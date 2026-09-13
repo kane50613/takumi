@@ -220,17 +220,15 @@ fn finish_node_render(
     }
   }
 
+  if has_constraint {
+    canvas.pop_mask();
+  }
   if let Some(isolated_canvas) = isolated_canvas {
-    if has_constraint {
-      canvas.pop_mask();
-    }
     canvas.composite_subcanvas(
       isolated_canvas,
       node.context.style.mix_blend_mode,
       node.context.style.opacity.0,
     );
-  } else if has_constraint {
-    canvas.pop_mask();
   }
 
   Ok(())
@@ -384,26 +382,7 @@ fn begin_node_render(
 
   if current.should_create_inline_layout() {
     draw_render_node_inline(current, canvas, layout)?;
-    finish_node_render(
-      current,
-      canvas,
-      layout,
-      has_constraint,
-      isolated_canvas,
-      node_paint.paint_bounds,
-      Some(outlines),
-    )?;
-  } else if !defer_finish {
-    finish_node_render(
-      current,
-      canvas,
-      layout,
-      has_constraint,
-      isolated_canvas,
-      node_paint.paint_bounds,
-      Some(outlines),
-    )?;
-  } else {
+  } else if defer_finish {
     return Ok(Some(DeferredNodeRender::Deferred {
       path: node_paint.path.clone(),
       layout,
@@ -413,48 +392,17 @@ fn begin_node_render(
     }));
   }
 
-  Ok(None)
-}
-
-fn paint_single_node(
-  root: &mut RenderNode,
-  layout_results: &LayoutResults,
-  canvas: &mut Canvas,
-  node_paint: &NodePaint,
-  outlines: &mut Vec<DeferredOutline>,
-) -> Result<()> {
-  match begin_node_render(
-    root,
-    layout_results,
+  finish_node_render(
+    current,
     canvas,
-    node_paint,
-    false,
-    None,
-    outlines,
-  )? {
-    Some(DeferredNodeRender::SkipRendering) | None => {}
-    Some(DeferredNodeRender::Deferred {
-      path,
-      layout,
-      has_constraint,
-      isolated_canvas,
-      filter_bounds,
-    }) => {
-      let Some(current) = root.node_at_path_mut(&path) else {
-        return Err(Error::InvalidLayoutNode(node_paint.node_id.into()));
-      };
-      finish_node_render(
-        current,
-        canvas,
-        layout,
-        has_constraint,
-        isolated_canvas,
-        filter_bounds,
-        None,
-      )?;
-    }
-  }
-  Ok(())
+    layout,
+    has_constraint,
+    isolated_canvas,
+    node_paint.paint_bounds,
+    Some(outlines),
+  )?;
+
+  Ok(None)
 }
 
 fn paint_bucket(
@@ -468,7 +416,15 @@ fn paint_bucket(
   for item in items {
     match &item.kind {
       PaintItemKind::Node(node_paint) => {
-        paint_single_node(root, layout_results, canvas, node_paint, outlines)?;
+        begin_node_render(
+          root,
+          layout_results,
+          canvas,
+          node_paint,
+          false,
+          None,
+          outlines,
+        )?;
       }
       PaintItemKind::Context(context_id) => {
         paint_context(root, contexts, layout_results, canvas, *context_id)?;

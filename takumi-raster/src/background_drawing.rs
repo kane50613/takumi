@@ -233,10 +233,6 @@ impl<'a> SampledBitmapView<'a> {
     }
 
     let source_width = self.source.width();
-    if source_width == 0 || self.source.height() == 0 {
-      return None;
-    }
-
     let columns = (x_start..x_start.checked_add(width)?)
       .map(|x| {
         bilinear_axis(

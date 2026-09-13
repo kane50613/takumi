@@ -265,46 +265,21 @@ pub(super) fn blit_paint_source_translation(
 
   let pixels: &mut [[u8; 4]] = bytemuck::cast_slice_mut(pixmap.pixels_mut());
   match source.resolve() {
-    ResolvedSource::Direct(PaintSource::Pixmap(source)) => {
+    ResolvedSource::Direct(PaintSource::Pixmap(source))
+      if mode == BlendMode::Normal && combined_mask.is_none() =>
+    {
       let source_pixels = source.pixels();
       let source_width = source.width();
-      if mode == BlendMode::Normal && combined_mask.is_none() {
-        let copy_width = (bounds.x_max - bounds.x_min) as usize;
-        let src_x_start = (bounds.x_min - bounds.offset_x) as usize;
-        for dest_y in bounds.y_min..bounds.y_max {
-          let src_y = (dest_y - bounds.offset_y) as usize;
-          let src_start = src_y * source_width as usize + src_x_start;
-          let src_end = src_start + copy_width;
-          let dst_start = (dest_y as u32 * canvas_width + bounds.x_min as u32) as usize;
-          let dst_end = dst_start + copy_width;
-          let dst = bytemuck::cast_slice_mut(&mut pixels[dst_start..dst_end]);
-          composite_premultiplied_over_span(dst, &source_pixels[src_start..src_end]);
-        }
-        return;
-      }
-
+      let copy_width = (bounds.x_max - bounds.x_min) as usize;
+      let src_x_start = (bounds.x_min - bounds.offset_x) as usize;
       for dest_y in bounds.y_min..bounds.y_max {
-        let mask_row = combined_mask.map(|view| view.row(dest_y, bounds.x_min));
-        if mask_row.is_some_and(|row| row.is_empty()) {
-          continue;
-        }
-
-        let src_y = (dest_y - bounds.offset_y) as u32;
-        let dst_row = dest_y as usize * canvas_width as usize;
-        let src_row = src_y as usize * source_width as usize;
-        for (i, dest_x) in (bounds.x_min..bounds.x_max).enumerate() {
-          let src_x = (dest_x - bounds.offset_x) as u32;
-          let src = premultiplied_from_pixel(source_pixels[src_row + src_x as usize]);
-          if src[3] == 0 {
-            continue;
-          }
-
-          let Some(src) = apply_mask_row(src, mask_row, i) else {
-            continue;
-          };
-
-          blend_premultiplied_pixel(&mut pixels[dst_row + dest_x as usize], src, mode);
-        }
+        let src_y = (dest_y - bounds.offset_y) as usize;
+        let src_start = src_y * source_width as usize + src_x_start;
+        let src_end = src_start + copy_width;
+        let dst_start = (dest_y as u32 * canvas_width + bounds.x_min as u32) as usize;
+        let dst_end = dst_start + copy_width;
+        let dst = bytemuck::cast_slice_mut(&mut pixels[dst_start..dst_end]);
+        composite_premultiplied_over_span(dst, &source_pixels[src_start..src_end]);
       }
     }
     ResolvedSource::Bitmap(view)
@@ -378,21 +353,9 @@ fn blit_solid_translation(
   }
 
   let pixels: &mut [[u8; 4]] = bytemuck::cast_slice_mut(data);
-  for dest_y in bounds.y_min..bounds.y_max {
-    let mask_row = combined_mask.map(|view| view.row(dest_y, bounds.x_min));
-    if mask_row.is_some_and(|row| row.is_empty()) {
-      continue;
-    }
-
-    let dst_row = dest_y as usize * canvas_width as usize;
-    for (i, dest_x) in (bounds.x_min..bounds.x_max).enumerate() {
-      let Some(src) = apply_mask_row(color, mask_row, i) else {
-        continue;
-      };
-
-      blend_premultiplied_pixel(&mut pixels[dst_row + dest_x as usize], src, mode);
-    }
-  }
+  blit_rows_from_sampler(pixels, canvas_width, bounds, mode, combined_mask, |_, _| {
+    color
+  });
 }
 
 pub(crate) fn composite_mask_source_to_pixmap(

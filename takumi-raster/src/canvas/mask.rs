@@ -171,14 +171,14 @@ fn mask_image_mask(
     copy_mask_to_viewport(viewport, mask, mask_placement)
   } else {
     rasterize_constraint_mask(viewport, placement, |x, y| {
-      sample_mask_image_alpha(
-        mask,
+      sample_overflow_alpha(
         Point { x: 0, y: 0 },
         Point {
           x: mask_placement.width,
           y: mask_placement.height,
         },
         inverse_transform,
+        Some((mask, mask_placement.width)),
         x,
         y,
       )
@@ -560,20 +560,6 @@ fn transformed_local_placement(local_placement: Placement, transform: Affine) ->
     },
     transform,
   )
-}
-
-fn sample_mask_image_alpha(
-  mask: &[u8],
-  from: Point<u32>,
-  to: Point<u32>,
-  inverse_transform: Affine,
-  x: u32,
-  y: u32,
-) -> u8 {
-  let Some(original_point) = transformed_mask_point(inverse_transform, from, to, x, y) else {
-    return 0;
-  };
-  mask[mask_index_from_coord(original_point.x, original_point.y, to.x - from.x)]
 }
 
 fn sample_overflow_alpha(
