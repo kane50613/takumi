@@ -730,11 +730,21 @@ impl PageOptions {
   }
 
   /// The page with the winning `@page` descriptors for every page laid over
-  /// it: `size` replaces the page size, and each margin descriptor its side,
-  /// resolved against that size. A rule with a page selector is left for
-  /// named pages.
+  /// it, as [`Self::for_page`] resolves the unnamed page.
   pub(crate) fn with_page_rules(self, stylesheet: &StyleSheet) -> Self {
-    let winners = stylesheet.page_descriptors(self.viewport(), PageSelector::is_universal);
+    self.for_page(stylesheet, None)
+  }
+
+  /// The page with the `@page` descriptors that win for the page named
+  /// `name` laid over it: `size` replaces the page size, and each margin
+  /// descriptor its side, resolved against that size. A selector with a
+  /// pseudo-class never matches; those pages are not told apart yet.
+  pub(crate) fn for_page(self, stylesheet: &StyleSheet, name: Option<&str>) -> Self {
+    let selects = |selector: &PageSelector| {
+      selector.pseudo_classes.is_empty()
+        && selector.name.as_deref().is_none_or(|own| Some(own) == name)
+    };
+    let winners = stylesheet.page_descriptors(self.viewport(), selects);
     let page = match winners.size {
       Some(size) => self.sized(size),
       None => self,

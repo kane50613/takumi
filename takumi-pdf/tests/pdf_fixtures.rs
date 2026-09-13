@@ -4764,3 +4764,80 @@ fn at_page_margins_resolve_against_the_cascaded_size() {
   assert_eq!(media_boxes(&pdf)[0], (150.0, 150.0));
   assert_eq!(page_count(&pdf), 2);
 }
+
+fn named_page_options<'g>(fonts: &'g Fonts, html: &str, css: &str) -> PdfOptions<'g> {
+  PdfOptions::builder()
+    .node(from_html(html, FromHtmlOptions::default()).expect("parse named page"))
+    .page(PageOptions::A4)
+    .stylesheet(Arc::new(StyleSheet::parse(css).expect("parse @page cover")))
+    .footer(text("footer", 12.0))
+    .fonts(fonts)
+    .build()
+}
+
+/// `page: cover` opens a page group that `@page cover` styles: the cover lays
+/// out at that page's width with no margin and a page break on each side,
+/// while the pages around it keep the unnamed page's margins and footer.
+#[test]
+fn a_named_page_takes_its_own_margins_and_size() {
+  let fonts = fonts();
+  let css = "@page cover { margin: 0 } .cover { page: cover; height: 100vh; background: #1e293b }";
+  let opening = run_pdf_fixture_with("named-page-cover", &fonts, |fonts| {
+    named_page_options(
+      fonts,
+      r#"<article>
+           <section class="cover"></section>
+           <p style="font-size: 14px">The report starts on page two.</p>
+         </article>"#,
+      css,
+    )
+  });
+
+  assert_eq!(page_count(&opening), 2);
+
+  let inside = run_pdf_fixture_with("named-page-inside", &fonts, |fonts| {
+    named_page_options(
+      fonts,
+      r#"<article>
+           <p style="font-size: 14px">An introduction before the cover.</p>
+           <section class="cover"></section>
+           <p style="font-size: 14px">The report continues.</p>
+         </article>"#,
+      css,
+    )
+  });
+
+  assert_eq!(page_count(&inside), 3);
+
+  let siblings = render_pinned(named_page_options(
+    &fonts,
+    r#"<section class="cover" style="height: 50vh"></section>
+       <section class="cover" style="height: 50vh"></section>
+       <p style="font-size: 14px">After.</p>"#,
+    &format!("{css} * {{ padding: 0 10px }}"),
+  ));
+
+  assert_eq!(
+    page_count(&siblings),
+    2,
+    "adjacent siblings share the named page"
+  );
+
+  let sized = render_pinned(named_page_options(
+    &fonts,
+    r#"<section class="cover" style="margin-top: 20px"></section><p style="font-size: 14px">After.</p>"#,
+    "@page cover { size: A5; margin: 0 } .cover { page: cover; height: 50vh }",
+  ));
+  let pt = |px: f32| px * 72.0 / 96.0;
+  let boxes = media_boxes(&sized);
+
+  assert_eq!(page_count(&sized), 2);
+  assert!(
+    (boxes[0].0 - pt(PageOptions::A5.width)).abs() < 0.01,
+    "cover page is A5: {boxes:?}"
+  );
+  assert!(
+    (boxes[1].0 - pt(PageOptions::A4.width)).abs() < 0.01,
+    "next page is A4: {boxes:?}"
+  );
+}

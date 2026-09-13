@@ -1,7 +1,6 @@
 //! One page: its resolved geometry, and the emit walk that draws it.
 
 use takumi_core::{
-  context::RenderContext,
   geometry::{Rect, Size},
   layout::node::Node,
   style::Color,
@@ -11,7 +10,7 @@ use takumi_core::{
 use std::mem::take;
 
 use crate::{
-  bands::{RepeatBounds, Repeatable, RepeatablePage},
+  bands::{Repeatable, RepeatablePage},
   emitter::DocumentState,
   inline::{InlineMap, TextBox, build_inline_map},
   interactive::add_link_annotations,
@@ -23,6 +22,7 @@ use crate::{
     surface::Surface,
   },
   options::{PT_PER_PX, PageOptions, PageRange, PageSelection, PdfError},
+  page_context::{PageContext, PageContexts},
   pagination::{MAX_PAGES, PageSlice, Paginated},
   paint::paint_page_background,
   tags::tag_id,
@@ -107,16 +107,16 @@ pub(crate) struct PageBands<'o> {
   pub(crate) page_ranges: Option<&'o [PageRange]>,
 }
 
-/// The paginated document: its geometry, its cut content, and which pages
-/// the render keeps.
+/// The paginated document: the contexts its pages draw from, its cut content,
+/// and which pages the render keeps.
 pub(crate) struct PagePlan {
-  pub(crate) frame: PageFrame,
+  pub(crate) contexts: PageContexts,
   pub(crate) paginated: Paginated,
   pub(crate) selection: PageSelection,
   /// Whether destinations name tag-tree structure elements.
   pub(crate) structural: bool,
-  /// In draw order: the header band, the repeated boxes, the footer band.
-  pub(crate) repeatables: Vec<Repeatable>,
+  /// The repeated `fixed` boxes, drawn between the header and footer bands.
+  pub(crate) repeated: Vec<Repeatable>,
 }
 
 impl PagePlan {
@@ -127,10 +127,11 @@ impl PagePlan {
     let index = self.paginated.page_index(top);
     let emitted = self.selection.emitted(index)?;
     let start = self.paginated.starts[index];
-    let y = self.frame.margin.top + self.paginated.reserved_at(start) + (top - start).max(0.0);
+    let frame = &self.context_of(index).frame;
+    let y = frame.margin.top + self.paginated.reserved_at(start) + (top - start).max(0.0);
     let dest = XyzDestination::new(
       emitted,
-      Point::from_xy(self.frame.margin.left * PT_PER_PX, y * PT_PER_PX),
+      Point::from_xy(frame.margin.left * PT_PER_PX, y * PT_PER_PX),
     );
 
     Some(match self.structural {
@@ -139,7 +140,12 @@ impl PagePlan {
     })
   }
 
-  /// Lays the bands out, resolves the page frame around them, and cuts the
+  /// The context page `index` draws on.
+  pub(crate) fn context_of(&self, index: usize) -> &PageContext {
+    self.contexts.get(self.paginated.page_name(index))
+  }
+
+  /// Lays the bands out, resolves the page contexts around them, and cuts the
   /// content into pages.
   pub(crate) fn solve(
     inputs: &TreeInputs<'_>,
@@ -148,59 +154,31 @@ impl PagePlan {
     node: Node,
     structural: bool,
   ) -> Result<Self, PdfError> {
-    // Bands lay out at full page width and draw inside the margin areas,
-    // like Chromium's print header and footer templates.
-    let band_viewport = page.band_viewport();
-    let measure_bands =
-      |pages: usize| -> Result<(Option<Repeatable>, Option<Repeatable>), PdfError> {
-        let band = |template: Option<&Node>, bounds| {
-          template
-            .map(|template| Repeatable::band(inputs, template, band_viewport, bounds, pages))
-            .transpose()
-        };
-
-        Ok((
-          band(bands.header, RepeatBounds::Header)?,
-          band(bands.footer, RepeatBounds::Footer)?,
-        ))
-      };
-    let resolve = |header: Option<&Repeatable>, footer: Option<&Repeatable>| {
-      PageFrame::resolve(
-        &page,
-        band_viewport,
-        header.map(Repeatable::height),
-        footer.map(Repeatable::height),
-      )
-    };
-    let (mut header, mut footer) = measure_bands(1)?;
-    let mut frame = resolve(header.as_ref(), footer.as_ref())?;
+    let mut contexts = PageContexts::resolve(inputs, page, &bands, 1)?;
     // A band with a counter and the cut list depend on each other: an `auto`
     // margin takes the band's height, the band lays out with the real page
     // numbers, and the page count is only known once the content is cut. The
-    // band is re-measured with the count each cut produced until its height
-    // stops moving, like the content counters in `Paginated::build`.
-    let dynamic = header.as_ref().is_some_and(Repeatable::dynamic)
-      || footer.as_ref().is_some_and(Repeatable::dynamic);
-    let source = dynamic.then(|| node.clone());
-    let mut paginated = Paginated::build(node, inputs, &frame)?;
+    // bands are re-measured with the count each cut produced until their
+    // heights stop moving, like the content counters in `Paginated::build`.
+    let source = contexts.dynamic().then(|| node.clone());
+    let mut paginated = Paginated::build(node, inputs, &mut contexts)?;
 
     if let Some(source) = source {
       const BAND_PASSES: usize = 3;
 
       for _ in 0..BAND_PASSES {
-        let (next_header, next_footer) = measure_bands(paginated.starts.len())?;
-        let stable = next_header.as_ref().map(Repeatable::height)
-          == header.as_ref().map(Repeatable::height)
-          && next_footer.as_ref().map(Repeatable::height)
-            == footer.as_ref().map(Repeatable::height);
+        let mut next = PageContexts::resolve(inputs, page, &bands, paginated.starts.len())?;
 
-        header = next_header;
-        footer = next_footer;
+        for name in contexts.names().flatten() {
+          next.ensure(inputs, Some(name))?;
+        }
+        let stable = next.same_band_heights(&contexts);
+
+        contexts = next;
         if stable {
           break;
         }
-        frame = resolve(header.as_ref(), footer.as_ref())?;
-        paginated = Paginated::build(source.clone(), inputs, &frame)?;
+        paginated = Paginated::build(source.clone(), inputs, &mut contexts)?;
       }
     }
 
@@ -208,18 +186,14 @@ impl PagePlan {
       return Err(PdfError::TooManyPages(paginated.starts.len()));
     }
     let selection = PageSelection::resolve(bands.page_ranges, paginated.starts.len())?;
-    let repeatables = header
-      .into_iter()
-      .chain(take(&mut paginated.repeated))
-      .chain(footer)
-      .collect();
+    let repeated = take(&mut paginated.repeated);
 
     Ok(Self {
-      frame,
+      contexts,
       paginated,
       selection,
       structural,
-      repeatables,
+      repeated,
     })
   }
 
@@ -236,7 +210,6 @@ impl PagePlan {
     let composer = PageComposer {
       plan: self,
       inputs,
-      page_context: inputs.context(self.frame.page_area),
       inline_map: &inline_map,
       state,
       background,
@@ -246,7 +219,7 @@ impl PagePlan {
       if !self.selection.keeps(slice.index) {
         continue;
       }
-      composer.compose(pdf, &self.repeatables, &slice)?;
+      composer.compose(pdf, &slice)?;
     }
     Ok(())
   }
@@ -266,34 +239,27 @@ impl PagePlan {
 pub(crate) struct PageComposer<'c, 'g> {
   pub(crate) plan: &'c PagePlan,
   pub(crate) inputs: &'c TreeInputs<'g>,
-  pub(crate) page_context: RenderContext,
   pub(crate) inline_map: &'c InlineMap<'c>,
   pub(crate) state: &'c DocumentState<'c>,
   pub(crate) background: Option<Color>,
 }
 
 impl PageComposer<'_, '_> {
-  /// Draws one page. `repeatables` are in draw order: the header band, the
-  /// repeated boxes, the footer band.
-  pub(crate) fn compose(
-    &self,
-    pdf: &mut Document,
-    repeatables: &[Repeatable],
-    slice: &PageSlice,
-  ) -> Result<(), PdfError> {
-    let frame = &self.plan.frame;
+  /// Draws one page: its context's header band, the repeated boxes, and its
+  /// footer band around the content.
+  pub(crate) fn compose(&self, pdf: &mut Document, slice: &PageSlice) -> Result<(), PdfError> {
+    let context = self.plan.context_of(slice.index);
+    let frame = &context.frame;
     let paginated = &self.plan.paginated;
     let pages = paginated.starts.len();
-    let resolved = repeatables
+    let page_context = self.inputs.context(frame.page_area);
+    let resolved = context
+      .header
       .iter()
+      .chain(&self.plan.repeated)
+      .chain(&context.footer)
       .map(|repeatable| {
-        repeatable.for_page(
-          self.inputs,
-          &self.page_context,
-          frame,
-          slice.index + 1,
-          pages,
-        )
+        repeatable.for_page(self.inputs, &page_context, frame, slice.index + 1, pages)
       })
       .collect::<Result<Vec<_>, _>>()?;
     let mut pdf_page = pdf.start_page_with(PageSettings::new(frame.page_size));
@@ -312,14 +278,17 @@ impl PageComposer<'_, '_> {
     surface.finish();
     let anchor = |id: &str| self.plan.anchor_destination(id);
 
+    let column_left = frame.margin.left - slice.left;
+
     add_link_annotations(
       &mut pdf_page,
       &paginated.interactive.links,
       Window {
         y: Some((slice.start, slice.start + slice.paint_height)),
-        ..Window::default()
+        x: Some((slice.left, slice.left + frame.content_width)),
+        lines: None,
       },
-      (frame.margin.left, frame.margin.top + slice.reserved),
+      (column_left, frame.margin.top + slice.reserved),
       self.state.tags.as_ref(),
       anchor,
     );
@@ -347,7 +316,7 @@ impl PageComposer<'_, '_> {
         &mut pdf_page,
         &paginated.interactive.links,
         band.window(),
-        (frame.margin.left, frame.margin.top + offset),
+        (column_left, frame.margin.top + offset),
         None,
         anchor,
       );
@@ -360,8 +329,9 @@ impl PageComposer<'_, '_> {
   /// height and translated so the slice lands at the content origin, below any
   /// repeated table headers.
   fn emit_content(&self, slice: &PageSlice, surface: &mut Surface) -> Result<(), PdfError> {
-    let frame = &self.plan.frame;
+    let frame = &self.plan.context_of(slice.index).frame;
     let paginated = &self.plan.paginated;
+    let column_left = frame.margin.left - slice.left;
 
     // Paint stops at the next cut: the region between a raised cut and the
     // page's full height belongs to the next page and stays blank, exactly
@@ -373,10 +343,7 @@ impl PageComposer<'_, '_> {
         frame.content_width,
         slice.paint_height,
       ),
-      translate: (
-        frame.margin.left,
-        frame.margin.top + slice.reserved - slice.start,
-      ),
+      translate: (column_left, frame.margin.top + slice.reserved - slice.start),
       window: Window {
         y: Some((slice.start, slice.start + slice.paint_height)),
         x: None,
@@ -405,12 +372,12 @@ impl PageComposer<'_, '_> {
 
       ContentWindow {
         clip: (
-          frame.margin.left + band.left,
+          column_left + band.left,
           frame.margin.top + offset,
           band.right - band.left,
           band.height(),
         ),
-        translate: (frame.margin.left, frame.margin.top + offset - band.top),
+        translate: (column_left, frame.margin.top + offset - band.top),
         window: Window {
           lines: Some((f32::NEG_INFINITY, band.bottom)),
           ..band.window()

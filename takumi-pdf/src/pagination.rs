@@ -1,5 +1,7 @@
 //! Cutting the content column into pages without splitting unsplittable atoms.
 
+use std::sync::Arc;
+
 use takumi_core::{
   geometry::transformed_rect_extents,
   layout::node::Node,
@@ -16,8 +18,8 @@ use crate::{
   inline::{TextBox, build_inline_map},
   interactive::Interactive,
   options::PdfError,
-  page::PageFrame,
-  tree::{PreparedTree, TreeInputs},
+  page_context::PageContexts,
+  tree::{PagedTree, PreparedTree, TreeInputs},
   window::Window,
 };
 
@@ -276,13 +278,63 @@ pub(crate) struct Paginated {
   pub(crate) starts: Vec<f32>,
   pub(crate) interactive: Interactive,
   pub(crate) headers: Vec<HeaderBand>,
+  pages: Vec<PageGeometry>,
+}
+
+/// What a page takes from its group: the page name, the window height, and
+/// the column x its content starts at.
+struct PageGeometry {
+  name: Option<Arc<str>>,
   window: f32,
+  left: f32,
+}
+
+/// The column extent a page group covers, and where its page-area box sits.
+pub(crate) struct PageGroup {
+  pub(crate) name: Arc<str>,
+  pub(crate) left: f32,
+  pub(crate) top: f32,
+  pub(crate) bottom: f32,
+}
+
+/// The page groups of a column, in column order, with the extents of the
+/// boxes outside every group that paint something, which tell whether a page
+/// starting above a group holds anything else.
+pub(crate) struct PageGroups {
+  groups: Vec<PageGroup>,
+  outside: Vec<Atom>,
+}
+
+impl PageGroups {
+  /// `groups` come in column order.
+  pub(crate) fn new(groups: Vec<PageGroup>, outside: Vec<Atom>) -> Self {
+    Self { groups, outside }
+  }
+
+  /// The group a page starting at `y` draws on: the group `y` falls in, or
+  /// the next group when only its own leading space lies between, as when a
+  /// cover carries a top margin.
+  pub(crate) fn at(&self, y: f32) -> Option<&PageGroup> {
+    let group = self.groups.iter().find(|group| y + 0.5 < group.bottom)?;
+
+    (group.top <= y + 0.5 || !self.shows_between(y, group)).then_some(group)
+  }
+
+  /// Whether a box outside every group shows between `y` and the group's top.
+  fn shows_between(&self, y: f32, group: &PageGroup) -> bool {
+    self
+      .outside
+      .iter()
+      .any(|&(top, bottom)| bottom > y + 0.5 && top < group.top - 0.5)
+  }
 }
 
 /// One page's window into the content column.
 pub(crate) struct PageSlice {
   /// 0-based; display page numbers are `index + 1`.
   pub(crate) index: usize,
+  /// The column x that lands at the page's left margin.
+  pub(crate) left: f32,
   pub(crate) start: f32,
   /// Where the next page begins. The last page never runs out.
   pub(crate) end: f32,
@@ -300,16 +352,16 @@ impl Paginated {
   pub(crate) fn build(
     mut node: Node,
     inputs: &TreeInputs<'_>,
-    frame: &PageFrame,
+    contexts: &mut PageContexts,
   ) -> Result<Self, PdfError> {
     if !has_page_counters(&node) && !has_target_counters(&node) {
-      return Self::build_once(node, inputs, frame);
+      return Self::build_once(node, inputs, contexts);
     }
     let mut previous: Vec<String> = Vec::new();
     let mut passes = 0;
 
     loop {
-      let paginated = Self::build_once(node.clone(), inputs, frame)?;
+      let paginated = Self::build_once(node.clone(), inputs, contexts)?;
       let pages = paginated.starts.len();
       let mut written = Vec::new();
 
@@ -324,24 +376,45 @@ impl Paginated {
       // The numbers are still moving, and this was the last pass allowed. They
       // are laid out once more so the page shows the numbers it was cut with.
       if passes == COUNTER_PASSES {
-        return Self::build_once(node, inputs, frame);
+        return Self::build_once(node, inputs, contexts);
       }
     }
   }
 
-  fn build_once(node: Node, inputs: &TreeInputs<'_>, frame: &PageFrame) -> Result<Self, PdfError> {
-    let (content, repeated) = inputs.prepare_paged(node, frame)?;
+  fn build_once(
+    node: Node,
+    inputs: &TreeInputs<'_>,
+    contexts: &mut PageContexts,
+  ) -> Result<Self, PdfError> {
+    let PagedTree {
+      content,
+      repeated,
+      groups,
+    } = inputs.prepare_paged(node, contexts)?;
     let text_boxes = TextBox::collect(&content);
     let inline_map = build_inline_map(&text_boxes)?;
     let mut atoms = content.atom_collector(Some(&inline_map)).collect()?;
-    let headers = HeaderBand::collect(&content, frame.window_height);
+    let headers = HeaderBand::collect(&content, contexts.unnamed().frame.window_height);
 
     // A repeating header is monolithic: a cut through it would show a partial
     // header once and the full band again on the next page.
     atoms
       .extents
       .extend(headers.iter().map(|band| (band.top, band.bottom)));
-    let starts = atoms.page_starts(&headers, content.height, frame.window_height);
+    let geometry = |y: f32| {
+      let group = groups.at(y);
+      let name = group.map(|group| group.name.clone());
+      let window = contexts.get(name.as_deref()).frame.window_height;
+
+      PageGeometry {
+        name,
+        window,
+        left: group.map_or(0.0, |group| group.left),
+      }
+    };
+    let window_at = |y: f32| geometry(y).window;
+    let starts = atoms.page_starts(&headers, content.height, &window_at);
+    let pages = starts.iter().map(|&start| geometry(start)).collect();
     let interactive = Interactive::collect(&content);
 
     Ok(Self {
@@ -350,8 +423,13 @@ impl Paginated {
       starts,
       interactive,
       headers,
-      window: frame.window_height,
+      pages,
     })
+  }
+
+  /// The name of the page `index` draws on, or `None` for the unnamed page.
+  pub(crate) fn page_name(&self, index: usize) -> Option<&str> {
+    self.pages.get(index).and_then(|page| page.name.as_deref())
   }
 
   /// Fills both kinds of counter from this laid-out pass, collecting what it
@@ -398,19 +476,23 @@ impl Paginated {
 
   /// Window height repeated headers take on the page starting at `start`.
   pub(crate) fn reserved_at(&self, start: f32) -> f32 {
-    HeaderBand::replays(&self.headers, start, self.window).0
+    let window = self.pages[self.page_index(start)].window;
+
+    HeaderBand::replays(&self.headers, start, window).0
   }
 
   pub(crate) fn pages(&self) -> impl Iterator<Item = PageSlice> + '_ {
     self.starts.iter().enumerate().map(|(index, &start)| {
       let end = self.starts.get(index + 1).copied().unwrap_or(f32::INFINITY);
-      let (reserved, replays) = HeaderBand::replays(&self.headers, start, self.window);
+      let PageGeometry { window, left, .. } = self.pages[index];
+      let (reserved, replays) = HeaderBand::replays(&self.headers, start, window);
 
       PageSlice {
         index,
+        left,
         start,
         end,
-        paint_height: (end - start).min(self.window - reserved),
+        paint_height: (end - start).min(window - reserved),
         reserved,
         replays,
       }
@@ -418,8 +500,9 @@ impl Paginated {
   }
 }
 
-/// Page start offsets for slicing `total` height into windows of `window`
-/// height. Each cut moves up to the top of any atom straddling it, repeated
+/// Page start offsets for slicing `total` height into pages, each as tall as
+/// `window_at` says for the column offset it starts at. Each cut moves up to
+/// the top of any atom straddling it, repeated
 /// until no atom straddles (a raised cut can land inside another atom). An
 /// atom taller than the window can never fit a page, so it does not push cuts
 /// at all — matching browsers, where `break-inside: avoid` is dropped for
@@ -433,7 +516,12 @@ impl Paginated {
 /// A cut within that distance of a content edge lands on the edge instead of
 /// leaving a sub-pixel sliver on either page.
 impl Atoms {
-  pub(crate) fn page_starts(mut self, headers: &[HeaderBand], total: f32, window: f32) -> Vec<f32> {
+  pub(crate) fn page_starts(
+    mut self,
+    headers: &[HeaderBand],
+    total: f32,
+    window_at: &dyn Fn(f32) -> f32,
+  ) -> Vec<f32> {
     let Self {
       extents,
       forced,
@@ -472,6 +560,7 @@ impl Atoms {
     let mut y0 = 0.0_f32;
 
     loop {
+      let window = window_at(y0);
       let limit = edges.snap(
         y0 + window - HeaderBand::replays(headers, y0, window).0,
         y0 + 1.0,
@@ -505,7 +594,9 @@ impl Atoms {
           }
           // An atom moves to the next page only when it fits the capacity that
           // page actually offers under its repeated headers.
-          if bottom > cut && bottom - top <= window - HeaderBand::replays(headers, top, window).0 {
+          let next = window_at(top);
+
+          if bottom > cut && bottom - top <= next - HeaderBand::replays(headers, top, next).0 {
             pushed_up = pushed_up.min(top);
           }
         }

@@ -13,8 +13,8 @@ use takumi_core::{
   resources::image::ImageSource,
   scene::{NodePaint, PaintItemKind, StackingContextNode, build_stacking_contexts},
   style::{
-    Affine, ComputedStyle, Display, FlexDirection, FontFamily, Lang, Length, Position,
-    SizingContext, Style, StyleDeclaration, StyleSheet, ZIndex,
+    Affine, BoxSizing, BreakBetween, ComputedStyle, Display, FlexDirection, FlexGrow, FontFamily,
+    Lang, Length, PageName, Position, SizingContext, Style, StyleDeclaration, StyleSheet, ZIndex,
   },
   viewport::Viewport,
 };
@@ -26,7 +26,8 @@ use crate::{
   emitter::{DocumentState, Emitter},
   inline::InlineMap,
   options::PdfError,
-  page::PageFrame,
+  page_context::PageContexts,
+  pagination::{PageGroup, PageGroups},
   window::Window,
 };
 
@@ -84,23 +85,81 @@ impl TreeInputs<'_> {
     self.prepare(node, viewport)
   }
 
-  /// The content column, plus the `fixed` subtrees attached to the initial
-  /// containing block. Those repeat on every page, so they lay out against the
-  /// page area instead of the column.
+  /// The content column, the `fixed` subtrees attached to the initial
+  /// containing block, and the page groups the `page` property opens. The
+  /// fixed boxes repeat on every page, so they lay out against the page area
+  /// instead of the column.
+  ///
+  /// A page group is wrapped in a page-area box laid out in the same column
+  /// at the group's page content width, with a page break before and after
+  /// the group; its pages translate the column so the box lands at their
+  /// left margin. The group's ancestors keep the unnamed page's width, and a
+  /// box nested in a group cannot open another. Viewport units take the
+  /// first page's area, so a document that opens with a named page sizes
+  /// `100vh` to that page.
   pub(crate) fn prepare_paged(
     &self,
     node: Node,
-    frame: &PageFrame,
-  ) -> Result<(PreparedTree, Vec<Repeatable>), PdfError> {
-    let viewport = frame.column();
+    contexts: &mut PageContexts,
+  ) -> Result<PagedTree, PdfError> {
+    let unnamed = &contexts.unnamed().frame;
+    let viewport = unnamed.column();
+    let page_area = unnamed.page_area;
     let node = fill_root(node, viewport);
     // A repeated box holding a counter lays out again per page, from the subtree
     // its preorder position names in the tree it was taken from.
     let source = has_page_counters(&node).then(|| node.clone());
     let mut root = RenderNode::from_node(&self.context(viewport), node);
     let repeated = take_repeating_fixed(&mut root);
+    let runs = PageGroupRun::collect(&root);
+
+    for run in &runs {
+      contexts.ensure(self, Some(&run.name))?;
+    }
+    if let Some(first) = runs.first().filter(|run| run.opens_the_document()) {
+      let frame = &contexts.get(Some(&first.name)).frame;
+
+      set_viewport(
+        &mut root,
+        viewport.with_unit_reference(Size {
+          width: frame.content_width,
+          height: frame.window_height,
+        }),
+      );
+    }
+    for run in &runs {
+      let width = contexts.get(Some(&run.name)).frame.content_width;
+      let last = run.members.len() - 1;
+
+      for (position, path) in run.members.iter().enumerate() {
+        wrap_in_page_area(&mut root, path, width, position == 0, position == last);
+      }
+    }
     let content = PreparedTree::lay_out(root, viewport)?;
-    let page_context = self.context(frame.page_area);
+    let groups = runs
+      .iter()
+      .filter_map(|run| {
+        let (left, top, _) = content.box_bounds(run.members.first()?)?;
+        let (_, _, bottom) = content.box_bounds(run.members.last()?)?;
+
+        Some(PageGroup {
+          name: run.name.clone(),
+          left,
+          top,
+          bottom,
+        })
+      })
+      .collect();
+    let in_a_group = |path: &[usize]| {
+      runs.iter().any(|run| {
+        run
+          .members
+          .iter()
+          .any(|member| path.starts_with(member) || member.starts_with(path))
+      })
+    };
+    let groups = PageGroups::new(groups, content.shown_extents(in_a_group));
+    let page_context = self.context(page_area);
     let repeated = repeated
       .into_iter()
       .map(|(node, parent)| {
@@ -114,14 +173,135 @@ impl TreeInputs<'_> {
             parent,
             source_order,
           });
-        let prepared = PreparedTree::lay_out(page_root(&page_context, node), frame.page_area)?;
+        let prepared = PreparedTree::lay_out(page_root(&page_context, node.clone()), page_area)?;
 
-        Ok(Repeatable::fixed(prepared, template))
+        Ok(Repeatable::fixed(prepared, template, node, page_area))
       })
       .collect::<Result<Vec<_>, PdfError>>()?;
 
-    Ok((content, repeated))
+    Ok(PagedTree {
+      content,
+      repeated,
+      groups,
+    })
   }
+}
+
+/// Sets the viewport every box in the subtree sizes against.
+pub(crate) fn set_viewport(node: &mut RenderNode, viewport: Viewport) {
+  node.context.sizing.viewport = viewport;
+  for child in node.children.as_deref_mut().unwrap_or_default() {
+    set_viewport(child, viewport);
+  }
+}
+
+/// What the content column lays out to: the column, the repeated boxes, and
+/// the page groups in it.
+pub(crate) struct PagedTree {
+  pub(crate) content: PreparedTree,
+  pub(crate) repeated: Vec<Repeatable>,
+  pub(crate) groups: PageGroups,
+}
+
+/// A run of adjacent sibling boxes that name the same page: one page group,
+/// per css-page-3 §8.1, which breaks only where the page name changes.
+struct PageGroupRun {
+  name: Arc<str>,
+  /// The paths of the boxes, in document order.
+  members: Vec<Vec<usize>>,
+}
+
+impl PageGroupRun {
+  fn collect(root: &RenderNode) -> Vec<Self> {
+    fn walk(node: &RenderNode, path: &mut Vec<usize>, runs: &mut Vec<PageGroupRun>) {
+      if let PageName::Named(name) = &node.context.style.page {
+        match runs.last_mut() {
+          Some(run) if run.name == *name && run.follows(path) => run.members.push(path.clone()),
+          _ => runs.push(PageGroupRun {
+            name: name.clone(),
+            members: vec![path.clone()],
+          }),
+        }
+        return;
+      }
+      for (index, child) in node
+        .children
+        .as_deref()
+        .unwrap_or_default()
+        .iter()
+        .enumerate()
+      {
+        path.push(index);
+        walk(child, path, runs);
+        path.pop();
+      }
+    }
+
+    let mut runs = Vec::new();
+
+    walk(root, &mut Vec::new(), &mut runs);
+    runs
+  }
+
+  /// Whether `path` is the sibling right after the run's last box.
+  fn follows(&self, path: &[usize]) -> bool {
+    let Some(last) = self.members.last() else {
+      return false;
+    };
+    let (Some((&last_index, parent)), Some((&index, candidate_parent))) =
+      (last.split_last(), path.split_last())
+    else {
+      return false;
+    };
+
+    parent == candidate_parent && index == last_index + 1
+  }
+
+  /// Whether nothing lays out before this run, so its page is the first.
+  fn opens_the_document(&self) -> bool {
+    self
+      .members
+      .first()
+      .is_some_and(|path| path.iter().all(|&index| index == 0))
+  }
+}
+
+/// Puts the box at `path` inside a block as wide as its page's content box,
+/// which breaks the page where the run starts and ends.
+fn wrap_in_page_area(root: &mut RenderNode, path: &[usize], width: f32, first: bool, last: bool) {
+  let Some((&index, parent_path)) = path.split_last() else {
+    return;
+  };
+  let Some(parent) = root.node_at_path_mut(parent_path) else {
+    return;
+  };
+  let Some(children) = parent.children.take() else {
+    return;
+  };
+  let mut children = children.into_vec();
+  let child = children.remove(index);
+  let mut area = RenderNode::anonymous_block(&parent.context, child);
+  let style = &mut area.context.style;
+
+  style.width = Length::Px(width).into();
+  style.box_sizing = BoxSizing::BorderBox;
+  style.flex_shrink = Some(FlexGrow(0.0));
+  style.border_top_width = Length::zero().into();
+  style.border_right_width = Length::zero().into();
+  style.border_bottom_width = Length::zero().into();
+  style.border_left_width = Length::zero().into();
+  style.break_before = if first {
+    BreakBetween::Page
+  } else {
+    BreakBetween::Auto
+  };
+  style.break_after = if last {
+    BreakBetween::Page
+  } else {
+    BreakBetween::Auto
+  };
+  children.insert(index, area);
+  parent.children = Some(children.into_boxed_slice());
 }
 
 /// A node tree taken through layout and scene building, ready to emit.
@@ -199,6 +379,37 @@ impl PreparedTree {
       .is_some_and(
         |child| matches!(child.context.style.z_index, ZIndex::Integer(index) if index < 0),
       )
+  }
+
+  /// The column extents of the boxes that painted something, leaving out
+  /// those `skip` names.
+  pub(crate) fn shown_extents(&self, skip: impl Fn(&[usize]) -> bool) -> Vec<(f32, f32)> {
+    let mut extents = Vec::new();
+
+    self.for_each_paint(|paint| {
+      if let Some(bounds) = paint.paint_bounds
+        && !skip(&paint.path)
+      {
+        extents.push((bounds.top as f32, bounds.bottom as f32));
+      }
+    });
+    extents
+  }
+
+  /// The column left, top, and bottom of the box at `path`.
+  pub(crate) fn box_bounds(&self, path: &[usize]) -> Option<(f32, f32, f32)> {
+    let mut bounds = None;
+
+    self.for_each_paint(|paint| {
+      if paint.path == path
+        && let Ok(layout) = self.results.layout(paint.node_id)
+      {
+        let (x, y) = (paint.transform.x, paint.transform.y);
+
+        bounds = Some((x, y, y + layout.size.height));
+      }
+    });
+    bounds
   }
 
   /// The scene's atom collector, for pagination.

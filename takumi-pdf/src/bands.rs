@@ -19,7 +19,7 @@ use crate::{
   krilla::surface::Surface,
   options::{BAND_EDGE_PADDING, PdfError},
   page::PageFrame,
-  tree::{PreparedTree, TreeInputs, page_root},
+  tree::{PreparedTree, TreeInputs, page_root, set_viewport},
   window::{ContentWindow, Window},
 };
 
@@ -66,8 +66,11 @@ pub(crate) struct Repeatable {
   template: Option<RepeatTemplate>,
   bounds: RepeatBounds,
   /// Links collected once from the measured layout. Bands never annotate
-  /// links, and a renumbered page collects its own.
+  /// links, and a re-laid-out page collects its own.
   links: Vec<LinkTarget>,
+  /// A repeated box's tree and the page area it was laid out against, for a
+  /// page whose area differs.
+  source: Option<(RenderNode, Viewport)>,
 }
 
 /// What a per-page layout starts from.
@@ -103,8 +106,9 @@ impl FixedTemplate {
     let mut node = self.node.clone();
 
     substitute_page_counters(&mut node, page, pages);
-    let child = RenderNode::from_node(&self.parent, node);
+    let mut child = RenderNode::from_node(&self.parent, node);
 
+    set_viewport(&mut child, page_area);
     PreparedTree::lay_out(page_root(page_context, child), page_area)
   }
 }
@@ -131,11 +135,18 @@ impl Repeatable {
       template: has_page_counters(template).then(|| RepeatTemplate::Band(template.clone())),
       bounds,
       links: Vec::new(),
+      source: None,
     })
   }
 
-  /// Wraps a repeated `fixed` box, caching its links when it never re-lays out.
-  pub(crate) fn fixed(prepared: PreparedTree, template: Option<FixedTemplate>) -> Self {
+  /// Wraps a repeated `fixed` box laid out against `page_area`, caching its
+  /// links when it holds no counter.
+  pub(crate) fn fixed(
+    prepared: PreparedTree,
+    template: Option<FixedTemplate>,
+    source: RenderNode,
+    page_area: Viewport,
+  ) -> Self {
     let links = match template {
       Some(_) => Vec::new(),
       None => Interactive::collect(&prepared).links,
@@ -147,6 +158,7 @@ impl Repeatable {
       template: template.map(RepeatTemplate::Fixed),
       bounds: RepeatBounds::Content { below },
       links,
+      source: Some((source, page_area)),
     }
   }
 
@@ -179,14 +191,26 @@ impl Repeatable {
     page: usize,
     pages: usize,
   ) -> Result<RepeatablePage<'_>, PdfError> {
-    let fresh = match &self.template {
-      None => None,
-      Some(RepeatTemplate::Band(node)) => {
+    let fresh = match (&self.template, &self.source) {
+      (Some(RepeatTemplate::Band(node)), _) => {
         Some(inputs.prepare_band(node, page, pages, frame.band_viewport)?)
       }
-      Some(RepeatTemplate::Fixed(template)) => {
+      (Some(RepeatTemplate::Fixed(template)), _) => {
         Some(template.prepare(page_context, page, pages, frame.page_area)?)
       }
+      (None, Some((node, area)))
+        if area.size.width != frame.page_area.size.width
+          || area.size.height != frame.page_area.size.height =>
+      {
+        let mut node = node.clone();
+
+        set_viewport(&mut node, frame.page_area);
+        Some(PreparedTree::lay_out(
+          page_root(page_context, node),
+          frame.page_area,
+        )?)
+      }
+      (None, _) => None,
     };
     let fresh_links = match (&fresh, &self.bounds) {
       (Some(tree), RepeatBounds::Content { .. }) => Interactive::collect(tree).links,
@@ -222,9 +246,12 @@ impl RepeatablePage<'_> {
     )
   }
 
-  /// The links this page annotates.
+  /// The links this page annotates: the fresh layout's when it has one, else
+  /// the measured layout's.
   pub(crate) fn links(&self) -> impl Iterator<Item = &LinkTarget> {
-    self.repeatable.links.iter().chain(&self.fresh_links)
+    let cached = self.fresh.is_none().then_some(&self.repeatable.links);
+
+    cached.into_iter().flatten().chain(&self.fresh_links)
   }
 
   /// Emits the tree clipped to its bounds on the page, as an artifact when the

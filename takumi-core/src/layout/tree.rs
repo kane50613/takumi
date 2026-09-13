@@ -1142,6 +1142,23 @@ impl RenderNode {
     }
   }
 
+  /// An anonymous block around `child`, styled by inheritance alone and laid
+  /// out from its computed style, which the caller sizes.
+  pub fn anonymous_block(parent_context: &RenderContext, child: RenderNode) -> Self {
+    Self {
+      context: Self::anonymous_box_context(parent_context),
+      node: None,
+      origin: NodeOrigin::Anonymous,
+      children: Some(Box::new([child])),
+      layout_style_override: None,
+      anonymous_text_content: None,
+      marker: None,
+      force_inline_layout: false,
+      table_header_lines: None,
+      table_part: None,
+    }
+  }
+
   pub(super) fn anonymous_block_container(
     parent_context: &RenderContext,
     children: Vec<RenderNode>,

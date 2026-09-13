@@ -50,6 +50,33 @@ const pdf = await render(
 
 `vw`, `vmin`, and `vmax` resolve against the same page area. In the `header` and `footer` bands they resolve against the full page.
 
+## Named pages
+
+Give an element `page: <name>` and style that page with `@page <name>`. The element starts on a new page, its pages take the named rule's `size` and margins, and the content after it returns to the unnamed page. Adjacent siblings that name the same page share it. A full-bleed cover is a named page with no margin:
+
+```tsx twoslash title="Full-bleed cover page"
+import { render } from "takumi-pdf";
+
+const pdf = await render(
+  <article>
+    {/* [!code highlight] */}
+    <section style={{ page: "cover", height: "100vh", background: "#1e293b" }} />
+    <p>The report starts on page two, inside the document margins.</p>
+  </article>,
+  {
+    // [!code highlight]
+    css: "@page cover { margin: 0 }",
+    footer: <p>Page footer</p>,
+  },
+);
+```
+
+When the document opens with a named page, viewport units resolve against that page's area, so `100vh` above fills the whole sheet.
+
+The header and footer bands draw on every page, including named ones, the way Chromium prints its header and footer over a page with no margin.
+
+This is an approximation of CSS named pages. The element lays out inside a box as wide as its page's content area, so its own `width` and margins still apply, but its ancestors keep the unnamed page's width and their backgrounds do not widen to the named page. An element inside a named page cannot name another page.
+
 ## Widows and orphans
 
 A cut through a paragraph keeps at least `orphans` lines at the bottom of the page and `widows` lines at the top of the next. Both default to 2, like Chromium. Set them to 1 to allow lone lines:

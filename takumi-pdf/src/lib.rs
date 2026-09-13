@@ -54,6 +54,7 @@ mod inline;
 mod interactive;
 mod options;
 mod page;
+mod page_context;
 mod pagination;
 mod paint;
 #[cfg(feature = "images")]
@@ -479,7 +480,7 @@ mod tests {
 
   #[test]
   fn content_taller_than_a_render_allows_stops_counting() {
-    let starts = atoms(&[], &[], Vec::new()).page_starts(&[], 2_000_000.0, 10.0);
+    let starts = atoms(&[], &[], Vec::new()).page_starts(&[], 2_000_000.0, &|_| 10.0);
 
     assert_eq!(starts.len(), MAX_PAGES, "the page count runs unbounded");
   }
@@ -487,7 +488,7 @@ mod tests {
   #[test]
   fn page_starts_without_atoms_cuts_at_window() {
     assert_eq!(
-      atoms(&[], &[], Vec::new()).page_starts(&[], 250.0, 100.0),
+      atoms(&[], &[], Vec::new()).page_starts(&[], 250.0, &|_| 100.0),
       vec![0.0, 100.0, 200.0]
     );
   }
@@ -495,7 +496,7 @@ mod tests {
   #[test]
   fn page_starts_pushes_straddling_atom_to_next_page() {
     assert_eq!(
-      atoms(&[(90.0, 110.0)], &[], Vec::new()).page_starts(&[], 250.0, 100.0),
+      atoms(&[(90.0, 110.0)], &[], Vec::new()).page_starts(&[], 250.0, &|_| 100.0),
       vec![0.0, 90.0, 190.0]
     );
   }
@@ -503,7 +504,7 @@ mod tests {
   #[test]
   fn page_starts_hard_cuts_atom_taller_than_window() {
     assert_eq!(
-      atoms(&[(0.0, 300.0)], &[], Vec::new()).page_starts(&[], 300.0, 100.0),
+      atoms(&[(0.0, 300.0)], &[], Vec::new()).page_starts(&[], 300.0, &|_| 100.0),
       vec![0.0, 100.0, 200.0]
     );
   }
@@ -522,7 +523,7 @@ mod tests {
     }];
 
     assert_eq!(
-      atoms(&lines, &[], paragraphs).page_starts(&[], 110.0, 100.0),
+      atoms(&lines, &[], paragraphs).page_starts(&[], 110.0, &|_| 100.0),
       vec![0.0, 90.0],
       "the cut moves from 100 to 90 so two lines reach the next page"
     );
@@ -542,7 +543,7 @@ mod tests {
     }];
 
     assert_eq!(
-      atoms(&lines, &[], paragraphs).page_starts(&[], 140.0, 100.0),
+      atoms(&lines, &[], paragraphs).page_starts(&[], 140.0, &|_| 100.0),
       vec![0.0, 90.0],
       "one line before the cut violates orphans, so the paragraph starts the next page"
     );
@@ -562,7 +563,7 @@ mod tests {
     }];
 
     assert_eq!(
-      atoms(&lines, &[], paragraphs).page_starts(&[], 110.0, 100.0),
+      atoms(&lines, &[], paragraphs).page_starts(&[], 110.0, &|_| 100.0),
       vec![0.0, 100.0],
       "backing up past the orphans floor is worse than a lone widow"
     );
@@ -581,7 +582,7 @@ mod tests {
     }];
 
     assert_eq!(
-      atoms(&lines, &[], paragraphs).page_starts(&[], 300.0, 100.0),
+      atoms(&lines, &[], paragraphs).page_starts(&[], 300.0, &|_| 100.0),
       vec![0.0, 100.0, 200.0],
       "a paragraph that can never satisfy 20/20 still paginates at the window"
     );
@@ -601,7 +602,7 @@ mod tests {
     }];
 
     assert_eq!(
-      atoms(&lines, &[], paragraphs).page_starts(&[], 110.0, 100.0),
+      atoms(&lines, &[], paragraphs).page_starts(&[], 110.0, &|_| 100.0),
       vec![0.0, 90.0]
     );
   }
@@ -609,7 +610,7 @@ mod tests {
   #[test]
   fn page_starts_honors_forced_cuts() {
     assert_eq!(
-      atoms(&[], &[40.0, 150.0], Vec::new()).page_starts(&[], 250.0, 100.0),
+      atoms(&[], &[40.0, 150.0], Vec::new()).page_starts(&[], 250.0, &|_| 100.0),
       vec![0.0, 40.0, 140.0, 150.0]
     );
   }
@@ -622,7 +623,10 @@ mod tests {
       ..Atoms::default()
     };
 
-    assert_eq!(atoms.page_starts(&[], 120.0, 30.0), vec![0.0, 30.0, 60.0]);
+    assert_eq!(
+      atoms.page_starts(&[], 120.0, &|_| 30.0),
+      vec![0.0, 30.0, 60.0]
+    );
   }
 
   #[test]
@@ -634,7 +638,7 @@ mod tests {
     };
 
     assert_eq!(
-      atoms.page_starts(&[], 120.0, 30.0),
+      atoms.page_starts(&[], 120.0, &|_| 30.0),
       vec![0.0, 30.0, 40.0, 70.0]
     );
   }
@@ -646,7 +650,7 @@ mod tests {
       ..Atoms::default()
     };
 
-    assert_eq!(atoms.page_starts(&[], 250.0, 100.0), vec![0.0]);
+    assert_eq!(atoms.page_starts(&[], 250.0, &|_| 100.0), vec![0.0]);
   }
 
   #[test]
