@@ -47,7 +47,7 @@ pastey = "0.2"
 pdf-writer = "0.15"
 precomputed-hash = "0.1"
 pretty_assertions = "1"
-quick-xml = "0.41"
+quick-xml = "0.42"
 rayon = "1.12"
 resvg = "0.48"
 roxmltree = "0.21.1"
@@ -99,7 +99,7 @@ default-features = false
 features = ["napi4", "serde-json"]
 
 [workspace.dependencies.icu_properties]
-version = "2.1.2"
+version = "2.3.0"
 default-features = false
 features = ["compiled_data"]
 
@@ -127,7 +127,7 @@ default-features = false
 features = ["std"]
 
 [workspace.dependencies.smallvec]
-version = "1.15"
+version = "1.16"
 features = ["serde"]
 
 [workspace.dependencies.taffy]
