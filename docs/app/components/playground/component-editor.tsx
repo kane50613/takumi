@@ -11,7 +11,11 @@ type MonacoModule = { startTypeScriptService: typeof startTypeScriptService };
 let monacoModule: Promise<MonacoModule> | undefined;
 
 /** monaco-editor reaches for `document` while it evaluates, so it may only load in the browser. */
-const loadMonaco = () => (monacoModule ??= import("./monaco"));
+const loadMonaco = () =>
+  (monacoModule ??= import("./monaco").catch((error: unknown) => {
+    monacoModule = undefined;
+    throw error;
+  }));
 
 export function ComponentEditor({
   code,
@@ -24,6 +28,7 @@ export function ComponentEditor({
 }) {
   const { resolvedTheme } = useTheme();
   const [monaco, setMonaco] = useState<MonacoModule | null>(null);
+  const [loadError, setLoadError] = useState<unknown>(null);
   const [isMobileViewport, setIsMobileViewport] = useState(false);
   const editorRef = useRef<
     Parameters<NonNullable<ComponentProps<typeof Editor>["onMount"]>>[0] | null
@@ -41,11 +46,18 @@ export function ComponentEditor({
   useEffect(() => {
     let isMounted = true;
 
-    loadMonaco().then((module) => {
-      if (isMounted) {
-        setMonaco(module);
-      }
-    });
+    loadMonaco().then(
+      (module) => {
+        if (isMounted) {
+          setMonaco(module);
+        }
+      },
+      (error: unknown) => {
+        if (isMounted) {
+          setLoadError(error);
+        }
+      },
+    );
 
     return () => {
       isMounted = false;
@@ -93,7 +105,9 @@ export function ComponentEditor({
   if (!monaco) {
     return (
       <div className="grid h-full w-full place-items-center text-fd-muted-foreground text-sm">
-        Launching editor...
+        {loadError
+          ? "The editor failed to load. Reload the page to try again."
+          : "Launching editor..."}
       </div>
     );
   }
