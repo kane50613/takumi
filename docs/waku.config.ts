@@ -11,7 +11,7 @@ export default defineConfig({
       format: "es",
     },
     ssr: {
-      external: ["typescript", "twoslash", "shiki", "@takumi-rs/core"],
+      external: ["typescript", "twoslash", "shiki", "@takumi-rs/core", "monaco-editor"],
     },
     optimizeDeps: {
       exclude: ["lucide-react"],
