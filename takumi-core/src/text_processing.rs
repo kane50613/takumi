@@ -6,7 +6,9 @@ use std::borrow::Cow;
 use parley::layout::BreakReason;
 
 use crate::{
-  layout::inline::{InlineLayout, LineWidths, ProcessedInlineSpan, break_lines},
+  layout::inline::{
+    InlineLayout, LineWidths, ProcessedInlineSpan, break_lines, has_custom_out_of_flow,
+  },
   style::{TextTransform, TextWrapMode, WhiteSpaceCollapse},
 };
 
@@ -219,6 +221,18 @@ pub(crate) fn make_balanced_text(
   }
 
   let initial_emergency_breaks = count_emergency_line_breaks(inline_layout);
+  // Floats keep placing against the container while the breaking width narrows.
+  let keeps_float_geometry = has_custom_out_of_flow(inline_layout);
+  let bisect_widths = |breaking: f32| {
+    if keeps_float_geometry {
+      LineWidths {
+        breaking,
+        alignment: max_width,
+      }
+    } else {
+      LineWidths::uniform(breaking)
+    }
+  };
 
   // Binary search between half width and full width
   let mut left = max_width / 2.0;
@@ -235,7 +249,7 @@ pub(crate) fn make_balanced_text(
     positioned_floats.clear();
     break_lines(
       inline_layout,
-      LineWidths::uniform(mid),
+      bisect_widths(mid),
       None,
       line_height_hint,
       text_wrap_mode,

@@ -107,6 +107,13 @@ impl LineWidths {
   }
 }
 
+pub(crate) fn has_custom_out_of_flow(layout: &InlineLayout) -> bool {
+  layout
+    .inline_boxes()
+    .iter()
+    .any(|inline_box| inline_box.kind == InlineBoxKind::CustomOutOfFlow)
+}
+
 pub(crate) fn break_lines(
   layout: &mut InlineLayout,
   widths: LineWidths,
@@ -118,9 +125,7 @@ pub(crate) fn break_lines(
 ) {
   let inline_boxes = layout.inline_boxes().to_vec();
   let mut float_layout = FloatLayoutState::new(widths, line_height_hint);
-  let has_custom_out_of_flow = inline_boxes
-    .iter()
-    .any(|inline_box| inline_box.kind == InlineBoxKind::CustomOutOfFlow);
+  let has_custom_out_of_flow = has_custom_out_of_flow(layout);
   let is_uniform = widths.breaking == widths.alignment;
 
   if text_wrap_mode == TextWrapMode::NoWrap && !has_custom_out_of_flow && is_uniform {
