@@ -77,7 +77,7 @@ pub(crate) fn emit_text(
   if font_style.sizing.font_size == 0.0 {
     return Ok(());
   }
-  let content = layout.content_box_size();
+  let content = layout.unsnapped_content;
 
   let built = create_inline_layout(InlineLayoutRequest::in_content_box(
     vec![InlineItem::Text {
@@ -119,7 +119,7 @@ pub(crate) fn emit_inline_content(
   if font_style.sizing.font_size == 0.0 {
     return Ok(());
   }
-  let content = layout.content_box_size();
+  let content = layout.unsnapped_content;
 
   let built = create_inline_layout(InlineLayoutRequest::in_content_box(
     collect_inline_items(node),

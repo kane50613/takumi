@@ -163,7 +163,7 @@ pub(crate) fn build_inline_runs<'c>(
   context: &'c RenderContext,
   layout: Layout,
 ) -> Result<Option<(BuiltInlineLayout<'c>, InlineRunLayout)>, PdfError> {
-  let content = layout.content_box_size();
+  let content = layout.unsnapped_content;
   if font_style.sizing.font_size == 0.0 || content.width <= 0.0 || content.height <= 0.0 {
     return Ok(None);
   }

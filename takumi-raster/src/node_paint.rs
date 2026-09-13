@@ -356,7 +356,7 @@ fn draw_text_node_content(
   layout: Layout,
 ) -> Result<()> {
   let font_style = SizedFontStyle::from_style(&context.style, context);
-  let size = layout.content_box_size();
+  let size = layout.unsnapped_content;
 
   if font_style.sizing.font_size == 0.0 {
     return Ok(());
