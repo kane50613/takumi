@@ -241,7 +241,7 @@ pub struct Fonts {
   /// Families with at least one face carrying a color glyph table.
   color_names: HashSet<String>,
   /// The family each registered face belongs to, keyed by `(blob id, face index)`.
-  face_families: Arc<HashMap<(u64, u32), String>>,
+  face_families: Arc<HashMap<(u64, u32), Option<String>>>,
   /// Lazily built face store for SVG `<text>`; cleared on registration.
   #[cfg(feature = "svg")]
   svg_db: Option<Arc<crate::resvg::usvg::fontdb::Database>>,
@@ -279,7 +279,7 @@ impl Default for Fonts {
 pub struct FontsSnapshot {
   context: Rc<RefCell<Fonts>>,
   pub(crate) groups: Arc<HashMap<String, SubsetGroup>>,
-  pub(crate) face_families: Arc<HashMap<(u64, u32), String>>,
+  pub(crate) face_families: Arc<HashMap<(u64, u32), Option<String>>>,
   pub(crate) classes: Arc<FontClasses>,
 }
 
@@ -315,7 +315,9 @@ pub(crate) struct RunSynthesis {
 /// rather than the requested stack. A face's own `name` table answers for one registered
 /// elsewhere: it can name a variable font's default instance, or carry nothing at all.
 pub(crate) fn face_family_name(fonts: &FontsSnapshot, font: &FontData) -> Option<String> {
-  if let Some(family) = fonts.face_families.get(&(font.data.id(), font.index)) {
+  // `None` is a face registered under more than one name: the file cannot say which was meant, so
+  // its own name table answers instead.
+  if let Some(Some(family)) = fonts.face_families.get(&(font.data.id(), font.index)) {
     return Some(family.clone());
   }
 
@@ -673,14 +675,14 @@ impl Fonts {
 
       for face in &faces {
         match face_families.entry((blob.id(), face.index)) {
-          // A blob's id is a hash of its bytes, so one file registered under two names lands
-          // here; drop the key rather than answer with whichever name arrived last.
-          Entry::Occupied(slot) if *slot.get() != family_name => {
-            slot.remove();
+          // A blob's id is a hash of its bytes, so one file registered under two names lands here.
+          // The key stays, holding `None`, so a third registration cannot make it answer again.
+          Entry::Occupied(mut slot) if slot.get().as_ref() != Some(&family_name) => {
+            slot.insert(None);
           }
           Entry::Occupied(_) => {}
           Entry::Vacant(slot) => {
-            slot.insert(family_name.clone());
+            slot.insert(Some(family_name.clone()));
           }
         }
       }
@@ -1084,6 +1086,26 @@ mod tests {
         ..Default::default()
       }))
       .unwrap()
+  }
+
+  #[test]
+  fn a_face_registered_under_three_names_stays_ambiguous() {
+    let mut fonts = Fonts::default();
+    register_named(&mut fonts, geist_bytes(), "First");
+    register_named(&mut fonts, geist_bytes(), "Second");
+    register_named(&mut fonts, geist_bytes(), "Third");
+
+    let snapshot = fonts.snapshot();
+    let face = &snapshot
+      .face_families
+      .keys()
+      .next()
+      .map(|(id, index)| (*id, *index));
+
+    assert!(
+      snapshot.face_families.values().all(Option::is_none),
+      "an ambiguous face must not be answered for; keys: {face:?}"
+    );
   }
 
   #[test]
