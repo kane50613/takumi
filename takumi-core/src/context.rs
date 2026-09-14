@@ -141,6 +141,16 @@ impl RenderContext {
     &self.shared.tw_cache
   }
 
+  /// Blink's `CreateAnonymousStyleWithDisplay`, with the `anonymous` flags of the style
+  /// table standing in for its applied text decorations.
+  /// https://source.chromium.org/chromium/chromium/src/+/main:third_party/blink/renderer/core/css/resolver/style_resolver.cc
+  pub(crate) fn for_anonymous(parent: &Self) -> Self {
+    let mut context = parent.clone();
+
+    context.style = Box::new(ComputedStyle::for_anonymous(&parent.style, &parent.sizing));
+    context
+  }
+
   pub(crate) fn from_parent(
     parent: &Self,
     style: ComputedStyle,

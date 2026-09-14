@@ -903,14 +903,21 @@ macro_rules! define_style {
           }
         }
 
-        /// Builds the style of an anonymous box generated inside `parent`.
-        pub(crate) fn for_anonymous(parent: &Self) -> Self {
-          Self {
+        /// Builds the style of an anonymous block box generated inside `parent`,
+        /// resolved down to its used values like any other box's.
+        pub(crate) fn for_anonymous(parent: &Self, sizing: &SizingContext) -> Self {
+          let mut style = Self {
             custom_properties: inherited_custom_properties(&parent.custom_properties),
             registered_custom_properties: parent.registered_custom_properties.clone(),
             lang: parent.lang,
             $($longhand: define_anonymous_default!(parent.$longhand, define_style!(@default $($longhand_default)?) $(, inherit $longhand_inherit)? $(, anonymous $longhand_anonymous)?),)*
-          }
+          };
+
+          // css 2.1 9.2.1.1: an anonymous box is a block container, and `display` starts
+          // at its initial `inline`.
+          style.display.blockify();
+          style.make_computed(sizing);
+          style
         }
 
         /// Resolves relative units against the sizing context.

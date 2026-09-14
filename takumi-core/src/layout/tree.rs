@@ -1109,22 +1109,8 @@ impl RoundTree for LayoutTree<'_> {
 }
 
 impl RenderNode {
-  /// Blink's `CreateAnonymousStyleWithDisplay`, with the `anonymous` flags of
-  /// the style table standing in for its applied text decorations.
-  /// https://source.chromium.org/chromium/chromium/src/+/main:third_party/blink/renderer/core/css/resolver/style_resolver.cc
-  fn anonymous_box_context(parent_context: &RenderContext) -> RenderContext {
-    let mut context = parent_context.clone();
-
-    context.style = Box::new(ComputedStyle::for_anonymous(&parent_context.style));
-    context.style.display = Display::Block;
-    // An anonymous box inherits no border style, so its `medium` border widths have to be
-    // taken down to their used value of zero like any other box's.
-    context.style.make_computed(&parent_context.sizing);
-    context
-  }
-
   pub(super) fn anonymous_text_item(parent_context: &RenderContext, text: String) -> Self {
-    Self::text_item(Self::anonymous_box_context(parent_context), text)
+    Self::text_item(RenderContext::for_anonymous(parent_context), text)
   }
 
   fn text_item(context: RenderContext, text: String) -> Self {
@@ -1150,7 +1136,7 @@ impl RenderNode {
     children: Vec<RenderNode>,
   ) -> Self {
     Self {
-      context: Self::anonymous_box_context(parent_context),
+      context: RenderContext::for_anonymous(parent_context),
       node: None,
       origin: NodeOrigin::Anonymous,
       children: Some(children.into_boxed_slice()),
@@ -1179,7 +1165,7 @@ impl RenderNode {
 
     match image {
       BackgroundImage::Url(url) => Self {
-        context: Self::anonymous_box_context(parent_context),
+        context: RenderContext::for_anonymous(parent_context),
         node: Some(Node::image(url)),
         origin: NodeOrigin::Anonymous,
         children: None,
@@ -1194,7 +1180,7 @@ impl RenderNode {
         table_part: None,
       },
       gradient => {
-        let mut context = Self::anonymous_box_context(parent_context);
+        let mut context = RenderContext::for_anonymous(parent_context);
         context.style.background_image = Some(BackgroundImages::from([gradient]));
         Self {
           context,
@@ -2460,7 +2446,7 @@ mod tests {
       .sizing(sizing)
       .build();
 
-    let anonymous = RenderNode::anonymous_box_context(&parent);
+    let anonymous = RenderContext::for_anonymous(&parent);
     let style = &anonymous.style;
     let sizing = &anonymous.sizing;
 
