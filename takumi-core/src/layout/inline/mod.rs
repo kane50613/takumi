@@ -185,9 +185,16 @@ fn span_box_style(
   size: (f32, f32),
 ) -> Option<MeasuredStyle> {
   match spans.get(id as usize) {
-    Some(ProcessedInlineSpan::Box(item)) => {
-      Some(MeasuredStyle::from_context(&item.render_node.context, size))
-    }
+    Some(ProcessedInlineSpan::Box(item)) => Some(MeasuredStyle::from_context(
+      &item.render_node.context,
+      size,
+      [
+        item.padding.top,
+        item.padding.right,
+        item.padding.bottom,
+        item.padding.left,
+      ],
+    )),
     _ => None,
   }
 }

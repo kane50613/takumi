@@ -91,9 +91,10 @@ pub struct MeasuredTextRunStyle {
 }
 
 impl MeasuredStyle {
-  /// Reads the paint properties off a node's resolved context. `size` is the node's border box,
-  /// which a percentage `border-radius` resolves against.
-  pub fn from_context(context: &RenderContext, size: (f32, f32)) -> Self {
+  /// Reads the paint properties off a node's resolved context. `size` is the border box a
+  /// percentage `border-radius` resolves against, and `padding` the used padding: a percentage
+  /// there resolves against the containing block, so it cannot be recomputed from this node.
+  pub fn from_context(context: &RenderContext, size: (f32, f32), padding: [f32; 4]) -> Self {
     let style = &context.style;
     let sizing = &context.sizing;
     let current_color = context.current_color;
@@ -113,13 +114,7 @@ impl MeasuredStyle {
     ]
     .map(|radius| radius.x.to_px(sizing, size.0));
     let has_border = border_widths.iter().any(|width| *width > 0.0);
-    let padding = [
-      style.padding_top,
-      style.padding_right,
-      style.padding_bottom,
-      style.padding_left,
-    ]
-    .map(|padding| padding.to_px(sizing, 0.0));
+
 
     Self {
       color: style.color.resolve(current_color).to_css_string(),

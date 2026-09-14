@@ -104,6 +104,21 @@ fn a_floated_box_reports_the_style_it_paints_with() {
 }
 
 #[test]
+fn reports_used_padding_given_as_a_percentage() {
+  let measured = measure_with_styles(
+    r#"<div style="width:200px"><div style="font-size:20px; padding-left:10%">text</div></div>"#,
+  );
+
+  let inner = measured.children.first().expect("the inner box");
+  let style = inner.style.as_ref().expect("node style");
+
+  // A percentage padding resolves against the containing block, here the 200px parent, so it
+  // cannot be recomputed from the node itself. The used value is what a consumer needs to place
+  // runs against the content box.
+  assert_eq!(style.padding.map(|p| p[3]), Some(20.0));
+}
+
+#[test]
 fn styles_are_absent_by_default() {
   let html = r#"<div style="width:200px; color:#14110f"><span>hello</span></div>"#;
   let measured = measure_with_include_styles(html, Viewport::new((1200, 630)), false);

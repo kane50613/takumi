@@ -281,7 +281,16 @@ fn collect_measure_result(
         let mut runs = Vec::new();
         let mut inline_backgrounds = Vec::new();
         let style = include_styles.then(|| {
-          MeasuredStyle::from_context(&current.context, (layout.size.width, layout.size.height))
+          MeasuredStyle::from_context(
+            &current.context,
+            (layout.size.width, layout.size.height),
+            [
+              layout.padding.top,
+              layout.padding.right,
+              layout.padding.bottom,
+              layout.padding.left,
+            ],
+          )
         });
 
         if current.should_create_inline_layout() {
