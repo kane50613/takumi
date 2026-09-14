@@ -1109,19 +1109,8 @@ impl RoundTree for LayoutTree<'_> {
 }
 
 impl RenderNode {
-  /// Blink's `CreateAnonymousStyleWithDisplay`, with the `anonymous` flags of
-  /// the style table standing in for its applied text decorations.
-  /// https://source.chromium.org/chromium/chromium/src/+/main:third_party/blink/renderer/core/css/resolver/style_resolver.cc
-  fn anonymous_box_context(parent_context: &RenderContext) -> RenderContext {
-    let mut context = parent_context.clone();
-
-    context.style = Box::new(ComputedStyle::for_anonymous(&parent_context.style));
-    context.style.display = Display::Block;
-    context
-  }
-
   pub(super) fn anonymous_text_item(parent_context: &RenderContext, text: String) -> Self {
-    Self::text_item(Self::anonymous_box_context(parent_context), text)
+    Self::text_item(RenderContext::for_anonymous(parent_context), text)
   }
 
   fn text_item(context: RenderContext, text: String) -> Self {
@@ -1147,7 +1136,7 @@ impl RenderNode {
     children: Vec<RenderNode>,
   ) -> Self {
     Self {
-      context: Self::anonymous_box_context(parent_context),
+      context: RenderContext::for_anonymous(parent_context),
       node: None,
       origin: NodeOrigin::Anonymous,
       children: Some(children.into_boxed_slice()),
@@ -1176,7 +1165,7 @@ impl RenderNode {
 
     match image {
       BackgroundImage::Url(url) => Self {
-        context: Self::anonymous_box_context(parent_context),
+        context: RenderContext::for_anonymous(parent_context),
         node: Some(Node::image(url)),
         origin: NodeOrigin::Anonymous,
         children: None,
@@ -1191,7 +1180,7 @@ impl RenderNode {
         table_part: None,
       },
       gradient => {
-        let mut context = Self::anonymous_box_context(parent_context);
+        let mut context = RenderContext::for_anonymous(parent_context);
         context.style.background_image = Some(BackgroundImages::from([gradient]));
         Self {
           context,
@@ -2445,6 +2434,28 @@ mod tests {
     }
 
     drop(root);
+  }
+
+  #[test]
+  fn anonymous_box_has_no_used_border_width() {
+    let sizing = SizingContext::builder()
+      .viewport(Viewport::default())
+      .build();
+    let parent = RenderContext::builder()
+      .fonts(Fonts::default().snapshot())
+      .sizing(sizing)
+      .build();
+
+    let anonymous = RenderContext::for_anonymous(&parent);
+    let style = &anonymous.style;
+    let sizing = &anonymous.sizing;
+
+    // `border-style` is `none`, so the initial `medium` width has a used value
+    // of zero: an anonymous box reports no border it cannot render.
+    assert_eq!(style.border_top_width.to_used_px(sizing), 0.0);
+    assert_eq!(style.border_right_width.to_used_px(sizing), 0.0);
+    assert_eq!(style.border_bottom_width.to_used_px(sizing), 0.0);
+    assert_eq!(style.border_left_width.to_used_px(sizing), 0.0);
   }
 
   #[test]
