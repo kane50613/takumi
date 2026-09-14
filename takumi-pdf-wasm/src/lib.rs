@@ -20,6 +20,7 @@ use takumi_core::{
 };
 use takumi_pdf::{
   Attachment, MeasureOptions, PageRange, PdfMetadata, PdfOptions, PdfStandard, Tagging,
+  UncoveredText,
 };
 use wasm_bindgen::prelude::*;
 
@@ -187,6 +188,10 @@ impl PdfRenderer {
         .into_iter()
         .map(Attachment::try_from)
         .collect::<Result<_, _>>()?,
+      uncovered_text: options
+        .uncovered_text
+        .map(UncoveredText::from)
+        .unwrap_or_default(),
     })
     .map_err(map_error)
   }

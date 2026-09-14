@@ -54,7 +54,14 @@ pub enum PdfError {
   UndrawableImage(String),
   /// No registered font covers these characters. They would draw nothing and
   /// leave no trace in the text layer, so the render stops instead.
-  MissingGlyphs(String),
+  UncoveredCharacters(String),
+  /// [`UncoveredText::Placeholder`] met a standard that forbids the glyph it draws.
+  PlaceholderForbidden {
+    /// The uncovered characters, named with their codepoints.
+    characters: String,
+    /// The forbidding standard, e.g. `PDF/A-2b`.
+    standard: &'static str,
+  },
   /// A page range names page zero or runs backwards.
   InvalidPageRange(String),
   /// The page ranges select none of the document's pages.
@@ -85,9 +92,17 @@ impl std::fmt::Display for PdfError {
         write!(f, "A PDF cannot draw filter: {filter}")
       }
       Self::UndrawableImage(reason) => write!(f, "Image could not be decoded: {reason}"),
-      Self::MissingGlyphs(characters) => write!(
+      Self::UncoveredCharacters(characters) => write!(
         f,
         "No registered font covers {characters}. Register one that does."
+      ),
+      Self::PlaceholderForbidden {
+        characters,
+        standard,
+      } => write!(
+        f,
+        "No registered font covers {characters}, and {standard} forbids the placeholder glyph. \
+         Register a font that covers them, or set uncoveredText to \"blank\"."
       ),
       Self::InvalidPageRange(range) => {
         write!(
@@ -165,6 +180,22 @@ impl PdfStandard {
   pub(crate) fn requires_tagging(self) -> bool {
     matches!(self, PdfStandard::A2a | PdfStandard::A3a)
   }
+
+  /// Every PDF/A level offered here forbids glyph 0. PDF/A-1b would allow it,
+  /// and is not offered.
+  pub(crate) fn forbids_placeholder(self) -> Option<&'static str> {
+    match self {
+      PdfStandard::None => None,
+      PdfStandard::A2b => Some("PDF/A-2b"),
+      PdfStandard::A2u => Some("PDF/A-2u"),
+      PdfStandard::A3b => Some("PDF/A-3b"),
+      PdfStandard::A3u => Some("PDF/A-3u"),
+      PdfStandard::A4 => Some("PDF/A-4"),
+      PdfStandard::A4f => Some("PDF/A-4f"),
+      PdfStandard::A2a => Some("PDF/A-2a"),
+      PdfStandard::A3a => Some("PDF/A-3a"),
+    }
+  }
 }
 
 /// Whether the output carries a tagged structure tree, and to which standard.
@@ -203,6 +234,14 @@ impl Tagging {
   /// nothing from the indirection.
   pub(crate) fn names_structure_destinations(self) -> bool {
     self == Self::Ua2
+  }
+
+  pub(crate) fn forbids_placeholder(self) -> Option<&'static str> {
+    match self {
+      Self::Off | Self::On => None,
+      Self::Ua1 => Some("PDF/UA-1"),
+      Self::Ua2 => Some("PDF/UA-2"),
+    }
   }
 }
 
@@ -369,6 +408,24 @@ pub struct PdfOptions<'g> {
   /// a modification date ([`PdfMetadata::creation_date`] is the fallback).
   #[builder(default)]
   pub attachments: Vec<Attachment>,
+  /// What a character no registered font covers turns into on the page.
+  #[builder(default)]
+  pub uncovered_text: UncoveredText,
+}
+
+/// What a character no registered font covers turns into on the page.
+///
+/// Neither [`Self::Placeholder`] nor [`Self::Blank`] reflows the line.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum UncoveredText {
+  /// The render fails, naming the characters.
+  #[default]
+  Error,
+  /// The font's glyph 0, which the font may leave empty. Every PDF/A level and
+  /// both PDF/UA levels forbid it.
+  Placeholder,
+  /// Nothing. The character's space stays empty.
+  Blank,
 }
 
 /// A file attached to the document.
@@ -770,7 +827,7 @@ mod tests {
   #[test]
   fn error_messages_read_as_sentences() {
     assert_eq!(
-      PdfError::MissingGlyphs("क (U+0915)".into()).to_string(),
+      PdfError::UncoveredCharacters("क (U+0915)".into()).to_string(),
       "No registered font covers क (U+0915). Register one that does."
     );
     assert_eq!(

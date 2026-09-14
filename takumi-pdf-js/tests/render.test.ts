@@ -398,3 +398,46 @@ test("rejects a filter a PDF cannot express", async () => {
     }),
   ).rejects.toThrow("A PDF cannot draw filter: blur(4px)");
 });
+
+const uncoveredDoc = container({
+  style: { display: "flex", padding: 24 },
+  children: [text("uncovered क", { fontSize: 16 })],
+});
+
+const uncoveredViewport = { width: 200, height: 100 };
+
+test("uncoveredText renders through uncovered characters", async () => {
+  await expect(renderer.render(uncoveredDoc, { viewport: uncoveredViewport })).rejects.toThrow(
+    "No registered font covers क (U+0915)",
+  );
+
+  const placeholder = await renderer.render(uncoveredDoc, {
+    viewport: uncoveredViewport,
+    uncoveredText: "placeholder",
+  });
+  const blank = await renderer.render(uncoveredDoc, {
+    viewport: uncoveredViewport,
+    uncoveredText: "blank",
+  });
+
+  expect(decoder.decode(placeholder.subarray(0, 5))).toBe("%PDF-");
+  expect(Buffer.from(placeholder).equals(Buffer.from(blank))).toBe(false);
+});
+
+test("only the placeholder policy trips the standard that forbids it", async () => {
+  await expect(
+    renderer.render(uncoveredDoc, {
+      viewport: uncoveredViewport,
+      uncoveredText: "placeholder",
+      pdfa: "2b",
+    }),
+  ).rejects.toThrow("PDF/A-2b forbids the placeholder glyph");
+
+  const blank = await renderer.render(uncoveredDoc, {
+    viewport: uncoveredViewport,
+    uncoveredText: "blank",
+    pdfa: "2b",
+  });
+
+  expect(decoder.decode(blank.subarray(0, 5))).toBe("%PDF-");
+});

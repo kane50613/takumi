@@ -98,10 +98,11 @@ pub const PRODUCER: &str = concat!("takumi-pdf ", env!("CARGO_PKG_VERSION"));
 pub use crate::options::{
   Attachment, AttachmentRelationship, MeasureOptions, MeasuredSize, PageMargin, PageMargins,
   PageOptions, PageRange, PdfDate, PdfError, PdfMetadata, PdfOptions, PdfStandard, Tagging,
-  XmpProperty, XmpSchema,
+  UncoveredText, XmpProperty, XmpSchema,
 };
 use crate::{
   emitter::DocumentState,
+  glyph::Uncovered,
   inline::{TextBox, build_inline_map},
   interactive::{Interactive, add_link_annotations},
   krilla::{
@@ -167,7 +168,14 @@ pub fn render(mut options: PdfOptions<'_>) -> Result<Vec<u8>, PdfError> {
     lang: options.lang,
   };
   let tagged = options.tagged != Tagging::Off || options.standard.requires_tagging();
-  let state = DocumentState::new(tagged, inputs.lang.as_ref().map(Lang::as_str));
+  let uncovered = Uncovered::new(
+    options.uncovered_text,
+    options
+      .standard
+      .forbids_placeholder()
+      .or_else(|| options.tagged.forbids_placeholder()),
+  );
+  let state = DocumentState::new(tagged, inputs.lang.as_ref().map(Lang::as_str), uncovered);
   let structural = options.tagged.names_structure_destinations();
   let rendered = match options.page {
     Some(page) => {

@@ -4,21 +4,72 @@ use std::ops::Range;
 
 use takumi_core::layout::inline::ShapedRun;
 
-use crate::krilla::{
-  surface::Location,
-  text::{Glyph, GlyphId},
+use crate::{
+  krilla::{
+    surface::Location,
+    text::{Glyph, GlyphId},
+  },
+  options::{PdfError, UncoveredText},
 };
+
+/// The characters no registered font covers, and what the render does with them.
+pub(crate) struct Uncovered {
+  policy: UncoveredText,
+  /// The standard that forbids [`UncoveredText::Placeholder`], if one applies.
+  forbidden_by: Option<&'static str>,
+  characters: String,
+}
+
+impl Uncovered {
+  pub(crate) fn new(policy: UncoveredText, forbidden_by: Option<&'static str>) -> Self {
+    Self {
+      policy,
+      forbidden_by,
+      characters: String::new(),
+    }
+  }
+
+  fn draws_placeholder(&self) -> bool {
+    self.policy != UncoveredText::Blank
+  }
+
+  fn record(&mut self, character: char) {
+    if !self.characters.contains(character) {
+      self.characters.push(character);
+    }
+  }
+
+  pub(crate) fn into_error(self) -> Option<PdfError> {
+    if self.characters.is_empty() {
+      return None;
+    }
+    let named = self
+      .characters
+      .chars()
+      .map(|character| format!("{character} (U+{:04X})", character as u32))
+      .collect::<Vec<_>>()
+      .join(", ");
+
+    match (self.policy, self.forbidden_by) {
+      (UncoveredText::Error, _) => Some(PdfError::UncoveredCharacters(named)),
+      (UncoveredText::Placeholder, Some(standard)) => Some(PdfError::PlaceholderForbidden {
+        characters: named,
+        standard,
+      }),
+      _ => None,
+    }
+  }
+}
 
 /// The run's glyphs, each carrying the source text it maps to.
 ///
-/// A character no registered font covers shapes to `.notdef`. It draws nothing
-/// and leaves nothing behind in the text layer, so the page would come out
-/// looking finished with the character quietly gone. Every such character lands
-/// in `uncovered` for the caller to report once the page is done.
+/// Dropping an uncovered glyph leaves its space behind, and a character sharing
+/// a cluster with a covered one still reaches the text layer through that
+/// neighbour's range.
 pub(crate) fn run_glyphs(
   shaped: &ShapedRun,
   run_text: &str,
-  uncovered: &mut String,
+  uncovered: &mut Uncovered,
 ) -> Vec<PdfGlyph> {
   let clusters = cluster_spans(shaped, run_text);
 
@@ -35,6 +86,7 @@ pub(crate) fn run_glyphs(
     .glyphs
     .iter()
     .zip(spans)
+    .filter(|(glyph, _)| glyph.id != 0 || uncovered.draws_placeholder())
     .map(|(glyph, range)| PdfGlyph {
       id: GlyphId::new(glyph.id),
       x_offset: glyph.x / shaped.font_size,
@@ -53,16 +105,14 @@ fn collect_uncovered(
   shaped: &ShapedRun,
   run_text: &str,
   clusters: &[Range<usize>],
-  uncovered: &mut String,
+  uncovered: &mut Uncovered,
 ) {
   for (glyph, cluster) in shaped.glyphs.iter().zip(clusters) {
     if glyph.id != 0 {
       continue;
     }
     for character in run_text.get(cluster.clone()).unwrap_or_default().chars() {
-      if !uncovered.contains(character) {
-        uncovered.push(character);
-      }
+      uncovered.record(character);
     }
   }
 }

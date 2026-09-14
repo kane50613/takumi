@@ -31,8 +31,23 @@ use takumi_core::{
 use takumi_html::{FromHtmlOptions, from_html};
 use takumi_pdf::{
   Attachment, AttachmentRelationship, MeasureOptions, PageMargins, PageOptions, PageRange, PdfDate,
-  PdfError, PdfMetadata, PdfOptions, PdfStandard, Tagging, XmpProperty, XmpSchema, measure, render,
+  PdfError, PdfMetadata, PdfOptions, PdfStandard, Tagging, UncoveredText, XmpProperty, XmpSchema,
+  measure, render,
 };
+
+fn latin_font() -> Fonts {
+  let mut fonts = Fonts::default();
+  let data = fs::read(
+    Path::new(env!("CARGO_MANIFEST_DIR"))
+      .join("../assets/fonts/archivo/Archivo-VariableFont_wdth,wght.ttf"),
+  )
+  .expect("read latin font");
+
+  fonts
+    .register(FontResource::new(data))
+    .expect("load latin font");
+  fonts
+}
 
 fn fonts() -> Fonts {
   let mut fonts = Fonts::default();
@@ -2634,7 +2649,124 @@ fn uncovered_character_stops_the_render() {
 
   assert!(render_with("covered").is_ok());
   assert!(
-    matches!(render_with("uncovered \u{76F4}"), Err(PdfError::MissingGlyphs(named)) if named == "直 (U+76F4)")
+    matches!(render_with("uncovered \u{76F4}"), Err(PdfError::UncoveredCharacters(named)) if named == "直 (U+76F4)")
+  );
+}
+
+/// `placeholder` draws glyph 0; `blank` leaves it out of the run.
+#[test]
+fn uncovered_character_renders_under_an_uncovered_text_policy() {
+  let latin_only = latin_font();
+  let render_with = |policy: UncoveredText| {
+    render(
+      PdfOptions::builder()
+        .node(text("uncovered \u{76F4}", 16.0))
+        .viewport(Viewport::new((200, 100)))
+        .fonts(&latin_only)
+        .uncovered_text(policy)
+        .build(),
+    )
+  };
+
+  assert!(matches!(
+    render_with(UncoveredText::Error),
+    Err(PdfError::UncoveredCharacters(_))
+  ));
+
+  let placeholder = render_with(UncoveredText::Placeholder).expect("render with the placeholder");
+  let blank = render_with(UncoveredText::Blank).expect("render without the glyph");
+
+  assert!(
+    inflated_text(&placeholder).contains("(\\000\\000)"),
+    "the placeholder policy did not draw glyph 0"
+  );
+  assert!(
+    !inflated_text(&blank).contains("(\\000\\000)"),
+    "the blank policy drew glyph 0"
+  );
+}
+
+/// The render names the standard itself, rather than failing as a generic
+/// write error once krilla validates the file.
+#[test]
+fn a_forbidden_placeholder_names_the_standard() {
+  let latin_only = latin_font();
+  let render_with = |standard: PdfStandard, tagged: Tagging| {
+    render(
+      PdfOptions::builder()
+        .node(text("uncovered \u{76F4}", 16.0))
+        .viewport(Viewport::new((200, 100)))
+        .fonts(&latin_only)
+        .uncovered_text(UncoveredText::Placeholder)
+        .standard(standard)
+        .tagged(tagged)
+        .build(),
+    )
+  };
+
+  assert_eq!(
+    render_with(PdfStandard::A2b, Tagging::On)
+      .expect_err("PDF/A-2b forbids the placeholder")
+      .to_string(),
+    "No registered font covers 直 (U+76F4), and PDF/A-2b forbids the placeholder glyph. \
+     Register a font that covers them, or set uncoveredText to \"blank\"."
+  );
+  assert!(matches!(
+    render_with(PdfStandard::None, Tagging::Ua1),
+    Err(PdfError::PlaceholderForbidden {
+      standard: "PDF/UA-1",
+      ..
+    })
+  ));
+  assert!(
+    render(
+      PdfOptions::builder()
+        .node(text("uncovered \u{76F4}", 16.0))
+        .viewport(Viewport::new((200, 100)))
+        .fonts(&latin_only)
+        .uncovered_text(UncoveredText::Blank)
+        .standard(PdfStandard::A2b)
+        .build(),
+    )
+    .is_ok(),
+    "the blank policy should satisfy PDF/A-2b"
+  );
+}
+
+/// A mark sharing a cluster with a covered letter rides that letter's source
+/// range back into the text layer, even with its own glyph dropped.
+#[test]
+fn an_uncovered_mark_survives_in_the_text_layer() {
+  let latin_only = latin_font();
+  // U+0301 COMBINING ACUTE ACCENT, which Archivo does not cover.
+  let accented = "e\u{301}";
+  let blank = render(
+    PdfOptions::builder()
+      .node(text(accented, 16.0))
+      .viewport(Viewport::new((200, 100)))
+      .fonts(&latin_only)
+      .uncovered_text(UncoveredText::Blank)
+      .build(),
+  )
+  .expect("render without the mark's glyph");
+
+  let bare = render(
+    PdfOptions::builder()
+      .node(text("e", 16.0))
+      .viewport(Viewport::new((200, 100)))
+      .fonts(&latin_only)
+      .build(),
+  )
+  .expect("render the letter alone");
+
+  // The bare letter is the control: no mark in the source, no such codepoint.
+  assert!(
+    !inflated_text(&bare).contains("0301"),
+    "the letter alone should map to no combining mark"
+  );
+  assert!(
+    inflated_text(&blank).contains("0301"),
+    "the mark left no trace in the text layer"
   );
 }
 
@@ -4162,7 +4294,7 @@ fn counter_style_needs_a_covering_font() {
   };
 
   assert!(
-    matches!(paged(&latin), Err(PdfError::MissingGlyphs(_))),
+    matches!(paged(&latin), Err(PdfError::UncoveredCharacters(_))),
     "a chinese counter over a latin face should say what it cannot draw"
   );
   // The shared set carries a CJK face alongside the latin one.

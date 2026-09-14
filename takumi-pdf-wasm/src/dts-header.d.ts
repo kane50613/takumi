@@ -177,7 +177,19 @@ export type PdfRenderOptions = {
   tagged?: Tagged;
   /** Files attached to the document. */
   attachments?: Attachment[];
+  /**
+   * What a character no registered font covers turns into: `"error"` (default)
+   * fails the render naming it, `"placeholder"` draws the font's glyph 0, and
+   * `"blank"` draws nothing. Neither of the last two reflows the line.
+   *
+   * `"placeholder"` is rejected with any `pdfa` level or `tagged: "ua1"` /
+   * `"ua2"`, which forbid glyph 0.
+   */
+  uncoveredText?: UncoveredText;
 };
+
+/** What a character no registered font covers turns into on the page. */
+export type UncoveredText = "error" | "placeholder" | "blank";
 
 /** Options for `measure`: page geometry (or a viewport) plus layout resources. */
 export type MeasureOptions = (

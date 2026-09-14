@@ -11,7 +11,7 @@ use takumi_core::{
   style::{Color, ColorInput, CssSource, FromCssStr},
   viewport::Viewport,
 };
-use takumi_pdf::{PageMargin, PageMargins, PageOptions, PageRange};
+use takumi_pdf::{PageMargin, PageMargins, PageOptions, PageRange, UncoveredText};
 
 use crate::{
   map_error,
@@ -232,6 +232,28 @@ pub(crate) struct PdfRenderOptions {
   pub(crate) tagged: Option<TaggedInput>,
   /// Files attached to the document.
   pub(crate) attachments: Option<Vec<AttachmentInput>>,
+  /// What a character no registered font covers turns into: `"error"`
+  /// (default), `"placeholder"` or `"blank"`.
+  pub(crate) uncovered_text: Option<UncoveredTextInput>,
+}
+
+/// `uncoveredText` names accepted from JS.
+#[derive(Deserialize, Clone, Copy)]
+#[serde(rename_all = "lowercase")]
+pub(crate) enum UncoveredTextInput {
+  Error,
+  Placeholder,
+  Blank,
+}
+
+impl From<UncoveredTextInput> for UncoveredText {
+  fn from(input: UncoveredTextInput) -> Self {
+    match input {
+      UncoveredTextInput::Error => Self::Error,
+      UncoveredTextInput::Placeholder => Self::Placeholder,
+      UncoveredTextInput::Blank => Self::Blank,
+    }
+  }
 }
 
 pub(crate) fn decode_images(
