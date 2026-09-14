@@ -264,9 +264,13 @@ impl CIDFont {
 
     // IN CID fonts, a upem value of 1000 is assumed for all fonts, so we need to convert.
     let to_pdf_units = |v: f32| v / self.font.units_per_em() * self.units_per_em();
-    // `/DW` states one width for the whole font, so the width most glyphs share
-    // costs nothing. A monospaced or CJK face leaves `/W` almost empty.
-    let default_width = most_common_width(&self.widths);
+    // `/DW` states one width for the whole font, so the width most glyphs share costs
+    // nothing to write. Rounding it moves those glyphs into `/W`, so a face whose widths
+    // convert to fractions no longer leaves `/W` short.
+    //
+    // PDF 32000-1 9.7.4.3 types `/DW` as an integer. Poppler ignores a real one and falls
+    // back to the spec default of 1000 for every glyph the entry covers.
+    let default_width = to_pdf_units(most_common_width(&self.widths)).round();
 
     let mut cid = chunk.cid_font(cid_ref);
     cid.subtype(if is_cff {
@@ -277,7 +281,7 @@ impl CIDFont {
     cid.base_font(Name(base_font.as_bytes()));
     cid.system_info(SYSTEM_INFO);
     cid.font_descriptor(descriptor_ref);
-    cid.default_width(to_pdf_units(default_width));
+    cid.default_width(default_width);
 
     if !is_cff {
       cid.cid_to_gid_map_predefined(Name(b"Identity"));
@@ -287,9 +291,10 @@ impl CIDFont {
     let mut width_writer = cid.widths();
     for (w, group) in self.widths.group_by_key(|&w| w) {
       let end = first + group.len();
-      if w != default_width {
+      let width = to_pdf_units(w);
+      if width != default_width {
         let last = end - 1;
-        width_writer.same(first as u16, last as u16, to_pdf_units(w));
+        width_writer.same(first as u16, last as u16, width);
       }
       first = end;
     }
