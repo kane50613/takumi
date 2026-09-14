@@ -1436,8 +1436,9 @@ fn test_measure_inline_atomic_containers_fixture() {
   assert_eq!(inline_container.height, 69.0);
   assert_eq!(inline_container.children.len(), 3);
 
+  // The container draws a 6px border, and an inline box sits inside it.
   for child in &inline_container.children {
-    assert_eq!(child.transform[5], inline_container.transform[5]);
+    assert_eq!(child.transform[5], inline_container.transform[5] + 6.0);
     assert_eq!(child.height, 57.0);
   }
 
@@ -1446,6 +1447,41 @@ fn test_measure_inline_atomic_containers_fixture() {
   assert_close(runs[0].y, 12.88);
   assert_close(runs[1].y, 12.88);
   assert_close(runs[2].y, 12.88);
+}
+
+#[test]
+fn test_measure_inline_box_transform_is_absolute() {
+  let picture = |display| -> Node {
+    Node::container([]).with_style(
+      Style::default()
+        .with(StyleDeclaration::display(display))
+        .with(StyleDeclaration::width(Px(100.0)))
+        .with(StyleDeclaration::height(Px(50.0))),
+    )
+  };
+  let padded = |child: Node| -> Node {
+    Node::container([child]).with_style(
+      Style::default()
+        .with(StyleDeclaration::display(Display::Block))
+        .with_padding(Sides([Px(40.0); 4])),
+    )
+  };
+
+  let inline = measure(
+    padded(picture(Display::InlineBlock)),
+    create_measure_viewport(),
+  );
+  let block = measure(padded(picture(Display::Block)), create_measure_viewport());
+
+  let inline_box = &inline.children[0];
+  let block_box = &block.children[0];
+
+  // An inline box is placed against its parent's content box, so its transform
+  // has to carry the padding the block child's already does.
+  assert_close(inline_box.transform[4], block_box.transform[4]);
+  assert_close(inline_box.transform[5], block_box.transform[5]);
+  assert_close(inline_box.transform[4], 40.0);
+  assert_close(inline_box.transform[5], 40.0);
 }
 
 #[test]

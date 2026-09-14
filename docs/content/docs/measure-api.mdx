@@ -39,3 +39,7 @@ const { width, height } = await renderer.measure(node, { css }); // [!code highl
 | `transform` | `[number, number, number, number, number, number]` | Transformation matrix.                                        |
 | `children`  | `MeasuredNode[]`                                   | Measured child nodes.                                         |
 | `runs`      | `MeasuredTextRun[]`                                | Text runs in the node, each with `x`, `y`, `width`, `height`. |
+
+`transform` is absolute, for every node including the inline boxes an inline formatting context
+produces. A run's `x` and `y` are local instead: they are measured from the node's content box, so
+a node that carries its own `padding` or `border` needs that added to place a run on the page.

@@ -262,9 +262,15 @@ fn collect_measure_result(
             width: run.width,
             height: run.height,
           }));
+          // Inline layout places boxes against the content box, while every measured node's
+          // transform is absolute.
+          let content_offset = layout.content_box_offset();
           children.extend(measured_boxes.into_iter().map(|inline_box| {
-            let inline_transform =
-              local_transform * Affine::translation(inline_box.x, inline_box.y);
+            let inline_transform = local_transform
+              * Affine::translation(
+                inline_box.x + content_offset.x,
+                inline_box.y + content_offset.y,
+              );
             MeasuredNode {
               width: inline_box.width,
               height: inline_box.height,
