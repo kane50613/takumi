@@ -194,6 +194,42 @@ pub struct MeasuredNode {
   pub runs: Vec<MeasuredTextRun>,
   /// The resolved style the node paints with, set by `includeStyles`.
   pub style: Option<MeasuredStyle>,
+  /// Backgrounds an inline span paints behind its text, which belong to no box of their own.
+  pub inline_backgrounds: Vec<MeasuredInlineBackground>,
+}
+
+/// A rectangle an inline span paints behind its text, in the node's local space.
+#[napi(object)]
+pub struct MeasuredInlineBackground {
+  /// Left edge.
+  pub x: f64,
+  /// Top edge.
+  pub y: f64,
+  /// Rectangle width.
+  pub width: f64,
+  /// Rectangle height.
+  pub height: f64,
+  /// Corner radii, already clamped: top-left, top-right, bottom-right, bottom-left.
+  #[napi(ts_type = "[number, number, number, number]")]
+  pub radii: Vec<f64>,
+  /// Fill colour.
+  pub color: String,
+  /// The span's `opacity`.
+  pub opacity: f64,
+}
+
+impl From<takumi_raster::MeasuredInlineBackground> for MeasuredInlineBackground {
+  fn from(background: takumi_raster::MeasuredInlineBackground) -> Self {
+    Self {
+      x: background.x as f64,
+      y: background.y as f64,
+      width: background.width as f64,
+      height: background.height as f64,
+      radii: background.radii.iter().map(|&r| r as f64).collect(),
+      color: background.color,
+      opacity: background.opacity as f64,
+    }
+  }
 }
 
 impl From<takumi_raster::MeasuredNode> for MeasuredNode {
@@ -205,6 +241,11 @@ impl From<takumi_raster::MeasuredNode> for MeasuredNode {
       children: node.children.into_iter().map(Into::into).collect(),
       runs: node.runs.into_iter().map(Into::into).collect(),
       style: node.style.map(Into::into),
+      inline_backgrounds: node
+        .inline_backgrounds
+        .into_iter()
+        .map(Into::into)
+        .collect(),
     }
   }
 }
