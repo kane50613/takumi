@@ -3,7 +3,40 @@
 
 import type { CSSProperties, JSX } from "react";
 
-export const defaultStylePresets: Partial<Record<keyof JSX.IntrinsicElements, CSSProperties>> = {
+/**
+ * Default styles by tag. An `input[type=…]` entry replaces the `input` one for
+ * that type.
+ */
+export type StylePresets = Partial<
+  Record<keyof JSX.IntrinsicElements | `input[type=${string}]`, CSSProperties>
+>;
+
+// What html.css gives every input, textarea, select and button:
+// `font: -webkit-small-control` is the default size two points smaller, and
+// `FieldText` its light-scheme black.
+const control: CSSProperties = {
+  display: "inline-block",
+  margin: 0,
+  fontSize: "13.3333px",
+  fontStyle: "normal",
+  fontWeight: "normal",
+  lineHeight: "normal",
+  color: "#000",
+  textAlign: "start",
+  textTransform: "none",
+  textIndent: 0,
+};
+
+const button: CSSProperties = {
+  ...control,
+  textAlign: "center",
+  padding: "1px 6px",
+  border: "2px outset #767676",
+  backgroundColor: "#efefef",
+  boxSizing: "border-box",
+};
+
+export const defaultStylePresets: StylePresets = {
   html: {
     display: "block",
   },
@@ -141,6 +174,60 @@ export const defaultStylePresets: Partial<Record<keyof JSX.IntrinsicElements, CS
   },
   // Forms and interactive elements
   form: {
+    display: "block",
+  },
+  input: {
+    ...control,
+    padding: "1px 0",
+    border: "2px inset #767676",
+    backgroundColor: "#fff",
+  },
+  "input[type=checkbox]": {
+    ...control,
+    margin: "3px 3px 3px 4px",
+    boxSizing: "border-box",
+  },
+  "input[type=radio]": {
+    ...control,
+    margin: "3px 3px 0 5px",
+    boxSizing: "border-box",
+  },
+  "input[type=hidden]": {
+    display: "none",
+  },
+  "input[type=file]": control,
+  "input[type=image]": control,
+  "input[type=button]": button,
+  "input[type=submit]": button,
+  "input[type=reset]": button,
+  button,
+  textarea: {
+    ...control,
+    whiteSpace: "pre-wrap",
+    overflowWrap: "break-word",
+    fontFamily: "monospace",
+    padding: 2,
+    border: "1px solid #767676",
+    backgroundColor: "#fff",
+  },
+  select: {
+    ...control,
+    boxSizing: "border-box",
+    whiteSpace: "pre",
+    border: "1px solid #767676",
+    backgroundColor: "#fff",
+    borderRadius: 0,
+  },
+  option: {
+    paddingLeft: 2,
+    paddingRight: 2,
+    paddingBottom: 1,
+    whiteSpace: "nowrap",
+    minHeight: "1.2em",
+    display: "block",
+  },
+  optgroup: {
+    fontWeight: "bolder",
     display: "block",
   },
   fieldset: {
