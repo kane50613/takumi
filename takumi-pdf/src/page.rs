@@ -22,7 +22,7 @@ use crate::{
     page::PageSettings,
     surface::Surface,
   },
-  options::{PT_PER_PX, PageOptions, PageRange, PageSelection, PdfError},
+  options::{PT_PER_PX, PageBand, PageOptions, PageRange, PageSelection, PdfError},
   pagination::{MAX_PAGES, PageSlice, Paginated},
   paint::paint_page_background,
   tags::tag_id,
@@ -113,8 +113,8 @@ pub(crate) fn band_viewport(page: &PageOptions) -> Viewport {
 
 /// What a paged render takes from its options besides the content.
 pub(crate) struct PageBands<'o> {
-  pub(crate) header: Option<&'o Node>,
-  pub(crate) footer: Option<&'o Node>,
+  pub(crate) header: Option<PageBand>,
+  pub(crate) footer: Option<PageBand>,
   pub(crate) page_ranges: Option<&'o [PageRange]>,
 }
 
@@ -164,15 +164,15 @@ impl PagePlan {
     let band_viewport = band_viewport(&page);
     let measure_bands =
       |pages: usize| -> Result<(Option<Repeatable>, Option<Repeatable>), PdfError> {
-        let band = |template: Option<&Node>, bounds| {
+        let band = |template: Option<&PageBand>, bounds| {
           template
             .map(|template| Repeatable::band(inputs, template, band_viewport, bounds, pages))
             .transpose()
         };
 
         Ok((
-          band(bands.header, RepeatBounds::Header)?,
-          band(bands.footer, RepeatBounds::Footer)?,
+          band(bands.header.as_ref(), RepeatBounds::Header)?,
+          band(bands.footer.as_ref(), RepeatBounds::Footer)?,
         ))
       };
     let resolve = |header: Option<&Repeatable>, footer: Option<&Repeatable>| {

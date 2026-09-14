@@ -10,7 +10,12 @@ import {
   subsetFonts,
 } from "@takumi-rs/helpers";
 import type { ReactNode } from "react";
-import { counterCharacters, PdfRenderer as PdfRendererInternal } from "../pkg/takumi_pdf_wasm";
+import {
+  counterCharacters,
+  type PageOverride,
+  type PageVariants,
+  PdfRenderer as PdfRendererInternal,
+} from "../pkg/takumi_pdf_wasm";
 
 export { default, initSync } from "../pkg/takumi_pdf_wasm";
 export type { FontLoader, ImagesInput } from "@takumi-rs/helpers/renderer";
@@ -43,6 +48,32 @@ function collectClassNames(node: unknown, into: string[]): void {
 
 /** A document input: a takumi node tree, JSX, or an HTML string. */
 export type NodeInput = Node | ReactNode | ReactElementLike | string;
+
+/** A band on a page: a document input, or `false` for none. */
+export type BandInput = NodeInput | false;
+
+/**
+ * What one kind of page draws instead of the document's own setting. A field
+ * left out or `null` falls through to the next variant covering the page, then
+ * to the top-level option.
+ */
+export type PageOverrideInput = {
+  header?: BandInput | null;
+  footer?: BandInput | null;
+};
+
+/**
+ * Overrides keyed by the pages they cover. A page reads each field from
+ * `first` or `last`, then `odd` or `even`, then the top-level option. Pages
+ * count from 1 over the whole document, before `pageRanges` drops any, and a
+ * one-page document is its own first and last page with `first` winning.
+ */
+export type PageVariantsInput = {
+  first?: PageOverrideInput | null;
+  last?: PageOverrideInput | null;
+  odd?: PageOverrideInput | null;
+  even?: PageOverrideInput | null;
+};
 
 /** Explicit dimensions in CSS px (96 dpi). */
 export type Dimensions = { width: number; height: number };
@@ -112,9 +143,11 @@ type PagedOptions = {
    * templates; add a CSS `@counter-style` name (e.g. `cjk-decimal`,
    * `lower-roman`) to the class list to format it.
    */
-  header?: NodeInput;
+  header?: NodeInput | null;
   /** Band repeated at the bottom of every page; same class hooks as `header`. */
-  footer?: NodeInput;
+  footer?: NodeInput | null;
+  /** What some pages draw differently from the rest. */
+  pages?: PageVariantsInput | null;
   /**
    * The pages the output keeps, e.g. `[1, { from: 4, to: 8 }]`, like a print
    * dialog's page ranges. Layout and page counters still run over the whole
@@ -137,6 +170,7 @@ type ViewportOptions = {
   margin?: never;
   header?: never;
   footer?: never;
+  pages?: never;
   pageRanges?: never;
 };
 
@@ -352,6 +386,51 @@ function ownCss(
   return stylesheets ?? [];
 }
 
+const PAGE_VARIANTS = ["first", "last", "odd", "even"] as const;
+const PAGE_OVERRIDE_FIELDS = ["header", "footer"] as const;
+
+/** Page variants with every document input resolved to a node tree. */
+type ResolvedVariants = { pages: PageVariants; nodes: Node[]; css: string[] };
+
+function rejectUnknownKeys(object: object, known: readonly string[], what: string): void {
+  const unknown = Object.keys(object).filter((key) => !known.includes(key));
+
+  if (unknown.length > 0) {
+    throw new TypeError(`unknown ${what}: ${unknown.join(", ")}`);
+  }
+}
+
+async function resolveVariants(input: PageVariantsInput): Promise<ResolvedVariants> {
+  const resolved: ResolvedVariants = { pages: {}, nodes: [], css: [] };
+
+  rejectUnknownKeys(input, PAGE_VARIANTS, "page variant");
+  for (const variant of PAGE_VARIANTS) {
+    const override = input[variant];
+
+    if (override == null) continue;
+    rejectUnknownKeys(override, PAGE_OVERRIDE_FIELDS, `field of pages.${variant}`);
+
+    const page: PageOverride = {};
+
+    for (const band of PAGE_OVERRIDE_FIELDS) {
+      const value = override[band];
+
+      if (value == null) continue;
+      if (value === false) {
+        page[band] = false;
+        continue;
+      }
+      const { node, css } = await resolveNode(value);
+
+      page[band] = node;
+      resolved.nodes.push(node);
+      resolved.css.push(...css);
+    }
+    resolved.pages[variant] = page;
+  }
+  return resolved;
+}
+
 async function resolveNode(input: NodeInput): Promise<{ node: Node; css: string[] }> {
   if (isNode(input)) {
     return { node: input, css: [] };
@@ -373,13 +452,17 @@ export class PdfRenderer {
 
   /** Renders a node tree, JSX, or an HTML string to PDF bytes. See {@link RenderOptions}. */
   async render(node: NodeInput, options: RenderOptions = {}): Promise<Uint8Array> {
-    const { fonts, images, header, footer, css, stylesheets, fontFamilies, ...rest } = options;
-    const [main, headerResult, footerResult] = await Promise.all([
+    const { fonts, images, header, footer, pages, css, stylesheets, fontFamilies, ...rest } =
+      options;
+    const [main, headerResult, footerResult, pagesResult] = await Promise.all([
       resolveNode(node),
-      header === undefined ? undefined : resolveNode(header),
-      footer === undefined ? undefined : resolveNode(footer),
+      header == null ? undefined : resolveNode(header),
+      footer == null ? undefined : resolveNode(footer),
+      pages == null ? undefined : resolveVariants(pages),
     ]);
-    const bands = [headerResult?.node, footerResult?.node].filter((band) => band !== undefined);
+    const bands = [headerResult?.node, footerResult?.node, ...(pagesResult?.nodes ?? [])].filter(
+      (band) => band !== undefined,
+    );
     const resources = await this.fonts.resolveResources(
       fonts &&
         subsetFonts({
@@ -401,12 +484,14 @@ export class PdfRenderer {
       ...main.css,
       ...(headerResult?.css ?? []),
       ...(footerResult?.css ?? []),
+      ...(pagesResult?.css ?? []),
     ];
 
     return this.inner.render(main.node, {
       ...rest,
       header: headerResult?.node,
       footer: footerResult?.node,
+      pages: pagesResult?.pages,
       css: sheets.length > 0 ? sheets : undefined,
       images: resources.images,
       fontFamilies: resources.fontFamilies,

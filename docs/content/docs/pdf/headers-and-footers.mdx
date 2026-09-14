@@ -23,6 +23,37 @@ const pdf = await render(report, {
 });
 ```
 
+## Pages that differ
+
+`pages` overrides the header or footer on some pages. A page reads each field from `first` or `last`, then `odd` or `even`, then the top-level option. `false` leaves that page's band empty. Pages count from 1 over the whole document, before `pageRanges` drops any.
+
+```tsx twoslash title="No header on the cover, a closing note on the last page"
+import type { ReactNode } from "react";
+declare const invoice: ReactNode;
+// ---cut---
+import { render } from "takumi-pdf";
+import { PageNumber } from "takumi-pdf/primitives";
+
+const pdf = await render(invoice, {
+  header: <p>Acme Ltd</p>,
+  footer: <PageNumber />,
+  // [!code highlight:11]
+  pages: {
+    first: { header: false },
+    last: {
+      footer: (
+        <div>
+          <p>Thank you for your business.</p>
+          <p>Terms: net 30.</p>
+        </div>
+      ),
+    },
+  },
+});
+```
+
+Automatic margins fit the tallest band on every page, so a taller last-page footer does not change where the other pages break. A one-page document is its own first and last page, and `first` wins.
+
 ## Sizing the margin
 
 `margin` defaults to `"auto"`. It measures the header and footer at full page width and reserves space above and below the document.

@@ -11,7 +11,9 @@ use takumi_core::{
   style::{Color, ColorInput, CssSource, FromCssStr},
   viewport::Viewport,
 };
-use takumi_pdf::{PageMargin, PageMargins, PageOptions, PageRange, UncoveredText};
+use takumi_pdf::{
+  Band, PageMargin, PageMargins, PageOptions, PageOverride, PageRange, PageVariants, UncoveredText,
+};
 
 use crate::{
   map_error,
@@ -208,6 +210,8 @@ pub(crate) struct PdfRenderOptions {
   pub(crate) header: Option<Node>,
   /// Band repeated at the bottom of every page; same class hooks as `header`.
   pub(crate) footer: Option<Node>,
+  /// What some pages draw differently from the rest.
+  pub(crate) pages: Option<PageVariantsInput>,
   /// The pages the output keeps, 1-based. Page counters keep their full-output
   /// numbers.
   pub(crate) page_ranges: Option<Vec<PageRangeInput>>,
@@ -256,6 +260,80 @@ impl From<UncoveredTextInput> for UncoveredText {
   }
 }
 
+/// A band as the caller writes it: a node, or `false` for none.
+#[derive(Deserialize)]
+#[serde(untagged)]
+pub(crate) enum BandInput {
+  Off(False),
+  Node(Box<Node>),
+}
+
+/// The one boolean a band takes.
+#[derive(Deserialize)]
+#[serde(try_from = "bool")]
+pub(crate) struct False;
+
+impl TryFrom<bool> for False {
+  type Error = String;
+
+  fn try_from(value: bool) -> Result<Self, Self::Error> {
+    match value {
+      false => Ok(Self),
+      true => Err("a band is a node or false; true names nothing".into()),
+    }
+  }
+}
+
+impl From<BandInput> for Band {
+  fn from(input: BandInput) -> Self {
+    match input {
+      BandInput::Off(False) => Self::Off,
+      BandInput::Node(node) => Self::from(*node),
+    }
+  }
+}
+
+/// What one kind of page draws instead of the document's own setting.
+#[derive(Deserialize, Default)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub(crate) struct PageOverrideInput {
+  header: Option<BandInput>,
+  footer: Option<BandInput>,
+}
+
+impl From<PageOverrideInput> for PageOverride {
+  fn from(input: PageOverrideInput) -> Self {
+    Self {
+      header: input.header.map(Band::from),
+      footer: input.footer.map(Band::from),
+    }
+  }
+}
+
+/// Overrides keyed by the pages they cover.
+#[derive(Deserialize, Default)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub(crate) struct PageVariantsInput {
+  first: Option<PageOverrideInput>,
+  last: Option<PageOverrideInput>,
+  odd: Option<PageOverrideInput>,
+  even: Option<PageOverrideInput>,
+}
+
+impl From<PageVariantsInput> for PageVariants {
+  fn from(input: PageVariantsInput) -> Self {
+    let variant =
+      |variant: Option<PageOverrideInput>| variant.map(PageOverride::from).unwrap_or_default();
+
+    Self {
+      first: variant(input.first),
+      last: variant(input.last),
+      odd: variant(input.odd),
+      even: variant(input.even),
+    }
+  }
+}
+
 pub(crate) fn decode_images(
   cache: &ResourceCache,
   sources: Option<Vec<ImageSource>>,
@@ -282,11 +360,12 @@ pub(crate) fn resolve_geometry(
     || options.margin.is_some()
     || options.header.is_some()
     || options.footer.is_some()
+    || options.pages.is_some()
     || options.page_ranges.is_some();
 
   match options.viewport {
     Some(_) if paged_field_set => Err(js_sys::Error::new(
-      "viewport is mutually exclusive with the paged options (size, landscape, margin, header, footer, pageRanges)",
+      "viewport is mutually exclusive with the paged options (size, landscape, margin, header, footer, pages, pageRanges)",
     )),
     Some(input) => Ok((
       Some(Viewport::new((

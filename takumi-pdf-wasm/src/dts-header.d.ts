@@ -76,6 +76,31 @@ export type PageSize = PageSizeName | Dimensions;
  */
 export type PageMarginSide = number | "auto";
 
+/** A band on a page: a node tree, or `false` for none. */
+export type Band = Node | false;
+
+/**
+ * What one kind of page draws instead of the document's own setting. A field
+ * left out or `null` falls through to the next variant covering the page, then
+ * to the top-level option.
+ */
+export type PageOverride = {
+  header?: Band | null;
+  footer?: Band | null;
+};
+
+/**
+ * Overrides keyed by the pages they cover. A page reads each field from
+ * `first` or `last`, then `odd` or `even`, then the top-level option. Pages
+ * count from 1 over the whole document.
+ */
+export type PageVariants = {
+  first?: PageOverride | null;
+  last?: PageOverride | null;
+  odd?: PageOverride | null;
+  even?: PageOverride | null;
+};
+
 /** A page margin: one value for all sides, or per-side values (a side left out is `auto`). */
 export type PageMargin =
   | PageMarginSide
@@ -133,7 +158,7 @@ export type Tagged = boolean | "ua1" | "ua2";
 export type PdfRenderOptions = {
   /**
    * Fixed viewport for single-page output. Mutually exclusive with the paged
-   * fields (`size`, `landscape`, `margin`, `header`, `footer`, `pageRanges`).
+   * fields (`size`, `landscape`, `margin`, `header`, `footer`, `pages`, `pageRanges`).
    */
   viewport?: ViewportInput;
   /** Page size for paged output. Defaults to A4. */
@@ -146,9 +171,11 @@ export type PdfRenderOptions = {
    * Band repeated at the top of every page. Nodes classed `pageNumber` /
    * `totalPages` receive the counters.
    */
-  header?: Node;
+  header?: Node | null;
   /** Band repeated at the bottom of every page; same class hooks as `header`. */
-  footer?: Node;
+  footer?: Node | null;
+  /** What some pages draw differently from the rest. */
+  pages?: PageVariants | null;
   /**
    * The pages the output keeps, e.g. `[1, { from: 4, to: 8 }]`. Page counters
    * keep their full-output numbers.

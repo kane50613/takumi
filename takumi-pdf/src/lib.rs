@@ -96,9 +96,9 @@ use takumi_core::{
 pub const PRODUCER: &str = concat!("takumi-pdf ", env!("CARGO_PKG_VERSION"));
 
 pub use crate::options::{
-  Attachment, AttachmentRelationship, MeasureOptions, MeasuredSize, PageMargin, PageMargins,
-  PageOptions, PageRange, PdfDate, PdfError, PdfMetadata, PdfOptions, PdfStandard, Tagging,
-  UncoveredText, XmpProperty, XmpSchema,
+  Attachment, AttachmentRelationship, Band, MeasureOptions, MeasuredSize, PageBand, PageMargin,
+  PageMargins, PageOptions, PageOverride, PageRange, PageVariants, PdfDate, PdfError, PdfMetadata,
+  PdfOptions, PdfStandard, Tagging, UncoveredText, XmpProperty, XmpSchema,
 };
 use crate::{
   emitter::DocumentState,
@@ -180,8 +180,8 @@ pub fn render(mut options: PdfOptions<'_>) -> Result<Vec<u8>, PdfError> {
   let rendered = match options.page {
     Some(page) => {
       let bands = PageBands {
-        header: options.header.as_ref(),
-        footer: options.footer.as_ref(),
+        header: options.pages.header_band(options.header.as_ref()),
+        footer: options.pages.footer_band(options.footer.as_ref()),
         page_ranges: options.page_ranges.as_deref(),
       };
       let plan = PagePlan::solve(&inputs, page, bands, options.node, structural)?;
