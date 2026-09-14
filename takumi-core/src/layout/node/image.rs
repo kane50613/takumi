@@ -44,127 +44,199 @@ pub(crate) fn take_image_style_layers(
   }
 }
 
-pub(crate) fn measure_image_node(
-  image: &ImageData,
-  context: &RenderContext,
-  available_space: Size<AvailableSpace>,
-  known_dimensions: Size<Option<f32>>,
-  style: &taffy::Style,
-) -> Size<f32> {
-  let Ok(image_source) = image.src.resolve(context) else {
-    return Size::ZERO;
-  };
+/// What a replaced element's source states about its own size, per css-images-3 5.
+struct NaturalSize {
+  /// The size the element takes when CSS leaves both axes `auto`, with the default object
+  /// size standing in for an axis the source leaves open.
+  size: Size<f32>,
+  /// The ratio the source states, either outright or through both of its own dimensions.
+  /// A default object dimension standing in for a missing axis states none.
+  ratio: Option<f32>,
+  /// Set when the source states no size of its own and carries only an aspect ratio. css
+  /// 2.1 10.3.2 leaves that case to the containing block rather than to the source.
+  from_ratio_only: bool,
+}
 
-  let intrinsic_sizing = image_source.intrinsic_sizing();
-  const DEFAULT_WIDTH: f32 = 300.0;
-  const DEFAULT_HEIGHT: f32 = 150.0;
+impl ImageData {
+  fn natural(&self, context: &RenderContext) -> Option<NaturalSize> {
+    let image_source = self.src.resolve(context).ok()?;
+    let intrinsic_sizing = image_source.intrinsic_sizing();
+    const DEFAULT_WIDTH: f32 = 300.0;
+    const DEFAULT_HEIGHT: f32 = 150.0;
 
-  let intrinsic_size = match (intrinsic_sizing.width, intrinsic_sizing.height) {
-    (Some(width), Some(height)) => Size { width, height },
-    (Some(width), None) => {
-      let height = match intrinsic_sizing.ratio {
-        Some(ratio) if ratio > 0.0 => width / ratio,
-        _ => DEFAULT_HEIGHT,
-      };
-      Size { width, height }
-    }
-    (None, Some(height)) => {
-      let width = match intrinsic_sizing.ratio {
-        Some(ratio) if ratio > 0.0 => height * ratio,
-        _ => DEFAULT_WIDTH,
-      };
-      Size { width, height }
-    }
-    (None, None) => match intrinsic_sizing.ratio {
-      Some(ratio) if ratio > 0.0 => {
-        let solution_width = DEFAULT_HEIGHT * ratio;
-        if solution_width <= DEFAULT_WIDTH {
-          Size {
-            width: solution_width,
-            height: DEFAULT_HEIGHT,
-          }
-        } else {
-          Size {
-            width: DEFAULT_WIDTH,
-            height: DEFAULT_WIDTH / ratio,
+    let intrinsic_size = match (intrinsic_sizing.width, intrinsic_sizing.height) {
+      (Some(width), Some(height)) => Size { width, height },
+      (Some(width), None) => {
+        let height = match intrinsic_sizing.ratio {
+          Some(ratio) if ratio > 0.0 => width / ratio,
+          _ => DEFAULT_HEIGHT,
+        };
+        Size { width, height }
+      }
+      (None, Some(height)) => {
+        let width = match intrinsic_sizing.ratio {
+          Some(ratio) if ratio > 0.0 => height * ratio,
+          _ => DEFAULT_WIDTH,
+        };
+        Size { width, height }
+      }
+      (None, None) => match intrinsic_sizing.ratio {
+        Some(ratio) if ratio > 0.0 => {
+          let solution_width = DEFAULT_HEIGHT * ratio;
+          if solution_width <= DEFAULT_WIDTH {
+            Size {
+              width: solution_width,
+              height: DEFAULT_HEIGHT,
+            }
+          } else {
+            Size {
+              width: DEFAULT_WIDTH,
+              height: DEFAULT_WIDTH / ratio,
+            }
           }
         }
-      }
-      _ => Size {
-        width: DEFAULT_WIDTH,
-        height: DEFAULT_HEIGHT,
+        _ => Size {
+          width: DEFAULT_WIDTH,
+          height: DEFAULT_HEIGHT,
+        },
       },
-    },
-  };
+    };
 
-  let intrinsic_aspect_ratio =
-    (intrinsic_size.height != 0.0).then_some(intrinsic_size.width / intrinsic_size.height);
-  let preferred_size = match (image.width, image.height) {
-    (Some(width), Some(height)) => Size { width, height },
-    (Some(width), None) => Size {
-      width,
-      height: intrinsic_aspect_ratio
-        .map(|ratio| width / ratio)
-        .unwrap_or(intrinsic_size.height),
-    },
-    (None, Some(height)) => Size {
-      width: intrinsic_aspect_ratio
-        .map(|ratio| height * ratio)
-        .unwrap_or(intrinsic_size.width),
-      height,
-    },
-    (None, None) => intrinsic_size,
-  }
-  .map(|value| context.sizing.to_device(value));
-
-  let style_known_dimensions = Size {
-    width: resolve_style_size_axis(style.size.width, available_space.width, context),
-    height: resolve_style_size_axis(style.size.height, available_space.height, context),
-  };
-
-  if let Size {
-    width: Some(width),
-    height: Some(height),
-  } = style_known_dimensions
-  {
-    return Size { width, height };
-  }
-
-  let known_dimensions = Size {
-    width: style_known_dimensions.width.or(known_dimensions.width),
-    height: style_known_dimensions.height.or(known_dimensions.height),
-  };
-
-  let known_dimensions = if style.size.width.is_auto()
-    && style.size.height.is_auto()
-    && known_dimensions.width.is_none()
-    && known_dimensions.height.is_none()
-    && matches!(
-      available_space.height,
-      AvailableSpace::MinContent | AvailableSpace::MaxContent
-    ) {
-    Size {
-      width: available_space.width.into_option(),
-      height: None,
+    // css-images-3 4: a default object dimension standing in for an axis the source leaves
+    // open states no ratio, so only the source's own ratio or its own two dimensions give
+    // one. Without a ratio the other axis keeps the default object dimension.
+    let source_ratio = intrinsic_sizing
+      .ratio
+      .filter(|ratio| *ratio > 0.0)
+      .or_else(|| match (intrinsic_sizing.width, intrinsic_sizing.height) {
+        (Some(width), Some(height)) if height != 0.0 => Some(width / height),
+        _ => None,
+      });
+    let preferred_size = match (self.width, self.height) {
+      (Some(width), Some(height)) => Size { width, height },
+      (Some(width), None) => Size {
+        width,
+        height: source_ratio
+          .map(|ratio| width / ratio)
+          .unwrap_or(intrinsic_size.height),
+      },
+      (None, Some(height)) => Size {
+        width: source_ratio
+          .map(|ratio| height * ratio)
+          .unwrap_or(intrinsic_size.width),
+        height,
+      },
+      (None, None) => intrinsic_size,
     }
-  } else {
-    known_dimensions
-  };
+    .map(|value| context.sizing.to_device(value));
 
-  let aspect_ratio = style.aspect_ratio.or_else(|| {
-    (preferred_size.height != 0.0).then_some(preferred_size.width / preferred_size.height)
-  });
-  let known_dimensions = known_dimensions.fill_missing_axis_from_aspect_ratio(aspect_ratio);
-
-  if let Size {
-    width: Some(width),
-    height: Some(height),
-  } = known_dimensions
-  {
-    return Size { width, height };
+    Some(NaturalSize {
+      size: preferred_size,
+      ratio: source_ratio,
+      // Blink's `ComputeNormalizedNaturalSize`: the default object size stands in whenever
+      // the source carries no ratio, so only a ratio-carrying source is left without one.
+      from_ratio_only: intrinsic_sizing.width.is_none()
+        && intrinsic_sizing.height.is_none()
+        && self.width.is_none()
+        && self.height.is_none()
+        && intrinsic_sizing.ratio.is_some_and(|ratio| ratio > 0.0),
+    })
   }
 
-  preferred_size
+  /// The size this element lays out at, given the space its container offers.
+  pub(crate) fn measure(
+    &self,
+    context: &RenderContext,
+    available_space: Size<AvailableSpace>,
+    known_dimensions: Size<Option<f32>>,
+    style: &taffy::Style,
+  ) -> Size<f32> {
+    let Some(natural) = self.natural(context) else {
+      return Size::ZERO;
+    };
+
+    // taffy reads a measure in content dimensions, so a style that states a border box
+    // carries the insets inside the size it gives and they come off here.
+    let insets = match style.box_sizing {
+      taffy::BoxSizing::ContentBox => Size {
+        width: 0.0,
+        height: 0.0,
+      },
+      taffy::BoxSizing::BorderBox => {
+        let basis = available_space.width.into_option();
+        let resolve = |value| resolve_inset(value, basis, context);
+
+        Size {
+          width: resolve(style.padding.left)
+            + resolve(style.padding.right)
+            + resolve(style.border.left)
+            + resolve(style.border.right),
+          height: resolve(style.padding.top)
+            + resolve(style.padding.bottom)
+            + resolve(style.border.top)
+            + resolve(style.border.bottom),
+        }
+      }
+    };
+    let style_known_dimensions = Size {
+      width: resolve_style_size_axis(style.size.width, available_space.width, context)
+        .map(|width| (width - insets.width).max(0.0)),
+      height: resolve_style_size_axis(style.size.height, available_space.height, context)
+        .map(|height| (height - insets.height).max(0.0)),
+    };
+
+    if let Size {
+      width: Some(width),
+      height: Some(height),
+    } = style_known_dimensions
+    {
+      return Size { width, height };
+    }
+
+    let known_dimensions = Size {
+      width: style_known_dimensions.width.or(known_dimensions.width),
+      height: style_known_dimensions.height.or(known_dimensions.height),
+    };
+
+    // css 2.1 10.3.2 gives a replaced element with no `width` or `height` its natural size,
+    // whatever box type it generated. A source carrying only an aspect ratio has none, and
+    // Blink fills the offered width there instead.
+    let known_dimensions = if natural.from_ratio_only
+      && style.size.width.is_auto()
+      && style.size.height.is_auto()
+      && known_dimensions.width.is_none()
+      && known_dimensions.height.is_none()
+    {
+      Size {
+        width: available_space.width.into_option(),
+        height: None,
+      }
+    } else {
+      known_dimensions
+    };
+
+    let aspect_ratio = style.aspect_ratio.or(natural.ratio);
+    let known_dimensions = known_dimensions.fill_missing_axis_from_aspect_ratio(aspect_ratio);
+
+    // Without a ratio the axes are independent: an axis CSS states keeps its value and the
+    // other one keeps the default object dimension.
+    Size {
+      width: known_dimensions.width.unwrap_or(natural.size.width),
+      height: known_dimensions.height.unwrap_or(natural.size.height),
+    }
+  }
+}
+
+/// A padding or border length in device pixels, with a percentage resolved against the
+/// containing block and an unresolvable one counted as zero.
+fn resolve_inset(
+  value: taffy::LengthPercentage,
+  basis: Option<f32>,
+  context: &RenderContext,
+) -> f32 {
+  value
+    .maybe_resolve(basis, |val, basis| context.sizing.resolve_calc(val, basis))
+    .unwrap_or_default()
 }
 
 fn resolve_style_size_axis(
@@ -218,9 +290,9 @@ mod tests {
   use serde_json::from_value;
   use taffy::{Dimension, Size as TaffySize, Style};
 
+  use super::image_url;
   #[cfg(feature = "svg")]
   use super::parse_data_uri_image;
-  use super::{image_url, measure_image_node};
   use crate::{
     Fonts,
     context::RenderContext,
@@ -360,8 +432,7 @@ mod tests {
       ..Style::default()
     };
 
-    let measured = measure_image_node(
-      &image,
+    let measured = image.measure(
       &context,
       Size {
         width: AvailableSpace::Definite(480.0),

@@ -1450,38 +1450,48 @@ fn test_measure_inline_atomic_containers_fixture() {
 }
 
 #[test]
-fn test_measure_inline_box_transform_is_absolute() {
-  let picture = |display| -> Node {
-    Node::container([]).with_style(
-      Style::default()
-        .with(StyleDeclaration::display(display))
-        .with(StyleDeclaration::width(Px(100.0)))
-        .with(StyleDeclaration::height(Px(50.0))),
-    )
-  };
-  let padded = |child: Node| -> Node {
-    Node::container([child]).with_style(
+fn test_measure_auto_sized_replaced_element_keeps_its_natural_size() {
+  let png = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAMgAAACWCAYAAACb3McZAAAAHUlEQVR42u3BAQ0AAADCoPdPbQ8HFAAAAAAAAAB4DSMgAAGIL7gAAAAAAElFTkSuQmCC";
+
+  // css 2.1 10.3.2 gives a replaced element with no `width` or `height` its natural size,
+  // which Chrome measures as 200x150 here. A block-level box still stretches instead: taffy
+  // stretches every auto-width block child to its container and reads the width off the
+  // style rather than off the measure, so takumi cannot state the exception yet.
+  let html = format!(
+    r#"<div style="display:block;width:600px"><img style="display:inline" src="{png}"></div>"#
+  );
+  let node = Node::from_html(&html, FromHtmlOptions::default()).expect("parse");
+  let measured = measure(node, create_measure_viewport());
+  let image = &measured.children[0];
+
+  assert_close(image.width, 200.0);
+  assert_close(image.height, 150.0);
+}
+
+#[test]
+fn test_measure_auto_sized_replaced_element_without_a_natural_size_fills_its_container() {
+  let svg = r##"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 150"><rect width="200" height="150" fill="#000"/></svg>"##;
+
+  // A `viewBox` states a ratio and no size, so no natural size answers. css 2.1 10.3.2
+  // leaves that case open and Blink fills the offered width; Chrome measures 600x450.
+  for display in [Display::Inline, Display::Block] {
+    let node: Node = Node::container([
+      Node::image(svg)
+        .with_tag_name("svg")
+        .with_style(Style::default().with(StyleDeclaration::display(display))),
+    ])
+    .with_style(
       Style::default()
         .with(StyleDeclaration::display(Display::Block))
-        .with_padding(Sides([Px(40.0); 4])),
-    )
-  };
+        .with(StyleDeclaration::width(Px(600.0))),
+    );
 
-  let inline = measure(
-    padded(picture(Display::InlineBlock)),
-    create_measure_viewport(),
-  );
-  let block = measure(padded(picture(Display::Block)), create_measure_viewport());
+    let measured = measure(node, create_measure_viewport());
+    let image = &measured.children[0];
 
-  let inline_box = &inline.children[0];
-  let block_box = &block.children[0];
-
-  // An inline box is placed against its parent's content box, so its transform
-  // has to carry the padding the block child's already does.
-  assert_close(inline_box.transform[4], block_box.transform[4]);
-  assert_close(inline_box.transform[5], block_box.transform[5]);
-  assert_close(inline_box.transform[4], 40.0);
-  assert_close(inline_box.transform[5], 40.0);
+    assert_close(image.width, 600.0);
+    assert_close(image.height, 450.0);
+  }
 }
 
 #[test]
@@ -2553,4 +2563,70 @@ fn test_measure_flex_baseline_aligns_to_the_first_line() {
     inline.runs[0].y - inline.runs[1].y,
     0.05,
   );
+}
+
+
+
+#[test]
+fn test_measure_replaced_element_reads_its_insets_the_way_box_sizing_states_them() {
+  let png = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAMgAAACWCAYAAACb3McZAAAAHUlEQVR42u3BAQ0AAADCoPdPbQ8HFAAAAAAAAAB4DSMgAAGIL7gAAAAAAElFTkSuQmCC";
+
+  // A 200x150 picture with 20px of padding and a 5px border, in a 600px container. Chrome
+  // measures the border box of each of these, and the box type never changes the answer.
+  // An auto width is left to the inline cases: a block-level box stretches to its
+  // container before any of this applies, which taffy decides and takumi cannot override.
+  for (width, sizing, displays, expected) in [
+    ("", "content-box", &["inline"][..], (250.0, 200.0)),
+    ("", "border-box", &["inline"][..], (250.0, 200.0)),
+    ("width:250px;", "content-box", &["block", "inline"][..], (300.0, 237.5)),
+    ("width:250px;", "border-box", &["block", "inline"][..], (250.0, 200.0)),
+  ] {
+    for display in displays {
+      let html = format!(
+        r#"<div style="display:block;width:600px"><img style="display:{display};box-sizing:{sizing};{width}padding:20px;border:5px solid #000" src="{png}"></div>"#
+      );
+      let node = Node::from_html(&html, FromHtmlOptions::default()).expect("parse");
+      let measured = measure(node, create_measure_viewport());
+      let image = &measured.children[0];
+
+      assert_within(image.width, expected.0, 0.5);
+      assert_within(image.height, expected.1, 0.5);
+    }
+  }
+}
+
+#[test]
+fn test_measure_replaced_element_without_a_ratio_keeps_its_axes_independent() {
+  // An `<svg>` with no `viewBox` and no size attributes states neither a size nor a ratio,
+  // so each axis falls back to its own default object dimension. Chrome measures 300x150,
+  // 600x150 and 300x600 for these.
+  let svg = r##"<svg xmlns="http://www.w3.org/2000/svg"></svg>"##;
+  let cases = [
+    (Style::default(), (300.0, 150.0)),
+    (
+      Style::default().with(StyleDeclaration::width(Px(600.0))),
+      (600.0, 150.0),
+    ),
+    (
+      Style::default().with(StyleDeclaration::height(Px(600.0))),
+      (300.0, 600.0),
+    ),
+  ];
+
+  for (style, expected) in cases {
+    let node: Node = Node::container([Node::image(svg).with_tag_name("svg").with_style(
+      style.with(StyleDeclaration::display(Display::Inline)),
+    )])
+    .with_style(
+      Style::default()
+        .with(StyleDeclaration::display(Display::Block))
+        .with(StyleDeclaration::width(Px(600.0))),
+    );
+
+    let measured = measure(node, create_measure_viewport());
+    let image = &measured.children[0];
+
+    assert_close(image.width, expected.0);
+    assert_close(image.height, expected.1);
+  }
 }

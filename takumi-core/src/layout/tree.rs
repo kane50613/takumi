@@ -28,7 +28,7 @@ use crate::{
   },
   matching::{MatchedDeclarationsView, NodeMatchedDeclarations, match_stylesheets_view},
   style::{
-    Affine, BackgroundImage, BackgroundImages, BoxSizing, Color, ComputedStyle, ContentItem,
+    Affine, BackgroundImage, BackgroundImages, Color, ComputedStyle, ContentItem,
     ContentValue, Display, Float, Length, LineHeight, ListStylePosition, Position, SizingContext,
     Style as NodeStyle, StyleDeclaration, StyleDeclarationBlock, StyleSheet, TextWrapMode,
     TwBlocks, TwCache, WhiteSpaceCollapse, apply_stylesheet_animations,
@@ -491,20 +491,17 @@ fn push_layout_node<'r>(
 
     render_nodes.push(render_node);
 
-    let (style, container_independent) = match &render_node.layout_style_override {
-      Some(style) => ((**style).clone(), true),
-      None => {
-        let sizing = &render_node.context.sizing;
+    let (style, container_independent) = {
+      let sizing = &render_node.context.sizing;
 
-        // Resolution reports whether it read the query container, which is
-        // exact. Comparing two resolved sizes is not: `min(10px, 100cqw)`
-        // agrees across two large containers and disagrees with a small one.
-        sizing.container_read.set(false);
-        let style = render_node.context.style.to_taffy_style(sizing);
-        let independent = !sizing.container_read.get();
+      // Resolution reports whether it read the query container, which is
+      // exact. Comparing two resolved sizes is not: `min(10px, 100cqw)`
+      // agrees across two large containers and disagrees with a small one.
+      sizing.container_read.set(false);
+      let style = render_node.layout_style(sizing);
+      let independent = !sizing.container_read.get();
 
-        (style, independent)
-      }
+      (style, independent)
     };
 
     nodes.push(LayoutNodeState {
@@ -702,9 +699,7 @@ impl<'r> LayoutTree<'r> {
       return;
     }
 
-    let style = if let Some(style_override) = &render_node.layout_style_override {
-      (**style_override).clone()
-    } else {
+    let style = {
       let mut sizing = render_node.context.sizing.clone();
       sizing.container_size = Size {
         width: known_dimensions.width.or(match available_space.width {
@@ -717,7 +712,7 @@ impl<'r> LayoutTree<'r> {
         }),
       };
 
-      render_node.context.style.to_taffy_style(&sizing)
+      render_node.layout_style(&sizing)
     };
 
     if let Some(node) = self.nodes.get_mut(idx) {
@@ -1109,6 +1104,15 @@ impl RoundTree for LayoutTree<'_> {
 }
 
 impl RenderNode {
+  /// The taffy style this node lays out with: its own override when it has one, otherwise
+  /// its computed style.
+  fn layout_style(&self, sizing: &SizingContext) -> taffy::Style {
+    match self.layout_style_override.as_deref() {
+      Some(style) => style.clone(),
+      None => self.context.style.to_taffy_style(sizing),
+    }
+  }
+
   pub(super) fn anonymous_text_item(parent_context: &RenderContext, text: String) -> Self {
     Self::text_item(RenderContext::for_anonymous(parent_context), text)
   }
@@ -1622,72 +1626,6 @@ impl RenderNode {
     height
   }
 
-  fn inline_replaced_content_size(
-    &self,
-    measured_size: Size<f32>,
-    layout_style: &Style,
-  ) -> Size<f32> {
-    if self.context.style.box_sizing != BoxSizing::BorderBox {
-      return measured_size;
-    }
-
-    let sizing = &self.context.sizing;
-    let horizontal_insets = self.context.style.padding_left.to_px(sizing, 0.0)
-      + self.context.style.padding_right.to_px(sizing, 0.0)
-      + if !self.context.style.border_left_style.is_rendered() {
-        0.0
-      } else {
-        Length::from(self.context.style.border_left_width).to_px(sizing, 0.0)
-      }
-      + if !self.context.style.border_right_style.is_rendered() {
-        0.0
-      } else {
-        Length::from(self.context.style.border_right_width).to_px(sizing, 0.0)
-      };
-    let vertical_insets = self.context.style.padding_top.to_px(sizing, 0.0)
-      + self.context.style.padding_bottom.to_px(sizing, 0.0)
-      + if !self.context.style.border_top_style.is_rendered() {
-        0.0
-      } else {
-        Length::from(self.context.style.border_top_width).to_px(sizing, 0.0)
-      }
-      + if !self.context.style.border_bottom_style.is_rendered() {
-        0.0
-      } else {
-        Length::from(self.context.style.border_bottom_width).to_px(sizing, 0.0)
-      };
-
-    let width_auto = layout_style.size.width.is_auto();
-    let height_auto = layout_style.size.height.is_auto();
-    let measured_ratio = if measured_size.width > 0.0 && measured_size.height > 0.0 {
-      Some(measured_size.width / measured_size.height)
-    } else {
-      None
-    };
-
-    match (width_auto, height_auto) {
-      (false, false) => Size {
-        width: (measured_size.width - horizontal_insets).max(0.0),
-        height: (measured_size.height - vertical_insets).max(0.0),
-      },
-      (false, true) => {
-        let width = (measured_size.width - horizontal_insets).max(0.0);
-        let height = measured_ratio
-          .filter(|ratio| *ratio > 0.0)
-          .map_or(measured_size.height, |ratio| width / ratio);
-        Size { width, height }
-      }
-      (true, false) => {
-        let height = (measured_size.height - vertical_insets).max(0.0);
-        let width = measured_ratio
-          .filter(|ratio| *ratio > 0.0)
-          .map_or(measured_size.width, |ratio| height * ratio);
-        Size { width, height }
-      }
-      (true, true) => measured_size,
-    }
-  }
-
   fn inline_baseline_box_kind(&self) -> Option<InlineBaselineBoxKind> {
     if self.participates_as_inline_box() {
       return Some(InlineBaselineBoxKind::AtomicContainer);
@@ -1895,17 +1833,11 @@ impl RenderNode {
       };
     };
 
-    let layout_style = self
-      .layout_style_override
-      .as_deref()
-      .cloned()
-      .unwrap_or_else(|| self.context.style.to_taffy_style(&self.context.sizing));
+    let layout_style = self.layout_style(&self.context.sizing);
     let measured_size = node.measure(&self.context, available_space, Size::NONE, &layout_style);
-    let size = self.inline_replaced_content_size(measured_size, &layout_style);
-
     AtomicInlineMetrics {
-      size,
-      baseline_offset: self.resolve_inline_baseline_offset(available_space, size, None),
+      size: measured_size,
+      baseline_offset: self.resolve_inline_baseline_offset(available_space, measured_size, None),
     }
   }
 

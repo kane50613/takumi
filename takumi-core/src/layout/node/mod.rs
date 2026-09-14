@@ -15,8 +15,7 @@ use self::{
   container::{
     container_children_ref, deserialize_children, drop_container_children, take_container_children,
   },
-  image::{measure_image_node, take_image_style_layers},
-  text::measure_text_node,
+  image::take_image_style_layers,
 };
 use crate::{
   Xxh3HashSet,
@@ -625,10 +624,8 @@ impl Node {
   ) -> Size<f32> {
     match &self.kind {
       NodeKind::Container { .. } => Size::ZERO,
-      NodeKind::Image(image) => {
-        measure_image_node(image, context, available_space, known_dimensions, style)
-      }
-      NodeKind::Text(text) => measure_text_node(text, context, available_space, known_dimensions),
+      NodeKind::Image(image) => image.measure(context, available_space, known_dimensions, style),
+      NodeKind::Text(text) => text.measure(context, available_space, known_dimensions),
     }
   }
 
