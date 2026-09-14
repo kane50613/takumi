@@ -31,7 +31,7 @@ use takumi_core::{
 use takumi_html::{FromHtmlOptions, from_html};
 use takumi_pdf::{
   Attachment, AttachmentRelationship, Band, MeasureOptions, PageBand, PageMargins, PageOptions,
-  PageOverride, PageRange, PageVariants, PdfDate, PdfError, PdfMetadata, PdfOptions, PdfStandard,
+  PageOverride, PageRange, PageRules, PdfDate, PdfError, PdfMetadata, PdfOptions, PdfStandard,
   Tagging, UncoveredText, XmpProperty, XmpSchema, measure, render,
 };
 
@@ -4917,7 +4917,7 @@ fn viewport_units_in_paged_content_take_the_page_area() {
   );
 }
 
-fn page_variant_options<'g>(fonts: &'g Fonts, pages: PageVariants) -> PdfOptions<'g> {
+fn page_rule_options<'g>(fonts: &'g Fonts, pages: PageRules) -> PdfOptions<'g> {
   let filler: String = (1..=40)
     .map(|line| format!("<p style=\"margin: 0\">line {line}</p>"))
     .collect();
@@ -4937,12 +4937,12 @@ fn page_variant_options<'g>(fonts: &'g Fonts, pages: PageVariants) -> PdfOptions
     .build()
 }
 
-/// Page variants: the header stays off the first page, the last page swaps
+/// Page rules: the header stays off the first page, the last page swaps
 /// in a taller closing footer, and the automatic margin fits the tallest band
 /// on every page, so the pages break where they would with that footer on
 /// every page.
 #[test]
-fn page_variants_override_the_bands_per_page() {
+fn page_rules_override_the_bands_per_page() {
   let fonts = fonts();
   let closing = || {
     column(vec![
@@ -4950,10 +4950,10 @@ fn page_variants_override_the_bands_per_page() {
       text("Terms: net 30.", 12.0),
     ])
   };
-  let pdf = run_pdf_fixture_with("page-variants", &fonts, |fonts| {
-    page_variant_options(
+  let pdf = run_pdf_fixture_with("page-rules", &fonts, |fonts| {
+    page_rule_options(
       fonts,
-      PageVariants {
+      PageRules {
         first: PageOverride {
           header: Some(Band::Off),
           ..PageOverride::default()
@@ -4962,13 +4962,13 @@ fn page_variants_override_the_bands_per_page() {
           footer: Some(closing().into()),
           ..PageOverride::default()
         },
-        ..PageVariants::default()
+        ..PageRules::default()
       },
     )
   });
-  let closing_everywhere = render_pinned(page_variant_options(
+  let closing_everywhere = render_pinned(page_rule_options(
     &fonts,
-    PageVariants {
+    PageRules {
       odd: PageOverride {
         footer: Some(closing().into()),
         ..PageOverride::default()
@@ -4977,7 +4977,7 @@ fn page_variants_override_the_bands_per_page() {
         footer: Some(closing().into()),
         ..PageOverride::default()
       },
-      ..PageVariants::default()
+      ..PageRules::default()
     },
   ));
 
@@ -4988,9 +4988,9 @@ fn page_variants_override_the_bands_per_page() {
 /// Each field falls through `first`, `last`, the page's parity, then the
 /// document's own setting, and `Band::Off` stops the fall.
 #[test]
-fn page_variants_pick_first_then_last_then_parity_then_the_document() {
+fn page_rules_pick_first_then_last_then_parity_then_the_document() {
   let node = |name: &str| text(name, 10.0);
-  let variants = PageVariants {
+  let variants = PageRules {
     first: PageOverride {
       header: Some(node("first").into()),
       ..PageOverride::default()
@@ -5023,5 +5023,5 @@ fn page_variants_pick_first_then_last_then_parity_then_the_document() {
   assert_eq!(name(&header, 4, 4), None);
   assert_eq!(name(&footer, 3, 4), None);
   assert_eq!(name(&footer, 4, 4).as_deref(), Some("last footer"));
-  assert!(PageVariants::default().footer_band(None).is_none());
+  assert!(PageRules::default().footer_band(None).is_none());
 }

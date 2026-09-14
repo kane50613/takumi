@@ -12,7 +12,7 @@ use takumi_core::{
   viewport::Viewport,
 };
 use takumi_pdf::{
-  Band, PageMargin, PageMargins, PageOptions, PageOverride, PageRange, PageVariants, UncoveredText,
+  Band, PageMargin, PageMargins, PageOptions, PageOverride, PageRange, PageRules, UncoveredText,
 };
 
 use crate::{
@@ -207,11 +207,11 @@ pub(crate) struct PdfRenderOptions {
   /// Band repeated at the top of every page. Nodes classed `pageNumber` /
   /// `totalPages` receive the counters, optionally formatted by a
   /// supported `@counter-style` name in the same class list.
-  pub(crate) header: Option<Node>,
+  pub(crate) header: Option<BandInput>,
   /// Band repeated at the bottom of every page; same class hooks as `header`.
-  pub(crate) footer: Option<Node>,
+  pub(crate) footer: Option<BandInput>,
   /// What some pages draw differently from the rest.
-  pub(crate) pages: Option<PageVariantsInput>,
+  pub(crate) pages: Option<PageRulesInput>,
   /// The pages the output keeps, 1-based. Page counters keep their full-output
   /// numbers.
   pub(crate) page_ranges: Option<Vec<PageRangeInput>>,
@@ -313,23 +313,23 @@ impl From<PageOverrideInput> for PageOverride {
 /// Overrides keyed by the pages they cover.
 #[derive(Deserialize, Default)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub(crate) struct PageVariantsInput {
+pub(crate) struct PageRulesInput {
   first: Option<PageOverrideInput>,
   last: Option<PageOverrideInput>,
   odd: Option<PageOverrideInput>,
   even: Option<PageOverrideInput>,
 }
 
-impl From<PageVariantsInput> for PageVariants {
-  fn from(input: PageVariantsInput) -> Self {
-    let variant =
-      |variant: Option<PageOverrideInput>| variant.map(PageOverride::from).unwrap_or_default();
+impl From<PageRulesInput> for PageRules {
+  fn from(input: PageRulesInput) -> Self {
+    let rule =
+      |rule: Option<PageOverrideInput>| rule.map(PageOverride::from).unwrap_or_default();
 
     Self {
-      first: variant(input.first),
-      last: variant(input.last),
-      odd: variant(input.odd),
-      even: variant(input.even),
+      first: rule(input.first),
+      last: rule(input.last),
+      odd: rule(input.odd),
+      even: rule(input.even),
     }
   }
 }

@@ -13,7 +13,7 @@ import type { ReactNode } from "react";
 import {
   counterCharacters,
   type PageOverride,
-  type PageVariants,
+  type PageRules,
   PdfRenderer as PdfRendererInternal,
 } from "../pkg/takumi_pdf_wasm";
 
@@ -54,12 +54,12 @@ export type BandInput = NodeInput | false;
 
 /**
  * What one kind of page draws instead of the document's own setting. A field
- * left out or `null` falls through to the next variant covering the page, then
+ * left out or `null` falls through to the next rule covering the page, then
  * to the top-level option.
  */
 export type PageOverrideInput = {
-  header?: BandInput | null;
-  footer?: BandInput | null;
+  header?: BandInput;
+  footer?: BandInput;
 };
 
 /**
@@ -68,11 +68,11 @@ export type PageOverrideInput = {
  * count from 1 over the whole document, before `pageRanges` drops any, and a
  * one-page document is its own first and last page with `first` winning.
  */
-export type PageVariantsInput = {
-  first?: PageOverrideInput | null;
-  last?: PageOverrideInput | null;
-  odd?: PageOverrideInput | null;
-  even?: PageOverrideInput | null;
+export type PageRulesInput = {
+  first?: PageOverrideInput;
+  last?: PageOverrideInput;
+  odd?: PageOverrideInput;
+  even?: PageOverrideInput;
 };
 
 /** Explicit dimensions in CSS px (96 dpi). */
@@ -143,11 +143,11 @@ type PagedOptions = {
    * templates; add a CSS `@counter-style` name (e.g. `cjk-decimal`,
    * `lower-roman`) to the class list to format it.
    */
-  header?: NodeInput | null;
+  header?: BandInput;
   /** Band repeated at the bottom of every page; same class hooks as `header`. */
-  footer?: NodeInput | null;
+  footer?: BandInput;
   /** What some pages draw differently from the rest. */
-  pages?: PageVariantsInput | null;
+  pages?: PageRulesInput;
   /**
    * The pages the output keeps, e.g. `[1, { from: 4, to: 8 }]`, like a print
    * dialog's page ranges. Layout and page counters still run over the whole
@@ -386,11 +386,11 @@ function ownCss(
   return stylesheets ?? [];
 }
 
-const PAGE_VARIANTS = ["first", "last", "odd", "even"] as const;
+const PAGE_RULES = ["first", "last", "odd", "even"] as const;
 const PAGE_OVERRIDE_FIELDS = ["header", "footer"] as const;
 
-/** Page variants with every document input resolved to a node tree. */
-type ResolvedVariants = { pages: PageVariants; nodes: Node[]; css: string[] };
+/** Page rules with every document input resolved to a node tree. */
+type ResolvedRules = { pages: PageRules; nodes: Node[]; css: string[] };
 
 function rejectUnknownKeys(object: object, known: readonly string[], what: string): void {
   const unknown = Object.keys(object).filter((key) => !known.includes(key));
@@ -400,15 +400,15 @@ function rejectUnknownKeys(object: object, known: readonly string[], what: strin
   }
 }
 
-async function resolveVariants(input: PageVariantsInput): Promise<ResolvedVariants> {
-  const resolved: ResolvedVariants = { pages: {}, nodes: [], css: [] };
+async function resolveRules(input: PageRulesInput): Promise<ResolvedRules> {
+  const resolved: ResolvedRules = { pages: {}, nodes: [], css: [] };
 
-  rejectUnknownKeys(input, PAGE_VARIANTS, "page variant");
-  for (const variant of PAGE_VARIANTS) {
-    const override = input[variant];
+  rejectUnknownKeys(input, PAGE_RULES, "page rule");
+  for (const rule of PAGE_RULES) {
+    const override = input[rule];
 
     if (override == null) continue;
-    rejectUnknownKeys(override, PAGE_OVERRIDE_FIELDS, `field of pages.${variant}`);
+    rejectUnknownKeys(override, PAGE_OVERRIDE_FIELDS, `field of pages.${rule}`);
 
     const page: PageOverride = {};
 
@@ -426,7 +426,7 @@ async function resolveVariants(input: PageVariantsInput): Promise<ResolvedVarian
       resolved.nodes.push(node);
       resolved.css.push(...css);
     }
-    resolved.pages[variant] = page;
+    resolved.pages[rule] = page;
   }
   return resolved;
 }
@@ -456,9 +456,9 @@ export class PdfRenderer {
       options;
     const [main, headerResult, footerResult, pagesResult] = await Promise.all([
       resolveNode(node),
-      header == null ? undefined : resolveNode(header),
-      footer == null ? undefined : resolveNode(footer),
-      pages == null ? undefined : resolveVariants(pages),
+      header == null || header === false ? undefined : resolveNode(header),
+      footer == null || footer === false ? undefined : resolveNode(footer),
+      pages == null ? undefined : resolveRules(pages),
     ]);
     const bands = [headerResult?.node, footerResult?.node, ...(pagesResult?.nodes ?? [])].filter(
       (band) => band !== undefined,

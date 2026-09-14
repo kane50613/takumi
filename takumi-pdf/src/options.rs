@@ -381,7 +381,7 @@ pub struct PdfOptions<'g> {
   pub footer: Option<Node>,
   /// What some pages draw differently from the rest.
   #[builder(default)]
-  pub pages: PageVariants,
+  pub pages: PageRules,
   /// Per-render font fallback chain (family names in order).
   #[builder(default)]
   pub font_families: Option<FontFamily>,
@@ -446,8 +446,18 @@ impl From<Node> for Band {
   }
 }
 
+impl Band {
+  /// The tree the band draws, or `None` when it draws nothing.
+  pub fn node(self) -> Option<Node> {
+    match self {
+      Self::Off => None,
+      Self::Node(node) => Some(*node),
+    }
+  }
+}
+
 /// What one kind of page draws instead of the document's own setting. A
-/// field left unset falls through to the next variant that covers the page,
+/// field left unset falls through to the next rule that covers the page,
 /// then to the [`PdfOptions`] field.
 #[derive(Clone, Default)]
 pub struct PageOverride {
@@ -463,7 +473,7 @@ pub struct PageOverride {
 /// [`PdfOptions::page_ranges`] drops any, and a one-page document is its own
 /// first and last page with `first` winning.
 #[derive(Clone, Default)]
-pub struct PageVariants {
+pub struct PageRules {
   /// The first page.
   pub first: PageOverride,
   /// The last page.
@@ -474,43 +484,38 @@ pub struct PageVariants {
   pub even: PageOverride,
 }
 
-impl PageVariants {
+impl PageRules {
   /// The header band a document with `header` draws per page, or `None` when
   /// no page draws one.
   pub fn header_band(&self, header: Option<&Node>) -> Option<PageBand> {
-    PageBand::new(header, self, |variant| variant.header.as_ref())
+    PageBand::new(header, self, |rule| rule.header.as_ref())
   }
 
   /// The footer band a document with `footer` draws per page.
   pub fn footer_band(&self, footer: Option<&Node>) -> Option<PageBand> {
-    PageBand::new(footer, self, |variant| variant.footer.as_ref())
+    PageBand::new(footer, self, |rule| rule.footer.as_ref())
   }
 }
 
-/// A band resolved per page: the document's tree and the variants that
+/// A band resolved per page: the document's tree and the rules that
 /// replace it.
 #[derive(Clone)]
 pub struct PageBand {
   default: Option<Node>,
-  variants: [Option<Band>; 4],
+  rules: [Option<Band>; 4],
 }
 
 impl PageBand {
   fn new(
     default: Option<&Node>,
-    variants: &PageVariants,
+    rules: &PageRules,
     field: impl Fn(&PageOverride) -> Option<&Band>,
   ) -> Option<Self> {
-    let variants = [
-      &variants.first,
-      &variants.last,
-      &variants.odd,
-      &variants.even,
-    ]
-    .map(|variant| field(variant).cloned());
+    let rules = [&rules.first, &rules.last, &rules.odd, &rules.even]
+      .map(|rule| field(rule).cloned());
     let band = Self {
       default: default.cloned(),
-      variants,
+      rules,
     };
     let draws = band.nodes().next().is_some();
 
@@ -519,15 +524,15 @@ impl PageBand {
 
   /// The tree page `page` of `pages` draws, 1-based, or `None` for nothing.
   pub fn for_page(&self, page: usize, pages: usize) -> Option<&Node> {
-    let [first, last, odd, even] = &self.variants;
+    let [first, last, odd, even] = &self.rules;
     let parity = if page % 2 == 1 { odd } else { even };
-    let variant = (page == 1)
+    let rule = (page == 1)
       .then_some(first.as_ref())
       .flatten()
       .or((page == pages).then_some(last.as_ref()).flatten())
       .or(parity.as_ref());
 
-    match variant {
+    match rule {
       Some(Band::Node(node)) => Some(node.as_ref()),
       Some(Band::Off) => None,
       None => self.default.as_ref(),
@@ -536,17 +541,17 @@ impl PageBand {
 
   /// Every tree some page may draw.
   pub(crate) fn nodes(&self) -> impl Iterator<Item = &Node> {
-    let variants = self.variants.iter().filter_map(|variant| match variant {
+    let rules = self.rules.iter().filter_map(|rule| match rule {
       Some(Band::Node(node)) => Some(node.as_ref()),
       _ => None,
     });
 
-    variants.chain(self.default.as_ref())
+    rules.chain(self.default.as_ref())
   }
 
   /// Whether one page can draw something another does not.
   pub(crate) fn varies(&self) -> bool {
-    self.variants.iter().any(Option::is_some)
+    self.rules.iter().any(Option::is_some)
   }
 }
 

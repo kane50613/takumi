@@ -19,7 +19,7 @@ use takumi_core::{
   style::{FontFamily, Lang},
 };
 use takumi_pdf::{
-  Attachment, MeasureOptions, PageRange, PageVariants, PdfMetadata, PdfOptions, PdfStandard,
+  Attachment, Band, MeasureOptions, PageRange, PageRules, PdfMetadata, PdfOptions, PdfStandard,
   Tagging, UncoveredText,
 };
 use wasm_bindgen::prelude::*;
@@ -173,9 +173,9 @@ impl PdfRenderer {
         .page_ranges
         .map(|ranges| ranges.into_iter().map(PageRange::from).collect()),
       background_color: page_background(options.background_color.as_deref())?,
-      header: options.header,
-      footer: options.footer,
-      pages: options.pages.map(PageVariants::from).unwrap_or_default(),
+      header: options.header.map(Band::from).and_then(Band::node),
+      footer: options.footer.map(Band::from).and_then(Band::node),
+      pages: options.pages.map(PageRules::from).unwrap_or_default(),
       font_families: options.font_families.map(FontFamily::from_names),
       lang,
       metadata: options.metadata.map(PdfMetadata::try_from).transpose()?,

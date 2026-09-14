@@ -72,7 +72,7 @@ pub(crate) struct Repeatable {
 
 /// What a per-page layout starts from.
 enum RepeatTemplate {
-  /// A band re-lays out the variant a page takes with that page's counters.
+  /// A band re-lays out the rule a page takes with that page's counters.
   Band(Box<PageBand>),
   /// A repeated box re-lays out the subtree it was taken from.
   Fixed(Box<FixedTemplate>),
@@ -230,7 +230,7 @@ pub(crate) struct RepeatablePage<'r> {
   repeatable: &'r Repeatable,
   fresh: Option<PreparedTree>,
   fresh_links: Vec<LinkTarget>,
-  /// The band's variant for this page is off.
+  /// The band's rule for this page is off.
   hidden: bool,
 }
 

@@ -97,7 +97,7 @@ pub const PRODUCER: &str = concat!("takumi-pdf ", env!("CARGO_PKG_VERSION"));
 
 pub use crate::options::{
   Attachment, AttachmentRelationship, Band, MeasureOptions, MeasuredSize, PageBand, PageMargin,
-  PageMargins, PageOptions, PageOverride, PageRange, PageVariants, PdfDate, PdfError, PdfMetadata,
+  PageMargins, PageOptions, PageOverride, PageRange, PageRules, PdfDate, PdfError, PdfMetadata,
   PdfOptions, PdfStandard, Tagging, UncoveredText, XmpProperty, XmpSchema,
 };
 use crate::{

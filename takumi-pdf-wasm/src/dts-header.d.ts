@@ -81,24 +81,25 @@ export type Band = Node | false;
 
 /**
  * What one kind of page draws instead of the document's own setting. A field
- * left out or `null` falls through to the next variant covering the page, then
- * to the top-level option.
+ * left out falls through to the next rule covering the page, then to the
+ * top-level option.
  */
 export type PageOverride = {
-  header?: Band | null;
-  footer?: Band | null;
+  header?: Band;
+  footer?: Band;
 };
 
 /**
  * Overrides keyed by the pages they cover. A page reads each field from
  * `first` or `last`, then `odd` or `even`, then the top-level option. Pages
- * count from 1 over the whole document.
+ * count from 1 over the whole document, and a one-page document is its own
+ * first and last page with `first` winning.
  */
-export type PageVariants = {
-  first?: PageOverride | null;
-  last?: PageOverride | null;
-  odd?: PageOverride | null;
-  even?: PageOverride | null;
+export type PageRules = {
+  first?: PageOverride;
+  last?: PageOverride;
+  odd?: PageOverride;
+  even?: PageOverride;
 };
 
 /** A page margin: one value for all sides, or per-side values (a side left out is `auto`). */
@@ -171,11 +172,11 @@ export type PdfRenderOptions = {
    * Band repeated at the top of every page. Nodes classed `pageNumber` /
    * `totalPages` receive the counters.
    */
-  header?: Node | null;
+  header?: Band;
   /** Band repeated at the bottom of every page; same class hooks as `header`. */
-  footer?: Node | null;
+  footer?: Band;
   /** What some pages draw differently from the rest. */
-  pages?: PageVariants | null;
+  pages?: PageRules;
   /**
    * The pages the output keeps, e.g. `[1, { from: 4, to: 8 }]`. Page counters
    * keep their full-output numbers.
