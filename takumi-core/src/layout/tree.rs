@@ -24,11 +24,11 @@ use crate::{
       collect_inline_items, create_inline_constraint, create_inline_layout, measure_inline_layout,
     },
     list_marker::{ListCounter, is_list_element, list_marker, owns_list_counter},
-    node::{Node, NodeKind, NodeStyleLayers},
+    node::{Node, NodeStyleLayers},
   },
   matching::{MatchedDeclarationsView, NodeMatchedDeclarations, match_stylesheets_view},
   style::{
-    Affine, BackgroundImage, BackgroundImages, BoxSizing, Color, ComputedStyle, ContentItem,
+    Affine, BackgroundImage, BackgroundImages, Color, ComputedStyle, ContentItem,
     ContentValue, Display, Float, Length, LineHeight, ListStylePosition, Position, SizingContext,
     Style as NodeStyle, StyleDeclaration, StyleDeclarationBlock, StyleSheet, TextWrapMode,
     TwBlocks, TwCache, WhiteSpaceCollapse, apply_stylesheet_animations,
@@ -1104,49 +1104,13 @@ impl RoundTree for LayoutTree<'_> {
 }
 
 impl RenderNode {
-  /// The padding and rendered border widths the inline axis carries.
-  fn used_inline_insets(&self) -> f32 {
-    let style = &self.context.style;
-    let sizing = &self.context.sizing;
-
-    style.padding_left.to_px(sizing, 0.0)
-      + style.padding_right.to_px(sizing, 0.0)
-      + style.border_left_width.to_used_px(sizing)
-      + style.border_right_width.to_used_px(sizing)
-  }
-
   /// The taffy style this node lays out with: its own override when it has one, otherwise
   /// its computed style.
-  ///
-  /// taffy stretches every auto-width block child to its container and notes in
-  /// `compute/block.rs` that it does not implement the exceptions. A replaced element is
-  /// one of them, so its natural width is pinned here: css 2.1 10.3.2 gives an element with
-  /// no `width` or `height` its natural size, whatever box type it generated.
   fn layout_style(&self, sizing: &SizingContext) -> taffy::Style {
-    let mut style = match self.layout_style_override.as_deref() {
+    match self.layout_style_override.as_deref() {
       Some(style) => style.clone(),
       None => self.context.style.to_taffy_style(sizing),
-    };
-
-    if style.size.width.is_auto()
-      && style.size.height.is_auto()
-      && style.aspect_ratio.is_none()
-      && let Some(node) = &self.node
-      && let NodeKind::Image(image) = &node.kind
-      && let Some(natural) = image.natural_size(&self.context)
-    {
-      // `box-sizing` reinterprets a width the author specified, and `auto` is not one, so
-      // the natural width is a content width under either mode. A border box states the
-      // insets on top of it, as the rest of the pipeline reads a border-box width here.
-      let width = match self.context.style.box_sizing {
-        BoxSizing::ContentBox => natural.width,
-        BoxSizing::BorderBox => natural.width + self.used_inline_insets(),
-      };
-
-      style.size.width = taffy::Dimension::length(width);
     }
-
-    style
   }
 
   pub(super) fn anonymous_text_item(parent_context: &RenderContext, text: String) -> Self {

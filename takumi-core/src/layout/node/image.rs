@@ -58,14 +58,6 @@ struct NaturalSize {
 }
 
 impl ImageData {
-  /// The size this element uses when CSS leaves both `width` and `height` at `auto`.
-  /// `None` when the source carries only an aspect ratio, which no natural size answers.
-  pub(crate) fn natural_size(&self, context: &RenderContext) -> Option<Size<f32>> {
-    let natural = self.natural(context)?;
-
-    (!natural.from_ratio_only).then_some(natural.size)
-  }
-
   fn natural(&self, context: &RenderContext) -> Option<NaturalSize> {
     let image_source = self.src.resolve(context).ok()?;
     let intrinsic_sizing = image_source.intrinsic_sizing();

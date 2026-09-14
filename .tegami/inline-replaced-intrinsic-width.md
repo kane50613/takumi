@@ -2,6 +2,6 @@
 "takumi": patch
 ---
 
-# Give a replaced element its natural size
+# Size a replaced element the way its source states it
 
-An `<img>` or `<svg>` with no `width` or `height` stretched to the width it was offered when it was a block-level box. CSS gives it its natural size instead, whatever box type it generated, and fills the offered width only for a source that carries an aspect ratio and no size of its own.
+An `<svg>` carrying only a `viewBox` states a ratio and no size, and as an inline box it took a size the ratio never stated. `box-sizing: border-box` counted an image's padding and border twice, so the picture came out taller than its box. A source stating neither a size nor a ratio had one synthesised from the default object size, so `width` alone moved `height` with it.
