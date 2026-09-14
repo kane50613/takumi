@@ -1117,6 +1117,9 @@ impl RenderNode {
 
     context.style = Box::new(ComputedStyle::for_anonymous(&parent_context.style));
     context.style.display = Display::Block;
+    // An anonymous box inherits no border style, so its `medium` border widths have to be
+    // taken down to their used value of zero like any other box's.
+    context.style.make_computed(&parent_context.sizing);
     context
   }
 
@@ -2445,6 +2448,28 @@ mod tests {
     }
 
     drop(root);
+  }
+
+  #[test]
+  fn anonymous_box_has_no_used_border_width() {
+    let sizing = SizingContext::builder()
+      .viewport(Viewport::default())
+      .build();
+    let parent = RenderContext::builder()
+      .fonts(Fonts::default().snapshot())
+      .sizing(sizing)
+      .build();
+
+    let anonymous = RenderNode::anonymous_box_context(&parent);
+    let style = &anonymous.style;
+    let sizing = &anonymous.sizing;
+
+    // `border-style` is `none`, so the initial `medium` width has a used value
+    // of zero: an anonymous box reports no border it cannot render.
+    assert_eq!(style.border_top_width.to_used_px(sizing), 0.0);
+    assert_eq!(style.border_right_width.to_used_px(sizing), 0.0);
+    assert_eq!(style.border_bottom_width.to_used_px(sizing), 0.0);
+    assert_eq!(style.border_left_width.to_used_px(sizing), 0.0);
   }
 
   #[test]
