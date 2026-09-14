@@ -87,6 +87,23 @@ fn run_style_reports_the_opacity_of_the_inline_element_it_came_from() {
 }
 
 #[test]
+fn a_floated_box_reports_the_style_it_paints_with() {
+  let measured = measure_with_styles(
+    r#"<div style="width:400px; font-size:20px"><div style="float:left; width:40px; height:40px; background:#C2410C"></div>text</div>"#,
+  );
+
+  // A float is positioned by the inline layout rather than walked into, so its style reaches a
+  // consumer only if the box it is handed back as carries it.
+  let floated = measured
+    .children
+    .iter()
+    .find_map(|child| child.style.as_ref())
+    .expect("the floated box's style");
+
+  assert_eq!(floated.background_color.as_deref(), Some("rgb(194, 65, 12)"));
+}
+
+#[test]
 fn styles_are_absent_by_default() {
   let html = r#"<div style="width:200px; color:#14110f"><span>hello</span></div>"#;
   let measured = measure_with_include_styles(html, Viewport::new((1200, 630)), false);
@@ -270,3 +287,4 @@ fn style_lengths_follow_the_device_pixel_ratio() {
   assert_eq!(style.line_height, Some(60.0));
   assert_eq!(style.border_widths.expect("border widths"), [6.0; 4]);
 }
+

@@ -177,6 +177,21 @@ pub struct BuiltInlineLayout<'c> {
   pub line_scales: Vec<f32>,
 }
 
+/// The resolved style of the element an inline box wraps. A box that wraps no element, such as a
+/// spacer, has none.
+fn span_box_style(
+  spans: &[ProcessedInlineSpan<'_>],
+  id: u64,
+  size: (f32, f32),
+) -> Option<MeasuredStyle> {
+  match spans.get(id as usize) {
+    Some(ProcessedInlineSpan::Box(item)) => {
+      Some(MeasuredStyle::from_context(&item.render_node.context, size))
+    }
+    _ => None,
+  }
+}
+
 impl BuiltInlineLayout<'_> {
   /// Parent font metrics from the first run.
   pub(crate) fn parent_font_metrics(&self) -> Option<ParentFontMetrics> {
@@ -305,12 +320,12 @@ impl BuiltInlineLayout<'_> {
             return Ok(());
           }
           let style = include_styles
-            .then(|| match self.spans.get(inline_box.id as usize) {
-              Some(ProcessedInlineSpan::Box(item)) => Some(MeasuredStyle::from_context(
-                &item.render_node.context,
+            .then(|| {
+              span_box_style(
+                &self.spans,
+                inline_box.id,
                 (inline_box.width, inline_box.height),
-              )),
-              _ => None,
+              )
             })
             .flatten();
 
@@ -332,7 +347,15 @@ impl BuiltInlineLayout<'_> {
         y: positioned_box.y,
         width: positioned_box.width,
         height: positioned_box.height,
-        style: None,
+        style: include_styles
+          .then(|| {
+            span_box_style(
+              &self.spans,
+              positioned_box.id,
+              (positioned_box.width, positioned_box.height),
+            )
+          })
+          .flatten(),
       });
     }
 
