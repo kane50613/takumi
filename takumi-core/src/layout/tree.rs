@@ -24,7 +24,7 @@ use crate::{
       collect_inline_items, create_inline_constraint, create_inline_layout, measure_inline_layout,
     },
     list_marker::{ListCounter, is_list_element, list_marker, owns_list_counter},
-    node::{Node, NodeStyleLayers},
+    node::{Node, NodeKind, NodeStyleLayers},
   },
   matching::{MatchedDeclarationsView, NodeMatchedDeclarations, match_stylesheets_view},
   style::{
@@ -491,20 +491,17 @@ fn push_layout_node<'r>(
 
     render_nodes.push(render_node);
 
-    let (style, container_independent) = match &render_node.layout_style_override {
-      Some(style) => ((**style).clone(), true),
-      None => {
-        let sizing = &render_node.context.sizing;
+    let (style, container_independent) = {
+      let sizing = &render_node.context.sizing;
 
-        // Resolution reports whether it read the query container, which is
-        // exact. Comparing two resolved sizes is not: `min(10px, 100cqw)`
-        // agrees across two large containers and disagrees with a small one.
-        sizing.container_read.set(false);
-        let style = render_node.context.style.to_taffy_style(sizing);
-        let independent = !sizing.container_read.get();
+      // Resolution reports whether it read the query container, which is
+      // exact. Comparing two resolved sizes is not: `min(10px, 100cqw)`
+      // agrees across two large containers and disagrees with a small one.
+      sizing.container_read.set(false);
+      let style = render_node.layout_style(sizing);
+      let independent = !sizing.container_read.get();
 
-        (style, independent)
-      }
+      (style, independent)
     };
 
     nodes.push(LayoutNodeState {
@@ -702,9 +699,7 @@ impl<'r> LayoutTree<'r> {
       return;
     }
 
-    let style = if let Some(style_override) = &render_node.layout_style_override {
-      (**style_override).clone()
-    } else {
+    let style = {
       let mut sizing = render_node.context.sizing.clone();
       sizing.container_size = Size {
         width: known_dimensions.width.or(match available_space.width {
@@ -717,7 +712,7 @@ impl<'r> LayoutTree<'r> {
         }),
       };
 
-      render_node.context.style.to_taffy_style(&sizing)
+      render_node.layout_style(&sizing)
     };
 
     if let Some(node) = self.nodes.get_mut(idx) {
@@ -1109,6 +1104,32 @@ impl RoundTree for LayoutTree<'_> {
 }
 
 impl RenderNode {
+  /// The taffy style this node lays out with: its own override when it has one, otherwise
+  /// its computed style.
+  ///
+  /// taffy stretches every auto-width block child to its container and notes in
+  /// `compute/block.rs` that it does not implement the exceptions. A replaced element is
+  /// one of them, so its natural width is pinned here: css 2.1 10.3.2 gives an element with
+  /// no `width` or `height` its natural size, whatever box type it generated.
+  fn layout_style(&self, sizing: &SizingContext) -> taffy::Style {
+    let mut style = match self.layout_style_override.as_deref() {
+      Some(style) => style.clone(),
+      None => self.context.style.to_taffy_style(sizing),
+    };
+
+    if style.size.width.is_auto()
+      && style.size.height.is_auto()
+      && style.aspect_ratio.is_none()
+      && let Some(node) = &self.node
+      && let NodeKind::Image(image) = &node.kind
+      && let Some(natural) = image.natural_size(&self.context)
+    {
+      style.size.width = taffy::Dimension::length(natural.width);
+    }
+
+    style
+  }
+
   pub(super) fn anonymous_text_item(parent_context: &RenderContext, text: String) -> Self {
     Self::text_item(RenderContext::for_anonymous(parent_context), text)
   }
@@ -1895,11 +1916,7 @@ impl RenderNode {
       };
     };
 
-    let layout_style = self
-      .layout_style_override
-      .as_deref()
-      .cloned()
-      .unwrap_or_else(|| self.context.style.to_taffy_style(&self.context.sizing));
+    let layout_style = self.layout_style(&self.context.sizing);
     let measured_size = node.measure(&self.context, available_space, Size::NONE, &layout_style);
     let size = self.inline_replaced_content_size(measured_size, &layout_style);
 

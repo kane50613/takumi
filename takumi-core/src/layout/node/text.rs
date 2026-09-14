@@ -73,55 +73,58 @@ fn measure_cache_key(
   (hasher.finish(), text.text.len() as u32)
 }
 
-pub(crate) fn measure_text_node(
-  text: &TextData,
-  context: &RenderContext,
-  available_space: Size<AvailableSpace>,
-  known_dimensions: Size<Option<f32>>,
-) -> Size<f32> {
-  let (max_width, max_height) =
-    create_inline_constraint(context, available_space, known_dimensions);
-  let font_style = SizedFontStyle::from_style(&context.style, context);
-  let min_content_query =
-    known_dimensions.width.is_none() && matches!(available_space.width, AvailableSpace::MinContent);
-  let key = measure_cache_key(
-    text,
-    context,
-    &font_style,
-    max_width,
-    max_height,
-    min_content_query,
-  );
-
-  context.inline_cache().get_or_measure(key, || {
-    let inline_content: InlineItem<'_> = InlineItem::Text {
-      text: text.text.as_str().into(),
+impl TextData {
+  /// The size this text lays out at, given the space its container offers.
+  pub(crate) fn measure(
+    &self,
+    context: &RenderContext,
+    available_space: Size<AvailableSpace>,
+    known_dimensions: Size<Option<f32>>,
+  ) -> Size<f32> {
+    let (max_width, max_height) =
+      create_inline_constraint(context, available_space, known_dimensions);
+    let font_style = SizedFontStyle::from_style(&context.style, context);
+    let min_content_query = known_dimensions.width.is_none()
+      && matches!(available_space.width, AvailableSpace::MinContent);
+    let key = measure_cache_key(
+      self,
       context,
-      link: None,
-      decorations: None,
-    };
-    let mut built = create_inline_layout(InlineLayoutRequest {
-      items: vec![inline_content],
-      available_space,
+      &font_style,
       max_width,
       max_height,
-      style: &font_style,
-      context,
-      mode: InlineLayoutMode::Measure,
-      shape_cacheable: true,
-    });
-    let parent_font_metrics = built.parent_font_metrics();
-    measure_inline_layout(
-      &mut built.layout,
-      &built.spans,
-      &built.positioned_floats,
-      &built.line_scales,
-      InlineMeasureOptions {
+      min_content_query,
+    );
+
+    context.inline_cache().get_or_measure(key, || {
+      let inline_content: InlineItem<'_> = InlineItem::Text {
+        text: self.text.as_str().into(),
+        context,
+        link: None,
+        decorations: None,
+      };
+      let mut built = create_inline_layout(InlineLayoutRequest {
+        items: vec![inline_content],
+        available_space,
         max_width,
-        ceil_width: true,
-        parent_font_metrics,
-        min_content_query,
-      },
-    )
-  })
+        max_height,
+        style: &font_style,
+        context,
+        mode: InlineLayoutMode::Measure,
+        shape_cacheable: true,
+      });
+      let parent_font_metrics = built.parent_font_metrics();
+      measure_inline_layout(
+        &mut built.layout,
+        &built.spans,
+        &built.positioned_floats,
+        &built.line_scales,
+        InlineMeasureOptions {
+          max_width,
+          ceil_width: true,
+          parent_font_metrics,
+          min_content_query,
+        },
+      )
+    })
+  }
 }

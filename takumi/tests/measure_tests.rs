@@ -1450,38 +1450,48 @@ fn test_measure_inline_atomic_containers_fixture() {
 }
 
 #[test]
-fn test_measure_inline_box_transform_is_absolute() {
-  let picture = |display| -> Node {
-    Node::container([]).with_style(
-      Style::default()
-        .with(StyleDeclaration::display(display))
-        .with(StyleDeclaration::width(Px(100.0)))
-        .with(StyleDeclaration::height(Px(50.0))),
-    )
-  };
-  let padded = |child: Node| -> Node {
-    Node::container([child]).with_style(
+fn test_measure_auto_sized_replaced_element_keeps_its_natural_size() {
+  let png = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAMgAAACWCAYAAACb3McZAAAAHUlEQVR42u3BAQ0AAADCoPdPbQ8HFAAAAAAAAAB4DSMgAAGIL7gAAAAAAElFTkSuQmCC";
+
+  // css 2.1 10.3.2 gives a replaced element with no `width` or `height` its natural size.
+  // The box type it generated does not enter into it: Chrome measures 200x150 for both.
+  for display in ["inline", "block"] {
+    let html = format!(
+      r#"<div style="display:block;width:600px"><img style="display:{display}" src="{png}"></div>"#
+    );
+    let node = Node::from_html(&html, FromHtmlOptions::default()).expect("parse");
+    let measured = measure(node, create_measure_viewport());
+    let image = &measured.children[0];
+
+    assert_close(image.width, 200.0);
+    assert_close(image.height, 150.0);
+  }
+}
+
+#[test]
+fn test_measure_auto_sized_replaced_element_without_a_natural_size_fills_its_container() {
+  let svg = r##"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 150"><rect width="200" height="150" fill="#000"/></svg>"##;
+
+  // A `viewBox` states a ratio and no size, so no natural size answers. css 2.1 10.3.2
+  // leaves that case open and Blink fills the offered width; Chrome measures 600x450.
+  for display in [Display::Inline, Display::Block] {
+    let node: Node = Node::container([
+      Node::image(svg)
+        .with_tag_name("svg")
+        .with_style(Style::default().with(StyleDeclaration::display(display))),
+    ])
+    .with_style(
       Style::default()
         .with(StyleDeclaration::display(Display::Block))
-        .with_padding(Sides([Px(40.0); 4])),
-    )
-  };
+        .with(StyleDeclaration::width(Px(600.0))),
+    );
 
-  let inline = measure(
-    padded(picture(Display::InlineBlock)),
-    create_measure_viewport(),
-  );
-  let block = measure(padded(picture(Display::Block)), create_measure_viewport());
+    let measured = measure(node, create_measure_viewport());
+    let image = &measured.children[0];
 
-  let inline_box = &inline.children[0];
-  let block_box = &block.children[0];
-
-  // An inline box is placed against its parent's content box, so its transform
-  // has to carry the padding the block child's already does.
-  assert_close(inline_box.transform[4], block_box.transform[4]);
-  assert_close(inline_box.transform[5], block_box.transform[5]);
-  assert_close(inline_box.transform[4], 40.0);
-  assert_close(inline_box.transform[5], 40.0);
+    assert_close(image.width, 600.0);
+    assert_close(image.height, 450.0);
+  }
 }
 
 #[test]
@@ -2554,3 +2564,4 @@ fn test_measure_flex_baseline_aligns_to_the_first_line() {
     0.05,
   );
 }
+
