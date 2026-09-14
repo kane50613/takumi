@@ -35,7 +35,6 @@ use takumi_pdf::{
   measure, render,
 };
 
-/// A font set covering latin only, for the characters no font covers.
 fn latin_font() -> Fonts {
   let mut fonts = Fonts::default();
   let data = fs::read(
@@ -2564,8 +2563,7 @@ fn uncovered_character_stops_the_render() {
   );
 }
 
-/// `uncoveredText` lets the render through: `placeholder` draws glyph 0,
-/// `blank` leaves it out of the run. Both keep the rest of the line in place.
+/// `placeholder` draws glyph 0; `blank` leaves it out of the run.
 #[test]
 fn uncovered_character_renders_under_an_uncovered_text_policy() {
   let latin_only = latin_font();
@@ -2598,9 +2596,8 @@ fn uncovered_character_renders_under_an_uncovered_text_policy() {
   );
 }
 
-/// PDF/A and PDF/UA forbid the glyph `placeholder` draws. The render says so
-/// and names the standard, rather than failing as a generic write error once
-/// krilla validates the file.
+/// The render names the standard itself, rather than failing as a generic
+/// write error once krilla validates the file.
 #[test]
 fn a_forbidden_placeholder_names_the_standard() {
   let latin_only = latin_font();
@@ -2631,7 +2628,6 @@ fn a_forbidden_placeholder_names_the_standard() {
       ..
     })
   ));
-  // `blank` draws no forbidden glyph, so it passes the same standard.
   assert!(
     render(
       PdfOptions::builder()
@@ -2647,10 +2643,8 @@ fn a_forbidden_placeholder_names_the_standard() {
   );
 }
 
-/// An uncovered combining mark shares its cluster with the letter it sits on.
-/// Dropping its glyph leaves the letter behind, and the letter's source range
-/// still covers the mark, so copying the text brings the mark back. The page
-/// shows the bare letter either way.
+/// A mark sharing a cluster with a covered letter rides that letter's source
+/// range back into the text layer, even with its own glyph dropped.
 #[test]
 fn an_uncovered_mark_survives_in_the_text_layer() {
   let latin_only = latin_font();
@@ -2675,9 +2669,7 @@ fn an_uncovered_mark_survives_in_the_text_layer() {
   )
   .expect("render the letter alone");
 
-  // The mark reaches the text layer through the letter's ToUnicode entry, not
-  // an `/ActualText` span. The bare letter is the control: without the mark in
-  // the source there is no such codepoint to find.
+  // The bare letter is the control: no mark in the source, no such codepoint.
   assert!(
     !inflated_text(&bare).contains("0301"),
     "the letter alone should map to no combining mark"

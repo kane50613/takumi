@@ -12,15 +12,10 @@ use crate::{
   options::{PdfError, UncoveredText},
 };
 
-/// The characters no registered font covers, and what the render does with
-/// them.
-///
-/// A character no font covers shapes to the font's `.notdef` glyph. Every one
-/// of them lands in `characters`, so the render can name them once the pages
-/// are done.
+/// The characters no registered font covers, and what the render does with them.
 pub(crate) struct Uncovered {
   policy: UncoveredText,
-  /// The standard that forbids [`UncoveredText::Placeholder`], when one applies.
+  /// The standard that forbids [`UncoveredText::Placeholder`], if one applies.
   forbidden_by: Option<&'static str>,
   characters: String,
 }
@@ -34,8 +29,6 @@ impl Uncovered {
     }
   }
 
-  /// Whether an uncovered character still reaches the page as the font's
-  /// placeholder glyph.
   fn draws_placeholder(&self) -> bool {
     self.policy != UncoveredText::Blank
   }
@@ -46,7 +39,6 @@ impl Uncovered {
     }
   }
 
-  /// What the uncovered characters cost the render, if anything.
   pub(crate) fn into_error(self) -> Option<PdfError> {
     if self.characters.is_empty() {
       return None;
@@ -71,10 +63,9 @@ impl Uncovered {
 
 /// The run's glyphs, each carrying the source text it maps to.
 ///
-/// [`UncoveredText::Blank`] leaves an uncovered character's glyph out of the
-/// run. Its neighbours keep their own positions, so the character's space stays
-/// where it was, empty. A character sharing a cluster with a covered one still
-/// reaches the text layer through that neighbour's source range.
+/// Dropping an uncovered glyph leaves its space behind, and a character sharing
+/// a cluster with a covered one still reaches the text layer through that
+/// neighbour's range.
 pub(crate) fn run_glyphs(
   shaped: &ShapedRun,
   run_text: &str,
@@ -105,7 +96,7 @@ pub(crate) fn run_glyphs(
     .collect()
 }
 
-/// Records the characters that came out as `.notdef`.
+/// Adds the characters that came out as `.notdef`.
 ///
 /// Reads the shaper's own cluster spans, before they are merged for ToUnicode:
 /// a merged span covers its neighbour's text too, and the fallback span covers

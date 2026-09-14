@@ -55,12 +55,11 @@ pub enum PdfError {
   /// No registered font covers these characters. They would draw nothing and
   /// leave no trace in the text layer, so the render stops instead.
   UncoveredCharacters(String),
-  /// [`UncoveredText::Placeholder`] met a standard that forbids the glyph it
-  /// draws. The render stops, naming the characters and the standard.
+  /// [`UncoveredText::Placeholder`] met a standard that forbids the glyph it draws.
   PlaceholderForbidden {
-    /// The characters no registered font covers.
+    /// The uncovered characters, named with their codepoints.
     characters: String,
-    /// The standard that forbids the placeholder, e.g. `PDF/A-2b`.
+    /// The forbidding standard, e.g. `PDF/A-2b`.
     standard: &'static str,
   },
   /// A page range names page zero or runs backwards.
@@ -182,9 +181,8 @@ impl PdfStandard {
     matches!(self, PdfStandard::A2a | PdfStandard::A3a)
   }
 
-  /// The standard forbidding the glyph [`UncoveredText::Placeholder`] draws, if
-  /// this is one. Every PDF/A level offered here forbids it; PDF/A-1b would
-  /// allow it, and is not offered.
+  /// Every PDF/A level offered here forbids glyph 0. PDF/A-1b would allow it,
+  /// and is not offered.
   pub(crate) fn forbids_placeholder(self) -> Option<&'static str> {
     match self {
       PdfStandard::None => None,
@@ -238,8 +236,6 @@ impl Tagging {
     self == Self::Ua2
   }
 
-  /// The standard forbidding the glyph [`UncoveredText::Placeholder`] draws, if
-  /// this is one. Both PDF/UA levels forbid it.
   pub(crate) fn forbids_placeholder(self) -> Option<&'static str> {
     match self {
       Self::Off | Self::On => None,
@@ -419,18 +415,14 @@ pub struct PdfOptions<'g> {
 
 /// What a character no registered font covers turns into on the page.
 ///
-/// Neither [`Self::Placeholder`] nor [`Self::Blank`] reflows the line: the
-/// character keeps the width the font gave it, and only the mark drawn in that
-/// space differs.
+/// Neither [`Self::Placeholder`] nor [`Self::Blank`] reflows the line.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum UncoveredText {
   /// The render fails, naming the characters.
   #[default]
   Error,
-  /// The font's own placeholder glyph, usually an empty box. A font is free to
-  /// leave it empty, so this promises a placeholder, not a visible one. Every
-  /// PDF/A level and both PDF/UA levels forbid it, so it cannot be combined
-  /// with [`PdfOptions::standard`] or an accessibility [`Tagging`].
+  /// The font's glyph 0, which the font may leave empty. Every PDF/A level and
+  /// both PDF/UA levels forbid it.
   Placeholder,
   /// Nothing. The character's space stays empty.
   Blank,

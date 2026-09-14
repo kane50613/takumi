@@ -127,7 +127,6 @@ fn image_label(src: &ImageSourceInput) -> &str {
 
 /// Failures a page collects while emitting, raised once the surface is closed.
 pub(crate) struct RenderIssues {
-  /// Characters no registered font covered, and what became of them.
   pub(crate) uncovered: Uncovered,
   /// The first failure worth stopping for.
   pub(crate) failure: Option<PdfError>,
@@ -157,8 +156,7 @@ impl<'a> DocumentState<'a> {
     }
   }
 
-  /// The error the pages left behind, if any: what failed outright, else what
-  /// the uncovered characters cost.
+  /// The error the pages left behind, if any.
   pub(crate) fn into_error(self) -> Option<PdfError> {
     let issues = self.issues.into_inner();
 
