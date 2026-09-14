@@ -290,7 +290,7 @@ fn collect_measure_result(
               transform: inline_transform.to_cols_array(),
               children: Vec::new(),
               runs: Vec::new(),
-              style: None,
+              style: inline_box.style,
             }
           }));
 

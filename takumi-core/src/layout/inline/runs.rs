@@ -7,7 +7,7 @@ use crate::{
     font::{FontError, run_synthesis, run_variations},
     glyph::{ResolvedColorLayer, ResolvedGlyph, ResolvedOutlineGlyph},
   },
-  style::{Affine, Color, MeasuredTextRunStyle, TextUnderlinePosition},
+  style::{Affine, Color, MeasuredStyle, MeasuredTextRunStyle, TextUnderlinePosition},
 };
 use parley::GlyphRun;
 use skrifa::{FontRef, MetadataProvider, raw::TableProvider};
@@ -511,7 +511,7 @@ pub struct MeasuredInlineRun<'a> {
 
 /// A measured inline box's local bounding box, with text-fit line scaling applied to in-flow boxes'
 /// x position.
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct MeasuredInlineBox {
   /// Left edge, relative to the inline formatting context's origin.
   pub x: f32,
@@ -521,6 +521,8 @@ pub struct MeasuredInlineBox {
   pub width: f32,
   /// Box height.
   pub height: f32,
+  /// Resolved paint properties, set only when the caller asked for them.
+  pub style: Option<MeasuredStyle>,
 }
 
 /// Extracts the source text rendered by a glyph run.

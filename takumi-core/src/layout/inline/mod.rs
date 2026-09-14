@@ -5,7 +5,7 @@ use crate::{
   layout::tree::RenderNode,
   resources::font::{FontClasses, FontsSnapshot, face_family_name},
   style::{
-    Color, Direction, FontSynthesis, Lang, Length, MeasuredTextRunStyle,
+    Color, Direction, FontSynthesis, Lang, Length, MeasuredStyle, MeasuredTextRunStyle,
     SizedTextDecorationThickness, TextDecorationLines, TextDecorationSkipInk, TextFitMode,
     TextOverflow, TextUnderlinePosition, TextWrapMode, TextWrapStyle, VerticalAlign, WordBreak,
   },
@@ -281,11 +281,22 @@ impl BuiltInlineLayout<'_> {
           ) {
             return Ok(());
           }
+          let style = include_styles
+            .then(|| match self.spans.get(inline_box.id as usize) {
+              Some(ProcessedInlineSpan::Box(item)) => Some(MeasuredStyle::from_context(
+                &item.render_node.context,
+                (inline_box.width, inline_box.height),
+              )),
+              _ => None,
+            })
+            .flatten();
+
           inline_boxes.push(MeasuredInlineBox {
             x: inline_box.x,
             y: inline_box.y,
             width: inline_box.width,
             height: inline_box.height,
+            style,
           });
         }
       }
@@ -298,6 +309,7 @@ impl BuiltInlineLayout<'_> {
         y: positioned_box.y,
         width: positioned_box.width,
         height: positioned_box.height,
+        style: None,
       });
     }
 
