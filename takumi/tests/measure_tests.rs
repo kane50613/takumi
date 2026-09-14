@@ -2592,3 +2592,39 @@ fn test_measure_replaced_element_reads_its_insets_the_way_box_sizing_states_them
     }
   }
 }
+
+#[test]
+fn test_measure_replaced_element_without_a_ratio_keeps_its_axes_independent() {
+  // An `<svg>` with no `viewBox` and no size attributes states neither a size nor a ratio,
+  // so each axis falls back to its own default object dimension. Chrome measures 300x150,
+  // 600x150 and 300x600 for these.
+  let svg = r##"<svg xmlns="http://www.w3.org/2000/svg"></svg>"##;
+  let cases = [
+    (Style::default(), (300.0, 150.0)),
+    (
+      Style::default().with(StyleDeclaration::width(Px(600.0))),
+      (600.0, 150.0),
+    ),
+    (
+      Style::default().with(StyleDeclaration::height(Px(600.0))),
+      (300.0, 600.0),
+    ),
+  ];
+
+  for (style, expected) in cases {
+    let node: Node = Node::container([Node::image(svg).with_tag_name("svg").with_style(
+      style.with(StyleDeclaration::display(Display::Inline)),
+    )])
+    .with_style(
+      Style::default()
+        .with(StyleDeclaration::display(Display::Block))
+        .with(StyleDeclaration::width(Px(600.0))),
+    );
+
+    let measured = measure(node, create_measure_viewport());
+    let image = &measured.children[0];
+
+    assert_close(image.width, expected.0);
+    assert_close(image.height, expected.1);
+  }
+}

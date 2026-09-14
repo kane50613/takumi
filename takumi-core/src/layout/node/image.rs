@@ -49,16 +49,12 @@ struct NaturalSize {
   /// The size the element takes when CSS leaves both axes `auto`, with the default object
   /// size standing in for an axis the source leaves open.
   size: Size<f32>,
+  /// The ratio the source states, either outright or through both of its own dimensions.
+  /// A default object dimension standing in for a missing axis states none.
+  ratio: Option<f32>,
   /// Set when the source states no size of its own and carries only an aspect ratio. css
   /// 2.1 10.3.2 leaves that case to the containing block rather than to the source.
   from_ratio_only: bool,
-}
-
-impl NaturalSize {
-  /// The ratio a missing axis is filled from.
-  fn ratio(&self) -> Option<f32> {
-    (self.size.height != 0.0).then_some(self.size.width / self.size.height)
-  }
 }
 
 impl ImageData {
@@ -114,18 +110,26 @@ impl ImageData {
       },
     };
 
-    let intrinsic_aspect_ratio =
-      (intrinsic_size.height != 0.0).then_some(intrinsic_size.width / intrinsic_size.height);
+    // css-images-3 4: a default object dimension standing in for an axis the source leaves
+    // open states no ratio, so only the source's own ratio or its own two dimensions give
+    // one. Without a ratio the other axis keeps the default object dimension.
+    let source_ratio = intrinsic_sizing
+      .ratio
+      .filter(|ratio| *ratio > 0.0)
+      .or_else(|| match (intrinsic_sizing.width, intrinsic_sizing.height) {
+        (Some(width), Some(height)) if height != 0.0 => Some(width / height),
+        _ => None,
+      });
     let preferred_size = match (self.width, self.height) {
       (Some(width), Some(height)) => Size { width, height },
       (Some(width), None) => Size {
         width,
-        height: intrinsic_aspect_ratio
+        height: source_ratio
           .map(|ratio| width / ratio)
           .unwrap_or(intrinsic_size.height),
       },
       (None, Some(height)) => Size {
-        width: intrinsic_aspect_ratio
+        width: source_ratio
           .map(|ratio| height * ratio)
           .unwrap_or(intrinsic_size.width),
         height,
@@ -136,6 +140,7 @@ impl ImageData {
 
     Some(NaturalSize {
       size: preferred_size,
+      ratio: source_ratio,
       // Blink's `ComputeNormalizedNaturalSize`: the default object size stands in whenever
       // the source carries no ratio, so only a ratio-carrying source is left without one.
       from_ratio_only: intrinsic_sizing.width.is_none()
@@ -218,18 +223,15 @@ impl ImageData {
       known_dimensions
     };
 
-    let aspect_ratio = style.aspect_ratio.or_else(|| natural.ratio());
+    let aspect_ratio = style.aspect_ratio.or(natural.ratio);
     let known_dimensions = known_dimensions.fill_missing_axis_from_aspect_ratio(aspect_ratio);
 
-    if let Size {
-      width: Some(width),
-      height: Some(height),
-    } = known_dimensions
-    {
-      return Size { width, height };
+    // Without a ratio the axes are independent: an axis CSS states keeps its value and the
+    // other one keeps the default object dimension.
+    Size {
+      width: known_dimensions.width.unwrap_or(natural.size.width),
+      height: known_dimensions.height.unwrap_or(natural.size.height),
     }
-
-    natural.size
   }
 }
 
