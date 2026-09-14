@@ -415,8 +415,8 @@ impl Length {
       Length::Em(value) => value * sizing.font_size,
       Length::Lh(value) => value * sizing.line_height,
       Length::Rlh(value) => value * sizing.root_line_height_basis(),
-      Length::Vh(value) => value * sizing.viewport.size.height.unwrap_or_default() as f32 / 100.0,
-      Length::Vw(value) => value * sizing.viewport.size.width.unwrap_or_default() as f32 / 100.0,
+      Length::Vh(value) => value * sizing.viewport.unit_height() / 100.0,
+      Length::Vw(value) => value * sizing.viewport.unit_width() / 100.0,
       Length::CqH(value) => value * sizing.query_container_height() / 100.0,
       Length::CqW(value) => value * sizing.query_container_width() / 100.0,
       Length::CqMin(value) => {
@@ -434,14 +434,20 @@ impl Length {
           / 100.0
       }
       Length::VMin(value) => {
-        let viewport_width = sizing.viewport.size.width.unwrap_or_default() as f32;
-        let viewport_height = sizing.viewport.size.height.unwrap_or_default() as f32;
-        value * viewport_width.min(viewport_height) / 100.0
+        value
+          * sizing
+            .viewport
+            .unit_width()
+            .min(sizing.viewport.unit_height())
+          / 100.0
       }
       Length::VMax(value) => {
-        let viewport_width = sizing.viewport.size.width.unwrap_or_default() as f32;
-        let viewport_height = sizing.viewport.size.height.unwrap_or_default() as f32;
-        value * viewport_width.max(viewport_height) / 100.0
+        value
+          * sizing
+            .viewport
+            .unit_width()
+            .max(sizing.viewport.unit_height())
+          / 100.0
       }
       Length::Cm(value) => value * ONE_CM_IN_PX,
       Length::Mm(value) => value * ONE_MM_IN_PX,
@@ -597,6 +603,7 @@ mod tests {
         font_size: 16.0,
         device_pixel_ratio: 2.0,
         media_target: Default::default(),
+        unit_reference: None,
       },
       container_size: Size::NONE,
       container_read: Default::default(),

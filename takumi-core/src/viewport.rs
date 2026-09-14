@@ -28,6 +28,10 @@ pub struct Viewport {
   pub device_pixel_ratio: f32,
   /// The media type `@media` queries resolve against.
   pub media_target: MediaTarget,
+  /// What viewport-percentage units resolve against when it differs from
+  /// `size`: in paged output the content column lays out at unbounded height
+  /// while `vh` takes the page area (CSS Values 4 §6.1.2, print media).
+  pub unit_reference: Option<Size<f32>>,
 }
 
 impl From<Viewport> for Size<AvailableSpace> {
@@ -61,6 +65,7 @@ impl Viewport {
       font_size: DEFAULT_FONT_SIZE,
       device_pixel_ratio: DEFAULT_DEVICE_PIXEL_RATIO,
       media_target: MediaTarget::Screen,
+      unit_reference: None,
     }
   }
 
@@ -80,6 +85,30 @@ impl Viewport {
   pub const fn with_media_target(mut self, media_target: MediaTarget) -> Self {
     self.media_target = media_target;
     self
+  }
+
+  /// Sets the size viewport-percentage units resolve against.
+  pub const fn with_unit_reference(mut self, size: Size<f32>) -> Self {
+    self.unit_reference = Some(size);
+    self
+  }
+
+  /// The width `vw` resolves against: the unit reference, else the viewport.
+  pub fn unit_width(self) -> f32 {
+    self
+      .unit_reference
+      .map_or(self.size.width.unwrap_or_default() as f32, |size| {
+        size.width
+      })
+  }
+
+  /// The height `vh` resolves against: the unit reference, else the viewport.
+  pub fn unit_height(self) -> f32 {
+    self
+      .unit_reference
+      .map_or(self.size.height.unwrap_or_default() as f32, |size| {
+        size.height
+      })
   }
 
   /// The effective device-pixel ratio, treating a non-positive value as `1.0`.

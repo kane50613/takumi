@@ -241,6 +241,7 @@ mod tests {
         font_size: 16.0,
         device_pixel_ratio: 2.0,
         media_target: Default::default(),
+        unit_reference: None,
       },
       container_size: Size::NONE,
       container_read: Default::default(),

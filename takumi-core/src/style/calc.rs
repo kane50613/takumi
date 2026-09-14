@@ -196,8 +196,8 @@ impl CalcTerms {
 
   /// Collapses the terms into a `px + percent * basis` linear form.
   pub fn resolve(self, sizing: &SizingContext) -> CalcLinear {
-    let viewport_width = sizing.viewport.size.width.unwrap_or_default() as f32;
-    let viewport_height = sizing.viewport.size.height.unwrap_or_default() as f32;
+    let viewport_width = sizing.viewport.unit_width();
+    let viewport_height = sizing.viewport.unit_height();
     let container_width = sizing.query_container_width();
     let container_height = sizing.query_container_height();
     let mut absolute_css = 0.0;
