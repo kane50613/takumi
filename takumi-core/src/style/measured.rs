@@ -86,6 +86,8 @@ pub struct MeasuredTextRunStyle {
   pub font_style: String,
   /// Used `letter-spacing` in device pixels.
   pub letter_spacing: f32,
+  /// Used `opacity` of the inline element the run came from, which generates no box of its own.
+  pub opacity: f32,
 }
 
 impl MeasuredStyle {
@@ -172,7 +174,11 @@ impl MeasuredStyle {
 
 impl MeasuredTextRunStyle {
   /// Reads the paint properties off the font style a run was shaped with.
-  pub(crate) fn from_font_style(style: &SizedFontStyle<'_>, face_family: Option<String>) -> Self {
+  pub(crate) fn from_font_style(
+    style: &SizedFontStyle<'_>,
+    face_family: Option<String>,
+    opacity: f32,
+  ) -> Self {
     let parent: &ComputedStyle = style.parent;
 
     Self {
@@ -183,6 +189,7 @@ impl MeasuredTextRunStyle {
       font_weight: parent.font_weight.value(),
       font_style: parent.font_style.to_css_string(),
       letter_spacing: style.letter_spacing,
+      opacity,
     }
   }
 }

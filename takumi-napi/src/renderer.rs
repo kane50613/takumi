@@ -130,6 +130,8 @@ pub struct MeasuredTextRunStyle {
   pub font_style: String,
   /// Used `letter-spacing` in device pixels.
   pub letter_spacing: f64,
+  /// Used `opacity` of the inline element the run came from.
+  pub opacity: f64,
 }
 
 impl From<takumi_core::style::MeasuredTextRunStyle> for MeasuredTextRunStyle {
@@ -141,6 +143,7 @@ impl From<takumi_core::style::MeasuredTextRunStyle> for MeasuredTextRunStyle {
       font_weight: style.font_weight as f64,
       font_style: style.font_style,
       letter_spacing: style.letter_spacing as f64,
+      opacity: style.opacity as f64,
     }
   }
 }

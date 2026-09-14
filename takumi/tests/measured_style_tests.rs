@@ -69,6 +69,24 @@ fn run_style_reports_the_family_the_face_was_registered_under() {
 }
 
 #[test]
+fn run_style_reports_the_opacity_of_the_inline_element_it_came_from() {
+  let measured = measure_with_styles(
+    r#"<div style="width:400px; font-size:20px">plain <span style="opacity:0.4">faded</span></div>"#,
+  );
+
+  // The span generates no box, so its opacity reaches a consumer only through the run. The div's
+  // own opacity stays 1: multiplying the two is the consumer's job, as it is for nested boxes.
+  let faded = measured
+    .runs
+    .iter()
+    .find(|run| run.text.contains("faded"))
+    .expect("the faded run");
+
+  assert_eq!(measured.style.as_ref().expect("node style").opacity, 1.0);
+  assert_eq!(faded.style.as_ref().expect("run style").opacity, 0.4);
+}
+
+#[test]
 fn styles_are_absent_by_default() {
   let html = r#"<div style="width:200px; color:#14110f"><span>hello</span></div>"#;
   let measured = measure_with_include_styles(html, Viewport::new((1200, 630)), false);

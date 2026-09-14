@@ -302,10 +302,11 @@ export type MeasuredStyle = {
   zIndex?: number;
 };
 
-/** The resolved style a measured text run paints with, returned when `includeStyles` is set. */
+/** The resolved style a measured text run paints with, returned when `includeStyles` is set.
+ * `opacity` is the inline element's own, which generates no box to carry it. */
 export type MeasuredTextRunStyle = Pick<
   MeasuredStyle,
-  "color" | "fontFamily" | "fontSize" | "fontWeight" | "fontStyle" | "letterSpacing"
+  "color" | "fontFamily" | "fontSize" | "fontWeight" | "fontStyle" | "letterSpacing" | "opacity"
 >;
 
 export type MeasuredTextRun = {
