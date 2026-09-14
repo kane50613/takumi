@@ -310,6 +310,9 @@ export type RenderOptions = (PagedOptions | ViewportOptions) &
      * `"error"` (default) fails the render naming it, `"placeholder"` draws the
      * font's own placeholder glyph, usually an empty box, and `"blank"` leaves its
      * space empty. Neither of the last two reflows the line.
+     *
+     * `"placeholder"` is rejected alongside `pdfa` or `tagged: "ua1"` / `"ua2"`,
+     * which forbid the glyph it draws. Use `"blank"` there.
      */
     uncoveredText?: UncoveredText;
   };
