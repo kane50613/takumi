@@ -234,6 +234,7 @@ impl BuiltInlineLayout<'_> {
           let mut y = glyph_run.baseline() + setup.baseline_shift - metrics.ascent;
           let mut width = glyph_run.advance();
           let mut height = metrics.ascent + metrics.descent;
+          let mut ascent = metrics.ascent;
           if (setup.state.scale - 1.0).abs() > f32::EPSILON {
             x = scale_text_fit_x(
               x,
@@ -245,6 +246,7 @@ impl BuiltInlineLayout<'_> {
             y = line_scale_origin_y + (y - line_scale_origin_y) * setup.state.scale;
             width *= setup.state.scale;
             height *= setup.state.scale;
+            ascent *= setup.state.scale;
           }
 
           let link = span_id.and_then(|span_id| match self.spans.get(span_id as usize) {
@@ -258,6 +260,7 @@ impl BuiltInlineLayout<'_> {
             y,
             width,
             height,
+            ascent,
             link,
           });
         }
