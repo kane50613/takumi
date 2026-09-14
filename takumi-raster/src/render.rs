@@ -254,7 +254,9 @@ fn collect_measure_result(
 
         let mut children = Vec::new();
         let mut runs = Vec::new();
-        let style = include_styles.then(|| MeasuredStyle::from_context(&current.context));
+        let style = include_styles.then(|| {
+          MeasuredStyle::from_context(&current.context, (layout.size.width, layout.size.height))
+        });
 
         if current.should_create_inline_layout() {
           let font_style = SizedFontStyle::from_style(&current.context.style, &current.context);
