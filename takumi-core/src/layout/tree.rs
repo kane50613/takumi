@@ -28,8 +28,8 @@ use crate::{
   },
   matching::{MatchedDeclarationsView, NodeMatchedDeclarations, match_stylesheets_view},
   style::{
-    Affine, BackgroundImage, BackgroundImages, Color, ComputedStyle, ContentItem,
-    ContentValue, Display, Float, Length, LineHeight, ListStylePosition, Position, SizingContext,
+    Affine, BackgroundImage, BackgroundImages, Color, ComputedStyle, ContentItem, ContentValue,
+    Display, Float, Length, LineHeight, ListStylePosition, Position, SizingContext,
     Style as NodeStyle, StyleDeclaration, StyleDeclarationBlock, StyleSheet, TextWrapMode,
     TwBlocks, TwCache, WhiteSpaceCollapse, apply_stylesheet_animations,
   },

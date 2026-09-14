@@ -1475,11 +1475,9 @@ fn test_measure_auto_sized_replaced_element_without_a_natural_size_fills_its_con
   // A `viewBox` states a ratio and no size, so no natural size answers. css 2.1 10.3.2
   // leaves that case open and Blink fills the offered width; Chrome measures 600x450.
   for display in [Display::Inline, Display::Block] {
-    let node: Node = Node::container([
-      Node::image(svg)
-        .with_tag_name("svg")
-        .with_style(Style::default().with(StyleDeclaration::display(display))),
-    ])
+    let node: Node = Node::container([Node::image(svg)
+      .with_tag_name("svg")
+      .with_style(Style::default().with(StyleDeclaration::display(display)))])
     .with_style(
       Style::default()
         .with(StyleDeclaration::display(Display::Block))
@@ -2565,8 +2563,6 @@ fn test_measure_flex_baseline_aligns_to_the_first_line() {
   );
 }
 
-
-
 #[test]
 fn test_measure_replaced_element_reads_its_insets_the_way_box_sizing_states_them() {
   let png = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAMgAAACWCAYAAACb3McZAAAAHUlEQVR42u3BAQ0AAADCoPdPbQ8HFAAAAAAAAAB4DSMgAAGIL7gAAAAAAElFTkSuQmCC";
@@ -2578,8 +2574,18 @@ fn test_measure_replaced_element_reads_its_insets_the_way_box_sizing_states_them
   for (width, sizing, displays, expected) in [
     ("", "content-box", &["inline"][..], (250.0, 200.0)),
     ("", "border-box", &["inline"][..], (250.0, 200.0)),
-    ("width:250px;", "content-box", &["block", "inline"][..], (300.0, 237.5)),
-    ("width:250px;", "border-box", &["block", "inline"][..], (250.0, 200.0)),
+    (
+      "width:250px;",
+      "content-box",
+      &["block", "inline"][..],
+      (300.0, 237.5),
+    ),
+    (
+      "width:250px;",
+      "border-box",
+      &["block", "inline"][..],
+      (250.0, 200.0),
+    ),
   ] {
     for display in displays {
       let html = format!(
@@ -2614,9 +2620,9 @@ fn test_measure_replaced_element_without_a_ratio_keeps_its_axes_independent() {
   ];
 
   for (style, expected) in cases {
-    let node: Node = Node::container([Node::image(svg).with_tag_name("svg").with_style(
-      style.with(StyleDeclaration::display(Display::Inline)),
-    )])
+    let node: Node = Node::container([Node::image(svg)
+      .with_tag_name("svg")
+      .with_style(style.with(StyleDeclaration::display(Display::Inline)))])
     .with_style(
       Style::default()
         .with(StyleDeclaration::display(Display::Block))
