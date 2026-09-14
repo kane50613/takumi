@@ -255,6 +255,8 @@ export type MeasuredTextRun = {
   y: number;
   width: number;
   height: number;
+  /** Distance from the run's top edge to its baseline; `y + ascent` is the baseline. */
+  ascent: number;
 };
 
 export type MeasuredNode = {

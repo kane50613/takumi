@@ -109,6 +109,8 @@ pub struct MeasuredTextRun {
   pub width: f32,
   /// The height of the run.
   pub height: f32,
+  /// Distance from the run's top edge to its baseline; `y + ascent` is the baseline.
+  pub ascent: f32,
 }
 
 /// The result of a layout measurement.
@@ -261,6 +263,7 @@ fn collect_measure_result(
             y: run.y,
             width: run.width,
             height: run.height,
+            ascent: run.ascent,
           }));
           children.extend(measured_boxes.into_iter().map(|inline_box| {
             let inline_transform =
@@ -314,6 +317,7 @@ fn collect_measure_result(
             y: run.y,
             width: run.width,
             height: run.height,
+            ascent: run.ascent,
           }));
         }
 
