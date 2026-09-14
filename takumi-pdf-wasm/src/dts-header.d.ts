@@ -178,13 +178,12 @@ export type PdfRenderOptions = {
   /** Files attached to the document. */
   attachments?: Attachment[];
   /**
-   * What a character no registered font covers turns into on the page:
-   * `"error"` (default) fails the render naming it, `"placeholder"` draws the
-   * font's own placeholder glyph, usually an empty box, and `"blank"` leaves its
-   * space empty. Neither of the last two reflows the line.
+   * What a character no registered font covers turns into: `"error"` (default)
+   * fails the render naming it, `"placeholder"` draws the font's glyph 0, and
+   * `"blank"` draws nothing. Neither of the last two reflows the line.
    *
-   * `"placeholder"` is rejected alongside `pdfa` or `tagged: "ua1"` / `"ua2"`,
-   * which forbid the glyph it draws. Use `"blank"` there.
+   * `"placeholder"` is rejected with any `pdfa` level or `tagged: "ua1"` /
+   * `"ua2"`, which forbid glyph 0.
    */
   uncoveredText?: UncoveredText;
 };

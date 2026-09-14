@@ -30,11 +30,19 @@ For offline renders, [bundle font files](/docs/typography-and-fonts#fonts-in-ci-
 
 The renderer does not use installed system fonts. If no registered font covers a body-text character, the render fails with the character and its codepoint. Register coverage for every script you use. Google Fonts may split accented characters between `latin` and `latin-ext` subsets.
 
-Set `uncoveredText` to render anyway. `"placeholder"` draws the font's own placeholder glyph, usually an empty box; a font is free to leave it empty. `"blank"` draws nothing. Neither reflows the line: the character keeps the width the font gave it, so the page reads the same either way apart from that one mark.
+Quote a family name that contains digits or spaces in CSS, such as `fontFamily: '"Source Serif 4"'`. An unquoted `Source Serif 4` is not a valid `font-family` value, so the declaration is dropped and the text falls back to the next family.
 
-Whether the character survives in the text layer depends on how it shaped. On its own it leaves no trace, because a PDF carries no Unicode for a placeholder glyph. Attached to a covered character — a combining mark on a letter the font does have — it comes back through that neighbour when the text is copied.
+## Uncovered text
 
-`"placeholder"` cannot be combined with `pdfa` or `tagged: "ua1"` / `"ua2"`. Both standards forbid the glyph it draws, so the render fails naming the characters and the standard. Use `"blank"` there instead.
+`uncoveredText` decides what a character no registered font covers turns into.
+
+| Value               | Result                                                     |
+| ------------------- | ---------------------------------------------------------- |
+| `"error"` (default) | Fails the render, naming each character and its codepoint. |
+| `"placeholder"`     | Draws the font's glyph 0, which the font may leave empty.  |
+| `"blank"`           | Draws nothing.                                             |
+
+**Neither `"placeholder"` nor `"blank"` reflows the line.** Glyph advances are absolute, so the character keeps the width the font gave it.
 
 ```tsx twoslash title="Render with uncovered characters"
 import type { ReactNode } from "react";
@@ -45,7 +53,20 @@ import { render } from "takumi-pdf";
 const pdf = await render(doc, { uncoveredText: "placeholder" });
 ```
 
-Quote a family name that contains digits or spaces in CSS, such as `fontFamily: '"Source Serif 4"'`. An unquoted `Source Serif 4` is not a valid `font-family` value, so the declaration is dropped and the text falls back to the next family.
+### Standards forbid the placeholder
+
+Every PDF/A level and both PDF/UA levels forbid glyph 0. See [PDF/A and PDF/UA](/docs/pdf/pdf-a).
+
+**`"placeholder"` is rejected with any `pdfa` level, `tagged: "ua1"`, or `tagged: "ua2"`.** The error names the uncovered characters and the standard. Use `"blank"` there.
+
+### What copied text keeps
+
+Whether an uncovered character survives in the text layer depends on its shaping cluster. This holds for `"placeholder"` and `"blank"` alike.
+
+| Uncovered character                  | Copied text                                            |
+| ------------------------------------ | ------------------------------------------------------ |
+| On its own                           | Nothing. A PDF carries no Unicode mapping for glyph 0. |
+| A combining mark on a covered letter | The mark, through the letter it shares a cluster with. |
 
 ## Images
 

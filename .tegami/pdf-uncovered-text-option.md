@@ -2,10 +2,8 @@
 "takumi-pdf": minor
 ---
 
-# Render through characters no font covers with `uncoveredText`
+# Render uncovered characters with `uncoveredText`
 
-A single character no registered font covers fails the whole render. That is right while you are writing a document, but a server rendering text someone else wrote has no way through.
+A single character no registered font covers used to fail the whole render, which leaves a server rendering text someone else wrote with no way through. `uncoveredText: "placeholder"` draws the font's glyph 0 instead, and `"blank"` draws nothing. Both keep the character's width, so the line does not reflow. The default stays `"error"`.
 
-`uncoveredText: "placeholder"` draws the font's own placeholder glyph, usually an empty box, and `"blank"` draws nothing. Both keep the character's space, so the line does not reflow. The default stays `"error"`.
-
-PDF/A and PDF/UA forbid the glyph `"placeholder"` draws, so pairing the two now fails naming the standard instead of reporting a generic write failure.
+Every PDF/A level and both PDF/UA levels forbid glyph 0, so `"placeholder"` is now rejected there by name instead of failing as a generic write error.
