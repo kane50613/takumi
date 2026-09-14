@@ -83,6 +83,50 @@ describe("Renderer.measure", () => {
     });
   });
 
+  it("should omit styles unless includeStyles is set", async () => {
+    const node = container({
+      style: { width: 100, height: 100, backgroundColor: "red" },
+      children: [],
+    });
+
+    const result = await renderer.measure(node);
+
+    expect(result).not.toHaveProperty("style");
+  });
+
+  it("should return resolved styles when includeStyles is set", async () => {
+    const node = container({
+      style: {
+        width: 100,
+        height: 100,
+        backgroundColor: "red",
+        borderRadius: 8,
+        opacity: 0.5,
+      },
+      children: [
+        text({
+          text: "Hello",
+          style: { fontSize: 20, color: "#14110f" },
+        }),
+      ],
+    });
+
+    const result = await renderer.measure(node, { includeStyles: true });
+
+    expect(result.style).toMatchObject({
+      backgroundColor: "rgb(255, 0, 0)",
+      borderRadius: [8, 8, 8, 8],
+      opacity: 0.5,
+    });
+    expect(result.runs[0]?.style).toMatchObject({
+      fontSize: 20,
+      color: "rgb(20, 17, 15)",
+      fontWeight: 400,
+      fontStyle: "normal",
+      letterSpacing: 0,
+    });
+  });
+
   it("should include transforms", async () => {
     const node = container({
       style: {

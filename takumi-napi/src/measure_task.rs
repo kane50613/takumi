@@ -26,6 +26,7 @@ pub struct MeasureTask {
   pub(crate) images: HashMap<Arc<str>, (JsBytes, ImageCacheMode)>,
   pub(crate) font_families: Option<FontFamily>,
   pub(crate) lang: Option<Lang>,
+  pub(crate) include_styles: bool,
 }
 
 impl MeasureTask {
@@ -52,6 +53,7 @@ impl MeasureTask {
       images: collect_images(env, options.images)?,
       font_families: options.font_families.map(FontFamily::from_names),
       lang: parse_lang(options.lang)?,
+      include_styles: options.include_styles.unwrap_or_default(),
     })
   }
 }
@@ -78,6 +80,7 @@ impl Task for MeasureTask {
       .fonts(&fonts)
       .font_families(take(&mut self.font_families))
       .lang(take(&mut self.lang))
+      .include_styles(self.include_styles)
       .build();
 
     measure(options).map_err(map_error)

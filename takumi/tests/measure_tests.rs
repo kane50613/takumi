@@ -111,6 +111,7 @@ fn test_measure_simple_container() {
       transform: Affine::IDENTITY.to_cols_array(),
       children: Vec::new(),
       runs: Vec::new(),
+      style: None,
     }
   );
 }
@@ -151,9 +152,12 @@ fn test_measure_text_node() {
           y: -0.10000038,
           width: 105.46001,
           height: 26.0,
+          style: None,
         }],
+        style: None,
       }],
       runs: Vec::new(),
+      style: None,
     }
   )
 }

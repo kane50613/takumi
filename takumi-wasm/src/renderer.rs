@@ -101,6 +101,7 @@ fn raster_options<'fonts>(
       .stylesheet(stylesheet)
       .time_ms(options.time_ms.unwrap_or_default().max(0) as u64)
       .dithering(options.dithering.unwrap_or_default())
+      .include_styles(options.include_styles.unwrap_or_default())
       .node(node)
       .fonts(fonts)
       .font_families(options.font_families.map(FontFamily::from_names))

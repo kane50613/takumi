@@ -20,7 +20,9 @@ export type {
   KeyframesMap,
   KeyframesRuleList,
   MeasuredNode,
+  MeasuredStyle,
   MeasuredTextRun,
+  MeasuredTextRunStyle,
   OutputFormat,
 } from "@takumi-rs/core";
 export { setGlyphCacheMaxBytes } from "./glyph-cache";

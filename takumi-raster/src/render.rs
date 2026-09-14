@@ -5,7 +5,7 @@ use takumi_core::{
   geometry::{AvailableSpace, ComputedLayout as Layout, NodeId, Size},
   layout::node::NodeKind,
   scene::build_stacking_contexts,
-  style::{ComputedStyle, Display, Lang},
+  style::{ComputedStyle, Display, Lang, MeasuredStyle, MeasuredTextRunStyle},
 };
 use typed_builder::TypedBuilder;
 
@@ -57,6 +57,10 @@ pub struct RenderOptions<'g> {
   /// their own `lang`. Drives locale-aware shaping and line-breaking.
   #[builder(default)]
   pub(crate) lang: Option<Lang>,
+  /// Attaches the resolved style of every box and text run to the measured tree.
+  /// Only [`measure`] reads it.
+  #[builder(default = false)]
+  pub(crate) include_styles: bool,
 }
 
 impl<'g> RenderOptions<'g> {
@@ -109,6 +113,9 @@ pub struct MeasuredTextRun {
   pub width: f32,
   /// The height of the run.
   pub height: f32,
+  /// The resolved style the run paints with, set by `include_styles`.
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub style: Option<MeasuredTextRunStyle>,
 }
 
 /// The result of a layout measurement.
@@ -125,6 +132,9 @@ pub struct MeasuredNode {
   pub children: Vec<MeasuredNode>,
   /// Text runs for inline layouts.
   pub runs: Vec<MeasuredTextRun>,
+  /// The resolved style the box paints with, set by `include_styles`.
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub style: Option<MeasuredStyle>,
 }
 
 struct TraversalEnter {
@@ -146,6 +156,7 @@ struct MeasureExit {
   local_transform: Affine,
   runs: Vec<MeasuredTextRun>,
   child_ids: Vec<NodeId>,
+  style: Option<MeasuredStyle>,
 }
 
 /// Measures the layout of a node.
@@ -161,6 +172,7 @@ pub fn measure<'g>(options: RenderOptions<'g>) -> Result<MeasuredNode> {
     dithering: _,
     font_families,
     lang,
+    include_styles,
   } = options;
 
   let render_context = RenderContext::builder()
@@ -193,6 +205,7 @@ pub fn measure<'g>(options: RenderOptions<'g>) -> Result<MeasuredNode> {
       width: viewport.size.width.map(|value| value as f32),
       height: viewport.size.height.map(|value| value as f32),
     },
+    include_styles,
   )
 }
 
@@ -202,6 +215,7 @@ fn collect_measure_result(
   node_id: NodeId,
   transform: Affine,
   container_size: Size<Option<f32>>,
+  include_styles: bool,
 ) -> Result<MeasuredNode> {
   let mut visits = vec![TraversalVisit::Enter(TraversalEnter {
     path: Vec::new(),
@@ -240,6 +254,7 @@ fn collect_measure_result(
 
         let mut children = Vec::new();
         let mut runs = Vec::new();
+        let style = include_styles.then(|| MeasuredStyle::from_context(&current.context));
 
         if current.should_create_inline_layout() {
           let font_style = SizedFontStyle::from_style(&current.context.style, &current.context);
@@ -254,13 +269,15 @@ fn collect_measure_result(
             &current.context,
             InlineLayoutMode::Measure,
           ));
-          let (measured_runs, measured_boxes) = built.measure_runs(layout);
+          let (measured_runs, measured_boxes) =
+            built.measure_runs(layout, include_styles, current.context.fonts());
           runs.extend(measured_runs.into_iter().map(|run| MeasuredTextRun {
             text: run.text.to_string(),
             x: run.x,
             y: run.y,
             width: run.width,
             height: run.height,
+            style: run.style,
           }));
           children.extend(measured_boxes.into_iter().map(|inline_box| {
             let inline_transform =
@@ -271,12 +288,13 @@ fn collect_measure_result(
               transform: inline_transform.to_cols_array(),
               children: Vec::new(),
               runs: Vec::new(),
+              style: None,
             }
           }));
 
           measured_by_node_id.insert(
             usize::from(node_id),
-            create_measured_node(layout, local_transform, children, runs),
+            create_measured_node(layout, local_transform, children, runs, style),
           );
           continue;
         }
@@ -307,20 +325,22 @@ fn collect_measure_result(
             &current.context,
             InlineLayoutMode::Measure,
           ));
-          let (measured_runs, _) = built.measure_runs(layout);
+          let (measured_runs, _) =
+            built.measure_runs(layout, include_styles, current.context.fonts());
           runs.extend(measured_runs.into_iter().map(|run| MeasuredTextRun {
             text: run.text.to_string(),
             x: run.x,
             y: run.y,
             width: run.width,
             height: run.height,
+            style: run.style,
           }));
         }
 
         if current.children.is_none() {
           measured_by_node_id.insert(
             usize::from(node_id),
-            create_measured_node(layout, local_transform, children, runs),
+            create_measured_node(layout, local_transform, children, runs, style),
           );
           continue;
         }
@@ -329,7 +349,7 @@ fn collect_measure_result(
         if layout_children.is_empty() {
           measured_by_node_id.insert(
             usize::from(node_id),
-            create_measured_node(layout, local_transform, children, runs),
+            create_measured_node(layout, local_transform, children, runs, style),
           );
           continue;
         }
@@ -347,6 +367,7 @@ fn collect_measure_result(
           local_transform,
           runs,
           child_ids: layout_children.iter().map(|child| child.node_id).collect(),
+          style,
         }));
 
         for child in layout_children.iter().rev() {
@@ -369,6 +390,7 @@ fn collect_measure_result(
         local_transform,
         runs,
         child_ids,
+        style,
       }) => {
         let mut children = Vec::with_capacity(child_ids.len());
         for child_id in child_ids {
@@ -386,6 +408,7 @@ fn collect_measure_result(
             transform: local_transform.to_cols_array(),
             children,
             runs,
+            style,
           },
         );
       }
@@ -402,6 +425,7 @@ fn create_measured_node(
   local_transform: Affine,
   children: Vec<MeasuredNode>,
   runs: Vec<MeasuredTextRun>,
+  style: Option<MeasuredStyle>,
 ) -> MeasuredNode {
   MeasuredNode {
     width: layout.size.width,
@@ -409,6 +433,7 @@ fn create_measured_node(
     transform: local_transform.to_cols_array(),
     children,
     runs,
+    style,
   }
 }
 
@@ -425,6 +450,7 @@ pub fn render<'g>(options: RenderOptions<'g>) -> Result<Bitmap> {
     dithering,
     font_families,
     lang,
+    include_styles: _,
   } = options;
 
   let render_context = RenderContext::builder()

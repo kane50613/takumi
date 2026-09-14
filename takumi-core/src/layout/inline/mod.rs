@@ -3,11 +3,11 @@ use crate::{
   font_style::{SizedFontStyle, contains_variation_selector, presentation_segments},
   geometry::{AvailableSpace, ComputedLayout, LAYOUT_UNIT_EPSILON, Point, Rect, Size},
   layout::tree::RenderNode,
-  resources::font::FontClasses,
+  resources::font::{FontClasses, FontsSnapshot, face_family_name},
   style::{
-    Color, Direction, FontSynthesis, Lang, Length, SizedTextDecorationThickness,
-    TextDecorationLines, TextDecorationSkipInk, TextFitMode, TextOverflow, TextUnderlinePosition,
-    TextWrapMode, TextWrapStyle, VerticalAlign, WordBreak,
+    Color, Direction, FontSynthesis, Lang, Length, MeasuredTextRunStyle,
+    SizedTextDecorationThickness, TextDecorationLines, TextDecorationSkipInk, TextFitMode,
+    TextOverflow, TextUnderlinePosition, TextWrapMode, TextWrapStyle, VerticalAlign, WordBreak,
   },
   text_processing::{
     MaxHeight, RebreakOptions, apply_text_transform, apply_white_space_collapse,
@@ -207,6 +207,8 @@ impl BuiltInlineLayout<'_> {
   pub fn measure_runs(
     &self,
     layout: ComputedLayout,
+    include_styles: bool,
+    fonts: &FontsSnapshot,
   ) -> (Vec<MeasuredInlineRun<'_>>, Vec<MeasuredInlineBox>) {
     let mut runs = Vec::new();
     let mut inline_boxes = Vec::new();
@@ -247,9 +249,18 @@ impl BuiltInlineLayout<'_> {
             height *= setup.state.scale;
           }
 
-          let link = span_id.and_then(|span_id| match self.spans.get(span_id as usize) {
-            Some(ProcessedInlineSpan::Text { link, .. }) => link.as_deref(),
-            _ => None,
+          let span = span_id.and_then(|span_id| self.spans.get(span_id as usize));
+          let (link, font_style) = match span {
+            Some(ProcessedInlineSpan::Text { link, style, .. }) => {
+              (link.as_deref(), Some(style.as_ref()))
+            }
+            _ => (None, None),
+          };
+          let style = font_style.filter(|_| include_styles).map(|font_style| {
+            MeasuredTextRunStyle::from_font_style(
+              font_style,
+              face_family_name(fonts, glyph_run.run().font()),
+            )
           });
 
           runs.push(MeasuredInlineRun {
@@ -259,6 +270,7 @@ impl BuiltInlineLayout<'_> {
             width,
             height,
             link,
+            style,
           });
         }
         PlacedItem::Box(inline_box) => {

@@ -26,6 +26,125 @@ use crate::{
   render_task::RenderTask, svg_render_task::SvgRenderTask,
 };
 
+/// The resolved style of a measured box, returned when `includeStyles` is set.
+#[napi(object)]
+pub struct MeasuredStyle {
+  /// Used `color`, with `currentColor` resolved.
+  pub color: String,
+  /// Computed `font-family` stack.
+  pub font_family: String,
+  /// Used `font-size` in device pixels.
+  pub font_size: f64,
+  /// Used numeric `font-weight`.
+  pub font_weight: f64,
+  /// Computed `font-style`.
+  pub font_style: String,
+  /// Used `line-height` in device pixels, absent when it resolves against font
+  /// metrics rather than a length.
+  pub line_height: Option<f64>,
+  /// Used `letter-spacing` in device pixels.
+  pub letter_spacing: f64,
+  /// Computed `text-align`.
+  pub text_align: String,
+  /// Computed `text-transform`.
+  pub text_transform: String,
+  /// Computed `display`, the box type the node generated.
+  pub display: String,
+  /// Computed `position`.
+  pub position: String,
+  /// Computed `visibility`.
+  pub visibility: String,
+  /// Computed `list-style-type`.
+  pub list_style_type: String,
+  /// Used padding in device pixels: top, right, bottom, left.
+  #[napi(ts_type = "[number, number, number, number]")]
+  pub padding: Option<Vec<f64>>,
+  /// Used `opacity`.
+  pub opacity: f64,
+  /// Used `background-color`, absent when transparent.
+  pub background_color: Option<String>,
+  /// Computed `background-image`, absent when `none`.
+  pub background_image: Option<String>,
+  /// Used corner radii in device pixels: top-left, top-right, bottom-right, bottom-left.
+  #[napi(ts_type = "[number, number, number, number]")]
+  pub border_radius: Option<Vec<f64>>,
+  /// Used border widths in device pixels: top, right, bottom, left.
+  #[napi(ts_type = "[number, number, number, number]")]
+  pub border_widths: Option<Vec<f64>>,
+  /// Used border colors: top, right, bottom, left.
+  #[napi(ts_type = "[string, string, string, string]")]
+  pub border_colors: Option<Vec<String>>,
+  /// Computed `box-shadow`, absent when `none`.
+  pub box_shadow: Option<String>,
+  /// Computed `z-index`, absent when `auto`.
+  pub z_index: Option<i32>,
+}
+
+impl From<takumi_core::style::MeasuredStyle> for MeasuredStyle {
+  fn from(style: takumi_core::style::MeasuredStyle) -> Self {
+    Self {
+      color: style.color,
+      font_family: style.font_family,
+      font_size: style.font_size as f64,
+      font_weight: style.font_weight as f64,
+      font_style: style.font_style,
+      line_height: style.line_height.map(|value| value as f64),
+      letter_spacing: style.letter_spacing as f64,
+      text_align: style.text_align,
+      text_transform: style.text_transform,
+      display: style.display,
+      position: style.position,
+      visibility: style.visibility,
+      list_style_type: style.list_style_type,
+      padding: style
+        .padding
+        .map(|padding| padding.iter().map(|&value| value as f64).collect()),
+      opacity: style.opacity as f64,
+      background_color: style.background_color,
+      background_image: style.background_image,
+      border_radius: style
+        .border_radius
+        .map(|radius| radius.iter().map(|&value| value as f64).collect()),
+      border_widths: style
+        .border_widths
+        .map(|widths| widths.iter().map(|&value| value as f64).collect()),
+      border_colors: style.border_colors.map(Vec::from),
+      box_shadow: style.box_shadow,
+      z_index: style.z_index,
+    }
+  }
+}
+
+/// The resolved style of a measured text run, returned when `includeStyles` is set.
+#[napi(object)]
+pub struct MeasuredTextRunStyle {
+  /// Used `color`, with `currentColor` resolved.
+  pub color: String,
+  /// Family name of the face the run was shaped with.
+  pub font_family: String,
+  /// Used `font-size` in device pixels.
+  pub font_size: f64,
+  /// Used numeric `font-weight`.
+  pub font_weight: f64,
+  /// Computed `font-style`.
+  pub font_style: String,
+  /// Used `letter-spacing` in device pixels.
+  pub letter_spacing: f64,
+}
+
+impl From<takumi_core::style::MeasuredTextRunStyle> for MeasuredTextRunStyle {
+  fn from(style: takumi_core::style::MeasuredTextRunStyle) -> Self {
+    Self {
+      color: style.color,
+      font_family: style.font_family,
+      font_size: style.font_size as f64,
+      font_weight: style.font_weight as f64,
+      font_style: style.font_style,
+      letter_spacing: style.letter_spacing as f64,
+    }
+  }
+}
+
 /// Represents a single run of text in a measured node.
 #[napi(object)]
 pub struct MeasuredTextRun {
@@ -39,6 +158,8 @@ pub struct MeasuredTextRun {
   pub width: f64,
   /// The height of the run.
   pub height: f64,
+  /// The resolved style the run paints with, set by `includeStyles`.
+  pub style: Option<MeasuredTextRunStyle>,
 }
 
 impl From<takumi_raster::MeasuredTextRun> for MeasuredTextRun {
@@ -49,6 +170,7 @@ impl From<takumi_raster::MeasuredTextRun> for MeasuredTextRun {
       y: run.y as f64,
       width: run.width as f64,
       height: run.height as f64,
+      style: run.style.map(Into::into),
     }
   }
 }
@@ -67,6 +189,8 @@ pub struct MeasuredNode {
   pub children: Vec<MeasuredNode>,
   /// The text runs within the node.
   pub runs: Vec<MeasuredTextRun>,
+  /// The resolved style the node paints with, set by `includeStyles`.
+  pub style: Option<MeasuredStyle>,
 }
 
 impl From<takumi_raster::MeasuredNode> for MeasuredNode {
@@ -77,6 +201,7 @@ impl From<takumi_raster::MeasuredNode> for MeasuredNode {
       transform: node.transform.iter().map(|&x| x as f64).collect(),
       children: node.children.into_iter().map(Into::into).collect(),
       runs: node.runs.into_iter().map(Into::into).collect(),
+      style: node.style.map(Into::into),
     }
   }
 }
@@ -216,6 +341,9 @@ pub struct RenderOptions<'env> {
   pub font_families: Option<Vec<String>>,
   /// Default BCP-47 language applied to the root, inherited by nodes without their own lang.
   pub lang: Option<String>,
+  /// Attaches the resolved style of every box and text run to the measured tree.
+  /// Only `measure` reads it.
+  pub include_styles: Option<bool>,
 }
 
 /// Options for rendering a node tree to an SVG document. SVG is a vector

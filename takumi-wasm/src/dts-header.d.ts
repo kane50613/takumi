@@ -119,6 +119,11 @@ export type RenderOptions = {
   fontFamilies?: string[];
   /** Default BCP-47 language applied to the root, inherited by nodes without their own lang. */
   lang?: string;
+  /**
+   * Attaches the resolved style of every box and text run to the measured tree.
+   * Only `measure` reads it.
+   */
+  includeStyles?: boolean;
 };
 
 /**
@@ -249,12 +254,67 @@ export type RegisteredFamily = {
   faces: RegisteredFace[];
 };
 
+/** The resolved style a measured box paints with, returned when `includeStyles` is set. */
+export type MeasuredStyle = {
+  /** Used `color`, with `currentColor` resolved. */
+  color: string;
+  /** Computed `font-family` stack. */
+  fontFamily: string;
+  /** Used `font-size` in device pixels. */
+  fontSize: number;
+  /** Used numeric `font-weight`. */
+  fontWeight: number;
+  /** Computed `font-style`. */
+  fontStyle: string;
+  /** Used `line-height` in device pixels, absent when it resolves against font metrics. */
+  lineHeight?: number;
+  /** Used `letter-spacing` in device pixels. */
+  letterSpacing: number;
+  /** Computed `text-align`. */
+  textAlign: string;
+  /** Computed `text-transform`. */
+  textTransform: string;
+  /** Computed `display`, the box type the node generated. */
+  display: string;
+  /** Computed `position`. */
+  position: string;
+  /** Computed `visibility`. */
+  visibility: string;
+  /** Computed `list-style-type`. */
+  listStyleType: string;
+  /** Used padding in device pixels: top, right, bottom, left. */
+  padding?: [number, number, number, number];
+  /** Used `opacity`. */
+  opacity: number;
+  /** Used `background-color`, absent when transparent. */
+  backgroundColor?: string;
+  /** Computed `background-image`, absent when `none`. */
+  backgroundImage?: string;
+  /** Used corner radii in device pixels: top-left, top-right, bottom-right, bottom-left. */
+  borderRadius?: [number, number, number, number];
+  /** Used border widths in device pixels: top, right, bottom, left. */
+  borderWidths?: [number, number, number, number];
+  /** Used border colors: top, right, bottom, left. */
+  borderColors?: [string, string, string, string];
+  /** Computed `box-shadow`, absent when `none`. */
+  boxShadow?: string;
+  /** Computed `z-index`, absent when `auto`. */
+  zIndex?: number;
+};
+
+/** The resolved style a measured text run paints with, returned when `includeStyles` is set. */
+export type MeasuredTextRunStyle = Pick<
+  MeasuredStyle,
+  "color" | "fontFamily" | "fontSize" | "fontWeight" | "fontStyle" | "letterSpacing"
+>;
+
 export type MeasuredTextRun = {
   text: string;
   x: number;
   y: number;
   width: number;
   height: number;
+  style?: MeasuredTextRunStyle;
 };
 
 export type MeasuredNode = {
@@ -263,6 +323,7 @@ export type MeasuredNode = {
   transform: [number, number, number, number, number, number];
   children: MeasuredNode[];
   runs: MeasuredTextRun[];
+  style?: MeasuredStyle;
 };
 
 export type AnimationScene = {
