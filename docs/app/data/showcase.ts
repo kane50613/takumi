@@ -142,6 +142,13 @@ export const showcaseProjects: Project[] = [
     width: 1200,
     height: 630,
   },
+  {
+    title: "Cultural Alignment",
+    image: "/images/cultural-alignment-keep-summer-safe.webp",
+    url: "https://cultural-alignment.com",
+    width: 1200,
+    height: 630,
+  },
 ];
 
 export const showcaseTemplates: Template[] = [
