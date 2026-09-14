@@ -4548,3 +4548,52 @@ fn paged_inline_span_background_paints_once() {
     "the badge fill must be emitted once, on its owning page"
   );
 }
+
+fn page_sized_boxes<'g>(fonts: &'g Fonts, page: PageOptions, height: &str) -> PdfOptions<'g> {
+  let html = format!(
+    r#"<div style="background: #e2e8f0; height: {height}"></div>
+       <div style="background: #cbd5e1; height: {height}"></div>
+       <div style="background: #94a3b8; height: {height}"></div>"#
+  );
+
+  PdfOptions::builder()
+    .node(from_html(&html, FromHtmlOptions::default()).expect("parse boxes"))
+    .page(page)
+    .fonts(fonts)
+    .build()
+}
+
+/// A box exactly as tall as the content window fills one page and no more,
+/// even when layout snaps its edges to whole pixels and the window is
+/// fractional (A4 is 1122.52px tall).
+#[test]
+fn a_box_as_tall_as_the_window_fills_exactly_one_page() {
+  let fonts = fonts();
+  let small = PageOptions {
+    width: 300.0,
+    height: 160.0,
+    margin: PageMargins::uniform(20.0),
+  };
+  let a4 = PageOptions {
+    margin: PageMargins::uniform(0.0),
+    ..PageOptions::A4
+  };
+
+  assert_eq!(
+    page_count(&render_pinned(page_sized_boxes(&fonts, small, "120px"))),
+    3,
+    "integer window"
+  );
+  assert_eq!(
+    page_count(&run_pdf_fixture_with("page-sized-boxes", &fonts, |fonts| {
+      page_sized_boxes(fonts, a4, "297mm")
+    })),
+    3,
+    "a4 in mm"
+  );
+  assert_eq!(
+    page_count(&render_pinned(page_sized_boxes(&fonts, a4, "1122.52px"))),
+    3,
+    "a4 in rounded px"
+  );
+}
