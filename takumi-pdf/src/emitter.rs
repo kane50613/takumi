@@ -1196,14 +1196,26 @@ impl Emitter<'_> {
     let Some(size) = KrillaSize::from_wh(dw, dh) else {
       return;
     };
-    let overflows = placement.overflows(content);
+    // A replaced element is trimmed to its content edge curve, so a corner radius clips the
+    // image whether or not it overflows.
+    let clip_border = BorderProperties::from_context(context, layout.size, layout.border);
+    let clip_path = if clip_border.is_zero() {
+      placement
+        .overflows(content)
+        .then(|| KrillaRect::from_xywh(bx, by, w, h).and_then(rect_path))
+        .flatten()
+    } else {
+      let clip_box = ClipBox::content_box(clip_border, layout);
+      let mut commands = Vec::with_capacity(BorderProperties::PATH_COMMANDS_AMOUNT);
 
-    if overflows {
-      let Some(path) = KrillaRect::from_xywh(bx, by, w, h).and_then(rect_path) else {
-        return;
-      };
+      clip_box
+        .border
+        .append_mask_commands(&mut commands, clip_box.size, clip_box.offset);
+      krilla_path(&commands, x, y)
+    };
 
-      surface.push_clip_path(&path, &FillRule::NonZero);
+    if let Some(path) = &clip_path {
+      surface.push_clip_path(path, &FillRule::NonZero);
     }
     #[cfg(feature = "svg")]
     if let Some((ops, svg_width, svg_height)) = vector {
@@ -1231,7 +1243,7 @@ impl Emitter<'_> {
       surface.draw_image(krilla_image, size);
       surface.pop();
     }
-    if overflows {
+    if clip_path.is_some() {
       surface.pop();
     }
   }

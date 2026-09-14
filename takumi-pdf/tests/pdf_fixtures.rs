@@ -1786,6 +1786,13 @@ fn inflated_text(pdf: &[u8]) -> String {
   text
 }
 
+/// Page-content lines ending in the Bezier-curve operator `c`.
+fn curve_operator_lines(pdf: &[u8]) -> usize {
+  content_lines(pdf)
+    .filter(|line| line.ends_with(b" c"))
+    .count()
+}
+
 fn find(haystack: &[u8], needle: &[u8]) -> Option<usize> {
   haystack
     .windows(needle.len())
@@ -3394,6 +3401,42 @@ fn inline_images() {
     haystack.contains("/ca 0.5"),
     "an inline image ignored its opacity"
   );
+}
+
+/// CSS trims a replaced element to its content edge curve, so `border-radius`
+/// on an `<img>` rounds the picture and not only the box behind it.
+#[test]
+fn a_rounded_image_is_clipped_to_its_corner_curve() {
+  let render_with = |radius: &str| {
+    let doc = format!(
+      r#"<div style="display:flex;padding:20px;background-color:#ffffff;"><img src="photo" style="width:200px;height:200px;border-radius:{radius};" /></div>"#
+    );
+    let photo = ImageBuffer::from_rgba_bytes(vec![64; 8 * 8 * 4], 8, 8).expect("image buffer");
+
+    render_pinned(
+      PdfOptions::builder()
+        .node(from_html(&doc, FromHtmlOptions::default()).expect("parse image doc"))
+        .images(HashMap::from([(
+          "photo".into(),
+          ImageSource::Bitmap(Arc::new(photo)),
+        )]))
+        .page(PageOptions::A4)
+        .fonts(&fonts())
+        .build(),
+    )
+  };
+
+  let rounded = render_with("60px");
+  let square = render_with("0");
+
+  assert!(
+    inflated_text(&rounded).contains("/x0 Do"),
+    "the image never reached the page"
+  );
+  // The image fits its box, so nothing overflows: the only curve on the page is
+  // the corner the picture is trimmed to.
+  assert_eq!(curve_operator_lines(&square), 0);
+  assert_eq!(curve_operator_lines(&rounded), 1);
 }
 
 /// CSS 2.1 Appendix E paints the outline last, so a negative `outline-offset`
