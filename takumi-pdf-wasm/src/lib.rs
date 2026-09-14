@@ -19,8 +19,8 @@ use takumi_core::{
   style::{FontFamily, Lang},
 };
 use takumi_pdf::{
-  Attachment, MeasureOptions, MissingGlyph, PageRange, PdfMetadata, PdfOptions, PdfStandard,
-  Tagging,
+  Attachment, MeasureOptions, PageRange, PdfMetadata, PdfOptions, PdfStandard, Tagging,
+  UncoveredText,
 };
 use wasm_bindgen::prelude::*;
 
@@ -188,9 +188,9 @@ impl PdfRenderer {
         .into_iter()
         .map(Attachment::try_from)
         .collect::<Result<_, _>>()?,
-      missing_glyph: options
-        .missing_glyph
-        .map(MissingGlyph::from)
+      uncovered_text: options
+        .uncovered_text
+        .map(UncoveredText::from)
         .unwrap_or_default(),
     })
     .map_err(map_error)

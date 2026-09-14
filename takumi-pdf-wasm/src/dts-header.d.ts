@@ -178,15 +178,16 @@ export type PdfRenderOptions = {
   /** Files attached to the document. */
   attachments?: Attachment[];
   /**
-   * What becomes of a character no registered font covers: `"error"` (default)
-   * fails the render naming it, `"notdef"` draws the font's `.notdef` glyph,
-   * `"skip"` drops it from the page. Neither puts it in the text layer.
+   * What a character no registered font covers turns into on the page:
+   * `"error"` (default) fails the render naming it, `"placeholder"` draws the
+   * font's own placeholder glyph, usually an empty box, and `"blank"` leaves its
+   * space empty. Neither of the last two reflows the line.
    */
-  missingGlyph?: MissingGlyph;
+  uncoveredText?: UncoveredText;
 };
 
-/** What becomes of a character no registered font covers. */
-export type MissingGlyph = "error" | "notdef" | "skip";
+/** What a character no registered font covers turns into on the page. */
+export type UncoveredText = "error" | "placeholder" | "blank";
 
 /** Options for `measure`: page geometry (or a viewport) plus layout resources. */
 export type MeasureOptions = (

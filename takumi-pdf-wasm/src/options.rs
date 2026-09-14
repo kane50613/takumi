@@ -11,7 +11,7 @@ use takumi_core::{
   style::{Color, ColorInput, CssSource, FromCssStr},
   viewport::Viewport,
 };
-use takumi_pdf::{MissingGlyph, PageMargin, PageMargins, PageOptions, PageRange};
+use takumi_pdf::{PageMargin, PageMargins, PageOptions, PageRange, UncoveredText};
 
 use crate::{
   map_error,
@@ -232,26 +232,26 @@ pub(crate) struct PdfRenderOptions {
   pub(crate) tagged: Option<TaggedInput>,
   /// Files attached to the document.
   pub(crate) attachments: Option<Vec<AttachmentInput>>,
-  /// What becomes of a character no registered font covers: `"error"`
-  /// (default), `"notdef"` or `"skip"`.
-  pub(crate) missing_glyph: Option<MissingGlyphInput>,
+  /// What a character no registered font covers turns into: `"error"`
+  /// (default), `"placeholder"` or `"blank"`.
+  pub(crate) uncovered_text: Option<UncoveredTextInput>,
 }
 
-/// `missingGlyph` names accepted from JS.
+/// `uncoveredText` names accepted from JS.
 #[derive(Deserialize, Clone, Copy)]
 #[serde(rename_all = "lowercase")]
-pub(crate) enum MissingGlyphInput {
+pub(crate) enum UncoveredTextInput {
   Error,
-  Notdef,
-  Skip,
+  Placeholder,
+  Blank,
 }
 
-impl From<MissingGlyphInput> for MissingGlyph {
-  fn from(input: MissingGlyphInput) -> Self {
+impl From<UncoveredTextInput> for UncoveredText {
+  fn from(input: UncoveredTextInput) -> Self {
     match input {
-      MissingGlyphInput::Error => Self::Error,
-      MissingGlyphInput::Notdef => Self::Notdef,
-      MissingGlyphInput::Skip => Self::Skip,
+      UncoveredTextInput::Error => Self::Error,
+      UncoveredTextInput::Placeholder => Self::Placeholder,
+      UncoveredTextInput::Blank => Self::Blank,
     }
   }
 }

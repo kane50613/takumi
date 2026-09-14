@@ -48,7 +48,7 @@ use crate::svg;
 use crate::{
   background::{Placement, cycled},
   filter::{ColorFilter, unsupported_filter},
-  glyph::run_glyphs,
+  glyph::{Uncovered, run_glyphs},
   inline::{InlineMap, build_inline_runs, node_inline_items},
   krilla::{
     Data,
@@ -63,7 +63,7 @@ use crate::{
     tagging::{Artifact, ArtifactType, ContentTag, SpanTag},
     text::{Font, Tag},
   },
-  options::{MissingGlyph, PdfError},
+  options::PdfError,
   paint::{
     empty_path, expanded_radial_stops, fill_from_rgba, krilla_blend, krilla_path, krilla_stop,
     krilla_stops, overflow_clip_rect, pop_transforms, rect_path, spread,
@@ -126,10 +126,9 @@ fn image_label(src: &ImageSourceInput) -> &str {
 }
 
 /// Failures a page collects while emitting, raised once the surface is closed.
-#[derive(Default)]
 pub(crate) struct RenderIssues {
-  /// Characters no registered font covered.
-  pub(crate) uncovered: String,
+  /// Characters no registered font covered, and what became of them.
+  pub(crate) uncovered: Uncovered,
   /// The first failure worth stopping for.
   pub(crate) failure: Option<PdfError>,
 }
@@ -143,39 +142,27 @@ pub(crate) struct DocumentState<'a> {
   pub(crate) issues: RefCell<RenderIssues>,
   /// The document's default language.
   pub(crate) lang: Option<&'a str>,
-  pub(crate) missing_glyph: MissingGlyph,
 }
 
 impl<'a> DocumentState<'a> {
-  pub(crate) fn new(tagged: bool, lang: Option<&'a str>, missing_glyph: MissingGlyph) -> Self {
+  pub(crate) fn new(tagged: bool, lang: Option<&'a str>, uncovered: Uncovered) -> Self {
     Self {
       fonts: RefCell::new(FontMap::default()),
       tags: tagged.then(RefCell::default),
-      issues: RefCell::default(),
+      issues: RefCell::new(RenderIssues {
+        uncovered,
+        failure: None,
+      }),
       lang,
-      missing_glyph,
     }
   }
 
-  /// The error the pages left behind, if any: what failed outright, else the characters no font
-  /// covered when those are errors.
+  /// The error the pages left behind, if any: what failed outright, else what
+  /// the uncovered characters cost.
   pub(crate) fn into_error(self) -> Option<PdfError> {
     let issues = self.issues.into_inner();
 
-    if issues.failure.is_some()
-      || issues.uncovered.is_empty()
-      || self.missing_glyph != MissingGlyph::Error
-    {
-      return issues.failure;
-    }
-    let named = issues
-      .uncovered
-      .chars()
-      .map(|character| format!("{character} (U+{:04X})", character as u32))
-      .collect::<Vec<_>>()
-      .join(", ");
-
-    Some(PdfError::MissingGlyphs(named))
+    issues.failure.or_else(|| issues.uncovered.into_error())
   }
 }
 
@@ -1360,7 +1347,6 @@ impl Emitter<'_> {
       let glyphs = run_glyphs(
         shaped,
         run_text,
-        self.document.missing_glyph,
         &mut self.document.issues.borrow_mut().uncovered,
       );
 
@@ -1782,7 +1768,6 @@ impl Emitter<'_> {
       let glyphs = run_glyphs(
         shaped,
         run_text,
-        self.document.missing_glyph,
         &mut self.document.issues.borrow_mut().uncovered,
       );
 

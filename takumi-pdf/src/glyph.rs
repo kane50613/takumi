@@ -9,19 +9,76 @@ use crate::{
     surface::Location,
     text::{Glyph, GlyphId},
   },
-  options::MissingGlyph,
+  options::{PdfError, UncoveredText},
 };
+
+/// The characters no registered font covers, and what the render does with
+/// them.
+///
+/// A character no font covers shapes to the font's `.notdef` glyph. Every one
+/// of them lands in `characters`, so the render can name them once the pages
+/// are done.
+pub(crate) struct Uncovered {
+  policy: UncoveredText,
+  /// The standard that forbids [`UncoveredText::Placeholder`], when one applies.
+  forbidden_by: Option<&'static str>,
+  characters: String,
+}
+
+impl Uncovered {
+  pub(crate) fn new(policy: UncoveredText, forbidden_by: Option<&'static str>) -> Self {
+    Self {
+      policy,
+      forbidden_by,
+      characters: String::new(),
+    }
+  }
+
+  /// Whether an uncovered character still reaches the page as the font's
+  /// placeholder glyph.
+  fn draws_placeholder(&self) -> bool {
+    self.policy != UncoveredText::Blank
+  }
+
+  fn record(&mut self, character: char) {
+    if !self.characters.contains(character) {
+      self.characters.push(character);
+    }
+  }
+
+  /// What the uncovered characters cost the render, if anything.
+  pub(crate) fn into_error(self) -> Option<PdfError> {
+    if self.characters.is_empty() {
+      return None;
+    }
+    let named = self
+      .characters
+      .chars()
+      .map(|character| format!("{character} (U+{:04X})", character as u32))
+      .collect::<Vec<_>>()
+      .join(", ");
+
+    match (self.policy, self.forbidden_by) {
+      (UncoveredText::Error, _) => Some(PdfError::UncoveredCharacters(named)),
+      (UncoveredText::Placeholder, Some(standard)) => Some(PdfError::PlaceholderForbidden {
+        characters: named,
+        standard,
+      }),
+      _ => None,
+    }
+  }
+}
 
 /// The run's glyphs, each carrying the source text it maps to.
 ///
-/// A character no registered font covers shapes to `.notdef`. Every such
-/// character lands in `uncovered` for the caller to report once the page is
-/// done; [`MissingGlyph::Skip`] leaves its glyph out of the run as well.
+/// [`UncoveredText::Blank`] leaves an uncovered character's glyph out of the
+/// run. Its neighbours keep their own positions, so the character's space stays
+/// where it was, empty. A character sharing a cluster with a covered one still
+/// reaches the text layer through that neighbour's source range.
 pub(crate) fn run_glyphs(
   shaped: &ShapedRun,
   run_text: &str,
-  missing: MissingGlyph,
-  uncovered: &mut String,
+  uncovered: &mut Uncovered,
 ) -> Vec<PdfGlyph> {
   let clusters = cluster_spans(shaped, run_text);
 
@@ -38,7 +95,7 @@ pub(crate) fn run_glyphs(
     .glyphs
     .iter()
     .zip(spans)
-    .filter(|(glyph, _)| missing != MissingGlyph::Skip || glyph.id != 0)
+    .filter(|(glyph, _)| glyph.id != 0 || uncovered.draws_placeholder())
     .map(|(glyph, range)| PdfGlyph {
       id: GlyphId::new(glyph.id),
       x_offset: glyph.x / shaped.font_size,
@@ -48,7 +105,7 @@ pub(crate) fn run_glyphs(
     .collect()
 }
 
-/// Adds the characters that came out as `.notdef`.
+/// Records the characters that came out as `.notdef`.
 ///
 /// Reads the shaper's own cluster spans, before they are merged for ToUnicode:
 /// a merged span covers its neighbour's text too, and the fallback span covers
@@ -57,16 +114,14 @@ fn collect_uncovered(
   shaped: &ShapedRun,
   run_text: &str,
   clusters: &[Range<usize>],
-  uncovered: &mut String,
+  uncovered: &mut Uncovered,
 ) {
   for (glyph, cluster) in shaped.glyphs.iter().zip(clusters) {
     if glyph.id != 0 {
       continue;
     }
     for character in run_text.get(cluster.clone()).unwrap_or_default().chars() {
-      if !uncovered.contains(character) {
-        uncovered.push(character);
-      }
+      uncovered.record(character);
     }
   }
 }
