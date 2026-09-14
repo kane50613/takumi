@@ -317,6 +317,19 @@ export type MeasuredTextRun = {
   style?: MeasuredTextRunStyle;
 };
 
+/** A rectangle an inline span paints behind its text, in the node's local space. An inline span
+ * generates no box of its own, so these belong to the node that laid it out. */
+export type MeasuredInlineBackground = {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  /** Already clamped: top-left, top-right, bottom-right, bottom-left. */
+  radii: [number, number, number, number];
+  color: string;
+  opacity: number;
+};
+
 export type MeasuredNode = {
   width: number;
   height: number;
@@ -324,6 +337,8 @@ export type MeasuredNode = {
   children: MeasuredNode[];
   runs: MeasuredTextRun[];
   style?: MeasuredStyle;
+  /** Present only with `includeStyles`, in paint order, outer spans first. */
+  inlineBackgrounds?: MeasuredInlineBackground[];
 };
 
 export type AnimationScene = {

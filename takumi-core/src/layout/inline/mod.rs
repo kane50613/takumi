@@ -45,10 +45,11 @@ pub use self::{
   },
 };
 use self::{
+  background::DecorationAccumulator,
   breaking::distribute_trailing_whitespace,
   items::inline_box_kind,
   metrics::text_line_box_contribution,
-  runs::measured_run_text,
+  runs::{cover_box_background, cover_run_background, measured_run_text},
   text_fit::{text_fit_is_applicable, text_fit_line_advance, text_fit_line_scales},
   truncation::make_ellipsis_layout,
 };
@@ -209,9 +210,14 @@ impl BuiltInlineLayout<'_> {
     layout: ComputedLayout,
     include_styles: bool,
     fonts: &FontsSnapshot,
-  ) -> (Vec<MeasuredInlineRun<'_>>, Vec<MeasuredInlineBox>) {
+  ) -> (
+    Vec<MeasuredInlineRun<'_>>,
+    Vec<MeasuredInlineBox>,
+    Vec<InlineBackgroundFragment>,
+  ) {
     let mut runs = Vec::new();
     let mut inline_boxes = Vec::new();
+    let mut coverage = DecorationAccumulator::default();
 
     let Ok(()) = self.walk_items::<Infallible>(layout, |line, item| {
       let setup = &line.setup;
@@ -223,6 +229,18 @@ impl BuiltInlineLayout<'_> {
           static_inline_prefix,
           ..
         } => {
+          if include_styles {
+            cover_run_background(
+              &mut coverage,
+              &self.spans,
+              layout,
+              line,
+              &glyph_run,
+              glyph_run.style().brush,
+              static_inline_prefix,
+            );
+          }
+
           let span_id = glyph_run.style().brush.source_span_id;
           let text = measured_run_text(&self.text, &self.spans, &glyph_run, span_id);
           if text.is_empty()
@@ -274,6 +292,10 @@ impl BuiltInlineLayout<'_> {
           });
         }
         PlacedItem::Box(inline_box) => {
+          if include_styles {
+            cover_box_background(&mut coverage, &self.spans, layout, line, &inline_box);
+          }
+
           // A padding spacer advances the line but is not a measured box.
           if matches!(
             self.spans.get(inline_box.id as usize),
@@ -313,7 +335,7 @@ impl BuiltInlineLayout<'_> {
       });
     }
 
-    (runs, inline_boxes)
+    (runs, inline_boxes, coverage.into_fragments())
   }
 }
 

@@ -5,7 +5,7 @@ use takumi_core::{
   geometry::{AvailableSpace, ComputedLayout as Layout, NodeId, Size},
   layout::node::NodeKind,
   scene::build_stacking_contexts,
-  style::{ComputedStyle, Display, Lang, MeasuredStyle, MeasuredTextRunStyle},
+  style::{ComputedStyle, Display, Lang, MeasuredStyle, MeasuredTextRunStyle, ToCss},
 };
 use typed_builder::TypedBuilder;
 
@@ -135,6 +135,31 @@ pub struct MeasuredNode {
   /// The resolved style the box paints with, set by `include_styles`.
   #[serde(skip_serializing_if = "Option::is_none")]
   pub style: Option<MeasuredStyle>,
+  /// Backgrounds an inline span paints behind its text, which belong to no box of their own. Set
+  /// by `include_styles`, in paint order, outer spans first.
+  #[serde(skip_serializing_if = "Vec::is_empty")]
+  pub inline_backgrounds: Vec<MeasuredInlineBackground>,
+}
+
+/// A rectangle an inline span paints behind its text, in the node's local space.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+#[non_exhaustive]
+pub struct MeasuredInlineBackground {
+  /// Left edge.
+  pub x: f32,
+  /// Top edge.
+  pub y: f32,
+  /// Rectangle width.
+  pub width: f32,
+  /// Rectangle height.
+  pub height: f32,
+  /// Corner radii, already clamped: top-left, top-right, bottom-right, bottom-left.
+  pub radii: [f32; 4],
+  /// Fill colour, serialized like every other measured colour.
+  pub color: String,
+  /// The span's `opacity`.
+  pub opacity: f32,
 }
 
 struct TraversalEnter {
@@ -254,6 +279,7 @@ fn collect_measure_result(
 
         let mut children = Vec::new();
         let mut runs = Vec::new();
+        let mut inline_backgrounds = Vec::new();
         let style = include_styles.then(|| {
           MeasuredStyle::from_context(&current.context, (layout.size.width, layout.size.height))
         });
@@ -271,8 +297,20 @@ fn collect_measure_result(
             &current.context,
             InlineLayoutMode::Measure,
           ));
-          let (measured_runs, measured_boxes) =
+          let (measured_runs, measured_boxes, background_fragments) =
             built.measure_runs(layout, include_styles, current.context.fonts());
+          inline_backgrounds = background_fragments
+            .into_iter()
+            .map(|fragment| MeasuredInlineBackground {
+              x: fragment.x,
+              y: fragment.y,
+              width: fragment.width,
+              height: fragment.height,
+              radii: fragment.radii.map(|(x, _)| x),
+              color: fragment.color.to_css_string(),
+              opacity: fragment.opacity,
+            })
+            .collect();
           runs.extend(measured_runs.into_iter().map(|run| MeasuredTextRun {
             text: run.text.to_string(),
             x: run.x,
@@ -291,12 +329,13 @@ fn collect_measure_result(
               children: Vec::new(),
               runs: Vec::new(),
               style: inline_box.style,
+              inline_backgrounds: Vec::new(),
             }
           }));
 
           measured_by_node_id.insert(
             usize::from(node_id),
-            create_measured_node(layout, local_transform, children, runs, style),
+            create_measured_node(layout, local_transform, children, runs, style, inline_backgrounds),
           );
           continue;
         }
@@ -327,7 +366,7 @@ fn collect_measure_result(
             &current.context,
             InlineLayoutMode::Measure,
           ));
-          let (measured_runs, _) =
+          let (measured_runs, _, _) =
             built.measure_runs(layout, include_styles, current.context.fonts());
           runs.extend(measured_runs.into_iter().map(|run| MeasuredTextRun {
             text: run.text.to_string(),
@@ -342,7 +381,7 @@ fn collect_measure_result(
         if current.children.is_none() {
           measured_by_node_id.insert(
             usize::from(node_id),
-            create_measured_node(layout, local_transform, children, runs, style),
+            create_measured_node(layout, local_transform, children, runs, style, inline_backgrounds),
           );
           continue;
         }
@@ -351,7 +390,7 @@ fn collect_measure_result(
         if layout_children.is_empty() {
           measured_by_node_id.insert(
             usize::from(node_id),
-            create_measured_node(layout, local_transform, children, runs, style),
+            create_measured_node(layout, local_transform, children, runs, style, inline_backgrounds),
           );
           continue;
         }
@@ -411,6 +450,8 @@ fn collect_measure_result(
             children,
             runs,
             style,
+            // A node reaching here has box children, so no inline formatting context of its own.
+            inline_backgrounds: Vec::new(),
           },
         );
       }
@@ -428,6 +469,7 @@ fn create_measured_node(
   children: Vec<MeasuredNode>,
   runs: Vec<MeasuredTextRun>,
   style: Option<MeasuredStyle>,
+  inline_backgrounds: Vec<MeasuredInlineBackground>,
 ) -> MeasuredNode {
   MeasuredNode {
     width: layout.size.width,
@@ -436,6 +478,7 @@ fn create_measured_node(
     children,
     runs,
     style,
+    inline_backgrounds,
   }
 }
 
