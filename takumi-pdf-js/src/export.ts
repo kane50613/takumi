@@ -52,22 +52,13 @@ export type NodeInput = Node | ReactNode | ReactElementLike | string;
 /** A band on a page: a document input, or `false` for none. */
 export type BandInput = NodeInput | false;
 
-/**
- * What one kind of page draws instead of the document's own setting. A field
- * left out or `null` falls through to the next rule covering the page, then
- * to the top-level option.
- */
+/** What some pages draw instead of the document's own bands. A field left out falls through. */
 export type PageOverrideInput = {
   header?: BandInput;
   footer?: BandInput;
 };
 
-/**
- * Overrides keyed by the pages they cover. A page reads each field from
- * `first` or `last`, then `odd` or `even`, then the top-level option. Pages
- * count from 1 over the whole document, before `pageRanges` drops any, and a
- * one-page document is its own first and last page with `first` winning.
- */
+/** Overrides keyed by the pages they cover. `first` and `last` win over `odd` and `even`. */
 export type PageRulesInput = {
   first?: PageOverrideInput;
   last?: PageOverrideInput;

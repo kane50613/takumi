@@ -79,22 +79,13 @@ export type PageMarginSide = number | "auto";
 /** A band on a page: a node tree, or `false` for none. */
 export type Band = Node | false;
 
-/**
- * What one kind of page draws instead of the document's own setting. A field
- * left out falls through to the next rule covering the page, then to the
- * top-level option.
- */
+/** What some pages draw instead of the document's own bands. A field left out falls through. */
 export type PageOverride = {
   header?: Band;
   footer?: Band;
 };
 
-/**
- * Overrides keyed by the pages they cover. A page reads each field from
- * `first` or `last`, then `odd` or `even`, then the top-level option. Pages
- * count from 1 over the whole document, and a one-page document is its own
- * first and last page with `first` winning.
- */
+/** Overrides keyed by the pages they cover. `first` and `last` win over `odd` and `even`. */
 export type PageRules = {
   first?: PageOverride;
   last?: PageOverride;

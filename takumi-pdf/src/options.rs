@@ -456,22 +456,18 @@ impl Band {
   }
 }
 
-/// What one kind of page draws instead of the document's own setting. A
-/// field left unset falls through to the next rule that covers the page,
-/// then to the [`PdfOptions`] field.
+/// What some pages draw instead of the document's own bands. A field left
+/// unset falls through.
 #[derive(Clone, Default)]
 pub struct PageOverride {
-  /// The header band, or [`Band::Off`] for none.
+  /// The header band.
   pub header: Option<Band>,
-  /// The footer band, or [`Band::Off`] for none.
+  /// The footer band.
   pub footer: Option<Band>,
 }
 
-/// Overrides keyed by the pages they cover. A page reads each field from
-/// `first` or `last`, then `odd` or `even`, then the document's own setting.
-/// Pages are numbered from 1 over the whole document, before
-/// [`PdfOptions::page_ranges`] drops any, and a one-page document is its own
-/// first and last page with `first` winning.
+/// Overrides keyed by the pages they cover. `first` and `last` win over
+/// `odd` and `even`.
 #[derive(Clone, Default)]
 pub struct PageRules {
   /// The first page.
