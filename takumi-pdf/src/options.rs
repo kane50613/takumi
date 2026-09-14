@@ -507,8 +507,8 @@ impl PageBand {
     rules: &PageRules,
     field: impl Fn(&PageOverride) -> Option<&Band>,
   ) -> Option<Self> {
-    let rules = [&rules.first, &rules.last, &rules.odd, &rules.even]
-      .map(|rule| field(rule).cloned());
+    let rules =
+      [&rules.first, &rules.last, &rules.odd, &rules.even].map(|rule| field(rule).cloned());
     let band = Self {
       default: default.cloned(),
       rules,

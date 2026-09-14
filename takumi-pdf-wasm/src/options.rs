@@ -322,8 +322,7 @@ pub(crate) struct PageRulesInput {
 
 impl From<PageRulesInput> for PageRules {
   fn from(input: PageRulesInput) -> Self {
-    let rule =
-      |rule: Option<PageOverrideInput>| rule.map(PageOverride::from).unwrap_or_default();
+    let rule = |rule: Option<PageOverrideInput>| rule.map(PageOverride::from).unwrap_or_default();
 
     Self {
       first: rule(input.first),

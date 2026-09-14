@@ -383,6 +383,12 @@ const PAGE_OVERRIDE_FIELDS = ["header", "footer"] as const;
 /** Page rules with every document input resolved to a node tree. */
 type ResolvedRules = { pages: PageRules; nodes: Node[]; css: string[] };
 
+function rejectNonObject(value: unknown, what: string): void {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    throw new TypeError(`${what} takes an object`);
+  }
+}
+
 function rejectUnknownKeys(object: object, known: readonly string[], what: string): void {
   const unknown = Object.keys(object).filter((key) => !known.includes(key));
 
@@ -394,11 +400,13 @@ function rejectUnknownKeys(object: object, known: readonly string[], what: strin
 async function resolveRules(input: PageRulesInput): Promise<ResolvedRules> {
   const resolved: ResolvedRules = { pages: {}, nodes: [], css: [] };
 
+  rejectNonObject(input, "pages");
   rejectUnknownKeys(input, PAGE_RULES, "page rule");
   for (const rule of PAGE_RULES) {
     const override = input[rule];
 
     if (override == null) continue;
+    rejectNonObject(override, `pages.${rule}`);
     rejectUnknownKeys(override, PAGE_OVERRIDE_FIELDS, `field of pages.${rule}`);
 
     const page: PageOverride = {};
