@@ -2,6 +2,13 @@
 // If no `title` provided, the hostname will be used as the title (or github owner/repo name).
 export const showcaseProjects: Project[] = [
   {
+    title: "Passage",
+    image: "/images/passage.webp",
+    url: "https://www.share-ai-passage.com",
+    width: 1200,
+    height: 630,
+  },
+  {
     image: "/images/dcard-post-260376394.webp",
     url: "https://dcard.tw",
     width: 1200,
