@@ -2565,3 +2565,30 @@ fn test_measure_flex_baseline_aligns_to_the_first_line() {
   );
 }
 
+
+
+#[test]
+fn test_measure_replaced_element_reads_its_insets_the_way_box_sizing_states_them() {
+  let png = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAMgAAACWCAYAAACb3McZAAAAHUlEQVR42u3BAQ0AAADCoPdPbQ8HFAAAAAAAAAB4DSMgAAGIL7gAAAAAAElFTkSuQmCC";
+
+  // A 200x150 picture with 20px of padding and a 5px border, in a 600px container. Chrome
+  // measures the border box of each of these, and the box type never changes the answer.
+  for (width, sizing, expected) in [
+    ("", "content-box", (250.0, 200.0)),
+    ("", "border-box", (250.0, 200.0)),
+    ("width:250px;", "content-box", (300.0, 237.5)),
+    ("width:250px;", "border-box", (250.0, 200.0)),
+  ] {
+    for display in ["block", "inline"] {
+      let html = format!(
+        r#"<div style="display:block;width:600px"><img style="display:{display};box-sizing:{sizing};{width}padding:20px;border:5px solid #000" src="{png}"></div>"#
+      );
+      let node = Node::from_html(&html, FromHtmlOptions::default()).expect("parse");
+      let measured = measure(node, create_measure_viewport());
+      let image = &measured.children[0];
+
+      assert_within(image.width, expected.0, 0.5);
+      assert_within(image.height, expected.1, 0.5);
+    }
+  }
+}

@@ -158,9 +158,34 @@ impl ImageData {
       return Size::ZERO;
     };
 
+    // taffy reads a measure in content dimensions, so a style that states a border box
+    // carries the insets inside the size it gives and they come off here.
+    let insets = match style.box_sizing {
+      taffy::BoxSizing::ContentBox => Size {
+        width: 0.0,
+        height: 0.0,
+      },
+      taffy::BoxSizing::BorderBox => {
+        let basis = available_space.width.into_option();
+        let resolve = |value| resolve_inset(value, basis, context);
+
+        Size {
+          width: resolve(style.padding.left)
+            + resolve(style.padding.right)
+            + resolve(style.border.left)
+            + resolve(style.border.right),
+          height: resolve(style.padding.top)
+            + resolve(style.padding.bottom)
+            + resolve(style.border.top)
+            + resolve(style.border.bottom),
+        }
+      }
+    };
     let style_known_dimensions = Size {
-      width: resolve_style_size_axis(style.size.width, available_space.width, context),
-      height: resolve_style_size_axis(style.size.height, available_space.height, context),
+      width: resolve_style_size_axis(style.size.width, available_space.width, context)
+        .map(|width| (width - insets.width).max(0.0)),
+      height: resolve_style_size_axis(style.size.height, available_space.height, context)
+        .map(|height| (height - insets.height).max(0.0)),
     };
 
     if let Size {
@@ -206,6 +231,18 @@ impl ImageData {
 
     natural.size
   }
+}
+
+/// A padding or border length in device pixels, with a percentage resolved against the
+/// containing block and an unresolvable one counted as zero.
+fn resolve_inset(
+  value: taffy::LengthPercentage,
+  basis: Option<f32>,
+  context: &RenderContext,
+) -> f32 {
+  value
+    .maybe_resolve(basis, |val, basis| context.sizing.resolve_calc(val, basis))
+    .unwrap_or_default()
 }
 
 fn resolve_style_size_axis(
