@@ -10,7 +10,12 @@ import {
   subsetFonts,
 } from "@takumi-rs/helpers";
 import type { ReactNode } from "react";
-import { counterCharacters, PdfRenderer as PdfRendererInternal } from "../pkg/takumi_pdf_wasm";
+import {
+  counterCharacters,
+  type PageOverride,
+  type PageRules,
+  PdfRenderer as PdfRendererInternal,
+} from "../pkg/takumi_pdf_wasm";
 
 export { default, initSync } from "../pkg/takumi_pdf_wasm";
 export type { FontLoader, ImagesInput } from "@takumi-rs/helpers/renderer";
@@ -43,6 +48,23 @@ function collectClassNames(node: unknown, into: string[]): void {
 
 /** A document input: a takumi node tree, JSX, or an HTML string. */
 export type NodeInput = Node | ReactNode | ReactElementLike | string;
+
+/** A band on a page: a document input, or `false` for none. */
+export type BandInput = NodeInput | false;
+
+/** What some pages draw instead of the document's own bands. A field left out falls through. */
+export type PageOverrideInput = {
+  header?: BandInput;
+  footer?: BandInput;
+};
+
+/** Overrides keyed by the pages they cover. `first` and `last` win over `odd` and `even`. */
+export type PageRulesInput = {
+  first?: PageOverrideInput;
+  last?: PageOverrideInput;
+  odd?: PageOverrideInput;
+  even?: PageOverrideInput;
+};
 
 /** Explicit dimensions in CSS px (96 dpi). */
 export type Dimensions = { width: number; height: number };
@@ -112,9 +134,11 @@ type PagedOptions = {
    * templates; add a CSS `@counter-style` name (e.g. `cjk-decimal`,
    * `lower-roman`) to the class list to format it.
    */
-  header?: NodeInput;
+  header?: BandInput;
   /** Band repeated at the bottom of every page; same class hooks as `header`. */
-  footer?: NodeInput;
+  footer?: BandInput;
+  /** What some pages draw differently from the rest. */
+  pages?: PageRulesInput;
   /**
    * The pages the output keeps, e.g. `[1, { from: 4, to: 8 }]`, like a print
    * dialog's page ranges. Layout and page counters still run over the whole
@@ -137,6 +161,7 @@ type ViewportOptions = {
   margin?: never;
   header?: never;
   footer?: never;
+  pages?: never;
   pageRanges?: never;
 };
 
@@ -352,6 +377,59 @@ function ownCss(
   return stylesheets ?? [];
 }
 
+const PAGE_RULES = ["first", "last", "odd", "even"] as const;
+const PAGE_OVERRIDE_FIELDS = ["header", "footer"] as const;
+
+/** Page rules with every document input resolved to a node tree. */
+type ResolvedRules = { pages: PageRules; nodes: Node[]; css: string[] };
+
+function rejectNonObject(value: unknown, what: string): void {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    throw new TypeError(`${what} takes an object`);
+  }
+}
+
+function rejectUnknownKeys(object: object, known: readonly string[], what: string): void {
+  const unknown = Object.keys(object).filter((key) => !known.includes(key));
+
+  if (unknown.length > 0) {
+    throw new TypeError(`unknown ${what}: ${unknown.join(", ")}`);
+  }
+}
+
+async function resolveRules(input: PageRulesInput): Promise<ResolvedRules> {
+  const resolved: ResolvedRules = { pages: {}, nodes: [], css: [] };
+
+  rejectNonObject(input, "pages");
+  rejectUnknownKeys(input, PAGE_RULES, "page rule");
+  for (const rule of PAGE_RULES) {
+    const override = input[rule];
+
+    if (override == null) continue;
+    rejectNonObject(override, `pages.${rule}`);
+    rejectUnknownKeys(override, PAGE_OVERRIDE_FIELDS, `field of pages.${rule}`);
+
+    const page: PageOverride = {};
+
+    for (const band of PAGE_OVERRIDE_FIELDS) {
+      const value = override[band];
+
+      if (value == null) continue;
+      if (value === false) {
+        page[band] = false;
+        continue;
+      }
+      const { node, css } = await resolveNode(value);
+
+      page[band] = node;
+      resolved.nodes.push(node);
+      resolved.css.push(...css);
+    }
+    resolved.pages[rule] = page;
+  }
+  return resolved;
+}
+
 async function resolveNode(input: NodeInput): Promise<{ node: Node; css: string[] }> {
   if (isNode(input)) {
     return { node: input, css: [] };
@@ -373,13 +451,17 @@ export class PdfRenderer {
 
   /** Renders a node tree, JSX, or an HTML string to PDF bytes. See {@link RenderOptions}. */
   async render(node: NodeInput, options: RenderOptions = {}): Promise<Uint8Array> {
-    const { fonts, images, header, footer, css, stylesheets, fontFamilies, ...rest } = options;
-    const [main, headerResult, footerResult] = await Promise.all([
+    const { fonts, images, header, footer, pages, css, stylesheets, fontFamilies, ...rest } =
+      options;
+    const [main, headerResult, footerResult, pagesResult] = await Promise.all([
       resolveNode(node),
-      header === undefined ? undefined : resolveNode(header),
-      footer === undefined ? undefined : resolveNode(footer),
+      header == null || header === false ? undefined : resolveNode(header),
+      footer == null || footer === false ? undefined : resolveNode(footer),
+      pages == null ? undefined : resolveRules(pages),
     ]);
-    const bands = [headerResult?.node, footerResult?.node].filter((band) => band !== undefined);
+    const bands = [headerResult?.node, footerResult?.node, ...(pagesResult?.nodes ?? [])].filter(
+      (band) => band !== undefined,
+    );
     const resources = await this.fonts.resolveResources(
       fonts &&
         subsetFonts({
@@ -401,12 +483,14 @@ export class PdfRenderer {
       ...main.css,
       ...(headerResult?.css ?? []),
       ...(footerResult?.css ?? []),
+      ...(pagesResult?.css ?? []),
     ];
 
     return this.inner.render(main.node, {
       ...rest,
       header: headerResult?.node,
       footer: footerResult?.node,
+      pages: pagesResult?.pages,
       css: sheets.length > 0 ? sheets : undefined,
       images: resources.images,
       fontFamilies: resources.fontFamilies,

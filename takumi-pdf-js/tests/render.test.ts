@@ -441,3 +441,18 @@ test("only the placeholder policy trips the standard that forbids it", async () 
 
   expect(decoder.decode(blank.subarray(0, 5))).toBe("%PDF-");
 });
+
+test("rejects a pages value that is not an object", async () => {
+  await expect(
+    renderer.render(doc, { pages: false as unknown as Record<string, never> }),
+  ).rejects.toThrow("pages takes an object");
+  await expect(
+    renderer.render(doc, { pages: [] as unknown as Record<string, never> }),
+  ).rejects.toThrow("pages takes an object");
+  await expect(
+    renderer.render(doc, { pages: { first: false as unknown as Record<string, never> } }),
+  ).rejects.toThrow("pages.first takes an object");
+  await expect(
+    renderer.render(doc, { pages: { nope: {} } as unknown as Record<string, never> }),
+  ).rejects.toThrow("unknown page rule: nope");
+});

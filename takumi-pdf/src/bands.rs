@@ -17,7 +17,7 @@ use crate::{
   emitter::DocumentState,
   interactive::{Interactive, LinkTarget},
   krilla::surface::Surface,
-  options::{BAND_EDGE_PADDING, PdfError},
+  options::{BAND_EDGE_PADDING, PageBand, PdfError},
   page::PageFrame,
   tree::{PreparedTree, TreeInputs, page_root},
   window::{ContentWindow, Window},
@@ -72,10 +72,10 @@ pub(crate) struct Repeatable {
 
 /// What a per-page layout starts from.
 enum RepeatTemplate {
-  /// A band re-lays out its option node with the page's counters.
-  Band(Node),
+  /// A band re-lays out the rule a page takes with that page's counters.
+  Band(Box<PageBand>),
   /// A repeated box re-lays out the subtree it was taken from.
-  Fixed(FixedTemplate),
+  Fixed(Box<FixedTemplate>),
 }
 
 /// A repeated box's source subtree, with the context its styles resolved
@@ -117,18 +117,33 @@ fn node_count(node: &Node) -> usize {
 }
 
 impl Repeatable {
-  /// Measures a band with the last page's counters, the widest a decimal
-  /// counter gets, recording the template when it must re-prepare per page.
+  /// Measures every tree of a band with the last page's counters, the widest
+  /// a decimal counter gets, and keeps the tallest, recording the template
+  /// when a page must prepare its own. `template` holds at least one tree.
   pub(crate) fn band(
     inputs: &TreeInputs<'_>,
-    template: &Node,
+    template: &PageBand,
     viewport: Viewport,
     bounds: RepeatBounds,
     pages: usize,
   ) -> Result<Self, PdfError> {
+    let mut tallest: Option<PreparedTree> = None;
+
+    for node in template.nodes() {
+      let prepared = inputs.prepare_band(node, pages, pages, viewport)?;
+
+      if tallest
+        .as_ref()
+        .is_none_or(|tree| prepared.height > tree.height)
+      {
+        tallest = Some(prepared);
+      }
+    }
+    let dynamic = template.varies() || template.nodes().any(has_page_counters);
+
     Ok(Self {
-      prepared: inputs.prepare_band(template, pages, pages, viewport)?,
-      template: has_page_counters(template).then(|| RepeatTemplate::Band(template.clone())),
+      prepared: tallest.ok_or(PdfError::MissingViewport)?,
+      template: dynamic.then(|| RepeatTemplate::Band(Box::new(template.clone()))),
       bounds,
       links: Vec::new(),
     })
@@ -144,7 +159,7 @@ impl Repeatable {
 
     Self {
       prepared,
-      template: template.map(RepeatTemplate::Fixed),
+      template: template.map(|template| RepeatTemplate::Fixed(Box::new(template))),
       bounds: RepeatBounds::Content { below },
       links,
     }
@@ -181,9 +196,17 @@ impl Repeatable {
   ) -> Result<RepeatablePage<'_>, PdfError> {
     let fresh = match &self.template {
       None => None,
-      Some(RepeatTemplate::Band(node)) => {
-        Some(inputs.prepare_band(node, page, pages, frame.band_viewport)?)
-      }
+      Some(RepeatTemplate::Band(band)) => match band.for_page(page, pages) {
+        Some(node) => Some(inputs.prepare_band(node, page, pages, frame.band_viewport)?),
+        None => {
+          return Ok(RepeatablePage {
+            repeatable: self,
+            fresh: None,
+            fresh_links: Vec::new(),
+            hidden: true,
+          });
+        }
+      },
       Some(RepeatTemplate::Fixed(template)) => {
         Some(template.prepare(page_context, page, pages, frame.page_area)?)
       }
@@ -197,6 +220,7 @@ impl Repeatable {
       repeatable: self,
       fresh,
       fresh_links,
+      hidden: false,
     })
   }
 }
@@ -206,6 +230,8 @@ pub(crate) struct RepeatablePage<'r> {
   repeatable: &'r Repeatable,
   fresh: Option<PreparedTree>,
   fresh_links: Vec<LinkTarget>,
+  /// The band's rule for this page is off.
+  hidden: bool,
 }
 
 impl RepeatablePage<'_> {
@@ -235,6 +261,9 @@ impl RepeatablePage<'_> {
     state: &DocumentState<'_>,
     surface: &mut Surface,
   ) -> Result<(), PdfError> {
+    if self.hidden {
+      return Ok(());
+    }
     let (x, y, width, height) = self.repeatable.bounds.rect(frame, self.repeatable.height());
 
     ContentWindow {

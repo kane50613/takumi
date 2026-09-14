@@ -379,6 +379,9 @@ pub struct PdfOptions<'g> {
   /// Band repeated at the bottom of every page; same class hooks as `header`.
   #[builder(default, setter(strip_option))]
   pub footer: Option<Node>,
+  /// What some pages draw differently from the rest.
+  #[builder(default)]
+  pub pages: PageRules,
   /// Per-render font fallback chain (family names in order).
   #[builder(default)]
   pub font_families: Option<FontFamily>,
@@ -426,6 +429,126 @@ pub enum UncoveredText {
   Placeholder,
   /// Nothing. The character's space stays empty.
   Blank,
+}
+
+/// What a page draws in a band: a tree, or nothing.
+#[derive(Clone)]
+pub enum Band {
+  /// The band is left empty on that page.
+  Off,
+  /// The tree the band draws.
+  Node(Box<Node>),
+}
+
+impl From<Node> for Band {
+  fn from(node: Node) -> Self {
+    Self::Node(Box::new(node))
+  }
+}
+
+impl Band {
+  /// The tree the band draws, or `None` when it draws nothing.
+  pub fn node(self) -> Option<Node> {
+    match self {
+      Self::Off => None,
+      Self::Node(node) => Some(*node),
+    }
+  }
+}
+
+/// What some pages draw instead of the document's own bands. A field left
+/// unset falls through.
+#[derive(Clone, Default)]
+pub struct PageOverride {
+  /// The header band.
+  pub header: Option<Band>,
+  /// The footer band.
+  pub footer: Option<Band>,
+}
+
+/// Overrides keyed by the pages they cover. `first` and `last` win over
+/// `odd` and `even`.
+#[derive(Clone, Default)]
+pub struct PageRules {
+  /// The first page.
+  pub first: PageOverride,
+  /// The last page.
+  pub last: PageOverride,
+  /// Odd pages.
+  pub odd: PageOverride,
+  /// Even pages.
+  pub even: PageOverride,
+}
+
+impl PageRules {
+  /// The header band a document with `header` draws per page, or `None` when
+  /// no page draws one.
+  pub fn header_band(&self, header: Option<&Node>) -> Option<PageBand> {
+    PageBand::new(header, self, |rule| rule.header.as_ref())
+  }
+
+  /// The footer band a document with `footer` draws per page.
+  pub fn footer_band(&self, footer: Option<&Node>) -> Option<PageBand> {
+    PageBand::new(footer, self, |rule| rule.footer.as_ref())
+  }
+}
+
+/// A band resolved per page: the document's tree and the rules that
+/// replace it.
+#[derive(Clone)]
+pub struct PageBand {
+  default: Option<Node>,
+  rules: [Option<Band>; 4],
+}
+
+impl PageBand {
+  fn new(
+    default: Option<&Node>,
+    rules: &PageRules,
+    field: impl Fn(&PageOverride) -> Option<&Band>,
+  ) -> Option<Self> {
+    let rules =
+      [&rules.first, &rules.last, &rules.odd, &rules.even].map(|rule| field(rule).cloned());
+    let band = Self {
+      default: default.cloned(),
+      rules,
+    };
+    let draws = band.nodes().next().is_some();
+
+    draws.then_some(band)
+  }
+
+  /// The tree page `page` of `pages` draws, 1-based, or `None` for nothing.
+  pub fn for_page(&self, page: usize, pages: usize) -> Option<&Node> {
+    let [first, last, odd, even] = &self.rules;
+    let parity = if page % 2 == 1 { odd } else { even };
+    let rule = (page == 1)
+      .then_some(first.as_ref())
+      .flatten()
+      .or((page == pages).then_some(last.as_ref()).flatten())
+      .or(parity.as_ref());
+
+    match rule {
+      Some(Band::Node(node)) => Some(node.as_ref()),
+      Some(Band::Off) => None,
+      None => self.default.as_ref(),
+    }
+  }
+
+  /// Every tree some page may draw.
+  pub(crate) fn nodes(&self) -> impl Iterator<Item = &Node> {
+    let rules = self.rules.iter().filter_map(|rule| match rule {
+      Some(Band::Node(node)) => Some(node.as_ref()),
+      _ => None,
+    });
+
+    rules.chain(self.default.as_ref())
+  }
+
+  /// Whether one page can draw something another does not.
+  pub(crate) fn varies(&self) -> bool {
+    self.rules.iter().any(Option::is_some)
+  }
 }
 
 /// A file attached to the document.

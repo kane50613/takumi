@@ -16,7 +16,7 @@ use std::{
 use flate2::read::ZlibDecoder;
 use takumi_core::{
   Fonts,
-  layout::node::{ImageData, ImageSourceInput, Node, RgbaImage},
+  layout::node::{ImageData, ImageSourceInput, Node, NodeKind, RgbaImage},
   resources::{
     font::{FontOverride, FontResource},
     image::{ImageCacheMode, ImageSource, ResourceCache},
@@ -30,9 +30,9 @@ use takumi_core::{
 };
 use takumi_html::{FromHtmlOptions, from_html};
 use takumi_pdf::{
-  Attachment, AttachmentRelationship, MeasureOptions, PageMargins, PageOptions, PageRange, PdfDate,
-  PdfError, PdfMetadata, PdfOptions, PdfStandard, Tagging, UncoveredText, XmpProperty, XmpSchema,
-  measure, render,
+  Attachment, AttachmentRelationship, Band, MeasureOptions, PageBand, PageMargins, PageOptions,
+  PageOverride, PageRange, PageRules, PdfDate, PdfError, PdfMetadata, PdfOptions, PdfStandard,
+  Tagging, UncoveredText, XmpProperty, XmpSchema, measure, render,
 };
 
 fn latin_font() -> Fonts {
@@ -4915,4 +4915,113 @@ fn viewport_units_in_paged_content_take_the_page_area() {
     2,
     "50vh + 50vmin + 40vmax = 60 + 60 + 104 in a 120 window"
   );
+}
+
+fn page_rule_options<'g>(fonts: &'g Fonts, pages: PageRules) -> PdfOptions<'g> {
+  let filler: String = (1..=40)
+    .map(|line| format!("<p style=\"margin: 0\">line {line}</p>"))
+    .collect();
+  let html = format!(r#"<div style="font-size: 12px; color: #141414">{filler}</div>"#);
+
+  PdfOptions::builder()
+    .node(from_html(&html, FromHtmlOptions::default()).expect("parse filler"))
+    .page(PageOptions {
+      width: 300.0,
+      height: 200.0,
+      margin: PageMargins::AUTO,
+    })
+    .header(text("Running header", 10.0))
+    .footer(text("Page footer", 10.0))
+    .pages(pages)
+    .fonts(fonts)
+    .build()
+}
+
+/// Page rules: the header stays off the first page, the last page swaps
+/// in a taller closing footer, and the automatic margin fits the tallest band
+/// on every page, so the pages break where they would with that footer on
+/// every page.
+#[test]
+fn page_rules_override_the_bands_per_page() {
+  let fonts = fonts();
+  let closing = || {
+    column(vec![
+      text("Thank you for your business.", 12.0),
+      text("Terms: net 30.", 12.0),
+    ])
+  };
+  let pdf = run_pdf_fixture_with("page-rules", &fonts, |fonts| {
+    page_rule_options(
+      fonts,
+      PageRules {
+        first: PageOverride {
+          header: Some(Band::Off),
+          ..PageOverride::default()
+        },
+        last: PageOverride {
+          footer: Some(closing().into()),
+          ..PageOverride::default()
+        },
+        ..PageRules::default()
+      },
+    )
+  });
+  let closing_everywhere = render_pinned(page_rule_options(
+    &fonts,
+    PageRules {
+      odd: PageOverride {
+        footer: Some(closing().into()),
+        ..PageOverride::default()
+      },
+      even: PageOverride {
+        footer: Some(closing().into()),
+        ..PageOverride::default()
+      },
+      ..PageRules::default()
+    },
+  ));
+
+  assert!(page_count(&pdf) > 2);
+  assert_eq!(page_count(&pdf), page_count(&closing_everywhere));
+}
+
+/// Each field falls through `first`, `last`, the page's parity, then the
+/// document's own setting, and `Band::Off` stops the fall.
+#[test]
+fn page_rules_pick_first_then_last_then_parity_then_the_document() {
+  let node = |name: &str| text(name, 10.0);
+  let variants = PageRules {
+    first: PageOverride {
+      header: Some(node("first").into()),
+      ..PageOverride::default()
+    },
+    last: PageOverride {
+      header: Some(Band::Off),
+      footer: Some(node("last footer").into()),
+    },
+    odd: PageOverride {
+      header: Some(node("odd").into()),
+      ..PageOverride::default()
+    },
+    even: PageOverride::default(),
+  };
+  let header = variants
+    .header_band(Some(&node("document")))
+    .expect("a header");
+  let footer = variants.footer_band(None).expect("a footer");
+  let name = |band: &PageBand, page: usize, pages: usize| {
+    band.for_page(page, pages).map(|node| match &node.kind {
+      NodeKind::Text(data) => data.text.clone(),
+      _ => String::new(),
+    })
+  };
+
+  assert_eq!(name(&header, 1, 1).as_deref(), Some("first"));
+  assert_eq!(name(&header, 1, 4).as_deref(), Some("first"));
+  assert_eq!(name(&header, 2, 4).as_deref(), Some("document"));
+  assert_eq!(name(&header, 3, 4).as_deref(), Some("odd"));
+  assert_eq!(name(&header, 4, 4), None);
+  assert_eq!(name(&footer, 3, 4), None);
+  assert_eq!(name(&footer, 4, 4).as_deref(), Some("last footer"));
+  assert!(PageRules::default().footer_band(None).is_none());
 }
