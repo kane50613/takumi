@@ -1104,6 +1104,18 @@ impl RoundTree for LayoutTree<'_> {
 }
 
 impl RenderNode {
+  /// The padding and rendered border widths the inline axis carries, as
+  /// `inline_replaced_content_size` reads them.
+  fn used_inline_insets(&self) -> f32 {
+    let style = &self.context.style;
+    let sizing = &self.context.sizing;
+
+    style.padding_left.to_px(sizing, 0.0)
+      + style.padding_right.to_px(sizing, 0.0)
+      + style.border_left_width.to_used_px(sizing)
+      + style.border_right_width.to_used_px(sizing)
+  }
+
   /// The taffy style this node lays out with: its own override when it has one, otherwise
   /// its computed style.
   ///
@@ -1124,7 +1136,15 @@ impl RenderNode {
       && let NodeKind::Image(image) = &node.kind
       && let Some(natural) = image.natural_size(&self.context)
     {
-      style.size.width = taffy::Dimension::length(natural.width);
+      // `box-sizing` reinterprets a width the author specified, and `auto` is not one, so
+      // the natural width is a content width under either mode. A border box states the
+      // insets on top of it, as the rest of the pipeline reads a border-box width here.
+      let width = match self.context.style.box_sizing {
+        BoxSizing::ContentBox => natural.width,
+        BoxSizing::BorderBox => natural.width + self.used_inline_insets(),
+      };
+
+      style.size.width = taffy::Dimension::length(width);
     }
 
     style
