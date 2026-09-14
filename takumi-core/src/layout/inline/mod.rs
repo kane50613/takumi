@@ -3,11 +3,11 @@ use crate::{
   font_style::{SizedFontStyle, contains_variation_selector, presentation_segments},
   geometry::{AvailableSpace, ComputedLayout, LAYOUT_UNIT_EPSILON, Point, Rect, Size},
   layout::tree::RenderNode,
-  resources::font::FontClasses,
+  resources::font::{FontClasses, FontsSnapshot, face_family_name},
   style::{
-    Color, Direction, FontSynthesis, Lang, Length, SizedTextDecorationThickness,
-    TextDecorationLines, TextDecorationSkipInk, TextFitMode, TextOverflow, TextUnderlinePosition,
-    TextWrapMode, TextWrapStyle, VerticalAlign, WordBreak,
+    Color, Direction, FontSynthesis, Lang, Length, MeasuredStyle, MeasuredTextRunStyle,
+    SizedTextDecorationThickness, TextDecorationLines, TextDecorationSkipInk, TextFitMode,
+    TextOverflow, TextUnderlinePosition, TextWrapMode, TextWrapStyle, VerticalAlign, WordBreak,
   },
   text_processing::{
     MaxHeight, RebreakOptions, apply_text_transform, apply_white_space_collapse,
@@ -45,10 +45,11 @@ pub use self::{
   },
 };
 use self::{
+  background::DecorationAccumulator,
   breaking::distribute_trailing_whitespace,
   items::inline_box_kind,
   metrics::text_line_box_contribution,
-  runs::measured_run_text,
+  runs::{cover_box_background, cover_run_background, measured_run_text},
   text_fit::{text_fit_is_applicable, text_fit_line_advance, text_fit_line_scales},
   truncation::make_ellipsis_layout,
 };
@@ -176,6 +177,28 @@ pub struct BuiltInlineLayout<'c> {
   pub line_scales: Vec<f32>,
 }
 
+/// The resolved style of the element an inline box wraps. A box that wraps no element, such as a
+/// spacer, has none.
+fn span_box_style(
+  spans: &[ProcessedInlineSpan<'_>],
+  id: u64,
+  size: (f32, f32),
+) -> Option<MeasuredStyle> {
+  match spans.get(id as usize) {
+    Some(ProcessedInlineSpan::Box(item)) => Some(MeasuredStyle::from_context(
+      &item.render_node.context,
+      size,
+      [
+        item.padding.top,
+        item.padding.right,
+        item.padding.bottom,
+        item.padding.left,
+      ],
+    )),
+    _ => None,
+  }
+}
+
 impl BuiltInlineLayout<'_> {
   /// Parent font metrics from the first run.
   pub(crate) fn parent_font_metrics(&self) -> Option<ParentFontMetrics> {
@@ -207,9 +230,16 @@ impl BuiltInlineLayout<'_> {
   pub fn measure_runs(
     &self,
     layout: ComputedLayout,
-  ) -> (Vec<MeasuredInlineRun<'_>>, Vec<MeasuredInlineBox>) {
+    include_styles: bool,
+    fonts: &FontsSnapshot,
+  ) -> (
+    Vec<MeasuredInlineRun<'_>>,
+    Vec<MeasuredInlineBox>,
+    Vec<InlineBackgroundFragment>,
+  ) {
     let mut runs = Vec::new();
     let mut inline_boxes = Vec::new();
+    let mut coverage = DecorationAccumulator::default();
 
     let Ok(()) = self.walk_items::<Infallible>(layout, |line, item| {
       let setup = &line.setup;
@@ -221,6 +251,18 @@ impl BuiltInlineLayout<'_> {
           static_inline_prefix,
           ..
         } => {
+          if include_styles {
+            cover_run_background(
+              &mut coverage,
+              &self.spans,
+              layout,
+              line,
+              &glyph_run,
+              glyph_run.style().brush,
+              static_inline_prefix,
+            );
+          }
+
           let span_id = glyph_run.style().brush.source_span_id;
           let text = measured_run_text(&self.text, &self.spans, &glyph_run, span_id);
           if text.is_empty()
@@ -247,9 +289,19 @@ impl BuiltInlineLayout<'_> {
             height *= setup.state.scale;
           }
 
-          let link = span_id.and_then(|span_id| match self.spans.get(span_id as usize) {
-            Some(ProcessedInlineSpan::Text { link, .. }) => link.as_deref(),
-            _ => None,
+          let span = span_id.and_then(|span_id| self.spans.get(span_id as usize));
+          let (link, font_style) = match span {
+            Some(ProcessedInlineSpan::Text { link, style, .. }) => {
+              (link.as_deref(), Some(style.as_ref()))
+            }
+            _ => (None, None),
+          };
+          let style = font_style.filter(|_| include_styles).map(|font_style| {
+            MeasuredTextRunStyle::from_font_style(
+              font_style,
+              face_family_name(fonts, glyph_run.run().font()),
+              glyph_run.style().brush.opacity,
+            )
           });
 
           runs.push(MeasuredInlineRun {
@@ -259,9 +311,14 @@ impl BuiltInlineLayout<'_> {
             width,
             height,
             link,
+            style,
           });
         }
         PlacedItem::Box(inline_box) => {
+          if include_styles {
+            cover_box_background(&mut coverage, &self.spans, layout, line, &inline_box);
+          }
+
           // A padding spacer advances the line but is not a measured box.
           if matches!(
             self.spans.get(inline_box.id as usize),
@@ -269,11 +326,22 @@ impl BuiltInlineLayout<'_> {
           ) {
             return Ok(());
           }
+          let style = include_styles
+            .then(|| {
+              span_box_style(
+                &self.spans,
+                inline_box.id,
+                (inline_box.width, inline_box.height),
+              )
+            })
+            .flatten();
+
           inline_boxes.push(MeasuredInlineBox {
             x: inline_box.x,
             y: inline_box.y,
             width: inline_box.width,
             height: inline_box.height,
+            style,
           });
         }
       }
@@ -286,10 +354,19 @@ impl BuiltInlineLayout<'_> {
         y: positioned_box.y,
         width: positioned_box.width,
         height: positioned_box.height,
+        style: include_styles
+          .then(|| {
+            span_box_style(
+              &self.spans,
+              positioned_box.id,
+              (positioned_box.width, positioned_box.height),
+            )
+          })
+          .flatten(),
       });
     }
 
-    (runs, inline_boxes)
+    (runs, inline_boxes, coverage.into_fragments())
   }
 }
 

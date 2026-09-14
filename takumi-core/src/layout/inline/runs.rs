@@ -7,14 +7,14 @@ use crate::{
     font::{FontError, run_synthesis, run_variations},
     glyph::{ResolvedColorLayer, ResolvedGlyph, ResolvedOutlineGlyph},
   },
-  style::{Affine, Color, TextUnderlinePosition},
+  style::{Affine, Color, MeasuredStyle, MeasuredTextRunStyle, TextUnderlinePosition},
 };
 use parley::GlyphRun;
 use skrifa::{FontRef, MetadataProvider, raw::TableProvider};
 use std::{collections::HashMap, ops::Range, sync::Arc};
 
 use super::{
-  BuiltInlineLayout, InlineBrush, PlacedItem,
+  BuiltInlineLayout, InlineBrush, PlacedItem, WalkedLine,
   background::{CoverExtent, DecorationAccumulator, InlineBackgroundFragment},
   items::ProcessedInlineSpan,
   metrics::{VisualInlineBox, resolve_visual_inline_box},
@@ -350,47 +350,15 @@ impl BuiltInlineLayout<'_> {
 
           let metrics = run.metrics();
 
-          if let Some(span_id) = brush.source_span_id
-            && let Some(ProcessedInlineSpan::Text {
-              decorations: Some(chain),
-              ..
-            }) = spans.get(span_id as usize)
-          {
-            // The run's leaded box, like Blink's inline box fragment
-            // (`InlineBoxState::ComputeTextMetrics` adds the line-height
-            // leading to the font height).
-            let (above, below) =
-              brush.line_box_contribution(metrics.line_height, metrics.ascent, metrics.descent);
-            let rect = scale_outline_rect(
-              InlineOutlineRect {
-                span_id,
-                line_index,
-                x: layout.border.left + layout.padding.left + glyph_run.offset(),
-                y: layout.border.top
-                  + layout.padding.top
-                  + glyph_run.baseline()
-                  + setup.baseline_shift
-                  - above,
-                width: glyph_run.advance(),
-                height: above + below,
-              },
-              setup.state,
-              static_inline_prefix,
-            );
-
-            decoration_coverage.cover(
-              Some(chain),
-              line_index,
-              rect.x,
-              rect.x + rect.width,
-              &CoverExtent::Run {
-                font_size: run.font_size(),
-                top: rect.y,
-                bottom: rect.y + rect.height,
-                baseline: rect.y + above * setup.state.scale,
-              },
-            );
-          }
+          cover_run_background(
+            &mut decoration_coverage,
+            spans,
+            layout,
+            line,
+            &glyph_run,
+            brush,
+            static_inline_prefix,
+          );
           let glyphs: Vec<PositionedGlyph> = glyph_run
             .positioned_glyphs()
             .map(|g| PositionedGlyph {
@@ -439,31 +407,7 @@ impl BuiltInlineLayout<'_> {
           // span's fragment horizontally; runs set its height, like Blink's
           // box metrics ignoring atomic descendants. The line extent is the
           // last resort so padding-only coverage still paints.
-          let chain = match spans.get(inline_box.id as usize) {
-            Some(ProcessedInlineSpan::Box(item)) => item.decorations.as_ref(),
-            Some(ProcessedInlineSpan::Spacer { decorations, .. }) => decorations.as_ref(),
-            _ => None,
-          };
-
-          if chain.is_some() {
-            let x0 = layout.border.left + layout.padding.left + inline_box.x;
-            let origin_y = setup.state.layout_origin.y;
-            let content_top = layout.border.top + layout.padding.top;
-            let line_y =
-              |value: f32| origin_y + (content_top + value - origin_y) * setup.state.scale;
-
-            decoration_coverage.cover(
-              chain,
-              line_index,
-              x0,
-              x0 + inline_box.width,
-              &CoverExtent::Line {
-                top: line_y(setup.resolved_metrics.resolved_line_top),
-                bottom: line_y(setup.resolved_metrics.resolved_line_bottom),
-                baseline: line_y(setup.resolved_metrics.resolved_baseline),
-              },
-            );
-          }
+          cover_box_background(&mut decoration_coverage, spans, layout, line, &inline_box);
           positioned_inline_boxes.insert(inline_box.id, inline_box);
         }
       }
@@ -489,9 +433,105 @@ impl BuiltInlineLayout<'_> {
   }
 }
 
+/// Covers a glyph run's leaded box for the decorated spans enclosing it. Shared by the resolve and
+/// measure walks so an inline background is the same rectangle in both.
+pub(super) fn cover_run_background(
+  coverage: &mut DecorationAccumulator,
+  spans: &[ProcessedInlineSpan<'_>],
+  layout: ComputedLayout,
+  line: &WalkedLine,
+  glyph_run: &GlyphRun<'_, InlineBrush>,
+  brush: InlineBrush,
+  static_inline_prefix: f32,
+) {
+  let Some(span_id) = brush.source_span_id else {
+    return;
+  };
+  let Some(ProcessedInlineSpan::Text {
+    decorations: Some(chain),
+    ..
+  }) = spans.get(span_id as usize)
+  else {
+    return;
+  };
+
+  let setup = &line.setup;
+  let metrics = glyph_run.run().metrics();
+  // The run's leaded box, like Blink's inline box fragment
+  // (`InlineBoxState::ComputeTextMetrics` adds the line-height leading to the font height).
+  let (above, below) =
+    brush.line_box_contribution(metrics.line_height, metrics.ascent, metrics.descent);
+  let rect = scale_outline_rect(
+    InlineOutlineRect {
+      span_id,
+      line_index: line.index,
+      x: layout.border.left + layout.padding.left + glyph_run.offset(),
+      y: layout.border.top + layout.padding.top + glyph_run.baseline() + setup.baseline_shift
+        - above,
+      width: glyph_run.advance(),
+      height: above + below,
+    },
+    setup.state,
+    static_inline_prefix,
+  );
+
+  coverage.cover(
+    Some(chain),
+    line.index,
+    rect.x,
+    rect.x + rect.width,
+    &CoverExtent::Run {
+      font_size: glyph_run.run().font_size(),
+      top: rect.y,
+      bottom: rect.y + rect.height,
+      baseline: rect.y + above * setup.state.scale,
+    },
+  );
+}
+
+/// Covers an inline box's line extent for the decorated spans enclosing it. A spacer or atomic box
+/// inside a decorated span stretches the span's fragment horizontally; runs set its height, like
+/// Blink's box metrics ignoring atomic descendants. The line extent is the last resort so
+/// padding-only coverage still paints.
+pub(super) fn cover_box_background(
+  coverage: &mut DecorationAccumulator,
+  spans: &[ProcessedInlineSpan<'_>],
+  layout: ComputedLayout,
+  line: &WalkedLine,
+  inline_box: &VisualInlineBox,
+) {
+  let chain = match spans.get(inline_box.id as usize) {
+    Some(ProcessedInlineSpan::Box(item)) => item.decorations.as_ref(),
+    Some(ProcessedInlineSpan::Spacer { decorations, .. }) => decorations.as_ref(),
+    _ => None,
+  };
+
+  if chain.is_none() {
+    return;
+  }
+
+  let setup = &line.setup;
+  let x0 = layout.border.left + layout.padding.left + inline_box.x;
+  let origin_y = setup.state.layout_origin.y;
+  let content_top = layout.border.top + layout.padding.top;
+  let line_y = |value: f32| origin_y + (content_top + value - origin_y) * setup.state.scale;
+
+  coverage.cover(
+    chain,
+    line.index,
+    x0,
+    x0 + inline_box.width,
+    &CoverExtent::Line {
+      top: line_y(setup.resolved_metrics.resolved_line_top),
+      bottom: line_y(setup.resolved_metrics.resolved_line_bottom),
+      baseline: line_y(setup.resolved_metrics.resolved_baseline),
+    },
+  );
+}
+
 /// A measured glyph run: its text (borrowed from the layout) and local bounding box, with text-fit
 /// line scaling applied.
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct MeasuredInlineRun<'a> {
   /// The run's text content, borrowed from the layout.
   pub text: &'a str,
@@ -505,11 +545,13 @@ pub struct MeasuredInlineRun<'a> {
   pub height: f32,
   /// URI of the nearest enclosing anchor's `href`, if any.
   pub link: Option<&'a str>,
+  /// Resolved paint properties, set only when the caller asked for them.
+  pub style: Option<MeasuredTextRunStyle>,
 }
 
 /// A measured inline box's local bounding box, with text-fit line scaling applied to in-flow boxes'
 /// x position.
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct MeasuredInlineBox {
   /// Left edge, relative to the inline formatting context's origin.
   pub x: f32,
@@ -519,6 +561,8 @@ pub struct MeasuredInlineBox {
   pub width: f32,
   /// Box height.
   pub height: f32,
+  /// Resolved paint properties, set only when the caller asked for them.
+  pub style: Option<MeasuredStyle>,
 }
 
 /// Extracts the source text rendered by a glyph run.

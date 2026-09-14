@@ -93,6 +93,9 @@ pub struct RenderOptions {
   pub font_families: Option<Vec<String>>,
   /// Default BCP-47 language applied to the root, inherited by nodes without their own lang.
   pub lang: Option<String>,
+  /// Attaches the resolved style of every box and text run to the measured tree.
+  /// Only `measure` reads it.
+  pub include_styles: Option<bool>,
 }
 
 /// Options for rendering a node tree to an SVG document. SVG is a vector

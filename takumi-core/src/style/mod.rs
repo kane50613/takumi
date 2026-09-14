@@ -3,6 +3,7 @@ mod calc;
 mod css_input;
 mod css_source;
 pub mod math;
+mod measured;
 mod media_query;
 pub(crate) mod properties;
 pub(crate) mod selector;
@@ -20,6 +21,7 @@ pub use css_source::{
   SupportsRule,
 };
 pub(crate) use math::lerp;
+pub use measured::{MeasuredStyle, MeasuredTextRunStyle};
 pub(crate) use properties::unexpected_token;
 pub use properties::*;
 // Selector matching internals (CssRule, SelectorImpl, Ident, …) stay crate-private

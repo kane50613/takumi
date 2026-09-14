@@ -323,7 +323,7 @@ fn collect_inline_links(
     context,
     InlineLayoutMode::Measure,
   ));
-  let (runs, _) = built.measure_runs(layout);
+  let (runs, _) = built.measure_runs(layout, false, context.fonts());
 
   for run in runs {
     let Some(uri) = run.link.filter(|uri| allowed_link_uri(uri)) else {

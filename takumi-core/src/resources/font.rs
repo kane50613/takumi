@@ -10,8 +10,8 @@ use std::{
 };
 
 use parley::{
-  CHROMIUM_LINE_BREAK_OVERRIDE, FontFamilyName, GenericFamily as ParleyGenericFamily, GlyphRun,
-  LayoutContext, TextStyle, TreeBuilder,
+  CHROMIUM_LINE_BREAK_OVERRIDE, FontData, FontFamilyName, GenericFamily as ParleyGenericFamily,
+  GlyphRun, LayoutContext, TextStyle, TreeBuilder,
   fontique::{
     Attributes, Blob, Collection, CollectionOptions, FallbackKey, FontInfo, FontInfoOverride,
     FontStyle, FontWeight, FontWidth, QueryFamily, QueryStatus, Script, ScriptExt,
@@ -21,6 +21,7 @@ use skrifa::{
   FontRef, MetadataProvider,
   instance::{LocationRef, Size},
   raw::types::{F2Dot14, Tag},
+  string::StringId,
 };
 use thiserror::Error;
 use xxhash_rust::xxh3::{Xxh3, xxh3_64};
@@ -239,6 +240,8 @@ pub struct Fonts {
   last_resort_order: Vec<String>,
   /// Families with at least one face carrying a color glyph table.
   color_names: HashSet<String>,
+  /// The family each registered face belongs to, keyed by `(blob id, face index)`.
+  face_families: Arc<HashMap<(u64, u32), Option<String>>>,
   /// Lazily built face store for SVG `<text>`; cleared on registration.
   #[cfg(feature = "svg")]
   svg_db: Option<Arc<crate::resvg::usvg::fontdb::Database>>,
@@ -262,6 +265,7 @@ impl Default for Fonts {
       order: Vec::new(),
       last_resort_order: Vec::new(),
       color_names: HashSet::new(),
+      face_families: Arc::new(HashMap::new()),
       #[cfg(feature = "svg")]
       svg_db: None,
       revision: 0,
@@ -275,6 +279,7 @@ impl Default for Fonts {
 pub struct FontsSnapshot {
   context: Rc<RefCell<Fonts>>,
   pub(crate) groups: Arc<HashMap<String, SubsetGroup>>,
+  pub(crate) face_families: Arc<HashMap<(u64, u32), Option<String>>>,
   pub(crate) classes: Arc<FontClasses>,
 }
 
@@ -304,6 +309,24 @@ pub(crate) struct RunSynthesis {
   pub embolden: Option<f32>,
   /// Synthetic oblique angle in degrees.
   pub skew: Option<f32>,
+}
+
+/// The family a shaped face was registered under, which is the face the fallback chain selected
+/// rather than the requested stack. A face's own `name` table answers for one registered
+/// elsewhere: it can name a variable font's default instance, or carry nothing at all.
+pub(crate) fn face_family_name(fonts: &FontsSnapshot, font: &FontData) -> Option<String> {
+  // `None` is a face registered under more than one name: the file cannot say which was meant, so
+  // its own name table answers instead.
+  if let Some(Some(family)) = fonts.face_families.get(&(font.data.id(), font.index)) {
+    return Some(family.clone());
+  }
+
+  let font_ref = FontRef::from_index(font.data.as_ref(), font.index).ok()?;
+
+  font_ref
+    .localized_strings(StringId::FAMILY_NAME)
+    .english_or_first()
+    .map(|name| name.to_string())
 }
 
 /// Shared by the raster glyph cache and the PDF emitter so both fake the same faces.
@@ -502,11 +525,13 @@ impl Fonts {
         order: self.order.clone(),
         last_resort_order: self.last_resort_order.clone(),
         color_names: self.color_names.clone(),
+        face_families: self.face_families.clone(),
         #[cfg(feature = "svg")]
         svg_db: self.svg_db.clone(),
         revision: self.revision,
       })),
       groups: self.groups.clone(),
+      face_families: self.face_families.clone(),
       classes: Arc::new(FontClasses {
         color: self.color_names.clone(),
         color_order,
@@ -606,7 +631,7 @@ impl Fonts {
       let is_color = faces.iter().any(|face| {
         FontRef::from_index(blob.data(), face.index()).is_ok_and(|font| has_color_table(&font))
       });
-      let faces = faces
+      let faces: Vec<RegisteredFace> = faces
         .iter()
         .map(|face| RegisteredFace {
           weight: face.weight().value(),
@@ -643,6 +668,23 @@ impl Fonts {
         let sequence = group.len() as u32;
 
         group.insert((subset_rank, sequence, name.clone()));
+      }
+
+      let family_name = subset_of.clone().unwrap_or_else(|| name.clone());
+      let face_families = Arc::make_mut(&mut self.face_families);
+
+      for face in &faces {
+        match face_families.entry((blob.id(), face.index)) {
+          // A blob's id is a hash of its bytes, so one file registered under two names lands here.
+          // The key stays, holding `None`, so a third registration cannot make it answer again.
+          Entry::Occupied(mut slot) if slot.get().as_ref() != Some(&family_name) => {
+            slot.insert(None);
+          }
+          Entry::Occupied(_) => {}
+          Entry::Vacant(slot) => {
+            slot.insert(Some(family_name.clone()));
+          }
+        }
       }
 
       families.push(RegisteredFamily { name, faces });
@@ -1044,6 +1086,26 @@ mod tests {
         ..Default::default()
       }))
       .unwrap()
+  }
+
+  #[test]
+  fn a_face_registered_under_three_names_stays_ambiguous() {
+    let mut fonts = Fonts::default();
+    register_named(&mut fonts, geist_bytes(), "First");
+    register_named(&mut fonts, geist_bytes(), "Second");
+    register_named(&mut fonts, geist_bytes(), "Third");
+
+    let snapshot = fonts.snapshot();
+    let face = &snapshot
+      .face_families
+      .keys()
+      .next()
+      .map(|(id, index)| (*id, *index));
+
+    assert!(
+      snapshot.face_families.values().all(Option::is_none),
+      "an ambiguous face must not be answered for; keys: {face:?}"
+    );
   }
 
   #[test]

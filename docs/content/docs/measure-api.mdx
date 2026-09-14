@@ -39,3 +39,61 @@ const { width, height } = await renderer.measure(node, { css }); // [!code highl
 | `transform` | `[number, number, number, number, number, number]` | Transformation matrix.                                        |
 | `children`  | `MeasuredNode[]`                                   | Measured child nodes.                                         |
 | `runs`      | `MeasuredTextRun[]`                                | Text runs in the node, each with `x`, `y`, `width`, `height`. |
+| `style`     | `MeasuredStyle \| undefined`                       | Resolved paint properties, present only with `includeStyles`. |
+
+## Resolved styles
+
+Set `includeStyles: true` to read the style the renderer resolved for each box, instead of
+re-implementing the CSS cascade over the same stylesheet. The default payload is unchanged, so
+nothing is added unless you ask for it.
+
+```tsx twoslash title="Measure with resolved styles"
+import { Renderer } from "takumi-js/node";
+import { fromJsx } from "takumi-js/helpers/jsx";
+
+const renderer = new Renderer();
+const { node, css } = await fromJsx(<span tw="text-xl">I'm a text node</span>);
+
+const measured = await renderer.measure(node, { css, includeStyles: true }); // [!code highlight]
+
+measured.style?.color; // "rgb(20, 17, 15)"
+measured.runs[0]?.style?.fontFamily; // the family the face it was shaped with is registered under
+```
+
+Every `MeasuredNode` then carries a `style`, and every `MeasuredTextRun` carries the subset that
+varies per run: `color`, `fontFamily`, `fontSize`, `fontWeight`, `fontStyle` and `letterSpacing`.
+
+| Field             | Type                                            | Description                                                       |
+| ----------------- | ----------------------------------------------- | ----------------------------------------------------------------- |
+| `color`           | `string`                                        | Used `color`, with `currentColor` resolved.                       |
+| `fontFamily`      | `string`                                        | Computed `font-family` stack.                                     |
+| `fontSize`        | `number`                                        | Used `font-size`.                                                 |
+| `fontWeight`      | `number`                                        | Used numeric `font-weight`.                                       |
+| `fontStyle`       | `string`                                        | Computed `font-style`.                                            |
+| `lineHeight`      | `number \| undefined`                           | Used `line-height`, absent when it resolves against font metrics. |
+| `letterSpacing`   | `number`                                        | Used `letter-spacing`.                                            |
+| `textAlign`       | `string`                                        | Computed `text-align`.                                            |
+| `textTransform`   | `string`                                        | Computed `text-transform`.                                        |
+| `display`         | `string`                                        | Computed `display`, the box type the node generated.              |
+| `position`        | `string`                                        | Computed `position`.                                              |
+| `visibility`      | `string`                                        | Computed `visibility`.                                            |
+| `listStyleType`   | `string`                                        | Computed `list-style-type`.                                       |
+| `padding`         | `[number, number, number, number] \| undefined` | Used padding: top, right, bottom, left.                           |
+| `opacity`         | `number`                                        | Used `opacity`.                                                   |
+| `backgroundColor` | `string \| undefined`                           | Used `background-color`, absent when transparent.                 |
+| `backgroundImage` | `string \| undefined`                           | Computed `background-image`, absent when `none`.                  |
+| `borderRadius`    | `[number, number, number, number] \| undefined` | Corner radii: top-left, top-right, bottom-right, bottom-left.     |
+| `borderWidths`    | `[number, number, number, number] \| undefined` | Used border widths: top, right, bottom, left.                     |
+| `borderColors`    | `[string, string, string, string] \| undefined` | Used border colors, in the same order.                            |
+| `boxShadow`       | `string \| undefined`                           | Computed `box-shadow`, absent when `none`.                        |
+| `zIndex`          | `number \| undefined`                           | Computed `z-index`, absent when `auto`.                           |
+
+Three details are worth knowing before you map these onto another format:
+
+- **Colors are serialized as `rgb()` or `rgba()`**, not hex, because that is the engine's own
+  serialization.
+- **Lengths are device pixels**, like `width`, `height`, `x` and `y`. With a `devicePixelRatio` of
+  `2`, a `20px` font reports `40`.
+- **A node's `fontFamily` is the computed stack** (`"Georgia, serif"`), while a run's `fontFamily`
+  is the family the face that survived fallback is registered under (`"Georgia"`) — the name you
+  gave it, not the one inside the file.
