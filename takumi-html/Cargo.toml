@@ -17,6 +17,7 @@ typed-builder.workspace = true
 [dependencies.takumi-core]
 path = "../takumi-core"
 version = "0.25.0"
+default-features = false
 
 [lints]
 workspace = true

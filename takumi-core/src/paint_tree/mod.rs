@@ -28,7 +28,7 @@ use crate::{
     tree::{LayoutTree, RenderNode},
   },
   resources::image::ImageSource,
-  scene::build_stacking_contexts,
+  scene::build_stacking_contexts_unbounded,
   style::{Affine, ComputedStyle, FontFamily, Lang, SizingContext, StyleSheet},
   viewport::Viewport,
 };
@@ -93,7 +93,7 @@ pub fn paint_tree(options: PaintTreeOptions<'_>) -> Result<PaintTree> {
     .size
     .height
     .map_or(root_layout.size.height, |h| h as f32);
-  let contexts = build_stacking_contexts(
+  let contexts = build_stacking_contexts_unbounded(
     &root,
     &results,
     NodeId::ROOT,

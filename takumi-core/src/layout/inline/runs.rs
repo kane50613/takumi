@@ -478,7 +478,7 @@ impl BuiltInlineLayout<'_> {
     }
 
     let mut inline_boxes: Vec<_> = positioned_inline_boxes.into_values().collect();
-    inline_boxes.sort_by_key(|inline_box| inline_box.id);
+    inline_boxes.sort_unstable_by_key(|inline_box| inline_box.id);
 
     Ok(InlineRunLayout {
       runs,

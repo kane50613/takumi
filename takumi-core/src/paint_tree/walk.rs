@@ -19,7 +19,7 @@ use crate::{
     tree::{LayoutResults, RenderNode},
   },
   painter::BoxPainter,
-  scene::{NodePaint, PaintItemKind, StackingContextNode, build_stacking_contexts},
+  scene::{NodePaint, PaintItemKind, StackingContextNode, build_stacking_contexts_unbounded},
   shadow::SizedShadow,
   style::{
     Affine, BackgroundClip, BackgroundImage, BlendMode, BorderStyle, Isolation,
@@ -232,7 +232,7 @@ impl Walker {
               offset.x + subtree.margin_offset.x,
               offset.y + subtree.margin_offset.y,
             );
-          let contexts = build_stacking_contexts(
+          let contexts = build_stacking_contexts_unbounded(
             &subtree.root,
             &subtree.results,
             NodeId::ROOT,

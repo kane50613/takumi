@@ -750,7 +750,7 @@ fn finalize_bucket<'a>(
   layer_count: usize,
   matched: &mut MatchedDeclarationsView<'a>,
 ) {
-  rules.sort_by_key(|rule| {
+  rules.sort_unstable_by_key(|rule| {
     (
       rule.important,
       rule.layer_order,
