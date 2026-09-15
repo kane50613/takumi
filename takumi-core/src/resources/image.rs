@@ -6,10 +6,8 @@
 use super::image_decoder::DecodeTarget;
 #[cfg(feature = "svg")]
 use std::borrow::Cow;
-#[cfg(feature = "svg")]
-use std::str::FromStr;
 #[cfg(feature = "svg-sizing")]
-use std::str::from_utf8;
+use std::str::{FromStr, from_utf8};
 use std::sync::{Arc, OnceLock, Weak};
 
 use quick_cache::{
@@ -35,7 +33,7 @@ use crate::resources::image_decoder::{
 use crate::resources::image_decoder::{
   apng_dimensions, apng_frame_infos, decode_apng_frame_alone, decode_apng_frames, is_apng,
 };
-#[cfg(feature = "svg")]
+#[cfg(all(test, feature = "svg"))]
 use crate::resources::svg_size::SvgIntrinsic;
 #[cfg(feature = "svg-sizing")]
 use crate::resources::svg_size::SvgSize;
@@ -78,11 +76,8 @@ pub(crate) type ImageResult = Result<ImageSource, ImageError>;
 #[non_exhaustive]
 pub enum ImageSource {
   /// An svg image source
-  #[cfg(feature = "svg")]
+  #[cfg(feature = "svg-sizing")]
   Svg(Arc<SvgSource>),
-  /// An SVG sized from its root element; this build cannot draw it.
-  #[cfg(all(feature = "svg-sizing", not(feature = "svg")))]
-  SvgSize(SvgSize),
   /// A bitmap image source
   Bitmap(Arc<ImageBuffer>),
   /// An animated image source.
@@ -91,43 +86,70 @@ pub enum ImageSource {
   Encoded(Arc<EncodedBitmap>),
 }
 
-/// Represents the resolved SVG source.
-#[cfg(feature = "svg")]
+/// Represents the resolved SVG source. Without the `svg` feature it holds the markup and its
+/// root-element size only, so it lays out but cannot be drawn.
+#[cfg(feature = "svg-sizing")]
 #[derive(Debug)]
 pub struct SvgSource {
   /// Original SVG source, for embedding directly in a vector backend.
   source: Box<str>,
+  /// Canvas size and CSS intrinsic sizing read from the root element.
+  sizing: SvgSize,
   /// Parsed SVG tree used for size and initial metadata.
+  #[cfg(feature = "svg")]
   pub(crate) tree: crate::resvg::usvg::Tree,
   /// Whether rendering depends on the host `color`: the markup references
   /// `currentColor` and the root element sets no `color` of its own.
+  #[cfg(feature = "svg")]
   uses_current_color: bool,
-  /// Intrinsic dimensions (non-percentage `width`/`height`) and `viewBox`
-  /// aspect ratio, for CSS `background-size`/`mask-size` resolution.
-  intrinsic: SvgIntrinsic,
   /// Whether the markup contains `<text`, so rendering re-parses with fonts.
+  #[cfg(feature = "svg")]
   has_text: bool,
   /// Text-capable re-parse of `source`, keyed by the font registry revision
   /// it was converted with; a registration re-converts on the next render.
+  #[cfg(feature = "svg")]
   text_tree: std::sync::Mutex<Option<(u64, Arc<crate::resvg::usvg::Tree>)>>,
+  #[cfg(feature = "svg")]
   hash: u64,
+  #[cfg(feature = "svg")]
   cache: Weak<SharedResourceCache>,
 }
 
-#[cfg(feature = "svg")]
+#[cfg(feature = "svg-sizing")]
 impl SvgSource {
   /// The SVG canvas dimensions in pixels, from the root `width`/`height` or
   /// `viewBox`.
+  #[cfg(feature = "svg")]
   pub fn dimensions(&self) -> (f32, f32) {
     let size = self.tree.size();
     (size.width(), size.height())
+  }
+
+  /// The SVG canvas dimensions in pixels, from the root `width`/`height` or
+  /// `viewBox`.
+  #[cfg(not(feature = "svg"))]
+  pub fn dimensions(&self) -> (f32, f32) {
+    (self.sizing.width, self.sizing.height)
   }
 
   /// The original SVG markup, for embedding directly in a vector backend.
   pub fn source(&self) -> &str {
     &self.source
   }
+}
 
+#[cfg(all(feature = "svg-sizing", not(feature = "svg")))]
+impl SvgSource {
+  fn parse(src: &str, _hash: u64, _cache: Weak<SharedResourceCache>) -> Result<Self, ImageError> {
+    Ok(SvgSource {
+      source: Box::from(src),
+      sizing: SvgSize::parse(src).map_err(ImageError::svg_parse)?,
+    })
+  }
+}
+
+#[cfg(feature = "svg")]
+impl SvgSource {
   /// Markup for embedding in a vector backend, with the host `color` injected
   /// as a root presentation attribute when `currentColor` depends on it.
   pub fn source_with_current_color(&self, current_color: Color) -> Cow<'_, str> {
@@ -482,7 +504,7 @@ impl AnimatedSource {
   }
 }
 
-#[cfg(feature = "svg")]
+#[cfg(feature = "svg-sizing")]
 impl From<SvgSource> for ImageSource {
   fn from(svg: SvgSource) -> Self {
     ImageSource::Svg(Arc::new(svg))
@@ -624,9 +646,7 @@ impl SvgSource {
 
     let options = svg_parse_options();
     let tree = Tree::from_xmltree(&document, &options).map_err(ImageError::svg_parse)?;
-    let intrinsic = SvgSize::from_root(document.root_element())
-      .map_err(ImageError::svg_parse)?
-      .intrinsic;
+    let sizing = SvgSize::from_root(document.root_element()).map_err(ImageError::svg_parse)?;
     // Set during parsing whenever a `currentColor` finds no `color` attribute
     // on its ancestors, so it also catches entity-encoded values a source-text
     // scan would miss.
@@ -639,9 +659,9 @@ impl SvgSource {
         .descendants()
         .any(|node| node.tag_name().name() == "text"),
       source: Box::from(src),
+      sizing,
       tree,
       uses_current_color,
-      intrinsic,
       text_tree: std::sync::Mutex::new(None),
       hash,
       cache,
@@ -742,7 +762,7 @@ impl SvgSource {
   }
 }
 
-#[cfg(feature = "svg")]
+#[cfg(feature = "svg-sizing")]
 impl FromStr for SvgSource {
   type Err = ImageError;
 
@@ -760,10 +780,8 @@ impl ImageSource {
       Self::Encoded(encoded) => encoded.bytes.len(),
       // Markup plus a parsed-tree estimate; rasterized pixmaps are weighted
       // separately as their own sized entries.
-      #[cfg(feature = "svg")]
+      #[cfg(feature = "svg-sizing")]
       Self::Svg(svg) => svg.source.len() * 3,
-      #[cfg(all(feature = "svg-sizing", not(feature = "svg")))]
-      Self::SvgSize(_) => std::mem::size_of::<SvgSize>(),
     }
   }
 
@@ -773,22 +791,12 @@ impl ImageSource {
   ///   are parsed as an SVG using `resvg::usvg`.
   /// - Otherwise, the bytes are decoded as a raster image.
   pub fn from_bytes(bytes: &[u8]) -> ImageResult {
-    #[cfg(feature = "svg")]
+    #[cfg(feature = "svg-sizing")]
     {
       if let Ok(text) = from_utf8(bytes)
         && is_svg_like(text)
       {
         return Ok(ImageSource::Svg(Arc::new(text.parse()?)));
-      }
-    }
-    #[cfg(all(feature = "svg-sizing", not(feature = "svg")))]
-    {
-      if let Ok(text) = from_utf8(bytes)
-        && is_svg_like(text)
-      {
-        return Ok(ImageSource::SvgSize(
-          SvgSize::parse(text).map_err(ImageError::svg_parse)?,
-        ));
       }
     }
 
@@ -819,7 +827,7 @@ impl ImageSource {
     hash: u64,
     cache: Weak<SharedResourceCache>,
   ) -> ImageResult {
-    #[cfg(feature = "svg")]
+    #[cfg(feature = "svg-sizing")]
     {
       if let Ok(text) = from_utf8(bytes)
         && is_svg_like(text)
@@ -827,16 +835,6 @@ impl ImageSource {
         return Ok(ImageSource::Svg(Arc::new(SvgSource::parse(
           text, hash, cache,
         )?)));
-      }
-    }
-    #[cfg(all(feature = "svg-sizing", not(feature = "svg")))]
-    {
-      if let Ok(text) = from_utf8(bytes)
-        && is_svg_like(text)
-      {
-        return Ok(ImageSource::SvgSize(
-          SvgSize::parse(text).map_err(ImageError::svg_parse)?,
-        ));
       }
     }
 
@@ -923,17 +921,15 @@ impl ImageSource {
         fonts,
       )?)),
       #[cfg(all(feature = "svg-sizing", not(feature = "svg")))]
-      ImageSource::SvgSize(_) => Err(ImageError::SvgParseNotSupported),
+      ImageSource::Svg(_) => Err(ImageError::SvgParseNotSupported),
     }
   }
 
   /// Get the image size in device pixels for the current sizing context.
   pub fn size(&self, sizing: &SizingContext) -> (f32, f32) {
     let (width, height) = match self {
-      #[cfg(feature = "svg")]
+      #[cfg(feature = "svg-sizing")]
       ImageSource::Svg(svg) => svg.dimensions(),
-      #[cfg(all(feature = "svg-sizing", not(feature = "svg")))]
-      ImageSource::SvgSize(svg) => (svg.width, svg.height),
       ImageSource::Bitmap(bitmap) => (bitmap.width() as f32, bitmap.height() as f32),
       ImageSource::Animated(animated) => {
         let (width, height) = animated.dimensions();
@@ -952,10 +948,8 @@ impl ImageSource {
   /// have both dimensions; an SVG may have only a `viewBox` ratio.
   pub fn intrinsic_sizing(&self) -> IntrinsicSizing {
     match self {
-      #[cfg(feature = "svg")]
-      ImageSource::Svg(svg) => svg.intrinsic.into(),
-      #[cfg(all(feature = "svg-sizing", not(feature = "svg")))]
-      ImageSource::SvgSize(svg) => svg.intrinsic.into(),
+      #[cfg(feature = "svg-sizing")]
+      ImageSource::Svg(svg) => svg.sizing.intrinsic.into(),
       ImageSource::Bitmap(bitmap) => {
         IntrinsicSizing::from_dimensions(bitmap.width() as f32, bitmap.height() as f32)
       }
@@ -1703,7 +1697,7 @@ mod tests {
       let Ok(source) = svg.parse::<SvgSource>() else {
         unreachable!("valid svg");
       };
-      source.intrinsic
+      source.sizing.intrinsic
     }
     let ns = r#"xmlns="http://www.w3.org/2000/svg""#;
 
