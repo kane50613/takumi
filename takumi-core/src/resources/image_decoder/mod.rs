@@ -1,5 +1,9 @@
 //! Bitmap decoding behind one format sniff: still images, animation timelines, and scaled decodes
 //! that never hold a full-size frame.
+#![cfg_attr(
+  not(any(feature = "png", feature = "gif", feature = "webp")),
+  allow(dead_code)
+)]
 
 use std::io::{Error as IoError, ErrorKind};
 

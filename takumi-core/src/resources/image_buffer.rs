@@ -113,6 +113,7 @@ impl ImageBuffer {
 }
 
 /// Converts premultiplied RGBA bytes to straight alpha in place.
+#[cfg(feature = "png")]
 pub(crate) fn unpremultiply_in_place(data: &mut [u8]) {
   for pixel in data.as_chunks_mut::<4>().0 {
     let alpha = pixel[3];
