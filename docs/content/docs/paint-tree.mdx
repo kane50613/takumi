@@ -1,0 +1,88 @@
+---
+title: The paint tree
+description: Read what the renderer paints with takumi-paint, for PPTX, Canvas, and native drawing exporters.
+icon: Brush
+---
+
+`takumi-paint` lays out a document and returns what painting it would draw, instead of an image. Use it when the output is not pixels: an editable PPTX, a Canvas replay, a native drawing API.
+
+```ts twoslash title="Read the boxes and runs"
+import { renderPaintTree, type PaintNode, type PaintTextRun } from "takumi-paint";
+
+const tree = await renderPaintTree(
+  `<style>.big { font: 700 40px Geist; color: #B3261E }</style>
+   <div style="width: 640px; padding: 32px; background: #F7F3EC">
+     <div class="big">4,2 %</div>
+     <p>hello <b>world</b></p>
+   </div>`,
+  { width: 640 },
+);
+
+const card = tree.root;
+card.boxDecoration?.background.color; // [247, 243, 236, 255]
+
+function* runs(node: PaintNode): Iterable<PaintTextRun> {
+  yield* node.runs ?? [];
+  for (const child of node.children ?? []) yield* runs(child);
+}
+
+for (const run of runs(card)) {
+  const font = tree.fonts[run.fontIndex];
+  console.log(run.text, font?.family, font?.weight, run.fontSize, run.color);
+}
+```
+
+The package runs the same layout as `takumi-js` and walks the same stacking-context scene the image, SVG, and PDF backends paint. It records used values: a `50%` width is a number, `currentColor` is a color, and `<b>world</b>` is its own run with its own face.
+
+## Coordinates
+
+Every length is a device pixel, and so are the `width` and `height` options. A `20px` font measures `40` under a `devicePixelRatio` of `2`.
+
+A node's `transform` is an absolute matrix placing its border box on the canvas. Everything inside a node, such as `clip`, `boxDecoration`, `image`, and `runs`, is relative to the node's border-box top-left.
+
+## Paint order
+
+Nodes come in the order the renderer paints them, so `zIndex` does not appear: draw a node's `boxDecoration`, then its `image`, `inlineBackgrounds`, and `runs`, then its `children`, then its `boxDecoration.outline`.
+
+Each node is a compositing group. Its `opacity`, `clip`, and `blendMode` apply to everything inside it, children included.
+
+## Fields
+
+<TypeTable
+  type={{
+    source: {
+      type: "PaintSource",
+      description:
+        "The input node this box came from: its child-index path, id, tag name, and class name",
+    },
+    boxDecoration: {
+      type: "PaintBoxDecoration",
+      description:
+        "Used background, border widths, colors, styles and radii, box shadows split inset and outer, and the outline",
+    },
+    image: {
+      type: "PaintImage",
+      description:
+        "The content box an image sits in and where it draws after object-fit and object-position",
+    },
+    runs: {
+      type: "PaintTextRun[]",
+      description:
+        "Shaped text runs with their font instance, size, color, decorations, and glyph positions",
+    },
+    inlineBackgrounds: {
+      type: "PaintInlineBackground[]",
+      description: "One rounded rectangle per line for each inline span with a background",
+    },
+    unresolvedEffects: {
+      type: "PaintUnresolvedEffects",
+      description: "filter, backdrop-filter, mask-image, and clip-path as CSS text",
+    },
+  }}
+/>
+
+Runs reference `tree.fonts` by index. A font instance names the registered family, the face index, the weight and style after variations, and any synthetic bold or skew the shaper applied.
+
+## What stays CSS
+
+Linear and radial gradients come resolved: stops in pixels along the axis, plus the tile geometry. A conic gradient is carried as CSS text. `filter`, `backdrop-filter`, `mask-image`, and `clip-path` are carried as CSS text under `unresolvedEffects`, so an exporter can decide what to do with them.

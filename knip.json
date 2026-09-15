@@ -20,6 +20,7 @@
         "@takumi-rs/core",
         "@takumi-rs/helpers",
         "@takumi-rs/wasm",
+        "takumi-paint",
         "takumi-pdf",
         "twoslash"
       ],
@@ -42,6 +43,11 @@
       "ignore": ["pkg*/**"]
     },
     "takumi-pdf-js": {
+      "entry": ["tests/**/*.test.{ts,tsx}"],
+      "ignore": ["pkg*/**"],
+      "ignoreDependencies": ["react"]
+    },
+    "takumi-paint": {
       "entry": ["tests/**/*.test.{ts,tsx}"],
       "ignore": ["pkg*/**"],
       "ignoreDependencies": ["react"]
