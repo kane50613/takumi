@@ -27,7 +27,7 @@ impl ImageBuffer {
   }
 
   /// A single transparent pixel, for a draw with nothing to show.
-  #[cfg(feature = "animation")]
+  #[cfg(any(feature = "png", feature = "gif", feature = "webp"))]
   pub(crate) fn transparent_pixel() -> Self {
     Self {
       data: vec![0; 4],

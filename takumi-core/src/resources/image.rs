@@ -3,9 +3,9 @@
 //! This module provides types and utilities for managing image resources,
 //! including loading states, error handling, and image processing operations.
 
-#[cfg(feature = "animation")]
+#[cfg(any(feature = "png", feature = "gif", feature = "webp"))]
 use super::animated::AnimatedFormat;
-#[cfg(feature = "animation")]
+#[cfg(any(feature = "png", feature = "gif", feature = "webp"))]
 pub use super::animated::AnimatedSource;
 #[cfg(feature = "svg")]
 use std::borrow::Cow;
@@ -71,7 +71,7 @@ pub enum ImageSource {
   /// A bitmap image source
   Bitmap(Arc<ImageBuffer>),
   /// An animated image source.
-  #[cfg(feature = "animation")]
+  #[cfg(any(feature = "png", feature = "gif", feature = "webp"))]
   Animated(AnimatedSource),
   /// An encoded bitmap decoded lazily at the size it is drawn at.
   Encoded(Arc<EncodedBitmap>),
@@ -504,7 +504,7 @@ impl ImageSource {
   pub(crate) fn estimated_bytes(&self) -> usize {
     match self {
       Self::Bitmap(buffer) => buffer.data().len(),
-      #[cfg(feature = "animation")]
+      #[cfg(any(feature = "png", feature = "gif", feature = "webp"))]
       Self::Animated(animated) => animated.decoded_bytes(),
       Self::Encoded(encoded) => encoded.bytes.len(),
       // Markup plus a parsed-tree estimate; rasterized pixmaps are weighted
@@ -529,7 +529,7 @@ impl ImageSource {
       }
     }
 
-    #[cfg(feature = "animation")]
+    #[cfg(any(feature = "png", feature = "gif", feature = "webp"))]
     if let Some(format) = AnimatedFormat::detect(bytes) {
       return Ok(ImageSource::Animated(AnimatedSource::from_bytes(
         format, bytes,
@@ -568,7 +568,7 @@ impl ImageSource {
       }
     }
 
-    #[cfg(feature = "animation")]
+    #[cfg(any(feature = "png", feature = "gif", feature = "webp"))]
     if let Some(format) = AnimatedFormat::detect(bytes) {
       return Ok(ImageSource::Animated(AnimatedSource::from_bytes(
         format, bytes,
@@ -607,7 +607,11 @@ impl ImageSource {
     width: u32,
     height: u32,
     image_rendering: ImageScalingAlgorithm,
-    #[cfg_attr(not(feature = "animation"), allow(unused_variables))] time_ms: u64,
+    #[cfg_attr(
+      not(any(feature = "png", feature = "gif", feature = "webp")),
+      allow(unused_variables)
+    )]
+    time_ms: u64,
     #[cfg_attr(not(feature = "svg"), allow(unused_variables))] current_color: Color,
     #[cfg_attr(not(feature = "svg"), allow(unused_variables))] fonts: Option<&FontsSnapshot>,
   ) -> Result<RenderedImage, ImageError> {
@@ -619,7 +623,7 @@ impl ImageSource {
         algorithm: image_rendering,
         source_scale: (1.0, 1.0),
       }),
-      #[cfg(feature = "animation")]
+      #[cfg(any(feature = "png", feature = "gif", feature = "webp"))]
       ImageSource::Animated(animated) => {
         let source = animated.frame_at_time_covering(time_ms, width, height, image_rendering);
         let (native_width, native_height) = animated.dimensions();
@@ -663,7 +667,7 @@ impl ImageSource {
       #[cfg(feature = "svg-sizing")]
       ImageSource::Svg(svg) => svg.dimensions(),
       ImageSource::Bitmap(bitmap) => (bitmap.width() as f32, bitmap.height() as f32),
-      #[cfg(feature = "animation")]
+      #[cfg(any(feature = "png", feature = "gif", feature = "webp"))]
       ImageSource::Animated(animated) => {
         let (width, height) = animated.dimensions();
         (width as f32, height as f32)
@@ -686,7 +690,7 @@ impl ImageSource {
       ImageSource::Bitmap(bitmap) => {
         IntrinsicSizing::from_dimensions(bitmap.width() as f32, bitmap.height() as f32)
       }
-      #[cfg(feature = "animation")]
+      #[cfg(any(feature = "png", feature = "gif", feature = "webp"))]
       ImageSource::Animated(animated) => {
         let (width, height) = animated.dimensions();
         IntrinsicSizing::from_dimensions(width as f32, height as f32)
@@ -1478,7 +1482,7 @@ mod tests {
 
   #[cfg(feature = "png")]
   const HALF_TRANSPARENT_BLUE: [u8; 4] = [0, 0, 255, 128];
-  #[cfg(feature = "animation")]
+  #[cfg(any(feature = "png", feature = "gif", feature = "webp"))]
   const FRAME_COLORS: [[u8; 4]; 3] = [[255, 0, 0, 255], [0, 255, 0, 255], [0, 0, 255, 255]];
 
   /// Encodes one 4x4 solid frame per `(color index, delay ms)` pair. Delays
