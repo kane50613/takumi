@@ -9,7 +9,6 @@ mod parser;
 use std::{
   borrow::Cow,
   cell::RefCell,
-  cmp::Ordering,
   collections::HashMap,
   convert::Infallible,
   rc::Rc,
@@ -289,30 +288,14 @@ impl TailwindValues {
   }
 
   fn parse(source: &str) -> Self {
-    let mut collected = source
-      .split_whitespace()
-      .filter_map(TailwindValue::parse)
-      .collect::<Vec<_>>();
-
-    // sort in reverse order by is important, then has breakpoint, then rest is last.
-    // Stable sort so equal-priority utilities keep source order (later one wins).
-    collected.sort_by(|a, b| {
-      // Not important comes before important
-      if !a.important && b.important {
-        return Ordering::Less;
-      }
-
-      if a.important && !b.important {
-        return Ordering::Greater;
-      }
-
-      // No breakpoint comes before breakpoint
-      match (&a.breakpoint, &b.breakpoint) {
-        (None, Some(_)) => Ordering::Less,
-        (Some(_), None) => Ordering::Greater,
-        _ => Ordering::Equal,
-      }
-    });
+    // Plain utilities first, then breakpoint ones, then the `!important` pair in the same
+    // order; within a group the source order stays, so a later utility wins.
+    let mut groups: [Vec<TailwindValue>; 4] = Default::default();
+    for value in source.split_whitespace().filter_map(TailwindValue::parse) {
+      let group = usize::from(value.important) * 2 + usize::from(value.breakpoint.is_some());
+      groups[group].push(value);
+    }
+    let collected = groups.into_iter().flatten().collect::<Vec<_>>();
 
     TailwindValues {
       inner: Arc::new(collected),
