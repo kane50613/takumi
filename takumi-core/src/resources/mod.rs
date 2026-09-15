@@ -1,4 +1,4 @@
-#[cfg(feature = "animation")]
+#[cfg(any(feature = "png", feature = "gif", feature = "webp"))]
 mod animated;
 /// Font loading and processing functionality
 pub mod font;

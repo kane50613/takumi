@@ -3,7 +3,7 @@
 
 use std::io::{Error as IoError, ErrorKind};
 
-#[cfg(any(feature = "animation", feature = "jpeg"))]
+#[cfg(any(feature = "png", feature = "gif", feature = "webp", feature = "jpeg"))]
 use image::RgbaImage;
 #[cfg(any(feature = "jpeg", feature = "png"))]
 use image::{DynamicImage, ImageDecoder, Limits};
@@ -17,7 +17,7 @@ use crate::{
   style::ImageScalingAlgorithm,
 };
 
-#[cfg(feature = "animation")]
+#[cfg(any(feature = "png", feature = "gif", feature = "webp"))]
 mod frames;
 #[cfg(feature = "gif")]
 mod gif;
@@ -54,7 +54,7 @@ mod webp;
 
 #[cfg(any(feature = "png", feature = "webp"))]
 pub(crate) use self::frames::covers_canvas;
-#[cfg(feature = "animation")]
+#[cfg(any(feature = "png", feature = "gif", feature = "webp"))]
 pub(crate) use self::frames::{
   DecodeTarget, Dispose, FrameInfo, MAX_ANIMATION_FRAMES, MAX_ANIMATION_TOTAL_PIXELS,
   fit_to_target, required_previous_frame,
@@ -252,7 +252,7 @@ pub(crate) fn decode_bitmap_scaled(
   .ok_or_else(invalid_buffer_error)
 }
 
-#[cfg(any(feature = "animation", feature = "jpeg"))]
+#[cfg(any(feature = "png", feature = "gif", feature = "webp", feature = "jpeg"))]
 pub(super) fn rgba_to_buffer(image: RgbaImage, format: ImageFormat) -> ImageResult<ImageBuffer> {
   let (width, height) = (image.width(), image.height());
   ImageBuffer::from_rgba_bytes(image.into_raw(), width, height).ok_or_else(|| {
