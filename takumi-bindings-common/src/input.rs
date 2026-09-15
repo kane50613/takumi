@@ -20,19 +20,19 @@ use crate::build_font_resource;
 #[serde(rename_all = "camelCase")]
 pub struct FontDetails {
   /// The family name to register the font under.
-  pub name: Option<String>,
+  name: Option<String>,
   /// The raw font bytes.
-  pub data: ByteBuf,
+  data: ByteBuf,
   /// The font weight, e.g. 400 or 700.
-  pub weight: Option<f64>,
+  weight: Option<f64>,
   /// The font style.
-  pub style: Option<FontStyle>,
+  style: Option<FontStyle>,
   /// Logical family this font is a coverage subset of.
-  pub subset_of: Option<String>,
+  subset_of: Option<String>,
   /// Where this subset sits in its group's fallback order.
-  pub subset_rank: Option<u32>,
+  subset_rank: Option<u32>,
   /// CSS generic family keyword this font resolves for.
-  pub generic: Option<String>,
+  generic: Option<String>,
 }
 
 /// Font input, either a details object or raw bytes.
@@ -47,7 +47,7 @@ pub enum Font {
 
 /// A `font-style` value parsed from its CSS text.
 #[derive(Clone, Copy)]
-pub struct FontStyle(pub CssFontStyle);
+pub struct FontStyle(CssFontStyle);
 
 impl<'de> Deserialize<'de> for FontStyle {
   fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
@@ -72,11 +72,11 @@ impl From<FontStyle> for CssFontStyle {
 #[serde(rename_all = "camelCase")]
 pub struct ImageSource {
   /// The source URL of the image.
-  pub src: Arc<str>,
+  src: Arc<str>,
   /// The raw image bytes.
-  pub data: ByteBuf,
+  data: ByteBuf,
   /// Cache policy for the decoded image. Defaults to `"auto"`.
-  pub cache: Option<ImageCacheMode>,
+  cache: Option<ImageCacheMode>,
 }
 
 /// Registers a font input, returning the families it produced.
