@@ -69,7 +69,7 @@ optional = true
 [dependencies.takumi-core]
 path = "../takumi-core"
 default-features = false
-features = ["woff2"]
+features = ["woff2", "png"]
 
 
 [lints]

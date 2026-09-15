@@ -1,11 +1,12 @@
 //! Bitmap decoding behind one format sniff: still images, animation timelines, and scaled decodes
 //! that never hold a full-size frame.
 
-use std::io::{Cursor, Error as IoError, ErrorKind};
+use std::io::{Error as IoError, ErrorKind};
 
+#[cfg(any(feature = "jpeg", feature = "png"))]
+use image::{DynamicImage, ImageDecoder, Limits};
 use image::{
-  DynamicImage, ImageDecoder, ImageError, ImageFormat, ImageResult, Limits, RgbaImage,
-  codecs::png::PngDecoder,
+  ImageError, ImageFormat, ImageResult, RgbaImage,
   error::{DecodingError, ImageFormatHint, UnsupportedError, UnsupportedErrorKind},
 };
 
@@ -16,9 +17,40 @@ use crate::{
 
 mod gif;
 mod jpeg;
+#[cfg(feature = "png")]
 mod png;
+#[cfg(not(feature = "png"))]
+mod png {
+  //! Header-only PNG sizing when the decoder is compiled out.
+
+  use image::ImageResult;
+
+  use super::{format_compiled_out_error, header_dimensions};
+  use crate::{resources::image_buffer::ImageBuffer, style::ImageScalingAlgorithm};
+
+  pub(crate) fn decode_png(_bytes: &[u8]) -> ImageResult<ImageBuffer> {
+    Err(format_compiled_out_error())
+  }
+
+  pub(super) fn png_dimensions(bytes: &[u8]) -> ImageResult<(u32, u32)> {
+    header_dimensions(bytes)
+  }
+
+  pub(super) fn decode_png_scaled(
+    _bytes: &[u8],
+    _width: u32,
+    _height: u32,
+    _algorithm: ImageScalingAlgorithm,
+  ) -> Option<ImageResult<ImageBuffer>> {
+    None
+  }
+}
 mod webp;
 
+#[cfg(feature = "png")]
+pub(crate) use self::png::{
+  apng_dimensions, apng_frame_infos, decode_apng_frame_alone, decode_apng_frames, is_apng,
+};
 #[cfg(feature = "webp")]
 pub(crate) use self::webp::{
   animated_webp_dimensions, decode_webp_frame_alone, decode_webp_frames, is_animated_webp,
@@ -26,16 +58,15 @@ pub(crate) use self::webp::{
 };
 pub(crate) use self::{
   gif::{decode_gif_frame_alone, decode_gif_frames, gif_dimensions, gif_frame_infos, is_gif},
-  png::{
-    apng_dimensions, apng_frame_infos, decode_apng_frame_alone, decode_apng_frames, decode_png,
-    is_apng,
-  },
+  png::decode_png,
 };
 use self::{
   jpeg::{JPEG_SIGNATURE, decode_jpeg, jpeg_dimensions},
-  png::{PNG_SIGNATURE, decode_png_scaled},
+  png::{decode_png_scaled, png_dimensions},
   webp::{decode_webp, decode_webp_scaled, webp_dimensions},
 };
+
+pub(super) const PNG_SIGNATURE: [u8; 8] = [137, 80, 78, 71, 13, 10, 26, 10];
 
 /// Maximum decoded image edge length; also the width/height limit fed to the `image` crate
 /// decoders.
@@ -186,6 +217,7 @@ pub(crate) enum DetectedImageFormat {
   WebP,
 }
 
+#[cfg(any(feature = "jpeg", feature = "png"))]
 pub(super) fn decode_limits() -> Limits {
   let mut limits = Limits::default();
   limits.max_image_width = Some(MAX_IMAGE_DIMENSION);
@@ -193,6 +225,7 @@ pub(super) fn decode_limits() -> Limits {
   limits
 }
 
+#[cfg(any(feature = "jpeg", feature = "png"))]
 pub(super) fn decode_with_image_crate(
   mut decoder: impl ImageDecoder,
   format: ImageFormat,
@@ -202,7 +235,7 @@ pub(super) fn decode_with_image_crate(
 }
 
 /// The error a decode entry point returns for a format whose feature is off.
-#[cfg(not(all(feature = "jpeg", feature = "webp", feature = "gif")))]
+#[cfg(not(all(feature = "png", feature = "jpeg", feature = "webp", feature = "gif")))]
 pub(super) fn format_compiled_out_error() -> ImageError {
   ImageError::Unsupported(UnsupportedError::from_format_and_kind(
     ImageFormatHint::Unknown,
@@ -211,9 +244,11 @@ pub(super) fn format_compiled_out_error() -> ImageError {
 }
 
 /// Whether these bytes are a format this build has no decoder for.
-#[cfg(not(all(feature = "jpeg", feature = "webp")))]
+#[cfg(not(all(feature = "png", feature = "jpeg", feature = "webp")))]
 pub(crate) fn decoder_compiled_out(bytes: &[u8]) -> bool {
   match detect_image_format(bytes) {
+    #[cfg(not(feature = "png"))]
+    Some(DetectedImageFormat::Png) => true,
     #[cfg(not(feature = "jpeg"))]
     Some(DetectedImageFormat::Jpeg) => true,
     #[cfg(not(feature = "webp"))]
@@ -223,7 +258,7 @@ pub(crate) fn decoder_compiled_out(bytes: &[u8]) -> bool {
 }
 
 /// Dimensions from the format header, for a format whose decoder is compiled out.
-#[cfg(not(all(feature = "jpeg", feature = "webp")))]
+#[cfg(not(all(feature = "png", feature = "jpeg", feature = "webp")))]
 pub(super) fn header_dimensions(bytes: &[u8]) -> ImageResult<(u32, u32)> {
   let size = imagesize::blob_size(bytes).map_err(|error| {
     ImageError::Decoding(DecodingError::new(
@@ -243,7 +278,7 @@ pub(super) fn header_dimensions(bytes: &[u8]) -> ImageResult<(u32, u32)> {
 /// Bitmap dimensions from the format header; decodes no pixels.
 pub(crate) fn bitmap_dimensions(bytes: &[u8]) -> Option<ImageResult<(u32, u32)>> {
   let dimensions = match detect_image_format(bytes)? {
-    DetectedImageFormat::Png => PngDecoder::new(Cursor::new(bytes)).map(|d| d.dimensions()),
+    DetectedImageFormat::Png => png_dimensions(bytes),
     DetectedImageFormat::Jpeg => jpeg_dimensions(bytes),
     DetectedImageFormat::WebP => return Some(webp_dimensions(bytes)),
     DetectedImageFormat::Gif => return None,
@@ -364,6 +399,7 @@ mod tests {
     assert!(check_pixel_budget(100_000, 100_000).is_err());
   }
 
+  #[cfg(feature = "png")]
   #[test]
   fn decode_png_accepts_small_valid_image() {
     let bytes = include_bytes!("../../../../assets/images/yeecord.png");
