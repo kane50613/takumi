@@ -131,7 +131,7 @@ impl TableSlots {
       }
     }
 
-    groups.sort_by_key(|(order, index, _)| (*order, *index));
+    groups.sort_unstable_by_key(|(order, index, _)| (*order, *index));
 
     let count = |wanted: u8| {
       groups
