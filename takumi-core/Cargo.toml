@@ -115,9 +115,9 @@ png = ["dep:png", "image/png"]
 jpeg = ["image/jpeg"]
 webp = ["dep:image-webp", "dep:libwebp-sys", "image/webp"]
 gif = ["dep:gif", "image/gif"]
-svg-size = ["dep:roxmltree", "dep:svgtypes"]
+svg-sizing = ["dep:roxmltree", "dep:svgtypes"]
 svg = [
-  "svg-size",
+  "svg-sizing",
   "dep:simplecss",
   "dep:siphasher",
   "dep:strict-num",

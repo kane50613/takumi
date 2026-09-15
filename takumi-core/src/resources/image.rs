@@ -8,7 +8,7 @@ use super::image_decoder::DecodeTarget;
 use std::borrow::Cow;
 #[cfg(feature = "svg")]
 use std::str::FromStr;
-#[cfg(feature = "svg-size")]
+#[cfg(feature = "svg-sizing")]
 use std::str::from_utf8;
 use std::sync::{Arc, OnceLock, Weak};
 
@@ -37,7 +37,7 @@ use crate::resources::image_decoder::{
 };
 #[cfg(feature = "svg")]
 use crate::resources::svg_size::SvgIntrinsic;
-#[cfg(feature = "svg-size")]
+#[cfg(feature = "svg-sizing")]
 use crate::resources::svg_size::SvgSize;
 #[cfg(feature = "svg")]
 use crate::resvg::{
@@ -81,7 +81,7 @@ pub enum ImageSource {
   #[cfg(feature = "svg")]
   Svg(Arc<SvgSource>),
   /// An SVG sized from its root element; this build cannot draw it.
-  #[cfg(all(feature = "svg-size", not(feature = "svg")))]
+  #[cfg(all(feature = "svg-sizing", not(feature = "svg")))]
   SvgSize(SvgSize),
   /// A bitmap image source
   Bitmap(Arc<ImageBuffer>),
@@ -762,7 +762,7 @@ impl ImageSource {
       // separately as their own sized entries.
       #[cfg(feature = "svg")]
       Self::Svg(svg) => svg.source.len() * 3,
-      #[cfg(all(feature = "svg-size", not(feature = "svg")))]
+      #[cfg(all(feature = "svg-sizing", not(feature = "svg")))]
       Self::SvgSize(_) => std::mem::size_of::<SvgSize>(),
     }
   }
@@ -781,7 +781,7 @@ impl ImageSource {
         return Ok(ImageSource::Svg(Arc::new(text.parse()?)));
       }
     }
-    #[cfg(all(feature = "svg-size", not(feature = "svg")))]
+    #[cfg(all(feature = "svg-sizing", not(feature = "svg")))]
     {
       if let Ok(text) = from_utf8(bytes)
         && is_svg_like(text)
@@ -829,7 +829,7 @@ impl ImageSource {
         )?)));
       }
     }
-    #[cfg(all(feature = "svg-size", not(feature = "svg")))]
+    #[cfg(all(feature = "svg-sizing", not(feature = "svg")))]
     {
       if let Ok(text) = from_utf8(bytes)
         && is_svg_like(text)
@@ -922,7 +922,7 @@ impl ImageSource {
         current_color,
         fonts,
       )?)),
-      #[cfg(all(feature = "svg-size", not(feature = "svg")))]
+      #[cfg(all(feature = "svg-sizing", not(feature = "svg")))]
       ImageSource::SvgSize(_) => Err(ImageError::SvgParseNotSupported),
     }
   }
@@ -932,7 +932,7 @@ impl ImageSource {
     let (width, height) = match self {
       #[cfg(feature = "svg")]
       ImageSource::Svg(svg) => svg.dimensions(),
-      #[cfg(all(feature = "svg-size", not(feature = "svg")))]
+      #[cfg(all(feature = "svg-sizing", not(feature = "svg")))]
       ImageSource::SvgSize(svg) => (svg.width, svg.height),
       ImageSource::Bitmap(bitmap) => (bitmap.width() as f32, bitmap.height() as f32),
       ImageSource::Animated(animated) => {
@@ -954,7 +954,7 @@ impl ImageSource {
     match self {
       #[cfg(feature = "svg")]
       ImageSource::Svg(svg) => svg.intrinsic.into(),
-      #[cfg(all(feature = "svg-size", not(feature = "svg")))]
+      #[cfg(all(feature = "svg-sizing", not(feature = "svg")))]
       ImageSource::SvgSize(svg) => svg.intrinsic.into(),
       ImageSource::Bitmap(bitmap) => {
         IntrinsicSizing::from_dimensions(bitmap.width() as f32, bitmap.height() as f32)
@@ -1100,7 +1100,7 @@ pub enum ImageError {
   /// The image data URI is malformed and cannot be parsed
   #[error("The image data URI is malformed and cannot be parsed")]
   MalformedDataUri,
-  #[cfg(feature = "svg-size")]
+  #[cfg(feature = "svg-sizing")]
   /// An error occurred while parsing an SVG image
   #[error("An error occurred while parsing an SVG image: {0}")]
   SvgParseError(#[source] Box<dyn std::error::Error + Send + Sync + 'static>),
@@ -1131,7 +1131,7 @@ impl ImageError {
 
   /// Wraps an SVG parse error opaquely so takumi's public API stays independent
   /// of the `resvg`/`usvg` version.
-  #[cfg(feature = "svg-size")]
+  #[cfg(feature = "svg-sizing")]
   pub(crate) fn svg_parse(err: impl std::error::Error + Send + Sync + 'static) -> Self {
     Self::SvgParseError(Box::new(err))
   }
