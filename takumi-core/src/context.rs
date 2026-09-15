@@ -1,4 +1,4 @@
-use std::{collections::HashMap, rc::Rc, sync::Arc};
+use std::{cell::RefCell, collections::HashMap, rc::Rc, sync::Arc};
 
 use typed_builder::TypedBuilder;
 
@@ -15,6 +15,7 @@ struct RenderShared {
   stylesheet: Arc<StyleSheet>,
   inline_cache: InlineLayoutCache,
   tw_cache: TwCache,
+  normal_line_heights: RefCell<HashMap<u64, f32>>,
   time_ms: u64,
   draw_debug_border: bool,
   dither_gradients: bool,
@@ -62,6 +63,7 @@ impl From<RenderContextInit> for RenderContext {
         stylesheet: init.stylesheet,
         inline_cache: InlineLayoutCache::new(init.shape_cache, init.measure_cache),
         tw_cache: TwCache::default(),
+        normal_line_heights: RefCell::new(HashMap::new()),
         time_ms: init.time_ms,
         draw_debug_border: init.draw_debug_border,
         dither_gradients: init.dither_gradients,
@@ -139,6 +141,20 @@ impl RenderContext {
   /// Per-render cache of expanded Tailwind class lists.
   pub(crate) fn tw_cache(&self) -> &TwCache {
     &self.shared.tw_cache
+  }
+
+  /// The `line-height: normal` value for `key`, resolved once per render.
+  pub(crate) fn normal_line_height(&self, key: u64, resolve: impl FnOnce() -> f32) -> f32 {
+    if let Some(height) = self.shared.normal_line_heights.borrow().get(&key) {
+      return *height;
+    }
+    let height = resolve();
+    self
+      .shared
+      .normal_line_heights
+      .borrow_mut()
+      .insert(key, height);
+    height
   }
 
   /// Blink's `CreateAnonymousStyleWithDisplay`, with the `anonymous` flags of the style

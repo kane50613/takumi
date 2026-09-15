@@ -1,5 +1,6 @@
 use std::{
   borrow::Cow,
+  cell::OnceCell,
   cell::RefCell,
   collections::{BTreeSet, HashMap, HashSet, hash_map::Entry},
   fmt::{self, Debug, Formatter},
@@ -560,18 +561,23 @@ impl Fonts {
 
     let font_id = run.run().font().data.id();
     let font_index = run.run().font().index;
-    let resolver = GlyphResolveContext {
-      outline_glyphs: font_ref.outline_glyphs(),
-      color_glyphs: font_ref.color_glyphs(),
-      bitmap_strikes: font_ref.bitmap_strikes(),
-      font_size,
-      size: Size::new(font_size),
-      location: LocationRef::new(&normalized_coords),
-      embolden,
-      skew,
+    // Built on the first cache miss; a run whose glyphs are all cached never needs it.
+    let resolver = OnceCell::new();
+    let resolver = || {
+      resolver.get_or_init(|| GlyphResolveContext {
+        outline_glyphs: font_ref.outline_glyphs(),
+        color_glyphs: font_ref.color_glyphs(),
+        bitmap_strikes: font_ref.bitmap_strikes(),
+        font_size,
+        size: Size::new(font_size),
+        location: LocationRef::new(&normalized_coords),
+        embolden,
+        skew,
+      })
     };
 
-    let mut result: HashMap<u32, Arc<ResolvedGlyph>> = HashMap::new();
+    let mut result: HashMap<u32, Arc<ResolvedGlyph>> =
+      HashMap::with_capacity(glyph_ids.size_hint().0);
     for glyph_id in glyph_ids {
       if let Entry::Vacant(slot) = result.entry(glyph_id) {
         let key = resolved_glyph_cache_key(
@@ -583,7 +589,7 @@ impl Fonts {
           skew,
           glyph_id,
         );
-        if let Some(glyph) = resolved_glyph(key, || resolver.resolve_glyph(glyph_id)) {
+        if let Some(glyph) = resolved_glyph(key, || resolver().resolve_glyph(glyph_id)) {
           slot.insert(glyph);
         }
       }

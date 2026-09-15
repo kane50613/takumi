@@ -1,9 +1,9 @@
 //! Text decoration rectangles and skip-ink outlines.
 
 use crate::{
-  geometry::{ComputedLayout, PathCommand, Point},
+  geometry::{ComputedLayout, Point},
   layout::intercept::skip_ink_spans,
-  resources::glyph::ResolvedGlyph,
+  resources::glyph::{ResolvedGlyph, ResolvedOutlineGlyph},
   style::{
     Affine, Color, SizedTextDecorationThickness, TextDecorationLines, TextDecorationSkipInk,
   },
@@ -70,7 +70,7 @@ impl ShapedRun {
     resolved_glyphs: &'g HashMap<u32, Arc<ResolvedGlyph>>,
     origin: Point<f32>,
     baseline_shift: f32,
-  ) -> Vec<(Point<f32>, &'g [PathCommand])> {
+  ) -> Vec<(Point<f32>, &'g ResolvedOutlineGlyph)> {
     self
       .glyphs
       .iter()
@@ -84,7 +84,7 @@ impl ShapedRun {
             x: origin.x + glyph.x,
             y: origin.y + glyph.y + baseline_shift,
           },
-          outline.paths(),
+          outline,
         ))
       })
       .collect()
