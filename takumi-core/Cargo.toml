@@ -111,10 +111,12 @@ optional = true
 [features]
 default = ["woff2", "woff", "svg", "image-decoding"]
 image-decoding = ["png", "jpeg", "webp", "gif"]
-png = ["dep:png", "image/png"]
+png = ["dep:png", "image/png", "animation"]
 jpeg = ["image/jpeg"]
-webp = ["dep:image-webp", "dep:libwebp-sys", "image/webp"]
-gif = ["dep:gif", "image/gif"]
+webp = ["dep:image-webp", "dep:libwebp-sys", "image/webp", "animation"]
+gif = ["dep:gif", "image/gif", "animation"]
+# Frame timelines shared by the animated decoders; each of `png`, `gif` and `webp` turns it on.
+animation = []
 svg-sizing = ["dep:roxmltree", "dep:svgtypes"]
 svg = [
   "svg-sizing",

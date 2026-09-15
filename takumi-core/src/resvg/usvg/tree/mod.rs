@@ -1481,6 +1481,9 @@ impl ImageKind {
           .and_then(|(width, height)| Size::from_wh(width as f32, height as f32))
           .log_none(|| log::warn!("Image has an invalid size. Skipped."))
       }
+      #[cfg(not(feature = "gif"))]
+      ImageKind::GIF(_) => None.log_none(|| log::warn!("GIF decoding is compiled out.")),
+      #[cfg(feature = "gif")]
       ImageKind::GIF(data) => crate::resources::image_decoder::gif_dimensions(data)
         .ok()
         .and_then(|(width, height)| Size::from_wh(width as f32, height as f32))
