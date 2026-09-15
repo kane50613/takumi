@@ -13,7 +13,6 @@ rust-version = "1.91"
 ignored = ["serde_bytes"]
 
 [dependencies]
-png.workspace = true
 log.workspace = true
 imagesize.workspace = true
 data-url.workspace = true
@@ -63,7 +62,10 @@ features = ["rc"]
 
 [dependencies.image]
 workspace = true
-features = ["png", "ico"]
+
+[dependencies.png]
+workspace = true
+optional = true
 
 [dependencies.roxmltree]
 workspace = true
@@ -108,7 +110,8 @@ optional = true
 
 [features]
 default = ["woff2", "woff", "svg", "image-decoding"]
-image-decoding = ["jpeg", "webp", "gif"]
+image-decoding = ["png", "jpeg", "webp", "gif"]
+png = ["dep:png", "image/png", "image/ico"]
 jpeg = ["image/jpeg"]
 webp = ["dep:image-webp", "dep:libwebp-sys", "image/webp"]
 gif = ["dep:gif", "image/gif"]

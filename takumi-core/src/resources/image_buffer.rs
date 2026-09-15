@@ -1,5 +1,6 @@
 //! Backend-agnostic decoded-image storage.
 
+#[cfg(feature = "png")]
 use image::{ExtendedColorType, ImageEncoder, codecs::png::PngEncoder};
 
 use crate::style::math::fast_div_255;
@@ -84,6 +85,7 @@ impl ImageBuffer {
 
   /// Encodes the image as straight-alpha PNG bytes, for embedding in an SVG
   /// `<image>` data URL. Returns `None` if encoding fails.
+  #[cfg(feature = "png")]
   pub fn encode_png(&self) -> Option<Vec<u8>> {
     let mut straight = self.data.clone();
 

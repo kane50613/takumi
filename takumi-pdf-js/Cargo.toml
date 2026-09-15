@@ -23,7 +23,7 @@ path = "../takumi-bindings-common"
 [dependencies.takumi-core]
 path = "../takumi-core"
 default-features = false
-features = ["woff2"]
+features = ["woff2", "png"]
 
 [dependencies.takumi-pdf]
 path = "../takumi-pdf"

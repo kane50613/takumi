@@ -16,9 +16,11 @@ use skrifa::{
   raw::types::BoundingBox,
 };
 
+#[cfg(feature = "png")]
+use crate::resources::image_decoder::decode_png;
 use crate::{
   geometry::{PathCommand as Command, Placement, Point},
-  resources::{image_buffer::ImageBuffer, image_decoder::decode_png},
+  resources::image_buffer::ImageBuffer,
 };
 
 /// A resolved glyph, either an embedded bitmap or a vector outline.
@@ -572,7 +574,10 @@ fn transform_commands(paths: &mut [Command], skew_degrees: f32) {
 
 fn decode_bitmap_image(bitmap: &BitmapGlyph<'_>) -> Option<(ImageBuffer, Origin)> {
   let image = match &bitmap.data {
+    #[cfg(feature = "png")]
     BitmapData::Png(bytes) => decode_png(bytes).ok()?,
+    #[cfg(not(feature = "png"))]
+    BitmapData::Png(_) => return None,
     BitmapData::Bgra(bytes) => {
       let expected = (bitmap.width as usize)
         .checked_mul(bitmap.height as usize)?
