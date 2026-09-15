@@ -1,86 +1,203 @@
 core:changelogs:
-  - content: "---\npackages:\n  \"@takumi-rs/core\":\n    type: patch\n---\n\n### Export the CssInput type from @takumi-rs/core\n\nThe `css` option referenced `CssInput` without importing it, so type checking failed on the declaration file when `skipLibCheck` was off.\n"
-    filename: core-css-input-type.md
+  - content: "---\npackages:\n  takumi-pdf:\n    type: patch\n---\n\n# Trim an image to its content edge curve\n\nA `border-radius` on an image was ignored unless the box also clipped its overflow, so a rounded picture came out square.\n"
+    filename: pdf-image-corner-clip.md
+    v: 0.0.0
+  - content: "---\npackages:\n  takumi-pdf:\n    type: patch\n---\n\n# Fill a page exactly with a box as tall as the content window\n\nA box sized to the page snapped to a whole pixel past the fractional window and opened an empty page after it.\n"
+    filename: page-cut-snap.md
+    v: 0.0.0
+  - content: "---\npackages:\n  takumi-pdf:\n    type: patch\n---\n\n# Write the CIDFont default width as an integer\n\nThe PDF spec types `/DW` as an integer. Poppler ignores a real one and falls back to the spec default of 1000, so every glyph the entry covered advanced far too far in poppler-based viewers.\n"
+    filename: pdf-integer-default-width.md
+    v: 0.0.0
+  - content: "---\npackages:\n  takumi:\n    type: patch\n  takumi-pdf:\n    type: patch\n---\n\n# Text wraps at the width layout measured\n\nA box with a fractional width wrapped its text against the pixel-snapped content box at paint, so a nearly full line pushed its last word onto a line the layout never reserved and it overlapped the block below.\n"
+    filename: text-wrap-measured-width.md
+    v: 0.0.0
+  - content: "---\npackages:\n  takumi-pdf:\n    type: minor\n---\n\n# Override the header and footer on some pages\n\n`pages` takes `{ first, last, odd, even }`, each overriding `header` or `footer` for the pages it covers. A band is a node tree, or `false` to draw none.\n"
+    filename: page-rules.md
+    v: 0.0.0
+  - content: "---\npackages:\n  takumi-pdf:\n    type: patch\n---\n\n# Accept object stylesheet rules in PDF bindings\n\nMatch the PDF binding's `css` type to the object rules already accepted at runtime.\n"
+    filename: pdf-css-types.md
+    v: 0.0.0
+  - content: "---\npackages:\n  takumi-pdf:\n    type: minor\n---\n\n# Render uncovered characters with `uncoveredText`\n\nA single character no registered font covers used to fail the whole render, which leaves a server rendering text someone else wrote with no way through. `uncoveredText: \"placeholder\"` draws the font's glyph 0 instead, and `\"blank\"` draws nothing. Both keep the character's width, so the line does not reflow. The default stays `\"error\"`.\n\nEvery PDF/A level and both PDF/UA levels forbid glyph 0, so `\"placeholder\"` is now rejected there by name instead of failing as a generic write error.\n"
+    filename: pdf-uncovered-text-option.md
+    v: 0.0.0
+  - content: "---\npackages:\n  takumi-pdf:\n    type: patch\n---\n\n# Forced page breaks no longer open empty pages\n\nA `break-before: page` or `break-after: page` with only spacing beside it on its page is dropped, and trailing spacing past the last content box no longer opens a page.\n"
+    filename: pdf-forced-break-empty-page.md
+    v: 0.0.0
+  - content: "---\npackages:\n  takumi:\n    type: patch\n  takumi-pdf:\n    type: patch\n---\n\n# Resolve viewport units against the page area in paged output\n\n`100vh` in paged content was `0` because the content column lays out at unbounded height; it now equals the page area height, as in print media.\n"
+    filename: page-area-viewport-units.md
+    v: 0.0.0
+  - content: "---\npackages:\n  takumi:\n    type: patch\n---\n\n# Clip overflow at the padding box\n\n`overflow: hidden`, `overflow: clip` and `contain: paint` now clip at the padding edge, as CSS specifies. Content that spilled into a padded box's padding used to be cut at the content edge.\n"
+    filename: overflow-clip-padding-box.md
+    v: 0.0.0
+  - content: "---\npackages:\n  takumi:\n    type: minor\n---\n\n# Size boxes from their content or available space\n\n`width` and `height` now accept `min-content`, `max-content`, `fit-content`, `fit-content(<length-percentage>)`, and `stretch`.\n\n```css\n.card {\n  width: fit-content(20rem);\n}\n```\n\nThis fits the card to its content with a preferred limit of `20rem`. Its min-content size remains the lower bound.\n\n`flex-basis` accepts the same values, plus `content` to size a flex item from its content regardless of its main size property.\n\nTailwind utilities map to the new values:\n\n| Value         | Utilities                    |\n| ------------- | ---------------------------- |\n| `min-content` | `w-min`, `h-min`, `size-min` |\n| `max-content` | `w-max`, `h-max`, `size-max` |\n| `fit-content` | `w-fit`, `h-fit`, `size-fit` |\n| `content`     | `basis-content`              |\n\n`min-width`, `max-width`, `min-height`, and `max-height` do not accept the new keywords. Their existing length and percentage values still work.\n"
+    filename: sizing-keywords.md
+    v: 0.0.0
+  - content: "---\npackages:\n  takumi:\n    type: patch\n---\n\n# Upgrade taffy to 0.14\n\nLayout picks up taffy's flexbox, grid and block fixes from 0.12 through 0.14.\n"
+    filename: taffy-0-14.md
+    v: 0.0.0
+  - content: "---\npackages:\n  takumi:\n    type: patch\n---\n\n# Paint text that overflows a zero-size box\n\nText inside a zero-size box now renders in SVG output like it does in raster output.\n"
+    filename: svg-zero-size-text.md
+    v: 0.0.0
+  - content: "---\npackages:\n  takumi:\n    type: minor\n---\n\n# Add balanced flex wrapping, flow-root, self-alignment, and containment\n\nSpread flex items across balanced lines and set a minimum line count:\n\n```css\n.cards {\n  display: flex;\n  flex-wrap: balance;\n  flex-line-count: 2;\n}\n```\n\n`balance` also combines with `wrap` or `wrap-reverse`, in either order. It cannot combine with `nowrap`.\n\n- `display: flow-root` makes the box a block formatting context root.\n- `align-items`, `align-self`, `justify-items`, and `justify-self` accept `self-start` and `self-end` to align to the item's own start or end. `justify-content` and `align-content` reject them.\n- `contain` accepts `none`, `content`, or a space-separated combination of `layout`, `style`, and `paint`, without duplicates. `content` means `layout style paint`.\n\n`contain: paint` clips descendants to the padding box. Either `layout` or `paint` creates a stacking context and a containing block for absolute and fixed descendants.\n\nSize containment is not implemented, so `size`, `inline-size`, and `strict` cause a parse error. `style` parses but has nothing to scope: Takumi has no author-facing counters, and list-item ordinals do not restart at the boundary.\n\nContainment is a correctness feature here, not a performance hint. Takumi renders once, so there is no relayout to skip. Paint containment adds a stacking context and a clip layer per box.\n"
+    filename: layout-keywords.md
+    v: 0.0.0
+  - content: "---\npackages:\n  takumi:\n    type: patch\n---\n\n# Take an anonymous box's border width down to its used value\n\nAn anonymous box skipped the used-value pass, so it reported the initial `medium` border width even though it has no border style to render it with.\n"
+    filename: anonymous-box-used-values.md
+    v: 0.0.0
+  - content: "---\npackages:\n  takumi:\n    type: patch\n---\n\n# Place a measured inline box against its parent's content box\n\nAn inline box's transform omitted the parent's border and padding, so it was reported at the border-box origin while every other measured node carries an absolute transform.\n"
+    filename: inline-box-absolute-transform.md
+    v: 0.0.0
+  - content: "---\npackages:\n  takumi:\n    type: patch\n---\n\n# Align flex items to the first line of a wrapped item\n\nA flex item that wraps onto several lines now offers the baseline of its first line to `align-items: baseline`, instead of its bottom edge.\n"
+    filename: flex-first-baseline.md
+    v: 0.0.0
+  - content: "---\npackages:\n  takumi:\n    type: patch\n---\n\n# Reject repeated alignment overflow prefixes\n\nReject repeated `safe` and `unsafe` prefixes in CSS alignment values.\n"
+    filename: alignment-overflow-prefixes.md
+    v: 0.0.0
+  - content: "---\npackages:\n  takumi:\n    type: patch\n---\n\n# Decode character references in `fromHtml` image sources\n\nAn `img` whose `src` holds `&amp;` now yields the decoded URL, matching `attributes.src`.\n"
+    filename: html-image-src-entities.md
+    v: 0.0.0
+  - content: "---\npackages:\n  takumi:\n    type: patch\n---\n\n# Size a replaced element the way its source states it\n\nAn `<svg>` carrying only a `viewBox` states a ratio and no size, and as an inline box it took a size the ratio never stated. `box-sizing: border-box` counted an image's padding and border twice, so the picture came out taller than its box. A source stating neither a size nor a ratio had one synthesised from the default object size, so `width` alone moved `height` with it.\n"
+    filename: inline-replaced-intrinsic-width.md
+    v: 0.0.0
+  - content: "---\npackages:\n  takumi:\n    type: patch\n---\n\n# Keep balanced lines aligned within the container\n\n`text-wrap: balance` aligned lines against the narrowed balancing width, so RTL, `text-align: right`, and centered paragraphs drifted toward the left edge.\n"
+    filename: balance-alignment.md
+    v: 0.0.0
+  - content: "---\npackages:\n  takumi:\n    type: minor\n---\n\n# Render canvases up to 64 megapixels\n\nThe canvas budget is now 64 megapixels, up from 16. A 7680 × 4320 banner or a 4096 × 16384 page fits.\n\nOver the budget, `render` fails with `InvalidViewport`. The message now states the limit.\n"
+    filename: canvas-pixel-budget.md
+    v: 0.0.0
+  - content: "---\npackages:\n  takumi:\n    type: minor\n---\n\n# Keep decoded photos in the resource cache\n\nThe default `cacheMaxBytes` is now 64 MiB, and one decoded image can use the whole budget. The cache used to split its budget into many small shards and never kept an image larger than one shard, so most photos were decoded again on every render.\n"
+    filename: resource-cache-shards.md
+    v: 0.0.0
+  - content: "---\npackages:\n  takumi:\n    type: patch\n---\n\n# Size a table's remaining auto columns by their content\n\nAuto columns next to a column with a declared width now share the free width in proportion to their max-content widths, as they already did when every column was auto.\n"
+    filename: table-auto-columns.md
+    v: 0.0.0
+  - content: "---\npackages:\n  takumi:\n    type: patch\n---\n\n# Encode photographic PNG output faster and smaller\n\nPNG output now picks its encoder settings from the image. Photo backgrounds encode about twice as fast and around 30% smaller. Flat art keeps its bytes. Animated PNG picks its settings from the first frame.\n"
+    filename: png-encode-filter.md
+    v: 0.0.0
+  - content: "---\npackages:\n  takumi:\n    type: patch\n---\n\n# Stop anonymous boxes inheriting their parent's box model\n\nBare text inside a padded `display: flex` container measured against a content box narrowed by the parent's padding again, so a line that fit was laid out as two.\n"
+    filename: anonymous-box-insets.md
+    v: 0.0.0
+  - content: "---\npackages:\n  takumi:\n    type: patch\n---\n\n# Balance text beside floats against the container\n\n`text-wrap: balance` searched for its width with the floats squeezed into that narrower width, so paragraphs beside a float ended up barely balanced.\n"
+    filename: balance-float-width.md
     v: 0.0.0
 core:packages:
-  - id: npm:takumi
+  - id: npm:takumi-workspace
     updated: false
-  - id: npm:@takumi-rs/helpers
-    updated: true
-  - changelogIds:
-      - core-css-input-type.md
-    id: npm:@takumi-rs/core
-    updated: true
-  - id: npm:takumi-js
-    updated: true
   - id: npm:docs
     updated: false
   - id: npm:@takumi-rs/wasm
     updated: true
+  - id: npm:takumi-js
+    updated: true
+  - id: npm:@takumi-rs/core
+    updated: true
+  - changelogIds:
+      - pdf-image-corner-clip.md
+      - page-cut-snap.md
+      - pdf-integer-default-width.md
+      - text-wrap-measured-width.md
+      - page-rules.md
+      - pdf-css-types.md
+      - pdf-uncovered-text-option.md
+      - pdf-forced-break-empty-page.md
+      - page-area-viewport-units.md
+    id: npm:takumi-pdf
+    updated: true
   - id: npm:@takumi-rs/image-response
     updated: true
-  - id: npm:takumi-pdf
+  - id: npm:@takumi-rs/helpers
     updated: true
   - id: npm:example-satori-html
     updated: false
-  - id: npm:example-liquid-glass
-    updated: false
-  - id: npm:example-e-invoice
-    updated: false
-  - id: npm:example-css-library-integration
-    updated: false
-  - id: npm:svelte
-    updated: false
-  - id: npm:pdf-bench
-    updated: false
-  - id: npm:ffmpeg-keyframe-animation
-    updated: false
-  - id: npm:example-tanstack-start
+  - id: npm:example-twitter-images
     updated: false
   - id: npm:example-generate-invoice
     updated: false
-  - id: npm:example-twitter-images
+  - id: npm:svelte
+    updated: false
+  - id: npm:example-tanstack-start
     updated: false
   - id: npm:waku-ssr
     updated: false
+  - id: npm:pdf-bench
+    updated: false
+  - id: npm:example-e-invoice
+    updated: false
   - id: npm:example-nextjs
+    updated: false
+  - id: npm:example-css-library-integration
+    updated: false
+  - id: npm:example-liquid-glass
     updated: false
   - id: npm:ffplay
     updated: false
   - id: npm:example-cloudflare-workers
     updated: false
-  - id: cargo:takumi
-    updated: true
-  - id: cargo:takumi-core
+  - id: npm:ffmpeg-keyframe-animation
     updated: false
   - id: cargo:takumi-svg
     updated: false
-  - id: cargo:takumi-pdf
+  - changelogIds:
+      - overflow-clip-padding-box.md
+      - sizing-keywords.md
+      - text-wrap-measured-width.md
+      - taffy-0-14.md
+      - svg-zero-size-text.md
+      - layout-keywords.md
+      - anonymous-box-used-values.md
+      - inline-box-absolute-transform.md
+      - flex-first-baseline.md
+      - alignment-overflow-prefixes.md
+      - html-image-src-entities.md
+      - inline-replaced-intrinsic-width.md
+      - balance-alignment.md
+      - canvas-pixel-budget.md
+      - resource-cache-shards.md
+      - table-auto-columns.md
+      - png-encode-filter.md
+      - anonymous-box-insets.md
+      - balance-float-width.md
+      - page-area-viewport-units.md
+    id: cargo:takumi
     updated: true
-  - id: cargo:takumi-raster
+  - id: cargo:takumi-core
     updated: false
+  - changelogIds:
+      - pdf-image-corner-clip.md
+      - page-cut-snap.md
+      - pdf-integer-default-width.md
+      - text-wrap-measured-width.md
+      - page-rules.md
+      - pdf-css-types.md
+      - pdf-uncovered-text-option.md
+      - pdf-forced-break-empty-page.md
+      - page-area-viewport-units.md
+    id: cargo:takumi-pdf
+    updated: true
   - id: cargo:takumi-html
     updated: false
+  - id: cargo:takumi-raster
+    updated: false
 npm:packages:
-  - id: npm:takumi
-  - id: npm:@takumi-rs/helpers
-  - id: npm:@takumi-rs/core
-  - id: npm:takumi-js
+  - id: npm:takumi-workspace
   - id: npm:docs
   - id: npm:@takumi-rs/wasm
-  - id: npm:@takumi-rs/image-response
+  - id: npm:takumi-js
+  - id: npm:@takumi-rs/core
   - id: npm:takumi-pdf
+  - id: npm:@takumi-rs/image-response
+  - id: npm:@takumi-rs/helpers
   - id: npm:example-satori-html
-  - id: npm:example-liquid-glass
-  - id: npm:example-e-invoice
-  - id: npm:example-css-library-integration
-  - id: npm:svelte
-  - id: npm:pdf-bench
-  - id: npm:ffmpeg-keyframe-animation
-  - id: npm:example-tanstack-start
-  - id: npm:example-generate-invoice
   - id: npm:example-twitter-images
+  - id: npm:example-generate-invoice
+  - id: npm:svelte
+  - id: npm:example-tanstack-start
   - id: npm:waku-ssr
+  - id: npm:pdf-bench
+  - id: npm:example-e-invoice
   - id: npm:example-nextjs
+  - id: npm:example-css-library-integration
+  - id: npm:example-liquid-glass
   - id: npm:ffplay
   - id: npm:example-cloudflare-workers
+  - id: npm:ffmpeg-keyframe-animation

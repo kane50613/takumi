@@ -1,3 +1,128 @@
+## takumi@2.14.0
+
+### Clip overflow at the padding box
+
+`overflow: hidden`, `overflow: clip` and `contain: paint` now clip at the padding edge, as CSS specifies. Content that spilled into a padded box's padding used to be cut at the content edge.
+
+### Size boxes from their content or available space
+
+`width` and `height` now accept `min-content`, `max-content`, `fit-content`, `fit-content(<length-percentage>)`, and `stretch`.
+
+```css
+.card {
+  width: fit-content(20rem);
+}
+```
+
+This fits the card to its content with a preferred limit of `20rem`. Its min-content size remains the lower bound.
+
+`flex-basis` accepts the same values, plus `content` to size a flex item from its content regardless of its main size property.
+
+Tailwind utilities map to the new values:
+
+| Value         | Utilities                    |
+| ------------- | ---------------------------- |
+| `min-content` | `w-min`, `h-min`, `size-min` |
+| `max-content` | `w-max`, `h-max`, `size-max` |
+| `fit-content` | `w-fit`, `h-fit`, `size-fit` |
+| `content`     | `basis-content`              |
+
+`min-width`, `max-width`, `min-height`, and `max-height` do not accept the new keywords. Their existing length and percentage values still work.
+
+### Text wraps at the width layout measured
+
+A box with a fractional width wrapped its text against the pixel-snapped content box at paint, so a nearly full line pushed its last word onto a line the layout never reserved and it overlapped the block below.
+
+### Upgrade taffy to 0.14
+
+Layout picks up taffy's flexbox, grid and block fixes from 0.12 through 0.14.
+
+### Paint text that overflows a zero-size box
+
+Text inside a zero-size box now renders in SVG output like it does in raster output.
+
+### Add balanced flex wrapping, flow-root, self-alignment, and containment
+
+Spread flex items across balanced lines and set a minimum line count:
+
+```css
+.cards {
+  display: flex;
+  flex-wrap: balance;
+  flex-line-count: 2;
+}
+```
+
+`balance` also combines with `wrap` or `wrap-reverse`, in either order. It cannot combine with `nowrap`.
+
+- `display: flow-root` makes the box a block formatting context root.
+- `align-items`, `align-self`, `justify-items`, and `justify-self` accept `self-start` and `self-end` to align to the item's own start or end. `justify-content` and `align-content` reject them.
+- `contain` accepts `none`, `content`, or a space-separated combination of `layout`, `style`, and `paint`, without duplicates. `content` means `layout style paint`.
+
+`contain: paint` clips descendants to the padding box. Either `layout` or `paint` creates a stacking context and a containing block for absolute and fixed descendants.
+
+Size containment is not implemented, so `size`, `inline-size`, and `strict` cause a parse error. `style` parses but has nothing to scope: Takumi has no author-facing counters, and list-item ordinals do not restart at the boundary.
+
+Containment is a correctness feature here, not a performance hint. Takumi renders once, so there is no relayout to skip. Paint containment adds a stacking context and a clip layer per box.
+
+### Take an anonymous box's border width down to its used value
+
+An anonymous box skipped the used-value pass, so it reported the initial `medium` border width even though it has no border style to render it with.
+
+### Place a measured inline box against its parent's content box
+
+An inline box's transform omitted the parent's border and padding, so it was reported at the border-box origin while every other measured node carries an absolute transform.
+
+### Align flex items to the first line of a wrapped item
+
+A flex item that wraps onto several lines now offers the baseline of its first line to `align-items: baseline`, instead of its bottom edge.
+
+### Reject repeated alignment overflow prefixes
+
+Reject repeated `safe` and `unsafe` prefixes in CSS alignment values.
+
+### Decode character references in `fromHtml` image sources
+
+An `img` whose `src` holds `&amp;` now yields the decoded URL, matching `attributes.src`.
+
+### Size a replaced element the way its source states it
+
+An `<svg>` carrying only a `viewBox` states a ratio and no size, and as an inline box it took a size the ratio never stated. `box-sizing: border-box` counted an image's padding and border twice, so the picture came out taller than its box. A source stating neither a size nor a ratio had one synthesised from the default object size, so `width` alone moved `height` with it.
+
+### Keep balanced lines aligned within the container
+
+`text-wrap: balance` aligned lines against the narrowed balancing width, so RTL, `text-align: right`, and centered paragraphs drifted toward the left edge.
+
+### Render canvases up to 64 megapixels
+
+The canvas budget is now 64 megapixels, up from 16. A 7680 × 4320 banner or a 4096 × 16384 page fits.
+
+Over the budget, `render` fails with `InvalidViewport`. The message now states the limit.
+
+### Keep decoded photos in the resource cache
+
+The default `cacheMaxBytes` is now 64 MiB, and one decoded image can use the whole budget. The cache used to split its budget into many small shards and never kept an image larger than one shard, so most photos were decoded again on every render.
+
+### Size a table's remaining auto columns by their content
+
+Auto columns next to a column with a declared width now share the free width in proportion to their max-content widths, as they already did when every column was auto.
+
+### Encode photographic PNG output faster and smaller
+
+PNG output now picks its encoder settings from the image. Photo backgrounds encode about twice as fast and around 30% smaller. Flat art keeps its bytes. Animated PNG picks its settings from the first frame.
+
+### Stop anonymous boxes inheriting their parent's box model
+
+Bare text inside a padded `display: flex` container measured against a content box narrowed by the parent's padding again, so a line that fit was laid out as two.
+
+### Balance text beside floats against the container
+
+`text-wrap: balance` searched for its width with the floats squeezed into that narrower width, so paragraphs beside a float ended up barely balanced.
+
+### Resolve viewport units against the page area in paged output
+
+`100vh` in paged content was `0` because the content column lays out at unbounded height; it now equals the page area height, as in print media.
+
 ## takumi@2.9.1
 
 ### Place an inset `box-shadow` in the padding box

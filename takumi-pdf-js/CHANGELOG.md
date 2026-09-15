@@ -1,3 +1,43 @@
+## takumi-pdf@0.15.0
+
+### Trim an image to its content edge curve
+
+A `border-radius` on an image was ignored unless the box also clipped its overflow, so a rounded picture came out square.
+
+### Fill a page exactly with a box as tall as the content window
+
+A box sized to the page snapped to a whole pixel past the fractional window and opened an empty page after it.
+
+### Write the CIDFont default width as an integer
+
+The PDF spec types `/DW` as an integer. Poppler ignores a real one and falls back to the spec default of 1000, so every glyph the entry covered advanced far too far in poppler-based viewers.
+
+### Text wraps at the width layout measured
+
+A box with a fractional width wrapped its text against the pixel-snapped content box at paint, so a nearly full line pushed its last word onto a line the layout never reserved and it overlapped the block below.
+
+### Override the header and footer on some pages
+
+`pages` takes `{ first, last, odd, even }`, each overriding `header` or `footer` for the pages it covers. A band is a node tree, or `false` to draw none.
+
+### Accept object stylesheet rules in PDF bindings
+
+Match the PDF binding's `css` type to the object rules already accepted at runtime.
+
+### Render uncovered characters with `uncoveredText`
+
+A single character no registered font covers used to fail the whole render, which leaves a server rendering text someone else wrote with no way through. `uncoveredText: "placeholder"` draws the font's glyph 0 instead, and `"blank"` draws nothing. Both keep the character's width, so the line does not reflow. The default stays `"error"`.
+
+Every PDF/A level and both PDF/UA levels forbid glyph 0, so `"placeholder"` is now rejected there by name instead of failing as a generic write error.
+
+### Forced page breaks no longer open empty pages
+
+A `break-before: page` or `break-after: page` with only spacing beside it on its page is dropped, and trailing spacing past the last content box no longer opens a page.
+
+### Resolve viewport units against the page area in paged output
+
+`100vh` in paged content was `0` because the content column lays out at unbounded height; it now equals the page area height, as in print media.
+
 ## takumi-pdf@0.14.1
 
 ### Resolve a browser-only entry in client builds
