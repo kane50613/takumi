@@ -240,6 +240,7 @@ pub struct Fonts {
   /// Families with at least one face carrying a color glyph table.
   color_names: HashSet<String>,
   /// Registered family name of every face, keyed by font blob id and collection index.
+  #[cfg(feature = "paint-tree")]
   face_families: Arc<HashMap<(u64, u32), String>>,
   /// Lazily built face store for SVG `<text>`; cleared on registration.
   #[cfg(feature = "svg")]
@@ -264,6 +265,7 @@ impl Default for Fonts {
       order: Vec::new(),
       last_resort_order: Vec::new(),
       color_names: HashSet::new(),
+      #[cfg(feature = "paint-tree")]
       face_families: Arc::new(HashMap::new()),
       #[cfg(feature = "svg")]
       svg_db: None,
@@ -283,7 +285,8 @@ pub struct FontsSnapshot {
 
 impl FontsSnapshot {
   /// The registered family name of a face; see [`Fonts::face_family`].
-  pub fn face_family(&self, font_id: u64, index: u32) -> Option<String> {
+  #[cfg(feature = "paint-tree")]
+  pub(crate) fn face_family(&self, font_id: u64, index: u32) -> Option<String> {
     self
       .context
       .borrow()
@@ -454,7 +457,8 @@ impl Fonts {
 
   /// The registered family name of a face, by the font blob id and collection index a
   /// shaped run reports.
-  pub fn face_family(&self, font_id: u64, index: u32) -> Option<&str> {
+  #[cfg(feature = "paint-tree")]
+  pub(crate) fn face_family(&self, font_id: u64, index: u32) -> Option<&str> {
     self
       .face_families
       .get(&(font_id, index))
@@ -523,6 +527,7 @@ impl Fonts {
         order: self.order.clone(),
         last_resort_order: self.last_resort_order.clone(),
         color_names: self.color_names.clone(),
+        #[cfg(feature = "paint-tree")]
         face_families: self.face_families.clone(),
         #[cfg(feature = "svg")]
         svg_db: self.svg_db.clone(),
@@ -657,9 +662,12 @@ impl Fonts {
       if is_color {
         self.color_names.insert(name.clone());
       }
-      let face_families = Arc::make_mut(&mut self.face_families);
-      for face in &faces {
-        face_families.insert((blob.id(), face.index), name.clone());
+      #[cfg(feature = "paint-tree")]
+      {
+        let face_families = Arc::make_mut(&mut self.face_families);
+        for face in &faces {
+          face_families.insert((blob.id(), face.index), name.clone());
+        }
       }
 
       if let Some(logical) = &subset_of {

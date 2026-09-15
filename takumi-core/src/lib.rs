@@ -31,6 +31,7 @@ pub(crate) mod matching;
 /// Deterministic float math shared by the painting paths.
 pub mod math;
 /// The seam between deciding what to paint and painting it.
+#[cfg(feature = "paint-tree")]
 pub mod paint_tree;
 pub mod painter;
 /// Font and image resource management.
