@@ -1,5 +1,6 @@
 ---
-"takumi-pdf": patch
+packages:
+  "takumi-pdf": patch
 ---
 
 # Trim an image to its content edge curve

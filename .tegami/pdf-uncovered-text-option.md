@@ -1,5 +1,6 @@
 ---
-"takumi-pdf": minor
+packages:
+  "takumi-pdf": minor
 ---
 
 # Render uncovered characters with `uncoveredText`

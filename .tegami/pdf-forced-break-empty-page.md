@@ -1,5 +1,6 @@
 ---
-"takumi-pdf": patch
+packages:
+  "takumi-pdf": patch
 ---
 
 # Forced page breaks no longer open empty pages

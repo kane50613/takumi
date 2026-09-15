@@ -1,5 +1,6 @@
 ---
-"takumi": minor
+packages:
+  "takumi": minor
 ---
 
 # Keep decoded photos in the resource cache

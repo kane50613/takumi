@@ -1,5 +1,6 @@
 ---
-"takumi-pdf": patch
+packages:
+  "takumi-pdf": patch
 ---
 
 # Write the CIDFont default width as an integer

@@ -329,6 +329,17 @@ Select the affected packages and the `patch`, `minor`, or `major` release type.
 
 Write the changelog entry as one imperative sentence. Do not add a second sentence or a rationale. Put reasoning in the commit body or pull request.
 
+The frontmatter lists the affected packages under `packages`. A bare `takumi` names the `takumi` crate, which bumps the whole release group:
+
+```md
+---
+packages:
+  "takumi": patch
+---
+
+# Clip overflow at the padding box
+```
+
 See the [changelog format docs](https://tegami.fuma-nama.dev/changelog) for the frontmatter and headings.
 
 ### Rust crate READMEs

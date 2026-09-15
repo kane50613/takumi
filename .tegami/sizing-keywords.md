@@ -1,5 +1,6 @@
 ---
-"takumi": minor
+packages:
+  "takumi": minor
 ---
 
 # Size boxes from their content or available space

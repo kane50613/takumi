@@ -1,5 +1,6 @@
 ---
-"takumi-svg": patch
+packages:
+  "takumi": patch
 ---
 
 # Paint text that overflows a zero-size box
