@@ -41,7 +41,7 @@ const groupedPackages = [
 // writes matches the npm package a reader installed.
 const pdfPackages = ["npm:takumi-pdf", "cargo:takumi-pdf"];
 
-const packages: Record<string, PackageOptions<"takumi" | "takumi-pdf">> = {};
+const packages: Record<string, PackageOptions<"takumi" | "takumi-pdf" | "takumi-paint">> = {};
 
 for (const name of groupedPackages) {
   packages[name] = { group: "takumi" };
@@ -50,6 +50,8 @@ for (const name of groupedPackages) {
 for (const name of pdfPackages) {
   packages[name] = { group: "takumi-pdf" };
 }
+
+packages["npm:takumi-paint"] = { group: "takumi-paint" };
 
 // Skip versionless dependents (private examples, docs, templates); only real
 // `dependencies` bumps propagate.
@@ -71,6 +73,7 @@ const paper = tegami({
   groups: {
     takumi: { syncBump: true, syncGitTag: true },
     "takumi-pdf": { syncBump: true },
+    "takumi-paint": { syncBump: true },
   },
   packages,
   npm: { client: "bun", updateLockFile: true, bumpDep },
