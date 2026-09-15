@@ -77,7 +77,7 @@ impl Walker {
     match context.root() {
       Some(np) => Ok(match self.node(root, results, np)? {
         Some(mut node) => {
-          node.children = items;
+          node.children.extend(items);
           vec![node]
         }
         None => items,
