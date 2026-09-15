@@ -1,5 +1,5 @@
 {
-  "name": "takumi",
+  "name": "takumi-workspace",
   "private": true,
   "workspaces": [
     "takumi-js",

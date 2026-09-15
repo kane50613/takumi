@@ -1,5 +1,6 @@
 ---
-"takumi": patch
+packages:
+  "takumi": patch
 ---
 
 # Clip overflow at the padding box

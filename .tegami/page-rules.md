@@ -1,5 +1,6 @@
 ---
-"takumi-pdf": minor
+packages:
+  "takumi-pdf": minor
 ---
 
 # Override the header and footer on some pages

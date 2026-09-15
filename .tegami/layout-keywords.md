@@ -1,5 +1,6 @@
 ---
-"takumi": minor
+packages:
+  "takumi": minor
 ---
 
 # Add balanced flex wrapping, flow-root, self-alignment, and containment

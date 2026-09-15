@@ -1,5 +1,6 @@
 ---
-"takumi-pdf": patch
+packages:
+  "takumi-pdf": patch
 ---
 
 # Accept object stylesheet rules in PDF bindings

@@ -1,5 +1,6 @@
 ---
-"takumi": patch
+packages:
+  "takumi": patch
 ---
 
 # Encode photographic PNG output faster and smaller

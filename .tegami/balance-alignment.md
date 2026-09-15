@@ -1,5 +1,6 @@
 ---
-"takumi": patch
+packages:
+  "takumi": patch
 ---
 
 # Keep balanced lines aligned within the container

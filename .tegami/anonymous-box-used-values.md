@@ -1,5 +1,6 @@
 ---
-"takumi": patch
+packages:
+  "takumi": patch
 ---
 
 # Take an anonymous box's border width down to its used value

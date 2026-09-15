@@ -1,5 +1,6 @@
 ---
-"takumi": patch
+packages:
+  "takumi": patch
 ---
 
 # Upgrade taffy to 0.14

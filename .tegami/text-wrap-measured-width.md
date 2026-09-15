@@ -1,6 +1,7 @@
 ---
-"takumi": patch
-"takumi-pdf": patch
+packages:
+  "takumi": patch
+  "takumi-pdf": patch
 ---
 
 # Text wraps at the width layout measured

@@ -1,5 +1,6 @@
 ---
-"takumi-pdf": patch
+packages:
+  "takumi-pdf": patch
 ---
 
 # Fill a page exactly with a box as tall as the content window

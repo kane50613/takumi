@@ -1,6 +1,7 @@
 ---
-"takumi": patch
-"takumi-pdf": patch
+packages:
+  "takumi": patch
+  "takumi-pdf": patch
 ---
 
 # Resolve viewport units against the page area in paged output

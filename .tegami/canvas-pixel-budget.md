@@ -1,5 +1,6 @@
 ---
-"takumi": minor
+packages:
+  "takumi": minor
 ---
 
 # Render canvases up to 64 megapixels
