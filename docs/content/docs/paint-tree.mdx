@@ -7,7 +7,7 @@ icon: Brush
 `takumi-paint` lays out a document and returns what painting it would draw, instead of an image. Use it when the output is not pixels: an editable PPTX, a Canvas replay, a native drawing API.
 
 ```ts twoslash title="Read the boxes and runs"
-import { renderPaintTree } from "takumi-paint";
+import { renderPaintTree, type PaintNode, type PaintTextRun } from "takumi-paint";
 
 const tree = await renderPaintTree(
   `<style>.big { font: 700 40px Geist; color: #B3261E }</style>
@@ -21,11 +21,14 @@ const tree = await renderPaintTree(
 const card = tree.root;
 card.boxDecoration?.background.color; // [247, 243, 236, 255]
 
-for (const node of card.children ?? []) {
-  for (const run of node.runs ?? []) {
-    const font = tree.fonts[run.fontIndex];
-    console.log(run.text, font?.family, font?.weight, run.fontSize, run.color);
-  }
+function* runs(node: PaintNode): Iterable<PaintTextRun> {
+  yield* node.runs ?? [];
+  for (const child of node.children ?? []) yield* runs(child);
+}
+
+for (const run of runs(card)) {
+  const font = tree.fonts[run.fontIndex];
+  console.log(run.text, font?.family, font?.weight, run.fontSize, run.color);
 }
 ```
 
