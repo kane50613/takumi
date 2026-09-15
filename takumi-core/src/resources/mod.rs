@@ -1,3 +1,5 @@
+#[cfg(feature = "animation")]
+mod animated;
 /// Font loading and processing functionality
 pub mod font;
 /// Glyph rasterization: shaped glyph ids to bitmaps or vector outlines.
