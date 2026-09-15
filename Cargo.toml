@@ -7,6 +7,7 @@ members = [
   "takumi-svg",
   "takumi-pdf",
   "takumi-pdf-wasm",
+  "takumi-paint",
   "takumi-html",
   "takumi-bindings-common",
   "takumi-napi",
@@ -241,6 +242,8 @@ opt-level = "s"
 [profile.release.package.takumi-pdf]
 opt-level = "s"
 [profile.release.package.takumi-pdf-wasm]
+opt-level = "z"
+[profile.release.package.takumi-paint-wasm]
 opt-level = "z"
 [profile.release.package.write-fonts]
 opt-level = "z"

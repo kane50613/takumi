@@ -1,0 +1,153 @@
+{
+  "name": "takumi-paint",
+  "version": "0.0.0",
+  "description": "Turn JSX, HTML, and CSS into a paint tree: boxes, images, and text runs with the values the renderer used.",
+  "keywords": [
+    "css",
+    "html",
+    "jsx",
+    "layout",
+    "paint",
+    "pptx",
+    "react",
+    "typescript",
+    "wasm",
+    "webassembly"
+  ],
+  "homepage": "https://takumi.kane.tw/docs/",
+  "bugs": {
+    "url": "https://github.com/kane50613/takumi/issues"
+  },
+  "license": "(MIT OR Apache-2.0)",
+  "author": {
+    "name": "Kane Wang",
+    "email": "me@kane.tw",
+    "url": "https://kane.tw"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/kane50613/takumi.git",
+    "directory": "takumi-paint"
+  },
+  "files": [
+    "pkg/takumi_paint_wasm_bg.wasm",
+    "pkg/takumi_paint_wasm_bg.wasm.d.ts",
+    "dist",
+    "bundlers"
+  ],
+  "type": "module",
+  "main": "./dist/export.cjs",
+  "module": "./dist/export.mjs",
+  "types": "./dist/export.d.mts",
+  "exports": {
+    ".": {
+      "bun": {
+        "types": "./bundlers/node.d.ts",
+        "default": "./bundlers/bun.mjs"
+      },
+      "workerd": {
+        "types": "./bundlers/node.d.ts",
+        "default": "./bundlers/workerd.mjs"
+      },
+      "edge-light": {
+        "types": "./bundlers/node.d.ts",
+        "default": "./bundlers/next.mjs"
+      },
+      "unwasm": {
+        "types": "./bundlers/node.d.ts",
+        "default": "./bundlers/next.mjs"
+      },
+      "webpack": {
+        "node": {
+          "require": {
+            "types": "./bundlers/node.d.cts",
+            "default": "./bundlers/node.cjs"
+          },
+          "default": {
+            "types": "./bundlers/node.d.ts",
+            "default": "./bundlers/node.mjs"
+          }
+        },
+        "default": {
+          "types": "./bundlers/node.d.ts",
+          "default": "./bundlers/vite.mjs"
+        }
+      },
+      "browser": {
+        "types": "./bundlers/node.d.ts",
+        "default": "./bundlers/browser.mjs"
+      },
+      "module": {
+        "types": "./bundlers/node.d.ts",
+        "default": "./bundlers/vite.mjs"
+      },
+      "node": {
+        "require": {
+          "types": "./bundlers/node.d.cts",
+          "default": "./bundlers/node.cjs"
+        },
+        "default": {
+          "types": "./bundlers/node.d.ts",
+          "default": "./bundlers/node.mjs"
+        }
+      },
+      "default": {
+        "types": "./bundlers/node.d.ts",
+        "default": "./bundlers/vite.mjs"
+      }
+    },
+    "./next": {
+      "types": "./bundlers/node.d.ts",
+      "default": "./bundlers/next.mjs"
+    },
+    "./no-init": {
+      "import": {
+        "types": "./dist/export.d.mts",
+        "default": "./dist/export.mjs"
+      },
+      "require": {
+        "types": "./dist/export.d.cts",
+        "default": "./dist/export.cjs"
+      }
+    },
+    "./takumi_paint_wasm_bg.wasm": {
+      "types": "./pkg/takumi_paint_wasm_bg.wasm.d.ts",
+      "default": "./pkg/takumi_paint_wasm_bg.wasm"
+    },
+    "./wasm-url": {
+      "import": {
+        "types": "./bundlers/wasm-url.d.ts",
+        "default": "./bundlers/wasm-url.mjs"
+      },
+      "require": {
+        "types": "./bundlers/wasm-url.d.cts",
+        "default": "./bundlers/wasm-url.cjs"
+      }
+    }
+  },
+  "scripts": {
+    "build": "wasm-pack build . --no-pack --release --out-dir pkg --target web -- --locked && bun build:js",
+    "build:js": "tsdown",
+    "publish-lint": "attw --pack . && publint --strict ."
+  },
+  "dependencies": {
+    "@takumi-rs/helpers": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/bun": "catalog:",
+    "@types/react": "catalog:",
+    "tsdown": "catalog:"
+  },
+  "peerDependencies": {
+    "react": "^18.0.0 || ^19.0.0"
+  },
+  "peerDependenciesMeta": {
+    "react": {
+      "optional": true
+    }
+  },
+  "engines": {
+    "node": ">=20.19"
+  },
+  "readme": "README.md"
+}

@@ -1885,6 +1885,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "takumi-paint-wasm"
+version = "0.0.0"
+dependencies = [
+ "js-sys",
+ "serde",
+ "serde-wasm-bindgen",
+ "takumi-bindings-common",
+ "takumi-core",
+ "wasm-bindgen",
+]
+
+[[package]]
 name = "takumi-pdf"
 version = "0.15.0"
 dependencies = [

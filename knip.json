@@ -45,6 +45,11 @@
       "entry": ["tests/**/*.test.{ts,tsx}"],
       "ignore": ["pkg*/**"],
       "ignoreDependencies": ["react"]
+    },
+    "takumi-paint": {
+      "entry": ["tests/**/*.test.{ts,tsx}"],
+      "ignore": ["pkg*/**"],
+      "ignoreDependencies": ["react"]
     }
   }
 }

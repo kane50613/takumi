@@ -183,7 +183,7 @@ CI runs these Rust gates:
 
 ```bash
 cargo clippy --locked --all-targets --all-features -- -D warnings
-cargo clippy --locked --target wasm32-unknown-unknown -p takumi-wasm -p takumi-pdf-wasm -- -D warnings
+cargo clippy --locked --target wasm32-unknown-unknown -p takumi-wasm -p takumi-pdf-wasm -p takumi-paint-wasm -- -D warnings
 cargo test --locked
 cargo machete
 ```
