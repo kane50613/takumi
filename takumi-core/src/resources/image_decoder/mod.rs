@@ -3,10 +3,12 @@
 
 use std::io::{Error as IoError, ErrorKind};
 
+#[cfg(any(feature = "png", feature = "gif", feature = "webp", feature = "jpeg"))]
+use image::RgbaImage;
 #[cfg(any(feature = "jpeg", feature = "png"))]
 use image::{DynamicImage, ImageDecoder, Limits};
 use image::{
-  ImageError, ImageFormat, ImageResult, RgbaImage,
+  ImageError, ImageFormat, ImageResult,
   error::{DecodingError, ImageFormatHint, UnsupportedError, UnsupportedErrorKind},
 };
 
@@ -15,6 +17,9 @@ use crate::{
   style::ImageScalingAlgorithm,
 };
 
+#[cfg(any(feature = "png", feature = "gif", feature = "webp"))]
+mod frames;
+#[cfg(feature = "gif")]
 mod gif;
 mod jpeg;
 #[cfg(feature = "png")]
@@ -47,6 +52,18 @@ mod png {
 }
 mod webp;
 
+#[cfg(any(feature = "png", feature = "webp"))]
+pub(crate) use self::frames::covers_canvas;
+#[cfg(any(feature = "png", feature = "gif", feature = "webp"))]
+pub(crate) use self::frames::{
+  DecodeTarget, Dispose, FrameInfo, MAX_ANIMATION_FRAMES, MAX_ANIMATION_TOTAL_PIXELS,
+  fit_to_target, required_previous_frame,
+};
+#[cfg(feature = "gif")]
+pub(crate) use self::gif::{
+  decode_gif_frame_alone, decode_gif_frames, gif_dimensions, gif_frame_infos, is_gif,
+};
+pub(crate) use self::png::decode_png;
 #[cfg(feature = "png")]
 pub(crate) use self::png::{
   apng_dimensions, apng_frame_infos, decode_apng_frame_alone, decode_apng_frames, is_apng,
@@ -55,10 +72,6 @@ pub(crate) use self::png::{
 pub(crate) use self::webp::{
   animated_webp_dimensions, decode_webp_frame_alone, decode_webp_frames, is_animated_webp,
   webp_frame_infos,
-};
-pub(crate) use self::{
-  gif::{decode_gif_frame_alone, decode_gif_frames, gif_dimensions, gif_frame_infos, is_gif},
-  png::decode_png,
 };
 use self::{
   jpeg::{JPEG_SIGNATURE, decode_jpeg, jpeg_dimensions},
@@ -74,86 +87,8 @@ pub(super) const MAX_IMAGE_DIMENSION: u32 = 8192;
 
 /// Decoded images above this pixel count are rejected (RGBA cost = 4x). 8192 x 8192 — far above any
 /// sane OG-image asset, far below OOM territory.
+#[cfg(feature = "webp")]
 const MAX_IMAGE_PIXELS: u64 = MAX_IMAGE_DIMENSION as u64 * MAX_IMAGE_DIMENSION as u64;
-
-/// What a container says about one frame, read without decoding pixels.
-#[derive(Debug, Clone, Copy)]
-pub(crate) struct FrameInfo {
-  /// Frame rectangle within the canvas, as `(x, y, width, height)`.
-  pub(crate) rect: (u32, u32, u32, u32),
-  pub(crate) duration_ms: u32,
-  /// Composites onto what is under it rather than replacing it.
-  pub(crate) blends: bool,
-  pub(crate) dispose: Dispose,
-}
-
-/// What the canvas holds once a frame has been shown.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum Dispose {
-  /// Leave the frame in place.
-  Keep,
-  /// Clear the frame rectangle.
-  Background,
-  /// Restore what was there before the frame.
-  Previous,
-}
-
-impl FrameInfo {
-  /// A single frame standing in for a stream whose metadata could not be read.
-  pub(crate) fn still() -> Self {
-    Self {
-      rect: (0, 0, u32::MAX, u32::MAX),
-      duration_ms: 1,
-      blends: false,
-      dispose: Dispose::Keep,
-    }
-  }
-
-  fn covers(&self, canvas: (u32, u32)) -> bool {
-    let (x, y, width, height) = self.rect;
-    x == 0 && y == 0 && width == canvas.0 && height == canvas.1
-  }
-}
-
-/// The frame that must be drawn before `index` can be, or `None` when `index`
-/// stands on its own.
-///
-/// Follows `ImageDecoder::FindRequiredPreviousFrame` in Blink.
-pub(crate) fn required_previous_frame(
-  frames: &[FrameInfo],
-  index: usize,
-  canvas: (u32, u32),
-) -> Option<usize> {
-  let frame = frames.get(index)?;
-  if index == 0 || (!frame.blends && frame.covers(canvas)) {
-    return None;
-  }
-
-  // A frame restoring what came before it leaves the canvas as it found it, so
-  // it is not the starting state for anything after it.
-  let mut previous = index - 1;
-  while frames[previous].dispose == Dispose::Previous {
-    previous = previous.checked_sub(1)?;
-  }
-
-  match frames[previous].dispose {
-    Dispose::Keep => Some(previous),
-    Dispose::Background
-      if frames[previous].covers(canvas)
-        || required_previous_frame(frames, previous, canvas).is_none() =>
-    {
-      None
-    }
-    Dispose::Background => Some(previous),
-    Dispose::Previous => None,
-  }
-}
-
-/// Total pixels across all frames of an animation (frames are canvas-sized).
-pub(super) const MAX_ANIMATION_TOTAL_PIXELS: u64 = 4 * MAX_IMAGE_PIXELS;
-
-/// Frames past this point are dropped from a timeline.
-pub(crate) const MAX_ANIMATION_FRAMES: usize = 1024;
 
 /// Rejects decoded images whose pixel count exceeds [`MAX_IMAGE_PIXELS`].
 #[cfg(feature = "webp")]
@@ -235,7 +170,7 @@ pub(super) fn decode_with_image_crate(
 }
 
 /// The error a decode entry point returns for a format whose feature is off.
-#[cfg(not(all(feature = "png", feature = "jpeg", feature = "webp", feature = "gif")))]
+#[cfg(not(all(feature = "png", feature = "jpeg", feature = "webp")))]
 pub(super) fn format_compiled_out_error() -> ImageError {
   ImageError::Unsupported(UnsupportedError::from_format_and_kind(
     ImageFormatHint::Unknown,
@@ -244,9 +179,11 @@ pub(super) fn format_compiled_out_error() -> ImageError {
 }
 
 /// Whether these bytes are a format this build has no decoder for.
-#[cfg(not(all(feature = "png", feature = "jpeg", feature = "webp")))]
+#[cfg(not(all(feature = "png", feature = "jpeg", feature = "webp", feature = "gif")))]
 pub(crate) fn decoder_compiled_out(bytes: &[u8]) -> bool {
   match detect_image_format(bytes) {
+    #[cfg(not(feature = "gif"))]
+    Some(DetectedImageFormat::Gif) => true,
     #[cfg(not(feature = "png"))]
     Some(DetectedImageFormat::Png) => true,
     #[cfg(not(feature = "jpeg"))]
@@ -258,7 +195,7 @@ pub(crate) fn decoder_compiled_out(bytes: &[u8]) -> bool {
 }
 
 /// Dimensions from the format header, for a format whose decoder is compiled out.
-#[cfg(not(all(feature = "png", feature = "jpeg", feature = "webp")))]
+#[cfg(not(all(feature = "png", feature = "jpeg", feature = "webp", feature = "gif")))]
 pub(super) fn header_dimensions(bytes: &[u8]) -> ImageResult<(u32, u32)> {
   let size = imagesize::blob_size(bytes).map_err(|error| {
     ImageError::Decoding(DecodingError::new(
@@ -315,46 +252,7 @@ pub(crate) fn decode_bitmap_scaled(
   .ok_or_else(invalid_buffer_error)
 }
 
-/// Whether a frame rectangle spans the entire canvas.
-pub(super) fn covers_canvas(rect: (u32, u32, u32, u32), canvas: (u32, u32)) -> bool {
-  let (x, y, width, height) = rect;
-  x == 0 && y == 0 && width == canvas.0 && height == canvas.1
-}
-
-/// The size decoded frames resample down to, and how.
-#[derive(Clone, Copy)]
-pub(crate) struct DecodeTarget {
-  pub(crate) width: u32,
-  pub(crate) height: u32,
-  pub(crate) algorithm: ImageScalingAlgorithm,
-}
-
-impl DecodeTarget {
-  /// Whether a `width` by `height` canvas is larger than the target on either axis.
-  pub(super) fn shrinks(self, width: u32, height: u32) -> bool {
-    self.width < width || self.height < height
-  }
-
-  /// Resamples a premultiplied `source`-sized canvas to the target.
-  pub(super) fn resample(self, data: &[u8], source: (u32, u32)) -> Option<ImageBuffer> {
-    resample_premultiplied(data, source, (self.width, self.height), self.algorithm)
-  }
-}
-
-/// Resamples a full-canvas buffer down to `target`, or hands it back untouched.
-pub(super) fn fit_to_target(
-  buffer: ImageBuffer,
-  target: Option<DecodeTarget>,
-) -> ImageResult<ImageBuffer> {
-  let Some(target) = target.filter(|target| target.shrinks(buffer.width(), buffer.height())) else {
-    return Ok(buffer);
-  };
-
-  target
-    .resample(buffer.data(), (buffer.width(), buffer.height()))
-    .ok_or_else(invalid_buffer_error)
-}
-
+#[cfg(any(feature = "png", feature = "gif", feature = "webp", feature = "jpeg"))]
 pub(super) fn rgba_to_buffer(image: RgbaImage, format: ImageFormat) -> ImageResult<ImageBuffer> {
   let (width, height) = (image.width(), image.height());
   ImageBuffer::from_rgba_bytes(image.into_raw(), width, height).ok_or_else(|| {
@@ -381,7 +279,7 @@ pub(super) fn webp_decode_error(
   ImageError::Decoding(DecodingError::new(ImageFormat::WebP.into(), error))
 }
 
-#[cfg(test)]
+#[cfg(all(test, any(feature = "png", feature = "webp")))]
 mod tests {
   use super::*;
 

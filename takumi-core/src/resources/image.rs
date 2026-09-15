@@ -3,12 +3,15 @@
 //! This module provides types and utilities for managing image resources,
 //! including loading states, error handling, and image processing operations.
 
-use super::image_decoder::DecodeTarget;
+#[cfg(any(feature = "png", feature = "gif", feature = "webp"))]
+use super::animated::AnimatedFormat;
+#[cfg(any(feature = "png", feature = "gif", feature = "webp"))]
+pub use super::animated::AnimatedSource;
 #[cfg(feature = "svg")]
 use std::borrow::Cow;
-#[cfg(feature = "svg")]
+#[cfg(feature = "svg-sizing")]
 use std::str::{FromStr, from_utf8};
-use std::sync::{Arc, OnceLock, Weak};
+use std::sync::{Arc, Weak};
 
 use quick_cache::{
   DefaultHashBuilder, OptionsBuilder, Weighter,
@@ -22,17 +25,12 @@ use thiserror::Error;
 use tiny_skia::Pixmap;
 use xxhash_rust::xxh3::{Xxh3, xxh3_64};
 
-#[cfg(not(all(feature = "png", feature = "jpeg", feature = "webp")))]
+#[cfg(not(all(feature = "png", feature = "jpeg", feature = "webp", feature = "gif")))]
 use crate::resources::image_decoder::decoder_compiled_out;
-#[cfg(feature = "webp")]
-use crate::resources::image_decoder::{
-  animated_webp_dimensions, decode_webp_frame_alone, decode_webp_frames, is_animated_webp,
-  webp_frame_infos,
-};
-#[cfg(feature = "png")]
-use crate::resources::image_decoder::{
-  apng_dimensions, apng_frame_infos, decode_apng_frame_alone, decode_apng_frames, is_apng,
-};
+#[cfg(all(test, feature = "svg"))]
+use crate::resources::svg_size::SvgIntrinsic;
+#[cfg(feature = "svg-sizing")]
+use crate::resources::svg_size::SvgSize;
 #[cfg(feature = "svg")]
 use crate::resvg::{
   apply_filters_to_layer, render as render_svg_tree,
@@ -47,11 +45,7 @@ use crate::{
   resources::{
     font::FontsSnapshot,
     image_buffer::ImageBuffer,
-    image_decoder::{
-      FrameInfo, MAX_ANIMATION_FRAMES, bitmap_dimensions, decode_bitmap_scaled,
-      decode_gif_frame_alone, decode_gif_frames, decode_image, gif_dimensions, gif_frame_infos,
-      is_gif, required_previous_frame,
-    },
+    image_decoder::{bitmap_dimensions, decode_bitmap_scaled, decode_image},
   },
   style::{Color, ImageScalingAlgorithm, IntrinsicSizing, SizingContext, StyleSheet},
 };
@@ -72,53 +66,81 @@ pub(crate) type ImageResult = Result<ImageSource, ImageError>;
 #[non_exhaustive]
 pub enum ImageSource {
   /// An svg image source
-  #[cfg(feature = "svg")]
+  #[cfg(feature = "svg-sizing")]
   Svg(Arc<SvgSource>),
   /// A bitmap image source
   Bitmap(Arc<ImageBuffer>),
   /// An animated image source.
+  #[cfg(any(feature = "png", feature = "gif", feature = "webp"))]
   Animated(AnimatedSource),
   /// An encoded bitmap decoded lazily at the size it is drawn at.
   Encoded(Arc<EncodedBitmap>),
 }
 
-/// Represents the resolved SVG source.
-#[cfg(feature = "svg")]
+/// Represents the resolved SVG source. Without the `svg` feature it holds the markup and its
+/// root-element size only, so it lays out but cannot be drawn.
+#[cfg(feature = "svg-sizing")]
 #[derive(Debug)]
 pub struct SvgSource {
   /// Original SVG source, for embedding directly in a vector backend.
   source: Box<str>,
+  /// Canvas size and CSS intrinsic sizing read from the root element.
+  sizing: SvgSize,
   /// Parsed SVG tree used for size and initial metadata.
+  #[cfg(feature = "svg")]
   pub(crate) tree: crate::resvg::usvg::Tree,
   /// Whether rendering depends on the host `color`: the markup references
   /// `currentColor` and the root element sets no `color` of its own.
+  #[cfg(feature = "svg")]
   uses_current_color: bool,
-  /// Intrinsic dimensions (non-percentage `width`/`height`) and `viewBox`
-  /// aspect ratio, for CSS `background-size`/`mask-size` resolution.
-  intrinsic: SvgIntrinsic,
   /// Whether the markup contains `<text`, so rendering re-parses with fonts.
+  #[cfg(feature = "svg")]
   has_text: bool,
   /// Text-capable re-parse of `source`, keyed by the font registry revision
   /// it was converted with; a registration re-converts on the next render.
+  #[cfg(feature = "svg")]
   text_tree: std::sync::Mutex<Option<(u64, Arc<crate::resvg::usvg::Tree>)>>,
+  #[cfg(feature = "svg")]
   hash: u64,
+  #[cfg(feature = "svg")]
   cache: Weak<SharedResourceCache>,
 }
 
-#[cfg(feature = "svg")]
+#[cfg(feature = "svg-sizing")]
 impl SvgSource {
   /// The SVG canvas dimensions in pixels, from the root `width`/`height` or
   /// `viewBox`.
+  #[cfg(feature = "svg")]
   pub fn dimensions(&self) -> (f32, f32) {
     let size = self.tree.size();
     (size.width(), size.height())
+  }
+
+  /// The SVG canvas dimensions in pixels, from the root `width`/`height` or
+  /// `viewBox`.
+  #[cfg(not(feature = "svg"))]
+  pub fn dimensions(&self) -> (f32, f32) {
+    (self.sizing.width, self.sizing.height)
   }
 
   /// The original SVG markup, for embedding directly in a vector backend.
   pub fn source(&self) -> &str {
     &self.source
   }
+}
 
+#[cfg(all(feature = "svg-sizing", not(feature = "svg")))]
+impl SvgSource {
+  fn parse(src: &str, _hash: u64, _cache: Weak<SharedResourceCache>) -> Result<Self, ImageError> {
+    Ok(SvgSource {
+      source: Box::from(src),
+      sizing: SvgSize::parse(src).map_err(ImageError::svg_parse)?,
+    })
+  }
+}
+
+#[cfg(feature = "svg")]
+impl SvgSource {
   /// Markup for embedding in a vector backend, with the host `color` injected
   /// as a root presentation attribute when `currentColor` depends on it.
   pub fn source_with_current_color(&self, current_color: Color) -> Cow<'_, str> {
@@ -210,279 +232,7 @@ impl SvgSource {
   }
 }
 
-/// Intrinsic width/height (in SVG user units) and aspect ratio of an SVG root.
-#[cfg(feature = "svg")]
-#[derive(Debug, Clone, Copy, Default)]
-struct SvgIntrinsic {
-  width: Option<f32>,
-  height: Option<f32>,
-  ratio: Option<f32>,
-}
-
-/// A lazily decoded animated GIF. Only the first frame and the (pixel-free)
-/// per-frame timing are retained; every later frame is decoded on demand at the
-/// size it is drawn and dropped afterwards, so the whole timeline never sits in
-/// memory at once. No cache holds decoded frames — retention stays a single
-/// frame, and the byte budget can account for it exactly.
-#[derive(Debug, Clone)]
-pub struct AnimatedSource {
-  inner: Arc<AnimatedInner>,
-}
-
-/// Animation container an [`AnimatedSource`] decodes its frames from.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum AnimatedFormat {
-  Gif,
-  #[cfg(feature = "png")]
-  Apng,
-  #[cfg(feature = "webp")]
-  WebP,
-}
-
-impl AnimatedFormat {
-  /// The animation container these bytes carry, if they carry one.
-  fn detect(bytes: &[u8]) -> Option<Self> {
-    if is_gif(bytes) {
-      return Some(Self::Gif);
-    }
-
-    #[cfg(feature = "png")]
-    if is_apng(bytes) {
-      return Some(Self::Apng);
-    }
-
-    #[cfg(feature = "webp")]
-    if is_animated_webp(bytes) {
-      return Some(Self::WebP);
-    }
-
-    None
-  }
-
-  fn dimensions(self, bytes: &[u8]) -> Result<(u32, u32), image::ImageError> {
-    match self {
-      Self::Gif => gif_dimensions(bytes),
-      #[cfg(feature = "png")]
-      Self::Apng => apng_dimensions(bytes),
-      #[cfg(feature = "webp")]
-      Self::WebP => animated_webp_dimensions(bytes),
-    }
-  }
-
-  fn decode_frames(
-    self,
-    bytes: &[u8],
-    skip: usize,
-    limit: Option<usize>,
-    target: Option<DecodeTarget>,
-    push: impl FnMut(Arc<ImageBuffer>),
-  ) -> Result<bool, image::ImageError> {
-    match self {
-      Self::Gif => decode_gif_frames(bytes, skip, limit, target, push),
-      #[cfg(feature = "png")]
-      Self::Apng => decode_apng_frames(bytes, skip, limit, target, push),
-      #[cfg(feature = "webp")]
-      Self::WebP => decode_webp_frames(bytes, skip, limit, target, push),
-    }
-  }
-
-  /// Decodes one frame without replaying the frames before it. `None` when the
-  /// container shows the frame depends on them.
-  fn decode_frame_alone(
-    self,
-    bytes: &[u8],
-    index: usize,
-    target: DecodeTarget,
-  ) -> Option<ImageBuffer> {
-    match self {
-      Self::Gif => decode_gif_frame_alone(bytes, index, Some(target)),
-      #[cfg(feature = "png")]
-      Self::Apng => decode_apng_frame_alone(bytes, index, Some(target)),
-      #[cfg(feature = "webp")]
-      Self::WebP => decode_webp_frame_alone(bytes, index, Some(target)),
-    }
-  }
-
-  /// Per-frame metadata in stream order, read without decoding pixels.
-  fn frame_infos(self, bytes: &[u8]) -> Result<Box<[FrameInfo]>, image::ImageError> {
-    match self {
-      Self::Gif => gif_frame_infos(bytes),
-      #[cfg(feature = "png")]
-      Self::Apng => apng_frame_infos(bytes),
-      #[cfg(feature = "webp")]
-      Self::WebP => webp_frame_infos(bytes),
-    }
-  }
-}
-
-#[derive(Debug)]
-struct AnimatedInner {
-  format: AnimatedFormat,
-  bytes: Box<[u8]>,
-  width: u32,
-  height: u32,
-  timing: OnceLock<AnimationTiming>,
-}
-
-/// Per-frame metadata for the whole animation, read once without pixels.
-#[derive(Debug)]
-struct AnimationTiming {
-  /// Every frame in stream order, first frame included.
-  frames: Box<[FrameInfo]>,
-  /// Duration of the whole loop.
-  total_ms: u64,
-}
-
-impl AnimatedSource {
-  fn from_bytes(format: AnimatedFormat, bytes: &[u8]) -> Result<Self, ImageError> {
-    let (width, height) = format.dimensions(bytes).map_err(ImageError::decode)?;
-
-    // Decoded only to reject a stream carrying no frame at all; the pixels go.
-    let mut decodable = false;
-    format
-      .decode_frames(bytes, 0, Some(1), None, |_| decodable = true)
-      .map_err(ImageError::decode)?;
-    if !decodable {
-      return Err(ImageError::InvalidAnimation);
-    }
-
-    Ok(Self {
-      inner: Arc::new(AnimatedInner {
-        format,
-        bytes: bytes.into(),
-        width,
-        height,
-        timing: OnceLock::new(),
-      }),
-    })
-  }
-
-  /// The animation canvas dimensions in pixels.
-  pub fn dimensions(&self) -> (u32, u32) {
-    (self.inner.width, self.inner.height)
-  }
-
-  /// Per-frame timing, read once (pixel-free) and memoized. Falls back to a
-  /// single-frame loop if the stream can't be re-read.
-  fn timing(&self) -> &AnimationTiming {
-    self.inner.timing.get_or_init(|| {
-      let frames = self
-        .inner
-        .format
-        .frame_infos(&self.inner.bytes)
-        .ok()
-        .filter(|frames| !frames.is_empty())
-        .unwrap_or_else(|| Box::from([FrameInfo::still()]));
-      let total_ms = frames.iter().map(|frame| frame.duration_ms as u64).sum();
-
-      AnimationTiming { frames, total_ms }
-    })
-  }
-
-  /// Whether the frame can be drawn without the frames before it.
-  fn stands_alone(&self, index: usize) -> bool {
-    index > 0
-      && index < MAX_ANIMATION_FRAMES
-      && required_previous_frame(
-        &self.timing().frames,
-        index,
-        (self.inner.width, self.inner.height),
-      )
-      .is_none()
-  }
-
-  /// Stream index of the frame shown at the given playback time, looping over
-  /// the total duration.
-  fn frame_index_at(&self, timing: &AnimationTiming, time_ms: u64) -> usize {
-    if timing.total_ms == 0 || timing.frames.len() <= 1 {
-      return 0;
-    }
-
-    let target_time = time_ms % timing.total_ms;
-    let mut elapsed_ms = 0_u64;
-    for (index, frame) in timing.frames.iter().enumerate() {
-      elapsed_ms += frame.duration_ms as u64;
-      if target_time < elapsed_ms {
-        return index;
-      }
-    }
-
-    timing.frames.len() - 1
-  }
-
-  /// Frame shown at the given playback time, looping over total duration.
-  #[cfg(test)]
-  fn frame_at_time(&self, time_ms: u64) -> Arc<ImageBuffer> {
-    self.frame_at_time_covering(
-      time_ms,
-      self.inner.width,
-      self.inner.height,
-      ImageScalingAlgorithm::Auto,
-    )
-  }
-
-  /// Frame shown at the given playback time, looping over total duration,
-  /// decoded to cover a `width` x `height` draw box (never upscaled).
-  pub fn frame_at_time_covering(
-    &self,
-    time_ms: u64,
-    width: u32,
-    height: u32,
-    algorithm: ImageScalingAlgorithm,
-  ) -> Arc<ImageBuffer> {
-    let timing = self.timing();
-    let index = self.frame_index_at(timing, time_ms);
-    let (width, height) = cover_target((self.inner.width, self.inner.height), (width, height));
-    let target = DecodeTarget {
-      width,
-      height,
-      algorithm,
-    };
-
-    self
-      .decode_frame(index, target)
-      .or_else(|| self.decode_frame(0, target))
-      .unwrap_or_else(|| {
-        log::warn!("Failed to decode any frame of an animated image, drawing nothing.");
-        Arc::new(ImageBuffer::transparent_pixel())
-      })
-  }
-
-  /// Decodes a single frame by stream index, resampled to `target`. A frame
-  /// that depends on earlier ones is reached by replaying them, since disposal
-  /// is stateful.
-  fn decode_frame(&self, index: usize, target: DecodeTarget) -> Option<Arc<ImageBuffer>> {
-    if self.stands_alone(index)
-      && let Some(frame) = self
-        .inner
-        .format
-        .decode_frame_alone(&self.inner.bytes, index, target)
-    {
-      return Some(Arc::new(frame));
-    }
-
-    let mut frame = None;
-    if let Err(error) =
-      self
-        .inner
-        .format
-        .decode_frames(&self.inner.bytes, index, Some(1), Some(target), |decoded| {
-          frame = Some(decoded)
-        })
-    {
-      log::warn!("Failed to decode frame {index} of an animated image: {error}");
-    }
-
-    frame
-  }
-
-  /// Bytes retained for cache budgeting: decoded frames are never held.
-  fn decoded_bytes(&self) -> usize {
-    self.inner.bytes.len()
-  }
-}
-
-#[cfg(feature = "svg")]
+#[cfg(feature = "svg-sizing")]
 impl From<SvgSource> for ImageSource {
   fn from(svg: SvgSource) -> Self {
     ImageSource::Svg(Arc::new(svg))
@@ -624,7 +374,7 @@ impl SvgSource {
 
     let options = svg_parse_options();
     let tree = Tree::from_xmltree(&document, &options).map_err(ImageError::svg_parse)?;
-    let intrinsic = svg_intrinsic_sizing(document.root_element(), tree.size());
+    let sizing = SvgSize::from_root(document.root_element()).map_err(ImageError::svg_parse)?;
     // Set during parsing whenever a `currentColor` finds no `color` attribute
     // on its ancestors, so it also catches entity-encoded values a source-text
     // scan would miss.
@@ -637,9 +387,9 @@ impl SvgSource {
         .descendants()
         .any(|node| node.tag_name().name() == "text"),
       source: Box::from(src),
+      sizing,
       tree,
       uses_current_color,
-      intrinsic,
       text_tree: std::sync::Mutex::new(None),
       hash,
       cache,
@@ -740,7 +490,7 @@ impl SvgSource {
   }
 }
 
-#[cfg(feature = "svg")]
+#[cfg(feature = "svg-sizing")]
 impl FromStr for SvgSource {
   type Err = ImageError;
 
@@ -754,11 +504,12 @@ impl ImageSource {
   pub(crate) fn estimated_bytes(&self) -> usize {
     match self {
       Self::Bitmap(buffer) => buffer.data().len(),
+      #[cfg(any(feature = "png", feature = "gif", feature = "webp"))]
       Self::Animated(animated) => animated.decoded_bytes(),
       Self::Encoded(encoded) => encoded.bytes.len(),
       // Markup plus a parsed-tree estimate; rasterized pixmaps are weighted
       // separately as their own sized entries.
-      #[cfg(feature = "svg")]
+      #[cfg(feature = "svg-sizing")]
       Self::Svg(svg) => svg.source.len() * 3,
     }
   }
@@ -769,7 +520,7 @@ impl ImageSource {
   ///   are parsed as an SVG using `resvg::usvg`.
   /// - Otherwise, the bytes are decoded as a raster image.
   pub fn from_bytes(bytes: &[u8]) -> ImageResult {
-    #[cfg(feature = "svg")]
+    #[cfg(feature = "svg-sizing")]
     {
       if let Ok(text) = from_utf8(bytes)
         && is_svg_like(text)
@@ -778,6 +529,7 @@ impl ImageSource {
       }
     }
 
+    #[cfg(any(feature = "png", feature = "gif", feature = "webp"))]
     if let Some(format) = AnimatedFormat::detect(bytes) {
       return Ok(ImageSource::Animated(AnimatedSource::from_bytes(
         format, bytes,
@@ -786,9 +538,9 @@ impl ImageSource {
 
     match decode_image(bytes) {
       Ok(buffer) => Ok(ImageSource::Bitmap(Arc::new(buffer))),
-      #[cfg(all(feature = "png", feature = "jpeg", feature = "webp"))]
+      #[cfg(all(feature = "png", feature = "jpeg", feature = "webp", feature = "gif"))]
       Err(error) => Err(ImageError::decode(error)),
-      #[cfg(not(all(feature = "png", feature = "jpeg", feature = "webp")))]
+      #[cfg(not(all(feature = "png", feature = "jpeg", feature = "webp", feature = "gif")))]
       Err(error) => match bitmap_dimensions(bytes).filter(|_| decoder_compiled_out(bytes)) {
         Some(Ok(dimensions)) => Ok(Self::encoded(bytes, dimensions, 0, Weak::new())),
         _ => Err(ImageError::decode(error)),
@@ -805,7 +557,7 @@ impl ImageSource {
     hash: u64,
     cache: Weak<SharedResourceCache>,
   ) -> ImageResult {
-    #[cfg(feature = "svg")]
+    #[cfg(feature = "svg-sizing")]
     {
       if let Ok(text) = from_utf8(bytes)
         && is_svg_like(text)
@@ -816,6 +568,7 @@ impl ImageSource {
       }
     }
 
+    #[cfg(any(feature = "png", feature = "gif", feature = "webp"))]
     if let Some(format) = AnimatedFormat::detect(bytes) {
       return Ok(ImageSource::Animated(AnimatedSource::from_bytes(
         format, bytes,
@@ -854,6 +607,10 @@ impl ImageSource {
     width: u32,
     height: u32,
     image_rendering: ImageScalingAlgorithm,
+    #[cfg_attr(
+      not(any(feature = "png", feature = "gif", feature = "webp")),
+      allow(unused_variables)
+    )]
     time_ms: u64,
     #[cfg_attr(not(feature = "svg"), allow(unused_variables))] current_color: Color,
     #[cfg_attr(not(feature = "svg"), allow(unused_variables))] fonts: Option<&FontsSnapshot>,
@@ -866,6 +623,7 @@ impl ImageSource {
         algorithm: image_rendering,
         source_scale: (1.0, 1.0),
       }),
+      #[cfg(any(feature = "png", feature = "gif", feature = "webp"))]
       ImageSource::Animated(animated) => {
         let source = animated.frame_at_time_covering(time_ms, width, height, image_rendering);
         let (native_width, native_height) = animated.dimensions();
@@ -898,15 +656,18 @@ impl ImageSource {
         current_color,
         fonts,
       )?)),
+      #[cfg(all(feature = "svg-sizing", not(feature = "svg")))]
+      ImageSource::Svg(_) => Err(ImageError::SvgParseNotSupported),
     }
   }
 
   /// Get the image size in device pixels for the current sizing context.
   pub fn size(&self, sizing: &SizingContext) -> (f32, f32) {
     let (width, height) = match self {
-      #[cfg(feature = "svg")]
+      #[cfg(feature = "svg-sizing")]
       ImageSource::Svg(svg) => svg.dimensions(),
       ImageSource::Bitmap(bitmap) => (bitmap.width() as f32, bitmap.height() as f32),
+      #[cfg(any(feature = "png", feature = "gif", feature = "webp"))]
       ImageSource::Animated(animated) => {
         let (width, height) = animated.dimensions();
         (width as f32, height as f32)
@@ -924,15 +685,12 @@ impl ImageSource {
   /// have both dimensions; an SVG may have only a `viewBox` ratio.
   pub fn intrinsic_sizing(&self) -> IntrinsicSizing {
     match self {
-      #[cfg(feature = "svg")]
-      ImageSource::Svg(svg) => IntrinsicSizing {
-        width: svg.intrinsic.width,
-        height: svg.intrinsic.height,
-        ratio: svg.intrinsic.ratio,
-      },
+      #[cfg(feature = "svg-sizing")]
+      ImageSource::Svg(svg) => svg.sizing.intrinsic.into(),
       ImageSource::Bitmap(bitmap) => {
         IntrinsicSizing::from_dimensions(bitmap.width() as f32, bitmap.height() as f32)
       }
+      #[cfg(any(feature = "png", feature = "gif", feature = "webp"))]
       ImageSource::Animated(animated) => {
         let (width, height) = animated.dimensions();
         IntrinsicSizing::from_dimensions(width as f32, height as f32)
@@ -946,7 +704,10 @@ impl ImageSource {
 }
 
 /// Cover-fit target for a draw box: uniform scale, never upscaled.
-fn cover_target((native_w, native_h): (u32, u32), (box_w, box_h): (u32, u32)) -> (u32, u32) {
+pub(crate) fn cover_target(
+  (native_w, native_h): (u32, u32),
+  (box_w, box_h): (u32, u32),
+) -> (u32, u32) {
   let scale = (box_w as f32 / native_w as f32)
     .max(box_h as f32 / native_h as f32)
     .min(1.0);
@@ -1058,49 +819,6 @@ pub fn to_data_url(mime: &str, bytes: &[u8]) -> String {
   out
 }
 
-/// SVG root intrinsic sizing per <https://www.w3.org/TR/SVG/coords.html#IntrinsicSizing>:
-/// a non-percentage `width`/`height` is an intrinsic dimension, the `viewBox`
-/// gives the ratio. Absolute px come from `resolved_size` (usvg's parsed size)
-/// to avoid reimplementing SVG length units.
-#[cfg(feature = "svg")]
-fn svg_intrinsic_sizing(
-  root: roxmltree::Node,
-  resolved_size: crate::resvg::usvg::Size,
-) -> SvgIntrinsic {
-  let is_absolute = |name| {
-    root
-      .attribute(name)
-      .map(str::trim)
-      .is_some_and(|value| !value.is_empty() && !value.ends_with('%'))
-  };
-
-  let width = is_absolute("width").then(|| resolved_size.width());
-  let height = is_absolute("height").then(|| resolved_size.height());
-
-  let ratio = match (width, height) {
-    (Some(width), Some(height)) if width != 0.0 && height != 0.0 => Some(width / height),
-    _ => root.attribute("viewBox").and_then(parse_viewbox_ratio),
-  };
-
-  SvgIntrinsic {
-    width,
-    height,
-    ratio,
-  }
-}
-
-/// Parse the aspect ratio (`width / height`) from a `viewBox` (`min-x min-y
-/// width height`).
-#[cfg(feature = "svg")]
-fn parse_viewbox_ratio(view_box: &str) -> Option<f32> {
-  let mut numbers = view_box
-    .split([' ', ',', '\t', '\n', '\r'])
-    .filter(|part| !part.is_empty());
-  let width: f32 = numbers.nth(2)?.parse().ok()?;
-  let height: f32 = numbers.next()?.parse().ok()?;
-  (width > 0.0 && height > 0.0).then_some(width / height)
-}
-
 /// Represents the state of an image in the rendering system.
 ///
 /// This enum tracks whether an image has been successfully loaded and decoded,
@@ -1117,13 +835,13 @@ pub enum ImageError {
   /// The image data URI is malformed and cannot be parsed
   #[error("The image data URI is malformed and cannot be parsed")]
   MalformedDataUri,
-  #[cfg(feature = "svg")]
+  #[cfg(feature = "svg-sizing")]
   /// An error occurred while parsing an SVG image
   #[error("An error occurred while parsing an SVG image: {0}")]
   SvgParseError(#[source] Box<dyn std::error::Error + Send + Sync + 'static>),
-  /// SVG parsing is not supported in this build
+  /// SVG rendering is not supported in this build
   #[cfg(not(feature = "svg"))]
-  #[error("SVG parsing is not supported in this build")]
+  #[error("SVG rendering is not supported in this build")]
   SvgParseNotSupported,
   /// The image source is unknown
   #[error("The image source is unknown")]
@@ -1148,7 +866,7 @@ impl ImageError {
 
   /// Wraps an SVG parse error opaquely so takumi's public API stays independent
   /// of the `resvg`/`usvg` version.
-  #[cfg(feature = "svg")]
+  #[cfg(feature = "svg-sizing")]
   pub(crate) fn svg_parse(err: impl std::error::Error + Send + Sync + 'static) -> Self {
     Self::SvgParseError(Box::new(err))
   }
@@ -1608,7 +1326,113 @@ mod tests {
 
   use image::{Rgba, RgbaImage};
 
+  #[cfg(feature = "png")]
+  use crate::resources::animated::AnimatedFormat;
+  #[cfg(any(feature = "png", feature = "webp"))]
+  use crate::resources::image_decoder::DecodeTarget;
+
   use super::*;
+
+  /// `SvgSize` reads the root element only; usvg's size and the intrinsic
+  /// rules the backends used before must agree with it on every SVG in the repo.
+  #[cfg(feature = "svg")]
+  #[test]
+  fn svg_size_matches_usvg_across_the_corpus() {
+    use std::{
+      fs,
+      path::{Path, PathBuf},
+    };
+
+    fn walk(dir: &Path, out: &mut Vec<PathBuf>) {
+      for entry in fs::read_dir(dir).unwrap().flatten() {
+        let path = entry.path();
+        if path.is_dir() {
+          walk(&path, out);
+        } else if path.extension().is_some_and(|extension| extension == "svg") {
+          out.push(path);
+        }
+      }
+    }
+
+    fn previous_intrinsic(root: roxmltree::Node, size: (f32, f32)) -> SvgIntrinsic {
+      let is_absolute = |name| {
+        root
+          .attribute(name)
+          .map(str::trim)
+          .is_some_and(|value| !value.is_empty() && !value.ends_with('%'))
+      };
+      let width = is_absolute("width").then_some(size.0);
+      let height = is_absolute("height").then_some(size.1);
+      let ratio = match (width, height) {
+        (Some(width), Some(height)) if width != 0.0 && height != 0.0 => Some(width / height),
+        _ => root.attribute("viewBox").and_then(|view_box| {
+          let mut numbers = view_box
+            .split([' ', ',', '\t', '\n', '\r'])
+            .filter(|part| !part.is_empty());
+          let width: f32 = numbers.nth(2)?.parse().ok()?;
+          let height: f32 = numbers.next()?.parse().ok()?;
+          (width > 0.0 && height > 0.0).then_some(width / height)
+        }),
+      };
+      SvgIntrinsic {
+        width,
+        height,
+        ratio,
+      }
+    }
+
+    let repo = Path::new(env!("CARGO_MANIFEST_DIR")).join("..");
+    let mut files = Vec::new();
+    walk(&repo.join("assets"), &mut files);
+    walk(&repo.join("takumi/tests"), &mut files);
+    assert!(files.len() > 100, "corpus too small: {}", files.len());
+
+    let mut compared = 0;
+    for path in files {
+      let Ok(markup) = fs::read_to_string(&path) else {
+        continue;
+      };
+      let Ok(source) = markup.parse::<SvgSource>() else {
+        continue;
+      };
+      let size =
+        SvgSize::parse(&markup).unwrap_or_else(|error| panic!("{}: {error}", path.display()));
+      let document = Document::parse_with_options(
+        &markup,
+        ParsingOptions {
+          allow_dtd: true,
+          ..Default::default()
+        },
+      )
+      .unwrap();
+      let root = document.root_element();
+      let usvg_size = source.dimensions();
+
+      let percent = |name| {
+        root
+          .attribute(name)
+          .is_some_and(|value| value.trim_end().ends_with('%'))
+      };
+      if root.attribute("viewBox").is_some() || !(percent("width") || percent("height")) {
+        let close = |a: f32, b: f32| (a - b).abs() <= 1e-3 * b.abs().max(1.0);
+        assert!(
+          close(size.width, usvg_size.0) && close(size.height, usvg_size.1),
+          "{}: {:?} vs usvg {:?}",
+          path.display(),
+          (size.width, size.height),
+          usvg_size
+        );
+      }
+      assert_eq!(
+        size.intrinsic,
+        previous_intrinsic(root, usvg_size),
+        "{}",
+        path.display()
+      );
+      compared += 1;
+    }
+    assert!(compared > 100, "compared only {compared}");
+  }
 
   /// `width`/`height` attributes give intrinsic dimensions; a `viewBox` alone
   /// gives only an aspect ratio (per the SVG/CSS intrinsic sizing rules).
@@ -1619,7 +1443,7 @@ mod tests {
       let Ok(source) = svg.parse::<SvgSource>() else {
         unreachable!("valid svg");
       };
-      source.intrinsic
+      source.sizing.intrinsic
     }
     let ns = r#"xmlns="http://www.w3.org/2000/svg""#;
 
@@ -1648,6 +1472,7 @@ mod tests {
     );
   }
 
+  #[cfg(feature = "svg")]
   fn premul_at(image: &RenderedImage, x: u32, y: u32) -> [u8; 4] {
     match image {
       RenderedImage::Rasterized(buffer) => buffer.pixel(x, y),
@@ -1655,7 +1480,9 @@ mod tests {
     }
   }
 
+  #[cfg(feature = "png")]
   const HALF_TRANSPARENT_BLUE: [u8; 4] = [0, 0, 255, 128];
+  #[cfg(any(feature = "png", feature = "gif", feature = "webp"))]
   const FRAME_COLORS: [[u8; 4]; 3] = [[255, 0, 0, 255], [0, 255, 0, 255], [0, 0, 255, 255]];
 
   /// Encodes one 4x4 solid frame per `(color index, delay ms)` pair. Delays
@@ -1823,10 +1650,10 @@ mod tests {
     ];
 
     for (format, bytes) in sources {
-      let Ok(ImageSource::Animated(source)) = ImageSource::from_bytes(&bytes) else {
+      let Ok(ImageSource::Animated(_)) = ImageSource::from_bytes(&bytes) else {
         unreachable!("valid {format}");
       };
-      let animated_format = source.inner.format;
+      let animated_format = AnimatedFormat::detect(&bytes).unwrap();
 
       for index in 1..3 {
         let seeked = animated_format
