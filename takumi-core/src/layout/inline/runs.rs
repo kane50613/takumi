@@ -324,10 +324,17 @@ impl BuiltInlineLayout<'_> {
 
           let font = FontRef::from_index(run.font().data.as_ref(), run.font().index)
             .map_err(|_| FontError::InvalidFontIndex)?;
-          let glyph_ids = glyph_run.positioned_glyphs().map(|glyph| glyph.id);
-          let resolved_glyphs = context
-            .fonts()
-            .with_context(|fonts| fonts.resolve_glyphs(&glyph_run, font, glyph_ids));
+          let glyphs: Vec<PositionedGlyph> = glyph_run
+            .positioned_glyphs()
+            .map(|g| PositionedGlyph {
+              id: g.id,
+              x: g.x,
+              y: g.y,
+            })
+            .collect();
+          let resolved_glyphs = context.fonts().with_context(|fonts| {
+            fonts.resolve_glyphs(&glyph_run, font, glyphs.iter().map(|glyph| glyph.id))
+          });
 
           if need_outline && let Some(span_id) = brush.source_span_id {
             outline_rects.push(scale_outline_rect(
@@ -391,14 +398,6 @@ impl BuiltInlineLayout<'_> {
               },
             );
           }
-          let glyphs: Vec<PositionedGlyph> = glyph_run
-            .positioned_glyphs()
-            .map(|g| PositionedGlyph {
-              id: g.id,
-              x: g.x,
-              y: g.y,
-            })
-            .collect();
           let cluster_ranges = glyph_cluster_ranges(&glyph_run, &glyphs);
           let synthesis = run_synthesis(&glyph_run);
           let shaped = ShapedRun {
