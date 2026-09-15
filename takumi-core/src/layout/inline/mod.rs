@@ -192,16 +192,6 @@ impl BuiltInlineLayout<'_> {
     )
   }
 
-  /// Resolved state for each line.
-  pub(crate) fn line_states(&self) -> Vec<ResolvedInlineLineState> {
-    resolve_inline_line_states(
-      &self.layout,
-      &self.spans,
-      self.parent_font_metrics(),
-      &self.line_scales,
-    )
-  }
-
   /// Measures each glyph run's text/bounding box and each inline box's position/size, with text-fit
   /// line scaling applied.
   pub fn measure_runs(
@@ -815,8 +805,8 @@ fn inline_box_span<'c>(
 }
 
 /// Shapes `spans` into a layout, through the render's shape cache when the
-/// content is pure text. Inline boxes bake constraint-dependent measured sizes
-/// into the layout, so only pure-text content is safe to cache across calls.
+/// content is text and direction marks only. Inline boxes bake
+/// constraint-dependent measured sizes into the layout, so they never cache.
 fn shape_spans(
   context: &RenderContext,
   spans: &[ProcessedInlineSpan<'_>],
@@ -824,16 +814,23 @@ fn shape_spans(
   shape_cacheable: bool,
 ) -> (InlineLayout, String) {
   let cacheable = shape_cacheable
-    && spans
-      .iter()
-      .all(|span| matches!(span, ProcessedInlineSpan::Text { .. }));
+    && spans.iter().all(|span| {
+      matches!(
+        span,
+        ProcessedInlineSpan::Text { .. } | ProcessedInlineSpan::DirectionMark { .. }
+      )
+    });
   let cache_key = cacheable
     .then(|| shape_fingerprint(spans, style, context.style.lang.as_ref().map(Lang::as_str)));
   // The stored text double-checks the fingerprint against hash collisions.
   let expected_text = cacheable.then(|| {
     spans.iter().fold(String::new(), |mut joined, span| {
-      if let ProcessedInlineSpan::Text { text, .. } = span {
-        joined.push_str(text);
+      match span {
+        ProcessedInlineSpan::Text { text, .. } => joined.push_str(text),
+        ProcessedInlineSpan::DirectionMark { direction, .. } => {
+          joined.push_str(direction.bidi_mark())
+        }
+        ProcessedInlineSpan::Box(_) | ProcessedInlineSpan::Spacer { .. } => {}
       }
       joined
     })
@@ -1055,7 +1052,11 @@ impl BuiltInlineLayout<'_> {
     mut visit: impl FnMut(&WalkedLine, PlacedItem<'_>) -> Result<(), E>,
   ) -> Result<(), E> {
     let line_vertical_metrics = self.line_metrics();
-    let line_states = self.line_states();
+    let line_states = resolve_inline_line_states(
+      &self.layout,
+      self.parent_font_metrics(),
+      &line_vertical_metrics,
+    );
 
     for (index, line) in self.layout.lines().enumerate() {
       let Some(setup) = LineSetup::new(
