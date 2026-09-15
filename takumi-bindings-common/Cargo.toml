@@ -17,6 +17,5 @@ features = ["woff2"]
 workspace = true
 
 [features]
-default = ["svg", "woff"]
+default = ["svg"]
 svg = ["takumi-core/svg"]
-woff = ["takumi-core/woff"]
