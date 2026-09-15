@@ -22,12 +22,16 @@ use thiserror::Error;
 use tiny_skia::Pixmap;
 use xxhash_rust::xxh3::{Xxh3, xxh3_64};
 
-#[cfg(not(all(feature = "jpeg", feature = "webp")))]
+#[cfg(not(all(feature = "png", feature = "jpeg", feature = "webp")))]
 use crate::resources::image_decoder::decoder_compiled_out;
 #[cfg(feature = "webp")]
 use crate::resources::image_decoder::{
   animated_webp_dimensions, decode_webp_frame_alone, decode_webp_frames, is_animated_webp,
   webp_frame_infos,
+};
+#[cfg(feature = "png")]
+use crate::resources::image_decoder::{
+  apng_dimensions, apng_frame_infos, decode_apng_frame_alone, decode_apng_frames, is_apng,
 };
 #[cfg(feature = "svg")]
 use crate::resvg::{
@@ -44,10 +48,9 @@ use crate::{
     font::FontsSnapshot,
     image_buffer::ImageBuffer,
     image_decoder::{
-      FrameInfo, MAX_ANIMATION_FRAMES, apng_dimensions, apng_frame_infos, bitmap_dimensions,
-      decode_apng_frame_alone, decode_apng_frames, decode_bitmap_scaled, decode_gif_frame_alone,
-      decode_gif_frames, decode_image, gif_dimensions, gif_frame_infos, is_apng, is_gif,
-      required_previous_frame,
+      FrameInfo, MAX_ANIMATION_FRAMES, bitmap_dimensions, decode_bitmap_scaled,
+      decode_gif_frame_alone, decode_gif_frames, decode_image, gif_dimensions, gif_frame_infos,
+      is_gif, required_previous_frame,
     },
   },
   style::{Color, ImageScalingAlgorithm, IntrinsicSizing, SizingContext, StyleSheet},
@@ -230,6 +233,7 @@ pub struct AnimatedSource {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum AnimatedFormat {
   Gif,
+  #[cfg(feature = "png")]
   Apng,
   #[cfg(feature = "webp")]
   WebP,
@@ -242,6 +246,7 @@ impl AnimatedFormat {
       return Some(Self::Gif);
     }
 
+    #[cfg(feature = "png")]
     if is_apng(bytes) {
       return Some(Self::Apng);
     }
@@ -257,6 +262,7 @@ impl AnimatedFormat {
   fn dimensions(self, bytes: &[u8]) -> Result<(u32, u32), image::ImageError> {
     match self {
       Self::Gif => gif_dimensions(bytes),
+      #[cfg(feature = "png")]
       Self::Apng => apng_dimensions(bytes),
       #[cfg(feature = "webp")]
       Self::WebP => animated_webp_dimensions(bytes),
@@ -273,6 +279,7 @@ impl AnimatedFormat {
   ) -> Result<bool, image::ImageError> {
     match self {
       Self::Gif => decode_gif_frames(bytes, skip, limit, target, push),
+      #[cfg(feature = "png")]
       Self::Apng => decode_apng_frames(bytes, skip, limit, target, push),
       #[cfg(feature = "webp")]
       Self::WebP => decode_webp_frames(bytes, skip, limit, target, push),
@@ -289,6 +296,7 @@ impl AnimatedFormat {
   ) -> Option<ImageBuffer> {
     match self {
       Self::Gif => decode_gif_frame_alone(bytes, index, Some(target)),
+      #[cfg(feature = "png")]
       Self::Apng => decode_apng_frame_alone(bytes, index, Some(target)),
       #[cfg(feature = "webp")]
       Self::WebP => decode_webp_frame_alone(bytes, index, Some(target)),
@@ -299,6 +307,7 @@ impl AnimatedFormat {
   fn frame_infos(self, bytes: &[u8]) -> Result<Box<[FrameInfo]>, image::ImageError> {
     match self {
       Self::Gif => gif_frame_infos(bytes),
+      #[cfg(feature = "png")]
       Self::Apng => apng_frame_infos(bytes),
       #[cfg(feature = "webp")]
       Self::WebP => webp_frame_infos(bytes),
@@ -777,9 +786,9 @@ impl ImageSource {
 
     match decode_image(bytes) {
       Ok(buffer) => Ok(ImageSource::Bitmap(Arc::new(buffer))),
-      #[cfg(all(feature = "jpeg", feature = "webp"))]
+      #[cfg(all(feature = "png", feature = "jpeg", feature = "webp"))]
       Err(error) => Err(ImageError::decode(error)),
-      #[cfg(not(all(feature = "jpeg", feature = "webp")))]
+      #[cfg(not(all(feature = "png", feature = "jpeg", feature = "webp")))]
       Err(error) => match bitmap_dimensions(bytes).filter(|_| decoder_compiled_out(bytes)) {
         Some(Ok(dimensions)) => Ok(Self::encoded(bytes, dimensions, 0, Weak::new())),
         _ => Err(ImageError::decode(error)),
@@ -1353,7 +1362,7 @@ impl ResourceCache {
   }
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "png"))]
 mod resource_cache_tests {
   use std::sync::Arc;
 
@@ -1673,6 +1682,7 @@ mod tests {
     bytes
   }
 
+  #[cfg(feature = "png")]
   /// One 4x4 solid frame per `(color index, delay ms)` pair, as an APNG.
   fn encoded_apng(frames: &[(usize, u32)]) -> Vec<u8> {
     use png::{BitDepth, ColorType, Encoder};
@@ -1697,6 +1707,7 @@ mod tests {
     bytes
   }
 
+  #[cfg(feature = "png")]
   fn apng_source(frames: &[(usize, u32)]) -> AnimatedSource {
     let Ok(ImageSource::Animated(animated)) = ImageSource::from_bytes(&encoded_apng(frames)) else {
       unreachable!("valid apng");
@@ -1704,6 +1715,7 @@ mod tests {
     animated
   }
 
+  #[cfg(feature = "png")]
   #[test]
   fn apng_walks_its_frame_timeline() {
     let apng = apng_source(&[(0, 100), (1, 100), (2, 100)]);
@@ -1715,6 +1727,7 @@ mod tests {
     assert_eq!(apng.frame_at_time(350).pixel(2, 2), FRAME_COLORS[0]);
   }
 
+  #[cfg(feature = "png")]
   #[test]
   fn apng_frames_cover_the_draw_box() {
     let apng = apng_source(&[(0, 100), (1, 100)]);
@@ -1724,6 +1737,7 @@ mod tests {
     assert_eq!(smaller.pixel(1, 1), FRAME_COLORS[1]);
   }
 
+  #[cfg(feature = "png")]
   #[test]
   fn apng_composites_a_blended_subframe() {
     use png::{BitDepth, BlendOp, ColorType, DisposeOp, Encoder};
@@ -1758,6 +1772,7 @@ mod tests {
     assert_eq!(apng.frame_at_time(150).pixel(3, 3), FRAME_COLORS[0]);
   }
 
+  #[cfg(feature = "png")]
   #[test]
   fn apng_default_image_stays_off_the_timeline() {
     use png::{BitDepth, ColorType, Encoder};
@@ -1793,6 +1808,7 @@ mod tests {
     assert_eq!(apng.frame_at_time(250).pixel(2, 2), FRAME_COLORS[0]);
   }
 
+  #[cfg(feature = "png")]
   #[test]
   fn seeking_a_frame_matches_replaying_to_it() {
     let sources: Vec<(&str, Vec<u8>)> = vec![
@@ -1886,6 +1902,7 @@ mod tests {
     );
   }
 
+  #[cfg(feature = "png")]
   #[test]
   fn a_dependent_frame_declines_to_seek() {
     use png::{BitDepth, BlendOp, ColorType, Encoder};
@@ -1946,6 +1963,7 @@ mod tests {
     assert_eq!(gif.frame_at_time(250).pixel(2, 2), FRAME_COLORS[2]);
   }
 
+  #[cfg(feature = "png")]
   #[test]
   fn still_png_stays_a_bitmap() {
     use png::{BitDepth, ColorType, Encoder};
@@ -2388,7 +2406,7 @@ mod tests {
 
   /// An `<image>` whose href is a local file path must not be read from disk;
   /// the referenced file's pixels must never appear in the rasterized output.
-  #[cfg(feature = "svg")]
+  #[cfg(all(feature = "svg", feature = "png"))]
   #[test]
   fn svg_image_href_local_path_is_not_read() {
     let opaque_red = ImageBuffer::from_rgba_bytes([255, 0, 0, 255].repeat(4 * 4), 4, 4)
