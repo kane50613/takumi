@@ -6,6 +6,8 @@
 //! binding keeps only its platform-specific glue (JS type coercion, error
 //! mapping, threading).
 
+pub mod input;
+
 use std::sync::Arc;
 
 use takumi_core::{
