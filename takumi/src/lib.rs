@@ -45,8 +45,8 @@
 //! - `woff2`: WOFF2 font support.
 //! - `woff`: WOFF font support.
 //! - `image-decoding` (default): `png`, `jpeg`, `webp` and `gif` together.
-//! - `png`, `jpeg`, `webp`, `gif`: one image source format each. A format whose
-//!   decoder is off still lays out from its header size.
+//! - `png`, `jpeg`, `webp`, `gif`: one image source format each. A PNG, JPEG or
+//!   WebP source whose decoder is off still lays out from its header size.
 //! - `rayon`: parallelism in the raster backend; needs `raster-backend`.
 //! - `unstable`: re-export the backend crates with no semver guarantee.
 
