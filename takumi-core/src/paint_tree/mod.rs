@@ -124,7 +124,7 @@ pub fn paint_tree(options: PaintTreeOptions<'_>) -> Result<PaintTree> {
       text_shadows: Vec::new(),
       inline_backgrounds: Vec::new(),
       runs: Vec::new(),
-      unresolved: None,
+      unresolved_effects: None,
       children: nodes,
     },
   };

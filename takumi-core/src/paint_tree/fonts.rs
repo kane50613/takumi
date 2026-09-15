@@ -83,7 +83,7 @@ fn describe(fonts: &FontsSnapshot, run: &ShapedRun) -> PaintFont {
 
   PaintFont {
     family: fonts.face_family(run.font_id(), run.font_index),
-    index: run.font_index,
+    face_index: run.font_index,
     weight,
     style: style.to_string(),
     width,
@@ -95,7 +95,7 @@ fn describe(fonts: &FontsSnapshot, run: &ShapedRun) -> PaintFont {
         value: *value,
       })
       .collect(),
-    synthetic_bold: run.synthetic_bold,
-    synthetic_skew: run.synthetic_skew,
+    synthetic_bold_width: run.synthetic_bold,
+    synthetic_oblique_angle: run.synthetic_skew,
   }
 }

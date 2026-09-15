@@ -4,7 +4,7 @@
   "fonts": [
     {
       "family": "Geist",
-      "index": 0,
+      "faceIndex": 0,
       "weight": 700.0,
       "style": "normal",
       "width": 100.0,
@@ -17,7 +17,7 @@
     },
     {
       "family": "Geist",
-      "index": 0,
+      "faceIndex": 0,
       "weight": 400.0,
       "style": "normal",
       "width": 100.0,
@@ -51,7 +51,7 @@
       "x": true,
       "y": true
     },
-    "box": {
+    "boxDecoration": {
       "background": {
         "color": [247, 243, 236, 255],
         "clip": "border-box",
@@ -147,7 +147,7 @@
             "width": 103.92,
             "ascent": 40.2,
             "descent": 11.8,
-            "font": 0,
+            "fontIndex": 0,
             "fontSize": 40.0,
             "color": [179, 38, 30, 255],
             "opacity": 1.0,
@@ -194,8 +194,8 @@
                 "color": [179, 38, 30, 255]
               }
             ],
-            "textRange": [3, 8],
-            "span": 1
+            "textByteRange": [3, 8],
+            "spanId": 1
           }
         ]
       },
@@ -236,7 +236,7 @@
             "width": 64.116,
             "ascent": 26.130001,
             "descent": 7.67,
-            "font": 1,
+            "fontIndex": 1,
             "fontSize": 26.0,
             "color": [20, 17, 15, 255],
             "opacity": 1.0,
@@ -272,8 +272,8 @@
                 "y": 0.0
               }
             ],
-            "textRange": [3, 9],
-            "span": 1
+            "textByteRange": [3, 9],
+            "spanId": 1
           },
           {
             "text": "world",
@@ -282,7 +282,7 @@
             "width": 71.942,
             "ascent": 26.130001,
             "descent": 7.67,
-            "font": 0,
+            "fontIndex": 0,
             "fontSize": 26.0,
             "color": [0, 0, 255, 255],
             "opacity": 1.0,
@@ -313,8 +313,8 @@
                 "y": 0.0
               }
             ],
-            "textRange": [9, 14],
-            "span": 2
+            "textByteRange": [9, 14],
+            "spanId": 2
           },
           {
             "text": " and ",
@@ -323,7 +323,7 @@
             "width": 57.486,
             "ascent": 26.130001,
             "descent": 7.67,
-            "font": 1,
+            "fontIndex": 1,
             "fontSize": 26.0,
             "color": [20, 17, 15, 255],
             "opacity": 1.0,
@@ -354,8 +354,8 @@
                 "y": 0.0
               }
             ],
-            "textRange": [14, 19],
-            "span": 3
+            "textByteRange": [14, 19],
+            "spanId": 3
           },
           {
             "text": "marked",
@@ -364,7 +364,7 @@
             "width": 89.674,
             "ascent": 26.130001,
             "descent": 7.67,
-            "font": 1,
+            "fontIndex": 1,
             "fontSize": 26.0,
             "color": [20, 17, 15, 255],
             "opacity": 1.0,
@@ -400,8 +400,8 @@
                 "y": 0.0
               }
             ],
-            "textRange": [19, 25],
-            "span": 4
+            "textByteRange": [19, 25],
+            "spanId": 4
           }
         ]
       },
@@ -417,7 +417,7 @@
         "isolate": false,
         "image": {
           "src": "assets/images/yeecord.png",
-          "content": {
+          "contentBox": {
             "x": 0.0,
             "y": 0.0,
             "width": 120.0,
@@ -442,7 +442,7 @@
         "opacity": 1.0,
         "blendMode": "multiply",
         "isolate": false,
-        "unresolved": {
+        "unresolvedEffects": {
           "filter": "blur(2px)",
           "clipPath": "circle(40%)"
         }

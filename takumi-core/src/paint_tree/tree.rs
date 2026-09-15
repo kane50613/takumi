@@ -44,7 +44,7 @@ pub struct PaintFont {
   /// The family the face was registered under; `None` for a face the registry cannot name.
   pub family: Option<String>,
   /// Index of the face within its collection.
-  pub index: u32,
+  pub face_index: u32,
   /// Weight class, `wght` applied when the face is variable.
   pub weight: f32,
   /// CSS `font-style` of the face: `normal`, `italic`, or `oblique`.
@@ -55,10 +55,10 @@ pub struct PaintFont {
   pub variations: Vec<PaintVariation>,
   /// Stroke width in px for synthetic bold.
   #[serde(skip_serializing_if = "Option::is_none")]
-  pub synthetic_bold: Option<f32>,
+  pub synthetic_bold_width: Option<f32>,
   /// Synthetic oblique angle in degrees.
   #[serde(skip_serializing_if = "Option::is_none")]
-  pub synthetic_skew: Option<f32>,
+  pub synthetic_oblique_angle: Option<f32>,
 }
 
 /// One variation axis setting.
@@ -71,8 +71,8 @@ pub struct PaintVariation {
 }
 
 /// One painted box: a compositing group whose `opacity`, `clip`, and blend apply to everything
-/// inside it. Paints in order: `box`, `image`, `inline_backgrounds`, `runs`, `children`, then
-/// `box.outline`.
+/// inside it. Paints in order: `box_decoration`, `image`, `inline_backgrounds`, `runs`,
+/// `children`, then `box_decoration.outline`.
 #[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PaintNode {
@@ -96,8 +96,8 @@ pub struct PaintNode {
   #[serde(skip_serializing_if = "Option::is_none")]
   pub clip: Option<PaintClip>,
   /// Box decorations, when the box paints any.
-  #[serde(rename = "box", skip_serializing_if = "Option::is_none")]
-  pub box_decoration: Option<PaintBox>,
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub box_decoration: Option<PaintBoxDecoration>,
   /// Replaced image content.
   #[serde(skip_serializing_if = "Option::is_none")]
   pub image: Option<PaintImage>,
@@ -109,10 +109,10 @@ pub struct PaintNode {
   pub inline_backgrounds: Vec<PaintInlineBackground>,
   /// Shaped text runs in visual order.
   #[serde(skip_serializing_if = "Vec::is_empty")]
-  pub runs: Vec<PaintRun>,
+  pub runs: Vec<PaintTextRun>,
   /// Effects the tree carries as CSS text instead of resolving.
   #[serde(skip_serializing_if = "Option::is_none")]
-  pub unresolved: Option<PaintUnresolved>,
+  pub unresolved_effects: Option<PaintUnresolvedEffects>,
   /// Boxes painted after this one, in paint order.
   #[serde(skip_serializing_if = "Vec::is_empty")]
   pub children: Vec<PaintNode>,
@@ -152,7 +152,7 @@ pub struct PaintClip {
 /// A box's decorations.
 #[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct PaintBox {
+pub struct PaintBoxDecoration {
   /// The background.
   pub background: PaintBackground,
   /// The border.
@@ -323,7 +323,7 @@ pub struct PaintImage {
   #[serde(skip_serializing_if = "Option::is_none")]
   pub src: Option<String>,
   /// The content box the image is placed in and clipped to.
-  pub content: PaintRect,
+  pub content_box: PaintRect,
   /// Where the whole image draws after `object-fit` and `object-position`.
   pub placement: PaintRect,
 }
@@ -331,7 +331,7 @@ pub struct PaintImage {
 /// A shaped text run.
 #[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct PaintRun {
+pub struct PaintTextRun {
   /// The run's text.
   pub text: String,
   /// Start of the run's baseline, x.
@@ -345,7 +345,7 @@ pub struct PaintRun {
   /// Typographic descent below the baseline.
   pub descent: f32,
   /// Index into [`PaintTree::fonts`].
-  pub font: usize,
+  pub font_index: usize,
   /// Font size the run was shaped at.
   pub font_size: f32,
   /// Fill color.
@@ -364,10 +364,10 @@ pub struct PaintRun {
   #[serde(skip_serializing_if = "Option::is_none")]
   pub stroke: Option<PaintStroke>,
   /// UTF-8 byte range of the text within the node's inline text.
-  pub text_range: [usize; 2],
+  pub text_byte_range: [usize; 2],
   /// The inline span the run came from.
   #[serde(skip_serializing_if = "Option::is_none")]
-  pub span: Option<u64>,
+  pub span_id: Option<u64>,
 }
 
 /// A positioned glyph.
@@ -421,7 +421,7 @@ pub struct PaintInlineBackground {
 /// Effects exported as CSS text.
 #[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct PaintUnresolved {
+pub struct PaintUnresolvedEffects {
   /// `filter`.
   #[serde(skip_serializing_if = "Option::is_none")]
   pub filter: Option<String>,
@@ -430,7 +430,7 @@ pub struct PaintUnresolved {
   pub backdrop_filter: Option<String>,
   /// `mask-image`.
   #[serde(skip_serializing_if = "Option::is_none")]
-  pub mask: Option<String>,
+  pub mask_image: Option<String>,
   /// `clip-path`.
   #[serde(skip_serializing_if = "Option::is_none")]
   pub clip_path: Option<String>,
