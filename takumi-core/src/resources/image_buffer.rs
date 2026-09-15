@@ -27,6 +27,7 @@ impl ImageBuffer {
   }
 
   /// A single transparent pixel, for a draw with nothing to show.
+  #[cfg(feature = "animation")]
   pub(crate) fn transparent_pixel() -> Self {
     Self {
       data: vec![0; 4],
@@ -36,7 +37,7 @@ impl ImageBuffer {
   }
 
   /// Allocates a transparent (all-zero) buffer of the given size.
-  #[cfg(test)]
+  #[cfg(all(test, feature = "png"))]
   pub(crate) fn new(width: u32, height: u32) -> Option<Self> {
     let len = (width as usize)
       .checked_mul(height as usize)?

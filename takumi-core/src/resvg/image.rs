@@ -49,10 +49,13 @@ fn render_vector(
 }
 
 mod raster_images {
+  #[cfg(feature = "gif")]
   use std::sync::Arc;
 
   use crate::resources::image_buffer::ImageBuffer;
-  use crate::resources::image_decoder::{decode_gif_frames, decode_image};
+  #[cfg(feature = "gif")]
+  use crate::resources::image_decoder::decode_gif_frames;
+  use crate::resources::image_decoder::decode_image;
   use crate::resvg::OptionLog;
   use crate::resvg::usvg::ImageRendering;
 
@@ -79,6 +82,9 @@ mod raster_images {
         .ok()
         .and_then(buffer_to_pixmap)
         .log_none(|| log::warn!("Failed to decode an image.")),
+      #[cfg(not(feature = "gif"))]
+      ImageKind::GIF(_) => None.log_none(|| log::warn!("GIF decoding is compiled out.")),
+      #[cfg(feature = "gif")]
       ImageKind::GIF(data) => {
         let mut first = None;
         decode_gif_frames(data, 0, Some(1), None, |frame| first = Some(frame)).ok()?;

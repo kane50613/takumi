@@ -3,12 +3,15 @@
 //! This module provides types and utilities for managing image resources,
 //! including loading states, error handling, and image processing operations.
 
+#[cfg(feature = "animation")]
 use super::image_decoder::DecodeTarget;
 #[cfg(feature = "svg")]
 use std::borrow::Cow;
 #[cfg(feature = "svg-sizing")]
 use std::str::{FromStr, from_utf8};
-use std::sync::{Arc, OnceLock, Weak};
+#[cfg(feature = "animation")]
+use std::sync::OnceLock;
+use std::sync::{Arc, Weak};
 
 use quick_cache::{
   DefaultHashBuilder, OptionsBuilder, Weighter,
@@ -22,8 +25,10 @@ use thiserror::Error;
 use tiny_skia::Pixmap;
 use xxhash_rust::xxh3::{Xxh3, xxh3_64};
 
-#[cfg(not(all(feature = "png", feature = "jpeg", feature = "webp")))]
+#[cfg(not(all(feature = "png", feature = "jpeg", feature = "webp", feature = "gif")))]
 use crate::resources::image_decoder::decoder_compiled_out;
+#[cfg(feature = "animation")]
+use crate::resources::image_decoder::{FrameInfo, MAX_ANIMATION_FRAMES, required_previous_frame};
 #[cfg(feature = "webp")]
 use crate::resources::image_decoder::{
   animated_webp_dimensions, decode_webp_frame_alone, decode_webp_frames, is_animated_webp,
@@ -32,6 +37,10 @@ use crate::resources::image_decoder::{
 #[cfg(feature = "png")]
 use crate::resources::image_decoder::{
   apng_dimensions, apng_frame_infos, decode_apng_frame_alone, decode_apng_frames, is_apng,
+};
+#[cfg(feature = "gif")]
+use crate::resources::image_decoder::{
+  decode_gif_frame_alone, decode_gif_frames, gif_dimensions, gif_frame_infos, is_gif,
 };
 #[cfg(all(test, feature = "svg"))]
 use crate::resources::svg_size::SvgIntrinsic;
@@ -51,11 +60,7 @@ use crate::{
   resources::{
     font::FontsSnapshot,
     image_buffer::ImageBuffer,
-    image_decoder::{
-      FrameInfo, MAX_ANIMATION_FRAMES, bitmap_dimensions, decode_bitmap_scaled,
-      decode_gif_frame_alone, decode_gif_frames, decode_image, gif_dimensions, gif_frame_infos,
-      is_gif, required_previous_frame,
-    },
+    image_decoder::{bitmap_dimensions, decode_bitmap_scaled, decode_image},
   },
   style::{Color, ImageScalingAlgorithm, IntrinsicSizing, SizingContext, StyleSheet},
 };
@@ -81,6 +86,7 @@ pub enum ImageSource {
   /// A bitmap image source
   Bitmap(Arc<ImageBuffer>),
   /// An animated image source.
+  #[cfg(feature = "animation")]
   Animated(AnimatedSource),
   /// An encoded bitmap decoded lazily at the size it is drawn at.
   Encoded(Arc<EncodedBitmap>),
@@ -246,14 +252,17 @@ impl SvgSource {
 /// size it is drawn and dropped afterwards, so the whole timeline never sits in
 /// memory at once. No cache holds decoded frames — retention stays a single
 /// frame, and the byte budget can account for it exactly.
+#[cfg(feature = "animation")]
 #[derive(Debug, Clone)]
 pub struct AnimatedSource {
   inner: Arc<AnimatedInner>,
 }
 
 /// Animation container an [`AnimatedSource`] decodes its frames from.
+#[cfg(feature = "animation")]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum AnimatedFormat {
+  #[cfg(feature = "gif")]
   Gif,
   #[cfg(feature = "png")]
   Apng,
@@ -261,9 +270,11 @@ enum AnimatedFormat {
   WebP,
 }
 
+#[cfg(feature = "animation")]
 impl AnimatedFormat {
   /// The animation container these bytes carry, if they carry one.
   fn detect(bytes: &[u8]) -> Option<Self> {
+    #[cfg(feature = "gif")]
     if is_gif(bytes) {
       return Some(Self::Gif);
     }
@@ -283,6 +294,7 @@ impl AnimatedFormat {
 
   fn dimensions(self, bytes: &[u8]) -> Result<(u32, u32), image::ImageError> {
     match self {
+      #[cfg(feature = "gif")]
       Self::Gif => gif_dimensions(bytes),
       #[cfg(feature = "png")]
       Self::Apng => apng_dimensions(bytes),
@@ -300,6 +312,7 @@ impl AnimatedFormat {
     push: impl FnMut(Arc<ImageBuffer>),
   ) -> Result<bool, image::ImageError> {
     match self {
+      #[cfg(feature = "gif")]
       Self::Gif => decode_gif_frames(bytes, skip, limit, target, push),
       #[cfg(feature = "png")]
       Self::Apng => decode_apng_frames(bytes, skip, limit, target, push),
@@ -317,6 +330,7 @@ impl AnimatedFormat {
     target: DecodeTarget,
   ) -> Option<ImageBuffer> {
     match self {
+      #[cfg(feature = "gif")]
       Self::Gif => decode_gif_frame_alone(bytes, index, Some(target)),
       #[cfg(feature = "png")]
       Self::Apng => decode_apng_frame_alone(bytes, index, Some(target)),
@@ -328,6 +342,7 @@ impl AnimatedFormat {
   /// Per-frame metadata in stream order, read without decoding pixels.
   fn frame_infos(self, bytes: &[u8]) -> Result<Box<[FrameInfo]>, image::ImageError> {
     match self {
+      #[cfg(feature = "gif")]
       Self::Gif => gif_frame_infos(bytes),
       #[cfg(feature = "png")]
       Self::Apng => apng_frame_infos(bytes),
@@ -337,6 +352,7 @@ impl AnimatedFormat {
   }
 }
 
+#[cfg(feature = "animation")]
 #[derive(Debug)]
 struct AnimatedInner {
   format: AnimatedFormat,
@@ -347,6 +363,7 @@ struct AnimatedInner {
 }
 
 /// Per-frame metadata for the whole animation, read once without pixels.
+#[cfg(feature = "animation")]
 #[derive(Debug)]
 struct AnimationTiming {
   /// Every frame in stream order, first frame included.
@@ -355,6 +372,7 @@ struct AnimationTiming {
   total_ms: u64,
 }
 
+#[cfg(feature = "animation")]
 impl AnimatedSource {
   fn from_bytes(format: AnimatedFormat, bytes: &[u8]) -> Result<Self, ImageError> {
     let (width, height) = format.dimensions(bytes).map_err(ImageError::decode)?;
@@ -776,6 +794,7 @@ impl ImageSource {
   pub(crate) fn estimated_bytes(&self) -> usize {
     match self {
       Self::Bitmap(buffer) => buffer.data().len(),
+      #[cfg(feature = "animation")]
       Self::Animated(animated) => animated.decoded_bytes(),
       Self::Encoded(encoded) => encoded.bytes.len(),
       // Markup plus a parsed-tree estimate; rasterized pixmaps are weighted
@@ -800,6 +819,7 @@ impl ImageSource {
       }
     }
 
+    #[cfg(feature = "animation")]
     if let Some(format) = AnimatedFormat::detect(bytes) {
       return Ok(ImageSource::Animated(AnimatedSource::from_bytes(
         format, bytes,
@@ -808,9 +828,9 @@ impl ImageSource {
 
     match decode_image(bytes) {
       Ok(buffer) => Ok(ImageSource::Bitmap(Arc::new(buffer))),
-      #[cfg(all(feature = "png", feature = "jpeg", feature = "webp"))]
+      #[cfg(all(feature = "png", feature = "jpeg", feature = "webp", feature = "gif"))]
       Err(error) => Err(ImageError::decode(error)),
-      #[cfg(not(all(feature = "png", feature = "jpeg", feature = "webp")))]
+      #[cfg(not(all(feature = "png", feature = "jpeg", feature = "webp", feature = "gif")))]
       Err(error) => match bitmap_dimensions(bytes).filter(|_| decoder_compiled_out(bytes)) {
         Some(Ok(dimensions)) => Ok(Self::encoded(bytes, dimensions, 0, Weak::new())),
         _ => Err(ImageError::decode(error)),
@@ -838,6 +858,7 @@ impl ImageSource {
       }
     }
 
+    #[cfg(feature = "animation")]
     if let Some(format) = AnimatedFormat::detect(bytes) {
       return Ok(ImageSource::Animated(AnimatedSource::from_bytes(
         format, bytes,
@@ -876,7 +897,7 @@ impl ImageSource {
     width: u32,
     height: u32,
     image_rendering: ImageScalingAlgorithm,
-    time_ms: u64,
+    #[cfg_attr(not(feature = "animation"), allow(unused_variables))] time_ms: u64,
     #[cfg_attr(not(feature = "svg"), allow(unused_variables))] current_color: Color,
     #[cfg_attr(not(feature = "svg"), allow(unused_variables))] fonts: Option<&FontsSnapshot>,
   ) -> Result<RenderedImage, ImageError> {
@@ -888,6 +909,7 @@ impl ImageSource {
         algorithm: image_rendering,
         source_scale: (1.0, 1.0),
       }),
+      #[cfg(feature = "animation")]
       ImageSource::Animated(animated) => {
         let source = animated.frame_at_time_covering(time_ms, width, height, image_rendering);
         let (native_width, native_height) = animated.dimensions();
@@ -931,6 +953,7 @@ impl ImageSource {
       #[cfg(feature = "svg-sizing")]
       ImageSource::Svg(svg) => svg.dimensions(),
       ImageSource::Bitmap(bitmap) => (bitmap.width() as f32, bitmap.height() as f32),
+      #[cfg(feature = "animation")]
       ImageSource::Animated(animated) => {
         let (width, height) = animated.dimensions();
         (width as f32, height as f32)
@@ -953,6 +976,7 @@ impl ImageSource {
       ImageSource::Bitmap(bitmap) => {
         IntrinsicSizing::from_dimensions(bitmap.width() as f32, bitmap.height() as f32)
       }
+      #[cfg(feature = "animation")]
       ImageSource::Animated(animated) => {
         let (width, height) = animated.dimensions();
         IntrinsicSizing::from_dimensions(width as f32, height as f32)
@@ -1726,6 +1750,7 @@ mod tests {
     );
   }
 
+  #[cfg(feature = "svg")]
   fn premul_at(image: &RenderedImage, x: u32, y: u32) -> [u8; 4] {
     match image {
       RenderedImage::Rasterized(buffer) => buffer.pixel(x, y),
@@ -1733,7 +1758,9 @@ mod tests {
     }
   }
 
+  #[cfg(feature = "png")]
   const HALF_TRANSPARENT_BLUE: [u8; 4] = [0, 0, 255, 128];
+  #[cfg(feature = "animation")]
   const FRAME_COLORS: [[u8; 4]; 3] = [[255, 0, 0, 255], [0, 255, 0, 255], [0, 0, 255, 255]];
 
   /// Encodes one 4x4 solid frame per `(color index, delay ms)` pair. Delays

@@ -487,7 +487,7 @@ pub(super) fn decode_webp_scaled(
   None
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "webp"))]
 mod tests {
   use super::*;
   use crate::style::ImageScalingAlgorithm;
