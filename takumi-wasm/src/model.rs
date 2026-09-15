@@ -1,14 +1,11 @@
 //! Data models and types for the WebAssembly bindings.
 
-use std::sync::Arc;
-
-use serde::{Deserialize, Deserializer, de::Error as DeError};
-use serde_bytes::ByteBuf;
+use serde::Deserialize;
+pub use takumi_bindings_common::input::{Font, ImageSource};
 use takumi_core::{
   keyframes::deserialize_optional_keyframes,
   layout::node::Node,
-  resources::image::ImageCacheMode,
-  style::{CssSource, FontStyle as CssFontStyle, FromCssStr, KeyframesRule},
+  style::{CssSource, KeyframesRule},
 };
 use takumi_raster::DitheringAlgorithm;
 use wasm_bindgen::prelude::*;
@@ -158,48 +155,6 @@ pub struct RenderAnimationOptions {
   pub lang: Option<String>,
 }
 
-/// Details for loading a custom font.
-#[derive(Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct FontDetails {
-  /// The name of the font family.
-  pub name: Option<String>,
-  /// The raw font data bytes.
-  pub data: ByteBuf,
-  /// The font weight (e.g., 400 for normal, 700 for bold).
-  pub weight: Option<f64>,
-  /// The font style (normal, italic, or oblique).
-  pub style: Option<FontStyle>,
-  /// Logical family this font is a coverage subset of; expands at render time.
-  pub subset_of: Option<String>,
-  /// Where this subset sits in its group's fallback order; lowest is tried first.
-  pub subset_rank: Option<u32>,
-  /// CSS generic family keyword (e.g. `monospace`) this font resolves for.
-  pub generic: Option<String>,
-}
-
-/// Font input, either as detailed object or raw buffer.
-#[derive(Deserialize)]
-#[serde(untagged)]
-pub enum Font {
-  /// Font loaded with detailed configuration.
-  Object(FontDetails),
-  /// Raw font buffer.
-  Buffer(ByteBuf),
-}
-
-/// An image source with its URL and raw data.
-#[derive(Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ImageSource {
-  /// The source URL of the image.
-  pub src: Arc<str>,
-  /// The raw image data bytes.
-  pub data: ByteBuf,
-  /// Cache policy for the decoded image. Defaults to `"auto"`.
-  pub cache: Option<ImageCacheMode>,
-}
-
 /// Output format for static images.
 #[derive(Deserialize, Clone, Copy, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
@@ -244,28 +199,6 @@ pub enum AnimationOutputFormat {
   WebP,
   /// Animated GIF format.
   Gif,
-}
-
-/// Font style input parsed from CSS-like font-style strings.
-#[derive(Clone, Copy)]
-pub struct FontStyle(pub CssFontStyle);
-
-impl<'de> Deserialize<'de> for FontStyle {
-  fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-  where
-    D: Deserializer<'de>,
-  {
-    let value = String::deserialize(deserializer)?;
-    Ok(Self(
-      CssFontStyle::from_css_str(&value).map_err(D::Error::custom)?,
-    ))
-  }
-}
-
-impl From<FontStyle> for CssFontStyle {
-  fn from(style: FontStyle) -> Self {
-    style.0
-  }
 }
 
 /// A single scene in a sequential animation timeline.
