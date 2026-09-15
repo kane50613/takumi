@@ -167,10 +167,10 @@ pub fn run_fixture_test_with_options(options: RenderOptions<'_>, fixture_name: &
 
 /// Embeds `css` in the repro HTML; `RenderOptions` only carries the parsed
 /// sheet, which cannot serialize back.
-#[allow(dead_code)]
 /// Runs the repo's formatter over a generated fixture, so a test run leaves the
 /// tree the way `bun lint` wants it. A checkout without `node_modules` skips.
-fn format_generated_html(path: &str) {
+#[allow(dead_code)]
+pub fn format_generated(path: &str) {
   let binary = if cfg!(windows) { "oxfmt.exe" } else { "oxfmt" };
   let oxfmt = repo_base_path(&format!("node_modules/.bin/{binary}"));
 
@@ -234,7 +234,7 @@ pub fn run_fixture_test_with_css(options: RenderOptions<'_>, css: &str, fixture_
 
   let html_path = format!("tests/fixtures-generated/{fixture_name}.html");
   write(&html_path, html_content).unwrap();
-  format_generated_html(&html_path);
+  format_generated(&html_path);
 
   // Emit the vector SVG alongside the raster golden (best-effort: the SVG backend
   // does not cover every paint feature yet, so failures are skipped not fatal).
