@@ -18,11 +18,12 @@ features = ["rc"]
 
 [dependencies.takumi-bindings-common]
 path = "../takumi-bindings-common"
+default-features = false
 
 [dependencies.takumi-core]
 path = "../takumi-core"
 default-features = false
-features = ["woff2", "paint-tree"]
+features = ["woff2", "svg-size", "paint-tree"]
 
 [lints]
 workspace = true

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { container, text } from "@takumi-rs/helpers";
+import { container, image, text } from "@takumi-rs/helpers";
 import { type PaintNode, type PaintTextRun, PaintTreeRenderer } from "takumi-paint";
 
 const renderer = new PaintTreeRenderer();
@@ -57,6 +57,18 @@ describe("PaintTreeRenderer.render", () => {
     expect([tree.width, tree.height]).toEqual([200, 100]);
     const [run] = runs(tree.root);
     expect(run?.fontSize).toBe(40);
+  });
+
+  it("sizes an SVG image from its root element", async () => {
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="2in" viewBox="0 0 4 1"><rect width="4" height="1"/></svg>`;
+    const tree = await renderer.render(container({ id: "wrap", children: [image({ src: svg })] }), {
+      width: 400,
+      height: 200,
+    });
+
+    const [picture] = find(tree.root, "wrap")?.children ?? [];
+    expect([picture?.width, picture?.height]).toEqual([192, 48]);
+    expect(picture?.image?.src).toBe(svg);
   });
 
   it("keeps a nested span's own color as its own run", async () => {

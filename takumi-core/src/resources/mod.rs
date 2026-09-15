@@ -9,3 +9,5 @@ pub mod image;
 pub mod image_buffer;
 pub(crate) mod image_decoder;
 mod image_resampler;
+#[cfg(feature = "svg-size")]
+pub(crate) mod svg_size;

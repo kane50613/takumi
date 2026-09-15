@@ -11,7 +11,11 @@ serde_bytes.workspace = true
 [dependencies.takumi-core]
 path = "../takumi-core"
 default-features = false
-features = ["woff2", "woff", "svg"]
+features = ["woff2", "woff"]
 
 [lints]
 workspace = true
+
+[features]
+default = ["svg"]
+svg = ["takumi-core/svg"]
