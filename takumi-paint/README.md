@@ -26,7 +26,7 @@ npm install takumi-paint @takumi-rs/helpers
 ## Quick start
 
 ```tsx
-import { renderPaintTree } from "takumi-paint";
+import { renderPaintTree, type PaintNode, type PaintTextRun } from "takumi-paint";
 
 const tree = await renderPaintTree(
   `<style>.big { font: 700 40px Georgia; color: #B3261E }</style>
@@ -37,7 +37,12 @@ const tree = await renderPaintTree(
   { width: 640 },
 );
 
-for (const run of tree.root.children?.[0]?.runs ?? []) {
+function* runs(node: PaintNode): Iterable<PaintTextRun> {
+  yield* node.runs ?? [];
+  for (const child of node.children ?? []) yield* runs(child);
+}
+
+for (const run of runs(tree.root)) {
   const font = tree.fonts[run.fontIndex];
   console.log(run.text, font?.family, font?.weight, run.fontSize, run.color);
 }
@@ -45,4 +50,4 @@ for (const run of tree.root.children?.[0]?.runs ?? []) {
 
 ## What is resolved and what is not
 
-Colors are `[r, g, b, a]`. Gradients come with their resolved stops and geometry. `filter`, `backdrop-filter`, `mask-image`, and `clip-path` are carried as CSS text under `unresolvedEffects`.
+Colors are `[r, g, b, a]`. Linear and radial gradients come with their resolved stops and geometry. A conic gradient is carried as CSS text. `filter`, `backdrop-filter`, `mask-image`, and `clip-path` are carried as CSS text under `unresolvedEffects`.

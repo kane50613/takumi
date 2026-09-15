@@ -82,4 +82,4 @@ Runs reference `tree.fonts` by index. A font instance names the registered famil
 
 ## What stays CSS
 
-Gradients come resolved: stops in pixels along the axis, plus the tile geometry. `filter`, `backdrop-filter`, `mask-image`, and `clip-path` are carried as CSS text under `unresolvedEffects`, so an exporter can decide what to do with them.
+Linear and radial gradients come resolved: stops in pixels along the axis, plus the tile geometry. A conic gradient is carried as CSS text. `filter`, `backdrop-filter`, `mask-image`, and `clip-path` are carried as CSS text under `unresolvedEffects`, so an exporter can decide what to do with them.
