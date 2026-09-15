@@ -7,7 +7,9 @@ use super::image_decoder::DecodeTarget;
 #[cfg(feature = "svg")]
 use std::borrow::Cow;
 #[cfg(feature = "svg")]
-use std::str::{FromStr, from_utf8};
+use std::str::FromStr;
+#[cfg(feature = "svg-size")]
+use std::str::from_utf8;
 use std::sync::{Arc, OnceLock, Weak};
 
 use quick_cache::{
@@ -33,6 +35,10 @@ use crate::resources::image_decoder::{
 use crate::resources::image_decoder::{
   apng_dimensions, apng_frame_infos, decode_apng_frame_alone, decode_apng_frames, is_apng,
 };
+#[cfg(feature = "svg")]
+use crate::resources::svg_size::SvgIntrinsic;
+#[cfg(feature = "svg-size")]
+use crate::resources::svg_size::SvgSize;
 #[cfg(feature = "svg")]
 use crate::resvg::{
   apply_filters_to_layer, render as render_svg_tree,
@@ -74,6 +80,9 @@ pub enum ImageSource {
   /// An svg image source
   #[cfg(feature = "svg")]
   Svg(Arc<SvgSource>),
+  /// An SVG sized from its root element; this build cannot draw it.
+  #[cfg(all(feature = "svg-size", not(feature = "svg")))]
+  SvgSize(SvgSize),
   /// A bitmap image source
   Bitmap(Arc<ImageBuffer>),
   /// An animated image source.
@@ -208,15 +217,6 @@ impl SvgSource {
       options.current_color = Some(svgtypes::Color::new_rgba(red, green, blue, alpha));
     })
   }
-}
-
-/// Intrinsic width/height (in SVG user units) and aspect ratio of an SVG root.
-#[cfg(feature = "svg")]
-#[derive(Debug, Clone, Copy, Default)]
-struct SvgIntrinsic {
-  width: Option<f32>,
-  height: Option<f32>,
-  ratio: Option<f32>,
 }
 
 /// A lazily decoded animated GIF. Only the first frame and the (pixel-free)
@@ -624,7 +624,9 @@ impl SvgSource {
 
     let options = svg_parse_options();
     let tree = Tree::from_xmltree(&document, &options).map_err(ImageError::svg_parse)?;
-    let intrinsic = svg_intrinsic_sizing(document.root_element(), tree.size());
+    let intrinsic = SvgSize::from_root(document.root_element())
+      .map_err(ImageError::svg_parse)?
+      .intrinsic;
     // Set during parsing whenever a `currentColor` finds no `color` attribute
     // on its ancestors, so it also catches entity-encoded values a source-text
     // scan would miss.
@@ -760,6 +762,8 @@ impl ImageSource {
       // separately as their own sized entries.
       #[cfg(feature = "svg")]
       Self::Svg(svg) => svg.source.len() * 3,
+      #[cfg(all(feature = "svg-size", not(feature = "svg")))]
+      Self::SvgSize(_) => std::mem::size_of::<SvgSize>(),
     }
   }
 
@@ -775,6 +779,16 @@ impl ImageSource {
         && is_svg_like(text)
       {
         return Ok(ImageSource::Svg(Arc::new(text.parse()?)));
+      }
+    }
+    #[cfg(all(feature = "svg-size", not(feature = "svg")))]
+    {
+      if let Ok(text) = from_utf8(bytes)
+        && is_svg_like(text)
+      {
+        return Ok(ImageSource::SvgSize(
+          SvgSize::parse(text).map_err(ImageError::svg_parse)?,
+        ));
       }
     }
 
@@ -813,6 +827,16 @@ impl ImageSource {
         return Ok(ImageSource::Svg(Arc::new(SvgSource::parse(
           text, hash, cache,
         )?)));
+      }
+    }
+    #[cfg(all(feature = "svg-size", not(feature = "svg")))]
+    {
+      if let Ok(text) = from_utf8(bytes)
+        && is_svg_like(text)
+      {
+        return Ok(ImageSource::SvgSize(
+          SvgSize::parse(text).map_err(ImageError::svg_parse)?,
+        ));
       }
     }
 
@@ -898,6 +922,8 @@ impl ImageSource {
         current_color,
         fonts,
       )?)),
+      #[cfg(all(feature = "svg-size", not(feature = "svg")))]
+      ImageSource::SvgSize(_) => Err(ImageError::SvgParseNotSupported),
     }
   }
 
@@ -906,6 +932,8 @@ impl ImageSource {
     let (width, height) = match self {
       #[cfg(feature = "svg")]
       ImageSource::Svg(svg) => svg.dimensions(),
+      #[cfg(all(feature = "svg-size", not(feature = "svg")))]
+      ImageSource::SvgSize(svg) => (svg.width, svg.height),
       ImageSource::Bitmap(bitmap) => (bitmap.width() as f32, bitmap.height() as f32),
       ImageSource::Animated(animated) => {
         let (width, height) = animated.dimensions();
@@ -925,11 +953,9 @@ impl ImageSource {
   pub fn intrinsic_sizing(&self) -> IntrinsicSizing {
     match self {
       #[cfg(feature = "svg")]
-      ImageSource::Svg(svg) => IntrinsicSizing {
-        width: svg.intrinsic.width,
-        height: svg.intrinsic.height,
-        ratio: svg.intrinsic.ratio,
-      },
+      ImageSource::Svg(svg) => svg.intrinsic.into(),
+      #[cfg(all(feature = "svg-size", not(feature = "svg")))]
+      ImageSource::SvgSize(svg) => svg.intrinsic.into(),
       ImageSource::Bitmap(bitmap) => {
         IntrinsicSizing::from_dimensions(bitmap.width() as f32, bitmap.height() as f32)
       }
@@ -1058,49 +1084,6 @@ pub fn to_data_url(mime: &str, bytes: &[u8]) -> String {
   out
 }
 
-/// SVG root intrinsic sizing per <https://www.w3.org/TR/SVG/coords.html#IntrinsicSizing>:
-/// a non-percentage `width`/`height` is an intrinsic dimension, the `viewBox`
-/// gives the ratio. Absolute px come from `resolved_size` (usvg's parsed size)
-/// to avoid reimplementing SVG length units.
-#[cfg(feature = "svg")]
-fn svg_intrinsic_sizing(
-  root: roxmltree::Node,
-  resolved_size: crate::resvg::usvg::Size,
-) -> SvgIntrinsic {
-  let is_absolute = |name| {
-    root
-      .attribute(name)
-      .map(str::trim)
-      .is_some_and(|value| !value.is_empty() && !value.ends_with('%'))
-  };
-
-  let width = is_absolute("width").then(|| resolved_size.width());
-  let height = is_absolute("height").then(|| resolved_size.height());
-
-  let ratio = match (width, height) {
-    (Some(width), Some(height)) if width != 0.0 && height != 0.0 => Some(width / height),
-    _ => root.attribute("viewBox").and_then(parse_viewbox_ratio),
-  };
-
-  SvgIntrinsic {
-    width,
-    height,
-    ratio,
-  }
-}
-
-/// Parse the aspect ratio (`width / height`) from a `viewBox` (`min-x min-y
-/// width height`).
-#[cfg(feature = "svg")]
-fn parse_viewbox_ratio(view_box: &str) -> Option<f32> {
-  let mut numbers = view_box
-    .split([' ', ',', '\t', '\n', '\r'])
-    .filter(|part| !part.is_empty());
-  let width: f32 = numbers.nth(2)?.parse().ok()?;
-  let height: f32 = numbers.next()?.parse().ok()?;
-  (width > 0.0 && height > 0.0).then_some(width / height)
-}
-
 /// Represents the state of an image in the rendering system.
 ///
 /// This enum tracks whether an image has been successfully loaded and decoded,
@@ -1117,13 +1100,13 @@ pub enum ImageError {
   /// The image data URI is malformed and cannot be parsed
   #[error("The image data URI is malformed and cannot be parsed")]
   MalformedDataUri,
-  #[cfg(feature = "svg")]
+  #[cfg(feature = "svg-size")]
   /// An error occurred while parsing an SVG image
   #[error("An error occurred while parsing an SVG image: {0}")]
   SvgParseError(#[source] Box<dyn std::error::Error + Send + Sync + 'static>),
-  /// SVG parsing is not supported in this build
+  /// SVG rendering is not supported in this build
   #[cfg(not(feature = "svg"))]
-  #[error("SVG parsing is not supported in this build")]
+  #[error("SVG rendering is not supported in this build")]
   SvgParseNotSupported,
   /// The image source is unknown
   #[error("The image source is unknown")]
@@ -1148,7 +1131,7 @@ impl ImageError {
 
   /// Wraps an SVG parse error opaquely so takumi's public API stays independent
   /// of the `resvg`/`usvg` version.
-  #[cfg(feature = "svg")]
+  #[cfg(feature = "svg-size")]
   pub(crate) fn svg_parse(err: impl std::error::Error + Send + Sync + 'static) -> Self {
     Self::SvgParseError(Box::new(err))
   }
@@ -1609,6 +1592,107 @@ mod tests {
   use image::{Rgba, RgbaImage};
 
   use super::*;
+
+  /// `SvgSize` reads the root element only; usvg's size and the intrinsic
+  /// rules the backends used before must agree with it on every SVG in the repo.
+  #[cfg(feature = "svg")]
+  #[test]
+  fn svg_size_matches_usvg_across_the_corpus() {
+    use std::{
+      fs,
+      path::{Path, PathBuf},
+    };
+
+    fn walk(dir: &Path, out: &mut Vec<PathBuf>) {
+      for entry in fs::read_dir(dir).unwrap().flatten() {
+        let path = entry.path();
+        if path.is_dir() {
+          walk(&path, out);
+        } else if path.extension().is_some_and(|extension| extension == "svg") {
+          out.push(path);
+        }
+      }
+    }
+
+    fn previous_intrinsic(root: roxmltree::Node, size: (f32, f32)) -> SvgIntrinsic {
+      let is_absolute = |name| {
+        root
+          .attribute(name)
+          .map(str::trim)
+          .is_some_and(|value| !value.is_empty() && !value.ends_with('%'))
+      };
+      let width = is_absolute("width").then_some(size.0);
+      let height = is_absolute("height").then_some(size.1);
+      let ratio = match (width, height) {
+        (Some(width), Some(height)) if width != 0.0 && height != 0.0 => Some(width / height),
+        _ => root.attribute("viewBox").and_then(|view_box| {
+          let mut numbers = view_box
+            .split([' ', ',', '\t', '\n', '\r'])
+            .filter(|part| !part.is_empty());
+          let width: f32 = numbers.nth(2)?.parse().ok()?;
+          let height: f32 = numbers.next()?.parse().ok()?;
+          (width > 0.0 && height > 0.0).then_some(width / height)
+        }),
+      };
+      SvgIntrinsic {
+        width,
+        height,
+        ratio,
+      }
+    }
+
+    let repo = Path::new(env!("CARGO_MANIFEST_DIR")).join("..");
+    let mut files = Vec::new();
+    walk(&repo.join("assets"), &mut files);
+    walk(&repo.join("takumi/tests"), &mut files);
+    assert!(files.len() > 100, "corpus too small: {}", files.len());
+
+    let mut compared = 0;
+    for path in files {
+      let Ok(markup) = fs::read_to_string(&path) else {
+        continue;
+      };
+      let Ok(source) = markup.parse::<SvgSource>() else {
+        continue;
+      };
+      let size =
+        SvgSize::parse(&markup).unwrap_or_else(|error| panic!("{}: {error}", path.display()));
+      let document = Document::parse_with_options(
+        &markup,
+        ParsingOptions {
+          allow_dtd: true,
+          ..Default::default()
+        },
+      )
+      .unwrap();
+      let root = document.root_element();
+      let usvg_size = source.dimensions();
+
+      let percent = |name| {
+        root
+          .attribute(name)
+          .is_some_and(|value| value.trim_end().ends_with('%'))
+      };
+      if root.attribute("viewBox").is_some() || !(percent("width") || percent("height")) {
+        let close = |a: f32, b: f32| (a - b).abs() <= 1e-3 * b.abs().max(1.0);
+        assert!(
+          close(size.width, usvg_size.0) && close(size.height, usvg_size.1),
+          "{}: {:?} vs usvg {:?}",
+          path.display(),
+          (size.width, size.height),
+          usvg_size
+        );
+      }
+      assert_eq!(
+        size.intrinsic,
+        previous_intrinsic(root, usvg_size),
+        "{}",
+        path.display()
+      );
+      compared += 1;
+    }
+    assert!(compared > 100, "compared only {compared}");
+  }
 
   /// `width`/`height` attributes give intrinsic dimensions; a `viewBox` alone
   /// gives only an aspect ratio (per the SVG/CSS intrinsic sizing rules).
