@@ -18,7 +18,7 @@ const DEFAULT_SIZE: f32 = 100.0;
 /// CSS intrinsic sizing of an SVG per <https://www.w3.org/TR/SVG/coords.html#IntrinsicSizing>:
 /// a non-percentage `width`/`height` is an intrinsic dimension, the `viewBox` gives the ratio.
 #[derive(Debug, Clone, Copy, Default, PartialEq)]
-pub(crate) struct SvgIntrinsic {
+pub struct SvgIntrinsic {
   pub(crate) width: Option<f32>,
   pub(crate) height: Option<f32>,
   pub(crate) ratio: Option<f32>,
@@ -36,7 +36,7 @@ impl From<SvgIntrinsic> for IntrinsicSizing {
 
 /// The size usvg gives an SVG tree, plus its CSS intrinsic sizing.
 #[derive(Debug, Clone, Copy, PartialEq)]
-pub(crate) struct SvgSize {
+pub struct SvgSize {
   pub(crate) width: f32,
   pub(crate) height: f32,
   pub(crate) intrinsic: SvgIntrinsic,

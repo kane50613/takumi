@@ -77,6 +77,11 @@ jobs:
       - name: Run Clippy for wasm
         run: cargo clippy --locked --target wasm32-unknown-unknown -p takumi-wasm -p takumi-pdf-wasm -p takumi-paint-wasm -- -D warnings
 
+      # Alone, so feature unification with the other wasm crates cannot hide
+      # what the paint build compiles.
+      - name: Run Clippy for the paint build
+        run: cargo clippy --locked --target wasm32-unknown-unknown -p takumi-paint-wasm -- -D warnings
+
       - name: Test README.md is up to date
         run: |
           fail=0
