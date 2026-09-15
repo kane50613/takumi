@@ -96,6 +96,9 @@ fn skip_ink_ranges<'g>(
   for (origin, paths) in glyphs {
     let band_top = top + MIN_INTERSECTION - origin.y;
     let band_bottom = bottom - MIN_INTERSECTION - origin.y;
+    if !reaches_band(paths, band_top, band_bottom) {
+      continue;
+    }
 
     ranges.extend(
       text_intercepts(paths, band_top, band_bottom)
@@ -105,6 +108,33 @@ fn skip_ink_ranges<'g>(
   }
 
   merge(ranges)
+}
+
+/// Whether any point of the outline, control points included, lies within the band; every
+/// flattened edge stays inside the hull of its control points, so an outline that fails this
+/// cannot cross a scanline in the band.
+fn reaches_band(paths: &[PathCommand], top: f32, bottom: f32) -> bool {
+  let (mut min_y, mut max_y) = (f32::INFINITY, f32::NEG_INFINITY);
+  let mut span = |point: &Point<f32>| {
+    min_y = min_y.min(point.y);
+    max_y = max_y.max(point.y);
+  };
+  for command in paths {
+    match command {
+      PathCommand::MoveTo(point) | PathCommand::LineTo(point) => span(point),
+      PathCommand::QuadTo(control, end) => {
+        span(control);
+        span(end);
+      }
+      PathCommand::CubicTo(first, second, end) => {
+        span(first);
+        span(second);
+        span(end);
+      }
+      PathCommand::Close => {}
+    }
+  }
+  max_y >= top && min_y <= bottom
 }
 
 /// What is left of `start..end` once `skips` are taken out of it. `skips` must

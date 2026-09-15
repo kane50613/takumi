@@ -5,8 +5,7 @@ use crate::geometry::Size;
 use super::InlineLayout;
 
 type ShapedText = (InlineLayout, String);
-// None records first sight without retaining a layout clone.
-pub(crate) type ShapeCache = Rc<RefCell<HashMap<u64, Option<ShapedText>>>>;
+pub(crate) type ShapeCache = Rc<RefCell<HashMap<u64, ShapedText>>>;
 pub(crate) type MeasureCache = Rc<RefCell<HashMap<(u64, u32), Size<f32>>>>;
 
 /// Render-local text shaping and measurement reuse.
@@ -29,24 +28,16 @@ impl InlineLayoutCache {
     key: Option<(u64, &str)>,
     shape: impl FnOnce() -> ShapedText,
   ) -> ShapedText {
-    let seen = if let Some((fingerprint, expected_text)) = key {
-      match self.shapes.borrow().get(&fingerprint) {
-        Some(Some((layout, text))) if text == expected_text => {
-          return (layout.clone(), text.clone());
-        }
-        Some(_) => true,
-        None => false,
-      }
-    } else {
-      false
-    };
+    if let Some((fingerprint, expected_text)) = key
+      && let Some((layout, text)) = self.shapes.borrow().get(&fingerprint)
+      && text == expected_text
+    {
+      return (layout.clone(), text.clone());
+    }
 
     let shaped = shape();
     if let Some((fingerprint, _)) = key {
-      self
-        .shapes
-        .borrow_mut()
-        .insert(fingerprint, seen.then(|| shaped.clone()));
+      self.shapes.borrow_mut().insert(fingerprint, shaped.clone());
     }
     shaped
   }
@@ -72,7 +63,7 @@ mod tests {
   use super::*;
 
   #[test]
-  fn shaping_retains_repeated_inputs_and_checks_text() {
+  fn shaping_retains_first_sight_and_checks_text() {
     let cache = InlineLayoutCache::default();
     let calls = Cell::new(0);
     let shape = || {
@@ -82,16 +73,16 @@ mod tests {
     for _ in 0..3 {
       cache.get_or_shape(Some((1, "hello")), shape);
     }
-    assert_eq!(calls.get(), 2);
+    assert_eq!(calls.get(), 1);
     cache.clone().get_or_shape(Some((1, "hello")), shape);
-    assert_eq!(calls.get(), 2);
+    assert_eq!(calls.get(), 1);
 
     let (_, text) = cache.get_or_shape(Some((1, "other")), || {
       (InlineLayout::new(), "other".to_owned())
     });
     assert_eq!(text, "other");
     InlineLayoutCache::default().get_or_shape(Some((1, "hello")), shape);
-    assert_eq!(calls.get(), 3);
+    assert_eq!(calls.get(), 2);
   }
 
   #[test]
