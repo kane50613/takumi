@@ -68,7 +68,7 @@ fn find<'t>(node: &'t PaintNode, id: &str) -> Option<&'t PaintNode> {
   node.children.iter().find_map(|child| find(child, id))
 }
 
-fn all_runs(node: &PaintNode) -> Vec<&takumi_core::paint_tree::PaintRun> {
+fn all_runs(node: &PaintNode) -> Vec<&takumi_core::paint_tree::PaintTextRun> {
   let mut runs: Vec<_> = node.runs.iter().collect();
   for child in &node.children {
     runs.extend(all_runs(child));
@@ -122,9 +122,12 @@ fn paint_tree_records_used_values() {
   assert!(big.decorations.iter().all(|d| d.line == "underline"));
   let world = runs[2];
   assert_eq!(world.color, [0, 0, 255, 255]);
-  assert_eq!(tree.fonts[world.font].weight, 700.0);
-  assert_eq!(tree.fonts[world.font].family.as_deref(), Some("Geist"));
-  assert_eq!(tree.fonts[runs[1].font].weight, 400.0);
+  assert_eq!(tree.fonts[world.font_index].weight, 700.0);
+  assert_eq!(
+    tree.fonts[world.font_index].family.as_deref(),
+    Some("Geist")
+  );
+  assert_eq!(tree.fonts[runs[1].font_index].weight, 400.0);
 
   let paragraph = find(&tree.root, "paragraph").expect("paragraph box");
   assert_eq!(paragraph.inline_backgrounds.len(), 1);
@@ -138,16 +141,19 @@ fn paint_tree_records_used_values() {
     .chain(card.children.iter())
     .find_map(|node| node.image.as_ref())
     .expect("image content");
-  assert_eq!((image.content.width, image.content.height), (120.0, 80.0));
+  assert_eq!(
+    (image.content_box.width, image.content_box.height),
+    (120.0, 80.0)
+  );
   assert_eq!(image.src.as_deref(), Some("assets/images/yeecord.png"));
   assert!(image.placement.width >= 120.0 && image.placement.height >= 80.0);
 
   let glass = card
     .children
     .iter()
-    .find(|node| node.unresolved.is_some())
+    .find(|node| node.unresolved_effects.is_some())
     .expect("glass box");
-  let unresolved = glass.unresolved.as_ref().unwrap();
+  let unresolved = glass.unresolved_effects.as_ref().unwrap();
   assert_eq!(unresolved.filter.as_deref(), Some("blur(2px)"));
   assert!(unresolved.clip_path.is_some());
   assert_eq!(glass.blend_mode.as_deref(), Some("multiply"));

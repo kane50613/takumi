@@ -30,10 +30,10 @@ use crate::{
 use super::{
   fonts::FontTable,
   tree::{
-    PaintBackground, PaintBackgroundLayer, PaintBorder, PaintBox, PaintBoxShadows, PaintClip,
-    PaintDecoration, PaintFill, PaintGlyph, PaintGradientStop, PaintImage, PaintInlineBackground,
-    PaintNode, PaintOutline, PaintRect, PaintRun, PaintShadow, PaintSource, PaintStroke,
-    PaintTiles, PaintUnresolved, Radii, rgba,
+    PaintBackground, PaintBackgroundLayer, PaintBorder, PaintBoxDecoration, PaintBoxShadows,
+    PaintClip, PaintDecoration, PaintFill, PaintGlyph, PaintGradientStop, PaintImage,
+    PaintInlineBackground, PaintNode, PaintOutline, PaintRect, PaintShadow, PaintSource,
+    PaintStroke, PaintTextRun, PaintTiles, PaintUnresolvedEffects, Radii, rgba,
   },
 };
 
@@ -139,7 +139,7 @@ impl Walker {
       text_shadows: Vec::new(),
       inline_backgrounds: Vec::new(),
       runs: Vec::new(),
-      unresolved: unresolved(node),
+      unresolved_effects: unresolved(node),
       children: Vec::new(),
     })
   }
@@ -267,7 +267,7 @@ impl Walker {
     spans: &[ProcessedInlineSpan<'_>],
     run: &PositionedInlineRun,
     layout: ComputedLayout,
-  ) -> PaintRun {
+  ) -> PaintTextRun {
     let shaped = &run.glyph_run;
     let brush = &shaped.brush;
     let text_range = run_text_range(shaped.text_range.clone(), spans, brush.source_span_id);
@@ -294,14 +294,14 @@ impl Walker {
       })
       .collect();
 
-    PaintRun {
+    PaintTextRun {
       text: run_text(text, text_range.clone()),
       x: origin.x,
       y: origin.y,
       width: shaped.advance,
       ascent: shaped.metrics.ascent,
       descent: shaped.metrics.descent,
-      font: self.fonts.intern(fonts, shaped),
+      font_index: self.fonts.intern(fonts, shaped),
       font_size: shaped.font_size,
       color: rgba(brush.color),
       opacity: brush.opacity,
@@ -320,8 +320,8 @@ impl Walker {
         color: rgba(brush.stroke_color),
         width: brush.stroke_width,
       }),
-      text_range: [text_range.start, text_range.end],
-      span: brush.source_span_id,
+      text_byte_range: [text_range.start, text_range.end],
+      span_id: brush.source_span_id,
     }
   }
 }
@@ -408,7 +408,7 @@ fn box_decoration(
   node: &RenderNode,
   layout: ComputedLayout,
   painter: &BoxPainter<'_>,
-) -> Result<Option<PaintBox>> {
+) -> Result<Option<PaintBoxDecoration>> {
   if !painter.paints_decorations() {
     return Ok(None);
   }
@@ -418,7 +418,7 @@ fn box_decoration(
   let shadows = painter.shadows();
   let background_color = style.background_color.resolve(context.current_color);
 
-  Ok(Some(PaintBox {
+  Ok(Some(PaintBoxDecoration {
     background: PaintBackground {
       color: (background_color.0[3] != 0).then(|| rgba(background_color)),
       clip: style.background_clip.to_css_string(),
@@ -600,7 +600,7 @@ fn image_content(
   };
   Some(PaintImage {
     src,
-    content,
+    content_box: content,
     placement: PaintRect {
       x: content.x + placement.offset.x,
       y: content.y + placement.offset.y,
@@ -610,16 +610,16 @@ fn image_content(
   })
 }
 
-fn unresolved(node: &RenderNode) -> Option<PaintUnresolved> {
+fn unresolved(node: &RenderNode) -> Option<PaintUnresolvedEffects> {
   let style = &node.context.style;
   let css = |present: bool, css: String| present.then_some(css);
-  let unresolved = PaintUnresolved {
+  let unresolved = PaintUnresolvedEffects {
     filter: css(!style.filter.is_empty(), style.filter.to_css_string()),
     backdrop_filter: css(
       !style.backdrop_filter.is_empty(),
       style.backdrop_filter.to_css_string(),
     ),
-    mask: style
+    mask_image: style
       .mask_image
       .as_ref()
       .filter(|images| !images.is_empty())
@@ -628,7 +628,7 @@ fn unresolved(node: &RenderNode) -> Option<PaintUnresolved> {
   };
   (unresolved.filter.is_some()
     || unresolved.backdrop_filter.is_some()
-    || unresolved.mask.is_some()
+    || unresolved.mask_image.is_some()
     || unresolved.clip_path.is_some())
   .then_some(unresolved)
 }
