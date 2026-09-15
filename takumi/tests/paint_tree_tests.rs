@@ -28,6 +28,7 @@ const CSS: &str = r#"
   b { display: inline; font-weight: 700; color: rgb(0, 0, 255); }
   .pic { width: 120px; height: 80px; object-fit: cover; border-radius: 8px; }
   .glass { filter: blur(2px); clip-path: circle(40%); mix-blend-mode: multiply; }
+  .fade { opacity: 0.5; }
 "#;
 
 fn card() -> Node {
@@ -157,4 +158,30 @@ fn paint_tree_records_used_values() {
   assert_eq!(unresolved.filter.as_deref(), Some("blur(2px)"));
   assert!(unresolved.clip_path.is_some());
   assert_eq!(glass.blend_mode.as_deref(), Some("multiply"));
+}
+
+#[test]
+fn stacking_context_root_keeps_inline_content() {
+  let tree = build(
+    Node::container([Node::container([
+      Node::text("hello "),
+      Node::image("assets/images/yeecord.png").with_class_name("pic"),
+    ])
+    .with_class_name("p fade")
+    .with_id("paragraph")])
+    .with_class_name("card")
+    .with_id("card"),
+  );
+
+  let paragraph = find(&tree.root, "paragraph").expect("paragraph box");
+  assert_eq!(paragraph.opacity, 0.5);
+  let texts: Vec<&str> = all_runs(paragraph)
+    .iter()
+    .map(|run| run.text.as_str())
+    .collect();
+  assert_eq!(texts, ["hello "]);
+  assert!(
+    paragraph.children.iter().any(|child| child.image.is_some()),
+    "inline image lost from the stacking-context root"
+  );
 }

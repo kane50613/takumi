@@ -41,7 +41,7 @@ pub struct PaintTree {
 #[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PaintFont {
-  /// The family the face was registered under; `None` for a face the registry cannot name.
+  /// The family the face was registered under, the last one when the same bytes carry several names; `None` for a face the registry cannot name.
   pub family: Option<String>,
   /// Index of the face within its collection.
   pub face_index: u32,
