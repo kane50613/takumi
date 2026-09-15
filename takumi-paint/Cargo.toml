@@ -18,7 +18,6 @@ features = ["rc"]
 
 [dependencies.takumi-bindings-common]
 path = "../takumi-bindings-common"
-default-features = false
 
 [dependencies.takumi-core]
 path = "../takumi-core"
