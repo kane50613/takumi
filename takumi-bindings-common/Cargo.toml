@@ -4,6 +4,10 @@ publish = false
 edition = "2024"
 license = "MIT OR Apache-2.0"
 
+[dependencies]
+serde.workspace = true
+serde_bytes.workspace = true
+
 [dependencies.takumi-core]
 path = "../takumi-core"
 default-features = false

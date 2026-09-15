@@ -1,13 +1,10 @@
 //! Deserialization of the render/measure option object, and the geometry and
 //! image resolution it drives.
 
-use std::{collections::HashMap, sync::Arc};
-
 use serde::Deserialize;
-use serde_bytes::ByteBuf;
+use takumi_bindings_common::input::ImageSource;
 use takumi_core::{
   layout::node::Node,
-  resources::image::{ImageCacheMode, ImageSource as DecodedImage, ResourceCache},
   style::{Color, ColorInput, CssSource, FromCssStr},
   viewport::Viewport,
 };
@@ -15,19 +12,7 @@ use takumi_pdf::{
   Band, PageMargin, PageMargins, PageOptions, PageOverride, PageRange, PageRules, UncoveredText,
 };
 
-use crate::{
-  map_error,
-  metadata::{AttachmentInput, MetadataInput, PdfaInput, TaggedInput},
-};
-
-/// An image source with its URL and raw data.
-#[derive(Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub(crate) struct ImageSource {
-  src: Arc<str>,
-  data: ByteBuf,
-  cache: Option<ImageCacheMode>,
-}
+use crate::metadata::{AttachmentInput, MetadataInput, PdfaInput, TaggedInput};
 
 /// Explicit page or viewport dimensions in CSS px.
 #[derive(Deserialize, Clone, Copy)]
@@ -331,22 +316,6 @@ impl From<PageRulesInput> for PageRules {
       even: rule(input.even),
     }
   }
-}
-
-pub(crate) fn decode_images(
-  cache: &ResourceCache,
-  sources: Option<Vec<ImageSource>>,
-) -> Result<HashMap<Arc<str>, DecodedImage>, js_sys::Error> {
-  let mut images = HashMap::new();
-
-  for source in sources.unwrap_or_default() {
-    let image = cache
-      .get_or_decode(&source.data, source.cache.unwrap_or_default())
-      .map_err(map_error)?;
-
-    images.insert(source.src, image);
-  }
-  Ok(images)
 }
 
 /// Splits the options into single-page viewport or paged geometry, rejecting

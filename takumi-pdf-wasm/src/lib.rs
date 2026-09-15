@@ -4,18 +4,21 @@
 #![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
 mod date;
-mod font;
 mod metadata;
 mod options;
 
 use std::sync::RwLock;
 
 use serde_wasm_bindgen::{from_value, to_value};
-use takumi_bindings_common::{build_font_resource, default_fonts, stylesheet};
+use takumi_bindings_common::{
+  default_fonts,
+  input::{Font, decode_images, register_font},
+  stylesheet,
+};
 use takumi_core::{
   Fonts,
   layout::node::Node,
-  resources::{font::FontResource, image::ResourceCache},
+  resources::image::ResourceCache,
   style::{FontFamily, Lang},
 };
 use takumi_pdf::{
@@ -24,10 +27,7 @@ use takumi_pdf::{
 };
 use wasm_bindgen::prelude::*;
 
-use crate::{
-  font::Font,
-  options::{PdfRenderOptions, decode_images, page_background, resolve_geometry},
-};
+use crate::options::{PdfRenderOptions, page_background, resolve_geometry};
 
 pub(crate) fn map_error(error: impl core::fmt::Display) -> js_sys::Error {
   js_sys::Error::new(&error.to_string())
@@ -111,27 +111,7 @@ impl PdfRenderer {
       .try_write()
       .map_err(|error| js_sys::Error::new(&format!("Renderer state is locked: {error}")))?;
 
-    let registered = match font {
-      Font::Buffer(buffer) => state
-        .register(FontResource::new(buffer.into_vec()))
-        .map_err(map_error)?,
-      Font::Object(details) => {
-        let data = details.data.into_vec();
-        let resource = build_font_resource(
-          &data,
-          details.name,
-          details.weight.map(|weight| weight as f32),
-          details.style.map(|style| style.0),
-          details.subset_of,
-          details.subset_rank,
-          details.generic,
-        )
-        .map_err(map_error)?;
-
-        state.register(resource).map_err(map_error)?
-      }
-    };
-
+    let registered = register_font(&mut state, font).map_err(map_error)?;
     Ok(to_value(&registered).map_err(map_error)?.unchecked_into())
   }
 
@@ -144,12 +124,16 @@ impl PdfRenderer {
     options: Option<PdfRenderOptionsType>,
   ) -> Result<Vec<u8>, js_sys::Error> {
     let node: Node = from_value(node.into()).map_err(map_error)?;
-    let mut options: PdfRenderOptions = options
+    let options: PdfRenderOptions = options
       .map(|options| from_value(options.into()).map_err(map_error))
       .transpose()?
       .unwrap_or_default();
 
-    let images = decode_images(&self.resource_cache, options.images.take())?;
+    let images = decode_images(
+      &self.resource_cache,
+      options.images.as_deref().unwrap_or_default(),
+    )
+    .map_err(map_error)?;
     let (viewport, page) = resolve_geometry(&options)?;
     let lang = options
       .lang
@@ -207,11 +191,15 @@ impl PdfRenderer {
     options: Option<MeasureOptionsType>,
   ) -> Result<MeasuredSizeType, js_sys::Error> {
     let node: Node = from_value(node.into()).map_err(map_error)?;
-    let mut options: PdfRenderOptions = options
+    let options: PdfRenderOptions = options
       .map(|options| from_value(options.into()).map_err(map_error))
       .transpose()?
       .unwrap_or_default();
-    let images = decode_images(&self.resource_cache, options.images.take())?;
+    let images = decode_images(
+      &self.resource_cache,
+      options.images.as_deref().unwrap_or_default(),
+    )
+    .map_err(map_error)?;
     let (viewport, page) = resolve_geometry(&options)?;
     let lang = options
       .lang

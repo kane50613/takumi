@@ -7,15 +7,16 @@ use std::{
 
 use base64::{Engine, prelude::BASE64_STANDARD};
 use serde_wasm_bindgen::{from_value, to_value};
-use takumi_bindings_common::{build_font_resource, default_fonts, stylesheet};
+use takumi_bindings_common::{
+  default_fonts,
+  input::{decode_images, register_font},
+  stylesheet,
+};
 use takumi_core::style::CssSource;
 use takumi_core::{
   Fonts,
   layout::node::Node,
-  resources::{
-    font::{FontResource, RegisteredFamily},
-    image::{ImageSource as LoadedImageSource, ResourceCache},
-  },
+  resources::image::{ImageSource as LoadedImageSource, ResourceCache},
   style::{FontFamily, Lang},
   viewport::{DEFAULT_DEVICE_PIXEL_RATIO, Viewport},
 };
@@ -36,32 +37,6 @@ use crate::{helper::map_error, model::*};
 pub struct Renderer {
   state: RwLock<Fonts>,
   resource_cache: ResourceCache,
-}
-
-fn load_font_internal(
-  fonts: &mut Fonts,
-  font: Font,
-) -> Result<Vec<RegisteredFamily>, js_sys::Error> {
-  match font {
-    Font::Buffer(buffer) => fonts
-      .register(FontResource::new(buffer.into_vec()))
-      .map_err(map_error),
-    Font::Object(details) => {
-      let data = details.data.into_vec();
-      let resource = build_font_resource(
-        &data,
-        details.name,
-        details.weight.map(|weight| weight as f32),
-        details.style.map(Into::into),
-        details.subset_of,
-        details.subset_rank,
-        details.generic,
-      )
-      .map_err(map_error)?;
-
-      fonts.register(resource).map_err(map_error)
-    }
-  }
 }
 
 fn parse_lang(lang: Option<String>) -> Result<Option<Lang>, js_sys::Error> {
@@ -131,19 +106,7 @@ impl Renderer {
     &self,
     images: Option<&[ImageSource]>,
   ) -> Result<HashMap<Arc<str>, LoadedImageSource>, js_sys::Error> {
-    let mut map = HashMap::new();
-
-    for source in images.unwrap_or_default() {
-      let mode = source.cache.unwrap_or_default();
-      let image = self
-        .resource_cache
-        .get_or_decode(&source.data, mode)
-        .map_err(map_error)?;
-
-      map.insert(source.src.clone(), image);
-    }
-
-    Ok(map)
+    decode_images(&self.resource_cache, images.unwrap_or_default()).map_err(map_error)
   }
 
   /// Creates a new Renderer instance.
@@ -169,7 +132,7 @@ impl Renderer {
     let font: Font = from_value(font.into()).map_err(map_error)?;
 
     let mut state = self.write_state()?;
-    let registered = load_font_internal(&mut state, font)?;
+    let registered = register_font(&mut state, font).map_err(map_error)?;
 
     Ok(to_value(&registered).map_err(map_error)?.unchecked_into())
   }
