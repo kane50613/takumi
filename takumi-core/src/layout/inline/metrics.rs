@@ -310,18 +310,12 @@ pub(crate) struct ResolvedInlineLineState {
 /// Resolve per-line state used when placing inline boxes and glyphs.
 pub(crate) fn resolve_inline_line_states(
   inline_layout: &InlineLayout,
-  spans: &[ProcessedInlineSpan<'_>],
   parent_font_metrics: Option<ParentFontMetrics>,
-  line_scales: &[f32],
+  line_metrics: &[ResolvedLineMetrics],
 ) -> Vec<ResolvedInlineLineState> {
   inline_layout
     .lines()
-    .zip(resolve_inline_line_metrics(
-      inline_layout,
-      spans,
-      parent_font_metrics,
-      line_scales,
-    ))
+    .zip(line_metrics.iter().cloned())
     .map(|(line, resolved)| ResolvedInlineLineState {
       adjusted_metrics: resolved_line_metrics_for_apply(line.metrics(), resolved),
       parent_x_height: effective_parent_x_height_for_line(&line, parent_font_metrics),
