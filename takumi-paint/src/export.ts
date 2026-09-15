@@ -10,7 +10,10 @@ import {
   subsetFonts,
 } from "@takumi-rs/helpers";
 import type { ReactNode } from "react";
-import { PaintRenderer as PaintRendererInternal, type PaintTree } from "../pkg/takumi_paint_wasm";
+import {
+  PaintTreeRenderer as PaintTreeRendererInternal,
+  type PaintTree,
+} from "../pkg/takumi_paint_wasm";
 
 export { default, initSync } from "../pkg/takumi_paint_wasm";
 export type { FontLoader, ImagesInput } from "@takumi-rs/helpers/renderer";
@@ -19,7 +22,7 @@ export type {
   PaintBackground,
   PaintBackgroundLayer,
   PaintBorder,
-  PaintBox,
+  PaintBoxDecoration,
   PaintClip,
   PaintDecoration,
   PaintFill,
@@ -30,11 +33,11 @@ export type {
   PaintNode,
   PaintOutline,
   PaintRect,
-  PaintRun,
+  PaintTextRun,
   PaintShadow,
   PaintSource,
   PaintTree,
-  PaintUnresolved,
+  PaintUnresolvedEffects,
   Radii,
   Rgba,
 } from "../pkg/takumi_paint_wasm";
@@ -42,8 +45,8 @@ export type {
 /** A document input: a takumi node tree, JSX, or an HTML string. */
 export type NodeInput = Node | ReactNode | ReactElementLike | string;
 
-/** Options for {@link PaintRenderer.paint}. */
-export type PaintOptions = {
+/** Options for {@link PaintTreeRenderer.render}. */
+export type PaintTreeOptions = {
   /** Canvas width in device pixels. Omit to size the canvas to the content. */
   width?: number;
   /** Canvas height in device pixels. Omit to size the canvas to the content. */
@@ -80,14 +83,14 @@ async function resolveNode(input: NodeInput): Promise<{ node: Node; css: string[
   return fromJsx(input as ReactNode);
 }
 
-export class PaintRenderer {
-  private inner = new PaintRendererInternal();
+export class PaintTreeRenderer {
+  private inner = new PaintTreeRendererInternal();
   private fonts = new FontRegistry<RegisteredFamilyLike>(
     (font) => this.inner.registerFont(font) as RegisteredFamilyLike[],
   );
 
   /** Lays out a node tree, JSX, or an HTML string and returns what painting it would draw. */
-  async paint(node: NodeInput, options: PaintOptions = {}): Promise<PaintTree> {
+  async render(node: NodeInput, options: PaintTreeOptions = {}): Promise<PaintTree> {
     const { fonts, images, css, fontFamilies, ...rest } = options;
     const main = await resolveNode(node);
     const resources = await this.fonts.resolveResources(
@@ -98,7 +101,7 @@ export class PaintRenderer {
     const own = css === undefined ? [] : isCssList(css) ? [...css] : [css];
     const sheets = [...own, ...main.css];
 
-    return this.inner.paint(main.node, {
+    return this.inner.render(main.node, {
       ...rest,
       css: sheets.length > 0 ? sheets : undefined,
       images: resources.images,
@@ -117,10 +120,10 @@ export class PaintRenderer {
   }
 }
 
-let shared: PaintRenderer | undefined;
+let shared: PaintTreeRenderer | undefined;
 
-/** Paints with a lazily created shared {@link PaintRenderer}. */
-export function paint(node: NodeInput, options?: PaintOptions): Promise<PaintTree> {
-  shared ??= new PaintRenderer();
-  return shared.paint(node, options);
+/** Renders with a lazily created shared {@link PaintTreeRenderer}. */
+export function renderPaintTree(node: NodeInput, options?: PaintTreeOptions): Promise<PaintTree> {
+  shared ??= new PaintTreeRenderer();
+  return shared.render(node, options);
 }

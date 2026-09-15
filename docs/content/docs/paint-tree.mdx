@@ -7,9 +7,9 @@ icon: Brush
 `takumi-paint` lays out a document and returns what painting it would draw, instead of an image. Use it when the output is not pixels: an editable PPTX, a Canvas replay, a native drawing API.
 
 ```ts twoslash title="Read the boxes and runs"
-import { paint } from "takumi-paint";
+import { renderPaintTree } from "takumi-paint";
 
-const tree = await paint(
+const tree = await renderPaintTree(
   `<style>.big { font: 700 40px Geist; color: #B3261E }</style>
    <div style="width: 640px; padding: 32px; background: #F7F3EC">
      <div class="big">4,2 %</div>
@@ -19,11 +19,11 @@ const tree = await paint(
 );
 
 const card = tree.root;
-card.box?.background.color; // [247, 243, 236, 255]
+card.boxDecoration?.background.color; // [247, 243, 236, 255]
 
 for (const node of card.children ?? []) {
   for (const run of node.runs ?? []) {
-    const font = tree.fonts[run.font];
+    const font = tree.fonts[run.fontIndex];
     console.log(run.text, font?.family, font?.weight, run.fontSize, run.color);
   }
 }
@@ -35,11 +35,11 @@ The package runs the same layout as `takumi-js` and walks the same stacking-cont
 
 Every length is a device pixel, and so are the `width` and `height` options. A `20px` font measures `40` under a `devicePixelRatio` of `2`.
 
-A node's `transform` is an absolute matrix placing its border box on the canvas. Everything inside a node, such as `clip`, `box`, `image`, and `runs`, is relative to the node's border-box top-left.
+A node's `transform` is an absolute matrix placing its border box on the canvas. Everything inside a node, such as `clip`, `boxDecoration`, `image`, and `runs`, is relative to the node's border-box top-left.
 
 ## Paint order
 
-Nodes come in the order the renderer paints them, so `zIndex` does not appear: draw a node's `box`, then its `image`, `inlineBackgrounds`, and `runs`, then its `children`, then its `box.outline`.
+Nodes come in the order the renderer paints them, so `zIndex` does not appear: draw a node's `boxDecoration`, then its `image`, `inlineBackgrounds`, and `runs`, then its `children`, then its `boxDecoration.outline`.
 
 Each node is a compositing group. Its `opacity`, `clip`, and `blendMode` apply to everything inside it, children included.
 
@@ -52,8 +52,8 @@ Each node is a compositing group. Its `opacity`, `clip`, and `blendMode` apply t
       description:
         "The input node this box came from: its child-index path, id, tag name, and class name",
     },
-    box: {
-      type: "PaintBox",
+    boxDecoration: {
+      type: "PaintBoxDecoration",
       description:
         "Used background, border widths, colors, styles and radii, box shadows split inset and outer, and the outline",
     },
@@ -63,7 +63,7 @@ Each node is a compositing group. Its `opacity`, `clip`, and `blendMode` apply t
         "The content box an image sits in and where it draws after object-fit and object-position",
     },
     runs: {
-      type: "PaintRun[]",
+      type: "PaintTextRun[]",
       description:
         "Shaped text runs with their font instance, size, color, decorations, and glyph positions",
     },
@@ -71,8 +71,8 @@ Each node is a compositing group. Its `opacity`, `clip`, and `blendMode` apply t
       type: "PaintInlineBackground[]",
       description: "One rounded rectangle per line for each inline span with a background",
     },
-    unresolved: {
-      type: "PaintUnresolved",
+    unresolvedEffects: {
+      type: "PaintUnresolvedEffects",
       description: "filter, backdrop-filter, mask-image, and clip-path as CSS text",
     },
   }}
@@ -82,4 +82,4 @@ Runs reference `tree.fonts` by index. A font instance names the registered famil
 
 ## What stays CSS
 
-Gradients come resolved: stops in pixels along the axis, plus the tile geometry. `filter`, `backdrop-filter`, `mask-image`, and `clip-path` are carried as CSS text under `unresolved`, so an exporter can decide what to do with them.
+Gradients come resolved: stops in pixels along the axis, plus the tile geometry. `filter`, `backdrop-filter`, `mask-image`, and `clip-path` are carried as CSS text under `unresolvedEffects`, so an exporter can decide what to do with them.

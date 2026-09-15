@@ -39,18 +39,18 @@ extern "C" {
   /// JavaScript type for the families produced by `registerFont`.
   #[wasm_bindgen(typescript_type = "RegisteredFamily[]")]
   pub type RegisteredFamiliesType;
-  /// JavaScript object representing paint options.
-  #[wasm_bindgen(typescript_type = "PaintOptions")]
-  pub type PaintOptionsType;
+  /// JavaScript object representing render options.
+  #[wasm_bindgen(typescript_type = "PaintTreeOptions")]
+  pub type RenderOptionsType;
   /// JavaScript object representing a paint tree.
   #[wasm_bindgen(typescript_type = "PaintTree")]
   pub type PaintTreeType;
 }
 
-/// Options for [`PaintRenderer::paint`].
+/// Options for [`PaintTreeRenderer::render`].
 #[derive(Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
-struct PaintOptions {
+struct RenderOptions {
   width: Option<u32>,
   height: Option<u32>,
   device_pixel_ratio: Option<f32>,
@@ -66,17 +66,17 @@ struct PaintOptions {
 /// other wasm bindings: a panic mid-call can't leave the wasm-bindgen borrow
 /// flag permanently set.
 #[wasm_bindgen]
-pub struct PaintRenderer {
+pub struct PaintTreeRenderer {
   state: RwLock<Fonts>,
   resource_cache: ResourceCache,
 }
 
 #[wasm_bindgen]
-impl PaintRenderer {
+impl PaintTreeRenderer {
   /// Creates a renderer with the bundled last-resort fonts.
   #[wasm_bindgen(constructor)]
-  pub fn new() -> Result<PaintRenderer, js_sys::Error> {
-    Ok(PaintRenderer {
+  pub fn new() -> Result<PaintTreeRenderer, js_sys::Error> {
+    Ok(PaintTreeRenderer {
       state: RwLock::new(default_fonts().map_err(map_error)?),
       resource_cache: ResourceCache::default(),
     })
@@ -96,13 +96,13 @@ impl PaintRenderer {
   }
 
   /// Lays out a node tree and returns what painting it would draw.
-  pub fn paint(
+  pub fn render(
     &self,
     node: NodeType,
-    options: Option<PaintOptionsType>,
+    options: Option<RenderOptionsType>,
   ) -> Result<PaintTreeType, js_sys::Error> {
     let node: Node = from_value(node.into()).map_err(map_error)?;
-    let options: PaintOptions = options
+    let options: RenderOptions = options
       .map(|options| from_value(options.into()).map_err(map_error))
       .transpose()?
       .unwrap_or_default();
