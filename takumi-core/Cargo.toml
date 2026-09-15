@@ -111,7 +111,7 @@ optional = true
 [features]
 default = ["woff2", "woff", "svg", "image-decoding"]
 image-decoding = ["png", "jpeg", "webp", "gif"]
-png = ["dep:png", "image/png", "image/ico"]
+png = ["dep:png", "image/png"]
 jpeg = ["image/jpeg"]
 webp = ["dep:image-webp", "dep:libwebp-sys", "image/webp"]
 gif = ["dep:gif", "image/gif"]
