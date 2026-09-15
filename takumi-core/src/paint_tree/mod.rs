@@ -37,26 +37,26 @@ use crate::{
 #[derive(TypedBuilder)]
 pub struct PaintTreeOptions<'g> {
   /// The viewport to lay out in.
-  pub viewport: Viewport,
+  pub(crate) viewport: Viewport,
   /// The font registry.
-  pub fonts: &'g Fonts,
+  pub(crate) fonts: &'g Fonts,
   /// The root node.
-  pub node: Node,
+  pub(crate) node: Node,
   /// Pre-decoded images keyed by `src`.
   #[builder(default)]
-  pub images: HashMap<Arc<str>, ImageSource>,
+  pub(crate) images: HashMap<Arc<str>, ImageSource>,
   /// CSS stylesheets to apply before layout.
   #[builder(default)]
-  pub stylesheet: Arc<StyleSheet>,
+  pub(crate) stylesheet: Arc<StyleSheet>,
   /// Global animation time in milliseconds.
   #[builder(default = 0)]
-  pub time_ms: u64,
+  pub(crate) time_ms: u64,
   /// Per-render font fallback chain.
   #[builder(default)]
-  pub font_families: Option<FontFamily>,
+  pub(crate) font_families: Option<FontFamily>,
   /// Default BCP-47 language applied to the root.
   #[builder(default)]
-  pub lang: Option<Lang>,
+  pub(crate) lang: Option<Lang>,
 }
 
 /// Lays out `options.node` and records what painting it would draw.
