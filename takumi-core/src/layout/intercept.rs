@@ -7,8 +7,9 @@
 //! the same question, answered from the path itself so every backend can ask
 //! it.
 
-use std::{cell::RefCell, collections::HashMap};
+use std::sync::LazyLock;
 
+use quick_cache::sync::Cache;
 use smallvec::SmallVec;
 
 use crate::{
@@ -112,35 +113,28 @@ fn skip_ink_ranges<'g>(
   merge(ranges)
 }
 
-/// Intercepts already computed on this thread, keyed by outline signature and band; the same
-/// glyph at the same size meets the same underline over and over.
-const INTERCEPT_CACHE_LIMIT: usize = 8192;
+/// Intercepts already computed, keyed by outline signature and band; the same glyph at the same
+/// size meets the same underline over and over.
+const INTERCEPT_CACHE_ITEMS: usize = 8192;
 
 type Spans = SmallVec<[(f32, f32); 4]>;
 
-thread_local! {
-  static INTERCEPTS: RefCell<HashMap<(u64, u32, u32), Spans>> = RefCell::new(HashMap::new());
-}
+static INTERCEPTS: LazyLock<Cache<(u64, u32, u32), Spans>> =
+  LazyLock::new(|| Cache::new(INTERCEPT_CACHE_ITEMS));
 
 fn cached_intercepts(outline: &ResolvedOutlineGlyph, top: f32, bottom: f32) -> Spans {
   let key = (outline.cache_signature(), top.to_bits(), bottom.to_bits());
-  INTERCEPTS.with(|cache| {
-    if let Some(spans) = cache.borrow().get(&key) {
-      return spans.clone();
-    }
-    let paths = outline.paths();
-    let spans = if reaches_band(paths, top, bottom) {
-      text_intercepts(paths, top, bottom)
-    } else {
-      SmallVec::new()
-    };
-    let mut cache = cache.borrow_mut();
-    if cache.len() >= INTERCEPT_CACHE_LIMIT {
-      cache.clear();
-    }
-    cache.insert(key, spans.clone());
-    spans
-  })
+  if let Some(spans) = INTERCEPTS.get(&key) {
+    return spans;
+  }
+  let paths = outline.paths();
+  let spans = if reaches_band(paths, top, bottom) {
+    text_intercepts(paths, top, bottom)
+  } else {
+    SmallVec::new()
+  };
+  INTERCEPTS.insert(key, spans.clone());
+  spans
 }
 
 /// Whether any outline point, control points included, lies in the band. A flattened edge
