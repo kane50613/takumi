@@ -5,17 +5,11 @@
 
 **Turn JSX, HTML, and CSS into a paint tree.**
 
-Boxes, images, and text runs with the values the renderer used, in paint order. Feed it to a PPTX, Canvas, or native drawing API.
+Boxes, images, and text runs in paint order, with the values the renderer used. Feed it to a PPTX, Canvas, or native drawing API.
 
 [Documentation](https://takumi.kane.tw/docs/paint-tree)
 
 </div>
-
-## How it works
-
-`takumi-paint` runs Takumi's layout in WebAssembly and walks the same stacking-context scene the image, SVG, and PDF backends paint. Instead of drawing, it records what each box would draw: the used background, border, shadows, and outline; where an image lands after `object-fit`; and every shaped text run with the face, size, and color it was shaped with.
-
-Every length is a device pixel. A node's `transform` is absolute; everything inside a node is relative to its border box.
 
 ## Install
 
@@ -48,6 +42,27 @@ for (const run of runs(tree.root)) {
 }
 ```
 
-## What is resolved and what is not
+## What the tree holds
 
-Colors are `[r, g, b, a]`. Linear and radial gradients come with their resolved stops and geometry. A conic gradient is carried as CSS text. `filter`, `backdrop-filter`, `mask-image`, and `clip-path` are carried as CSS text under `unresolvedEffects`.
+`takumi-paint` runs Takumi's layout in WebAssembly and walks the same stacking-context scene the image, SVG, and PDF backends paint. Instead of drawing, it records what each box would draw:
+
+- **Box decoration**: the used background, border, shadows, and outline.
+- **Image**: where a replaced image lands after `object-fit`.
+- **Text runs**: every shaped run with the font, size, and color it was shaped with.
+
+## Coordinates
+
+- Every length is a device pixel.
+- A node's `transform` is absolute.
+- Everything inside a node is relative to its border box.
+
+## Resolved and unresolved values
+
+| Value                                                  | Form in the tree                   |
+| ------------------------------------------------------ | ---------------------------------- |
+| Colors                                                 | `[r, g, b, a]`                     |
+| Linear and radial gradients                            | Resolved stops and geometry        |
+| Conic gradients                                        | CSS text                           |
+| `filter`, `backdrop-filter`, `mask-image`, `clip-path` | CSS text under `unresolvedEffects` |
+
+The [paint tree reference](https://takumi.kane.tw/docs/paint-tree) lists every field.
