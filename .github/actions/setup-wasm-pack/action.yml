@@ -1,0 +1,21 @@
+name: Setup wasm-pack
+description: Install a pinned wasm-pack release and verify its checksum
+
+runs:
+  using: composite
+  steps:
+    - name: Install wasm-pack
+      shell: bash
+      env:
+        VERSION: v0.15.0
+        TARGET: x86_64-unknown-linux-musl
+        SHA256: c09f971ecaed9a2efc80fdcea7a00ef6b53c7fadc8c57d1f61b53a6aa66b668a
+      run: |
+        set -euo pipefail
+        archive="wasm-pack-$VERSION-$TARGET.tar.gz"
+        curl -sSfL -o "$RUNNER_TEMP/$archive" \
+          "https://github.com/rustwasm/wasm-pack/releases/download/$VERSION/$archive"
+        echo "$SHA256  $RUNNER_TEMP/$archive" | sha256sum --check --strict
+        tar -xzf "$RUNNER_TEMP/$archive" -C "$RUNNER_TEMP" \
+          --strip-components 1 "wasm-pack-$VERSION-$TARGET/wasm-pack"
+        install -D -m 755 "$RUNNER_TEMP/wasm-pack" "$HOME/.cargo/bin/wasm-pack"

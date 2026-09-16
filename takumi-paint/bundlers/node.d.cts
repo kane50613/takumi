@@ -1,1 +1,3 @@
-export * from "../dist/export.mjs";
+import * as paint from "../dist/export.mjs";
+
+export = paint;

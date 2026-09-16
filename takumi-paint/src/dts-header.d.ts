@@ -1,6 +1,6 @@
 import type { CssInput, Node } from "@takumi-rs/helpers";
 
-export type ByteBuf = Uint8Array | ArrayBuffer | Buffer;
+export type ByteBuf = Uint8Array | ArrayBuffer;
 
 /** Cache policy for a decoded image. Defaults to `"auto"`. */
 export type ImageCacheMode = "auto" | "none";
