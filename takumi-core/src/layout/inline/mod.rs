@@ -174,6 +174,8 @@ pub struct BuiltInlineLayout<'c> {
   pub(crate) positioned_floats: Vec<PositionedInlineBox>,
   /// Per-line text-fit scale factors.
   pub line_scales: Vec<f32>,
+  /// Whether a height or line limit may have dropped lines.
+  pub(crate) clamped: bool,
 }
 
 impl BuiltInlineLayout<'_> {
@@ -294,6 +296,18 @@ pub enum InlineLayoutMode {
 
 /// Parley layout specialized to [`InlineBrush`].
 pub(crate) type InlineLayout = parley::Layout<InlineBrush>;
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+/// The size an inline layout measures at and where its first and last lines sit.
+pub struct InlineMeasurement {
+  pub(crate) size: Size<f32>,
+  /// Baseline of the first line from the content-box top.
+  pub(crate) first_baseline: Option<f32>,
+  /// Baseline of the last line from the content-box top.
+  pub(crate) last_baseline: Option<f32>,
+  /// Whether a height or line limit may have dropped lines.
+  pub(crate) clamped: bool,
+}
 
 #[derive(Clone, Copy, Debug)]
 pub(crate) struct InlineMeasureOptions {
@@ -468,7 +482,7 @@ pub(crate) fn measure_inline_layout(
   positioned_floats: &[PositionedInlineBox],
   line_scales: &[f32],
   options: InlineMeasureOptions,
-) -> Size<f32> {
+) -> InlineMeasurement {
   let InlineMeasureOptions {
     max_width,
     ceil_width,
@@ -511,13 +525,18 @@ pub(crate) fn measure_inline_layout(
     max_run_width.max(float_box_width)
   };
 
-  Size {
-    width: if min_content_query {
-      measured_width
-    } else {
-      measured_width.min(max_width)
+  InlineMeasurement {
+    size: Size {
+      width: if min_content_query {
+        measured_width
+      } else {
+        measured_width.min(max_width)
+      },
+      height: total_height.max(float_box_height).ceil(),
     },
-    height: total_height.max(float_box_height).ceil(),
+    first_baseline: line_metrics.first().map(|line| line.resolved_baseline),
+    last_baseline: line_metrics.last().map(|line| line.resolved_baseline),
+    clamped: false,
   }
 }
 
@@ -673,6 +692,7 @@ fn build_inline_layout_tree<'c>(
     spans,
     positioned_floats: Vec::new(),
     line_scales: Vec::new(),
+    clamped: false,
   }
 }
 
@@ -853,7 +873,7 @@ fn prepare_inline_layout(
   let text_wrap_mode = style.parent.resolved_text_wrap_mode();
   let line_height_hint = inline_line_height_hint(style);
   apply_text_indent(&mut built.layout, style, max_width);
-  break_lines(
+  built.clamped = break_lines(
     &mut built.layout,
     LineWidths::uniform(max_width),
     max_height,
@@ -1223,6 +1243,45 @@ mod tests {
     let decorations = run.decorations(&HashMap::new(), layout, 0.0, Affine::IDENTITY);
 
     assert_eq!(decorations.len(), 0);
+  }
+
+  #[test]
+  fn a_line_limit_marks_the_layout_clamped() {
+    let fonts = create_test_context();
+    let context = RenderContext::builder()
+      .fonts(fonts.snapshot_with_fallbacks(None))
+      .sizing(
+        SizingContext::builder()
+          .viewport(Viewport::new((1200, 630)))
+          .build(),
+      )
+      .build();
+    let node = Node::text("a\nb\nc".to_string()).with_style(
+      Style::default()
+        .with(StyleDeclaration::display(Display::Block))
+        .with_white_space(WhiteSpace::pre_wrap()),
+    );
+    let render_node = RenderNode::from_node(&context, node);
+    let font_style = SizedFontStyle::from_style(&render_node.context.style, &render_node.context);
+    let build = |max_height| {
+      create_inline_layout(InlineLayoutRequest {
+        items: collect_inline_items(&render_node),
+        available_space: Size {
+          width: AvailableSpace::Definite(1200.0),
+          height: AvailableSpace::Definite(630.0),
+        },
+        max_width: 1200.0,
+        max_height,
+        style: &font_style,
+        context: &render_node.context,
+        mode: InlineLayoutMode::Measure,
+        shape_cacheable: false,
+      })
+    };
+
+    assert!(!build(None).clamped);
+    assert!(!build(Some(MaxHeight::Lines(4))).clamped);
+    assert!(build(Some(MaxHeight::Lines(1))).clamped);
   }
 
   #[test]

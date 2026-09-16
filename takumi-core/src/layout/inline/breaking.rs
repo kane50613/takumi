@@ -114,6 +114,7 @@ pub(crate) fn has_custom_out_of_flow(layout: &InlineLayout) -> bool {
     .any(|inline_box| inline_box.kind == InlineBoxKind::CustomOutOfFlow)
 }
 
+/// Breaks `layout` into lines; true when `max_height` may have dropped lines.
 pub(crate) fn break_lines(
   layout: &mut InlineLayout,
   widths: LineWidths,
@@ -122,18 +123,20 @@ pub(crate) fn break_lines(
   text_wrap_mode: TextWrapMode,
   spans: &[ProcessedInlineSpan<'_>],
   positioned_floats: &mut Vec<PositionedInlineBox>,
-) {
+) -> bool {
   let inline_boxes = layout.inline_boxes().to_vec();
   let mut float_layout = FloatLayoutState::new(widths, line_height_hint);
   let has_custom_out_of_flow = has_custom_out_of_flow(layout);
   let is_uniform = widths.breaking == widths.alignment;
 
   if text_wrap_mode == TextWrapMode::NoWrap && !has_custom_out_of_flow && is_uniform {
-    return layout.break_all_lines(Some(widths.breaking));
+    layout.break_all_lines(Some(widths.breaking));
+    return false;
   }
 
   if max_height.is_none() && !has_custom_out_of_flow && is_uniform {
-    return layout.break_all_lines(Some(widths.breaking));
+    layout.break_all_lines(Some(widths.breaking));
+    return false;
   }
 
   let (limit_height, limit_lines) = match max_height {
@@ -147,10 +150,12 @@ pub(crate) fn break_lines(
   let mut line_count = 0;
   let mut line_y = 0.0;
   let mut breaker = layout.break_lines();
+  let mut exhausted = false;
   float_layout.update_breaker_line(&mut breaker, line_y);
 
   while line_count < limit_lines {
     let Some(yield_data) = breaker.break_next() else {
+      exhausted = true;
       break;
     };
     let height = match yield_data {
@@ -194,6 +199,7 @@ pub(crate) fn break_lines(
   }
 
   breaker.finish();
+  !exhausted
 }
 
 fn can_commit_line_candidate(

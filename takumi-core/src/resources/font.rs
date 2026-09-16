@@ -116,15 +116,15 @@ thread_local! {
   static LAYOUT_CONTEXT: RefCell<LayoutContext<InlineBrush>> = RefCell::new(LayoutContext::new());
 }
 
-fn resolved_glyph_cache_key(
+/// Hasher primed with everything but the glyph id of a run's cache key.
+fn glyph_cache_key_prefix(
   font_id: u64,
   font_index: u32,
   font_size: f32,
   coords: &[F2Dot14],
   embolden: Option<f32>,
   skew: Option<f32>,
-  glyph_id: u32,
-) -> u64 {
+) -> Xxh3 {
   let mut h = Xxh3::new();
   h.update(&font_id.to_le_bytes());
   h.update(&font_index.to_le_bytes());
@@ -146,6 +146,11 @@ fn resolved_glyph_cache_key(
     }
     None => h.update(&[0u8]),
   }
+  h
+}
+
+fn resolved_glyph_cache_key(prefix: &Xxh3, glyph_id: u32) -> u64 {
+  let mut h = prefix.clone();
   h.update(&glyph_id.to_le_bytes());
   h.digest()
 }
@@ -576,19 +581,19 @@ impl Fonts {
       })
     };
 
+    let key_prefix = glyph_cache_key_prefix(
+      font_id,
+      font_index,
+      font_size,
+      &normalized_coords,
+      embolden,
+      skew,
+    );
     let mut result: HashMap<u32, Arc<ResolvedGlyph>> =
       HashMap::with_capacity(glyph_ids.size_hint().0);
     for glyph_id in glyph_ids {
       if let Entry::Vacant(slot) = result.entry(glyph_id) {
-        let key = resolved_glyph_cache_key(
-          font_id,
-          font_index,
-          font_size,
-          &normalized_coords,
-          embolden,
-          skew,
-          glyph_id,
-        );
+        let key = resolved_glyph_cache_key(&key_prefix, glyph_id);
         if let Some(glyph) = resolved_glyph(key, || resolver().resolve_glyph(glyph_id)) {
           slot.insert(glyph);
         }

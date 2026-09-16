@@ -1,7 +1,9 @@
 //! Vertical line metrics: line-height, baselines and vertical-align.
 
+use std::ptr;
+
 use crate::style::{ResolvedVerticalAlign, VerticalAlignKeyword};
-use parley::{InlineBoxKind, Line, LineMetrics, PositionedInlineBox, PositionedLayoutItem};
+use parley::{InlineBoxKind, Line, LineMetrics, PositionedInlineBox, PositionedLayoutItem, Style};
 
 use super::{
   InlineBrush, InlineLayout,
@@ -130,6 +132,9 @@ pub(crate) fn resolve_inline_line_metrics(
   let mut result = Vec::with_capacity(inline_layout.lines().count());
   let mut previous_parley_bottom = 0.0_f32;
   let mut previous_resolved_bottom = 0.0_f32;
+  let has_boxes = spans
+    .iter()
+    .any(|span| matches!(span, ProcessedInlineSpan::Box(_)));
   let preserve_first_line_top = spans.iter().any(|span| match span {
     ProcessedInlineSpan::Box(item) => {
       matches!(
@@ -155,27 +160,38 @@ pub(crate) fn resolve_inline_line_metrics(
     let mut bottom_box_heights: Vec<f32> = Vec::new();
     let mut has_contribution = false;
 
-    for item in line.items() {
-      match item {
-        PositionedLayoutItem::GlyphRun(glyph_run) => {
-          let metrics = glyph_run.run().metrics();
-          let (base_above, base_below) = glyph_run.style().brush.line_box_contribution(
-            metrics.line_height,
-            metrics.ascent,
-            metrics.descent,
-          );
-          if (line_scale - 1.0).abs() <= f32::EPSILON {
-            resolved_above = resolved_above.max(base_above);
-            resolved_below = resolved_below.max(base_below);
-          } else if glyph_run.style().brush.line_height_scales_with_text_fit {
-            resolved_above = resolved_above.max(base_above * line_scale);
-            resolved_below = resolved_below.max(base_below * line_scale);
-          } else {
-            resolved_above = resolved_above.max(base_above);
-            resolved_below = resolved_below.max(base_below);
-          }
-          has_contribution = true;
+    // Walking runs by cluster style skips the per-fragment glyph re-walk that
+    // `line.items()` does, and boxes only exist when a span holds one.
+    for run in line.runs() {
+      let metrics = run.metrics();
+      let mut seen: Option<*const Style<InlineBrush>> = None;
+      for cluster in run.clusters() {
+        let style = cluster.first_style();
+        if seen == Some(ptr::from_ref(style)) || cluster.glyphs().next().is_none() {
+          continue;
         }
+        seen = Some(ptr::from_ref(style));
+        let (base_above, base_below) =
+          style
+            .brush
+            .line_box_contribution(metrics.line_height, metrics.ascent, metrics.descent);
+        if (line_scale - 1.0).abs() <= f32::EPSILON {
+          resolved_above = resolved_above.max(base_above);
+          resolved_below = resolved_below.max(base_below);
+        } else if style.brush.line_height_scales_with_text_fit {
+          resolved_above = resolved_above.max(base_above * line_scale);
+          resolved_below = resolved_below.max(base_below * line_scale);
+        } else {
+          resolved_above = resolved_above.max(base_above);
+          resolved_below = resolved_below.max(base_below);
+        }
+        has_contribution = true;
+      }
+    }
+
+    for item in has_boxes.then(|| line.items()).into_iter().flatten() {
+      match item {
+        PositionedLayoutItem::GlyphRun(_) => {}
         PositionedLayoutItem::InlineBox(inline_box) => {
           if inline_box.kind != InlineBoxKind::InFlow {
             continue;
