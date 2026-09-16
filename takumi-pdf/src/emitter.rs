@@ -589,16 +589,24 @@ impl Emitter<'_> {
       let at = (x + origin_offset.x, y + origin_offset.y);
 
       if placement.tiles {
-        self.tiled_layer(image, node, &placement, size, (x, y), at, surface, true);
+        self.tiled_layer(
+          image,
+          node,
+          &placement,
+          size,
+          (x, y),
+          at,
+          surface,
+          Transform::from_scale(PT_PER_PX, PT_PER_PX),
+        );
       } else {
         self.background_layer(
           image,
           node,
           placement.tile,
-          at.0 + placement.origin.0,
-          at.1 + placement.origin.1,
+          (at.0 + placement.origin.0, at.1 + placement.origin.1),
           surface,
-          false,
+          Transform::identity(),
         );
       }
       if blended {
@@ -623,7 +631,7 @@ impl Emitter<'_> {
     rect_at: (f32, f32),
     anchor: (f32, f32),
     surface: &mut Surface,
-    in_page_pattern: bool,
+    pattern_space: Transform,
   ) {
     let stream = {
       let mut builder = surface.stream_builder();
@@ -633,10 +641,9 @@ impl Emitter<'_> {
         image,
         node,
         placement.tile,
-        0.0,
-        0.0,
+        (0.0, 0.0),
         &mut tile,
-        in_page_pattern,
+        pattern_space,
       );
       tile.finish();
       builder.finish()
@@ -664,17 +671,16 @@ impl Emitter<'_> {
     surface.draw_path(&path);
   }
 
-  #[allow(clippy::too_many_arguments)]
   fn background_layer(
     &self,
     image: &BackgroundImage,
     node: &RenderNode,
     size: Size<f32>,
-    x: f32,
-    y: f32,
+    at: (f32, f32),
     surface: &mut Surface,
-    in_page_pattern: bool,
+    pattern_space: Transform,
   ) {
+    let (x, y) = at;
     let (w, h) = (size.width, size.height);
 
     // A url() layer draws as an image tile; the transform applies to pixels,
@@ -699,7 +705,7 @@ impl Emitter<'_> {
       surface.pop();
       return;
     }
-    let Some(paint) = self.gradient_paint(image, node, size, x, y, in_page_pattern) else {
+    let Some(paint) = self.gradient_paint(image, node, size, x, y, pattern_space) else {
       return;
     };
     let Some(path) = KrillaRect::from_xywh(x, y, w, h).and_then(rect_path) else {
@@ -716,6 +722,10 @@ impl Emitter<'_> {
 
   /// The krilla paint of one gradient layer, its geometry anchored at `(x, y)`
   /// with `size` as the tile. `None` for layers that are not gradients.
+  ///
+  /// PDF 32000-1 8.7.3.1 resolves a pattern matrix against the default space of the stream the
+  /// pattern is used in, which a nested stream does not inherit; `pattern_space` carries what
+  /// krilla no longer composes.
   fn gradient_paint(
     &self,
     image: &BackgroundImage,
@@ -723,7 +733,7 @@ impl Emitter<'_> {
     size: Size<f32>,
     x: f32,
     y: f32,
-    in_page_pattern: bool,
+    pattern_space: Transform,
   ) -> Option<Paint> {
     let (w, h) = (size.width, size.height);
     let sizing = &node.context.sizing;
@@ -757,7 +767,7 @@ impl Emitter<'_> {
           y1,
           x2,
           y2,
-          transform: gradient_transform(Transform::identity(), in_page_pattern),
+          transform: pattern_space,
           spread_method: spread(gradient.repeating),
           stops: krilla_stops(resolved, base, span),
           anti_alias: false,
@@ -792,10 +802,14 @@ impl Emitter<'_> {
           cx: 0.0,
           cy: 0.0,
           cr: extent,
-          transform: gradient_transform(
-            Transform::from_row(scale_x, 0.0, 0.0, scale_y, x + cx, y + cy),
-            in_page_pattern,
-          ),
+          transform: pattern_space.pre_concat(Transform::from_row(
+            scale_x,
+            0.0,
+            0.0,
+            scale_y,
+            x + cx,
+            y + cy,
+          )),
           spread_method: SpreadMethod::Pad,
           stops,
           anti_alias: false,
@@ -835,10 +849,11 @@ impl Emitter<'_> {
           cy: ccy,
           start_angle: 0.0,
           end_angle: 360.0,
-          transform: gradient_transform(
-            Transform::from_rotate_at(tile.start_rad.to_degrees() - 90.0, ccx, ccy),
-            in_page_pattern,
-          ),
+          transform: pattern_space.pre_concat(Transform::from_rotate_at(
+            tile.start_rad.to_degrees() - 90.0,
+            ccx,
+            ccy,
+          )),
           spread_method: SpreadMethod::Pad,
           stops,
           anti_alias: false,
@@ -919,16 +934,24 @@ impl Emitter<'_> {
         );
 
         if placement.tiles {
-          self.tiled_layer(image, node, &placement, size, at, at, &mut content, false);
+          self.tiled_layer(
+            image,
+            node,
+            &placement,
+            size,
+            at,
+            at,
+            &mut content,
+            Transform::identity(),
+          );
         } else {
           self.background_layer(
             image,
             node,
             placement.tile,
-            at.0 + placement.origin.0,
-            at.1 + placement.origin.1,
+            (at.0 + placement.origin.0, at.1 + placement.origin.1),
             &mut content,
-            false,
+            Transform::identity(),
           );
         }
       }
@@ -1685,7 +1708,14 @@ impl Emitter<'_> {
       let mut builder = surface.stream_builder();
       let mut inner = builder.surface();
 
-      self.background_layer(image, node, tile, 0.0, 0.0, &mut inner, true);
+      self.background_layer(
+        image,
+        node,
+        tile,
+        (0.0, 0.0),
+        &mut inner,
+        Transform::identity(),
+      );
       inner.finish();
       builder.finish()
     };
@@ -1751,7 +1781,14 @@ impl Emitter<'_> {
         BackgroundImage::Url(_) => {
           self.image_pattern(image, node, placement.tile, (tile_x, tile_y), surface)
         }
-        _ => self.gradient_paint(image, node, placement.tile, tile_x, tile_y, false),
+        _ => self.gradient_paint(
+          image,
+          node,
+          placement.tile,
+          tile_x,
+          tile_y,
+          Transform::identity(),
+        ),
       };
       let Some(paint) = paint else {
         continue;
@@ -1894,23 +1931,6 @@ fn layer_intrinsic(
 }
 
 /// The positioning area selected by `background-origin`.
-/// PDF 32000-1 8.7.3.1 maps a pattern matrix to the page's default space, which the surface's
-/// pixel-to-point scale never reaches from inside a pattern's own stream.
-fn gradient_transform(transform: Transform, in_page_pattern: bool) -> Transform {
-  if !in_page_pattern {
-    return transform;
-  }
-
-  Transform::from_row(
-    transform.sx() * PT_PER_PX,
-    transform.ky() * PT_PER_PX,
-    transform.kx() * PT_PER_PX,
-    transform.sy() * PT_PER_PX,
-    transform.tx() * PT_PER_PX,
-    transform.ty() * PT_PER_PX,
-  )
-}
-
 fn background_origin_area(origin: BackgroundOrigin, layout: Layout) -> (CorePoint<f32>, Size<f32>) {
   let inset = |left: f32, right: f32, top: f32, bottom: f32| {
     (
