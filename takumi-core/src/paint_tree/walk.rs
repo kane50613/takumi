@@ -186,9 +186,6 @@ impl Walker {
   ) -> Result<Vec<PaintNode>> {
     let context = &node.context;
     let font_style = SizedFontStyle::from_style(&context.style, context);
-    if font_style.sizing.font_size == 0.0 {
-      return Ok(Vec::new());
-    }
     let built = create_inline_layout(InlineLayoutRequest::in_content_box(
       items,
       layout.unsnapped_content,

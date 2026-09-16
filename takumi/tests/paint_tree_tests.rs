@@ -28,6 +28,8 @@ const CSS: &str = r#"
   b { display: inline; font-weight: 700; color: rgb(0, 0, 255); }
   .pic { width: 120px; height: 80px; object-fit: cover; border-radius: 8px; }
   .glass { filter: blur(2px); clip-path: circle(40%); mix-blend-mode: multiply; }
+  .collapsed { font-size: 0; }
+  .sized { display: inline; font-size: 18px; }
   .fade { opacity: 0.5; }
 "#;
 
@@ -184,4 +186,25 @@ fn stacking_context_root_keeps_inline_content() {
     paragraph.children.iter().any(|child| child.image.is_some()),
     "inline image lost from the stacking-context root"
   );
+}
+
+#[test]
+fn zero_font_size_container_keeps_sized_child_runs() {
+  let tree = build(
+    Node::container([Node::container([
+      Node::container([Node::text("visible")]).with_class_name("sized")
+    ])
+    .with_class_name("p collapsed")
+    .with_id("paragraph")])
+    .with_class_name("card")
+    .with_id("card"),
+  );
+
+  let paragraph = find(&tree.root, "paragraph").expect("paragraph box");
+  let runs = all_runs(paragraph);
+  assert_eq!(
+    runs.iter().map(|run| run.text.as_str()).collect::<Vec<_>>(),
+    ["visible"]
+  );
+  assert_eq!(runs[0].font_size, 18.0);
 }
