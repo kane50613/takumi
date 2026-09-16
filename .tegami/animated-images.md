@@ -5,4 +5,4 @@ packages:
 
 # Build without animated image support
 
-`ImageSource::Animated` exists only when `gif`, `png` or `webp` is on. A GIF whose decoder is off lays out from its header size instead of failing to load.
+`ImageSource::Animated` exists only with `gif`, `png`, or `webp`. A GIF keeps its header size when its decoder is off.

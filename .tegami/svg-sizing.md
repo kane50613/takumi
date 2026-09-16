@@ -5,4 +5,4 @@ packages:
 
 # Size an SVG without the renderer
 
-The `svg-sizing` feature reads an SVG's `width`, `height` and `viewBox` following usvg's rules, so a build that only lays out SVG images can leave the renderer out. `svg` implies it.
+`svg-sizing` reads an SVG's `width`, `height`, and `viewBox` without the renderer. The `svg` feature includes it.
