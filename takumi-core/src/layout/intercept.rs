@@ -113,8 +113,7 @@ fn skip_ink_ranges<'g>(
   merge(ranges)
 }
 
-/// Intercepts already computed, keyed by outline signature and band; the same glyph at the same
-/// size meets the same underline over and over.
+/// Intercepts keyed by outline signature and band, shared across runs and renders.
 const INTERCEPT_CACHE_ITEMS: usize = 8192;
 
 type Spans = SmallVec<[(f32, f32); 4]>;
