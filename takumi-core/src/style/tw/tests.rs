@@ -1211,10 +1211,8 @@ fn test_parse_list_utilities() {
 /// Stands in for the `:root` rule a stylesheet would supply.
 fn root_with(variables: &[(&str, &str)]) -> ComputedStyle {
   let mut root = ComputedStyle::default();
-  let properties = Arc::make_mut(&mut root.custom_properties);
-
   for (name, value) in variables {
-    properties.insert((*name).to_owned(), (*value).to_owned());
+    root.custom.set((*name).to_owned(), (*value).to_owned());
   }
 
   root
@@ -1665,25 +1663,20 @@ fn test_gradient_state_does_not_inherit() {
 #[test]
 fn test_registered_gradient_state_survives_inheritance() {
   let mut parent = ComputedStyle::default();
-  Arc::make_mut(&mut parent.custom_properties)
-    .insert("--tw-gradient-from-position".to_owned(), "25%".to_owned());
-  Arc::make_mut(&mut parent.registered_custom_properties).insert(
-    "--tw-gradient-from-position".to_owned(),
-    PropertyRule {
-      name: "--tw-gradient-from-position".to_owned(),
-      syntax: "<length-percentage>".to_owned(),
-      inherits: false,
-      initial_value: Some("0%".to_owned()),
-      media_queries: Vec::new(),
-    },
-  );
+  parent
+    .custom
+    .set("--tw-gradient-from-position".to_owned(), "25%".to_owned());
+  parent.custom.register(PropertyRule {
+    name: "--tw-gradient-from-position".to_owned(),
+    syntax: "<length-percentage>".to_owned(),
+    inherits: false,
+    initial_value: Some("0%".to_owned()),
+    media_queries: Vec::new(),
+  });
 
   let child = ComputedStyle::from_parent(&parent);
 
-  assert_eq!(
-    child.custom_properties.get("--tw-gradient-from-position"),
-    Some(&"25%".to_owned())
-  );
+  assert_eq!(child.custom.get("--tw-gradient-from-position"), Some("25%"));
 }
 
 /// The shadow colour utility overrides every layer through the variable it

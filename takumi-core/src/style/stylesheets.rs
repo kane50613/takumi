@@ -1,6 +1,5 @@
 use std::{
   borrow::Cow,
-  collections::HashMap,
   fmt,
   str::FromStr,
   sync::{Arc, OnceLock},
@@ -20,10 +19,8 @@ use crate::{
   Error,
   error::StyleDeclarationBlockParseError,
   style::{
-    CssInput, CssUnexpected, CssValueSeed, SizingContext,
-    properties::*,
-    selector::{PropertyRule, StyleDeclarationParser},
-    unexpected_token,
+    CssInput, CssUnexpected, CssValueSeed, CustomProperties, SizingContext, properties::*,
+    selector::StyleDeclarationParser, unexpected_token,
   },
 };
 #[path = "stylesheets_helpers.rs"]
@@ -72,28 +69,6 @@ pub(crate) struct DeferredDeclaration {
   pub(crate) specified_value: String,
 }
 
-/// `--tw-*` holds per-element composition state (gradient stops) that the utility
-/// engine writes without registering, so it stops at the element that set it. A
-/// name an `@property` rule registers is governed by that rule instead.
-fn inherited_custom_properties(
-  parent: &Arc<HashMap<String, String>>,
-  registered: &HashMap<String, PropertyRule>,
-) -> Arc<HashMap<String, String>> {
-  let drops = |name: &String| name.starts_with("--tw-") && !registered.contains_key(name);
-
-  if !parent.keys().any(drops) {
-    return parent.clone();
-  }
-
-  Arc::new(
-    parent
-      .iter()
-      .filter(|(name, _)| !drops(name))
-      .map(|(name, value)| (name.clone(), value.clone()))
-      .collect(),
-  )
-}
-
 /// A utility value read from a custom property, with the built-in scale as its
 /// fallback. Tailwind compiles `bg-red-500` to `var(--color-red-500)`.
 #[derive(Debug, Clone, PartialEq)]
@@ -126,7 +101,7 @@ fn snake_to_css_name(name: &&str) -> Box<str> {
 
 impl TwVarRef {
   fn apply(&self, style: &mut ComputedStyle, parent: Option<&ComputedStyle>) {
-    let defined = style.custom_properties.contains_key(self.name.as_ref());
+    let defined = style.custom.contains(self.name.as_ref());
 
     if defined && apply_deferred_declaration(style, parent, &self.deferred) {
       return;
@@ -800,7 +775,7 @@ macro_rules! define_style {
           for declaration in self.declarations.declarations {
             match declaration {
               StyleDeclaration::CustomProperty(name, value) => {
-                Arc::make_mut(&mut style.custom_properties).insert(name, value);
+                style.custom.set(name, value);
               }
               declaration => declarations.push(declaration),
             }
@@ -857,10 +832,9 @@ macro_rules! define_style {
       /// The computed style snapshot used during layout and rendering.
       #[derive(Clone, Debug)]
       pub struct ComputedStyle {
-        /// Resolved custom property values by name.
-        pub custom_properties: Arc<HashMap<String, String>>,
-        /// Registered `@property` rules by name.
-        pub registered_custom_properties: Arc<HashMap<String, PropertyRule>>,
+        /// Custom properties in scope: their specified values and the `@property`
+        /// rules that govern them.
+        pub custom: CustomProperties,
         /// Resolved BCP-47 language, inherited from the `lang` attribute. Drives
         /// locale-aware shaping (Han unification, line-breaking). Has no CSS property.
         pub lang: Option<Lang>,
@@ -873,8 +847,7 @@ macro_rules! define_style {
       impl Default for ComputedStyle {
         fn default() -> Self {
           Self {
-            custom_properties: Default::default(),
-            registered_custom_properties: Default::default(),
+            custom: Default::default(),
             lang: None,
             $(
               $longhand: define_style!(@default $($longhand_default)?),
@@ -910,11 +883,7 @@ macro_rules! define_style {
         /// Builds a child computed style inheriting from a parent.
         pub(crate) fn from_parent(parent: &Self) -> Self {
           Self {
-            custom_properties: inherited_custom_properties(
-              &parent.custom_properties,
-              &parent.registered_custom_properties,
-            ),
-            registered_custom_properties: parent.registered_custom_properties.clone(),
+            custom: parent.custom.inherited(),
             lang: parent.lang,
             $($longhand: define_inherited_default!(parent.$longhand, define_style!(@default $($longhand_default)?) $(, $longhand_inherit)?),)*
           }
@@ -924,11 +893,7 @@ macro_rules! define_style {
         /// resolved down to its used values like any other box's.
         pub(crate) fn for_anonymous(parent: &Self, sizing: &SizingContext) -> Self {
           let mut style = Self {
-            custom_properties: inherited_custom_properties(
-              &parent.custom_properties,
-              &parent.registered_custom_properties,
-            ),
-            registered_custom_properties: parent.registered_custom_properties.clone(),
+            custom: parent.custom.inherited(),
             lang: parent.lang,
             $($longhand: define_anonymous_default!(parent.$longhand, define_style!(@default $($longhand_default)?) $(, inherit $longhand_inherit)? $(, anonymous $longhand_anonymous)?),)*
           };
@@ -1105,7 +1070,7 @@ macro_rules! define_style {
               }
             }
             Self::CustomProperty(name, value) => {
-              Arc::make_mut(&mut style.custom_properties).insert(name, value);
+              style.custom.set(name, value);
             }
             Self::Deferred(deferred) => {
               apply_deferred_declaration(style, Some(parent), &deferred);
@@ -1141,7 +1106,7 @@ macro_rules! define_style {
               CssWideKeyword::Inherit | CssWideKeyword::Unset => {}
             },
             Self::CustomProperty(name, value) => {
-              Arc::make_mut(&mut style.custom_properties).insert(name.to_owned(), value.to_owned());
+              style.custom.set(name.to_owned(), value.to_owned());
             }
             Self::Deferred(deferred) => {
               apply_deferred_declaration(style, None, deferred);
@@ -1778,13 +1743,13 @@ impl<'i> FromCss<'i> for CssWideKeyword {
 pub struct DeclarationImportance {
   pub(crate) longhands: PropertyMask,
   /// Custom property names marked important.
-  pub(crate) custom_properties: SmallVec<[Box<str>; 1]>,
+  pub(crate) important_custom_property_names: SmallVec<[Box<str>; 1]>,
 }
 
 impl DeclarationImportance {
   /// Whether no property is marked important.
   pub fn is_empty(&self) -> bool {
-    self.custom_properties.is_empty() && self.longhands.iter().next().is_none()
+    self.important_custom_property_names.is_empty() && self.longhands.iter().next().is_none()
   }
 
   /// Records the longhands a declaration marks important.
@@ -1802,13 +1767,13 @@ impl DeclarationImportance {
   pub(crate) fn extend_from(&mut self, other: &Self) {
     self.longhands.union(&other.longhands);
 
-    for name in &other.custom_properties {
+    for name in &other.important_custom_property_names {
       if self
-        .custom_properties
+        .important_custom_property_names
         .iter()
         .all(|existing| existing != name)
       {
-        self.custom_properties.push(name.clone());
+        self.important_custom_property_names.push(name.clone());
       }
     }
   }
@@ -1820,11 +1785,11 @@ impl DeclarationImportance {
 
   fn insert_custom_property(&mut self, name: &str) {
     if self
-      .custom_properties
+      .important_custom_property_names
       .iter()
       .all(|existing| existing.as_ref() != name)
     {
-      self.custom_properties.push(name.into());
+      self.important_custom_property_names.push(name.into());
     }
   }
 }
@@ -1836,7 +1801,7 @@ where
   fn from(value: T) -> Self {
     Self {
       longhands: value.into_iter().collect(),
-      custom_properties: SmallVec::new(),
+      important_custom_property_names: SmallVec::new(),
     }
   }
 }

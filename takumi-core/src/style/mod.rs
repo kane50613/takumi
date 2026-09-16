@@ -2,6 +2,7 @@ mod animation;
 mod calc;
 mod css_input;
 mod css_source;
+mod custom_properties;
 pub mod math;
 mod media_query;
 pub(crate) mod properties;
@@ -19,6 +20,7 @@ pub use css_source::{
   AnimationRule, AnimationStep, CssSource, CssSourceError, LayerRule, MediaRule, StyleRule,
   SupportsRule,
 };
+pub use custom_properties::CustomProperties;
 pub(crate) use math::lerp;
 pub(crate) use properties::unexpected_token;
 pub use properties::*;
