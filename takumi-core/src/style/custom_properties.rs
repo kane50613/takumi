@@ -71,11 +71,18 @@ impl CustomProperties {
     Arc::make_mut(&mut self.element_state).insert(name.to_owned());
   }
 
-  /// Whether a child inherits `name`. A registered property keeps whatever
-  /// [`Self::register_in_scope`] left it; only an engine's element state stops
-  /// here.
-  fn inherits(&self, name: &str) -> bool {
-    !self.element_state.contains(name)
+  /// What a child starts `name` from: the value itself when it inherits, the
+  /// registered initial value when it does not, and nothing when an engine
+  /// wrote it as this element's own state.
+  fn inherited_value<'v>(&'v self, name: &str, value: &'v str) -> Option<&'v str> {
+    if self.element_state.contains(name) {
+      return None;
+    }
+
+    match self.registration(name) {
+      Some(rule) if !rule.inherits => rule.initial_value.as_deref(),
+      _ => Some(value),
+    }
   }
 
   /// The properties a child starts from, carrying the registrations forward and
@@ -83,7 +90,12 @@ impl CustomProperties {
   pub(crate) fn inherited(&self) -> Self {
     let registrations = self.registrations.clone();
 
-    if self.element_state.is_empty() {
+    if self.element_state.is_empty()
+      && self
+        .registrations
+        .values()
+        .all(|rule| rule.inherits || !self.values.contains_key(&rule.name))
+    {
       return Self {
         values: self.values.clone(),
         registrations,
@@ -96,8 +108,9 @@ impl CustomProperties {
         self
           .values
           .iter()
-          .filter(|(name, _)| self.inherits(name))
-          .map(|(name, value)| (name.clone(), value.clone()))
+          .filter_map(|(name, value)| {
+            Some((name.clone(), self.inherited_value(name, value)?.to_owned()))
+          })
           .collect(),
       ),
       registrations,

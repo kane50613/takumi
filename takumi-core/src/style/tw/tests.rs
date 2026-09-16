@@ -1660,10 +1660,10 @@ fn test_gradient_state_does_not_inherit() {
   assert_eq!(child.background_image, None);
 }
 
-/// Registering a `--tw-*` name hands it to the `@property` rule, so the value
-/// that rule gives reaches the child the utility engine's state would not.
+/// Registering a `--tw-*` name hands it to the `@property` rule, so the child
+/// starts from the initial value that rule gives rather than losing the name.
 #[test]
-fn test_registered_gradient_state_survives_inheritance() {
+fn test_a_registered_gradient_name_starts_from_its_initial_value() {
   let mut parent = ComputedStyle::default();
   parent
     .custom_properties
@@ -1680,7 +1680,7 @@ fn test_registered_gradient_state_survives_inheritance() {
 
   assert_eq!(
     child.custom_properties.get("--tw-gradient-from-position"),
-    Some("25%")
+    Some("0%")
   );
 }
 
