@@ -27,8 +27,6 @@ use xxhash_rust::xxh3::{Xxh3, xxh3_64};
 
 #[cfg(not(all(feature = "png", feature = "jpeg", feature = "webp", feature = "gif")))]
 use crate::resources::image_decoder::decoder_compiled_out;
-#[cfg(all(test, feature = "svg"))]
-use crate::resources::svg_size::SvgIntrinsic;
 #[cfg(feature = "svg-sizing")]
 use crate::resources::svg_size::SvgSize;
 #[cfg(feature = "svg")]
@@ -686,7 +684,7 @@ impl ImageSource {
   pub fn intrinsic_sizing(&self) -> IntrinsicSizing {
     match self {
       #[cfg(feature = "svg-sizing")]
-      ImageSource::Svg(svg) => svg.sizing.intrinsic.into(),
+      ImageSource::Svg(svg) => svg.sizing.intrinsic,
       ImageSource::Bitmap(bitmap) => {
         IntrinsicSizing::from_dimensions(bitmap.width() as f32, bitmap.height() as f32)
       }
@@ -1354,7 +1352,7 @@ mod tests {
       }
     }
 
-    fn previous_intrinsic(root: roxmltree::Node, size: (f32, f32)) -> SvgIntrinsic {
+    fn previous_intrinsic(root: roxmltree::Node, size: (f32, f32)) -> IntrinsicSizing {
       let is_absolute = |name| {
         root
           .attribute(name)
@@ -1374,7 +1372,7 @@ mod tests {
           (width > 0.0 && height > 0.0).then_some(width / height)
         }),
       };
-      SvgIntrinsic {
+      IntrinsicSizing {
         width,
         height,
         ratio,
@@ -1439,7 +1437,7 @@ mod tests {
   #[cfg(feature = "svg")]
   #[test]
   fn svg_intrinsic_distinguishes_viewbox_from_dimensions() {
-    fn intrinsic(svg: String) -> SvgIntrinsic {
+    fn intrinsic(svg: String) -> IntrinsicSizing {
       let Ok(source) = svg.parse::<SvgSource>() else {
         unreachable!("valid svg");
       };

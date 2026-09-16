@@ -17,31 +17,14 @@ const DEFAULT_SIZE: f32 = 100.0;
 #[cfg(any(test, not(feature = "svg")))]
 const SVG_NAMESPACE: &str = "http://www.w3.org/2000/svg";
 
-/// CSS intrinsic sizing of an SVG per <https://www.w3.org/TR/SVG/coords.html#IntrinsicSizing>:
-/// a non-percentage `width`/`height` is an intrinsic dimension, the `viewBox` gives the ratio.
-#[derive(Debug, Clone, Copy, Default, PartialEq)]
-pub(crate) struct SvgIntrinsic {
-  pub(crate) width: Option<f32>,
-  pub(crate) height: Option<f32>,
-  pub(crate) ratio: Option<f32>,
-}
-
-impl From<SvgIntrinsic> for IntrinsicSizing {
-  fn from(intrinsic: SvgIntrinsic) -> Self {
-    Self {
-      width: intrinsic.width,
-      height: intrinsic.height,
-      ratio: intrinsic.ratio,
-    }
-  }
-}
-
 /// The size usvg gives an SVG tree, plus its CSS intrinsic sizing.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub(crate) struct SvgSize {
   pub(crate) width: f32,
   pub(crate) height: f32,
-  pub(crate) intrinsic: SvgIntrinsic,
+  /// Per <https://www.w3.org/TR/SVG/coords.html#IntrinsicSizing>: a non-percentage
+  /// `width`/`height` is an intrinsic dimension, the `viewBox` gives the ratio.
+  pub(crate) intrinsic: IntrinsicSizing,
 }
 
 #[derive(Debug, Error)]
@@ -124,7 +107,7 @@ impl SvgSize {
     Ok(Self {
       width: width_px,
       height: height_px,
-      intrinsic: SvgIntrinsic {
+      intrinsic: IntrinsicSizing {
         width: intrinsic_width,
         height: intrinsic_height,
         ratio,
@@ -187,7 +170,7 @@ mod tests {
     assert_eq!((svg.width, svg.height), (200.0, 100.0));
     assert_eq!(
       svg.intrinsic,
-      SvgIntrinsic {
+      IntrinsicSizing {
         width: None,
         height: None,
         ratio: Some(2.0)
@@ -212,7 +195,7 @@ mod tests {
   fn no_size_falls_back_to_the_default() {
     let svg = size("");
     assert_eq!((svg.width, svg.height), (100.0, 100.0));
-    assert_eq!(svg.intrinsic, SvgIntrinsic::default());
+    assert_eq!(svg.intrinsic, IntrinsicSizing::default());
   }
 
   #[test]

@@ -43,42 +43,37 @@ impl FrameInfo {
   }
 
   fn covers(&self, canvas: (u32, u32)) -> bool {
-    let (x, y, width, height) = self.rect;
-    x == 0 && y == 0 && width == canvas.0 && height == canvas.1
+    covers_canvas(self.rect, canvas)
   }
 }
 
-/// The frame that must be drawn before `index` can be, or `None` when `index`
-/// stands on its own.
+/// Whether frame `index` needs an earlier frame drawn first.
 ///
 /// Follows `ImageDecoder::FindRequiredPreviousFrame` in Blink.
-pub(crate) fn required_previous_frame(
-  frames: &[FrameInfo],
-  index: usize,
-  canvas: (u32, u32),
-) -> Option<usize> {
-  let frame = frames.get(index)?;
+pub(crate) fn needs_previous_frame(frames: &[FrameInfo], index: usize, canvas: (u32, u32)) -> bool {
+  let Some(frame) = frames.get(index) else {
+    return false;
+  };
   if index == 0 || (!frame.blends && frame.covers(canvas)) {
-    return None;
+    return false;
   }
 
   // A frame restoring what came before it leaves the canvas as it found it, so
   // it is not the starting state for anything after it.
   let mut previous = index - 1;
   while frames[previous].dispose == Dispose::Previous {
-    previous = previous.checked_sub(1)?;
+    let Some(earlier) = previous.checked_sub(1) else {
+      return false;
+    };
+    previous = earlier;
   }
 
   match frames[previous].dispose {
-    Dispose::Keep => Some(previous),
-    Dispose::Background
-      if frames[previous].covers(canvas)
-        || required_previous_frame(frames, previous, canvas).is_none() =>
-    {
-      None
+    Dispose::Keep => true,
+    Dispose::Background => {
+      !frames[previous].covers(canvas) && needs_previous_frame(frames, previous, canvas)
     }
-    Dispose::Background => Some(previous),
-    Dispose::Previous => None,
+    Dispose::Previous => false,
   }
 }
 
@@ -90,7 +85,6 @@ pub(crate) const MAX_ANIMATION_TOTAL_PIXELS: u64 =
 pub(crate) const MAX_ANIMATION_FRAMES: usize = 1024;
 
 /// Whether a frame rectangle spans the entire canvas.
-#[cfg(any(feature = "png", feature = "webp"))]
 pub(crate) fn covers_canvas(rect: (u32, u32, u32, u32), canvas: (u32, u32)) -> bool {
   let (x, y, width, height) = rect;
   x == 0 && y == 0 && width == canvas.0 && height == canvas.1

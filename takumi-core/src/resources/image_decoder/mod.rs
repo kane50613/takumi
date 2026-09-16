@@ -57,7 +57,7 @@ pub(crate) use self::frames::covers_canvas;
 #[cfg(any(feature = "png", feature = "gif", feature = "webp"))]
 pub(crate) use self::frames::{
   DecodeTarget, Dispose, FrameInfo, MAX_ANIMATION_FRAMES, MAX_ANIMATION_TOTAL_PIXELS,
-  fit_to_target, required_previous_frame,
+  fit_to_target, needs_previous_frame,
 };
 #[cfg(feature = "gif")]
 pub(crate) use self::gif::{

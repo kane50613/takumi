@@ -19,7 +19,7 @@ use super::image_decoder::{
 use super::{
   image::ImageError,
   image_buffer::ImageBuffer,
-  image_decoder::{DecodeTarget, FrameInfo, MAX_ANIMATION_FRAMES, required_previous_frame},
+  image_decoder::{DecodeTarget, FrameInfo, MAX_ANIMATION_FRAMES, needs_previous_frame},
 };
 use crate::{resources::image::cover_target, style::ImageScalingAlgorithm};
 
@@ -191,12 +191,11 @@ impl AnimatedSource {
   pub(crate) fn stands_alone(&self, index: usize) -> bool {
     index > 0
       && index < MAX_ANIMATION_FRAMES
-      && required_previous_frame(
+      && !needs_previous_frame(
         &self.timing().frames,
         index,
         (self.inner.width, self.inner.height),
       )
-      .is_none()
   }
 
   /// Stream index of the frame shown at the given playback time, looping over
