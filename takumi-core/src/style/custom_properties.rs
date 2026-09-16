@@ -48,7 +48,7 @@ impl CustomProperties {
 
   /// Applies one `@property` registration, leaving the value the rule puts in
   /// scope: the parent's when it inherits, the rule's initial value otherwise.
-  pub(crate) fn apply_registration(&mut self, rule: &PropertyRule, parent: &Self) {
+  pub(crate) fn register_in_scope(&mut self, rule: &PropertyRule, parent: &Self) {
     self.register(rule.clone());
 
     let inherited = rule.inherits.then(|| parent.get(&rule.name)).flatten();
@@ -61,7 +61,7 @@ impl CustomProperties {
 
   /// Whether a child inherits `name` from this element.
   ///
-  /// [`Self::apply_registration`] has already left the value a registered
+  /// [`Self::register_in_scope`] has already left the value a registered
   /// property puts in scope, so a registered name passes through untouched.
   /// That leaves the unregistered ones: `--tw-*` holds per-element composition
   /// state the utility engine writes without registering, and stops here.

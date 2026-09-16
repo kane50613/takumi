@@ -1212,7 +1212,9 @@ fn test_parse_list_utilities() {
 fn root_with(variables: &[(&str, &str)]) -> ComputedStyle {
   let mut root = ComputedStyle::default();
   for (name, value) in variables {
-    root.custom.set((*name).to_owned(), (*value).to_owned());
+    root
+      .custom_properties
+      .set((*name).to_owned(), (*value).to_owned());
   }
 
   root
@@ -1664,9 +1666,9 @@ fn test_gradient_state_does_not_inherit() {
 fn test_registered_gradient_state_survives_inheritance() {
   let mut parent = ComputedStyle::default();
   parent
-    .custom
+    .custom_properties
     .set("--tw-gradient-from-position".to_owned(), "25%".to_owned());
-  parent.custom.register(PropertyRule {
+  parent.custom_properties.register(PropertyRule {
     name: "--tw-gradient-from-position".to_owned(),
     syntax: "<length-percentage>".to_owned(),
     inherits: false,
@@ -1676,7 +1678,10 @@ fn test_registered_gradient_state_survives_inheritance() {
 
   let child = ComputedStyle::from_parent(&parent);
 
-  assert_eq!(child.custom.get("--tw-gradient-from-position"), Some("25%"));
+  assert_eq!(
+    child.custom_properties.get("--tw-gradient-from-position"),
+    Some("25%")
+  );
 }
 
 /// The shadow colour utility overrides every layer through the variable it

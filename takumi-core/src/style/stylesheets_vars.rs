@@ -184,7 +184,7 @@ pub(crate) fn apply_deferred_declaration(
 ) -> bool {
   let Some(resolved_value) = resolve_var_references(
     &deferred.specified_value,
-    style.custom.values(),
+    style.custom_properties.values(),
     &mut Vec::new(),
   ) else {
     return false;

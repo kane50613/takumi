@@ -397,8 +397,8 @@ fn registered_custom_property_parent_style<'a>(
       }
 
       adjusted_parent
-        .custom
-        .apply_registration(property_rule, &parent_style.custom);
+        .custom_properties
+        .register_in_scope(property_rule, &parent_style.custom_properties);
     }
   }
 
@@ -2398,7 +2398,7 @@ mod tests {
   fn registered_custom_property_can_disable_inheritance() {
     let mut parent = ComputedStyle::default();
     parent
-      .custom
+      .custom_properties
       .set("--box-size".to_owned(), "50px".to_owned());
 
     let stylesheets = [StyleSheet::from(vec![PropertyRule {
@@ -2411,7 +2411,10 @@ mod tests {
 
     let adjusted_parent =
       registered_custom_property_parent_style(&parent, &stylesheets, Viewport::default());
-    assert_eq!(adjusted_parent.custom.get("--box-size"), Some("10px"));
+    assert_eq!(
+      adjusted_parent.custom_properties.get("--box-size"),
+      Some("10px")
+    );
   }
 
   /// An `@property` registration is what decides whether a name inherits, even
@@ -2431,14 +2434,17 @@ mod tests {
       registered_custom_property_parent_style(&parent, &stylesheets, Viewport::default());
     let child = ComputedStyle::from_parent(&adjusted_parent);
 
-    assert_eq!(child.custom.get("--tw-gradient-from-position"), Some("0%"));
+    assert_eq!(
+      child.custom_properties.get("--tw-gradient-from-position"),
+      Some("0%")
+    );
   }
 
   #[test]
   fn registered_custom_property_preserves_parent_value_when_inheriting() {
     let mut parent = ComputedStyle::default();
     parent
-      .custom
+      .custom_properties
       .set("--box-size".to_owned(), "50px".to_owned());
 
     let stylesheets = [StyleSheet::from(vec![PropertyRule {
@@ -2451,7 +2457,10 @@ mod tests {
 
     let adjusted_parent =
       registered_custom_property_parent_style(&parent, &stylesheets, Viewport::default());
-    assert_eq!(adjusted_parent.custom.get("--box-size"), Some("50px"));
+    assert_eq!(
+      adjusted_parent.custom_properties.get("--box-size"),
+      Some("50px")
+    );
   }
 
   #[test]
@@ -2468,7 +2477,10 @@ mod tests {
 
     let adjusted_parent =
       registered_custom_property_parent_style(&parent, &stylesheets, Viewport::default());
-    assert_eq!(adjusted_parent.custom.get("--box-size"), Some("10px"));
+    assert_eq!(
+      adjusted_parent.custom_properties.get("--box-size"),
+      Some("10px")
+    );
   }
 
   #[test]
@@ -2494,14 +2506,17 @@ mod tests {
 
     let adjusted_parent =
       registered_custom_property_parent_style(&parent, &stylesheets, Viewport::default());
-    assert_eq!(adjusted_parent.custom.get("--box-size"), Some("20px"));
+    assert_eq!(
+      adjusted_parent.custom_properties.get("--box-size"),
+      Some("20px")
+    );
   }
 
   #[test]
   fn registered_custom_property_later_inheriting_rule_restores_parent_value() {
     let mut parent = ComputedStyle::default();
     parent
-      .custom
+      .custom_properties
       .set("--box-size".to_owned(), "50px".to_owned());
 
     let stylesheets = [StyleSheet::from(vec![
@@ -2523,7 +2538,10 @@ mod tests {
 
     let adjusted_parent =
       registered_custom_property_parent_style(&parent, &stylesheets, Viewport::default());
-    assert_eq!(adjusted_parent.custom.get("--box-size"), Some("50px"));
+    assert_eq!(
+      adjusted_parent.custom_properties.get("--box-size"),
+      Some("50px")
+    );
   }
 
   #[test]
@@ -2550,7 +2568,7 @@ mod tests {
 
     let adjusted_parent =
       registered_custom_property_parent_style(&parent, &stylesheets, Viewport::default());
-    assert_eq!(adjusted_parent.custom.get("--box-size"), None);
+    assert_eq!(adjusted_parent.custom_properties.get("--box-size"), None);
   }
 
   #[test]
@@ -2573,7 +2591,7 @@ mod tests {
     ));
 
     let resolved = style.inherit(&adjusted_parent);
-    assert_eq!(resolved.custom.get("--box-size"), Some("red"));
+    assert_eq!(resolved.custom_properties.get("--box-size"), Some("red"));
   }
 
   #[test]
@@ -2596,7 +2614,7 @@ mod tests {
     ));
 
     let resolved = style.inherit(&adjusted_parent);
-    assert_eq!(resolved.custom.get("--box-size"), Some("24px"));
+    assert_eq!(resolved.custom_properties.get("--box-size"), Some("24px"));
   }
 
   #[test]
@@ -2624,7 +2642,10 @@ mod tests {
       ));
 
     let resolved = style.inherit(&adjusted_parent);
-    assert_eq!(resolved.custom.get("--box-size"), Some("var(--source)"));
+    assert_eq!(
+      resolved.custom_properties.get("--box-size"),
+      Some("var(--source)")
+    );
   }
 
   #[test]
@@ -2647,7 +2668,10 @@ mod tests {
     ));
 
     let resolved = style.inherit(&adjusted_parent);
-    assert_eq!(resolved.custom.get("--display-state"), Some("auto"));
+    assert_eq!(
+      resolved.custom_properties.get("--display-state"),
+      Some("auto")
+    );
   }
 
   #[test]
@@ -2670,7 +2694,7 @@ mod tests {
     ));
 
     let resolved = style.inherit(&adjusted_parent);
-    assert_eq!(resolved.custom.get("--accent"), Some("12px"));
+    assert_eq!(resolved.custom_properties.get("--accent"), Some("12px"));
   }
 
   #[test]
@@ -2712,9 +2736,18 @@ mod tests {
       ));
 
     let resolved = style.inherit(&adjusted_parent);
-    assert_eq!(resolved.custom.get("--fade-duration"), Some("2s"));
-    assert_eq!(resolved.custom.get("--move"), Some("rotate(45deg)"));
-    assert_eq!(resolved.custom.get("--bg"), Some("url(hero.png)"));
+    assert_eq!(
+      resolved.custom_properties.get("--fade-duration"),
+      Some("2s")
+    );
+    assert_eq!(
+      resolved.custom_properties.get("--move"),
+      Some("rotate(45deg)")
+    );
+    assert_eq!(
+      resolved.custom_properties.get("--bg"),
+      Some("url(hero.png)")
+    );
   }
 
   #[test]
@@ -2767,7 +2800,7 @@ mod tests {
     ));
 
     let resolved = style.inherit(&adjusted_parent);
-    assert_eq!(resolved.custom.get("--move"), Some("red"));
+    assert_eq!(resolved.custom_properties.get("--move"), Some("red"));
   }
 
   #[test]

@@ -101,7 +101,7 @@ fn snake_to_css_name(name: &&str) -> Box<str> {
 
 impl TwVarRef {
   fn apply(&self, style: &mut ComputedStyle, parent: Option<&ComputedStyle>) {
-    let defined = style.custom.contains(self.name.as_ref());
+    let defined = style.custom_properties.contains(self.name.as_ref());
 
     if defined && apply_deferred_declaration(style, parent, &self.deferred) {
       return;
@@ -775,7 +775,7 @@ macro_rules! define_style {
           for declaration in self.declarations.declarations {
             match declaration {
               StyleDeclaration::CustomProperty(name, value) => {
-                style.custom.set(name, value);
+                style.custom_properties.set(name, value);
               }
               declaration => declarations.push(declaration),
             }
@@ -834,7 +834,7 @@ macro_rules! define_style {
       pub struct ComputedStyle {
         /// Custom properties in scope: their specified values and the `@property`
         /// rules that govern them.
-        pub custom: CustomProperties,
+        pub custom_properties: CustomProperties,
         /// Resolved BCP-47 language, inherited from the `lang` attribute. Drives
         /// locale-aware shaping (Han unification, line-breaking). Has no CSS property.
         pub lang: Option<Lang>,
@@ -847,7 +847,7 @@ macro_rules! define_style {
       impl Default for ComputedStyle {
         fn default() -> Self {
           Self {
-            custom: Default::default(),
+            custom_properties: Default::default(),
             lang: None,
             $(
               $longhand: define_style!(@default $($longhand_default)?),
@@ -883,7 +883,7 @@ macro_rules! define_style {
         /// Builds a child computed style inheriting from a parent.
         pub(crate) fn from_parent(parent: &Self) -> Self {
           Self {
-            custom: parent.custom.inherited(),
+            custom_properties: parent.custom_properties.inherited(),
             lang: parent.lang,
             $($longhand: define_inherited_default!(parent.$longhand, define_style!(@default $($longhand_default)?) $(, $longhand_inherit)?),)*
           }
@@ -893,7 +893,7 @@ macro_rules! define_style {
         /// resolved down to its used values like any other box's.
         pub(crate) fn for_anonymous(parent: &Self, sizing: &SizingContext) -> Self {
           let mut style = Self {
-            custom: parent.custom.inherited(),
+            custom_properties: parent.custom_properties.inherited(),
             lang: parent.lang,
             $($longhand: define_anonymous_default!(parent.$longhand, define_style!(@default $($longhand_default)?) $(, inherit $longhand_inherit)? $(, anonymous $longhand_anonymous)?),)*
           };
@@ -1070,7 +1070,7 @@ macro_rules! define_style {
               }
             }
             Self::CustomProperty(name, value) => {
-              style.custom.set(name, value);
+              style.custom_properties.set(name, value);
             }
             Self::Deferred(deferred) => {
               apply_deferred_declaration(style, Some(parent), &deferred);
@@ -1106,7 +1106,7 @@ macro_rules! define_style {
               CssWideKeyword::Inherit | CssWideKeyword::Unset => {}
             },
             Self::CustomProperty(name, value) => {
-              style.custom.set(name.to_owned(), value.to_owned());
+              style.custom_properties.set(name.to_owned(), value.to_owned());
             }
             Self::Deferred(deferred) => {
               apply_deferred_declaration(style, None, deferred);
