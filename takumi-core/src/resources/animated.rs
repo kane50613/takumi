@@ -23,11 +23,9 @@ use super::{
 };
 use crate::{resources::image::cover_target, style::ImageScalingAlgorithm};
 
-/// A lazily decoded animated GIF. Only the first frame and the (pixel-free)
-/// per-frame timing are retained; every later frame is decoded on demand at the
-/// size it is drawn and dropped afterwards, so the whole timeline never sits in
-/// memory at once. No cache holds decoded frames — retention stays a single
-/// frame, and the byte budget can account for it exactly.
+/// A lazily decoded animated image. It keeps the first frame and the per-frame timing,
+/// decodes any later frame at its drawn size when needed, then drops it. Nothing caches
+/// decoded frames, so the byte budget counts a single frame.
 #[derive(Debug, Clone)]
 pub struct AnimatedSource {
   inner: Arc<AnimatedInner>,

@@ -77,7 +77,7 @@ pub enum ImageSource {
   Encoded(Arc<EncodedBitmap>),
 }
 
-/// Represents the resolved SVG source. Without the `svg` feature it holds the markup and its
+/// The resolved SVG source. Without the `svg` feature it holds the markup and its
 /// root-element size only, so it lays out but cannot be drawn.
 #[cfg(feature = "svg-sizing")]
 #[derive(Debug)]
