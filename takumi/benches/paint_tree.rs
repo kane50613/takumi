@@ -1,6 +1,6 @@
-use std::hint::black_box;
+use std::{fs, hint::black_box, path::Path};
 
-use criterion::{Criterion, criterion_group, criterion_main};
+use criterion::{BatchSize, Criterion, criterion_group, criterion_main};
 use serde_json::{Value, json};
 use takumi::{
   prelude::{FontOverride, FontResource, Fonts, GenericFamily, Node, RenderOptions, Viewport},
@@ -21,7 +21,7 @@ const WORDS: [&str; 12] = [
   "dog",
   "漢字混排",
   "العربية",
-  "עברית",
+  "shapes",
   "type",
 ];
 
@@ -38,6 +38,15 @@ fn fonts() -> Fonts {
         .generic_family(GenericFamily::SANS_SERIF),
     )
     .unwrap();
+  for fallback in [
+    "../assets/fonts/noto-sans/NotoSansTC-VariableFont_wght.woff2",
+    "../assets/fonts/sil/scheherazade-new-v17-arabic-regular.woff2",
+  ] {
+    let bytes = fs::read(Path::new(env!("CARGO_MANIFEST_DIR")).join(fallback)).unwrap();
+    fonts
+      .register(FontResource::new(bytes).generic_family(GenericFamily::SANS_SERIF))
+      .unwrap();
+  }
   fonts
 }
 
@@ -85,33 +94,41 @@ fn bench_paint_tree(c: &mut Criterion) {
   let mut group = c.benchmark_group("paint_tree");
 
   group.bench_function("paint", |b| {
-    b.iter(|| {
-      black_box(
-        paint_tree(
-          PaintTreeOptions::builder()
-            .viewport(Viewport::new((1200, 1600)))
-            .node(node.clone())
-            .fonts(&fonts)
-            .build(),
+    b.iter_batched(
+      || node.clone(),
+      |node| {
+        black_box(
+          paint_tree(
+            PaintTreeOptions::builder()
+              .viewport(Viewport::new((1200, 1600)))
+              .node(node)
+              .fonts(&fonts)
+              .build(),
+          )
+          .expect("paints"),
         )
-        .expect("paints"),
-      )
-    })
+      },
+      BatchSize::SmallInput,
+    )
   });
 
   group.bench_function("raster", |b| {
-    b.iter(|| {
-      black_box(
-        render(
-          RenderOptions::builder()
-            .viewport(Viewport::new((1200, 1600)))
-            .node(node.clone())
-            .fonts(&fonts)
-            .build(),
+    b.iter_batched(
+      || node.clone(),
+      |node| {
+        black_box(
+          render(
+            RenderOptions::builder()
+              .viewport(Viewport::new((1200, 1600)))
+              .node(node)
+              .fonts(&fonts)
+              .build(),
+          )
+          .expect("renders"),
         )
-        .expect("renders"),
-      )
-    })
+      },
+      BatchSize::SmallInput,
+    )
   });
 
   group.finish();
