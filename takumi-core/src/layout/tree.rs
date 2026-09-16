@@ -1727,7 +1727,6 @@ impl RenderNode {
     let text = self.node.as_ref()?.text_data()?;
     let [
       InlineItem::Text {
-        text: item_text,
         link: None,
         decorations: None,
         ..
@@ -1737,7 +1736,7 @@ impl RenderNode {
       return None;
     };
 
-    (item_text == &text.text).then_some(text)
+    Some(text)
   }
 
   fn layout_first_baseline_offset(
