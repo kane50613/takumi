@@ -1656,6 +1656,34 @@ fn fill_colors(pdf: &[u8]) -> Vec<String> {
   colors
 }
 
+/// A gradient is built in pixels, and the shading pattern that carries it is
+/// placed against the page, so its matrix has to convert the two.
+#[test]
+fn a_gradient_axis_is_measured_in_page_units() {
+  let doc = r##"<div style="width: 300px; height: 120px; background-image: linear-gradient(to right, #ff5f6d, #3a1c71);"></div>"##;
+  let pdf = render_pinned(
+    PdfOptions::builder()
+      .node(from_html(doc, FromHtmlOptions::default()).expect("parse gradient doc"))
+      .viewport(Viewport::new((300, 120)))
+      .fonts(&fonts())
+      .build(),
+  );
+
+  let (shading, matrix) = shading_pattern(&pdf).expect("a shading pattern");
+  let coords = shading_coords(&pdf, shading).expect("shading coords");
+  let [x1, y1, x2, y2] = coords[..4] else {
+    panic!("expected four coords, got {coords:?}");
+  };
+  let (dx, dy) = (x2 - x1, y2 - y1);
+  let axis = (matrix[0] * dx + matrix[2] * dy).hypot(matrix[1] * dx + matrix[3] * dy);
+
+  // The box is 300 css px wide, which is 225 pt.
+  assert!(
+    (axis - 225.0).abs() < 0.5,
+    "gradient axis is {axis} pt, expected 225"
+  );
+}
+
 /// `box-shadow`: a sharp shadow is one exact ring, a blurred one is a stack of
 /// bands, and an inset shadow fills the box minus the hole it casts.
 #[test]
@@ -1849,6 +1877,37 @@ fn exception_widths(pdf: &[u8]) -> Vec<f32> {
   }
 
   widths
+}
+
+/// The first shading pattern in the document: the shading it points at, and its matrix.
+fn shading_pattern(pdf: &[u8]) -> Option<(usize, [f32; 6])> {
+  let at = find(pdf, b"/PatternType 2/Shading ")?;
+  let rest = &pdf[at + b"/PatternType 2/Shading ".len()..];
+  let shading = read_numbers(rest, 1)?[0] as usize;
+  let matrix_at = find(rest, b"/Matrix[")?;
+  let matrix = read_numbers(&rest[matrix_at + b"/Matrix[".len()..], 6)?;
+
+  Some((shading, matrix.try_into().ok()?))
+}
+
+/// The `/Coords` of one shading object.
+fn shading_coords(pdf: &[u8], shading: usize) -> Option<Vec<f32>> {
+  let at = find(pdf, format!("\n{shading} 0 obj").as_bytes())?;
+  let coords_at = find(&pdf[at..], b"/Coords[")?;
+
+  read_numbers(&pdf[at + coords_at + b"/Coords[".len()..], 6)
+}
+
+fn read_numbers(bytes: &[u8], count: usize) -> Option<Vec<f32>> {
+  let text = String::from_utf8_lossy(&bytes[..bytes.len().min(256)]);
+  let numbers: Vec<f32> = text
+    .split(|c: char| !(c.is_ascii_digit() || c == '.' || c == '-'))
+    .filter(|token| !token.is_empty())
+    .filter_map(|token| token.parse().ok())
+    .take(count)
+    .collect();
+
+  (numbers.len() == count).then_some(numbers)
 }
 
 fn find(haystack: &[u8], needle: &[u8]) -> Option<usize> {
