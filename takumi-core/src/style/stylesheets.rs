@@ -72,19 +72,23 @@ pub(crate) struct DeferredDeclaration {
   pub(crate) specified_value: String,
 }
 
-/// `--tw-*` holds per-element composition state (gradient stops), registered
-/// `inherits: false` by Tailwind's own `@property` rules.
+/// `--tw-*` holds per-element composition state (gradient stops) that the utility
+/// engine writes without registering, so it stops at the element that set it. A
+/// name an `@property` rule registers is governed by that rule instead.
 fn inherited_custom_properties(
   parent: &Arc<HashMap<String, String>>,
+  registered: &HashMap<String, PropertyRule>,
 ) -> Arc<HashMap<String, String>> {
-  if !parent.keys().any(|name| name.starts_with("--tw-")) {
+  let drops = |name: &String| name.starts_with("--tw-") && !registered.contains_key(name);
+
+  if !parent.keys().any(drops) {
     return parent.clone();
   }
 
   Arc::new(
     parent
       .iter()
-      .filter(|(name, _)| !name.starts_with("--tw-"))
+      .filter(|(name, _)| !drops(name))
       .map(|(name, value)| (name.clone(), value.clone()))
       .collect(),
   )
@@ -906,7 +910,10 @@ macro_rules! define_style {
         /// Builds a child computed style inheriting from a parent.
         pub(crate) fn from_parent(parent: &Self) -> Self {
           Self {
-            custom_properties: inherited_custom_properties(&parent.custom_properties),
+            custom_properties: inherited_custom_properties(
+              &parent.custom_properties,
+              &parent.registered_custom_properties,
+            ),
             registered_custom_properties: parent.registered_custom_properties.clone(),
             lang: parent.lang,
             $($longhand: define_inherited_default!(parent.$longhand, define_style!(@default $($longhand_default)?) $(, $longhand_inherit)?),)*
@@ -917,7 +924,10 @@ macro_rules! define_style {
         /// resolved down to its used values like any other box's.
         pub(crate) fn for_anonymous(parent: &Self, sizing: &SizingContext) -> Self {
           let mut style = Self {
-            custom_properties: inherited_custom_properties(&parent.custom_properties),
+            custom_properties: inherited_custom_properties(
+              &parent.custom_properties,
+              &parent.registered_custom_properties,
+            ),
             registered_custom_properties: parent.registered_custom_properties.clone(),
             lang: parent.lang,
             $($longhand: define_anonymous_default!(parent.$longhand, define_style!(@default $($longhand_default)?) $(, inherit $longhand_inherit)? $(, anonymous $longhand_anonymous)?),)*
