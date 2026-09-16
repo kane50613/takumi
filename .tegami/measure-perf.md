@@ -3,6 +3,6 @@ packages:
   "takumi": minor
 ---
 
-# Measure text once per node and reuse its baseline
+# Measure text once per node
 
-A text node's measurement key is digested once per render instead of on every layout query, and its first and last baselines come from the cached measurement instead of a second layout. Output is unchanged.
+Text measurement hashes a node's style once, and a text node's baseline comes from its cached measurement unless a height or line limit clamped it.
