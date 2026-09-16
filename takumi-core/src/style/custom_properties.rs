@@ -1,7 +1,10 @@
 //! The custom properties in scope on an element: their specified values and the
 //! `@property` rules that govern them.
 
-use std::{collections::HashMap, sync::Arc};
+use std::{
+  collections::{HashMap, HashSet},
+  sync::Arc,
+};
 
 use crate::style::selector::PropertyRule;
 
@@ -11,6 +14,9 @@ use crate::style::selector::PropertyRule;
 pub struct CustomProperties {
   values: Arc<HashMap<String, String>>,
   registrations: Arc<HashMap<String, PropertyRule>>,
+  /// Names a utility engine wrote as this element's own composition state.
+  /// Unlike a registration, this does not reach the children.
+  element_state: Arc<HashSet<String>>,
 }
 
 impl CustomProperties {
@@ -54,14 +60,22 @@ impl CustomProperties {
     }
   }
 
-  /// Whether a child inherits `name` from this element.
-  ///
-  /// [`Self::register_in_scope`] has already left the value a registered
-  /// property puts in scope, so a registered name passes through untouched.
-  /// That leaves the unregistered ones: `--tw-*` holds per-element composition
-  /// state the utility engine writes without registering, and stops here.
+  /// Records state a utility engine wrote for this element alone. Tailwind's
+  /// own stylesheet says so with an `@property` rule; the engine has no
+  /// stylesheet, so it says so here. An author's rule for the name wins.
+  pub(crate) fn register_element_state(&mut self, name: &str) {
+    if self.registration(name).is_some() {
+      return;
+    }
+
+    Arc::make_mut(&mut self.element_state).insert(name.to_owned());
+  }
+
+  /// Whether a child inherits `name`. A registered property keeps whatever
+  /// [`Self::register_in_scope`] left it; only an engine's element state stops
+  /// here.
   fn inherits(&self, name: &str) -> bool {
-    self.registration(name).is_some() || !name.starts_with("--tw-")
+    !self.element_state.contains(name)
   }
 
   /// The properties a child starts from, carrying the registrations forward and
@@ -69,10 +83,11 @@ impl CustomProperties {
   pub(crate) fn inherited(&self) -> Self {
     let registrations = self.registrations.clone();
 
-    if self.values.keys().all(|name| self.inherits(name)) {
+    if self.element_state.is_empty() {
       return Self {
         values: self.values.clone(),
         registrations,
+        element_state: Default::default(),
       };
     }
 
@@ -86,6 +101,7 @@ impl CustomProperties {
           .collect(),
       ),
       registrations,
+      element_state: Default::default(),
     }
   }
 }

@@ -313,6 +313,10 @@ fn build_style_layers(
   }
 
   for &declarations in matched_declarations.layered_normal() {
+    style
+      .declarations
+      .extend_element_state(declarations.element_state.iter().map(Box::as_ref));
+
     for declaration in declarations.iter() {
       declaration.merge_into_ref(&mut style);
     }
@@ -325,6 +329,10 @@ fn build_style_layers(
   }
 
   for &declarations in matched_declarations.unlayered_normal() {
+    style
+      .declarations
+      .extend_element_state(declarations.element_state.iter().map(Box::as_ref));
+
     for declaration in declarations.iter() {
       declaration.merge_into_ref(&mut style);
     }
@@ -344,6 +352,10 @@ fn build_style_layers(
   // Important declarations reverse layer order, so `tw`, the last declared
   // layer, sits above unlayered rules and below every named `@layer`.
   for &declarations in matched_declarations.unlayered_important() {
+    style
+      .declarations
+      .extend_element_state(declarations.element_state.iter().map(Box::as_ref));
+
     for declaration in declarations.iter() {
       declaration.merge_into_ref(&mut style);
     }
@@ -354,6 +366,10 @@ fn build_style_layers(
   }
 
   for &declarations in matched_declarations.layered_important() {
+    style
+      .declarations
+      .extend_element_state(declarations.element_state.iter().map(Box::as_ref));
+
     for declaration in declarations.iter() {
       declaration.merge_into_ref(&mut style);
     }

@@ -772,6 +772,10 @@ macro_rules! define_style {
           let mut style = ComputedStyle::from_parent(parent);
           let mut declarations = ParsedDeclarations::new();
 
+          for name in &self.declarations.element_state {
+            style.custom_properties.register_element_state(name);
+          }
+
           for declaration in self.declarations.declarations {
             match declaration {
               StyleDeclaration::CustomProperty(name, value) => {
@@ -1830,6 +1834,9 @@ impl ImportantBits {
 pub struct StyleDeclarationBlock {
   /// Ordered declarations in source order.
   pub(crate) declarations: ThinVec<StyleDeclaration>,
+  /// Custom property names a utility engine wrote as the element's own
+  /// composition state, which stops at the element that set it.
+  pub(crate) element_state: SmallVec<[Box<str>; 2]>,
   /// Positional against `declarations`, because the mask below unions the block
   /// and cannot tell `p-2 !p-4` apart once both have marked the same longhand.
   important: ImportantBits,
@@ -1842,6 +1849,23 @@ impl StyleDeclarationBlock {
     let mut block = Self::default();
     block.append_parsed_declarations(declarations, important);
     block
+  }
+
+  /// Records a name a utility engine wrote as this element's own state.
+  pub(crate) fn push_element_state(&mut self, name: &str) {
+    if self
+      .element_state
+      .iter()
+      .all(|existing| existing.as_ref() != name)
+    {
+      self.element_state.push(name.into());
+    }
+  }
+
+  pub(crate) fn extend_element_state<'n>(&mut self, names: impl IntoIterator<Item = &'n str>) {
+    for name in names {
+      self.push_element_state(name);
+    }
   }
 
   /// Reserves room for `additional` more declarations.
@@ -1902,6 +1926,7 @@ impl StyleDeclarationBlock {
   /// Appends a borrowed block's declarations and importance, cloning them.
   pub(crate) fn append_cloned(&mut self, other: &Self) {
     self.importance.extend_from(&other.importance);
+    self.extend_element_state(other.element_state.iter().map(Box::as_ref));
     self
       .important
       .append(self.declarations.len(), &other.important);
@@ -1911,6 +1936,7 @@ impl StyleDeclarationBlock {
   /// Appends another block's declarations and importance.
   pub(crate) fn append(&mut self, other: Self) {
     self.importance.extend_from(&other.importance);
+    self.extend_element_state(other.element_state.iter().map(Box::as_ref));
     self
       .important
       .append(self.declarations.len(), &other.important);
