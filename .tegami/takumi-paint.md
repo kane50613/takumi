@@ -3,6 +3,6 @@ packages:
   "takumi-paint": minor
 ---
 
-# Add `takumi-paint`, a paint tree of used values
+# Export painted values from JSX, HTML, or a node tree
 
-`renderPaintTree()` lays out JSX, HTML, or a node tree and returns every box's used background, border, shadows, outline, image placement, and shaped text runs in paint order, so a PPTX or Canvas exporter reads what the renderer painted instead of re-running the cascade.
+`renderPaintTree()` and `PaintTreeRenderer.render()` return every box's used decorations, image placement, and shaped text runs in paint order, with a shared font table.
