@@ -326,8 +326,8 @@ impl Walker {
   }
 }
 
-/// A shaped run's byte range covers the whole parley run, which several spans can share;
-/// the run's own span narrows it.
+/// Narrows a parley run's byte range to the span it was shaped for, since several spans can
+/// share one run.
 fn run_text_range(
   range: std::ops::Range<usize>,
   spans: &[ProcessedInlineSpan<'_>],
