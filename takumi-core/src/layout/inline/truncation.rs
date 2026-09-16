@@ -237,7 +237,7 @@ pub(super) fn make_ellipsis_layout<'c>(
   apply_text_indent(&mut final_layout, root_style, max_width);
   let text_wrap_mode = root_style.parent.resolved_text_wrap_mode();
   positioned_floats.clear();
-  let _ = break_lines(
+  break_lines(
     &mut final_layout,
     LineWidths::uniform(max_width),
     max_height,
