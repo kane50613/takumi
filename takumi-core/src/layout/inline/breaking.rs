@@ -153,11 +153,15 @@ pub(crate) fn break_lines(
   let mut exhausted = false;
   float_layout.update_breaker_line(&mut breaker, line_y);
 
-  while line_count < limit_lines {
+  loop {
     let Some(yield_data) = breaker.break_next() else {
       exhausted = true;
       break;
     };
+    if line_count >= limit_lines {
+      breaker.revert();
+      break;
+    }
     let height = match yield_data {
       YieldData::LineBreak(data) => data.line_height,
       YieldData::MaxHeightExceeded(data) => data.line_height,
@@ -192,10 +196,6 @@ pub(crate) fn break_lines(
     line_count += 1;
     line_y = breaker.state().line_y() as f32;
     float_layout.update_breaker_line(&mut breaker, line_y);
-
-    if total_height >= limit_height {
-      break;
-    }
   }
 
   breaker.finish();

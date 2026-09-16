@@ -1281,7 +1281,13 @@ mod tests {
 
     assert!(!build(None).clamped);
     assert!(!build(Some(MaxHeight::Lines(4))).clamped);
+    assert!(!build(Some(MaxHeight::Lines(3))).clamped);
+    assert!(build(Some(MaxHeight::Lines(2))).clamped);
     assert!(build(Some(MaxHeight::Lines(1))).clamped);
+
+    let three_lines = build(Some(MaxHeight::Lines(3))).layout.height();
+    assert!(!build(Some(MaxHeight::Absolute(three_lines))).clamped);
+    assert!(build(Some(MaxHeight::Absolute(three_lines * 2.0 / 3.0))).clamped);
   }
 
   #[test]
