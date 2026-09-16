@@ -47,7 +47,7 @@ pub enum Font {
 
 /// A `font-style` value parsed from its CSS text.
 #[derive(Clone, Copy)]
-pub struct FontStyle(CssFontStyle);
+struct FontStyle(CssFontStyle);
 
 impl<'de> Deserialize<'de> for FontStyle {
   fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
@@ -58,12 +58,6 @@ impl<'de> Deserialize<'de> for FontStyle {
     Ok(Self(
       CssFontStyle::from_css_str(&value).map_err(D::Error::custom)?,
     ))
-  }
-}
-
-impl From<FontStyle> for CssFontStyle {
-  fn from(style: FontStyle) -> Self {
-    style.0
   }
 }
 
@@ -89,7 +83,7 @@ pub fn register_font(fonts: &mut Fonts, font: Font) -> Result<Vec<RegisteredFami
         &data,
         details.name,
         details.weight.map(|weight| weight as f32),
-        details.style.map(Into::into),
+        details.style.map(|style| style.0),
         details.subset_of,
         details.subset_rank,
         details.generic,
