@@ -96,7 +96,7 @@ impl Walker {
       return Ok(None);
     };
     let layout = results.layout(np.node_id)?;
-    let mut painted = self.box_node(node, layout, np.transform, Some(np.path.clone()))?;
+    let mut painted = self.box_node(node, layout, np.transform, Some(np.path.clone()));
     painted.children = self.own_content(node, layout, np.transform, &mut painted)?;
     Ok(Some(painted))
   }
@@ -108,10 +108,10 @@ impl Walker {
     layout: ComputedLayout,
     transform: Affine,
     path: Option<Vec<usize>>,
-  ) -> Result<PaintNode> {
+  ) -> PaintNode {
     let style = &node.context.style;
     let painter = BoxPainter::new(&node.context, layout);
-    Ok(PaintNode {
+    PaintNode {
       source: path.map(|path| PaintSource {
         path,
         id: node.node.as_ref().and_then(|n| n.id()).map(str::to_owned),
@@ -134,14 +134,14 @@ impl Walker {
         .then(|| style.mix_blend_mode.to_css_string()),
       isolate: style.isolation == Isolation::Isolate,
       clip: overflow_clip(node, layout, painter.border()),
-      box_decoration: box_decoration(node, layout, &painter)?,
+      box_decoration: box_decoration(node, layout, &painter),
       image: None,
       text_shadows: Vec::new(),
       inline_backgrounds: Vec::new(),
       runs: Vec::new(),
       unresolved_effects: unresolved(node),
       children: Vec::new(),
-    })
+    }
   }
 
   /// Fills `painted` with the node's image or text and returns the boxes its inline content adds.
@@ -251,7 +251,7 @@ impl Walker {
             &node.context.sizing,
           );
           let placed = transform * Affine::translation(offset.x, offset.y) * local;
-          let mut painted = self.box_node(node, layout, placed, None)?;
+          let mut painted = self.box_node(node, layout, placed, None);
           painted.children = self.own_content(node, layout, placed, &mut painted)?;
           boxes.push(painted);
         }
@@ -408,9 +408,9 @@ fn box_decoration(
   node: &RenderNode,
   layout: ComputedLayout,
   painter: &BoxPainter<'_>,
-) -> Result<Option<PaintBoxDecoration>> {
+) -> Option<PaintBoxDecoration> {
   if !painter.paints_decorations() {
-    return Ok(None);
+    return None;
   }
   let context = &node.context;
   let style = &context.style;
@@ -418,11 +418,11 @@ fn box_decoration(
   let shadows = painter.shadows();
   let background_color = style.background_color.resolve(context.current_color);
 
-  Ok(Some(PaintBoxDecoration {
+  Some(PaintBoxDecoration {
     background: PaintBackground {
       color: (background_color.0[3] != 0).then(|| rgba(background_color)),
       clip: style.background_clip.to_css_string(),
-      layers: background_layers(node, layout)?,
+      layers: background_layers(node, layout),
     },
     border: PaintBorder {
       widths: [
@@ -459,21 +459,18 @@ fn box_decoration(
         offset: outline.grow - width,
       }
     }),
-  }))
+  })
 }
 
-fn background_layers(
-  node: &RenderNode,
-  layout: ComputedLayout,
-) -> Result<Vec<PaintBackgroundLayer>> {
+fn background_layers(node: &RenderNode, layout: ComputedLayout) -> Vec<PaintBackgroundLayer> {
   let context = &node.context;
   let style = &context.style;
   if style.background_clip == BackgroundClip::Text {
-    return Ok(Vec::new());
+    return Vec::new();
   }
   let images = style.background_image.as_deref().unwrap_or(&[]);
   if images.is_empty() {
-    return Ok(Vec::new());
+    return Vec::new();
   }
   let origin = background_origin_box(style.background_origin, layout);
   let resolved = BackgroundLayersInput {
@@ -492,25 +489,23 @@ fn background_layers(
   }
   .resolve();
 
-  Ok(
-    resolved
-      .into_iter()
-      .filter_map(|(index, geometry)| {
-        let image = images.get(index)?;
-        let fill = fill(image, geometry.tile_width, geometry.tile_height, context)?;
-        Some(PaintBackgroundLayer {
-          fill,
-          tiles: PaintTiles {
-            xs: geometry.xs.to_vec(),
-            ys: geometry.ys.to_vec(),
-            width: geometry.tile_width,
-            height: geometry.tile_height,
-          },
-          blend_mode: geometry.blend_mode.to_css_string(),
-        })
+  resolved
+    .into_iter()
+    .filter_map(|(index, geometry)| {
+      let image = images.get(index)?;
+      let fill = fill(image, geometry.tile_width, geometry.tile_height, context)?;
+      Some(PaintBackgroundLayer {
+        fill,
+        tiles: PaintTiles {
+          xs: geometry.xs.to_vec(),
+          ys: geometry.ys.to_vec(),
+          width: geometry.tile_width,
+          height: geometry.tile_height,
+        },
+        blend_mode: geometry.blend_mode.to_css_string(),
       })
-      .collect(),
-  )
+    })
+    .collect()
 }
 
 fn fill(
