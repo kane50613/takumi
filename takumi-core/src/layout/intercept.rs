@@ -110,9 +110,9 @@ fn skip_ink_ranges<'g>(
   merge(ranges)
 }
 
-/// Whether any point of the outline, control points included, lies within the band; every
-/// flattened edge stays inside the hull of its control points, so an outline that fails this
-/// cannot cross a scanline in the band.
+/// Whether any outline point, control points included, lies in the band. A flattened edge
+/// stays inside the hull of its control points, so an outline that fails this cannot cross a
+/// scanline in the band.
 fn reaches_band(paths: &[PathCommand], top: f32, bottom: f32) -> bool {
   let (mut min_y, mut max_y) = (f32::INFINITY, f32::NEG_INFINITY);
   let mut span = |point: &Point<f32>| {
