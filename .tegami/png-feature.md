@@ -3,6 +3,6 @@ packages:
   "takumi": minor
 ---
 
-# Build without the PNG decoder
+# Build without PNG decoding
 
-`png` joins `jpeg`, `webp` and `gif` under the default-on `image-decoding` feature. With it off, a PNG or APNG source lays out from its header size and cannot be drawn, PNG bitmap glyphs are skipped, and `ImageBuffer::encode_png` is gone.
+The `png` feature is on by default through `image-decoding`. Without it, PNG and APNG sources keep their header size but cannot be drawn, PNG bitmap glyphs are skipped, and `ImageBuffer::encode_png` is gone.
