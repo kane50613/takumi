@@ -1,9 +1,7 @@
 //! Vertical line metrics: line-height, baselines and vertical-align.
 
-use std::ptr;
-
 use crate::style::{ResolvedVerticalAlign, VerticalAlignKeyword};
-use parley::{InlineBoxKind, Line, LineMetrics, PositionedInlineBox, PositionedLayoutItem, Style};
+use parley::{InlineBoxKind, Line, LineMetrics, PositionedInlineBox, PositionedLayoutItem};
 
 use super::{
   InlineBrush, InlineLayout,
@@ -164,13 +162,16 @@ pub(crate) fn resolve_inline_line_metrics(
     // `line.items()` does, and boxes only exist when a span holds one.
     for run in line.runs() {
       let metrics = run.metrics();
-      let mut seen: Option<*const Style<InlineBrush>> = None;
+      let mut seen = None;
       for cluster in run.clusters() {
-        let style = cluster.first_style();
-        if seen == Some(ptr::from_ref(style)) || cluster.glyphs().next().is_none() {
+        let Some(glyph) = cluster.glyphs().next() else {
+          continue;
+        };
+        if seen == Some(glyph.style_index()) {
           continue;
         }
-        seen = Some(ptr::from_ref(style));
+        seen = Some(glyph.style_index());
+        let style = cluster.first_style();
         let (base_above, base_below) =
           style
             .brush

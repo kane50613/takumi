@@ -1,5 +1,5 @@
 use std::{
-  borrow::Cow, collections::HashMap, hash::Hasher, iter::Copied, mem::take, ptr, rc::Rc, slice,
+  borrow::Cow, collections::HashMap, hash::Hasher, iter::Copied, mem::take, rc::Rc, slice,
   vec::IntoIter,
 };
 
@@ -1721,21 +1721,23 @@ impl RenderNode {
   }
 
   /// This node's text when it lays out exactly as [`TextData::measurement`] does.
+  ///
+  /// A text node's own text is always among its items, so a lone text item is that text.
   fn plain_text(&self, items: &[InlineItem<'_>]) -> Option<&TextData> {
     let text = self.node.as_ref()?.text_data()?;
     let [
       InlineItem::Text {
         text: item_text,
-        context,
         link: None,
         decorations: None,
+        ..
       },
     ] = items
     else {
       return None;
     };
 
-    (ptr::eq(*context, &self.context) && item_text == &text.text).then_some(text)
+    (item_text == &text.text).then_some(text)
   }
 
   fn layout_first_baseline_offset(
