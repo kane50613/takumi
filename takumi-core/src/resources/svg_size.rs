@@ -14,6 +14,8 @@ use crate::style::IntrinsicSizing;
 const DPI: f32 = 96.0;
 const FONT_SIZE: f32 = 12.0;
 const DEFAULT_SIZE: f32 = 100.0;
+#[cfg(any(test, not(feature = "svg")))]
+const SVG_NAMESPACE: &str = "http://www.w3.org/2000/svg";
 
 /// CSS intrinsic sizing of an SVG per <https://www.w3.org/TR/SVG/coords.html#IntrinsicSizing>:
 /// a non-percentage `width`/`height` is an intrinsic dimension, the `viewBox` gives the ratio.
@@ -48,6 +50,9 @@ pub(crate) enum SvgSizeError {
   Xml(#[from] roxmltree::Error),
   #[error("SVG has an invalid size")]
   InvalidSize,
+  #[cfg(any(test, not(feature = "svg")))]
+  #[error("SVG root element is not <svg>")]
+  InvalidRoot,
 }
 
 impl SvgSize {
@@ -58,8 +63,13 @@ impl SvgSize {
       ..Default::default()
     };
     let document = Document::parse_with_options(markup, options)?;
+    let root = document.root_element();
+    let tag = root.tag_name();
+    if tag.name() != "svg" || !matches!(tag.namespace(), None | Some(SVG_NAMESPACE)) {
+      return Err(SvgSizeError::InvalidRoot);
+    }
 
-    Self::from_root(document.root_element())
+    Self::from_root(root)
   }
 
   pub(crate) fn from_root(root: Node) -> Result<Self, SvgSizeError> {
@@ -208,6 +218,24 @@ mod tests {
   #[test]
   fn unparsable_lengths_fall_back_like_missing_ones() {
     assert_eq!(size(r#"width="wide" height="10""#).width, 100.0);
+  }
+
+  #[test]
+  fn the_root_must_be_an_svg_element() {
+    let nested = r#"<html><svg xmlns="http://www.w3.org/2000/svg" width="10" height="10"/></html>"#;
+    let foreign = r#"<svg xmlns="http://example.com/ns" width="10" height="10"/>"#;
+    for markup in [nested, foreign] {
+      assert!(matches!(
+        SvgSize::parse(markup),
+        Err(SvgSizeError::InvalidRoot)
+      ));
+    }
+    assert_eq!(
+      SvgSize::parse(r#"<svg width="10" height="10"/>"#)
+        .unwrap()
+        .width,
+      10.0
+    );
   }
 
   #[test]
