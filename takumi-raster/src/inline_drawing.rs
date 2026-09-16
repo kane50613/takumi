@@ -2,7 +2,7 @@ use std::{collections::HashMap, sync::Arc};
 
 use skrifa::{FontRef, MetadataProvider};
 use takumi_core::{
-  geometry::{ComputedLayout as Layout, NodeId, Point, Size},
+  geometry::{ComputedLayout as Layout, Point, Size},
   layout::{
     inline_box::{InlineBoxPaint, resolve_inline_box},
     intercept::skip_ink_spans,
@@ -340,7 +340,6 @@ pub(crate) fn draw_inline_box(
       render_node(
         &mut root,
         &subtree.results,
-        NodeId::ROOT,
         canvas,
         transform
           * Affine::translation(

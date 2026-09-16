@@ -203,8 +203,6 @@ pub struct SceneRequest<'a> {
   pub root: &'a RenderNode,
   /// Its layout.
   pub layout_results: &'a LayoutResults,
-  /// The node to start from.
-  pub node_id: NodeId,
   /// The transform the root paints under.
   pub transform: Affine,
   /// The size percentages of the root resolve against.
@@ -218,7 +216,6 @@ pub fn build_scene(request: SceneRequest<'_>) -> Result<Vec<StackingContextNode>
   let SceneRequest {
     root,
     layout_results,
-    node_id,
     transform,
     container_size,
     paint_bounds: with_bounds,
@@ -228,7 +225,7 @@ pub fn build_scene(request: SceneRequest<'_>) -> Result<Vec<StackingContextNode>
   let mut containing_blocks = ContainingBlocks::default();
   let mut visits = vec![StackingContextBuildVisit {
     path: Vec::new(),
-    node_id,
+    node_id: NodeId::ROOT,
     transform,
     container_size,
     context_id: 0,

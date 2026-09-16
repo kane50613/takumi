@@ -488,7 +488,6 @@ fn render_with_context(
   render_node(
     &mut root,
     &layout_results,
-    root_node_id,
     &mut canvas,
     Affine::IDENTITY,
     Size {
@@ -685,7 +684,6 @@ fn resolve_scene_at_time<'a, 'g>(
 pub(crate) fn render_node(
   node: &mut RenderNode,
   layout_results: &LayoutResults,
-  node_id: NodeId,
   canvas: &mut Canvas,
   transform: Affine,
   container_size: Size<Option<f32>>,
@@ -693,7 +691,6 @@ pub(crate) fn render_node(
   let contexts = build_scene(SceneRequest {
     root: node,
     layout_results,
-    node_id,
     transform,
     container_size,
     paint_bounds: true,

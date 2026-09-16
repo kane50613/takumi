@@ -152,7 +152,6 @@ impl PreparedTree {
     let contexts = build_scene(SceneRequest {
       root: &root,
       layout_results: &results,
-      node_id: NodeId::ROOT,
       transform: Affine::IDENTITY,
       container_size: Size {
         width: Some(width),

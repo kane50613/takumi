@@ -5,7 +5,7 @@ use std::borrow::Cow;
 use crate::{
   error::Result,
   font_style::SizedFontStyle,
-  geometry::{ComputedLayout, NodeId, Point, Size},
+  geometry::{ComputedLayout, Point, Size},
   layout::{
     background::{BackgroundLayersInput, background_origin_box},
     decoration::ClipBox,
@@ -235,7 +235,6 @@ impl Walker {
           let contexts = build_scene(SceneRequest {
             root: &subtree.root,
             layout_results: &subtree.results,
-            node_id: NodeId::ROOT,
             transform: origin,
             container_size: subtree.size.map(Some),
             paint_bounds: false,

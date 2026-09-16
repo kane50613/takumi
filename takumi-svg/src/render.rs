@@ -107,7 +107,6 @@ pub fn render(options: SvgOptions<'_>) -> Result<String> {
   let contexts = build_scene(SceneRequest {
     root: &root,
     layout_results: &results,
-    node_id: root_id,
     transform: IDENTITY,
     container_size: Size {
       width: Some(width),
@@ -710,7 +709,6 @@ pub(crate) fn emit_inline_box(
       let contexts = build_scene(SceneRequest {
         root: &subtree.root,
         layout_results: &subtree.results,
-        node_id: NodeId::ROOT,
         transform: origin,
         container_size: subtree.size.map(Some),
         paint_bounds: true,

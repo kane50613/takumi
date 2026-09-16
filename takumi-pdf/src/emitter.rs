@@ -1610,7 +1610,6 @@ impl Emitter<'_> {
     let Ok(contexts) = build_scene(SceneRequest {
       root: &subtree.root,
       layout_results: &subtree.results,
-      node_id: NodeId::ROOT,
       transform: Affine::IDENTITY,
       container_size: subtree.size.map(Some),
       paint_bounds: true,
