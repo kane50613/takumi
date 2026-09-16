@@ -196,50 +196,33 @@ fn classify_bucket(style: &ComputedStyle, is_flex_or_grid_item: bool) -> (PaintB
   }
 }
 
+/// What a scene is built from.
+#[derive(Clone, Copy)]
+pub struct SceneRequest<'a> {
+  /// The tree to paint.
+  pub root: &'a RenderNode,
+  /// Its layout.
+  pub layout_results: &'a LayoutResults,
+  /// The node to start from.
+  pub node_id: NodeId,
+  /// The transform the root paints under.
+  pub transform: Affine,
+  /// The size percentages of the root resolve against.
+  pub container_size: Size<Option<f32>>,
+  /// Whether to compute each node's paint bounds, which the raster and SVG backends clip and cull by.
+  pub paint_bounds: bool,
+}
+
 /// Flattens the node tree into CSS-ordered stacking contexts for painting.
-pub fn build_stacking_contexts(
-  root: &RenderNode,
-  layout_results: &LayoutResults,
-  node_id: NodeId,
-  transform: Affine,
-  container_size: Size<Option<f32>>,
-) -> Result<Vec<StackingContextNode>> {
-  build_scene(
+pub fn build_scene(request: SceneRequest<'_>) -> Result<Vec<StackingContextNode>> {
+  let SceneRequest {
     root,
     layout_results,
     node_id,
     transform,
     container_size,
-    true,
-  )
-}
-
-/// [`build_stacking_contexts`] without paint bounds, for a consumer that never clips or culls.
-pub fn build_stacking_contexts_unbounded(
-  root: &RenderNode,
-  layout_results: &LayoutResults,
-  node_id: NodeId,
-  transform: Affine,
-  container_size: Size<Option<f32>>,
-) -> Result<Vec<StackingContextNode>> {
-  build_scene(
-    root,
-    layout_results,
-    node_id,
-    transform,
-    container_size,
-    false,
-  )
-}
-
-fn build_scene(
-  root: &RenderNode,
-  layout_results: &LayoutResults,
-  node_id: NodeId,
-  transform: Affine,
-  container_size: Size<Option<f32>>,
-  with_bounds: bool,
-) -> Result<Vec<StackingContextNode>> {
+    paint_bounds: with_bounds,
+  } = request;
   let mut contexts = vec![StackingContextNode::with_root(None)];
   let mut source_order = 0usize;
   let mut containing_blocks = ContainingBlocks::default();

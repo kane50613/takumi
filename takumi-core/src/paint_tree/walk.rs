@@ -19,7 +19,7 @@ use crate::{
     tree::{LayoutResults, RenderNode},
   },
   painter::BoxPainter,
-  scene::{NodePaint, PaintItemKind, StackingContextNode, build_stacking_contexts_unbounded},
+  scene::{NodePaint, PaintItemKind, SceneRequest, StackingContextNode, build_scene},
   shadow::SizedShadow,
   style::{
     Affine, BackgroundClip, BackgroundImage, BlendMode, BorderStyle, Isolation,
@@ -232,13 +232,14 @@ impl Walker {
               offset.x + subtree.margin_offset.x,
               offset.y + subtree.margin_offset.y,
             );
-          let contexts = build_stacking_contexts_unbounded(
-            &subtree.root,
-            &subtree.results,
-            NodeId::ROOT,
-            origin,
-            subtree.size.map(Some),
-          )?;
+          let contexts = build_scene(SceneRequest {
+            root: &subtree.root,
+            layout_results: &subtree.results,
+            node_id: NodeId::ROOT,
+            transform: origin,
+            container_size: subtree.size.map(Some),
+            paint_bounds: false,
+          })?;
           boxes.extend(self.scene(&subtree.root, &subtree.results, &contexts)?);
         }
         InlineBoxPaint::Replaced { node, layout } => {

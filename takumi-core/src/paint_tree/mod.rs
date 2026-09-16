@@ -28,7 +28,7 @@ use crate::{
     tree::{LayoutTree, RenderNode},
   },
   resources::image::ImageSource,
-  scene::build_stacking_contexts_unbounded,
+  scene::{SceneRequest, build_scene},
   style::{Affine, ComputedStyle, FontFamily, Lang, SizingContext, StyleSheet},
   viewport::Viewport,
 };
@@ -93,16 +93,17 @@ pub fn paint_tree(options: PaintTreeOptions<'_>) -> Result<PaintTree> {
     .size
     .height
     .map_or(root_layout.size.height, |h| h as f32);
-  let contexts = build_stacking_contexts_unbounded(
-    &root,
-    &results,
-    NodeId::ROOT,
-    Affine::IDENTITY,
-    Size {
+  let contexts = build_scene(SceneRequest {
+    root: &root,
+    layout_results: &results,
+    node_id: NodeId::ROOT,
+    transform: Affine::IDENTITY,
+    container_size: Size {
       width: Some(width),
       height: Some(height),
     },
-  )?;
+    paint_bounds: false,
+  })?;
 
   let mut walker = walk::Walker {
     fonts: fonts::FontTable::default(),
