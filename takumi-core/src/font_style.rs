@@ -31,6 +31,24 @@ enum ExpandedFamilyToken {
 }
 
 impl ExpandedFontFamily {
+  /// Hashes the family list in order, names and generics alike.
+  pub(crate) fn hash_tokens(&self, hasher: &mut impl core::hash::Hasher) {
+    use core::hash::Hash;
+
+    for token in &self.0 {
+      match token {
+        ExpandedFamilyToken::Named(name) => {
+          0_u8.hash(hasher);
+          name.hash(hasher);
+        }
+        ExpandedFamilyToken::Generic(generic) => {
+          1_u8.hash(hasher);
+          (*generic as u8).hash(hasher);
+        }
+      }
+    }
+  }
+
   fn iter(&self) -> impl Iterator<Item = FontFamilyName<'_>> + Clone {
     self.0.iter().map(|token| match token {
       ExpandedFamilyToken::Named(name) => FontFamilyName::Named(name.as_str().into()),
@@ -288,12 +306,7 @@ impl SizedFontStyle<'_> {
     self.text_decoration_color.0.hash(hasher);
     self.text_stroke_color.0.hash(hasher);
     self.stroke_width.to_bits().hash(hasher);
-    for token in &self.font_family.0 {
-      match token {
-        ExpandedFamilyToken::Named(name) => name.hash(hasher),
-        ExpandedFamilyToken::Generic(generic) => (*generic as u8).hash(hasher),
-      }
-    }
+    self.font_family.hash_tokens(hasher);
     match self.line_height {
       LineHeight::MetricsRelative(value)
       | LineHeight::FontSizeRelative(value)
@@ -533,8 +546,8 @@ mod tests {
   use parley::{FontFamilyName, GenericFamily};
 
   use super::{
-    ExpandedFontFamily, FontClasses, Presentation, SizedFontStyle, SubsetGroup,
-    presentation_segments,
+    ExpandedFamilyToken, ExpandedFontFamily, FontClasses, Presentation, SizedFontStyle,
+    SubsetGroup, presentation_segments,
   };
   use crate::{
     Fonts,
@@ -545,6 +558,25 @@ mod tests {
     },
     viewport::Viewport,
   };
+
+  #[test]
+  fn family_token_hashes_tell_a_generic_from_a_name() {
+    use std::hash::{DefaultHasher, Hasher};
+
+    let hash = |tokens: Vec<ExpandedFamilyToken>| {
+      let mut hasher = DefaultHasher::new();
+      ExpandedFontFamily(tokens).hash_tokens(&mut hasher);
+      hasher.finish()
+    };
+
+    assert_ne!(
+      hash(vec![
+        ExpandedFamilyToken::Generic(GenericFamily::SansSerif),
+        ExpandedFamilyToken::Named(String::new()),
+      ]),
+      hash(vec![ExpandedFamilyToken::Named("\u{1}".to_owned())])
+    );
+  }
 
   fn names(expanded: &ExpandedFontFamily) -> Vec<String> {
     expanded

@@ -7,9 +7,15 @@
 //! the same question, answered from the path itself so every backend can ask
 //! it.
 
+use std::sync::LazyLock;
+
+use quick_cache::sync::Cache;
 use smallvec::SmallVec;
 
-use crate::geometry::{PathCommand, Point};
+use crate::{
+  geometry::{PathCommand, Point},
+  resources::glyph::ResolvedOutlineGlyph,
+};
 
 /// Segments a curve is flattened into. A glyph is small enough on screen that
 /// the error from sixteen steps stays well under the half-pixel Chromium
@@ -63,7 +69,7 @@ const MIN_INTERSECTION: f32 = 0.5;
 /// growing each by the line's thickness so a stroke never touches the line it
 /// interrupts. This answers the same question from the outlines themselves.
 pub fn skip_ink_spans<'g>(
-  glyphs: impl Iterator<Item = (Point<f32>, &'g [PathCommand])>,
+  glyphs: impl Iterator<Item = (Point<f32>, &'g ResolvedOutlineGlyph)>,
   start: f32,
   end: f32,
   top: f32,
@@ -81,7 +87,7 @@ pub fn skip_ink_spans<'g>(
 /// grows past the ink, which keeps a stroke from touching the line it
 /// interrupts.
 fn skip_ink_ranges<'g>(
-  glyphs: impl Iterator<Item = (Point<f32>, &'g [PathCommand])>,
+  glyphs: impl Iterator<Item = (Point<f32>, &'g ResolvedOutlineGlyph)>,
   top: f32,
   bottom: f32,
   thickness: f32,
@@ -93,21 +99,41 @@ fn skip_ink_ranges<'g>(
   }
   let dilation = thickness.min(MAX_DILATION);
 
-  for (origin, paths) in glyphs {
+  for (origin, outline) in glyphs {
     let band_top = top + MIN_INTERSECTION - origin.y;
     let band_bottom = bottom - MIN_INTERSECTION - origin.y;
-    if !reaches_band(paths, band_top, band_bottom) {
-      continue;
-    }
 
     ranges.extend(
-      text_intercepts(paths, band_top, band_bottom)
+      cached_intercepts(outline, band_top, band_bottom)
         .into_iter()
         .map(|(low, high)| (origin.x + low - dilation, origin.x + high + dilation)),
     );
   }
 
   merge(ranges)
+}
+
+/// Intercepts keyed by outline signature and band, shared across runs and renders.
+const INTERCEPT_CACHE_ITEMS: usize = 8192;
+
+type Spans = SmallVec<[(f32, f32); 4]>;
+
+static INTERCEPTS: LazyLock<Cache<(u64, u32, u32), Spans>> =
+  LazyLock::new(|| Cache::new(INTERCEPT_CACHE_ITEMS));
+
+fn cached_intercepts(outline: &ResolvedOutlineGlyph, top: f32, bottom: f32) -> Spans {
+  let key = (outline.cache_signature(), top.to_bits(), bottom.to_bits());
+  if let Some(spans) = INTERCEPTS.get(&key) {
+    return spans;
+  }
+  let paths = outline.paths();
+  let spans = if reaches_band(paths, top, bottom) {
+    text_intercepts(paths, top, bottom)
+  } else {
+    SmallVec::new()
+  };
+  INTERCEPTS.insert(key, spans.clone());
+  spans
 }
 
 /// Whether any outline point, control points included, lies in the band. A flattened edge
@@ -308,7 +334,18 @@ fn flatten_cubic(
 #[cfg(test)]
 mod tests {
   use super::{remaining_spans, skip_ink_ranges, text_intercepts};
-  use crate::geometry::{PathCommand, Point};
+  use crate::{
+    geometry::{PathCommand, Point},
+    resources::glyph::ResolvedOutlineGlyph,
+  };
+
+  fn outline(paths: Vec<PathCommand>, signature: u64) -> ResolvedOutlineGlyph {
+    ResolvedOutlineGlyph::Plain {
+      paths,
+      embolden: None,
+      cache_signature: signature,
+    }
+  }
 
   fn point(x: f32, y: f32) -> Point<f32> {
     Point { x, y }
@@ -396,30 +433,17 @@ mod tests {
   fn a_glyph_gives_up_a_dilated_range() {
     // A 3-wide bar at x 2..5 under a 2px-thick line: the range grows 2 each
     // side, so the line loses 0..7.
-    let glyph = rect(2.0, -10.0, 5.0, 10.0);
-    let ranges = skip_ink_ranges(
-      [(point(0.0, 0.0), glyph.as_slice())].into_iter(),
-      -2.0,
-      2.0,
-      2.0,
-    );
+    let glyph = outline(rect(2.0, -10.0, 5.0, 10.0), 1);
+    let ranges = skip_ink_ranges([(point(0.0, 0.0), &glyph)].into_iter(), -2.0, 2.0, 2.0);
 
     assert_eq!(ranges.as_slice(), [(0.0, 7.0)]);
   }
 
   #[test]
   fn a_line_thinner_than_the_ignored_slice_skips_nothing() {
-    let glyph = rect(2.0, -10.0, 5.0, 10.0);
+    let glyph = outline(rect(2.0, -10.0, 5.0, 10.0), 2);
 
-    assert!(
-      skip_ink_ranges(
-        [(point(0.0, 0.0), glyph.as_slice())].into_iter(),
-        -0.5,
-        0.5,
-        1.0
-      )
-      .is_empty()
-    );
+    assert!(skip_ink_ranges([(point(0.0, 0.0), &glyph)].into_iter(), -0.5, 0.5, 1.0).is_empty());
   }
 
   #[test]

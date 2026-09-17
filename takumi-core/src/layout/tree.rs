@@ -1,8 +1,9 @@
 use std::{
-  borrow::Cow, collections::HashMap, iter::Copied, mem::take, rc::Rc, slice, vec::IntoIter,
+  borrow::Cow, collections::HashMap, hash::Hasher, iter::Copied, mem::take, rc::Rc, slice,
+  vec::IntoIter,
 };
 
-use parley::fontique::Attributes;
+use parley::fontique::{Attributes, FontStyle as FontiqueStyle};
 use taffy::{
   BlockContext, Cache, CacheTree, Display as TaffyDisplay, Layout, LayoutBlockContainer,
   LayoutFlexboxContainer, LayoutGridContainer, LayoutInput, LayoutOutput, LayoutPartialTree,
@@ -11,6 +12,7 @@ use taffy::{
   compute_flexbox_layout, compute_grid_layout, compute_hidden_layout, compute_leaf_layout,
   compute_root_layout,
 };
+use xxhash_rust::xxh3::Xxh3;
 
 use crate::{
   Error,
@@ -276,9 +278,25 @@ pub(crate) fn resolve_normal_line_height(
   };
   let font_family = context.expand_font_family(&style.font_family);
 
-  context
-    .first_font_line_spacing(font_family.query_families(), attributes, font_size)
-    .unwrap_or(font_size)
+  let mut hasher = Xxh3::new();
+  font_family.hash_tokens(&mut hasher);
+  hasher.write_u32(attributes.weight.value().to_bits());
+  hasher.write_u32(attributes.width.ratio().to_bits());
+  match attributes.style {
+    FontiqueStyle::Normal => hasher.write_u8(0),
+    FontiqueStyle::Italic => hasher.write_u8(1),
+    FontiqueStyle::Oblique(angle) => {
+      hasher.write_u8(2);
+      hasher.write_u32(angle.unwrap_or(f32::NAN).to_bits());
+    }
+  }
+  hasher.write_u32(font_size.to_bits());
+
+  context.normal_line_height(hasher.finish(), || {
+    context
+      .first_font_line_spacing(font_family.query_families(), attributes, font_size)
+      .unwrap_or(font_size)
+  })
 }
 
 /// An element's own important declarations by cascade tier.
