@@ -1684,6 +1684,65 @@ fn a_gradient_axis_is_measured_in_page_units() {
   );
 }
 
+/// A radial gradient's circle keeps the centre and the reach its box gives it
+/// once the pattern matrix has taken both into page units.
+#[test]
+fn a_radial_gradient_is_centred_in_page_units() {
+  let doc = r##"<div style="width: 120px; height: 120px; background-image: radial-gradient(circle, #fddb92, #4481eb);"></div>"##;
+  let pdf = render_pinned(
+    PdfOptions::builder()
+      .node(from_html(doc, FromHtmlOptions::default()).expect("parse gradient doc"))
+      .viewport(Viewport::new((120, 120)))
+      .fonts(&fonts())
+      .build(),
+  );
+
+  let (shading, matrix) = shading_pattern(&pdf).expect("a shading pattern");
+  let coords = shading_coords(&pdf, shading).expect("shading coords");
+  // A radial shading carries two circles: `[x0 y0 r0 x1 y1 r1]`.
+  let [_, _, _, cx, cy, radius] = coords[..6] else {
+    panic!("expected six coords, got {coords:?}");
+  };
+  let centre_x = matrix[0] * cx + matrix[2] * cy + matrix[4];
+  let centre_y = matrix[1] * cx + matrix[3] * cy + matrix[5];
+  let reach = radius * matrix[0].hypot(matrix[1]);
+
+  // The box fills a 120 css px square, which is 90 pt, so its centre is 45 pt
+  // in on both axes and the farthest corner is 60 css px away diagonally.
+  assert!(
+    (centre_x - 45.0).abs() < 0.5 && (centre_y - 45.0).abs() < 0.5,
+    "gradient centre is ({centre_x}, {centre_y}) pt, expected (45, 45)"
+  );
+  let farthest_corner = 45.0 * 2.0_f32.sqrt();
+  assert!(
+    (reach - farthest_corner).abs() < 0.5,
+    "gradient reaches {reach} pt, expected {farthest_corner}"
+  );
+}
+
+/// A conic gradient has no coords to read, so its matrix carries the whole
+/// placement and has to be in page units like the others.
+#[test]
+fn a_conic_gradient_is_placed_in_page_units() {
+  let doc = r##"<div style="width: 120px; height: 120px; background-image: conic-gradient(from 0deg, red, lime, blue, red);"></div>"##;
+  let pdf = render_pinned(
+    PdfOptions::builder()
+      .node(from_html(doc, FromHtmlOptions::default()).expect("parse gradient doc"))
+      .viewport(Viewport::new((120, 120)))
+      .fonts(&fonts())
+      .build(),
+  );
+
+  let (_, matrix) = shading_pattern(&pdf).expect("a shading pattern");
+  // The matrix rotates, so the scale is the length of a basis vector.
+  let scale = matrix[0].hypot(matrix[1]);
+
+  assert!(
+    (scale - 0.75).abs() < 0.01,
+    "conic pattern scales by {scale}, expected 0.75 pt per css px"
+  );
+}
+
 /// `box-shadow`: a sharp shadow is one exact ring, a blurred one is a stack of
 /// bands, and an inset shadow fills the box minus the hole it casts.
 #[test]
