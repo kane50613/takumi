@@ -749,6 +749,18 @@ macro_rules! define_style {
           self.declarations.append_cloned(declarations);
         }
 
+        /// Merges a matched block declaration by declaration, which the cascade
+        /// does to keep each one's own importance, and takes its element state.
+        pub(crate) fn merge_matched_block(&mut self, declarations: &StyleDeclarationBlock) {
+          self
+            .declarations
+            .extend_element_state(declarations.element_state.iter().map(Box::as_ref));
+
+          for declaration in declarations.iter() {
+            declaration.merge_into_ref(self);
+          }
+        }
+
         /// Appends one declaration, recording its importance.
         pub fn push(&mut self, declaration: StyleDeclaration, important: bool) {
           self.declarations.push(declaration, important);

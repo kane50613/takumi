@@ -85,8 +85,9 @@ impl CustomProperties {
     }
   }
 
-  /// Whether any value here reaches a child as something other than itself.
-  fn changes_on_the_way_down(&self) -> bool {
+  /// Whether a child needs a map of its own. Conservative: a non-inheriting
+  /// property already holding its initial value still answers yes.
+  fn needs_its_own_values(&self) -> bool {
     !self.element_state.is_empty()
       || self
         .registrations
@@ -97,7 +98,7 @@ impl CustomProperties {
   /// The properties a child starts from: the registrations as they are, and the
   /// values each rule leaves in reach.
   pub(crate) fn inherited(&self) -> Self {
-    let values = if self.changes_on_the_way_down() {
+    let values = if self.needs_its_own_values() {
       Arc::new(
         self
           .values

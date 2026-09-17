@@ -313,13 +313,7 @@ fn build_style_layers(
   }
 
   for &declarations in matched_declarations.layered_normal() {
-    style
-      .declarations
-      .extend_element_state(declarations.element_state.iter().map(Box::as_ref));
-
-    for declaration in declarations.iter() {
-      declaration.merge_into_ref(&mut style);
-    }
+    style.merge_matched_block(declarations);
   }
 
   // `tw` is the last declared layer, as Tailwind orders utilities: above every
@@ -329,13 +323,7 @@ fn build_style_layers(
   }
 
   for &declarations in matched_declarations.unlayered_normal() {
-    style
-      .declarations
-      .extend_element_state(declarations.element_state.iter().map(Box::as_ref));
-
-    for declaration in declarations.iter() {
-      declaration.merge_into_ref(&mut style);
-    }
+    style.merge_matched_block(declarations);
   }
 
   // An element's own declarations outrank selector-based ones at the same
@@ -352,13 +340,7 @@ fn build_style_layers(
   // Important declarations reverse layer order, so `tw`, the last declared
   // layer, sits above unlayered rules and below every named `@layer`.
   for &declarations in matched_declarations.unlayered_important() {
-    style
-      .declarations
-      .extend_element_state(declarations.element_state.iter().map(Box::as_ref));
-
-    for declaration in declarations.iter() {
-      declaration.merge_into_ref(&mut style);
-    }
+    style.merge_matched_block(declarations);
   }
 
   if let Some(tw) = &tw {
@@ -366,13 +348,7 @@ fn build_style_layers(
   }
 
   for &declarations in matched_declarations.layered_important() {
-    style
-      .declarations
-      .extend_element_state(declarations.element_state.iter().map(Box::as_ref));
-
-    for declaration in declarations.iter() {
-      declaration.merge_into_ref(&mut style);
-    }
+    style.merge_matched_block(declarations);
   }
 
   if let Some(inline_important) = &inline_important {
