@@ -55,6 +55,7 @@
     "csstype": "^3.2.3",
     "portless": "^0.15.6",
     "prettier": "^3.9.6",
+    "takumi-paint": "workspace:*",
     "takumi-pdf": "workspace:*",
     "typescript": "catalog:",
     "vite": "catalog:"
