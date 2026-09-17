@@ -325,8 +325,8 @@ fn important_custom_property_takes_part_in_the_cascade() {
   assert_eq!(loses_to_specificity.children[0].width, 75.0);
 }
 
-/// An unlayered important declaration beats a layered one, the way the cascade
-/// reverses layer order for important declarations.
+/// Important declarations reverse layer order, so a layered one outranks an
+/// unlayered one and an earlier layer outranks a later one.
 #[test]
 fn important_custom_property_reverses_layer_order() {
   let result = measure_with_css(
@@ -338,4 +338,20 @@ fn important_custom_property_reverses_layer_order() {
     "#,
   );
   assert_eq!(result.children[0].width, 70.0);
+}
+
+/// A custom property keeps its value verbatim, so a `!` that does not start a
+/// trailing `!important` stays in the value and the declaration survives.
+#[test]
+fn a_bang_inside_a_custom_value_is_not_an_importance_marker() {
+  for css in [
+    ".box { --w: 50px !x; width: var(--w, 90px); }",
+    ".box { --w: 50px ! 60px; width: var(--w, 90px); }",
+  ] {
+    let result = measure_with_css(Node::container([block("box")]), css);
+
+    // The name is defined, so the fallback never applies and the substituted
+    // value is not a width.
+    assert_ne!(result.children[0].width, 90.0, "case: {css}");
+  }
 }
