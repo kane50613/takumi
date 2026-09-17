@@ -1,4 +1,9 @@
-use std::{cell::RefCell, collections::HashMap, rc::Rc, sync::Arc};
+use std::{
+  cell::{OnceCell, RefCell},
+  collections::HashMap,
+  rc::Rc,
+  sync::Arc,
+};
 
 use typed_builder::TypedBuilder;
 
@@ -73,6 +78,7 @@ impl From<RenderContextInit> for RenderContext {
       current_color: init.current_color,
       style: init.style,
       collapsed_borders: init.collapsed_borders,
+      text_measure_digest: OnceCell::new(),
     }
   }
 }
@@ -92,6 +98,8 @@ pub struct RenderContext {
   pub style: Box<ComputedStyle>,
   /// Whether this box is a cell of a table that collapses its borders.
   pub(crate) collapsed_borders: bool,
+  /// Digest of the style inputs to text measurement, taken on first use.
+  text_measure_digest: OnceCell<u64>,
 }
 
 /// A [`RenderContextBuilder`] with nothing set yet.
@@ -164,6 +172,7 @@ impl RenderContext {
     let mut context = parent.clone();
 
     context.style = Box::new(ComputedStyle::for_anonymous(&parent.style, &parent.sizing));
+    context.text_measure_digest = OnceCell::new();
     context
   }
 
@@ -180,6 +189,12 @@ impl RenderContext {
       current_color,
       style: Box::new(style),
       collapsed_borders: false,
+      text_measure_digest: OnceCell::new(),
     }
+  }
+
+  /// The part of a text measurement key that only depends on this context.
+  pub(crate) fn text_measure_digest(&self, digest: impl FnOnce() -> u64) -> u64 {
+    *self.text_measure_digest.get_or_init(digest)
   }
 }

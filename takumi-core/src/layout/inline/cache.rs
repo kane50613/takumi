@@ -1,12 +1,10 @@
 use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
-use crate::geometry::Size;
-
-use super::InlineLayout;
+use super::{InlineLayout, InlineMeasurement};
 
 type ShapedText = (InlineLayout, String);
 pub(crate) type ShapeCache = Rc<RefCell<HashMap<u64, ShapedText>>>;
-pub(crate) type MeasureCache = Rc<RefCell<HashMap<(u64, u32), Size<f32>>>>;
+pub(crate) type MeasureCache = Rc<RefCell<HashMap<(u64, u32), InlineMeasurement>>>;
 
 /// Render-local text shaping and measurement reuse.
 #[derive(Clone, Default)]
@@ -45,8 +43,8 @@ impl InlineLayoutCache {
   pub(crate) fn get_or_measure(
     &self,
     key: (u64, u32),
-    measure: impl FnOnce() -> Size<f32>,
-  ) -> Size<f32> {
+    measure: impl FnOnce() -> InlineMeasurement,
+  ) -> InlineMeasurement {
     if let Some(size) = self.measurements.borrow().get(&key) {
       return *size;
     }
@@ -61,6 +59,7 @@ mod tests {
   use std::cell::Cell;
 
   use super::*;
+  use crate::geometry::Size;
 
   #[test]
   fn shaping_retains_first_sight_and_checks_text() {
@@ -95,13 +94,23 @@ mod tests {
   #[test]
   fn measurements_share_only_with_clones_and_matching_inputs() {
     let cache = InlineLayoutCache::default();
-    let first = Size {
-      width: 10.0,
-      height: 20.0,
+    let first = InlineMeasurement {
+      size: Size {
+        width: 10.0,
+        height: 20.0,
+      },
+      first_baseline: Some(8.0),
+      last_baseline: Some(18.0),
+      clamped: false,
     };
-    let second = Size {
-      width: 30.0,
-      height: 40.0,
+    let second = InlineMeasurement {
+      size: Size {
+        width: 30.0,
+        height: 40.0,
+      },
+      first_baseline: None,
+      last_baseline: None,
+      clamped: true,
     };
     assert_eq!(cache.get_or_measure((1, 5), || first), first);
     assert_eq!(cache.clone().get_or_measure((1, 5), || second), first);

@@ -21,11 +21,11 @@ use crate::{
   geometry::{AvailableSpace, ComputedLayout, NodeId, Size},
   layout::{
     inline::{
-      InlineContentKind, InlineLayoutMode, InlineLayoutRequest, InlineMeasureOptions,
+      InlineContentKind, InlineItem, InlineLayoutMode, InlineLayoutRequest, InlineMeasureOptions,
       collect_inline_items, create_inline_constraint, create_inline_layout, measure_inline_layout,
     },
     list_marker::{ListCounter, is_list_element, list_marker, owns_list_counter},
-    node::{Node, NodeStyleLayers},
+    node::{Node, NodeStyleLayers, TextData},
   },
   matching::{MatchedDeclarationsView, NodeMatchedDeclarations, match_stylesheets_view},
   style::{
@@ -1669,40 +1669,74 @@ impl RenderNode {
       return None;
     }
 
-    let font_style = SizedFontStyle::from_style(&self.context.style, &self.context);
     // `size` is the border box, but the content wrapped against the content box.
-    let (max_width, _) = create_inline_constraint(
-      &self.context,
-      available_space,
-      Size {
-        width: Some(size.width.max(0.0)),
-        height: None,
-      },
-    );
-    let built = create_inline_layout(InlineLayoutRequest {
-      items,
-      available_space: Size {
-        width: AvailableSpace::Definite(max_width),
-        height: available_space.height,
-      },
-      max_width,
-      max_height: None,
-      style: &font_style,
-      context: &self.context,
-      mode: InlineLayoutMode::Measure,
-      shape_cacheable: true,
-    });
-    let resolved = built.line_metrics();
-    let line = if use_last_line {
-      resolved.last()?
-    } else {
-      resolved.first()?
+    let known_dimensions = Size {
+      width: Some(size.width.max(0.0)),
+      height: None,
+    };
+    // A clamped measurement dropped lines this pass keeps, so it lays out again.
+    let measured = self
+      .plain_text(&items)
+      .map(|text| text.measurement(&self.context, available_space, known_dimensions))
+      .filter(|measured| !measured.clamped);
+    let baseline = match measured {
+      Some(measured) => {
+        if use_last_line {
+          measured.last_baseline?
+        } else {
+          measured.first_baseline?
+        }
+      }
+      None => {
+        let font_style = SizedFontStyle::from_style(&self.context.style, &self.context);
+        let (max_width, _) =
+          create_inline_constraint(&self.context, available_space, known_dimensions);
+        let built = create_inline_layout(InlineLayoutRequest {
+          items,
+          available_space: Size {
+            width: AvailableSpace::Definite(max_width),
+            height: available_space.height,
+          },
+          max_width,
+          max_height: None,
+          style: &font_style,
+          context: &self.context,
+          mode: InlineLayoutMode::Measure,
+          shape_cacheable: true,
+        });
+        let resolved = built.line_metrics();
+        let line = if use_last_line {
+          resolved.last()?
+        } else {
+          resolved.first()?
+        };
+        line.resolved_baseline
+      }
     };
     let sizing = &self.context.sizing;
     let border_top = Length::from(self.context.style.border_top_width).to_px(sizing, 0.0);
     let padding_top = self.context.style.padding_top.to_px(sizing, 0.0);
 
-    Some(border_top + padding_top + line.resolved_baseline)
+    Some(border_top + padding_top + baseline)
+  }
+
+  /// This node's text when it lays out exactly as [`TextData::measurement`] does.
+  ///
+  /// A text node's own text is always among its items, so a lone text item is that text.
+  fn plain_text(&self, items: &[InlineItem<'_>]) -> Option<&TextData> {
+    let text = self.node.as_ref()?.text_data()?;
+    let [
+      InlineItem::Text {
+        link: None,
+        decorations: None,
+        ..
+      },
+    ] = items
+    else {
+      return None;
+    };
+
+    Some(text)
   }
 
   fn layout_first_baseline_offset(
@@ -1959,7 +1993,8 @@ impl RenderNode {
           min_content_query: known_dimensions.width.is_none()
             && matches!(available_space.width, AvailableSpace::MinContent),
         },
-      );
+      )
+      .size;
     }
 
     assert_ne!(

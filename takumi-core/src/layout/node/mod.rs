@@ -408,6 +408,13 @@ impl Node {
     Some(text)
   }
 
+  pub(crate) fn text_data(&self) -> Option<&TextData> {
+    match &self.kind {
+      NodeKind::Text(text) => Some(text),
+      _ => None,
+    }
+  }
+
   pub(crate) fn take_children(&mut self) -> Option<Box<[Node]>> {
     take_container_children(&mut self.kind)
   }
