@@ -5,7 +5,7 @@ use std::borrow::Cow;
 use crate::{
   error::Result,
   font_style::SizedFontStyle,
-  geometry::{ComputedLayout, NodeId, Point, Size},
+  geometry::{ComputedLayout, Point, Size},
   layout::{
     background::{BackgroundLayersInput, background_origin_box},
     decoration::ClipBox,
@@ -19,7 +19,7 @@ use crate::{
     tree::{LayoutResults, RenderNode},
   },
   painter::BoxPainter,
-  scene::{NodePaint, PaintItemKind, StackingContextNode, build_stacking_contexts},
+  scene::{NodePaint, PaintItemKind, SceneRequest, StackingContextNode, build_scene},
   shadow::SizedShadow,
   style::{
     Affine, BackgroundClip, BackgroundImage, BlendMode, BorderStyle, Isolation,
@@ -232,13 +232,13 @@ impl Walker {
               offset.x + subtree.margin_offset.x,
               offset.y + subtree.margin_offset.y,
             );
-          let contexts = build_stacking_contexts(
-            &subtree.root,
-            &subtree.results,
-            NodeId::ROOT,
-            origin,
-            subtree.size.map(Some),
-          )?;
+          let contexts = build_scene(SceneRequest {
+            root: &subtree.root,
+            layout_results: &subtree.results,
+            transform: origin,
+            container_size: subtree.size.map(Some),
+            paint_bounds: false,
+          })?;
           boxes.extend(self.scene(&subtree.root, &subtree.results, &contexts)?);
         }
         InlineBoxPaint::Replaced { node, layout } => {

@@ -4,7 +4,7 @@ use serde::Serialize;
 use takumi_core::{
   geometry::{AvailableSpace, ComputedLayout as Layout, NodeId, Size},
   layout::node::NodeKind,
-  scene::build_stacking_contexts,
+  scene::{SceneRequest, build_scene},
   style::{ComputedStyle, Display, Lang},
 };
 use typed_builder::TypedBuilder;
@@ -488,7 +488,6 @@ fn render_with_context(
   render_node(
     &mut root,
     &layout_results,
-    root_node_id,
     &mut canvas,
     Affine::IDENTITY,
     Size {
@@ -685,12 +684,17 @@ fn resolve_scene_at_time<'a, 'g>(
 pub(crate) fn render_node(
   node: &mut RenderNode,
   layout_results: &LayoutResults,
-  node_id: NodeId,
   canvas: &mut Canvas,
   transform: Affine,
   container_size: Size<Option<f32>>,
 ) -> Result<()> {
-  let contexts = build_stacking_contexts(node, layout_results, node_id, transform, container_size)?;
+  let contexts = build_scene(SceneRequest {
+    root: node,
+    layout_results,
+    transform,
+    container_size,
+    paint_bounds: true,
+  })?;
   paint_context(node, &contexts, layout_results, canvas, 0)
 }
 

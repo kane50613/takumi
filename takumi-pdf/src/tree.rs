@@ -11,7 +11,7 @@ use takumi_core::{
     tree::{LayoutResults, LayoutTree, RenderNode},
   },
   resources::image::ImageSource,
-  scene::{NodePaint, PaintItemKind, StackingContextNode, build_stacking_contexts},
+  scene::{NodePaint, PaintItemKind, SceneRequest, StackingContextNode, build_scene},
   style::{
     Affine, ComputedStyle, Display, FlexDirection, FontFamily, Lang, Length, Position,
     SizingContext, Style, StyleDeclaration, StyleSheet, ZIndex,
@@ -149,16 +149,16 @@ impl PreparedTree {
       .size
       .height
       .map_or(root_layout.size.height, |h| h as f32);
-    let contexts = build_stacking_contexts(
-      &root,
-      &results,
-      NodeId::ROOT,
-      Affine::IDENTITY,
-      Size {
+    let contexts = build_scene(SceneRequest {
+      root: &root,
+      layout_results: &results,
+      transform: Affine::IDENTITY,
+      container_size: Size {
         width: Some(width),
         height: Some(height),
       },
-    )?;
+      paint_bounds: true,
+    })?;
 
     Ok(Self {
       root,

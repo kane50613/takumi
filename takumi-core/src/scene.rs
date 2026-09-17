@@ -67,13 +67,19 @@ pub enum PaintItemKind {
   Context(usize),
 }
 
-/// A paint entry plus its z-index and source order for stable sorting.
+/// A paint entry plus its z-index and source order, which together order it uniquely.
 #[derive(Clone)]
 pub struct PaintItem {
   /// The node or nested stacking context to paint.
   pub kind: PaintItemKind,
   z_index: i32,
   source_order: usize,
+}
+
+impl PaintItem {
+  fn z_order(&self) -> (i32, usize) {
+    (self.z_index, self.source_order)
+  }
 }
 
 #[derive(Clone, Copy)]
@@ -99,20 +105,10 @@ impl StackingBuckets {
     }
   }
 
+  /// Orders the z-indexed buckets; `auto_zero` is pushed in source order already.
   fn sort(&mut self) {
-    self.negative.sort_by(|left, right| {
-      left
-        .z_index
-        .cmp(&right.z_index)
-        .then_with(|| left.source_order.cmp(&right.source_order))
-    });
-    self.auto_zero.sort_by_key(|item| item.source_order);
-    self.positive.sort_by(|left, right| {
-      left
-        .z_index
-        .cmp(&right.z_index)
-        .then_with(|| left.source_order.cmp(&right.source_order))
-    });
+    self.negative.sort_unstable_by_key(PaintItem::z_order);
+    self.positive.sort_unstable_by_key(PaintItem::z_order);
   }
 
   fn in_paint_order(&self) -> [&[PaintItem]; 3] {
@@ -200,20 +196,36 @@ fn classify_bucket(style: &ComputedStyle, is_flex_or_grid_item: bool) -> (PaintB
   }
 }
 
+/// What a scene is built from.
+#[derive(Clone, Copy)]
+pub struct SceneRequest<'a> {
+  /// The tree to paint.
+  pub root: &'a RenderNode,
+  /// Its layout.
+  pub layout_results: &'a LayoutResults,
+  /// The transform the root paints under.
+  pub transform: Affine,
+  /// The size percentages of the root resolve against.
+  pub container_size: Size<Option<f32>>,
+  /// Whether to compute each node's paint bounds, which the raster and SVG backends clip and cull by.
+  pub paint_bounds: bool,
+}
+
 /// Flattens the node tree into CSS-ordered stacking contexts for painting.
-pub fn build_stacking_contexts(
-  root: &RenderNode,
-  layout_results: &LayoutResults,
-  node_id: NodeId,
-  transform: Affine,
-  container_size: Size<Option<f32>>,
-) -> Result<Vec<StackingContextNode>> {
+pub fn build_scene(request: SceneRequest<'_>) -> Result<Vec<StackingContextNode>> {
+  let SceneRequest {
+    root,
+    layout_results,
+    transform,
+    container_size,
+    paint_bounds: with_bounds,
+  } = request;
   let mut contexts = vec![StackingContextNode::with_root(None)];
   let mut source_order = 0usize;
   let mut containing_blocks = ContainingBlocks::default();
   let mut visits = vec![StackingContextBuildVisit {
     path: Vec::new(),
-    node_id,
+    node_id: NodeId::ROOT,
     transform,
     container_size,
     context_id: 0,
@@ -247,7 +259,9 @@ pub fn build_stacking_contexts(
       node_id: visit.node_id,
       transform: current_transform,
       container_size: visit.container_size,
-      paint_bounds: compute_node_paint_bounds(current, layout, current_transform),
+      paint_bounds: with_bounds
+        .then(|| compute_node_paint_bounds(current, layout, current_transform))
+        .flatten(),
     };
 
     let is_flex_or_grid_item = visit.parent_display.is_some_and(|display| {
@@ -332,6 +346,10 @@ pub fn build_stacking_contexts(
 
   for context in &mut contexts {
     context.buckets.sort();
+  }
+
+  if !with_bounds {
+    return Ok(contexts);
   }
 
   // `None` means "unknown extent" and poisons the union; dropping it would

@@ -17,7 +17,7 @@ use takumi_core::{
   },
   painter::{BoxPainter, FillShape, PaintDevice, StrokeStyle, paint_border},
   resources::image::ImageSource,
-  scene::build_stacking_contexts,
+  scene::{SceneRequest, build_scene},
   style::{
     Affine, BackgroundClip, BackgroundImage, BackgroundOrigin, BasicShape, BlendMode, BorderStyle,
     Color, ComputedStyle, FillRule, FontFamily, Isolation, Lang, Overflow, ShapeRadius, Sides,
@@ -104,16 +104,16 @@ pub fn render(options: SvgOptions<'_>) -> Result<String> {
     .map_or(root_layout.size.height, |h| h as f32);
   let mut doc = SvgDocument::new(width, height)?;
 
-  let contexts = build_stacking_contexts(
-    &root,
-    &results,
-    root_id,
-    IDENTITY,
-    Size {
+  let contexts = build_scene(SceneRequest {
+    root: &root,
+    layout_results: &results,
+    transform: IDENTITY,
+    container_size: Size {
       width: Some(width),
       height: Some(height),
     },
-  )?;
+    paint_bounds: true,
+  })?;
   emit_scene(&root, &contexts, &results, &mut doc)?;
 
   Ok(doc.render()?)
@@ -706,13 +706,13 @@ pub(crate) fn emit_inline_box(
         box_x + subtree.margin_offset.x,
         box_y + subtree.margin_offset.y,
       );
-      let contexts = build_stacking_contexts(
-        &subtree.root,
-        &subtree.results,
-        NodeId::ROOT,
-        origin,
-        subtree.size.map(Some),
-      )
+      let contexts = build_scene(SceneRequest {
+        root: &subtree.root,
+        layout_results: &subtree.results,
+        transform: origin,
+        container_size: subtree.size.map(Some),
+        paint_bounds: true,
+      })
       .map_err(io::Error::other)?;
 
       emit_scene(&subtree.root, &contexts, &subtree.results, doc)

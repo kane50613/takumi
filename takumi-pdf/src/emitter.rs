@@ -30,7 +30,7 @@ use takumi_core::{
     BoxPainter, BoxShadows, FillShape, PaintDevice, StrokeStyle, paint_border,
     paint_run_decorations,
   },
-  scene::{NodePaint, PaintItemKind, StackingContextNode, build_stacking_contexts},
+  scene::{NodePaint, PaintItemKind, SceneRequest, StackingContextNode, build_scene},
   shadow::SizedShadow,
   style::{
     Affine, BackgroundClip, BackgroundImage, BackgroundOrigin, BlendMode, BoxDecorationBreak,
@@ -1607,13 +1607,13 @@ impl Emitter<'_> {
     if subtree.size.height <= 0.0 {
       return;
     }
-    let Ok(contexts) = build_stacking_contexts(
-      &subtree.root,
-      &subtree.results,
-      NodeId::ROOT,
-      Affine::IDENTITY,
-      subtree.size.map(Some),
-    ) else {
+    let Ok(contexts) = build_scene(SceneRequest {
+      root: &subtree.root,
+      layout_results: &subtree.results,
+      transform: Affine::IDENTITY,
+      container_size: subtree.size.map(Some),
+      paint_bounds: true,
+    }) else {
       return;
     };
     // The subtree root is a clone of `node`, so the box's own path is the
