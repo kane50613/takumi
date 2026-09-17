@@ -511,3 +511,16 @@ fn an_inline_tw_named_variable_still_inherits() {
 
   assert_eq!(result.children[0].width, 65.0);
 }
+
+/// The plainest shape: state a `tw` attribute writes stops at its element.
+#[test]
+fn utility_state_stops_at_its_element() {
+  use std::str::FromStr;
+
+  let root = Node::container([block("leaf")])
+    .with_class_name("hero")
+    .with_tw(TailwindValues::from_str("translate-x-4").expect("tailwind values should parse"));
+  let result = measure_with_css(root, ".leaf { width: var(--tw-translate-x, 80px); }");
+
+  assert_eq!(result.children[0].width, 80.0);
+}
