@@ -1742,55 +1742,35 @@ impl<'i> FromCss<'i> for CssWideKeyword {
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct DeclarationImportance {
   pub(crate) longhands: PropertyMask,
-  /// Custom property names marked important.
-  pub(crate) important_custom_property_names: SmallVec<[Box<str>; 1]>,
+  /// A custom property affects no longhand, so the mask above cannot record
+  /// one and the cascade would read the block as carrying nothing important.
+  any_custom_property: bool,
 }
 
 impl DeclarationImportance {
   /// Whether no property is marked important.
   pub fn is_empty(&self) -> bool {
-    self.important_custom_property_names.is_empty() && self.longhands.iter().next().is_none()
+    !self.any_custom_property && self.longhands.iter().next().is_none()
   }
 
-  /// Records the longhands a declaration marks important.
+  /// Records what a declaration marks important.
   pub(crate) fn insert_declaration(&mut self, declaration: &StyleDeclaration) {
     self
       .longhands
       .extend(declaration.affected_longhands().iter());
 
-    if let StyleDeclaration::CustomProperty(name, _) = declaration {
-      self.insert_custom_property(name);
-    }
+    self.any_custom_property |= matches!(declaration, StyleDeclaration::CustomProperty(..));
   }
 
-  /// Merges another importance set, deduping custom properties.
+  /// Merges another importance set.
   pub(crate) fn extend_from(&mut self, other: &Self) {
     self.longhands.union(&other.longhands);
-
-    for name in &other.important_custom_property_names {
-      if self
-        .important_custom_property_names
-        .iter()
-        .all(|existing| existing != name)
-      {
-        self.important_custom_property_names.push(name.clone());
-      }
-    }
+    self.any_custom_property |= other.any_custom_property;
   }
 
   pub(crate) fn append(&mut self, other: &mut Self) {
     self.extend_from(other);
     *other = Self::default();
-  }
-
-  fn insert_custom_property(&mut self, name: &str) {
-    if self
-      .important_custom_property_names
-      .iter()
-      .all(|existing| existing.as_ref() != name)
-    {
-      self.important_custom_property_names.push(name.into());
-    }
   }
 }
 
@@ -1801,7 +1781,7 @@ where
   fn from(value: T) -> Self {
     Self {
       longhands: value.into_iter().collect(),
-      important_custom_property_names: SmallVec::new(),
+      any_custom_property: false,
     }
   }
 }
