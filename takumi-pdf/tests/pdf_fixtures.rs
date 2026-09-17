@@ -1656,6 +1656,93 @@ fn fill_colors(pdf: &[u8]) -> Vec<String> {
   colors
 }
 
+/// A gradient is built in pixels, and the shading pattern that carries it is
+/// placed against the page, so its matrix has to convert the two.
+#[test]
+fn a_gradient_axis_is_measured_in_page_units() {
+  let doc = r##"<div style="width: 300px; height: 120px; background-image: linear-gradient(to right, #ff5f6d, #3a1c71);"></div>"##;
+  let pdf = render_pinned(
+    PdfOptions::builder()
+      .node(from_html(doc, FromHtmlOptions::default()).expect("parse gradient doc"))
+      .viewport(Viewport::new((300, 120)))
+      .fonts(&fonts())
+      .build(),
+  );
+
+  let (shading, matrix) = shading_pattern(&pdf).expect("a shading pattern");
+  let coords = shading_coords(&pdf, shading).expect("shading coords");
+  let [x1, y1, x2, y2] = coords[..4] else {
+    panic!("expected four coords, got {coords:?}");
+  };
+  let (dx, dy) = (x2 - x1, y2 - y1);
+  let axis = (matrix[0] * dx + matrix[2] * dy).hypot(matrix[1] * dx + matrix[3] * dy);
+
+  // The box is 300 css px wide, which is 225 pt.
+  assert!(
+    (axis - 225.0).abs() < 0.5,
+    "gradient axis is {axis} pt, expected 225"
+  );
+}
+
+/// A radial gradient's circle keeps the centre and the reach its box gives it
+/// once the pattern matrix has taken both into page units.
+#[test]
+fn a_radial_gradient_is_centred_in_page_units() {
+  let doc = r##"<div style="width: 120px; height: 120px; background-image: radial-gradient(circle, #fddb92, #4481eb);"></div>"##;
+  let pdf = render_pinned(
+    PdfOptions::builder()
+      .node(from_html(doc, FromHtmlOptions::default()).expect("parse gradient doc"))
+      .viewport(Viewport::new((120, 120)))
+      .fonts(&fonts())
+      .build(),
+  );
+
+  let (shading, matrix) = shading_pattern(&pdf).expect("a shading pattern");
+  let coords = shading_coords(&pdf, shading).expect("shading coords");
+  // A radial shading carries two circles: `[x0 y0 r0 x1 y1 r1]`.
+  let [_, _, _, cx, cy, radius] = coords[..6] else {
+    panic!("expected six coords, got {coords:?}");
+  };
+  let centre_x = matrix[0] * cx + matrix[2] * cy + matrix[4];
+  let centre_y = matrix[1] * cx + matrix[3] * cy + matrix[5];
+  let reach = radius * matrix[0].hypot(matrix[1]);
+
+  // The box fills a 120 css px square, which is 90 pt, so its centre is 45 pt
+  // in on both axes and the farthest corner is 60 css px away diagonally.
+  assert!(
+    (centre_x - 45.0).abs() < 0.5 && (centre_y - 45.0).abs() < 0.5,
+    "gradient centre is ({centre_x}, {centre_y}) pt, expected (45, 45)"
+  );
+  let farthest_corner = 45.0 * 2.0_f32.sqrt();
+  assert!(
+    (reach - farthest_corner).abs() < 0.5,
+    "gradient reaches {reach} pt, expected {farthest_corner}"
+  );
+}
+
+/// A conic gradient has no coords to read, so its matrix carries the whole
+/// placement and has to be in page units like the others.
+#[test]
+fn a_conic_gradient_is_placed_in_page_units() {
+  let doc = r##"<div style="width: 120px; height: 120px; background-image: conic-gradient(from 0deg, red, lime, blue, red);"></div>"##;
+  let pdf = render_pinned(
+    PdfOptions::builder()
+      .node(from_html(doc, FromHtmlOptions::default()).expect("parse gradient doc"))
+      .viewport(Viewport::new((120, 120)))
+      .fonts(&fonts())
+      .build(),
+  );
+
+  let (_, matrix) = shading_pattern(&pdf).expect("a shading pattern");
+  // The matrix rotates, so the scale is the length of a basis vector.
+  let scale = matrix[0].hypot(matrix[1]);
+
+  assert!(
+    (scale - 0.75).abs() < 0.01,
+    "conic pattern scales by {scale}, expected 0.75 pt per css px"
+  );
+}
+
 /// `box-shadow`: a sharp shadow is one exact ring, a blurred one is a stack of
 /// bands, and an inset shadow fills the box minus the hole it casts.
 #[test]
@@ -1849,6 +1936,37 @@ fn exception_widths(pdf: &[u8]) -> Vec<f32> {
   }
 
   widths
+}
+
+/// The first shading pattern in the document: the shading it points at, and its matrix.
+fn shading_pattern(pdf: &[u8]) -> Option<(usize, [f32; 6])> {
+  let at = find(pdf, b"/PatternType 2/Shading ")?;
+  let rest = &pdf[at + b"/PatternType 2/Shading ".len()..];
+  let shading = read_numbers(rest, 1)?[0] as usize;
+  let matrix_at = find(rest, b"/Matrix[")?;
+  let matrix = read_numbers(&rest[matrix_at + b"/Matrix[".len()..], 6)?;
+
+  Some((shading, matrix.try_into().ok()?))
+}
+
+/// The `/Coords` of one shading object.
+fn shading_coords(pdf: &[u8], shading: usize) -> Option<Vec<f32>> {
+  let at = find(pdf, format!("\n{shading} 0 obj").as_bytes())?;
+  let coords_at = find(&pdf[at..], b"/Coords[")?;
+
+  read_numbers(&pdf[at + coords_at + b"/Coords[".len()..], 6)
+}
+
+fn read_numbers(bytes: &[u8], count: usize) -> Option<Vec<f32>> {
+  let text = String::from_utf8_lossy(&bytes[..bytes.len().min(256)]);
+  let numbers: Vec<f32> = text
+    .split(|c: char| !(c.is_ascii_digit() || c == '.' || c == '-'))
+    .filter(|token| !token.is_empty())
+    .filter_map(|token| token.parse().ok())
+    .take(count)
+    .collect();
+
+  (numbers.len() == count).then_some(numbers)
 }
 
 fn find(haystack: &[u8], needle: &[u8]) -> Option<usize> {
