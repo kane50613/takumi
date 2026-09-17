@@ -88,6 +88,10 @@ name = "animated_frames"
 harness = false
 
 [[bench]]
+name = "paint_tree"
+harness = false
+
+[[bench]]
 name = "background"
 harness = false
 
