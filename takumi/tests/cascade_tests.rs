@@ -288,3 +288,54 @@ fn preflight_keeps_hidden_until_found_visible() {
 
   assert_eq!(result.children[0].width, 256.0);
 }
+
+/// `!important` on a custom property marks the declaration rather than ending
+/// up inside the value, so `var()` substitutes a usable one.
+#[test]
+fn important_custom_property_keeps_its_value() {
+  let result = measure_with_css(
+    Node::container([block("box")]),
+    ".box { --w: 50px !important; width: var(--w); }",
+  );
+  assert_eq!(result.children[0].width, 50.0);
+}
+
+/// An important custom property outranks a normal one of higher specificity,
+/// and loses to an important one of higher specificity.
+#[test]
+fn important_custom_property_takes_part_in_the_cascade() {
+  let beats_specificity = measure_with_css(
+    Node::container([block("box extra")]),
+    r#"
+      .box { --w: 50px !important; }
+      .box.extra { --w: 100px; }
+      .box { width: var(--w); }
+    "#,
+  );
+  assert_eq!(beats_specificity.children[0].width, 50.0);
+
+  let loses_to_specificity = measure_with_css(
+    Node::container([block("box extra")]),
+    r#"
+      .box { --w: 150px !important; }
+      .box.extra { --w: 75px !important; }
+      .box { width: var(--w); }
+    "#,
+  );
+  assert_eq!(loses_to_specificity.children[0].width, 75.0);
+}
+
+/// An unlayered important declaration beats a layered one, the way the cascade
+/// reverses layer order for important declarations.
+#[test]
+fn important_custom_property_reverses_layer_order() {
+  let result = measure_with_css(
+    Node::container([block("box")]),
+    r#"
+      @layer base { .box { --w: 70px !important; } }
+      .box { --w: 140px !important; }
+      .box { width: var(--w); }
+    "#,
+  );
+  assert_eq!(result.children[0].width, 70.0);
+}

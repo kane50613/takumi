@@ -480,8 +480,10 @@ macro_rules! define_style {
               Ok(ParsedDeclarations::new())
             }
             Self::Custom => {
+              // A custom property keeps its value verbatim, so stop before a
+              // trailing `!important` instead of swallowing it into the value.
               let start = input.position();
-              while input.next_including_whitespace_and_comments().is_ok() {}
+              skip_to_important(input);
               Ok(smallvec![StyleDeclaration::CustomProperty(
                 name.to_owned(),
                 input.slice_from(start).trim().to_owned(),
