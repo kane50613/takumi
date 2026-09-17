@@ -1,3 +1,5 @@
+#[cfg(any(feature = "png", feature = "gif", feature = "webp"))]
+mod animated;
 /// Font loading and processing functionality
 pub mod font;
 /// Glyph rasterization: shaped glyph ids to bitmaps or vector outlines.
@@ -9,3 +11,5 @@ pub mod image;
 pub mod image_buffer;
 pub(crate) mod image_decoder;
 mod image_resampler;
+#[cfg(feature = "svg-sizing")]
+pub(crate) mod svg_size;

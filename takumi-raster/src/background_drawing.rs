@@ -486,6 +486,7 @@ pub(crate) fn render_tile(
             height: tile_h,
             algo: context.style.image_rendering,
           }),
+          #[cfg(any(feature = "png", feature = "gif", feature = "webp"))]
           ImageSource::Animated(animated) => Some(BackgroundTile::SampledBitmap {
             source: animated.frame_at_time_covering(
               context.time_ms(),

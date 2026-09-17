@@ -269,9 +269,9 @@ pub fn resolve_image(src: &str, context: &RenderContext) -> ImageResult {
   }
 
   if is_svg_like(src) {
-    #[cfg(feature = "svg")]
+    #[cfg(feature = "svg-sizing")]
     return ImageSource::from_bytes(src.as_bytes());
-    #[cfg(not(feature = "svg"))]
+    #[cfg(not(feature = "svg-sizing"))]
     return Err(ImageError::SvgParseNotSupported);
   }
 

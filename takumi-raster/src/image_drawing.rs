@@ -24,6 +24,7 @@ pub(crate) fn process_image_for_object_fit(
   let (image_width, image_height) = image.size(&context.sizing);
   let (source_width, source_height) = match image {
     ImageSource::Bitmap(bitmap) => (bitmap.width() as f32, bitmap.height() as f32),
+    #[cfg(any(feature = "png", feature = "gif", feature = "webp"))]
     ImageSource::Animated(animated) => {
       let (width, height) = animated.dimensions();
       (width as f32, height as f32)

@@ -1,26 +1,18 @@
-//! GIF sizing and timelines, composited the way browsers and the `image` crate do; stubs when the
-//! decoder is compiled out.
+//! GIF sizing and timelines, composited the way browsers and the `image` crate do.
 
 use super::DecodeTarget;
 use std::sync::Arc;
-#[cfg(feature = "gif")]
 use std::{io::Cursor, mem::take};
 
-#[cfg(feature = "gif")]
 use gif::{ColorOutput, DecodeOptions, Decoder as GifDecoder, DisposalMethod};
 use image::ImageResult;
-#[cfg(feature = "gif")]
 use image::{ImageError, ImageFormat, error::DecodingError};
 
-#[cfg(not(feature = "gif"))]
-use super::format_compiled_out_error;
 use super::{DetectedImageFormat, FrameInfo, detect_image_format};
-#[cfg(feature = "gif")]
 use super::{
   Dispose, MAX_ANIMATION_FRAMES, MAX_ANIMATION_TOTAL_PIXELS, MAX_IMAGE_DIMENSION, fit_to_target,
   invalid_buffer_error, pixel_budget_error,
 };
-#[cfg(feature = "gif")]
 use crate::geometry::Rect;
 use crate::resources::image_buffer::ImageBuffer;
 
@@ -28,12 +20,10 @@ pub(crate) fn is_gif(bytes: &[u8]) -> bool {
   matches!(detect_image_format(bytes), Some(DetectedImageFormat::Gif))
 }
 
-#[cfg(feature = "gif")]
 fn gif_decode_error(error: gif::DecodingError) -> ImageError {
   ImageError::Decoding(DecodingError::new(ImageFormat::Gif.into(), error))
 }
 
-#[cfg(feature = "gif")]
 fn gif_decoder(bytes: &[u8]) -> ImageResult<GifDecoder<Cursor<&[u8]>>> {
   let mut options = DecodeOptions::new();
   options.set_color_output(ColorOutput::RGBA);
@@ -50,7 +40,6 @@ fn gif_decoder(bytes: &[u8]) -> ImageResult<GifDecoder<Cursor<&[u8]>>> {
 }
 
 /// GIF logical screen dimensions from the header; decodes no frame.
-#[cfg(feature = "gif")]
 pub(crate) fn gif_dimensions(bytes: &[u8]) -> ImageResult<(u32, u32)> {
   let decoder = gif_decoder(bytes)?;
   Ok((decoder.width() as u32, decoder.height() as u32))
@@ -58,7 +47,6 @@ pub(crate) fn gif_dimensions(bytes: &[u8]) -> ImageResult<(u32, u32)> {
 
 /// Per-frame delays in milliseconds, in stream order (first frame included), without decoding any
 /// pixels.
-#[cfg(feature = "gif")]
 pub(crate) fn gif_frame_infos(bytes: &[u8]) -> ImageResult<Box<[FrameInfo]>> {
   let mut options = DecodeOptions::new();
   options.skip_frame_decoding(true);
@@ -115,7 +103,6 @@ pub(crate) fn gif_frame_infos(bytes: &[u8]) -> ImageResult<Box<[FrameInfo]>> {
 
 /// Rows and columns of the rect that fall inside the canvas, plus the rect's unclamped pixel
 /// stride.
-#[cfg(feature = "gif")]
 fn clamped_span(rect: Rect<u32>, canvas_width: u32, canvas_height: u32) -> (u32, usize, usize) {
   let cols = rect.right.min(canvas_width).saturating_sub(rect.left) as usize;
   let rows = if cols == 0 {
@@ -129,7 +116,6 @@ fn clamped_span(rect: Rect<u32>, canvas_width: u32, canvas_height: u32) -> (u32,
 
 /// Overwrites the canvas rect with the frame's non-transparent pixels (straight-alpha RGBA; GIF
 /// alpha is 0 or 255).
-#[cfg(feature = "gif")]
 fn blit_frame(canvas: &mut [u8], canvas_size: (u32, u32), rect: Rect<u32>, pixels: &[u8]) {
   let (rows, cols, stride) = clamped_span(rect, canvas_size.0, canvas_size.1);
   for row in 0..rows {
@@ -145,7 +131,6 @@ fn blit_frame(canvas: &mut [u8], canvas_size: (u32, u32), rect: Rect<u32>, pixel
   }
 }
 
-#[cfg(feature = "gif")]
 fn clear_rect(canvas: &mut [u8], canvas_size: (u32, u32), rect: Rect<u32>) {
   let (rows, cols, _) = clamped_span(rect, canvas_size.0, canvas_size.1);
   for row in 0..rows {
@@ -156,7 +141,6 @@ fn clear_rect(canvas: &mut [u8], canvas_size: (u32, u32), rect: Rect<u32>) {
 
 /// Decodes GIF frames in stream order, passing each frame past the first `skip` to `push`, up to
 /// `limit` pushed frames.
-#[cfg(feature = "gif")]
 pub(crate) fn decode_gif_frames(
   bytes: &[u8],
   skip: usize,
@@ -273,7 +257,6 @@ pub(crate) fn decode_gif_frames(
 
 /// Decodes frame `index` on its own when the GIF's frame headers show it covers the whole canvas
 /// opaquely.
-#[cfg(feature = "gif")]
 pub(crate) fn decode_gif_frame_alone(
   bytes: &[u8],
   index: usize,
@@ -314,42 +297,11 @@ pub(crate) fn decode_gif_frame_alone(
   fit_to_target(buffer, target).ok()
 }
 
-#[cfg(not(feature = "gif"))]
-pub(crate) fn gif_dimensions(_bytes: &[u8]) -> ImageResult<(u32, u32)> {
-  Err(format_compiled_out_error())
-}
-
-#[cfg(not(feature = "gif"))]
-pub(crate) fn gif_frame_infos(_bytes: &[u8]) -> ImageResult<Box<[FrameInfo]>> {
-  Err(format_compiled_out_error())
-}
-
-#[cfg(not(feature = "gif"))]
-pub(crate) fn decode_gif_frame_alone(
-  _bytes: &[u8],
-  _index: usize,
-  _target: Option<DecodeTarget>,
-) -> Option<ImageBuffer> {
-  None
-}
-
-#[cfg(not(feature = "gif"))]
-pub(crate) fn decode_gif_frames(
-  _bytes: &[u8],
-  _skip: usize,
-  _limit: Option<usize>,
-  _target: Option<DecodeTarget>,
-  _push: impl FnMut(Arc<ImageBuffer>),
-) -> ImageResult<bool> {
-  Err(format_compiled_out_error())
-}
-
 #[cfg(test)]
 mod tests {
   use super::*;
   use crate::resources::image_decoder::rgba_to_buffer;
 
-  #[cfg(feature = "gif")]
   #[test]
   fn frames_starting_outside_the_canvas_clear_nothing() {
     let mut canvas = vec![255_u8; 4 * 4 * 4];
@@ -365,12 +317,10 @@ mod tests {
     assert!(canvas.iter().all(|byte| *byte == 255));
   }
 
-  #[cfg(feature = "gif")]
   fn rgba_patch(width: u16, height: u16, rgba: [u8; 4]) -> Vec<u8> {
     rgba.repeat(width as usize * height as usize)
   }
 
-  #[cfg(feature = "gif")]
   fn test_frame(
     width: u16,
     height: u16,
@@ -387,7 +337,6 @@ mod tests {
     frame
   }
 
-  #[cfg(feature = "gif")]
   fn encode_test_gif(width: u16, height: u16, frames: &[gif::Frame<'static>]) -> Vec<u8> {
     let mut bytes = Vec::new();
     let mut encoder = gif::Encoder::new(&mut bytes, width, height, &[]).unwrap();
@@ -398,7 +347,6 @@ mod tests {
     bytes
   }
 
-  #[cfg(feature = "gif")]
   fn reference_frames(bytes: &[u8]) -> Vec<(Vec<u8>, u32)> {
     use image::AnimationDecoder;
 
@@ -418,7 +366,6 @@ mod tests {
       .collect()
   }
 
-  #[cfg(feature = "gif")]
   fn our_frames(bytes: &[u8], skip: usize) -> Vec<(Vec<u8>, u32)> {
     let infos = gif_frame_infos(bytes).unwrap();
     let mut frames = Vec::new();
@@ -433,14 +380,12 @@ mod tests {
     frames
   }
 
-  #[cfg(feature = "gif")]
   fn assert_matches_reference(bytes: &[u8]) {
     let reference = reference_frames(bytes);
     assert_eq!(our_frames(bytes, 0), reference);
     assert_eq!(our_frames(bytes, 1), reference[1..]);
   }
 
-  #[cfg(feature = "gif")]
   #[test]
   fn gif_compositing_matches_image_crate_for_keep_disposal() {
     let bytes = encode_test_gif(
@@ -476,7 +421,6 @@ mod tests {
     assert_matches_reference(&bytes);
   }
 
-  #[cfg(feature = "gif")]
   #[test]
   fn gif_compositing_matches_image_crate_for_transparent_patches() {
     let mut patch = rgba_patch(2, 2, [0, 255, 0, 255]);
@@ -500,7 +444,6 @@ mod tests {
     assert_matches_reference(&bytes);
   }
 
-  #[cfg(feature = "gif")]
   #[test]
   fn gif_compositing_matches_image_crate_for_background_disposal() {
     let bytes = encode_test_gif(
@@ -536,7 +479,6 @@ mod tests {
     assert_matches_reference(&bytes);
   }
 
-  #[cfg(feature = "gif")]
   #[test]
   fn gif_compositing_matches_image_crate_for_previous_disposal() {
     let bytes = encode_test_gif(
@@ -572,7 +514,6 @@ mod tests {
     assert_matches_reference(&bytes);
   }
 
-  #[cfg(feature = "gif")]
   #[test]
   fn gif_compositing_matches_image_crate_for_interlaced_frames() {
     let mut striped = Vec::new();
@@ -601,7 +542,6 @@ mod tests {
     assert_matches_reference(&bytes);
   }
 
-  #[cfg(feature = "gif")]
   #[test]
   fn gif_zero_delay_clamps_to_one_ms_like_image_crate() {
     let bytes = encode_test_gif(
@@ -630,7 +570,6 @@ mod tests {
     assert!(our_frames(&bytes, 0).iter().all(|(_, ms)| *ms == 1));
   }
 
-  #[cfg(feature = "gif")]
   #[test]
   fn gif_limit_stops_before_decoding_later_frames() {
     let bytes = encode_test_gif(
