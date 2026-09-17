@@ -749,6 +749,18 @@ macro_rules! define_style {
           self.declarations.append_cloned(declarations);
         }
 
+        /// Merges a matched block declaration by declaration, which the cascade
+        /// does to keep each one's own importance, and takes its element state.
+        pub(crate) fn merge_matched_block(&mut self, declarations: &StyleDeclarationBlock) {
+          self
+            .declarations
+            .extend_element_state(declarations.element_state.iter().map(Box::as_ref));
+
+          for declaration in declarations.iter() {
+            declaration.merge_into_ref(self);
+          }
+        }
+
         /// Appends one declaration, recording its importance.
         pub fn push(&mut self, declaration: StyleDeclaration, important: bool) {
           self.declarations.push(declaration, important);
@@ -771,6 +783,10 @@ macro_rules! define_style {
         pub(crate) fn inherit(self, parent: &ComputedStyle) -> ComputedStyle {
           let mut style = ComputedStyle::from_parent(parent);
           let mut declarations = ParsedDeclarations::new();
+
+          for name in &self.declarations.element_state {
+            style.custom_properties.register_element_state(name);
+          }
 
           for declaration in self.declarations.declarations {
             match declaration {
@@ -1830,6 +1846,9 @@ impl ImportantBits {
 pub struct StyleDeclarationBlock {
   /// Ordered declarations in source order.
   pub(crate) declarations: ThinVec<StyleDeclaration>,
+  /// Custom property names a utility engine wrote as the element's own
+  /// composition state, which stops at the element that set it.
+  pub(crate) element_state: SmallVec<[Box<str>; 2]>,
   /// Positional against `declarations`, because the mask below unions the block
   /// and cannot tell `p-2 !p-4` apart once both have marked the same longhand.
   important: ImportantBits,
@@ -1842,6 +1861,23 @@ impl StyleDeclarationBlock {
     let mut block = Self::default();
     block.append_parsed_declarations(declarations, important);
     block
+  }
+
+  /// Records a name a utility engine wrote as this element's own state.
+  pub(crate) fn push_element_state(&mut self, name: &str) {
+    if self
+      .element_state
+      .iter()
+      .all(|existing| existing.as_ref() != name)
+    {
+      self.element_state.push(name.into());
+    }
+  }
+
+  pub(crate) fn extend_element_state<'n>(&mut self, names: impl IntoIterator<Item = &'n str>) {
+    for name in names {
+      self.push_element_state(name);
+    }
   }
 
   /// Reserves room for `additional` more declarations.
@@ -1884,6 +1920,7 @@ impl StyleDeclarationBlock {
     let mut important = Self::default();
 
     let flags = self.important;
+    let element_state = self.element_state;
 
     for (index, declaration) in self.declarations.into_iter().enumerate() {
       let is_important = flags.get(index);
@@ -1892,6 +1929,14 @@ impl StyleDeclarationBlock {
       } else {
         &mut normal
       };
+
+      // The name belongs to whichever side kept the declaration that wrote it,
+      // which can be both.
+      if let StyleDeclaration::CustomProperty(name, _) = &declaration
+        && element_state.iter().any(|state| state.as_ref() == name)
+      {
+        target.push_element_state(name);
+      }
 
       target.push(declaration, is_important);
     }
@@ -1902,6 +1947,7 @@ impl StyleDeclarationBlock {
   /// Appends a borrowed block's declarations and importance, cloning them.
   pub(crate) fn append_cloned(&mut self, other: &Self) {
     self.importance.extend_from(&other.importance);
+    self.extend_element_state(other.element_state.iter().map(Box::as_ref));
     self
       .important
       .append(self.declarations.len(), &other.important);
@@ -1911,6 +1957,7 @@ impl StyleDeclarationBlock {
   /// Appends another block's declarations and importance.
   pub(crate) fn append(&mut self, other: Self) {
     self.importance.extend_from(&other.importance);
+    self.extend_element_state(other.element_state.iter().map(Box::as_ref));
     self
       .important
       .append(self.declarations.len(), &other.important);

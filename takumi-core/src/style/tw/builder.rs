@@ -17,6 +17,10 @@ impl TailwindDeclarationBuilder {
   }
 
   pub(super) fn push(&mut self, declaration: StyleDeclaration, important: bool) {
+    if let StyleDeclaration::CustomProperty(name, _) = &declaration {
+      self.declarations.push_element_state(name);
+    }
+
     self.declarations.push(declaration, important);
   }
 

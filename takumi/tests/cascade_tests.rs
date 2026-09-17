@@ -395,3 +395,132 @@ fn a_registered_property_reaches_the_root_element() {
   );
   assert_eq!(result.width, 140.0);
 }
+
+/// A `--tw-*` name the utility engine never wrote is the author's own variable,
+/// so it inherits like any unregistered custom property.
+#[test]
+fn an_author_tw_named_variable_still_inherits() {
+  let root = Node::container([block("box")]);
+  let result = measure_with_css(
+    root,
+    r#"
+      :root { --tw-box-width: 160px; }
+      .box { width: var(--tw-box-width); }
+    "#,
+  );
+  assert_eq!(result.children[0].width, 160.0);
+}
+
+/// `@apply` writes the same utility state through a stylesheet rule, so it has
+/// to stop at its element the way the `tw` attribute's does. An inherited stop
+/// list is not a length, so the width declaration would fall over.
+#[test]
+fn applied_gradient_state_stops_at_its_element() {
+  let root = Node::container([block("child")]).with_class_name("hero");
+  let result = measure_with_css(
+    root,
+    r#"
+      .hero { @apply bg-linear-to-r from-red-500 to-blue-500; }
+      .child { width: var(--tw-gradient-stops, 90px); }
+    "#,
+  );
+  assert_eq!(result.children[0].width, 90.0);
+}
+
+/// Element state belongs to the element that set it, not to its subtree, so a
+/// descendant's own variable of the same name inherits normally.
+#[test]
+fn element_state_does_not_claim_the_whole_subtree() {
+  use std::str::FromStr;
+
+  let inner = Node::container([block("leaf")])
+    .with_class_name("mid")
+    .with_style(Style::default().with(StyleDeclaration::display(Display::Block)));
+  let root = Node::container([inner])
+    .with_class_name("hero")
+    .with_tw(TailwindValues::from_str("translate-x-4").expect("tailwind values should parse"));
+  let result = measure_with_css(
+    root,
+    r#"
+      .mid { --tw-translate-x: 70px; }
+      .leaf { width: var(--tw-translate-x, 10px); }
+    "#,
+  );
+  assert_eq!(result.children[0].children[0].width, 70.0);
+}
+
+/// An important utility takes the block through the importance split, which the
+/// element state has to survive.
+#[test]
+fn important_utility_state_stops_at_its_element() {
+  use std::str::FromStr;
+
+  let root = Node::container([block("leaf")])
+    .with_class_name("hero")
+    .with_tw(TailwindValues::from_str("!translate-x-4").expect("tailwind values should parse"));
+  let result = measure_with_css(root, ".leaf { width: var(--tw-translate-x, 80px); }");
+
+  assert_eq!(result.children[0].width, 80.0);
+}
+
+/// The same importance split on the `@apply` path.
+#[test]
+fn important_applied_state_stops_at_its_element() {
+  let root = Node::container([block("leaf")]).with_class_name("hero");
+  let result = measure_with_css(
+    root,
+    r#"
+      .hero { @apply !translate-x-4; }
+      .leaf { width: var(--tw-translate-x, 80px); }
+    "#,
+  );
+  assert_eq!(result.children[0].width, 80.0);
+}
+
+/// A registration is keyed by name, so an author value that outranks the
+/// utility on the same element stops there too, as it would in a browser
+/// holding Tailwind's own `@property` rule.
+#[test]
+fn an_author_value_over_utility_state_stops_at_its_element() {
+  use std::str::FromStr;
+
+  let root = Node::container([block("leaf")])
+    .with_class_name("hero")
+    .with_tw(TailwindValues::from_str("translate-x-4").expect("tailwind values should parse"));
+  let result = measure_with_css(
+    root,
+    r#"
+      .hero { --tw-translate-x: 55px; }
+      .leaf { width: var(--tw-translate-x, 80px); }
+    "#,
+  );
+  assert_eq!(result.children[0].width, 80.0);
+}
+
+/// An inline `--tw-` name is the author's, so it inherits.
+#[test]
+fn an_inline_tw_named_variable_still_inherits() {
+  let hero = Node::container([block("leaf")]).with_style(
+    serde_json::from_value(serde_json::json!({
+      "display": "block",
+      "--tw-translate-x": "65px"
+    }))
+    .expect("style should deserialize"),
+  );
+  let result = measure_with_css(hero, ".leaf { width: var(--tw-translate-x, 80px); }");
+
+  assert_eq!(result.children[0].width, 65.0);
+}
+
+/// The plainest shape: state a `tw` attribute writes stops at its element.
+#[test]
+fn utility_state_stops_at_its_element() {
+  use std::str::FromStr;
+
+  let root = Node::container([block("leaf")])
+    .with_class_name("hero")
+    .with_tw(TailwindValues::from_str("translate-x-4").expect("tailwind values should parse"));
+  let result = measure_with_css(root, ".leaf { width: var(--tw-translate-x, 80px); }");
+
+  assert_eq!(result.children[0].width, 80.0);
+}

@@ -1,7 +1,10 @@
 //! The custom properties in scope on an element: their specified values and the
 //! `@property` rules that govern them.
 
-use std::{collections::HashMap, sync::Arc};
+use std::{
+  collections::{HashMap, HashSet},
+  sync::Arc,
+};
 
 use crate::style::selector::PropertyRule;
 
@@ -11,6 +14,9 @@ use crate::style::selector::PropertyRule;
 pub struct CustomProperties {
   values: Arc<HashMap<String, String>>,
   registrations: Arc<HashMap<String, PropertyRule>>,
+  /// Names a utility engine wrote as this element's own composition state.
+  /// Unlike a registration, this does not reach the children.
+  element_state: Arc<HashSet<String>>,
 }
 
 impl CustomProperties {
@@ -54,38 +60,62 @@ impl CustomProperties {
     }
   }
 
-  /// Whether a child inherits `name` from this element.
-  ///
-  /// [`Self::register_in_scope`] has already left the value a registered
-  /// property puts in scope, so a registered name passes through untouched.
-  /// That leaves the unregistered ones: `--tw-*` holds per-element composition
-  /// state the utility engine writes without registering, and stops here.
-  fn inherits(&self, name: &str) -> bool {
-    self.registration(name).is_some() || !name.starts_with("--tw-")
-  }
-
-  /// The properties a child starts from, carrying the registrations forward and
-  /// dropping the values that stop here.
-  pub(crate) fn inherited(&self) -> Self {
-    let registrations = self.registrations.clone();
-
-    if self.values.keys().all(|name| self.inherits(name)) {
-      return Self {
-        values: self.values.clone(),
-        registrations,
-      };
+  /// Records state a utility engine wrote for this element alone. Tailwind's
+  /// own stylesheet says so with an `@property` rule; the engine has no
+  /// stylesheet, so it says so here. An author's rule for the name wins.
+  pub(crate) fn register_element_state(&mut self, name: &str) {
+    if self.registration(name).is_some() {
+      return;
     }
 
-    Self {
-      values: Arc::new(
+    Arc::make_mut(&mut self.element_state).insert(name.to_owned());
+  }
+
+  /// What a child starts `name` from: the value itself when it inherits, the
+  /// registered initial value when it does not, and nothing when an engine
+  /// wrote it as this element's own state.
+  fn inherited_value<'v>(&'v self, name: &str, value: &'v str) -> Option<&'v str> {
+    if self.element_state.contains(name) {
+      return None;
+    }
+
+    match self.registration(name) {
+      Some(rule) if !rule.inherits => rule.initial_value.as_deref(),
+      _ => Some(value),
+    }
+  }
+
+  /// Whether a child needs a map of its own. Conservative: a non-inheriting
+  /// property already holding its initial value still answers yes.
+  fn needs_its_own_values(&self) -> bool {
+    !self.element_state.is_empty()
+      || self
+        .registrations
+        .values()
+        .any(|rule| !rule.inherits && self.values.contains_key(&rule.name))
+  }
+
+  /// The properties a child starts from: the registrations as they are, and the
+  /// values each rule leaves in reach.
+  pub(crate) fn inherited(&self) -> Self {
+    let values = if self.needs_its_own_values() {
+      Arc::new(
         self
           .values
           .iter()
-          .filter(|(name, _)| self.inherits(name))
-          .map(|(name, value)| (name.clone(), value.clone()))
+          .filter_map(|(name, value)| {
+            Some((name.clone(), self.inherited_value(name, value)?.to_owned()))
+          })
           .collect(),
-      ),
-      registrations,
+      )
+    } else {
+      self.values.clone()
+    };
+
+    Self {
+      values,
+      registrations: self.registrations.clone(),
+      element_state: Default::default(),
     }
   }
 }
