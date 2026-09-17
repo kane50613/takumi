@@ -685,6 +685,15 @@ fn parse_property_rule<'i, 't>(
     return Err(input.new_custom_error(StyleSheetParseError::missing_property_inherits()));
   };
 
+  // The descriptor is a string, and nothing downstream wants the quotes.
+  let syntax = syntax.trim_matches(['"', '\'']).to_owned();
+
+  // css-properties-values-api-1 2.1: only the universal syntax may leave the
+  // initial value out, because every other one needs a value to fall back to.
+  if syntax != "*" && initial_value.is_none() {
+    return Err(input.new_custom_error(StyleSheetParseError::missing_property_initial_value()));
+  }
+
   Ok(PropertyRule {
     name: property_name,
     syntax,
@@ -2405,7 +2414,7 @@ mod tests {
 
     assert_eq!(sheet.property_rules.len(), 1);
     assert_eq!(sheet.property_rules[0].name, "--box-size");
-    assert_eq!(sheet.property_rules[0].syntax, "\"<length>\"");
+    assert_eq!(sheet.property_rules[0].syntax, "<length>");
     assert!(!sheet.property_rules[0].inherits);
     assert_eq!(
       sheet.property_rules[0].initial_value,
@@ -2427,7 +2436,7 @@ mod tests {
 
     assert_eq!(sheet.property_rules.len(), 1);
     assert_eq!(sheet.property_rules[0].name, "--box-size");
-    assert_eq!(sheet.property_rules[0].syntax, "\"<length>\"");
+    assert_eq!(sheet.property_rules[0].syntax, "<length>");
     assert!(!sheet.property_rules[0].inherits);
     assert_eq!(
       sheet.property_rules[0].initial_value,
@@ -2436,7 +2445,7 @@ mod tests {
   }
 
   #[test]
-  fn test_parse_property_rule_requires_initial_value_for_typed_syntax() {
+  fn test_parse_property_rule_needs_an_initial_value_unless_universal() {
     let sheet = parse_stylesheet(
       r#"
         @property --tw-rotate-x {
@@ -2448,21 +2457,24 @@ mod tests {
 
     assert_eq!(sheet.property_rules.len(), 1);
     assert_eq!(sheet.property_rules[0].name, "--tw-rotate-x");
-    assert_eq!(sheet.property_rules[0].syntax, "\"*\"");
+    assert_eq!(sheet.property_rules[0].syntax, "*");
     assert!(!sheet.property_rules[0].inherits);
     assert_eq!(sheet.property_rules[0].initial_value, None);
 
-    let sheet = parse_stylesheet(
+    // A typed syntax has nothing to fall back to without one, so the rule goes.
+    let sheet = parse_stylesheet_loosy(
       r#"
         @property --box-size {
           syntax: "<length>";
           inherits: false;
         }
+
+        .card { width: 100px; }
       "#,
     );
 
-    assert_eq!(sheet.property_rules.len(), 1);
-    assert_eq!(sheet.property_rules[0].initial_value, None);
+    assert!(sheet.property_rules.is_empty());
+    assert_eq!(sheet.rules.len(), 1);
   }
 
   #[test]
@@ -2508,13 +2520,13 @@ mod tests {
     );
 
     assert_eq!(sheet.property_rules.len(), 7);
-    assert_eq!(sheet.property_rules[0].syntax, "\"<length> | <color>\"");
-    assert_eq!(sheet.property_rules[1].syntax, "\"none | auto\"");
-    assert_eq!(sheet.property_rules[2].syntax, "\"<time>\"");
-    assert_eq!(sheet.property_rules[3].syntax, "\"<transform-function>\"");
-    assert_eq!(sheet.property_rules[4].syntax, "\"<easing-function>\"");
-    assert_eq!(sheet.property_rules[5].syntax, "\"<filter-function>\"");
-    assert_eq!(sheet.property_rules[6].syntax, "\"<image>\"");
+    assert_eq!(sheet.property_rules[0].syntax, "<length> | <color>");
+    assert_eq!(sheet.property_rules[1].syntax, "none | auto");
+    assert_eq!(sheet.property_rules[2].syntax, "<time>");
+    assert_eq!(sheet.property_rules[3].syntax, "<transform-function>");
+    assert_eq!(sheet.property_rules[4].syntax, "<easing-function>");
+    assert_eq!(sheet.property_rules[5].syntax, "<filter-function>");
+    assert_eq!(sheet.property_rules[6].syntax, "<image>");
   }
 
   #[test]

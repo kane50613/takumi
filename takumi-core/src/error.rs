@@ -238,6 +238,10 @@ pub enum StyleSheetParseErrorKind {
   #[error("missing `@property` inherits")]
   MissingPropertyInherits,
 
+  /// `@property` gives a typed `syntax` without the `initial-value` it needs.
+  #[error("`@property` with a typed syntax needs an initial-value")]
+  MissingPropertyInitialValue,
+
   /// `@supports` mixed `and` and `or` without parentheses.
   #[error("@supports cannot mix `and` and `or` without parentheses")]
   SupportsMixedAndOrWithoutParentheses,
@@ -317,6 +321,11 @@ impl StyleSheetParseError {
   /// Error for a `@property` missing its `inherits` descriptor.
   pub(crate) fn missing_property_inherits() -> Self {
     Self::new(StyleSheetParseErrorKind::MissingPropertyInherits)
+  }
+
+  /// Error for a typed `@property` missing its `initial-value` descriptor.
+  pub(crate) fn missing_property_initial_value() -> Self {
+    Self::new(StyleSheetParseErrorKind::MissingPropertyInitialValue)
   }
 
   /// Error for `@supports` mixing `and`/`or` without parentheses.
