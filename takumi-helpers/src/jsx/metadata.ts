@@ -1,5 +1,5 @@
 import type { Declarations } from "../types";
-import { defaultStylePresets } from "./style-presets";
+import { defaultStylePresets, type StylePresets } from "./style-presets";
 
 export type HtmlProps = {
   className?: string;
@@ -11,15 +11,43 @@ export type HtmlProps = {
   [key: string]: unknown;
 };
 
-export function getPresets(
-  defaultStyles?: typeof defaultStylePresets | false,
-): typeof defaultStylePresets | undefined {
+export function getPresets(defaultStyles?: StylePresets | false): StylePresets | undefined {
   if (defaultStyles === false) {
     return;
   }
 
   return defaultStyles ?? defaultStylePresets;
 }
+
+function isPresetKey(presets: StylePresets, key: string): key is keyof StylePresets {
+  return key in presets;
+}
+
+/** The preset for a tag, where an `input[type=…]` entry outranks the bare tag. */
+export function presetFor(
+  presets: StylePresets | undefined,
+  tagName: string,
+  type: unknown,
+): Declarations | undefined {
+  if (!presets) {
+    return;
+  }
+
+  const typed = typeof type === "string" ? `${tagName}[type=${type.trim().toLowerCase()}]` : "";
+
+  if (isPresetKey(presets, typed)) {
+    return presets[typed];
+  }
+
+  return isPresetKey(presets, tagName) ? presets[tagName] : undefined;
+}
+
+// React spells these three HTML attributes its own way.
+const reactAttributeNames: Record<string, string> = {
+  htmlFor: "for",
+  defaultValue: "value",
+  defaultChecked: "checked",
+};
 
 export function extractAttributes(
   props: HtmlProps,
@@ -62,7 +90,8 @@ export function extractAttributes(
     }
 
     collectedAttributes ??= {};
-    collectedAttributes[attributeName] = attributeValue === true ? "" : String(attributeValue);
+    collectedAttributes[reactAttributeNames[attributeName] ?? attributeName] =
+      attributeValue === true ? "" : String(attributeValue);
   }
 
   return collectedAttributes;
