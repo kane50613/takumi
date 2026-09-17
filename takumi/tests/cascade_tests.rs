@@ -448,3 +448,66 @@ fn element_state_does_not_claim_the_whole_subtree() {
   );
   assert_eq!(result.children[0].children[0].width, 70.0);
 }
+
+/// An important utility takes the block through the importance split, which the
+/// element state has to survive.
+#[test]
+fn important_utility_state_stops_at_its_element() {
+  use std::str::FromStr;
+
+  let root = Node::container([block("leaf")])
+    .with_class_name("hero")
+    .with_tw(TailwindValues::from_str("!translate-x-4").expect("tailwind values should parse"));
+  let result = measure_with_css(root, ".leaf { width: var(--tw-translate-x, 80px); }");
+
+  assert_eq!(result.children[0].width, 80.0);
+}
+
+/// The same importance split on the `@apply` path.
+#[test]
+fn important_applied_state_stops_at_its_element() {
+  let root = Node::container([block("leaf")]).with_class_name("hero");
+  let result = measure_with_css(
+    root,
+    r#"
+      .hero { @apply !translate-x-4; }
+      .leaf { width: var(--tw-translate-x, 80px); }
+    "#,
+  );
+  assert_eq!(result.children[0].width, 80.0);
+}
+
+/// A registration is keyed by name, so an author value that outranks the
+/// utility on the same element stops there too, as it would in a browser
+/// holding Tailwind's own `@property` rule.
+#[test]
+fn an_author_value_over_utility_state_stops_at_its_element() {
+  use std::str::FromStr;
+
+  let root = Node::container([block("leaf")])
+    .with_class_name("hero")
+    .with_tw(TailwindValues::from_str("translate-x-4").expect("tailwind values should parse"));
+  let result = measure_with_css(
+    root,
+    r#"
+      .hero { --tw-translate-x: 55px; }
+      .leaf { width: var(--tw-translate-x, 80px); }
+    "#,
+  );
+  assert_eq!(result.children[0].width, 80.0);
+}
+
+/// An inline `--tw-` name is the author's, so it inherits.
+#[test]
+fn an_inline_tw_named_variable_still_inherits() {
+  let hero = Node::container([block("leaf")]).with_style(
+    serde_json::from_value(serde_json::json!({
+      "display": "block",
+      "--tw-translate-x": "65px"
+    }))
+    .expect("style should deserialize"),
+  );
+  let result = measure_with_css(hero, ".leaf { width: var(--tw-translate-x, 80px); }");
+
+  assert_eq!(result.children[0].width, 65.0);
+}

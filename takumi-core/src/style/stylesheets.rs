@@ -1908,6 +1908,7 @@ impl StyleDeclarationBlock {
     let mut important = Self::default();
 
     let flags = self.important;
+    let element_state = self.element_state;
 
     for (index, declaration) in self.declarations.into_iter().enumerate() {
       let is_important = flags.get(index);
@@ -1916,6 +1917,14 @@ impl StyleDeclarationBlock {
       } else {
         &mut normal
       };
+
+      // The name belongs to whichever side kept the declaration that wrote it,
+      // which can be both.
+      if let StyleDeclaration::CustomProperty(name, _) = &declaration
+        && element_state.iter().any(|state| state.as_ref() == name)
+      {
+        target.push_element_state(name);
+      }
 
       target.push(declaration, is_important);
     }
