@@ -1,7 +1,7 @@
 use std::{assert_matches, sync::Arc};
 
 use super::*;
-use crate::style::{ComputedStyle, LonghandId, Style, properties::BackgroundImage};
+use crate::style::{ComputedStyle, LonghandId, PropertyRule, Style, properties::BackgroundImage};
 
 /// The declarations a utility produces without any variable defined, which is
 /// what these assertions are about.
@@ -518,10 +518,10 @@ fn test_comprehensive_mappings() {
   let should_not_parse = vec!["nonexistent-class", "invalid-prefix-1", "random-string"];
 
   for class in should_parse {
+    let declarations = parse_property(class);
     assert!(
-      parse_property(class).is_some(),
-      "Expected '{}' to parse successfully",
-      class
+      declarations.is_some_and(|declarations| !declarations.is_empty()),
+      "expected '{class}' to parse into at least one declaration"
     );
   }
 
@@ -1658,6 +1658,32 @@ fn test_gradient_state_does_not_inherit() {
   // With the parent's stops out of reach, `var(--tw-gradient-stops)` fails to
   // substitute and the child paints no gradient, as a browser would.
   assert_eq!(child.background_image, None);
+}
+
+/// Registering a `--tw-*` name hands it to the `@property` rule, so the value
+/// that rule gives reaches the child the utility engine's state would not.
+#[test]
+fn test_registered_gradient_state_survives_inheritance() {
+  let mut parent = ComputedStyle::default();
+  Arc::make_mut(&mut parent.custom_properties)
+    .insert("--tw-gradient-from-position".to_owned(), "25%".to_owned());
+  Arc::make_mut(&mut parent.registered_custom_properties).insert(
+    "--tw-gradient-from-position".to_owned(),
+    PropertyRule {
+      name: "--tw-gradient-from-position".to_owned(),
+      syntax: "<length-percentage>".to_owned(),
+      inherits: false,
+      initial_value: Some("0%".to_owned()),
+      media_queries: Vec::new(),
+    },
+  );
+
+  let child = ComputedStyle::from_parent(&parent);
+
+  assert_eq!(
+    child.custom_properties.get("--tw-gradient-from-position"),
+    Some(&"25%".to_owned())
+  );
 }
 
 /// The shadow colour utility overrides every layer through the variable it

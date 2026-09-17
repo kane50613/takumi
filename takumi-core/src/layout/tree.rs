@@ -2432,6 +2432,29 @@ mod tests {
     );
   }
 
+  /// An `@property` registration is what decides whether a name inherits, even
+  /// for the `--tw-*` names the utility engine also writes.
+  #[test]
+  fn a_registered_tw_property_reaches_the_child() {
+    let parent = ComputedStyle::default();
+    let stylesheets = [StyleSheet::from(vec![PropertyRule {
+      name: "--tw-gradient-from-position".to_owned(),
+      syntax: "<length-percentage>".to_owned(),
+      inherits: false,
+      initial_value: Some("0%".to_owned()),
+      media_queries: Vec::new(),
+    }])];
+
+    let adjusted_parent =
+      registered_custom_property_parent_style(&parent, &stylesheets, Viewport::default());
+    let child = ComputedStyle::from_parent(&adjusted_parent);
+
+    assert_eq!(
+      child.custom_properties.get("--tw-gradient-from-position"),
+      Some(&"0%".to_owned())
+    );
+  }
+
   #[test]
   fn registered_custom_property_preserves_parent_value_when_inheriting() {
     let mut parent = ComputedStyle::default();

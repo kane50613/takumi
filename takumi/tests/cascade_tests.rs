@@ -355,3 +355,43 @@ fn a_bang_inside_a_custom_value_is_not_an_importance_marker() {
     assert_ne!(result.children[0].width, 90.0, "case: {css}");
   }
 }
+
+/// #1645: a `--tw-*` name an `@property` rule registers keeps the rule's
+/// initial value, instead of being dropped as unregistered utility state.
+#[test]
+fn a_registered_tw_property_keeps_its_initial_value() {
+  let root = Node::container([block("box")]);
+  let result = measure_with_css(
+    root,
+    r#"
+      @property --tw-box-width {
+        syntax: "<length>";
+        inherits: false;
+        initial-value: 120px;
+      }
+      .box { width: var(--tw-box-width); }
+    "#,
+  );
+  assert_eq!(result.children[0].width, 120.0);
+}
+
+/// The same registration read by the element the stylesheet declares it for,
+/// rather than by a descendant.
+#[test]
+fn a_registered_property_reaches_the_root_element() {
+  let root = Node::container([])
+    .with_class_name("box")
+    .with_style(Style::default().with(StyleDeclaration::display(Display::Block)));
+  let result = measure_with_css(
+    root,
+    r#"
+      @property --box-width {
+        syntax: "<length>";
+        inherits: false;
+        initial-value: 140px;
+      }
+      .box { width: var(--box-width); }
+    "#,
+  );
+  assert_eq!(result.width, 140.0);
+}
