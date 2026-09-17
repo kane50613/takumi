@@ -304,9 +304,10 @@ pub(crate) fn contains_var_function(specified_value: &str) -> bool {
   contains_in_parser(&mut parser)
 }
 
-/// Advances to the `!` a trailing `!important` starts with, leaving the marker
-/// itself unread.
-pub(crate) fn skip_to_important(parser: &mut Parser<'_, '_>) {
+/// Advances to the first `!` at the top level, leaving it unread. A value can
+/// carry one for its own sake, so the caller decides whether what follows is an
+/// importance marker.
+pub(crate) fn skip_to_bang(parser: &mut Parser<'_, '_>) {
   let _ = parser.parse_until_before(Delimiter::Bang, |parser| {
     while parser.next_including_whitespace_and_comments().is_ok() {}
 
@@ -323,7 +324,7 @@ pub(crate) fn important_start(value: &str) -> Option<usize> {
   let mut parser_input = ParserInput::new(value);
   let mut parser = Parser::new(&mut parser_input);
 
-  skip_to_important(&mut parser);
+  skip_to_bang(&mut parser);
   let end = parser.position().byte_index();
 
   (parse_important(&mut parser).is_ok() && parser.is_exhausted()).then_some(end)

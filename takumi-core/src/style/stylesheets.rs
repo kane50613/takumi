@@ -468,7 +468,7 @@ macro_rules! define_style {
 
               if important_start(input.slice_from(start)).is_some() {
                 input.reset(&state);
-                skip_to_important(input);
+                skip_to_bang(input);
               }
 
               Ok(smallvec![StyleDeclaration::CustomProperty(
@@ -607,7 +607,7 @@ macro_rules! define_style {
         // would commit before deferral. See #712.
         if !matches!(property, PropertyId::Ignored | PropertyId::Custom) {
           let state = input.state();
-          skip_to_important(input);
+          skip_to_bang(input);
           let specified_value = input.slice_from(start).trim();
           if contains_var_function(specified_value) {
             return Ok(StyleDeclarationBlock::from_parsed_declarations(
