@@ -24,11 +24,6 @@ impl CustomProperties {
     self.values.contains_key(name)
   }
 
-  /// Every specified value, for the `var()` resolver.
-  pub(crate) fn values(&self) -> &HashMap<String, String> {
-    &self.values
-  }
-
   pub(crate) fn set(&mut self, name: String, value: String) {
     Arc::make_mut(&mut self.values).insert(name, value);
   }

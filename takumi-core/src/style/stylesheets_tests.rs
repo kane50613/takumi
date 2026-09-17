@@ -1,4 +1,4 @@
-use std::{collections::HashMap, rc::Rc, str::FromStr};
+use std::{rc::Rc, str::FromStr};
 
 use cssparser::{Parser, ParserInput};
 use serde_json::{from_value, json};
@@ -10,8 +10,8 @@ use super::{
 use crate::{
   geometry::Size,
   style::{
-    CalcArena, ComputedStyle, DeferredDeclaration, SizingContext, Style, StyleDeclaration,
-    properties::*,
+    CalcArena, ComputedStyle, CustomProperties, DeferredDeclaration, SizingContext, Style,
+    StyleDeclaration, properties::*,
   },
   viewport::Viewport,
 };
@@ -88,12 +88,13 @@ fn resolve_var(
   specified_value: &str,
   custom_properties: impl IntoIterator<Item = (&'static str, &'static str)>,
 ) -> Option<String> {
-  let custom_properties = custom_properties
-    .into_iter()
-    .map(|(name, value)| (name.to_owned(), value.to_owned()))
-    .collect::<HashMap<_, _>>();
+  let mut properties = CustomProperties::default();
 
-  resolve_var_references(specified_value, &custom_properties, &mut Vec::new())
+  for (name, value) in custom_properties {
+    properties.set(name.to_owned(), value.to_owned());
+  }
+
+  resolve_var_references(specified_value, &properties, &mut Vec::new())
 }
 
 #[test]
@@ -1435,9 +1436,10 @@ fn test_var_resolves_inside_nested_blocks() {
 
 #[test]
 fn test_var_gives_up_on_exponential_fan_out() {
-  let mut custom_properties = HashMap::from([("--l0".to_owned(), "x".to_owned())]);
+  let mut custom_properties = CustomProperties::default();
+  custom_properties.set("--l0".to_owned(), "x".to_owned());
   for level in 1..=24 {
-    custom_properties.insert(
+    custom_properties.set(
       format!("--l{level}"),
       format!("var(--l{prev})var(--l{prev})", prev = level - 1),
     );
@@ -1451,7 +1453,11 @@ fn test_var_gives_up_on_exponential_fan_out() {
 #[test]
 fn test_var_gives_up_on_deeply_nested_blocks() {
   let specified_value = format!("{}1px{}", "(".repeat(200), ")".repeat(200));
-  let resolved = resolve_var_references(&specified_value, &HashMap::new(), &mut Vec::new());
+  let resolved = resolve_var_references(
+    &specified_value,
+    &CustomProperties::default(),
+    &mut Vec::new(),
+  );
 
   assert_eq!(resolved, None);
 }

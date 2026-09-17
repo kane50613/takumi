@@ -1,9 +1,9 @@
-use std::{borrow::Cow, collections::HashMap};
+use std::borrow::Cow;
 
 use cssparser::{Parser, ParserInput, Token};
 
 use super::DeferredDeclaration;
-use crate::style::{ComputedStyle, CssInput};
+use crate::style::{ComputedStyle, CssInput, CustomProperties};
 
 // Block nesting recurses here where Blink's tokenizer iterates, so it needs a
 // depth of its own; the value follows Blink's `kMaxExpressionDepth`.
@@ -22,7 +22,7 @@ fn charge(budget: &mut usize, bytes: usize) -> Option<()> {
 
 fn resolve_var_function(
   input: &mut Parser<'_, '_>,
-  custom_properties: &HashMap<String, String>,
+  custom_properties: &CustomProperties,
   stack: &mut Vec<String>,
   budget: &mut usize,
   depth: u32,
@@ -63,7 +63,7 @@ fn resolve_var_function(
 
 fn resolve_var_tokens_into(
   input: &mut Parser<'_, '_>,
-  custom_properties: &HashMap<String, String>,
+  custom_properties: &CustomProperties,
   stack: &mut Vec<String>,
   budget: &mut usize,
   depth: u32,
@@ -146,7 +146,7 @@ fn resolve_var_tokens_into(
 
 pub(crate) fn resolve_var_references(
   specified_value: &str,
-  custom_properties: &HashMap<String, String>,
+  custom_properties: &CustomProperties,
   stack: &mut Vec<String>,
 ) -> Option<String> {
   let mut budget = MAX_VAR_OUTPUT_BYTES;
@@ -156,7 +156,7 @@ pub(crate) fn resolve_var_references(
 
 fn resolve_var_references_with(
   specified_value: &str,
-  custom_properties: &HashMap<String, String>,
+  custom_properties: &CustomProperties,
   stack: &mut Vec<String>,
   budget: &mut usize,
   depth: u32,
@@ -184,7 +184,7 @@ pub(crate) fn apply_deferred_declaration(
 ) -> bool {
   let Some(resolved_value) = resolve_var_references(
     &deferred.specified_value,
-    style.custom_properties.values(),
+    &style.custom_properties,
     &mut Vec::new(),
   ) else {
     return false;

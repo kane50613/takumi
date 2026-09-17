@@ -1744,13 +1744,13 @@ pub struct DeclarationImportance {
   pub(crate) longhands: PropertyMask,
   /// A custom property affects no longhand, so the mask above cannot record
   /// one and the cascade would read the block as carrying nothing important.
-  any_custom_property: bool,
+  has_custom_property: bool,
 }
 
 impl DeclarationImportance {
   /// Whether no property is marked important.
   pub fn is_empty(&self) -> bool {
-    !self.any_custom_property && self.longhands.iter().next().is_none()
+    !self.has_custom_property && self.longhands.iter().next().is_none()
   }
 
   /// Records what a declaration marks important.
@@ -1759,13 +1759,13 @@ impl DeclarationImportance {
       .longhands
       .extend(declaration.affected_longhands().iter());
 
-    self.any_custom_property |= matches!(declaration, StyleDeclaration::CustomProperty(..));
+    self.has_custom_property |= matches!(declaration, StyleDeclaration::CustomProperty(..));
   }
 
   /// Merges another importance set.
   pub(crate) fn extend_from(&mut self, other: &Self) {
     self.longhands.union(&other.longhands);
-    self.any_custom_property |= other.any_custom_property;
+    self.has_custom_property |= other.has_custom_property;
   }
 
   pub(crate) fn append(&mut self, other: &mut Self) {
@@ -1781,7 +1781,7 @@ where
   fn from(value: T) -> Self {
     Self {
       longhands: value.into_iter().collect(),
-      any_custom_property: false,
+      has_custom_property: false,
     }
   }
 }
