@@ -1,16 +1,18 @@
 //! PNG stills, streamed downscaling, and APNG timelines.
 
-use super::DecodeTarget;
 use std::{io::Cursor, sync::Arc};
 
-use image::{ImageError, ImageFormat, ImageResult, codecs::png::PngDecoder, error::DecodingError};
+use image::{
+  ImageDecoder, ImageError, ImageFormat, ImageResult, codecs::png::PngDecoder, error::DecodingError,
+};
 use png::{
   BitDepth, BlendOp, ColorType, Decoder as PngRowDecoder, DisposeOp, FrameControl, Transformations,
 };
 
 use super::{
-  Dispose, FrameInfo, MAX_ANIMATION_FRAMES, MAX_ANIMATION_TOTAL_PIXELS, MAX_IMAGE_DIMENSION,
-  covers_canvas, decode_with_image_crate, fit_to_target, invalid_buffer_error, pixel_budget_error,
+  DecodeTarget, Dispose, FrameInfo, MAX_ANIMATION_FRAMES, MAX_ANIMATION_TOTAL_PIXELS,
+  MAX_IMAGE_DIMENSION, PNG_SIGNATURE, covers_canvas, decode_with_image_crate, fit_to_target,
+  invalid_buffer_error, pixel_budget_error,
 };
 use crate::{
   resources::{
@@ -20,10 +22,12 @@ use crate::{
   style::ImageScalingAlgorithm,
 };
 
-pub(super) const PNG_SIGNATURE: [u8; 8] = [137, 80, 78, 71, 13, 10, 26, 10];
-
 pub(crate) fn decode_png(bytes: &[u8]) -> ImageResult<ImageBuffer> {
   decode_with_image_crate(PngDecoder::new(Cursor::new(bytes))?, ImageFormat::Png)
+}
+
+pub(super) fn png_dimensions(bytes: &[u8]) -> ImageResult<(u32, u32)> {
+  PngDecoder::new(Cursor::new(bytes)).map(|d| d.dimensions())
 }
 
 fn png_decode_error(error: png::DecodingError) -> ImageError {
