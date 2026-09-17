@@ -1767,11 +1767,6 @@ impl DeclarationImportance {
     self.longhands.union(&other.longhands);
     self.has_custom_property |= other.has_custom_property;
   }
-
-  pub(crate) fn append(&mut self, other: &mut Self) {
-    self.extend_from(other);
-    *other = Self::default();
-  }
 }
 
 impl<T> From<T> for DeclarationImportance
@@ -1914,8 +1909,8 @@ impl StyleDeclarationBlock {
   }
 
   /// Appends another block's declarations and importance.
-  pub(crate) fn append(&mut self, mut other: Self) {
-    self.importance.append(&mut other.importance);
+  pub(crate) fn append(&mut self, other: Self) {
+    self.importance.extend_from(&other.importance);
     self
       .important
       .append(self.declarations.len(), &other.important);

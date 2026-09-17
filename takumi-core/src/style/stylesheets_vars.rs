@@ -147,11 +147,17 @@ fn resolve_var_tokens_into(
 pub(crate) fn resolve_var_references(
   specified_value: &str,
   custom_properties: &CustomProperties,
-  stack: &mut Vec<String>,
 ) -> Option<String> {
   let mut budget = MAX_VAR_OUTPUT_BYTES;
+  let mut stack = Vec::new();
 
-  resolve_var_references_with(specified_value, custom_properties, stack, &mut budget, 0)
+  resolve_var_references_with(
+    specified_value,
+    custom_properties,
+    &mut stack,
+    &mut budget,
+    0,
+  )
 }
 
 fn resolve_var_references_with(
@@ -182,11 +188,9 @@ pub(crate) fn apply_deferred_declaration(
   parent: Option<&ComputedStyle>,
   deferred: &DeferredDeclaration,
 ) -> bool {
-  let Some(resolved_value) = resolve_var_references(
-    &deferred.specified_value,
-    &style.custom_properties,
-    &mut Vec::new(),
-  ) else {
+  let Some(resolved_value) =
+    resolve_var_references(&deferred.specified_value, &style.custom_properties)
+  else {
     return false;
   };
 

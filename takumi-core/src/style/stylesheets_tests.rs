@@ -94,7 +94,7 @@ fn resolve_var(
     properties.set(name.to_owned(), value.to_owned());
   }
 
-  resolve_var_references(specified_value, &properties, &mut Vec::new())
+  resolve_var_references(specified_value, &properties)
 }
 
 #[test]
@@ -1445,7 +1445,7 @@ fn test_var_gives_up_on_exponential_fan_out() {
     );
   }
 
-  let resolved = resolve_var_references("var(--l24)", &custom_properties, &mut Vec::new());
+  let resolved = resolve_var_references("var(--l24)", &custom_properties);
 
   assert_eq!(resolved, None);
 }
@@ -1453,11 +1453,7 @@ fn test_var_gives_up_on_exponential_fan_out() {
 #[test]
 fn test_var_gives_up_on_deeply_nested_blocks() {
   let specified_value = format!("{}1px{}", "(".repeat(200), ")".repeat(200));
-  let resolved = resolve_var_references(
-    &specified_value,
-    &CustomProperties::default(),
-    &mut Vec::new(),
-  );
+  let resolved = resolve_var_references(&specified_value, &CustomProperties::default());
 
   assert_eq!(resolved, None);
 }
