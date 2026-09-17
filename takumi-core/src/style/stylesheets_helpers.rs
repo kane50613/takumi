@@ -315,7 +315,7 @@ pub(crate) fn skip_to_important(parser: &mut Parser<'_, '_>) {
 }
 
 /// The byte index where a trailing `!important` starts, if the value ends with one.
-fn important_start(value: &str) -> Option<usize> {
+pub(crate) fn important_start(value: &str) -> Option<usize> {
   if !value.contains('!') {
     return None;
   }

@@ -288,3 +288,70 @@ fn preflight_keeps_hidden_until_found_visible() {
 
   assert_eq!(result.children[0].width, 256.0);
 }
+
+/// `!important` on a custom property marks the declaration rather than ending
+/// up inside the value, so `var()` substitutes a usable one.
+#[test]
+fn important_custom_property_keeps_its_value() {
+  let result = measure_with_css(
+    Node::container([block("box")]),
+    ".box { --w: 50px !important; width: var(--w); }",
+  );
+  assert_eq!(result.children[0].width, 50.0);
+}
+
+/// An important custom property outranks a normal one of higher specificity,
+/// and loses to an important one of higher specificity.
+#[test]
+fn important_custom_property_takes_part_in_the_cascade() {
+  let beats_specificity = measure_with_css(
+    Node::container([block("box extra")]),
+    r#"
+      .box { --w: 50px !important; }
+      .box.extra { --w: 100px; }
+      .box { width: var(--w); }
+    "#,
+  );
+  assert_eq!(beats_specificity.children[0].width, 50.0);
+
+  let loses_to_specificity = measure_with_css(
+    Node::container([block("box extra")]),
+    r#"
+      .box { --w: 150px !important; }
+      .box.extra { --w: 75px !important; }
+      .box { width: var(--w); }
+    "#,
+  );
+  assert_eq!(loses_to_specificity.children[0].width, 75.0);
+}
+
+/// Important declarations reverse layer order, so a layered one outranks an
+/// unlayered one and an earlier layer outranks a later one.
+#[test]
+fn important_custom_property_reverses_layer_order() {
+  let result = measure_with_css(
+    Node::container([block("box")]),
+    r#"
+      @layer base { .box { --w: 70px !important; } }
+      .box { --w: 140px !important; }
+      .box { width: var(--w); }
+    "#,
+  );
+  assert_eq!(result.children[0].width, 70.0);
+}
+
+/// A custom property keeps its value verbatim, so a `!` that does not start a
+/// trailing `!important` stays in the value and the declaration survives.
+#[test]
+fn a_bang_inside_a_custom_value_is_not_an_importance_marker() {
+  for css in [
+    ".box { --w: 50px !x; width: var(--w, 90px); }",
+    ".box { --w: 50px ! 60px; width: var(--w, 90px); }",
+  ] {
+    let result = measure_with_css(Node::container([block("box")]), css);
+
+    // The name is defined, so the fallback never applies and the substituted
+    // value is not a width.
+    assert_ne!(result.children[0].width, 90.0, "case: {css}");
+  }
+}
