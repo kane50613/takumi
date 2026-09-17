@@ -71,6 +71,7 @@ features = ["from-html", "svg-backend"]
 
 [dev-dependencies.takumi-core]
 path = "../takumi-core"
+features = ["paint-tree"]
 
 [dev-dependencies.takumi-svg]
 path = "../takumi-svg"

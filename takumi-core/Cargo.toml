@@ -125,6 +125,8 @@ svg = [
 ]
 woff2 = ["dep:wuff", "wuff/brotli"]
 woff = ["dep:wuff", "wuff/z"]
+# The paint tree: what the backends paint, as data. Off by default; `takumi-paint` turns it on.
+paint-tree = []
 
 [dev-dependencies]
 serde_json.workspace = true

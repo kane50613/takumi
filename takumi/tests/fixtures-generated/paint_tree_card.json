@@ -1,0 +1,452 @@
+{
+  "width": 600.0,
+  "height": 400.0,
+  "fonts": [
+    {
+      "family": "Geist",
+      "faceIndex": 0,
+      "weight": 700.0,
+      "style": "normal",
+      "width": 100.0,
+      "variations": [
+        {
+          "tag": "wght",
+          "value": 700.0
+        }
+      ]
+    },
+    {
+      "family": "Geist",
+      "faceIndex": 0,
+      "weight": 400.0,
+      "style": "normal",
+      "width": 100.0,
+      "variations": []
+    }
+  ],
+  "root": {
+    "source": {
+      "path": [],
+      "id": "card",
+      "className": "card"
+    },
+    "width": 400.0,
+    "height": 214.0,
+    "transform": [1.0, 0.0, 0.0, 1.0, 0.0, 0.0],
+    "opacity": 1.0,
+    "isolate": false,
+    "clip": {
+      "rect": {
+        "x": 4.0,
+        "y": 4.0,
+        "width": 392.0,
+        "height": 206.0
+      },
+      "radii": [
+        [8.0, 8.0],
+        [8.0, 8.0],
+        [8.0, 8.0],
+        [8.0, 8.0]
+      ],
+      "x": true,
+      "y": true
+    },
+    "boxDecoration": {
+      "background": {
+        "color": [247, 243, 236, 255],
+        "clip": "border-box",
+        "layers": [
+          {
+            "fill": {
+              "kind": "linear",
+              "css": "linear-gradient(to right, rgb(255, 0, 0), rgb(0, 0, 255))",
+              "repeating": false,
+              "dirX": 1.0,
+              "dirY": 4.371139e-8,
+              "axisLength": 392.0,
+              "stops": [
+                {
+                  "color": [255, 0, 0, 255],
+                  "position": 0.0
+                },
+                {
+                  "color": [0, 0, 255, 255],
+                  "position": 392.0
+                }
+              ]
+            },
+            "tiles": {
+              "xs": [-388, 4, 396],
+              "ys": [-202, 4, 210],
+              "width": 392,
+              "height": 206
+            },
+            "blendMode": "normal"
+          }
+        ]
+      },
+      "border": {
+        "widths": [4.0, 4.0, 4.0, 4.0],
+        "colors": [
+          [179, 38, 30, 255],
+          [179, 38, 30, 255],
+          [179, 38, 30, 255],
+          [179, 38, 30, 255]
+        ],
+        "styles": ["solid", "solid", "solid", "solid"],
+        "radii": [
+          [12.0, 12.0],
+          [12.0, 12.0],
+          [12.0, 12.0],
+          [12.0, 12.0]
+        ]
+      },
+      "shadows": {
+        "inset": [
+          {
+            "offsetX": 0.0,
+            "offsetY": 1.0,
+            "blur": 0.0,
+            "spread": 0.0,
+            "color": [255, 255, 255, 255]
+          }
+        ],
+        "outer": [
+          {
+            "offsetX": 0.0,
+            "offsetY": 4.0,
+            "blur": 8.0,
+            "spread": 0.0,
+            "color": [0, 0, 0, 64]
+          }
+        ]
+      },
+      "outline": {
+        "width": 2.0,
+        "color": [0, 128, 0, 255],
+        "style": "dashed",
+        "offset": 3.0
+      }
+    },
+    "children": [
+      {
+        "source": {
+          "path": [0],
+          "className": "big"
+        },
+        "width": 352.0,
+        "height": 52.0,
+        "transform": [1.0, 0.0, 0.0, 1.0, 24.0, 24.0],
+        "opacity": 1.0,
+        "isolate": false,
+        "runs": [
+          {
+            "text": "4,2 %",
+            "x": 0.0,
+            "y": 40.0,
+            "width": 103.92,
+            "ascent": 40.2,
+            "descent": 11.8,
+            "fontIndex": 0,
+            "fontSize": 40.0,
+            "color": [179, 38, 30, 255],
+            "opacity": 1.0,
+            "glyphs": [
+              {
+                "id": 512,
+                "x": 0.0,
+                "y": 0.0
+              },
+              {
+                "id": 607,
+                "x": 26.24,
+                "y": 0.0
+              },
+              {
+                "id": 510,
+                "x": 35.68,
+                "y": 0.0
+              },
+              {
+                "id": 601,
+                "x": 61.8,
+                "y": 0.0
+              },
+              {
+                "id": 727,
+                "x": 70.92,
+                "y": 0.0
+              }
+            ],
+            "decorations": [
+              {
+                "line": "underline",
+                "transform": [1.0, 0.0, 0.0, 1.0, 0.0, 44.0],
+                "width": 24.279562,
+                "height": 4.0,
+                "color": [179, 38, 30, 255]
+              },
+              {
+                "line": "underline",
+                "transform": [1.0, 0.0, 0.0, 1.0, 36.175686, 44.0],
+                "width": 67.82431,
+                "height": 4.0,
+                "color": [179, 38, 30, 255]
+              }
+            ],
+            "textByteRange": [3, 8],
+            "spanId": 1
+          }
+        ]
+      },
+      {
+        "source": {
+          "path": [1],
+          "id": "paragraph",
+          "className": "p"
+        },
+        "width": 352.0,
+        "height": 34.0,
+        "transform": [1.0, 0.0, 0.0, 1.0, 24.0, 76.0],
+        "opacity": 1.0,
+        "isolate": false,
+        "inlineBackgrounds": [
+          {
+            "rect": {
+              "x": 193.544,
+              "y": 0.0,
+              "width": 89.67401,
+              "height": 34.0
+            },
+            "radii": [
+              [0.0, 0.0],
+              [0.0, 0.0],
+              [0.0, 0.0],
+              [0.0, 0.0]
+            ],
+            "color": [255, 255, 0, 255],
+            "opacity": 0.5
+          }
+        ],
+        "runs": [
+          {
+            "text": "hello ",
+            "x": 0.0,
+            "y": 26.0,
+            "width": 64.116,
+            "ascent": 26.130001,
+            "descent": 7.67,
+            "fontIndex": 1,
+            "fontSize": 26.0,
+            "color": [20, 17, 15, 255],
+            "opacity": 1.0,
+            "glyphs": [
+              {
+                "id": 214,
+                "x": 0.0,
+                "y": 0.0
+              },
+              {
+                "id": 194,
+                "x": 14.794001,
+                "y": 0.0
+              },
+              {
+                "id": 235,
+                "x": 29.25,
+                "y": 0.0
+              },
+              {
+                "id": 235,
+                "x": 35.932,
+                "y": 0.0
+              },
+              {
+                "id": 247,
+                "x": 42.718,
+                "y": 0.0
+              },
+              {
+                "id": 601,
+                "x": 57.615997,
+                "y": 0.0
+              }
+            ],
+            "textByteRange": [3, 9],
+            "spanId": 1
+          },
+          {
+            "text": "world",
+            "x": 64.116,
+            "y": 26.0,
+            "width": 71.942,
+            "ascent": 26.130001,
+            "descent": 7.67,
+            "fontIndex": 0,
+            "fontSize": 26.0,
+            "color": [0, 0, 255, 255],
+            "opacity": 1.0,
+            "glyphs": [
+              {
+                "id": 288,
+                "x": 0.0,
+                "y": 0.0
+              },
+              {
+                "id": 247,
+                "x": 21.346,
+                "y": 0.0
+              },
+              {
+                "id": 260,
+                "x": 37.154,
+                "y": 0.0
+              },
+              {
+                "id": 235,
+                "x": 47.58,
+                "y": 0.0
+              },
+              {
+                "id": 190,
+                "x": 55.458,
+                "y": 0.0
+              }
+            ],
+            "textByteRange": [9, 14],
+            "spanId": 2
+          },
+          {
+            "text": " and ",
+            "x": 136.058,
+            "y": 26.0,
+            "width": 57.486,
+            "ascent": 26.130001,
+            "descent": 7.67,
+            "fontIndex": 1,
+            "fontSize": 26.0,
+            "color": [20, 17, 15, 255],
+            "opacity": 1.0,
+            "glyphs": [
+              {
+                "id": 601,
+                "x": 0.0,
+                "y": 0.0
+              },
+              {
+                "id": 171,
+                "x": 6.5,
+                "y": 0.0
+              },
+              {
+                "id": 241,
+                "x": 20.722,
+                "y": 0.0
+              },
+              {
+                "id": 190,
+                "x": 35.516006,
+                "y": 0.0
+              },
+              {
+                "id": 601,
+                "x": 50.986008,
+                "y": 0.0
+              }
+            ],
+            "textByteRange": [14, 19],
+            "spanId": 3
+          },
+          {
+            "text": "marked",
+            "x": 193.544,
+            "y": 26.0,
+            "width": 89.674,
+            "ascent": 26.130001,
+            "descent": 7.67,
+            "fontIndex": 1,
+            "fontSize": 26.0,
+            "color": [20, 17, 15, 255],
+            "opacity": 1.0,
+            "glyphs": [
+              {
+                "id": 240,
+                "x": 0.0,
+                "y": 0.0
+              },
+              {
+                "id": 171,
+                "x": 22.541992,
+                "y": 0.0
+              },
+              {
+                "id": 260,
+                "x": 36.763992,
+                "y": 0.0
+              },
+              {
+                "id": 232,
+                "x": 45.837997,
+                "y": 0.0
+              },
+              {
+                "id": 194,
+                "x": 59.87799,
+                "y": 0.0
+              },
+              {
+                "id": 190,
+                "x": 74.20398,
+                "y": 0.0
+              }
+            ],
+            "textByteRange": [19, 25],
+            "spanId": 4
+          }
+        ]
+      },
+      {
+        "source": {
+          "path": [2],
+          "className": "pic"
+        },
+        "width": 120.0,
+        "height": 80.0,
+        "transform": [1.0, 0.0, 0.0, 1.0, 24.0, 110.0],
+        "opacity": 1.0,
+        "isolate": false,
+        "image": {
+          "src": "assets/images/yeecord.png",
+          "contentBox": {
+            "x": 0.0,
+            "y": 0.0,
+            "width": 120.0,
+            "height": 80.0
+          },
+          "placement": {
+            "x": 0.0,
+            "y": -20.0,
+            "width": 120.0,
+            "height": 120.0
+          }
+        }
+      },
+      {
+        "source": {
+          "path": [3],
+          "className": "glass"
+        },
+        "width": 352.0,
+        "height": 0.0,
+        "transform": [1.0, 0.0, 0.0, 1.0, 24.0, 190.0],
+        "opacity": 1.0,
+        "blendMode": "multiply",
+        "isolate": false,
+        "unresolvedEffects": {
+          "filter": "blur(2px)",
+          "clipPath": "circle(40%)"
+        }
+      }
+    ]
+  }
+}

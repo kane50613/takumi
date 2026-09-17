@@ -239,6 +239,9 @@ pub struct Fonts {
   last_resort_order: Vec<String>,
   /// Families with at least one face carrying a color glyph table.
   color_names: HashSet<String>,
+  /// Registered family name of every face, keyed by font blob id and collection index.
+  #[cfg(feature = "paint-tree")]
+  face_families: Arc<HashMap<(u64, u32), String>>,
   /// Lazily built face store for SVG `<text>`; cleared on registration.
   #[cfg(feature = "svg")]
   svg_db: Option<Arc<crate::resvg::usvg::fontdb::Database>>,
@@ -262,6 +265,8 @@ impl Default for Fonts {
       order: Vec::new(),
       last_resort_order: Vec::new(),
       color_names: HashSet::new(),
+      #[cfg(feature = "paint-tree")]
+      face_families: Arc::new(HashMap::new()),
       #[cfg(feature = "svg")]
       svg_db: None,
       revision: 0,
@@ -279,6 +284,16 @@ pub struct FontsSnapshot {
 }
 
 impl FontsSnapshot {
+  /// The registered family name of a face; see [`Fonts::face_family`].
+  #[cfg(feature = "paint-tree")]
+  pub(crate) fn face_family(&self, font_id: u64, index: u32) -> Option<String> {
+    self
+      .context
+      .borrow()
+      .face_family(font_id, index)
+      .map(str::to_owned)
+  }
+
   /// Mutable access to the render-local parley context. Callers must not re-enter while the
   /// borrow is held (layout measures inline boxes before building the parley tree).
   pub(crate) fn with_context<R>(&self, f: impl FnOnce(&mut Fonts) -> R) -> R {
@@ -440,6 +455,16 @@ impl Fonts {
     self.snapshot_with_fallbacks(None)
   }
 
+  /// The registered family name of a face, by the font blob id and collection index a
+  /// shaped run reports.
+  #[cfg(feature = "paint-tree")]
+  pub(crate) fn face_family(&self, font_id: u64, index: u32) -> Option<&str> {
+    self
+      .face_families
+      .get(&(font_id, index))
+      .map(String::as_str)
+  }
+
   /// Render-local snapshot whose fallback bucket carries the given families.
   pub fn snapshot_with_fallbacks(&self, fallbacks: Option<&FontFamily>) -> FontsSnapshot {
     let mut cloned = self.inner.clone();
@@ -502,6 +527,8 @@ impl Fonts {
         order: self.order.clone(),
         last_resort_order: self.last_resort_order.clone(),
         color_names: self.color_names.clone(),
+        #[cfg(feature = "paint-tree")]
+        face_families: self.face_families.clone(),
         #[cfg(feature = "svg")]
         svg_db: self.svg_db.clone(),
         revision: self.revision,
@@ -606,7 +633,7 @@ impl Fonts {
       let is_color = faces.iter().any(|face| {
         FontRef::from_index(blob.data(), face.index()).is_ok_and(|font| has_color_table(&font))
       });
-      let faces = faces
+      let faces: Vec<RegisteredFace> = faces
         .iter()
         .map(|face| RegisteredFace {
           weight: face.weight().value(),
@@ -634,6 +661,13 @@ impl Fonts {
 
       if is_color {
         self.color_names.insert(name.clone());
+      }
+      #[cfg(feature = "paint-tree")]
+      {
+        let face_families = Arc::make_mut(&mut self.face_families);
+        for face in &faces {
+          face_families.insert((blob.id(), face.index), name.clone());
+        }
       }
 
       if let Some(logical) = &subset_of {
