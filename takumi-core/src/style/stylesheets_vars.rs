@@ -1,9 +1,9 @@
-use std::{borrow::Cow, collections::HashMap};
+use std::borrow::Cow;
 
 use cssparser::{Parser, ParserInput, Token};
 
 use super::DeferredDeclaration;
-use crate::style::{ComputedStyle, CssInput};
+use crate::style::{ComputedStyle, CssInput, CustomProperties};
 
 // Block nesting recurses here where Blink's tokenizer iterates, so it needs a
 // depth of its own; the value follows Blink's `kMaxExpressionDepth`.
@@ -22,7 +22,7 @@ fn charge(budget: &mut usize, bytes: usize) -> Option<()> {
 
 fn resolve_var_function(
   input: &mut Parser<'_, '_>,
-  custom_properties: &HashMap<String, String>,
+  custom_properties: &CustomProperties,
   stack: &mut Vec<String>,
   budget: &mut usize,
   depth: u32,
@@ -63,7 +63,7 @@ fn resolve_var_function(
 
 fn resolve_var_tokens_into(
   input: &mut Parser<'_, '_>,
-  custom_properties: &HashMap<String, String>,
+  custom_properties: &CustomProperties,
   stack: &mut Vec<String>,
   budget: &mut usize,
   depth: u32,
@@ -146,17 +146,23 @@ fn resolve_var_tokens_into(
 
 pub(crate) fn resolve_var_references(
   specified_value: &str,
-  custom_properties: &HashMap<String, String>,
-  stack: &mut Vec<String>,
+  custom_properties: &CustomProperties,
 ) -> Option<String> {
   let mut budget = MAX_VAR_OUTPUT_BYTES;
+  let mut stack = Vec::new();
 
-  resolve_var_references_with(specified_value, custom_properties, stack, &mut budget, 0)
+  resolve_var_references_with(
+    specified_value,
+    custom_properties,
+    &mut stack,
+    &mut budget,
+    0,
+  )
 }
 
 fn resolve_var_references_with(
   specified_value: &str,
-  custom_properties: &HashMap<String, String>,
+  custom_properties: &CustomProperties,
   stack: &mut Vec<String>,
   budget: &mut usize,
   depth: u32,
@@ -182,11 +188,9 @@ pub(crate) fn apply_deferred_declaration(
   parent: Option<&ComputedStyle>,
   deferred: &DeferredDeclaration,
 ) -> bool {
-  let Some(resolved_value) = resolve_var_references(
-    &deferred.specified_value,
-    &style.custom_properties,
-    &mut Vec::new(),
-  ) else {
+  let Some(resolved_value) =
+    resolve_var_references(&deferred.specified_value, &style.custom_properties)
+  else {
     return false;
   };
 

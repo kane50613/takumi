@@ -1,6 +1,5 @@
 use std::{
-  borrow::Cow, collections::HashMap, iter::Copied, mem::take, rc::Rc, slice, sync::Arc,
-  vec::IntoIter,
+  borrow::Cow, collections::HashMap, iter::Copied, mem::take, rc::Rc, slice, vec::IntoIter,
 };
 
 use parley::fontique::Attributes;
@@ -397,25 +396,9 @@ fn registered_custom_property_parent_style<'a>(
         continue;
       }
 
-      let registered = Arc::make_mut(&mut adjusted_parent.registered_custom_properties);
-      let custom = Arc::make_mut(&mut adjusted_parent.custom_properties);
-
-      registered.insert(property_rule.name.clone(), property_rule.clone());
-
-      if property_rule.inherits {
-        if let Some(parent_value) = parent_style.custom_properties.get(&property_rule.name) {
-          custom.insert(property_rule.name.clone(), parent_value.clone());
-        } else if let Some(initial_value) = &property_rule.initial_value {
-          custom.insert(property_rule.name.clone(), initial_value.clone());
-        } else {
-          custom.remove(&property_rule.name);
-        }
-      } else {
-        custom.remove(&property_rule.name);
-        if let Some(initial_value) = &property_rule.initial_value {
-          custom.insert(property_rule.name.clone(), initial_value.clone());
-        }
-      }
+      adjusted_parent
+        .custom_properties
+        .register_in_scope(property_rule, &parent_style.custom_properties);
     }
   }
 
@@ -2314,7 +2297,7 @@ impl RenderContext {
 
 #[cfg(test)]
 mod tests {
-  use std::{str::FromStr, sync::Arc};
+  use std::str::FromStr;
 
   use taffy::NodeId as TaffyNodeId;
 
@@ -2414,7 +2397,9 @@ mod tests {
   #[test]
   fn registered_custom_property_can_disable_inheritance() {
     let mut parent = ComputedStyle::default();
-    Arc::make_mut(&mut parent.custom_properties).insert("--box-size".to_owned(), "50px".to_owned());
+    parent
+      .custom_properties
+      .set("--box-size".to_owned(), "50px".to_owned());
 
     let stylesheets = [StyleSheet::from(vec![PropertyRule {
       name: "--box-size".to_owned(),
@@ -2428,7 +2413,7 @@ mod tests {
       registered_custom_property_parent_style(&parent, &stylesheets, Viewport::default());
     assert_eq!(
       adjusted_parent.custom_properties.get("--box-size"),
-      Some(&"10px".to_owned())
+      Some("10px")
     );
   }
 
@@ -2451,14 +2436,16 @@ mod tests {
 
     assert_eq!(
       child.custom_properties.get("--tw-gradient-from-position"),
-      Some(&"0%".to_owned())
+      Some("0%")
     );
   }
 
   #[test]
   fn registered_custom_property_preserves_parent_value_when_inheriting() {
     let mut parent = ComputedStyle::default();
-    Arc::make_mut(&mut parent.custom_properties).insert("--box-size".to_owned(), "50px".to_owned());
+    parent
+      .custom_properties
+      .set("--box-size".to_owned(), "50px".to_owned());
 
     let stylesheets = [StyleSheet::from(vec![PropertyRule {
       name: "--box-size".to_owned(),
@@ -2472,7 +2459,7 @@ mod tests {
       registered_custom_property_parent_style(&parent, &stylesheets, Viewport::default());
     assert_eq!(
       adjusted_parent.custom_properties.get("--box-size"),
-      Some(&"50px".to_owned())
+      Some("50px")
     );
   }
 
@@ -2492,7 +2479,7 @@ mod tests {
       registered_custom_property_parent_style(&parent, &stylesheets, Viewport::default());
     assert_eq!(
       adjusted_parent.custom_properties.get("--box-size"),
-      Some(&"10px".to_owned())
+      Some("10px")
     );
   }
 
@@ -2521,14 +2508,16 @@ mod tests {
       registered_custom_property_parent_style(&parent, &stylesheets, Viewport::default());
     assert_eq!(
       adjusted_parent.custom_properties.get("--box-size"),
-      Some(&"20px".to_owned())
+      Some("20px")
     );
   }
 
   #[test]
   fn registered_custom_property_later_inheriting_rule_restores_parent_value() {
     let mut parent = ComputedStyle::default();
-    Arc::make_mut(&mut parent.custom_properties).insert("--box-size".to_owned(), "50px".to_owned());
+    parent
+      .custom_properties
+      .set("--box-size".to_owned(), "50px".to_owned());
 
     let stylesheets = [StyleSheet::from(vec![
       PropertyRule {
@@ -2551,7 +2540,7 @@ mod tests {
       registered_custom_property_parent_style(&parent, &stylesheets, Viewport::default());
     assert_eq!(
       adjusted_parent.custom_properties.get("--box-size"),
-      Some(&"50px".to_owned())
+      Some("50px")
     );
   }
 
@@ -2602,10 +2591,7 @@ mod tests {
     ));
 
     let resolved = style.inherit(&adjusted_parent);
-    assert_eq!(
-      resolved.custom_properties.get("--box-size"),
-      Some(&"red".to_owned())
-    );
+    assert_eq!(resolved.custom_properties.get("--box-size"), Some("red"));
   }
 
   #[test]
@@ -2628,10 +2614,7 @@ mod tests {
     ));
 
     let resolved = style.inherit(&adjusted_parent);
-    assert_eq!(
-      resolved.custom_properties.get("--box-size"),
-      Some(&"24px".to_owned())
-    );
+    assert_eq!(resolved.custom_properties.get("--box-size"), Some("24px"));
   }
 
   #[test]
@@ -2661,7 +2644,7 @@ mod tests {
     let resolved = style.inherit(&adjusted_parent);
     assert_eq!(
       resolved.custom_properties.get("--box-size"),
-      Some(&"var(--source)".to_owned())
+      Some("var(--source)")
     );
   }
 
@@ -2687,7 +2670,7 @@ mod tests {
     let resolved = style.inherit(&adjusted_parent);
     assert_eq!(
       resolved.custom_properties.get("--display-state"),
-      Some(&"auto".to_owned())
+      Some("auto")
     );
   }
 
@@ -2711,10 +2694,7 @@ mod tests {
     ));
 
     let resolved = style.inherit(&adjusted_parent);
-    assert_eq!(
-      resolved.custom_properties.get("--accent"),
-      Some(&"12px".to_owned())
-    );
+    assert_eq!(resolved.custom_properties.get("--accent"), Some("12px"));
   }
 
   #[test]
@@ -2758,15 +2738,15 @@ mod tests {
     let resolved = style.inherit(&adjusted_parent);
     assert_eq!(
       resolved.custom_properties.get("--fade-duration"),
-      Some(&"2s".to_owned())
+      Some("2s")
     );
     assert_eq!(
       resolved.custom_properties.get("--move"),
-      Some(&"rotate(45deg)".to_owned())
+      Some("rotate(45deg)")
     );
     assert_eq!(
       resolved.custom_properties.get("--bg"),
-      Some(&"url(hero.png)".to_owned())
+      Some("url(hero.png)")
     );
   }
 
@@ -2820,10 +2800,7 @@ mod tests {
     ));
 
     let resolved = style.inherit(&adjusted_parent);
-    assert_eq!(
-      resolved.custom_properties.get("--move"),
-      Some(&"red".to_owned())
-    );
+    assert_eq!(resolved.custom_properties.get("--move"), Some("red"));
   }
 
   #[test]
