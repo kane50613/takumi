@@ -85,26 +85,20 @@ impl CustomProperties {
     }
   }
 
-  /// The properties a child starts from, carrying the registrations forward and
-  /// dropping the values that stop here.
-  pub(crate) fn inherited(&self) -> Self {
-    let registrations = self.registrations.clone();
-
-    if self.element_state.is_empty()
-      && self
+  /// Whether any value here reaches a child as something other than itself.
+  fn changes_on_the_way_down(&self) -> bool {
+    !self.element_state.is_empty()
+      || self
         .registrations
         .values()
-        .all(|rule| rule.inherits || !self.values.contains_key(&rule.name))
-    {
-      return Self {
-        values: self.values.clone(),
-        registrations,
-        element_state: Default::default(),
-      };
-    }
+        .any(|rule| !rule.inherits && self.values.contains_key(&rule.name))
+  }
 
-    Self {
-      values: Arc::new(
+  /// The properties a child starts from: the registrations as they are, and the
+  /// values each rule leaves in reach.
+  pub(crate) fn inherited(&self) -> Self {
+    let values = if self.changes_on_the_way_down() {
+      Arc::new(
         self
           .values
           .iter()
@@ -112,8 +106,14 @@ impl CustomProperties {
             Some((name.clone(), self.inherited_value(name, value)?.to_owned()))
           })
           .collect(),
-      ),
-      registrations,
+      )
+    } else {
+      self.values.clone()
+    };
+
+    Self {
+      values,
+      registrations: self.registrations.clone(),
       element_state: Default::default(),
     }
   }
