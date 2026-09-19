@@ -55,10 +55,10 @@ fn edit_runs_unless(
   edit(tail.as_chunks_mut::<4>().0);
 }
 
-#[cfg(target_arch = "aarch64")]
+#[cfg(all(target_arch = "aarch64", target_endian = "little"))]
 use neon as baseline;
 #[cfg(not(any(
-  target_arch = "aarch64",
+  all(target_arch = "aarch64", target_endian = "little"),
   target_arch = "x86_64",
   all(target_arch = "wasm32", target_feature = "simd128")
 )))]
@@ -89,7 +89,7 @@ pub(crate) mod scalar {
   }
 }
 
-#[cfg(target_arch = "aarch64")]
+#[cfg(all(target_arch = "aarch64", target_endian = "little"))]
 pub(crate) mod neon {
   use std::arch::aarch64::{
     vandq_u8, vld1q_u8, vmaxvq_u32, vminvq_u32, vorrq_u8, vreinterpretq_u32_u8, vshrq_n_u32,
