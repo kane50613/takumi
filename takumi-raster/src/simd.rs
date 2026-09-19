@@ -39,6 +39,10 @@ impl Simd {
 /// non-negative and the scaled index stays below 2^31, which every gradient LUT satisfies.
 pub(crate) use baseline::linear_lut_indices;
 
+/// Four steps of `out = (sum * mul) >> shift; sum += entering - leaving`, returning the
+/// packed outputs and the sum after the fourth step.
+pub(crate) use baseline::slide_box_alpha4;
+
 #[inline(always)]
 fn edit_runs_unless(
   pixels: &mut [u8],
@@ -109,6 +113,24 @@ pub(crate) mod scalar {
   ) -> [u32; 4] {
     projections.map(|projection| lut_index(projection, axis_length, scale, max_index))
   }
+
+  #[inline(always)]
+  pub(crate) fn slide_box_alpha4(
+    mut sum: u32,
+    entering: [u8; 4],
+    leaving: [u8; 4],
+    mul: u32,
+    shift: u32,
+  ) -> ([u8; 4], u32) {
+    let mut out = [0u8; 4];
+
+    for lane in 0..4 {
+      out[lane] = ((sum * mul) >> shift) as u8;
+      sum = sum + entering[lane] as u32 - leaving[lane] as u32;
+    }
+
+    (out, sum)
+  }
 }
 
 #[cfg(all(target_arch = "aarch64", target_endian = "little"))]
@@ -154,6 +176,37 @@ pub(crate) mod neon {
       let mut out = [0u32; 4];
       vst1q_u32(out.as_mut_ptr(), indices);
       out
+    }
+  }
+
+  #[inline(always)]
+  pub(crate) fn slide_box_alpha4(
+    sum: u32,
+    entering: [u8; 4],
+    leaving: [u8; 4],
+    mul: u32,
+    shift: u32,
+  ) -> ([u8; 4], u32) {
+    // SAFETY: NEON is baseline on aarch64; every load and store uses an owned array.
+    unsafe {
+      let widen = |bytes: [u8; 4]| {
+        vmovl_u16(vget_low_u16(vmovl_u8(vcreate_u8(
+          u32::from_le_bytes(bytes) as u64,
+        ))))
+      };
+
+      let zero = vdupq_n_u32(0);
+      let delta = vsubq_u32(widen(entering), widen(leaving));
+      let scan = vaddq_u32(delta, vextq_u32::<3>(zero, delta));
+      let scan = vaddq_u32(scan, vextq_u32::<2>(zero, scan));
+      let sums = vaddq_u32(vdupq_n_u32(sum), vextq_u32::<3>(zero, scan));
+      let packed = vshlq_u32(vmulq_n_u32(sums, mul), vdupq_n_s32(-(shift as i32)));
+      let mut lanes = [0u32; 4];
+      vst1q_u32(lanes.as_mut_ptr(), packed);
+      (
+        lanes.map(|lane| lane as u8),
+        sum.wrapping_add(vgetq_lane_u32::<3>(scan)),
+      )
     }
   }
 }
@@ -213,6 +266,41 @@ pub(crate) mod simd128 {
       out
     }
   }
+
+  #[inline(always)]
+  pub(crate) fn slide_box_alpha4(
+    sum: u32,
+    entering: [u8; 4],
+    leaving: [u8; 4],
+    mul: u32,
+    shift: u32,
+  ) -> ([u8; 4], u32) {
+    let widen = |bytes: [u8; 4]| {
+      u32x4(
+        bytes[0] as u32,
+        bytes[1] as u32,
+        bytes[2] as u32,
+        bytes[3] as u32,
+      )
+    };
+
+    let zero = u32x4_splat(0);
+    let delta = u32x4_sub(widen(entering), widen(leaving));
+    let scan = u32x4_add(delta, u32x4_shuffle::<4, 0, 1, 2>(delta, zero));
+    let scan = u32x4_add(scan, u32x4_shuffle::<4, 5, 0, 1>(scan, zero));
+    let sums = u32x4_add(u32x4_splat(sum), u32x4_shuffle::<4, 0, 1, 2>(scan, zero));
+    let packed = u32x4_shr(u32x4_mul(sums, u32x4_splat(mul)), shift);
+    let lanes = [
+      u32x4_extract_lane::<0>(packed),
+      u32x4_extract_lane::<1>(packed),
+      u32x4_extract_lane::<2>(packed),
+      u32x4_extract_lane::<3>(packed),
+    ];
+    (
+      lanes.map(|lane| lane as u8),
+      sum.wrapping_add(u32x4_extract_lane::<3>(scan)),
+    )
+  }
 }
 
 #[cfg(target_arch = "x86_64")]
@@ -268,6 +356,44 @@ pub(crate) mod sse2 {
       let mut rounded = [0f32; 4];
       _mm_storeu_ps(rounded.as_mut_ptr(), _mm_add_ps(truncated, round_up));
       rounded.map(|value| (value as u32).min(max_index))
+    }
+  }
+
+  #[inline(always)]
+  pub(crate) fn slide_box_alpha4(
+    sum: u32,
+    entering: [u8; 4],
+    leaving: [u8; 4],
+    mul: u32,
+    shift: u32,
+  ) -> ([u8; 4], u32) {
+    // SAFETY: SSE2 is baseline on x86_64; every load and store uses an owned array.
+    unsafe {
+      let widen = |bytes: [u8; 4]| {
+        let zero = _mm_setzero_si128();
+        _mm_unpacklo_epi16(
+          _mm_unpacklo_epi8(_mm_cvtsi32_si128(u32::from_le_bytes(bytes) as i32), zero),
+          zero,
+        )
+      };
+
+      let delta = _mm_sub_epi32(widen(entering), widen(leaving));
+      let scan = _mm_add_epi32(delta, _mm_slli_si128::<4>(delta));
+      let scan = _mm_add_epi32(scan, _mm_slli_si128::<8>(scan));
+      let sums = _mm_add_epi32(_mm_set1_epi32(sum as i32), _mm_slli_si128::<4>(scan));
+      let factor = _mm_set1_epi32(mul as i32);
+      let even = _mm_mul_epu32(sums, factor);
+      let odd = _mm_mul_epu32(_mm_srli_epi64::<32>(sums), factor);
+      let products = _mm_unpacklo_epi32(
+        _mm_shuffle_epi32::<0b10_00_10_00>(even),
+        _mm_shuffle_epi32::<0b10_00_10_00>(odd),
+      );
+      let packed = _mm_srl_epi32(products, _mm_cvtsi32_si128(shift as i32));
+      let mut lanes = [0u32; 4];
+      _mm_storeu_si128(lanes.as_mut_ptr() as *mut __m128i, packed);
+      let mut scanned = [0u32; 4];
+      _mm_storeu_si128(scanned.as_mut_ptr() as *mut __m128i, scan);
+      (lanes.map(|lane| lane as u8), sum.wrapping_add(scanned[3]))
     }
   }
 }
@@ -408,6 +534,35 @@ mod tests {
         scalar::linear_lut_indices(projections, 2000.0, scale, 1023),
         "{projections:?}"
       );
+    }
+  }
+
+  #[test]
+  fn baseline_slide_box_alpha4_matches_scalar() {
+    let mut state = 0x2545_F491u32;
+    let mut next = || {
+      state ^= state << 13;
+      state ^= state >> 17;
+      state ^= state << 5;
+      state
+    };
+
+    for radius in [1u32, 4, 25, 200] {
+      let div = 2 * radius + 1;
+      let mul = ((1u64 << 23) as f64 / div as f64).round() as u32;
+
+      for _ in 0..20_000 {
+        let entering = next().to_le_bytes();
+        let leaving = next().to_le_bytes();
+        let window_floor = leaving.iter().map(|&b| b as u32).sum::<u32>();
+        let headroom = (255 * div).saturating_sub(window_floor).max(1);
+        let sum = window_floor + next() % headroom;
+        assert_eq!(
+          baseline::slide_box_alpha4(sum, entering, leaving, mul, 23),
+          scalar::slide_box_alpha4(sum, entering, leaving, mul, 23),
+          "sum={sum} entering={entering:?} leaving={leaving:?} radius={radius}"
+        );
+      }
     }
   }
 
