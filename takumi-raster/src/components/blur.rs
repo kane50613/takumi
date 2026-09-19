@@ -411,67 +411,19 @@ fn box_blur_h_rgba(src: &[[u8; 4]], dst: &mut [[u8; 4]], params: BlurPassParams)
   }
 }
 
-fn box_blur_v_rgba(
-  src: &[[u8; 4]],
-  dst: &mut [[u8; 4]],
-  params: BlurPassParams,
-  sum_bytes: &mut [u32],
-) {
-  let radius = params.radius as usize;
-  let width = params.width as usize;
-  let height = params.height as usize;
-  let mul = params.mul_val;
-  let shift = params.shg;
-  let k = radius as u32 + 1;
-
-  let sums: &mut [[u32; 4]] = bytemuck::cast_slice_mut(sum_bytes);
-  let sums = &mut sums[..width];
-
-  for x in 0..width {
-    sums[x] = scale_pixel(src[x], k);
-  }
-  for dy in 1..=radius {
-    let py = dy.min(height - 1);
-    let row = &src[py * width..py * width + width];
-    for x in 0..width {
-      sums[x] = add_pixel(sums[x], widen_pixel(row[x]));
-    }
-  }
-
-  let left_end = (radius + 1).min(height);
-  let first_row_start = 0;
-  for y in 0..left_end {
-    let entering_y = (y + radius + 1).min(height - 1);
-    let entering_row = &src[entering_y * width..entering_y * width + width];
-    let leaving_row = &src[first_row_start..first_row_start + width];
-    let dst_row = &mut dst[y * width..y * width + width];
-    for x in 0..width {
-      dst_row[x] = pack_pixel(sums[x], mul, shift);
-      sums[x] = slide_pixel(sums[x], entering_row[x], leaving_row[x]);
-    }
-  }
-
-  let middle_end = height.saturating_sub(radius + 1).max(left_end);
-  for y in left_end..middle_end {
-    let entering_row = &src[(y + radius + 1) * width..(y + radius + 1) * width + width];
-    let leaving_row = &src[(y - radius) * width..(y - radius) * width + width];
-    let dst_row = &mut dst[y * width..y * width + width];
-    for x in 0..width {
-      dst_row[x] = pack_pixel(sums[x], mul, shift);
-      sums[x] = slide_pixel(sums[x], entering_row[x], leaving_row[x]);
-    }
-  }
-
-  let last_row_start = (height - 1) * width;
-  let last_row = &src[last_row_start..last_row_start + width];
-  for y in middle_end..height {
-    let leaving_row = &src[(y - radius) * width..(y - radius) * width + width];
-    let dst_row = &mut dst[y * width..y * width + width];
-    for x in 0..width {
-      dst_row[x] = pack_pixel(sums[x], mul, shift);
-      sums[x] = slide_pixel(sums[x], last_row[x], leaving_row[x]);
-    }
-  }
+/// The vertical pass treats a row as `width * 4` independent bytes, since each
+/// channel slides the same window down its own column.
+fn box_blur_v_rgba(src: &[[u8; 4]], dst: &mut [[u8; 4]], params: BlurPassParams, sums: &mut [u32]) {
+  let flat = BlurPassParams {
+    width: params.width * 4,
+    ..params
+  };
+  box_blur_v_alpha(
+    bytemuck::cast_slice(src),
+    bytemuck::cast_slice_mut(dst),
+    flat,
+    sums,
+  );
 }
 
 #[inline(always)]
