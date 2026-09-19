@@ -1,9 +1,11 @@
+use std::ops::Range;
+
 use takumi_core::geometry::Point;
 use tiny_skia::PixmapMut;
 
 use super::{
   MaskSamplingOptions, MaskView, PaintSource, SamplingFootprint,
-  blit::{OverlayBounds, compute_overlay_bounds_for_canvas},
+  blit::{OverlayBounds, apply_mask_row, compute_overlay_bounds_for_canvas},
   mask::MaskRow,
   paint_source::{
     MaskCompositeColor, ResolvedSource, ScaledRows, apply_mask_color_mode, sample_paint_source,
@@ -20,6 +22,25 @@ struct DestRegion {
   bounds: OverlayBounds,
   canvas_width: usize,
   mask_stride: usize,
+}
+
+impl DestRegion {
+  fn span(&self) -> usize {
+    (self.bounds.x_max - self.bounds.x_min) as usize
+  }
+
+  fn dst_row(&self, dest_y: i32) -> Range<usize> {
+    let start = dest_y as usize * self.canvas_width + self.bounds.x_min as usize;
+
+    start..start + self.span()
+  }
+
+  fn mask_row(&self, dest_y: i32) -> Range<usize> {
+    let start = (dest_y - self.bounds.offset_y) as usize * self.mask_stride
+      + (self.bounds.x_min - self.bounds.offset_x) as usize;
+
+    start..start + self.span()
+  }
 }
 
 #[derive(Clone, Copy)]
@@ -126,27 +147,17 @@ pub(super) fn source(
 
 #[inline]
 fn constant_normal(pixels: &mut [[u8; 4]], mask: &[u8], color: [u8; 4], region: DestRegion) {
-  let DestRegion {
-    bounds,
-    canvas_width,
-    mask_stride,
-  } = region;
-  let span = (bounds.x_max - bounds.x_min) as usize;
-
-  for dest_y in bounds.y_min..bounds.y_max {
-    let mask_y = (dest_y - bounds.offset_y) as usize;
-    let mask_x = (bounds.x_min - bounds.offset_x) as usize;
-    let dst_row_start = dest_y as usize * canvas_width + bounds.x_min as usize;
-    let mask_row_start = mask_y * mask_stride + mask_x;
-
-    let dst = &mut pixels[dst_row_start..dst_row_start + span];
-    let mask_row = &mask[mask_row_start..mask_row_start + span];
+  for dest_y in region.bounds.y_min..region.bounds.y_max {
+    let dst = &mut pixels[region.dst_row(dest_y)];
+    let mask_row = &mask[region.mask_row(dest_y)];
 
     for (dst_px, &alpha) in dst.iter_mut().zip(mask_row) {
       if alpha == 0 {
         continue;
       }
+
       let src = scale_premultiplied_pixel(color, alpha);
+
       if src[3] != 0 {
         composite_premultiplied_over(dst_px, src);
       }
@@ -220,39 +231,28 @@ fn try_translation_blit(
     return false;
   };
 
-  let DestRegion {
-    bounds,
-    canvas_width,
-    mask_stride,
-  } = region;
+  let bounds = region.bounds;
   let source_width = source_pixmap.width() as i32;
   let source_height = source_pixmap.height() as i32;
   let source_pixels = source_pixmap.pixels();
   let pixels: &mut [[u8; 4]] = bytemuck::cast_slice_mut(pixmap.pixels_mut());
   let sample_dx = transform.x as i32;
   let sample_dy = transform.y as i32;
-  let span = (bounds.x_max - bounds.x_min) as usize;
 
   for dest_y in bounds.y_min..bounds.y_max {
     let src_y = dest_y + sample_dy;
+
     if src_y < 0 || src_y >= source_height {
       continue;
     }
-    let mask_y = (dest_y - bounds.offset_y) as usize;
-    let mask_x_start = (bounds.x_min - bounds.offset_x) as usize;
-    let mask_row =
-      &mask[mask_y * mask_stride + mask_x_start..mask_y * mask_stride + mask_x_start + span];
 
+    let mask_row = &mask[region.mask_row(dest_y)];
     let combined_row = options
       .combined_mask
       .as_ref()
       .map(|view| view.row(dest_y, bounds.x_min));
-
     let src_row_offset = src_y as usize * source_width as usize;
-    let dst_row_offset = dest_y as usize * canvas_width;
-    let dst_row = &mut pixels
-      [dst_row_offset + bounds.x_min as usize..dst_row_offset + bounds.x_min as usize + span];
-
+    let dst_row = &mut pixels[region.dst_row(dest_y)];
     let src_x_base = bounds.x_min + sample_dx;
     for (i, (dst, &mask_alpha)) in dst_row.iter_mut().zip(mask_row).enumerate() {
       if mask_alpha == 0 {
@@ -312,29 +312,27 @@ fn source_general(
   options: &Options<'_>,
   region: DestRegion,
 ) {
-  let DestRegion {
-    bounds,
-    canvas_width,
-    mask_stride,
-  } = region;
-  let transform = options.sampling.canvas_to_source;
+  let bounds = region.bounds;
   let bias = options.sampling.sample_bias;
+  let resolved = source.resolve();
 
   if let Some(rows) = ScaledRows::new(
-    source,
-    transform,
+    resolved,
+    options.sampling.canvas_to_source,
     options.sampling.algorithm,
     bounds.x_min as f32 + bias.x,
-    (bounds.x_max - bounds.x_min) as usize,
+    region.span(),
   ) {
     source_scaled_rows(pixmap, mask, &rows, options, region);
+
     return;
   }
 
   let pixels: &mut [[u8; 4]] = bytemuck::cast_slice_mut(pixmap.pixels_mut());
+
   PixelSampler {
-    resolved: source.resolve(),
-    transform,
+    resolved,
+    transform: options.sampling.canvas_to_source,
     algorithm: options.sampling.algorithm,
     color_mode: options.color_mode,
     mode: options.mode,
@@ -342,17 +340,19 @@ fn source_general(
   }
   .sample_into(
     pixels,
-    canvas_width,
+    region.canvas_width,
     bounds,
-    |dest_y| transform.transform_point(bounds.x_min as f32 + bias.x, dest_y as f32 + bias.y),
-    |dest_y, dest_x| {
-      mask[(dest_y - bounds.offset_y) as usize * mask_stride + (dest_x - bounds.offset_x) as usize]
+    |dest_y| {
+      options
+        .sampling
+        .canvas_to_source
+        .transform_point(bounds.x_min as f32 + bias.x, dest_y as f32 + bias.y)
     },
+    |dest_y, dest_x| mask[region.mask_row(dest_y).start + (dest_x - bounds.x_min) as usize],
   );
 }
 
-/// The per-pixel sampler behind every transform `ScaledRows` does not cover:
-/// each destination pixel inverse-maps and interpolates on its own.
+/// Per-pixel sampling from a transformed row start and per-pixel increments.
 pub(super) struct PixelSampler<'a> {
   pub resolved: ResolvedSource<'a>,
   pub transform: Affine,
@@ -374,6 +374,7 @@ impl PixelSampler<'_> {
     mask_alpha: impl Fn(i32, i32) -> u8,
   ) {
     let footprint = SamplingFootprint::of(self.transform);
+
     for dest_y in bounds.y_min..bounds.y_max {
       let combined_row = self
         .combined_mask
@@ -384,6 +385,7 @@ impl PixelSampler<'_> {
 
       let dst_row = dest_y as usize * canvas_width;
       let (mut sample_x, mut sample_y) = row_start(dest_y);
+
       for (i, dest_x) in (bounds.x_min..bounds.x_max).enumerate() {
         let mask_alpha = mask_alpha(dest_y, dest_x);
         let sampled = if mask_alpha == 0 {
@@ -391,6 +393,7 @@ impl PixelSampler<'_> {
         } else {
           sample_paint_source(self.resolved, self.algorithm, sample_x, sample_y, footprint)
         };
+
         sample_x += self.transform.a;
         sample_y += self.transform.b;
 
@@ -410,7 +413,6 @@ impl PixelSampler<'_> {
   }
 }
 
-/// An axis-aligned, non-minifying bitmap sampled a row at a time.
 fn source_scaled_rows(
   pixmap: &mut PixmapMut<'_>,
   mask: &[u8],
@@ -418,35 +420,29 @@ fn source_scaled_rows(
   options: &Options<'_>,
   region: DestRegion,
 ) {
-  let DestRegion {
-    bounds,
-    canvas_width,
-    mask_stride,
-  } = region;
-  let bias = options.sampling.sample_bias;
-  let span = (bounds.x_max - bounds.x_min) as usize;
-  let mut row = vec![[0u8; 4]; span];
+  let bounds = region.bounds;
+  let mut row = vec![[0u8; 4]; region.span()];
   let pixels: &mut [[u8; 4]] = bytemuck::cast_slice_mut(pixmap.pixels_mut());
 
   for dest_y in bounds.y_min..bounds.y_max {
     let combined_row = options
       .combined_mask
       .map(|view| view.row(dest_y, bounds.x_min));
+
     if combined_row.is_some_and(|row| row.is_empty()) {
       continue;
     }
 
-    rows.fill(dest_y as f32 + bias.y, &mut row);
-    let mask_y = (dest_y - bounds.offset_y) as usize;
-    let mask_x = (bounds.x_min - bounds.offset_x) as usize;
-    let mask_row = &mask[mask_y * mask_stride + mask_x..mask_y * mask_stride + mask_x + span];
-    let dst_start = dest_y as usize * canvas_width + bounds.x_min as usize;
-    let dst_row = &mut pixels[dst_start..dst_start + span];
+    rows.fill(dest_y as f32 + options.sampling.sample_bias.y, &mut row);
+
+    let mask_row = &mask[region.mask_row(dest_y)];
+    let dst_row = &mut pixels[region.dst_row(dest_y)];
 
     for (i, ((dst, &mask_alpha), &src)) in dst_row.iter_mut().zip(mask_row).zip(&row).enumerate() {
       if mask_alpha == 0 {
         continue;
       }
+
       blend_sampled(
         dst,
         src,
@@ -470,22 +466,15 @@ fn blend_sampled(
   color_mode: MaskCompositeColor,
   mode: BlendMode,
 ) {
-  let mut src = apply_mask_color_mode(src, color_mode);
-  src = scale_premultiplied_pixel(src, mask_alpha);
+  let src = scale_premultiplied_pixel(apply_mask_color_mode(src, color_mode), mask_alpha);
+
   if src[3] == 0 {
     return;
   }
 
-  if let Some(row) = combined_row {
-    let extra = row.alpha_at_offset(offset);
-    if extra == 0 {
-      return;
-    }
-    src = scale_premultiplied_pixel(src, extra);
-    if src[3] == 0 {
-      return;
-    }
-  }
+  let Some(src) = apply_mask_row(src, combined_row, offset) else {
+    return;
+  };
 
   blend_premultiplied_pixel(dst, src, mode);
 }
@@ -499,6 +488,7 @@ mod scaled_rows_tests {
 
   fn source() -> Pixmap {
     let mut source = Pixmap::new(7, 5).unwrap();
+
     for (i, pixel) in source.pixels_mut().iter_mut().enumerate() {
       let alpha = [255u8, 200, 90, 0, 255][i % 5];
       let channel = |k: usize| ((i * 37 + k * 11) % 256) as u8;
@@ -510,6 +500,7 @@ mod scaled_rows_tests {
       )
       .unwrap();
     }
+
     source
   }
 
@@ -521,9 +512,11 @@ mod scaled_rows_tests {
   ) -> Vec<u8> {
     let source = source();
     let mut canvas = Pixmap::new(40, 30).unwrap();
+
     for (i, pixel) in canvas.pixels_mut().iter_mut().enumerate() {
       *pixel = PremultipliedColorU8::from_rgba(0, (i % 100) as u8, 20, 120).unwrap();
     }
+
     let mask: Vec<u8> = (0..36 * 26)
       .map(|i| match i % 7 {
         0 => 0,
@@ -538,6 +531,7 @@ mod scaled_rows_tests {
       width: 36,
       height: 26,
     };
+
     let options = Options {
       placement,
       sampling: MaskSamplingOptions {
@@ -549,21 +543,33 @@ mod scaled_rows_tests {
       mode,
       combined_mask: None,
     };
-    let bounds =
-      compute_overlay_bounds_for_canvas(40, 30, Point { x: 2.0, y: 3.0 }, 36, 26).unwrap();
+
+    let bounds = compute_overlay_bounds_for_canvas(
+      canvas.width(),
+      canvas.height(),
+      Point {
+        x: placement.left as f32,
+        y: placement.top as f32,
+      },
+      placement.width,
+      placement.height,
+    )
+    .unwrap();
     let region = DestRegion {
       bounds,
-      canvas_width: 40,
-      mask_stride: 36,
+      canvas_width: canvas.width() as usize,
+      mask_stride: placement.width as usize,
     };
+
     let mut pixmap = canvas.as_mut();
+
     if scaled {
       let rows = ScaledRows::new(
-        PaintSource::Pixmap(source.as_ref()),
+        PaintSource::Pixmap(source.as_ref()).resolve(),
         transform,
-        ImageScalingAlgorithm::Auto,
+        options.sampling.algorithm,
         bounds.x_min as f32 + 0.5,
-        36,
+        region.span(),
       )
       .unwrap();
       source_scaled_rows(&mut pixmap, &mask, &rows, &options, region);
@@ -572,19 +578,20 @@ mod scaled_rows_tests {
       PixelSampler {
         resolved: PaintSource::Pixmap(source.as_ref()).resolve(),
         transform,
-        algorithm: ImageScalingAlgorithm::Auto,
+        algorithm: options.sampling.algorithm,
         color_mode,
         mode,
         combined_mask: None,
       }
       .sample_into(
         pixels,
-        40,
+        region.canvas_width,
         bounds,
         |dest_y| transform.transform_point(bounds.x_min as f32 + 0.5, dest_y as f32 + 0.5),
-        |dest_y, dest_x| mask[(dest_y - 3) as usize * 36 + (dest_x - 2) as usize],
+        |dest_y, dest_x| mask[region.mask_row(dest_y).start + (dest_x - bounds.x_min) as usize],
       );
     }
+
     canvas.data().to_vec()
   }
 
@@ -607,6 +614,7 @@ mod scaled_rows_tests {
         x,
         y,
       };
+
       for mode in [BlendMode::Normal, BlendMode::Multiply] {
         for color_mode in [
           MaskCompositeColor::SourceOnly,

@@ -142,8 +142,10 @@ fn blit_sampled_paint_source_translation(
   };
 
   let pixels: &mut [[u8; 4]] = bytemuck::cast_slice_mut(pixmap.pixels_mut());
+  let resolved = source.resolve();
+
   if let Some(rows) = ScaledRows::new(
-    source,
+    resolved,
     sampling.logical_to_source,
     sampling.algorithm,
     (bounds.x_min - bounds.offset_x) as f32 + 0.5,
@@ -159,13 +161,13 @@ fn blit_sampled_paint_source_translation(
         rows.fill(src_y as f32 + 0.5, row);
       },
     );
+
     return;
   }
 
-  let transform = sampling.logical_to_source;
   PixelSampler {
-    resolved: source.resolve(),
-    transform,
+    resolved,
+    transform: sampling.logical_to_source,
     algorithm: sampling.algorithm,
     color_mode: MaskCompositeColor::SourceOnly,
     mode,
@@ -176,7 +178,7 @@ fn blit_sampled_paint_source_translation(
     canvas_width as usize,
     bounds,
     |dest_y| {
-      transform.transform_point(
+      sampling.logical_to_source.transform_point(
         (bounds.x_min - bounds.offset_x) as f32 + 0.5,
         (dest_y - bounds.offset_y) as f32 + 0.5,
       )
@@ -185,9 +187,7 @@ fn blit_sampled_paint_source_translation(
   );
 }
 
-/// Walks the destination region row by row, pulling each pixel from `sample`
-/// in source-local coordinates.
-/// Blends `bounds` row by row, asking `fill` for each source row's premultiplied pixels.
+/// Blends `bounds` row by row; `fill` produces each source-local row, premultiplied.
 pub(super) fn blit_rows(
   pixels: &mut [[u8; 4]],
   canvas_width: u32,

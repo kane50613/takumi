@@ -243,7 +243,8 @@ impl<'a> SampledBitmapView<'a> {
       .collect();
 
     Some(BilinearRows {
-      view: *self,
+      source: self.source,
+      logical_height: self.logical_size.height,
       columns,
     })
   }
@@ -251,21 +252,22 @@ impl<'a> SampledBitmapView<'a> {
 
 /// Bilinear sampling of a scaled tile one destination row at a time.
 pub(crate) struct BilinearRows<'a> {
-  view: SampledBitmapView<'a>,
+  source: PixmapRef<'a>,
+  logical_height: u32,
   columns: Vec<BilinearAxis>,
 }
 
 impl BilinearRows<'_> {
-  /// Fills `dst` with destination row `y`, one pixel per column.
   pub(crate) fn fill(&self, y: u32, dst: &mut [[u8; 4]]) {
-    let source = self.view.source;
+    let source_height = self.source.height();
     let row = BilinearAxis::new(
-      (y as f32 + 0.5) * source.height() as f32 / self.view.logical_size.height.max(1) as f32,
-      source.height(),
-    );
-    let (top, bottom) = row.rows(source.pixels(), source.width() as usize);
+      (y as f32 + 0.5) * source_height as f32 / self.logical_height.max(1) as f32,
+      source_height,
+    )
+    .rows(self.source);
+
     for (out, column) in dst.iter_mut().zip(&self.columns) {
-      *out = column.mix(row, top, bottom);
+      *out = column.mix(row);
     }
   }
 }
