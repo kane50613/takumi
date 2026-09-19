@@ -416,13 +416,8 @@ pub(crate) fn attenuate_alpha_by_mask(
       continue;
     }
 
-    for index in 0..width {
-      let mask_alpha = mask_row[index] as u32;
-      if mask_alpha == 0 {
-        continue;
-      }
-      let factor = 255 - mask_alpha;
-      dst_row[index] = fast_div_255(dst_row[index] as u32 * factor);
+    for (alpha, &mask_alpha) in dst_row.iter_mut().zip(mask_row) {
+      *alpha = fast_div_255(*alpha as u32 * (255 - mask_alpha as u32));
     }
   }
 }

@@ -235,16 +235,18 @@ fn find_nonzero_bounds<T>(
     .take(height as usize)
     .enumerate()
   {
-    for (x, pixel) in row.iter().enumerate() {
-      if alpha_of(pixel) == 0 {
-        continue;
-      }
-      has_alpha = true;
-      min_x = min_x.min(x as u32);
-      min_y = min_y.min(y as u32);
-      max_x = max_x.max(x as u32);
-      max_y = max_y.max(y as u32);
-    }
+    let Some(first) = row.iter().position(|pixel| alpha_of(pixel) != 0) else {
+      continue;
+    };
+    let last = row
+      .iter()
+      .rposition(|pixel| alpha_of(pixel) != 0)
+      .unwrap_or(first);
+    has_alpha = true;
+    min_x = min_x.min(first as u32);
+    max_x = max_x.max(last as u32);
+    min_y = min_y.min(y as u32);
+    max_y = y as u32;
   }
 
   has_alpha.then(|| Placement {
