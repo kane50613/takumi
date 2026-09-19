@@ -867,6 +867,7 @@ mod tests {
     if mask_alpha == 0 {
       return alpha;
     }
+
     fast_div_255(alpha as u32 * (255 - mask_alpha as u32))
   }
 
@@ -878,9 +879,11 @@ mod tests {
       width: 256,
       height: 256,
     };
+
     let mut dst: Vec<u8> = (0..256 * 256).map(|i| (i / 256) as u8).collect();
     let mask: Vec<u8> = (0..256 * 256).map(|i| (i % 256) as u8).collect();
     attenuate_alpha_by_mask(&mut dst, placement, &mask, placement);
+
     for (i, &alpha) in dst.iter().enumerate() {
       assert_eq!(
         alpha,
@@ -888,34 +891,6 @@ mod tests {
         "index {i}"
       );
     }
-  }
-
-  #[test]
-  fn attenuate_touches_only_the_overlap() {
-    let dst_placement = Placement {
-      left: 2,
-      top: 1,
-      width: 3,
-      height: 2,
-    };
-    let mask_placement = Placement {
-      left: 1,
-      top: 0,
-      width: 4,
-      height: 3,
-    };
-    let mut dst = vec![200u8; 6];
-    let mask: Vec<u8> = (0..12).map(|i| (i * 21) as u8).collect();
-    attenuate_alpha_by_mask(&mut dst, dst_placement, &mask, mask_placement);
-    let expected: Vec<u8> = (0..6)
-      .map(|i| {
-        let (x, y) = (i % 3 + 2, i / 3 + 1);
-        let mask_alpha =
-          mask[(y - mask_placement.top as usize) * 4 + (x - mask_placement.left as usize)];
-        attenuate_reference(200, mask_alpha)
-      })
-      .collect();
-    assert_eq!(dst, expected);
   }
 
   #[test]

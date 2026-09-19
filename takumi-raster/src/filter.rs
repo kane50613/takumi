@@ -228,7 +228,6 @@ fn find_nonzero_bounds<T>(
   let mut min_y = height;
   let mut max_x = 0;
   let mut max_y = 0;
-  let mut has_alpha = false;
 
   for (y, row) in pixels
     .chunks_exact(width as usize)
@@ -238,18 +237,18 @@ fn find_nonzero_bounds<T>(
     let Some(first) = row.iter().position(|pixel| alpha_of(pixel) != 0) else {
       continue;
     };
+
     let last = row
       .iter()
       .rposition(|pixel| alpha_of(pixel) != 0)
       .unwrap_or(first);
-    has_alpha = true;
     min_x = min_x.min(first as u32);
     max_x = max_x.max(last as u32);
     min_y = min_y.min(y as u32);
     max_y = y as u32;
   }
 
-  has_alpha.then(|| Placement {
+  (min_x < width).then(|| Placement {
     left: min_x as i32,
     top: min_y as i32,
     width: max_x - min_x + 1,
