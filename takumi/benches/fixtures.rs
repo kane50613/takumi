@@ -1,10 +1,11 @@
-use std::hint::black_box;
+use std::{collections::HashMap, hint::black_box, sync::Arc};
 
 use criterion::{Criterion, criterion_group, criterion_main};
 use takumi::{
   prelude::{
     AlignItems, BackgroundClip, BackgroundImages, BackgroundRepeats, BackgroundSizes, BorderRadius,
-    Color, ColorInput, Display, FlexDirection, FontWeight, Fonts, FromCssStr, JustifyContent,
+    Color, ColorInput, Display, FlexDirection, FontWeight, Fonts, FromCssStr, ImageSource,
+    JustifyContent,
     Length::{Percentage, Px},
     Node, ObjectFit, Overflow, PositionValues, RenderOptions, Sides, SpacePair, Style,
     StyleDeclaration, Viewport,
@@ -14,13 +15,12 @@ use takumi::{
 
 const BENCH_WIDTH: u32 = 1200;
 const BENCH_HEIGHT: u32 = 630;
-const IMAGE_PATH: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../assets/images/yeecord.png");
-
-fn render_fixture(fonts: &Fonts, node: Node) {
+fn render_fixture(fonts: &Fonts, images: &HashMap<Arc<str>, ImageSource>, node: Node) {
   let options = RenderOptions::builder()
     .viewport(Viewport::new((BENCH_WIDTH, BENCH_HEIGHT)))
     .node(node)
     .fonts(fonts)
+    .images(images.clone())
     .build();
 
   let image = render(options).unwrap();
@@ -28,7 +28,7 @@ fn render_fixture(fonts: &Fonts, node: Node) {
 }
 
 fn simple_image_blit_fixture() -> Node {
-  Node::image(IMAGE_PATH).with_style(
+  Node::image(common::IMAGE_SRC).with_style(
     Style::default()
       .with(StyleDeclaration::display(Display::Flex))
       .with(StyleDeclaration::width(Percentage(100.0)))
@@ -80,7 +80,7 @@ fn gradient_clip_text_fixture() -> Node {
 
 fn emoji_social_fixture() -> Node {
   Node::container([
-    Node::container([Node::image(IMAGE_PATH).with_style(
+    Node::container([Node::image(common::IMAGE_SRC).with_style(
       Style::default()
         .with(StyleDeclaration::display(Display::Flex))
         .with(StyleDeclaration::width(Px(220.0)))
@@ -135,17 +135,18 @@ fn emoji_social_fixture() -> Node {
 }
 
 fn bench_fixtures(c: &mut Criterion) {
-  let fonts = Fonts::default();
+  let fonts = common::fonts();
+  let images = common::images();
   let mut group = c.benchmark_group("fixtures");
 
   group.bench_function("simple_image_blit", |b| {
-    b.iter(|| render_fixture(&fonts, black_box(simple_image_blit_fixture())))
+    b.iter(|| render_fixture(&fonts, &images, black_box(simple_image_blit_fixture())))
   });
   group.bench_function("gradient_clip_text", |b| {
-    b.iter(|| render_fixture(&fonts, black_box(gradient_clip_text_fixture())))
+    b.iter(|| render_fixture(&fonts, &images, black_box(gradient_clip_text_fixture())))
   });
   group.bench_function("emoji_social", |b| {
-    b.iter(|| render_fixture(&fonts, black_box(emoji_social_fixture())))
+    b.iter(|| render_fixture(&fonts, &images, black_box(emoji_social_fixture())))
   });
 
   group.finish();
