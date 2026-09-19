@@ -103,6 +103,14 @@ pub(crate) mod scalar {
     all >> 24 == 0xFF || any >> 24 == 0
   }
 
+  /// One gradient projection to a LUT index: clamp, scale, round half away
+  /// from zero, clamp to `max_index`.
+  #[inline(always)]
+  pub(crate) fn lut_index(projection: f32, axis_length: f32, scale: f32, max_index: u32) -> u32 {
+    let position = projection.clamp(0.0, axis_length);
+    ((position * scale).round() as u32).min(max_index)
+  }
+
   #[inline(always)]
   pub(crate) fn linear_lut_indices(
     projections: [f32; 4],
@@ -110,10 +118,7 @@ pub(crate) mod scalar {
     scale: f32,
     max_index: u32,
   ) -> [u32; 4] {
-    projections.map(|projection| {
-      let position = projection.clamp(0.0, axis_length);
-      ((position * scale).round() as u32).min(max_index)
-    })
+    projections.map(|projection| lut_index(projection, axis_length, scale, max_index))
   }
 }
 

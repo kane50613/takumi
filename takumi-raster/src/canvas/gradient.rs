@@ -207,10 +207,6 @@ fn overlay_linear_gradient_row_lanes(
   let scale = gradient.position_to_lut_scale;
   let step = gradient.dir_x;
   let src_x_start = (bounds.x_min - bounds.offset_x) as f32;
-  let lut_index = |projection: f32| {
-    let position = projection.clamp(0.0, axis_length);
-    ((position * scale).round() as u32).min(max_index) as usize
-  };
   let row_projection = |dest_y: i32| {
     let src_y = (dest_y - bounds.offset_y) as f32;
     src_x_start * gradient.dir_x + src_y * gradient.dir_y + gradient.projection_bias
@@ -253,7 +249,8 @@ fn overlay_linear_gradient_row_lanes(
     let row = &mut pixels[row_start + x_min..row_start + x_max];
     let mut projection = row_projection(dest_y);
     for pixel in row {
-      *pixel = premultiplied_from_pixel(lut[lut_index(projection)]);
+      let index = simd::scalar::lut_index(projection, axis_length, scale, max_index);
+      *pixel = premultiplied_from_pixel(lut[index as usize]);
       projection += step;
     }
   }
