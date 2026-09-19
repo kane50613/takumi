@@ -12,8 +12,8 @@ use tiny_skia::{IntSize, Pixmap, PixmapMut, PixmapRef, PremultipliedColorU8};
 #[cfg(feature = "svg")]
 use crate::resources::image::RenderedImage;
 use crate::{
-  BorderProperties, DrawTarget, OverlayOptions, PaintSource, RenderContext, Result, RowSource,
-  SamplingFootprint, checked_area, color_to_premultiplied, interpolate_with_footprint,
+  BilinearAxis, BorderProperties, DrawTarget, OverlayOptions, PaintSource, RenderContext, Result,
+  RowSource, SamplingFootprint, checked_area, color_to_premultiplied, interpolate_with_footprint,
   layout::node::resolve_image,
   overlay_image, pixmap_from_buffer, pixmap_ref_from_buffer,
   resources::{image::ImageSource, image_buffer::ImageBuffer},
@@ -235,7 +235,7 @@ impl<'a> SampledBitmapView<'a> {
     let source_width = self.source.width();
     let columns = (x_start..x_start.checked_add(width)?)
       .map(|x| {
-        bilinear_axis(
+        BilinearAxis::new(
           (x as f32 + 0.5) * source_width as f32 / self.logical_size.width.max(1) as f32,
           source_width,
         )
@@ -243,81 +243,31 @@ impl<'a> SampledBitmapView<'a> {
       .collect();
 
     Some(BilinearRows {
-      view: *self,
+      source: self.source,
+      logical_height: self.logical_size.height,
       columns,
     })
   }
 }
 
-#[derive(Clone, Copy)]
-struct BilinearAxis {
-  floor: u32,
-  ceil: u32,
-  ratio: u32,
-}
-
-/// One axis of `interpolate_bilinear`, casts included, so a row fill matches it byte for byte.
-fn bilinear_axis(coord: f32, len: u32) -> BilinearAxis {
-  let last = len.saturating_sub(1);
-  let coord = (coord - 0.5).clamp(0.0, last as f32);
-  let floor = coord.floor() as u32;
-
-  BilinearAxis {
-    floor,
-    ceil: (floor + 1).min(last),
-    ratio: ((coord - floor as f32) * 256.0) as u32,
-  }
-}
-
 /// Bilinear sampling of a scaled tile one destination row at a time.
 pub(crate) struct BilinearRows<'a> {
-  view: SampledBitmapView<'a>,
+  source: PixmapRef<'a>,
+  logical_height: u32,
   columns: Vec<BilinearAxis>,
 }
 
 impl BilinearRows<'_> {
-  /// Fills `dst` with destination row `y`, one pixel per column.
   pub(crate) fn fill(&self, y: u32, dst: &mut [[u8; 4]]) {
-    let source = self.view.source;
-    let width = source.width() as usize;
-    let row = bilinear_axis(
-      (y as f32 + 0.5) * source.height() as f32 / self.view.logical_size.height.max(1) as f32,
-      source.height(),
-    );
-    let pixels = source.pixels();
-    let top = &pixels[row.floor as usize * width..][..width];
-    let bottom = &pixels[row.ceil as usize * width..][..width];
-    let v_opposite = 256 - row.ratio;
+    let source_height = self.source.height();
+    let row = BilinearAxis::new(
+      (y as f32 + 0.5) * source_height as f32 / self.logical_height.max(1) as f32,
+      source_height,
+    )
+    .rows(self.source);
 
     for (out, column) in dst.iter_mut().zip(&self.columns) {
-      let u_opposite = 256 - column.ratio;
-      let weights = [
-        u_opposite * v_opposite,
-        column.ratio * v_opposite,
-        u_opposite * row.ratio,
-        column.ratio * row.ratio,
-      ];
-      let taps = [
-        top[column.floor as usize],
-        top[column.ceil as usize],
-        bottom[column.floor as usize],
-        bottom[column.ceil as usize],
-      ];
-      let mix = |channel: fn(PremultipliedColorU8) -> u8| {
-        let sum: u32 = taps
-          .iter()
-          .zip(weights)
-          .map(|(tap, weight)| channel(*tap) as u32 * weight)
-          .sum();
-        (sum >> 16) as u8
-      };
-
-      *out = [
-        mix(PremultipliedColorU8::red),
-        mix(PremultipliedColorU8::green),
-        mix(PremultipliedColorU8::blue),
-        mix(PremultipliedColorU8::alpha),
-      ];
+      *out = column.mix(row);
     }
   }
 }

@@ -8,9 +8,9 @@ use tiny_skia::{PixmapMut, PremultipliedColorU8};
 use super::{
   DrawTarget, MaskSamplingOptions, MaskView, OverlayOptions, PaintSource, SamplingOptions,
   composite,
-  composite::sampling_footprint,
+  composite::PixelSampler,
   mask::MaskRow,
-  paint_source::{MaskCompositeColor, RowSource, sample_paint_source},
+  paint_source::{MaskCompositeColor, RowSource, ScaledRows},
   skia::{
     FillColorOptions, ImagePathFillOptions, try_draw_image_with_tiny_skia,
     try_fill_color_with_tiny_skia, try_fill_image_path_with_tiny_skia,
@@ -142,40 +142,52 @@ fn blit_sampled_paint_source_translation(
   };
 
   let pixels: &mut [[u8; 4]] = bytemuck::cast_slice_mut(pixmap.pixels_mut());
-  let footprint = sampling_footprint(sampling.logical_to_source);
   let resolved = source.resolve();
-  for dest_y in bounds.y_min..bounds.y_max {
-    let mask_row = combined_mask.map(|view| view.row(dest_y, bounds.x_min));
-    if mask_row.is_some_and(|row| row.is_empty()) {
-      continue;
-    }
 
-    let src_y = (dest_y - bounds.offset_y) as f32;
-    let (mut sample_x, mut sample_y) = sampling
-      .logical_to_source
-      .transform_point((bounds.x_min - bounds.offset_x) as f32 + 0.5, src_y + 0.5);
-    let dst_row = dest_y as usize * canvas_width as usize;
-    for (i, dest_x) in (bounds.x_min..bounds.x_max).enumerate() {
-      let src = sample_paint_source(resolved, sampling.algorithm, sample_x, sample_y, footprint)
-        .unwrap_or([0, 0, 0, 0]);
-      sample_x += sampling.logical_to_source.a;
-      sample_y += sampling.logical_to_source.b;
-      if src[3] == 0 {
-        continue;
-      }
+  if let Some(rows) = ScaledRows::new(
+    resolved,
+    sampling.logical_to_source,
+    sampling.algorithm,
+    (bounds.x_min - bounds.offset_x) as f32 + 0.5,
+    (bounds.x_max - bounds.x_min) as usize,
+  ) {
+    blit_rows(
+      pixels,
+      canvas_width,
+      bounds,
+      mode,
+      combined_mask,
+      |src_y, row| {
+        rows.fill(src_y as f32 + 0.5, row);
+      },
+    );
 
-      let Some(src) = apply_mask_row(src, mask_row, i) else {
-        continue;
-      };
-
-      blend_premultiplied_pixel(&mut pixels[dst_row + dest_x as usize], src, mode);
-    }
+    return;
   }
+
+  PixelSampler {
+    resolved,
+    transform: sampling.logical_to_source,
+    algorithm: sampling.algorithm,
+    color_mode: MaskCompositeColor::SourceOnly,
+    mode,
+    combined_mask,
+  }
+  .sample_into(
+    pixels,
+    canvas_width as usize,
+    bounds,
+    |dest_y| {
+      sampling.logical_to_source.transform_point(
+        (bounds.x_min - bounds.offset_x) as f32 + 0.5,
+        (dest_y - bounds.offset_y) as f32 + 0.5,
+      )
+    },
+    |_, _| u8::MAX,
+  );
 }
 
-/// Walks the destination region row by row, pulling each pixel from `sample`
-/// in source-local coordinates.
-/// Blends `bounds` row by row, asking `fill` for each source row's premultiplied pixels.
+/// Blends `bounds` row by row; `fill` produces each source-local row, premultiplied.
 pub(super) fn blit_rows(
   pixels: &mut [[u8; 4]],
   canvas_width: u32,
