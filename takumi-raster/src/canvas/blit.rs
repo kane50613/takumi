@@ -10,7 +10,7 @@ use super::{
   composite,
   composite::sampling_footprint,
   mask::MaskRow,
-  paint_source::{MaskCompositeColor, RowSource, sample_paint_source},
+  paint_source::{MaskCompositeColor, RowSource, ScaledRows, sample_paint_source},
   skia::{
     FillColorOptions, ImagePathFillOptions, try_draw_image_with_tiny_skia,
     try_fill_color_with_tiny_skia, try_fill_image_path_with_tiny_skia,
@@ -142,6 +142,26 @@ fn blit_sampled_paint_source_translation(
   };
 
   let pixels: &mut [[u8; 4]] = bytemuck::cast_slice_mut(pixmap.pixels_mut());
+  if let Some(rows) = ScaledRows::new(
+    source,
+    sampling.logical_to_source,
+    sampling.algorithm,
+    (bounds.x_min - bounds.offset_x) as f32 + 0.5,
+    (bounds.x_max - bounds.x_min) as usize,
+  ) {
+    blit_rows(
+      pixels,
+      canvas_width,
+      bounds,
+      mode,
+      combined_mask,
+      |src_y, row| {
+        rows.fill(src_y as f32 + 0.5, row);
+      },
+    );
+    return;
+  }
+
   let footprint = sampling_footprint(sampling.logical_to_source);
   let resolved = source.resolve();
   for dest_y in bounds.y_min..bounds.y_max {

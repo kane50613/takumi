@@ -5,7 +5,7 @@ use crate::{
   BackgroundTile, BilinearRows, ColorTile, SampledBitmapView,
   blend::{premultiplied_from_pixel, premultiply_rgba},
   canvas::{checked_area, composite_premultiplied_over},
-  style::{Color, ImageScalingAlgorithm},
+  style::{Affine, Color, ImageScalingAlgorithm},
 };
 
 #[derive(Clone, Copy)]
@@ -300,6 +300,128 @@ pub(super) fn sample_paint_source(
   footprint: SamplingFootprint,
 ) -> Option<[u8; 4]> {
   interpolate_with_footprint(source, algorithm, x, y, footprint).map(premultiplied_from_pixel)
+}
+
+/// One axis of a bilinear lookup, derived the way `interpolate_bilinear` derives it per pixel.
+#[derive(Clone, Copy)]
+struct BilinearTap {
+  floor: usize,
+  ceil: usize,
+  ratio: u32,
+}
+
+impl BilinearTap {
+  fn new(coordinate: f32, extent: u32) -> Self {
+    let last = extent.saturating_sub(1);
+    let clamped = (coordinate - 0.5).clamp(0.0, last as f32);
+    let floor = clamped.floor() as u32;
+    Self {
+      floor: floor as usize,
+      ceil: (floor + 1).min(last) as usize,
+      ratio: ((clamped - floor as f32) * 256.0) as u32,
+    }
+  }
+}
+
+/// Bilinear sampling of an axis-aligned, non-minifying scale, one destination
+/// row at a time. The column taps repeat on every row, so they are derived once;
+/// each row derives only its vertical tap.
+pub(crate) struct ScaledRows<'a> {
+  source: PixmapRef<'a>,
+  transform: Affine,
+  x_start: f32,
+  columns: Vec<BilinearTap>,
+}
+
+impl<'a> ScaledRows<'a> {
+  /// `x_start` is the first destination column in the transform's input space;
+  /// `fill` receives rows in that same space.
+  pub(crate) fn new(
+    source: PaintSource<'a>,
+    transform: Affine,
+    algorithm: ImageScalingAlgorithm,
+    x_start: f32,
+    width: usize,
+  ) -> Option<Self> {
+    let source = source.as_pixmap_ref()?;
+    if transform.b != 0.0
+      || transform.c != 0.0
+      || matches!(algorithm, ImageScalingAlgorithm::Pixelated)
+      || SamplingFootprint::new(
+        transform.a.hypot(transform.b),
+        transform.c.hypot(transform.d),
+      )
+      .is_minifying()
+      || source.width() == 0
+      || source.height() == 0
+    {
+      return None;
+    }
+
+    let (mut sample_x, _) = transform.transform_point(x_start, 0.0);
+    let columns = (0..width)
+      .map(|_| {
+        let tap = BilinearTap::new(sample_x, source.width());
+        sample_x += transform.a;
+        tap
+      })
+      .collect();
+
+    Some(Self {
+      source,
+      transform,
+      x_start,
+      columns,
+    })
+  }
+
+  /// Fills `out` with destination row `y`; a sample that is not a legal
+  /// premultiplied colour comes out fully transparent, as the per-pixel path
+  /// reports it.
+  pub(crate) fn fill(&self, y: f32, out: &mut [[u8; 4]]) {
+    let stride = self.source.width() as usize;
+    let pixels = self.source.pixels();
+    let (_, sample_y) = self.transform.transform_point(self.x_start, y);
+    let row = BilinearTap::new(sample_y, self.source.height());
+    let top = &pixels[row.floor * stride..row.floor * stride + stride];
+    let bottom = &pixels[row.ceil * stride..row.ceil * stride + stride];
+    let v_opposite = 256 - row.ratio;
+
+    for (dst, column) in out.iter_mut().zip(&self.columns) {
+      let u_opposite = 256 - column.ratio;
+      let weights = [
+        u_opposite * v_opposite,
+        column.ratio * v_opposite,
+        u_opposite * row.ratio,
+        column.ratio * row.ratio,
+      ];
+      let taps = [
+        top[column.floor],
+        top[column.ceil],
+        bottom[column.floor],
+        bottom[column.ceil],
+      ];
+      let mix = |channel: fn(PremultipliedColorU8) -> u8| {
+        let sum: u32 = taps
+          .iter()
+          .zip(weights)
+          .map(|(tap, weight)| channel(*tap) as u32 * weight)
+          .sum();
+        (sum >> 16) as u8
+      };
+      let src = [
+        mix(PremultipliedColorU8::red),
+        mix(PremultipliedColorU8::green),
+        mix(PremultipliedColorU8::blue),
+        mix(PremultipliedColorU8::alpha),
+      ];
+      *dst = if src[..3].iter().any(|&channel| channel > src[3]) {
+        [0; 4]
+      } else {
+        src
+      };
+    }
+  }
 }
 
 pub(crate) fn interpolate_with_footprint(
