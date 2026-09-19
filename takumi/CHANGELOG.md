@@ -1,3 +1,85 @@
+## takumi@2.15.0
+
+### Blur shadows faster
+
+The horizontal pass of the alpha box blur slides its window four pixels at a time with NEON, SSE2, or wasm simd128.
+
+### Measure text once per node
+
+Text measurement hashes a node's style once, and a text node's baseline comes from its cached measurement unless a height or line limit clamped it.
+
+### Finish opaque renders faster
+
+The final premultiplied-to-straight alpha pass skips 16-pixel runs that are fully opaque or fully transparent, using NEON, SSE2, AVX2, or wasm simd128 to find them.
+
+### Honour `!important` on a custom property
+
+`--gap: 8px !important` kept the marker inside the value, so `var(--gap)` substituted `8px !important` and every declaration reading it fell over. The marker now marks the declaration, which then takes part in the cascade like any other.
+
+### ⚠️ Reach custom properties through one type on `ComputedStyle`
+
+`ComputedStyle::custom_properties` and `ComputedStyle::registered_custom_properties` are now one `custom_properties: CustomProperties` field. Read a value with `style.custom_properties.get(name)`, which returns `Option<&str>`. Constructing a `ComputedStyle` with `..Default::default()` is unaffected.
+
+### Inherit a `--tw-`prefixed variable the utility engine never wrote
+
+A custom property was dropped from inheritance whenever its name started with `--tw-`. The utility engine now registers the state it writes, so only that state stops at its element and an author's own `--tw-` name inherits like any other.
+
+### Render text-heavy layouts faster
+
+Shaped text is reused across measurement, baseline lookup, and painting. `text-decoration-skip-ink` skips glyphs outside the underline band.
+
+### Render box shadows and backdrop filters faster
+
+Mask attenuation and the shadow bounds scan run without per-pixel branches.
+
+### Size an SVG without the renderer
+
+`svg-sizing` reads an SVG's `width`, `height`, and `viewBox` without the renderer. The `svg` feature includes it.
+
+### Draw scaled images faster
+
+An axis-aligned image scale derives its bilinear taps once per column and once per row instead of once per pixel.
+
+### Read painted values from a node tree
+
+With `paint-tree` enabled, `takumi_core::paint_tree::paint_tree` returns used decorations, image placement, and shaped text in paint order, in device pixels with absolute transforms. `Fonts::face_family` names a shaped run's registered family.
+
+### Render repeated glyphs faster
+
+Glyph positions, `text-decoration-skip-ink` intercepts, and `line-height: normal` metrics are reused within a render.
+
+### Render oblique linear gradients faster
+
+Opaque, non-repeating linear gradients at an angle fill four rows at a time, computing their LUT indices with NEON, SSE2, or wasm simd128.
+
+### Build without PNG decoding
+
+The `png` feature is on by default through `image-decoding`. Without it, PNG and APNG sources keep their header size but cannot be drawn, PNG bitmap glyphs are skipped, and `ImageBuffer::encode_png` is gone.
+
+### Build the paint tree faster
+
+`build_scene(SceneRequest)` replaces `build_stacking_contexts`; its `paint_bounds` flag lets `paint_tree()` skip paint bounds and the text shaping they need. Z-order, cascade, table-group, and inline-box ordering use cheaper sorts.
+
+### Keep the registered value of a `--tw-*` custom property
+
+The utility engine's `--tw-*` state stops at the element that sets it, but that applied to every such name. An `@property` rule registering one lost its initial value, so Tailwind's compiled `linear-gradient(..., var(--tw-gradient-from-position))` painted nothing.
+
+### Blur backdrops faster
+
+The vertical pass of the RGBA box blur runs over each row as independent bytes.
+
+### Drop WOFF1 decoding from the wasm packages
+
+`@takumi-rs/wasm` and `takumi-pdf` load TTF, OTF, and WOFF2 but no longer decode WOFF1. `@takumi-rs/core` keeps WOFF1.
+
+### Drop an `@property` rule that cannot fall back
+
+`@property --size { syntax: "<length>"; inherits: false; }` was kept even though a typed syntax has no value to fall back to without `initial-value`. The rule is now ignored, so the name behaves as the ordinary custom property it is. `syntax` also loses the quotes it was stored with.
+
+### Build without animated image support
+
+`ImageSource::Animated` exists only with `gif`, `png`, or `webp`. A GIF keeps its header size when its decoder is off.
+
 ## takumi@2.14.0
 
 ### Clip overflow at the padding box
