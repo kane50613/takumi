@@ -412,16 +412,16 @@ fn box_blur_h_rgba(src: &[[u8; 4]], dst: &mut [[u8; 4]], params: BlurPassParams)
 }
 
 /// The vertical pass treats a row as `width * 4` independent bytes, since each
-/// channel slides the same window down its own column.
+/// channel slides the same window down its own column. A row wider than
+/// `u32::MAX` bytes cannot be allocated, so the checked multiply never misses.
 fn box_blur_v_rgba(src: &[[u8; 4]], dst: &mut [[u8; 4]], params: BlurPassParams, sums: &mut [u32]) {
-  let flat = BlurPassParams {
-    width: params.width * 4,
-    ..params
+  let Some(width) = params.width.checked_mul(4) else {
+    return;
   };
   box_blur_v_alpha(
     bytemuck::cast_slice(src),
     bytemuck::cast_slice_mut(dst),
-    flat,
+    BlurPassParams { width, ..params },
     sums,
   );
 }
@@ -549,7 +549,7 @@ mod tests {
 
   use super::{
     BlurPassParams, BlurType, Dims, apply_blur_rgba_bytes, blur_downsample_scale, box_blur_h_alpha,
-    compute_mul_shg, pack_alpha, upsample_rgba_bilinear,
+    box_blur_v_rgba, compute_mul_shg, pack_alpha, upsample_rgba_bilinear,
   };
   use crate::Error;
 
@@ -589,6 +589,84 @@ mod tests {
       for x in middle_end..width {
         dst_row[x] = pack_alpha(sum, params.mul_val, params.shg);
         sum = sum + last - src_row[x - radius] as u32;
+      }
+    }
+  }
+
+  /// The RGBA vertical pass as it was before it ran over flat bytes.
+  fn box_blur_v_rgba_reference(src: &[[u8; 4]], dst: &mut [[u8; 4]], params: BlurPassParams) {
+    let radius = params.radius as usize;
+    let width = params.width as usize;
+    let height = params.height as usize;
+    let k = radius as u32 + 1;
+    let pack = |sum: [u32; 4]| sum.map(|s| ((s * params.mul_val) >> params.shg) as u8);
+    let slide = |sum: [u32; 4], entering: [u8; 4], leaving: [u8; 4]| {
+      core::array::from_fn(|c| sum[c] + entering[c] as u32 - leaving[c] as u32)
+    };
+    let mut sums: Vec<[u32; 4]> = src[..width]
+      .iter()
+      .map(|p| p.map(|c| c as u32 * k))
+      .collect();
+    for dy in 1..=radius {
+      let row = &src[dy.min(height - 1) * width..][..width];
+      for x in 0..width {
+        sums[x] = core::array::from_fn(|c| sums[x][c] + row[x][c] as u32);
+      }
+    }
+    let left_end = (radius + 1).min(height);
+    for y in 0..left_end {
+      let entering = &src[(y + radius + 1).min(height - 1) * width..][..width];
+      for x in 0..width {
+        dst[y * width + x] = pack(sums[x]);
+        sums[x] = slide(sums[x], entering[x], src[x]);
+      }
+    }
+    let middle_end = height.saturating_sub(radius + 1).max(left_end);
+    for y in left_end..middle_end {
+      let entering = &src[(y + radius + 1) * width..][..width];
+      let leaving = &src[(y - radius) * width..][..width];
+      for x in 0..width {
+        dst[y * width + x] = pack(sums[x]);
+        sums[x] = slide(sums[x], entering[x], leaving[x]);
+      }
+    }
+    let last = &src[(height - 1) * width..][..width];
+    for y in middle_end..height {
+      let leaving = &src[(y - radius) * width..][..width];
+      for x in 0..width {
+        dst[y * width + x] = pack(sums[x]);
+        sums[x] = slide(sums[x], last[x], leaving[x]);
+      }
+    }
+  }
+
+  #[test]
+  fn vertical_rgba_pass_matches_the_reference() {
+    for radius in [1u32, 4, 25] {
+      let (mul_val, shg) = compute_mul_shg(2 * radius + 1);
+      for width in [1u32, 2, 3, 17] {
+        for height in [1u32, 2, 3, 7, 10] {
+          let params = BlurPassParams {
+            width,
+            height,
+            radius,
+            stride: width as usize * 4,
+            mul_val,
+            shg,
+          };
+          let src: Vec<[u8; 4]> = (0..width * height)
+            .map(|i| core::array::from_fn(|c| ((i * 37 + c as u32 * 53) % 256) as u8))
+            .collect();
+          let mut expected = vec![[0u8; 4]; src.len()];
+          let mut actual = vec![[0u8; 4]; src.len()];
+          let mut sums = vec![0u32; width as usize * 4];
+          box_blur_v_rgba_reference(&src, &mut expected, params);
+          box_blur_v_rgba(&src, &mut actual, params, &mut sums);
+          assert_eq!(
+            actual, expected,
+            "radius {radius} width {width} height {height}"
+          );
+        }
       }
     }
   }
