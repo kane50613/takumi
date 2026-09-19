@@ -40,6 +40,7 @@ use crate::{
   BackgroundTile, BorderProperties, Placement, Result,
   blend::*,
   error::Error,
+  simd,
   stacking_context::blend_pixmap_software,
   style::{Affine, BlendMode, Color, ImageScalingAlgorithm},
 };
@@ -598,17 +599,19 @@ mod tests {
 /// `f64`, which lands a hair under the halfway point for some values and rounds
 /// them down; integers make the result identical on every target.
 pub(crate) fn demultiply_rgba_in_place(data: &mut [u8]) {
-  for pixel in data.as_chunks_mut::<4>().0 {
-    let alpha = pixel[3] as u32;
-    if alpha == u8::MAX as u32 || alpha == 0 {
-      continue;
-    }
+  simd::for_each_mixed_alpha_chunk(data, |pixels| {
+    for pixel in pixels {
+      let alpha = pixel[3] as u32;
+      if alpha == u8::MAX as u32 || alpha == 0 {
+        continue;
+      }
 
-    let divisor = alpha * 2;
-    for channel in &mut pixel[..3] {
-      *channel = ((*channel as u32 * 510 + alpha) / divisor) as u8;
+      let divisor = alpha * 2;
+      for channel in &mut pixel[..3] {
+        *channel = ((*channel as u32 * 510 + alpha) / divisor) as u8;
+      }
     }
-  }
+  });
 }
 
 #[cfg(test)]
