@@ -14,13 +14,12 @@ use takumi::{
 
 const BENCH_WIDTH: u32 = 1200;
 const BENCH_HEIGHT: u32 = 630;
-const IMAGE_PATH: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../assets/images/yeecord.png");
-
 fn render_fixture(fonts: &Fonts, node: Node) {
   let options = RenderOptions::builder()
     .viewport(Viewport::new((BENCH_WIDTH, BENCH_HEIGHT)))
     .node(node)
     .fonts(fonts)
+    .images(common::images())
     .build();
 
   let image = render(options).unwrap();
@@ -28,7 +27,7 @@ fn render_fixture(fonts: &Fonts, node: Node) {
 }
 
 fn simple_image_blit_fixture() -> Node {
-  Node::image(IMAGE_PATH).with_style(
+  Node::image(common::IMAGE_SRC).with_style(
     Style::default()
       .with(StyleDeclaration::display(Display::Flex))
       .with(StyleDeclaration::width(Percentage(100.0)))
@@ -80,7 +79,7 @@ fn gradient_clip_text_fixture() -> Node {
 
 fn emoji_social_fixture() -> Node {
   Node::container([
-    Node::container([Node::image(IMAGE_PATH).with_style(
+    Node::container([Node::image(common::IMAGE_SRC).with_style(
       Style::default()
         .with(StyleDeclaration::display(Display::Flex))
         .with(StyleDeclaration::width(Px(220.0)))
@@ -135,7 +134,7 @@ fn emoji_social_fixture() -> Node {
 }
 
 fn bench_fixtures(c: &mut Criterion) {
-  let fonts = Fonts::default();
+  let fonts = common::fonts();
   let mut group = c.benchmark_group("fixtures");
 
   group.bench_function("simple_image_blit", |b| {
