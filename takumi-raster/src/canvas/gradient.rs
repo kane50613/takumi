@@ -10,9 +10,10 @@ use tiny_skia::PixmapMut;
 
 use super::{
   MaskView,
-  blit::{blit_rows, compute_overlay_bounds_for_canvas},
+  blit::{OverlayBounds, blit_rows, compute_overlay_bounds_for_canvas},
 };
-use crate::{BackgroundTile, blend::*, style::BlendMode};
+
+use crate::{BackgroundTile, blend::*, simd, style::BlendMode};
 
 /// Overlays a gradient-shaped [`BackgroundTile`] at a plain translation, reporting whether the tile
 /// was one. Non-gradient tiles are left for the caller's generic overlay path.
@@ -105,7 +106,7 @@ fn try_overlay_linear_gradient_tile_fast_normal_unconstrained(
   };
 
   let Some(fast_path) = gradient.fast_path() else {
-    return false;
+    return overlay_linear_gradient_row_lanes(data, bottom_width, bounds, gradient);
   };
 
   let row_stride = bottom_width as usize * 4;
@@ -177,6 +178,91 @@ fn try_overlay_linear_gradient_tile_fast_normal_unconstrained(
           }
         }
       }
+    }
+  }
+
+  true
+}
+
+const ROW_LANES: usize = 4;
+
+/// Four rows at a time, each keeping the generic path's per-pixel projection recurrence.
+fn overlay_linear_gradient_row_lanes(
+  data: &mut [u8],
+  bottom_width: u32,
+  bounds: OverlayBounds,
+  gradient: &LinearGradientTile,
+) -> bool {
+  if gradient.repeating || !gradient.fully_opaque || gradient.lut.dither_active() {
+    return false;
+  }
+
+  let lut = gradient.lut.colors();
+
+  if lut.is_empty() {
+    return true;
+  }
+
+  let max_index = (lut.len() - 1) as u32;
+  let src_x_start = (bounds.x_min - bounds.offset_x) as f32;
+  let row_projection = |dest_y: i32| {
+    let src_y = (dest_y - bounds.offset_y) as f32;
+    src_x_start * gradient.dir_x + src_y * gradient.dir_y + gradient.projection_bias
+  };
+
+  let pixels: &mut [[u8; 4]] = bytemuck::cast_slice_mut(data);
+  let row_pixels = bottom_width as usize;
+  let (x_min, x_max) = (bounds.x_min as usize, bounds.x_max as usize);
+  let mut dest_y = bounds.y_min;
+
+  while dest_y + ROW_LANES as i32 <= bounds.y_max {
+    let band_start = dest_y as usize * row_pixels;
+    let band = &mut pixels[band_start..band_start + ROW_LANES * row_pixels];
+    let (r0, rest) = band.split_at_mut(row_pixels);
+    let (r1, rest) = rest.split_at_mut(row_pixels);
+    let (r2, r3) = rest.split_at_mut(row_pixels);
+    let lanes = r0[x_min..x_max]
+      .iter_mut()
+      .zip(&mut r1[x_min..x_max])
+      .zip(&mut r2[x_min..x_max])
+      .zip(&mut r3[x_min..x_max]);
+    let mut projections: [f32; ROW_LANES] =
+      std::array::from_fn(|lane| row_projection(dest_y + lane as i32));
+
+    for (((p0, p1), p2), p3) in lanes {
+      let [i0, i1, i2, i3] = simd::linear_lut_indices(
+        projections,
+        gradient.axis_length,
+        gradient.position_to_lut_scale,
+        max_index,
+      );
+      *p0 = premultiplied_from_pixel(lut[i0 as usize]);
+      *p1 = premultiplied_from_pixel(lut[i1 as usize]);
+      *p2 = premultiplied_from_pixel(lut[i2 as usize]);
+      *p3 = premultiplied_from_pixel(lut[i3 as usize]);
+
+      for projection in &mut projections {
+        *projection += gradient.dir_x;
+      }
+    }
+
+    dest_y += ROW_LANES as i32;
+  }
+
+  for dest_y in dest_y..bounds.y_max {
+    let row_start = dest_y as usize * row_pixels;
+    let row = &mut pixels[row_start + x_min..row_start + x_max];
+    let mut projection = row_projection(dest_y);
+
+    for pixel in row {
+      let index = simd::scalar::lut_index(
+        projection,
+        gradient.axis_length,
+        gradient.position_to_lut_scale,
+        max_index,
+      );
+      *pixel = premultiplied_from_pixel(lut[index as usize]);
+      projection += gradient.dir_x;
     }
   }
 
@@ -467,6 +553,61 @@ mod tests {
         overlay_linear_gradient_tile(pixmap, tile, offset, BlendMode::Normal, None);
       },
     )?;
+    Ok(())
+  }
+
+  /// Row tails, clipped offsets, and every quadrant against the generic per-row recurrence.
+  #[test]
+  fn oblique_linear_gradient_rows_match_the_generic_overlay() -> Result<()> {
+    let fonts = Fonts::default();
+    let canvas_size = Size {
+      width: 4101,
+      height: 12,
+    };
+
+    for angle in [33, 135, 225, 315] {
+      let gradient =
+        LinearGradient::from_css_str(&format!("linear-gradient({angle}deg, red, blue)"))?;
+      for height in 1..=9 {
+        let render_context = RenderContext::builder()
+          .fonts(fonts.snapshot())
+          .sizing(
+            SizingContext::builder()
+              .viewport(Viewport::new((4099, height)))
+              .build(),
+          )
+          .build();
+        let tile = LinearGradientTile::new(
+          &gradient,
+          4099,
+          height,
+          &render_context.sizing,
+          render_context.current_color,
+          false,
+        );
+        assert!(tile.fast_path().is_none() && tile.fully_opaque && !tile.repeating);
+
+        for offset in [Point { x: 0.0, y: 0.0 }, Point { x: -3.0, y: -1.0 }] {
+          let mut fast = Canvas::new(canvas_size);
+          let mut generic = Canvas::new(canvas_size);
+          {
+            let mut pixmap = fast.image.as_mut();
+            overlay_linear_gradient_tile(&mut pixmap, &tile, offset, BlendMode::Normal, None);
+          }
+
+          generic.with_pixmap(|pixmap| {
+            let data: &mut [u8] = bytemuck::cast_slice_mut(pixmap.pixels_mut());
+            tile.overlay_unconstrained(data, canvas_size.width, canvas_size.height, offset);
+          });
+          assert_eq!(
+            fast.into_inner()?.as_raw(),
+            generic.into_inner()?.as_raw(),
+            "angle {angle} height {height} offset {offset:?}"
+          );
+        }
+      }
+    }
+
     Ok(())
   }
 
