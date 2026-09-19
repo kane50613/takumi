@@ -12,7 +12,7 @@ use super::{
   MaskView,
   blit::{OverlayBounds, blit_rows, compute_overlay_bounds_for_canvas},
 };
-use crate::{BackgroundTile, blend::*, style::BlendMode};
+use crate::{BackgroundTile, blend::*, simd, style::BlendMode};
 
 /// Overlays a gradient-shaped [`BackgroundTile`] at a plain translation, reporting whether the tile
 /// was one. Non-gradient tiles are left for the caller's generic overlay path.
@@ -202,14 +202,14 @@ fn overlay_linear_gradient_row_lanes(
     return true;
   }
 
-  let max_index = lut.len() - 1;
+  let max_index = (lut.len() - 1) as u32;
   let axis_length = gradient.axis_length;
   let scale = gradient.position_to_lut_scale;
   let step = gradient.dir_x;
   let src_x_start = (bounds.x_min - bounds.offset_x) as f32;
   let lut_index = |projection: f32| {
     let position = projection.clamp(0.0, axis_length);
-    ((position * scale).round() as usize).min(max_index)
+    ((position * scale).round() as u32).min(max_index) as usize
   };
   let row_projection = |dest_y: i32| {
     let src_y = (dest_y - bounds.offset_y) as f32;
@@ -219,7 +219,6 @@ fn overlay_linear_gradient_row_lanes(
   let pixels: &mut [[u8; 4]] = bytemuck::cast_slice_mut(data);
   let row_pixels = bottom_width as usize;
   let (x_min, x_max) = (bounds.x_min as usize, bounds.x_max as usize);
-  let span = x_max - x_min;
   let mut dest_y = bounds.y_min;
 
   while dest_y + ROW_LANES as i32 <= bounds.y_max {
@@ -228,20 +227,22 @@ fn overlay_linear_gradient_row_lanes(
     let (r0, rest) = band.split_at_mut(row_pixels);
     let (r1, rest) = rest.split_at_mut(row_pixels);
     let (r2, r3) = rest.split_at_mut(row_pixels);
-    let rows = [
-      &mut r0[x_min..x_max],
-      &mut r1[x_min..x_max],
-      &mut r2[x_min..x_max],
-      &mut r3[x_min..x_max],
-    ];
+    let lanes = r0[x_min..x_max]
+      .iter_mut()
+      .zip(&mut r1[x_min..x_max])
+      .zip(&mut r2[x_min..x_max])
+      .zip(&mut r3[x_min..x_max]);
     let mut projections: [f32; ROW_LANES] =
       std::array::from_fn(|lane| row_projection(dest_y + lane as i32));
 
-    for x in 0..span {
-      let indices = projections.map(lut_index);
-      for lane in 0..ROW_LANES {
-        rows[lane][x] = premultiplied_from_pixel(lut[indices[lane]]);
-        projections[lane] += step;
+    for (((p0, p1), p2), p3) in lanes {
+      let [i0, i1, i2, i3] = simd::linear_lut_indices(projections, axis_length, scale, max_index);
+      *p0 = premultiplied_from_pixel(lut[i0 as usize]);
+      *p1 = premultiplied_from_pixel(lut[i1 as usize]);
+      *p2 = premultiplied_from_pixel(lut[i2 as usize]);
+      *p3 = premultiplied_from_pixel(lut[i3 as usize]);
+      for projection in &mut projections {
+        *projection += step;
       }
     }
     dest_y += ROW_LANES as i32;
