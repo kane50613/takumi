@@ -548,6 +548,58 @@ mod tests {
     Ok(())
   }
 
+  /// The four-row path against the generic per-row recurrence it replaces,
+  /// across widths that leave a tail, clipped offsets, and every quadrant.
+  #[test]
+  fn oblique_linear_gradient_rows_match_the_generic_overlay() -> Result<()> {
+    let fonts = Fonts::default();
+    let canvas_size = Size {
+      width: 4101,
+      height: 12,
+    };
+    for angle in [33, 135, 225, 315] {
+      let gradient =
+        LinearGradient::from_css_str(&format!("linear-gradient({angle}deg, red, blue)"))?;
+      for height in 1..=9 {
+        let render_context = RenderContext::builder()
+          .fonts(fonts.snapshot())
+          .sizing(
+            SizingContext::builder()
+              .viewport(Viewport::new((4099, height)))
+              .build(),
+          )
+          .build();
+        let tile = LinearGradientTile::new(
+          &gradient,
+          4099,
+          height,
+          &render_context.sizing,
+          render_context.current_color,
+          false,
+        );
+        assert!(tile.fast_path().is_none() && tile.fully_opaque && !tile.repeating);
+        for offset in [Point { x: 0.0, y: 0.0 }, Point { x: -3.0, y: -1.0 }] {
+          let mut fast = Canvas::new(canvas_size);
+          let mut generic = Canvas::new(canvas_size);
+          {
+            let mut pixmap = fast.image.as_mut();
+            overlay_linear_gradient_tile(&mut pixmap, &tile, offset, BlendMode::Normal, None);
+          }
+          generic.with_pixmap(|pixmap| {
+            let data: &mut [u8] = bytemuck::cast_slice_mut(pixmap.pixels_mut());
+            tile.overlay_unconstrained(data, canvas_size.width, canvas_size.height, offset);
+          });
+          assert_eq!(
+            fast.into_inner()?.as_raw(),
+            generic.into_inner()?.as_raw(),
+            "angle {angle} height {height} offset {offset:?}"
+          );
+        }
+      }
+    }
+    Ok(())
+  }
+
   #[test]
   fn test_overlay_radial_gradient_fast_paths_match_reference() -> Result<()> {
     let cases = [

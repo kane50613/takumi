@@ -37,6 +37,8 @@ impl Simd {
 
 /// Maps four gradient projections to LUT indices the way the scalar path does:
 /// clamp to the axis, scale, round half away from zero, clamp to `max_index`.
+/// `axis_length` and `scale` must be finite and non-negative and the scaled
+/// index must stay below 2^31, which every gradient LUT satisfies.
 #[inline(always)]
 pub(crate) fn linear_lut_indices(
   projections: [f32; 4],
@@ -396,6 +398,10 @@ mod tests {
         "{projections:?}"
       );
     }
+    assert_eq!(
+      baseline::linear_lut_indices([0.499_999_97, 0.5, 1.5, 2.5], 8.0, 1.0, 8),
+      [0, 1, 2, 3]
+    );
     let scale = 1023.0 / 2000.0;
     for step in 0..200_000u32 {
       let base = step as f32 * 0.0100003 - 50.0;
