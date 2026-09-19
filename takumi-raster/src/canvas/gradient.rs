@@ -10,7 +10,7 @@ use tiny_skia::PixmapMut;
 
 use super::{
   MaskView,
-  blit::{blit_rows, compute_overlay_bounds_for_canvas},
+  blit::{OverlayBounds, blit_rows, compute_overlay_bounds_for_canvas},
 };
 use crate::{BackgroundTile, blend::*, style::BlendMode};
 
@@ -105,7 +105,7 @@ fn try_overlay_linear_gradient_tile_fast_normal_unconstrained(
   };
 
   let Some(fast_path) = gradient.fast_path() else {
-    return false;
+    return overlay_linear_gradient_row_lanes(data, bottom_width, bounds, gradient);
   };
 
   let row_stride = bottom_width as usize * 4;
@@ -177,6 +177,83 @@ fn try_overlay_linear_gradient_tile_fast_normal_unconstrained(
           }
         }
       }
+    }
+  }
+
+  true
+}
+
+const ROW_LANES: usize = 4;
+
+/// Fills an opaque, non-repeating, undithered linear gradient four rows at a
+/// time. Each row keeps the generic path's per-pixel projection recurrence, so
+/// the lanes only remove the dependency between neighbouring pixels.
+fn overlay_linear_gradient_row_lanes(
+  data: &mut [u8],
+  bottom_width: u32,
+  bounds: OverlayBounds,
+  gradient: &LinearGradientTile,
+) -> bool {
+  if gradient.repeating || !gradient.fully_opaque || gradient.lut.dither_active() {
+    return false;
+  }
+  let lut = gradient.lut.colors();
+  if lut.is_empty() {
+    return true;
+  }
+
+  let max_index = lut.len() - 1;
+  let axis_length = gradient.axis_length;
+  let scale = gradient.position_to_lut_scale;
+  let step = gradient.dir_x;
+  let src_x_start = (bounds.x_min - bounds.offset_x) as f32;
+  let lut_index = |projection: f32| {
+    let position = projection.clamp(0.0, axis_length);
+    ((position * scale).round() as usize).min(max_index)
+  };
+  let row_projection = |dest_y: i32| {
+    let src_y = (dest_y - bounds.offset_y) as f32;
+    src_x_start * gradient.dir_x + src_y * gradient.dir_y + gradient.projection_bias
+  };
+
+  let pixels: &mut [[u8; 4]] = bytemuck::cast_slice_mut(data);
+  let row_pixels = bottom_width as usize;
+  let (x_min, x_max) = (bounds.x_min as usize, bounds.x_max as usize);
+  let span = x_max - x_min;
+  let mut dest_y = bounds.y_min;
+
+  while dest_y + ROW_LANES as i32 <= bounds.y_max {
+    let band_start = dest_y as usize * row_pixels;
+    let band = &mut pixels[band_start..band_start + ROW_LANES * row_pixels];
+    let (r0, rest) = band.split_at_mut(row_pixels);
+    let (r1, rest) = rest.split_at_mut(row_pixels);
+    let (r2, r3) = rest.split_at_mut(row_pixels);
+    let rows = [
+      &mut r0[x_min..x_max],
+      &mut r1[x_min..x_max],
+      &mut r2[x_min..x_max],
+      &mut r3[x_min..x_max],
+    ];
+    let mut projections: [f32; ROW_LANES] =
+      std::array::from_fn(|lane| row_projection(dest_y + lane as i32));
+
+    for x in 0..span {
+      let indices = projections.map(lut_index);
+      for lane in 0..ROW_LANES {
+        rows[lane][x] = premultiplied_from_pixel(lut[indices[lane]]);
+        projections[lane] += step;
+      }
+    }
+    dest_y += ROW_LANES as i32;
+  }
+
+  for dest_y in dest_y..bounds.y_max {
+    let row_start = dest_y as usize * row_pixels;
+    let row = &mut pixels[row_start + x_min..row_start + x_max];
+    let mut projection = row_projection(dest_y);
+    for pixel in row {
+      *pixel = premultiplied_from_pixel(lut[lut_index(projection)]);
+      projection += step;
     }
   }
 
