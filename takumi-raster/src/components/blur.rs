@@ -483,8 +483,6 @@ fn box_blur_h_alpha(src: &[u8], dst: &mut [u8], params: BlurPassParams) {
   let radius = params.radius as usize;
   let width = params.width as usize;
   let height = params.height as usize;
-  let mul = params.mul_val;
-  let shift = params.shg;
   let k = radius as u32 + 1;
 
   for y in 0..height {
@@ -501,22 +499,26 @@ fn box_blur_h_alpha(src: &[u8], dst: &mut [u8], params: BlurPassParams) {
     let left_end = (radius + 1).min(width);
     for x in 0..left_end {
       let entering = src_row[(x + radius + 1).min(width - 1)] as u32;
-      dst_row[x] = pack_alpha(sum, mul, shift);
+      dst_row[x] = pack_alpha(sum, params.mul_val, params.shg);
       sum = sum + entering - first;
     }
 
     let middle_end = width.saturating_sub(radius + 1).max(left_end);
+
     if left_end < middle_end {
       let (entering, entering_tail) =
         src_row[left_end + radius + 1..middle_end + radius + 1].as_chunks::<4>();
       let (leaving, leaving_tail) =
         src_row[left_end - radius..middle_end - radius].as_chunks::<4>();
       let (out, out_tail) = dst_row[left_end..middle_end].as_chunks_mut::<4>();
+
       for ((out, entering), leaving) in out.iter_mut().zip(entering).zip(leaving) {
-        (*out, sum) = simd::slide_box_alpha4(sum, *entering, *leaving, mul, shift as u32);
+        (*out, sum) =
+          simd::slide_box_alpha4(sum, *entering, *leaving, params.mul_val, params.shg as u32);
       }
+
       for ((out, &entering), &leaving) in out_tail.iter_mut().zip(entering_tail).zip(leaving_tail) {
-        *out = pack_alpha(sum, mul, shift);
+        *out = pack_alpha(sum, params.mul_val, params.shg);
         sum = sum + entering as u32 - leaving as u32;
       }
     }
@@ -524,7 +526,7 @@ fn box_blur_h_alpha(src: &[u8], dst: &mut [u8], params: BlurPassParams) {
     let last = src_row[width - 1] as u32;
     for x in middle_end..width {
       let leaving = src_row[x - radius] as u32;
-      dst_row[x] = pack_alpha(sum, mul, shift);
+      dst_row[x] = pack_alpha(sum, params.mul_val, params.shg);
       sum = sum + last - leaving;
     }
   }
@@ -599,31 +601,39 @@ mod tests {
   };
   use crate::Error;
 
-  /// The horizontal alpha pass as it was before the four-pixel slide.
+  /// Scalar horizontal alpha blur with clamped edges, the oracle for the four-pixel slide.
   fn box_blur_h_alpha_reference(src: &[u8], dst: &mut [u8], params: BlurPassParams) {
     let radius = params.radius as usize;
     let width = params.width as usize;
     let k = radius as u32 + 1;
+
     for y in 0..params.height as usize {
       let src_row = &src[y * width..(y + 1) * width];
       let dst_row = &mut dst[y * width..(y + 1) * width];
       let first = src_row[0] as u32;
       let mut sum = first * k;
+
       for dx in 1..=radius {
         sum += src_row[dx.min(width - 1)] as u32;
       }
+
       let left_end = (radius + 1).min(width);
+
       for x in 0..left_end {
         let entering = src_row[(x + radius + 1).min(width - 1)] as u32;
         dst_row[x] = pack_alpha(sum, params.mul_val, params.shg);
         sum = sum + entering - first;
       }
+
       let middle_end = width.saturating_sub(radius + 1).max(left_end);
+
       for x in left_end..middle_end {
         dst_row[x] = pack_alpha(sum, params.mul_val, params.shg);
         sum = sum + src_row[x + radius + 1] as u32 - src_row[x - radius] as u32;
       }
+
       let last = src_row[width - 1] as u32;
+
       for x in middle_end..width {
         dst_row[x] = pack_alpha(sum, params.mul_val, params.shg);
         sum = sum + last - src_row[x - radius] as u32;
@@ -646,6 +656,7 @@ mod tests {
         2 * radius + 6,
         2 * radius + 7,
       ];
+
       for width in widths {
         for height in [1u32, 3] {
           let params = BlurPassParams {
@@ -656,6 +667,7 @@ mod tests {
             mul_val,
             shg,
           };
+
           let src: Vec<u8> = (0..width * height)
             .map(|i| ((31 * i + 17) % 256) as u8)
             .collect();

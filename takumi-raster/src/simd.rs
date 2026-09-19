@@ -39,19 +39,9 @@ impl Simd {
 /// non-negative and the scaled index stays below 2^31, which every gradient LUT satisfies.
 pub(crate) use baseline::linear_lut_indices;
 
-/// Slides a box-blur window across four alpha samples: returns the four packed
-/// outputs and the window sum after the fourth step, exactly as four scalar
-/// `out = (sum * mul) >> shift; sum += entering - leaving` steps would.
-#[inline(always)]
-pub(crate) fn slide_box_alpha4(
-  sum: u32,
-  entering: [u8; 4],
-  leaving: [u8; 4],
-  mul: u32,
-  shift: u32,
-) -> ([u8; 4], u32) {
-  baseline::slide_box_alpha4(sum, entering, leaving, mul, shift)
-}
+/// Four steps of `out = (sum * mul) >> shift; sum += entering - leaving`, returning the
+/// packed outputs and the sum after the fourth step.
+pub(crate) use baseline::slide_box_alpha4;
 
 #[inline(always)]
 fn edit_runs_unless(
@@ -133,10 +123,12 @@ pub(crate) mod scalar {
     shift: u32,
   ) -> ([u8; 4], u32) {
     let mut out = [0u8; 4];
+
     for lane in 0..4 {
       out[lane] = ((sum * mul) >> shift) as u8;
       sum = sum + entering[lane] as u32 - leaving[lane] as u32;
     }
+
     (out, sum)
   }
 }
@@ -202,6 +194,7 @@ pub(crate) mod neon {
           u32::from_le_bytes(bytes) as u64,
         ))))
       };
+
       let zero = vdupq_n_u32(0);
       let delta = vsubq_u32(widen(entering), widen(leaving));
       let scan = vaddq_u32(delta, vextq_u32::<3>(zero, delta));
@@ -290,6 +283,7 @@ pub(crate) mod simd128 {
         bytes[3] as u32,
       )
     };
+
     let zero = u32x4_splat(0);
     let delta = u32x4_sub(widen(entering), widen(leaving));
     let scan = u32x4_add(delta, u32x4_shuffle::<4, 0, 1, 2>(delta, zero));
@@ -382,6 +376,7 @@ pub(crate) mod sse2 {
           zero,
         )
       };
+
       let delta = _mm_sub_epi32(widen(entering), widen(leaving));
       let scan = _mm_add_epi32(delta, _mm_slli_si128::<4>(delta));
       let scan = _mm_add_epi32(scan, _mm_slli_si128::<8>(scan));
@@ -551,9 +546,11 @@ mod tests {
       state ^= state << 5;
       state
     };
+
     for radius in [1u32, 4, 25, 200] {
       let div = 2 * radius + 1;
       let mul = ((1u64 << 23) as f64 / div as f64).round() as u32;
+
       for _ in 0..20_000 {
         let entering = next().to_le_bytes();
         let leaving = next().to_le_bytes();
