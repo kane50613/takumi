@@ -92,9 +92,7 @@ pub(crate) mod scalar {
 
 #[cfg(all(target_arch = "aarch64", target_endian = "little"))]
 pub(crate) mod neon {
-  use std::arch::aarch64::{
-    vandq_u8, vld1q_u8, vmaxvq_u32, vminvq_u32, vorrq_u8, vreinterpretq_u32_u8, vshrq_n_u32,
-  };
+  use std::arch::aarch64::*;
 
   use super::PixelRun;
 
@@ -119,10 +117,7 @@ pub(crate) mod neon {
 
 #[cfg(all(target_arch = "wasm32", target_feature = "simd128"))]
 pub(crate) mod simd128 {
-  use std::arch::wasm32::{
-    u32x4_all_true, u32x4_eq, u32x4_shr, u32x4_splat, v128, v128_and, v128_any_true, v128_load,
-    v128_or,
-  };
+  use std::arch::wasm32::*;
 
   use super::PixelRun;
 
@@ -147,10 +142,7 @@ pub(crate) mod simd128 {
 
 #[cfg(target_arch = "x86_64")]
 pub(crate) mod sse2 {
-  use std::arch::x86_64::{
-    __m128i, _mm_and_si128, _mm_cmpeq_epi8, _mm_loadu_si128, _mm_movemask_epi8, _mm_or_si128,
-    _mm_set1_epi8, _mm_setzero_si128,
-  };
+  use std::arch::x86_64::*;
 
   use super::PixelRun;
 
@@ -179,13 +171,7 @@ pub(crate) mod sse2 {
 
 #[cfg(target_arch = "x86_64")]
 pub(crate) mod avx2 {
-  use std::arch::{
-    is_x86_feature_detected,
-    x86_64::{
-      __m256i, _mm256_and_si256, _mm256_cmpeq_epi8, _mm256_loadu_si256, _mm256_movemask_epi8,
-      _mm256_or_si256, _mm256_set1_epi8, _mm256_setzero_si256,
-    },
-  };
+  use std::arch::{is_x86_feature_detected, x86_64::*};
 
   use super::{PixelRun, edit_runs_unless};
 
