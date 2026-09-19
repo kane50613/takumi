@@ -602,11 +602,13 @@ pub(crate) fn demultiply_rgba_in_place(data: &mut [u8]) {
   Simd::detect().edit_mixed_alpha_runs(data, |pixels| {
     for pixel in pixels {
       let alpha = pixel[3] as u32;
+
       if alpha == u8::MAX as u32 || alpha == 0 {
         continue;
       }
 
       let divisor = alpha * 2;
+
       for channel in &mut pixel[..3] {
         *channel = ((*channel as u32 * 510 + alpha) / divisor) as u8;
       }
@@ -646,9 +648,11 @@ mod demultiply_tests {
 
   fn reference(pixel: [u8; 4]) -> [u8; 4] {
     let alpha = pixel[3] as u32;
+
     if alpha == 255 || alpha == 0 {
       return pixel;
     }
+
     let channel = |c: u8| ((c as u32 * 510 + alpha) / (alpha * 2)) as u8;
     [
       channel(pixel[0]),
@@ -658,11 +662,10 @@ mod demultiply_tests {
     ]
   }
 
-  /// Every run length around the 16-pixel chunk, with uniform, mixed, and
-  /// zero-alpha-with-noise pixels, matches the per-pixel formula.
   #[test]
   fn matches_the_per_pixel_formula_for_every_run_shape() {
     let alphas = [0u8, 1, 66, 128, 254, 255];
+
     for count in [0usize, 1, 15, 16, 17, 31, 32, 33] {
       for &alpha in &alphas {
         let mut uniform: Vec<[u8; 4]> = (0..count)
@@ -679,6 +682,7 @@ mod demultiply_tests {
         demultiply_rgba_in_place(bytemuck::cast_slice_mut(&mut uniform));
         assert_eq!(uniform, expected, "uniform alpha {alpha} count {count}");
       }
+
       let mut mixed: Vec<[u8; 4]> = (0..count)
         .map(|i| {
           let alpha = alphas[i % alphas.len()];

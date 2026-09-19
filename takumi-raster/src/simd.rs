@@ -1,7 +1,4 @@
-//! SIMD primitives behind one instruction-set-agnostic entry point. Every
-//! backend module implements the same functions over a [`PixelRun`], `scalar`
-//! is always compiled as the reference the others are tested against, and
-//! [`Simd`] is the only place that picks a backend.
+//! Per-target SIMD primitives; `scalar` is the reference every backend is tested against.
 
 #[cfg(target_arch = "x86_64")]
 use avx2::Avx2;
@@ -28,8 +25,7 @@ impl Simd {
     Self::Baseline
   }
 
-  /// Hands `edit` every 16-pixel run whose alpha is neither all 255 nor all 0,
-  /// then the tail shorter than a run.
+  /// Hands `edit` every run of mixed alpha, then the tail shorter than a run.
   pub(crate) fn edit_mixed_alpha_runs(self, pixels: &mut [u8], edit: impl FnMut(&mut [[u8; 4]])) {
     match self {
       Self::Baseline => edit_runs_unless(pixels, edit, baseline::alpha_is_uniform),
@@ -46,12 +42,15 @@ fn edit_runs_unless(
   skip: impl Fn(&PixelRun) -> bool,
 ) {
   let (runs, tail) = pixels.as_chunks_mut::<64>();
+
   for run in runs {
     if skip(run) {
       continue;
     }
+
     edit(run.as_chunks_mut::<4>().0);
   }
+
   edit(tail.as_chunks_mut::<4>().0);
 }
 
@@ -80,11 +79,13 @@ pub(crate) mod scalar {
   pub(crate) fn alpha_is_uniform(run: &PixelRun) -> bool {
     let mut all = u32::MAX;
     let mut any = 0u32;
+
     for pixel in run.as_chunks::<4>().0 {
       let pixel = u32::from_le_bytes(*pixel);
       all &= pixel;
       any |= pixel;
     }
+
     all >> 24 == 0xFF || any >> 24 == 0
   }
 }
@@ -191,7 +192,7 @@ pub(crate) mod avx2 {
   /// Movemask bits of the alpha byte in each of 8 pixels.
   const ALPHA_LANES: u32 = 0x8888_8888;
 
-  /// Proof that this CPU runs AVX2; only [`Avx2::detect`] constructs it.
+  /// Proof of AVX2 support; only [`Avx2::detect`] constructs it.
   #[derive(Clone, Copy)]
   pub(crate) struct Avx2(());
 
@@ -239,15 +240,19 @@ mod tests {
 
   fn runs() -> Vec<PixelRun> {
     let mut runs = vec![[0u8; 64], [0xFF; 64]];
+
     for (fill, salt) in [(0xFF, 37), (0, 53)] {
       let mut rgb_noise = [fill; 64];
+
       for (i, byte) in rgb_noise.iter_mut().enumerate() {
         if i % 4 != 3 {
           *byte = (i * salt) as u8;
         }
       }
+
       runs.push(rgb_noise);
     }
+
     for pixel in 0..16 {
       for alpha in [0u8, 1, 0x80, 0xFE, 0xFF] {
         for fill in [0xFF, 0] {
@@ -257,6 +262,7 @@ mod tests {
         }
       }
     }
+
     runs
   }
 
