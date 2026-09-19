@@ -416,13 +416,8 @@ pub(crate) fn attenuate_alpha_by_mask(
       continue;
     }
 
-    for index in 0..width {
-      let mask_alpha = mask_row[index] as u32;
-      if mask_alpha == 0 {
-        continue;
-      }
-      let factor = 255 - mask_alpha;
-      dst_row[index] = fast_div_255(dst_row[index] as u32 * factor);
+    for (alpha, &mask_alpha) in dst_row.iter_mut().zip(mask_row) {
+      *alpha = fast_div_255(*alpha as u32 * (255 - mask_alpha as u32));
     }
   }
 }
@@ -867,6 +862,36 @@ pub(crate) fn materialize_mask(mask: MaskView<'_>, size: Size<u32>) -> Option<Ti
 #[cfg(test)]
 mod tests {
   use super::*;
+
+  fn attenuate_reference(alpha: u8, mask_alpha: u8) -> u8 {
+    if mask_alpha == 0 {
+      return alpha;
+    }
+
+    fast_div_255(alpha as u32 * (255 - mask_alpha as u32))
+  }
+
+  #[test]
+  fn attenuate_matches_the_branching_formula_for_every_pair() {
+    let placement = Placement {
+      left: 0,
+      top: 0,
+      width: 256,
+      height: 256,
+    };
+
+    let mut dst: Vec<u8> = (0..256 * 256).map(|i| (i / 256) as u8).collect();
+    let mask: Vec<u8> = (0..256 * 256).map(|i| (i % 256) as u8).collect();
+    attenuate_alpha_by_mask(&mut dst, placement, &mask, placement);
+
+    for (i, &alpha) in dst.iter().enumerate() {
+      assert_eq!(
+        alpha,
+        attenuate_reference((i / 256) as u8, (i % 256) as u8),
+        "index {i}"
+      );
+    }
+  }
 
   #[test]
   fn intersect_alpha_masks_respects_overlap_placement() {
