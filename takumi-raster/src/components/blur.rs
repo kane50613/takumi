@@ -11,7 +11,6 @@ struct BlurPassParams {
   width: u32,
   height: u32,
   radius: u32,
-  stride: usize,
   mul_val: u32,
   shg: i32,
 }
@@ -49,7 +48,6 @@ fn blur_pass_params(
   height: u32,
   radius: f32,
   blur_type: BlurType,
-  stride: usize,
 ) -> Option<BlurPassParams> {
   let sigma = blur_type.to_sigma(radius);
   if sigma <= 0.5 || width == 0 || height == 0 {
@@ -66,7 +64,6 @@ fn blur_pass_params(
     width,
     height,
     radius: box_radius,
-    stride,
     mul_val,
     shg,
   })
@@ -76,7 +73,8 @@ fn blur_pass_params(
 pub(crate) fn apply_blur(format: BlurFormat<'_>, radius: f32, blur_type: BlurType) -> Result<()> {
   let width = format.width();
   let height = format.height();
-  let Some(pass_params) = blur_pass_params(width, height, radius, blur_type, width as usize) else {
+
+  let Some(pass_params) = blur_pass_params(width, height, radius, blur_type) else {
     return Ok(());
   };
 
@@ -92,7 +90,7 @@ pub(crate) fn apply_blur(format: BlurFormat<'_>, radius: f32, blur_type: BlurTyp
         });
       }
 
-      let mut col_sums = vec![0u32; pass_params.stride];
+      let mut col_sums = vec![0u32; width as usize];
       let mut temp_image = vec![0; expected];
       let temp_data = &mut *temp_image;
 
@@ -145,11 +143,11 @@ fn apply_blur_rgba_bytes_internal(
     }
   }
 
-  let Some(pass_params) = blur_pass_params(width, height, radius, blur_type, width as usize * 4)
-  else {
+  let Some(pass_params) = blur_pass_params(width, height, radius, blur_type) else {
     return Ok(());
   };
-  let mut col_sums = vec![0u32; pass_params.stride];
+
+  let mut col_sums = vec![0u32; width as usize * 4];
 
   let mut temp = vec![0; expected];
   let src_pixels: &mut [[u8; 4]] = bytemuck::cast_slice_mut(data);
@@ -329,12 +327,7 @@ fn bilinear_axis_positions(dst_len: u32, src_len: u32, scale: u32) -> Vec<Biline
 
 #[inline(always)]
 fn pack_pixel(sum: [u32; 4], mul: u32, shift: i32) -> [u8; 4] {
-  [
-    ((sum[0] * mul) >> shift) as u8,
-    ((sum[1] * mul) >> shift) as u8,
-    ((sum[2] * mul) >> shift) as u8,
-    ((sum[3] * mul) >> shift) as u8,
-  ]
+  sum.map(|channel| pack_alpha(channel, mul, shift))
 }
 
 #[inline(always)]
@@ -411,13 +404,12 @@ fn box_blur_h_rgba(src: &[[u8; 4]], dst: &mut [[u8; 4]], params: BlurPassParams)
   }
 }
 
-/// The vertical pass treats a row as `width * 4` independent bytes, since each
-/// channel slides the same window down its own column. A row wider than
-/// `u32::MAX` bytes cannot be allocated, so the checked multiply never misses.
+/// Each channel is an independent byte column in the vertical pass.
 fn box_blur_v_rgba(src: &[[u8; 4]], dst: &mut [[u8; 4]], params: BlurPassParams, sums: &mut [u32]) {
   let Some(width) = params.width.checked_mul(4) else {
     return;
   };
+
   box_blur_v_alpha(
     bytemuck::cast_slice(src),
     bytemuck::cast_slice_mut(dst),
@@ -548,8 +540,9 @@ mod tests {
   use std::assert_matches;
 
   use super::{
-    BlurPassParams, BlurType, Dims, apply_blur_rgba_bytes, blur_downsample_scale, box_blur_h_alpha,
-    box_blur_v_rgba, compute_mul_shg, pack_alpha, upsample_rgba_bilinear,
+    BlurPassParams, BlurType, Dims, add_pixel, apply_blur_rgba_bytes, blur_downsample_scale,
+    box_blur_h_alpha, box_blur_v_rgba, compute_mul_shg, pack_alpha, pack_pixel, scale_pixel,
+    slide_pixel, upsample_rgba_bilinear, widen_pixel,
   };
   use crate::Error;
 
@@ -593,49 +586,54 @@ mod tests {
     }
   }
 
-  /// The RGBA vertical pass as it was before it ran over flat bytes.
+  /// Channel-wise vertical blur, independent of the flat-byte traversal.
   fn box_blur_v_rgba_reference(src: &[[u8; 4]], dst: &mut [[u8; 4]], params: BlurPassParams) {
     let radius = params.radius as usize;
     let width = params.width as usize;
     let height = params.height as usize;
     let k = radius as u32 + 1;
-    let pack = |sum: [u32; 4]| sum.map(|s| ((s * params.mul_val) >> params.shg) as u8);
-    let slide = |sum: [u32; 4], entering: [u8; 4], leaving: [u8; 4]| {
-      core::array::from_fn(|c| sum[c] + entering[c] as u32 - leaving[c] as u32)
-    };
-    let mut sums: Vec<[u32; 4]> = src[..width]
-      .iter()
-      .map(|p| p.map(|c| c as u32 * k))
-      .collect();
+    let pack = |sum| pack_pixel(sum, params.mul_val, params.shg);
+    let mut sums: Vec<[u32; 4]> = src[..width].iter().map(|&p| scale_pixel(p, k)).collect();
+
     for dy in 1..=radius {
       let row = &src[dy.min(height - 1) * width..][..width];
+
       for x in 0..width {
-        sums[x] = core::array::from_fn(|c| sums[x][c] + row[x][c] as u32);
+        sums[x] = add_pixel(sums[x], widen_pixel(row[x]));
       }
     }
+
     let left_end = (radius + 1).min(height);
+
     for y in 0..left_end {
       let entering = &src[(y + radius + 1).min(height - 1) * width..][..width];
+
       for x in 0..width {
         dst[y * width + x] = pack(sums[x]);
-        sums[x] = slide(sums[x], entering[x], src[x]);
+        sums[x] = slide_pixel(sums[x], entering[x], src[x]);
       }
     }
+
     let middle_end = height.saturating_sub(radius + 1).max(left_end);
+
     for y in left_end..middle_end {
       let entering = &src[(y + radius + 1) * width..][..width];
       let leaving = &src[(y - radius) * width..][..width];
+
       for x in 0..width {
         dst[y * width + x] = pack(sums[x]);
-        sums[x] = slide(sums[x], entering[x], leaving[x]);
+        sums[x] = slide_pixel(sums[x], entering[x], leaving[x]);
       }
     }
+
     let last = &src[(height - 1) * width..][..width];
+
     for y in middle_end..height {
       let leaving = &src[(y - radius) * width..][..width];
+
       for x in 0..width {
         dst[y * width + x] = pack(sums[x]);
-        sums[x] = slide(sums[x], last[x], leaving[x]);
+        sums[x] = slide_pixel(sums[x], last[x], leaving[x]);
       }
     }
   }
@@ -644,16 +642,17 @@ mod tests {
   fn vertical_rgba_pass_matches_the_reference() {
     for radius in [1u32, 4, 25] {
       let (mul_val, shg) = compute_mul_shg(2 * radius + 1);
+
       for width in [1u32, 2, 3, 17] {
         for height in [1u32, 2, 3, 7, 10] {
           let params = BlurPassParams {
             width,
             height,
             radius,
-            stride: width as usize * 4,
             mul_val,
             shg,
           };
+
           let src: Vec<[u8; 4]> = (0..width * height)
             .map(|i| core::array::from_fn(|c| ((i * 37 + c as u32 * 53) % 256) as u8))
             .collect();
@@ -693,7 +692,6 @@ mod tests {
             width,
             height,
             radius,
-            stride: width as usize,
             mul_val,
             shg,
           };
