@@ -1,6 +1,6 @@
 {
   "name": "takumi-paint",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "description": "Turn JSX, HTML, and CSS into a paint tree: boxes, images, and text runs with the values the renderer used.",
   "keywords": [
     "css",
