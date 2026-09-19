@@ -40,6 +40,7 @@ use crate::{
   BackgroundTile, BorderProperties, Placement, Result,
   blend::*,
   error::Error,
+  simd::Simd,
   stacking_context::blend_pixmap_software,
   style::{Affine, BlendMode, Color, ImageScalingAlgorithm},
 };
@@ -598,17 +599,21 @@ mod tests {
 /// `f64`, which lands a hair under the halfway point for some values and rounds
 /// them down; integers make the result identical on every target.
 pub(crate) fn demultiply_rgba_in_place(data: &mut [u8]) {
-  for pixel in data.as_chunks_mut::<4>().0 {
-    let alpha = pixel[3] as u32;
-    if alpha == u8::MAX as u32 || alpha == 0 {
-      continue;
-    }
+  Simd::detect().edit_mixed_alpha_runs(data, |pixels| {
+    for pixel in pixels {
+      let alpha = pixel[3] as u32;
 
-    let divisor = alpha * 2;
-    for channel in &mut pixel[..3] {
-      *channel = ((*channel as u32 * 510 + alpha) / divisor) as u8;
+      if alpha == u8::MAX as u32 || alpha == 0 {
+        continue;
+      }
+
+      let divisor = alpha * 2;
+
+      for channel in &mut pixel[..3] {
+        *channel = ((*channel as u32 * 510 + alpha) / divisor) as u8;
+      }
     }
-  }
+  });
 }
 
 #[cfg(test)]
@@ -638,6 +643,64 @@ mod demultiply_tests {
         );
         assert_eq!(pixel[3], alpha);
       }
+    }
+  }
+
+  fn reference(pixel: [u8; 4]) -> [u8; 4] {
+    let alpha = pixel[3] as u32;
+
+    if alpha == 255 || alpha == 0 {
+      return pixel;
+    }
+
+    let channel = |c: u8| ((c as u32 * 510 + alpha) / (alpha * 2)) as u8;
+    [
+      channel(pixel[0]),
+      channel(pixel[1]),
+      channel(pixel[2]),
+      pixel[3],
+    ]
+  }
+
+  #[test]
+  fn matches_the_per_pixel_formula_for_every_run_shape() {
+    let alphas = [0u8, 1, 66, 128, 254, 255];
+
+    for count in [0usize, 1, 15, 16, 17, 31, 32, 33] {
+      for &alpha in &alphas {
+        let mut uniform: Vec<[u8; 4]> = (0..count)
+          .map(|i| {
+            [
+              11u8.min(alpha),
+              17u8.min(alpha),
+              (31 + i as u8).min(alpha),
+              alpha,
+            ]
+          })
+          .collect();
+        let expected: Vec<[u8; 4]> = uniform.iter().map(|&p| reference(p)).collect();
+        demultiply_rgba_in_place(bytemuck::cast_slice_mut(&mut uniform));
+        assert_eq!(uniform, expected, "uniform alpha {alpha} count {count}");
+      }
+
+      let mut mixed: Vec<[u8; 4]> = (0..count)
+        .map(|i| {
+          let alpha = alphas[i % alphas.len()];
+          [
+            (i as u8).min(alpha),
+            17u8.min(alpha),
+            200u8.min(alpha),
+            alpha,
+          ]
+        })
+        .collect();
+      let expected: Vec<[u8; 4]> = mixed.iter().map(|&p| reference(p)).collect();
+      demultiply_rgba_in_place(bytemuck::cast_slice_mut(&mut mixed));
+      assert_eq!(mixed, expected, "mixed count {count}");
+      let mut clear_noise: Vec<[u8; 4]> = (0..count).map(|i| [i as u8, 7, 250, 0]).collect();
+      let expected = clear_noise.clone();
+      demultiply_rgba_in_place(bytemuck::cast_slice_mut(&mut clear_noise));
+      assert_eq!(clear_noise, expected, "transparent noise count {count}");
     }
   }
 
