@@ -257,7 +257,7 @@ impl<'a> From<&'a ColorTile> for PaintSource<'a> {
   }
 }
 
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum MaskCompositeColor {
   SourceOnly,
   SourceOverColor([u8; 4]),
@@ -302,16 +302,16 @@ pub(super) fn sample_paint_source(
   interpolate_with_footprint(source, algorithm, x, y, footprint).map(premultiplied_from_pixel)
 }
 
-/// One axis of a bilinear lookup, derived the way `interpolate_bilinear` derives it per pixel.
+/// One axis of `interpolate_bilinear`, casts included, so a row fill matches it byte for byte.
 #[derive(Clone, Copy)]
-struct BilinearTap {
+pub(crate) struct BilinearAxis {
   floor: usize,
   ceil: usize,
   ratio: u32,
 }
 
-impl BilinearTap {
-  fn new(coordinate: f32, extent: u32) -> Self {
+impl BilinearAxis {
+  pub(crate) fn new(coordinate: f32, extent: u32) -> Self {
     let last = extent.saturating_sub(1);
     let clamped = (coordinate - 0.5).clamp(0.0, last as f32);
     let floor = clamped.floor() as u32;
@@ -320,6 +320,56 @@ impl BilinearTap {
       ceil: (floor + 1).min(last) as usize,
       ratio: ((clamped - floor as f32) * 256.0) as u32,
     }
+  }
+
+  /// The four-tap mix of this column against `row`'s two source rows. Legal
+  /// premultiplied taps average to a legal premultiplied colour.
+  pub(crate) fn mix(
+    self,
+    row: Self,
+    top: &[PremultipliedColorU8],
+    bottom: &[PremultipliedColorU8],
+  ) -> [u8; 4] {
+    let u_opposite = 256 - self.ratio;
+    let v_opposite = 256 - row.ratio;
+    let weights = [
+      u_opposite * v_opposite,
+      self.ratio * v_opposite,
+      u_opposite * row.ratio,
+      self.ratio * row.ratio,
+    ];
+    let taps = [
+      top[self.floor],
+      top[self.ceil],
+      bottom[self.floor],
+      bottom[self.ceil],
+    ];
+    let channel = |channel: fn(PremultipliedColorU8) -> u8| {
+      let sum: u32 = taps
+        .iter()
+        .zip(weights)
+        .map(|(tap, weight)| channel(*tap) as u32 * weight)
+        .sum();
+      (sum >> 16) as u8
+    };
+    [
+      channel(PremultipliedColorU8::red),
+      channel(PremultipliedColorU8::green),
+      channel(PremultipliedColorU8::blue),
+      channel(PremultipliedColorU8::alpha),
+    ]
+  }
+
+  /// The two source rows this vertical axis reads.
+  pub(crate) fn rows(
+    self,
+    pixels: &[PremultipliedColorU8],
+    stride: usize,
+  ) -> (&[PremultipliedColorU8], &[PremultipliedColorU8]) {
+    (
+      &pixels[self.floor * stride..][..stride],
+      &pixels[self.ceil * stride..][..stride],
+    )
   }
 }
 
@@ -330,7 +380,7 @@ pub(crate) struct ScaledRows<'a> {
   source: PixmapRef<'a>,
   transform: Affine,
   x_start: f32,
-  columns: Vec<BilinearTap>,
+  columns: Vec<BilinearAxis>,
 }
 
 impl<'a> ScaledRows<'a> {
@@ -361,7 +411,7 @@ impl<'a> ScaledRows<'a> {
     let (mut sample_x, _) = transform.transform_point(x_start, 0.0);
     let columns = (0..width)
       .map(|_| {
-        let tap = BilinearTap::new(sample_x, source.width());
+        let tap = BilinearAxis::new(sample_x, source.width());
         sample_x += transform.a;
         tap
       })
@@ -375,51 +425,13 @@ impl<'a> ScaledRows<'a> {
     })
   }
 
-  /// Fills `out` with destination row `y`; a sample that is not a legal
-  /// premultiplied colour comes out fully transparent, as the per-pixel path
-  /// reports it.
+  /// Fills `out` with destination row `y`.
   pub(crate) fn fill(&self, y: f32, out: &mut [[u8; 4]]) {
-    let stride = self.source.width() as usize;
-    let pixels = self.source.pixels();
     let (_, sample_y) = self.transform.transform_point(self.x_start, y);
-    let row = BilinearTap::new(sample_y, self.source.height());
-    let top = &pixels[row.floor * stride..row.floor * stride + stride];
-    let bottom = &pixels[row.ceil * stride..row.ceil * stride + stride];
-    let v_opposite = 256 - row.ratio;
-
+    let row = BilinearAxis::new(sample_y, self.source.height());
+    let (top, bottom) = row.rows(self.source.pixels(), self.source.width() as usize);
     for (dst, column) in out.iter_mut().zip(&self.columns) {
-      let u_opposite = 256 - column.ratio;
-      let weights = [
-        u_opposite * v_opposite,
-        column.ratio * v_opposite,
-        u_opposite * row.ratio,
-        column.ratio * row.ratio,
-      ];
-      let taps = [
-        top[column.floor],
-        top[column.ceil],
-        bottom[column.floor],
-        bottom[column.ceil],
-      ];
-      let mix = |channel: fn(PremultipliedColorU8) -> u8| {
-        let sum: u32 = taps
-          .iter()
-          .zip(weights)
-          .map(|(tap, weight)| channel(*tap) as u32 * weight)
-          .sum();
-        (sum >> 16) as u8
-      };
-      let src = [
-        mix(PremultipliedColorU8::red),
-        mix(PremultipliedColorU8::green),
-        mix(PremultipliedColorU8::blue),
-        mix(PremultipliedColorU8::alpha),
-      ];
-      *dst = if src[..3].iter().any(|&channel| channel > src[3]) {
-        [0; 4]
-      } else {
-        src
-      };
+      *dst = column.mix(row, top, bottom);
     }
   }
 }
