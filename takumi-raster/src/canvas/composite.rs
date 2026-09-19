@@ -373,7 +373,7 @@ impl PixelSampler<'_> {
     row_start: impl Fn(i32) -> (f32, f32),
     mask_alpha: impl Fn(i32, i32) -> u8,
   ) {
-    let footprint = sampling_footprint(self.transform);
+    let footprint = SamplingFootprint::of(self.transform);
     for dest_y in bounds.y_min..bounds.y_max {
       let combined_row = self
         .combined_mask
@@ -488,14 +488,6 @@ fn blend_sampled(
   }
 
   blend_premultiplied_pixel(dst, src, mode);
-}
-
-#[inline(always)]
-pub(super) fn sampling_footprint(transform: Affine) -> SamplingFootprint {
-  SamplingFootprint::new(
-    transform.a.hypot(transform.b),
-    transform.c.hypot(transform.d),
-  )
 }
 
 #[cfg(test)]

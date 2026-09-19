@@ -22,6 +22,14 @@ impl SamplingFootprint {
     }
   }
 
+  /// The source pixels one destination pixel covers under `transform`.
+  pub(crate) fn of(transform: Affine) -> Self {
+    Self::new(
+      transform.a.hypot(transform.b),
+      transform.c.hypot(transform.d),
+    )
+  }
+
   pub(crate) fn is_minifying(self) -> bool {
     self.x > 1.0 || self.y > 1.0
   }
@@ -397,13 +405,7 @@ impl<'a> ScaledRows<'a> {
     if transform.b != 0.0
       || transform.c != 0.0
       || matches!(algorithm, ImageScalingAlgorithm::Pixelated)
-      || SamplingFootprint::new(
-        transform.a.hypot(transform.b),
-        transform.c.hypot(transform.d),
-      )
-      .is_minifying()
-      || source.width() == 0
-      || source.height() == 0
+      || SamplingFootprint::of(transform).is_minifying()
     {
       return None;
     }
