@@ -635,6 +635,24 @@ mod tests {
   use crate::viewport::Viewport;
 
   #[test]
+  fn mask_bounds_span_the_first_and_last_visible_pixels() {
+    let bounds = |mask: &[u8]| mask_bounds(mask, 5, 3).map(|p| (p.left, p.top, p.width, p.height));
+    assert_eq!(bounds(&[0; 15]), None);
+    assert_eq!(bounds(&[255; 15]), Some((0, 0, 5, 3)));
+    let mut single = [0u8; 15];
+    single[7] = 1;
+    assert_eq!(bounds(&single), Some((2, 1, 1, 1)));
+    let mut corners = [0u8; 15];
+    corners[0] = 9;
+    corners[14] = 9;
+    assert_eq!(bounds(&corners), Some((0, 0, 5, 3)));
+    let mut middle_rows = [0u8; 15];
+    middle_rows[6] = 3;
+    middle_rows[8] = 3;
+    assert_eq!(bounds(&middle_rows), Some((1, 1, 3, 1)));
+  }
+
+  #[test]
   fn test_apply_filters_lut_batching() -> Result<()> {
     let mut image = RgbaImage::new(1, 1);
     image.put_pixel(0, 0, Rgba([100, 150, 200, 255]));
