@@ -1,4 +1,4 @@
-use crate::{Error, Result, checked_area};
+use crate::{Error, Result, checked_area, simd};
 
 const BLUR_DOWNSAMPLE_TARGET_SIGMA: f32 = 6.0;
 const BLUR_DOWNSAMPLE_MIN_DIMENSION: u32 = 128;
@@ -506,11 +506,16 @@ fn box_blur_h_alpha(src: &[u8], dst: &mut [u8], params: BlurPassParams) {
     }
 
     let middle_end = width.saturating_sub(radius + 1).max(left_end);
-    for x in left_end..middle_end {
-      let entering = src_row[x + radius + 1] as u32;
-      let leaving = src_row[x - radius] as u32;
-      dst_row[x] = pack_alpha(sum, mul, shift);
-      sum = sum + entering - leaving;
+    let (entering, entering_tail) =
+      src_row[left_end + radius + 1..middle_end + radius + 1].as_chunks::<4>();
+    let (leaving, leaving_tail) = src_row[left_end - radius..middle_end - radius].as_chunks::<4>();
+    let (out, out_tail) = dst_row[left_end..middle_end].as_chunks_mut::<4>();
+    for ((out, entering), leaving) in out.iter_mut().zip(entering).zip(leaving) {
+      (*out, sum) = simd::slide_box_alpha4(sum, *entering, *leaving, mul, shift as u32);
+    }
+    for ((out, &entering), &leaving) in out_tail.iter_mut().zip(entering_tail).zip(leaving_tail) {
+      *out = pack_alpha(sum, mul, shift);
+      sum = sum + entering as u32 - leaving as u32;
     }
 
     let last = src_row[width - 1] as u32;
