@@ -72,7 +72,7 @@
     "@takumi-rs/helpers": "workspace:*"
   },
   "devDependencies": {
-    "@napi-rs/cli": "3.9.0",
+    "@napi-rs/cli": "3.9.1",
     "@types/bun": "catalog:",
     "@types/react": "catalog:",
     "csstype": "catalog:",
