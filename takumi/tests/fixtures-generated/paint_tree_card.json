@@ -1,29 +1,6 @@
 {
   "width": 600.0,
   "height": 400.0,
-  "fonts": [
-    {
-      "family": "Geist",
-      "faceIndex": 0,
-      "weight": 700.0,
-      "style": "normal",
-      "width": 100.0,
-      "variations": [
-        {
-          "tag": "wght",
-          "value": 700.0
-        }
-      ]
-    },
-    {
-      "family": "Geist",
-      "faceIndex": 0,
-      "weight": 400.0,
-      "style": "normal",
-      "width": 100.0,
-      "variations": []
-    }
-  ],
   "root": {
     "source": {
       "path": [],
@@ -32,7 +9,8 @@
     },
     "width": 400.0,
     "height": 214.0,
-    "transform": [1.0, 0.0, 0.0, 1.0, 0.0, 0.0],
+    "x": 0.0,
+    "y": 0.0,
     "opacity": 1.0,
     "isolate": false,
     "clip": {
@@ -51,82 +29,80 @@
       "x": true,
       "y": true
     },
-    "boxDecoration": {
-      "background": {
-        "color": [247, 243, 236, 255],
-        "clip": "border-box",
-        "layers": [
-          {
-            "fill": {
-              "kind": "linear",
-              "css": "linear-gradient(to right, rgb(255, 0, 0), rgb(0, 0, 255))",
-              "repeating": false,
-              "dirX": 1.0,
-              "dirY": 4.371139e-8,
-              "axisLength": 392.0,
-              "stops": [
-                {
-                  "color": [255, 0, 0, 255],
-                  "position": 0.0
-                },
-                {
-                  "color": [0, 0, 255, 255],
-                  "position": 392.0
-                }
-              ]
-            },
-            "tiles": {
-              "xs": [-388, 4, 396],
-              "ys": [-202, 4, 210],
-              "width": 392,
-              "height": 206
-            },
-            "blendMode": "normal"
-          }
-        ]
-      },
-      "border": {
-        "widths": [4.0, 4.0, 4.0, 4.0],
-        "colors": [
-          [179, 38, 30, 255],
-          [179, 38, 30, 255],
-          [179, 38, 30, 255],
-          [179, 38, 30, 255]
-        ],
-        "styles": ["solid", "solid", "solid", "solid"],
-        "radii": [
-          [12.0, 12.0],
-          [12.0, 12.0],
-          [12.0, 12.0],
-          [12.0, 12.0]
-        ]
-      },
-      "shadows": {
-        "inset": [
-          {
-            "offsetX": 0.0,
-            "offsetY": 1.0,
-            "blur": 0.0,
-            "spread": 0.0,
-            "color": [255, 255, 255, 255]
-          }
-        ],
-        "outer": [
-          {
-            "offsetX": 0.0,
-            "offsetY": 4.0,
-            "blur": 8.0,
-            "spread": 0.0,
-            "color": [0, 0, 0, 64]
-          }
-        ]
-      },
-      "outline": {
-        "width": 2.0,
-        "color": [0, 128, 0, 255],
-        "style": "dashed",
-        "offset": 3.0
-      }
+    "background": {
+      "color": [247, 243, 236, 255],
+      "clip": "border-box",
+      "layers": [
+        {
+          "fill": {
+            "kind": "linear",
+            "css": "linear-gradient(to right, rgb(255, 0, 0), rgb(0, 0, 255))",
+            "repeating": false,
+            "dirX": 1.0,
+            "dirY": 4.371139e-8,
+            "axisLength": 392.0,
+            "stops": [
+              {
+                "color": [255, 0, 0, 255],
+                "position": 0.0
+              },
+              {
+                "color": [0, 0, 255, 255],
+                "position": 392.0
+              }
+            ]
+          },
+          "tiles": {
+            "xs": [-388, 4, 396],
+            "ys": [-202, 4, 210],
+            "width": 392,
+            "height": 206
+          },
+          "blendMode": "normal"
+        }
+      ]
+    },
+    "border": {
+      "widths": [4.0, 4.0, 4.0, 4.0],
+      "colors": [
+        [179, 38, 30, 255],
+        [179, 38, 30, 255],
+        [179, 38, 30, 255],
+        [179, 38, 30, 255]
+      ],
+      "styles": ["solid", "solid", "solid", "solid"],
+      "radii": [
+        [12.0, 12.0],
+        [12.0, 12.0],
+        [12.0, 12.0],
+        [12.0, 12.0]
+      ]
+    },
+    "shadows": {
+      "inset": [
+        {
+          "offsetX": 0.0,
+          "offsetY": 1.0,
+          "blur": 0.0,
+          "spread": 0.0,
+          "color": [255, 255, 255, 255]
+        }
+      ],
+      "outer": [
+        {
+          "offsetX": 0.0,
+          "offsetY": 4.0,
+          "blur": 8.0,
+          "spread": 0.0,
+          "color": [0, 0, 0, 64]
+        }
+      ]
+    },
+    "outline": {
+      "width": 2.0,
+      "color": [0, 128, 0, 255],
+      "style": "dashed",
+      "offset": 3.0
     },
     "children": [
       {
@@ -136,10 +112,11 @@
         },
         "width": 352.0,
         "height": 52.0,
-        "transform": [1.0, 0.0, 0.0, 1.0, 24.0, 24.0],
+        "x": 24.0,
+        "y": 24.0,
         "opacity": 1.0,
         "isolate": false,
-        "runs": [
+        "textRuns": [
           {
             "text": "4,2 %",
             "x": 0.0,
@@ -147,7 +124,19 @@
             "width": 103.92,
             "ascent": 40.2,
             "descent": 11.8,
-            "fontIndex": 0,
+            "font": {
+              "family": "Geist",
+              "faceIndex": 0,
+              "weight": 700.0,
+              "style": "normal",
+              "width": 100.0,
+              "variations": [
+                {
+                  "tag": "wght",
+                  "value": 700.0
+                }
+              ]
+            },
             "fontSize": 40.0,
             "color": [179, 38, 30, 255],
             "opacity": 1.0,
@@ -207,7 +196,8 @@
         },
         "width": 352.0,
         "height": 34.0,
-        "transform": [1.0, 0.0, 0.0, 1.0, 24.0, 76.0],
+        "x": 24.0,
+        "y": 76.0,
         "opacity": 1.0,
         "isolate": false,
         "inlineBackgrounds": [
@@ -228,7 +218,7 @@
             "opacity": 0.5
           }
         ],
-        "runs": [
+        "textRuns": [
           {
             "text": "hello ",
             "x": 0.0,
@@ -236,7 +226,14 @@
             "width": 64.116,
             "ascent": 26.130001,
             "descent": 7.67,
-            "fontIndex": 1,
+            "font": {
+              "family": "Geist",
+              "faceIndex": 0,
+              "weight": 400.0,
+              "style": "normal",
+              "width": 100.0,
+              "variations": []
+            },
             "fontSize": 26.0,
             "color": [20, 17, 15, 255],
             "opacity": 1.0,
@@ -282,7 +279,19 @@
             "width": 71.942,
             "ascent": 26.130001,
             "descent": 7.67,
-            "fontIndex": 0,
+            "font": {
+              "family": "Geist",
+              "faceIndex": 0,
+              "weight": 700.0,
+              "style": "normal",
+              "width": 100.0,
+              "variations": [
+                {
+                  "tag": "wght",
+                  "value": 700.0
+                }
+              ]
+            },
             "fontSize": 26.0,
             "color": [0, 0, 255, 255],
             "opacity": 1.0,
@@ -323,7 +332,14 @@
             "width": 57.486,
             "ascent": 26.130001,
             "descent": 7.67,
-            "fontIndex": 1,
+            "font": {
+              "family": "Geist",
+              "faceIndex": 0,
+              "weight": 400.0,
+              "style": "normal",
+              "width": 100.0,
+              "variations": []
+            },
             "fontSize": 26.0,
             "color": [20, 17, 15, 255],
             "opacity": 1.0,
@@ -364,7 +380,14 @@
             "width": 89.674,
             "ascent": 26.130001,
             "descent": 7.67,
-            "fontIndex": 1,
+            "font": {
+              "family": "Geist",
+              "faceIndex": 0,
+              "weight": 400.0,
+              "style": "normal",
+              "width": 100.0,
+              "variations": []
+            },
             "fontSize": 26.0,
             "color": [20, 17, 15, 255],
             "opacity": 1.0,
@@ -412,7 +435,8 @@
         },
         "width": 120.0,
         "height": 80.0,
-        "transform": [1.0, 0.0, 0.0, 1.0, 24.0, 110.0],
+        "x": 24.0,
+        "y": 110.0,
         "opacity": 1.0,
         "isolate": false,
         "image": {
@@ -438,7 +462,8 @@
         },
         "width": 352.0,
         "height": 0.0,
-        "transform": [1.0, 0.0, 0.0, 1.0, 24.0, 190.0],
+        "x": 24.0,
+        "y": 190.0,
         "opacity": 1.0,
         "blendMode": "multiply",
         "isolate": false,

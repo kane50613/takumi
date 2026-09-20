@@ -46,7 +46,7 @@ export type ImageSource = {
   cache?: ImageCacheMode;
 };
 
-export type PaintTreeOptions = {
+export type PaintOptions = {
   /** Canvas width in device pixels. Omit to size the canvas to the content. */
   width?: number;
   /** Canvas height in device pixels. Omit to size the canvas to the content. */
@@ -81,8 +81,6 @@ export type PaintTree = {
   width: number;
   /** Canvas height in device pixels. */
   height: number;
-  /** Font instances the runs reference by index. */
-  fonts: PaintFont[];
   root: PaintNode;
 };
 
@@ -106,8 +104,8 @@ export type PaintFont = {
 
 /**
  * One painted box: a compositing group whose `opacity`, `clip`, and `blendMode` apply to
- * everything inside it. Paints in order: `boxDecoration`, `image`, `inlineBackgrounds`, `runs`,
- * `children`, then `boxDecoration.outline`.
+ * everything inside it. Paints in order: `shadows.outer`, `background`, `shadows.inset`, `border`,
+ * `image`, `inlineBackgrounds`, `textRuns`, `children`, then `outline`.
  */
 export type PaintNode = {
   /** The node this box came from; absent for an anonymous box. */
@@ -116,8 +114,15 @@ export type PaintNode = {
   width: number;
   /** Border-box height in device pixels. */
   height: number;
-  /** Absolute transform placing the border box on the canvas. */
-  transform: Matrix;
+  /** Left edge of the border box on the canvas. */
+  x: number;
+  /** Top edge of the border box on the canvas. */
+  y: number;
+  /**
+   * Absolute transform when the box is rotated, scaled, or skewed; absent for a plain
+   * translation. Its translation is `x`, `y`.
+   */
+  transform?: Matrix;
   opacity: number;
   /** `mix-blend-mode` other than `normal`. */
   blendMode?: string;
@@ -125,15 +130,21 @@ export type PaintNode = {
   isolate: boolean;
   /** Overflow clip applied to the children. */
   clip?: PaintClip;
-  /** Box decorations, when the box paints any. */
-  boxDecoration?: PaintBoxDecoration;
+  /** The background, when it paints a color or a layer. */
+  background?: PaintBackground;
+  /** The border, when any side has width. */
+  border?: PaintBorder;
+  /** `box-shadow` layers, when any. */
+  shadows?: PaintBoxShadows;
+  /** The outline, painted after the children. */
+  outline?: PaintOutline;
   image?: PaintImage;
   /** `text-shadow` layers under every run, later-listed shadows lowest. */
   textShadows?: PaintShadow[];
   /** Inline-span backgrounds, one rounded rect per line, outer spans first. */
   inlineBackgrounds?: PaintInlineBackground[];
   /** Shaped text runs in visual order. */
-  runs?: PaintTextRun[];
+  textRuns?: PaintTextRun[];
   /** Effects the tree carries as CSS text instead of resolving. */
   unresolvedEffects?: PaintUnresolvedEffects;
   /** Boxes painted after this one, in paint order. */
@@ -157,13 +168,8 @@ export type PaintClip = {
   y: boolean;
 };
 
-export type PaintBoxDecoration = {
-  background: PaintBackground;
-  border: PaintBorder;
-  shadows: { inset: PaintShadow[]; outer: PaintShadow[] };
-  /** The outline, painted after the children. */
-  outline?: PaintOutline;
-};
+/** `box-shadow` layers split by where they fall. */
+export type PaintBoxShadows = { inset: PaintShadow[]; outer: PaintShadow[] };
 
 export type PaintBackground = {
   /** `background-color`, when visible. */
@@ -252,8 +258,8 @@ export type PaintTextRun = {
   width: number;
   ascent: number;
   descent: number;
-  /** Index into `PaintTree.fonts`. */
-  fontIndex: number;
+  /** The font instance the run was shaped with. */
+  font: PaintFont;
   fontSize: number;
   color: Rgba;
   opacity: number;

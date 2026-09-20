@@ -1,25 +1,16 @@
 import { describe, expect, it } from "bun:test";
 import { container, image, text } from "@takumi-rs/helpers";
-import { type PaintNode, type PaintTextRun, PaintTreeRenderer } from "takumi-paint";
+import { Painter, find, textRuns } from "takumi-paint";
 
-const renderer = new PaintTreeRenderer();
+const painter = new Painter();
 
-function runs(node: PaintNode): PaintTextRun[] {
-  return [...(node.runs ?? []), ...(node.children ?? []).flatMap(runs)];
+function texts(tree: Parameters<typeof textRuns>[0]) {
+  return [...textRuns(tree)].map(({ run }) => run);
 }
 
-function find(node: PaintNode, id: string): PaintNode | undefined {
-  if (node.source?.id === id) return node;
-  for (const child of node.children ?? []) {
-    const found = find(child, id);
-    if (found) return found;
-  }
-  return undefined;
-}
-
-describe("PaintTreeRenderer.render", () => {
+describe("Painter.paint", () => {
   it("records a box's used decorations and its text runs", async () => {
-    const tree = await renderer.render(
+    const tree = await painter.paint(
       container({
         id: "card",
         style: {
@@ -36,51 +27,64 @@ describe("PaintTreeRenderer.render", () => {
     );
 
     expect([tree.width, tree.height]).toEqual([600, 300]);
-    const card = find(tree.root, "card");
-    expect(card?.boxDecoration?.background.color).toEqual([247, 243, 236, 255]);
-    expect(card?.boxDecoration?.border.widths).toEqual([4, 4, 4, 4]);
-    expect(card?.boxDecoration?.border.radii[0]).toEqual([12, 12]);
+    const card = find(tree, "card");
+    expect([card?.x, card?.y, card?.transform]).toEqual([0, 0, undefined]);
+    expect(card?.background?.color).toEqual([247, 243, 236, 255]);
+    expect(card?.border?.widths).toEqual([4, 4, 4, 4]);
+    expect(card?.border?.radii[0]).toEqual([12, 12]);
+    expect(card?.shadows).toBeUndefined();
 
-    const [run] = runs(tree.root);
+    const [run] = texts(tree);
     expect(run?.text).toBe("Hello paint");
     expect(run?.color).toEqual([0, 0, 255, 255]);
     expect(run?.fontSize).toBe(32);
-    expect(tree.fonts[run!.fontIndex]?.family).toBe("Geist");
+    expect(run?.font.family).toBe("Geist");
+  });
+
+  it("places a transformed box by its origin and keeps the matrix", async () => {
+    const tree = await painter.paint(
+      `<div id="box" style="width: 100px; height: 50px; transform: rotate(90deg)"></div>`,
+      { width: 200, height: 200 },
+    );
+
+    const box = find(tree, "box");
+    expect(box?.transform).toBeDefined();
+    expect([box?.x, box?.y]).toEqual([box?.transform?.[4], box?.transform?.[5]]);
   });
 
   it("scales CSS lengths by the device pixel ratio", async () => {
-    const tree = await renderer.render(
+    const tree = await painter.paint(
       `<style>.big { font-size: 20px }</style><div class="big" style="width: 100px">hi</div>`,
       { width: 200, height: 100, devicePixelRatio: 2 },
     );
 
     expect([tree.width, tree.height]).toEqual([200, 100]);
-    const [run] = runs(tree.root);
+    const [run] = texts(tree);
     expect(run?.fontSize).toBe(40);
   });
 
   it("sizes an SVG image from its root element", async () => {
     const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="2in" viewBox="0 0 4 1"><rect width="4" height="1"/></svg>`;
-    const tree = await renderer.render(container({ id: "wrap", children: [image({ src: svg })] }), {
+    const tree = await painter.paint(container({ id: "wrap", children: [image({ src: svg })] }), {
       width: 400,
       height: 200,
     });
 
-    const [picture] = find(tree.root, "wrap")?.children ?? [];
+    const [picture] = find(tree, "wrap")?.children ?? [];
     expect([picture?.width, picture?.height]).toEqual([192, 48]);
     expect(picture?.image?.src).toBe(svg);
   });
 
   it("keeps a nested span's own color as its own run", async () => {
-    const tree = await renderer.render(
+    const tree = await painter.paint(
       `<style>b { color: rgb(255, 0, 0); font-weight: 700 }</style><p>hello <b>world</b></p>`,
       { width: 400 },
     );
 
-    const texts = runs(tree.root).map((run) => [run.text, run.color[0]]);
-    expect(texts).toEqual([
-      ["hello ", 0],
-      ["world", 255],
+    const runs = texts(tree).map((run) => [run.text, run.color[0], run.font.weight]);
+    expect(runs).toEqual([
+      ["hello ", 0, 400],
+      ["world", 255, 700],
     ]);
   });
 });

@@ -31,8 +31,6 @@ pub struct PaintTree {
   pub width: f32,
   /// Canvas height in device pixels.
   pub height: f32,
-  /// Font instances the runs reference by index.
-  pub fonts: Vec<PaintFont>,
   /// The root node.
   pub root: PaintNode,
 }
@@ -71,8 +69,8 @@ pub struct PaintVariation {
 }
 
 /// One painted box: a compositing group whose `opacity`, `clip`, and blend apply to everything
-/// inside it. Paints in order: `box_decoration`, `image`, `inline_backgrounds`, `runs`,
-/// `children`, then `box_decoration.outline`.
+/// inside it. Paints in order: `shadows.outer`, `background`, `shadows.inset`, `border`, `image`,
+/// `inline_backgrounds`, `text_runs`, `children`, then `outline`.
 #[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PaintNode {
@@ -83,8 +81,14 @@ pub struct PaintNode {
   pub width: f32,
   /// Border-box height in device pixels.
   pub height: f32,
-  /// Absolute transform placing the border box on the canvas, as `[a, b, c, d, e, f]`.
-  pub transform: [f32; 6],
+  /// Left edge of the border box on the canvas.
+  pub x: f32,
+  /// Top edge of the border box on the canvas.
+  pub y: f32,
+  /// Absolute transform as `[a, b, c, d, e, f]` when the box is rotated, scaled, or skewed;
+  /// absent for a plain translation. Its translation is `x`, `y`.
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub transform: Option<[f32; 6]>,
   /// Group opacity, `0..=1`.
   pub opacity: f32,
   /// `mix-blend-mode` other than `normal`.
@@ -95,9 +99,18 @@ pub struct PaintNode {
   /// Overflow clip applied to the children.
   #[serde(skip_serializing_if = "Option::is_none")]
   pub clip: Option<PaintClip>,
-  /// Box decorations, when the box paints any.
+  /// The background, when it paints a color or a layer.
   #[serde(skip_serializing_if = "Option::is_none")]
-  pub box_decoration: Option<PaintBoxDecoration>,
+  pub background: Option<PaintBackground>,
+  /// The border, when any side has width.
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub border: Option<PaintBorder>,
+  /// `box-shadow` layers, when any.
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub shadows: Option<PaintBoxShadows>,
+  /// The outline, painted after the children.
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub outline: Option<PaintOutline>,
   /// Replaced image content.
   #[serde(skip_serializing_if = "Option::is_none")]
   pub image: Option<PaintImage>,
@@ -109,7 +122,7 @@ pub struct PaintNode {
   pub inline_backgrounds: Vec<PaintInlineBackground>,
   /// Shaped text runs in visual order.
   #[serde(skip_serializing_if = "Vec::is_empty")]
-  pub runs: Vec<PaintTextRun>,
+  pub text_runs: Vec<PaintTextRun>,
   /// Effects the tree carries as CSS text instead of resolving.
   #[serde(skip_serializing_if = "Option::is_none")]
   pub unresolved_effects: Option<PaintUnresolvedEffects>,
@@ -147,21 +160,6 @@ pub struct PaintClip {
   pub x: bool,
   /// Whether the vertical axis clips.
   pub y: bool,
-}
-
-/// A box's decorations.
-#[derive(Debug, Clone, PartialEq, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct PaintBoxDecoration {
-  /// The background.
-  pub background: PaintBackground,
-  /// The border.
-  pub border: PaintBorder,
-  /// `box-shadow` layers.
-  pub shadows: PaintBoxShadows,
-  /// The outline, painted after the children.
-  #[serde(skip_serializing_if = "Option::is_none")]
-  pub outline: Option<PaintOutline>,
 }
 
 /// A box's background.
@@ -344,8 +342,8 @@ pub struct PaintTextRun {
   pub ascent: f32,
   /// Typographic descent below the baseline.
   pub descent: f32,
-  /// Index into [`PaintTree::fonts`].
-  pub font_index: usize,
+  /// The font instance the run was shaped with.
+  pub font: PaintFont,
   /// Font size the run was shaped at.
   pub font_size: f32,
   /// Fill color.

@@ -1,4 +1,4 @@
-//! The font instance table runs reference by index.
+//! Font instances described once per distinct face and variation.
 
 use std::collections::HashMap;
 
@@ -32,28 +32,20 @@ impl FontKey {
   }
 }
 
-/// Deduplicates the font instances the runs use.
+/// Caches the description of each font instance the runs use.
 #[derive(Default)]
 pub(super) struct FontTable {
-  indices: HashMap<FontKey, usize>,
-  fonts: Vec<PaintFont>,
+  fonts: HashMap<FontKey, PaintFont>,
 }
 
 impl FontTable {
-  /// The table index of the instance `run` was shaped with.
-  pub(super) fn intern(&mut self, fonts: &FontsSnapshot, run: &ShapedRun) -> usize {
-    let key = FontKey::of(run);
-    if let Some(&index) = self.indices.get(&key) {
-      return index;
-    }
-    let index = self.fonts.len();
-    self.fonts.push(describe(fonts, run));
-    self.indices.insert(key, index);
-    index
-  }
-
-  pub(super) fn into_fonts(self) -> Vec<PaintFont> {
-    self.fonts
+  /// The instance `run` was shaped with.
+  pub(super) fn describe(&mut self, fonts: &FontsSnapshot, run: &ShapedRun) -> PaintFont {
+    self
+      .fonts
+      .entry(FontKey::of(run))
+      .or_insert_with(|| describe(fonts, run))
+      .clone()
   }
 }
 

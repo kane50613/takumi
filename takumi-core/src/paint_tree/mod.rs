@@ -2,8 +2,8 @@
 //!
 //! [`paint_tree`] runs layout, builds the same stacking-context scene the raster, SVG, and
 //! PDF backends walk, and records each box's decorations, image placement, and shaped text
-//! runs instead of drawing them. Lengths are device pixels. A node's `transform` is absolute;
-//! everything inside a node is relative to its border box.
+//! runs instead of drawing them. Lengths are device pixels. A node's `x`, `y`, and `transform`
+//! are absolute; everything inside a node is relative to its border box.
 //!
 //! Descendant outlines drift from the backends: they paint after the owning node's children,
 //! while raster and SVG defer a plain node's outline past the siblings that follow it in the
@@ -92,16 +92,21 @@ pub fn paint_tree(options: PaintTreeOptions<'_>) -> Result<PaintTree> {
       source: None,
       width,
       height,
-      transform: Affine::IDENTITY.to_cols_array(),
+      x: 0.0,
+      y: 0.0,
+      transform: None,
       opacity: 1.0,
       blend_mode: None,
       isolate: false,
       clip: None,
-      box_decoration: None,
+      background: None,
+      border: None,
+      shadows: None,
+      outline: None,
       image: None,
       text_shadows: Vec::new(),
       inline_backgrounds: Vec::new(),
-      runs: Vec::new(),
+      text_runs: Vec::new(),
       unresolved_effects: None,
       children: nodes,
     },
@@ -110,7 +115,6 @@ pub fn paint_tree(options: PaintTreeOptions<'_>) -> Result<PaintTree> {
   Ok(PaintTree {
     width,
     height,
-    fonts: walker.fonts.into_fonts(),
     root,
   })
 }

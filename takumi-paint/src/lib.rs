@@ -39,18 +39,18 @@ extern "C" {
   /// JavaScript type for the families produced by `registerFont`.
   #[wasm_bindgen(typescript_type = "RegisteredFamily[]")]
   pub type RegisteredFamiliesType;
-  /// JavaScript object representing render options.
-  #[wasm_bindgen(typescript_type = "PaintTreeOptions")]
-  pub type RenderOptionsType;
+  /// JavaScript object representing paint options.
+  #[wasm_bindgen(typescript_type = "PaintOptions")]
+  pub type PaintOptionsType;
   /// JavaScript object representing a paint tree.
   #[wasm_bindgen(typescript_type = "PaintTree")]
   pub type PaintTreeType;
 }
 
-/// Options for [`PaintTreeRenderer::render`].
+/// Options for [`Painter::paint`].
 #[derive(Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
-struct RenderOptions {
+struct PaintOptions {
   width: Option<u32>,
   height: Option<u32>,
   device_pixel_ratio: Option<f32>,
@@ -60,23 +60,23 @@ struct RenderOptions {
   lang: Option<String>,
 }
 
-/// A renderer holding registered fonts and a decoded-resource cache.
+/// A painter holding registered fonts and a decoded-resource cache.
 ///
 /// State lives behind a lock and every method takes `&self`, mirroring the
 /// other wasm bindings: a panic mid-call can't leave the wasm-bindgen borrow
 /// flag permanently set.
 #[wasm_bindgen]
-pub struct PaintTreeRenderer {
+pub struct Painter {
   state: RwLock<Fonts>,
   resource_cache: ResourceCache,
 }
 
 #[wasm_bindgen]
-impl PaintTreeRenderer {
-  /// Creates a renderer with the bundled last-resort fonts.
+impl Painter {
+  /// Creates a painter with the bundled last-resort fonts.
   #[wasm_bindgen(constructor)]
-  pub fn new() -> Result<PaintTreeRenderer, js_sys::Error> {
-    Ok(PaintTreeRenderer {
+  pub fn new() -> Result<Painter, js_sys::Error> {
+    Ok(Painter {
       state: RwLock::new(default_fonts().map_err(map_error)?),
       resource_cache: ResourceCache::default(),
     })
@@ -90,19 +90,19 @@ impl PaintTreeRenderer {
     let mut state = self
       .state
       .try_write()
-      .map_err(|error| js_sys::Error::new(&format!("Renderer state is locked: {error}")))?;
+      .map_err(|error| js_sys::Error::new(&format!("Painter state is locked: {error}")))?;
     let registered = register_font(&mut state, font).map_err(map_error)?;
     Ok(to_value(&registered).map_err(map_error)?.unchecked_into())
   }
 
   /// Lays out a node tree and returns what painting it would draw.
-  pub fn render(
+  pub fn paint(
     &self,
     node: NodeType,
-    options: Option<RenderOptionsType>,
+    options: Option<PaintOptionsType>,
   ) -> Result<PaintTreeType, js_sys::Error> {
     let node: Node = from_value(node.into()).map_err(map_error)?;
-    let options: RenderOptions = options
+    let options: PaintOptions = options
       .map(|options| from_value(options.into()).map_err(map_error))
       .transpose()?
       .unwrap_or_default();
@@ -120,7 +120,7 @@ impl PaintTreeRenderer {
     let state = self
       .state
       .try_read()
-      .map_err(|error| js_sys::Error::new(&format!("Renderer state is locked: {error}")))?;
+      .map_err(|error| js_sys::Error::new(&format!("Painter state is locked: {error}")))?;
     let tree = paint_tree(
       PaintTreeOptions::builder()
         .viewport(

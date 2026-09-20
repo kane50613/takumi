@@ -72,7 +72,7 @@ fn find<'t>(node: &'t PaintNode, id: &str) -> Option<&'t PaintNode> {
 }
 
 fn all_runs(node: &PaintNode) -> Vec<&takumi_core::paint_tree::PaintTextRun> {
-  let mut runs: Vec<_> = node.runs.iter().collect();
+  let mut runs: Vec<_> = node.text_runs.iter().collect();
   for child in &node.children {
     runs.extend(all_runs(child));
   }
@@ -92,23 +92,27 @@ fn paint_tree_records_used_values() {
 
   let card = find(&tree.root, "card").expect("card box");
   assert_eq!((card.width, card.height), (400.0, card.height));
-  let decoration = card.box_decoration.as_ref().expect("card decorations");
-  assert_eq!(decoration.background.color, Some([247, 243, 236, 255]));
-  assert_eq!(decoration.border.widths, [4.0; 4]);
-  assert_eq!(decoration.border.colors[0], [179, 38, 30, 255]);
-  assert_eq!(decoration.border.styles[0], "solid");
-  assert_eq!(decoration.border.radii[0], [12.0, 12.0]);
-  assert_eq!(decoration.shadows.outer.len(), 1);
-  assert_eq!(decoration.shadows.inset.len(), 1);
-  assert_eq!(decoration.shadows.outer[0].blur, 8.0);
-  let outline = decoration.outline.as_ref().expect("outline");
+  assert_eq!((card.x, card.y), (0.0, 0.0));
+  assert_eq!(card.transform, None);
+  let background = card.background.as_ref().expect("card background");
+  let border = card.border.as_ref().expect("card border");
+  let shadows = card.shadows.as_ref().expect("card shadows");
+  assert_eq!(background.color, Some([247, 243, 236, 255]));
+  assert_eq!(border.widths, [4.0; 4]);
+  assert_eq!(border.colors[0], [179, 38, 30, 255]);
+  assert_eq!(border.styles[0], "solid");
+  assert_eq!(border.radii[0], [12.0, 12.0]);
+  assert_eq!(shadows.outer.len(), 1);
+  assert_eq!(shadows.inset.len(), 1);
+  assert_eq!(shadows.outer[0].blur, 8.0);
+  let outline = card.outline.as_ref().expect("outline");
   assert_eq!(
     (outline.width, outline.offset, outline.style.as_str()),
     (2.0, 3.0, "dashed")
   );
-  assert_eq!(decoration.background.layers.len(), 1);
+  assert_eq!(background.layers.len(), 1);
   assert!(matches!(
-    &decoration.background.layers[0].fill,
+    &background.layers[0].fill,
     PaintFill::Linear { stops, .. } if stops.len() == 2 && stops[0].color == [255, 0, 0, 255]
   ));
   let clip = card.clip.as_ref().expect("overflow clip");
@@ -125,12 +129,9 @@ fn paint_tree_records_used_values() {
   assert!(big.decorations.iter().all(|d| d.line == "underline"));
   let world = runs[2];
   assert_eq!(world.color, [0, 0, 255, 255]);
-  assert_eq!(tree.fonts[world.font_index].weight, 700.0);
-  assert_eq!(
-    tree.fonts[world.font_index].family.as_deref(),
-    Some("Geist")
-  );
-  assert_eq!(tree.fonts[runs[1].font_index].weight, 400.0);
+  assert_eq!(world.font.weight, 700.0);
+  assert_eq!(world.font.family.as_deref(), Some("Geist"));
+  assert_eq!(runs[1].font.weight, 400.0);
 
   let paragraph = find(&tree.root, "paragraph").expect("paragraph box");
   assert_eq!(paragraph.inline_backgrounds.len(), 1);

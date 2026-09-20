@@ -30,10 +30,10 @@ use crate::{
 use super::{
   fonts::FontTable,
   tree::{
-    PaintBackground, PaintBackgroundLayer, PaintBorder, PaintBoxDecoration, PaintBoxShadows,
-    PaintClip, PaintDecoration, PaintFill, PaintGlyph, PaintGradientStop, PaintImage,
-    PaintInlineBackground, PaintNode, PaintOutline, PaintRect, PaintShadow, PaintSource,
-    PaintStroke, PaintTextRun, PaintTiles, PaintUnresolvedEffects, Radii, rgba,
+    PaintBackground, PaintBackgroundLayer, PaintBorder, PaintBoxShadows, PaintClip,
+    PaintDecoration, PaintFill, PaintGlyph, PaintGradientStop, PaintImage, PaintInlineBackground,
+    PaintNode, PaintOutline, PaintRect, PaintShadow, PaintSource, PaintStroke, PaintTextRun,
+    PaintTiles, PaintUnresolvedEffects, Radii, rgba,
   },
 };
 
@@ -111,6 +111,8 @@ impl Walker {
   ) -> PaintNode {
     let style = &node.context.style;
     let painter = BoxPainter::new(&node.context, layout);
+    let decorations = BoxDecorations::of(node, layout, &painter);
+    let (x, y) = transform.transform_point(0.0, 0.0);
     PaintNode {
       source: path.map(|path| PaintSource {
         path,
@@ -128,17 +130,22 @@ impl Walker {
       }),
       width: layout.size.width,
       height: layout.size.height,
-      transform: transform.to_cols_array(),
+      x,
+      y,
+      transform: (!transform.only_translation()).then(|| transform.to_cols_array()),
       opacity: style.opacity.0,
       blend_mode: (style.mix_blend_mode != BlendMode::Normal)
         .then(|| style.mix_blend_mode.to_css_string()),
       isolate: style.isolation == Isolation::Isolate,
       clip: overflow_clip(node, layout, painter.border()),
-      box_decoration: box_decoration(node, layout, &painter),
+      background: decorations.background,
+      border: decorations.border,
+      shadows: decorations.shadows,
+      outline: decorations.outline,
       image: None,
       text_shadows: Vec::new(),
       inline_backgrounds: Vec::new(),
-      runs: Vec::new(),
+      text_runs: Vec::new(),
       unresolved_effects: unresolved(node),
       children: Vec::new(),
     }
@@ -211,7 +218,7 @@ impl Walker {
         opacity: fragment.opacity,
       })
       .collect();
-    painted.runs = runs
+    painted.text_runs = runs
       .runs
       .iter()
       .map(|run| self.run(context.fonts(), &built.text, &built.spans, run, layout))
@@ -289,7 +296,7 @@ impl Walker {
       width: shaped.advance,
       ascent: shaped.metrics.ascent,
       descent: shaped.metrics.descent,
-      font_index: self.fonts.intern(fonts, shaped),
+      font: self.fonts.describe(fonts, shaped),
       font_size: shaped.font_size,
       color: rgba(brush.color),
       opacity: brush.opacity,
@@ -392,53 +399,18 @@ fn overflow_clip(
   })
 }
 
-fn box_decoration(
-  node: &RenderNode,
-  layout: ComputedLayout,
-  painter: &BoxPainter<'_>,
-) -> Option<PaintBoxDecoration> {
-  if !painter.paints_decorations() {
-    return None;
-  }
-  let context = &node.context;
-  let style = &context.style;
-  let border = painter.border();
-  let shadows = painter.shadows();
-  let background_color = style.background_color.resolve(context.current_color);
+/// What a box paints around its content.
+#[derive(Default)]
+struct BoxDecorations {
+  background: Option<PaintBackground>,
+  border: Option<PaintBorder>,
+  shadows: Option<PaintBoxShadows>,
+  outline: Option<PaintOutline>,
+}
 
-  Some(PaintBoxDecoration {
-    background: PaintBackground {
-      color: (background_color.0[3] != 0).then(|| rgba(background_color)),
-      clip: style.background_clip.to_css_string(),
-      layers: background_layers(node, layout),
-    },
-    border: PaintBorder {
-      widths: [
-        border.width.top,
-        border.width.right,
-        border.width.bottom,
-        border.width.left,
-      ],
-      colors: [
-        rgba(border.color.top),
-        rgba(border.color.right),
-        rgba(border.color.bottom),
-        rgba(border.color.left),
-      ],
-      styles: [
-        border.style.top,
-        border.style.right,
-        border.style.bottom,
-        border.style.left,
-      ]
-      .map(|style: BorderStyle| style.to_css_string()),
-      radii: radii(border),
-    },
-    shadows: PaintBoxShadows {
-      inset: shadows.inset.iter().map(shadow).collect(),
-      outer: shadows.outer.iter().map(shadow).collect(),
-    },
-    outline: painter.outline().map(|outline| {
+impl BoxDecorations {
+  fn of(node: &RenderNode, layout: ComputedLayout, painter: &BoxPainter<'_>) -> Self {
+    let outline = painter.outline().map(|outline| {
       let width = outline.border.width.top;
       PaintOutline {
         width,
@@ -446,8 +418,56 @@ fn box_decoration(
         style: outline.border.style.top.to_css_string(),
         offset: outline.grow - width,
       }
-    }),
-  })
+    });
+    if !painter.paints_decorations() {
+      return Self {
+        outline,
+        ..Self::default()
+      };
+    }
+    let context = &node.context;
+    let style = &context.style;
+    let border = painter.border();
+    let shadows = painter.shadows();
+    let background_color = style.background_color.resolve(context.current_color);
+    let background = PaintBackground {
+      color: (background_color.0[3] != 0).then(|| rgba(background_color)),
+      clip: style.background_clip.to_css_string(),
+      layers: background_layers(node, layout),
+    };
+
+    Self {
+      background: (background.color.is_some() || !background.layers.is_empty())
+        .then_some(background),
+      border: border.has_visible_sides().then(|| PaintBorder {
+        widths: [
+          border.width.top,
+          border.width.right,
+          border.width.bottom,
+          border.width.left,
+        ],
+        colors: [
+          rgba(border.color.top),
+          rgba(border.color.right),
+          rgba(border.color.bottom),
+          rgba(border.color.left),
+        ],
+        styles: [
+          border.style.top,
+          border.style.right,
+          border.style.bottom,
+          border.style.left,
+        ]
+        .map(|style: BorderStyle| style.to_css_string()),
+        radii: radii(border),
+      }),
+      shadows: (!shadows.inset.is_empty() || !shadows.outer.is_empty()).then(|| PaintBoxShadows {
+        inset: shadows.inset.iter().map(shadow).collect(),
+        outer: shadows.outer.iter().map(shadow).collect(),
+      }),
+      outline,
+    }
+  }
 }
 
 fn background_layers(node: &RenderNode, layout: ComputedLayout) -> Vec<PaintBackgroundLayer> {
