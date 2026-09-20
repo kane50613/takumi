@@ -19,16 +19,22 @@ const tree = await paint(
 
 function draw(ctx: CanvasRenderingContext2D) {
   for (const node of walk(tree)) {
+    if (node.transform) ctx.setTransform(...node.transform);
+    else ctx.setTransform(1, 0, 0, 1, node.x, node.y);
     if (node.background?.color) {
       ctx.fillStyle = rgba(node.background.color);
-      ctx.fillRect(node.x, node.y, node.width, node.height);
+      ctx.fillRect(0, 0, node.width, node.height);
     }
     for (const run of node.textRuns ?? []) {
+      ctx.save();
+      if (run.transform) ctx.transform(...run.transform);
       ctx.font = `${run.font.weight} ${run.fontSize}px ${run.font.family}`;
       ctx.fillStyle = rgba(run.color);
-      ctx.fillText(run.text, node.x + run.x, node.y + run.y);
+      ctx.fillText(run.text, run.x, run.y);
+      ctx.restore();
     }
   }
+  ctx.resetTransform();
 }
 
 const rgba = ([r, g, b, a]: number[]) => `rgb(${r} ${g} ${b} / ${a / 255})`;
