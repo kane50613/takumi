@@ -19,10 +19,10 @@ npm install takumi-paint @takumi-rs/helpers
 
 ## Quick start
 
-`paint()` lays out the document. `walk()` yields every box in paint order, so drawing is one loop.
+`paint()` lays out the document. The tree iterates its boxes in paint order, so drawing is one loop.
 
 ```tsx
-import { paint, walk } from "takumi-paint";
+import { paint } from "takumi-paint";
 
 const tree = await paint(
   <div style={{ width: 640, padding: 32, background: "#F7F3EC", flexDirection: "column", gap: 8 }}>
@@ -33,7 +33,7 @@ const tree = await paint(
 );
 
 function draw(ctx: CanvasRenderingContext2D) {
-  for (const node of walk(tree)) {
+  for (const node of tree) {
     if (node.transform) ctx.setTransform(...node.transform);
     else ctx.setTransform(1, 0, 0, 1, node.x, node.y);
     if (node.background?.color) {

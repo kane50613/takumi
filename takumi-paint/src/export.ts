@@ -10,10 +10,14 @@ import {
   subsetFonts,
 } from "@takumi-rs/helpers";
 import type { ReactNode } from "react";
-import { Painter as PainterInternal, type PaintTree } from "../pkg/takumi_paint_wasm";
+import {
+  Painter as PainterInternal,
+  type PaintNode,
+  type PaintTextRun,
+  type PaintTree as PaintTreeShape,
+} from "../pkg/takumi_paint_wasm";
 
 export { default, initSync } from "../pkg/takumi_paint_wasm";
-export { find, textRuns, walk } from "./tree";
 export type { FontLoader, ImagesInput } from "@takumi-rs/helpers/renderer";
 export type {
   Matrix,
@@ -34,7 +38,6 @@ export type {
   PaintTextRun,
   PaintShadow,
   PaintSource,
-  PaintTree,
   PaintUnresolvedEffects,
   Radii,
   Rgba,
@@ -81,6 +84,46 @@ async function resolveNode(input: NodeInput): Promise<{ node: Node; css: string[
   return fromJsx(input as ReactNode);
 }
 
+function* nodes(node: PaintNode): Generator<PaintNode> {
+  yield node;
+  for (const child of node.children ?? []) yield* nodes(child);
+}
+
+/** Everything the backends paint for a document, in paint order. Iterates its nodes. */
+export class PaintTree implements PaintTreeShape {
+  /** Canvas width in device pixels. */
+  readonly width: number;
+  /** Canvas height in device pixels. */
+  readonly height: number;
+  readonly root: PaintNode;
+
+  constructor(tree: PaintTreeShape) {
+    this.width = tree.width;
+    this.height = tree.height;
+    this.root = tree.root;
+  }
+
+  /** Every node in paint order, starting at the root. */
+  [Symbol.iterator](): Generator<PaintNode> {
+    return nodes(this.root);
+  }
+
+  /** Every text run in paint order, each paired with the node that paints it. */
+  *textRuns(): Generator<{ run: PaintTextRun; node: PaintNode }> {
+    for (const node of this) {
+      for (const run of node.textRuns ?? []) yield { run, node };
+    }
+  }
+
+  /** The first node whose source `id` matches. */
+  find(id: string): PaintNode | undefined {
+    for (const node of this) {
+      if (node.source?.id === id) return node;
+    }
+    return undefined;
+  }
+}
+
 export class Painter {
   private inner = new PainterInternal();
   private fonts = new FontRegistry<RegisteredFamilyLike>(
@@ -99,12 +142,14 @@ export class Painter {
     const own = css === undefined ? [] : isCssList(css) ? [...css] : [css];
     const sheets = [...own, ...main.css];
 
-    return this.inner.paint(main.node, {
-      ...rest,
-      css: sheets.length > 0 ? sheets : undefined,
-      images: resources.images,
-      fontFamilies: resources.fontFamilies,
-    });
+    return new PaintTree(
+      this.inner.paint(main.node, {
+        ...rest,
+        css: sheets.length > 0 ? sheets : undefined,
+        images: resources.images,
+        fontFamilies: resources.fontFamilies,
+      }),
+    );
   }
 
   /** Registers a font ahead of time, deduped against earlier registrations. */

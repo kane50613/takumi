@@ -1,11 +1,11 @@
 import { describe, expect, it } from "bun:test";
 import { container, image, text } from "@takumi-rs/helpers";
-import { Painter, find, textRuns } from "takumi-paint";
+import { Painter, type PaintTree } from "takumi-paint";
 
 const painter = new Painter();
 
-function texts(tree: Parameters<typeof textRuns>[0]) {
-  return [...textRuns(tree)].map(({ run }) => run);
+function texts(tree: PaintTree) {
+  return [...tree.textRuns()].map(({ run }) => run);
 }
 
 describe("Painter.paint", () => {
@@ -27,7 +27,7 @@ describe("Painter.paint", () => {
     );
 
     expect([tree.width, tree.height]).toEqual([600, 300]);
-    const card = find(tree, "card");
+    const card = tree.find("card");
     expect([card?.x, card?.y, card?.transform]).toEqual([0, 0, undefined]);
     expect(card?.background?.color).toEqual([247, 243, 236, 255]);
     expect(card?.border?.widths).toEqual([4, 4, 4, 4]);
@@ -47,7 +47,7 @@ describe("Painter.paint", () => {
       { width: 200, height: 200 },
     );
 
-    const box = find(tree, "box");
+    const box = tree.find("box");
     expect(box?.transform).toBeDefined();
     expect([box?.x, box?.y]).toEqual([box?.transform?.[4], box?.transform?.[5]]);
   });
@@ -70,7 +70,7 @@ describe("Painter.paint", () => {
       height: 200,
     });
 
-    const [picture] = find(tree, "wrap")?.children ?? [];
+    const [picture] = tree.find("wrap")?.children ?? [];
     expect([picture?.width, picture?.height]).toEqual([192, 48]);
     expect(picture?.image?.src).toBe(svg);
   });

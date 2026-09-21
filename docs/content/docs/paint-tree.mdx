@@ -7,7 +7,7 @@ icon: Brush
 `takumi-paint` lays out a document and returns what painting it would draw, instead of an image. Use it when the output is not pixels: an editable PPTX, a Canvas replay, a native drawing API.
 
 ```tsx twoslash title="Draw the tree on a canvas"
-import { paint, walk } from "takumi-paint";
+import { paint } from "takumi-paint";
 
 const tree = await paint(
   <div style={{ width: 640, padding: 32, background: "#F7F3EC", flexDirection: "column", gap: 8 }}>
@@ -18,7 +18,7 @@ const tree = await paint(
 );
 
 function draw(ctx: CanvasRenderingContext2D) {
-  for (const node of walk(tree)) {
+  for (const node of tree) {
     if (node.transform) ctx.setTransform(...node.transform);
     else ctx.setTransform(1, 0, 0, 1, node.x, node.y);
     if (node.background?.color) {
@@ -50,7 +50,7 @@ A node's `x` and `y` place its border box on the canvas. `transform` appears onl
 
 ## Paint order
 
-Nodes come in the order the renderer paints them, so `zIndex` does not appear. `walk()` yields them in that order. Within a node, draw `shadows.outer`, `background`, `shadows.inset`, and `border`, then `image`, `inlineBackgrounds`, and `textRuns`, then `children`, then `outline`.
+Nodes come in the order the renderer paints them, so `zIndex` does not appear. Iterating the tree yields them in that order. Within a node, draw `shadows.outer`, `background`, `shadows.inset`, and `border`, then `image`, `inlineBackgrounds`, and `textRuns`, then `children`, then `outline`.
 
 Each node is a compositing group. Its `opacity`, `clip`, and `blendMode` apply to everything inside it, children included.
 
@@ -100,7 +100,7 @@ Each node is a compositing group. Its `opacity`, `clip`, and `blendMode` apply t
   }}
 />
 
-Each run carries its `font`: the registered family, the face index, the weight and style after variations, and any synthetic bold or skew the shaper applied. `textRuns()` yields every run with the node that paints it, and `find()` looks a node up by its source `id`.
+Each run carries its `font`: the registered family, the face index, the weight and style after variations, and any synthetic bold or skew the shaper applied. `tree.textRuns()` yields every run with the node that paints it, and `tree.find(id)` looks a node up by its source `id`.
 
 ## What stays CSS
 
