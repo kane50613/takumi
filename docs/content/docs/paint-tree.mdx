@@ -50,7 +50,7 @@ A node's `x` and `y` place its border box on the canvas. `transform` appears onl
 
 ## Paint order
 
-Nodes come in the order the renderer paints them, so `zIndex` does not appear. Iterating the tree yields them in that order. Within a node, draw `shadows.outer`, `background`, `shadows.inset`, and `border`, then `image`, `inlineBackgrounds`, and `textRuns`, then `children`, then `outline`.
+Nodes come in the order the renderer paints them, so `zIndex` does not appear. Iterating the tree yields them in that order, parents before children. Within a node, draw `shadows.outer`, `background`, `shadows.inset`, and `border`, then `image`, `inlineBackgrounds`, and `textRuns`, then `children`, then `outline`. The outline comes after the children, so an exporter that draws outlines recurses over `children` instead of the flat iteration.
 
 Each node is a compositing group. Its `opacity`, `clip`, and `blendMode` apply to everything inside it, children included.
 

@@ -103,7 +103,10 @@ export class PaintTree implements PaintTreeShape {
     this.root = tree.root;
   }
 
-  /** Every node in paint order, starting at the root. */
+  /**
+   * Every node in paint order, parents before children. An `outline` paints after the node's
+   * children, so an exporter that draws outlines recurses over `children` itself.
+   */
   [Symbol.iterator](): Generator<PaintNode> {
     return nodes(this.root);
   }
