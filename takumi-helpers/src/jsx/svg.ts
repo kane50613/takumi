@@ -19,12 +19,71 @@ const xmlName = new RegExp(
   `^[${xmlNameStartChars}][${xmlNameStartChars}\\-.0-9\\u00B7\\u0300-\\u036F\\u203F-\\u2040]*$`,
   "u",
 );
-const cssPropertyName = /^(?:--[\w-]*|-?[A-Za-z_][\w-]*)$/;
+const cssPropertyName = /^(?:--|-?[A-Za-z_\u0080-\u{10FFFF}])[\w\u0080-\u{10FFFF}-]*$/u;
+const cssClosingBrackets = new Map([
+  ["(", ")"],
+  ["[", "]"],
+  ["{", "}"],
+]);
 
 function assertXmlName(name: string, kind: "element" | "attribute"): void {
   if (!xmlName.test(name)) {
     throw new Error(`Invalid SVG ${kind} name: ${JSON.stringify(name)}`);
   }
+}
+
+/** Whether `value` stays inside one CSS declaration; trailing semicolons are allowed. */
+function isCssDeclarationValue(value: string): boolean {
+  const expectedClosers: string[] = [];
+  let quote: string | undefined;
+
+  for (let index = 0; index < value.length; index++) {
+    const char = value.charAt(index);
+
+    if (char === "\\") {
+      if (index === value.length - 1) return false;
+
+      index++;
+      continue;
+    }
+
+    if (quote) {
+      if (char === quote) quote = undefined;
+      continue;
+    }
+
+    if (char === '"' || char === "'") {
+      quote = char;
+      continue;
+    }
+
+    if (char === "/" && value.charAt(index + 1) === "*") {
+      const commentEnd = value.indexOf("*/", index + 2);
+
+      if (commentEnd === -1) return false;
+
+      index = commentEnd + 1;
+      continue;
+    }
+
+    const closer = cssClosingBrackets.get(char);
+
+    if (closer) {
+      expectedClosers.push(closer);
+      continue;
+    }
+
+    if (char === ")" || char === "]" || char === "}") {
+      if (expectedClosers.pop() !== char) return false;
+      continue;
+    }
+
+    if (char === ";" && expectedClosers.length === 0) {
+      return /^[;\s]*$/.test(value.slice(index));
+    }
+  }
+
+  return quote === undefined && expectedClosers.length === 0;
 }
 
 function escapeXml(value: string): string {
@@ -51,7 +110,7 @@ function styleObjectToString(styleObj: Record<string, unknown>): string {
       throw new Error(`Invalid SVG style property: ${JSON.stringify(key)}`);
     }
 
-    if (value.includes(";")) {
+    if (!isCssDeclarationValue(value)) {
       throw new Error(`Invalid SVG style value: ${JSON.stringify(value)}`);
     }
 
