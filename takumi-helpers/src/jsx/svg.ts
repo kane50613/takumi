@@ -12,10 +12,26 @@ function isTextNode(node: unknown): node is string | number {
   return typeof node === "string" || typeof node === "number";
 }
 
-function escapeAttr(value: string): string {
+// https://www.w3.org/TR/xml/#NT-Name
+const xmlNameStartChars =
+  ":A-Z_a-z\\u00C0-\\u00D6\\u00D8-\\u00F6\\u00F8-\\u02FF\\u0370-\\u037D\\u037F-\\u1FFF\\u200C-\\u200D\\u2070-\\u218F\\u2C00-\\u2FEF\\u3001-\\uD7FF\\uF900-\\uFDCF\\uFDF0-\\uFFFD\\u{10000}-\\u{EFFFF}";
+const xmlName = new RegExp(
+  `^[${xmlNameStartChars}][${xmlNameStartChars}\\-.0-9\\u00B7\\u0300-\\u036F\\u203F-\\u2040]*$`,
+  "u",
+);
+const cssPropertyName = /^(?:--[\w-]*|-?[A-Za-z_][\w-]*)$/;
+
+function assertXmlName(name: string, kind: "element" | "attribute"): void {
+  if (!xmlName.test(name)) {
+    throw new Error(`Invalid SVG ${kind} name: ${JSON.stringify(name)}`);
+  }
+}
+
+function escapeXml(value: string): string {
   return value
     .replace(/&/g, "&amp;")
     .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#x27;")
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;");
 }
@@ -28,7 +44,18 @@ function styleObjectToString(styleObj: Record<string, unknown>): string {
       continue;
     }
 
-    declarations.push(`${camelToKebab(key)}:${String(styleObj[key]).trim()}`);
+    const property = camelToKebab(key);
+    const value = String(styleObj[key]).trim();
+
+    if (!cssPropertyName.test(property)) {
+      throw new Error(`Invalid SVG style property: ${JSON.stringify(key)}`);
+    }
+
+    if (value.includes(";")) {
+      throw new Error(`Invalid SVG style value: ${JSON.stringify(value)}`);
+    }
+
+    declarations.push(`${property}:${value}`);
   }
 
   return declarations.join(";");
@@ -119,6 +146,8 @@ function serializePropToAttrString(key: string, value: unknown): string | undefi
     attrName = key;
   }
 
+  assertXmlName(attrName, "attribute");
+
   if (typeof value === "boolean") {
     // For SVG serialization we want boolean attributes to be explicit like
     // `focusable="true"` to match react-dom server output.
@@ -127,10 +156,10 @@ function serializePropToAttrString(key: string, value: unknown): string | undefi
 
   if (key === "style" && typeof value === "object") {
     const styleString = styleObjectToString(value as Record<string, unknown>);
-    if (styleString) return `style="${escapeAttr(styleString)}"`;
+    if (styleString) return `style="${escapeXml(styleString)}"`;
   }
 
-  return `${attrName}="${escapeAttr(String(value))}"`;
+  return `${attrName}="${escapeXml(String(value))}"`;
 }
 
 function pushSerializedAttributes(
@@ -192,6 +221,7 @@ const serializeElementNode = (
   // Only string types can be used as HTML/SVG tag names
   if (typeof obj.type !== "string") return;
 
+  assertXmlName(obj.type, "element");
   parts.push("<", obj.type);
   pushSerializedAttributes(props, parts, injectSvgXmlns && obj.type === "svg");
 
@@ -205,7 +235,7 @@ function serializeNode(node: unknown, parts: string[], injectSvgXmlns: boolean):
   if (node === null || node === undefined || node === false) return;
 
   if (isTextNode(node)) {
-    parts.push(String(node));
+    parts.push(escapeXml(String(node)));
     return;
   }
 

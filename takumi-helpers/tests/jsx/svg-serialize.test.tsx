@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { forwardRef, memo, StrictMode } from "react";
+import { createElement, forwardRef, memo, StrictMode } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 
 import { serializeSvg } from "../../src/jsx/svg";
@@ -116,4 +116,40 @@ test("serializeSvg adds xmlns when not provided", () => {
   const actual = serializeSvg(component);
 
   expect(actual).toBe(expected);
+});
+
+test("serializeSvg escapes text and attribute values like react-dom", () => {
+  const payload = `</title><image href="data:image/png;base64,AAAA" width='9999'/><title>&amp;`;
+  const component = (
+    <svg xmlns="http://www.w3.org/2000/svg">
+      <title>{payload}</title>
+      <text fill={payload}>{payload}</text>
+    </svg>
+  );
+
+  const expected = renderToStaticMarkup(component);
+  const actual = serializeSvg(component);
+
+  expect(actual).toBe(expected);
+  expect(actual).not.toContain("<image");
+});
+
+test("serializeSvg rejects element and attribute names that break out of the tag", () => {
+  expect(() => serializeSvg(<svg>{createElement('g><image href="x"/><g', null)}</svg>)).toThrow(
+    "Invalid SVG element name",
+  );
+  expect(() => serializeSvg(<svg>{createElement("rect", { 'x="0"/><image': 1 })}</svg>)).toThrow(
+    "Invalid SVG attribute name",
+  );
+});
+
+test("serializeSvg rejects style entries that inject declarations", () => {
+  const injectedProperty: Record<string, string> = { "fill:red;stroke": "blue" };
+
+  expect(() => serializeSvg(<svg style={{ fill: "red;filter:url(#x)" }} />)).toThrow(
+    "Invalid SVG style value",
+  );
+  expect(() => serializeSvg(<svg style={injectedProperty} />)).toThrow(
+    "Invalid SVG style property",
+  );
 });
