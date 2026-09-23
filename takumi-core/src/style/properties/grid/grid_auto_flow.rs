@@ -1,3 +1,5 @@
+use std::fmt;
+
 use cssparser::Parser;
 
 use crate::style::{CssToken, FromCss, MakeComputed, ParseResult, ToCss};
@@ -110,7 +112,7 @@ impl<'i> FromCss<'i> for GridAutoFlow {
 }
 
 impl ToCss for GridAutoFlow {
-  fn to_css<W: std::fmt::Write>(&self, dest: &mut W) -> std::fmt::Result {
+  fn to_css<W: fmt::Write>(&self, dest: &mut W) -> fmt::Result {
     match self.direction {
       GridDirection::Row => dest.write_str("row")?,
       GridDirection::Column => dest.write_str("column")?,

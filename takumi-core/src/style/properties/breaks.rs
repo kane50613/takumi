@@ -132,7 +132,7 @@ impl<'i> FromCss<'i> for MinLines {
 
 impl ToCss for MinLines {
   fn to_css<W: fmt::Write>(&self, dest: &mut W) -> fmt::Result {
-    write!(dest, "{}", self.0)
+    self.0.to_css(dest)
   }
 }
 

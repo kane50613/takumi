@@ -266,7 +266,7 @@ impl<'i> FromCss<'i> for FlexLineCount {
 
 impl ToCss for FlexLineCount {
   fn to_css<W: fmt::Write>(&self, dest: &mut W) -> fmt::Result {
-    write!(dest, "{}", self.0)
+    write!(dest, "{count}", count = self.0)
   }
 }
 

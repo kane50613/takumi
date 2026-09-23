@@ -133,9 +133,7 @@ impl TailwindPropertyParser for LineWidth {
 impl ToCss for LineWidth {
   fn to_css<W: fmt::Write>(&self, dest: &mut W) -> fmt::Result {
     match self {
-      Self::Keyword(LineWidthKeyword::Thin) => dest.write_str("thin"),
-      Self::Keyword(LineWidthKeyword::Medium) => dest.write_str("medium"),
-      Self::Keyword(LineWidthKeyword::Thick) => dest.write_str("thick"),
+      Self::Keyword(keyword) => keyword.to_css(dest),
       Self::Length(length) => length.to_css(dest),
     }
   }

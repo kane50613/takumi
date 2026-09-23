@@ -1,3 +1,5 @@
+use std::fmt;
+
 use cssparser::{Parser, Token};
 use taffy::CompactLength;
 
@@ -57,9 +59,9 @@ impl MakeComputed for GridLength {
 }
 
 impl ToCss for GridLength {
-  fn to_css<W: std::fmt::Write>(&self, dest: &mut W) -> std::fmt::Result {
+  fn to_css<W: fmt::Write>(&self, dest: &mut W) -> fmt::Result {
     match self {
-      Self::Fr(fr) => write!(dest, "{}fr", fr),
+      Self::Fr(fr) => write!(dest, "{fr}fr"),
       Self::Unit(u) => u.to_css(dest),
     }
   }

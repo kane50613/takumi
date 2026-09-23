@@ -63,7 +63,7 @@ impl ToCss for FontStyle {
       ParleyFontStyle::Normal => dest.write_str("normal"),
       ParleyFontStyle::Italic => dest.write_str("italic"),
       ParleyFontStyle::Oblique(angle) => match angle {
-        Some(a) => write!(dest, "oblique {}deg", a),
+        Some(a) => write!(dest, "oblique {a}deg"),
         None => dest.write_str("oblique"),
       },
     }

@@ -170,7 +170,7 @@ impl ToCss for Superellipse {
       Self::BEVEL => dest.write_str("bevel"),
       Self::ROUND => dest.write_str("round"),
       Self::SQUIRCLE => dest.write_str("squircle"),
-      Self(value) => write!(dest, "superellipse({})", value),
+      Self(value) => write!(dest, "superellipse({value})"),
     }
   }
 }

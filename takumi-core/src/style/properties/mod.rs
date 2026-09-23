@@ -208,17 +208,18 @@ pub(crate) fn build_unexpected_token<'i>(
 /// - `["fill", "contain"]` → `"'fill' or 'contain'"`
 /// - `["fill", "contain", "cover"]` → `"'fill', 'contain' or 'cover'"`
 pub(crate) fn merge_enum_values(values: &[CssToken]) -> String {
-  match values.len() {
-    0 => String::new(),
-    1 => values[0].to_string(),
-    2 => format!("{} or {}", values[0], values[1]),
-    _ => {
-      let all_but_last = values[..values.len() - 1]
+  match values {
+    [] => String::new(),
+    [only] => only.to_string(),
+    [first, second] => format!("{first} or {second}"),
+    [all_but_last @ .., last] => {
+      let all_but_last = all_but_last
         .iter()
         .map(ToString::to_string)
         .collect::<Vec<_>>()
         .join(", ");
-      format!("{} or {}", all_but_last, values[values.len() - 1])
+
+      format!("{all_but_last} or {last}")
     }
   }
 }

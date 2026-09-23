@@ -1,4 +1,4 @@
-use std::mem::take;
+use std::{fmt, mem::take};
 
 use cssparser::Parser;
 
@@ -196,7 +196,7 @@ impl ToCss for GridTemplateComponent {
   // An empty track list is the keyword `none`.
   const EMPTY_LIST_KEYWORD: Option<&'static str> = Some("none");
 
-  fn to_css<W: std::fmt::Write>(&self, dest: &mut W) -> std::fmt::Result {
+  fn to_css<W: fmt::Write>(&self, dest: &mut W) -> fmt::Result {
     match self {
       Self::LineNames(names) => {
         dest.write_str("[")?;
@@ -208,14 +208,7 @@ impl ToCss for GridTemplateComponent {
         dest.write_str("repeat(")?;
         count.to_css(dest)?;
         dest.write_str(", ")?;
-        let mut first = true;
-        for track in tracks {
-          if !first {
-            dest.write_str(" ")?;
-          }
-          first = false;
-          track.to_css(dest)?;
-        }
+        write_space_separated(dest, tracks)?;
         dest.write_str(")")
       }
     }

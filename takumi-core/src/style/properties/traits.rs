@@ -346,8 +346,8 @@ impl fmt::Display for CssToken {
   fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
     match self {
       CssToken::Keyword(keyword) => write!(f, "'{keyword}'"),
-      CssToken::Syntax(token) => write!(f, "<{}>", token.as_str()),
-      CssToken::Descriptor(token) => write!(f, "<{}>", token.as_str()),
+      CssToken::Syntax(token) => write!(f, "<{name}>", name = token.as_str()),
+      CssToken::Descriptor(token) => write!(f, "<{name}>", name = token.as_str()),
     }
   }
 }
@@ -726,6 +726,29 @@ impl<T: ToCss> ToCss for Option<T> {
       None => dest.write_str("none"),
     }
   }
+}
+
+/// Writes `keywords` space-separated, or `empty` when there are none.
+pub(crate) fn write_keywords<'k, W: fmt::Write>(
+  dest: &mut W,
+  keywords: impl IntoIterator<Item = &'k str>,
+  empty: &str,
+) -> fmt::Result {
+  let mut keywords = keywords.into_iter().peekable();
+
+  if keywords.peek().is_none() {
+    return dest.write_str(empty);
+  }
+
+  for (index, keyword) in keywords.enumerate() {
+    if index > 0 {
+      dest.write_char(' ')?;
+    }
+
+    dest.write_str(keyword)?;
+  }
+
+  Ok(())
 }
 
 fn write_css_list<W: fmt::Write, T: ToCss>(items: &[T], dest: &mut W) -> fmt::Result {

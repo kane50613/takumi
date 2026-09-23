@@ -366,9 +366,7 @@ impl<'i> FromCss<'i> for Transforms {
 
 impl MakeComputed for Transforms {
   fn make_computed(&mut self, sizing: &SizingContext) {
-    for transform in self.0.iter_mut() {
-      transform.make_computed(sizing);
-    }
+    self.0.make_computed(sizing);
   }
 }
 
@@ -423,6 +421,8 @@ impl<const N: usize> From<[Transform; N]> for Transforms {
 }
 
 impl ToCss for Transform {
+  const LIST_SEPARATOR: &'static str = " ";
+
   fn to_css<W: fmt::Write>(&self, dest: &mut W) -> fmt::Result {
     match self {
       Self::Translate(x, y) => {
@@ -445,9 +445,7 @@ impl ToCss for Transform {
         y.to_css(dest)?;
         dest.write_char(')')
       }
-      Self::Matrix(Affine { a, b, c, d, x, y }) => {
-        write!(dest, "matrix({a}, {b}, {c}, {d}, {x}, {y})")
-      }
+      Self::Matrix(affine) => affine.to_css(dest),
     }
   }
 }
@@ -461,15 +459,7 @@ impl ToCss for Affine {
 
 impl ToCss for Transforms {
   fn to_css<W: fmt::Write>(&self, dest: &mut W) -> fmt::Result {
-    let mut first = true;
-    for transform in self.iter() {
-      if !first {
-        dest.write_char(' ')?;
-      }
-      transform.to_css(dest)?;
-      first = false;
-    }
-    Ok(())
+    self.0.to_css(dest)
   }
 }
 

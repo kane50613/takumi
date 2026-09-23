@@ -1,3 +1,5 @@
+use std::fmt;
+
 use cssparser::{Parser, match_ignore_ascii_case};
 
 use crate::style::tw::Namespace;
@@ -122,10 +124,10 @@ impl MakeComputed for LineHeight {
 }
 
 impl ToCss for LineHeight {
-  fn to_css<W: std::fmt::Write>(&self, dest: &mut W) -> std::fmt::Result {
+  fn to_css<W: fmt::Write>(&self, dest: &mut W) -> fmt::Result {
     match self {
       Self::Normal => dest.write_str("normal"),
-      Self::Unitless(v) => write!(dest, "{}", v),
+      Self::Unitless(v) => write!(dest, "{v}"),
       Self::Length(l) => l.to_css(dest),
     }
   }

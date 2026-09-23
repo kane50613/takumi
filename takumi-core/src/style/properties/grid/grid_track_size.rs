@@ -1,4 +1,4 @@
-use std::fmt::Write;
+use std::fmt;
 
 use cssparser::{Parser, match_ignore_ascii_case};
 use taffy::{MaxTrackSizingFunction, MinTrackSizingFunction, TrackSizingFunction};
@@ -99,7 +99,7 @@ impl MakeComputed for GridTrackSize {
 }
 
 impl ToCss for GridTrackSize {
-  fn to_css<W: Write>(&self, dest: &mut W) -> std::fmt::Result {
+  fn to_css<W: fmt::Write>(&self, dest: &mut W) -> fmt::Result {
     match self {
       Self::MinMax(mm) => mm.to_css(dest),
       Self::Fixed(gl) => gl.to_css(dest),

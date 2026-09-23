@@ -22,17 +22,21 @@ pub use grid_template_areas::*;
 pub use grid_template_component::*;
 pub use grid_track_size::*;
 
-pub(crate) fn write_space_separated<W: std::fmt::Write>(
+use std::fmt;
+
+use crate::style::ToCss;
+
+pub(crate) fn write_space_separated<W: fmt::Write, T: ToCss>(
   dest: &mut W,
-  items: &[String],
-) -> std::fmt::Result {
-  let mut first = true;
-  for item in items {
-    if !first {
-      dest.write_str(" ")?;
+  items: &[T],
+) -> fmt::Result {
+  for (index, item) in items.iter().enumerate() {
+    if index > 0 {
+      dest.write_char(' ')?;
     }
-    first = false;
-    dest.write_str(item)?;
+
+    item.to_css(dest)?;
   }
+
   Ok(())
 }

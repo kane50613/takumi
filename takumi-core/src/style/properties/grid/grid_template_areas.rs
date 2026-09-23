@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, fmt};
 
 use cssparser::{Parser, Token};
 
@@ -98,7 +98,7 @@ impl<'i> FromCss<'i> for GridTemplateAreas {
 }
 
 impl ToCss for GridTemplateAreas {
-  fn to_css<W: std::fmt::Write>(&self, dest: &mut W) -> std::fmt::Result {
+  fn to_css<W: fmt::Write>(&self, dest: &mut W) -> fmt::Result {
     if self.0.is_empty() {
       dest.write_str("none")
     } else {

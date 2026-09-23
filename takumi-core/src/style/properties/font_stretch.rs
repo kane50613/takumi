@@ -98,7 +98,7 @@ impl ToCss for FontStretch {
       FontWidth::EXPANDED => dest.write_str("expanded"),
       FontWidth::EXTRA_EXPANDED => dest.write_str("extra-expanded"),
       FontWidth::ULTRA_EXPANDED => dest.write_str("ultra-expanded"),
-      _ => write!(dest, "{}%", self.0.percentage()),
+      _ => write!(dest, "{percentage}%", percentage = self.0.percentage()),
     }
   }
 }

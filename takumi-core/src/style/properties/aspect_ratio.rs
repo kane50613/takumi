@@ -109,7 +109,7 @@ impl ToCss for AspectRatio {
   fn to_css<W: fmt::Write>(&self, dest: &mut W) -> fmt::Result {
     match self {
       Self::Auto => dest.write_str("auto"),
-      Self::Ratio(v) => write!(dest, "{}", v),
+      Self::Ratio(v) => write!(dest, "{v}"),
     }
   }
 }
