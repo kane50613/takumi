@@ -138,7 +138,7 @@ impl MediaFeatureComparison {
   fn matches(self, actual: f32, expected: f32, tolerance: f32) -> bool {
     // <https://drafts.csswg.org/mediaqueries-4/#false-in-the-negative-range>
     if expected < 0.0 {
-      return matches!(self, Self::Min | MediaFeatureComparison::GreaterThan);
+      return matches!(self, Self::Min | Self::GreaterThan);
     }
 
     match self {
@@ -264,6 +264,17 @@ impl MediaFeature {
     }
   }
 
+  /// The feature `name` names, or the unsupported-feature error when `value` does not fit it.
+  fn from_value<'i>(
+    input: &Parser<'i, '_>,
+    name: &str,
+    comparison: MediaFeatureComparison,
+    value: MediaFeatureValue,
+  ) -> Result<Self, ParseError<'i, StyleSheetParseError>> {
+    Self::new(name, comparison, value)
+      .ok_or_else(|| input.new_custom_error(StyleSheetParseError::unsupported_media_feature()))
+  }
+
   fn parse<'i, 't>(
     input: &mut Parser<'i, 't>,
   ) -> Result<MediaFeature, ParseError<'i, StyleSheetParseError>> {
@@ -301,8 +312,7 @@ impl MediaFeature {
 
     let value = MediaFeatureValue::parse(input)?;
 
-    MediaFeature::new(name, comparison, value)
-      .ok_or_else(|| input.new_custom_error(StyleSheetParseError::unsupported_media_feature()))
+    Self::from_value(input, name, comparison, value)
   }
 
   /// The range context of Media Queries Level 4, such as `(width >= 40em)` and
@@ -311,22 +321,17 @@ impl MediaFeature {
   fn parse_range<'i, 't>(
     input: &mut Parser<'i, 't>,
   ) -> Result<(MediaFeature, Option<MediaFeature>), ParseError<'i, StyleSheetParseError>> {
-    let feature = |input: &mut Parser<'i, 't>, name: &str, comparison, value| {
-      MediaFeature::new(name, comparison, value)
-        .ok_or_else(|| input.new_custom_error(StyleSheetParseError::unsupported_media_feature()))
-    };
-
     if let Ok(name) = input.try_parse(Parser::expect_ident_cloned) {
       let comparison = MediaFeatureComparison::parse(input)?;
       let value = MediaFeatureValue::parse(input)?;
 
-      return Ok((feature(input, &name, comparison, value)?, None));
+      return Ok((Self::from_value(input, &name, comparison, value)?, None));
     }
 
     let lower_value = MediaFeatureValue::parse(input)?;
     let lower = MediaFeatureComparison::parse(input)?.flipped();
     let name = input.expect_ident_cloned()?;
-    let lower_feature = feature(input, &name, lower, lower_value)?;
+    let lower_feature = Self::from_value(input, &name, lower, lower_value)?;
 
     if input.is_exhausted() {
       return Ok((lower_feature, None));
@@ -344,7 +349,7 @@ impl MediaFeature {
 
     Ok((
       lower_feature,
-      Some(feature(input, &name, upper, upper_value)?),
+      Some(Self::from_value(input, &name, upper, upper_value)?),
     ))
   }
 
@@ -378,16 +383,16 @@ impl MediaFeature {
             LAYOUT_UNIT_EPSILON,
           )
         }),
-      Self::Orientation(MediaOrientation::Portrait) => viewport
-        .size
-        .width
-        .zip(viewport.size.height)
-        .is_some_and(|(width, height)| height >= width),
-      Self::Orientation(MediaOrientation::Landscape) => viewport
-        .size
-        .width
-        .zip(viewport.size.height)
-        .is_some_and(|(width, height)| width > height),
+      Self::Orientation(orientation) => {
+        viewport
+          .size
+          .width
+          .zip(viewport.size.height)
+          .is_some_and(|(width, height)| match orientation {
+            MediaOrientation::Portrait => height >= width,
+            MediaOrientation::Landscape => width > height,
+          })
+      }
     }
   }
 }
@@ -558,17 +563,13 @@ impl MediaQuery {
       MediaType::Unsupported(_) => false,
     };
 
-    let mut is_match = media_type_matches
+    let is_match = media_type_matches
       && self
         .condition
         .as_ref()
         .is_none_or(|condition| condition.matches(viewport, sizing));
 
-    if self.negated {
-      is_match = !is_match;
-    }
-
-    is_match
+    is_match != self.negated
   }
 }
 

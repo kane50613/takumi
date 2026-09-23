@@ -1,4 +1,7 @@
-use std::cell::RefCell;
+use std::{
+  cell::RefCell,
+  hash::{Hash, Hasher},
+};
 
 use cssparser::{Parser, Token, match_ignore_ascii_case};
 
@@ -239,9 +242,7 @@ impl CalcTerms {
   }
 
   /// Hashes each term's unit and value by bit pattern.
-  pub(crate) fn hash_bits(&self, hasher: &mut impl core::hash::Hasher) {
-    use core::hash::Hash;
-
+  pub(crate) fn hash_bits(&self, hasher: &mut impl Hasher) {
     for (unit, value) in self.units.into_iter().zip(self.values) {
       (unit as u8).hash(hasher);
       value.to_bits().hash(hasher);
@@ -311,9 +312,33 @@ impl CalcFormula {
   for_each_unit!(calc_add);
   for_each_unit!(calc_sub);
   for_each_unit!(calc_scale);
-}
 
-impl CalcFormula {
+  /// Bridges a single-unit `Length` to its symbolic `calc(...)` coefficient.
+  fn from_length(length: Length) -> Self {
+    match length {
+      Length::Px(v) => Self::px(v),
+      Length::Em(v) => Self::em(v),
+      Length::Rem(v) => Self::rem(v),
+      Length::Lh(v) => Self::lh(v),
+      Length::Rlh(v) => Self::rlh(v),
+      Length::Vw(v) => Self::vw(v),
+      Length::CqW(v) => Self::cqw(v),
+      Length::Vh(v) => Self::vh(v),
+      Length::CqH(v) => Self::cqh(v),
+      Length::VMin(v) => Self::vmin(v),
+      Length::CqMin(v) => Self::cqmin(v),
+      Length::VMax(v) => Self::vmax(v),
+      Length::CqMax(v) => Self::cqmax(v),
+      Length::Cm(v) => Self::cm(v),
+      Length::Mm(v) => Self::mm(v),
+      Length::In(v) => Self::inch(v),
+      Length::Q(v) => Self::q(v),
+      Length::Pt(v) => Self::pt(v),
+      Length::Pc(v) => Self::pc(v),
+      _ => Self::default(),
+    }
+  }
+
   /// Compresses to the non-zero terms, or `None` when more than
   /// [`MAX_CALC_TERMS`] distinct units appear.
   pub(crate) fn compress(self) -> Option<CalcTerms> {
@@ -363,6 +388,25 @@ pub(crate) enum CalcValue {
   Formula(CalcFormula),
 }
 
+impl CalcValue {
+  /// Applies a binary operator, or `None` when the operand types rule it out.
+  fn combine(self, operator: char, rhs: Self) -> Option<Self> {
+    Some(match (operator, self, rhs) {
+      ('+', Self::Number(lhs), Self::Number(rhs)) => Self::Number(lhs + rhs),
+      ('+', Self::Formula(lhs), Self::Formula(rhs)) => Self::Formula(lhs.add(rhs)),
+      ('-', Self::Number(lhs), Self::Number(rhs)) => Self::Number(lhs - rhs),
+      ('-', Self::Formula(lhs), Self::Formula(rhs)) => Self::Formula(lhs.sub(rhs)),
+      ('*', Self::Formula(formula), Self::Number(factor))
+      | ('*', Self::Number(factor), Self::Formula(formula)) => Self::Formula(formula.scale(factor)),
+      ('*', Self::Number(lhs), Self::Number(rhs)) => Self::Number(lhs * rhs),
+      ('/', _, Self::Number(0.0)) => return None,
+      ('/', Self::Formula(lhs), Self::Number(rhs)) => Self::Formula(lhs.scale(1.0 / rhs)),
+      ('/', Self::Number(lhs), Self::Number(rhs)) => Self::Number(lhs / rhs),
+      _ => return None,
+    })
+  }
+}
+
 // Matches Blink's `kMaxExpressionDepth` (css_math_expression_node.h).
 const MAX_CALC_DEPTH: u32 = 100;
 
@@ -371,45 +415,9 @@ pub(crate) fn parse_calc_sum<'i>(input: &mut Parser<'i, '_>) -> ParseResult<'i, 
 }
 
 fn parse_calc_sum_at<'i>(input: &mut Parser<'i, '_>, depth: u32) -> ParseResult<'i, CalcValue> {
-  let mut value = parse_calc_product_at(input, depth)?;
-
-  loop {
-    if input.try_parse(|parser| parser.expect_delim('+')).is_ok() {
-      let rhs = parse_calc_product_at(input, depth)?;
-      value = match (value, rhs) {
-        (CalcValue::Number(lhs), CalcValue::Number(rhs)) => CalcValue::Number(lhs + rhs),
-        (CalcValue::Formula(lhs), CalcValue::Formula(rhs)) => CalcValue::Formula(lhs.add(rhs)),
-        _ => {
-          return Err(unexpected_token!(
-            Length,
-            input.current_source_location(),
-            &Token::Delim('+'),
-          ));
-        }
-      };
-      continue;
-    }
-
-    if input.try_parse(|parser| parser.expect_delim('-')).is_ok() {
-      let rhs = parse_calc_product_at(input, depth)?;
-      value = match (value, rhs) {
-        (CalcValue::Number(lhs), CalcValue::Number(rhs)) => CalcValue::Number(lhs - rhs),
-        (CalcValue::Formula(lhs), CalcValue::Formula(rhs)) => CalcValue::Formula(lhs.sub(rhs)),
-        _ => {
-          return Err(unexpected_token!(
-            Length,
-            input.current_source_location(),
-            &Token::Delim('-'),
-          ));
-        }
-      };
-      continue;
-    }
-
-    break;
-  }
-
-  Ok(value)
+  parse_calc_chain(input, ['+', '-'], |input| {
+    parse_calc_product_at(input, depth)
+  })
 }
 
 /// Parses a `calc(...)` that must reduce to a unitless number.
@@ -417,95 +425,53 @@ pub(crate) fn parse_calc_number_expression<'i>(input: &mut Parser<'i, '_>) -> Pa
   let location = input.current_source_location();
   let token = input.next()?.clone();
 
-  match &token {
-    Token::Function(function) if function.eq_ignore_ascii_case("calc") => {
-      match input.parse_nested_block(parse_calc_sum)? {
-        CalcValue::Number(value) => Ok(value),
-        _ => Err(location.new_unexpected_token_error(token.clone())),
-      }
-    }
-    _ => Err(location.new_unexpected_token_error(token.clone())),
+  if let Token::Function(function) = &token
+    && function.eq_ignore_ascii_case("calc")
+    && let CalcValue::Number(value) = input.parse_nested_block(parse_calc_sum)?
+  {
+    return Ok(value);
   }
+
+  Err(location.new_unexpected_token_error(token))
 }
 
 fn parse_calc_product_at<'i>(input: &mut Parser<'i, '_>, depth: u32) -> ParseResult<'i, CalcValue> {
-  let mut value = parse_calc_factor_at(input, depth)?;
+  parse_calc_chain(input, ['*', '/'], |input| {
+    parse_calc_factor_at(input, depth)
+  })
+}
 
-  loop {
-    if input.try_parse(|parser| parser.expect_delim('*')).is_ok() {
-      let rhs = parse_calc_factor_at(input, depth)?;
-      value = match (value, rhs) {
-        (CalcValue::Formula(lhs), CalcValue::Number(rhs)) => CalcValue::Formula(lhs.scale(rhs)),
-        (CalcValue::Number(lhs), CalcValue::Formula(rhs)) => CalcValue::Formula(rhs.scale(lhs)),
-        (CalcValue::Number(lhs), CalcValue::Number(rhs)) => CalcValue::Number(lhs * rhs),
-        _ => {
-          return Err(unexpected_token!(
-            Length,
-            input.current_source_location(),
-            &Token::Delim('*'),
-          ));
-        }
-      };
-      continue;
-    }
+/// An operand followed by any number of `operators` and further operands, folded left.
+fn parse_calc_chain<'i, 't>(
+  input: &mut Parser<'i, 't>,
+  operators: [char; 2],
+  mut parse_operand: impl FnMut(&mut Parser<'i, 't>) -> ParseResult<'i, CalcValue>,
+) -> ParseResult<'i, CalcValue> {
+  let mut value = parse_operand(input)?;
 
-    if input.try_parse(|parser| parser.expect_delim('/')).is_ok() {
-      let rhs = parse_calc_factor_at(input, depth)?;
-      value = match (value, rhs) {
-        (_, CalcValue::Number(0.0)) => {
-          return Err(unexpected_token!(
-            Length,
-            input.current_source_location(),
-            &Token::Delim('/'),
-          ));
-        }
-        (CalcValue::Formula(lhs), CalcValue::Number(rhs)) => {
-          CalcValue::Formula(lhs.scale(1.0 / rhs))
-        }
-        (CalcValue::Number(lhs), CalcValue::Number(rhs)) => CalcValue::Number(lhs / rhs),
-        _ => {
-          return Err(unexpected_token!(
-            Length,
-            input.current_source_location(),
-            &Token::Delim('/'),
-          ));
-        }
-      };
-      continue;
-    }
+  while let Some(operator) = parse_calc_operator(input, operators) {
+    let rhs = parse_operand(input)?;
 
-    break;
+    value = value.combine(operator, rhs).ok_or_else(|| {
+      unexpected_token!(
+        Length,
+        input.current_source_location(),
+        &Token::Delim(operator),
+      )
+    })?;
   }
 
   Ok(value)
 }
 
-impl CalcFormula {
-  /// Bridges a single-unit `Length` to its symbolic `calc(...)` coefficient.
-  fn from_length(length: Length) -> Self {
-    match length {
-      Length::Px(v) => Self::px(v),
-      Length::Em(v) => Self::em(v),
-      Length::Rem(v) => Self::rem(v),
-      Length::Lh(v) => Self::lh(v),
-      Length::Rlh(v) => Self::rlh(v),
-      Length::Vw(v) => Self::vw(v),
-      Length::CqW(v) => Self::cqw(v),
-      Length::Vh(v) => Self::vh(v),
-      Length::CqH(v) => Self::cqh(v),
-      Length::VMin(v) => Self::vmin(v),
-      Length::CqMin(v) => Self::cqmin(v),
-      Length::VMax(v) => Self::vmax(v),
-      Length::CqMax(v) => Self::cqmax(v),
-      Length::Cm(v) => Self::cm(v),
-      Length::Mm(v) => Self::mm(v),
-      Length::In(v) => Self::inch(v),
-      Length::Q(v) => Self::q(v),
-      Length::Pt(v) => Self::pt(v),
-      Length::Pc(v) => Self::pc(v),
-      _ => Self::default(),
-    }
-  }
+/// Consumes the next token when it is a delimiter among `operators`.
+fn parse_calc_operator(input: &mut Parser<'_, '_>, operators: [char; 2]) -> Option<char> {
+  input
+    .try_parse(|input| match input.next() {
+      Ok(&Token::Delim(operator)) if operators.contains(&operator) => Ok(operator),
+      _ => Err(()),
+    })
+    .ok()
 }
 
 fn parse_calc_factor_at<'i>(input: &mut Parser<'i, '_>, depth: u32) -> ParseResult<'i, CalcValue> {
@@ -514,15 +480,15 @@ fn parse_calc_factor_at<'i>(input: &mut Parser<'i, '_>, depth: u32) -> ParseResu
     return Err(location.new_unexpected_token_error(Token::ParenthesisBlock));
   }
 
-  if input.try_parse(|parser| parser.expect_delim('+')).is_ok() {
-    return parse_calc_factor_at(input, depth + 1);
-  }
-
-  if input.try_parse(|parser| parser.expect_delim('-')).is_ok() {
-    return Ok(match parse_calc_factor_at(input, depth + 1)? {
-      CalcValue::Number(value) => CalcValue::Number(-value),
-      CalcValue::Formula(formula) => CalcValue::Formula(formula.neg()),
-    });
+  match parse_calc_operator(input, ['+', '-']) {
+    Some('+') => return parse_calc_factor_at(input, depth + 1),
+    Some('-') => {
+      return Ok(match parse_calc_factor_at(input, depth + 1)? {
+        CalcValue::Number(value) => CalcValue::Number(-value),
+        CalcValue::Formula(formula) => CalcValue::Formula(formula.neg()),
+      });
+    }
+    _ => {}
   }
 
   let token = input.next()?;
