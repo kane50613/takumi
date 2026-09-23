@@ -1,13 +1,15 @@
 //! Placement of `background-image` layers: `background-size`, `-position` and
 //! `-repeat` resolved to a tile size, a first-tile origin, and a tiling step.
 
+#[cfg(feature = "images")]
+use takumi_core::layout::node::resolve_image;
 use takumi_core::{
   context::RenderContext,
   geometry::Size,
   layout::background::auto_axis_from_intrinsic,
   style::{
-    AutoBackgroundAxis, BackgroundRepeat, BackgroundRepeatStyle, BackgroundSize, IntrinsicSizing,
-    Length, PositionComponent, PositionValue,
+    AutoBackgroundAxis, BackgroundImage, BackgroundRepeat, BackgroundRepeatStyle, BackgroundSize,
+    ComputedStyle, IntrinsicSizing, Length, PositionComponent, PositionValue,
   },
 };
 
@@ -17,6 +19,66 @@ pub(crate) fn cycled<T: Copy + Default>(values: &[T], index: usize) -> T {
     return T::default();
   }
   values[index % values.len()]
+}
+
+/// The `-size`, `-position` and `-repeat` lists of `background-*` or
+/// `mask-*`, which place the layers of one image list.
+pub(crate) struct LayerLists<'s> {
+  sizes: &'s [BackgroundSize],
+  positions: &'s [PositionValue],
+  repeats: &'s [BackgroundRepeat],
+}
+
+impl<'s> LayerLists<'s> {
+  pub(crate) fn background(style: &'s ComputedStyle) -> Self {
+    Self {
+      sizes: &style.background_size,
+      positions: &style.background_position,
+      repeats: &style.background_repeat,
+    }
+  }
+
+  pub(crate) fn mask(style: &'s ComputedStyle) -> Self {
+    Self {
+      sizes: &style.mask_size,
+      positions: &style.mask_position,
+      repeats: &style.mask_repeat,
+    }
+  }
+
+  /// Where layer `index`, drawing `image`, lands inside the positioning `area`.
+  pub(crate) fn placement(
+    &self,
+    index: usize,
+    image: &BackgroundImage,
+    area: Size<f32>,
+    context: &RenderContext,
+  ) -> Placement {
+    Placement::resolve(
+      area,
+      cycled(self.sizes, index),
+      cycled(self.positions, index),
+      cycled(self.repeats, index),
+      layer_intrinsic(image, context),
+      context,
+    )
+  }
+}
+
+/// Intrinsic sizing of a `url()` layer, which `background-size` resolves against.
+#[cfg(feature = "images")]
+fn layer_intrinsic(image: &BackgroundImage, context: &RenderContext) -> Option<IntrinsicSizing> {
+  let BackgroundImage::Url(url) = image else {
+    return None;
+  };
+  let source = resolve_image(url, context).ok()?;
+
+  Some(source.intrinsic_sizing().scale(&context.sizing))
+}
+
+#[cfg(not(feature = "images"))]
+fn layer_intrinsic(_image: &BackgroundImage, _context: &RenderContext) -> Option<IntrinsicSizing> {
+  None
 }
 
 /// Where one background layer's tiles land inside the positioning area.
@@ -45,7 +107,7 @@ impl Placement {
   /// Resolves one layer's placement. An image layer carries its intrinsic
   /// sizing, which `auto`, `cover` and `contain` resolve against; a gradient has
   /// none, so those all resolve to the positioning area.
-  pub(crate) fn resolve(
+  fn resolve(
     area: Size<f32>,
     size: BackgroundSize,
     position: PositionValue,
