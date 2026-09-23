@@ -28,30 +28,31 @@ const refreshLockfile: TegamiPlugin = {
   },
 };
 
-const groupedPackages = [
-  "npm:takumi-js",
-  "npm:@takumi-rs/core",
-  "npm:@takumi-rs/helpers",
-  "npm:@takumi-rs/wasm",
-  "npm:@takumi-rs/image-response",
-  "cargo:takumi",
+type ReleaseGroup = "takumi" | "takumi-pdf" | "takumi-paint";
+
+const releaseGroups: [ReleaseGroup, string[]][] = [
+  [
+    "takumi",
+    [
+      "npm:takumi-js",
+      "npm:@takumi-rs/core",
+      "npm:@takumi-rs/helpers",
+      "npm:@takumi-rs/wasm",
+      "npm:@takumi-rs/image-response",
+      "cargo:takumi",
+    ],
+  ],
+  // The crate is never published; it carries a version so the `/Producer` it
+  // writes matches the npm package a reader installed.
+  ["takumi-pdf", ["npm:takumi-pdf", "cargo:takumi-pdf"]],
+  ["takumi-paint", ["npm:takumi-paint"]],
 ];
 
-// The crate is never published; it carries a version so the `/Producer` it
-// writes matches the npm package a reader installed.
-const pdfPackages = ["npm:takumi-pdf", "cargo:takumi-pdf"];
-
-const packages: Record<string, PackageOptions<"takumi" | "takumi-pdf" | "takumi-paint">> = {};
-
-for (const name of groupedPackages) {
-  packages[name] = { group: "takumi" };
-}
-
-for (const name of pdfPackages) {
-  packages[name] = { group: "takumi-pdf" };
-}
-
-packages["npm:takumi-paint"] = { group: "takumi-paint" };
+const packages = Object.fromEntries(
+  releaseGroups.flatMap(([group, names]) =>
+    names.map((name): [string, PackageOptions<ReleaseGroup>] => [name, { group }]),
+  ),
+);
 
 // Skip versionless dependents (private examples, docs, templates); only real
 // `dependencies` bumps propagate.
