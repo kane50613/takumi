@@ -321,7 +321,7 @@ impl<'a, 'd> LayerEmitter<'a, 'd> {
       wedge.close();
       self
         .doc
-        .path(&wedge.into_string(), fill, FillRule::NonZero)?;
+        .fill_path(&wedge.into_string(), fill, FillRule::NonZero)?;
     }
     self.doc.end_group(group)
   }

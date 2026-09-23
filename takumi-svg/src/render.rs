@@ -119,7 +119,7 @@ pub fn render(options: SvgOptions<'_>) -> Result<String> {
   }
   .emit(&mut doc)?;
 
-  Ok(doc.render()?)
+  Ok(doc.finish()?)
 }
 
 /// A render node laid out at its [`BoxFrame`].
@@ -437,7 +437,7 @@ impl<'n> PlacedBox<'n> {
       let data = rounded_rect_path_data(&shadow, spread_size, shadow_origin);
 
       doc.with_blur(resolved.blur_radius, |doc| {
-        doc.path(&data, fill, FillRule::NonZero)
+        doc.fill_path(&data, fill, FillRule::NonZero)
       })?;
     }
     Ok(())
@@ -473,7 +473,7 @@ impl<'n> PlacedBox<'n> {
       );
       let clip_group = doc.begin_clipped_group(&outer)?;
       doc.with_blur(resolved.blur_radius, |doc| {
-        doc.path(&ring, fill, FillRule::EvenOdd)
+        doc.fill_path(&ring, fill, FillRule::EvenOdd)
       })?;
       doc.end_group(clip_group)?;
     }
@@ -552,13 +552,7 @@ impl BoxChrome {
     let mask = placed.begin_mask_group(doc)?;
 
     let opacity = style.opacity.0;
-    let filter_refs = doc.filter(
-      &style.filter,
-      &context.sizing,
-      context.current_color,
-      placed.frame.layout.size,
-      false,
-    )?;
+    let filter_refs = doc.filter(&style.filter, context, placed.frame.layout.size, false)?;
     let filter_wrappers = doc.begin_filter_wrappers(&filter_refs)?;
     let outer = (!group_transform.is_identity() || opacity < 1.0 || !filter_refs.is_empty())
       .then(|| {
@@ -577,7 +571,7 @@ impl BoxChrome {
     // overlay driving feTurbulence). The invisible rect only ever grows the bbox,
     // so painted content is unaffected.
     if !filter_refs.is_empty() {
-      doc.rect(placed.frame.border_box(), Rgba([0, 0, 0, 0]))?;
+      doc.rect(placed.frame.border_box(), Rgba::TRANSPARENT)?;
     }
 
     let clip_group = placed.begin_clip_path_group(doc)?;
@@ -623,15 +617,13 @@ impl BoxChrome {
       doc.end_group(group)?;
     }
     if let Some(pending) = self.outline {
-      pending.paint(doc)?;
+      pending.emit(doc)?;
     }
     let groups = [self.clip_group, self.outer];
     for group in groups.into_iter().flatten() {
       doc.end_group(group)?;
     }
-    for group in self.filter_wrappers.into_iter().rev() {
-      doc.end_group(group)?;
-    }
+    doc.end_filter_wrappers(self.filter_wrappers)?;
     let groups = [self.mask, self.isolate, self.blend];
     for group in groups.into_iter().flatten() {
       doc.end_group(group)?;
@@ -685,7 +677,7 @@ impl PaintDevice for DocumentDevice<'_> {
       _ => {
         let data = path_data(&shape.to_commands(), transform);
 
-        self.doc.path(&data, Rgba(color.0), shape.rule())
+        self.doc.fill_path(&data, Rgba(color.0), shape.rule())
       }
     };
 
@@ -812,7 +804,7 @@ fn emit_borders(
             size.inset(band.inset),
             band.inset.top_left(),
           );
-          doc.path(
+          doc.fill_path(
             &path_data(&polygon, transform),
             Rgba(band.color.0),
             FillRule::NonZero,
@@ -899,7 +891,7 @@ impl PendingOutline {
 
   /// Paints the outline as a ring around the border box, grown by
   /// `outline-offset + outline-width`.
-  pub(crate) fn paint(&self, doc: &mut SvgDocument) -> io::Result<()> {
+  pub(crate) fn emit(&self, doc: &mut SvgDocument) -> io::Result<()> {
     emit_borders(
       &self.outline.border,
       self.outline.size,
