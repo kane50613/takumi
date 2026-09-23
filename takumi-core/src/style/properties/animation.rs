@@ -5,26 +5,9 @@ use typed_builder::TypedBuilder;
 
 use crate::style::{
   CssDescriptorKind, CssSyntaxKind, CssToken, FromCss, FromCssStr, MakeComputed, ParseResult,
-  ToCss, impl_css_enum, next_is_comma, tw::TailwindPropertyParser, unexpected_token,
+  ToCss, impl_comma_list_from_css, impl_css_enum, next_is_comma, tw::TailwindPropertyParser,
+  unexpected_token,
 };
-
-/// Implements `FromCss` for a `Box<[T]>` animation list type as a comma-separated list of `$elem`.
-macro_rules! impl_comma_list_from_css {
-  ($list:ty, $elem:ty) => {
-    impl_comma_list_from_css!($list, $elem, <$elem>::VALID_TOKENS);
-  };
-  ($list:ty, $elem:ty, $valid:expr) => {
-    impl<'i> FromCss<'i> for $list {
-      fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
-        input
-          .parse_comma_separated(<$elem>::from_css)
-          .map(Vec::into_boxed_slice)
-      }
-
-      const VALID_TOKENS: &'static [CssToken] = $valid;
-    }
-  };
-}
 
 /// Represents a CSS animation time value stored in milliseconds.
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
@@ -379,16 +362,10 @@ impl<'i> FromCss<'i> for Animation {
 /// Parsed values for the `animation` shorthand.
 pub(crate) type Animations = Box<[Animation]>;
 
-impl<'i> FromCss<'i> for Animations {
-  fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
-    Ok(
-      input
-        .parse_comma_separated(Animation::from_css)?
-        .into_boxed_slice(),
-    )
-  }
-
-  const VALID_TOKENS: &'static [CssToken] = &[
+impl_comma_list_from_css!(
+  Animations,
+  Animation,
+  &[
     CssToken::Syntax(CssSyntaxKind::Time),
     CssToken::Syntax(CssSyntaxKind::EasingFunction),
     CssToken::Syntax(CssSyntaxKind::Number),
@@ -405,8 +382,8 @@ impl<'i> FromCss<'i> for Animations {
     CssToken::Keyword("paused"),
     CssToken::Syntax(CssSyntaxKind::CustomIdent),
     CssToken::Syntax(CssSyntaxKind::String),
-  ];
-}
+  ]
+);
 
 impl TailwindPropertyParser for Animations {
   fn parse_tw(token: &str) -> Option<Self> {

@@ -2,13 +2,13 @@ use std::fmt;
 
 use cssparser::{Parser, Token, match_ignore_ascii_case};
 
-use super::{background_image::parse_comma_list, background_size_resolve::*};
+use super::background_size_resolve::*;
 use crate::{
   geometry::Size,
   style::{
     Animatable, Color, CssSyntaxKind, CssToken, FromCss, Length, ListInterpolationStrategy,
-    MakeComputed, ParseResult, SizingContext, ToCss, discrete, tw::TailwindPropertyParser,
-    unexpected_token,
+    MakeComputed, ParseResult, SizingContext, ToCss, discrete, parse_comma_list,
+    tw::TailwindPropertyParser, unexpected_token,
   },
 };
 

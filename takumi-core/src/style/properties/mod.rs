@@ -143,7 +143,9 @@ pub use text_shadow::*;
 pub use text_stroke::*;
 pub use text_wrap::*;
 pub use traits::*;
-pub(crate) use traits::{declare_box_alignment_enum_impl, impl_css_enum, impl_from_taffy_enum};
+pub(crate) use traits::{
+  declare_box_alignment_enum_impl, impl_comma_list_from_css, impl_css_enum, impl_from_taffy_enum,
+};
 pub use transform::*;
 pub use vertical_align::*;
 pub use white_space::*;
@@ -157,6 +159,19 @@ pub(crate) fn next_is_comma<'i>(input: &mut Parser<'i, '_>) -> bool {
   let is_comma = input.expect_comma().is_ok();
   input.reset(&state);
   is_comma
+}
+
+/// Parses a comma-separated list of `parse_item`, requiring at least one.
+pub(crate) fn parse_comma_list<'i, T>(
+  input: &mut Parser<'i, '_>,
+  mut parse_item: impl FnMut(&mut Parser<'i, '_>) -> ParseResult<'i, T>,
+) -> ParseResult<'i, Box<[T]>> {
+  let mut items = Vec::new();
+  items.push(parse_item(input)?);
+  while input.expect_comma().is_ok() {
+    items.push(parse_item(input)?);
+  }
+  Ok(items.into_boxed_slice())
 }
 
 // These parse Tailwind tokens straight through their `FromCss` value parser.

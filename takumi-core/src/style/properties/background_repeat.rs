@@ -3,10 +3,9 @@ use std::{fmt, iter::successors};
 use cssparser::{Parser, match_ignore_ascii_case};
 use smallvec::{SmallVec, smallvec};
 
-use super::background_image::parse_comma_list;
 use crate::style::{
   Animatable, CssToken, FromCss, ListInterpolationStrategy, MakeComputed, ParseResult, ToCss,
-  impl_css_enum,
+  impl_css_enum, parse_comma_list,
 };
 
 /// Tile origins along one axis for `background-repeat: repeat`: the first origin
