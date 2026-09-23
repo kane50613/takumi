@@ -1508,10 +1508,21 @@ impl Emitter<'_> {
         .flatten();
       let marker_tagged = marker_target.is_some();
 
+      // The box never reaches `emit_box`, so the state that would paint it
+      // there is applied here: its own opacity, and its `filter` composed onto
+      // the one the enclosing stacking contexts left.
+      let opacity = node.context.style.opacity.0;
+      let faded = opacity < 1.0;
       // A container box runs its own emitter, which tags every node it walks.
-      // A replaced one paints here, so it takes one region for the whole box.
-      let box_tagged =
-        cfg!(feature = "images") && self.tagged && matches!(paint, InlineBoxPaint::Replaced { .. });
+      // A replaced one paints here. Its decorations are artifacts and marked
+      // content cannot nest within one stream, so the box's region wraps the
+      // whole box only when opacity moves it into a group of its own, and
+      // wraps just the content otherwise.
+      let box_tagged = cfg!(feature = "images")
+        && self.tagged
+        && !marker_tagged
+        && matches!(paint, InlineBoxPaint::Replaced { .. });
+      let box_wrapped = box_tagged && faded;
 
       if owner_tagged {
         surface.end_tagged();
@@ -1522,14 +1533,9 @@ impl Emitter<'_> {
         if let Some(tags) = self.tags() {
           tags.borrow_mut().record_label(path, identifier);
         }
-      } else if box_tagged {
+      } else if box_wrapped {
         self.start_tagged_node(node, surface);
       }
-      // The box never reaches `emit_box`, so the state that would paint it
-      // there is applied here: its own opacity, and its `filter` composed onto
-      // the one the enclosing stacking contexts left.
-      let opacity = node.context.style.opacity.0;
-      let faded = opacity < 1.0;
 
       if faded {
         surface
@@ -1545,7 +1551,13 @@ impl Emitter<'_> {
         InlineBoxPaint::Replaced {
           node,
           layout: box_layout,
-        } => self.emit_inline_replaced(node, box_layout, origin, surface),
+        } => self.emit_inline_replaced(
+          node,
+          box_layout,
+          origin,
+          box_tagged && !box_wrapped,
+          surface,
+        ),
         #[cfg(not(feature = "images"))]
         InlineBoxPaint::Replaced { .. } => {}
         InlineBoxPaint::Container(subtree) => {
@@ -1556,7 +1568,7 @@ impl Emitter<'_> {
       if faded {
         surface.pop();
       }
-      if marker_tagged || box_tagged {
+      if marker_tagged || box_wrapped {
         surface.end_tagged();
       }
       if owner_tagged {
@@ -1565,13 +1577,15 @@ impl Emitter<'_> {
     }
   }
 
-  /// Paints a replaced inline box: its decorations, then its content.
+  /// Paints a replaced inline box: its decorations, then its content, which
+  /// `tagged` wraps in the box's own region.
   #[cfg(feature = "images")]
   fn emit_inline_replaced(
     &mut self,
     node: &RenderNode,
     layout: Layout,
     origin: (f32, f32),
+    tagged: bool,
     surface: &mut Surface,
   ) {
     let (x, y) = origin;
@@ -1585,8 +1599,14 @@ impl Emitter<'_> {
     self.shadows(&inset, &border, layout, (x, y), surface, true);
     self.emit_borders(&border, x, y, layout.size, surface);
 
+    if tagged {
+      self.start_tagged_node(node, surface);
+    }
     if let Some(NodeKind::Image(image)) = node.node.as_ref().map(|source| &source.kind) {
       self.emit_image(image, &node.context, layout, x, y, surface);
+    }
+    if tagged {
+      surface.end_tagged();
     }
     self.paint_outline(
       self
