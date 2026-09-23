@@ -104,7 +104,7 @@ pub(crate) fn parse_comma_list<'i, T>(
 ) -> ParseResult<'i, Box<[T]>> {
   let mut items = Vec::new();
   items.push(parse_item(input)?);
-  while input.expect_comma().is_ok() {
+  while input.try_parse(Parser::expect_comma).is_ok() {
     items.push(parse_item(input)?);
   }
   Ok(items.into_boxed_slice())
@@ -142,8 +142,26 @@ mod tests {
   use crate::style::{
     Angle, Color, ConicGradient, FromCssStr, GradientStop, Length, LinearGradient,
     LinearGradientDirection, PositionValue, RadialGradient, RadialShape, RadialSize, SpacePair,
-    StopPosition,
+    StopPosition, StyleDeclarationBlock,
   };
+
+  /// A token after the last item is the declaration's to reject; the list must not swallow it.
+  #[test]
+  fn comma_lists_leave_a_stray_token_invalid() {
+    for css in [
+      "background-image: none bogus",
+      "background-repeat: repeat bogus",
+      "background-size: cover bogus",
+      "background-position: left bogus",
+      "background-blend-mode: screen bogus",
+    ] {
+      assert_eq!(
+        StyleDeclarationBlock::parse_loosy(css).len(),
+        0,
+        "{css} parsed as valid"
+      );
+    }
+  }
 
   #[test]
   fn test_parse_tailwind_none() {
