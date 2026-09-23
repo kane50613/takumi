@@ -1,11 +1,11 @@
-use std::f32::consts::{PI, SQRT_2};
+use std::f32::consts::PI;
 
 use smallvec::SmallVec;
 
 use crate::{
   context::RenderContext,
   geometry::{LAYOUT_UNIT_EPSILON, PathBuilder, PathCommand as Command, Point, Rect, Size},
-  layout::corner_shape::{CornerContour, contour_arc_length, corner_contour},
+  layout::corner_shape::{CornerContour, KAPPA, contour_arc_length, corner_contour},
   style::{BorderStyle, Color, ImageScalingAlgorithm, Sides, SpacePair, Superellipse},
 };
 
@@ -76,28 +76,17 @@ impl BorderProperties {
     context: &RenderContext,
     border_box: Size<f32>,
   ) -> Sides<SpacePair<f32>> {
-    let top_left = context.style.border_top_left_radius.to_px(
-      &context.sizing,
-      border_box.width,
-      border_box.height,
-    );
-    let top_right = context.style.border_top_right_radius.to_px(
-      &context.sizing,
-      border_box.width,
-      border_box.height,
-    );
-    let bottom_right = context.style.border_bottom_right_radius.to_px(
-      &context.sizing,
-      border_box.width,
-      border_box.height,
-    );
-    let bottom_left = context.style.border_bottom_left_radius.to_px(
-      &context.sizing,
-      border_box.width,
-      border_box.height,
-    );
+    let style = &context.style;
 
-    Sides([top_left, top_right, bottom_right, bottom_left])
+    Sides(
+      [
+        style.border_top_left_radius,
+        style.border_top_right_radius,
+        style.border_bottom_right_radius,
+        style.border_bottom_left_radius,
+      ]
+      .map(|radius| radius.to_px(&context.sizing, border_box.width, border_box.height)),
+    )
   }
 
   /// Resolves the corner shapes from the context.
@@ -149,13 +138,8 @@ impl BorderProperties {
     }
   }
 
-  /// True if a side with this style and width is rendered.
-  fn is_side_visible(style: BorderStyle, width: f32) -> bool {
-    style.is_rendered() && width > 0.0
-  }
-
-  /// The sides that put ink on the page, clockwise from the top.
-  pub fn painted_sides(&self) -> impl Iterator<Item = PaintedSide> {
+  /// Every side, painted or not, clockwise from the top.
+  fn sides(&self) -> [PaintedSide; 4] {
     [
       (
         BorderSide::Top,
@@ -182,96 +166,59 @@ impl BorderProperties {
         self.style.left,
       ),
     ]
-    .into_iter()
-    .filter_map(|(side, width, color, style)| {
-      (Self::is_side_visible(style, width) && color.0[3] != 0).then_some(PaintedSide {
-        side,
-        width,
-        color,
-        style,
-      })
+    .map(|(side, width, color, style)| PaintedSide {
+      side,
+      width,
+      color,
+      style,
     })
+  }
+
+  /// The sides that put ink on the page, clockwise from the top.
+  pub fn painted_sides(&self) -> impl Iterator<Item = PaintedSide> {
+    self
+      .sides()
+      .into_iter()
+      .filter(|side| side.is_visible() && side.color.0[3] != 0)
   }
 
   /// True if any side is rendered with nonzero width.
   pub fn has_visible_sides(&self) -> bool {
-    Self::is_side_visible(self.style.top, self.width.top)
-      || Self::is_side_visible(self.style.right, self.width.right)
-      || Self::is_side_visible(self.style.bottom, self.width.bottom)
-      || Self::is_side_visible(self.style.left, self.width.left)
+    self.sides().iter().any(PaintedSide::is_visible)
   }
 
   /// Per-side widths with invisible sides zeroed.
   pub fn visible_side_widths(&self) -> Rect<f32> {
+    let [top, right, bottom, left] = self
+      .sides()
+      .map(|side| if side.is_visible() { side.width } else { 0.0 });
+
     Rect {
-      top: if Self::is_side_visible(self.style.top, self.width.top) {
-        self.width.top
-      } else {
-        0.0
-      },
-      right: if Self::is_side_visible(self.style.right, self.width.right) {
-        self.width.right
-      } else {
-        0.0
-      },
-      bottom: if Self::is_side_visible(self.style.bottom, self.width.bottom) {
-        self.width.bottom
-      } else {
-        0.0
-      },
-      left: if Self::is_side_visible(self.style.left, self.width.left) {
-        self.width.left
-      } else {
-        0.0
-      },
+      top,
+      right,
+      bottom,
+      left,
     }
   }
 
   /// The shared color if all visible sides match, else `None`.
   pub fn has_uniform_visible_color(&self) -> Option<Color> {
-    let mut color = None;
+    let mut colors = self
+      .sides()
+      .into_iter()
+      .filter(PaintedSide::is_visible)
+      .map(|side| side.color);
+    let color = colors.next()?;
 
-    if Self::is_side_visible(self.style.top, self.width.top) {
-      color = Some(self.color.top);
-    }
-    if Self::is_side_visible(self.style.right, self.width.right) {
-      if let Some(existing) = color {
-        if existing != self.color.right {
-          return None;
-        }
-      } else {
-        color = Some(self.color.right);
-      }
-    }
-    if Self::is_side_visible(self.style.bottom, self.width.bottom) {
-      if let Some(existing) = color {
-        if existing != self.color.bottom {
-          return None;
-        }
-      } else {
-        color = Some(self.color.bottom);
-      }
-    }
-    if Self::is_side_visible(self.style.left, self.width.left) {
-      if let Some(existing) = color {
-        if existing != self.color.left {
-          return None;
-        }
-      } else {
-        color = Some(self.color.left);
-      }
-    }
-
-    color
+    colors.all(|other| other == color).then_some(color)
   }
 
   /// True if all visible sides use the given style.
   pub fn visible_sides_match(&self, style: BorderStyle) -> bool {
-    (!Self::is_side_visible(self.style.top, self.width.top) || self.style.top == style)
-      && (!Self::is_side_visible(self.style.right, self.width.right) || self.style.right == style)
-      && (!Self::is_side_visible(self.style.bottom, self.width.bottom)
-        || self.style.bottom == style)
-      && (!Self::is_side_visible(self.style.left, self.width.left) || self.style.left == style)
+    self
+      .sides()
+      .iter()
+      .all(|side| !side.is_visible() || side.style == style)
   }
 
   /// True if every side has equal nonzero width and the given style.
@@ -329,15 +276,17 @@ impl BorderProperties {
       return;
     }
 
-    let inner_left = self.width.left.min(border_box.width);
-    let inner_right = (border_box.width - self.width.right).max(inner_left);
-    let inner_top = self.width.top.min(border_box.height);
-    let inner_bottom = (border_box.height - self.width.bottom).max(inner_top);
-
     if self.collapsed {
       self.append_squared_side_polygon_commands_at(side, path, border_box, offset);
       return;
     }
+
+    let Rect {
+      left: inner_left,
+      right: inner_right,
+      top: inner_top,
+      bottom: inner_bottom,
+    } = self.inner_edges(border_box);
 
     match side {
       BorderSide::Top => {
@@ -378,10 +327,12 @@ impl BorderProperties {
     border_box: Size<f32>,
     offset: Point<f32>,
   ) {
-    let inner_left = self.width.left.min(border_box.width);
-    let inner_right = (border_box.width - self.width.right).max(inner_left);
-    let inner_top = self.width.top.min(border_box.height);
-    let inner_bottom = (border_box.height - self.width.bottom).max(inner_top);
+    let Rect {
+      left: inner_left,
+      right: inner_right,
+      top: inner_top,
+      bottom: inner_bottom,
+    } = self.inner_edges(border_box);
     let (start, end) = match side {
       BorderSide::Top => (
         (
@@ -466,6 +417,19 @@ impl BorderProperties {
     path.line_to((offset.x + end.0, offset.y + end.1));
     path.line_to((offset.x + start.0, offset.y + end.1));
     path.close();
+  }
+
+  /// The padding-box edges inside `border_box`, clamped so opposite edges never cross.
+  fn inner_edges(&self, border_box: Size<f32>) -> Rect<f32> {
+    let left = self.width.left.min(border_box.width);
+    let top = self.width.top.min(border_box.height);
+
+    Rect {
+      left,
+      right: (border_box.width - self.width.right).max(left),
+      top,
+      bottom: (border_box.height - self.width.bottom).max(top),
+    }
   }
 
   /// Appends a clip polygon for one side that follows the rounded inner contour.
@@ -627,12 +591,7 @@ impl BorderProperties {
   /// with the spread-expanded box size.
   pub fn outset_shadow_box(&self, size: Size<f32>, spread: f32) -> (Self, Size<f32>) {
     let mut expanded = *self;
-    expanded.expand_by(Rect {
-      top: spread,
-      right: spread,
-      bottom: spread,
-      left: spread,
-    });
+    expanded.expand_by(Sides::from(spread).into());
 
     let spread_size = Size {
       width: (size.width + 2.0 * spread).max(0.0),
@@ -693,8 +652,6 @@ impl BorderProperties {
     }
 
     path.reserve_exact(BorderProperties::PATH_COMMANDS_AMOUNT);
-
-    const KAPPA: f32 = 4.0 / 3.0 * (SQRT_2 - 1.0);
 
     let radii = self.scaled_corner_radii(border_box);
     let [top_left, top_right, bottom_right, bottom_left] = radii.0;
@@ -981,10 +938,6 @@ fn corner_arc_length(shape: Superellipse, radius_x: f32, radius_y: f32) -> f32 {
 }
 
 fn approximate_quarter_ellipse_arc_length(radius_x: f32, radius_y: f32) -> f32 {
-  if radius_x <= 0.0 || radius_y <= 0.0 {
-    return 0.0;
-  }
-
   // Ramanujan II approximation for ellipse circumference.
   let sum = radius_x + radius_y;
   let diff = radius_x - radius_y;
@@ -1164,6 +1117,10 @@ fn select_best_dash_gap(length: f32, dash: f32, gap: f32, closed: bool) -> f32 {
 }
 
 impl PaintedSide {
+  fn is_visible(&self) -> bool {
+    self.style.is_rendered() && self.width > 0.0
+  }
+
   /// The side's colour lightened or darkened for `inset`/`outset` 3D shading.
   fn shaded(&self, style: BorderStyle) -> Color {
     let lighten = match style {

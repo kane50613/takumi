@@ -137,6 +137,22 @@ impl AxisArea {
       }
     }
   }
+
+  /// Resolves the `background-position` component against the free space on this axis.
+  fn position_offset(&self, tile: u32, sizing: &SizingContext) -> i32 {
+    let available = calculate_available_space(self.area, tile);
+
+    match (self.position, self.axis) {
+      (PositionComponent::KeywordX(PositionKeywordX::Left), Axis::X)
+      | (PositionComponent::KeywordY(PositionKeywordY::Top), Axis::Y) => 0,
+      (PositionComponent::KeywordX(PositionKeywordX::Right), Axis::X)
+      | (PositionComponent::KeywordY(PositionKeywordY::Bottom), Axis::Y) => available,
+      (PositionComponent::Length(length), _) => {
+        resolve_length_to_position_component(length, available, sizing)
+      }
+      _ => available / 2,
+    }
+  }
 }
 
 /// The size of a `background-size` axis left `auto`, taken from the image's ratio once the other
@@ -183,24 +199,6 @@ fn calculate_available_space(area_size: u32, tile_size: u32) -> i32 {
   i32::try_from(area_size)
     .unwrap_or(i32::MAX)
     .saturating_sub_unsigned(tile_size)
-}
-
-impl AxisArea {
-  /// Resolves the `background-position` component against the free space on this axis.
-  fn position_offset(&self, tile: u32, sizing: &SizingContext) -> i32 {
-    let available = calculate_available_space(self.area, tile);
-
-    match (self.position, self.axis) {
-      (PositionComponent::KeywordX(PositionKeywordX::Left), Axis::X)
-      | (PositionComponent::KeywordY(PositionKeywordY::Top), Axis::Y) => 0,
-      (PositionComponent::KeywordX(PositionKeywordX::Right), Axis::X)
-      | (PositionComponent::KeywordY(PositionKeywordY::Bottom), Axis::Y) => available,
-      (PositionComponent::Length(length), _) => {
-        resolve_length_to_position_component(length, available, sizing)
-      }
-      _ => available / 2,
-    }
-  }
 }
 
 /// A `background-origin` positioning area.
