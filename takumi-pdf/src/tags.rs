@@ -20,8 +20,16 @@ use takumi_core::{
 };
 
 use crate::krilla::tagging::{
-  Identifier, ListNumbering, TableHeaderScope, Tag, TagGroup, TagId, TagTree,
+  Artifact, ArtifactType, ContentTag, Identifier, ListNumbering, TableHeaderScope, Tag, TagGroup,
+  TagId, TagTree,
 };
+
+/// Content kept out of the structure tree. `Other` stays valid below PDF 2.0,
+/// where the header and footer artifact subtypes do not exist yet.
+pub(crate) const ARTIFACT: ContentTag<'static> = ContentTag::Artifact(Artifact {
+  kind: ArtifactType::Other,
+  bbox: None,
+});
 
 /// Marked-content identifiers recorded during emission, keyed by the source
 /// node's path from the root.

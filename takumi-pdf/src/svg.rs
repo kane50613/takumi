@@ -1,27 +1,23 @@
 //! Draws flattened SVG vector ops onto a krilla surface, so SVG image sources
 //! embed as real paths and gradients instead of bitmaps.
 
-use takumi_core::{
-  geometry::PathCommand,
-  resources::image::{
-    SvgFill, SvgGradient, SvgLineCap, SvgLineJoin, SvgOp, SvgPaint, SvgSpreadMethod, SvgStrokeStyle,
-  },
+use takumi_core::resources::image::{
+  SvgFill, SvgGradient, SvgLineCap, SvgLineJoin, SvgOp, SvgPaint, SvgSpreadMethod, SvgStrokeStyle,
 };
 
 use crate::{
   krilla::{
     color::rgb,
-    geom::{Path as KrillaPath, Size as KrillaSize, Transform},
+    geom::{Size as KrillaSize, Transform},
     image::Image as KrillaImage,
     mask::{Mask, MaskType},
-    num::NormalizedF32,
     paint::{
       Fill, FillRule, LineCap, LineJoin, LinearGradient, Paint, Pattern, RadialGradient,
       SpreadMethod, Stop, Stroke, StrokeDash,
     },
     surface::Surface,
   },
-  paint::{krilla_blend, krilla_path},
+  paint::{draw_stream, krilla_blend, krilla_path, krilla_transform, normalized},
 };
 
 /// Draws `ops` onto `surface` in the current coordinate space and resets the
@@ -35,25 +31,16 @@ pub(crate) fn draw_svg_ops(surface: &mut Surface, ops: Vec<SvgOp>) {
 fn draw_ops(surface: &mut Surface, ops: Vec<SvgOp>) {
   for op in ops {
     match op {
-      SvgOp::PushTransform([a, b, c, d, e, f]) => {
-        surface.push_transform(&Transform::from_row(a, b, c, d, e, f));
-      }
-      SvgOp::PushClip { path, evenodd } => match svg_path(&path) {
+      SvgOp::PushTransform(transform) => surface.push_transform(&krilla_transform(transform)),
+      SvgOp::PushClip { path, evenodd } => match krilla_path(&path, 0.0, 0.0) {
         Some(path) => surface.push_clip_path(&path, &fill_rule(evenodd)),
         // The matching `Pop` still comes; keep the layer stack balanced.
         None => surface.push_transform(&Transform::identity()),
       },
       SvgOp::PushBlend(blend) => surface.push_blend_mode(krilla_blend(blend)),
-      SvgOp::PushOpacity(opacity) => {
-        surface.push_opacity(normalized(opacity));
-      }
+      SvgOp::PushOpacity(opacity) => surface.push_opacity(normalized(opacity)),
       SvgOp::PushMask { ops, luminance } => {
-        let mut stream_builder = surface.stream_builder();
-        let mut sub_surface = stream_builder.surface();
-
-        draw_ops(&mut sub_surface, ops);
-        sub_surface.finish();
-        let stream = stream_builder.finish();
+        let stream = draw_stream(surface, |mask| draw_ops(mask, ops));
         let kind = if luminance {
           MaskType::Luminosity
         } else {
@@ -64,7 +51,7 @@ fn draw_ops(surface: &mut Surface, ops: Vec<SvgOp>) {
       }
       SvgOp::Pop => surface.pop(),
       SvgOp::Draw { path, fill, stroke } => {
-        let Some(path) = svg_path(&path) else {
+        let Some(path) = krilla_path(&path, 0.0, 0.0) else {
           continue;
         };
         let fill = fill.map(|fill| svg_fill(fill, surface));
@@ -90,10 +77,6 @@ fn draw_ops(surface: &mut Surface, ops: Vec<SvgOp>) {
       }
     }
   }
-}
-
-fn svg_path(commands: &[PathCommand]) -> Option<KrillaPath> {
-  krilla_path(commands, 0.0, 0.0)
 }
 
 fn svg_fill(fill: SvgFill, surface: &mut Surface) -> Fill {
@@ -138,7 +121,7 @@ fn svg_paint(paint: SvgPaint, surface: &mut Surface) -> Paint {
       y1: start.y,
       x2: end.x,
       y2: end.y,
-      transform: gradient_transform(&gradient),
+      transform: krilla_transform(gradient.transform),
       spread_method: spread_method(gradient.spread),
       stops: gradient_stops(&gradient),
       anti_alias: false,
@@ -156,7 +139,7 @@ fn svg_paint(paint: SvgPaint, surface: &mut Surface) -> Paint {
       fx: focal.x,
       fy: focal.y,
       fr: 0.0,
-      transform: gradient_transform(&gradient),
+      transform: krilla_transform(gradient.transform),
       spread_method: spread_method(gradient.spread),
       stops: gradient_stops(&gradient),
       anti_alias: false,
@@ -164,31 +147,17 @@ fn svg_paint(paint: SvgPaint, surface: &mut Surface) -> Paint {
     .into(),
     SvgPaint::Pattern {
       ops,
-      transform: [a, b, c, d, e, f],
+      transform,
       width,
       height,
-    } => {
-      let mut stream_builder = surface.stream_builder();
-      let mut tile = stream_builder.surface();
-
-      draw_ops(&mut tile, ops);
-      tile.finish();
-
-      Pattern {
-        stream: stream_builder.finish(),
-        transform: Transform::from_row(a, b, c, d, e, f),
-        width,
-        height,
-      }
-      .into()
+    } => Pattern {
+      stream: draw_stream(surface, |tile| draw_ops(tile, ops)),
+      transform: krilla_transform(transform),
+      width,
+      height,
     }
+    .into(),
   }
-}
-
-fn gradient_transform(gradient: &SvgGradient) -> Transform {
-  let [a, b, c, d, e, f] = gradient.transform;
-
-  Transform::from_row(a, b, c, d, e, f)
 }
 
 const fn spread_method(spread: SvgSpreadMethod) -> SpreadMethod {
@@ -217,8 +186,4 @@ const fn fill_rule(evenodd: bool) -> FillRule {
   } else {
     FillRule::NonZero
   }
-}
-
-fn normalized(value: f32) -> NormalizedF32 {
-  NormalizedF32::new(value.clamp(0.0, 1.0)).unwrap_or(NormalizedF32::ONE)
 }
