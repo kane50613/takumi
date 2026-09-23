@@ -11,7 +11,6 @@ use std::{io, sync::Arc};
 use takumi_core::{
   context::RenderContext,
   font_style::SizedFontStyle,
-  geometry::{ComputedLayout as Layout, Point},
   layout::{
     inline::{
       DecorationRect, InlineItem, InlineLayoutMode, InlineLayoutRequest, InlineOutlineRect,
@@ -28,62 +27,18 @@ use takumi_core::{
 
 use crate::{
   Frame, Rgba, SvgDocument,
-  box_model::path_data,
+  box_model::{BoxFrame, path_data},
   gradient::LayerEmitter,
   render::{DocumentDevice, emit_inline_box},
 };
 
 const WHITE: Rgba = Rgba([255, 255, 255, 255]);
 
-/// Where inline text sits: its container `layout` and the container's absolute
-/// border-box top-left `(origin_x, origin_y)`.
-#[derive(Clone, Copy)]
-struct TextFrame {
-  layout: Layout,
-  origin_x: f32,
-  origin_y: f32,
-}
-
-impl TextFrame {
-  fn new(layout: Layout, origin_x: f32, origin_y: f32) -> Self {
-    Self {
-      layout,
-      origin_x,
-      origin_y,
-    }
-  }
-
-  /// Shifts the origin by `(dx, dy)` (for the text-shadow pass).
-  fn shifted(self, dx: f32, dy: f32) -> Self {
-    Self {
-      origin_x: self.origin_x + dx,
-      origin_y: self.origin_y + dy,
-      ..self
-    }
-  }
-
-  /// The `path_data` matrix translating to the origin.
-  fn translation(self) -> [f32; 6] {
-    [1.0, 0.0, 0.0, 1.0, self.origin_x, self.origin_y]
-  }
-
-  /// Moves a border-box-relative transform to absolute space.
-  fn place(self, transform: Affine) -> Affine {
-    Affine {
-      x: transform.x + self.origin_x,
-      y: transform.y + self.origin_y,
-      ..transform
-    }
-  }
-}
-
-/// Emits a leaf [`TextData`] node at its absolute border-box top-left.
+/// Emits a leaf [`TextData`] node at its frame.
 pub(crate) fn emit_text(
   text: &TextData,
   context: &RenderContext,
-  layout: Layout,
-  origin_x: f32,
-  origin_y: f32,
+  frame: BoxFrame,
   doc: &mut SvgDocument,
 ) -> io::Result<()> {
   emit_inline_items(
@@ -96,27 +51,19 @@ pub(crate) fn emit_text(
         decorations: None,
       }]
     },
-    TextFrame::new(layout, origin_x, origin_y),
+    frame,
     doc,
   )
 }
 
 /// Emits a container's inline formatting context (anonymous text + inline
-/// children) at its absolute border-box top-left. Mirrors the raster backend's
-/// container inline path.
+/// children) at its frame. Mirrors the raster backend's container inline path.
 pub(crate) fn emit_inline_content(
   node: &RenderNode,
-  layout: Layout,
-  origin_x: f32,
-  origin_y: f32,
+  frame: BoxFrame,
   doc: &mut SvgDocument,
 ) -> io::Result<()> {
-  emit_inline_items(
-    &node.context,
-    || collect_inline_items(node),
-    TextFrame::new(layout, origin_x, origin_y),
-    doc,
-  )
+  emit_inline_items(&node.context, || collect_inline_items(node), frame, doc)
 }
 
 /// Lays out the inline items in the content box, paints the runs, then recurses
@@ -124,7 +71,7 @@ pub(crate) fn emit_inline_content(
 fn emit_inline_items<'c>(
   context: &'c RenderContext,
   items: impl FnOnce() -> Vec<InlineItem<'c>>,
-  frame: TextFrame,
+  frame: BoxFrame,
   doc: &mut SvgDocument,
 ) -> io::Result<()> {
   let font_style = SizedFontStyle::from_style(&context.style, context);
@@ -143,18 +90,11 @@ fn emit_inline_items<'c>(
   let runs = built
     .resolve_runs(context, frame.layout)
     .map_err(font_error)?;
-  emit_runs(doc, &runs, &built.spans, &font_style, context, frame)?;
+  emit_runs(&runs, &built.spans, &font_style, context, frame, doc)?;
 
   for inline_box in &runs.inline_boxes {
     if let Some(ProcessedInlineSpan::Box(item)) = built.spans.get(inline_box.id as usize) {
-      emit_inline_box(
-        inline_box,
-        item,
-        frame.layout,
-        frame.origin_x,
-        frame.origin_y,
-        doc,
-      )?;
+      emit_inline_box(inline_box, item, frame, doc)?;
     }
   }
   Ok(())
@@ -163,12 +103,12 @@ fn emit_inline_items<'c>(
 /// Paints a resolved run layout in CSS text-decoration order: shadows, under/over
 /// decorations, glyphs, then line-through.
 fn emit_runs(
-  doc: &mut SvgDocument,
   runs: &InlineRunLayout,
   spans: &[ProcessedInlineSpan<'_>],
   font_style: &SizedFontStyle,
   context: &RenderContext,
-  frame: TextFrame,
+  frame: BoxFrame,
+  doc: &mut SvgDocument,
 ) -> io::Result<()> {
   // Inline-span backgrounds fill under every glyph of the formatting context.
   for fragment in &runs.background_fragments {
@@ -196,7 +136,7 @@ fn emit_runs(
     let group = doc.begin_group(Affine::IDENTITY, 1.0, None, filter.as_deref())?;
     let shadow_frame = frame.shifted(shadow.offset_x, shadow.offset_y);
     for run in &runs.runs {
-      emit_run_glyphs(doc, run, font_style, shadow_frame, Some(color), None)?;
+      emit_run_glyphs(run, font_style, shadow_frame, Some(color), None, doc)?;
     }
     doc.end_group(group)?;
   }
@@ -215,25 +155,25 @@ fn emit_runs(
     .collect();
 
   for (run, decorations) in runs.runs.iter().zip(&decorations) {
-    emit_run_decorations(doc, run, decorations, frame, false)?;
+    emit_run_decorations(run, decorations, frame, false, doc)?;
   }
 
   if context.style.background_clip == BackgroundClip::Text {
-    emit_clip_text_glyphs(doc, runs, font_style, context, frame)?;
+    emit_clip_text_glyphs(runs, font_style, context, frame, doc)?;
   } else {
     for run in &runs.runs {
       let stroke = run_stroke(&run.glyph_run, font_style);
 
-      emit_run_glyphs(doc, run, font_style, frame, None, stroke)?;
+      emit_run_glyphs(run, font_style, frame, None, stroke, doc)?;
     }
   }
 
   // Text outlines stroke between the glyphs and the line-through, matching the
   // raster backend's painting order.
-  emit_inline_outlines(doc, runs, spans, frame)?;
+  emit_inline_outlines(runs, spans, frame, doc)?;
 
   for (run, decorations) in runs.runs.iter().zip(&decorations) {
-    emit_run_decorations(doc, run, decorations, frame, true)?;
+    emit_run_decorations(run, decorations, frame, true, doc)?;
   }
   Ok(())
 }
@@ -241,25 +181,25 @@ fn emit_runs(
 /// Strokes the shared inline outline contours ([`outline_islands`]) for each
 /// styled span, mirroring the raster backend's merged-island outlines.
 fn emit_inline_outlines(
-  doc: &mut SvgDocument,
   runs: &InlineRunLayout,
   spans: &[ProcessedInlineSpan<'_>],
-  frame: TextFrame,
+  frame: BoxFrame,
+  doc: &mut SvgDocument,
 ) -> io::Result<()> {
   if runs.outline_rects.is_empty() {
     return Ok(());
   }
   for island in outline_islands(runs.outline_rects.clone()) {
-    emit_outline_island(doc, &island, spans, frame)?;
+    emit_outline_island(&island, spans, frame, doc)?;
   }
   Ok(())
 }
 
 fn emit_outline_island(
-  doc: &mut SvgDocument,
   island: &[InlineOutlineRect],
   spans: &[ProcessedInlineSpan<'_>],
-  frame: TextFrame,
+  frame: BoxFrame,
+  doc: &mut SvgDocument,
 ) -> io::Result<()> {
   let Some(first_rect) = island.first() else {
     return Ok(());
@@ -315,18 +255,18 @@ fn run_stroke<'j>(run: &ShapedRun, font_style: &'j SizedFontStyle) -> Option<(Rg
 /// glyph interior. A mask honors the stroke, so the background fills the full
 /// fill+stroke coverage.
 fn emit_clip_text_glyphs(
-  doc: &mut SvgDocument,
   runs: &InlineRunLayout,
   font_style: &SizedFontStyle,
   context: &RenderContext,
-  frame: TextFrame,
+  frame: BoxFrame,
+  doc: &mut SvgDocument,
 ) -> io::Result<()> {
   let join = line_join_str(font_style.parent.stroke_linejoin);
 
   let (mask_token, mask_ref) = doc.begin_mask()?;
   let mut any = false;
   for run in &runs.runs {
-    any |= emit_clip_text_mask_glyphs(doc, run, frame, join)?;
+    any |= emit_clip_text_mask_glyphs(run, frame, join, doc)?;
   }
   doc.end_mask(mask_token)?;
   if !any {
@@ -340,12 +280,7 @@ fn emit_clip_text_glyphs(
       .resolve(context.current_color)
       .0,
   );
-  let area = Frame::new(
-    frame.origin_x,
-    frame.origin_y,
-    frame.layout.size.width,
-    frame.layout.size.height,
-  );
+  let area = frame.border_box();
 
   let group = doc.begin_masked_group(&mask_ref)?;
   if background.0[3] != 0 {
@@ -361,7 +296,7 @@ fn emit_clip_text_glyphs(
   for run in &runs.runs {
     let stroke = run_stroke(&run.glyph_run, font_style);
 
-    emit_run_glyphs(doc, run, font_style, frame, None, stroke)?;
+    emit_run_glyphs(run, font_style, frame, None, stroke, doc)?;
   }
   Ok(())
 }
@@ -370,10 +305,10 @@ fn emit_clip_text_glyphs(
 /// stroke (and any faux-bold embolden), so the mask covers the full fill+stroke
 /// glyph coverage. Returns whether any glyph was emitted.
 fn emit_clip_text_mask_glyphs(
-  doc: &mut SvgDocument,
   run: &PositionedInlineRun,
-  frame: TextFrame,
+  frame: BoxFrame,
   join: &str,
+  doc: &mut SvgDocument,
 ) -> io::Result<bool> {
   let run_transform = run.transform(Affine::IDENTITY);
   let glyph_offset = run.glyph_offset(frame.layout);
@@ -386,7 +321,7 @@ fn emit_clip_text_mask_glyphs(
     };
     let matrix =
       run_transform * Affine::translation(glyph_offset.x + glyph.x, glyph_offset.y + glyph.y);
-    let data = path_data(outline.paths(), frame.place(matrix).to_cols_array());
+    let data = path_data(outline.paths(), frame.place(matrix));
     if data.is_empty() {
       continue;
     }
@@ -406,11 +341,11 @@ fn emit_clip_text_mask_glyphs(
 /// Emits a run's under/overline (`over == false`) or line-through (`over == true`)
 /// decoration rects.
 fn emit_run_decorations(
-  doc: &mut SvgDocument,
   run: &PositionedInlineRun,
   decorations: &[DecorationRect],
-  frame: TextFrame,
+  frame: BoxFrame,
   over: bool,
+  doc: &mut SvgDocument,
 ) -> io::Result<()> {
   let opacity = run.glyph_run.brush.opacity;
   let opacity_group = (opacity < 1.0)
@@ -422,10 +357,7 @@ fn emit_run_decorations(
     decorations,
     over,
     TextDecorationLines::empty(),
-    Point {
-      x: frame.origin_x,
-      y: frame.origin_y,
-    },
+    frame.origin,
     &mut device,
   );
   device.finish()?;
@@ -438,12 +370,12 @@ fn emit_run_decorations(
 /// Emits a run's glyphs. `color_override` (for shadows) recolors every glyph and
 /// suppresses bitmaps/COLR; `stroke` adds `-webkit-text-stroke` to outlines.
 fn emit_run_glyphs(
-  doc: &mut SvgDocument,
   run: &PositionedInlineRun,
   font_style: &SizedFontStyle,
-  frame: TextFrame,
+  frame: BoxFrame,
   color_override: Option<Rgba>,
   stroke: Option<(Rgba, f32, &str)>,
+  doc: &mut SvgDocument,
 ) -> io::Result<()> {
   let run_transform = run.transform(Affine::IDENTITY);
   let glyph_offset = run.glyph_offset(frame.layout);
@@ -471,7 +403,6 @@ fn emit_run_glyphs(
     let matrix =
       run_transform * Affine::translation(glyph_offset.x + glyph.x, glyph_offset.y + glyph.y);
     let placed = frame.place(matrix);
-    let cols = placed.to_cols_array();
 
     match resolved.as_ref() {
       ResolvedGlyph::Outline(outline) => {
@@ -485,7 +416,7 @@ fn emit_run_glyphs(
           // its own fill color (`outline.embolden()`); mirror that here.
           match outline.embolden().filter(|embolden| *embolden > 0.0) {
             Some(embolden) => {
-              let data = path_data(outline.paths(), cols);
+              let data = path_data(outline.paths(), placed);
               if data.is_empty() {
                 continue;
               }
@@ -496,11 +427,17 @@ fn emit_run_glyphs(
               }
             }
             None => {
-              let [a, b, c, d, x, y] = cols;
-              let data = path_data(outline.paths(), [a, b, c, d, 0.0, 0.0]);
+              let data = path_data(
+                outline.paths(),
+                Affine {
+                  x: 0.0,
+                  y: 0.0,
+                  ..placed
+                },
+              );
 
               if !data.is_empty() {
-                uses.push((doc.glyph_ref(data), x, y));
+                uses.push((doc.glyph_ref(data), placed.x, placed.y));
               }
             }
           }
@@ -510,7 +447,7 @@ fn emit_run_glyphs(
             if color.0[3] == 0 {
               continue;
             }
-            let data = path_data(paths, cols);
+            let data = path_data(paths, placed);
             if !data.is_empty() {
               doc.glyph_path(&data, Rgba(color.0), None)?;
             }

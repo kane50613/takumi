@@ -10,20 +10,16 @@
 use std::io;
 
 use takumi_core::{
-  geometry::{ComputedLayout as Layout, NodeId},
-  layout::{
-    border::BorderProperties,
-    tree::{LayoutResults, RenderNode},
-  },
+  geometry::{NodeId, Point},
+  layout::tree::{LayoutResults, RenderNode},
   scene::{NodePaint, PaintItemKind, StackingContextNode},
   style::{Affine, Filter},
 };
 
 use crate::{
   SvgDocument,
-  render::{
-    BoxChrome, border_box_path_data, emit_clip_path_group, emit_mask_group, emit_own_content,
-  },
+  box_model::BoxFrame,
+  render::{BoxChrome, PlacedBox},
 };
 
 /// A laid-out tree and its stacking-context scene, emitted in paint order.
@@ -35,7 +31,7 @@ pub(crate) struct SceneEmitter<'a> {
 
 impl SceneEmitter<'_> {
   pub(crate) fn emit(&self, doc: &mut SvgDocument) -> io::Result<()> {
-    self.emit_context(0, Affine::IDENTITY, doc, None)?;
+    self.emit_context(0, Affine::IDENTITY, None, doc)?;
     Ok(())
   }
 
@@ -46,28 +42,25 @@ impl SceneEmitter<'_> {
   ///
   /// SVG has no native backdrop source (SVG 1.1 `BackgroundImage` is dead), so the
   /// backdrop is re-emitted vector content, wrapped in the inverse of the current
-  /// frame to stay in root coordinates.
-  #[allow(clippy::too_many_arguments)]
+  /// `transform` to stay in root coordinates.
   fn emit_backdrop(
     &self,
-    doc: &mut SvgDocument,
-    node: &RenderNode,
+    placed: &PlacedBox,
     node_id: NodeId,
-    layout: Layout,
-    frame: Affine,
-    x: f32,
-    y: f32,
+    transform: Affine,
     group_transform: Affine,
+    doc: &mut SvgDocument,
   ) -> io::Result<()> {
-    let filters: Vec<Filter> = node
-      .context
+    let context = &placed.node.context;
+    let size = placed.frame.layout.size;
+    let filters: Vec<Filter> = context
       .style
       .backdrop_filter
       .iter()
       .filter(|f| !f.is_drop_shadow())
       .cloned()
       .collect();
-    if filters.is_empty() || layout.size.width <= 0.0 || layout.size.height <= 0.0 {
+    if filters.is_empty() || size.width <= 0.0 || size.height <= 0.0 {
       return Ok(());
     }
 
@@ -75,20 +68,19 @@ impl SceneEmitter<'_> {
       .then(|| doc.begin_group(group_transform, 1.0, None, None))
       .transpose()?;
 
-    let border = BorderProperties::from_context(&node.context, layout.size, layout.border);
-    let clip_group = doc.begin_clipped_group(&border_box_path_data(&border, layout.size, x, y))?;
+    let clip_group = doc.begin_clipped_group(&placed.border_box_path_data())?;
 
-    let shape_clip = emit_clip_path_group(node, layout.size, x, y, doc)?;
-    let mask = emit_mask_group(node, layout.size, x, y, doc)?;
+    let shape_clip = placed.begin_clip_path_group(doc)?;
+    let mask = placed.begin_mask_group(doc)?;
 
     // Alpha restore approximates the edge-duplicated backdrop sampling browsers
     // use; skipped for opacity(), which lowers alpha on purpose.
     let restore_alpha = !filters.iter().any(|f| matches!(f, Filter::Opacity(_)));
     let filter_refs = doc.filter(
       &filters,
-      &node.context.sizing,
-      node.context.current_color,
-      layout.size,
+      &context.sizing,
+      context.current_color,
+      size,
       restore_alpha,
     )?;
     let filter_wrappers = doc.begin_filter_wrappers(&filter_refs)?;
@@ -99,13 +91,13 @@ impl SceneEmitter<'_> {
       filter_refs.first().map(String::as_str),
     )?;
 
-    // The replay is emitted in root coordinates; cancel the current frame.
-    let to_root = frame.invert().unwrap_or(Affine::IDENTITY);
+    // The replay is emitted in root coordinates; cancel the current transform.
+    let to_root = transform.invert().unwrap_or(Affine::IDENTITY);
     let root_group = (!to_root.is_identity())
       .then(|| doc.begin_group(to_root, 1.0, None, None))
       .transpose()?;
 
-    self.emit_context(0, Affine::IDENTITY, doc, Some(node_id))?;
+    self.emit_context(0, Affine::IDENTITY, Some(node_id), doc)?;
 
     if let Some(group) = root_group {
       doc.end_group(group)?;
@@ -129,16 +121,16 @@ impl SceneEmitter<'_> {
 
   /// Emits a node's decorations and own content positioned by its transform
   /// relative to `parent`, leaving its chrome groups open for the caller to close
-  /// after the node's children. Returns the chrome and the frame the node's
+  /// after the node's children. Returns the chrome and the transform the node's
   /// children sit in (`parent · group_transform`): a pure translation is folded into
-  /// the draw origin so it leaves no group, so the children's frame is the parent's,
-  /// not the node's.
+  /// the draw origin so it leaves no group, so the children's transform is the
+  /// parent's, not the node's.
   fn emit_box(
     &self,
     np: &NodePaint,
     parent: Affine,
-    doc: &mut SvgDocument,
     stop_at: Option<NodeId>,
+    doc: &mut SvgDocument,
   ) -> io::Result<Option<(BoxChrome, Affine)>> {
     let Some(node) = self.root.node_at_path(&np.path) else {
       return Ok(None);
@@ -148,25 +140,31 @@ impl SceneEmitter<'_> {
     };
 
     let relative = parent.invert().unwrap_or(Affine::IDENTITY) * np.transform;
-    let (x, y, group_transform) = if relative.only_translation() {
-      (relative.x, relative.y, Affine::IDENTITY)
+    let (origin, group_transform) = if relative.only_translation() {
+      (
+        Point {
+          x: relative.x,
+          y: relative.y,
+        },
+        Affine::IDENTITY,
+      )
     } else {
-      (0.0, 0.0, relative)
+      (Point::ZERO, relative)
     };
-
-    let frame = parent * group_transform;
+    let child_transform = parent * group_transform;
+    let placed = PlacedBox::new(node, BoxFrame::new(layout, origin));
 
     // Inside a replay (stop_at set), nested backdrop-filter nodes are emitted
     // without their own backdrop (each level would replay its own prefix, doubling
     // the output per backdrop node in paint order). Stacked backdrop elements
     // therefore see the unfiltered content beneath them in the replay.
     if stop_at.is_none() && !node.context.style.backdrop_filter.is_empty() {
-      self.emit_backdrop(doc, node, np.node_id, layout, frame, x, y, group_transform)?;
+      self.emit_backdrop(&placed, np.node_id, child_transform, group_transform, doc)?;
     }
 
-    let chrome = BoxChrome::open(node, layout, x, y, group_transform, doc)?;
-    emit_own_content(node, layout, x, y, doc)?;
-    Ok(Some((chrome, frame)))
+    let chrome = BoxChrome::open(&placed, group_transform, doc)?;
+    placed.emit_own_content(doc)?;
+    Ok(Some((chrome, child_transform)))
   }
 
   /// Walks a stacking context in paint order. With `stop_at` set, emission halts
@@ -176,22 +174,22 @@ impl SceneEmitter<'_> {
     &self,
     id: usize,
     parent: Affine,
-    doc: &mut SvgDocument,
     stop_at: Option<NodeId>,
+    doc: &mut SvgDocument,
   ) -> io::Result<bool> {
     let Some(ctx) = self.contexts.get(id) else {
       return Ok(false);
     };
 
-    // Children sit in the root node's child frame; a synthetic root context keeps
-    // the caller's frame.
-    let (chrome, child_frame) = match ctx.root() {
+    // Children sit in the root node's child transform; a synthetic root context
+    // keeps the caller's.
+    let (chrome, child_transform) = match ctx.root() {
       Some(np) => {
         if stop_at == Some(np.node_id) {
           return Ok(true);
         }
-        match self.emit_box(np, parent, doc, stop_at)? {
-          Some((chrome, frame)) => (Some(chrome), frame),
+        match self.emit_box(np, parent, stop_at, doc)? {
+          Some((chrome, transform)) => (Some(chrome), transform),
           None => (None, parent),
         }
       }
@@ -213,13 +211,13 @@ impl SceneEmitter<'_> {
               stopped = true;
               break 'buckets;
             }
-            if let Some((mut chrome, _)) = self.emit_box(np, child_frame, doc, stop_at)? {
+            if let Some((mut chrome, _)) = self.emit_box(np, child_transform, stop_at, doc)? {
               descendant_outlines.extend(chrome.take_outline());
               chrome.close(doc)?;
             }
           }
           PaintItemKind::Context(child) => {
-            if self.emit_context(*child, child_frame, doc, stop_at)? {
+            if self.emit_context(*child, child_transform, stop_at, doc)? {
               stopped = true;
               break 'buckets;
             }
