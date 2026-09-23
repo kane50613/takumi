@@ -50,11 +50,8 @@
 //! - `rayon`: parallelism in the raster backend; needs `raster-backend`.
 //! - `unstable`: re-export the backend crates with no semver guarantee.
 
-/// The curated, stable data structures for building a node tree and configuring a
-/// render.
+/// The curated, stable types for building a node tree and configuring a render.
 ///
-/// A glob import (`use takumi::prelude::*;`) brings the types into scope; call the
-/// entry-point functions (e.g. [`render`], [`write_image`]) from the crate root.
 /// The glob pulls in common names like `Error`, `Result`, `Style`, and `Color`;
 /// that breadth is intentional for a prelude.
 pub mod prelude {
@@ -91,9 +88,6 @@ pub use takumi_raster::{
 pub use takumi_svg::render as render_svg;
 
 /// Unstable, semver-exempt access to the backend crates in full.
-///
-/// Everything here is implementation surface that may change or disappear in any
-/// release. Prefer the curated [`prelude`] and crate-root functions.
 #[cfg(feature = "unstable")]
 pub mod unstable {
   pub use takumi_core as base;
