@@ -9,7 +9,7 @@ use takumi_core::{
   paint::{ColorLut, ConicGradientTile},
   style::{
     BackgroundImage, BackgroundRepeat, BackgroundSize, BlendMode, ColorInterpolationMethod,
-    ConicGradient, LinearGradient, PositionValue, RadialGradient, ResolvedGradientStop,
+    ConicGradient, FillRule, LinearGradient, PositionValue, RadialGradient, ResolvedGradientStop,
   },
 };
 
@@ -319,7 +319,9 @@ impl<'a, 'd> LayerEmitter<'a, 'd> {
       wedge.pair(x0, y0);
       wedge.pair(x1, y1);
       wedge.close();
-      self.doc.path(&wedge.into_string(), fill, false)?;
+      self
+        .doc
+        .path(&wedge.into_string(), fill, FillRule::NonZero)?;
     }
     self.doc.end_group(group)
   }

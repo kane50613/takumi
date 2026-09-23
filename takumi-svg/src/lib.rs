@@ -40,7 +40,9 @@ use takumi_core::{
   geometry::{Rect, Size},
   painter::StrokeStyle,
   shadow::SizedShadow,
-  style::{Affine, Color, Filter, FilterReference, LUMA_WEIGHTS, SEPIA_WEIGHTS, SizingContext},
+  style::{
+    Affine, Color, FillRule, Filter, FilterReference, LUMA_WEIGHTS, SEPIA_WEIGHTS, SizingContext,
+  },
 };
 use tiny_skia::PremultipliedColorU8;
 
@@ -188,13 +190,13 @@ impl SvgDocument {
     self.empty("rect", &attrs)
   }
 
-  /// Appends a filled path; `even_odd` picks the fill rule ring shapes need.
-  pub(crate) fn path(&mut self, data: &str, fill: Rgba, even_odd: bool) -> io::Result<()> {
+  /// Appends a filled path.
+  pub(crate) fn path(&mut self, data: &str, fill: Rgba, rule: FillRule) -> io::Result<()> {
     let mut attrs: Vec<(&str, Cow<'_, str>)> =
       vec![("d", data.into()), ("fill", fill.hex().into())];
 
     push_opacity(&mut attrs, "fill-opacity", fill.opacity());
-    if even_odd {
+    if rule == FillRule::EvenOdd {
       attrs.push(("fill-rule", "evenodd".into()));
     }
     self.empty("path", &attrs)
@@ -287,17 +289,16 @@ impl SvgDocument {
   }
 
   /// Defines a clip path from SVG path data and returns its `url(#id)`.
-  /// `even_odd` picks the clip rule ring shapes need.
   pub(crate) fn clip_path(
     &mut self,
     data: &str,
-    even_odd: bool,
+    rule: FillRule,
     transform: Option<&str>,
   ) -> io::Result<String> {
     let (id, reference) = self.alloc_id("cp");
     self.open("clipPath", &[("id", id.into())])?;
     let mut attrs: Vec<(&str, Cow<'_, str>)> = vec![("d", data.into())];
-    if even_odd {
+    if rule == FillRule::EvenOdd {
       attrs.push(("clip-rule", "evenodd".into()));
     }
     if let Some(transform) = transform {
@@ -327,7 +328,7 @@ impl SvgDocument {
 
   /// Opens a `<g>` clipped to the path data.
   pub(crate) fn begin_clipped_group(&mut self, data: &str) -> io::Result<GroupToken> {
-    let clip = self.clip_path(data, false, None)?;
+    let clip = self.clip_path(data, FillRule::NonZero, None)?;
 
     self.begin_group(Affine::IDENTITY, 1.0, Some(&clip), None)
   }
@@ -1035,7 +1036,9 @@ mod tests {
       )
       .unwrap();
     assert_eq!(fill, "url(#lg0)");
-    doc.path("M0 0 H10 V10 H0 Z", RED, false).unwrap();
+    doc
+      .path("M0 0 H10 V10 H0 Z", RED, FillRule::NonZero)
+      .unwrap();
     let svg = doc.render().unwrap();
     assert!(svg.contains(r#"<linearGradient id="lg0""#));
     assert!(svg.contains(r#"<stop offset="0""#));
@@ -1044,7 +1047,9 @@ mod tests {
   #[test]
   fn clip_path_and_group_nest() {
     let mut doc = SvgDocument::new(10.0, 10.0).unwrap();
-    let clip = doc.clip_path("M0 0 H5 V5 H0 Z", false, None).unwrap();
+    let clip = doc
+      .clip_path("M0 0 H5 V5 H0 Z", FillRule::NonZero, None)
+      .unwrap();
     let token = doc
       .begin_group(Affine::translation(3.0, 4.0), 0.5, Some(&clip), None)
       .unwrap();
@@ -1102,7 +1107,11 @@ mod tests {
   fn text_emits_glyph_path() {
     let mut doc = SvgDocument::new(10.0, 10.0).unwrap();
     doc
-      .path("M1 9 L2 1 L3 9 M1.5 5 H2.5", Rgba([0, 0, 0, 255]), false)
+      .path(
+        "M1 9 L2 1 L3 9 M1.5 5 H2.5",
+        Rgba([0, 0, 0, 255]),
+        FillRule::NonZero,
+      )
       .unwrap();
     assert!(
       doc
