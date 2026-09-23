@@ -4,7 +4,7 @@ use takumi_core::{
 };
 
 use crate::{
-  Canvas, Cap, DashPattern, Fill, MaskCompositeColor, MaskSamplingOptions, PaintSource,
+  Canvas, Cap, Command, DashPattern, Fill, MaskCompositeColor, MaskSamplingOptions, PaintSource,
   PathBuilder, Placement, Stroke, Style, intersect_alpha_masks, render_mask,
   style::{Affine, BlendMode, BorderStyle, Color, ImageScalingAlgorithm},
 };
@@ -28,346 +28,262 @@ pub(crate) fn paint_border(
     return;
   }
 
-  if draw_uniform_fast_path(properties, canvas, border_box, transform, clip_image) {
-    return;
-  }
-
-  let inverse = if clip_image.is_some() {
-    transform.invert()
-  } else {
-    None
-  };
-  let mut paint = SidePaintContext {
+  let mut paint = BorderPaint {
     canvas,
+    border_box,
     transform,
     clip_image,
-    inverse,
+    inverse: clip_image.and_then(|_| transform.invert()),
+    image_rendering: properties.image_rendering,
   };
+
+  if paint.draw_uniform(properties) {
+    return;
+  }
 
   let mut border = properties;
   border.width = properties.visible_side_widths();
 
   for side in border.painted_sides() {
-    draw_visible_side(border, &mut paint, side, border_box);
+    paint.draw_side(border, side);
   }
 }
 
-fn draw_uniform_fast_path(
-  border: BorderProperties,
-  canvas: &mut Canvas,
+/// Where a border paints: the canvas, the border box under its transform, and
+/// the image a `border-area` background fills the border with.
+struct BorderPaint<'canvas, 'source> {
+  canvas: &'canvas mut Canvas,
   border_box: Size<f32>,
   transform: Affine,
-  clip_image: Option<PaintSource<'_>>,
-) -> bool {
-  let Some(color) = border.has_uniform_visible_color() else {
-    return false;
-  };
-
-  if border.visible_sides_match(BorderStyle::Solid) {
-    let mut solid = border;
-    solid.width = border.visible_side_widths();
-    let mut paths = Vec::with_capacity(BorderProperties::PATH_COMMANDS_AMOUNT * 2);
-    solid.append_border_ring_commands(&mut paths, border_box);
-    let (mask, placement) = render_mask(
-      &paths,
-      Some(transform),
-      Some(Fill::EvenOdd.into()),
-      Some(canvas.viewport()),
-    );
-
-    paint_mask(
-      canvas,
-      &mask,
-      placement,
-      color,
-      clip_image,
-      transform,
-      border.image_rendering,
-    );
-    return true;
-  }
-
-  if border.visible_sides_match(BorderStyle::Double) {
-    let mut double = border;
-    double.width = border.visible_side_widths();
-    draw_uniform_double(double, canvas, border_box, transform, clip_image, color);
-    return true;
-  }
-
-  if border.is_uniform_all_sides_style(BorderStyle::Dashed) {
-    draw_uniform_pattern(
-      border,
-      canvas,
-      border_box,
-      transform,
-      clip_image,
-      color,
-      BorderStyle::Dashed,
-    );
-    return true;
-  }
-
-  if border.is_uniform_all_sides_style(BorderStyle::Dotted) {
-    draw_uniform_pattern(
-      border,
-      canvas,
-      border_box,
-      transform,
-      clip_image,
-      color,
-      BorderStyle::Dotted,
-    );
-    return true;
-  }
-
-  false
+  clip_image: Option<PaintSource<'source>>,
+  inverse: Option<Affine>,
+  image_rendering: ImageScalingAlgorithm,
 }
 
-fn draw_visible_side(
-  border: BorderProperties,
-  paint: &mut SidePaintContext<'_, '_>,
-  side: PaintedSide,
-  border_box: Size<f32>,
-) {
-  if matches!(side.style, BorderStyle::Dashed | BorderStyle::Dotted) {
-    draw_side_pattern_border(border, paint, side.side, border_box, side.color, side.style);
-    return;
-  }
-  for band in border.side_bands(side) {
-    draw_side_band(
-      border, paint, side.side, border_box, band.inset, band.width, band.color,
-    );
-  }
-}
+impl BorderPaint<'_, '_> {
+  /// Paints a border whose visible sides share one colour and style in a single
+  /// pass, reporting whether it could.
+  fn draw_uniform(&mut self, border: BorderProperties) -> bool {
+    let Some(color) = border.has_uniform_visible_color() else {
+      return false;
+    };
 
-fn draw_uniform_double(
-  border: BorderProperties,
-  canvas: &mut Canvas,
-  border_box: Size<f32>,
-  transform: Affine,
-  clip_image: Option<PaintSource<'_>>,
-  color: Color,
-) {
-  let stripe_width = border.width.map(|value| value / 3.0);
-  let mut outer = border;
-  outer.width = stripe_width;
+    if border.visible_sides_match(BorderStyle::Solid) {
+      let mut solid = border;
+      solid.width = border.visible_side_widths();
+      let mut paths = Vec::with_capacity(BorderProperties::PATH_COMMANDS_AMOUNT * 2);
+      solid.append_border_ring_commands(&mut paths, self.border_box);
+      let (mask, placement) = self.render(&paths, Fill::EvenOdd.into());
 
-  let mut paths = Vec::with_capacity(BorderProperties::PATH_COMMANDS_AMOUNT * 4);
-  outer.append_border_ring_commands(&mut paths, border_box);
+      self.fill(&mask, placement, color);
+      return true;
+    }
 
-  let inset = border.width.map(|value| value * (2.0 / 3.0));
-  let mut inner = border;
-  inner.width = stripe_width;
-  inner.expand_by(inset.map(|value| -value));
-  inner.append_border_ring_commands_at(&mut paths, border_box.inset(inset), inset.top_left());
+    if border.visible_sides_match(BorderStyle::Double) {
+      let mut double = border;
+      double.width = border.visible_side_widths();
+      self.draw_uniform_double(double, color);
+      return true;
+    }
 
-  let (mask, placement) = render_mask(
-    &paths,
-    Some(transform),
-    Some(Fill::EvenOdd.into()),
-    Some(canvas.viewport()),
-  );
-  paint_mask(
-    canvas,
-    &mask,
-    placement,
-    color,
-    clip_image,
-    transform,
-    border.image_rendering,
-  );
-}
+    let Some(style) = [BorderStyle::Dashed, BorderStyle::Dotted]
+      .into_iter()
+      .find(|&style| border.is_uniform_all_sides_style(style))
+    else {
+      return false;
+    };
 
-fn draw_uniform_pattern(
-  border: BorderProperties,
-  canvas: &mut Canvas,
-  border_box: Size<f32>,
-  transform: Affine,
-  clip_image: Option<PaintSource<'_>>,
-  color: Color,
-  style: BorderStyle,
-) {
-  let width = border.width.top;
-  if width <= 0.0 {
-    return;
+    self.draw_uniform_pattern(border, color, style);
+    true
   }
 
-  let half_width = border.width.map(|v| v / 2.0);
-  let mut center_rect = border;
-  center_rect.expand_by(half_width.map(|v| -v));
+  fn draw_uniform_double(&mut self, border: BorderProperties, color: Color) {
+    let stripe_width = border.width.map(|value| value / 3.0);
+    let mut outer = border;
+    outer.width = stripe_width;
 
-  let center_size = border_box.inset(half_width);
-  let center_offset = half_width.top_left();
+    let mut paths = Vec::with_capacity(BorderProperties::PATH_COMMANDS_AMOUNT * 4);
+    outer.append_border_ring_commands(&mut paths, self.border_box);
 
-  let mut paths = Vec::with_capacity(BorderProperties::PATH_COMMANDS_AMOUNT);
-  center_rect.append_mask_commands(&mut paths, center_size, center_offset);
-
-  let perimeter = center_rect.approximate_rounded_rect_perimeter(center_size);
-
-  let stroke = compute_side_stroke(width, style, perimeter, true);
-
-  let (mask, placement) = render_mask(
-    &paths,
-    Some(transform),
-    Some(Style::Stroke(stroke)),
-    Some(canvas.viewport()),
-  );
-
-  paint_mask(
-    canvas,
-    &mask,
-    placement,
-    color,
-    clip_image,
-    transform,
-    border.image_rendering,
-  );
-}
-
-fn draw_side_band(
-  border: BorderProperties,
-  paint: &mut SidePaintContext<'_, '_>,
-  side: BorderSide,
-  border_box: Size<f32>,
-  inset: Rect<f32>,
-  width: Rect<f32>,
-  color: Color,
-) {
-  if border_box.width <= 0.0 || border_box.height <= 0.0 {
-    return;
-  }
-
-  let mut band = border;
-  band.width = width;
-
-  let band_box = border_box.inset(inset);
-  if band_box.width <= 0.0 || band_box.height <= 0.0 {
-    return;
-  }
-  let offset = inset.top_left();
-  band.expand_by(inset.map(|value| -value));
-
-  if band.is_zero() {
-    let mut paths = Vec::with_capacity(5);
-    band.append_side_polygon_commands_at(side, &mut paths, band_box, offset);
-    let (mask, placement) = render_mask(
-      &paths,
-      Some(paint.transform),
-      Some(Fill::NonZero.into()),
-      Some(paint.canvas.viewport()),
-    );
-    paint_mask_with_inverse(
-      paint.canvas,
-      &mask,
-      placement,
-      color,
-      paint.clip_image,
-      paint.inverse,
-      border.image_rendering,
-    );
-    return;
-  }
-
-  let mut ring_paths = Vec::with_capacity(BorderProperties::PATH_COMMANDS_AMOUNT * 2);
-  band.append_border_ring_commands_at(&mut ring_paths, band_box, offset);
-  let (ring_mask, ring_placement) = render_mask(
-    &ring_paths,
-    Some(paint.transform),
-    Some(Fill::EvenOdd.into()),
-    Some(paint.canvas.viewport()),
-  );
-
-  if !ring_mask.is_empty() {
-    let mut clip_paths = Vec::with_capacity(5);
-    band.append_side_clip_polygon_commands_at(side, &mut clip_paths, band_box, offset);
-    let (clip_mask, clip_placement) = render_mask(
-      &clip_paths,
-      Some(paint.transform),
-      Some(Fill::NonZero.into()),
-      Some(paint.canvas.viewport()),
+    let inset = border.width.map(|value| value * (2.0 / 3.0));
+    let mut inner = border;
+    inner.width = stripe_width;
+    inner.expand_by(inset.map(|value| -value));
+    inner.append_border_ring_commands_at(
+      &mut paths,
+      self.border_box.inset(inset),
+      inset.top_left(),
     );
 
-    if let Some((mask, placement)) =
-      intersect_alpha_masks(&ring_mask, ring_placement, &clip_mask, clip_placement)
-    {
-      paint_mask_with_inverse(
-        paint.canvas,
-        &mask,
-        placement,
-        color,
-        paint.clip_image,
-        paint.inverse,
-        border.image_rendering,
-      );
+    let (mask, placement) = self.render(&paths, Fill::EvenOdd.into());
+    self.fill(&mask, placement, color);
+  }
+
+  fn draw_uniform_pattern(&mut self, border: BorderProperties, color: Color, style: BorderStyle) {
+    let width = border.width.top;
+    if width <= 0.0 {
+      return;
+    }
+
+    let half_width = border.width.map(|v| v / 2.0);
+    let mut center_rect = border;
+    center_rect.expand_by(half_width.map(|v| -v));
+
+    let center_size = self.border_box.inset(half_width);
+    let center_offset = half_width.top_left();
+
+    let mut paths = Vec::with_capacity(BorderProperties::PATH_COMMANDS_AMOUNT);
+    center_rect.append_mask_commands(&mut paths, center_size, center_offset);
+
+    let perimeter = center_rect.approximate_rounded_rect_perimeter(center_size);
+
+    let stroke = compute_side_stroke(width, style, perimeter, true);
+
+    let (mask, placement) = self.render(&paths, Style::Stroke(stroke));
+    self.fill(&mask, placement, color);
+  }
+
+  fn draw_side(&mut self, border: BorderProperties, side: PaintedSide) {
+    if matches!(side.style, BorderStyle::Dashed | BorderStyle::Dotted) {
+      self.draw_side_pattern(border, side.side, side.color, side.style);
+      return;
+    }
+
+    for band in border.side_bands(side) {
+      self.draw_side_band(border, side.side, band.inset, band.width, band.color);
     }
   }
-}
 
-fn draw_side_pattern_border(
-  border: BorderProperties,
-  paint: &mut SidePaintContext<'_, '_>,
-  side: BorderSide,
-  border_box: Size<f32>,
-  color: Color,
-  style: BorderStyle,
-) {
-  let line = SidePatternLine::from_border(border.width, border_box, side);
-  if line.width <= 0.0 || line.end <= line.start {
-    return;
-  }
-
-  let mut path = Vec::with_capacity(2);
-  if line.is_horizontal {
-    path.move_to((line.start, line.fixed));
-    path.line_to((line.end, line.fixed));
-  } else {
-    path.move_to((line.fixed, line.start));
-    path.line_to((line.fixed, line.end));
-  }
-
-  let stroke = compute_side_stroke(line.width, style, line.end - line.start, false);
-  let (pattern_mask, pattern_placement) = render_mask(
-    &path,
-    Some(paint.transform),
-    Some(Style::Stroke(stroke)),
-    Some(paint.canvas.viewport()),
-  );
-
-  if !pattern_mask.is_empty() {
-    let mut ring_path = Vec::with_capacity(BorderProperties::PATH_COMMANDS_AMOUNT * 2);
-    border.append_border_ring_commands(&mut ring_path, border_box);
-    let (ring_mask, ring_placement) = render_mask(
-      &ring_path,
-      Some(paint.transform),
-      Some(Fill::EvenOdd.into()),
-      Some(paint.canvas.viewport()),
-    );
-
-    let mut clip_path = Vec::with_capacity(5);
-    border.append_side_clip_polygon_commands_at(side, &mut clip_path, border_box, Point::ZERO);
-    let (clip_mask, clip_placement) = render_mask(
-      &clip_path,
-      Some(paint.transform),
-      Some(Fill::NonZero.into()),
-      Some(paint.canvas.viewport()),
-    );
-
-    if !ring_mask.is_empty()
-      && let Some((mask, placement)) =
-        intersect_alpha_masks(&pattern_mask, pattern_placement, &clip_mask, clip_placement)
-      && let Some((mask, placement)) =
-        intersect_alpha_masks(&mask, placement, &ring_mask, ring_placement)
-    {
-      paint_mask_with_inverse(
-        paint.canvas,
-        &mask,
-        placement,
-        color,
-        paint.clip_image,
-        paint.inverse,
-        border.image_rendering,
-      );
+  fn draw_side_band(
+    &mut self,
+    border: BorderProperties,
+    side: BorderSide,
+    inset: Rect<f32>,
+    width: Rect<f32>,
+    color: Color,
+  ) {
+    if self.border_box.width <= 0.0 || self.border_box.height <= 0.0 {
+      return;
     }
+
+    let mut band = border;
+    band.width = width;
+
+    let band_box = self.border_box.inset(inset);
+    if band_box.width <= 0.0 || band_box.height <= 0.0 {
+      return;
+    }
+    let offset = inset.top_left();
+    band.expand_by(inset.map(|value| -value));
+
+    if band.is_zero() {
+      let mut paths = Vec::with_capacity(5);
+      band.append_side_polygon_commands_at(side, &mut paths, band_box, offset);
+      let (mask, placement) = self.render(&paths, Fill::NonZero.into());
+      self.fill(&mask, placement, color);
+      return;
+    }
+
+    let mut ring_paths = Vec::with_capacity(BorderProperties::PATH_COMMANDS_AMOUNT * 2);
+    band.append_border_ring_commands_at(&mut ring_paths, band_box, offset);
+    let (ring_mask, ring_placement) = self.render(&ring_paths, Fill::EvenOdd.into());
+
+    if !ring_mask.is_empty() {
+      let mut clip_paths = Vec::with_capacity(5);
+      band.append_side_clip_polygon_commands_at(side, &mut clip_paths, band_box, offset);
+      let (clip_mask, clip_placement) = self.render(&clip_paths, Fill::NonZero.into());
+
+      if let Some((mask, placement)) =
+        intersect_alpha_masks(&ring_mask, ring_placement, &clip_mask, clip_placement)
+      {
+        self.fill(&mask, placement, color);
+      }
+    }
+  }
+
+  fn draw_side_pattern(
+    &mut self,
+    border: BorderProperties,
+    side: BorderSide,
+    color: Color,
+    style: BorderStyle,
+  ) {
+    let line = SidePatternLine::from_border(border.width, self.border_box, side);
+    if line.width <= 0.0 || line.end <= line.start {
+      return;
+    }
+
+    let mut path = Vec::with_capacity(2);
+    if line.is_horizontal {
+      path.move_to((line.start, line.fixed));
+      path.line_to((line.end, line.fixed));
+    } else {
+      path.move_to((line.fixed, line.start));
+      path.line_to((line.fixed, line.end));
+    }
+
+    let stroke = compute_side_stroke(line.width, style, line.end - line.start, false);
+    let (pattern_mask, pattern_placement) = self.render(&path, Style::Stroke(stroke));
+
+    if !pattern_mask.is_empty() {
+      let mut ring_path = Vec::with_capacity(BorderProperties::PATH_COMMANDS_AMOUNT * 2);
+      border.append_border_ring_commands(&mut ring_path, self.border_box);
+      let (ring_mask, ring_placement) = self.render(&ring_path, Fill::EvenOdd.into());
+
+      let mut clip_path = Vec::with_capacity(5);
+      border.append_side_clip_polygon_commands_at(
+        side,
+        &mut clip_path,
+        self.border_box,
+        Point::ZERO,
+      );
+      let (clip_mask, clip_placement) = self.render(&clip_path, Fill::NonZero.into());
+
+      if !ring_mask.is_empty()
+        && let Some((mask, placement)) =
+          intersect_alpha_masks(&pattern_mask, pattern_placement, &clip_mask, clip_placement)
+        && let Some((mask, placement)) =
+          intersect_alpha_masks(&mask, placement, &ring_mask, ring_placement)
+      {
+        self.fill(&mask, placement, color);
+      }
+    }
+  }
+
+  /// Rasterizes `paths` under the border's transform, culled to the canvas.
+  fn render(&self, paths: &[Command], style: Style) -> (Vec<u8>, Placement) {
+    render_mask(
+      paths,
+      Some(self.transform),
+      Some(style),
+      Some(self.canvas.viewport()),
+    )
+  }
+
+  /// Fills `mask` with `color`, or with the clip image over `color`.
+  fn fill(&mut self, mask: &[u8], placement: Placement, color: Color) {
+    let Some(clip_image) = self.clip_image else {
+      self
+        .canvas
+        .draw_mask(mask, placement, color, BlendMode::Normal);
+      return;
+    };
+    let Some(inverse) = self.inverse else {
+      return;
+    };
+
+    self.canvas.composite_mask_source(
+      mask,
+      placement,
+      clip_image,
+      MaskCompositeColor::source_over_color(color),
+      MaskSamplingOptions {
+        canvas_to_source: inverse,
+        sample_bias: Point::ZERO,
+        algorithm: self.image_rendering,
+      },
+      BlendMode::Normal,
+    );
   }
 }
 
@@ -426,63 +342,6 @@ impl SidePatternLine {
         end: border_box.height - width.bottom / 2.0,
       },
     }
-  }
-}
-
-struct SidePaintContext<'canvas, 'source> {
-  canvas: &'canvas mut Canvas,
-  transform: Affine,
-  clip_image: Option<PaintSource<'source>>,
-  inverse: Option<Affine>,
-}
-
-fn paint_mask(
-  canvas: &mut Canvas,
-  mask: &[u8],
-  placement: Placement,
-  color: Color,
-  clip_image: Option<PaintSource<'_>>,
-  transform: Affine,
-  image_rendering: ImageScalingAlgorithm,
-) {
-  paint_mask_with_inverse(
-    canvas,
-    mask,
-    placement,
-    color,
-    clip_image,
-    transform.invert(),
-    image_rendering,
-  );
-}
-
-fn paint_mask_with_inverse(
-  canvas: &mut Canvas,
-  mask: &[u8],
-  placement: Placement,
-  color: Color,
-  clip_image: Option<PaintSource<'_>>,
-  inverse: Option<Affine>,
-  image_rendering: ImageScalingAlgorithm,
-) {
-  if let Some(clip_image) = clip_image {
-    let Some(inverse) = inverse else {
-      return;
-    };
-    canvas.composite_mask_source(
-      mask,
-      placement,
-      clip_image,
-      MaskCompositeColor::source_over_color(color),
-      MaskSamplingOptions {
-        canvas_to_source: inverse,
-        sample_bias: Point::ZERO,
-        algorithm: image_rendering,
-      },
-      BlendMode::Normal,
-    );
-  } else {
-    canvas.draw_mask(mask, placement, color, BlendMode::Normal);
   }
 }
 

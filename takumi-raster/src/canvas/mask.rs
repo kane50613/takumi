@@ -1,6 +1,9 @@
 use std::{borrow::Cow, sync::Arc};
 
-use takumi_core::geometry::{ComputedLayout as Layout, Point, Size, transformed_rect_extents};
+use takumi_core::{
+  geometry::{ComputedLayout as Layout, Point, Size, transformed_rect_extents},
+  scene::SceneBounds,
+};
 use tiny_skia::{
   FillRule as TinyFillRule, IntSize, Mask as TinyMask, PathBuilder as TinyPathBuilder,
   Rect as TinyRect, Transform as TinyTransform,
@@ -11,7 +14,7 @@ use crate::{
   checked_area, create_mask, fast_div_255,
   layout::clip::clip_shape_commands,
   placement_overlap,
-  style::{Affine, BasicShape, ComputedStyle, FillRule, Overflow},
+  style::{Affine, BasicShape, ComputedStyle, Overflow},
 };
 
 pub(crate) enum NodeMaskAction {
@@ -42,6 +45,33 @@ impl CanvasViewport {
 
   pub(crate) fn bottom(self) -> i32 {
     self.origin.y as i32 + self.size.height as i32
+  }
+
+  pub(crate) fn placement(self) -> Placement {
+    Placement {
+      left: self.origin.x as i32,
+      top: self.origin.y as i32,
+      width: self.size.width,
+      height: self.size.height,
+    }
+  }
+
+  pub(crate) fn intersects(self, bounds: SceneBounds) -> bool {
+    !bounds.is_empty()
+      && bounds.right as i32 > self.origin.x as i32
+      && bounds.bottom as i32 > self.origin.y as i32
+      && (bounds.left as i32) < self.right()
+      && (bounds.top as i32) < self.bottom()
+  }
+
+  /// The part of `bounds`, grown by `padding` on every side, inside the viewport.
+  pub(crate) fn clamp_bounds(self, bounds: SceneBounds, padding: i32) -> Option<Placement> {
+    Placement::from_bounds(
+      (bounds.left as i32 - padding).max(self.origin.x as i32),
+      (bounds.top as i32 - padding).max(self.origin.y as i32),
+      (bounds.right as i32 + padding).min(self.right()),
+      (bounds.bottom as i32 + padding).min(self.bottom()),
+    )
   }
 
   /// Grows the viewport for masks whose pixels move before landing on the
@@ -139,11 +169,8 @@ fn clip_path_mask(
     return NodeMaskAction::SkipRendering;
   }
 
-  let Some(mut full_mask) = TinyMask::new(viewport.size.width, viewport.size.height) else {
-    return NodeMaskAction::SkipRendering;
-  };
-  copy_mask_into_canvas(&mut full_mask, viewport.origin, &mask, placement);
-  NodeMaskAction::Shell(full_mask)
+  copy_mask_to_viewport(viewport, &mask, placement)
+    .map_or(NodeMaskAction::SkipRendering, NodeMaskAction::Shell)
 }
 
 /// The `mask-image` layers as a viewport mask over the box and its descendants.
@@ -158,7 +185,7 @@ fn mask_image_mask(
     return NodeMaskAction::SkipRendering;
   }
 
-  let Some(placement) = transformed_rect_placement(layout.size, transform) else {
+  let Some(placement) = transformed_placement(Point::ZERO, layout.size, transform) else {
     return NodeMaskAction::SkipRendering;
   };
   let mask_placement = Placement {
@@ -184,10 +211,8 @@ fn mask_image_mask(
       )
     })
   };
-  let Some(full_mask) = full_mask else {
-    return NodeMaskAction::SkipRendering;
-  };
-  NodeMaskAction::Shell(full_mask)
+
+  full_mask.map_or(NodeMaskAction::SkipRendering, NodeMaskAction::Shell)
 }
 
 /// A rounded padding-box mask for `overflow` clipping under `border-radius`.
@@ -244,10 +269,8 @@ fn rounded_overflow_mask(
       )
     })
   };
-  let Some(full_mask) = full_mask else {
-    return NodeMaskAction::SkipRendering;
-  };
-  NodeMaskAction::Content(full_mask)
+
+  full_mask.map_or(NodeMaskAction::SkipRendering, NodeMaskAction::Content)
 }
 
 /// A rectangular content-box mask for `overflow` clipping on the clipped axes.
@@ -315,10 +338,8 @@ fn rect_overflow_mask(
       sample_overflow_alpha(from, to, inverse_transform, None, x, y)
     })
   };
-  let Some(mask) = mask else {
-    return NodeMaskAction::SkipRendering;
-  };
-  NodeMaskAction::Content(mask)
+
+  mask.map_or(NodeMaskAction::SkipRendering, NodeMaskAction::Content)
 }
 
 fn fill_rect_mask(viewport: CanvasViewport, from: Point<u32>, to: Point<u32>) -> Option<TinyMask> {
@@ -429,19 +450,14 @@ fn overflow_mask_placement(
   clip_x: bool,
   clip_y: bool,
 ) -> Option<Placement> {
-  let mut placement = transformed_rect_placement(size, transform)?;
+  let mut placement = transformed_placement(Point::ZERO, size, transform)?;
 
   if clip_x == clip_y {
     return Some(placement);
   }
 
   if !transform.only_translation() {
-    return Some(Placement {
-      left: viewport.origin.x as i32,
-      top: viewport.origin.y as i32,
-      width: viewport.size.width,
-      height: viewport.size.height,
-    });
+    return Some(viewport.placement());
   }
 
   if !clip_x {
@@ -539,10 +555,6 @@ fn transformed_placement(
   )
 }
 
-fn transformed_rect_placement(size: Size<f32>, transform: Affine) -> Option<Placement> {
-  transformed_placement(Point::ZERO, size, transform)
-}
-
 fn transformed_local_placement(local_placement: Placement, transform: Affine) -> Option<Placement> {
   transformed_placement(
     Point {
@@ -572,7 +584,7 @@ fn sample_overflow_alpha(
   if let Some((mask, mask_width)) = border_radius_mask {
     let mask_x = original_point.x - from.x;
     let mask_y = original_point.y - from.y;
-    return mask[mask_index_from_coord(mask_x, mask_y, mask_width)];
+    return mask[(mask_y * mask_width + mask_x) as usize];
   }
 
   u8::MAX
@@ -601,15 +613,6 @@ fn transformed_mask_point(
   is_contained.then_some(original_point)
 }
 
-impl From<FillRule> for Fill {
-  fn from(value: FillRule) -> Self {
-    match value {
-      FillRule::EvenOdd => Fill::EvenOdd,
-      _ => Fill::NonZero,
-    }
-  }
-}
-
 pub(crate) fn render_clip_shape_mask(
   shape: &BasicShape,
   context: &RenderContext,
@@ -634,10 +637,16 @@ pub(crate) fn render_mask(
   style: Option<Style>,
   cull: Option<CanvasViewport>,
 ) -> (Vec<u8>, Placement) {
-  let style = style.unwrap_or_default();
-  let Some(mut path) = build_path(paths) else {
-    return (Vec::new(), Placement::default());
-  };
+  rasterize_mask(paths, transform, style.unwrap_or_default(), cull).unwrap_or_default()
+}
+
+fn rasterize_mask(
+  paths: &[Command],
+  transform: Option<Affine>,
+  style: Style,
+  cull: Option<CanvasViewport>,
+) -> Option<(Vec<u8>, Placement)> {
+  let mut path = build_path(paths)?;
 
   if let Some(stroke) = style.stroke() {
     if let Some(dash) = &stroke.dash
@@ -646,22 +655,14 @@ pub(crate) fn render_mask(
       path = dashed_path;
     }
 
-    let Some(stroked_path) = path.stroke(&stroke, 1.0) else {
-      return (Vec::new(), Placement::default());
-    };
-    path = stroked_path;
+    path = path.stroke(&stroke, 1.0)?;
   }
 
   if let Some(transform) = transform {
-    let Some(transformed) = path.transform(transform.into()) else {
-      return (Vec::new(), Placement::default());
-    };
-    path = transformed;
+    path = path.transform(transform.into())?;
   }
 
-  let Some(bounds) = path.compute_tight_bounds() else {
-    return (Vec::new(), Placement::default());
-  };
+  let bounds = path.compute_tight_bounds()?;
   let mut left = bounds.left().floor() as i32;
   let mut top = bounds.top().floor() as i32;
   let mut right = bounds.right().ceil() as i32;
@@ -688,30 +689,15 @@ pub(crate) fn render_mask(
   }
 
   if right <= left || bottom <= top {
-    return (Vec::new(), Placement::default());
+    return None;
   }
 
-  let (Some(width), Some(height)) = (
-    right.checked_sub(left).map(|value| value as u32),
-    bottom.checked_sub(top).map(|value| value as u32),
-  ) else {
-    return (Vec::new(), Placement::default());
-  };
-  let Some(size) = IntSize::from_wh(width, height) else {
-    return (Vec::new(), Placement::default());
-  };
-  let Some(buffer_len) = checked_area(width, height, 1) else {
-    return (Vec::new(), Placement::default());
-  };
-  let buffer = vec![0; buffer_len];
-  let Some(mut mask) = TinyMask::from_vec(buffer, size) else {
-    return (Vec::new(), Placement::default());
-  };
-  let Some(local_path) =
-    path.transform(TinyTransform::from_translate(-(left as f32), -(top as f32)))
-  else {
-    return (Vec::new(), Placement::default());
-  };
+  let width = right.checked_sub(left)? as u32;
+  let height = bottom.checked_sub(top)? as u32;
+  let size = IntSize::from_wh(width, height)?;
+  let buffer = vec![0; checked_area(width, height, 1)?];
+  let mut mask = TinyMask::from_vec(buffer, size)?;
+  let local_path = path.transform(TinyTransform::from_translate(-(left as f32), -(top as f32)))?;
   mask.fill_path(
     &local_path,
     style.fill_rule(),
@@ -719,7 +705,7 @@ pub(crate) fn render_mask(
     TinyTransform::identity(),
   );
 
-  (
+  Some((
     mask.take(),
     Placement {
       left,
@@ -727,7 +713,7 @@ pub(crate) fn render_mask(
       width,
       height,
     },
-  )
+  ))
 }
 
 #[derive(Clone)]
@@ -761,6 +747,67 @@ impl<'a> MaskView<'a> {
       mask_width,
     }
   }
+
+  /// Resolves the combined constraint mask against the pixmap it clips: borrowed
+  /// directly when the stored mask already matches the canvas viewport, cropped
+  /// into a scratch buffer otherwise.
+  pub(crate) fn resolve(self, size: Size<u32>) -> Option<Cow<'a, TinyMask>> {
+    if self.origin == self.canvas_origin
+      && self.mask.width() == size.width
+      && self.mask.height() == size.height
+    {
+      return Some(Cow::Borrowed(self.mask));
+    }
+
+    self.materialize(size).map(Cow::Owned)
+  }
+
+  fn materialize(self, size: Size<u32>) -> Option<TinyMask> {
+    let mut cropped = TinyMask::from_vec(
+      vec![0; (size.width as usize) * (size.height as usize)],
+      IntSize::from_wh(size.width, size.height)?,
+    )?;
+
+    let offset = Point {
+      x: self.canvas_origin.x as i32 - self.origin.x as i32,
+      y: self.canvas_origin.y as i32 - self.origin.y as i32,
+    };
+    let src_width = self.mask.width() as i32;
+    let src_height = self.mask.height() as i32;
+    let start_x = offset.x.max(0);
+    let start_y = offset.y.max(0);
+    let end_x = (offset.x + size.width as i32).min(src_width);
+    let end_y = (offset.y + size.height as i32).min(src_height);
+    if start_x >= end_x || start_y >= end_y {
+      return Some(cropped);
+    }
+
+    let src = self.mask.data();
+    let dst = cropped.data_mut();
+    if start_x == 0
+      && start_y == 0
+      && end_x == src_width
+      && end_y == src_height
+      && src_width as u32 == size.width
+      && src_height as u32 == size.height
+    {
+      dst.copy_from_slice(src);
+      return Some(cropped);
+    }
+
+    let dst_width = size.width as usize;
+    let src_width = src_width as usize;
+    let copy_width = (end_x - start_x) as usize;
+    let dst_x_start = (start_x - offset.x) as usize;
+    for src_y in start_y..end_y {
+      let dst_y = (src_y - offset.y) as usize;
+      let src_row = src_y as usize * src_width + start_x as usize;
+      let dst_row = dst_y * dst_width + dst_x_start;
+      dst[dst_row..dst_row + copy_width].copy_from_slice(&src[src_row..src_row + copy_width]);
+    }
+
+    Some(cropped)
+  }
 }
 
 #[derive(Clone, Copy)]
@@ -792,71 +839,6 @@ impl<'a> MaskRow<'a> {
   pub(crate) fn is_empty(&self) -> bool {
     self.data.is_empty()
   }
-}
-
-/// Resolves the combined constraint mask against the pixmap it clips: borrowed
-/// directly when the stored mask already matches the canvas viewport, cropped
-/// into a scratch buffer otherwise.
-pub(crate) fn resolve_mask<'a>(mask: MaskView<'a>, size: Size<u32>) -> Option<Cow<'a, TinyMask>> {
-  if mask.origin == mask.canvas_origin
-    && mask.mask.width() == size.width
-    && mask.mask.height() == size.height
-  {
-    return Some(Cow::Borrowed(mask.mask));
-  }
-  materialize_mask(mask, size).map(Cow::Owned)
-}
-
-#[inline(always)]
-fn mask_index_from_coord(x: u32, y: u32, width: u32) -> usize {
-  (y * width + x) as usize
-}
-
-pub(crate) fn materialize_mask(mask: MaskView<'_>, size: Size<u32>) -> Option<TinyMask> {
-  let mut cropped = TinyMask::from_vec(
-    vec![0; (size.width as usize) * (size.height as usize)],
-    IntSize::from_wh(size.width, size.height)?,
-  )?;
-
-  let offset = Point {
-    x: mask.canvas_origin.x as i32 - mask.origin.x as i32,
-    y: mask.canvas_origin.y as i32 - mask.origin.y as i32,
-  };
-  let src_width = mask.mask.width() as i32;
-  let src_height = mask.mask.height() as i32;
-  let start_x = offset.x.max(0);
-  let start_y = offset.y.max(0);
-  let end_x = (offset.x + size.width as i32).min(src_width);
-  let end_y = (offset.y + size.height as i32).min(src_height);
-  if start_x >= end_x || start_y >= end_y {
-    return Some(cropped);
-  }
-
-  let src = mask.mask.data();
-  let dst = cropped.data_mut();
-  if start_x == 0
-    && start_y == 0
-    && end_x == src_width
-    && end_y == src_height
-    && src_width as u32 == size.width
-    && src_height as u32 == size.height
-  {
-    dst.copy_from_slice(src);
-    return Some(cropped);
-  }
-
-  let dst_width = size.width as usize;
-  let src_width = src_width as usize;
-  let copy_width = (end_x - start_x) as usize;
-  let dst_x_start = (start_x - offset.x) as usize;
-  for src_y in start_y..end_y {
-    let dst_y = (src_y - offset.y) as usize;
-    let src_row = src_y as usize * src_width + start_x as usize;
-    let dst_row = dst_y * dst_width + dst_x_start;
-    dst[dst_row..dst_row + copy_width].copy_from_slice(&src[src_row..src_row + copy_width]);
-  }
-
-  Some(cropped)
 }
 
 #[cfg(test)]

@@ -5,7 +5,7 @@
 //! tiny-skia, and the SVG backend emits the same geometry as vector paths.
 
 use takumi_core::{
-  geometry::{ComputedLayout as Layout, Point, Point as CorePoint},
+  geometry::{ComputedLayout as Layout, Point},
   layout::decoration::{ClipBox, OutlineGeometry},
   painter::{BoxPainter, FillShape, PaintDevice},
   style::{Color, ImageScalingAlgorithm},
@@ -32,25 +32,30 @@ pub(crate) fn draw_outset_box_shadow(
   layout: Layout,
 ) -> Result<()> {
   let painter = BoxPainter::new(context, layout);
-  let element_border_radius = *painter.border();
+  let shadows = painter.shadows().outer;
 
-  for shadow in painter.shadows().outer {
+  if shadows.is_empty() {
+    return Ok(());
+  }
+
+  let element_border_radius = *painter.border();
+  let mut element_paths = Vec::new();
+
+  element_border_radius.append_mask_commands(&mut element_paths, layout.size, Point::ZERO);
+
+  for shadow in shadows {
     let mut paths = Vec::new();
-    let mut element_paths = Vec::new();
-    let resolved_spread_radius = shadow.spread_radius;
     let (border_radius, spread_size) =
-      element_border_radius.outset_shadow_box(layout.size, resolved_spread_radius);
+      element_border_radius.outset_shadow_box(layout.size, shadow.spread_radius);
 
     border_radius.append_mask_commands(
       &mut paths,
       spread_size,
       Point {
-        x: -resolved_spread_radius,
-        y: -resolved_spread_radius,
+        x: -shadow.spread_radius,
+        y: -shadow.spread_radius,
       },
     );
-
-    element_border_radius.append_mask_commands(&mut element_paths, layout.size, Point::ZERO);
 
     draw_outset_shadow(
       &shadow,
@@ -70,15 +75,27 @@ pub(crate) fn draw_inset_box_shadow(
   canvas: &mut Canvas,
   layout: Layout,
 ) -> Result<()> {
-  {
-    let painter = BoxPainter::new(context, layout);
-    let border_radius = *painter.border();
+  let painter = BoxPainter::new(context, layout);
+  let border_radius = *painter.border();
 
-    for shadow in painter.shadows().inset {
-      draw_inset_shadow_to_canvas(&shadow, context.transform, border_radius, canvas, layout)?;
-    }
+  for shadow in painter.shadows().inset {
+    draw_inset_shadow_to_canvas(&shadow, context.transform, border_radius, canvas, layout)?;
   }
+
   Ok(())
+}
+
+/// Paints a box's own decorations, bottom to top: outset shadows, background,
+/// inset shadows, and border.
+pub(crate) fn draw_box_shell(
+  context: &RenderContext,
+  canvas: &mut Canvas,
+  layout: Layout,
+) -> Result<()> {
+  draw_outset_box_shadow(context, canvas, layout)?;
+  draw_background(context, canvas, layout)?;
+  draw_inset_box_shadow(context, canvas, layout)?;
+  draw_border(context, canvas, layout)
 }
 
 /// The canvas as a [`PaintDevice`]. A rounded rectangle composites through the
@@ -93,7 +110,7 @@ pub(crate) struct CanvasDevice<'c> {
 impl PaintDevice for CanvasDevice<'_> {
   fn fill_shape(&mut self, shape: &FillShape, color: Color, transform: Affine) {
     let (border, size, offset) = match shape {
-      FillShape::Rect(size) => (BorderProperties::default(), *size, CorePoint::ZERO),
+      FillShape::Rect(size) => (BorderProperties::default(), *size, Point::ZERO),
       FillShape::RoundedRect {
         border,
         size,
@@ -129,7 +146,7 @@ pub(crate) fn draw_background(
     algorithm: context.style.image_rendering,
   };
 
-  BoxPainter::new(context, layout).background_color(Point { x: 0.0, y: 0.0 }, &mut device);
+  BoxPainter::new(context, layout).background_color(Point::ZERO, &mut device);
 
   match context.style.background_clip {
     BackgroundClip::BorderBox => {
@@ -345,8 +362,7 @@ fn draw_image_node_content(
     return Ok(());
   };
 
-  draw_image(&image_source, context, canvas, layout)?;
-  Ok(())
+  draw_image(&image_source, context, canvas, layout)
 }
 
 fn draw_text_node_content(
@@ -356,13 +372,12 @@ fn draw_text_node_content(
   layout: Layout,
 ) -> Result<()> {
   let font_style = SizedFontStyle::from_style(&context.style, context);
-  let size = layout.unsnapped_content;
 
   if font_style.sizing.font_size == 0.0 {
     return Ok(());
   }
 
-  let inline_text: InlineItem<'_> = InlineItem::Text {
+  let inline_text = InlineItem::Text {
     text: text.text.as_str().into(),
     context,
     link: None,
@@ -371,7 +386,7 @@ fn draw_text_node_content(
 
   let built = create_inline_layout(InlineLayoutRequest::in_content_box(
     vec![inline_text],
-    size,
+    layout.unsnapped_content,
     &font_style,
     context,
     InlineLayoutMode::Draw,

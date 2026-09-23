@@ -64,36 +64,34 @@ pub(crate) fn placement_overlap(lhs: Placement, rhs: Placement) -> Option<Placem
   })
 }
 
-#[inline(always)]
-pub(crate) fn compute_overlay_bounds_for_canvas(
-  canvas_width: u32,
-  canvas_height: u32,
-  offset: Point<f32>,
-  width: u32,
-  height: u32,
-) -> Option<OverlayBounds> {
-  if width == 0 || height == 0 {
-    return None;
-  }
+impl OverlayBounds {
+  /// Clips a `size` overlay at `offset` to a `canvas`-sized pixmap, or `None`
+  /// when nothing of it lands inside.
+  #[inline(always)]
+  pub(crate) fn new(canvas: Size<u32>, offset: Point<f32>, size: Size<u32>) -> Option<Self> {
+    if size.width == 0 || size.height == 0 {
+      return None;
+    }
 
-  let offset_x = offset.x.trunc() as i32;
-  let offset_y = offset.y.trunc() as i32;
-  let clipped = Placement {
-    left: offset_x,
-    top: offset_y,
-    width,
-    height,
-  }
-  .clamp_to(Size::new(canvas_width, canvas_height))?;
+    let offset_x = offset.x.trunc() as i32;
+    let offset_y = offset.y.trunc() as i32;
+    let clipped = Placement {
+      left: offset_x,
+      top: offset_y,
+      width: size.width,
+      height: size.height,
+    }
+    .clamp_to(canvas)?;
 
-  Some(OverlayBounds {
-    offset_x,
-    offset_y,
-    x_min: clipped.left,
-    x_max: clipped.right(),
-    y_min: clipped.top,
-    y_max: clipped.bottom(),
-  })
+    Some(Self {
+      offset_x,
+      offset_y,
+      x_min: clipped.left,
+      x_max: clipped.right(),
+      y_min: clipped.top,
+      y_max: clipped.bottom(),
+    })
+  }
 }
 
 #[inline(always)]
@@ -134,9 +132,7 @@ fn blit_sampled_paint_source_translation(
   }
 
   let canvas_width = pixmap.width();
-  let canvas_height = pixmap.height();
-  let Some(bounds) =
-    compute_overlay_bounds_for_canvas(canvas_width, canvas_height, offset, size.width, size.height)
+  let Some(bounds) = OverlayBounds::new(Size::new(canvas_width, pixmap.height()), offset, size)
   else {
     return;
   };
@@ -241,13 +237,10 @@ pub(super) fn blit_paint_source_translation(
   }
 
   let canvas_width = pixmap.width();
-  let canvas_height = pixmap.height();
-  let Some(bounds) = compute_overlay_bounds_for_canvas(
-    canvas_width,
-    canvas_height,
+  let Some(bounds) = OverlayBounds::new(
+    Size::new(canvas_width, pixmap.height()),
     offset,
-    source.width(),
-    source.height(),
+    Size::new(source.width(), source.height()),
   ) else {
     return;
   };
@@ -294,13 +287,10 @@ fn blit_solid_translation(
   }
 
   let canvas_width = pixmap.width();
-  let canvas_height = pixmap.height();
-  let Some(bounds) = compute_overlay_bounds_for_canvas(
-    canvas_width,
-    canvas_height,
+  let Some(bounds) = OverlayBounds::new(
+    Size::new(canvas_width, pixmap.height()),
     offset,
-    source_width,
-    source_height,
+    Size::new(source_width, source_height),
   ) else {
     return;
   };
@@ -394,9 +384,10 @@ pub(crate) fn overlay_image<'a, I: Into<PaintSource<'a>>>(
   options: OverlayOptions,
 ) {
   let image = image.into();
-  let width = image.width();
-  let height = image.height();
-  let content_size = Size { width, height };
+  let content_size = Size {
+    width: image.width(),
+    height: image.height(),
+  };
 
   if let PaintSource::ColorTile(color) = image
     && try_fill_color_with_tiny_skia(
@@ -413,15 +404,7 @@ pub(crate) fn overlay_image<'a, I: Into<PaintSource<'a>>>(
     return;
   }
 
-  if options.border.is_zero()
-    && options.transform.only_translation()
-    && options.transform.x.fract() == 0.0
-    && options.transform.y.fract() == 0.0
-  {
-    let offset = Point {
-      x: options.transform.x,
-      y: options.transform.y,
-    };
+  if let Some(offset) = options.whole_pixel_translation() {
     blit_paint_source_translation(
       target.pixmap,
       image,
@@ -538,19 +521,12 @@ pub(crate) fn overlay_sampled_paint_source(
 ) {
   // A whole-pixel translation copies row spans directly. Tiny-skia would take
   // the same draw through its sampling pipeline, so this is tried first.
-  if options.border.is_zero()
-    && options.transform.only_translation()
-    && options.transform.x.fract() == 0.0
-    && options.transform.y.fract() == 0.0
-  {
+  if let Some(offset) = options.whole_pixel_translation() {
     blit_sampled_paint_source_translation(
       target.pixmap,
       source,
       size,
-      Point {
-        x: options.transform.x,
-        y: options.transform.y,
-      },
+      offset,
       sampling,
       options.mode,
       target.combined_mask,

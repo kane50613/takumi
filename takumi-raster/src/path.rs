@@ -4,13 +4,22 @@ use tiny_skia::{
   PathBuilder as TinyPathBuilder, Stroke as TinyStroke, StrokeDash as TinyStrokeDash,
 };
 
-use crate::style::LineJoin;
+use crate::style::{FillRule, LineJoin};
 
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
 pub(crate) enum Fill {
   #[default]
   NonZero,
   EvenOdd,
+}
+
+impl From<FillRule> for Fill {
+  fn from(value: FillRule) -> Self {
+    match value {
+      FillRule::EvenOdd => Fill::EvenOdd,
+      _ => Fill::NonZero,
+    }
+  }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Default)]

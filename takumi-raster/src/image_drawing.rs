@@ -9,18 +9,19 @@ use crate::{
   style::{Affine, BlendMode},
 };
 
-pub(crate) struct PreparedImage {
+struct PreparedImage {
   image: RenderedImage,
   logical_to_source: Affine,
+  offset: Point<f32>,
 }
 
 /// Sizes and places an image for `object-fit`/`object-position`, rendering
 /// only the part that lands inside the content box.
-pub(crate) fn process_image_for_object_fit(
+fn process_image_for_object_fit(
   image: &ImageSource,
   context: &RenderContext,
   content_box: Size<f32>,
-) -> Result<(PreparedImage, Point<f32>)> {
+) -> Result<PreparedImage> {
   let (image_width, image_height) = image.size(&context.sizing);
   let (source_width, source_height) = match image {
     ImageSource::Bitmap(bitmap) => (bitmap.width() as f32, bitmap.height() as f32),
@@ -63,13 +64,11 @@ pub(crate) fn process_image_for_object_fit(
     ) * Affine::translation(clipped.crop.x, clipped.crop.y)
   };
 
-  Ok((
-    PreparedImage {
-      image: rendered,
-      logical_to_source,
-    },
-    clipped.origin,
-  ))
+  Ok(PreparedImage {
+    image: rendered,
+    logical_to_source,
+    offset: clipped.origin,
+  })
 }
 
 /// Draws an image on the canvas with the specified style and layout.
@@ -79,13 +78,13 @@ pub(crate) fn draw_image(
   canvas: &mut Canvas,
   layout: Layout,
 ) -> Result<()> {
-  let (image, offset) = process_image_for_object_fit(image, context, layout.content_box_size())?;
+  let image = process_image_for_object_fit(image, context, layout.content_box_size())?;
 
   // manually apply the border and padding to ensure rotation with origin is applied correctly
   let transform_with_content_offset = context.transform
     * Affine::translation(
-      layout.border.left + layout.padding.left + offset.x,
-      layout.border.top + layout.padding.top + offset.y,
+      layout.border.left + layout.padding.left + image.offset.x,
+      layout.border.top + layout.padding.top + image.offset.y,
     );
 
   let mut border = BorderProperties::from_context(context, layout.size, layout.border);
@@ -109,7 +108,7 @@ pub(crate) fn draw_image(
       source,
       width,
       height,
-      algorithm: algo,
+      algorithm,
       source_scale,
     } => {
       if let Some(pixmap_ref) = pixmap_ref_from_buffer(source.as_ref()) {
@@ -121,7 +120,7 @@ pub(crate) fn draw_image(
           SamplingOptions {
             logical_to_source: Affine::scale(source_scale.0, source_scale.1)
               * image.logical_to_source,
-            algorithm: algo,
+            algorithm,
           },
           BlendMode::Normal,
         );
