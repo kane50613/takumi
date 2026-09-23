@@ -15,13 +15,16 @@ use std::{
 };
 
 use takumi_core::{
-  layout::tree::{RenderNode, TablePart},
+  layout::{
+    node::NodeKind,
+    tree::{RenderNode, TablePart},
+  },
   style::{Display, FlexDirection, GridPlacement, GridPlacementSpan, ListStyleType},
 };
 
 use crate::krilla::tagging::{
-  Artifact, ArtifactType, ContentTag, Identifier, ListNumbering, TableHeaderScope, Tag, TagGroup,
-  TagId, TagTree,
+  Artifact, ArtifactType, ContentTag, Identifier, ListNumbering, Node, TableHeaderScope, Tag,
+  TagGroup, TagId, TagTree,
 };
 
 /// Content kept out of the structure tree. `Other` stays valid below PDF 2.0,
@@ -35,49 +38,39 @@ pub(crate) const ARTIFACT: ContentTag<'static> = ContentTag::Artifact(Artifact {
 /// node's path from the root.
 #[derive(Default)]
 pub(crate) struct TagCollector {
-  identifiers: HashMap<Vec<usize>, Vec<Identifier>>,
-  /// Generated list-label identifiers per source list item.
-  labels: HashMap<Vec<usize>, Vec<Identifier>>,
-  /// Link-annotation identifiers per source node, joined into that node's
-  /// `Link` element (or wrapped in one) so annotations sit inside the tree.
-  annotations: HashMap<Vec<usize>, Vec<Identifier>>,
+  recorded: HashMap<Vec<usize>, Recorded>,
+}
+
+/// What one source node recorded.
+#[derive(Default)]
+struct Recorded {
+  identifiers: Vec<Identifier>,
+  /// Generated list-label identifiers, for a list item.
+  labels: Vec<Identifier>,
+  /// Link-annotation identifiers, joined into the node's `Link` element (or
+  /// wrapped in one) so annotations sit inside the tree.
+  annotations: Vec<Identifier>,
 }
 
 impl TagCollector {
   pub(crate) fn record(&mut self, path: &[usize], identifier: Identifier) {
-    self
-      .identifiers
-      .entry(path.to_vec())
-      .or_default()
-      .push(identifier);
+    self.at(path).identifiers.push(identifier);
   }
 
   pub(crate) fn record_label(&mut self, path: &[usize], identifier: Identifier) {
-    self
-      .labels
-      .entry(path.to_vec())
-      .or_default()
-      .push(identifier);
+    self.at(path).labels.push(identifier);
   }
 
   pub(crate) fn record_annotation(&mut self, path: &[usize], identifier: Identifier) {
-    self
-      .annotations
-      .entry(path.to_vec())
-      .or_default()
-      .push(identifier);
+    self.at(path).annotations.push(identifier);
   }
 
-  fn take(&mut self, path: &[usize]) -> Vec<Identifier> {
-    self.identifiers.remove(path).unwrap_or_default()
+  fn at(&mut self, path: &[usize]) -> &mut Recorded {
+    self.recorded.entry(path.to_vec()).or_default()
   }
 
-  fn take_labels(&mut self, path: &[usize]) -> Vec<Identifier> {
-    self.labels.remove(path).unwrap_or_default()
-  }
-
-  fn take_annotations(&mut self, path: &[usize]) -> Vec<Identifier> {
-    self.annotations.remove(path).unwrap_or_default()
+  fn take(&mut self, path: &[usize]) -> Recorded {
+    self.recorded.remove(path).unwrap_or_default()
   }
 
   /// Walks the source tree in logical order and builds the structure tree from
@@ -133,12 +126,12 @@ fn flush_paragraph(pending: &mut Vec<Identifier>, parent: &mut Vec<TagGroup>) {
   if pending.is_empty() {
     return;
   }
-  let mut group = TagGroup::new(Tag::P);
+  parent.push(tag_group(Tag::P, pending.drain(..)));
+}
 
-  for identifier in pending.drain(..) {
-    group.push(identifier);
-  }
-  parent.push(group);
+/// A structure element holding `children` in order.
+fn tag_group(tag: Tag, children: impl IntoIterator<Item = impl Into<Node>>) -> TagGroup {
+  TagGroup::with_children(tag, children.into_iter().map(Into::into).collect())
 }
 
 /// State carried across the walk: the identifiers to place, plus the source
@@ -151,6 +144,17 @@ struct Walk<'c> {
 }
 
 impl Walk<'_> {
+  /// Gives `kind` the id a destination names it by when one points at
+  /// `path`, returning whether one does.
+  fn name_target(&self, path: &[usize], kind: &mut Tag) -> bool {
+    let is_target = self.targets.contains(path);
+
+    if is_target {
+      kind.set_id(Some(tag_id(path)));
+    }
+    is_target
+  }
+
   /// PDF/UA rejects a heading sequence that skips a level or opens below
   /// `H1`, which HTML happily writes. Numbering by nesting depth keeps the
   /// document's hierarchy and always produces a sequence validators accept.
@@ -215,9 +219,11 @@ fn build_node(
       }
     }
     None => {
-      let identifiers = walk.collector.take(path);
-      let labels = walk.collector.take_labels(path);
-      let annotations = walk.collector.take_annotations(path);
+      let Recorded {
+        identifiers,
+        labels,
+        annotations,
+      } = walk.collector.take(path);
       // Items of a row-direction flex container read as one visual line, so
       // their block boundaries do not split the paragraph run.
       let block = is_block(node) && !nesting.in_row;
@@ -248,24 +254,20 @@ fn build_element(
   node: &RenderNode,
   path: &mut Vec<usize>,
   walk: &mut Walk,
-  kind: Tag,
+  mut kind: Tag,
   nesting: Nesting,
   keep_empty: bool,
 ) -> Option<TagGroup> {
-  let identifiers = walk.collector.take(path);
-  let labels = walk.collector.take_labels(path);
-  let mut annotations = walk.collector.take_annotations(path);
+  let Recorded {
+    identifiers,
+    labels,
+    mut annotations,
+  } = walk.collector.take(path);
   let is_link = kind.is_link();
   let is_list_item = kind.is_list_item();
   let is_list = kind.is_list();
   let is_figure = kind.is_figure();
-  let mut kind = kind;
-
-  let is_target = walk.targets.contains(path.as_slice());
-
-  if is_target {
-    kind.set_id(Some(tag_id(path)));
-  }
+  let is_target = walk.name_target(path, &mut kind);
   let mut group = TagGroup::new(kind);
   let mut children = Vec::new();
   let mut child_pending = Vec::new();
@@ -275,12 +277,7 @@ fn build_element(
   // item's whole subtree wrap in one of each.
   if is_list_item {
     if !labels.is_empty() {
-      let mut label = TagGroup::new(Tag::LBL);
-
-      for identifier in labels {
-        label.push(identifier);
-      }
-      group.push(label);
+      group.push(tag_group(Tag::LBL, labels));
     }
     child_pending.extend(identifiers);
   } else {
@@ -310,12 +307,7 @@ fn build_element(
   has_content |= !children.is_empty();
   if is_list_item {
     if !children.is_empty() {
-      let mut body = TagGroup::new(Tag::L_BODY);
-
-      for child in children {
-        body.push(child);
-      }
-      group.push(body);
+      group.push(tag_group(Tag::L_BODY, children));
     }
   } else {
     for child in children {
@@ -362,16 +354,13 @@ impl TableBuilder {
   fn close_section(&mut self) {
     self.close_row();
     if let Some((part, rows)) = self.section.take() {
-      let mut group = TagGroup::new(match part {
+      let tag = match part {
         TablePart::HeaderCell => Tag::T_HEAD,
         TablePart::FooterCell => Tag::T_FOOT,
         _ => Tag::T_BODY,
-      });
+      };
 
-      for row in rows {
-        group.push(row);
-      }
-      self.groups.push(group);
+      self.groups.push(tag_group(tag, rows));
     }
   }
 
@@ -394,16 +383,10 @@ impl TableBuilder {
   /// content model, so it rides in a row of its own.
   fn push_stray(&mut self, children: Vec<TagGroup>) {
     self.close_section();
-
-    let mut cell = TagGroup::new(Tag::table_data(None, None));
-
-    for child in children {
-      cell.push(child);
-    }
-    let mut row = TagGroup::new(Tag::TR);
-
-    row.push(cell);
-    self.groups.push(row);
+    self.groups.push(tag_group(
+      Tag::TR,
+      [tag_group(Tag::table_data(None, None), children)],
+    ));
   }
 
   fn push_caption(&mut self, caption: TagGroup) {
@@ -467,14 +450,13 @@ fn build_table(
   parent: &mut Vec<TagGroup>,
   nesting: Nesting,
 ) {
-  let identifiers = walk.collector.take(path);
-  let annotations = walk.collector.take_annotations(path);
+  let Recorded {
+    identifiers,
+    annotations,
+    ..
+  } = walk.collector.take(path);
   let mut kind = Tag::TABLE;
-  let is_target = walk.targets.contains(path.as_slice());
-
-  if is_target {
-    kind.set_id(Some(tag_id(path)));
-  }
+  let is_target = walk.name_target(path, &mut kind);
   let mut builder = TableBuilder {
     groups: Vec::new(),
     section: None,
@@ -541,14 +523,8 @@ fn build_table(
   }
   builder.close_section();
 
-  let mut table = TagGroup::new(kind);
-  let has_content = !builder.groups.is_empty();
-
-  for group in builder.groups {
-    table.push(group);
-  }
-  if has_content || is_target {
-    parent.push(table);
+  if !builder.groups.is_empty() || is_target {
+    parent.push(tag_group(kind, builder.groups));
   }
   push_link_wrappers(annotations, parent);
 }
@@ -557,10 +533,7 @@ fn build_table(
 /// box of their own) in `Link` elements of their own.
 fn push_link_wrappers(annotations: Vec<Identifier>, parent: &mut Vec<TagGroup>) {
   for annotation in annotations {
-    let mut group = TagGroup::new(Tag::LINK);
-
-    group.push(annotation);
-    parent.push(group);
+    parent.push(tag_group(Tag::LINK, [annotation]));
   }
 }
 
@@ -693,8 +666,6 @@ pub(crate) fn text_content(node: &RenderNode) -> String {
 }
 
 fn collect_text(node: &RenderNode, out: &mut String) {
-  use takumi_core::layout::node::NodeKind;
-
   if let Some(NodeKind::Text(text)) = node.node.as_ref().map(|source| &source.kind) {
     out.push_str(&text.text);
   }
