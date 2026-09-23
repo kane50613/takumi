@@ -496,6 +496,24 @@ impl SvgDocument {
     Ok(())
   }
 
+  /// Runs `emit` inside a Gaussian-blur group when `blur_radius` is positive (the
+  /// CSS shadow blur is `2σ`), or directly otherwise.
+  pub(crate) fn with_blur(
+    &mut self,
+    blur_radius: f32,
+    emit: impl FnOnce(&mut Self) -> io::Result<()>,
+  ) -> io::Result<()> {
+    if blur_radius > 0.0 {
+      let filter = self.blur_filter(blur_radius / 2.0)?;
+      let group = self.begin_group(Affine::IDENTITY, 1.0, None, Some(&filter))?;
+
+      emit(self)?;
+      self.end_group(group)
+    } else {
+      emit(self)
+    }
+  }
+
   /// Defines a gaussian-blur filter (for text-shadow) and returns its `url(#id)`.
   pub(crate) fn blur_filter(&mut self, std_deviation: f32) -> io::Result<String> {
     let (id, reference) = self.alloc_id("bl");

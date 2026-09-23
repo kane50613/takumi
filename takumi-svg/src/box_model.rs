@@ -1,15 +1,88 @@
-//! Box-model geometry for the node walk: the element's affine transform and
-//! serialization of takumi-core path commands to SVG path `d` data.
+//! Box-model geometry for the node walk: where a box sits, its rounded outlines,
+//! and serialization of takumi-core path commands to SVG path `d` data.
 
 use std::fmt::Write as _;
 
 use takumi_core::{
-  context::RenderContext,
-  geometry::{PathCommand, Point, Rect, Size},
-  style::Affine,
+  geometry::{ComputedLayout as Layout, PathCommand, Point, Rect, Size},
+  layout::{background::background_origin_box, border::BorderProperties, decoration::ClipBox},
+  style::{Affine, BackgroundOrigin},
 };
 
-use crate::{APPROX_CHARS_PER_NUMBER, Num};
+use crate::{APPROX_CHARS_PER_NUMBER, Frame, Num};
+
+/// A box's layout at its absolute border-box top-left `origin`.
+#[derive(Clone, Copy)]
+pub(crate) struct BoxFrame {
+  pub layout: Layout,
+  pub origin: Point<f32>,
+}
+
+impl BoxFrame {
+  pub(crate) fn new(layout: Layout, origin: Point<f32>) -> Self {
+    Self { layout, origin }
+  }
+
+  /// The border box.
+  pub(crate) fn border_box(self) -> Frame {
+    Frame::new(
+      self.origin.x,
+      self.origin.y,
+      self.layout.size.width,
+      self.layout.size.height,
+    )
+  }
+
+  /// The content box.
+  pub(crate) fn content_box(self) -> Frame {
+    // The origin is the element's absolute border-box top-left, so the content box
+    // is inset by the border and padding only (not `content_box_x`, which also
+    // folds in the element's own `location` relative to its parent).
+    Frame::new(
+      self.origin.x + self.layout.border.left + self.layout.padding.left,
+      self.origin.y + self.layout.border.top + self.layout.padding.top,
+      self.layout.content_box_width(),
+      self.layout.content_box_height(),
+    )
+  }
+
+  /// The `background-origin` positioning area.
+  pub(crate) fn background_origin_box(self, origin: BackgroundOrigin) -> Frame {
+    let area = background_origin_box(origin, self.layout);
+
+    Frame::new(
+      self.origin.x + area.offset.x,
+      self.origin.y + area.offset.y,
+      area.size.width,
+      area.size.height,
+    )
+  }
+
+  /// Moves the origin by `(dx, dy)`.
+  pub(crate) fn shifted(self, dx: f32, dy: f32) -> Self {
+    Self {
+      origin: Point {
+        x: self.origin.x + dx,
+        y: self.origin.y + dy,
+      },
+      ..self
+    }
+  }
+
+  /// The translation to the origin.
+  pub(crate) fn translation(self) -> Affine {
+    Affine::translation(self.origin.x, self.origin.y)
+  }
+
+  /// Moves a border-box-relative transform to absolute space.
+  pub(crate) fn place(self, transform: Affine) -> Affine {
+    Affine {
+      x: transform.x + self.origin.x,
+      y: transform.y + self.origin.y,
+      ..transform
+    }
+  }
+}
 
 /// Numbers a single path command serializes (a cubic carries three coordinate
 /// pairs), used with [`APPROX_CHARS_PER_NUMBER`] to presize the path buffer.
@@ -92,15 +165,15 @@ pub(crate) fn quantize_path(value: f32) -> f32 {
 }
 
 /// Serializes takumi-core path commands ([`PathCommand`], the shared `Command`
-/// type) to compact SVG path `d` data, applying `transform` (`[a, b, c, d, e,
-/// f]`, SVG `matrix` order) to every point.
+/// type) to compact SVG path `d` data, applying `transform` to every point.
 ///
 /// Coordinates are emitted relative to the previous point (the first move stays
 /// absolute), axis-aligned lines collapse to `h`/`v`, and smooth cubics/quadratics
 /// use the `s`/`t` shorthands. Each delta is quantized with its rounding error
 /// folded into the next, so multi-contour fills stay closed — the core of SVGO's
 /// `convertPathData`.
-pub(crate) fn path_data(commands: &[PathCommand], [a, b, c, d, e, f]: [f32; 6]) -> String {
+pub(crate) fn path_data(commands: &[PathCommand], transform: Affine) -> String {
+  let [a, b, c, d, e, f] = transform.to_cols_array();
   let path =
     PathData::with_capacity(commands.len() * NUMBERS_PER_COMMAND * APPROX_CHARS_PER_NUMBER);
   let map = |p: Point<f32>| (a * p.x + c * p.y + e, b * p.x + d * p.y + f);
@@ -284,23 +357,30 @@ pub(crate) fn edges_path_data(edges: Rect<f32>) -> String {
   path.into_string()
 }
 
-/// The element's paint transform moved into absolute space, or `None` when it
-/// has none.
-pub(crate) fn element_transform(
-  context: &RenderContext,
-  border_box: Size<f32>,
-  x: f32,
-  y: f32,
-) -> Option<Affine> {
-  let local = context
-    .style
-    .local_transform(border_box.width, border_box.height, &context.sizing);
-  if local.is_identity() {
-    return None;
-  }
-  // Children are emitted in absolute coordinates; move the local transform into
-  // that space: M_abs = T(x, y) * local * T(-x, -y).
-  Some(Affine::translation(x, y) * local * Affine::translation(-x, -y))
+/// An absolute SVG path `d` for a [`ClipBox`]'s rounded rectangle at `origin`.
+pub(crate) fn clip_box_path_data(clip: ClipBox, origin: Point<f32>) -> String {
+  let mut commands = Vec::with_capacity(BorderProperties::PATH_COMMANDS_AMOUNT);
+  clip
+    .border
+    .append_mask_commands(&mut commands, clip.size, clip.offset);
+  path_data(&commands, Affine::translation(origin.x, origin.y))
+}
+
+/// Absolute SVG path `d` for a rounded rectangle of `size` at `origin` with
+/// `border`'s corner geometry.
+pub(crate) fn rounded_rect_path_data(
+  border: &BorderProperties,
+  size: Size<f32>,
+  origin: Point<f32>,
+) -> String {
+  clip_box_path_data(
+    ClipBox {
+      border: *border,
+      size,
+      offset: Point::ZERO,
+    },
+    origin,
+  )
 }
 
 #[cfg(test)]
@@ -371,8 +451,6 @@ mod tests {
     Point::new(x, y)
   }
 
-  const IDENTITY: [f32; 6] = [1.0, 0.0, 0.0, 1.0, 0.0, 0.0];
-
   #[test]
   fn path_data_is_relative_with_hv_shorthands() {
     let commands = [
@@ -381,7 +459,7 @@ mod tests {
       PathCommand::LineTo(pt(20.0, 20.0)),
       PathCommand::Close,
     ];
-    assert_eq!(path_data(&commands, IDENTITY), "M10 10h10v10Z");
+    assert_eq!(path_data(&commands, Affine::IDENTITY), "M10 10h10v10Z");
   }
 
   #[test]
@@ -393,7 +471,10 @@ mod tests {
       PathCommand::CubicTo(pt(0.0, 5.0), pt(5.0, 5.0), pt(5.0, 0.0)),
       PathCommand::CubicTo(pt(5.0, -5.0), pt(10.0, -5.0), pt(10.0, 0.0)),
     ];
-    assert_eq!(path_data(&commands, IDENTITY), "M0 0c0 5 5 5 5 0s5-5 5 0");
+    assert_eq!(
+      path_data(&commands, Affine::IDENTITY),
+      "M0 0c0 5 5 5 5 0s5-5 5 0"
+    );
   }
 
   #[test]
@@ -402,7 +483,7 @@ mod tests {
       PathCommand::MoveTo(pt(0.0, 0.0)),
       PathCommand::LineTo(pt(1.2345, 6.789)),
     ];
-    assert_eq!(path_data(&commands, IDENTITY), "M0 0l1.23 6.79");
+    assert_eq!(path_data(&commands, Affine::IDENTITY), "M0 0l1.23 6.79");
   }
 
   #[test]
