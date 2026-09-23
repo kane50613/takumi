@@ -182,11 +182,7 @@ function createFontKey(font: Exclude<FontLoader, string>): string | ByteBuf {
 /** Normalize an {@link ImagesInput} into concrete, deduped {@link ImageSource} entries. */
 export async function resolveImageLoaders(images: ImagesInput): Promise<ImageSource[]> {
   const { sources = [], cache } = Array.isArray(images) ? { sources: images } : images;
-  const bySrc = new Map<string, ImageLoader>();
-
-  for (const image of sources) {
-    bySrc.set(image.src, image);
-  }
+  const bySrc = new Map(sources.map((image) => [image.src, image]));
 
   return Promise.all(
     [...bySrc.values()].map(async ({ src, data, cache: own }) => ({
@@ -241,9 +237,7 @@ export class FontRegistry<TFamily extends RegisteredFamilyLike> {
       return cached;
     }
 
-    const extracted = extractFontBuffer(loader);
-
-    const promise = Promise.resolve(extracted)
+    const promise = Promise.resolve(extractFontBuffer(loader))
       .then((data) => {
         const view = asView(data);
 

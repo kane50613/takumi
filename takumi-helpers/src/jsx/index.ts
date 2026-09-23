@@ -1,16 +1,16 @@
 import type { ComponentProps, ReactElement, ReactNode } from "react";
-import { container, image, percentage, text } from "../helpers";
-import type { Declarations, Node, NodeMetadata, RgbaImage, ReactElementLike } from "../types";
-import { extractAttributes, getPresets, type HtmlProps } from "./metadata";
+import { container, image, text } from "../helpers";
+import { rootResult } from "../root";
+import type { ImageNode, Node, NodeMetadata, RgbaImage, ReactElementLike } from "../types";
+import { extractAttributes, getPresets, presetFor, type HtmlProps } from "./metadata";
 export type { HtmlProps } from "./metadata";
 import { callWithDispatcher, getProperty, readContext, type RenderEnv } from "./dispatcher";
-import { hideStylesheetsAlias, warnStylesheetsDeprecated } from "../deprecation";
-import { defaultStylePresets } from "./style-presets";
+import type { defaultStylePresets } from "./style-presets";
 import { serializeSvg } from "./svg";
 import {
   isFunctionComponent,
   isHtmlElement,
-  isHtmlVoidElement,
+  isUnrenderedElement,
   isReactForwardRef,
   isReactFragment,
   isReactMemo,
@@ -62,7 +62,6 @@ export interface FromJsxOptions {
 }
 
 interface ResolvedFromJsxOptions extends RenderEnv {
-  defaultStyles: typeof defaultStylePresets | false;
   presets?: typeof defaultStylePresets;
   tailwindClassesProperty: string;
 }
@@ -83,48 +82,22 @@ function emptyTraversalResult(): FromJsxTraversalResult {
   return { nodes: [], css: [] };
 }
 
+function nodeResult(node: Node): FromJsxTraversalResult {
+  return { nodes: [node], css: [] };
+}
+
 export async function fromJsx(
   element: ReactNode | ReactElementLike,
   options?: FromJsxOptions,
 ): Promise<FromJsxResult> {
-  const resolvedOptions = {
-    defaultStyles: resolveDefaultStyles(options),
+  const { nodes, css } = await fromJsxInternal(element, {
     presets: getPresets(options?.defaultStyles),
     tailwindClassesProperty: options?.tailwindClassesProperty ?? "tw",
     contexts: new Map<unknown, unknown>(),
     ids: { current: 0 },
-  } satisfies ResolvedFromJsxOptions;
-  const result = await fromJsxInternal(element, resolvedOptions);
-  const nodes = result.nodes;
+  });
 
-  let node: Node;
-  if (nodes.length === 0) {
-    node = container({});
-  } else if (nodes.length === 1 && nodes[0] !== undefined) {
-    node = nodes[0];
-  } else {
-    node = container({
-      children: nodes,
-      style: {
-        display: "block",
-        width: percentage(100),
-        height: percentage(100),
-      },
-    });
-  }
-
-  const css = result.css;
-  const aliased: FromJsxResult = {
-    node,
-    css,
-    get stylesheets() {
-      warnStylesheetsDeprecated();
-      return css;
-    },
-  };
-
-  hideStylesheetsAlias(aliased);
-  return aliased;
+  return rootResult(nodes, css);
 }
 
 async function fromJsxInternal(
@@ -142,28 +115,9 @@ async function fromJsxInternal(
   if (typeof element === "object" && Symbol.iterator in element)
     return collectIterable(element, options);
 
-  if (isValidElement(element)) {
-    const result = await processReactElement(element, options);
-    return result;
-  }
+  if (isValidElement(element)) return processReactElement(element, options);
 
-  return {
-    nodes: [
-      text({
-        text: String(element),
-        preset: options.presets?.span,
-      }),
-    ],
-    css: [],
-  };
-}
-
-function resolveDefaultStyles(options?: FromJsxOptions): typeof defaultStylePresets | false {
-  if (options && "defaultStyles" in options) {
-    return options.defaultStyles ?? defaultStylePresets;
-  }
-
-  return defaultStylePresets;
+  return nodeResult(text({ text: String(element), preset: options.presets?.span }));
 }
 
 const REACT_CONTEXT_TYPE = Symbol.for("react.context");
@@ -254,21 +208,14 @@ function tryHandleComponentWrapper(
 }
 
 function getElementChildren(element: ReactElementLike): ReactNode | undefined {
-  if (typeof element.props === "object" && element.props !== null && "children" in element.props) {
-    return element.props.children as ReactNode;
-  }
+  return getProperty(element.props, "children") as ReactNode | undefined;
 }
 
 function tryCollectTextChildren(element: ReactElementLike): string | undefined {
-  if (!isValidElement(element)) return;
   const children = getElementChildren(element);
 
   if (typeof children === "string") return children;
   if (typeof children === "number") return String(children);
-
-  if (Array.isArray(children)) {
-    return collectTextFromIterable(children);
-  }
 
   if (typeof children === "object" && children !== null && Symbol.iterator in children) {
     return collectTextFromIterable(children as Iterable<ReactNode>);
@@ -309,46 +256,20 @@ function collectStyleText(node: ReactNode | ReactElementLike): string | undefine
 
   if (!isValidElement(node)) return;
 
-  if (isReactFragment(node)) {
-    return collectStyleText(getElementChildren(node));
-  }
-
-  const children = getElementChildren(node);
-  if (children === undefined) return "";
-
-  if (typeof children === "object" && children !== null && Symbol.iterator in children) {
-    return collectStyleTextFromIterable(children as Iterable<ReactNode>);
-  }
-
-  return collectStyleText(children);
+  return collectStyleText(getElementChildren(node));
 }
 
+/** Joins string and number children; `undefined` when empty or when any child is neither. */
 function collectTextFromIterable(children: Iterable<ReactNode>): string | undefined {
-  const chunks: string[] = [];
-  let hasText = false;
+  let text: string | undefined;
 
   for (const child of children) {
-    // If any child is a React element, this is not pure text
-    if (isValidElement(child)) return;
+    if (typeof child !== "string" && typeof child !== "number") return;
 
-    if (typeof child === "string") {
-      hasText = true;
-      chunks.push(child);
-      continue;
-    }
-
-    if (typeof child === "number") {
-      hasText = true;
-      chunks.push(String(child));
-      continue;
-    }
-
-    return;
+    text = (text ?? "") + child;
   }
 
-  if (!hasText) return;
-
-  return chunks.join("");
+  return text;
 }
 
 async function processReactElement(
@@ -386,138 +307,52 @@ async function processReactElement(
     };
   }
 
-  if (typeof element.type !== "string" || isHtmlVoidElement(element.type)) {
+  if (typeof element.type !== "string" || isUnrenderedElement(element.type)) {
     return emptyTraversalResult();
   }
 
   const metadata = extractNodeMetadata(element, options);
 
   if (isHtmlElement(element, "br")) {
-    return {
-      nodes: [
-        text({
-          text: "\n",
-          preset: options.presets?.br,
-          ...metadata,
-        }),
-      ],
-      css: [],
-    };
+    return nodeResult(text({ text: "\n", preset: options.presets?.br, ...metadata }));
   }
 
   if (isHtmlElement(element, "img")) {
-    return {
-      nodes: [createImageElement(element, options)],
-      css: [],
-    };
+    if (!element.props.src) {
+      throw new Error("Image element must have a 'src' prop.");
+    }
+
+    return nodeResult(imageNode(element.props.src, element.props, metadata));
   }
 
   if (isHtmlElement(element, "svg")) {
-    return {
-      nodes: [createSvgElement(element, options)],
-      css: [],
-    };
+    return nodeResult(imageNode(serializeSvg(element), element.props, metadata));
   }
 
   const textChildren = tryCollectTextChildren(element);
   if (textChildren !== undefined) {
-    return {
-      nodes: [
-        text({
-          text: textChildren,
-          ...metadata,
-        }),
-      ],
-      css: [],
-    };
+    return nodeResult(text({ text: textChildren, ...metadata }));
   }
 
   const children = await collectChildren(element, options);
 
   return {
-    nodes: [
-      container({
-        children: children.nodes,
-        ...metadata,
-      }),
-    ],
+    nodes: [container({ children: children.nodes, ...metadata })],
     css: children.css,
   };
 }
 
-function createImageElement(
-  element: ReactElement<ComponentProps<"img">, "img">,
-  options: ResolvedFromJsxOptions,
-) {
-  if (!element.props.src) {
-    throw new Error("Image element must have a 'src' prop.");
-  }
-
-  const metadata = extractNodeMetadata(element, options);
-
-  const width = element.props.width !== undefined ? Number(element.props.width) : undefined;
-  const height = element.props.height !== undefined ? Number(element.props.height) : undefined;
-
+function imageNode(
+  src: ImageNode["src"],
+  { width, height }: { width?: number | string; height?: number | string },
+  metadata: NodeMetadata,
+): ImageNode {
   return image({
-    src: element.props.src,
-    width,
-    height,
+    src,
+    width: width !== undefined ? Number(width) : undefined,
+    height: height !== undefined ? Number(height) : undefined,
     ...metadata,
   });
-}
-
-function createSvgElement(
-  element: ReactElement<ComponentProps<"svg">, "svg">,
-  options: ResolvedFromJsxOptions,
-) {
-  const metadata = extractNodeMetadata(element, options);
-  const svg = serializeSvg(element);
-
-  const width = element.props.width !== undefined ? Number(element.props.width) : undefined;
-  const height = element.props.height !== undefined ? Number(element.props.height) : undefined;
-
-  return image({
-    src: svg,
-    width,
-    height,
-    ...metadata,
-  });
-}
-
-function extractStyle(
-  tagName: string | undefined,
-  inlineStyle: HtmlProps["style"],
-  options: ResolvedFromJsxOptions,
-): { preset?: Declarations; style?: Declarations } {
-  const presets = options.presets;
-  const preset =
-    presets && tagName !== undefined && tagName in presets
-      ? presets[tagName as keyof typeof presets]
-      : undefined;
-
-  if (typeof inlineStyle !== "object" || inlineStyle === null) {
-    return { preset };
-  }
-
-  for (const key in inlineStyle) {
-    if (Object.hasOwn(inlineStyle, key)) {
-      return { preset, style: inlineStyle };
-    }
-  }
-
-  return { preset };
-}
-
-function extractTw(element: ReactElementLike, options: ResolvedFromJsxOptions): string | undefined {
-  const propName = options.tailwindClassesProperty;
-
-  if (typeof element.props !== "object" || element.props === null || !(propName in element.props))
-    return;
-
-  const tw = element.props[propName as keyof typeof element.props];
-  if (typeof tw !== "string") return;
-
-  return tw;
 }
 
 function extractNodeMetadata(
@@ -526,9 +361,8 @@ function extractNodeMetadata(
 ): NodeMetadata {
   const htmlProps = element.props as HtmlProps;
   const tagName = typeof element.type === "string" ? element.type : undefined;
-  const { preset, style } = extractStyle(tagName, htmlProps.style, options);
-  const tw = extractTw(element, options);
-  const attributes = extractAttributes(htmlProps, options.tailwindClassesProperty);
+  const style = htmlProps.style;
+  const tw = getProperty(element.props, options.tailwindClassesProperty);
 
   return {
     tagName,
@@ -536,10 +370,13 @@ function extractNodeMetadata(
     id: htmlProps.id,
     dir: htmlProps.dir as NodeMetadata["dir"],
     lang: htmlProps.lang,
-    attributes,
-    tw,
-    style,
-    preset,
+    attributes: extractAttributes(htmlProps, options.tailwindClassesProperty),
+    tw: typeof tw === "string" ? tw : undefined,
+    style:
+      typeof style === "object" && style !== null && Object.keys(style).length > 0
+        ? style
+        : undefined,
+    preset: presetFor(options.presets, tagName),
   };
 }
 
@@ -566,9 +403,7 @@ async function collectIterable(
   let index = 0;
 
   for (const element of iterable) {
-    const currentIndex = index;
-    index += 1;
-
+    const currentIndex = index++;
     const task = fromJsxInternal(element, options)
       .then((nodes) => {
         groupedResults[currentIndex] = nodes;
@@ -584,16 +419,8 @@ async function collectIterable(
 
   await Promise.all(inFlight);
 
-  const flattenedNodes: Node[] = [];
-  const flattenedCss: string[] = [];
-  for (const group of groupedResults) {
-    if (!group) continue;
-    flattenedNodes.push(...group.nodes);
-    flattenedCss.push(...group.css);
-  }
-
   return {
-    nodes: flattenedNodes,
-    css: flattenedCss,
+    nodes: groupedResults.flatMap((group) => group.nodes),
+    css: groupedResults.flatMap((group) => group.css),
   };
 }

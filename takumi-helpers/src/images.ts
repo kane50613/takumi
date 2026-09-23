@@ -24,44 +24,34 @@ function collectCssUrls(value: unknown, urls: Set<string>) {
   }
 }
 
-/**
- * Every remote image URL a node tree references: `<img src>`, `backgroundImage`, `maskImage`,
- * `listStyleImage`.
- */
-function extractImageUrls(node: Node): string[] {
-  const urls = new Set<string>();
+function collectStyleUrls(style: CSSProperties | undefined, urls: Set<string>) {
+  if (!style) {
+    return;
+  }
 
-  const visit = (current: Node) => {
-    const collectStyleUrls = (style: CSSProperties | undefined) => {
-      if (!style) {
-        return;
-      }
+  collectCssUrls(style.backgroundImage, urls);
+  collectCssUrls(style.maskImage, urls);
+  collectCssUrls(style.listStyleImage, urls);
+}
 
-      collectCssUrls(style.backgroundImage, urls);
-      collectCssUrls(style.maskImage, urls);
-      collectCssUrls(style.listStyleImage, urls);
-    };
+/** Adds every remote image URL the tree references through `src` or image-bearing styles. */
+function collectImageUrls(node: Node, urls: Set<string>) {
+  collectStyleUrls(node.style, urls);
+  collectStyleUrls(node.preset, urls);
+  collectCssUrls(node.tw, urls);
 
-    collectStyleUrls(current.style);
-    collectStyleUrls(current.preset);
-    collectCssUrls(current.tw, urls);
-
-    if (current.type === "image") {
-      if (typeof current.src === "string" && isRemoteUrl(current.src)) {
-        urls.add(current.src);
-      }
-      return;
+  if (node.type === "image") {
+    if (typeof node.src === "string" && isRemoteUrl(node.src)) {
+      urls.add(node.src);
     }
+    return;
+  }
 
-    if (current.type === "container") {
-      for (const child of current.children ?? []) {
-        visit(child);
-      }
+  if (node.type === "container") {
+    for (const child of node.children ?? []) {
+      collectImageUrls(child, urls);
     }
-  };
-
-  visit(node);
-  return [...urls];
+  }
 }
 
 /**
@@ -81,12 +71,11 @@ function fetchImageData(
   fetchCache?: ImageFetchCache,
 ): Promise<ArrayBuffer> {
   const maxBytes = options.maxBytes ?? defaultMaxFetchBytes;
-  const { allowUrl } = options;
 
   const cached = fetchCache?.get(url);
   if (cached) {
     return new FetchDeadline(options).waitFor(cached).then((data) => {
-      if (allowUrl && !allowUrl(url)) {
+      if (options.allowUrl && !options.allowUrl(url)) {
         throw new Error(`URL blocked by allowUrl policy: ${url}`);
       }
 
@@ -140,14 +129,14 @@ export async function prepareImages<T extends { src: string } = FetchedImage>({
   allowUrl,
   throwOnError = true,
 }: PrepareImagesOptions<T>): Promise<(T | FetchedImage)[]> {
-  const nodes = Array.isArray(node) ? node : [node];
-  const provided = new Map<string, T>();
+  const provided = new Map(sources.map((image) => [image.src, image]));
+  const referenced = new Set<string>();
 
-  for (const image of sources) {
-    provided.set(image.src, image);
+  for (const root of Array.isArray(node) ? node : [node]) {
+    collectImageUrls(root, referenced);
   }
 
-  const urls = [...new Set(nodes.flatMap(extractImageUrls))].filter((url) => !provided.has(url));
+  const urls = [...referenced].filter((url) => !provided.has(url));
   const fetchOptions: FetchOptions = { fetch, timeout, signal, maxBytes, allowUrl };
 
   const tasks = urls.map(async (src): Promise<FetchedImage> => ({

@@ -1,18 +1,10 @@
 import type { ContainerNode, Declarations, ImageNode, Node, NodeMetadata, TextNode } from "./types";
 
-function applyStyle(node: Node, style?: Declarations) {
-  if (style && Object.keys(style).length > 0) {
-    node.style = style;
+function applyMetadata(node: Node, props: Partial<NodeMetadata>, style = props.style) {
+  if (props.tw) {
+    node.tw = props.tw;
   }
-}
 
-function applyPreset(node: Node, preset?: Declarations) {
-  if (preset && Object.keys(preset).length > 0) {
-    node.preset = preset;
-  }
-}
-
-function applyMetadata(node: Node, props: Partial<NodeMetadata>) {
   if (props.tagName !== undefined) {
     node.tagName = props.tagName;
   }
@@ -36,6 +28,18 @@ function applyMetadata(node: Node, props: Partial<NodeMetadata>) {
   if (props.attributes !== undefined) {
     node.attributes = props.attributes;
   }
+
+  if (hasDeclarations(props.preset)) {
+    node.preset = props.preset;
+  }
+
+  if (hasDeclarations(style)) {
+    node.style = style;
+  }
+}
+
+function hasDeclarations(declarations: Declarations | undefined): declarations is Declarations {
+  return declarations !== undefined && Object.keys(declarations).length > 0;
 }
 
 export function container(props: Omit<ContainerNode, "type">): ContainerNode {
@@ -44,13 +48,7 @@ export function container(props: Omit<ContainerNode, "type">): ContainerNode {
     children: props.children,
   };
 
-  if (props.tw) {
-    node.tw = props.tw;
-  }
-
   applyMetadata(node, props);
-  applyPreset(node, props.preset);
-  applyStyle(node, props.style);
 
   return node;
 }
@@ -59,29 +57,13 @@ export function text(text: string, style?: Declarations): TextNode;
 export function text(props: Omit<TextNode, "type">): TextNode;
 
 export function text(props: Omit<TextNode, "type"> | string, style?: Declarations): TextNode {
-  if (typeof props === "string") {
-    const node: TextNode = {
-      type: "text",
-      text: props,
-    };
-
-    applyStyle(node, style);
-
-    return node;
-  }
-
+  const textProps = typeof props === "string" ? { text: props } : props;
   const node: TextNode = {
     type: "text",
-    text: props.text,
+    text: textProps.text,
   };
 
-  if (props.tw) {
-    node.tw = props.tw;
-  }
-
-  applyMetadata(node, props);
-  applyPreset(node, props.preset);
-  applyStyle(node, style ?? props.style);
+  applyMetadata(node, textProps, style ?? textProps.style);
 
   return node;
 }
@@ -94,13 +76,7 @@ export function image(props: Omit<ImageNode, "type">): ImageNode {
     height: props.height,
   };
 
-  if (props.tw) {
-    node.tw = props.tw;
-  }
-
   applyMetadata(node, props);
-  applyPreset(node, props.preset);
-  applyStyle(node, props.style);
 
   return node;
 }

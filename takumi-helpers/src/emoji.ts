@@ -3,8 +3,7 @@ import type { Node, TextNode } from "./types";
 
 export type EmojiType = "twemoji" | "blobmoji" | "noto" | "openmoji" | "fluent" | "fluentFlat";
 
-const UFE0Fg = /\uFE0F/g;
-const U200D = String.fromCharCode(0x200d);
+const ZERO_WIDTH_JOINER = "\u200D";
 const TEXT_VARIATION_SELECTOR = "\uFE0E";
 const EMOJI_VARIATION_SELECTOR = "\uFE0F";
 const EXTENDED_PICTOGRAPHIC_REGEX = /^\p{Extended_Pictographic}/u;
@@ -14,7 +13,7 @@ const REGIONAL_INDICATOR_REGEX = /^(?:\p{Regional_Indicator}){1,2}$/u;
 const KEYCAP_EMOJI_REGEX = /^[#*0-9]\uFE0F?\u20E3$/u;
 
 function getIconCode(char: string) {
-  const c = char.indexOf(U200D) < 0 ? char.replace(UFE0Fg, "") : char;
+  const c = char.includes(ZERO_WIDTH_JOINER) ? char : char.replaceAll(EMOJI_VARIATION_SELECTOR, "");
 
   return [...c].map((ch) => ch.codePointAt(0)?.toString(16)).join("-");
 }
@@ -57,7 +56,7 @@ function isEmojiSegment(segment: string): boolean {
   return (
     EXTENDED_PICTOGRAPHIC_REGEX.test(segment) &&
     (segment.includes(EMOJI_VARIATION_SELECTOR) ||
-      segment.includes(U200D) ||
+      segment.includes(ZERO_WIDTH_JOINER) ||
       EMOJI_PRESENTATION_REGEX.test(segment) ||
       EMOJI_MODIFIER_SEQUENCE_REGEX.test(segment))
   );
@@ -67,9 +66,7 @@ function splitTextToNodes(node: TextNode, emojiType: EmojiType): Node[] {
   const nodes: Node[] = [];
   let currentText = "";
 
-  const segments = getSegments(node.text);
-
-  for (const { segment } of segments) {
+  for (const { segment } of getSegments(node.text)) {
     if (isEmojiSegment(segment)) {
       if (currentText) {
         nodes.push(text({ text: currentText }));

@@ -24,10 +24,10 @@ export class FetchDeadline {
     }
 
     return new Promise((resolve, reject) => {
-      function abort() {
-        signal?.removeEventListener("abort", abort);
-        reject(signal?.reason);
-      }
+      const abort = () => {
+        signal.removeEventListener("abort", abort);
+        reject(signal.reason);
+      };
       signal.addEventListener("abort", abort, { once: true });
       promise.then(
         (value) => {

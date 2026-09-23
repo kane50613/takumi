@@ -11,6 +11,20 @@ export type HtmlProps = {
   [key: string]: unknown;
 };
 
+const nonAttributeProps = new Set([
+  "children",
+  "className",
+  "class",
+  "id",
+  "style",
+  "ref",
+  "key",
+  "dangerouslySetInnerHTML",
+  "suppressHydrationWarning",
+]);
+
+const attributeValueTypes = new Set(["string", "number", "bigint", "boolean"]);
+
 export function getPresets(
   defaultStyles?: typeof defaultStylePresets | false,
 ): typeof defaultStylePresets | undefined {
@@ -21,49 +35,29 @@ export function getPresets(
   return defaultStyles ?? defaultStylePresets;
 }
 
+export function presetFor(
+  presets: typeof defaultStylePresets | undefined,
+  tagName: string | undefined,
+): Declarations | undefined {
+  return presets && tagName !== undefined && tagName in presets
+    ? presets[tagName as keyof typeof presets]
+    : undefined;
+}
+
 export function extractAttributes(
   props: HtmlProps,
   tailwindClassesProperty: string,
 ): Record<string, string> | undefined {
-  let collectedAttributes: Record<string, string> | undefined;
+  let attributes: Record<string, string> | undefined;
 
-  for (const attributeName in props) {
-    if (!Object.hasOwn(props, attributeName)) {
-      continue;
-    }
+  for (const [name, value] of Object.entries(props)) {
+    if (nonAttributeProps.has(name) || name === tailwindClassesProperty) continue;
 
-    const attributeValue = props[attributeName];
+    if (value === false || !attributeValueTypes.has(typeof value)) continue;
 
-    if (
-      attributeName === "children" ||
-      attributeName === "className" ||
-      attributeName === "class" ||
-      attributeName === "id" ||
-      attributeName === "style" ||
-      attributeName === tailwindClassesProperty ||
-      attributeName === "ref" ||
-      attributeName === "key" ||
-      attributeName === "dangerouslySetInnerHTML" ||
-      attributeName === "suppressHydrationWarning"
-    ) {
-      continue;
-    }
-
-    if (attributeValue === undefined || attributeValue === null || attributeValue === false) {
-      continue;
-    }
-
-    if (typeof attributeValue === "function" || typeof attributeValue === "symbol") {
-      continue;
-    }
-
-    if (typeof attributeValue === "object") {
-      continue;
-    }
-
-    collectedAttributes ??= {};
-    collectedAttributes[attributeName] = attributeValue === true ? "" : String(attributeValue);
+    attributes ??= {};
+    attributes[name] = value === true ? "" : String(value);
   }
 
-  return collectedAttributes;
+  return attributes;
 }

@@ -48,29 +48,24 @@ function isThenable(value: unknown): value is TrackedThenable {
 function resolveSlot(react: unknown): DispatcherSlot | null {
   const client = getProperty(react, CLIENT_INTERNALS);
   if (typeof client === "object" && client !== null && "H" in client) {
-    const internals = client as { H: unknown };
-
-    return {
-      get: () => internals.H,
-      set: (value) => {
-        internals.H = value;
-      },
-    };
+    return propertySlot(client, "H");
   }
 
   const dispatcherRef = getProperty(getProperty(react, SECRET_INTERNALS), "ReactCurrentDispatcher");
   if (typeof dispatcherRef === "object" && dispatcherRef !== null && "current" in dispatcherRef) {
-    const ref = dispatcherRef as { current: unknown };
-
-    return {
-      get: () => ref.current,
-      set: (value) => {
-        ref.current = value;
-      },
-    };
+    return propertySlot(dispatcherRef, "current");
   }
 
   return null;
+}
+
+function propertySlot<K extends string>(holder: Record<K, unknown>, key: K): DispatcherSlot {
+  return {
+    get: () => holder[key],
+    set: (value) => {
+      holder[key] = value;
+    },
+  };
 }
 
 function getSlot(): Promise<DispatcherSlot | null> {

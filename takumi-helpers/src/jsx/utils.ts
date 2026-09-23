@@ -2,10 +2,10 @@ import type { ComponentProps, JSX, ReactElement, ReactNode } from "react";
 export type { ReactElementLike } from "../types";
 import type { ReactElementLike } from "../types";
 
-const voidElements = new Set(["head", "meta", "link", "style", "script"]);
+const unrenderedElements = new Set(["head", "meta", "link", "style", "script"]);
 
-export function isHtmlVoidElement(type: string) {
-  return voidElements.has(type);
+export function isUnrenderedElement(type: string) {
+  return unrenderedElements.has(type);
 }
 
 export function isHtmlElement<T extends keyof JSX.IntrinsicElements>(
