@@ -14,7 +14,7 @@ use crate::{
   bands::{RepeatBounds, Repeatable, RepeatablePage},
   emitter::DocumentState,
   inline::{InlineMap, TextBox, build_inline_map},
-  interactive::add_link_annotations,
+  interactive::{add_link_annotations, xyz_destination},
   krilla::{
     Document,
     destination::XyzDestination,
@@ -25,7 +25,6 @@ use crate::{
   options::{PT_PER_PX, PageBand, PageOptions, PageRange, PageSelection, PdfError},
   pagination::{MAX_PAGES, PageSlice, Paginated},
   paint::paint_page_background,
-  tags::tag_id,
   tree::TreeInputs,
   window::{ContentWindow, Window},
 };
@@ -139,15 +138,13 @@ impl PagePlan {
     let emitted = self.selection.emitted(index)?;
     let start = self.paginated.starts[index];
     let y = self.frame.margin.top + self.paginated.reserved_at(start) + (top - start).max(0.0);
-    let dest = XyzDestination::new(
+
+    Some(xyz_destination(
       emitted,
       Point::from_xy(self.frame.margin.left * PT_PER_PX, y * PT_PER_PX),
-    );
-
-    Some(match self.structural {
-      true => dest.with_structure(tag_id(path)),
-      false => dest,
-    })
+      path,
+      self.structural,
+    ))
   }
 
   /// Lays the bands out, resolves the page frame around them, and cuts the

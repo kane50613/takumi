@@ -104,19 +104,17 @@ use crate::{
   emitter::DocumentState,
   glyph::Uncovered,
   inline::{TextBox, build_inline_map},
-  interactive::{Interactive, add_link_annotations},
+  interactive::{Interactive, add_link_annotations, xyz_destination},
   krilla::{
     Document, SerializeSettings,
     configure::ConfigurationBuilder,
     destination::XyzDestination,
-    embed::{EmbeddedFile, MimeType},
     geom::{Point, Size as KrillaSize, Transform},
     page::PageSettings,
   },
-  options::{PT_PER_PX, PageSelection, build_metadata, krilla_datetime, validate_xmp_schemas},
+  options::{PT_PER_PX, PageSelection},
   page::{PageBands, PagePlan, band_viewport},
   paint::paint_page_background,
-  tags::tag_id,
   tree::{PreparedTree, TreeInputs},
   window::Window,
 };
@@ -160,6 +158,7 @@ pub fn measure(options: MeasureOptions<'_>) -> Result<MeasuredSize, PdfError> {
 pub fn render(mut options: PdfOptions<'_>) -> Result<Vec<u8>, PdfError> {
   let attachments = take(&mut options.attachments);
   let mut pdf = open_document(&options, attachments)?;
+  let tagged = options.writes_structure();
   let inputs = TreeInputs {
     fonts: options.fonts,
     stylesheet: options.stylesheet,
@@ -167,7 +166,6 @@ pub fn render(mut options: PdfOptions<'_>) -> Result<Vec<u8>, PdfError> {
     font_families: options.font_families,
     lang: options.lang,
   };
-  let tagged = options.tagged != Tagging::Off || options.standard.requires_tagging();
   let uncovered = Uncovered::new(
     options.uncovered_text,
     options
@@ -266,40 +264,22 @@ fn open_document(
   } else {
     Document::new_with(settings)
   };
-  let tagged = options.tagged != Tagging::Off || options.standard.requires_tagging();
 
   if let Some(metadata) = &options.metadata {
-    validate_xmp_schemas(&metadata.xmp)?;
-    document.set_metadata(build_metadata(metadata, options.lang));
-  } else if tagged && options.lang.is_some() {
+    document.set_metadata(metadata.metadata(options.lang)?);
+  } else if options.writes_structure() && options.lang.is_some() {
     // Tagged standards check the document language even without metadata.
-    document.set_metadata(build_metadata(&PdfMetadata::default(), options.lang));
+    document.set_metadata(PdfMetadata::default().metadata(options.lang)?);
   }
 
   let fallback_date = options.metadata.as_ref().and_then(|m| m.creation_date);
 
   for attachment in attachments {
-    let mime_type = match attachment.mime_type {
-      Some(mime) => Some(MimeType::new(&mime).ok_or(PdfError::InvalidMimeType(mime))?),
-      None => None,
-    };
-    let file = EmbeddedFile {
-      path: attachment.name.clone(),
-      mime_type,
-      description: attachment.description,
-      association_kind: attachment.relationship.association_kind(),
-      data: attachment.data.into(),
-      modification_date: attachment
-        .modification_date
-        .or(fallback_date)
-        .map(krilla_datetime),
-      compress: None,
-      location: None,
-    };
+    let name = attachment.name.clone();
 
     document
-      .embed_file(file)
-      .ok_or(PdfError::DuplicateAttachment(attachment.name))?;
+      .embed_file(attachment.embedded_file(fallback_date)?)
+      .ok_or(PdfError::DuplicateAttachment(name))?;
   }
   Ok(document)
 }
@@ -393,12 +373,12 @@ impl SinglePage {
   }
 
   fn destination(&self, top: f32, path: &[usize]) -> XyzDestination {
-    let dest = XyzDestination::new(0, Point::from_xy(0.0, top.max(0.0) * PT_PER_PX));
-
-    match self.structural {
-      true => dest.with_structure(tag_id(path)),
-      false => dest,
-    }
+    xyz_destination(
+      0,
+      Point::from_xy(0.0, top.max(0.0) * PT_PER_PX),
+      path,
+      self.structural,
+    )
   }
 }
 
