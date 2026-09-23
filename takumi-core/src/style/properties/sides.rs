@@ -5,7 +5,8 @@ use cssparser::Parser;
 use crate::{
   geometry::Rect,
   style::{
-    CssExpectedMessage, CssToken, FromCss, Length, MakeComputed, ParseResult, SizingContext, ToCss,
+    Animatable, Color, CssExpectedMessage, CssToken, FromCss, Length, MakeComputed, ParseResult,
+    SizingContext, ToCss,
   },
 };
 
@@ -102,6 +103,21 @@ impl<T: Copy + MakeComputed> MakeComputed for Sides<T> {
   fn make_computed(&mut self, sizing: &SizingContext) {
     for value in &mut self.0 {
       value.make_computed(sizing);
+    }
+  }
+}
+
+impl<T: Animatable + Copy> Animatable for Sides<T> {
+  fn interpolate(
+    &mut self,
+    from: &Self,
+    to: &Self,
+    progress: f32,
+    sizing: &SizingContext,
+    current_color: Color,
+  ) {
+    for ((value, from), to) in self.0.iter_mut().zip(&from.0).zip(&to.0) {
+      value.interpolate(from, to, progress, sizing, current_color);
     }
   }
 }

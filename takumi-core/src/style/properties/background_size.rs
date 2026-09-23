@@ -7,7 +7,8 @@ use crate::{
   geometry::Size,
   style::{
     Animatable, Color, CssSyntaxKind, CssToken, FromCss, Length, ListInterpolationStrategy,
-    MakeComputed, ParseResult, SizingContext, ToCss, tw::TailwindPropertyParser, unexpected_token,
+    MakeComputed, ParseResult, SizingContext, ToCss, discrete, tw::TailwindPropertyParser,
+    unexpected_token,
   },
 };
 
@@ -109,20 +110,11 @@ impl Animatable for BackgroundSize {
           width: to_width,
           height: to_height,
         },
-      ) => {
-        let mut width = from_width;
-        width.interpolate(&from_width, &to_width, progress, sizing, current_color);
-        let mut height = from_height;
-        height.interpolate(&from_height, &to_height, progress, sizing, current_color);
-        BackgroundSize::Explicit { width, height }
-      }
-      _ => {
-        if progress >= 0.5 {
-          *to
-        } else {
-          *from
-        }
-      }
+      ) => BackgroundSize::Explicit {
+        width: Length::interpolated(&from_width, &to_width, progress, sizing, current_color),
+        height: Length::interpolated(&from_height, &to_height, progress, sizing, current_color),
+      },
+      _ => discrete(from, to, progress),
     };
   }
 }

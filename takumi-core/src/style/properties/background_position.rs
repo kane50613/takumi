@@ -72,15 +72,13 @@ impl Animatable for PositionComponent {
     sizing: &SizingContext,
     current_color: Color,
   ) {
-    let mut length = Length::from(*from);
-    length.interpolate(
+    *self = PositionComponent::Length(Length::interpolated(
       &Length::from(*from),
       &Length::from(*to),
       progress,
       sizing,
       current_color,
-    );
-    *self = PositionComponent::Length(length);
+    ));
   }
 }
 
@@ -131,9 +129,9 @@ impl Animatable for PositionValue {
     sizing: &SizingContext,
     current_color: Color,
   ) {
-    let mut value = from.0;
-    value.interpolate(&from.0, &to.0, progress, sizing, current_color);
-    self.0 = value;
+    self
+      .0
+      .interpolate(&from.0, &to.0, progress, sizing, current_color);
   }
 }
 

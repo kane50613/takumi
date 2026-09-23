@@ -8,8 +8,8 @@ use tiny_skia::Transform as TinyTransform;
 
 use crate::style::{
   Angle, Animatable, Color, CssSyntaxKind, CssToken, FromCss, Length, ListInterpolationStrategy,
-  MakeComputed, ParseResult, PercentageNumber, SizingContext, ToCss, lerp,
-  properties::filter::interpolate_field, unexpected_token,
+  MakeComputed, ParseResult, PercentageNumber, SizingContext, ToCss, discrete, lerp,
+  unexpected_token,
 };
 
 const DEFAULT_SCALE: f32 = 1.0;
@@ -64,42 +64,21 @@ impl Animatable for Transform {
   ) {
     *self = match (*from, *to) {
       (Transform::Translate(from_x, from_y), Transform::Translate(to_x, to_y)) => {
-        interpolate_field!(
-          Transform::Translate,
-          from_x,
-          to_x,
-          from_y,
-          to_y,
-          progress,
-          sizing,
-          current_color
+        Transform::Translate(
+          Animatable::interpolated(&from_x, &to_x, progress, sizing, current_color),
+          Animatable::interpolated(&from_y, &to_y, progress, sizing, current_color),
         )
       }
       (Transform::Scale(from_x, from_y), Transform::Scale(to_x, to_y)) => {
         Transform::Scale(lerp(from_x, to_x, progress), lerp(from_y, to_y, progress))
       }
-      (Transform::Rotate(from_angle), Transform::Rotate(to_angle)) => {
-        interpolate_field!(
-          Transform::Rotate,
-          from_angle,
-          to_angle,
-          progress,
-          sizing,
-          current_color
-        )
-      }
-      (Transform::Skew(from_x, from_y), Transform::Skew(to_x, to_y)) => {
-        interpolate_field!(
-          Transform::Skew,
-          from_x,
-          to_x,
-          from_y,
-          to_y,
-          progress,
-          sizing,
-          current_color
-        )
-      }
+      (Transform::Rotate(from_angle), Transform::Rotate(to_angle)) => Transform::Rotate(
+        Angle::interpolated(&from_angle, &to_angle, progress, sizing, current_color),
+      ),
+      (Transform::Skew(from_x, from_y), Transform::Skew(to_x, to_y)) => Transform::Skew(
+        Animatable::interpolated(&from_x, &to_x, progress, sizing, current_color),
+        Animatable::interpolated(&from_y, &to_y, progress, sizing, current_color),
+      ),
       (Transform::Matrix(from_affine), Transform::Matrix(to_affine)) => Transform::Matrix(Affine {
         a: lerp(from_affine.a, to_affine.a, progress),
         b: lerp(from_affine.b, to_affine.b, progress),
@@ -108,13 +87,7 @@ impl Animatable for Transform {
         x: lerp(from_affine.x, to_affine.x, progress),
         y: lerp(from_affine.y, to_affine.y, progress),
       }),
-      _ => {
-        if progress >= 0.5 {
-          *to
-        } else {
-          *from
-        }
-      }
+      _ => discrete(from, to, progress),
     };
   }
 }

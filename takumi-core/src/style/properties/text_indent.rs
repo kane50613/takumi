@@ -4,7 +4,7 @@ use cssparser::{Parser, Token, match_ignore_ascii_case};
 
 use crate::style::{
   Animatable, Color, CssSyntaxKind, CssToken, FromCss, Length, MakeComputed, ParseResult,
-  SizingContext, ToCss, unexpected_token,
+  SizingContext, ToCss, discrete, unexpected_token,
 };
 
 /// Controls indentation of the first line, or hanging/each-line variants.
@@ -67,16 +67,8 @@ impl Animatable for TextIndent {
     self
       .amount
       .interpolate(&from.amount, &to.amount, progress, sizing, current_color);
-    self.each_line = if progress >= 0.5 {
-      to.each_line
-    } else {
-      from.each_line
-    };
-    self.hanging = if progress >= 0.5 {
-      to.hanging
-    } else {
-      from.hanging
-    };
+    self.each_line = discrete(&from.each_line, &to.each_line, progress);
+    self.hanging = discrete(&from.hanging, &to.hanging, progress);
   }
 }
 

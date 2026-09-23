@@ -5,7 +5,8 @@ use typed_builder::TypedBuilder;
 
 use crate::style::{
   Animatable, Color, ColorInput, CssSyntaxKind, CssToken, FromCss, FromCssStr, Length,
-  ListInterpolationStrategy, MakeComputed, ParseResult, SizingContext, ToCss, next_is_comma,
+  ListInterpolationStrategy, MakeComputed, ParseResult, SizingContext, ToCss, discrete,
+  next_is_comma,
 };
 
 /// Represents a box shadow with all its properties.
@@ -195,7 +196,7 @@ impl Animatable for BoxShadow {
     current_color: Color,
   ) {
     if from.inset != to.inset {
-      *self = if progress >= 0.5 { *to } else { *from };
+      *self = discrete(from, to, progress);
       return;
     }
 
