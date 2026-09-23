@@ -490,7 +490,7 @@ impl RuleIndex {
 
     for (order, rule) in rules.iter().enumerate() {
       let keys: SmallVec<[SelectorKey; 4]> =
-        rule.selectors().slice().iter().map(selector_key).collect();
+        rule.selectors.slice().iter().map(selector_key).collect();
 
       // A rule with one unindexable selector has to be visited by every node,
       // so it goes wholly into the unindexed bucket.
@@ -630,7 +630,7 @@ pub(crate) fn match_stylesheets_view<'a>(
       let mut best_before: Option<u32> = None;
       let mut best_after: Option<u32> = None;
 
-      for (selector_index, selector) in rule.selectors().slice().iter().enumerate() {
+      for (selector_index, selector) in rule.selectors.slice().iter().enumerate() {
         let Some(target) = selector_target(selector) else {
           continue;
         };
