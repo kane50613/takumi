@@ -1,7 +1,12 @@
 //! Public option, metadata and error types for the render and measure entry
 //! points, plus the page geometry constants.
 
-use std::{collections::HashMap, sync::Arc};
+use std::{
+  collections::HashMap,
+  error::Error,
+  fmt::{self, Display, Formatter},
+  sync::Arc,
+};
 
 use takumi_core::{
   Fonts,
@@ -68,8 +73,8 @@ pub enum PdfError {
   PageRangesOutOfBounds(usize),
 }
 
-impl std::fmt::Display for PdfError {
-  fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl Display for PdfError {
+  fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
     match self {
       Self::Render(error) => write!(f, "{error}"),
       Self::Font(error) => write!(f, "Font error: {error}"),
@@ -118,8 +123,8 @@ impl std::fmt::Display for PdfError {
   }
 }
 
-impl std::error::Error for PdfError {
-  fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+impl Error for PdfError {
+  fn source(&self) -> Option<&(dyn Error + 'static)> {
     match self {
       Self::Render(error) => Some(error),
       Self::Font(error) => Some(error),
@@ -279,8 +284,8 @@ impl PageRange {
   }
 }
 
-impl std::fmt::Display for PageRange {
-  fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl Display for PageRange {
+  fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
     match (self.from, self.to) {
       (Some(from), Some(to)) if from == to => write!(f, "{from}"),
       (from, to) => write!(
