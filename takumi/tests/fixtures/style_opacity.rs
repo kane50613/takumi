@@ -1,8 +1,10 @@
-use takumi::{prelude::*, render};
+use std::ops::Range;
 
-use crate::test_utils::CONTEXT;
+use takumi::prelude::*;
 
-fn darkest_pixel_in_range(image: &Bitmap, x_range: std::ops::Range<u32>) -> u8 {
+use crate::test_utils::render_node;
+
+fn darkest_pixel_in_range(image: &Bitmap, x_range: Range<u32>) -> u8 {
   let width = image.width();
 
   image
@@ -49,14 +51,7 @@ fn test_inline_text_span_opacity() {
       ))),
   );
 
-  let image = render(
-    RenderOptions::builder()
-      .viewport(Viewport::new((320, 120)))
-      .node(root)
-      .fonts(&CONTEXT)
-      .build(),
-  )
-  .unwrap();
+  let image = render_node(root, Viewport::new((320, 120)));
 
   let translucent_text = darkest_pixel_in_range(&image, 0..80);
   let opaque_text = darkest_pixel_in_range(&image, 140..240);

@@ -1,20 +1,9 @@
 mod test_utils;
 
-use takumi::{measure, prelude::*};
-use test_utils::CONTEXT;
+use std::str::FromStr;
 
-fn measure_with_css(node: Node, css: &str) -> MeasuredNode {
-  let stylesheet = StyleSheet::parse_loosy(css);
-  measure(
-    RenderOptions::builder()
-      .viewport(Viewport::new((1200, 630)))
-      .node(node)
-      .stylesheet(stylesheet.into())
-      .fonts(&CONTEXT)
-      .build(),
-  )
-  .unwrap()
-}
+use takumi::prelude::*;
+use test_utils::{block, measure_with_css};
 
 /// A block carrying the `style` object a JS caller would send, so the value
 /// takes the deserializing path rather than the typed builder.
@@ -22,12 +11,6 @@ fn styled_block(class: &str, style: serde_json::Value) -> Node {
   Node::container([])
     .with_class_name(class)
     .with_style(serde_json::from_value(style).expect("style should deserialize"))
-}
-
-fn block(class: &str) -> Node {
-  Node::container([])
-    .with_class_name(class)
-    .with_style(Style::default().with(StyleDeclaration::display(Display::Block)))
 }
 
 #[test]
@@ -71,12 +54,14 @@ fn descendant_selector_matches_after_sibling_subtrees() {
   assert_eq!(result.children[2].children[0].width, default_width);
 }
 
-fn tw_block(class: &str, tw: &str) -> Node {
-  use std::str::FromStr;
-
+fn tw_block(class: &str, values: &str) -> Node {
   Node::container([])
     .with_class_name(class)
-    .with_tw(TailwindValues::from_str(tw).expect("tailwind values should parse"))
+    .with_tw(tw(values))
+}
+
+fn tw(values: &str) -> TailwindValues {
+  TailwindValues::from_str(values).expect("tailwind values should parse")
 }
 
 #[test]
@@ -262,11 +247,9 @@ fn important_inline_wins_over_an_animation() {
 /// that is important too.
 #[test]
 fn preflight_hides_the_hidden_attribute() {
-  use std::str::FromStr;
-
   let hidden = Node::container([])
     .with_attributes([("hidden".into(), "".into())].into_iter().collect())
-    .with_tw(TailwindValues::from_str("block w-64!").expect("tailwind values should parse"));
+    .with_tw(tw("block w-64!"));
   let result = measure_with_css(Node::container([hidden]), r#"@import "tailwindcss";"#);
 
   assert_eq!(result.children[0].width, 0.0);
@@ -275,15 +258,13 @@ fn preflight_hides_the_hidden_attribute() {
 /// `until-found` is the one `hidden` value Preflight leaves visible.
 #[test]
 fn preflight_keeps_hidden_until_found_visible() {
-  use std::str::FromStr;
-
   let node = Node::container([])
     .with_attributes(
       [("hidden".into(), "until-found".into())]
         .into_iter()
         .collect(),
     )
-    .with_tw(TailwindValues::from_str("block w-64!").expect("tailwind values should parse"));
+    .with_tw(tw("block w-64!"));
   let result = measure_with_css(Node::container([node]), r#"@import "tailwindcss";"#);
 
   assert_eq!(result.children[0].width, 256.0);
@@ -379,11 +360,8 @@ fn a_registered_tw_property_keeps_its_initial_value() {
 /// rather than by a descendant.
 #[test]
 fn a_registered_property_reaches_the_root_element() {
-  let root = Node::container([])
-    .with_class_name("box")
-    .with_style(Style::default().with(StyleDeclaration::display(Display::Block)));
   let result = measure_with_css(
-    root,
+    block("box"),
     r#"
       @property --box-width {
         syntax: "<length>";
@@ -431,14 +409,12 @@ fn applied_gradient_state_stops_at_its_element() {
 /// descendant's own variable of the same name inherits normally.
 #[test]
 fn element_state_does_not_claim_the_whole_subtree() {
-  use std::str::FromStr;
-
   let inner = Node::container([block("leaf")])
     .with_class_name("mid")
     .with_style(Style::default().with(StyleDeclaration::display(Display::Block)));
   let root = Node::container([inner])
     .with_class_name("hero")
-    .with_tw(TailwindValues::from_str("translate-x-4").expect("tailwind values should parse"));
+    .with_tw(tw("translate-x-4"));
   let result = measure_with_css(
     root,
     r#"
@@ -453,11 +429,9 @@ fn element_state_does_not_claim_the_whole_subtree() {
 /// element state has to survive.
 #[test]
 fn important_utility_state_stops_at_its_element() {
-  use std::str::FromStr;
-
   let root = Node::container([block("leaf")])
     .with_class_name("hero")
-    .with_tw(TailwindValues::from_str("!translate-x-4").expect("tailwind values should parse"));
+    .with_tw(tw("!translate-x-4"));
   let result = measure_with_css(root, ".leaf { width: var(--tw-translate-x, 80px); }");
 
   assert_eq!(result.children[0].width, 80.0);
@@ -482,11 +456,9 @@ fn important_applied_state_stops_at_its_element() {
 /// holding Tailwind's own `@property` rule.
 #[test]
 fn an_author_value_over_utility_state_stops_at_its_element() {
-  use std::str::FromStr;
-
   let root = Node::container([block("leaf")])
     .with_class_name("hero")
-    .with_tw(TailwindValues::from_str("translate-x-4").expect("tailwind values should parse"));
+    .with_tw(tw("translate-x-4"));
   let result = measure_with_css(
     root,
     r#"
@@ -515,11 +487,9 @@ fn an_inline_tw_named_variable_still_inherits() {
 /// The plainest shape: state a `tw` attribute writes stops at its element.
 #[test]
 fn utility_state_stops_at_its_element() {
-  use std::str::FromStr;
-
   let root = Node::container([block("leaf")])
     .with_class_name("hero")
-    .with_tw(TailwindValues::from_str("translate-x-4").expect("tailwind values should parse"));
+    .with_tw(tw("translate-x-4"));
   let result = measure_with_css(root, ".leaf { width: var(--tw-translate-x, 80px); }");
 
   assert_eq!(result.children[0].width, 80.0);

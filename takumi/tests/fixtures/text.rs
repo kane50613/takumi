@@ -1,26 +1,9 @@
-use takumi::{prelude::*, render};
+use takumi::prelude::*;
 
-use crate::test_utils::{CONTEXT, run_fixture_test};
+use crate::test_utils::{ink_bounds, render_node, run_fixture_test};
 
 const ELLIPSIS_CANVAS_WIDTH: u32 = 480;
 const ELLIPSIS_CANVAS_HEIGHT: u32 = 200;
-
-fn rightmost_dark_column(image: &Bitmap) -> u32 {
-  let width = image.width();
-
-  image
-    .as_raw()
-    .as_chunks::<4>()
-    .0
-    .iter()
-    .enumerate()
-    .filter_map(|(index, pixel)| {
-      let dark = pixel[3] > 0 && pixel[0].min(pixel[1]).min(pixel[2]) < 160;
-      dark.then(|| index as u32 % width)
-    })
-    .max()
-    .unwrap_or(0)
-}
 
 fn unbreakable_ellipsis_root(text_overflow: TextOverflow) -> Node {
   let text = Node::text("gsijdsoifgdhaetlelwtyuxxxxxx".to_string()).with_style(
@@ -53,36 +36,17 @@ fn unbreakable_ellipsis_root(text_overflow: TextOverflow) -> Node {
 /// box edge; the ellipsis variant must stop short of it.
 #[test]
 fn test_nowrap_ellipsis_without_break_opportunity() {
-  let clipped = render(
-    RenderOptions::builder()
-      .viewport(Viewport::new((
-        ELLIPSIS_CANVAS_WIDTH,
-        ELLIPSIS_CANVAS_HEIGHT,
-      )))
-      .node(unbreakable_ellipsis_root(TextOverflow::Clip))
-      .fonts(&CONTEXT)
-      .build(),
-  )
-  .unwrap();
-  let ellipsized = render(
-    RenderOptions::builder()
-      .viewport(Viewport::new((
-        ELLIPSIS_CANVAS_WIDTH,
-        ELLIPSIS_CANVAS_HEIGHT,
-      )))
-      .node(unbreakable_ellipsis_root(TextOverflow::Ellipsis))
-      .fonts(&CONTEXT)
-      .build(),
-  )
-  .unwrap();
+  let viewport = Viewport::new((ELLIPSIS_CANVAS_WIDTH, ELLIPSIS_CANVAS_HEIGHT));
+  let clipped = render_node(unbreakable_ellipsis_root(TextOverflow::Clip), viewport);
+  let ellipsized = render_node(unbreakable_ellipsis_root(TextOverflow::Ellipsis), viewport);
 
   run_fixture_test(
     unbreakable_ellipsis_root(TextOverflow::Ellipsis),
     "text_ellipsis_nowrap_unbreakable",
   );
 
-  let clipped_right = rightmost_dark_column(&clipped);
-  let ellipsized_right = rightmost_dark_column(&ellipsized);
+  let (_, _, clipped_right, _) = ink_bounds(&clipped);
+  let (_, _, ellipsized_right, _) = ink_bounds(&ellipsized);
 
   assert!(
     clipped_right >= 355,

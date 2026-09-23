@@ -4,7 +4,9 @@
 //! positioning/color regressions without requiring pixel-exact parity with the
 //! raster backend (a different rasterizer).
 
-use std::{fs, path::Path};
+mod test_utils;
+
+use std::fs;
 
 use resvg::{
   tiny_skia::{Pixmap, Transform},
@@ -12,15 +14,17 @@ use resvg::{
 };
 use takumi::prelude::{Length::*, *};
 use takumi_svg::{SvgOptions, render};
+use test_utils::repo_base_path;
 
 const W: u32 = 200;
 const H: u32 = 100;
 
 fn context() -> Fonts {
   let mut fonts = Fonts::default();
-  let path = Path::new(env!("CARGO_MANIFEST_DIR"))
-    .join("../assets/fonts/archivo/Archivo-VariableFont_wdth,wght.ttf");
-  let data = fs::read(&path).expect("read test font");
+  let data = fs::read(repo_base_path(
+    "assets/fonts/archivo/Archivo-VariableFont_wdth,wght.ttf",
+  ))
+  .expect("read test font");
   fonts
     .register(FontResource::new(data))
     .expect("load test font");
@@ -58,7 +62,10 @@ fn assert_close(actual: [u8; 4], expected: [u8; 4], tol: i32) {
 }
 
 /// A viewport-filling container carrying the given style declarations.
-fn full_container(decls: impl IntoIterator<Item = StyleDeclaration>) -> Node {
+fn full_container(
+  children: impl Into<Vec<Node>>,
+  decls: impl IntoIterator<Item = StyleDeclaration>,
+) -> Node {
   let mut style = Style::default()
     .with(StyleDeclaration::display(Display::Flex))
     .with(StyleDeclaration::width(Percentage(100.0)))
@@ -66,14 +73,17 @@ fn full_container(decls: impl IntoIterator<Item = StyleDeclaration>) -> Node {
   for declaration in decls {
     style = style.with(declaration);
   }
-  Node::container([]).with_style(style)
+  Node::container(children).with_style(style)
 }
 
 #[test]
 fn solid_background_renders_as_fill() {
-  let node = full_container([StyleDeclaration::background_color(ColorInput::Value(
-    Color([255, 0, 0, 255]),
-  ))]);
+  let node = full_container(
+    [],
+    [StyleDeclaration::background_color(ColorInput::Value(
+      Color([255, 0, 0, 255]),
+    ))],
+  );
   let pixmap = rasterize(node, &context());
   assert_close(pixel(&pixmap, W / 2, H / 2), [255, 0, 0, 255], 2);
 }
@@ -82,7 +92,7 @@ fn solid_background_renders_as_fill() {
 fn linear_gradient_endpoints_match_stops() {
   let images = BackgroundImages::from_css_str("linear-gradient(to right, #ff0000, #0000ff)")
     .expect("parse gradient");
-  let node = full_container([StyleDeclaration::background_image(Some(images))]);
+  let node = full_container([], [StyleDeclaration::background_image(Some(images))]);
   let pixmap = rasterize(node, &context());
   assert_close(pixel(&pixmap, 1, H / 2), [255, 0, 0, 255], 12);
   assert_close(pixel(&pixmap, W - 2, H / 2), [0, 0, 255, 255], 12);
@@ -90,10 +100,13 @@ fn linear_gradient_endpoints_match_stops() {
 
 #[test]
 fn opacity_group_halves_alpha() {
-  let node = full_container([
-    StyleDeclaration::background_color(ColorInput::Value(Color([255, 0, 0, 255]))),
-    StyleDeclaration::opacity(PercentageNumber(0.5)),
-  ]);
+  let node = full_container(
+    [],
+    [
+      StyleDeclaration::background_color(ColorInput::Value(Color([255, 0, 0, 255]))),
+      StyleDeclaration::opacity(PercentageNumber(0.5)),
+    ],
+  );
   let pixmap = rasterize(node, &context());
   let [r, g, b, a] = pixel(&pixmap, W / 2, H / 2);
   assert!((120..=135).contains(&a), "alpha {a} not ~128");
@@ -109,14 +122,11 @@ fn text_renders_visible_glyphs() {
       ]))))
       .with(StyleDeclaration::font_size(FontSize::Length(Px(48.0)))),
   );
-  let node = Node::container([text]).with_style(
-    Style::default()
-      .with(StyleDeclaration::display(Display::Flex))
-      .with(StyleDeclaration::width(Percentage(100.0)))
-      .with(StyleDeclaration::height(Percentage(100.0)))
-      .with(StyleDeclaration::background_color(ColorInput::Value(
-        Color([255, 255, 255, 255]),
-      ))),
+  let node = full_container(
+    [text],
+    [StyleDeclaration::background_color(ColorInput::Value(
+      Color([255, 255, 255, 255]),
+    ))],
   );
   let pixmap = rasterize(node, &context());
   let dark = pixmap
@@ -142,14 +152,11 @@ fn underline_decoration_renders() {
           .build(),
       ),
   );
-  let node = Node::container([text]).with_style(
-    Style::default()
-      .with(StyleDeclaration::display(Display::Flex))
-      .with(StyleDeclaration::width(Percentage(100.0)))
-      .with(StyleDeclaration::height(Percentage(100.0)))
-      .with(StyleDeclaration::background_color(ColorInput::Value(
-        Color([255, 255, 255, 255]),
-      ))),
+  let node = full_container(
+    [text],
+    [StyleDeclaration::background_color(ColorInput::Value(
+      Color([255, 255, 255, 255]),
+    ))],
   );
   let pixmap = rasterize(node, &context());
   let red = pixmap
