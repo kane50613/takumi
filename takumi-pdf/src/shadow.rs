@@ -67,10 +67,7 @@ pub(crate) fn emit_inset_shadows(
   at: (f32, f32),
   surface: &mut Surface,
 ) {
-  let origin = CorePoint {
-    x: at.0 + clip.offset.x,
-    y: at.1 + clip.offset.y,
-  };
+  let origin = (at.0 + clip.offset.x, at.1 + clip.offset.y);
 
   for shadow in shadows.iter().rev() {
     for band in Band::of(shadow) {
@@ -95,13 +92,7 @@ pub(crate) fn emit_inset_shadows(
       hole
         .border
         .append_mask_commands(&mut commands, hole.size, hole.offset);
-      fill(
-        &commands,
-        shadow.color,
-        band.alpha,
-        (origin.x, origin.y),
-        surface,
-      );
+      fill(&commands, shadow.color, band.alpha, origin, surface);
     }
   }
 }

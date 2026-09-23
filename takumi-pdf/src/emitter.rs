@@ -1,6 +1,6 @@
 //! The scene walker that emits boxes, text and images onto a krilla surface.
 
-use std::{cell::RefCell, collections::HashMap, rc::Rc};
+use std::{cell::RefCell, collections::HashMap, ptr, rc::Rc};
 
 #[cfg(feature = "images")]
 use takumi_core::{
@@ -77,7 +77,7 @@ use crate::{
 
 /// What a box left on the surface for its caller to unwind.
 #[derive(Default)]
-pub(crate) struct BoxState {
+struct BoxState {
   /// Transforms, clips and layers to pop once the box and its children are done.
   pushed: usize,
   /// The `overflow` clip, popped before the outline so the outline escapes it.
@@ -87,18 +87,17 @@ pub(crate) struct BoxState {
 }
 
 /// An outline waiting for its box's state to be popped.
-#[derive(Clone)]
-pub(crate) struct PendingOutline {
+struct PendingOutline {
   outline: OutlineGeometry,
   x: f32,
   y: f32,
 }
 
 /// Blob identity, collection index, and the variation coordinates the run was shaped at.
-pub(crate) type FontKey = (u64, u32, Vec<([u8; 4], u32)>);
+type FontKey = (u64, u32, Vec<([u8; 4], u32)>);
 
 /// Krilla fonts embedded so far, one per distinct instance.
-pub(crate) type FontMap = HashMap<FontKey, Font>;
+type FontMap = HashMap<FontKey, Font>;
 
 pub(crate) struct Emitter<'a> {
   pub(crate) root: &'a RenderNode,
@@ -119,19 +118,19 @@ pub(crate) struct Emitter<'a> {
 }
 
 /// Failures a page collects while emitting, raised once the surface is closed.
-pub(crate) struct RenderIssues {
-  pub(crate) uncovered: Uncovered,
+struct RenderIssues {
+  uncovered: Uncovered,
   /// The first failure worth stopping for.
-  pub(crate) failure: Option<PdfError>,
+  failure: Option<PdfError>,
 }
 
 /// What every page of one document shares while it is emitted.
 pub(crate) struct DocumentState<'a> {
-  pub(crate) fonts: RefCell<FontMap>,
+  fonts: RefCell<FontMap>,
   /// Present when the document is tagged.
   pub(crate) tags: Option<RefCell<TagCollector>>,
   /// What the pages could not draw.
-  pub(crate) issues: RefCell<RenderIssues>,
+  issues: RefCell<RenderIssues>,
   /// The document's default language.
   pub(crate) lang: Option<&'a str>,
 }
@@ -193,15 +192,6 @@ impl Emitter<'_> {
     if issues.failure.is_none() {
       issues.failure = Some(error);
     }
-  }
-
-  /// Whether the run's line belongs to another page.
-  fn window_disowns_run(&self, run: &PositionedInlineRun, layout: Layout, y: f32) -> bool {
-    run.glyph_run.glyphs.first().is_some_and(|glyph| {
-      self
-        .window
-        .disowns_line(y + run.glyph_offset(layout).y + glyph.y)
-    })
   }
 
   /// The marked-content identifiers this walk records into, if it tags.
@@ -1659,11 +1649,15 @@ impl Emitter<'_> {
       return None;
     }
     let font = self.cached_font(shaped)?;
+    let offset = run.glyph_offset(layout);
 
-    if self.window_disowns_run(run, layout, y) {
+    if shaped
+      .glyphs
+      .first()
+      .is_some_and(|glyph| self.window.disowns_line(y + offset.y + glyph.y))
+    {
       return None;
     }
-    let offset = run.glyph_offset(layout);
     let text = built
       .text
       .get(shaped.text_range.clone())
@@ -1887,7 +1881,7 @@ fn image_label(src: &ImageSourceInput) -> &str {
 
 /// Fills `path` with the child indices leading from `root` to `target`, matched by identity.
 fn node_path(root: &RenderNode, target: &RenderNode, path: &mut Vec<usize>) -> bool {
-  if std::ptr::eq(root, target) {
+  if ptr::eq(root, target) {
     return true;
   }
   for (index, child) in root.children.iter().flatten().enumerate() {
