@@ -78,35 +78,43 @@ impl PageFrame {
       content_width,
       window_height: content_height,
       band_viewport,
-      page_area: Viewport::new((content_width as u32, content_height as u32))
-        .with_media_target(MediaTarget::Print)
-        .with_unit_reference(Size {
-          width: content_width,
-          height: content_height,
-        }),
+      page_area: print_viewport(
+        content_width,
+        Some(content_height),
+        (content_width, content_height),
+      ),
     })
   }
 
   /// The content column: content width, unbounded height. Viewport units
   /// take the page area, as in print media.
   pub(crate) fn column(&self) -> Viewport {
-    Viewport::new((self.content_width as u32, None))
-      .with_media_target(MediaTarget::Print)
-      .with_unit_reference(Size {
-        width: self.content_width,
-        height: self.window_height,
-      })
+    print_viewport(
+      self.content_width,
+      None,
+      (self.content_width, self.window_height),
+    )
   }
 }
 
 /// Full page width, unbounded height: what a band lays out against, with
 /// viewport units taking the whole page.
 pub(crate) fn band_viewport(page: &PageOptions) -> Viewport {
-  Viewport::new((page.width as u32, None))
+  print_viewport(page.width, None, (page.width, page.height))
+}
+
+/// A print-media viewport `width` wide, `height` tall or unbounded, whose
+/// viewport units resolve against `units`.
+fn print_viewport(
+  width: f32,
+  height: Option<f32>,
+  (unit_width, unit_height): (f32, f32),
+) -> Viewport {
+  Viewport::new((width as u32, height.map(|height| height as u32)))
     .with_media_target(MediaTarget::Print)
     .with_unit_reference(Size {
-      width: page.width,
-      height: page.height,
+      width: unit_width,
+      height: unit_height,
     })
 }
 
