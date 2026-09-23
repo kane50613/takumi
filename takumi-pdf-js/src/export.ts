@@ -316,7 +316,6 @@ export type RenderOptions = (PagedOptions | ViewportOptions) &
      * @deprecated Use `css` instead. Will be removed in v3.
      */
     stylesheets?: string[];
-    /** CSS custom properties for `:root`; the `--` prefix is optional. */
     /** Per-render font stack: ordered family names used as the fallback chain. */
     fontFamilies?: string[];
     /** Default BCP-47 language tag applied to the root. */

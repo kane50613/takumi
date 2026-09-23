@@ -7,6 +7,7 @@ use arc_swap::ArcSwap;
 use napi::bindgen_prelude::*;
 use napi_derive::napi;
 use serde::Deserialize;
+use takumi_bindings_common::css_or_stylesheets;
 use takumi_core::{
   Fonts,
   layout::node::Node,
@@ -153,15 +154,14 @@ pub(crate) fn resolve_css(
   css: Option<Object>,
   stylesheets: Option<Vec<String>>,
 ) -> Result<Option<Vec<CssSource>>> {
-  let Some(css) = css else {
-    return Ok(stylesheets.map(|sheets| sheets.into_iter().map(CssSource::Text).collect()));
-  };
+  let css = css
+    .map(|css| {
+      Vec::<CssSource>::deserialize(&mut De::new(&css))
+        .map_err(|error: napi::Error| Error::from_reason(error.to_string()))
+    })
+    .transpose()?;
 
-  let mut deserializer = De::new(&css);
-
-  Vec::<CssSource>::deserialize(&mut deserializer)
-    .map(Some)
-    .map_err(|error: napi::Error| Error::from_reason(error.to_string()))
+  Ok(css_or_stylesheets(css, stylesheets))
 }
 
 pub(crate) fn deserialize_keyframes(keyframes: Option<Object>) -> Result<Vec<CoreKeyframesRule>> {

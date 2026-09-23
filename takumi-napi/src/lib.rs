@@ -17,15 +17,9 @@ use std::fmt::Display;
 use napi::{De, Env, Error, bindgen_prelude::*};
 use napi_derive::napi;
 pub use renderer::Renderer;
-use serde::{
-  Deserialize, Deserializer,
-  de::{DeserializeOwned, Error as DeError},
-};
-use takumi_bindings_common::build_font_resource;
-use takumi_core::{
-  resources::{font::FontResource, glyph_cache},
-  style::{FontStyle, FromCssStr},
-};
+use serde::de::DeserializeOwned;
+use takumi_bindings_common::input::FontOptions;
+use takumi_core::resources::glyph_cache;
 
 /// Sets the byte budget shared by the resolved-glyph and glyph-mask caches;
 /// `0` stops caching. Defaults to 8 MiB.
@@ -84,35 +78,6 @@ impl From<takumi_core::resources::font::RegisteredFace> for RegisteredFace {
   }
 }
 
-#[derive(Deserialize, Default)]
-#[serde(rename_all = "camelCase")]
-pub(crate) struct FontInput {
-  pub name: Option<String>,
-  pub weight: Option<f64>,
-  pub style: Option<FontStyleInput>,
-  /// Logical family this font is a coverage subset of; expands at render time.
-  pub subset_of: Option<String>,
-  /// Where this subset sits in its group's fallback order; lowest is tried first.
-  pub subset_rank: Option<u32>,
-  /// CSS generic family keyword (e.g. `monospace`) this font resolves for.
-  pub generic: Option<String>,
-}
-
-#[derive(Clone, Copy)]
-pub(crate) struct FontStyleInput(pub FontStyle);
-
-impl<'de> Deserialize<'de> for FontStyleInput {
-  fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
-  where
-    D: Deserializer<'de>,
-  {
-    let s = String::deserialize(deserializer)?;
-    Ok(FontStyleInput(
-      FontStyle::from_css_str(&s).map_err(D::Error::custom)?,
-    ))
-  }
-}
-
 /// Ref-counted view of JS-owned bytes, sendable into async tasks without copying.
 /// Callers must not mutate the bytes on the JS side while a task reads them —
 /// the same aliasing contract Buffer inputs have always had.
@@ -153,35 +118,17 @@ impl JsBytes {
   }
 }
 
-pub(crate) fn parse_font_input(env: Env, font: Object) -> Result<(FontInput, JsBytes)> {
+pub(crate) fn parse_font_input(env: Env, font: Object) -> Result<(FontOptions, JsBytes)> {
   if let Ok(buffer) = JsBytes::from_object(env, font) {
-    Ok((FontInput::default(), buffer))
+    Ok((FontOptions::default(), buffer))
   } else {
     let buffer = font
       .get_named_property("data")
       .and_then(|buffer| JsBytes::from_object(env, buffer))?;
-    let font: FontInput = deserialize_with_tracing(font).map_err(map_error)?;
+    let font: FontOptions = deserialize_with_tracing(font).map_err(map_error)?;
 
     Ok((font, buffer))
   }
-}
-
-pub(crate) fn resolve_font_resource<'a>(
-  font: &'a FontInput,
-  buffer: &'a [u8],
-) -> Result<FontResource<'a>> {
-  build_font_resource(
-    buffer,
-    font.name.clone(),
-    font.weight.map(|weight| weight as f32),
-    font.style.map(|style| style.0),
-    font.subset_of.clone(),
-    font.subset_rank,
-    font.generic.clone(),
-  )
-  .map_err(map_error)?
-  .into_resolved()
-  .map_err(map_error)
 }
 
 pub(crate) fn deserialize_with_tracing<T: DeserializeOwned>(value: Object) -> Result<T> {

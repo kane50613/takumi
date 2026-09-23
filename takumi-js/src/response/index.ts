@@ -22,10 +22,8 @@ function defaultErrorHandler(error: unknown) {
   console.error(error);
 }
 
-function buildImageResponse(
-  element: RenderInput,
-  options?: ImageResponseOptions,
-): ImageResponseResult {
+/** Streams the rendered image; `ready` settles once the render finishes or fails. */
+function renderStream(element: RenderInput, options?: ImageResponseOptions) {
   let resolveReady: (value: void | PromiseLike<void>) => void;
   let rejectReady: (reason?: unknown) => void;
   const ready = new Promise<void>((resolve, reject) => {
@@ -54,23 +52,8 @@ function buildImageResponse(
       }
     },
   });
-  const headers = new Headers(options?.headers);
 
-  if (!headers.get("content-type")) {
-    headers.set("content-type", contentTypeMap[options?.format ?? "png"]);
-  }
-
-  const response = new Response(stream, {
-    headers,
-    status: options?.status,
-    statusText: options?.statusText,
-  });
-
-  return Object.defineProperty(response, "ready", {
-    enumerable: false,
-    value: ready,
-    writable: false,
-  }) as ImageResponseResult;
+  return { stream, ready };
 }
 
 /**
@@ -100,10 +83,15 @@ export class ImageResponse extends Response {
   readonly ready: Promise<void>;
 
   constructor(component: RenderInput, options?: ImageResponseOptions) {
-    const response = buildImageResponse(component, options);
+    const { stream, ready } = renderStream(component, options);
+    const headers = new Headers(options?.headers);
 
-    super(response.body, response);
-    this.ready = response.ready;
+    if (!headers.get("content-type")) {
+      headers.set("content-type", contentTypeMap[options?.format ?? "png"]);
+    }
+
+    super(stream, { headers, status: options?.status, statusText: options?.statusText });
+    this.ready = ready;
   }
 }
 

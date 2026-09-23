@@ -16,7 +16,7 @@ use takumi_core::{
     font::{FontError, FontOverride, FontResource},
     image::ResourceCache,
   },
-  style::{CssSource, CssSourceError, FontStyle, KeyframesRule, StyleSheet},
+  style::{CssSource, CssSourceError, KeyframesRule, StyleSheet},
 };
 
 /// Last-resort only: no generic family claim, so `sans-serif` and friends
@@ -45,35 +45,13 @@ pub fn default_fonts() -> Result<Fonts, FontError> {
   Ok(fonts)
 }
 
-/// Builds a font resource from normalized optional fields. Each binding pulls
-/// these out of its own input type before calling in.
-pub fn build_font_resource<'a>(
-  bytes: &'a [u8],
-  name: Option<String>,
-  weight: Option<f32>,
-  style: Option<FontStyle>,
-  subset_of: Option<String>,
-  subset_rank: Option<u32>,
-  generic: Option<String>,
-) -> Result<FontResource<'a>, FontError> {
-  let resource = FontResource::new(bytes).override_info(FontOverride {
-    family_name: name.map(Into::into),
-    weight,
-    style,
-    ..Default::default()
-  });
-
-  let resource = match subset_of {
-    Some(logical) => resource
-      .subset_of(logical)
-      .subset_rank(subset_rank.unwrap_or_default()),
-    None => resource,
-  };
-
-  match generic {
-    Some(generic) => Ok(resource.generic_family(generic.parse()?)),
-    None => Ok(resource),
-  }
+/// The CSS for a render, taking the deprecated `stylesheets` alias when `css`
+/// is absent.
+pub fn css_or_stylesheets(
+  css: Option<Vec<CssSource>>,
+  stylesheets: Option<Vec<String>>,
+) -> Option<Vec<CssSource>> {
+  css.or_else(|| stylesheets.map(|sheets| sheets.into_iter().map(CssSource::Text).collect()))
 }
 
 /// The stylesheet for a render: the loose-parsed sheet list with its keyframes.

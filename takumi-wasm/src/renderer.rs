@@ -8,11 +8,10 @@ use std::{
 use base64::{Engine, prelude::BASE64_STANDARD};
 use serde_wasm_bindgen::{from_value, to_value};
 use takumi_bindings_common::{
-  default_fonts,
+  css_or_stylesheets, default_fonts,
   input::{decode_images, register_font},
   stylesheet,
 };
-use takumi_core::style::CssSource;
 use takumi_core::{
   Fonts,
   layout::node::Node,
@@ -56,7 +55,7 @@ fn raster_options<'fonts>(
 ) -> Result<takumi_raster::RenderOptions<'fonts>, js_sys::Error> {
   let stylesheet = stylesheet(
     resource_cache,
-    resolve_css(options.css, options.stylesheets),
+    css_or_stylesheets(options.css, options.stylesheets),
     options.keyframes.unwrap_or_default(),
   )
   .map_err(map_error)?;
@@ -200,7 +199,7 @@ impl Renderer {
     let images = self.images_map(options.images.as_deref())?;
     let stylesheet = stylesheet(
       &self.resource_cache,
-      resolve_css(options.css, options.stylesheets),
+      css_or_stylesheets(options.css, options.stylesheets),
       options.keyframes.unwrap_or_default(),
     )
     .map_err(map_error)?;
@@ -318,7 +317,7 @@ impl Renderer {
     let draw_debug_border = draw_debug_border.unwrap_or_default();
     let stylesheet = stylesheet(
       &self.resource_cache,
-      resolve_css(css, stylesheets),
+      css_or_stylesheets(css, stylesheets),
       keyframes.unwrap_or_default(),
     )
     .map_err(map_error)?;
@@ -356,13 +355,4 @@ impl Renderer {
 
     Ok(buffer)
   }
-}
-
-/// The CSS for a render, taking the deprecated `stylesheets` alias when `css`
-/// is absent.
-fn resolve_css(
-  css: Option<Vec<CssSource>>,
-  stylesheets: Option<Vec<String>>,
-) -> Option<Vec<CssSource>> {
-  css.or_else(|| stylesheets.map(|sheets| sheets.into_iter().map(CssSource::Text).collect()))
 }
