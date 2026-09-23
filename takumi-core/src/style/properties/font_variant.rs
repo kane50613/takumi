@@ -38,6 +38,7 @@ impl FontVariantLigatures {
 
   fn set_keyword(&mut self, ident: &str) -> bool {
     match_ignore_ascii_case! { ident,
+      "none" => *self = Self::none(),
       "common-ligatures" => self.common = LigatureState::Enabled,
       "no-common-ligatures" => self.common = LigatureState::Disabled,
       "discretionary-ligatures" => self.discretionary = LigatureState::Enabled,
@@ -51,7 +52,7 @@ impl FontVariantLigatures {
     true
   }
 
-  fn append_features(&self, out: &mut Vec<FontFeature>) {
+  pub(crate) fn append_features(&self, out: &mut Vec<FontFeature>) {
     for (state, tags) in [
       (self.common, &[b"liga", b"clig"][..]),
       (self.discretionary, &[b"dlig"][..]),
@@ -75,21 +76,7 @@ impl Animatable for FontVariantLigatures {}
 
 impl<'i> FromCss<'i> for FontVariantLigatures {
   fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
-    let mut value = Self::default();
-    while !input.is_exhausted() {
-      let location = input.current_source_location();
-      let ident = input.expect_ident()?;
-      match_ignore_ascii_case! { ident,
-        "normal" => {},
-        "none" => value = Self::none(),
-        _ => {
-          if !value.set_keyword(ident) {
-            return Err(unexpected_token!(location, &Token::Ident(ident.to_owned())));
-          }
-        },
-      }
-    }
-    Ok(value)
+    parse_keyword_set(input, Self::set_keyword)
   }
 
   const VALID_TOKENS: &'static [CssToken] = &[
@@ -183,7 +170,7 @@ impl FontVariantNumeric {
     true
   }
 
-  fn append_features(&self, out: &mut Vec<FontFeature>) {
+  pub(crate) fn append_features(&self, out: &mut Vec<FontFeature>) {
     match self.figure {
       NumericFigure::Normal => {}
       NumericFigure::Lining => out.push(FontFeature::new(Tag::new(b"lnum"), 1)),
@@ -213,20 +200,7 @@ impl Animatable for FontVariantNumeric {}
 
 impl<'i> FromCss<'i> for FontVariantNumeric {
   fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
-    let mut value = Self::default();
-    while !input.is_exhausted() {
-      let location = input.current_source_location();
-      let ident = input.expect_ident()?;
-      match_ignore_ascii_case! { ident,
-        "normal" => {},
-        _ => {
-          if !value.set_keyword(ident) {
-            return Err(unexpected_token!(location, &Token::Ident(ident.to_owned())));
-          }
-        },
-      }
-    }
-    Ok(value)
+    parse_keyword_set(input, Self::set_keyword)
   }
 
   const VALID_TOKENS: &'static [CssToken] = &[
@@ -316,7 +290,7 @@ impl FontVariantEastAsian {
     true
   }
 
-  fn append_features(&self, out: &mut Vec<FontFeature>) {
+  pub(crate) fn append_features(&self, out: &mut Vec<FontFeature>) {
     match self.form {
       EastAsianForm::Normal => {}
       EastAsianForm::Jis78 => out.push(FontFeature::new(Tag::new(b"jp78"), 1)),
@@ -342,20 +316,7 @@ impl Animatable for FontVariantEastAsian {}
 
 impl<'i> FromCss<'i> for FontVariantEastAsian {
   fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
-    let mut value = Self::default();
-    while !input.is_exhausted() {
-      let location = input.current_source_location();
-      let ident = input.expect_ident()?;
-      match_ignore_ascii_case! { ident,
-        "normal" => {},
-        _ => {
-          if !value.set_keyword(ident) {
-            return Err(unexpected_token!(location, &Token::Ident(ident.to_owned())));
-          }
-        },
-      }
-    }
-    Ok(value)
+    parse_keyword_set(input, Self::set_keyword)
   }
 
   const VALID_TOKENS: &'static [CssToken] = &[
@@ -417,7 +378,7 @@ pub enum FontVariantCaps {
 }
 
 impl FontVariantCaps {
-  fn append_features(&self, out: &mut Vec<FontFeature>) {
+  pub(crate) fn append_features(&self, out: &mut Vec<FontFeature>) {
     match self {
       Self::Normal => {}
       Self::SmallCaps => out.push(FontFeature::new(Tag::new(b"smcp"), 1)),
@@ -460,7 +421,7 @@ pub enum FontVariantPosition {
 }
 
 impl FontVariantPosition {
-  fn append_features(&self, out: &mut Vec<FontFeature>) {
+  pub(crate) fn append_features(&self, out: &mut Vec<FontFeature>) {
     match self {
       Self::Normal => {}
       Self::Sub => out.push(FontFeature::new(Tag::new(b"subs"), 1)),
@@ -476,21 +437,27 @@ impl_css_enum!(
   "super" => FontVariantPosition::Super,
 );
 
-/// Appends every resolved `font-variant-*` feature to `out`, in property order. The caller
-/// appends `font-feature-settings` afterwards so explicit settings win on tag conflicts.
-pub(crate) fn append_variant_features(
-  ligatures: &FontVariantLigatures,
-  numeric: &FontVariantNumeric,
-  east_asian: &FontVariantEastAsian,
-  caps: &FontVariantCaps,
-  position: &FontVariantPosition,
-  out: &mut Vec<FontFeature>,
-) {
-  ligatures.append_features(out);
-  numeric.append_features(out);
-  east_asian.append_features(out);
-  caps.append_features(out);
-  position.append_features(out);
+/// Parses `normal` or a space-separated run of keywords that `set_keyword` accepts.
+fn parse_keyword_set<'i, T: Default + FromCss<'i>>(
+  input: &mut Parser<'i, '_>,
+  set_keyword: fn(&mut T, &str) -> bool,
+) -> ParseResult<'i, T> {
+  let mut value = T::default();
+
+  while !input.is_exhausted() {
+    let location = input.current_source_location();
+    let ident = input.expect_ident()?;
+
+    if !ident.eq_ignore_ascii_case("normal") && !set_keyword(&mut value, ident) {
+      return Err(unexpected_token!(
+        T,
+        location,
+        &Token::Ident(ident.to_owned())
+      ));
+    }
+  }
+
+  Ok(value)
 }
 
 /// The `font-variant` shorthand. Only the subset of values takumi maps to OpenType features is
@@ -517,10 +484,6 @@ impl<'i> FromCss<'i> for FontVariant {
       let ident = input.expect_ident()?;
 
       if ident.eq_ignore_ascii_case("normal") {
-        continue;
-      }
-      if ident.eq_ignore_ascii_case("none") {
-        value.ligatures = FontVariantLigatures::none();
         continue;
       }
       if value.ligatures.set_keyword(ident)

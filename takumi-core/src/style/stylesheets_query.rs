@@ -150,8 +150,7 @@ impl ComputedStyle {
       .or_else(|| sizing.viewport.size.height.map(|height| height as f32))
       .unwrap_or(height);
     if let Some(path) = &self.offset_path
-      && let Some((point, tangent)) = sample_offset_path(
-        path,
+      && let Some((point, tangent)) = path.sample(
         self.offset_distance,
         &self.offset_position,
         sizing,
@@ -298,14 +297,11 @@ impl ComputedStyle {
   /// `font-variant-*` is active, avoiding an allocation.
   pub(crate) fn resolved_font_features(&self) -> Cow<'_, [FontFeature]> {
     let mut features = Vec::new();
-    append_variant_features(
-      &self.font_variant_ligatures,
-      &self.font_variant_numeric,
-      &self.font_variant_east_asian,
-      &self.font_variant_caps,
-      &self.font_variant_position,
-      &mut features,
-    );
+    self.font_variant_ligatures.append_features(&mut features);
+    self.font_variant_numeric.append_features(&mut features);
+    self.font_variant_east_asian.append_features(&mut features);
+    self.font_variant_caps.append_features(&mut features);
+    self.font_variant_position.append_features(&mut features);
     self.font_kerning.append_features(&mut features);
 
     if features.is_empty() {

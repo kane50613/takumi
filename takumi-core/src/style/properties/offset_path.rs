@@ -1,7 +1,13 @@
-use std::{f32::consts::FRAC_PI_2, fmt};
+use std::{
+  f32::consts::{FRAC_PI_2, PI},
+  fmt,
+};
 
 use cssparser::Parser;
-use kurbo::{BezPath, ParamCurve, ParamCurveArclen, PathEl, PathSeg, Shape};
+use kurbo::{
+  Affine as KurboAffine, BezPath, Ellipse, ParamCurve, ParamCurveArclen, PathEl, PathSeg, Rect,
+  Shape,
+};
 
 use crate::{
   geometry::{Point, Size},
@@ -30,7 +36,7 @@ pub enum RaySize {
   Sides,
 }
 
-crate::style::properties::impl_css_enum!(
+impl_css_enum!(
   RaySize,
   "closest-side" => RaySize::ClosestSide,
   "closest-corner" => RaySize::ClosestCorner,
@@ -223,7 +229,7 @@ impl OffsetAnchor {
     match self {
       OffsetAnchor::Auto => None,
       OffsetAnchor::Position(position) => {
-        let point = position_point(&position, sizing, Size { width, height });
+        let point = position.to_point(sizing, Size { width, height });
         Some((point.x, point.y))
       }
     }
@@ -279,7 +285,7 @@ impl MakeComputed for OffsetPosition {
 impl OffsetPosition {
   fn resolve(self, sizing: &SizingContext, border_box: Size<f32>) -> Option<Point<f32>> {
     match self {
-      OffsetPosition::Position(position) => Some(position_point(&position, sizing, border_box)),
+      OffsetPosition::Position(position) => Some(position.to_point(sizing, border_box)),
       _ => None,
     }
   }
@@ -342,7 +348,7 @@ impl OffsetRotate {
   pub fn resolve(self, tangent_radians: f32) -> f32 {
     match self {
       Self::Auto(angle) => tangent_radians + angle.to_radians(),
-      Self::Reverse(angle) => tangent_radians + std::f32::consts::PI + angle.to_radians(),
+      Self::Reverse(angle) => tangent_radians + PI + angle.to_radians(),
       Self::Fixed(angle) => angle.to_radians(),
     }
   }
@@ -479,22 +485,25 @@ impl<'i> FromCss<'i> for OffsetShorthand {
       .ok()
       .flatten();
 
-    let mut distance = Length::default();
-    let mut rotate = OffsetRotate::default();
+    let mut distance = None;
+    let mut rotate = None;
+
     if path.is_some() {
-      let mut got_distance = false;
-      let mut got_rotate = false;
       loop {
-        if !got_distance && let Ok(value) = input.try_parse(Length::from_css) {
-          distance = value;
-          got_distance = true;
+        if distance.is_none()
+          && let Ok(value) = input.try_parse(Length::from_css)
+        {
+          distance = Some(value);
           continue;
         }
-        if !got_rotate && let Ok(value) = input.try_parse(OffsetRotate::from_css) {
-          rotate = value;
-          got_rotate = true;
+
+        if rotate.is_none()
+          && let Ok(value) = input.try_parse(OffsetRotate::from_css)
+        {
+          rotate = Some(value);
           continue;
         }
+
         break;
       }
     }
@@ -508,8 +517,8 @@ impl<'i> FromCss<'i> for OffsetShorthand {
     Ok(OffsetShorthand {
       position,
       path,
-      distance,
-      rotate,
+      distance: distance.unwrap_or_default(),
+      rotate: rotate.unwrap_or_default(),
       anchor,
     })
   }
@@ -517,22 +526,15 @@ impl<'i> FromCss<'i> for OffsetShorthand {
   const VALID_TOKENS: &'static [CssToken] = OffsetPath::VALID_TOKENS;
 }
 
-fn position_point(position: &ShapePosition, sizing: &SizingContext, size: Size<f32>) -> Point<f32> {
-  Point {
-    x: position.0.x.to_px(sizing, size.width),
-    y: position.0.y.to_px(sizing, size.height),
-  }
-}
-
 fn resolve_radius(
   radius: ShapeRadius,
-  center: Size<f32>,
+  center: Point<f32>,
   sizing: &SizingContext,
   full: f32,
 ) -> f64 {
   f64::from(match radius {
-    ShapeRadius::ClosestSide => center.width.min(center.height),
-    ShapeRadius::FarthestSide => center.width.max(center.height),
+    ShapeRadius::ClosestSide => center.x.min(center.y),
+    ShapeRadius::FarthestSide => center.x.max(center.y),
     ShapeRadius::Length(length) => length.to_px(sizing, full),
   })
 }
@@ -550,7 +552,7 @@ fn basic_shape_to_bezpath(
     BasicShape::Path(path_shape) => {
       // path() coords are CSS px; scale to device space like the to_px shapes.
       let mut path = BezPath::from_svg(&path_shape.path).ok()?;
-      path.apply_affine(kurbo::Affine::scale(f64::from(sizing.to_device(1.0))));
+      path.apply_affine(KurboAffine::scale(f64::from(sizing.to_device(1.0))));
       Some(path)
     }
     BasicShape::Polygon(polygon) => {
@@ -565,14 +567,11 @@ fn basic_shape_to_bezpath(
       Some(path)
     }
     BasicShape::Ellipse(ellipse) => {
-      let center = Size {
-        width: ellipse.position.0.x.to_px(sizing, size.width),
-        height: ellipse.position.0.y.to_px(sizing, size.height),
-      };
+      let center = ellipse.position.to_point(sizing, size);
       let radius_x = resolve_radius(ellipse.radius_x, center, sizing, size.width);
       let radius_y = resolve_radius(ellipse.radius_y, center, sizing, size.height);
-      let ellipse = kurbo::Ellipse::new(
-        (f64::from(center.width), f64::from(center.height)),
+      let ellipse = Ellipse::new(
+        (f64::from(center.x), f64::from(center.y)),
         (radius_x, radius_y),
         0.0,
       );
@@ -581,7 +580,7 @@ fn basic_shape_to_bezpath(
     BasicShape::Inset(inset) => {
       // ponytail: rounded-inset corners ignored for offset-path sampling.
       let [top, right, bottom, left] = inset.inset.0;
-      let rect = kurbo::Rect::new(
+      let rect = Rect::new(
         px(left, size.width),
         px(top, size.height),
         f64::from(size.width) - px(right, size.width),
@@ -711,9 +710,9 @@ fn sample_ray(
   let start = ray
     .position
     .as_ref()
-    .map(|position| position_point(position, sizing, border_box))
+    .map(|position| position.to_point(sizing, border_box))
     .or_else(|| offset_position.resolve(sizing, border_box))
-    .unwrap_or_else(|| position_point(&ShapePosition::default(), sizing, border_box));
+    .unwrap_or_else(|| ShapePosition::default().to_point(sizing, border_box));
 
   let length = ray_length(start, ray, border_box);
   let traveled = distance.to_px(sizing, length);
@@ -729,37 +728,39 @@ fn sample_ray(
   )
 }
 
-/// Samples an `offset-path` at `distance`, returning the point (box-local px)
-/// and tangent direction (radians).
-pub(crate) fn sample_offset_path(
-  path: &OffsetPath,
-  distance: Length,
-  offset_position: &OffsetPosition,
-  sizing: &SizingContext,
-  border_box: Size<f32>,
-) -> Option<(Point<f32>, f32)> {
-  match path {
-    OffsetPath::Ray(ray) => Some(sample_ray(
-      ray,
-      distance,
-      offset_position,
-      sizing,
-      border_box,
-    )),
-    OffsetPath::Shape(shape) => sample_bezpath(
-      &basic_shape_to_bezpath(shape, sizing, border_box)?,
-      distance,
-      sizing,
-    ),
-    OffsetPath::CoordBox(_) => {
-      // Every coord box falls back to the available border box.
-      let rect = kurbo::Rect::new(
-        0.0,
-        0.0,
-        f64::from(border_box.width),
-        f64::from(border_box.height),
-      );
-      sample_bezpath(&rect.to_path(ARCLEN_ACCURACY), distance, sizing)
+impl OffsetPath {
+  /// Samples the path at `distance`, returning the point (box-local px) and
+  /// tangent direction (radians).
+  pub(crate) fn sample(
+    &self,
+    distance: Length,
+    offset_position: &OffsetPosition,
+    sizing: &SizingContext,
+    border_box: Size<f32>,
+  ) -> Option<(Point<f32>, f32)> {
+    match self {
+      OffsetPath::Ray(ray) => Some(sample_ray(
+        ray,
+        distance,
+        offset_position,
+        sizing,
+        border_box,
+      )),
+      OffsetPath::Shape(shape) => sample_bezpath(
+        &basic_shape_to_bezpath(shape, sizing, border_box)?,
+        distance,
+        sizing,
+      ),
+      OffsetPath::CoordBox(_) => {
+        // Every coord box falls back to the available border box.
+        let rect = Rect::new(
+          0.0,
+          0.0,
+          f64::from(border_box.width),
+          f64::from(border_box.height),
+        );
+        sample_bezpath(&rect.to_path(ARCLEN_ACCURACY), distance, sizing)
+      }
     }
   }
 }
@@ -813,14 +814,14 @@ mod tests {
       height: 200.0,
     };
 
-    let (point, tangent) = sample_offset_path(
-      &path,
-      Length::Percentage(50.0),
-      &OffsetPosition::Normal,
-      &test_sizing(),
-      size,
-    )
-    .unwrap();
+    let (point, tangent) = path
+      .sample(
+        Length::Percentage(50.0),
+        &OffsetPosition::Normal,
+        &test_sizing(),
+        size,
+      )
+      .unwrap();
 
     assert!((point.x - 50.0).abs() < 0.5, "x = {}", point.x);
     assert!(point.y.abs() < 0.5, "y = {}", point.y);
@@ -835,14 +836,14 @@ mod tests {
       height: 200.0,
     };
 
-    let (point, _) = sample_offset_path(
-      &path,
-      Length::Percentage(150.0),
-      &OffsetPosition::Normal,
-      &test_sizing(),
-      size,
-    )
-    .unwrap();
+    let (point, _) = path
+      .sample(
+        Length::Percentage(150.0),
+        &OffsetPosition::Normal,
+        &test_sizing(),
+        size,
+      )
+      .unwrap();
     assert!((point.x - 100.0).abs() < 0.5, "x = {}", point.x);
   }
 
@@ -857,14 +858,14 @@ mod tests {
       .viewport(Viewport::new((400, 400)).with_device_pixel_ratio(2.0))
       .build();
 
-    let (point, _) = sample_offset_path(
-      &path,
-      Length::Percentage(50.0),
-      &OffsetPosition::Normal,
-      &sizing,
-      size,
-    )
-    .unwrap();
+    let (point, _) = path
+      .sample(
+        Length::Percentage(50.0),
+        &OffsetPosition::Normal,
+        &sizing,
+        size,
+      )
+      .unwrap();
 
     // The authored 100px line is CSS px; at dpr 2 its midpoint sits at 100 device px.
     assert!((point.x - 100.0).abs() < 0.5, "x = {}", point.x);
@@ -879,14 +880,14 @@ mod tests {
     };
 
     // Start at center (100, 100); 0deg points up, so distance moves -y.
-    let (point, _) = sample_offset_path(
-      &path,
-      Length::Px(50.0),
-      &OffsetPosition::Normal,
-      &test_sizing(),
-      size,
-    )
-    .unwrap();
+    let (point, _) = path
+      .sample(
+        Length::Px(50.0),
+        &OffsetPosition::Normal,
+        &test_sizing(),
+        size,
+      )
+      .unwrap();
 
     assert!((point.x - 100.0).abs() < 0.5, "x = {}", point.x);
     assert!((point.y - 50.0).abs() < 0.5, "y = {}", point.y);
@@ -901,14 +902,14 @@ mod tests {
     };
 
     // Start at (0,0); 90deg points right, so distance moves +x.
-    let (point, _) = sample_offset_path(
-      &path,
-      Length::Px(30.0),
-      &OffsetPosition::Normal,
-      &test_sizing(),
-      size,
-    )
-    .unwrap();
+    let (point, _) = path
+      .sample(
+        Length::Px(30.0),
+        &OffsetPosition::Normal,
+        &test_sizing(),
+        size,
+      )
+      .unwrap();
 
     assert!((point.x - 30.0).abs() < 0.5, "x = {}", point.x);
     assert!(point.y.abs() < 0.5, "y = {}", point.y);

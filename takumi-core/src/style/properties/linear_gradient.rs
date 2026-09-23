@@ -3,14 +3,14 @@ use std::{
   ops::{Deref, Neg},
 };
 
-use cssparser::{Parser, Token, match_ignore_ascii_case};
+use cssparser::{Parser, Token};
 use smallvec::SmallVec;
 use tiny_skia::PremultipliedColorU8;
 use typed_builder::TypedBuilder;
 
 use super::gradient_utils::{
-  ColorLut, GradientOverlayTile, LutAxis, gradient_tile_accessors, parse_gradient_stops,
-  write_gradient_css,
+  ColorLut, GradientOverlayTile, LutAxis, gradient_tile_accessors, parse_gradient_function,
+  parse_gradient_stops, write_gradient_css,
 };
 use crate::style::{
   Animatable, Color, ColorInterpolationMethod, CssDescriptorKind, CssSyntaxKind, CssToken, FromCss,
@@ -57,11 +57,8 @@ pub struct LinearGradientGeometry {
 
 impl LinearGradient {
   fn direction_components(&self, width: u32, height: u32) -> (f32, f32) {
-    match self.direction {
-      LinearGradientDirection::Angle(angle) => {
-        let rad = angle.0.to_radians();
-        (rad.sin(), -rad.cos())
-      }
+    let angle = match self.direction {
+      LinearGradientDirection::Angle(angle) => angle,
       LinearGradientDirection::Keyword(keyword_direction) => {
         if let (Some(horizontal), Some(vertical)) =
           (keyword_direction.horizontal, keyword_direction.vertical)
@@ -75,16 +72,18 @@ impl LinearGradient {
             VerticalKeyword::Bottom => width as f32,
           };
           let magnitude = dir_x.hypot(dir_y);
+
           if magnitude > f32::EPSILON {
             return (dir_x / magnitude, dir_y / magnitude);
           }
         }
 
-        let angle = keyword_direction.to_angle();
-        let rad = angle.0.to_radians();
-        (rad.sin(), -rad.cos())
+        keyword_direction.to_angle()
       }
-    }
+    };
+    let rad = angle.0.to_radians();
+
+    (rad.sin(), -rad.cos())
   }
 
   /// Resolves the geometry and stops for a target viewport.
@@ -299,11 +298,7 @@ impl LinearGradientTile {
     };
     let lut = axis.lut(lut_size, gradient.interpolation, dither);
     let lut_len = lut.len();
-    let position_to_lut_scale = if axis.length.abs() <= f32::EPSILON || lut_len <= 1 {
-      0.0
-    } else {
-      (lut_len - 1) as f32 / axis.length
-    };
+    let position_to_lut_scale = axis.position_to_lut_scale(lut_len);
     let fully_opaque = axis.stops.iter().all(|stop| stop.color.0[3] == u8::MAX);
 
     let mut tile = LinearGradientTile {
@@ -639,7 +634,17 @@ impl VerticalKeyword {
 impl GradientKeywordDirection {
   /// Converts a side-or-corner direction into the matching CSS angle.
   pub(crate) fn to_angle(self) -> Angle {
-    Angle::degrees_from_keywords(self.horizontal, self.vertical)
+    match (self.horizontal, self.vertical) {
+      (None, None) => Angle::new(180.0),
+      (Some(horizontal), None) => Angle::new(horizontal.degrees()),
+      (None, Some(vertical)) => Angle::new(vertical.degrees()),
+      (Some(horizontal), Some(VerticalKeyword::Top)) => {
+        Angle::new(horizontal.vertical_mixed_degrees())
+      }
+      (Some(horizontal), Some(VerticalKeyword::Bottom)) => {
+        Angle::new(180.0 - horizontal.vertical_mixed_degrees())
+      }
+    }
   }
 }
 
@@ -692,15 +697,13 @@ impl<'i> FromCss<'i> for LinearGradientDirection {
   const VALID_TOKENS: &'static [CssToken] = Angle::VALID_TOKENS;
 }
 
+impl LinearGradient {
+  const FUNCTION_NAMES: [&'static str; 2] = ["linear-gradient", "repeating-linear-gradient"];
+}
+
 impl<'i> FromCss<'i> for LinearGradient {
   fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, LinearGradient> {
-    let location = input.current_source_location();
-    let name = input.expect_function()?;
-    let repeating = match_ignore_ascii_case! { &name,
-      "linear-gradient" => false,
-      "repeating-linear-gradient" => true,
-      _ => return Err(unexpected_token!(location, &Token::Function(name.clone()))),
-    };
+    let repeating = parse_gradient_function::<Self>(input, Self::FUNCTION_NAMES)?;
 
     input.parse_nested_block(|input| {
       let mut direction = LinearGradientDirection::default();
@@ -741,26 +744,6 @@ impl<'i> FromCss<'i> for LinearGradient {
 
   const VALID_TOKENS: &'static [CssToken] =
     &[CssToken::Descriptor(CssDescriptorKind::LinearGradientFn)];
-}
-
-impl Angle {
-  /// Calculates the angle from horizontal and vertical keywords.
-  pub(crate) fn degrees_from_keywords(
-    horizontal: Option<HorizontalKeyword>,
-    vertical: Option<VerticalKeyword>,
-  ) -> Angle {
-    match (horizontal, vertical) {
-      (None, None) => Angle::new(180.0),
-      (Some(horizontal), None) => Angle::new(horizontal.degrees()),
-      (None, Some(vertical)) => Angle::new(vertical.degrees()),
-      (Some(horizontal), Some(VerticalKeyword::Top)) => {
-        Angle::new(horizontal.vertical_mixed_degrees())
-      }
-      (Some(horizontal), Some(VerticalKeyword::Bottom)) => {
-        Angle::new(180.0 - horizontal.vertical_mixed_degrees())
-      }
-    }
-  }
 }
 
 impl<'i> FromCss<'i> for Angle {
@@ -842,11 +825,7 @@ impl ToCss for LinearGradientDirection {
 
 impl ToCss for LinearGradient {
   fn to_css<W: fmt::Write>(&self, dest: &mut W) -> fmt::Result {
-    let name = if self.repeating {
-      "repeating-linear-gradient"
-    } else {
-      "linear-gradient"
-    };
+    let name = Self::FUNCTION_NAMES[usize::from(self.repeating)];
 
     let mut dir_buf = String::new();
     self.direction.to_css(&mut dir_buf)?;
@@ -1230,44 +1209,80 @@ mod tests {
   }
 
   #[test]
-  fn test_angle_degrees_from_keywords() {
-    assert_eq!(Angle::degrees_from_keywords(None, None), Angle::new(180.0));
-
+  fn test_keyword_direction_to_angle() {
     assert_eq!(
-      Angle::degrees_from_keywords(Some(HorizontalKeyword::Left), None),
-      Angle::new(270.0) // "to left" = 270deg
-    );
-    assert_eq!(
-      Angle::degrees_from_keywords(Some(HorizontalKeyword::Right), None),
-      Angle::new(90.0) // "to right" = 90deg
-    );
-
-    assert_eq!(
-      Angle::degrees_from_keywords(None, Some(VerticalKeyword::Top)),
-      Angle::new(0.0)
-    );
-    assert_eq!(
-      Angle::degrees_from_keywords(None, Some(VerticalKeyword::Bottom)),
+      GradientKeywordDirection {
+        horizontal: None,
+        vertical: None
+      }
+      .to_angle(),
       Angle::new(180.0)
     );
 
     assert_eq!(
-      Angle::degrees_from_keywords(Some(HorizontalKeyword::Left), Some(VerticalKeyword::Top)),
+      GradientKeywordDirection {
+        horizontal: Some(HorizontalKeyword::Left),
+        vertical: None
+      }
+      .to_angle(),
+      Angle::new(270.0) // "to left" = 270deg
+    );
+    assert_eq!(
+      GradientKeywordDirection {
+        horizontal: Some(HorizontalKeyword::Right),
+        vertical: None
+      }
+      .to_angle(),
+      Angle::new(90.0) // "to right" = 90deg
+    );
+
+    assert_eq!(
+      GradientKeywordDirection {
+        horizontal: None,
+        vertical: Some(VerticalKeyword::Top)
+      }
+      .to_angle(),
+      Angle::new(0.0)
+    );
+    assert_eq!(
+      GradientKeywordDirection {
+        horizontal: None,
+        vertical: Some(VerticalKeyword::Bottom)
+      }
+      .to_angle(),
+      Angle::new(180.0)
+    );
+
+    assert_eq!(
+      GradientKeywordDirection {
+        horizontal: Some(HorizontalKeyword::Left),
+        vertical: Some(VerticalKeyword::Top)
+      }
+      .to_angle(),
       Angle::new(315.0)
     );
     assert_eq!(
-      Angle::degrees_from_keywords(Some(HorizontalKeyword::Right), Some(VerticalKeyword::Top)),
+      GradientKeywordDirection {
+        horizontal: Some(HorizontalKeyword::Right),
+        vertical: Some(VerticalKeyword::Top)
+      }
+      .to_angle(),
       Angle::new(45.0)
     );
     assert_eq!(
-      Angle::degrees_from_keywords(Some(HorizontalKeyword::Left), Some(VerticalKeyword::Bottom)),
+      GradientKeywordDirection {
+        horizontal: Some(HorizontalKeyword::Left),
+        vertical: Some(VerticalKeyword::Bottom)
+      }
+      .to_angle(),
       Angle::new(225.0)
     );
     assert_eq!(
-      Angle::degrees_from_keywords(
-        Some(HorizontalKeyword::Right),
-        Some(VerticalKeyword::Bottom)
-      ),
+      GradientKeywordDirection {
+        horizontal: Some(HorizontalKeyword::Right),
+        vertical: Some(VerticalKeyword::Bottom)
+      }
+      .to_angle(),
       Angle::new(135.0)
     );
   }
