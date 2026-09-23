@@ -2,9 +2,12 @@ use std::fmt;
 
 use cssparser::{Parser, Token, match_ignore_ascii_case, serialize_string};
 
-use crate::style::{
-  CssDescriptorKind, CssSyntaxKind, CssToken, FromCss, Length, MakeComputed, ParseResult, Sides,
-  SizingContext, SpacePair, ToCss, unexpected_token,
+use crate::{
+  geometry::{Point, Size},
+  style::{
+    CssDescriptorKind, CssSyntaxKind, CssToken, FromCss, Length, MakeComputed, ParseResult, Sides,
+    SizingContext, SpacePair, ToCss, impl_css_enum, unexpected_token,
+  },
 };
 
 /// Represents the fill rule used for determining the interior of shapes.
@@ -47,6 +50,16 @@ pub struct ShapePosition(pub SpacePair<Length>);
 impl MakeComputed for ShapePosition {
   fn make_computed(&mut self, sizing: &SizingContext) {
     self.0.make_computed(sizing);
+  }
+}
+
+impl ShapePosition {
+  /// Resolves the position to a point within `size`.
+  pub(crate) fn to_point(self, sizing: &SizingContext, size: Size<f32>) -> Point<f32> {
+    Point {
+      x: self.0.x.to_px(sizing, size.width),
+      y: self.0.y.to_px(sizing, size.height),
+    }
   }
 }
 
@@ -161,7 +174,7 @@ impl BasicShape {
   }
 }
 
-crate::style::properties::impl_css_enum!(
+impl_css_enum!(
   FillRule,
   "nonzero" => FillRule::NonZero,
   "evenodd" => FillRule::EvenOdd,

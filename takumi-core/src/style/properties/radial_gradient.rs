@@ -6,8 +6,8 @@ use tiny_skia::PremultipliedColorU8;
 use typed_builder::TypedBuilder;
 
 use super::gradient_utils::{
-  ColorLut, GradientOverlayTile, LutAxis, gradient_tile_accessors, parse_gradient_stops,
-  write_gradient_css,
+  ColorLut, GradientOverlayTile, LutAxis, gradient_tile_accessors, parse_gradient_function,
+  parse_gradient_stops, push_center_clause, write_gradient_css,
 };
 use crate::style::{
   Color, ColorInterpolationMethod, CssDescriptorKind, CssToken, FromCss, GradientStop, Length,
@@ -339,11 +339,7 @@ impl RadialGradientTile {
     let lut_len = lut.len();
     let inv_radius_x = geometry.inv_radius_x;
     let inv_radius_y = geometry.inv_radius_y;
-    let position_to_lut_scale = if axis.length.abs() <= f32::EPSILON || lut_len <= 1 {
-      0.0
-    } else {
-      (lut_len - 1) as f32 / axis.length
-    };
+    let position_to_lut_scale = axis.position_to_lut_scale(lut_len);
     let fully_opaque = lut.colors().iter().all(|p| p.alpha() == u8::MAX);
 
     RadialGradientTile {
@@ -425,15 +421,13 @@ impl GradientOverlayTile for RadialGradientTile {
   }
 }
 
+impl RadialGradient {
+  const FUNCTION_NAMES: [&'static str; 2] = ["radial-gradient", "repeating-radial-gradient"];
+}
+
 impl<'i> FromCss<'i> for RadialGradient {
   fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, RadialGradient> {
-    let location = input.current_source_location();
-    let name = input.expect_function()?;
-    let repeating = match_ignore_ascii_case! { &name,
-      "radial-gradient" => false,
-      "repeating-radial-gradient" => true,
-      _ => return Err(unexpected_token!(location, &Token::Function(name.clone()))),
-    };
+    let repeating = parse_gradient_function::<Self>(input, Self::FUNCTION_NAMES)?;
 
     input.parse_nested_block(|input| {
       let mut shape = RadialShape::Ellipse;
@@ -511,11 +505,7 @@ impl ToCss for RadialSize {
 
 impl ToCss for RadialGradient {
   fn to_css<W: fmt::Write>(&self, dest: &mut W) -> fmt::Result {
-    let name = if self.repeating {
-      "repeating-radial-gradient"
-    } else {
-      "radial-gradient"
-    };
+    let name = Self::FUNCTION_NAMES[usize::from(self.repeating)];
 
     let mut shape_size_buf = String::new();
     if self.shape != RadialShape::Ellipse {
@@ -528,23 +518,15 @@ impl ToCss for RadialGradient {
       self.size.to_css(&mut shape_size_buf)?;
     }
 
-    let mut center_buf = String::new();
-    self.center.to_css(&mut center_buf)?;
-    let is_center_default = center_buf == "center center" || center_buf == "50% 50%";
+    push_center_clause(&mut shape_size_buf, &self.center)?;
 
-    let mut params = String::new();
-    if !shape_size_buf.is_empty() || !is_center_default {
-      params.push_str(&shape_size_buf);
-      if !is_center_default {
-        if !shape_size_buf.is_empty() {
-          params.push(' ');
-        }
-        params.push_str("at ");
-        params.push_str(&center_buf);
-      }
-    }
-
-    write_gradient_css(dest, name, &params, &self.interpolation, &self.stops)
+    write_gradient_css(
+      dest,
+      name,
+      &shape_size_buf,
+      &self.interpolation,
+      &self.stops,
+    )
   }
 }
 
