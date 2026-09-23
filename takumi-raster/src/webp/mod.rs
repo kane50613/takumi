@@ -1,10 +1,19 @@
-use std::borrow::Cow;
+use std::{
+  borrow::{Borrow, Cow},
+  io::Write,
+  mem,
+  ops::Range,
+};
 
 use image::RgbaImage;
 #[cfg(target_arch = "wasm32")]
 use image::imageops::crop_imm;
 
-use crate::write::AnimatedWebpOptions;
+use crate::{
+  Result,
+  error::{Error, WebPError},
+  write::{AnimatedWebpOptions, Bitmap},
+};
 
 #[cfg(target_arch = "wasm32")]
 mod image_webp;
@@ -166,6 +175,203 @@ impl FramePlacement {
   }
 }
 
+/// A run of identical frames merged into one, with where it lands on the canvas.
+pub(super) struct UniqueFrame<T> {
+  pub image: T,
+  pub placement: FramePlacement,
+  pub duration_ms: u32,
+}
+
+impl<T: Borrow<Bitmap>> UniqueFrame<T> {
+  pub(super) fn first(image: T, duration_ms: u32, options: &AnimatedWebpOptions) -> Self {
+    Self {
+      placement: FramePlacement::first(image.borrow().as_rgba(), options),
+      duration_ms: duration_ms.clamp(0, U24_MAX),
+      image,
+    }
+  }
+
+  /// Lengthens this frame when `image` looks the same, or starts the next frame
+  /// from `image` and returns this one finished.
+  pub(super) fn push(
+    &mut self,
+    image: T,
+    duration_ms: u32,
+    canvas_width: u32,
+    canvas_height: u32,
+    options: &AnimatedWebpOptions,
+  ) -> Option<Self> {
+    let duration_ms = duration_ms.clamp(0, U24_MAX);
+    let Some(placement) = FramePlacement::next(
+      self.image.borrow().as_rgba(),
+      image.borrow().as_rgba(),
+      canvas_width,
+      canvas_height,
+      options,
+    ) else {
+      self.duration_ms = self.duration_ms.saturating_add(duration_ms);
+      return None;
+    };
+
+    Some(mem::replace(
+      self,
+      Self {
+        image,
+        placement,
+        duration_ms,
+      },
+    ))
+  }
+}
+
+/// A frame's encoded WebP file, located down to the VP8 or VP8L chunk an ANMF
+/// frame wraps.
+pub(super) struct EncodedFrame<B> {
+  encoded: B,
+  payload_range: Range<usize>,
+  tag: [u8; 4],
+  placement: FramePlacement,
+  duration_ms: u32,
+}
+
+impl<B: AsRef<[u8]>> EncodedFrame<B> {
+  /// `None` when `encoded` holds no VP8 or VP8L chunk.
+  pub(super) fn new(encoded: B, placement: FramePlacement, duration_ms: u32) -> Option<Self> {
+    let (tag, payload_range) = vp8_chunk(encoded.as_ref())?;
+
+    Some(Self {
+      encoded,
+      payload_range,
+      tag,
+      placement,
+      duration_ms,
+    })
+  }
+
+  fn payload(&self) -> &[u8] {
+    &self.encoded.as_ref()[self.payload_range.clone()]
+  }
+}
+
+/// Finds the VP8 or VP8L chunk of a single-image WebP file.
+fn vp8_chunk(buf: &[u8]) -> Option<([u8; 4], Range<usize>)> {
+  const RIFF_HEADER_SIZE: usize = 12;
+
+  if buf.len() < RIFF_HEADER_SIZE {
+    return None;
+  }
+
+  let mut offset = RIFF_HEADER_SIZE;
+  while offset + 8 <= buf.len() {
+    let tag: [u8; 4] = buf[offset..offset + 4].try_into().ok()?;
+    let len = u32::from_le_bytes(buf[offset + 4..offset + 8].try_into().ok()?) as usize;
+    if &tag == b"VP8 " || &tag == b"VP8L" {
+      let payload_start = offset + 8;
+      let payload_end = payload_start.checked_add(len)?;
+      if payload_end > buf.len() {
+        return None;
+      }
+
+      return Some((tag, payload_start..payload_end));
+    }
+
+    let padding = len & 1;
+    offset = (offset + 8).checked_add(len + padding)?;
+  }
+
+  None
+}
+
+const VP8X_CHUNK_BYTES: usize = 18;
+const ANIM_CHUNK_BYTES: usize = 14;
+
+fn anmf_chunk_bytes(vp8_len: usize) -> Result<usize> {
+  8usize
+    .checked_add(16)
+    .and_then(|v| v.checked_add(8))
+    .and_then(|v| v.checked_add(vp8_len))
+    .and_then(|v| v.checked_add(vp8_len & 1))
+    .ok_or(WebPError::ContainerSizeOverflow.into())
+}
+
+fn write_le24<W: Write>(destination: &mut W, value: u32) -> Result<()> {
+  destination.write_all(&value.to_le_bytes()[..3])?;
+  Ok(())
+}
+
+/// Writes the animated WebP container around already-encoded frames.
+pub(super) fn write_riff_container<W: Write, B: AsRef<[u8]>>(
+  frames: &[EncodedFrame<B>],
+  canvas_width: u32,
+  canvas_height: u32,
+  destination: &mut W,
+  options: &AnimatedWebpOptions,
+) -> Result<()> {
+  let frames_total = frames.iter().try_fold(0usize, |acc, frame| {
+    acc
+      .checked_add(anmf_chunk_bytes(frame.payload().len())?)
+      .ok_or(WebPError::ContainerSizeOverflow)
+      .map_err(Error::from)
+  })?;
+  let riff_payload_usize = 4usize
+    .checked_add(VP8X_CHUNK_BYTES)
+    .and_then(|v| v.checked_add(ANIM_CHUNK_BYTES))
+    .and_then(|v| v.checked_add(frames_total))
+    .ok_or(WebPError::ContainerSizeOverflow)?;
+  let riff_payload =
+    u32::try_from(riff_payload_usize).map_err(|_| WebPError::ContainerSizeOverflow)?;
+
+  destination.write_all(b"RIFF")?;
+  destination.write_all(&riff_payload.to_le_bytes())?;
+  destination.write_all(b"WEBP")?;
+
+  let vp8x_flags: u8 = (1 << 1) | (1 << 4); // animation + alpha
+  destination.write_all(b"VP8X")?;
+  destination.write_all(&10u32.to_le_bytes())?;
+  destination.write_all(&[vp8x_flags, 0, 0, 0])?;
+  write_le24(destination, canvas_width - 1)?;
+  write_le24(destination, canvas_height - 1)?;
+
+  destination.write_all(b"ANIM")?;
+  destination.write_all(&6u32.to_le_bytes())?;
+  destination.write_all(&[0u8; 4])?;
+  destination.write_all(&options.loop_count.unwrap_or(0).to_le_bytes())?;
+
+  for frame in frames {
+    let vp8_payload = frame.payload();
+    let vp8_len = vp8_payload.len();
+    let padding = vp8_len & 1;
+    let anmf_payload_size_usize = 16usize
+      .checked_add(8)
+      .and_then(|v| v.checked_add(vp8_len))
+      .and_then(|v| v.checked_add(padding))
+      .ok_or(WebPError::ContainerSizeOverflow)?;
+    let anmf_payload_size =
+      u32::try_from(anmf_payload_size_usize).map_err(|_| WebPError::ContainerSizeOverflow)?;
+
+    let region = frame.placement.region;
+    let frame_flags: u8 = (u8::from(!frame.placement.blend) << 1) | u8::from(options.dispose);
+
+    destination.write_all(b"ANMF")?;
+    destination.write_all(&anmf_payload_size.to_le_bytes())?;
+    write_le24(destination, region.x / 2)?;
+    write_le24(destination, region.y / 2)?;
+    write_le24(destination, region.width - 1)?;
+    write_le24(destination, region.height - 1)?;
+    write_le24(destination, frame.duration_ms.clamp(0, U24_MAX))?;
+    destination.write_all(&[frame_flags])?;
+    destination.write_all(&frame.tag)?;
+    let vp8_len_u32 = u32::try_from(vp8_len).map_err(|_| WebPError::ContainerSizeOverflow)?;
+    destination.write_all(&vp8_len_u32.to_le_bytes())?;
+    destination.write_all(vp8_payload)?;
+    if padding == 1 {
+      destination.write_all(&[0u8])?;
+    }
+  }
+
+  Ok(())
+}
+
 pub(super) fn strip_alpha_channel(image: Cow<'_, RgbaImage>) -> Vec<u8> {
   match image {
     Cow::Owned(image) => {
@@ -207,6 +413,16 @@ mod tests {
   use image::Rgba;
 
   use super::*;
+
+  #[test]
+  fn vp8_chunk_reads_chunk_tag_not_chunk_size() {
+    let encoded = [
+      b'R', b'I', b'F', b'F', 16, 0, 0, 0, b'W', b'E', b'B', b'P', b'V', b'P', b'8', b' ', 4, 0, 0,
+      0, 1, 2, 3, 4,
+    ];
+
+    assert_eq!(vp8_chunk(&encoded), Some((*b"VP8 ", 20..24)));
+  }
 
   #[test]
   fn diff_rounds_origin_down_to_even_and_grows_size() {
