@@ -29,13 +29,16 @@ pub struct InlineBoxItem<'c> {
   pub(crate) vertical_align: ResolvedVerticalAlign,
 }
 
-pub(super) fn inline_box_kind(render_node: &RenderNode) -> InlineBoxKind {
-  if render_node.context.style.position.is_out_of_flow() {
-    InlineBoxKind::OutOfFlow
-  } else if render_node.context.style.float != Float::None {
-    InlineBoxKind::CustomOutOfFlow
-  } else {
-    InlineBoxKind::InFlow
+impl RenderNode {
+  /// How parley places the box standing in for this node.
+  pub(super) fn inline_box_kind(&self) -> InlineBoxKind {
+    if self.context.style.position.is_out_of_flow() {
+      InlineBoxKind::OutOfFlow
+    } else if self.context.style.float != Float::None {
+      InlineBoxKind::CustomOutOfFlow
+    } else {
+      InlineBoxKind::InFlow
+    }
   }
 }
 
@@ -82,8 +85,8 @@ pub(crate) struct InlineDecoration {
   /// bottom-right, bottom-left.
   pub(crate) radii: [(f32, f32); 4],
   pub(crate) opacity: f32,
-  /// Whether the span's start edge sits on the right.
-  pub(crate) rtl: bool,
+  /// The span's direction, which puts its start edge on the left or right.
+  pub(crate) direction: Direction,
   /// The span's own font size. Runs at this size set the fragment height
   /// (Blink sizes the box from its own text metrics); other sizes only when
   /// the span has no text of its own.
@@ -304,7 +307,7 @@ fn inline_span_decoration(node: &RenderNode, depth: usize) -> Option<InlineDecor
       radius(&style.border_bottom_left_radius),
     ],
     opacity: style.opacity.0,
-    rtl: style.direction == Direction::Rtl,
+    direction: style.direction,
     font_size: sizing.font_size,
   })
 }

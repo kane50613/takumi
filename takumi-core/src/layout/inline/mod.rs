@@ -7,7 +7,7 @@ use crate::{
   style::{
     Color, Direction, FontSynthesis, Lang, Length, SizedTextDecorationThickness,
     TextDecorationLines, TextDecorationSkipInk, TextFitMode, TextOverflow, TextUnderlinePosition,
-    TextWrapMode, TextWrapStyle, VerticalAlign, WordBreak,
+    TextWrapStyle, VerticalAlign, WordBreak,
   },
   text_processing::{
     MaxHeight, RebreakOptions, apply_text_transform, apply_white_space_collapse,
@@ -18,7 +18,11 @@ use parley::{
   GlyphRun, IndentOptions, InlineBox, InlineBoxKind, Line, PositionedInlineBox,
   PositionedLayoutItem, TextStyle, TreeBuilder,
 };
-use std::{convert::Infallible, rc::Rc};
+use std::{
+  convert::Infallible,
+  hash::{Hash, Hasher},
+  rc::Rc,
+};
 use xxhash_rust::xxh3::Xxh3;
 
 mod background;
@@ -46,20 +50,20 @@ pub use self::{
 };
 use self::{
   breaking::distribute_trailing_whitespace,
-  items::inline_box_kind,
-  metrics::text_line_box_contribution,
+  metrics::{
+    ParentFontMetrics, ResolvedInlineLineState, ResolvedLineMetrics, resolve_inline_line_metrics,
+    resolve_inline_line_states, resolve_visual_inline_box, text_line_box_contribution,
+  },
   runs::measured_run_text,
-  text_fit::{text_fit_is_applicable, text_fit_line_advance, text_fit_line_scales},
+  text_fit::{
+    LineScaleState, scale_text_fit_x, text_fit_is_applicable, text_fit_line_advance,
+    text_fit_line_alignment_correction, text_fit_line_scales,
+  },
   truncation::make_ellipsis_layout,
 };
 pub(crate) use self::{
   breaking::{LineWidths, break_lines, create_inline_constraint, has_custom_out_of_flow},
   items::InlineContentKind,
-  metrics::{
-    ParentFontMetrics, ResolvedInlineLineState, ResolvedLineMetrics, get_parent_font_metrics,
-    resolve_inline_line_metrics, resolve_inline_line_states, resolve_visual_inline_box,
-  },
-  text_fit::{LineScaleState, scale_text_fit_x, text_fit_line_alignment_correction},
 };
 pub(crate) use cache::{InlineLayoutCache, MeasureCache, ShapeCache};
 
@@ -142,8 +146,6 @@ fn shape_fingerprint(
   style: &SizedFontStyle<'_>,
   lang: Option<&str>,
 ) -> u64 {
-  use std::hash::{Hash, Hasher};
-
   let mut hasher = Xxh3::new();
 
   style.hash_shaping_inputs(&mut hasher);
@@ -180,8 +182,14 @@ pub struct BuiltInlineLayout<'c> {
 
 impl BuiltInlineLayout<'_> {
   /// Parent font metrics from the first run.
-  pub(crate) fn parent_font_metrics(&self) -> Option<ParentFontMetrics> {
-    get_parent_font_metrics(&self.layout)
+  fn parent_font_metrics(&self) -> Option<ParentFontMetrics> {
+    let run = self.layout.lines().find_map(|line| line.runs().next())?;
+    let metrics = run.metrics();
+
+    Some(ParentFontMetrics {
+      x_height: metrics.x_height,
+      text_metrics: (metrics.ascent, metrics.descent),
+    })
   }
 
   /// Resolved metrics for each line.
@@ -192,6 +200,67 @@ impl BuiltInlineLayout<'_> {
       self.parent_font_metrics(),
       &self.line_scales,
     )
+  }
+
+  /// The size the layout measures at and where its first and last lines sit.
+  pub(crate) fn measure(&self, options: InlineMeasureOptions) -> InlineMeasurement {
+    let InlineMeasureOptions {
+      max_width,
+      ceil_width,
+      min_content_query,
+    } = options;
+    let max_run_width = self
+      .layout
+      .lines()
+      .enumerate()
+      .map(|(index, line)| {
+        let metrics = line.metrics();
+
+        if !min_content_query {
+          return metrics.inline_min_coord + metrics.advance;
+        }
+
+        let (text_advance, static_advance) = text_fit_line_advance(&line);
+        let scale = self.line_scales.get(index).copied().unwrap_or(1.0);
+
+        metrics.inline_min_coord + static_advance + text_advance * scale
+      })
+      .fold(0.0, f32::max);
+    let line_metrics = self.line_metrics();
+    let total_height = line_metrics
+      .last()
+      .map(|metrics| metrics.resolved_line_bottom)
+      .unwrap_or(0.0);
+    let float_box_width = self
+      .positioned_floats
+      .iter()
+      .map(|inline_box| inline_box.x + inline_box.width)
+      .fold(0.0, f32::max);
+    let float_box_height = self
+      .positioned_floats
+      .iter()
+      .map(|inline_box| inline_box.y + inline_box.height)
+      .fold(0.0, f32::max);
+
+    let measured_width = if ceil_width {
+      max_run_width.max(float_box_width).ceil()
+    } else {
+      max_run_width.max(float_box_width)
+    };
+
+    InlineMeasurement {
+      size: Size {
+        width: if min_content_query {
+          measured_width
+        } else {
+          measured_width.min(max_width)
+        },
+        height: total_height.max(float_box_height).ceil(),
+      },
+      first_baseline: line_metrics.first().map(|line| line.resolved_baseline),
+      last_baseline: line_metrics.last().map(|line| line.resolved_baseline),
+      clamped: self.clamped,
+    }
   }
 
   /// Measures each glyph run's text/bounding box and each inline box's position/size, with text-fit
@@ -205,7 +274,6 @@ impl BuiltInlineLayout<'_> {
 
     let Ok(()) = self.walk_items::<Infallible>(layout, |line, item| {
       let setup = &line.setup;
-      let line_scale_origin_y = setup.resolved_metrics.resolved_baseline;
 
       match item {
         PlacedItem::Run {
@@ -221,23 +289,8 @@ impl BuiltInlineLayout<'_> {
             return Ok(());
           }
 
-          let metrics = glyph_run.run().metrics();
-          let mut x = glyph_run.offset();
-          let mut y = glyph_run.baseline() + setup.baseline_shift - metrics.ascent;
-          let mut width = glyph_run.advance();
-          let mut height = metrics.ascent + metrics.descent;
-          if (setup.state.scale - 1.0).abs() > f32::EPSILON {
-            x = scale_text_fit_x(
-              x,
-              setup.line_scale_origin_x,
-              setup.state.scale,
-              static_inline_prefix,
-              setup.state.alignment_correction,
-            );
-            y = line_scale_origin_y + (y - line_scale_origin_y) * setup.state.scale;
-            width *= setup.state.scale;
-            height *= setup.state.scale;
-          }
+          let (origin, size) = glyph_run_rect(&glyph_run, setup.baseline_shift);
+          let (origin, size) = setup.scale_rect(origin, size, static_inline_prefix);
 
           let link = span_id.and_then(|span_id| match self.spans.get(span_id as usize) {
             Some(ProcessedInlineSpan::Text { link, .. }) => link.as_deref(),
@@ -246,10 +299,10 @@ impl BuiltInlineLayout<'_> {
 
           runs.push(MeasuredInlineRun {
             text,
-            x,
-            y,
-            width,
-            height,
+            x: origin.x,
+            y: origin.y,
+            width: size.width,
+            height: size.height,
             link,
           });
         }
@@ -311,12 +364,28 @@ pub struct InlineMeasurement {
 
 #[derive(Clone, Copy, Debug)]
 pub(crate) struct InlineMeasureOptions {
-  pub(crate) max_width: f32,
-  pub(crate) ceil_width: bool,
-  pub(crate) parent_font_metrics: Option<ParentFontMetrics>,
+  max_width: f32,
+  ceil_width: bool,
   /// A min-content query wraps at every opportunity, so the width it wrapped against neither caps
   /// the answer nor counts the spaces that pushed the breaks.
   pub(crate) min_content_query: bool,
+}
+
+impl InlineMeasureOptions {
+  /// Options for measuring against `max_width` under taffy's constraint.
+  pub(crate) fn new(
+    max_width: f32,
+    ceil_width: bool,
+    available_space: Size<AvailableSpace>,
+    known_dimensions: Size<Option<f32>>,
+  ) -> Self {
+    Self {
+      max_width,
+      ceil_width,
+      min_content_query: known_dimensions.width.is_none()
+        && matches!(available_space.width, AvailableSpace::MinContent),
+    }
+  }
 }
 
 #[derive(Clone, PartialEq, Copy, Debug)]
@@ -411,7 +480,7 @@ fn text_style_with_span_id<'s>(
   text_style
 }
 
-pub(super) fn apply_text_indent(layout: &mut InlineLayout, style: &SizedFontStyle, max_width: f32) {
+fn apply_text_indent(layout: &mut InlineLayout, style: &SizedFontStyle, max_width: f32) {
   let indent_basis = if max_width.is_finite() {
     max_width
   } else {
@@ -429,7 +498,7 @@ pub(super) fn apply_text_indent(layout: &mut InlineLayout, style: &SizedFontStyl
   layout.set_text_indent(amount, options);
 }
 
-pub(super) fn inline_line_height_hint(style: &SizedFontStyle) -> f32 {
+fn inline_line_height_hint(style: &SizedFontStyle) -> f32 {
   match style.line_height {
     parley::LineHeight::Absolute(value) => value,
     parley::LineHeight::FontSizeRelative(value) | parley::LineHeight::MetricsRelative(value) => {
@@ -474,70 +543,6 @@ pub(super) fn chromium_line_breaks(spans: &[ProcessedInlineSpan<'_>]) -> bool {
       ProcessedInlineSpan::Text { style, .. } if style.parent.word_break == WordBreak::BreakAll
     )
   })
-}
-
-pub(crate) fn measure_inline_layout(
-  layout: &mut InlineLayout,
-  spans: &[ProcessedInlineSpan<'_>],
-  positioned_floats: &[PositionedInlineBox],
-  line_scales: &[f32],
-  options: InlineMeasureOptions,
-) -> InlineMeasurement {
-  let InlineMeasureOptions {
-    max_width,
-    ceil_width,
-    parent_font_metrics,
-    min_content_query,
-  } = options;
-  let max_run_width = layout
-    .lines()
-    .enumerate()
-    .map(|(index, line)| {
-      let metrics = line.metrics();
-
-      if !min_content_query {
-        return metrics.inline_min_coord + metrics.advance;
-      }
-
-      let (text_advance, static_advance) = text_fit_line_advance(&line);
-      let scale = line_scales.get(index).copied().unwrap_or(1.0);
-
-      metrics.inline_min_coord + static_advance + text_advance * scale
-    })
-    .fold(0.0, f32::max);
-  let line_metrics = resolve_inline_line_metrics(layout, spans, parent_font_metrics, line_scales);
-  let total_height = line_metrics
-    .last()
-    .map(|metrics| metrics.resolved_line_bottom)
-    .unwrap_or(0.0);
-  let float_box_width = positioned_floats
-    .iter()
-    .map(|inline_box| inline_box.x + inline_box.width)
-    .fold(0.0, f32::max);
-  let float_box_height = positioned_floats
-    .iter()
-    .map(|inline_box| inline_box.y + inline_box.height)
-    .fold(0.0, f32::max);
-
-  let measured_width = if ceil_width {
-    max_run_width.max(float_box_width).ceil()
-  } else {
-    max_run_width.max(float_box_width)
-  };
-
-  InlineMeasurement {
-    size: Size {
-      width: if min_content_query {
-        measured_width
-      } else {
-        measured_width.min(max_width)
-      },
-      height: total_height.max(float_box_height).ceil(),
-    },
-    first_baseline: line_metrics.first().map(|line| line.resolved_baseline),
-    last_baseline: line_metrics.last().map(|line| line.resolved_baseline),
-    clamped: false,
-  }
 }
 
 /// Pushes `text` under `style`, giving each variation-selector segment a presentation-reordered
@@ -804,7 +809,7 @@ fn inline_box_span<'c>(
   let inline_box = InlineBox {
     index,
     id,
-    kind: inline_box_kind(render_node),
+    kind: render_node.inline_box_kind(),
     width: paint_width,
     height: paint_height,
   };
@@ -864,25 +869,25 @@ fn shape_spans(
     })
 }
 
-fn prepare_inline_layout(
-  built: &mut BuiltInlineLayout<'_>,
-  max_width: f32,
-  max_height: Option<MaxHeight>,
+/// Indents `layout` and breaks it at `options.max_width`; true when `options.max_height` may have
+/// dropped lines.
+pub(super) fn break_into_lines(
+  layout: &mut InlineLayout,
+  options: RebreakOptions,
   style: &SizedFontStyle,
-) -> (TextWrapMode, f32) {
-  let text_wrap_mode = style.parent.resolved_text_wrap_mode();
-  let line_height_hint = inline_line_height_hint(style);
-  apply_text_indent(&mut built.layout, style, max_width);
-  built.clamped = break_lines(
-    &mut built.layout,
-    LineWidths::uniform(max_width),
-    max_height,
-    line_height_hint,
-    text_wrap_mode,
-    &built.spans,
-    &mut built.positioned_floats,
-  );
-  (text_wrap_mode, line_height_hint)
+  spans: &[ProcessedInlineSpan<'_>],
+  positioned_floats: &mut Vec<PositionedInlineBox>,
+) -> bool {
+  apply_text_indent(layout, style, options.max_width);
+  break_lines(
+    layout,
+    LineWidths::uniform(options.max_width),
+    options.max_height,
+    options.line_height_hint,
+    options.text_wrap_mode,
+    spans,
+    positioned_floats,
+  )
 }
 
 /// Build, wrap, and align the inline layout for a request.
@@ -899,8 +904,20 @@ pub fn create_inline_layout<'c>(request: InlineLayoutRequest<'c>) -> BuiltInline
   } = request;
   let mut built =
     build_inline_layout_tree(&items, available_space, style, context, shape_cacheable);
-  let (text_wrap_mode, line_height_hint) =
-    prepare_inline_layout(&mut built, max_width, max_height, style);
+  let rebreak = RebreakOptions {
+    max_width,
+    max_height,
+    line_height_hint: inline_line_height_hint(style),
+    text_wrap_mode: style.parent.resolved_text_wrap_mode(),
+  };
+
+  built.clamped = break_into_lines(
+    &mut built.layout,
+    rebreak,
+    style,
+    &built.spans,
+    &mut built.positioned_floats,
+  );
 
   if mode == InlineLayoutMode::Draw {
     let BuiltInlineLayout {
@@ -931,15 +948,7 @@ pub fn create_inline_layout<'c>(request: InlineLayoutRequest<'c>) -> BuiltInline
       });
 
       if is_overflowing {
-        make_ellipsis_layout(
-          layout,
-          spans,
-          max_width,
-          max_height,
-          style,
-          context,
-          positioned_floats,
-        );
+        make_ellipsis_layout(layout, spans, rebreak, style, context, positioned_floats);
       }
     }
 
@@ -948,12 +957,7 @@ pub fn create_inline_layout<'c>(request: InlineLayoutRequest<'c>) -> BuiltInline
     if style.parent.text_wrap_style == TextWrapStyle::Balance {
       make_balanced_text(
         layout,
-        RebreakOptions {
-          max_width,
-          max_height,
-          line_height_hint,
-          text_wrap_mode,
-        },
+        rebreak,
         line_count,
         style.sizing.viewport.device_pixel_ratio,
         spans,
@@ -962,17 +966,7 @@ pub fn create_inline_layout<'c>(request: InlineLayoutRequest<'c>) -> BuiltInline
     }
 
     if style.parent.text_wrap_style == TextWrapStyle::Pretty {
-      make_pretty_text(
-        layout,
-        RebreakOptions {
-          max_width,
-          max_height,
-          line_height_hint,
-          text_wrap_mode,
-        },
-        spans,
-        positioned_floats,
-      );
+      make_pretty_text(layout, rebreak, spans, positioned_floats);
     }
   }
 
@@ -1028,13 +1022,15 @@ impl LineSetup {
     let line_scale = line_scales.get(line_index).copied().unwrap_or(1.0);
     let (line_scale_origin_x, alignment_correction) =
       text_fit_line_alignment_correction(line, line_scale, layout.unsnapped_content.width);
+    let content = layout.content_box_offset();
+
     Some(Self {
       state: LineScaleState {
         scale: line_scale,
         alignment_correction,
         layout_origin: Point {
-          x: layout.border.left + layout.padding.left + line_scale_origin_x,
-          y: layout.border.top + layout.padding.top + resolved_metrics.resolved_baseline,
+          x: content.x + line_scale_origin_x,
+          y: content.y + resolved_metrics.resolved_baseline,
         },
       },
       baseline_shift: resolved_metrics.baseline_shift,
@@ -1042,6 +1038,63 @@ impl LineSetup {
       resolved_metrics,
     })
   }
+
+  /// Scales a line-local `x` for text-fit.
+  pub(crate) fn scale_x(&self, x: f32, static_inline_prefix: f32) -> f32 {
+    scale_text_fit_x(
+      x,
+      self.line_scale_origin_x,
+      self.state.scale,
+      static_inline_prefix,
+      self.state.alignment_correction,
+    )
+  }
+
+  /// Scales a line-local rect for text-fit about the line's baseline.
+  pub(crate) fn scale_rect(
+    &self,
+    origin: Point<f32>,
+    size: Size<f32>,
+    static_inline_prefix: f32,
+  ) -> (Point<f32>, Size<f32>) {
+    let scale = self.state.scale;
+
+    if (scale - 1.0).abs() <= f32::EPSILON {
+      return (origin, size);
+    }
+
+    let baseline = self.resolved_metrics.resolved_baseline;
+
+    (
+      Point {
+        x: self.scale_x(origin.x, static_inline_prefix),
+        y: baseline + (origin.y - baseline) * scale,
+      },
+      Size {
+        width: size.width * scale,
+        height: size.height * scale,
+      },
+    )
+  }
+}
+
+/// A glyph run's advance by its ascent plus descent, as a line-local top-left and size.
+pub(crate) fn glyph_run_rect(
+  glyph_run: &GlyphRun<'_, InlineBrush>,
+  baseline_shift: f32,
+) -> (Point<f32>, Size<f32>) {
+  let metrics = glyph_run.run().metrics();
+
+  (
+    Point {
+      x: glyph_run.offset(),
+      y: glyph_run.baseline() + baseline_shift - metrics.ascent,
+    },
+    Size {
+      width: glyph_run.advance(),
+      height: metrics.ascent + metrics.descent,
+    },
+  )
 }
 
 /// A line under an item walk: its index, setup, and resolved state.
@@ -1117,13 +1170,7 @@ impl BuiltInlineLayout<'_> {
               continue;
             };
             let inline_box = VisualInlineBox {
-              x: scale_text_fit_x(
-                resolved.x,
-                walked.setup.line_scale_origin_x,
-                walked.setup.state.scale,
-                static_inline_prefix,
-                walked.setup.state.alignment_correction,
-              ),
+              x: walked.setup.scale_x(resolved.x, static_inline_prefix),
               ..resolved
             };
 
@@ -1143,7 +1190,7 @@ impl BuiltInlineLayout<'_> {
 mod tests {
   use std::{collections::HashMap, fs::File, io::Read, path::Path, sync::Arc};
 
-  use super::{outline::x_ranges_touch, runs::slice_text_at_char_boundaries, *};
+  use super::{runs::slice_text_at_char_boundaries, *};
   use crate::{
     Fonts,
     context::RenderContext,
@@ -1667,7 +1714,7 @@ mod tests {
       height: 10.0,
     };
 
-    assert!(x_ranges_touch(rect(0.0, 10.0), rect(10.01, 10.0)));
-    assert!(!x_ranges_touch(rect(0.0, 10.0), rect(10.1, 10.0)));
+    assert!(rect(0.0, 10.0).x_range_touches(rect(10.01, 10.0)));
+    assert!(!rect(0.0, 10.0).x_range_touches(rect(10.1, 10.0)));
   }
 }

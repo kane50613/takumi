@@ -22,7 +22,7 @@ use crate::{
   layout::{
     inline::{
       InlineContentKind, InlineItem, InlineLayoutMode, InlineLayoutRequest, InlineMeasureOptions,
-      collect_inline_items, create_inline_constraint, create_inline_layout, measure_inline_layout,
+      collect_inline_items, create_inline_constraint, create_inline_layout,
     },
     list_marker::{ListCounter, is_list_element, list_marker, owns_list_counter},
     node::{Node, NodeStyleLayers, TextData},
@@ -107,32 +107,41 @@ struct LayoutResultNode {
 }
 
 impl LayoutResults {
+  /// Lays out the tree under `root` in `available_space`.
+  pub(crate) fn compute(root: &RenderNode, available_space: Size<AvailableSpace>) -> Self {
+    let mut tree = LayoutTree::from_render_node(root);
+
+    tree.compute_layout(available_space);
+    tree.into_results()
+  }
+
   /// Computed layout of a node.
   pub fn layout(&self, node_id: NodeId) -> crate::Result<ComputedLayout> {
-    let idx: usize = node_id.into();
     self
-      .nodes
-      .get(idx)
+      .node(node_id)
       .map(|node| ComputedLayout::from_taffy(&node.layout, &node.unsnapped))
-      .ok_or(Error::InvalidLayoutNode(node_id.into()))
   }
 
   /// Paint-ordered children of a node.
   pub fn box_children(&self, node_id: NodeId) -> crate::Result<&[OrderedChild]> {
-    let idx: usize = node_id.into();
-    self
-      .nodes
-      .get(idx)
-      .map(|node| node.box_children.as_ref())
-      .ok_or(Error::InvalidLayoutNode(node_id.into()))
+    self.node(node_id).map(|node| node.box_children.as_ref())
   }
 
   pub(crate) fn first_baseline_y(&self, node_id: NodeId) -> crate::Result<Option<f32>> {
-    let idx: usize = node_id.into();
+    self.node(node_id).map(|node| node.first_baseline_y)
+  }
+
+  /// The root's border-box size, zero when the tree is empty.
+  pub(crate) fn root_size(&self) -> Size<f32> {
+    self
+      .layout(NodeId::ROOT)
+      .map_or(Size::ZERO, |layout| layout.size)
+  }
+
+  fn node(&self, node_id: NodeId) -> crate::Result<&LayoutResultNode> {
     self
       .nodes
-      .get(idx)
-      .map(|node| node.first_baseline_y)
+      .get(usize::from(node_id))
       .ok_or(Error::InvalidLayoutNode(node_id.into()))
   }
 }
@@ -233,6 +242,14 @@ impl Drop for RenderNode {
   }
 }
 
+/// The layout an anonymous block box takes in place of a computed style.
+fn block_style() -> Style {
+  Style {
+    display: TaffyDisplay::Block,
+    ..Style::default()
+  }
+}
+
 #[derive(Clone, Copy, Debug)]
 pub(crate) struct AtomicInlineMetrics {
   pub(crate) size: Size<f32>,
@@ -244,23 +261,6 @@ enum InlineBaselineSource {
   InlineContentLastLine,
   InlineContentFirstLine,
   LayoutFirstBaseline,
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum InlineBaselineFallback {
-  BottomMarginEdge,
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum InlineBaselineBoxKind {
-  AtomicContainer,
-  Replaced,
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-struct InlineBaselineStrategy {
-  sources: &'static [InlineBaselineSource],
-  fallback: InlineBaselineFallback,
 }
 
 pub(crate) fn resolve_normal_line_height(
@@ -428,24 +428,11 @@ pub(super) fn pseudo_computed_style(
   );
   let inherited_parent = registered_custom_property_parent_style(
     &parent_context.style,
-    std::slice::from_ref(parent_context.stylesheet().as_ref()),
+    slice::from_ref(parent_context.stylesheet().as_ref()),
     parent_context.sizing.viewport,
   );
   let mut style = style_layers.inherit(&inherited_parent);
-
-  let font_size = style
-    .font_size
-    .to_px(&parent_context.sizing, parent_context.sizing.font_size);
-  let normal_basis = resolve_normal_line_height(parent_context, &style, font_size);
-  let line_height = style
-    .line_height
-    .to_px(&parent_context.sizing, normal_basis);
-  let sizing = parent_context.sizing.with_font_metrics(
-    font_size,
-    parent_context.sizing.root_font_size,
-    line_height,
-    parent_context.sizing.root_line_height,
-  );
+  let sizing = parent_context.child_sizing(&style, &parent_context.sizing, false);
   let current_color = style.color.resolve(parent_context.current_color);
   style.make_computed(&sizing);
   (style, sizing, current_color)
@@ -655,19 +642,12 @@ impl<'r> LayoutTree<'r> {
     }
   }
 
-  fn get_index(&self, node_id: TaffyNodeId) -> Option<usize> {
-    let idx = node_id.into();
-    (idx < self.nodes.len()).then_some(idx)
-  }
-
   fn get_layout_node_ref(&self, node_id: TaffyNodeId) -> Option<&LayoutNodeState> {
-    self.get_index(node_id).and_then(|idx| self.nodes.get(idx))
+    self.nodes.get(usize::from(node_id))
   }
 
   fn get_layout_node_mut_ref(&mut self, node_id: TaffyNodeId) -> Option<&mut LayoutNodeState> {
-    self
-      .get_index(node_id)
-      .and_then(|idx| self.nodes.get_mut(idx))
+    self.nodes.get_mut(usize::from(node_id))
   }
 
   fn update_node_style_for_available_space(
@@ -676,41 +656,27 @@ impl<'r> LayoutTree<'r> {
     available_space: Size<AvailableSpace>,
     known_dimensions: Size<Option<f32>>,
   ) {
-    let Some(idx) = self.get_index(node_id) else {
+    let idx = usize::from(node_id);
+    let (Some(node), Some(render_node)) = (self.nodes.get_mut(idx), self.render_nodes.get(idx))
+    else {
       return;
     };
 
-    let Some(render_node) = self.render_nodes.get(idx) else {
-      return;
-    };
-
-    if self
-      .nodes
-      .get(idx)
-      .is_some_and(|node| node.container_independent)
-    {
+    if node.container_independent {
       return;
     }
 
-    let style = {
-      let mut sizing = render_node.context.sizing.clone();
-      sizing.container_size = Size {
-        width: known_dimensions.width.or(match available_space.width {
-          AvailableSpace::Definite(value) => Some(value),
-          _ => None,
-        }),
-        height: known_dimensions.height.or(match available_space.height {
-          AvailableSpace::Definite(value) => Some(value),
-          _ => None,
-        }),
-      };
+    let mut sizing = render_node.context.sizing.clone();
 
-      render_node.layout_style(&sizing)
+    sizing.container_size = Size {
+      width: known_dimensions
+        .width
+        .or(available_space.width.into_option()),
+      height: known_dimensions
+        .height
+        .or(available_space.height.into_option()),
     };
-
-    if let Some(node) = self.nodes.get_mut(idx) {
-      node.style = style;
-    }
+    node.style = render_node.layout_style(&sizing);
   }
 }
 
@@ -1106,47 +1072,62 @@ impl RenderNode {
     }
   }
 
-  pub(super) fn anonymous_text_item(parent_context: &RenderContext, text: String) -> Self {
-    Self::text_item(RenderContext::for_anonymous(parent_context), text)
-  }
-
-  fn text_item(context: RenderContext, text: String) -> Self {
-    Self {
-      context,
-      node: None,
-      origin: NodeOrigin::Anonymous,
-      children: None,
-      layout_style_override: Some(Box::new(Style {
-        display: TaffyDisplay::Block,
-        ..Style::default()
-      })),
-      anonymous_text_content: Some(text),
-      marker: None,
-      force_inline_layout: true,
-      table_header_lines: None,
-      table_part: None,
-    }
-  }
-
-  pub(super) fn anonymous_block_container(
-    parent_context: &RenderContext,
-    children: Vec<RenderNode>,
+  /// A box with no layout override, marker, or table role.
+  pub(super) fn new(
+    context: RenderContext,
+    origin: NodeOrigin,
+    node: Option<Node>,
+    children: Option<Box<[RenderNode]>>,
   ) -> Self {
     Self {
-      context: RenderContext::for_anonymous(parent_context),
-      node: None,
-      origin: NodeOrigin::Anonymous,
-      children: Some(children.into_boxed_slice()),
-      layout_style_override: Some(Box::new(Style {
-        display: TaffyDisplay::Block,
-        ..Style::default()
-      })),
+      context,
+      node,
+      origin,
+      children,
+      layout_style_override: None,
       anonymous_text_content: None,
       marker: None,
       force_inline_layout: false,
       table_header_lines: None,
       table_part: None,
     }
+  }
+
+  /// An anonymous box laid out with `layout_style` instead of its computed style.
+  fn anonymous(
+    context: RenderContext,
+    node: Option<Node>,
+    children: Option<Box<[RenderNode]>>,
+    layout_style: Style,
+  ) -> Self {
+    let mut anonymous = Self::new(context, NodeOrigin::Anonymous, node, children);
+
+    anonymous.layout_style_override = Some(Box::new(layout_style));
+    anonymous
+  }
+
+  pub(super) fn anonymous_text_item(parent_context: &RenderContext, text: String) -> Self {
+    Self::text_item(RenderContext::for_anonymous(parent_context), text)
+  }
+
+  fn text_item(context: RenderContext, text: String) -> Self {
+    let mut item = Self::anonymous(context, None, None, block_style());
+
+    item.anonymous_text_content = Some(text);
+    item.force_inline_layout = true;
+    item
+  }
+
+  pub(super) fn anonymous_block_container(
+    parent_context: &RenderContext,
+    children: Vec<RenderNode>,
+  ) -> Self {
+    Self::anonymous(
+      RenderContext::for_anonymous(parent_context),
+      None,
+      Some(children.into_boxed_slice()),
+      block_style(),
+    )
   }
 
   pub(super) fn anonymous_image_item(
@@ -1161,44 +1142,33 @@ impl RenderNode {
     };
 
     match image {
-      BackgroundImage::Url(url) => Self {
-        context: RenderContext::for_anonymous(parent_context),
-        node: Some(Node::image(url)),
-        origin: NodeOrigin::Anonymous,
-        children: None,
-        layout_style_override: Some(Box::new(Style {
+      BackgroundImage::Url(url) => Self::anonymous(
+        RenderContext::for_anonymous(parent_context),
+        Some(Node::image(url)),
+        None,
+        Style {
           max_size,
           ..Style::default()
-        })),
-        anonymous_text_content: None,
-        marker: None,
-        force_inline_layout: false,
-        table_header_lines: None,
-        table_part: None,
-      },
+        },
+      ),
       gradient => {
         let mut context = RenderContext::for_anonymous(parent_context);
+
         context.style.background_image = Some(BackgroundImages::from([gradient]));
-        Self {
+        Self::anonymous(
           context,
-          node: Some(Node::container([])),
-          origin: NodeOrigin::Anonymous,
-          children: None,
+          Some(Node::container([])),
+          None,
           // css-images-3 §5.1 default object size when the parent is auto.
-          layout_style_override: Some(Box::new(Style {
+          Style {
             size: TaffySize {
               width: taffy::Dimension::length(300.0),
               height: taffy::Dimension::length(150.0),
             },
             max_size,
             ..Style::default()
-          })),
-          anonymous_text_content: None,
-          marker: None,
-          force_inline_layout: false,
-          table_header_lines: None,
-          table_part: None,
-        }
+          },
+        )
       }
     }
   }
@@ -1261,7 +1231,7 @@ impl RenderNode {
       style.display = Display::Block;
     }
 
-    let items = match std::mem::take(&mut style.content) {
+    let items = match take(&mut style.content) {
       ContentValue::Items(items) => items,
       _ => return None,
     };
@@ -1278,18 +1248,12 @@ impl RenderNode {
       return None;
     }
 
-    Some(Self {
-      context: pseudo_context,
-      node: Some(Node::container([])),
-      origin: NodeOrigin::Pseudo,
-      children: Some(children),
-      layout_style_override: None,
-      anonymous_text_content: None,
-      marker: None,
-      force_inline_layout: false,
-      table_header_lines: None,
-      table_part: None,
-    })
+    Some(Self::new(
+      pseudo_context,
+      NodeOrigin::Pseudo,
+      Some(Node::container([])),
+      Some(children),
+    ))
   }
 
   /// The block box the marker travels into when this box has no line of its own.
@@ -1497,40 +1461,13 @@ impl RenderNode {
     }
   }
 
-  /// An authored node with its resolved context and normalized children.
-  fn authored(
-    context: RenderContext,
-    node: Node,
-    source_order: usize,
-    children: Option<Box<[RenderNode]>>,
-  ) -> Self {
-    RenderNode {
-      context,
-      node: Some(node),
-      origin: NodeOrigin::Authored { source_order },
-      children,
-      layout_style_override: None,
-      anonymous_text_content: None,
-      marker: None,
-      force_inline_layout: false,
-      table_header_lines: None,
-      table_part: None,
-    }
-  }
-
   fn empty(parent_context: &RenderContext) -> Self {
-    RenderNode {
-      context: parent_context.clone(),
-      node: Some(Node::container([])),
-      origin: NodeOrigin::Anonymous,
-      children: None,
-      layout_style_override: None,
-      anonymous_text_content: None,
-      marker: None,
-      force_inline_layout: false,
-      table_header_lines: None,
-      table_part: None,
-    }
+    Self::new(
+      parent_context.clone(),
+      NodeOrigin::Anonymous,
+      Some(Node::container([])),
+      None,
+    )
   }
 
   /// Blockifies, trims, and wraps `children` the way their parent's display
@@ -1599,36 +1536,12 @@ impl RenderNode {
     final_children.into_boxed_slice()
   }
 
-  fn inline_box_margin_box_height(
-    &self,
-    content_size: Size<f32>,
-    include_padding_border: bool,
-  ) -> f32 {
-    let sizing = &self.context.sizing;
-    let mut height = content_size.height
-      + self.context.style.margin_top.to_px(sizing, 0.0)
-      + self.context.style.margin_bottom.to_px(sizing, 0.0);
-
-    if include_padding_border {
-      height += Length::from(self.context.style.border_top_width).to_px(sizing, 0.0)
-        + Length::from(self.context.style.border_bottom_width).to_px(sizing, 0.0)
-        + self.context.style.padding_top.to_px(sizing, 0.0)
-        + self.context.style.padding_bottom.to_px(sizing, 0.0);
-    }
-
-    height
-  }
-
-  fn inline_baseline_box_kind(&self) -> Option<InlineBaselineBoxKind> {
-    if self.participates_as_inline_box() {
-      return Some(InlineBaselineBoxKind::AtomicContainer);
-    }
-
+  fn margin_top_px(&self) -> f32 {
     self
-      .node
-      .as_ref()
-      .filter(|node| node.is_replaced_element() && self.context.style.display == Display::Inline)
-      .map(|_| InlineBaselineBoxKind::Replaced)
+      .context
+      .style
+      .margin_top
+      .to_px(&self.context.sizing, 0.0)
   }
 
   fn inline_content_baseline_offset(
@@ -1638,13 +1551,8 @@ impl RenderNode {
     use_last_line: bool,
   ) -> Option<f32> {
     let baseline = self.inline_content_border_box_baseline(available_space, size, use_last_line)?;
-    let margin_top = self
-      .context
-      .style
-      .margin_top
-      .to_px(&self.context.sizing, 0.0);
 
-    Some(margin_top + baseline)
+    Some(self.margin_top_px() + baseline)
   }
 
   /// Baseline of the first or last line box, measured from the border box top.
@@ -1748,10 +1656,8 @@ impl RenderNode {
       .first_baseline_y(root_node_id)
       .ok()
       .flatten()?;
-    let sizing = &self.context.sizing;
-    let margin_top = self.context.style.margin_top.to_px(sizing, 0.0);
 
-    Some(margin_top + baseline)
+    Some(self.margin_top_px() + baseline)
   }
 
   fn valid_baseline_offset(candidate: Option<f32>, box_height: f32) -> Option<f32> {
@@ -1759,43 +1665,25 @@ impl RenderNode {
       .filter(|baseline| baseline.is_finite() && *baseline >= 0.0 && *baseline <= box_height + 0.5)
   }
 
-  fn inline_baseline_strategy(&self) -> Option<InlineBaselineStrategy> {
-    match self.inline_baseline_box_kind()? {
-      InlineBaselineBoxKind::AtomicContainer => {
-        let display = self.context.style.display;
-        let overflow_hidden_inline_block =
-          display == Display::InlineBlock && self.context.style.clips_overflow();
+  /// Where an atomic inline box takes its baseline from, in order; an empty list, or no source
+  /// that resolves, falls back to the bottom margin edge.
+  fn inline_baseline_sources(&self) -> &'static [InlineBaselineSource] {
+    if !self.participates_as_inline_box() {
+      return &[];
+    }
 
-        Some(match display {
-          Display::InlineBlock if overflow_hidden_inline_block => InlineBaselineStrategy {
-            sources: &[],
-            fallback: InlineBaselineFallback::BottomMarginEdge,
-          },
-          Display::InlineBlock => InlineBaselineStrategy {
-            sources: &[
-              InlineBaselineSource::InlineContentLastLine,
-              InlineBaselineSource::LayoutFirstBaseline,
-            ],
-            fallback: InlineBaselineFallback::BottomMarginEdge,
-          },
-          Display::InlineFlex | Display::InlineGrid => InlineBaselineStrategy {
-            sources: &[
-              InlineBaselineSource::InlineContentLastLine,
-              InlineBaselineSource::InlineContentFirstLine,
-              InlineBaselineSource::LayoutFirstBaseline,
-            ],
-            fallback: InlineBaselineFallback::BottomMarginEdge,
-          },
-          _ => InlineBaselineStrategy {
-            sources: &[],
-            fallback: InlineBaselineFallback::BottomMarginEdge,
-          },
-        })
-      }
-      InlineBaselineBoxKind::Replaced => Some(InlineBaselineStrategy {
-        sources: &[],
-        fallback: InlineBaselineFallback::BottomMarginEdge,
-      }),
+    match self.context.style.display {
+      Display::InlineBlock if self.context.style.clips_overflow() => &[],
+      Display::InlineBlock => &[
+        InlineBaselineSource::InlineContentLastLine,
+        InlineBaselineSource::LayoutFirstBaseline,
+      ],
+      Display::InlineFlex | Display::InlineGrid => &[
+        InlineBaselineSource::InlineContentLastLine,
+        InlineBaselineSource::InlineContentFirstLine,
+        InlineBaselineSource::LayoutFirstBaseline,
+      ],
+      _ => &[],
     }
   }
 
@@ -1827,22 +1715,17 @@ impl RenderNode {
     size: Size<f32>,
     layout_results: Option<(&LayoutResults, NodeId)>,
   ) -> Option<f32> {
-    let strategy = self.inline_baseline_strategy()?;
-    let include_padding_border = !self.participates_as_inline_box();
-    let margin_box_height = self.inline_box_margin_box_height(size, include_padding_border);
+    let sizing = &self.context.sizing;
+    let margin_box_height = size.height
+      + self.context.style.margin_top.to_px(sizing, 0.0)
+      + self.context.style.margin_bottom.to_px(sizing, 0.0);
 
-    for source in strategy.sources {
+    self.inline_baseline_sources().iter().find_map(|&source| {
       let candidate =
-        self.resolve_inline_baseline_source(available_space, size, *source, layout_results);
+        self.resolve_inline_baseline_source(available_space, size, source, layout_results);
 
-      if let Some(baseline) = Self::valid_baseline_offset(candidate, margin_box_height) {
-        return Some(baseline);
-      }
-    }
-
-    match strategy.fallback {
-      InlineBaselineFallback::BottomMarginEdge => None,
-    }
+      Self::valid_baseline_offset(candidate, margin_box_height)
+    })
   }
 
   pub(crate) fn measure_inline_box(
@@ -1872,87 +1755,61 @@ impl RenderNode {
     &self,
     available_space: Size<AvailableSpace>,
   ) -> AtomicInlineMetrics {
-    let measure_with = |width: AvailableSpace| {
-      let mut tree = LayoutTree::from_render_node(self);
-      tree.compute_layout(Size {
-        width,
-        height: available_space.height,
-      });
-      let results = tree.into_results();
-
-      results
-        .layout(NodeId::ROOT)
-        .map_or(Size::ZERO, |layout| layout.size)
+    let at_width = |width| Size {
+      width,
+      height: available_space.height,
     };
 
-    if self.participates_as_inline_box() {
-      // CSS shrink-to-fit for inline-level atomic boxes:
-      // width = min(max-content, max(min-content, available)).
-      // Reference: https://www.w3.org/TR/CSS22/visudet.html#float-width
-      let min_content = measure_with(AvailableSpace::MinContent);
-      let max_content = {
-        let mut tree = LayoutTree::from_render_node(self);
-        // Hack: Use Flexbox to avoid Block's "expand to fill" behavior when calculating max-content.
-        // We want the content's preferred width, not the container's available width.
-        if let Some(node) = tree.get_layout_node_mut_ref(TaffyNodeId::from(0usize))
-          && node.style.display == TaffyDisplay::Block
-        {
-          node.style.display = TaffyDisplay::Flex;
-          node.style.flex_direction = taffy::FlexDirection::Row;
-          node.style.justify_content = Some(taffy::JustifyContent::START);
-        }
-
-        tree.compute_layout(Size {
-          width: AvailableSpace::MaxContent,
-          height: available_space.height,
-        });
-
-        let results = tree.into_results();
-        results
-          .layout(NodeId::ROOT)
-          .map_or(Size::ZERO, |layout| layout.size)
+    if !self.participates_as_inline_box() {
+      return AtomicInlineMetrics {
+        size: LayoutResults::compute(self, at_width(available_space.width)).root_size(),
+        baseline_offset: None,
       };
+    }
 
-      let used_width = match available_space.width {
-        AvailableSpace::Definite(available) => {
-          max_content.width.min(min_content.width.max(available))
-        }
-        AvailableSpace::MinContent => min_content.width,
-        AvailableSpace::MaxContent => max_content.width,
-      };
+    // CSS shrink-to-fit for inline-level atomic boxes:
+    // width = min(max-content, max(min-content, available)).
+    // Reference: https://www.w3.org/TR/CSS22/visudet.html#float-width
+    let min_content =
+      LayoutResults::compute(self, at_width(AvailableSpace::MinContent)).root_size();
+    let max_content = {
       let mut tree = LayoutTree::from_render_node(self);
-      tree.compute_layout(Size {
-        width: AvailableSpace::Definite(used_width),
-        height: available_space.height,
-      });
-      let results = tree.into_results();
-      let root_node_id = NodeId::ROOT;
+      // Hack: Use Flexbox to avoid Block's "expand to fill" behavior when calculating max-content.
+      // We want the content's preferred width, not the container's available width.
+      if let Some(node) = tree.get_layout_node_mut_ref(NodeId::ROOT.into_taffy())
+        && node.style.display == TaffyDisplay::Block
+      {
+        node.style.display = TaffyDisplay::Flex;
+        node.style.flex_direction = taffy::FlexDirection::Row;
+        node.style.justify_content = Some(taffy::JustifyContent::START);
+      }
 
-      return results.layout(root_node_id).map_or(
-        AtomicInlineMetrics {
-          size: Size::ZERO,
-          baseline_offset: None,
-        },
-        |layout| {
-          let size = layout.size;
-          let baseline_offset = self.resolve_inline_baseline_offset(
-            available_space,
-            size,
-            Some((&results, root_node_id)),
-          );
-          AtomicInlineMetrics {
-            size,
-            baseline_offset,
-          }
-        },
-      );
-    }
+      tree.compute_layout(at_width(AvailableSpace::MaxContent));
+      tree.into_results().root_size()
+    };
+    let used_width = match available_space.width {
+      AvailableSpace::Definite(available) => {
+        max_content.width.min(min_content.width.max(available))
+      }
+      AvailableSpace::MinContent => min_content.width,
+      AvailableSpace::MaxContent => max_content.width,
+    };
+    let results = LayoutResults::compute(self, at_width(AvailableSpace::Definite(used_width)));
 
-    let size = measure_with(available_space.width);
-    AtomicInlineMetrics {
-      size,
-      baseline_offset: None,
-    }
+    results.layout(NodeId::ROOT).map_or(
+      AtomicInlineMetrics {
+        size: Size::ZERO,
+        baseline_offset: None,
+      },
+      |layout| AtomicInlineMetrics {
+        size: layout.size,
+        baseline_offset: self.resolve_inline_baseline_offset(
+          available_space,
+          layout.size,
+          Some((&results, NodeId::ROOT)),
+        ),
+      },
+    )
   }
 
   pub(crate) fn measure(
@@ -1963,38 +1820,23 @@ impl RenderNode {
     is_inline_children: bool,
   ) -> Size<f32> {
     if is_inline_children {
-      let (max_width, max_height) =
-        create_inline_constraint(&self.context, available_space, known_dimensions);
-
       let font_style = SizedFontStyle::from_style(&self.context.style, &self.context);
-
-      let mut built = create_inline_layout(InlineLayoutRequest {
-        items: collect_inline_items(self),
+      let request = InlineLayoutRequest::in_available_space(
+        collect_inline_items(self),
         available_space,
-        max_width,
-        max_height,
-        style: &font_style,
-        context: &self.context,
-        mode: InlineLayoutMode::Measure,
-        shape_cacheable: true,
-      });
+        known_dimensions,
+        &font_style,
+        &self.context,
+        InlineLayoutMode::Measure,
+      );
+      let options = InlineMeasureOptions::new(
+        request.max_width,
+        font_style.parent.resolved_text_wrap_mode() == TextWrapMode::Wrap,
+        available_space,
+        known_dimensions,
+      );
 
-      let ceil_width = font_style.parent.resolved_text_wrap_mode() == TextWrapMode::Wrap;
-      let parent_font_metrics = built.parent_font_metrics();
-      return measure_inline_layout(
-        &mut built.layout,
-        &built.spans,
-        &built.positioned_floats,
-        &built.line_scales,
-        InlineMeasureOptions {
-          max_width,
-          ceil_width,
-          parent_font_metrics,
-          min_content_query: known_dimensions.width.is_none()
-            && matches!(available_space.width, AvailableSpace::MinContent),
-        },
-      )
-      .size;
+      return create_inline_layout(request).measure(options).size;
     }
 
     assert_ne!(
@@ -2180,7 +2022,14 @@ impl PendingRenderNode {
     } else {
       Self::anonymous_text_child(&context, &self.node).map(|child| Box::from([child]))
     };
-    let mut render_node = RenderNode::authored(context, self.node, self.source_order, children);
+    let mut render_node = RenderNode::new(
+      context,
+      NodeOrigin::Authored {
+        source_order: self.source_order,
+      },
+      Some(self.node),
+      children,
+    );
 
     if let Some(ordinal) = self.marker_ordinal
       && let Some(marker) = list_marker(&render_node.context, ordinal)
@@ -2288,11 +2137,31 @@ impl RenderContext {
       }
     }
 
-    let sizing_basis = child_sizing_for_final.unwrap_or_else(|| self.sizing.clone());
-    let font_size = style.font_size.to_px(&sizing_basis, sizing_basis.font_size);
-    let normal_basis = resolve_normal_line_height(self, &style, font_size);
+    let sizing = self.child_sizing(
+      &style,
+      child_sizing_for_final.as_ref().unwrap_or(&self.sizing),
+      is_document_root,
+    );
+    let current_color = style.color.resolve(self.current_color);
+    style.make_computed(&sizing);
+    (style, sizing, current_color)
+  }
+
+  /// The sizing a child with `style` resolves against. Its font size resolves in
+  /// `font_size_basis`, and a document root sets the root font metrics itself.
+  fn child_sizing(
+    &self,
+    style: &ComputedStyle,
+    font_size_basis: &SizingContext,
+    is_document_root: bool,
+  ) -> SizingContext {
+    let font_size = style
+      .font_size
+      .to_px(font_size_basis, font_size_basis.font_size);
+    let normal_basis = resolve_normal_line_height(self, style, font_size);
     let line_height = style.line_height.to_px(&self.sizing, normal_basis);
-    let sizing = self.sizing.with_font_metrics(
+
+    self.sizing.with_font_metrics(
       font_size,
       self
         .sizing
@@ -2303,24 +2172,13 @@ impl RenderContext {
         .sizing
         .root_line_height
         .or_else(|| is_document_root.then_some(line_height)),
-    );
-    let current_color = style.color.resolve(self.current_color);
-    style.make_computed(&sizing);
-    (style, sizing, current_color)
+    )
   }
 
   /// Samples the stylesheet animations on `style` at this render's time,
   /// against the sizing the pre-animation style produces.
   fn animated_style(&self, style: ComputedStyle) -> (ComputedStyle, SizingContext) {
-    let font_size = style.font_size.to_px(&self.sizing, self.sizing.font_size);
-    let normal_basis = resolve_normal_line_height(self, &style, font_size);
-    let line_height = style.line_height.to_px(&self.sizing, normal_basis);
-    let child_sizing = self.sizing.with_font_metrics(
-      font_size,
-      self.sizing.root_font_size,
-      line_height,
-      self.sizing.root_line_height,
-    );
+    let child_sizing = self.child_sizing(&style, &self.sizing, false);
     let child_current_color = style.color.resolve(self.current_color);
     let child_context = RenderContext::from_parent(
       self,
@@ -2375,17 +2233,8 @@ mod tests {
           .build(),
       )
       .build();
-    let leaf = |children: Option<Box<[RenderNode]>>| RenderNode {
-      context: context.clone(),
-      node: None,
-      origin: NodeOrigin::Anonymous,
-      children,
-      layout_style_override: None,
-      anonymous_text_content: None,
-      marker: None,
-      force_inline_layout: false,
-      table_header_lines: None,
-      table_part: None,
+    let leaf = |children: Option<Box<[RenderNode]>>| {
+      RenderNode::new(context.clone(), NodeOrigin::Anonymous, None, children)
     };
 
     let mut root = leaf(None);

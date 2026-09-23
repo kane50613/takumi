@@ -23,7 +23,7 @@ const INSIDE_SYMBOL_GAP_EM: f32 = 1.0;
 
 /// The marker box of a `display: list-item` box, per css-lists-3 §3.
 pub(super) fn list_marker(item_context: &RenderContext, ordinal: i32) -> Option<RenderNode> {
-  let is_rtl = item_context.style.direction == Direction::Rtl;
+  let direction = item_context.style.direction;
   let (mut style, sizing, current_color) =
     pseudo_computed_style(item_context, &MatchedDeclarationsView::default());
 
@@ -42,10 +42,10 @@ pub(super) fn list_marker(item_context: &RenderContext, ordinal: i32) -> Option<
 
   let context = RenderContext::from_parent(item_context, style, sizing, current_color);
   let mut content = match available_marker_image(item_context) {
-    Some(image) => marker_image(&context, image, is_rtl),
+    Some(image) => marker_image(&context, image, direction),
     None => {
       let style_type = &item_context.style.list_style_type;
-      let text = style_type.marker_text(ordinal, is_rtl)?;
+      let text = style_type.marker_text(ordinal, direction == Direction::Rtl)?;
 
       // Blink spaces a symbol marker with margins, not its suffix
       // (`InlineMarginsForInside`/`Outside`).
@@ -58,7 +58,7 @@ pub(super) fn list_marker(item_context: &RenderContext, ordinal: i32) -> Option<
         };
         let mut item = RenderNode::anonymous_text_item(&context, text);
 
-        apply_marker_gap(&mut item, &context, gap, is_rtl);
+        apply_marker_gap(&mut item, &context, gap, direction);
         item
       } else {
         RenderNode::anonymous_text_item(&context, text)
@@ -70,18 +70,12 @@ pub(super) fn list_marker(item_context: &RenderContext, ordinal: i32) -> Option<
     layout_style.flex_shrink = 0.0;
   }
 
-  Some(RenderNode {
+  Some(RenderNode::new(
     context,
-    node: Some(Node::container([])),
-    origin: NodeOrigin::Marker,
-    children: Some(Box::new([content])),
-    layout_style_override: None,
-    anonymous_text_content: None,
-    marker: None,
-    force_inline_layout: false,
-    table_header_lines: None,
-    table_part: None,
-  })
+    NodeOrigin::Marker,
+    Some(Node::container([])),
+    Some(Box::new([content])),
+  ))
 }
 
 /// css-lists-3 §3.1: an image that is not available leaves the counter style
@@ -97,7 +91,11 @@ fn available_marker_image(item_context: &RenderContext) -> Option<BackgroundImag
 }
 
 /// A marker image at its natural size.
-fn marker_image(context: &RenderContext, mut image: BackgroundImage, is_rtl: bool) -> RenderNode {
+fn marker_image(
+  context: &RenderContext,
+  mut image: BackgroundImage,
+  direction: Direction,
+) -> RenderNode {
   // Inheriting the image shares it, so its lengths resolve here rather than
   // once per node that inherited it.
   image.make_computed(&context.sizing);
@@ -107,23 +105,25 @@ fn marker_image(context: &RenderContext, mut image: BackgroundImage, is_rtl: boo
   if let Some(layout_style) = &mut item.layout_style_override {
     layout_style.max_size = TaffySize::auto();
   }
-  apply_marker_gap(&mut item, context, Length::Px(MARKER_GAP_PX), is_rtl);
+  apply_marker_gap(&mut item, context, Length::Px(MARKER_GAP_PX), direction);
 
   item
 }
 
-/// A margin on the content keeps the marker box itself zero-width.
-fn apply_marker_gap(item: &mut RenderNode, context: &RenderContext, gap: Length, is_rtl: bool) {
+/// A margin on the content's inline-end side keeps the marker box itself zero-width.
+fn apply_marker_gap(
+  item: &mut RenderNode,
+  context: &RenderContext,
+  gap: Length,
+  direction: Direction,
+) {
   let Some(layout_style) = &mut item.layout_style_override else {
     return;
   };
-  let gap = LengthPercentageAuto::length(gap.to_px(&context.sizing, 0.0));
+  let margin = &mut layout_style.margin;
+  let (_, end) = direction.inline_sides(&mut margin.left, &mut margin.right);
 
-  if is_rtl {
-    layout_style.margin.left = gap;
-  } else {
-    layout_style.margin.right = gap;
-  }
+  *end = LengthPercentageAuto::length(gap.to_px(&context.sizing, 0.0));
 }
 
 /// The running count a list hands to its items, honoring `start` and `value`.

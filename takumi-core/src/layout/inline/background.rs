@@ -2,6 +2,7 @@
 
 use crate::{
   geometry::{PathCommand, Point},
+  layout::corner_shape::KAPPA,
   style::Color,
 };
 use std::{collections::HashMap, rc::Rc};
@@ -225,11 +226,7 @@ impl DecorationAccumulator {
         // The start edge sits on the first line, the end edge on the last;
         // wrap-edge corners stay square, like `box-decoration-break: slice`.
         let (has_start, has_end) = (line_index == min_line, line_index == max_line);
-        let (has_left, has_right) = if decoration.rtl {
-          (has_end, has_start)
-        } else {
-          (has_start, has_end)
-        };
+        let (has_left, has_right) = decoration.direction.inline_sides(has_start, has_end);
         // css-backgrounds-3 corner overlap: one uniform factor shrinks every
         // radius so adjacent corners never cross.
         let raw = [
@@ -285,8 +282,6 @@ impl DecorationAccumulator {
 impl InlineBackgroundFragment {
   /// The rounded-rect contour the fragment fills, with quarter-ellipse corners.
   pub fn path(&self) -> Vec<PathCommand> {
-    const KAPPA: f32 = 4.0 / 3.0 * (std::f32::consts::SQRT_2 - 1.0);
-
     let InlineBackgroundFragment {
       x,
       y,

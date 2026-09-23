@@ -7,7 +7,8 @@
 
 use crate::style::Superellipse;
 
-const KAPPA: f32 = 4.0 / 3.0 * (std::f32::consts::SQRT_2 - 1.0);
+/// Control-point ratio that turns four cubics into a circle.
+pub(crate) const KAPPA: f32 = 4.0 / 3.0 * (std::f32::consts::SQRT_2 - 1.0);
 
 /// A corner outline in normalized coordinates, traversed from `(0, 1)` to `(1, 0)`.
 pub(crate) enum CornerContour {

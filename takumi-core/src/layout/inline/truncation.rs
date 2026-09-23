@@ -1,13 +1,10 @@
 //! `text-overflow: ellipsis` and line-clamp truncation.
 
-use crate::{context::RenderContext, font_style::SizedFontStyle, text_processing::MaxHeight};
+use crate::{context::RenderContext, font_style::SizedFontStyle, text_processing::RebreakOptions};
 use parley::{InlineBoxKind, PositionedInlineBox, PositionedLayoutItem};
 
 use super::{
-  InlineLayout, apply_text_indent,
-  breaking::{LineWidths, break_lines},
-  chromium_line_breaks, inline_line_height_hint,
-  items::ProcessedInlineSpan,
+  InlineLayout, break_into_lines, chromium_line_breaks, items::ProcessedInlineSpan,
   push_presentation_text, push_spans_into_builder, refresh_text_span_ranges,
 };
 
@@ -91,20 +88,24 @@ fn collect_truncation_checkpoints(layout: &InlineLayout) -> Vec<TruncationCheckp
   checkpoints
 }
 
-fn truncation_plan<'c>(
-  checkpoints: &[TruncationCheckpoint],
-  spans: &[ProcessedInlineSpan<'c>],
-  available_w: f32,
-) -> (Option<usize>, Option<(usize, usize)>) {
-  let truncate_at = checkpoints
-    .partition_point(|checkpoint| checkpoint.cumulative_width <= available_w)
-    .checked_sub(1)
-    .map(|index| checkpoints[index].byte_end)
-    .or(Some(0));
+/// Where truncation cuts the spans: every span from `span_cut` on goes, and `text_cut` shortens one
+/// text span to a byte length.
+struct TruncationPlan {
+  span_cut: usize,
+  text_cut: Option<(usize, usize)>,
+}
 
-  if let Some(cut) = truncate_at {
-    let mut remaining = cut;
-    let mut span_cut_idx = spans.len();
+impl TruncationPlan {
+  fn new(
+    checkpoints: &[TruncationCheckpoint],
+    spans: &[ProcessedInlineSpan<'_>],
+    available_w: f32,
+  ) -> Self {
+    let mut remaining = checkpoints
+      .partition_point(|checkpoint| checkpoint.cumulative_width <= available_w)
+      .checked_sub(1)
+      .map_or(0, |index| checkpoints[index].byte_end);
+    let mut span_cut = spans.len();
     let mut text_cut = None;
 
     for (index, span) in spans.iter().enumerate() {
@@ -119,23 +120,30 @@ fn truncation_plan<'c>(
           if remaining <= len {
             let safe_cut = text.floor_char_boundary(remaining.min(len));
             text_cut = Some((index, safe_cut));
-            span_cut_idx = index + 1;
+            span_cut = index + 1;
             break;
           }
           remaining -= len;
         }
         ProcessedInlineSpan::Box(_) | ProcessedInlineSpan::Spacer { .. } => {
           if remaining == 0 {
-            span_cut_idx = index;
+            span_cut = index;
             break;
           }
         }
       }
     }
 
-    (Some(span_cut_idx), text_cut)
-  } else {
-    (None, None)
+    Self { span_cut, text_cut }
+  }
+
+  fn apply(self, spans: &mut Vec<ProcessedInlineSpan<'_>>) {
+    if let Some((text_index, safe_cut)) = self.text_cut
+      && let Some(ProcessedInlineSpan::Text { text, .. }) = spans.get_mut(text_index)
+    {
+      text.truncate(safe_cut);
+    }
+    spans.truncate(self.span_cut);
   }
 }
 
@@ -151,47 +159,11 @@ fn text_span_style_by_id<'a, 'c>(
   }
 }
 
-fn truncated_tail_text_span_id<'c>(
-  spans: &[ProcessedInlineSpan<'c>],
-  span_cut_idx: Option<usize>,
-) -> Option<u64> {
-  span_cut_idx.and_then(|cut_idx| {
-    spans[..cut_idx]
-      .iter()
-      .enumerate()
-      .rev()
-      .find_map(|(span_id, span)| match span {
-        ProcessedInlineSpan::Text { .. } => Some(span_id as u64),
-        ProcessedInlineSpan::DirectionMark { .. }
-        | ProcessedInlineSpan::Box(_)
-        | ProcessedInlineSpan::Spacer { .. } => None,
-      })
-  })
-}
-
-fn apply_truncation_plan<'c>(
-  spans: &mut Vec<ProcessedInlineSpan<'c>>,
-  plan: (Option<usize>, Option<(usize, usize)>),
-) {
-  let (span_cut_idx, text_cut) = plan;
-  if let Some(span_cut_idx) = span_cut_idx {
-    if let Some((text_index, safe_cut)) = text_cut
-      && let Some(ProcessedInlineSpan::Text { text, .. }) = spans.get_mut(text_index)
-    {
-      text.truncate(safe_cut);
-    }
-    spans.truncate(span_cut_idx);
-  } else {
-    spans.clear();
-  }
-}
-
 /// Truncates text in the layout to fit within `max_width` and appends an ellipsis.
 pub(super) fn make_ellipsis_layout<'c>(
   layout: &mut InlineLayout,
   spans: &mut Vec<ProcessedInlineSpan<'c>>,
-  max_width: f32,
-  max_height: Option<MaxHeight>,
+  options: RebreakOptions,
   root_style: &'c SizedFontStyle,
   context: &RenderContext,
   positioned_floats: &mut Vec<PositionedInlineBox>,
@@ -208,8 +180,12 @@ pub(super) fn make_ellipsis_layout<'c>(
       .unwrap_or(root_style);
     let ellipsis_w = measure_ellipsis_width(context, ellipsis_style, ellipsis_char);
 
-    let plan = truncation_plan(&checkpoints, spans, (max_width - ellipsis_w).max(0.0));
-    let next_ellipsis_span_id = truncated_tail_text_span_id(spans, plan.0);
+    let plan = TruncationPlan::new(
+      &checkpoints,
+      spans,
+      (options.max_width - ellipsis_w).max(0.0),
+    );
+    let next_ellipsis_span_id = tail_text_span(&spans[..plan.span_cut]).map(|(_, span_id)| span_id);
 
     if next_ellipsis_span_id == ellipsis_span_id || iterations > 3 {
       break plan;
@@ -217,7 +193,7 @@ pub(super) fn make_ellipsis_layout<'c>(
     ellipsis_span_id = next_ellipsis_span_id;
   };
 
-  apply_truncation_plan(spans, final_plan);
+  final_plan.apply(spans);
   refresh_text_span_ranges(spans);
 
   let ellipsis_style = tail_text_span(spans).map_or(root_style, |(style, _)| style);
@@ -234,15 +210,11 @@ pub(super) fn make_ellipsis_layout<'c>(
       );
     });
 
-  apply_text_indent(&mut final_layout, root_style, max_width);
-  let text_wrap_mode = root_style.parent.resolved_text_wrap_mode();
   positioned_floats.clear();
-  break_lines(
+  break_into_lines(
     &mut final_layout,
-    LineWidths::uniform(max_width),
-    max_height,
-    inline_line_height_hint(root_style),
-    text_wrap_mode,
+    options,
+    root_style,
     spans,
     positioned_floats,
   );
