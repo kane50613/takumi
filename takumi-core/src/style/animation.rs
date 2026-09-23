@@ -242,24 +242,6 @@ fn sample_animation_progress(
 ) -> Option<AnimationSample> {
   let active_time = time_ms - delay_ms;
 
-  if duration_ms <= 0.0 {
-    if active_time < 0.0 {
-      return match fill_mode {
-        AnimationFillMode::Backwards | AnimationFillMode::Both => {
-          Some(AnimationSample::before(start_progress(direction)))
-        }
-        _ => None,
-      };
-    }
-
-    return Some(AnimationSample::active(end_progress(direction, 0)));
-  }
-
-  let total_active_duration = match iteration_count {
-    AnimationIterationCount::Infinite => f32::INFINITY,
-    AnimationIterationCount::Number(count) => duration_ms * count.max(0.0),
-  };
-
   if active_time < 0.0 {
     return match fill_mode {
       AnimationFillMode::Backwards | AnimationFillMode::Both => {
@@ -268,6 +250,15 @@ fn sample_animation_progress(
       _ => None,
     };
   }
+
+  if duration_ms <= 0.0 {
+    return Some(AnimationSample::active(end_progress(direction, 0)));
+  }
+
+  let total_active_duration = match iteration_count {
+    AnimationIterationCount::Infinite => f32::INFINITY,
+    AnimationIterationCount::Number(count) => duration_ms * count.max(0.0),
+  };
 
   if active_time >= total_active_duration {
     return match fill_mode {
@@ -348,13 +339,14 @@ fn sample_keyframe_segment<'a>(
     } else {
       progress / first.offset
     };
-    return Some(InterpolationSegment::new(
-      base_style,
-      None,
-      &resolved_frames.style(first.style_index).style,
-      Some(&resolved_frames.style(first.style_index).mask),
-      segment_progress.clamp(0.0, 1.0),
-    ));
+    let to = resolved_frames.style(first);
+
+    return Some(InterpolationSegment {
+      from_style: base_style,
+      to_style: &to.style,
+      animated_properties: to.mask,
+      progress: segment_progress.clamp(0.0, 1.0),
+    });
   }
 
   for window in resolved_frames.points.windows(2) {
@@ -368,13 +360,17 @@ fn sample_keyframe_segment<'a>(
       } else {
         (progress - start_point.offset) / width
       };
-      return Some(InterpolationSegment::new(
-        &resolved_frames.style(start_point.style_index).style,
-        Some(&resolved_frames.style(start_point.style_index).mask),
-        &resolved_frames.style(end_point.style_index).style,
-        Some(&resolved_frames.style(end_point.style_index).mask),
-        segment_progress.clamp(0.0, 1.0),
-      ));
+      let from = resolved_frames.style(start_point);
+      let to = resolved_frames.style(end_point);
+      let mut animated_properties = from.mask;
+
+      animated_properties.union(&to.mask);
+      return Some(InterpolationSegment {
+        from_style: &from.style,
+        to_style: &to.style,
+        animated_properties,
+        progress: segment_progress.clamp(0.0, 1.0),
+      });
     }
   }
 
@@ -384,13 +380,14 @@ fn sample_keyframe_segment<'a>(
   } else {
     (progress - last.offset) / (1.0 - last.offset)
   };
-  Some(InterpolationSegment::new(
-    &resolved_frames.style(last.style_index).style,
-    Some(&resolved_frames.style(last.style_index).mask),
-    base_style,
-    None,
-    segment_progress.clamp(0.0, 1.0),
-  ))
+  let from = resolved_frames.style(last);
+
+  Some(InterpolationSegment {
+    from_style: &from.style,
+    to_style: base_style,
+    animated_properties: from.mask,
+    progress: segment_progress.clamp(0.0, 1.0),
+  })
 }
 
 fn resolve_keyframes(keyframes: &KeyframesRule, base_style: &ComputedStyle) -> ResolvedKeyframes {
@@ -417,24 +414,26 @@ fn resolve_keyframes(keyframes: &KeyframesRule, base_style: &ComputedStyle) -> R
       .unwrap_or(Ordering::Equal)
   });
 
-  let mut styles = Vec::with_capacity(points.len());
+  let mut styles: Vec<ResolvedKeyframeStyle> = Vec::with_capacity(points.len());
   let mut merged_points: Vec<ResolvedKeyframePoint> = Vec::with_capacity(points.len());
   for point in points {
+    let keyframe = &keyframes.keyframes[point.style_index];
+
     if let Some(last_point) = merged_points.last_mut()
       && (last_point.offset - point.offset).abs() <= f32::EPSILON
     {
-      merge_keyframe_style(
-        &mut styles[last_point.style_index],
-        &keyframes.keyframes[point.style_index],
-      );
+      styles[last_point.style_index].apply(keyframe);
       continue;
     }
 
     let style_index = styles.len();
-    styles.push(resolve_keyframe_style(
-      &keyframes.keyframes[point.style_index],
-      base_style,
-    ));
+    let mut style = ResolvedKeyframeStyle {
+      style: base_style.clone(),
+      mask: PropertyMask::new(),
+    };
+
+    style.apply(keyframe);
+    styles.push(style);
     merged_points.push(ResolvedKeyframePoint {
       offset: point.offset,
       style_index,
@@ -447,6 +446,7 @@ fn resolve_keyframes(keyframes: &KeyframesRule, base_style: &ComputedStyle) -> R
   }
 }
 
+/// A keyframe's style and the longhands its declarations animate.
 #[derive(Debug)]
 struct ResolvedKeyframeStyle {
   style: ComputedStyle,
@@ -454,8 +454,11 @@ struct ResolvedKeyframeStyle {
 }
 
 impl ResolvedKeyframeStyle {
-  fn new(style: ComputedStyle, mask: PropertyMask) -> Self {
-    Self { style, mask }
+  fn apply(&mut self, keyframe: &KeyframeRule) {
+    for declaration in keyframe.declarations.iter() {
+      declaration.apply_to_computed(&mut self.style);
+      self.mask.extend(declaration.affected_longhands().iter());
+    }
   }
 }
 
@@ -472,8 +475,8 @@ struct ResolvedKeyframes {
 }
 
 impl ResolvedKeyframes {
-  fn style(&self, index: usize) -> &ResolvedKeyframeStyle {
-    &self.styles[index]
+  fn style(&self, point: &ResolvedKeyframePoint) -> &ResolvedKeyframeStyle {
+    &self.styles[point.style_index]
   }
 }
 
@@ -483,55 +486,6 @@ struct InterpolationSegment<'a> {
   to_style: &'a ComputedStyle,
   animated_properties: PropertyMask,
   progress: f32,
-}
-
-impl<'a> InterpolationSegment<'a> {
-  fn new(
-    from_style: &'a ComputedStyle,
-    from_mask: Option<&'a PropertyMask>,
-    to_style: &'a ComputedStyle,
-    to_mask: Option<&'a PropertyMask>,
-    progress: f32,
-  ) -> Self {
-    let mut animated_properties = PropertyMask::new();
-    if let Some(mask) = from_mask {
-      animated_properties.extend(mask.iter());
-    }
-    if let Some(mask) = to_mask {
-      animated_properties.extend(mask.iter());
-    }
-    Self {
-      from_style,
-      to_style,
-      animated_properties,
-      progress,
-    }
-  }
-}
-
-fn resolve_keyframe_style(
-  keyframe: &KeyframeRule,
-  base_style: &ComputedStyle,
-) -> ResolvedKeyframeStyle {
-  let mut style = base_style.clone();
-  let mut mask = PropertyMask::new();
-  apply_keyframe_declarations(&mut style, &mut mask, keyframe);
-  ResolvedKeyframeStyle::new(style, mask)
-}
-
-fn merge_keyframe_style(style: &mut ResolvedKeyframeStyle, keyframe: &KeyframeRule) {
-  apply_keyframe_declarations(&mut style.style, &mut style.mask, keyframe);
-}
-
-fn apply_keyframe_declarations(
-  style: &mut ComputedStyle,
-  mask: &mut PropertyMask,
-  keyframe: &KeyframeRule,
-) {
-  for declaration in keyframe.declarations.iter() {
-    declaration.apply_to_computed(style);
-    mask.extend(declaration.affected_longhands().iter());
-  }
 }
 
 macro_rules! impl_passthrough_animatable {
@@ -594,7 +548,7 @@ impl Animatable for Length {
             .map(|resolved_to| Length::Px(lerp(resolved_from, resolved_to, progress)))
         })
       })
-      .unwrap_or(if progress >= 0.5 { *to } else { *from });
+      .unwrap_or_else(|| discrete(from, to, progress));
   }
 }
 
