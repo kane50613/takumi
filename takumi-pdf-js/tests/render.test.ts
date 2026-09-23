@@ -7,10 +7,29 @@ const renderer = new PdfRenderer();
 
 const decoder = new TextDecoder("latin1");
 
+function pdfHeader(pdf: Uint8Array): string {
+  return decoder.decode(pdf.subarray(0, 5));
+}
+
 function pageCount(pdf: Uint8Array): number {
   const match = decoder.decode(pdf).match(/\/Count (\d+)/);
 
   return match ? Number(match[1]) : 0;
+}
+
+function notoSansTc(): Uint8Array {
+  return new Uint8Array(
+    readFileSync(
+      new URL("../../assets/fonts/noto-sans/NotoSansTC-VariableFont_wght.woff2", import.meta.url),
+    ),
+  );
+}
+
+function rows(count: number) {
+  return container({
+    style: { display: "flex", flexDirection: "column", width: "100%" },
+    children: Array.from({ length: count }, (_, i) => text(`Row ${i + 1}`, { fontSize: 16 })),
+  });
 }
 
 const doc = container({
@@ -22,14 +41,14 @@ test("renders a single fixed page", async () => {
   const pdf = await renderer.render(doc, { viewport: { width: 600, height: 300 } });
 
   expect(pdf).toBeInstanceOf(Uint8Array);
-  expect(decoder.decode(pdf.subarray(0, 5))).toBe("%PDF-");
+  expect(pdfHeader(pdf)).toBe("%PDF-");
   expect(pageCount(pdf)).toBe(1);
 });
 
 test("defaults to paged A4 without options", async () => {
   const pdf = await renderer.render(doc);
 
-  expect(decoder.decode(pdf.subarray(0, 5))).toBe("%PDF-");
+  expect(pdfHeader(pdf)).toBe("%PDF-");
   expect(pageCount(pdf)).toBe(1);
 });
 
@@ -39,7 +58,7 @@ test("renders an HTML string with its own stylesheet", async () => {
     { viewport: { width: 600, height: 300 } },
   );
 
-  expect(decoder.decode(pdf.subarray(0, 5))).toBe("%PDF-");
+  expect(pdfHeader(pdf)).toBe("%PDF-");
   expect(pageCount(pdf)).toBe(1);
 });
 
@@ -75,7 +94,7 @@ test("css takes one string and rejects the stylesheets alias next to it", async 
     css: ".title { font-size: 32px }",
   });
 
-  expect(decoder.decode(pdf.subarray(0, 5))).toBe("%PDF-");
+  expect(pdfHeader(pdf)).toBe("%PDF-");
 
   expect(
     renderer.render(`<div>Hello</div>`, {
@@ -92,19 +111,9 @@ test("paginates and substitutes footer counters", async () => {
   // own so the other tests keep the bundled set.
   const counting = new PdfRenderer();
 
-  await counting.registerFont(
-    new Uint8Array(
-      readFileSync(
-        new URL("../../assets/fonts/noto-sans/NotoSansTC-VariableFont_wght.woff2", import.meta.url),
-      ),
-    ),
-  );
+  await counting.registerFont(notoSansTc());
 
-  const rows = container({
-    style: { display: "flex", flexDirection: "column", width: "100%" },
-    children: Array.from({ length: 60 }, (_, i) => text(`Row ${i + 1}`, { fontSize: 16 })),
-  });
-  const pdf = await counting.render(rows, {
+  const pdf = await counting.render(rows(60), {
     size: { width: 400, height: 300 },
     margin: 24,
     footer: container({
@@ -122,19 +131,16 @@ test("paginates and substitutes footer counters", async () => {
 });
 
 test("pageRanges keeps only the listed pages", async () => {
-  const rows = container({
-    style: { display: "flex", flexDirection: "column", width: "100%" },
-    children: Array.from({ length: 60 }, (_, i) => text(`Row ${i + 1}`, { fontSize: 16 })),
-  });
+  const content = rows(60);
   const options = { size: { width: 400, height: 300 }, margin: 24 } as const;
-  const full = await renderer.render(rows, options);
-  const ranged = await renderer.render(rows, { ...options, pageRanges: [1, { from: 3 }] });
+  const full = await renderer.render(content, options);
+  const ranged = await renderer.render(content, { ...options, pageRanges: [1, { from: 3 }] });
 
   expect(pageCount(full)).toBeGreaterThan(3);
   expect(pageCount(ranged)).toBe(pageCount(full) - 1);
-  await expect(renderer.render(rows, { ...options, pageRanges: [{ from: 99 }] })).rejects.toThrow(
-    "select none",
-  );
+  await expect(
+    renderer.render(content, { ...options, pageRanges: [{ from: 99 }] }),
+  ).rejects.toThrow("select none");
   await expect(
     renderer.render(doc, {
       viewport: { width: 600, height: 300 },
@@ -145,49 +151,36 @@ test("pageRanges keeps only the listed pages", async () => {
 
 test("page counter primitives fill per page and pull their counter face", async () => {
   let loaded = false;
-  const pdf = await renderer.render(
-    container({
-      style: { display: "flex", flexDirection: "column", width: "100%" },
-      children: Array.from({ length: 60 }, (_, i) => text(`Row ${i + 1}`, { fontSize: 16 })),
-    }),
-    {
-      size: { width: 400, height: 300 },
-      margin: 24,
-      fonts: [
-        {
-          name: "Primitive CJK",
-          ranges: [[0x4e00, 0x9fff]],
-          data: () => {
-            loaded = true;
-            return new Uint8Array(
-              readFileSync(
-                new URL(
-                  "../../assets/fonts/noto-sans/NotoSansTC-VariableFont_wght.woff2",
-                  import.meta.url,
-                ),
-              ),
-            );
-          },
-        },
-      ],
-      footer: {
-        $$typeof: Symbol.for("react.transitional.element"),
-        type: "div",
-        props: {
-          style: { display: "flex", fontSize: 12 },
-          children: [
-            // Direct call and JSX element forms both resolve.
-            PageNumber({ format: "trad-chinese-informal" }),
-            {
-              $$typeof: Symbol.for("react.transitional.element"),
-              type: TotalPages,
-              props: { format: "trad-chinese-informal" },
-            },
-          ],
+  const pdf = await renderer.render(rows(60), {
+    size: { width: 400, height: 300 },
+    margin: 24,
+    fonts: [
+      {
+        name: "Primitive CJK",
+        ranges: [[0x4e00, 0x9fff]],
+        data: () => {
+          loaded = true;
+          return notoSansTc();
         },
       },
+    ],
+    footer: {
+      $$typeof: Symbol.for("react.transitional.element"),
+      type: "div",
+      props: {
+        style: { display: "flex", fontSize: 12 },
+        children: [
+          // Direct call and JSX element forms both resolve.
+          PageNumber({ format: "trad-chinese-informal" }),
+          {
+            $$typeof: Symbol.for("react.transitional.element"),
+            type: TotalPages,
+            props: { format: "trad-chinese-informal" },
+          },
+        ],
+      },
     },
-  );
+  });
 
   expect(pageCount(pdf)).toBeGreaterThan(1);
   expect(loaded).toBeTrue();
@@ -196,45 +189,27 @@ test("page counter primitives fill per page and pull their counter face", async 
 test("keeps a face the page counter needs but the document never uses", async () => {
   // `fonts` are filtered by whether their range covers the render, and a
   // chinese counter is the only thing on the page outside latin.
-  const pdf = await renderer.render(
-    container({
-      style: { display: "flex", flexDirection: "column", width: "100%" },
-      children: Array.from({ length: 60 }, (_, i) => text(`Row ${i + 1}`, { fontSize: 16 })),
+  const pdf = await renderer.render(rows(60), {
+    size: { width: 400, height: 300 },
+    margin: 24,
+    fonts: [
+      {
+        name: "Counter CJK",
+        ranges: [[0x4e00, 0x9fff]],
+        data: () => notoSansTc(),
+      },
+    ],
+    footer: container({
+      style: { display: "flex", fontSize: 12 },
+      children: [container({ className: "totalPages trad-chinese-informal" })],
     }),
-    {
-      size: { width: 400, height: 300 },
-      margin: 24,
-      fonts: [
-        {
-          name: "Counter CJK",
-          ranges: [[0x4e00, 0x9fff]],
-          data: () =>
-            new Uint8Array(
-              readFileSync(
-                new URL(
-                  "../../assets/fonts/noto-sans/NotoSansTC-VariableFont_wght.woff2",
-                  import.meta.url,
-                ),
-              ),
-            ),
-        },
-      ],
-      footer: container({
-        style: { display: "flex", fontSize: 12 },
-        children: [container({ className: "totalPages trad-chinese-informal" })],
-      }),
-    },
-  );
+  });
 
   expect(pageCount(pdf)).toBeGreaterThan(1);
 });
 
 test("auto-height viewport sizes the page to content", async () => {
-  const rows = container({
-    style: { display: "flex", flexDirection: "column", width: "100%" },
-    children: Array.from({ length: 40 }, (_, i) => text(`Row ${i + 1}`, { fontSize: 16 })),
-  });
-  const pdf = await renderer.render(rows, { viewport: { width: 300 } });
+  const pdf = await renderer.render(rows(40), { viewport: { width: 300 } });
 
   expect(pageCount(pdf)).toBe(1);
 
@@ -263,13 +238,10 @@ test("accepts case-insensitive presets and per-side margins", async () => {
 });
 
 test("a side left out of the margin object is auto", async () => {
-  const rows = container({
-    style: { display: "flex", flexDirection: "column", width: "100%" },
-    children: Array.from({ length: 40 }, (_, i) => text(`Row ${i + 1}`, { fontSize: 16 })),
-  });
+  const content = rows(40);
   const size = { width: 400, height: 300 } as const;
-  const auto = await renderer.render(rows, { size, margin: { left: 0 } });
-  const zero = await renderer.render(rows, {
+  const auto = await renderer.render(content, { size, margin: { left: 0 } });
+  const zero = await renderer.render(content, {
     size,
     margin: { top: 0, right: 0, bottom: 0, left: 0 },
   });
@@ -420,7 +392,7 @@ test("uncoveredText renders through uncovered characters", async () => {
     uncoveredText: "blank",
   });
 
-  expect(decoder.decode(placeholder.subarray(0, 5))).toBe("%PDF-");
+  expect(pdfHeader(placeholder)).toBe("%PDF-");
   expect(Buffer.from(placeholder).equals(Buffer.from(blank))).toBe(false);
 });
 
@@ -439,7 +411,7 @@ test("only the placeholder policy trips the standard that forbids it", async () 
     pdfa: "2b",
   });
 
-  expect(decoder.decode(blank.subarray(0, 5))).toBe("%PDF-");
+  expect(pdfHeader(blank)).toBe("%PDF-");
 });
 
 test("rejects a pages value that is not an object", async () => {
