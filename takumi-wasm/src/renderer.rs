@@ -1,23 +1,20 @@
 //! The main renderer for Takumi image rendering engine.
 
-use std::{
-  collections::HashMap,
-  sync::{Arc, RwLock, RwLockReadGuard, RwLockWriteGuard},
-};
+use std::{collections::HashMap, sync::Arc};
 
 use base64::{Engine, prelude::BASE64_STANDARD};
 use serde_wasm_bindgen::{from_value, to_value};
 use takumi_bindings_common::{
-  css_or_stylesheets, default_fonts,
+  FontStore, css_or_stylesheets, device_pixel_ratio,
   input::{decode_images, register_font},
-  stylesheet,
+  parse_lang, stylesheet, time_ms,
 };
 use takumi_core::{
   Fonts,
   layout::node::Node,
   resources::image::{ImageSource as LoadedImageSource, ResourceCache},
-  style::{FontFamily, Lang},
-  viewport::{DEFAULT_DEVICE_PIXEL_RATIO, Viewport},
+  style::FontFamily,
+  viewport::Viewport,
 };
 use takumi_raster::{
   AnimatedGifOptions, AnimatedPngOptions, AnimatedWebpOptions, AnimationFormat, SequentialScene,
@@ -34,16 +31,8 @@ use crate::{helper::map_error, model::*};
 /// permanently set, which would otherwise fail all subsequent calls.
 #[wasm_bindgen]
 pub struct Renderer {
-  state: RwLock<Fonts>,
+  fonts: FontStore,
   resource_cache: ResourceCache,
-}
-
-fn parse_lang(lang: Option<String>) -> Result<Option<Lang>, js_sys::Error> {
-  lang
-    .as_deref()
-    .map(Lang::parse)
-    .transpose()
-    .map_err(map_error)
 }
 
 fn raster_options<'fonts>(
@@ -59,21 +48,18 @@ fn raster_options<'fonts>(
     options.keyframes.unwrap_or_default(),
   )
   .map_err(map_error)?;
-  let lang = parse_lang(options.lang)?;
+  let lang = parse_lang(options.lang.as_deref()).map_err(map_error)?;
 
   Ok(
     takumi_raster::RenderOptions::builder()
       .viewport(
-        Viewport::new((options.width, options.height)).with_device_pixel_ratio(
-          options
-            .device_pixel_ratio
-            .unwrap_or(DEFAULT_DEVICE_PIXEL_RATIO),
-        ),
+        Viewport::new((options.width, options.height))
+          .with_device_pixel_ratio(device_pixel_ratio(options.device_pixel_ratio)),
       )
       .draw_debug_border(options.draw_debug_border.unwrap_or_default())
       .images(images)
       .stylesheet(stylesheet)
-      .time_ms(options.time_ms.unwrap_or_default().max(0) as u64)
+      .time_ms(time_ms(options.time_ms))
       .dithering(options.dithering.unwrap_or_default())
       .node(node)
       .fonts(fonts)
@@ -81,22 +67,6 @@ fn raster_options<'fonts>(
       .lang(lang)
       .build(),
   )
-}
-
-impl Renderer {
-  fn read_state(&self) -> Result<RwLockReadGuard<'_, Fonts>, js_sys::Error> {
-    self
-      .state
-      .try_read()
-      .map_err(|error| js_sys::Error::new(&format!("Renderer state is locked: {error}")))
-  }
-
-  fn write_state(&self) -> Result<RwLockWriteGuard<'_, Fonts>, js_sys::Error> {
-    self
-      .state
-      .try_write()
-      .map_err(|error| js_sys::Error::new(&format!("Renderer state is locked: {error}")))
-  }
 }
 
 #[wasm_bindgen]
@@ -117,7 +87,7 @@ impl Renderer {
       .unwrap_or_default();
 
     Ok(Renderer {
-      state: RwLock::new(default_fonts().map_err(map_error)?),
+      fonts: FontStore::new().map_err(map_error)?,
       resource_cache: match options.cache_max_bytes {
         Some(bytes) => ResourceCache::new(bytes),
         None => ResourceCache::default(),
@@ -130,7 +100,7 @@ impl Renderer {
   pub fn register_font(&self, font: FontType) -> Result<RegisteredFamiliesType, js_sys::Error> {
     let font: Font = from_value(font.into()).map_err(map_error)?;
 
-    let mut state = self.write_state()?;
+    let mut state = self.fonts.write().map_err(map_error)?;
     let registered = register_font(&mut state, font).map_err(map_error)?;
 
     Ok(to_value(&registered).map_err(map_error)?.unchecked_into())
@@ -150,7 +120,7 @@ impl Renderer {
       .unwrap_or_default();
 
     let images = self.images_map(options.images.as_deref())?;
-    let state = self.read_state()?;
+    let state = self.fonts.read().map_err(map_error)?;
     self.render_internal(&state, node, options, images)
   }
 
@@ -203,16 +173,16 @@ impl Renderer {
       options.keyframes.unwrap_or_default(),
     )
     .map_err(map_error)?;
-    let state = self.read_state()?;
+    let state = self.fonts.read().map_err(map_error)?;
 
-    let lang = parse_lang(options.lang)?;
+    let lang = parse_lang(options.lang.as_deref()).map_err(map_error)?;
 
     let svg = takumi_svg::render(
       takumi_svg::SvgOptions::builder()
         .viewport(Viewport::new((options.width, options.height)))
         .images(images)
         .stylesheet(stylesheet)
-        .time_ms(options.time_ms.unwrap_or_default().max(0) as u64)
+        .time_ms(time_ms(options.time_ms))
         .node(node)
         .fonts(&state)
         .font_families(options.font_families.map(FontFamily::from_names))
@@ -239,7 +209,7 @@ impl Renderer {
 
     let images = self.images_map(options.images.as_deref())?;
 
-    let state = self.read_state()?;
+    let state = self.fonts.read().map_err(map_error)?;
     let render_options = raster_options(&self.resource_cache, &state, node, options, images)?;
 
     let layout = measure(render_options).map_err(map_error)?;
@@ -268,7 +238,7 @@ impl Renderer {
     }
 
     let images = self.images_map(options.images.as_deref())?;
-    let state = self.read_state()?;
+    let state = self.fonts.read().map_err(map_error)?;
     let buffer = self.render_internal(&state, node, options, images)?;
 
     let mut data_uri = String::new();
@@ -294,13 +264,13 @@ impl Renderer {
       css,
       stylesheets,
       keyframes,
-      device_pixel_ratio,
+      device_pixel_ratio: dpr,
       fps,
       font_families,
       lang,
     } = from_value(options.into()).map_err(map_error)?;
 
-    let lang = parse_lang(lang)?;
+    let lang = parse_lang(lang.as_deref()).map_err(map_error)?;
 
     let images = self.images_map(images.as_deref())?;
 
@@ -312,8 +282,7 @@ impl Renderer {
       return Err(JsValue::from_str("Expected fps to be greater than 0"));
     }
 
-    let viewport = Viewport::new((width, height))
-      .with_device_pixel_ratio(device_pixel_ratio.unwrap_or(DEFAULT_DEVICE_PIXEL_RATIO));
+    let viewport = Viewport::new((width, height)).with_device_pixel_ratio(device_pixel_ratio(dpr));
     let draw_debug_border = draw_debug_border.unwrap_or_default();
     let stylesheet = stylesheet(
       &self.resource_cache,
@@ -321,7 +290,7 @@ impl Renderer {
       keyframes.unwrap_or_default(),
     )
     .map_err(map_error)?;
-    let state = self.read_state()?;
+    let state = self.fonts.read().map_err(map_error)?;
     let scene_options = scenes
       .into_iter()
       .map(|scene| {

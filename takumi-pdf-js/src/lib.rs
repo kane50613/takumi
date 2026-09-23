@@ -7,20 +7,15 @@ mod date;
 mod metadata;
 mod options;
 
-use std::{
-  collections::HashMap,
-  fmt::Display,
-  sync::{Arc, RwLock, RwLockReadGuard},
-};
+use std::{collections::HashMap, fmt::Display, sync::Arc};
 
 use serde_wasm_bindgen::{from_value, to_value};
 use takumi_bindings_common::{
-  default_fonts,
+  FontStore,
   input::{Font, decode_images, register_font},
-  stylesheet,
+  parse_lang, stylesheet,
 };
 use takumi_core::{
-  Fonts,
   layout::node::Node,
   resources::image::{ImageSource, ResourceCache},
   style::{FontFamily, Lang},
@@ -36,10 +31,6 @@ use crate::options::{PdfRenderOptions, page_background, resolve_geometry};
 
 pub(crate) fn map_error(error: impl Display) -> js_sys::Error {
   js_sys::Error::new(&error.to_string())
-}
-
-fn locked_error(error: impl Display) -> js_sys::Error {
-  js_sys::Error::new(&format!("Renderer state is locked: {error}"))
 }
 
 #[wasm_bindgen(typescript_custom_section)]
@@ -103,7 +94,7 @@ struct Layout {
 /// flag permanently set.
 #[wasm_bindgen]
 pub struct PdfRenderer {
-  state: RwLock<Fonts>,
+  fonts: FontStore,
   resource_cache: ResourceCache,
 }
 
@@ -115,12 +106,7 @@ impl PdfRenderer {
     )
     .map_err(map_error)?;
     let (viewport, page) = resolve_geometry(options)?;
-    let lang = options
-      .lang
-      .as_deref()
-      .map(Lang::parse)
-      .transpose()
-      .map_err(map_error)?;
+    let lang = parse_lang(options.lang.as_deref()).map_err(map_error)?;
 
     Ok(Layout {
       viewport,
@@ -128,10 +114,6 @@ impl PdfRenderer {
       images,
       lang,
     })
-  }
-
-  fn fonts(&self) -> Result<RwLockReadGuard<'_, Fonts>, js_sys::Error> {
-    self.state.try_read().map_err(locked_error)
   }
 }
 
@@ -141,7 +123,7 @@ impl PdfRenderer {
   #[wasm_bindgen(constructor)]
   pub fn new() -> Result<PdfRenderer, js_sys::Error> {
     Ok(PdfRenderer {
-      state: RwLock::new(default_fonts().map_err(map_error)?),
+      fonts: FontStore::new().map_err(map_error)?,
       resource_cache: ResourceCache::default(),
     })
   }
@@ -151,7 +133,7 @@ impl PdfRenderer {
   #[wasm_bindgen(js_name = registerFont)]
   pub fn register_font(&self, font: FontType) -> Result<RegisteredFamiliesType, js_sys::Error> {
     let font: Font = from_value(font.into()).map_err(map_error)?;
-    let mut state = self.state.try_write().map_err(locked_error)?;
+    let mut state = self.fonts.write().map_err(map_error)?;
 
     let registered = register_font(&mut state, font).map_err(map_error)?;
     Ok(to_value(&registered).map_err(map_error)?.unchecked_into())
@@ -176,7 +158,7 @@ impl PdfRenderer {
       images,
       lang,
     } = self.layout(&options)?;
-    let state = self.fonts()?;
+    let state = self.fonts.read().map_err(map_error)?;
 
     takumi_pdf::render(PdfOptions {
       viewport,
@@ -233,7 +215,7 @@ impl PdfRenderer {
       images,
       lang,
     } = self.layout(&options)?;
-    let state = self.fonts()?;
+    let state = self.fonts.read().map_err(map_error)?;
     let measured = takumi_pdf::measure(MeasureOptions {
       viewport,
       fonts: &state,
