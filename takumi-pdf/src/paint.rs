@@ -1,9 +1,11 @@
 //! Path, gradient, decoration and image helpers translating takumi paint into krilla.
 
 #[cfg(feature = "images")]
-use takumi_core::resources::image::{ImageError, ImageSource, RenderedImage};
 use takumi_core::{
   context::RenderContext,
+  resources::image::{ImageError, ImageSource, RenderedImage},
+};
+use takumi_core::{
   geometry::{ComputedLayout as Layout, PathCommand},
   layout::{border::BorderProperties, decoration::ClipBox},
   painter::FillShape,
@@ -12,20 +14,17 @@ use takumi_core::{
   },
 };
 
-use crate::{
-  filter::ColorFilter,
-  krilla::{
-    blend::BlendMode as KrillaBlendMode,
-    color::rgb,
-    geom::{Path as KrillaPath, PathBuilder, Rect as KrillaRect, Transform},
-    num::NormalizedF32,
-    paint::{Fill, FillRule, SpreadMethod, Stop},
-    stream::Stream,
-    surface::Surface,
-  },
+use crate::krilla::{
+  blend::BlendMode as KrillaBlendMode,
+  color::rgb,
+  geom::{Path as KrillaPath, PathBuilder, Rect as KrillaRect, Transform},
+  num::NormalizedF32,
+  paint::{Fill, FillRule, SpreadMethod, Stop},
+  stream::Stream,
+  surface::Surface,
 };
 #[cfg(feature = "images")]
-use crate::{krilla::image::Image as KrillaImage, raster::embedded_image};
+use crate::{filter::ColorFilter, krilla::image::Image as KrillaImage, raster::embedded_image};
 
 /// A degenerate path, for a clip that must hide everything: an empty region is
 /// what CSS asks for when a shape resolves to no area.
