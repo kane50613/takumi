@@ -12,32 +12,25 @@ use takumi::{
 const BENCH_WIDTH: u32 = 1200;
 const BENCH_HEIGHT: u32 = 630;
 
-fn build_gradient_node(background_images: Option<BackgroundImages>) -> Node {
-  let style = Style::default()
-    .with(StyleDeclaration::width(Length::Px(BENCH_WIDTH as f32)))
-    .with(StyleDeclaration::height(Length::Px(BENCH_HEIGHT as f32)))
-    .with(StyleDeclaration::background_image(background_images));
-
-  Node::container([]).with_style(style)
+fn gradient_node(background_image: &str) -> Node {
+  Node::container([]).with_style(
+    Style::default()
+      .with(StyleDeclaration::width(Length::Px(BENCH_WIDTH as f32)))
+      .with(StyleDeclaration::height(Length::Px(BENCH_HEIGHT as f32)))
+      .with(StyleDeclaration::background_image(
+        BackgroundImages::from_css_str(background_image).ok(),
+      )),
+  )
 }
 
-fn render_gradient_node(fonts: &Fonts, node: Node) {
-  let viewport = Viewport::new((BENCH_WIDTH, BENCH_HEIGHT));
-
+fn render_node(fonts: &Fonts, node: Node) {
   let options = RenderOptions::builder()
-    .viewport(viewport)
+    .viewport(Viewport::new((BENCH_WIDTH, BENCH_HEIGHT)))
     .node(node)
     .fonts(fonts)
     .build();
-
   let image = render(options).unwrap();
   black_box(image);
-}
-
-fn run_gradient_render(fonts: &Fonts, background_image_str: &str) {
-  let background_images = BackgroundImages::from_css_str(background_image_str).ok();
-  let node = build_gradient_node(background_images);
-  render_gradient_node(fonts, node);
 }
 
 fn bench_gradients(c: &mut Criterion) {
@@ -45,13 +38,28 @@ fn bench_gradients(c: &mut Criterion) {
   let mut group = c.benchmark_group("gradient");
 
   group.bench_function("linear_2_stops_1200x630", |b| {
-    b.iter(|| run_gradient_render(&fonts, black_box("linear-gradient(to right, red, blue)")))
+    b.iter(|| {
+      render_node(
+        &fonts,
+        gradient_node(black_box("linear-gradient(to right, red, blue)")),
+      )
+    })
   });
   group.bench_function("radial_2_stops_1200x630", |b| {
-    b.iter(|| run_gradient_render(&fonts, black_box("radial-gradient(circle, red, blue)")))
+    b.iter(|| {
+      render_node(
+        &fonts,
+        gradient_node(black_box("radial-gradient(circle, red, blue)")),
+      )
+    })
   });
   group.bench_function("conic_2_stops_1200x630", |b| {
-    b.iter(|| run_gradient_render(&fonts, black_box("conic-gradient(red, blue)")))
+    b.iter(|| {
+      render_node(
+        &fonts,
+        gradient_node(black_box("conic-gradient(red, blue)")),
+      )
+    })
   });
 
   group.finish();

@@ -1,12 +1,10 @@
-use std::{hint::black_box, path::Path};
+use std::{fs, hint::black_box, path::Path};
 
 use criterion::{Criterion, criterion_group, criterion_main};
 use takumi::prelude::{
-  AlignItems, BackgroundClip, BackgroundImages, BackgroundRepeats, BackgroundSizes, BorderRadius,
-  BorderStyle, Color, ColorInput, Display, FlexWrap, FontResource, FontWeight, Fonts, FromCssStr,
-  JustifyContent,
+  BorderRadius, BorderStyle, Color, ColorInput, Display, FlexWrap, FontResource, Fonts, FromCssStr,
   Length::{Percentage, Px},
-  Node, PositionValues, Sides, Style, StyleDeclaration, Viewport,
+  Node, Sides, Style, StyleDeclaration, Viewport,
 };
 use takumi_svg::{SvgOptions, render};
 
@@ -19,18 +17,18 @@ const PARAGRAPH: &str = "The quick brown fox jumps over the lazy dog. Pack my bo
 
 const CJK: &str = "日本利用壓電磁磚將腳步轉化為電能。這些瓷磚捕捉來自你腳步的動能。當你行走時，你的重量和動作會對瓷磚產生壓力。磁磚會輕微彎曲，從而產生機械應力。磁磚內部的壓電材料將這種應力轉化為電能。每一步都會產生少量電荷，而數百萬步結合在一起就能產生足夠的電力來驅動 LED燈、數位顯示器和感測器。";
 
-fn font_context_with_font() -> Fonts {
+fn fonts() -> Fonts {
   let mut fonts = Fonts::default();
   let path = Path::new(env!("CARGO_MANIFEST_DIR"))
     .join("../assets/fonts/archivo/Archivo-VariableFont_wdth,wght.ttf");
-  let data = std::fs::read(&path).expect("read test font");
+  let data = fs::read(&path).expect("read test font");
   fonts
     .register(FontResource::new(data))
     .expect("load test font");
   fonts
 }
 
-fn render_fixture(fonts: &Fonts, node: Node) {
+fn render_node(fonts: &Fonts, node: Node) {
   let svg = render(
     SvgOptions::builder()
       .viewport(Viewport::new((BENCH_WIDTH, BENCH_HEIGHT)))
@@ -69,41 +67,6 @@ fn cjk_fixture() -> Node {
     ])
     .with_padding(Sides::from(Px(24.0))),
   )
-}
-
-fn gradient_clip_text_fixture() -> Node {
-  let gradient = BackgroundImages::from_css_str(
-    "linear-gradient(90deg, #ff3b30, #ffcc00, #34c759, #007aff, #5856d6)",
-  )
-  .unwrap();
-
-  Node::container([
-    Node::text("Gradient Text Benchmark".to_string()).with_style(
-      Style::default()
-        .with(StyleDeclaration::display(Display::Flex))
-        .with(StyleDeclaration::background_image(Some(gradient)))
-        .with(StyleDeclaration::background_size(
-          BackgroundSizes::from_css_str("100% 100%").unwrap(),
-        ))
-        .with(StyleDeclaration::background_position(
-          PositionValues::from_css_str("0 0").unwrap(),
-        ))
-        .with(StyleDeclaration::background_repeat(
-          BackgroundRepeats::from_css_str("no-repeat").unwrap(),
-        ))
-        .with(StyleDeclaration::background_clip(BackgroundClip::Text))
-        .with(StyleDeclaration::color(ColorInput::Value(
-          Color::transparent(),
-        ))),
-    ),
-  ])
-  .with_style(full([
-    StyleDeclaration::background_color(ColorInput::Value(Color([242, 242, 242, 255]))),
-    StyleDeclaration::font_size(Px(72.0).into()),
-    StyleDeclaration::font_weight(FontWeight::from(800.0)),
-    StyleDeclaration::align_items(AlignItems::Center),
-    StyleDeclaration::justify_content(JustifyContent::Center),
-  ]))
 }
 
 fn shape_border_fixture() -> Node {
@@ -149,20 +112,20 @@ fn shape_border_fixture() -> Node {
 }
 
 fn bench_svg(c: &mut Criterion) {
-  let fonts = font_context_with_font();
+  let fonts = fonts();
   let mut group = c.benchmark_group("svg");
 
   group.bench_function("paragraph", |b| {
-    b.iter(|| render_fixture(&fonts, black_box(paragraph_fixture())))
+    b.iter(|| render_node(&fonts, black_box(paragraph_fixture())))
   });
   group.bench_function("cjk", |b| {
-    b.iter(|| render_fixture(&fonts, black_box(cjk_fixture())))
+    b.iter(|| render_node(&fonts, black_box(cjk_fixture())))
   });
   group.bench_function("gradient_clip_text", |b| {
-    b.iter(|| render_fixture(&fonts, black_box(gradient_clip_text_fixture())))
+    b.iter(|| render_node(&fonts, black_box(common::gradient_clip_text_fixture())))
   });
   group.bench_function("shape_border", |b| {
-    b.iter(|| render_fixture(&fonts, black_box(shape_border_fixture())))
+    b.iter(|| render_node(&fonts, black_box(shape_border_fixture())))
   });
 
   group.finish();
