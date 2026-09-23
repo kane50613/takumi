@@ -155,6 +155,12 @@ test("serializeSvg keeps valid style values that contain semicolons", () => {
   expect(serializeSvg(<svg style={{ stroke: "blue;" }} />)).toContain('style="stroke:blue;"');
 });
 
+test("serializeSvg keeps an empty style object empty", () => {
+  expect(serializeSvg(<svg style={{}} />)).toBe(
+    '<svg style="" xmlns="http://www.w3.org/2000/svg"></svg>',
+  );
+});
+
 test("serializeSvg rejects style entries that leave their declaration", () => {
   const injectedProperty: Record<string, string> = { "fill:red;stroke": "blue" };
 

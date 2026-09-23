@@ -140,9 +140,10 @@ function serializeAttributes(props: Record<string, unknown>): string {
 
     assertXmlName(name, "attribute");
 
-    const style = key === "style" && typeof value === "object" ? serializeStyle(value) : "";
+    const text =
+      key === "style" && typeof value === "object" ? serializeStyle(value) : String(value);
 
-    attributes += ` ${name}="${escapeXml(style || String(value))}"`;
+    attributes += ` ${name}="${escapeXml(text)}"`;
   }
 
   return attributes;
