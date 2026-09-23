@@ -10,12 +10,13 @@ use takumi_core::{
 use tiny_skia::{IntSize, Pixmap, PixmapMut, PixmapRef, PremultipliedColorU8};
 
 #[cfg(feature = "svg")]
+use crate::pixmap_from_buffer;
 use crate::resources::image::RenderedImage;
 use crate::{
   BilinearAxis, BorderProperties, DrawTarget, OverlayOptions, PaintSource, RenderContext, Result,
   RowSource, SamplingFootprint, checked_area, color_to_premultiplied, interpolate_with_footprint,
   layout::node::resolve_image,
-  overlay_image, pixmap_from_buffer, pixmap_ref_from_buffer,
+  overlay_image, pixmap_ref_from_buffer,
   resources::{image::ImageSource, image_buffer::ImageBuffer},
   style::*,
   try_overlay_gradient_tile,
