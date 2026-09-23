@@ -13,8 +13,8 @@ use super::gradient_utils::{
   parse_gradient_stops, write_gradient_css,
 };
 use crate::style::{
-  Animatable, Color, ColorInterpolationMethod, CssDescriptorKind, CssSyntaxKind, CssToken, FromCss,
-  Length, MakeComputed, ParseResult, SizingContext, ToCss, impl_css_enum, properties::ColorInput,
+  Animatable, Color, ColorInput, ColorInterpolationMethod, CssDescriptorKind, CssSyntaxKind,
+  CssToken, FromCss, Length, MakeComputed, ParseResult, SizingContext, ToCss, impl_css_enum,
   tw::TailwindPropertyParser, unexpected_token,
 };
 

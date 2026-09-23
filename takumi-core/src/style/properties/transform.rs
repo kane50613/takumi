@@ -1,6 +1,6 @@
 use std::{
   fmt,
-  ops::{Mul, MulAssign},
+  ops::{Deref, DerefMut, Mul, MulAssign},
 };
 
 use cssparser::{Parser, Token, match_ignore_ascii_case};
@@ -389,14 +389,14 @@ impl Animatable for Transforms {
   }
 }
 
-impl std::ops::Deref for Transforms {
+impl Deref for Transforms {
   type Target = Box<[Transform]>;
   fn deref(&self) -> &Self::Target {
     &self.0
   }
 }
 
-impl std::ops::DerefMut for Transforms {
+impl DerefMut for Transforms {
   fn deref_mut(&mut self) -> &mut Self::Target {
     &mut self.0
   }

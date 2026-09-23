@@ -522,8 +522,6 @@ fn build_lut<T: Copy>(
   from_color: impl Fn(Color) -> T,
   interpolate_srgb: impl Fn(T, T, f32) -> T,
 ) -> Vec<T> {
-  let color_space = interpolation.color_space;
-  let hue_direction = interpolation.hue_direction;
   if lut_size == 0 {
     return Vec::new();
   }
@@ -565,15 +563,18 @@ fn build_lut<T: Copy>(
     }
 
     let t = interpolation_position(left_stop.position, right_stop.position, position_px);
-    if color_space == ColorSpaceTag::Srgb && hue_direction == HueDirection::Shorter {
+    if interpolation.color_space == ColorSpaceTag::Srgb
+      && interpolation.hue_direction == HueDirection::Shorter
+    {
       return interpolate_srgb(from_color(left_stop.color), from_color(right_stop.color), t);
     }
 
-    from_color(
-      left_stop
-        .color
-        .interpolate(right_stop.color, t, color_space, hue_direction),
-    )
+    from_color(left_stop.color.interpolate(
+      right_stop.color,
+      t,
+      interpolation.color_space,
+      interpolation.hue_direction,
+    ))
   };
 
   let mut lut: Vec<T> = (0..lut_size).map(&mut write_sample).collect();

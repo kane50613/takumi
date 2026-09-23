@@ -3,8 +3,8 @@ use std::fmt;
 use cssparser::Parser;
 
 use crate::style::{
-  Animatable, BorderStyle, Color, ColorInput, CssSyntaxKind, CssToken, FromCss, MakeComputed,
-  ParseResult, SizingContext, ToCss, impl_css_enum, properties::Length, tw::TailwindPropertyParser,
+  Animatable, BorderStyle, Color, ColorInput, CssSyntaxKind, CssToken, FromCss, Length,
+  MakeComputed, ParseResult, SizingContext, ToCss, impl_css_enum, tw::TailwindPropertyParser,
   unexpected_token,
 };
 
@@ -157,11 +157,7 @@ impl<'i> FromCss<'i> for Border {
     let mut style = None;
     let mut color = None;
 
-    loop {
-      if input.is_exhausted() {
-        break;
-      }
-
+    while !input.is_exhausted() {
       if let Ok(value) = input.try_parse(LineWidth::from_css) {
         width = Some(value);
         continue;
