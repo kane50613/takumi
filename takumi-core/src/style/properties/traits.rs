@@ -1,11 +1,13 @@
-use std::{borrow::Cow, fmt, sync::Arc};
+use std::{borrow::Cow, error::Error, fmt, sync::Arc};
 
-use cssparser::{Parser, ParserInput, Token};
+use cssparser::{
+  BasicParseErrorKind, ParseError as CssParseError, ParseErrorKind, Parser, ParserInput, Token,
+};
 
 use crate::style::{Color, SizingContext, build_unexpected_token, math::lcm};
 
 /// Parser result type alias for CSS property parsers.
-pub(crate) type ParseResult<'i, T> = Result<T, cssparser::ParseError<'i, Cow<'i, str>>>;
+pub(crate) type ParseResult<'i, T> = Result<T, CssParseError<'i, Cow<'i, str>>>;
 
 /// Owned error returned by [`FromCssStr::from_css_str`]. Carries a
 /// human-readable message and borrows nothing from the parser, keeping
@@ -21,13 +23,13 @@ impl fmt::Display for ParseError {
   }
 }
 
-impl std::error::Error for ParseError {}
+impl Error for ParseError {}
 
 impl ParseError {
   /// Stringifies an internal `cssparser` error into an owned [`ParseError`].
-  pub(crate) fn from_css_error(error: &cssparser::ParseError<'_, Cow<'_, str>>) -> Self {
+  pub(crate) fn from_css_error(error: &CssParseError<'_, Cow<'_, str>>) -> Self {
     let message = match &error.kind {
-      cssparser::ParseErrorKind::Custom(message) => message.to_string(),
+      ParseErrorKind::Custom(message) => message.to_string(),
       basic => format!("{basic:?}"),
     };
 
@@ -804,10 +806,10 @@ impl Animatable for u32 {}
 impl<'i> FromCss<'i> for u32 {
   const VALID_TOKENS: &'static [CssToken] = &[CssToken::Syntax(CssSyntaxKind::Integer)];
 
-  fn from_css(input: &mut cssparser::Parser<'i, '_>) -> ParseResult<'i, Self> {
+  fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
     let value = input.expect_integer()?;
     if value < 0 {
-      return Err(input.new_error(cssparser::BasicParseErrorKind::QualifiedRuleInvalid));
+      return Err(input.new_error(BasicParseErrorKind::QualifiedRuleInvalid));
     }
     Ok(value as u32)
   }

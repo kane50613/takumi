@@ -330,30 +330,14 @@ impl<'i> FromCss<'i> for Filter {
     }
 
     match_ignore_ascii_case! {function,
-      "brightness" => parser.parse_nested_block(|input| {
-        Ok(Filter::Brightness(PercentageNumber::from_css(input)?))
-      }),
-      "opacity" => parser.parse_nested_block(|input| {
-        Ok(Filter::Opacity(PercentageNumber::from_css(input)?))
-      }),
-      "contrast" => parser.parse_nested_block(|input| {
-        Ok(Filter::Contrast(PercentageNumber::from_css(input)?))
-      }),
-      "grayscale" => parser.parse_nested_block(|input| {
-        Ok(Filter::Grayscale(PercentageNumber::from_css(input)?))
-      }),
-      "hue-rotate" => parser.parse_nested_block(|input| {
-        Ok(Filter::HueRotate(Angle::from_css(input)?))
-      }),
-      "invert" => parser.parse_nested_block(|input| {
-        Ok(Filter::Invert(PercentageNumber::from_css(input)?))
-      }),
-      "saturate" => parser.parse_nested_block(|input| {
-        Ok(Filter::Saturate(PercentageNumber::from_css(input)?))
-      }),
-      "sepia" => parser.parse_nested_block(|input| {
-        Ok(Filter::Sepia(PercentageNumber::from_css(input)?))
-      }),
+      "brightness" => parser.parse_nested_block(|input| PercentageNumber::from_css(input).map(Filter::Brightness)),
+      "opacity" => parser.parse_nested_block(|input| PercentageNumber::from_css(input).map(Filter::Opacity)),
+      "contrast" => parser.parse_nested_block(|input| PercentageNumber::from_css(input).map(Filter::Contrast)),
+      "grayscale" => parser.parse_nested_block(|input| PercentageNumber::from_css(input).map(Filter::Grayscale)),
+      "hue-rotate" => parser.parse_nested_block(|input| Angle::from_css(input).map(Filter::HueRotate)),
+      "invert" => parser.parse_nested_block(|input| PercentageNumber::from_css(input).map(Filter::Invert)),
+      "saturate" => parser.parse_nested_block(|input| PercentageNumber::from_css(input).map(Filter::Saturate)),
+      "sepia" => parser.parse_nested_block(|input| PercentageNumber::from_css(input).map(Filter::Sepia)),
       "blur" => parser.parse_nested_block(|input| {
         // blur() radius is optional and defaults to 0; a present argument must be a valid length.
         let radius = if input.is_exhausted() {
@@ -363,9 +347,7 @@ impl<'i> FromCss<'i> for Filter {
         };
         Ok(Filter::Blur(radius))
       }),
-      "drop-shadow" => parser.parse_nested_block(|input| {
-        Ok(Filter::DropShadow(TextShadow::from_css(input)?))
-      }),
+      "drop-shadow" => parser.parse_nested_block(|input| TextShadow::from_css(input).map(Filter::DropShadow)),
       _ => Err(unexpected_token!(location, token)),
     }
   }

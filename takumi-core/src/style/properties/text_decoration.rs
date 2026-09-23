@@ -5,8 +5,8 @@ use cssparser::{Parser, Token};
 use typed_builder::TypedBuilder;
 
 use crate::style::{
-  Animatable, Color, CssSyntaxKind, CssToken, FromCss, FromCssStr, Length, MakeComputed,
-  ParseResult, SizingContext, ToCss, discrete, impl_css_enum, properties::ColorInput,
+  Animatable, Color, ColorInput, CssSyntaxKind, CssToken, FromCss, FromCssStr, Length,
+  MakeComputed, ParseResult, SizingContext, ToCss, discrete, impl_css_enum,
   tw::TailwindPropertyParser, unexpected_token, write_keywords,
 };
 

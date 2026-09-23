@@ -32,7 +32,7 @@ impl<'i> FromCss<'i> for FontStretch {
     let location = input.current_source_location();
 
     if let Ok(value) = input.try_parse(Parser::expect_percentage) {
-      return Ok(Self(FontWidth::from_percentage(value.max(0.0) * 100.0)));
+      return Ok(Self::from_percentage(value));
     }
 
     let ident = input.expect_ident()?;
