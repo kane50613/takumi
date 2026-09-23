@@ -5,7 +5,7 @@ use taffy::{CompactLength, Dimension};
 
 use crate::style::{
   Animatable, Color, CssDescriptorKind, CssSyntaxKind, CssToken, FromCss, Length, MakeComputed,
-  ParseResult, SizingContext, ToCss,
+  ParseResult, SizingContext, ToCss, discrete,
   tw::{Namespace, TailwindPropertyParser},
   unexpected_token,
 };
@@ -107,23 +107,17 @@ impl Animatable for Size {
     current_color: Color,
   ) {
     *self = match (from, to) {
-      (Self::Length(from), Self::Length(to)) => {
-        let mut length = *from;
-        length.interpolate(from, to, progress, sizing, current_color);
-        Self::Length(length)
-      }
-      (Self::FitContentLimit(from), Self::FitContentLimit(to)) => {
-        let mut length = *from;
-        length.interpolate(from, to, progress, sizing, current_color);
-        Self::FitContentLimit(length)
-      }
-      _ => {
-        if progress >= 0.5 {
-          *to
-        } else {
-          *from
-        }
-      }
+      (Self::Length(from), Self::Length(to)) => Self::Length(Length::interpolated(
+        from,
+        to,
+        progress,
+        sizing,
+        current_color,
+      )),
+      (Self::FitContentLimit(from), Self::FitContentLimit(to)) => Self::FitContentLimit(
+        Length::interpolated(from, to, progress, sizing, current_color),
+      ),
+      _ => discrete(from, to, progress),
     };
   }
 }

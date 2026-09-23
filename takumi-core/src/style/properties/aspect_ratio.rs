@@ -5,7 +5,7 @@ use cssparser::{Parser, match_ignore_ascii_case};
 use crate::style::tw::Namespace;
 use crate::style::{
   Animatable, Color, CssSyntaxKind, CssToken, FromCss, FromCssStr, MakeComputed, ParseResult,
-  SizingContext, ToCss, lerp, tw::TailwindPropertyParser,
+  SizingContext, ToCss, discrete, lerp, tw::TailwindPropertyParser,
 };
 
 #[derive(Default, Debug, Clone, Copy, PartialEq)]
@@ -45,13 +45,7 @@ impl Animatable for AspectRatio {
       (AspectRatio::Ratio(lhs), AspectRatio::Ratio(rhs)) => {
         AspectRatio::Ratio(lerp(lhs, rhs, progress))
       }
-      _ => {
-        if progress >= 0.5 {
-          *to
-        } else {
-          *from
-        }
-      }
+      _ => discrete(from, to, progress),
     };
   }
 }

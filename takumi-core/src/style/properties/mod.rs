@@ -169,45 +169,6 @@ impl TailwindPropertyParser for LineJoin {}
 impl TailwindPropertyParser for AlignItems {}
 impl TailwindPropertyParser for BorderStyle {}
 
-impl<T: Animatable + Copy> Animatable for SpacePair<T> {
-  fn interpolate(
-    &mut self,
-    from: &Self,
-    to: &Self,
-    progress: f32,
-    sizing: &SizingContext,
-    current_color: Color,
-  ) {
-    self
-      .x
-      .interpolate(&from.x, &to.x, progress, sizing, current_color);
-    self
-      .y
-      .interpolate(&from.y, &to.y, progress, sizing, current_color);
-  }
-}
-
-impl<T: Animatable + Copy> Animatable for Sides<T> {
-  fn interpolate(
-    &mut self,
-    from: &Self,
-    to: &Self,
-    progress: f32,
-    sizing: &SizingContext,
-    current_color: Color,
-  ) {
-    for (index, value) in self.0.iter_mut().enumerate() {
-      value.interpolate(
-        &from.0[index],
-        &to.0[index],
-        progress,
-        sizing,
-        current_color,
-      );
-    }
-  }
-}
-
 macro_rules! unexpected_token {
   ($type:ty, $location:expr, $token:expr $(,)?) => {
     $crate::style::build_unexpected_token(

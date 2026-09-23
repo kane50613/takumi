@@ -4,8 +4,8 @@ use cssparser::Parser;
 use taffy::Point;
 
 use crate::style::{
-  CssExpectedMessage, CssToken, FromCss, Length, MakeComputed, Overflow, ParseResult,
-  SizingContext, ToCss,
+  Animatable, Color, CssExpectedMessage, CssToken, FromCss, Length, MakeComputed, Overflow,
+  ParseResult, SizingContext, ToCss,
 };
 
 /// A pair of values for horizontal and vertical axes.
@@ -50,6 +50,13 @@ impl<T: Copy> SpacePair<T> {
   pub const fn from_pair(x: T, y: T) -> Self {
     Self { x, y }
   }
+
+  pub(crate) fn into_taffy(self) -> Point<T> {
+    Point {
+      x: self.x,
+      y: self.y,
+    }
+  }
 }
 
 impl<T: Copy + MakeComputed> MakeComputed for SpacePair<T> {
@@ -59,12 +66,21 @@ impl<T: Copy + MakeComputed> MakeComputed for SpacePair<T> {
   }
 }
 
-impl<T: Copy> SpacePair<T> {
-  pub(crate) fn into_taffy(self) -> Point<T> {
-    Point {
-      x: self.x,
-      y: self.y,
-    }
+impl<T: Animatable + Copy> Animatable for SpacePair<T> {
+  fn interpolate(
+    &mut self,
+    from: &Self,
+    to: &Self,
+    progress: f32,
+    sizing: &SizingContext,
+    current_color: Color,
+  ) {
+    self
+      .x
+      .interpolate(&from.x, &to.x, progress, sizing, current_color);
+    self
+      .y
+      .interpolate(&from.y, &to.y, progress, sizing, current_color);
   }
 }
 

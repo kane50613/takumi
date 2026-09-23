@@ -27,7 +27,7 @@ impl Animatable for PercentageNumber {
     _sizing: &SizingContext,
     _current_color: Color,
   ) {
-    *self = Self(lerp(from.0, to.0, progress));
+    self.0 = lerp(from.0, to.0, progress);
   }
 }
 

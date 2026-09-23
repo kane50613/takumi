@@ -86,6 +86,16 @@ impl FontSize {
     }
   }
 
+  /// The length this size animates as; `larger`/`smaller` scale `1em`.
+  fn to_length(self) -> Length {
+    match self {
+      Self::Keyword(keyword) => keyword.to_length(),
+      Self::Length(length) => length,
+      Self::Larger => Length::Em(RELATIVE_SIZE_RATIO),
+      Self::Smaller => Length::Em(1.0 / RELATIVE_SIZE_RATIO),
+    }
+  }
+
   fn parse_relative<'i>(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
     let location = input.current_source_location();
     let token = input.next()?;
@@ -160,19 +170,13 @@ impl Animatable for FontSize {
     sizing: &SizingContext,
     current_color: Color,
   ) {
-    let to_length = |size: Self| match size {
-      Self::Keyword(keyword) => keyword.to_length(),
-      Self::Length(length) => length,
-      Self::Larger => Length::Em(RELATIVE_SIZE_RATIO),
-      Self::Smaller => Length::Em(1.0 / RELATIVE_SIZE_RATIO),
-    };
-
-    let from_length = to_length(*from);
-    let to_length = to_length(*to);
-
-    let mut value = from_length;
-    value.interpolate(&from_length, &to_length, progress, sizing, current_color);
-    *self = Self::Length(value);
+    *self = Self::Length(Length::interpolated(
+      &from.to_length(),
+      &to.to_length(),
+      progress,
+      sizing,
+      current_color,
+    ));
   }
 }
 

@@ -111,11 +111,13 @@ impl Animatable for LineWidth {
     sizing: &SizingContext,
     current_color: Color,
   ) {
-    let from_length = Length::from(*from);
-    let to_length = Length::from(*to);
-    let mut value = from_length;
-    value.interpolate(&from_length, &to_length, progress, sizing, current_color);
-    *self = Self::Length(value);
+    *self = Self::Length(Length::interpolated(
+      &Length::from(*from),
+      &Length::from(*to),
+      progress,
+      sizing,
+      current_color,
+    ));
   }
 }
 

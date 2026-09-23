@@ -4,7 +4,7 @@ use cssparser::{BasicParseErrorKind, Parser, Token, match_ignore_ascii_case};
 
 use crate::style::{
   Animatable, AspectRatio, Color, CssSyntaxKind, CssToken, FlexDirection, FromCss, FromCssStr,
-  Length, MakeComputed, ParseResult, Size, SizingContext, ToCss,
+  Length, MakeComputed, ParseResult, Size, SizingContext, ToCss, discrete,
   tw::{Namespace, TailwindPropertyParser},
   unexpected_token,
 };
@@ -74,18 +74,14 @@ impl Animatable for FlexBasis {
     current_color: Color,
   ) {
     *self = match (from, to) {
-      (Self::Size(from), Self::Size(to)) => {
-        let mut size = *from;
-        size.interpolate(from, to, progress, sizing, current_color);
-        Self::Size(size)
-      }
-      _ => {
-        if progress >= 0.5 {
-          *to
-        } else {
-          *from
-        }
-      }
+      (Self::Size(from), Self::Size(to)) => Self::Size(Size::interpolated(
+        from,
+        to,
+        progress,
+        sizing,
+        current_color,
+      )),
+      _ => discrete(from, to, progress),
     };
   }
 }

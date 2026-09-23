@@ -36,22 +36,14 @@ impl Animatable for Gap {
     current_color: Color,
   ) {
     *self = match (from, to) {
-      (Self::Length(from), Self::Length(to)) => {
-        let mut length = *from;
-        length.interpolate(from, to, progress, sizing, current_color);
-        Self::Length(length)
-      }
       (Self::Normal, Self::Normal) => Self::Normal,
-      (Self::Normal, Self::Length(to)) => {
-        let mut length = Length::zero();
-        length.interpolate(&Length::zero(), to, progress, sizing, current_color);
-        Self::Length(length)
-      }
-      (Self::Length(from), Self::Normal) => {
-        let mut length = *from;
-        length.interpolate(from, &Length::zero(), progress, sizing, current_color);
-        Self::Length(length)
-      }
+      _ => Self::Length(Length::interpolated(
+        &from.to_length(),
+        &to.to_length(),
+        progress,
+        sizing,
+        current_color,
+      )),
     };
   }
 }
@@ -81,12 +73,17 @@ impl From<Length> for Gap {
 }
 
 impl Gap {
+  /// The gap as a length, with `normal` as `0`.
+  fn to_length(self) -> Length {
+    match self {
+      Self::Normal => Length::zero(),
+      Self::Length(length) => length,
+    }
+  }
+
   /// Resolves to a taffy `LengthPercentage`, treating `normal` as `0`.
   pub(crate) fn resolve_to_length_percentage(self, sizing: &SizingContext) -> LengthPercentage {
-    match self {
-      Self::Normal => Length::zero().resolve_to_length_percentage(sizing),
-      Self::Length(length) => length.resolve_to_length_percentage(sizing),
-    }
+    self.to_length().resolve_to_length_percentage(sizing)
   }
 }
 

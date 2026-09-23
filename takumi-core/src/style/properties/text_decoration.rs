@@ -6,7 +6,7 @@ use typed_builder::TypedBuilder;
 
 use crate::style::{
   Animatable, Color, CssSyntaxKind, CssToken, FromCss, FromCssStr, Length, MakeComputed,
-  ParseResult, SizingContext, ToCss, impl_css_enum, properties::ColorInput,
+  ParseResult, SizingContext, ToCss, discrete, impl_css_enum, properties::ColorInput,
   tw::TailwindPropertyParser, unexpected_token,
 };
 
@@ -104,17 +104,15 @@ impl Animatable for TextDecorationThickness {
   ) {
     *self = match (*from, *to) {
       (TextDecorationThickness::Length(from), TextDecorationThickness::Length(to)) => {
-        let mut value = from;
-        value.interpolate(&from, &to, progress, sizing, current_color);
-        TextDecorationThickness::Length(value)
+        TextDecorationThickness::Length(Length::interpolated(
+          &from,
+          &to,
+          progress,
+          sizing,
+          current_color,
+        ))
       }
-      _ => {
-        if progress >= 0.5 {
-          *to
-        } else {
-          *from
-        }
-      }
+      _ => discrete(from, to, progress),
     };
   }
 }
@@ -234,12 +232,15 @@ impl Animatable for TextUnderlineOffset {
   ) {
     *self = match (*from, *to) {
       (TextUnderlineOffset::Length(from), TextUnderlineOffset::Length(to)) => {
-        let mut value = from;
-        value.interpolate(&from, &to, progress, sizing, current_color);
-        TextUnderlineOffset::Length(value)
+        TextUnderlineOffset::Length(Length::interpolated(
+          &from,
+          &to,
+          progress,
+          sizing,
+          current_color,
+        ))
       }
-      _ if progress >= 0.5 => *to,
-      _ => *from,
+      _ => discrete(from, to, progress),
     };
   }
 }

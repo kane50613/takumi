@@ -7,7 +7,7 @@ use crate::{
   geometry::{Point, Size},
   style::{
     Angle, Animatable, BasicShape, Color, CssSyntaxKind, CssToken, FromCss, Length, MakeComputed,
-    ParseResult, ShapePosition, ShapeRadius, SizingContext, ToCss, impl_css_enum,
+    ParseResult, ShapePosition, ShapeRadius, SizingContext, ToCss, discrete, impl_css_enum,
   },
 };
 
@@ -346,12 +346,6 @@ impl OffsetRotate {
       Self::Fixed(angle) => angle.to_radians(),
     }
   }
-
-  fn angle_mut(&mut self) -> &mut Angle {
-    match self {
-      Self::Auto(angle) | Self::Reverse(angle) | Self::Fixed(angle) => angle,
-    }
-  }
 }
 
 impl MakeComputed for OffsetRotate {}
@@ -365,24 +359,30 @@ impl Animatable for OffsetRotate {
     sizing: &SizingContext,
     current_color: Color,
   ) {
-    // Interpolate the angle only when the auto/reverse/fixed kind matches.
-    let same_kind = matches!(
-      (from, to),
-      (Self::Auto(_), Self::Auto(_))
-        | (Self::Reverse(_), Self::Reverse(_))
-        | (Self::Fixed(_), Self::Fixed(_))
-    );
-
-    if same_kind {
-      *self = *from;
-      let (Self::Auto(a) | Self::Reverse(a) | Self::Fixed(a)) = *from;
-      let (Self::Auto(b) | Self::Reverse(b) | Self::Fixed(b)) = *to;
-      let mut angle = a;
-      angle.interpolate(&a, &b, progress, sizing, current_color);
-      *self.angle_mut() = angle;
-    } else {
-      *self = if progress >= 0.5 { *to } else { *from };
-    }
+    *self = match (*from, *to) {
+      (Self::Auto(from), Self::Auto(to)) => Self::Auto(Angle::interpolated(
+        &from,
+        &to,
+        progress,
+        sizing,
+        current_color,
+      )),
+      (Self::Reverse(from), Self::Reverse(to)) => Self::Reverse(Angle::interpolated(
+        &from,
+        &to,
+        progress,
+        sizing,
+        current_color,
+      )),
+      (Self::Fixed(from), Self::Fixed(to)) => Self::Fixed(Angle::interpolated(
+        &from,
+        &to,
+        progress,
+        sizing,
+        current_color,
+      )),
+      _ => discrete(from, to, progress),
+    };
   }
 }
 

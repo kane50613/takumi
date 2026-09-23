@@ -4,7 +4,7 @@ use cssparser::{Parser, Token, match_ignore_ascii_case};
 
 use crate::style::{
   Animatable, Color, CssDescriptorKind, CssToken, FromCss, MakeComputed, ParseResult,
-  SizingContext, ToCss, unexpected_token,
+  SizingContext, ToCss, lerp, unexpected_token,
 };
 
 /// Superellipse parameter for the CSS `corner-shape` property.
@@ -102,10 +102,7 @@ impl Animatable for Superellipse {
     _sizing: &SizingContext,
     _current_color: Color,
   ) {
-    let start = from.to_interpolable();
-    let end = to.to_interpolable();
-
-    *self = Self::from_interpolable(start + (end - start) * progress);
+    *self = Self::from_interpolable(lerp(from.to_interpolable(), to.to_interpolable(), progress));
   }
 }
 

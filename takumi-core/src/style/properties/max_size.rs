@@ -5,7 +5,7 @@ use taffy::LengthPercentageAuto;
 
 use crate::style::{
   Animatable, Color, CssSyntaxKind, CssToken, FromCss, Length, MakeComputed, ParseResult,
-  SizingContext, ToCss,
+  SizingContext, ToCss, discrete,
 };
 
 /// Represents the `max-width`/`max-height` value: either `none` (unbounded) or a [`Length`].
@@ -36,18 +36,14 @@ impl Animatable for MaxSize {
     current_color: Color,
   ) {
     *self = match (from, to) {
-      (Self::Length(from), Self::Length(to)) => {
-        let mut length = *from;
-        length.interpolate(from, to, progress, sizing, current_color);
-        Self::Length(length)
-      }
-      _ => {
-        if progress >= 0.5 {
-          *to
-        } else {
-          *from
-        }
-      }
+      (Self::Length(from), Self::Length(to)) => Self::Length(Length::interpolated(
+        from,
+        to,
+        progress,
+        sizing,
+        current_color,
+      )),
+      _ => discrete(from, to, progress),
     };
   }
 }
