@@ -2,10 +2,9 @@ use std::fmt;
 
 use cssparser::{Parser, match_ignore_ascii_case};
 
-use crate::style::tw::Namespace;
 use crate::style::{
   Animatable, Color, CssSyntaxKind, CssToken, FromCss, FromCssStr, MakeComputed, ParseResult,
-  SizingContext, ToCss, discrete, lerp, tw::TailwindPropertyParser,
+  SizingContext, ToCss, discrete, lerp, tw::Namespace, tw::TailwindPropertyParser,
 };
 
 #[derive(Default, Debug, Clone, Copy, PartialEq)]

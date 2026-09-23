@@ -51,7 +51,6 @@ impl MakeComputed for GridTemplateComponent {
 
 impl<'i> FromCss<'i> for GridTemplateComponent {
   fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
-    // Line name block: [name1 name2 ...]
     if input.try_parse(Parser::expect_square_bracket_block).is_ok() {
       return Ok(GridTemplateComponent::LineNames(parse_line_names(input)?));
     }
@@ -68,18 +67,13 @@ impl<'i> FromCss<'i> for GridTemplateComponent {
         // Names encountered after a size belong to the NEXT track in repeat() context
         let mut pending_leading_names: Vec<String> = Vec::new();
         loop {
-          // Start with any pending names from the previous track's trailing names
           let mut names: Vec<String> = take(&mut pending_leading_names);
 
-          // Capture any additional leading square-bracketed names before the size
           while input.try_parse(Parser::expect_square_bracket_block).is_ok() {
             names.extend(parse_line_names(input)?);
           }
 
-          // If we cannot parse a size, stop the loop
-          let size = if let Ok(size) = input.try_parse(GridTrackSize::from_css) {
-            size
-          } else {
+          let Ok(size) = input.try_parse(GridTrackSize::from_css) else {
             break;
           };
 
@@ -110,7 +104,6 @@ impl<'i> FromCss<'i> for GridTemplateComponent {
       });
     }
 
-    // Single track-size
     let size = GridTrackSize::from_css(input)?;
     Ok(GridTemplateComponent::Single(size))
   }
@@ -146,9 +139,7 @@ pub(crate) fn collect_components_and_names(
   for component in components {
     match component {
       GridTemplateComponent::LineNames(names) => {
-        if !names.is_empty() {
-          pending_line_names.extend_from_slice(names);
-        }
+        pending_line_names.extend_from_slice(names);
       }
       GridTemplateComponent::Single(track_size) => {
         line_name_sets.push(take(&mut pending_line_names));
@@ -165,7 +156,7 @@ pub(crate) fn collect_components_and_names(
           .collect();
         let mut inner_line_names = tracks
           .iter()
-          .map(|track| track.names.to_owned())
+          .map(|track| track.names.clone())
           .collect::<Vec<_>>();
         inner_line_names.push(
           tracks
@@ -191,9 +182,7 @@ pub(crate) fn collect_components_and_names(
 }
 
 impl ToCss for GridTemplateComponent {
-  // Track lists are space-separated, not comma.
   const LIST_SEPARATOR: &'static str = " ";
-  // An empty track list is the keyword `none`.
   const EMPTY_LIST_KEYWORD: Option<&'static str> = Some("none");
 
   fn to_css<W: fmt::Write>(&self, dest: &mut W) -> fmt::Result {

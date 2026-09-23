@@ -1,4 +1,9 @@
-use std::{fmt, ops::Neg};
+use std::{
+  fmt,
+  hash::{Hash, Hasher},
+  mem::discriminant,
+  ops::Neg,
+};
 
 use cssparser::{Parser, Token, match_ignore_ascii_case};
 use taffy::{CompactLength, Dimension, LengthPercentage, LengthPercentageAuto};
@@ -7,11 +12,10 @@ use crate::style::{
   AspectRatio, CssSyntaxKind, CssToken, FromCss, FromCssStr, MakeComputed, ParseResult,
   SizingContext, ToCss,
   calc::{CalcLinear, CalcTerms, CalcValue, parse_calc_sum},
+  tw::Namespace,
   tw::{TW_VAR_SPACING, TailwindPropertyParser},
   unexpected_token,
 };
-
-use crate::style::tw::Namespace;
 pub(crate) use crate::units::{
   ONE_CM_IN_PX, ONE_IN_PX, ONE_MM_IN_PX, ONE_PC_IN_PX, ONE_PT_IN_PX, ONE_Q_IN_PX,
 };
@@ -144,10 +148,8 @@ pub enum Length {
 
 impl Length {
   /// Hashes the unit and value by bit pattern.
-  pub(crate) fn hash_bits(&self, hasher: &mut impl core::hash::Hasher) {
-    use core::hash::Hash;
-
-    core::mem::discriminant(self).hash(hasher);
+  pub(crate) fn hash_bits(&self, hasher: &mut impl Hasher) {
+    discriminant(self).hash(hasher);
     match self {
       Self::Auto => {}
       Self::Calc(formula) => formula.hash_bits(hasher),
@@ -173,9 +175,7 @@ impl Length {
       | Self::Px(value) => value.to_bits().hash(hasher),
     }
   }
-}
 
-impl Length {
   /// Construct a length from a Tailwind spacing-scale multiplier.
   #[inline]
   pub(crate) fn from_spacing(units: f32) -> Self {

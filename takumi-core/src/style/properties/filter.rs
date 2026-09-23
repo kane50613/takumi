@@ -3,6 +3,12 @@ use std::fmt;
 use cssparser::{Parser, Token, match_ignore_ascii_case};
 
 #[cfg(feature = "svg")]
+use std::{borrow::Cow, sync::Arc};
+
+#[cfg(feature = "svg")]
+use cssparser::{ParseError as CssParseError, ParseErrorKind, SourceLocation};
+
+#[cfg(feature = "svg")]
 use crate::style::properties::filter_reference::FilterReference;
 use crate::style::{
   Angle, Animatable, Color, CssDescriptorKind, CssExpectedMessage, CssToken, FromCss, Length,
@@ -47,7 +53,7 @@ pub enum Filter {
   DropShadow(TextShadow),
   /// An SVG filter referenced with `url(data:image/svg+xml,...)`
   #[cfg(feature = "svg")]
-  Reference(std::sync::Arc<FilterReference>),
+  Reference(Arc<FilterReference>),
 }
 
 /// Rec. 709 luma weights for the red, green, and blue channels. The CSS
@@ -128,12 +134,7 @@ impl Animatable for Filter {
       Filter::Sepia(_) => Filter::Sepia(PercentageNumber(0.0)),
       Filter::Opacity(_) => Filter::Opacity(PercentageNumber(1.0)),
       Filter::Blur(_) => Filter::Blur(Length::zero()),
-      Filter::DropShadow(_) => Filter::DropShadow(TextShadow {
-        offset_x: Length::zero(),
-        offset_y: Length::zero(),
-        blur_radius: Length::zero(),
-        color: Color::transparent().into(),
-      }),
+      Filter::DropShadow(shadow) => Filter::DropShadow(TextShadow::neutral_value_like(shadow)?),
       #[cfg(feature = "svg")]
       Filter::Reference(_) => return None,
     })
@@ -293,14 +294,11 @@ impl<'i> FromCss<'i> for Filters {
 }
 
 #[cfg(feature = "svg")]
-fn parse_filter_reference<'i>(
-  url: &str,
-  location: cssparser::SourceLocation,
-) -> ParseResult<'i, Filter> {
+fn parse_filter_reference<'i>(url: &str, location: SourceLocation) -> ParseResult<'i, Filter> {
   FilterReference::from_url(url)
-    .map(|reference| Filter::Reference(std::sync::Arc::new(reference)))
-    .map_err(|error| cssparser::ParseError {
-      kind: cssparser::ParseErrorKind::Custom(std::borrow::Cow::Owned(error.to_string())),
+    .map(|reference| Filter::Reference(Arc::new(reference)))
+    .map_err(|error| CssParseError {
+      kind: ParseErrorKind::Custom(Cow::Owned(error.to_string())),
       location,
     })
 }
@@ -366,7 +364,6 @@ impl<'i> FromCss<'i> for Filter {
         Ok(Filter::Blur(radius))
       }),
       "drop-shadow" => parser.parse_nested_block(|input| {
-        // drop-shadow uses the same syntax as text-shadow
         Ok(Filter::DropShadow(TextShadow::from_css(input)?))
       }),
       _ => Err(unexpected_token!(location, token)),
@@ -390,9 +387,7 @@ impl<'i> FromCss<'i> for Filter {
 }
 
 impl ToCss for Filter {
-  // The `filter`/`backdrop-filter` grammar is space-separated, not comma.
   const LIST_SEPARATOR: &'static str = " ";
-  // An empty filter list is the keyword `none`.
   const EMPTY_LIST_KEYWORD: Option<&'static str> = Some("none");
 
   fn to_css<W: fmt::Write>(&self, dest: &mut W) -> fmt::Result {

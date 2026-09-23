@@ -716,8 +716,6 @@ mod tests {
     assert_eq!(value.ligatures.common, LigatureState::Enabled);
   }
 
-  // FontVariant (the shorthand struct) has no ToCss impl, so no round-trip test.
-
   #[test]
   fn test_parse_font_variant_shorthand_invalid() {
     assert!(FontVariant::from_css_str("bogus").is_err());

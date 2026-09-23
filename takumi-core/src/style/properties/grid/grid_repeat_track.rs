@@ -28,17 +28,14 @@ impl MakeComputed for GridRepeatTrack {
 
 impl<'i> FromCss<'i> for GridRepeatTrack {
   fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
-    // Collect any leading line name blocks: [name1 name2]
     let mut names: Vec<String> = Vec::new();
 
     while input.try_parse(Parser::expect_square_bracket_block).is_ok() {
       names.extend(parse_line_names(input)?);
     }
 
-    // Parse the track size
     let size = GridTrackSize::from_css(input)?;
 
-    // Collect any trailing line name blocks
     while input.try_parse(Parser::expect_square_bracket_block).is_ok() {
       names.extend(parse_line_names(input)?);
     }

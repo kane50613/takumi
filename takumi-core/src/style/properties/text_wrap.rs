@@ -152,8 +152,6 @@ mod tests {
     }
   }
 
-  // TextWrap (the shorthand struct) has no ToCss impl, so no round-trip test on it. Its
-  // sub-enums do though.
   #[test]
   fn test_text_wrap_sub_enums_round_trip() {
     for css in ["wrap", "nowrap"] {

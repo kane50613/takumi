@@ -3,9 +3,9 @@ use std::{fmt, sync::Arc};
 use cssparser::{Parser, match_ignore_ascii_case, serialize_string};
 use parley::{FontFamilyName, GenericFamily};
 
-use crate::style::tw::Namespace;
 use crate::style::{
-  CssSyntaxKind, CssToken, FromCss, MakeComputed, ParseResult, ToCss, tw::TailwindPropertyParser,
+  CssSyntaxKind, CssToken, FromCss, MakeComputed, ParseResult, ToCss, tw::Namespace,
+  tw::TailwindPropertyParser,
 };
 
 /// Represents a font family for text rendering.

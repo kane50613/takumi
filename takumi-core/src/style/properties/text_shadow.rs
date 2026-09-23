@@ -45,29 +45,16 @@ pub(crate) type TextShadows = Box<[TextShadow]>;
 impl_comma_list_from_css!(TextShadows, TextShadow);
 
 impl<'i> FromCss<'i> for TextShadow {
-  /// Parses a text-shadow value from CSS input.
-  ///
-  /// The text-shadow syntax supports the following components (in that order):
-  /// - Two length values for horizontal and vertical offsets (required)
-  /// - An optional length value for blur radius
-  /// - An optional color value
-  ///
-  /// Examples:
-  /// - `text-shadow: 2px 4px;`
-  /// - `text-shadow: 2px 4px 6px;`
-  /// - `text-shadow: 2px 4px red;`
   fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, TextShadow> {
     let mut color = None;
     let mut lengths = None;
 
     while !input.is_exhausted() && !next_is_comma(input) {
-      if lengths.is_none() {
-        let value = input.try_parse(parse_offsets_blur);
-
-        if let Ok(value) = value {
-          lengths = Some(value);
-          continue;
-        }
+      if lengths.is_none()
+        && let Ok(value) = input.try_parse(parse_offsets_blur)
+      {
+        lengths = Some(value);
+        continue;
       }
 
       if color.is_none()
@@ -113,10 +100,8 @@ impl Animatable for TextShadow {
 
   fn neutral_value_like(_other: &Self) -> Option<Self> {
     Some(Self {
-      offset_x: Length::zero(),
-      offset_y: Length::zero(),
-      blur_radius: Length::zero(),
       color: Color::transparent().into(),
+      ..Self::default()
     })
   }
 

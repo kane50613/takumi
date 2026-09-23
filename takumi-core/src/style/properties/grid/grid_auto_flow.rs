@@ -36,9 +36,7 @@ impl GridAutoFlow {
       (GridDirection::Column, true) => taffy::GridAutoFlow::ColumnDense,
     }
   }
-}
 
-impl GridAutoFlow {
   /// The grid auto flow is in the row direction.
   pub const fn row() -> Self {
     Self {
@@ -69,11 +67,7 @@ impl<'i> FromCss<'i> for GridAutoFlow {
     let mut direction = GridDirection::default();
     let mut dense = false;
 
-    loop {
-      if input.is_exhausted() {
-        break;
-      }
-
+    while !input.is_exhausted() {
       if input
         .try_parse(|input| input.expect_ident_matching("dense"))
         .is_ok()
