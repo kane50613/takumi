@@ -14,7 +14,7 @@ function Row({ label, value, strong }: { label: string; value: string; strong?: 
 }
 
 export function ReceiptDocument({ data }: { data: Invoice }) {
-  const { net, tax } = totals(data);
+  const { net, tax, gross } = totals(data);
 
   return (
     <div tw="flex w-full flex-col gap-3 bg-white p-5 text-[11px] text-[#111827]">
@@ -52,7 +52,7 @@ export function ReceiptDocument({ data }: { data: Invoice }) {
 
       <Divider />
 
-      <Row label="Total" value={money(net * (1 + data.taxRate))} strong />
+      <Row label="Total" value={money(gross)} strong />
 
       <span tw="mt-2 text-center text-[10px] tracking-[1px] text-[#6b7280]">
         THANK YOU FOR YOUR BUSINESS
