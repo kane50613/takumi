@@ -241,48 +241,53 @@ const PHOTO_PNG: PngEncoding = PngEncoding {
   filter: Filter::Adaptive,
 };
 
-/// Picks the encoding that makes a 1-in-32 row sample of `rgba` smaller.
-fn pick_png_encoding(rgba: &[u8], width: u32) -> PngEncoding {
-  const ROW_STRIDE: usize = 32;
+impl PngEncoding {
+  /// Picks the encoding that makes a 1-in-32 row sample of `rgba` smaller.
+  fn pick(rgba: &[u8], width: u32) -> Self {
+    const ROW_STRIDE: usize = 32;
 
-  let row_bytes = width as usize * 4;
-  if row_bytes == 0 {
-    return FLAT_PNG;
+    let row_bytes = width as usize * 4;
+    if row_bytes == 0 {
+      return FLAT_PNG;
+    }
+
+    let band: Vec<u8> = rgba
+      .chunks_exact(row_bytes)
+      .step_by(ROW_STRIDE)
+      .flatten()
+      .copied()
+      .collect();
+    let band_height = (band.len() / row_bytes) as u32;
+    if band_height < 2 {
+      return FLAT_PNG;
+    }
+
+    let encoded_len = |encoding: Self| {
+      let mut out = Vec::new();
+      let mut encoder = png::Encoder::new(&mut out, width, band_height);
+      encoding.apply(&mut encoder);
+      encoder.set_color(ColorType::Rgba);
+      let written = encoder
+        .write_header()
+        .and_then(|mut writer| writer.write_image_data(&band));
+      written.map(|_| out.len())
+    };
+
+    match (encoded_len(FLAT_PNG), encoded_len(PHOTO_PNG)) {
+      (Ok(flat), Ok(photo)) if photo < flat => PHOTO_PNG,
+      _ => FLAT_PNG,
+    }
   }
 
-  let band: Vec<u8> = rgba
-    .chunks_exact(row_bytes)
-    .step_by(ROW_STRIDE)
-    .flatten()
-    .copied()
-    .collect();
-  let band_height = (band.len() / row_bytes) as u32;
-  if band_height < 2 {
-    return FLAT_PNG;
-  }
-
-  let encoded_len = |encoding: PngEncoding| {
-    let mut out = Vec::new();
-    let mut encoder = png::Encoder::new(&mut out, width, band_height);
-    encoder.set_deflate_compression(encoding.compression);
-    encoder.set_filter(encoding.filter);
-    encoder.set_color(ColorType::Rgba);
-    let written = encoder
-      .write_header()
-      .and_then(|mut writer| writer.write_image_data(&band));
-    written.map(|_| out.len())
-  };
-
-  match (encoded_len(FLAT_PNG), encoded_len(PHOTO_PNG)) {
-    (Ok(flat), Ok(photo)) if photo < flat => PHOTO_PNG,
-    _ => FLAT_PNG,
+  fn apply<T: Write>(self, encoder: &mut png::Encoder<'_, T>) {
+    encoder.set_deflate_compression(self.compression);
+    encoder.set_filter(self.filter);
   }
 }
 
-fn configure_png_encoder<T: Write>(encoder: &mut png::Encoder<'_, T>, rgba: &[u8], width: u32) {
-  let encoding = pick_png_encoding(rgba, width);
-  encoder.set_deflate_compression(encoding.compression);
-  encoder.set_filter(encoding.filter);
+/// Clamps a frame duration to the 16-bit APNG delay numerator, in milliseconds.
+fn duration_ms_to_apng_delay(duration_ms: u32) -> u16 {
+  duration_ms.min(u16::MAX as u32) as u16
 }
 
 /// Writes a single rendered image to `destination` using `format`.
@@ -295,18 +300,16 @@ pub fn write_image<T: Write>(
 
   match format {
     OutputFormat::Jpeg { quality } => {
-      let width = image.width();
-      let height = image.height();
       let rgb = strip_alpha_channel(Cow::Borrowed(rgba));
 
       let encoder = JpegEncoder::new_with_quality(destination, quality.get());
       encoder
-        .write_image(&rgb, width, height, ExtendedColorType::Rgb8)
+        .write_image(&rgb, image.width(), image.height(), ExtendedColorType::Rgb8)
         .map_err(Error::encode)?;
     }
     OutputFormat::Png => {
       let mut encoder = png::Encoder::new(destination, image.width(), image.height());
-      configure_png_encoder(&mut encoder, image.as_raw(), image.width());
+      PngEncoding::pick(image.as_raw(), image.width()).apply(&mut encoder);
 
       let has_alpha = has_any_alpha_pixel(rgba);
 
@@ -336,11 +339,14 @@ pub fn write_image<T: Write>(
       write_webp_lossless(Cow::Borrowed(rgba), destination)?;
     }
     OutputFormat::Ico => {
-      let width = image.width();
-      let height = image.height();
       let encoder = IcoEncoder::new(destination);
       encoder
-        .write_image(image.as_raw(), width, height, ExtendedColorType::Rgba8)
+        .write_image(
+          image.as_raw(),
+          image.width(),
+          image.height(),
+          ExtendedColorType::Rgba8,
+        )
         .map_err(Error::encode)?;
     }
   }
@@ -438,9 +444,12 @@ pub fn write_animated_png<W: Write>(
   }
   ensure_uniform_frame_dimensions(frames)?;
 
-  let frame_count = frames.len() as u32;
-
-  encode_animated_png(frames.iter().map(Ok), frame_count, destination, options)
+  encode_animated_png(
+    frames.iter().map(Ok),
+    frames.len() as u32,
+    destination,
+    options,
+  )
 }
 
 /// Streams frames into an animated PNG. `frame_count` is passed in because APNG
@@ -464,13 +473,13 @@ where
   let height = first.image.height();
 
   let mut encoder = png::Encoder::new(destination, width, height);
-  configure_png_encoder(&mut encoder, first.image.as_raw(), width);
+  PngEncoding::pick(first.image.as_raw(), width).apply(&mut encoder);
   encoder.set_color(ColorType::Rgba);
   encoder
     .set_animated(frame_count, options.loop_count.unwrap_or(0) as u32)
     .map_err(Error::encode)?;
   encoder
-    .set_frame_delay(first.duration_ms.min(u16::MAX as u32) as u16, 1000)
+    .set_frame_delay(duration_ms_to_apng_delay(first.duration_ms), 1000)
     .map_err(Error::encode)?;
 
   let mut writer = encoder.write_header().map_err(Error::encode)?;
@@ -485,7 +494,7 @@ where
       return Err(Error::MixedAnimationFrameDimensions);
     }
     writer
-      .set_frame_delay(frame.duration_ms.min(u16::MAX as u32) as u16, 1000)
+      .set_frame_delay(duration_ms_to_apng_delay(frame.duration_ms), 1000)
       .map_err(Error::encode)?;
     writer
       .write_image_data(frame.image.as_raw())
@@ -657,7 +666,7 @@ mod tests {
 
   use super::{
     AnimatedGifOptions, AnimatedPngOptions, AnimatedWebpOptions, AnimationFrame, Bitmap, Filter,
-    OutputFormat, pick_png_encoding, write_animated_gif, write_animated_png, write_animated_webp,
+    OutputFormat, PngEncoding, write_animated_gif, write_animated_png, write_animated_webp,
     write_image,
   };
 
@@ -679,7 +688,7 @@ mod tests {
     });
 
     assert!(matches!(
-      pick_png_encoding(&rgba, 256).filter,
+      PngEncoding::pick(&rgba, 256).filter,
       Filter::NoFilter
     ));
   }
@@ -697,7 +706,7 @@ mod tests {
     });
 
     assert!(matches!(
-      pick_png_encoding(&rgba, 256).filter,
+      PngEncoding::pick(&rgba, 256).filter,
       Filter::Adaptive
     ));
   }
