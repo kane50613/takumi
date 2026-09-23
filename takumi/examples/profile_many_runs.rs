@@ -13,18 +13,19 @@ const LONG_TEXT: &str = "Typography is the art and technique of arranging type t
    design typefaces, and some type designers do not consider themselves typographers.";
 
 fn load_global() -> Fonts {
-  let mut g = Fonts::default();
+  let mut fonts = Fonts::default();
   let regular: &[u8] = include_bytes!("../../assets/fonts/geist/Geist[wght].woff2");
-  g.register(
-    FontResource::new(regular.to_vec())
-      .override_info(FontOverride {
-        family_name: Some("Geist".into()),
-        ..Default::default()
-      })
-      .generic_family(GenericFamily::SANS_SERIF),
-  )
-  .unwrap();
-  g
+  fonts
+    .register(
+      FontResource::new(regular.to_vec())
+        .override_info(FontOverride {
+          family_name: Some("Geist".into()),
+          ..Default::default()
+        })
+        .generic_family(GenericFamily::SANS_SERIF),
+    )
+    .unwrap();
+  fonts
 }
 
 fn many_runs() -> Node {
@@ -54,13 +55,14 @@ fn many_runs() -> Node {
 }
 
 fn main() {
-  let g = load_global();
+  let fonts = load_global();
+
   for _ in 0..ITERS {
-    let opts = RenderOptions::builder()
+    let options = RenderOptions::builder()
       .viewport(Viewport::new((1200, 630)))
       .node(many_runs())
-      .fonts(&g)
+      .fonts(&fonts)
       .build();
-    black_box(render(opts).unwrap());
+    black_box(render(options).unwrap());
   }
 }
