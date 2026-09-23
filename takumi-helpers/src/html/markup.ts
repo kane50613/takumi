@@ -5,52 +5,30 @@ import type {
   Node as UltraHtmlNode,
 } from "ultrahtml";
 import { container, image, text } from "../helpers";
-import type { Declarations, Node, NodeMetadata } from "../types";
-import { extractAttributes, getPresets, presetFor } from "../jsx/metadata";
-import type { FromJsxOptions } from "../jsx";
-import type { defaultStylePresets } from "../jsx/style-presets";
+import type { ConvertedNodes } from "../root";
+import type { Declarations, Node } from "../types";
+import { NodeMetadataReader } from "../jsx/metadata";
 import { isUnrenderedElement } from "../jsx/utils";
 import { decodeHtmlEntities } from "./entities";
 
-export interface FromStaticMarkupOptions extends FromJsxOptions {}
-
-export interface FromStaticMarkupResult {
-  nodes: Node[];
-  css: string[];
-}
-
 /**
- * Convert static HTML/SVG markup into Takumi nodes.
- *
- * This is primarily used as the React DOM Server fallback for `fromJsx()`,
- * but it is also exposed as a public API for callers that already have
- * serialized markup.
- *
- * The output preserves extracted stylesheet contents from `<style>` tags and
- * converts `<img>` / `<svg>` elements into Takumi image nodes.
+ * Converts static HTML/SVG markup into Takumi nodes, keeping `<style>` contents
+ * as stylesheets and turning `<img>` / `<svg>` into image nodes.
  */
-export function fromStaticMarkup(
-  markup: string,
-  options?: FromStaticMarkupOptions,
-): FromStaticMarkupResult {
-  const builder = new StaticMarkupBuilder(
-    getPresets(options?.defaultStyles),
-    options?.tailwindClassesProperty ?? "tw",
-  );
-  const nodes = builder.build((parse(markup) as UltraHtmlDocumentNode).children);
-
-  return { nodes, css: builder.css };
+export function fromStaticMarkup(markup: string): ConvertedNodes {
+  return new NodeBuilder(new NodeMetadataReader()).build(parse(markup) as UltraHtmlDocumentNode);
 }
 
-class StaticMarkupBuilder {
-  readonly css: string[] = [];
+class NodeBuilder {
+  private readonly css: string[] = [];
 
-  constructor(
-    private readonly presets: typeof defaultStylePresets | undefined,
-    private readonly tailwindClassesProperty: string,
-  ) {}
+  constructor(private readonly metadata: NodeMetadataReader) {}
 
-  build(children: UltraHtmlNode[]): Node[] {
+  build(document: UltraHtmlDocumentNode): ConvertedNodes {
+    return { nodes: this.nodes(document.children), css: this.css };
+  }
+
+  private nodes(children: UltraHtmlNode[]): Node[] {
     const nodes: Node[] = [];
 
     for (const child of children) {
@@ -68,7 +46,7 @@ class StaticMarkupBuilder {
     if (node.type === TEXT_NODE) {
       const value = decodeHtmlEntities(node.value ?? "");
       if (value) {
-        nodes.push(text({ text: value, preset: this.presets?.span }));
+        nodes.push(text({ text: value, preset: this.metadata.presets?.span }));
       }
       return;
     }
@@ -101,13 +79,13 @@ class StaticMarkupBuilder {
     }
 
     if (element.name === "head") {
-      this.build(element.children);
+      this.nodes(element.children);
       return;
     }
 
-    const metadata = this.metadata(element);
+    const metadata = this.elementMetadata(element);
     if (element.name === "br") {
-      nodes.push(text({ text: "\n", preset: this.presets?.br, ...metadata }));
+      nodes.push(text({ text: "\n", preset: this.metadata.presets?.br, ...metadata }));
       return;
     }
 
@@ -117,7 +95,7 @@ class StaticMarkupBuilder {
         throw new Error("Image element must have a 'src' prop.");
       }
 
-      nodes.push(imageNode(decodeHtmlEntities(src), element, metadata));
+      nodes.push(image({ src: decodeHtmlEntities(src), ...dimensions(element), ...metadata }));
       return;
     }
 
@@ -126,7 +104,7 @@ class StaticMarkupBuilder {
     }
 
     if (element.name === "svg") {
-      nodes.push(imageNode(renderSync(element), element, metadata));
+      nodes.push(image({ src: renderSync(element), ...dimensions(element), ...metadata }));
       return;
     }
 
@@ -151,34 +129,27 @@ class StaticMarkupBuilder {
       return;
     }
 
-    nodes.push(container({ children: this.build(element.children), ...metadata }));
+    nodes.push(container({ children: this.nodes(element.children), ...metadata }));
   }
 
-  private metadata(element: UltraHtmlElementNode): NodeMetadata {
+  private elementMetadata(element: UltraHtmlElementNode) {
     const props = element.attributes ? decodeAttributeMap(element.attributes) : {};
-    const tw = props[this.tailwindClassesProperty];
 
-    return {
-      tagName: element.name,
-      className: props.class,
-      id: props.id,
-      dir: props.dir as NodeMetadata["dir"],
-      lang: props.lang,
-      attributes: extractAttributes(props, this.tailwindClassesProperty),
-      tw: typeof tw === "string" ? tw : undefined,
-      style: typeof props.style === "string" ? parseInlineStyle(props.style) : undefined,
-      preset: presetFor(this.presets, element.name),
-    };
+    return this.metadata.read(
+      element.name,
+      props,
+      props.class,
+      typeof props.style === "string" ? parseInlineStyle(props.style) : undefined,
+    );
   }
 }
 
-function imageNode(src: string, element: UltraHtmlElementNode, metadata: NodeMetadata): Node {
-  return image({
-    src,
+/** Width and height attributes; values that are not finite numbers are dropped. */
+function dimensions(element: UltraHtmlElementNode): { width?: number; height?: number } {
+  return {
     width: parseDimension(element.attributes?.width),
     height: parseDimension(element.attributes?.height),
-    ...metadata,
-  });
+  };
 }
 
 function decodeAttributeMap(attributes: Record<string, string>): Record<string, string> {

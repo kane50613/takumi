@@ -1,8 +1,8 @@
 import type { ComponentProps, ReactElement, ReactNode } from "react";
 import { container, image, text } from "../helpers";
-import { rootResult } from "../root";
-import type { ImageNode, Node, NodeMetadata, RgbaImage, ReactElementLike } from "../types";
-import { extractAttributes, getPresets, presetFor, type HtmlProps } from "./metadata";
+import { rootResult, type ConvertedNodes } from "../root";
+import type { Node, NodeMetadata, RgbaImage, ReactElementLike } from "../types";
+import { NodeMetadataReader, type HtmlProps } from "./metadata";
 export type { HtmlProps } from "./metadata";
 import { callWithDispatcher, getProperty, readContext, type RenderEnv } from "./dispatcher";
 import type { defaultStylePresets } from "./style-presets";
@@ -61,11 +61,6 @@ export interface FromJsxOptions {
   tailwindClassesProperty?: string;
 }
 
-interface ResolvedFromJsxOptions extends RenderEnv {
-  presets?: typeof defaultStylePresets;
-  tailwindClassesProperty: string;
-}
-
 export interface FromJsxResult {
   node: Node;
   css: string[];
@@ -73,145 +68,264 @@ export interface FromJsxResult {
   stylesheets: string[];
 }
 
-interface FromJsxTraversalResult {
-  nodes: Node[];
-  css: string[];
-}
-
-function emptyTraversalResult(): FromJsxTraversalResult {
-  return { nodes: [], css: [] };
-}
-
-function nodeResult(node: Node): FromJsxTraversalResult {
-  return { nodes: [node], css: [] };
-}
-
 export async function fromJsx(
   element: ReactNode | ReactElementLike,
   options?: FromJsxOptions,
 ): Promise<FromJsxResult> {
-  const { nodes, css } = await fromJsxInternal(element, {
-    presets: getPresets(options?.defaultStyles),
-    tailwindClassesProperty: options?.tailwindClassesProperty ?? "tw",
-    contexts: new Map<unknown, unknown>(),
-    ids: { current: 0 },
-  });
+  const builder = new NodeBuilder(new NodeMetadataReader(options), new Map(), { current: 0 });
 
-  return rootResult(nodes, css);
-}
-
-async function fromJsxInternal(
-  element: ReactNode | ReactElementLike,
-  options: ResolvedFromJsxOptions,
-): Promise<FromJsxTraversalResult> {
-  if (element === undefined || element === null || element === false) {
-    return emptyTraversalResult();
-  }
-
-  // If element is a server component, wait for it to resolve first
-  if (element instanceof Promise) return fromJsxInternal(await element, options);
-
-  // If element is an iterable, collect the children
-  if (typeof element === "object" && Symbol.iterator in element)
-    return collectIterable(element, options);
-
-  if (isValidElement(element)) return processReactElement(element, options);
-
-  return nodeResult(text({ text: String(element), preset: options.presets?.span }));
+  return rootResult(await builder.build(element));
 }
 
 const REACT_CONTEXT_TYPE = Symbol.for("react.context");
 const REACT_PROVIDER_TYPE = Symbol.for("react.provider");
 const REACT_CONSUMER_TYPE = Symbol.for("react.consumer");
 
-/**
- * Handles context provider/consumer elements natively: providers push their
- * value onto the traversal's context map (read back by the dispatcher's
- * `useContext`), consumers call their render prop with the current value.
- * A `react.context` element type is a provider on React 19 and a legacy
- * consumer on 18; the render-prop children shape disambiguates.
- */
-function tryHandleContextElement(
-  element: ReactElementLike,
-  options: ResolvedFromJsxOptions,
-): Promise<FromJsxTraversalResult> | undefined {
-  const type = element.type;
-  if (typeof type !== "object" || type === null) return;
+const MAX_CONCURRENT_ITERABLE_RESOLUTION = 8;
 
-  const tag = getProperty(type, "$$typeof");
+function emptyResult(): ConvertedNodes {
+  return { nodes: [], css: [] };
+}
 
-  if (tag === REACT_PROVIDER_TYPE) {
-    return collectChildrenWithContext(element, getProperty(type, "_context"), options);
-  }
+function nodeResult(node: Node): ConvertedNodes {
+  return { nodes: [node], css: [] };
+}
 
-  if (tag === REACT_CONSUMER_TYPE) {
-    return renderConsumer(element, getProperty(type, "_context") ?? type, options);
-  }
+/** Converts React elements into Takumi nodes with the context values and hook ids of one traversal. */
+class NodeBuilder implements RenderEnv {
+  constructor(
+    private readonly metadata: NodeMetadataReader,
+    readonly contexts: ReadonlyMap<unknown, unknown>,
+    readonly ids: { current: number },
+  ) {}
 
-  if (tag === REACT_CONTEXT_TYPE) {
-    if (typeof getElementChildren(element) === "function") {
-      return renderConsumer(element, type, options);
+  async build(element: ReactNode | ReactElementLike): Promise<ConvertedNodes> {
+    if (element === undefined || element === null || element === false) {
+      return emptyResult();
     }
 
-    return collectChildrenWithContext(element, type, options);
-  }
-}
+    // If element is a server component, wait for it to resolve first
+    if (element instanceof Promise) return this.build(await element);
 
-function collectChildrenWithContext(
-  element: ReactElementLike,
-  context: unknown,
-  options: ResolvedFromJsxOptions,
-): Promise<FromJsxTraversalResult> {
-  const contexts = new Map(options.contexts);
-  contexts.set(context, getProperty(element.props, "value"));
+    // If element is an iterable, collect the children
+    if (typeof element === "object" && Symbol.iterator in element) return this.iterable(element);
 
-  return collectChildren(element, { ...options, contexts });
-}
+    if (isValidElement(element)) return this.element(element);
 
-function renderConsumer(
-  element: ReactElementLike,
-  context: unknown,
-  options: ResolvedFromJsxOptions,
-): Promise<FromJsxTraversalResult> {
-  const children = getElementChildren(element);
-  if (!isFunctionComponent(children)) return collectChildren(element, options);
-
-  return fromJsxInternal(children(readContext(options, context)), options);
-}
-
-async function renderFunctionComponent(
-  component: (props: unknown) => ReactNode,
-  props: unknown,
-  options: ResolvedFromJsxOptions,
-): Promise<FromJsxTraversalResult> {
-  return fromJsxInternal(await callWithDispatcher(component, props, options), options);
-}
-
-function tryHandleComponentWrapper(
-  element: ReactElementLike,
-  options: ResolvedFromJsxOptions,
-): Promise<FromJsxTraversalResult> | undefined {
-  if (isReactForwardRef(element.type)) {
-    const { render } = element.type;
-    return renderFunctionComponent((props) => render(props, null), element.props, options);
+    return nodeResult(text({ text: String(element), preset: this.metadata.presets?.span }));
   }
 
-  if (isReactMemo(element.type)) {
-    const innerType = element.type.type;
+  private async element(element: ReactElementLike): Promise<ConvertedNodes> {
+    const contextResult = this.tryContext(element);
+    if (contextResult !== undefined) return contextResult;
 
-    if (isFunctionComponent(innerType)) {
-      return renderFunctionComponent(innerType, element.props, options);
+    if (isFunctionComponent(element.type)) {
+      return this.functionComponent(element.type, element.props);
     }
 
-    return processReactElement({ ...element, type: innerType }, options);
+    const wrapperResult = this.tryWrapper(element);
+    if (wrapperResult !== undefined) return wrapperResult;
+
+    // Handle React fragments <></>
+    if (isReactFragment(element)) {
+      return this.children(element);
+    }
+
+    if (isHtmlElement(element, "style")) {
+      const css = collectStyleText(getElementChildren(element));
+      return {
+        nodes: [],
+        css: css && css.length > 0 ? [css] : [],
+      };
+    }
+
+    if (isHtmlElement(element, "head")) {
+      const children = await this.children(element);
+      return {
+        nodes: [],
+        css: children.css,
+      };
+    }
+
+    if (typeof element.type !== "string" || isUnrenderedElement(element.type)) {
+      return emptyResult();
+    }
+
+    const metadata = this.elementMetadata(element);
+
+    if (isHtmlElement(element, "br")) {
+      return nodeResult(text({ text: "\n", preset: this.metadata.presets?.br, ...metadata }));
+    }
+
+    if (isHtmlElement(element, "img")) {
+      if (!element.props.src) {
+        throw new Error("Image element must have a 'src' prop.");
+      }
+
+      return nodeResult(
+        image({ src: element.props.src, ...dimensions(element.props), ...metadata }),
+      );
+    }
+
+    if (isHtmlElement(element, "svg")) {
+      return nodeResult(
+        image({ src: serializeSvg(element), ...dimensions(element.props), ...metadata }),
+      );
+    }
+
+    const textChildren = collectText(element);
+    if (textChildren !== undefined) {
+      return nodeResult(text({ text: textChildren, ...metadata }));
+    }
+
+    const children = await this.children(element);
+
+    return {
+      nodes: [container({ children: children.nodes, ...metadata })],
+      css: children.css,
+    };
   }
+
+  /**
+   * Handles context provider/consumer elements natively: providers push their
+   * value onto the traversal's context map (read back by the dispatcher's
+   * `useContext`), consumers call their render prop with the current value.
+   * A `react.context` element type is a provider on React 19 and a legacy
+   * consumer on 18; the render-prop children shape disambiguates.
+   */
+  private tryContext(element: ReactElementLike): Promise<ConvertedNodes> | undefined {
+    const type = element.type;
+    if (typeof type !== "object" || type === null) return;
+
+    const tag = getProperty(type, "$$typeof");
+
+    if (tag === REACT_PROVIDER_TYPE) {
+      return this.childrenWithContext(element, getProperty(type, "_context"));
+    }
+
+    if (tag === REACT_CONSUMER_TYPE) {
+      return this.consumer(element, getProperty(type, "_context") ?? type);
+    }
+
+    if (tag === REACT_CONTEXT_TYPE) {
+      if (typeof getElementChildren(element) === "function") {
+        return this.consumer(element, type);
+      }
+
+      return this.childrenWithContext(element, type);
+    }
+  }
+
+  private tryWrapper(element: ReactElementLike): Promise<ConvertedNodes> | undefined {
+    if (isReactForwardRef(element.type)) {
+      const { render } = element.type;
+      return this.functionComponent((props) => render(props, null), element.props);
+    }
+
+    if (isReactMemo(element.type)) {
+      const innerType = element.type.type;
+
+      if (isFunctionComponent(innerType)) {
+        return this.functionComponent(innerType, element.props);
+      }
+
+      return this.element({ ...element, type: innerType });
+    }
+  }
+
+  private childrenWithContext(
+    element: ReactElementLike,
+    context: unknown,
+  ): Promise<ConvertedNodes> {
+    const contexts = new Map(this.contexts);
+    contexts.set(context, getProperty(element.props, "value"));
+
+    return new NodeBuilder(this.metadata, contexts, this.ids).children(element);
+  }
+
+  private consumer(element: ReactElementLike, context: unknown): Promise<ConvertedNodes> {
+    const children = getElementChildren(element);
+    if (!isFunctionComponent(children)) return this.children(element);
+
+    return this.build(children(readContext(this, context)));
+  }
+
+  private async functionComponent(
+    component: (props: unknown) => ReactNode,
+    props: unknown,
+  ): Promise<ConvertedNodes> {
+    return this.build(await callWithDispatcher(component, props, this));
+  }
+
+  private children(element: ReactElementLike): Promise<ConvertedNodes> {
+    const children = getElementChildren(element);
+    if (children === undefined) {
+      return Promise.resolve(emptyResult());
+    }
+
+    return this.build(children);
+  }
+
+  private async iterable(iterable: Iterable<ReactNode>): Promise<ConvertedNodes> {
+    const groupedResults: ConvertedNodes[] = [];
+    const inFlight = new Set<Promise<void>>();
+    let index = 0;
+
+    for (const element of iterable) {
+      const currentIndex = index++;
+      const task = this.build(element)
+        .then((nodes) => {
+          groupedResults[currentIndex] = nodes;
+        })
+        .finally(() => inFlight.delete(task));
+
+      inFlight.add(task);
+
+      if (inFlight.size >= MAX_CONCURRENT_ITERABLE_RESOLUTION) {
+        await Promise.race(inFlight);
+      }
+    }
+
+    await Promise.all(inFlight);
+
+    return {
+      nodes: groupedResults.flatMap((group) => group.nodes),
+      css: groupedResults.flatMap((group) => group.css),
+    };
+  }
+
+  private elementMetadata(element: ReactElementLike): NodeMetadata {
+    const props = element.props as HtmlProps;
+    const style = props.style;
+
+    return this.metadata.read(
+      typeof element.type === "string" ? element.type : undefined,
+      props,
+      props.className ?? props.class,
+      typeof style === "object" && style !== null && Object.keys(style).length > 0
+        ? style
+        : undefined,
+    );
+  }
+}
+
+/** Width and height props as numbers; non-numeric strings become `NaN`. */
+function dimensions({ width, height }: { width?: number | string; height?: number | string }): {
+  width?: number;
+  height?: number;
+} {
+  return {
+    width: width !== undefined ? Number(width) : undefined,
+    height: height !== undefined ? Number(height) : undefined,
+  };
 }
 
 function getElementChildren(element: ReactElementLike): ReactNode | undefined {
   return getProperty(element.props, "children") as ReactNode | undefined;
 }
 
-function tryCollectTextChildren(element: ReactElementLike): string | undefined {
+/** An element's children as one string, when they are all text; fragments are looked through. */
+function collectText(element: ReactElementLike): string | undefined {
   const children = getElementChildren(element);
 
   if (typeof children === "string") return children;
@@ -222,20 +336,21 @@ function tryCollectTextChildren(element: ReactElementLike): string | undefined {
   }
 
   if (isValidElement(children) && isReactFragment(children)) {
-    return tryCollectTextChildren(children);
+    return collectText(children);
   }
 }
 
-function collectStyleTextFromIterable(children: Iterable<ReactNode>): string | undefined {
-  const chunks: string[] = [];
+/** Joins string and number children; `undefined` when empty or when any child is neither. */
+function collectTextFromIterable(children: Iterable<ReactNode>): string | undefined {
+  let text: string | undefined;
 
   for (const child of children) {
-    const chunk = collectStyleText(child);
-    if (chunk === undefined) return;
-    chunks.push(chunk);
+    if (typeof child !== "string" && typeof child !== "number") return;
+
+    text = (text ?? "") + child;
   }
 
-  return chunks.join("");
+  return text;
 }
 
 function collectStyleText(node: ReactNode | ReactElementLike): string | undefined {
@@ -259,168 +374,14 @@ function collectStyleText(node: ReactNode | ReactElementLike): string | undefine
   return collectStyleText(getElementChildren(node));
 }
 
-/** Joins string and number children; `undefined` when empty or when any child is neither. */
-function collectTextFromIterable(children: Iterable<ReactNode>): string | undefined {
-  let text: string | undefined;
+function collectStyleTextFromIterable(children: Iterable<ReactNode>): string | undefined {
+  const chunks: string[] = [];
 
   for (const child of children) {
-    if (typeof child !== "string" && typeof child !== "number") return;
-
-    text = (text ?? "") + child;
+    const chunk = collectStyleText(child);
+    if (chunk === undefined) return;
+    chunks.push(chunk);
   }
 
-  return text;
-}
-
-async function processReactElement(
-  element: ReactElementLike,
-  options: ResolvedFromJsxOptions,
-): Promise<FromJsxTraversalResult> {
-  const contextResult = tryHandleContextElement(element, options);
-  if (contextResult !== undefined) return contextResult;
-
-  if (isFunctionComponent(element.type)) {
-    return renderFunctionComponent(element.type, element.props, options);
-  }
-
-  const wrapperResult = tryHandleComponentWrapper(element, options);
-  if (wrapperResult !== undefined) return wrapperResult;
-
-  // Handle React fragments <></>
-  if (isReactFragment(element)) {
-    return collectChildren(element, options);
-  }
-
-  if (isHtmlElement(element, "style")) {
-    const css = collectStyleText(getElementChildren(element));
-    return {
-      nodes: [],
-      css: css && css.length > 0 ? [css] : [],
-    };
-  }
-
-  if (isHtmlElement(element, "head")) {
-    const children = await collectChildren(element, options);
-    return {
-      nodes: [],
-      css: children.css,
-    };
-  }
-
-  if (typeof element.type !== "string" || isUnrenderedElement(element.type)) {
-    return emptyTraversalResult();
-  }
-
-  const metadata = extractNodeMetadata(element, options);
-
-  if (isHtmlElement(element, "br")) {
-    return nodeResult(text({ text: "\n", preset: options.presets?.br, ...metadata }));
-  }
-
-  if (isHtmlElement(element, "img")) {
-    if (!element.props.src) {
-      throw new Error("Image element must have a 'src' prop.");
-    }
-
-    return nodeResult(imageNode(element.props.src, element.props, metadata));
-  }
-
-  if (isHtmlElement(element, "svg")) {
-    return nodeResult(imageNode(serializeSvg(element), element.props, metadata));
-  }
-
-  const textChildren = tryCollectTextChildren(element);
-  if (textChildren !== undefined) {
-    return nodeResult(text({ text: textChildren, ...metadata }));
-  }
-
-  const children = await collectChildren(element, options);
-
-  return {
-    nodes: [container({ children: children.nodes, ...metadata })],
-    css: children.css,
-  };
-}
-
-function imageNode(
-  src: ImageNode["src"],
-  { width, height }: { width?: number | string; height?: number | string },
-  metadata: NodeMetadata,
-): ImageNode {
-  return image({
-    src,
-    width: width !== undefined ? Number(width) : undefined,
-    height: height !== undefined ? Number(height) : undefined,
-    ...metadata,
-  });
-}
-
-function extractNodeMetadata(
-  element: ReactElementLike,
-  options: ResolvedFromJsxOptions,
-): NodeMetadata {
-  const htmlProps = element.props as HtmlProps;
-  const tagName = typeof element.type === "string" ? element.type : undefined;
-  const style = htmlProps.style;
-  const tw = getProperty(element.props, options.tailwindClassesProperty);
-
-  return {
-    tagName,
-    className: htmlProps.className ?? htmlProps.class,
-    id: htmlProps.id,
-    dir: htmlProps.dir as NodeMetadata["dir"],
-    lang: htmlProps.lang,
-    attributes: extractAttributes(htmlProps, options.tailwindClassesProperty),
-    tw: typeof tw === "string" ? tw : undefined,
-    style:
-      typeof style === "object" && style !== null && Object.keys(style).length > 0
-        ? style
-        : undefined,
-    preset: presetFor(options.presets, tagName),
-  };
-}
-
-function collectChildren(
-  element: ReactElementLike,
-  options: ResolvedFromJsxOptions,
-): Promise<FromJsxTraversalResult> {
-  const children = getElementChildren(element);
-  if (children === undefined) {
-    return Promise.resolve(emptyTraversalResult());
-  }
-
-  return fromJsxInternal(children, options);
-}
-
-const MAX_CONCURRENT_ITERABLE_RESOLUTION = 8;
-
-async function collectIterable(
-  iterable: Iterable<ReactNode>,
-  options: ResolvedFromJsxOptions,
-): Promise<FromJsxTraversalResult> {
-  const groupedResults: FromJsxTraversalResult[] = [];
-  const inFlight = new Set<Promise<void>>();
-  let index = 0;
-
-  for (const element of iterable) {
-    const currentIndex = index++;
-    const task = fromJsxInternal(element, options)
-      .then((nodes) => {
-        groupedResults[currentIndex] = nodes;
-      })
-      .finally(() => inFlight.delete(task));
-
-    inFlight.add(task);
-
-    if (inFlight.size >= MAX_CONCURRENT_ITERABLE_RESOLUTION) {
-      await Promise.race(inFlight);
-    }
-  }
-
-  await Promise.all(inFlight);
-
-  return {
-    nodes: groupedResults.flatMap((group) => group.nodes),
-    css: groupedResults.flatMap((group) => group.css),
-  };
+  return chunks.join("");
 }
