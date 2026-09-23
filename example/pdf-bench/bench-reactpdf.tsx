@@ -1,4 +1,5 @@
 import { interFonts } from "./fonts";
+import { benchmark } from "./harness";
 import { items, total } from "./invoice-data";
 
 const interPaths = await interFonts();
@@ -87,23 +88,4 @@ async function renderOnce(): Promise<Uint8Array> {
   return new Uint8Array(Buffer.concat(chunks));
 }
 
-const first = await renderOnce();
-const coldMs = performance.now() - t0;
-
-const times: number[] = [];
-for (let i = 0; i < 20; i++) {
-  const start = performance.now();
-  await renderOnce();
-  times.push(performance.now() - start);
-}
-times.sort((a, b) => a - b);
-
-await Bun.write("out-reactpdf.pdf", first);
-console.log(
-  JSON.stringify({
-    engine: "@react-pdf/renderer",
-    coldMs: Math.round(coldMs),
-    warmMedianMs: Math.round((times[9]! + times[10]!) / 2),
-    bytes: first.byteLength,
-  }),
-);
+await benchmark("@react-pdf/renderer", t0, renderOnce, "out-reactpdf.pdf");

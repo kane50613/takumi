@@ -10,16 +10,15 @@ import { render } from "takumi-js";
 const width = 1200;
 const height = 630;
 
-const currentFile = fileURLToPath(import.meta.url);
-const currentDir = dirname(currentFile);
-const exampleDir = dirname(currentFile);
-const outputDir = join(exampleDir, "..", "output");
+const sourceDir = dirname(fileURLToPath(import.meta.url));
+const outputDir = join(sourceDir, "..", "output");
 
 await mkdir(outputDir, { recursive: true });
 
 const stylesheets = [
   {
-    css: await compileTailwindStylesheet(currentDir),
+    Card: TailwindCard,
+    css: await compileTailwindStylesheet(sourceDir),
     imageName: "tailwind-stylesheets.png",
     libraryName: "Tailwind CSS",
     outputName: "tailwind.generated.css",
@@ -28,7 +27,8 @@ const stylesheets = [
       "Tailwind utilities are compiled to CSS, loaded from disk, and applied through Takumi's stylesheet pipeline.",
   },
   {
-    css: await compileUnoStylesheet(currentDir),
+    Card: UnoCard,
+    css: await compileUnoStylesheet(sourceDir),
     imageName: "unocss-stylesheets.png",
     libraryName: "UnoCSS",
     outputName: "unocss.generated.css",
@@ -36,25 +36,15 @@ const stylesheets = [
     description:
       "UnoCSS utilities are generated from the same JSX classes and applied through Takumi's stylesheet pipeline.",
   },
-] as const;
+];
 
-for (const stylesheet of stylesheets) {
-  await write(join(outputDir, stylesheet.outputName), stylesheet.css);
-
-  const CardComponent = stylesheet.libraryName === "Tailwind CSS" ? TailwindCard : UnoCard;
+for (const { Card, css, imageName, libraryName, outputName, title, description } of stylesheets) {
+  await write(join(outputDir, outputName), css);
 
   const image = await render(
-    <CardComponent
-      description={stylesheet.description}
-      libraryName={stylesheet.libraryName}
-      title={stylesheet.title}
-    />,
-    {
-      width,
-      height,
-      css: stylesheet.css,
-    },
+    <Card description={description} libraryName={libraryName} title={title} />,
+    { width, height, css },
   );
 
-  await write(join(outputDir, stylesheet.imageName), image);
+  await write(join(outputDir, imageName), image);
 }

@@ -1,4 +1,4 @@
-import { type Invoice, money, subtotal } from "./data";
+import { type Invoice, money, totals } from "./data";
 
 function Meta({ label, value }: { label: string; value: string }) {
   return (
@@ -21,9 +21,7 @@ function Party({ label, party }: { label?: string; party: Invoice["seller"] }) {
 }
 
 export function InvoiceDocument({ data }: { data: Invoice }) {
-  const net = subtotal(data);
-  const tax = net * data.taxRate;
-  const total = net + tax;
+  const { net, tax, gross } = totals(data);
 
   return (
     <div tw="flex w-full flex-col gap-9 text-[#30313d]">
@@ -45,7 +43,7 @@ export function InvoiceDocument({ data }: { data: Invoice }) {
       </div>
 
       <span tw="text-[19px] font-semibold">
-        {money(total)} due {data.dueAt}
+        {money(gross)} due {data.dueAt}
       </span>
 
       <div tw="flex flex-col">
@@ -77,7 +75,7 @@ export function InvoiceDocument({ data }: { data: Invoice }) {
           </div>
           <div tw="flex justify-between border-t border-[#ebeef1] pt-2.5 text-[13px] font-semibold">
             <span>Amount due</span>
-            <span>{money(total)}</span>
+            <span>{money(gross)}</span>
           </div>
         </div>
       </div>

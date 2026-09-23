@@ -1,4 +1,6 @@
+import type { RenderOptions } from "takumi-pdf";
 import { interFonts } from "./fonts";
+import { benchmark } from "./harness";
 import { items, total } from "./invoice-data";
 
 const fonts = await interFonts();
@@ -31,7 +33,7 @@ function Invoice() {
   );
 }
 
-const options = {
+const options: RenderOptions = {
   size: "a4",
   fonts: fontData,
   fontFamilies: ["Inter"],
@@ -40,25 +42,6 @@ const options = {
       Page <span className="pageNumber" /> of <span className="totalPages" />
     </div>
   ),
-} as const;
+};
 
-const first = await render(<Invoice />, options);
-const coldMs = performance.now() - t0;
-
-const times: number[] = [];
-for (let i = 0; i < 20; i++) {
-  const start = performance.now();
-  await render(<Invoice />, options);
-  times.push(performance.now() - start);
-}
-times.sort((a, b) => a - b);
-
-await Bun.write("out-takumi.pdf", first);
-console.log(
-  JSON.stringify({
-    engine: "takumi-pdf",
-    coldMs: Math.round(coldMs),
-    warmMedianMs: Math.round((times[9]! + times[10]!) / 2),
-    bytes: first.byteLength,
-  }),
-);
+await benchmark("takumi-pdf", t0, () => render(<Invoice />, options), "out-takumi.pdf");
