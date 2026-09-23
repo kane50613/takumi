@@ -10,11 +10,10 @@ use takumi_core::{
 };
 
 use crate::{
-  BorderProperties, Canvas, Cap, DashPattern, DecorationSegmentParams, PaintSource, Placement,
-  RenderContext, Result, SizedFontStyle, Stroke, collect_background_layers, draw_background,
-  draw_border, draw_decoration, draw_decoration_segment, draw_glyph, draw_glyph_clip_image,
-  draw_glyph_text_shadow, draw_inset_box_shadow, draw_node_content, draw_outline,
-  draw_outset_box_shadow,
+  BorderProperties, Canvas, Cap, DashPattern, DecorationSegmentParams, PaintSource, RenderContext,
+  Result, SizedFontStyle, Stroke, collect_background_layers, draw_box_shell, draw_decoration,
+  draw_decoration_segment, draw_glyph, draw_glyph_clip_image, draw_glyph_text_shadow,
+  draw_node_content, draw_outline,
   layout::inline::{
     BuiltInlineLayout, InlineBoxItem, InlineOutlineRect, InlineRunLayout, PositionedInlineRun,
     ProcessedInlineSpan, ShapedRun, VisualInlineBox, outline_island_contour, outline_islands,
@@ -40,13 +39,7 @@ fn draw_with_inline_opacity(
     return Ok(());
   }
 
-  let viewport = canvas.viewport();
-  let subcanvas = canvas.begin_subcanvas(Placement {
-    left: viewport.origin.x as i32,
-    top: viewport.origin.y as i32,
-    width: viewport.size.width,
-    height: viewport.size.height,
-  })?;
+  let subcanvas = canvas.begin_subcanvas(canvas.viewport().placement())?;
 
   draw(canvas)?;
   canvas.composite_subcanvas(subcanvas, BlendMode::Normal, opacity);
@@ -183,8 +176,7 @@ fn draw_outline_island(
   let Some(stroke) = style.outline_stroke() else {
     return Ok(());
   };
-  let opacity = style.parent.opacity.0;
-  draw_with_inline_opacity(canvas, opacity, |canvas| {
+  draw_with_inline_opacity(canvas, style.parent.opacity.0, |canvas| {
     draw_outline_island_content(outline_rects, canvas, style, &stroke, transform);
     Ok(())
   })
@@ -359,10 +351,7 @@ pub(crate) fn draw_inline_box(
       let mut context = node.context.clone();
       context.transform = transform * Affine::translation(origin.x, origin.y);
 
-      draw_outset_box_shadow(&context, canvas, layout)?;
-      draw_background(&context, canvas, layout)?;
-      draw_inset_box_shadow(&context, canvas, layout)?;
-      draw_border(&context, canvas, layout)?;
+      draw_box_shell(&context, canvas, layout)?;
       draw_node_content(source, &context, canvas, layout)?;
       if let Some((outline, transform)) = resolve_outline(&context, layout) {
         draw_outline(&outline, transform, canvas);
@@ -379,7 +368,6 @@ pub(crate) fn draw_inline_layout(
   built: &BuiltInlineLayout<'_>,
   font_style: &SizedFontStyle,
 ) -> Result<Vec<VisualInlineBox>> {
-  let spans = &built.spans;
   let resolved = built.resolve_runs(context, layout)?;
 
   // Inline-span backgrounds fill under every glyph of the formatting context.
@@ -397,6 +385,7 @@ pub(crate) fn draw_inline_layout(
       Ok(())
     })?;
   }
+
   let InlineRunLayout {
     runs,
     inline_boxes,
@@ -482,7 +471,7 @@ pub(crate) fn draw_inline_layout(
   }
 
   if !outline_rects.is_empty() {
-    draw_merged_outline_rects(outline_rects, canvas, spans, context.transform)?;
+    draw_merged_outline_rects(outline_rects, canvas, &built.spans, context.transform)?;
   }
 
   if need_line_through {

@@ -14,7 +14,6 @@ use takumi_core::*;
 /// Background and color drawing functions
 mod background_drawing;
 mod blend;
-/// Canvas operations and image blending
 mod canvas;
 mod components;
 /// Debug drawing utilities
@@ -22,12 +21,10 @@ mod debug_drawing;
 mod dithering;
 /// Filter rasterization (blur, drop-shadow, backdrop, pixel filters)
 mod filter;
-/// Interpreter for `filter: url(...)` SVG filter graphs
-#[cfg(feature = "svg")]
 /// Image drawing functions
+#[cfg(feature = "svg")]
 mod image_drawing;
 pub(crate) mod inline_drawing;
-/// Box-decoration painting (backgrounds, borders, outlines, box-shadows)
 mod node_paint;
 mod path;
 /// Main image renderer and viewport management

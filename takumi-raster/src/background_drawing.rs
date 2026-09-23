@@ -137,8 +137,8 @@ pub(crate) fn rasterize_layers(
 pub(crate) struct ColorTile {
   color: Color,
   premultiplied: PremultipliedColorU8,
-  pub width: u32,
-  pub height: u32,
+  width: u32,
+  height: u32,
 }
 
 impl ColorTile {
@@ -428,60 +428,60 @@ pub(crate) fn render_tile(
       context.dither_gradients(),
     ))),
     BackgroundImage::Url(url) => {
-      if let Ok(source) = resolve_image(url, context) {
-        match &source {
-          ImageSource::Bitmap(bitmap) => Some(BackgroundTile::SampledBitmap {
-            source: bitmap.clone(),
+      let Ok(source) = resolve_image(url, context) else {
+        return Ok(None);
+      };
+
+      match &source {
+        ImageSource::Bitmap(bitmap) => Some(BackgroundTile::SampledBitmap {
+          source: bitmap.clone(),
+          width: tile_w,
+          height: tile_h,
+          algo: context.style.image_rendering,
+        }),
+        #[cfg(any(feature = "png", feature = "gif", feature = "webp"))]
+        ImageSource::Animated(animated) => Some(BackgroundTile::SampledBitmap {
+          source: animated.frame_at_time_covering(
+            context.time_ms(),
+            tile_w,
+            tile_h,
+            context.style.image_rendering,
+          ),
+          width: tile_w,
+          height: tile_h,
+          algo: context.style.image_rendering,
+        }),
+        ImageSource::Encoded(..) => match source.render_for_layout(
+          tile_w,
+          tile_h,
+          context.style.image_rendering,
+          context.time_ms(),
+          context.current_color,
+          Some(context.fonts()),
+        )? {
+          RenderedImage::Sampled { source, .. } => Some(BackgroundTile::SampledBitmap {
+            source,
             width: tile_w,
             height: tile_h,
             algo: context.style.image_rendering,
           }),
-          #[cfg(any(feature = "png", feature = "gif", feature = "webp"))]
-          ImageSource::Animated(animated) => Some(BackgroundTile::SampledBitmap {
-            source: animated.frame_at_time_covering(
-              context.time_ms(),
-              tile_w,
-              tile_h,
-              context.style.image_rendering,
-            ),
-            width: tile_w,
-            height: tile_h,
-            algo: context.style.image_rendering,
-          }),
-          ImageSource::Encoded(..) => match source.render_for_layout(
-            tile_w,
-            tile_h,
-            context.style.image_rendering,
-            context.time_ms(),
-            context.current_color,
-            Some(context.fonts()),
-          )? {
-            RenderedImage::Sampled { source, .. } => Some(BackgroundTile::SampledBitmap {
-              source,
-              width: tile_w,
-              height: tile_h,
-              algo: context.style.image_rendering,
-            }),
-            RenderedImage::Rasterized(..) => None,
-          },
-          #[cfg(feature = "svg")]
-          ImageSource::Svg(..) => match source.render_for_layout(
-            tile_w,
-            tile_h,
-            context.style.image_rendering,
-            context.time_ms(),
-            context.current_color,
-            Some(context.fonts()),
-          )? {
-            RenderedImage::Rasterized(buffer) => {
-              pixmap_from_buffer(&buffer).map(|pixmap| BackgroundTile::Pixmap(Arc::new(pixmap)))
-            }
-            RenderedImage::Sampled { .. } => None,
-          },
-          _ => None,
-        }
-      } else {
-        None
+          RenderedImage::Rasterized(..) => None,
+        },
+        #[cfg(feature = "svg")]
+        ImageSource::Svg(..) => match source.render_for_layout(
+          tile_w,
+          tile_h,
+          context.style.image_rendering,
+          context.time_ms(),
+          context.current_color,
+          Some(context.fonts()),
+        )? {
+          RenderedImage::Rasterized(buffer) => {
+            pixmap_from_buffer(&buffer).map(|pixmap| BackgroundTile::Pixmap(Arc::new(pixmap)))
+          }
+          RenderedImage::Sampled { .. } => None,
+        },
+        _ => None,
       }
     }
   })
@@ -521,20 +521,16 @@ pub(crate) fn create_mask(
   context: &RenderContext,
   border_box: Size<f32>,
 ) -> Result<Option<Vec<u8>>> {
-  let mask_image = context.style.mask_image.as_deref().unwrap_or(&[]);
-  let mask_position = context.style.mask_position.as_ref();
-  let mask_size = context.style.mask_size.as_ref();
-  let mask_repeat = context.style.mask_repeat.as_ref();
-
+  let size = border_box.map(|x| x as u32);
   let layers = resolve_tile_layers(BackgroundLayersInput {
-    images: mask_image,
-    positions: mask_position,
-    sizes: mask_size,
-    repeats: mask_repeat,
+    images: context.style.mask_image.as_deref().unwrap_or(&[]),
+    positions: context.style.mask_position.as_ref(),
+    sizes: context.style.mask_size.as_ref(),
+    repeats: context.style.mask_repeat.as_ref(),
     blend_modes: &[],
     context,
-    area: border_box.map(|x| x as u32),
-    paint: border_box.map(|x| x as u32),
+    area: size,
+    paint: size,
     origin_offset: Point { x: 0, y: 0 },
   })?;
 
@@ -544,7 +540,6 @@ pub(crate) fn create_mask(
 
   // An empty mask hides the node. A mask this size cannot be rasterized, and
   // dropping it would paint the node unmasked instead.
-  let size = border_box.map(|x| x as u32);
   let Some(tile) = rasterize_layers(
     layers,
     size,
@@ -556,38 +551,25 @@ pub(crate) fn create_mask(
     return Ok(Some(Vec::new()));
   };
 
-  Ok(Some({
-    let (w, h) = tile.dimensions();
-    let Some(len) = checked_area(w, h, 1) else {
-      return Ok(Some(Vec::new()));
-    };
-    let mut alpha = vec![0; len];
+  let (width, height) = tile.dimensions();
+  let Some(len) = checked_area(width, height, 1) else {
+    return Ok(Some(Vec::new()));
+  };
+  let mut alpha = vec![0; len];
 
-    if let Some(raw) = tile.as_raw() {
-      let count = alpha.len().min(raw.len() / 4);
-      for i in 0..count {
-        alpha[i] = raw[i * 4 + 3];
-      }
-      for alpha_val in alpha.iter_mut().skip(count) {
-        *alpha_val = 0;
-      }
-    } else {
-      let mut i = 0;
-      for y in 0..h {
-        for x in 0..w {
-          if i < alpha.len() {
-            alpha[i] = tile.get_pixel(x, y).alpha();
-            i += 1;
-          }
-        }
-      }
-      for alpha_val in alpha.iter_mut().skip(i) {
-        *alpha_val = 0;
-      }
+  if let Some(raw) = tile.as_raw() {
+    for (alpha, pixel) in alpha.iter_mut().zip(raw.as_chunks::<4>().0) {
+      *alpha = pixel[3];
     }
+  } else {
+    let pixels = (0..height).flat_map(|y| (0..width).map(move |x| (x, y)));
 
-    alpha
-  }))
+    for (alpha, (x, y)) in alpha.iter_mut().zip(pixels) {
+      *alpha = tile.get_pixel(x, y).alpha();
+    }
+  }
+
+  Ok(Some(alpha))
 }
 
 /// The `background-image` layers only.
@@ -595,7 +577,9 @@ pub(crate) fn background_image_layers(
   context: &RenderContext,
   layout: Layout,
 ) -> Result<TileLayers> {
-  let border_box = layout.size;
+  // `background-origin` sets the positioning area that `background-position`/`-size`
+  // resolve against; `repeat` still tiles across the painting (border) box so a
+  // repeating layer covers the clip region when origin and clip differ.
   let origin = background_origin_box(context.style.background_origin, layout);
 
   resolve_tile_layers(BackgroundLayersInput {
@@ -606,7 +590,7 @@ pub(crate) fn background_image_layers(
     blend_modes: &context.style.background_blend_mode,
     context,
     area: origin.size.map(|x| x.max(0.0) as u32),
-    paint: border_box.map(|x| x as u32),
+    paint: layout.size.map(|x| x as u32),
     origin_offset: Point {
       x: origin.offset.x as i32,
       y: origin.offset.y as i32,
@@ -614,31 +598,12 @@ pub(crate) fn background_image_layers(
   })
 }
 
+/// The `background-image` layers under a `background-color` layer.
 pub(crate) fn collect_background_layers(
   context: &RenderContext,
   layout: Layout,
 ) -> Result<TileLayers> {
-  let border_box = layout.size;
-  // `background-origin` sets the positioning area that `background-position`/`-size`
-  // resolve against; `repeat` still tiles across the painting (border) box so a
-  // repeating layer covers the clip region when origin and clip differ.
-  let origin = background_origin_box(context.style.background_origin, layout);
-
-  let mut layers = resolve_tile_layers(BackgroundLayersInput {
-    images: context.style.background_image.as_deref().unwrap_or(&[]),
-    positions: &context.style.background_position,
-    sizes: &context.style.background_size,
-    repeats: &context.style.background_repeat,
-    blend_modes: &context.style.background_blend_mode,
-    context,
-    area: origin.size.map(|x| x.max(0.0) as u32),
-    paint: border_box.map(|x| x as u32),
-    origin_offset: Point {
-      x: origin.offset.x as i32,
-      y: origin.offset.y as i32,
-    },
-  })?;
-
+  let mut layers = background_image_layers(context, layout)?;
   let background_color = context
     .style
     .background_color
@@ -650,8 +615,8 @@ pub(crate) fn collect_background_layers(
       TileLayer {
         tile: BackgroundTile::Color(ColorTile::new(
           background_color,
-          border_box.width as u32,
-          border_box.height as u32,
+          layout.size.width as u32,
+          layout.size.height as u32,
         )),
         xs: [0].into(),
         ys: [0].into(),
