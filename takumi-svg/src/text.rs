@@ -11,6 +11,7 @@ use std::{io, sync::Arc};
 use takumi_core::{
   context::RenderContext,
   font_style::SizedFontStyle,
+  geometry::Point,
   layout::{
     inline::{
       DecorationRect, InlineItem, InlineLayoutMode, InlineLayoutRequest, InlineOutlineRect,
@@ -127,7 +128,10 @@ fn emit_runs(
       .then(|| doc.blur_filter(shadow.blur_radius / 2.0))
       .transpose()?;
     let group = doc.begin_group(Affine::IDENTITY, 1.0, None, filter.as_deref())?;
-    let shadow_frame = frame.shifted(shadow.offset_x, shadow.offset_y);
+    let shadow_frame = frame.shifted(Point {
+      x: shadow.offset_x,
+      y: shadow.offset_y,
+    });
     for run in &runs.runs {
       emit_run_glyphs(run, font_style, shadow_frame, Some(color), None, doc)?;
     }

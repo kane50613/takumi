@@ -58,13 +58,10 @@ impl BoxFrame {
     )
   }
 
-  /// Moves the origin by `(dx, dy)`.
-  pub(crate) fn shifted(self, dx: f32, dy: f32) -> Self {
+  /// Moves the origin by `offset`.
+  pub(crate) fn shifted(self, offset: Point<f32>) -> Self {
     Self {
-      origin: Point {
-        x: self.origin.x + dx,
-        y: self.origin.y + dy,
-      },
+      origin: self.origin + offset,
       ..self
     }
   }
