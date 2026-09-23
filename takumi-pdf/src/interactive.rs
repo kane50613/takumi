@@ -24,12 +24,12 @@ use crate::{
     action::{Action, LinkAction},
     annotation::{Annotation, LinkAnnotation, Target},
     destination::{Destination, XyzDestination},
-    geom::Rect as KrillaRect,
+    geom::{Point, Rect as KrillaRect},
     outline::{Outline, OutlineNode},
     page::Page,
   },
   options::PT_PER_PX,
-  tags::{TagCollector, text_content},
+  tags::{TagCollector, tag_id, text_content},
   tree::PreparedTree,
   window::Window,
 };
@@ -78,6 +78,23 @@ pub(crate) struct HeadingTarget {
   /// Path of the heading element. A heading whose text sits in child elements
   /// paints once per child, and the outline wants one entry.
   pub(crate) path: Vec<usize>,
+}
+
+/// A destination at `point` on output page `page`. PDF/UA-2 destinations
+/// also name the structure element built from `path`.
+pub(crate) fn xyz_destination(
+  page: usize,
+  point: Point,
+  path: &[usize],
+  structural: bool,
+) -> XyzDestination {
+  let destination = XyzDestination::new(page, point);
+
+  if structural {
+    destination.with_structure(tag_id(path))
+  } else {
+    destination
+  }
 }
 
 /// The axis-aligned bounding box of a node-local rect under the node's
