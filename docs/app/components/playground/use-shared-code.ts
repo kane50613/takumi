@@ -1,8 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { compressCode, decompressCode } from "~/playground/share";
-import { defaultTemplate, templates } from "~/playground/templates";
-
-export const DEFAULT_TEMPLATE = templates[0];
+import { DEFAULT_TEMPLATE, templates } from "~/playground/templates";
 
 function hashParams() {
   if (typeof window === "undefined") return new URLSearchParams();
@@ -45,8 +43,11 @@ export function useSharedCode() {
   const templateQuery = params.get("template") ?? legacy.get("template");
   const matchedTemplate = templates.find((template) => template.code === code);
 
-  const replaceParams = (updater: (current: URLSearchParams) => URLSearchParams) => {
-    const next = updater(hashParams());
+  const replaceParams = (update: (next: URLSearchParams) => void) => {
+    const next = hashParams();
+
+    update(next);
+
     const hash = next.toString();
     const url = `${window.location.pathname}${hash ? `#${hash}` : ""}`;
 
@@ -79,33 +80,27 @@ export function useSharedCode() {
   useEffect(() => {
     if (!code) return;
 
-    if (code === defaultTemplate) {
-      replaceParams((current) => {
-        const next = new URLSearchParams(current);
+    if (code === DEFAULT_TEMPLATE.code) {
+      replaceParams((next) => {
         next.delete("code");
         next.delete("template");
-        return next;
       });
       return;
     }
 
     if (matchedTemplate) {
-      replaceParams((current) => {
-        const next = new URLSearchParams(current);
+      replaceParams((next) => {
         next.delete("code");
         next.set("template", matchedTemplate.id);
-        return next;
       });
       return;
     }
 
     const timer = setTimeout(() => {
       compressCode(code).then((base64) => {
-        replaceParams((current) => {
-          const next = new URLSearchParams(current);
+        replaceParams((next) => {
           next.delete("template");
           next.set("code", base64);
-          return next;
         });
       });
     }, 500);

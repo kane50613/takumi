@@ -123,4 +123,4 @@ export const templates: Template[] = [
   },
 ];
 
-export const defaultTemplate = templates[0].code;
+export const DEFAULT_TEMPLATE = templates[0];

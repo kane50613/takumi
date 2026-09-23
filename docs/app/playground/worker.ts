@@ -16,22 +16,10 @@ import { inspectPdf } from "./inspect-pdf";
 import { cssEntryToText } from "./preview-css";
 import { messageSchema, type CssEntry, type OutputKind, type RenderMessageInput } from "./schema";
 
-const DEFAULT_IMAGE_SIZE = { width: 1200, height: 630 };
-
 type PdfOptions = NonNullable<PlaygroundOptions["pdf"]>;
 
-/**
- * What the browser preview pane and the status bar need: the box to lay the
- * HTML out in, and a name for it. PDF output has no preview pane, so it carries
- * a name alone.
- */
-type OutputGeometry = {
-  width: number;
-  height?: number;
-  /** CSS `padding` shorthand mirroring the PDF page margin. */
-  padding?: string;
-  label: string;
-};
+/** The box an image or animation lays out in, which the browser preview pane mirrors. */
+type ImageSize = { width: number; height: number };
 
 function pdfLabel(pdf: PdfOptions): string {
   if (pdf.viewport) {
@@ -48,12 +36,8 @@ function pdfLabel(pdf: PdfOptions): string {
   return pdf.landscape ? `${name} landscape` : name;
 }
 
-function outputGeometry(options: PlaygroundOptions): OutputGeometry {
-  if (options.pdf) return { width: 0, label: pdfLabel(options.pdf) };
-
-  const { width = DEFAULT_IMAGE_SIZE.width, height = DEFAULT_IMAGE_SIZE.height } = options;
-
-  return { width, height, label: `${width} × ${height}` };
+function imageSize({ width = 1200, height = 630 }: PlaygroundOptions): ImageSize {
+  return { width, height };
 }
 
 const fetchCache = new Map<string, Promise<ArrayBuffer>>();
@@ -107,7 +91,7 @@ type RenderInput = Omit<Resources, "notice"> & {
   renderer: Renderer;
   node: Node;
   options: PlaygroundOptions;
-  geometry: OutputGeometry;
+  size: ImageSize;
 };
 
 type Output = {
@@ -121,7 +105,7 @@ async function renderOutput({
   renderer,
   node,
   options,
-  geometry,
+  size,
   images,
   fonts,
   css,
@@ -147,8 +131,8 @@ async function renderOutput({
     return {
       buffer: await renderer.renderAnimation({
         scenes: [{ node, durationMs }],
-        width: geometry.width,
-        height: geometry.height ?? geometry.width,
+        width: size.width,
+        height: size.height,
         format,
         fps,
         quality: options.quality,
@@ -176,13 +160,9 @@ async function renderRequest(renderer: Renderer, id: number, code: string) {
   const optionCss =
     options.css === undefined || Array.isArray(options.css) ? options.css : [options.css];
   const effectiveCss: CssEntry[] = optionCss ?? extractedCss;
-  // The pane compiles utilities itself, so it needs the theme as declarations
-  // rather than as the `:root` rule the renderer reads.
-  const theme = effectiveCss
-    .map(cssEntryToText)
-    .flatMap((text) => [...text.matchAll(/:root\s*\{([^{}]*)\}/g)].map(([, body]) => body))
-    .join("");
-  const geometry = outputGeometry(options);
+  const cssTexts = effectiveCss.map(cssEntryToText);
+  const size = imageSize(options);
+  const label = options.pdf ? pdfLabel(options.pdf) : `${size.width} × ${size.height}`;
 
   // A PDF renders pages, which a single HTML flow cannot stand in for, so the
   // playground gives the whole pane to the viewer instead.
@@ -191,26 +171,21 @@ async function renderRequest(renderer: Renderer, id: number, code: string) {
       type: "preview-result",
       id,
       html: renderToStaticMarkup(element),
-      width: geometry.width,
-      height: geometry.height,
-      padding: geometry.padding,
-      cssContents: effectiveCss.map(cssEntryToText),
-      theme,
+      width: size.width,
+      height: size.height,
+      cssContents: cssTexts,
+      // The pane compiles utilities itself, so it needs the theme as declarations
+      // rather than as the `:root` rule the renderer reads.
+      theme: cssTexts
+        .flatMap((text) => [...text.matchAll(/:root\s*\{([^{}]*)\}/g)].map(([, body]) => body))
+        .join(""),
     });
   }
 
   const emojified = extractEmojis(node, options.emoji ?? "twemoji");
-  const resources = await loadResources(emojified, effectiveCss);
-
-  const { notice, ...renderResources } = resources;
+  const { notice, ...resources } = await loadResources(emojified, effectiveCss);
   const start = performance.now();
-  const output = await renderOutput({
-    renderer,
-    node: emojified,
-    options,
-    geometry,
-    ...renderResources,
-  });
+  const output = await renderOutput({ renderer, node: emojified, options, size, ...resources });
   const duration = performance.now() - start;
   const inspection = output.kind === "pdf" ? await inspectPdf(output.buffer) : undefined;
 
@@ -224,7 +199,7 @@ async function renderRequest(renderer: Renderer, id: number, code: string) {
         duration,
         outputKind: output.kind,
         outputFormat: output.format,
-        label: geometry.label,
+        label,
         inspection,
         notice,
       },

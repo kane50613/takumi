@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import type { z } from "zod/mini";
 import {
   messageSchema,
+  type previewResultSchema,
   type RenderMessageInput,
   type renderResultSchema,
 } from "~/playground/schema";
@@ -11,14 +12,7 @@ export type RenderResult = z.infer<typeof renderResultSchema>["result"];
 export type RenderSuccess = Extract<RenderResult, { status: "success" }> & { outputSize: number };
 export type RenderError = Extract<RenderResult, { status: "error" }>;
 
-export type BrowserPreviewData = {
-  html: string;
-  width?: number;
-  height?: number;
-  padding?: string;
-  cssContents?: string[];
-  theme?: string;
-};
+export type BrowserPreviewData = Omit<z.infer<typeof previewResultSchema>, "type" | "id">;
 
 function isBlobUrl(url: string | undefined): url is string {
   return typeof url === "string" && url.startsWith("blob:");
@@ -37,11 +31,11 @@ const LIVENESS_TIMEOUT_MS = 2_000;
 /** Bounds what the worker can hand the page to hold, forged or not, in UTF-16 code units. */
 const MAX_PREVIEW_LENGTH = 4 * 1024 * 1024;
 
-function previewLength(message: { html: string; cssContents?: string[]; theme?: string }) {
+function previewLength(preview: BrowserPreviewData) {
   return (
-    message.html.length +
-    (message.cssContents ?? []).reduce((sum, css) => sum + css.length, 0) +
-    (message.theme ?? "").length
+    preview.html.length +
+    (preview.cssContents ?? []).reduce((sum, css) => sum + css.length, 0) +
+    (preview.theme ?? "").length
   );
 }
 
@@ -89,7 +83,6 @@ export function useRenderWorker(ranCode: string | undefined) {
               html: message.html,
               width: message.width,
               height: message.height,
-              padding: message.padding,
               cssContents: message.cssContents,
               theme: message.theme,
             });

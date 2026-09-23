@@ -3,7 +3,7 @@
 import { lazy, Suspense } from "react";
 import { LoadingScreen } from "./loading-screen";
 
-const ImageEditor = lazy(() => import("~/components/playground/playground"));
+const Playground = lazy(() => import("./playground"));
 
 export function LazyPlayground() {
   return (
@@ -14,7 +14,7 @@ export function LazyPlayground() {
         </div>
       }
     >
-      <ImageEditor />
+      <Playground />
     </Suspense>
   );
 }

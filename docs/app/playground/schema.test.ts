@@ -29,13 +29,13 @@ test("rejects a value that is not an entry", () => {
   expect(accepts({ style: { color: "red" } })).toBe(false);
 });
 
-/// Only a layer has a statement form; a media or support group without its
-/// entries is a typo, not an empty block.
 /// A style rule nests style rules alone; text belongs in a group or at the top.
 test("rejects text nested in a style rule", () => {
   expect(accepts({ selector: ".a", rules: ["b{}"] })).toBe(false);
 });
 
+/// Only a layer has a statement form; a media or support group without its
+/// entries is a typo, not an empty block.
 test("rejects a media or supports group without rules", () => {
   expect(accepts({ media: "print" })).toBe(false);
   expect(accepts({ supports: "(display: grid)" })).toBe(false);

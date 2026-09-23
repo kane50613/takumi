@@ -3,13 +3,13 @@
 import { AxeIcon, ExternalLinkIcon, GlobeIcon } from "lucide-react";
 import { lazy, Suspense, useEffect, useState } from "react";
 import { cn } from "~/lib/utils";
-import type { Template } from "~/playground/templates";
+import { DEFAULT_TEMPLATE, type Template } from "~/playground/templates";
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "../ui/resizable";
 import { ComponentEditor } from "./component-editor";
 import { LoadingScreen } from "./loading-screen";
 import { LabeledPane, OutputPanel, PDF_VIEWS, type PdfView, type Zoom } from "./output-panel";
 import { Toolbar, type TabId } from "./toolbar";
-import { DEFAULT_TEMPLATE, useSharedCode } from "./use-shared-code";
+import { useSharedCode } from "./use-shared-code";
 import { type RenderSuccess, useRenderWorker } from "./use-render-worker";
 
 const BrowserPreview = lazy(() => import("./browser-preview"));
@@ -165,14 +165,7 @@ export default function Playground() {
   );
   const browserPane = (
     <Suspense fallback={<div className="h-full bg-muted/20" />}>
-      <BrowserPreview
-        html={browserPreview?.html}
-        width={browserPreview?.width}
-        height={browserPreview?.height}
-        padding={browserPreview?.padding}
-        cssContents={browserPreview?.cssContents}
-        theme={browserPreview?.theme}
-      />
+      <BrowserPreview preview={browserPreview} />
     </Suspense>
   );
   const splitPreview = (

@@ -2,6 +2,8 @@ import * as z from "zod/mini";
 import type { PdfInspection } from "./inspect-pdf";
 import type { PlaygroundPdfOptions } from "./options";
 
+const positiveInt = z.int().check(z.positive(), z.minimum(1));
+
 const declarationsSchema = z.record(z.string(), z.union([z.string(), z.number()]));
 
 /**
@@ -46,16 +48,16 @@ const cssInputSchema: z.ZodMiniType<CssEntry> = z.lazy(() =>
 );
 
 export const optionsSchema = z.object({
-  width: z.optional(z.int().check(z.positive(), z.minimum(1))),
-  height: z.optional(z.int().check(z.positive(), z.minimum(1))),
-  quality: z.optional(z.int().check(z.positive(), z.minimum(1), z.maximum(100))),
+  width: z.optional(positiveInt),
+  height: z.optional(positiveInt),
+  quality: z.optional(positiveInt.check(z.maximum(100))),
   format: z.optional(z.enum(["png", "jpeg", "webp"])),
   devicePixelRatio: z.optional(z.number().check(z.positive(), z.minimum(0.1), z.maximum(10.0))),
   css: z.optional(z.union([cssInputSchema, z.array(cssInputSchema)])),
   animation: z.optional(
     z.object({
-      durationMs: z.int().check(z.positive(), z.minimum(1)),
-      fps: z.optional(z.int().check(z.positive(), z.minimum(1))),
+      durationMs: positiveInt,
+      fps: z.optional(positiveInt),
       format: z.optional(z.enum(["webp", "apng", "gif"])),
     }),
   ),
@@ -71,7 +73,7 @@ export type OutputKind = (typeof outputKinds)[number];
 
 const renderSuccessSchema = z.object({
   status: z.literal("success"),
-  id: z.int().check(z.positive(), z.minimum(1)),
+  id: positiveInt,
   outputBuffer: z.any(),
   outputUrl: z.optional(z.string()),
   duration: z.number(),
@@ -87,14 +89,14 @@ const renderSuccessSchema = z.object({
 
 const renderErrorSchema = z.object({
   status: z.literal("error"),
-  id: z.int().check(z.positive(), z.minimum(1)),
+  id: positiveInt,
   message: z.string(),
   transformedCode: z.optional(z.string()),
 });
 
 const renderRequestSchema = z.object({
   type: z.literal("render-request"),
-  id: z.int().check(z.positive(), z.minimum(1)),
+  id: positiveInt,
   code: z.string(),
 });
 
@@ -115,15 +117,12 @@ const watchdogSchema = z.object({
 
 // Posted before the (slower) fetches + WASM render so the browser pane never
 // waits on them. `cssContents` is raw CSS (Takumi's effective stylesheets), not URLs.
-const previewResultSchema = z.object({
+export const previewResultSchema = z.object({
   type: z.literal("preview-result"),
-  id: z.int().check(z.positive(), z.minimum(1)),
+  id: positiveInt,
   html: z.string(),
-  width: z.optional(z.int().check(z.positive(), z.minimum(1))),
-  // Omitted for paged PDF: the pane shows one continuous flow instead of pages.
-  height: z.optional(z.int().check(z.positive(), z.minimum(1))),
-  /** CSS `padding` shorthand mirroring the PDF page margin. */
-  padding: z.optional(z.string()),
+  width: positiveInt,
+  height: positiveInt,
   cssContents: z.optional(z.array(z.string())),
   /** `:root` declarations the pane's own Tailwind compiler needs. */
   theme: z.optional(z.string()),

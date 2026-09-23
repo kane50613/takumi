@@ -1,18 +1,10 @@
 import { ArrowRight } from "lucide-react";
+import type { Template } from "~/data/showcase";
 
-export interface TemplateCardProps {
-  item: {
-    title: string;
-    href: string;
-    image: string;
-  };
-}
-
-export function TemplateCard({ item }: TemplateCardProps) {
+export function TemplateCard({ item }: { item: Template }) {
   return (
     <a href={item.href} className="group flex flex-col space-y-4">
       <div className="relative aspect-1200/630 overflow-hidden rounded-xl bg-zinc-950/50 border border-border/40 shadow-sm transition-all duration-500 group-hover:border-primary/30 group-hover:shadow-[0_0_30px_-5px_--theme(--color-primary/0.2)]">
-        {/* Subtle inner glow on hover */}
         <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-500 bg-[radial-gradient(circle_at_50%_0%,--theme(--color-primary/0.1)_0%,transparent_70%)] pointer-events-none z-10" />
 
         <img
