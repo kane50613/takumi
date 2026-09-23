@@ -22,7 +22,6 @@ mod dithering;
 /// Filter rasterization (blur, drop-shadow, backdrop, pixel filters)
 mod filter;
 /// Image drawing functions
-#[cfg(feature = "svg")]
 mod image_drawing;
 pub(crate) mod inline_drawing;
 mod node_paint;
@@ -43,14 +42,15 @@ pub(crate) use components::*;
 pub(crate) use debug_drawing::*;
 pub use dithering::*;
 pub(crate) use filter::*;
-#[cfg(feature = "svg")]
 pub(crate) use image_drawing::*;
 pub(crate) use node_paint::*;
 pub(crate) use path::*;
 pub use render::*;
 pub(crate) use takumi_core::geometry::Placement;
 pub(crate) use text_drawing::*;
-use tiny_skia::{IntSize, Pixmap, PixmapRef};
+use tiny_skia::PixmapRef;
+#[cfg(any(feature = "svg", test))]
+use tiny_skia::{IntSize, Pixmap};
 pub use write::*;
 
 use crate::resources::image_buffer::ImageBuffer;
@@ -66,6 +66,7 @@ pub(crate) fn pixmap_ref_from_buffer(buffer: &ImageBuffer) -> Option<PixmapRef<'
 }
 
 /// Copies an [`ImageBuffer`] into an owned `tiny_skia` pixmap.
+#[cfg(any(feature = "svg", test))]
 pub(crate) fn pixmap_from_buffer(buffer: &ImageBuffer) -> Option<Pixmap> {
   let size = IntSize::from_wh(buffer.width(), buffer.height())?;
   Pixmap::from_vec(buffer.data().to_vec(), size)
