@@ -323,7 +323,7 @@ fn build_style_layers(
     .map(|author_tw| author_tw.declaration_blocks(viewport, &stylesheet.breakpoints, tw_cache));
 
   if let Some(preset) = node_layers.preset {
-    style.merge_from(preset);
+    style.append_block(preset.declarations);
   }
 
   if let Some(dir) = node_layers.dir {

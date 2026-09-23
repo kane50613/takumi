@@ -29,15 +29,37 @@ pub(crate) enum CssInputParseError<'de> {
   },
 }
 
-impl CssInputParseError<'_> {
-  pub(crate) fn into_serde_error<E>(self, property_name: &str, property: PropertyId) -> E
+impl<'de> CssInputParseError<'de> {
+  pub(crate) fn new(
+    css_input: CssInput<'de>,
+    expected: String,
+    failure: CssInputParseFailure,
+  ) -> Self {
+    match css_input {
+      CssInput::Str(value) => Self::Value {
+        value,
+        expected: expected.into(),
+        failure: Some(failure),
+      },
+      CssInput::Number(number) => Self::NumberType {
+        number,
+        expected: expected.into(),
+      },
+      CssInput::Unexpected(unexpected) => Self::UnexpectedType {
+        unexpected,
+        expected: expected.into(),
+      },
+    }
+  }
+
+  pub(crate) fn into_serde_error<E>(self, property_name: &str) -> E
   where
     E: serde::de::Error,
   {
-    E::custom(self.message(property_name, property))
+    E::custom(self.message(property_name))
   }
 
-  fn message(&self, property_name: &str, _property: PropertyId) -> String {
+  fn message(&self, property_name: &str) -> String {
     let mut message = String::new();
     let value_kind = match self {
       Self::Value { .. } => "value",
@@ -93,74 +115,41 @@ impl CssInputParseError<'_> {
   }
 }
 
-pub(crate) fn parse_css_wide_keyword(css_input: &CssInput<'_>) -> Option<CssWideKeyword> {
-  match css_input {
-    CssInput::Str(value) => {
-      let mut parser_input = ParserInput::new(value.as_ref());
-      let mut parser = Parser::new(&mut parser_input);
-      CssWideKeyword::from_css(&mut parser).ok()
-    }
-    CssInput::Number(_) | CssInput::Unexpected(_) => None,
-  }
-}
-
-pub(crate) fn css_input_parse_error<'de>(
-  css_input: CssInput<'de>,
-  expected: String,
-  failure: CssInputParseFailure,
-) -> CssInputParseError<'de> {
-  match css_input {
-    CssInput::Str(value) => CssInputParseError::Value {
-      value,
-      expected: expected.into(),
-      failure: Some(failure),
-    },
-    CssInput::Number(number) => CssInputParseError::NumberType {
-      number,
-      expected: expected.into(),
-    },
-    CssInput::Unexpected(unexpected) => CssInputParseError::UnexpectedType {
-      unexpected,
-      expected: expected.into(),
-    },
-  }
-}
-
-pub(crate) fn css_input_parse_failure(
-  source: &str,
-  error: ParseError<'_, Cow<'_, str>>,
-) -> CssInputParseFailure {
-  let location = error.location;
-  let Some(start) = source
-    .char_indices()
-    .nth(location.column.saturating_sub(1) as usize)
-    .map(|(index, _)| index)
-  else {
-    return CssInputParseFailure {
-      location,
-      detail: None,
+impl CssWideKeyword {
+  /// The keyword a string input spells, if any.
+  pub(crate) fn from_css_input(css_input: &CssInput<'_>) -> Option<Self> {
+    let CssInput::Str(value) = css_input else {
+      return None;
     };
-  };
+    let mut parser_input = ParserInput::new(value.as_ref());
+    let mut parser = Parser::new(&mut parser_input);
 
-  let snippet = source[start..]
-    .trim_start()
-    .split([' ', '\t', '\n', '\r', ',', ')', '('])
-    .next()
-    .unwrap_or_default()
-    .trim_matches('"')
-    .trim_matches('\'');
+    Self::from_css(&mut parser).ok()
+  }
+}
 
-  let snippet = snippet.chars().take(24).collect::<String>();
-  if snippet.is_empty() {
-    CssInputParseFailure {
-      location,
-      detail: None,
-    }
-  } else {
-    CssInputParseFailure {
-      location,
-      detail: Some(snippet),
-    }
+impl CssInputParseFailure {
+  /// Where `error` stopped reading `source`, with the word it stopped at.
+  pub(crate) fn new(source: &str, error: ParseError<'_, Cow<'_, str>>) -> Self {
+    let location = error.location;
+    let detail = source
+      .char_indices()
+      .nth(location.column.saturating_sub(1) as usize)
+      .map(|(start, _)| {
+        source[start..]
+          .trim_start()
+          .split([' ', '\t', '\n', '\r', ',', ')', '('])
+          .next()
+          .unwrap_or_default()
+          .trim_matches('"')
+          .trim_matches('\'')
+          .chars()
+          .take(24)
+          .collect::<String>()
+      })
+      .filter(|snippet| !snippet.is_empty());
+
+    Self { location, detail }
   }
 }
 
@@ -228,7 +217,7 @@ pub(crate) fn normalize_kebab_property_name(name: &str) -> Cow<'_, str> {
     return Cow::Borrowed(name);
   }
 
-  let mut normalized: String = name
+  let normalized = name
     .chars()
     .map(|ch| match ch {
       '-' => '_',
@@ -236,13 +225,7 @@ pub(crate) fn normalize_kebab_property_name(name: &str) -> Cow<'_, str> {
     })
     .collect();
 
-  let leading = normalized.len() - normalized.trim_start_matches('_').len();
-
-  if leading > 0 {
-    normalized.drain(..leading);
-  }
-
-  Cow::Owned(normalized)
+  without_leading_underscores(normalized)
 }
 
 pub(crate) fn normalize_camel_property_name(name: &str) -> Cow<'_, str> {
@@ -260,12 +243,13 @@ pub(crate) fn normalize_camel_property_name(name: &str) -> Cow<'_, str> {
     }
   }
 
+  without_leading_underscores(normalized)
+}
+
+fn without_leading_underscores(mut normalized: String) -> Cow<'static, str> {
   let leading = normalized.len() - normalized.trim_start_matches('_').len();
 
-  if leading > 0 {
-    normalized.drain(..leading);
-  }
-
+  normalized.drain(..leading);
   Cow::Owned(normalized)
 }
 
@@ -273,14 +257,13 @@ pub(crate) fn contains_var_function(specified_value: &str) -> bool {
   fn contains_in_parser(input: &mut Parser<'_, '_>) -> bool {
     loop {
       let should_check_nested_block = match input.next_including_whitespace_and_comments() {
-        Ok(Token::Function(name)) => {
-          if name.eq_ignore_ascii_case("var") {
-            return true;
-          }
-
-          true
-        }
-        Ok(Token::ParenthesisBlock | Token::SquareBracketBlock | Token::CurlyBracketBlock) => true,
+        Ok(Token::Function(name)) if name.eq_ignore_ascii_case("var") => return true,
+        Ok(
+          Token::Function(_)
+          | Token::ParenthesisBlock
+          | Token::SquareBracketBlock
+          | Token::CurlyBracketBlock,
+        ) => true,
         Ok(_) => false,
         Err(_) => break,
       };
