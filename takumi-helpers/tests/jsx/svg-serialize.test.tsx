@@ -4,6 +4,10 @@ import { renderToStaticMarkup } from "react-dom/server";
 
 import { serializeSvg } from "../../src/jsx/svg";
 
+function expectReactDomMarkup(component: Parameters<typeof serializeSvg>[0]) {
+  expect(serializeSvg(component)).toBe(renderToStaticMarkup(component));
+}
+
 test("serializeSvg matches react-dom server output for SVG", () => {
   const component = (
     <svg width="60" height="60" viewBox="0 0 180 180" xmlns="http://www.w3.org/2000/svg">
@@ -18,10 +22,7 @@ test("serializeSvg matches react-dom server output for SVG", () => {
     </svg>
   );
 
-  const expected = renderToStaticMarkup(component);
-  const actual = serializeSvg(component);
-
-  expect(actual).toBe(expected);
+  expectReactDomMarkup(component);
 });
 
 test("serializeSvg handles camelCase SVG props and boolean attributes", () => {
@@ -36,10 +37,7 @@ test("serializeSvg handles camelCase SVG props and boolean attributes", () => {
     </svg>
   );
 
-  const expected = renderToStaticMarkup(component);
-  const actual = serializeSvg(component);
-
-  expect(actual).toBe(expected);
+  expectReactDomMarkup(component);
 });
 
 test("serializeSvg preserves style objects and converts camelCase style keys", () => {
@@ -49,10 +47,7 @@ test("serializeSvg preserves style objects and converts camelCase style keys", (
     </svg>
   );
 
-  const expected = renderToStaticMarkup(component);
-  const actual = serializeSvg(component);
-
-  expect(actual).toBe(expected);
+  expectReactDomMarkup(component);
 });
 
 test("serializeSvg emits fragment children, including from components", () => {
@@ -75,10 +70,7 @@ test("serializeSvg emits fragment children, including from components", () => {
     </svg>
   );
 
-  const expected = renderToStaticMarkup(component);
-  const actual = serializeSvg(component);
-
-  expect(actual).toBe(expected);
+  expectReactDomMarkup(component);
 });
 
 test("serializeSvg renders memo and forwardRef children", () => {
@@ -94,10 +86,7 @@ test("serializeSvg renders memo and forwardRef children", () => {
     </svg>
   );
 
-  const expected = renderToStaticMarkup(component);
-  const actual = serializeSvg(component);
-
-  expect(actual).toBe(expected);
+  expectReactDomMarkup(component);
 });
 
 test("serializeSvg adds xmlns when not provided", () => {
@@ -149,9 +138,7 @@ test("serializeSvg keeps valid style values that contain semicolons", () => {
     fill: "url(data:image/png;base64,AAAA)",
     "--色": "red",
   };
-  const component = <svg xmlns="http://www.w3.org/2000/svg" style={style} />;
-
-  expect(serializeSvg(component)).toBe(renderToStaticMarkup(component));
+  expectReactDomMarkup(<svg xmlns="http://www.w3.org/2000/svg" style={style} />);
   expect(serializeSvg(<svg style={{ stroke: "blue;" }} />)).toContain('style="stroke:blue;"');
 });
 

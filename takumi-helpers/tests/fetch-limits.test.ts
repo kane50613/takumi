@@ -1,12 +1,7 @@
 import { describe, expect, mock, test } from "bun:test";
 import { fontFromUrl } from "../src/fonts";
-import type { Node } from "../src/types";
 import { prepareImages } from "../src/images";
-
-const tree = (...srcs: string[]): Node => ({
-  type: "container",
-  children: srcs.map((src) => ({ type: "image", src })),
-});
+import { imageTree } from "./image-tree";
 
 const streamOf = (...chunks: Uint8Array[]): ReadableStream<Uint8Array> =>
   new ReadableStream({
@@ -25,7 +20,11 @@ describe("fetch byte caps", () => {
     );
 
     await expect(
-      prepareImages({ node: tree("https://example.com/big.png"), fetch: fetchMock, maxBytes: 100 }),
+      prepareImages({
+        node: imageTree("https://example.com/big.png"),
+        fetch: fetchMock,
+        maxBytes: 100,
+      }),
     ).rejects.toThrow(/exceeds 100 bytes/);
   });
 
@@ -36,7 +35,7 @@ describe("fetch byte caps", () => {
 
     await expect(
       prepareImages({
-        node: tree("https://example.com/stream.png"),
+        node: imageTree("https://example.com/stream.png"),
         fetch: fetchMock,
         maxBytes: 100,
       }),
@@ -48,7 +47,7 @@ describe("fetch byte caps", () => {
     const fetchMock = mock(() => Promise.resolve(new Response(streamOf(payload))));
 
     const images = await prepareImages({
-      node: tree("https://example.com/ok.png"),
+      node: imageTree("https://example.com/ok.png"),
       fetch: fetchMock,
       maxBytes: 100,
     });
@@ -63,7 +62,7 @@ describe("allowUrl policy", () => {
 
     await expect(
       prepareImages({
-        node: tree("https://blocked.example.com/a.png"),
+        node: imageTree("https://blocked.example.com/a.png"),
         fetch: fetchMock,
         allowUrl: () => false,
       }),
@@ -90,7 +89,7 @@ describe("allowUrl policy", () => {
 
     await expect(
       prepareImages({
-        node: tree("https://allowed.example.com/a.png"),
+        node: imageTree("https://allowed.example.com/a.png"),
         fetch: fetchMock,
         allowUrl: (url) => url.startsWith("https://allowed.example.com/"),
       }),
@@ -107,7 +106,7 @@ describe("allowUrl policy", () => {
     const checked: string[] = [];
 
     const images = await prepareImages({
-      node: tree("https://allowed.example.com/a.png"),
+      node: imageTree("https://allowed.example.com/a.png"),
       fetch: fetchMock,
       allowUrl: (url) => {
         checked.push(url);
@@ -129,7 +128,7 @@ describe("allowUrl policy", () => {
 
     await expect(
       prepareImages({
-        node: tree("https://allowed.example.com/loop.png"),
+        node: imageTree("https://allowed.example.com/loop.png"),
         fetch: fetchMock,
         allowUrl: () => true,
       }),
@@ -144,7 +143,7 @@ describe("allowUrl policy", () => {
     });
 
     const images = await prepareImages({
-      node: tree("https://anywhere.example.com/a.png"),
+      node: imageTree("https://anywhere.example.com/a.png"),
       fetch: fetchMock,
     });
 
@@ -165,7 +164,7 @@ describe("shared fetchCache policy enforcement", () => {
           : new Response(payload),
       ),
     );
-    const node = tree(entry);
+    const node = imageTree(entry);
     const fetchCache = new Map<string, Promise<ArrayBuffer>>();
     await prepareImages({ node, fetchCache, fetch: fetchMock, allowUrl: () => true });
     const checked: string[] = [];
@@ -188,7 +187,7 @@ describe("shared fetchCache policy enforcement", () => {
   test("a cache hit re-runs a stricter maxBytes and keeps the entry reusable", async () => {
     const fetchMock = mock(() => Promise.resolve(new Response(streamOf(new Uint8Array(60)))));
     const fetchCache = new Map<string, Promise<ArrayBuffer>>();
-    const node = tree("https://example.com/cached.png");
+    const node = imageTree("https://example.com/cached.png");
 
     await prepareImages({ node, fetchCache, fetch: fetchMock, maxBytes: 100 });
 
@@ -206,7 +205,7 @@ describe("shared fetchCache policy enforcement", () => {
     const payload = new TextEncoder().encode("pixels");
     const fetchMock = mock(() => Promise.resolve(new Response(streamOf(payload))));
     const fetchCache = new Map<string, Promise<ArrayBuffer>>();
-    const node = tree("https://allowed.example.com/cached.png");
+    const node = imageTree("https://allowed.example.com/cached.png");
 
     await prepareImages({ node, fetchCache, fetch: fetchMock, allowUrl: () => true });
 
@@ -228,7 +227,7 @@ describe("shared fetchCache policy enforcement", () => {
   test("an entry fetched without allowUrl is still checked against its entry url", async () => {
     const fetchMock = mock(() => Promise.resolve(new Response(new Uint8Array(8))));
     const fetchCache = new Map<string, Promise<ArrayBuffer>>();
-    const node = tree("http://169.254.169.254/meta.png");
+    const node = imageTree("http://169.254.169.254/meta.png");
 
     await prepareImages({ node, fetchCache, fetch: fetchMock });
 

@@ -1,13 +1,9 @@
 import { describe, expect, mock, test } from "bun:test";
 import type { Node } from "../src/types";
 import { prepareImages } from "../src/images";
+import { imageTree } from "./image-tree";
 
 const ok = (url: string) => new Response(new TextEncoder().encode(url).buffer);
-
-const tree = (...srcs: string[]): Node => ({
-  type: "container",
-  children: srcs.map((src) => ({ type: "image", src })),
-});
 
 describe("prepareImages", () => {
   test("fetches remote images and skips provided sources", async () => {
@@ -15,7 +11,7 @@ describe("prepareImages", () => {
     const provided = { src: "https://example.com/a.png", data: new ArrayBuffer(0) };
 
     const images = await prepareImages({
-      node: tree("https://example.com/a.png", "https://example.com/b.png"),
+      node: imageTree("https://example.com/a.png", "https://example.com/b.png"),
       sources: [provided],
       fetch: fetchMock,
     });
@@ -31,7 +27,7 @@ describe("prepareImages", () => {
   test("single-flight cache coalesces concurrent fetches of the same url", async () => {
     const fetchMock = mock((url: string) => Promise.resolve(ok(url)));
     const fetchCache = new Map<string, Promise<ArrayBuffer>>();
-    const node = tree("https://example.com/x.png");
+    const node = imageTree("https://example.com/x.png");
 
     await Promise.all([
       prepareImages({ node, fetchCache, fetch: fetchMock }),
@@ -47,7 +43,7 @@ describe("prepareImages", () => {
       ++attempt === 1 ? Promise.reject(new Error("boom")) : Promise.resolve(ok(url)),
     );
     const fetchCache = new Map<string, Promise<ArrayBuffer>>();
-    const node = tree("https://example.com/y.png");
+    const node = imageTree("https://example.com/y.png");
 
     expect(prepareImages({ node, fetchCache, fetch: fetchMock })).rejects.toThrow("boom");
     expect(fetchCache.size).toBe(0);
@@ -83,7 +79,7 @@ describe("prepareImages", () => {
     );
 
     const images = await prepareImages({
-      node: tree("https://example.com/good.png", "https://example.com/bad.png"),
+      node: imageTree("https://example.com/good.png", "https://example.com/bad.png"),
       fetch: fetchMock,
       throwOnError: false,
     });
