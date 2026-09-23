@@ -62,8 +62,7 @@ impl<'i> FromCss<'i> for GridTemplateAreas {
   fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
     let location = input.current_source_location();
     if let Ok(ident) = input.try_parse(Parser::expect_ident_cloned) {
-      let ident_str = ident.as_ref();
-      if ident_str == "none" {
+      if ident.as_ref() == "none" {
         return Ok(GridTemplateAreas(Vec::new()));
       }
       return Err(unexpected_token!(location, &Token::Ident(ident)));
@@ -80,11 +79,9 @@ impl<'i> FromCss<'i> for GridTemplateAreas {
       rows.push(cols);
     }
 
-    // Validate consistent column counts across rows
     if let Some(width) = rows.first().map(Vec::len)
       && rows.iter().any(|r| r.len() != width)
     {
-      // Create a parse error for inconsistent row lengths
       return Err(unexpected_token!(
         input.current_source_location(),
         &Token::Ident("inconsistent-rows".into()),

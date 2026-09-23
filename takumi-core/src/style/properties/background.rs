@@ -41,7 +41,6 @@ impl<'i> FromCss<'i> for Background {
     let mut box_count = 0u8;
 
     while !input.is_exhausted() && !next_is_comma(input) {
-      // Try to parse background-color
       if color.is_none()
         && let Ok(value) = input.try_parse(ColorInput::from_css)
       {
@@ -49,7 +48,6 @@ impl<'i> FromCss<'i> for Background {
         continue;
       }
 
-      // Try to parse background-position (and optionally background-size with /)
       if position.is_none()
         && let Ok(value) = input.try_parse(PositionValue::from_css)
       {
@@ -65,7 +63,6 @@ impl<'i> FromCss<'i> for Background {
         continue;
       }
 
-      // Try to parse background-image
       if image.is_none()
         && let Ok(value) = input.try_parse(BackgroundImage::from_css)
       {
@@ -73,7 +70,6 @@ impl<'i> FromCss<'i> for Background {
         continue;
       }
 
-      // Try to parse background-repeat
       if repeat.is_none()
         && let Ok(value) = input.try_parse(BackgroundRepeat::from_css)
       {
@@ -94,7 +90,6 @@ impl<'i> FromCss<'i> for Background {
         continue;
       }
 
-      // If we can't parse anything, it's an error
       return Err(unexpected_token!(
         input.current_source_location(),
         input.next()?,

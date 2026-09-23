@@ -1,6 +1,6 @@
-use std::{borrow::Cow, fmt};
+use std::fmt;
 
-use cssparser::{BasicParseErrorKind, ParseError, Parser};
+use cssparser::{BasicParseErrorKind, Parser};
 use typed_builder::TypedBuilder;
 
 use crate::style::{
@@ -73,20 +73,6 @@ pub(super) fn parse_offsets_blur<'i>(
 }
 
 impl<'i> FromCss<'i> for BoxShadow {
-  /// Parses a box-shadow value from CSS input.
-  ///
-  /// The box-shadow syntax allows for the following components in any order:
-  /// - inset keyword (optional)
-  /// - Two length values for horizontal and vertical offsets (required)
-  /// - Two optional length values for blur radius and spread radius
-  /// - A color value (optional)
-  ///
-  /// Examples:
-  /// - `box-shadow: 2px 4px;`
-  /// - `box-shadow: 2px 4px 6px;`
-  /// - `box-shadow: 2px 4px 6px 8px;`
-  /// - `box-shadow: 2px 4px red;`
-  /// - `box-shadow: inset 2px 4px 6px red;`
   fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, BoxShadow> {
     let mut color = None;
     let mut lengths = None;
@@ -102,19 +88,18 @@ impl<'i> FromCss<'i> for BoxShadow {
         continue;
       }
 
-      if lengths.is_none() {
-        let value = input.try_parse::<_, _, ParseError<Cow<'i, str>>>(|input| {
+      if lengths.is_none()
+        && let Ok(value) = input.try_parse(|input| -> ParseResult<'i, _> {
           let (horizontal, vertical, blur) = parse_offsets_blur(input)?;
           let spread = input
             .try_parse(parse_non_percentage_length)
             .unwrap_or(Length::zero());
-          Ok((horizontal, vertical, blur, spread))
-        });
 
-        if let Ok(value) = value {
-          lengths = Some(value);
-          continue;
-        }
+          Ok((horizontal, vertical, blur, spread))
+        })
+      {
+        lengths = Some(value);
+        continue;
       }
 
       if color.is_none()
@@ -165,11 +150,8 @@ impl Animatable for BoxShadow {
   fn neutral_value_like(other: &Self) -> Option<Self> {
     Some(Self {
       inset: other.inset,
-      offset_x: Length::zero(),
-      offset_y: Length::zero(),
-      blur_radius: Length::zero(),
-      spread_radius: Length::zero(),
       color: Color::transparent().into(),
+      ..Self::default()
     })
   }
 

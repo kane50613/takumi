@@ -42,7 +42,6 @@ impl<'i> FromCss<'i> for TextFit {
       })
       .ok();
 
-    // Reject trailing tokens (e.g. duplicate target or two percentages).
     if !input.is_exhausted() {
       return Err(input.new_error_for_next_token());
     }

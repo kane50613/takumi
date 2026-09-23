@@ -48,13 +48,7 @@ pub(crate) fn parse_opentype_tag<'i, T: FromCss<'i>>(
 ) -> ParseResult<'i, Tag> {
   let location = input.current_source_location();
   let tag_name = input.expect_string()?;
-  if tag_name.len() != 4 || !tag_name.is_ascii() {
-    return Err(unexpected_token!(
-      T,
-      location,
-      &Token::QuotedString(tag_name.clone()),
-    ));
-  }
+
   Tag::parse(tag_name)
     .ok_or_else(|| unexpected_token!(T, location, &Token::QuotedString(tag_name.clone())))
 }
@@ -130,7 +124,6 @@ impl<'i> FromCss<'i> for FontFeatureSettings {
 }
 
 impl ToCss for FontFeature {
-  // An empty `font-feature-settings` list is the keyword `normal`.
   const EMPTY_LIST_KEYWORD: Option<&'static str> = Some("normal");
 
   fn to_css<W: fmt::Write>(&self, dest: &mut W) -> fmt::Result {

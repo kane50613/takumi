@@ -56,12 +56,11 @@ impl GridTrackSize {
 
 impl TailwindPropertyParser for GridTrackSize {
   fn parse_tw(token: &str) -> Option<Self> {
-    let track_size = match_ignore_ascii_case! {token,
-      "auto" => GridTrackSize::Fixed(GridLength::Unit(Length::Auto)),
-      "fr" => GridTrackSize::Fixed(GridLength::Fr(1.0)),
-      _ => return None,
-    };
-    Some(track_size)
+    match_ignore_ascii_case! {token,
+      "auto" => Some(GridTrackSize::Fixed(GridLength::Unit(Length::Auto))),
+      "fr" => Some(GridTrackSize::Fixed(GridLength::Fr(1.0))),
+      _ => None,
+    }
   }
 }
 

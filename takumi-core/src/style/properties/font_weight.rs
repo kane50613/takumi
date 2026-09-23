@@ -3,10 +3,9 @@ use std::fmt;
 use cssparser::{Parser, Token, match_ignore_ascii_case};
 use parley::style::FontWeight as ParleyFontWeight;
 
-use crate::style::tw::Namespace;
 use crate::style::{
   Animatable, Color, CssSyntaxKind, CssToken, FromCss, MakeComputed, ParseResult, SizingContext,
-  ToCss, lerp, tw::TailwindPropertyParser, unexpected_token,
+  ToCss, lerp, tw::Namespace, tw::TailwindPropertyParser, unexpected_token,
 };
 
 /// Represents font weight value.

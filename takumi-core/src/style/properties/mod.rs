@@ -70,7 +70,7 @@ mod white_space;
 mod word_break;
 mod z_index;
 
-use std::fmt;
+use std::{borrow::Cow, fmt};
 
 pub use animation::*;
 pub use aspect_ratio::*;
@@ -91,7 +91,10 @@ pub use conic_gradient::ConicGradient;
 pub use contain::*;
 pub use content::*;
 pub use corner_shape::*;
-use cssparser::{Parser, match_ignore_ascii_case};
+use cssparser::{
+  ParseError as CssParseError, ParseErrorKind, Parser, SourceLocation, ToCss as CssParserToCss,
+  Token, match_ignore_ascii_case,
+};
 pub use filter::{
   BlurType, Filter, FilterCategory, Filters, LUMA_WEIGHTS, SEPIA_WEIGHTS, TransferChannel,
   TransferTable,
@@ -204,17 +207,17 @@ pub(crate) use unexpected_token;
 #[cold]
 #[inline(never)]
 pub(crate) fn build_unexpected_token<'i>(
-  location: cssparser::SourceLocation,
-  token: &cssparser::Token<'_>,
+  location: SourceLocation,
+  token: &Token<'_>,
   expect: CssExpectedMessage,
   valid_tokens: &'static [CssToken],
-) -> cssparser::ParseError<'i, std::borrow::Cow<'i, str>> {
-  let token = cssparser::ToCss::to_css_string(token);
+) -> CssParseError<'i, Cow<'i, str>> {
+  let token = CssParserToCss::to_css_string(token);
   let message = expect.build_message(&token, merge_enum_values(valid_tokens));
 
-  cssparser::ParseError {
+  CssParseError {
     location,
-    kind: cssparser::ParseErrorKind::Custom(std::borrow::Cow::Owned(message)),
+    kind: ParseErrorKind::Custom(Cow::Owned(message)),
   }
 }
 
@@ -586,7 +589,7 @@ impl<'i> FromCss<'i> for BorderSpacing {
   const VALID_TOKENS: &'static [CssToken] = SpacePair::<Length>::VALID_TOKENS;
   const EXPECT_MESSAGE: CssExpectedMessage = CssExpectedMessage::OneOrTwoValues;
 
-  fn from_css(input: &mut cssparser::Parser<'i, '_>) -> ParseResult<'i, Self> {
+  fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
     let location = input.current_source_location();
     let pair = SpacePair::<Length>::from_css(input)?;
 
@@ -594,7 +597,7 @@ impl<'i> FromCss<'i> for BorderSpacing {
       .into_iter()
       .any(|length| matches!(length, Length::Auto | Length::Percentage(_)) || length.is_negative())
     {
-      return Err(location.new_unexpected_token_error(cssparser::Token::Delim('%')));
+      return Err(location.new_unexpected_token_error(Token::Delim('%')));
     }
 
     Ok(Self(pair))
@@ -661,9 +664,7 @@ impl Position {
       Position::Absolute | Position::Fixed => taffy::Position::Absolute,
     }
   }
-}
 
-impl Position {
   /// A positioned element (anything but `static`): establishes a containing
   /// block for absolutely-positioned descendants and honors `z-index`.
   pub(crate) const fn is_positioned(self) -> bool {
@@ -1043,6 +1044,28 @@ impl Display {
   pub(crate) fn blockify(&mut self) {
     *self = self.as_blockified();
   }
+
+  pub(crate) fn into_taffy(self) -> taffy::Display {
+    match self {
+      Display::Flex | Display::InlineFlex => taffy::Display::Flex,
+      Display::Grid | Display::InlineGrid => taffy::Display::Grid,
+      Display::Block | Display::InlineBlock | Display::Inline | Display::ListItem => {
+        taffy::Display::Block
+      }
+      Display::FlowRoot => taffy::Display::FlowRoot,
+      // Lowering replaces every table box that sits in a table, so what is left
+      // here is a table part outside one. Blink wraps those in anonymous table
+      // boxes; block is the approximation.
+      Display::Table
+      | Display::TableHeaderGroup
+      | Display::TableRowGroup
+      | Display::TableFooterGroup
+      | Display::TableRow
+      | Display::TableCell
+      | Display::TableCaption => taffy::Display::Block,
+      Display::None => taffy::Display::None,
+    }
+  }
 }
 
 /// Legacy `-webkit-box-orient` axis, lowered to `flex-direction`.
@@ -1136,30 +1159,6 @@ impl From<BoxAlign> for AlignItems {
       BoxAlign::Center => AlignItems::Center,
       BoxAlign::Baseline => AlignItems::Baseline,
       BoxAlign::Stretch => AlignItems::Stretch,
-    }
-  }
-}
-
-impl Display {
-  pub(crate) fn into_taffy(self) -> taffy::Display {
-    match self {
-      Display::Flex | Display::InlineFlex => taffy::Display::Flex,
-      Display::Grid | Display::InlineGrid => taffy::Display::Grid,
-      Display::Block | Display::InlineBlock | Display::Inline | Display::ListItem => {
-        taffy::Display::Block
-      }
-      Display::FlowRoot => taffy::Display::FlowRoot,
-      // Lowering replaces every table box that sits in a table, so what is left
-      // here is a table part outside one. Blink wraps those in anonymous table
-      // boxes; block is the approximation.
-      Display::Table
-      | Display::TableHeaderGroup
-      | Display::TableRowGroup
-      | Display::TableFooterGroup
-      | Display::TableRow
-      | Display::TableCell
-      | Display::TableCaption => taffy::Display::Block,
-      Display::None => taffy::Display::None,
     }
   }
 }

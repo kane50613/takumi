@@ -118,8 +118,6 @@ mod tests {
     }
   }
 
-  // FontSynthesis has no ToCss impl, so no round-trip test.
-
   #[test]
   fn test_parse_font_synthesis_invalid() {
     assert!(FontSynthesis::from_css_str("auto").is_err());
