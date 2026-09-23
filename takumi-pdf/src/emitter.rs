@@ -1355,8 +1355,9 @@ impl Emitter<'_> {
         runs,
         built,
         layout,
-        x + shadow.offset_x,
-        y + shadow.offset_y,
+        x,
+        y,
+        (shadow.offset_x, shadow.offset_y),
         Some(shadow.color),
         surface,
       );
@@ -1803,8 +1804,8 @@ impl Emitter<'_> {
     fills
   }
 
-  /// Draws every run's glyphs once, in `color` when set, with no decorations: the shadow passes
-  /// under the real text.
+  /// Draws every run's glyphs once, moved by `shift` and in `color` when set, with no
+  /// decorations: the shadow passes under the real text. A run's page follows its unshifted line.
   #[allow(clippy::too_many_arguments)]
   fn glyph_pass(
     &mut self,
@@ -1813,6 +1814,7 @@ impl Emitter<'_> {
     layout: Layout,
     x: f32,
     y: f32,
+    shift: (f32, f32),
     color: Option<Color>,
     surface: &mut Surface,
   ) {
@@ -1841,7 +1843,7 @@ impl Emitter<'_> {
       let color = color.unwrap_or(shaped.brush.color);
 
       let fill = fill_from_rgba(self.filtered(color), shaped.brush.opacity);
-      let origin = Point::from_xy(x + offset.x, y + offset.y);
+      let origin = Point::from_xy(x + shift.0 + offset.x, y + shift.1 + offset.y);
 
       surface.set_fill(Some(fill.clone()));
       surface.set_stroke(synthetic_stroke(shaped, &fill));

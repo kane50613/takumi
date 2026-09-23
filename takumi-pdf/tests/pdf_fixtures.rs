@@ -1852,9 +1852,9 @@ fn text_show_operators(pdf: &[u8]) -> usize {
     .count()
 }
 
-/// The lines of every deflated content stream in the document.
-fn content_lines(pdf: &[u8]) -> impl Iterator<Item = Vec<u8>> {
-  let mut lines = Vec::new();
+/// Every deflated content stream in the document, in file order.
+fn content_streams(pdf: &[u8]) -> Vec<Vec<u8>> {
+  let mut streams = Vec::new();
   let mut rest = pdf;
 
   while let Some(start) = find(rest, b"stream\n") {
@@ -1868,11 +1868,21 @@ fn content_lines(pdf: &[u8]) -> impl Iterator<Item = Vec<u8>> {
       .read_to_end(&mut decoded)
       .is_ok()
     {
-      lines.extend(decoded.split(|byte| *byte == b'\n').map(<[u8]>::to_vec));
+      streams.push(decoded);
     }
     rest = &body[end + "endstream".len()..];
   }
-  lines.into_iter()
+  streams
+}
+
+/// The lines of every deflated content stream in the document.
+fn content_lines(pdf: &[u8]) -> impl Iterator<Item = Vec<u8>> {
+  content_streams(pdf).into_iter().flat_map(|stream| {
+    stream
+      .split(|byte| *byte == b'\n')
+      .map(<[u8]>::to_vec)
+      .collect::<Vec<_>>()
+  })
 }
 
 /// The document's text with every deflated stream inflated, so a structure
@@ -2051,6 +2061,45 @@ fn background_boxes() {
   assert!(
     haystack.contains("/Multiply"),
     "expected the blended layer to set its blend mode"
+  );
+}
+
+/// A text shadow belongs to the page of the line it shadows. Shifted past the
+/// page cut, it used to be claimed by the next page and drawn off its top.
+#[test]
+fn text_shadow_stays_on_its_line_page() {
+  let doc = r#"<div style="font-size:16px;line-height:20px;">
+    <div style="height:225px"></div>
+    <div style="color:#00f;text-shadow:0 20px 0 #0f0;">shadowed</div>
+    <div style="color:#f00;">next page</div>
+  </div>"#;
+  let pdf = run_pdf_fixture("text-shadow-page-cut", |fonts| {
+    PdfOptions::builder()
+      .node(from_html(doc, FromHtmlOptions::default()).expect("parse shadow doc"))
+      .page(PageOptions {
+        width: 400.0,
+        height: 300.0,
+        margin: PageMargins::uniform(24.0),
+      })
+      .fonts(fonts)
+      .build()
+  });
+  let streams = content_streams(&pdf);
+  let page_of = |fill: &[u8]| {
+    streams
+      .iter()
+      .position(|stream| find(stream, fill).is_some())
+  };
+
+  assert_ne!(
+    page_of(b"0 0 1 rg"),
+    page_of(b"1 0 0 rg"),
+    "the fixture needs the red line on the next page"
+  );
+  assert_eq!(
+    page_of(b"0 1 0 rg"),
+    page_of(b"0 0 1 rg"),
+    "the shadow left the page of the line it shadows"
   );
 }
 
