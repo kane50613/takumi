@@ -34,8 +34,8 @@ use takumi_core::{
   shadow::SizedShadow,
   style::{
     Affine, BackgroundClip, BackgroundImage, BackgroundOrigin, BlendMode, BoxDecorationBreak,
-    Color, ComputedStyle, Display, FillRule as CoreFillRule, Filter, Isolation, Lang,
-    ResolvedGradientStop, TextDecorationLines,
+    Color, ComputedStyle, Display, Filter, Isolation, Lang, ResolvedGradientStop,
+    TextDecorationLines,
   },
 };
 
@@ -60,16 +60,17 @@ use crate::{
       RadialGradient as KrillaRadialGradient, SpreadMethod, Stroke, StrokeDash, SweepGradient,
     },
     surface::Surface,
-    tagging::{Artifact, ArtifactType, ContentTag, SpanTag},
+    tagging::{ContentTag, SpanTag},
     text::{Font, Tag},
   },
   options::{PT_PER_PX, PdfError},
   paint::{
-    empty_path, expanded_radial_stops, fill_from_rgba, krilla_blend, krilla_path, krilla_stop,
-    krilla_stops, overflow_clip_rect, pop_transforms, rect_path, spread,
+    draw_stream, empty_path, expanded_radial_stops, fill_from_rgba, krilla_blend, krilla_fill_rule,
+    krilla_path, krilla_stop, krilla_stops, krilla_transform, normalized, overflow_clip_rect,
+    pop_transforms, rect_path, shape_path, spread,
   },
   shadow::{emit_inset_shadows, emit_outer_shadows},
-  tags::TagCollector,
+  tags::{ARTIFACT, TagCollector},
   window::Window,
 };
 
@@ -305,7 +306,7 @@ impl Emitter<'_> {
     let (x, y) = if relative.only_translation() {
       (relative.x, relative.y)
     } else {
-      push_transform(relative, surface);
+      surface.push_transform(&krilla_transform(relative.to_cols_array()));
       pushed += 1;
       (0.0, 0.0)
     };
@@ -399,12 +400,10 @@ impl Emitter<'_> {
       let path = krilla_path(&commands, x, y).or_else(|| empty_path(x, y));
 
       if let Some(path) = path {
-        let rule = match shape.fill_rule().unwrap_or(style.clip_rule) {
-          CoreFillRule::EvenOdd => FillRule::EvenOdd,
-          _ => FillRule::NonZero,
-        };
-
-        surface.push_clip_path(&path, &rule);
+        surface.push_clip_path(
+          &path,
+          &krilla_fill_rule(shape.fill_rule().unwrap_or(style.clip_rule)),
+        );
         pushed += 1;
       }
     }
@@ -481,10 +480,7 @@ impl Emitter<'_> {
 
     if tagged {
       if decorative_image(node) {
-        surface.start_tagged(ContentTag::Artifact(Artifact::new(
-          ArtifactType::Other,
-          None,
-        )));
+        surface.start_tagged(ARTIFACT);
       } else {
         let identifier = surface.start_tagged(self.content_tag(node));
 
@@ -554,23 +550,13 @@ impl Emitter<'_> {
     let Some(shape) = BoxPainter::new(&node.context, layout).background_clip_shape() else {
       return;
     };
-    let clip = match &shape {
-      FillShape::Rect(size) => {
-        KrillaRect::from_xywh(x, y, size.width, size.height).and_then(rect_path)
-      }
-      _ => krilla_path(&shape.to_commands(), x, y),
-    };
-    let Some(clip) = clip else {
+    let Some(clip) = shape_path(&shape, x, y) else {
       return;
-    };
-    let rule = match shape.rule() {
-      CoreFillRule::EvenOdd => FillRule::EvenOdd,
-      _ => FillRule::NonZero,
     };
     let (origin_offset, area) = background_origin_area(style.background_origin, layout);
     let artifact = self.start_artifact(surface);
 
-    surface.push_clip_path(&clip, &rule);
+    surface.push_clip_path(&clip, &krilla_fill_rule(shape.rule()));
     for (index, image) in images.iter().enumerate().rev() {
       let placement = Placement::resolve(
         area,
@@ -633,21 +619,9 @@ impl Emitter<'_> {
     surface: &mut Surface,
     pattern_space: Transform,
   ) {
-    let stream = {
-      let mut builder = surface.stream_builder();
-      let mut tile = builder.surface();
-
-      self.background_layer(
-        image,
-        node,
-        placement.tile,
-        (0.0, 0.0),
-        &mut tile,
-        pattern_space,
-      );
-      tile.finish();
-      builder.finish()
-    };
+    let stream = draw_stream(surface, |tile| {
+      self.background_layer(image, node, placement.tile, (0.0, 0.0), tile, pattern_space);
+    });
     let Some(path) =
       KrillaRect::from_xywh(rect_at.0, rect_at.1, size.width, size.height).and_then(rect_path)
     else {
@@ -919,10 +893,7 @@ impl Emitter<'_> {
     }
     let filter = self.color_filter.take();
     let style = &node.context.style;
-    let stream = {
-      let mut builder = surface.stream_builder();
-      let mut content = builder.surface();
-
+    let stream = draw_stream(surface, |content| {
       for (index, image) in images.iter().enumerate().rev() {
         let placement = Placement::resolve(
           size,
@@ -941,7 +912,7 @@ impl Emitter<'_> {
             size,
             at,
             at,
-            &mut content,
+            content,
             Transform::identity(),
           );
         } else {
@@ -950,14 +921,12 @@ impl Emitter<'_> {
             node,
             placement.tile,
             (at.0 + placement.origin.0, at.1 + placement.origin.1),
-            &mut content,
+            content,
             Transform::identity(),
           );
         }
       }
-      content.finish();
-      builder.finish()
-    };
+    });
 
     self.color_filter = filter;
     Some(Mask::new(stream, MaskType::Alpha))
@@ -986,10 +955,7 @@ impl Emitter<'_> {
     if !self.tagged {
       return false;
     }
-    surface.start_tagged(ContentTag::Artifact(Artifact::new(
-      ArtifactType::Other,
-      None,
-    )));
+    surface.start_tagged(ARTIFACT);
     true
   }
 
@@ -1532,8 +1498,7 @@ impl Emitter<'_> {
       let faded = opacity < 1.0;
 
       if faded {
-        surface
-          .push_opacity(NormalizedF32::new(opacity.clamp(0.0, 1.0)).unwrap_or(NormalizedF32::ONE));
+        surface.push_opacity(normalized(opacity));
       }
       let outer_filter = self.color_filter.clone();
       self.color_filter = self.composed_filter(outer_filter.as_deref(), &node.context.style.filter);
@@ -1644,10 +1609,7 @@ impl Emitter<'_> {
   /// reaches the structure tree.
   fn start_tagged_node(&self, node: &RenderNode, surface: &mut Surface) {
     if decorative_image(node) {
-      surface.start_tagged(ContentTag::Artifact(Artifact::new(
-        ArtifactType::Other,
-        None,
-      )));
+      surface.start_tagged(ARTIFACT);
       return;
     }
     let identifier = surface.start_tagged(self.content_tag(node));
@@ -1704,21 +1666,9 @@ impl Emitter<'_> {
     at: (f32, f32),
     surface: &mut Surface,
   ) -> Option<Paint> {
-    let stream = {
-      let mut builder = surface.stream_builder();
-      let mut inner = builder.surface();
-
-      self.background_layer(
-        image,
-        node,
-        tile,
-        (0.0, 0.0),
-        &mut inner,
-        Transform::identity(),
-      );
-      inner.finish();
-      builder.finish()
-    };
+    let stream = draw_stream(surface, |inner| {
+      self.background_layer(image, node, tile, (0.0, 0.0), inner, Transform::identity());
+    });
 
     (tile.width > 0.0 && tile.height > 0.0).then(|| {
       Pattern {
@@ -1974,19 +1924,11 @@ fn push_compositing(style: &ComputedStyle, surface: &mut Surface) -> usize {
   let opacity = style.opacity.0;
 
   if opacity < 1.0 {
-    surface.push_opacity(NormalizedF32::new(opacity.clamp(0.0, 1.0)).unwrap_or(NormalizedF32::ONE));
+    surface.push_opacity(normalized(opacity));
     pushed += 1;
   }
 
   pushed
-}
-
-fn push_transform(relative: Affine, surface: &mut Surface) {
-  let cols = relative.to_cols_array();
-
-  surface.push_transform(&Transform::from_row(
-    cols[0], cols[1], cols[2], cols[3], cols[4], cols[5],
-  ));
 }
 
 fn has_own_content(node: &RenderNode) -> bool {
@@ -2023,22 +1965,14 @@ impl PaintDevice for SurfaceDevice<'_, '_> {
     } else {
       (0.0, 0.0)
     };
-    let path = match shape {
-      FillShape::Rect(size) => {
-        KrillaRect::from_xywh(x, y, size.width, size.height).and_then(rect_path)
-      }
-      _ => krilla_path(&shape.to_commands(), x, y),
-    };
-    let Some(path) = path else {
+    let Some(path) = shape_path(shape, x, y) else {
       return;
     };
 
     if !flat {
-      let cols = transform.to_cols_array();
-
-      self.surface.push_transform(&Transform::from_row(
-        cols[0], cols[1], cols[2], cols[3], cols[4], cols[5],
-      ));
+      self
+        .surface
+        .push_transform(&krilla_transform(transform.to_cols_array()));
     }
     let color = match self.filter {
       Some(filter) => filter.apply(color.0),
@@ -2046,18 +1980,10 @@ impl PaintDevice for SurfaceDevice<'_, '_> {
     };
 
     if self.artifact {
-      self
-        .surface
-        .start_tagged(ContentTag::Artifact(Artifact::new(
-          ArtifactType::Other,
-          None,
-        )));
+      self.surface.start_tagged(ARTIFACT);
     }
     self.surface.set_fill(Some(Fill {
-      rule: match shape.rule() {
-        CoreFillRule::EvenOdd => FillRule::EvenOdd,
-        _ => FillRule::NonZero,
-      },
+      rule: krilla_fill_rule(shape.rule()),
       ..fill_from_rgba(color, 1.0)
     }));
     self.surface.draw_path(&path);
@@ -2084,11 +2010,9 @@ impl PaintDevice for SurfaceDevice<'_, '_> {
     };
 
     if !flat {
-      let cols = transform.to_cols_array();
-
-      self.surface.push_transform(&Transform::from_row(
-        cols[0], cols[1], cols[2], cols[3], cols[4], cols[5],
-      ));
+      self
+        .surface
+        .push_transform(&krilla_transform(transform.to_cols_array()));
     }
     let color = match self.filter {
       Some(filter) => filter.apply(stroke.color.0),
@@ -2096,12 +2020,7 @@ impl PaintDevice for SurfaceDevice<'_, '_> {
     };
 
     if self.artifact {
-      self
-        .surface
-        .start_tagged(ContentTag::Artifact(Artifact::new(
-          ArtifactType::Other,
-          None,
-        )));
+      self.surface.start_tagged(ARTIFACT);
     }
     self.surface.set_fill(None);
     self.surface.set_stroke(Some(Stroke {

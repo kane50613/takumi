@@ -9,10 +9,10 @@ use crate::{
     geom::{Rect as KrillaRect, Transform},
     paint::FillRule,
     surface::Surface,
-    tagging::{Artifact, ArtifactType, ContentTag},
   },
   options::PdfError,
   paint::rect_path,
+  tags::ARTIFACT,
 };
 
 /// The content windows one emit walk filters by, in content coordinates.
@@ -78,8 +78,6 @@ pub(crate) struct ContentWindow {
   pub(crate) translate: (f32, f32),
   pub(crate) window: Window,
   /// A repeated occurrence is an artifact: the first one carried the tags.
-  /// `Other` stays valid below PDF 2.0, where the header/footer artifact
-  /// subtypes do not exist yet.
   pub(crate) artifact: bool,
 }
 
@@ -95,10 +93,7 @@ impl ContentWindow {
     };
 
     if self.artifact {
-      surface.start_tagged(ContentTag::Artifact(Artifact::new(
-        ArtifactType::Other,
-        None,
-      )));
+      surface.start_tagged(ARTIFACT);
     }
     surface.push_clip_path(&path, &FillRule::NonZero);
     surface.push_transform(&Transform::from_translate(
