@@ -36,23 +36,22 @@ pub(crate) fn emit_image(
   content: Frame,
   doc: &mut SvgDocument,
 ) -> io::Result<()> {
-  let Frame { x, y, w, h } = content;
-  if w <= 0.0 || h <= 0.0 {
+  if content.w <= 0.0 || content.h <= 0.0 {
     return Ok(());
   }
   let Some(href) = data_url(&image.src, context) else {
     return Ok(());
   };
   if matches!(context.style.object_fit, ObjectFit::Fill) {
-    return doc.image(x, y, w, h, &href, Some(PRESERVE_ASPECT_NONE));
+    return doc.image(content, &href, Some(PRESERVE_ASPECT_NONE));
   }
 
   let Some((iw, ih)) = intrinsic_size(&image.src, context) else {
-    return doc.image(x, y, w, h, &href, Some("xMidYMid meet"));
+    return doc.image(content, &href, Some("xMidYMid meet"));
   };
   let size = Size {
-    width: w,
-    height: h,
+    width: content.w,
+    height: content.h,
   };
   let placement = place_replaced(
     context,
@@ -68,10 +67,12 @@ pub(crate) fn emit_image(
     .transpose()?;
 
   doc.image(
-    x + placement.offset.x,
-    y + placement.offset.y,
-    placement.size.width,
-    placement.size.height,
+    Frame::new(
+      content.x + placement.offset.x,
+      content.y + placement.offset.y,
+      placement.size.width,
+      placement.size.height,
+    ),
     &href,
     Some(PRESERVE_ASPECT_NONE),
   )?;

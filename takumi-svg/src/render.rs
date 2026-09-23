@@ -6,7 +6,7 @@ use takumi_core::{
   Fonts,
   context::RenderContext,
   error::Result,
-  geometry::{ComputedLayout as Layout, NodeId, Point, Size},
+  geometry::{ComputedLayout as Layout, NodeId, Point, Rect, Size},
   layout::{
     border::{BorderProperties, BorderSide, PaintedSide},
     decoration::{ClipBox, OutlineGeometry},
@@ -29,7 +29,7 @@ use typed_builder::TypedBuilder;
 
 use crate::{
   APPROX_CHARS_PER_NUMBER, Frame, GroupToken, Num, Rgba, SvgDocument,
-  box_model::{PathData, element_transform, path_data, rect_path_data},
+  box_model::{PathData, edges_path_data, element_transform, path_data},
   gradient::LayerEmitter,
   image::emit_image,
   scene_emit::SceneEmitter,
@@ -183,10 +183,7 @@ impl BoxChrome {
     // so painted content is unaffected.
     if !filter_refs.is_empty() {
       doc.rect(
-        x,
-        y,
-        layout.size.width,
-        layout.size.height,
+        Frame::new(x, y, layout.size.width, layout.size.height),
         Rgba([0, 0, 0, 0]),
       )?;
     }
@@ -211,7 +208,7 @@ impl BoxChrome {
       .clips_overflow()
       .then(|| {
         let path = if border.is_zero() {
-          overflow_clip_rect_data(style, layout, x, y)
+          overflow_clip_path_data(style, layout, x, y)
         } else {
           padding_box_path_data(&border, layout, x, y)
         };
@@ -509,7 +506,7 @@ fn padding_box_path_data(border: &BorderProperties, layout: Layout, x: f32, y: f
 }
 
 /// Absolute SVG path `d` for the (non-rounded) overflow clip rectangle.
-fn overflow_clip_rect_data(style: &ComputedStyle, layout: Layout, x: f32, y: f32) -> String {
+fn overflow_clip_path_data(style: &ComputedStyle, layout: Layout, x: f32, y: f32) -> String {
   const UNBOUNDED: f32 = 1.0e6;
   let overflow = style.resolve_overflows();
   let clip_x = overflow.x != Overflow::Visible;
@@ -530,7 +527,12 @@ fn overflow_clip_rect_data(style: &ComputedStyle, layout: Layout, x: f32, y: f32
     (y - UNBOUNDED, y + layout.size.height + UNBOUNDED)
   };
 
-  rect_path_data(left, top, right, bottom)
+  edges_path_data(Rect {
+    left,
+    top,
+    right,
+    bottom,
+  })
 }
 
 /// A [`PaintDevice`] writing into an [`SvgDocument`], keeping the first write error.
@@ -557,10 +559,7 @@ impl PaintDevice for DocumentDevice<'_> {
     }
     let result = match shape {
       FillShape::Rect(size) if transform.only_translation() => self.doc.rect(
-        transform.x,
-        transform.y,
-        size.width,
-        size.height,
+        Frame::new(transform.x, transform.y, size.width, size.height),
         Rgba(color.0),
       ),
       _ => {
