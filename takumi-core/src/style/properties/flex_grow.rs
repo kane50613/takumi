@@ -34,13 +34,9 @@ impl<'i> FromCss<'i> for FlexGrow {
   const VALID_TOKENS: &'static [CssToken] = &[CssToken::Syntax(CssSyntaxKind::Number)];
 }
 
-pub(crate) fn parse_numeric_tw<T>(token: &str, f: impl FnOnce(f32) -> T) -> Option<T> {
-  token.parse::<f32>().ok().map(f)
-}
-
 impl TailwindPropertyParser for FlexGrow {
   fn parse_tw(token: &str) -> Option<Self> {
-    parse_numeric_tw(token, FlexGrow)
+    token.parse().ok().map(FlexGrow)
   }
 }
 

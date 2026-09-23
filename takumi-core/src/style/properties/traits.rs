@@ -846,6 +846,26 @@ macro_rules! impl_from_taffy_enum {
 
 pub(crate) use impl_from_taffy_enum;
 
+/// Implements `FromCss` for a `Box<[$elem]>` list as a comma-separated list of `$elem`.
+macro_rules! impl_comma_list_from_css {
+  ($list:ty, $elem:ty) => {
+    $crate::style::properties::impl_comma_list_from_css!($list, $elem, <$elem>::VALID_TOKENS);
+  };
+  ($list:ty, $elem:ty, $valid:expr) => {
+    impl<'i> $crate::style::FromCss<'i> for $list {
+      fn from_css(input: &mut cssparser::Parser<'i, '_>) -> $crate::style::ParseResult<'i, Self> {
+        input
+          .parse_comma_separated(<$elem as $crate::style::FromCss>::from_css)
+          .map(Vec::into_boxed_slice)
+      }
+
+      const VALID_TOKENS: &'static [$crate::style::CssToken] = $valid;
+    }
+  };
+}
+
+pub(crate) use impl_comma_list_from_css;
+
 /// Treats the first keyword in each group as canonical and the rest as aliases.
 macro_rules! impl_css_enum {
   (

@@ -5,7 +5,7 @@ use cssparser::{Parser, Token, match_ignore_ascii_case, serialize_string};
 use crate::style::{
   Animatable, ConicGradient, CssDescriptorKind, CssToken, FromCss, LinearGradient,
   ListInterpolationStrategy, MakeComputed, ParseResult, RadialGradient, SizingContext, ToCss,
-  tw::TailwindPropertyParser, unexpected_token,
+  parse_comma_list, tw::TailwindPropertyParser, unexpected_token,
 };
 
 /// Background image variants supported by Takumi.
@@ -95,19 +95,6 @@ impl<'i> FromCss<'i> for BackgroundImage {
     CssToken::Descriptor(CssDescriptorKind::RepeatingConicGradientFn),
     CssToken::Keyword("none"),
   ];
-}
-
-/// Parses a comma-separated list of `parse_item`, requiring at least one.
-pub(crate) fn parse_comma_list<'i, T>(
-  input: &mut Parser<'i, '_>,
-  mut parse_item: impl FnMut(&mut Parser<'i, '_>) -> ParseResult<'i, T>,
-) -> ParseResult<'i, Box<[T]>> {
-  let mut items = Vec::new();
-  items.push(parse_item(input)?);
-  while input.expect_comma().is_ok() {
-    items.push(parse_item(input)?);
-  }
-  Ok(items.into_boxed_slice())
 }
 
 /// An ordered list of [`BackgroundImage`] values.

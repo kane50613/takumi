@@ -1,12 +1,13 @@
-use std::{fmt, fmt::Debug};
+use std::fmt;
 
 use cssparser::{BasicParseErrorKind, Parser};
 use typed_builder::TypedBuilder;
 
 use super::box_shadow::parse_offsets_blur;
 use crate::style::{
-  Animatable, Color, ColorInput, CssSyntaxKind, CssToken, FromCss, FromCssStr, Length,
-  ListInterpolationStrategy, MakeComputed, ParseResult, SizingContext, ToCss, next_is_comma,
+  Animatable, Color, ColorInput, CssSyntaxKind, CssToken, FromCss, Length,
+  ListInterpolationStrategy, MakeComputed, ParseResult, SizingContext, ToCss,
+  impl_comma_list_from_css, next_is_comma, tw::TailwindPropertyParser,
 };
 
 /// Represents a text shadow with all its properties.
@@ -41,17 +42,7 @@ impl Default for TextShadow {
 /// Represents a collection of text shadows; has custom `FromCss` implementation for comma-separated values.
 pub(crate) type TextShadows = Box<[TextShadow]>;
 
-impl<'i> FromCss<'i> for TextShadows {
-  fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
-    Ok(
-      input
-        .parse_comma_separated(TextShadow::from_css)?
-        .into_boxed_slice(),
-    )
-  }
-
-  const VALID_TOKENS: &'static [CssToken] = TextShadow::VALID_TOKENS;
-}
+impl_comma_list_from_css!(TextShadows, TextShadow);
 
 impl<'i> FromCss<'i> for TextShadow {
   /// Parses a text-shadow value from CSS input.
@@ -105,11 +96,7 @@ impl<'i> FromCss<'i> for TextShadow {
   ];
 }
 
-impl crate::style::tw::TailwindPropertyParser for TextShadow {
-  fn parse_tw(token: &str) -> Option<Self> {
-    Self::from_css_str(token).ok()
-  }
-}
+impl TailwindPropertyParser for TextShadow {}
 
 impl MakeComputed for TextShadow {
   fn make_computed(&mut self, sizing: &SizingContext) {
@@ -188,7 +175,7 @@ impl ToCss for TextShadow {
 #[cfg(test)]
 mod tests {
   use super::*;
-  use crate::style::{Color, Length::Px};
+  use crate::style::{Color, FromCssStr, Length::Px};
 
   #[test]
   fn test_parse_text_shadow_no_blur_radius() {

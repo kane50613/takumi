@@ -1,12 +1,12 @@
-use std::{borrow::Cow, fmt, fmt::Debug};
+use std::{borrow::Cow, fmt};
 
 use cssparser::{BasicParseErrorKind, ParseError, Parser};
 use typed_builder::TypedBuilder;
 
 use crate::style::{
-  Animatable, Color, ColorInput, CssSyntaxKind, CssToken, FromCss, FromCssStr, Length,
+  Animatable, Color, ColorInput, CssSyntaxKind, CssToken, FromCss, Length,
   ListInterpolationStrategy, MakeComputed, ParseResult, SizingContext, ToCss, discrete,
-  next_is_comma,
+  impl_comma_list_from_css, next_is_comma, tw::TailwindPropertyParser,
 };
 
 /// Represents a box shadow with all its properties.
@@ -50,17 +50,7 @@ impl Default for BoxShadow {
 /// Represents a collection of box shadows, have custom `FromCss` implementation for comma-separated values.
 pub(crate) type BoxShadows = Box<[BoxShadow]>;
 
-impl<'i> FromCss<'i> for BoxShadows {
-  fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
-    Ok(
-      input
-        .parse_comma_separated(BoxShadow::from_css)?
-        .into_boxed_slice(),
-    )
-  }
-
-  const VALID_TOKENS: &'static [CssToken] = BoxShadow::VALID_TOKENS;
-}
+impl_comma_list_from_css!(BoxShadows, BoxShadow);
 
 /// Parses a `<length>` rejecting percentages, which are invalid for shadow blur/spread radii.
 fn parse_non_percentage_length<'i>(input: &mut Parser<'i, '_>) -> ParseResult<'i, Length> {
@@ -156,11 +146,7 @@ impl<'i> FromCss<'i> for BoxShadow {
   ];
 }
 
-impl crate::style::tw::TailwindPropertyParser for BoxShadow {
-  fn parse_tw(token: &str) -> Option<Self> {
-    Self::from_css_str(token).ok()
-  }
-}
+impl TailwindPropertyParser for BoxShadow {}
 
 impl MakeComputed for BoxShadow {
   fn make_computed(&mut self, sizing: &SizingContext) {
@@ -264,7 +250,7 @@ impl ToCss for BoxShadow {
 mod tests {
   use super::*;
   use crate::style::{
-    Color,
+    Color, FromCssStr,
     Length::{self, Px},
   };
 

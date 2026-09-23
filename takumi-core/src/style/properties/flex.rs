@@ -4,7 +4,7 @@ use cssparser::{BasicParseErrorKind, Parser, Token, match_ignore_ascii_case};
 
 use crate::style::{
   Animatable, AspectRatio, Color, CssSyntaxKind, CssToken, FlexDirection, FromCss, FromCssStr,
-  Length, MakeComputed, ParseResult, Size, SizingContext, ToCss, discrete,
+  Length, MakeComputed, ParseResult, Size, SizingContext, ToCss, discrete, impl_from_taffy_enum,
   tw::{Namespace, TailwindPropertyParser},
   unexpected_token,
 };
@@ -149,17 +149,15 @@ impl MakeComputed for FlexWrap {}
 
 impl Animatable for FlexWrap {}
 
-impl FlexWrap {
-  pub(crate) fn into_taffy(self) -> taffy::FlexWrap {
-    match self {
-      Self::NoWrap => taffy::FlexWrap::NoWrap,
-      Self::Wrap => taffy::FlexWrap::Wrap,
-      Self::WrapReverse => taffy::FlexWrap::WrapReverse,
-      Self::Balance => taffy::FlexWrap::Balance,
-      Self::BalanceReverse => taffy::FlexWrap::BalanceReverse,
-    }
-  }
-}
+impl_from_taffy_enum!(
+  FlexWrap,
+  into_taffy -> taffy::FlexWrap,
+  NoWrap,
+  Wrap,
+  WrapReverse,
+  Balance,
+  BalanceReverse
+);
 
 impl<'i> FromCss<'i> for FlexWrap {
   const VALID_TOKENS: &'static [CssToken] = &[

@@ -24,41 +24,11 @@ pub enum BreakBetween {
   Page,
 }
 
-impl MakeComputed for BreakBetween {}
-
-impl<'i> FromCss<'i> for BreakBetween {
-  const VALID_TOKENS: &'static [CssToken] = &[
-    CssToken::Keyword("auto"),
-    CssToken::Keyword("page"),
-    CssToken::Keyword("always"),
-    CssToken::Keyword("left"),
-    CssToken::Keyword("right"),
-  ];
-
-  fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
-    let location = input.current_source_location();
-    let token = input.next()?;
-
-    let cssparser::Token::Ident(ident) = token else {
-      return Err(crate::style::unexpected_token!(location, token));
-    };
-
-    cssparser::match_ignore_ascii_case! {&ident,
-      "auto" => Ok(Self::Auto),
-      "page" | "always" | "left" | "right" => Ok(Self::Page),
-      _ => Err(crate::style::unexpected_token!(location, token)),
-    }
-  }
-}
-
-impl ToCss for BreakBetween {
-  fn to_css<W: fmt::Write>(&self, dest: &mut W) -> fmt::Result {
-    dest.write_str(match self {
-      Self::Auto => "auto",
-      Self::Page => "page",
-    })
-  }
-}
+impl_css_enum!(
+  BreakBetween,
+  "auto" => BreakBetween::Auto,
+  "page" | "always" | "left" | "right" => BreakBetween::Page
+);
 
 /// A `break-inside` value.
 #[derive(Debug, Clone, Copy, PartialEq, Default)]

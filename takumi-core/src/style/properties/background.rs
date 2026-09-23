@@ -1,6 +1,6 @@
 use cssparser::Parser;
 
-use crate::style::{unexpected_token, *};
+use crate::style::{impl_comma_list_from_css, unexpected_token, *};
 
 /// Parsed `background` shorthand value.
 #[derive(Debug, Clone, Default, PartialEq)]
@@ -124,17 +124,7 @@ impl<'i> FromCss<'i> for Background {
 /// A list of background properties (one per layer).
 pub(crate) type Backgrounds = Box<[Background]>;
 
-impl<'i> FromCss<'i> for Backgrounds {
-  fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
-    Ok(
-      input
-        .parse_comma_separated(Background::from_css)?
-        .into_boxed_slice(),
-    )
-  }
-
-  const VALID_TOKENS: &'static [CssToken] = Background::VALID_TOKENS;
-}
+impl_comma_list_from_css!(Backgrounds, Background);
 
 #[cfg(test)]
 mod tests {
