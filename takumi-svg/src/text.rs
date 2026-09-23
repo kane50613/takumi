@@ -26,13 +26,11 @@ use takumi_core::{
 };
 
 use crate::{
-  Frame, Rgba, SvgDocument,
+  Frame, GlyphStroke, Rgba, SvgDocument,
   box_model::{BoxFrame, path_data},
   gradient::LayerEmitter,
   render::{DocumentDevice, emit_inline_box},
 };
-
-const WHITE: Rgba = Rgba([255, 255, 255, 255]);
 
 /// Emits a leaf [`TextData`] node at its frame.
 pub(crate) fn emit_text(
@@ -117,14 +115,9 @@ fn emit_runs(
     if data.is_empty() {
       continue;
     }
-    let group = (fragment.opacity < 1.0)
-      .then(|| doc.begin_group(Affine::IDENTITY, fragment.opacity, None, None))
-      .transpose()?;
-
-    doc.path(&data, Rgba(fragment.color.0), FillRule::NonZero)?;
-    if let Some(group) = group {
-      doc.end_group(group)?;
-    }
+    doc.with_opacity(fragment.opacity, |doc| {
+      doc.fill_path(&data, Rgba(fragment.color.0), FillRule::NonZero)
+    })?;
   }
 
   // text-shadow paints below the glyphs; later-listed shadows paint lowest.
@@ -219,27 +212,21 @@ fn emit_outline_island(
     return Ok(());
   }
 
-  let opacity = style.parent.opacity.0;
-  let group = (opacity < 1.0)
-    .then(|| doc.begin_group(Affine::IDENTITY, opacity, None, None))
-    .transpose()?;
-  doc.stroke_path(&data, &stroke)?;
-  if let Some(group) = group {
-    doc.end_group(group)?;
-  }
-  Ok(())
+  doc.with_opacity(style.parent.opacity.0, |doc| {
+    doc.stroke_path(&data, &stroke)
+  })
 }
 
 /// The `-webkit-text-stroke` a run carries. A span may set it for itself, so it
 /// comes off the run; the join is a box-level property and stays with the node.
-fn run_stroke<'j>(run: &ShapedRun, font_style: &'j SizedFontStyle) -> Option<(Rgba, f32, &'j str)> {
+fn run_stroke(run: &ShapedRun, font_style: &SizedFontStyle) -> Option<GlyphStroke> {
   let brush = &run.brush;
 
-  (brush.stroke_width > 0.0 && brush.stroke_color.0[3] != 0).then_some((
-    Rgba(brush.stroke_color.0),
-    brush.stroke_width,
-    line_join_str(font_style.parent.stroke_linejoin),
-  ))
+  (brush.stroke_width > 0.0 && brush.stroke_color.0[3] != 0).then_some(GlyphStroke {
+    color: Rgba(brush.stroke_color.0),
+    width: brush.stroke_width,
+    join: font_style.parent.stroke_linejoin,
+  })
 }
 
 /// Emits glyphs filled by the element's background (`background-clip: text`).
@@ -261,7 +248,7 @@ fn emit_clip_text_glyphs(
   frame: BoxFrame,
   doc: &mut SvgDocument,
 ) -> io::Result<()> {
-  let join = line_join_str(font_style.parent.stroke_linejoin);
+  let join = font_style.parent.stroke_linejoin;
 
   let (mask_token, mask_ref) = doc.begin_mask()?;
   let mut any = false;
@@ -307,7 +294,7 @@ fn emit_clip_text_glyphs(
 fn emit_clip_text_mask_glyphs(
   run: &PositionedInlineRun,
   frame: BoxFrame,
-  join: &str,
+  join: LineJoin,
   doc: &mut SvgDocument,
 ) -> io::Result<bool> {
   let run_transform = run.transform(Affine::IDENTITY);
@@ -327,13 +314,21 @@ fn emit_clip_text_mask_glyphs(
     }
     any = true;
     if let Some(embolden) = outline.embolden().filter(|embolden| *embolden > 0.0) {
-      doc.glyph_path(&data, WHITE, Some((WHITE, embolden, join)))?;
+      let bold = GlyphStroke {
+        color: Rgba::WHITE,
+        width: embolden,
+        join,
+      };
+
+      doc.glyph_path(&data, Rgba::WHITE, Some(bold))?;
     }
-    doc.glyph_path(
-      &data,
-      WHITE,
-      (stroke_width > 0.0).then_some((WHITE, stroke_width, join)),
-    )?;
+    let stroke = (stroke_width > 0.0).then_some(GlyphStroke {
+      color: Rgba::WHITE,
+      width: stroke_width,
+      join,
+    });
+
+    doc.glyph_path(&data, Rgba::WHITE, stroke)?;
   }
   Ok(any)
 }
@@ -347,24 +342,18 @@ fn emit_run_decorations(
   over: bool,
   doc: &mut SvgDocument,
 ) -> io::Result<()> {
-  let opacity = run.glyph_run.brush.opacity;
-  let opacity_group = (opacity < 1.0)
-    .then(|| doc.begin_group(Affine::IDENTITY, opacity, None, None))
-    .transpose()?;
-  let mut device = DocumentDevice::new(doc);
+  doc.with_opacity(run.glyph_run.brush.opacity, |doc| {
+    let mut device = DocumentDevice::new(doc);
 
-  paint_run_decorations(
-    decorations,
-    over,
-    TextDecorationLines::empty(),
-    frame.origin,
-    &mut device,
-  );
-  device.finish()?;
-  if let Some(group) = opacity_group {
-    doc.end_group(group)?;
-  }
-  Ok(())
+    paint_run_decorations(
+      decorations,
+      over,
+      TextDecorationLines::empty(),
+      frame.origin,
+      &mut device,
+    );
+    device.finish()
+  })
 }
 
 /// Emits a run's glyphs. `color_override` (for shadows) recolors every glyph and
@@ -374,20 +363,13 @@ fn emit_run_glyphs(
   font_style: &SizedFontStyle,
   frame: BoxFrame,
   color_override: Option<Rgba>,
-  stroke: Option<(Rgba, f32, &str)>,
+  stroke: Option<GlyphStroke>,
   doc: &mut SvgDocument,
 ) -> io::Result<()> {
   let run_transform = run.transform(Affine::IDENTITY);
   let glyph_offset = run.glyph_offset(frame.layout);
   let fill_color = run.glyph_run.brush.color;
-  let bold_join = line_join_str(font_style.parent.stroke_linejoin);
-
-  // Per-run (inline span) opacity, matching the raster backend's
-  // `draw_with_inline_opacity`.
-  let opacity = run.glyph_run.brush.opacity;
-  let opacity_group = (opacity < 1.0)
-    .then(|| doc.begin_group(Affine::IDENTITY, opacity, None, None))
-    .transpose()?;
+  let bold_join = font_style.parent.stroke_linejoin;
 
   // Plain outline glyphs are interned in glyph space (translation stripped) and
   // emitted as `<use>` references, so repeated glyphs cost one outline plus a
@@ -396,103 +378,100 @@ fn emit_run_glyphs(
   let fill = color_override.unwrap_or(Rgba(fill_color.0));
   let mut uses: Vec<(u32, f32, f32)> = Vec::new();
 
-  for glyph in &run.glyph_run.glyphs {
-    let Some(resolved) = run.resolved_glyphs.get(&glyph.id) else {
-      continue;
-    };
-    let matrix =
-      run_transform * Affine::translation(glyph_offset.x + glyph.x, glyph_offset.y + glyph.y);
-    let placed = frame.place(matrix);
+  // Per-run (inline span) opacity, matching the raster backend's
+  // `draw_with_inline_opacity`.
+  doc.with_opacity(run.glyph_run.brush.opacity, |doc| {
+    for glyph in &run.glyph_run.glyphs {
+      let Some(resolved) = run.resolved_glyphs.get(&glyph.id) else {
+        continue;
+      };
+      let matrix =
+        run_transform * Affine::translation(glyph_offset.x + glyph.x, glyph_offset.y + glyph.y);
+      let placed = frame.place(matrix);
 
-    match resolved.as_ref() {
-      ResolvedGlyph::Outline(outline) => {
-        let color_layers = if color_override.is_some() {
-          Vec::new()
-        } else {
-          run.resolve_color_layers(outline, fill_color)
-        };
-        if color_layers.is_empty() {
-          // Synthesized (faux) bold: the raster backend strokes the glyph with
-          // its own fill color (`outline.embolden()`); mirror that here.
-          match outline.embolden().filter(|embolden| *embolden > 0.0) {
-            Some(embolden) => {
-              let data = path_data(outline.paths(), placed);
-              if data.is_empty() {
+      match resolved.as_ref() {
+        ResolvedGlyph::Outline(outline) => {
+          let color_layers = if color_override.is_some() {
+            Vec::new()
+          } else {
+            run.resolve_color_layers(outline, fill_color)
+          };
+          if color_layers.is_empty() {
+            // Synthesized (faux) bold: the raster backend strokes the glyph with
+            // its own fill color (`outline.embolden()`); mirror that here.
+            match outline.embolden().filter(|embolden| *embolden > 0.0) {
+              Some(embolden) => {
+                let data = path_data(outline.paths(), placed);
+                if data.is_empty() {
+                  continue;
+                }
+                doc.flush_glyph_uses(&mut uses, fill, stroke)?;
+                let bold = GlyphStroke {
+                  color: fill,
+                  width: embolden,
+                  join: bold_join,
+                };
+
+                doc.glyph_path(&data, fill, Some(bold))?;
+                if let Some(text_stroke) = stroke {
+                  doc.glyph_path(&data, Rgba::TRANSPARENT, Some(text_stroke))?;
+                }
+              }
+              None => {
+                let data = path_data(
+                  outline.paths(),
+                  Affine {
+                    x: 0.0,
+                    y: 0.0,
+                    ..placed
+                  },
+                );
+
+                if !data.is_empty() {
+                  uses.push((doc.glyph_ref(data), placed.x, placed.y));
+                }
+              }
+            }
+          } else {
+            doc.flush_glyph_uses(&mut uses, fill, stroke)?;
+            for (color, paths) in color_layers {
+              if color.0[3] == 0 {
                 continue;
               }
-              doc.flush_glyph_uses(&mut uses, fill, stroke)?;
-              doc.glyph_path(&data, fill, Some((fill, embolden, bold_join)))?;
-              if let Some(text_stroke) = stroke {
-                doc.glyph_path(&data, Rgba([0, 0, 0, 0]), Some(text_stroke))?;
-              }
-            }
-            None => {
-              let data = path_data(
-                outline.paths(),
-                Affine {
-                  x: 0.0,
-                  y: 0.0,
-                  ..placed
-                },
-              );
-
+              let data = path_data(paths, placed);
               if !data.is_empty() {
-                uses.push((doc.glyph_ref(data), placed.x, placed.y));
+                doc.glyph_path(&data, Rgba(color.0), None)?;
               }
             }
           }
-        } else {
-          doc.flush_glyph_uses(&mut uses, fill, stroke)?;
-          for (color, paths) in color_layers {
-            if color.0[3] == 0 {
-              continue;
-            }
-            let data = path_data(paths, placed);
-            if !data.is_empty() {
-              doc.glyph_path(&data, Rgba(color.0), None)?;
-            }
+        }
+        // Color/bitmap glyphs (emoji) have no vector form, so embed the rasterized
+        // pixmap as a `data:image/png` `<image>`. Skipped in the shadow pass.
+        ResolvedGlyph::Bitmap(bitmap) => {
+          if color_override.is_some() {
+            continue;
           }
+          let Some(png) = bitmap.image.encode_png() else {
+            continue;
+          };
+          doc.flush_glyph_uses(&mut uses, fill, stroke)?;
+          let (width, height) = (bitmap.image.width(), bitmap.image.height());
+          let bitmap_matrix = placed
+            * Affine::translation(bitmap.placement.left as f32, -(bitmap.placement.top as f32))
+            * Affine::scale(bitmap.scale_x, bitmap.scale_y);
+          let href = to_data_url("image/png", &png);
+          let group = doc.begin_group(bitmap_matrix, 1.0, None, None)?;
+          doc.image(
+            Frame::new(0.0, 0.0, width as f32, height as f32),
+            &href,
+            None,
+          )?;
+          doc.end_group(group)?;
         }
-      }
-      // Color/bitmap glyphs (emoji) have no vector form, so embed the rasterized
-      // pixmap as a `data:image/png` `<image>`. Skipped in the shadow pass.
-      ResolvedGlyph::Bitmap(bitmap) => {
-        if color_override.is_some() {
-          continue;
-        }
-        let Some(png) = bitmap.image.encode_png() else {
-          continue;
-        };
-        doc.flush_glyph_uses(&mut uses, fill, stroke)?;
-        let (width, height) = (bitmap.image.width(), bitmap.image.height());
-        let bitmap_matrix = placed
-          * Affine::translation(bitmap.placement.left as f32, -(bitmap.placement.top as f32))
-          * Affine::scale(bitmap.scale_x, bitmap.scale_y);
-        let href = to_data_url("image/png", &png);
-        let group = doc.begin_group(bitmap_matrix, 1.0, None, None)?;
-        doc.image(
-          Frame::new(0.0, 0.0, width as f32, height as f32),
-          &href,
-          None,
-        )?;
-        doc.end_group(group)?;
       }
     }
-  }
-  doc.flush_glyph_uses(&mut uses, fill, stroke)?;
-
-  if let Some(group) = opacity_group {
-    doc.end_group(group)?;
-  }
-  Ok(())
-}
-
-fn line_join_str(join: LineJoin) -> &'static str {
-  match join {
-    LineJoin::Round => "round",
-    LineJoin::Bevel => "bevel",
-    _ => "miter",
-  }
+    doc.flush_glyph_uses(&mut uses, fill, stroke)
+  })
 }
 
 fn font_error(error: FontError) -> io::Error {

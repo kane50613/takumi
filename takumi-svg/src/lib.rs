@@ -37,11 +37,12 @@ use quick_xml::{
 };
 pub use render::{SvgOptions, render};
 use takumi_core::{
+  context::RenderContext,
   geometry::{Rect, Size},
   painter::StrokeStyle,
   shadow::SizedShadow,
   style::{
-    Affine, Color, FillRule, Filter, FilterReference, LUMA_WEIGHTS, SEPIA_WEIGHTS, SizingContext,
+    Affine, FillRule, Filter, FilterReference, LUMA_WEIGHTS, LineJoin, SEPIA_WEIGHTS, ToCss,
   },
 };
 use tiny_skia::PremultipliedColorU8;
@@ -51,6 +52,9 @@ use tiny_skia::PremultipliedColorU8;
 pub(crate) struct Rgba(pub [u8; 4]);
 
 impl Rgba {
+  pub(crate) const TRANSPARENT: Self = Self([0, 0, 0, 0]);
+  pub(crate) const WHITE: Self = Self([255, 255, 255, 255]);
+
   /// Unpremultiplies a tiny-skia pixel.
   pub(crate) fn demultiplied(color: PremultipliedColorU8) -> Self {
     let color = color.demultiply();
@@ -110,6 +114,14 @@ impl Frame {
   }
 }
 
+/// A stroke painted around glyph outlines: `-webkit-text-stroke` or faux bold.
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct GlyphStroke {
+  pub color: Rgba,
+  pub width: f32,
+  pub join: LineJoin,
+}
+
 /// A single stop in a gradient.
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct GradientStop {
@@ -126,7 +138,7 @@ pub(crate) struct GradientStop {
 pub(crate) struct SvgDocument {
   writer: Writer<Vec<u8>>,
   next_id: u32,
-  /// Interned glyph outlines in glyph space, emitted as `<defs>` by [`Self::render`].
+  /// Interned glyph outlines in glyph space, emitted as `<defs>` by [`Self::finish`].
   glyph_defs: Vec<String>,
   glyph_ids: HashMap<String, u32>,
 }
@@ -191,7 +203,7 @@ impl SvgDocument {
   }
 
   /// Appends a filled path.
-  pub(crate) fn path(&mut self, data: &str, fill: Rgba, rule: FillRule) -> io::Result<()> {
+  pub(crate) fn fill_path(&mut self, data: &str, fill: Rgba, rule: FillRule) -> io::Result<()> {
     let mut attrs: Vec<(&str, Cow<'_, str>)> =
       vec![("d", data.into()), ("fill", fill.hex().into())];
 
@@ -439,12 +451,12 @@ impl SvgDocument {
     Ok(GroupToken(()))
   }
 
-  /// Appends a glyph path with an optional `(color, width, line-join)` stroke.
+  /// Appends a glyph path with an optional stroke.
   pub(crate) fn glyph_path(
     &mut self,
     data: &str,
     fill: Rgba,
-    stroke: Option<(Rgba, f32, &str)>,
+    stroke: Option<GlyphStroke>,
   ) -> io::Result<()> {
     let mut attrs: Vec<(&str, Cow<'_, str>)> = vec![("d", data.into())];
 
@@ -471,7 +483,7 @@ impl SvgDocument {
     &mut self,
     uses: &mut Vec<(u32, f32, f32)>,
     fill: Rgba,
-    stroke: Option<(Rgba, f32, &str)>,
+    stroke: Option<GlyphStroke>,
   ) -> io::Result<()> {
     if uses.is_empty() {
       return Ok(());
@@ -514,6 +526,23 @@ impl SvgDocument {
     }
   }
 
+  /// Runs `emit` inside an opacity group when `opacity` is below 1, or directly
+  /// otherwise.
+  pub(crate) fn with_opacity(
+    &mut self,
+    opacity: f32,
+    emit: impl FnOnce(&mut Self) -> io::Result<()>,
+  ) -> io::Result<()> {
+    if opacity < 1.0 {
+      let group = self.begin_group(Affine::IDENTITY, opacity, None, None)?;
+
+      emit(self)?;
+      self.end_group(group)
+    } else {
+      emit(self)
+    }
+  }
+
   /// Defines a gaussian-blur filter (for text-shadow) and returns its `url(#id)`.
   pub(crate) fn blur_filter(&mut self, std_deviation: f32) -> io::Result<String> {
     let (id, reference) = self.alloc_id("bl");
@@ -540,8 +569,7 @@ impl SvgDocument {
   pub(crate) fn filter(
     &mut self,
     filters: &[Filter],
-    sizing: &SizingContext,
-    current_color: Color,
+    context: &RenderContext,
     size: Size<f32>,
     restore_opaque_alpha: bool,
   ) -> io::Result<Vec<String>> {
@@ -552,13 +580,7 @@ impl SvgDocument {
       match filter {
         Filter::Reference(reference) => {
           if !pending.is_empty() {
-            references.push(self.function_chain_filter(
-              &pending,
-              sizing,
-              current_color,
-              size,
-              false,
-            )?);
+            references.push(self.function_chain_filter(&pending, context, size, false)?);
             pending.clear();
           }
           references.push(self.reference_filter(reference)?);
@@ -568,15 +590,9 @@ impl SvgDocument {
     }
 
     if !pending.is_empty() {
-      references.push(self.function_chain_filter(
-        &pending,
-        sizing,
-        current_color,
-        size,
-        restore_opaque_alpha,
-      )?);
+      references.push(self.function_chain_filter(&pending, context, size, restore_opaque_alpha)?);
     } else if restore_opaque_alpha && !references.is_empty() {
-      references.push(self.function_chain_filter(&[], sizing, current_color, size, true)?);
+      references.push(self.function_chain_filter(&[], context, size, true)?);
     }
 
     Ok(references)
@@ -594,6 +610,14 @@ impl SvgDocument {
       .rev()
       .map(|reference| self.begin_group(Affine::IDENTITY, 1.0, None, Some(reference)))
       .collect()
+  }
+
+  /// Closes the groups [`Self::begin_filter_wrappers`] opened, innermost first.
+  pub(crate) fn end_filter_wrappers(&mut self, tokens: Vec<GroupToken>) -> io::Result<()> {
+    for token in tokens.into_iter().rev() {
+      self.end_group(token)?;
+    }
+    Ok(())
   }
 
   /// Emits a referenced `<filter>` verbatim under a fresh document-unique id.
@@ -620,8 +644,7 @@ impl SvgDocument {
   fn function_chain_filter(
     &mut self,
     filters: &[&Filter],
-    sizing: &SizingContext,
-    current_color: Color,
+    context: &RenderContext,
     size: Size<f32>,
     restore_opaque_alpha: bool,
   ) -> io::Result<String> {
@@ -641,7 +664,7 @@ impl SvgDocument {
     let mut prev: Cow<'_, str> = "SourceGraphic".into();
     for (index, filter) in filters.iter().copied().enumerate() {
       let result = format!("f{index}");
-      self.filter_primitive(filter, &prev, &result, sizing, current_color, size)?;
+      self.filter_primitive(filter, &prev, &result, context, size)?;
       prev = result.into();
     }
     if restore_opaque_alpha {
@@ -661,10 +684,11 @@ impl SvgDocument {
     filter: &Filter,
     input: &str,
     result: &str,
-    sizing: &SizingContext,
-    current_color: Color,
+    context: &RenderContext,
     size: Size<f32>,
   ) -> io::Result<()> {
+    let sizing = &context.sizing;
+
     match filter {
       Filter::Blur(length) => self.empty(
         "feGaussianBlur",
@@ -713,12 +737,14 @@ impl SvgDocument {
       ),
       Filter::Invert(amount) => {
         let a = amount.0.clamp(0.0, 1.0);
+        let [low, high] = [a, 1.0 - a].map(Num);
+
         self.component_transfer_rgb(
           input,
           result,
           &[
             ("type", "table".into()),
-            ("tableValues", format!("{} {}", num(a), num(1.0 - a)).into()),
+            ("tableValues", format!("{low} {high}").into()),
           ],
         )
       }
@@ -739,7 +765,7 @@ impl SvgDocument {
         self.close("feComponentTransfer")
       }
       Filter::DropShadow(shadow) => {
-        let resolved = SizedShadow::from_text_shadow(*shadow, sizing, current_color, size);
+        let resolved = SizedShadow::from_text_shadow(*shadow, sizing, context.current_color, size);
         let color = Rgba(resolved.color.0);
         self.empty(
           "feGaussianBlur",
@@ -843,7 +869,7 @@ impl SvgDocument {
   /// Closes the root `<svg>` and serializes the document to a string. Interned
   /// glyph outlines are flushed as a trailing `<defs>`; `<use>` references
   /// resolve document-wide, so forward references are fine.
-  pub(crate) fn render(mut self) -> io::Result<String> {
+  pub(crate) fn finish(mut self) -> io::Result<String> {
     if !self.glyph_defs.is_empty() {
       self.open("defs", &[])?;
       for (id, data) in mem::take(&mut self.glyph_defs).iter().enumerate() {
@@ -859,7 +885,8 @@ impl SvgDocument {
   }
 }
 
-/// Opaque proof that a `<g>` is open; consumed by [`SvgDocument::end_group`].
+/// Opaque proof that an element a `begin_*` method opened is still open;
+/// consumed by the matching `end_*`.
 #[must_use]
 pub(crate) struct GroupToken(());
 
@@ -967,19 +994,19 @@ fn element<'a>(name: &'a str, attrs: &[(&str, Cow<'_, str>)]) -> BytesStart<'a> 
 
 /// Fill plus optional `-webkit-text-stroke` attributes, shared by glyph
 /// `<path>` elements and `<use>` runs.
-fn glyph_paint_attrs<'a>(
+fn glyph_paint_attrs(
   fill: Rgba,
-  stroke: Option<(Rgba, f32, &'a str)>,
-) -> Vec<(&'a str, Cow<'a, str>)> {
+  stroke: Option<GlyphStroke>,
+) -> Vec<(&'static str, Cow<'static, str>)> {
   let mut attrs: Vec<(&str, Cow<'_, str>)> = vec![("fill", fill.hex().into())];
 
   push_opacity(&mut attrs, "fill-opacity", fill.opacity());
-  if let Some((color, width, line_join)) = stroke {
-    attrs.push(("stroke", color.hex().into()));
-    push_opacity(&mut attrs, "stroke-opacity", color.opacity());
-    attrs.push(("stroke-width", num(width).into()));
-    if line_join != "miter" {
-      attrs.push(("stroke-linejoin", line_join.into()));
+  if let Some(stroke) = stroke {
+    attrs.push(("stroke", stroke.color.hex().into()));
+    push_opacity(&mut attrs, "stroke-opacity", stroke.color.opacity());
+    attrs.push(("stroke-width", num(stroke.width).into()));
+    if stroke.join != LineJoin::Miter {
+      attrs.push(("stroke-linejoin", stroke.join.to_css_string().into()));
     }
   }
   attrs
@@ -1014,7 +1041,7 @@ mod tests {
   fn solid_rect_is_native_svg() {
     let mut doc = SvgDocument::new(100.0, 50.0).unwrap();
     doc.rect(Frame::new(0.0, 0.0, 100.0, 50.0), RED).unwrap();
-    let svg = doc.render().unwrap();
+    let svg = doc.finish().unwrap();
     assert!(svg.starts_with("<svg xmlns=\"http://www.w3.org/2000/svg\""));
     assert!(svg.contains(r##"<rect x="0" y="0" width="100" height="50" fill="#f00""##));
     assert!(!svg.contains("fill-opacity"));
@@ -1027,7 +1054,7 @@ mod tests {
     doc.rect(Frame::new(0.0, 0.0, 1.0, 1.0), HALF_BLUE).unwrap();
     assert!(
       doc
-        .render()
+        .finish()
         .unwrap()
         .contains(r##"fill="#00f" fill-opacity=".502""##)
     );
@@ -1055,9 +1082,9 @@ mod tests {
       .unwrap();
     assert_eq!(fill, "url(#lg0)");
     doc
-      .path("M0 0 H10 V10 H0 Z", RED, FillRule::NonZero)
+      .fill_path("M0 0 H10 V10 H0 Z", RED, FillRule::NonZero)
       .unwrap();
-    let svg = doc.render().unwrap();
+    let svg = doc.finish().unwrap();
     assert!(svg.contains(r#"<linearGradient id="lg0""#));
     assert!(svg.contains(r#"<stop offset="0""#));
   }
@@ -1073,7 +1100,7 @@ mod tests {
       .unwrap();
     doc.rect(Frame::new(0.0, 0.0, 10.0, 10.0), RED).unwrap();
     doc.end_group(token).unwrap();
-    let svg = doc.render().unwrap();
+    let svg = doc.finish().unwrap();
     assert!(svg.contains("<clipPath id=\"cp0\">"));
     assert!(
       svg.contains(r#"<g transform="matrix(1 0 0 1 3 4)" opacity=".5" clip-path="url(#cp0)">"#)
@@ -1086,7 +1113,7 @@ mod tests {
     let mut doc = SvgDocument::new(10.0, 10.0).unwrap();
     let token = doc.begin_group(Affine::IDENTITY, 0.5, None, None).unwrap();
     doc.end_group(token).unwrap();
-    assert!(doc.render().unwrap().contains("<g opacity=\".5\">"));
+    assert!(doc.finish().unwrap().contains("<g opacity=\".5\">"));
   }
 
   #[test]
@@ -1099,7 +1126,7 @@ mod tests {
         None,
       )
       .unwrap();
-    let svg = doc.render().unwrap();
+    let svg = doc.finish().unwrap();
     assert!(
       svg
         .contains(r#"<image x="0" y="0" width="10" height="10" href="data:image/png;base64,AAAA""#)
@@ -1116,7 +1143,7 @@ mod tests {
         None,
       )
       .unwrap();
-    let svg = doc.render().unwrap();
+    let svg = doc.finish().unwrap();
     assert!(!svg.contains("<script>"));
     assert!(svg.contains("&quot;"));
   }
@@ -1125,7 +1152,7 @@ mod tests {
   fn text_emits_glyph_path() {
     let mut doc = SvgDocument::new(10.0, 10.0).unwrap();
     doc
-      .path(
+      .fill_path(
         "M1 9 L2 1 L3 9 M1.5 5 H2.5",
         Rgba([0, 0, 0, 255]),
         FillRule::NonZero,
@@ -1133,7 +1160,7 @@ mod tests {
       .unwrap();
     assert!(
       doc
-        .render()
+        .finish()
         .unwrap()
         .contains("<path d=\"M1 9 L2 1 L3 9 M1.5 5 H2.5\"")
     );

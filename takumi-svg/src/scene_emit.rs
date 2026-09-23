@@ -76,13 +76,7 @@ impl SceneEmitter<'_> {
     // Alpha restore approximates the edge-duplicated backdrop sampling browsers
     // use; skipped for opacity(), which lowers alpha on purpose.
     let restore_alpha = !filters.iter().any(|f| matches!(f, Filter::Opacity(_)));
-    let filter_refs = doc.filter(
-      &filters,
-      &context.sizing,
-      context.current_color,
-      size,
-      restore_alpha,
-    )?;
+    let filter_refs = doc.filter(&filters, context, size, restore_alpha)?;
     let filter_wrappers = doc.begin_filter_wrappers(&filter_refs)?;
     let filter_group = doc.begin_group(
       Affine::IDENTITY,
@@ -103,9 +97,7 @@ impl SceneEmitter<'_> {
       doc.end_group(group)?;
     }
     doc.end_group(filter_group)?;
-    for group in filter_wrappers.into_iter().rev() {
-      doc.end_group(group)?;
-    }
+    doc.end_filter_wrappers(filter_wrappers)?;
     if let Some(group) = mask {
       doc.end_group(group)?;
     }
@@ -227,7 +219,7 @@ impl SceneEmitter<'_> {
     }
 
     for pending in &descendant_outlines {
-      pending.paint(doc)?;
+      pending.emit(doc)?;
     }
     if let Some(chrome) = chrome {
       chrome.close(doc)?;
