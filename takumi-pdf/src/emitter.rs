@@ -48,7 +48,7 @@ use crate::svg;
 use crate::{
   background::{LayerLists, Placement, cycled},
   filter::{ColorFilter, filtered, unsupported_filter},
-  glyph::{Uncovered, run_glyphs},
+  glyph::{PdfGlyph, Uncovered, run_glyphs},
   inline::{InlineMap, visit_inline_layout},
   krilla::{
     Data,
@@ -1217,17 +1217,16 @@ impl Emitter<'_> {
     let text_fills = self.text_clip_fills(node, layout, x, y, surface);
 
     for run in &runs.runs {
-      let shaped = &run.glyph_run;
-      if shaped.glyphs.is_empty() {
-        continue;
-      }
-      let Some(font) = self.cached_font(shaped) else {
+      let Some(GlyphRun {
+        font,
+        text,
+        glyphs,
+        origin,
+      }) = self.glyph_run(run, built, layout, x, y)
+      else {
         continue;
       };
-      if self.window_disowns_run(run, layout, y) {
-        continue;
-      }
-      let offset = run.glyph_offset(layout);
+      let shaped = &run.glyph_run;
       let decorations = shaped.decorations(
         &run.resolved_glyphs,
         layout,
@@ -1242,19 +1241,7 @@ impl Emitter<'_> {
         CorePoint { x, y },
         &mut self.device(surface, false),
       );
-      let run_text = built
-        .text
-        .get(shaped.text_range.clone())
-        .unwrap_or_default();
-      let glyphs = run_glyphs(
-        shaped,
-        run_text,
-        &mut self.document.issues.borrow_mut().uncovered,
-      );
-
-      let color = shaped.brush.color;
-      let fill = fill_from_rgba(self.filtered(color), shaped.brush.opacity);
-      let origin = Point::from_xy(x + offset.x, y + offset.y);
+      let fill = fill_from_rgba(self.filtered(shaped.brush.color), shaped.brush.opacity);
       let oblique = self.push_oblique(shaped, origin, surface);
 
       // `background-clip: text` paints the background through the glyphs, under
@@ -1266,14 +1253,7 @@ impl Emitter<'_> {
         // Outlined: text extraction keys on the text-showing operator, whatever
         // the rendering mode, so a second run of glyphs would put the text in
         // the text layer twice. Paths paint the same pixels and stay out of it.
-        surface.draw_glyphs(
-          origin,
-          &glyphs,
-          font.clone(),
-          run_text,
-          shaped.font_size,
-          true,
-        );
+        surface.draw_glyphs(origin, &glyphs, font.clone(), text, shaped.font_size, true);
       }
 
       surface.set_fill(Some(fill.clone()));
@@ -1296,7 +1276,7 @@ impl Emitter<'_> {
         },
       );
 
-      surface.draw_glyphs(origin, &glyphs, font, run_text, shaped.font_size, false);
+      surface.draw_glyphs(origin, &glyphs, font, text, shaped.font_size, false);
 
       if oblique {
         surface.pop();
@@ -1634,44 +1614,72 @@ impl Emitter<'_> {
     surface: &mut Surface,
   ) {
     for run in &runs.runs {
-      let shaped = &run.glyph_run;
-      if shaped.glyphs.is_empty() {
-        continue;
-      }
-      let Some(font) = self.cached_font(shaped) else {
+      let Some(GlyphRun {
+        font,
+        text,
+        glyphs,
+        origin,
+      }) = self.glyph_run(run, built, layout, x, y)
+      else {
         continue;
       };
-      if self.window_disowns_run(run, layout, y) {
-        continue;
-      }
-      let offset = run.glyph_offset(layout);
-      let run_text = built
-        .text
-        .get(shaped.text_range.clone())
-        .unwrap_or_default();
-      let glyphs = run_glyphs(
-        shaped,
-        run_text,
-        &mut self.document.issues.borrow_mut().uncovered,
+      let shaped = &run.glyph_run;
+      let fill = fill_from_rgba(
+        self.filtered(color.unwrap_or(shaped.brush.color)),
+        shaped.brush.opacity,
       );
-
-      let color = color.unwrap_or(shaped.brush.color);
-
-      let fill = fill_from_rgba(self.filtered(color), shaped.brush.opacity);
-      let origin = Point::from_xy(x + offset.x, y + offset.y);
 
       surface.set_fill(Some(fill.clone()));
       surface.set_stroke(synthetic_stroke(shaped, &fill));
 
       let oblique = self.push_oblique(shaped, origin, surface);
 
-      surface.draw_glyphs(origin, &glyphs, font, run_text, shaped.font_size, false);
+      surface.draw_glyphs(origin, &glyphs, font, text, shaped.font_size, false);
 
       if oblique {
         surface.pop();
       }
       surface.set_stroke(None);
     }
+  }
+
+  /// A run this page draws, placed with its line at `y`, or `None` when it
+  /// has no glyphs, no font, or belongs to another page.
+  fn glyph_run<'r>(
+    &mut self,
+    run: &PositionedInlineRun,
+    built: &'r BuiltInlineLayout<'_>,
+    layout: Layout,
+    x: f32,
+    y: f32,
+  ) -> Option<GlyphRun<'r>> {
+    let shaped = &run.glyph_run;
+
+    if shaped.glyphs.is_empty() {
+      return None;
+    }
+    let font = self.cached_font(shaped)?;
+
+    if self.window_disowns_run(run, layout, y) {
+      return None;
+    }
+    let offset = run.glyph_offset(layout);
+    let text = built
+      .text
+      .get(shaped.text_range.clone())
+      .unwrap_or_default();
+    let glyphs = run_glyphs(
+      shaped,
+      text,
+      &mut self.document.issues.borrow_mut().uncovered,
+    );
+
+    Some(GlyphRun {
+      font,
+      text,
+      glyphs,
+      origin: Point::from_xy(x + offset.x, y + offset.y),
+    })
   }
 
   /// Shears the text about its baseline, the faux oblique the raster renderer applies to glyph
@@ -1857,6 +1865,15 @@ impl PaintDevice for SurfaceDevice<'_, '_> {
       },
     );
   }
+}
+
+/// A run ready to draw: its font, the text its glyphs map to, and where it
+/// starts.
+struct GlyphRun<'r> {
+  font: Font,
+  text: &'r str,
+  glyphs: Vec<PdfGlyph>,
+  origin: Point,
 }
 
 /// Names an image in an error: its URL, or that it came in as raw bytes.
