@@ -749,20 +749,8 @@ fn inline_box_span<'c>(
     context.sizing.font_size,
     context.style.line_height,
   );
-  let margin = Rect {
-    top: context.style.margin_top,
-    right: context.style.margin_right,
-    bottom: context.style.margin_bottom,
-    left: context.style.margin_left,
-  }
-  .map(|length| length.to_px(&context.sizing, 0.0));
-  let padding = Rect {
-    top: context.style.padding_top,
-    right: context.style.padding_right,
-    bottom: context.style.padding_bottom,
-    left: context.style.padding_left,
-  }
-  .map(|length| length.to_px(&context.sizing, 0.0));
+  let margin = render_node.margin_px();
+  let padding = render_node.padding_px();
   let border = Rect {
     top: (
       context.style.border_top_style,

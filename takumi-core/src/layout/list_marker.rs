@@ -4,7 +4,7 @@ use crate::{
   context::RenderContext,
   layout::{
     node::{Node, resolve_image},
-    tree::{NodeOrigin, RenderNode, pseudo_computed_style},
+    tree::{NodeOrigin, RenderNode},
   },
   matching::MatchedDeclarationsView,
   style::{
@@ -25,7 +25,7 @@ const INSIDE_SYMBOL_GAP_EM: f32 = 1.0;
 pub(super) fn list_marker(item_context: &RenderContext, ordinal: i32) -> Option<RenderNode> {
   let direction = item_context.style.direction;
   let (mut style, sizing, current_color) =
-    pseudo_computed_style(item_context, &MatchedDeclarationsView::default());
+    item_context.resolve_pseudo_style(&MatchedDeclarationsView::default());
 
   style.white_space_collapse = WhiteSpaceCollapse::Preserve;
   style.text_wrap_mode = TextWrapMode::NoWrap;

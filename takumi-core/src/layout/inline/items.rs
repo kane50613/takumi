@@ -268,14 +268,8 @@ fn inline_span_padding(node: &RenderNode, depth: usize) -> Rect<f32> {
   if !is_inline_span(node, depth) {
     return Rect::default();
   }
-  let sizing = &node.context.sizing;
 
-  Rect {
-    top: node.context.style.padding_top.to_px(sizing, 0.0),
-    right: node.context.style.padding_right.to_px(sizing, 0.0),
-    bottom: node.context.style.padding_bottom.to_px(sizing, 0.0),
-    left: node.context.style.padding_left.to_px(sizing, 0.0),
-  }
+  node.padding_px()
 }
 
 /// The decoration an inline span paints, or `None` when its background is invisible.

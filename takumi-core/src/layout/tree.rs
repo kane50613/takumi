@@ -18,7 +18,7 @@ use crate::{
   Error,
   context::RenderContext,
   font_style::SizedFontStyle,
-  geometry::{AvailableSpace, ComputedLayout, NodeId, Size},
+  geometry::{AvailableSpace, ComputedLayout, NodeId, Rect, Size},
   layout::{
     inline::{
       InlineContentKind, InlineItem, InlineLayoutMode, InlineLayoutRequest, InlineMeasureOptions,
@@ -32,7 +32,7 @@ use crate::{
     Affine, BackgroundImage, BackgroundImages, Color, ComputedStyle, ContentItem, ContentValue,
     Display, Float, Length, LineHeight, ListStylePosition, Position, SizingContext,
     Style as NodeStyle, StyleDeclaration, StyleDeclarationBlock, StyleSheet, TextWrapMode,
-    TwBlocks, TwCache, WhiteSpaceCollapse, apply_stylesheet_animations,
+    TwBlocks, WhiteSpaceCollapse, apply_stylesheet_animations,
   },
   viewport::Viewport,
 };
@@ -263,123 +263,10 @@ enum InlineBaselineSource {
   LayoutFirstBaseline,
 }
 
-pub(crate) fn resolve_normal_line_height(
-  context: &RenderContext,
-  style: &ComputedStyle,
-  font_size: f32,
-) -> f32 {
-  if !matches!(style.line_height, LineHeight::Normal) {
-    return 0.0;
-  }
-  let attributes = Attributes {
-    width: style.font_stretch.into_parlance(),
-    style: style.font_style.into_parlance(),
-    weight: style.font_weight.into_parlance(),
-  };
-  let font_family = context.expand_font_family(&style.font_family);
-
-  let mut hasher = Xxh3::new();
-  font_family.hash_tokens(&mut hasher);
-  hasher.write_u32(attributes.weight.value().to_bits());
-  hasher.write_u32(attributes.width.ratio().to_bits());
-  match attributes.style {
-    FontiqueStyle::Normal => hasher.write_u8(0),
-    FontiqueStyle::Italic => hasher.write_u8(1),
-    FontiqueStyle::Oblique(angle) => {
-      hasher.write_u8(2);
-      hasher.write_u32(angle.unwrap_or(f32::NAN).to_bits());
-    }
-  }
-  hasher.write_u32(font_size.to_bits());
-
-  context.normal_line_height(hasher.finish(), || {
-    context
-      .first_font_line_spacing(font_family.query_families(), attributes, font_size)
-      .unwrap_or(font_size)
-  })
-}
-
 /// An element's own important declarations by cascade tier.
 struct ElementImportant {
   tw: Option<Rc<TwBlocks>>,
   inline: Option<StyleDeclarationBlock>,
-}
-
-/// A node's style and element-owned important declarations.
-fn build_style_layers(
-  node_layers: NodeStyleLayers,
-  matched_declarations: &MatchedDeclarationsView<'_>,
-  viewport: Viewport,
-  stylesheet: &StyleSheet,
-  tw_cache: &TwCache,
-) -> (NodeStyle, ElementImportant) {
-  let mut style = NodeStyle::default();
-
-  // `tw` is the last declared layer, below unlayered author rules, so its
-  // important half goes last: the cascade reverses layer order for important
-  // declarations.
-  let tw = node_layers
-    .author_tw
-    .map(|author_tw| author_tw.declaration_blocks(viewport, &stylesheet.breakpoints, tw_cache));
-
-  if let Some(preset) = node_layers.preset {
-    style.append_block(preset.declarations);
-  }
-
-  if let Some(dir) = node_layers.dir {
-    style.push(StyleDeclaration::direction(dir), false);
-  }
-
-  for &declarations in matched_declarations.layered_normal() {
-    style.merge_matched_block(declarations);
-  }
-
-  // `tw` is the last declared layer, as Tailwind orders utilities: above every
-  // named `@layer`, below unlayered author rules.
-  if let Some(tw) = &tw {
-    style.append_block_cloned(&tw.normal);
-  }
-
-  for &declarations in matched_declarations.unlayered_normal() {
-    style.merge_matched_block(declarations);
-  }
-
-  // An element's own declarations outrank selector-based ones at the same
-  // importance.
-  let (inline_normal, inline_important) = node_layers
-    .inline
-    .map(|inline| StyleDeclarationBlock::from(inline).split_importance())
-    .unzip();
-
-  if let Some(inline_normal) = inline_normal {
-    style.append_block(inline_normal);
-  }
-
-  // Important declarations reverse layer order, so `tw`, the last declared
-  // layer, sits above unlayered rules and below every named `@layer`.
-  for &declarations in matched_declarations.unlayered_important() {
-    style.merge_matched_block(declarations);
-  }
-
-  if let Some(tw) = &tw {
-    style.append_block_cloned(&tw.important);
-  }
-
-  for &declarations in matched_declarations.layered_important() {
-    style.merge_matched_block(declarations);
-  }
-
-  if let Some(inline_important) = &inline_important {
-    style.append_block(inline_important.clone());
-  }
-
-  (
-    style,
-    ElementImportant {
-      tw,
-      inline: inline_important,
-    },
-  )
 }
 
 fn registered_custom_property_parent_style<'a>(
@@ -415,204 +302,181 @@ fn registered_custom_property_parent_style<'a>(
   Cow::Owned(adjusted_parent)
 }
 
-pub(super) fn pseudo_computed_style(
-  parent_context: &RenderContext,
-  pseudo_matched: &MatchedDeclarationsView<'_>,
-) -> (ComputedStyle, SizingContext, Color) {
-  let (style_layers, _) = build_style_layers(
-    NodeStyleLayers::default(),
-    pseudo_matched,
-    parent_context.sizing.viewport,
-    parent_context.stylesheet().as_ref(),
-    parent_context.tw_cache(),
-  );
-  let inherited_parent = registered_custom_property_parent_style(
-    &parent_context.style,
-    slice::from_ref(parent_context.stylesheet().as_ref()),
-    parent_context.sizing.viewport,
-  );
-  let mut style = style_layers.inherit(&inherited_parent);
-  let sizing = parent_context.child_sizing(&style, &parent_context.sizing, false);
-  let current_color = style.color.resolve(parent_context.current_color);
-  style.make_computed(&sizing);
-  (style, sizing, current_color)
-}
-
-fn push_layout_node<'r>(
-  nodes: &mut Vec<LayoutNodeState>,
-  render_nodes: &mut Vec<&'r RenderNode>,
-  render_root: &'r RenderNode,
-) -> TaffyNodeId {
-  struct PendingNode<'r> {
-    node_id: TaffyNodeId,
-    position: Position,
-    contains_fixed: bool,
-    next_child_index: usize,
-    children: Option<&'r [RenderNode]>,
-    taffy_child_ids: Vec<TaffyNodeId>,
-    box_children: Vec<OrderedChild>,
-  }
-
-  fn push_node_state<'r>(
-    nodes: &mut Vec<LayoutNodeState>,
-    render_nodes: &mut Vec<&'r RenderNode>,
-    render_node: &'r RenderNode,
-  ) -> PendingNode<'r> {
-    let node_index = nodes.len();
-    let node_id = TaffyNodeId::from(node_index);
-    let is_inline_children = render_node.should_create_inline_layout();
-    let children = if is_inline_children {
-      None
-    } else {
-      render_node.children.as_deref()
-    };
-    let position = render_node.context.style.position;
-    let contains_fixed = render_node.context.style.contains_fixed_descendants();
-
-    render_nodes.push(render_node);
-
-    let (style, container_independent) = {
-      let sizing = &render_node.context.sizing;
-
-      // Resolution reports whether it read the query container, which is
-      // exact. Comparing two resolved sizes is not: `min(10px, 100cqw)`
-      // agrees across two large containers and disagrees with a small one.
-      sizing.container_read.set(false);
-      let style = render_node.layout_style(sizing);
-      let independent = !sizing.container_read.get();
-
-      (style, independent)
-    };
-
-    nodes.push(LayoutNodeState {
-      style,
-      container_independent,
-      cache: Cache::new(),
-      unrounded_layout: Layout::new(),
-      final_layout: Layout::new(),
-      first_baseline_y: None,
-      is_inline_children,
-      children: Box::new([]),
-      box_children: Box::new([]),
-    });
-
-    let capacity = children.map_or(0, <[RenderNode]>::len);
-    PendingNode {
-      node_id,
-      position,
-      contains_fixed,
-      next_child_index: 0,
-      children,
-      taffy_child_ids: Vec::with_capacity(capacity),
-      box_children: Vec::with_capacity(capacity),
-    }
-  }
-
-  // Out-of-flow nodes are re-parented (hoisted) in the taffy tree so taffy's
-  // direct-parent positioning resolves against the correct CSS containing
-  // block: the nearest ancestor that establishes one. The box (render) tree is
-  // preserved separately for painting.
-  let mut cb_stack: Vec<TaffyNodeId> = Vec::new();
-  let mut fixed_cb_stack: Vec<TaffyNodeId> = Vec::new();
-  let mut hoisted: HashMap<TaffyNodeId, Vec<TaffyNodeId>> = HashMap::new();
-
-  let root = push_node_state(nodes, render_nodes, render_root);
-  let root_id = root.node_id;
-  cb_stack.push(root_id);
-  fixed_cb_stack.push(root_id);
-  let mut stack = vec![root];
-
-  while let Some(current) = stack.last_mut() {
-    if let Some(children) = current.children
-      && let Some(child) = children.get(current.next_child_index)
-    {
-      current.next_child_index += 1;
-      let pending = push_node_state(nodes, render_nodes, child);
-      if pending.position.is_positioned() || pending.contains_fixed {
-        cb_stack.push(pending.node_id);
-      }
-      if pending.contains_fixed {
-        fixed_cb_stack.push(pending.node_id);
-      }
-      stack.push(pending);
-      continue;
-    }
-
-    let Some(finished) = stack.pop() else {
-      break;
-    };
-    let fid = finished.node_id;
-
-    let mut taffy_children = finished.taffy_child_ids;
-    if let Some(extra) = hoisted.remove(&fid) {
-      taffy_children.extend(extra);
-    }
-    let idx: usize = fid.into();
-    if matches!(
-      nodes[idx].style.display,
-      TaffyDisplay::Flex | TaffyDisplay::Grid
-    ) {
-      sort_children_by_order(&mut taffy_children, |child_id| {
-        let child_idx: usize = child_id.into();
-        render_nodes
-          .get(child_idx)
-          .map_or(0, |child| child.context.style.order.0)
-      });
-    }
-    nodes[idx].children = taffy_children.into_boxed_slice();
-    nodes[idx].box_children = finished.box_children.into_boxed_slice();
-
-    if finished.position.is_positioned() || finished.contains_fixed {
-      cb_stack.pop();
-    }
-    if finished.contains_fixed {
-      fixed_cb_stack.pop();
-    }
-
-    if let Some(parent) = stack.last_mut() {
-      let render_index = parent.next_child_index - 1;
-      let cb = match finished.position {
-        Position::Absolute => Some(*cb_stack.last().unwrap_or(&root_id)),
-        Position::Fixed => Some(*fixed_cb_stack.last().unwrap_or(&root_id)),
-        _ => None,
-      };
-      // Only re-parent when the containing block differs from the structural
-      // parent; otherwise keep the node in place to preserve DOM order (and the
-      // in-flow static position for auto-inset out-of-flow boxes).
-      let hoisted_cb = match cb {
-        Some(cb) if cb != parent.node_id => {
-          hoisted.entry(cb).or_default().push(fid);
-          Some(cb)
-        }
-        _ => {
-          parent.taffy_child_ids.push(fid);
-          None
-        }
-      };
-      parent.box_children.push(OrderedChild {
-        render_index,
-        node_id: NodeId::from_taffy(fid),
-        hoisted_cb: hoisted_cb.map(NodeId::from_taffy),
-      });
-    }
-  }
-
-  root_id
-}
-
 impl<'r> LayoutTree<'r> {
   /// Builds a layout tree from a render-node root.
   pub fn from_render_node(render_root: &'r RenderNode) -> Self {
-    let mut nodes = Vec::with_capacity(1);
-    let mut render_nodes = Vec::with_capacity(1);
-    let root_id = push_layout_node(&mut nodes, &mut render_nodes, render_root);
+    let mut tree = Self {
+      nodes: Vec::with_capacity(1),
+      render_nodes: Vec::with_capacity(1),
+    };
+    let root_id = tree.push_subtree(render_root);
 
     debug_assert_eq!(root_id, TaffyNodeId::from(0usize));
 
-    Self {
+    tree
+  }
+
+  /// Appends the layout nodes of the subtree under `render_root`, returning its root id.
+  fn push_subtree(&mut self, render_root: &'r RenderNode) -> TaffyNodeId {
+    struct PendingNode<'r> {
+      node_id: TaffyNodeId,
+      position: Position,
+      contains_fixed: bool,
+      next_child_index: usize,
+      children: Option<&'r [RenderNode]>,
+      taffy_child_ids: Vec<TaffyNodeId>,
+      box_children: Vec<OrderedChild>,
+    }
+
+    fn push_node_state<'r>(
+      nodes: &mut Vec<LayoutNodeState>,
+      render_nodes: &mut Vec<&'r RenderNode>,
+      render_node: &'r RenderNode,
+    ) -> PendingNode<'r> {
+      let node_index = nodes.len();
+      let node_id = TaffyNodeId::from(node_index);
+      let is_inline_children = render_node.should_create_inline_layout();
+      let children = if is_inline_children {
+        None
+      } else {
+        render_node.children.as_deref()
+      };
+      let position = render_node.context.style.position;
+      let contains_fixed = render_node.context.style.contains_fixed_descendants();
+
+      render_nodes.push(render_node);
+
+      let (style, container_independent) = {
+        let sizing = &render_node.context.sizing;
+
+        // Resolution reports whether it read the query container, which is
+        // exact. Comparing two resolved sizes is not: `min(10px, 100cqw)`
+        // agrees across two large containers and disagrees with a small one.
+        sizing.container_read.set(false);
+        let style = render_node.layout_style(sizing);
+        let independent = !sizing.container_read.get();
+
+        (style, independent)
+      };
+
+      nodes.push(LayoutNodeState {
+        style,
+        container_independent,
+        cache: Cache::new(),
+        unrounded_layout: Layout::new(),
+        final_layout: Layout::new(),
+        first_baseline_y: None,
+        is_inline_children,
+        children: Box::new([]),
+        box_children: Box::new([]),
+      });
+
+      let capacity = children.map_or(0, <[RenderNode]>::len);
+      PendingNode {
+        node_id,
+        position,
+        contains_fixed,
+        next_child_index: 0,
+        children,
+        taffy_child_ids: Vec::with_capacity(capacity),
+        box_children: Vec::with_capacity(capacity),
+      }
+    }
+
+    // Out-of-flow nodes are re-parented (hoisted) in the taffy tree so taffy's
+    // direct-parent positioning resolves against the correct CSS containing
+    // block: the nearest ancestor that establishes one. The box (render) tree is
+    // preserved separately for painting.
+    let Self {
       nodes,
       render_nodes,
+    } = self;
+    let mut cb_stack: Vec<TaffyNodeId> = Vec::new();
+    let mut fixed_cb_stack: Vec<TaffyNodeId> = Vec::new();
+    let mut hoisted: HashMap<TaffyNodeId, Vec<TaffyNodeId>> = HashMap::new();
+
+    let root = push_node_state(nodes, render_nodes, render_root);
+    let root_id = root.node_id;
+    cb_stack.push(root_id);
+    fixed_cb_stack.push(root_id);
+    let mut stack = vec![root];
+
+    while let Some(current) = stack.last_mut() {
+      if let Some(children) = current.children
+        && let Some(child) = children.get(current.next_child_index)
+      {
+        current.next_child_index += 1;
+        let pending = push_node_state(nodes, render_nodes, child);
+        if pending.position.is_positioned() || pending.contains_fixed {
+          cb_stack.push(pending.node_id);
+        }
+        if pending.contains_fixed {
+          fixed_cb_stack.push(pending.node_id);
+        }
+        stack.push(pending);
+        continue;
+      }
+
+      let Some(finished) = stack.pop() else {
+        break;
+      };
+      let fid = finished.node_id;
+
+      let mut taffy_children = finished.taffy_child_ids;
+      if let Some(extra) = hoisted.remove(&fid) {
+        taffy_children.extend(extra);
+      }
+      let idx: usize = fid.into();
+      if matches!(
+        nodes[idx].style.display,
+        TaffyDisplay::Flex | TaffyDisplay::Grid
+      ) {
+        sort_children_by_order(&mut taffy_children, |child_id| {
+          let child_idx: usize = child_id.into();
+          render_nodes
+            .get(child_idx)
+            .map_or(0, |child| child.context.style.order.0)
+        });
+      }
+      nodes[idx].children = taffy_children.into_boxed_slice();
+      nodes[idx].box_children = finished.box_children.into_boxed_slice();
+
+      if finished.position.is_positioned() || finished.contains_fixed {
+        cb_stack.pop();
+      }
+      if finished.contains_fixed {
+        fixed_cb_stack.pop();
+      }
+
+      if let Some(parent) = stack.last_mut() {
+        let render_index = parent.next_child_index - 1;
+        let cb = match finished.position {
+          Position::Absolute => Some(*cb_stack.last().unwrap_or(&root_id)),
+          Position::Fixed => Some(*fixed_cb_stack.last().unwrap_or(&root_id)),
+          _ => None,
+        };
+        // Only re-parent when the containing block differs from the structural
+        // parent; otherwise keep the node in place to preserve DOM order (and the
+        // in-flow static position for auto-inset out-of-flow boxes).
+        let hoisted_cb = match cb {
+          Some(cb) if cb != parent.node_id => {
+            hoisted.entry(cb).or_default().push(fid);
+            Some(cb)
+          }
+          _ => {
+            parent.taffy_child_ids.push(fid);
+            None
+          }
+        };
+        parent.box_children.push(OrderedChild {
+          render_index,
+          node_id: NodeId::from_taffy(fid),
+          hoisted_cb: hoisted_cb.map(NodeId::from_taffy),
+        });
+      }
     }
+
+    root_id
   }
 
   /// Computes and rounds the layout for the whole tree.
@@ -623,7 +487,7 @@ impl<'r> LayoutTree<'r> {
       root_node_id,
       available_space.map(AvailableSpace::into_taffy).into_taffy(),
     );
-    snap_layout(self, root_node_id, 0.0, 0.0);
+    self.snap_layout(root_node_id, 0.0, 0.0);
   }
 
   /// Consumes the tree into immutable per-node layout results.
@@ -684,43 +548,45 @@ impl<'r> LayoutTree<'r> {
 // during intrinsic single-axis sizing (`ComputeSize` with `InherentSize` or `ContentSize`). For replaced
 // elements, letting that value participate in aspect-ratio transfer can
 // incorrectly inflate the measured main-size. Strip that hint at the leaf boundary.
-fn should_strip_flex_intrinsic_stretch_known_dimension(
-  render_node: &RenderNode,
-  inputs: LayoutInput,
-  known_dimensions: Size<Option<f32>>,
-) -> bool {
-  if inputs.run_mode != RunMode::ComputeSize
-    || !matches!(
-      inputs.sizing_mode,
-      SizingMode::InherentSize | SizingMode::ContentSize
-    )
-  {
-    return false;
-  }
-
-  if !matches!(
-    inputs.axis,
-    RequestedAxis::Horizontal | RequestedAxis::Vertical
-  ) {
-    return false;
-  }
-
-  let Some(node) = render_node.node.as_ref() else {
-    return false;
-  };
-
-  if !node.is_replaced_element() {
-    return false;
-  }
-
-  match inputs.axis {
-    RequestedAxis::Horizontal => {
-      known_dimensions.width.is_none() && known_dimensions.height.is_some()
+impl RenderNode {
+  fn should_strip_flex_intrinsic_stretch_known_dimension(
+    &self,
+    inputs: LayoutInput,
+    known_dimensions: Size<Option<f32>>,
+  ) -> bool {
+    if inputs.run_mode != RunMode::ComputeSize
+      || !matches!(
+        inputs.sizing_mode,
+        SizingMode::InherentSize | SizingMode::ContentSize
+      )
+    {
+      return false;
     }
-    RequestedAxis::Vertical => {
-      known_dimensions.height.is_none() && known_dimensions.width.is_some()
+
+    if !matches!(
+      inputs.axis,
+      RequestedAxis::Horizontal | RequestedAxis::Vertical
+    ) {
+      return false;
     }
-    RequestedAxis::Both => false,
+
+    let Some(node) = self.node.as_ref() else {
+      return false;
+    };
+
+    if !node.is_replaced_element() {
+      return false;
+    }
+
+    match inputs.axis {
+      RequestedAxis::Horizontal => {
+        known_dimensions.width.is_none() && known_dimensions.height.is_some()
+      }
+      RequestedAxis::Vertical => {
+        known_dimensions.height.is_none() && known_dimensions.width.is_some()
+      }
+      RequestedAxis::Both => false,
+    }
   }
 }
 
@@ -844,8 +710,7 @@ impl<'r> LayoutTree<'r> {
           };
 
           let stripped_known_dimensions = |known_dimensions: TaffySize<Option<f32>>| {
-            if should_strip_flex_intrinsic_stretch_known_dimension(
-              render_node,
+            if render_node.should_strip_flex_intrinsic_stretch_known_dimension(
               inputs,
               Size::from_taffy(known_dimensions),
             ) {
@@ -1010,29 +875,31 @@ impl LayoutGridContainer for LayoutTree<'_> {
 /// pixel whenever their parent sits on a fraction.
 /// Blink snaps the same way, against the absolute offset's fraction
 /// (`SnapSizeToPixel`, platform/geometry/layout_unit.h).
-fn snap_layout(tree: &mut LayoutTree<'_>, node_id: TaffyNodeId, parent_x: f32, parent_y: f32) {
-  let unrounded = tree.get_unrounded_layout(node_id);
-  let mut layout = unrounded;
-  let x = parent_x + unrounded.location.x;
-  let y = parent_y + unrounded.location.y;
+impl LayoutTree<'_> {
+  fn snap_layout(&mut self, node_id: TaffyNodeId, parent_x: f32, parent_y: f32) {
+    let unrounded = self.get_unrounded_layout(node_id);
+    let mut layout = unrounded;
+    let x = parent_x + unrounded.location.x;
+    let y = parent_y + unrounded.location.y;
 
-  layout.location.x = x.round() - parent_x.round();
-  layout.location.y = y.round() - parent_y.round();
-  layout.size.width = (x + unrounded.size.width).round() - x.round();
-  layout.size.height = (y + unrounded.size.height).round() - y.round();
-  layout.padding.left = (x + unrounded.padding.left).round() - x.round();
-  layout.padding.right = (x + unrounded.size.width).round()
-    - (x + unrounded.size.width - unrounded.padding.right).round();
-  layout.padding.top = (y + unrounded.padding.top).round() - y.round();
-  layout.padding.bottom = (y + unrounded.size.height).round()
-    - (y + unrounded.size.height - unrounded.padding.bottom).round();
+    layout.location.x = x.round() - parent_x.round();
+    layout.location.y = y.round() - parent_y.round();
+    layout.size.width = (x + unrounded.size.width).round() - x.round();
+    layout.size.height = (y + unrounded.size.height).round() - y.round();
+    layout.padding.left = (x + unrounded.padding.left).round() - x.round();
+    layout.padding.right = (x + unrounded.size.width).round()
+      - (x + unrounded.size.width - unrounded.padding.right).round();
+    layout.padding.top = (y + unrounded.padding.top).round() - y.round();
+    layout.padding.bottom = (y + unrounded.size.height).round()
+      - (y + unrounded.size.height - unrounded.padding.bottom).round();
 
-  tree.set_final_layout(node_id, &layout);
+    self.set_final_layout(node_id, &layout);
 
-  for index in 0..tree.child_count(node_id) {
-    let child = tree.get_child_id(node_id, index);
+    for index in 0..self.child_count(node_id) {
+      let child = self.get_child_id(node_id, index);
 
-    snap_layout(tree, child, x, y);
+      self.snap_layout(child, x, y);
+    }
   }
 }
 
@@ -1176,7 +1043,7 @@ impl RenderNode {
   /// An element's own text, moved into a child so generated content can precede it.
   fn generated_sibling_text(parent_context: &RenderContext, text: String) -> Self {
     let (mut style, sizing, current_color) =
-      pseudo_computed_style(parent_context, &MatchedDeclarationsView::default());
+      parent_context.resolve_pseudo_style(&MatchedDeclarationsView::default());
     let parent_style = &parent_context.style;
 
     style
@@ -1217,7 +1084,7 @@ impl RenderNode {
     originating_node: &Node,
     pseudo_matched: &MatchedDeclarationsView<'_>,
   ) -> Option<Self> {
-    let (mut style, sizing, current_color) = pseudo_computed_style(parent_context, pseudo_matched);
+    let (mut style, sizing, current_color) = parent_context.resolve_pseudo_style(pseudo_matched);
 
     if matches!(style.display, Display::None) {
       return None;
@@ -1536,12 +1403,30 @@ impl RenderNode {
     final_children.into_boxed_slice()
   }
 
-  fn margin_top_px(&self) -> f32 {
-    self
-      .context
-      .style
-      .margin_top
-      .to_px(&self.context.sizing, 0.0)
+  /// Padding in pixels, with a percentage resolving to zero.
+  pub(crate) fn padding_px(&self) -> Rect<f32> {
+    let style = &self.context.style;
+
+    Rect {
+      top: style.padding_top,
+      right: style.padding_right,
+      bottom: style.padding_bottom,
+      left: style.padding_left,
+    }
+    .map(|length| length.to_px(&self.context.sizing, 0.0))
+  }
+
+  /// Margins in pixels, with a percentage resolving to zero.
+  pub(crate) fn margin_px(&self) -> Rect<f32> {
+    let style = &self.context.style;
+
+    Rect {
+      top: style.margin_top,
+      right: style.margin_right,
+      bottom: style.margin_bottom,
+      left: style.margin_left,
+    }
+    .map(|length| length.to_px(&self.context.sizing, 0.0))
   }
 
   fn inline_content_baseline_offset(
@@ -1552,7 +1437,7 @@ impl RenderNode {
   ) -> Option<f32> {
     let baseline = self.inline_content_border_box_baseline(available_space, size, use_last_line)?;
 
-    Some(self.margin_top_px() + baseline)
+    Some(self.margin_px().top + baseline)
   }
 
   /// Baseline of the first or last line box, measured from the border box top.
@@ -1657,7 +1542,7 @@ impl RenderNode {
       .ok()
       .flatten()?;
 
-    Some(self.margin_top_px() + baseline)
+    Some(self.margin_px().top + baseline)
   }
 
   fn valid_baseline_offset(candidate: Option<f32>, box_height: f32) -> Option<f32> {
@@ -1715,10 +1600,8 @@ impl RenderNode {
     size: Size<f32>,
     layout_results: Option<(&LayoutResults, NodeId)>,
   ) -> Option<f32> {
-    let sizing = &self.context.sizing;
-    let margin_box_height = size.height
-      + self.context.style.margin_top.to_px(sizing, 0.0)
-      + self.context.style.margin_bottom.to_px(sizing, 0.0);
+    let margin = self.margin_px();
+    let margin_box_height = size.height + margin.top + margin.bottom;
 
     self.inline_baseline_sources().iter().find_map(|&source| {
       let candidate =
@@ -1868,43 +1751,45 @@ fn flush_inline_group(
   ));
 }
 
-/// Blink positions an outside marker against the item's first line box, so the
-/// marker goes on the box that establishes that line, however deep it sits. An
-/// inside marker is the item's own content and stays on the item.
-fn attach_marker(node: &mut RenderNode, marker: RenderNode) {
-  if node.should_create_inline_layout() {
-    node.marker = Some(Box::new(marker));
-    return;
+impl RenderNode {
+  /// Blink positions an outside marker against the item's first line box, so the
+  /// marker goes on the box that establishes that line, however deep it sits. An
+  /// inside marker is the item's own content and stays on the item.
+  fn attach_marker(&mut self, marker: RenderNode) {
+    if self.should_create_inline_layout() {
+      self.marker = Some(Box::new(marker));
+      return;
+    }
+
+    if marker.context.style.list_style_position == ListStylePosition::Outside
+      && let Some(block) = self.marker_host_child()
+    {
+      block.attach_marker(marker);
+      return;
+    }
+
+    let has_block_content = self.children.as_deref().is_some_and(|children| {
+      children
+        .iter()
+        .any(|child| !child.participates_in_inline_formatting_context())
+    });
+
+    if !has_block_content {
+      // Text of its own, or nothing at all: the marker shares that line.
+      self.force_inline_layout = true;
+      self.marker = Some(Box::new(marker));
+      return;
+    }
+
+    // Block-level content the marker may not join, so it gets a line of its own.
+    let mut line = RenderNode::anonymous_block_container(&self.context, Vec::new());
+    line.force_inline_layout = true;
+    line.marker = Some(Box::new(marker));
+
+    let mut children = Vec::from(self.children.take().unwrap_or_default());
+    children.insert(0, line);
+    self.children = Some(children.into_boxed_slice());
   }
-
-  if marker.context.style.list_style_position == ListStylePosition::Outside
-    && let Some(block) = node.marker_host_child()
-  {
-    attach_marker(block, marker);
-    return;
-  }
-
-  let has_block_content = node.children.as_deref().is_some_and(|children| {
-    children
-      .iter()
-      .any(|child| !child.participates_in_inline_formatting_context())
-  });
-
-  if !has_block_content {
-    // Text of its own, or nothing at all: the marker shares that line.
-    node.force_inline_layout = true;
-    node.marker = Some(Box::new(marker));
-    return;
-  }
-
-  // Block-level content the marker may not join, so it gets a line of its own.
-  let mut line = RenderNode::anonymous_block_container(&node.context, Vec::new());
-  line.force_inline_layout = true;
-  line.marker = Some(Box::new(marker));
-
-  let mut children = Vec::from(node.children.take().unwrap_or_default());
-  children.insert(0, line);
-  node.children = Some(children.into_boxed_slice());
 }
 
 // Mirrors Blink's Text::TextLayoutObjectIsNeeded, minus the ends-with-space
@@ -2034,7 +1919,7 @@ impl PendingRenderNode {
     if let Some(ordinal) = self.marker_ordinal
       && let Some(marker) = list_marker(&render_node.context, ordinal)
     {
-      attach_marker(&mut render_node, marker);
+      render_node.attach_marker(marker);
     }
 
     render_node
@@ -2056,6 +1941,142 @@ impl PendingRenderNode {
 }
 
 impl RenderContext {
+  /// The used `line-height: normal` for `style` at `font_size`, or zero for any other
+  /// `line-height`.
+  pub(crate) fn resolve_normal_line_height(&self, style: &ComputedStyle, font_size: f32) -> f32 {
+    if !matches!(style.line_height, LineHeight::Normal) {
+      return 0.0;
+    }
+    let attributes = Attributes {
+      width: style.font_stretch.into_parlance(),
+      style: style.font_style.into_parlance(),
+      weight: style.font_weight.into_parlance(),
+    };
+    let font_family = self.expand_font_family(&style.font_family);
+
+    let mut hasher = Xxh3::new();
+    font_family.hash_tokens(&mut hasher);
+    hasher.write_u32(attributes.weight.value().to_bits());
+    hasher.write_u32(attributes.width.ratio().to_bits());
+    match attributes.style {
+      FontiqueStyle::Normal => hasher.write_u8(0),
+      FontiqueStyle::Italic => hasher.write_u8(1),
+      FontiqueStyle::Oblique(angle) => {
+        hasher.write_u8(2);
+        hasher.write_u32(angle.unwrap_or(f32::NAN).to_bits());
+      }
+    }
+    hasher.write_u32(font_size.to_bits());
+
+    self.normal_line_height(hasher.finish(), || {
+      self
+        .first_font_line_spacing(font_family.query_families(), attributes, font_size)
+        .unwrap_or(font_size)
+    })
+  }
+
+  /// A child's cascaded style and its element-owned important declarations.
+  fn cascade(
+    &self,
+    node_layers: NodeStyleLayers,
+    matched_declarations: &MatchedDeclarationsView<'_>,
+  ) -> (NodeStyle, ElementImportant) {
+    let mut style = NodeStyle::default();
+
+    // `tw` is the last declared layer, below unlayered author rules, so its
+    // important half goes last: the cascade reverses layer order for important
+    // declarations.
+    let tw = node_layers.author_tw.map(|author_tw| {
+      author_tw.declaration_blocks(
+        self.sizing.viewport,
+        &self.stylesheet().breakpoints,
+        self.tw_cache(),
+      )
+    });
+
+    if let Some(preset) = node_layers.preset {
+      style.append_block(preset.declarations);
+    }
+
+    if let Some(dir) = node_layers.dir {
+      style.push(StyleDeclaration::direction(dir), false);
+    }
+
+    for &declarations in matched_declarations.layered_normal() {
+      style.merge_matched_block(declarations);
+    }
+
+    // `tw` is the last declared layer, as Tailwind orders utilities: above every
+    // named `@layer`, below unlayered author rules.
+    if let Some(tw) = &tw {
+      style.append_block_cloned(&tw.normal);
+    }
+
+    for &declarations in matched_declarations.unlayered_normal() {
+      style.merge_matched_block(declarations);
+    }
+
+    // An element's own declarations outrank selector-based ones at the same
+    // importance.
+    let (inline_normal, inline_important) = node_layers
+      .inline
+      .map(|inline| StyleDeclarationBlock::from(inline).split_importance())
+      .unzip();
+
+    if let Some(inline_normal) = inline_normal {
+      style.append_block(inline_normal);
+    }
+
+    // Important declarations reverse layer order, so `tw`, the last declared
+    // layer, sits above unlayered rules and below every named `@layer`.
+    for &declarations in matched_declarations.unlayered_important() {
+      style.merge_matched_block(declarations);
+    }
+
+    if let Some(tw) = &tw {
+      style.append_block_cloned(&tw.important);
+    }
+
+    for &declarations in matched_declarations.layered_important() {
+      style.merge_matched_block(declarations);
+    }
+
+    if let Some(inline_important) = &inline_important {
+      style.append_block(inline_important.clone());
+    }
+
+    (
+      style,
+      ElementImportant {
+        tw,
+        inline: inline_important,
+      },
+    )
+  }
+
+  /// This style as a child inherits it, with the stylesheet's registered custom properties.
+  fn inherited_style(&self) -> Cow<'_, ComputedStyle> {
+    registered_custom_property_parent_style(
+      &self.style,
+      slice::from_ref(self.stylesheet().as_ref()),
+      self.sizing.viewport,
+    )
+  }
+
+  /// Resolves a generated box's style and sizing from its matched declarations.
+  pub(super) fn resolve_pseudo_style(
+    &self,
+    pseudo_matched: &MatchedDeclarationsView<'_>,
+  ) -> (ComputedStyle, SizingContext, Color) {
+    let (style_layers, _) = self.cascade(NodeStyleLayers::default(), pseudo_matched);
+    let mut style = style_layers.inherit(&self.inherited_style());
+    let sizing = self.child_sizing(&style, &self.sizing, false);
+    let current_color = style.color.resolve(self.current_color);
+
+    style.make_computed(&sizing);
+    (style, sizing, current_color)
+  }
+
   /// Resolves a child's style and sizing from its matched declarations.
   fn resolve_child_style(
     &self,
@@ -2071,18 +2092,8 @@ impl RenderContext {
     let layers = node.take_style_layers();
     let lang = layers.lang;
 
-    let (style_layers, element_important) = build_style_layers(
-      layers,
-      matched,
-      self.sizing.viewport,
-      self.stylesheet().as_ref(),
-      self.tw_cache(),
-    );
-    let inherited_parent = registered_custom_property_parent_style(
-      &self.style,
-      slice::from_ref(self.stylesheet().as_ref()),
-      self.sizing.viewport,
-    );
+    let (style_layers, element_important) = self.cascade(layers, matched);
+    let inherited_parent = self.inherited_style();
 
     let mut style = style_layers.inherit_with_lang(&inherited_parent, lang);
 
@@ -2158,7 +2169,7 @@ impl RenderContext {
     let font_size = style
       .font_size
       .to_px(font_size_basis, font_size_basis.font_size);
-    let normal_basis = resolve_normal_line_height(self, style, font_size);
+    let normal_basis = self.resolve_normal_line_height(style, font_size);
     let line_height = style.line_height.to_px(&self.sizing, normal_basis);
 
     self.sizing.with_font_metrics(
