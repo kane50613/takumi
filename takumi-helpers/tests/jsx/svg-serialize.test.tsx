@@ -143,13 +143,32 @@ test("serializeSvg rejects element and attribute names that break out of the tag
   );
 });
 
-test("serializeSvg rejects style entries that inject declarations", () => {
+test("serializeSvg keeps valid style values that contain semicolons", () => {
+  const style: Record<string, string> = {
+    fontFamily: '"Noto Sans; TC", serif',
+    fill: "url(data:image/png;base64,AAAA)",
+    "--色": "red",
+  };
+  const component = <svg xmlns="http://www.w3.org/2000/svg" style={style} />;
+
+  expect(serializeSvg(component)).toBe(renderToStaticMarkup(component));
+  expect(serializeSvg(<svg style={{ stroke: "blue;" }} />)).toContain('style="stroke:blue;"');
+});
+
+test("serializeSvg keeps an empty style object empty", () => {
+  expect(serializeSvg(<svg style={{}} />)).toBe(
+    '<svg style="" xmlns="http://www.w3.org/2000/svg"></svg>',
+  );
+});
+
+test("serializeSvg rejects style entries that leave their declaration", () => {
   const injectedProperty: Record<string, string> = { "fill:red;stroke": "blue" };
 
-  expect(() => serializeSvg(<svg style={{ fill: "red;filter:url(#x)" }} />)).toThrow(
-    "Invalid SVG style value",
-  );
   expect(() => serializeSvg(<svg style={injectedProperty} />)).toThrow(
     "Invalid SVG style property",
   );
+
+  for (const fill of ["red;filter:url(#x)", '"red', "url(#x", "red)", "red/*", "red\\"]) {
+    expect(() => serializeSvg(<svg style={{ fill }} />)).toThrow("Invalid SVG style value");
+  }
 });
