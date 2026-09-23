@@ -6,7 +6,7 @@ use std::{cell::RefCell, collections::HashMap, rc::Rc};
 use takumi_core::{
   context::RenderContext,
   layout::{
-    node::{ImageData, ImageSourceInput, resolve_image},
+    node::{ImageData, ImageSourceInput, NodeKind, resolve_image},
     replaced::place_replaced,
   },
   resources::image::ImageSource,
@@ -23,7 +23,6 @@ use takumi_core::{
       BuiltInlineLayout, InlineRunLayout, PositionedInlineRun, ProcessedInlineSpan, ShapedRun,
     },
     inline_box::{InlineBoxPaint, InlineSubtree, resolve_inline_box},
-    node::NodeKind,
     tree::{LayoutResults, NodeOrigin, RenderNode},
   },
   paint::ConicGradientTile,
@@ -50,7 +49,7 @@ use crate::{
   background::{LayerLists, Placement, cycled},
   filter::{ColorFilter, filtered, unsupported_filter},
   glyph::{Uncovered, run_glyphs},
-  inline::{InlineMap, build_inline_runs, node_inline_items},
+  inline::{InlineMap, visit_inline_layout},
   krilla::{
     Data,
     geom::{Path as KrillaPath, Point, Rect as KrillaRect, Transform},
@@ -72,6 +71,7 @@ use crate::{
   },
   shadow::{emit_inset_shadows, emit_outer_shadows},
   tags::{ARTIFACT, TagCollector},
+  tree::OwnContent,
   window::Window,
 };
 
@@ -473,7 +473,7 @@ impl Emitter<'_> {
     y: f32,
     surface: &mut Surface,
   ) -> Result<(), PdfError> {
-    let tagged = self.tagged && has_own_content(node);
+    let tagged = self.tagged && OwnContent::of(node).draws();
 
     if tagged {
       self.start_node_region(node, Some(&paint.path), surface);
@@ -1014,16 +1014,10 @@ impl Emitter<'_> {
     y: f32,
     surface: &mut Surface,
   ) -> Result<(), PdfError> {
-    if node.should_create_inline_layout() {
-      return self.emit_node_text(node, node_id, layout, x, y, surface);
-    }
-    if node.has_anonymous_text_item_child() {
-      return Ok(());
-    }
-    match node.node.as_ref().map(|n| &n.kind) {
-      Some(NodeKind::Text(_)) => self.emit_node_text(node, node_id, layout, x, y, surface),
+    match OwnContent::of(node) {
+      OwnContent::Text => self.emit_node_text(node, node_id, layout, x, y, surface),
       #[cfg(feature = "images")]
-      Some(NodeKind::Image(image)) => {
+      OwnContent::Image(image) => {
         self.emit_image(image, &node.context, layout, x, y, surface);
         Ok(())
       }
@@ -1165,30 +1159,16 @@ impl Emitter<'_> {
     y: f32,
     surface: &mut Surface,
   ) -> Result<(), PdfError> {
-    if let Some(prepared) = self.inline.and_then(|map| map.get(&node_id)) {
-      let font_style = SizedFontStyle::from_style(&node.context.style, &node.context);
-
-      return self.draw_runs(
-        node,
-        &prepared.runs,
-        &prepared.built,
-        layout,
-        x,
-        y,
-        &font_style,
-        surface,
-      );
-    }
-    let context = &node.context;
-    let Some(items) = node_inline_items(node) else {
-      return Ok(());
-    };
-    let font_style = SizedFontStyle::from_style(&context.style, context);
-    let Some((built, runs)) = build_inline_runs(items, &font_style, context, layout)? else {
-      return Ok(());
-    };
-
-    self.draw_runs(node, &runs, &built, layout, x, y, &font_style, surface)
+    visit_inline_layout(
+      self.inline,
+      node,
+      node_id,
+      layout,
+      |built, runs, font_style| {
+        self.draw_runs(node, runs, built, layout, x, y, font_style, surface);
+      },
+    )?;
+    Ok(())
   }
 
   #[allow(clippy::too_many_arguments)]
@@ -1202,7 +1182,7 @@ impl Emitter<'_> {
     y: f32,
     font_style: &SizedFontStyle,
     surface: &mut Surface,
-  ) -> Result<(), PdfError> {
+  ) {
     // Inline-span backgrounds fill under every glyph of the formatting context.
     // A fragment paints only on the page that owns its line, like the glyph
     // pass, so a page cut leaves no background sliver on the neighbor page.
@@ -1331,7 +1311,6 @@ impl Emitter<'_> {
       );
     }
     self.emit_inline_boxes(node, runs, built, layout, x, y, surface);
-    Ok(())
   }
 
   /// Paints the inline layout's replaced boxes and nested container subtrees.
@@ -1349,7 +1328,7 @@ impl Emitter<'_> {
     // The caller opened a marked-content region for the text around these
     // boxes. Marked content does not nest, so each box closes it, takes a
     // region of its own, and hands it back.
-    let owner_tagged = self.tagged && has_own_content(owner);
+    let owner_tagged = self.tagged && OwnContent::of(owner).draws();
 
     for positioned in &runs.inline_boxes {
       let Some(ProcessedInlineSpan::Box(item)) = built.spans.get(positioned.id as usize) else {
@@ -1780,23 +1759,6 @@ fn push_compositing(style: &ComputedStyle, surface: &mut Surface) -> usize {
   }
 
   pushed
-}
-
-/// Whether the node draws own content (text or an image), i.e. whether a tagged content sequence
-/// around it would be non-empty.
-fn has_own_content(node: &RenderNode) -> bool {
-  if node.should_create_inline_layout() {
-    return true;
-  }
-  if node.has_anonymous_text_item_child() {
-    return false;
-  }
-  match node.node.as_ref().map(|n| &n.kind) {
-    Some(NodeKind::Text(_)) => true,
-    #[cfg(feature = "images")]
-    Some(NodeKind::Image(_)) => true,
-    _ => false,
-  }
 }
 
 /// The PDF surface as a [`PaintDevice`], so the shared painting code can drive
