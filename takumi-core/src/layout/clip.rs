@@ -44,12 +44,7 @@ pub fn clip_shape_commands(
         .into();
       let border = BorderProperties {
         width: Rect::ZERO,
-        color: Rect {
-          top: Color::transparent(),
-          right: Color::transparent(),
-          bottom: Color::transparent(),
-          left: Color::transparent(),
-        },
+        color: Sides::from(Color::transparent()).into(),
         // A corner's horizontal radius resolves against the box width and its
         // vertical one against the height, like `border-radius`.
         radius: shape
@@ -62,12 +57,7 @@ pub fn clip_shape_commands(
           })
           .unwrap_or_default(),
         image_rendering: ImageScalingAlgorithm::Auto,
-        style: Rect {
-          top: BorderStyle::Solid,
-          right: BorderStyle::Solid,
-          bottom: BorderStyle::Solid,
-          left: BorderStyle::Solid,
-        },
+        style: Sides::from(BorderStyle::Solid).into(),
         shape: Sides::default(),
         collapsed: false,
       };
@@ -78,10 +68,7 @@ pub fn clip_shape_commands(
           width: size.width - inset.horizontal(),
           height: size.height - inset.vertical(),
         },
-        Point {
-          x: inset.left,
-          y: inset.top,
-        },
+        inset.top_left(),
       );
     }
     BasicShape::Ellipse(shape) => {
