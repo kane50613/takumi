@@ -1,8 +1,5 @@
-//! Box-model geometry helpers for the node walk: the element's affine transform,
-//! overflow clipping predicate, and serialization of takumi-core path commands to
-//! SVG path `d` data. The rounded-rect / border-radius geometry itself is reused
-//! from takumi-core's [`BorderProperties`] (the same geometry the raster backend
-//! rasterizes), not reimplemented here.
+//! Box-model geometry for the node walk: the element's affine transform and
+//! serialization of takumi-core path commands to SVG path `d` data.
 
 use std::fmt::Write as _;
 
@@ -96,8 +93,7 @@ pub(crate) fn quantize_path(value: f32) -> f32 {
 
 /// Serializes takumi-core path commands ([`PathCommand`], the shared `Command`
 /// type) to compact SVG path `d` data, applying `transform` (`[a, b, c, d, e,
-/// f]`, SVG `matrix` order) to every point. Shared by glyph, border, background,
-/// and clip emission.
+/// f]`, SVG `matrix` order) to every point.
 ///
 /// Coordinates are emitted relative to the previous point (the first move stays
 /// absolute), axis-aligned lines collapse to `h`/`v`, and smooth cubics/quadratics
@@ -273,25 +269,23 @@ fn near(a: f32, b: f32) -> bool {
   (a - b).abs() < REFLECT_TOLERANCE
 }
 
-/// Builds the `d` data for an axis-aligned rectangle (`M x y H V H Z`), shared by
-/// the clip-rect and conic-tile emitters.
-pub(crate) fn rect_path_data(x: f32, y: f32, width: f32, height: f32) -> String {
+/// Builds the `d` data for an axis-aligned rectangle from its edges.
+pub(crate) fn rect_path_data(left: f32, top: f32, right: f32, bottom: f32) -> String {
   let mut path = PathData::with_capacity(5 * APPROX_CHARS_PER_NUMBER);
   path.command(b'M');
-  path.pair(x, y);
+  path.pair(left, top);
   path.command(b'H');
-  path.number(x + width);
+  path.number(right);
   path.command(b'V');
-  path.number(y + height);
+  path.number(bottom);
   path.command(b'H');
-  path.number(x);
+  path.number(left);
   path.close();
   path.into_string()
 }
 
-/// Computes the element's paint transform as an absolute-space matrix (the walk
-/// emits children in absolute coordinates, so the transform is conjugated by the
-/// box origin). Returns `None` when the element has no transform.
+/// The element's paint transform moved into absolute space, or `None` when it
+/// has none.
 pub(crate) fn element_transform(
   context: &RenderContext,
   border_box: Size<f32>,

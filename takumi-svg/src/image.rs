@@ -17,7 +17,7 @@ use takumi_core::{
   style::{ImageScalingAlgorithm, ObjectFit},
 };
 
-use crate::{Frame, SvgDocument, box_model::rect_path_data};
+use crate::{Frame, SvgDocument};
 
 pub(crate) const PRESERVE_ASPECT_NONE: &str = "none";
 
@@ -44,34 +44,41 @@ pub(crate) fn emit_image(
     return Ok(());
   };
   if matches!(context.style.object_fit, ObjectFit::Fill) {
-    return doc.image(x, y, w, h, &href, Some("none"));
+    return doc.image(x, y, w, h, &href, Some(PRESERVE_ASPECT_NONE));
   }
 
   let Some((iw, ih)) = intrinsic_size(&image.src, context) else {
     return doc.image(x, y, w, h, &href, Some("xMidYMid meet"));
   };
-  let content = Size {
+  let size = Size {
     width: w,
     height: h,
   };
   let placement = place_replaced(
     context,
-    content,
+    size,
     Size {
       width: iw,
       height: ih,
     },
   );
-  let (dw, dh) = (placement.size.width, placement.size.height);
-  let (ix, iy) = (x + placement.offset.x, y + placement.offset.y);
+  let group = placement
+    .overflows(size)
+    .then(|| doc.begin_clipped_group(&content.path_data()))
+    .transpose()?;
 
-  if placement.overflows(content) {
-    let clip = doc.clip_path(&rect_path_data(x, y, w, h))?;
-    let group = doc.begin_group(crate::IDENTITY, 1.0, Some(&clip), None)?;
-    doc.image(ix, iy, dw, dh, &href, Some(PRESERVE_ASPECT_NONE))?;
-    return doc.end_group(group);
+  doc.image(
+    x + placement.offset.x,
+    y + placement.offset.y,
+    placement.size.width,
+    placement.size.height,
+    &href,
+    Some(PRESERVE_ASPECT_NONE),
+  )?;
+  if let Some(group) = group {
+    doc.end_group(group)?;
   }
-  doc.image(ix, iy, dw, dh, &href, Some(PRESERVE_ASPECT_NONE))
+  Ok(())
 }
 
 fn intrinsic_size(src: &ImageSourceInput, context: &RenderContext) -> Option<(f32, f32)> {
