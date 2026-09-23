@@ -349,7 +349,7 @@ fn emit_clip_text_glyphs(
 
   let group = doc.begin_masked_group(&mask_ref)?;
   if background.0[3] != 0 {
-    doc.rect(area.x, area.y, area.w, area.h, background)?;
+    doc.rect(area, background)?;
   }
   if let Some(images) = context.style.background_image.as_deref() {
     LayerEmitter::new(context, doc).background_images(images, area, area)?;
@@ -533,7 +533,11 @@ fn emit_run_glyphs(
           * Affine::scale(bitmap.scale_x, bitmap.scale_y);
         let href = to_data_url("image/png", &png);
         let group = doc.begin_group(bitmap_matrix, 1.0, None, None)?;
-        doc.image(0.0, 0.0, width as f32, height as f32, &href, None)?;
+        doc.image(
+          Frame::new(0.0, 0.0, width as f32, height as f32),
+          &href,
+          None,
+        )?;
         doc.end_group(group)?;
       }
     }

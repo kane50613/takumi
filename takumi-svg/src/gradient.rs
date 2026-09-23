@@ -145,17 +145,18 @@ impl<'a, 'd> LayerEmitter<'a, 'd> {
       && placement.xs.len() > 1
       && placement.ys.len() > 1
     {
-      let origin_x = paint_box.x + placement.xs[0];
-      let origin_y = paint_box.y + placement.ys[0];
-      let (token, paint) = self.doc.begin_pattern(origin_x, origin_y, step_x, step_y)?;
+      let (token, paint) = self.doc.begin_pattern(Frame::new(
+        paint_box.x + placement.xs[0],
+        paint_box.y + placement.ys[0],
+        step_x,
+        step_y,
+      ))?;
       self.tile(
         image,
         Frame::new(0.0, 0.0, placement.tile_w, placement.tile_h),
       )?;
       self.doc.end_pattern(token)?;
-      return self
-        .doc
-        .rect_paint(paint_box.x, paint_box.y, paint_box.w, paint_box.h, &paint);
+      return self.doc.rect_paint(paint_box, &paint);
     }
 
     // Explicit tile grid, clipped to the box so edge tiles don't bleed outside.
@@ -191,14 +192,7 @@ impl<'a, 'd> LayerEmitter<'a, 'd> {
     let Some(href) = data_url_for_url(url, self.context) else {
       return Ok(());
     };
-    self.doc.image(
-      rect.x,
-      rect.y,
-      rect.w,
-      rect.h,
-      &href,
-      Some(PRESERVE_ASPECT_NONE),
-    )
+    self.doc.image(rect, &href, Some(PRESERVE_ASPECT_NONE))
   }
 
   fn linear(&mut self, gradient: &LinearGradient, rect: Frame) -> io::Result<()> {
@@ -237,7 +231,7 @@ impl<'a, 'd> LayerEmitter<'a, 'd> {
     let paint = self
       .doc
       .linear_gradient(point_at(t0), point_at(t1), gradient.repeating, &stops)?;
-    self.doc.rect_paint(x, y, w, h, &paint)
+    self.doc.rect_paint(rect, &paint)
   }
 
   fn radial(&mut self, gradient: &RadialGradient, rect: Frame) -> io::Result<()> {
@@ -281,7 +275,7 @@ impl<'a, 'd> LayerEmitter<'a, 'd> {
       gradient.repeating,
       &stops,
     )?;
-    self.doc.rect_paint(x, y, w, h, &paint)
+    self.doc.rect_paint(rect, &paint)
   }
 
   fn conic(&mut self, gradient: &ConicGradient, rect: Frame) -> io::Result<()> {

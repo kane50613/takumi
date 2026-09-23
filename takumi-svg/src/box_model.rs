@@ -5,7 +5,7 @@ use std::fmt::Write as _;
 
 use takumi_core::{
   context::RenderContext,
-  geometry::{PathCommand, Point, Size},
+  geometry::{PathCommand, Point, Rect, Size},
   style::Affine,
 };
 
@@ -270,16 +270,16 @@ fn near(a: f32, b: f32) -> bool {
 }
 
 /// Builds the `d` data for an axis-aligned rectangle from its edges.
-pub(crate) fn rect_path_data(left: f32, top: f32, right: f32, bottom: f32) -> String {
+pub(crate) fn edges_path_data(edges: Rect<f32>) -> String {
   let mut path = PathData::with_capacity(5 * APPROX_CHARS_PER_NUMBER);
   path.command(b'M');
-  path.pair(left, top);
+  path.pair(edges.left, edges.top);
   path.command(b'H');
-  path.number(right);
+  path.number(edges.right);
   path.command(b'V');
-  path.number(bottom);
+  path.number(edges.bottom);
   path.command(b'H');
-  path.number(left);
+  path.number(edges.left);
   path.close();
   path.into_string()
 }

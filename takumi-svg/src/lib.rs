@@ -30,14 +30,14 @@ mod text;
 
 use std::{borrow::Cow, collections::HashMap, fmt, fmt::Write as _, io, mem};
 
-use box_model::{quantize_path, rect_path_data};
+use box_model::{edges_path_data, quantize_path};
 use quick_xml::{
   Writer,
   events::{BytesEnd, BytesStart, BytesText, Event},
 };
 pub use render::{SvgOptions, render};
 use takumi_core::{
-  geometry::Size,
+  geometry::{Rect, Size},
   painter::StrokeStyle,
   shadow::SizedShadow,
   style::{Affine, Color, Filter, FilterReference, LUMA_WEIGHTS, SEPIA_WEIGHTS, SizingContext},
@@ -73,7 +73,7 @@ impl Rgba {
   }
 }
 
-/// An axis-aligned rectangle in absolute SVG user space.
+/// An axis-aligned `x`/`y`/`width`/`height` rectangle in absolute SVG user space.
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct Frame {
   pub x: f32,
@@ -89,7 +89,22 @@ impl Frame {
 
   /// Path `d` data tracing the rectangle.
   pub(crate) fn path_data(self) -> String {
-    rect_path_data(self.x, self.y, self.x + self.w, self.y + self.h)
+    edges_path_data(Rect {
+      left: self.x,
+      top: self.y,
+      right: self.x + self.w,
+      bottom: self.y + self.h,
+    })
+  }
+
+  /// The `x`/`y`/`width`/`height` attributes placing an element on the rectangle.
+  fn attrs(self) -> Vec<(&'static str, Cow<'static, str>)> {
+    vec![
+      ("x", num(self.x).into()),
+      ("y", num(self.y).into()),
+      ("width", num(self.w).into()),
+      ("height", num(self.h).into()),
+    ]
   }
 }
 
@@ -157,44 +172,20 @@ impl SvgDocument {
   }
 
   /// Appends a solid-fill rectangle.
-  pub(crate) fn rect(
-    &mut self,
-    x: f32,
-    y: f32,
-    width: f32,
-    height: f32,
-    fill: Rgba,
-  ) -> io::Result<()> {
-    let mut attrs: Vec<(&str, Cow<'_, str>)> = vec![
-      ("x", num(x).into()),
-      ("y", num(y).into()),
-      ("width", num(width).into()),
-      ("height", num(height).into()),
-      ("fill", fill.hex().into()),
-    ];
+  pub(crate) fn rect(&mut self, rect: Frame, fill: Rgba) -> io::Result<()> {
+    let mut attrs = rect.attrs();
+
+    attrs.push(("fill", fill.hex().into()));
     push_opacity(&mut attrs, "fill-opacity", fill.opacity());
     self.empty("rect", &attrs)
   }
 
   /// Appends a rectangle filled with a paint reference (e.g. a gradient `url(#id)`).
-  pub(crate) fn rect_paint(
-    &mut self,
-    x: f32,
-    y: f32,
-    width: f32,
-    height: f32,
-    paint: &str,
-  ) -> io::Result<()> {
-    self.empty(
-      "rect",
-      &[
-        ("x", num(x).into()),
-        ("y", num(y).into()),
-        ("width", num(width).into()),
-        ("height", num(height).into()),
-        ("fill", paint.into()),
-      ],
-    )
+  pub(crate) fn rect_paint(&mut self, rect: Frame, paint: &str) -> io::Result<()> {
+    let mut attrs = rect.attrs();
+
+    attrs.push(("fill", paint.into()));
+    self.empty("rect", &attrs)
   }
 
   /// Appends a filled path; `even_odd` picks the fill rule ring shapes need.
@@ -369,25 +360,12 @@ impl SvgDocument {
 
   /// Opens a user-space `<pattern>` tile and returns the open token plus its
   /// `url(#id)`.
-  pub(crate) fn begin_pattern(
-    &mut self,
-    x: f32,
-    y: f32,
-    width: f32,
-    height: f32,
-  ) -> io::Result<(GroupToken, String)> {
+  pub(crate) fn begin_pattern(&mut self, tile: Frame) -> io::Result<(GroupToken, String)> {
     let (id, reference) = self.alloc_id("pat");
-    self.open(
-      "pattern",
-      &[
-        ("id", id.into()),
-        ("patternUnits", "userSpaceOnUse".into()),
-        ("x", num(x).into()),
-        ("y", num(y).into()),
-        ("width", num(width).into()),
-        ("height", num(height).into()),
-      ],
-    )?;
+    let mut attrs = vec![("id", id.into()), ("patternUnits", "userSpaceOnUse".into())];
+
+    attrs.extend(tile.attrs());
+    self.open("pattern", &attrs)?;
     Ok((GroupToken(()), reference))
   }
 
@@ -399,20 +377,13 @@ impl SvgDocument {
   /// Appends a raster image referenced by a `data:` URL href.
   pub(crate) fn image(
     &mut self,
-    x: f32,
-    y: f32,
-    width: f32,
-    height: f32,
+    rect: Frame,
     href: &str,
     preserve_aspect_ratio: Option<&str>,
   ) -> io::Result<()> {
-    let mut attrs = vec![
-      ("x", num(x).into()),
-      ("y", num(y).into()),
-      ("width", num(width).into()),
-      ("height", num(height).into()),
-      ("href", href.into()),
-    ];
+    let mut attrs = rect.attrs();
+
+    attrs.push(("href", href.into()));
     if let Some(par) = preserve_aspect_ratio {
       attrs.push(("preserveAspectRatio", par.into()));
     }
@@ -1023,7 +994,7 @@ mod tests {
   #[test]
   fn solid_rect_is_native_svg() {
     let mut doc = SvgDocument::new(100.0, 50.0).unwrap();
-    doc.rect(0.0, 0.0, 100.0, 50.0, RED).unwrap();
+    doc.rect(Frame::new(0.0, 0.0, 100.0, 50.0), RED).unwrap();
     let svg = doc.render().unwrap();
     assert!(svg.starts_with("<svg xmlns=\"http://www.w3.org/2000/svg\""));
     assert!(svg.contains(r##"<rect x="0" y="0" width="100" height="50" fill="#f00""##));
@@ -1034,7 +1005,7 @@ mod tests {
   #[test]
   fn alpha_becomes_fill_opacity() {
     let mut doc = SvgDocument::new(1.0, 1.0).unwrap();
-    doc.rect(0.0, 0.0, 1.0, 1.0, HALF_BLUE).unwrap();
+    doc.rect(Frame::new(0.0, 0.0, 1.0, 1.0), HALF_BLUE).unwrap();
     assert!(
       doc
         .render()
@@ -1077,7 +1048,7 @@ mod tests {
     let token = doc
       .begin_group(Affine::translation(3.0, 4.0), 0.5, Some(&clip), None)
       .unwrap();
-    doc.rect(0.0, 0.0, 10.0, 10.0, RED).unwrap();
+    doc.rect(Frame::new(0.0, 0.0, 10.0, 10.0), RED).unwrap();
     doc.end_group(token).unwrap();
     let svg = doc.render().unwrap();
     assert!(svg.contains("<clipPath id=\"cp0\">"));
@@ -1099,7 +1070,11 @@ mod tests {
   fn image_href_is_escaped_not_faked() {
     let mut doc = SvgDocument::new(10.0, 10.0).unwrap();
     doc
-      .image(0.0, 0.0, 10.0, 10.0, "data:image/png;base64,AAAA", None)
+      .image(
+        Frame::new(0.0, 0.0, 10.0, 10.0),
+        "data:image/png;base64,AAAA",
+        None,
+      )
       .unwrap();
     let svg = doc.render().unwrap();
     assert!(
@@ -1113,10 +1088,7 @@ mod tests {
     let mut doc = SvgDocument::new(10.0, 10.0).unwrap();
     doc
       .image(
-        0.0,
-        0.0,
-        10.0,
-        10.0,
+        Frame::new(0.0, 0.0, 10.0, 10.0),
         r#"x"/><script>alert(1)</script>"#,
         None,
       )
