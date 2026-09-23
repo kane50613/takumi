@@ -18,7 +18,7 @@ use super::{
   background::{CoverExtent, DecorationAccumulator, InlineBackgroundFragment},
   items::ProcessedInlineSpan,
   metrics::{VisualInlineBox, resolve_visual_inline_box},
-  outline::{InlineOutlineRect, scale_outline_rect},
+  outline::InlineOutlineRect,
   text_fit::LineScaleState,
 };
 
@@ -300,6 +300,8 @@ impl BuiltInlineLayout<'_> {
     let mut decoration_coverage = DecorationAccumulator::default();
     let mut positioned_inline_boxes: HashMap<u64, VisualInlineBox> = HashMap::new();
 
+    let content = layout.content_box_offset();
+
     self.walk_items(layout, |line, item| {
       let setup = &line.setup;
       let line_index = line.index;
@@ -337,22 +339,18 @@ impl BuiltInlineLayout<'_> {
           });
 
           if need_outline && let Some(span_id) = brush.source_span_id {
-            outline_rects.push(scale_outline_rect(
+            outline_rects.push(
               InlineOutlineRect {
                 span_id,
                 line_index,
-                x: layout.border.left + layout.padding.left + glyph_run.offset(),
-                y: layout.border.top
-                  + layout.padding.top
-                  + glyph_run.baseline()
-                  + setup.baseline_shift
+                x: content.x + glyph_run.offset(),
+                y: content.y + glyph_run.baseline() + setup.baseline_shift
                   - setup.resolved_metrics.resolved_ascent,
                 width: glyph_run.advance(),
                 height: setup.resolved_metrics.resolved_line_height,
-              },
-              setup.state,
-              static_inline_prefix,
-            ));
+              }
+              .scaled(setup.state, static_inline_prefix),
+            );
           }
 
           let metrics = run.metrics();
@@ -368,22 +366,15 @@ impl BuiltInlineLayout<'_> {
             // leading to the font height).
             let (above, below) =
               brush.line_box_contribution(metrics.line_height, metrics.ascent, metrics.descent);
-            let rect = scale_outline_rect(
-              InlineOutlineRect {
-                span_id,
-                line_index,
-                x: layout.border.left + layout.padding.left + glyph_run.offset(),
-                y: layout.border.top
-                  + layout.padding.top
-                  + glyph_run.baseline()
-                  + setup.baseline_shift
-                  - above,
-                width: glyph_run.advance(),
-                height: above + below,
-              },
-              setup.state,
-              static_inline_prefix,
-            );
+            let rect = InlineOutlineRect {
+              span_id,
+              line_index,
+              x: content.x + glyph_run.offset(),
+              y: content.y + glyph_run.baseline() + setup.baseline_shift - above,
+              width: glyph_run.advance(),
+              height: above + below,
+            }
+            .scaled(setup.state, static_inline_prefix);
 
             decoration_coverage.cover(
               Some(chain),
@@ -445,11 +436,9 @@ impl BuiltInlineLayout<'_> {
           };
 
           if chain.is_some() {
-            let x0 = layout.border.left + layout.padding.left + inline_box.x;
+            let x0 = content.x + inline_box.x;
             let origin_y = setup.state.layout_origin.y;
-            let content_top = layout.border.top + layout.padding.top;
-            let line_y =
-              |value: f32| origin_y + (content_top + value - origin_y) * setup.state.scale;
+            let line_y = |value: f32| origin_y + (content.y + value - origin_y) * setup.state.scale;
 
             decoration_coverage.cover(
               chain,

@@ -173,10 +173,13 @@ pub(crate) fn break_lines(
         let Some(inline_box) = inline_boxes.get(data.inline_box_index).cloned() else {
           continue;
         };
-        let Some(side) = float_layout.side_for_inline_box(spans, inline_box.id) else {
+        let Some(ProcessedInlineSpan::Box(item)) = spans.get(inline_box.id as usize) else {
           continue;
         };
-        let clear = float_layout.clear_for_inline_box(spans, inline_box.id);
+        let Some(side) = item.float_side() else {
+          continue;
+        };
+        let clear = item.clear();
         let start_y = breaker.state().line_y() as f32;
         let positioned_float = float_layout.push_float(side, clear, start_y, &inline_box);
         line_y = float_layout.find_line_y_for_advance(start_y, data.advance);

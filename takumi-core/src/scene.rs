@@ -14,7 +14,7 @@ use crate::{
     decoration::outline_paint,
     inline::{
       InlineContentKind, InlineLayoutMode, InlineLayoutRequest, PlacedItem, ProcessedInlineSpan,
-      collect_inline_items, create_inline_layout, resolve_inline_max_height, scale_text_fit_x,
+      collect_inline_items, create_inline_layout, glyph_run_rect, resolve_inline_max_height,
     },
     node::Node,
     tree::{ContainingBlocks, LayoutResults, RenderNode},
@@ -511,30 +511,6 @@ fn compute_node_paint_bounds(
   ) * transform;
   let Ok(()) = built.walk_items::<Infallible>(layout, |line, item| {
     let setup = &line.setup;
-    let line_scale = setup.state.scale;
-    let scaled = |origin: Point<f32>, size: Size<f32>, static_inline_prefix: f32| {
-      if (line_scale - 1.0).abs() <= f32::EPSILON {
-        return (origin, size);
-      }
-      let baseline = setup.resolved_metrics.resolved_baseline;
-
-      (
-        Point {
-          x: scale_text_fit_x(
-            origin.x,
-            setup.line_scale_origin_x,
-            line_scale,
-            static_inline_prefix,
-            setup.state.alignment_correction,
-          ),
-          y: baseline + (origin.y - baseline) * line_scale,
-        },
-        Size {
-          width: size.width * line_scale,
-          height: size.height * line_scale,
-        },
-      )
-    };
 
     match item {
       PlacedItem::Run {
@@ -542,18 +518,9 @@ fn compute_node_paint_bounds(
         static_inline_prefix,
         ..
       } => {
-        let metrics = glyph_run.run().metrics();
-        let (glyph_origin, glyph_size) = scaled(
-          Point {
-            x: glyph_run.offset(),
-            y: glyph_run.baseline() + setup.baseline_shift - metrics.ascent,
-          },
-          Size {
-            width: glyph_run.advance(),
-            height: metrics.ascent + metrics.descent,
-          },
-          static_inline_prefix,
-        );
+        let (glyph_origin, glyph_size) = glyph_run_rect(&glyph_run, setup.baseline_shift);
+        let (glyph_origin, glyph_size) =
+          setup.scale_rect(glyph_origin, glyph_size, static_inline_prefix);
         let glyph_transform =
           Affine::translation(glyph_origin.x, glyph_origin.y) * inline_transform;
         bounds = merge_bounds(bounds, bounds_for_rect(glyph_size, glyph_transform));
@@ -581,7 +548,7 @@ fn compute_node_paint_bounds(
           else {
             continue;
           };
-          let (ink_origin, ink_size) = scaled(
+          let (ink_origin, ink_size) = setup.scale_rect(
             Point {
               x: glyph.x + min_x,
               y: glyph.y + setup.baseline_shift + min_y,
