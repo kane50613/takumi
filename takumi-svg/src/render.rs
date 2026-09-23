@@ -313,8 +313,8 @@ fn emit_background(
     return Ok(());
   };
   let group = background_clip_path(style.background_clip, border, layout, x, y)
-    .map(|(data, even_odd)| {
-      let clip = doc.clip_path(&data, even_odd, None)?;
+    .map(|(data, rule)| {
+      let clip = doc.clip_path(&data, rule, None)?;
 
       doc.begin_group(Affine::IDENTITY, 1.0, Some(&clip), None)
     })
@@ -425,7 +425,7 @@ pub(crate) fn emit_clip_path_group(
         size: inner,
         offset: Point { x: left, y: top },
       };
-      doc.clip_path(&clip_box_path_data(clip, x, y), false, None)?
+      doc.clip_path(&clip_box_path_data(clip, x, y), FillRule::NonZero, None)?
     }
     BasicShape::Polygon(polygon) => {
       if polygon.coordinates.is_empty() {
@@ -440,16 +440,16 @@ pub(crate) fn emit_clip_path_group(
         data.pair(px, py);
       }
       data.close();
-      let data = data.into_string();
-      let even_odd = polygon.fill_rule.unwrap_or(node.context.style.clip_rule) == FillRule::EvenOdd;
-      doc.clip_path(&data, even_odd, None)?
+      let rule = polygon.fill_rule.unwrap_or(node.context.style.clip_rule);
+
+      doc.clip_path(&data.into_string(), rule, None)?
     }
     BasicShape::Path(path) => {
-      let even_odd = path.fill_rule.unwrap_or(node.context.style.clip_rule) == FillRule::EvenOdd;
+      let rule = path.fill_rule.unwrap_or(node.context.style.clip_rule);
       // Inner scale lifts CSS-px path() coords to device space; translate offsets after.
       let [tx, ty, scale] = [x, y, sizing.to_device(1.0)].map(Num);
       let transform = format!("translate({tx} {ty}) scale({scale})");
-      doc.clip_path(&path.path, even_odd, Some(&transform))?
+      doc.clip_path(&path.path, rule, Some(&transform))?
     }
     _ => return Ok(None),
   };
@@ -565,11 +565,7 @@ impl PaintDevice for DocumentDevice<'_> {
       _ => {
         let data = path_data(&shape.to_commands(), transform.to_cols_array());
 
-        self.doc.path(
-          &data,
-          Rgba(color.0),
-          matches!(shape.rule(), FillRule::EvenOdd),
-        )
+        self.doc.path(&data, Rgba(color.0), shape.rule())
       }
     };
 
@@ -590,30 +586,38 @@ impl PaintDevice for DocumentDevice<'_> {
   }
 }
 
-/// Builds the clip path and fill rule for a `background-clip` area.
+/// Builds the clip path `d` and fill rule for a `background-clip` area.
 fn background_clip_path(
   clip: BackgroundClip,
   border: &BorderProperties,
   layout: Layout,
   x: f32,
   y: f32,
-) -> Option<(String, bool)> {
+) -> Option<(String, FillRule)> {
   match clip {
-    BackgroundClip::PaddingBox => Some((padding_box_path_data(border, layout, x, y), false)),
+    BackgroundClip::PaddingBox => Some((
+      padding_box_path_data(border, layout, x, y),
+      FillRule::NonZero,
+    )),
     BackgroundClip::ContentBox => Some((
       clip_box_path_data(ClipBox::content_box(*border, layout), x, y),
-      false,
+      FillRule::NonZero,
     )),
     BackgroundClip::BorderArea => {
       // The border ring: the (rounded) border-box with the (rounded) padding box
       // punched out, drawn even-odd so the background shows only under the border.
       let outer = border_box_path_data(border, layout.size, x, y);
       let inner = padding_box_path_data(border, layout, x, y);
-      Some((format!("{outer}{inner}"), true))
+      Some((format!("{outer}{inner}"), FillRule::EvenOdd))
     }
     // `text` is handled separately by the text path; anything else clips to the
     // border box.
-    _ => (!border.is_zero()).then(|| (border_box_path_data(border, layout.size, x, y), false)),
+    _ => (!border.is_zero()).then(|| {
+      (
+        border_box_path_data(border, layout.size, x, y),
+        FillRule::NonZero,
+      )
+    }),
   }
 }
 
@@ -768,7 +772,7 @@ fn emit_borders(
 
     border.append_border_ring_commands(&mut ring, size);
 
-    Some(doc.clip_path(&path_data(&ring, matrix), true, None)?)
+    Some(doc.clip_path(&path_data(&ring, matrix), FillRule::EvenOdd, None)?)
   };
   let group = doc.begin_group(Affine::IDENTITY, 1.0, clip.as_deref(), None)?;
   for side in sides {
@@ -790,7 +794,11 @@ fn emit_borders(
             size.inset(band.inset),
             band.inset.top_left(),
           );
-          doc.path(&path_data(&polygon, matrix), Rgba(band.color.0), false)?;
+          doc.path(
+            &path_data(&polygon, matrix),
+            Rgba(band.color.0),
+            FillRule::NonZero,
+          )?;
         }
       }
     }
@@ -929,7 +937,7 @@ fn emit_box_shadows(
     let data = border_box_path_data(&shadow, spread_size, sx, sy);
 
     emit_with_blur(doc, resolved.blur_radius, |doc| {
-      doc.path(&data, fill, false)
+      doc.path(&data, fill, FillRule::NonZero)
     })?;
   }
   Ok(())
@@ -969,7 +977,9 @@ fn emit_inset_box_shadows(
       clip_box_path_data(hole, x + padding.offset.x, y + padding.offset.y)
     );
     let clip_group = doc.begin_clipped_group(&outer)?;
-    emit_with_blur(doc, resolved.blur_radius, |doc| doc.path(&ring, fill, true))?;
+    emit_with_blur(doc, resolved.blur_radius, |doc| {
+      doc.path(&ring, fill, FillRule::EvenOdd)
+    })?;
     doc.end_group(clip_group)?;
   }
   Ok(())

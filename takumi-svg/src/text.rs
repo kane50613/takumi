@@ -23,7 +23,7 @@ use takumi_core::{
   },
   painter::paint_run_decorations,
   resources::{font::FontError, glyph::ResolvedGlyph, image::to_data_url},
-  style::{Affine, BackgroundClip, LineJoin, TextDecorationLines},
+  style::{Affine, BackgroundClip, FillRule, LineJoin, TextDecorationLines},
 };
 
 use crate::{
@@ -181,7 +181,7 @@ fn emit_runs(
       .then(|| doc.begin_group(Affine::IDENTITY, fragment.opacity, None, None))
       .transpose()?;
 
-    doc.path(&data, Rgba(fragment.color.0), false)?;
+    doc.path(&data, Rgba(fragment.color.0), FillRule::NonZero)?;
     if let Some(group) = group {
       doc.end_group(group)?;
     }
