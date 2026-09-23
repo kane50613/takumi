@@ -118,7 +118,7 @@ pub(super) fn text_fit_line_scales(
 }
 
 /// Line start and offset correction for a scaled text-fit line.
-pub(crate) fn text_fit_line_alignment_correction(
+pub(super) fn text_fit_line_alignment_correction(
   line: &Line<'_, InlineBrush>,
   line_scale: f32,
   container_width: f32,
@@ -164,7 +164,7 @@ pub(crate) struct LineScaleState {
 
 /// Horizontal correction for a text-fit-scaled line:
 /// `static_inline_prefix * (1 - scale) + alignment_correction`.
-pub(crate) fn text_fit_x_correction(
+pub(super) fn text_fit_x_correction(
   scale: f32,
   static_inline_prefix: f32,
   alignment_correction: f32,
@@ -184,21 +184,4 @@ impl LineScaleState {
       * Affine::scale(self.scale, self.scale)
       * Affine::translation(-self.layout_origin.x, -self.layout_origin.y)
   }
-}
-
-/// Scales an inline box's `x` for a text-fit-scaled line, mirroring the horizontal correction in
-/// [`LineScaleState::transform`].
-pub(crate) fn scale_text_fit_x(
-  x: f32,
-  origin_x: f32,
-  scale: f32,
-  static_inline_prefix: f32,
-  line_alignment_correction: f32,
-) -> f32 {
-  if (scale - 1.0).abs() <= f32::EPSILON {
-    return x;
-  }
-  text_fit_x_correction(scale, static_inline_prefix, line_alignment_correction)
-    + origin_x
-    + (x - origin_x) * scale
 }

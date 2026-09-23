@@ -490,6 +490,38 @@ impl<'r> LayoutTree<'r> {
     self.snap_layout(root_node_id, 0.0, 0.0);
   }
 
+  /// Snaps every box to whole pixels, both edges in absolute space so a box
+  /// always meets the one beside it. taffy's `round_layout` documents the same
+  /// rule but rounds a location against its parent, which parts two siblings by a
+  /// pixel whenever their parent sits on a fraction.
+  /// Blink snaps the same way, against the absolute offset's fraction
+  /// (`SnapSizeToPixel`, platform/geometry/layout_unit.h).
+  fn snap_layout(&mut self, node_id: TaffyNodeId, parent_x: f32, parent_y: f32) {
+    let unrounded = self.get_unrounded_layout(node_id);
+    let mut layout = unrounded;
+    let x = parent_x + unrounded.location.x;
+    let y = parent_y + unrounded.location.y;
+
+    layout.location.x = x.round() - parent_x.round();
+    layout.location.y = y.round() - parent_y.round();
+    layout.size.width = (x + unrounded.size.width).round() - x.round();
+    layout.size.height = (y + unrounded.size.height).round() - y.round();
+    layout.padding.left = (x + unrounded.padding.left).round() - x.round();
+    layout.padding.right = (x + unrounded.size.width).round()
+      - (x + unrounded.size.width - unrounded.padding.right).round();
+    layout.padding.top = (y + unrounded.padding.top).round() - y.round();
+    layout.padding.bottom = (y + unrounded.size.height).round()
+      - (y + unrounded.size.height - unrounded.padding.bottom).round();
+
+    self.set_final_layout(node_id, &layout);
+
+    for index in 0..self.child_count(node_id) {
+      let child = self.get_child_id(node_id, index);
+
+      self.snap_layout(child, x, y);
+    }
+  }
+
   /// Consumes the tree into immutable per-node layout results.
   pub fn into_results(self) -> LayoutResults {
     LayoutResults {
@@ -544,11 +576,11 @@ impl<'r> LayoutTree<'r> {
   }
 }
 
-// Taffy may inject a flex stretch-derived cross-size into leaf `known_dimensions`
-// during intrinsic single-axis sizing (`ComputeSize` with `InherentSize` or `ContentSize`). For replaced
-// elements, letting that value participate in aspect-ratio transfer can
-// incorrectly inflate the measured main-size. Strip that hint at the leaf boundary.
 impl RenderNode {
+  // Taffy may inject a flex stretch-derived cross-size into leaf `known_dimensions`
+  // during intrinsic single-axis sizing (`ComputeSize` with `InherentSize` or `ContentSize`). For replaced
+  // elements, letting that value participate in aspect-ratio transfer can
+  // incorrectly inflate the measured main-size. Strip that hint at the leaf boundary.
   fn should_strip_flex_intrinsic_stretch_known_dimension(
     &self,
     inputs: LayoutInput,
@@ -869,40 +901,6 @@ impl LayoutGridContainer for LayoutTree<'_> {
   }
 }
 
-/// Snaps every box to whole pixels, both edges in absolute space so a box
-/// always meets the one beside it. taffy's `round_layout` documents the same
-/// rule but rounds a location against its parent, which parts two siblings by a
-/// pixel whenever their parent sits on a fraction.
-/// Blink snaps the same way, against the absolute offset's fraction
-/// (`SnapSizeToPixel`, platform/geometry/layout_unit.h).
-impl LayoutTree<'_> {
-  fn snap_layout(&mut self, node_id: TaffyNodeId, parent_x: f32, parent_y: f32) {
-    let unrounded = self.get_unrounded_layout(node_id);
-    let mut layout = unrounded;
-    let x = parent_x + unrounded.location.x;
-    let y = parent_y + unrounded.location.y;
-
-    layout.location.x = x.round() - parent_x.round();
-    layout.location.y = y.round() - parent_y.round();
-    layout.size.width = (x + unrounded.size.width).round() - x.round();
-    layout.size.height = (y + unrounded.size.height).round() - y.round();
-    layout.padding.left = (x + unrounded.padding.left).round() - x.round();
-    layout.padding.right = (x + unrounded.size.width).round()
-      - (x + unrounded.size.width - unrounded.padding.right).round();
-    layout.padding.top = (y + unrounded.padding.top).round() - y.round();
-    layout.padding.bottom = (y + unrounded.size.height).round()
-      - (y + unrounded.size.height - unrounded.padding.bottom).round();
-
-    self.set_final_layout(node_id, &layout);
-
-    for index in 0..self.child_count(node_id) {
-      let child = self.get_child_id(node_id, index);
-
-      self.snap_layout(child, x, y);
-    }
-  }
-}
-
 impl RoundTree for LayoutTree<'_> {
   fn get_unrounded_layout(&self, node_id: TaffyNodeId) -> Layout {
     let Some(node) = self.get_layout_node_ref(node_id) else {
@@ -1121,6 +1119,45 @@ impl RenderNode {
       Some(Node::container([])),
       Some(children),
     ))
+  }
+
+  /// Blink positions an outside marker against the item's first line box, so the
+  /// marker goes on the box that establishes that line, however deep it sits. An
+  /// inside marker is the item's own content and stays on the item.
+  fn attach_marker(&mut self, marker: RenderNode) {
+    if self.should_create_inline_layout() {
+      self.marker = Some(Box::new(marker));
+      return;
+    }
+
+    if marker.context.style.list_style_position == ListStylePosition::Outside
+      && let Some(block) = self.marker_host_child()
+    {
+      block.attach_marker(marker);
+      return;
+    }
+
+    let has_block_content = self.children.as_deref().is_some_and(|children| {
+      children
+        .iter()
+        .any(|child| !child.participates_in_inline_formatting_context())
+    });
+
+    if !has_block_content {
+      // Text of its own, or nothing at all: the marker shares that line.
+      self.force_inline_layout = true;
+      self.marker = Some(Box::new(marker));
+      return;
+    }
+
+    // Block-level content the marker may not join, so it gets a line of its own.
+    let mut line = RenderNode::anonymous_block_container(&self.context, Vec::new());
+    line.force_inline_layout = true;
+    line.marker = Some(Box::new(marker));
+
+    let mut children = Vec::from(self.children.take().unwrap_or_default());
+    children.insert(0, line);
+    self.children = Some(children.into_boxed_slice());
   }
 
   /// The block box the marker travels into when this box has no line of its own.
@@ -1532,15 +1569,8 @@ impl RenderNode {
     Some(text)
   }
 
-  fn layout_first_baseline_offset(
-    &self,
-    layout_results: &LayoutResults,
-    root_node_id: NodeId,
-  ) -> Option<f32> {
-    let baseline = layout_results
-      .first_baseline_y(root_node_id)
-      .ok()
-      .flatten()?;
+  fn layout_first_baseline_offset(&self, results: &LayoutResults) -> Option<f32> {
+    let baseline = results.first_baseline_y(NodeId::ROOT).ok().flatten()?;
 
     Some(self.margin_px().top + baseline)
   }
@@ -1553,10 +1583,6 @@ impl RenderNode {
   /// Where an atomic inline box takes its baseline from, in order; an empty list, or no source
   /// that resolves, falls back to the bottom margin edge.
   fn inline_baseline_sources(&self) -> &'static [InlineBaselineSource] {
-    if !self.participates_as_inline_box() {
-      return &[];
-    }
-
     match self.context.style.display {
       Display::InlineBlock if self.context.style.clips_overflow() => &[],
       Display::InlineBlock => &[
@@ -1577,7 +1603,7 @@ impl RenderNode {
     available_space: Size<AvailableSpace>,
     size: Size<f32>,
     source: InlineBaselineSource,
-    layout_results: Option<(&LayoutResults, NodeId)>,
+    results: &LayoutResults,
   ) -> Option<f32> {
     match source {
       InlineBaselineSource::InlineContentLastLine => {
@@ -1586,11 +1612,7 @@ impl RenderNode {
       InlineBaselineSource::InlineContentFirstLine => {
         self.inline_content_baseline_offset(available_space, size, false)
       }
-      InlineBaselineSource::LayoutFirstBaseline => {
-        layout_results.and_then(|(results, root_node_id)| {
-          self.layout_first_baseline_offset(results, root_node_id)
-        })
-      }
+      InlineBaselineSource::LayoutFirstBaseline => self.layout_first_baseline_offset(results),
     }
   }
 
@@ -1598,14 +1620,13 @@ impl RenderNode {
     &self,
     available_space: Size<AvailableSpace>,
     size: Size<f32>,
-    layout_results: Option<(&LayoutResults, NodeId)>,
+    results: &LayoutResults,
   ) -> Option<f32> {
     let margin = self.margin_px();
     let margin_box_height = size.height + margin.top + margin.bottom;
 
     self.inline_baseline_sources().iter().find_map(|&source| {
-      let candidate =
-        self.resolve_inline_baseline_source(available_space, size, source, layout_results);
+      let candidate = self.resolve_inline_baseline_source(available_space, size, source, results);
 
       Self::valid_baseline_offset(candidate, margin_box_height)
     })
@@ -1619,36 +1640,26 @@ impl RenderNode {
       return self.measure_atomic_subtree(available_space);
     }
 
-    let Some(node) = &self.node else {
-      return AtomicInlineMetrics {
-        size: Size::ZERO,
-        baseline_offset: None,
-      };
-    };
-
-    let layout_style = self.layout_style(&self.context.sizing);
-    let measured_size = node.measure(&self.context, available_space, Size::NONE, &layout_style);
+    // Only an atomic box has a baseline of its own; a replaced one sits on its bottom margin edge.
     AtomicInlineMetrics {
-      size: measured_size,
-      baseline_offset: self.resolve_inline_baseline_offset(available_space, measured_size, None),
+      size: self.node.as_ref().map_or(Size::ZERO, |node| {
+        node.measure(
+          &self.context,
+          available_space,
+          Size::NONE,
+          &self.layout_style(&self.context.sizing),
+        )
+      }),
+      baseline_offset: None,
     }
   }
 
-  pub(crate) fn measure_atomic_subtree(
-    &self,
-    available_space: Size<AvailableSpace>,
-  ) -> AtomicInlineMetrics {
+  /// An atomic inline box's shrink-to-fit size and baseline.
+  fn measure_atomic_subtree(&self, available_space: Size<AvailableSpace>) -> AtomicInlineMetrics {
     let at_width = |width| Size {
       width,
       height: available_space.height,
     };
-
-    if !self.participates_as_inline_box() {
-      return AtomicInlineMetrics {
-        size: LayoutResults::compute(self, at_width(available_space.width)).root_size(),
-        baseline_offset: None,
-      };
-    }
 
     // CSS shrink-to-fit for inline-level atomic boxes:
     // width = min(max-content, max(min-content, available)).
@@ -1689,7 +1700,7 @@ impl RenderNode {
         baseline_offset: self.resolve_inline_baseline_offset(
           available_space,
           layout.size,
-          Some((&results, NodeId::ROOT)),
+          &results,
         ),
       },
     )
@@ -1749,47 +1760,6 @@ fn flush_inline_group(
     parent_render_context,
     take(inline_group),
   ));
-}
-
-impl RenderNode {
-  /// Blink positions an outside marker against the item's first line box, so the
-  /// marker goes on the box that establishes that line, however deep it sits. An
-  /// inside marker is the item's own content and stays on the item.
-  fn attach_marker(&mut self, marker: RenderNode) {
-    if self.should_create_inline_layout() {
-      self.marker = Some(Box::new(marker));
-      return;
-    }
-
-    if marker.context.style.list_style_position == ListStylePosition::Outside
-      && let Some(block) = self.marker_host_child()
-    {
-      block.attach_marker(marker);
-      return;
-    }
-
-    let has_block_content = self.children.as_deref().is_some_and(|children| {
-      children
-        .iter()
-        .any(|child| !child.participates_in_inline_formatting_context())
-    });
-
-    if !has_block_content {
-      // Text of its own, or nothing at all: the marker shares that line.
-      self.force_inline_layout = true;
-      self.marker = Some(Box::new(marker));
-      return;
-    }
-
-    // Block-level content the marker may not join, so it gets a line of its own.
-    let mut line = RenderNode::anonymous_block_container(&self.context, Vec::new());
-    line.force_inline_layout = true;
-    line.marker = Some(Box::new(marker));
-
-    let mut children = Vec::from(self.children.take().unwrap_or_default());
-    children.insert(0, line);
-    self.children = Some(children.into_boxed_slice());
-  }
 }
 
 // Mirrors Blink's Text::TextLayoutObjectIsNeeded, minus the ends-with-space

@@ -56,8 +56,8 @@ use self::{
   },
   runs::measured_run_text,
   text_fit::{
-    LineScaleState, scale_text_fit_x, text_fit_is_applicable, text_fit_line_advance,
-    text_fit_line_alignment_correction, text_fit_line_scales,
+    LineScaleState, text_fit_is_applicable, text_fit_line_advance,
+    text_fit_line_alignment_correction, text_fit_line_scales, text_fit_x_correction,
   },
   truncation::make_ellipsis_layout,
 };
@@ -1027,15 +1027,22 @@ impl LineSetup {
     })
   }
 
-  /// Scales a line-local `x` for text-fit.
+  /// Scales a line-local `x` for text-fit, mirroring the horizontal correction in
+  /// [`LineScaleState::transform`].
   pub(crate) fn scale_x(&self, x: f32, static_inline_prefix: f32) -> f32 {
-    scale_text_fit_x(
-      x,
-      self.line_scale_origin_x,
-      self.state.scale,
-      static_inline_prefix,
-      self.state.alignment_correction,
-    )
+    let LineScaleState {
+      scale,
+      alignment_correction,
+      ..
+    } = self.state;
+
+    if (scale - 1.0).abs() <= f32::EPSILON {
+      return x;
+    }
+
+    text_fit_x_correction(scale, static_inline_prefix, alignment_correction)
+      + self.line_scale_origin_x
+      + (x - self.line_scale_origin_x) * scale
   }
 
   /// Scales a line-local rect for text-fit about the line's baseline.
