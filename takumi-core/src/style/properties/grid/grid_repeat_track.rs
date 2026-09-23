@@ -1,3 +1,5 @@
+use std::fmt;
+
 use cssparser::Parser;
 
 use super::{parse_line_names, write_space_separated};
@@ -55,7 +57,7 @@ impl<'i> FromCss<'i> for GridRepeatTrack {
 }
 
 impl ToCss for GridRepeatTrack {
-  fn to_css<W: std::fmt::Write>(&self, dest: &mut W) -> std::fmt::Result {
+  fn to_css<W: fmt::Write>(&self, dest: &mut W) -> fmt::Result {
     if !self.names.is_empty() {
       dest.write_str("[")?;
       write_space_separated(dest, &self.names)?;

@@ -357,14 +357,7 @@ impl ToCss for BasicShape {
           rule.to_css(dest)?;
           dest.write_str(", ")?;
         }
-        let mut first = true;
-        for coord in shape.coordinates.iter() {
-          if !first {
-            dest.write_str(", ")?;
-          }
-          coord.to_css(dest)?;
-          first = false;
-        }
+        shape.coordinates.to_css(dest)?;
         dest.write_char(')')
       }
       Self::Path(shape) => {

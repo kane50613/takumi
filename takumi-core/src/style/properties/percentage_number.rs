@@ -79,7 +79,7 @@ impl<'i> FromCss<'i> for PercentageNumber {
 
 impl ToCss for PercentageNumber {
   fn to_css<W: fmt::Write>(&self, dest: &mut W) -> fmt::Result {
-    write!(dest, "{}", self.0)
+    self.0.to_css(dest)
   }
 }
 

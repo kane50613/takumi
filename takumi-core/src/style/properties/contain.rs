@@ -4,7 +4,9 @@ use std::fmt;
 
 use cssparser::{Parser, Token, match_ignore_ascii_case};
 
-use crate::style::{Animatable, CssToken, FromCss, MakeComputed, ParseResult, ToCss};
+use crate::style::{
+  Animatable, CssToken, FromCss, MakeComputed, ParseResult, ToCss, unexpected_token, write_keywords,
+};
 
 /// A `contain` value: `none | content | [ layout || style || paint ]`.
 ///
@@ -67,14 +69,14 @@ impl<'i> FromCss<'i> for Contain {
       let location = input.current_source_location();
       let token = input.next()?.clone();
       let Token::Ident(ident) = &token else {
-        return Err(crate::style::unexpected_token!(location, &token));
+        return Err(unexpected_token!(location, &token));
       };
 
       let added = match_ignore_ascii_case! {ident,
         // The single-keyword values stand alone.
         "none" | "content" => {
           if flags != Self::NONE || !input.is_exhausted() {
-            return Err(crate::style::unexpected_token!(location, &token));
+            return Err(unexpected_token!(location, &token));
           }
 
           return Ok(match_ignore_ascii_case! {ident,
@@ -85,11 +87,11 @@ impl<'i> FromCss<'i> for Contain {
         "layout" => Self::LAYOUT,
         "style" => Self::STYLE,
         "paint" => Self::PAINT,
-        _ => return Err(crate::style::unexpected_token!(location, &token)),
+        _ => return Err(unexpected_token!(location, &token)),
       };
 
       if flags.contains(added) {
-        return Err(crate::style::unexpected_token!(location, &token));
+        return Err(unexpected_token!(location, &token));
       }
 
       flags = Self(flags.0 | added.0);
@@ -103,32 +105,22 @@ impl<'i> FromCss<'i> for Contain {
 
 impl ToCss for Contain {
   fn to_css<W: fmt::Write>(&self, dest: &mut W) -> fmt::Result {
-    match *self {
-      Self::NONE => return dest.write_str("none"),
-      Self::CONTENT => return dest.write_str("content"),
-      _ => {}
+    if *self == Self::CONTENT {
+      return dest.write_str("content");
     }
 
-    let mut written = false;
-
-    for (flag, keyword) in [
-      (Self::LAYOUT, "layout"),
-      (Self::STYLE, "style"),
-      (Self::PAINT, "paint"),
-    ] {
-      if !self.contains(flag) {
-        continue;
-      }
-
-      if written {
-        dest.write_char(' ')?;
-      }
-
-      dest.write_str(keyword)?;
-      written = true;
-    }
-
-    Ok(())
+    write_keywords(
+      dest,
+      [
+        (Self::LAYOUT, "layout"),
+        (Self::STYLE, "style"),
+        (Self::PAINT, "paint"),
+      ]
+      .into_iter()
+      .filter(|(flag, _)| self.contains(*flag))
+      .map(|(_, keyword)| keyword),
+      "none",
+    )
   }
 }
 

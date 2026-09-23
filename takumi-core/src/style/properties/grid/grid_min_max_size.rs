@@ -1,3 +1,5 @@
+use std::fmt;
+
 use crate::style::{GridLength, MakeComputed, SizingContext, ToCss};
 
 /// Represents a grid minmax()
@@ -18,7 +20,7 @@ impl MakeComputed for GridMinMaxSize {
 }
 
 impl ToCss for GridMinMaxSize {
-  fn to_css<W: std::fmt::Write>(&self, dest: &mut W) -> std::fmt::Result {
+  fn to_css<W: fmt::Write>(&self, dest: &mut W) -> fmt::Result {
     dest.write_str("minmax(")?;
     self.min.to_css(dest)?;
     dest.write_str(", ")?;

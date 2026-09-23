@@ -49,7 +49,7 @@ impl ToCss for ZIndex {
   fn to_css<W: fmt::Write>(&self, dest: &mut W) -> fmt::Result {
     match self {
       Self::Auto => dest.write_str("auto"),
-      Self::Integer(i) => write!(dest, "{}", i),
+      Self::Integer(i) => write!(dest, "{i}"),
     }
   }
 }

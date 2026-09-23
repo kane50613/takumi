@@ -1,3 +1,5 @@
+use std::fmt;
+
 use cssparser::{Parser, Token};
 
 use crate::style::{CssSyntaxKind, CssToken, FromCss, ParseResult, ToCss, unexpected_token};
@@ -84,7 +86,7 @@ impl<'i> FromCss<'i> for GridRepetitionCount {
 }
 
 impl ToCss for GridRepetitionKeyword {
-  fn to_css<W: std::fmt::Write>(&self, dest: &mut W) -> std::fmt::Result {
+  fn to_css<W: fmt::Write>(&self, dest: &mut W) -> fmt::Result {
     match self {
       Self::AutoFill => dest.write_str("auto-fill"),
       Self::AutoFit => dest.write_str("auto-fit"),
@@ -93,10 +95,10 @@ impl ToCss for GridRepetitionKeyword {
 }
 
 impl ToCss for GridRepetitionCount {
-  fn to_css<W: std::fmt::Write>(&self, dest: &mut W) -> std::fmt::Result {
+  fn to_css<W: fmt::Write>(&self, dest: &mut W) -> fmt::Result {
     match self {
       Self::Keyword(kw) => kw.to_css(dest),
-      Self::Count(c) => write!(dest, "{}", c),
+      Self::Count(c) => write!(dest, "{c}"),
     }
   }
 }

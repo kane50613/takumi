@@ -1,3 +1,5 @@
+use std::fmt;
+
 use cssparser::{Parser, Token};
 
 use crate::style::{
@@ -143,22 +145,22 @@ impl<'i> FromCss<'i> for GridPlacement {
 }
 
 impl ToCss for GridPlacementSpan {
-  fn to_css<W: std::fmt::Write>(&self, dest: &mut W) -> std::fmt::Result {
+  fn to_css<W: fmt::Write>(&self, dest: &mut W) -> fmt::Result {
     match self {
-      Self::Span(span) => write!(dest, "{}", span),
+      Self::Span(span) => write!(dest, "{span}"),
     }
   }
 }
 
 impl ToCss for GridPlacement {
-  fn to_css<W: std::fmt::Write>(&self, dest: &mut W) -> std::fmt::Result {
+  fn to_css<W: fmt::Write>(&self, dest: &mut W) -> fmt::Result {
     match self {
       Self::Auto => dest.write_str("auto"),
       Self::Span(span) => {
         dest.write_str("span ")?;
         span.to_css(dest)
       }
-      Self::Line(line) => write!(dest, "{}", line),
+      Self::Line(line) => write!(dest, "{line}"),
       Self::Named(name) => dest.write_str(name),
     }
   }

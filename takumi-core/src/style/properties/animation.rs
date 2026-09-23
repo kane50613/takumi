@@ -648,7 +648,7 @@ pub(crate) fn apply_timing_function(
 
 impl ToCss for AnimationTime {
   fn to_css<W: fmt::Write>(&self, dest: &mut W) -> fmt::Result {
-    write!(dest, "{}ms", self.milliseconds)
+    write!(dest, "{milliseconds}ms", milliseconds = self.milliseconds)
   }
 }
 
@@ -689,7 +689,7 @@ impl ToCss for AnimationTimingFunction {
 impl ToCss for AnimationIterationCount {
   fn to_css<W: fmt::Write>(&self, dest: &mut W) -> fmt::Result {
     match self {
-      Self::Number(n) => write!(dest, "{}", n),
+      Self::Number(n) => write!(dest, "{n}"),
       Self::Infinite => dest.write_str("infinite"),
     }
   }

@@ -159,7 +159,7 @@ impl ToCss for ColorInterpolationMethod {
       HueDirection::Decreasing => " decreasing hue",
       _ => "",
     };
-    write!(dest, "in {}{}", space, hue)
+    write!(dest, "in {space}{hue}")
   }
 }
 
@@ -468,25 +468,24 @@ impl From<Color> for ColorInput {
 }
 
 impl Display for Color {
-  fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-    if self.0[3] == 255 {
-      return write!(f, "rgb({}, {}, {})", self.0[0], self.0[1], self.0[2]);
+  fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    let [r, g, b, a] = self.0;
+
+    if a == 255 {
+      return write!(f, "rgb({r}, {g}, {b})");
     }
 
     write!(
       f,
-      "rgba({}, {}, {}, {:.6})",
-      self.0[0],
-      self.0[1],
-      self.0[2],
-      self.0[3] as f32 / 255.0
+      "rgba({r}, {g}, {b}, {alpha:.6})",
+      alpha = a as f32 / 255.0
     )
   }
 }
 
 impl ToCss for Color {
   fn to_css<W: fmt::Write>(&self, dest: &mut W) -> fmt::Result {
-    write!(dest, "{}", self)
+    write!(dest, "{self}")
   }
 }
 

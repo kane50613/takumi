@@ -480,7 +480,7 @@ impl MakeComputed for Angle {}
 
 impl ToCss for Angle {
   fn to_css<W: fmt::Write>(&self, dest: &mut W) -> fmt::Result {
-    write!(dest, "{}deg", **self)
+    write!(dest, "{degrees}deg", degrees = self.0)
   }
 }
 
