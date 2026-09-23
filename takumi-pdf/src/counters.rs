@@ -83,8 +83,11 @@ const ALPHABET_STYLES: [(&str, &str); 7] = [
   ),
 ];
 
-/// The class hooks a page counter is requested through.
-const COUNTER_HOOKS: [&str; 2] = ["pageNumber", "totalPages"];
+/// The class hook the current page number is requested through.
+const PAGE_HOOK: &str = "pageNumber";
+
+/// The class hook the page count is requested through.
+const PAGES_HOOK: &str = "totalPages";
 
 /// The class hook a cross-reference to another element's page is requested
 /// through. Chromium has no counterpart, so the name follows the CSS
@@ -261,7 +264,7 @@ pub fn counter_characters<'c>(classes: impl IntoIterator<Item = &'c str>) -> Str
   let mut characters = String::new();
 
   for class in classes {
-    if COUNTER_HOOKS.contains(&class) || class == TARGET_HOOK {
+    if [PAGE_HOOK, PAGES_HOOK, TARGET_HOOK].contains(&class) {
       hooked = true;
       continue;
     }
@@ -283,15 +286,9 @@ pub fn counter_characters<'c>(classes: impl IntoIterator<Item = &'c str>) -> Str
 /// contract as Chromium's print header/footer templates.
 pub(crate) fn counter_text(node: &Node, page: usize, pages: usize) -> Option<String> {
   let classes = node.class_name()?;
-  let value = if classes
-    .split_whitespace()
-    .any(|class| class == COUNTER_HOOKS[0])
-  {
+  let value = if has_class(classes, PAGE_HOOK) {
     page
-  } else if classes
-    .split_whitespace()
-    .any(|class| class == COUNTER_HOOKS[1])
-  {
+  } else if has_class(classes, PAGES_HOOK) {
     pages
   } else {
     return None;
@@ -311,7 +308,7 @@ fn target_counter_text(
 ) -> Option<String> {
   let classes = node.class_name()?;
 
-  if !classes.split_whitespace().any(|class| class == TARGET_HOOK) {
+  if !has_class(classes, TARGET_HOOK) {
     return None;
   }
   let style = CounterStyle::from_classes(classes);
@@ -326,17 +323,11 @@ fn target_counter_text(
 /// Whether a tree asks for any target page counter. Only such a tree pays for
 /// the extra pagination passes that resolve one.
 pub(crate) fn has_target_counters(node: &Node) -> bool {
-  let hooked = node
-    .class_name()
-    .is_some_and(|classes| classes.split_whitespace().any(|class| class == TARGET_HOOK));
-
-  if hooked {
-    return true;
-  }
-  match &node.kind {
-    NodeKind::Container { children } => children.iter().any(has_target_counters),
-    _ => false,
-  }
+  any_node(node, &|node| {
+    node
+      .class_name()
+      .is_some_and(|classes| has_class(classes, TARGET_HOOK))
+  })
 }
 
 /// Fills `targetPageNumber` hooks with the page their target sits on, and
@@ -352,13 +343,14 @@ pub(crate) fn substitute_target_counters(
 
   if let Some(text) = target_counter_text(node, href, page_of) {
     written.push(text.clone());
-    match &mut node.kind {
-      NodeKind::Text(data) => data.text = text,
-      // An unresolved target empties the node rather than holding empty text,
-      // which would still reach the page as a structure element.
-      NodeKind::Container { children } if text.is_empty() => children.clear(),
-      NodeKind::Container { children } => *children = vec![Node::text(text)],
-      _ => {}
+    // An unresolved target empties the node rather than holding empty text,
+    // which would still reach the page as a structure element.
+    if text.is_empty()
+      && let NodeKind::Container { children } = &mut node.kind
+    {
+      children.clear();
+    } else {
+      write_counter(node, text);
     }
     return;
   }
@@ -372,13 +364,22 @@ pub(crate) fn substitute_target_counters(
 /// Whether a tree holds a page-counter hook. A band or repeated box without one
 /// lays out identically on every page, so it is prepared once and reused.
 pub(crate) fn has_page_counters(node: &Node) -> bool {
-  if counter_text(node, 1, 1).is_some() {
+  any_node(node, &|node| counter_text(node, 1, 1).is_some())
+}
+
+/// Whether `matches` holds for a node of the tree, the root included.
+fn any_node(node: &Node, matches: &impl Fn(&Node) -> bool) -> bool {
+  if matches(node) {
     return true;
   }
   match &node.kind {
-    NodeKind::Container { children } => children.iter().any(has_page_counters),
+    NodeKind::Container { children } => children.iter().any(|child| any_node(child, matches)),
     _ => false,
   }
+}
+
+fn has_class(classes: &str, class: &str) -> bool {
+  classes.split_whitespace().any(|name| name == class)
 }
 
 /// Fills `pageNumber` / `totalPages` class hooks with the formatted counter,
