@@ -78,14 +78,16 @@ pub(crate) struct TwVarRef {
   pub(crate) fallback: Option<Box<StyleDeclaration>>,
 }
 
-fn deferred_to_css<W: fmt::Write>(deferred: &DeferredDeclaration, dest: &mut W) -> fmt::Result {
-  let name = match deferred.property {
-    PropertyId::Longhand(id) => id.css_name(),
-    PropertyId::Shorthand(id) => id.css_name(),
-    _ => return Ok(()),
-  };
+impl ToCss for DeferredDeclaration {
+  fn to_css<W: fmt::Write>(&self, dest: &mut W) -> fmt::Result {
+    let name = match self.property {
+      PropertyId::Longhand(id) => id.css_name(),
+      PropertyId::Shorthand(id) => id.css_name(),
+      _ => return Ok(()),
+    };
 
-  write!(dest, "{}: {};", name, deferred.specified_value)
+    write!(dest, "{}: {};", name, self.specified_value)
+  }
 }
 
 /// `webkit_text_fill_color` → `-webkit-text-fill-color`.
@@ -111,10 +113,7 @@ impl TwVarRef {
       return;
     };
 
-    match parent {
-      Some(parent) => (**fallback).clone().apply_with_parent(style, parent),
-      None => fallback.apply_to_computed(style),
-    }
+    (**fallback).clone().apply(style, parent);
   }
 }
 
@@ -164,50 +163,26 @@ struct InterpolationContext<'a> {
   current_color: Color,
 }
 
-fn interpolate_option_with_missing<T: Animatable + Clone>(
-  target: &mut Option<T>,
+/// The value `progress` of the way from `from` to `to`, standing `missing_from`
+/// or `missing_to` in for an endpoint that is unset.
+fn interpolated_with_missing<T: Animatable>(
   from: &Option<T>,
   to: &Option<T>,
   missing_from: T,
   missing_to: T,
   context: InterpolationContext<'_>,
-) {
-  *target = match (from, to) {
-    (Some(from), Some(to)) => {
-      let mut value = from.clone();
-      value.interpolate(
-        from,
-        to,
-        context.progress,
-        context.sizing,
-        context.current_color,
-      );
-      Some(value)
-    }
-    (Some(from), None) => {
-      let mut value = from.clone();
-      value.interpolate(
-        from,
-        &missing_to,
-        context.progress,
-        context.sizing,
-        context.current_color,
-      );
-      Some(value)
-    }
-    (None, Some(to)) => {
-      let mut value = missing_from.clone();
-      value.interpolate(
-        &missing_from,
-        to,
-        context.progress,
-        context.sizing,
-        context.current_color,
-      );
-      Some(value)
-    }
-    (None, None) => None,
-  };
+) -> Option<T> {
+  if from.is_none() && to.is_none() {
+    return None;
+  }
+
+  Some(T::interpolated(
+    from.as_ref().unwrap_or(&missing_from),
+    to.as_ref().unwrap_or(&missing_to),
+    context.progress,
+    context.sizing,
+    context.current_color,
+  ))
 }
 
 macro_rules! push_expanded_declarations {
@@ -383,11 +358,8 @@ macro_rules! define_style {
         ) -> ParseResult<'i, ParsedDeclarations> {
           match self {
             $(
-              Self::[<$shorthand:camel>] => Ok(expand_shorthand(
+              Self::[<$shorthand:camel>] => Ok(StyleDeclaration::[<expand_ $shorthand>](
                 <$shorthand_ty as FromCss>::from_css(input)?,
-                |$value, $target_var| {
-                  $expand
-                },
               )),
             )*
           }
@@ -507,22 +479,21 @@ macro_rules! define_style {
 
           let css_string = match &css_input {
             CssInput::Str(value) => Some(value.as_ref()),
-            CssInput::Number(_) => None,
-            CssInput::Unexpected(_) => None,
+            CssInput::Number(_) | CssInput::Unexpected(_) => None,
           };
 
-            if css_string.is_some_and(contains_var_function) {
-              return Ok(smallvec![StyleDeclaration::Deferred(DeferredDeclaration {
-                property: self,
-                specified_value: css_input.into_string(),
-              })]);
-            }
+          if css_string.is_some_and(contains_var_function) {
+            return Ok(smallvec![StyleDeclaration::Deferred(DeferredDeclaration {
+              property: self,
+              specified_value: css_input.into_string(),
+            })]);
+          }
 
           if matches!(self, Self::Ignored | Self::Custom) {
             return Ok(ParsedDeclarations::new());
           }
 
-          if let Some(keyword) = parse_css_wide_keyword(&css_input) {
+          if let Some(keyword) = CssWideKeyword::from_css_input(&css_input) {
             return Ok(
               self
                 .target_longhands()
@@ -560,16 +531,13 @@ macro_rules! define_style {
           .map_err(|error| {
             (
               self.expected_message(&source),
-              css_input_parse_failure(&source, error),
+              CssInputParseFailure::new(&source, error),
             )
           });
 
           drop(source);
 
-          match result {
-            Ok(declarations) => Ok(declarations),
-            Err((expected, failure)) => Err(css_input_parse_error(css_input, expected, failure)),
-          }
+          result.map_err(|(expected, failure)| CssInputParseError::new(css_input, expected, failure))
         }
 
         /// Parse-error "expected ..." text for this property's value type.
@@ -595,35 +563,6 @@ macro_rules! define_style {
             },
           }
         }
-      }
-
-      fn parse_style_declaration<'i>(
-        name: &str,
-        input: &mut cssparser::Parser<'i, '_>,
-      ) -> ParseResult<'i, StyleDeclarationBlock> {
-        let property = PropertyId::from_kebab_case(name);
-        let start = input.position();
-        // Detect var() up-front; otherwise a partial parse (e.g. `0 var(--y)`)
-        // would commit before deferral. See #712.
-        if !matches!(property, PropertyId::Ignored | PropertyId::Custom) {
-          let state = input.state();
-          skip_to_bang(input);
-          let specified_value = input.slice_from(start).trim();
-          if contains_var_function(specified_value) {
-            return Ok(StyleDeclarationBlock::from_parsed_declarations(
-              smallvec![StyleDeclaration::Deferred(DeferredDeclaration {
-                property,
-                specified_value: specified_value.to_owned(),
-              })],
-              false,
-            ));
-          }
-          input.reset(&state);
-        }
-
-        property.parse_declarations(name, input).map(|declarations| {
-          StyleDeclarationBlock::from_parsed_declarations(declarations, false)
-        })
       }
 
       /// Defines the style of an element.
@@ -682,7 +621,7 @@ macro_rules! define_style {
                     .append_parsed_declarations(
                       property
                         .parse_css_input_declarations(css_input)
-                        .map_err(|error| error.into_serde_error(&key, property))?,
+                        .map_err(|error| error.into_serde_error(&key))?,
                       important,
                     );
                 }
@@ -725,12 +664,7 @@ macro_rules! define_style {
         $(
           /// Returns a new style with this shorthand expanded and appended in source order.
           pub fn [<with_ $shorthand>](self, value: $shorthand_ty) -> Self {
-            self.with_declarations(
-              expand_shorthand(value, |$value, $target_var| {
-                $expand
-              }),
-              false,
-            )
+            self.with_declarations(StyleDeclaration::[<expand_ $shorthand>](value), false)
           }
         )*
 
@@ -757,7 +691,7 @@ macro_rules! define_style {
             .extend_element_state(declarations.element_state.iter().map(Box::as_ref));
 
           for declaration in declarations.iter() {
-            declaration.merge_into_ref(self);
+            self.push(declaration.clone(), false);
           }
         }
 
@@ -825,11 +759,6 @@ macro_rules! define_style {
             declaration.apply_with_parent(&mut style, parent);
           }
           style
-        }
-
-        /// Merges another style's declarations into this one.
-        pub(crate) fn merge_from(&mut self, other: Self) {
-          self.append_block(other.declarations);
         }
       }
 
@@ -960,8 +889,7 @@ macro_rules! define_style {
 
           // special cases
           if animated_properties.contains(&LonghandId::FlexGrow) {
-            interpolate_option_with_missing(
-              &mut self.flex_grow,
+            self.flex_grow = interpolated_with_missing(
               &from.flex_grow,
               &to.flex_grow,
               FlexGrow(0.0),
@@ -971,8 +899,7 @@ macro_rules! define_style {
           }
 
           if animated_properties.contains(&LonghandId::FlexShrink) {
-            interpolate_option_with_missing(
-              &mut self.flex_shrink,
+            self.flex_shrink = interpolated_with_missing(
               &from.flex_shrink,
               &to.flex_shrink,
               FlexGrow(1.0),
@@ -982,8 +909,7 @@ macro_rules! define_style {
           }
 
           if animated_properties.contains(&LonghandId::WebkitTextStrokeWidth) {
-            interpolate_option_with_missing(
-              &mut self.webkit_text_stroke_width,
+            self.webkit_text_stroke_width = interpolated_with_missing(
               &from.webkit_text_stroke_width,
               &to.webkit_text_stroke_width,
               Length::zero(),
@@ -993,8 +919,7 @@ macro_rules! define_style {
           }
 
           if animated_properties.contains(&LonghandId::WebkitTextStrokeColor) {
-            interpolate_option_with_missing(
-              &mut self.webkit_text_stroke_color,
+            self.webkit_text_stroke_color = interpolated_with_missing(
               &from.webkit_text_stroke_color,
               &to.webkit_text_stroke_color,
               ColorInput::CurrentColor,
@@ -1004,8 +929,7 @@ macro_rules! define_style {
           }
 
           if animated_properties.contains(&LonghandId::WebkitTextFillColor) {
-            interpolate_option_with_missing(
-              &mut self.webkit_text_fill_color,
+            self.webkit_text_fill_color = interpolated_with_missing(
               &from.webkit_text_fill_color,
               &to.webkit_text_fill_color,
               from.color,
@@ -1024,6 +948,12 @@ macro_rules! define_style {
           /// Returns a declaration for this property.
           pub fn $transient(value: $transient_ty) -> Self {
             Self::[<$transient:camel>](value)
+          }
+        )*
+        $(
+          /// The longhand declarations this shorthand value expands into.
+          pub(crate) fn [<expand_ $shorthand>](value: $shorthand_ty) -> ParsedDeclarations {
+            expand_shorthand(value, |$value, $target_var| $expand)
           }
         )*
 
@@ -1137,15 +1067,9 @@ macro_rules! define_style {
             )*
           }
         }
-
-        /// Pushes a clone of this declaration onto a style.
-        pub(crate) fn merge_into_ref(&self, style: &mut Style) {
-          style.declarations.push(self.to_owned(), false);
-        }
-
       }
 
-      impl crate::style::properties::ToCss for StyleDeclaration {
+      impl ToCss for StyleDeclaration {
         fn to_css<W: fmt::Write>(&self, dest: &mut W) -> fmt::Result {
           match self {
             $(
@@ -1167,8 +1091,8 @@ macro_rules! define_style {
             Self::CustomProperty(name, value) => {
               write!(dest, "{}: {};", name, value)
             }
-            Self::VarRef(var_ref) => deferred_to_css(&var_ref.deferred, dest),
-            Self::Deferred(deferred) => deferred_to_css(deferred, dest),
+            Self::VarRef(var_ref) => var_ref.deferred.to_css(dest),
+            Self::Deferred(deferred) => deferred.to_css(dest),
             Self::CssWideKeyword(id, keyword) => {
               let keyword_str = match keyword {
                 CssWideKeyword::Initial => "initial",
@@ -1709,6 +1633,16 @@ define_style! {
   }
 }
 
+impl StyleDeclaration {
+  /// Applies this declaration against `parent`, or as the root's when there is none.
+  pub(crate) fn apply(self, style: &mut ComputedStyle, parent: Option<&ComputedStyle>) {
+    match parent {
+      Some(parent) => self.apply_with_parent(style, parent),
+      None => self.apply_to_computed(style),
+    }
+  }
+}
+
 // Hand-written so that a `Length` still reaches the sizing longhands, which the
 // CSS Sizing keywords moved off `Length`.
 impl StyleDeclaration {
@@ -2013,7 +1947,30 @@ impl StyleDeclarationBlock {
 
   /// Parses one declaration block for the given property name.
   pub(crate) fn parse<'i>(name: &str, input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
-    parse_style_declaration(name, input)
+    let property = PropertyId::from_kebab_case(name);
+    let start = input.position();
+
+    // Detect var() up-front; otherwise a partial parse (e.g. `0 var(--y)`)
+    // would commit before deferral. See #712.
+    if !matches!(property, PropertyId::Ignored | PropertyId::Custom) {
+      let state = input.state();
+      skip_to_bang(input);
+      let specified_value = input.slice_from(start).trim();
+      if contains_var_function(specified_value) {
+        return Ok(Self::from_parsed_declarations(
+          smallvec![StyleDeclaration::Deferred(DeferredDeclaration {
+            property,
+            specified_value: specified_value.to_owned(),
+          })],
+          false,
+        ));
+      }
+      input.reset(&state);
+    }
+
+    property
+      .parse_declarations(name, input)
+      .map(|declarations| Self::from_parsed_declarations(declarations, false))
   }
 
   /// Parses a declaration list, dropping the declarations that fail and keeping the rest.

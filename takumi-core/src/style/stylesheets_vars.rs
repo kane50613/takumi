@@ -88,50 +88,27 @@ fn resolve_var_tokens_into(
         charge(budget, resolved.len())?;
         output.push_str(&resolved);
       }
-      Token::Function(name) => {
+      Token::Function(_)
+      | Token::ParenthesisBlock
+      | Token::SquareBracketBlock
+      | Token::CurlyBracketBlock => {
+        let (name, open, close) = match token {
+          Token::Function(name) => (name.as_ref(), '(', ')'),
+          Token::SquareBracketBlock => ("", '[', ']'),
+          Token::CurlyBracketBlock => ("", '{', '}'),
+          _ => ("", '(', ')'),
+        };
+
         charge(budget, name.len() + 2)?;
         output.push_str(name);
-        output.push('(');
+        output.push(open);
         input
           .parse_nested_block(|input| {
             resolve_var_tokens_into(input, custom_properties, stack, budget, depth + 1, output)
               .ok_or_else(|| input.new_error_for_next_token::<()>())
           })
           .ok()?;
-        output.push(')');
-      }
-      Token::ParenthesisBlock => {
-        charge(budget, 2)?;
-        output.push('(');
-        input
-          .parse_nested_block(|input| {
-            resolve_var_tokens_into(input, custom_properties, stack, budget, depth + 1, output)
-              .ok_or_else(|| input.new_error_for_next_token::<()>())
-          })
-          .ok()?;
-        output.push(')');
-      }
-      Token::SquareBracketBlock => {
-        charge(budget, 2)?;
-        output.push('[');
-        input
-          .parse_nested_block(|input| {
-            resolve_var_tokens_into(input, custom_properties, stack, budget, depth + 1, output)
-              .ok_or_else(|| input.new_error_for_next_token::<()>())
-          })
-          .ok()?;
-        output.push(']');
-      }
-      Token::CurlyBracketBlock => {
-        charge(budget, 2)?;
-        output.push('{');
-        input
-          .parse_nested_block(|input| {
-            resolve_var_tokens_into(input, custom_properties, stack, budget, depth + 1, output)
-              .ok_or_else(|| input.new_error_for_next_token::<()>())
-          })
-          .ok()?;
-        output.push('}');
+        output.push(close);
       }
       _ => {
         let slice = input.slice_from(start);
@@ -194,20 +171,15 @@ pub(crate) fn apply_deferred_declaration(
     return false;
   };
 
-  let declarations = deferred
+  let Ok(declarations) = deferred
     .property
     .parse_css_input_declarations(CssInput::Str(Cow::Owned(resolved_value)))
-    .ok();
-
-  let Some(declarations) = declarations else {
+  else {
     return false;
   };
 
   for declaration in declarations {
-    match parent {
-      Some(parent) => declaration.apply_with_parent(style, parent),
-      None => declaration.apply_to_computed(style),
-    }
+    declaration.apply(style, parent);
   }
 
   true

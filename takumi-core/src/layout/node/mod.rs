@@ -919,12 +919,12 @@ mod matching_tests {
       .chain(matches.unlayered_normal())
     {
       for declaration in declarations.iter() {
-        declaration.merge_into_ref(&mut style);
+        style.push(declaration.clone(), false);
       }
     }
     for &declarations in matches.important() {
       for declaration in declarations.iter() {
-        declaration.merge_into_ref(&mut style);
+        style.push(declaration.clone(), false);
       }
     }
     style.inherit(&ComputedStyle::default()).width
@@ -938,12 +938,12 @@ mod matching_tests {
       .chain(matches.unlayered_normal())
     {
       for declaration in declarations.iter() {
-        declaration.merge_into_ref(&mut style);
+        style.push(declaration.clone(), false);
       }
     }
     for &declarations in matches.important() {
       for declaration in declarations.iter() {
-        declaration.merge_into_ref(&mut style);
+        style.push(declaration.clone(), false);
       }
     }
     style.inherit(&ComputedStyle::default()).height
