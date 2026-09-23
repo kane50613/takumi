@@ -3,7 +3,7 @@ import { fromJsx } from "@takumi-rs/helpers/jsx";
 import { Globe2 } from "lucide-react";
 import { bench, run, summary } from "mitata";
 import DocsTemplate from "../../../docs/app/registry/image/docs";
-import { Renderer } from "../../src/export";
+import { Renderer, type RenderOptions } from "../../src/export";
 
 function createNode(progress = 0) {
   const orbitOffsetX = Math.sin(progress * Math.PI * 2) * 18;
@@ -54,159 +54,105 @@ function createNode(progress = 0) {
   );
 }
 
-async function createAnimationNodes() {
-  const scenes = await Promise.all(
+function createScenes() {
+  return Promise.all(
     [0, 0.33, 0.66, 1].map(async (progress) => {
       const { node } = await createNode(progress);
-      return {
-        node,
-        durationMs: 250,
-      };
+
+      return { node, durationMs: 250 };
     }),
   );
-
-  return {
-    scenes,
-    fps: 30,
-    durationMs: 1000,
-  };
 }
 
 const renderer = new Renderer();
 
+async function renderStill(options: RenderOptions) {
+  const { node, css } = await createNode();
+
+  return renderer.render(node, { ...options, css });
+}
+
 bench("createNode", createNode);
 
 summary(() => {
-  bench("createNode + render (raw)", async () => {
-    const { node, css } = await createNode();
-    return renderer.render(node, {
+  bench("createNode + render (raw)", () =>
+    renderStill({
       width: 1200,
       height: 630,
       format: "raw",
-      css,
-    });
-  });
+    }));
 
-  bench("createNode + render (png, fdeflate)", async () => {
-    const { node, css } = await createNode();
-    return renderer.render(node, {
+  bench("createNode + render (png, fdeflate)", () =>
+    renderStill({
       width: 1200,
       height: 630,
       quality: 75,
-      css,
-    });
-  });
+    }));
 
-  bench("createNode + render (png, flate2)", async () => {
-    const { node, css } = await createNode();
-    return renderer.render(node, {
+  bench("createNode + render (png, flate2)", () =>
+    renderStill({
       width: 1200,
       height: 630,
       quality: 100,
-      css,
-    });
-  });
+    }));
 
-  bench("createNode + render (webp 75%)", async () => {
-    const { node, css } = await createNode();
-    return renderer.render(node, {
+  bench("createNode + render (webp 75%)", () =>
+    renderStill({
       width: 1200,
       height: 630,
       format: "webp",
       quality: 75,
-      css,
-    });
-  });
+    }));
 
-  bench("createNode + render (webp 100%)", async () => {
-    const { node, css } = await createNode();
-    return renderer.render(node, {
+  bench("createNode + render (webp 100%)", () =>
+    renderStill({
       width: 1200,
       height: 630,
       format: "webp",
       quality: 100,
-      css,
-    });
-  });
+    }));
 });
 
 summary(() => {
-  bench("createNode + renderAnimation (webp, 30fps, 75%, 1000ms)", async () => {
-    const { scenes, fps, durationMs } = await createAnimationNodes();
-
-    if (fps !== 30 || durationMs !== 1000) {
-      throw new Error("Invalid fps or durationMs");
-    }
-
-    return renderer.renderAnimation({
-      scenes,
+  bench("createNode + renderAnimation (webp, 30fps, 75%, 1000ms)", async () =>
+    renderer.renderAnimation({
+      scenes: await createScenes(),
       width: 1200,
       height: 630,
-      fps,
+      fps: 30,
       format: "webp",
       quality: 75,
-    });
-  });
+    }));
 
-  bench("createNode + renderAnimation (webp, 30fps, 100%, 1000ms)", async () => {
-    const { scenes, fps, durationMs } = await createAnimationNodes();
-
-    if (fps !== 30 || durationMs !== 1000) {
-      throw new Error("Invalid fps or durationMs");
-    }
-
-    return renderer.renderAnimation({
-      scenes,
+  bench("createNode + renderAnimation (webp, 30fps, 100%, 1000ms)", async () =>
+    renderer.renderAnimation({
+      scenes: await createScenes(),
       width: 1200,
       height: 630,
-      fps,
+      fps: 30,
       format: "webp",
       quality: 100,
-    });
-  });
+    }));
 
-  bench("createNode + renderAnimation (apng, 30fps, 1000ms)", async () => {
-    const { scenes, fps, durationMs } = await createAnimationNodes();
-
-    if (fps !== 30 || durationMs !== 1000) {
-      throw new Error("Invalid fps or durationMs");
-    }
-
-    return renderer.renderAnimation({
-      scenes,
+  bench("createNode + renderAnimation (apng, 30fps, 1000ms)", async () =>
+    renderer.renderAnimation({
+      scenes: await createScenes(),
       width: 1200,
       height: 630,
-      fps,
+      fps: 30,
       format: "apng",
-    });
-  });
+    }));
 
-  bench("createNode + renderAnimation (gif, 30fps, 1000ms)", async () => {
-    const { scenes, fps, durationMs } = await createAnimationNodes();
-
-    if (fps !== 30 || durationMs !== 1000) {
-      throw new Error("Invalid fps or durationMs");
-    }
-
-    return renderer.renderAnimation({
-      scenes,
+  bench("createNode + renderAnimation (gif, 30fps, 1000ms)", async () =>
+    renderer.renderAnimation({
+      scenes: await createScenes(),
       width: 1200,
       height: 630,
-      fps,
+      fps: 30,
       format: "gif",
-    });
-  });
+    }));
 });
 
-const { node, css } = await createNode();
-
-await writeFile(
-  "tests/bench/bench.png",
-  await renderer.render(node, {
-    width: 1200,
-    height: 630,
-    css,
-  }),
-);
+await writeFile("tests/bench/bench.png", await renderStill({ width: 1200, height: 630 }));
 
 await run();
