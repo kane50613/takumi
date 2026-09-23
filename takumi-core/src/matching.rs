@@ -312,7 +312,7 @@ impl Element for ArenaElement<'_> {
 
     self.tree.nodes[self.index]
       .node
-      .attr(local_name)
+      .attribute(local_name)
       .is_some_and(|value| operation.eval_str(value))
   }
   fn match_non_ts_pseudo_class(
@@ -329,7 +329,7 @@ impl Element for ArenaElement<'_> {
     // set means the language is unknown, so `:lang()` never matches.
     let mut current = Some(*self);
     while let Some(element) = current {
-      if let Some(lang) = element.tree.nodes[element.index].node.attr("lang") {
+      if let Some(lang) = element.tree.nodes[element.index].node.attribute("lang") {
         return ranges.iter().any(|range| lang_matches(lang, range));
       }
       current = element.parent_element();
@@ -603,7 +603,7 @@ pub(crate) fn match_stylesheets_view<'a>(
       tree: &arena,
       index: i,
     };
-    let is_replaced = arena.nodes[i].node.is_replaced();
+    let is_replaced = arena.nodes[i].node.is_replaced_element();
 
     let mut element_ctx = MatchingContext::new(
       MatchingMode::Normal,

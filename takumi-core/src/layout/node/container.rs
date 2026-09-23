@@ -11,31 +11,34 @@ where
   Option::<Vec<Node>>::deserialize(deserializer).map(Option::unwrap_or_default)
 }
 
-pub(crate) fn container_children_ref(kind: &NodeKind) -> Option<&[Node]> {
-  let NodeKind::Container { children } = kind else {
-    return None;
-  };
+impl Node {
+  pub(crate) fn children(&self) -> Option<&[Node]> {
+    let NodeKind::Container { children } = &self.kind else {
+      return None;
+    };
 
-  (!children.is_empty()).then_some(children.as_slice())
-}
+    (!children.is_empty()).then_some(children.as_slice())
+  }
 
-pub(crate) fn take_container_children(kind: &mut NodeKind) -> Option<Box<[Node]>> {
-  let NodeKind::Container { children } = kind else {
-    return None;
-  };
+  pub(crate) fn take_children(&mut self) -> Option<Box<[Node]>> {
+    let NodeKind::Container { children } = &mut self.kind else {
+      return None;
+    };
 
-  (!children.is_empty()).then(|| take(children).into_boxed_slice())
-}
+    (!children.is_empty()).then(|| take(children).into_boxed_slice())
+  }
 
-pub(crate) fn drop_container_children(kind: &mut NodeKind) {
-  let NodeKind::Container { children } = kind else {
-    return;
-  };
+  /// Drops the subtree iteratively; recursive drop glue overflows the stack on deep trees.
+  pub(super) fn drop_children(&mut self) {
+    let NodeKind::Container { children } = &mut self.kind else {
+      return;
+    };
 
-  let mut stack = take(children);
-  while let Some(mut child) = stack.pop() {
-    if let Some(grandchildren) = child.take_children() {
-      stack.extend(grandchildren.into_vec());
+    let mut stack = take(children);
+    while let Some(mut child) = stack.pop() {
+      if let Some(grandchildren) = child.take_children() {
+        stack.extend(grandchildren.into_vec());
+      }
     }
   }
 }

@@ -5,44 +5,10 @@ use taffy::{CompactLength, MaybeResolve};
 use crate::{
   context::RenderContext,
   geometry::{AvailableSpace, Size},
-  layout::node::{ImageData, ImageSourceInput, Node, NodeStyleLayers},
+  layout::node::{ImageData, ImageSourceInput},
   resources::image::{ImageError, ImageResult, ImageSource, decode_data_uri, is_svg_like},
   style::{Length, Style, StyleDeclaration},
 };
-
-pub(crate) fn image_url(image: &ImageData) -> Option<&str> {
-  match &image.src {
-    ImageSourceInput::Url(src) if src.starts_with("https://") || src.starts_with("http://") => {
-      Some(src.as_ref())
-    }
-    _ => None,
-  }
-}
-
-pub(crate) fn take_image_style_layers(
-  node: &mut Node,
-  width: Option<f32>,
-  height: Option<f32>,
-) -> NodeStyleLayers {
-  let mut preset = node.metadata.preset.take();
-  if width.is_some() || height.is_some() {
-    let preset_style = preset.get_or_insert_with(Style::default);
-    if let Some(width) = width {
-      preset_style.push(StyleDeclaration::width(Length::Px(width)), false);
-    }
-    if let Some(height) = height {
-      preset_style.push(StyleDeclaration::height(Length::Px(height)), false);
-    }
-  }
-
-  NodeStyleLayers {
-    preset,
-    author_tw: node.metadata.tw.take(),
-    inline: node.metadata.style.take(),
-    dir: node.metadata.dir.take(),
-    lang: node.metadata.lang.take(),
-  }
-}
 
 /// What a replaced element's source states about its own size, per css-images-3 5.
 struct NaturalSize {
@@ -58,6 +24,32 @@ struct NaturalSize {
 }
 
 impl ImageData {
+  /// The source URL when it is fetched over HTTP(S).
+  pub(crate) fn url(&self) -> Option<&str> {
+    match &self.src {
+      ImageSourceInput::Url(src) if src.starts_with("https://") || src.starts_with("http://") => {
+        Some(src.as_ref())
+      }
+      _ => None,
+    }
+  }
+
+  /// Pushes the element's `width` and `height` attributes into its preset style.
+  pub(super) fn push_size_preset(&self, preset: &mut Option<Style>) {
+    if self.width.is_none() && self.height.is_none() {
+      return;
+    }
+
+    let preset = preset.get_or_insert_with(Style::default);
+
+    if let Some(width) = self.width {
+      preset.push(StyleDeclaration::width(Length::Px(width)), false);
+    }
+    if let Some(height) = self.height {
+      preset.push(StyleDeclaration::height(Length::Px(height)), false);
+    }
+  }
+
   fn natural(&self, context: &RenderContext) -> Option<NaturalSize> {
     let image_source = self.src.resolve(context).ok()?;
     let intrinsic_sizing = image_source.intrinsic_sizing();
@@ -290,7 +282,6 @@ mod tests {
   use serde_json::from_value;
   use taffy::{Dimension, Size as TaffySize, Style};
 
-  use super::image_url;
   #[cfg(feature = "svg")]
   use super::parse_data_uri_image;
   use crate::{
@@ -328,11 +319,12 @@ mod tests {
 
     assert_eq!(src.as_ref(), "https://example.com/image.png");
     assert_eq!(
-      image_url(&ImageData {
+      ImageData {
         src: ImageSourceInput::Url(src),
         width: None,
         height: None
-      }),
+      }
+      .url(),
       Some("https://example.com/image.png")
     );
 
@@ -353,11 +345,12 @@ mod tests {
 
     assert_eq!(&data[..], [137, 80, 78, 71]);
     assert_eq!(
-      image_url(&ImageData {
+      ImageData {
         src: ImageSourceInput::Buffer(data),
         width: None,
         height: None
-      }),
+      }
+      .url(),
       None
     );
 

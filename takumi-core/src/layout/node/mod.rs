@@ -10,18 +10,13 @@ use std::{
 
 use serde::Deserialize;
 
+use self::container::deserialize_children;
 pub use self::image::resolve_image;
-use self::{
-  container::{
-    container_children_ref, deserialize_children, drop_container_children, take_container_children,
-  },
-  image::take_image_style_layers,
-};
 use crate::{
   Xxh3HashSet,
   context::RenderContext,
   geometry::{AvailableSpace, Size},
-  layout::{inline::InlineContentKind, node::image::image_url},
+  layout::inline::InlineContentKind,
   resources::{
     image::{ImageError, ImageResult, ImageSource},
     image_buffer::ImageBuffer,
@@ -165,31 +160,19 @@ pub struct ImageData {
 
 impl From<&str> for ImageData {
   fn from(src: &str) -> Self {
-    Self {
-      src: ImageSourceInput::Url(src.into()),
-      width: None,
-      height: None,
-    }
+    Self::from((src, None, None))
   }
 }
 
 impl From<String> for ImageData {
   fn from(src: String) -> Self {
-    Self {
-      src: ImageSourceInput::Url(src.into()),
-      width: None,
-      height: None,
-    }
+    Self::from((src, None, None))
   }
 }
 
 impl From<Arc<str>> for ImageData {
   fn from(src: Arc<str>) -> Self {
-    Self {
-      src: ImageSourceInput::Url(src),
-      width: None,
-      height: None,
-    }
+    Self::from((src, None, None))
   }
 }
 
@@ -205,11 +188,7 @@ impl From<Vec<u8>> for ImageData {
 
 impl From<&[u8]> for ImageData {
   fn from(data: &[u8]) -> Self {
-    Self {
-      src: ImageSourceInput::Buffer(data.to_vec()),
-      width: None,
-      height: None,
-    }
+    Self::from(data.to_vec())
   }
 }
 
@@ -231,81 +210,49 @@ impl From<ImageBuffer> for ImageData {
 
 impl From<(&str, u32, u32)> for ImageData {
   fn from((src, width, height): (&str, u32, u32)) -> Self {
-    Self {
-      src: ImageSourceInput::Url(src.into()),
-      width: Some(width as f32),
-      height: Some(height as f32),
-    }
+    Self::from((src, width as f32, height as f32))
   }
 }
 
 impl From<(String, u32, u32)> for ImageData {
   fn from((src, width, height): (String, u32, u32)) -> Self {
-    Self {
-      src: ImageSourceInput::Url(src.into()),
-      width: Some(width as f32),
-      height: Some(height as f32),
-    }
+    Self::from((src, width as f32, height as f32))
   }
 }
 
 impl From<(Arc<str>, u32, u32)> for ImageData {
   fn from((src, width, height): (Arc<str>, u32, u32)) -> Self {
-    Self {
-      src: ImageSourceInput::Url(src),
-      width: Some(width as f32),
-      height: Some(height as f32),
-    }
+    Self::from((src, width as f32, height as f32))
   }
 }
 
 impl From<(&str, f32, f32)> for ImageData {
   fn from((src, width, height): (&str, f32, f32)) -> Self {
-    Self {
-      src: ImageSourceInput::Url(src.into()),
-      width: Some(width),
-      height: Some(height),
-    }
+    Self::from((src, Some(width), Some(height)))
   }
 }
 
 impl From<(String, f32, f32)> for ImageData {
   fn from((src, width, height): (String, f32, f32)) -> Self {
-    Self {
-      src: ImageSourceInput::Url(src.into()),
-      width: Some(width),
-      height: Some(height),
-    }
+    Self::from((src, Some(width), Some(height)))
   }
 }
 
 impl From<(Arc<str>, f32, f32)> for ImageData {
   fn from((src, width, height): (Arc<str>, f32, f32)) -> Self {
-    Self {
-      src: ImageSourceInput::Url(src),
-      width: Some(width),
-      height: Some(height),
-    }
+    Self::from((src, Some(width), Some(height)))
   }
 }
 
 impl From<(&str, Option<f32>, Option<f32>)> for ImageData {
   fn from((src, width, height): (&str, Option<f32>, Option<f32>)) -> Self {
-    Self {
-      src: ImageSourceInput::Url(src.into()),
-      width,
-      height,
-    }
+    Self::from((Arc::from(src), width, height))
   }
 }
 
 impl From<(String, Option<f32>, Option<f32>)> for ImageData {
   fn from((src, width, height): (String, Option<f32>, Option<f32>)) -> Self {
-    Self {
-      src: ImageSourceInput::Url(src.into()),
-      width,
-      height,
-    }
+    Self::from((Arc::from(src), width, height))
   }
 }
 
@@ -355,7 +302,7 @@ impl Default for Node {
 
 impl Drop for Node {
   fn drop(&mut self) {
-    drop_container_children(&mut self.kind);
+    self.drop_children();
   }
 }
 
@@ -386,10 +333,6 @@ impl Node {
     }
   }
 
-  pub(crate) fn children_ref(&self) -> Option<&[Node]> {
-    container_children_ref(&self.kind)
-  }
-
   /// Takes the node's own text, leaving an empty container behind.
   pub(crate) fn take_text(&mut self) -> Option<String> {
     let NodeKind::Text(data) = &mut self.kind else {
@@ -413,10 +356,6 @@ impl Node {
       NodeKind::Text(text) => Some(text),
       _ => None,
     }
-  }
-
-  pub(crate) fn take_children(&mut self) -> Option<Box<[Node]>> {
-    take_container_children(&mut self.kind)
   }
 
   pub(crate) fn is_whitespace_only_text(&self) -> bool {
@@ -556,17 +495,11 @@ impl Node {
     }
 
     if !inline_styles.is_empty() {
-      let joined: String =
-        inline_styles
-          .iter()
-          .enumerate()
-          .fold(String::new(), |mut acc, (i, (_, s))| {
-            if i > 0 {
-              acc.push(' ');
-            }
-            acc.push_str(s);
-            acc
-          });
+      let joined = inline_styles
+        .iter()
+        .map(|(_, css)| css.as_str())
+        .collect::<Vec<_>>()
+        .join(" ");
       attrs.push(format!("style=\"{}\"", escape_attr(&joined)));
     }
 
@@ -601,12 +534,14 @@ impl Node {
   }
 
   pub(crate) fn take_style_layers(&mut self) -> NodeStyleLayers {
+    let mut preset = self.metadata.preset.take();
+
     if let NodeKind::Image(image) = &self.kind {
-      return take_image_style_layers(self, image.width, image.height);
+      image.push_size_preset(&mut preset);
     }
 
     NodeStyleLayers {
-      preset: self.metadata.preset.take(),
+      preset,
       author_tw: self.metadata.tw.take(),
       inline: self.metadata.style.take(),
       dir: self.metadata.dir.take(),
@@ -639,17 +574,13 @@ impl Node {
   /// Collects resource URLs referenced by this node tree.
   pub(crate) fn metadata_image_urls<'a>(&'a self, urls: &mut Xxh3HashSet<&'a str>) {
     match &self.kind {
-      NodeKind::Container { .. } => {
-        let Some(children) = self.children_ref() else {
-          return;
-        };
-
+      NodeKind::Container { children } => {
         for child in children {
           child.metadata_image_urls(urls);
         }
       }
       NodeKind::Image(image) => {
-        if let Some(url) = image_url(image) {
+        if let Some(url) = image.url() {
           urls.insert(url);
         }
       }
@@ -671,7 +602,7 @@ impl Node {
       urls.extend(inline.image_urls());
     }
 
-    let Some(children) = self.children_ref() else {
+    let Some(children) = self.children() else {
       return;
     };
 
@@ -759,18 +690,6 @@ impl Node {
   /// The element's `class` attribute, space-separated.
   pub fn class_name(&self) -> Option<&str> {
     self.metadata.class_name.as_deref()
-  }
-
-  pub(crate) fn attr(&self, name: &str) -> Option<&str> {
-    self.attribute(name)
-  }
-
-  pub(crate) fn is_replaced(&self) -> bool {
-    self.is_replaced_element()
-  }
-
-  pub(crate) fn children(&self) -> Option<&[Self]> {
-    self.children_ref()
   }
 }
 
@@ -903,7 +822,7 @@ mod matching_tests {
   use crate::{
     layout::node::Node,
     matching::{MatchedDeclarationsView, match_stylesheets_view},
-    style::{ComputedStyle, Length, Size, Style, StyleSheet},
+    style::{ComputedStyle, Length, Style, StyleSheet},
     viewport::Viewport,
   };
 
@@ -911,7 +830,7 @@ mod matching_tests {
     Node::container([]).with_class_name(class_name)
   }
 
-  fn computed_width_from_matches(matches: &MatchedDeclarationsView<'_>) -> Size {
+  fn computed_style_from_matches(matches: &MatchedDeclarationsView<'_>) -> ComputedStyle {
     let mut style = Style::default();
     for &declarations in matches
       .layered_normal()
@@ -927,26 +846,7 @@ mod matching_tests {
         style.push(declaration.clone(), false);
       }
     }
-    style.inherit(&ComputedStyle::default()).width
-  }
-
-  fn computed_height_from_matches(matches: &MatchedDeclarationsView<'_>) -> Size {
-    let mut style = Style::default();
-    for &declarations in matches
-      .layered_normal()
-      .iter()
-      .chain(matches.unlayered_normal())
-    {
-      for declaration in declarations.iter() {
-        style.push(declaration.clone(), false);
-      }
-    }
-    for &declarations in matches.important() {
-      for declaration in declarations.iter() {
-        style.push(declaration.clone(), false);
-      }
-    }
-    style.inherit(&ComputedStyle::default()).height
+    style.inherit(&ComputedStyle::default())
   }
 
   fn parse_stylesheet(css: &str) -> StyleSheet {
@@ -986,7 +886,7 @@ mod matching_tests {
     let matched = match_stylesheets_view(&root, &stylesheet, Viewport::default());
     assert_eq!(matched.len(), 1);
     assert_eq!(
-      computed_width_from_matches(matched[0].element()),
+      computed_style_from_matches(matched[0].element()).width,
       Length::Px(10.0).into()
     );
   }
@@ -1008,7 +908,7 @@ mod matching_tests {
     let matched = match_stylesheets_view(&root, &stylesheet, Viewport::default());
     assert_eq!(matched.len(), 2);
     assert_eq!(
-      computed_width_from_matches(matched[1].element()),
+      computed_style_from_matches(matched[1].element()).width,
       Length::Px(10.0).into()
     );
   }
@@ -1032,7 +932,7 @@ mod matching_tests {
     let matched = match_stylesheets_view(&root, &stylesheet, Viewport::default());
     assert_eq!(matched.len(), 1);
     assert_eq!(
-      computed_width_from_matches(matched[0].element()),
+      computed_style_from_matches(matched[0].element()).width,
       Length::Px(20.0).into()
     );
   }
@@ -1045,7 +945,7 @@ mod matching_tests {
     let matched = match_stylesheets_view(&root, &stylesheet, Viewport::default());
     assert_eq!(matched.len(), 1);
     assert_eq!(
-      computed_width_from_matches(matched[0].element()),
+      computed_style_from_matches(matched[0].element()).width,
       Length::Px(20.0).into()
     );
   }
@@ -1070,7 +970,7 @@ mod matching_tests {
     let matched = match_stylesheets_view(&root, &stylesheet, Viewport::default());
     assert_eq!(matched.len(), 1);
     assert_eq!(
-      computed_width_from_matches(matched[0].element()),
+      computed_style_from_matches(matched[0].element()).width,
       Length::Px(10.0).into()
     );
   }
@@ -1089,7 +989,7 @@ mod matching_tests {
     let matched = match_stylesheets_view(&root, &stylesheet, Viewport::default());
     assert_eq!(matched.len(), 1);
     assert_eq!(
-      computed_width_from_matches(matched[0].element()),
+      computed_style_from_matches(matched[0].element()).width,
       Length::Px(10.0).into()
     );
   }
@@ -1114,19 +1014,19 @@ mod matching_tests {
     let matched = match_stylesheets_view(&root, &stylesheet, Viewport::default());
     assert_eq!(matched.len(), 5);
     assert_eq!(
-      computed_width_from_matches(matched[2].element()),
+      computed_style_from_matches(matched[2].element()).width,
       Length::Px(10.0).into()
     );
     assert_eq!(
-      computed_height_from_matches(matched[2].element()),
+      computed_style_from_matches(matched[2].element()).height,
       Length::Px(30.0).into()
     );
     assert_eq!(
-      computed_width_from_matches(matched[4].element()),
+      computed_style_from_matches(matched[4].element()).width,
       Length::Px(20.0).into()
     );
     assert_eq!(
-      computed_height_from_matches(matched[4].element()),
+      computed_style_from_matches(matched[4].element()).height,
       Length::Px(30.0).into()
     );
   }
@@ -1155,11 +1055,11 @@ mod matching_tests {
     let matched = match_stylesheets_view(&root, &stylesheet, Viewport::default());
     assert_eq!(matched.len(), 2);
     assert_eq!(
-      computed_width_from_matches(matched[1].element()),
+      computed_style_from_matches(matched[1].element()).width,
       Length::Px(30.0).into()
     );
     assert_eq!(
-      computed_height_from_matches(matched[1].element()),
+      computed_style_from_matches(matched[1].element()).height,
       Length::Px(40.0).into()
     );
   }
