@@ -59,24 +59,6 @@ impl CssInput<'_> {
 
 struct CssInputVisitor;
 
-impl CssInputVisitor {
-  fn drain_seq<'de, A>(mut seq: A) -> Result<(), A::Error>
-  where
-    A: SeqAccess<'de>,
-  {
-    while seq.next_element::<IgnoredAny>()?.is_some() {}
-    Ok(())
-  }
-
-  fn drain_map<'de, A>(mut map: A) -> Result<(), A::Error>
-  where
-    A: MapAccess<'de>,
-  {
-    while map.next_entry::<IgnoredAny, IgnoredAny>()?.is_some() {}
-    Ok(())
-  }
-}
-
 impl<'de> Visitor<'de> for CssInputVisitor {
   type Value = CssInput<'de>;
 
@@ -175,19 +157,21 @@ impl<'de> Visitor<'de> for CssInputVisitor {
     deserializer.deserialize_any(self)
   }
 
-  fn visit_seq<A>(self, seq: A) -> Result<Self::Value, A::Error>
+  fn visit_seq<A>(self, mut seq: A) -> Result<Self::Value, A::Error>
   where
     A: SeqAccess<'de>,
   {
-    Self::drain_seq(seq)?;
+    while seq.next_element::<IgnoredAny>()?.is_some() {}
+
     Ok(CssInput::Unexpected(CssUnexpected::Seq))
   }
 
-  fn visit_map<A>(self, map: A) -> Result<Self::Value, A::Error>
+  fn visit_map<A>(self, mut map: A) -> Result<Self::Value, A::Error>
   where
     A: MapAccess<'de>,
   {
-    Self::drain_map(map)?;
+    while map.next_entry::<IgnoredAny, IgnoredAny>()?.is_some() {}
+
     Ok(CssInput::Unexpected(CssUnexpected::Map))
   }
 }
