@@ -2089,6 +2089,7 @@ fn text_shadow_stays_on_its_line_page() {
     streams
       .iter()
       .position(|stream| find(stream, fill).is_some())
+      .unwrap_or_else(|| panic!("expected a {} fill", String::from_utf8_lossy(fill)))
   };
 
   assert_ne!(
