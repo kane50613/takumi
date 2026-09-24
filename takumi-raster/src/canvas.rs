@@ -1,7 +1,4 @@
-//! Canvas operations and image blending for the takumi rendering system.
-//!
-//! This module provides performance-optimized canvas operations including
-//! fast image blending and pixel manipulation operations.
+//! Canvas operations and image blending.
 
 mod blit;
 mod composite;
@@ -21,11 +18,11 @@ use image::{
   ImageError, Rgba, RgbaImage,
   error::{ParameterError, ParameterErrorKind},
 };
+use mask::MaskStackEntry;
 pub(crate) use mask::{
   CanvasViewport, MaskView, NodeMaskAction, attenuate_alpha_by_mask, intersect_alpha_masks,
   prepare_node_mask, render_mask,
 };
-use mask::{MaskStackEntry, resolve_mask};
 pub(crate) use paint_source::{
   BilinearAxis, MaskCompositeColor, PaintSource, RowSource, SamplingFootprint,
   interpolate_with_footprint,
@@ -91,6 +88,26 @@ pub(crate) struct OverlayOptions {
   pub mode: BlendMode,
 }
 
+impl OverlayOptions {
+  /// The offset of an unbordered overlay that lands on whole pixels.
+  fn whole_pixel_translation(&self) -> Option<Point<f32>> {
+    if !self.border.is_zero() {
+      return None;
+    }
+
+    whole_pixel_translation(self.transform)
+  }
+}
+
+/// The offset of a transform that only moves by whole pixels.
+fn whole_pixel_translation(transform: Affine) -> Option<Point<f32>> {
+  (transform.only_translation() && transform.x.fract() == 0.0 && transform.y.fract() == 0.0)
+    .then_some(Point {
+      x: transform.x,
+      y: transform.y,
+    })
+}
+
 /// Borrowed view of the active paint destination: the pixmap and the canvas's
 /// combined constraint mask. Primitives take this instead of threading
 /// `(pixmap, mask, size)` separately, so a materialized mask always matches
@@ -110,7 +127,7 @@ impl<'a> DrawTarget<'a, '_> {
 
   pub(crate) fn resolve_combined_mask(&mut self) -> Option<Cow<'a, TinyMask>> {
     let size = self.size();
-    self.combined_mask.and_then(|mask| resolve_mask(mask, size))
+    self.combined_mask.and_then(|mask| mask.resolve(size))
   }
 
   /// Blit-level coordinates are already localized, so the cull rect is the
@@ -169,26 +186,16 @@ impl Canvas {
       return Err(Error::InvalidViewport);
     }
 
-    Pixmap::new(size.width, size.height).ok_or_else(|| {
-      Error::encode(ImageError::Parameter(ParameterError::from_kind(
-        ParameterErrorKind::DimensionMismatch,
-      )))
-    })
+    Pixmap::new(size.width, size.height).ok_or_else(dimension_mismatch)
   }
 
   pub(crate) fn begin_subcanvas(&mut self, bounds: Placement) -> Result<CanvasSubcanvas> {
-    let size = Size {
+    let image = Self::acquire_offscreen(Size {
       width: bounds.width,
       height: bounds.height,
-    };
-    let image = Self::acquire_offscreen(size)?;
+    })?;
 
-    let viewport = self.viewport();
-    if bounds.left == viewport.origin.x as i32
-      && bounds.top == viewport.origin.y as i32
-      && bounds.width == viewport.size.width
-      && bounds.height == viewport.size.height
-    {
+    if bounds == self.viewport().placement() {
       return Ok(CanvasSubcanvas {
         image: replace(&mut self.image, image),
         origin: None,
@@ -197,10 +204,9 @@ impl Canvas {
       });
     }
 
-    let parent_origin = self.origin;
     let offset = Point {
-      x: bounds.left - parent_origin.x as i32,
-      y: bounds.top - parent_origin.y as i32,
+      x: bounds.left - self.origin.x as i32,
+      y: bounds.top - self.origin.y as i32,
     };
     let origin = Point {
       x: bounds.left as u32,
@@ -299,19 +305,38 @@ impl Canvas {
     let mut data = self.image.take();
     demultiply_rgba_in_place(&mut data);
 
-    RgbaImage::from_raw(width, height, data).ok_or_else(|| {
-      Error::encode(ImageError::Parameter(ParameterError::from_kind(
-        ParameterErrorKind::DimensionMismatch,
-      )))
-    })
+    RgbaImage::from_raw(width, height, data).ok_or_else(dimension_mismatch)
   }
 
   pub(crate) fn with_pixmap<R>(&mut self, f: impl FnOnce(&mut Pixmap) -> R) -> R {
     f(&mut self.image)
   }
 
-  pub(crate) fn with_pixmap_ref<R>(&mut self, f: impl FnOnce(&Pixmap) -> R) -> R {
-    f(&self.image)
+  /// Copies the pixels under `region`, which must lie inside the pixmap.
+  pub(crate) fn read_region(&self, region: Placement) -> Vec<u8> {
+    let row_bytes = region.width as usize * 4;
+    let canvas_width = self.image.width() as usize;
+    let canvas_raw = self.image.data();
+    let mut raw = vec![0; row_bytes * region.height as usize];
+
+    for (y, dest_row) in raw.chunks_exact_mut(row_bytes).enumerate() {
+      let src_start = ((region.top as usize + y) * canvas_width + region.left as usize) * 4;
+      dest_row.copy_from_slice(&canvas_raw[src_start..src_start + row_bytes]);
+    }
+
+    raw
+  }
+
+  /// Writes `raw` back over `region`, the inverse of [`Self::read_region`].
+  pub(crate) fn write_region(&mut self, region: Placement, raw: &[u8]) {
+    let row_bytes = region.width as usize * 4;
+    let canvas_width = self.image.width() as usize;
+    let canvas_raw = self.image.data_mut();
+
+    for (y, src_row) in raw.chunks_exact(row_bytes).enumerate() {
+      let dst_start = ((region.top as usize + y) * canvas_width + region.left as usize) * 4;
+      canvas_raw[dst_start..dst_start + row_bytes].copy_from_slice(src_row);
+    }
   }
 
   pub(crate) fn draw_mask(
@@ -333,6 +358,7 @@ impl Canvas {
       );
     });
   }
+
   pub(crate) fn composite_mask_source(
     &mut self,
     mask: &[u8],
@@ -359,6 +385,7 @@ impl Canvas {
       );
     });
   }
+
   pub(crate) fn overlay_sampled_pixmap(
     &mut self,
     source: PixmapRef<'_>,
@@ -531,6 +558,35 @@ impl Canvas {
   }
 }
 
+/// Undoes premultiplication in place.
+///
+/// Rounds half away from zero in integer arithmetic. tiny-skia divides in
+/// `f64`, which lands a hair under the halfway point for some values and rounds
+/// them down; integers make the result identical on every target.
+pub(crate) fn demultiply_rgba_in_place(data: &mut [u8]) {
+  Simd::detect().edit_mixed_alpha_runs(data, |pixels| {
+    for pixel in pixels {
+      let alpha = pixel[3] as u32;
+
+      if alpha == u8::MAX as u32 || alpha == 0 {
+        continue;
+      }
+
+      let divisor = alpha * 2;
+
+      for channel in &mut pixel[..3] {
+        *channel = ((*channel as u32 * 510 + alpha) / divisor) as u8;
+      }
+    }
+  });
+}
+
+fn dimension_mismatch() -> Error {
+  Error::encode(ImageError::Parameter(ParameterError::from_kind(
+    ParameterErrorKind::DimensionMismatch,
+  )))
+}
+
 #[cfg(test)]
 mod tests {
   use super::*;
@@ -592,29 +648,6 @@ mod tests {
     assert_eq!(painted.dimensions(), (4, 4));
     assert!(painted.as_raw().iter().all(|byte| *byte == 0xff));
   }
-}
-
-/// Undoes premultiplication in place.
-///
-/// Rounds half away from zero in integer arithmetic. tiny-skia divides in
-/// `f64`, which lands a hair under the halfway point for some values and rounds
-/// them down; integers make the result identical on every target.
-pub(crate) fn demultiply_rgba_in_place(data: &mut [u8]) {
-  Simd::detect().edit_mixed_alpha_runs(data, |pixels| {
-    for pixel in pixels {
-      let alpha = pixel[3] as u32;
-
-      if alpha == u8::MAX as u32 || alpha == 0 {
-        continue;
-      }
-
-      let divisor = alpha * 2;
-
-      for channel in &mut pixel[..3] {
-        *channel = ((*channel as u32 * 510 + alpha) / divisor) as u8;
-      }
-    }
-  });
 }
 
 #[cfg(test)]

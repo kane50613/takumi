@@ -9,8 +9,8 @@ use takumi_core::{
 use tiny_skia::{Mask as TinyMask, PixmapMut};
 
 use crate::{
-  BlurFormat, BlurType, BorderProperties, Canvas, Placement, RenderContext, Result, SizedShadow,
-  apply_blur, apply_blur_rgba_bytes,
+  BlurType, BorderProperties, Canvas, Placement, RenderContext, Result, SizedShadow,
+  apply_blur_alpha_bytes, apply_blur_rgba_bytes,
   canvas::demultiply_rgba_in_place,
   checked_area, fast_div_255, intersect_alpha_masks, premultiply_rgba_pixel, render_mask,
   style::{
@@ -44,7 +44,6 @@ fn apply_single_pixel_filter(pixel: &mut [u8], filter: &Filter) {
       }
     }
     Filter::Sepia(PercentageNumber(amount)) => {
-      // Sepia tone matrix coefficients
       let r = pixel[0] as f32;
       let g = pixel[1] as f32;
       let b = pixel[2] as f32;
@@ -322,24 +321,18 @@ pub(crate) fn apply_filters_to_pixmap<'f, F: Iterator<Item = &'f Filter>>(
   current_color: Color,
   filters: F,
 ) -> Result<()> {
-  // Collect filters and batch consecutive pixel filters
   let mut pending_pixel_filters: SmallVec<[&Filter; 8]> = SmallVec::new();
 
   for filter in filters {
     match filter.categorize() {
-      FilterCategory::Pixel(f) => {
-        // Accumulate pixel filters for batch processing
-        pending_pixel_filters.push(f);
-      }
+      FilterCategory::Pixel(f) => pending_pixel_filters.push(f),
       FilterCategory::Complex(f) => {
-        // Flush any pending pixel filters first
-        if !pending_pixel_filters.is_empty() {
-          let raw: &mut [u8] = bytemuck::cast_slice_mut(pixmap.pixels_mut());
-          apply_batched_pixel_filters(raw, &pending_pixel_filters);
-          pending_pixel_filters.clear();
-        }
+        apply_batched_pixel_filters(
+          bytemuck::cast_slice_mut(pixmap.pixels_mut()),
+          &pending_pixel_filters,
+        );
+        pending_pixel_filters.clear();
 
-        // Apply complex filter
         match f {
           Filter::HueRotate(angle) => {
             let raw: &mut [u8] = bytemuck::cast_slice_mut(pixmap.pixels_mut());
@@ -387,20 +380,15 @@ pub(crate) fn apply_filters_to_pixmap<'f, F: Iterator<Item = &'f Filter>>(
     }
   }
 
-  // Flush remaining pixel filters
-  if !pending_pixel_filters.is_empty() {
-    let raw: &mut [u8] = bytemuck::cast_slice_mut(pixmap.pixels_mut());
-    apply_batched_pixel_filters(raw, &pending_pixel_filters);
-  }
+  apply_batched_pixel_filters(
+    bytemuck::cast_slice_mut(pixmap.pixels_mut()),
+    &pending_pixel_filters,
+  );
 
   Ok(())
 }
 
-/// Applies backdrop-filter effects to the area behind an element.
-///
-/// This extracts the region of the canvas that will be covered by the element,
-/// applies the specified filters to it, and composites it back to the canvas.
-#[allow(clippy::needless_range_loop)]
+/// Filters the canvas behind an element and composites it back through the element's shape.
 pub(crate) fn apply_backdrop_filter(
   canvas: &mut Canvas,
   border: BorderProperties,
@@ -415,18 +403,14 @@ pub(crate) fn apply_backdrop_filter(
     return Ok(());
   }
 
-  let drop_shadow_filtered = filters.iter().filter(|f| !f.is_drop_shadow());
-
   let canvas_size = canvas.size();
   if canvas_size.width == 0 || canvas_size.height == 0 {
     return Ok(());
   }
 
-  // Generate the mask for the element's shape (with border-radius)
   let mut paths = Vec::new();
   border.append_mask_commands(&mut paths, layout_size, Point::ZERO);
 
-  // Render the mask for compositing.
   let (mut mask_data, mut placement) =
     render_mask(&paths, Some(transform), None, Some(canvas.viewport()));
 
@@ -458,25 +442,10 @@ pub(crate) fn apply_backdrop_filter(
     return Ok(());
   };
 
-  let region_width = region.width;
-  let region_height = region.height;
-  let region_row_bytes = region_width as usize * 4;
-  let backdrop_len = region_row_bytes * region_height as usize;
-
-  let mut backdrop_raw = vec![0; backdrop_len];
-
-  canvas.with_pixmap_ref(|pixmap| {
-    let canvas_width = pixmap.width() as usize;
-    let canvas_raw: &[u8] = bytemuck::cast_slice(pixmap.pixels());
-    for (y, dest_row) in backdrop_raw.chunks_exact_mut(region_row_bytes).enumerate() {
-      let src_y = region.top as usize + y;
-      let src_start = (src_y * canvas_width + region.left as usize) * 4;
-      dest_row.copy_from_slice(&canvas_raw[src_start..src_start + region_row_bytes]);
-    }
-  });
-
+  let region_row_bytes = region.width as usize * 4;
+  let mut backdrop_raw = canvas.read_region(region);
   let Some(mut backdrop_pixmap) =
-    PixmapMut::from_bytes(&mut backdrop_raw, region_width, region_height)
+    PixmapMut::from_bytes(&mut backdrop_raw, region.width, region.height)
   else {
     return Ok(());
   };
@@ -485,10 +454,9 @@ pub(crate) fn apply_backdrop_filter(
     &mut backdrop_pixmap,
     &context.sizing,
     context.current_color,
-    drop_shadow_filtered,
+    filters.iter().filter(|filter| !filter.is_drop_shadow()),
   )?;
 
-  // Composite the filtered backdrop back to the canvas, respecting the mask.
   let mask_offset_x = region.left - placement.left;
   let mask_offset_y = region.top - placement.top;
   let x_start = (-mask_offset_x).max(0) as usize;
@@ -501,7 +469,7 @@ pub(crate) fn apply_backdrop_filter(
     let canvas_width = pixmap.width() as usize;
     let canvas_raw: &mut [u8] = bytemuck::cast_slice_mut(pixmap.pixels_mut());
 
-    for y in 0..region_height {
+    for y in 0..region.height {
       let mask_y = mask_offset_y + y as i32;
       if mask_y < 0 {
         continue;
@@ -514,7 +482,7 @@ pub(crate) fn apply_backdrop_filter(
       let canvas_start = (canvas_y * canvas_width + region.left as usize) * 4;
       let canvas_row = &mut canvas_raw[canvas_start..canvas_start + region_row_bytes];
 
-      let backdrop_start = (y * region_width) as usize * 4;
+      let backdrop_start = (y * region.width) as usize * 4;
       let backdrop_row = &backdrop_raw[backdrop_start..backdrop_start + region_row_bytes];
       let mask_row_start = mask_y as usize * placement.width as usize;
       let mask_row = &mask_data[mask_row_start..mask_row_start + placement.width as usize];
@@ -539,8 +507,7 @@ fn apply_drop_shadow_filter(pixmap: &mut PixmapMut<'_>, shadow: &SizedShadow) ->
     return Ok(());
   }
 
-  let blur_radius = shadow.blur_radius;
-  let padding = (blur_radius * BlurType::Shadow.extent_multiplier()).ceil() as u32;
+  let padding = (shadow.blur_radius * BlurType::Shadow.extent_multiplier()).ceil() as u32;
 
   let offset_x = shadow.offset_x.round() as i32;
   let offset_y = shadow.offset_y.round() as i32;
@@ -581,14 +548,11 @@ fn apply_drop_shadow_filter(pixmap: &mut PixmapMut<'_>, shadow: &SizedShadow) ->
     }
   }
 
-  // Apply blur to the shadow alpha
-  apply_blur(
-    BlurFormat::Alpha {
-      data: &mut shadow_alpha,
-      width: shadow_width,
-      height: shadow_height,
-    },
-    blur_radius,
+  apply_blur_alpha_bytes(
+    &mut shadow_alpha,
+    shadow_width,
+    shadow_height,
+    shadow.blur_radius,
     BlurType::Shadow,
   )?;
 

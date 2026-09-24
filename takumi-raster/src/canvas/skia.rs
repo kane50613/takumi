@@ -52,7 +52,6 @@ pub(crate) fn to_tiny_blend_mode(mode: BlendMode) -> Option<tiny_skia::BlendMode
     BlendMode::Color => T::Color,
     BlendMode::Luminosity => T::Luminosity,
     BlendMode::PlusLighter => T::Plus,
-    BlendMode::PlusDarker => return None,
     _ => return None,
   })
 }
