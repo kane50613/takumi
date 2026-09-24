@@ -210,7 +210,6 @@ pub(super) fn make_ellipsis_layout<'c>(
       );
     });
 
-  positioned_floats.clear();
   break_into_lines(
     &mut final_layout,
     options,
