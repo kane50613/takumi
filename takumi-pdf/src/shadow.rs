@@ -31,7 +31,7 @@ pub(crate) fn emit_outer_shadows(
   shadows: &[SizedShadow],
   border: &BorderProperties,
   size: Size<f32>,
-  at: (f32, f32),
+  origin: CorePoint<f32>,
   surface: &mut Surface,
 ) {
   let mut element = Vec::with_capacity(BorderProperties::PATH_COMMANDS_AMOUNT);
@@ -53,7 +53,7 @@ pub(crate) fn emit_outer_shadows(
       );
       // The element's own shape, unshifted, so the even-odd fill leaves a ring.
       commands.extend_from_slice(&element);
-      fill(&commands, shadow.color, band.alpha, at, surface);
+      fill(&commands, shadow.color, band.alpha, origin, surface);
     }
   }
 }
@@ -64,10 +64,10 @@ pub(crate) fn emit_outer_shadows(
 pub(crate) fn emit_inset_shadows(
   shadows: &[SizedShadow],
   clip: &ClipBox,
-  at: (f32, f32),
+  origin: CorePoint<f32>,
   surface: &mut Surface,
 ) {
-  let origin = (at.0 + clip.offset.x, at.1 + clip.offset.y);
+  let origin = origin + clip.offset;
 
   for shadow in shadows.iter().rev() {
     for band in Band::of(shadow) {
@@ -170,8 +170,14 @@ fn erfc(x: f32) -> f32 {
   1.0 - sign * erf
 }
 
-fn fill(commands: &[PathCommand], color: Color, alpha: f32, at: (f32, f32), surface: &mut Surface) {
-  let Some(path) = krilla_path(commands, at.0, at.1) else {
+fn fill(
+  commands: &[PathCommand],
+  color: Color,
+  alpha: f32,
+  origin: CorePoint<f32>,
+  surface: &mut Surface,
+) {
+  let Some(path) = krilla_path(commands, origin) else {
     return;
   };
 

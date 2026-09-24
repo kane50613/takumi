@@ -1,8 +1,11 @@
 //! Draws flattened SVG vector ops onto a krilla surface, so SVG image sources
 //! embed as real paths and gradients instead of bitmaps.
 
-use takumi_core::resources::image::{
-  SvgFill, SvgGradient, SvgLineCap, SvgLineJoin, SvgOp, SvgPaint, SvgSpreadMethod, SvgStrokeStyle,
+use takumi_core::{
+  geometry::Point,
+  resources::image::{
+    SvgFill, SvgGradient, SvgLineCap, SvgLineJoin, SvgOp, SvgPaint, SvgSpreadMethod, SvgStrokeStyle,
+  },
 };
 
 use crate::{
@@ -32,7 +35,7 @@ fn draw_ops(surface: &mut Surface, ops: Vec<SvgOp>) {
   for op in ops {
     match op {
       SvgOp::PushTransform(transform) => surface.push_transform(&krilla_transform(transform)),
-      SvgOp::PushClip { path, evenodd } => match krilla_path(&path, 0.0, 0.0) {
+      SvgOp::PushClip { path, evenodd } => match krilla_path(&path, Point::ZERO) {
         Some(path) => surface.push_clip_path(&path, &fill_rule(evenodd)),
         // The matching `Pop` still comes; keep the layer stack balanced.
         None => surface.push_transform(&Transform::identity()),
@@ -51,7 +54,7 @@ fn draw_ops(surface: &mut Surface, ops: Vec<SvgOp>) {
       }
       SvgOp::Pop => surface.pop(),
       SvgOp::Draw { path, fill, stroke } => {
-        let Some(path) = krilla_path(&path, 0.0, 0.0) else {
+        let Some(path) = krilla_path(&path, Point::ZERO) else {
           continue;
         };
         let fill = fill.map(|fill| svg_fill(fill, surface));

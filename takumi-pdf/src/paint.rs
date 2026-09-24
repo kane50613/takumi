@@ -6,11 +6,9 @@ use takumi_core::{
   resources::image::{ImageError, ImageSource, RenderedImage},
 };
 use takumi_core::{
-  geometry::{ComputedLayout as Layout, PathCommand},
+  geometry::{PathCommand, Point, Rect},
   painter::FillShape,
-  style::{
-    BlendMode, Color, ComputedStyle, FillRule as CoreFillRule, Overflow, ResolvedGradientStop,
-  },
+  style::{BlendMode, Color, FillRule as CoreFillRule, ResolvedGradientStop},
 };
 
 use crate::krilla::{
@@ -27,11 +25,11 @@ use crate::{filter::ColorFilter, krilla::image::Image as KrillaImage, raster::em
 
 /// A degenerate path, for a clip that must hide everything: an empty region is
 /// what CSS asks for when a shape resolves to no area.
-pub(crate) fn empty_path(x: f32, y: f32) -> Option<KrillaPath> {
+pub(crate) fn empty_path(origin: Point<f32>) -> Option<KrillaPath> {
   let mut builder = PathBuilder::new();
 
-  builder.move_to(x, y);
-  builder.line_to(x, y);
+  builder.move_to(origin.x, origin.y);
+  builder.line_to(origin.x, origin.y);
   builder.close();
   builder.finish()
 }
@@ -44,8 +42,9 @@ pub(crate) fn rect_path(rect: KrillaRect) -> Option<KrillaPath> {
   builder.finish()
 }
 
-/// Converts takumi-core path commands to a krilla path translated by `(x, y)`.
-pub(crate) fn krilla_path(commands: &[PathCommand], x: f32, y: f32) -> Option<KrillaPath> {
+/// Converts takumi-core path commands to a krilla path translated by `origin`.
+pub(crate) fn krilla_path(commands: &[PathCommand], origin: Point<f32>) -> Option<KrillaPath> {
+  let Point { x, y } = origin;
   let mut builder = PathBuilder::new();
 
   for command in commands {
@@ -62,44 +61,19 @@ pub(crate) fn krilla_path(commands: &[PathCommand], x: f32, y: f32) -> Option<Kr
   builder.finish()
 }
 
-/// A fill shape as a krilla path translated by `(x, y)`.
-pub(crate) fn shape_path(shape: &FillShape, x: f32, y: f32) -> Option<KrillaPath> {
+/// A fill shape as a krilla path translated by `origin`.
+pub(crate) fn shape_path(shape: &FillShape, origin: Point<f32>) -> Option<KrillaPath> {
   match shape {
     FillShape::Rect(size) => {
-      KrillaRect::from_xywh(x, y, size.width, size.height).and_then(rect_path)
+      KrillaRect::from_xywh(origin.x, origin.y, size.width, size.height).and_then(rect_path)
     }
-    _ => krilla_path(&shape.to_commands(), x, y),
+    _ => krilla_path(&shape.to_commands(), origin),
   }
 }
 
-/// The rectangular overflow clip: each hidden axis bounds to the padding box,
-/// a visible axis is left effectively unbounded.
-pub(crate) fn overflow_clip_rect(
-  style: &ComputedStyle,
-  layout: Layout,
-  x: f32,
-  y: f32,
-) -> Option<KrillaPath> {
-  const UNBOUNDED: f32 = 1.0e6;
-  let overflow = style.resolve_overflows();
-  let clip_x = overflow.x != Overflow::Visible;
-  let clip_y = overflow.y != Overflow::Visible;
-
-  let (left, right) = if clip_x {
-    let padding_left = x + layout.border.left;
-    let padding_right = (x + layout.size.width - layout.border.right).max(padding_left);
-    (padding_left, padding_right)
-  } else {
-    (x - UNBOUNDED, x + layout.size.width + UNBOUNDED)
-  };
-  let (top, bottom) = if clip_y {
-    let padding_top = y + layout.border.top;
-    let padding_bottom = (y + layout.size.height - layout.border.bottom).max(padding_top);
-    (padding_top, padding_bottom)
-  } else {
-    (y - UNBOUNDED, y + layout.size.height + UNBOUNDED)
-  };
-  KrillaRect::from_ltrb(left, top, right, bottom).and_then(rect_path)
+/// A krilla path tracing `edges`.
+pub(crate) fn edges_path(edges: Rect<f32>) -> Option<KrillaPath> {
+  KrillaRect::from_ltrb(edges.left, edges.top, edges.right, edges.bottom).and_then(rect_path)
 }
 
 /// Undoes the premultiplication takumi-core renders with: PDF image streams
