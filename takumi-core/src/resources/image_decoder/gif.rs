@@ -1,20 +1,16 @@
 //! GIF sizing and timelines, composited the way browsers and the `image` crate do.
 
-use super::DecodeTarget;
-use std::sync::Arc;
-use std::{io::Cursor, mem::take};
+use std::{io::Cursor, mem::take, sync::Arc};
 
-use gif::{ColorOutput, DecodeOptions, Decoder as GifDecoder, DisposalMethod};
-use image::ImageResult;
-use image::{ImageError, ImageFormat, error::DecodingError};
+use gif::{ColorOutput, DecodeOptions, Decoder as GifDecoder, DisposalMethod, Frame};
+use image::{ImageError, ImageFormat, ImageResult, error::DecodingError};
 
-use super::{DetectedImageFormat, FrameInfo, detect_image_format};
 use super::{
-  Dispose, MAX_ANIMATION_FRAMES, MAX_ANIMATION_TOTAL_PIXELS, MAX_IMAGE_DIMENSION, fit_to_target,
+  DecodeTarget, DetectedImageFormat, Dispose, FrameInfo, MAX_ANIMATION_FRAMES,
+  MAX_ANIMATION_TOTAL_PIXELS, MAX_IMAGE_DIMENSION, detect_image_format, fit_to_target,
   invalid_buffer_error, pixel_budget_error,
 };
-use crate::geometry::Rect;
-use crate::resources::image_buffer::ImageBuffer;
+use crate::{geometry::Rect, resources::image_buffer::ImageBuffer};
 
 pub(crate) fn is_gif(bytes: &[u8]) -> bool {
   matches!(detect_image_format(bytes), Some(DetectedImageFormat::Gif))
@@ -28,6 +24,11 @@ fn gif_decoder(bytes: &[u8]) -> ImageResult<GifDecoder<Cursor<&[u8]>>> {
   let mut options = DecodeOptions::new();
   options.set_color_output(ColorOutput::RGBA);
 
+  read_gif(options, bytes)
+}
+
+/// Reads the GIF header under `options`, rejecting a logical screen over the dimension limit.
+fn read_gif(options: DecodeOptions, bytes: &[u8]) -> ImageResult<GifDecoder<Cursor<&[u8]>>> {
   let decoder = options
     .read_info(Cursor::new(bytes))
     .map_err(gif_decode_error)?;
@@ -37,6 +38,16 @@ fn gif_decoder(bytes: &[u8]) -> ImageResult<GifDecoder<Cursor<&[u8]>>> {
   }
 
   Ok(decoder)
+}
+
+/// The frame's rectangle within the logical screen.
+fn frame_rect(frame: &Frame) -> Rect<u32> {
+  Rect {
+    left: frame.left as u32,
+    top: frame.top as u32,
+    right: frame.left as u32 + frame.width as u32,
+    bottom: frame.top as u32 + frame.height as u32,
+  }
 }
 
 /// GIF logical screen dimensions from the header; decodes no frame.
@@ -50,14 +61,7 @@ pub(crate) fn gif_dimensions(bytes: &[u8]) -> ImageResult<(u32, u32)> {
 pub(crate) fn gif_frame_infos(bytes: &[u8]) -> ImageResult<Box<[FrameInfo]>> {
   let mut options = DecodeOptions::new();
   options.skip_frame_decoding(true);
-  let mut decoder = options
-    .read_info(Cursor::new(bytes))
-    .map_err(gif_decode_error)?;
-
-  let (width, height) = (decoder.width() as u32, decoder.height() as u32);
-  if width > MAX_IMAGE_DIMENSION || height > MAX_IMAGE_DIMENSION {
-    return Err(pixel_budget_error(width, height));
-  }
+  let mut decoder = read_gif(options, bytes)?;
 
   // Stop at the same budgets as `decode_gif_frames`, so the timeline covers
   // exactly the frames that are decodable.
@@ -185,12 +189,7 @@ pub(crate) fn decode_gif_frames(
       return Ok(true);
     }
 
-    let rect = Rect {
-      left: frame.left as u32,
-      top: frame.top as u32,
-      right: frame.left as u32 + frame.width as u32,
-      bottom: frame.top as u32 + frame.height as u32,
-    };
+    let rect = frame_rect(frame);
     let dispose = frame.dispose;
 
     scratch.resize(decoder.buffer_size(), 0);
@@ -269,13 +268,7 @@ pub(crate) fn decode_gif_frame_alone(
     decoder.next_frame_info().ok()??;
   }
 
-  let frame = decoder.next_frame_info().ok()??;
-  let rect = Rect {
-    left: frame.left as u32,
-    top: frame.top as u32,
-    right: frame.left as u32 + frame.width as u32,
-    bottom: frame.top as u32 + frame.height as u32,
-  };
+  let rect = frame_rect(decoder.next_frame_info().ok()??);
 
   let mut pixels = vec![0; decoder.buffer_size()];
   decoder.read_into_buffer(&mut pixels).ok()?;

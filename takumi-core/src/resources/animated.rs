@@ -21,7 +21,7 @@ use super::{
   image_buffer::ImageBuffer,
   image_decoder::{DecodeTarget, FrameInfo, MAX_ANIMATION_FRAMES, needs_previous_frame},
 };
-use crate::{resources::image::cover_target, style::ImageScalingAlgorithm};
+use crate::style::ImageScalingAlgorithm;
 
 /// A lazily decoded animated image. It keeps the first frame and the per-frame timing,
 /// decodes any later frame at its drawn size when needed, then drops it. Nothing caches
@@ -141,6 +141,27 @@ struct AnimationTiming {
   total_ms: u64,
 }
 
+impl AnimationTiming {
+  /// Stream index of the frame shown at the given playback time, looping over
+  /// the total duration.
+  fn frame_index_at(&self, time_ms: u64) -> usize {
+    if self.total_ms == 0 || self.frames.len() <= 1 {
+      return 0;
+    }
+
+    let target_time = time_ms % self.total_ms;
+    let mut elapsed_ms = 0_u64;
+    for (index, frame) in self.frames.iter().enumerate() {
+      elapsed_ms += frame.duration_ms as u64;
+      if target_time < elapsed_ms {
+        return index;
+      }
+    }
+
+    self.frames.len() - 1
+  }
+}
+
 impl AnimatedSource {
   pub(crate) fn from_bytes(format: AnimatedFormat, bytes: &[u8]) -> Result<Self, ImageError> {
     let (width, height) = format.dimensions(bytes).map_err(ImageError::decode)?;
@@ -198,27 +219,7 @@ impl AnimatedSource {
       )
   }
 
-  /// Stream index of the frame shown at the given playback time, looping over
-  /// the total duration.
-  fn frame_index_at(&self, timing: &AnimationTiming, time_ms: u64) -> usize {
-    if timing.total_ms == 0 || timing.frames.len() <= 1 {
-      return 0;
-    }
-
-    let target_time = time_ms % timing.total_ms;
-    let mut elapsed_ms = 0_u64;
-    for (index, frame) in timing.frames.iter().enumerate() {
-      elapsed_ms += frame.duration_ms as u64;
-      if target_time < elapsed_ms {
-        return index;
-      }
-    }
-
-    timing.frames.len() - 1
-  }
-
   /// Frame shown at the given playback time, looping over total duration.
-  #[cfg(test)]
   #[cfg(test)]
   pub(crate) fn frame_at_time(&self, time_ms: u64) -> Arc<ImageBuffer> {
     self.frame_at_time_covering(
@@ -238,14 +239,12 @@ impl AnimatedSource {
     height: u32,
     algorithm: ImageScalingAlgorithm,
   ) -> Arc<ImageBuffer> {
-    let timing = self.timing();
-    let index = self.frame_index_at(timing, time_ms);
-    let (width, height) = cover_target((self.inner.width, self.inner.height), (width, height));
-    let target = DecodeTarget {
-      width,
-      height,
+    let index = self.timing().frame_index_at(time_ms);
+    let target = DecodeTarget::covering(
+      (self.inner.width, self.inner.height),
+      (width, height),
       algorithm,
-    };
+    );
 
     self
       .decode_frame(index, target)

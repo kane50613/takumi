@@ -3,9 +3,7 @@
 
 use std::str::FromStr;
 
-use roxmltree::Node;
-#[cfg(any(test, not(feature = "svg")))]
-use roxmltree::{Document, ParsingOptions};
+use roxmltree::{Document, Node, ParsingOptions};
 use svgtypes::{Length, LengthUnit, ViewBox};
 use thiserror::Error;
 
@@ -41,11 +39,7 @@ pub(crate) enum SvgSizeError {
 impl SvgSize {
   #[cfg(any(test, not(feature = "svg")))]
   pub(crate) fn parse(markup: &str) -> Result<Self, SvgSizeError> {
-    let options = ParsingOptions {
-      allow_dtd: true,
-      ..Default::default()
-    };
-    let document = Document::parse_with_options(markup, options)?;
+    let document = parse_svg_document(markup)?;
     let root = document.root_element();
     let tag = root.tag_name();
     if tag.name() != "svg" || !matches!(tag.namespace(), None | Some(SVG_NAMESPACE)) {
@@ -114,6 +108,17 @@ impl SvgSize {
       },
     })
   }
+}
+
+/// Parses SVG markup as XML, with the DTD entities usvg also accepts.
+pub(crate) fn parse_svg_document(markup: &str) -> Result<Document<'_>, roxmltree::Error> {
+  Document::parse_with_options(
+    markup,
+    ParsingOptions {
+      allow_dtd: true,
+      ..Default::default()
+    },
+  )
 }
 
 fn positive(value: f32) -> bool {

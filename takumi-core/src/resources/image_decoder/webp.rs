@@ -1,7 +1,6 @@
 //! WebP stills and animations: libwebp on native targets, `image-webp` on
 //! wasm, and header-only sizing when the decoder is compiled out.
 
-#[cfg(feature = "webp")]
 use super::DecodeTarget;
 #[cfg(feature = "webp")]
 use std::{io::Cursor, sync::Arc};
@@ -24,8 +23,10 @@ use super::{
   covers_canvas, fit_to_target, invalid_buffer_error, rgba_to_buffer, webp_decode_error,
 };
 #[cfg(not(feature = "webp"))]
-use super::{format_compiled_out_error, header_dimensions};
+use super::{header_dimensions, unsupported_format_error};
 use crate::resources::image_buffer::ImageBuffer;
+#[cfg(all(not(target_arch = "wasm32"), feature = "webp"))]
+use crate::{error::WebPError, resources::image_buffer::rgba_len};
 
 #[cfg(all(target_arch = "wasm32", feature = "webp"))]
 pub(super) fn webp_dimensions(bytes: &[u8]) -> ImageResult<(u32, u32)> {
@@ -35,8 +36,6 @@ pub(super) fn webp_dimensions(bytes: &[u8]) -> ImageResult<(u32, u32)> {
 
 #[cfg(all(not(target_arch = "wasm32"), feature = "webp"))]
 pub(super) fn webp_dimensions(bytes: &[u8]) -> ImageResult<(u32, u32)> {
-  use crate::error::WebPError;
-
   let mut width = 0;
   let mut height = 0;
   let header_ok = unsafe {
@@ -69,12 +68,7 @@ pub(super) fn decode_webp(bytes: &[u8]) -> ImageResult<ImageBuffer> {
       .and_then(|image| rgba_to_buffer(image, ImageFormat::WebP));
   }
 
-  let mut rgba = Vec::with_capacity(width as usize * height as usize * 4);
-  for rgb in image_data.as_chunks::<3>().0 {
-    rgba.extend_from_slice(&[rgb[0], rgb[1], rgb[2], u8::MAX]);
-  }
-
-  RgbaImage::from_raw(width, height, rgba)
+  RgbaImage::from_raw(width, height, rgb_to_rgba(&image_data))
     .ok_or_else(invalid_buffer_error)
     .and_then(|image| rgba_to_buffer(image, ImageFormat::WebP))
 }
@@ -99,8 +93,7 @@ pub(super) fn decode_webp(bytes: &[u8]) -> ImageResult<ImageBuffer> {
 #[cfg(all(not(target_arch = "wasm32"), feature = "webp"))]
 pub(super) fn decode_webp_scaled(
   bytes: &[u8],
-  width: u32,
-  height: u32,
+  target: DecodeTarget,
 ) -> Option<ImageResult<ImageBuffer>> {
   if !matches!(detect_image_format(bytes), Some(DetectedImageFormat::WebP))
     || is_animated_webp(bytes)
@@ -109,9 +102,11 @@ pub(super) fn decode_webp_scaled(
   }
 
   let (native_width, native_height) = webp_dimensions(bytes).ok()?;
-  if width >= native_width && height >= native_height {
+  if !target.shrinks(native_width, native_height) {
     return None;
   }
+
+  let DecodeTarget { width, height, .. } = target;
 
   i32::try_from(width).ok()?;
   i32::try_from(height).ok()?;
@@ -134,12 +129,7 @@ fn decode_webp_into(
   height: u32,
   scale: bool,
 ) -> ImageResult<ImageBuffer> {
-  use crate::error::WebPError;
-
-  let buffer_len = (width as usize)
-    .checked_mul(height as usize)
-    .and_then(|pixels| pixels.checked_mul(4))
-    .ok_or_else(invalid_buffer_error)?;
+  let buffer_len = rgba_len(width, height).ok_or_else(invalid_buffer_error)?;
   let stride = i32::try_from(width)
     .ok()
     .and_then(|w| w.checked_mul(4))
@@ -231,22 +221,13 @@ pub(crate) fn webp_frame_infos(bytes: &[u8]) -> ImageResult<Box<[FrameInfo]>> {
       break;
     }
 
-    // `ANMF`: x, y, width, height and duration as 24-bit values, then flags.
-    let Some(header) = payload.get(..16) else {
+    let Some(header) = anmf_header(payload) else {
       break;
-    };
-    let read_24 = |offset: usize| {
-      u32::from_le_bytes([header[offset], header[offset + 1], header[offset + 2], 0])
     };
 
     frames.push(FrameInfo {
-      rect: (
-        read_24(0) * 2,
-        read_24(3) * 2,
-        read_24(6) + 1,
-        read_24(9) + 1,
-      ),
-      duration_ms: read_24(12).max(1),
+      rect: anmf_rect(header),
+      duration_ms: read_u24(header, 12).max(1),
       blends: header[15] & 0b0000_0010 == 0,
       dispose: if header[15] & 0b0000_0001 == 0 {
         Dispose::Keep
@@ -366,14 +347,7 @@ pub(crate) fn decode_webp_frame_alone(
   let (canvas_width, canvas_height) = canvas?;
   check_pixel_budget(canvas_width, canvas_height).ok()?;
   let payload = payload?;
-  let header = payload.get(..16)?;
-  let read_24 = |offset: usize| read_24(header, offset).unwrap_or_default();
-  let rect = (
-    read_24(0) * 2,
-    read_24(3) * 2,
-    read_24(6) + 1,
-    read_24(9) + 1,
-  );
+  let rect = anmf_rect(anmf_header(payload)?);
 
   let still = webp_frame_as_still(payload.get(16..)?, rect.2, rect.3)?;
   let frame = decode_webp(&still).ok()?;
@@ -392,6 +366,40 @@ pub(crate) fn decode_webp_frame_alone(
   };
 
   fit_to_target(buffer, target).ok()
+}
+
+/// The fixed `ANMF` header: x, y, width, height and duration as 24-bit values, then flags.
+#[cfg(feature = "webp")]
+fn anmf_header(payload: &[u8]) -> Option<&[u8; 16]> {
+  payload.first_chunk()
+}
+
+/// The frame rectangle an `ANMF` header claims, as `(x, y, width, height)`.
+#[cfg(feature = "webp")]
+fn anmf_rect(header: &[u8; 16]) -> (u32, u32, u32, u32) {
+  (
+    read_u24(header, 0) * 2,
+    read_u24(header, 3) * 2,
+    read_u24(header, 6) + 1,
+    read_u24(header, 9) + 1,
+  )
+}
+
+#[cfg(feature = "webp")]
+fn read_u24(header: &[u8; 16], offset: usize) -> u32 {
+  u32::from_le_bytes([header[offset], header[offset + 1], header[offset + 2], 0])
+}
+
+/// Opaque RGBA from packed RGB.
+#[cfg(feature = "webp")]
+fn rgb_to_rgba(rgb: &[u8]) -> Vec<u8> {
+  let pixels = rgb.as_chunks::<3>().0;
+  let mut rgba = Vec::with_capacity(pixels.len() * 4);
+
+  for pixel in pixels {
+    rgba.extend_from_slice(&[pixel[0], pixel[1], pixel[2], u8::MAX]);
+  }
+  rgba
 }
 
 /// Copies `frame` onto a cleared canvas at `rect`, clipping the part that falls outside.
@@ -455,11 +463,7 @@ fn webp_canvas_to_buffer(
   let rgba = if has_alpha {
     canvas.to_vec()
   } else {
-    let mut rgba = Vec::with_capacity(width as usize * height as usize * 4);
-    for rgb in canvas.as_chunks::<3>().0 {
-      rgba.extend_from_slice(&[rgb[0], rgb[1], rgb[2], u8::MAX]);
-    }
-    rgba
+    rgb_to_rgba(canvas)
   };
 
   let buffer =
@@ -475,14 +479,13 @@ pub(super) fn webp_dimensions(bytes: &[u8]) -> ImageResult<(u32, u32)> {
 
 #[cfg(not(feature = "webp"))]
 pub(super) fn decode_webp(_bytes: &[u8]) -> ImageResult<ImageBuffer> {
-  Err(format_compiled_out_error())
+  Err(unsupported_format_error())
 }
 
 #[cfg(not(all(not(target_arch = "wasm32"), feature = "webp")))]
 pub(super) fn decode_webp_scaled(
   _bytes: &[u8],
-  _width: u32,
-  _height: u32,
+  _target: DecodeTarget,
 ) -> Option<ImageResult<ImageBuffer>> {
   None
 }
@@ -504,6 +507,15 @@ mod tests {
     image_decoder::{decode_bitmap_scaled, decode_image},
     image_resampler::resample_premultiplied,
   };
+
+  #[cfg(all(not(target_arch = "wasm32"), feature = "webp"))]
+  fn target(width: u32, height: u32) -> DecodeTarget {
+    DecodeTarget {
+      width,
+      height,
+      algorithm: ImageScalingAlgorithm::Auto,
+    }
+  }
 
   #[cfg(all(not(target_arch = "wasm32"), feature = "webp"))]
   fn encode_test_webp(width: u32, height: u32) -> Vec<u8> {
@@ -540,7 +552,7 @@ mod tests {
   #[test]
   fn webp_scaled_decode_approximates_full_decode() {
     let bytes = encode_test_webp(40, 30);
-    let scaled = decode_bitmap_scaled(&bytes, 13, 9, ImageScalingAlgorithm::Auto).unwrap();
+    let scaled = decode_bitmap_scaled(&bytes, target(13, 9)).unwrap();
     assert_eq!((scaled.width(), scaled.height()), (13, 9));
 
     let full = decode_image(&bytes).unwrap();
@@ -563,7 +575,7 @@ mod tests {
   #[test]
   fn webp_scaled_decode_skips_upscale() {
     let bytes = encode_test_webp(40, 30);
-    let unscaled = decode_bitmap_scaled(&bytes, 80, 60, ImageScalingAlgorithm::Auto).unwrap();
+    let unscaled = decode_bitmap_scaled(&bytes, target(80, 60)).unwrap();
     assert_eq!((unscaled.width(), unscaled.height()), (40, 30));
     assert_eq!(unscaled.data(), decode_image(&bytes).unwrap().data());
   }
