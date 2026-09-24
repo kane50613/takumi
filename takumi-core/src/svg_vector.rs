@@ -3,6 +3,8 @@
 //! Groups with filters, patterns and embedded raster images fall back to
 //! rasterization, mirroring krilla-svg.
 
+use std::iter::repeat_n;
+
 use tiny_skia::Pixmap;
 use tiny_skia_path::{NonZeroRect, PathSegment, Transform};
 
@@ -260,9 +262,12 @@ impl Flattener {
       self.push_node(child);
     }
 
-    for _ in 0..pop_count {
-      self.ops.push(SvgOp::Pop);
-    }
+    self.pop(pop_count);
+  }
+
+  /// Closes the innermost `count` open layers.
+  fn pop(&mut self, count: usize) {
+    self.ops.extend(repeat_n(SvgOp::Pop, count));
   }
 
   fn push_node(&mut self, node: &Node) {
@@ -453,8 +458,8 @@ impl Flattener {
     extend_clip_commands(clip_path.root(), &clip_path.transform(), &mut commands);
     if commands.is_empty() {
       // A clip path with only hidden children still hides everything.
-      commands.push(PathCommand::MoveTo(Point { x: 0.0, y: 0.0 }));
-      commands.push(PathCommand::LineTo(Point { x: 0.0, y: 0.0 }));
+      commands.push(PathCommand::MoveTo(Point::ZERO));
+      commands.push(PathCommand::LineTo(Point::ZERO));
     }
     self.ops.push(SvgOp::PushClip {
       path: commands,
@@ -480,9 +485,7 @@ impl Flattener {
         pop_count += 1;
       }
       mask.push_group(clip_path.root());
-      for _ in 0..pop_count {
-        mask.ops.push(SvgOp::Pop);
-      }
+      mask.pop(pop_count);
     });
 
     SvgOp::PushMask {
@@ -510,9 +513,7 @@ impl Flattener {
       });
       pop_count += 1;
       flattener.push_group(mask.root());
-      for _ in 0..pop_count {
-        flattener.ops.push(SvgOp::Pop);
-      }
+      flattener.pop(pop_count);
     });
 
     SvgOp::PushMask {

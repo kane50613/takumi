@@ -505,10 +505,8 @@ fn compute_node_paint_bounds(
     mode: InlineLayoutMode::Measure,
     shape_cacheable: true,
   });
-  let inline_transform = Affine::translation(
-    layout.border.left + layout.padding.left,
-    layout.border.top + layout.padding.top,
-  ) * transform;
+  let content_offset = layout.content_box_offset();
+  let inline_transform = Affine::translation(content_offset.x, content_offset.y) * transform;
   let Ok(()) = built.walk_items::<Infallible>(layout, |line, item| {
     let setup = &line.setup;
 
@@ -521,9 +519,11 @@ fn compute_node_paint_bounds(
         let (glyph_origin, glyph_size) = glyph_run_rect(&glyph_run, setup.baseline_shift);
         let (glyph_origin, glyph_size) =
           setup.scale_rect(glyph_origin, glyph_size, static_inline_prefix);
-        let glyph_transform =
-          Affine::translation(glyph_origin.x, glyph_origin.y) * inline_transform;
-        bounds = merge_bounds(bounds, bounds_for_rect(glyph_size, glyph_transform));
+
+        bounds = merge_bounds(
+          bounds,
+          bounds_for_placed_rect(glyph_origin, glyph_size, inline_transform),
+        );
 
         // The metrics box above misses ink outside advance × (ascent+descent):
         // synthetic-italic skew, faux-bold outset, negative bearings, and
@@ -562,22 +562,17 @@ fn compute_node_paint_bounds(
 
           bounds = merge_bounds(
             bounds,
-            bounds_for_rect(
-              ink_size,
-              Affine::translation(ink_origin.x, ink_origin.y) * inline_transform,
-            ),
+            bounds_for_placed_rect(ink_origin, ink_size, inline_transform),
           );
         }
       }
       PlacedItem::Box(inline_box) => {
         bounds = merge_bounds(
           bounds,
-          bounds_for_rect(
-            Size {
-              width: inline_box.width,
-              height: inline_box.height,
-            },
-            Affine::translation(inline_box.x, inline_box.y) * inline_transform,
+          bounds_for_placed_rect(
+            Point::new(inline_box.x, inline_box.y),
+            Size::new(inline_box.width, inline_box.height),
+            inline_transform,
           ),
         );
       }
@@ -588,12 +583,10 @@ fn compute_node_paint_bounds(
   for inline_box in built.positioned_floats {
     bounds = merge_bounds(
       bounds,
-      bounds_for_rect(
-        Size {
-          width: inline_box.width,
-          height: inline_box.height,
-        },
-        Affine::translation(inline_box.x, inline_box.y) * inline_transform,
+      bounds_for_placed_rect(
+        Point::new(inline_box.x, inline_box.y),
+        Size::new(inline_box.width, inline_box.height),
+        inline_transform,
       ),
     );
   }
@@ -662,6 +655,15 @@ fn bounds_for_rect(size: Size<f32>, transform: Affine) -> Option<SceneBounds> {
     right,
     bottom,
   })
+}
+
+/// [`bounds_for_rect`] for a rect at `origin` in `transform`'s space.
+fn bounds_for_placed_rect(
+  origin: Point<f32>,
+  size: Size<f32>,
+  transform: Affine,
+) -> Option<SceneBounds> {
+  bounds_for_rect(size, Affine::translation(origin.x, origin.y) * transform)
 }
 
 fn merge_bounds(left: Option<SceneBounds>, right: Option<SceneBounds>) -> Option<SceneBounds> {
