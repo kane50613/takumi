@@ -65,9 +65,9 @@ use crate::{
   },
   options::{PT_PER_PX, PdfError},
   paint::{
-    clip_box_path, draw_stream, empty_path, expanded_radial_stops, fill_from_rgba, krilla_blend,
-    krilla_fill_rule, krilla_path, krilla_stop, krilla_stops, krilla_transform, normalized,
-    overflow_clip_rect, pop_transforms, rect_path, shape_path, spread,
+    draw_stream, empty_path, expanded_radial_stops, fill_from_rgba, krilla_blend, krilla_fill_rule,
+    krilla_path, krilla_stop, krilla_stops, krilla_transform, normalized, overflow_clip_rect,
+    pop_transforms, rect_path, shape_path, spread,
   },
   shadow::{emit_inset_shadows, emit_outer_shadows},
   tags::{ARTIFACT, TagCollector},
@@ -442,7 +442,7 @@ impl Emitter<'_> {
     let path = if clip_border.is_zero() {
       overflow_clip_rect(&node.context.style, layout, x, y)
     } else {
-      clip_box_path(ClipBox::padding_box(clip_border, layout), x, y)
+      shape_path(&ClipBox::padding_box(clip_border, layout).into(), x, y)
     };
     let Some(path) = path else {
       return 0;
@@ -936,10 +936,7 @@ impl Emitter<'_> {
     if !border.has_visible_sides() {
       return;
     }
-    let mut ring = Vec::with_capacity(BorderProperties::PATH_COMMANDS_AMOUNT * 2);
-
-    border.append_border_ring_commands(&mut ring, size);
-    let Some(ring_path) = krilla_path(&ring, x, y) else {
+    let Some(ring_path) = shape_path(&FillShape::border_ring(border, size), x, y) else {
       return;
     };
 
@@ -1100,7 +1097,7 @@ impl Emitter<'_> {
         .then(|| KrillaRect::from_xywh(bx, by, w, h).and_then(rect_path))
         .flatten()
     } else {
-      clip_box_path(ClipBox::content_box(clip_border, layout), x, y)
+      shape_path(&ClipBox::content_box(clip_border, layout).into(), x, y)
     };
 
     if let Some(path) = &clip_path {

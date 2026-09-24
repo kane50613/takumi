@@ -81,11 +81,8 @@ pub(crate) fn draw_image(
   let image = process_image_for_object_fit(image, context, layout.content_box_size())?;
 
   // manually apply the border and padding to ensure rotation with origin is applied correctly
-  let transform_with_content_offset = context.transform
-    * Affine::translation(
-      layout.border.left + layout.padding.left + image.offset.x,
-      layout.border.top + layout.padding.top + image.offset.y,
-    );
+  let offset = layout.content_box_offset() + image.offset;
+  let transform_with_content_offset = context.transform * Affine::translation(offset.x, offset.y);
 
   let mut border = BorderProperties::from_context(context, layout.size, layout.border);
   border.inset_by_border_width();

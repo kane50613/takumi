@@ -7,7 +7,6 @@ use takumi_core::{
 };
 use takumi_core::{
   geometry::{ComputedLayout as Layout, PathCommand},
-  layout::{border::BorderProperties, decoration::ClipBox},
   painter::FillShape,
   style::{
     BlendMode, Color, ComputedStyle, FillRule as CoreFillRule, Overflow, ResolvedGradientStop,
@@ -71,16 +70,6 @@ pub(crate) fn shape_path(shape: &FillShape, x: f32, y: f32) -> Option<KrillaPath
     }
     _ => krilla_path(&shape.to_commands(), x, y),
   }
-}
-
-/// A clip box's rounded edge as a krilla path, the box at `(x, y)`.
-pub(crate) fn clip_box_path(clip: ClipBox, x: f32, y: f32) -> Option<KrillaPath> {
-  let mut commands = Vec::with_capacity(BorderProperties::PATH_COMMANDS_AMOUNT);
-
-  clip
-    .border
-    .append_mask_commands(&mut commands, clip.size, clip.offset);
-  krilla_path(&commands, x, y)
 }
 
 /// The rectangular overflow clip: each hidden axis bounds to the padding box,

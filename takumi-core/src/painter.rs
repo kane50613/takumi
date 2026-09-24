@@ -64,7 +64,7 @@ impl FillShape {
   }
 
   /// The ring between the outer and inner edges of `border` on a `size` box.
-  fn border_ring(border: &BorderProperties, size: Size<f32>) -> Self {
+  pub fn border_ring(border: &BorderProperties, size: Size<f32>) -> Self {
     let mut commands = Vec::with_capacity(BorderProperties::PATH_COMMANDS_AMOUNT * 2);
 
     border.append_border_ring_commands(&mut commands, size);
@@ -73,8 +73,10 @@ impl FillShape {
       rule: FillRule::EvenOdd,
     }
   }
+}
 
-  fn clip_box(clip: ClipBox) -> Self {
+impl From<ClipBox> for FillShape {
+  fn from(clip: ClipBox) -> Self {
     Self::RoundedRect {
       border: clip.border,
       size: clip.size,
@@ -154,14 +156,8 @@ impl<'c> BoxPainter<'c> {
         size: self.layout.size,
         offset: Point::ZERO,
       }),
-      BackgroundClip::PaddingBox => Some(FillShape::clip_box(ClipBox::padding_box(
-        self.border,
-        self.layout,
-      ))),
-      BackgroundClip::ContentBox => Some(FillShape::clip_box(ClipBox::content_box(
-        self.border,
-        self.layout,
-      ))),
+      BackgroundClip::PaddingBox => Some(ClipBox::padding_box(self.border, self.layout).into()),
+      BackgroundClip::ContentBox => Some(ClipBox::content_box(self.border, self.layout).into()),
       BackgroundClip::BorderArea => Some(FillShape::border_ring(&self.border, self.layout.size)),
       BackgroundClip::Text => None,
     }
