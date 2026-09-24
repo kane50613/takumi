@@ -141,42 +141,48 @@ fn hash_ascii_case_insensitive(value: &str) -> u32 {
   hash
 }
 
+/// The hashes of the node's tag, id and classes, as the ancestor bloom filter holds them.
+fn node_unique_hashes(node: &Node) -> impl Iterator<Item = u32> {
+  node
+    .tag_name()
+    .into_iter()
+    .chain(node.id())
+    .chain(
+      node
+        .class_name()
+        .into_iter()
+        .flat_map(str::split_whitespace),
+    )
+    .map(hash_ascii_case_insensitive)
+}
+
 fn add_node_unique_hashes_to_filter(node: &Node, filter: &mut BloomFilter) -> bool {
   let mut added = false;
 
-  if let Some(tag) = node.tag_name() {
-    filter.insert_hash(hash_ascii_case_insensitive(tag));
+  for hash in node_unique_hashes(node) {
+    filter.insert_hash(hash);
     added = true;
-  }
-
-  if let Some(id) = node.id() {
-    filter.insert_hash(hash_ascii_case_insensitive(id));
-    added = true;
-  }
-
-  if let Some(classes) = node.class_name() {
-    for class_name in classes.split_whitespace() {
-      filter.insert_hash(hash_ascii_case_insensitive(class_name));
-      added = true;
-    }
   }
 
   added
 }
 
 fn remove_node_unique_hashes_from_filter(node: &Node, filter: &mut BloomFilter) {
-  if let Some(tag) = node.tag_name() {
-    filter.remove_hash(hash_ascii_case_insensitive(tag));
+  for hash in node_unique_hashes(node) {
+    filter.remove_hash(hash);
+  }
+}
+
+impl<'a> ArenaElement<'a> {
+  fn style_node(&self) -> &'a StyleNode<'a> {
+    &self.tree.nodes[self.index]
   }
 
-  if let Some(id) = node.id() {
-    filter.remove_hash(hash_ascii_case_insensitive(id));
-  }
-
-  if let Some(classes) = node.class_name() {
-    for class_name in classes.split_whitespace() {
-      filter.remove_hash(hash_ascii_case_insensitive(class_name));
-    }
+  fn at(&self, index: Option<usize>) -> Option<Self> {
+    index.map(|index| ArenaElement {
+      tree: self.tree,
+      index,
+    })
   }
 }
 
@@ -184,16 +190,11 @@ impl Element for ArenaElement<'_> {
   type Impl = SelectorImpl;
 
   fn opaque(&self) -> OpaqueElement {
-    OpaqueElement::new(self.tree.nodes[self.index].node)
+    OpaqueElement::new(self.style_node().node)
   }
 
   fn parent_element(&self) -> Option<Self> {
-    self.tree.nodes[self.index]
-      .parent
-      .map(|index| ArenaElement {
-        tree: self.tree,
-        index,
-      })
+    self.at(self.style_node().parent)
   }
 
   fn parent_node_is_shadow_root(&self) -> bool {
@@ -209,30 +210,15 @@ impl Element for ArenaElement<'_> {
   }
 
   fn prev_sibling_element(&self) -> Option<Self> {
-    self.tree.nodes[self.index]
-      .prev_sibling
-      .map(|index| ArenaElement {
-        tree: self.tree,
-        index,
-      })
+    self.at(self.style_node().prev_sibling)
   }
 
   fn next_sibling_element(&self) -> Option<Self> {
-    self.tree.nodes[self.index]
-      .next_sibling
-      .map(|index| ArenaElement {
-        tree: self.tree,
-        index,
-      })
+    self.at(self.style_node().next_sibling)
   }
 
   fn first_element_child(&self) -> Option<Self> {
-    self.tree.nodes[self.index]
-      .first_child
-      .map(|index| ArenaElement {
-        tree: self.tree,
-        index,
-      })
+    self.at(self.style_node().first_child)
   }
 
   fn is_html_element_in_html_document(&self) -> bool {
@@ -240,12 +226,11 @@ impl Element for ArenaElement<'_> {
   }
 
   fn has_local_name(&self, local_name: &Ident) -> bool {
-    let node = self.tree.nodes[self.index].node;
-    if let Some(tag) = node.tag_name() {
-      tag.eq_ignore_ascii_case(local_name)
-    } else {
-      false
-    }
+    self
+      .style_node()
+      .node
+      .tag_name()
+      .is_some_and(|tag| tag.eq_ignore_ascii_case(local_name))
   }
 
   fn has_namespace(&self, _ns: &Ident) -> bool {
@@ -254,8 +239,8 @@ impl Element for ArenaElement<'_> {
 
   fn is_same_type(&self, other: &Self) -> bool {
     match (
-      self.tree.nodes[self.index].node.tag_name(),
-      other.tree.nodes[other.index].node.tag_name(),
+      self.style_node().node.tag_name(),
+      other.style_node().node.tag_name(),
     ) {
       (Some(a), Some(b)) => a.eq_ignore_ascii_case(b),
       (a, b) => a == b,
@@ -263,17 +248,15 @@ impl Element for ArenaElement<'_> {
   }
 
   fn has_id(&self, id: &Ident, _case_sensitivity: CaseSensitivity) -> bool {
-    let node = self.tree.nodes[self.index].node;
-    node.id() == Some(&**id)
+    self.style_node().node.id() == Some(&**id)
   }
 
   fn has_class(&self, name: &Ident, _case_sensitivity: CaseSensitivity) -> bool {
-    let node = self.tree.nodes[self.index].node;
-    if let Some(classes) = node.class_name() {
-      classes.split_whitespace().any(|c| c == *name)
-    } else {
-      false
-    }
+    self
+      .style_node()
+      .node
+      .class_name()
+      .is_some_and(|classes| classes.split_whitespace().any(|c| c == *name))
   }
 
   fn imported_part(&self, _name: &Ident) -> Option<Ident> {
@@ -285,11 +268,11 @@ impl Element for ArenaElement<'_> {
   }
 
   fn is_empty(&self) -> bool {
-    self.tree.nodes[self.index].first_child.is_none()
+    self.style_node().first_child.is_none()
   }
 
   fn is_root(&self) -> bool {
-    self.tree.nodes[self.index].parent.is_none()
+    self.style_node().parent.is_none()
   }
 
   fn has_custom_state(&self, _name: &Ident) -> bool {
@@ -310,7 +293,8 @@ impl Element for ArenaElement<'_> {
       return false;
     }
 
-    self.tree.nodes[self.index]
+    self
+      .style_node()
       .node
       .attribute(local_name)
       .is_some_and(|value| operation.eval_str(value))
@@ -329,7 +313,7 @@ impl Element for ArenaElement<'_> {
     // set means the language is unknown, so `:lang()` never matches.
     let mut current = Some(*self);
     while let Some(element) = current {
-      if let Some(lang) = element.tree.nodes[element.index].node.attribute("lang") {
+      if let Some(lang) = element.style_node().node.attribute("lang") {
         return ranges.iter().any(|range| lang_matches(lang, range));
       }
       current = element.parent_element();
@@ -352,7 +336,7 @@ impl Element for ArenaElement<'_> {
     false
   }
   fn add_element_unique_hashes(&self, filter: &mut BloomFilter) -> bool {
-    add_node_unique_hashes_to_filter(self.tree.nodes[self.index].node, filter)
+    add_node_unique_hashes_to_filter(self.style_node().node, filter)
   }
 }
 
@@ -440,8 +424,6 @@ enum SelectorTarget {
   After,
 }
 
-/// Matches every rule in `stylesheet` against the tree rooted at `root`,
-/// returning the declaration blocks that apply to each node in tree order.
 /// What a selector's rightmost compound requires of the element it matches.
 ///
 /// A rule whose rightmost compound names an id, class or tag can only match an
@@ -547,6 +529,8 @@ impl RuleIndex {
   }
 }
 
+/// Matches every rule in `stylesheet` against the tree rooted at `root`,
+/// returning the declaration blocks that apply to each node in tree order.
 pub(crate) fn match_stylesheets_view<'a>(
   root: &Node,
   stylesheet: &'a StyleSheet,
@@ -573,9 +557,8 @@ pub(crate) fn match_stylesheets_view<'a>(
     return per_node;
   }
 
-  let mut matched_element: Vec<Vec<MatchedRule<'a>>> = vec![Vec::new(); node_count];
-  let mut matched_before: Vec<Vec<MatchedRule<'a>>> = vec![Vec::new(); node_count];
-  let mut matched_after: Vec<Vec<MatchedRule<'a>>> = vec![Vec::new(); node_count];
+  // Indexed by `SelectorTarget`.
+  let mut matched_rules: Vec<[Vec<MatchedRule<'a>>; 3]> = vec![Default::default(); node_count];
 
   let mut ancestor_bloom_filter = BloomFilter::new();
   let mut ancestor_stack: Vec<usize> = Vec::new();
@@ -626,9 +609,7 @@ pub(crate) fn match_stylesheets_view<'a>(
 
     for &source_order in &candidates {
       let rule = flattened_rules[source_order];
-      let mut best_element: Option<u32> = None;
-      let mut best_before: Option<u32> = None;
-      let mut best_after: Option<u32> = None;
+      let mut best_specificities: [Option<u32>; 3] = [None; 3];
 
       for (selector_index, selector) in rule.selectors.slice().iter().enumerate() {
         let Some(target) = selector_target(selector) else {
@@ -655,50 +636,31 @@ pub(crate) fn match_stylesheets_view<'a>(
 
         if matches_selector(selector, 0, Some(ancestor_hashes), &element, ctx) {
           let specificity = selector.specificity();
-          let slot = match target {
-            SelectorTarget::Element => &mut best_element,
-            SelectorTarget::Before => &mut best_before,
-            SelectorTarget::After => &mut best_after,
-          };
+          let slot = &mut best_specificities[target as usize];
+
           *slot = Some(slot.map_or(specificity, |best| best.max(specificity)));
         }
       }
 
-      record_matches(
-        rule,
-        source_order,
-        stylesheet.layer_count,
-        best_element,
-        &mut matched_element[i],
-      );
-      record_matches(
-        rule,
-        source_order,
-        stylesheet.layer_count,
-        best_before,
-        &mut matched_before[i],
-      );
-      record_matches(
-        rule,
-        source_order,
-        stylesheet.layer_count,
-        best_after,
-        &mut matched_after[i],
-      );
+      for (best_specificity, bucket) in best_specificities.into_iter().zip(&mut matched_rules[i]) {
+        record_matches(
+          rule,
+          source_order,
+          stylesheet.layer_count,
+          best_specificity,
+          bucket,
+        );
+      }
     }
 
     ancestor_stack.push(i);
     add_node_unique_hashes_to_filter(arena.nodes[i].node, &mut ancestor_bloom_filter);
   }
 
-  for (i, matched) in per_node.iter_mut().enumerate() {
-    finalize_bucket(
-      &mut matched_element[i],
-      stylesheet.layer_count,
-      &mut matched.element,
-    );
-    matched.before = take_pseudo_bucket(&mut matched_before[i], stylesheet.layer_count);
-    matched.after = take_pseudo_bucket(&mut matched_after[i], stylesheet.layer_count);
+  for (matched, [element, before, after]) in per_node.iter_mut().zip(&mut matched_rules) {
+    finalize_bucket(element, stylesheet.layer_count, &mut matched.element);
+    matched.before = take_pseudo_bucket(before, stylesheet.layer_count);
+    matched.after = take_pseudo_bucket(after, stylesheet.layer_count);
   }
 
   per_node
