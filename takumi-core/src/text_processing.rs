@@ -3,7 +3,7 @@
 
 use std::borrow::Cow;
 
-use parley::layout::BreakReason;
+use parley::{PositionedInlineBox, layout::BreakReason};
 
 use crate::{
   layout::inline::{
@@ -200,6 +200,29 @@ pub(crate) struct RebreakOptions {
   pub(crate) text_wrap_mode: TextWrapMode,
 }
 
+impl RebreakOptions {
+  /// Breaks `layout` at `widths` from an empty float list; true when `max_height` may have
+  /// dropped lines.
+  pub(crate) fn rebreak(
+    self,
+    layout: &mut InlineLayout,
+    widths: LineWidths,
+    spans: &[ProcessedInlineSpan<'_>],
+    positioned_floats: &mut Vec<PositionedInlineBox>,
+  ) -> bool {
+    positioned_floats.clear();
+    break_lines(
+      layout,
+      widths,
+      self.max_height,
+      self.line_height_hint,
+      self.text_wrap_mode,
+      spans,
+      positioned_floats,
+    )
+  }
+}
+
 /// Use binary search to find the minimum width that maintains the same number of lines.
 /// Returns `true` if a meaningful adjustment was made.
 pub(crate) fn make_balanced_text(
@@ -208,14 +231,10 @@ pub(crate) fn make_balanced_text(
   target_lines: usize,
   device_pixel_ratio: f32,
   spans: &[ProcessedInlineSpan<'_>],
-  positioned_floats: &mut Vec<parley::PositionedInlineBox>,
+  positioned_floats: &mut Vec<PositionedInlineBox>,
 ) -> bool {
-  let RebreakOptions {
-    max_width,
-    max_height,
-    line_height_hint,
-    text_wrap_mode,
-  } = options;
+  let max_width = options.max_width;
+
   if target_lines <= 1 {
     return false;
   }
@@ -233,6 +252,10 @@ pub(crate) fn make_balanced_text(
       LineWidths::uniform(breaking)
     }
   };
+  let unclamped = RebreakOptions {
+    max_height: None,
+    ..options
+  };
 
   // Binary search between half width and full width
   let mut left = max_width / 2.0;
@@ -246,16 +269,7 @@ pub(crate) fn make_balanced_text(
     iterations += 1;
     let mid = (left + right) / 2.0;
 
-    positioned_floats.clear();
-    break_lines(
-      inline_layout,
-      bisect_widths(mid),
-      None,
-      line_height_hint,
-      text_wrap_mode,
-      spans,
-      positioned_floats,
-    );
+    unclamped.rebreak(inline_layout, bisect_widths(mid), spans, positioned_floats);
     let lines_at_mid = inline_layout.lines().count();
 
     if lines_at_mid > target_lines
@@ -272,29 +286,20 @@ pub(crate) fn make_balanced_text(
 
   // No meaningful adjustment if within 1px * DPR of max_width
   if (balanced_width - max_width).abs() < device_pixel_ratio {
-    // Reset to original max_width
-    positioned_floats.clear();
-    break_lines(
+    options.rebreak(
       inline_layout,
       LineWidths::uniform(max_width),
-      max_height,
-      line_height_hint,
-      text_wrap_mode,
       spans,
       positioned_floats,
     );
     false
   } else {
-    positioned_floats.clear();
-    break_lines(
+    options.rebreak(
       inline_layout,
       LineWidths {
         breaking: balanced_width,
         alignment: max_width,
       },
-      max_height,
-      line_height_hint,
-      text_wrap_mode,
       spans,
       positioned_floats,
     );
@@ -308,14 +313,10 @@ pub(crate) fn make_pretty_text(
   inline_layout: &mut InlineLayout,
   options: RebreakOptions,
   spans: &[ProcessedInlineSpan<'_>],
-  positioned_floats: &mut Vec<parley::PositionedInlineBox>,
+  positioned_floats: &mut Vec<PositionedInlineBox>,
 ) -> bool {
-  let RebreakOptions {
-    max_width,
-    max_height,
-    line_height_hint,
-    text_wrap_mode,
-  } = options;
+  let max_width = options.max_width;
+
   // Get the last line width at the current max width (layout should already be broken)
   let Some(last_line_width) = inline_layout
     .lines()
@@ -339,14 +340,9 @@ pub(crate) fn make_pretty_text(
   }
 
   // Try reflowing with 90% width to redistribute words
-  let adjusted_width = max_width * 0.9;
-  positioned_floats.clear();
-  break_lines(
+  options.rebreak(
     inline_layout,
-    LineWidths::uniform(adjusted_width),
-    max_height,
-    line_height_hint,
-    text_wrap_mode,
+    LineWidths::uniform(max_width * 0.9),
     spans,
     positioned_floats,
   );
@@ -358,14 +354,9 @@ pub(crate) fn make_pretty_text(
   if adjusted_lines <= max_acceptable_lines {
     true
   } else {
-    // Reset to original max_width
-    positioned_floats.clear();
-    break_lines(
+    options.rebreak(
       inline_layout,
       LineWidths::uniform(max_width),
-      max_height,
-      line_height_hint,
-      text_wrap_mode,
       spans,
       positioned_floats,
     );
