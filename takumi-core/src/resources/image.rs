@@ -153,6 +153,92 @@ fn svg_parse_options() -> Options<'static> {
 
 #[cfg(feature = "svg")]
 impl SvgSource {
+  /// Markup for embedding in a vector backend, with the host `color` injected
+  /// as a root presentation attribute when `currentColor` depends on it.
+  pub fn source_with_current_color(&self, current_color: Color) -> Cow<'_, str> {
+    if !self.uses_current_color {
+      return Cow::Borrowed(&self.source);
+    }
+
+    let Some(tag_start) = self.source.find("<svg") else {
+      return Cow::Borrowed(&self.source);
+    };
+
+    let insert_at = tag_start + "<svg".len();
+
+    if !matches!(
+      self.source[insert_at..].chars().next(),
+      Some(c) if c == '>' || c == '/' || c.is_whitespace()
+    ) {
+      return Cow::Borrowed(&self.source);
+    }
+
+    let [red, green, blue, alpha] = current_color.0;
+    let mut markup = String::with_capacity(self.source.len() + 32);
+
+    markup.push_str(&self.source[..insert_at]);
+    markup.push_str(&format!(
+      " color=\"#{red:02x}{green:02x}{blue:02x}{alpha:02x}\""
+    ));
+    markup.push_str(&self.source[insert_at..]);
+    Cow::Owned(markup)
+  }
+
+  /// Flattens the SVG into backend-agnostic vector drawing ops in SVG canvas
+  /// coordinates. `raster_scale` is the device-pixels-per-user-unit factor
+  /// used when a subtree (filters, embedded bitmaps) has to fall back to
+  /// rasterization.
+  pub fn vector_ops(
+    &self,
+    raster_scale: f32,
+    current_color: Color,
+    fonts: Option<&FontsSnapshot>,
+  ) -> Vec<SvgOp> {
+    match self.tree_with_current_color(current_color, fonts) {
+      Some(tree) => flatten(&tree, raster_scale),
+      None => {
+        let text_tree = self.text_tree(fonts);
+
+        flatten(text_tree.as_deref().unwrap_or(&self.tree), raster_scale)
+      }
+    }
+  }
+
+  /// Re-parses the markup with `configure` applied to the parse options.
+  fn reparse(
+    &self,
+    fonts: Option<&FontsSnapshot>,
+    configure: impl FnOnce(&mut Options),
+  ) -> Option<Tree> {
+    let document = parse_svg_document(&self.source).ok()?;
+    let mut options = svg_parse_options();
+
+    if let Some(fonts) = fonts.filter(|_| self.has_text) {
+      options.fontdb = fonts.svg_fontdb();
+    }
+
+    configure(&mut options);
+    Tree::from_xmltree(&document, &options).ok()
+  }
+
+  /// Re-parses the markup with `current_color` as the `currentColor` fallback.
+  /// `None` when rendering does not depend on the host color.
+  fn tree_with_current_color(
+    &self,
+    current_color: Color,
+    fonts: Option<&FontsSnapshot>,
+  ) -> Option<Tree> {
+    if !self.uses_current_color {
+      return None;
+    }
+
+    let [red, green, blue, alpha] = current_color.0;
+
+    self.reparse(fonts, |options| {
+      options.current_color = Some(svgtypes::Color::new_rgba(red, green, blue, alpha));
+    })
+  }
+
   /// Parses SVG markup; rasterized pixmaps go into `cache` while it is alive,
   /// keyed by content hash and target size. A dead handle rasterizes per call.
   fn parse(src: &str, hash: u64, cache: Weak<SharedResourceCache>) -> Result<Self, ImageError> {
@@ -261,92 +347,6 @@ impl SvgSource {
 
     cached_sized(&self.cache, key, || {
       self.rasterize(width, height, current_color, fonts)
-    })
-  }
-
-  /// Markup for embedding in a vector backend, with the host `color` injected
-  /// as a root presentation attribute when `currentColor` depends on it.
-  pub fn source_with_current_color(&self, current_color: Color) -> Cow<'_, str> {
-    if !self.uses_current_color {
-      return Cow::Borrowed(&self.source);
-    }
-
-    let Some(tag_start) = self.source.find("<svg") else {
-      return Cow::Borrowed(&self.source);
-    };
-
-    let insert_at = tag_start + "<svg".len();
-
-    if !matches!(
-      self.source[insert_at..].chars().next(),
-      Some(c) if c == '>' || c == '/' || c.is_whitespace()
-    ) {
-      return Cow::Borrowed(&self.source);
-    }
-
-    let [red, green, blue, alpha] = current_color.0;
-    let mut markup = String::with_capacity(self.source.len() + 32);
-
-    markup.push_str(&self.source[..insert_at]);
-    markup.push_str(&format!(
-      " color=\"#{red:02x}{green:02x}{blue:02x}{alpha:02x}\""
-    ));
-    markup.push_str(&self.source[insert_at..]);
-    Cow::Owned(markup)
-  }
-
-  /// Flattens the SVG into backend-agnostic vector drawing ops in SVG canvas
-  /// coordinates. `raster_scale` is the device-pixels-per-user-unit factor
-  /// used when a subtree (filters, embedded bitmaps) has to fall back to
-  /// rasterization.
-  pub fn vector_ops(
-    &self,
-    raster_scale: f32,
-    current_color: Color,
-    fonts: Option<&FontsSnapshot>,
-  ) -> Vec<SvgOp> {
-    match self.tree_with_current_color(current_color, fonts) {
-      Some(tree) => flatten(&tree, raster_scale),
-      None => {
-        let text_tree = self.text_tree(fonts);
-
-        flatten(text_tree.as_deref().unwrap_or(&self.tree), raster_scale)
-      }
-    }
-  }
-
-  /// Re-parses the markup with `configure` applied to the parse options.
-  fn reparse(
-    &self,
-    fonts: Option<&FontsSnapshot>,
-    configure: impl FnOnce(&mut Options),
-  ) -> Option<Tree> {
-    let document = parse_svg_document(&self.source).ok()?;
-    let mut options = svg_parse_options();
-
-    if let Some(fonts) = fonts.filter(|_| self.has_text) {
-      options.fontdb = fonts.svg_fontdb();
-    }
-
-    configure(&mut options);
-    Tree::from_xmltree(&document, &options).ok()
-  }
-
-  /// Re-parses the markup with `current_color` as the `currentColor` fallback.
-  /// `None` when rendering does not depend on the host color.
-  fn tree_with_current_color(
-    &self,
-    current_color: Color,
-    fonts: Option<&FontsSnapshot>,
-  ) -> Option<Tree> {
-    if !self.uses_current_color {
-      return None;
-    }
-
-    let [red, green, blue, alpha] = current_color.0;
-
-    self.reparse(fonts, |options| {
-      options.current_color = Some(svgtypes::Color::new_rgba(red, green, blue, alpha));
     })
   }
 }
