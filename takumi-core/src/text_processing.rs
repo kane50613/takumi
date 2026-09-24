@@ -1,7 +1,7 @@
 //! Backend-agnostic text processing: whitespace collapsing, text-transform, and
 //! line balancing/rebreaking used by inline layout.
 
-use std::borrow::Cow;
+use std::{borrow::Cow, iter::repeat_n};
 
 use parley::{PositionedInlineBox, layout::BreakReason};
 
@@ -60,7 +60,7 @@ fn expand_tabs(input: &str, tab_spaces: usize) -> Cow<'_, str> {
   let mut out = String::with_capacity(input.len() + tab_spaces);
   for ch in input.chars() {
     if ch == '\t' {
-      out.extend(std::iter::repeat_n(' ', tab_spaces));
+      out.extend(repeat_n(' ', tab_spaces));
     } else {
       out.push(ch);
     }
@@ -126,13 +126,13 @@ pub(crate) fn apply_white_space_collapse<'a>(
 
       for ch in input.chars() {
         // treat common line break characters as breaks to be removed/replaced
-        if matches!(ch, '\n' | '\r' | '\x0B' | '\x0C' | '\u{2028}' | '\u{2029}') {
+        if is_line_break(ch) {
           if !last_was_space {
             out.push(' ');
             last_was_space = true;
           }
         } else if ch == '\t' {
-          out.extend(std::iter::repeat_n(' ', tab_spaces));
+          out.extend(repeat_n(' ', tab_spaces));
           if tab_spaces > 0 {
             last_was_space = true;
           }
@@ -168,8 +168,7 @@ pub(crate) fn apply_white_space_collapse<'a>(
           out.push(ch);
           last_was_space = false;
           // Track if we just processed a line break
-          last_was_line_break =
-            matches!(ch, '\n' | '\r' | '\x0B' | '\x0C' | '\u{2028}' | '\u{2029}');
+          last_was_line_break = is_line_break(ch);
         }
       }
 
@@ -178,6 +177,10 @@ pub(crate) fn apply_white_space_collapse<'a>(
       Cow::Owned(out)
     }
   }
+}
+
+fn is_line_break(ch: char) -> bool {
+  matches!(ch, '\n' | '\r' | '\x0B' | '\x0C' | '\u{2028}' | '\u{2029}')
 }
 
 // Preserve the original number of forced breaks while balancing so #437 does not
