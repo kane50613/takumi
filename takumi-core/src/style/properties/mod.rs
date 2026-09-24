@@ -171,7 +171,7 @@ pub(crate) fn parse_comma_list<'i, T>(
 ) -> ParseResult<'i, Box<[T]>> {
   let mut items = Vec::new();
   items.push(parse_item(input)?);
-  while input.expect_comma().is_ok() {
+  while input.try_parse(Parser::expect_comma).is_ok() {
     items.push(parse_item(input)?);
   }
   Ok(items.into_boxed_slice())
