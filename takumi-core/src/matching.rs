@@ -574,7 +574,7 @@ pub(crate) fn match_stylesheets_view<'a>(
   // ancestor chain replaces a per-node filter copy: pop-and-remove until the
   // stack top is this node's parent, match against strict-ancestor hashes
   // only, then push self before descending.
-  for i in 0..node_count {
+  for (i, node_rules) in matched_rules.iter_mut().enumerate() {
     while ancestor_stack.last().copied() != arena.nodes[i].parent {
       let Some(left) = ancestor_stack.pop() else {
         break;
@@ -642,7 +642,7 @@ pub(crate) fn match_stylesheets_view<'a>(
         }
       }
 
-      for (best_specificity, bucket) in best_specificities.into_iter().zip(&mut matched_rules[i]) {
+      for (best_specificity, bucket) in best_specificities.into_iter().zip(node_rules.iter_mut()) {
         record_matches(
           rule,
           source_order,
