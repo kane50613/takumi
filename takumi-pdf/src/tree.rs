@@ -8,13 +8,13 @@ use takumi_core::{
   geometry::{NodeId, Size},
   layout::{
     node::{ImageData, Node, NodeKind},
-    tree::{LayoutResults, LayoutTree, RenderNode},
+    tree::RenderNode,
   },
   resources::image::ImageSource,
-  scene::{NodePaint, PaintItemKind, SceneRequest, StackingContextNode, build_scene},
+  scene::{NodePaint, PaintItemKind, Scene},
   style::{
-    Affine, ComputedStyle, Display, FlexDirection, FontFamily, Lang, Length, Position,
-    SizingContext, Style, StyleDeclaration, StyleSheet, ZIndex,
+    ComputedStyle, Display, FlexDirection, FontFamily, Lang, Length, Position, SizingContext,
+    Style, StyleDeclaration, StyleSheet, ZIndex,
   },
   viewport::Viewport,
 };
@@ -51,11 +51,10 @@ impl TreeInputs<'_> {
       .sizing(SizingContext::builder().viewport(viewport).build())
       .images(self.images.clone())
       .stylesheet(self.stylesheet.clone())
-      .style(Box::new(ComputedStyle {
-        lang: self.lang,
-        font_family: self.font_families.clone().unwrap_or_default(),
-        ..Default::default()
-      }))
+      .style(Box::new(ComputedStyle::root(
+        self.lang,
+        self.font_families.clone(),
+      )))
       .build()
   }
 
@@ -160,46 +159,13 @@ impl<'n> OwnContent<'n> {
 
 /// A node tree taken through layout and scene building, ready to emit.
 pub(crate) struct PreparedTree {
-  pub(crate) root: RenderNode,
-  pub(crate) results: LayoutResults,
-  pub(crate) contexts: Vec<StackingContextNode>,
-  pub(crate) width: f32,
-  pub(crate) height: f32,
+  pub(crate) scene: Scene,
 }
 
 impl PreparedTree {
   pub(crate) fn lay_out(root: RenderNode, viewport: Viewport) -> Result<Self, PdfError> {
-    let mut tree = LayoutTree::from_render_node(&root);
-
-    tree.compute_layout(viewport.into());
-
-    let results = tree.into_results();
-    let root_layout = results.layout(NodeId::ROOT)?;
-    let width = viewport
-      .size
-      .width
-      .map_or(root_layout.size.width, |w| w as f32);
-    let height = viewport
-      .size
-      .height
-      .map_or(root_layout.size.height, |h| h as f32);
-    let contexts = build_scene(SceneRequest {
-      root: &root,
-      layout_results: &results,
-      transform: Affine::IDENTITY,
-      container_size: Size {
-        width: Some(width),
-        height: Some(height),
-      },
-      paint_bounds: true,
-    })?;
-
     Ok(Self {
-      root,
-      results,
-      contexts,
-      width,
-      height,
+      scene: Scene::lay_out(root, viewport, true)?,
     })
   }
 
@@ -207,25 +173,21 @@ impl PreparedTree {
   /// reports. [`fill_root`] wraps that node in a page-wide box, so the root's
   /// size only ever gives the page back.
   pub(crate) fn content_size(&self) -> Size<f32> {
-    self
-      .results
+    let results = &self.scene.results;
+
+    results
       .box_children(NodeId::ROOT)
       .ok()
       .and_then(|children| children.first())
-      .and_then(|child| self.results.layout(child.node_id).ok())
-      .map_or(
-        Size {
-          width: self.width,
-          height: self.height,
-        },
-        |layout| layout.size,
-      )
+      .and_then(|child| results.layout(child.node_id).ok())
+      .map_or(self.scene.size, |layout| layout.size)
   }
 
   /// Whether a repeated box paints under the content, which is what a negative
   /// `z-index` asks for.
   pub(crate) fn paints_below(&self) -> bool {
     self
+      .scene
       .root
       .children
       .as_deref()
@@ -241,9 +203,7 @@ impl PreparedTree {
     inline: Option<&'a InlineMap<'a>>,
   ) -> AtomCollector<'a> {
     AtomCollector {
-      root: &self.root,
-      contexts: &self.contexts,
-      results: &self.results,
+      scene: &self.scene,
       inline,
     }
   }
@@ -251,7 +211,7 @@ impl PreparedTree {
   /// Visits every node paint of the scene, in paint order.
   pub(crate) fn for_each_paint(&self, mut visit: impl FnMut(&NodePaint)) {
     fn walk(tree: &PreparedTree, id: usize, visit: &mut impl FnMut(&NodePaint)) {
-      let Some(context) = tree.contexts.get(id) else {
+      let Some(context) = tree.scene.contexts.get(id) else {
         return;
       };
 
@@ -278,9 +238,7 @@ impl PreparedTree {
     tagged: bool,
   ) -> Emitter<'a> {
     Emitter {
-      root: &self.root,
-      contexts: &self.contexts,
-      results: &self.results,
+      scene: &self.scene,
       document: state,
       inline,
       window: Window::default(),

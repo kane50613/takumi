@@ -23,14 +23,14 @@ use takumi_core::{
       BuiltInlineLayout, InlineRunLayout, PositionedInlineRun, ProcessedInlineSpan, ShapedRun,
     },
     inline_box::{InlineBoxPaint, InlineSubtree, resolve_inline_box},
-    tree::{LayoutResults, NodeOrigin, RenderNode},
+    tree::{NodeOrigin, RenderNode},
   },
   paint::ConicGradientTile,
   painter::{
     BoxPainter, BoxShadows, FillShape, PaintDevice, StrokeStyle, paint_border,
     paint_run_decorations,
   },
-  scene::{NodePaint, PaintItemKind, SceneRequest, StackingContextNode, build_scene},
+  scene::{NodePaint, PaintItemKind, Scene},
   shadow::SizedShadow,
   style::{
     Affine, BackgroundClip, BackgroundImage, BackgroundOrigin, BlendMode, BoxDecorationBreak,
@@ -100,9 +100,7 @@ type FontKey = (u64, u32, Vec<([u8; 4], u32)>);
 type FontMap = HashMap<FontKey, Font>;
 
 pub(crate) struct Emitter<'a> {
-  pub(crate) root: &'a RenderNode,
-  pub(crate) contexts: &'a [StackingContextNode],
-  pub(crate) results: &'a LayoutResults,
+  pub(crate) scene: &'a Scene,
   pub(crate) document: &'a DocumentState<'a>,
   /// Pre-built inline layouts for the content tree; band trees build on the fly.
   pub(crate) inline: Option<&'a InlineMap<'a>>,
@@ -217,7 +215,7 @@ impl Emitter<'_> {
     parent: Affine,
     surface: &mut Surface,
   ) -> Result<(), PdfError> {
-    let Some(context) = self.contexts.get(id) else {
+    let Some(context) = self.scene.contexts.get(id) else {
       return Ok(());
     };
 
@@ -225,7 +223,7 @@ impl Emitter<'_> {
 
     if let Some(node) = context
       .root()
-      .and_then(|paint| self.root.node_at_path(&paint.path))
+      .and_then(|paint| self.scene.root.node_at_path(&paint.path))
     {
       self.color_filter = self.composed_filter(outer_filter.as_deref(), &node.context.style.filter);
     }
@@ -252,6 +250,7 @@ impl Emitter<'_> {
           }
           PaintItemKind::Context(child) => {
             let excluded = self
+              .scene
               .contexts
               .get(*child)
               .is_some_and(|ctx| self.window.excludes_bounds(ctx.paint_bounds()));
@@ -275,10 +274,10 @@ impl Emitter<'_> {
     parent: Affine,
     surface: &mut Surface,
   ) -> Result<(Affine, BoxState), PdfError> {
-    let Some(node) = self.root.node_at_path(&paint.path) else {
+    let Some(node) = self.scene.root.node_at_path(&paint.path) else {
       return Ok((parent, BoxState::default()));
     };
-    let Ok(layout) = self.results.layout(paint.node_id) else {
+    let Ok(layout) = self.scene.results.layout(paint.node_id) else {
       return Ok((parent, BoxState::default()));
     };
 
@@ -1429,24 +1428,17 @@ impl Emitter<'_> {
     if subtree.size.height <= 0.0 {
       return;
     }
-    let Ok(contexts) = build_scene(SceneRequest {
-      root: &subtree.root,
-      layout_results: &subtree.results,
-      transform: Affine::IDENTITY,
-      container_size: subtree.size.map(Some),
-      paint_bounds: true,
-    }) else {
+    let at = subtree.border_box_origin(CorePoint { x, y });
+    let Ok(scene) = subtree.into_scene(Affine::IDENTITY, true) else {
       return;
     };
     // The subtree root is a clone of `node`, so the box's own path is the
     // prefix that puts the subtree's nodes back on the document tree.
     let mut box_path = Vec::new();
-    let tagged = self.tagged && node_path(self.root, node, &mut box_path);
+    let tagged = self.tagged && node_path(&self.scene.root, node, &mut box_path);
     let tag_prefix = self.tag_path(&box_path);
     let mut emitter = Emitter {
-      root: &subtree.root,
-      contexts: &contexts,
-      results: &subtree.results,
+      scene: &scene,
       document: self.document,
       inline: None,
       window: Window::default(),
@@ -1454,10 +1446,7 @@ impl Emitter<'_> {
       tag_prefix,
       color_filter: self.color_filter.clone(),
     };
-    surface.push_transform(&Transform::from_translate(
-      x + subtree.margin_offset.x,
-      y + subtree.margin_offset.y,
-    ));
+    surface.push_transform(&Transform::from_translate(at.x, at.y));
     let _ = emitter.emit_context(0, Affine::IDENTITY, surface);
     surface.pop();
   }
@@ -1482,7 +1471,7 @@ impl Emitter<'_> {
   /// still reaches the structure tree.
   fn start_tagged_node(&self, node: &RenderNode, surface: &mut Surface) {
     let mut path = Vec::new();
-    let found = node_path(self.root, node, &mut path);
+    let found = node_path(&self.scene.root, node, &mut path);
 
     self.start_node_region(node, found.then_some(path.as_slice()), surface);
   }
@@ -1503,10 +1492,10 @@ impl Emitter<'_> {
   fn marker_tag_target(&self, owner: &RenderNode) -> Option<Vec<usize>> {
     let mut owner_path = Vec::new();
 
-    if !node_path(self.root, owner, &mut owner_path) {
+    if !node_path(&self.scene.root, owner, &mut owner_path) {
       return None;
     }
-    let mut current = self.root;
+    let mut current = &self.scene.root;
     let mut length = owner_path.len();
 
     for (depth, index) in owner_path.iter().enumerate() {

@@ -204,10 +204,10 @@ impl Interactive {
 }
 
 fn collect_interactive_paint(tree: &PreparedTree, paint: &NodePaint, collected: &mut Interactive) {
-  let Some(node) = tree.root.node_at_path(&paint.path) else {
+  let Some(node) = tree.scene.root.node_at_path(&paint.path) else {
     return;
   };
-  let Ok(layout) = tree.results.layout(paint.node_id) else {
+  let Ok(layout) = tree.scene.results.layout(paint.node_id) else {
     return;
   };
   let Some(source) = node.node.as_ref() else {
@@ -300,7 +300,7 @@ fn heading_ancestor<'t>(
   path: &[usize],
 ) -> Option<(Vec<usize>, &'t RenderNode, u8)> {
   for length in (0..=path.len()).rev() {
-    let ancestor = tree.root.node_at_path(&path[..length])?;
+    let ancestor = tree.scene.root.node_at_path(&path[..length])?;
     let Some(source) = ancestor.node.as_ref() else {
       continue;
     };

@@ -301,8 +301,8 @@ struct SinglePage {
 impl Rendered {
   fn root(&self) -> &RenderNode {
     match self {
-      Self::Paged(plan) => &plan.paginated.content.root,
-      Self::Single(page) => &page.content.root,
+      Self::Paged(plan) => &plan.paginated.content.scene.root,
+      Self::Single(page) => &page.content.scene.root,
     }
   }
 
@@ -330,15 +330,22 @@ impl SinglePage {
     background: Option<Color>,
     structural: bool,
   ) -> Result<Self, PdfError> {
-    let page_size = KrillaSize::from_wh(content.width * PT_PER_PX, content.height * PT_PER_PX)
-      .ok_or(PdfError::InvalidPageSize)?;
+    let page_size = KrillaSize::from_wh(
+      content.scene.size.width * PT_PER_PX,
+      content.scene.size.height * PT_PER_PX,
+    )
+    .ok_or(PdfError::InvalidPageSize)?;
     let text_boxes = TextBox::collect(&content);
     let inline_map = build_inline_map(&text_boxes)?;
     let mut page = pdf.start_page_with(PageSettings::new(page_size));
     let mut surface = page.surface();
 
     surface.push_transform(&Transform::from_scale(PT_PER_PX, PT_PER_PX));
-    paint_page_background(background, (content.width, content.height), &mut surface);
+    paint_page_background(
+      background,
+      (content.scene.size.width, content.scene.size.height),
+      &mut surface,
+    );
 
     let mut emitter = content.emitter(state, Some(&inline_map), true);
 
@@ -355,7 +362,7 @@ impl SinglePage {
       &mut page,
       &rendered.interactive.links,
       Window {
-        y: Some((0.0, rendered.content.height)),
+        y: Some((0.0, rendered.content.scene.size.height)),
         ..Window::default()
       },
       (0.0, 0.0),

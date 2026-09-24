@@ -134,7 +134,7 @@ impl Repeatable {
 
       if tallest
         .as_ref()
-        .is_none_or(|tree| prepared.height > tree.height)
+        .is_none_or(|tree| prepared.scene.size.height > tree.scene.size.height)
       {
         tallest = Some(prepared);
       }
@@ -172,7 +172,7 @@ impl Repeatable {
 
   /// The height the measured layout came out at.
   pub(crate) fn height(&self) -> f32 {
-    self.prepared.height
+    self.prepared.scene.size.height
   }
 
   /// The source orders a repeated box's counters live at, which the content

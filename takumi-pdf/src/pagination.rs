@@ -138,7 +138,7 @@ impl HeaderBand {
   }
 
   fn collect_paint(tree: &PreparedTree, paint: &NodePaint, bands: &mut Vec<Self>) {
-    let Some(node) = tree.root.node_at_path(&paint.path) else {
+    let Some(node) = tree.scene.root.node_at_path(&paint.path) else {
       return;
     };
     let Some((start, end)) = node.table_header_lines else {
@@ -156,7 +156,7 @@ impl HeaderBand {
     {
       return;
     }
-    let Ok(layout) = tree.results.layout(paint.node_id) else {
+    let Ok(layout) = tree.scene.results.layout(paint.node_id) else {
       return;
     };
     let Some((table_left, table_top, table_right, table_bottom)) =
@@ -167,7 +167,7 @@ impl HeaderBand {
     let Some(rows) = node.children.as_deref() else {
       return;
     };
-    let Ok(children) = tree.results.box_children(paint.node_id) else {
+    let Ok(children) = tree.scene.results.box_children(paint.node_id) else {
       return;
     };
     let content_top = table_top + layout.border.top + layout.padding.top;
@@ -182,7 +182,7 @@ impl HeaderBand {
       let GridPlacement::Line(line) = child.context.style.grid_row_start else {
         continue;
       };
-      let Ok(cell) = tree.results.layout(ordered.node_id) else {
+      let Ok(cell) = tree.scene.results.layout(ordered.node_id) else {
         continue;
       };
 
@@ -339,7 +339,7 @@ impl Paginated {
     atoms
       .extents
       .extend(headers.iter().map(|band| (band.top, band.bottom)));
-    let starts = atoms.page_starts(&headers, content.height, frame.window_height);
+    let starts = atoms.page_starts(&headers, content.scene.size.height, frame.window_height);
     let interactive = Interactive::collect(&content);
 
     Ok(Self {

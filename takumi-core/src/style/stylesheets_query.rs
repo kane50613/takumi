@@ -5,10 +5,19 @@ use taffy::{LengthPercentage, Line, Rect, Size};
 use super::ComputedStyle;
 use crate::{
   geometry::Size as CoreSize,
-  style::{SizingContext, properties::*},
+  style::{Lang, SizingContext, properties::*},
 };
 
 impl ComputedStyle {
+  /// The style a render's root inherits from: its language and font fallback chain.
+  pub fn root(lang: Option<Lang>, font_family: Option<FontFamily>) -> Self {
+    Self {
+      lang,
+      font_family: font_family.unwrap_or_default(),
+      ..Self::default()
+    }
+  }
+
   /// Normalize inheritable text-related values to computed values for this node.
   pub(crate) fn make_computed(&mut self, sizing: &SizingContext) {
     // `font-size` computed value is already resolved in `sizing.font_size`.

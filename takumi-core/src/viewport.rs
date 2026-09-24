@@ -36,11 +36,14 @@ pub struct Viewport {
 
 impl From<Viewport> for Size<AvailableSpace> {
   fn from(value: Viewport) -> Self {
-    Size::new(value.size.width, value.size.height).map(|length| {
-      length.map_or(AvailableSpace::MaxContent, |length| {
-        AvailableSpace::Definite(length as f32)
-      })
-    })
+    Size::from(value.size)
+      .map(|length| length.map_or(AvailableSpace::MaxContent, AvailableSpace::Definite))
+  }
+}
+
+impl From<ViewportSize> for Size<Option<f32>> {
+  fn from(value: ViewportSize) -> Self {
+    Size::new(value.width, value.height).map(|length| length.map(|length| length as f32))
   }
 }
 

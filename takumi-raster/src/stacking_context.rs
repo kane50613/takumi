@@ -1,7 +1,7 @@
 use takumi_core::{
   geometry::{ComputedLayout as Layout, NodeId, Point},
   layout::decoration::OutlineGeometry,
-  scene::{NodePaint, PaintItem, PaintItemKind, SceneBounds, StackingContextNode},
+  scene::{NodePaint, PaintItem, PaintItemKind, Scene, SceneBounds, StackingContextNode},
 };
 use tiny_skia::{Pixmap, PixmapMut};
 
@@ -235,7 +235,16 @@ pub(crate) struct ScenePainter<'a> {
   pub(crate) canvas: &'a mut Canvas,
 }
 
-impl ScenePainter<'_> {
+impl<'a> ScenePainter<'a> {
+  pub(crate) fn new(scene: &'a mut Scene, canvas: &'a mut Canvas) -> Self {
+    Self {
+      root: &mut scene.root,
+      contexts: &scene.contexts,
+      layout_results: &scene.results,
+      canvas,
+    }
+  }
+
   pub(crate) fn paint_context(&mut self, context_id: usize) -> Result<()> {
     let contexts = self.contexts;
     let Some(context) = contexts.get(context_id) else {

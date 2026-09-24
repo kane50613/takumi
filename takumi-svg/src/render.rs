@@ -6,18 +6,18 @@ use takumi_core::{
   Fonts,
   context::RenderContext,
   error::Result,
-  geometry::{NodeId, Point, Rect, Size},
+  geometry::{Point, Rect, Size},
   layout::{
     border::{BorderProperties, BorderSide, PaintedSide},
     decoration::{ClipBox, OutlineGeometry},
     inline::{InlineBoxItem, VisualInlineBox},
     inline_box::{InlineBoxPaint, resolve_inline_box},
     node::{ImageData, Node, NodeKind},
-    tree::{LayoutTree, RenderNode},
+    tree::RenderNode,
   },
   painter::{BoxPainter, FillShape, PaintDevice, StrokeStyle, paint_border},
   resources::image::ImageSource,
-  scene::{SceneRequest, build_scene},
+  scene::Scene,
   style::{
     Affine, BackgroundClip, BackgroundImage, BasicShape, BlendMode, BorderStyle, Color,
     ComputedStyle, FillRule, FontFamily, Isolation, Lang, Overflow, ShapeRadius, Sides,
@@ -78,46 +78,20 @@ pub fn render(options: SvgOptions<'_>) -> Result<String> {
     .images(Rc::new(options.images))
     .stylesheet(options.stylesheet)
     .time_ms(options.time_ms)
-    .style(Box::new(ComputedStyle {
-      lang: options.lang,
-      font_family: options.font_families.unwrap_or_default(),
-      ..Default::default()
-    }))
+    .style(Box::new(ComputedStyle::root(
+      options.lang,
+      options.font_families,
+    )))
     .build();
 
-  let root = RenderNode::from_node(&context, options.node);
-  let mut tree = LayoutTree::from_render_node(&root);
+  let scene = Scene::lay_out(
+    RenderNode::from_node(&context, options.node),
+    viewport,
+    true,
+  )?;
+  let mut doc = SvgDocument::new(scene.size.width, scene.size.height)?;
 
-  tree.compute_layout(viewport.into());
-
-  let results = tree.into_results();
-  let root_layout = results.layout(NodeId::ROOT)?;
-  let width = viewport
-    .size
-    .width
-    .map_or(root_layout.size.width, |w| w as f32);
-  let height = viewport
-    .size
-    .height
-    .map_or(root_layout.size.height, |h| h as f32);
-  let mut doc = SvgDocument::new(width, height)?;
-
-  let contexts = build_scene(SceneRequest {
-    root: &root,
-    layout_results: &results,
-    transform: Affine::IDENTITY,
-    container_size: Size {
-      width: Some(width),
-      height: Some(height),
-    },
-    paint_bounds: true,
-  })?;
-  SceneEmitter {
-    root: &root,
-    contexts: &contexts,
-    results: &results,
-  }
-  .emit(&mut doc)?;
+  SceneEmitter { scene: &scene }.emit(&mut doc)?;
 
   Ok(doc.finish()?)
 }
@@ -713,25 +687,12 @@ pub(crate) fn emit_inline_box(
 
   match paint {
     InlineBoxPaint::Container(subtree) => {
-      let transform = Affine::translation(
-        origin.x + subtree.margin_offset.x,
-        origin.y + subtree.margin_offset.y,
-      );
-      let contexts = build_scene(SceneRequest {
-        root: &subtree.root,
-        layout_results: &subtree.results,
-        transform,
-        container_size: subtree.size.map(Some),
-        paint_bounds: true,
-      })
-      .map_err(io::Error::other)?;
+      let at = subtree.border_box_origin(origin);
+      let scene = subtree
+        .into_scene(Affine::translation(at.x, at.y), true)
+        .map_err(io::Error::other)?;
 
-      SceneEmitter {
-        root: &subtree.root,
-        contexts: &contexts,
-        results: &subtree.results,
-      }
-      .emit(doc)
+      SceneEmitter { scene: &scene }.emit(doc)
     }
     InlineBoxPaint::Replaced { node, layout } => {
       let placed = PlacedBox::new(node, BoxFrame::new(layout, origin));

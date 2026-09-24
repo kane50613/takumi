@@ -6,11 +6,14 @@
 //! decision is the same everywhere; only the drawing differs.
 
 use crate::{
+  error::Result,
   geometry::{AvailableSpace, ComputedLayout, NodeId, Point, Size},
   layout::{
     inline::{InlineBoxItem, VisualInlineBox},
     tree::{LayoutResults, RenderNode},
   },
+  scene::{Scene, SceneRequest, build_scene},
+  style::Affine,
 };
 
 /// What an inline box paints.
@@ -95,4 +98,27 @@ pub fn resolve_inline_box<'n>(
 impl InlineSubtree {
   /// The subtree's root node id.
   pub const ROOT: NodeId = NodeId::ROOT;
+
+  /// Where the subtree's root border box sits, for the inline box at `origin`.
+  pub fn border_box_origin(&self, origin: Point<f32>) -> Point<f32> {
+    origin + self.margin_offset
+  }
+
+  /// Builds the subtree's scene, its root placed by `transform`.
+  pub fn into_scene(self, transform: Affine, paint_bounds: bool) -> Result<Scene> {
+    let contexts = build_scene(SceneRequest {
+      root: &self.root,
+      layout_results: &self.results,
+      transform,
+      container_size: self.size.map(Some),
+      paint_bounds,
+    })?;
+
+    Ok(Scene {
+      root: self.root,
+      results: self.results,
+      contexts,
+      size: self.size,
+    })
+  }
 }
