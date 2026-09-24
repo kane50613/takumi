@@ -27,7 +27,10 @@ pub(crate) use paint_source::{
   BilinearAxis, MaskCompositeColor, PaintSource, RowSource, SamplingFootprint,
   interpolate_with_footprint,
 };
-use takumi_core::geometry::{Point, Size};
+use takumi_core::{
+  geometry::{Point, Size},
+  resources::image_buffer::demultiply_pixel,
+};
 use tiny_skia::{
   FilterQuality as TinyFilterQuality, Mask as TinyMask, Pixmap, PixmapMut, PixmapPaint, PixmapRef,
   Transform as TinyTransform,
@@ -558,26 +561,10 @@ impl Canvas {
   }
 }
 
-/// Undoes premultiplication in place.
-///
-/// Rounds half away from zero in integer arithmetic. tiny-skia divides in
-/// `f64`, which lands a hair under the halfway point for some values and rounds
-/// them down; integers make the result identical on every target.
+/// Undoes premultiplication in place, skipping runs whose alpha is uniform.
 pub(crate) fn demultiply_rgba_in_place(data: &mut [u8]) {
   Simd::detect().edit_mixed_alpha_runs(data, |pixels| {
-    for pixel in pixels {
-      let alpha = pixel[3] as u32;
-
-      if alpha == u8::MAX as u32 || alpha == 0 {
-        continue;
-      }
-
-      let divisor = alpha * 2;
-
-      for channel in &mut pixel[..3] {
-        *channel = ((*channel as u32 * 510 + alpha) / divisor) as u8;
-      }
-    }
+    pixels.iter_mut().for_each(demultiply_pixel);
   });
 }
 
