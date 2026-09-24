@@ -103,8 +103,7 @@ pub(crate) fn resolved_glyph(
 
   match cached {
     Some(CachedGlyph::Resolved(glyph)) => Some(glyph),
-    Some(CachedGlyph::Mask(..)) => None,
-    None => None,
+    _ => None,
   }
 }
 

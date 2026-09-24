@@ -131,7 +131,6 @@ pub(crate) fn unpremultiply_in_place(data: &mut [u8]) {
 const ALPHA_MASK_U128: u128 =
   u128::from_ne_bytes([0, 0, 0, 0xFF, 0, 0, 0, 0xFF, 0, 0, 0, 0xFF, 0, 0, 0, 0xFF]);
 
-#[inline(always)]
 fn has_opaque_alpha(raw: &[u8]) -> bool {
   let (chunks, remainder) = raw.as_chunks::<16>();
   for chunk in chunks {

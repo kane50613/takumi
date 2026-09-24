@@ -504,13 +504,13 @@ impl RuleIndex {
     out.clear();
     out.extend_from_slice(&self.unindexed);
 
-    if let Some(id) = node.metadata.id.as_deref()
+    if let Some(id) = node.id()
       && let Some(rules) = self.by_id.get(id)
     {
       out.extend_from_slice(rules);
     }
 
-    if let Some(classes) = node.metadata.class_name.as_deref() {
+    if let Some(classes) = node.class_name() {
       for class in classes.split_ascii_whitespace() {
         if let Some(rules) = self.by_class.get(class) {
           out.extend_from_slice(rules);
@@ -518,7 +518,7 @@ impl RuleIndex {
       }
     }
 
-    if let Some(tag) = node.metadata.tag_name.as_deref()
+    if let Some(tag) = node.tag_name()
       && let Some(rules) = self.by_tag.get(&tag.to_ascii_lowercase())
     {
       out.extend_from_slice(rules);
