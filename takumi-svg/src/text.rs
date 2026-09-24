@@ -21,14 +21,14 @@ use takumi_core::{
     node::TextData,
     tree::RenderNode,
   },
-  painter::paint_run_decorations,
+  painter::{BoxFrame, paint_run_decorations},
   resources::{font::FontError, glyph::ResolvedGlyph, image::to_data_url},
   style::{Affine, BackgroundClip, FillRule, LineJoin, TextDecorationLines},
 };
 
 use crate::{
   Frame, GlyphStroke, Rgba, SvgDocument,
-  box_model::{BoxFrame, path_data},
+  box_model::path_data,
   gradient::LayerEmitter,
   render::{DocumentDevice, emit_inline_box},
 };
@@ -271,7 +271,7 @@ fn emit_clip_text_glyphs(
       .resolve(context.current_color)
       .0,
   );
-  let area = frame.border_box();
+  let area = Frame::border_box(frame);
 
   let group = doc.begin_masked_group(&mask_ref)?;
   if background.0[3] != 0 {

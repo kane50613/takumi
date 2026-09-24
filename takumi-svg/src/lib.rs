@@ -39,10 +39,12 @@ pub use render::{SvgOptions, render};
 use takumi_core::{
   context::RenderContext,
   geometry::{Rect, Size},
-  painter::StrokeStyle,
+  layout::background::background_origin_box,
+  painter::{BoxFrame, StrokeStyle},
   shadow::SizedShadow,
   style::{
-    Affine, FillRule, Filter, FilterReference, LUMA_WEIGHTS, LineJoin, SEPIA_WEIGHTS, ToCss,
+    Affine, BackgroundOrigin, FillRule, Filter, FilterReference, LUMA_WEIGHTS, LineJoin,
+    SEPIA_WEIGHTS, ToCss,
   },
 };
 use tiny_skia::PremultipliedColorU8;
@@ -91,6 +93,43 @@ pub(crate) struct Frame {
 impl Frame {
   pub(crate) fn new(x: f32, y: f32, w: f32, h: f32) -> Self {
     Self { x, y, w, h }
+  }
+
+  /// `frame`'s border box.
+  pub(crate) fn border_box(frame: BoxFrame) -> Self {
+    Self::new(
+      frame.origin.x,
+      frame.origin.y,
+      frame.layout.size.width,
+      frame.layout.size.height,
+    )
+  }
+
+  /// `frame`'s content box.
+  pub(crate) fn content_box(frame: BoxFrame) -> Self {
+    let BoxFrame { layout, origin } = frame;
+
+    // Summed from the origin one side at a time rather than through
+    // `content_box_offset`, which adds border and padding first and rounds
+    // differently.
+    Self::new(
+      origin.x + layout.border.left + layout.padding.left,
+      origin.y + layout.border.top + layout.padding.top,
+      layout.content_box_width(),
+      layout.content_box_height(),
+    )
+  }
+
+  /// `frame`'s `background-origin` positioning area.
+  pub(crate) fn background_origin_box(frame: BoxFrame, origin: BackgroundOrigin) -> Self {
+    let area = background_origin_box(origin, frame.layout);
+
+    Self::new(
+      frame.origin.x + area.offset.x,
+      frame.origin.y + area.offset.y,
+      area.size.width,
+      area.size.height,
+    )
   }
 
   /// Path `d` data tracing the rectangle.

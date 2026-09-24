@@ -6,7 +6,7 @@ use takumi_core::{
   Fonts,
   context::RenderContext,
   error::Result,
-  geometry::{Point, Rect, Size},
+  geometry::{Point, Size},
   layout::{
     border::{BorderProperties, BorderSide, PaintedSide},
     decoration::{ClipBox, OutlineGeometry},
@@ -15,13 +15,13 @@ use takumi_core::{
     node::{ImageData, Node, NodeKind},
     tree::RenderNode,
   },
-  painter::{BoxPainter, FillShape, PaintDevice, StrokeStyle, paint_border},
+  painter::{BoxFrame, BoxPainter, FillShape, PaintDevice, StrokeStyle, paint_border},
   resources::image::ImageSource,
   scene::Scene,
   style::{
     Affine, BackgroundClip, BackgroundImage, BasicShape, BlendMode, BorderStyle, Color,
-    ComputedStyle, FillRule, FontFamily, Isolation, Lang, Overflow, ShapeRadius, Sides,
-    SizingContext, SpacePair, StyleSheet, ToCss,
+    ComputedStyle, FillRule, FontFamily, Isolation, Lang, ShapeRadius, Sides, SizingContext,
+    SpacePair, StyleSheet, ToCss,
   },
   viewport::Viewport,
 };
@@ -29,9 +29,7 @@ use typed_builder::TypedBuilder;
 
 use crate::{
   APPROX_CHARS_PER_NUMBER, Frame, GroupToken, Num, Rgba, SvgDocument,
-  box_model::{
-    BoxFrame, PathData, edges_path_data, path_data, rounded_rect_path_data, shape_path_data,
-  },
+  box_model::{PathData, edges_path_data, path_data, rounded_rect_path_data, shape_path_data},
   gradient::LayerEmitter,
   image::emit_image,
   scene_emit::SceneEmitter,
@@ -159,36 +157,7 @@ impl<'n> PlacedBox<'n> {
       return self.padding_box_path_data();
     }
 
-    const UNBOUNDED: f32 = 1.0e6;
-    let BoxFrame {
-      layout,
-      origin: Point { x, y },
-    } = self.frame;
-    let overflow = self.node.context.style.resolve_overflows();
-    let clip_x = overflow.x != Overflow::Visible;
-    let clip_y = overflow.y != Overflow::Visible;
-
-    let (left, right) = if clip_x {
-      let padding_left = x + layout.border.left;
-      let padding_right = (x + layout.size.width - layout.border.right).max(padding_left);
-      (padding_left, padding_right)
-    } else {
-      (x - UNBOUNDED, x + layout.size.width + UNBOUNDED)
-    };
-    let (top, bottom) = if clip_y {
-      let padding_top = y + layout.border.top;
-      let padding_bottom = (y + layout.size.height - layout.border.bottom).max(padding_top);
-      (padding_top, padding_bottom)
-    } else {
-      (y - UNBOUNDED, y + layout.size.height + UNBOUNDED)
-    };
-
-    edges_path_data(Rect {
-      left,
-      top,
-      right,
-      bottom,
-    })
+    edges_path_data(self.frame.overflow_clip_edges(&self.node.context.style))
   }
 
   /// The clip path `d` and fill rule for the `background-clip` area.
@@ -255,8 +224,8 @@ impl<'n> PlacedBox<'n> {
 
     LayerEmitter::new(context, doc).background_images(
       images,
-      self.frame.background_origin_box(style.background_origin),
-      self.frame.border_box(),
+      Frame::background_origin_box(self.frame, style.background_origin),
+      Frame::border_box(self.frame),
     )?;
     if let Some(group) = group {
       doc.end_group(group)?;
@@ -280,7 +249,7 @@ impl<'n> PlacedBox<'n> {
     }
 
     let (token, reference) = doc.begin_mask()?;
-    let border_box = self.frame.border_box();
+    let border_box = Frame::border_box(self.frame);
 
     LayerEmitter::new(&self.node.context, doc).image_layers(
       images,
@@ -480,7 +449,7 @@ impl<'n> PlacedBox<'n> {
   /// Emits an image node's content into its content box.
   fn emit_image(&self, image: &ImageData, doc: &mut SvgDocument) -> io::Result<()> {
     let context = &self.node.context;
-    let content = self.frame.content_box();
+    let content = Frame::content_box(self.frame);
     if self.border().is_zero() {
       return emit_image(image, context, content, doc);
     }
@@ -545,7 +514,7 @@ impl BoxChrome {
     // overlay driving feTurbulence). The invisible rect only ever grows the bbox,
     // so painted content is unaffected.
     if !filter_refs.is_empty() {
-      doc.rect(placed.frame.border_box(), Rgba::TRANSPARENT)?;
+      doc.rect(Frame::border_box(placed.frame), Rgba::TRANSPARENT)?;
     }
 
     let clip_group = placed.begin_clip_path_group(doc)?;

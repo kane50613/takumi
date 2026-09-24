@@ -1,86 +1,15 @@
-//! Box-model geometry for the node walk: where a box sits, its rounded outlines,
-//! and serialization of takumi-core path commands to SVG path `d` data.
+//! Box outlines and serialization of takumi-core path commands to SVG path `d` data.
 
 use std::fmt::Write as _;
 
 use takumi_core::{
-  geometry::{ComputedLayout as Layout, PathCommand, Point, Rect, Size},
-  layout::{background::background_origin_box, border::BorderProperties},
+  geometry::{PathCommand, Point, Rect, Size},
+  layout::border::BorderProperties,
   painter::FillShape,
-  style::{Affine, BackgroundOrigin},
+  style::Affine,
 };
 
-use crate::{APPROX_CHARS_PER_NUMBER, Frame, Num};
-
-/// A box's layout at its absolute border-box top-left `origin`.
-#[derive(Clone, Copy)]
-pub(crate) struct BoxFrame {
-  pub layout: Layout,
-  pub origin: Point<f32>,
-}
-
-impl BoxFrame {
-  pub(crate) fn new(layout: Layout, origin: Point<f32>) -> Self {
-    Self { layout, origin }
-  }
-
-  /// The border box.
-  pub(crate) fn border_box(self) -> Frame {
-    Frame::new(
-      self.origin.x,
-      self.origin.y,
-      self.layout.size.width,
-      self.layout.size.height,
-    )
-  }
-
-  /// The content box.
-  pub(crate) fn content_box(self) -> Frame {
-    // The origin is the element's absolute border-box top-left, so the content box
-    // is inset by the border and padding only (not `content_box_x`, which also
-    // folds in the element's own `location` relative to its parent).
-    Frame::new(
-      self.origin.x + self.layout.border.left + self.layout.padding.left,
-      self.origin.y + self.layout.border.top + self.layout.padding.top,
-      self.layout.content_box_width(),
-      self.layout.content_box_height(),
-    )
-  }
-
-  /// The `background-origin` positioning area.
-  pub(crate) fn background_origin_box(self, origin: BackgroundOrigin) -> Frame {
-    let area = background_origin_box(origin, self.layout);
-
-    Frame::new(
-      self.origin.x + area.offset.x,
-      self.origin.y + area.offset.y,
-      area.size.width,
-      area.size.height,
-    )
-  }
-
-  /// Moves the origin by `offset`.
-  pub(crate) fn shifted(self, offset: Point<f32>) -> Self {
-    Self {
-      origin: self.origin + offset,
-      ..self
-    }
-  }
-
-  /// The translation to the origin.
-  pub(crate) fn translation(self) -> Affine {
-    Affine::translation(self.origin.x, self.origin.y)
-  }
-
-  /// Moves a border-box-relative transform to absolute space.
-  pub(crate) fn place(self, transform: Affine) -> Affine {
-    Affine {
-      x: transform.x + self.origin.x,
-      y: transform.y + self.origin.y,
-      ..transform
-    }
-  }
-}
+use crate::{APPROX_CHARS_PER_NUMBER, Num};
 
 /// Numbers a single path command serializes (a cubic carries three coordinate
 /// pairs), used with [`APPROX_CHARS_PER_NUMBER`] to presize the path buffer.
