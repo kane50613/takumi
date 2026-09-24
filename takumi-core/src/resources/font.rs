@@ -7,12 +7,15 @@ use std::{
   iter::once,
   rc::Rc,
   str::FromStr,
-  sync::Arc,
+  sync::{
+    Arc,
+    atomic::{AtomicU64, Ordering},
+  },
 };
 
 use parley::{
-  CHROMIUM_LINE_BREAK_OVERRIDE, FontFamilyName, GenericFamily as ParleyGenericFamily, GlyphRun,
-  LayoutContext, TextStyle, TreeBuilder,
+  CHROMIUM_LINE_BREAK_OVERRIDE, GenericFamily as ParleyGenericFamily, GlyphRun, LayoutContext,
+  TextStyle, TreeBuilder,
   fontique::{
     Attributes, Blob, Collection, CollectionOptions, FallbackKey, FontInfo, FontInfoOverride,
     FontStyle, FontWeight, FontWidth, QueryFamily, QueryStatus, Script, ScriptExt,
@@ -26,8 +29,11 @@ use skrifa::{
 use thiserror::Error;
 use xxhash_rust::xxh3::{Xxh3, xxh3_64};
 
+#[cfg(feature = "svg")]
+use crate::resvg::usvg::fontdb::Database;
 use crate::{
   context::RenderContext,
+  font_style::ExpandedFontFamily,
   layout::inline::{InlineBrush, InlineLayout},
   resources::{
     glyph::{BOLD_THRESHOLD, GlyphResolveContext, ResolvedGlyph, synthesis_embolden_strength},
@@ -73,28 +79,6 @@ pub(crate) enum FontFormat {
   Ttc,
 }
 
-fn load_font(source: Cow<'_, [u8]>, format_hint: Option<FontFormat>) -> Result<Vec<u8>, FontError> {
-  let format = if let Some(format) = format_hint {
-    format
-  } else {
-    guess_font_format(&source)?
-  };
-
-  match format {
-    FontFormat::Ttf | FontFormat::Otf | FontFormat::Ttc => Ok(source.into_owned()),
-    #[cfg(feature = "woff2")]
-    FontFormat::Woff2 => {
-      let ttf = wuff::decompress_woff2(&source).map_err(|e| FontError::Woff(Box::new(e)))?;
-      Ok(ttf)
-    }
-    #[cfg(feature = "woff")]
-    FontFormat::Woff => {
-      let ttf = wuff::decompress_woff1(&source).map_err(|e| FontError::Woff(Box::new(e)))?;
-      Ok(ttf)
-    }
-  }
-}
-
 fn guess_font_format(source: &[u8]) -> Result<FontFormat, FontError> {
   if source.len() < 4 {
     return Err(FontError::UnsupportedFormat);
@@ -132,19 +116,14 @@ fn glyph_cache_key_prefix(
   for c in coords {
     h.update(&c.to_bits().to_le_bytes());
   }
-  match embolden {
-    Some(e) => {
-      h.update(&[1u8]);
-      h.update(&e.to_le_bytes());
+  for synthesis in [embolden, skew] {
+    match synthesis {
+      Some(value) => {
+        h.update(&[1u8]);
+        h.update(&value.to_le_bytes());
+      }
+      None => h.update(&[0u8]),
     }
-    None => h.update(&[0u8]),
-  }
-  match skew {
-    Some(s) => {
-      h.update(&[1u8]);
-      h.update(&s.to_le_bytes());
-    }
-    None => h.update(&[0u8]),
   }
   h
 }
@@ -250,7 +229,7 @@ pub struct Fonts {
   face_families: Arc<HashMap<(u64, u32), String>>,
   /// Lazily built face store for SVG `<text>`; cleared on registration.
   #[cfg(feature = "svg")]
-  svg_db: Option<Arc<crate::resvg::usvg::fontdb::Database>>,
+  svg_db: Option<Arc<Database>>,
   /// Stamped from a process-wide counter on every registration, so
   /// font-dependent caches (SVG `<text>` trees, their rasterizations) can
   /// tell any two registry states apart, including across `Fonts` instances.
@@ -308,7 +287,7 @@ impl FontsSnapshot {
 
   /// Face store for SVG `<text>` conversion, built once per snapshot.
   #[cfg(feature = "svg")]
-  pub(crate) fn svg_fontdb(&self) -> Arc<crate::resvg::usvg::fontdb::Database> {
+  pub(crate) fn svg_fontdb(&self) -> Arc<Database> {
     self.with_context(Fonts::svg_fontdb)
   }
 
@@ -366,7 +345,7 @@ pub(crate) fn run_variations(run: &GlyphRun<'_, InlineBrush>) -> Vec<([u8; 4], f
 impl Fonts {
   /// Face store for SVG `<text>` conversion, sharing this collection's font bytes.
   #[cfg(feature = "svg")]
-  pub(crate) fn svg_fontdb(&mut self) -> Arc<crate::resvg::usvg::fontdb::Database> {
+  pub(crate) fn svg_fontdb(&mut self) -> Arc<Database> {
     if let Some(database) = &self.svg_db {
       return database.clone();
     }
@@ -378,8 +357,8 @@ impl Fonts {
   }
 
   #[cfg(feature = "svg")]
-  fn build_svg_fontdb(&mut self) -> crate::resvg::usvg::fontdb::Database {
-    use crate::resvg::usvg::fontdb::{Database, Family, Stretch, Style, Weight};
+  fn build_svg_fontdb(&mut self) -> Database {
+    use crate::resvg::usvg::fontdb::{Family, Stretch, Style, Weight};
 
     fn stretch_bucket(width: FontWidth) -> Stretch {
       match width.ratio() {
@@ -475,27 +454,16 @@ impl Fonts {
   pub fn snapshot_with_fallbacks(&self, fallbacks: Option<&FontFamily>) -> FontsSnapshot {
     let mut cloned = self.inner.clone();
 
-    let mut family_ids = if let Some(names) = fallbacks {
+    let mut family_ids: Vec<_> = if let Some(names) = fallbacks {
       // A name may be a logical subset family; expand it to its registered subset names so
       // the fallback bucket carries the whole stack, matching `font-family` expansion.
-      let mut family_ids = Vec::new();
-      for name in names.names() {
-        let FontFamilyName::Named(literal_name) = name else {
-          continue;
-        };
-
-        match self.groups.get(&*literal_name) {
-          Some(subsets) => {
-            family_ids.extend(
-              subsets
-                .iter()
-                .filter_map(|(_, _, name)| cloned.collection.family_id(name)),
-            );
-          }
-          None => family_ids.extend(cloned.collection.family_id(&literal_name)),
-        }
-      }
-      family_ids
+      ExpandedFontFamily::expand(names, &self.groups)
+        .query_families()
+        .filter_map(|family| match family {
+          QueryFamily::Named(name) => cloned.collection.family_id(name),
+          _ => None,
+        })
+        .collect()
     } else {
       // Registration order, not `family_names()` (hash order), so font selection is stable.
       self
@@ -611,9 +579,9 @@ impl Fonts {
       self.svg_db = None;
     }
 
-    static REVISION: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
+    static REVISION: AtomicU64 = AtomicU64::new(1);
 
-    self.revision = REVISION.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    self.revision = REVISION.fetch_add(1, Ordering::Relaxed);
 
     let FontResource {
       source,
@@ -775,6 +743,21 @@ impl FontBytes<'_> {
       Self::Shared(bytes) => (*bytes).as_ref().to_vec(),
     }
   }
+
+  /// The raw sfnt bytes, decompressing WOFF and WOFF2.
+  fn into_sfnt(self) -> Result<Vec<u8>, FontError> {
+    match guess_font_format(self.as_ref())? {
+      FontFormat::Ttf | FontFormat::Otf | FontFormat::Ttc => Ok(self.into_owned()),
+      #[cfg(feature = "woff2")]
+      FontFormat::Woff2 => {
+        wuff::decompress_woff2(self.as_ref()).map_err(|e| FontError::Woff(Box::new(e)))
+      }
+      #[cfg(feature = "woff")]
+      FontFormat::Woff => {
+        wuff::decompress_woff1(self.as_ref()).map_err(|e| FontError::Woff(Box::new(e)))
+      }
+    }
+  }
 }
 
 impl Debug for FontBytes<'_> {
@@ -858,10 +841,7 @@ impl<'a> FontSource<'a> {
     }
 
     Ok(Self {
-      bytes: FontBytes::Inline(Cow::Owned(load_font(
-        Cow::Owned(self.bytes.into_owned()),
-        None,
-      )?)),
+      bytes: FontBytes::Inline(Cow::Owned(self.bytes.into_sfnt()?)),
       is_decoded: true,
       cache_id: self.cache_id,
     })
@@ -872,7 +852,7 @@ impl<'a> FontSource<'a> {
     let cache_id = self.cache_id;
     let decoded: SharedBytes = match self.bytes {
       FontBytes::Shared(bytes) if passthrough => bytes,
-      bytes => Arc::new(load_font(Cow::Owned(bytes.into_owned()), None)?),
+      bytes => Arc::new(bytes.into_sfnt()?),
     };
 
     // `Blob::new` draws its id from a global counter, and that id keys the shared glyph
@@ -1103,7 +1083,9 @@ mod tests {
 
   #[test]
   fn shared_sfnt_bytes_reach_the_font_system_uncopied() {
-    let sfnt = load_font(Cow::Owned(geist_bytes()), None).unwrap();
+    let sfnt = FontBytes::Inline(Cow::Owned(geist_bytes()))
+      .into_sfnt()
+      .unwrap();
     let bytes: Arc<dyn AsRef<[u8]> + Send + Sync> = Arc::new(sfnt);
     let address = (*bytes).as_ref().as_ptr();
     let blob = FontSource::from_shared(Arc::clone(&bytes))
@@ -1127,7 +1109,10 @@ mod tests {
 
   #[test]
   fn static_sfnt_bytes_reach_the_font_system_uncopied() {
-    let sfnt: &'static [u8] = load_font(Cow::Owned(geist_bytes()), None).unwrap().leak();
+    let sfnt: &'static [u8] = FontBytes::Inline(Cow::Owned(geist_bytes()))
+      .into_sfnt()
+      .unwrap()
+      .leak();
     let blob = FontSource::from_static(sfnt).into_blob().unwrap();
 
     assert_eq!(blob.data().as_ptr(), sfnt.as_ptr());
@@ -1198,8 +1183,12 @@ mod tests {
 
   #[test]
   fn multi_family_file_registers_in_face_order() {
-    let geist = load_font(Cow::Owned(geist_bytes()), None).unwrap();
-    let mono = load_font(Cow::Owned(geist_mono_bytes()), None).unwrap();
+    let geist = FontBytes::Inline(Cow::Owned(geist_bytes()))
+      .into_sfnt()
+      .unwrap();
+    let mono = FontBytes::Inline(Cow::Owned(geist_mono_bytes()))
+      .into_sfnt()
+      .unwrap();
     let ttc = build_ttc(&[geist, mono]);
 
     for _ in 0..32 {
