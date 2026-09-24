@@ -161,13 +161,7 @@ fn scale_commands(commands: Vec<PathCommand>, scale: f32) -> Vec<PathCommand> {
 
   commands
     .into_iter()
-    .map(|command| match command {
-      PathCommand::MoveTo(a) => PathCommand::MoveTo(point(a)),
-      PathCommand::LineTo(a) => PathCommand::LineTo(point(a)),
-      PathCommand::QuadTo(a, b) => PathCommand::QuadTo(point(a), point(b)),
-      PathCommand::CubicTo(a, b, c) => PathCommand::CubicTo(point(a), point(b), point(c)),
-      PathCommand::Close => PathCommand::Close,
-    })
+    .map(|command| command.map_points(point))
     .collect()
 }
 
