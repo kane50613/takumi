@@ -1,26 +1,30 @@
 //! Path, gradient, decoration and image helpers translating takumi paint into krilla.
 
 #[cfg(feature = "images")]
-use takumi_core::resources::image::{ImageError, ImageSource, RenderedImage};
 use takumi_core::{
   context::RenderContext,
-  geometry::{ComputedLayout as Layout, PathCommand},
-  style::{BlendMode, Color, ComputedStyle, Overflow, ResolvedGradientStop},
+  resources::image::{ImageError, ImageSource, RenderedImage},
 };
-
-use crate::{
-  filter::ColorFilter,
-  krilla::{
-    blend::BlendMode as KrillaBlendMode,
-    color::rgb,
-    geom::{Path as KrillaPath, PathBuilder, Rect as KrillaRect},
-    num::NormalizedF32,
-    paint::{Fill, FillRule, SpreadMethod, Stop},
-    surface::Surface,
+use takumi_core::{
+  geometry::{ComputedLayout as Layout, PathCommand},
+  layout::{border::BorderProperties, decoration::ClipBox},
+  painter::FillShape,
+  style::{
+    BlendMode, Color, ComputedStyle, FillRule as CoreFillRule, Overflow, ResolvedGradientStop,
   },
 };
+
+use crate::krilla::{
+  blend::BlendMode as KrillaBlendMode,
+  color::rgb,
+  geom::{Path as KrillaPath, PathBuilder, Rect as KrillaRect, Transform},
+  num::NormalizedF32,
+  paint::{Fill, FillRule, SpreadMethod, Stop},
+  stream::Stream,
+  surface::Surface,
+};
 #[cfg(feature = "images")]
-use crate::{krilla::image::Image as KrillaImage, raster::embedded_image};
+use crate::{filter::ColorFilter, krilla::image::Image as KrillaImage, raster::embedded_image};
 
 /// A degenerate path, for a clip that must hide everything: an empty region is
 /// what CSS asks for when a shape resolves to no area.
@@ -57,6 +61,26 @@ pub(crate) fn krilla_path(commands: &[PathCommand], x: f32, y: f32) -> Option<Kr
     }
   }
   builder.finish()
+}
+
+/// A fill shape as a krilla path translated by `(x, y)`.
+pub(crate) fn shape_path(shape: &FillShape, x: f32, y: f32) -> Option<KrillaPath> {
+  match shape {
+    FillShape::Rect(size) => {
+      KrillaRect::from_xywh(x, y, size.width, size.height).and_then(rect_path)
+    }
+    _ => krilla_path(&shape.to_commands(), x, y),
+  }
+}
+
+/// A clip box's rounded edge as a krilla path, the box at `(x, y)`.
+pub(crate) fn clip_box_path(clip: ClipBox, x: f32, y: f32) -> Option<KrillaPath> {
+  let mut commands = Vec::with_capacity(BorderProperties::PATH_COMMANDS_AMOUNT);
+
+  clip
+    .border
+    .append_mask_commands(&mut commands, clip.size, clip.offset);
+  krilla_path(&commands, x, y)
 }
 
 /// The rectangular overflow clip: each hidden axis bounds to the padding box,
@@ -105,14 +129,6 @@ fn unpremultiply(data: &mut [u8]) {
   }
 }
 
-#[cfg(feature = "images")]
-fn encoded_bytes(source: &ImageSource) -> Option<&[u8]> {
-  match source {
-    ImageSource::Encoded(encoded) => Some(encoded.bytes()),
-    _ => None,
-  }
-}
-
 /// Why an image that had bytes could not be drawn.
 #[cfg(feature = "images")]
 fn undrawable_reason(filtered: bool, error: &ImageError) -> String {
@@ -138,8 +154,8 @@ pub(crate) fn rasterized_image(
   filter: Option<&ColorFilter>,
 ) -> Result<Option<KrillaImage>, String> {
   if filter.is_none()
-    && let Some(bytes) = encoded_bytes(source)
-    && let Some(image) = embedded_image(bytes)
+    && let ImageSource::Encoded(encoded) = source
+    && let Some(image) = embedded_image(encoded.bytes())
   {
     return Ok(Some(image));
   }
@@ -199,7 +215,7 @@ pub(crate) fn krilla_stop(offset: f32, rgba: [u8; 4]) -> Stop {
   Stop {
     offset: NormalizedF32::new(offset.clamp(0.0, 1.0)).unwrap_or(NormalizedF32::ZERO),
     color: rgb::Color::new(rgba[0], rgba[1], rgba[2]).into(),
-    opacity: NormalizedF32::new(f32::from(rgba[3]) / 255.0).unwrap_or(NormalizedF32::ONE),
+    opacity: normalized(f32::from(rgba[3]) / 255.0),
   }
 }
 
@@ -247,6 +263,18 @@ pub(crate) fn expanded_radial_stops(resolved: &[ResolvedGradientStop], extent: f
   stops
 }
 
+pub(crate) const fn krilla_fill_rule(rule: CoreFillRule) -> FillRule {
+  match rule {
+    CoreFillRule::EvenOdd => FillRule::EvenOdd,
+    _ => FillRule::NonZero,
+  }
+}
+
+/// An affine in takumi-core's column order, `[a, b, c, d, e, f]`.
+pub(crate) fn krilla_transform([a, b, c, d, e, f]: [f32; 6]) -> Transform {
+  Transform::from_row(a, b, c, d, e, f)
+}
+
 pub(crate) const fn krilla_blend(mode: BlendMode) -> KrillaBlendMode {
   match mode {
     BlendMode::Multiply => KrillaBlendMode::Multiply,
@@ -283,6 +311,16 @@ pub(crate) fn paint_page_background(color: Option<Color>, size: (f32, f32), surf
   surface.draw_path(&path);
 }
 
+/// Draws into a stream of its own, for a pattern tile or a mask.
+pub(crate) fn draw_stream(surface: &mut Surface, draw: impl FnOnce(&mut Surface)) -> Stream {
+  let mut builder = surface.stream_builder();
+  let mut content = builder.surface();
+
+  draw(&mut content);
+  content.finish();
+  builder.finish()
+}
+
 pub(crate) fn pop_transforms(surface: &mut Surface, pushed: usize) {
   for _ in 0..pushed {
     surface.pop();
@@ -294,7 +332,12 @@ pub(crate) fn fill_from_rgba(rgba: [u8; 4], opacity: f32) -> Fill {
 
   Fill {
     paint: rgb::Color::new(rgba[0], rgba[1], rgba[2]).into(),
-    opacity: NormalizedF32::new(alpha.clamp(0.0, 1.0)).unwrap_or(NormalizedF32::ONE),
+    opacity: normalized(alpha),
     rule: FillRule::NonZero,
   }
+}
+
+/// A value clamped into `0..=1`, with NaN read as one.
+pub(crate) fn normalized(value: f32) -> NormalizedF32 {
+  NormalizedF32::new(value.clamp(0.0, 1.0)).unwrap_or(NormalizedF32::ONE)
 }

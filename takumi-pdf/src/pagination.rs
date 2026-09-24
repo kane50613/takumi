@@ -1,7 +1,7 @@
 //! Cutting the content column into pages without splitting unsplittable atoms.
 
 use takumi_core::{
-  geometry::transformed_rect_extents,
+  geometry::{Point, transformed_rect_extents},
   layout::node::Node,
   scene::NodePaint,
   style::{GridPlacement, GridPlacementSpan},
@@ -159,11 +159,9 @@ impl HeaderBand {
     let Ok(layout) = tree.results.layout(paint.node_id) else {
       return;
     };
-    let Some((table_left, table_top, table_right, table_bottom)) = transformed_rect_extents(
-      takumi_core::geometry::Point { x: 0.0, y: 0.0 },
-      layout.size,
-      paint.transform,
-    ) else {
+    let Some((table_left, table_top, table_right, table_bottom)) =
+      transformed_rect_extents(Point::ZERO, layout.size, paint.transform)
+    else {
       return;
     };
     let Some(rows) = node.children.as_deref() else {

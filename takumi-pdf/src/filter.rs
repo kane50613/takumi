@@ -29,6 +29,11 @@ pub(crate) fn unsupported_filter(filters: &[Filter]) -> Option<String> {
     .map(ToCss::to_css_string)
 }
 
+/// A color as `filter` leaves it, or as it is when nothing filters it.
+pub(crate) fn filtered(filter: Option<&ColorFilter>, color: Color) -> [u8; 4] {
+  filter.map_or(color.0, |filter| filter.apply(color.0))
+}
+
 impl ColorFilter {
   /// Prepends a filter list to whatever the ancestors already apply: CSS
   /// filters the element first and the ancestor's group afterwards, and the

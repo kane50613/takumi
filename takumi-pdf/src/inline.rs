@@ -17,13 +17,18 @@ use takumi_core::{
   scene::NodePaint,
 };
 
-use crate::{options::PdfError, pagination::Atom, tree::PreparedTree};
+use crate::{
+  options::PdfError,
+  pagination::Atom,
+  tree::{OwnContent, PreparedTree},
+};
 
 /// A text box's inline layout, built once per render and reused by atom
 /// collection and every page's emission.
 pub(crate) struct PreparedInline<'c> {
-  pub(crate) built: BuiltInlineLayout<'c>,
-  pub(crate) runs: InlineRunLayout,
+  built: BuiltInlineLayout<'c>,
+  runs: InlineRunLayout,
+  font_style: &'c SizedFontStyle<'c>,
 }
 
 /// Inline layouts keyed by the box's layout [`NodeId`].
@@ -53,11 +58,7 @@ impl<'t> TextBox<'t> {
     let Ok(layout) = tree.results.layout(paint.node_id) else {
       return;
     };
-    let is_text = node.should_create_inline_layout()
-      || (!node.has_anonymous_text_item_child()
-        && matches!(node.node.as_ref().map(|n| &n.kind), Some(NodeKind::Text(_))));
-
-    if is_text {
+    if matches!(OwnContent::of(node), OwnContent::Text) {
       boxes.push(Self {
         node,
         node_id: paint.node_id,
@@ -74,11 +75,7 @@ pub(crate) fn build_inline_map<'c>(boxes: &'c [TextBox<'c>]) -> Result<InlineMap
   let mut map = InlineMap::new();
 
   for text_box in boxes {
-    let items = if text_box.node.should_create_inline_layout() {
-      collect_inline_items(text_box.node)
-    } else if let Some(NodeKind::Text(text)) = text_box.node.node.as_ref().map(|n| &n.kind) {
-      single_text_items(text, &text_box.node.context)
-    } else {
+    let Some(items) = node_inline_items(text_box.node) else {
       continue;
     };
 
@@ -88,15 +85,49 @@ pub(crate) fn build_inline_map<'c>(boxes: &'c [TextBox<'c>]) -> Result<InlineMap
       &text_box.node.context,
       text_box.layout,
     )? {
-      map.insert(text_box.node_id, PreparedInline { built, runs });
+      map.insert(
+        text_box.node_id,
+        PreparedInline {
+          built,
+          runs,
+          font_style: &text_box.font_style,
+        },
+      );
     }
   }
   Ok(map)
 }
 
+/// Visits a text box's inline layout: the one `map` prepared, or one laid out
+/// now. `None` when the box lays out no runs.
+pub(crate) fn visit_inline_layout<R>(
+  map: Option<&InlineMap<'_>>,
+  node: &RenderNode,
+  node_id: NodeId,
+  layout: Layout,
+  visit: impl FnOnce(&BuiltInlineLayout<'_>, &InlineRunLayout, &SizedFontStyle<'_>) -> R,
+) -> Result<Option<R>, PdfError> {
+  if let Some(prepared) = map.and_then(|map| map.get(&node_id)) {
+    return Ok(Some(visit(
+      &prepared.built,
+      &prepared.runs,
+      prepared.font_style,
+    )));
+  }
+  let Some(items) = node_inline_items(node) else {
+    return Ok(None);
+  };
+  let font_style = SizedFontStyle::from_style(&node.context.style, &node.context);
+  let Some((built, runs)) = build_inline_runs(items, &font_style, &node.context, layout)? else {
+    return Ok(None);
+  };
+
+  Ok(Some(visit(&built, &runs, &font_style)))
+}
+
 /// The inline items an emitted box lays out: the flattened subtree for an
 /// inline formatting context, the lone run for a text node, nothing otherwise.
-pub(crate) fn node_inline_items(node: &RenderNode) -> Option<Vec<InlineItem<'_>>> {
+fn node_inline_items(node: &RenderNode) -> Option<Vec<InlineItem<'_>>> {
   if node.should_create_inline_layout() {
     return Some(collect_inline_items(node));
   }
@@ -157,7 +188,7 @@ fn single_text_items<'c>(text: &'c TextData, context: &'c RenderContext) -> Vec<
 
 /// Runs inline layout and resolves the paintable run set. `None` when the font
 /// size or content box is degenerate.
-pub(crate) fn build_inline_runs<'c>(
+fn build_inline_runs<'c>(
   items: Vec<InlineItem<'c>>,
   font_style: &'c SizedFontStyle<'c>,
   context: &'c RenderContext,
