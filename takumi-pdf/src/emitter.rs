@@ -1198,8 +1198,9 @@ impl Emitter<'_> {
         runs,
         built,
         layout,
-        x + shadow.offset_x,
-        y + shadow.offset_y,
+        x,
+        y,
+        (shadow.offset_x, shadow.offset_y),
         Some(shadow.color),
         surface,
       );
@@ -1212,7 +1213,7 @@ impl Emitter<'_> {
         text,
         glyphs,
         origin,
-      }) = self.glyph_run(run, built, layout, x, y)
+      }) = self.glyph_run(run, built, layout, x, y, y)
       else {
         continue;
       };
@@ -1611,8 +1612,8 @@ impl Emitter<'_> {
     fills
   }
 
-  /// Draws every run's glyphs once, in `color` when set, with no decorations: the shadow passes
-  /// under the real text.
+  /// Draws every run's glyphs once, moved by `shift` and in `color` when set, with no
+  /// decorations: the shadow passes under the real text. A run's page follows its unshifted line.
   #[allow(clippy::too_many_arguments)]
   fn glyph_pass(
     &mut self,
@@ -1621,6 +1622,7 @@ impl Emitter<'_> {
     layout: Layout,
     x: f32,
     y: f32,
+    shift: (f32, f32),
     color: Option<Color>,
     surface: &mut Surface,
   ) {
@@ -1630,7 +1632,7 @@ impl Emitter<'_> {
         text,
         glyphs,
         origin,
-      }) = self.glyph_run(run, built, layout, x, y)
+      }) = self.glyph_run(run, built, layout, x + shift.0, y + shift.1, y)
       else {
         continue;
       };
@@ -1654,8 +1656,8 @@ impl Emitter<'_> {
     }
   }
 
-  /// A run this page draws, placed with its line at `y`, or `None` when it
-  /// has no glyphs, no font, or belongs to another page.
+  /// A run this page draws at `(x, y)`, or `None` when it has no glyphs, no
+  /// font, or its line at `line_y` belongs to another page.
   fn glyph_run<'r>(
     &mut self,
     run: &PositionedInlineRun,
@@ -1663,6 +1665,7 @@ impl Emitter<'_> {
     layout: Layout,
     x: f32,
     y: f32,
+    line_y: f32,
   ) -> Option<GlyphRun<'r>> {
     let shaped = &run.glyph_run;
 
@@ -1675,7 +1678,7 @@ impl Emitter<'_> {
     if shaped
       .glyphs
       .first()
-      .is_some_and(|glyph| self.window.disowns_line(y + offset.y + glyph.y))
+      .is_some_and(|glyph| self.window.disowns_line(line_y + offset.y + glyph.y))
     {
       return None;
     }
