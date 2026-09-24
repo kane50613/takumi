@@ -1,6 +1,9 @@
 use cssparser::*;
 
-use crate::{error::StyleSheetParseError, style::StyleDeclarationBlock};
+use crate::{
+  error::{StyleSheetParseError, StyleSheetParseErrorKind},
+  style::StyleDeclarationBlock,
+};
 
 fn parse_supports_declaration<'i, 't>(
   input: &mut Parser<'i, 't>,
@@ -53,7 +56,7 @@ pub(crate) fn parse_supports_condition<'i, 't>(
   while let Ok(is_and) = input.try_parse(parse_supports_operator) {
     if operator.is_some_and(|operator| operator != is_and) {
       return Err(
-        input.new_custom_error(StyleSheetParseError::supports_mixed_and_or_without_parentheses()),
+        input.new_custom_error(StyleSheetParseErrorKind::SupportsMixedAndOrWithoutParentheses),
       );
     }
 
