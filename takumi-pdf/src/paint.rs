@@ -6,7 +6,7 @@ use takumi_core::{
   resources::image::{ImageError, ImageSource, RenderedImage},
 };
 use takumi_core::{
-  geometry::{PathCommand, Point, Rect},
+  geometry::{PathCommand, Point, Rect, Size},
   painter::FillShape,
   style::{BlendMode, Color, FillRule as CoreFillRule, ResolvedGradientStop},
 };
@@ -113,7 +113,7 @@ fn undrawable_reason(filtered: bool, error: &ImageError) -> String {
 pub(crate) fn rasterized_image(
   source: &ImageSource,
   context: &RenderContext,
-  target: (f32, f32),
+  target: Size<f32>,
   filter: Option<&ColorFilter>,
 ) -> Result<Option<KrillaImage>, String> {
   if filter.is_none()
@@ -129,8 +129,8 @@ pub(crate) fn rasterized_image(
     ImageSource::Encoded(encoded) => encoded.dimensions(),
     #[cfg(feature = "svg")]
     ImageSource::Svg(_) => (
-      (target.0 * 2.0).ceil() as u32,
-      (target.1 * 2.0).ceil() as u32,
+      (target.width * 2.0).ceil() as u32,
+      (target.height * 2.0).ceil() as u32,
     ),
     _ => return Ok(None),
   };
@@ -262,11 +262,12 @@ pub(crate) const fn krilla_blend(mode: BlendMode) -> KrillaBlendMode {
 /// Fills the page box before the page draws anything else. An unset color
 /// leaves the page empty rather than painting white, like Chromium's print
 /// path.
-pub(crate) fn paint_page_background(color: Option<Color>, size: (f32, f32), surface: &mut Surface) {
+pub(crate) fn paint_page_background(color: Option<Color>, size: Size<f32>, surface: &mut Surface) {
   let Some(color) = color else {
     return;
   };
-  let Some(path) = KrillaRect::from_xywh(0.0, 0.0, size.0, size.1).and_then(rect_path) else {
+  let Some(path) = KrillaRect::from_xywh(0.0, 0.0, size.width, size.height).and_then(rect_path)
+  else {
     return;
   };
 

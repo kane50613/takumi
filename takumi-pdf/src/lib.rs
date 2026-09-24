@@ -87,6 +87,7 @@ mod krilla;
 mod subsetter;
 
 use takumi_core::{
+  geometry::Point as CorePoint,
   layout::tree::RenderNode,
   style::{Affine, Color, Lang},
   viewport::MediaTarget,
@@ -341,11 +342,7 @@ impl SinglePage {
     let mut surface = page.surface();
 
     surface.push_transform(&Transform::from_scale(PT_PER_PX, PT_PER_PX));
-    paint_page_background(
-      background,
-      (content.scene.size.width, content.scene.size.height),
-      &mut surface,
-    );
+    paint_page_background(background, content.scene.size, &mut surface);
 
     let mut emitter = content.emitter(state, Some(&inline_map), true);
 
@@ -365,7 +362,7 @@ impl SinglePage {
         y: Some((0.0, rendered.content.scene.size.height)),
         ..Window::default()
       },
-      (0.0, 0.0),
+      CorePoint::ZERO,
       state.tags.as_ref(),
       |id| {
         rendered
@@ -391,7 +388,7 @@ impl SinglePage {
 
 #[cfg(test)]
 mod tests {
-  use takumi_core::units::ONE_IN_PX;
+  use takumi_core::{geometry::Size, units::ONE_IN_PX};
 
   use super::*;
   use crate::{
@@ -409,7 +406,7 @@ mod tests {
     }
   }
 
-  const A4: (f32, f32) = (PageOptions::A4.width, PageOptions::A4.height);
+  const A4: Size<f32> = PageOptions::A4.size();
 
   #[test]
   fn page_selection_maps_kept_pages_to_output_order() {
@@ -717,7 +714,7 @@ mod tests {
   #[test]
   fn a_page_under_an_inch_keeps_no_margin_on_that_axis() {
     for width in [ONE_IN_PX, ONE_IN_PX - 1.0] {
-      let margins = PageMargins::AUTO.resolve((width, 4.0 * ONE_IN_PX), None, None);
+      let margins = PageMargins::AUTO.resolve(Size::new(width, 4.0 * ONE_IN_PX), None, None);
 
       assert_eq!(margins.left, 0.0, "width of {width}");
       assert_eq!(margins.right, 0.0, "width of {width}");
@@ -726,7 +723,7 @@ mod tests {
     }
     assert_eq!(
       PageMargins::AUTO
-        .resolve((ONE_IN_PX + 1.0, 4.0 * ONE_IN_PX), None, None)
+        .resolve(Size::new(ONE_IN_PX + 1.0, 4.0 * ONE_IN_PX), None, None)
         .left,
       PageOptions::DEFAULT_MARGIN,
       "an axis past the inch keeps its margin"

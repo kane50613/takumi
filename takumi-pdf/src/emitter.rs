@@ -502,10 +502,7 @@ impl Emitter<'_> {
     frame: BoxFrame,
     surface: &mut Surface,
   ) {
-    let BoxFrame {
-      layout,
-      origin: CorePoint { x, y },
-    } = frame;
+    let BoxFrame { layout, .. } = frame;
     let style = &node.context.style;
     let Some(images) = style.background_image.as_deref() else {
       return;
@@ -537,8 +534,8 @@ impl Emitter<'_> {
           node,
           &placement,
           layout.size,
-          (x, y),
-          (x + origin_offset.x, y + origin_offset.y),
+          frame.origin,
+          frame.origin + origin_offset,
           surface,
           Transform::from_scale(PT_PER_PX, PT_PER_PX),
         );
@@ -561,8 +558,8 @@ impl Emitter<'_> {
     node: &RenderNode,
     placement: &Placement,
     size: Size<f32>,
-    rect_at: (f32, f32),
-    anchor: (f32, f32),
+    rect_at: CorePoint<f32>,
+    anchor: CorePoint<f32>,
     surface: &mut Surface,
     tile_space: Transform,
   ) {
@@ -571,30 +568,35 @@ impl Emitter<'_> {
         image,
         node,
         placement.tile,
-        (anchor.0 + placement.origin.0, anchor.1 + placement.origin.1),
+        anchor + placement.origin,
         surface,
         Transform::identity(),
       );
       return;
     }
     let stream = draw_stream(surface, |tile| {
-      self.background_layer(image, node, placement.tile, (0.0, 0.0), tile, tile_space);
+      self.background_layer(
+        image,
+        node,
+        placement.tile,
+        CorePoint::ZERO,
+        tile,
+        tile_space,
+      );
     });
     let Some(path) =
-      KrillaRect::from_xywh(rect_at.0, rect_at.1, size.width, size.height).and_then(rect_path)
+      KrillaRect::from_xywh(rect_at.x, rect_at.y, size.width, size.height).and_then(rect_path)
     else {
       return;
     };
+    let tile_origin = anchor + placement.origin;
 
     surface.set_fill(Some(Fill {
       paint: Pattern {
         stream,
-        transform: Transform::from_translate(
-          anchor.0 + placement.origin.0,
-          anchor.1 + placement.origin.1,
-        ),
-        width: placement.step.0,
-        height: placement.step.1,
+        transform: Transform::from_translate(tile_origin.x, tile_origin.y),
+        width: placement.step.width,
+        height: placement.step.height,
       }
       .into(),
       opacity: NormalizedF32::ONE,
@@ -608,11 +610,10 @@ impl Emitter<'_> {
     image: &BackgroundImage,
     node: &RenderNode,
     size: Size<f32>,
-    at: (f32, f32),
+    at: CorePoint<f32>,
     surface: &mut Surface,
     pattern_space: Transform,
   ) {
-    let (x, y) = at;
     let (w, h) = (size.width, size.height);
 
     // A url() layer draws as an image tile; the transform applies to pixels,
@@ -624,7 +625,7 @@ impl Emitter<'_> {
       };
       let Some(krilla_image) = self.drawable(
         url,
-        rasterized_image(&source, &node.context, (w, h), self.color_filter.as_deref()),
+        rasterized_image(&source, &node.context, size, self.color_filter.as_deref()),
       ) else {
         return;
       };
@@ -632,15 +633,15 @@ impl Emitter<'_> {
         return;
       };
 
-      surface.push_transform(&Transform::from_translate(x, y));
+      surface.push_transform(&Transform::from_translate(at.x, at.y));
       surface.draw_image(krilla_image, target);
       surface.pop();
       return;
     }
-    let Some(paint) = self.gradient_paint(image, node, size, x, y, pattern_space) else {
+    let Some(paint) = self.gradient_paint(image, node, size, at, pattern_space) else {
       return;
     };
-    let Some(path) = KrillaRect::from_xywh(x, y, w, h).and_then(rect_path) else {
+    let Some(path) = KrillaRect::from_xywh(at.x, at.y, w, h).and_then(rect_path) else {
       return;
     };
 
@@ -663,10 +664,10 @@ impl Emitter<'_> {
     image: &BackgroundImage,
     node: &RenderNode,
     size: Size<f32>,
-    x: f32,
-    y: f32,
+    at: CorePoint<f32>,
     pattern_space: Transform,
   ) -> Option<Paint> {
+    let CorePoint { x, y } = at;
     let (w, h) = (size.width, size.height);
     let sizing = &node.context.sizing;
     let current_color = node.context.current_color;
@@ -815,7 +816,7 @@ impl Emitter<'_> {
   fn mask(&mut self, node: &RenderNode, frame: BoxFrame, surface: &mut Surface) -> Option<Mask> {
     let BoxFrame {
       layout: Layout { size, .. },
-      origin: CorePoint { x, y },
+      ..
     } = frame;
     let images = node.context.style.mask_image.as_deref()?;
 
@@ -833,8 +834,8 @@ impl Emitter<'_> {
           node,
           &placement,
           size,
-          (x, y),
-          (x, y),
+          frame.origin,
+          frame.origin,
           content,
           Transform::identity(),
         );
@@ -1068,7 +1069,12 @@ impl Emitter<'_> {
     let krilla_image = if vector.is_none() {
       let Some(image) = self.drawable(
         image_label(&image.src),
-        rasterized_image(&source, context, (dw, dh), self.color_filter.as_deref()),
+        rasterized_image(
+          &source,
+          context,
+          placement.size,
+          self.color_filter.as_deref(),
+        ),
       ) else {
         return;
       };
@@ -1512,17 +1518,24 @@ impl Emitter<'_> {
     image: &BackgroundImage,
     node: &RenderNode,
     tile: Size<f32>,
-    at: (f32, f32),
+    at: CorePoint<f32>,
     surface: &mut Surface,
   ) -> Option<Paint> {
     let stream = draw_stream(surface, |inner| {
-      self.background_layer(image, node, tile, (0.0, 0.0), inner, Transform::identity());
+      self.background_layer(
+        image,
+        node,
+        tile,
+        CorePoint::ZERO,
+        inner,
+        Transform::identity(),
+      );
     });
 
     (tile.width > 0.0 && tile.height > 0.0).then(|| {
       Pattern {
         stream,
-        transform: Transform::from_translate(at.0, at.1),
+        transform: Transform::from_translate(at.x, at.y),
         width: tile.width,
         height: tile.height,
       }
@@ -1537,10 +1550,7 @@ impl Emitter<'_> {
     frame: BoxFrame,
     surface: &mut Surface,
   ) -> Vec<Fill> {
-    let BoxFrame {
-      layout,
-      origin: CorePoint { x, y },
-    } = frame;
+    let BoxFrame { layout, .. } = frame;
     let style = &node.context.style;
 
     if style.background_clip != BackgroundClip::Text {
@@ -1566,22 +1576,18 @@ impl Emitter<'_> {
       let placement = layers.placement(index, image, area, &node.context);
       // ponytail: one tile per layer; a repeating gradient behind text would
       // need a pattern paint here.
-      let (tile_x, tile_y) = (
-        x + origin_offset.x + placement.origin.0,
-        y + origin_offset.y + placement.origin.1,
-      );
+      let tile_origin = frame.origin + origin_offset + placement.origin;
       // An image layer has no paint of its own, so it draws into a pattern the
       // glyphs can be filled with, the way a tiled background already does.
       let paint = match image {
         BackgroundImage::Url(_) => {
-          self.image_pattern(image, node, placement.tile, (tile_x, tile_y), surface)
+          self.image_pattern(image, node, placement.tile, tile_origin, surface)
         }
         _ => self.gradient_paint(
           image,
           node,
           placement.tile,
-          tile_x,
-          tile_y,
+          tile_origin,
           Transform::identity(),
         ),
       };

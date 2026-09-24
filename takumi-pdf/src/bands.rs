@@ -5,6 +5,7 @@ use std::ops::Range;
 
 use takumi_core::{
   context::RenderContext,
+  geometry::Point,
   layout::{
     node::{Node, NodeKind},
     tree::RenderNode,
@@ -42,11 +43,11 @@ impl RepeatBounds {
   /// between pages.
   fn rect(&self, frame: &PageFrame, height: f32) -> (f32, f32, f32, f32) {
     match self {
-      Self::Header => (0.0, BAND_EDGE_PADDING, frame.size.0, height),
+      Self::Header => (0.0, BAND_EDGE_PADDING, frame.size.width, height),
       Self::Footer => (
         0.0,
-        frame.size.1 - BAND_EDGE_PADDING - height,
-        frame.size.0,
+        frame.size.height - BAND_EDGE_PADDING - height,
+        frame.size.width,
         height,
       ),
       Self::Content { .. } => (
@@ -268,7 +269,7 @@ impl RepeatablePage<'_> {
 
     ContentWindow {
       clip: (x, y, width, height),
-      translate: (x, y),
+      translate: Point { x, y },
       window: Window::default(),
       artifact: state.tags.is_some(),
     }
