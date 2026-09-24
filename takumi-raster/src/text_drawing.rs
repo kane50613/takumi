@@ -168,7 +168,7 @@ pub(crate) fn draw_decoration_segment(
     params.transform
       * Affine::translation(
         snapped_start_x,
-        params.layout.border.top + params.layout.padding.top + params.offset,
+        params.layout.content_box_offset().y + params.offset,
       ),
     ImageScalingAlgorithm::Auto,
     BlendMode::Normal,

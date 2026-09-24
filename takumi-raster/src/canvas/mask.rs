@@ -2,6 +2,8 @@ use std::{borrow::Cow, sync::Arc};
 
 use takumi_core::{
   geometry::{ComputedLayout as Layout, Point, Size, transformed_rect_extents},
+  layout::decoration::ClipBox,
+  painter::FillShape,
   scene::SceneBounds,
 };
 use tiny_skia::{
@@ -223,21 +225,7 @@ fn rounded_overflow_mask(
   inverse_transform: Affine,
   viewport: CanvasViewport,
 ) -> NodeMaskAction {
-  let padding_box = Size {
-    width: (layout.size.width - layout.border.left - layout.border.right).max(0.0),
-    height: (layout.size.height - layout.border.top - layout.border.bottom).max(0.0),
-  };
-
-  let mut inner_props = border_props;
-  inner_props.inset_by_border_width();
-
-  let mut paths = Vec::with_capacity(10);
-  let padding_origin = Point {
-    x: layout.border.left,
-    y: layout.border.top,
-  };
-  inner_props.append_mask_commands(&mut paths, padding_box, padding_origin);
-
+  let paths = FillShape::from(ClipBox::padding_box(border_props, layout)).to_commands();
   let (mask_data, local_placement) = render_mask(&paths, None, None, None);
   if local_placement.width == 0 || local_placement.height == 0 {
     return NodeMaskAction::SkipRendering;
