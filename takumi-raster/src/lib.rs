@@ -22,7 +22,6 @@ mod dithering;
 /// Filter rasterization (blur, drop-shadow, backdrop, pixel filters)
 mod filter;
 /// Image drawing functions
-#[cfg(feature = "svg")]
 mod image_drawing;
 pub(crate) mod inline_drawing;
 mod node_paint;
