@@ -3716,9 +3716,14 @@ fn inline_image_decorations_in_a_tagged_document() {
   });
   let haystack = inflated_text(&pdf);
 
+  assert_eq!(
+    haystack.matches("/x0 Do").count(),
+    2,
+    "expected both decorated inline images on the page"
+  );
   assert!(
-    haystack.contains("/x0 Do"),
-    "the decorated inline image never reached the page"
+    haystack.contains("/ca 0.5"),
+    "expected the faded inline image at half opacity"
   );
 }
 
