@@ -15,12 +15,16 @@ use skrifa::{
   outline::{DrawSettings, OutlineGlyphCollection, OutlinePen},
   raw::types::BoundingBox,
 };
+use xxhash_rust::xxh3::Xxh3;
 
 #[cfg(feature = "png")]
 use crate::resources::image_decoder::decode_png;
 use crate::{
   geometry::{PathCommand as Command, Placement, Point},
-  resources::image_buffer::ImageBuffer,
+  resources::{
+    glyph_cache::ENTRY_OVERHEAD,
+    image_buffer::{ImageBuffer, rgba_len},
+  },
 };
 
 /// A resolved glyph, either an embedded bitmap or a vector outline.
@@ -169,8 +173,6 @@ impl ResolvedGlyph {
   /// Approximate retained size in bytes, for glyph-cache budgeting. Element
   /// sizes are exact; the constant covers map-slot and allocator overhead.
   pub(crate) fn estimated_bytes(&self) -> usize {
-    const ENTRY_OVERHEAD: usize = 64;
-
     match self {
       Self::Bitmap(bitmap) => bitmap.image.data().len() + ENTRY_OVERHEAD,
       Self::Outline(ResolvedOutlineGlyph::Plain { paths, .. }) => {
@@ -197,8 +199,8 @@ impl ResolvedGlyph {
           (
             placement.left as f32,
             placement.top as f32,
-            (placement.left + placement.width as i32) as f32,
-            (placement.top + placement.height as i32) as f32,
+            placement.right() as f32,
+            placement.bottom() as f32,
           )
         })
       }
@@ -274,35 +276,32 @@ pub(crate) fn synthesis_embolden_strength(font_size: f32) -> f32 {
 }
 
 fn hash_path_commands(paths: &[Command]) -> u64 {
-  use xxhash_rust::xxh3::Xxh3;
   let mut h = Xxh3::new();
+  let point = |h: &mut Xxh3, p: &Point<f32>| {
+    h.update(&p.x.to_le_bytes());
+    h.update(&p.y.to_le_bytes());
+  };
+
   for cmd in paths {
     match cmd {
       Command::MoveTo(p) => {
         h.update(&[0u8]);
-        h.update(&p.x.to_le_bytes());
-        h.update(&p.y.to_le_bytes());
+        point(&mut h, p);
       }
       Command::LineTo(p) => {
         h.update(&[1u8]);
-        h.update(&p.x.to_le_bytes());
-        h.update(&p.y.to_le_bytes());
+        point(&mut h, p);
       }
       Command::QuadTo(p1, p2) => {
         h.update(&[2u8]);
-        h.update(&p1.x.to_le_bytes());
-        h.update(&p1.y.to_le_bytes());
-        h.update(&p2.x.to_le_bytes());
-        h.update(&p2.y.to_le_bytes());
+        point(&mut h, p1);
+        point(&mut h, p2);
       }
       Command::CubicTo(p1, p2, p3) => {
         h.update(&[3u8]);
-        h.update(&p1.x.to_le_bytes());
-        h.update(&p1.y.to_le_bytes());
-        h.update(&p2.x.to_le_bytes());
-        h.update(&p2.y.to_le_bytes());
-        h.update(&p3.x.to_le_bytes());
-        h.update(&p3.y.to_le_bytes());
+        point(&mut h, p1);
+        point(&mut h, p2);
+        point(&mut h, p3);
       }
       Command::Close => {
         h.update(&[4u8]);
@@ -342,12 +341,6 @@ impl OutlinePen for ErasedPen<'_> {
 #[derive(Default)]
 struct GlyphOutlinePen {
   paths: Vec<Command>,
-}
-
-impl GlyphOutlinePen {
-  fn finish(self) -> Vec<Command> {
-    self.paths
-  }
 }
 
 impl OutlinePen for GlyphOutlinePen {
@@ -398,10 +391,6 @@ impl<'a, 'g> ColorLayerCollector<'a, 'g> {
       layers: Vec::new(),
     }
   }
-
-  fn into_layers(self) -> Vec<ResolvedColorLayer> {
-    self.layers
-  }
 }
 
 pub(crate) struct GlyphResolveContext<'a> {
@@ -445,7 +434,7 @@ impl<'a> GlyphResolveContext<'a> {
       .get_with_format(glyph_id, ColorGlyphFormat::ColrV0)?;
     let mut collector = ColorLayerCollector::new(&self.outline_glyphs, self.size, self.location);
     color_glyph.paint(self.location, &mut collector).ok()?;
-    let color_layers = collector.into_layers();
+    let color_layers = collector.layers;
     if color_layers.is_empty() {
       return None;
     }
@@ -548,27 +537,14 @@ fn resolve_outline_commands(
       &mut ErasedPen(&mut pen),
     )
     .ok()?;
-  Some(pen.finish())
+  Some(pen.paths)
 }
 
 fn transform_commands(paths: &mut [Command], skew_degrees: f32) {
   let skew_tangent = skew_degrees.to_radians().tan();
+
   for command in paths {
-    match command {
-      Command::MoveTo(point) | Command::LineTo(point) => {
-        point.x += point.y * skew_tangent;
-      }
-      Command::QuadTo(control, point) => {
-        control.x += control.y * skew_tangent;
-        point.x += point.y * skew_tangent;
-      }
-      Command::CubicTo(control1, control2, point) => {
-        control1.x += control1.y * skew_tangent;
-        control2.x += control2.y * skew_tangent;
-        point.x += point.y * skew_tangent;
-      }
-      Command::Close => {}
-    }
+    *command = command.map_points(|point| Point::new(point.x + point.y * skew_tangent, point.y));
   }
 }
 
@@ -579,10 +555,7 @@ fn decode_bitmap_image(bitmap: &BitmapGlyph<'_>) -> Option<(ImageBuffer, Origin)
     #[cfg(not(feature = "png"))]
     BitmapData::Png(_) => return None,
     BitmapData::Bgra(bytes) => {
-      let expected = (bitmap.width as usize)
-        .checked_mul(bitmap.height as usize)?
-        .checked_mul(4)?;
-      if bytes.len() < expected {
+      if bytes.len() < rgba_len(bitmap.width, bitmap.height)? {
         return None;
       }
 

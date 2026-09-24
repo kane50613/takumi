@@ -20,7 +20,7 @@ use crate::{geometry::Placement, resources::glyph::ResolvedGlyph};
 const DEFAULT_GLYPH_CACHE_MAX_BYTES: usize = 8 << 20; // 8 MiB
 
 /// Bytes charged for an entry's own bookkeeping on top of its payload.
-const ENTRY_OVERHEAD: usize = 64;
+pub(crate) const ENTRY_OVERHEAD: usize = 64;
 
 static MAX_BYTES: AtomicUsize = AtomicUsize::new(DEFAULT_GLYPH_CACHE_MAX_BYTES);
 
