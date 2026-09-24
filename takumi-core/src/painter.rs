@@ -10,8 +10,8 @@ use crate::{
   },
   shadow::SizedShadow,
   style::{
-    Affine, BackgroundClip, BackgroundImage, BoxShadow, Color, ComputedStyle, FillRule, Overflow,
-    Sides, TextDecorationLines,
+    Affine, BackgroundClip, BackgroundImage, BoxShadow, Color, FillRule, Overflow, Sides,
+    TextDecorationLines,
   },
 };
 
@@ -123,24 +123,22 @@ impl BoxFrame {
     }
   }
 
-  /// The edges `style`'s overflow clips to without rounded corners: the padding box on a
-  /// clipped axis, effectively unbounded on a visible one.
-  pub fn overflow_clip_edges(self, style: &ComputedStyle) -> Rect<f32> {
+  /// The padding box's edges on each axis that clips, effectively unbounded on the others.
+  pub fn overflow_clip_edges(self, clip_x: bool, clip_y: bool) -> Rect<f32> {
     const UNBOUNDED: f32 = 1.0e6;
 
     let Self {
       layout,
       origin: Point { x, y },
     } = self;
-    let overflow = style.resolve_overflows();
-    let (left, right) = if overflow.x != Overflow::Visible {
+    let (left, right) = if clip_x {
       let padding_left = x + layout.border.left;
       let padding_right = (x + layout.size.width - layout.border.right).max(padding_left);
       (padding_left, padding_right)
     } else {
       (x - UNBOUNDED, x + layout.size.width + UNBOUNDED)
     };
-    let (top, bottom) = if overflow.y != Overflow::Visible {
+    let (top, bottom) = if clip_y {
       let padding_top = y + layout.border.top;
       let padding_bottom = (y + layout.size.height - layout.border.bottom).max(padding_top);
       (padding_top, padding_bottom)
@@ -154,6 +152,41 @@ impl BoxFrame {
       right,
       bottom,
     }
+  }
+}
+
+/// What a box's `overflow` clips its content to.
+pub enum OverflowClip {
+  /// The rounded padding box. A corner radius clips both axes, whatever each axis asks for.
+  Rounded(ClipBox),
+  /// The padding box on each axis that clips, the other axis left unbounded.
+  Axes {
+    /// Whether the horizontal axis clips.
+    x: bool,
+    /// Whether the vertical axis clips.
+    y: bool,
+  },
+}
+
+impl OverflowClip {
+  /// What the box at `layout` clips its content to, or `None` when it clips nothing.
+  pub fn of(context: &RenderContext, layout: ComputedLayout) -> Option<Self> {
+    let overflow = context.style.resolve_overflows();
+
+    if !overflow.should_clip_content() {
+      return None;
+    }
+
+    let border = BorderProperties::from_context(context, layout.size, layout.border);
+
+    if !border.is_zero() {
+      return Some(Self::Rounded(ClipBox::padding_box(border, layout)));
+    }
+
+    Some(Self::Axes {
+      x: overflow.x != Overflow::Visible,
+      y: overflow.y != Overflow::Visible,
+    })
   }
 }
 

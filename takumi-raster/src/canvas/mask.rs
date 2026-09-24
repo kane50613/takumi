@@ -3,7 +3,7 @@ use std::{borrow::Cow, sync::Arc};
 use takumi_core::{
   geometry::{ComputedLayout as Layout, Point, Size, transformed_rect_extents},
   layout::decoration::ClipBox,
-  painter::FillShape,
+  painter::{FillShape, OverflowClip},
   scene::SceneBounds,
 };
 use tiny_skia::{
@@ -12,11 +12,11 @@ use tiny_skia::{
 };
 
 use crate::{
-  BorderProperties, Command, Fill, Placement, RenderContext, Result, Style, build_path,
-  checked_area, create_mask, fast_div_255,
+  Command, Fill, Placement, RenderContext, Result, Style, build_path, checked_area, create_mask,
+  fast_div_255,
   layout::clip::clip_shape_commands,
   placement_overlap,
-  style::{Affine, BasicShape, ComputedStyle, Overflow},
+  style::{Affine, BasicShape},
 };
 
 pub(crate) enum NodeMaskAction {
@@ -105,12 +105,11 @@ impl NodeMaskAction {
 
 pub(crate) fn prepare_node_mask(
   context: &RenderContext,
-  style: &ComputedStyle,
   layout: Layout,
   transform: Affine,
   viewport: CanvasViewport,
 ) -> Result<NodeMaskAction> {
-  if let Some(clip_path) = &style.clip_path {
+  if let Some(clip_path) = &context.style.clip_path {
     return Ok(clip_path_mask(clip_path, context, layout, viewport));
   }
 
@@ -128,32 +127,18 @@ pub(crate) fn prepare_node_mask(
     ));
   }
 
-  let overflow = style.resolve_overflows();
-  let clip_x = overflow.x != Overflow::Visible;
-  let clip_y = overflow.y != Overflow::Visible;
-
-  if !overflow.should_clip_content() {
+  let Some(clip) = OverflowClip::of(context, layout) else {
     return Ok(NodeMaskAction::None);
-  }
+  };
 
-  let border_props = BorderProperties::from_context(context, layout.size, layout.border);
-  if !border_props.is_zero() {
-    return Ok(rounded_overflow_mask(
-      border_props,
-      layout,
-      transform,
-      inverse_transform,
-      viewport,
-    ));
-  }
-
-  Ok(rect_overflow_mask(
-    layout,
-    transform,
-    inverse_transform,
-    viewport,
-    (clip_x, clip_y),
-  ))
+  Ok(match clip {
+    OverflowClip::Rounded(clip) => {
+      rounded_overflow_mask(clip, transform, inverse_transform, viewport)
+    }
+    OverflowClip::Axes { x, y } => {
+      rect_overflow_mask(layout, transform, inverse_transform, viewport, (x, y))
+    }
+  })
 }
 
 /// The `clip-path` shape as a viewport mask over the box and its descendants.
@@ -219,13 +204,12 @@ fn mask_image_mask(
 
 /// A rounded padding-box mask for `overflow` clipping under `border-radius`.
 fn rounded_overflow_mask(
-  border_props: BorderProperties,
-  layout: Layout,
+  padding_box: ClipBox,
   transform: Affine,
   inverse_transform: Affine,
   viewport: CanvasViewport,
 ) -> NodeMaskAction {
-  let paths = FillShape::from(ClipBox::padding_box(border_props, layout)).to_commands();
+  let paths = FillShape::from(padding_box).to_commands();
   let (mask_data, local_placement) = render_mask(&paths, None, None, None);
   if local_placement.width == 0 || local_placement.height == 0 {
     return NodeMaskAction::SkipRendering;
