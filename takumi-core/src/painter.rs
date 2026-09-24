@@ -62,6 +62,25 @@ impl FillShape {
       _ => FillRule::NonZero,
     }
   }
+
+  /// The ring between the outer and inner edges of `border` on a `size` box.
+  fn border_ring(border: &BorderProperties, size: Size<f32>) -> Self {
+    let mut commands = Vec::with_capacity(BorderProperties::PATH_COMMANDS_AMOUNT * 2);
+
+    border.append_border_ring_commands(&mut commands, size);
+    Self::Path {
+      commands,
+      rule: FillRule::EvenOdd,
+    }
+  }
+
+  fn clip_box(clip: ClipBox) -> Self {
+    Self::RoundedRect {
+      border: clip.border,
+      size: clip.size,
+      offset: clip.offset,
+    }
+  }
 }
 
 /// What a backend has to be able to do for the shared painting code to drive it.
@@ -124,11 +143,28 @@ impl<'c> BoxPainter<'c> {
 
   /// The box a background paints into, per `background-clip`.
   pub fn background_clip_shape(&self) -> Option<FillShape> {
-    background_clip_shape(
-      self.context.style.background_clip,
-      &self.border,
-      self.layout,
-    )
+    if self.layout.size.width <= 0.0 || self.layout.size.height <= 0.0 {
+      return None;
+    }
+
+    match self.context.style.background_clip {
+      BackgroundClip::BorderBox if self.border.is_zero() => Some(FillShape::Rect(self.layout.size)),
+      BackgroundClip::BorderBox => Some(FillShape::RoundedRect {
+        border: self.border,
+        size: self.layout.size,
+        offset: Point::ZERO,
+      }),
+      BackgroundClip::PaddingBox => Some(FillShape::clip_box(ClipBox::padding_box(
+        self.border,
+        self.layout,
+      ))),
+      BackgroundClip::ContentBox => Some(FillShape::clip_box(ClipBox::content_box(
+        self.border,
+        self.layout,
+      ))),
+      BackgroundClip::BorderArea => Some(FillShape::border_ring(&self.border, self.layout.size)),
+      BackgroundClip::Text => None,
+    }
   }
 
   /// Paints `background-color`.
@@ -205,52 +241,6 @@ impl<'c> BoxPainter<'c> {
   }
 }
 
-fn background_clip_shape(
-  clip: BackgroundClip,
-  border: &BorderProperties,
-  layout: ComputedLayout,
-) -> Option<FillShape> {
-  if layout.size.width <= 0.0 || layout.size.height <= 0.0 {
-    return None;
-  }
-  let mut commands = Vec::with_capacity(BorderProperties::PATH_COMMANDS_AMOUNT * 2);
-
-  match clip {
-    BackgroundClip::BorderBox if border.is_zero() => Some(FillShape::Rect(layout.size)),
-    BackgroundClip::BorderBox => Some(FillShape::RoundedRect {
-      border: *border,
-      size: layout.size,
-      offset: Point::ZERO,
-    }),
-    BackgroundClip::PaddingBox => {
-      let clip = ClipBox::padding_box(*border, layout);
-
-      Some(FillShape::RoundedRect {
-        border: clip.border,
-        size: clip.size,
-        offset: clip.offset,
-      })
-    }
-    BackgroundClip::ContentBox => {
-      let clip = ClipBox::content_box(*border, layout);
-
-      Some(FillShape::RoundedRect {
-        border: clip.border,
-        size: clip.size,
-        offset: clip.offset,
-      })
-    }
-    BackgroundClip::BorderArea => {
-      border.append_border_ring_commands(&mut commands, layout.size);
-      Some(FillShape::Path {
-        commands,
-        rule: FillRule::EvenOdd,
-      })
-    }
-    BackgroundClip::Text => None,
-  }
-}
-
 /// Paints the decoration lines of one glyph run: `text-decoration` under, over, and through the
 /// text.
 pub fn paint_run_decorations<D: PaintDevice>(
@@ -306,17 +296,7 @@ pub fn paint_border<D: PaintDevice>(
     | BorderPaint::Stroked { color, .. }
       if color.0[3] == 0 => {}
     BorderPaint::Ring { color } => {
-      let mut commands = Vec::with_capacity(BorderProperties::PATH_COMMANDS_AMOUNT * 2);
-
-      border.append_border_ring_commands(&mut commands, size);
-      device.fill_shape(
-        &FillShape::Path {
-          commands,
-          rule: FillRule::EvenOdd,
-        },
-        color,
-        at,
-      );
+      device.fill_shape(&FillShape::border_ring(border, size), color, at);
     }
     BorderPaint::Double { color, width } => {
       let third = width / 3.0;
@@ -336,14 +316,9 @@ pub fn paint_border<D: PaintDevice>(
           width: (size.width - inset * 2.0).max(0.0),
           height: (size.height - inset * 2.0).max(0.0),
         };
-        let mut commands = Vec::with_capacity(BorderProperties::PATH_COMMANDS_AMOUNT * 2);
 
-        ring.append_border_ring_commands(&mut commands, ring_size);
         device.fill_shape(
-          &FillShape::Path {
-            commands,
-            rule: FillRule::EvenOdd,
-          },
+          &FillShape::border_ring(&ring, ring_size),
           color,
           Affine::translation(origin.x + inset, origin.y + inset),
         );
