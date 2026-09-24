@@ -3,8 +3,8 @@ use std::{fmt, sync::Arc};
 use cssparser::{Parser, Token, match_ignore_ascii_case, serialize_string};
 
 use crate::style::{
-  Animatable, BackgroundImage, CssSyntaxKind, CssToken, FromCss, MakeComputed, ParseResult, ToCss,
-  impl_css_enum, unexpected_token,
+  Animatable, BackgroundImage, CssSyntaxKind, CssToken, Direction, FromCss, MakeComputed,
+  ParseResult, ToCss, impl_css_enum, unexpected_token,
 };
 
 /// The counter style a list item's marker is generated from.
@@ -185,9 +185,9 @@ impl ListStyleType {
   }
 
   /// The marker string for an item at `ordinal`, including the counter style's
-  /// suffix. `is_rtl` only reaches `disclosure-closed`, whose triangle points
+  /// suffix. `direction` only reaches `disclosure-closed`, whose triangle points
   /// the way the text runs.
-  pub(crate) fn marker_text(&self, ordinal: i32, is_rtl: bool) -> Option<String> {
+  pub(crate) fn marker_text(&self, ordinal: i32, direction: Direction) -> Option<String> {
     let (representation, suffix) = match self {
       ListStyleType::None => return None,
       ListStyleType::String(value) => return Some(value.as_ref().to_owned()),
@@ -197,7 +197,9 @@ impl ListStyleType {
       // (`RelativeSymbolMarkerRect`); `▪` tracks that size, `■` does not.
       ListStyleType::Square => ("\u{25aa}".to_owned(), " "),
       // Ref: https://drafts.csswg.org/css-counter-styles-3/#simple-symbolic
-      ListStyleType::DisclosureClosed if is_rtl => ("\u{25c2}".to_owned(), " "),
+      ListStyleType::DisclosureClosed if direction == Direction::Rtl => {
+        ("\u{25c2}".to_owned(), " ")
+      }
       ListStyleType::DisclosureClosed => ("\u{25b8}".to_owned(), " "),
       ListStyleType::DisclosureOpen => ("\u{25be}".to_owned(), " "),
       ListStyleType::Decimal => (ordinal.to_string(), ". "),
@@ -407,61 +409,67 @@ mod tests {
   #[test]
   fn numbers_the_marker_per_counter_style() {
     assert_eq!(
-      ListStyleType::Decimal.marker_text(3, false).as_deref(),
+      ListStyleType::Decimal
+        .marker_text(3, Direction::Ltr)
+        .as_deref(),
       Some("3. ")
     );
     assert_eq!(
       ListStyleType::DecimalLeadingZero
-        .marker_text(7, false)
+        .marker_text(7, Direction::Ltr)
         .as_deref(),
       Some("07. ")
     );
     assert_eq!(
-      ListStyleType::LowerAlpha.marker_text(28, false).as_deref(),
+      ListStyleType::LowerAlpha
+        .marker_text(28, Direction::Ltr)
+        .as_deref(),
       Some("ab. ")
     );
     assert_eq!(
       ListStyleType::UpperRoman
-        .marker_text(1994, false)
+        .marker_text(1994, Direction::Ltr)
         .as_deref(),
       Some("MCMXCIV. ")
     );
     assert_eq!(
       ListStyleType::DisclosureClosed
-        .marker_text(1, false)
+        .marker_text(1, Direction::Ltr)
         .as_deref(),
       Some("\u{25b8} ")
     );
     assert_eq!(
       ListStyleType::DisclosureClosed
-        .marker_text(1, true)
+        .marker_text(1, Direction::Rtl)
         .as_deref(),
       Some("\u{25c2} ")
     );
     assert_eq!(
       ListStyleType::DisclosureOpen
-        .marker_text(1, false)
+        .marker_text(1, Direction::Ltr)
         .as_deref(),
       Some("\u{25be} ")
     );
     assert_eq!(
       ListStyleType::DisclosureOpen
-        .marker_text(9, true)
+        .marker_text(9, Direction::Rtl)
         .as_deref(),
       Some("\u{25be} ")
     );
     assert_eq!(
-      ListStyleType::Disc.marker_text(1, false).as_deref(),
+      ListStyleType::Disc
+        .marker_text(1, Direction::Ltr)
+        .as_deref(),
       Some("\u{2022} ")
     );
-    assert_eq!(ListStyleType::None.marker_text(1, false), None);
+    assert_eq!(ListStyleType::None.marker_text(1, Direction::Ltr), None);
   }
 
   #[test]
   fn a_negative_value_spends_its_padding_on_the_sign() {
     assert_eq!(
       ListStyleType::DecimalLeadingZero
-        .marker_text(-7, false)
+        .marker_text(-7, Direction::Ltr)
         .as_deref(),
       Some("-7. ")
     );
@@ -508,8 +516,8 @@ mod tests {
       };
 
       for ordinal in covered {
-        for is_rtl in [false, true] {
-          let marker = style.marker_text(*ordinal, is_rtl).expect("marker text");
+        for direction in [Direction::Ltr, Direction::Rtl] {
+          let marker = style.marker_text(*ordinal, direction).expect("marker text");
 
           for character in marker.chars() {
             assert!(
@@ -525,11 +533,15 @@ mod tests {
   #[test]
   fn falls_back_to_decimal_outside_the_counter_range() {
     assert_eq!(
-      ListStyleType::LowerAlpha.marker_text(0, false).as_deref(),
+      ListStyleType::LowerAlpha
+        .marker_text(0, Direction::Ltr)
+        .as_deref(),
       Some("0. ")
     );
     assert_eq!(
-      ListStyleType::LowerRoman.marker_text(-2, false).as_deref(),
+      ListStyleType::LowerRoman
+        .marker_text(-2, Direction::Ltr)
+        .as_deref(),
       Some("-2. ")
     );
   }
