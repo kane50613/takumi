@@ -108,7 +108,7 @@ struct LayoutResultNode {
 
 impl LayoutResults {
   /// Lays out the tree under `root` in `available_space`.
-  pub(crate) fn compute(root: &RenderNode, available_space: Size<AvailableSpace>) -> Self {
+  pub(super) fn compute(root: &RenderNode, available_space: Size<AvailableSpace>) -> Self {
     let mut tree = LayoutTree::from_render_node(root);
 
     tree.compute_layout(available_space);
@@ -132,7 +132,7 @@ impl LayoutResults {
   }
 
   /// The root's border-box size, zero when the tree is empty.
-  pub(crate) fn root_size(&self) -> Size<f32> {
+  pub(super) fn root_size(&self) -> Size<f32> {
     self
       .layout(NodeId::ROOT)
       .map_or(Size::ZERO, |layout| layout.size)
@@ -1441,7 +1441,7 @@ impl RenderNode {
   }
 
   /// Padding in pixels, with a percentage resolving to zero.
-  pub(crate) fn padding_px(&self) -> Rect<f32> {
+  pub(super) fn padding_px(&self) -> Rect<f32> {
     let style = &self.context.style;
 
     Rect {
@@ -1454,7 +1454,7 @@ impl RenderNode {
   }
 
   /// Margins in pixels, with a percentage resolving to zero.
-  pub(crate) fn margin_px(&self) -> Rect<f32> {
+  pub(super) fn margin_px(&self) -> Rect<f32> {
     let style = &self.context.style;
 
     Rect {
