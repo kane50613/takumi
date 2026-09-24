@@ -15,7 +15,7 @@ use selectors::parser::{
 
 pub use crate::style::media_query::MediaQueryList;
 use crate::{
-  error::StyleSheetParseError,
+  error::{StyleSheetParseError, StyleSheetParseErrorKind},
   keyframes::parse_keyframe_prelude,
   style::{
     BreakpointOverrides, FromCssStr, KeyframeRule, KeyframesRule, Length, StyleDeclaration,
@@ -702,14 +702,14 @@ fn parse_property_rule<'i, 't>(
   }
 
   if invalid_inherits {
-    return Err(input.new_custom_error(StyleSheetParseError::property_inherits_must_be_boolean()));
+    return Err(input.new_custom_error(StyleSheetParseErrorKind::PropertyInheritsMustBeBoolean));
   }
 
   let Some(syntax) = syntax else {
-    return Err(input.new_custom_error(StyleSheetParseError::missing_property_syntax()));
+    return Err(input.new_custom_error(StyleSheetParseErrorKind::MissingPropertySyntax));
   };
   let Some(inherits) = inherits else {
-    return Err(input.new_custom_error(StyleSheetParseError::missing_property_inherits()));
+    return Err(input.new_custom_error(StyleSheetParseErrorKind::MissingPropertyInherits));
   };
 
   // The descriptor is a string, and nothing downstream wants the quotes.
@@ -718,7 +718,7 @@ fn parse_property_rule<'i, 't>(
   // css-properties-values-api-1 2.1: only the universal syntax may leave the
   // initial value out, because every other one needs a value to fall back to.
   if syntax != "*" && initial_value.is_none() {
-    return Err(input.new_custom_error(StyleSheetParseError::missing_property_initial_value()));
+    return Err(input.new_custom_error(StyleSheetParseErrorKind::MissingPropertyInitialValue));
   }
 
   Ok(PropertyRule {
@@ -784,7 +784,7 @@ impl<'i> AtRuleParser<'i> for ThemeBlockParser<'_> {
         .context
         .parse_keyframes_block(name, input)
         .map(ThemeBodyItem::Keyframes),
-      _ => Err(input.new_custom_error(StyleSheetParseError::unsupported_nested_at_rule())),
+      _ => Err(input.new_custom_error(StyleSheetParseErrorKind::UnsupportedNestedAtRule)),
     }
   }
 }
@@ -798,7 +798,7 @@ impl<'i> QualifiedRuleParser<'i> for ThemeBlockParser<'_> {
     &mut self,
     input: &mut Parser<'i, 't>,
   ) -> Result<Self::Prelude, ParseError<'i, Self::Error>> {
-    Err(input.new_custom_error(StyleSheetParseError::unsupported_nested_at_rule()))
+    Err(input.new_custom_error(StyleSheetParseErrorKind::UnsupportedNestedAtRule))
   }
 }
 
@@ -835,7 +835,7 @@ impl NestingContext<'_> {
       &mut Parser::new(&mut root_input),
       ParseRelative::No,
     )
-    .map_err(|_| input.new_custom_error(StyleSheetParseError::unsupported_nested_at_rule()))?;
+    .map_err(|_| input.new_custom_error(StyleSheetParseErrorKind::UnsupportedNestedAtRule))?;
 
     let mut declarations = RuleDeclarations::default();
     let mut fragment = StyleSheetFragment::default();
@@ -949,7 +949,7 @@ impl NestingContext<'_> {
       | AtRulePrelude::Property(_)
       | AtRulePrelude::TailwindImport
       | AtRulePrelude::Apply(_) => {
-        Err(input.new_custom_error(StyleSheetParseError::unsupported_nested_at_rule()))
+        Err(input.new_custom_error(StyleSheetParseErrorKind::UnsupportedNestedAtRule))
       }
     }
   }
@@ -1014,7 +1014,7 @@ fn parse_at_rule_prelude<'i, 't>(
     source.push_str(input.slice_from(start));
 
     let block = expand_apply(&source)
-      .ok_or_else(|| input.new_custom_error(StyleSheetParseError::invalid_apply_utility()))?;
+      .ok_or_else(|| input.new_custom_error(StyleSheetParseErrorKind::InvalidApplyUtility))?;
 
     return Ok(AtRulePrelude::Apply(Box::new(block)));
   }
@@ -1035,7 +1035,7 @@ fn parse_at_rule_prelude<'i, 't>(
     let property_name = input.expect_ident_or_string()?.to_string();
     if !property_name.starts_with("--") {
       return Err(
-        input.new_custom_error(StyleSheetParseError::property_name_must_be_custom_property()),
+        input.new_custom_error(StyleSheetParseErrorKind::PropertyNameMustBeCustomProperty),
       );
     }
     return Ok(AtRulePrelude::Property(property_name));
@@ -1103,7 +1103,7 @@ fn ensure_single_layer_name<'i>(
     return Ok(());
   }
 
-  Err(input.new_custom_error(StyleSheetParseError::layer_block_multiple_names()))
+  Err(input.new_custom_error(StyleSheetParseErrorKind::LayerBlockMultipleNames))
 }
 
 impl<'i> QualifiedRuleParser<'i> for RuleParser {
@@ -1165,7 +1165,7 @@ impl<'i> AtRuleParser<'i> for RuleParser {
       AtRulePrelude::Theme => self.context().parse_theme_block(input),
       // `@import` and `@apply` end at their semicolon; a block after them is invalid.
       AtRulePrelude::TailwindImport | AtRulePrelude::Apply(_) => {
-        Err(input.new_custom_error(StyleSheetParseError::unsupported_nested_at_rule()))
+        Err(input.new_custom_error(StyleSheetParseErrorKind::UnsupportedNestedAtRule))
       }
       AtRulePrelude::Media(media_query) => {
         let mut fragment = self
