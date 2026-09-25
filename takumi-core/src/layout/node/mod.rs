@@ -1,4 +1,5 @@
 mod container;
+mod form;
 mod image;
 mod text;
 
@@ -10,13 +11,13 @@ use std::{
 
 use serde::Deserialize;
 
-pub use self::image::resolve_image;
 use self::{
   container::{
     container_children_ref, deserialize_children, drop_container_children, take_container_children,
   },
   image::take_image_style_layers,
 };
+pub use self::{form::OptionState, image::resolve_image};
 use crate::{
   Xxh3HashSet,
   context::RenderContext,
