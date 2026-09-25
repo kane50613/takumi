@@ -65,10 +65,6 @@ export function ComponentEditor({
   }, []);
 
   useEffect(() => {
-    if (typeof window === "undefined") {
-      return;
-    }
-
     const mobileMediaQuery = window.matchMedia("(max-width: 640px)");
     const updateMobileViewport = () => setIsMobileViewport(mobileMediaQuery.matches);
 

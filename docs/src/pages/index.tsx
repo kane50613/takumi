@@ -10,6 +10,7 @@ import { CTA } from "~/components/home/cta";
 import { Features } from "~/components/home/features";
 import { Filmstrip } from "~/components/home/filmstrip";
 import { Hero } from "~/components/home/hero";
+import type { ThemedHtml } from "~/components/home/shiki-html";
 import { Showcase } from "~/components/home/showcase";
 import { Seo, SiteJsonLd } from "~/components/seo";
 import { baseOptions } from "~/layout-config";
@@ -52,27 +53,15 @@ const highlighter = await createHighlighterCore({
   engine: createOnigurumaEngine(import("shiki/wasm")),
 });
 
-const highlightedCodeDemo = {
-  dark: highlighter.codeToHtml(CODE_SNIPPET, {
-    lang: "tsx",
-    theme: "github-dark-default",
-  }),
-  light: highlighter.codeToHtml(CODE_SNIPPET, {
-    lang: "tsx",
-    theme: "github-light-default",
-  }),
-};
+function highlight(code: string, lang: "tsx" | "sh"): ThemedHtml {
+  return {
+    dark: highlighter.codeToHtml(code, { lang, theme: "github-dark-default" }),
+    light: highlighter.codeToHtml(code, { lang, theme: "github-light-default" }),
+  };
+}
 
-const highlightedCta = {
-  dark: highlighter.codeToHtml(CTA_COMMAND, {
-    lang: "sh",
-    theme: "github-dark-default",
-  }),
-  light: highlighter.codeToHtml(CTA_COMMAND, {
-    lang: "sh",
-    theme: "github-light-default",
-  }),
-};
+const highlightedCodeDemo = highlight(CODE_SNIPPET, "tsx");
+const highlightedCta = highlight(CTA_COMMAND, "sh");
 
 export default function Home() {
   return (

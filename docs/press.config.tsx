@@ -34,7 +34,7 @@ import { googleFonts } from "takumi-js/helpers";
 import wasmModule from "takumi-js/wasm";
 import { docs } from "./.source/server";
 import sticker from "./public/sticker.svg?raw";
-import { baseOptions, SITE_URL } from "./app/layout-config";
+import { baseOptions, SITE_NAME, SITE_URL } from "./app/layout-config";
 import { Accordion, Accordions } from "./app/components/accordion";
 import { Mermaid } from "./app/components/mdx/mermaid";
 import { TypeTable } from "./app/components/type-table";
@@ -75,8 +75,8 @@ export default defineConfig({
     plugins: [lucideIconsPlugin()],
   },
   site: {
-    name: "Takumi",
-    baseUrl: "https://takumi.kane.tw",
+    name: SITE_NAME,
+    baseUrl: SITE_URL,
     git: {
       user: "kane50613",
       repo: "takumi",
@@ -93,7 +93,7 @@ export default defineConfig({
           <meta name="twitter:image:height" content="630" />
           <meta name="twitter:creator" content="@kanewang_" />
           <meta name="twitter:site" content="@kanewang_" />
-          <meta property="og:site_name" content="Takumi" />
+          <meta property="og:site_name" content={SITE_NAME} />
           <meta property="og:type" content="website" />
           <link rel="icon" type="image/svg+xml" href="/logo.svg" />
           <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -113,7 +113,7 @@ export default defineConfig({
         <>
           {page.data.description && <meta name="description" content={page.data.description} />}
           <meta property="og:url" content={url} />
-          <meta property="og:image:alt" content={`${page.data.title} — Takumi`} />
+          <meta property="og:image:alt" content={`${page.data.title} — ${SITE_NAME}`} />
           <link rel="canonical" href={url} />
         </>
       );

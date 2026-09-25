@@ -62,9 +62,8 @@ function utf8(value: string | undefined) {
 /** Decodes a PDF literal `(string)` or a UTF-16BE `<hex string>`. */
 function pdfString(raw: string): string {
   if (raw.startsWith("<")) {
-    const hex = raw.slice(1, -1).replace(/\s/g, "");
-    const text = (hex.match(/.{4}/g) ?? [])
-      .map((unit) => String.fromCharCode(Number.parseInt(unit, 16)))
+    const text = utf16Units(raw.slice(1, -1))
+      .map((unit) => String.fromCharCode(unit))
       .join("");
 
     return text.replace(/^﻿/, "");
@@ -211,9 +210,9 @@ function dictValue(dict: string, key: string): string | undefined {
   return undefined;
 }
 
-/** A CMap destination is UTF-16BE, so an emoji arrives as the two units of its surrogate pair. */
+/** Every four hex digits as one UTF-16 unit, so an emoji arrives as its surrogate pair. */
 function utf16Units(hex: string): number[] {
-  return (hex.match(/.{4}/g) ?? []).map((unit) => Number.parseInt(unit, 16));
+  return (hex.replace(/\s/g, "").match(/.{4}/g) ?? []).map((unit) => Number.parseInt(unit, 16));
 }
 
 /** Reads `beginbfchar` and `beginbfrange`, the two forms Takumi's CMaps use. */
@@ -285,11 +284,7 @@ function extractText(content: string, fonts: Map<string, Map<number, string>>): 
 
 /** Both string forms carry the same two-byte codes, written differently. */
 function showCodes(literal: string | undefined, hex: string | undefined): number[] {
-  if (literal === undefined) {
-    return ((hex ?? "").replace(/\s/g, "").match(/.{4}/g) ?? []).map((unit) =>
-      Number.parseInt(unit, 16),
-    );
-  }
+  if (literal === undefined) return utf16Units(hex ?? "");
 
   const bytes = pdfLiteral(literal);
 
@@ -297,6 +292,11 @@ function showCodes(literal: string | undefined, hex: string | undefined): number
     { length: bytes.length >> 1 },
     (_, index) => (bytes.charCodeAt(index * 2) << 8) | bytes.charCodeAt(index * 2 + 1),
   );
+}
+
+/** The object's `/Type`, or its `/Subtype` when that comes first. */
+function typeName(object: string): string {
+  return object.match(/\/(?:Sub)?Type\s*\/(\w+)/)?.[1] ?? "";
 }
 
 /** Objects packed into an `/ObjStm`, which the file never lists at the top level. */
@@ -316,7 +316,7 @@ function expandObjectStream(dict: string, data: Uint8Array): PdfObject[] {
 
     return {
       number: String(header[index * 2]),
-      label: source.match(/\/(?:Sub)?Type\s*\/(\w+)/)?.[1] ?? "",
+      label: typeName(source),
       dict: source,
     };
   });
@@ -367,7 +367,7 @@ function describeObject({ number, raw, stream, body, pages, text }: ObjectSource
       number,
       label: pages
         ? `content stream, page${pages.length > 1 ? "s" : ""} ${pages.join(", ")}`
-        : (raw.match(/\/(?:Sub)?Type\s*\/(\w+)/)?.[1] ?? ""),
+        : typeName(raw),
       dict,
       body:
         packed.length > 0

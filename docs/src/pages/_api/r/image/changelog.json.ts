@@ -1,3 +1,3 @@
-import { itemRoute } from "../../../../../app/registry/route";
+import { itemRoute } from "~/registry/route";
 
 export const { GET, getConfig } = itemRoute("changelog");

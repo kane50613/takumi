@@ -1,4 +1,5 @@
 import { interFonts } from "./fonts";
+import { benchmark } from "./harness";
 import { items, total } from "./invoice-data";
 
 const fonts = await interFonts();
@@ -59,25 +60,5 @@ async function renderOnce(): Promise<Uint8Array> {
   return pdf;
 }
 
-const first = await renderOnce();
-const coldMs = performance.now() - t0;
-
-const times: number[] = [];
-for (let i = 0; i < 20; i++) {
-  const start = performance.now();
-  await renderOnce();
-  times.push(performance.now() - start);
-}
-times.sort((a, b) => a - b);
-
-await Bun.write("out-puppeteer.pdf", first);
-console.log(
-  JSON.stringify({
-    engine: "puppeteer + chrome",
-    coldMs: Math.round(coldMs),
-    warmMedianMs: Math.round((times[9]! + times[10]!) / 2),
-    bytes: first.byteLength,
-  }),
-);
-
+await benchmark("puppeteer + chrome", t0, renderOnce, "out-puppeteer.pdf");
 await browser.close();

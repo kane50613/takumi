@@ -54,6 +54,9 @@ export function money(value: number): string {
   return twd.format(value);
 }
 
-export function subtotal(data: Invoice): number {
-  return data.items.reduce((sum, item) => sum + item.quantity * item.unitPrice, 0);
+export function totals(data: Invoice) {
+  const net = data.items.reduce((sum, item) => sum + item.quantity * item.unitPrice, 0);
+  const tax = net * data.taxRate;
+
+  return { net, tax, gross: net + tax };
 }

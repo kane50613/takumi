@@ -3,8 +3,6 @@ import { join } from "node:path";
 import { render, renderSvg } from "takumi-js";
 import { file, gzipSync, write } from "bun";
 import type { ReactNode } from "react";
-
-const kb = (bytes: number) => `${(bytes / 1024).toFixed(1)} KB`;
 import BlogPostTemplate from "../app/registry/image/blog-post";
 import ChangelogTemplate from "../app/registry/image/changelog";
 import DocsTemplate from "../app/registry/image/docs";
@@ -12,6 +10,8 @@ import EventTemplate from "../app/registry/image/event";
 import ProductCardTemplate from "../app/registry/image/product-card";
 import QuoteTemplate from "../app/registry/image/quote";
 import RepositoryTemplate from "../app/registry/image/repository";
+
+const kb = (bytes: number) => `${(bytes / 1024).toFixed(1)} KB`;
 
 function testRender(name: string, template: ReactNode) {
   test(name, async () => {

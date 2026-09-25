@@ -45,7 +45,6 @@ const ffplay = spawn(
 console.log("Starting ffplay timer...");
 console.log(`Resolution: ${width}x${height} @ ${fps}fps`);
 
-// Auto-quit bun process when ffplay exits
 ffplay.exited.then(() => {
   console.log("ffplay exited, cleaning up...");
   cleanup();
@@ -77,7 +76,6 @@ async function run() {
   }
 }
 
-// Cleanup on exit
 function cleanup() {
   ffplay.stdin.end();
   ffplay.kill();
@@ -119,14 +117,12 @@ function createFrame(time = Date.now()): Node {
   const posX = bounce(width / 2 + elapsed * speedX, width - textWidth);
   const posY = bounce(height / 2 + elapsed * speedY, height - textHeight);
 
-  // Calculate hue rotation based on time for visible smooth color animation
   const hue = ((time / 1000) * 36) % 360; // Rotate through full color spectrum every 10 seconds
   const angle = ((time / 1000) * 10) % 360; // Rotate gradient angle every 36 seconds
 
-  // Vibrant chroma gradient using HSL colors with good saturation
-  const color1 = `hsl(${hue}, 80%, 45%)`; // Saturated color
-  const color2 = `hsl(${(hue + 120) % 360}, 80%, 55%)`; // Complementary brighter color
-  const color3 = `hsl(${(hue + 240) % 360}, 80%, 35%)`; // Third color
+  const color1 = `hsl(${hue}, 80%, 45%)`;
+  const color2 = `hsl(${(hue + 120) % 360}, 80%, 55%)`;
+  const color3 = `hsl(${(hue + 240) % 360}, 80%, 35%)`;
 
   return container({
     tw: "w-full h-full relative bg-gray-950",
@@ -147,7 +143,6 @@ function createFrame(time = Date.now()): Node {
   });
 }
 
-// Format time with milliseconds
 function formatTime(timestamp: number): string {
   const date = new Date(timestamp);
   const hours = String(date.getHours()).padStart(2, "0");

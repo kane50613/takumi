@@ -1,8 +1,5 @@
-import { buildRegistry } from "../../../../app/registry/build";
+import { buildRegistry } from "~/registry/build";
 
-export const GET = () =>
-  Response.json(buildRegistry(), {
-    headers: { "Content-Type": "application/json" },
-  });
+export const GET = () => Response.json(buildRegistry());
 
 export const getConfig = async () => ({ render: "static" }) as const;

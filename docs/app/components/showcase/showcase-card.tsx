@@ -1,38 +1,23 @@
 "use client";
 
 import { Link2Icon } from "lucide-react";
-import { useMemo } from "react";
 import type { Project } from "~/data/showcase";
 import { GithubIcon } from "./github-icon";
 
-export interface ShowcaseCardProps {
-  project: Project;
+function projectTitle(project: Project) {
+  if (project.title) return project.title;
+
+  const { hostname, pathname } = new URL(project.url);
+
+  if (hostname !== "github.com") return hostname;
+
+  const [owner, repo] = pathname.split("/").filter(Boolean);
+
+  return `${owner}/${repo}`;
 }
 
-export function ShowcaseCard({ project }: ShowcaseCardProps) {
-  const title = useMemo(() => {
-    if (!project.title) {
-      const { hostname, pathname } = new URL(project.url);
-
-      if (hostname === "github.com") {
-        const [owner, repo] = pathname.split("/").filter(Boolean);
-
-        return `${owner}/${repo}`;
-      }
-
-      return hostname;
-    }
-
-    return project.title;
-  }, [project.title, project.url]);
-
-  const icon = useMemo(() => {
-    if (project.url.includes("github.com")) {
-      return <GithubIcon size={16} />;
-    }
-
-    return <Link2Icon size={16} />;
-  }, [project.url]);
+export function ShowcaseCard({ project }: { project: Project }) {
+  const title = projectTitle(project);
 
   return (
     <a
@@ -66,7 +51,11 @@ export function ShowcaseCard({ project }: ShowcaseCardProps) {
       <div className="px-3 py-2.5 flex items-center justify-between bg-zinc-950/40 backdrop-blur-sm z-20">
         <div className="flex items-center gap-2 text-muted-foreground group-hover:text-foreground transition-colors duration-300">
           <div className="flex items-center justify-center p-1 rounded-md bg-foreground/5 text-foreground/70 group-hover:text-primary group-hover:bg-primary/10 transition-colors duration-300">
-            {icon}
+            {project.url.includes("github.com") ? (
+              <GithubIcon size={16} />
+            ) : (
+              <Link2Icon size={16} />
+            )}
           </div>
           <span className="text-sm font-medium tracking-tight truncate">{title}</span>
         </div>

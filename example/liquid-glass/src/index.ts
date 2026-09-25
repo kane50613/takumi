@@ -8,6 +8,8 @@ import { applyLiquidGlassCpu } from "./liquid-glass-cpu.ts";
 const width = 1200;
 const height = 630;
 const dpr = 2;
+const pixelWidth = width * dpr;
+const pixelHeight = height * dpr;
 const glass = { x: 280, y: 320, width: 640, height: 240, radius: 48 };
 
 const assets = join(import.meta.dirname, "../../../assets");
@@ -25,8 +27,8 @@ const scene = image({
 });
 
 const raw = await render(scene, {
-  width: width * dpr,
-  height: height * dpr,
+  width: pixelWidth,
+  height: pixelHeight,
   format: "raw",
   devicePixelRatio: dpr,
   fonts,
@@ -44,8 +46,8 @@ const thickness = 20 * dpr;
 
 const start = performance.now();
 const processed = useCpu
-  ? applyLiquidGlassCpu(new Uint8Array(raw), width * dpr, height * dpr, glassPx, thickness)
-  : await applyLiquidGlass(new Uint8Array(raw), width * dpr, height * dpr, glassPx, thickness);
+  ? applyLiquidGlassCpu(new Uint8Array(raw), pixelWidth, pixelHeight, glassPx, thickness)
+  : await applyLiquidGlass(new Uint8Array(raw), pixelWidth, pixelHeight, glassPx, thickness);
 
 console.log(`${useCpu ? "cpu" : "gpu"} filter: ${(performance.now() - start).toFixed(0)}ms`);
 
@@ -149,7 +151,7 @@ const composed = container({
   style: { width: "100%", height: "100%", position: "relative" },
   children: [
     image({
-      src: { width: width * dpr, height: height * dpr, data: processed },
+      src: { width: pixelWidth, height: pixelHeight, data: processed },
       style: { position: "absolute", left: 0, top: 0, width, height },
     }),
     widget,
@@ -157,8 +159,8 @@ const composed = container({
 });
 
 const webp = await render(composed, {
-  width: width * dpr,
-  height: height * dpr,
+  width: pixelWidth,
+  height: pixelHeight,
   format: "webp",
   quality: 90,
   devicePixelRatio: dpr,

@@ -35,9 +35,11 @@ const MAX_CODE_BYTES = 512 * 1024;
 /** Bounds the URL itself, before `atob` allocates for it. */
 const MAX_BASE64_LENGTH = 256 * 1024;
 
+const TOO_LARGE = "the shared snippet is larger than the playground accepts";
+
 export async function decompressCode(base64: string) {
   if (base64.length > MAX_BASE64_LENGTH) {
-    throw new Error("the shared snippet is larger than the playground accepts");
+    throw new Error(TOO_LARGE);
   }
 
   const blob = new Blob([base64ToUint8(base64)]);
@@ -55,7 +57,7 @@ export async function decompressCode(base64: string) {
 
     if (size > MAX_CODE_BYTES) {
       await reader.cancel();
-      throw new Error("the shared snippet is larger than the playground accepts");
+      throw new Error(TOO_LARGE);
     }
 
     text += decoder.decode(value, { stream: true });

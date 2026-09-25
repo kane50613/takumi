@@ -1,4 +1,4 @@
-import { type Invoice, money, subtotal } from "./data";
+import { type Invoice, money, totals } from "./data";
 
 function Divider() {
   return <div tw="border-b border-dashed border-[#d1d5db]" />;
@@ -14,7 +14,7 @@ function Row({ label, value, strong }: { label: string; value: string; strong?: 
 }
 
 export function ReceiptDocument({ data }: { data: Invoice }) {
-  const net = subtotal(data);
+  const { net, tax, gross } = totals(data);
 
   return (
     <div tw="flex w-full flex-col gap-3 bg-white p-5 text-[11px] text-[#111827]">
@@ -47,12 +47,12 @@ export function ReceiptDocument({ data }: { data: Invoice }) {
 
       <div tw="flex flex-col gap-1">
         <Row label="Subtotal" value={money(net)} />
-        <Row label={`Tax (${data.taxRate * 100}%)`} value={money(net * data.taxRate)} />
+        <Row label={`Tax (${data.taxRate * 100}%)`} value={money(tax)} />
       </div>
 
       <Divider />
 
-      <Row label="Total" value={money(net * (1 + data.taxRate))} strong />
+      <Row label="Total" value={money(gross)} strong />
 
       <span tw="mt-2 text-center text-[10px] tracking-[1px] text-[#6b7280]">
         THANK YOU FOR YOUR BUSINESS

@@ -4,8 +4,8 @@ import { compile } from "tailwindcss";
 import themeCss from "tailwindcss/theme.css?raw";
 import utilitiesCss from "tailwindcss/utilities.css?raw";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import type { CSSProperties } from "react";
-import { FONT_FAMILIES, googleFontsCssUrl } from "../../playground/fonts";
+import { FONT_FAMILIES, googleFontsCssUrl } from "~/playground/fonts";
+import type { BrowserPreviewData } from "./use-render-worker";
 
 const SOURCES: Record<string, string> = {
   "tailwindcss/theme.css": themeCss,
@@ -60,7 +60,7 @@ const FRAME_HTML = `<!doctype html>
 <link rel="stylesheet" href="${googleFontsCssUrl()}">
 <style>:root{background:#fff}</style>
 <style id="sheet"></style>
-<body><div id="mount"></div>
+<body><div id="mount" style="display:flex;width:100%;height:100%;padding:0"></div>
 <script>
 const mount = document.getElementById("mount");
 const sheet = document.getElementById("sheet");
@@ -69,18 +69,10 @@ const sheet = document.getElementById("sheet");
 // can be the one that is ready first.
 const announce = () => {
   const channel = new MessageChannel();
-  const port = channel.port1;
-  const reportHeight = () =>
-    port.postMessage({ type: "height", value: document.documentElement.scrollHeight });
-  // Images and fonts land after the paint returns, so the height follows the
-  // mount rather than being read once. Watching starts with the first paint,
-  // which is what tells the page the frame has something to show.
-  const observer = new ResizeObserver(reportHeight);
 
-  port.onmessage = (paint) => {
+  channel.port1.onmessage = (paint) => {
     if (paint.data?.type !== "paint") return;
     sheet.textContent = paint.data.css;
-    mount.style.cssText = paint.data.mountStyle;
     mount.innerHTML = paint.data.html;
     // Takumi treats any source containing "<svg" as inline SVG markup; a
     // browser needs it wrapped in a data URI.
@@ -89,7 +81,6 @@ const announce = () => {
       if (src.includes("<svg"))
         img.src = "data:image/svg+xml;utf8," + encodeURIComponent(src);
     }
-    observer.observe(mount);
   };
   parent.postMessage({ type: "ready" }, "*", [channel.port2]);
 };
@@ -100,10 +91,7 @@ addEventListener("message", (event) => {
 announce();
 </script>`;
 
-/** Guards against a frame that reports a height big enough to hang the layout. */
-const MAX_FRAME_HEIGHT = 20000;
-
-type Paint = { type: "paint"; css: string; html: string; mountStyle: string };
+type Paint = { type: "paint"; css: string; html: string };
 
 function extractClasses(html: string) {
   const classes = new Set<string>();
@@ -113,15 +101,14 @@ function extractClasses(html: string) {
   return [...classes];
 }
 
-function useFitScale(width: number, height: number | undefined) {
+function useFitScale(width: number | undefined, height: number | undefined) {
   const ref = useRef<HTMLDivElement>(null);
   const [scale, setScale] = useState(1);
 
   useLayoutEffect(() => {
     const el = ref.current;
-    if (!el) return;
-    const measure = () =>
-      setScale(Math.min(el.clientWidth / width, height ? el.clientHeight / height : Infinity, 1));
+    if (!el || !width || !height) return;
+    const measure = () => setScale(Math.min(el.clientWidth / width, el.clientHeight / height, 1));
     measure();
     const observer = new ResizeObserver(measure);
     observer.observe(el);
@@ -136,23 +123,11 @@ function usePaintFrame(paint: Paint | undefined) {
   const frameRef = useRef<HTMLIFrameElement>(null);
   const portRef = useRef<MessagePort>(undefined);
   const pendingRef = useRef<Paint>(undefined);
-  const [contentHeight, setContentHeight] = useState<number>();
   // The frame is blank until its first paint lands, which would flash white
-  // over the pane. Delivery is what counts as painted: the frame's own report
-  // rides a port a later announce may already have closed.
+  // over the pane, so delivering a paint is what counts as painted.
   const [hasPainted, setHasPainted] = useState(false);
 
   useEffect(() => {
-    const onPortMessage = (event: MessageEvent) => {
-      // The frame paints untrusted markup, so its numbers are clamped rather
-      // than trusted.
-      const message = event.data as { type?: string; value?: unknown } | null;
-
-      if (message?.type === "height" && Number.isFinite(message.value)) {
-        setContentHeight(Math.min(Math.max(Number(message.value), 0), MAX_FRAME_HEIGHT));
-      }
-    };
-
     const onMessage = (event: MessageEvent) => {
       if (event.source !== frameRef.current?.contentWindow) return;
       if ((event.data as { type?: string } | null)?.type !== "ready") return;
@@ -163,8 +138,6 @@ function usePaintFrame(paint: Paint | undefined) {
 
       portRef.current?.close();
       portRef.current = port;
-      port.onmessage = onPortMessage;
-      port.start();
 
       if (!pendingRef.current) return;
 
@@ -192,98 +165,61 @@ function usePaintFrame(paint: Paint | undefined) {
     setHasPainted(true);
   }, [paint]);
 
-  return { frameRef, contentHeight, hasPainted };
+  return { frameRef, hasPainted };
 }
 
-export default function BrowserPreview({
-  html,
-  width = 1200,
-  height,
-  padding,
-  cssContents,
-  theme,
-}: {
-  html: string | undefined;
-  width?: number;
-  /** Omitted for paged PDF: the pane grows with the content instead of clipping. */
-  height?: number;
-  padding?: string;
-  cssContents?: string[];
-  theme?: string;
-}) {
-  const { ref, scale } = useFitScale(width, height);
+export default function BrowserPreview({ preview }: { preview: BrowserPreviewData | undefined }) {
+  const { ref, scale } = useFitScale(preview?.width, preview?.height);
   const [paint, setPaint] = useState<Paint>();
-  const { frameRef, contentHeight, hasPainted } = usePaintFrame(paint);
+  const { frameRef, hasPainted } = usePaintFrame(paint);
 
   useEffect(() => {
-    if (!html) return;
+    if (!preview?.html) return;
 
+    const { html, cssContents, theme = "" } = preview;
     let cancelled = false;
-    const declarations = theme ?? "";
 
     // `theme` only reaches the compiler: a custom token has to be declared for
     // `bg-brand` to exist at all. Its value arrives with the rest of the CSS,
     // which is unlayered and comes last, the position the binding gives it.
-    void loadCompiler(declarations).then((compiler) => {
+    void loadCompiler(theme).then((compiler) => {
       if (cancelled) return;
 
       setPaint({
         type: "paint",
         css: [ROOT_CSS, compiler.build(extractClasses(html)), ...(cssContents ?? [])].join("\n\n"),
         html,
-        mountStyle: `display:flex;width:100%;height:${height ? "100%" : "auto"};padding:${padding ?? "0"}`,
       });
     });
 
     return () => {
       cancelled = true;
     };
-  }, [html, cssContents, theme, height, padding]);
-
-  // `border-0` overrides the border an iframe carries by default, which paints
-  // a light ring around the preview.
-  const frame = (style: CSSProperties) => (
-    <iframe
-      ref={frameRef}
-      title="Browser preview"
-      sandbox="allow-scripts"
-      srcDoc={FRAME_HTML}
-      onLoad={() => frameRef.current?.contentWindow?.postMessage({ type: "hello" }, "*")}
-      className="block border-0"
-      style={{ ...style, visibility: hasPainted ? undefined : "hidden" }}
-    />
-  );
-
-  // Without a height the pane scrolls the flow at page width, since the browser
-  // cannot paginate the HTML the way the PDF renderer does.
-  // Vertical padding only: `clientWidth` counts horizontal padding, so the
-  // scaled page would end up that much wider than the pane.
-  if (!height) {
-    return (
-      <div ref={ref} className="h-full min-w-0 overflow-auto bg-muted/20 py-4">
-        {html &&
-          frame({
-            width,
-            height: contentHeight ?? 0,
-            zoom: scale,
-            display: "block",
-            margin: "0 auto",
-          })}
-      </div>
-    );
-  }
+  }, [preview]);
 
   return (
     <div ref={ref} className="relative h-full min-w-0 overflow-hidden bg-muted/20">
-      {html &&
-        frame({
-          position: "absolute",
-          top: "50%",
-          left: "50%",
-          width,
-          height,
-          transform: `translate(-50%, -50%) scale(${scale})`,
-        })}
+      {preview?.html && (
+        // `border-0` overrides the border an iframe carries by default, which
+        // paints a light ring around the preview.
+        <iframe
+          ref={frameRef}
+          title="Browser preview"
+          sandbox="allow-scripts"
+          srcDoc={FRAME_HTML}
+          onLoad={() => frameRef.current?.contentWindow?.postMessage({ type: "hello" }, "*")}
+          className="block border-0"
+          style={{
+            position: "absolute",
+            top: "50%",
+            left: "50%",
+            width: preview.width,
+            height: preview.height,
+            transform: `translate(-50%, -50%) scale(${scale})`,
+            visibility: hasPainted ? undefined : "hidden",
+          }}
+        />
+      )}
     </div>
   );
 }
