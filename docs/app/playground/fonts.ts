@@ -12,6 +12,7 @@ export const FONT_FAMILIES = [
   "Noto Sans Hebrew",
   "Noto Sans Devanagari",
   "Noto Sans Thai",
+  "Noto Sans Georgian",
 ] as const;
 
 /** Google Fonts `css2` URL covering {@link FONT_FAMILIES} across the full weight axis. */
