@@ -11,7 +11,7 @@ use skrifa::Tag;
 use skrifa::outline::{DrawSettings, OutlinePen};
 use tiny_skia_path::{NonZeroRect, Transform};
 
-use crate::resources::glyph::ErasedPen;
+use crate::resources::glyph::draw_outline;
 use crate::resvg::usvg::*;
 
 fn resolve_rendering_mode(text: &Text) -> ShapeRendering {
@@ -195,12 +195,12 @@ impl DatabaseExt for Database {
           .iter()
           .map(|v| (Tag::from_be_bytes(v.tag), v.value)),
       );
-      outline
-        .draw(
-          DrawSettings::unhinted(size, &location),
-          &mut ErasedPen(&mut builder),
-        )
-        .ok()?;
+      draw_outline(
+        &outline,
+        DrawSettings::unhinted(size, &location),
+        &mut builder,
+      )
+      .ok()?;
 
       builder.builder.finish()
     })?

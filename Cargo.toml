@@ -273,12 +273,13 @@ opt-level = "z"
 opt-level = "z"
 
 
-# skrifa's TrueType hinting interpreter and autohinter are dead code for us
-# (every draw is unhinted) but survive dead-code elimination through runtime
-# branches, costing ~240KB of wasm. The fork gates them behind an upstreamable
-# `hinting` cargo feature; drop the patch once it lands in a skrifa release.
-# https://github.com/googlefonts/fontations/issues/892
+# skrifa's TrueType hinting interpreter, autohinter, and HarfBuzz-style scaler
+# are dead code for us (every draw is unhinted and FreeType-style) but survive
+# dead-code elimination through runtime branches. The fork gates them behind
+# the `hinting` and `harfbuzz_path_style` cargo features, and forwards
+# `OutlinePen` through `&mut` so skrifa's own bounds pen shares our `dyn` draw
+# path. parley pins skrifa 0.44, so the fork stays on that line until it moves.
 [patch.crates-io]
-skrifa = { git = "https://github.com/kane50613/fontations", rev = "80db8b0ccde357fd65ceb5c5243eb2de2754ee83" }
-read-fonts = { git = "https://github.com/kane50613/fontations", rev = "80db8b0ccde357fd65ceb5c5243eb2de2754ee83" }
-font-types = { git = "https://github.com/kane50613/fontations", rev = "80db8b0ccde357fd65ceb5c5243eb2de2754ee83" }
+skrifa = { git = "https://github.com/kane50613/fontations", rev = "8070d52c3310579e0266fa0999abe4182a0f4be5" }
+read-fonts = { git = "https://github.com/kane50613/fontations", rev = "8070d52c3310579e0266fa0999abe4182a0f4be5" }
+font-types = { git = "https://github.com/kane50613/fontations", rev = "8070d52c3310579e0266fa0999abe4182a0f4be5" }
