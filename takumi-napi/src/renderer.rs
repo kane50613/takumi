@@ -7,14 +7,14 @@ use arc_swap::ArcSwap;
 use napi::bindgen_prelude::*;
 use napi_derive::napi;
 use serde::Deserialize;
+use takumi_bindings_common::css_or_stylesheets;
 use takumi_core::{
   Fonts,
   layout::node::Node,
   resources::image::{
     ImageCacheMode as CoreImageCacheMode, ImageSource as LoadedImageSource, ResourceCache,
   },
-  style::{CssSource, KeyframesRule as CoreKeyframesRule, Lang},
-  viewport::DEFAULT_DEVICE_PIXEL_RATIO,
+  style::{CssSource, KeyframesRule as CoreKeyframesRule},
 };
 use takumi_raster::{
   DitheringAlgorithm as CoreDitheringAlgorithm, OutputFormat as RasterOutputFormat, Quality,
@@ -133,35 +133,20 @@ pub(crate) fn collect_images(
     .collect()
 }
 
-pub(crate) fn parse_lang(lang: Option<String>) -> Result<Option<Lang>> {
-  lang
-    .as_deref()
-    .map(Lang::parse)
-    .transpose()
-    .map_err(map_error)
-}
-
-pub(crate) fn device_pixel_ratio(ratio: Option<f64>) -> f32 {
-  ratio
-    .map(|ratio| ratio as f32)
-    .unwrap_or(DEFAULT_DEVICE_PIXEL_RATIO)
-}
-
 /// The CSS for a render, taking the deprecated `stylesheets` alias when `css`
 /// is absent.
-pub(crate) fn resolve_css(
+pub(crate) fn deserialize_css(
   css: Option<Object>,
   stylesheets: Option<Vec<String>>,
 ) -> Result<Option<Vec<CssSource>>> {
-  let Some(css) = css else {
-    return Ok(stylesheets.map(|sheets| sheets.into_iter().map(CssSource::Text).collect()));
-  };
+  let css = css
+    .map(|css| {
+      Vec::<CssSource>::deserialize(&mut De::new(&css))
+        .map_err(|error: napi::Error| Error::from_reason(error.to_string()))
+    })
+    .transpose()?;
 
-  let mut deserializer = De::new(&css);
-
-  Vec::<CssSource>::deserialize(&mut deserializer)
-    .map(Some)
-    .map_err(|error: napi::Error| Error::from_reason(error.to_string()))
+  Ok(css_or_stylesheets(css, stylesheets))
 }
 
 pub(crate) fn deserialize_keyframes(keyframes: Option<Object>) -> Result<Vec<CoreKeyframesRule>> {

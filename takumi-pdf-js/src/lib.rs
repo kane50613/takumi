@@ -7,29 +7,29 @@ mod date;
 mod metadata;
 mod options;
 
-use std::sync::RwLock;
+use std::{collections::HashMap, fmt::Display, sync::Arc};
 
 use serde_wasm_bindgen::{from_value, to_value};
 use takumi_bindings_common::{
-  default_fonts,
+  FontStore,
   input::{Font, decode_images, register_font},
-  stylesheet,
+  parse_lang, stylesheet,
 };
 use takumi_core::{
-  Fonts,
   layout::node::Node,
-  resources::image::ResourceCache,
+  resources::image::{ImageSource, ResourceCache},
   style::{FontFamily, Lang},
+  viewport::Viewport,
 };
 use takumi_pdf::{
-  Attachment, Band, MeasureOptions, PageRange, PageRules, PdfMetadata, PdfOptions, PdfStandard,
-  Tagging, UncoveredText,
+  Attachment, Band, MeasureOptions, PageOptions, PageRange, PageRules, PdfMetadata, PdfOptions,
+  PdfStandard, Tagging, UncoveredText,
 };
 use wasm_bindgen::prelude::*;
 
 use crate::options::{PdfRenderOptions, page_background, resolve_geometry};
 
-pub(crate) fn map_error(error: impl core::fmt::Display) -> js_sys::Error {
+pub(crate) fn map_error(error: impl Display) -> js_sys::Error {
   js_sys::Error::new(&error.to_string())
 }
 
@@ -79,6 +79,14 @@ pub fn counter_characters(classes: Vec<String>) -> String {
   takumi_pdf::counter_characters(classes.iter().map(String::as_str))
 }
 
+/// The layout inputs [`PdfRenderer::render`] and [`PdfRenderer::measure`] share.
+struct Layout {
+  viewport: Option<Viewport>,
+  page: Option<PageOptions>,
+  images: HashMap<Arc<str>, ImageSource>,
+  lang: Option<Lang>,
+}
+
 /// A PDF renderer holding registered fonts and a decoded-resource cache.
 ///
 /// State lives behind a lock and every method takes `&self`, mirroring the
@@ -86,8 +94,27 @@ pub fn counter_characters(classes: Vec<String>) -> String {
 /// flag permanently set.
 #[wasm_bindgen]
 pub struct PdfRenderer {
-  state: RwLock<Fonts>,
+  fonts: FontStore,
   resource_cache: ResourceCache,
+}
+
+impl PdfRenderer {
+  fn layout(&self, options: &PdfRenderOptions) -> Result<Layout, js_sys::Error> {
+    let images = decode_images(
+      &self.resource_cache,
+      options.images.as_deref().unwrap_or_default(),
+    )
+    .map_err(map_error)?;
+    let (viewport, page) = resolve_geometry(options)?;
+    let lang = parse_lang(options.lang.as_deref()).map_err(map_error)?;
+
+    Ok(Layout {
+      viewport,
+      page,
+      images,
+      lang,
+    })
+  }
 }
 
 #[wasm_bindgen]
@@ -96,7 +123,7 @@ impl PdfRenderer {
   #[wasm_bindgen(constructor)]
   pub fn new() -> Result<PdfRenderer, js_sys::Error> {
     Ok(PdfRenderer {
-      state: RwLock::new(default_fonts().map_err(map_error)?),
+      fonts: FontStore::new().map_err(map_error)?,
       resource_cache: ResourceCache::default(),
     })
   }
@@ -106,10 +133,7 @@ impl PdfRenderer {
   #[wasm_bindgen(js_name = registerFont)]
   pub fn register_font(&self, font: FontType) -> Result<RegisteredFamiliesType, js_sys::Error> {
     let font: Font = from_value(font.into()).map_err(map_error)?;
-    let mut state = self
-      .state
-      .try_write()
-      .map_err(|error| js_sys::Error::new(&format!("Renderer state is locked: {error}")))?;
+    let mut state = self.fonts.write().map_err(map_error)?;
 
     let registered = register_font(&mut state, font).map_err(map_error)?;
     Ok(to_value(&registered).map_err(map_error)?.unchecked_into())
@@ -128,23 +152,13 @@ impl PdfRenderer {
       .map(|options| from_value(options.into()).map_err(map_error))
       .transpose()?
       .unwrap_or_default();
-
-    let images = decode_images(
-      &self.resource_cache,
-      options.images.as_deref().unwrap_or_default(),
-    )
-    .map_err(map_error)?;
-    let (viewport, page) = resolve_geometry(&options)?;
-    let lang = options
-      .lang
-      .as_deref()
-      .map(Lang::parse)
-      .transpose()
-      .map_err(map_error)?;
-    let state = self
-      .state
-      .try_read()
-      .map_err(|error| js_sys::Error::new(&format!("Renderer state is locked: {error}")))?;
+    let Layout {
+      viewport,
+      page,
+      images,
+      lang,
+    } = self.layout(&options)?;
+    let state = self.fonts.read().map_err(map_error)?;
 
     takumi_pdf::render(PdfOptions {
       viewport,
@@ -195,22 +209,13 @@ impl PdfRenderer {
       .map(|options| from_value(options.into()).map_err(map_error))
       .transpose()?
       .unwrap_or_default();
-    let images = decode_images(
-      &self.resource_cache,
-      options.images.as_deref().unwrap_or_default(),
-    )
-    .map_err(map_error)?;
-    let (viewport, page) = resolve_geometry(&options)?;
-    let lang = options
-      .lang
-      .as_deref()
-      .map(Lang::parse)
-      .transpose()
-      .map_err(map_error)?;
-    let state = self
-      .state
-      .try_read()
-      .map_err(|error| js_sys::Error::new(&format!("Renderer state is locked: {error}")))?;
+    let Layout {
+      viewport,
+      page,
+      images,
+      lang,
+    } = self.layout(&options)?;
+    let state = self.fonts.read().map_err(map_error)?;
     let measured = takumi_pdf::measure(MeasureOptions {
       viewport,
       fonts: &state,

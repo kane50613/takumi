@@ -2,12 +2,14 @@ use std::sync::Arc;
 
 use napi::bindgen_prelude::*;
 
-use crate::{FontInput, JsBytes, RegisteredFamily, renderer::RendererState, resolve_font_resource};
+use takumi_bindings_common::input::FontOptions;
+
+use crate::{JsBytes, RegisteredFamily, map_error, renderer::RendererState};
 
 pub struct LoadFontTask {
   pub(crate) state: Arc<RendererState>,
   pub(crate) buffer: JsBytes,
-  pub(crate) info: FontInput,
+  pub(crate) info: FontOptions,
 }
 
 impl Task for LoadFontTask {
@@ -15,7 +17,12 @@ impl Task for LoadFontTask {
   type JsValue = Vec<RegisteredFamily>;
 
   fn compute(&mut self) -> Result<Self::Output> {
-    let resource = resolve_font_resource(&self.info, self.buffer.as_ref())?;
+    let resource = self
+      .info
+      .resource(self.buffer.as_ref())
+      .map_err(map_error)?
+      .into_resolved()
+      .map_err(map_error)?;
 
     // Serialize registrations; readers stay wait-free on the old snapshot meanwhile.
     let _write = self

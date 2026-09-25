@@ -7,22 +7,18 @@ use serde_bytes::ByteBuf;
 use takumi_core::{
   Fonts,
   resources::{
-    font::{FontError, FontResource, RegisteredFamily},
+    font::{FontError, FontOverride, FontResource, RegisteredFamily},
     image::{ImageCacheMode, ImageError, ImageSource as DecodedImage, ResourceCache},
   },
   style::{FontStyle as CssFontStyle, FromCssStr},
 };
 
-use crate::build_font_resource;
-
-/// Details for loading a custom font.
-#[derive(Deserialize)]
+/// How to register a font's bytes, each field overriding what the file says.
+#[derive(Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
-pub struct FontDetails {
+pub struct FontOptions {
   /// The family name to register the font under.
   name: Option<String>,
-  /// The raw font bytes.
-  data: ByteBuf,
   /// The font weight, e.g. 400 or 700.
   weight: Option<f64>,
   /// The font style.
@@ -33,6 +29,40 @@ pub struct FontDetails {
   subset_rank: Option<u32>,
   /// CSS generic family keyword this font resolves for.
   generic: Option<String>,
+}
+
+impl FontOptions {
+  /// A font resource over `bytes` with these overrides applied.
+  pub fn resource<'a>(&self, bytes: &'a [u8]) -> Result<FontResource<'a>, FontError> {
+    let resource = FontResource::new(bytes).override_info(FontOverride {
+      family_name: self.name.clone().map(Into::into),
+      weight: self.weight.map(|weight| weight as f32),
+      style: self.style.map(|style| style.0),
+      ..Default::default()
+    });
+
+    let resource = match &self.subset_of {
+      Some(logical) => resource
+        .subset_of(logical.clone())
+        .subset_rank(self.subset_rank.unwrap_or_default()),
+      None => resource,
+    };
+
+    match &self.generic {
+      Some(generic) => Ok(resource.generic_family(generic.parse()?)),
+      None => Ok(resource),
+    }
+  }
+}
+
+/// Details for loading a custom font.
+#[derive(Deserialize)]
+pub struct FontDetails {
+  /// The raw font bytes.
+  data: ByteBuf,
+  /// How to register the bytes.
+  #[serde(flatten)]
+  options: FontOptions,
 }
 
 /// Font input, either a details object or raw bytes.
@@ -77,19 +107,7 @@ pub struct ImageSource {
 pub fn register_font(fonts: &mut Fonts, font: Font) -> Result<Vec<RegisteredFamily>, FontError> {
   match font {
     Font::Buffer(buffer) => fonts.register(FontResource::new(buffer.into_vec())),
-    Font::Object(details) => {
-      let data = details.data.into_vec();
-      let resource = build_font_resource(
-        &data,
-        details.name,
-        details.weight.map(|weight| weight as f32),
-        details.style.map(|style| style.0),
-        details.subset_of,
-        details.subset_rank,
-        details.generic,
-      )?;
-      fonts.register(resource)
-    }
+    Font::Object(details) => fonts.register(details.options.resource(&details.data)?),
   }
 }
 

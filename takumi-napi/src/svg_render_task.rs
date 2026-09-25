@@ -1,7 +1,7 @@
 use std::{collections::HashMap, mem::take, sync::Arc};
 
 use napi::bindgen_prelude::*;
-use takumi_bindings_common::stylesheet;
+use takumi_bindings_common::{parse_lang, stylesheet, time_ms};
 use takumi_core::{
   layout::node::Node,
   style::{FontFamily, Lang, StyleSheet},
@@ -12,7 +12,7 @@ use crate::{
   JsBytes, map_error,
   renderer::{
     ImageCacheMode, RendererState, SvgRenderOptions, collect_images, decode_images,
-    deserialize_keyframes, parse_lang, resolve_css,
+    deserialize_css, deserialize_keyframes,
   },
 };
 
@@ -36,7 +36,7 @@ impl SvgRenderTask {
   ) -> Result<Self> {
     let stylesheet = stylesheet(
       &state.resource_cache,
-      resolve_css(options.css, options.stylesheets)?,
+      deserialize_css(options.css, options.stylesheets)?,
       deserialize_keyframes(options.keyframes)?,
     )
     .map_err(map_error)?;
@@ -45,11 +45,11 @@ impl SvgRenderTask {
       node: Some(node),
       state,
       viewport: Viewport::new((options.width, options.height)),
-      time_ms: options.time_ms.unwrap_or_default().max(0) as u64,
+      time_ms: time_ms(options.time_ms),
       stylesheet,
       images: collect_images(env, options.images)?,
       font_families: options.font_families.map(FontFamily::from_names),
-      lang: parse_lang(options.lang)?,
+      lang: parse_lang(options.lang.as_deref()).map_err(map_error)?,
     })
   }
 }

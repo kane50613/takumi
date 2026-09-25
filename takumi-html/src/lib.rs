@@ -32,11 +32,11 @@ use takumi_core::{
 };
 use typed_builder::TypedBuilder;
 
-/// Tags whose entire subtree is dropped, matching the JS `isHtmlVoidElement`
-/// set. Deliberately distinct from the `display:none` presets (`title`,
+/// Tags whose entire subtree is dropped, matching the JS markup walker.
+/// Deliberately distinct from the `display:none` presets (`title`,
 /// `noscript`, `template`, ...): these never reach the tree, those are merely
 /// laid out hidden.
-const VOID_TAGS: [&str; 5] = ["head", "meta", "link", "style", "script"];
+const UNRENDERED_TAGS: [&str; 5] = ["head", "meta", "link", "style", "script"];
 
 const DEFAULT_PRESETS: &[(&str, &str)] = &[
   ("html", "display:block"),
@@ -166,7 +166,12 @@ const DEFAULT_PRESETS: &[(&str, &str)] = &[
 static DEFAULT_STYLE_PRESETS: LazyLock<HashMap<Box<str>, Style>> = LazyLock::new(|| {
   DEFAULT_PRESETS
     .iter()
-    .map(|&(tag, css)| (tag.into(), Style::from(parse_declarations(css))))
+    .map(|&(tag, css)| {
+      (
+        tag.into(),
+        Style::from(StyleDeclarationBlock::parse_loosy(css)),
+      )
+    })
     .collect()
 });
 
@@ -248,32 +253,25 @@ impl Default for FromHtmlOptions {
 /// Parse HTML markup into a node tree.
 ///
 /// `tw`, `style`, `class`, `id`, `dir`, and `lang` attributes become the
-/// corresponding node styling and metadata; `<style>` blocks and other void
-/// elements are dropped. A single root element is returned as-is; multiple
+/// corresponding node styling and metadata; `<style>` blocks and other
+/// unrendered elements are dropped. A single root element is returned as-is; multiple
 /// roots are wrapped in a full-size container.
 ///
 /// A source that starts with an `<html>` element is parsed as a document, so
 /// the tree keeps that element as its root along with `<head>` and `<body>`.
 /// Anything else is parsed as a fragment and gains no wrappers of its own.
 pub fn from_html(source: &str, options: FromHtmlOptions) -> Result<Node, HtmlError> {
-  let tw_property = options.tailwind_property.as_deref().unwrap_or("tw");
-
-  let mut nodes = Vec::new();
-  let build = |handle: &Handle, nodes: &mut Vec<Node>| {
-    build_nodes(
-      handle,
-      &options.presets,
-      tw_property,
-      options.max_depth,
-      0,
-      nodes,
-    )
+  let builder = NodeBuilder {
+    presets: &options.presets,
+    tw_property: options.tailwind_property.as_deref().unwrap_or("tw"),
+    max_depth: options.max_depth,
   };
+  let mut nodes = Vec::new();
 
   if starts_with_html_element(source) {
     let dom = parse_document(RcDom::default(), ParseOpts::default()).one(source);
 
-    build(&dom.document, &mut nodes)?;
+    builder.build_nodes(&dom.document, 0, &mut nodes)?;
   } else {
     let context = QualName::new(None, ns!(html), local_name!("body"));
     let dom = parse_fragment(
@@ -289,7 +287,7 @@ pub fn from_html(source: &str, options: FromHtmlOptions) -> Result<Node, HtmlErr
     // document's only child.
     if let Some(context) = dom.document.children.borrow().first() {
       for child in context.children.borrow().iter() {
-        build(child, &mut nodes)?;
+        builder.build_nodes(child, 0, &mut nodes)?;
       }
     }
   }
@@ -365,137 +363,152 @@ fn collapse(mut nodes: Vec<Node>) -> Node {
   match nodes.len() {
     0 => Node::container([]),
     1 => nodes.pop().unwrap_or_default(),
-    _ => Node::container(nodes).with_style(Style::from(parse_declarations(
+    _ => Node::container(nodes).with_style(Style::from(StyleDeclarationBlock::parse_loosy(
       "display:block;width:100%;height:100%",
     ))),
   }
 }
 
-fn build_nodes(
-  handle: &Handle,
-  presets: &StylePresets,
-  tw_property: &str,
+/// Turns parsed DOM handles into nodes under one set of options.
+struct NodeBuilder<'a> {
+  presets: &'a StylePresets,
+  tw_property: &'a str,
   max_depth: usize,
-  depth: usize,
-  out: &mut Vec<Node>,
-) -> Result<(), HtmlError> {
-  match &handle.data {
-    NodeData::Comment { .. }
-    | NodeData::Doctype { .. }
-    | NodeData::ProcessingInstruction { .. } => {}
-    NodeData::Document => {
-      for child in handle.children.borrow().iter() {
-        build_nodes(child, presets, tw_property, max_depth, depth, out)?;
-      }
-    }
-    NodeData::Text { contents } => {
-      let value = contents.borrow();
-      if !value.is_empty() {
-        out.push(Node::text(value.to_string()));
-      }
-    }
-    NodeData::Element { name, .. } => {
-      let tag = name.local.as_ref();
-
-      if let Some(node) = build_element(handle, tag, presets, tw_property, max_depth, depth)? {
-        out.push(node);
-      }
-    }
-  }
-
-  Ok(())
 }
 
-fn build_element(
-  handle: &Handle,
-  tag: &str,
-  presets: &StylePresets,
-  tw_property: &str,
-  max_depth: usize,
-  depth: usize,
-) -> Result<Option<Node>, HtmlError> {
-  if depth >= max_depth {
-    return Err(HtmlError::MaxDepthExceeded(max_depth));
+impl NodeBuilder<'_> {
+  fn build_nodes(
+    &self,
+    handle: &Handle,
+    depth: usize,
+    out: &mut Vec<Node>,
+  ) -> Result<(), HtmlError> {
+    match &handle.data {
+      NodeData::Comment { .. }
+      | NodeData::Doctype { .. }
+      | NodeData::ProcessingInstruction { .. } => {}
+      NodeData::Document => {
+        for child in handle.children.borrow().iter() {
+          self.build_nodes(child, depth, out)?;
+        }
+      }
+      NodeData::Text { contents } => {
+        let value = contents.borrow();
+        if !value.is_empty() {
+          out.push(Node::text(value.to_string()));
+        }
+      }
+      NodeData::Element { name, .. } => {
+        if let Some(node) = self.build_element(handle, name.local.as_ref(), depth)? {
+          out.push(node);
+        }
+      }
+    }
+
+    Ok(())
   }
 
-  if tag == "br" {
-    return Ok(Some(apply_metadata(
-      Node::text("\n"),
-      handle,
-      tag,
-      presets,
-      tw_property,
-    )));
-  }
+  fn build_element(
+    &self,
+    handle: &Handle,
+    tag: &str,
+    depth: usize,
+  ) -> Result<Option<Node>, HtmlError> {
+    if depth >= self.max_depth {
+      return Err(HtmlError::MaxDepthExceeded(self.max_depth));
+    }
 
-  if tag == "img" {
-    let src = attribute(handle, "src")
-      .filter(|src| !src.trim().is_empty())
-      .ok_or(HtmlError::MissingImageSrc)?;
-    let image = ImageData {
-      src: ImageSourceInput::Url(src.into()),
-      width: dimension(handle, "width"),
-      height: dimension(handle, "height"),
+    let node = match tag {
+      "br" => Node::text("\n"),
+      "img" => {
+        let src = attribute(handle, "src")
+          .filter(|src| !src.trim().is_empty())
+          .ok_or(HtmlError::MissingImageSrc)?;
+
+        Node::image(ImageData {
+          src: ImageSourceInput::Url(src.into()),
+          width: dimension(handle, "width"),
+          height: dimension(handle, "height"),
+        })
+      }
+      _ if UNRENDERED_TAGS.contains(&tag) => return Ok(None),
+      "svg" => Node::image(ImageData {
+        src: ImageSourceInput::Buffer(serialize_outer_html(handle)),
+        width: dimension(handle, "width"),
+        height: dimension(handle, "height"),
+      }),
+      _ => match text_only_contents(handle) {
+        Some(text) => Node::text(text),
+        None => {
+          let mut children = Vec::new();
+          for child in handle.children.borrow().iter() {
+            self.build_nodes(child, depth + 1, &mut children)?;
+          }
+
+          Node::container(children)
+        }
+      },
     };
 
-    return Ok(Some(apply_metadata(
-      Node::image(image),
-      handle,
-      tag,
-      presets,
-      tw_property,
-    )));
+    Ok(Some(self.apply_metadata(node, handle, tag)))
   }
 
-  if VOID_TAGS.contains(&tag) {
-    return Ok(None);
-  }
+  fn apply_metadata(&self, mut node: Node, handle: &Handle, tag: &str) -> Node {
+    node = node.with_tag_name(tag);
 
-  if tag == "svg" {
-    let image = ImageData {
-      src: ImageSourceInput::Buffer(serialize_outer_html(handle)),
-      width: dimension(handle, "width"),
-      height: dimension(handle, "height"),
+    if let Some(preset) = self.presets.get(tag) {
+      node = node.with_preset(preset.clone());
+    }
+
+    let NodeData::Element { attrs, .. } = &handle.data else {
+      return node;
     };
 
-    return Ok(Some(apply_metadata(
-      Node::image(image),
-      handle,
-      tag,
-      presets,
-      tw_property,
-    )));
-  }
+    let mut attributes = BTreeMap::new();
+    for attr in attrs.borrow().iter() {
+      let name = attr.name.local.as_ref();
+      let value = attr.value.as_ref();
 
-  if let Some(text) = text_only_contents(handle) {
-    return Ok(Some(apply_metadata(
-      Node::text(text),
-      handle,
-      tag,
-      presets,
-      tw_property,
-    )));
-  }
+      // Read Tailwind independently of reserved names so it can alias `class`
+      // without dropping the class name.
+      if name == self.tw_property
+        && let Ok(tw) = TailwindValues::from_str(value)
+      {
+        node = node.with_tw(tw);
+      }
 
-  let mut children = Vec::new();
-  for child in handle.children.borrow().iter() {
-    build_nodes(
-      child,
-      presets,
-      tw_property,
-      max_depth,
-      depth + 1,
-      &mut children,
-    )?;
-  }
+      match name {
+        "class" => node = node.with_class_name(value),
+        "id" => node = node.with_id(value),
+        "lang" => {
+          if let Ok(lang) = Lang::parse(value) {
+            node = node.with_lang(lang);
+          }
+        }
+        "dir" => {
+          if let Ok(dir) = Direction::from_css_str(value) {
+            node = node.with_dir(dir);
+          }
+        }
+        "style" => node = node.with_style(Style::from(StyleDeclarationBlock::parse_loosy(value))),
+        // Consumed into `ImageData`; re-emitted by serialization, so keep them out
+        // of the passthrough attributes to avoid duplicating on round-trip.
+        "src" if tag == "img" => {}
+        "width" | "height" if matches!(tag, "img" | "svg") => {}
+        // Consumed above; keep out of the passthrough attributes.
+        _ if name == self.tw_property => {}
+        _ => {
+          attributes.insert(name.into(), value.into());
+        }
+      }
+    }
 
-  Ok(Some(apply_metadata(
-    Node::container(children),
-    handle,
-    tag,
-    presets,
-    tw_property,
-  )))
+    if !attributes.is_empty() {
+      node = node.with_attributes(attributes);
+    }
+
+    node
+  }
 }
 
 /// Concatenated text if every child is a text node, else `None`. Comments are
@@ -512,69 +525,6 @@ fn text_only_contents(handle: &Handle) -> Option<String> {
   }
 
   (!text.is_empty()).then_some(text)
-}
-
-fn apply_metadata(
-  mut node: Node,
-  handle: &Handle,
-  tag: &str,
-  presets: &StylePresets,
-  tw_property: &str,
-) -> Node {
-  node = node.with_tag_name(tag);
-
-  if let Some(preset) = presets.get(tag) {
-    node = node.with_preset(preset.clone());
-  }
-
-  let NodeData::Element { attrs, .. } = &handle.data else {
-    return node;
-  };
-
-  let mut attributes = BTreeMap::new();
-  for attr in attrs.borrow().iter() {
-    let name = attr.name.local.as_ref();
-    let value = attr.value.as_ref();
-
-    // Read Tailwind independently of reserved names so it can alias `class`
-    // without dropping the class name.
-    if name == tw_property
-      && let Ok(tw) = TailwindValues::from_str(value)
-    {
-      node = node.with_tw(tw);
-    }
-
-    match name {
-      "class" => node = node.with_class_name(value),
-      "id" => node = node.with_id(value),
-      "lang" => {
-        if let Ok(lang) = Lang::parse(value) {
-          node = node.with_lang(lang);
-        }
-      }
-      "dir" => {
-        if let Ok(dir) = Direction::from_css_str(value) {
-          node = node.with_dir(dir);
-        }
-      }
-      "style" => node = node.with_style(Style::from(parse_declarations(value))),
-      // Consumed into `ImageData`; re-emitted by serialization, so keep them out
-      // of the passthrough attributes to avoid duplicating on round-trip.
-      "src" if tag == "img" => {}
-      "width" | "height" if matches!(tag, "img" | "svg") => {}
-      // Consumed above; keep out of the passthrough attributes.
-      _ if name == tw_property => {}
-      _ => {
-        attributes.insert(name.into(), value.into());
-      }
-    }
-  }
-
-  if !attributes.is_empty() {
-    node = node.with_attributes(attributes);
-  }
-
-  node
 }
 
 fn attribute(handle: &Handle, name: &str) -> Option<String> {
@@ -610,12 +560,6 @@ fn serialize_outer_html(handle: &Handle) -> Vec<u8> {
   buffer
 }
 
-/// Parse a CSS declaration block, ignoring it if it fails to parse. Parses the
-/// whole block so values containing `;` (e.g. `data:` URIs) survive.
-fn parse_declarations(css: &str) -> StyleDeclarationBlock {
-  StyleDeclarationBlock::parse_loosy(css)
-}
-
 #[cfg(test)]
 mod tests {
   use super::*;
@@ -628,7 +572,7 @@ mod tests {
   /// cannot read. An unreadable width used to take the whole attribute down with it.
   #[test]
   fn an_unreadable_declaration_leaves_its_neighbours_alone() {
-    let block = parse_declarations("font-size:64px;width:wider;color:red");
+    let block = StyleDeclarationBlock::parse_loosy("font-size:64px;width:wider;color:red");
 
     assert_eq!(block.len(), 2);
   }

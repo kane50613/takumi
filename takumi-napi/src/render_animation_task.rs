@@ -1,7 +1,7 @@
 use std::{collections::HashMap, mem::take, sync::Arc};
 
 use napi::bindgen_prelude::*;
-use takumi_bindings_common::stylesheet;
+use takumi_bindings_common::{device_pixel_ratio, parse_lang, stylesheet};
 use takumi_core::{
   layout::node::Node,
   style::{CssSource, FontFamily, KeyframesRule, Lang},
@@ -16,8 +16,7 @@ use crate::{
   JsBytes, deserialize_with_tracing, map_error,
   renderer::{
     AnimationOutputFormat, ImageCacheMode, RenderAnimationOptions, RendererState, collect_images,
-    decode_images, deserialize_keyframes, device_pixel_ratio, parse_lang, resolve_css,
-    webp_lossless,
+    decode_images, deserialize_css, deserialize_keyframes, webp_lossless,
   },
 };
 
@@ -82,16 +81,17 @@ impl RenderAnimationTask {
     Ok(Self {
       scenes: Some(scenes),
       state,
-      viewport: Viewport::new((width, height)).with_device_pixel_ratio(device_pixel_ratio(dpr)),
+      viewport: Viewport::new((width, height))
+        .with_device_pixel_ratio(device_pixel_ratio(dpr.map(|ratio| ratio as f32))),
       format: format.unwrap_or(AnimationOutputFormat::WebP),
       quality,
       lossless,
       draw_debug_border: draw_debug_border.unwrap_or_default(),
-      css: resolve_css(css, stylesheets)?,
+      css: deserialize_css(css, stylesheets)?,
       keyframes: deserialize_keyframes(keyframes)?,
       images: collect_images(env, images)?,
       font_families: font_families.map(FontFamily::from_names),
-      lang: parse_lang(lang)?,
+      lang: parse_lang(lang.as_deref()).map_err(map_error)?,
       fps,
     })
   }

@@ -7,6 +7,7 @@
 //! when the process exits. All parallel work runs through [`install`].
 
 use std::{
+  mem::take,
   sync::{Arc, Mutex, OnceLock},
   thread::{Builder, JoinHandle},
 };
@@ -77,7 +78,7 @@ fn shutdown() {
     // Drop our pool reference so `terminate()` signals the workers; with no
     // work in flight at teardown this is the last reference.
     shared.pool.take();
-    std::mem::take(&mut shared.handles)
+    take(&mut shared.handles)
   };
   for handle in handles {
     let _ = handle.join();

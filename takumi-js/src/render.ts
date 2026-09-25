@@ -219,6 +219,21 @@ function mergeCss(options: PipelineOptions | undefined, extra: string[]): CssInp
   return [...own, ...extra];
 }
 
+/** Resolves the renderer, node tree, images, and CSS a single-scene render needs. */
+async function prepareScene(element: RenderInput, options?: PipelineOptions) {
+  options?.signal?.throwIfAborted();
+
+  const renderer = await resolveRenderer(options);
+  const { node, css } = await resolveContent(element, options);
+  const images = await collectImages(node, options);
+
+  // The WASM renderer is synchronous and ignores the signal argument, so honor an
+  // abort that happened during the async font and image loading before the blocking call.
+  options?.signal?.throwIfAborted();
+
+  return { renderer, node, images, css: mergeCss(options, css) };
+}
+
 /**
  * Renders a React element, HTML string, or Takumi node tree into an image.
  *
@@ -240,23 +255,10 @@ function mergeCss(options: PipelineOptions | undefined, extra: string[]): CssInp
  * @returns A promise that resolves to the rendered image data (Buffer/Uint8Array).
  */
 export async function render(element: RenderInput, options?: RenderOptions) {
-  options?.signal?.throwIfAborted();
-
-  const renderer = await resolveRenderer(options);
-  const { node, css: extractedCss } = await resolveContent(element, options);
-  const images = await collectImages(node, options);
-
-  // The WASM renderer is synchronous and ignores the signal argument, so honor an
-  // abort that happened during the async font and image loading before the blocking call.
-  options?.signal?.throwIfAborted();
-
+  const { renderer, node, images, css } = await prepareScene(element, options);
   const { css: _, stylesheets: _alias, ...forward } = options ?? {};
 
-  return renderer.render(node, {
-    ...forward,
-    images,
-    css: mergeCss(options, extractedCss),
-  });
+  return renderer.render(node, { ...forward, images, css });
 }
 
 /**
@@ -280,21 +282,10 @@ export async function render(element: RenderInput, options?: RenderOptions) {
  * @returns A promise that resolves to the SVG document string.
  */
 export async function renderSvg(element: RenderInput, options?: RenderSvgOptions): Promise<string> {
-  options?.signal?.throwIfAborted();
-
-  const renderer = await resolveRenderer(options);
-  const { node, css: extractedCss } = await resolveContent(element, options);
-  const images = await collectImages(node, options);
-
-  options?.signal?.throwIfAborted();
-
+  const { renderer, node, images, css } = await prepareScene(element, options);
   const { css: _, stylesheets: _alias, ...forward } = options ?? {};
 
-  return renderer.renderSvg(node, {
-    ...forward,
-    images,
-    css: mergeCss(options, extractedCss),
-  });
+  return renderer.renderSvg(node, { ...forward, images, css });
 }
 
 /**

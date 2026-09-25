@@ -2,21 +2,25 @@
 //!
 //! Both bindings lower raw JS input into a takumi render request the same way —
 //! the embedded fallback fonts, a font resource from optional fields, the
-//! stylesheet. That lowering lives here so neither binding re-derives it. Each
+//! stylesheet, and the per-render options. That lowering lives here so neither binding re-derives it. Each
 //! binding keeps only its platform-specific glue (JS type coercion, error
 //! mapping, threading).
 
 pub mod input;
 
-use std::sync::Arc;
+use std::{
+  fmt,
+  sync::{Arc, RwLock, RwLockReadGuard, RwLockWriteGuard, TryLockError},
+};
 
 use takumi_core::{
-  Fonts,
+  Error as CoreError, Fonts,
   resources::{
     font::{FontError, FontOverride, FontResource},
     image::ResourceCache,
   },
-  style::{CssSource, CssSourceError, FontStyle, KeyframesRule, StyleSheet},
+  style::{CssSource, CssSourceError, KeyframesRule, Lang, StyleSheet},
+  viewport::DEFAULT_DEVICE_PIXEL_RATIO,
 };
 
 /// Last-resort only: no generic family claim, so `sans-serif` and friends
@@ -45,35 +49,63 @@ pub fn default_fonts() -> Result<Fonts, FontError> {
   Ok(fonts)
 }
 
-/// Builds a font resource from normalized optional fields. Each binding pulls
-/// these out of its own input type before calling in.
-pub fn build_font_resource<'a>(
-  bytes: &'a [u8],
-  name: Option<String>,
-  weight: Option<f32>,
-  style: Option<FontStyle>,
-  subset_of: Option<String>,
-  subset_rank: Option<u32>,
-  generic: Option<String>,
-) -> Result<FontResource<'a>, FontError> {
-  let resource = FontResource::new(bytes).override_info(FontOverride {
-    family_name: name.map(Into::into),
-    weight,
-    style,
-    ..Default::default()
-  });
+/// Registered fonts behind a lock that fails instead of blocking, for the
+/// single-threaded wasm bindings.
+pub struct FontStore(RwLock<Fonts>);
 
-  let resource = match subset_of {
-    Some(logical) => resource
-      .subset_of(logical)
-      .subset_rank(subset_rank.unwrap_or_default()),
-    None => resource,
-  };
-
-  match generic {
-    Some(generic) => Ok(resource.generic_family(generic.parse()?)),
-    None => Ok(resource),
+impl FontStore {
+  /// A store holding the embedded last-resort fonts.
+  pub fn new() -> Result<Self, FontError> {
+    default_fonts().map(|fonts| Self(RwLock::new(fonts)))
   }
+
+  pub fn read(&self) -> Result<RwLockReadGuard<'_, Fonts>, FontStoreLocked> {
+    self.0.try_read().map_err(FontStoreLocked::from)
+  }
+
+  pub fn write(&self) -> Result<RwLockWriteGuard<'_, Fonts>, FontStoreLocked> {
+    self.0.try_write().map_err(FontStoreLocked::from)
+  }
+}
+
+/// A [`FontStore`] lock already held by another call.
+#[derive(Debug)]
+pub struct FontStoreLocked(String);
+
+impl<T> From<TryLockError<T>> for FontStoreLocked {
+  fn from(error: TryLockError<T>) -> Self {
+    Self(error.to_string())
+  }
+}
+
+impl fmt::Display for FontStoreLocked {
+  fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    write!(f, "Renderer state is locked: {}", self.0)
+  }
+}
+
+/// A render's default language, parsed from its BCP-47 tag.
+pub fn parse_lang(tag: Option<&str>) -> Result<Option<Lang>, CoreError> {
+  tag.map(Lang::parse).transpose()
+}
+
+/// The timeline position in milliseconds, with negative times clamped to zero.
+pub fn time_ms(time_ms: Option<i64>) -> u64 {
+  time_ms.unwrap_or_default().max(0) as u64
+}
+
+/// The device pixel ratio, defaulting to [`DEFAULT_DEVICE_PIXEL_RATIO`].
+pub fn device_pixel_ratio(ratio: Option<f32>) -> f32 {
+  ratio.unwrap_or(DEFAULT_DEVICE_PIXEL_RATIO)
+}
+
+/// The CSS for a render, taking the deprecated `stylesheets` alias when `css`
+/// is absent.
+pub fn css_or_stylesheets(
+  css: Option<Vec<CssSource>>,
+  stylesheets: Option<Vec<String>>,
+) -> Option<Vec<CssSource>> {
+  css.or_else(|| stylesheets.map(|sheets| sheets.into_iter().map(CssSource::Text).collect()))
 }
 
 /// The stylesheet for a render: the loose-parsed sheet list with its keyframes.
