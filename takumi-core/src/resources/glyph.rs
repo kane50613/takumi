@@ -314,14 +314,40 @@ fn hash_path_commands(paths: &[Command]) -> u64 {
   h.digest()
 }
 
-/// Draws `glyph` through `&mut dyn OutlinePen`: skrifa monomorphizes its whole
+/// Draws `glyph` through one type-erased pen: skrifa monomorphizes its whole
 /// CFF/glyf evaluator per pen type, which costs ~100KB of wasm per concrete pen.
 pub fn draw_outline(
   glyph: &OutlineGlyph<'_>,
   settings: DrawSettings<'_>,
-  mut pen: &mut dyn OutlinePen,
+  pen: &mut dyn OutlinePen,
 ) -> Result<AdjustedMetrics, DrawError> {
-  glyph.draw(settings, &mut pen)
+  glyph.draw(settings, &mut ErasedPen(pen))
+}
+
+// Upstream skrifa has no `OutlinePen` impl for `&mut dyn OutlinePen`, and
+// `cargo package` builds this crate without the fork patch.
+struct ErasedPen<'a>(&'a mut dyn OutlinePen);
+
+impl OutlinePen for ErasedPen<'_> {
+  fn move_to(&mut self, x: f32, y: f32) {
+    self.0.move_to(x, y);
+  }
+
+  fn line_to(&mut self, x: f32, y: f32) {
+    self.0.line_to(x, y);
+  }
+
+  fn quad_to(&mut self, cx0: f32, cy0: f32, x: f32, y: f32) {
+    self.0.quad_to(cx0, cy0, x, y);
+  }
+
+  fn curve_to(&mut self, cx0: f32, cy0: f32, cx1: f32, cy1: f32, x: f32, y: f32) {
+    self.0.curve_to(cx0, cy0, cx1, cy1, x, y);
+  }
+
+  fn close(&mut self) {
+    self.0.close();
+  }
 }
 
 #[derive(Default)]
