@@ -1,4 +1,5 @@
-import type { Declarations } from "../types";
+import type { FromJsxOptions } from ".";
+import type { Declarations, NodeMetadata } from "../types";
 import { defaultStylePresets } from "./style-presets";
 
 export type HtmlProps = {
@@ -11,59 +12,73 @@ export type HtmlProps = {
   [key: string]: unknown;
 };
 
-export function getPresets(
-  defaultStyles?: typeof defaultStylePresets | false,
-): typeof defaultStylePresets | undefined {
-  if (defaultStyles === false) {
-    return;
+const nonAttributeProps = new Set([
+  "children",
+  "className",
+  "class",
+  "id",
+  "style",
+  "ref",
+  "key",
+  "dangerouslySetInnerHTML",
+  "suppressHydrationWarning",
+]);
+
+const attributeValueTypes = new Set(["string", "number", "bigint", "boolean"]);
+
+/** Reads node metadata from element props under one set of {@link FromJsxOptions}. */
+export class NodeMetadataReader {
+  readonly presets: typeof defaultStylePresets | undefined;
+  readonly tailwindClassesProperty: string;
+
+  constructor(options?: FromJsxOptions) {
+    this.presets =
+      options?.defaultStyles === false
+        ? undefined
+        : (options?.defaultStyles ?? defaultStylePresets);
+    this.tailwindClassesProperty = options?.tailwindClassesProperty ?? "tw";
   }
 
-  return defaultStyles ?? defaultStylePresets;
-}
+  /** `className` and `style` arrive already read, since JSX and markup spell them differently. */
+  read(
+    tagName: string | undefined,
+    props: HtmlProps,
+    className: string | undefined,
+    style: Declarations | undefined,
+  ): NodeMetadata {
+    const tw = props[this.tailwindClassesProperty];
 
-export function extractAttributes(
-  props: HtmlProps,
-  tailwindClassesProperty: string,
-): Record<string, string> | undefined {
-  let collectedAttributes: Record<string, string> | undefined;
-
-  for (const attributeName in props) {
-    if (!Object.hasOwn(props, attributeName)) {
-      continue;
-    }
-
-    const attributeValue = props[attributeName];
-
-    if (
-      attributeName === "children" ||
-      attributeName === "className" ||
-      attributeName === "class" ||
-      attributeName === "id" ||
-      attributeName === "style" ||
-      attributeName === tailwindClassesProperty ||
-      attributeName === "ref" ||
-      attributeName === "key" ||
-      attributeName === "dangerouslySetInnerHTML" ||
-      attributeName === "suppressHydrationWarning"
-    ) {
-      continue;
-    }
-
-    if (attributeValue === undefined || attributeValue === null || attributeValue === false) {
-      continue;
-    }
-
-    if (typeof attributeValue === "function" || typeof attributeValue === "symbol") {
-      continue;
-    }
-
-    if (typeof attributeValue === "object") {
-      continue;
-    }
-
-    collectedAttributes ??= {};
-    collectedAttributes[attributeName] = attributeValue === true ? "" : String(attributeValue);
+    return {
+      tagName,
+      className,
+      id: props.id,
+      dir: props.dir as NodeMetadata["dir"],
+      lang: props.lang,
+      attributes: this.attributes(props),
+      tw: typeof tw === "string" ? tw : undefined,
+      style,
+      preset: this.preset(tagName),
+    };
   }
 
-  return collectedAttributes;
+  private preset(tagName: string | undefined): Declarations | undefined {
+    return this.presets && tagName !== undefined && tagName in this.presets
+      ? this.presets[tagName as keyof typeof this.presets]
+      : undefined;
+  }
+
+  private attributes(props: HtmlProps): Record<string, string> | undefined {
+    let attributes: Record<string, string> | undefined;
+
+    for (const [name, value] of Object.entries(props)) {
+      if (nonAttributeProps.has(name) || name === this.tailwindClassesProperty) continue;
+
+      if (value === false || !attributeValueTypes.has(typeof value)) continue;
+
+      attributes ??= {};
+      attributes[name] = value === true ? "" : String(value);
+    }
+
+    return attributes;
+  }
 }

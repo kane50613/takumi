@@ -5,213 +5,150 @@ import type {
   Node as UltraHtmlNode,
 } from "ultrahtml";
 import { container, image, text } from "../helpers";
-import type { Declarations, Node, NodeMetadata } from "../types";
-import { extractAttributes, getPresets } from "../jsx/metadata";
-import type { FromJsxOptions } from "../jsx";
-import type { defaultStylePresets } from "../jsx/style-presets";
-import { isHtmlVoidElement } from "../jsx/utils";
+import type { ConvertedNodes } from "../root";
+import type { Declarations, Node } from "../types";
+import { NodeMetadataReader } from "../jsx/metadata";
+import { isUnrenderedElement } from "../jsx/utils";
 import { decodeHtmlEntities } from "./entities";
 
-export interface FromStaticMarkupOptions extends FromJsxOptions {}
-
-export interface FromStaticMarkupResult {
-  nodes: Node[];
-  css: string[];
-}
-
 /**
- * Convert static HTML/SVG markup into Takumi nodes.
- *
- * This is primarily used as the React DOM Server fallback for `fromJsx()`,
- * but it is also exposed as a public API for callers that already have
- * serialized markup.
- *
- * The output preserves extracted stylesheet contents from `<style>` tags and
- * converts `<img>` / `<svg>` elements into Takumi image nodes.
+ * Converts static HTML/SVG markup into Takumi nodes, keeping `<style>` contents
+ * as stylesheets and turning `<img>` / `<svg>` into image nodes.
  */
-export function fromStaticMarkup(
-  markup: string,
-  options?: FromStaticMarkupOptions,
-): FromStaticMarkupResult {
-  const document = parse(markup) as UltraHtmlDocumentNode;
-  const result: FromStaticMarkupResult = { nodes: [], css: [] };
-  const presets = getPresets(options?.defaultStyles);
-  const tailwindClassesProperty = options?.tailwindClassesProperty ?? "tw";
-
-  for (const child of document.children) {
-    buildStaticNodes(child, presets, tailwindClassesProperty, result.nodes, result.css);
-  }
-
-  return result;
+export function fromStaticMarkup(markup: string): ConvertedNodes {
+  return new NodeBuilder(new NodeMetadataReader()).build(parse(markup) as UltraHtmlDocumentNode);
 }
 
-function buildStaticNodes(
-  node: UltraHtmlNode,
-  presets: typeof defaultStylePresets | undefined,
-  tailwindClassesProperty: string,
-  nodes: Node[],
-  css: string[],
-): void {
-  if (node.type === COMMENT_NODE) {
-    return;
+class NodeBuilder {
+  private readonly css: string[] = [];
+
+  constructor(private readonly metadata: NodeMetadataReader) {}
+
+  build(document: UltraHtmlDocumentNode): ConvertedNodes {
+    return { nodes: this.nodes(document.children), css: this.css };
   }
 
-  if (node.type === TEXT_NODE) {
-    const value = decodeHtmlEntities(node.value ?? "");
-    if (value) {
-      nodes.push(
-        text({
-          text: value,
-          preset: presets?.span,
-        }),
-      );
+  private nodes(children: UltraHtmlNode[]): Node[] {
+    const nodes: Node[] = [];
+
+    for (const child of children) {
+      this.append(child, nodes);
     }
-    return;
+
+    return nodes;
   }
 
-  if (node.type === DOCUMENT_NODE) {
-    for (const child of node.children) {
-      buildStaticNodes(child, presets, tailwindClassesProperty, nodes, css);
+  private append(node: UltraHtmlNode, nodes: Node[]): void {
+    if (node.type === COMMENT_NODE) {
+      return;
     }
-    return;
-  }
 
-  if (node.type !== ELEMENT_NODE) {
-    return;
-  }
-
-  const element = node as UltraHtmlElementNode;
-  if (element.name === "style") {
-    let content = "";
-
-    for (const child of element.children) {
-      if (child.type === TEXT_NODE && typeof child.value === "string") {
-        content += child.value;
+    if (node.type === TEXT_NODE) {
+      const value = decodeHtmlEntities(node.value ?? "");
+      if (value) {
+        nodes.push(text({ text: value, preset: this.metadata.presets?.span }));
       }
+      return;
     }
 
-    if (content) {
-      css.push(content);
+    if (node.type === DOCUMENT_NODE) {
+      for (const child of node.children) {
+        this.append(child, nodes);
+      }
+      return;
     }
-    return;
-  }
 
-  if (element.name === "head") {
-    const discardedNodes: Node[] = [];
+    if (node.type !== ELEMENT_NODE) {
+      return;
+    }
+
+    const element = node as UltraHtmlElementNode;
+    if (element.name === "style") {
+      let content = "";
+
+      for (const child of element.children) {
+        if (child.type === TEXT_NODE && typeof child.value === "string") {
+          content += child.value;
+        }
+      }
+
+      if (content) {
+        this.css.push(content);
+      }
+      return;
+    }
+
+    if (element.name === "head") {
+      this.nodes(element.children);
+      return;
+    }
+
+    const metadata = this.elementMetadata(element);
+    if (element.name === "br") {
+      nodes.push(text({ text: "\n", preset: this.metadata.presets?.br, ...metadata }));
+      return;
+    }
+
+    if (element.name === "img") {
+      const src = element.attributes?.src;
+      if (!src) {
+        throw new Error("Image element must have a 'src' prop.");
+      }
+
+      nodes.push(image({ src: decodeHtmlEntities(src), ...dimensions(element), ...metadata }));
+      return;
+    }
+
+    if (isUnrenderedElement(element.name)) {
+      return;
+    }
+
+    if (element.name === "svg") {
+      nodes.push(image({ src: renderSync(element), ...dimensions(element), ...metadata }));
+      return;
+    }
+
+    let onlyTextChildren = true;
+    let textContent = "";
 
     for (const child of element.children) {
-      buildStaticNodes(child, presets, tailwindClassesProperty, discardedNodes, css);
-    }
-    return;
-  }
+      if (child.type === COMMENT_NODE) {
+        continue;
+      }
 
-  const metadata = extractStaticNodeMetadata(element, presets, tailwindClassesProperty);
-  if (element.name === "br") {
-    nodes.push(
-      text({
-        text: "\n",
-        preset: presets?.br,
-        ...metadata,
-      }),
-    );
-    return;
-  }
+      if (child.type !== TEXT_NODE) {
+        onlyTextChildren = false;
+        break;
+      }
 
-  if (element.name === "img") {
-    const src = element.attributes?.src;
-    if (!src) {
-      throw new Error("Image element must have a 'src' prop.");
+      textContent += child.value ?? "";
     }
 
-    nodes.push(
-      image({
-        src: decodeHtmlEntities(src),
-        width: parseDimension(element.attributes?.width),
-        height: parseDimension(element.attributes?.height),
-        ...metadata,
-      }),
-    );
-    return;
-  }
-
-  if (isHtmlVoidElement(element.name)) {
-    return;
-  }
-
-  if (element.name === "svg") {
-    nodes.push(
-      image({
-        src: renderSync(element),
-        width: parseDimension(element.attributes?.width),
-        height: parseDimension(element.attributes?.height),
-        ...metadata,
-      }),
-    );
-    return;
-  }
-
-  let onlyTextChildren = true;
-  let textContent = "";
-
-  for (const child of element.children) {
-    if (child.type === COMMENT_NODE) {
-      continue;
+    if (onlyTextChildren && textContent) {
+      nodes.push(text({ text: decodeHtmlEntities(textContent), ...metadata }));
+      return;
     }
 
-    if (child.type !== TEXT_NODE) {
-      onlyTextChildren = false;
-      break;
-    }
-
-    textContent += child.value ?? "";
+    nodes.push(container({ children: this.nodes(element.children), ...metadata }));
   }
 
-  if (onlyTextChildren && textContent) {
-    nodes.push(
-      text({
-        text: decodeHtmlEntities(textContent),
-        ...metadata,
-      }),
+  private elementMetadata(element: UltraHtmlElementNode) {
+    const props = element.attributes ? decodeAttributeMap(element.attributes) : {};
+
+    return this.metadata.read(
+      element.name,
+      props,
+      props.class,
+      typeof props.style === "string" ? parseInlineStyle(props.style) : undefined,
     );
-    return;
   }
-
-  const childNodes: Node[] = [];
-  for (const child of element.children) {
-    buildStaticNodes(child, presets, tailwindClassesProperty, childNodes, css);
-  }
-
-  nodes.push(
-    container({
-      children: childNodes,
-      ...metadata,
-    }),
-  );
 }
 
-function extractStaticNodeMetadata(
-  node: UltraHtmlElementNode,
-  presets: typeof defaultStylePresets | undefined,
-  tailwindClassesProperty: string,
-): NodeMetadata {
-  const props = node.attributes ? decodeAttributeMap(node.attributes) : {};
-  const style = typeof props.style === "string" ? parseInlineStyle(props.style) : undefined;
-  const attributes = extractAttributes(props, tailwindClassesProperty);
-  const tw =
-    typeof props[tailwindClassesProperty] === "string" ? props[tailwindClassesProperty] : undefined;
-  const preset =
-    presets && node.name in presets ? presets[node.name as keyof typeof presets] : undefined;
-
+/** Width and height attributes; values that are not finite numbers are dropped. */
+function dimensions(element: UltraHtmlElementNode): { width?: number; height?: number } {
   return {
-    tagName: node.name,
-    className: props.class,
-    id: props.id,
-    dir: props.dir as NodeMetadata["dir"],
-    lang: props.lang,
-    attributes,
-    tw,
-    style,
-    preset,
+    width: parseDimension(element.attributes?.width),
+    height: parseDimension(element.attributes?.height),
   };
 }
 

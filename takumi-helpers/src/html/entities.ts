@@ -298,9 +298,5 @@ function decodeCodePoint(codePoint: number): string | undefined {
     return windows1252C1[codePoint - 0x80];
   }
 
-  try {
-    return String.fromCodePoint(codePoint);
-  } catch {
-    return;
-  }
+  return String.fromCodePoint(codePoint);
 }

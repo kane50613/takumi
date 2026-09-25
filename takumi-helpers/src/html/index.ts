@@ -1,53 +1,23 @@
-import { hideStylesheetsAlias, warnStylesheetsDeprecated } from "../deprecation";
-import { container, percentage } from "../helpers";
+import type { FromJsxResult } from "../jsx";
 import { fromStaticMarkup } from "./markup";
+import { rootResult } from "../root";
 import type { Node } from "../types";
 
-export interface FromHtmlResult {
-  node: Node;
-  css: string[];
-  /** @deprecated Use `css` instead. */
-  stylesheets: string[];
-}
+export interface FromHtmlResult extends FromJsxResult {}
 
-const isWhitespaceOnlyText = (node: Node): boolean =>
-  "text" in node && typeof node.text === "string" && node.text.trim() === "";
+const isWhitespaceOnlyText = (node: Node | undefined): boolean =>
+  node !== undefined && "text" in node && typeof node.text === "string" && node.text.trim() === "";
 
 export function fromHtml(html: string): FromHtmlResult {
-  const { nodes, css } = fromStaticMarkup(html);
+  const converted = fromStaticMarkup(html);
 
-  while (nodes[0] && isWhitespaceOnlyText(nodes[0])) {
-    nodes.shift();
-  }
-  while (nodes.at(-1) && isWhitespaceOnlyText(nodes.at(-1) as Node)) {
-    nodes.pop();
+  while (isWhitespaceOnlyText(converted.nodes[0])) {
+    converted.nodes.shift();
   }
 
-  let node: Node;
-  if (nodes.length === 0) {
-    node = container({});
-  } else if (nodes.length === 1 && nodes[0]) {
-    node = nodes[0];
-  } else {
-    node = container({
-      style: {
-        display: "block",
-        width: percentage(100),
-        height: percentage(100),
-      },
-      children: nodes,
-    });
+  while (isWhitespaceOnlyText(converted.nodes.at(-1))) {
+    converted.nodes.pop();
   }
 
-  const aliased: FromHtmlResult = {
-    node,
-    css,
-    get stylesheets() {
-      warnStylesheetsDeprecated();
-      return css;
-    },
-  };
-
-  hideStylesheetsAlias(aliased);
-  return aliased;
+  return rootResult(converted);
 }
