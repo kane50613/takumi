@@ -14,7 +14,6 @@ ignored = ["serde_bytes"]
 
 [dependencies]
 log.workspace = true
-imagesize.workspace = true
 data-url.workspace = true
 color.workspace = true
 serde_bytes.workspace = true
@@ -62,6 +61,10 @@ features = ["rc"]
 
 [dependencies.image]
 workspace = true
+
+[dependencies.imagesize]
+workspace = true
+features = ["png", "jpeg", "webp", "gif"]
 
 [dependencies.png]
 workspace = true

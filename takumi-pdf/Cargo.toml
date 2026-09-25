@@ -53,6 +53,7 @@ optional = true
 [dependencies.imagesize]
 workspace = true
 optional = true
+features = ["gif"]
 
 [dependencies.png]
 workspace = true
