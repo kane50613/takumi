@@ -43,7 +43,7 @@ extern "C" {
   #[wasm_bindgen(typescript_type = "PaintOptions")]
   pub type PaintOptionsType;
   /// JavaScript object representing a paint tree.
-  #[wasm_bindgen(typescript_type = "PaintTree")]
+  #[wasm_bindgen(typescript_type = "PaintTreeData")]
   pub type PaintTreeType;
 }
 

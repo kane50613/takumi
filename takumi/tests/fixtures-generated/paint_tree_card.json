@@ -1,6 +1,29 @@
 {
   "width": 600.0,
   "height": 400.0,
+  "fonts": [
+    {
+      "family": "Geist",
+      "faceIndex": 0,
+      "weight": 700.0,
+      "style": "normal",
+      "width": 100.0,
+      "variations": [
+        {
+          "tag": "wght",
+          "value": 700.0
+        }
+      ]
+    },
+    {
+      "family": "Geist",
+      "faceIndex": 0,
+      "weight": 400.0,
+      "style": "normal",
+      "width": 100.0,
+      "variations": []
+    }
+  ],
   "root": {
     "source": {
       "path": [],
@@ -124,19 +147,7 @@
             "width": 103.92,
             "ascent": 40.2,
             "descent": 11.8,
-            "font": {
-              "family": "Geist",
-              "faceIndex": 0,
-              "weight": 700.0,
-              "style": "normal",
-              "width": 100.0,
-              "variations": [
-                {
-                  "tag": "wght",
-                  "value": 700.0
-                }
-              ]
-            },
+            "fontIndex": 0,
             "fontSize": 40.0,
             "color": [179, 38, 30, 255],
             "opacity": 1.0,
@@ -226,14 +237,7 @@
             "width": 64.116,
             "ascent": 26.130001,
             "descent": 7.67,
-            "font": {
-              "family": "Geist",
-              "faceIndex": 0,
-              "weight": 400.0,
-              "style": "normal",
-              "width": 100.0,
-              "variations": []
-            },
+            "fontIndex": 1,
             "fontSize": 26.0,
             "color": [20, 17, 15, 255],
             "opacity": 1.0,
@@ -279,19 +283,7 @@
             "width": 71.942,
             "ascent": 26.130001,
             "descent": 7.67,
-            "font": {
-              "family": "Geist",
-              "faceIndex": 0,
-              "weight": 700.0,
-              "style": "normal",
-              "width": 100.0,
-              "variations": [
-                {
-                  "tag": "wght",
-                  "value": 700.0
-                }
-              ]
-            },
+            "fontIndex": 0,
             "fontSize": 26.0,
             "color": [0, 0, 255, 255],
             "opacity": 1.0,
@@ -332,14 +324,7 @@
             "width": 57.486,
             "ascent": 26.130001,
             "descent": 7.67,
-            "font": {
-              "family": "Geist",
-              "faceIndex": 0,
-              "weight": 400.0,
-              "style": "normal",
-              "width": 100.0,
-              "variations": []
-            },
+            "fontIndex": 1,
             "fontSize": 26.0,
             "color": [20, 17, 15, 255],
             "opacity": 1.0,
@@ -380,14 +365,7 @@
             "width": 89.674,
             "ascent": 26.130001,
             "descent": 7.67,
-            "font": {
-              "family": "Geist",
-              "faceIndex": 0,
-              "weight": 400.0,
-              "style": "normal",
-              "width": 100.0,
-              "variations": []
-            },
+            "fontIndex": 1,
             "fontSize": 26.0,
             "color": [20, 17, 15, 255],
             "opacity": 1.0,

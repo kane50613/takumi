@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import { container, image, text } from "@takumi-rs/helpers";
-import { Painter, type PaintTree } from "takumi-paint";
+import { Painter, PaintTree, type PaintNodeData } from "takumi-paint";
 
 const painter = new Painter();
 
@@ -86,5 +86,33 @@ describe("Painter.paint", () => {
       ["hello ", 0, 400],
       ["world", 255, 700],
     ]);
+  });
+
+  it("shares one font description between runs of the same face", async () => {
+    const tree = await painter.paint(`<p>hello <b>world</b> again</p>`, { width: 400 });
+
+    const [hello, world, again] = texts(tree);
+    expect(tree.fonts).toHaveLength(2);
+    expect(hello?.font).toBe(again?.font);
+    expect(world?.font.weight).toBe(700);
+  });
+
+  it("derives a node's canvas matrix and a run's vertical extent", async () => {
+    const tree = await painter.paint(
+      `<div><div id="box" style="margin: 20px 0 0 10px; font-size: 20px">hi</div></div>`,
+      { width: 200, height: 100 },
+    );
+
+    expect(tree.find("box")?.matrix).toEqual([1, 0, 0, 1, 10, 20]);
+    const [run] = texts(tree);
+    expect(run && [run.top, run.bottom]).toEqual(run && [run.y - run.ascent, run.y + run.descent]);
+  });
+
+  it("iterates a tree deeper than the call stack", () => {
+    const leaf: PaintNodeData = { width: 0, height: 0, x: 0, y: 0, opacity: 1, isolate: false };
+    let root = leaf;
+    for (let depth = 0; depth < 100_000; depth++) root = { ...leaf, children: [root] };
+
+    expect([...new PaintTree({ width: 0, height: 0, fonts: [], root })]).toHaveLength(100_001);
   });
 });

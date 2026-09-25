@@ -34,13 +34,12 @@ const tree = await paint(
 
 function draw(ctx: CanvasRenderingContext2D) {
   for (const node of tree) {
-    if (node.transform) ctx.setTransform(...node.transform);
-    else ctx.setTransform(1, 0, 0, 1, node.x, node.y);
+    ctx.setTransform(...node.matrix);
     if (node.background?.color) {
       ctx.fillStyle = rgba(node.background.color);
       ctx.fillRect(0, 0, node.width, node.height);
     }
-    for (const run of node.textRuns ?? []) {
+    for (const run of node.textRuns) {
       ctx.save();
       if (run.transform) ctx.transform(...run.transform);
       ctx.font = `${run.font.weight} ${run.fontSize}px ${run.font.family}`;
@@ -66,7 +65,7 @@ const rgba = ([r, g, b, a]: number[]) => `rgb(${r} ${g} ${b} / ${a / 255})`;
 ## Coordinates
 
 - Every length is a device pixel.
-- A node's `x` and `y` place its border box on the canvas. `transform` appears only when the box is rotated, scaled, or skewed.
+- A node's `x` and `y` place its border box on the canvas. `transform` appears only when the box is rotated, scaled, or skewed. `node.matrix` returns whichever of the two applies.
 - Everything inside a node is relative to its border box.
 
 ## Resolved and unresolved values

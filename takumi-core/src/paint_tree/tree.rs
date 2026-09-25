@@ -47,8 +47,17 @@ pub struct PaintTree {
   pub width: f32,
   /// Canvas height in device pixels.
   pub height: f32,
+  /// Font instances the runs reference by index.
+  pub fonts: Vec<PaintFont>,
   /// The root node.
   pub root: PaintNode,
+}
+
+impl PaintTree {
+  /// The font instance `run` was shaped with.
+  pub fn font(&self, run: &PaintTextRun) -> Option<&PaintFont> {
+    self.fonts.get(run.font_index)
+  }
 }
 
 /// A font instance a run was shaped with.
@@ -382,8 +391,8 @@ pub struct PaintTextRun {
   pub ascent: f32,
   /// Typographic descent below the baseline.
   pub descent: f32,
-  /// The font instance the run was shaped with.
-  pub font: PaintFont,
+  /// Index into [`PaintTree::fonts`].
+  pub font_index: usize,
   /// Font size the run was shaped at.
   pub font_size: f32,
   /// Fill color.

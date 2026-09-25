@@ -288,7 +288,7 @@ impl Walker {
       width: shaped.advance,
       ascent: shaped.metrics.ascent,
       descent: shaped.metrics.descent,
-      font: self.fonts.describe(fonts, shaped),
+      font_index: self.fonts.intern(fonts, shaped),
       font_size: shaped.font_size,
       color: brush.color.0,
       opacity: brush.opacity,

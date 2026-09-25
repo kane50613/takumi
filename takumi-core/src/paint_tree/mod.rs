@@ -115,6 +115,7 @@ pub fn paint_tree(options: PaintTreeOptions<'_>) -> Result<PaintTree> {
   Ok(PaintTree {
     width,
     height,
+    fonts: walker.fonts.into_fonts(),
     root,
   })
 }

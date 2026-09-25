@@ -129,9 +129,10 @@ fn paint_tree_records_used_values() {
   assert!(big.decorations.iter().all(|d| d.line == "underline"));
   let world = runs[2];
   assert_eq!(world.color, [0, 0, 255, 255]);
-  assert_eq!(world.font.weight, 700.0);
-  assert_eq!(world.font.family.as_deref(), Some("Geist"));
-  assert_eq!(runs[1].font.weight, 400.0);
+  let font = |run| tree.font(run).unwrap();
+  assert_eq!(font(world).weight, 700.0);
+  assert_eq!(font(world).family.as_deref(), Some("Geist"));
+  assert_eq!(font(runs[1]).weight, 400.0);
 
   let paragraph = find(&tree.root, "paragraph").expect("paragraph box");
   assert_eq!(paragraph.inline_backgrounds.len(), 1);

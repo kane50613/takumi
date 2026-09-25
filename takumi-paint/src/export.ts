@@ -12,9 +12,25 @@ import {
 import type { ReactNode } from "react";
 import {
   Painter as PainterInternal,
-  type PaintNode,
-  type PaintTextRun,
-  type PaintTree as PaintTreeShape,
+  type Matrix,
+  type PaintFont,
+  type PaintBackground,
+  type PaintBorder,
+  type PaintBoxShadows,
+  type PaintClip,
+  type PaintDecoration,
+  type PaintGlyph,
+  type PaintImage,
+  type PaintInlineBackground,
+  type PaintNodeData,
+  type PaintOutline,
+  type PaintShadow,
+  type PaintSource,
+  type PaintStroke,
+  type PaintTextRunData,
+  type PaintTreeData,
+  type PaintUnresolvedEffects,
+  type Rgba,
 } from "../pkg/takumi_paint_wasm";
 
 export { default, initSync } from "../pkg/takumi_paint_wasm";
@@ -29,15 +45,18 @@ export type {
   PaintDecoration,
   PaintFill,
   PaintFont,
+  PaintGlyph,
   PaintGradientStop,
   PaintImage,
   PaintInlineBackground,
-  PaintNode,
+  PaintNodeData,
   PaintOutline,
   PaintRect,
-  PaintTextRun,
   PaintShadow,
   PaintSource,
+  PaintStroke,
+  PaintTextRunData,
+  PaintTreeData,
   PaintUnresolvedEffects,
   Radii,
   Rgba,
@@ -84,37 +103,168 @@ async function resolveNode(input: NodeInput): Promise<{ node: Node; css: string[
   return fromJsx(input as ReactNode);
 }
 
-function* nodes(node: PaintNode): Generator<PaintNode> {
-  yield node;
-  for (const child of node.children ?? []) yield* nodes(child);
+function fontAt(fonts: readonly PaintFont[], index: number): PaintFont {
+  const font = fonts[index];
+  if (!font) throw new RangeError(`The paint tree has no font ${index}`);
+  return font;
+}
+
+/** A shaped text run. Coordinates are relative to the owning node's border box. */
+export class PaintTextRun {
+  declare readonly text: string;
+  /** Start of the run's baseline, x. */
+  declare readonly x: number;
+  /** The run's baseline, y. */
+  declare readonly y: number;
+  /** Advance of the run. */
+  declare readonly width: number;
+  /** Typographic ascent above the baseline. */
+  declare readonly ascent: number;
+  /** Typographic descent below the baseline. */
+  declare readonly descent: number;
+  /** Index into {@link PaintTree.fonts}. */
+  declare readonly fontIndex: number;
+  /** Font size the run was shaped at. */
+  declare readonly fontSize: number;
+  declare readonly color: Rgba;
+  /** The span's `opacity`. */
+  declare readonly opacity: number;
+  /** A transform on top of the node's, when text-fit scales the line. */
+  declare readonly transform?: Matrix;
+  /** Glyphs relative to the run origin. */
+  declare readonly glyphs: PaintGlyph[];
+  declare readonly decorations?: PaintDecoration[];
+  /** `-webkit-text-stroke`, when visible. */
+  declare readonly stroke?: PaintStroke;
+  /** UTF-8 byte range of the text within the node's inline text. */
+  declare readonly textByteRange: [number, number];
+  /** The inline span the run came from. */
+  declare readonly spanId?: number;
+  /** The font instance the run was shaped with. */
+  readonly font: PaintFont;
+
+  constructor(run: PaintTextRunData, fonts: readonly PaintFont[]) {
+    Object.assign(this, run);
+    this.font = fontAt(fonts, run.fontIndex);
+  }
+
+  /** Top of the run's ascent: `y - ascent`. */
+  get top(): number {
+    return this.y - this.ascent;
+  }
+
+  /** Bottom of the run's descent: `y + descent`. */
+  get bottom(): number {
+    return this.y + this.descent;
+  }
+}
+
+/**
+ * One painted box: a compositing group whose `opacity`, `clip`, and `blendMode` apply to
+ * everything inside it. Paints in order: `shadows.outer`, `background`, `shadows.inset`, `border`,
+ * `image`, `inlineBackgrounds`, `textRuns`, `children`, then `outline`.
+ */
+export class PaintNode {
+  /** The node this box came from; absent for an anonymous box. */
+  declare readonly source?: PaintSource;
+  /** Border-box width in device pixels. */
+  declare readonly width: number;
+  /** Border-box height in device pixels. */
+  declare readonly height: number;
+  /** Left edge of the border box on the canvas. */
+  declare readonly x: number;
+  /** Top edge of the border box on the canvas. */
+  declare readonly y: number;
+  /**
+   * Absolute transform when the box is rotated, scaled, or skewed; absent for a plain
+   * translation. Its translation is `x`, `y`.
+   */
+  declare readonly transform?: Matrix;
+  declare readonly opacity: number;
+  /** `mix-blend-mode` other than `normal`. */
+  declare readonly blendMode?: string;
+  /** Whether `isolation: isolate` applies. */
+  declare readonly isolate: boolean;
+  /** Overflow clip applied to the children. */
+  declare readonly clip?: PaintClip;
+  /** The background, when it paints a color or a layer. */
+  declare readonly background?: PaintBackground;
+  /** The border, when any side has width. */
+  declare readonly border?: PaintBorder;
+  /** `box-shadow` layers, when any. */
+  declare readonly shadows?: PaintBoxShadows;
+  /** The outline, painted after the children. */
+  declare readonly outline?: PaintOutline;
+  declare readonly image?: PaintImage;
+  /** `text-shadow` layers under every run, later-listed shadows lowest. */
+  declare readonly textShadows?: PaintShadow[];
+  /** Inline-span backgrounds, one rounded rect per line, outer spans first. */
+  declare readonly inlineBackgrounds?: PaintInlineBackground[];
+  /** Effects the tree carries as CSS text instead of resolving. */
+  declare readonly unresolvedEffects?: PaintUnresolvedEffects;
+  /** Shaped text runs in visual order. */
+  readonly textRuns: PaintTextRun[];
+  /** Boxes painted after this one, in paint order. */
+  readonly children: PaintNode[];
+
+  constructor(node: PaintNodeData, fonts: readonly PaintFont[]) {
+    Object.assign(this, node);
+    this.textRuns = (node.textRuns ?? []).map((run) => new PaintTextRun(run, fonts));
+    this.children = [];
+  }
+
+  /** The matrix that places the border box on the canvas: `transform`, or a translation to `x`, `y`. */
+  get matrix(): Matrix {
+    return this.transform ?? [1, 0, 0, 1, this.x, this.y];
+  }
 }
 
 /** Everything the backends paint for a document, in paint order. Iterates its nodes. */
-export class PaintTree implements PaintTreeShape {
+export class PaintTree {
   /** Canvas width in device pixels. */
   readonly width: number;
   /** Canvas height in device pixels. */
   readonly height: number;
+  /** Font instances the runs were shaped with. */
+  readonly fonts: PaintFont[];
   readonly root: PaintNode;
 
-  constructor(tree: PaintTreeShape) {
+  constructor(tree: PaintTreeData) {
     this.width = tree.width;
     this.height = tree.height;
-    this.root = tree.root;
+    this.fonts = tree.fonts;
+    this.root = new PaintNode(tree.root, tree.fonts);
+
+    const pending: [PaintNodeData, PaintNode][] = [[tree.root, this.root]];
+    for (let entry = pending.pop(); entry; entry = pending.pop()) {
+      const [data, node] = entry;
+      for (const child of data.children ?? []) {
+        const painted = new PaintNode(child, tree.fonts);
+        node.children.push(painted);
+        pending.push([child, painted]);
+      }
+    }
   }
 
   /**
    * Every node in paint order, parents before children. An `outline` paints after the node's
    * children, so an exporter that draws outlines recurses over `children` itself.
    */
-  [Symbol.iterator](): Generator<PaintNode> {
-    return nodes(this.root);
+  *[Symbol.iterator](): Generator<PaintNode> {
+    const pending = [this.root];
+    for (let node = pending.pop(); node; node = pending.pop()) {
+      yield node;
+      for (let index = node.children.length - 1; index >= 0; index--) {
+        const child = node.children[index];
+        if (child) pending.push(child);
+      }
+    }
   }
 
   /** Every text run in paint order, each paired with the node that paints it. */
   *textRuns(): Generator<{ run: PaintTextRun; node: PaintNode }> {
     for (const node of this) {
-      for (const run of node.textRuns ?? []) yield { run, node };
+      for (const run of node.textRuns) yield { run, node };
     }
   }
 

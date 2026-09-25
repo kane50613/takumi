@@ -76,12 +76,14 @@ export type Radii = [[number, number], [number, number], [number, number], [numb
 export type Matrix = [number, number, number, number, number, number];
 
 /** Everything the backends paint for a node tree, in paint order. */
-export type PaintTree = {
+export type PaintTreeData = {
   /** Canvas width in device pixels. */
   width: number;
   /** Canvas height in device pixels. */
   height: number;
-  root: PaintNode;
+  /** Font instances the runs reference by index. */
+  fonts: PaintFont[];
+  root: PaintNodeData;
 };
 
 /** A font instance a run was shaped with. */
@@ -102,53 +104,28 @@ export type PaintFont = {
   syntheticObliqueAngle?: number;
 };
 
-/**
- * One painted box: a compositing group whose `opacity`, `clip`, and `blendMode` apply to
- * everything inside it. Paints in order: `shadows.outer`, `background`, `shadows.inset`, `border`,
- * `image`, `inlineBackgrounds`, `textRuns`, `children`, then `outline`.
- */
-export type PaintNode = {
-  /** The node this box came from; absent for an anonymous box. */
+/** The serialized form of the `PaintNode` class. */
+export type PaintNodeData = {
   source?: PaintSource;
-  /** Border-box width in device pixels. */
   width: number;
-  /** Border-box height in device pixels. */
   height: number;
-  /** Left edge of the border box on the canvas. */
   x: number;
-  /** Top edge of the border box on the canvas. */
   y: number;
-  /**
-   * Absolute transform when the box is rotated, scaled, or skewed; absent for a plain
-   * translation. Its translation is `x`, `y`.
-   */
   transform?: Matrix;
   opacity: number;
-  /** `mix-blend-mode` other than `normal`. */
   blendMode?: string;
-  /** Whether `isolation: isolate` applies. */
   isolate: boolean;
-  /** Overflow clip applied to the children. */
   clip?: PaintClip;
-  /** The background, when it paints a color or a layer. */
   background?: PaintBackground;
-  /** The border, when any side has width. */
   border?: PaintBorder;
-  /** `box-shadow` layers, when any. */
   shadows?: PaintBoxShadows;
-  /** The outline, painted after the children. */
   outline?: PaintOutline;
   image?: PaintImage;
-  /** `text-shadow` layers under every run, later-listed shadows lowest. */
   textShadows?: PaintShadow[];
-  /** Inline-span backgrounds, one rounded rect per line, outer spans first. */
   inlineBackgrounds?: PaintInlineBackground[];
-  /** Shaped text runs in visual order. */
-  textRuns?: PaintTextRun[];
-  /** Effects the tree carries as CSS text instead of resolving. */
+  textRuns?: PaintTextRunData[];
   unresolvedEffects?: PaintUnresolvedEffects;
-  /** Boxes painted after this one, in paint order. */
-  children?: PaintNode[];
+  children?: PaintNodeData[];
 };
 
 export type PaintSource = {
@@ -248,32 +225,31 @@ export type PaintImage = {
   placement: PaintRect;
 };
 
-export type PaintTextRun = {
+/** The serialized form of the `PaintTextRun` class. */
+export type PaintTextRunData = {
   text: string;
-  /** Start of the run's baseline, x. */
   x: number;
-  /** The run's baseline, y. */
   y: number;
-  /** Advance of the run. */
   width: number;
   ascent: number;
   descent: number;
-  /** The font instance the run was shaped with. */
-  font: PaintFont;
+  /** Index into `PaintTreeData.fonts`. */
+  fontIndex: number;
   fontSize: number;
   color: Rgba;
   opacity: number;
-  /** A transform on top of the node's, when text-fit scales the line. */
   transform?: Matrix;
-  /** Glyphs relative to the run origin. */
-  glyphs: { id: number; x: number; y: number }[];
+  glyphs: PaintGlyph[];
   decorations?: PaintDecoration[];
-  stroke?: { color: Rgba; width: number };
-  /** UTF-8 byte range of the text within the node's inline text. */
+  stroke?: PaintStroke;
   textByteRange: [number, number];
-  /** The inline span the run came from. */
   spanId?: number;
 };
+
+/** A glyph id and its offset from the run origin. */
+export type PaintGlyph = { id: number; x: number; y: number };
+
+export type PaintStroke = { color: Rgba; width: number };
 
 export type PaintDecoration = {
   line: "underline" | "overline" | "line-through";
