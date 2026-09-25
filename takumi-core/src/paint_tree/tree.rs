@@ -398,7 +398,8 @@ pub struct PaintTextRun {
   pub font_index: usize,
   /// Font size the run was shaped at.
   pub font_size: f32,
-  /// Used line height.
+  /// Height of the run's leaded box: the used line height, grown to a fallback face's own
+  /// height under `line-height: normal`.
   pub line_height: f32,
   /// `letter-spacing`, already applied to the glyph positions.
   pub letter_spacing: f32,

@@ -127,7 +127,10 @@ export class PaintTextRun {
   declare readonly fontIndex: number;
   /** Font size the run was shaped at. */
   declare readonly fontSize: number;
-  /** Used line height. */
+  /**
+   * Height of the run's leaded box: the used line height, grown to a fallback face's own height
+   * under `line-height: normal`.
+   */
   declare readonly lineHeight: number;
   /** `letter-spacing`, already applied to the glyph positions. */
   declare readonly letterSpacing: number;

@@ -28,6 +28,7 @@ const CSS: &str = r#"
   .big { font-size: 40px; font-weight: 700; color: rgb(179, 38, 30); text-decoration: underline; letter-spacing: 2px; }
   .p { text-align: center; line-height: 40px; }
   .rtl { direction: rtl; }
+  .fallback { font-family: Geist, "Scheherazade New"; font-size: 20px; }
   .mark { display: inline; background-color: yellow; opacity: 0.5; }
   b { display: inline; font-weight: 700; color: rgb(0, 0, 255); }
   .pic { width: 120px; height: 80px; object-fit: cover; border-radius: 8px; }
@@ -237,4 +238,18 @@ fn text_align_start_resolves_to_the_writing_direction() {
       .find_map(|node| node.text_align.as_deref()),
     Some("right")
   );
+}
+
+#[test]
+fn a_fallback_run_reports_the_line_it_grows_under_normal_line_height() {
+  let tree = build(Node::container([Node::text("abc مرحبا")]).with_class_name("fallback"));
+
+  let runs = all_runs(&tree.root);
+  let (latin, arabic) = (runs[0], runs.last().unwrap());
+  assert_ne!(tree.font(latin), tree.font(arabic));
+  assert_eq!(
+    arabic.line_height,
+    arabic.ascent.round() + arabic.descent.round()
+  );
+  assert!(arabic.line_height > latin.line_height);
 }
