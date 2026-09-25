@@ -62,6 +62,10 @@ Each node is a compositing group. Its `opacity`, `clip`, and `blendMode` apply t
       description:
         "The input node this box came from: its child-index path, id, tag name, and class name",
     },
+    contentBox: {
+      type: "PaintRect",
+      description: "The border box inset by border and padding",
+    },
     background: {
       type: "PaintBackground",
       description: "Used background color, clip, and image layers",
@@ -80,13 +84,16 @@ Each node is a compositing group. Its `opacity`, `clip`, and `blendMode` apply t
     },
     image: {
       type: "PaintImage",
-      description:
-        "The content box an image sits in and where it draws after object-fit and object-position",
+      description: "Where an image draws after object-fit and object-position",
     },
     textRuns: {
       type: "PaintTextRun[]",
       description:
         "Shaped text runs with their font, size, color, decorations, and glyph positions",
+    },
+    textAlign: {
+      type: '"left" | "right" | "center" | "justify"',
+      description: "The text-align of the inline content, with start and end resolved",
     },
     inlineBackgrounds: {
       type: "PaintInlineBackground[]",
@@ -99,7 +106,7 @@ Each node is a compositing group. Its `opacity`, `clip`, and `blendMode` apply t
   }}
 />
 
-Each run carries its `font`: the registered family, the face index, the weight and style after variations, and any synthetic bold or skew the shaper applied. Runs shaped with the same face share one object from `tree.fonts`. A run's `y` is its baseline, and `top` and `bottom` add its ascent and descent. `tree.textRuns()` yields every run with the node that paints it, and `tree.find(id)` looks a node up by its source `id`.
+Each run carries its `font`: the registered family, the face index, the weight and style after variations, and any synthetic bold or skew the shaper applied. Runs shaped with the same face share one object from `tree.fonts`. A run's `y` is its baseline, and `top` and `bottom` add its ascent and descent. `lineHeight` and `letterSpacing` carry the used values, so an exporter that lays the text out again, such as a PPTX writer, can reproduce the lines. `tree.textRuns()` yields every run with the node that paints it, and `tree.find(id)` looks a node up by its source `id`.
 
 ## What stays CSS
 

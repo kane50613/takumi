@@ -40,6 +40,8 @@ pub struct RunMetrics {
   pub ascent: f32,
   /// Typographic descent.
   pub descent: f32,
+  /// Used line height.
+  pub line_height: f32,
   /// Underline offset from the baseline.
   pub underline_offset: f32,
   /// Underline stroke thickness.
@@ -401,6 +403,7 @@ impl BuiltInlineLayout<'_> {
             metrics: RunMetrics {
               ascent: metrics.ascent,
               descent: metrics.descent,
+              line_height: brush.line_height_px.unwrap_or(metrics.line_height),
               underline_offset: metrics.underline_offset,
               underline_size: metrics.underline_size,
               strikethrough_offset: metrics.strikethrough_offset,

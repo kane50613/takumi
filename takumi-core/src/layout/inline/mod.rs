@@ -422,6 +422,8 @@ pub struct InlineBrush {
   /// Whether the line height is `normal`, letting fallback-font runs grow the line.
   pub(crate) line_height_is_normal: bool,
   pub(crate) vertical_align: VerticalAlign,
+  /// `letter-spacing` in px.
+  pub(crate) letter_spacing: f32,
 }
 
 impl InlineBrush {
@@ -467,6 +469,7 @@ impl Default for InlineBrush {
       line_height_px: None,
       line_height_is_normal: false,
       vertical_align: VerticalAlign::default(),
+      letter_spacing: 0.0,
     }
   }
 }
@@ -1235,6 +1238,7 @@ mod tests {
       metrics: RunMetrics {
         ascent: 40.0,
         descent: 10.0,
+        line_height: 50.0,
         underline_offset: -5.0,
         underline_size: 2.0,
         strikethrough_offset: 20.0,

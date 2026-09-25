@@ -3,7 +3,9 @@ mod test_utils;
 use std::fs::{create_dir_all, write};
 
 use takumi::prelude::*;
-use takumi_core::paint_tree::{PaintFill, PaintNode, PaintTree, PaintTreeOptions, paint_tree};
+use takumi_core::paint_tree::{
+  PaintFill, PaintNode, PaintTextRun, PaintTree, PaintTreeOptions, paint_tree,
+};
 use test_utils::{CONTEXT, TEST_IMAGES, format_generated};
 
 const CSS: &str = r#"
@@ -23,7 +25,9 @@ const CSS: &str = r#"
     font-family: Geist;
     font-size: 26px;
   }
-  .big { font-size: 40px; font-weight: 700; color: rgb(179, 38, 30); text-decoration: underline; }
+  .big { font-size: 40px; font-weight: 700; color: rgb(179, 38, 30); text-decoration: underline; letter-spacing: 2px; }
+  .p { text-align: center; line-height: 40px; }
+  .rtl { direction: rtl; }
   .mark { display: inline; background-color: yellow; opacity: 0.5; }
   b { display: inline; font-weight: 700; color: rgb(0, 0, 255); }
   .pic { width: 120px; height: 80px; object-fit: cover; border-radius: 8px; }
@@ -71,12 +75,19 @@ fn find<'t>(node: &'t PaintNode, id: &str) -> Option<&'t PaintNode> {
   node.children.iter().find_map(|child| find(child, id))
 }
 
-fn all_runs(node: &PaintNode) -> Vec<&takumi_core::paint_tree::PaintTextRun> {
-  let mut runs: Vec<_> = node.text_runs.iter().collect();
+fn all_nodes(node: &PaintNode) -> Vec<&PaintNode> {
+  let mut nodes = vec![node];
   for child in &node.children {
-    runs.extend(all_runs(child));
+    nodes.extend(all_nodes(child));
   }
-  runs
+  nodes
+}
+
+fn all_runs(node: &PaintNode) -> Vec<&PaintTextRun> {
+  all_nodes(node)
+    .into_iter()
+    .flat_map(|node| &node.text_runs)
+    .collect()
 }
 
 #[test]
@@ -94,6 +105,10 @@ fn paint_tree_records_used_values() {
   assert_eq!((card.width, card.height), (400.0, card.height));
   assert_eq!((card.x, card.y), (0.0, 0.0));
   assert_eq!(card.transform, None);
+  assert_eq!(
+    (card.content_box.x, card.content_box.width),
+    (24.0, card.width - 48.0)
+  );
   let background = card.background.as_ref().expect("card background");
   let border = card.border.as_ref().expect("card border");
   let shadows = card.shadows.as_ref().expect("card shadows");
@@ -125,6 +140,7 @@ fn paint_tree_records_used_values() {
   let big = runs[0];
   assert_eq!(big.color, [179, 38, 30, 255]);
   assert_eq!(big.font_size, 40.0);
+  assert_eq!(big.letter_spacing, 2.0);
   assert!(!big.decorations.is_empty());
   assert!(big.decorations.iter().all(|d| d.line == "underline"));
   let world = runs[2];
@@ -133,23 +149,23 @@ fn paint_tree_records_used_values() {
   assert_eq!(font(world).weight, 700.0);
   assert_eq!(font(world).family.as_deref(), Some("Geist"));
   assert_eq!(font(runs[1]).weight, 400.0);
+  assert_eq!((runs[1].line_height, runs[1].letter_spacing), (40.0, 0.0));
 
   let paragraph = find(&tree.root, "paragraph").expect("paragraph box");
+  assert_eq!(paragraph.text_align.as_deref(), Some("center"));
   assert_eq!(paragraph.inline_backgrounds.len(), 1);
   assert_eq!(paragraph.inline_backgrounds[0].color, [255, 255, 0, 255]);
   assert_eq!(paragraph.inline_backgrounds[0].opacity, 0.5);
 
-  let image = tree
-    .root
-    .children
-    .iter()
-    .chain(card.children.iter())
-    .find_map(|node| node.image.as_ref())
-    .expect("image content");
+  let picture = all_nodes(&tree.root)
+    .into_iter()
+    .find(|node| node.image.is_some())
+    .expect("image node");
   assert_eq!(
-    (image.content_box.width, image.content_box.height),
+    (picture.content_box.width, picture.content_box.height),
     (120.0, 80.0)
   );
+  let image = picture.image.as_ref().expect("image content");
   assert_eq!(image.src.as_deref(), Some("assets/images/yeecord.png"));
   assert!(image.placement.width >= 120.0 && image.placement.height >= 80.0);
 
@@ -209,4 +225,16 @@ fn zero_font_size_container_keeps_sized_child_runs() {
     ["visible"]
   );
   assert_eq!(runs[0].font_size, 18.0);
+}
+
+#[test]
+fn text_align_start_resolves_to_the_writing_direction() {
+  let tree = build(Node::container([Node::text("abc")]).with_class_name("rtl"));
+
+  assert_eq!(
+    all_nodes(&tree.root)
+      .into_iter()
+      .find_map(|node| node.text_align.as_deref()),
+    Some("right")
+  );
 }

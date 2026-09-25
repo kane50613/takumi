@@ -109,10 +109,24 @@ describe("Painter.paint", () => {
   });
 
   it("iterates a tree deeper than the call stack", () => {
-    const leaf: PaintNodeData = { width: 0, height: 0, x: 0, y: 0, opacity: 1, isolate: false };
+    const box = { x: 0, y: 0, width: 0, height: 0 };
+    const leaf: PaintNodeData = { ...box, contentBox: box, opacity: 1, isolate: false };
     let root = leaf;
     for (let depth = 0; depth < 100_000; depth++) root = { ...leaf, children: [root] };
 
     expect([...new PaintTree({ width: 0, height: 0, fonts: [], root })]).toHaveLength(100_001);
+  });
+
+  it("keeps the values a text re-layout needs", async () => {
+    const tree = await painter.paint(
+      `<div id="title" style="width: 200px; padding: 10px; text-align: center; line-height: 30px; letter-spacing: 2px">Title</div>`,
+      { width: 400 },
+    );
+
+    const title = tree.find("title");
+    expect(title?.textAlign).toBe("center");
+    expect(title?.contentBox).toEqual({ x: 10, y: 10, width: 180, height: 30 });
+    const [run] = texts(tree);
+    expect([run?.lineHeight, run?.letterSpacing]).toEqual([30, 2]);
   });
 });

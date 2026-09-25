@@ -121,6 +121,7 @@ impl Walker {
       height: layout.size.height,
       x,
       y,
+      content_box: PaintRect::new(layout.content_box_offset(), layout.content_box_size()),
       transform: (!transform.only_translation()).then(|| transform.to_cols_array()),
       opacity: style.opacity.0,
       blend_mode: (style.mix_blend_mode != BlendMode::Normal)
@@ -135,6 +136,7 @@ impl Walker {
       text_shadows: Vec::new(),
       inline_backgrounds: Vec::new(),
       text_runs: Vec::new(),
+      text_align: None,
       unresolved_effects: unresolved(node),
       children: Vec::new(),
     }
@@ -191,6 +193,13 @@ impl Walker {
     ));
     let runs = built.resolve_runs(context, layout)?;
 
+    painted.text_align = Some(
+      context
+        .style
+        .text_align
+        .resolve(context.style.direction)
+        .to_css_string(),
+    );
     painted.text_shadows = font_style
       .painted_text_shadows()
       .map(PaintShadow::from)
@@ -290,6 +299,8 @@ impl Walker {
       descent: shaped.metrics.descent,
       font_index: self.fonts.intern(fonts, shaped),
       font_size: shaped.font_size,
+      line_height: shaped.metrics.line_height,
+      letter_spacing: brush.letter_spacing,
       color: brush.color.0,
       opacity: brush.opacity,
       transform: (!run_transform.is_identity()).then(|| run_transform.to_cols_array()),
@@ -535,7 +546,6 @@ fn image_content(
   layout: ComputedLayout,
 ) -> Option<PaintImage> {
   let context = &node.context;
-  let content_offset = layout.content_box_offset();
   let content_size = layout.content_box_size();
   if content_size.width <= 0.0 || content_size.height <= 0.0 {
     return None;
@@ -555,8 +565,10 @@ fn image_content(
 
   Some(PaintImage {
     src,
-    content_box: PaintRect::new(content_offset, content_size),
-    placement: PaintRect::new(content_offset + placement.offset, placement.size),
+    placement: PaintRect::new(
+      layout.content_box_offset() + placement.offset,
+      placement.size,
+    ),
   })
 }
 

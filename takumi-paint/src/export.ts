@@ -24,6 +24,7 @@ import {
   type PaintInlineBackground,
   type PaintNodeData,
   type PaintOutline,
+  type PaintRect,
   type PaintShadow,
   type PaintSource,
   type PaintStroke,
@@ -126,6 +127,10 @@ export class PaintTextRun {
   declare readonly fontIndex: number;
   /** Font size the run was shaped at. */
   declare readonly fontSize: number;
+  /** Used line height. */
+  declare readonly lineHeight: number;
+  /** `letter-spacing`, already applied to the glyph positions. */
+  declare readonly letterSpacing: number;
   declare readonly color: Rgba;
   /** The span's `opacity`. */
   declare readonly opacity: number;
@@ -175,6 +180,8 @@ export class PaintNode {
   declare readonly x: number;
   /** Top edge of the border box on the canvas. */
   declare readonly y: number;
+  /** The content box: the border box inset by border and padding. */
+  declare readonly contentBox: PaintRect;
   /**
    * Absolute transform when the box is rotated, scaled, or skewed; absent for a plain
    * translation. Its translation is `x`, `y`.
@@ -202,6 +209,8 @@ export class PaintNode {
   declare readonly inlineBackgrounds?: PaintInlineBackground[];
   /** Effects the tree carries as CSS text instead of resolving. */
   declare readonly unresolvedEffects?: PaintUnresolvedEffects;
+  /** `text-align` of the inline content, `start` and `end` resolved to `left` or `right`. */
+  declare readonly textAlign?: "left" | "right" | "center" | "justify";
   /** Shaped text runs in visual order. */
   readonly textRuns: PaintTextRun[];
   /** Boxes painted after this one, in paint order. */

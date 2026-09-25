@@ -110,6 +110,8 @@ pub struct PaintNode {
   pub x: f32,
   /// Top edge of the border box on the canvas.
   pub y: f32,
+  /// The content box: the border box inset by border and padding.
+  pub content_box: PaintRect,
   /// Absolute transform as `[a, b, c, d, e, f]` when the box is rotated, scaled, or skewed;
   /// absent for a plain translation. Its translation is `x`, `y`.
   #[serde(skip_serializing_if = "Option::is_none")]
@@ -148,6 +150,9 @@ pub struct PaintNode {
   /// Shaped text runs in visual order.
   #[serde(skip_serializing_if = "Vec::is_empty")]
   pub text_runs: Vec<PaintTextRun>,
+  /// `text-align` of the inline content, `start` and `end` resolved to `left` or `right`.
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub text_align: Option<String>,
   /// Effects the tree carries as CSS text instead of resolving.
   #[serde(skip_serializing_if = "Option::is_none")]
   pub unresolved_effects: Option<PaintUnresolvedEffects>,
@@ -362,15 +367,13 @@ pub struct PaintOutline {
   pub offset: f32,
 }
 
-/// Replaced image content placed inside its content box.
+/// Replaced image content, clipped to the node's content box.
 #[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PaintImage {
   /// The image URL, when the source was one.
   #[serde(skip_serializing_if = "Option::is_none")]
   pub src: Option<String>,
-  /// The content box the image is placed in and clipped to.
-  pub content_box: PaintRect,
   /// Where the whole image draws after `object-fit` and `object-position`.
   pub placement: PaintRect,
 }
@@ -395,6 +398,10 @@ pub struct PaintTextRun {
   pub font_index: usize,
   /// Font size the run was shaped at.
   pub font_size: f32,
+  /// Used line height.
+  pub line_height: f32,
+  /// `letter-spacing`, already applied to the glyph positions.
+  pub letter_spacing: f32,
   /// Fill color.
   pub color: Rgba,
   /// The span's `opacity`.

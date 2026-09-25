@@ -111,6 +111,7 @@ export type PaintNodeData = {
   height: number;
   x: number;
   y: number;
+  contentBox: PaintRect;
   transform?: Matrix;
   opacity: number;
   blendMode?: string;
@@ -124,6 +125,7 @@ export type PaintNodeData = {
   textShadows?: PaintShadow[];
   inlineBackgrounds?: PaintInlineBackground[];
   textRuns?: PaintTextRunData[];
+  textAlign?: "left" | "right" | "center" | "justify";
   unresolvedEffects?: PaintUnresolvedEffects;
   children?: PaintNodeData[];
 };
@@ -216,11 +218,10 @@ export type PaintOutline = {
   offset: number;
 };
 
+/** Replaced image content, clipped to the node's `contentBox`. */
 export type PaintImage = {
   /** The image URL, when the source was one. */
   src?: string;
-  /** The content box the image is placed in and clipped to. */
-  contentBox: PaintRect;
   /** Where the whole image draws after `object-fit` and `object-position`. */
   placement: PaintRect;
 };
@@ -236,6 +237,8 @@ export type PaintTextRunData = {
   /** Index into `PaintTreeData.fonts`. */
   fontIndex: number;
   fontSize: number;
+  lineHeight: number;
+  letterSpacing: number;
   color: Rgba;
   opacity: number;
   transform?: Matrix;

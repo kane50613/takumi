@@ -426,6 +426,7 @@ impl<'s> From<&'s SizedFontStyle<'s>> for TextStyle<'s, 's, InlineBrush> {
         line_height_px: style.line_height_px,
         line_height_is_normal: style.line_height_is_normal,
         vertical_align: style.parent.vertical_align,
+        letter_spacing: style.letter_spacing,
       },
       text_wrap_mode: style.parent.resolved_text_wrap_mode().into_parley(),
       font_width: style.parent.font_stretch.into_parlance(),
