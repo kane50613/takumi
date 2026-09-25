@@ -3,6 +3,7 @@ use skrifa::color::{Brush, ColorPainter, ColorStop, CompositeMode};
 use skrifa::outline::DrawSettings;
 use skrifa::raw::TableProvider;
 use skrifa::raw::types::BoundingBox;
+use takumi_core::resources::glyph::draw_outline;
 use tiny_skia_path::{Path, PathBuilder};
 
 use crate::krilla::geom::Transform;
@@ -334,9 +335,10 @@ impl ColorPainter for ColrBuilder {
       return;
     };
 
-    let Ok(_) = outline_glyph.draw(
+    let Ok(_) = draw_outline(
+      &outline_glyph,
       DrawSettings::unhinted(skrifa::instance::Size::unscaled(), self.font.location_ref()),
-      &mut takumi_core::resources::glyph::ErasedPen(&mut glyph_builder),
+      &mut glyph_builder,
     ) else {
       self.error = true;
       return;

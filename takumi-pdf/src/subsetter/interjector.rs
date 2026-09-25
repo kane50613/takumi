@@ -21,7 +21,7 @@ pub(crate) mod skrifa {
   use skrifa::outline::{DrawSettings, OutlinePen};
   use skrifa::prelude::Size;
   use skrifa::{FontRef, GlyphId, MetadataProvider};
-  use takumi_core::resources::glyph::ErasedPen;
+  use takumi_core::resources::glyph::draw_outline;
   use write_fonts::tables::glyf::SimpleGlyph;
   use write_fonts::{FontWrite, TableWriter, dump_table};
 
@@ -61,12 +61,12 @@ pub(crate) mod skrifa {
       let glyph_id = GlyphId::new(glyph as u32);
 
       if let Some(outline_glyph) = outlines.get(glyph_id) {
-        outline_glyph
-          .draw(
-            DrawSettings::unhinted(Size::unscaled(), &self.location),
-            &mut ErasedPen(&mut outline_builder),
-          )
-          .ok()?;
+        draw_outline(
+          &outline_glyph,
+          DrawSettings::unhinted(Size::unscaled(), &self.location),
+          &mut outline_builder,
+        )
+        .ok()?;
       }
 
       let path = outline_builder.path;

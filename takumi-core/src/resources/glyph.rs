@@ -12,7 +12,9 @@ use skrifa::{
     PaintCachedColorGlyph, Transform,
   },
   instance::{LocationRef, Size},
-  outline::{DrawSettings, OutlineGlyphCollection, OutlinePen},
+  outline::{
+    AdjustedMetrics, DrawError, DrawSettings, OutlineGlyph, OutlineGlyphCollection, OutlinePen,
+  },
   raw::types::BoundingBox,
 };
 
@@ -312,31 +314,14 @@ fn hash_path_commands(paths: &[Command]) -> u64 {
   h.digest()
 }
 
-/// Type-erased [`OutlinePen`]: skrifa monomorphizes its whole CFF/glyf
-/// evaluator per pen type, which costs ~100KB of wasm per concrete pen.
-/// Route every `OutlineGlyph::draw` call through this instead.
-pub struct ErasedPen<'a>(pub &'a mut dyn OutlinePen);
-
-impl OutlinePen for ErasedPen<'_> {
-  fn move_to(&mut self, x: f32, y: f32) {
-    self.0.move_to(x, y);
-  }
-
-  fn line_to(&mut self, x: f32, y: f32) {
-    self.0.line_to(x, y);
-  }
-
-  fn quad_to(&mut self, cx0: f32, cy0: f32, x: f32, y: f32) {
-    self.0.quad_to(cx0, cy0, x, y);
-  }
-
-  fn curve_to(&mut self, cx0: f32, cy0: f32, cx1: f32, cy1: f32, x: f32, y: f32) {
-    self.0.curve_to(cx0, cy0, cx1, cy1, x, y);
-  }
-
-  fn close(&mut self) {
-    self.0.close();
-  }
+/// Draws `glyph` through `&mut dyn OutlinePen`: skrifa monomorphizes its whole
+/// CFF/glyf evaluator per pen type, which costs ~100KB of wasm per concrete pen.
+pub fn draw_outline(
+  glyph: &OutlineGlyph<'_>,
+  settings: DrawSettings<'_>,
+  mut pen: &mut dyn OutlinePen,
+) -> Result<AdjustedMetrics, DrawError> {
+  glyph.draw(settings, &mut pen)
 }
 
 #[derive(Default)]
@@ -542,12 +527,7 @@ fn resolve_outline_commands(
 ) -> Option<Vec<Command>> {
   let glyph = outline_glyphs.get(glyph_id)?;
   let mut pen = GlyphOutlinePen::default();
-  glyph
-    .draw(
-      DrawSettings::unhinted(size, location),
-      &mut ErasedPen(&mut pen),
-    )
-    .ok()?;
+  draw_outline(&glyph, DrawSettings::unhinted(size, location), &mut pen).ok()?;
   Some(pen.finish())
 }
 
