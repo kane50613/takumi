@@ -2,7 +2,11 @@
 
 use serde::Serialize;
 
-use crate::style::Color;
+use crate::{
+  geometry::{Point, Size},
+  layout::node::Node,
+  shadow::SizedShadow,
+};
 
 /// A color as `[r, g, b, a]`, each `0..=255`.
 pub type Rgba = [u8; 4];
@@ -18,6 +22,18 @@ pub struct PaintRect {
   pub width: f32,
   /// Height.
   pub height: f32,
+}
+
+impl PaintRect {
+  /// The rectangle at `offset` with `size`.
+  pub fn new(offset: Point<f32>, size: Size<f32>) -> Self {
+    Self {
+      x: offset.x,
+      y: offset.y,
+      width: size.width,
+      height: size.height,
+    }
+  }
 }
 
 /// Corner radii as `[x, y]` pairs: top-left, top-right, bottom-right, bottom-left.
@@ -146,6 +162,18 @@ pub struct PaintSource {
   /// The node's class name.
   #[serde(skip_serializing_if = "Option::is_none")]
   pub class_name: Option<String>,
+}
+
+impl PaintSource {
+  /// The source of the box `node` generates at `path`.
+  pub(super) fn new(path: Vec<usize>, node: Option<&Node>) -> Self {
+    Self {
+      path,
+      id: node.and_then(Node::id).map(str::to_owned),
+      tag_name: node.and_then(Node::tag_name).map(str::to_owned),
+      class_name: node.and_then(Node::class_name).map(str::to_owned),
+    }
+  }
 }
 
 /// The rounded padding box children clip to, and which axes clip.
@@ -300,6 +328,18 @@ pub struct PaintShadow {
   pub color: Rgba,
 }
 
+impl From<&SizedShadow> for PaintShadow {
+  fn from(shadow: &SizedShadow) -> Self {
+    Self {
+      offset_x: shadow.offset_x,
+      offset_y: shadow.offset_y,
+      blur: shadow.blur_radius,
+      spread: shadow.spread_radius,
+      color: shadow.color.0,
+    }
+  }
+}
+
 /// A box's outline, drawn outside the border box.
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct PaintOutline {
@@ -432,9 +472,4 @@ pub struct PaintUnresolvedEffects {
   /// `clip-path`.
   #[serde(skip_serializing_if = "Option::is_none")]
   pub clip_path: Option<String>,
-}
-
-/// The `[r, g, b, a]` form of a color.
-pub(super) fn rgba(color: Color) -> Rgba {
-  color.0
 }

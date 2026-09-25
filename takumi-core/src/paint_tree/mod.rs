@@ -26,7 +26,7 @@ use crate::{
   layout::{node::Node, tree::RenderNode},
   resources::image::ImageSource,
   scene::Scene,
-  style::{Affine, ComputedStyle, FontFamily, Lang, SizingContext, StyleSheet},
+  style::{ComputedStyle, FontFamily, Lang, SizingContext, StyleSheet},
   viewport::Viewport,
 };
 
