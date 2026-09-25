@@ -468,7 +468,7 @@ checksum = "77ce24cb58228fbb8aa041425bb1050850ac19177686ea6e0f41a70416f56fdb"
 [[package]]
 name = "font-types"
 version = "0.12.1"
-source = "git+https://github.com/kane50613/fontations?rev=8070d52c3310579e0266fa0999abe4182a0f4be5#8070d52c3310579e0266fa0999abe4182a0f4be5"
+source = "git+https://github.com/kane50613/fontations?rev=caf93ec16d8e0f268da88dbdedd2fb21d7191170#caf93ec16d8e0f268da88dbdedd2fb21d7191170"
 dependencies = [
  "bytemuck",
 ]
@@ -1401,7 +1401,7 @@ dependencies = [
 [[package]]
 name = "read-fonts"
 version = "0.41.0"
-source = "git+https://github.com/kane50613/fontations?rev=8070d52c3310579e0266fa0999abe4182a0f4be5#8070d52c3310579e0266fa0999abe4182a0f4be5"
+source = "git+https://github.com/kane50613/fontations?rev=caf93ec16d8e0f268da88dbdedd2fb21d7191170#caf93ec16d8e0f268da88dbdedd2fb21d7191170"
 dependencies = [
  "bytemuck",
  "font-types",
@@ -1658,7 +1658,7 @@ checksum = "8ee5873ec9cce0195efcb7a4e9507a04cd49aec9c83d0389df45b1ef7ba2e649"
 [[package]]
 name = "skrifa"
 version = "0.44.0"
-source = "git+https://github.com/kane50613/fontations?rev=8070d52c3310579e0266fa0999abe4182a0f4be5#8070d52c3310579e0266fa0999abe4182a0f4be5"
+source = "git+https://github.com/kane50613/fontations?rev=caf93ec16d8e0f268da88dbdedd2fb21d7191170#caf93ec16d8e0f268da88dbdedd2fb21d7191170"
 dependencies = [
  "bytemuck",
  "read-fonts",
