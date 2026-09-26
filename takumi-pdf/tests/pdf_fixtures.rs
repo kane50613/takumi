@@ -3696,6 +3696,37 @@ fn inline_images() {
   );
 }
 
+/// A decorated inline image paints its background, shadow, and border as
+/// artifacts, which cannot open inside the image's own tag in the same stream.
+#[test]
+fn inline_image_decorations_in_a_tagged_document() {
+  let doc = r#"<div style="display:block;font-size:14px;">Text before <img src="inline" alt="decorated" style="width:20px;height:20px;background-color:#00f;border:2px solid #f00;box-shadow:2px 2px #0f0;" /> and a faded <img src="inline" alt="faded" style="width:20px;height:20px;opacity:0.5;border:2px solid #f00;box-shadow:2px 2px #0f0;" /> after.</div>"#;
+  let pdf = run_pdf_fixture("inline-image-decorations", |fonts| {
+    let inline = ImageBuffer::from_rgba_bytes(vec![128; 4 * 4 * 4], 4, 4).expect("image buffer");
+
+    PdfOptions::builder()
+      .node(from_html(doc, FromHtmlOptions::default()).expect("parse image doc"))
+      .images(HashMap::from([(
+        "inline".into(),
+        ImageSource::Bitmap(Arc::new(inline)),
+      )]))
+      .page(PageOptions::A4)
+      .fonts(fonts)
+      .build()
+  });
+  let haystack = inflated_text(&pdf);
+
+  assert_eq!(
+    haystack.matches("/x0 Do").count(),
+    2,
+    "expected both decorated inline images on the page"
+  );
+  assert!(
+    haystack.contains("/ca 0.5"),
+    "expected the faded inline image at half opacity"
+  );
+}
+
 /// CSS trims a replaced element to its content edge curve, so `border-radius`
 /// on an `<img>` rounds the picture and not only the box behind it.
 #[test]
