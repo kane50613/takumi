@@ -1,0 +1,69 @@
+---
+title: Drawing
+description: Place paint nodes and replay their layers in order.
+icon: PenTool
+---
+
+A `PaintNode` is a border box and a compositing group. Its drawing data uses coordinates relative to the border box. `node.matrix` places that box on the canvas.
+
+## Place a box
+
+`node.matrix` returns the absolute `transform` when present. Otherwise it returns a translation from `node.x` and `node.y`. Canvas accepts the six matrix values in the same order.
+
+```ts twoslash title="place.ts"
+import type { PaintNode } from "takumi-paint";
+
+function place(ctx: CanvasRenderingContext2D, node: PaintNode) {
+  ctx.setTransform(...node.matrix);
+}
+```
+
+All lengths use device pixels. With `devicePixelRatio: 2`, a CSS length of `20px` becomes `40` in the tree.
+
+## Follow paint order
+
+A tree iterator yields parents before children. Within each node, paint these layers in order:
+
+| Order                       | Data                      |
+| --------------------------- | ------------------------- |
+| Outer shadows               | `shadows?.outer`          |
+| Background color and layers | `background`              |
+| Inset shadows               | `shadows?.inset`          |
+| Border                      | `border`                  |
+| Replaced image              | `image`                   |
+| Inline backgrounds          | `inlineBackgrounds`       |
+| Text shadows and runs       | `textShadows`, `textRuns` |
+| Child boxes                 | `children`                |
+| Outline                     | `outline`                 |
+
+An outline follows its children. Recurse through `children` when drawing complete boxes; the flat iterator yields the parent first.
+
+```tsx twoslash title="visit.tsx"
+import { paint, type PaintNode } from "takumi-paint";
+
+const tree = await paint(
+  <div style={{ background: "red" }}>
+    <span>Hi</span>
+  </div>,
+  { width: 320 },
+);
+
+function visit(node: PaintNode) {
+  if (node.background?.color) console.log("background", node.background.color);
+  for (const run of node.textRuns) console.log("text", run.text);
+  for (const child of node.children) visit(child);
+  if (node.outline) console.log("outline", node.outline);
+}
+
+visit(tree.root);
+```
+
+## Apply group effects
+
+`opacity`, `blendMode`, and `isolate` belong to the whole node, including its children. `clip` is a rounded padding box and records which axes clip. A Canvas replay needs an offscreen group for overlapping content under group opacity; setting `globalAlpha` on each draw call changes the result.
+
+## Read background layers
+
+`background.layers` runs from bottom to top. Each layer has a `fill`, tile positions, and a blend mode. Linear and radial fills include resolved geometry and stops. A conic fill retains its CSS text.
+
+`unresolvedEffects` carries `filter`, `backdropFilter`, `maskImage`, and `clipPath` as CSS text. The tree does not resolve those effects into drawing geometry.

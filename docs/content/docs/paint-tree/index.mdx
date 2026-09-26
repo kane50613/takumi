@@ -1,0 +1,62 @@
+---
+title: Paint tree
+description: Get the boxes, images, and shaped text that takumi would paint.
+index: true
+icon: BookOpen
+---
+
+`takumi-paint` lays out JSX, HTML, or a takumi node tree. It returns drawing data for Canvas, presentation files, and native drawing APIs.
+
+```npm
+npm i takumi-paint @takumi-rs/helpers
+```
+
+## Paint JSX
+
+`paint()` returns a `PaintTree`. The tree has a canvas size, a font table, and a root box.
+
+```tsx twoslash title="inspect.tsx"
+import { paint } from "takumi-paint";
+
+const tree = await paint(
+  <div id="card" style={{ width: 240, padding: 16 }}>
+    Hello
+  </div>,
+  { width: 320 },
+);
+
+const card = tree.find("card");
+if (!card) throw new Error("Card was not painted");
+
+console.log(
+  tree.width,
+  card.contentBox,
+  card.textRuns.map((run) => run.text),
+);
+```
+
+The returned lengths are device pixels. Set `devicePixelRatio` to scale CSS lengths during layout.
+
+## Read the result
+
+| Need                           | Read                                    |
+| ------------------------------ | --------------------------------------- |
+| Draw boxes in order            | [Drawing](/docs/paint-tree/drawing)     |
+| Place text or lay it out again | [Text](/docs/paint-tree/text)           |
+| Check options and field types  | [Reference](/docs/paint-tree/reference) |
+
+## Reuse a painter
+
+`paint()` uses a shared `Painter`. A dedicated `Painter` keeps its registered fonts separate. Release its WebAssembly memory when finished.
+
+```tsx twoslash title="painter.tsx"
+import { Painter } from "takumi-paint";
+
+const painter = new Painter();
+try {
+  const tree = await painter.paint(<p>Hello</p>, { width: 320 });
+  console.log(tree.height);
+} finally {
+  painter.free();
+}
+```

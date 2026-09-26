@@ -18,6 +18,7 @@ import { takumiPlugin } from "fumapress/plugins/takumi";
 import {
   ArrowBigRight,
   BookOpen,
+  Brush,
   FileCode2,
   FileText,
   Hand,
@@ -41,6 +42,16 @@ import { TypeTable } from "./app/components/type-table";
 import { Video } from "./app/components/video";
 
 const PDF_ACCENT = "#3b82f6";
+const PAINT_ACCENT = "#8b5cf6";
+
+const SECTION_CLASSES = [
+  ["/docs/pdf", "pdf-section"],
+  ["/docs/paint-tree", "paint-section"],
+] as const;
+
+function sectionClass(url: string) {
+  return SECTION_CLASSES.find(([root]) => url === root || url.startsWith(`${root}/`))?.[1];
+}
 
 function tabIcon(icon: ReactNode, color: string) {
   return (
@@ -205,15 +216,15 @@ export default defineConfig({
             tree = { ...tree, children: child.children };
           }
         }
-        const inPdfSection = page.url === "/docs/pdf" || page.url.startsWith("/docs/pdf/");
+        const className = sectionClass(page.url);
 
         return {
           layoutProps: {
             tree,
-            containerProps: inPdfSection ? { className: "pdf-section" } : undefined,
+            containerProps: className ? { className } : undefined,
             sidebar: {
               // Active tab resolves by findLast + prefix match, so the nested
-              // PDF root must come after the whole-docs tab.
+              // roots must come after the whole-docs tab.
               tabs: [
                 {
                   title: "Image",
@@ -226,6 +237,12 @@ export default defineConfig({
                   description: "Paged documents with takumi-pdf",
                   url: "/docs/pdf",
                   icon: tabIcon(<FileText size="100%" />, PDF_ACCENT),
+                },
+                {
+                  title: "Paint",
+                  description: "Boxes, images, and text runs with takumi-paint",
+                  url: "/docs/paint-tree",
+                  icon: tabIcon(<Brush size="100%" />, PAINT_ACCENT),
                 },
               ],
             },

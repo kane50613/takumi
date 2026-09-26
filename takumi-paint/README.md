@@ -22,7 +22,7 @@ npm install takumi-paint @takumi-rs/helpers
 `paint()` lays out the document. The tree iterates its boxes in paint order, so drawing is one loop.
 
 ```tsx
-import { paint } from "takumi-paint";
+import { paint, type Rgba } from "takumi-paint";
 
 const tree = await paint(
   <div style={{ width: 640, padding: 32, background: "#F7F3EC", flexDirection: "column", gap: 8 }}>
@@ -51,7 +51,7 @@ function draw(ctx: CanvasRenderingContext2D) {
   ctx.resetTransform();
 }
 
-const rgba = ([r, g, b, a]: number[]) => `rgb(${r} ${g} ${b} / ${a / 255})`;
+const rgba = ([r, g, b, a]: Rgba) => `rgb(${r} ${g} ${b} / ${a / 255})`;
 ```
 
 ## What the tree holds
@@ -77,4 +77,4 @@ const rgba = ([r, g, b, a]: number[]) => `rgb(${r} ${g} ${b} / ${a / 255})`;
 | Conic gradients                                        | CSS text                           |
 | `filter`, `backdrop-filter`, `mask-image`, `clip-path` | CSS text under `unresolvedEffects` |
 
-The [paint tree reference](https://takumi.kane.tw/docs/paint-tree) lists every field.
+The [paint tree reference](https://takumi.kane.tw/docs/paint-tree/reference) lists every field.
