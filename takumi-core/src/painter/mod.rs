@@ -1,19 +1,23 @@
 //! The seam between deciding what to paint and painting it.
 
 mod background;
+mod border;
 
-pub use self::background::{BackgroundClipArea, BoxBackground};
+pub use self::{
+  background::{BackgroundClipArea, BoxBackground},
+  border::BoxBorderPainter,
+};
 
 use crate::{
   context::RenderContext,
   geometry::{ComputedLayout, PathCommand, Point, Rect, Size},
   layout::{
-    border::{BorderPaint, BorderProperties},
+    border::BorderProperties,
     decoration::{ClipBox, OutlineGeometry},
     inline::DecorationRect,
   },
   shadow::SizedShadow,
-  style::{Affine, BackgroundImage, BoxShadow, Color, FillRule, Overflow, Sides},
+  style::{Affine, BackgroundImage, BoxShadow, Color, FillRule, Overflow},
 };
 
 /// A closed shape to fill, in the coordinate space of the box that owns it.
@@ -198,6 +202,12 @@ pub trait PaintDevice {
 
   /// Strokes `shape` under `transform`.
   fn stroke_shape(&mut self, _shape: &FillShape, _stroke: &StrokeStyle, _transform: Affine) {}
+
+  /// Saves the drawing state, then clips later draws to the shape under its transform, if any.
+  fn save(&mut self, clip: Option<(&FillShape, Affine)>);
+
+  /// Restores the state the matching [`PaintDevice::save`] saved.
+  fn restore(&mut self);
 }
 
 /// How to stroke a shape.
@@ -356,100 +366,5 @@ impl DecorationRect {
         y: f + origin.y,
       },
     );
-  }
-}
-
-impl BorderProperties {
-  /// Paints the border ring at `origin`, unless it needs per-side work: a uniform dashed or
-  /// dotted border strokes the centerline so the pattern runs round the whole ring, and a double
-  /// border fills two rings.
-  pub fn paint_ring<D: PaintDevice>(
-    &self,
-    size: Size<f32>,
-    origin: Point<f32>,
-    device: &mut D,
-  ) -> bool {
-    let at = Affine::translation(origin.x, origin.y);
-
-    match self.paint() {
-      BorderPaint::Sides => return false,
-      // A transparent ring is a fill nobody sees, and painting it would only
-      // lengthen the output.
-      BorderPaint::Ring { color }
-      | BorderPaint::Double { color, .. }
-      | BorderPaint::Stroked { color, .. }
-        if color.0[3] == 0 => {}
-      BorderPaint::Ring { color } => {
-        device.fill_shape(&FillShape::border_ring(self, size), color, at);
-      }
-      BorderPaint::Double { color, width } => {
-        let third = width / 3.0;
-
-        for inset in [0.0, third * 2.0] {
-          let mut ring = *self;
-
-          ring.expand_by(Rect {
-            top: -inset,
-            right: -inset,
-            bottom: -inset,
-            left: -inset,
-          });
-          ring.width = Sides([third; 4]).into();
-
-          let ring_size = Size {
-            width: (size.width - inset * 2.0).max(0.0),
-            height: (size.height - inset * 2.0).max(0.0),
-          };
-
-          device.fill_shape(
-            &FillShape::border_ring(&ring, ring_size),
-            color,
-            Affine::translation(origin.x + inset, origin.y + inset),
-          );
-        }
-      }
-      BorderPaint::Stroked {
-        color,
-        width,
-        style,
-      } => {
-        let half = width / 2.0;
-        let mut center = *self;
-
-        center.expand_by(Rect {
-          top: -half,
-          right: -half,
-          bottom: -half,
-          left: -half,
-        });
-
-        let center_size = Size {
-          width: (size.width - width).max(0.0),
-          height: (size.height - width).max(0.0),
-        };
-        let mut commands = Vec::with_capacity(BorderProperties::PATH_COMMANDS_AMOUNT);
-
-        center.append_mask_commands(&mut commands, center_size, Point { x: half, y: half });
-
-        let perimeter = center.approximate_rounded_rect_perimeter(center_size);
-        let dash = style.dash_pattern(width, perimeter, true);
-
-        device.stroke_shape(
-          &FillShape::Path {
-            commands,
-            rule: FillRule::NonZero,
-          },
-          &StrokeStyle {
-            color,
-            width,
-            dash: dash.map(|dash| dash.intervals),
-            round_cap: dash.is_some_and(|dash| dash.round_cap),
-          },
-          at,
-        );
-      }
-    }
-
-    true
   }
 }

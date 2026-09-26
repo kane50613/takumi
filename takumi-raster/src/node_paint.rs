@@ -7,7 +7,7 @@
 use takumi_core::{
   geometry::{ComputedLayout as Layout, Point},
   layout::decoration::{ClipBox, OutlineGeometry},
-  painter::{BackgroundClipArea, BoxPainter, FillShape, PaintDevice},
+  painter::{BackgroundClipArea, BoxPainter, FillShape, PaintDevice, StrokeStyle},
   style::{Color, ImageScalingAlgorithm},
 };
 
@@ -18,11 +18,12 @@ use super::{
   paint_border, rasterize_layers,
 };
 use crate::{
-  Result,
+  Placement, Result, Style, intersect_alpha_masks,
   layout::{
     inline::{InlineItem, InlineLayoutMode, InlineLayoutRequest, create_inline_layout},
     node::{ImageData, Node, NodeKind, TextData},
   },
+  render_mask,
   style::{Affine, BlendMode},
 };
 
@@ -98,26 +99,74 @@ pub(crate) fn draw_box_shell(
   draw_border(context, canvas, layout)
 }
 
-/// The canvas as a [`PaintDevice`]. A rounded rectangle composites through the
-/// same border machinery the tile path uses, so nothing rasterizes a path that
-/// did not before.
+/// The canvas as a [`PaintDevice`]. An unclipped rounded rectangle composites
+/// through the same border machinery the tile path uses, so a background colour
+/// rasterizes as it always has.
 pub(crate) struct CanvasDevice<'c> {
   pub(crate) canvas: &'c mut Canvas,
   pub(crate) transform: Affine,
   pub(crate) algorithm: ImageScalingAlgorithm,
+  /// The coverage each open [`PaintDevice::save`] clips to, if it clips.
+  pub(crate) clips: Vec<Option<(Vec<u8>, Placement)>>,
+}
+
+impl<'c> CanvasDevice<'c> {
+  pub(crate) fn new(
+    canvas: &'c mut Canvas,
+    transform: Affine,
+    algorithm: ImageScalingAlgorithm,
+  ) -> Self {
+    Self {
+      canvas,
+      transform,
+      algorithm,
+      clips: Vec::new(),
+    }
+  }
+
+  /// Rasterizes `shape` under `transform`, culled to the canvas.
+  fn coverage(&self, shape: &FillShape, style: Style, transform: Affine) -> (Vec<u8>, Placement) {
+    render_mask(
+      &shape.to_commands(),
+      Some(self.transform * transform),
+      Some(style),
+      Some(self.canvas.viewport()),
+    )
+  }
+
+  /// Paints `coverage` in `color`, limited to the open clips.
+  fn draw_coverage(&mut self, coverage: (Vec<u8>, Placement), color: Color) {
+    let mut coverage = coverage;
+
+    for (clip, placement) in self.clips.iter().flatten() {
+      let Some(clipped) = intersect_alpha_masks(&coverage.0, coverage.1, clip, *placement) else {
+        return;
+      };
+
+      coverage = clipped;
+    }
+
+    self
+      .canvas
+      .draw_mask(&coverage.0, coverage.1, color, BlendMode::Normal);
+  }
 }
 
 impl PaintDevice for CanvasDevice<'_> {
   fn fill_shape(&mut self, shape: &FillShape, color: Color, transform: Affine) {
+    let unclipped = self.clips.iter().all(Option::is_none);
     let (border, size, offset) = match shape {
-      FillShape::Rect(size) => (BorderProperties::default(), *size, Point::ZERO),
+      FillShape::Rect(size) if unclipped => (BorderProperties::default(), *size, Point::ZERO),
       FillShape::RoundedRect {
         border,
         size,
         offset,
-      } => (*border, *size, *offset),
-      // A path that is not a rectangle never reaches a background colour.
-      FillShape::Path { .. } => return,
+      } if unclipped => (*border, *size, *offset),
+      _ => {
+        let coverage = self.coverage(shape, Fill::from(shape.rule()).into(), transform);
+
+        return self.draw_coverage(coverage, color);
+      }
     };
     if size.width <= 0.0 || size.height <= 0.0 {
       return;
@@ -132,6 +181,23 @@ impl PaintDevice for CanvasDevice<'_> {
       BlendMode::Normal,
     );
   }
+
+  fn stroke_shape(&mut self, shape: &FillShape, stroke: &StrokeStyle, transform: Affine) {
+    let coverage = self.coverage(shape, Style::Stroke(stroke.into()), transform);
+
+    self.draw_coverage(coverage, stroke.color);
+  }
+
+  fn save(&mut self, clip: Option<(&FillShape, Affine)>) {
+    let clip = clip
+      .map(|(shape, transform)| self.coverage(shape, Fill::from(shape.rule()).into(), transform));
+
+    self.clips.push(clip);
+  }
+
+  fn restore(&mut self) {
+    self.clips.pop();
+  }
 }
 
 pub(crate) fn draw_background(
@@ -141,11 +207,7 @@ pub(crate) fn draw_background(
 ) -> Result<()> {
   let painter = BoxPainter::new(context, layout);
   let background = painter.background();
-  let mut device = CanvasDevice {
-    canvas,
-    transform: context.transform,
-    algorithm: context.style.image_rendering,
-  };
+  let mut device = CanvasDevice::new(canvas, context.transform, context.style.image_rendering);
 
   // A blending layer mixes with the layers and color beneath it and nothing behind the box, so
   // the whole background composites in one tile, color included.
@@ -154,7 +216,7 @@ pub(crate) fn draw_background(
     .iter()
     .any(|layer| layer.blend_mode != BlendMode::Normal);
 
-  if !isolated {
+  if !isolated && !matches!(background.clip, BackgroundClipArea::BorderArea(_)) {
     painter.background_color(Point::ZERO, &mut device);
   }
 

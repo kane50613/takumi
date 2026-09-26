@@ -1,4 +1,4 @@
-use takumi_core::geometry::PathCommand;
+use takumi_core::{geometry::PathCommand, painter::StrokeStyle};
 use tiny_skia::{
   FillRule as TinyFillRule, LineCap as TinyLineCap, LineJoin as TinyLineJoin, Path as TinyPath,
   PathBuilder as TinyPathBuilder, Stroke as TinyStroke, StrokeDash as TinyStrokeDash,
@@ -68,6 +68,23 @@ impl Stroke {
       join: Join::Miter,
       cap: Cap::Butt,
       dash: None,
+    }
+  }
+}
+
+impl From<&StrokeStyle> for Stroke {
+  fn from(style: &StrokeStyle) -> Self {
+    Self {
+      cap: if style.round_cap {
+        Cap::Round
+      } else {
+        Cap::Butt
+      },
+      dash: style.dash.map(|intervals| DashPattern {
+        intervals,
+        offset: 0.0,
+      }),
+      ..Self::new(style.width)
     }
   }
 }

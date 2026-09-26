@@ -26,8 +26,8 @@ use takumi_core::{
   },
   paint::ConicGradientTile,
   painter::{
-    BackgroundClipArea, BoxBackground, BoxFrame, BoxPainter, BoxShadows, FillShape, OverflowClip,
-    PaintDevice, StrokeStyle,
+    BackgroundClipArea, BoxBackground, BoxBorderPainter, BoxFrame, BoxPainter, BoxShadows,
+    FillShape, OverflowClip, PaintDevice, StrokeStyle,
   },
   scene::{NodePaint, PaintItemKind, Scene},
   shadow::SizedShadow,
@@ -869,6 +869,7 @@ impl Emitter<'_> {
       surface,
       filter: self.color_filter.as_deref(),
       artifact,
+      saves: Vec::new(),
     }
   }
 
@@ -930,7 +931,9 @@ impl Emitter<'_> {
 
     // The device opens its own artifact per fill, so a border that paints
     // nothing leaves no empty region behind.
-    if border.paint_ring(size, origin, &mut self.device(surface, self.tagged)) {
+    if BoxBorderPainter::new(border, size)
+      .paint_fast_path(origin, &mut self.device(surface, self.tagged))
+    {
       return;
     }
     let mut sides = border.painted_sides().peekable();
@@ -1741,6 +1744,17 @@ struct SurfaceDevice<'s, 'a> {
   /// once something paints leaves no empty region behind, since marked
   /// content does not nest.
   artifact: bool,
+  /// What each open [`PaintDevice::save`] clipped to.
+  saves: Vec<SavedClip>,
+}
+
+/// The clip one [`PaintDevice::save`] pushed.
+#[derive(Clone, Copy, PartialEq)]
+enum SavedClip {
+  None,
+  Path,
+  /// A clip with no area, which hides every draw until it is restored.
+  Empty,
 }
 
 impl SurfaceDevice<'_, '_> {
@@ -1762,23 +1776,27 @@ impl SurfaceDevice<'_, '_> {
     } else {
       CorePoint::ZERO
     };
+    if self.saves.contains(&SavedClip::Empty) {
+      return;
+    }
     let Some(path) = build(origin) else {
       return;
     };
+    let artifact = self.artifact && self.saves.is_empty();
 
     if !flat {
       self
         .surface
         .push_transform(&krilla_transform(transform.to_cols_array()));
     }
-    if self.artifact {
+    if artifact {
       self.surface.start_tagged(ARTIFACT);
     }
     paint(self.surface, &path);
     if !flat {
       self.surface.pop();
     }
-    if self.artifact {
+    if artifact {
       self.surface.end_tagged();
     }
   }
@@ -1830,6 +1848,66 @@ impl PaintDevice for SurfaceDevice<'_, '_> {
         surface.set_stroke(None);
       },
     );
+  }
+
+  fn save(&mut self, clip: Option<(&FillShape, Affine)>) {
+    // A whole saved state is one artifact, since marked content does not nest.
+    if self.artifact && self.saves.is_empty() {
+      self.surface.start_tagged(ARTIFACT);
+    }
+    let saved = match clip {
+      None => SavedClip::None,
+      Some((shape, transform)) => {
+        let path = if transform.only_translation() {
+          shape_path(
+            shape,
+            CorePoint {
+              x: transform.x,
+              y: transform.y,
+            },
+          )
+        } else {
+          let commands: Vec<_> = shape
+            .to_commands()
+            .into_iter()
+            .map(|command| {
+              command.map_points(|point| {
+                let (x, y) = transform.transform_point(point.x, point.y);
+
+                CorePoint { x, y }
+              })
+            })
+            .collect();
+
+          krilla_path(&commands, CorePoint::ZERO)
+        };
+
+        match path {
+          Some(path) => {
+            self
+              .surface
+              .push_clip_path(&path, &krilla_fill_rule(shape.rule()));
+            SavedClip::Path
+          }
+          None => SavedClip::Empty,
+        }
+      }
+    };
+
+    self.saves.push(saved);
+  }
+
+  fn restore(&mut self) {
+    let Some(saved) = self.saves.pop() else {
+      return;
+    };
+
+    if saved == SavedClip::Path {
+      self.surface.pop();
+    }
+    if self.artifact && self.saves.is_empty() {
+      self.surface.end_tagged();
+    }
   }
 }
 

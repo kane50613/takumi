@@ -6,10 +6,10 @@ use takumi_core::{
   Fonts,
   context::RenderContext,
   error::Result,
-  geometry::{PathCommand, Point, Size},
+  geometry::{Point, Size},
   layout::{
     background_image_geometry::FillLayers,
-    border::{BorderProperties, BorderSide, PaintedSide},
+    border::BorderProperties,
     decoration::{ClipBox, OutlineGeometry},
     inline::{InlineBoxItem, VisualInlineBox},
     inline_box::{InlineBoxPaint, resolve_inline_box},
@@ -17,13 +17,14 @@ use takumi_core::{
     tree::RenderNode,
   },
   painter::{
-    BackgroundClipArea, BoxFrame, BoxPainter, FillShape, OverflowClip, PaintDevice, StrokeStyle,
+    BackgroundClipArea, BoxBorderPainter, BoxFrame, BoxPainter, FillShape, OverflowClip,
+    PaintDevice, StrokeStyle,
   },
   resources::image::ImageSource,
   scene::Scene,
   style::{
-    Affine, BackgroundImage, BasicShape, BlendMode, BorderStyle, Color, ComputedStyle, FillRule,
-    FontFamily, Isolation, Lang, ShapeRadius, Sides, SizingContext, SpacePair, StyleSheet, ToCss,
+    Affine, BackgroundImage, BasicShape, BlendMode, Color, ComputedStyle, FillRule, FontFamily,
+    Isolation, Lang, ShapeRadius, Sides, SizingContext, SpacePair, StyleSheet, ToCss,
   },
   viewport::Viewport,
 };
@@ -587,12 +588,17 @@ fn resolve_shape_radius(
 /// A [`PaintDevice`] writing into an [`SvgDocument`], keeping the first write error.
 pub(crate) struct DocumentDevice<'d> {
   doc: &'d mut SvgDocument,
+  groups: Vec<GroupToken>,
   error: Option<io::Error>,
 }
 
 impl<'d> DocumentDevice<'d> {
   pub(crate) fn new(doc: &'d mut SvgDocument) -> Self {
-    Self { doc, error: None }
+    Self {
+      doc,
+      groups: Vec::new(),
+      error: None,
+    }
   }
 
   /// Surfaces the first write error.
@@ -633,6 +639,42 @@ impl PaintDevice for DocumentDevice<'_> {
       self.error = Some(error);
     }
   }
+
+  fn save(&mut self, clip: Option<(&FillShape, Affine)>) {
+    if self.error.is_some() {
+      return;
+    }
+    let group = clip
+      .map(|(shape, transform)| {
+        self.doc.clip_path(
+          &path_data(&shape.to_commands(), transform),
+          shape.rule(),
+          None,
+        )
+      })
+      .transpose()
+      .and_then(|clip| {
+        self
+          .doc
+          .begin_group(Affine::IDENTITY, 1.0, clip.as_deref(), None)
+      });
+
+    match group {
+      Ok(group) => self.groups.push(group),
+      Err(error) => self.error = Some(error),
+    }
+  }
+
+  fn restore(&mut self) {
+    if self.error.is_some() {
+      return;
+    }
+    if let Some(group) = self.groups.pop()
+      && let Err(error) = self.doc.end_group(group)
+    {
+      self.error = Some(error);
+    }
+  }
 }
 
 /// Recurses into an in-flow inline box (an atomic inline element such as an inline-block or
@@ -668,125 +710,17 @@ pub(crate) fn emit_inline_box(
   }
 }
 
-/// Emits a border's rings at `origin`, reusing takumi-core's `BorderProperties` geometry.
+/// Emits a border at `origin`.
 fn emit_borders(
   border: &BorderProperties,
   size: Size<f32>,
   origin: Point<f32>,
   doc: &mut SvgDocument,
 ) -> io::Result<()> {
-  if !border.has_visible_sides() {
-    return Ok(());
-  }
-
-  let transform = Affine::translation(origin.x, origin.y);
   let mut device = DocumentDevice::new(doc);
 
-  if border.paint_ring(size, origin, &mut device) {
-    return device.finish();
-  }
-
-  let mut sides = border.painted_sides().peekable();
-
-  if sides.peek().is_none() {
-    return Ok(());
-  }
-  // Mixed per-side styles/colors: clip to the ring; fill solid sides as their
-  // diagonal-split polygon and stroke dashed/dotted sides along their centerline.
-  // A collapsed border's sides are squared rectangles already inside the ring,
-  // so the clip only adds an antialiased edge that leaks the background where
-  // two cells meet. Patterned sides still need it to trim their centerlines.
-  let patterned = border
-    .painted_sides()
-    .any(|side| matches!(side.style, BorderStyle::Dashed | BorderStyle::Dotted));
-  let clip = if border.collapsed && !patterned {
-    None
-  } else {
-    let ring = FillShape::border_ring(border, size);
-
-    Some(doc.clip_path(
-      &path_data(&ring.to_commands(), transform),
-      ring.rule(),
-      None,
-    )?)
-  };
-  let group = doc.begin_group(Affine::IDENTITY, 1.0, clip.as_deref(), None)?;
-  for side in sides {
-    match side.style {
-      BorderStyle::Dashed | BorderStyle::Dotted => {
-        emit_side_pattern(border, side, size, transform, doc)?;
-      }
-      _ => {
-        for band in border.side_bands(side) {
-          let mut strip = *border;
-
-          strip.width = band.width;
-          strip.expand_by(band.inset.map(|value| -value));
-
-          let mut polygon = Vec::new();
-          strip.append_side_clip_polygon_commands_at(
-            side.side,
-            &mut polygon,
-            size.inset(band.inset),
-            band.inset.top_left(),
-          );
-          doc.fill_path(
-            &path_data(&polygon, transform),
-            Rgba(band.color.0),
-            FillRule::NonZero,
-          )?;
-        }
-      }
-    }
-  }
-  doc.end_group(group)
-}
-
-/// Strokes one dashed/dotted border side along its centerline.
-fn emit_side_pattern(
-  border: &BorderProperties,
-  side: PaintedSide,
-  size: Size<f32>,
-  transform: Affine,
-  doc: &mut SvgDocument,
-) -> io::Result<()> {
-  let (half_top, half_right, half_bottom, half_left) = (
-    border.width.top / 2.0,
-    border.width.right / 2.0,
-    border.width.bottom / 2.0,
-    border.width.left / 2.0,
-  );
-  let ((x0, y0), (x1, y1)) = match side.side {
-    BorderSide::Top => ((half_left, half_top), (size.width - half_right, half_top)),
-    BorderSide::Right => (
-      (size.width - half_right, half_top),
-      (size.width - half_right, size.height - half_bottom),
-    ),
-    BorderSide::Bottom => (
-      (half_left, size.height - half_bottom),
-      (size.width - half_right, size.height - half_bottom),
-    ),
-    BorderSide::Left => (
-      (half_left, half_top),
-      (half_left, size.height - half_bottom),
-    ),
-  };
-  let line = [
-    PathCommand::MoveTo(Point { x: x0, y: y0 }),
-    PathCommand::LineTo(Point { x: x1, y: y1 }),
-  ];
-  let length = ((x1 - x0).powi(2) + (y1 - y0).powi(2)).sqrt();
-  let dash = side.style.dash_pattern(side.width, length, false);
-
-  doc.stroke_path(
-    &path_data(&line, transform),
-    &StrokeStyle {
-      color: side.color,
-      width: side.width,
-      dash: dash.map(|dash| dash.intervals),
-      round_cap: dash.is_some_and(|dash| dash.round_cap),
-    },
-  )
+  BoxBorderPainter::new(border, size).paint(origin, &mut device);
+  device.finish()
 }
 
 /// A box's CSS `outline`, deferred until its content is painted.

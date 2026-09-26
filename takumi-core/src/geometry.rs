@@ -401,7 +401,7 @@ pub enum PathCommand {
 
 impl PathCommand {
   /// Maps every point the command carries through `f`.
-  pub(crate) fn map_points(self, mut f: impl FnMut(Point<f32>) -> Point<f32>) -> Self {
+  pub fn map_points(self, mut f: impl FnMut(Point<f32>) -> Point<f32>) -> Self {
     match self {
       Self::MoveTo(point) => Self::MoveTo(f(point)),
       Self::LineTo(point) => Self::LineTo(f(point)),
