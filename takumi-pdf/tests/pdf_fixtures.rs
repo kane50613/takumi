@@ -2049,6 +2049,32 @@ fn outlines() {
   }
 }
 
+/// An inline box's `outline` follows its text across line breaks as one
+/// contour, at the box's opacity.
+#[test]
+fn inline_outlines() {
+  let pdf = run_pdf_fixture("inline-outlines", |fonts| {
+    let source = r##"<div style="width: 100%; height: 100%; padding: 24px; background-color: #ffffff; font-size: 20px; line-height: 1.6; color: #111827;">
+      Plain words, then <span style="outline: 2px solid #0e7490; outline-offset: 2px;">an outlined phrase that wraps onto the next line</span> and <span style="outline: 3px dashed #be123c; opacity: 0.5;">a faded one</span>.
+    </div>"##;
+    let node = from_html(source, FromHtmlOptions::default()).expect("parse inline outline fixture");
+
+    PdfOptions::builder()
+      .node(node)
+      .viewport(Viewport::new((360, 200)))
+      .fonts(fonts)
+      .build()
+  });
+  let content: Vec<Vec<u8>> = content_lines(&pdf).collect();
+
+  assert!(
+    content
+      .iter()
+      .any(|line| find(line, b"0.0549 0.4549 0.5647 RG").is_some()),
+    "expected the inline outline's stroke color"
+  );
+}
+
 /// `background-origin` moves the positioning area, `background-clip` shrinks
 /// the painted region, `border-area` paints over the borders, and
 /// `background-blend-mode` blends a layer into the one below.

@@ -1150,6 +1150,12 @@ impl Emitter<'_> {
         decoration.paint(frame.origin, &mut device);
       }
     }
+
+    let mut device = self.device(surface, false);
+
+    for island in runs.outline_islands() {
+      island.paint(&built.spans, frame.origin, &mut device);
+    }
     self.emit_inline_boxes(node, runs, built, frame, surface);
   }
 
