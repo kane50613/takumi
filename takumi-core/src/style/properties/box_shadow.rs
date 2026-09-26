@@ -1,11 +1,12 @@
-use std::{borrow::Cow, fmt, fmt::Debug};
+use std::fmt;
 
-use cssparser::{BasicParseErrorKind, ParseError, Parser};
+use cssparser::{BasicParseErrorKind, Parser};
 use typed_builder::TypedBuilder;
 
 use crate::style::{
-  Animatable, Color, ColorInput, CssSyntaxKind, CssToken, FromCss, FromCssStr, Length,
-  ListInterpolationStrategy, MakeComputed, ParseResult, SizingContext, ToCss, next_is_comma,
+  Animatable, Color, ColorInput, CssSyntaxKind, CssToken, FromCss, Length,
+  ListInterpolationStrategy, MakeComputed, ParseResult, SizingContext, ToCss, discrete,
+  impl_comma_list_from_css, next_is_comma, tw::TailwindPropertyParser,
 };
 
 /// Represents a box shadow with all its properties.
@@ -49,17 +50,7 @@ impl Default for BoxShadow {
 /// Represents a collection of box shadows, have custom `FromCss` implementation for comma-separated values.
 pub(crate) type BoxShadows = Box<[BoxShadow]>;
 
-impl<'i> FromCss<'i> for BoxShadows {
-  fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
-    Ok(
-      input
-        .parse_comma_separated(BoxShadow::from_css)?
-        .into_boxed_slice(),
-    )
-  }
-
-  const VALID_TOKENS: &'static [CssToken] = BoxShadow::VALID_TOKENS;
-}
+impl_comma_list_from_css!(BoxShadows, BoxShadow);
 
 /// Parses a `<length>` rejecting percentages, which are invalid for shadow blur/spread radii.
 fn parse_non_percentage_length<'i>(input: &mut Parser<'i, '_>) -> ParseResult<'i, Length> {
@@ -82,20 +73,6 @@ pub(super) fn parse_offsets_blur<'i>(
 }
 
 impl<'i> FromCss<'i> for BoxShadow {
-  /// Parses a box-shadow value from CSS input.
-  ///
-  /// The box-shadow syntax allows for the following components in any order:
-  /// - inset keyword (optional)
-  /// - Two length values for horizontal and vertical offsets (required)
-  /// - Two optional length values for blur radius and spread radius
-  /// - A color value (optional)
-  ///
-  /// Examples:
-  /// - `box-shadow: 2px 4px;`
-  /// - `box-shadow: 2px 4px 6px;`
-  /// - `box-shadow: 2px 4px 6px 8px;`
-  /// - `box-shadow: 2px 4px red;`
-  /// - `box-shadow: inset 2px 4px 6px red;`
   fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, BoxShadow> {
     let mut color = None;
     let mut lengths = None;
@@ -111,19 +88,18 @@ impl<'i> FromCss<'i> for BoxShadow {
         continue;
       }
 
-      if lengths.is_none() {
-        let value = input.try_parse::<_, _, ParseError<Cow<'i, str>>>(|input| {
+      if lengths.is_none()
+        && let Ok(value) = input.try_parse(|input| -> ParseResult<'i, _> {
           let (horizontal, vertical, blur) = parse_offsets_blur(input)?;
           let spread = input
             .try_parse(parse_non_percentage_length)
             .unwrap_or(Length::zero());
-          Ok((horizontal, vertical, blur, spread))
-        });
 
-        if let Ok(value) = value {
-          lengths = Some(value);
-          continue;
-        }
+          Ok((horizontal, vertical, blur, spread))
+        })
+      {
+        lengths = Some(value);
+        continue;
       }
 
       if color.is_none()
@@ -155,11 +131,7 @@ impl<'i> FromCss<'i> for BoxShadow {
   ];
 }
 
-impl crate::style::tw::TailwindPropertyParser for BoxShadow {
-  fn parse_tw(token: &str) -> Option<Self> {
-    Self::from_css_str(token).ok()
-  }
-}
+impl TailwindPropertyParser for BoxShadow {}
 
 impl MakeComputed for BoxShadow {
   fn make_computed(&mut self, sizing: &SizingContext) {
@@ -178,11 +150,8 @@ impl Animatable for BoxShadow {
   fn neutral_value_like(other: &Self) -> Option<Self> {
     Some(Self {
       inset: other.inset,
-      offset_x: Length::zero(),
-      offset_y: Length::zero(),
-      blur_radius: Length::zero(),
-      spread_radius: Length::zero(),
       color: Color::transparent().into(),
+      ..Self::default()
     })
   }
 
@@ -195,7 +164,7 @@ impl Animatable for BoxShadow {
     current_color: Color,
   ) {
     if from.inset != to.inset {
-      *self = if progress >= 0.5 { *to } else { *from };
+      *self = discrete(from, to, progress);
       return;
     }
 
@@ -263,7 +232,7 @@ impl ToCss for BoxShadow {
 mod tests {
   use super::*;
   use crate::style::{
-    Color,
+    Color, FromCssStr,
     Length::{self, Px},
   };
 

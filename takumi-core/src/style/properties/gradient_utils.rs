@@ -8,8 +8,8 @@ use tiny_skia::PremultipliedColorU8;
 use crate::{
   geometry::Point,
   style::{
-    Color, ColorInput, ColorInterpolationMethod, FromCss, GradientStop, ParseResult,
-    ResolvedGradientStop, SizingContext, StopPosition, ToCss, math::fast_div_255,
+    Color, ColorInput, ColorInterpolationMethod, FromCss, GradientStop, ParseResult, PositionValue,
+    ResolvedGradientStop, SizingContext, StopPosition, ToCss, math::fast_div_255, unexpected_token,
   },
 };
 
@@ -120,6 +120,48 @@ fn peeks_modern_color_function(input: &mut Parser<'_, '_>) -> bool {
 
   input.reset(&state);
   modern
+}
+
+/// Parses the `names[0](` or `names[1](` (repeating) function token, returning whether it repeats.
+pub(crate) fn parse_gradient_function<'i, T: FromCss<'i>>(
+  input: &mut Parser<'i, '_>,
+  [name, repeating_name]: [&str; 2],
+) -> ParseResult<'i, bool> {
+  let location = input.current_source_location();
+  let function = input.expect_function()?;
+
+  if function.eq_ignore_ascii_case(name) {
+    return Ok(false);
+  }
+
+  if function.eq_ignore_ascii_case(repeating_name) {
+    return Ok(true);
+  }
+
+  Err(unexpected_token!(
+    T,
+    location,
+    &Token::Function(function.clone())
+  ))
+}
+
+/// Appends `at <center>` to a gradient prelude unless the center is the default.
+pub(crate) fn push_center_clause(params: &mut String, center: &PositionValue) -> fmt::Result {
+  let mut center_css = String::new();
+
+  center.to_css(&mut center_css)?;
+
+  if center_css == "center center" || center_css == "50% 50%" {
+    return Ok(());
+  }
+
+  if !params.is_empty() {
+    params.push(' ');
+  }
+
+  params.push_str("at ");
+  params.push_str(&center_css);
+  Ok(())
 }
 
 /// Parses a comma-separated gradient stop list; `color a b` expands to two stops.
@@ -480,8 +522,6 @@ fn build_lut<T: Copy>(
   from_color: impl Fn(Color) -> T,
   interpolate_srgb: impl Fn(T, T, f32) -> T,
 ) -> Vec<T> {
-  let color_space = interpolation.color_space;
-  let hue_direction = interpolation.hue_direction;
   if lut_size == 0 {
     return Vec::new();
   }
@@ -523,15 +563,18 @@ fn build_lut<T: Copy>(
     }
 
     let t = interpolation_position(left_stop.position, right_stop.position, position_px);
-    if color_space == ColorSpaceTag::Srgb && hue_direction == HueDirection::Shorter {
+    if interpolation.color_space == ColorSpaceTag::Srgb
+      && interpolation.hue_direction == HueDirection::Shorter
+    {
       return interpolate_srgb(from_color(left_stop.color), from_color(right_stop.color), t);
     }
 
-    from_color(
-      left_stop
-        .color
-        .interpolate(right_stop.color, t, color_space, hue_direction),
-    )
+    from_color(left_stop.color.interpolate(
+      right_stop.color,
+      t,
+      interpolation.color_space,
+      interpolation.hue_direction,
+    ))
   };
 
   let mut lut: Vec<T> = (0..lut_size).map(&mut write_sample).collect();
@@ -705,6 +748,15 @@ impl LutAxis {
       repeat_period: 0.0,
       length: axis_length,
       stops,
+    }
+  }
+
+  /// Scale from an axis position in pixels to an index into a LUT of `lut_len` entries.
+  pub(crate) fn position_to_lut_scale(&self, lut_len: usize) -> f32 {
+    if self.length.abs() <= f32::EPSILON || lut_len <= 1 {
+      0.0
+    } else {
+      (lut_len - 1) as f32 / self.length
     }
   }
 

@@ -1,30 +1,13 @@
-use std::{borrow::Cow, fmt, vec::Vec};
+use std::{borrow::Cow, fmt};
 
 use cssparser::{BasicParseErrorKind, Parser, Token, match_ignore_ascii_case, serialize_string};
 use typed_builder::TypedBuilder;
 
 use crate::style::{
   CssDescriptorKind, CssSyntaxKind, CssToken, FromCss, FromCssStr, MakeComputed, ParseResult,
-  ToCss, impl_css_enum, next_is_comma, tw::TailwindPropertyParser, unexpected_token,
+  ToCss, impl_comma_list_from_css, impl_css_enum, next_is_comma, tw::TailwindPropertyParser,
+  unexpected_token,
 };
-
-/// Implements `FromCss` for a `Box<[T]>` animation list type as a comma-separated list of `$elem`.
-macro_rules! impl_comma_list_from_css {
-  ($list:ty, $elem:ty) => {
-    impl_comma_list_from_css!($list, $elem, <$elem>::VALID_TOKENS);
-  };
-  ($list:ty, $elem:ty, $valid:expr) => {
-    impl<'i> FromCss<'i> for $list {
-      fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
-        input
-          .parse_comma_separated(<$elem>::from_css)
-          .map(Vec::into_boxed_slice)
-      }
-
-      const VALID_TOKENS: &'static [CssToken] = $valid;
-    }
-  };
-}
 
 /// Represents a CSS animation time value stored in milliseconds.
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
@@ -379,16 +362,10 @@ impl<'i> FromCss<'i> for Animation {
 /// Parsed values for the `animation` shorthand.
 pub(crate) type Animations = Box<[Animation]>;
 
-impl<'i> FromCss<'i> for Animations {
-  fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
-    Ok(
-      input
-        .parse_comma_separated(Animation::from_css)?
-        .into_boxed_slice(),
-    )
-  }
-
-  const VALID_TOKENS: &'static [CssToken] = &[
+impl_comma_list_from_css!(
+  Animations,
+  Animation,
+  &[
     CssToken::Syntax(CssSyntaxKind::Time),
     CssToken::Syntax(CssSyntaxKind::EasingFunction),
     CssToken::Syntax(CssSyntaxKind::Number),
@@ -405,8 +382,8 @@ impl<'i> FromCss<'i> for Animations {
     CssToken::Keyword("paused"),
     CssToken::Syntax(CssSyntaxKind::CustomIdent),
     CssToken::Syntax(CssSyntaxKind::String),
-  ];
-}
+  ]
+);
 
 impl TailwindPropertyParser for Animations {
   fn parse_tw(token: &str) -> Option<Self> {
@@ -531,42 +508,13 @@ fn expect_number<'i>(input: &mut Parser<'i, '_>) -> ParseResult<'i, f32> {
   Ok(*value)
 }
 
-pub(crate) fn repeated_list_value<T: Clone>(values: &[T], index: usize, default: T) -> T {
+/// The `index`th entry of an `animation-*` list, repeating the list to fit; the initial value when empty.
+pub(crate) fn repeated_list_value<T: Clone + Default>(values: &[T], index: usize) -> T {
   if values.is_empty() {
-    return default;
+    return T::default();
   }
 
   values[index % values.len()].clone()
-}
-
-pub(crate) fn timing_function_at(
-  values: &AnimationTimingFunctions,
-  index: usize,
-) -> AnimationTimingFunction {
-  repeated_list_value(values, index, AnimationTimingFunction::default())
-}
-
-pub(crate) fn time_at(
-  values: &AnimationDurations,
-  index: usize,
-  default: AnimationTime,
-) -> AnimationTime {
-  repeated_list_value(values, index, default)
-}
-
-pub(crate) fn iteration_count_at(
-  values: &AnimationIterationCounts,
-  index: usize,
-) -> AnimationIterationCount {
-  repeated_list_value(values, index, AnimationIterationCount::default())
-}
-
-pub(crate) fn direction_at(values: &AnimationDirections, index: usize) -> AnimationDirection {
-  repeated_list_value(values, index, AnimationDirection::default())
-}
-
-pub(crate) fn fill_mode_at(values: &AnimationFillModes, index: usize) -> AnimationFillMode {
-  repeated_list_value(values, index, AnimationFillMode::default())
 }
 
 fn cubic_bezier_sample(x1: f32, y1: f32, x2: f32, y2: f32, progress: f32) -> f32 {
@@ -620,35 +568,29 @@ fn steps_sample(step_count: u32, position: StepPosition, progress: f32, before: 
   current_step.clamp(0.0, jumps) / jumps
 }
 
-/// Samples the easing curve at `progress`. `before` marks a sample taken from
-/// the interval before the animation's active phase, where a step function
-/// sitting exactly on a jump takes the lower step.
-/// https://drafts.csswg.org/css-easing-1/#step-easing-algo
-pub(crate) fn apply_timing_function(
-  function: &AnimationTimingFunction,
-  progress: f32,
-  before: bool,
-) -> f32 {
-  match function {
-    AnimationTimingFunction::Linear => progress,
-    AnimationTimingFunction::Ease => cubic_bezier_sample(0.25, 0.1, 0.25, 1.0, progress),
-    AnimationTimingFunction::EaseIn => cubic_bezier_sample(0.42, 0.0, 1.0, 1.0, progress),
-    AnimationTimingFunction::EaseOut => cubic_bezier_sample(0.0, 0.0, 0.58, 1.0, progress),
-    AnimationTimingFunction::EaseInOut => cubic_bezier_sample(0.42, 0.0, 0.58, 1.0, progress),
-    AnimationTimingFunction::StepStart => steps_sample(1, StepPosition::Start, progress, before),
-    AnimationTimingFunction::StepEnd => steps_sample(1, StepPosition::End, progress, before),
-    AnimationTimingFunction::Steps(count, position) => {
-      steps_sample(*count, *position, progress, before)
-    }
-    AnimationTimingFunction::CubicBezier(x1, y1, x2, y2) => {
-      cubic_bezier_sample(*x1, *y1, *x2, *y2, progress)
+impl AnimationTimingFunction {
+  /// Samples the easing curve at `progress`. `before` marks a sample taken from
+  /// the interval before the animation's active phase, where a step function
+  /// sitting exactly on a jump takes the lower step.
+  /// https://drafts.csswg.org/css-easing-1/#step-easing-algo
+  pub(crate) fn apply(self, progress: f32, before: bool) -> f32 {
+    match self {
+      Self::Linear => progress,
+      Self::Ease => cubic_bezier_sample(0.25, 0.1, 0.25, 1.0, progress),
+      Self::EaseIn => cubic_bezier_sample(0.42, 0.0, 1.0, 1.0, progress),
+      Self::EaseOut => cubic_bezier_sample(0.0, 0.0, 0.58, 1.0, progress),
+      Self::EaseInOut => cubic_bezier_sample(0.42, 0.0, 0.58, 1.0, progress),
+      Self::StepStart => steps_sample(1, StepPosition::Start, progress, before),
+      Self::StepEnd => steps_sample(1, StepPosition::End, progress, before),
+      Self::Steps(count, position) => steps_sample(count, position, progress, before),
+      Self::CubicBezier(x1, y1, x2, y2) => cubic_bezier_sample(x1, y1, x2, y2, progress),
     }
   }
 }
 
 impl ToCss for AnimationTime {
   fn to_css<W: fmt::Write>(&self, dest: &mut W) -> fmt::Result {
-    write!(dest, "{}ms", self.milliseconds)
+    write!(dest, "{milliseconds}ms", milliseconds = self.milliseconds)
   }
 }
 
@@ -689,7 +631,7 @@ impl ToCss for AnimationTimingFunction {
 impl ToCss for AnimationIterationCount {
   fn to_css<W: fmt::Write>(&self, dest: &mut W) -> fmt::Result {
     match self {
-      Self::Number(n) => write!(dest, "{}", n),
+      Self::Number(n) => write!(dest, "{n}"),
       Self::Infinite => dest.write_str("infinite"),
     }
   }
@@ -808,11 +750,9 @@ mod tests {
   #[test]
   fn steps_timing_functions_sample_as_staircase() {
     let sample = |css: &str, progress: f32| {
-      apply_timing_function(
-        &AnimationTimingFunction::from_css_str(css).unwrap(),
-        progress,
-        false,
-      )
+      AnimationTimingFunction::from_css_str(css)
+        .unwrap()
+        .apply(progress, false)
     };
 
     for (progress, expected) in [(0.0, 0.0), (0.3, 0.25), (0.6, 0.5), (1.0, 1.0)] {
@@ -835,11 +775,9 @@ mod tests {
   #[test]
   fn steps_timing_functions_hold_the_lower_step_before_the_active_phase() {
     let sample = |css: &str, progress: f32| {
-      apply_timing_function(
-        &AnimationTimingFunction::from_css_str(css).unwrap(),
-        progress,
-        true,
-      )
+      AnimationTimingFunction::from_css_str(css)
+        .unwrap()
+        .apply(progress, true)
     };
 
     // A backwards-filled delay samples progress 0, which sits on a jump for
@@ -904,8 +842,8 @@ mod tests {
       return;
     };
 
-    let early = apply_timing_function(&function, 0.2, false);
-    let late = apply_timing_function(&function, 0.8, false);
+    let early = function.apply(0.2, false);
+    let late = function.apply(0.8, false);
 
     assert!(early < 0.0, "expected negative overshoot, got {early}");
     assert!(late > 1.0, "expected positive overshoot, got {late}");
@@ -913,8 +851,9 @@ mod tests {
 
   #[test]
   fn repeated_list_value_wraps() {
-    let values = [AnimationDirection::Normal, AnimationDirection::Reverse].into();
-    assert_eq!(direction_at(&values, 2), AnimationDirection::Normal);
+    let values: AnimationDirections =
+      [AnimationDirection::Normal, AnimationDirection::Reverse].into();
+    assert_eq!(repeated_list_value(&values, 2), AnimationDirection::Normal);
   }
 
   #[test]

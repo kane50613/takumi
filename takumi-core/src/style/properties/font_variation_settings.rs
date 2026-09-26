@@ -62,11 +62,12 @@ impl<'i> FromCss<'i> for FontVariationSettings {
 }
 
 impl ToCss for FontVariation {
-  // An empty `font-variation-settings` list is the keyword `normal`.
   const EMPTY_LIST_KEYWORD: Option<&'static str> = Some("normal");
 
   fn to_css<W: fmt::Write>(&self, dest: &mut W) -> fmt::Result {
-    write!(dest, "\"{}\" {}", self.tag, self.value)
+    let Self { tag, value } = self;
+
+    write!(dest, "\"{tag}\" {value}")
   }
 }
 

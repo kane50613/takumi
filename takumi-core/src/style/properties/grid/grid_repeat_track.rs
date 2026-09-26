@@ -1,3 +1,5 @@
+use std::fmt;
+
 use cssparser::Parser;
 
 use super::{parse_line_names, write_space_separated};
@@ -26,17 +28,14 @@ impl MakeComputed for GridRepeatTrack {
 
 impl<'i> FromCss<'i> for GridRepeatTrack {
   fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
-    // Collect any leading line name blocks: [name1 name2]
     let mut names: Vec<String> = Vec::new();
 
     while input.try_parse(Parser::expect_square_bracket_block).is_ok() {
       names.extend(parse_line_names(input)?);
     }
 
-    // Parse the track size
     let size = GridTrackSize::from_css(input)?;
 
-    // Collect any trailing line name blocks
     while input.try_parse(Parser::expect_square_bracket_block).is_ok() {
       names.extend(parse_line_names(input)?);
     }
@@ -55,7 +54,7 @@ impl<'i> FromCss<'i> for GridRepeatTrack {
 }
 
 impl ToCss for GridRepeatTrack {
-  fn to_css<W: std::fmt::Write>(&self, dest: &mut W) -> std::fmt::Result {
+  fn to_css<W: fmt::Write>(&self, dest: &mut W) -> fmt::Result {
     if !self.names.is_empty() {
       dest.write_str("[")?;
       write_space_separated(dest, &self.names)?;

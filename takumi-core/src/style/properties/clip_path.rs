@@ -2,9 +2,12 @@ use std::fmt;
 
 use cssparser::{Parser, Token, match_ignore_ascii_case, serialize_string};
 
-use crate::style::{
-  CssDescriptorKind, CssSyntaxKind, CssToken, FromCss, Length, MakeComputed, ParseResult, Sides,
-  SizingContext, SpacePair, ToCss, unexpected_token,
+use crate::{
+  geometry::{Point, Size},
+  style::{
+    CssDescriptorKind, CssSyntaxKind, CssToken, FromCss, Length, MakeComputed, ParseResult, Sides,
+    SizingContext, SpacePair, ToCss, impl_css_enum, unexpected_token,
+  },
 };
 
 /// Represents the fill rule used for determining the interior of shapes.
@@ -18,6 +21,12 @@ pub enum FillRule {
   /// Counts the total number of crossings - if even, the point is outside
   EvenOdd,
 }
+
+impl_css_enum!(
+  FillRule,
+  "nonzero" => FillRule::NonZero,
+  "evenodd" => FillRule::EvenOdd,
+);
 
 /// Represents radius values for circle() and ellipse() functions.
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
@@ -47,6 +56,16 @@ pub struct ShapePosition(pub SpacePair<Length>);
 impl MakeComputed for ShapePosition {
   fn make_computed(&mut self, sizing: &SizingContext) {
     self.0.make_computed(sizing);
+  }
+}
+
+impl ShapePosition {
+  /// Resolves the position to a point within `size`.
+  pub(crate) fn to_point(self, sizing: &SizingContext, size: Size<f32>) -> Point<f32> {
+    Point {
+      x: self.0.x.to_px(sizing, size.width),
+      y: self.0.y.to_px(sizing, size.height),
+    }
   }
 }
 
@@ -161,22 +180,14 @@ impl BasicShape {
   }
 }
 
-crate::style::properties::impl_css_enum!(
-  FillRule,
-  "nonzero" => FillRule::NonZero,
-  "evenodd" => FillRule::EvenOdd,
-);
-
 impl<'i> FromCss<'i> for ShapeRadius {
   fn from_css(parser: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
     let location = parser.current_source_location();
 
-    // Try parsing as length first
     if let Ok(length) = parser.try_parse(Length::from_css) {
       return Ok(ShapeRadius::Length(length));
     }
 
-    // Try parsing keywords
     let ident = parser.expect_ident()?;
     match_ignore_ascii_case! { &ident,
       "closest-side" => Ok(ShapeRadius::ClosestSide),
@@ -192,11 +203,36 @@ impl<'i> FromCss<'i> for ShapeRadius {
   ];
 }
 
+impl ShapePosition {
+  /// Parses an optional `at <position>` clause, defaulting to the center.
+  fn parse_at<'i>(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
+    if input
+      .try_parse(|input| input.expect_ident_matching("at"))
+      .is_ok()
+    {
+      return Self::from_css(input);
+    }
+
+    Ok(Self::default())
+  }
+}
+
+impl FillRule {
+  /// Parses an optional leading `<fill-rule>,` of `polygon()` and `path()`.
+  fn parse_prefix<'i>(input: &mut Parser<'i, '_>) -> ParseResult<'i, Option<Self>> {
+    let fill_rule = input.try_parse(Self::from_css).ok();
+
+    if fill_rule.is_some() {
+      input.expect_comma()?;
+    }
+
+    Ok(fill_rule)
+  }
+}
+
 impl<'i> FromCss<'i> for ShapePosition {
   fn from_css(parser: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
     let first = Length::from_css(parser)?;
-
-    // If there's a second value, parse it; otherwise default to 50%
     let second = parser
       .try_parse(Length::from_css)
       .unwrap_or(Length::Percentage(50.0));
@@ -217,8 +253,6 @@ impl<'i> FromCss<'i> for BasicShape {
         match_ignore_ascii_case! { &function,
           "inset" => parser.parse_nested_block(|input| {
             let inset = Sides::from_css(input)?;
-
-            // Parse border radius with "round" keyword
             let border_radius = if input.try_parse(|input| input.expect_ident_matching("round")).is_ok() {
               Some(Sides::from_css(input)?)
             } else {
@@ -233,11 +267,7 @@ impl<'i> FromCss<'i> for BasicShape {
           "circle" => parser.parse_nested_block(|input| {
             let radius = input.try_parse(ShapeRadius::from_css).unwrap_or_default();
 
-            let position = if input.try_parse(|input| input.expect_ident_matching("at")).is_ok() {
-              ShapePosition::from_css(input)?
-            } else {
-              ShapePosition::default()
-            };
+            let position = ShapePosition::parse_at(input)?;
 
             Ok(BasicShape::Ellipse(Box::new(EllipseShape { radius_x: radius, radius_y: radius, position })))
           }),
@@ -245,19 +275,12 @@ impl<'i> FromCss<'i> for BasicShape {
             let radius_x = ShapeRadius::from_css(input)?;
             let radius_y = input.try_parse(ShapeRadius::from_css).unwrap_or_default();
 
-            let position = if input.try_parse(|input| input.expect_ident_matching("at")).is_ok() {
-              ShapePosition::from_css(input)?
-            } else {
-              ShapePosition::default()
-            };
+            let position = ShapePosition::parse_at(input)?;
 
             Ok(BasicShape::Ellipse(Box::new(EllipseShape { radius_x, radius_y, position })))
           }),
           "polygon" => parser.parse_nested_block(|input| {
-            let fill_rule = input.try_parse(FillRule::from_css).ok();
-            if fill_rule.is_some() {
-              input.expect_comma()?;
-            }
+            let fill_rule = FillRule::parse_prefix(input)?;
 
             Ok(BasicShape::Polygon(PolygonShape {
               fill_rule,
@@ -267,10 +290,7 @@ impl<'i> FromCss<'i> for BasicShape {
             }))
           }),
           "path" => parser.parse_nested_block(|input| {
-            let fill_rule = input.try_parse(FillRule::from_css).ok();
-            if fill_rule.is_some() {
-              input.expect_comma()?;
-            }
+            let fill_rule = FillRule::parse_prefix(input)?;
 
             let path = input.expect_string()?.as_ref().into();
 
@@ -357,14 +377,7 @@ impl ToCss for BasicShape {
           rule.to_css(dest)?;
           dest.write_str(", ")?;
         }
-        let mut first = true;
-        for coord in shape.coordinates.iter() {
-          if !first {
-            dest.write_str(", ")?;
-          }
-          coord.to_css(dest)?;
-          first = false;
-        }
+        shape.coordinates.to_css(dest)?;
         dest.write_char(')')
       }
       Self::Path(shape) => {

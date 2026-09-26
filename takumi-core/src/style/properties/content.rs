@@ -3,8 +3,8 @@ use std::{fmt, sync::Arc};
 use cssparser::{Parser, Token, match_ignore_ascii_case, serialize_string};
 
 use crate::style::{
-  Animatable, BackgroundImage, CssSyntaxKind, CssToken, FromCss, MakeComputed, ParseResult, ToCss,
-  tw::TailwindPropertyParser, unexpected_token,
+  Animatable, BackgroundImage, CssSyntaxKind, CssToken, FromCss, MakeComputed, ParseResult,
+  SizingContext, ToCss, tw::TailwindPropertyParser, unexpected_token,
 };
 
 /// CSS `content` property value for `::before` / `::after` pseudo-elements.
@@ -42,7 +42,7 @@ pub struct AttrRef {
 }
 
 impl MakeComputed for ContentValue {
-  fn make_computed(&mut self, sizing: &crate::style::SizingContext) {
+  fn make_computed(&mut self, sizing: &SizingContext) {
     if let ContentValue::Items(items) = self {
       for item in items.iter_mut() {
         if let ContentItem::Image(image) = item {
@@ -150,20 +150,14 @@ impl ToCss for ContentValue {
     match self {
       ContentValue::Normal => dest.write_str("normal"),
       ContentValue::None => dest.write_str("none"),
-      ContentValue::Items(items) => {
-        for (i, item) in items.iter().enumerate() {
-          if i > 0 {
-            dest.write_char(' ')?;
-          }
-          item.to_css(dest)?;
-        }
-        Ok(())
-      }
+      ContentValue::Items(items) => items.to_css(dest),
     }
   }
 }
 
 impl ToCss for ContentItem {
+  const LIST_SEPARATOR: &'static str = " ";
+
   fn to_css<W: fmt::Write>(&self, dest: &mut W) -> fmt::Result {
     match self {
       ContentItem::Text(value) => serialize_string(value, dest),

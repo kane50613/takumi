@@ -4,7 +4,7 @@ use cssparser::{Parser, Token, match_ignore_ascii_case};
 
 use crate::style::{
   Animatable, CssToken, FontFeature, FromCss, MakeComputed, ParseResult, Tag, ToCss, impl_css_enum,
-  unexpected_token,
+  unexpected_token, write_keywords,
 };
 
 /// Tri-state for one `font-variant-ligatures` group.
@@ -38,6 +38,7 @@ impl FontVariantLigatures {
 
   fn set_keyword(&mut self, ident: &str) -> bool {
     match_ignore_ascii_case! { ident,
+      "none" => *self = Self::none(),
       "common-ligatures" => self.common = LigatureState::Enabled,
       "no-common-ligatures" => self.common = LigatureState::Disabled,
       "discretionary-ligatures" => self.discretionary = LigatureState::Enabled,
@@ -51,7 +52,7 @@ impl FontVariantLigatures {
     true
   }
 
-  fn append_features(&self, out: &mut Vec<FontFeature>) {
+  pub(crate) fn append_features(&self, out: &mut Vec<FontFeature>) {
     for (state, tags) in [
       (self.common, &[b"liga", b"clig"][..]),
       (self.discretionary, &[b"dlig"][..]),
@@ -75,21 +76,7 @@ impl Animatable for FontVariantLigatures {}
 
 impl<'i> FromCss<'i> for FontVariantLigatures {
   fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
-    let mut value = Self::default();
-    while !input.is_exhausted() {
-      let location = input.current_source_location();
-      let ident = input.expect_ident()?;
-      match_ignore_ascii_case! { ident,
-        "normal" => {},
-        "none" => value = Self::none(),
-        _ => {
-          if !value.set_keyword(ident) {
-            return Err(unexpected_token!(location, &Token::Ident(ident.to_owned())));
-          }
-        },
-      }
-    }
-    Ok(value)
+    parse_keyword_set(input, Self::set_keyword)
   }
 
   const VALID_TOKENS: &'static [CssToken] = &[
@@ -108,8 +95,7 @@ impl<'i> FromCss<'i> for FontVariantLigatures {
 
 impl ToCss for FontVariantLigatures {
   fn to_css<W: fmt::Write>(&self, dest: &mut W) -> fmt::Result {
-    let mut wrote = false;
-    for (state, on, off) in [
+    let keywords = [
       (self.common, "common-ligatures", "no-common-ligatures"),
       (
         self.discretionary,
@@ -122,22 +108,15 @@ impl ToCss for FontVariantLigatures {
         "no-historical-ligatures",
       ),
       (self.contextual, "contextual", "no-contextual"),
-    ] {
-      let keyword = match state {
-        LigatureState::Normal => continue,
-        LigatureState::Enabled => on,
-        LigatureState::Disabled => off,
-      };
-      if wrote {
-        dest.write_str(" ")?;
-      }
-      dest.write_str(keyword)?;
-      wrote = true;
-    }
-    if !wrote {
-      dest.write_str("normal")?;
-    }
-    Ok(())
+    ]
+    .into_iter()
+    .filter_map(|(state, on, off)| match state {
+      LigatureState::Normal => None,
+      LigatureState::Enabled => Some(on),
+      LigatureState::Disabled => Some(off),
+    });
+
+    write_keywords(dest, keywords, "normal")
   }
 }
 
@@ -191,7 +170,7 @@ impl FontVariantNumeric {
     true
   }
 
-  fn append_features(&self, out: &mut Vec<FontFeature>) {
+  pub(crate) fn append_features(&self, out: &mut Vec<FontFeature>) {
     match self.figure {
       NumericFigure::Normal => {}
       NumericFigure::Lining => out.push(FontFeature::new(Tag::new(b"lnum"), 1)),
@@ -221,20 +200,7 @@ impl Animatable for FontVariantNumeric {}
 
 impl<'i> FromCss<'i> for FontVariantNumeric {
   fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
-    let mut value = Self::default();
-    while !input.is_exhausted() {
-      let location = input.current_source_location();
-      let ident = input.expect_ident()?;
-      match_ignore_ascii_case! { ident,
-        "normal" => {},
-        _ => {
-          if !value.set_keyword(ident) {
-            return Err(unexpected_token!(location, &Token::Ident(ident.to_owned())));
-          }
-        },
-      }
-    }
-    Ok(value)
+    parse_keyword_set(input, Self::set_keyword)
   }
 
   const VALID_TOKENS: &'static [CssToken] = &[
@@ -252,33 +218,30 @@ impl<'i> FromCss<'i> for FontVariantNumeric {
 
 impl ToCss for FontVariantNumeric {
   fn to_css<W: fmt::Write>(&self, dest: &mut W) -> fmt::Result {
-    let mut parts: Vec<&str> = Vec::new();
-    match self.figure {
-      NumericFigure::Normal => {}
-      NumericFigure::Lining => parts.push("lining-nums"),
-      NumericFigure::Oldstyle => parts.push("oldstyle-nums"),
-    }
-    match self.spacing {
-      NumericSpacing::Normal => {}
-      NumericSpacing::Proportional => parts.push("proportional-nums"),
-      NumericSpacing::Tabular => parts.push("tabular-nums"),
-    }
-    match self.fraction {
-      NumericFraction::Normal => {}
-      NumericFraction::Diagonal => parts.push("diagonal-fractions"),
-      NumericFraction::Stacked => parts.push("stacked-fractions"),
-    }
-    if self.ordinal {
-      parts.push("ordinal");
-    }
-    if self.slashed_zero {
-      parts.push("slashed-zero");
-    }
-    if parts.is_empty() {
-      dest.write_str("normal")
-    } else {
-      dest.write_str(&parts.join(" "))
-    }
+    let figure = match self.figure {
+      NumericFigure::Normal => None,
+      NumericFigure::Lining => Some("lining-nums"),
+      NumericFigure::Oldstyle => Some("oldstyle-nums"),
+    };
+    let spacing = match self.spacing {
+      NumericSpacing::Normal => None,
+      NumericSpacing::Proportional => Some("proportional-nums"),
+      NumericSpacing::Tabular => Some("tabular-nums"),
+    };
+    let fraction = match self.fraction {
+      NumericFraction::Normal => None,
+      NumericFraction::Diagonal => Some("diagonal-fractions"),
+      NumericFraction::Stacked => Some("stacked-fractions"),
+    };
+    let keywords = [
+      figure,
+      spacing,
+      fraction,
+      self.ordinal.then_some("ordinal"),
+      self.slashed_zero.then_some("slashed-zero"),
+    ];
+
+    write_keywords(dest, keywords.into_iter().flatten(), "normal")
   }
 }
 
@@ -327,7 +290,7 @@ impl FontVariantEastAsian {
     true
   }
 
-  fn append_features(&self, out: &mut Vec<FontFeature>) {
+  pub(crate) fn append_features(&self, out: &mut Vec<FontFeature>) {
     match self.form {
       EastAsianForm::Normal => {}
       EastAsianForm::Jis78 => out.push(FontFeature::new(Tag::new(b"jp78"), 1)),
@@ -353,20 +316,7 @@ impl Animatable for FontVariantEastAsian {}
 
 impl<'i> FromCss<'i> for FontVariantEastAsian {
   fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
-    let mut value = Self::default();
-    while !input.is_exhausted() {
-      let location = input.current_source_location();
-      let ident = input.expect_ident()?;
-      match_ignore_ascii_case! { ident,
-        "normal" => {},
-        _ => {
-          if !value.set_keyword(ident) {
-            return Err(unexpected_token!(location, &Token::Ident(ident.to_owned())));
-          }
-        },
-      }
-    }
-    Ok(value)
+    parse_keyword_set(input, Self::set_keyword)
   }
 
   const VALID_TOKENS: &'static [CssToken] = &[
@@ -385,29 +335,23 @@ impl<'i> FromCss<'i> for FontVariantEastAsian {
 
 impl ToCss for FontVariantEastAsian {
   fn to_css<W: fmt::Write>(&self, dest: &mut W) -> fmt::Result {
-    let mut parts: Vec<&str> = Vec::new();
-    match self.form {
-      EastAsianForm::Normal => {}
-      EastAsianForm::Jis78 => parts.push("jis78"),
-      EastAsianForm::Jis83 => parts.push("jis83"),
-      EastAsianForm::Jis90 => parts.push("jis90"),
-      EastAsianForm::Jis04 => parts.push("jis04"),
-      EastAsianForm::Simplified => parts.push("simplified"),
-      EastAsianForm::Traditional => parts.push("traditional"),
-    }
-    match self.width {
-      EastAsianWidth::Normal => {}
-      EastAsianWidth::Full => parts.push("full-width"),
-      EastAsianWidth::Proportional => parts.push("proportional-width"),
-    }
-    if self.ruby {
-      parts.push("ruby");
-    }
-    if parts.is_empty() {
-      dest.write_str("normal")
-    } else {
-      dest.write_str(&parts.join(" "))
-    }
+    let form = match self.form {
+      EastAsianForm::Normal => None,
+      EastAsianForm::Jis78 => Some("jis78"),
+      EastAsianForm::Jis83 => Some("jis83"),
+      EastAsianForm::Jis90 => Some("jis90"),
+      EastAsianForm::Jis04 => Some("jis04"),
+      EastAsianForm::Simplified => Some("simplified"),
+      EastAsianForm::Traditional => Some("traditional"),
+    };
+    let width = match self.width {
+      EastAsianWidth::Normal => None,
+      EastAsianWidth::Full => Some("full-width"),
+      EastAsianWidth::Proportional => Some("proportional-width"),
+    };
+    let keywords = [form, width, self.ruby.then_some("ruby")];
+
+    write_keywords(dest, keywords.into_iter().flatten(), "normal")
   }
 }
 
@@ -434,7 +378,7 @@ pub enum FontVariantCaps {
 }
 
 impl FontVariantCaps {
-  fn append_features(&self, out: &mut Vec<FontFeature>) {
+  pub(crate) fn append_features(&self, out: &mut Vec<FontFeature>) {
     match self {
       Self::Normal => {}
       Self::SmallCaps => out.push(FontFeature::new(Tag::new(b"smcp"), 1)),
@@ -477,7 +421,7 @@ pub enum FontVariantPosition {
 }
 
 impl FontVariantPosition {
-  fn append_features(&self, out: &mut Vec<FontFeature>) {
+  pub(crate) fn append_features(&self, out: &mut Vec<FontFeature>) {
     match self {
       Self::Normal => {}
       Self::Sub => out.push(FontFeature::new(Tag::new(b"subs"), 1)),
@@ -493,21 +437,27 @@ impl_css_enum!(
   "super" => FontVariantPosition::Super,
 );
 
-/// Appends every resolved `font-variant-*` feature to `out`, in property order. The caller
-/// appends `font-feature-settings` afterwards so explicit settings win on tag conflicts.
-pub(crate) fn append_variant_features(
-  ligatures: &FontVariantLigatures,
-  numeric: &FontVariantNumeric,
-  east_asian: &FontVariantEastAsian,
-  caps: &FontVariantCaps,
-  position: &FontVariantPosition,
-  out: &mut Vec<FontFeature>,
-) {
-  ligatures.append_features(out);
-  numeric.append_features(out);
-  east_asian.append_features(out);
-  caps.append_features(out);
-  position.append_features(out);
+/// Parses `normal` or a space-separated run of keywords that `set_keyword` accepts.
+fn parse_keyword_set<'i, T: Default + FromCss<'i>>(
+  input: &mut Parser<'i, '_>,
+  set_keyword: fn(&mut T, &str) -> bool,
+) -> ParseResult<'i, T> {
+  let mut value = T::default();
+
+  while !input.is_exhausted() {
+    let location = input.current_source_location();
+    let ident = input.expect_ident()?;
+
+    if !ident.eq_ignore_ascii_case("normal") && !set_keyword(&mut value, ident) {
+      return Err(unexpected_token!(
+        T,
+        location,
+        &Token::Ident(ident.to_owned())
+      ));
+    }
+  }
+
+  Ok(value)
 }
 
 /// The `font-variant` shorthand. Only the subset of values takumi maps to OpenType features is
@@ -534,10 +484,6 @@ impl<'i> FromCss<'i> for FontVariant {
       let ident = input.expect_ident()?;
 
       if ident.eq_ignore_ascii_case("normal") {
-        continue;
-      }
-      if ident.eq_ignore_ascii_case("none") {
-        value.ligatures = FontVariantLigatures::none();
         continue;
       }
       if value.ligatures.set_keyword(ident)
@@ -769,8 +715,6 @@ mod tests {
     assert_eq!(value.position, FontVariantPosition::Sub);
     assert_eq!(value.ligatures.common, LigatureState::Enabled);
   }
-
-  // FontVariant (the shorthand struct) has no ToCss impl, so no round-trip test.
 
   #[test]
   fn test_parse_font_variant_shorthand_invalid() {

@@ -1,9 +1,10 @@
+use std::fmt;
+
 use cssparser::{Parser, match_ignore_ascii_case};
 
-use crate::style::tw::Namespace;
 use crate::style::{
   CssSyntaxKind, CssToken, FromCss, Length, MakeComputed, ParseResult, SizingContext, ToCss,
-  parse_calc_number_expression, tw::TailwindPropertyParser,
+  parse_calc_number_expression, tw::Namespace, tw::TailwindPropertyParser,
 };
 
 /// Represents a line height value.
@@ -38,13 +39,10 @@ impl TailwindPropertyParser for LineHeight {
       "normal" => Some(LineHeight::Unitless(1.5)),
       "relaxed" => Some(LineHeight::Unitless(1.625)),
       "loose" => Some(LineHeight::Unitless(2.0)),
-      _ => {
-        let Ok(value) = token.parse::<f32>() else {
-          return None;
-        };
-
-        Some(LineHeight::Length(Length::from_spacing(value)))
-      }
+      _ => token
+        .parse()
+        .ok()
+        .map(|value| LineHeight::Length(Length::from_spacing(value))),
     }
   }
 }
@@ -81,9 +79,8 @@ impl<'i> FromCss<'i> for LineHeight {
 }
 
 impl LineHeight {
-  // Match Blink text-fit line-height scaling: non-fixed line heights scale, fixed and percentage line heights do not.
-  // Reference: https://source.chromium.org/chromium/chromium/src/+/main:third_party/blink/renderer/core/layout/inline/inline_box_state.cc;l=137
-  /// Whether the line height scales under text-fit (non-fixed values).
+  /// Whether the line height scales under text-fit: non-fixed values do, fixed and percentage ones
+  /// do not, matching Blink's [`InlineBoxState`](https://source.chromium.org/chromium/chromium/src/+/main:third_party/blink/renderer/core/layout/inline/inline_box_state.cc;l=137).
   pub(crate) const fn scales_with_text_fit(self) -> bool {
     matches!(self, Self::Normal | Self::Unitless(_))
   }
@@ -122,10 +119,10 @@ impl MakeComputed for LineHeight {
 }
 
 impl ToCss for LineHeight {
-  fn to_css<W: std::fmt::Write>(&self, dest: &mut W) -> std::fmt::Result {
+  fn to_css<W: fmt::Write>(&self, dest: &mut W) -> fmt::Result {
     match self {
       Self::Normal => dest.write_str("normal"),
-      Self::Unitless(v) => write!(dest, "{}", v),
+      Self::Unitless(v) => write!(dest, "{v}"),
       Self::Length(l) => l.to_css(dest),
     }
   }

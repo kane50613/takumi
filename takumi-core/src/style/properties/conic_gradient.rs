@@ -5,8 +5,8 @@ use tiny_skia::PremultipliedColorU8;
 use typed_builder::TypedBuilder;
 
 use super::gradient_utils::{
-  ColorLut, GradientOverlayTile, LutAxis, gradient_tile_accessors, parse_gradient_stops,
-  write_gradient_css,
+  ColorLut, GradientOverlayTile, LutAxis, gradient_tile_accessors, parse_gradient_function,
+  parse_gradient_stops, push_center_clause, write_gradient_css,
 };
 use crate::{
   math,
@@ -300,15 +300,13 @@ impl ConicGradient {
   }
 }
 
+impl ConicGradient {
+  const FUNCTION_NAMES: [&'static str; 2] = ["conic-gradient", "repeating-conic-gradient"];
+}
+
 impl<'i> FromCss<'i> for ConicGradient {
   fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, ConicGradient> {
-    let location = input.current_source_location();
-    let name = input.expect_function()?.to_owned();
-    let repeating = match_ignore_ascii_case! { &name,
-      "conic-gradient" => false,
-      "repeating-conic-gradient" => true,
-      _ => return Err(unexpected_token!(location, &Token::Function(name))),
-    };
+    let repeating = parse_gradient_function::<Self>(input, Self::FUNCTION_NAMES)?;
 
     input.parse_nested_block(|input| {
       let mut from_angle: Option<Angle> = None;
@@ -353,27 +351,14 @@ impl<'i> FromCss<'i> for ConicGradient {
 
 impl ToCss for ConicGradient {
   fn to_css<W: fmt::Write>(&self, dest: &mut W) -> fmt::Result {
-    let name = if self.repeating {
-      "repeating-conic-gradient"
-    } else {
-      "conic-gradient"
-    };
+    let name = Self::FUNCTION_NAMES[usize::from(self.repeating)];
 
     let mut params_buf = String::new();
     if self.from_angle != Angle::zero() {
       params_buf.push_str("from ");
       self.from_angle.to_css(&mut params_buf)?;
     }
-    let mut center_buf = String::new();
-    self.center.to_css(&mut center_buf)?;
-    let is_center_default = center_buf == "center center" || center_buf == "50% 50%";
-    if !is_center_default {
-      if !params_buf.is_empty() {
-        params_buf.push(' ');
-      }
-      params_buf.push_str("at ");
-      params_buf.push_str(&center_buf);
-    }
+    push_center_clause(&mut params_buf, &self.center)?;
 
     write_gradient_css(dest, name, &params_buf, &self.interpolation, &self.stops)
   }

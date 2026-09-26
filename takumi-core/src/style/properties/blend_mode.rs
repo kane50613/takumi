@@ -1,9 +1,8 @@
 use cssparser::Parser;
 
-use super::background_image::parse_comma_list;
 use crate::style::{
-  Animatable, CssToken, FromCss, FromCssStr, ListInterpolationStrategy, ParseResult, impl_css_enum,
-  tw::TailwindPropertyParser,
+  Animatable, CssToken, FromCss, ListInterpolationStrategy, ParseResult, impl_css_enum,
+  parse_comma_list, tw::TailwindPropertyParser,
 };
 
 /// A list of blend modes.
@@ -82,11 +81,7 @@ impl_css_enum!(
   "plus-darker" => BlendMode::PlusDarker
 );
 
-impl TailwindPropertyParser for BlendMode {
-  fn parse_tw(token: &str) -> Option<Self> {
-    Self::from_css_str(token).ok()
-  }
-}
+impl TailwindPropertyParser for BlendMode {}
 
 impl Animatable for BlendMode {
   fn list_interpolation_strategy() -> ListInterpolationStrategy {
@@ -97,7 +92,7 @@ impl Animatable for BlendMode {
 #[cfg(test)]
 mod tests {
   use super::*;
-  use crate::style::ToCss;
+  use crate::style::{FromCssStr, ToCss};
 
   #[test]
   fn test_parse_blend_mode() {

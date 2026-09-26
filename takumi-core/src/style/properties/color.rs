@@ -8,11 +8,15 @@ use cssparser::{
 };
 use tiny_skia::{ColorU8, PremultipliedColorU8};
 
-use crate::style::tw::{Namespace, extract_arbitrary_value};
+use super::gradient_utils::interpolate_rgba_premultiplied;
+
 use crate::style::{
   Animatable, Color as CurrentColor, CssDescriptorKind, CssSyntaxKind, CssToken, FromCss,
   FromCssStr, MakeComputed, ParseResult, PercentageNumber, SizingContext, ToCss,
-  math::fast_div_255, tw::TailwindPropertyParser, unexpected_token,
+  math::fast_div_255,
+  tw::TailwindPropertyParser,
+  tw::{Namespace, extract_arbitrary_value},
+  unexpected_token,
 };
 
 fn is_cylindrical_color_space(color_space: ColorSpaceTag) -> bool {
@@ -33,13 +37,10 @@ pub struct ColorInterpolationMethod {
 }
 
 impl Default for ColorInterpolationMethod {
+  /// <https://developer.mozilla.org/en-US/docs/Web/CSS/color-interpolation-method>: interpolating
+  /// `<color>` values defaults to Oklab.
   fn default() -> Self {
-    Self {
-      // Reference: https://developer.mozilla.org/en-US/docs/Web/CSS/color-interpolation-method
-      // When interpolating <color> values, the interpolation color space defaults to Oklab.
-      color_space: ColorSpaceTag::Oklab,
-      hue_direction: HueDirection::Shorter,
-    }
+    Self::MODERN
   }
 }
 
@@ -93,39 +94,35 @@ impl<'i> FromCss<'i> for ColorInterpolationMethod {
       _ => return Err(unexpected_token!(location, token)),
     };
 
-    let mut hue_direction = HueDirection::Shorter;
-    let mut has_hue_direction = false;
+    let hue_direction = input
+      .try_parse(|input| -> ParseResult<'i, HueDirection> {
+        let location = input.current_source_location();
+        let token = input.next()?;
+        let Token::Ident(ident) = token else {
+          return Err(unexpected_token!(location, token));
+        };
 
-    if let Ok(direction) = input.try_parse(|input| -> ParseResult<'i, HueDirection> {
-      let location = input.current_source_location();
-      let token = input.next()?;
-      let Token::Ident(ident) = token else {
-        return Err(unexpected_token!(location, token));
-      };
+        let direction = match_ignore_ascii_case! { &ident,
+          "shorter" => HueDirection::Shorter,
+          "longer" => HueDirection::Longer,
+          "increasing" => HueDirection::Increasing,
+          "decreasing" => HueDirection::Decreasing,
+          _ => return Err(unexpected_token!(location, token)),
+        };
 
-      let direction = match_ignore_ascii_case! { &ident,
-        "shorter" => HueDirection::Shorter,
-        "longer" => HueDirection::Longer,
-        "increasing" => HueDirection::Increasing,
-        "decreasing" => HueDirection::Decreasing,
-        _ => return Err(unexpected_token!(location, token)),
-      };
+        input.expect_ident_matching("hue")?;
 
-      input.expect_ident_matching("hue")?;
+        Ok(direction)
+      })
+      .ok();
 
-      Ok(direction)
-    }) {
-      hue_direction = direction;
-      has_hue_direction = true;
-    }
-
-    if has_hue_direction && !is_cylindrical_color_space(color_space) {
+    if hue_direction.is_some() && !is_cylindrical_color_space(color_space) {
       return Err(input.new_error_for_next_token());
     }
 
     Ok(Self {
       color_space,
-      hue_direction,
+      hue_direction: hue_direction.unwrap_or(HueDirection::Shorter),
     })
   }
 
@@ -159,7 +156,7 @@ impl ToCss for ColorInterpolationMethod {
       HueDirection::Decreasing => " decreasing hue",
       _ => "",
     };
-    write!(dest, "in {}{}", space, hue)
+    write!(dest, "in {space}{hue}")
   }
 }
 
@@ -468,25 +465,24 @@ impl From<Color> for ColorInput {
 }
 
 impl Display for Color {
-  fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-    if self.0[3] == 255 {
-      return write!(f, "rgb({}, {}, {})", self.0[0], self.0[1], self.0[2]);
+  fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    let [r, g, b, a] = self.0;
+
+    if a == 255 {
+      return write!(f, "rgb({r}, {g}, {b})");
     }
 
     write!(
       f,
-      "rgba({}, {}, {}, {:.6})",
-      self.0[0],
-      self.0[1],
-      self.0[2],
-      self.0[3] as f32 / 255.0
+      "rgba({r}, {g}, {b}, {alpha:.6})",
+      alpha = a as f32 / 255.0
     )
   }
 }
 
 impl ToCss for Color {
   fn to_css<W: fmt::Write>(&self, dest: &mut W) -> fmt::Result {
-    write!(dest, "{}", self)
+    write!(dest, "{self}")
   }
 }
 
@@ -515,6 +511,14 @@ impl Color {
     Color([255, 255, 255, 255])
   }
 
+  fn to_dynamic(self) -> DynamicColor {
+    DynamicColor::from_alpha_color(AlphaColor::<Srgb>::from(Rgba8::from_u8_array(self.0)))
+  }
+
+  fn from_dynamic(color: DynamicColor) -> Self {
+    Color(color.to_alpha_color::<Srgb>().to_rgba8().to_u8_array())
+  }
+
   /// Premultiplies the straight-alpha colour into a `tiny_skia`
   /// [`PremultipliedColorU8`].
   pub(crate) fn premultiplied(self) -> PremultipliedColorU8 {
@@ -537,36 +541,9 @@ impl Color {
       return other;
     }
 
-    let [r1, g1, b1, a1] = self.0;
-    let [r2, g2, b2, a2] = other.0;
-    let premul_1 = [
-      fast_div_255(r1 as u32 * a1 as u32),
-      fast_div_255(g1 as u32 * a1 as u32),
-      fast_div_255(b1 as u32 * a1 as u32),
-      a1,
-    ];
-    let premul_2 = [
-      fast_div_255(r2 as u32 * a2 as u32),
-      fast_div_255(g2 as u32 * a2 as u32),
-      fast_div_255(b2 as u32 * a2 as u32),
-      a2,
-    ];
+    let demul: ColorU8 =
+      interpolate_rgba_premultiplied(self.premultiplied(), other.premultiplied(), t).demultiply();
 
-    let mut result = [0u8; 4];
-    for i in 0..4 {
-      result[i] = (premul_1[i] as f32 * (1.0 - t) + premul_2[i] as f32 * t)
-        .round()
-        .clamp(0.0, 255.0) as u8;
-    }
-
-    let premul = PremultipliedColorU8::from_rgba(
-      result[0].min(result[3]),
-      result[1].min(result[3]),
-      result[2].min(result[3]),
-      result[3],
-    )
-    .unwrap_or(PremultipliedColorU8::TRANSPARENT);
-    let demul: ColorU8 = premul.demultiply();
     Color([demul.red(), demul.green(), demul.blue(), demul.alpha()])
   }
 
@@ -594,17 +571,12 @@ impl Color {
       return other;
     }
 
-    let dynamic_1 =
-      DynamicColor::from_alpha_color(AlphaColor::<Srgb>::from(Rgba8::from_u8_array(self.0)));
-    let dynamic_2 =
-      DynamicColor::from_alpha_color(AlphaColor::<Srgb>::from(Rgba8::from_u8_array(other.0)));
-
-    let mixed = dynamic_1
-      .interpolate(dynamic_2, color_space, hue_direction)
-      .eval(t);
-    let rgba = mixed.to_alpha_color::<Srgb>().to_rgba8().to_u8_array();
-
-    Color(rgba)
+    Color::from_dynamic(
+      self
+        .to_dynamic()
+        .interpolate(other.to_dynamic(), color_space, hue_direction)
+        .eval(t),
+    )
   }
 
   /// Mixes `amount` of `target` into the colour, keeping this alpha.
@@ -679,25 +651,12 @@ struct ColorMix {
 
 impl ColorMix {
   fn evaluate(self) -> Option<Color> {
-    let mut p1 = self.first.percentage;
-    let mut p2 = self.second.percentage;
-
-    match (p1, p2) {
-      (None, None) => {
-        p1 = Some(PercentageNumber(0.5));
-        p2 = Some(PercentageNumber(0.5));
-      }
-      (Some(p1_value), None) => {
-        p2 = Some(PercentageNumber((1.0 - p1_value.0).max(0.0)));
-      }
-      (None, Some(p2_value)) => {
-        p1 = Some(PercentageNumber((1.0 - p2_value.0).max(0.0)));
-      }
-      _ => {}
-    }
-
-    let p1 = p1.unwrap_or(PercentageNumber(0.5)).0;
-    let p2 = p2.unwrap_or(PercentageNumber(0.5)).0;
+    let (p1, p2) = match (self.first.percentage, self.second.percentage) {
+      (None, None) => (0.5, 0.5),
+      (Some(PercentageNumber(p1)), None) => (p1, (1.0 - p1).max(0.0)),
+      (None, Some(PercentageNumber(p2))) => ((1.0 - p2).max(0.0), p2),
+      (Some(PercentageNumber(p1)), Some(PercentageNumber(p2))) => (p1, p2),
+    };
     let sum = p1 + p2;
 
     if sum <= f32::EPSILON {
@@ -707,24 +666,18 @@ impl ColorMix {
     let weight_2 = p2 / sum;
     let alpha_multiplier = sum.min(1.0);
 
-    let dynamic_1 = DynamicColor::from_alpha_color(AlphaColor::<Srgb>::from(
-      color::Rgba8::from_u8_array(self.first.color.0),
-    ));
-    let dynamic_2 = DynamicColor::from_alpha_color(AlphaColor::<Srgb>::from(
-      color::Rgba8::from_u8_array(self.second.color.0),
-    ));
-
-    let mixed = dynamic_1
-      .interpolate(
-        dynamic_2,
-        self.interpolation.color_space,
-        self.interpolation.hue_direction,
-      )
-      .eval(weight_2)
-      .multiply_alpha(alpha_multiplier);
-
-    Some(Color(
-      mixed.to_alpha_color::<Srgb>().to_rgba8().to_u8_array(),
+    Some(Color::from_dynamic(
+      self
+        .first
+        .color
+        .to_dynamic()
+        .interpolate(
+          self.second.color.to_dynamic(),
+          self.interpolation.color_space,
+          self.interpolation.hue_direction,
+        )
+        .eval(weight_2)
+        .multiply_alpha(alpha_multiplier),
     ))
   }
 }
@@ -886,9 +839,7 @@ fn parse_relative_color<'i>(
   let scale = channel_keyword_scale(target_cs);
   let origin_color = Color::from_css_str(input.slice_from(origin_start).trim())
     .map_err(|_| unexpected_token!(Color, origin_location, &origin_token))?;
-  let [r, g, b, a] = origin_color.0;
-  let converted =
-    DynamicColor::from_alpha_color(AlphaColor::<Srgb>::from_rgba8(r, g, b, a)).convert(target_cs);
+  let converted = origin_color.to_dynamic().convert(target_cs);
   let [k0, k1, k2, k_alpha] = converted.components;
   let keyword_values = [k0 * scale, k1 * scale, k2 * scale, k_alpha];
 
@@ -902,9 +853,8 @@ fn parse_relative_color<'i>(
   };
 
   let new_components = [s0 / scale, s1 / scale, s2 / scale, alpha.clamp(0.0, 1.0)];
-  let result = converted.map(|_, _, _, _| new_components);
-  Ok(Color(
-    result.to_alpha_color::<Srgb>().to_rgba8().to_u8_array(),
+  Ok(Color::from_dynamic(
+    converted.map(|_, _, _, _| new_components),
   ))
 }
 
@@ -927,12 +877,10 @@ impl<'i> FromCss<'i> for Color {
           .map(|(r, g, b)| Color([r, g, b, 255]))
           .map_err(|_| unexpected_token!(location, token))
       }
-      Token::Function(_) => {
-        let token = token.clone();
+      Token::Function(ref name) => {
+        let token = Token::Function(name.clone());
 
-        if let Token::Function(function) = &token
-          && function.eq_ignore_ascii_case("color-mix")
-        {
+        if name.eq_ignore_ascii_case("color-mix") {
           return input.parse_nested_block(|input| {
             let color_mix = ColorMix::from_css(input)?;
             color_mix
@@ -941,11 +889,7 @@ impl<'i> FromCss<'i> for Color {
           });
         }
 
-        let target_cs = if let Token::Function(name) = &token {
-          relative_target_cs(name)
-        } else {
-          None
-        };
+        let target_cs = relative_target_cs(name);
 
         input.parse_nested_block(|input| {
           if let Some(cs) = target_cs
@@ -956,14 +900,12 @@ impl<'i> FromCss<'i> for Color {
 
           while input.next().is_ok() {}
 
-          let body = input.slice_from(position);
-
-          let mut function = body.to_string();
+          let mut function = input.slice_from(position).to_string();
 
           function.push(')');
 
           parse_color(&function)
-            .map(|color| Color(color.to_alpha_color::<Srgb>().to_rgba8().to_u8_array()))
+            .map(Color::from_dynamic)
             .map_err(|_| unexpected_token!(location, &token))
         })
       }

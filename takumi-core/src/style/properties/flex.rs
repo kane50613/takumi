@@ -4,7 +4,7 @@ use cssparser::{BasicParseErrorKind, Parser, Token, match_ignore_ascii_case};
 
 use crate::style::{
   Animatable, AspectRatio, Color, CssSyntaxKind, CssToken, FlexDirection, FromCss, FromCssStr,
-  Length, MakeComputed, ParseResult, Size, SizingContext, ToCss,
+  Length, MakeComputed, ParseResult, Size, SizingContext, ToCss, discrete, impl_from_taffy_enum,
   tw::{Namespace, TailwindPropertyParser},
   unexpected_token,
 };
@@ -74,18 +74,14 @@ impl Animatable for FlexBasis {
     current_color: Color,
   ) {
     *self = match (from, to) {
-      (Self::Size(from), Self::Size(to)) => {
-        let mut size = *from;
-        size.interpolate(from, to, progress, sizing, current_color);
-        Self::Size(size)
-      }
-      _ => {
-        if progress >= 0.5 {
-          *to
-        } else {
-          *from
-        }
-      }
+      (Self::Size(from), Self::Size(to)) => Self::Size(Size::interpolated(
+        from,
+        to,
+        progress,
+        sizing,
+        current_color,
+      )),
+      _ => discrete(from, to, progress),
     };
   }
 }
@@ -153,17 +149,15 @@ impl MakeComputed for FlexWrap {}
 
 impl Animatable for FlexWrap {}
 
-impl FlexWrap {
-  pub(crate) fn into_taffy(self) -> taffy::FlexWrap {
-    match self {
-      Self::NoWrap => taffy::FlexWrap::NoWrap,
-      Self::Wrap => taffy::FlexWrap::Wrap,
-      Self::WrapReverse => taffy::FlexWrap::WrapReverse,
-      Self::Balance => taffy::FlexWrap::Balance,
-      Self::BalanceReverse => taffy::FlexWrap::BalanceReverse,
-    }
-  }
-}
+impl_from_taffy_enum!(
+  FlexWrap,
+  into_taffy -> taffy::FlexWrap,
+  NoWrap,
+  Wrap,
+  WrapReverse,
+  Balance,
+  BalanceReverse
+);
 
 impl<'i> FromCss<'i> for FlexWrap {
   const VALID_TOKENS: &'static [CssToken] = &[
@@ -270,7 +264,7 @@ impl<'i> FromCss<'i> for FlexLineCount {
 
 impl ToCss for FlexLineCount {
   fn to_css<W: fmt::Write>(&self, dest: &mut W) -> fmt::Result {
-    write!(dest, "{}", self.0)
+    write!(dest, "{count}", count = self.0)
   }
 }
 

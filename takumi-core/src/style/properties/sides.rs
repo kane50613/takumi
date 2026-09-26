@@ -5,7 +5,8 @@ use cssparser::Parser;
 use crate::{
   geometry::Rect,
   style::{
-    CssExpectedMessage, CssToken, FromCss, Length, MakeComputed, ParseResult, SizingContext, ToCss,
+    Animatable, Color, CssExpectedMessage, CssToken, FromCss, Length, MakeComputed, ParseResult,
+    SizingContext, ToCss,
   },
 };
 
@@ -37,37 +38,24 @@ impl<T: Copy> Sides<T> {
 
 impl<'i, T: Copy + for<'j> FromCss<'j>> FromCss<'i> for Sides<T> {
   fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
-    // Parse between 1 and 4 values of T using FromCss
-    let first = T::from_css(input)?;
+    let mut values = [T::from_css(input)?; 4];
+    let mut count = 1;
 
-    // Collect all values by parsing until we can't parse more
-    let mut values = Vec::with_capacity(4);
-
-    values.push(first);
-
-    // Keep parsing values separated by whitespace
-    loop {
-      // Try to parse the next value
-      match input.try_parse(T::from_css) {
-        Ok(next_value) => values.push(next_value),
-        Err(_) => break,
-      }
-
-      // Don't allow more than 4 values
-      if values.len() >= 4 {
+    while count < 4 {
+      let Ok(value) = input.try_parse(T::from_css) else {
         break;
-      }
+      };
+
+      values[count] = value;
+      count += 1;
     }
 
-    // Now create the sides based on how many values we got
-    let sides = match values.len() {
-      1 => Sides([values[0]; 4]),
+    Ok(match count {
+      1 => Sides(values),
       2 => Sides([values[0], values[1], values[0], values[1]]),
       3 => Sides([values[0], values[1], values[2], values[1]]),
-      _ => Sides([values[0], values[1], values[2], values[3]]),
-    };
-
-    Ok(sides)
+      _ => Sides(values),
+    })
   }
 
   const VALID_TOKENS: &'static [CssToken] = T::VALID_TOKENS;
@@ -102,6 +90,21 @@ impl<T: Copy + MakeComputed> MakeComputed for Sides<T> {
   fn make_computed(&mut self, sizing: &SizingContext) {
     for value in &mut self.0 {
       value.make_computed(sizing);
+    }
+  }
+}
+
+impl<T: Animatable + Copy> Animatable for Sides<T> {
+  fn interpolate(
+    &mut self,
+    from: &Self,
+    to: &Self,
+    progress: f32,
+    sizing: &SizingContext,
+    current_color: Color,
+  ) {
+    for ((value, from), to) in self.0.iter_mut().zip(&from.0).zip(&to.0) {
+      value.interpolate(from, to, progress, sizing, current_color);
     }
   }
 }

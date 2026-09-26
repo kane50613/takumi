@@ -1,3 +1,5 @@
+use std::fmt;
+
 use cssparser::{Parser, Token};
 
 use crate::style::{
@@ -46,6 +48,14 @@ impl GridPlacement {
       _ => None,
     }
   }
+
+  pub(crate) fn into_taffy(self) -> taffy::GridPlacement {
+    match self {
+      GridPlacement::Auto | GridPlacement::Named(_) => taffy::GridPlacement::Auto,
+      GridPlacement::Line(line) => taffy::GridPlacement::Line(line.into()),
+      GridPlacement::Span(GridPlacementSpan::Span(span)) => taffy::GridPlacement::Span(span),
+    }
+  }
 }
 
 impl TailwindPropertyParser for GridPlacement {
@@ -64,11 +74,9 @@ pub enum GridPlacementSpan {
 
 impl<'i> FromCss<'i> for GridPlacementSpan {
   fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
-    Ok(
-      input
-        .expect_integer()
-        .map(|n| GridPlacementSpan::Span(n.max(1) as u16))?,
-    )
+    Ok(GridPlacementSpan::Span(
+      input.expect_integer()?.max(1) as u16
+    ))
   }
 
   const VALID_TOKENS: &'static [CssToken] = &[CssToken::Syntax(CssSyntaxKind::Integer)];
@@ -80,16 +88,6 @@ impl TailwindPropertyParser for GridPlacementSpan {
   }
 }
 
-impl GridPlacement {
-  pub(crate) fn into_taffy(self) -> taffy::GridPlacement {
-    match self {
-      GridPlacement::Auto | GridPlacement::Named(_) => taffy::GridPlacement::Auto,
-      GridPlacement::Line(line) => taffy::GridPlacement::Line(line.into()),
-      GridPlacement::Span(GridPlacementSpan::Span(span)) => taffy::GridPlacement::Span(span),
-    }
-  }
-}
-
 impl<'i> FromCss<'i> for GridPlacement {
   fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
     if let Ok(ident) = input.try_parse(Parser::expect_ident_cloned) {
@@ -98,29 +96,24 @@ impl<'i> FromCss<'i> for GridPlacement {
       }
 
       if ident.eq_ignore_ascii_case("span") {
-        // Next token should be a number or ident
-        // Try integer first
         if let Ok(span) = input.try_parse(GridPlacementSpan::from_css) {
           return Ok(GridPlacement::Span(span));
         }
 
-        // Try identifier span name (treated as span 1 for named; enum only carries count)
-        if let Ok(_name) = input.try_parse(Parser::expect_ident_cloned) {
+        // Approximate: a named span counts as `span 1`, since the placement only carries a count.
+        if input.try_parse(Parser::expect_ident_cloned).is_ok() {
           return Ok(GridPlacement::span(1));
         }
 
-        // If neither, error
         return Err(unexpected_token!(
           input.current_source_location(),
           input.next()?,
         ));
       }
 
-      // Any other ident is a named line
       return Ok(GridPlacement::Named(ident.to_string()));
     }
 
-    // Try a line index (number, may be negative)
     let location = input.current_source_location();
     let token = input.next()?;
     match *token {
@@ -143,22 +136,22 @@ impl<'i> FromCss<'i> for GridPlacement {
 }
 
 impl ToCss for GridPlacementSpan {
-  fn to_css<W: std::fmt::Write>(&self, dest: &mut W) -> std::fmt::Result {
+  fn to_css<W: fmt::Write>(&self, dest: &mut W) -> fmt::Result {
     match self {
-      Self::Span(span) => write!(dest, "{}", span),
+      Self::Span(span) => write!(dest, "{span}"),
     }
   }
 }
 
 impl ToCss for GridPlacement {
-  fn to_css<W: std::fmt::Write>(&self, dest: &mut W) -> std::fmt::Result {
+  fn to_css<W: fmt::Write>(&self, dest: &mut W) -> fmt::Result {
     match self {
       Self::Auto => dest.write_str("auto"),
       Self::Span(span) => {
         dest.write_str("span ")?;
         span.to_css(dest)
       }
-      Self::Line(line) => write!(dest, "{}", line),
+      Self::Line(line) => write!(dest, "{line}"),
       Self::Named(name) => dest.write_str(name),
     }
   }

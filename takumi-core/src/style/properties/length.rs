@@ -1,4 +1,9 @@
-use std::{fmt, ops::Neg};
+use std::{
+  fmt,
+  hash::{Hash, Hasher},
+  mem::discriminant,
+  ops::Neg,
+};
 
 use cssparser::{Parser, Token, match_ignore_ascii_case};
 use taffy::{CompactLength, Dimension, LengthPercentage, LengthPercentageAuto};
@@ -7,11 +12,10 @@ use crate::style::{
   AspectRatio, CssSyntaxKind, CssToken, FromCss, FromCssStr, MakeComputed, ParseResult,
   SizingContext, ToCss,
   calc::{CalcLinear, CalcTerms, CalcValue, parse_calc_sum},
+  tw::Namespace,
   tw::{TW_VAR_SPACING, TailwindPropertyParser},
   unexpected_token,
 };
-
-use crate::style::tw::Namespace;
 pub(crate) use crate::units::{
   ONE_CM_IN_PX, ONE_IN_PX, ONE_MM_IN_PX, ONE_PC_IN_PX, ONE_PT_IN_PX, ONE_Q_IN_PX,
 };
@@ -144,10 +148,8 @@ pub enum Length {
 
 impl Length {
   /// Hashes the unit and value by bit pattern.
-  pub(crate) fn hash_bits(&self, hasher: &mut impl core::hash::Hasher) {
-    use core::hash::Hash;
-
-    core::mem::discriminant(self).hash(hasher);
+  pub(crate) fn hash_bits(&self, hasher: &mut impl Hasher) {
+    discriminant(self).hash(hasher);
     match self {
       Self::Auto => {}
       Self::Calc(formula) => formula.hash_bits(hasher),
@@ -173,9 +175,7 @@ impl Length {
       | Self::Px(value) => value.to_bits().hash(hasher),
     }
   }
-}
 
-impl Length {
   /// Construct a length from a Tailwind spacing-scale multiplier.
   #[inline]
   pub(crate) fn from_spacing(units: f32) -> Self {
@@ -239,26 +239,26 @@ impl ToCss for Length {
   fn to_css<W: fmt::Write>(&self, dest: &mut W) -> fmt::Result {
     match self {
       Self::Auto => dest.write_str("auto"),
-      Self::Percentage(v) => write!(dest, "{}%", v),
-      Self::Rem(v) => write!(dest, "{}rem", v),
-      Self::Em(v) => write!(dest, "{}em", v),
-      Self::Lh(v) => write!(dest, "{}lh", v),
-      Self::Rlh(v) => write!(dest, "{}rlh", v),
-      Self::Vh(v) => write!(dest, "{}vh", v),
-      Self::Vw(v) => write!(dest, "{}vw", v),
-      Self::CqH(v) => write!(dest, "{}cqh", v),
-      Self::CqW(v) => write!(dest, "{}cqw", v),
-      Self::CqMin(v) => write!(dest, "{}cqmin", v),
-      Self::CqMax(v) => write!(dest, "{}cqmax", v),
-      Self::VMin(v) => write!(dest, "{}vmin", v),
-      Self::VMax(v) => write!(dest, "{}vmax", v),
-      Self::Cm(v) => write!(dest, "{}cm", v),
-      Self::Mm(v) => write!(dest, "{}mm", v),
-      Self::In(v) => write!(dest, "{}in", v),
-      Self::Q(v) => write!(dest, "{}q", v),
-      Self::Pt(v) => write!(dest, "{}pt", v),
-      Self::Pc(v) => write!(dest, "{}pc", v),
-      Self::Px(v) => write!(dest, "{}px", v),
+      Self::Percentage(v) => write!(dest, "{v}%"),
+      Self::Rem(v) => write!(dest, "{v}rem"),
+      Self::Em(v) => write!(dest, "{v}em"),
+      Self::Lh(v) => write!(dest, "{v}lh"),
+      Self::Rlh(v) => write!(dest, "{v}rlh"),
+      Self::Vh(v) => write!(dest, "{v}vh"),
+      Self::Vw(v) => write!(dest, "{v}vw"),
+      Self::CqH(v) => write!(dest, "{v}cqh"),
+      Self::CqW(v) => write!(dest, "{v}cqw"),
+      Self::CqMin(v) => write!(dest, "{v}cqmin"),
+      Self::CqMax(v) => write!(dest, "{v}cqmax"),
+      Self::VMin(v) => write!(dest, "{v}vmin"),
+      Self::VMax(v) => write!(dest, "{v}vmax"),
+      Self::Cm(v) => write!(dest, "{v}cm"),
+      Self::Mm(v) => write!(dest, "{v}mm"),
+      Self::In(v) => write!(dest, "{v}in"),
+      Self::Q(v) => write!(dest, "{v}q"),
+      Self::Pt(v) => write!(dest, "{v}pt"),
+      Self::Pc(v) => write!(dest, "{v}pc"),
+      Self::Px(v) => write!(dest, "{v}px"),
       Self::Calc(f) => {
         if f.terms().next().is_none() {
           return dest.write_str("0px");
@@ -271,14 +271,14 @@ impl ToCss for Length {
         {
           if first {
             if value < 0.0 {
-              write!(dest, "-{}{}", -value, unit)?;
+              write!(dest, "-{magnitude}{unit}", magnitude = -value)?;
             } else {
-              write!(dest, "{}{}", value, unit)?;
+              write!(dest, "{value}{unit}")?;
             }
           } else if value < 0.0 {
-            write!(dest, " - {}{}", -value, unit)?;
+            write!(dest, " - {magnitude}{unit}", magnitude = -value)?;
           } else {
-            write!(dest, " + {}{}", value, unit)?;
+            write!(dest, " + {value}{unit}")?;
           }
           first = false;
         }
@@ -1107,14 +1107,18 @@ mod tests {
 
   #[test]
   fn calc_rejects_deeply_nested_unary_signs() {
-    let css = format!("calc({}1px)", "- ".repeat(200));
+    let css = format!("calc({signs}1px)", signs = "- ".repeat(200));
 
     assert!(Length::from_css_str(&css).is_err());
   }
 
   #[test]
   fn calc_rejects_deeply_nested_calc_functions() {
-    let css = format!("{}1px{}", "calc(".repeat(200), ")".repeat(200));
+    let css = format!(
+      "{open}1px{close}",
+      open = "calc(".repeat(200),
+      close = ")".repeat(200)
+    );
 
     assert!(Length::from_css_str(&css).is_err());
   }

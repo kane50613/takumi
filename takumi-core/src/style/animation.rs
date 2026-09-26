@@ -62,22 +62,15 @@ pub(crate) fn apply_stylesheet_animations(
       continue;
     };
 
-    let duration = time_at(
-      &base_snapshot.animation_duration,
-      animation_index,
-      AnimationTime::from_milliseconds(0.0),
-    );
-    let delay = time_at(
-      &base_snapshot.animation_delay,
-      animation_index,
-      AnimationTime::from_milliseconds(0.0),
-    );
+    let duration: AnimationTime =
+      repeated_list_value(&base_snapshot.animation_duration, animation_index);
+    let delay: AnimationTime = repeated_list_value(&base_snapshot.animation_delay, animation_index);
     let iteration_count =
-      iteration_count_at(&base_snapshot.animation_iteration_count, animation_index);
-    let direction = direction_at(&base_snapshot.animation_direction, animation_index);
-    let fill_mode = fill_mode_at(&base_snapshot.animation_fill_mode, animation_index);
-    let timing_function =
-      timing_function_at(&base_snapshot.animation_timing_function, animation_index);
+      repeated_list_value(&base_snapshot.animation_iteration_count, animation_index);
+    let direction = repeated_list_value(&base_snapshot.animation_direction, animation_index);
+    let fill_mode = repeated_list_value(&base_snapshot.animation_fill_mode, animation_index);
+    let timing_function: AnimationTimingFunction =
+      repeated_list_value(&base_snapshot.animation_timing_function, animation_index);
 
     let Some(sample) = sample_animation_progress(
       time as f32,
@@ -96,7 +89,7 @@ pub(crate) fn apply_stylesheet_animations(
       continue;
     };
 
-    let eased_progress = apply_timing_function(&timing_function, segment.progress, sample.before);
+    let eased_progress = timing_function.apply(segment.progress, sample.before);
     base_style.apply_interpolated_properties(
       segment.from_style,
       segment.to_style,
@@ -569,7 +562,6 @@ impl_passthrough_animatable!(
   TextStroke,
   TextDecoration,
   TextDecorationLines,
-  BreakBetween,
   OverflowWrap,
   BasicShape,
   OffsetPath,

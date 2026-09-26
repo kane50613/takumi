@@ -49,9 +49,7 @@ impl FontStyle {
   pub const fn oblique(angle: f32) -> Self {
     Self(ParleyFontStyle::Oblique(Some(angle)))
   }
-}
 
-impl FontStyle {
   pub(crate) fn into_parlance(self) -> ParleyFontStyle {
     self.0
   }
@@ -63,7 +61,7 @@ impl ToCss for FontStyle {
       ParleyFontStyle::Normal => dest.write_str("normal"),
       ParleyFontStyle::Italic => dest.write_str("italic"),
       ParleyFontStyle::Oblique(angle) => match angle {
-        Some(a) => write!(dest, "oblique {}deg", a),
+        Some(a) => write!(dest, "oblique {a}deg"),
         None => dest.write_str("oblique"),
       },
     }

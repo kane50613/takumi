@@ -2,10 +2,9 @@ use std::fmt;
 
 use cssparser::{Parser, match_ignore_ascii_case};
 
-use crate::style::tw::Namespace;
 use crate::style::{
   Animatable, Color, CssSyntaxKind, CssToken, FromCss, FromCssStr, MakeComputed, ParseResult,
-  SizingContext, ToCss, lerp, tw::TailwindPropertyParser,
+  SizingContext, ToCss, discrete, lerp, tw::Namespace, tw::TailwindPropertyParser,
 };
 
 #[derive(Default, Debug, Clone, Copy, PartialEq)]
@@ -45,13 +44,7 @@ impl Animatable for AspectRatio {
       (AspectRatio::Ratio(lhs), AspectRatio::Ratio(rhs)) => {
         AspectRatio::Ratio(lerp(lhs, rhs, progress))
       }
-      _ => {
-        if progress >= 0.5 {
-          *to
-        } else {
-          *from
-        }
-      }
+      _ => discrete(from, to, progress),
     };
   }
 }
@@ -115,7 +108,7 @@ impl ToCss for AspectRatio {
   fn to_css<W: fmt::Write>(&self, dest: &mut W) -> fmt::Result {
     match self {
       Self::Auto => dest.write_str("auto"),
-      Self::Ratio(v) => write!(dest, "{}", v),
+      Self::Ratio(v) => write!(dest, "{v}"),
     }
   }
 }

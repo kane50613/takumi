@@ -1,6 +1,6 @@
 use cssparser::Parser;
 
-use crate::style::{unexpected_token, *};
+use crate::style::{impl_comma_list_from_css, unexpected_token, *};
 
 /// Parsed `background` shorthand value.
 #[derive(Debug, Clone, Default, PartialEq)]
@@ -41,7 +41,6 @@ impl<'i> FromCss<'i> for Background {
     let mut box_count = 0u8;
 
     while !input.is_exhausted() && !next_is_comma(input) {
-      // Try to parse background-color
       if color.is_none()
         && let Ok(value) = input.try_parse(ColorInput::from_css)
       {
@@ -49,7 +48,6 @@ impl<'i> FromCss<'i> for Background {
         continue;
       }
 
-      // Try to parse background-position (and optionally background-size with /)
       if position.is_none()
         && let Ok(value) = input.try_parse(PositionValue::from_css)
       {
@@ -65,7 +63,6 @@ impl<'i> FromCss<'i> for Background {
         continue;
       }
 
-      // Try to parse background-image
       if image.is_none()
         && let Ok(value) = input.try_parse(BackgroundImage::from_css)
       {
@@ -73,7 +70,6 @@ impl<'i> FromCss<'i> for Background {
         continue;
       }
 
-      // Try to parse background-repeat
       if repeat.is_none()
         && let Ok(value) = input.try_parse(BackgroundRepeat::from_css)
       {
@@ -94,7 +90,6 @@ impl<'i> FromCss<'i> for Background {
         continue;
       }
 
-      // If we can't parse anything, it's an error
       return Err(unexpected_token!(
         input.current_source_location(),
         input.next()?,
@@ -124,17 +119,7 @@ impl<'i> FromCss<'i> for Background {
 /// A list of background properties (one per layer).
 pub(crate) type Backgrounds = Box<[Background]>;
 
-impl<'i> FromCss<'i> for Backgrounds {
-  fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
-    Ok(
-      input
-        .parse_comma_separated(Background::from_css)?
-        .into_boxed_slice(),
-    )
-  }
-
-  const VALID_TOKENS: &'static [CssToken] = Background::VALID_TOKENS;
-}
+impl_comma_list_from_css!(Backgrounds, Background);
 
 #[cfg(test)]
 mod tests {

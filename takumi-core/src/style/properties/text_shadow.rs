@@ -1,12 +1,13 @@
-use std::{fmt, fmt::Debug};
+use std::fmt;
 
 use cssparser::{BasicParseErrorKind, Parser};
 use typed_builder::TypedBuilder;
 
 use super::box_shadow::parse_offsets_blur;
 use crate::style::{
-  Animatable, Color, ColorInput, CssSyntaxKind, CssToken, FromCss, FromCssStr, Length,
-  ListInterpolationStrategy, MakeComputed, ParseResult, SizingContext, ToCss, next_is_comma,
+  Animatable, Color, ColorInput, CssSyntaxKind, CssToken, FromCss, Length,
+  ListInterpolationStrategy, MakeComputed, ParseResult, SizingContext, ToCss,
+  impl_comma_list_from_css, next_is_comma, tw::TailwindPropertyParser,
 };
 
 /// Represents a text shadow with all its properties.
@@ -41,42 +42,19 @@ impl Default for TextShadow {
 /// Represents a collection of text shadows; has custom `FromCss` implementation for comma-separated values.
 pub(crate) type TextShadows = Box<[TextShadow]>;
 
-impl<'i> FromCss<'i> for TextShadows {
-  fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
-    Ok(
-      input
-        .parse_comma_separated(TextShadow::from_css)?
-        .into_boxed_slice(),
-    )
-  }
-
-  const VALID_TOKENS: &'static [CssToken] = TextShadow::VALID_TOKENS;
-}
+impl_comma_list_from_css!(TextShadows, TextShadow);
 
 impl<'i> FromCss<'i> for TextShadow {
-  /// Parses a text-shadow value from CSS input.
-  ///
-  /// The text-shadow syntax supports the following components (in that order):
-  /// - Two length values for horizontal and vertical offsets (required)
-  /// - An optional length value for blur radius
-  /// - An optional color value
-  ///
-  /// Examples:
-  /// - `text-shadow: 2px 4px;`
-  /// - `text-shadow: 2px 4px 6px;`
-  /// - `text-shadow: 2px 4px red;`
   fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, TextShadow> {
     let mut color = None;
     let mut lengths = None;
 
     while !input.is_exhausted() && !next_is_comma(input) {
-      if lengths.is_none() {
-        let value = input.try_parse(parse_offsets_blur);
-
-        if let Ok(value) = value {
-          lengths = Some(value);
-          continue;
-        }
+      if lengths.is_none()
+        && let Ok(value) = input.try_parse(parse_offsets_blur)
+      {
+        lengths = Some(value);
+        continue;
       }
 
       if color.is_none()
@@ -105,11 +83,7 @@ impl<'i> FromCss<'i> for TextShadow {
   ];
 }
 
-impl crate::style::tw::TailwindPropertyParser for TextShadow {
-  fn parse_tw(token: &str) -> Option<Self> {
-    Self::from_css_str(token).ok()
-  }
-}
+impl TailwindPropertyParser for TextShadow {}
 
 impl MakeComputed for TextShadow {
   fn make_computed(&mut self, sizing: &SizingContext) {
@@ -126,10 +100,8 @@ impl Animatable for TextShadow {
 
   fn neutral_value_like(_other: &Self) -> Option<Self> {
     Some(Self {
-      offset_x: Length::zero(),
-      offset_y: Length::zero(),
-      blur_radius: Length::zero(),
       color: Color::transparent().into(),
+      ..Self::default()
     })
   }
 
@@ -188,7 +160,7 @@ impl ToCss for TextShadow {
 #[cfg(test)]
 mod tests {
   use super::*;
-  use crate::style::{Color, Length::Px};
+  use crate::style::{Color, FromCssStr, Length::Px};
 
   #[test]
   fn test_parse_text_shadow_no_blur_radius() {

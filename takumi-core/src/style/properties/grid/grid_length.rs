@@ -1,3 +1,5 @@
+use std::fmt;
+
 use cssparser::{Parser, Token};
 use taffy::CompactLength;
 
@@ -5,7 +7,7 @@ use crate::style::{
   CssToken, FromCss, Length, MakeComputed, ParseResult, SizingContext, ToCss, unexpected_token,
 };
 
-/// Represents a grid track sizing function with serde support
+/// Represents a grid track sizing function
 #[derive(Debug, Clone, Copy, PartialEq)]
 #[non_exhaustive]
 pub enum GridLength {
@@ -24,7 +26,6 @@ impl GridLength {
   }
 }
 
-// Minimal CSS parsing helpers for grid values (mirror patterns used in other property modules)
 impl<'i> FromCss<'i> for GridLength {
   fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
     if let Ok(unit) = input.try_parse(Length::from_css) {
@@ -57,9 +58,9 @@ impl MakeComputed for GridLength {
 }
 
 impl ToCss for GridLength {
-  fn to_css<W: std::fmt::Write>(&self, dest: &mut W) -> std::fmt::Result {
+  fn to_css<W: fmt::Write>(&self, dest: &mut W) -> fmt::Result {
     match self {
-      Self::Fr(fr) => write!(dest, "{}fr", fr),
+      Self::Fr(fr) => write!(dest, "{fr}fr"),
       Self::Unit(u) => u.to_css(dest),
     }
   }

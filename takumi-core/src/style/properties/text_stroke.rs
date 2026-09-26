@@ -18,9 +18,7 @@ pub struct TextStroke {
 
 impl<'i> FromCss<'i> for TextStroke {
   fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
-    // Parse width first
     let width = Length::from_css(input)?;
-    // Try optional color
     let color = input.try_parse(ColorInput::from_css).ok();
 
     Ok(TextStroke { width, color })
@@ -75,8 +73,6 @@ mod tests {
       );
     }
   }
-
-  // TextStroke has no ToCss impl, so no round-trip test.
 
   #[test]
   fn test_parse_text_stroke_invalid() {

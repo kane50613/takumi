@@ -42,7 +42,6 @@ impl<'i> FromCss<'i> for TextFit {
       })
       .ok();
 
-    // Reject trailing tokens (e.g. duplicate target or two percentages).
     if !input.is_exhausted() {
       return Err(input.new_error_for_next_token());
     }
@@ -119,8 +118,7 @@ impl ToCss for TextFit {
       self.target.to_css(dest)?;
     }
     if let Some(limit) = self.limit {
-      dest.write_char(' ')?;
-      write!(dest, "{}%", limit * 100.0)?;
+      write!(dest, " {percent}%", percent = limit * 100.0)?;
     }
     Ok(())
   }

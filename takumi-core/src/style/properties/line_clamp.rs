@@ -212,8 +212,6 @@ mod tests {
     }
   }
 
-  // LineClamp has no ToCss impl, so no round-trip test.
-
   #[test]
   fn test_parse_line_clamp_invalid() {
     assert!(LineClamp::from_css_str("bogus").is_err());

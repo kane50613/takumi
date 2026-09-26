@@ -70,7 +70,7 @@ mod white_space;
 mod word_break;
 mod z_index;
 
-use std::fmt;
+use std::{borrow::Cow, fmt};
 
 pub use animation::*;
 pub use aspect_ratio::*;
@@ -91,7 +91,10 @@ pub use conic_gradient::ConicGradient;
 pub use contain::*;
 pub use content::*;
 pub use corner_shape::*;
-use cssparser::{Parser, match_ignore_ascii_case};
+use cssparser::{
+  ParseError as CssParseError, ParseErrorKind, Parser, SourceLocation, ToCss as CssParserToCss,
+  Token, match_ignore_ascii_case,
+};
 pub use filter::{
   BlurType, Filter, FilterCategory, Filters, LUMA_WEIGHTS, SEPIA_WEIGHTS, TransferChannel,
   TransferTable,
@@ -143,7 +146,9 @@ pub use text_shadow::*;
 pub use text_stroke::*;
 pub use text_wrap::*;
 pub use traits::*;
-pub(crate) use traits::{declare_box_alignment_enum_impl, impl_css_enum, impl_from_taffy_enum};
+pub(crate) use traits::{
+  declare_box_alignment_enum_impl, impl_comma_list_from_css, impl_css_enum, impl_from_taffy_enum,
+};
 pub use transform::*;
 pub use vertical_align::*;
 pub use white_space::*;
@@ -159,6 +164,19 @@ pub(crate) fn next_is_comma<'i>(input: &mut Parser<'i, '_>) -> bool {
   is_comma
 }
 
+/// Parses a comma-separated list of `parse_item`, requiring at least one.
+pub(crate) fn parse_comma_list<'i, T>(
+  input: &mut Parser<'i, '_>,
+  mut parse_item: impl FnMut(&mut Parser<'i, '_>) -> ParseResult<'i, T>,
+) -> ParseResult<'i, Box<[T]>> {
+  let mut items = Vec::new();
+  items.push(parse_item(input)?);
+  while input.expect_comma().is_ok() {
+    items.push(parse_item(input)?);
+  }
+  Ok(items.into_boxed_slice())
+}
+
 // These parse Tailwind tokens straight through their `FromCss` value parser.
 impl TailwindPropertyParser for ObjectFit {}
 impl TailwindPropertyParser for ListStyleType {}
@@ -168,45 +186,6 @@ impl TailwindPropertyParser for TextAlign {}
 impl TailwindPropertyParser for LineJoin {}
 impl TailwindPropertyParser for AlignItems {}
 impl TailwindPropertyParser for BorderStyle {}
-
-impl<T: Animatable + Copy> Animatable for SpacePair<T> {
-  fn interpolate(
-    &mut self,
-    from: &Self,
-    to: &Self,
-    progress: f32,
-    sizing: &SizingContext,
-    current_color: Color,
-  ) {
-    self
-      .x
-      .interpolate(&from.x, &to.x, progress, sizing, current_color);
-    self
-      .y
-      .interpolate(&from.y, &to.y, progress, sizing, current_color);
-  }
-}
-
-impl<T: Animatable + Copy> Animatable for Sides<T> {
-  fn interpolate(
-    &mut self,
-    from: &Self,
-    to: &Self,
-    progress: f32,
-    sizing: &SizingContext,
-    current_color: Color,
-  ) {
-    for (index, value) in self.0.iter_mut().enumerate() {
-      value.interpolate(
-        &from.0[index],
-        &to.0[index],
-        progress,
-        sizing,
-        current_color,
-      );
-    }
-  }
-}
 
 macro_rules! unexpected_token {
   ($type:ty, $location:expr, $token:expr $(,)?) => {
@@ -228,17 +207,17 @@ pub(crate) use unexpected_token;
 #[cold]
 #[inline(never)]
 pub(crate) fn build_unexpected_token<'i>(
-  location: cssparser::SourceLocation,
-  token: &cssparser::Token<'_>,
+  location: SourceLocation,
+  token: &Token<'_>,
   expect: CssExpectedMessage,
   valid_tokens: &'static [CssToken],
-) -> cssparser::ParseError<'i, std::borrow::Cow<'i, str>> {
-  let token = cssparser::ToCss::to_css_string(token);
+) -> CssParseError<'i, Cow<'i, str>> {
+  let token = CssParserToCss::to_css_string(token);
   let message = expect.build_message(&token, merge_enum_values(valid_tokens));
 
-  cssparser::ParseError {
+  CssParseError {
     location,
-    kind: cssparser::ParseErrorKind::Custom(std::borrow::Cow::Owned(message)),
+    kind: ParseErrorKind::Custom(Cow::Owned(message)),
   }
 }
 
@@ -247,17 +226,18 @@ pub(crate) fn build_unexpected_token<'i>(
 /// - `["fill", "contain"]` → `"'fill' or 'contain'"`
 /// - `["fill", "contain", "cover"]` → `"'fill', 'contain' or 'cover'"`
 pub(crate) fn merge_enum_values(values: &[CssToken]) -> String {
-  match values.len() {
-    0 => String::new(),
-    1 => values[0].to_string(),
-    2 => format!("{} or {}", values[0], values[1]),
-    _ => {
-      let all_but_last = values[..values.len() - 1]
+  match values {
+    [] => String::new(),
+    [only] => only.to_string(),
+    [first, second] => format!("{first} or {second}"),
+    [all_but_last @ .., last] => {
+      let all_but_last = all_but_last
         .iter()
         .map(ToString::to_string)
         .collect::<Vec<_>>()
         .join(", ");
-      format!("{} or {}", all_but_last, values[values.len() - 1])
+
+      format!("{all_but_last} or {last}")
     }
   }
 }
@@ -609,7 +589,7 @@ impl<'i> FromCss<'i> for BorderSpacing {
   const VALID_TOKENS: &'static [CssToken] = SpacePair::<Length>::VALID_TOKENS;
   const EXPECT_MESSAGE: CssExpectedMessage = CssExpectedMessage::OneOrTwoValues;
 
-  fn from_css(input: &mut cssparser::Parser<'i, '_>) -> ParseResult<'i, Self> {
+  fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
     let location = input.current_source_location();
     let pair = SpacePair::<Length>::from_css(input)?;
 
@@ -617,7 +597,7 @@ impl<'i> FromCss<'i> for BorderSpacing {
       .into_iter()
       .any(|length| matches!(length, Length::Auto | Length::Percentage(_)) || length.is_negative())
     {
-      return Err(location.new_unexpected_token_error(cssparser::Token::Delim('%')));
+      return Err(location.new_unexpected_token_error(Token::Delim('%')));
     }
 
     Ok(Self(pair))
@@ -684,9 +664,7 @@ impl Position {
       Position::Absolute | Position::Fixed => taffy::Position::Absolute,
     }
   }
-}
 
-impl Position {
   /// A positioned element (anything but `static`): establishes a containing
   /// block for absolutely-positioned descendants and honors `z-index`.
   pub(crate) const fn is_positioned(self) -> bool {
@@ -1066,6 +1044,28 @@ impl Display {
   pub(crate) fn blockify(&mut self) {
     *self = self.as_blockified();
   }
+
+  pub(crate) fn into_taffy(self) -> taffy::Display {
+    match self {
+      Display::Flex | Display::InlineFlex => taffy::Display::Flex,
+      Display::Grid | Display::InlineGrid => taffy::Display::Grid,
+      Display::Block | Display::InlineBlock | Display::Inline | Display::ListItem => {
+        taffy::Display::Block
+      }
+      Display::FlowRoot => taffy::Display::FlowRoot,
+      // Lowering replaces every table box that sits in a table, so what is left
+      // here is a table part outside one. Blink wraps those in anonymous table
+      // boxes; block is the approximation.
+      Display::Table
+      | Display::TableHeaderGroup
+      | Display::TableRowGroup
+      | Display::TableFooterGroup
+      | Display::TableRow
+      | Display::TableCell
+      | Display::TableCaption => taffy::Display::Block,
+      Display::None => taffy::Display::None,
+    }
+  }
 }
 
 /// Legacy `-webkit-box-orient` axis, lowered to `flex-direction`.
@@ -1159,30 +1159,6 @@ impl From<BoxAlign> for AlignItems {
       BoxAlign::Center => AlignItems::Center,
       BoxAlign::Baseline => AlignItems::Baseline,
       BoxAlign::Stretch => AlignItems::Stretch,
-    }
-  }
-}
-
-impl Display {
-  pub(crate) fn into_taffy(self) -> taffy::Display {
-    match self {
-      Display::Flex | Display::InlineFlex => taffy::Display::Flex,
-      Display::Grid | Display::InlineGrid => taffy::Display::Grid,
-      Display::Block | Display::InlineBlock | Display::Inline | Display::ListItem => {
-        taffy::Display::Block
-      }
-      Display::FlowRoot => taffy::Display::FlowRoot,
-      // Lowering replaces every table box that sits in a table, so what is left
-      // here is a table part outside one. Blink wraps those in anonymous table
-      // boxes; block is the approximation.
-      Display::Table
-      | Display::TableHeaderGroup
-      | Display::TableRowGroup
-      | Display::TableFooterGroup
-      | Display::TableRow
-      | Display::TableCell
-      | Display::TableCaption => taffy::Display::Block,
-      Display::None => taffy::Display::None,
     }
   }
 }

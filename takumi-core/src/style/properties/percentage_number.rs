@@ -7,7 +7,7 @@ use cssparser::{Parser, Token};
 
 use crate::style::{
   Animatable, Color, CssSyntaxKind, CssToken, MakeComputed, SizingContext, ToCss, lerp,
-  properties::{FromCss, ParseResult, flex_grow::parse_numeric_tw},
+  properties::{FromCss, ParseResult},
   tw::TailwindPropertyParser,
   unexpected_token,
 };
@@ -27,7 +27,7 @@ impl Animatable for PercentageNumber {
     _sizing: &SizingContext,
     _current_color: Color,
   ) {
-    *self = Self(lerp(from.0, to.0, progress));
+    self.0 = lerp(from.0, to.0, progress);
   }
 }
 
@@ -55,7 +55,10 @@ impl Neg for PercentageNumber {
 
 impl TailwindPropertyParser for PercentageNumber {
   fn parse_tw(token: &str) -> Option<Self> {
-    parse_numeric_tw(token, |v| PercentageNumber(v / 100.0))
+    token
+      .parse()
+      .ok()
+      .map(|value: f32| PercentageNumber(value / 100.0))
   }
 }
 
@@ -79,7 +82,7 @@ impl<'i> FromCss<'i> for PercentageNumber {
 
 impl ToCss for PercentageNumber {
   fn to_css<W: fmt::Write>(&self, dest: &mut W) -> fmt::Result {
-    write!(dest, "{}", self.0)
+    self.0.to_css(dest)
   }
 }
 

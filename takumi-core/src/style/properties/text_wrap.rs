@@ -3,7 +3,7 @@ use typed_builder::TypedBuilder;
 
 use crate::style::{
   CssDescriptorKind, CssToken, FromCss, MakeComputed, ParseResult, impl_css_enum,
-  tw::TailwindPropertyParser,
+  impl_from_taffy_enum, tw::TailwindPropertyParser,
 };
 
 /// Controls how text should be wrapped.
@@ -86,20 +86,13 @@ pub enum TextWrapMode {
   NoWrap,
 }
 
-impl TextWrapMode {
-  pub(crate) fn into_parley(self) -> parley::TextWrapMode {
-    match self {
-      TextWrapMode::Wrap => parley::TextWrapMode::Wrap,
-      TextWrapMode::NoWrap => parley::TextWrapMode::NoWrap,
-    }
-  }
-}
-
 impl_css_enum!(
   TextWrapMode,
   "wrap" => TextWrapMode::Wrap,
   "nowrap" => TextWrapMode::NoWrap,
 );
+
+impl_from_taffy_enum!(TextWrapMode, into_parley -> parley::TextWrapMode, Wrap, NoWrap);
 
 /// Controls the style of text wrapping.
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
@@ -159,8 +152,6 @@ mod tests {
     }
   }
 
-  // TextWrap (the shorthand struct) has no ToCss impl, so no round-trip test on it. Its
-  // sub-enums do though.
   #[test]
   fn test_text_wrap_sub_enums_round_trip() {
     for css in ["wrap", "nowrap"] {

@@ -1,3 +1,5 @@
+use std::fmt;
+
 use cssparser::Parser;
 
 use crate::style::{CssToken, FromCss, MakeComputed, ParseResult, ToCss};
@@ -34,9 +36,7 @@ impl GridAutoFlow {
       (GridDirection::Column, true) => taffy::GridAutoFlow::ColumnDense,
     }
   }
-}
 
-impl GridAutoFlow {
   /// The grid auto flow is in the row direction.
   pub const fn row() -> Self {
     Self {
@@ -67,11 +67,7 @@ impl<'i> FromCss<'i> for GridAutoFlow {
     let mut direction = GridDirection::default();
     let mut dense = false;
 
-    loop {
-      if input.is_exhausted() {
-        break;
-      }
-
+    while !input.is_exhausted() {
       if input
         .try_parse(|input| input.expect_ident_matching("dense"))
         .is_ok()
@@ -110,7 +106,7 @@ impl<'i> FromCss<'i> for GridAutoFlow {
 }
 
 impl ToCss for GridAutoFlow {
-  fn to_css<W: std::fmt::Write>(&self, dest: &mut W) -> std::fmt::Result {
+  fn to_css<W: fmt::Write>(&self, dest: &mut W) -> fmt::Result {
     match self.direction {
       GridDirection::Row => dest.write_str("row")?,
       GridDirection::Column => dest.write_str("column")?,

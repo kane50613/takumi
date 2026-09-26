@@ -1,13 +1,13 @@
 use std::fmt;
 
 use bitflags::bitflags;
-use cssparser::{Parser, Token, match_ignore_ascii_case};
+use cssparser::{Parser, Token};
 use typed_builder::TypedBuilder;
 
 use crate::style::{
-  Animatable, Color, CssSyntaxKind, CssToken, FromCss, FromCssStr, Length, MakeComputed,
-  ParseResult, SizingContext, ToCss, impl_css_enum, properties::ColorInput,
-  tw::TailwindPropertyParser, unexpected_token,
+  Animatable, Color, ColorInput, CssSyntaxKind, CssToken, FromCss, FromCssStr, Length,
+  MakeComputed, ParseResult, SizingContext, ToCss, discrete, impl_css_enum,
+  tw::TailwindPropertyParser, unexpected_token, write_keywords,
 };
 
 bitflags! {
@@ -24,37 +24,48 @@ bitflags! {
   }
 }
 
+impl TextDecorationLines {
+  const KEYWORDS: [(Self, &'static str); 3] = [
+    (Self::UNDERLINE, "underline"),
+    (Self::LINE_THROUGH, "line-through"),
+    (Self::OVERLINE, "overline"),
+  ];
+
+  fn from_keyword(ident: &str) -> Option<Self> {
+    Self::KEYWORDS
+      .into_iter()
+      .find(|(_, keyword)| ident.eq_ignore_ascii_case(keyword))
+      .map(|(line, _)| line)
+  }
+}
+
 impl<'i> FromCss<'i> for TextDecorationLines {
   fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
-    let mut lines = TextDecorationLines::empty();
-
-    // Parse at least one line decoration
     let first_location = input.current_source_location();
     let first_ident = input.expect_ident()?;
-    match_ignore_ascii_case! {first_ident,
-      "none" => return Ok(lines),
-      "underline" => lines |= TextDecorationLines::UNDERLINE,
-      "line-through" => lines |= TextDecorationLines::LINE_THROUGH,
-      "overline" => lines |= TextDecorationLines::OVERLINE,
-      _ => return Err(unexpected_token!(first_location, &Token::Ident(first_ident.clone()))),
+
+    if first_ident.eq_ignore_ascii_case("none") {
+      return Ok(Self::empty());
     }
 
-    // Parse additional decorations if present
+    let Some(mut lines) = Self::from_keyword(first_ident) else {
+      return Err(unexpected_token!(
+        first_location,
+        &Token::Ident(first_ident.clone())
+      ));
+    };
+
     while !input.is_exhausted() {
       let state = input.state();
-      if let Ok(ident) = input.expect_ident() {
-        match_ignore_ascii_case! {ident,
-          "underline" => lines |= TextDecorationLines::UNDERLINE,
-          "line-through" => lines |= TextDecorationLines::LINE_THROUGH,
-          "overline" => lines |= TextDecorationLines::OVERLINE,
-          _ => {
-            input.reset(&state);
-            break;
-          }
-        }
-      } else {
+      let Ok(ident) = input.expect_ident() else {
         break;
-      }
+      };
+      let Some(line) = Self::from_keyword(ident) else {
+        input.reset(&state);
+        break;
+      };
+
+      lines |= line;
     }
 
     Ok(lines)
@@ -104,17 +115,15 @@ impl Animatable for TextDecorationThickness {
   ) {
     *self = match (*from, *to) {
       (TextDecorationThickness::Length(from), TextDecorationThickness::Length(to)) => {
-        let mut value = from;
-        value.interpolate(&from, &to, progress, sizing, current_color);
-        TextDecorationThickness::Length(value)
+        TextDecorationThickness::Length(Length::interpolated(
+          &from,
+          &to,
+          progress,
+          sizing,
+          current_color,
+        ))
       }
-      _ => {
-        if progress >= 0.5 {
-          *to
-        } else {
-          *from
-        }
-      }
+      _ => discrete(from, to, progress),
     };
   }
 }
@@ -159,28 +168,14 @@ impl TailwindPropertyParser for TextDecorationThickness {
 
 impl ToCss for TextDecorationLines {
   fn to_css<W: fmt::Write>(&self, dest: &mut W) -> fmt::Result {
-    if self.is_empty() {
-      return dest.write_str("none");
-    }
-    let mut first = true;
-    if self.contains(TextDecorationLines::UNDERLINE) {
-      dest.write_str("underline")?;
-      first = false;
-    }
-    if self.contains(TextDecorationLines::LINE_THROUGH) {
-      if !first {
-        dest.write_char(' ')?;
-      }
-      dest.write_str("line-through")?;
-      first = false;
-    }
-    if self.contains(TextDecorationLines::OVERLINE) {
-      if !first {
-        dest.write_char(' ')?;
-      }
-      dest.write_str("overline")?;
-    }
-    Ok(())
+    write_keywords(
+      dest,
+      Self::KEYWORDS
+        .into_iter()
+        .filter(|(line, _)| self.contains(*line))
+        .map(|(_, keyword)| keyword),
+      "none",
+    )
   }
 }
 
@@ -234,12 +229,15 @@ impl Animatable for TextUnderlineOffset {
   ) {
     *self = match (*from, *to) {
       (TextUnderlineOffset::Length(from), TextUnderlineOffset::Length(to)) => {
-        let mut value = from;
-        value.interpolate(&from, &to, progress, sizing, current_color);
-        TextUnderlineOffset::Length(value)
+        TextUnderlineOffset::Length(Length::interpolated(
+          &from,
+          &to,
+          progress,
+          sizing,
+          current_color,
+        ))
       }
-      _ if progress >= 0.5 => *to,
-      _ => *from,
+      _ => discrete(from, to, progress),
     };
   }
 }
@@ -305,7 +303,7 @@ pub enum TextDecorationStyle {
 
 impl_css_enum!(
   TextDecorationStyle,
-  "solid" => Self::Solid
+  "solid" => TextDecorationStyle::Solid
 );
 
 /// Parsed `text-decoration` value.

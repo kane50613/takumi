@@ -87,12 +87,10 @@ impl WhiteSpace {
 
 impl<'i> FromCss<'i> for WhiteSpace {
   fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
-    // Try parsing as a keyword first
     if let Ok(ident) = input.try_parse(WhiteSpace::parse_keyword) {
       return Ok(ident);
     }
 
-    // Otherwise parse individual components
     let mut text_wrap_mode = TextWrapMode::default();
     let mut white_space_collapse = WhiteSpaceCollapse::default();
 

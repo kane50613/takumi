@@ -124,8 +124,6 @@ mod tests {
     );
   }
 
-  // PlaceItems/PlaceContent/PlaceSelf have no ToCss impl, so no round-trip test.
-
   #[test]
   fn test_parse_place_items_invalid() {
     assert!(PlaceItems::from_css_str("bogus").is_err());

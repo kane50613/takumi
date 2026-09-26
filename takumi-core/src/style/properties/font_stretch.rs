@@ -4,8 +4,8 @@ use cssparser::{Parser, Token, match_ignore_ascii_case};
 use parley::FontWidth;
 
 use crate::style::{
-  Animatable, Color, CssSyntaxKind, CssToken, FromCss, FromCssStr, MakeComputed, ParseResult,
-  SizingContext, ToCss, lerp, tw::TailwindPropertyParser, unexpected_token,
+  Animatable, Color, CssSyntaxKind, CssToken, FromCss, MakeComputed, ParseResult, SizingContext,
+  ToCss, lerp, tw::TailwindPropertyParser, unexpected_token,
 };
 
 /// Controls the width/stretch of text rendering.
@@ -32,7 +32,7 @@ impl<'i> FromCss<'i> for FontStretch {
     let location = input.current_source_location();
 
     if let Ok(value) = input.try_parse(Parser::expect_percentage) {
-      return Ok(Self(FontWidth::from_percentage(value.max(0.0) * 100.0)));
+      return Ok(Self::from_percentage(value));
     }
 
     let ident = input.expect_ident()?;
@@ -64,11 +64,7 @@ impl<'i> FromCss<'i> for FontStretch {
   ];
 }
 
-impl TailwindPropertyParser for FontStretch {
-  fn parse_tw(token: &str) -> Option<Self> {
-    Self::from_css_str(token).ok()
-  }
-}
+impl TailwindPropertyParser for FontStretch {}
 
 impl FontStretch {
   /// The stretch as a fraction where `1.0` is normal.
@@ -98,7 +94,7 @@ impl ToCss for FontStretch {
       FontWidth::EXPANDED => dest.write_str("expanded"),
       FontWidth::EXTRA_EXPANDED => dest.write_str("extra-expanded"),
       FontWidth::ULTRA_EXPANDED => dest.write_str("ultra-expanded"),
-      _ => write!(dest, "{}%", self.0.percentage()),
+      _ => write!(dest, "{percentage}%", percentage = self.0.percentage()),
     }
   }
 }
@@ -106,6 +102,7 @@ impl ToCss for FontStretch {
 #[cfg(test)]
 mod tests {
   use super::*;
+  use crate::style::FromCssStr;
 
   #[test]
   fn test_parse_font_stretch_keywords() {

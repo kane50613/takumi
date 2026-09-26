@@ -2,12 +2,11 @@ use std::fmt;
 
 use cssparser::{Parser, Token, match_ignore_ascii_case};
 
-use super::background_image::parse_comma_list;
 use crate::context::RenderContext;
 use crate::style::{
   Animatable, Color, CssSyntaxKind, CssToken, FromCss, Length, ListInterpolationStrategy,
-  MakeComputed, ParseResult, SizingContext, SpacePair, ToCss, tw::TailwindPropertyParser,
-  unexpected_token,
+  MakeComputed, ParseResult, SizingContext, SpacePair, ToCss, parse_comma_list,
+  tw::TailwindPropertyParser, unexpected_token,
 };
 
 /// Horizontal keywords for `background-position`.
@@ -72,15 +71,13 @@ impl Animatable for PositionComponent {
     sizing: &SizingContext,
     current_color: Color,
   ) {
-    let mut length = Length::from(*from);
-    length.interpolate(
+    *self = PositionComponent::Length(Length::interpolated(
       &Length::from(*from),
       &Length::from(*to),
       progress,
       sizing,
       current_color,
-    );
-    *self = PositionComponent::Length(length);
+    ));
   }
 }
 
@@ -131,13 +128,26 @@ impl Animatable for PositionValue {
     sizing: &SizingContext,
     current_color: Color,
   ) {
-    let mut value = from.0;
-    value.interpolate(&from.0, &to.0, progress, sizing, current_color);
-    self.0 = value;
+    self
+      .0
+      .interpolate(&from.0, &to.0, progress, sizing, current_color);
   }
 }
 
 impl PositionValue {
+  const fn from_keywords(x: PositionKeywordX, y: PositionKeywordY) -> Self {
+    Self(SpacePair::from_pair(
+      PositionComponent::KeywordX(x),
+      PositionComponent::KeywordY(y),
+    ))
+  }
+
+  /// Center position (`center center`), the initial value for `object-position` and
+  /// `transform-origin`.
+  pub const fn center() -> Self {
+    Self::from_keywords(PositionKeywordX::Center, PositionKeywordY::Center)
+  }
+
   /// Resolves the position to a pixel point within the border box.
   pub(crate) fn to_point(self, sizing: &SizingContext, width: f32, height: f32) -> (f32, f32) {
     (
@@ -150,42 +160,42 @@ impl PositionValue {
 impl TailwindPropertyParser for PositionValue {
   fn parse_tw(token: &str) -> Option<Self> {
     match token {
-      "top-left" => Some(Self(SpacePair::from_pair(
-        PositionComponent::KeywordX(PositionKeywordX::Left),
-        PositionComponent::KeywordY(PositionKeywordY::Top),
-      ))),
-      "top" => Some(Self(SpacePair::from_pair(
-        PositionComponent::KeywordX(PositionKeywordX::Center),
-        PositionComponent::KeywordY(PositionKeywordY::Top),
-      ))),
-      "top-right" => Some(Self(SpacePair::from_pair(
-        PositionComponent::KeywordX(PositionKeywordX::Right),
-        PositionComponent::KeywordY(PositionKeywordY::Top),
-      ))),
-      "left" => Some(Self(SpacePair::from_pair(
-        PositionComponent::KeywordX(PositionKeywordX::Left),
-        PositionComponent::KeywordY(PositionKeywordY::Center),
-      ))),
-      "center" => Some(Self(SpacePair::from_pair(
-        PositionComponent::KeywordX(PositionKeywordX::Center),
-        PositionComponent::KeywordY(PositionKeywordY::Center),
-      ))),
-      "right" => Some(Self(SpacePair::from_pair(
-        PositionComponent::KeywordX(PositionKeywordX::Right),
-        PositionComponent::KeywordY(PositionKeywordY::Center),
-      ))),
-      "bottom-left" => Some(Self(SpacePair::from_pair(
-        PositionComponent::KeywordX(PositionKeywordX::Left),
-        PositionComponent::KeywordY(PositionKeywordY::Bottom),
-      ))),
-      "bottom" => Some(Self(SpacePair::from_pair(
-        PositionComponent::KeywordX(PositionKeywordX::Center),
-        PositionComponent::KeywordY(PositionKeywordY::Bottom),
-      ))),
-      "bottom-right" => Some(Self(SpacePair::from_pair(
-        PositionComponent::KeywordX(PositionKeywordX::Right),
-        PositionComponent::KeywordY(PositionKeywordY::Bottom),
-      ))),
+      "top-left" => Some(Self::from_keywords(
+        PositionKeywordX::Left,
+        PositionKeywordY::Top,
+      )),
+      "top" => Some(Self::from_keywords(
+        PositionKeywordX::Center,
+        PositionKeywordY::Top,
+      )),
+      "top-right" => Some(Self::from_keywords(
+        PositionKeywordX::Right,
+        PositionKeywordY::Top,
+      )),
+      "left" => Some(Self::from_keywords(
+        PositionKeywordX::Left,
+        PositionKeywordY::Center,
+      )),
+      "center" => Some(Self::from_keywords(
+        PositionKeywordX::Center,
+        PositionKeywordY::Center,
+      )),
+      "right" => Some(Self::from_keywords(
+        PositionKeywordX::Right,
+        PositionKeywordY::Center,
+      )),
+      "bottom-left" => Some(Self::from_keywords(
+        PositionKeywordX::Left,
+        PositionKeywordY::Bottom,
+      )),
+      "bottom" => Some(Self::from_keywords(
+        PositionKeywordX::Center,
+        PositionKeywordY::Bottom,
+      )),
+      "bottom-right" => Some(Self::from_keywords(
+        PositionKeywordX::Right,
+        PositionKeywordY::Bottom,
+      )),
       _ => None,
     }
   }
@@ -193,28 +203,13 @@ impl TailwindPropertyParser for PositionValue {
 
 impl Default for PositionValue {
   fn default() -> Self {
-    Self(SpacePair::from_pair(
-      PositionComponent::KeywordX(PositionKeywordX::Left),
-      PositionComponent::KeywordY(PositionKeywordY::Top),
-    ))
-  }
-}
-
-impl PositionValue {
-  /// Center position (`center center`), the initial value for `object-position` and
-  /// `transform-origin`.
-  pub const fn center() -> Self {
-    Self(SpacePair::from_pair(
-      PositionComponent::KeywordX(PositionKeywordX::Center),
-      PositionComponent::KeywordY(PositionKeywordY::Center),
-    ))
+    Self::from_keywords(PositionKeywordX::Left, PositionKeywordY::Top)
   }
 }
 
 impl<'i> FromCss<'i> for PositionValue {
   fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
     let first = PositionComponent::from_css(input)?;
-    // If a second exists, parse it; otherwise, 1-value syntax means y=center
     let second = input.try_parse(PositionComponent::from_css).ok();
 
     let (x, y) = match (first, second) {

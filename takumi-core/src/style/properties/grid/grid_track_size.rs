@@ -1,4 +1,4 @@
-use std::fmt::Write;
+use std::fmt;
 
 use cssparser::{Parser, match_ignore_ascii_case};
 use taffy::{MaxTrackSizingFunction, MinTrackSizingFunction, TrackSizingFunction};
@@ -56,12 +56,11 @@ impl GridTrackSize {
 
 impl TailwindPropertyParser for GridTrackSize {
   fn parse_tw(token: &str) -> Option<Self> {
-    let track_size = match_ignore_ascii_case! {token,
-      "auto" => GridTrackSize::Fixed(GridLength::Unit(Length::Auto)),
-      "fr" => GridTrackSize::Fixed(GridLength::Fr(1.0)),
-      _ => return None,
-    };
-    Some(track_size)
+    match_ignore_ascii_case! {token,
+      "auto" => Some(GridTrackSize::Fixed(GridLength::Unit(Length::Auto))),
+      "fr" => Some(GridTrackSize::Fixed(GridLength::Fr(1.0))),
+      _ => None,
+    }
   }
 }
 
@@ -99,7 +98,7 @@ impl MakeComputed for GridTrackSize {
 }
 
 impl ToCss for GridTrackSize {
-  fn to_css<W: Write>(&self, dest: &mut W) -> std::fmt::Result {
+  fn to_css<W: fmt::Write>(&self, dest: &mut W) -> fmt::Result {
     match self {
       Self::MinMax(mm) => mm.to_css(dest),
       Self::Fixed(gl) => gl.to_css(dest),

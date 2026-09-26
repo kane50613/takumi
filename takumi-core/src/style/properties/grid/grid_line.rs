@@ -5,7 +5,7 @@ use crate::style::{
   SizingContext, tw::TailwindPropertyParser,
 };
 
-/// Represents a grid line placement with serde support
+/// Represents a grid line placement
 #[derive(Debug, Clone, Default, PartialEq)]
 #[non_exhaustive]
 pub struct GridLine {
@@ -42,20 +42,14 @@ impl GridLine {
 
 impl<'i> FromCss<'i> for GridLine {
   fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
-    // First placement is required
-    let first = GridPlacement::from_css(input)?;
-
-    // Optional delimiter '/'
-    let second = if input.try_parse(|i| i.expect_delim('/')).is_ok() {
-      Some(GridPlacement::from_css(input)?)
+    let start = GridPlacement::from_css(input)?;
+    let end = if input.try_parse(|i| i.expect_delim('/')).is_ok() {
+      GridPlacement::from_css(input)?
     } else {
-      None
+      GridPlacement::default()
     };
 
-    Ok(GridLine {
-      start: first,
-      end: second.unwrap_or_default(),
-    })
+    Ok(GridLine { start, end })
   }
 
   const VALID_TOKENS: &'static [CssToken] = &[

@@ -1,11 +1,13 @@
-use std::{borrow::Cow, fmt, sync::Arc};
+use std::{borrow::Cow, error::Error, fmt, sync::Arc};
 
-use cssparser::{Parser, ParserInput, Token};
+use cssparser::{
+  BasicParseErrorKind, ParseError as CssParseError, ParseErrorKind, Parser, ParserInput, Token,
+};
 
 use crate::style::{Color, SizingContext, build_unexpected_token, math::lcm};
 
 /// Parser result type alias for CSS property parsers.
-pub(crate) type ParseResult<'i, T> = Result<T, cssparser::ParseError<'i, Cow<'i, str>>>;
+pub(crate) type ParseResult<'i, T> = Result<T, CssParseError<'i, Cow<'i, str>>>;
 
 /// Owned error returned by [`FromCssStr::from_css_str`]. Carries a
 /// human-readable message and borrows nothing from the parser, keeping
@@ -21,13 +23,13 @@ impl fmt::Display for ParseError {
   }
 }
 
-impl std::error::Error for ParseError {}
+impl Error for ParseError {}
 
 impl ParseError {
   /// Stringifies an internal `cssparser` error into an owned [`ParseError`].
-  pub(crate) fn from_css_error(error: &cssparser::ParseError<'_, Cow<'_, str>>) -> Self {
+  pub(crate) fn from_css_error(error: &CssParseError<'_, Cow<'_, str>>) -> Self {
     let message = match &error.kind {
-      cssparser::ParseErrorKind::Custom(message) => message.to_string(),
+      ParseErrorKind::Custom(message) => message.to_string(),
       basic => format!("{basic:?}"),
     };
 
@@ -342,12 +344,12 @@ pub(crate) fn parse_ident_enum_keyword<'i>(
   })
 }
 
-impl std::fmt::Display for CssToken {
-  fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl fmt::Display for CssToken {
+  fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
     match self {
-      CssToken::Keyword(keyword) => write!(f, "'{}'", keyword),
-      CssToken::Syntax(token) => write!(f, "<{}>", token.as_str()),
-      CssToken::Descriptor(token) => write!(f, "<{}>", token.as_str()),
+      CssToken::Keyword(keyword) => write!(f, "'{keyword}'"),
+      CssToken::Syntax(token) => write!(f, "<{name}>", name = token.as_str()),
+      CssToken::Descriptor(token) => write!(f, "<{name}>", name = token.as_str()),
     }
   }
 }
@@ -444,11 +446,21 @@ pub(crate) trait Animatable: Sized + Clone {
     _sizing: &SizingContext,
     _current_color: Color,
   ) {
-    *self = if progress >= 0.5 {
-      to.clone()
-    } else {
-      from.clone()
-    };
+    *self = discrete(from, to, progress);
+  }
+
+  /// The value `progress` of the way from `from` to `to`.
+  fn interpolated(
+    from: &Self,
+    to: &Self,
+    progress: f32,
+    sizing: &SizingContext,
+    current_color: Color,
+  ) -> Self {
+    let mut value = from.clone();
+
+    value.interpolate(from, to, progress, sizing, current_color);
+    value
   }
 
   fn list_interpolation_strategy() -> ListInterpolationStrategy {
@@ -461,6 +473,15 @@ pub(crate) trait Animatable: Sized + Clone {
 
   fn missing_value() -> Option<Self> {
     None
+  }
+}
+
+/// The discrete animation step: `from` before the midpoint, `to` from it on.
+pub(crate) fn discrete<T: Clone>(from: &T, to: &T, progress: f32) -> T {
+  if progress >= 0.5 {
+    to.clone()
+  } else {
+    from.clone()
   }
 }
 
@@ -504,37 +525,31 @@ impl<T: Animatable + Clone> Animatable for Option<T> {
     current_color: Color,
   ) {
     *self = match (from, to) {
-      (Some(from), Some(to)) => {
-        let mut value = from.clone();
-        value.interpolate(from, to, progress, sizing, current_color);
-        Some(value)
+      (Some(start), Some(end)) => {
+        Some(T::interpolated(start, end, progress, sizing, current_color))
       }
-      (Some(from), None) => T::missing_value().map_or_else(
-        || {
-          if progress >= 0.5 {
-            None
-          } else {
-            Some(from.clone())
-          }
-        },
+      (Some(start), None) => T::missing_value().map_or_else(
+        || discrete(from, to, progress),
         |missing| {
-          let mut value = from.clone();
-          value.interpolate(from, &missing, progress, sizing, current_color);
-          Some(value)
+          Some(T::interpolated(
+            start,
+            &missing,
+            progress,
+            sizing,
+            current_color,
+          ))
         },
       ),
-      (None, Some(to)) => T::missing_value().map_or_else(
-        || {
-          if progress >= 0.5 {
-            Some(to.clone())
-          } else {
-            None
-          }
-        },
+      (None, Some(end)) => T::missing_value().map_or_else(
+        || discrete(from, to, progress),
         |missing| {
-          let mut value = missing.clone();
-          value.interpolate(&missing, to, progress, sizing, current_color);
-          Some(value)
+          Some(T::interpolated(
+            &missing,
+            end,
+            progress,
+            sizing,
+            current_color,
+          ))
         },
       ),
       (None, None) => None,
@@ -542,133 +557,84 @@ impl<T: Animatable + Clone> Animatable for Option<T> {
   }
 }
 
-impl<T: Animatable + Clone> Animatable for Box<[T]> {
-  fn missing_value() -> Option<Self> {
-    match T::list_interpolation_strategy() {
-      ListInterpolationStrategy::Discrete => None,
-      ListInterpolationStrategy::RepeatToLcm
-      | ListInterpolationStrategy::PadToLongestWithNeutral => Some(Box::default()),
-    }
-  }
-
-  fn interpolate(
-    &mut self,
-    from: &Self,
-    to: &Self,
-    progress: f32,
-    sizing: &SizingContext,
-    current_color: Color,
-  ) {
-    *self = interpolate_list(
-      from,
-      to,
-      progress,
-      sizing,
-      current_color,
-      Vec::into_boxed_slice,
-    )
-    .unwrap_or_else(|| {
-      if progress >= 0.5 {
-        to.clone()
-      } else {
-        from.clone()
+macro_rules! impl_list_animatable {
+  ($($list:ty),+) => {$(
+    impl<T: Animatable + Clone> Animatable for $list {
+      fn missing_value() -> Option<Self> {
+        match T::list_interpolation_strategy() {
+          ListInterpolationStrategy::Discrete => None,
+          ListInterpolationStrategy::RepeatToLcm
+          | ListInterpolationStrategy::PadToLongestWithNeutral => Some(Self::default()),
+        }
       }
-    });
-  }
-}
 
-impl<T: Animatable + Clone> Animatable for Arc<[T]> {
-  fn missing_value() -> Option<Self> {
-    match T::list_interpolation_strategy() {
-      ListInterpolationStrategy::Discrete => None,
-      ListInterpolationStrategy::RepeatToLcm
-      | ListInterpolationStrategy::PadToLongestWithNeutral => Some(Arc::from([])),
+      fn interpolate(
+        &mut self,
+        from: &Self,
+        to: &Self,
+        progress: f32,
+        sizing: &SizingContext,
+        current_color: Color,
+      ) {
+        *self = interpolate_list(from, to, progress, sizing, current_color)
+          .map_or_else(|| discrete(from, to, progress), Into::into);
+      }
     }
-  }
-
-  fn interpolate(
-    &mut self,
-    from: &Self,
-    to: &Self,
-    progress: f32,
-    sizing: &SizingContext,
-    current_color: Color,
-  ) {
-    *self =
-      interpolate_list(from, to, progress, sizing, current_color, Vec::into).unwrap_or_else(|| {
-        if progress >= 0.5 {
-          to.clone()
-        } else {
-          from.clone()
-        }
-      });
-  }
+  )+};
 }
 
-impl<T: Animatable + Clone> Animatable for Vec<T> {
-  fn missing_value() -> Option<Self> {
-    match T::list_interpolation_strategy() {
-      ListInterpolationStrategy::Discrete => None,
-      ListInterpolationStrategy::RepeatToLcm
-      | ListInterpolationStrategy::PadToLongestWithNeutral => Some(Vec::new()),
-    }
-  }
-
-  fn interpolate(
-    &mut self,
-    from: &Self,
-    to: &Self,
-    progress: f32,
-    sizing: &SizingContext,
-    current_color: Color,
-  ) {
-    *self = interpolate_list(from, to, progress, sizing, current_color, |values| values)
-      .unwrap_or_else(|| {
-        if progress >= 0.5 {
-          to.clone()
-        } else {
-          from.clone()
-        }
-      });
-  }
-}
+impl_list_animatable!(Box<[T]>, Arc<[T]>, Vec<T>);
 
 // Matches Blink's `kRepeatableListMaxLength` (list_interpolation_functions.cc);
 // transitions restarted on an already-animating value otherwise compound the
 // LCM expansion until it exhausts memory. See crbug.com/739197.
 const MAX_INTERPOLATED_LIST_LEN: usize = 1000;
 
-fn interpolate_list<T: Animatable + Clone, C: AsRef<[T]>, O>(
+fn interpolate_list<T: Animatable + Clone, C: AsRef<[T]>>(
   from: &C,
   to: &C,
   progress: f32,
   sizing: &SizingContext,
   current_color: Color,
-  build: impl FnOnce(Vec<T>) -> O,
-) -> Option<O> {
+) -> Option<Vec<T>> {
   let from = from.as_ref();
   let to = to.as_ref();
 
-  let values = match T::list_interpolation_strategy() {
+  match T::list_interpolation_strategy() {
     ListInterpolationStrategy::Discrete => {
       if from.len() != to.len() {
         return None;
       }
-      interpolate_pairwise_list(from, to, from.len(), progress, sizing, current_color)
+
+      Some(interpolate_pairwise_list(
+        from,
+        to,
+        from.len(),
+        progress,
+        sizing,
+        current_color,
+      ))
     }
     ListInterpolationStrategy::RepeatToLcm => {
       if from.is_empty() || to.is_empty() {
         return None;
       }
+
       let output_len = lcm(from.len(), to.len()).min(MAX_INTERPOLATED_LIST_LEN);
-      interpolate_pairwise_list(from, to, output_len, progress, sizing, current_color)
+
+      Some(interpolate_pairwise_list(
+        from,
+        to,
+        output_len,
+        progress,
+        sizing,
+        current_color,
+      ))
     }
     ListInterpolationStrategy::PadToLongestWithNeutral => {
-      interpolate_neutral_padded_list(from, to, progress, sizing, current_color)?
+      interpolate_neutral_padded_list(from, to, progress, sizing, current_color)
     }
-  };
-
-  Some(build(values))
+  }
 }
 
 fn interpolate_pairwise_list<T: Animatable + Clone>(
@@ -681,11 +647,13 @@ fn interpolate_pairwise_list<T: Animatable + Clone>(
 ) -> Vec<T> {
   (0..output_len)
     .map(|index| {
-      let from_value = &from[index % from.len()];
-      let to_value = &to[index % to.len()];
-      let mut value = from_value.clone();
-      value.interpolate(from_value, to_value, progress, sizing, current_color);
-      value
+      T::interpolated(
+        &from[index % from.len()],
+        &to[index % to.len()],
+        progress,
+        sizing,
+        current_color,
+      )
     })
     .collect()
 }
@@ -712,9 +680,13 @@ fn interpolate_neutral_padded_list<T: Animatable + Clone>(
         from.get(index).and_then(T::neutral_value_like)
       }?;
 
-      let mut value = from_value.clone();
-      value.interpolate(&from_value, &to_value, progress, sizing, current_color);
-      Some(value)
+      Some(T::interpolated(
+        &from_value,
+        &to_value,
+        progress,
+        sizing,
+        current_color,
+      ))
     })
     .collect()
 }
@@ -758,6 +730,29 @@ impl<T: ToCss> ToCss for Option<T> {
   }
 }
 
+/// Writes `keywords` space-separated, or `empty` when there are none.
+pub(crate) fn write_keywords<'k, W: fmt::Write>(
+  dest: &mut W,
+  keywords: impl IntoIterator<Item = &'k str>,
+  empty: &str,
+) -> fmt::Result {
+  let mut keywords = keywords.into_iter().peekable();
+
+  if keywords.peek().is_none() {
+    return dest.write_str(empty);
+  }
+
+  for (index, keyword) in keywords.enumerate() {
+    if index > 0 {
+      dest.write_char(' ')?;
+    }
+
+    dest.write_str(keyword)?;
+  }
+
+  Ok(())
+}
+
 fn write_css_list<W: fmt::Write, T: ToCss>(items: &[T], dest: &mut W) -> fmt::Result {
   if items.is_empty() {
     return match T::EMPTY_LIST_KEYWORD {
@@ -795,13 +790,13 @@ impl<T: ToCss> ToCss for Vec<T> {
 
 impl ToCss for f32 {
   fn to_css<W: fmt::Write>(&self, dest: &mut W) -> fmt::Result {
-    write!(dest, "{}", self)
+    write!(dest, "{self}")
   }
 }
 
 impl ToCss for u32 {
   fn to_css<W: fmt::Write>(&self, dest: &mut W) -> fmt::Result {
-    write!(dest, "{}", self)
+    write!(dest, "{self}")
   }
 }
 
@@ -811,10 +806,10 @@ impl Animatable for u32 {}
 impl<'i> FromCss<'i> for u32 {
   const VALID_TOKENS: &'static [CssToken] = &[CssToken::Syntax(CssSyntaxKind::Integer)];
 
-  fn from_css(input: &mut cssparser::Parser<'i, '_>) -> ParseResult<'i, Self> {
+  fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
     let value = input.expect_integer()?;
     if value < 0 {
-      return Err(input.new_error(cssparser::BasicParseErrorKind::QualifiedRuleInvalid));
+      return Err(input.new_error(BasicParseErrorKind::QualifiedRuleInvalid));
     }
     Ok(value as u32)
   }
@@ -822,7 +817,7 @@ impl<'i> FromCss<'i> for u32 {
 
 impl ToCss for i32 {
   fn to_css<W: fmt::Write>(&self, dest: &mut W) -> fmt::Result {
-    write!(dest, "{}", self)
+    write!(dest, "{self}")
   }
 }
 
@@ -852,6 +847,26 @@ macro_rules! impl_from_taffy_enum {
 }
 
 pub(crate) use impl_from_taffy_enum;
+
+/// Implements `FromCss` for a `Box<[$elem]>` list as a comma-separated list of `$elem`.
+macro_rules! impl_comma_list_from_css {
+  ($list:ty, $elem:ty) => {
+    $crate::style::properties::impl_comma_list_from_css!($list, $elem, <$elem>::VALID_TOKENS);
+  };
+  ($list:ty, $elem:ty, $valid:expr) => {
+    impl<'i> $crate::style::FromCss<'i> for $list {
+      fn from_css(input: &mut cssparser::Parser<'i, '_>) -> $crate::style::ParseResult<'i, Self> {
+        input
+          .parse_comma_separated(<$elem as $crate::style::FromCss>::from_css)
+          .map(Vec::into_boxed_slice)
+      }
+
+      const VALID_TOKENS: &'static [$crate::style::CssToken] = $valid;
+    }
+  };
+}
+
+pub(crate) use impl_comma_list_from_css;
 
 /// Treats the first keyword in each group as canonical and the rest as aliases.
 macro_rules! impl_css_enum {
@@ -896,7 +911,7 @@ macro_rules! impl_css_enum {
 
     impl $enum_type {
       fn from_keyword(ident: &str) -> Option<Self> {
-        crate::style::CssToken::keyword_index(
+        $crate::style::CssToken::keyword_index(
           ident,
           <Self as $crate::style::properties::FromCss>::VALID_TOKENS,
         )
@@ -1048,7 +1063,6 @@ mod tests {
       0.75,
       &sizing,
       Color([0, 0, 0, 255]),
-      |values| values,
     )
   }
 

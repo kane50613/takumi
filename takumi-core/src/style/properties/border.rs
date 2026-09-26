@@ -3,8 +3,8 @@ use std::fmt;
 use cssparser::Parser;
 
 use crate::style::{
-  Animatable, BorderStyle, Color, ColorInput, CssSyntaxKind, CssToken, FromCss, MakeComputed,
-  ParseResult, SizingContext, ToCss, impl_css_enum, properties::Length, tw::TailwindPropertyParser,
+  Animatable, BorderStyle, Color, ColorInput, CssSyntaxKind, CssToken, FromCss, Length,
+  MakeComputed, ParseResult, SizingContext, ToCss, impl_css_enum, tw::TailwindPropertyParser,
   unexpected_token,
 };
 
@@ -111,11 +111,13 @@ impl Animatable for LineWidth {
     sizing: &SizingContext,
     current_color: Color,
   ) {
-    let from_length = Length::from(*from);
-    let to_length = Length::from(*to);
-    let mut value = from_length;
-    value.interpolate(&from_length, &to_length, progress, sizing, current_color);
-    *self = Self::Length(value);
+    *self = Self::Length(Length::interpolated(
+      &Length::from(*from),
+      &Length::from(*to),
+      progress,
+      sizing,
+      current_color,
+    ));
   }
 }
 
@@ -131,9 +133,7 @@ impl TailwindPropertyParser for LineWidth {
 impl ToCss for LineWidth {
   fn to_css<W: fmt::Write>(&self, dest: &mut W) -> fmt::Result {
     match self {
-      Self::Keyword(LineWidthKeyword::Thin) => dest.write_str("thin"),
-      Self::Keyword(LineWidthKeyword::Medium) => dest.write_str("medium"),
-      Self::Keyword(LineWidthKeyword::Thick) => dest.write_str("thick"),
+      Self::Keyword(keyword) => keyword.to_css(dest),
       Self::Length(length) => length.to_css(dest),
     }
   }
@@ -157,11 +157,7 @@ impl<'i> FromCss<'i> for Border {
     let mut style = None;
     let mut color = None;
 
-    loop {
-      if input.is_exhausted() {
-        break;
-      }
-
+    while !input.is_exhausted() {
       if let Ok(value) = input.try_parse(LineWidth::from_css) {
         width = Some(value);
         continue;

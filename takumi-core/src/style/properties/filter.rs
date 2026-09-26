@@ -3,28 +3,18 @@ use std::fmt;
 use cssparser::{Parser, Token, match_ignore_ascii_case};
 
 #[cfg(feature = "svg")]
+use std::{borrow::Cow, sync::Arc};
+
+#[cfg(feature = "svg")]
+use cssparser::{ParseError as CssParseError, ParseErrorKind, SourceLocation};
+
+#[cfg(feature = "svg")]
 use crate::style::properties::filter_reference::FilterReference;
 use crate::style::{
   Angle, Animatable, Color, CssDescriptorKind, CssExpectedMessage, CssToken, FromCss, Length,
   ListInterpolationStrategy, MakeComputed, ParseResult, PercentageNumber, SizingContext,
-  TextShadow, ToCss, tw::TailwindPropertyParser, unexpected_token,
+  TextShadow, ToCss, discrete, tw::TailwindPropertyParser, unexpected_token,
 };
-
-macro_rules! interpolate_field {
-  ($variant:path, $from:ident, $to:ident, $progress:expr, $sizing:expr, $cc:expr) => {{
-    let mut value = $from;
-    value.interpolate(&$from, &$to, $progress, $sizing, $cc);
-    $variant(value)
-  }};
-  ($variant:path, $from_a:ident, $to_a:ident, $from_b:ident, $to_b:ident, $progress:expr, $sizing:expr, $cc:expr) => {{
-    let mut a = $from_a;
-    a.interpolate(&$from_a, &$to_a, $progress, $sizing, $cc);
-    let mut b = $from_b;
-    b.interpolate(&$from_b, &$to_b, $progress, $sizing, $cc);
-    $variant(a, b)
-  }};
-}
-pub(crate) use interpolate_field;
 
 /// Lookup table for a single 8-bit channel transition.
 pub type TransferTable = [u8; 256];
@@ -63,7 +53,7 @@ pub enum Filter {
   DropShadow(TextShadow),
   /// An SVG filter referenced with `url(data:image/svg+xml,...)`
   #[cfg(feature = "svg")]
-  Reference(std::sync::Arc<FilterReference>),
+  Reference(Arc<FilterReference>),
 }
 
 /// Rec. 709 luma weights for the red, green, and blue channels. The CSS
@@ -144,12 +134,7 @@ impl Animatable for Filter {
       Filter::Sepia(_) => Filter::Sepia(PercentageNumber(0.0)),
       Filter::Opacity(_) => Filter::Opacity(PercentageNumber(1.0)),
       Filter::Blur(_) => Filter::Blur(Length::zero()),
-      Filter::DropShadow(_) => Filter::DropShadow(TextShadow {
-        offset_x: Length::zero(),
-        offset_y: Length::zero(),
-        blur_radius: Length::zero(),
-        color: Color::transparent().into(),
-      }),
+      Filter::DropShadow(shadow) => Filter::DropShadow(TextShadow::neutral_value_like(shadow)?),
       #[cfg(feature = "svg")]
       Filter::Reference(_) => return None,
     })
@@ -163,55 +148,56 @@ impl Animatable for Filter {
     sizing: &SizingContext,
     current_color: Color,
   ) {
-    *self = match (from, to) {
-      (&Filter::Brightness(from), &Filter::Brightness(to)) => interpolate_field!(
-        Filter::Brightness,
-        from,
-        to,
-        progress,
-        sizing,
-        current_color
-      ),
-      (&Filter::Contrast(from), &Filter::Contrast(to)) => {
-        interpolate_field!(Filter::Contrast, from, to, progress, sizing, current_color)
-      }
-      (&Filter::Grayscale(from), &Filter::Grayscale(to)) => {
-        interpolate_field!(Filter::Grayscale, from, to, progress, sizing, current_color)
-      }
-      (&Filter::Saturate(from), &Filter::Saturate(to)) => {
-        interpolate_field!(Filter::Saturate, from, to, progress, sizing, current_color)
-      }
-      (&Filter::HueRotate(from), &Filter::HueRotate(to)) => {
-        interpolate_field!(Filter::HueRotate, from, to, progress, sizing, current_color)
-      }
-      (&Filter::Invert(from), &Filter::Invert(to)) => {
-        interpolate_field!(Filter::Invert, from, to, progress, sizing, current_color)
-      }
-      (&Filter::Sepia(from), &Filter::Sepia(to)) => {
-        interpolate_field!(Filter::Sepia, from, to, progress, sizing, current_color)
-      }
-      (&Filter::Opacity(from), &Filter::Opacity(to)) => {
-        interpolate_field!(Filter::Opacity, from, to, progress, sizing, current_color)
-      }
-      (&Filter::Blur(from), &Filter::Blur(to)) => {
-        interpolate_field!(Filter::Blur, from, to, progress, sizing, current_color)
-      }
-      (&Filter::DropShadow(from), &Filter::DropShadow(to)) => interpolate_field!(
-        Filter::DropShadow,
-        from,
-        to,
-        progress,
-        sizing,
-        current_color
-      ),
-      _ => {
-        if progress >= 0.5 {
-          to.clone()
-        } else {
-          from.clone()
-        }
-      }
-    };
+    *self =
+      match (from, to) {
+        (Filter::Brightness(from), Filter::Brightness(to)) => Filter::Brightness(
+          Animatable::interpolated(from, to, progress, sizing, current_color),
+        ),
+        (Filter::Contrast(from), Filter::Contrast(to)) => Filter::Contrast(
+          Animatable::interpolated(from, to, progress, sizing, current_color),
+        ),
+        (Filter::Grayscale(from), Filter::Grayscale(to)) => Filter::Grayscale(
+          Animatable::interpolated(from, to, progress, sizing, current_color),
+        ),
+        (Filter::Saturate(from), Filter::Saturate(to)) => Filter::Saturate(
+          Animatable::interpolated(from, to, progress, sizing, current_color),
+        ),
+        (Filter::HueRotate(from), Filter::HueRotate(to)) => Filter::HueRotate(
+          Animatable::interpolated(from, to, progress, sizing, current_color),
+        ),
+        (Filter::Invert(from), Filter::Invert(to)) => Filter::Invert(Animatable::interpolated(
+          from,
+          to,
+          progress,
+          sizing,
+          current_color,
+        )),
+        (Filter::Sepia(from), Filter::Sepia(to)) => Filter::Sepia(Animatable::interpolated(
+          from,
+          to,
+          progress,
+          sizing,
+          current_color,
+        )),
+        (Filter::Opacity(from), Filter::Opacity(to)) => Filter::Opacity(Animatable::interpolated(
+          from,
+          to,
+          progress,
+          sizing,
+          current_color,
+        )),
+        (Filter::Blur(from), Filter::Blur(to)) => Filter::Blur(Animatable::interpolated(
+          from,
+          to,
+          progress,
+          sizing,
+          current_color,
+        )),
+        (Filter::DropShadow(from), Filter::DropShadow(to)) => Filter::DropShadow(
+          Animatable::interpolated(from, to, progress, sizing, current_color),
+        ),
+        _ => discrete(from, to, progress),
+      };
   }
 }
 
@@ -308,14 +294,11 @@ impl<'i> FromCss<'i> for Filters {
 }
 
 #[cfg(feature = "svg")]
-fn parse_filter_reference<'i>(
-  url: &str,
-  location: cssparser::SourceLocation,
-) -> ParseResult<'i, Filter> {
+fn parse_filter_reference<'i>(url: &str, location: SourceLocation) -> ParseResult<'i, Filter> {
   FilterReference::from_url(url)
-    .map(|reference| Filter::Reference(std::sync::Arc::new(reference)))
-    .map_err(|error| cssparser::ParseError {
-      kind: cssparser::ParseErrorKind::Custom(std::borrow::Cow::Owned(error.to_string())),
+    .map(|reference| Filter::Reference(Arc::new(reference)))
+    .map_err(|error| CssParseError {
+      kind: ParseErrorKind::Custom(Cow::Owned(error.to_string())),
       location,
     })
 }
@@ -347,30 +330,14 @@ impl<'i> FromCss<'i> for Filter {
     }
 
     match_ignore_ascii_case! {function,
-      "brightness" => parser.parse_nested_block(|input| {
-        Ok(Filter::Brightness(PercentageNumber::from_css(input)?))
-      }),
-      "opacity" => parser.parse_nested_block(|input| {
-        Ok(Filter::Opacity(PercentageNumber::from_css(input)?))
-      }),
-      "contrast" => parser.parse_nested_block(|input| {
-        Ok(Filter::Contrast(PercentageNumber::from_css(input)?))
-      }),
-      "grayscale" => parser.parse_nested_block(|input| {
-        Ok(Filter::Grayscale(PercentageNumber::from_css(input)?))
-      }),
-      "hue-rotate" => parser.parse_nested_block(|input| {
-        Ok(Filter::HueRotate(Angle::from_css(input)?))
-      }),
-      "invert" => parser.parse_nested_block(|input| {
-        Ok(Filter::Invert(PercentageNumber::from_css(input)?))
-      }),
-      "saturate" => parser.parse_nested_block(|input| {
-        Ok(Filter::Saturate(PercentageNumber::from_css(input)?))
-      }),
-      "sepia" => parser.parse_nested_block(|input| {
-        Ok(Filter::Sepia(PercentageNumber::from_css(input)?))
-      }),
+      "brightness" => parser.parse_nested_block(|input| PercentageNumber::from_css(input).map(Filter::Brightness)),
+      "opacity" => parser.parse_nested_block(|input| PercentageNumber::from_css(input).map(Filter::Opacity)),
+      "contrast" => parser.parse_nested_block(|input| PercentageNumber::from_css(input).map(Filter::Contrast)),
+      "grayscale" => parser.parse_nested_block(|input| PercentageNumber::from_css(input).map(Filter::Grayscale)),
+      "hue-rotate" => parser.parse_nested_block(|input| Angle::from_css(input).map(Filter::HueRotate)),
+      "invert" => parser.parse_nested_block(|input| PercentageNumber::from_css(input).map(Filter::Invert)),
+      "saturate" => parser.parse_nested_block(|input| PercentageNumber::from_css(input).map(Filter::Saturate)),
+      "sepia" => parser.parse_nested_block(|input| PercentageNumber::from_css(input).map(Filter::Sepia)),
       "blur" => parser.parse_nested_block(|input| {
         // blur() radius is optional and defaults to 0; a present argument must be a valid length.
         let radius = if input.is_exhausted() {
@@ -380,10 +347,7 @@ impl<'i> FromCss<'i> for Filter {
         };
         Ok(Filter::Blur(radius))
       }),
-      "drop-shadow" => parser.parse_nested_block(|input| {
-        // drop-shadow uses the same syntax as text-shadow
-        Ok(Filter::DropShadow(TextShadow::from_css(input)?))
-      }),
+      "drop-shadow" => parser.parse_nested_block(|input| TextShadow::from_css(input).map(Filter::DropShadow)),
       _ => Err(unexpected_token!(location, token)),
     }
   }
@@ -405,9 +369,7 @@ impl<'i> FromCss<'i> for Filter {
 }
 
 impl ToCss for Filter {
-  // The `filter`/`backdrop-filter` grammar is space-separated, not comma.
   const LIST_SEPARATOR: &'static str = " ";
-  // An empty filter list is the keyword `none`.
   const EMPTY_LIST_KEYWORD: Option<&'static str> = Some("none");
 
   fn to_css<W: fmt::Write>(&self, dest: &mut W) -> fmt::Result {
