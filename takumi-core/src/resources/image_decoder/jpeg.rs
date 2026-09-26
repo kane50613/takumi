@@ -10,7 +10,7 @@ use image::{ImageDecoder, ImageFormat, codecs::jpeg::JpegDecoder};
 #[cfg(feature = "jpeg")]
 use super::decode_with_image_crate;
 #[cfg(not(feature = "jpeg"))]
-use super::{format_compiled_out_error, header_dimensions};
+use super::{header_dimensions, unsupported_format_error};
 use crate::resources::image_buffer::ImageBuffer;
 
 pub(super) const JPEG_SIGNATURE: [u8; 3] = [0xFF, 0xD8, 0xFF];
@@ -22,7 +22,7 @@ pub(super) fn decode_jpeg(bytes: &[u8]) -> ImageResult<ImageBuffer> {
 
 #[cfg(not(feature = "jpeg"))]
 pub(super) fn decode_jpeg(_bytes: &[u8]) -> ImageResult<ImageBuffer> {
-  Err(format_compiled_out_error())
+  Err(unsupported_format_error())
 }
 
 #[cfg(feature = "jpeg")]

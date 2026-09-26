@@ -1,4 +1,10 @@
-use std::{borrow::Cow, collections::HashMap, ops::Range};
+use std::{
+  borrow::Cow,
+  collections::HashMap,
+  hash::{Hash, Hasher},
+  mem::discriminant,
+  ops::Range,
+};
 
 use parley::{
   FontFamily as ParleyFontFamily, FontFamilyName, FontFeatures, FontVariations, GenericFamily,
@@ -32,9 +38,7 @@ enum ExpandedFamilyToken {
 
 impl ExpandedFontFamily {
   /// Hashes the family list in order, names and generics alike.
-  pub(crate) fn hash_tokens(&self, hasher: &mut impl core::hash::Hasher) {
-    use core::hash::Hash;
-
+  pub(crate) fn hash_tokens(&self, hasher: &mut impl Hasher) {
     for token in &self.0 {
       match token {
         ExpandedFamilyToken::Named(name) => {
@@ -113,7 +117,7 @@ impl ExpandedFontFamily {
   }
 
   /// Expands `family` against registered subset `groups`.
-  fn expand(family: &FontFamily, groups: &HashMap<String, SubsetGroup>) -> Self {
+  pub(crate) fn expand(family: &FontFamily, groups: &HashMap<String, SubsetGroup>) -> Self {
     let mut tokens = Vec::new();
     for name in family.names() {
       match name {
@@ -287,9 +291,7 @@ impl SizedFontStyle<'_> {
 
   /// Hashes every input the `TextStyle` conversion below reads, so shaped text-only layouts can be
   /// cached by content.
-  pub(crate) fn hash_shaping_inputs(&self, hasher: &mut impl core::hash::Hasher) {
-    use core::{hash::Hash, mem::discriminant};
-
+  pub(crate) fn hash_shaping_inputs(&self, hasher: &mut impl Hasher) {
     self.sizing.font_size.to_bits().hash(hasher);
     self.letter_spacing.to_bits().hash(hasher);
     self.word_spacing.to_bits().hash(hasher);
@@ -307,14 +309,6 @@ impl SizedFontStyle<'_> {
     self.text_stroke_color.0.hash(hasher);
     self.stroke_width.to_bits().hash(hasher);
     self.font_family.hash_tokens(hasher);
-    match self.line_height {
-      LineHeight::MetricsRelative(value)
-      | LineHeight::FontSizeRelative(value)
-      | LineHeight::Absolute(value) => {
-        discriminant(&self.line_height).hash(hasher);
-        value.to_bits().hash(hasher);
-      }
-    }
     match self.text_decoration_thickness {
       SizedTextDecorationThickness::FromFont => 0_u8.hash(hasher),
       SizedTextDecorationThickness::Value(value) => {

@@ -45,7 +45,7 @@ pub(super) fn list_marker(item_context: &RenderContext, ordinal: i32) -> Option<
     Some(image) => marker_image(&context, image, direction),
     None => {
       let style_type = &item_context.style.list_style_type;
-      let text = style_type.marker_text(ordinal, direction == Direction::Rtl)?;
+      let text = style_type.marker_text(ordinal, direction)?;
 
       // Blink spaces a symbol marker with margins, not its suffix
       // (`InlineMarginsForInside`/`Outside`).

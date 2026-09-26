@@ -24,18 +24,11 @@ impl<'de> Deserialize<'de> for StageMap {
         formatter.write_str("a map from keyframe selector to declaration block")
       }
 
-      fn visit_map<A>(self, mut access: A) -> Result<Self::Value, A::Error>
+      fn visit_map<A>(self, access: A) -> Result<Self::Value, A::Error>
       where
         A: MapAccess<'de>,
       {
-        let mut stages = Vec::with_capacity(access.size_hint().unwrap_or(0));
-        while let Some((selector, declarations)) =
-          access.next_entry::<String, StyleDeclarationBlock>()?
-        {
-          stages.push((selector, declarations));
-        }
-        stages.sort_unstable_by(|(left, _), (right, _)| left.cmp(right));
-        Ok(StageMap(stages))
+        Ok(StageMap(sorted_entries(access)?))
       }
     }
 
@@ -70,17 +63,11 @@ impl<'de> Deserialize<'de> for KeyframesVec {
         Ok(KeyframesVec(rules))
       }
 
-      fn visit_map<A>(self, mut access: A) -> Result<Self::Value, A::Error>
+      fn visit_map<A>(self, access: A) -> Result<Self::Value, A::Error>
       where
         A: MapAccess<'de>,
       {
-        let mut shorthand = Vec::with_capacity(access.size_hint().unwrap_or(0));
-        while let Some((name, stages)) = access.next_entry::<String, StageMap>()? {
-          shorthand.push((name, stages));
-        }
-        shorthand.sort_unstable_by(|(left, _), (right, _)| left.cmp(right));
-
-        let rules = shorthand
+        let rules = sorted_entries::<_, StageMap>(access)?
           .into_iter()
           .map(|(name, StageMap(stages))| {
             let keyframes = stages
@@ -107,6 +94,21 @@ impl<'de> Deserialize<'de> for KeyframesVec {
 
     deserializer.deserialize_any(KeyframesVecVisitor)
   }
+}
+
+/// A map's entries in key order.
+fn sorted_entries<'de, A, V>(mut access: A) -> Result<Vec<(String, V)>, A::Error>
+where
+  A: MapAccess<'de>,
+  V: Deserialize<'de>,
+{
+  let mut entries = Vec::with_capacity(access.size_hint().unwrap_or(0));
+
+  while let Some(entry) = access.next_entry::<String, V>()? {
+    entries.push(entry);
+  }
+  entries.sort_unstable_by(|(left, _), (right, _)| left.cmp(right));
+  Ok(entries)
 }
 
 /// Deserializes either structured keyframes or shorthand keyframe maps.

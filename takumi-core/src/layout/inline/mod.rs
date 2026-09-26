@@ -867,12 +867,9 @@ pub(super) fn break_into_lines(
   positioned_floats: &mut Vec<PositionedInlineBox>,
 ) -> bool {
   apply_text_indent(layout, style, options.max_width);
-  break_lines(
+  options.rebreak(
     layout,
     LineWidths::uniform(options.max_width),
-    options.max_height,
-    options.line_height_hint,
-    options.text_wrap_mode,
     spans,
     positioned_floats,
   )

@@ -3,7 +3,7 @@ use std::rc::Rc;
 use cssparser::*;
 
 use crate::{
-  error::StyleSheetParseError,
+  error::{StyleSheetParseError, StyleSheetParseErrorKind},
   geometry::{LAYOUT_UNIT_EPSILON, Size},
   style::{CalcArena, FromCss, Length, SizingContext},
   viewport::{MediaTarget, Viewport},
@@ -272,7 +272,7 @@ impl MediaFeature {
     value: MediaFeatureValue,
   ) -> Result<Self, ParseError<'i, StyleSheetParseError>> {
     Self::new(name, comparison, value)
-      .ok_or_else(|| input.new_custom_error(StyleSheetParseError::unsupported_media_feature()))
+      .ok_or_else(|| input.new_custom_error(StyleSheetParseErrorKind::UnsupportedMediaFeature))
   }
 
   fn parse<'i, 't>(
@@ -284,7 +284,7 @@ impl MediaFeature {
     // <https://drafts.csswg.org/mediaqueries-4/#mq-boolean-context>
     if input.try_parse(Parser::expect_colon).is_err() {
       return MediaFeature::boolean(&feature_name)
-        .ok_or_else(|| input.new_custom_error(StyleSheetParseError::unsupported_media_feature()));
+        .ok_or_else(|| input.new_custom_error(StyleSheetParseErrorKind::UnsupportedMediaFeature));
     }
 
     if feature_name.eq_ignore_ascii_case("orientation") {

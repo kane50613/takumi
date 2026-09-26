@@ -12,13 +12,13 @@ use std::borrow::Cow;
 #[cfg(feature = "svg-sizing")]
 use std::str::{FromStr, from_utf8};
 use std::sync::{Arc, Weak};
+#[cfg(feature = "svg")]
+use std::sync::{Mutex, atomic::Ordering};
 
 use quick_cache::{
   DefaultHashBuilder, OptionsBuilder, Weighter,
   sync::{Cache, DefaultLifecycle, GuardResult},
 };
-#[cfg(feature = "svg")]
-use roxmltree::{Document, ParsingOptions};
 use serde::Deserialize;
 use thiserror::Error;
 #[cfg(feature = "svg")]
@@ -30,10 +30,14 @@ use crate::resources::image_decoder::decoder_compiled_out;
 #[cfg(feature = "svg-sizing")]
 use crate::resources::svg_size::SvgSize;
 #[cfg(feature = "svg")]
+use crate::resources::svg_size::parse_svg_document;
+#[cfg(feature = "svg")]
 use crate::resvg::{
   apply_filters_to_layer, render as render_svg_tree,
   usvg::{Options, Transform, Tree, filters_from_markup},
 };
+#[cfg(feature = "svg")]
+use crate::svg_vector::flatten;
 #[cfg(feature = "svg")]
 pub use crate::svg_vector::{
   SvgFill, SvgGradient, SvgGradientStop, SvgLineCap, SvgLineJoin, SvgOp, SvgPaint, SvgSpreadMethod,
@@ -43,7 +47,7 @@ use crate::{
   resources::{
     font::FontsSnapshot,
     image_buffer::ImageBuffer,
-    image_decoder::{bitmap_dimensions, decode_bitmap_scaled, decode_image},
+    image_decoder::{DecodeTarget, bitmap_dimensions, decode_bitmap_scaled, decode_image},
   },
   style::{Color, ImageScalingAlgorithm, IntrinsicSizing, SizingContext, StyleSheet},
 };
@@ -86,7 +90,7 @@ pub struct SvgSource {
   sizing: SvgSize,
   /// Parsed SVG tree used for size and initial metadata.
   #[cfg(feature = "svg")]
-  pub(crate) tree: crate::resvg::usvg::Tree,
+  pub(crate) tree: Tree,
   /// Whether rendering depends on the host `color`: the markup references
   /// `currentColor` and the root element sets no `color` of its own.
   #[cfg(feature = "svg")]
@@ -97,7 +101,7 @@ pub struct SvgSource {
   /// Text-capable re-parse of `source`, keyed by the font registry revision
   /// it was converted with; a registration re-converts on the next render.
   #[cfg(feature = "svg")]
-  text_tree: std::sync::Mutex<Option<(u64, Arc<crate::resvg::usvg::Tree>)>>,
+  text_tree: Mutex<Option<(u64, Arc<Tree>)>>,
   #[cfg(feature = "svg")]
   hash: u64,
   #[cfg(feature = "svg")]
@@ -135,6 +139,16 @@ impl SvgSource {
       sizing: SvgSize::parse(src).map_err(ImageError::svg_parse)?,
     })
   }
+}
+
+/// Parse options for untrusted SVG markup: the string href resolver is
+/// disabled so `<image>`/`<feImage href>` cannot read local files. `data:`
+/// URIs still resolve through the default data resolver.
+#[cfg(feature = "svg")]
+fn svg_parse_options() -> Options<'static> {
+  let mut options = Options::default();
+  options.image_href_resolver.resolve_string = Box::new(|_, _| None);
+  options
 }
 
 #[cfg(feature = "svg")]
@@ -181,11 +195,11 @@ impl SvgSource {
     fonts: Option<&FontsSnapshot>,
   ) -> Vec<SvgOp> {
     match self.tree_with_current_color(current_color, fonts) {
-      Some(tree) => crate::svg_vector::flatten(&tree, raster_scale),
+      Some(tree) => flatten(&tree, raster_scale),
       None => {
         let text_tree = self.text_tree(fonts);
 
-        crate::svg_vector::flatten(text_tree.as_deref().unwrap_or(&self.tree), raster_scale)
+        flatten(text_tree.as_deref().unwrap_or(&self.tree), raster_scale)
       }
     }
   }
@@ -195,12 +209,8 @@ impl SvgSource {
     &self,
     fonts: Option<&FontsSnapshot>,
     configure: impl FnOnce(&mut Options),
-  ) -> Option<crate::resvg::usvg::Tree> {
-    let parsing = ParsingOptions {
-      allow_dtd: true,
-      ..Default::default()
-    };
-    let document = Document::parse_with_options(&self.source, parsing).ok()?;
+  ) -> Option<Tree> {
+    let document = parse_svg_document(&self.source).ok()?;
     let mut options = svg_parse_options();
 
     if let Some(fonts) = fonts.filter(|_| self.has_text) {
@@ -217,7 +227,7 @@ impl SvgSource {
     &self,
     current_color: Color,
     fonts: Option<&FontsSnapshot>,
-  ) -> Option<crate::resvg::usvg::Tree> {
+  ) -> Option<Tree> {
     if !self.uses_current_color {
       return None;
     }
@@ -228,147 +238,14 @@ impl SvgSource {
       options.current_color = Some(svgtypes::Color::new_rgba(red, green, blue, alpha));
     })
   }
-}
 
-#[cfg(feature = "svg-sizing")]
-impl From<SvgSource> for ImageSource {
-  fn from(svg: SvgSource) -> Self {
-    ImageSource::Svg(Arc::new(svg))
-  }
-}
-
-/// An encoded bitmap (PNG/JPEG/WebP) that decodes lazily at draw time, scaled
-/// down to the box it is drawn into. Decoded results are stored in the owning
-/// [`ResourceCache`] keyed by content and target size, so a source drawn at a
-/// stable size decodes once while the retained bytes track the draw size, not
-/// the source size.
-#[derive(Debug)]
-pub struct EncodedBitmap {
-  bytes: Box<[u8]>,
-  width: u32,
-  height: u32,
-  hash: u64,
-  cache: Weak<SharedResourceCache>,
-}
-
-impl EncodedBitmap {
-  /// The bitmap dimensions in pixels, from the format header.
-  pub fn dimensions(&self) -> (u32, u32) {
-    (self.width, self.height)
-  }
-
-  /// The original encoded bytes.
-  pub fn bytes(&self) -> &[u8] {
-    &self.bytes
-  }
-
-  /// Decoded buffer covering a `width` x `height` draw box, downscaled with
-  /// `algorithm`'s filter but never upscaled. Returns the buffer and its scale
-  /// relative to the source dimensions.
-  fn decode_at(
-    &self,
-    width: u32,
-    height: u32,
-    algorithm: ImageScalingAlgorithm,
-  ) -> Result<(Arc<ImageBuffer>, (f32, f32)), ImageError> {
-    let (target_width, target_height) = cover_target((self.width, self.height), (width, height));
-
-    let buffer = self.decode_scaled(target_width, target_height, algorithm)?;
-    let scale = (
-      target_width as f32 / self.width as f32,
-      target_height as f32 / self.height as f32,
-    );
-
-    Ok((buffer, scale))
-  }
-
-  fn decode_scaled(
-    &self,
-    width: u32,
-    height: u32,
-    algorithm: ImageScalingAlgorithm,
-  ) -> Result<Arc<ImageBuffer>, ImageError> {
-    let Some(cache) = self.cache.upgrade() else {
-      return self.decode_uncached(width, height, algorithm);
-    };
-
-    let key = ResourceCacheKey::sized(self.hash, width, height, algorithm);
-
-    match cache.get_value_or_guard(&key, None) {
-      GuardResult::Value(CacheEntry::Sized(buffer)) => Ok(buffer),
-      GuardResult::Value(_) => self.decode_uncached(width, height, algorithm),
-      GuardResult::Guard(guard) => {
-        let buffer = self.decode_uncached(width, height, algorithm)?;
-        let _ = guard.insert(CacheEntry::Sized(buffer.clone()));
-        Ok(buffer)
-      }
-      // `None` timeout never times out.
-      GuardResult::Timeout => self.decode_uncached(width, height, algorithm),
-    }
-  }
-
-  fn decode_uncached(
-    &self,
-    width: u32,
-    height: u32,
-    algorithm: ImageScalingAlgorithm,
-  ) -> Result<Arc<ImageBuffer>, ImageError> {
-    decode_bitmap_scaled(&self.bytes, width, height, algorithm)
-      .map(Arc::new)
-      .map_err(ImageError::decode)
-  }
-}
-
-/// Image data prepared for layout rendering.
-#[derive(Debug, Clone)]
-pub enum RenderedImage {
-  /// A fully rasterized image, used for SVGs.
-  Rasterized(Arc<ImageBuffer>),
-  /// A shared bitmap that should be sampled directly.
-  Sampled {
-    /// The original bitmap source.
-    source: Arc<ImageBuffer>,
-    /// The logical width that will be rendered on the canvas.
-    width: u32,
-    /// The logical height that will be rendered on the canvas.
-    height: u32,
-    /// The sampling algorithm to use.
-    algorithm: ImageScalingAlgorithm,
-    /// The buffer size relative to the source's intrinsic dimensions;
-    /// `(1.0, 1.0)` unless the buffer was decoded pre-scaled.
-    source_scale: (f32, f32),
-  },
-}
-
-impl From<ImageBuffer> for ImageSource {
-  fn from(buffer: ImageBuffer) -> Self {
-    ImageSource::Bitmap(Arc::new(buffer))
-  }
-}
-
-/// Parse options for untrusted SVG markup: the string href resolver is
-/// disabled so `<image>`/`<feImage href>` cannot read local files. `data:`
-/// URIs still resolve through the default data resolver.
-#[cfg(feature = "svg")]
-fn svg_parse_options() -> Options<'static> {
-  let mut options = Options::default();
-  options.image_href_resolver.resolve_string = Box::new(|_, _| None);
-  options
-}
-
-#[cfg(feature = "svg")]
-impl SvgSource {
   /// Parses SVG markup; rasterized pixmaps go into `cache` while it is alive,
   /// keyed by content hash and target size. A dead handle rasterizes per call.
   fn parse(src: &str, hash: u64, cache: Weak<SharedResourceCache>) -> Result<Self, ImageError> {
     // One parse, shared with usvg via `from_xmltree` (what `from_str` does
     // internally). No text stripping: usvg drops `<text>`/`<tspan>` with its
     // `text` feature off.
-    let options = ParsingOptions {
-      allow_dtd: true,
-      ..Default::default()
-    };
-    let document = Document::parse_with_options(src, options).map_err(ImageError::svg_parse)?;
+    let document = parse_svg_document(src).map_err(ImageError::svg_parse)?;
 
     let options = svg_parse_options();
     let tree = Tree::from_xmltree(&document, &options).map_err(ImageError::svg_parse)?;
@@ -376,9 +253,7 @@ impl SvgSource {
     // Set during parsing whenever a `currentColor` finds no `color` attribute
     // on its ancestors, so it also catches entity-encoded values a source-text
     // scan would miss.
-    let uses_current_color = options
-      .current_color_used
-      .load(std::sync::atomic::Ordering::Relaxed);
+    let uses_current_color = options.current_color_used.load(Ordering::Relaxed);
 
     Ok(SvgSource {
       has_text: document
@@ -388,7 +263,7 @@ impl SvgSource {
       sizing,
       tree,
       uses_current_color,
-      text_tree: std::sync::Mutex::new(None),
+      text_tree: Mutex::new(None),
       hash,
       cache,
     })
@@ -396,7 +271,7 @@ impl SvgSource {
 
   /// The text-capable re-parse for the snapshot's font revision when the
   /// markup holds `<text>`, or `None` to use the parse-time tree.
-  fn text_tree(&self, fonts: Option<&FontsSnapshot>) -> Option<Arc<crate::resvg::usvg::Tree>> {
+  fn text_tree(&self, fonts: Option<&FontsSnapshot>) -> Option<Arc<Tree>> {
     let fonts = fonts.filter(|_| self.has_text)?;
     let revision = fonts.revision();
     let mut cached = self.text_tree.lock().ok()?;
@@ -455,10 +330,6 @@ impl SvgSource {
     current_color: Color,
     fonts: Option<&FontsSnapshot>,
   ) -> Result<Arc<ImageBuffer>, ImageError> {
-    let Some(cache) = self.cache.upgrade() else {
-      return self.rasterize(width, height, current_color, fonts);
-    };
-
     let mut hash = if self.uses_current_color {
       self.hash ^ xxh3_64(&current_color.0)
     } else {
@@ -474,17 +345,117 @@ impl SvgSource {
 
     let key = ResourceCacheKey::sized(hash, width, height, image_rendering);
 
-    match cache.get_value_or_guard(&key, None) {
-      GuardResult::Value(CacheEntry::Sized(buffer)) => Ok(buffer),
-      GuardResult::Value(_) => self.rasterize(width, height, current_color, fonts),
-      GuardResult::Guard(guard) => {
-        let buffer = self.rasterize(width, height, current_color, fonts)?;
-        let _ = guard.insert(CacheEntry::Sized(buffer.clone()));
-        Ok(buffer)
-      }
-      // `None` timeout never times out.
-      GuardResult::Timeout => self.rasterize(width, height, current_color, fonts),
+    cached_sized(&self.cache, key, || {
+      self.rasterize(width, height, current_color, fonts)
+    })
+  }
+}
+
+#[cfg(feature = "svg-sizing")]
+impl From<SvgSource> for ImageSource {
+  fn from(svg: SvgSource) -> Self {
+    ImageSource::Svg(Arc::new(svg))
+  }
+}
+
+/// An encoded bitmap (PNG/JPEG/WebP) that decodes lazily at draw time, scaled
+/// down to the box it is drawn into. Decoded results are stored in the owning
+/// [`ResourceCache`] keyed by content and target size, so a source drawn at a
+/// stable size decodes once while the retained bytes track the draw size, not
+/// the source size.
+#[derive(Debug)]
+pub struct EncodedBitmap {
+  bytes: Box<[u8]>,
+  width: u32,
+  height: u32,
+  hash: u64,
+  cache: Weak<SharedResourceCache>,
+}
+
+impl EncodedBitmap {
+  /// The bitmap dimensions in pixels, from the format header.
+  pub fn dimensions(&self) -> (u32, u32) {
+    (self.width, self.height)
+  }
+
+  /// The original encoded bytes.
+  pub fn bytes(&self) -> &[u8] {
+    &self.bytes
+  }
+
+  /// Decoded buffer covering a `width` x `height` draw box, downscaled with
+  /// `algorithm`'s filter but never upscaled. Returns the buffer and its scale
+  /// relative to the source dimensions.
+  fn decode_at(
+    &self,
+    width: u32,
+    height: u32,
+    algorithm: ImageScalingAlgorithm,
+  ) -> Result<(Arc<ImageBuffer>, (f32, f32)), ImageError> {
+    let target = DecodeTarget::covering((self.width, self.height), (width, height), algorithm);
+    let key = ResourceCacheKey::sized(self.hash, target.width, target.height, algorithm);
+    let buffer = cached_sized(&self.cache, key, || {
+      decode_bitmap_scaled(&self.bytes, target)
+        .map(Arc::new)
+        .map_err(ImageError::decode)
+    })?;
+    let scale = (
+      target.width as f32 / self.width as f32,
+      target.height as f32 / self.height as f32,
+    );
+
+    Ok((buffer, scale))
+  }
+}
+
+/// The sized buffer `cache` holds for `key`, computing it once across concurrent misses. A dead
+/// cache computes on every call.
+fn cached_sized(
+  cache: &Weak<SharedResourceCache>,
+  key: ResourceCacheKey,
+  compute: impl Fn() -> Result<Arc<ImageBuffer>, ImageError>,
+) -> Result<Arc<ImageBuffer>, ImageError> {
+  let Some(cache) = cache.upgrade() else {
+    return compute();
+  };
+
+  match cache.get_value_or_guard(&key, None) {
+    GuardResult::Value(CacheEntry::Sized(buffer)) => Ok(buffer),
+    GuardResult::Value(_) => compute(),
+    GuardResult::Guard(guard) => {
+      let buffer = compute()?;
+      let _ = guard.insert(CacheEntry::Sized(buffer.clone()));
+      Ok(buffer)
     }
+    // `None` timeout never times out.
+    GuardResult::Timeout => compute(),
+  }
+}
+
+/// Image data prepared for layout rendering.
+#[derive(Debug, Clone)]
+pub enum RenderedImage {
+  /// A fully rasterized image, used for SVGs.
+  Rasterized(Arc<ImageBuffer>),
+  /// A shared bitmap that should be sampled directly.
+  Sampled {
+    /// The original bitmap source.
+    source: Arc<ImageBuffer>,
+    /// The logical width that will be rendered on the canvas.
+    width: u32,
+    /// The logical height that will be rendered on the canvas.
+    height: u32,
+    /// The sampling algorithm to use.
+    algorithm: ImageScalingAlgorithm,
+    /// The buffer size relative to the source's intrinsic dimensions;
+    /// `(1.0, 1.0)` unless the buffer was decoded pre-scaled.
+    source_scale: (f32, f32),
+  },
+}
+
+impl From<ImageBuffer> for ImageSource {
+  fn from(buffer: ImageBuffer) -> Self {
+    ImageSource::Bitmap(Arc::new(buffer))
   }
 }
 
@@ -518,32 +489,8 @@ impl ImageSource {
   ///   are parsed as an SVG using `resvg::usvg`.
   /// - Otherwise, the bytes are decoded as a raster image.
   pub fn from_bytes(bytes: &[u8]) -> ImageResult {
-    #[cfg(feature = "svg-sizing")]
-    {
-      if let Ok(text) = from_utf8(bytes)
-        && is_svg_like(text)
-      {
-        return Ok(ImageSource::Svg(Arc::new(text.parse()?)));
-      }
-    }
-
-    #[cfg(any(feature = "png", feature = "gif", feature = "webp"))]
-    if let Some(format) = AnimatedFormat::detect(bytes) {
-      return Ok(ImageSource::Animated(AnimatedSource::from_bytes(
-        format, bytes,
-      )?));
-    }
-
-    match decode_image(bytes) {
-      Ok(buffer) => Ok(ImageSource::Bitmap(Arc::new(buffer))),
-      #[cfg(all(feature = "png", feature = "jpeg", feature = "webp", feature = "gif"))]
-      Err(error) => Err(ImageError::decode(error)),
-      #[cfg(not(all(feature = "png", feature = "jpeg", feature = "webp", feature = "gif")))]
-      Err(error) => match bitmap_dimensions(bytes).filter(|_| decoder_compiled_out(bytes)) {
-        Some(Ok(dimensions)) => Ok(Self::encoded(bytes, dimensions, 0, Weak::new())),
-        _ => Err(ImageError::decode(error)),
-      },
-    }
+    Self::from_svg_or_animated_bytes(bytes, || xxh3_64(bytes), &Weak::new())
+      .unwrap_or_else(|| Self::from_still_bytes(bytes))
   }
 
   /// [`from_bytes`](Self::from_bytes), but bitmaps stay encoded and decode at
@@ -555,28 +502,51 @@ impl ImageSource {
     hash: u64,
     cache: Weak<SharedResourceCache>,
   ) -> ImageResult {
-    #[cfg(feature = "svg-sizing")]
-    {
-      if let Ok(text) = from_utf8(bytes)
-        && is_svg_like(text)
-      {
-        return Ok(ImageSource::Svg(Arc::new(SvgSource::parse(
-          text, hash, cache,
-        )?)));
-      }
-    }
-
-    #[cfg(any(feature = "png", feature = "gif", feature = "webp"))]
-    if let Some(format) = AnimatedFormat::detect(bytes) {
-      return Ok(ImageSource::Animated(AnimatedSource::from_bytes(
-        format, bytes,
-      )?));
+    if let Some(source) = Self::from_svg_or_animated_bytes(bytes, || hash, &cache) {
+      return source;
     }
 
     match bitmap_dimensions(bytes) {
       Some(Ok((width, height))) => Ok(Self::encoded(bytes, (width, height), hash, cache)),
       Some(Err(error)) => Err(ImageError::decode(error)),
-      None => Self::from_bytes(bytes),
+      None => Self::from_still_bytes(bytes),
+    }
+  }
+
+  /// The SVG or animated source `bytes` hold, or `None` for a still bitmap. `hash` keys the SVG's
+  /// rasters in `cache`.
+  #[cfg_attr(not(feature = "svg-sizing"), allow(unused_variables))]
+  fn from_svg_or_animated_bytes(
+    bytes: &[u8],
+    hash: impl FnOnce() -> u64,
+    cache: &Weak<SharedResourceCache>,
+  ) -> Option<ImageResult> {
+    #[cfg(feature = "svg-sizing")]
+    if let Ok(text) = from_utf8(bytes)
+      && is_svg_like(text)
+    {
+      return Some(SvgSource::parse(text, hash(), cache.clone()).map(Self::from));
+    }
+
+    #[cfg(any(feature = "png", feature = "gif", feature = "webp"))]
+    if let Some(format) = AnimatedFormat::detect(bytes) {
+      return Some(AnimatedSource::from_bytes(format, bytes).map(ImageSource::Animated));
+    }
+
+    None
+  }
+
+  /// Decodes a still bitmap in full.
+  fn from_still_bytes(bytes: &[u8]) -> ImageResult {
+    match decode_image(bytes) {
+      Ok(buffer) => Ok(ImageSource::Bitmap(Arc::new(buffer))),
+      #[cfg(all(feature = "png", feature = "jpeg", feature = "webp", feature = "gif"))]
+      Err(error) => Err(ImageError::decode(error)),
+      #[cfg(not(all(feature = "png", feature = "jpeg", feature = "webp", feature = "gif")))]
+      Err(error) => match bitmap_dimensions(bytes).filter(|_| decoder_compiled_out(bytes)) {
+        Some(Ok(dimensions)) => Ok(Self::encoded(bytes, dimensions, 0, Weak::new())),
+        _ => Err(ImageError::decode(error)),
+      },
     }
   }
 
@@ -699,20 +669,6 @@ impl ImageSource {
       }
     }
   }
-}
-
-/// Cover-fit target for a draw box: uniform scale, never upscaled.
-pub(crate) fn cover_target(
-  (native_w, native_h): (u32, u32),
-  (box_w, box_h): (u32, u32),
-) -> (u32, u32) {
-  let scale = (box_w as f32 / native_w as f32)
-    .max(box_h as f32 / native_h as f32)
-    .min(1.0);
-  (
-    ((native_w as f32 * scale).round() as u32).clamp(1, native_w),
-    ((native_h as f32 * scale).round() as u32).clamp(1, native_h),
-  )
 }
 
 /// Check if the string looks like an SVG image.
@@ -1119,7 +1075,7 @@ mod resource_cache_tests {
 
     match (&first, &second) {
       (ImageSource::Encoded(a), ImageSource::Encoded(b)) => {
-        assert!(std::sync::Arc::ptr_eq(a, b))
+        assert!(Arc::ptr_eq(a, b))
       }
       _ => panic!("expected encoded bitmaps"),
     }
@@ -1136,7 +1092,7 @@ mod resource_cache_tests {
     source: &ImageSource,
     width: u32,
     height: u32,
-  ) -> (std::sync::Arc<ImageBuffer>, (f32, f32)) {
+  ) -> (Arc<ImageBuffer>, (f32, f32)) {
     match source
       .render_for_layout(
         width,
@@ -1168,7 +1124,7 @@ mod resource_cache_tests {
 
     assert_eq!((first.width(), first.height()), (16, 16));
     assert_eq!(scale, (0.25, 0.25));
-    assert!(std::sync::Arc::ptr_eq(&first, &second));
+    assert!(Arc::ptr_eq(&first, &second));
   }
 
   #[test]
@@ -1204,7 +1160,7 @@ mod resource_cache_tests {
     let b = cache.get_or_decode(&bytes, ImageCacheMode::None).unwrap();
 
     match (&a, &b) {
-      (ImageSource::Bitmap(x), ImageSource::Bitmap(y)) => assert!(!std::sync::Arc::ptr_eq(x, y)),
+      (ImageSource::Bitmap(x), ImageSource::Bitmap(y)) => assert!(!Arc::ptr_eq(x, y)),
       _ => panic!("expected bitmaps"),
     }
   }
@@ -1220,17 +1176,17 @@ mod resource_cache_tests {
 
     match (&a, &b) {
       (ImageSource::Svg(x), ImageSource::Svg(y)) => {
-        assert!(std::sync::Arc::ptr_eq(x, y))
+        assert!(Arc::ptr_eq(x, y))
       }
       _ => panic!("expected svgs"),
     }
 
     let (first, second) = (rendered_raster(&a, 4, 4), rendered_raster(&b, 4, 4));
-    assert!(std::sync::Arc::ptr_eq(&first, &second));
+    assert!(Arc::ptr_eq(&first, &second));
   }
 
   #[cfg(feature = "svg")]
-  fn rendered_raster(source: &ImageSource, width: u32, height: u32) -> std::sync::Arc<ImageBuffer> {
+  fn rendered_raster(source: &ImageSource, width: u32, height: u32) -> Arc<ImageBuffer> {
     match source
       .render_for_layout(
         width,
@@ -1255,7 +1211,7 @@ mod resource_cache_tests {
     let first = cache.get_or_parse_stylesheet(sources.clone());
     let second = cache.get_or_parse_stylesheet(sources);
 
-    assert!(std::sync::Arc::ptr_eq(&first, &second));
+    assert!(Arc::ptr_eq(&first, &second));
   }
 
   #[test]
@@ -1290,7 +1246,7 @@ mod resource_cache_tests {
 
     match (&a, &b) {
       (ImageSource::Encoded(x), ImageSource::Encoded(y)) => {
-        assert!(!std::sync::Arc::ptr_eq(x, y))
+        assert!(!Arc::ptr_eq(x, y))
       }
       _ => panic!("expected encoded bitmaps"),
     }
@@ -1395,14 +1351,7 @@ mod tests {
       };
       let size =
         SvgSize::parse(&markup).unwrap_or_else(|error| panic!("{}: {error}", path.display()));
-      let document = Document::parse_with_options(
-        &markup,
-        ParsingOptions {
-          allow_dtd: true,
-          ..Default::default()
-        },
-      )
-      .unwrap();
+      let document = parse_svg_document(&markup).unwrap();
       let root = document.root_element();
       let usvg_size = source.dimensions();
 

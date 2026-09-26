@@ -81,21 +81,19 @@ impl ColorMatrix {
   /// gray; negative amounts push past the original, which is how `saturate`
   /// above 1 works.
   fn toward_luma(amount: f32) -> Self {
-    let mut filter = IDENTITY;
-
-    for (index, row) in filter.rows.iter_mut().enumerate() {
-      for (column, weight) in LUMA_WEIGHTS.iter().enumerate() {
-        row[column] = amount * weight + if index == column { 1.0 - amount } else { 0.0 };
-      }
-    }
-    filter
+    Self::toward([LUMA_WEIGHTS; 3], amount)
   }
 
   fn sepia(amount: f32) -> Self {
+    Self::toward(SEPIA_WEIGHTS, amount)
+  }
+
+  /// Mixes each channel toward the row of `weights` that produces it, by `amount`.
+  fn toward(weights: [[f32; 3]; 3], amount: f32) -> Self {
     let mut filter = IDENTITY;
 
     for (index, row) in filter.rows.iter_mut().enumerate() {
-      for (column, weight) in SEPIA_WEIGHTS[index].iter().enumerate() {
+      for (column, weight) in weights[index].iter().enumerate() {
         row[column] = amount * weight + if index == column { 1.0 - amount } else { 0.0 };
       }
     }

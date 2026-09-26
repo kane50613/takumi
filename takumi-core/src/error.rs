@@ -279,6 +279,15 @@ impl std::fmt::Display for StyleSheetParseError {
 
 impl std::error::Error for StyleSheetParseError {}
 
+impl From<StyleSheetParseErrorKind> for StyleSheetParseError {
+  fn from(kind: StyleSheetParseErrorKind) -> Self {
+    Self {
+      context: None,
+      kind,
+    }
+  }
+}
+
 impl<'i> From<SelectorParseErrorKind<'i>> for StyleSheetParseError {
   fn from(err: SelectorParseErrorKind<'i>) -> Self {
     Self::invalid_reason(format!("{err:?}"))
@@ -300,64 +309,7 @@ impl<'i> From<KeyframePreludeParseError<'i>> for StyleSheetParseError {
 impl StyleSheetParseError {
   /// Builds an invalid-stylesheet error from a reason string.
   pub(crate) fn invalid_reason(reason: impl Into<String>) -> Self {
-    Self::new(StyleSheetParseErrorKind::InvalidStyleSheet(reason.into()))
-  }
-
-  /// Error for an unsupported media feature.
-  pub(crate) fn unsupported_media_feature() -> Self {
-    Self::new(StyleSheetParseErrorKind::UnsupportedMediaFeature)
-  }
-
-  /// Error for a non-boolean `@property` `inherits` descriptor.
-  pub(crate) fn property_inherits_must_be_boolean() -> Self {
-    Self::new(StyleSheetParseErrorKind::PropertyInheritsMustBeBoolean)
-  }
-
-  /// Error for a `@property` missing its `syntax` descriptor.
-  pub(crate) fn missing_property_syntax() -> Self {
-    Self::new(StyleSheetParseErrorKind::MissingPropertySyntax)
-  }
-
-  /// Error for a `@property` missing its `inherits` descriptor.
-  pub(crate) fn missing_property_inherits() -> Self {
-    Self::new(StyleSheetParseErrorKind::MissingPropertyInherits)
-  }
-
-  /// Error for a typed `@property` missing its `initial-value` descriptor.
-  pub(crate) fn missing_property_initial_value() -> Self {
-    Self::new(StyleSheetParseErrorKind::MissingPropertyInitialValue)
-  }
-
-  /// Error for `@supports` mixing `and`/`or` without parentheses.
-  pub(crate) fn supports_mixed_and_or_without_parentheses() -> Self {
-    Self::new(StyleSheetParseErrorKind::SupportsMixedAndOrWithoutParentheses)
-  }
-
-  /// Error for a `@property` name that is not a custom property.
-  pub(crate) fn property_name_must_be_custom_property() -> Self {
-    Self::new(StyleSheetParseErrorKind::PropertyNameMustBeCustomProperty)
-  }
-
-  /// Error for an `@layer` block naming more than one layer.
-  pub(crate) fn layer_block_multiple_names() -> Self {
-    Self::new(StyleSheetParseErrorKind::LayerBlockMultipleNames)
-  }
-
-  /// Error for an unsupported nested at-rule.
-  pub(crate) fn unsupported_nested_at_rule() -> Self {
-    Self::new(StyleSheetParseErrorKind::UnsupportedNestedAtRule)
-  }
-
-  /// Error for an `@apply` token that is not a plain utility.
-  pub(crate) fn invalid_apply_utility() -> Self {
-    Self::new(StyleSheetParseErrorKind::InvalidApplyUtility)
-  }
-
-  fn new(kind: StyleSheetParseErrorKind) -> Self {
-    Self {
-      context: None,
-      kind,
-    }
+    StyleSheetParseErrorKind::InvalidStyleSheet(reason.into()).into()
   }
 
   fn with_context(self, context: &str) -> Self {

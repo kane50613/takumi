@@ -16,10 +16,7 @@ pub struct ImageBuffer {
 impl ImageBuffer {
   /// Wraps premultiplied RGBA bytes. Returns `None` if `data.len() != width * height * 4`.
   pub fn from_premultiplied_rgba(data: Vec<u8>, width: u32, height: u32) -> Option<Self> {
-    let expected = (width as usize)
-      .checked_mul(height as usize)?
-      .checked_mul(4)?;
-    (data.len() == expected).then_some(Self {
+    (data.len() == rgba_len(width, height)?).then_some(Self {
       data,
       width,
       height,
@@ -39,11 +36,8 @@ impl ImageBuffer {
   /// Allocates a transparent (all-zero) buffer of the given size.
   #[cfg(all(test, feature = "png"))]
   pub(crate) fn new(width: u32, height: u32) -> Option<Self> {
-    let len = (width as usize)
-      .checked_mul(height as usize)?
-      .checked_mul(4)?;
     Some(Self {
-      data: vec![0; len],
+      data: vec![0; rgba_len(width, height)?],
       width,
       height,
     })
@@ -113,6 +107,13 @@ impl ImageBuffer {
   }
 }
 
+/// Byte length of a `width` x `height` RGBA buffer, or `None` when it overflows `usize`.
+pub(crate) fn rgba_len(width: u32, height: u32) -> Option<usize> {
+  (width as usize)
+    .checked_mul(height as usize)?
+    .checked_mul(4)
+}
+
 /// Converts premultiplied RGBA bytes to straight alpha in place.
 #[cfg(feature = "png")]
 pub(crate) fn unpremultiply_in_place(data: &mut [u8]) {
@@ -130,7 +131,6 @@ pub(crate) fn unpremultiply_in_place(data: &mut [u8]) {
 const ALPHA_MASK_U128: u128 =
   u128::from_ne_bytes([0, 0, 0, 0xFF, 0, 0, 0, 0xFF, 0, 0, 0, 0xFF, 0, 0, 0, 0xFF]);
 
-#[inline(always)]
 fn has_opaque_alpha(raw: &[u8]) -> bool {
   let (chunks, remainder) = raw.as_chunks::<16>();
   for chunk in chunks {

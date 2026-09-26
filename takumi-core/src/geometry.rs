@@ -32,6 +32,10 @@ impl<T> Point<T> {
       y: f(self.y),
     }
   }
+
+  pub(crate) fn from_taffy(p: taffy::geometry::Point<T>) -> Self {
+    Self { x: p.x, y: p.y }
+  }
 }
 
 impl Point<f32> {
@@ -78,6 +82,20 @@ impl<T> Size<T> {
     Size {
       width: f(self.width, other.width),
       height: f(self.height, other.height),
+    }
+  }
+
+  pub(crate) fn from_taffy(s: taffy::geometry::Size<T>) -> Self {
+    Self {
+      width: s.width,
+      height: s.height,
+    }
+  }
+
+  pub(crate) fn into_taffy(self) -> taffy::geometry::Size<T> {
+    taffy::geometry::Size {
+      width: self.width,
+      height: self.height,
     }
   }
 }
@@ -167,6 +185,15 @@ impl<T> Rect<T> {
       bottom: f(self.bottom),
     }
   }
+
+  pub(crate) fn from_taffy(r: taffy::geometry::Rect<T>) -> Self {
+    Self {
+      left: r.left,
+      right: r.right,
+      top: r.top,
+      bottom: r.bottom,
+    }
+  }
 }
 
 impl<T: Add<Output = T> + Copy> Rect<T> {
@@ -206,39 +233,6 @@ impl Rect<f32> {
       bottom: (self.bottom - rhs.bottom).max(0.0),
       left: (self.left - rhs.left).max(0.0),
     }
-  }
-}
-
-impl<T> Size<T> {
-  pub(crate) fn from_taffy(s: taffy::geometry::Size<T>) -> Self {
-    Self {
-      width: s.width,
-      height: s.height,
-    }
-  }
-
-  pub(crate) fn into_taffy(self) -> taffy::geometry::Size<T> {
-    taffy::geometry::Size {
-      width: self.width,
-      height: self.height,
-    }
-  }
-}
-
-impl<T> Rect<T> {
-  pub(crate) fn from_taffy(r: taffy::geometry::Rect<T>) -> Self {
-    Self {
-      left: r.left,
-      right: r.right,
-      top: r.top,
-      bottom: r.bottom,
-    }
-  }
-}
-
-impl<T> Point<T> {
-  pub(crate) fn from_taffy(p: taffy::geometry::Point<T>) -> Self {
-    Self { x: p.x, y: p.y }
   }
 }
 
@@ -310,9 +304,7 @@ impl ComputedLayout {
       self.border.top + self.padding.top,
     )
   }
-}
 
-impl ComputedLayout {
   /// Converts the snapped layout, taking the content box from the layout
   /// before snapping.
   pub(crate) fn from_taffy(l: &taffy::Layout, unsnapped: &taffy::Layout) -> Self {
@@ -332,11 +324,7 @@ pub struct NodeId(usize);
 
 impl NodeId {
   /// The root of any layout tree; construction always assigns it index 0.
-  pub const ROOT: Self = Self::new(0);
-
-  const fn new(index: usize) -> Self {
-    Self(index)
-  }
+  pub const ROOT: Self = Self(0);
 
   pub(crate) fn from_taffy(id: taffy::NodeId) -> Self {
     Self(id.into())
@@ -409,6 +397,19 @@ pub enum PathCommand {
   CubicTo(Point<f32>, Point<f32>, Point<f32>),
   /// Closes the current subpath.
   Close,
+}
+
+impl PathCommand {
+  /// Maps every point the command carries through `f`.
+  pub(crate) fn map_points(self, mut f: impl FnMut(Point<f32>) -> Point<f32>) -> Self {
+    match self {
+      Self::MoveTo(point) => Self::MoveTo(f(point)),
+      Self::LineTo(point) => Self::LineTo(f(point)),
+      Self::QuadTo(control, point) => Self::QuadTo(f(control), f(point)),
+      Self::CubicTo(control1, control2, point) => Self::CubicTo(f(control1), f(control2), f(point)),
+      Self::Close => Self::Close,
+    }
+  }
 }
 
 /// Push-style sugar over a [`PathCommand`] list, shared by the geometry and rasterization path

@@ -30,11 +30,11 @@ mod png {
 
   use image::ImageResult;
 
-  use super::{format_compiled_out_error, header_dimensions};
-  use crate::{resources::image_buffer::ImageBuffer, style::ImageScalingAlgorithm};
+  use super::{DecodeTarget, header_dimensions, unsupported_format_error};
+  use crate::resources::image_buffer::ImageBuffer;
 
   pub(crate) fn decode_png(_bytes: &[u8]) -> ImageResult<ImageBuffer> {
-    Err(format_compiled_out_error())
+    Err(unsupported_format_error())
   }
 
   pub(super) fn png_dimensions(bytes: &[u8]) -> ImageResult<(u32, u32)> {
@@ -43,9 +43,7 @@ mod png {
 
   pub(super) fn decode_png_scaled(
     _bytes: &[u8],
-    _width: u32,
-    _height: u32,
-    _algorithm: ImageScalingAlgorithm,
+    _target: DecodeTarget,
   ) -> Option<ImageResult<ImageBuffer>> {
     None
   }
@@ -56,8 +54,7 @@ mod webp;
 pub(crate) use self::frames::covers_canvas;
 #[cfg(any(feature = "png", feature = "gif", feature = "webp"))]
 pub(crate) use self::frames::{
-  DecodeTarget, Dispose, FrameInfo, MAX_ANIMATION_FRAMES, MAX_ANIMATION_TOTAL_PIXELS,
-  fit_to_target, needs_previous_frame,
+  Dispose, FrameInfo, MAX_ANIMATION_FRAMES, MAX_ANIMATION_TOTAL_PIXELS, needs_previous_frame,
 };
 #[cfg(feature = "gif")]
 pub(crate) use self::gif::{
@@ -110,17 +107,63 @@ pub(super) fn pixel_budget_error(width: u32, height: u32) -> ImageError {
   ))
 }
 
+/// The size a decode resamples down to, and how.
+#[derive(Clone, Copy)]
+pub(crate) struct DecodeTarget {
+  pub(crate) width: u32,
+  pub(crate) height: u32,
+  pub(crate) algorithm: ImageScalingAlgorithm,
+}
+
+impl DecodeTarget {
+  /// The target covering a `draw_box` for a `native`-sized image: uniform scale, never upscaled.
+  pub(crate) fn covering(
+    (native_width, native_height): (u32, u32),
+    (box_width, box_height): (u32, u32),
+    algorithm: ImageScalingAlgorithm,
+  ) -> Self {
+    let scale = (box_width as f32 / native_width as f32)
+      .max(box_height as f32 / native_height as f32)
+      .min(1.0);
+
+    Self {
+      width: ((native_width as f32 * scale).round() as u32).clamp(1, native_width),
+      height: ((native_height as f32 * scale).round() as u32).clamp(1, native_height),
+      algorithm,
+    }
+  }
+
+  /// Whether a `width` by `height` canvas is larger than the target on either axis.
+  pub(super) fn shrinks(self, width: u32, height: u32) -> bool {
+    self.width < width || self.height < height
+  }
+
+  /// Resamples a premultiplied `source`-sized canvas to the target.
+  pub(super) fn resample(self, data: &[u8], source: (u32, u32)) -> Option<ImageBuffer> {
+    resample_premultiplied(data, source, (self.width, self.height), self.algorithm)
+  }
+}
+
+/// Resamples a full-canvas buffer down to `target`, or hands it back untouched.
+pub(crate) fn fit_to_target(
+  buffer: ImageBuffer,
+  target: Option<DecodeTarget>,
+) -> ImageResult<ImageBuffer> {
+  let Some(target) = target.filter(|target| target.shrinks(buffer.width(), buffer.height())) else {
+    return Ok(buffer);
+  };
+
+  target
+    .resample(buffer.data(), (buffer.width(), buffer.height()))
+    .ok_or_else(invalid_buffer_error)
+}
+
 pub(crate) fn decode_image(bytes: &[u8]) -> ImageResult<ImageBuffer> {
   match detect_image_format(bytes) {
     Some(DetectedImageFormat::Png) => decode_png(bytes),
     Some(DetectedImageFormat::Jpeg) => decode_jpeg(bytes),
     Some(DetectedImageFormat::WebP) => decode_webp(bytes),
-    Some(DetectedImageFormat::Gif) | None => Err(ImageError::Unsupported(
-      UnsupportedError::from_format_and_kind(
-        ImageFormatHint::Unknown,
-        UnsupportedErrorKind::Format(ImageFormatHint::Unknown),
-      ),
-    )),
+    Some(DetectedImageFormat::Gif) | None => Err(unsupported_format_error()),
   }
 }
 
@@ -169,9 +212,8 @@ pub(super) fn decode_with_image_crate(
   rgba_to_buffer(DynamicImage::from_decoder(decoder)?.into_rgba8(), format)
 }
 
-/// The error a decode entry point returns for a format whose feature is off.
-#[cfg(not(all(feature = "png", feature = "jpeg", feature = "webp")))]
-pub(super) fn format_compiled_out_error() -> ImageError {
+/// The error a decode entry point returns for a format it has no decoder for.
+pub(super) fn unsupported_format_error() -> ImageError {
   ImageError::Unsupported(UnsupportedError::from_format_and_kind(
     ImageFormatHint::Unknown,
     UnsupportedErrorKind::Format(ImageFormatHint::Unknown),
@@ -214,42 +256,25 @@ pub(super) fn header_dimensions(bytes: &[u8]) -> ImageResult<(u32, u32)> {
 
 /// Bitmap dimensions from the format header; decodes no pixels.
 pub(crate) fn bitmap_dimensions(bytes: &[u8]) -> Option<ImageResult<(u32, u32)>> {
-  let dimensions = match detect_image_format(bytes)? {
-    DetectedImageFormat::Png => png_dimensions(bytes),
-    DetectedImageFormat::Jpeg => jpeg_dimensions(bytes),
-    DetectedImageFormat::WebP => return Some(webp_dimensions(bytes)),
-    DetectedImageFormat::Gif => return None,
-  };
-  Some(dimensions)
+  match detect_image_format(bytes)? {
+    DetectedImageFormat::Png => Some(png_dimensions(bytes)),
+    DetectedImageFormat::Jpeg => Some(jpeg_dimensions(bytes)),
+    DetectedImageFormat::WebP => Some(webp_dimensions(bytes)),
+    DetectedImageFormat::Gif => None,
+  }
 }
 
-/// Decodes bitmap bytes scaled to cover `width` x `height`, never upscaling.
-pub(crate) fn decode_bitmap_scaled(
-  bytes: &[u8],
-  width: u32,
-  height: u32,
-  algorithm: ImageScalingAlgorithm,
-) -> ImageResult<ImageBuffer> {
-  if let Some(streamed) = decode_png_scaled(bytes, width, height, algorithm) {
+/// Decodes bitmap bytes down to `target`, never upscaling.
+pub(crate) fn decode_bitmap_scaled(bytes: &[u8], target: DecodeTarget) -> ImageResult<ImageBuffer> {
+  if let Some(streamed) = decode_png_scaled(bytes, target) {
     return streamed;
   }
 
-  if let Some(scaled) = decode_webp_scaled(bytes, width, height) {
+  if let Some(scaled) = decode_webp_scaled(bytes, target) {
     return scaled;
   }
 
-  let decoded = decode_image(bytes)?;
-  if width >= decoded.width() && height >= decoded.height() {
-    return Ok(decoded);
-  }
-
-  resample_premultiplied(
-    decoded.data(),
-    (decoded.width(), decoded.height()),
-    (width, height),
-    algorithm,
-  )
-  .ok_or_else(invalid_buffer_error)
+  fit_to_target(decode_image(bytes)?, Some(target))
 }
 
 #[cfg(any(feature = "png", feature = "gif", feature = "webp", feature = "jpeg"))]
