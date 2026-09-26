@@ -1,13 +1,15 @@
 //! A box's border, painted after Blink's
 //! [`BoxBorderPainter`](https://source.chromium.org/chromium/chromium/src/+/main:third_party/blink/renderer/core/paint/box_border_painter.cc).
 
+use std::cmp::Ordering;
+
 use smallvec::SmallVec;
 
 use super::{FillShape, PaintDevice, StrokeStyle};
 use crate::{
   geometry::{PathCommand, Point, Size},
   layout::border::{BorderProperties, BorderSide, PaintedSide, SideBand},
-  style::{Affine, BorderStyle, FillRule},
+  style::{Affine, BorderStyle, Color, FillRule},
 };
 
 /// How far a curved dashed side overstrokes its centerline, so the ring clip
@@ -176,32 +178,25 @@ impl<'b> BoxBorderPainter<'b> {
       device.push_clip(clip, at);
     }
 
-    let (line, dash) = if curved {
+    if curved {
       let (centerline, perimeter) = self.centerline_loop(border);
-
-      (
-        centerline,
-        side.style.dash_pattern(side.width, perimeter, true),
-      )
-    } else {
-      let length = match side.side {
-        BorderSide::Top | BorderSide::Bottom => self.size.width,
-        BorderSide::Left | BorderSide::Right => self.size.height,
+      let dash = side.style.dash_pattern(side.width, perimeter, true);
+      let width = if side.style == BorderStyle::Dashed {
+        side.width.max(widest_neighbour) * CURVED_DASH_OVERSTROKE
+      } else {
+        side.width
       };
-      let dash = side.style.dash_pattern(side.width, length, false);
 
-      (
-        self.centerline(side, dash.is_some_and(|dash| dash.round_cap)),
-        dash,
-      )
-    };
-    let width = if curved && side.style == BorderStyle::Dashed {
-      side.width.max(widest_neighbour) * CURVED_DASH_OVERSTROKE
+      device.stroke_shape(
+        &centerline,
+        &StrokeStyle::border(side.color, width, dash),
+        at,
+      );
     } else {
-      side.width
-    };
+      let [start, end] = self.side_line(side);
 
-    device.stroke_shape(&line, &StrokeStyle::border(side.color, width, dash), at);
+      StyledLine::new(start, end, side.width, side.style, side.color).paint(at, device);
+    }
 
     for _ in clips {
       device.pop_clip();
@@ -280,29 +275,74 @@ impl<'b> BoxBorderPainter<'b> {
     )
   }
 
-  /// The straight line through the middle of `side` across the whole border box. Round dots
-  /// stop half a dot short of each end, so the end dots stay inside.
-  fn centerline(&self, side: PaintedSide, round_dots: bool) -> FillShape {
+  /// The ends of the line through the middle of `side`, across the whole border box.
+  fn side_line(&self, side: PaintedSide) -> [Point<f32>; 2] {
     let Size { width, height } = self.size;
     let half = side.width / 2.0;
-    let inset = if round_dots { half } else { 0.0 };
     let point = |x, y| Point { x, y };
-    let (start, end) = match side.side {
-      BorderSide::Top => (point(inset, half), point(width - inset, half)),
-      BorderSide::Bottom => (
-        point(inset, height - half),
-        point(width - inset, height - half),
-      ),
-      BorderSide::Left => (point(half, inset), point(half, height - inset)),
-      BorderSide::Right => (
-        point(width - half, inset),
-        point(width - half, height - inset),
-      ),
+
+    match side.side {
+      BorderSide::Top => [point(0.0, half), point(width, half)],
+      BorderSide::Bottom => [point(0.0, height - half), point(width, height - half)],
+      BorderSide::Left => [point(half, 0.0), point(half, height)],
+      BorderSide::Right => [point(width - half, 0.0), point(width - half, height)],
+    }
+  }
+}
+
+/// A dashed or dotted line along one axis, after Blink's `DrawLineWithStyle`: its dashes spread
+/// over the whole line, and round dots stop half a dot short of each end so the end dots stay
+/// inside.
+pub(super) struct StyledLine {
+  line: FillShape,
+  stroke: StrokeStyle,
+}
+
+impl StyledLine {
+  /// The line from `start` to `end` in `style`, `width` thick.
+  pub(super) fn new(
+    start: Point<f32>,
+    end: Point<f32>,
+    width: f32,
+    style: BorderStyle,
+    color: Color,
+  ) -> Self {
+    let length = (end.x - start.x).abs() + (end.y - start.y).abs();
+    let dash = style.dash_pattern(width, length, false);
+    let [start, end] = if dash.is_some_and(|dash| dash.round_cap) {
+      let half = width / 2.0;
+      let step = |from: f32, to: f32| match to.total_cmp(&from) {
+        Ordering::Greater => half,
+        Ordering::Less => -half,
+        Ordering::Equal => 0.0,
+      };
+      let (dx, dy) = (step(start.x, end.x), step(start.y, end.y));
+
+      [
+        Point {
+          x: start.x + dx,
+          y: start.y + dy,
+        },
+        Point {
+          x: end.x - dx,
+          y: end.y - dy,
+        },
+      ]
+    } else {
+      [start, end]
     };
 
-    FillShape::Path {
-      commands: vec![PathCommand::MoveTo(start), PathCommand::LineTo(end)],
-      rule: FillRule::NonZero,
+    Self {
+      line: FillShape::Path {
+        commands: vec![PathCommand::MoveTo(start), PathCommand::LineTo(end)],
+        rule: FillRule::NonZero,
+      },
+      stroke: StrokeStyle::border(color, width, dash),
     }
+  }
+
+  /// Strokes the line under `at`.
+  pub(super) fn paint<D: PaintDevice>(&self, at: Affine, device: &mut D) {
+    device.stroke_shape(&self.line, &self.stroke, at);
   }
 }
