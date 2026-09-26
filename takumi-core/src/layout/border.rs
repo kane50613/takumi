@@ -243,14 +243,6 @@ impl BorderProperties {
     colors.all(|other| other == color).then_some(color)
   }
 
-  /// True if all visible sides use the given style.
-  pub fn visible_sides_match(&self, style: BorderStyle) -> bool {
-    self
-      .sides()
-      .iter()
-      .all(|side| !side.is_visible() || side.style == style)
-  }
-
   /// True if every side has equal nonzero width and the given style.
   pub fn is_uniform_all_sides_style(&self, style: BorderStyle) -> bool {
     let has_uniform_width = self.width.top > 0.0
