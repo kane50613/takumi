@@ -1000,30 +1000,45 @@ const DASHED_GAP_RATIO_THIN: f32 = 2.0;
 const DOTTED_ENDPOINT_EPSILON: f32 = 1.0e-2;
 
 impl BorderStyle {
-  /// Returns a dash interval and round-cap flag for this style.
+  /// Returns a dash interval and round-cap flag for this style. A dotted line up to 3px wide
+  /// draws square dots, as Blink does.
+  ///
+  /// Approximate: Blink also nudges thin dotted lines by whole pixels so both ends land on a
+  /// dot; these dots keep an even spacing instead.
   pub fn dash_pattern(self, width: f32, length: f32, closed: bool) -> Option<BorderDash> {
-    if !matches!(self, BorderStyle::Dashed | BorderStyle::Dotted) || width <= 0.0 || length <= 0.0 {
+    if width <= 0.0 || length <= 0.0 {
       return None;
     }
 
-    if self == BorderStyle::Dashed {
-      let (dash, gap) = compute_dashed_intervals(width, length, closed)?;
-      return Some(BorderDash {
-        intervals: [dash, gap],
-        round_cap: false,
-      });
-    }
+    match self {
+      BorderStyle::Dashed => {
+        let thick = width >= DASHED_THICK_WIDTH_THRESHOLD;
+        let (dash, gap) = if thick {
+          (DASHED_LENGTH_RATIO_THICK, DASHED_GAP_RATIO_THICK)
+        } else {
+          (DASHED_LENGTH_RATIO_THIN, DASHED_GAP_RATIO_THIN)
+        };
 
-    let per_dot_length = width * 2.0;
-    let gap = if length < per_dot_length {
-      per_dot_length
-    } else {
-      select_best_dash_gap(length, width, width, closed) + width - DOTTED_ENDPOINT_EPSILON
-    };
-    Some(BorderDash {
-      intervals: [0.0, gap],
-      round_cap: true,
-    })
+        square_dash(width * dash, width * gap, length, closed, true)
+      }
+      BorderStyle::Dotted if width <= DASHED_THICK_WIDTH_THRESHOLD => {
+        square_dash(width, width, length, closed, false)
+      }
+      BorderStyle::Dotted => {
+        let per_dot_length = width * 2.0;
+        let gap = if length < per_dot_length {
+          per_dot_length
+        } else {
+          select_best_dash_gap(length, width, width, closed) + width - DOTTED_ENDPOINT_EPSILON
+        };
+
+        Some(BorderDash {
+          intervals: [0.0, gap],
+          round_cap: true,
+        })
+      }
+      _ => None,
+    }
   }
 }
 
@@ -1036,39 +1051,29 @@ pub struct BorderDash {
   pub round_cap: bool,
 }
 
-fn compute_dashed_intervals(width: f32, length: f32, closed: bool) -> Option<(f32, f32)> {
-  let thick = width >= DASHED_THICK_WIDTH_THRESHOLD;
-  let dash = width
-    * if thick {
-      DASHED_LENGTH_RATIO_THICK
-    } else {
-      DASHED_LENGTH_RATIO_THIN
-    };
-  let gap = width
-    * if thick {
-      DASHED_GAP_RATIO_THICK
-    } else {
-      DASHED_GAP_RATIO_THIN
-    };
-
+/// Butt-capped dashes of `dash` with gaps near `gap` fitted to `length`, or `None` when two
+/// dashes do not fit and the line draws solid. `spread` stretches the gaps so the line ends on a
+/// dash.
+fn square_dash(dash: f32, gap: f32, length: f32, closed: bool, spread: bool) -> Option<BorderDash> {
   if length <= dash * 2.0 {
     return None;
   }
 
-  let mut applied_dash = dash;
-  let mut applied_gap = gap;
-  let mut two_dashes_with_gap = 2.0 * dash + gap;
-  if closed {
-    two_dashes_with_gap += gap;
-  }
-  if length <= two_dashes_with_gap {
+  let two_dashes_with_gap = 2.0 * dash + gap + if closed { gap } else { 0.0 };
+  let intervals = if length <= two_dashes_with_gap {
     let multiplier = length / two_dashes_with_gap;
-    applied_dash *= multiplier;
-    applied_gap *= multiplier;
+
+    [dash * multiplier, gap * multiplier]
+  } else if spread {
+    [dash, select_best_dash_gap(length, dash, gap, closed)]
   } else {
-    applied_gap = select_best_dash_gap(length, dash, gap, closed);
-  }
-  Some((applied_dash, applied_gap))
+    [dash, gap]
+  };
+
+  Some(BorderDash {
+    intervals,
+    round_cap: false,
+  })
 }
 
 fn select_best_dash_gap(length: f32, dash: f32, gap: f32, closed: bool) -> f32 {

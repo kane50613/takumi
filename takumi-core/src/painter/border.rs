@@ -204,16 +204,25 @@ impl<'b> BoxBorderPainter<'b> {
       device.save(Some((clip, at)));
     }
 
-    let (line, length, closed) = if curved {
+    let (line, dash) = if curved {
       let (centerline, perimeter) = self.centerline_loop(border);
 
-      (centerline, perimeter, true)
+      (
+        centerline,
+        side.style.dash_pattern(side.width, perimeter, true),
+      )
     } else {
-      let (line, length) = self.centerline(side);
+      let length = match side.side {
+        BorderSide::Top | BorderSide::Bottom => self.size.width,
+        BorderSide::Left | BorderSide::Right => self.size.height,
+      };
+      let dash = side.style.dash_pattern(side.width, length, false);
 
-      (line, length, false)
+      (
+        self.centerline(side, dash.is_some_and(|dash| dash.round_cap)),
+        dash,
+      )
     };
-    let dash = side.style.dash_pattern(side.width, length, closed);
     let width = if curved && side.style == BorderStyle::Dashed {
       side.width.max(widest_neighbour) * CURVED_DASH_OVERSTROKE
     } else {
@@ -298,38 +307,29 @@ impl<'b> BoxBorderPainter<'b> {
     )
   }
 
-  /// The straight line through the middle of `side` across the whole border box, and the length
-  /// its dashes spread over. Dots stop half a dot short of each end, so the end dots stay inside.
-  fn centerline(&self, side: PaintedSide) -> (FillShape, f32) {
+  /// The straight line through the middle of `side` across the whole border box. Round dots
+  /// stop half a dot short of each end, so the end dots stay inside.
+  fn centerline(&self, side: PaintedSide, round_dots: bool) -> FillShape {
     let Size { width, height } = self.size;
     let half = side.width / 2.0;
-    let inset = if side.style == BorderStyle::Dotted {
-      half
-    } else {
-      0.0
-    };
+    let inset = if round_dots { half } else { 0.0 };
     let point = |x, y| Point { x, y };
-    let (start, end, length) = match side.side {
-      BorderSide::Top => (point(inset, half), point(width - inset, half), width),
+    let (start, end) = match side.side {
+      BorderSide::Top => (point(inset, half), point(width - inset, half)),
       BorderSide::Bottom => (
         point(inset, height - half),
         point(width - inset, height - half),
-        width,
       ),
-      BorderSide::Left => (point(half, inset), point(half, height - inset), height),
+      BorderSide::Left => (point(half, inset), point(half, height - inset)),
       BorderSide::Right => (
         point(width - half, inset),
         point(width - half, height - inset),
-        height,
       ),
     };
 
-    (
-      FillShape::Path {
-        commands: vec![PathCommand::MoveTo(start), PathCommand::LineTo(end)],
-        rule: FillRule::NonZero,
-      },
-      length,
-    )
+    FillShape::Path {
+      commands: vec![PathCommand::MoveTo(start), PathCommand::LineTo(end)],
+      rule: FillRule::NonZero,
+    }
   }
 }

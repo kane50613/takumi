@@ -1,5 +1,5 @@
 The dash and dot spacing in src/layout/border.rs (`BorderStyle::dash_pattern`,
-`compute_dashed_intervals`, and `select_best_dash_gap`) is derived from
+`square_dash`, and `select_best_dash_gap`) is derived from
 Chromium's third_party/blink/renderer/platform/graphics/styled_stroke_data.cc,
 which carries the following notice.
 

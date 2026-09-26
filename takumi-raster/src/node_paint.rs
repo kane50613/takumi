@@ -662,7 +662,7 @@ mod tests {
   }
 
   #[test]
-  fn dotted_border_thin_width_uses_zero_dash_length() {
+  fn thin_dotted_border_draws_square_dots() {
     let stroke = Stroke::from(&StrokeStyle::border(
       Color::black(),
       2.0,
@@ -671,9 +671,9 @@ mod tests {
     let Some(dash_pattern) = stroke.dash else {
       unreachable!("thin dotted stroke should produce a dash pattern");
     };
-    assert_eq!(stroke.cap, Cap::Round);
-    assert_eq!(dash_pattern.intervals[0], 0.0);
-    assert!(dash_pattern.intervals[1] > 0.0);
+
+    assert_eq!(stroke.cap, Cap::Butt);
+    assert_eq!(dash_pattern.intervals, [2.0, 2.0]);
   }
 
   #[test]
