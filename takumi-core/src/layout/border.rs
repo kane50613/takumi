@@ -946,6 +946,8 @@ fn approximate_quarter_ellipse_arc_length(radius_x: f32, radius_y: f32) -> f32 {
   circumference / 4.0
 }
 
+// The dash spacing below derives from Chromium's styled_stroke_data.cc, under
+// the BSD notice in LICENSE-CHROMIUM.
 const DASHED_THICK_WIDTH_THRESHOLD: f32 = 3.0;
 const DASHED_LENGTH_RATIO_THICK: f32 = 2.0;
 const DASHED_LENGTH_RATIO_THIN: f32 = 3.0;
