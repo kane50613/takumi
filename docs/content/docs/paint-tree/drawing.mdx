@@ -43,7 +43,7 @@ Iterating the tree yields nodes in paint order, parents before children, so `zIn
 The outline comes after the children. The flat iteration yields a node before its children, so an exporter that draws outlines recurses over `children` instead.
 
 ```ts twoslash title="Draw outlines after the children"
-import type { PaintNode } from "takumi-paint";
+import type { PaintNode, Rgba } from "takumi-paint";
 
 function drawBox(ctx: CanvasRenderingContext2D, node: PaintNode) {
   ctx.setTransform(...node.matrix);
@@ -52,13 +52,16 @@ function drawBox(ctx: CanvasRenderingContext2D, node: PaintNode) {
   for (const child of node.children) drawBox(ctx, child);
 
   if (node.outline) {
-    const { width, offset } = node.outline;
+    const { width, offset, color } = node.outline;
     const inset = -offset - width / 2;
     ctx.setTransform(...node.matrix);
     ctx.lineWidth = width;
+    ctx.strokeStyle = rgba(color);
     ctx.strokeRect(inset, inset, node.width - inset * 2, node.height - inset * 2);
   }
 }
+
+const rgba = ([r, g, b, a]: Rgba) => `rgb(${r} ${g} ${b} / ${a / 255})`;
 ```
 
 ## Compositing groups
