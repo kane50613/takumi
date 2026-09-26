@@ -15,7 +15,7 @@ use takumi_core::{
   font_style::SizedFontStyle,
   geometry::{ComputedLayout as Layout, NodeId, Point as CorePoint, Rect as CoreRect, Size},
   layout::{
-    background_image_geometry::{BackgroundImageGeometry, FillLayers, OriginBox},
+    background_image_geometry::{BackgroundImageGeometry, FillLayers},
     border::BorderProperties,
     decoration::{ClipBox, OutlineGeometry},
     inline::{
@@ -25,12 +25,15 @@ use takumi_core::{
     tree::{NodeOrigin, RenderNode},
   },
   paint::ConicGradientTile,
-  painter::{BoxFrame, BoxPainter, BoxShadows, FillShape, OverflowClip, PaintDevice, StrokeStyle},
+  painter::{
+    BackgroundClipArea, BoxBackground, BoxFrame, BoxPainter, BoxShadows, FillShape, OverflowClip,
+    PaintDevice, StrokeStyle,
+  },
   scene::{NodePaint, PaintItemKind, Scene},
   shadow::SizedShadow,
   style::{
-    Affine, BackgroundClip, BackgroundImage, BackgroundOrigin, BlendMode, BoxDecorationBreak,
-    Color, ComputedStyle, Display, Filter, Isolation, Lang, ResolvedGradientStop,
+    Affine, BackgroundImage, BlendMode, BoxDecorationBreak, Color, ComputedStyle, Display, Filter,
+    Isolation, Lang, ResolvedGradientStop,
   },
 };
 
@@ -401,7 +404,7 @@ impl Emitter<'_> {
       });
     }
     painter.background_color(frame.origin, &mut self.device(surface, self.tagged));
-    self.emit_background_layers(node, &painter, frame, surface);
+    self.emit_background_layers(node, &painter.background(), frame, surface);
     if !shadows.inset.is_empty() {
       self.in_artifact(surface, |surface| {
         emit_inset_shadows(
@@ -484,44 +487,36 @@ impl Emitter<'_> {
   fn emit_background_layers(
     &self,
     node: &RenderNode,
-    painter: &BoxPainter<'_>,
+    background: &BoxBackground<'_>,
     frame: BoxFrame,
     surface: &mut Surface,
   ) {
     let BoxFrame { layout, .. } = frame;
-    let style = &node.context.style;
-    let Some(images) = style.background_image.as_deref() else {
-      return;
-    };
-    if !images.iter().any(BackgroundImage::paints) {
+    if background.layers.is_empty() {
       return;
     }
-    let Some(shape) = painter.background_clip_shape() else {
+    let Some(shape) = background.clip.shape(layout.size) else {
       return;
     };
     let Some(clip) = shape_path(&shape, frame.origin) else {
       return;
     };
-    let (origin_offset, area) = background_origin_area(style.background_origin, layout);
-    let layers = FillLayers::background(style);
 
     self.in_artifact(surface, |surface| {
       surface.push_clip_path(&clip, &krilla_fill_rule(shape.rule()));
-      for (index, image) in images.iter().enumerate().rev() {
-        let placement = layers.geometry(index, image, area, &node.context);
-        let blend = layers.blend_mode(index);
-        let blended = blend != BlendMode::Normal;
+      for layer in &background.layers {
+        let blended = layer.blend_mode != BlendMode::Normal;
 
         if blended {
-          surface.push_blend_mode(krilla_blend(blend));
+          surface.push_blend_mode(krilla_blend(layer.blend_mode));
         }
         self.layer(
-          image,
+          layer.image,
           node,
-          &placement,
+          &layer.geometry,
           layout.size,
           frame.origin,
-          frame.origin + origin_offset,
+          frame.origin + background.origin.offset,
           surface,
           Transform::from_scale(PT_PER_PX, PT_PER_PX),
         );
@@ -1538,46 +1533,29 @@ impl Emitter<'_> {
     frame: BoxFrame,
     surface: &mut Surface,
   ) -> Vec<Fill> {
-    let BoxFrame { layout, .. } = frame;
-    let style = &node.context.style;
+    let background = BoxPainter::new(&node.context, frame.layout).background();
 
-    if style.background_clip != BackgroundClip::Text {
+    if !matches!(background.clip, BackgroundClipArea::Text) {
       return Vec::new();
     }
     let mut fills = Vec::new();
-    let color = style.background_color.resolve(node.context.current_color);
 
-    if color.0[3] != 0 {
+    if let Some(color) = background.color {
       fills.push(fill_from_rgba(self.filtered(color), 1.0));
     }
-    let (origin_offset, area) = background_origin_area(style.background_origin, layout);
-    let layers = FillLayers::background(style);
 
-    for (index, image) in style
-      .background_image
-      .as_deref()
-      .unwrap_or_default()
-      .iter()
-      .enumerate()
-      .rev()
-    {
-      let placement = layers.geometry(index, image, area, &node.context);
+    for layer in &background.layers {
+      let tile = layer.geometry.tile_size;
       // ponytail: one tile per layer; a repeating gradient behind text would
       // need a pattern paint here.
-      let tile_origin = frame.origin + origin_offset + placement.first_tile();
+      let tile_origin = frame.origin + background.origin.offset + layer.geometry.first_tile();
       // An image layer has no paint of its own, so it draws into a pattern the
       // glyphs can be filled with, the way a tiled background already does.
-      let paint = match image {
+      let paint = match layer.image {
         BackgroundImage::Url(_) => {
-          self.image_pattern(image, node, placement.tile_size, tile_origin, surface)
+          self.image_pattern(layer.image, node, tile, tile_origin, surface)
         }
-        _ => self.gradient_paint(
-          image,
-          node,
-          placement.tile_size,
-          tile_origin,
-          Transform::identity(),
-        ),
+        _ => self.gradient_paint(layer.image, node, tile, tile_origin, Transform::identity()),
       };
       let Some(paint) = paint else {
         continue;
@@ -1729,19 +1707,6 @@ impl Emitter<'_> {
     self.document.fonts.borrow_mut().insert(key, font.clone());
     Some(font)
   }
-}
-
-/// The positioning area `background-origin` selects, never negative.
-fn background_origin_area(origin: BackgroundOrigin, layout: Layout) -> (CorePoint<f32>, Size<f32>) {
-  let area = OriginBox::new(origin, layout);
-
-  (
-    area.offset,
-    Size {
-      width: area.size.width.max(0.0),
-      height: area.size.height.max(0.0),
-    },
-  )
 }
 
 /// Pushes the blend mode, isolation, and opacity a box composites with,

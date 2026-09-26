@@ -23,6 +23,16 @@ fn cycled<T: Copy + Default>(values: &[T], index: usize) -> T {
   values[index % values.len()]
 }
 
+/// One `background-image` or `mask-image` layer, resolved.
+pub struct BackgroundLayer<'i> {
+  /// The image the layer draws.
+  pub image: &'i BackgroundImage,
+  /// Where its tiles land, relative to the positioning area.
+  pub geometry: BackgroundImageGeometry,
+  /// Its `background-blend-mode`.
+  pub blend_mode: BlendMode,
+}
+
 /// The `-size`, `-position`, `-repeat`, and `-blend-mode` lists of `background-*` or `mask-*`,
 /// Blink's `FillLayer` chain for one image list.
 pub struct FillLayers<'s> {
@@ -51,6 +61,26 @@ impl<'s> FillLayers<'s> {
       repeats: &style.mask_repeat,
       blend_modes: &[],
     }
+  }
+
+  /// Every layer of `images` that paints, bottom first, positioned in an `area`.
+  pub fn resolve<'i>(
+    &self,
+    images: &'i [BackgroundImage],
+    area: Size<f32>,
+    context: &RenderContext,
+  ) -> Vec<BackgroundLayer<'i>> {
+    images
+      .iter()
+      .enumerate()
+      .rev()
+      .filter(|(_, image)| image.paints())
+      .map(|(index, image)| BackgroundLayer {
+        image,
+        geometry: self.geometry(index, image, area, context),
+        blend_mode: self.blend_mode(index),
+      })
+      .collect()
   }
 
   /// `background-blend-mode` of layer `index`.
@@ -88,6 +118,7 @@ fn layer_intrinsic(image: &BackgroundImage, context: &RenderContext) -> Option<I
 }
 
 /// A `background-origin` positioning area.
+#[derive(Debug, Clone, Copy)]
 pub struct OriginBox {
   /// Offset of the positioning area inside the border box.
   pub offset: Point<f32>,
@@ -96,15 +127,15 @@ pub struct OriginBox {
 }
 
 impl OriginBox {
-  /// The positioning area `origin` selects on `layout`.
+  /// The positioning area `origin` selects on `layout`, never negative.
   pub fn new(origin: BackgroundOrigin, layout: Layout) -> Self {
     let border = layout.border;
     let padding = layout.padding;
     let inset = |left: f32, right: f32, top: f32, bottom: f32| Self {
       offset: Point { x: left, y: top },
       size: Size {
-        width: layout.size.width - left - right,
-        height: layout.size.height - top - bottom,
+        width: (layout.size.width - left - right).max(0.0),
+        height: (layout.size.height - top - bottom).max(0.0),
       },
     };
 

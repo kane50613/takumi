@@ -18,7 +18,7 @@ use crate::{
     BuiltInlineLayout, InlineBoxItem, InlineOutlineRect, InlineRunLayout, PositionedInlineRun,
     ProcessedInlineSpan, ShapedRun, VisualInlineBox, outline_island_contour, outline_islands,
   },
-  painter::StrokeStyle,
+  painter::{BoxPainter, StrokeStyle},
   rasterize_layers, render_mask, resolve_outline,
   resources::{font::FontError, glyph::ResolvedGlyph},
   stacking_context::ScenePainter,
@@ -389,7 +389,8 @@ pub(crate) fn draw_inline_layout(
   let need_line_through = decoration_mask.contains(TextDecorationLines::LINE_THROUGH);
 
   let clip_image = if context.style.background_clip == BackgroundClip::Text {
-    let layers = collect_background_layers(context, layout)?;
+    let layers =
+      collect_background_layers(&BoxPainter::new(context, layout).background(), context)?;
 
     rasterize_layers(
       layers,

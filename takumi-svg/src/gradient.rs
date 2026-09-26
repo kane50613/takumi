@@ -4,8 +4,8 @@ use std::{f32::consts::TAU, io};
 
 use takumi_core::{
   context::RenderContext,
-  geometry::{Rect, Size},
-  layout::background_image_geometry::{BackgroundImageGeometry, FillLayers},
+  geometry::Rect,
+  layout::background_image_geometry::{BackgroundImageGeometry, BackgroundLayer},
   paint::{ColorLut, ConicGradientTile},
   style::{
     BackgroundImage, ColorInterpolationMethod, ConicGradient, FillRule, LinearGradient,
@@ -32,41 +32,20 @@ impl<'a, 'd> LayerEmitter<'a, 'd> {
     Self { context, doc }
   }
 
-  /// Emits a node's background images in bottom-to-top paint order.
-  pub(crate) fn background_images(
+  /// Emits resolved background or mask layers, bottom first, positioned in `area` and painted
+  /// over `paint`.
+  pub(crate) fn layers(
     &mut self,
-    images: &[BackgroundImage],
-    area: Frame,
-    paint: Frame,
-  ) -> io::Result<()> {
-    let layers = FillLayers::background(&self.context.style);
-
-    self.image_layers(images, layers, area, paint)
-  }
-
-  /// Emits background or mask image layers, positioned in `area` and painted over `paint`.
-  pub(crate) fn image_layers(
-    &mut self,
-    images: &[BackgroundImage],
-    layers: FillLayers<'_>,
+    layers: &[BackgroundLayer<'_>],
     area: Frame,
     paint: Frame,
   ) -> io::Result<()> {
     if paint.w <= 0.0 || paint.h <= 0.0 {
       return Ok(());
     }
-    let size = Size {
-      width: area.w,
-      height: area.h,
-    };
 
-    for (index, image) in images.iter().enumerate().rev() {
-      if !image.paints() {
-        continue;
-      }
-      let geometry = layers.geometry(index, image, size, self.context);
-
-      self.layer(image, &geometry, area, paint)?;
+    for layer in layers {
+      self.layer(layer.image, &layer.geometry, area, paint)?;
     }
     Ok(())
   }

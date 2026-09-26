@@ -11,8 +11,9 @@ use std::{io, sync::Arc};
 use takumi_core::{
   context::RenderContext,
   font_style::SizedFontStyle,
-  geometry::Point,
+  geometry::{Point, Size},
   layout::{
+    background_image_geometry::FillLayers,
     inline::{
       DecorationRect, InlineItem, InlineLayoutMode, InlineLayoutRequest, InlineOutlineRect,
       InlineRunLayout, PositionedInlineRun, ProcessedInlineSpan, ShapedRun, collect_inline_items,
@@ -278,7 +279,16 @@ fn emit_clip_text_glyphs(
     doc.rect(area, background)?;
   }
   if let Some(images) = context.style.background_image.as_deref() {
-    LayerEmitter::new(context, doc).background_images(images, area, area)?;
+    let layers = FillLayers::background(&context.style).resolve(
+      images,
+      Size {
+        width: area.w,
+        height: area.h,
+      },
+      context,
+    );
+
+    LayerEmitter::new(context, doc).layers(&layers, area, area)?;
   }
   doc.end_group(group)?;
 

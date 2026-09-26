@@ -43,7 +43,7 @@ use takumi_core::{
   layout::background_image_geometry::OriginBox,
   painter::{BoxFrame, StrokeStyle},
   shadow::SizedShadow,
-  style::{Affine, BackgroundOrigin, FillRule, Filter, FilterReference, LineJoin, ToCss},
+  style::{Affine, FillRule, Filter, FilterReference, LineJoin, ToCss},
 };
 use tiny_skia::PremultipliedColorU8;
 
@@ -118,10 +118,8 @@ impl Frame {
     )
   }
 
-  /// `frame`'s `background-origin` positioning area.
-  pub(crate) fn background_origin_box(frame: BoxFrame, origin: BackgroundOrigin) -> Self {
-    let area = OriginBox::new(origin, frame.layout);
-
+  /// A positioning `area` inside `frame`.
+  pub(crate) fn origin_box(frame: BoxFrame, area: OriginBox) -> Self {
     Self::new(
       frame.origin.x + area.offset.x,
       frame.origin.y + area.offset.y,

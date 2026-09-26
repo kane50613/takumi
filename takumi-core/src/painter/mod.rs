@@ -1,5 +1,9 @@
 //! The seam between deciding what to paint and painting it.
 
+mod background;
+
+pub use self::background::{BackgroundClipArea, BoxBackground};
+
 use crate::{
   context::RenderContext,
   geometry::{ComputedLayout, PathCommand, Point, Rect, Size},
@@ -9,7 +13,7 @@ use crate::{
     inline::DecorationRect,
   },
   shadow::SizedShadow,
-  style::{Affine, BackgroundClip, BackgroundImage, BoxShadow, Color, FillRule, Overflow, Sides},
+  style::{Affine, BackgroundImage, BoxShadow, Color, FillRule, Overflow, Sides},
 };
 
 /// A closed shape to fill, in the coordinate space of the box that owns it.
@@ -245,24 +249,14 @@ impl<'c> BoxPainter<'c> {
     &self.border
   }
 
-  /// The box a background paints into, per `background-clip`.
-  pub fn background_clip_shape(&self) -> Option<FillShape> {
-    if self.layout.size.width <= 0.0 || self.layout.size.height <= 0.0 {
-      return None;
-    }
+  /// The area the box clips its background to, per `background-clip`.
+  pub fn background_clip(&self) -> BackgroundClipArea {
+    BackgroundClipArea::new(self.context, self.layout, self.border)
+  }
 
-    match self.context.style.background_clip {
-      BackgroundClip::BorderBox if self.border.is_zero() => Some(FillShape::Rect(self.layout.size)),
-      BackgroundClip::BorderBox => Some(FillShape::RoundedRect {
-        border: self.border,
-        size: self.layout.size,
-        offset: Point::ZERO,
-      }),
-      BackgroundClip::PaddingBox => Some(ClipBox::padding_box(self.border, self.layout).into()),
-      BackgroundClip::ContentBox => Some(ClipBox::content_box(self.border, self.layout).into()),
-      BackgroundClip::BorderArea => Some(FillShape::border_ring(&self.border, self.layout.size)),
-      BackgroundClip::Text => None,
-    }
+  /// The box's background, resolved.
+  pub fn background(&self) -> BoxBackground<'c> {
+    BoxBackground::new(self.context, self.layout, self.border)
   }
 
   /// Paints `background-color`.
@@ -276,7 +270,7 @@ impl<'c> BoxPainter<'c> {
     if color.0[3] == 0 {
       return;
     }
-    let Some(shape) = self.background_clip_shape() else {
+    let Some(shape) = self.background_clip().shape(self.layout.size) else {
       return;
     };
 
@@ -331,7 +325,7 @@ impl<'c> BoxPainter<'c> {
         .is_some_and(|images| images.iter().any(BackgroundImage::paints));
     let shadows = self.shadows();
 
-    (background && self.background_clip_shape().is_some())
+    (background && self.background_clip().shape(self.layout.size).is_some())
       || self.border.has_visible_sides()
       || !shadows.inset.is_empty()
       || !shadows.outer.is_empty()

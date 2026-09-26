@@ -16,13 +16,14 @@ use takumi_core::{
     node::{ImageData, Node, NodeKind},
     tree::RenderNode,
   },
-  painter::{BoxFrame, BoxPainter, FillShape, OverflowClip, PaintDevice, StrokeStyle},
+  painter::{
+    BackgroundClipArea, BoxFrame, BoxPainter, FillShape, OverflowClip, PaintDevice, StrokeStyle,
+  },
   resources::image::ImageSource,
   scene::Scene,
   style::{
-    Affine, BackgroundClip, BackgroundImage, BasicShape, BlendMode, BorderStyle, Color,
-    ComputedStyle, FillRule, FontFamily, Isolation, Lang, ShapeRadius, Sides, SizingContext,
-    SpacePair, StyleSheet, ToCss,
+    Affine, BackgroundImage, BasicShape, BlendMode, BorderStyle, Color, ComputedStyle, FillRule,
+    FontFamily, Isolation, Lang, ShapeRadius, Sides, SizingContext, SpacePair, StyleSheet, ToCss,
   },
   viewport::Viewport,
 };
@@ -158,44 +159,39 @@ impl<'n> PlacedBox<'n> {
     )
   }
 
-  /// The clip path `d` and fill rule for the `background-clip` area.
-  fn background_clip_path_data(&self) -> Option<(String, FillRule)> {
-    let border = self.border();
-
-    match self.node.context.style.background_clip {
-      BackgroundClip::PaddingBox => Some((self.padding_box_path_data(), FillRule::NonZero)),
-      BackgroundClip::ContentBox => Some((
-        shape_path_data(
-          &ClipBox::content_box(*border, self.frame.layout).into(),
-          self.frame.origin,
-        ),
+  /// The clip path `d` and fill rule for a background's `clip` area. A square border box needs
+  /// none.
+  fn background_clip_path_data(&self, clip: BackgroundClipArea) -> Option<(String, FillRule)> {
+    match clip {
+      BackgroundClipArea::BorderBox(border) => {
+        (!border.is_zero()).then(|| (self.border_box_path_data(), FillRule::NonZero))
+      }
+      BackgroundClipArea::Inner(clip) => Some((
+        shape_path_data(&clip.into(), self.frame.origin),
         FillRule::NonZero,
       )),
-      BackgroundClip::BorderArea => {
+      BackgroundClipArea::BorderArea(_) => {
         // The border ring: the (rounded) border-box with the (rounded) padding box
         // punched out, drawn even-odd so the background shows only under the border.
         let outer = self.border_box_path_data();
         let inner = self.padding_box_path_data();
         Some((format!("{outer}{inner}"), FillRule::EvenOdd))
       }
-      // `text` is handled separately by the text path; anything else clips to the
-      // border box.
-      _ => (!border.is_zero()).then(|| (self.border_box_path_data(), FillRule::NonZero)),
+      BackgroundClipArea::Text => None,
     }
   }
 
   /// Emits the element's background (color then image layers) clipped to the
   /// region selected by `background-clip`.
   fn emit_background(&self, doc: &mut SvgDocument) -> io::Result<()> {
-    let context = &self.node.context;
-    let style = &context.style;
-    if style.background_clip == BackgroundClip::Text {
+    let background = self.painter.background();
+    if matches!(background.clip, BackgroundClipArea::Text) {
       return Ok(());
     }
 
     // The colour fill carries the clip shape itself, so it goes outside the
     // group. Only the image layers need the clip.
-    if style.background_color.resolve(context.current_color).0[3] != 0 {
+    if background.color.is_some() {
       let mut device = DocumentDevice::new(doc);
 
       self
@@ -204,25 +200,27 @@ impl<'n> PlacedBox<'n> {
       device.finish()?;
     }
 
-    let Some(images) = style
+    if self
+      .node
+      .context
+      .style
       .background_image
       .as_deref()
-      .filter(|images| !images.is_empty())
-    else {
+      .is_none_or(<[_]>::is_empty)
+    {
       return Ok(());
-    };
+    }
     let group = self
-      .background_clip_path_data()
+      .background_clip_path_data(background.clip)
       .map(|(data, rule)| {
         let clip = doc.clip_path(&data, rule, None)?;
 
         doc.begin_group(Affine::IDENTITY, 1.0, Some(&clip), None)
       })
       .transpose()?;
-
-    LayerEmitter::new(context, doc).background_images(
-      images,
-      Frame::background_origin_box(self.frame, style.background_origin),
+    LayerEmitter::new(&self.node.context, doc).layers(
+      &background.layers,
+      Frame::origin_box(self.frame, background.origin),
       Frame::border_box(self.frame),
     )?;
     if let Some(group) = group {
@@ -249,12 +247,9 @@ impl<'n> PlacedBox<'n> {
     let (token, reference) = doc.begin_mask()?;
     let border_box = Frame::border_box(self.frame);
 
-    LayerEmitter::new(&self.node.context, doc).image_layers(
-      images,
-      FillLayers::mask(style),
-      border_box,
-      border_box,
-    )?;
+    let layers = FillLayers::mask(style).resolve(images, size, &self.node.context);
+
+    LayerEmitter::new(&self.node.context, doc).layers(&layers, border_box, border_box)?;
     doc.end_mask(token)?;
     Ok(Some(doc.begin_masked_group(&reference)?))
   }

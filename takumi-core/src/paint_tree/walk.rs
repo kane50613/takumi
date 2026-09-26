@@ -3,11 +3,11 @@
 use std::borrow::Cow;
 
 use crate::{
+  context::RenderContext,
   error::Result,
   font_style::SizedFontStyle,
   geometry::{ComputedLayout, Point, Size},
   layout::{
-    background_image_geometry::{FillLayers, OriginBox},
     decoration::ClipBox,
     inline::{
       InlineItem, InlineLayoutMode, InlineLayoutRequest, PositionedInlineRun, ProcessedInlineSpan,
@@ -18,13 +18,10 @@ use crate::{
     replaced::ReplacedPlacement,
     tree::{LayoutResults, RenderNode},
   },
-  painter::BoxPainter,
+  painter::{BackgroundClipArea, BoxBackground, BoxPainter},
   scene::{NodePaint, PaintItemKind, StackingContextNode},
   shadow::SizedShadow,
-  style::{
-    Affine, BackgroundClip, BackgroundImage, BlendMode, BorderStyle, Isolation,
-    TextDecorationLines, ToCss,
-  },
+  style::{Affine, BackgroundImage, BlendMode, BorderStyle, Isolation, TextDecorationLines, ToCss},
 };
 
 use super::{
@@ -134,7 +131,7 @@ impl Walker {
         .then(|| style.mix_blend_mode.to_css_string()),
       isolate: style.isolation == Isolation::Isolate,
       clip: overflow_clip(node, layout, painter.border()),
-      box_decoration: box_decoration(node, layout, &painter),
+      box_decoration: box_decoration(node, &painter),
       image: None,
       text_shadows: Vec::new(),
       inline_backgrounds: Vec::new(),
@@ -392,11 +389,7 @@ fn overflow_clip(
   })
 }
 
-fn box_decoration(
-  node: &RenderNode,
-  layout: ComputedLayout,
-  painter: &BoxPainter<'_>,
-) -> Option<PaintBoxDecoration> {
+fn box_decoration(node: &RenderNode, painter: &BoxPainter<'_>) -> Option<PaintBoxDecoration> {
   if !painter.paints_decorations() {
     return None;
   }
@@ -410,7 +403,7 @@ fn box_decoration(
     background: PaintBackground {
       color: (background_color.0[3] != 0).then(|| rgba(background_color)),
       clip: style.background_clip.to_css_string(),
-      layers: background_layers(node, layout),
+      layers: background_layers(&painter.background(), context),
     },
     border: PaintBorder {
       widths: [
@@ -450,28 +443,22 @@ fn box_decoration(
   })
 }
 
-fn background_layers(node: &RenderNode, layout: ComputedLayout) -> Vec<PaintBackgroundLayer> {
-  let context = &node.context;
-  let style = &context.style;
-  if style.background_clip == BackgroundClip::Text {
+fn background_layers(
+  background: &BoxBackground<'_>,
+  context: &RenderContext,
+) -> Vec<PaintBackgroundLayer> {
+  if matches!(background.clip, BackgroundClipArea::Text) {
     return Vec::new();
   }
-  let images = style.background_image.as_deref().unwrap_or(&[]);
-  if images.is_empty() {
-    return Vec::new();
-  }
-  let origin = OriginBox::new(style.background_origin, layout);
-  let layers = FillLayers::background(style);
 
-  images
+  background
+    .layers
     .iter()
-    .enumerate()
-    .rev()
-    .filter_map(|(index, image)| {
-      let tiles = layers
-        .geometry(index, image, origin.size, context)
-        .snap(layout.size, origin.offset)?;
-      let fill = fill(image, tiles.width, tiles.height, context)?;
+    .filter_map(|layer| {
+      let tiles = layer
+        .geometry
+        .snap(background.size, background.origin.offset)?;
+      let fill = fill(layer.image, tiles.width, tiles.height, context)?;
       Some(PaintBackgroundLayer {
         fill,
         tiles: PaintTiles {
@@ -480,7 +467,7 @@ fn background_layers(node: &RenderNode, layout: ComputedLayout) -> Vec<PaintBack
           width: tiles.width,
           height: tiles.height,
         },
-        blend_mode: layers.blend_mode(index).to_css_string(),
+        blend_mode: layer.blend_mode.to_css_string(),
       })
     })
     .collect()
