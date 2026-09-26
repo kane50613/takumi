@@ -5,7 +5,7 @@
 use takumi_core::layout::node::resolve_image;
 use takumi_core::{
   context::RenderContext,
-  geometry::Size,
+  geometry::{Point, Size},
   layout::background::auto_axis_from_intrinsic,
   style::{
     AutoBackgroundAxis, BackgroundImage, BackgroundRepeat, BackgroundRepeatStyle, BackgroundSize,
@@ -90,10 +90,10 @@ pub(crate) struct Placement {
   /// Tile size after `background-size`, and after `round` rescales it.
   pub(crate) tile: Size<f32>,
   /// Top-left of the first tile, relative to the positioning area.
-  pub(crate) origin: (f32, f32),
+  pub(crate) origin: Point<f32>,
   /// Distance between tile origins. Equals the tile size for `repeat`, grows
   /// for `space`, and covers the whole area on an axis that does not repeat.
-  pub(crate) step: (f32, f32),
+  pub(crate) step: Size<f32>,
 }
 
 /// One axis of a tiled layer.
@@ -152,8 +152,14 @@ impl Placement {
         width: x.tile,
         height: y.tile,
       },
-      origin: (x.origin, y.origin),
-      step: (x.step, y.step),
+      origin: Point {
+        x: x.origin,
+        y: y.origin,
+      },
+      step: Size {
+        width: x.step,
+        height: y.step,
+      },
     }
   }
 }

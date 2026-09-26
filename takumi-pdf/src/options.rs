@@ -11,7 +11,7 @@ use std::{
 use takumi_core::{
   Fonts,
   error::Error as TakumiError,
-  geometry::Rect,
+  geometry::{Rect, Size},
   layout::node::Node,
   resources::{font::FontError, image::ImageSource},
   style::{Color, FontFamily, Lang, StyleSheet},
@@ -846,17 +846,15 @@ impl PageMargins {
   /// Margins with every [`PageMargin::Auto`] replaced by the band it sits under.
   pub(crate) fn resolve(
     self,
-    size: (f32, f32),
+    size: Size<f32>,
     header: Option<f32>,
     footer: Option<f32>,
   ) -> Rect<f32> {
-    let (width, height) = size;
-
     Rect {
-      top: self.top.resolve(height, header),
-      right: self.right.resolve(width, None),
-      bottom: self.bottom.resolve(height, footer),
-      left: self.left.resolve(width, None),
+      top: self.top.resolve(size.height, header),
+      right: self.right.resolve(size.width, None),
+      bottom: self.bottom.resolve(size.height, footer),
+      left: self.left.resolve(size.width, None),
     }
   }
 }
@@ -948,11 +946,19 @@ impl PageOptions {
     }
   }
 
-  pub(crate) fn content_size(&self, margin: Rect<f32>) -> (f32, f32) {
-    (
-      self.width - margin.horizontal(),
-      self.height - margin.vertical(),
-    )
+  /// The page size.
+  pub(crate) const fn size(&self) -> Size<f32> {
+    Size {
+      width: self.width,
+      height: self.height,
+    }
+  }
+
+  pub(crate) fn content_size(&self, margin: Rect<f32>) -> Size<f32> {
+    Size {
+      width: self.width - margin.horizontal(),
+      height: self.height - margin.vertical(),
+    }
   }
 }
 

@@ -11,13 +11,13 @@ use std::io;
 
 use takumi_core::{
   geometry::{NodeId, Point},
+  painter::BoxFrame,
   scene::{NodePaint, PaintItemKind, Scene},
   style::{Affine, Filter},
 };
 
 use crate::{
   SvgDocument,
-  box_model::BoxFrame,
   render::{BoxChrome, PlacedBox},
 };
 

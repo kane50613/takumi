@@ -1,7 +1,7 @@
 //! The page window a prepared tree emits through: what it paints, what it
 //! owns, and the clip and translation that put it on the page.
 
-use takumi_core::{scene::SceneBounds, style::Affine};
+use takumi_core::{geometry::Point, scene::SceneBounds, style::Affine};
 
 use crate::{
   emitter::Emitter,
@@ -75,7 +75,7 @@ pub(crate) struct ContentWindow {
   /// Clip rect on the page, as `(x, y, width, height)`.
   pub(crate) clip: (f32, f32, f32, f32),
   /// Translation from content to page coordinates.
-  pub(crate) translate: (f32, f32),
+  pub(crate) translate: Point<f32>,
   pub(crate) window: Window,
   /// A repeated occurrence is an artifact: the first one carried the tags.
   pub(crate) artifact: bool,
@@ -97,8 +97,8 @@ impl ContentWindow {
     }
     surface.push_clip_path(&path, &FillRule::NonZero);
     surface.push_transform(&Transform::from_translate(
-      self.translate.0,
-      self.translate.1,
+      self.translate.x,
+      self.translate.y,
     ));
     emitter.window = self.window;
     emitter.emit_context(0, Affine::IDENTITY, surface)?;

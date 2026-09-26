@@ -100,15 +100,12 @@ pub(crate) fn xyz_destination(
 
 /// The axis-aligned bounding box of a node-local rect under the node's
 /// absolute transform, in content coordinates.
-fn transformed_rect(transform: Affine, origin: (f32, f32), size: Size<f32>) -> Option<KrillaRect> {
-  let (left, top, right, bottom) = transformed_rect_extents(
-    CorePoint {
-      x: origin.0,
-      y: origin.1,
-    },
-    size,
-    transform,
-  )?;
+fn transformed_rect(
+  transform: Affine,
+  origin: CorePoint<f32>,
+  size: Size<f32>,
+) -> Option<KrillaRect> {
+  let (left, top, right, bottom) = transformed_rect_extents(origin, size, transform)?;
 
   KrillaRect::from_ltrb(left, top, right, bottom)
 }
@@ -213,7 +210,7 @@ fn collect_interactive_paint(tree: &PreparedTree, paint: &NodePaint, collected: 
   let Some(source) = node.node.as_ref() else {
     return;
   };
-  let Some(rect) = transformed_rect(paint.transform, (0.0, 0.0), layout.size) else {
+  let Some(rect) = transformed_rect(paint.transform, CorePoint::ZERO, layout.size) else {
     return;
   };
 
@@ -233,7 +230,7 @@ fn collect_interactive_paint(tree: &PreparedTree, paint: &NodePaint, collected: 
           .invert()
       })
       .flatten()
-      .and_then(|undo| transformed_rect(paint.transform * undo, (0.0, 0.0), layout.size))
+      .and_then(|undo| transformed_rect(paint.transform * undo, CorePoint::ZERO, layout.size))
       .map(|flow| flow.bottom());
 
     collected.extents.entry(index).or_insert(BoxExtent {
@@ -396,7 +393,7 @@ fn collect_inline_links(
     };
     let Some(rect) = transformed_rect(
       transform,
-      (run.x, run.y),
+      CorePoint { x: run.x, y: run.y },
       Size {
         width: run.width,
         height: run.height,
@@ -420,7 +417,7 @@ pub(crate) fn add_link_annotations<'l>(
   page: &mut Page,
   links: impl IntoIterator<Item = &'l LinkTarget>,
   window: Window,
-  offset: (f32, f32),
+  offset: CorePoint<f32>,
   tags: Option<&RefCell<TagCollector>>,
   anchor: impl Fn(&str) -> Option<XyzDestination>,
 ) {
@@ -437,10 +434,10 @@ pub(crate) fn add_link_annotations<'l>(
       continue;
     }
     let Some(rect) = KrillaRect::from_ltrb(
-      (left + offset.0) * PT_PER_PX,
-      (top - y0 + offset.1) * PT_PER_PX,
-      (right + offset.0) * PT_PER_PX,
-      (bottom - y0 + offset.1) * PT_PER_PX,
+      (left + offset.x) * PT_PER_PX,
+      (top - y0 + offset.y) * PT_PER_PX,
+      (right + offset.x) * PT_PER_PX,
+      (bottom - y0 + offset.y) * PT_PER_PX,
     ) else {
       continue;
     };

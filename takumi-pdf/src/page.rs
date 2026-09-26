@@ -2,7 +2,7 @@
 
 use takumi_core::{
   context::RenderContext,
-  geometry::{Rect, Size},
+  geometry::{Point as CorePoint, Rect, Size},
   layout::node::Node,
   style::Color,
   viewport::{MediaTarget, Viewport},
@@ -33,7 +33,7 @@ use crate::{
 /// the measured band heights.
 pub(crate) struct PageFrame {
   /// Page size in px.
-  pub(crate) size: (f32, f32),
+  pub(crate) size: Size<f32>,
   /// Page size in pt, the unit pages are written in.
   pub(crate) page_size: KrillaSize,
   pub(crate) margin: Rect<f32>,
@@ -60,8 +60,11 @@ impl PageFrame {
       .ok_or(PdfError::InvalidPageSize)?;
     let margin = page
       .margin
-      .resolve((page.width, page.height), header_height, footer_height);
-    let (content_width, content_height) = page.content_size(margin);
+      .resolve(page.size(), header_height, footer_height);
+    let Size {
+      width: content_width,
+      height: content_height,
+    } = page.content_size(margin);
 
     if !(content_width.is_finite()
       && content_height.is_finite()
@@ -72,7 +75,7 @@ impl PageFrame {
     }
 
     Ok(Self {
-      size: (page.width, page.height),
+      size: page.size(),
       page_size,
       margin,
       content_width,
@@ -81,7 +84,10 @@ impl PageFrame {
       page_area: print_viewport(
         content_width,
         Some(content_height),
-        (content_width, content_height),
+        Size {
+          width: content_width,
+          height: content_height,
+        },
       ),
     })
   }
@@ -92,7 +98,10 @@ impl PageFrame {
     print_viewport(
       self.content_width,
       None,
-      (self.content_width, self.window_height),
+      Size {
+        width: self.content_width,
+        height: self.window_height,
+      },
     )
   }
 }
@@ -100,22 +109,15 @@ impl PageFrame {
 /// Full page width, unbounded height: what a band lays out against, with
 /// viewport units taking the whole page.
 pub(crate) fn band_viewport(page: &PageOptions) -> Viewport {
-  print_viewport(page.width, None, (page.width, page.height))
+  print_viewport(page.width, None, page.size())
 }
 
 /// A print-media viewport `width` wide, `height` tall or unbounded, whose
 /// viewport units resolve against `units`.
-fn print_viewport(
-  width: f32,
-  height: Option<f32>,
-  (unit_width, unit_height): (f32, f32),
-) -> Viewport {
+fn print_viewport(width: f32, height: Option<f32>, units: Size<f32>) -> Viewport {
   Viewport::new((width as u32, height.map(|height| height as u32)))
     .with_media_target(MediaTarget::Print)
-    .with_unit_reference(Size {
-      width: unit_width,
-      height: unit_height,
-    })
+    .with_unit_reference(units)
 }
 
 /// What a paged render takes from its options besides the content.
@@ -335,7 +337,10 @@ impl PageComposer<'_, '_> {
         y: Some((slice.start, slice.start + slice.paint_height)),
         ..Window::default()
       },
-      (frame.margin.left, frame.margin.top + slice.reserved),
+      CorePoint {
+        x: frame.margin.left,
+        y: frame.margin.top + slice.reserved,
+      },
       self.state.tags.as_ref(),
       anchor,
     );
@@ -350,7 +355,10 @@ impl PageComposer<'_, '_> {
         y: Some((0.0, frame.window_height)),
         ..Window::default()
       },
-      (frame.margin.left, frame.margin.top),
+      CorePoint {
+        x: frame.margin.left,
+        y: frame.margin.top,
+      },
       None,
       anchor,
     );
@@ -363,7 +371,10 @@ impl PageComposer<'_, '_> {
         &mut pdf_page,
         &paginated.interactive.links,
         band.window(),
-        (frame.margin.left, frame.margin.top + offset),
+        CorePoint {
+          x: frame.margin.left,
+          y: frame.margin.top + offset,
+        },
         None,
         anchor,
       );
@@ -389,10 +400,10 @@ impl PageComposer<'_, '_> {
         frame.content_width,
         slice.paint_height,
       ),
-      translate: (
-        frame.margin.left,
-        frame.margin.top + slice.reserved - slice.start,
-      ),
+      translate: CorePoint {
+        x: frame.margin.left,
+        y: frame.margin.top + slice.reserved - slice.start,
+      },
       window: Window {
         y: Some((slice.start, slice.start + slice.paint_height)),
         x: None,
@@ -426,7 +437,10 @@ impl PageComposer<'_, '_> {
           band.right - band.left,
           band.height(),
         ),
-        translate: (frame.margin.left, frame.margin.top + offset - band.top),
+        translate: CorePoint {
+          x: frame.margin.left,
+          y: frame.margin.top + offset - band.top,
+        },
         window: Window {
           lines: Some((f32::NEG_INFINITY, band.bottom)),
           ..band.window()

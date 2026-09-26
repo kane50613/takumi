@@ -10,7 +10,8 @@ use crate::{
   },
   shadow::SizedShadow,
   style::{
-    Affine, BackgroundClip, BackgroundImage, BoxShadow, Color, FillRule, Sides, TextDecorationLines,
+    Affine, BackgroundClip, BackgroundImage, BoxShadow, Color, ComputedStyle, FillRule, Overflow,
+    Sides, TextDecorationLines,
   },
 };
 
@@ -81,6 +82,77 @@ impl From<ClipBox> for FillShape {
       border: clip.border,
       size: clip.size,
       offset: clip.offset,
+    }
+  }
+}
+
+/// A box's layout, its border-box top-left at `origin`.
+#[derive(Debug, Clone, Copy)]
+pub struct BoxFrame {
+  /// The box's layout.
+  pub layout: ComputedLayout,
+  /// The border-box top-left.
+  pub origin: Point<f32>,
+}
+
+impl BoxFrame {
+  /// Places `layout` at `origin`.
+  pub fn new(layout: ComputedLayout, origin: Point<f32>) -> Self {
+    Self { layout, origin }
+  }
+
+  /// Moves the origin by `offset`.
+  pub fn shifted(self, offset: Point<f32>) -> Self {
+    Self {
+      origin: self.origin + offset,
+      ..self
+    }
+  }
+
+  /// The translation to the origin.
+  pub fn translation(self) -> Affine {
+    Affine::translation(self.origin.x, self.origin.y)
+  }
+
+  /// Moves a border-box-relative transform to the origin's space.
+  pub fn place(self, transform: Affine) -> Affine {
+    Affine {
+      x: transform.x + self.origin.x,
+      y: transform.y + self.origin.y,
+      ..transform
+    }
+  }
+
+  /// The edges `style`'s overflow clips to without rounded corners: the padding box on a
+  /// clipped axis, effectively unbounded on a visible one.
+  pub fn overflow_clip_edges(self, style: &ComputedStyle) -> Rect<f32> {
+    const UNBOUNDED: f32 = 1.0e6;
+
+    let Self {
+      layout,
+      origin: Point { x, y },
+    } = self;
+    let overflow = style.resolve_overflows();
+    let (left, right) = if overflow.x != Overflow::Visible {
+      let padding_left = x + layout.border.left;
+      let padding_right = (x + layout.size.width - layout.border.right).max(padding_left);
+      (padding_left, padding_right)
+    } else {
+      (x - UNBOUNDED, x + layout.size.width + UNBOUNDED)
+    };
+    let (top, bottom) = if overflow.y != Overflow::Visible {
+      let padding_top = y + layout.border.top;
+      let padding_bottom = (y + layout.size.height - layout.border.bottom).max(padding_top);
+      (padding_top, padding_bottom)
+    } else {
+      (y - UNBOUNDED, y + layout.size.height + UNBOUNDED)
+    };
+
+    Rect {
+      left,
+      top,
+      right,
+      bottom,
     }
   }
 }
