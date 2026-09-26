@@ -11,9 +11,8 @@ use std::{io, sync::Arc};
 use takumi_core::{
   context::RenderContext,
   font_style::SizedFontStyle,
-  geometry::{Point, Size},
+  geometry::Point,
   layout::{
-    background_image_geometry::FillLayers,
     inline::{
       DecorationRect, InlineItem, InlineLayoutMode, InlineLayoutRequest, InlineOutlineRect,
       InlineRunLayout, PositionedInlineRun, ProcessedInlineSpan, ShapedRun, collect_inline_items,
@@ -22,7 +21,7 @@ use takumi_core::{
     node::TextData,
     tree::RenderNode,
   },
-  painter::BoxFrame,
+  painter::{BoxFrame, BoxPainter},
   resources::{font::FontError, glyph::ResolvedGlyph, image::to_data_url},
   style::{Affine, BackgroundClip, FillRule, LineJoin},
 };
@@ -265,31 +264,18 @@ fn emit_clip_text_glyphs(
     return Ok(());
   }
 
-  let background = Rgba(
-    context
-      .style
-      .background_color
-      .resolve(context.current_color)
-      .0,
-  );
+  let background = BoxPainter::new(context, frame.layout).background();
   let area = Frame::border_box(frame);
 
   let group = doc.begin_masked_group(&mask_ref)?;
-  if background.0[3] != 0 {
-    doc.rect(area, background)?;
+  if let Some(color) = background.color {
+    doc.rect(area, Rgba(color.0))?;
   }
-  if let Some(images) = context.style.background_image.as_deref() {
-    let layers = FillLayers::background(&context.style).resolve(
-      images,
-      Size {
-        width: area.w,
-        height: area.h,
-      },
-      context,
-    );
-
-    LayerEmitter::new(context, doc).layers(&layers, area, area)?;
-  }
+  LayerEmitter::new(context, doc).layers(
+    &background.layers,
+    Frame::origin_box(frame, background.origin),
+    area,
+  )?;
   doc.end_group(group)?;
 
   // The `color` (brush) fills the glyph interiors on top of the background, with
