@@ -40,7 +40,7 @@ use takumi_core::{
   context::RenderContext,
   filter::ColorMatrix,
   geometry::{Rect, Size},
-  layout::background::background_origin_box,
+  layout::background::OriginBox,
   painter::{BoxFrame, StrokeStyle},
   shadow::SizedShadow,
   style::{Affine, BackgroundOrigin, FillRule, Filter, FilterReference, LineJoin, ToCss},
@@ -120,7 +120,7 @@ impl Frame {
 
   /// `frame`'s `background-origin` positioning area.
   pub(crate) fn background_origin_box(frame: BoxFrame, origin: BackgroundOrigin) -> Self {
-    let area = background_origin_box(origin, frame.layout);
+    let area = OriginBox::new(origin, frame.layout);
 
     Self::new(
       frame.origin.x + area.offset.x,

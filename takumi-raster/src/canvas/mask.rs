@@ -13,9 +13,7 @@ use tiny_skia::{
 
 use crate::{
   Command, Fill, Placement, RenderContext, Result, Style, build_path, checked_area, create_mask,
-  fast_div_255,
-  layout::clip::clip_shape_commands,
-  placement_overlap,
+  fast_div_255, placement_overlap,
   style::{Affine, BasicShape},
 };
 
@@ -591,7 +589,7 @@ pub(crate) fn render_clip_shape_mask(
   size: Size<f32>,
   canvas: CanvasViewport,
 ) -> (Vec<u8>, Placement) {
-  let paths = clip_shape_commands(shape, context, size).unwrap_or_default();
+  let paths = shape.path_commands(context, size).unwrap_or_default();
   render_mask(
     &paths,
     Some(context.transform),

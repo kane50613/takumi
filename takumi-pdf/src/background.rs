@@ -6,7 +6,6 @@ use takumi_core::layout::node::resolve_image;
 use takumi_core::{
   context::RenderContext,
   geometry::{Point, Size},
-  layout::background::auto_axis_from_intrinsic,
   style::{
     AutoBackgroundAxis, BackgroundImage, BackgroundRepeat, BackgroundRepeatStyle, BackgroundSize,
     ComputedStyle, IntrinsicSizing, Length, PositionComponent, PositionValue,
@@ -121,8 +120,9 @@ impl Placement {
     let (x, y) = match auto {
       Some((AutoBackgroundAxis::Width, ratio)) => {
         let y = Axis::resolve(area.height, tile.height, position.0.y, repeat.1, context);
-        let width =
-          auto_axis_from_intrinsic(AutoBackgroundAxis::Width, ratio, y.tile).unwrap_or(tile.width);
+        let width = AutoBackgroundAxis::Width
+          .size_from_intrinsic(ratio, y.tile)
+          .unwrap_or(tile.width);
 
         (
           Axis::resolve(area.width, width, position.0.x, repeat.0, context),
@@ -131,7 +131,8 @@ impl Placement {
       }
       Some((AutoBackgroundAxis::Height, ratio)) => {
         let x = Axis::resolve(area.width, tile.width, position.0.x, repeat.0, context);
-        let height = auto_axis_from_intrinsic(AutoBackgroundAxis::Height, ratio, x.tile)
+        let height = AutoBackgroundAxis::Height
+          .size_from_intrinsic(ratio, x.tile)
           .unwrap_or(tile.height);
 
         (

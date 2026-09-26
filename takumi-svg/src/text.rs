@@ -21,9 +21,9 @@ use takumi_core::{
     node::TextData,
     tree::RenderNode,
   },
-  painter::{BoxFrame, paint_run_decorations},
+  painter::BoxFrame,
   resources::{font::FontError, glyph::ResolvedGlyph, image::to_data_url},
-  style::{Affine, BackgroundClip, FillRule, LineJoin, TextDecorationLines},
+  style::{Affine, BackgroundClip, FillRule, LineJoin},
 };
 
 use crate::{
@@ -349,13 +349,12 @@ fn emit_run_decorations(
   doc.with_opacity(run.glyph_run.brush.opacity, |doc| {
     let mut device = DocumentDevice::new(doc);
 
-    paint_run_decorations(
-      decorations,
-      over,
-      TextDecorationLines::empty(),
-      frame.origin,
-      &mut device,
-    );
+    for decoration in decorations
+      .iter()
+      .filter(|decoration| decoration.over == over)
+    {
+      decoration.paint(frame.origin, &mut device);
+    }
     device.finish()
   })
 }

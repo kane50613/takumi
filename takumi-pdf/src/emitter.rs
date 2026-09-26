@@ -7,7 +7,7 @@ use takumi_core::{
   context::RenderContext,
   layout::{
     node::{ImageData, ImageSourceInput, NodeKind, resolve_image},
-    replaced::place_replaced,
+    replaced::ReplacedPlacement,
   },
   resources::image::ImageSource,
 };
@@ -15,9 +15,8 @@ use takumi_core::{
   font_style::SizedFontStyle,
   geometry::{ComputedLayout as Layout, NodeId, Point as CorePoint, Size},
   layout::{
-    background::background_origin_box,
+    background::OriginBox,
     border::BorderProperties,
-    clip::clip_shape_commands,
     decoration::{ClipBox, OutlineGeometry},
     inline::{
       BuiltInlineLayout, InlineRunLayout, PositionedInlineRun, ProcessedInlineSpan, ShapedRun,
@@ -26,16 +25,12 @@ use takumi_core::{
     tree::{NodeOrigin, RenderNode},
   },
   paint::ConicGradientTile,
-  painter::{
-    BoxFrame, BoxPainter, BoxShadows, FillShape, OverflowClip, PaintDevice, StrokeStyle,
-    paint_border, paint_run_decorations,
-  },
+  painter::{BoxFrame, BoxPainter, BoxShadows, FillShape, OverflowClip, PaintDevice, StrokeStyle},
   scene::{NodePaint, PaintItemKind, Scene},
   shadow::SizedShadow,
   style::{
     Affine, BackgroundClip, BackgroundImage, BackgroundOrigin, BlendMode, BoxDecorationBreak,
     Color, ComputedStyle, Display, Filter, Isolation, Lang, ResolvedGradientStop,
-    TextDecorationLines,
   },
 };
 
@@ -374,7 +369,7 @@ impl Emitter<'_> {
     }
 
     if let Some(shape) = &style.clip_path
-      && let Some(commands) = clip_shape_commands(shape, &node.context, layout.size)
+      && let Some(commands) = shape.path_commands(&node.context, layout.size)
     {
       // A shape that resolves to no area clips everything away, so a missing
       // path becomes an empty region rather than no clip at all.
@@ -935,7 +930,7 @@ impl Emitter<'_> {
 
     // The device opens its own artifact per fill, so a border that paints
     // nothing leaves no empty region behind.
-    if paint_border(border, size, origin, &mut self.device(surface, self.tagged)) {
+    if border.paint_ring(size, origin, &mut self.device(surface, self.tagged)) {
       return;
     }
     let mut sides = border.painted_sides().peekable();
@@ -1027,7 +1022,7 @@ impl Emitter<'_> {
     if iw <= 0.0 || ih <= 0.0 {
       return;
     }
-    let placement = place_replaced(
+    let placement = ReplacedPlacement::new(
       context,
       content,
       Size {
@@ -1219,13 +1214,11 @@ impl Emitter<'_> {
         run.transform(Affine::IDENTITY),
       );
 
-      paint_run_decorations(
-        &decorations,
-        false,
-        TextDecorationLines::empty(),
-        frame.origin,
-        &mut self.device(surface, false),
-      );
+      let mut device = self.device(surface, false);
+
+      for decoration in decorations.iter().filter(|decoration| !decoration.over) {
+        decoration.paint(frame.origin, &mut device);
+      }
       let fill = fill_from_rgba(self.filtered(shaped.brush.color), shaped.brush.opacity);
       let oblique = self.push_oblique(shaped, origin, surface);
 
@@ -1267,13 +1260,11 @@ impl Emitter<'_> {
         surface.pop();
       }
       surface.set_stroke(None);
-      paint_run_decorations(
-        &decorations,
-        true,
-        TextDecorationLines::empty(),
-        frame.origin,
-        &mut self.device(surface, false),
-      );
+      let mut device = self.device(surface, false);
+
+      for decoration in decorations.iter().filter(|decoration| decoration.over) {
+        decoration.paint(frame.origin, &mut device);
+      }
     }
     self.emit_inline_boxes(node, runs, built, frame, surface);
   }
@@ -1737,7 +1728,7 @@ impl Emitter<'_> {
 
 /// The positioning area `background-origin` selects, never negative.
 fn background_origin_area(origin: BackgroundOrigin, layout: Layout) -> (CorePoint<f32>, Size<f32>) {
-  let area = background_origin_box(origin, layout);
+  let area = OriginBox::new(origin, layout);
 
   (
     area.offset,

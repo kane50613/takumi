@@ -155,23 +155,20 @@ impl AxisArea {
   }
 }
 
-/// The size of a `background-size` axis left `auto`, taken from the image's ratio once the other
-/// axis is settled.
-pub fn auto_axis_from_intrinsic(
-  auto_axis: AutoBackgroundAxis,
-  intrinsic_ratio: Option<f32>,
-  fixed_size: f32,
-) -> Option<f32> {
-  let ratio = intrinsic_ratio?;
+impl AutoBackgroundAxis {
+  /// The size of this `auto` axis, taken from the image's ratio once the other axis is `fixed_size`.
+  pub fn size_from_intrinsic(self, intrinsic_ratio: Option<f32>, fixed_size: f32) -> Option<f32> {
+    let ratio = intrinsic_ratio?;
 
-  if ratio == 0.0 {
-    return Some(0.0);
+    if ratio == 0.0 {
+      return Some(0.0);
+    }
+
+    Some(match self {
+      Self::Width => fixed_size * ratio,
+      Self::Height => fixed_size / ratio,
+    })
   }
-
-  Some(match auto_axis {
-    AutoBackgroundAxis::Width => fixed_size * ratio,
-    AutoBackgroundAxis::Height => fixed_size / ratio,
-  })
 }
 
 fn resolve_auto_axis_from_intrinsic(
@@ -179,7 +176,8 @@ fn resolve_auto_axis_from_intrinsic(
   intrinsic_ratio: Option<f32>,
   fixed_size: u32,
 ) -> Option<u32> {
-  auto_axis_from_intrinsic(auto_axis, intrinsic_ratio, fixed_size as f32)
+  auto_axis
+    .size_from_intrinsic(intrinsic_ratio, fixed_size as f32)
     .map(|size| size.round() as u32)
 }
 
@@ -209,30 +207,32 @@ pub struct OriginBox {
   pub size: Size<f32>,
 }
 
-/// The positioning area `background-origin` selects, and its offset inside the border box.
-pub fn background_origin_box(origin: BackgroundOrigin, layout: Layout) -> OriginBox {
-  let border = layout.border;
-  let padding = layout.padding;
-  let inset = |left: f32, right: f32, top: f32, bottom: f32| OriginBox {
-    offset: Point { x: left, y: top },
-    size: Size {
-      width: layout.size.width - left - right,
-      height: layout.size.height - top - bottom,
-    },
-  };
+impl OriginBox {
+  /// The positioning area `origin` selects on `layout`.
+  pub fn new(origin: BackgroundOrigin, layout: Layout) -> Self {
+    let border = layout.border;
+    let padding = layout.padding;
+    let inset = |left: f32, right: f32, top: f32, bottom: f32| Self {
+      offset: Point { x: left, y: top },
+      size: Size {
+        width: layout.size.width - left - right,
+        height: layout.size.height - top - bottom,
+      },
+    };
 
-  match origin {
-    BackgroundOrigin::BorderBox => OriginBox {
-      offset: Point { x: 0.0, y: 0.0 },
-      size: layout.size,
-    },
-    BackgroundOrigin::PaddingBox => inset(border.left, border.right, border.top, border.bottom),
-    BackgroundOrigin::ContentBox => inset(
-      border.left + padding.left,
-      border.right + padding.right,
-      border.top + padding.top,
-      border.bottom + padding.bottom,
-    ),
+    match origin {
+      BackgroundOrigin::BorderBox => Self {
+        offset: Point { x: 0.0, y: 0.0 },
+        size: layout.size,
+      },
+      BackgroundOrigin::PaddingBox => inset(border.left, border.right, border.top, border.bottom),
+      BackgroundOrigin::ContentBox => inset(
+        border.left + padding.left,
+        border.right + padding.right,
+        border.top + padding.top,
+        border.bottom + padding.bottom,
+      ),
+    }
   }
 }
 

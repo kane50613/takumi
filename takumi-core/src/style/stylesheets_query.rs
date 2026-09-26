@@ -62,6 +62,15 @@ impl ComputedStyle {
   }
 
   /// Whether the element paints in the positioned/z-index bucket.
+  /// The effective paint-order z-index of a child with this style.
+  pub(crate) fn paint_order_z(&self, is_flex_or_grid_item: bool) -> i32 {
+    if self.participates_in_positioned_paint_bucket(is_flex_or_grid_item) {
+      self.z_index.painting_order_value()
+    } else {
+      0
+    }
+  }
+
   pub(crate) fn participates_in_positioned_paint_bucket(&self, is_flex_or_grid_item: bool) -> bool {
     self.position.is_positioned() || self.is_z_index_applicable(is_flex_or_grid_item)
   }

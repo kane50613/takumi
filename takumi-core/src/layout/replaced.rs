@@ -31,6 +31,45 @@ pub struct ClippedPlacement {
 }
 
 impl ReplacedPlacement {
+  /// Sizes `intrinsic` content for a `content` box and places it.
+  ///
+  /// `fill` and a missing intrinsic size both stretch to the box, which is what
+  /// CSS asks for when there is no ratio to preserve.
+  pub fn new(context: &RenderContext, content: Size<f32>, intrinsic: Size<f32>) -> Self {
+    let scale = match context.style.object_fit {
+      _ if intrinsic.width <= 0.0 || intrinsic.height <= 0.0 => None,
+      ObjectFit::Fill => None,
+      ObjectFit::Contain => {
+        Some((content.width / intrinsic.width).min(content.height / intrinsic.height))
+      }
+      ObjectFit::Cover => {
+        Some((content.width / intrinsic.width).max(content.height / intrinsic.height))
+      }
+      ObjectFit::ScaleDown => Some(
+        (content.width / intrinsic.width)
+          .min(content.height / intrinsic.height)
+          .min(1.0),
+      ),
+      ObjectFit::None => Some(1.0),
+    };
+    let size = match scale {
+      Some(scale) => Size {
+        width: intrinsic.width * scale,
+        height: intrinsic.height * scale,
+      },
+      None => content,
+    };
+    let position = context.style.object_position.0;
+
+    Self {
+      size,
+      offset: Point {
+        x: position.x.resolve(context, content.width - size.width),
+        y: position.y.resolve(context, content.height - size.height),
+      },
+    }
+  }
+
   /// Whether the content reaches past its box and needs clipping to it. A
   /// percentage past 100% pushes content that fits out of the box, so the test
   /// is on the placed edges, not the size alone. Half a pixel of slack keeps a
@@ -60,49 +99,6 @@ impl ReplacedPlacement {
         height: ((self.offset.y + self.size.height).min(content.height) - origin.y).max(0.0),
       },
     }
-  }
-}
-
-/// Sizes `intrinsic` content for a `content` box and places it.
-///
-/// `fill` and a missing intrinsic size both stretch to the box, which is what
-/// CSS asks for when there is no ratio to preserve.
-pub fn place_replaced(
-  context: &RenderContext,
-  content: Size<f32>,
-  intrinsic: Size<f32>,
-) -> ReplacedPlacement {
-  let scale = match context.style.object_fit {
-    _ if intrinsic.width <= 0.0 || intrinsic.height <= 0.0 => None,
-    ObjectFit::Fill => None,
-    ObjectFit::Contain => {
-      Some((content.width / intrinsic.width).min(content.height / intrinsic.height))
-    }
-    ObjectFit::Cover => {
-      Some((content.width / intrinsic.width).max(content.height / intrinsic.height))
-    }
-    ObjectFit::ScaleDown => Some(
-      (content.width / intrinsic.width)
-        .min(content.height / intrinsic.height)
-        .min(1.0),
-    ),
-    ObjectFit::None => Some(1.0),
-  };
-  let size = match scale {
-    Some(scale) => Size {
-      width: intrinsic.width * scale,
-      height: intrinsic.height * scale,
-    },
-    None => content,
-  };
-  let position = context.style.object_position.0;
-
-  ReplacedPlacement {
-    size,
-    offset: Point {
-      x: position.x.resolve(context, content.width - size.width),
-      y: position.y.resolve(context, content.height - size.height),
-    },
   }
 }
 

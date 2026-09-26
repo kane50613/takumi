@@ -15,9 +15,7 @@ use takumi_core::{
     node::{ImageData, Node, NodeKind},
     tree::RenderNode,
   },
-  painter::{
-    BoxFrame, BoxPainter, FillShape, OverflowClip, PaintDevice, StrokeStyle, paint_border,
-  },
+  painter::{BoxFrame, BoxPainter, FillShape, OverflowClip, PaintDevice, StrokeStyle},
   resources::image::ImageSource,
   scene::Scene,
   style::{
@@ -687,7 +685,7 @@ fn emit_borders(
   let transform = Affine::translation(origin.x, origin.y);
   let mut device = DocumentDevice::new(doc);
 
-  if paint_border(border, size, origin, &mut device) {
+  if border.paint_ring(size, origin, &mut device) {
     return device.finish();
   }
 

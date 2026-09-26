@@ -4,7 +4,7 @@ use image::Rgba;
 use smallvec::SmallVec;
 use takumi_core::{
   geometry::{ComputedLayout as Layout, Point, Size},
-  layout::background::{BackgroundLayersInput, background_origin_box},
+  layout::background::{BackgroundLayersInput, OriginBox},
   paint::{ConicGradientTile, GradientOverlayTile, LinearGradientTile, RadialGradientTile},
 };
 use tiny_skia::{IntSize, Pixmap, PixmapMut, PixmapRef, PremultipliedColorU8};
@@ -581,7 +581,7 @@ pub(crate) fn background_image_layers(
   // `background-origin` sets the positioning area that `background-position`/`-size`
   // resolve against; `repeat` still tiles across the painting (border) box so a
   // repeating layer covers the clip region when origin and clip differ.
-  let origin = background_origin_box(context.style.background_origin, layout);
+  let origin = OriginBox::new(context.style.background_origin, layout);
 
   resolve_tile_layers(BackgroundLayersInput {
     images: context.style.background_image.as_deref().unwrap_or(&[]),

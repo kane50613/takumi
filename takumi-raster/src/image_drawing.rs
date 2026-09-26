@@ -1,6 +1,6 @@
 use takumi_core::{
   geometry::{ComputedLayout as Layout, Point, Size},
-  layout::replaced::place_replaced,
+  layout::replaced::ReplacedPlacement,
 };
 
 use crate::{
@@ -38,7 +38,7 @@ fn process_image_for_object_fit(
     ImageSource::Svg(svg) => svg.dimensions(),
     _ => (image_width, image_height),
   };
-  let placement = place_replaced(
+  let placement = ReplacedPlacement::new(
     context,
     content_box,
     Size {

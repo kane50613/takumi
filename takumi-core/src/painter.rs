@@ -5,14 +5,11 @@ use crate::{
   geometry::{ComputedLayout, PathCommand, Point, Rect, Size},
   layout::{
     border::{BorderPaint, BorderProperties},
-    decoration::{ClipBox, OutlineGeometry, outline_paint},
+    decoration::{ClipBox, OutlineGeometry},
     inline::DecorationRect,
   },
   shadow::SizedShadow,
-  style::{
-    Affine, BackgroundClip, BackgroundImage, BoxShadow, Color, FillRule, Overflow, Sides,
-    TextDecorationLines,
-  },
+  style::{Affine, BackgroundClip, BackgroundImage, BoxShadow, Color, FillRule, Overflow, Sides},
 };
 
 /// A closed shape to fill, in the coordinate space of the box that owns it.
@@ -320,7 +317,7 @@ impl<'c> BoxPainter<'c> {
 
   /// The outline the box paints, or `None` when it paints none.
   pub fn outline(&self) -> Option<OutlineGeometry> {
-    outline_paint(self.context, self.layout.size)
+    OutlineGeometry::painted(self.context, self.layout.size)
   }
 
   /// Whether the box paints a background, border, shadow or outline.
@@ -342,30 +339,20 @@ impl<'c> BoxPainter<'c> {
   }
 }
 
-/// Paints the decoration lines of one glyph run: `text-decoration` under, over, and through the
-/// text.
-pub fn paint_run_decorations<D: PaintDevice>(
-  decorations: &[DecorationRect],
-  over: bool,
-  skip: TextDecorationLines,
-  origin: Point<f32>,
-  device: &mut D,
-) {
-  for decoration in decorations
-    .iter()
-    .filter(|line| line.over == over && !skip.contains(line.line))
-  {
-    if decoration.color.0[3] == 0 || decoration.width <= 0.0 || decoration.height <= 0.0 {
-      continue;
+impl DecorationRect {
+  /// Paints the line with its border box at `origin`.
+  pub fn paint<D: PaintDevice>(&self, origin: Point<f32>, device: &mut D) {
+    if self.color.0[3] == 0 || self.width <= 0.0 || self.height <= 0.0 {
+      return;
     }
-    let [a, b, c, d, e, f] = decoration.transform;
+    let [a, b, c, d, e, f] = self.transform;
 
     device.fill_shape(
       &FillShape::Rect(Size {
-        width: decoration.width,
-        height: decoration.height,
+        width: self.width,
+        height: self.height,
       }),
-      decoration.color,
+      self.color,
       Affine {
         a,
         b,
@@ -378,94 +365,97 @@ pub fn paint_run_decorations<D: PaintDevice>(
   }
 }
 
-/// Paints a border ring, unless it needs per-side work: a uniform dashed or dotted border strokes
-/// the centerline so the pattern runs round the whole ring, and a double border fills two rings.
-pub fn paint_border<D: PaintDevice>(
-  border: &BorderProperties,
-  size: Size<f32>,
-  origin: Point<f32>,
-  device: &mut D,
-) -> bool {
-  let at = Affine::translation(origin.x, origin.y);
+impl BorderProperties {
+  /// Paints the border ring at `origin`, unless it needs per-side work: a uniform dashed or
+  /// dotted border strokes the centerline so the pattern runs round the whole ring, and a double
+  /// border fills two rings.
+  pub fn paint_ring<D: PaintDevice>(
+    &self,
+    size: Size<f32>,
+    origin: Point<f32>,
+    device: &mut D,
+  ) -> bool {
+    let at = Affine::translation(origin.x, origin.y);
 
-  match border.paint() {
-    BorderPaint::Sides => return false,
-    // A transparent ring is a fill nobody sees, and painting it would only
-    // lengthen the output.
-    BorderPaint::Ring { color }
-    | BorderPaint::Double { color, .. }
-    | BorderPaint::Stroked { color, .. }
-      if color.0[3] == 0 => {}
-    BorderPaint::Ring { color } => {
-      device.fill_shape(&FillShape::border_ring(border, size), color, at);
-    }
-    BorderPaint::Double { color, width } => {
-      let third = width / 3.0;
+    match self.paint() {
+      BorderPaint::Sides => return false,
+      // A transparent ring is a fill nobody sees, and painting it would only
+      // lengthen the output.
+      BorderPaint::Ring { color }
+      | BorderPaint::Double { color, .. }
+      | BorderPaint::Stroked { color, .. }
+        if color.0[3] == 0 => {}
+      BorderPaint::Ring { color } => {
+        device.fill_shape(&FillShape::border_ring(self, size), color, at);
+      }
+      BorderPaint::Double { color, width } => {
+        let third = width / 3.0;
 
-      for inset in [0.0, third * 2.0] {
-        let mut ring = *border;
+        for inset in [0.0, third * 2.0] {
+          let mut ring = *self;
 
-        ring.expand_by(Rect {
-          top: -inset,
-          right: -inset,
-          bottom: -inset,
-          left: -inset,
+          ring.expand_by(Rect {
+            top: -inset,
+            right: -inset,
+            bottom: -inset,
+            left: -inset,
+          });
+          ring.width = Sides([third; 4]).into();
+
+          let ring_size = Size {
+            width: (size.width - inset * 2.0).max(0.0),
+            height: (size.height - inset * 2.0).max(0.0),
+          };
+
+          device.fill_shape(
+            &FillShape::border_ring(&ring, ring_size),
+            color,
+            Affine::translation(origin.x + inset, origin.y + inset),
+          );
+        }
+      }
+      BorderPaint::Stroked {
+        color,
+        width,
+        style,
+      } => {
+        let half = width / 2.0;
+        let mut center = *self;
+
+        center.expand_by(Rect {
+          top: -half,
+          right: -half,
+          bottom: -half,
+          left: -half,
         });
-        ring.width = Sides([third; 4]).into();
 
-        let ring_size = Size {
-          width: (size.width - inset * 2.0).max(0.0),
-          height: (size.height - inset * 2.0).max(0.0),
+        let center_size = Size {
+          width: (size.width - width).max(0.0),
+          height: (size.height - width).max(0.0),
         };
+        let mut commands = Vec::with_capacity(BorderProperties::PATH_COMMANDS_AMOUNT);
 
-        device.fill_shape(
-          &FillShape::border_ring(&ring, ring_size),
-          color,
-          Affine::translation(origin.x + inset, origin.y + inset),
+        center.append_mask_commands(&mut commands, center_size, Point { x: half, y: half });
+
+        let perimeter = center.approximate_rounded_rect_perimeter(center_size);
+        let dash = style.dash_pattern(width, perimeter, true);
+
+        device.stroke_shape(
+          &FillShape::Path {
+            commands,
+            rule: FillRule::NonZero,
+          },
+          &StrokeStyle {
+            color,
+            width,
+            dash: dash.map(|dash| dash.intervals),
+            round_cap: dash.is_some_and(|dash| dash.round_cap),
+          },
+          at,
         );
       }
     }
-    BorderPaint::Stroked {
-      color,
-      width,
-      style,
-    } => {
-      let half = width / 2.0;
-      let mut center = *border;
 
-      center.expand_by(Rect {
-        top: -half,
-        right: -half,
-        bottom: -half,
-        left: -half,
-      });
-
-      let center_size = Size {
-        width: (size.width - width).max(0.0),
-        height: (size.height - width).max(0.0),
-      };
-      let mut commands = Vec::with_capacity(BorderProperties::PATH_COMMANDS_AMOUNT);
-
-      center.append_mask_commands(&mut commands, center_size, Point { x: half, y: half });
-
-      let perimeter = center.approximate_rounded_rect_perimeter(center_size);
-      let dash = style.dash_pattern(width, perimeter, true);
-
-      device.stroke_shape(
-        &FillShape::Path {
-          commands,
-          rule: FillRule::NonZero,
-        },
-        &StrokeStyle {
-          color,
-          width,
-          dash: dash.map(|dash| dash.intervals),
-          round_cap: dash.is_some_and(|dash| dash.round_cap),
-        },
-        at,
-      );
-    }
+    true
   }
-
-  true
 }

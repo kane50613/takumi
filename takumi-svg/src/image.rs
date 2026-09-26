@@ -11,7 +11,7 @@ use takumi_core::{
   geometry::Size,
   layout::{
     node::{ImageData, ImageSourceInput, resolve_image},
-    replaced::place_replaced,
+    replaced::ReplacedPlacement,
   },
   resources::image::{ImageSource, to_data_url},
   style::{ImageScalingAlgorithm, ObjectFit},
@@ -53,7 +53,7 @@ pub(crate) fn emit_image(
     width: content.w,
     height: content.h,
   };
-  let placement = place_replaced(
+  let placement = ReplacedPlacement::new(
     context,
     size,
     Size {

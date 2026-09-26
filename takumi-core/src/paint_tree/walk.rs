@@ -7,7 +7,7 @@ use crate::{
   font_style::SizedFontStyle,
   geometry::{ComputedLayout, Point, Size},
   layout::{
-    background::{BackgroundLayersInput, background_origin_box},
+    background::{BackgroundLayersInput, OriginBox},
     decoration::ClipBox,
     inline::{
       InlineItem, InlineLayoutMode, InlineLayoutRequest, PositionedInlineRun, ProcessedInlineSpan,
@@ -15,7 +15,7 @@ use crate::{
     },
     inline_box::{InlineBoxPaint, resolve_inline_box},
     node::{ImageData, ImageSourceInput, NodeKind},
-    replaced::place_replaced,
+    replaced::ReplacedPlacement,
     tree::{LayoutResults, RenderNode},
   },
   painter::BoxPainter,
@@ -460,7 +460,7 @@ fn background_layers(node: &RenderNode, layout: ComputedLayout) -> Vec<PaintBack
   if images.is_empty() {
     return Vec::new();
   }
-  let origin = background_origin_box(style.background_origin, layout);
+  let origin = OriginBox::new(style.background_origin, layout);
   let resolved = BackgroundLayersInput {
     images,
     positions: &style.background_position,
@@ -578,8 +578,8 @@ fn image_content(
     .map(|source| source.size(&context.sizing))
     .filter(|(width, height)| *width > 0.0 && *height > 0.0);
   let placement = match intrinsic {
-    Some((width, height)) => place_replaced(context, box_size, Size { width, height }),
-    None => place_replaced(context, box_size, Size::default()),
+    Some((width, height)) => ReplacedPlacement::new(context, box_size, Size { width, height }),
+    None => ReplacedPlacement::new(context, box_size, Size::default()),
   };
   Some(PaintImage {
     src,
