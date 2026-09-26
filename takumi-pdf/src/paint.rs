@@ -3,7 +3,10 @@
 #[cfg(feature = "images")]
 use takumi_core::{
   context::RenderContext,
-  resources::image::{ImageError, ImageSource, RenderedImage},
+  resources::{
+    image::{ImageError, ImageSource, RenderedImage},
+    image_buffer::demultiply_pixel,
+  },
 };
 use takumi_core::{
   geometry::{PathCommand, Point, Rect, Size},
@@ -76,22 +79,6 @@ pub(crate) fn edges_path(edges: Rect<f32>) -> Option<KrillaPath> {
   KrillaRect::from_ltrb(edges.left, edges.top, edges.right, edges.bottom).and_then(rect_path)
 }
 
-/// Undoes the premultiplication takumi-core renders with: PDF image streams
-/// carry straight alpha. Only the paths that go through core reach this;
-/// embedded bytes never become premultiplied samples in the first place.
-#[cfg(feature = "images")]
-fn unpremultiply(data: &mut [u8]) {
-  for pixel in data.as_chunks_mut::<4>().0 {
-    let alpha = pixel[3];
-    if alpha != 0 && alpha != 255 {
-      let alpha16 = u16::from(alpha);
-      pixel[0] = ((u16::from(pixel[0]) * 255 + alpha16 / 2) / alpha16).min(255) as u8;
-      pixel[1] = ((u16::from(pixel[1]) * 255 + alpha16 / 2) / alpha16).min(255) as u8;
-      pixel[2] = ((u16::from(pixel[2]) * 255 + alpha16 / 2) / alpha16).min(255) as u8;
-    }
-  }
-}
-
 /// Why an image that had bytes could not be drawn.
 #[cfg(feature = "images")]
 fn undrawable_reason(filtered: bool, error: &ImageError) -> String {
@@ -153,7 +140,14 @@ pub(crate) fn rasterized_image(
   };
   let mut data = buffer.data().to_vec();
 
-  unpremultiply(&mut data);
+  // Undoes the premultiplication takumi-core renders with: PDF image streams
+  // carry straight alpha. Only the paths that go through core reach this;
+  // embedded bytes never become premultiplied samples in the first place.
+  data
+    .as_chunks_mut::<4>()
+    .0
+    .iter_mut()
+    .for_each(demultiply_pixel);
   if let Some(filter) = filter {
     for pixel in data.as_chunks_mut::<4>().0 {
       *pixel = filter.apply(*pixel);

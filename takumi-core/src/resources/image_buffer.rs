@@ -84,7 +84,7 @@ impl ImageBuffer {
   pub fn encode_png(&self) -> Option<Vec<u8>> {
     let mut straight = self.data.clone();
 
-    unpremultiply_in_place(&mut straight);
+    demultiply_truncating_in_place(&mut straight);
     let mut out = Vec::new();
     PngEncoder::new(&mut out)
       .write_image(&straight, self.width, self.height, ExtendedColorType::Rgba8)
@@ -114,9 +114,30 @@ pub(crate) fn rgba_len(width: u32, height: u32) -> Option<usize> {
     .checked_mul(4)
 }
 
-/// Converts premultiplied RGBA bytes to straight alpha in place.
+/// Converts one premultiplied RGBA pixel to straight alpha.
+///
+/// Rounds half away from zero in integer arithmetic. tiny-skia divides in
+/// `f64`, which lands a hair under the halfway point for some values and rounds
+/// them down; integers make the result identical on every target.
+#[inline]
+pub fn demultiply_pixel(pixel: &mut [u8; 4]) {
+  let alpha = pixel[3] as u32;
+
+  if alpha == u8::MAX as u32 || alpha == 0 {
+    return;
+  }
+
+  let divisor = alpha * 2;
+
+  for channel in &mut pixel[..3] {
+    *channel = ((*channel as u32 * 510 + alpha) / divisor) as u8;
+  }
+}
+
+/// Converts premultiplied RGBA bytes to straight alpha in place, truncating
+/// where [`demultiply_pixel`] rounds.
 #[cfg(feature = "png")]
-pub(crate) fn unpremultiply_in_place(data: &mut [u8]) {
+pub(crate) fn demultiply_truncating_in_place(data: &mut [u8]) {
   for pixel in data.as_chunks_mut::<4>().0 {
     let alpha = pixel[3];
     if alpha != 0 && alpha != 255 {
