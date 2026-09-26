@@ -13,7 +13,9 @@ use takumi_core::{
 };
 use takumi_core::{
   font_style::SizedFontStyle,
-  geometry::{ComputedLayout as Layout, NodeId, Point as CorePoint, Rect as CoreRect, Size},
+  geometry::{
+    ComputedLayout as Layout, NodeId, PathCommand, Point as CorePoint, Rect as CoreRect, Size,
+  },
   layout::{
     background_image_geometry::{BackgroundImageGeometry, FillLayers},
     border::BorderProperties,
@@ -26,14 +28,13 @@ use takumi_core::{
   },
   paint::ConicGradientTile,
   painter::{
-    BackgroundClipArea, BoxBackground, BoxBorderPainter, BoxFrame, BoxPainter, BoxShadows,
-    FillShape, OverflowClip, PaintDevice, StrokeStyle,
+    BackgroundClipArea, BoxBackground, BoxBorderPainter, BoxFrame, BoxPainter, FillShape,
+    OverflowClip, PaintDevice, ShadowShape, StrokeStyle, UNBOUNDED,
   },
   scene::{NodePaint, PaintItemKind, Scene},
-  shadow::SizedShadow,
   style::{
-    Affine, BackgroundImage, BlendMode, BoxDecorationBreak, Color, ComputedStyle, Display, Filter,
-    Isolation, Lang, ResolvedGradientStop,
+    Affine, BackgroundImage, BlendMode, BoxDecorationBreak, Color, ComputedStyle, Display,
+    FillRule as CoreFillRule, Filter, Isolation, Lang, ResolvedGradientStop,
   },
 };
 
@@ -66,7 +67,7 @@ use crate::{
     krilla_fill_rule, krilla_path, krilla_stop, krilla_stops, krilla_transform, normalized,
     pop_transforms, rect_path, shape_path, spread,
   },
-  shadow::{emit_inset_shadows, emit_outer_shadows},
+  shadow::Band,
   tags::{ARTIFACT, TagCollector},
   tree::OwnContent,
   window::Window,
@@ -396,25 +397,10 @@ impl Emitter<'_> {
     let BoxFrame { layout, .. } = frame;
     let painter = BoxPainter::new(&node.context, layout);
     let border = painter.border();
-    let shadows = self.filtered_shadows(painter.shadows());
-
-    if !shadows.outer.is_empty() {
-      self.in_artifact(surface, |surface| {
-        emit_outer_shadows(&shadows.outer, border, layout.size, frame.origin, surface);
-      });
-    }
+    painter.paint_normal_box_shadows(frame.origin, &mut self.device(surface, self.tagged));
     painter.background_color(frame.origin, &mut self.device(surface, self.tagged));
     self.emit_background_layers(node, &painter.background(), frame, surface);
-    if !shadows.inset.is_empty() {
-      self.in_artifact(surface, |surface| {
-        emit_inset_shadows(
-          &shadows.inset,
-          &ClipBox::padding_box(*border, layout),
-          frame.origin,
-          surface,
-        );
-      });
-    }
+    painter.paint_inset_box_shadows(frame.origin, &mut self.device(surface, self.tagged));
     self.emit_borders(border, layout.size, frame.origin, surface);
   }
 
@@ -784,19 +770,6 @@ impl Emitter<'_> {
     };
 
     Some(paint)
-  }
-
-  /// The shadows in the colors this subtree's `filter` leaves them.
-  fn filtered_shadows(&self, shadows: BoxShadows) -> BoxShadows {
-    let recolor = |shadow: SizedShadow| SizedShadow {
-      color: Color(self.filtered(shadow.color)),
-      ..shadow
-    };
-
-    BoxShadows {
-      inset: shadows.inset.into_iter().map(recolor).collect(),
-      outer: shadows.outer.into_iter().map(recolor).collect(),
-    }
   }
 
   /// Builds the soft mask for `mask-image`, drawing its layers into their own stream.
@@ -1702,6 +1675,23 @@ enum Clip {
 }
 
 impl SurfaceDevice<'_, '_> {
+  /// Clips later draws to `path`, or hides them when the clip has no area.
+  fn open_clip(&mut self, path: Option<KrillaPath>, rule: CoreFillRule) {
+    // A whole clip is one artifact, since marked content does not nest.
+    if self.artifact && self.clips.is_empty() {
+      self.surface.start_tagged(ARTIFACT);
+    }
+    let clip = match path {
+      Some(path) => {
+        self.surface.push_clip_path(&path, &krilla_fill_rule(rule));
+        Clip::Path
+      }
+      None => Clip::Empty,
+    };
+
+    self.clips.push(clip);
+  }
+
   /// Draws the path `build` makes at `transform`'s translation, with the rest
   /// of `transform` pushed around it. A pure translation folds into the path,
   /// which keeps the content stream free of a `cm` pair for every fill.
@@ -1795,10 +1785,6 @@ impl PaintDevice for SurfaceDevice<'_, '_> {
   }
 
   fn push_clip(&mut self, shape: &FillShape, transform: Affine) {
-    // A whole clip is one artifact, since marked content does not nest.
-    if self.artifact && self.clips.is_empty() {
-      self.surface.start_tagged(ARTIFACT);
-    }
     let path = if transform.only_translation() {
       shape_path(
         shape,
@@ -1808,31 +1794,31 @@ impl PaintDevice for SurfaceDevice<'_, '_> {
         },
       )
     } else {
-      let commands: Vec<_> = shape
-        .to_commands()
-        .into_iter()
-        .map(|command| {
-          command.map_points(|point| {
-            let (x, y) = transform.transform_point(point.x, point.y);
-
-            CorePoint { x, y }
-          })
-        })
-        .collect();
-
-      krilla_path(&commands, CorePoint::ZERO)
-    };
-    let clip = match path {
-      Some(path) => {
-        self
-          .surface
-          .push_clip_path(&path, &krilla_fill_rule(shape.rule()));
-        Clip::Path
-      }
-      None => Clip::Empty,
+      krilla_path(&device_commands(shape, transform), CorePoint::ZERO)
     };
 
-    self.clips.push(clip);
+    self.open_clip(path, shape.rule());
+  }
+
+  fn push_clip_out(&mut self, shape: &FillShape, transform: Affine) {
+    let mut commands = Vec::with_capacity(BorderProperties::PATH_COMMANDS_AMOUNT * 2);
+
+    BorderProperties::default().append_mask_commands(
+      &mut commands,
+      Size {
+        width: UNBOUNDED * 2.0,
+        height: UNBOUNDED * 2.0,
+      },
+      CorePoint {
+        x: -UNBOUNDED,
+        y: -UNBOUNDED,
+      },
+    );
+    commands.extend(device_commands(shape, transform));
+    self.open_clip(
+      krilla_path(&commands, CorePoint::ZERO),
+      CoreFillRule::EvenOdd,
+    );
   }
 
   fn pop_clip(&mut self) {
@@ -1847,6 +1833,48 @@ impl PaintDevice for SurfaceDevice<'_, '_> {
       self.surface.end_tagged();
     }
   }
+
+  fn fill_shadow(
+    &mut self,
+    shape: &ShadowShape,
+    color: Color,
+    blur_radius: f32,
+    transform: Affine,
+  ) {
+    let color = filtered(self.filter, color);
+
+    for band in Band::of(blur_radius) {
+      let band_shape = shape.spread(band.spread).fill_shape();
+      let fill = Fill {
+        rule: krilla_fill_rule(band_shape.rule()),
+        ..fill_from_rgba(color, band.alpha)
+      };
+
+      self.draw(
+        transform,
+        |origin| shape_path(&band_shape, origin),
+        |surface, path| {
+          surface.set_fill(Some(fill));
+          surface.draw_path(path);
+        },
+      );
+    }
+  }
+}
+
+/// `shape`'s path with every point mapped through `transform`.
+fn device_commands(shape: &FillShape, transform: Affine) -> Vec<PathCommand> {
+  shape
+    .to_commands()
+    .into_iter()
+    .map(|command| {
+      command.map_points(|point| {
+        let (x, y) = transform.transform_point(point.x, point.y);
+
+        CorePoint { x, y }
+      })
+    })
+    .collect()
 }
 
 /// A run ready to draw: its font, the text its glyphs map to, and where it

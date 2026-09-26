@@ -6,7 +6,7 @@ use takumi_core::{
   Fonts,
   context::RenderContext,
   error::Result,
-  geometry::{Point, Size},
+  geometry::{Point, Rect, Size},
   layout::{
     background_image_geometry::FillLayers,
     border::BorderProperties,
@@ -18,7 +18,7 @@ use takumi_core::{
   },
   painter::{
     BackgroundClipArea, BoxBorderPainter, BoxFrame, BoxPainter, FillShape, OverflowClip,
-    PaintDevice, StrokeStyle,
+    PaintDevice, ShadowShape, StrokeStyle, UNBOUNDED,
   },
   resources::image::ImageSource,
   scene::Scene,
@@ -200,12 +200,9 @@ impl<'n> PlacedBox<'n> {
     // The colour fill carries the clip shape itself, so it goes outside the
     // group. Only the image layers need the clip.
     if background.color.is_some() {
-      let mut device = DocumentDevice::new(doc);
-
-      self
-        .painter
-        .background_color(self.frame.origin, &mut device);
-      device.finish()?;
+      DocumentDevice::paint(doc, |device| {
+        self.painter.background_color(self.frame.origin, device);
+      })?;
     }
 
     if background.layers.is_empty() {
@@ -353,69 +350,22 @@ impl<'n> PlacedBox<'n> {
     Ok(Some(group))
   }
 
-  /// Emits outset `box-shadow`s behind the element as offset, blurred rects.
+  /// Emits the outer `box-shadow`s behind the element.
   fn emit_box_shadows(&self, doc: &mut SvgDocument) -> io::Result<()> {
-    let BoxFrame { layout, origin } = self.frame;
-
-    for resolved in self.painter.shadows().outer {
-      // Shadow shape = the element's rounded border-box, radii expanded by the
-      // spread (shared core geometry with the raster backend).
-      let (shadow, spread_size) = self
-        .border()
-        .outset_shadow_box(layout.size, resolved.spread_radius);
-      if spread_size.width <= 0.0 || spread_size.height <= 0.0 {
-        continue;
-      }
-
-      let shadow_origin = Point {
-        x: origin.x + resolved.offset_x - resolved.spread_radius,
-        y: origin.y + resolved.offset_y - resolved.spread_radius,
-      };
-      let fill = Rgba(resolved.color.0);
-      let data = rounded_rect_path_data(&shadow, spread_size, shadow_origin);
-
-      doc.with_blur(resolved.blur_radius, |doc| {
-        doc.fill_path(&data, fill, FillRule::NonZero)
-      })?;
-    }
-    Ok(())
+    DocumentDevice::paint(doc, |device| {
+      self
+        .painter
+        .paint_normal_box_shadows(self.frame.origin, device);
+    })
   }
 
-  /// Emits inset `box-shadow`s as a blurred ring inside the element's rounded
-  /// padding box.
+  /// Emits the inset `box-shadow`s inside the element's padding box.
   fn emit_inset_box_shadows(&self, doc: &mut SvgDocument) -> io::Result<()> {
-    let BoxFrame { layout, origin } = self.frame;
-    if layout.size.width <= 0.0 || layout.size.height <= 0.0 {
-      return Ok(());
-    }
-    let padding = ClipBox::padding_box(*self.border(), layout);
-    let outer = shape_path_data(&padding.into(), origin);
-    for resolved in self.painter.shadows().inset {
-      let fill = Rgba(resolved.color.0);
-
-      // The shadow fills the padding box minus the hole it leaves uncovered
-      // (shared core geometry with the raster backend), drawn even-odd, blurred,
-      // and clipped to the rounded padding box so the blur stays inside.
-      let hole = ClipBox::inset_shadow_hole(
-        padding.border,
-        padding.size,
-        resolved.spread_radius,
-        Point {
-          x: resolved.offset_x,
-          y: resolved.offset_y,
-        },
-      );
-      let ring = format!(
-        "{outer}{}",
-        shape_path_data(&hole.into(), origin + padding.offset)
-      );
-      let clip_group = doc.begin_clipped_group(&outer)?;
-      doc.with_blur(resolved.blur_radius, |doc| {
-        doc.fill_path(&ring, fill, FillRule::EvenOdd)
-      })?;
-      doc.end_group(clip_group)?;
-    }
-    Ok(())
+    DocumentDevice::paint(doc, |device| {
+      self
+        .painter
+        .paint_inset_box_shadows(self.frame.origin, device);
+    })
   }
 
   /// Emits the node's own content: its inline run set, or its replaced
@@ -605,6 +555,31 @@ impl<'d> DocumentDevice<'d> {
   pub(crate) fn finish(self) -> io::Result<()> {
     self.error.map_or(Ok(()), Err)
   }
+
+  /// Runs `paint` against `doc`, surfacing the first write error.
+  pub(crate) fn paint(doc: &'d mut SvgDocument, paint: impl FnOnce(&mut Self)) -> io::Result<()> {
+    let mut device = Self::new(doc);
+
+    paint(&mut device);
+    device.finish()
+  }
+
+  /// Opens a group clipped to `data`, keeping the first write error.
+  fn begin_clip(&mut self, data: &str, rule: FillRule) {
+    if self.error.is_some() {
+      return;
+    }
+    let group = self.doc.clip_path(data, rule, None).and_then(|clip| {
+      self
+        .doc
+        .begin_group(Affine::IDENTITY, 1.0, Some(&clip), None)
+    });
+
+    match group {
+      Ok(group) => self.groups.push(group),
+      Err(error) => self.error = Some(error),
+    }
+  }
 }
 
 impl PaintDevice for DocumentDevice<'_> {
@@ -641,26 +616,19 @@ impl PaintDevice for DocumentDevice<'_> {
   }
 
   fn push_clip(&mut self, shape: &FillShape, transform: Affine) {
-    if self.error.is_some() {
-      return;
-    }
-    let group = self
-      .doc
-      .clip_path(
-        &path_data(&shape.to_commands(), transform),
-        shape.rule(),
-        None,
-      )
-      .and_then(|clip| {
-        self
-          .doc
-          .begin_group(Affine::IDENTITY, 1.0, Some(&clip), None)
-      });
+    self.begin_clip(&path_data(&shape.to_commands(), transform), shape.rule());
+  }
 
-    match group {
-      Ok(group) => self.groups.push(group),
-      Err(error) => self.error = Some(error),
-    }
+  fn push_clip_out(&mut self, shape: &FillShape, transform: Affine) {
+    let everywhere = edges_path_data(Rect {
+      left: -UNBOUNDED,
+      top: -UNBOUNDED,
+      right: UNBOUNDED,
+      bottom: UNBOUNDED,
+    });
+    let data = format!("{everywhere}{}", path_data(&shape.to_commands(), transform));
+
+    self.begin_clip(&data, FillRule::EvenOdd);
   }
 
   fn pop_clip(&mut self) {
@@ -670,6 +638,27 @@ impl PaintDevice for DocumentDevice<'_> {
     if let Some(group) = self.groups.pop()
       && let Err(error) = self.doc.end_group(group)
     {
+      self.error = Some(error);
+    }
+  }
+
+  fn fill_shadow(
+    &mut self,
+    shape: &ShadowShape,
+    color: Color,
+    blur_radius: f32,
+    transform: Affine,
+  ) {
+    if self.error.is_some() {
+      return;
+    }
+    let fill = shape.fill_shape();
+    let data = path_data(&fill.to_commands(), transform);
+    let result = self.doc.with_blur(blur_radius, |doc| {
+      doc.fill_path(&data, Rgba(color.0), fill.rule())
+    });
+
+    if let Err(error) = result {
       self.error = Some(error);
     }
   }
@@ -715,10 +704,9 @@ fn emit_borders(
   origin: Point<f32>,
   doc: &mut SvgDocument,
 ) -> io::Result<()> {
-  let mut device = DocumentDevice::new(doc);
-
-  BoxBorderPainter::new(border, size).paint(origin, &mut device);
-  device.finish()
+  DocumentDevice::paint(doc, |device| {
+    BoxBorderPainter::new(border, size).paint(origin, device);
+  })
 }
 
 /// A box's CSS `outline`, deferred until its content is painted.

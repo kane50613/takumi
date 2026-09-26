@@ -623,20 +623,6 @@ impl BorderProperties {
     self.expand_by(self.width.map(|size| -size))
   }
 
-  /// Outset `box-shadow` shape: a copy with corner radii expanded by `spread` on every side, paired
-  /// with the spread-expanded box size.
-  pub fn outset_shadow_box(&self, size: Size<f32>, spread: f32) -> (Self, Size<f32>) {
-    let mut expanded = *self;
-    expanded.expand_by(Sides::from(spread).into());
-
-    let spread_size = Size {
-      width: (size.width + 2.0 * spread).max(0.0),
-      height: (size.height + 2.0 * spread).max(0.0),
-    };
-
-    (expanded, spread_size)
-  }
-
   /// CSS overlapping-curves scale factor: shrinks corner radii so adjacent radii on a side never
   /// exceed the border-box edge.
   fn overlapping_curves_scale(radii: &Sides<SpacePair<f32>>, border_box: Size<f32>) -> f32 {

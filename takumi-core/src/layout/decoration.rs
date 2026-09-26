@@ -7,7 +7,7 @@
 
 use crate::{
   context::RenderContext,
-  geometry::{ComputedLayout as Layout, Point, Size},
+  geometry::{ComputedLayout as Layout, Point, Rect, Size},
   layout::border::BorderProperties,
   style::Sides,
 };
@@ -55,28 +55,46 @@ impl ClipBox {
     }
   }
 
-  /// The region an inset `box-shadow` leaves uncovered: the padding box shrunk
-  /// by `spread` on every side and shifted by the shadow `offset`. An inset
-  /// shadow fills the padding box minus this hole.
-  pub fn inset_shadow_hole(
-    border: BorderProperties,
-    padding_box: Size<f32>,
-    spread: f32,
-    offset: Point<f32>,
-  ) -> Self {
-    let mut hole = border;
-    hole.expand_by(Sides::from(-spread).into());
+  /// The region grown by `spread` on every side, its corner radii with it, or shrunk when
+  /// `spread` is negative.
+  pub fn outset(self, spread: f32) -> Self {
+    let mut border = self.border;
+
+    border.expand_by(Sides::from(spread).into());
 
     Self {
-      border: hole,
+      border,
       size: Size {
-        width: (padding_box.width - 2.0 * spread).max(0.0),
-        height: (padding_box.height - 2.0 * spread).max(0.0),
+        width: (self.size.width + 2.0 * spread).max(0.0),
+        height: (self.size.height + 2.0 * spread).max(0.0),
       },
       offset: Point {
-        x: offset.x + spread,
-        y: offset.y + spread,
+        x: self.offset.x - spread,
+        y: self.offset.y - spread,
       },
+    }
+  }
+
+  /// The region moved by `delta`.
+  pub fn shifted(self, delta: Point<f32>) -> Self {
+    Self {
+      offset: self.offset + delta,
+      ..self
+    }
+  }
+
+  /// Whether the region covers no area.
+  pub fn is_empty(&self) -> bool {
+    self.size.width <= 0.0 || self.size.height <= 0.0
+  }
+
+  /// The region's edges, relative to the border box.
+  pub fn edges(&self) -> Rect<f32> {
+    Rect {
+      left: self.offset.x,
+      top: self.offset.y,
+      right: self.offset.x + self.size.width,
+      bottom: self.offset.y + self.size.height,
     }
   }
 }

@@ -343,15 +343,14 @@ fn emit_run_decorations(
   doc: &mut SvgDocument,
 ) -> io::Result<()> {
   doc.with_opacity(run.glyph_run.brush.opacity, |doc| {
-    let mut device = DocumentDevice::new(doc);
-
-    for decoration in decorations
-      .iter()
-      .filter(|decoration| decoration.over == over)
-    {
-      decoration.paint(frame.origin, &mut device);
-    }
-    device.finish()
+    DocumentDevice::paint(doc, |device| {
+      for decoration in decorations
+        .iter()
+        .filter(|decoration| decoration.over == over)
+      {
+        decoration.paint(frame.origin, device);
+      }
+    })
   })
 }
 

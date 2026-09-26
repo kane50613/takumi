@@ -2,10 +2,12 @@
 
 mod background;
 mod border;
+mod shadow;
 
 pub use self::{
   background::{BackgroundClipArea, BoxBackground},
   border::BoxBorderPainter,
+  shadow::ShadowShape,
 };
 
 use crate::{
@@ -19,6 +21,10 @@ use crate::{
   shadow::SizedShadow,
   style::{Affine, BackgroundImage, BoxShadow, Color, FillRule, Overflow},
 };
+
+/// A distance far enough out that an edge placed there never shows, for a clip that is unbounded on
+/// some side.
+pub const UNBOUNDED: f32 = 1.0e6;
 
 /// A closed shape to fill, in the coordinate space of the box that owns it.
 pub enum FillShape {
@@ -130,8 +136,6 @@ impl BoxFrame {
 
   /// The padding box's edges on each axis that clips, effectively unbounded on the others.
   pub fn overflow_clip_edges(self, clip_x: bool, clip_y: bool) -> Rect<f32> {
-    const UNBOUNDED: f32 = 1.0e6;
-
     let Self {
       layout,
       origin: Point { x, y },
@@ -206,8 +210,16 @@ pub trait PaintDevice {
   /// Clips later draws to `shape` under `transform`, until the matching [`PaintDevice::pop_clip`].
   fn push_clip(&mut self, shape: &FillShape, transform: Affine);
 
+  /// Clips later draws to everything outside `shape` under `transform`, until the matching
+  /// [`PaintDevice::pop_clip`].
+  fn push_clip_out(&mut self, shape: &FillShape, transform: Affine);
+
   /// Removes the most recent clip.
   fn pop_clip(&mut self);
+
+  /// Fills `shape` in `color`, blurred by a Gaussian whose standard deviation is half
+  /// `blur_radius`, as a CSS shadow blurs.
+  fn fill_shadow(&mut self, shape: &ShadowShape, color: Color, blur_radius: f32, transform: Affine);
 }
 
 /// How to stroke a shape.

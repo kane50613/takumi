@@ -8,7 +8,8 @@ use takumi_core::{
   geometry::{ComputedLayout as Layout, Point},
   layout::decoration::{ClipBox, OutlineGeometry},
   painter::{
-    BackgroundClipArea, BoxBorderPainter, BoxPainter, FillShape, PaintDevice, StrokeStyle,
+    BackgroundClipArea, BoxBorderPainter, BoxPainter, FillShape, PaintDevice, ShadowShape,
+    StrokeStyle,
   },
   style::{Color, ImageScalingAlgorithm},
 };
@@ -16,11 +17,11 @@ use takumi_core::{
 use super::{
   BackgroundTile, BorderProperties, Canvas, ColorTile, Fill, PaintSource, RenderContext,
   SizedFontStyle, TileLayer, TileLayers, background_image_layers, collect_background_layers,
-  draw_image, draw_inset_shadow_to_canvas, draw_outset_shadow, inline_drawing::draw_inline_layout,
-  rasterize_layers,
+  draw_image, inline_drawing::draw_inline_layout, rasterize_layers,
 };
 use crate::{
-  MaskCompositeColor, MaskSamplingOptions, Placement, Result, Style, intersect_alpha_masks,
+  BlurType, MaskCompositeColor, MaskSamplingOptions, Placement, Result, Style,
+  apply_blur_alpha_bytes, attenuate_alpha_by_mask, checked_area, intersect_alpha_masks,
   layout::{
     inline::{InlineItem, InlineLayoutMode, InlineLayoutRequest, create_inline_layout},
     node::{ImageData, Node, NodeKind, TextData},
@@ -29,65 +30,6 @@ use crate::{
   style::{Affine, BlendMode},
 };
 
-pub(crate) fn draw_outset_box_shadow(
-  context: &RenderContext,
-  canvas: &mut Canvas,
-  layout: Layout,
-) -> Result<()> {
-  let painter = BoxPainter::new(context, layout);
-  let shadows = painter.shadows().outer;
-
-  if shadows.is_empty() {
-    return Ok(());
-  }
-
-  let element_border_radius = *painter.border();
-  let mut element_paths = Vec::new();
-
-  element_border_radius.append_mask_commands(&mut element_paths, layout.size, Point::ZERO);
-
-  for shadow in shadows {
-    let mut paths = Vec::new();
-    let (border_radius, spread_size) =
-      element_border_radius.outset_shadow_box(layout.size, shadow.spread_radius);
-
-    border_radius.append_mask_commands(
-      &mut paths,
-      spread_size,
-      Point {
-        x: -shadow.spread_radius,
-        y: -shadow.spread_radius,
-      },
-    );
-
-    draw_outset_shadow(
-      &shadow,
-      canvas,
-      &paths,
-      context.transform,
-      Fill::NonZero.into(),
-      Some(&element_paths),
-    )?;
-  }
-
-  Ok(())
-}
-
-pub(crate) fn draw_inset_box_shadow(
-  context: &RenderContext,
-  canvas: &mut Canvas,
-  layout: Layout,
-) -> Result<()> {
-  let painter = BoxPainter::new(context, layout);
-  let border_radius = *painter.border();
-
-  for shadow in painter.shadows().inset {
-    draw_inset_shadow_to_canvas(&shadow, context.transform, border_radius, canvas, layout)?;
-  }
-
-  Ok(())
-}
-
 /// Paints a box's own decorations, bottom to top: outset shadows, background,
 /// inset shadows, and border.
 pub(crate) fn draw_box_shell(
@@ -95,9 +37,11 @@ pub(crate) fn draw_box_shell(
   canvas: &mut Canvas,
   layout: Layout,
 ) -> Result<()> {
-  draw_outset_box_shadow(context, canvas, layout)?;
+  let painter = BoxPainter::new(context, layout);
+
+  painter.paint_normal_box_shadows(Point::ZERO, &mut CanvasDevice::of(canvas, context));
   draw_background(context, canvas, layout)?;
-  draw_inset_box_shadow(context, canvas, layout)?;
+  painter.paint_inset_box_shadows(Point::ZERO, &mut CanvasDevice::of(canvas, context));
   draw_border(context, canvas, layout)
 }
 
@@ -108,8 +52,15 @@ pub(crate) struct CanvasDevice<'c> {
   pub(crate) canvas: &'c mut Canvas,
   pub(crate) transform: Affine,
   pub(crate) algorithm: ImageScalingAlgorithm,
-  /// The coverage of each open clip.
-  pub(crate) clips: Vec<(Vec<u8>, Placement)>,
+  /// Each open clip.
+  pub(crate) clips: Vec<CanvasClip>,
+}
+
+/// A clip the canvas device holds: a shape's coverage, and whether draws keep to it or avoid it.
+pub(crate) struct CanvasClip {
+  coverage: Vec<u8>,
+  placement: Placement,
+  out: bool,
 }
 
 impl<'c> CanvasDevice<'c> {
@@ -124,6 +75,11 @@ impl<'c> CanvasDevice<'c> {
       algorithm,
       clips: Vec::new(),
     }
+  }
+
+  /// The canvas as a device for the box `context` paints.
+  pub(crate) fn of(canvas: &'c mut Canvas, context: &RenderContext) -> Self {
+    Self::new(canvas, context.transform, context.style.image_rendering)
   }
 
   /// Rasterizes `shape` under `transform`, culled to the canvas.
@@ -141,9 +97,26 @@ impl<'c> CanvasDevice<'c> {
     self
       .clips
       .iter()
-      .try_fold(coverage, |(mask, placement), (clip, clip_placement)| {
-        intersect_alpha_masks(&mask, placement, clip, *clip_placement)
+      .try_fold(coverage, |(mut mask, placement), clip| {
+        if clip.out {
+          attenuate_alpha_by_mask(&mut mask, placement, &clip.coverage, clip.placement);
+
+          return Some((mask, placement));
+        }
+
+        intersect_alpha_masks(&mask, placement, &clip.coverage, clip.placement)
       })
+  }
+
+  /// Opens a clip to `shape`, or out of it when `out` is set.
+  fn open_clip(&mut self, shape: &FillShape, transform: Affine, out: bool) {
+    let (coverage, placement) = self.coverage(shape, Fill::from(shape.rule()).into(), transform);
+
+    self.clips.push(CanvasClip {
+      coverage,
+      placement,
+      out,
+    });
   }
 
   /// Paints `coverage` in `color`, limited to the open clips.
@@ -217,13 +190,68 @@ impl PaintDevice for CanvasDevice<'_> {
   }
 
   fn push_clip(&mut self, shape: &FillShape, transform: Affine) {
-    let clip = self.coverage(shape, Fill::from(shape.rule()).into(), transform);
+    self.open_clip(shape, transform, false);
+  }
 
-    self.clips.push(clip);
+  fn push_clip_out(&mut self, shape: &FillShape, transform: Affine) {
+    self.open_clip(shape, transform, true);
   }
 
   fn pop_clip(&mut self) {
     self.clips.pop();
+  }
+
+  fn fill_shadow(
+    &mut self,
+    shape: &ShadowShape,
+    color: Color,
+    blur_radius: f32,
+    transform: Affine,
+  ) {
+    let fill = shape.fill_shape();
+
+    if blur_radius <= 0.0 {
+      return self.fill_shape(&fill, color, transform);
+    }
+
+    let reach = blur_radius * BlurType::Shadow.extent_multiplier();
+    let (mask, placement) = render_mask(
+      &fill.to_commands(),
+      Some(self.transform * transform),
+      Some(Fill::from(fill.rule()).into()),
+      Some(self.canvas.viewport().inflate(reach, reach)),
+    );
+
+    if mask.is_empty() {
+      return;
+    }
+
+    let padding = reach as u32;
+    let width = placement.width.saturating_add(padding * 2);
+    let height = placement.height.saturating_add(padding * 2);
+    let Some(area) = checked_area(width, height, 1) else {
+      return;
+    };
+    let mut blurred = vec![0; area];
+
+    for (row, source) in mask.chunks_exact(placement.width as usize).enumerate() {
+      let start = (row + padding as usize) * width as usize + padding as usize;
+
+      blurred[start..start + source.len()].copy_from_slice(source);
+    }
+
+    if apply_blur_alpha_bytes(&mut blurred, width, height, blur_radius, BlurType::Shadow).is_err() {
+      return;
+    }
+
+    let placement = Placement {
+      left: placement.left - padding as i32,
+      top: placement.top - padding as i32,
+      width,
+      height,
+    };
+
+    self.draw_coverage((blurred, placement), color);
   }
 }
 
@@ -234,7 +262,7 @@ pub(crate) fn draw_background(
 ) -> Result<()> {
   let painter = BoxPainter::new(context, layout);
   let background = painter.background();
-  let mut device = CanvasDevice::new(canvas, context.transform, context.style.image_rendering);
+  let mut device = CanvasDevice::of(canvas, context);
 
   // A blending layer mixes with the layers and color beneath it and nothing behind the box, so
   // the whole background composites in one tile, color included.
@@ -384,7 +412,7 @@ pub(crate) fn draw_border(
   layout: Layout,
 ) -> Result<()> {
   let painter = BoxPainter::new(context, layout);
-  let mut device = CanvasDevice::new(canvas, context.transform, context.style.image_rendering);
+  let mut device = CanvasDevice::of(canvas, context);
 
   BoxBorderPainter::new(painter.border(), layout.size).paint(Point::ZERO, &mut device);
 
