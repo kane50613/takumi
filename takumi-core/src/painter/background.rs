@@ -21,6 +21,9 @@ pub enum BackgroundClipArea {
   /// The padding or content box.
   Inner(ClipBox),
   /// The border ring alone.
+  ///
+  /// Approximate: a dashed, dotted, or double border clips to its whole ring, where Blink clips
+  /// to the dashes and stripes it paints.
   BorderArea(BorderProperties),
   /// The box's glyphs.
   Text,
