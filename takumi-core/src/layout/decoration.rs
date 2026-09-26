@@ -60,7 +60,11 @@ impl ClipBox {
   pub fn outset(self, spread: f32) -> Self {
     let mut border = self.border;
 
-    border.expand_by(Sides::from(spread).into());
+    if spread > 0.0 {
+      border.outset_radii(self.size, spread);
+    } else {
+      border.expand_by(Sides::from(spread).into());
+    }
 
     Self {
       border,

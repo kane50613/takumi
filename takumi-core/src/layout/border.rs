@@ -618,6 +618,32 @@ impl BorderProperties {
     self.radius.0[3].y = (self.radius.0[3].y + amount.bottom).max(0.0);
   }
 
+  /// Grows the corner radii of a `border_box` whose edges move `outset` outward, after
+  /// css-backgrounds-3's [outset-adjusted border radius](https://drafts.csswg.org/css-backgrounds-3/#outset-adjusted-border-radius),
+  /// so a small corner stays proportionally sharp and a square one stays square.
+  pub fn outset_radii(&mut self, border_box: Size<f32>, outset: f32) {
+    let used = self.scaled_corner_radii(border_box);
+
+    for (corner, used) in self.radius.0.iter_mut().zip(used.0) {
+      if used.x <= 0.0 && used.y <= 0.0 {
+        *corner = SpacePair::from_single(0.0);
+        continue;
+      }
+
+      let coverage = 2.0 * (used.x / border_box.width).min(used.y / border_box.height);
+      let adjusted = |radius: f32| {
+        if radius > outset || coverage > 1.0 {
+          return radius + outset;
+        }
+
+        radius + outset * (1.0 - (1.0 - radius / outset).powi(3) * (1.0 - coverage.powi(3)))
+      };
+
+      corner.x = adjusted(used.x);
+      corner.y = adjusted(used.y);
+    }
+  }
+
   /// Shrink radii by the border width to get inner radius path.
   pub fn inset_by_border_width(&mut self) {
     self.expand_by(self.width.map(|size| -size))
@@ -1159,6 +1185,7 @@ mod tests {
   use crate::{
     geometry::{PathCommand, Point, Rect, Size},
     layout::border::{BorderProperties, BorderSide},
+    style::{Sides, SpacePair},
   };
 
   fn collapsed_border() -> BorderProperties {
@@ -1211,4 +1238,31 @@ mod tests {
     assert!(left.iter().all(|point| point.x == 0.0 || point.x == 1.0));
     assert!(left.iter().all(|point| point.y == 4.0 || point.y == 49.0));
   }
+
+  #[test]
+  fn an_outset_keeps_square_corners_square() {
+    let mut border = BorderProperties::default();
+
+    border.outset_radii(BOX, 10.0);
+
+    assert!(border.is_zero());
+  }
+
+  #[test]
+  fn an_outset_grows_a_small_corner_less_than_the_outset() {
+    let mut border = BorderProperties {
+      radius: Sides([SpacePair::from_single(2.0); 4]),
+      ..BorderProperties::default()
+    };
+
+    border.outset_radii(BOX, 10.0);
+
+    // 2 + 10 * (1 - (1 - 0.2)^3 * (1 - 0.04^3))
+    assert!((border.radius.0[0].x - 6.88).abs() < 1e-3);
+  }
+
+  const BOX: Size<f32> = Size {
+    width: 100.0,
+    height: 100.0,
+  };
 }
