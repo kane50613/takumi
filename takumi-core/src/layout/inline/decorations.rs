@@ -64,7 +64,7 @@ impl ShapedRun {
     Some((offset, thickness))
   }
 
-  /// The active decoration lines for a glyph run, in border-box space.
+  /// The run's outline glyphs, positioned from `origin`.
   pub fn glyph_outlines<'g>(
     &self,
     resolved_glyphs: &'g HashMap<u32, Arc<ResolvedGlyph>>,
@@ -108,13 +108,13 @@ impl ShapedRun {
     if self.decorated_advance() <= 0.0 {
       return out;
     }
-    let start_x = layout.border.left + layout.padding.left + self.offset;
+    let content = layout.content_box_offset();
+    let start_x = content.x + self.offset;
     let snapped_start_x = start_x.floor();
     let width = (start_x + self.decorated_advance()).ceil() - snapped_start_x;
     if width <= 0.0 {
       return out;
     }
-    let top = layout.border.top + layout.padding.top;
     // Blink floors every decoration at 1px (`TextDecorationInfo::ResolvedThickness`).
     let thickness = |value: f32| value.max(1.0);
     let mut emit = |x: f32,
@@ -126,7 +126,7 @@ impl ShapedRun {
       if height <= 0.0 || span_width <= 0.0 {
         return;
       }
-      let matrix = transform * Affine::translation(x, top + y_offset);
+      let matrix = transform * Affine::translation(x, content.y + y_offset);
       out.push(DecorationRect {
         width: span_width,
         height,
@@ -152,7 +152,7 @@ impl ShapedRun {
         let outlines = self.glyph_outlines(
           resolved_glyphs,
           Point {
-            x: layout.border.left + layout.padding.left,
+            x: content.x,
             y: 0.0,
           },
           baseline_shift,

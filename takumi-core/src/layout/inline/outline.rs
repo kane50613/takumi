@@ -23,46 +23,47 @@ pub struct InlineOutlineRect {
   pub(crate) height: f32,
 }
 
-pub(super) fn scale_outline_rect(
-  rect: InlineOutlineRect,
-  state: LineScaleState,
-  static_inline_prefix: f32,
-) -> InlineOutlineRect {
-  if (state.scale - 1.0).abs() <= f32::EPSILON {
-    return rect;
+impl InlineOutlineRect {
+  /// The rect on a line scaled for text-fit.
+  pub(super) fn scaled(self, state: LineScaleState, static_inline_prefix: f32) -> Self {
+    if (state.scale - 1.0).abs() <= f32::EPSILON {
+      return self;
+    }
+    let x_correction = text_fit_x_correction(
+      state.scale,
+      static_inline_prefix,
+      state.alignment_correction,
+    );
+    Self {
+      x: x_correction + state.layout_origin.x + (self.x - state.layout_origin.x) * state.scale,
+      y: state.layout_origin.y + (self.y - state.layout_origin.y) * state.scale,
+      width: self.width * state.scale,
+      height: self.height * state.scale,
+      ..self
+    }
   }
-  let x_correction = text_fit_x_correction(
-    state.scale,
-    static_inline_prefix,
-    state.alignment_correction,
-  );
-  InlineOutlineRect {
-    x: x_correction + state.layout_origin.x + (rect.x - state.layout_origin.x) * state.scale,
-    y: state.layout_origin.y + (rect.y - state.layout_origin.y) * state.scale,
-    width: rect.width * state.scale,
-    height: rect.height * state.scale,
-    ..rect
-  }
-}
 
-pub(super) fn x_ranges_touch(left: InlineOutlineRect, right: InlineOutlineRect) -> bool {
-  left.x <= right.x + right.width + LAYOUT_UNIT_EPSILON
-    && right.x <= left.x + left.width + LAYOUT_UNIT_EPSILON
-}
-
-fn expand_outline_rect(rect: InlineOutlineRect, amount: f32) -> Option<InlineOutlineRect> {
-  let width = rect.width + amount * 2.0;
-  let height = rect.height + amount * 2.0;
-  if width <= 0.0 || height <= 0.0 {
-    return None;
+  /// Whether the two rects' x ranges meet, within a layout unit.
+  pub(super) fn x_range_touches(self, other: Self) -> bool {
+    self.x <= other.x + other.width + LAYOUT_UNIT_EPSILON
+      && other.x <= self.x + self.width + LAYOUT_UNIT_EPSILON
   }
-  Some(InlineOutlineRect {
-    x: rect.x - amount,
-    y: rect.y - amount,
-    width,
-    height,
-    ..rect
-  })
+
+  /// The rect grown by `amount` on every side, or `None` once it has no area.
+  fn expanded(self, amount: f32) -> Option<Self> {
+    let width = self.width + amount * 2.0;
+    let height = self.height + amount * 2.0;
+    if width <= 0.0 || height <= 0.0 {
+      return None;
+    }
+    Some(Self {
+      x: self.x - amount,
+      y: self.y - amount,
+      width,
+      height,
+      ..self
+    })
+  }
 }
 
 /// Merges rects that touch on the same span and line into one rect per contiguous group, sorted by
@@ -133,7 +134,7 @@ pub fn outline_islands(outline_rects: Vec<InlineOutlineRect>) -> Vec<Vec<InlineO
         line_rect_counts.get(&(previous_rect.span_id, previous_rect.line_index)) == Some(&1);
       let current_is_unique =
         line_rect_counts.get(&(outline_rect.span_id, outline_rect.line_index)) == Some(&1);
-      if (previous_is_unique && current_is_unique) || x_ranges_touch(previous_rect, outline_rect) {
+      if (previous_is_unique && current_is_unique) || previous_rect.x_range_touches(outline_rect) {
         matched_island = Some(index);
         break;
       }
@@ -153,9 +154,7 @@ pub fn outline_islands(outline_rects: Vec<InlineOutlineRect>) -> Vec<Vec<InlineO
 /// (outline-offset plus half the outline width).
 pub fn outline_island_contour(island: &[InlineOutlineRect], expansion: f32) -> Vec<PathCommand> {
   let mut path = Vec::with_capacity(island.len() * 6);
-  let mut expanded_rects = island
-    .iter()
-    .filter_map(|r| expand_outline_rect(*r, expansion));
+  let mut expanded_rects = island.iter().filter_map(|rect| rect.expanded(expansion));
   let Some(first_rect) = expanded_rects.next() else {
     return path;
   };
@@ -180,7 +179,7 @@ pub fn outline_island_contour(island: &[InlineOutlineRect], expansion: f32) -> V
   let mut expanded_rev = island
     .iter()
     .rev()
-    .filter_map(|r| expand_outline_rect(*r, expansion));
+    .filter_map(|rect| rect.expanded(expansion));
   let Some(mut lower_rect) = expanded_rev.next() else {
     return path;
   };

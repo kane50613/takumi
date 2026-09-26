@@ -9,7 +9,7 @@ use crate::{
   layout::{
     inline::{
       InlineItem, InlineLayoutMode, InlineLayoutRequest, InlineMeasureOptions, InlineMeasurement,
-      create_inline_constraint, create_inline_layout, measure_inline_layout,
+      create_inline_constraint, create_inline_layout,
     },
     node::TextData,
   },
@@ -46,39 +46,6 @@ fn style_measure_digest(context: &RenderContext) -> u64 {
   hasher.finish()
 }
 
-fn measure_cache_key(
-  text: &TextData,
-  context: &RenderContext,
-  max_width: f32,
-  max_height: Option<MaxHeight>,
-  min_content_query: bool,
-) -> (u64, u32) {
-  let mut hasher = Xxh3::new();
-
-  hasher.write_u64(context.text_measure_digest(|| style_measure_digest(context)));
-  hasher.write(text.text.as_bytes());
-  hasher.write_u32(max_width.to_bits());
-  hasher.write_u8(u8::from(min_content_query));
-  match max_height {
-    None => hasher.write_u8(0),
-    Some(MaxHeight::Absolute(height)) => {
-      hasher.write_u8(1);
-      hasher.write_u32(height.to_bits());
-    }
-    Some(MaxHeight::Lines(lines)) => {
-      hasher.write_u8(2);
-      hasher.write_u32(lines);
-    }
-    Some(MaxHeight::HeightAndLines(height, lines)) => {
-      hasher.write_u8(3);
-      hasher.write_u32(height.to_bits());
-      hasher.write_u32(lines);
-    }
-  }
-
-  (hasher.finish(), text.text.len() as u32)
-}
-
 impl TextData {
   /// The size this text lays out at, given the space its container offers.
   pub(crate) fn measure(
@@ -101,20 +68,19 @@ impl TextData {
   ) -> InlineMeasurement {
     let (max_width, max_height) =
       create_inline_constraint(context, available_space, known_dimensions);
-    let min_content_query = known_dimensions.width.is_none()
-      && matches!(available_space.width, AvailableSpace::MinContent);
-    let key = measure_cache_key(self, context, max_width, max_height, min_content_query);
+    let options = InlineMeasureOptions::new(max_width, true, available_space, known_dimensions);
+    let key = self.measure_key(context, max_width, max_height, options.min_content_query);
 
     context.inline_cache().get_or_measure(key, || {
       let font_style = SizedFontStyle::from_style(&context.style, context);
-      let inline_content: InlineItem<'_> = InlineItem::Text {
-        text: self.text.as_str().into(),
-        context,
-        link: None,
-        decorations: None,
-      };
-      let mut built = create_inline_layout(InlineLayoutRequest {
-        items: vec![inline_content],
+
+      create_inline_layout(InlineLayoutRequest {
+        items: vec![InlineItem::Text {
+          text: self.text.as_str().into(),
+          context,
+          link: None,
+          decorations: None,
+        }],
         available_space,
         max_width,
         max_height,
@@ -122,23 +88,42 @@ impl TextData {
         context,
         mode: InlineLayoutMode::Measure,
         shape_cacheable: true,
-      });
-      let parent_font_metrics = built.parent_font_metrics();
-      InlineMeasurement {
-        clamped: built.clamped,
-        ..measure_inline_layout(
-          &mut built.layout,
-          &built.spans,
-          &built.positioned_floats,
-          &built.line_scales,
-          InlineMeasureOptions {
-            max_width,
-            ceil_width: true,
-            parent_font_metrics,
-            min_content_query,
-          },
-        )
-      }
+      })
+      .measure(options)
     })
+  }
+
+  /// The memo key for a measurement under this constraint.
+  fn measure_key(
+    &self,
+    context: &RenderContext,
+    max_width: f32,
+    max_height: Option<MaxHeight>,
+    min_content_query: bool,
+  ) -> (u64, u32) {
+    let mut hasher = Xxh3::new();
+
+    hasher.write_u64(context.text_measure_digest(|| style_measure_digest(context)));
+    hasher.write(self.text.as_bytes());
+    hasher.write_u32(max_width.to_bits());
+    hasher.write_u8(u8::from(min_content_query));
+    match max_height {
+      None => hasher.write_u8(0),
+      Some(MaxHeight::Absolute(height)) => {
+        hasher.write_u8(1);
+        hasher.write_u32(height.to_bits());
+      }
+      Some(MaxHeight::Lines(lines)) => {
+        hasher.write_u8(2);
+        hasher.write_u32(lines);
+      }
+      Some(MaxHeight::HeightAndLines(height, lines)) => {
+        hasher.write_u8(3);
+        hasher.write_u32(height.to_bits());
+        hasher.write_u32(lines);
+      }
+    }
+
+    (hasher.finish(), self.text.len() as u32)
   }
 }

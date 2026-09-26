@@ -19,19 +19,6 @@ pub struct ReplacedPlacement {
   pub offset: Point<f32>,
 }
 
-impl ReplacedPlacement {
-  /// Whether the content reaches past its box and needs clipping to it. A
-  /// percentage past 100% pushes content that fits out of the box, so the test
-  /// is on the placed edges, not the size alone. Half a pixel of slack keeps a
-  /// `cover` that lands on the box from opening a clip nothing shows through.
-  pub fn overflows(&self, content: Size<f32>) -> bool {
-    self.offset.x < -0.5
-      || self.offset.y < -0.5
-      || self.offset.x + self.size.width > content.width + 0.5
-      || self.offset.y + self.size.height > content.height + 0.5
-  }
-}
-
 /// The part of placed content that lands inside its box.
 #[derive(Debug, Clone, Copy)]
 pub struct ClippedPlacement {
@@ -44,6 +31,17 @@ pub struct ClippedPlacement {
 }
 
 impl ReplacedPlacement {
+  /// Whether the content reaches past its box and needs clipping to it. A
+  /// percentage past 100% pushes content that fits out of the box, so the test
+  /// is on the placed edges, not the size alone. Half a pixel of slack keeps a
+  /// `cover` that lands on the box from opening a clip nothing shows through.
+  pub fn overflows(&self, content: Size<f32>) -> bool {
+    self.offset.x < -0.5
+      || self.offset.y < -0.5
+      || self.offset.x + self.size.width > content.width + 0.5
+      || self.offset.y + self.size.height > content.height + 0.5
+  }
+
   /// Intersects the placed content with the `content` box.
   pub fn clipped(&self, content: Size<f32>) -> ClippedPlacement {
     let origin = Point {

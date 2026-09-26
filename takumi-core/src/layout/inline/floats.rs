@@ -2,7 +2,7 @@
 
 use parley::{InlineBox, PositionedInlineBox};
 
-use super::{InlineBrush, breaking::LineWidths, items::ProcessedInlineSpan};
+use super::{InlineBrush, breaking::LineWidths, items::InlineBoxItem};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(super) enum FloatSide {
@@ -49,45 +49,6 @@ impl FloatLayoutState {
     let (line_x, line_right) = self.line_bounds(line_y);
 
     (line_right - line_x).max(0.0)
-  }
-
-  pub(super) fn side_for_inline_box(
-    &self,
-    spans: &[ProcessedInlineSpan<'_>],
-    inline_box_id: u64,
-  ) -> Option<FloatSide> {
-    let ProcessedInlineSpan::Box(item) = spans.get(inline_box_id as usize)? else {
-      return None;
-    };
-
-    match item
-      .render_node
-      .context
-      .style
-      .float
-      .resolve(item.render_node.context.style.direction)
-    {
-      taffy::Float::Left => Some(FloatSide::Left),
-      taffy::Float::Right => Some(FloatSide::Right),
-      taffy::Float::None => None,
-    }
-  }
-
-  pub(super) fn clear_for_inline_box(
-    &self,
-    spans: &[ProcessedInlineSpan<'_>],
-    inline_box_id: u64,
-  ) -> taffy::Clear {
-    let Some(ProcessedInlineSpan::Box(item)) = spans.get(inline_box_id as usize) else {
-      return taffy::Clear::None;
-    };
-
-    item
-      .render_node
-      .context
-      .style
-      .clear
-      .resolve(item.render_node.context.style.direction)
   }
 
   fn next_float_bottom(&self, top: f32, height: f32) -> Option<f32> {
@@ -142,7 +103,8 @@ impl FloatLayoutState {
       .fold(start_y.max(0.0), f32::max)
   }
 
-  fn find_float_y(&self, start_y: f32, width: f32, height: f32) -> f32 {
+  /// The first `y` from `start_y` down where `width` fits beside the floats over `height`.
+  fn fit_y(&self, start_y: f32, width: f32, height: f32) -> f32 {
     let mut line_y = start_y.max(0.0);
 
     loop {
@@ -159,19 +121,7 @@ impl FloatLayoutState {
   }
 
   pub(super) fn find_line_y_for_advance(&self, start_y: f32, current_advance: f32) -> f32 {
-    let mut line_y = start_y.max(0.0);
-
-    loop {
-      let (left, right) = self.line_bounds(line_y);
-      if current_advance <= right - left || (left == 0.0 && right == self.widths.alignment) {
-        return line_y;
-      }
-
-      let Some(next_y) = self.next_float_bottom(line_y, self.line_height_hint) else {
-        return line_y;
-      };
-      line_y = next_y;
-    }
+    self.fit_y(start_y, current_advance, self.line_height_hint)
   }
 
   pub(super) fn push_float(
@@ -182,7 +132,7 @@ impl FloatLayoutState {
     inline_box: &InlineBox,
   ) -> PositionedInlineBox {
     let cleared_y = self.clearance_y(start_y, clear);
-    let float_y = self.find_float_y(cleared_y, inline_box.width, inline_box.height);
+    let float_y = self.fit_y(cleared_y, inline_box.width, inline_box.height);
     let (left, right) = self.bounds_for_range(float_y, inline_box.height);
     let float_x = match side {
       FloatSide::Left => left,
@@ -218,5 +168,25 @@ impl FloatLayoutState {
     state.set_line_x(line_x);
     state.set_line_y(f64::from(line_y));
     state.set_line_max_advance((line_right - line_x).max(0.0).min(self.widths.breaking));
+  }
+}
+
+impl InlineBoxItem<'_> {
+  /// The side this box floats to, resolved against its direction.
+  pub(super) fn float_side(&self) -> Option<FloatSide> {
+    let style = &self.render_node.context.style;
+
+    match style.float.resolve(style.direction) {
+      taffy::Float::Left => Some(FloatSide::Left),
+      taffy::Float::Right => Some(FloatSide::Right),
+      taffy::Float::None => None,
+    }
+  }
+
+  /// The floats this box clears, resolved against its direction.
+  pub(super) fn clear(&self) -> taffy::Clear {
+    let style = &self.render_node.context.style;
+
+    style.clear.resolve(style.direction)
   }
 }

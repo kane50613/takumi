@@ -20,11 +20,11 @@
 use taffy::LengthPercentageAuto;
 
 use crate::{
-  geometry::{AvailableSpace, NodeId, Size},
+  geometry::{AvailableSpace, Size},
   layout::{
     node::NodeKind,
     table_borders::CollapsedBorders,
-    tree::{LayoutTree, NodeOrigin, RenderNode, TablePart},
+    tree::{LayoutResults, NodeOrigin, RenderNode, TablePart},
   },
   style::{
     BorderCollapse, BorderStyle, CaptionSide, ColorInput, ComputedStyle, Display, FlexDirection,
@@ -38,7 +38,7 @@ use crate::{
 const MAX_COLSPAN: u16 = 1000;
 
 /// Blink's `kMaxRowSpan`.
-pub(crate) const MAX_ROWSPAN: u16 = 65534;
+const MAX_ROWSPAN: u16 = 65534;
 
 /// Blink table-cell content alignment from `block_layout_algorithm_utils.cc`.
 #[derive(Clone, Copy, PartialEq)]
@@ -170,17 +170,13 @@ impl TableGrid {
       let mut column = 0usize;
       let mut cells = Vec::new();
 
-      for cell in row.children.as_deref().unwrap_or_default() {
-        if !cell.is_cell() {
-          continue;
-        }
-
+      for cell in row.cells() {
         while covered.get(column).is_some_and(|rows_left| *rows_left > 0) {
           column += 1;
         }
 
-        let colspan = cell.span_attribute("colspan", MAX_COLSPAN);
-        let rowspan = cell.span_attribute("rowspan", MAX_ROWSPAN);
+        let colspan = cell.colspan();
+        let rowspan = cell.rowspan();
         let end = column + usize::from(colspan);
 
         if covered.len() < end {
@@ -226,15 +222,7 @@ impl TableGrid {
       .iter()
       .take(rows_taken)
       .zip(&self.placements)
-      .flat_map(|(row, cells)| {
-        row
-          .children
-          .as_deref()
-          .unwrap_or_default()
-          .iter()
-          .filter(|cell| cell.is_cell())
-          .zip(cells)
-      })
+      .flat_map(|(row, cells)| row.cells().zip(cells))
   }
 
   /// Naive: a spanning cell spreads its width over the columns it covers in
@@ -380,24 +368,37 @@ impl RenderNode {
     }
   }
 
-  /// Reads a case-insensitive span attribute within Blink's limit.
-  pub(crate) fn span_attribute(&self, name: &str, max: u16) -> u16 {
+  /// The `colspan` attribute within Blink's limit.
+  pub(crate) fn colspan(&self) -> u16 {
+    self.span_attribute("colspan", MAX_COLSPAN)
+  }
+
+  /// The `rowspan` attribute within Blink's limit.
+  pub(crate) fn rowspan(&self) -> u16 {
+    self.span_attribute("rowspan", MAX_ROWSPAN)
+  }
+
+  fn span_attribute(&self, name: &str, max: u16) -> u16 {
     self
       .node
       .as_ref()
-      .and_then(|node| node.metadata.attributes.as_ref())
-      .and_then(|attributes| {
-        attributes
-          .iter()
-          .find(|(key, _)| key.eq_ignore_ascii_case(name))
-          .map(|(_, value)| value)
-      })
+      .and_then(|node| node.attribute(name))
       .and_then(|value| value.trim().parse::<u32>().ok())
       .map_or(1, |value| value.clamp(1, u32::from(max)) as u16)
   }
 
+  /// The cells of this row, skipping children that are not cells.
+  pub(crate) fn cells(&self) -> impl Iterator<Item = &RenderNode> {
+    self
+      .children
+      .as_deref()
+      .unwrap_or_default()
+      .iter()
+      .filter(|cell| cell.is_cell())
+  }
+
   /// Recognizes authored cells without CSS anonymous table-box fixup.
-  pub(crate) fn is_cell(&self) -> bool {
+  fn is_cell(&self) -> bool {
     let display = self.context.style.display;
 
     if display == Display::TableCell {
@@ -529,7 +530,7 @@ impl RenderNode {
   /// Places the self explicitly: taffy's cursor does not return to the row start
   /// on a row a `rowspan` reaches into.
   fn lower_cell(&mut self, line: i16, column: usize, colspan: u16, collapse: bool) {
-    let rowspan = self.span_attribute("rowspan", MAX_ROWSPAN);
+    let rowspan = self.rowspan();
 
     self.context.collapsed_borders = collapse;
 
@@ -639,17 +640,15 @@ impl RenderNode {
     cell.context.style.display.blockify();
 
     let measure = |width| {
-      let mut tree = LayoutTree::from_render_node(&cell);
-
-      tree.compute_layout(Size {
-        width,
-        height: AvailableSpace::MaxContent,
-      });
-
-      tree
-        .into_results()
-        .layout(NodeId::ROOT)
-        .map_or(0.0, |layout| layout.size.width)
+      LayoutResults::compute(
+        &cell,
+        Size {
+          width,
+          height: AvailableSpace::MaxContent,
+        },
+      )
+      .root_size()
+      .width
     };
 
     (

@@ -25,17 +25,16 @@ const CURVE_STEPS: usize = 16;
 /// Scanlines taken across the band.
 const BAND_SAMPLES: usize = 8;
 
+/// Disjoint x-ranges, left to right.
+type Spans = SmallVec<[(f32, f32); 4]>;
+
 /// The x-ranges `paths` fills between `top` and `bottom`, left to right and
 /// never overlapping.
 ///
 /// Ranges stay separate when the outline leaves the band between them, so the
 /// gap inside a `u` stays a gap rather than being swallowed with the stems.
-pub(crate) fn text_intercepts(
-  paths: &[PathCommand],
-  top: f32,
-  bottom: f32,
-) -> SmallVec<[(f32, f32); 4]> {
-  let mut spans: SmallVec<[(f32, f32); 4]> = SmallVec::new();
+fn text_intercepts(paths: &[PathCommand], top: f32, bottom: f32) -> Spans {
+  let mut spans = Spans::new();
 
   if bottom <= top {
     return spans;
@@ -91,8 +90,8 @@ fn skip_ink_ranges<'g>(
   top: f32,
   bottom: f32,
   thickness: f32,
-) -> SmallVec<[(f32, f32); 4]> {
-  let mut ranges: SmallVec<[(f32, f32); 4]> = SmallVec::new();
+) -> Spans {
+  let mut ranges = Spans::new();
 
   if bottom - top <= 2.0 * MIN_INTERSECTION {
     return ranges;
@@ -116,8 +115,6 @@ fn skip_ink_ranges<'g>(
 /// Intercepts keyed by outline signature and band, shared across runs and renders.
 const INTERCEPT_CACHE_ITEMS: usize = 8192;
 
-type Spans = SmallVec<[(f32, f32); 4]>;
-
 static INTERCEPTS: LazyLock<Cache<(u64, u32, u32), Spans>> =
   LazyLock::new(|| Cache::new(INTERCEPT_CACHE_ITEMS));
 
@@ -130,7 +127,7 @@ fn cached_intercepts(outline: &ResolvedOutlineGlyph, top: f32, bottom: f32) -> S
   let spans = if reaches_band(paths, top, bottom) {
     text_intercepts(paths, top, bottom)
   } else {
-    SmallVec::new()
+    Spans::new()
   };
   INTERCEPTS.insert(key, spans.clone());
   spans
@@ -165,8 +162,8 @@ fn reaches_band(paths: &[PathCommand], top: f32, bottom: f32) -> bool {
 
 /// What is left of `start..end` once `skips` are taken out of it. `skips` must
 /// be sorted and disjoint, which is what [`skip_ink_ranges`] returns.
-fn remaining_spans(start: f32, end: f32, skips: &[(f32, f32)]) -> SmallVec<[(f32, f32); 4]> {
-  let mut spans: SmallVec<[(f32, f32); 4]> = SmallVec::new();
+fn remaining_spans(start: f32, end: f32, skips: &[(f32, f32)]) -> Spans {
+  let mut spans = Spans::new();
   let mut left = start;
 
   for (skip_start, skip_end) in skips.iter().copied() {
@@ -186,7 +183,7 @@ fn remaining_spans(start: f32, end: f32, skips: &[(f32, f32)]) -> SmallVec<[(f32
 }
 
 /// The x-ranges the outline encloses along the line `y`, by nonzero winding.
-fn filled_at(edges: &[(Point<f32>, Point<f32>)], y: f32) -> SmallVec<[(f32, f32); 4]> {
+fn filled_at(edges: &[(Point<f32>, Point<f32>)], y: f32) -> Spans {
   let mut crossings: SmallVec<[(f32, i32); 8]> = SmallVec::new();
 
   for (a, b) in edges.iter().copied() {
@@ -203,7 +200,7 @@ fn filled_at(edges: &[(Point<f32>, Point<f32>)], y: f32) -> SmallVec<[(f32, f32)
   }
   crossings.sort_by(|a, b| a.0.total_cmp(&b.0));
 
-  let mut spans: SmallVec<[(f32, f32); 4]> = SmallVec::new();
+  let mut spans = Spans::new();
   let mut winding = 0;
   let mut entered = 0.0;
 
@@ -272,13 +269,13 @@ fn flatten(paths: &[PathCommand]) -> SmallVec<[(Point<f32>, Point<f32>); 32]> {
 }
 
 /// Sorts the spans and unions the ones that touch.
-fn merge(mut spans: SmallVec<[(f32, f32); 4]>) -> SmallVec<[(f32, f32); 4]> {
+fn merge(mut spans: Spans) -> Spans {
   if spans.len() < 2 {
     return spans;
   }
   spans.sort_by(|a, b| a.0.total_cmp(&b.0));
 
-  let mut merged: SmallVec<[(f32, f32); 4]> = SmallVec::new();
+  let mut merged = Spans::new();
 
   for (low, high) in spans {
     match merged.last_mut() {

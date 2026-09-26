@@ -7,7 +7,7 @@
 
 use crate::{
   context::RenderContext,
-  geometry::{ComputedLayout as Layout, Point, Rect, Size},
+  geometry::{ComputedLayout as Layout, Point, Size},
   layout::border::BorderProperties,
   style::Sides,
 };
@@ -34,13 +34,10 @@ impl ClipBox {
     Self {
       border: inner,
       size: Size {
-        width: (layout.size.width - layout.border.left - layout.border.right).max(0.0),
-        height: (layout.size.height - layout.border.top - layout.border.bottom).max(0.0),
+        width: layout.padding_box_width().max(0.0),
+        height: layout.padding_box_height().max(0.0),
       },
-      offset: Point {
-        x: layout.border.left,
-        y: layout.border.top,
-      },
+      offset: layout.border.top_left(),
     }
   }
 
@@ -68,12 +65,7 @@ impl ClipBox {
     offset: Point<f32>,
   ) -> Self {
     let mut hole = border;
-    hole.expand_by(Rect {
-      top: -spread,
-      right: -spread,
-      bottom: -spread,
-      left: -spread,
-    });
+    hole.expand_by(Sides::from(-spread).into());
 
     Self {
       border: hole,
@@ -121,7 +113,7 @@ pub(crate) fn outline_paint(context: &RenderContext, size: Size<f32>) -> Option<
 
 /// The outline ring's border geometry and how far it grows past the border box.
 /// Says nothing about whether the outline paints; see [`outline_paint`].
-pub(crate) fn outline_geometry(context: &RenderContext, size: Size<f32>) -> OutlineGeometry {
+fn outline_geometry(context: &RenderContext, size: Size<f32>) -> OutlineGeometry {
   let style = &context.style;
   let width = style.outline_width.to_used_px(&context.sizing).max(0.0);
   let offset = style
@@ -144,12 +136,7 @@ pub(crate) fn outline_geometry(context: &RenderContext, size: Size<f32>) -> Outl
     shape: BorderProperties::resolve_shape_part(context),
     collapsed: false,
   };
-  border.expand_by(Rect {
-    top: grow,
-    right: grow,
-    bottom: grow,
-    left: grow,
-  });
+  border.expand_by(Sides::from(grow).into());
 
   OutlineGeometry {
     border,

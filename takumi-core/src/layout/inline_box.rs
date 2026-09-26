@@ -9,7 +9,7 @@ use crate::{
   geometry::{AvailableSpace, ComputedLayout, NodeId, Point, Size},
   layout::{
     inline::{InlineBoxItem, VisualInlineBox},
-    tree::{LayoutResults, LayoutTree, RenderNode},
+    tree::{LayoutResults, RenderNode},
   },
 };
 
@@ -54,6 +54,7 @@ pub fn resolve_inline_box<'n>(
   if node.context.style.opacity.0 == 0.0 {
     return None;
   }
+
   let content = container.content_box_offset();
   let origin = Point {
     x: content.x + positioned.x,
@@ -69,20 +70,13 @@ pub fn resolve_inline_box<'n>(
       },
     ));
   }
+
   let size = Size {
     width: (positioned.width - item.margin.horizontal()).max(0.0),
     height: (positioned.height - item.margin.vertical()).max(0.0),
   };
   let root = node.clone();
-  let results = {
-    let mut tree = LayoutTree::from_render_node(&root);
-
-    tree.compute_layout(Size {
-      width: AvailableSpace::Definite(size.width),
-      height: AvailableSpace::Definite(size.height),
-    });
-    tree.into_results()
-  };
+  let results = LayoutResults::compute(&root, size.map(AvailableSpace::Definite));
 
   Some((
     origin,

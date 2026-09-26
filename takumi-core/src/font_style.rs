@@ -9,7 +9,7 @@ use smallvec::SmallVec;
 use crate::{
   context::RenderContext,
   geometry::Size,
-  layout::{inline::InlineBrush, tree::resolve_normal_line_height},
+  layout::inline::InlineBrush,
   painter::StrokeStyle,
   resources::font::{FontClasses, SubsetGroup},
   shadow::SizedShadow,
@@ -477,11 +477,7 @@ impl<'s> SizedFontStyle<'s> {
   pub fn from_style(style: &'s ComputedStyle, context: &RenderContext) -> Self {
     let line_height_is_normal = matches!(style.line_height, CssLineHeight::Normal);
     let line_height = if line_height_is_normal {
-      LineHeight::Absolute(resolve_normal_line_height(
-        context,
-        style,
-        context.sizing.font_size,
-      ))
+      LineHeight::Absolute(context.resolve_normal_line_height(style, context.sizing.font_size))
     } else {
       style.line_height.into_parley(&context.sizing)
     };
