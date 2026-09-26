@@ -27,28 +27,42 @@ mod image;
 mod render;
 mod scene_emit;
 mod text;
+
 use std::{borrow::Cow, collections::HashMap, fmt, fmt::Write as _, io, mem};
 
-use box_model::quantize_path;
+use box_model::{edges_path_data, quantize_path};
 use quick_xml::{
   Writer,
   events::{BytesEnd, BytesStart, BytesText, Event},
 };
 pub use render::{SvgOptions, render};
 use takumi_core::{
-  geometry::Size,
+  context::RenderContext,
+  geometry::{Rect, Size},
+  painter::StrokeStyle,
   shadow::SizedShadow,
-  style::{Affine, Color, Filter, FilterReference, LUMA_WEIGHTS, SEPIA_WEIGHTS, SizingContext},
+  style::{
+    Affine, FillRule, Filter, FilterReference, LUMA_WEIGHTS, LineJoin, SEPIA_WEIGHTS, ToCss,
+  },
 };
+use tiny_skia::PremultipliedColorU8;
 
 /// Straight-alpha RGBA color.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct Rgba(pub [u8; 4]);
 
 impl Rgba {
-  /// `#rgb` or `#rrggbb` hex (alpha is emitted separately as `*-opacity`). The
-  /// short form is used when each channel's nibbles match, which SVG expands back
-  /// to the same color.
+  pub(crate) const TRANSPARENT: Self = Self([0, 0, 0, 0]);
+  pub(crate) const WHITE: Self = Self([255, 255, 255, 255]);
+
+  /// Unpremultiplies a tiny-skia pixel.
+  pub(crate) fn demultiplied(color: PremultipliedColorU8) -> Self {
+    let color = color.demultiply();
+
+    Self([color.red(), color.green(), color.blue(), color.alpha()])
+  }
+
+  /// `#rgb` or `#rrggbb` hex; alpha goes in a separate `*-opacity`.
   fn hex(self) -> String {
     let [r, g, b, _] = self.0;
     let collapsible = |c: u8| c >> 4 == c & 0x0f;
@@ -65,10 +79,7 @@ impl Rgba {
   }
 }
 
-pub(crate) const IDENTITY: Affine = Affine::IDENTITY;
-
-/// An axis-aligned rectangle in absolute SVG user space: top-left `(x, y)` and
-/// size `(w, h)`. Bundles the box geometry threaded through the emission chain.
+/// An axis-aligned `x`/`y`/`width`/`height` rectangle in absolute SVG user space.
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct Frame {
   pub x: f32,
@@ -81,6 +92,34 @@ impl Frame {
   pub(crate) fn new(x: f32, y: f32, w: f32, h: f32) -> Self {
     Self { x, y, w, h }
   }
+
+  /// Path `d` data tracing the rectangle.
+  pub(crate) fn path_data(self) -> String {
+    edges_path_data(Rect {
+      left: self.x,
+      top: self.y,
+      right: self.x + self.w,
+      bottom: self.y + self.h,
+    })
+  }
+
+  /// The `x`/`y`/`width`/`height` attributes placing an element on the rectangle.
+  fn attrs(self) -> Vec<(&'static str, Cow<'static, str>)> {
+    vec![
+      ("x", num(self.x).into()),
+      ("y", num(self.y).into()),
+      ("width", num(self.w).into()),
+      ("height", num(self.h).into()),
+    ]
+  }
+}
+
+/// A stroke painted around glyph outlines: `-webkit-text-stroke` or faux bold.
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct GlyphStroke {
+  pub color: Rgba,
+  pub width: f32,
+  pub join: LineJoin,
 }
 
 /// A single stop in a gradient.
@@ -95,15 +134,11 @@ pub(crate) struct GradientStop {
 /// An incrementally-built SVG document.
 ///
 /// Gradient/filter/clip definitions are written inline at the point of use; SVG
-/// resolves `url(#id)` references regardless of document order, so no separate
-/// `<defs>` section is needed. Each write is forwarded to the underlying
-/// [`quick_xml`] writer and surfaces its [`io::Result`].
+/// resolves `url(#id)` references regardless of document order.
 pub(crate) struct SvgDocument {
   writer: Writer<Vec<u8>>,
   next_id: u32,
-  /// Interned glyph outlines (path data in glyph space, translation excluded),
-  /// emitted as `<defs>` `<path id="gN">` when the document is rendered. Repeated
-  /// glyphs then cost one `<use>` each instead of a full outline.
+  /// Interned glyph outlines in glyph space, emitted as `<defs>` by [`Self::finish`].
   glyph_defs: Vec<String>,
   glyph_ids: HashMap<String, u32>,
 }
@@ -114,14 +149,12 @@ impl SvgDocument {
   pub(crate) fn new(width: f32, height: f32) -> io::Result<Self> {
     // Indent so the emitted SVG is one element per line and reviewable in a diff.
     let mut writer = Writer::new_with_indent(Vec::new(), b' ', 2);
+    let (width, height) = (num(width), num(height));
     let mut svg = BytesStart::new("svg");
     svg.push_attribute(("xmlns", "http://www.w3.org/2000/svg"));
-    svg.push_attribute(("width", num(width).as_str()));
-    svg.push_attribute(("height", num(height).as_str()));
-    svg.push_attribute((
-      "viewBox",
-      format!("0 0 {} {}", num(width), num(height)).as_str(),
-    ));
+    svg.push_attribute(("width", width.as_str()));
+    svg.push_attribute(("height", height.as_str()));
+    svg.push_attribute(("viewBox", format!("0 0 {width} {height}").as_str()));
     writer.write_event(Event::Start(svg))?;
     Ok(Self {
       writer,
@@ -131,26 +164,21 @@ impl SvgDocument {
     })
   }
 
-  fn alloc_id(&mut self, prefix: &str) -> String {
+  /// Allocates a document-unique id and its `url(#id)` reference.
+  fn alloc_id(&mut self, prefix: &str) -> (String, String) {
     let id = format!("{prefix}{}", self.next_id);
+    let reference = format!("url(#{id})");
+
     self.next_id += 1;
-    id
+    (id, reference)
   }
 
   fn empty(&mut self, name: &str, attrs: &[(&str, Cow<'_, str>)]) -> io::Result<()> {
-    let mut element = BytesStart::new(name);
-    for (key, value) in attrs {
-      element.push_attribute((*key, value.as_ref()));
-    }
-    self.writer.write_event(Event::Empty(element))
+    self.writer.write_event(Event::Empty(element(name, attrs)))
   }
 
   fn open(&mut self, name: &str, attrs: &[(&str, Cow<'_, str>)]) -> io::Result<()> {
-    let mut element = BytesStart::new(name);
-    for (key, value) in attrs {
-      element.push_attribute((*key, value.as_ref()));
-    }
-    self.writer.write_event(Event::Start(element))
+    self.writer.write_event(Event::Start(element(name, attrs)))
   }
 
   fn close(&mut self, name: &str) -> io::Result<()> {
@@ -158,63 +186,35 @@ impl SvgDocument {
   }
 
   /// Appends a solid-fill rectangle.
-  pub(crate) fn rect(
-    &mut self,
-    x: f32,
-    y: f32,
-    width: f32,
-    height: f32,
-    fill: Rgba,
-  ) -> io::Result<()> {
-    let mut attrs: Vec<(&str, Cow<'_, str>)> = vec![
-      ("x", num(x).into()),
-      ("y", num(y).into()),
-      ("width", num(width).into()),
-      ("height", num(height).into()),
-      ("fill", fill.hex().into()),
-    ];
+  pub(crate) fn rect(&mut self, rect: Frame, fill: Rgba) -> io::Result<()> {
+    let mut attrs = rect.attrs();
+
+    attrs.push(("fill", fill.hex().into()));
     push_opacity(&mut attrs, "fill-opacity", fill.opacity());
     self.empty("rect", &attrs)
   }
 
   /// Appends a rectangle filled with a paint reference (e.g. a gradient `url(#id)`).
-  pub(crate) fn rect_paint(
-    &mut self,
-    x: f32,
-    y: f32,
-    width: f32,
-    height: f32,
-    paint: &str,
-  ) -> io::Result<()> {
-    self.empty(
-      "rect",
-      &[
-        ("x", num(x).into()),
-        ("y", num(y).into()),
-        ("width", num(width).into()),
-        ("height", num(height).into()),
-        ("fill", paint.into()),
-      ],
-    )
+  pub(crate) fn rect_paint(&mut self, rect: Frame, paint: &str) -> io::Result<()> {
+    let mut attrs = rect.attrs();
+
+    attrs.push(("fill", paint.into()));
+    self.empty("rect", &attrs)
   }
 
-  /// Appends a solid-fill path from SVG path data (`d`).
-  /// Fills a path, with the even-odd rule for ring shapes.
-  /// Appends a filled path. `even_odd` picks the even-odd fill rule, which ring
-  /// shapes need: an outer subpath with an inner subpath punched out.
-  pub(crate) fn path(&mut self, data: &str, fill: Rgba, even_odd: bool) -> io::Result<()> {
+  /// Appends a filled path.
+  pub(crate) fn fill_path(&mut self, data: &str, fill: Rgba, rule: FillRule) -> io::Result<()> {
     let mut attrs: Vec<(&str, Cow<'_, str>)> =
       vec![("d", data.into()), ("fill", fill.hex().into())];
 
     push_opacity(&mut attrs, "fill-opacity", fill.opacity());
-    if even_odd {
+    if rule == FillRule::EvenOdd {
       attrs.push(("fill-rule", "evenodd".into()));
     }
     self.empty("path", &attrs)
   }
 
-  /// Defines a linear gradient and returns its `url(#id)` reference. When
-  /// `repeating` is set the stops tile beyond their range (`spreadMethod`).
+  /// Defines a linear gradient and returns its `url(#id)` reference.
   pub(crate) fn linear_gradient(
     &mut self,
     (x1, y1): (f32, f32),
@@ -222,25 +222,14 @@ impl SvgDocument {
     repeating: bool,
     stops: &[GradientStop],
   ) -> io::Result<String> {
-    let id = self.alloc_id("lg");
-    let reference = format!("url(#{id})");
-    let mut attrs = vec![
-      ("id", id.into()),
-      ("gradientUnits", "userSpaceOnUse".into()),
-    ];
-    if repeating {
-      attrs.push(("spreadMethod", "repeat".into()));
-    }
-    attrs.extend([
+    let geometry = vec![
       ("x1", num(x1).into()),
       ("y1", num(y1).into()),
       ("x2", num(x2).into()),
       ("y2", num(y2).into()),
-    ]);
-    self.open("linearGradient", &attrs)?;
-    self.write_stops(stops)?;
-    self.close("linearGradient")?;
-    Ok(reference)
+    ];
+
+    self.gradient("linearGradient", "lg", repeating, geometry, stops)
   }
 
   /// Defines a radial gradient and returns its `url(#id)` reference. `scale`
@@ -254,32 +243,48 @@ impl SvgDocument {
     repeating: bool,
     stops: &[GradientStop],
   ) -> io::Result<String> {
-    let id = self.alloc_id("rg");
-    let reference = format!("url(#{id})");
+    let mut geometry = vec![
+      ("cx", num(cx).into()),
+      ("cy", num(cy).into()),
+      ("r", num(r).into()),
+    ];
+    let (sx, sy) = scale;
+
+    if (sx - 1.0).abs() > f32::EPSILON || (sy - 1.0).abs() > f32::EPSILON {
+      let [e, f] = [cx - sx * cx, cy - sy * cy].map(Num);
+      let [sx, sy] = [sx, sy].map(Num);
+
+      geometry.push((
+        "gradientTransform",
+        format!("matrix({sx} 0 0 {sy} {e} {f})").into(),
+      ));
+    }
+
+    self.gradient("radialGradient", "rg", repeating, geometry, stops)
+  }
+
+  /// Defines a gradient element; `repeating` tiles the stops beyond their range.
+  fn gradient(
+    &mut self,
+    name: &str,
+    id_prefix: &str,
+    repeating: bool,
+    geometry: Vec<(&str, Cow<'_, str>)>,
+    stops: &[GradientStop],
+  ) -> io::Result<String> {
+    let (id, reference) = self.alloc_id(id_prefix);
     let mut attrs = vec![
       ("id", id.into()),
       ("gradientUnits", "userSpaceOnUse".into()),
     ];
+
     if repeating {
       attrs.push(("spreadMethod", "repeat".into()));
     }
-    attrs.extend([
-      ("cx", num(cx).into()),
-      ("cy", num(cy).into()),
-      ("r", num(r).into()),
-    ]);
-    let (sx, sy) = scale;
-    if (sx - 1.0).abs() > f32::EPSILON || (sy - 1.0).abs() > f32::EPSILON {
-      let e = cx - sx * cx;
-      let f = cy - sy * cy;
-      attrs.push((
-        "gradientTransform",
-        format!("matrix({} 0 0 {} {} {})", num(sx), num(sy), num(e), num(f)).into(),
-      ));
-    }
-    self.open("radialGradient", &attrs)?;
+    attrs.extend(geometry);
+    self.open(name, &attrs)?;
     self.write_stops(stops)?;
-    self.close("radialGradient")?;
+    self.close(name)?;
     Ok(reference)
   }
 
@@ -296,37 +301,54 @@ impl SvgDocument {
   }
 
   /// Defines a clip path from SVG path data and returns its `url(#id)`.
-  pub(crate) fn clip_path(&mut self, data: &str) -> io::Result<String> {
-    self.clip_path_impl(data, false)
-  }
-
-  /// Like [`SvgDocument::clip_path`] but with the even-odd clip rule, for ring
-  /// shapes (an outer subpath with an inner subpath punched out).
-  pub(crate) fn clip_path_evenodd(&mut self, data: &str) -> io::Result<String> {
-    self.clip_path_impl(data, true)
-  }
-
-  fn clip_path_impl(&mut self, data: &str, even_odd: bool) -> io::Result<String> {
-    let id = self.alloc_id("cp");
-    let reference = format!("url(#{id})");
+  pub(crate) fn clip_path(
+    &mut self,
+    data: &str,
+    rule: FillRule,
+    transform: Option<&str>,
+  ) -> io::Result<String> {
+    let (id, reference) = self.alloc_id("cp");
     self.open("clipPath", &[("id", id.into())])?;
     let mut attrs: Vec<(&str, Cow<'_, str>)> = vec![("d", data.into())];
-    if even_odd {
+    if rule == FillRule::EvenOdd {
       attrs.push(("clip-rule", "evenodd".into()));
+    }
+    if let Some(transform) = transform {
+      attrs.push(("transform", transform.into()));
     }
     self.empty("path", &attrs)?;
     self.close("clipPath")?;
     Ok(reference)
   }
 
-  /// Opens a `<mask>` in user space (`maskUnits="userSpaceOnUse"`) and returns the
-  /// open token plus its `url(#id)` reference. Content emitted before
-  /// [`SvgDocument::end_mask`] is the mask source; CSS `mask-image` defaults to
-  /// alpha masking, so `mask-type="alpha"` is set (the mask's alpha attenuates the
-  /// masked element rather than its luminance).
+  /// Defines an elliptical `<clipPath>` and returns its `url(#id)`.
+  pub(crate) fn clip_ellipse(&mut self, cx: f32, cy: f32, rx: f32, ry: f32) -> io::Result<String> {
+    let (id, reference) = self.alloc_id("cp");
+    self.open("clipPath", &[("id", id.into())])?;
+    self.empty(
+      "ellipse",
+      &[
+        ("cx", num(cx).into()),
+        ("cy", num(cy).into()),
+        ("rx", num(rx).into()),
+        ("ry", num(ry).into()),
+      ],
+    )?;
+    self.close("clipPath")?;
+    Ok(reference)
+  }
+
+  /// Opens a `<g>` clipped to the path data.
+  pub(crate) fn begin_clipped_group(&mut self, data: &str) -> io::Result<GroupToken> {
+    let clip = self.clip_path(data, FillRule::NonZero, None)?;
+
+    self.begin_group(Affine::IDENTITY, 1.0, Some(&clip), None)
+  }
+
+  /// Opens an alpha `<mask>` in user space and returns the open token plus its
+  /// `url(#id)`; CSS `mask-image` defaults to alpha masking.
   pub(crate) fn begin_mask(&mut self) -> io::Result<(GroupToken, String)> {
-    let id = self.alloc_id("mk");
-    let reference = format!("url(#{id})");
+    let (id, reference) = self.alloc_id("mk");
     self.open(
       "mask",
       &[
@@ -349,30 +371,14 @@ impl SvgDocument {
     Ok(GroupToken(()))
   }
 
-  /// Opens a `<pattern>` tile in user space at `(x, y)` with the given tile size
-  /// and returns the open token plus its `url(#id)` reference. Content emitted
-  /// before [`SvgDocument::end_pattern`] becomes one tile; fill a rect with the
-  /// returned reference to tile it across the box.
-  pub(crate) fn begin_pattern(
-    &mut self,
-    x: f32,
-    y: f32,
-    width: f32,
-    height: f32,
-  ) -> io::Result<(GroupToken, String)> {
-    let id = self.alloc_id("pat");
-    let reference = format!("url(#{id})");
-    self.open(
-      "pattern",
-      &[
-        ("id", id.into()),
-        ("patternUnits", "userSpaceOnUse".into()),
-        ("x", num(x).into()),
-        ("y", num(y).into()),
-        ("width", num(width).into()),
-        ("height", num(height).into()),
-      ],
-    )?;
+  /// Opens a user-space `<pattern>` tile and returns the open token plus its
+  /// `url(#id)`.
+  pub(crate) fn begin_pattern(&mut self, tile: Frame) -> io::Result<(GroupToken, String)> {
+    let (id, reference) = self.alloc_id("pat");
+    let mut attrs = vec![("id", id.into()), ("patternUnits", "userSpaceOnUse".into())];
+
+    attrs.extend(tile.attrs());
+    self.open("pattern", &attrs)?;
     Ok((GroupToken(()), reference))
   }
 
@@ -381,34 +387,23 @@ impl SvgDocument {
     self.close("pattern")
   }
 
-  /// Appends a raster image referenced by a `data:` URL href. This is legitimate
-  /// SVG (a genuine photo has no vector form), not the "fake SVG" of wrapping the
-  /// whole render in one bitmap.
+  /// Appends a raster image referenced by a `data:` URL href.
   pub(crate) fn image(
     &mut self,
-    x: f32,
-    y: f32,
-    width: f32,
-    height: f32,
+    rect: Frame,
     href: &str,
     preserve_aspect_ratio: Option<&str>,
   ) -> io::Result<()> {
-    let mut attrs = vec![
-      ("x", num(x).into()),
-      ("y", num(y).into()),
-      ("width", num(width).into()),
-      ("height", num(height).into()),
-      ("href", href.into()),
-    ];
+    let mut attrs = rect.attrs();
+
+    attrs.push(("href", href.into()));
     if let Some(par) = preserve_aspect_ratio {
       attrs.push(("preserveAspectRatio", par.into()));
     }
     self.empty("image", &attrs)
   }
 
-  /// Opens a `<g>` with a transform and optional opacity/clip; returns a token
-  /// that must be passed to [`SvgDocument::end_group`]. An identity transform is
-  /// omitted from the output.
+  /// Opens a `<g>` with a transform and optional opacity, clip, and filter.
   pub(crate) fn begin_group(
     &mut self,
     transform: Affine,
@@ -433,6 +428,11 @@ impl SvgDocument {
     Ok(GroupToken(()))
   }
 
+  /// Closes the most recently opened group.
+  pub(crate) fn end_group(&mut self, _token: GroupToken) -> io::Result<()> {
+    self.close("g")
+  }
+
   /// Opens a `<g>` carrying a `mix-blend-mode` so the wrapped subtree composites
   /// against its backdrop. Returns a token for [`SvgDocument::end_group`].
   pub(crate) fn begin_blend_group(&mut self, mix_blend_mode: &str) -> io::Result<GroupToken> {
@@ -451,14 +451,12 @@ impl SvgDocument {
     Ok(GroupToken(()))
   }
 
-  /// Appends a filled path with an optional stroke (for `-webkit-text-stroke`).
-  /// The stroke is `(color, width, line-join)`; raster joins miter/round/bevel,
-  /// so emitting `stroke-linejoin` avoids miter spikes on glyph corners.
+  /// Appends a glyph path with an optional stroke.
   pub(crate) fn glyph_path(
     &mut self,
     data: &str,
     fill: Rgba,
-    stroke: Option<(Rgba, f32, &str)>,
+    stroke: Option<GlyphStroke>,
   ) -> io::Result<()> {
     let mut attrs: Vec<(&str, Cow<'_, str>)> = vec![("d", data.into())];
 
@@ -479,33 +477,75 @@ impl SvgDocument {
     id
   }
 
-  /// Emits a run of interned glyphs as `<use>` references. Fill and stroke
-  /// attributes go on a shared `<g>` (or directly on a lone `<use>`).
-  pub(crate) fn glyph_uses(
+  /// Emits and clears a run of interned glyphs as `<use>` references. Fill and
+  /// stroke go on a shared `<g>`, or directly on a lone `<use>`.
+  pub(crate) fn flush_glyph_uses(
     &mut self,
-    uses: &[(u32, f32, f32)],
+    uses: &mut Vec<(u32, f32, f32)>,
     fill: Rgba,
-    stroke: Option<(Rgba, f32, &str)>,
+    stroke: Option<GlyphStroke>,
   ) -> io::Result<()> {
+    if uses.is_empty() {
+      return Ok(());
+    }
+
     let paint = glyph_paint_attrs(fill, stroke);
 
-    if let &[(id, x, y)] = uses {
+    if let &[(id, x, y)] = uses.as_slice() {
       let mut attrs = glyph_use_attrs(id, x, y);
 
       attrs.extend(paint);
-      return self.empty("use", &attrs);
+      self.empty("use", &attrs)?;
+    } else {
+      self.open("g", &paint)?;
+      for &(id, x, y) in uses.iter() {
+        self.empty("use", &glyph_use_attrs(id, x, y))?;
+      }
+      self.close("g")?;
     }
-    self.open("g", &paint)?;
-    for &(id, x, y) in uses {
-      self.empty("use", &glyph_use_attrs(id, x, y))?;
+
+    uses.clear();
+    Ok(())
+  }
+
+  /// Runs `emit` inside a Gaussian-blur group when `blur_radius` is positive (the
+  /// CSS shadow blur is `2σ`), or directly otherwise.
+  pub(crate) fn with_blur(
+    &mut self,
+    blur_radius: f32,
+    emit: impl FnOnce(&mut Self) -> io::Result<()>,
+  ) -> io::Result<()> {
+    if blur_radius > 0.0 {
+      let filter = self.blur_filter(blur_radius / 2.0)?;
+      let group = self.begin_group(Affine::IDENTITY, 1.0, None, Some(&filter))?;
+
+      emit(self)?;
+      self.end_group(group)
+    } else {
+      emit(self)
     }
-    self.close("g")
+  }
+
+  /// Runs `emit` inside an opacity group when `opacity` is below 1, or directly
+  /// otherwise.
+  pub(crate) fn with_opacity(
+    &mut self,
+    opacity: f32,
+    emit: impl FnOnce(&mut Self) -> io::Result<()>,
+  ) -> io::Result<()> {
+    if opacity < 1.0 {
+      let group = self.begin_group(Affine::IDENTITY, opacity, None, None)?;
+
+      emit(self)?;
+      self.end_group(group)
+    } else {
+      emit(self)
+    }
   }
 
   /// Defines a gaussian-blur filter (for text-shadow) and returns its `url(#id)`.
   pub(crate) fn blur_filter(&mut self, std_deviation: f32) -> io::Result<String> {
-    let id = self.alloc_id("bl");
-    let reference = format!("url(#{id})");
+    let (id, reference) = self.alloc_id("bl");
     self.open("filter", &[("id", id.into())])?;
     self.empty(
       "feGaussianBlur",
@@ -529,8 +569,7 @@ impl SvgDocument {
   pub(crate) fn filter(
     &mut self,
     filters: &[Filter],
-    sizing: &SizingContext,
-    current_color: Color,
+    context: &RenderContext,
     size: Size<f32>,
     restore_opaque_alpha: bool,
   ) -> io::Result<Vec<String>> {
@@ -541,13 +580,7 @@ impl SvgDocument {
       match filter {
         Filter::Reference(reference) => {
           if !pending.is_empty() {
-            references.push(self.function_chain_filter(
-              &pending,
-              sizing,
-              current_color,
-              size,
-              false,
-            )?);
+            references.push(self.function_chain_filter(&pending, context, size, false)?);
             pending.clear();
           }
           references.push(self.reference_filter(reference)?);
@@ -557,23 +590,39 @@ impl SvgDocument {
     }
 
     if !pending.is_empty() {
-      references.push(self.function_chain_filter(
-        &pending,
-        sizing,
-        current_color,
-        size,
-        restore_opaque_alpha,
-      )?);
+      references.push(self.function_chain_filter(&pending, context, size, restore_opaque_alpha)?);
     } else if restore_opaque_alpha && !references.is_empty() {
-      references.push(self.function_chain_filter(&[], sizing, current_color, size, true)?);
+      references.push(self.function_chain_filter(&[], context, size, true)?);
     }
 
     Ok(references)
   }
 
+  /// Opens a group per filter reference after the first, outermost last: later
+  /// filters in the list apply after earlier ones, so they wrap outside.
+  pub(crate) fn begin_filter_wrappers(
+    &mut self,
+    references: &[String],
+  ) -> io::Result<Vec<GroupToken>> {
+    references
+      .iter()
+      .skip(1)
+      .rev()
+      .map(|reference| self.begin_group(Affine::IDENTITY, 1.0, None, Some(reference)))
+      .collect()
+  }
+
+  /// Closes the groups [`Self::begin_filter_wrappers`] opened, innermost first.
+  pub(crate) fn end_filter_wrappers(&mut self, tokens: Vec<GroupToken>) -> io::Result<()> {
+    for token in tokens.into_iter().rev() {
+      self.end_group(token)?;
+    }
+    Ok(())
+  }
+
   /// Emits a referenced `<filter>` verbatim under a fresh document-unique id.
   fn reference_filter(&mut self, reference: &FilterReference) -> io::Result<String> {
-    let id = self.alloc_id("fr");
+    let (id, filter_reference) = self.alloc_id("fr");
     // The parser strips any author id and injects the canonical one, so this
     // textual rewrite always hits.
     let markup = reference.markup.replacen(
@@ -584,7 +633,7 @@ impl SvgDocument {
     self
       .writer
       .write_event(Event::Text(BytesText::from_escaped(markup)))?;
-    Ok(format!("url(#{id})"))
+    Ok(filter_reference)
   }
 
   /// Defines a run of CSS filter functions as one chained `<filter>`.
@@ -595,13 +644,11 @@ impl SvgDocument {
   fn function_chain_filter(
     &mut self,
     filters: &[&Filter],
-    sizing: &SizingContext,
-    current_color: Color,
+    context: &RenderContext,
     size: Size<f32>,
     restore_opaque_alpha: bool,
   ) -> io::Result<String> {
-    let id = self.alloc_id("ft");
-    let reference = format!("url(#{id})");
+    let (id, reference) = self.alloc_id("ft");
     self.open(
       "filter",
       &[
@@ -617,7 +664,7 @@ impl SvgDocument {
     let mut prev: Cow<'_, str> = "SourceGraphic".into();
     for (index, filter) in filters.iter().copied().enumerate() {
       let result = format!("f{index}");
-      self.filter_primitive(filter, &prev, &result, sizing, current_color, size)?;
+      self.filter_primitive(filter, &prev, &result, context, size)?;
       prev = result.into();
     }
     if restore_opaque_alpha {
@@ -637,10 +684,11 @@ impl SvgDocument {
     filter: &Filter,
     input: &str,
     result: &str,
-    sizing: &SizingContext,
-    current_color: Color,
+    context: &RenderContext,
     size: Size<f32>,
   ) -> io::Result<()> {
+    let sizing = &context.sizing;
+
     match filter {
       Filter::Blur(length) => self.empty(
         "feGaussianBlur",
@@ -664,11 +712,11 @@ impl SvgDocument {
           ("intercept", num(0.5 * (1.0 - v.0)).into()),
         ],
       ),
-      Filter::Grayscale(amount) => {
-        let a = amount.0.clamp(0.0, 1.0);
-        let m = grayscale_matrix(a);
-        self.color_matrix(input, result, &m)
-      }
+      Filter::Grayscale(amount) => self.color_matrix(
+        input,
+        result,
+        &projection_matrix(amount.0.clamp(0.0, 1.0), [LUMA_WEIGHTS; 3]),
+      ),
       Filter::Saturate(v) => self.empty(
         "feColorMatrix",
         &[
@@ -689,20 +737,22 @@ impl SvgDocument {
       ),
       Filter::Invert(amount) => {
         let a = amount.0.clamp(0.0, 1.0);
+        let [low, high] = [a, 1.0 - a].map(Num);
+
         self.component_transfer_rgb(
           input,
           result,
           &[
             ("type", "table".into()),
-            ("tableValues", format!("{} {}", num(a), num(1.0 - a)).into()),
+            ("tableValues", format!("{low} {high}").into()),
           ],
         )
       }
-      Filter::Sepia(amount) => {
-        let a = amount.0.clamp(0.0, 1.0);
-        let m = sepia_matrix(a);
-        self.color_matrix(input, result, &m)
-      }
+      Filter::Sepia(amount) => self.color_matrix(
+        input,
+        result,
+        &projection_matrix(amount.0.clamp(0.0, 1.0), SEPIA_WEIGHTS),
+      ),
       Filter::Opacity(v) => {
         self.open(
           "feComponentTransfer",
@@ -715,7 +765,7 @@ impl SvgDocument {
         self.close("feComponentTransfer")
       }
       Filter::DropShadow(shadow) => {
-        let resolved = SizedShadow::from_text_shadow(*shadow, sizing, current_color, size);
+        let resolved = SizedShadow::from_text_shadow(*shadow, sizing, context.current_color, size);
         let color = Rgba(resolved.color.0);
         self.empty(
           "feGaussianBlur",
@@ -795,83 +845,31 @@ impl SvgDocument {
     )
   }
 
-  /// Defines a `<clipPath>` from raw SVG path data with an optional transform,
-  /// and returns its `url(#id)`. Used for `clip-path: path(...)` whose data is in
-  /// box-local coordinates.
-  pub(crate) fn clip_path_transformed(
-    &mut self,
-    data: &str,
-    even_odd: bool,
-    transform: Option<&str>,
-  ) -> io::Result<String> {
-    let id = self.alloc_id("cp");
-    let reference = format!("url(#{id})");
-    self.open("clipPath", &[("id", id.into())])?;
-    let mut attrs: Vec<(&str, Cow<'_, str>)> = vec![("d", data.into())];
-    if even_odd {
-      attrs.push(("clip-rule", "evenodd".into()));
-    }
-    if let Some(transform) = transform {
-      attrs.push(("transform", transform.into()));
-    }
-    self.empty("path", &attrs)?;
-    self.close("clipPath")?;
-    Ok(reference)
-  }
-
-  /// Defines an elliptical `<clipPath>` and returns its `url(#id)`.
-  pub(crate) fn clip_ellipse(&mut self, cx: f32, cy: f32, rx: f32, ry: f32) -> io::Result<String> {
-    let id = self.alloc_id("cp");
-    let reference = format!("url(#{id})");
-    self.open("clipPath", &[("id", id.into())])?;
-    self.empty(
-      "ellipse",
-      &[
-        ("cx", num(cx).into()),
-        ("cy", num(cy).into()),
-        ("rx", num(rx).into()),
-        ("ry", num(ry).into()),
-      ],
-    )?;
-    self.close("clipPath")?;
-    Ok(reference)
-  }
-
-  /// Strokes an open/closed path (for dashed/dotted borders). `dasharray` and
-  /// `linecap` are optional.
-  pub(crate) fn stroke_path(
-    &mut self,
-    data: &str,
-    stroke: Rgba,
-    width: f32,
-    dasharray: Option<&str>,
-    linecap: Option<&str>,
-  ) -> io::Result<()> {
+  /// Strokes a path, dashed when the stroke carries a dash pattern.
+  pub(crate) fn stroke_path(&mut self, data: &str, stroke: &StrokeStyle) -> io::Result<()> {
+    let color = Rgba(stroke.color.0);
     let mut attrs: Vec<(&str, Cow<'_, str>)> = vec![
       ("d", data.into()),
       ("fill", "none".into()),
-      ("stroke", stroke.hex().into()),
+      ("stroke", color.hex().into()),
     ];
-    push_opacity(&mut attrs, "stroke-opacity", stroke.opacity());
-    attrs.push(("stroke-width", num(width).into()));
-    if let Some(dasharray) = dasharray {
-      attrs.push(("stroke-dasharray", dasharray.into()));
+    push_opacity(&mut attrs, "stroke-opacity", color.opacity());
+    attrs.push(("stroke-width", num(stroke.width).into()));
+    if let Some(dash) = stroke.dash {
+      let [dash, gap] = dash.map(Num);
+
+      attrs.push(("stroke-dasharray", format!("{dash} {gap}").into()));
     }
-    if let Some(linecap) = linecap {
-      attrs.push(("stroke-linecap", linecap.into()));
+    if stroke.round_cap {
+      attrs.push(("stroke-linecap", "round".into()));
     }
     self.empty("path", &attrs)
-  }
-
-  /// Closes the most recently opened group.
-  pub(crate) fn end_group(&mut self, _token: GroupToken) -> io::Result<()> {
-    self.close("g")
   }
 
   /// Closes the root `<svg>` and serializes the document to a string. Interned
   /// glyph outlines are flushed as a trailing `<defs>`; `<use>` references
   /// resolve document-wide, so forward references are fine.
-  pub(crate) fn render(mut self) -> io::Result<String> {
+  pub(crate) fn finish(mut self) -> io::Result<String> {
     if !self.glyph_defs.is_empty() {
       self.open("defs", &[])?;
       for (id, data) in mem::take(&mut self.glyph_defs).iter().enumerate() {
@@ -887,73 +885,33 @@ impl SvgDocument {
   }
 }
 
-/// Opaque proof that a `<g>` is open; consumed by [`SvgDocument::end_group`].
+/// Opaque proof that an element a `begin_*` method opened is still open;
+/// consumed by the matching `end_*`.
 #[must_use]
 pub(crate) struct GroupToken(());
 
-pub(crate) fn matrix_attr(transform: Affine) -> String {
-  let [a, b, c, d, e, f] = transform.to_cols_array();
-  format!(
-    "matrix({} {} {} {} {} {})",
-    num(a),
-    num(b),
-    num(c),
-    num(d),
-    num(e),
-    num(f)
-  )
+fn matrix_attr(transform: Affine) -> String {
+  let [a, b, c, d, e, f] = transform.to_cols_array().map(Num);
+
+  format!("matrix({a} {b} {c} {d} {e} {f})")
 }
 
-/// CSS `grayscale(a)` color matrix (spec form: identity lerped toward the luma
-/// projection by `a`). Matches the raster backend's luma-lerp.
-fn grayscale_matrix(a: f32) -> [f32; 20] {
-  let [lr, lg, lb] = LUMA_WEIGHTS;
-  let r0 = 1.0 - a + a * lr;
-  let g_to_r = a * lg;
-  let b_to_r = a * lb;
-  let r_to_g = a * lr;
-  let g0 = 1.0 - a + a * lg;
-  let b_to_g = a * lb;
-  let r_to_b = a * lr;
-  let g_to_b = a * lg;
-  let b0 = 1.0 - a + a * lb;
-  [
-    r0, g_to_r, b_to_r, 0.0, 0.0, //
-    r_to_g, g0, b_to_g, 0.0, 0.0, //
-    r_to_b, g_to_b, b0, 0.0, 0.0, //
-    0.0, 0.0, 0.0, 1.0, 0.0,
-  ]
-}
+/// CSS `grayscale()`/`sepia()` color matrix (spec form: identity lerped toward
+/// the `weights` projection by `amount`), matching the raster backend.
+fn projection_matrix(amount: f32, weights: [[f32; 3]; 3]) -> [f32; 20] {
+  let mut matrix = [0.0; 20];
 
-/// CSS `sepia(a)` color matrix (spec form: identity lerped toward the sepia
-/// projection by `a`). Matches the raster backend's per-channel sepia lerp.
-fn sepia_matrix(a: f32) -> [f32; 20] {
-  let lerp = |to: f32, idx_diag: bool| {
-    if idx_diag { 1.0 - a + a * to } else { a * to }
-  };
-  let [[rr, rg, rb], [gr, gg, gb], [br, bg, bb]] = SEPIA_WEIGHTS;
-  [
-    lerp(rr, true),
-    lerp(rg, false),
-    lerp(rb, false),
-    0.0,
-    0.0, //
-    lerp(gr, false),
-    lerp(gg, true),
-    lerp(gb, false),
-    0.0,
-    0.0, //
-    lerp(br, false),
-    lerp(bg, false),
-    lerp(bb, true),
-    0.0,
-    0.0, //
-    0.0,
-    0.0,
-    0.0,
-    1.0,
-    0.0,
-  ]
+  for (row, row_weights) in weights.into_iter().enumerate() {
+    for (column, weight) in row_weights.into_iter().enumerate() {
+      matrix[row * 5 + column] = if row == column {
+        1.0 - amount + amount * weight
+      } else {
+        amount * weight
+      };
+    }
+  }
+  matrix[18] = 1.0;
+  matrix
 }
 
 /// Quantization grid for coordinates, dimensions, and opacities: three decimals.
@@ -1005,7 +963,7 @@ impl fmt::Display for Num {
     if write!(buf, "{value}").is_err() {
       return write!(f, "{value}");
     }
-    let Ok(text) = std::str::from_utf8(&buf.bytes[..buf.len]) else {
+    let Ok(text) = str::from_utf8(&buf.bytes[..buf.len]) else {
       return write!(f, "{value}");
     };
     // Drop the redundant integer-part zero: `0.5` -> `.5`, `-0.5` -> `-.5`.
@@ -1025,21 +983,30 @@ fn num(value: f32) -> String {
   Num(value).to_string()
 }
 
+fn element<'a>(name: &'a str, attrs: &[(&str, Cow<'_, str>)]) -> BytesStart<'a> {
+  let mut element = BytesStart::new(name);
+
+  for (key, value) in attrs {
+    element.push_attribute((*key, value.as_ref()));
+  }
+  element
+}
+
 /// Fill plus optional `-webkit-text-stroke` attributes, shared by glyph
 /// `<path>` elements and `<use>` runs.
-fn glyph_paint_attrs<'a>(
+fn glyph_paint_attrs(
   fill: Rgba,
-  stroke: Option<(Rgba, f32, &'a str)>,
-) -> Vec<(&'a str, Cow<'a, str>)> {
+  stroke: Option<GlyphStroke>,
+) -> Vec<(&'static str, Cow<'static, str>)> {
   let mut attrs: Vec<(&str, Cow<'_, str>)> = vec![("fill", fill.hex().into())];
 
   push_opacity(&mut attrs, "fill-opacity", fill.opacity());
-  if let Some((color, width, line_join)) = stroke {
-    attrs.push(("stroke", color.hex().into()));
-    push_opacity(&mut attrs, "stroke-opacity", color.opacity());
-    attrs.push(("stroke-width", num(width).into()));
-    if line_join != "miter" {
-      attrs.push(("stroke-linejoin", line_join.into()));
+  if let Some(stroke) = stroke {
+    attrs.push(("stroke", stroke.color.hex().into()));
+    push_opacity(&mut attrs, "stroke-opacity", stroke.color.opacity());
+    attrs.push(("stroke-width", num(stroke.width).into()));
+    if stroke.join != LineJoin::Miter {
+      attrs.push(("stroke-linejoin", stroke.join.to_css_string().into()));
     }
   }
   attrs
@@ -1073,8 +1040,8 @@ mod tests {
   #[test]
   fn solid_rect_is_native_svg() {
     let mut doc = SvgDocument::new(100.0, 50.0).unwrap();
-    doc.rect(0.0, 0.0, 100.0, 50.0, RED).unwrap();
-    let svg = doc.render().unwrap();
+    doc.rect(Frame::new(0.0, 0.0, 100.0, 50.0), RED).unwrap();
+    let svg = doc.finish().unwrap();
     assert!(svg.starts_with("<svg xmlns=\"http://www.w3.org/2000/svg\""));
     assert!(svg.contains(r##"<rect x="0" y="0" width="100" height="50" fill="#f00""##));
     assert!(!svg.contains("fill-opacity"));
@@ -1084,10 +1051,10 @@ mod tests {
   #[test]
   fn alpha_becomes_fill_opacity() {
     let mut doc = SvgDocument::new(1.0, 1.0).unwrap();
-    doc.rect(0.0, 0.0, 1.0, 1.0, HALF_BLUE).unwrap();
+    doc.rect(Frame::new(0.0, 0.0, 1.0, 1.0), HALF_BLUE).unwrap();
     assert!(
       doc
-        .render()
+        .finish()
         .unwrap()
         .contains(r##"fill="#00f" fill-opacity=".502""##)
     );
@@ -1114,8 +1081,10 @@ mod tests {
       )
       .unwrap();
     assert_eq!(fill, "url(#lg0)");
-    doc.path("M0 0 H10 V10 H0 Z", RED, false).unwrap();
-    let svg = doc.render().unwrap();
+    doc
+      .fill_path("M0 0 H10 V10 H0 Z", RED, FillRule::NonZero)
+      .unwrap();
+    let svg = doc.finish().unwrap();
     assert!(svg.contains(r#"<linearGradient id="lg0""#));
     assert!(svg.contains(r#"<stop offset="0""#));
   }
@@ -1123,13 +1092,15 @@ mod tests {
   #[test]
   fn clip_path_and_group_nest() {
     let mut doc = SvgDocument::new(10.0, 10.0).unwrap();
-    let clip = doc.clip_path("M0 0 H5 V5 H0 Z").unwrap();
+    let clip = doc
+      .clip_path("M0 0 H5 V5 H0 Z", FillRule::NonZero, None)
+      .unwrap();
     let token = doc
       .begin_group(Affine::translation(3.0, 4.0), 0.5, Some(&clip), None)
       .unwrap();
-    doc.rect(0.0, 0.0, 10.0, 10.0, RED).unwrap();
+    doc.rect(Frame::new(0.0, 0.0, 10.0, 10.0), RED).unwrap();
     doc.end_group(token).unwrap();
-    let svg = doc.render().unwrap();
+    let svg = doc.finish().unwrap();
     assert!(svg.contains("<clipPath id=\"cp0\">"));
     assert!(
       svg.contains(r#"<g transform="matrix(1 0 0 1 3 4)" opacity=".5" clip-path="url(#cp0)">"#)
@@ -1140,18 +1111,22 @@ mod tests {
   #[test]
   fn identity_transform_is_omitted() {
     let mut doc = SvgDocument::new(10.0, 10.0).unwrap();
-    let token = doc.begin_group(IDENTITY, 0.5, None, None).unwrap();
+    let token = doc.begin_group(Affine::IDENTITY, 0.5, None, None).unwrap();
     doc.end_group(token).unwrap();
-    assert!(doc.render().unwrap().contains("<g opacity=\".5\">"));
+    assert!(doc.finish().unwrap().contains("<g opacity=\".5\">"));
   }
 
   #[test]
   fn image_href_is_escaped_not_faked() {
     let mut doc = SvgDocument::new(10.0, 10.0).unwrap();
     doc
-      .image(0.0, 0.0, 10.0, 10.0, "data:image/png;base64,AAAA", None)
+      .image(
+        Frame::new(0.0, 0.0, 10.0, 10.0),
+        "data:image/png;base64,AAAA",
+        None,
+      )
       .unwrap();
-    let svg = doc.render().unwrap();
+    let svg = doc.finish().unwrap();
     assert!(
       svg
         .contains(r#"<image x="0" y="0" width="10" height="10" href="data:image/png;base64,AAAA""#)
@@ -1163,15 +1138,12 @@ mod tests {
     let mut doc = SvgDocument::new(10.0, 10.0).unwrap();
     doc
       .image(
-        0.0,
-        0.0,
-        10.0,
-        10.0,
+        Frame::new(0.0, 0.0, 10.0, 10.0),
         r#"x"/><script>alert(1)</script>"#,
         None,
       )
       .unwrap();
-    let svg = doc.render().unwrap();
+    let svg = doc.finish().unwrap();
     assert!(!svg.contains("<script>"));
     assert!(svg.contains("&quot;"));
   }
@@ -1180,11 +1152,15 @@ mod tests {
   fn text_emits_glyph_path() {
     let mut doc = SvgDocument::new(10.0, 10.0).unwrap();
     doc
-      .path("M1 9 L2 1 L3 9 M1.5 5 H2.5", Rgba([0, 0, 0, 255]), false)
+      .fill_path(
+        "M1 9 L2 1 L3 9 M1.5 5 H2.5",
+        Rgba([0, 0, 0, 255]),
+        FillRule::NonZero,
+      )
       .unwrap();
     assert!(
       doc
-        .render()
+        .finish()
         .unwrap()
         .contains("<path d=\"M1 9 L2 1 L3 9 M1.5 5 H2.5\"")
     );

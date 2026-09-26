@@ -6,7 +6,7 @@ use takumi_core::{
   Fonts,
   context::RenderContext,
   error::Result,
-  geometry::{ComputedLayout as Layout, NodeId, Point, Size},
+  geometry::{NodeId, Point, Rect, Size},
   layout::{
     border::{BorderProperties, BorderSide, PaintedSide},
     decoration::{ClipBox, OutlineGeometry},
@@ -19,8 +19,8 @@ use takumi_core::{
   resources::image::ImageSource,
   scene::{SceneRequest, build_scene},
   style::{
-    Affine, BackgroundClip, BackgroundImage, BackgroundOrigin, BasicShape, BlendMode, BorderStyle,
-    Color, ComputedStyle, FillRule, FontFamily, Isolation, Lang, Overflow, ShapeRadius, Sides,
+    Affine, BackgroundClip, BackgroundImage, BasicShape, BlendMode, BorderStyle, Color,
+    ComputedStyle, FillRule, FontFamily, Isolation, Lang, Overflow, ShapeRadius, Sides,
     SizingContext, SpacePair, StyleSheet, ToCss,
   },
   viewport::Viewport,
@@ -28,11 +28,13 @@ use takumi_core::{
 use typed_builder::TypedBuilder;
 
 use crate::{
-  APPROX_CHARS_PER_NUMBER, Frame, IDENTITY, Num, Rgba, SvgDocument,
-  box_model::{PathData, element_transform, path_data},
+  APPROX_CHARS_PER_NUMBER, Frame, GroupToken, Num, Rgba, SvgDocument,
+  box_model::{
+    BoxFrame, PathData, clip_box_path_data, edges_path_data, path_data, rounded_rect_path_data,
+  },
   gradient::LayerEmitter,
   image::emit_image,
-  scene_emit::emit_scene,
+  scene_emit::SceneEmitter,
   text::{emit_inline_content, emit_text},
 };
 
@@ -76,13 +78,11 @@ pub fn render(options: SvgOptions<'_>) -> Result<String> {
     .images(Rc::new(options.images))
     .stylesheet(options.stylesheet)
     .time_ms(options.time_ms)
-    .style({
-      Box::new(ComputedStyle {
-        lang: options.lang,
-        font_family: options.font_families.unwrap_or_default(),
-        ..Default::default()
-      })
-    })
+    .style(Box::new(ComputedStyle {
+      lang: options.lang,
+      font_family: options.font_families.unwrap_or_default(),
+      ..Default::default()
+    }))
     .build();
 
   let root = RenderNode::from_node(&context, options.node);
@@ -91,9 +91,7 @@ pub fn render(options: SvgOptions<'_>) -> Result<String> {
   tree.compute_layout(viewport.into());
 
   let results = tree.into_results();
-  let root_id = NodeId::ROOT;
-
-  let root_layout = results.layout(root_id)?;
+  let root_layout = results.layout(NodeId::ROOT)?;
   let width = viewport
     .size
     .width
@@ -107,41 +105,508 @@ pub fn render(options: SvgOptions<'_>) -> Result<String> {
   let contexts = build_scene(SceneRequest {
     root: &root,
     layout_results: &results,
-    transform: IDENTITY,
+    transform: Affine::IDENTITY,
     container_size: Size {
       width: Some(width),
       height: Some(height),
     },
     paint_bounds: true,
   })?;
-  emit_scene(&root, &contexts, &results, &mut doc)?;
+  SceneEmitter {
+    root: &root,
+    contexts: &contexts,
+    results: &results,
+  }
+  .emit(&mut doc)?;
 
-  Ok(doc.render()?)
+  Ok(doc.finish()?)
 }
 
-/// Open group tokens from [`emit_box_chrome`], to be closed (innermost first:
-/// `child_group`, `outer`, then `blend`) after the box content.
+/// A render node laid out at its [`BoxFrame`].
+pub(crate) struct PlacedBox<'n> {
+  pub node: &'n RenderNode,
+  pub frame: BoxFrame,
+  painter: BoxPainter<'n>,
+}
+
+impl<'n> PlacedBox<'n> {
+  pub(crate) fn new(node: &'n RenderNode, frame: BoxFrame) -> Self {
+    Self {
+      node,
+      frame,
+      painter: BoxPainter::new(&node.context, frame.layout),
+    }
+  }
+
+  /// The box's border geometry, corners included.
+  pub(crate) fn border(&self) -> &BorderProperties {
+    self.painter.border()
+  }
+
+  /// The element's paint transform moved into absolute space, or `None` when
+  /// it has none.
+  fn element_transform(&self) -> Option<Affine> {
+    let context = &self.node.context;
+    let Point { x, y } = self.frame.origin;
+    let size = self.frame.layout.size;
+    let local = context
+      .style
+      .local_transform(size.width, size.height, &context.sizing);
+
+    if local.is_identity() {
+      return None;
+    }
+    // Children are emitted in absolute coordinates; move the local transform into
+    // that space: M_abs = T(x, y) * local * T(-x, -y).
+    Some(Affine::translation(x, y) * local * Affine::translation(-x, -y))
+  }
+
+  /// Absolute SVG path `d` for the rounded border box.
+  pub(crate) fn border_box_path_data(&self) -> String {
+    rounded_rect_path_data(self.border(), self.frame.layout.size, self.frame.origin)
+  }
+
+  /// Absolute SVG path `d` for the rounded padding box.
+  fn padding_box_path_data(&self) -> String {
+    clip_box_path_data(
+      ClipBox::padding_box(*self.border(), self.frame.layout),
+      self.frame.origin,
+    )
+  }
+
+  /// Absolute SVG path `d` the box clips its children to when overflow is not
+  /// visible.
+  fn overflow_clip_path_data(&self) -> String {
+    // With border-radius present the raster backend clips both axes to the rounded
+    // padding box regardless of the per-axis overflow values, so the rounded path is
+    // used as-is. Without radius a two-value overflow (e.g. `overflow-x: hidden;
+    // overflow-y: visible`) must leave the visible axis unbounded.
+    if !self.border().is_zero() {
+      return self.padding_box_path_data();
+    }
+
+    const UNBOUNDED: f32 = 1.0e6;
+    let BoxFrame {
+      layout,
+      origin: Point { x, y },
+    } = self.frame;
+    let overflow = self.node.context.style.resolve_overflows();
+    let clip_x = overflow.x != Overflow::Visible;
+    let clip_y = overflow.y != Overflow::Visible;
+
+    let (left, right) = if clip_x {
+      let padding_left = x + layout.border.left;
+      let padding_right = (x + layout.size.width - layout.border.right).max(padding_left);
+      (padding_left, padding_right)
+    } else {
+      (x - UNBOUNDED, x + layout.size.width + UNBOUNDED)
+    };
+    let (top, bottom) = if clip_y {
+      let padding_top = y + layout.border.top;
+      let padding_bottom = (y + layout.size.height - layout.border.bottom).max(padding_top);
+      (padding_top, padding_bottom)
+    } else {
+      (y - UNBOUNDED, y + layout.size.height + UNBOUNDED)
+    };
+
+    edges_path_data(Rect {
+      left,
+      top,
+      right,
+      bottom,
+    })
+  }
+
+  /// The clip path `d` and fill rule for the `background-clip` area.
+  fn background_clip_path_data(&self) -> Option<(String, FillRule)> {
+    let border = self.border();
+
+    match self.node.context.style.background_clip {
+      BackgroundClip::PaddingBox => Some((self.padding_box_path_data(), FillRule::NonZero)),
+      BackgroundClip::ContentBox => Some((
+        clip_box_path_data(
+          ClipBox::content_box(*border, self.frame.layout),
+          self.frame.origin,
+        ),
+        FillRule::NonZero,
+      )),
+      BackgroundClip::BorderArea => {
+        // The border ring: the (rounded) border-box with the (rounded) padding box
+        // punched out, drawn even-odd so the background shows only under the border.
+        let outer = self.border_box_path_data();
+        let inner = self.padding_box_path_data();
+        Some((format!("{outer}{inner}"), FillRule::EvenOdd))
+      }
+      // `text` is handled separately by the text path; anything else clips to the
+      // border box.
+      _ => (!border.is_zero()).then(|| (self.border_box_path_data(), FillRule::NonZero)),
+    }
+  }
+
+  /// Emits the element's background (color then image layers) clipped to the
+  /// region selected by `background-clip`.
+  fn emit_background(&self, doc: &mut SvgDocument) -> io::Result<()> {
+    let context = &self.node.context;
+    let style = &context.style;
+    if style.background_clip == BackgroundClip::Text {
+      return Ok(());
+    }
+
+    // The colour fill carries the clip shape itself, so it goes outside the
+    // group. Only the image layers need the clip.
+    if style.background_color.resolve(context.current_color).0[3] != 0 {
+      let mut device = DocumentDevice::new(doc);
+
+      self
+        .painter
+        .background_color(self.frame.origin, &mut device);
+      device.finish()?;
+    }
+
+    let Some(images) = style
+      .background_image
+      .as_deref()
+      .filter(|images| !images.is_empty())
+    else {
+      return Ok(());
+    };
+    let group = self
+      .background_clip_path_data()
+      .map(|(data, rule)| {
+        let clip = doc.clip_path(&data, rule, None)?;
+
+        doc.begin_group(Affine::IDENTITY, 1.0, Some(&clip), None)
+      })
+      .transpose()?;
+
+    LayerEmitter::new(context, doc).background_images(
+      images,
+      self.frame.background_origin_box(style.background_origin),
+      self.frame.border_box(),
+    )?;
+    if let Some(group) = group {
+      doc.end_group(group)?;
+    }
+    Ok(())
+  }
+
+  /// Emits the element's `mask-image` as an SVG `<mask>` painted into the border
+  /// box and opens the masked group wrapping the element.
+  pub(crate) fn begin_mask_group(&self, doc: &mut SvgDocument) -> io::Result<Option<GroupToken>> {
+    let style = &self.node.context.style;
+    let Some(images) = style.mask_image.as_deref() else {
+      return Ok(None);
+    };
+    if !images.iter().any(BackgroundImage::paints) {
+      return Ok(None);
+    }
+    let size = self.frame.layout.size;
+    if size.width <= 0.0 || size.height <= 0.0 {
+      return Ok(None);
+    }
+
+    let (token, reference) = doc.begin_mask()?;
+    let border_box = self.frame.border_box();
+
+    LayerEmitter::new(&self.node.context, doc).image_layers(
+      images,
+      &style.mask_size,
+      &style.mask_position,
+      &style.mask_repeat,
+      border_box,
+      border_box,
+    )?;
+    doc.end_mask(token)?;
+    Ok(Some(doc.begin_masked_group(&reference)?))
+  }
+
+  /// Resolves `clip-path` against the border box and opens a clip group wrapping
+  /// the element. Mirrors the raster backend's `render_clip_shape_mask` geometry.
+  pub(crate) fn begin_clip_path_group(
+    &self,
+    doc: &mut SvgDocument,
+  ) -> io::Result<Option<GroupToken>> {
+    let style = &self.node.context.style;
+    let Some(shape) = style.clip_path.as_ref() else {
+      return Ok(None);
+    };
+    let sizing = &self.node.context.sizing;
+    let Point { x, y } = self.frame.origin;
+    let size = self.frame.layout.size;
+    let clip = match shape {
+      BasicShape::Ellipse(ellipse) => {
+        let cx = x + ellipse.position.0.x.to_px(sizing, size.width);
+        let cy = y + ellipse.position.0.y.to_px(sizing, size.height);
+        // closest/farthest-side measure each axis from the center to BOTH of its
+        // sides, not just the top-left corner.
+        let rx = resolve_shape_radius(
+          ellipse.radius_x,
+          cx - x,
+          x + size.width - cx,
+          sizing,
+          size.width,
+        );
+        let ry = resolve_shape_radius(
+          ellipse.radius_y,
+          cy - y,
+          y + size.height - cy,
+          sizing,
+          size.height,
+        );
+        doc.clip_ellipse(cx, cy, rx, ry)?
+      }
+      BasicShape::Inset(inset) => {
+        let [top_l, right_l, bottom_l, left_l] = inset.inset.0;
+        let top = top_l.to_px(sizing, size.height);
+        let right = right_l.to_px(sizing, size.width);
+        let bottom = bottom_l.to_px(sizing, size.height);
+        let left = left_l.to_px(sizing, size.width);
+        let inner = Size {
+          width: (size.width - left - right).max(0.0),
+          height: (size.height - top - bottom).max(0.0),
+        };
+        let mut border = BorderProperties::default();
+        if let Some(radius) = inset.border_radius {
+          border.radius = Sides(
+            radius
+              .0
+              .map(|corner| SpacePair::from_single(corner.to_px(sizing, size.width))),
+          );
+        }
+        let clip = ClipBox {
+          border,
+          size: inner,
+          offset: Point { x: left, y: top },
+        };
+        doc.clip_path(
+          &clip_box_path_data(clip, self.frame.origin),
+          FillRule::NonZero,
+          None,
+        )?
+      }
+      BasicShape::Polygon(polygon) => {
+        if polygon.coordinates.is_empty() {
+          return Ok(None);
+        }
+        let mut data =
+          PathData::with_capacity(polygon.coordinates.len() * (2 * APPROX_CHARS_PER_NUMBER + 1));
+        for (index, coord) in polygon.coordinates.iter().enumerate() {
+          let px = x + coord.x.to_px(sizing, size.width);
+          let py = y + coord.y.to_px(sizing, size.height);
+          data.command(if index == 0 { b'M' } else { b'L' });
+          data.pair(px, py);
+        }
+        data.close();
+        let rule = polygon.fill_rule.unwrap_or(style.clip_rule);
+
+        doc.clip_path(&data.into_string(), rule, None)?
+      }
+      BasicShape::Path(path) => {
+        let rule = path.fill_rule.unwrap_or(style.clip_rule);
+        // Inner scale lifts CSS-px path() coords to device space; translate offsets after.
+        let [tx, ty, scale] = [x, y, sizing.to_device(1.0)].map(Num);
+        let transform = format!("translate({tx} {ty}) scale({scale})");
+        doc.clip_path(&path.path, rule, Some(&transform))?
+      }
+      _ => return Ok(None),
+    };
+    let group = doc.begin_group(Affine::IDENTITY, 1.0, Some(&clip), None)?;
+
+    Ok(Some(group))
+  }
+
+  /// Emits outset `box-shadow`s behind the element as offset, blurred rects.
+  fn emit_box_shadows(&self, doc: &mut SvgDocument) -> io::Result<()> {
+    let BoxFrame { layout, origin } = self.frame;
+
+    for resolved in self.painter.shadows().outer {
+      // Shadow shape = the element's rounded border-box, radii expanded by the
+      // spread (shared core geometry with the raster backend).
+      let (shadow, spread_size) = self
+        .border()
+        .outset_shadow_box(layout.size, resolved.spread_radius);
+      if spread_size.width <= 0.0 || spread_size.height <= 0.0 {
+        continue;
+      }
+
+      let shadow_origin = Point {
+        x: origin.x + resolved.offset_x - resolved.spread_radius,
+        y: origin.y + resolved.offset_y - resolved.spread_radius,
+      };
+      let fill = Rgba(resolved.color.0);
+      let data = rounded_rect_path_data(&shadow, spread_size, shadow_origin);
+
+      doc.with_blur(resolved.blur_radius, |doc| {
+        doc.fill_path(&data, fill, FillRule::NonZero)
+      })?;
+    }
+    Ok(())
+  }
+
+  /// Emits inset `box-shadow`s as a blurred ring inside the element's rounded
+  /// padding box.
+  fn emit_inset_box_shadows(&self, doc: &mut SvgDocument) -> io::Result<()> {
+    let BoxFrame { layout, origin } = self.frame;
+    if layout.size.width <= 0.0 || layout.size.height <= 0.0 {
+      return Ok(());
+    }
+    let padding = ClipBox::padding_box(*self.border(), layout);
+    let outer = clip_box_path_data(padding, origin);
+    for resolved in self.painter.shadows().inset {
+      let fill = Rgba(resolved.color.0);
+
+      // The shadow fills the padding box minus the hole it leaves uncovered
+      // (shared core geometry with the raster backend), drawn even-odd, blurred,
+      // and clipped to the rounded padding box so the blur stays inside.
+      let hole = ClipBox::inset_shadow_hole(
+        padding.border,
+        padding.size,
+        resolved.spread_radius,
+        Point {
+          x: resolved.offset_x,
+          y: resolved.offset_y,
+        },
+      );
+      let ring = format!(
+        "{outer}{}",
+        clip_box_path_data(hole, origin + padding.offset)
+      );
+      let clip_group = doc.begin_clipped_group(&outer)?;
+      doc.with_blur(resolved.blur_radius, |doc| {
+        doc.fill_path(&ring, fill, FillRule::EvenOdd)
+      })?;
+      doc.end_group(clip_group)?;
+    }
+    Ok(())
+  }
+
+  /// Emits the node's own content: its inline run set, or its replaced
+  /// image/text. Block children are painted separately.
+  pub(crate) fn emit_own_content(&self, doc: &mut SvgDocument) -> io::Result<()> {
+    if self.node.should_create_inline_layout() {
+      return emit_inline_content(self.node, self.frame, doc);
+    }
+    // A node whose anonymous text became a child item paints that text through the
+    // child, not as its own content (mirroring the raster backend's guard).
+    if self.node.has_anonymous_text_item_child() {
+      return Ok(());
+    }
+    self.emit_replaced_content(doc)
+  }
+
+  /// Emits an image or text leaf.
+  fn emit_replaced_content(&self, doc: &mut SvgDocument) -> io::Result<()> {
+    match self.node.node.as_ref().map(|n| &n.kind) {
+      Some(NodeKind::Image(image)) => self.emit_image(image, doc),
+      Some(NodeKind::Text(text)) => emit_text(text, &self.node.context, self.frame, doc),
+      _ => Ok(()),
+    }
+  }
+
+  /// Emits an image node's content into its content box.
+  fn emit_image(&self, image: &ImageData, doc: &mut SvgDocument) -> io::Result<()> {
+    let context = &self.node.context;
+    let content = self.frame.content_box();
+    if self.border().is_zero() {
+      return emit_image(image, context, content, doc);
+    }
+
+    let group = doc.begin_clipped_group(&self.padding_box_path_data())?;
+    emit_image(image, context, content, doc)?;
+    doc.end_group(group)
+  }
+}
+
+/// A box's open effect groups and deferred outline, closed after its content.
 pub(crate) struct BoxChrome {
   /// The outline, painted when the box closes. CSS 2.1 Appendix E puts it
   /// above the box's own content, so it cannot go with the other decorations.
   outline: Option<PendingOutline>,
-  blend: Option<crate::GroupToken>,
-  isolate: Option<crate::GroupToken>,
-  mask: Option<crate::GroupToken>,
-  filter_wrappers: Vec<crate::GroupToken>,
-  outer: Option<crate::GroupToken>,
-  clip_group: Option<crate::GroupToken>,
-  child_group: Option<crate::GroupToken>,
-}
-
-/// An outline waiting for its box's content to finish.
-pub(crate) struct PendingOutline {
-  outline: OutlineGeometry,
-  x: f32,
-  y: f32,
+  blend: Option<GroupToken>,
+  isolate: Option<GroupToken>,
+  mask: Option<GroupToken>,
+  filter_wrappers: Vec<GroupToken>,
+  outer: Option<GroupToken>,
+  clip_group: Option<GroupToken>,
+  child_group: Option<GroupToken>,
 }
 
 impl BoxChrome {
+  /// Emits a box's shared chrome and opens its child group.
+  pub(crate) fn open(
+    placed: &PlacedBox,
+    group_transform: Affine,
+    doc: &mut SvgDocument,
+  ) -> io::Result<Self> {
+    let context = &placed.node.context;
+    let style = &context.style;
+
+    let blend = (style.mix_blend_mode != BlendMode::Normal)
+      .then(|| doc.begin_blend_group(&style.mix_blend_mode.to_css_string()))
+      .transpose()?;
+
+    let isolate = (style.isolation == Isolation::Isolate)
+      .then(|| doc.begin_isolate_group())
+      .transpose()?;
+
+    let mask = placed.begin_mask_group(doc)?;
+
+    let opacity = style.opacity.0;
+    let filter_refs = doc.filter(&style.filter, context, placed.frame.layout.size, false)?;
+    let filter_wrappers = doc.begin_filter_wrappers(&filter_refs)?;
+    let outer = (!group_transform.is_identity() || opacity < 1.0 || !filter_refs.is_empty())
+      .then(|| {
+        doc.begin_group(
+          group_transform,
+          opacity,
+          None,
+          filter_refs.first().map(String::as_str),
+        )
+      })
+      .transpose()?;
+
+    // Anchor the filter region to the border box: the raster backend filters the
+    // element's full layer box, but an SVG filter's default objectBoundingBox
+    // region collapses when nothing inside the group paints (e.g. an empty
+    // overlay driving feTurbulence). The invisible rect only ever grows the bbox,
+    // so painted content is unaffected.
+    if !filter_refs.is_empty() {
+      doc.rect(placed.frame.border_box(), Rgba::TRANSPARENT)?;
+    }
+
+    let clip_group = placed.begin_clip_path_group(doc)?;
+
+    placed.emit_box_shadows(doc)?;
+
+    // `background-clip` picks the shape a background fills, never when it paints:
+    // the border draws over the ring, as it does in Blink.
+    placed.emit_background(doc)?;
+    placed.emit_inset_box_shadows(doc)?;
+    emit_borders(
+      placed.border(),
+      placed.frame.layout.size,
+      placed.frame.origin,
+      doc,
+    )?;
+
+    // Children, clipped to the (rounded) padding box when overflow is not visible.
+    let child_group = style
+      .clips_overflow()
+      .then(|| doc.begin_clipped_group(&placed.overflow_clip_path_data()))
+      .transpose()?;
+
+    Ok(Self {
+      outline: PendingOutline::new(placed),
+      blend,
+      isolate,
+      mask,
+      filter_wrappers,
+      outer,
+      clip_group,
+      child_group,
+    })
+  }
+
   pub(crate) fn take_outline(&mut self) -> Option<PendingOutline> {
     self.outline.take()
   }
@@ -152,334 +617,19 @@ impl BoxChrome {
       doc.end_group(group)?;
     }
     if let Some(pending) = self.outline {
-      paint_outline(&pending, doc)?;
+      pending.emit(doc)?;
     }
     let groups = [self.clip_group, self.outer];
     for group in groups.into_iter().flatten() {
       doc.end_group(group)?;
     }
-    for group in self.filter_wrappers.into_iter().rev() {
-      doc.end_group(group)?;
-    }
+    doc.end_filter_wrappers(self.filter_wrappers)?;
     let groups = [self.mask, self.isolate, self.blend];
     for group in groups.into_iter().flatten() {
       doc.end_group(group)?;
     }
     Ok(())
   }
-}
-
-/// Emits a box's shared chrome and opens its child group.
-pub(crate) fn emit_box_chrome(
-  node: &RenderNode,
-  layout: Layout,
-  x: f32,
-  y: f32,
-  group_transform: Affine,
-  doc: &mut SvgDocument,
-) -> io::Result<BoxChrome> {
-  let width = layout.size.width;
-  let height = layout.size.height;
-  let style = &node.context.style;
-  let cc = node.context.current_color;
-
-  let blend = (style.mix_blend_mode != BlendMode::Normal)
-    .then(|| doc.begin_blend_group(&style.mix_blend_mode.to_css_string()))
-    .transpose()?;
-
-  let isolate = (style.isolation == Isolation::Isolate)
-    .then(|| doc.begin_isolate_group())
-    .transpose()?;
-
-  let mask = emit_mask_group(node, x, y, width, height, doc)?;
-
-  let opacity = style.opacity.0;
-  let filter_refs = doc.filter(&style.filter, &node.context.sizing, cc, layout.size, false)?;
-  // Later filters in the list apply after earlier ones, so they wrap outside.
-  let filter_wrappers = filter_refs
-    .iter()
-    .skip(1)
-    .rev()
-    .map(|reference| doc.begin_group(IDENTITY, 1.0, None, Some(reference)))
-    .collect::<io::Result<Vec<_>>>()?;
-  let outer = (!group_transform.is_identity() || opacity < 1.0 || !filter_refs.is_empty())
-    .then(|| {
-      doc.begin_group(
-        group_transform,
-        opacity,
-        None,
-        filter_refs.first().map(String::as_str),
-      )
-    })
-    .transpose()?;
-
-  // Anchor the filter region to the border box: the raster backend filters the
-  // element's full layer box, but an SVG filter's default objectBoundingBox
-  // region collapses when nothing inside the group paints (e.g. an empty
-  // overlay driving feTurbulence). The invisible rect only ever grows the bbox,
-  // so painted content is unaffected.
-  if !filter_refs.is_empty() {
-    doc.rect(x, y, width, height, Rgba([0, 0, 0, 0]))?;
-  }
-
-  let clip_group = emit_clip_path_group(node, layout.size, x, y, doc)?;
-
-  emit_box_shadows(node, layout, x, y, width, height, doc)?;
-
-  // Border/radius geometry is reused from takumi-core (the same `BorderProperties`
-  // the raster backend rasterizes) instead of being reimplemented here.
-  let border = BorderProperties::from_context(&node.context, layout.size, layout.border);
-  let rounded = !border.is_zero();
-
-  // `background-clip` picks the shape a background fills, never when it paints:
-  // the border draws over the ring, as it does in Blink.
-  emit_background(node, &border, layout, x, y, doc)?;
-  emit_inset_box_shadows(node, &border, layout, x, y, doc)?;
-  emit_borders(&border, x, y, layout.size, doc)?;
-
-  // Children, clipped to the (rounded) padding box when overflow is not visible.
-  // With border-radius present the raster backend clips both axes to the rounded
-  // padding box regardless of the per-axis overflow values, so the rounded path is
-  // used as-is. Without radius a two-value overflow (e.g. `overflow-x: hidden;
-  // overflow-y: visible`) must leave the visible axis unbounded.
-  let child_group = style
-    .clips_overflow()
-    .then(|| {
-      let path = if rounded {
-        padding_box_path_data(&border, layout, x, y)
-      } else {
-        overflow_clip_rect_data(style, layout, x, y)
-      };
-      doc
-        .clip_path(&path)
-        .and_then(|clip| doc.begin_group(IDENTITY, 1.0, Some(&clip), None))
-    })
-    .transpose()?;
-
-  Ok(BoxChrome {
-    outline: pending_outline(node, layout, layout.size, x, y),
-    blend,
-    isolate,
-    mask,
-    filter_wrappers,
-    outer,
-    clip_group,
-    child_group,
-  })
-}
-
-/// The `background-origin` positioning area as an absolute frame within the box.
-fn background_origin_frame(origin: BackgroundOrigin, layout: Layout, x: f32, y: f32) -> Frame {
-  let b = layout.border;
-  let p = layout.padding;
-  let frame = |left: f32, right: f32, top: f32, bottom: f32| {
-    Frame::new(
-      x + left,
-      y + top,
-      (layout.size.width - left - right).max(0.0),
-      (layout.size.height - top - bottom).max(0.0),
-    )
-  };
-
-  match origin {
-    BackgroundOrigin::BorderBox => Frame::new(x, y, layout.size.width, layout.size.height),
-    BackgroundOrigin::PaddingBox => frame(b.left, b.right, b.top, b.bottom),
-    BackgroundOrigin::ContentBox => frame(
-      b.left + p.left,
-      b.right + p.right,
-      b.top + p.top,
-      b.bottom + p.bottom,
-    ),
-    _ => Frame::new(x, y, layout.size.width, layout.size.height),
-  }
-}
-
-/// Emits the element's background (color then image layers) clipped to the region selected by
-/// `background-clip`.
-pub(crate) fn emit_background(
-  node: &RenderNode,
-  border: &BorderProperties,
-  layout: Layout,
-  x: f32,
-  y: f32,
-  doc: &mut SvgDocument,
-) -> io::Result<()> {
-  let style = &node.context.style;
-  if style.background_clip == BackgroundClip::Text {
-    return Ok(());
-  }
-  let (width, height) = (layout.size.width, layout.size.height);
-  let background = style.background_color.resolve(node.context.current_color);
-  let has_bg_image = style
-    .background_image
-    .as_deref()
-    .is_some_and(|images| !images.is_empty());
-  if background.0[3] == 0 && !has_bg_image {
-    return Ok(());
-  }
-
-  // The colour fill carries the clip shape itself, so it goes outside the
-  // group. Only the image layers need the clip.
-  if background.0[3] != 0 {
-    let mut device = DocumentDevice { doc, error: None };
-
-    BoxPainter::new(&node.context, layout).background_color(Point { x, y }, &mut device);
-    if let Some(error) = device.error {
-      return Err(error);
-    }
-  }
-  if !has_bg_image {
-    return Ok(());
-  }
-  let bg_clip = background_clip_path(style.background_clip, border, layout, x, y)
-    .map(|(data, even_odd)| {
-      if even_odd {
-        doc.clip_path_evenodd(&data)
-      } else {
-        doc.clip_path(&data)
-      }
-    })
-    .transpose()?;
-  let bg_group = bg_clip
-    .as_deref()
-    .map(|clip| doc.begin_group(IDENTITY, 1.0, Some(clip), None))
-    .transpose()?;
-  if let Some(images) = style.background_image.as_deref() {
-    LayerEmitter::new(&node.context, doc).background_images(
-      images,
-      background_origin_frame(style.background_origin, layout, x, y),
-      Frame::new(x, y, width, height),
-    )?;
-  }
-  if let Some(group) = bg_group {
-    doc.end_group(group)?;
-  }
-  Ok(())
-}
-
-/// Emits the element's `mask-image` as an SVG `<mask>` (the mask layers painted
-/// into the border box) and opens the masked group wrapping the element. CSS
-/// `mask-image` defaults to alpha masking. `x`/`y` are the absolute border-box
-/// top-left. Returns the open group token (closed by [`BoxChrome::close`]).
-pub(crate) fn emit_mask_group(
-  node: &RenderNode,
-  x: f32,
-  y: f32,
-  width: f32,
-  height: f32,
-  doc: &mut SvgDocument,
-) -> io::Result<Option<crate::GroupToken>> {
-  let style = &node.context.style;
-  let Some(images) = style.mask_image.as_deref() else {
-    return Ok(None);
-  };
-  if !images.iter().any(BackgroundImage::paints) {
-    return Ok(None);
-  }
-  if width <= 0.0 || height <= 0.0 {
-    return Ok(None);
-  }
-
-  let (token, reference) = doc.begin_mask()?;
-  LayerEmitter::new(&node.context, doc).image_layers(
-    images,
-    &style.mask_size,
-    &style.mask_position,
-    &style.mask_repeat,
-    Frame::new(x, y, width, height),
-    Frame::new(x, y, width, height),
-  )?;
-  doc.end_mask(token)?;
-  Ok(Some(doc.begin_masked_group(&reference)?))
-}
-
-/// Resolves `clip-path` (a `BasicShape`) against the element's border box and
-/// opens a clip group wrapping the element. Mirrors the raster backend's
-/// `render_clip_shape_mask` geometry. `x`/`y` are the absolute border-box
-/// top-left. Returns the open group token (closed by [`BoxChrome::close`]).
-pub(crate) fn emit_clip_path_group(
-  node: &RenderNode,
-  size: Size<f32>,
-  x: f32,
-  y: f32,
-  doc: &mut SvgDocument,
-) -> io::Result<Option<crate::GroupToken>> {
-  let Some(shape) = node.context.style.clip_path.as_ref() else {
-    return Ok(None);
-  };
-  let sizing = &node.context.sizing;
-  let clip = match shape {
-    BasicShape::Ellipse(ellipse) => {
-      let cx = x + ellipse.position.0.x.to_px(sizing, size.width);
-      let cy = y + ellipse.position.0.y.to_px(sizing, size.height);
-      // closest/farthest-side measure each axis from the center to BOTH of its
-      // sides, not just the top-left corner.
-      let rx = resolve_shape_radius(
-        ellipse.radius_x,
-        cx - x,
-        x + size.width - cx,
-        sizing,
-        size.width,
-      );
-      let ry = resolve_shape_radius(
-        ellipse.radius_y,
-        cy - y,
-        y + size.height - cy,
-        sizing,
-        size.height,
-      );
-      doc.clip_ellipse(cx, cy, rx, ry)?
-    }
-    BasicShape::Inset(inset) => {
-      let [top_l, right_l, bottom_l, left_l] = inset.inset.0;
-      let top = top_l.to_px(sizing, size.height);
-      let right = right_l.to_px(sizing, size.width);
-      let bottom = bottom_l.to_px(sizing, size.height);
-      let left = left_l.to_px(sizing, size.width);
-      let inner = Size {
-        width: (size.width - left - right).max(0.0),
-        height: (size.height - top - bottom).max(0.0),
-      };
-      let mut border = BorderProperties::default();
-      if let Some(radius) = inset.border_radius {
-        border.radius = Sides(
-          radius
-            .0
-            .map(|corner| SpacePair::from_single(corner.to_px(sizing, size.width))),
-        );
-      }
-      let mut commands = Vec::with_capacity(BorderProperties::PATH_COMMANDS_AMOUNT);
-      border.append_mask_commands(&mut commands, inner, Point { x: left, y: top });
-      let data = path_data(&commands, [1.0, 0.0, 0.0, 1.0, x, y]);
-      doc.clip_path(&data)?
-    }
-    BasicShape::Polygon(polygon) => {
-      if polygon.coordinates.is_empty() {
-        return Ok(None);
-      }
-      let mut data =
-        PathData::with_capacity(polygon.coordinates.len() * (2 * APPROX_CHARS_PER_NUMBER + 1));
-      for (index, coord) in polygon.coordinates.iter().enumerate() {
-        let px = x + coord.x.to_px(sizing, size.width);
-        let py = y + coord.y.to_px(sizing, size.height);
-        data.command(if index == 0 { b'M' } else { b'L' });
-        data.pair(px, py);
-      }
-      data.close();
-      let data = data.into_string();
-      let even_odd = polygon.fill_rule.unwrap_or(node.context.style.clip_rule) == FillRule::EvenOdd;
-      doc.clip_path_transformed(&data, even_odd, None)?
-    }
-    BasicShape::Path(path) => {
-      let even_odd = path.fill_rule.unwrap_or(node.context.style.clip_rule) == FillRule::EvenOdd;
-      // Inner scale lifts CSS-px path() coords to device space; translate offsets after.
-      let scale = sizing.to_device(1.0);
-      let transform = format!("translate({} {}) scale({})", Num(x), Num(y), Num(scale));
-      doc.clip_path_transformed(&path.path, even_odd, Some(&transform))?
-    }
-    _ => return Ok(None),
-  };
-  Ok(Some(doc.begin_group(IDENTITY, 1.0, Some(&clip), None)?))
 }
 
 /// Resolves a [`ShapeRadius`] to pixels.
@@ -497,87 +647,21 @@ fn resolve_shape_radius(
   }
 }
 
-/// An absolute SVG path for a [`ClipBox`]'s rounded rectangle.
-fn clip_box_path_data(clip: ClipBox, x: f32, y: f32) -> String {
-  let mut commands = Vec::with_capacity(BorderProperties::PATH_COMMANDS_AMOUNT);
-  clip
-    .border
-    .append_mask_commands(&mut commands, clip.size, clip.offset);
-  path_data(&commands, [1.0, 0.0, 0.0, 1.0, x, y])
-}
-
-/// Absolute SVG path `d` for a rounded rectangle of `size` with `border`'s corner geometry.
-pub(crate) fn border_box_path_data(
-  border: &BorderProperties,
-  size: Size<f32>,
-  x: f32,
-  y: f32,
-) -> String {
-  clip_box_path_data(
-    ClipBox {
-      border: *border,
-      size,
-      offset: Point::ZERO,
-    },
-    x,
-    y,
-  )
-}
-
-/// Absolute SVG path `d` for the padding-box rounded rectangle.
-pub(crate) fn padding_box_path_data(
-  border: &BorderProperties,
-  layout: Layout,
-  x: f32,
-  y: f32,
-) -> String {
-  clip_box_path_data(ClipBox::padding_box(*border, layout), x, y)
-}
-
-/// Absolute SVG path `d` for the (non-rounded) overflow clip rectangle.
-pub(crate) fn overflow_clip_rect_data(
-  style: &ComputedStyle,
-  layout: Layout,
-  x: f32,
-  y: f32,
-) -> String {
-  const UNBOUNDED: f32 = 1.0e6;
-  let overflow = style.resolve_overflows();
-  let clip_x = overflow.x != Overflow::Visible;
-  let clip_y = overflow.y != Overflow::Visible;
-
-  let (left, right) = if clip_x {
-    let padding_left = x + layout.border.left;
-    let padding_right = (x + layout.size.width - layout.border.right).max(padding_left);
-    (padding_left, padding_right)
-  } else {
-    (x - UNBOUNDED, x + layout.size.width + UNBOUNDED)
-  };
-  let (top, bottom) = if clip_y {
-    let padding_top = y + layout.border.top;
-    let padding_bottom = (y + layout.size.height - layout.border.bottom).max(padding_top);
-    (padding_top, padding_bottom)
-  } else {
-    (y - UNBOUNDED, y + layout.size.height + UNBOUNDED)
-  };
-
-  let mut path = PathData::with_capacity(5 * APPROX_CHARS_PER_NUMBER);
-  path.command(b'M');
-  path.pair(left, top);
-  path.command(b'H');
-  path.number(right);
-  path.command(b'V');
-  path.number(bottom);
-  path.command(b'H');
-  path.number(left);
-  path.close();
-  path.into_string()
-}
-
-/// Builds the clip path and fill rule for a `background-clip` area.
+/// A [`PaintDevice`] writing into an [`SvgDocument`], keeping the first write error.
 pub(crate) struct DocumentDevice<'d> {
-  pub(crate) doc: &'d mut SvgDocument,
-  pub(crate) error: Option<io::Error>,
+  doc: &'d mut SvgDocument,
+  error: Option<io::Error>,
+}
+
+impl<'d> DocumentDevice<'d> {
+  pub(crate) fn new(doc: &'d mut SvgDocument) -> Self {
+    Self { doc, error: None }
+  }
+
+  /// Surfaces the first write error.
+  pub(crate) fn finish(self) -> io::Result<()> {
+    self.error.map_or(Ok(()), Err)
+  }
 }
 
 impl PaintDevice for DocumentDevice<'_> {
@@ -587,20 +671,13 @@ impl PaintDevice for DocumentDevice<'_> {
     }
     let result = match shape {
       FillShape::Rect(size) if transform.only_translation() => self.doc.rect(
-        transform.x,
-        transform.y,
-        size.width,
-        size.height,
+        Frame::new(transform.x, transform.y, size.width, size.height),
         Rgba(color.0),
       ),
       _ => {
-        let data = path_data(&shape.to_commands(), transform.to_cols_array());
+        let data = path_data(&shape.to_commands(), transform);
 
-        self.doc.path(
-          &data,
-          Rgba(color.0),
-          matches!(shape.rule(), takumi_core::style::FillRule::EvenOdd),
-        )
+        self.doc.fill_path(&data, Rgba(color.0), shape.rule())
       }
     };
 
@@ -613,74 +690,11 @@ impl PaintDevice for DocumentDevice<'_> {
     if self.error.is_some() {
       return;
     }
-    let data = path_data(&shape.to_commands(), transform.to_cols_array());
-    let dash = stroke
-      .dash
-      .map(|[dash, gap]| format!("{} {}", Num(dash), Num(gap)));
+    let data = path_data(&shape.to_commands(), transform);
 
-    if let Err(error) = self.doc.stroke_path(
-      &data,
-      Rgba(stroke.color.0),
-      stroke.width,
-      dash.as_deref(),
-      stroke.round_cap.then_some("round"),
-    ) {
+    if let Err(error) = self.doc.stroke_path(&data, stroke) {
       self.error = Some(error);
     }
-  }
-}
-
-fn background_clip_path(
-  clip: BackgroundClip,
-  border: &BorderProperties,
-  layout: Layout,
-  x: f32,
-  y: f32,
-) -> Option<(String, bool)> {
-  let rounded = !border.is_zero();
-  match clip {
-    BackgroundClip::BorderBox => {
-      rounded.then(|| (border_box_path_data(border, layout.size, x, y), false))
-    }
-    BackgroundClip::PaddingBox => Some((padding_box_path_data(border, layout, x, y), false)),
-    BackgroundClip::ContentBox => Some((
-      clip_box_path_data(ClipBox::content_box(*border, layout), x, y),
-      false,
-    )),
-    BackgroundClip::BorderArea => {
-      // The border ring: the (rounded) border-box with the (rounded) padding box
-      // punched out, drawn even-odd so the background shows only under the border.
-      let outer = border_box_path_data(border, layout.size, x, y);
-      let inner = padding_box_path_data(border, layout, x, y);
-      Some((format!("{outer}{inner}"), true))
-    }
-    // `text` is handled separately by the text path; treat anything else as the
-    // full border box.
-    _ => rounded.then(|| (border_box_path_data(border, layout.size, x, y), false)),
-  }
-}
-
-/// Emits a node's own content — its inline run set, or its replaced image/text —
-/// at the border-box top-left `(x, y)`. Block children are painted separately.
-pub(crate) fn emit_own_content(
-  node: &RenderNode,
-  layout: Layout,
-  x: f32,
-  y: f32,
-  doc: &mut SvgDocument,
-) -> io::Result<()> {
-  if node.should_create_inline_layout() {
-    return emit_inline_content(node, layout, x, y, doc);
-  }
-  // A node whose anonymous text became a child item paints that text through the
-  // child, not as its own content (mirroring the raster backend's guard).
-  if node.has_anonymous_text_item_child() {
-    return Ok(());
-  }
-  match node.node.as_ref().map(|n| &n.kind) {
-    Some(NodeKind::Image(image)) => emit_image_node(image, node, layout, x, y, doc),
-    Some(NodeKind::Text(text)) => emit_text(text, &node.context, layout, x, y, doc),
-    _ => Ok(()),
   }
 }
 
@@ -689,103 +703,63 @@ pub(crate) fn emit_own_content(
 pub(crate) fn emit_inline_box(
   inline_box: &VisualInlineBox,
   item: &InlineBoxItem<'_>,
-  container_layout: Layout,
-  container_x: f32,
-  container_y: f32,
+  container: BoxFrame,
   doc: &mut SvgDocument,
 ) -> io::Result<()> {
-  let Some((offset, paint)) = resolve_inline_box(inline_box, item, container_layout) else {
+  let Some((offset, paint)) = resolve_inline_box(inline_box, item, container.layout) else {
     return Ok(());
   };
-  let box_x = container_x + offset.x;
-  let box_y = container_y + offset.y;
+  let origin = container.origin + offset;
 
   match paint {
     InlineBoxPaint::Container(subtree) => {
-      let origin = Affine::translation(
-        box_x + subtree.margin_offset.x,
-        box_y + subtree.margin_offset.y,
+      let transform = Affine::translation(
+        origin.x + subtree.margin_offset.x,
+        origin.y + subtree.margin_offset.y,
       );
       let contexts = build_scene(SceneRequest {
         root: &subtree.root,
         layout_results: &subtree.results,
-        transform: origin,
+        transform,
         container_size: subtree.size.map(Some),
         paint_bounds: true,
       })
       .map_err(io::Error::other)?;
 
-      emit_scene(&subtree.root, &contexts, &subtree.results, doc)
+      SceneEmitter {
+        root: &subtree.root,
+        contexts: &contexts,
+        results: &subtree.results,
+      }
+      .emit(doc)
     }
     InlineBoxPaint::Replaced { node, layout } => {
-      let group_transform =
-        element_transform(&node.context, layout.size, box_x, box_y).unwrap_or(IDENTITY);
-      let chrome = emit_box_chrome(node, layout, box_x, box_y, group_transform, doc)?;
+      let placed = PlacedBox::new(node, BoxFrame::new(layout, origin));
+      let group_transform = placed.element_transform().unwrap_or(Affine::IDENTITY);
+      let chrome = BoxChrome::open(&placed, group_transform, doc)?;
 
-      match node.node.as_ref().map(|n| &n.kind) {
-        Some(NodeKind::Image(image)) => emit_image_node(image, node, layout, box_x, box_y, doc)?,
-        Some(NodeKind::Text(text)) => emit_text(text, &node.context, layout, box_x, box_y, doc)?,
-        _ => {}
-      }
-
+      placed.emit_replaced_content(doc)?;
       chrome.close(doc)
     }
   }
 }
 
-/// Emits an image node's content into its content box.
-fn emit_image_node(
-  image: &ImageData,
-  node: &RenderNode,
-  layout: Layout,
-  x: f32,
-  y: f32,
-  doc: &mut SvgDocument,
-) -> io::Result<()> {
-  // `x`/`y` are the element's absolute border-box top-left; the content box is
-  // inset by the border and padding (not `content_box_x`, which also folds in the
-  // element's own `location` relative to its parent).
-  let ix = x + layout.border.left + layout.padding.left;
-  let iy = y + layout.border.top + layout.padding.top;
-  let (iw, ih) = (layout.content_box_width(), layout.content_box_height());
-
-  let content = Frame::new(ix, iy, iw, ih);
-  let border = BorderProperties::from_context(&node.context, layout.size, layout.border);
-  if border.is_zero() {
-    return emit_image(image, &node.context, content, doc);
-  }
-
-  let path = padding_box_path_data(&border, layout, x, y);
-  let clip = doc.clip_path(&path)?;
-  let group = doc.begin_group(IDENTITY, 1.0, Some(&clip), None)?;
-  emit_image(image, &node.context, content, doc)?;
-  doc.end_group(group)
-}
-
-/// Emits the element's borders, reusing takumi-core's `BorderProperties` geometry.
-#[derive(Clone, Copy)]
-struct BorderGeom {
-  matrix: [f32; 6],
-  size: Size<f32>,
-}
-
-pub(crate) fn emit_borders(
+/// Emits a border's rings at `origin`, reusing takumi-core's `BorderProperties` geometry.
+fn emit_borders(
   border: &BorderProperties,
-  x: f32,
-  y: f32,
   size: Size<f32>,
+  origin: Point<f32>,
   doc: &mut SvgDocument,
 ) -> io::Result<()> {
   if !border.has_visible_sides() {
     return Ok(());
   }
 
-  let matrix = [1.0, 0.0, 0.0, 1.0, x, y];
-  let geom = BorderGeom { matrix, size };
-  let mut device = DocumentDevice { doc, error: None };
+  let transform = Affine::translation(origin.x, origin.y);
+  let mut device = DocumentDevice::new(doc);
 
-  if paint_border(border, size, Point { x, y }, &mut device) {
-    return device.error.map_or(Ok(()), Err);
+  if paint_border(border, size, origin, &mut device) {
+    return device.finish();
   }
 
   let mut sides = border.painted_sides().peekable();
@@ -808,13 +782,13 @@ pub(crate) fn emit_borders(
 
     border.append_border_ring_commands(&mut ring, size);
 
-    Some(doc.clip_path_evenodd(&path_data(&ring, matrix))?)
+    Some(doc.clip_path(&path_data(&ring, transform), FillRule::EvenOdd, None)?)
   };
-  let group = doc.begin_group(IDENTITY, 1.0, clip.as_deref(), None)?;
+  let group = doc.begin_group(Affine::IDENTITY, 1.0, clip.as_deref(), None)?;
   for side in sides {
     match side.style {
       BorderStyle::Dashed | BorderStyle::Dotted => {
-        emit_side_pattern(border, side, geom, doc)?;
+        emit_side_pattern(border, side, size, transform, doc)?;
       }
       _ => {
         for band in border.side_bands(side) {
@@ -830,7 +804,11 @@ pub(crate) fn emit_borders(
             size.inset(band.inset),
             band.inset.top_left(),
           );
-          doc.path(&path_data(&polygon, matrix), Rgba(band.color.0), false)?;
+          doc.fill_path(
+            &path_data(&polygon, transform),
+            Rgba(band.color.0),
+            FillRule::NonZero,
+          )?;
         }
       }
     }
@@ -842,10 +820,10 @@ pub(crate) fn emit_borders(
 fn emit_side_pattern(
   border: &BorderProperties,
   side: PaintedSide,
-  geom: BorderGeom,
+  size: Size<f32>,
+  transform: Affine,
   doc: &mut SvgDocument,
 ) -> io::Result<()> {
-  let BorderGeom { matrix, size } = geom;
   let (half_top, half_right, half_bottom, half_left) = (
     border.width.top / 2.0,
     border.width.right / 2.0,
@@ -867,7 +845,7 @@ fn emit_side_pattern(
       (half_left, size.height - half_bottom),
     ),
   };
-  let [a, b, c, d, e, f] = matrix;
+  let [a, b, c, d, e, f] = transform.to_cols_array();
   let map = |px: f32, py: f32| (a * px + c * py + e, b * px + d * py + f);
   let (mx0, my0) = map(x0, y0);
   let (mx1, my1) = map(x1, y1);
@@ -876,171 +854,54 @@ fn emit_side_pattern(
   path.pair(mx0, my0);
   path.command(b'L');
   path.pair(mx1, my1);
-  let data = path.into_string();
   let length = ((x1 - x0).powi(2) + (y1 - y0).powi(2)).sqrt();
-  let (dasharray, linecap) = dash_attrs(side.width, side.style, length, false);
+  let dash = side.style.dash_pattern(side.width, length, false);
+
   doc.stroke_path(
-    &data,
-    Rgba(side.color.0),
-    side.width,
-    dasharray.as_deref(),
-    linecap,
+    &path.into_string(),
+    &StrokeStyle {
+      color: side.color,
+      width: side.width,
+      dash: dash.map(|dash| dash.intervals),
+      round_cap: dash.is_some_and(|dash| dash.round_cap),
+    },
   )
 }
 
-/// Emits the CSS `outline` as a ring around the border-box, expanded outward by `outline-offset +
-/// outline-width`.
-fn pending_outline(
-  node: &RenderNode,
-  layout: Layout,
-  size: Size<f32>,
-  x: f32,
-  y: f32,
-) -> Option<PendingOutline> {
-  let color = node
-    .context
-    .style
-    .outline_color
-    .resolve(node.context.current_color);
-
-  if color.0[3] == 0 {
-    return None;
-  }
-
-  Some(PendingOutline {
-    outline: BoxPainter::fragment(&node.context, layout, size).outline()?,
-    x,
-    y,
-  })
+/// A box's CSS `outline`, deferred until its content is painted.
+pub(crate) struct PendingOutline {
+  outline: OutlineGeometry,
+  origin: Point<f32>,
 }
 
-pub(crate) fn paint_outline(pending: &PendingOutline, doc: &mut SvgDocument) -> io::Result<()> {
-  emit_borders(
-    &pending.outline.border,
-    pending.x - pending.outline.grow,
-    pending.y - pending.outline.grow,
-    pending.outline.size,
-    doc,
-  )
-}
+impl PendingOutline {
+  fn new(placed: &PlacedBox) -> Option<Self> {
+    let context = &placed.node.context;
+    let color = context.style.outline_color.resolve(context.current_color);
 
-/// SVG dash attributes for a border or outline stroke.
-fn dash_attrs(
-  width: f32,
-  style: BorderStyle,
-  length: f32,
-  closed: bool,
-) -> (Option<String>, Option<&'static str>) {
-  match style.dash_pattern(width, length, closed) {
-    Some(dash) => (
-      Some(format!(
-        "{} {}",
-        Num(dash.intervals[0]),
-        Num(dash.intervals[1])
-      )),
-      dash.round_cap.then_some("round"),
-    ),
-    None => (None, None),
-  }
-}
-
-/// Runs `emit` inside a Gaussian-blur group when `blur_radius` is positive (the CSS shadow blur is
-/// `2σ`), or directly otherwise.
-fn emit_with_blur(
-  doc: &mut SvgDocument,
-  blur_radius: f32,
-  emit: impl FnOnce(&mut SvgDocument) -> io::Result<()>,
-) -> io::Result<()> {
-  if blur_radius > 0.0 {
-    let filter = doc.blur_filter(blur_radius / 2.0)?;
-    let group = doc.begin_group(IDENTITY, 1.0, None, Some(&filter))?;
-    emit(doc)?;
-    doc.end_group(group)
-  } else {
-    emit(doc)
-  }
-}
-
-/// Emits outset `box-shadow`s behind the element as offset, blurred rects.
-pub(crate) fn emit_box_shadows(
-  node: &RenderNode,
-  layout: Layout,
-  x: f32,
-  y: f32,
-  w: f32,
-  h: f32,
-  doc: &mut SvgDocument,
-) -> io::Result<()> {
-  for resolved in BoxPainter::new(&node.context, layout).shadows().outer {
-    {}
-
-    // Shadow shape = the element's rounded border-box, radii expanded by the
-    // spread (shared core geometry with the raster backend).
-    let element_border = BorderProperties::from_context(&node.context, layout.size, layout.border);
-    let (shadow, spread_size) = element_border.outset_shadow_box(
-      Size {
-        width: w,
-        height: h,
-      },
-      resolved.spread_radius,
-    );
-    if spread_size.width <= 0.0 || spread_size.height <= 0.0 {
-      continue;
+    if color.0[3] == 0 {
+      return None;
     }
 
-    let sx = x + resolved.offset_x - resolved.spread_radius;
-    let sy = y + resolved.offset_y - resolved.spread_radius;
-    let fill = Rgba(resolved.color.0);
-    let data = border_box_path_data(&shadow, spread_size, sx, sy);
-
-    emit_with_blur(doc, resolved.blur_radius, |doc| {
-      doc.path(&data, fill, false)
-    })?;
+    Some(Self {
+      outline: placed.painter.outline()?,
+      origin: placed.frame.origin,
+    })
   }
-  Ok(())
-}
 
-/// Emits inset `box-shadow`s as a blurred ring inside the element's rounded padding box.
-pub(crate) fn emit_inset_box_shadows(
-  node: &RenderNode,
-  border: &BorderProperties,
-  layout: Layout,
-  x: f32,
-  y: f32,
-  doc: &mut SvgDocument,
-) -> io::Result<()> {
-  if layout.size.width <= 0.0 || layout.size.height <= 0.0 {
-    return Ok(());
-  }
-  let padding = ClipBox::padding_box(*border, layout);
-  let outer = clip_box_path_data(padding, x, y);
-  for resolved in BoxPainter::new(&node.context, layout).shadows().inset {
-    let fill = Rgba(resolved.color.0);
-
-    // The shadow fills the padding box minus the hole it leaves uncovered
-    // (shared core geometry with the raster backend), drawn even-odd.
-    let hole = ClipBox::inset_shadow_hole(
-      padding.border,
-      padding.size,
-      resolved.spread_radius,
+  /// Paints the outline as a ring around the border box, grown by
+  /// `outline-offset + outline-width`.
+  pub(crate) fn emit(&self, doc: &mut SvgDocument) -> io::Result<()> {
+    emit_borders(
+      &self.outline.border,
+      self.outline.size,
       Point {
-        x: resolved.offset_x,
-        y: resolved.offset_y,
+        x: self.origin.x - self.outline.grow,
+        y: self.origin.y - self.outline.grow,
       },
-    );
-    let ring = format!(
-      "{outer}{}",
-      clip_box_path_data(hole, x + padding.offset.x, y + padding.offset.y)
-    );
-
-    // Padding box minus the hole, drawn even-odd, blurred, and clipped to the
-    // rounded padding box so the blur stays inside the element.
-    let clip = doc.clip_path(&outer)?;
-    let clip_group = doc.begin_group(IDENTITY, 1.0, Some(&clip), None)?;
-    emit_with_blur(doc, resolved.blur_radius, |doc| doc.path(&ring, fill, true))?;
-    doc.end_group(clip_group)?;
+      doc,
+    )
   }
-  Ok(())
 }
 
 #[cfg(test)]

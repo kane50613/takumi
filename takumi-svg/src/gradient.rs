@@ -9,13 +9,13 @@ use takumi_core::{
   paint::{ColorLut, ConicGradientTile},
   style::{
     BackgroundImage, BackgroundRepeat, BackgroundSize, BlendMode, ColorInterpolationMethod,
-    ConicGradient, LinearGradient, PositionValue, RadialGradient, ResolvedGradientStop,
+    ConicGradient, FillRule, LinearGradient, PositionValue, RadialGradient, ResolvedGradientStop,
   },
 };
 
 use crate::{
-  APPROX_CHARS_PER_NUMBER, Frame, GradientStop, IDENTITY, Rgba, SvgDocument,
-  box_model::{PathData, rect_path_data},
+  APPROX_CHARS_PER_NUMBER, Frame, GradientStop, Rgba, SvgDocument,
+  box_model::PathData,
   image::{PRESERVE_ASPECT_NONE, data_url_for_url},
 };
 
@@ -57,7 +57,7 @@ impl<'a, 'd> LayerEmitter<'a, 'd> {
     )
   }
 
-  /// Emits a list of background/mask image layers honoring per-layer size/ position/repeat.
+  /// Emits a list of background/mask image layers honoring per-layer size/position/repeat.
   pub(crate) fn image_layers(
     &mut self,
     images: &[BackgroundImage],
@@ -120,7 +120,7 @@ impl<'a, 'd> LayerEmitter<'a, 'd> {
         || tile.x + tile.w > paint.x + paint.w + 1e-3
         || tile.y + tile.h > paint.y + paint.h + 1e-3;
       if overflows {
-        let token = self.begin_box_clip(paint)?;
+        let token = self.doc.begin_clipped_group(&paint.path_data())?;
         self.tile(image, tile)?;
         return self.doc.end_group(token);
       }
@@ -128,15 +128,6 @@ impl<'a, 'd> LayerEmitter<'a, 'd> {
     }
 
     self.tiled_pattern(image, paint, &placement)
-  }
-
-  /// Opens a group clipped to the layer box so tiles that extend past the edges
-  /// (cover/positioned/repeated) don't bleed outside it.
-  fn begin_box_clip(&mut self, frame: Frame) -> io::Result<crate::GroupToken> {
-    let clip = self
-      .doc
-      .clip_path(&rect_path_data(frame.x, frame.y, frame.w, frame.h))?;
-    self.doc.begin_group(IDENTITY, 1.0, Some(&clip), None)
   }
 
   fn tiled_pattern(
@@ -148,27 +139,28 @@ impl<'a, 'd> LayerEmitter<'a, 'd> {
     // A `<pattern>` repeats on both axes, so only use it when both axes have
     // multiple evenly-spaced tiles; otherwise a single row/column would wrongly
     // repeat on the other axis, so emit the explicit grid.
-    let even_x = is_even_step(&placement.xs, placement.tile_w);
-    let even_y = is_even_step(&placement.ys, placement.tile_h);
+    let even_x = even_step(&placement.xs, placement.tile_w);
+    let even_y = even_step(&placement.ys, placement.tile_h);
     if let (Some(step_x), Some(step_y)) = (even_x, even_y)
       && placement.xs.len() > 1
       && placement.ys.len() > 1
     {
-      let origin_x = paint_box.x + placement.xs[0];
-      let origin_y = paint_box.y + placement.ys[0];
-      let (token, paint) = self.doc.begin_pattern(origin_x, origin_y, step_x, step_y)?;
+      let (token, paint) = self.doc.begin_pattern(Frame::new(
+        paint_box.x + placement.xs[0],
+        paint_box.y + placement.ys[0],
+        step_x,
+        step_y,
+      ))?;
       self.tile(
         image,
         Frame::new(0.0, 0.0, placement.tile_w, placement.tile_h),
       )?;
       self.doc.end_pattern(token)?;
-      return self
-        .doc
-        .rect_paint(paint_box.x, paint_box.y, paint_box.w, paint_box.h, &paint);
+      return self.doc.rect_paint(paint_box, &paint);
     }
 
     // Explicit tile grid, clipped to the box so edge tiles don't bleed outside.
-    let token = self.begin_box_clip(paint_box)?;
+    let token = self.doc.begin_clipped_group(&paint_box.path_data())?;
     for &ty in &placement.ys {
       for &tx in &placement.xs {
         self.tile(
@@ -200,14 +192,7 @@ impl<'a, 'd> LayerEmitter<'a, 'd> {
     let Some(href) = data_url_for_url(url, self.context) else {
       return Ok(());
     };
-    self.doc.image(
-      rect.x,
-      rect.y,
-      rect.w,
-      rect.h,
-      &href,
-      Some(PRESERVE_ASPECT_NONE),
-    )
+    self.doc.image(rect, &href, Some(PRESERVE_ASPECT_NONE))
   }
 
   fn linear(&mut self, gradient: &LinearGradient, rect: Frame) -> io::Result<()> {
@@ -232,23 +217,21 @@ impl<'a, 'd> LayerEmitter<'a, 'd> {
       )
     };
 
-    let (t0, t1, base, span) = if gradient.repeating {
+    let (t0, t1, stops) = if gradient.repeating {
       let first = resolved.first().map_or(0.0, |s| s.position);
       let last = resolved.last().map_or(geometry.axis_length, |s| s.position);
-      (first, last, first, last - first)
+      (first, last, svg_stops(resolved, first, last - first))
     } else {
-      (0.0, geometry.axis_length, 0.0, geometry.axis_length)
-    };
-
-    let stops = if gradient.repeating {
-      svg_stops(resolved, base, span)
-    } else {
-      lut_svg_stops(resolved, geometry.axis_length, gradient.interpolation)
+      (
+        0.0,
+        geometry.axis_length,
+        lut_svg_stops(resolved, geometry.axis_length, gradient.interpolation),
+      )
     };
     let paint = self
       .doc
       .linear_gradient(point_at(t0), point_at(t1), gradient.repeating, &stops)?;
-    self.doc.rect_paint(x, y, w, h, &paint)
+    self.doc.rect_paint(rect, &paint)
   }
 
   fn radial(&mut self, gradient: &RadialGradient, rect: Frame) -> io::Result<()> {
@@ -266,25 +249,25 @@ impl<'a, 'd> LayerEmitter<'a, 'd> {
 
     let radius_x = geometry.inv_radius_x.recip();
     let radius_y = geometry.inv_radius_y.recip();
-    let (r, base, span) = if gradient.repeating {
+    let (r, stops) = if gradient.repeating {
       let first = resolved.first().map_or(0.0, |s| s.position);
       let last = resolved
         .last()
         .map_or(geometry.radius_scale, |s| s.position);
-      ((last - first).max(1e-6), first, last - first)
+      (
+        (last - first).max(1e-6),
+        svg_stops(resolved, first, last - first),
+      )
     } else {
-      (geometry.radius_scale, 0.0, geometry.radius_scale)
+      (
+        geometry.radius_scale,
+        lut_svg_stops(resolved, geometry.radius_scale, gradient.interpolation),
+      )
     };
     let scale = (
       (radius_x / geometry.radius_scale.max(1e-6)).max(1e-6),
       (radius_y / geometry.radius_scale.max(1e-6)).max(1e-6),
     );
-
-    let stops = if gradient.repeating {
-      svg_stops(resolved, base, span)
-    } else {
-      lut_svg_stops(resolved, geometry.radius_scale, gradient.interpolation)
-    };
     let paint = self.doc.radial_gradient(
       (x + geometry.cx, y + geometry.cy),
       r,
@@ -292,7 +275,7 @@ impl<'a, 'd> LayerEmitter<'a, 'd> {
       gradient.repeating,
       &stops,
     )?;
-    self.doc.rect_paint(x, y, w, h, &paint)
+    self.doc.rect_paint(rect, &paint)
   }
 
   fn conic(&mut self, gradient: &ConicGradient, rect: Frame) -> io::Result<()> {
@@ -316,16 +299,14 @@ impl<'a, 'd> LayerEmitter<'a, 'd> {
       .map(|(px, py)| (px - ccx).hypot(py - ccy))
       .fold(0.0_f32, f32::max);
 
-    let clip = self.doc.clip_path(&rect_path_data(x, y, w, h))?;
-    let group = self.doc.begin_group(IDENTITY, 1.0, Some(&clip), None)?;
+    let group = self.doc.begin_clipped_group(&rect.path_data())?;
     for i in 0..CONIC_WEDGES {
       let a0 = i as f32 / CONIC_WEDGES as f32 * TAU;
       let a1 = (i + 1) as f32 / CONIC_WEDGES as f32 * TAU;
       let mid = (a0 + a1) / 2.0;
       let adjusted = (mid - tile.start_rad).rem_euclid(TAU);
       let idx = tile.lut_index_for_adjusted_angle_with_len(adjusted, lut_len);
-      let color = tile.lut.sample(idx).demultiply();
-      let fill = Rgba([color.red(), color.green(), color.blue(), color.alpha()]);
+      let fill = Rgba::demultiplied(tile.lut.sample(idx));
       if fill.0[3] == 0 {
         continue;
       }
@@ -338,7 +319,9 @@ impl<'a, 'd> LayerEmitter<'a, 'd> {
       wedge.pair(x0, y0);
       wedge.pair(x1, y1);
       wedge.close();
-      self.doc.path(&wedge.into_string(), fill, false)?;
+      self
+        .doc
+        .fill_path(&wedge.into_string(), fill, FillRule::NonZero)?;
     }
     self.doc.end_group(group)
   }
@@ -346,7 +329,7 @@ impl<'a, 'd> LayerEmitter<'a, 'd> {
 
 /// Returns the uniform step between positions (tile size when there is a single tile) if the
 /// positions are equally spaced, else `None`.
-fn is_even_step(positions: &[f32], tile_size: f32) -> Option<f32> {
+fn even_step(positions: &[f32], tile_size: f32) -> Option<f32> {
   match positions {
     [] => None,
     [_] => Some(tile_size),
@@ -439,10 +422,6 @@ fn lut_svg_stops(
   }
   let span = axis_length.max(1e-6);
   let cell = 1.0 / (lut.len() - 1) as f32;
-  let demul = |premultiplied: &tiny_skia::PremultipliedColorU8| {
-    let color = premultiplied.demultiply();
-    Rgba([color.red(), color.green(), color.blue(), color.alpha()])
-  };
 
   // Hard stops: adjacent resolved stops with (near-)equal positions.
   let mut hard_stops = Vec::new();
@@ -460,16 +439,17 @@ fn lut_svg_stops(
   let mut stops: Vec<GradientStop> = lut
     .iter()
     .enumerate()
-    .filter(|(index, _)| {
-      let offset = *index as f32 / (lut.len() - 1) as f32;
+    .filter_map(|(index, &premultiplied)| {
+      let offset = index as f32 / (lut.len() - 1) as f32;
       // Drop LUT samples that straddle a hard stop; the injected pair covers it.
-      !hard_stops
+      let straddles = hard_stops
         .iter()
-        .any(|(boundary, ..)| (offset - boundary).abs() < cell)
-    })
-    .map(|(index, premultiplied)| GradientStop {
-      offset: index as f32 / (lut.len() - 1) as f32,
-      color: demul(premultiplied),
+        .any(|(boundary, ..)| (offset - boundary).abs() < cell);
+
+      (!straddles).then(|| GradientStop {
+        offset,
+        color: Rgba::demultiplied(premultiplied),
+      })
     })
     .collect();
 
