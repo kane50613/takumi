@@ -27,7 +27,7 @@
     "@types/bun": "^1.4.1",
     "knip": "^6.34.0",
     "lefthook": "^2.1.12",
-    "oxfmt": "^0.66.0",
+    "oxfmt": "^0.68.0",
     "oxlint": "^1.81.0",
     "publint": "^0.3.24",
     "tegami": "^1.5.0",
@@ -35,10 +35,10 @@
   },
   "overrides": {
     "@takumi-rs/image-response": "workspace:*",
-    "rolldown-plugin-dts": "0.27.6",
+    "rolldown-plugin-dts": "0.28.6",
     "takumi-js": "workspace:*",
-    "vite": "8.2.2",
-    "waku": "1.0.0-rc.0"
+    "vite": "8.3.0",
+    "waku": "1.0.0-rc.1"
   },
   "catalog": {
     "@types/bun": "^1.4.1",
