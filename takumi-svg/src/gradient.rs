@@ -4,12 +4,12 @@ use std::{f32::consts::TAU, io};
 
 use takumi_core::{
   context::RenderContext,
-  geometry::{Point, Size},
-  layout::background::{BackgroundLayerInput, LayerTileStyle},
+  geometry::{Rect, Size},
+  layout::background_image_geometry::{BackgroundImageGeometry, FillLayers},
   paint::{ColorLut, ConicGradientTile},
   style::{
-    BackgroundImage, BackgroundRepeat, BackgroundSize, BlendMode, ColorInterpolationMethod,
-    ConicGradient, FillRule, LinearGradient, PositionValue, RadialGradient, ResolvedGradientStop,
+    BackgroundImage, ColorInterpolationMethod, ConicGradient, FillRule, LinearGradient,
+    RadialGradient, ResolvedGradientStop,
   },
 };
 
@@ -20,14 +20,6 @@ use crate::{
 };
 
 const CONIC_WEDGES: usize = 180;
-
-/// A resolved background or mask layer.
-struct LayerPlacement {
-  tile_w: f32,
-  tile_h: f32,
-  xs: Vec<f32>,
-  ys: Vec<f32>,
-}
 
 /// Emits background/mask image layers for one node into an SVG document.
 pub(crate) struct LayerEmitter<'a, 'd> {
@@ -47,41 +39,34 @@ impl<'a, 'd> LayerEmitter<'a, 'd> {
     area: Frame,
     paint: Frame,
   ) -> io::Result<()> {
-    self.image_layers(
-      images,
-      &self.context.style.background_size,
-      &self.context.style.background_position,
-      &self.context.style.background_repeat,
-      area,
-      paint,
-    )
+    let layers = FillLayers::background(&self.context.style);
+
+    self.image_layers(images, layers, area, paint)
   }
 
-  /// Emits a list of background/mask image layers honoring per-layer size/position/repeat.
+  /// Emits background or mask image layers, positioned in `area` and painted over `paint`.
   pub(crate) fn image_layers(
     &mut self,
     images: &[BackgroundImage],
-    sizes: &[BackgroundSize],
-    positions: &[PositionValue],
-    repeats: &[BackgroundRepeat],
+    layers: FillLayers<'_>,
     area: Frame,
     paint: Frame,
   ) -> io::Result<()> {
     if paint.w <= 0.0 || paint.h <= 0.0 {
       return Ok(());
     }
-    let last_size = sizes.last().copied().unwrap_or_default();
-    let last_position = positions.last().copied().unwrap_or_default();
-    let last_repeat = repeats.last().copied().unwrap_or_default();
+    let size = Size {
+      width: area.w,
+      height: area.h,
+    };
 
     for (index, image) in images.iter().enumerate().rev() {
       if !image.paints() {
         continue;
       }
-      let size = sizes.get(index).copied().unwrap_or(last_size);
-      let position = positions.get(index).copied().unwrap_or(last_position);
-      let repeat = repeats.get(index).copied().unwrap_or(last_repeat);
-      self.layer(image, size, position, repeat, area, paint)?;
+      let geometry = layers.geometry(index, image, size, self.context);
+
+      self.layer(image, &geometry, area, paint)?;
     }
     Ok(())
   }
@@ -89,92 +74,59 @@ impl<'a, 'd> LayerEmitter<'a, 'd> {
   fn layer(
     &mut self,
     image: &BackgroundImage,
-    size: BackgroundSize,
-    position: PositionValue,
-    repeat: BackgroundRepeat,
+    geometry: &BackgroundImageGeometry,
     area: Frame,
     paint: Frame,
   ) -> io::Result<()> {
-    let Some(placement) =
-      resolve_placement(image, size, position, repeat, self.context, area, paint)
-    else {
-      return Ok(());
-    };
-    if placement.tile_w <= 0.0 || placement.tile_h <= 0.0 {
+    let tile = geometry.tile_size;
+    if tile.width <= 0.0 || tile.height <= 0.0 {
       return Ok(());
     }
+    let (xs, ys) = geometry.tile_origins(Rect {
+      left: paint.x - area.x,
+      top: paint.y - area.y,
+      right: paint.x + paint.w - area.x,
+      bottom: paint.y + paint.h - area.y,
+    });
 
-    // Tile positions are relative to the painting box, so origin only shifts
-    // placement while the clip stays the painting box.
-    if placement.xs.len() == 1 && placement.ys.len() == 1 {
-      let tile = Frame::new(
-        paint.x + placement.xs[0],
-        paint.y + placement.ys[0],
-        placement.tile_w,
-        placement.tile_h,
-      );
+    // One tile in view draws on its own; a pattern only pays off for several.
+    if let ([tile_x], [tile_y]) = (xs.as_slice(), ys.as_slice()) {
+      let rect = Frame::new(area.x + tile_x, area.y + tile_y, tile.width, tile.height);
       // A `cover`/positioned/origin-shifted tile can extend past the painting box;
       // clip it so it does not bleed outside the element (matching the raster backend).
-      let overflows = tile.x < paint.x - 1e-3
-        || tile.y < paint.y - 1e-3
-        || tile.x + tile.w > paint.x + paint.w + 1e-3
-        || tile.y + tile.h > paint.y + paint.h + 1e-3;
+      let overflows = rect.x < paint.x - 1e-3
+        || rect.y < paint.y - 1e-3
+        || rect.x + rect.w > paint.x + paint.w + 1e-3
+        || rect.y + rect.h > paint.y + paint.h + 1e-3;
       if overflows {
         let token = self.doc.begin_clipped_group(&paint.path_data())?;
-        self.tile(image, tile)?;
+        self.tile(image, rect)?;
         return self.doc.end_group(token);
       }
-      return self.tile(image, tile);
+      return self.tile(image, rect);
     }
 
-    self.tiled_pattern(image, paint, &placement)
-  }
-
-  fn tiled_pattern(
-    &mut self,
-    image: &BackgroundImage,
-    paint_box: Frame,
-    placement: &LayerPlacement,
-  ) -> io::Result<()> {
-    // A `<pattern>` repeats on both axes, so only use it when both axes have
-    // multiple evenly-spaced tiles; otherwise a single row/column would wrongly
-    // repeat on the other axis, so emit the explicit grid.
-    let even_x = even_step(&placement.xs, placement.tile_w);
-    let even_y = even_step(&placement.ys, placement.tile_h);
-    if let (Some(step_x), Some(step_y)) = (even_x, even_y)
-      && placement.xs.len() > 1
-      && placement.ys.len() > 1
-    {
-      let (token, paint) = self.doc.begin_pattern(Frame::new(
-        paint_box.x + placement.xs[0],
-        paint_box.y + placement.ys[0],
-        step_x,
-        step_y,
-      ))?;
-      self.tile(
-        image,
-        Frame::new(0.0, 0.0, placement.tile_w, placement.tile_h),
-      )?;
-      self.doc.end_pattern(token)?;
-      return self.doc.rect_paint(paint_box, &paint);
-    }
-
-    // Explicit tile grid, clipped to the box so edge tiles don't bleed outside.
-    let token = self.doc.begin_clipped_group(&paint_box.path_data())?;
-    for &ty in &placement.ys {
-      for &tx in &placement.xs {
-        self.tile(
-          image,
-          Frame::new(
-            paint_box.x + tx,
-            paint_box.y + ty,
-            placement.tile_w,
-            placement.tile_h,
-          ),
-        )?;
-      }
-    }
-    self.doc.end_group(token)
+    let first = geometry.first_tile();
+    let (x, y) = (area.x + first.x, area.y + first.y);
+    // An axis that does not repeat steps past the painted box, so its one tile stays single.
+    let step = geometry.step();
+    let (token, pattern) = self.doc.begin_pattern(Frame::new(
+      x,
+      y,
+      if geometry.repeat_x {
+        step.width
+      } else {
+        paint.w + tile.width
+      },
+      if geometry.repeat_y {
+        step.height
+      } else {
+        paint.h + tile.height
+      },
+    ))?;
+    self.tile(image, Frame::new(0.0, 0.0, tile.width, tile.height))?;
+    self.doc.end_pattern(token)?;
+    self.doc.rect_paint(paint, &pattern)
   }
 
   /// Paints one tile of a layer into `rect`.
@@ -325,65 +277,6 @@ impl<'a, 'd> LayerEmitter<'a, 'd> {
     }
     self.doc.end_group(group)
   }
-}
-
-/// Returns the uniform step between positions (tile size when there is a single tile) if the
-/// positions are equally spaced, else `None`.
-fn even_step(positions: &[f32], tile_size: f32) -> Option<f32> {
-  match positions {
-    [] => None,
-    [_] => Some(tile_size),
-    [first, second, ..] => {
-      let step = second - first;
-      positions
-        .windows(2)
-        .all(|w| (w[1] - w[0] - step).abs() < 0.5)
-        .then_some(step)
-    }
-  }
-}
-
-/// Resolves a layer's tile size and per-axis tile origins (box-relative).
-fn resolve_placement(
-  image: &BackgroundImage,
-  size: BackgroundSize,
-  position: PositionValue,
-  repeat: BackgroundRepeat,
-  context: &RenderContext,
-  area: Frame,
-  paint: Frame,
-) -> Option<LayerPlacement> {
-  let geometry = BackgroundLayerInput {
-    area: Size {
-      width: area.w.round().max(0.0) as u32,
-      height: area.h.round().max(0.0) as u32,
-    },
-    paint: Size {
-      width: paint.w.round().max(0.0) as u32,
-      height: paint.h.round().max(0.0) as u32,
-    },
-    origin_offset: Point {
-      x: (area.x - paint.x).round() as i32,
-      y: (area.y - paint.y).round() as i32,
-    },
-    context,
-  }
-  .resolve(
-    image,
-    LayerTileStyle {
-      pos: position,
-      size,
-      repeat,
-      blend_mode: BlendMode::Normal,
-    },
-  )?;
-
-  Some(LayerPlacement {
-    tile_w: geometry.tile_width as f32,
-    tile_h: geometry.tile_height as f32,
-    xs: geometry.xs.iter().map(|x| *x as f32).collect(),
-    ys: geometry.ys.iter().map(|y| *y as f32).collect(),
-  })
 }
 
 fn svg_stops(stops: &[ResolvedGradientStop], base: f32, span: f32) -> Vec<GradientStop> {

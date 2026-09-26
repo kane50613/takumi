@@ -2,13 +2,16 @@
 //! `-position`, and `-repeat` resolved in exact floats, after Blink's
 //! `BackgroundImageGeometry` (`third_party/blink/renderer/core/paint/background_image_geometry.cc`).
 
+use smallvec::{SmallVec, smallvec};
+
 use crate::{
   context::RenderContext,
-  geometry::{Point, Size},
+  geometry::{ComputedLayout as Layout, Point, Rect, Size},
   layout::node::resolve_image,
   style::{
-    AutoBackgroundAxis, BackgroundImage, BackgroundRepeat, BackgroundRepeatStyle, BackgroundSize,
-    BlendMode, ComputedStyle, IntrinsicSizing, Length, PositionComponent, PositionValue,
+    AutoBackgroundAxis, BackgroundImage, BackgroundOrigin, BackgroundRepeat, BackgroundRepeatStyle,
+    BackgroundSize, BlendMode, ComputedStyle, IntrinsicSizing, Length, PositionComponent,
+    PositionValue,
   },
 };
 
@@ -84,27 +87,81 @@ fn layer_intrinsic(image: &BackgroundImage, context: &RenderContext) -> Option<I
   Some(source.intrinsic_sizing().scale(&context.sizing))
 }
 
-/// Where one background layer's tiles land inside the positioning area, in exact floats. Blink's
-/// `BackgroundImageGeometry` expresses the same placement as a phase and a spacing.
+/// A `background-origin` positioning area.
+pub struct OriginBox {
+  /// Offset of the positioning area inside the border box.
+  pub offset: Point<f32>,
+  /// The positioning area.
+  pub size: Size<f32>,
+}
+
+impl OriginBox {
+  /// The positioning area `origin` selects on `layout`.
+  pub fn new(origin: BackgroundOrigin, layout: Layout) -> Self {
+    let border = layout.border;
+    let padding = layout.padding;
+    let inset = |left: f32, right: f32, top: f32, bottom: f32| Self {
+      offset: Point { x: left, y: top },
+      size: Size {
+        width: layout.size.width - left - right,
+        height: layout.size.height - top - bottom,
+      },
+    };
+
+    match origin {
+      BackgroundOrigin::BorderBox => Self {
+        offset: Point { x: 0.0, y: 0.0 },
+        size: layout.size,
+      },
+      BackgroundOrigin::PaddingBox => inset(border.left, border.right, border.top, border.bottom),
+      BackgroundOrigin::ContentBox => inset(
+        border.left + padding.left,
+        border.right + padding.right,
+        border.top + padding.top,
+        border.bottom + padding.bottom,
+      ),
+    }
+  }
+}
+
+impl AutoBackgroundAxis {
+  /// The size of this `auto` axis, taken from the image's ratio once the other axis is `fixed_size`.
+  pub fn size_from_intrinsic(self, intrinsic_ratio: Option<f32>, fixed_size: f32) -> Option<f32> {
+    let ratio = intrinsic_ratio?;
+
+    if ratio == 0.0 {
+      return Some(0.0);
+    }
+
+    Some(match self {
+      Self::Width => fixed_size * ratio,
+      Self::Height => fixed_size / ratio,
+    })
+  }
+}
+
+/// Where one background layer's tiles land, in exact floats relative to the positioning area.
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub struct BackgroundImageGeometry {
-  /// Whether either axis tiles. A tiling axis becomes a pattern even when one
-  /// tile would span the area, because the phase can still pull a second tile
-  /// into view.
-  pub tiles: bool,
-  /// Tile size after `background-size`, and after `round` rescales it.
-  pub tile: Size<f32>,
-  /// Top-left of the first tile, relative to the positioning area.
-  pub origin: Point<f32>,
-  /// Distance between tile origins. Equals the tile size for `repeat`, grows
-  /// for `space`, and covers the whole area on an axis that does not repeat.
-  pub step: Size<f32>,
+  /// The size one tile draws at, after `background-size` and `round`.
+  pub tile_size: Size<f32>,
+  /// The point of the tile pattern that lands on the positioning area's top-left. On an axis that
+  /// does not repeat, the negated offset of its one tile.
+  pub phase: Point<f32>,
+  /// Extra room between tiles, which only `space` adds.
+  pub repeat_spacing: Size<f32>,
+  /// Whether the tiles repeat horizontally.
+  pub repeat_x: bool,
+  /// Whether the tiles repeat vertically.
+  pub repeat_y: bool,
 }
 
 /// One axis of a tiled layer.
 struct TileAxis {
   tile: f32,
   origin: f32,
-  step: f32,
+  spacing: f32,
+  repeats: bool,
 }
 
 impl BackgroundImageGeometry {
@@ -152,22 +209,113 @@ impl BackgroundImageGeometry {
     };
 
     Self {
-      tiles: repeat.0 != BackgroundRepeatStyle::NoRepeat
-        || repeat.1 != BackgroundRepeatStyle::NoRepeat,
-      tile: Size {
+      tile_size: Size {
         width: x.tile,
         height: y.tile,
       },
-      origin: Point {
-        x: x.origin,
-        y: y.origin,
+      phase: Point {
+        x: -x.origin,
+        y: -y.origin,
       },
-      step: Size {
-        width: x.step,
-        height: y.step,
+      repeat_spacing: Size {
+        width: x.spacing,
+        height: y.spacing,
       },
+      repeat_x: x.repeats,
+      repeat_y: y.repeats,
     }
   }
+
+  /// Whether the tiles repeat on either axis.
+  pub fn repeats(&self) -> bool {
+    self.repeat_x || self.repeat_y
+  }
+
+  /// The first tile's top-left, relative to the positioning area.
+  pub fn first_tile(&self) -> Point<f32> {
+    Point {
+      x: -self.phase.x,
+      y: -self.phase.y,
+    }
+  }
+
+  /// Distance between the origins of neighboring tiles.
+  pub fn step(&self) -> Size<f32> {
+    Size {
+      width: self.tile_size.width + self.repeat_spacing.width,
+      height: self.tile_size.height + self.repeat_spacing.height,
+    }
+  }
+
+  /// Every tile origin on each axis that meets `paint`, a rectangle relative to the positioning
+  /// area. A repeating axis tiles all of it; an axis that does not repeat keeps its one tile.
+  pub fn tile_origins(&self, paint: Rect<f32>) -> (SmallVec<[f32; 1]>, SmallVec<[f32; 1]>) {
+    let first = self.first_tile();
+    let step = self.step();
+
+    (
+      axis_origins(first.x, step.width, self.repeat_x, paint.left, paint.right),
+      axis_origins(first.y, step.height, self.repeat_y, paint.top, paint.bottom),
+    )
+  }
+}
+
+/// A layer's tiles snapped to whole device pixels, in border-box coordinates.
+pub struct SnappedTiles {
+  /// Tile origins on the x axis.
+  pub xs: SmallVec<[i32; 1]>,
+  /// Tile origins on the y axis.
+  pub ys: SmallVec<[i32; 1]>,
+  /// Width of one tile.
+  pub width: u32,
+  /// Height of one tile.
+  pub height: u32,
+}
+
+impl BackgroundImageGeometry {
+  /// The tiles meeting a `paint` border box, with the positioning area at `offset` inside it.
+  /// Approximate: tiles land on whole pixels, so a fractional tile drifts up to half a pixel
+  /// from the exact geometry. A repeating axis rounds its tile up so neighbors leave no seam.
+  pub fn snap(&self, paint: Size<f32>, offset: Point<f32>) -> Option<SnappedTiles> {
+    // A tile under half a pixel paints nothing, the way it rounds.
+    if self.tile_size.width.round() <= 0.0 || self.tile_size.height.round() <= 0.0 {
+      return None;
+    }
+    let snap_size =
+      |size: f32, repeats: bool| (if repeats { size.ceil() } else { size.round() }) as u32;
+    let width = snap_size(self.tile_size.width, self.repeat_x);
+    let height = snap_size(self.tile_size.height, self.repeat_y);
+    let (xs, ys) = self.tile_origins(Rect {
+      left: -offset.x,
+      top: -offset.y,
+      right: paint.width - offset.x,
+      bottom: paint.height - offset.y,
+    });
+    let snap = |origins: SmallVec<[f32; 1]>, offset: f32| -> SmallVec<[i32; 1]> {
+      origins
+        .into_iter()
+        .map(|origin| (origin + offset).round() as i32)
+        .collect()
+    };
+
+    Some(SnappedTiles {
+      xs: snap(xs, offset.x),
+      ys: snap(ys, offset.y),
+      width,
+      height,
+    })
+  }
+}
+
+/// Tile origins on one axis that meet `start..end`.
+fn axis_origins(first: f32, step: f32, repeats: bool, start: f32, end: f32) -> SmallVec<[f32; 1]> {
+  if !repeats || step <= 0.0 {
+    return smallvec![first];
+  }
+  let lead = first - ((first - start) / step).ceil() * step;
+  let count = ((end - lead) / step).ceil().max(0.0) as usize;
+
+  (0..count).map(|index| lead + index as f32 * step).collect()
 }
 
 /// The tile before repeat rescales it, and which axis the ratio still has to
@@ -234,14 +382,16 @@ impl TileAxis {
       return Self {
         tile,
         origin: 0.0,
-        step: area.max(1.0),
+        spacing: 0.0,
+        repeats: false,
       };
     }
     let anchor = position.resolve(context, area - tile);
     let once = Self {
       tile,
       origin: anchor,
-      step: area.max(tile),
+      spacing: 0.0,
+      repeats: false,
     };
 
     match repeat {
@@ -249,7 +399,8 @@ impl TileAxis {
       BackgroundRepeatStyle::Repeat => Self {
         tile,
         origin: anchor - (anchor / tile).ceil() * tile,
-        step: tile,
+        spacing: 0.0,
+        repeats: true,
       },
       BackgroundRepeatStyle::Round => {
         let count = (area / tile).round().max(1.0);
@@ -260,7 +411,8 @@ impl TileAxis {
         Self {
           tile: rounded,
           origin: anchor - (anchor / rounded).ceil() * rounded,
-          step: rounded,
+          spacing: 0.0,
+          repeats: true,
         }
       }
       BackgroundRepeatStyle::Space => {
@@ -272,7 +424,8 @@ impl TileAxis {
         Self {
           tile,
           origin: 0.0,
-          step: tile + (area - count * tile) / (count - 1.0),
+          spacing: (area - count * tile) / (count - 1.0),
+          repeats: true,
         }
       }
     }
@@ -292,7 +445,7 @@ mod tests {
     viewport::Viewport,
   };
 
-  use super::BackgroundImageGeometry;
+  use super::{BackgroundImageGeometry, axis_origins};
 
   /// `round` rescales the axis it applies to, and an `auto` axis follows from
   /// the image's ratio rather than keeping the size it was asked for.
@@ -325,7 +478,27 @@ mod tests {
 
     // 630 fits eight 80px tiles once rounded, so each is 78.75 tall. The width
     // is `auto` against a square image, so it follows rather than staying 80.
-    assert_eq!(placement.tile.height, 78.75);
-    assert_eq!(placement.tile.width, 78.75);
+    assert_eq!(placement.tile_size.height, 78.75);
+    assert_eq!(placement.tile_size.width, 78.75);
+  }
+
+  #[test]
+  fn a_tile_larger_than_the_area_yields_one_origin() {
+    assert_eq!(
+      axis_origins(0.0, f32::MAX, true, 0.0, 100.0).as_slice(),
+      [0.0]
+    );
+  }
+
+  #[test]
+  fn a_far_negative_first_tile_starts_at_the_area_edge() {
+    assert_eq!(
+      axis_origins(-1.0e9, 10.0, true, 0.0, 30.0).as_slice(),
+      [0.0, 10.0, 20.0]
+    );
+    assert_eq!(
+      axis_origins(-25.0, 10.0, true, 0.0, 30.0).as_slice(),
+      [-5.0, 5.0, 15.0, 25.0]
+    );
   }
 }

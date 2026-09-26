@@ -40,7 +40,7 @@ use takumi_core::{
   context::RenderContext,
   filter::ColorMatrix,
   geometry::{Rect, Size},
-  layout::background::OriginBox,
+  layout::background_image_geometry::OriginBox,
   painter::{BoxFrame, StrokeStyle},
   shadow::SizedShadow,
   style::{Affine, BackgroundOrigin, FillRule, Filter, FilterReference, LineJoin, ToCss},

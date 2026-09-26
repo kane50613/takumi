@@ -1,5 +1,5 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630">
-  <pattern id="pat0" patternUnits="userSpaceOnUse" x="0" y="0" width="120" height="127">
+  <pattern id="pat0" patternUnits="userSpaceOnUse" x="0" y="0" width="120" height="127.5">
     <radialGradient id="rg1" gradientUnits="userSpaceOnUse" cx="60" cy="60" r="84.853">
       <stop offset="0" stop-color="#ffa500"/>
       <stop offset=".016" stop-color="#ffa500" stop-opacity=".976"/>

@@ -23,8 +23,8 @@ fn create_container_with(
 }
 
 /// `background-size` with one auto axis re-derives that axis from the image's
-/// intrinsic ratio after `round` rescales the other one. The SVG backend used
-/// to skip that step and disagree with the raster one.
+/// intrinsic ratio after `round` rescales the other one, the third step of
+/// <https://drafts.csswg.org/css-backgrounds-3/#background-size>.
 #[test]
 fn test_background_size_auto_axis_round() {
   let images = BackgroundImages::from_css_str("url(assets/images/yeecord.png)").unwrap();
@@ -32,7 +32,7 @@ fn test_background_size_auto_axis_round() {
     images,
     BackgroundSizes::from_css_str("auto 80px").unwrap(),
     PositionValues::from_css_str("left top").unwrap(),
-    BackgroundRepeats::from_css_str("round").unwrap(),
+    BackgroundRepeats::from_css_str("repeat round").unwrap(),
   );
 
   // The fixture harness rewrites its goldens without comparing, so the geometry
@@ -64,7 +64,10 @@ fn test_background_size_auto_axis_round() {
       .unwrap_or_default()
   };
 
-  // The fixed axis rounds to 90, the auto axis follows the intrinsic ratio and
-  // then rounds to 92. Without the re-derivation the auto axis stays at 80.
-  assert_eq!((attr("width"), attr("height")), ("92".into(), "90".into()));
+  // The rounded axis fits eight tiles: 630 / 8 = 78.75. The auto axis follows the
+  // square image to 78.75; without the re-derivation it stays at 80.
+  assert_eq!(
+    (attr("width"), attr("height")),
+    ("78.75".into(), "78.75".into())
+  );
 }

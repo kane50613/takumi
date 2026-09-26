@@ -8,6 +8,7 @@ use takumi_core::{
   error::Result,
   geometry::{Point, Size},
   layout::{
+    background_image_geometry::FillLayers,
     border::{BorderProperties, BorderSide, PaintedSide},
     decoration::{ClipBox, OutlineGeometry},
     inline::{InlineBoxItem, VisualInlineBox},
@@ -250,9 +251,7 @@ impl<'n> PlacedBox<'n> {
 
     LayerEmitter::new(&self.node.context, doc).image_layers(
       images,
-      &style.mask_size,
-      &style.mask_position,
-      &style.mask_repeat,
+      FillLayers::mask(style),
       border_box,
       border_box,
     )?;

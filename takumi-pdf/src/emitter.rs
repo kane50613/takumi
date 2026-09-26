@@ -15,8 +15,7 @@ use takumi_core::{
   font_style::SizedFontStyle,
   geometry::{ComputedLayout as Layout, NodeId, Point as CorePoint, Size},
   layout::{
-    background::OriginBox,
-    background_image_geometry::{BackgroundImageGeometry, FillLayers},
+    background_image_geometry::{BackgroundImageGeometry, FillLayers, OriginBox},
     border::BorderProperties,
     decoration::{ClipBox, OutlineGeometry},
     inline::{
@@ -550,12 +549,12 @@ impl Emitter<'_> {
     surface: &mut Surface,
     tile_space: Transform,
   ) {
-    if !placement.tiles {
+    if !placement.repeats() {
       self.background_layer(
         image,
         node,
-        placement.tile,
-        anchor + placement.origin,
+        placement.tile_size,
+        anchor + placement.first_tile(),
         surface,
         Transform::identity(),
       );
@@ -565,7 +564,7 @@ impl Emitter<'_> {
       self.background_layer(
         image,
         node,
-        placement.tile,
+        placement.tile_size,
         CorePoint::ZERO,
         tile,
         tile_space,
@@ -576,14 +575,24 @@ impl Emitter<'_> {
     else {
       return;
     };
-    let tile_origin = anchor + placement.origin;
+    let tile_origin = anchor + placement.first_tile();
+    // An axis that does not repeat steps past the painted rect, so its one tile stays single.
+    let step = placement.step();
 
     surface.set_fill(Some(Fill {
       paint: Pattern {
         stream,
         transform: Transform::from_translate(tile_origin.x, tile_origin.y),
-        width: placement.step.width,
-        height: placement.step.height,
+        width: if placement.repeat_x {
+          step.width
+        } else {
+          size.width + placement.tile_size.width
+        },
+        height: if placement.repeat_y {
+          step.height
+        } else {
+          size.height + placement.tile_size.height
+        },
       }
       .into(),
       opacity: NormalizedF32::ONE,
@@ -1559,17 +1568,17 @@ impl Emitter<'_> {
       let placement = layers.geometry(index, image, area, &node.context);
       // ponytail: one tile per layer; a repeating gradient behind text would
       // need a pattern paint here.
-      let tile_origin = frame.origin + origin_offset + placement.origin;
+      let tile_origin = frame.origin + origin_offset + placement.first_tile();
       // An image layer has no paint of its own, so it draws into a pattern the
       // glyphs can be filled with, the way a tiled background already does.
       let paint = match image {
         BackgroundImage::Url(_) => {
-          self.image_pattern(image, node, placement.tile, tile_origin, surface)
+          self.image_pattern(image, node, placement.tile_size, tile_origin, surface)
         }
         _ => self.gradient_paint(
           image,
           node,
-          placement.tile,
+          placement.tile_size,
           tile_origin,
           Transform::identity(),
         ),

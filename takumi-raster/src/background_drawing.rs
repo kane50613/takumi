@@ -4,7 +4,7 @@ use image::Rgba;
 use smallvec::SmallVec;
 use takumi_core::{
   geometry::{ComputedLayout as Layout, Point, Size},
-  layout::background::{BackgroundLayersInput, OriginBox},
+  layout::background_image_geometry::{FillLayers, OriginBox},
   paint::{ConicGradientTile, GradientOverlayTile, LinearGradientTile, RadialGradientTile},
 };
 use tiny_skia::{IntSize, Pixmap, PixmapMut, PixmapRef, PremultipliedColorU8};
@@ -488,34 +488,41 @@ pub(crate) fn render_tile(
   })
 }
 
-/// Resolve tile image, positions along X and Y for a background-like layer.
-pub(crate) fn resolve_tile_layers(input: BackgroundLayersInput<'_>) -> Result<TileLayers> {
-  let images = input.images;
-  let context = input.context;
-  let mut layers = Vec::new();
+/// Renders each layer's tile and places it over a `paint` border box, bottom layer first.
+pub(crate) fn resolve_tile_layers(
+  images: &[BackgroundImage],
+  layers: FillLayers<'_>,
+  area: OriginBox,
+  paint: Size<f32>,
+  context: &RenderContext,
+) -> Result<TileLayers> {
+  let mut resolved = Vec::new();
 
-  for (index, geometry) in input.resolve() {
-    let Some(image) = images.get(index) else {
+  for (index, image) in images.iter().enumerate().rev() {
+    let Some(tiles) = layers
+      .geometry(index, image, area.size, context)
+      .snap(paint, area.offset)
+    else {
       continue;
     };
-    let Some(tile) = render_tile(image, geometry.tile_width, geometry.tile_height, context)? else {
+    let Some(tile) = render_tile(image, tiles.width, tiles.height, context)? else {
       continue;
     };
-    let tile = if should_rasterize_repeated_tile(&tile, &geometry.xs, &geometry.ys) {
+    let tile = if should_rasterize_repeated_tile(&tile, &tiles.xs, &tiles.ys) {
       rasterize_tile(tile)?
     } else {
       tile
     };
 
-    layers.push(TileLayer {
+    resolved.push(TileLayer {
       tile,
-      xs: geometry.xs,
-      ys: geometry.ys,
-      blend_mode: geometry.blend_mode,
+      xs: tiles.xs,
+      ys: tiles.ys,
+      blend_mode: layers.blend_mode(index),
     });
   }
 
-  Ok(layers)
+  Ok(resolved)
 }
 
 pub(crate) fn create_mask(
@@ -523,17 +530,16 @@ pub(crate) fn create_mask(
   border_box: Size<f32>,
 ) -> Result<Option<Vec<u8>>> {
   let size = border_box.map(|x| x as u32);
-  let layers = resolve_tile_layers(BackgroundLayersInput {
-    images: context.style.mask_image.as_deref().unwrap_or(&[]),
-    positions: context.style.mask_position.as_ref(),
-    sizes: context.style.mask_size.as_ref(),
-    repeats: context.style.mask_repeat.as_ref(),
-    blend_modes: &[],
+  let layers = resolve_tile_layers(
+    context.style.mask_image.as_deref().unwrap_or(&[]),
+    FillLayers::mask(&context.style),
+    OriginBox {
+      offset: Point::ZERO,
+      size: border_box,
+    },
+    border_box,
     context,
-    area: size,
-    paint: size,
-    origin_offset: Point { x: 0, y: 0 },
-  })?;
+  )?;
 
   if layers.is_empty() {
     return Ok(None);
@@ -578,25 +584,13 @@ pub(crate) fn background_image_layers(
   context: &RenderContext,
   layout: Layout,
 ) -> Result<TileLayers> {
-  // `background-origin` sets the positioning area that `background-position`/`-size`
-  // resolve against; `repeat` still tiles across the painting (border) box so a
-  // repeating layer covers the clip region when origin and clip differ.
-  let origin = OriginBox::new(context.style.background_origin, layout);
-
-  resolve_tile_layers(BackgroundLayersInput {
-    images: context.style.background_image.as_deref().unwrap_or(&[]),
-    positions: &context.style.background_position,
-    sizes: &context.style.background_size,
-    repeats: &context.style.background_repeat,
-    blend_modes: &context.style.background_blend_mode,
+  resolve_tile_layers(
+    context.style.background_image.as_deref().unwrap_or(&[]),
+    FillLayers::background(&context.style),
+    OriginBox::new(context.style.background_origin, layout),
+    layout.size,
     context,
-    area: origin.size.map(|x| x.max(0.0) as u32),
-    paint: layout.size.map(|x| x as u32),
-    origin_offset: Point {
-      x: origin.offset.x as i32,
-      y: origin.offset.y as i32,
-    },
-  })
+  )
 }
 
 /// The `background-image` layers under a `background-color` layer.

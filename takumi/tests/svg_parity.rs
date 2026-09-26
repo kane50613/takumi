@@ -31,6 +31,12 @@ const FLOOR: f32 = 90.0;
 /// Shrink this as the backend improves; entries are `(name, why)`.
 const KNOWN_DIVERGENT: &[(&str, &str)] = &[
   (
+    "style_background_size_auto_axis_round",
+    "raster is the approximate side here: it snaps the 78.75px round tiles to \
+     whole pixels, so each tile drifts up to half a pixel from svg's exact \
+     pattern and the outlines disagree (82.6%, floor is 90%)",
+  ),
+  (
     "style_backdrop_filter",
     "backdrop-filter: opacity() semantics differ: raster replaces the backdrop \
      pixels, svg (paint-over model, no erase) composites the filtered copy over \

@@ -7,7 +7,7 @@ use crate::{
   font_style::SizedFontStyle,
   geometry::{ComputedLayout, Point, Size},
   layout::{
-    background::{BackgroundLayersInput, OriginBox},
+    background_image_geometry::{FillLayers, OriginBox},
     decoration::ClipBox,
     inline::{
       InlineItem, InlineLayoutMode, InlineLayoutRequest, PositionedInlineRun, ProcessedInlineSpan,
@@ -461,36 +461,26 @@ fn background_layers(node: &RenderNode, layout: ComputedLayout) -> Vec<PaintBack
     return Vec::new();
   }
   let origin = OriginBox::new(style.background_origin, layout);
-  let resolved = BackgroundLayersInput {
-    images,
-    positions: &style.background_position,
-    sizes: &style.background_size,
-    repeats: &style.background_repeat,
-    blend_modes: &style.background_blend_mode,
-    context,
-    area: origin.size.map(|x| x.max(0.0) as u32),
-    paint: layout.size.map(|x| x as u32),
-    origin_offset: Point {
-      x: origin.offset.x as i32,
-      y: origin.offset.y as i32,
-    },
-  }
-  .resolve();
+  let layers = FillLayers::background(style);
 
-  resolved
-    .into_iter()
-    .filter_map(|(index, geometry)| {
-      let image = images.get(index)?;
-      let fill = fill(image, geometry.tile_width, geometry.tile_height, context)?;
+  images
+    .iter()
+    .enumerate()
+    .rev()
+    .filter_map(|(index, image)| {
+      let tiles = layers
+        .geometry(index, image, origin.size, context)
+        .snap(layout.size, origin.offset)?;
+      let fill = fill(image, tiles.width, tiles.height, context)?;
       Some(PaintBackgroundLayer {
         fill,
         tiles: PaintTiles {
-          xs: geometry.xs.to_vec(),
-          ys: geometry.ys.to_vec(),
-          width: geometry.tile_width,
-          height: geometry.tile_height,
+          xs: tiles.xs.to_vec(),
+          ys: tiles.ys.to_vec(),
+          width: tiles.width,
+          height: tiles.height,
         },
-        blend_mode: geometry.blend_mode.to_css_string(),
+        blend_mode: layers.blend_mode(index).to_css_string(),
       })
     })
     .collect()
