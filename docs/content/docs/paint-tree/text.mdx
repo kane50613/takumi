@@ -1,115 +1,76 @@
 ---
-title: Text runs
-description: Place shaped text from a takumi-paint tree, or read the values a PPTX writer needs to lay the text out again.
+title: Text
+description: Place shaped runs or collect values for a text exporter.
 icon: Type
 ---
 
-A text run is a stretch of text shaped with one font, size, and color. `<b>world</b>` inside a paragraph is its own run. Runs sit on the node that lays them out, in visual order.
+`node.textRuns` holds shaped runs in visual order. A run's `x` and `y` mark the start of its baseline in the node's border-box space.
 
-## Place a run
+## Place runs
 
-A run's `x` and `y` are the start of its baseline, relative to the node's border box. `width` is its advance.
+Use `node.matrix` for the box. Apply `run.transform` after it when present; the walker adds that transform when `text-fit` scales a line.
 
-`transform` appears when `text-fit` scales the line. Apply it on top of the node's matrix before drawing at `x`, `y`.
+```ts twoslash title="Read positioned text"
+import { paint } from "takumi-paint";
 
-```ts twoslash title="Draw every run"
-import { paint, type Rgba } from "takumi-paint";
+const tree = await paint("<p>Hello <b>world</b></p>", { width: 320 });
 
-const tree = await paint("<p>hello <b>world</b></p>", { width: 400 });
-
-function drawText(ctx: CanvasRenderingContext2D) {
-  for (const { run, node } of tree.textRuns()) {
-    ctx.setTransform(...node.matrix);
-    if (run.transform) ctx.transform(...run.transform);
-    ctx.font = `${run.font.weight} ${run.fontSize}px ${run.font.family}`;
-    ctx.fillStyle = rgba(run.color);
-    ctx.fillText(run.text, run.x, run.y);
-  }
+for (const { node, run } of tree.textRuns()) {
+  console.log(node.matrix, run.x, run.y, run.text, run.font.family);
 }
-
-const rgba = ([r, g, b, a]: Rgba) => `rgb(${r} ${g} ${b} / ${a / 255})`;
 ```
 
-`tree.textRuns()` yields every run in paint order, paired with the node that paints it.
+`run.font` is the font instance selected during shaping. `run.fontIndex` refers to the same instance in `tree.fonts`. Runs shaped with the same instance share the same font object.
 
-## Fonts
+## Draw glyphs
 
-`run.font` describes the font instance the run was shaped with:
+`run.glyphs` contains font glyph IDs and positions relative to the run origin. Native drawing APIs can use those values with `run.fontIndex`. `run.width` is the run's advance. `run.letterSpacing` is already reflected in glyph positions.
 
-| Field                   | Value                                                         |
-| ----------------------- | ------------------------------------------------------------- |
-| `family`                | The family the face was registered under; absent when unnamed |
-| `faceIndex`             | Index of the face within its collection                       |
-| `weight`                | Weight class, with `wght` applied when the face is variable   |
-| `style`                 | `normal`, `italic`, or `oblique`                              |
-| `width`                 | Width as a percentage of normal                               |
-| `variations`            | Variation coordinates the run was shaped at                   |
-| `syntheticBoldWidth`    | Stroke width in px for synthetic bold                         |
-| `syntheticObliqueAngle` | Synthetic oblique angle in degrees                            |
+`run.decorations` contains placed underline, overline, or line-through rectangles. `run.stroke` records visible `-webkit-text-stroke`. `node.textShadows` applies under the node's runs.
 
-Runs shaped with the same face share one object from `tree.fonts`, so a font table keyed by object identity holds each face once.
+## Lay text out again
 
-## Glyphs
+A presentation writer can build a text box from `node.contentBox` and `node.textAlign`. The box is relative to the node's border box; transform it through `node.matrix` when needed.
 
-`run.glyphs` lists each glyph's `id` in the run's font and its offset from the run origin. Draw glyphs instead of `run.text` when the target API takes glyph ids, or when it must match the renderer's shaping exactly.
+| Value          | Field                  |
+| -------------- | ---------------------- |
+| Text box       | `node.contentBox`      |
+| Alignment      | `node.textAlign`       |
+| Text and face  | `run.text`, `run.font` |
+| Font size      | `run.fontSize`         |
+| Line height    | `run.lineHeight`       |
+| Letter spacing | `run.letterSpacing`    |
+| Baseline       | `run.x`, `run.y`       |
 
-## Vertical metrics
-
-| Field           | Value                                  |
-| --------------- | -------------------------------------- |
-| `ascent`        | Typographic ascent above the baseline  |
-| `descent`       | Typographic descent below the baseline |
-| `top`, `bottom` | `y - ascent` and `y + descent`         |
-| `lineHeight`    | Height of the run's leaded box         |
-
-Under `line-height: normal`, a run set in a fallback face grows `lineHeight` to that face's own height, the same way it grows the line.
-
-## Lay the text out again
-
-A PPTX slide does not take glyph positions. It takes a text box and paragraphs, then builds the lines from the font metrics. These values let a writer rebuild the paragraph:
-
-| Value       | Where                                                       |
-| ----------- | ----------------------------------------------------------- |
-| Text box    | `node.contentBox`, relative to the node's border box        |
-| Alignment   | `node.textAlign`, with `start` and `end` resolved to a side |
-| Line height | `run.lineHeight`                                            |
-| Tracking    | `run.letterSpacing`, already applied to the glyph positions |
-| Font        | `run.font.family`, `run.font.weight`, `run.font.style`      |
-
-```ts twoslash title="Collect paragraphs"
+```ts twoslash title="Collect text for a presentation"
 import { paint } from "takumi-paint";
 
 const tree = await paint(
-  `<div style="width: 400px; padding: 24px; text-align: center; line-height: 1.5">Quarterly review</div>`,
-  { width: 400 },
+  '<div style="width: 240px; padding: 12px; text-align: center; line-height: 30px">Title</div>',
+  { width: 320 },
 );
 
 const paragraphs = [...tree]
   .filter((node) => node.textRuns.length > 0)
   .map((node) => ({
-    x: node.x + node.contentBox.x,
-    y: node.y + node.contentBox.y,
-    width: node.contentBox.width,
+    box: node.contentBox,
+    matrix: node.matrix,
     align: node.textAlign,
     runs: node.textRuns.map((run) => ({
       text: run.text,
-      family: run.font.family,
-      weight: run.font.weight,
-      size: run.fontSize,
+      font: run.font,
+      fontSize: run.fontSize,
       lineHeight: run.lineHeight,
       letterSpacing: run.letterSpacing,
+      baseline: [run.x, run.y],
     })),
   }));
+
+console.log(paragraphs);
 ```
 
-`node.x + node.contentBox.x` is the text box's left edge on the canvas when the node has no `transform`.
+`run.ascent` and `run.descent` are typographic distances from the baseline. `run.top` equals `run.y - run.ascent`; `run.bottom` equals `run.y + run.descent`. Under `line-height: normal`, a fallback face can grow `run.lineHeight` to its own height.
 
-## Decorations, strokes, and shadows
+## Trace source text
 
-- `run.decorations` lists underline, overline, and line-through rectangles, each placed by its own `transform` in border-box space.
-- `run.stroke` is the visible `-webkit-text-stroke`.
-- `node.textShadows` apply under every run of the node, later-listed shadows lowest.
-
-## Map a run to its source
-
-`run.textByteRange` is the UTF-8 byte range of the run's text within the node's inline text. `run.spanId` names the inline span the run came from, so runs split from one span share it.
+`run.textByteRange` identifies the UTF-8 byte range within the node's inline text. `run.spanId` identifies the source inline span when available.

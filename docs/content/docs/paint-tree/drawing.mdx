@@ -1,22 +1,16 @@
 ---
-title: Draw a paint tree
-description: Place each box of a takumi-paint tree, draw its layers in paint order, and apply its clip and opacity.
+title: Drawing
+description: Place paint nodes and replay their layers in order.
 icon: PenTool
 ---
 
-A paint tree lists boxes in the order the renderer paints them. This page covers where each box goes and what to draw for it.
+A `PaintNode` is a border box and a compositing group. Its drawing data uses coordinates relative to the border box. `node.matrix` places that box on the canvas.
 
-## Coordinates
+## Place a box
 
-Every length is a device pixel, including the `width` and `height` options. A `20px` font measures `40` under a `devicePixelRatio` of `2`.
+`node.matrix` returns the absolute `transform` when present. Otherwise it returns a translation from `node.x` and `node.y`. Canvas accepts the six matrix values in the same order.
 
-A node's `x` and `y` place its border box on the canvas. Everything inside a node, such as `clip`, `background`, `image`, and `textRuns`, is relative to the border box's top-left corner.
-
-## Place a node
-
-`transform` appears only when the box is rotated, scaled, or skewed, and its translation equals `x`, `y`. `node.matrix` returns whichever of the two applies, so one call places any node.
-
-```ts twoslash title="Place a node"
+```ts twoslash title="Place a paint node"
 import type { PaintNode } from "takumi-paint";
 
 function place(ctx: CanvasRenderingContext2D, node: PaintNode) {
@@ -24,56 +18,49 @@ function place(ctx: CanvasRenderingContext2D, node: PaintNode) {
 }
 ```
 
-## Paint order
+All lengths use device pixels. With `devicePixelRatio: 2`, a CSS length of `20px` becomes `40` in the tree.
 
-Iterating the tree yields nodes in paint order, parents before children, so `zIndex` does not appear. Within a node, draw these layers in order:
+## Follow paint order
 
-| Layer                   | Field                          |
-| ----------------------- | ------------------------------ |
-| Outer box shadows       | `shadows.outer`                |
-| Background              | `background`                   |
-| Inset box shadows       | `shadows.inset`                |
-| Border                  | `border`                       |
-| Replaced image          | `image`                        |
-| Inline span backgrounds | `inlineBackgrounds`            |
-| Text                    | `textShadows`, then `textRuns` |
-| Child boxes             | `children`                     |
-| Outline                 | `outline`                      |
+A tree iterator yields parents before children. Within each node, paint these layers in order:
 
-The outline comes after the children. The flat iteration yields a node before its children, so an exporter that draws outlines recurses over `children` instead.
+| Order                       | Data                      |
+| --------------------------- | ------------------------- |
+| Outer shadows               | `shadows?.outer`          |
+| Background color and layers | `background`              |
+| Inset shadows               | `shadows?.inset`          |
+| Border                      | `border`                  |
+| Replaced image              | `image`                   |
+| Inline backgrounds          | `inlineBackgrounds`       |
+| Text shadows and runs       | `textShadows`, `textRuns` |
+| Child boxes                 | `children`                |
+| Outline                     | `outline`                 |
 
-```ts twoslash title="Draw outlines after the children"
-import type { PaintNode, Rgba } from "takumi-paint";
+An outline follows its children. Recurse through `children` when drawing complete boxes; the flat iterator yields the parent first.
 
-function drawBox(ctx: CanvasRenderingContext2D, node: PaintNode) {
-  ctx.setTransform(...node.matrix);
-  // Draw the node's own layers here.
+```ts twoslash title="Visit boxes in paint order"
+import { paint, type PaintNode } from "takumi-paint";
 
-  for (const child of node.children) drawBox(ctx, child);
+const tree = await paint('<div style="background: red"><span>Hi</span></div>', {
+  width: 320,
+});
 
-  if (node.outline) {
-    const { width, offset, color } = node.outline;
-    const inset = -offset - width / 2;
-    ctx.setTransform(...node.matrix);
-    ctx.lineWidth = width;
-    ctx.strokeStyle = rgba(color);
-    ctx.strokeRect(inset, inset, node.width - inset * 2, node.height - inset * 2);
-  }
+function visit(node: PaintNode) {
+  if (node.background?.color) console.log("background", node.background.color);
+  for (const run of node.textRuns) console.log("text", run.text);
+  for (const child of node.children) visit(child);
+  if (node.outline) console.log("outline", node.outline);
 }
 
-const rgba = ([r, g, b, a]: Rgba) => `rgb(${r} ${g} ${b} / ${a / 255})`;
+visit(tree.root);
 ```
 
-## Compositing groups
+## Apply group effects
 
-Each node is a compositing group. Its `opacity`, `clip`, and `blendMode` apply to everything inside it, children included. Canvas `globalAlpha` applies to each draw call on its own, so a translucent node with overlapping children needs an offscreen layer to match.
+`opacity`, `blendMode`, and `isolate` belong to the whole node, including its children. `clip` is a rounded padding box and records which axes clip. A Canvas replay needs an offscreen group for overlapping content under group opacity; setting `globalAlpha` on each draw call changes the result.
 
-`isolate` is `true` when the node sets `isolation: isolate`.
+## Read background layers
 
-## Overflow clip
+`background.layers` runs from bottom to top. Each layer has a `fill`, tile positions, and a blend mode. Linear and radial fills include resolved geometry and stops. A conic fill retains its CSS text.
 
-`clip` is the rounded padding box that children clip to. `clip.x` and `clip.y` say which axes clip.
-
-## What stays CSS
-
-Linear and radial gradients come resolved: stops in pixels along the axis, plus the tile geometry. A conic gradient is carried as CSS text. `filter`, `backdrop-filter`, `mask-image`, and `clip-path` are carried as CSS text under `unresolvedEffects`, so an exporter decides what to do with them.
+`unresolvedEffects` carries `filter`, `backdropFilter`, `maskImage`, and `clipPath` as CSS text. The tree does not resolve those effects into drawing geometry.
