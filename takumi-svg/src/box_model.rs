@@ -5,7 +5,8 @@ use std::fmt::Write as _;
 
 use takumi_core::{
   geometry::{ComputedLayout as Layout, PathCommand, Point, Rect, Size},
-  layout::{background::background_origin_box, border::BorderProperties, decoration::ClipBox},
+  layout::{background::background_origin_box, border::BorderProperties},
+  painter::FillShape,
   style::{Affine, BackgroundOrigin},
 };
 
@@ -354,13 +355,12 @@ pub(crate) fn edges_path_data(edges: Rect<f32>) -> String {
   path.into_string()
 }
 
-/// An absolute SVG path `d` for a [`ClipBox`]'s rounded rectangle at `origin`.
-pub(crate) fn clip_box_path_data(clip: ClipBox, origin: Point<f32>) -> String {
-  let mut commands = Vec::with_capacity(BorderProperties::PATH_COMMANDS_AMOUNT);
-  clip
-    .border
-    .append_mask_commands(&mut commands, clip.size, clip.offset);
-  path_data(&commands, Affine::translation(origin.x, origin.y))
+/// An absolute SVG path `d` for `shape` placed at `origin`.
+pub(crate) fn shape_path_data(shape: &FillShape, origin: Point<f32>) -> String {
+  path_data(
+    &shape.to_commands(),
+    Affine::translation(origin.x, origin.y),
+  )
 }
 
 /// Absolute SVG path `d` for a rounded rectangle of `size` at `origin` with
@@ -370,8 +370,8 @@ pub(crate) fn rounded_rect_path_data(
   size: Size<f32>,
   origin: Point<f32>,
 ) -> String {
-  clip_box_path_data(
-    ClipBox {
+  shape_path_data(
+    &FillShape::RoundedRect {
       border: *border,
       size,
       offset: Point::ZERO,

@@ -132,7 +132,7 @@ pub(crate) fn draw_decoration(
   layout: Layout,
   transform: Affine,
 ) {
-  let start_x = layout.border.left + layout.padding.left + glyph_run.offset;
+  let start_x = layout.content_box_offset().x + glyph_run.offset;
   let end_x = start_x + glyph_run.decorated_advance();
   draw_decoration_segment(
     canvas,
@@ -168,7 +168,7 @@ pub(crate) fn draw_decoration_segment(
     params.transform
       * Affine::translation(
         snapped_start_x,
-        params.layout.border.top + params.layout.padding.top + params.offset,
+        params.layout.content_box_offset().y + params.offset,
       ),
     ImageScalingAlgorithm::Auto,
     BlendMode::Normal,

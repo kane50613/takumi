@@ -30,7 +30,7 @@ use typed_builder::TypedBuilder;
 use crate::{
   APPROX_CHARS_PER_NUMBER, Frame, GroupToken, Num, Rgba, SvgDocument,
   box_model::{
-    BoxFrame, PathData, clip_box_path_data, edges_path_data, path_data, rounded_rect_path_data,
+    BoxFrame, PathData, edges_path_data, path_data, rounded_rect_path_data, shape_path_data,
   },
   gradient::LayerEmitter,
   image::emit_image,
@@ -142,8 +142,8 @@ impl<'n> PlacedBox<'n> {
 
   /// Absolute SVG path `d` for the rounded padding box.
   fn padding_box_path_data(&self) -> String {
-    clip_box_path_data(
-      ClipBox::padding_box(*self.border(), self.frame.layout),
+    shape_path_data(
+      &ClipBox::padding_box(*self.border(), self.frame.layout).into(),
       self.frame.origin,
     )
   }
@@ -198,8 +198,8 @@ impl<'n> PlacedBox<'n> {
     match self.node.context.style.background_clip {
       BackgroundClip::PaddingBox => Some((self.padding_box_path_data(), FillRule::NonZero)),
       BackgroundClip::ContentBox => Some((
-        clip_box_path_data(
-          ClipBox::content_box(*border, self.frame.layout),
+        shape_path_data(
+          &ClipBox::content_box(*border, self.frame.layout).into(),
           self.frame.origin,
         ),
         FillRule::NonZero,
@@ -353,7 +353,7 @@ impl<'n> PlacedBox<'n> {
           offset: Point { x: left, y: top },
         };
         doc.clip_path(
-          &clip_box_path_data(clip, self.frame.origin),
+          &shape_path_data(&clip.into(), self.frame.origin),
           FillRule::NonZero,
           None,
         )?
@@ -425,7 +425,7 @@ impl<'n> PlacedBox<'n> {
       return Ok(());
     }
     let padding = ClipBox::padding_box(*self.border(), layout);
-    let outer = clip_box_path_data(padding, origin);
+    let outer = shape_path_data(&padding.into(), origin);
     for resolved in self.painter.shadows().inset {
       let fill = Rgba(resolved.color.0);
 
@@ -443,7 +443,7 @@ impl<'n> PlacedBox<'n> {
       );
       let ring = format!(
         "{outer}{}",
-        clip_box_path_data(hole, origin + padding.offset)
+        shape_path_data(&hole.into(), origin + padding.offset)
       );
       let clip_group = doc.begin_clipped_group(&outer)?;
       doc.with_blur(resolved.blur_radius, |doc| {
@@ -739,11 +739,13 @@ fn emit_borders(
   let clip = if border.collapsed && !patterned {
     None
   } else {
-    let mut ring = Vec::with_capacity(BorderProperties::PATH_COMMANDS_AMOUNT * 2);
+    let ring = FillShape::border_ring(border, size);
 
-    border.append_border_ring_commands(&mut ring, size);
-
-    Some(doc.clip_path(&path_data(&ring, transform), FillRule::EvenOdd, None)?)
+    Some(doc.clip_path(
+      &path_data(&ring.to_commands(), transform),
+      ring.rule(),
+      None,
+    )?)
   };
   let group = doc.begin_group(Affine::IDENTITY, 1.0, clip.as_deref(), None)?;
   for side in sides {
