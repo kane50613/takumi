@@ -38,12 +38,15 @@ A tree iterator yields parents before children. Within each node, paint these la
 
 An outline follows its children. Recurse through `children` when drawing complete boxes; the flat iterator yields the parent first.
 
-```ts twoslash title="visit.ts"
+```tsx twoslash title="visit.tsx"
 import { paint, type PaintNode } from "takumi-paint";
 
-const tree = await paint('<div style="background: red"><span>Hi</span></div>', {
-  width: 320,
-});
+const tree = await paint(
+  <div style={{ background: "red" }}>
+    <span>Hi</span>
+  </div>,
+  { width: 320 },
+);
 
 function visit(node: PaintNode) {
   if (node.background?.color) console.log("background", node.background.color);

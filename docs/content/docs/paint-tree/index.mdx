@@ -11,16 +11,19 @@ icon: BookOpen
 npm i takumi-paint @takumi-rs/helpers
 ```
 
-## Paint HTML
+## Paint JSX
 
 `paint()` returns a `PaintTree`. The tree has a canvas size, a font table, and a root box.
 
-```ts twoslash title="inspect.ts"
+```tsx twoslash title="inspect.tsx"
 import { paint } from "takumi-paint";
 
-const tree = await paint('<div id="card" style="width: 240px; padding: 16px">Hello</div>', {
-  width: 320,
-});
+const tree = await paint(
+  <div id="card" style={{ width: 240, padding: 16 }}>
+    Hello
+  </div>,
+  { width: 320 },
+);
 
 const card = tree.find("card");
 if (!card) throw new Error("Card was not painted");
@@ -46,12 +49,12 @@ The returned lengths are device pixels. Set `devicePixelRatio` to scale CSS leng
 
 `paint()` uses a shared `Painter`. A dedicated `Painter` keeps its registered fonts separate. Release its WebAssembly memory when finished.
 
-```ts twoslash title="painter.ts"
+```tsx twoslash title="painter.tsx"
 import { Painter } from "takumi-paint";
 
 const painter = new Painter();
 try {
-  const tree = await painter.paint("<p>Hello</p>", { width: 320 });
+  const tree = await painter.paint(<p>Hello</p>, { width: 320 });
   console.log(tree.height);
 } finally {
   painter.free();
