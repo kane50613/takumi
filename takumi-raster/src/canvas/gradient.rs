@@ -10,7 +10,7 @@ use tiny_skia::PixmapMut;
 
 use super::{
   MaskView,
-  blit::{OverlayBounds, blit_rows, compute_overlay_bounds_for_canvas},
+  blit::{OverlayBounds, blit_rows},
 };
 
 use crate::{BackgroundTile, blend::*, simd, style::BlendMode};
@@ -51,10 +51,6 @@ pub(crate) fn overlay_gradient_tile<T>(
 {
   let bottom_width = pixmap.width();
   let bottom_height = pixmap.height();
-  let top_size = Size {
-    width: gradient.width(),
-    height: gradient.height(),
-  };
 
   if mode == BlendMode::Normal && combined_mask.is_none() {
     let bottom_data: &mut [u8] = bytemuck::cast_slice_mut(pixmap.pixels_mut());
@@ -62,12 +58,10 @@ pub(crate) fn overlay_gradient_tile<T>(
     return;
   }
 
-  let Some(bounds) = compute_overlay_bounds_for_canvas(
-    bottom_width,
-    bottom_height,
+  let Some(bounds) = OverlayBounds::new(
+    Size::new(bottom_width, bottom_height),
     offset,
-    top_size.width,
-    top_size.height,
+    Size::new(gradient.width(), gradient.height()),
   ) else {
     return;
   };
@@ -95,12 +89,10 @@ fn try_overlay_linear_gradient_tile_fast_normal_unconstrained(
   gradient: &LinearGradientTile,
   offset: Point<f32>,
 ) -> bool {
-  let Some(bounds) = compute_overlay_bounds_for_canvas(
-    bottom_width,
-    bottom_height,
+  let Some(bounds) = OverlayBounds::new(
+    Size::new(bottom_width, bottom_height),
     offset,
-    gradient.width(),
-    gradient.height(),
+    Size::new(gradient.width(), gradient.height()),
   ) else {
     return true;
   };
@@ -299,13 +291,16 @@ fn overlay_gradient_tile_with_fast_path<T>(
   let bottom_width = pixmap.width();
   let bottom_height = pixmap.height();
 
-  if mode == BlendMode::Normal && combined_mask.is_none() {
-    let bottom_data: &mut [u8] = bytemuck::cast_slice_mut(pixmap.pixels_mut());
-    if try_fast_path(bottom_data, bottom_width, bottom_height, gradient, offset) {
-      return;
-    }
-
-    gradient.overlay_unconstrained(bottom_data, bottom_width, bottom_height, offset);
+  if mode == BlendMode::Normal
+    && combined_mask.is_none()
+    && try_fast_path(
+      bytemuck::cast_slice_mut(pixmap.pixels_mut()),
+      bottom_width,
+      bottom_height,
+      gradient,
+      offset,
+    )
+  {
     return;
   }
 
@@ -319,12 +314,10 @@ fn try_overlay_radial_gradient_tile_fast_normal_unconstrained(
   gradient: &RadialGradientTile,
   offset: Point<f32>,
 ) -> bool {
-  let Some(bounds) = compute_overlay_bounds_for_canvas(
-    bottom_width,
-    bottom_height,
+  let Some(bounds) = OverlayBounds::new(
+    Size::new(bottom_width, bottom_height),
     offset,
-    gradient.width(),
-    gradient.height(),
+    Size::new(gradient.width(), gradient.height()),
   ) else {
     return true;
   };

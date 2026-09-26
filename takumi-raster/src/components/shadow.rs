@@ -6,9 +6,9 @@ use tiny_skia::PixmapRef;
 
 pub(crate) use crate::shadow::SizedShadow;
 use crate::{
-  BlurFormat, BlurType, BorderProperties, Canvas, CanvasViewport, Command, Fill, Placement, Result,
-  SamplingOptions, Style, apply_blur, attenuate_alpha_by_mask, checked_area, fast_div_255,
-  render_mask,
+  BlurType, BorderProperties, Canvas, CanvasViewport, Command, Fill, Placement, Result,
+  SamplingOptions, Style, apply_blur_alpha_bytes, attenuate_alpha_by_mask, checked_area,
+  fast_div_255, render_mask,
   style::{Affine, BlendMode, ImageScalingAlgorithm},
 };
 
@@ -59,18 +59,20 @@ pub(crate) fn draw_outset_shadow(
       .copy_from_slice(&mask[src_row..src_row + placement.width as usize]);
   }
 
-  apply_blur(
-    BlurFormat::Alpha {
-      data: &mut shadow_alpha,
-      width: shadow_width,
-      height: shadow_height,
-    },
+  apply_blur_alpha_bytes(
+    &mut shadow_alpha,
+    shadow_width,
+    shadow_height,
     shadow.blur_radius,
     BlurType::Shadow,
   )?;
 
-  let img_origin_x = placement.left as f32 - blur_padding;
-  let img_origin_y = placement.top as f32 - blur_padding;
+  let shadow_placement = Placement {
+    left: (placement.left as f32 - blur_padding) as i32,
+    top: (placement.top as f32 - blur_padding) as i32,
+    width: shadow_width,
+    height: shadow_height,
+  };
 
   if let Some(cutout_paths) = cutout_paths {
     let (erase_mask, erase_placement) = render_mask(
@@ -81,12 +83,6 @@ pub(crate) fn draw_outset_shadow(
     );
 
     if !erase_mask.is_empty() {
-      let shadow_placement = Placement {
-        left: img_origin_x as i32,
-        top: img_origin_y as i32,
-        width: shadow_width,
-        height: shadow_height,
-      };
       attenuate_alpha_by_mask(
         &mut shadow_alpha,
         shadow_placement,
@@ -98,12 +94,7 @@ pub(crate) fn draw_outset_shadow(
 
   canvas.draw_mask(
     &shadow_alpha,
-    Placement {
-      left: img_origin_x as i32,
-      top: img_origin_y as i32,
-      width: shadow_width,
-      height: shadow_height,
-    },
+    shadow_placement,
     shadow.color,
     BlendMode::Normal,
   );
@@ -136,7 +127,7 @@ pub(crate) fn draw_inset_shadow_to_canvas(
   Ok(())
 }
 
-pub(crate) fn draw_inset_shadow(
+fn draw_inset_shadow(
   shadow: &SizedShadow,
   border: BorderProperties,
   layout: Layout,
@@ -187,12 +178,10 @@ pub(crate) fn draw_inset_shadow(
     attenuate_alpha_by_mask(&mut shadow_alpha, shadow_placement, &mask, placement);
   }
 
-  apply_blur(
-    BlurFormat::Alpha {
-      data: &mut shadow_alpha,
-      width,
-      height,
-    },
+  apply_blur_alpha_bytes(
+    &mut shadow_alpha,
+    width,
+    height,
     shadow.blur_radius,
     BlurType::Shadow,
   )?;

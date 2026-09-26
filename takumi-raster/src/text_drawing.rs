@@ -1,4 +1,4 @@
-use std::{convert::Into, sync::Arc};
+use std::sync::Arc;
 
 use skrifa::color::ColorPalette;
 use takumi_core::geometry::{ComputedLayout as Layout, Point, Size};
@@ -81,12 +81,12 @@ fn glyph_cache_bucket_and_offset(transform: Affine) -> Option<(u64, i32, i32)> {
 /// Paints `paths` through the mask cache, falling back to a direct rasterization
 /// when the transform or the stroke is outside what the cache keys on.
 fn draw_mask_with_cache(
-  paths: &[Command],
+  canvas: &mut Canvas,
   glyph_signature: u64,
+  paths: &[Command],
   transform: Affine,
   stroke: Option<Stroke>,
   color: Color,
-  canvas: &mut Canvas,
 ) {
   let cacheable = stroke.is_none_or(|stroke| stroke.dash.is_none());
   let bucket = cacheable
@@ -111,16 +111,6 @@ fn draw_mask_with_cache(
     color,
     BlendMode::Normal,
   );
-}
-
-fn draw_outline_with_cache(
-  paths: &[Command],
-  glyph_signature: u64,
-  transform: Affine,
-  color: Color,
-  canvas: &mut Canvas,
-) {
-  draw_mask_with_cache(paths, glyph_signature, transform, None, color, canvas);
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -196,6 +186,113 @@ struct GlyphPaintCtx<'a, 'b> {
   glyph_signature: u64,
 }
 
+impl GlyphPaintCtx<'_, '_> {
+  /// A stroke of `width` joined the way the text's `stroke-linejoin` asks.
+  fn stroke_of(&self, width: f32) -> Stroke {
+    let mut stroke = Stroke::new(width);
+    stroke.join = self.style.parent.stroke_linejoin.into();
+    stroke
+  }
+
+  /// The `-webkit-text-stroke`, divided by the transform's scale so it lands at
+  /// its specified width.
+  fn scaled_text_stroke(&self) -> Stroke {
+    let scale = self.transform.uniform_scale().max(f32::EPSILON);
+
+    self.stroke_of(self.stroke.0 / scale)
+  }
+
+  fn draw_text_stroke(&mut self) {
+    if self.stroke.0 <= 0.0 {
+      return;
+    }
+
+    self.draw_stroke(self.scaled_text_stroke(), self.stroke.1);
+  }
+
+  fn draw_embolden(&mut self, embolden: f32, color: Color) {
+    if embolden <= 0.0 {
+      return;
+    }
+
+    self.draw_stroke(self.stroke_of(embolden), color);
+  }
+
+  fn draw_stroke(&mut self, stroke: Stroke, color: Color) {
+    draw_mask_with_cache(
+      self.canvas,
+      self.glyph_signature,
+      self.paths,
+      self.transform,
+      Some(stroke),
+      color,
+    );
+  }
+
+  fn composite_text_stroke(&mut self, clip_image: PaintSource<'_>) {
+    if self.stroke.0 <= 0.0 {
+      return;
+    }
+
+    self.composite_stroke(
+      self.scaled_text_stroke(),
+      MaskCompositeColor::color_over_source(self.stroke.1),
+      clip_image,
+    );
+  }
+
+  fn composite_embolden(&mut self, embolden: f32, clip_image: PaintSource<'_>) {
+    if embolden <= 0.0 {
+      return;
+    }
+
+    self.composite_stroke(
+      self.stroke_of(embolden),
+      MaskCompositeColor::SourceOnly,
+      clip_image,
+    );
+  }
+
+  /// Composites `clip_image` through `stroke` traced around the glyph.
+  fn composite_stroke(
+    &mut self,
+    stroke: Stroke,
+    color_mode: MaskCompositeColor,
+    clip_image: PaintSource<'_>,
+  ) {
+    let Some(inverse) = self.transform.invert() else {
+      return;
+    };
+
+    let sampling = self.clip_sampling(inverse);
+    let (mask, placement) = render_mask(
+      self.paths,
+      Some(self.transform),
+      Some(stroke.into()),
+      Some(self.canvas.viewport()),
+    );
+
+    self.canvas.composite_mask_source(
+      &mask,
+      placement,
+      clip_image,
+      color_mode,
+      sampling,
+      BlendMode::Normal,
+    );
+  }
+
+  /// Samples the `background-clip: text` image under the glyph, mapping canvas
+  /// pixels back through `inverse`.
+  fn clip_sampling(&self, inverse: Affine) -> MaskSamplingOptions {
+    MaskSamplingOptions {
+      canvas_to_source: Affine::translation(self.inline_offset.x, self.inline_offset.y) * inverse,
+      sample_bias: Point { x: 0.5, y: 0.5 },
+      algorithm: self.style.parent.image_rendering,
+    }
+  }
+}
+
 pub(crate) fn draw_glyph_clip_image(
   glyph: &ResolvedGlyph,
   canvas: &mut Canvas,
@@ -260,44 +357,9 @@ pub(crate) fn draw_glyph_clip_image(
       );
     }
     ResolvedGlyph::Outline(outline) => {
-      // If the transform is not invertible, we can't draw the glyph
       let Some(inverse) = transform.invert() else {
         return Ok(());
       };
-
-      let sampling = MaskSamplingOptions {
-        canvas_to_source: Affine::translation(inline_offset.x, inline_offset.y) * inverse,
-        sample_bias: Point { x: 0.5, y: 0.5 },
-        algorithm: style.parent.image_rendering,
-      };
-
-      if let Some((bucket_x, int_x, int_y)) = glyph_cache_bucket_and_offset(transform) {
-        let (mask, cached_placement) =
-          cached_mask(outline.cache_signature(), bucket_x, outline.paths(), None);
-        canvas.composite_mask_source(
-          &mask,
-          cached_placement.translate(int_x, int_y),
-          clip_image,
-          MaskCompositeColor::SourceOnly,
-          sampling,
-          BlendMode::Normal,
-        );
-      } else {
-        let (mask, placement) = render_mask(
-          outline.paths(),
-          Some(transform),
-          None,
-          Some(canvas.viewport()),
-        );
-        canvas.composite_mask_source(
-          &mask,
-          placement,
-          clip_image,
-          MaskCompositeColor::SourceOnly,
-          sampling,
-          BlendMode::Normal,
-        );
-      }
 
       let mut ctx = GlyphPaintCtx {
         canvas,
@@ -308,17 +370,46 @@ pub(crate) fn draw_glyph_clip_image(
         paths: outline.paths(),
         glyph_signature: outline.cache_signature(),
       };
+      let sampling = ctx.clip_sampling(inverse);
 
-      if let Some(embolden) = outline.embolden() {
-        draw_text_embolden_clip_image(&mut ctx, embolden, clip_image);
+      if let Some((bucket_x, int_x, int_y)) = glyph_cache_bucket_and_offset(transform) {
+        let (mask, cached_placement) = cached_mask(ctx.glyph_signature, bucket_x, ctx.paths, None);
+        ctx.canvas.composite_mask_source(
+          &mask,
+          cached_placement.translate(int_x, int_y),
+          clip_image,
+          MaskCompositeColor::SourceOnly,
+          sampling,
+          BlendMode::Normal,
+        );
+      } else {
+        let (mask, placement) = render_mask(
+          ctx.paths,
+          Some(transform),
+          None,
+          Some(ctx.canvas.viewport()),
+        );
+        ctx.canvas.composite_mask_source(
+          &mask,
+          placement,
+          clip_image,
+          MaskCompositeColor::SourceOnly,
+          sampling,
+          BlendMode::Normal,
+        );
       }
 
-      draw_text_stroke_clip_image(&mut ctx, clip_image);
+      if let Some(embolden) = outline.embolden() {
+        ctx.composite_embolden(embolden, clip_image);
+      }
+
+      ctx.composite_text_stroke(clip_image);
     }
   }
 
   Ok(())
 }
+
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn draw_glyph(
   glyph: &ResolvedGlyph,
@@ -360,12 +451,13 @@ pub(crate) fn draw_glyph(
       {
         draw_color_outline_image(canvas, color_layers, palette, color, transform);
       } else {
-        draw_outline_with_cache(
-          outline.paths(),
-          outline.cache_signature(),
-          transform,
-          color,
+        draw_mask_with_cache(
           canvas,
+          outline.cache_signature(),
+          outline.paths(),
+          transform,
+          None,
+          color,
         );
       }
 
@@ -380,136 +472,11 @@ pub(crate) fn draw_glyph(
       };
 
       if let Some(embolden) = outline.embolden() {
-        draw_text_embolden(&mut ctx, color, embolden);
+        ctx.draw_embolden(embolden, color);
       }
 
-      draw_text_stroke(&mut ctx);
+      ctx.draw_text_stroke();
     }
-  }
-
-  Ok(())
-}
-
-fn draw_text_stroke_clip_image(ctx: &mut GlyphPaintCtx<'_, '_>, clip_image: PaintSource<'_>) {
-  if ctx.stroke.0 <= 0.0 {
-    return;
-  }
-
-  let Some(inverse) = ctx.transform.invert() else {
-    return;
-  };
-
-  let scale = ctx.transform.uniform_scale().max(f32::EPSILON);
-  let mut stroke = Stroke::new(ctx.stroke.0 / scale);
-  stroke.join = ctx.style.parent.stroke_linejoin.into();
-
-  let (stroke_mask, stroke_placement) = render_mask(
-    ctx.paths,
-    Some(ctx.transform),
-    Some(stroke.into()),
-    Some(ctx.canvas.viewport()),
-  );
-
-  ctx.canvas.composite_mask_source(
-    &stroke_mask,
-    stroke_placement,
-    clip_image,
-    MaskCompositeColor::color_over_source(ctx.stroke.1),
-    MaskSamplingOptions {
-      canvas_to_source: Affine::translation(ctx.inline_offset.x, ctx.inline_offset.y) * inverse,
-      sample_bias: Point { x: 0.5, y: 0.5 },
-      algorithm: ctx.style.parent.image_rendering,
-    },
-    BlendMode::Normal,
-  );
-}
-
-fn draw_text_embolden_clip_image(
-  ctx: &mut GlyphPaintCtx<'_, '_>,
-  embolden: f32,
-  clip_image: PaintSource<'_>,
-) {
-  if embolden <= 0.0 {
-    return;
-  }
-
-  let Some(inverse) = ctx.transform.invert() else {
-    return;
-  };
-
-  let mut stroke = Stroke::new(embolden);
-  stroke.join = ctx.style.parent.stroke_linejoin.into();
-
-  let (stroke_mask, stroke_placement) = render_mask(
-    ctx.paths,
-    Some(ctx.transform),
-    Some(stroke.into()),
-    Some(ctx.canvas.viewport()),
-  );
-
-  ctx.canvas.composite_mask_source(
-    &stroke_mask,
-    stroke_placement,
-    clip_image,
-    MaskCompositeColor::SourceOnly,
-    MaskSamplingOptions {
-      canvas_to_source: Affine::translation(ctx.inline_offset.x, ctx.inline_offset.y) * inverse,
-      sample_bias: Point { x: 0.5, y: 0.5 },
-      algorithm: ctx.style.parent.image_rendering,
-    },
-    BlendMode::Normal,
-  );
-}
-
-fn draw_text_stroke(ctx: &mut GlyphPaintCtx<'_, '_>) {
-  if ctx.stroke.0 <= 0.0 {
-    return;
-  }
-
-  let scale = ctx.transform.uniform_scale().max(f32::EPSILON);
-  let mut stroke = Stroke::new(ctx.stroke.0 / scale);
-  stroke.join = ctx.style.parent.stroke_linejoin.into();
-
-  draw_mask_with_cache(
-    ctx.paths,
-    ctx.glyph_signature,
-    ctx.transform,
-    Some(stroke),
-    ctx.stroke.1,
-    ctx.canvas,
-  );
-}
-
-fn draw_text_embolden(ctx: &mut GlyphPaintCtx<'_, '_>, color: Color, embolden: f32) {
-  if embolden <= 0.0 {
-    return;
-  }
-
-  let mut stroke = Stroke::new(embolden);
-  stroke.join = ctx.style.parent.stroke_linejoin.into();
-
-  draw_mask_with_cache(
-    ctx.paths,
-    ctx.glyph_signature,
-    ctx.transform,
-    Some(stroke),
-    color,
-    ctx.canvas,
-  );
-}
-
-fn draw_text_shadow(
-  canvas: &mut Canvas,
-  style: &SizedFontStyle,
-  transform: Affine,
-  paths: &[Command],
-) -> Result<()> {
-  if style.text_shadow.is_empty() {
-    return Ok(());
-  }
-
-  for shadow in style.painted_text_shadows() {
-    draw_outset_shadow(shadow, canvas, paths, transform, Default::default(), None)?;
   }
 
   Ok(())
@@ -519,17 +486,33 @@ pub(crate) fn draw_glyph_text_shadow(
   glyph: &ResolvedGlyph,
   canvas: &mut Canvas,
   style: &SizedFontStyle,
-  mut transform: Affine,
+  transform: Affine,
   inline_offset: Point<f32>,
 ) -> Result<()> {
-  transform *= Affine::translation(inline_offset.x, inline_offset.y);
+  let ResolvedGlyph::Outline(outline) = glyph else {
+    return Ok(());
+  };
 
-  if let ResolvedGlyph::Outline(outline) = glyph {
-    draw_text_shadow(canvas, style, transform, outline.paths())?;
+  if style.text_shadow.is_empty() {
+    return Ok(());
+  }
+
+  let transform = transform * Affine::translation(inline_offset.x, inline_offset.y);
+
+  for shadow in style.painted_text_shadows() {
+    draw_outset_shadow(
+      shadow,
+      canvas,
+      outline.paths(),
+      transform,
+      Default::default(),
+      None,
+    )?;
   }
 
   Ok(())
 }
+
 fn draw_color_outline_image(
   canvas: &mut Canvas,
   color_layers: &[ResolvedColorLayer],

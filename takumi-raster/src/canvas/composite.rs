@@ -1,15 +1,16 @@
 use std::ops::Range;
 
-use takumi_core::geometry::Point;
+use takumi_core::geometry::{Point, Size};
 use tiny_skia::PixmapMut;
 
 use super::{
   MaskSamplingOptions, MaskView, PaintSource, SamplingFootprint,
-  blit::{OverlayBounds, apply_mask_row, compute_overlay_bounds_for_canvas},
+  blit::{OverlayBounds, apply_mask_row},
   mask::MaskRow,
   paint_source::{
     MaskCompositeColor, ResolvedSource, ScaledRows, apply_mask_color_mode, sample_paint_source,
   },
+  whole_pixel_translation,
 };
 use crate::{
   Placement,
@@ -25,6 +26,25 @@ struct DestRegion {
 }
 
 impl DestRegion {
+  /// The part of `placement` inside a `canvas`-sized pixmap, or `None` when
+  /// they do not overlap.
+  fn new(canvas: Size<u32>, placement: Placement) -> Option<Self> {
+    let bounds = OverlayBounds::new(
+      canvas,
+      Point {
+        x: placement.left as f32,
+        y: placement.top as f32,
+      },
+      Size::new(placement.width, placement.height),
+    )?;
+
+    Some(Self {
+      bounds,
+      canvas_width: canvas.width as usize,
+      mask_stride: placement.width as usize,
+    })
+  }
+
   fn span(&self) -> usize {
     (self.bounds.x_max - self.bounds.x_min) as usize
   }
@@ -64,25 +84,8 @@ pub(super) fn constant(
     return;
   }
 
-  let canvas_width = pixmap.width();
-  let canvas_height = pixmap.height();
-  let Some(bounds) = compute_overlay_bounds_for_canvas(
-    canvas_width,
-    canvas_height,
-    Point {
-      x: placement.left as f32,
-      y: placement.top as f32,
-    },
-    placement.width,
-    placement.height,
-  ) else {
+  let Some(region) = DestRegion::new(Size::new(pixmap.width(), pixmap.height()), placement) else {
     return;
-  };
-
-  let region = DestRegion {
-    bounds,
-    canvas_width: canvas_width as usize,
-    mask_stride: placement.width as usize,
   };
   let pixels: &mut [[u8; 4]] = bytemuck::cast_slice_mut(pixmap.pixels_mut());
   if mode == BlendMode::Normal && combined_mask.is_none() {
@@ -115,24 +118,11 @@ pub(super) fn source(
     return;
   }
 
-  let canvas_width = pixmap.width();
-  let canvas_height = pixmap.height();
-  let Some(bounds) = compute_overlay_bounds_for_canvas(
-    canvas_width,
-    canvas_height,
-    Point {
-      x: options.placement.left as f32,
-      y: options.placement.top as f32,
-    },
-    options.placement.width,
-    options.placement.height,
+  let Some(region) = DestRegion::new(
+    Size::new(pixmap.width(), pixmap.height()),
+    options.placement,
   ) else {
     return;
-  };
-  let region = DestRegion {
-    bounds,
-    canvas_width: canvas_width as usize,
-    mask_stride: options.placement.width as usize,
   };
 
   if options.color_mode == MaskCompositeColor::SourceOnly
@@ -220,10 +210,9 @@ fn try_translation_blit(
   options: &Options<'_>,
   region: DestRegion,
 ) -> bool {
-  let transform = options.sampling.canvas_to_source;
-  if !transform.only_translation() || transform.x.fract() != 0.0 || transform.y.fract() != 0.0 {
+  let Some(sample_offset) = whole_pixel_translation(options.sampling.canvas_to_source) else {
     return false;
-  }
+  };
   if options.sampling.sample_bias != (Point { x: 0.5, y: 0.5 }) {
     return false;
   }
@@ -236,8 +225,8 @@ fn try_translation_blit(
   let source_height = source_pixmap.height() as i32;
   let source_pixels = source_pixmap.pixels();
   let pixels: &mut [[u8; 4]] = bytemuck::cast_slice_mut(pixmap.pixels_mut());
-  let sample_dx = transform.x as i32;
-  let sample_dy = transform.y as i32;
+  let sample_dx = sample_offset.x as i32;
+  let sample_dy = sample_offset.y as i32;
 
   for dest_y in bounds.y_min..bounds.y_max {
     let src_y = dest_y + sample_dy;
@@ -544,22 +533,8 @@ mod scaled_rows_tests {
       combined_mask: None,
     };
 
-    let bounds = compute_overlay_bounds_for_canvas(
-      canvas.width(),
-      canvas.height(),
-      Point {
-        x: placement.left as f32,
-        y: placement.top as f32,
-      },
-      placement.width,
-      placement.height,
-    )
-    .unwrap();
-    let region = DestRegion {
-      bounds,
-      canvas_width: canvas.width() as usize,
-      mask_stride: placement.width as usize,
-    };
+    let region = DestRegion::new(Size::new(canvas.width(), canvas.height()), placement).unwrap();
+    let bounds = region.bounds;
 
     let mut pixmap = canvas.as_mut();
 

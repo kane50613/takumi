@@ -8,8 +8,7 @@ use tiny_skia::{Pixmap, PixmapMut};
 use crate::{
   BlurType, BorderProperties, Canvas, CanvasSubcanvas, CanvasViewport, Error, NodeMaskAction,
   Placement, Result, SizedFontStyle, apply_backdrop_filter, apply_filters_to_pixmap, blend_pixel,
-  color_to_premultiplied, draw_background, draw_border, draw_debug_border, draw_inset_box_shadow,
-  draw_node_content, draw_outline, draw_outset_box_shadow,
+  color_to_premultiplied, draw_box_shell, draw_debug_border, draw_node_content, draw_outline,
   inline_drawing::{draw_inline_box, draw_inline_layout},
   layout::{
     inline::{
@@ -21,22 +20,6 @@ use crate::{
   placement_overlap, prepare_node_mask, resolve_outline,
   style::{Affine, BlendMode, Filter, SizingContext},
 };
-
-fn bounds_intersects_viewport(bounds: SceneBounds, viewport: CanvasViewport) -> bool {
-  if bounds.is_empty() {
-    return false;
-  }
-
-  let viewport_left = viewport.origin.x as i32;
-  let viewport_top = viewport.origin.y as i32;
-  let viewport_right = viewport.right();
-  let viewport_bottom = viewport.bottom();
-
-  bounds.right as i32 > viewport_left
-    && bounds.bottom as i32 > viewport_top
-    && (bounds.left as i32) < viewport_right
-    && (bounds.top as i32) < viewport_bottom
-}
 
 pub(crate) fn blend_pixmap_software(
   dst: &mut Pixmap,
@@ -103,10 +86,7 @@ pub(crate) fn blend_pixmap_software(
 enum DeferredNodeRender {
   Deferred {
     path: Vec<usize>,
-    layout: Layout,
-    has_constraint: bool,
-    isolated_canvas: Option<Box<CanvasSubcanvas>>,
-    filter_bounds: Option<SceneBounds>,
+    finish: PendingFinish,
   },
   SkipRendering,
 }
@@ -122,116 +102,91 @@ impl DeferredOutline {
   }
 }
 
-fn finish_node_render(
-  node: &mut RenderNode,
-  canvas: &mut Canvas,
+/// The state a painted node leaves open until its descendants are done: its
+/// constraint mask, its isolation layer, and the bounds its filters cover.
+struct PendingFinish {
   layout: Layout,
   has_constraint: bool,
   isolated_canvas: Option<Box<CanvasSubcanvas>>,
   filter_bounds: Option<SceneBounds>,
-  outlines: Option<&mut Vec<DeferredOutline>>,
-) -> Result<()> {
-  // CSS 2.1 Appendix E paints the outline last, above the box's children, so a
-  // node whose children follow it in the bucket hands its outline to the caller.
-  if let Some((outline, transform)) = resolve_outline(&node.context, layout) {
-    let deferred = DeferredOutline { outline, transform };
+}
 
-    match outlines {
-      Some(outlines) => outlines.push(deferred),
-      None => deferred.paint(canvas),
+impl PendingFinish {
+  /// Paints the outline and filters, pops the mask, and composites the layer.
+  fn run(
+    self,
+    node: &mut RenderNode,
+    canvas: &mut Canvas,
+    outlines: Option<&mut Vec<DeferredOutline>>,
+  ) -> Result<()> {
+    // CSS 2.1 Appendix E paints the outline last, above the box's children, so a
+    // node whose children follow it in the bucket hands its outline to the caller.
+    if let Some((outline, transform)) = resolve_outline(&node.context, self.layout) {
+      let deferred = DeferredOutline { outline, transform };
+
+      match outlines {
+        Some(outlines) => outlines.push(deferred),
+        None => deferred.paint(canvas),
+      }
     }
-  }
 
-  if !node.context.style.filter.is_empty() {
-    let viewport = canvas.viewport();
-    let filter_padding = filter_padding(
-      &node.context.style.filter,
-      &node.context.sizing,
-      node.context.transform,
-    );
-    let filter_region = filter_bounds.and_then(|bounds| {
-      let left = (bounds.left as i32 - filter_padding).max(viewport.origin.x as i32);
-      let top = (bounds.top as i32 - filter_padding).max(viewport.origin.y as i32);
-      let right = (bounds.right as i32 + filter_padding).min(viewport.right());
-      let bottom = (bounds.bottom as i32 + filter_padding).min(viewport.bottom());
-
-      (left < right && top < bottom).then_some(Placement {
-        left: left - viewport.origin.x as i32,
-        top: top - viewport.origin.y as i32,
-        width: (right - left) as u32,
-        height: (bottom - top) as u32,
-      })
-    });
-
-    let canvas_size = canvas.viewport().size;
-    let region_is_full_canvas = filter_region.is_some_and(|r| {
-      r.left == 0 && r.top == 0 && r.width == canvas_size.width && r.height == canvas_size.height
-    });
-
-    if let Some(region) = filter_region
-      && !region_is_full_canvas
-    {
-      let row_bytes = region.width as usize * 4;
-      let region_len = row_bytes * region.height as usize;
-      let mut region_raw = vec![0; region_len];
-
-      canvas.with_pixmap_ref(|pixmap| {
-        let canvas_width = pixmap.width() as usize;
-        let canvas_raw: &[u8] = bytemuck::cast_slice(pixmap.pixels());
-        for (y, dest_row) in region_raw.chunks_exact_mut(row_bytes).enumerate() {
-          let src_y = region.top as usize + y;
-          let src_start = (src_y * canvas_width + region.left as usize) * 4;
-          dest_row.copy_from_slice(&canvas_raw[src_start..src_start + row_bytes]);
-        }
-      });
-
-      let Some(mut region_pixmap) =
-        PixmapMut::from_bytes(&mut region_raw, region.width, region.height)
-      else {
-        return Ok(());
-      };
-
-      apply_filters_to_pixmap(
-        &mut region_pixmap,
+    if !node.context.style.filter.is_empty() {
+      let viewport = canvas.viewport();
+      let filter_padding = filter_padding(
+        &node.context.style.filter,
         &node.context.sizing,
-        node.context.current_color,
-        node.context.style.filter.iter(),
-      )?;
-
-      canvas.with_pixmap(|pixmap| {
-        let canvas_width = pixmap.width() as usize;
-        let canvas_raw: &mut [u8] = bytemuck::cast_slice_mut(pixmap.pixels_mut());
-        for (y, src_row) in region_raw.chunks_exact(row_bytes).enumerate() {
-          let dst_y = region.top as usize + y;
-          let dst_start = (dst_y * canvas_width + region.left as usize) * 4;
-          canvas_raw[dst_start..dst_start + row_bytes].copy_from_slice(src_row);
-        }
+        node.context.transform,
+      );
+      let filter_region = self.filter_bounds.and_then(|bounds| {
+        viewport
+          .clamp_bounds(bounds, filter_padding)
+          .map(|region| region.translate(-(viewport.origin.x as i32), -(viewport.origin.y as i32)))
       });
-    } else {
-      canvas.with_pixmap(|pixmap| {
-        let mut pixmap_mut = pixmap.as_mut();
+
+      if let Some(region) = filter_region
+        && region != CanvasViewport::local(viewport.size).placement()
+      {
+        let mut region_raw = canvas.read_region(region);
+        let Some(mut region_pixmap) =
+          PixmapMut::from_bytes(&mut region_raw, region.width, region.height)
+        else {
+          return Ok(());
+        };
+
         apply_filters_to_pixmap(
-          &mut pixmap_mut,
+          &mut region_pixmap,
           &node.context.sizing,
           node.context.current_color,
           node.context.style.filter.iter(),
-        )
-      })?;
+        )?;
+
+        canvas.write_region(region, &region_raw);
+      } else {
+        canvas.with_pixmap(|pixmap| {
+          let mut pixmap_mut = pixmap.as_mut();
+          apply_filters_to_pixmap(
+            &mut pixmap_mut,
+            &node.context.sizing,
+            node.context.current_color,
+            node.context.style.filter.iter(),
+          )
+        })?;
+      }
     }
-  }
 
-  if has_constraint {
-    canvas.pop_mask();
-  }
-  if let Some(isolated_canvas) = isolated_canvas {
-    canvas.composite_subcanvas(
-      *isolated_canvas,
-      node.context.style.mix_blend_mode,
-      node.context.style.opacity.0,
-    );
-  }
+    if self.has_constraint {
+      canvas.pop_mask();
+    }
+    if let Some(isolated_canvas) = self.isolated_canvas {
+      canvas.composite_subcanvas(
+        *isolated_canvas,
+        node.context.style.mix_blend_mode,
+        node.context.style.opacity.0,
+      );
+    }
 
-  Ok(())
+    Ok(())
+  }
 }
 
 fn filter_padding(filters: &[Filter], sizing: &SizingContext, transform: Affine) -> i32 {
@@ -272,275 +227,209 @@ fn affine_max_scale(transform: Affine) -> f32 {
   }
 }
 
-fn begin_node_render(
-  root: &mut RenderNode,
-  layout_results: &LayoutResults,
-  canvas: &mut Canvas,
-  node_paint: &NodePaint,
-  defer_finish: bool,
-  isolation_bounds_hint: Option<SceneBounds>,
-  outlines: &mut Vec<DeferredOutline>,
-) -> Result<Option<DeferredNodeRender>> {
-  let Some(current) = root.node_at_path_mut(&node_paint.path) else {
-    return Err(Error::InvalidLayoutNode(node_paint.node_id.into()));
-  };
-  let layout = layout_results.layout(node_paint.node_id)?;
+/// Paints a scene's stacking contexts, in paint order, onto one canvas.
+pub(crate) struct ScenePainter<'a> {
+  pub(crate) root: &'a mut RenderNode,
+  pub(crate) contexts: &'a [StackingContextNode],
+  pub(crate) layout_results: &'a LayoutResults,
+  pub(crate) canvas: &'a mut Canvas,
+}
 
-  if current.context.style.is_invisible() || !node_paint.transform.is_invertible() {
-    return Ok(None);
-  }
+impl ScenePainter<'_> {
+  pub(crate) fn paint_context(&mut self, context_id: usize) -> Result<()> {
+    let contexts = self.contexts;
+    let Some(context) = contexts.get(context_id) else {
+      return Err(Error::InvalidLayoutNode(context_id as u64));
+    };
 
-  // Prefer the context's merged bounds: a zero-sized root can still have visible overflowing children.
-  if let Some(bounds) = isolation_bounds_hint.or(node_paint.paint_bounds)
-    && !bounds_intersects_viewport(bounds, canvas.viewport())
-  {
-    return Ok(Some(DeferredNodeRender::SkipRendering));
-  }
+    if let Some(bounds) = context.paint_bounds()
+      && !self.canvas.viewport().intersects(bounds)
+    {
+      return Ok(());
+    }
 
-  current.context.sizing.set_container_size(
-    node_paint.container_size.width,
-    node_paint.container_size.height,
-  );
-  current.context.transform = node_paint.transform;
+    let mut deferred_root = None;
+    let mut outlines = Vec::new();
 
-  if !current.context.style.backdrop_filter.is_empty() {
-    // Filtered backdrop is clipped by the node's clip-path and mask, like Chromium's
-    // backdrop root: https://drafts.fxtf.org/filter-effects-2/#BackdropRoot
-    let node_mask = if current.context.style.has_shape_mask() {
-      match prepare_node_mask(
-        &current.context,
-        &current.context.style,
-        layout,
-        node_paint.transform,
-        canvas.viewport(),
-      )? {
-        NodeMaskAction::Shell(mask) => Some(mask),
-        NodeMaskAction::SkipRendering => return Ok(Some(DeferredNodeRender::SkipRendering)),
-        _ => None,
+    if let Some(root_paint) = context.root() {
+      match self.begin_node(root_paint, true, context.paint_bounds(), &mut outlines)? {
+        Some(DeferredNodeRender::SkipRendering) => return Ok(()),
+        Some(deferred_root_render @ DeferredNodeRender::Deferred { .. }) => {
+          deferred_root = Some(deferred_root_render);
+        }
+        None => {}
       }
+    }
+
+    for bucket in context.in_paint_order() {
+      self.paint_bucket(bucket, &mut outlines)?;
+    }
+
+    for outline in &outlines {
+      outline.paint(self.canvas);
+    }
+
+    if let Some(DeferredNodeRender::Deferred { path, finish }) = deferred_root {
+      let Some(current) = self.root.node_at_path_mut(&path) else {
+        let node_id = context.root().map_or(NodeId::ROOT, |node| node.node_id);
+        return Err(Error::InvalidLayoutNode(node_id.into()));
+      };
+
+      PendingFinish {
+        filter_bounds: context.paint_bounds().or(finish.filter_bounds),
+        ..finish
+      }
+      .run(current, self.canvas, None)?;
+    }
+
+    Ok(())
+  }
+
+  fn paint_bucket(
+    &mut self,
+    items: &[PaintItem],
+    outlines: &mut Vec<DeferredOutline>,
+  ) -> Result<()> {
+    for item in items {
+      match &item.kind {
+        PaintItemKind::Node(node_paint) => {
+          self.begin_node(node_paint, false, None, outlines)?;
+        }
+        PaintItemKind::Context(context_id) => {
+          self.paint_context(*context_id)?;
+        }
+      }
+    }
+    Ok(())
+  }
+
+  fn begin_node(
+    &mut self,
+    node_paint: &NodePaint,
+    defer_finish: bool,
+    isolation_bounds_hint: Option<SceneBounds>,
+    outlines: &mut Vec<DeferredOutline>,
+  ) -> Result<Option<DeferredNodeRender>> {
+    let canvas = &mut *self.canvas;
+    let Some(current) = self.root.node_at_path_mut(&node_paint.path) else {
+      return Err(Error::InvalidLayoutNode(node_paint.node_id.into()));
+    };
+    let layout = self.layout_results.layout(node_paint.node_id)?;
+    if current.context.style.is_invisible() || !node_paint.transform.is_invertible() {
+      return Ok(None);
+    }
+
+    // Prefer the context's merged bounds: a zero-sized root can still have visible overflowing children.
+    if let Some(bounds) = isolation_bounds_hint.or(node_paint.paint_bounds)
+      && !canvas.viewport().intersects(bounds)
+    {
+      return Ok(Some(DeferredNodeRender::SkipRendering));
+    }
+
+    current.context.sizing.set_container_size(
+      node_paint.container_size.width,
+      node_paint.container_size.height,
+    );
+    current.context.transform = node_paint.transform;
+
+    if !current.context.style.backdrop_filter.is_empty() {
+      // Filtered backdrop is clipped by the node's clip-path and mask, like Chromium's
+      // backdrop root: https://drafts.fxtf.org/filter-effects-2/#BackdropRoot
+      let node_mask = if current.context.style.has_shape_mask() {
+        match prepare_node_mask(
+          &current.context,
+          &current.context.style,
+          layout,
+          node_paint.transform,
+          canvas.viewport(),
+        )? {
+          NodeMaskAction::Shell(mask) => Some(mask),
+          NodeMaskAction::SkipRendering => return Ok(Some(DeferredNodeRender::SkipRendering)),
+          _ => None,
+        }
+      } else {
+        None
+      };
+
+      let border = BorderProperties::from_context(&current.context, layout.size, layout.border);
+      apply_backdrop_filter(
+        canvas,
+        border,
+        layout.size,
+        node_paint.transform,
+        &current.context,
+        node_mask.as_ref(),
+      )?;
+    }
+
+    let isolated_canvas = if current.context.style.needs_offscreen_compositing() {
+      let viewport = canvas.viewport();
+      let bounds = isolation_bounds_hint
+        .and_then(|bounds| viewport.clamp_bounds(bounds, 2))
+        .unwrap_or_else(|| viewport.placement());
+
+      Some(Box::new(canvas.begin_subcanvas(bounds)?))
     } else {
       None
     };
 
-    let border = BorderProperties::from_context(&current.context, layout.size, layout.border);
-    apply_backdrop_filter(
-      canvas,
-      border,
-      layout.size,
-      node_paint.transform,
+    let mask_action = prepare_node_mask(
       &current.context,
-      node_mask.as_ref(),
+      &current.context.style,
+      layout,
+      node_paint.transform,
+      canvas.viewport(),
     )?;
-  }
-
-  let should_isolate = current.context.style.needs_offscreen_compositing();
-  let isolated_canvas = if should_isolate {
-    Some(Box::new(canvas.begin_subcanvas(
-      compute_isolation_bounds(canvas.viewport(), isolation_bounds_hint),
-    )?))
-  } else {
-    None
-  };
-
-  let mask_action = prepare_node_mask(
-    &current.context,
-    &current.context.style,
-    layout,
-    node_paint.transform,
-    canvas.viewport(),
-  )?;
-  if matches!(mask_action, NodeMaskAction::SkipRendering) {
-    if let Some(isolated_canvas) = isolated_canvas {
-      canvas.composite_subcanvas(*isolated_canvas, BlendMode::Normal, 0.0);
+    if matches!(mask_action, NodeMaskAction::SkipRendering) {
+      if let Some(isolated_canvas) = isolated_canvas {
+        canvas.composite_subcanvas(*isolated_canvas, BlendMode::Normal, 0.0);
+      }
+      return Ok(Some(DeferredNodeRender::SkipRendering));
     }
-    return Ok(Some(DeferredNodeRender::SkipRendering));
-  }
 
-  let has_constraint = mask_action.is_some();
+    let has_constraint = mask_action.is_some();
 
-  match mask_action {
-    NodeMaskAction::None => {
-      draw_render_node_shell(current, canvas, layout)?;
+    match mask_action {
+      NodeMaskAction::None => {
+        draw_render_node_shell(current, canvas, layout)?;
+      }
+      NodeMaskAction::Shell(mask) => {
+        canvas.push_mask(mask);
+        draw_render_node_shell(current, canvas, layout)?;
+      }
+      NodeMaskAction::Content(mask) => {
+        draw_render_node_shell(current, canvas, layout)?;
+        canvas.push_mask(mask);
+      }
+      NodeMaskAction::SkipRendering => return Ok(Some(DeferredNodeRender::SkipRendering)),
     }
-    NodeMaskAction::Shell(mask) => {
-      canvas.push_mask(mask);
-      draw_render_node_shell(current, canvas, layout)?;
-    }
-    NodeMaskAction::Content(mask) => {
-      draw_render_node_shell(current, canvas, layout)?;
-      canvas.push_mask(mask);
-    }
-    NodeMaskAction::SkipRendering => return Ok(Some(DeferredNodeRender::SkipRendering)),
-  }
 
-  draw_render_node_content(current, canvas, layout)?;
-
-  if current.context.draw_debug_border() {
-    draw_debug_border(canvas, layout, node_paint.transform);
-  }
-
-  if current.should_create_inline_layout() {
-    draw_render_node_inline(current, canvas, layout)?;
-  } else if defer_finish {
-    return Ok(Some(DeferredNodeRender::Deferred {
-      path: node_paint.path.clone(),
+    let finish = PendingFinish {
       layout,
       has_constraint,
       isolated_canvas,
       filter_bounds: node_paint.paint_bounds,
-    }));
-  }
-
-  finish_node_render(
-    current,
-    canvas,
-    layout,
-    has_constraint,
-    isolated_canvas,
-    node_paint.paint_bounds,
-    Some(outlines),
-  )?;
-
-  Ok(None)
-}
-
-fn paint_bucket(
-  root: &mut RenderNode,
-  contexts: &[StackingContextNode],
-  layout_results: &LayoutResults,
-  canvas: &mut Canvas,
-  items: &[PaintItem],
-  outlines: &mut Vec<DeferredOutline>,
-) -> Result<()> {
-  for item in items {
-    match &item.kind {
-      PaintItemKind::Node(node_paint) => {
-        begin_node_render(
-          root,
-          layout_results,
-          canvas,
-          node_paint,
-          false,
-          None,
-          outlines,
-        )?;
-      }
-      PaintItemKind::Context(context_id) => {
-        paint_context(root, contexts, layout_results, canvas, *context_id)?;
-      }
-    }
-  }
-  Ok(())
-}
-
-pub(crate) fn paint_context(
-  root: &mut RenderNode,
-  contexts: &[StackingContextNode],
-  layout_results: &LayoutResults,
-  canvas: &mut Canvas,
-  context_id: usize,
-) -> Result<()> {
-  let Some(context) = contexts.get(context_id) else {
-    return Err(Error::InvalidLayoutNode(context_id as u64));
-  };
-
-  if let Some(bounds) = context.paint_bounds()
-    && !bounds_intersects_viewport(bounds, canvas.viewport())
-  {
-    return Ok(());
-  }
-
-  let mut deferred_root = None;
-  let mut outlines = Vec::new();
-
-  if let Some(root_paint) = context.root() {
-    match begin_node_render(
-      root,
-      layout_results,
-      canvas,
-      root_paint,
-      true,
-      context.paint_bounds(),
-      &mut outlines,
-    )? {
-      Some(DeferredNodeRender::SkipRendering) => return Ok(()),
-      Some(deferred_root_render @ DeferredNodeRender::Deferred { .. }) => {
-        deferred_root = Some(deferred_root_render);
-      }
-      None => {}
-    }
-  }
-
-  for bucket in context.in_paint_order() {
-    paint_bucket(
-      root,
-      contexts,
-      layout_results,
-      canvas,
-      bucket,
-      &mut outlines,
-    )?;
-  }
-
-  for outline in &outlines {
-    outline.paint(canvas);
-  }
-
-  if let Some(DeferredNodeRender::Deferred {
-    path,
-    layout,
-    has_constraint,
-    isolated_canvas,
-    filter_bounds,
-  }) = deferred_root
-  {
-    let Some(current) = root.node_at_path_mut(&path) else {
-      let node_id = context.root().map_or(NodeId::ROOT, |node| node.node_id);
-      return Err(Error::InvalidLayoutNode(node_id.into()));
     };
-    finish_node_render(
-      current,
-      canvas,
-      layout,
-      has_constraint,
-      isolated_canvas,
-      context.paint_bounds().or(filter_bounds),
-      None,
-    )?;
+
+    draw_render_node_content(current, canvas, layout)?;
+
+    if current.context.draw_debug_border() {
+      draw_debug_border(canvas, layout, node_paint.transform);
+    }
+
+    if current.should_create_inline_layout() {
+      draw_render_node_inline(current, canvas, layout)?;
+    } else if defer_finish {
+      return Ok(Some(DeferredNodeRender::Deferred {
+        path: node_paint.path.clone(),
+        finish,
+      }));
+    }
+
+    finish.run(current, canvas, Some(outlines))?;
+
+    Ok(None)
   }
-
-  Ok(())
-}
-
-fn placement_from_bounds(
-  bounds: SceneBounds,
-  viewport: CanvasViewport,
-  padding: i32,
-) -> Option<Placement> {
-  let left = (bounds.left as i32 - padding).max(viewport.origin.x as i32);
-  let top = (bounds.top as i32 - padding).max(viewport.origin.y as i32);
-  let right = (bounds.right as i32 + padding).min(viewport.right());
-  let bottom = (bounds.bottom as i32 + padding).min(viewport.bottom());
-
-  Placement::from_bounds(left, top, right, bottom)
-}
-
-fn full_viewport_placement(viewport: CanvasViewport) -> Placement {
-  Placement {
-    left: viewport.origin.x as i32,
-    top: viewport.origin.y as i32,
-    width: viewport.size.width,
-    height: viewport.size.height,
-  }
-}
-
-fn compute_isolation_bounds(
-  viewport: CanvasViewport,
-  paint_bounds_hint: Option<SceneBounds>,
-) -> Placement {
-  paint_bounds_hint
-    .and_then(|bounds| placement_from_bounds(bounds, viewport, 2))
-    .unwrap_or_else(|| full_viewport_placement(viewport))
 }
 
 fn draw_render_node_shell(node: &RenderNode, canvas: &mut Canvas, layout: Layout) -> Result<()> {
@@ -548,11 +437,7 @@ fn draw_render_node_shell(node: &RenderNode, canvas: &mut Canvas, layout: Layout
     return Ok(());
   }
 
-  draw_outset_box_shadow(&node.context, canvas, layout)?;
-  draw_background(&node.context, canvas, layout)?;
-  draw_inset_box_shadow(&node.context, canvas, layout)?;
-  draw_border(&node.context, canvas, layout)?;
-  Ok(())
+  draw_box_shell(&node.context, canvas, layout)
 }
 
 fn draw_render_node_content(node: &RenderNode, canvas: &mut Canvas, layout: Layout) -> Result<()> {
@@ -584,29 +469,16 @@ fn draw_render_node_inline(
     &node.context,
     InlineLayoutMode::Draw,
   ));
-  let inline_layout_box = layout;
-
   let boxes = built.spans.iter().filter_map(|span| match span {
     ProcessedInlineSpan::Box(item) => Some(item),
     _ => None,
   });
 
-  let positioned_inline_boxes = draw_inline_layout(
-    &node.context,
-    canvas,
-    inline_layout_box,
-    &built,
-    &font_style,
-  )?;
+  let positioned_inline_boxes =
+    draw_inline_layout(&node.context, canvas, layout, &built, &font_style)?;
 
   for (item, positioned) in boxes.zip(positioned_inline_boxes.iter()) {
-    draw_inline_box(
-      positioned,
-      item,
-      inline_layout_box,
-      canvas,
-      node.context.transform,
-    )?;
+    draw_inline_box(positioned, item, layout, canvas, node.context.transform)?;
   }
   Ok(())
 }

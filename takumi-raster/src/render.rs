@@ -1,4 +1,4 @@
-use std::{collections::HashMap, rc::Rc, sync::Arc};
+use std::{collections::HashMap, mem, rc::Rc, sync::Arc};
 
 use serde::Serialize;
 use takumi_core::{
@@ -14,13 +14,14 @@ use crate::{
   SizedFontStyle,
   layout::{
     inline::{
-      InlineItem, InlineLayoutMode, InlineLayoutRequest, collect_inline_items, create_inline_layout,
+      InlineItem, InlineLayoutMode, InlineLayoutRequest, MeasuredInlineBox, collect_inline_items,
+      create_inline_layout,
     },
     node::Node,
     tree::{ContainingBlocks, LayoutResults, LayoutTree, RenderNode},
   },
   resources::{font::FontsSnapshot, image::ImageSource},
-  stacking_context::paint_context,
+  stacking_context::ScenePainter,
   style::{Affine, FontFamily, SizingContext, StyleSheet},
   viewport::Viewport,
 };
@@ -127,6 +128,38 @@ pub struct MeasuredNode {
   pub runs: Vec<MeasuredTextRun>,
 }
 
+impl RenderOptions<'_> {
+  fn fonts_snapshot(&self) -> FontsSnapshot {
+    self
+      .fonts
+      .snapshot_with_fallbacks(self.font_families.as_ref())
+  }
+
+  /// Builds the render context for these options at `time_ms`, from a font
+  /// snapshot and image table the caller may share across frames.
+  fn render_context(
+    &self,
+    fonts: FontsSnapshot,
+    images: Rc<HashMap<Arc<str>, ImageSource>>,
+    time_ms: u64,
+  ) -> RenderContext {
+    RenderContext::builder()
+      .fonts(fonts)
+      .sizing(SizingContext::builder().viewport(self.viewport).build())
+      .images(images)
+      .stylesheet(self.stylesheet.clone())
+      .time_ms(time_ms)
+      .draw_debug_border(self.draw_debug_border)
+      .dither_gradients(self.dithering != DitheringAlgorithm::None)
+      .style(Box::new(ComputedStyle {
+        lang: self.lang,
+        font_family: self.font_families.clone().unwrap_or_default(),
+        ..Default::default()
+      }))
+      .build()
+  }
+}
+
 struct TraversalEnter {
   path: Vec<usize>,
   node_id: NodeId,
@@ -134,66 +167,102 @@ struct TraversalEnter {
   container_size: Size<Option<f32>>,
 }
 
-enum TraversalVisit<Exit> {
+enum TraversalVisit {
   Enter(TraversalEnter),
-  Exit(Exit),
+  Exit(MeasureExit),
 }
 
 struct MeasureExit {
   node_id: NodeId,
-  width: f32,
-  height: f32,
+  layout: Layout,
   local_transform: Affine,
   runs: Vec<MeasuredTextRun>,
   child_ids: Vec<NodeId>,
 }
 
+impl MeasuredNode {
+  fn from_layout(
+    layout: Layout,
+    local_transform: Affine,
+    children: Vec<MeasuredNode>,
+    runs: Vec<MeasuredTextRun>,
+  ) -> Self {
+    Self {
+      width: layout.size.width,
+      height: layout.size.height,
+      transform: local_transform.to_cols_array(),
+      children,
+      runs,
+    }
+  }
+}
+
 /// Measures the layout of a node.
-pub fn measure<'g>(options: RenderOptions<'g>) -> Result<MeasuredNode> {
-  let RenderOptions {
-    viewport,
-    fonts,
-    node,
-    draw_debug_border,
-    images,
-    stylesheet,
-    time_ms,
-    dithering: _,
-    font_families,
-    lang,
-  } = options;
-
-  let render_context = RenderContext::builder()
-    .fonts(fonts.snapshot_with_fallbacks(font_families.as_ref()))
-    .sizing(SizingContext::builder().viewport(viewport).build())
-    .images(Rc::new(images))
-    .stylesheet(stylesheet)
-    .time_ms(time_ms)
-    .draw_debug_border(draw_debug_border)
-    .style(Box::new(ComputedStyle {
-      lang,
-      font_family: font_families.unwrap_or_default(),
-      ..Default::default()
-    }))
-    .build();
-
-  let mut root = RenderNode::from_node(&render_context, node);
-  let mut tree = LayoutTree::from_render_node(&root);
-
-  tree.compute_layout(render_context.sizing.viewport.into());
-
-  let layout_results = tree.into_results();
+pub fn measure<'g>(mut options: RenderOptions<'g>) -> Result<MeasuredNode> {
+  let images = Rc::new(mem::take(&mut options.images));
+  let render_context = options.render_context(options.fonts_snapshot(), images, options.time_ms);
+  let (mut root, layout_results) = lay_out(&render_context, options.node);
 
   collect_measure_result(
     &mut root,
     &layout_results,
     NodeId::ROOT,
     Affine::IDENTITY,
-    Size {
-      width: viewport.size.width.map(|value| value as f32),
-      height: viewport.size.height.map(|value| value as f32),
-    },
+    viewport_container_size(options.viewport),
   )
+}
+
+/// Builds the render tree for `node` and computes its layout.
+fn lay_out(render_context: &RenderContext, node: Node) -> (RenderNode, LayoutResults) {
+  let root = RenderNode::from_node(render_context, node);
+  let mut tree = LayoutTree::from_render_node(&root);
+
+  tree.compute_layout(render_context.sizing.viewport.into());
+
+  let layout_results = tree.into_results();
+
+  (root, layout_results)
+}
+
+fn viewport_container_size(viewport: Viewport) -> Size<Option<f32>> {
+  Size {
+    width: viewport.size.width.map(|value| value as f32),
+    height: viewport.size.height.map(|value| value as f32),
+  }
+}
+
+/// Lays `items` out in `node`'s content box and reads back the text runs and
+/// inline boxes it produced.
+fn measure_inline(
+  node: &RenderNode,
+  items: Vec<InlineItem<'_>>,
+  layout: Layout,
+) -> (Vec<MeasuredTextRun>, Vec<MeasuredInlineBox>) {
+  let font_style = SizedFontStyle::from_style(&node.context.style, &node.context);
+  let built = create_inline_layout(InlineLayoutRequest::in_available_space(
+    items,
+    Size {
+      width: AvailableSpace::Definite(layout.unsnapped_content.width),
+      height: AvailableSpace::Definite(layout.unsnapped_content.height),
+    },
+    Size::NONE,
+    &font_style,
+    &node.context,
+    InlineLayoutMode::Measure,
+  ));
+  let (runs, inline_boxes) = built.measure_runs(layout);
+  let runs = runs
+    .into_iter()
+    .map(|run| MeasuredTextRun {
+      text: run.text.to_string(),
+      x: run.x,
+      y: run.y,
+      width: run.width,
+      height: run.height,
+    })
+    .collect();
+
+  (runs, inline_boxes)
 }
 
 fn collect_measure_result(
@@ -238,104 +307,64 @@ fn collect_measure_result(
         );
         containing_blocks.record_transform(node_id, local_transform);
 
-        let mut children = Vec::new();
-        let mut runs = Vec::new();
-
         if current.should_create_inline_layout() {
-          let font_style = SizedFontStyle::from_style(&current.context.style, &current.context);
-          let built = create_inline_layout(InlineLayoutRequest::in_available_space(
-            collect_inline_items(current),
-            Size {
-              width: AvailableSpace::Definite(layout.unsnapped_content.width),
-              height: AvailableSpace::Definite(layout.unsnapped_content.height),
-            },
-            Size::NONE,
-            &font_style,
-            &current.context,
-            InlineLayoutMode::Measure,
-          ));
-          let (measured_runs, measured_boxes) = built.measure_runs(layout);
-          runs.extend(measured_runs.into_iter().map(|run| MeasuredTextRun {
-            text: run.text.to_string(),
-            x: run.x,
-            y: run.y,
-            width: run.width,
-            height: run.height,
-          }));
+          let (runs, inline_boxes) = measure_inline(current, collect_inline_items(current), layout);
           // Inline layout places boxes against the content box, while every measured node's
           // transform is absolute.
           let content_offset = layout.content_box_offset();
-          children.extend(measured_boxes.into_iter().map(|inline_box| {
-            let inline_transform = local_transform
-              * Affine::translation(
-                inline_box.x + content_offset.x,
-                inline_box.y + content_offset.y,
-              );
-            MeasuredNode {
+          let children = inline_boxes
+            .into_iter()
+            .map(|inline_box| MeasuredNode {
               width: inline_box.width,
               height: inline_box.height,
-              transform: inline_transform.to_cols_array(),
+              transform: (local_transform
+                * Affine::translation(
+                  inline_box.x + content_offset.x,
+                  inline_box.y + content_offset.y,
+                ))
+              .to_cols_array(),
               children: Vec::new(),
               runs: Vec::new(),
-            }
-          }));
+            })
+            .collect();
 
           measured_by_node_id.insert(
             usize::from(node_id),
-            create_measured_node(layout, local_transform, children, runs),
+            MeasuredNode::from_layout(layout, local_transform, children, runs),
           );
           continue;
         }
 
         // Paint always draws a text node's own text, even when generated
         // content gave it box children; its runs sit beside those children.
-        if current.context.style.display != Display::None
+        let runs = if current.context.style.display != Display::None
           && !current.has_anonymous_text_item_child()
           && let Some(text) = current.node.as_ref().and_then(|node| match &node.kind {
             NodeKind::Text(data) => Some(data.text.as_str()),
             _ => None,
-          })
-        {
-          let font_style = SizedFontStyle::from_style(&current.context.style, &current.context);
-          let built = create_inline_layout(InlineLayoutRequest::in_available_space(
-            vec![InlineItem::Text {
-              text: text.into(),
-              context: &current.context,
-              link: None,
-              decorations: None,
-            }],
-            Size {
-              width: AvailableSpace::Definite(layout.unsnapped_content.width),
-              height: AvailableSpace::Definite(layout.unsnapped_content.height),
-            },
-            Size::NONE,
-            &font_style,
-            &current.context,
-            InlineLayoutMode::Measure,
-          ));
-          let (measured_runs, _) = built.measure_runs(layout);
-          runs.extend(measured_runs.into_iter().map(|run| MeasuredTextRun {
-            text: run.text.to_string(),
-            x: run.x,
-            y: run.y,
-            width: run.width,
-            height: run.height,
-          }));
-        }
+          }) {
+          let item = InlineItem::Text {
+            text: text.into(),
+            context: &current.context,
+            link: None,
+            decorations: None,
+          };
 
-        if current.children.is_none() {
-          measured_by_node_id.insert(
-            usize::from(node_id),
-            create_measured_node(layout, local_transform, children, runs),
-          );
-          continue;
-        }
+          measure_inline(current, vec![item], layout).0
+        } else {
+          Vec::new()
+        };
 
-        let layout_children = layout_results.box_children(node_id)?;
+        let layout_children = if current.children.is_some() {
+          layout_results.box_children(node_id)?
+        } else {
+          &[]
+        };
+
         if layout_children.is_empty() {
           measured_by_node_id.insert(
             usize::from(node_id),
-            create_measured_node(layout, local_transform, children, runs),
+            MeasuredNode::from_layout(layout, local_transform, Vec::new(), runs),
           );
           continue;
         }
@@ -348,8 +377,7 @@ fn collect_measure_result(
 
         visits.push(TraversalVisit::Exit(MeasureExit {
           node_id,
-          width: layout.size.width,
-          height: layout.size.height,
+          layout,
           local_transform,
           runs,
           child_ids: layout_children.iter().map(|child| child.node_id).collect(),
@@ -370,8 +398,7 @@ fn collect_measure_result(
       }
       TraversalVisit::Exit(MeasureExit {
         node_id,
-        width,
-        height,
+        layout,
         local_transform,
         runs,
         child_ids,
@@ -386,13 +413,7 @@ fn collect_measure_result(
 
         measured_by_node_id.insert(
           usize::from(node_id),
-          MeasuredNode {
-            width,
-            height,
-            transform: local_transform.to_cols_array(),
-            children,
-            runs,
-          },
+          MeasuredNode::from_layout(layout, local_transform, children, runs),
         );
       }
     };
@@ -403,52 +424,12 @@ fn collect_measure_result(
     .ok_or(Error::InvalidLayoutNode(node_id.into()))
 }
 
-fn create_measured_node(
-  layout: Layout,
-  local_transform: Affine,
-  children: Vec<MeasuredNode>,
-  runs: Vec<MeasuredTextRun>,
-) -> MeasuredNode {
-  MeasuredNode {
-    width: layout.size.width,
-    height: layout.size.height,
-    transform: local_transform.to_cols_array(),
-    children,
-    runs,
-  }
-}
-
 /// Renders a node to an image.
-pub fn render<'g>(options: RenderOptions<'g>) -> Result<Bitmap> {
-  let RenderOptions {
-    viewport,
-    fonts,
-    node,
-    draw_debug_border,
-    images,
-    stylesheet,
-    time_ms,
-    dithering,
-    font_families,
-    lang,
-  } = options;
+pub fn render<'g>(mut options: RenderOptions<'g>) -> Result<Bitmap> {
+  let images = Rc::new(mem::take(&mut options.images));
+  let render_context = options.render_context(options.fonts_snapshot(), images, options.time_ms);
 
-  let render_context = RenderContext::builder()
-    .fonts(fonts.snapshot_with_fallbacks(font_families.as_ref()))
-    .sizing(SizingContext::builder().viewport(viewport).build())
-    .images(Rc::new(images))
-    .stylesheet(stylesheet)
-    .time_ms(time_ms)
-    .draw_debug_border(draw_debug_border)
-    .dither_gradients(dithering != DitheringAlgorithm::None)
-    .style(Box::new(ComputedStyle {
-      lang,
-      font_family: font_families.unwrap_or_default(),
-      ..Default::default()
-    }))
-    .build();
-
-  render_with_context(render_context, node, viewport)
+  render_with_context(render_context, options.node, options.viewport)
 }
 
 /// Rasterizes `node` under an already-built [`RenderContext`]. The context
@@ -459,25 +440,18 @@ fn render_with_context(
   node: Node,
   viewport: Viewport,
 ) -> Result<Bitmap> {
-  let mut root = RenderNode::from_node(&render_context, node);
-  let mut tree = LayoutTree::from_render_node(&root);
-
-  tree.compute_layout(render_context.sizing.viewport.into());
-
-  let layout_results = tree.into_results();
-  let root_node_id = NodeId::ROOT;
+  let (mut root, layout_results) = lay_out(&render_context, node);
   let root_size = layout_results
-    .layout(root_node_id)?
+    .layout(NodeId::ROOT)?
     .size
-    .map(|size| size.round() as u32);
-
-  let root_size = root_size.zip_map(viewport.into(), |size, viewport| {
-    if let AvailableSpace::Definite(defined) = viewport {
-      defined as u32
-    } else {
-      size
-    }
-  });
+    .map(|size| size.round() as u32)
+    .zip_map(viewport.into(), |size, viewport| {
+      if let AvailableSpace::Definite(defined) = viewport {
+        defined as u32
+      } else {
+        size
+      }
+    });
 
   if root_size.width == 0 || root_size.height == 0 {
     return Err(Error::InvalidViewport);
@@ -490,10 +464,7 @@ fn render_with_context(
     &layout_results,
     &mut canvas,
     Affine::IDENTITY,
-    Size {
-      width: viewport.size.width.map(|value| value as f32),
-      height: viewport.size.height.map(|value| value as f32),
-    },
+    viewport_container_size(viewport),
   )?;
 
   let image = canvas.into_inner()?;
@@ -502,49 +473,29 @@ fn render_with_context(
 }
 
 /// A scene with its per-frame-invariant render state precomputed: the font
-/// snapshot and the shared image and stylesheet handles do not change between
-/// frames of the same scene, so they are built once and cheaply cloned per
-/// frame instead of rebuilt (and the whole option tree deep-cloned) each time.
+/// snapshot and the shared image table do not change between frames of the
+/// same scene, so they are built once and cheaply cloned per frame instead of
+/// rebuilt (and the whole option tree deep-cloned) each time.
 ///
 /// This is the seam where wider per-frame layout reuse would later live.
 pub(crate) struct PreparedScene<'a, 'g> {
   scene: &'a SequentialScene<'g>,
   fonts: FontsSnapshot,
   images: Rc<HashMap<Arc<str>, ImageSource>>,
-  stylesheet: Arc<StyleSheet>,
 }
 
 impl<'a, 'g> PreparedScene<'a, 'g> {
   fn new(scene: &'a SequentialScene<'g>) -> Self {
-    let options = &scene.options;
-
     Self {
-      fonts: options
-        .fonts
-        .snapshot_with_fallbacks(options.font_families.as_ref()),
-      images: Rc::new(options.images.clone()),
-      stylesheet: options.stylesheet.clone(),
+      fonts: scene.options.fonts_snapshot(),
+      images: Rc::new(scene.options.images.clone()),
       scene,
     }
   }
 
   fn render_at_time(&self, time_ms: u64) -> Result<Bitmap> {
     let options = &self.scene.options;
-
-    let render_context = RenderContext::builder()
-      .fonts(self.fonts.clone())
-      .sizing(SizingContext::builder().viewport(options.viewport).build())
-      .images(self.images.clone())
-      .stylesheet(self.stylesheet.clone())
-      .time_ms(time_ms)
-      .draw_debug_border(options.draw_debug_border)
-      .dither_gradients(options.dithering != DitheringAlgorithm::None)
-      .style(Box::new(ComputedStyle {
-        lang: options.lang,
-        font_family: options.font_families.clone().unwrap_or_default(),
-        ..Default::default()
-      }))
-      .build();
+    let render_context = options.render_context(self.fonts.clone(), self.images.clone(), time_ms);
 
     render_with_context(render_context, options.node.clone(), options.viewport)
   }
@@ -695,7 +646,13 @@ pub(crate) fn render_node(
     container_size,
     paint_bounds: true,
   })?;
-  paint_context(node, &contexts, layout_results, canvas, 0)
+  ScenePainter {
+    root: node,
+    contexts: &contexts,
+    layout_results,
+    canvas,
+  }
+  .paint_context(0)
 }
 
 #[cfg(test)]

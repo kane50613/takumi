@@ -15,28 +15,6 @@ struct BlurPassParams {
   shg: i32,
 }
 
-pub(crate) enum BlurFormat<'a> {
-  Alpha {
-    data: &'a mut [u8],
-    width: u32,
-    height: u32,
-  },
-}
-
-impl<'a> BlurFormat<'a> {
-  pub(crate) fn width(&self) -> u32 {
-    match self {
-      Self::Alpha { width, .. } => *width,
-    }
-  }
-
-  pub(crate) fn height(&self) -> u32 {
-    match self {
-      Self::Alpha { height, .. } => *height,
-    }
-  }
-}
-
 #[derive(Clone, Copy)]
 struct Dims {
   width: u32,
@@ -69,36 +47,35 @@ fn blur_pass_params(
   })
 }
 
-/// Applies a Gaussian approximation using 3-pass Box Blur.
-pub(crate) fn apply_blur(format: BlurFormat<'_>, radius: f32, blur_type: BlurType) -> Result<()> {
-  let width = format.width();
-  let height = format.height();
-
+/// Blurs a `width` by `height` alpha mask with a Gaussian approximated by
+/// three box blur passes.
+pub(crate) fn apply_blur_alpha_bytes(
+  data: &mut [u8],
+  width: u32,
+  height: u32,
+  radius: f32,
+  blur_type: BlurType,
+) -> Result<()> {
   let Some(pass_params) = blur_pass_params(width, height, radius, blur_type) else {
     return Ok(());
   };
+  let Some(expected) = checked_area(width, height, 1) else {
+    return Ok(());
+  };
 
-  match format {
-    BlurFormat::Alpha { data, .. } => {
-      let Some(expected) = checked_area(width, height, 1) else {
-        return Ok(());
-      };
-      if data.len() != expected {
-        return Err(Error::InvalidAlphaBufferLength {
-          actual: data.len(),
-          expected,
-        });
-      }
+  if data.len() != expected {
+    return Err(Error::InvalidAlphaBufferLength {
+      actual: data.len(),
+      expected,
+    });
+  }
 
-      let mut col_sums = vec![0u32; width as usize];
-      let mut temp_image = vec![0; expected];
-      let temp_data = &mut *temp_image;
+  let mut col_sums = vec![0u32; width as usize];
+  let mut temp = vec![0; expected];
 
-      for _ in 0..3 {
-        box_blur_h_alpha(data, temp_data, pass_params);
-        box_blur_v_alpha(temp_data, data, pass_params, &mut col_sums);
-      }
-    }
+  for _ in 0..3 {
+    box_blur_h_alpha(data, &mut temp, pass_params);
+    box_blur_v_alpha(&temp, data, pass_params, &mut col_sums);
   }
 
   Ok(())
