@@ -10,7 +10,7 @@ use takumi_core::{
   layout::{
     background_image_geometry::FillLayers,
     border::BorderProperties,
-    decoration::{ClipBox, OutlineGeometry},
+    decoration::ClipBox,
     inline::{InlineBoxItem, VisualInlineBox},
     inline_box::{InlineBoxPaint, resolve_inline_box},
     node::{ImageData, Node, NodeKind},
@@ -18,7 +18,7 @@ use takumi_core::{
   },
   painter::{
     BackgroundClipArea, BoxBorderPainter, BoxFrame, BoxPainter, FillShape, OverflowClip,
-    PaintDevice, ShadowShape, StrokeStyle, UNBOUNDED,
+    PaintDevice, PendingOutline, ShadowShape, StrokeStyle, UNBOUNDED,
   },
   resources::image::ImageSource,
   scene::Scene,
@@ -484,7 +484,7 @@ impl BoxChrome {
       .transpose()?;
 
     Ok(Self {
-      outline: PendingOutline::new(placed),
+      outline: placed.painter.pending_outline(placed.frame.origin),
       blend,
       isolate,
       mask,
@@ -505,7 +505,7 @@ impl BoxChrome {
       doc.end_group(group)?;
     }
     if let Some(pending) = self.outline {
-      pending.emit(doc)?;
+      DocumentDevice::paint(doc, |device| pending.paint(device))?;
     }
     let groups = [self.clip_group, self.outer];
     for group in groups.into_iter().flatten() {
@@ -562,6 +562,18 @@ impl<'d> DocumentDevice<'d> {
 
     paint(&mut device);
     device.finish()
+  }
+
+  /// Closes the most recent group, keeping the first write error.
+  fn close_group(&mut self) {
+    if self.error.is_some() {
+      return;
+    }
+    if let Some(group) = self.groups.pop()
+      && let Err(error) = self.doc.end_group(group)
+    {
+      self.error = Some(error);
+    }
   }
 
   /// Opens a group clipped to `data`, keeping the first write error.
@@ -632,14 +644,22 @@ impl PaintDevice for DocumentDevice<'_> {
   }
 
   fn pop_clip(&mut self) {
+    self.close_group();
+  }
+
+  fn begin_layer(&mut self, opacity: f32) {
     if self.error.is_some() {
       return;
     }
-    if let Some(group) = self.groups.pop()
-      && let Err(error) = self.doc.end_group(group)
-    {
-      self.error = Some(error);
+
+    match self.doc.begin_group(Affine::IDENTITY, opacity, None, None) {
+      Ok(group) => self.groups.push(group),
+      Err(error) => self.error = Some(error),
     }
+  }
+
+  fn end_layer(&mut self) {
+    self.close_group();
   }
 
   fn fill_shadow(
@@ -707,42 +727,6 @@ fn emit_borders(
   DocumentDevice::paint(doc, |device| {
     BoxBorderPainter::new(border, size).paint(origin, device);
   })
-}
-
-/// A box's CSS `outline`, deferred until its content is painted.
-pub(crate) struct PendingOutline {
-  outline: OutlineGeometry,
-  origin: Point<f32>,
-}
-
-impl PendingOutline {
-  fn new(placed: &PlacedBox) -> Option<Self> {
-    let context = &placed.node.context;
-    let color = context.style.outline_color.resolve(context.current_color);
-
-    if color.0[3] == 0 {
-      return None;
-    }
-
-    Some(Self {
-      outline: placed.painter.outline()?,
-      origin: placed.frame.origin,
-    })
-  }
-
-  /// Paints the outline as a ring around the border box, grown by
-  /// `outline-offset + outline-width`.
-  pub(crate) fn emit(&self, doc: &mut SvgDocument) -> io::Result<()> {
-    emit_borders(
-      &self.outline.border,
-      self.outline.size,
-      Point {
-        x: self.origin.x - self.outline.grow,
-        y: self.origin.y - self.outline.grow,
-      },
-      doc,
-    )
-  }
 }
 
 #[cfg(test)]

@@ -10,16 +10,16 @@ use takumi_core::{
 };
 
 use crate::{
-  BorderProperties, Canvas, Cap, DashPattern, DecorationSegmentParams, PaintSource, RenderContext,
-  Result, SizedFontStyle, Stroke, collect_background_layers, draw_box_shell, draw_decoration,
-  draw_decoration_segment, draw_glyph, draw_glyph_clip_image, draw_glyph_text_shadow,
-  draw_node_content, draw_outline,
+  BorderProperties, Canvas, CanvasDevice, DecorationSegmentParams, DeferredOutline, PaintSource,
+  RenderContext, Result, SizedFontStyle, collect_background_layers, draw_box_shell,
+  draw_decoration, draw_decoration_segment, draw_glyph, draw_glyph_clip_image,
+  draw_glyph_text_shadow, draw_node_content,
   layout::inline::{
-    BuiltInlineLayout, InlineBoxItem, InlineOutlineRect, InlineRunLayout, PositionedInlineRun,
-    ProcessedInlineSpan, ShapedRun, VisualInlineBox, outline_island_contour, outline_islands,
+    BuiltInlineLayout, InlineBoxItem, InlineRunLayout, OutlineIsland, PositionedInlineRun,
+    ShapedRun, VisualInlineBox,
   },
-  painter::{BoxPainter, StrokeStyle},
-  rasterize_layers, render_mask, resolve_outline,
+  painter::BoxPainter,
+  rasterize_layers, render_mask,
   resources::{font::FontError, glyph::ResolvedGlyph},
   stacking_context::ScenePainter,
   style::{Affine, BackgroundClip, BlendMode, Color, TextDecorationLines, TextDecorationSkipInk},
@@ -159,74 +159,6 @@ fn draw_glyph_run_decorations(
   Ok(())
 }
 
-fn draw_outline_island(
-  outline_rects: &[InlineOutlineRect],
-  canvas: &mut Canvas,
-  spans: &[ProcessedInlineSpan<'_>],
-  transform: Affine,
-) -> Result<()> {
-  let Some(first_rect) = outline_rects.first().copied() else {
-    return Ok(());
-  };
-  let Some(ProcessedInlineSpan::Text { style, .. }) = spans.get(first_rect.span_id as usize) else {
-    return Ok(());
-  };
-
-  let Some(stroke) = style.outline_stroke() else {
-    return Ok(());
-  };
-  draw_with_inline_opacity(canvas, style.parent.opacity.0, |canvas| {
-    draw_outline_island_content(outline_rects, canvas, style, &stroke, transform);
-    Ok(())
-  })
-}
-
-fn draw_outline_island_content(
-  outline_rects: &[InlineOutlineRect],
-  canvas: &mut Canvas,
-  style: &SizedFontStyle,
-  outline: &StrokeStyle,
-  transform: Affine,
-) {
-  let path = outline_island_contour(outline_rects, style.outline_offset + outline.width / 2.0);
-  if path.is_empty() {
-    return;
-  }
-
-  let mut stroke = Stroke::new(outline.width);
-
-  if let Some(intervals) = outline.dash {
-    stroke.dash = Some(DashPattern {
-      intervals,
-      offset: 0.0,
-    });
-  }
-  if outline.round_cap {
-    stroke.cap = Cap::Round;
-  }
-
-  let (mask, placement) = render_mask(
-    &path,
-    Some(transform),
-    Some(stroke.into()),
-    Some(canvas.viewport()),
-  );
-  canvas.draw_mask(&mask, placement, outline.color, BlendMode::Normal);
-}
-
-fn draw_merged_outline_rects(
-  outline_rects: Vec<InlineOutlineRect>,
-  canvas: &mut Canvas,
-  spans: &[ProcessedInlineSpan<'_>],
-  transform: Affine,
-) -> Result<()> {
-  for island in outline_islands(outline_rects) {
-    draw_outline_island(&island, canvas, spans, transform)?;
-  }
-
-  Ok(())
-}
-
 fn draw_glyph_run_content(
   glyph_run: &ShapedRun,
   resolved_glyphs: &HashMap<u32, Arc<ResolvedGlyph>>,
@@ -340,8 +272,8 @@ pub(crate) fn draw_inline_box(
 
       draw_box_shell(&context, canvas, layout)?;
       draw_node_content(source, &context, canvas, layout)?;
-      if let Some((outline, transform)) = resolve_outline(&context, layout) {
-        draw_outline(&outline, transform, canvas);
+      if let Some(outline) = DeferredOutline::of(&context, layout) {
+        outline.paint(canvas);
       }
       Ok(())
     }
@@ -459,7 +391,12 @@ pub(crate) fn draw_inline_layout(
   }
 
   if !outline_rects.is_empty() {
-    draw_merged_outline_rects(outline_rects, canvas, &built.spans, context.transform)?;
+    let mut device = CanvasDevice::of(canvas, context);
+
+    for island in OutlineIsland::of(outline_rects) {
+      island.paint(&built.spans, Point::ZERO, &mut device);
+    }
+    device.finish()?;
   }
 
   if need_line_through {

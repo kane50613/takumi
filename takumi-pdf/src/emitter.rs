@@ -19,7 +19,7 @@ use takumi_core::{
   layout::{
     background_image_geometry::{BackgroundImageGeometry, FillLayers},
     border::BorderProperties,
-    decoration::{ClipBox, OutlineGeometry},
+    decoration::ClipBox,
     inline::{
       BuiltInlineLayout, InlineRunLayout, PositionedInlineRun, ProcessedInlineSpan, ShapedRun,
     },
@@ -29,7 +29,7 @@ use takumi_core::{
   paint::ConicGradientTile,
   painter::{
     BackgroundClipArea, BoxBackground, BoxBorderPainter, BoxFrame, BoxPainter, FillShape,
-    OverflowClip, PaintDevice, ShadowShape, StrokeStyle, UNBOUNDED,
+    OverflowClip, PaintDevice, PendingOutline, ShadowShape, StrokeStyle, UNBOUNDED,
   },
   scene::{NodePaint, PaintItemKind, Scene},
   style::{
@@ -82,12 +82,6 @@ struct BoxState {
   overflow_clip: usize,
   /// The outline, painted between the two pops.
   outline: Option<PendingOutline>,
-}
-
-/// An outline waiting for its box's state to be popped.
-struct PendingOutline {
-  outline: OutlineGeometry,
-  origin: CorePoint<f32>,
 }
 
 /// Blob identity, collection index, and the variation coordinates the run was shaped at.
@@ -317,7 +311,8 @@ impl Emitter<'_> {
         // overflow clip first, so the outline lands above the content and
         // outside that clip, but still under the box's transform, opacity,
         // mask and blend.
-        outline: self.pending_outline(node, decoration_frame),
+        outline: BoxPainter::new(&node.context, decoration_frame.layout)
+          .pending_outline(decoration_frame.origin),
       },
     ))
   }
@@ -842,46 +837,14 @@ impl Emitter<'_> {
       surface,
       filter: self.color_filter.as_deref(),
       artifact,
-      clips: Vec::new(),
+      stack: Vec::new(),
     }
-  }
-
-  /// The CSS `outline` the box will paint once its own state is popped, a ring
-  /// around the border box expanded outward by `outline-offset +
-  /// outline-width`. A transparent outline is a fill nobody sees, so it is
-  /// skipped to keep the content stream shorter.
-  fn pending_outline(&self, node: &RenderNode, frame: BoxFrame) -> Option<PendingOutline> {
-    if node
-      .context
-      .style
-      .outline_color
-      .resolve(node.context.current_color)
-      .0[3]
-      == 0
-    {
-      return None;
-    }
-
-    Some(PendingOutline {
-      outline: BoxPainter::new(&node.context, frame.layout).outline()?,
-      origin: frame.origin,
-    })
   }
 
   fn paint_outline(&self, pending: Option<&PendingOutline>, surface: &mut Surface) {
-    let Some(pending) = pending else {
-      return;
-    };
-
-    self.emit_borders(
-      &pending.outline.border,
-      pending.outline.size,
-      CorePoint {
-        x: pending.origin.x - pending.outline.grow,
-        y: pending.origin.y - pending.outline.grow,
-      },
-      surface,
-    );
+    if let Some(pending) = pending {
+      pending.paint(&mut self.device(surface, self.tagged));
+    }
   }
 
   /// Paints a border at `origin`.
@@ -1319,7 +1282,12 @@ impl Emitter<'_> {
     if tagged {
       surface.end_tagged();
     }
-    self.paint_outline(self.pending_outline(node, frame).as_ref(), surface);
+    self.paint_outline(
+      BoxPainter::new(&node.context, frame.layout)
+        .pending_outline(frame.origin)
+        .as_ref(),
+      surface,
+    );
   }
 
   /// Paints an inline-level container from the scene it carries.
@@ -1662,34 +1630,56 @@ struct SurfaceDevice<'s, 'a> {
   /// once something paints leaves no empty region behind, since marked
   /// content does not nest.
   artifact: bool,
-  /// Each open clip.
-  clips: Vec<Clip>,
+  /// Each open clip and layer, innermost last.
+  stack: Vec<Saved>,
 }
 
-/// One clip [`PaintDevice::push_clip`] opened.
+/// A clip or layer the device holds open.
 #[derive(Clone, Copy, PartialEq)]
-enum Clip {
-  Path,
+enum Saved {
+  Clip,
   /// A clip with no area, which hides every draw until it is popped.
-  Empty,
+  EmptyClip,
+  Layer,
 }
 
 impl SurfaceDevice<'_, '_> {
   /// Clips later draws to `path`, or hides them when the clip has no area.
   fn open_clip(&mut self, path: Option<KrillaPath>, rule: CoreFillRule) {
-    // A whole clip is one artifact, since marked content does not nest.
-    if self.artifact && self.clips.is_empty() {
-      self.surface.start_tagged(ARTIFACT);
-    }
-    let clip = match path {
-      Some(path) => {
-        self.surface.push_clip_path(&path, &krilla_fill_rule(rule));
-        Clip::Path
-      }
-      None => Clip::Empty,
+    let saved = match &path {
+      Some(_) => Saved::Clip,
+      None => Saved::EmptyClip,
     };
 
-    self.clips.push(clip);
+    self.open(saved);
+
+    if let Some(path) = path {
+      self.surface.push_clip_path(&path, &krilla_fill_rule(rule));
+    }
+  }
+
+  /// Records `saved`, opening the artifact the whole outermost state shares, since marked content
+  /// does not nest.
+  fn open(&mut self, saved: Saved) {
+    if self.artifact && self.stack.is_empty() {
+      self.surface.start_tagged(ARTIFACT);
+    }
+
+    self.stack.push(saved);
+  }
+
+  /// Pops the innermost clip or layer.
+  fn close(&mut self) {
+    let Some(saved) = self.stack.pop() else {
+      return;
+    };
+
+    if saved != Saved::EmptyClip {
+      self.surface.pop();
+    }
+    if self.artifact && self.stack.is_empty() {
+      self.surface.end_tagged();
+    }
   }
 
   /// Draws the path `build` makes at `transform`'s translation, with the rest
@@ -1710,13 +1700,13 @@ impl SurfaceDevice<'_, '_> {
     } else {
       CorePoint::ZERO
     };
-    if self.clips.contains(&Clip::Empty) {
+    if self.stack.contains(&Saved::EmptyClip) {
       return;
     }
     let Some(path) = build(origin) else {
       return;
     };
-    let artifact = self.artifact && self.clips.is_empty();
+    let artifact = self.artifact && self.stack.is_empty();
 
     if !flat {
       self
@@ -1822,16 +1812,16 @@ impl PaintDevice for SurfaceDevice<'_, '_> {
   }
 
   fn pop_clip(&mut self) {
-    let Some(clip) = self.clips.pop() else {
-      return;
-    };
+    self.close();
+  }
 
-    if clip == Clip::Path {
-      self.surface.pop();
-    }
-    if self.artifact && self.clips.is_empty() {
-      self.surface.end_tagged();
-    }
+  fn begin_layer(&mut self, opacity: f32) {
+    self.open(Saved::Layer);
+    self.surface.push_opacity(normalized(opacity));
+  }
+
+  fn end_layer(&mut self) {
+    self.close();
   }
 
   fn fill_shadow(

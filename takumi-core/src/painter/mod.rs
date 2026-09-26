@@ -2,11 +2,13 @@
 
 mod background;
 mod border;
+mod outline;
 mod shadow;
 
 pub use self::{
   background::{BackgroundClipArea, BoxBackground},
   border::BoxBorderPainter,
+  outline::PendingOutline,
   shadow::ShadowShape,
 };
 
@@ -216,6 +218,13 @@ pub trait PaintDevice {
 
   /// Removes the most recent clip.
   fn pop_clip(&mut self);
+
+  /// Draws what follows into a layer that composites at `opacity` on the matching
+  /// [`PaintDevice::end_layer`].
+  fn begin_layer(&mut self, opacity: f32);
+
+  /// Composites the most recent layer.
+  fn end_layer(&mut self);
 
   /// Fills `shape` in `color`, blurred by a Gaussian whose standard deviation is half
   /// `blur_radius`, as a CSS shadow blurs.

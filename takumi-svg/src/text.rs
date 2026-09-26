@@ -14,9 +14,9 @@ use takumi_core::{
   geometry::Point,
   layout::{
     inline::{
-      DecorationRect, InlineItem, InlineLayoutMode, InlineLayoutRequest, InlineOutlineRect,
-      InlineRunLayout, PositionedInlineRun, ProcessedInlineSpan, ShapedRun, collect_inline_items,
-      create_inline_layout, outline_island_contour, outline_islands,
+      DecorationRect, InlineItem, InlineLayoutMode, InlineLayoutRequest, InlineRunLayout,
+      PositionedInlineRun, ProcessedInlineSpan, ShapedRun, collect_inline_items,
+      create_inline_layout,
     },
     node::TextData,
     tree::RenderNode,
@@ -167,58 +167,16 @@ fn emit_runs(
 
   // Text outlines stroke between the glyphs and the line-through, matching the
   // raster backend's painting order.
-  emit_inline_outlines(runs, spans, frame, doc)?;
+  DocumentDevice::paint(doc, |device| {
+    for island in runs.outline_islands() {
+      island.paint(spans, frame.origin, device);
+    }
+  })?;
 
   for (run, decorations) in runs.runs.iter().zip(&decorations) {
     emit_run_decorations(run, decorations, frame, true, doc)?;
   }
   Ok(())
-}
-
-/// Strokes the shared inline outline contours ([`outline_islands`]) for each
-/// styled span, mirroring the raster backend's merged-island outlines.
-fn emit_inline_outlines(
-  runs: &InlineRunLayout,
-  spans: &[ProcessedInlineSpan<'_>],
-  frame: BoxFrame,
-  doc: &mut SvgDocument,
-) -> io::Result<()> {
-  if runs.outline_rects.is_empty() {
-    return Ok(());
-  }
-  for island in outline_islands(runs.outline_rects.clone()) {
-    emit_outline_island(&island, spans, frame, doc)?;
-  }
-  Ok(())
-}
-
-fn emit_outline_island(
-  island: &[InlineOutlineRect],
-  spans: &[ProcessedInlineSpan<'_>],
-  frame: BoxFrame,
-  doc: &mut SvgDocument,
-) -> io::Result<()> {
-  let Some(first_rect) = island.first() else {
-    return Ok(());
-  };
-  let Some(ProcessedInlineSpan::Text { style, .. }) = spans.get(first_rect.span_id as usize) else {
-    return Ok(());
-  };
-  // The device skips a transparent stroke, but an inline outline never reaches
-  // one, so the emptiness is checked here instead.
-  let Some(stroke) = style.outline_stroke().filter(|s| s.color.0[3] != 0) else {
-    return Ok(());
-  };
-
-  let contour = outline_island_contour(island, style.outline_offset + stroke.width / 2.0);
-  let data = path_data(&contour, frame.translation());
-  if data.is_empty() {
-    return Ok(());
-  }
-
-  doc.with_opacity(style.parent.opacity.0, |doc| {
-    doc.stroke_path(&data, &stroke)
-  })
 }
 
 /// The `-webkit-text-stroke` a run carries. A span may set it for itself, so it

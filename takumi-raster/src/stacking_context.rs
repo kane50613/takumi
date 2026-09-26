@@ -1,14 +1,14 @@
 use takumi_core::{
   geometry::{ComputedLayout as Layout, NodeId, Point},
-  layout::decoration::OutlineGeometry,
   scene::{NodePaint, PaintItem, PaintItemKind, Scene, SceneBounds, StackingContextNode},
 };
 use tiny_skia::{Pixmap, PixmapMut};
 
 use crate::{
-  BlurType, BorderProperties, Canvas, CanvasSubcanvas, CanvasViewport, Error, NodeMaskAction,
-  Placement, Result, SizedFontStyle, apply_backdrop_filter, apply_filters_to_pixmap, blend_pixel,
-  color_to_premultiplied, draw_box_shell, draw_debug_border, draw_node_content, draw_outline,
+  BlurType, BorderProperties, Canvas, CanvasSubcanvas, CanvasViewport, DeferredOutline, Error,
+  NodeMaskAction, Placement, Result, SizedFontStyle, apply_backdrop_filter,
+  apply_filters_to_pixmap, blend_pixel, color_to_premultiplied, draw_box_shell, draw_debug_border,
+  draw_node_content,
   inline_drawing::{draw_inline_box, draw_inline_layout},
   layout::{
     inline::{
@@ -17,7 +17,7 @@ use crate::{
     },
     tree::{LayoutResults, RenderNode},
   },
-  placement_overlap, prepare_node_mask, resolve_outline,
+  placement_overlap, prepare_node_mask,
   style::{Affine, BlendMode, Filter, SizingContext},
 };
 
@@ -91,17 +91,6 @@ enum DeferredNodeRender {
   SkipRendering,
 }
 
-pub(crate) struct DeferredOutline {
-  outline: OutlineGeometry,
-  transform: Affine,
-}
-
-impl DeferredOutline {
-  fn paint(&self, canvas: &mut Canvas) {
-    draw_outline(&self.outline, self.transform, canvas);
-  }
-}
-
 /// The state a painted node leaves open until its descendants are done: its
 /// constraint mask, its isolation layer, and the bounds its filters cover.
 struct PendingFinish {
@@ -121,9 +110,7 @@ impl PendingFinish {
   ) -> Result<()> {
     // CSS 2.1 Appendix E paints the outline last, above the box's children, so a
     // node whose children follow it in the bucket hands its outline to the caller.
-    if let Some((outline, transform)) = resolve_outline(&node.context, self.layout) {
-      let deferred = DeferredOutline { outline, transform };
-
+    if let Some(deferred) = DeferredOutline::of(&node.context, self.layout) {
       match outlines {
         Some(outlines) => outlines.push(deferred),
         None => deferred.paint(canvas),

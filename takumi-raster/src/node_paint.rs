@@ -6,10 +6,10 @@
 
 use takumi_core::{
   geometry::{ComputedLayout as Layout, Point},
-  layout::decoration::{ClipBox, OutlineGeometry},
+  layout::decoration::ClipBox,
   painter::{
-    BackgroundClipArea, BoxBorderPainter, BoxPainter, FillShape, PaintDevice, ShadowShape,
-    StrokeStyle,
+    BackgroundClipArea, BoxBorderPainter, BoxPainter, FillShape, PaintDevice, PendingOutline,
+    ShadowShape, StrokeStyle,
   },
   style::{Color, ImageScalingAlgorithm},
 };
@@ -20,8 +20,8 @@ use super::{
   draw_image, inline_drawing::draw_inline_layout, rasterize_layers,
 };
 use crate::{
-  BlurType, MaskCompositeColor, MaskSamplingOptions, Placement, Result, Style,
-  apply_blur_alpha_bytes, attenuate_alpha_by_mask, checked_area, intersect_alpha_masks,
+  BlurType, CanvasSubcanvas, Error, MaskCompositeColor, MaskSamplingOptions, Placement, Result,
+  Style, apply_blur_alpha_bytes, attenuate_alpha_by_mask, checked_area, intersect_alpha_masks,
   layout::{
     inline::{InlineItem, InlineLayoutMode, InlineLayoutRequest, create_inline_layout},
     node::{ImageData, Node, NodeKind, TextData},
@@ -54,6 +54,10 @@ pub(crate) struct CanvasDevice<'c> {
   pub(crate) algorithm: ImageScalingAlgorithm,
   /// Each open clip.
   pub(crate) clips: Vec<CanvasClip>,
+  /// Each open layer and the opacity it composites at, or `None` when it could not open.
+  layers: Vec<Option<(CanvasSubcanvas, f32)>>,
+  /// The first error a draw hit.
+  error: Option<Error>,
 }
 
 /// A clip the canvas device holds: a shape's coverage, and whether draws keep to it or avoid it.
@@ -74,12 +78,19 @@ impl<'c> CanvasDevice<'c> {
       transform,
       algorithm,
       clips: Vec::new(),
+      layers: Vec::new(),
+      error: None,
     }
   }
 
   /// The canvas as a device for the box `context` paints.
   pub(crate) fn of(canvas: &'c mut Canvas, context: &RenderContext) -> Self {
     Self::new(canvas, context.transform, context.style.image_rendering)
+  }
+
+  /// Surfaces the first error a draw hit.
+  pub(crate) fn finish(self) -> Result<()> {
+    self.error.map_or(Ok(()), Err)
   }
 
   /// Rasterizes `shape` under `transform`, culled to the canvas.
@@ -199,6 +210,29 @@ impl PaintDevice for CanvasDevice<'_> {
 
   fn pop_clip(&mut self) {
     self.clips.pop();
+  }
+
+  fn begin_layer(&mut self, opacity: f32) {
+    let layer = match self
+      .canvas
+      .begin_subcanvas(self.canvas.viewport().placement())
+    {
+      Ok(subcanvas) => Some((subcanvas, opacity)),
+      Err(error) => {
+        self.error.get_or_insert(error);
+        None
+      }
+    };
+
+    self.layers.push(layer);
+  }
+
+  fn end_layer(&mut self) {
+    if let Some(Some((subcanvas, opacity))) = self.layers.pop() {
+      self
+        .canvas
+        .composite_subcanvas(subcanvas, BlendMode::Normal, opacity);
+    }
   }
 
   fn fill_shadow(
@@ -419,22 +453,30 @@ pub(crate) fn draw_border(
   Ok(())
 }
 
-/// The outline a box paints, resolved against its layout so nothing but the
-/// geometry has to survive until the box's children are done.
-pub(crate) fn resolve_outline(
-  context: &RenderContext,
-  layout: Layout,
-) -> Option<(OutlineGeometry, Affine)> {
-  let outline = BoxPainter::new(context, layout).outline()?;
-  let transform = context.transform * Affine::translation(-outline.grow, -outline.grow);
-
-  Some((outline, transform))
+/// A box's outline and the device state it paints with, kept until the box's children are done.
+pub(crate) struct DeferredOutline {
+  outline: PendingOutline,
+  transform: Affine,
+  algorithm: ImageScalingAlgorithm,
 }
 
-pub(crate) fn draw_outline(outline: &OutlineGeometry, transform: Affine, canvas: &mut Canvas) {
-  let mut device = CanvasDevice::new(canvas, transform, outline.border.image_rendering);
+impl DeferredOutline {
+  /// The outline of the box `context` paints at `layout`, or `None` when it paints none.
+  pub(crate) fn of(context: &RenderContext, layout: Layout) -> Option<Self> {
+    Some(Self {
+      outline: BoxPainter::new(context, layout).pending_outline(Point::ZERO)?,
+      transform: context.transform,
+      algorithm: context.style.image_rendering,
+    })
+  }
 
-  BoxBorderPainter::new(&outline.border, outline.size).paint(Point::ZERO, &mut device);
+  pub(crate) fn paint(&self, canvas: &mut Canvas) {
+    self.outline.paint(&mut CanvasDevice::new(
+      canvas,
+      self.transform,
+      self.algorithm,
+    ));
+  }
 }
 
 struct SolidColorLayer<'a> {

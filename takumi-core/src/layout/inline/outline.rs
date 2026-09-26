@@ -103,93 +103,105 @@ fn merge_inline_rects(mut rects: Vec<InlineOutlineRect>) -> Vec<InlineOutlineRec
   merged_rects
 }
 
-/// Merges adjacent per-line outline rects, then groups them into vertically-continuous islands;
-/// each island becomes one stroked contour.
-pub fn outline_islands(outline_rects: Vec<InlineOutlineRect>) -> Vec<Vec<InlineOutlineRect>> {
-  let merged_rects = merge_inline_rects(outline_rects);
-
-  let mut line_rect_counts = HashMap::new();
-  for outline_rect in &merged_rects {
-    *line_rect_counts
-      .entry((outline_rect.span_id, outline_rect.line_index))
-      .or_insert(0usize) += 1;
-  }
-
-  let mut islands: Vec<Vec<InlineOutlineRect>> = Vec::new();
-  for outline_rect in merged_rects {
-    let mut matched_island = None;
-
-    for (index, island) in islands.iter().enumerate() {
-      let Some(previous_rect) = island.last().copied() else {
-        continue;
-      };
-      if previous_rect.span_id != outline_rect.span_id {
-        continue;
-      }
-      if outline_rect.line_index != previous_rect.line_index + 1 {
-        continue;
-      }
-
-      let previous_is_unique =
-        line_rect_counts.get(&(previous_rect.span_id, previous_rect.line_index)) == Some(&1);
-      let current_is_unique =
-        line_rect_counts.get(&(outline_rect.span_id, outline_rect.line_index)) == Some(&1);
-      if (previous_is_unique && current_is_unique) || previous_rect.x_range_touches(outline_rect) {
-        matched_island = Some(index);
-        break;
-      }
-    }
-
-    if let Some(index) = matched_island {
-      islands[index].push(outline_rect);
-    } else {
-      islands.push(vec![outline_rect]);
-    }
-  }
-
-  islands
+/// Rects of one span's outline that touch from line to line, stroked as one contour.
+pub struct OutlineIsland {
+  rects: Vec<InlineOutlineRect>,
 }
 
-/// Builds the rectilinear contour around one island of outline rects, expanded by `expansion`
-/// (outline-offset plus half the outline width).
-pub fn outline_island_contour(island: &[InlineOutlineRect], expansion: f32) -> Vec<PathCommand> {
-  let mut path = Vec::with_capacity(island.len() * 6);
-  let mut expanded_rects = island.iter().filter_map(|rect| rect.expanded(expansion));
-  let Some(first_rect) = expanded_rects.next() else {
-    return path;
-  };
+impl OutlineIsland {
+  /// Merges adjacent per-line outline rects, then groups them into vertically-continuous islands.
+  pub fn of(outline_rects: Vec<InlineOutlineRect>) -> Vec<Self> {
+    let merged_rects = merge_inline_rects(outline_rects);
 
-  path.move_to((first_rect.x, first_rect.y));
-  path.line_to((first_rect.x + first_rect.width, first_rect.y));
+    let mut line_rect_counts = HashMap::new();
+    for outline_rect in &merged_rects {
+      *line_rect_counts
+        .entry((outline_rect.span_id, outline_rect.line_index))
+        .or_insert(0usize) += 1;
+    }
 
-  let mut current_rect = first_rect;
-  for next_rect in expanded_rects {
-    path.line_to((current_rect.x + current_rect.width, next_rect.y));
-    path.line_to((next_rect.x + next_rect.width, next_rect.y));
-    current_rect = next_rect;
+    let mut islands: Vec<Vec<InlineOutlineRect>> = Vec::new();
+    for outline_rect in merged_rects {
+      let mut matched_island = None;
+
+      for (index, island) in islands.iter().enumerate() {
+        let Some(previous_rect) = island.last().copied() else {
+          continue;
+        };
+        if previous_rect.span_id != outline_rect.span_id {
+          continue;
+        }
+        if outline_rect.line_index != previous_rect.line_index + 1 {
+          continue;
+        }
+
+        let previous_is_unique =
+          line_rect_counts.get(&(previous_rect.span_id, previous_rect.line_index)) == Some(&1);
+        let current_is_unique =
+          line_rect_counts.get(&(outline_rect.span_id, outline_rect.line_index)) == Some(&1);
+        if (previous_is_unique && current_is_unique) || previous_rect.x_range_touches(outline_rect)
+        {
+          matched_island = Some(index);
+          break;
+        }
+      }
+
+      if let Some(index) = matched_island {
+        islands[index].push(outline_rect);
+      } else {
+        islands.push(vec![outline_rect]);
+      }
+    }
+
+    islands.into_iter().map(|rects| Self { rects }).collect()
   }
-  let last_rect = current_rect;
 
-  path.line_to((
-    last_rect.x + last_rect.width,
-    last_rect.y + last_rect.height,
-  ));
-  path.line_to((last_rect.x, last_rect.y + last_rect.height));
-
-  let mut expanded_rev = island
-    .iter()
-    .rev()
-    .filter_map(|rect| rect.expanded(expansion));
-  let Some(mut lower_rect) = expanded_rev.next() else {
-    return path;
-  };
-
-  for upper_rect in expanded_rev {
-    path.line_to((lower_rect.x, upper_rect.y + upper_rect.height));
-    path.line_to((upper_rect.x, upper_rect.y + upper_rect.height));
-    lower_rect = upper_rect;
+  /// The span whose outline this is.
+  pub fn span_id(&self) -> Option<u64> {
+    self.rects.first().map(|rect| rect.span_id)
   }
 
-  path.close();
-  path
+  /// The rectilinear contour around the island, grown by `expansion` past its rects.
+  pub fn contour(&self, expansion: f32) -> Vec<PathCommand> {
+    let island = &self.rects;
+    let mut path = Vec::with_capacity(island.len() * 6);
+    let mut expanded_rects = island.iter().filter_map(|rect| rect.expanded(expansion));
+    let Some(first_rect) = expanded_rects.next() else {
+      return path;
+    };
+
+    path.move_to((first_rect.x, first_rect.y));
+    path.line_to((first_rect.x + first_rect.width, first_rect.y));
+
+    let mut current_rect = first_rect;
+    for next_rect in expanded_rects {
+      path.line_to((current_rect.x + current_rect.width, next_rect.y));
+      path.line_to((next_rect.x + next_rect.width, next_rect.y));
+      current_rect = next_rect;
+    }
+    let last_rect = current_rect;
+
+    path.line_to((
+      last_rect.x + last_rect.width,
+      last_rect.y + last_rect.height,
+    ));
+    path.line_to((last_rect.x, last_rect.y + last_rect.height));
+
+    let mut expanded_rev = island
+      .iter()
+      .rev()
+      .filter_map(|rect| rect.expanded(expansion));
+    let Some(mut lower_rect) = expanded_rev.next() else {
+      return path;
+    };
+
+    for upper_rect in expanded_rev {
+      path.line_to((lower_rect.x, upper_rect.y + upper_rect.height));
+      path.line_to((upper_rect.x, upper_rect.y + upper_rect.height));
+      lower_rect = upper_rect;
+    }
+
+    path.close();
+    path
+  }
 }
