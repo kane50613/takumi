@@ -13,7 +13,7 @@ use takumi_core::{
 };
 use takumi_core::{
   font_style::SizedFontStyle,
-  geometry::{ComputedLayout as Layout, NodeId, Point as CorePoint, Size},
+  geometry::{ComputedLayout as Layout, NodeId, Point as CorePoint, Rect as CoreRect, Size},
   layout::{
     background_image_geometry::{BackgroundImageGeometry, FillLayers, OriginBox},
     border::BorderProperties,
@@ -576,23 +576,19 @@ impl Emitter<'_> {
       return;
     };
     let tile_origin = anchor + placement.first_tile();
-    // An axis that does not repeat steps past the painted rect, so its one tile stays single.
-    let step = placement.step();
+    let period = placement.pattern_period(CoreRect {
+      left: rect_at.x - anchor.x,
+      top: rect_at.y - anchor.y,
+      right: rect_at.x + size.width - anchor.x,
+      bottom: rect_at.y + size.height - anchor.y,
+    });
 
     surface.set_fill(Some(Fill {
       paint: Pattern {
         stream,
         transform: Transform::from_translate(tile_origin.x, tile_origin.y),
-        width: if placement.repeat_x {
-          step.width
-        } else {
-          size.width + placement.tile_size.width
-        },
-        height: if placement.repeat_y {
-          step.height
-        } else {
-          size.height + placement.tile_size.height
-        },
+        width: period.width,
+        height: period.height,
       }
       .into(),
       opacity: NormalizedF32::ONE,

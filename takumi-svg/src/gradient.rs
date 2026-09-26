@@ -107,22 +107,17 @@ impl<'a, 'd> LayerEmitter<'a, 'd> {
     }
 
     let first = geometry.first_tile();
-    let (x, y) = (area.x + first.x, area.y + first.y);
-    // An axis that does not repeat steps past the painted box, so its one tile stays single.
-    let step = geometry.step();
+    let period = geometry.pattern_period(Rect {
+      left: paint.x - area.x,
+      top: paint.y - area.y,
+      right: paint.x + paint.w - area.x,
+      bottom: paint.y + paint.h - area.y,
+    });
     let (token, pattern) = self.doc.begin_pattern(Frame::new(
-      x,
-      y,
-      if geometry.repeat_x {
-        step.width
-      } else {
-        paint.w + tile.width
-      },
-      if geometry.repeat_y {
-        step.height
-      } else {
-        paint.h + tile.height
-      },
+      area.x + first.x,
+      area.y + first.y,
+      period.width,
+      period.height,
     ))?;
     self.tile(image, Frame::new(0.0, 0.0, tile.width, tile.height))?;
     self.doc.end_pattern(token)?;

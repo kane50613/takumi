@@ -247,6 +247,29 @@ impl BackgroundImageGeometry {
     }
   }
 
+  /// The period of a pattern that paints these tiles over `paint`, a rectangle relative to the
+  /// positioning area: the tile step on a repeating axis, and on an axis that does not repeat a
+  /// distance that keeps every other copy of its one tile outside `paint`.
+  pub fn pattern_period(&self, paint: Rect<f32>) -> Size<f32> {
+    let first = self.first_tile();
+    let step = self.step();
+    let lone =
+      |start: f32, end: f32, tile: f32, origin: f32| end - start + tile + (origin - start).abs();
+
+    Size {
+      width: if self.repeat_x {
+        step.width
+      } else {
+        lone(paint.left, paint.right, self.tile_size.width, first.x)
+      },
+      height: if self.repeat_y {
+        step.height
+      } else {
+        lone(paint.top, paint.bottom, self.tile_size.height, first.y)
+      },
+    }
+  }
+
   /// Every tile origin on each axis that meets `paint`, a rectangle relative to the positioning
   /// area. A repeating axis tiles all of it; an axis that does not repeat keeps its one tile.
   pub fn tile_origins(&self, paint: Rect<f32>) -> (SmallVec<[f32; 1]>, SmallVec<[f32; 1]>) {
@@ -437,7 +460,7 @@ mod tests {
   use crate::{
     Fonts,
     context::RenderContext,
-    geometry::Size,
+    geometry::{Point, Rect, Size},
     style::{
       BackgroundRepeats, BackgroundSizes, FromCssStr, IntrinsicSizing, PositionValues,
       SizingContext,
@@ -488,6 +511,32 @@ mod tests {
       axis_origins(0.0, f32::MAX, true, 0.0, 100.0).as_slice(),
       [0.0]
     );
+  }
+
+  #[test]
+  fn a_lone_tile_far_outside_the_paint_area_repeats_nowhere_inside_it() {
+    let geometry = BackgroundImageGeometry {
+      tile_size: Size {
+        width: 100.0,
+        height: 100.0,
+      },
+      phase: Point { x: 450.0, y: 0.0 },
+      repeat_spacing: Size {
+        width: 0.0,
+        height: 0.0,
+      },
+      repeat_x: false,
+      repeat_y: true,
+    };
+    let period = geometry.pattern_period(Rect {
+      left: 0.0,
+      top: 0.0,
+      right: 400.0,
+      bottom: 400.0,
+    });
+
+    assert!(geometry.first_tile().x + period.width >= 400.0);
+    assert_eq!(period.height, 100.0);
   }
 
   #[test]
