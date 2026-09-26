@@ -510,6 +510,7 @@ impl<'i> AtRuleParser<'i> for NestedStyleRuleParser<'_> {
           ..StyleSheetFragment::default()
         }))
       }
+      AtRulePrelude::Unknown => Ok(StyleRuleBodyItem::Rules(StyleSheetFragment::default())),
       _ => Err(()),
     }
   }
@@ -656,6 +657,9 @@ enum AtRulePrelude {
   TailwindImport,
   /// `@apply`, already expanded into the declarations its utilities stand for.
   Apply(Box<StyleDeclarationBlock>),
+  /// An at-rule takumi does not implement, such as `@font-face`, dropped
+  /// without failing the sheet: <https://drafts.csswg.org/css-syntax-3/#consume-at-rule>.
+  Unknown,
 }
 
 /// A style rule with its selectors and declaration blocks. Opaque: its
@@ -943,7 +947,7 @@ impl NestingContext<'_> {
         .parse_style_rule_block(parent_selectors.clone(), input)
       }
       AtRulePrelude::Supports(true) => self.parse_style_rule_block(parent_selectors.clone(), input),
-      AtRulePrelude::Supports(false) => Ok(skip_block(input)),
+      AtRulePrelude::Supports(false) | AtRulePrelude::Unknown => Ok(skip_block(input)),
       AtRulePrelude::Theme => self.parse_theme_block(input),
       AtRulePrelude::Keyframes(_)
       | AtRulePrelude::Property(_)
@@ -1041,7 +1045,9 @@ fn parse_at_rule_prelude<'i, 't>(
     return Ok(AtRulePrelude::Property(property_name));
   }
 
-  Err(input.new_error(BasicParseErrorKind::AtRuleInvalid(name)))
+  while input.next().is_ok() {}
+
+  Ok(AtRulePrelude::Unknown)
 }
 
 pub(crate) fn parse_layer_name<'i, 't>(
@@ -1187,7 +1193,7 @@ impl<'i> AtRuleParser<'i> for RuleParser {
       AtRulePrelude::Supports(true) => self
         .nested(self.current_layer.clone())
         .parse_fragment(input),
-      AtRulePrelude::Supports(false) => Ok(skip_block(input)),
+      AtRulePrelude::Supports(false) | AtRulePrelude::Unknown => Ok(skip_block(input)),
       AtRulePrelude::Property(name) => Ok(StyleSheetFragment {
         property_rules: vec![parse_property_rule(name, input)?],
         ..StyleSheetFragment::default()
@@ -1215,6 +1221,7 @@ impl<'i> AtRuleParser<'i> for RuleParser {
           ..StyleSheetFragment::default()
         })
       }
+      AtRulePrelude::Unknown => Ok(StyleSheetFragment::default()),
       _ => Err(()),
     }
   }
@@ -2757,6 +2764,27 @@ mod tests {
         .card { width: 100px; }
       "#,
     );
+  }
+
+  #[test]
+  fn test_parse_skips_unknown_at_rules() {
+    let sheets = [
+      r#"@font-face { font-family: Geist; src: url(geist.woff2); } .card { width: 100px; }"#,
+      r#"@charset "utf-8"; .card { width: 100px; }"#,
+      r#"@unknown something { .card { width: 10px; } } .card { width: 100px; }"#,
+      r#".card { @unknown something { width: 10px; } width: 100px; }"#,
+      r#".card { @unknown something; width: 100px; }"#,
+    ];
+
+    for css in sheets {
+      let sheet = parse_stylesheet(css);
+      assert_eq!(sheet.rules.len(), 1, "{css}");
+      assert_eq!(
+        computed_style_from_declarations(&sheet.rules[0].normal_declarations).width,
+        Length::Px(100.0).into(),
+        "{css}"
+      );
+    }
   }
 
   #[test]
