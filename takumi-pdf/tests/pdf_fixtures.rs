@@ -2070,8 +2070,8 @@ fn inline_outlines() {
   assert!(
     content
       .iter()
-      .any(|line| find(line, b"0.0549 0.4549 0.5647 RG").is_some()),
-    "expected the inline outline's stroke color"
+      .any(|line| find(line, b"0.0549 0.4549 0.5647 rg").is_some()),
+    "expected the inline outline's color"
   );
 }
 

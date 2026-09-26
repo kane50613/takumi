@@ -31,6 +31,12 @@ impl BorderSide {
     }
   }
 
+  /// Whether a 3D `style` shades this side dark: `inset` darkens the top and left, and `outset`
+  /// the bottom and right, as Blink's `DarkenBoxSide` decides.
+  pub fn darkened_by(self, style: BorderStyle) -> bool {
+    matches!(self, Self::Top | Self::Left) == (style == BorderStyle::Inset)
+  }
+
   /// This side's entry in `sides`.
   pub fn of<T: Copy>(self, sides: Rect<T>) -> T {
     match self {
@@ -1106,7 +1112,7 @@ impl PaintedSide {
   }
 
   /// The side's colour lightened or darkened for `inset`/`outset` 3D shading.
-  fn shaded(&self, style: BorderStyle) -> Color {
+  pub(crate) fn shaded(&self, style: BorderStyle) -> Color {
     let lighten = match style {
       BorderStyle::Outset => matches!(self.side, BorderSide::Top | BorderSide::Left),
       BorderStyle::Inset => matches!(self.side, BorderSide::Right | BorderSide::Bottom),

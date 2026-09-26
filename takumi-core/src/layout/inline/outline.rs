@@ -1,6 +1,6 @@
 //! Outline rectangles of an inline formatting context, merged into islands.
 
-use crate::geometry::{LAYOUT_UNIT_EPSILON, PathBuilder, PathCommand};
+use crate::geometry::{LAYOUT_UNIT_EPSILON, PathBuilder, PathCommand, Point};
 use std::collections::HashMap;
 
 use super::text_fit::{LineScaleState, text_fit_x_correction};
@@ -161,44 +161,63 @@ impl OutlineIsland {
     self.rects.first().map(|rect| rect.span_id)
   }
 
-  /// The rectilinear contour around the island, grown by `expansion` past its rects.
-  pub fn contour(&self, expansion: f32) -> Vec<PathCommand> {
+  /// The corners of the rectilinear contour around the island, grown by `expansion` past its
+  /// rects, clockwise from the top-left.
+  pub fn corners(&self, expansion: f32) -> Vec<Point<f32>> {
     let island = &self.rects;
-    let mut path = Vec::with_capacity(island.len() * 6);
+    let mut corners = Vec::with_capacity(island.len() * 4);
+    let point = |x, y| Point { x, y };
     let mut expanded_rects = island.iter().filter_map(|rect| rect.expanded(expansion));
     let Some(first_rect) = expanded_rects.next() else {
-      return path;
+      return corners;
     };
 
-    path.move_to((first_rect.x, first_rect.y));
-    path.line_to((first_rect.x + first_rect.width, first_rect.y));
+    corners.push(point(first_rect.x, first_rect.y));
+    corners.push(point(first_rect.x + first_rect.width, first_rect.y));
 
     let mut current_rect = first_rect;
     for next_rect in expanded_rects {
-      path.line_to((current_rect.x + current_rect.width, next_rect.y));
-      path.line_to((next_rect.x + next_rect.width, next_rect.y));
+      corners.push(point(current_rect.x + current_rect.width, next_rect.y));
+      corners.push(point(next_rect.x + next_rect.width, next_rect.y));
       current_rect = next_rect;
     }
     let last_rect = current_rect;
 
-    path.line_to((
+    corners.push(point(
       last_rect.x + last_rect.width,
       last_rect.y + last_rect.height,
     ));
-    path.line_to((last_rect.x, last_rect.y + last_rect.height));
+    corners.push(point(last_rect.x, last_rect.y + last_rect.height));
 
     let mut expanded_rev = island
       .iter()
       .rev()
       .filter_map(|rect| rect.expanded(expansion));
     let Some(mut lower_rect) = expanded_rev.next() else {
-      return path;
+      return corners;
     };
 
     for upper_rect in expanded_rev {
-      path.line_to((lower_rect.x, upper_rect.y + upper_rect.height));
-      path.line_to((upper_rect.x, upper_rect.y + upper_rect.height));
+      corners.push(point(lower_rect.x, upper_rect.y + upper_rect.height));
+      corners.push(point(upper_rect.x, upper_rect.y + upper_rect.height));
       lower_rect = upper_rect;
+    }
+
+    corners
+  }
+
+  /// The closed contour through [`OutlineIsland::corners`].
+  pub fn contour(&self, expansion: f32) -> Vec<PathCommand> {
+    let corners = self.corners(expansion);
+    let mut path = Vec::with_capacity(corners.len() + 1);
+    let Some((first, rest)) = corners.split_first() else {
+      return path;
+    };
+
+    path.move_to((first.x, first.y));
+
+    for corner in rest {
+      path.line_to((corner.x, corner.y));
     }
 
     path.close();

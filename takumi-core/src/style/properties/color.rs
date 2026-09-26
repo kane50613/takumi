@@ -579,6 +579,38 @@ impl Color {
     )
   }
 
+  /// The colour darkened as Blink's `Color::Dark` darkens the shadow edge of a 3D border.
+  pub(crate) fn dark(self) -> Self {
+    let v = self.max_channel();
+
+    self.scaled_rgb(if v == 0.0 {
+      0.0
+    } else {
+      ((v - 0.33) / v).max(0.0)
+    })
+  }
+
+  /// The largest of the red, green and blue channels, from 0 to 1.
+  fn max_channel(self) -> f32 {
+    f32::from(self.0[0].max(self.0[1]).max(self.0[2])) / 255.0
+  }
+
+  /// Every colour channel multiplied by `factor` and truncated to 8 bits as Blink quantizes them,
+  /// keeping this alpha.
+  fn scaled_rgb(self, factor: f32) -> Self {
+    // Blink's `QuantizeTo8Bit` scales by the float just below 256.
+    const SCALE: f32 = 255.999_98;
+
+    let channel = |value: u8| (f32::from(value) / 255.0 * factor * SCALE) as u8;
+
+    Color([
+      channel(self.0[0]),
+      channel(self.0[1]),
+      channel(self.0[2]),
+      self.0[3],
+    ])
+  }
+
   /// Mixes `amount` of `target` into the colour, keeping this alpha.
   pub(crate) fn mix_rgb(self, target: Color, amount: f32) -> Self {
     let amount = amount.clamp(0.0, 1.0);
