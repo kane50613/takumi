@@ -689,6 +689,14 @@ pub enum Direction {
 }
 
 impl Direction {
+  /// The physical `(start, end)` inline sides, given as `left` and `right`.
+  pub(crate) fn inline_sides<T>(self, left: T, right: T) -> (T, T) {
+    match self {
+      Self::Ltr => (left, right),
+      Self::Rtl => (right, left),
+    }
+  }
+
   /// The bidi control character forcing this base direction: U+200E LEFT-TO-RIGHT
   /// MARK or U+200F RIGHT-TO-LEFT MARK.
   pub(crate) const fn bidi_mark(self) -> &'static str {
@@ -736,24 +744,14 @@ impl_css_enum!(
 impl Float {
   /// Resolves the floating direction based on the layout direction.
   pub(crate) fn resolve(self, direction: Direction) -> taffy::Float {
+    let (start, end) = direction.inline_sides(taffy::Float::Left, taffy::Float::Right);
+
     match self {
       Self::None => taffy::Float::None,
       Self::Left => taffy::Float::Left,
       Self::Right => taffy::Float::Right,
-      Self::InlineStart => {
-        if direction == Direction::Rtl {
-          taffy::Float::Right
-        } else {
-          taffy::Float::Left
-        }
-      }
-      Self::InlineEnd => {
-        if direction == Direction::Rtl {
-          taffy::Float::Left
-        } else {
-          taffy::Float::Right
-        }
-      }
+      Self::InlineStart => start,
+      Self::InlineEnd => end,
     }
   }
 }
@@ -790,25 +788,15 @@ impl_css_enum!(
 impl Clear {
   /// Resolves the clearing direction based on the layout direction.
   pub(crate) fn resolve(self, direction: Direction) -> taffy::Clear {
+    let (start, end) = direction.inline_sides(taffy::Clear::Left, taffy::Clear::Right);
+
     match self {
       Self::None => taffy::Clear::None,
       Self::Left => taffy::Clear::Left,
       Self::Right => taffy::Clear::Right,
       Self::Both => taffy::Clear::Both,
-      Self::InlineStart => {
-        if direction == Direction::Rtl {
-          taffy::Clear::Right
-        } else {
-          taffy::Clear::Left
-        }
-      }
-      Self::InlineEnd => {
-        if direction == Direction::Rtl {
-          taffy::Clear::Left
-        } else {
-          taffy::Clear::Right
-        }
-      }
+      Self::InlineStart => start,
+      Self::InlineEnd => end,
     }
   }
 }

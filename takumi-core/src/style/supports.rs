@@ -50,36 +50,22 @@ pub(crate) fn parse_supports_condition<'i, 't>(
   let mut result = parse_supports_not(input)?;
   let mut operator = None;
 
-  loop {
-    if input
-      .try_parse(|input| input.expect_ident_matching("and"))
-      .is_ok()
-    {
-      if matches!(operator, Some(false)) {
-        return Err(
-          input.new_custom_error(StyleSheetParseError::supports_mixed_and_or_without_parentheses()),
-        );
-      }
-      operator = Some(true);
-      result &= parse_supports_not(input)?;
-      continue;
+  while let Ok(is_and) = input.try_parse(parse_supports_operator) {
+    if operator.is_some_and(|operator| operator != is_and) {
+      return Err(
+        input.new_custom_error(StyleSheetParseError::supports_mixed_and_or_without_parentheses()),
+      );
     }
 
-    if input
-      .try_parse(|input| input.expect_ident_matching("or"))
-      .is_ok()
-    {
-      if matches!(operator, Some(true)) {
-        return Err(
-          input.new_custom_error(StyleSheetParseError::supports_mixed_and_or_without_parentheses()),
-        );
-      }
-      operator = Some(false);
-      result |= parse_supports_not(input)?;
-      continue;
-    }
+    operator = Some(is_and);
 
-    break;
+    let operand = parse_supports_not(input)?;
+
+    if is_and {
+      result &= operand;
+    } else {
+      result |= operand;
+    }
   }
 
   if !input.is_exhausted() {
@@ -87,4 +73,18 @@ pub(crate) fn parse_supports_condition<'i, 't>(
   }
 
   Ok(result)
+}
+
+/// Reads `and` as `true` and `or` as `false`.
+fn parse_supports_operator<'i>(
+  input: &mut Parser<'i, '_>,
+) -> Result<bool, ParseError<'i, StyleSheetParseError>> {
+  let location = input.current_source_location();
+  let ident = input.expect_ident()?;
+
+  match_ignore_ascii_case! { ident.as_ref(),
+    "and" => Ok(true),
+    "or" => Ok(false),
+    _ => Err(location.new_unexpected_token_error(Token::Ident(ident.clone()))),
+  }
 }

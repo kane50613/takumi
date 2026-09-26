@@ -3,7 +3,7 @@
 
 use std::fmt::Write;
 
-use cssparser::{ParseError, Parser, ParserInput};
+use cssparser::{ParseError, Parser, ParserInput, Token};
 use selectors::parser::{ParseRelative, SelectorList};
 use serde::{
   Deserialize,
@@ -212,44 +212,54 @@ impl CssSource {
 
 impl MediaRule {
   fn write_css(&self, css: &mut String) -> Result<(), CssSourceError> {
-    validate_prelude("@media", &self.media, |parser| {
+    write_group(css, "@media", &self.media, Some(&self.rules), |parser| {
       MediaQueryList::parse(parser).map(|_| ())
-    })?;
-    write_group(css, "@media ", &self.media, &self.rules)
+    })
   }
 }
 
 impl SupportsRule {
   fn write_css(&self, css: &mut String) -> Result<(), CssSourceError> {
-    validate_prelude("@supports", &self.supports, |parser| {
-      parse_supports_condition(parser).map(|_| ())
-    })?;
-    write_group(css, "@supports ", &self.supports, &self.rules)
+    write_group(
+      css,
+      "@supports",
+      &self.supports,
+      Some(&self.rules),
+      |parser| parse_supports_condition(parser).map(|_| ()),
+    )
   }
 }
 
 impl LayerRule {
   fn write_css(&self, css: &mut String) -> Result<(), CssSourceError> {
-    validate_prelude("@layer", &self.layer, |parser| {
-      parse_layer_name(parser).map(|_| ())
-    })?;
-
-    let Some(rules) = &self.rules else {
-      let _ = write!(css, "@layer {};", self.layer);
-      return Ok(());
-    };
-
-    write_group(css, "@layer ", &self.layer, rules)
+    write_group(
+      css,
+      "@layer",
+      &self.layer,
+      self.rules.as_deref(),
+      |parser| parse_layer_name(parser).map(|_| ()),
+    )
   }
 }
 
+/// Writes `<at-rule> <prelude>{<rules>}`, or the `;` statement form without `rules`.
 fn write_group(
   css: &mut String,
-  at_rule: &str,
+  at_rule: &'static str,
   prelude: &str,
-  rules: &[CssSource],
+  rules: Option<&[CssSource]>,
+  parse: impl for<'i, 't> FnOnce(
+    &mut Parser<'i, 't>,
+  ) -> Result<(), ParseError<'i, StyleSheetParseError>>,
 ) -> Result<(), CssSourceError> {
-  let _ = write!(css, "{at_rule}{prelude}{{");
+  validate_prelude(at_rule, prelude, parse)?;
+
+  let Some(rules) = rules else {
+    let _ = write!(css, "{at_rule} {prelude};");
+    return Ok(());
+  };
+
+  let _ = write!(css, "{at_rule} {prelude}{{");
 
   for entry in rules {
     entry.write_css(css)?;
@@ -271,13 +281,12 @@ fn validate_prelude(
   let mut parser_input = ParserInput::new(prelude);
   let mut parser = Parser::new(&mut parser_input);
 
-  match parser.parse_entirely(parse) {
-    Ok(()) => Ok(()),
-    Err(_) => Err(CssSourceError::Prelude {
+  parser
+    .parse_entirely(parse)
+    .map_err(|_| CssSourceError::Prelude {
       rule,
       value: prelude.to_owned(),
-    }),
-  }
+    })
 }
 
 impl AnimationRule {
@@ -289,10 +298,7 @@ impl AnimationRule {
     let _ = write!(css, "@keyframes {}{{", self.keyframes);
 
     for step in &self.steps {
-      validate_keyframe_offset(&step.offset)?;
-      let _ = write!(css, "{}{{", step.offset);
-      write_declarations(&step.style, css)?;
-      css.push('}');
+      step.write_css(css)?;
     }
 
     css.push('}');
@@ -300,14 +306,46 @@ impl AnimationRule {
   }
 }
 
+impl AnimationStep {
+  /// A step selector is a comma list of `from`, `to`, or a percentage.
+  fn write_css(&self, css: &mut String) -> Result<(), CssSourceError> {
+    validate_prelude("keyframe offset", &self.offset, |parser| {
+      parser
+        .parse_comma_separated(|parser| {
+          if parser.try_parse(Parser::expect_percentage).is_ok() {
+            return Ok(());
+          }
+
+          let location = parser.current_source_location();
+          let ident = parser.expect_ident()?;
+
+          if ident.eq_ignore_ascii_case("from") || ident.eq_ignore_ascii_case("to") {
+            Ok(())
+          } else {
+            Err(location.new_unexpected_token_error(Token::Ident(ident.clone())))
+          }
+        })
+        .map(|_| ())
+    })?;
+
+    let _ = write!(css, "{}{{", self.offset);
+    self.style.write_css(css)?;
+    css.push('}');
+    Ok(())
+  }
+}
+
 impl StyleRule {
   fn write_css(&self, css: &mut String) -> Result<(), CssSourceError> {
-    validate_selector(&self.selector)?;
+    validate_prelude("selector", &self.selector, |parser| {
+      SelectorList::<SelectorImpl>::parse(&TakumiSelectorParser, parser, ParseRelative::ForNesting)
+        .map(|_| ())
+    })?;
 
     // The selector and every value are checked before they are written, so the
     // text cannot carry a declaration or a rule the object did not name.
     let _ = write!(css, "{}{{", self.selector);
-    write_declarations(&self.style, css)?;
+    self.style.write_css(css)?;
 
     for nested in &self.rules {
       nested.write_css(css)?;
@@ -318,99 +356,51 @@ impl StyleRule {
   }
 }
 
-fn write_declarations(declarations: &Declarations, css: &mut String) -> Result<(), CssSourceError> {
-  for declaration in &declarations.0 {
-    validate_declaration(declaration)?;
-    let _ = write!(
-      css,
-      "{}:{};",
-      css_name(&declaration.name),
-      declaration.value
-    );
-  }
-
-  Ok(())
-}
-
-/// A step selector is a comma list of `from`, `to`, or a percentage.
-fn validate_keyframe_offset(offset: &str) -> Result<(), CssSourceError> {
-  let mut parser_input = ParserInput::new(offset);
-  let mut parser = Parser::new(&mut parser_input);
-
-  parser
-    .parse_entirely(|parser| {
-      parser.parse_comma_separated(|parser| {
-        if parser.try_parse(Parser::expect_percentage).is_ok() {
-          return Ok(());
-        }
-
-        let location = parser.current_source_location();
-        let ident = parser.expect_ident()?;
-
-        if ident.eq_ignore_ascii_case("from") || ident.eq_ignore_ascii_case("to") {
-          Ok(())
-        } else {
-          Err(location.new_custom_error(()))
-        }
-      })
-    })
-    .map(|_| ())
-    .map_err(|_: ParseError<'_, ()>| CssSourceError::Prelude {
-      rule: "keyframe offset",
-      value: offset.to_owned(),
-    })
-}
-
-/// The CSS spelling of a property name written in camelCase.
-fn css_name(name: &str) -> String {
-  if name.starts_with("--") || name.contains('-') {
-    return name.to_owned();
-  }
-
-  let mut css = String::with_capacity(name.len() + 4);
-  for character in name.chars() {
-    if character.is_ascii_uppercase() {
-      css.push('-');
-      css.push(character.to_ascii_lowercase());
-    } else {
-      css.push(character);
+impl Declarations {
+  fn write_css(&self, css: &mut String) -> Result<(), CssSourceError> {
+    for declaration in &self.0 {
+      declaration.write_css(css)?;
     }
-  }
 
-  css
-}
-
-fn validate_selector(selector: &str) -> Result<(), CssSourceError> {
-  let mut parser_input = ParserInput::new(selector);
-  let mut parser = Parser::new(&mut parser_input);
-
-  let parsed = parser.parse_entirely(|parser| {
-    SelectorList::<SelectorImpl>::parse(&TakumiSelectorParser, parser, ParseRelative::ForNesting)
-  });
-
-  match parsed {
-    Ok(_) => Ok(()),
-    Err(_) => Err(CssSourceError::Prelude {
-      rule: "selector",
-      value: selector.to_owned(),
-    }),
+    Ok(())
   }
 }
 
-fn validate_declaration(declaration: &Declaration) -> Result<(), CssSourceError> {
-  let property = PropertyId::from_camel_case(&declaration.name);
+impl Declaration {
+  fn write_css(&self, css: &mut String) -> Result<(), CssSourceError> {
+    let property = PropertyId::from_camel_case(&self.name);
 
-  if matches!(property, PropertyId::Ignored | PropertyId::Custom) {
-    return Ok(());
+    if !matches!(property, PropertyId::Ignored | PropertyId::Custom) {
+      property
+        .parse_css_input_declarations(CssInput::Str(self.value.as_str().into()))
+        .map_err(|_| CssSourceError::Declaration {
+          name: self.name.clone(),
+          value: self.value.clone(),
+        })?;
+    }
+
+    let _ = write!(css, "{}:{};", self.css_name(), self.value);
+    Ok(())
   }
 
-  property
-    .parse_css_input_declarations(CssInput::Str(declaration.value.as_str().into()))
-    .map(|_| ())
-    .map_err(|_| CssSourceError::Declaration {
-      name: declaration.name.clone(),
-      value: declaration.value.clone(),
-    })
+  /// The CSS spelling of a property name written in camelCase.
+  fn css_name(&self) -> String {
+    if self.name.starts_with("--") || self.name.contains('-') {
+      return self.name.clone();
+    }
+
+    let mut css = String::with_capacity(self.name.len() + 4);
+    for character in self.name.chars() {
+      if character.is_ascii_uppercase() {
+        css.push('-');
+        css.push(character.to_ascii_lowercase());
+      } else {
+        css.push(character);
+      }
+    }
+
+    css
+  }
 }
 
 #[cfg(test)]

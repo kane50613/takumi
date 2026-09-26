@@ -5,7 +5,7 @@ use cssparser::{Parser, match_ignore_ascii_case};
 use crate::style::{
   CssToken,
   Length::{self, *},
-  tw::{TailwindPropertyParser, is_ident_byte},
+  tw::{TailwindPropertyParser, is_ident, parse_opacity_modifier, with_opacity},
   *,
 };
 
@@ -349,7 +349,7 @@ impl TailwindPropertyParser for TwAnimation {
 
     // An unknown token reads `var(--animate-<token>)` alone: nothing runs
     // until the variable and its keyframes exist, the way Tailwind pairs them.
-    (!token.is_empty() && token.bytes().all(is_ident_byte)).then(|| TwAnimation {
+    is_ident(token).then(|| TwAnimation {
       animations: Animations::default(),
       token: Some(token.into()),
     })
@@ -364,11 +364,7 @@ pub(crate) struct TwVarColor(pub Arc<str>);
 
 impl<'i> FromCss<'i> for TwVarColor {
   fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
-    let color = ColorInput::from_css(input)?;
-    let mut css = String::new();
-
-    let _ = color.to_css(&mut css);
-    Ok(Self(css.into()))
+    Ok(Self(ColorInput::from_css(input)?.to_css_string().into()))
   }
 
   const VALID_TOKENS: &'static [CssToken] = ColorInput::VALID_TOKENS;
@@ -382,15 +378,7 @@ impl TailwindPropertyParser for TwVarColor {
     };
 
     let percentage = match modifier {
-      Some(modifier) => {
-        let percentage = modifier.parse::<f32>().ok()?;
-
-        if !(0.0..=100.0).contains(&percentage) {
-          return None;
-        }
-
-        Some(percentage)
-      }
+      Some(modifier) => Some(parse_opacity_modifier(modifier)?),
       None => None,
     };
 
@@ -404,20 +392,13 @@ impl TailwindPropertyParser for TwVarColor {
       }
 
       match Color::parse_tw(base) {
-        Some(color) => {
-          let mut css = String::new();
-
-          let _ = color.to_css(&mut css);
-          format!("var(--color-{base}, {css})")
-        }
+        Some(color) => format!("var(--color-{base}, {})", color.to_css_string()),
         None => format!("var(--color-{base})"),
       }
     };
 
     Some(Self(match percentage {
-      Some(percentage) => {
-        format!("color-mix(in oklab, {expression} {percentage}%, transparent)").into()
-      }
+      Some(percentage) => with_opacity(&expression, percentage).into(),
       None => expression.into(),
     }))
   }

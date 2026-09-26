@@ -16,9 +16,7 @@ pub(crate) fn lerp(lhs: f32, rhs: f32, progress: f32) -> f32 {
   lhs + (rhs - lhs) * progress
 }
 
-fn gcd(lhs: usize, rhs: usize) -> usize {
-  let mut lhs = lhs;
-  let mut rhs = rhs;
+fn gcd(mut lhs: usize, mut rhs: usize) -> usize {
   while rhs != 0 {
     let remainder = lhs % rhs;
     lhs = rhs;

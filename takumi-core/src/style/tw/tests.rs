@@ -6,10 +6,14 @@ use crate::style::{ComputedStyle, LonghandId, PropertyRule, Style, properties::B
 /// The declarations a utility produces without any variable defined, which is
 /// what these assertions are about.
 fn parse_property(token: &str) -> Option<Vec<StyleDeclaration>> {
-  Some(match TailwindProperty::parse(token)? {
+  TailwindProperty::parse(token).map(builtin_declarations)
+}
+
+fn builtin_declarations(property: TailwindProperty) -> Vec<StyleDeclaration> {
+  match property {
     TailwindProperty::VarUtility(var_utility) => var_utility.builtin_declarations(),
     property => expand(property),
-  })
+  }
 }
 
 fn expect(property: TailwindProperty) -> Option<Vec<StyleDeclaration>> {
@@ -25,10 +29,7 @@ fn parse_value(token: &str) -> Option<(Vec<StyleDeclaration>, Option<Breakpoint>
   let value = TailwindValue::parse(token)?;
 
   Some((
-    match value.property {
-      TailwindProperty::VarUtility(var_utility) => var_utility.builtin_declarations(),
-      property => expand(property),
-    },
+    builtin_declarations(value.property),
     value.breakpoint,
     value.important,
   ))

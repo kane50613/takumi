@@ -106,7 +106,7 @@ fn test_merge_from_inline_over_tailwind() {
   ]);
   let inline_style = style_with([StyleDeclaration::width(Length::Px(100.0))]);
 
-  tw_style.merge_from(inline_style);
+  tw_style.append_block(inline_style.declarations);
 
   let resolved = tw_style.inherit(&ComputedStyle::default());
   assert_eq!(resolved.width, Length::Px(100.0).into());
@@ -946,7 +946,7 @@ fn test_merge_from_text_decoration_longhands_clear_lower_priority_color() {
     StyleDeclaration::text_decoration_thickness(TextDecorationThickness::default()),
   ]);
 
-  preset_style.merge_from(inline_style);
+  preset_style.append_block(inline_style.declarations);
 
   let inherited = preset_style.inherit(&ComputedStyle::default());
   assert_eq!(inherited.text_decoration_color, ColorInput::default());
@@ -971,7 +971,7 @@ fn test_merge_from_background_longhands_clear_lower_priority_background_color() 
     StyleDeclaration::background_clip(BackgroundClip::default()),
   ]);
 
-  preset_style.merge_from(inline_style);
+  preset_style.append_block(inline_style.declarations);
 
   let inherited = preset_style.inherit(&ComputedStyle::default());
   assert_eq!(inherited.background_color, ColorInput::default());
