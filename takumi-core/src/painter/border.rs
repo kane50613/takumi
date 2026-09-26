@@ -12,6 +12,8 @@ use crate::{
   style::{Affine, BorderStyle, Color, FillRule},
 };
 
+// The curved dash overstroke and `StyledLine` follow Blink, under the notice in LICENSE-CHROMIUM.
+
 /// How far a curved dashed side overstrokes its centerline, so the ring clip
 /// rather than the stroke decides where each dash ends.
 const CURVED_DASH_OVERSTROKE: f32 = 2.2;

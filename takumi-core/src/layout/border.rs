@@ -1111,22 +1111,9 @@ impl PaintedSide {
     self.style.is_rendered() && self.width > 0.0
   }
 
-  /// The side's colour lightened or darkened for `inset`/`outset` 3D shading.
+  /// The side's colour shaded for the `inset` or `outset` half of a 3D style.
   pub(crate) fn shaded(&self, style: BorderStyle) -> Color {
-    let lighten = match style {
-      BorderStyle::Outset => matches!(self.side, BorderSide::Top | BorderSide::Left),
-      BorderStyle::Inset => matches!(self.side, BorderSide::Right | BorderSide::Bottom),
-      _ => false,
-    };
-
-    self.color.mix_rgb(
-      if lighten {
-        Color::white()
-      } else {
-        Color::black()
-      },
-      0.35,
-    )
+    self.color.inset_outset(self.side.darkened_by(style))
   }
 }
 
