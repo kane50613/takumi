@@ -1,3 +1,105 @@
+## takumi@2.15.0
+
+### Draw scaled images faster
+
+An axis-aligned image scale derives its bilinear taps once per column and once per row instead of once per pixel.
+
+### Blur backdrops faster
+
+The vertical pass of the RGBA box blur runs over each row as independent bytes.
+
+### Finish opaque renders faster
+
+The final premultiplied-to-straight alpha pass skips 16-pixel runs that are fully opaque or fully transparent, using NEON, SSE2, AVX2, or wasm simd128 to find them.
+
+### Drop WOFF1 decoding from the wasm packages
+
+`@takumi-rs/wasm` and `takumi-pdf` load TTF, OTF, and WOFF2 but no longer decode WOFF1. `@takumi-rs/core` keeps WOFF1.
+
+### Drop an `@property` rule that cannot fall back
+
+`@property --size { syntax: "<length>"; inherits: false; }` was kept even though a typed syntax has no value to fall back to without `initial-value`. The rule is now ignored, so the name behaves as the ordinary custom property it is. `syntax` also loses the quotes it was stored with.
+
+### Honour `!important` on a custom property
+
+`--gap: 8px !important` kept the marker inside the value, so `var(--gap)` substituted `8px !important` and every declaration reading it fell over. The marker now marks the declaration, which then takes part in the cascade like any other.
+
+### Render repeated glyphs faster
+
+Glyph positions, `text-decoration-skip-ink` intercepts, and `line-height: normal` metrics are reused within a render.
+
+### Render oblique linear gradients faster
+
+Opaque, non-repeating linear gradients at an angle fill four rows at a time, computing their LUT indices with NEON, SSE2, or wasm simd128.
+
+### Size an SVG without the renderer
+
+`svg-sizing` reads an SVG's `width`, `height`, and `viewBox` without the renderer. The `svg` feature includes it.
+
+### Inherit a `--tw-`prefixed variable the utility engine never wrote
+
+A custom property was dropped from inheritance whenever its name started with `--tw-`. The utility engine now registers the state it writes, so only that state stops at its element and an author's own `--tw-` name inherits like any other.
+
+### Build without animated image support
+
+`ImageSource::Animated` exists only with `gif`, `png`, or `webp`. A GIF keeps its header size when its decoder is off.
+
+### Build the paint tree faster
+
+`build_scene(SceneRequest)` replaces `build_stacking_contexts`; its `paint_bounds` flag lets `paint_tree()` skip paint bounds and the text shaping they need. Z-order, cascade, table-group, and inline-box ordering use cheaper sorts.
+
+### Blur shadows faster
+
+The horizontal pass of the alpha box blur slides its window four pixels at a time with NEON, SSE2, or wasm simd128.
+
+### Reject a stray token after a background list
+
+`background-repeat: repeat bogus` and the same tail on `background-size`, `background-position`, and `background-blend-mode` used to parse as valid, because the list parser swallowed the token after the last item. The declaration is now invalid and dropped, as in browsers.
+
+### Build the raster backend without the `svg` feature
+
+`takumi-raster` with `default-features = false` failed to compile because image drawing was gated behind `svg`. It now builds, and only SVG sources need the feature.
+
+### Keep the registered value of a `--tw-*` custom property
+
+The utility engine's `--tw-*` state stops at the element that sets it, but that applied to every such name. An `@property` rule registering one lost its initial value, so Tailwind's compiled `linear-gradient(..., var(--tw-gradient-from-position))` painted nothing.
+
+### Draw glyph outlines through `draw_outline`
+
+`base::resources::glyph::draw_outline` replaces `ErasedPen`. It draws a skrifa `OutlineGlyph` through `&mut dyn OutlinePen`, the path skrifa's own bounds pen shares.
+
+### Render text-heavy layouts faster
+
+Shaped text is reused across measurement, baseline lookup, and painting. `text-decoration-skip-ink` skips glyphs outside the underline band.
+
+### Render box shadows and backdrop filters faster
+
+Mask attenuation and the shadow bounds scan run without per-pixel branches.
+
+### Read painted values from a node tree
+
+With `paint-tree` enabled, `takumi_core::paint_tree::paint_tree` returns used decorations, image placement, and shaped text in paint order, in device pixels with absolute transforms. `Fonts::face_family` names a shaped run's registered family.
+
+### Escape text inside JSX `<svg>` elements
+
+`fromJsx` now escapes text children of an `<svg>` element, so they can no longer inject SVG markup. It throws on element or attribute names that are not valid XML names, and on `style` entries that would end their own declaration, such as `fill: "red;stroke:blue"` or an unclosed quote. Semicolons inside quotes or `url()` still work.
+
+### ⚠️ Reach custom properties through one type on `ComputedStyle`
+
+`ComputedStyle::custom_properties` and `ComputedStyle::registered_custom_properties` are now one `custom_properties: CustomProperties` field. Read a value with `style.custom_properties.get(name)`, which returns `Option<&str>`. Constructing a `ComputedStyle` with `..Default::default()` is unaffected.
+
+### Build without PNG decoding
+
+The `png` feature is on by default through `image-decoding`. Without it, PNG and APNG sources keep their header size but cannot be drawn, PNG bitmap glyphs are skipped, and `ImageBuffer::encode_png` is gone.
+
+### Measure text once per node
+
+Text measurement hashes a node's style once, and a text node's baseline comes from its cached measurement unless a height or line limit clamped it.
+
+### Skip unknown at-rules in `StyleSheet::parse`
+
+`StyleSheet::parse` used to fail the whole sheet on an at-rule it does not implement, such as `@font-face`, `@charset`, or `@page`. It now drops that at-rule and keeps the rest, as browsers do. `parse_loosy` already behaved this way.
+
 ## takumi@2.14.0
 
 ### Clip overflow at the padding box
