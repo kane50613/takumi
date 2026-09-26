@@ -1,6 +1,6 @@
 use takumi::{prelude::*, render};
 
-use crate::test_utils::CONTEXT;
+use crate::test_utils::{CONTEXT, InkBounds, ink_bounds};
 
 const CANVAS: (u32, u32) = (480, 320);
 
@@ -13,9 +13,6 @@ struct Case {
   css: &'static str,
   expected: Option<InkBounds>,
 }
-
-/// Inclusive edges of the dark ink: left, top, right, bottom.
-type InkBounds = (u32, u32, u32, u32);
 
 const CASES: &[Case] = &[
   Case {
@@ -101,25 +98,6 @@ fn render_case(effect: &str, opacity: f32) -> Bitmap {
   .unwrap()
 }
 
-fn ink_bounds(image: &Bitmap) -> InkBounds {
-  let width = image.width();
-
-  image
-    .as_raw()
-    .as_chunks::<4>()
-    .0
-    .iter()
-    .enumerate()
-    .filter(|(_, pixel)| pixel[3] > 0 && pixel[0].min(pixel[1]).min(pixel[2]) < 160)
-    .fold(
-      (u32::MAX, u32::MAX, 0, 0),
-      |(left, top, right, bottom), (index, _)| {
-        let (x, y) = (index as u32 % width, index as u32 / width);
-        (left.min(x), top.min(y), right.max(x), bottom.max(y))
-      },
-    )
-}
-
 #[test]
 fn test_isolation_keeps_ink_that_reaches_past_the_box() {
   for Case {
@@ -128,10 +106,8 @@ fn test_isolation_keeps_ink_that_reaches_past_the_box() {
     expected,
   } in CASES
   {
-    let plain = render_case(css, 1.0);
-    let isolated = render_case(css, 0.99);
-    let plain = ink_bounds(&plain);
-    let isolated = ink_bounds(&isolated);
+    let plain = ink_bounds(&render_case(css, 1.0));
+    let isolated = ink_bounds(&render_case(css, 0.99));
 
     assert!(plain.2 > 0 && plain.3 > 0, "{name}: no ink painted");
     if let Some(expected) = expected {

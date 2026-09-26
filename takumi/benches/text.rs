@@ -18,12 +18,12 @@ const LONG_TEXT: &str = "Typography is the art and technique of arranging type t
    design typefaces, and some type designers do not consider themselves typographers.";
 
 fn render_node(fonts: &Fonts, node: Node) {
-  let opts = RenderOptions::builder()
+  let options = RenderOptions::builder()
     .viewport(Viewport::new((BENCH_WIDTH, BENCH_HEIGHT)))
     .node(node)
     .fonts(fonts)
     .build();
-  black_box(render(opts).unwrap());
+  black_box(render(options).unwrap());
 }
 
 fn long_paragraph() -> Node {
@@ -43,14 +43,16 @@ fn clipped_text_paragraph() -> Node {
 }
 
 fn bench_text(c: &mut Criterion) {
-  let g = common::fonts();
+  let fonts = common::fonts();
   let mut group = c.benchmark_group("text");
+
   group.bench_function("long_paragraph", |b| {
-    b.iter(|| render_node(&g, black_box(long_paragraph())))
+    b.iter(|| render_node(&fonts, black_box(long_paragraph())))
   });
   group.bench_function("clipped_text_paragraph", |b| {
-    b.iter(|| render_node(&g, black_box(clipped_text_paragraph())))
+    b.iter(|| render_node(&fonts, black_box(clipped_text_paragraph())))
   });
+
   group.finish();
 }
 

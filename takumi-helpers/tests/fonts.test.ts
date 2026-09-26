@@ -32,10 +32,19 @@ const interCss = `
   }
 `;
 
-const mockInter = () =>
-  mock((url: string) =>
-    Promise.resolve(url.includes("/css2") ? new Response(interCss) : new Response(bytes(url))),
+const cssFetch = (css: string) =>
+  mock((url: string, _init?: RequestInit) =>
+    Promise.resolve(url.includes("/css2") ? new Response(css) : new Response(bytes(url))),
   );
+
+const mockInter = () => cssFetch(interCss);
+
+/** The last css2 request a `cssFetch` mock received. */
+const cssRequest = (fetchMock: ReturnType<typeof cssFetch>) => {
+  const [url = "", init] = fetchMock.mock.calls.findLast(([url]) => url.includes("/css2")) ?? [];
+
+  return { url: new URL(url), init };
+};
 
 describe("googleFonts", () => {
   const twoWeightCss = `
@@ -91,11 +100,7 @@ describe("googleFonts", () => {
   });
 
   test("resolves every weight to a keyed loader under one subsetOf", async () => {
-    const fetchMock = mock((url: string) =>
-      Promise.resolve(
-        url.includes("/css2") ? new Response(twoWeightCss) : new Response(bytes(url)),
-      ),
-    );
+    const fetchMock = cssFetch(twoWeightCss);
 
     const fonts = await googleFonts({
       families: [{ name: "Inter", weight: [400, 700] }],
@@ -127,9 +132,7 @@ describe("googleFonts", () => {
         unicode-range: U+0000-00FF;
       }
     `;
-    const fetchMock = mock((url: string) =>
-      Promise.resolve(url.includes("/css2") ? new Response(variableCss) : new Response(bytes(url))),
-    );
+    const fetchMock = cssFetch(variableCss);
 
     const fonts = await googleFonts({
       families: [{ name: "Public Sans", weight: [400, 700] }],
@@ -140,11 +143,7 @@ describe("googleFonts", () => {
     expect(fonts[0]?.weight).toBeUndefined();
 
     // A static font keeps a distinct url per weight, so faces stay split.
-    const staticMock = mock((url: string) =>
-      Promise.resolve(
-        url.includes("/css2") ? new Response(twoWeightCss) : new Response(bytes(url)),
-      ),
-    );
+    const staticMock = cssFetch(twoWeightCss);
     const staticFonts = await googleFonts({
       families: [{ name: "Inter", weight: [400, 700] }],
       fetch: staticMock,
@@ -153,35 +152,23 @@ describe("googleFonts", () => {
   });
 
   test("builds the family/axis and sends a woff2 UA", async () => {
-    let requestedUrl = "";
-    let ua = "";
-    const fetchMock = mock((url: string, init?: RequestInit) => {
-      if (url.includes("/css2")) {
-        requestedUrl = url;
-        ua = new Headers(init?.headers).get("User-Agent") ?? "";
-        return Promise.resolve(new Response(twoWeightCss));
-      }
-      return Promise.resolve(new Response(bytes(url)));
-    });
+    const fetchMock = cssFetch(twoWeightCss);
 
     await googleFonts({
       families: [{ name: "Open Sans", weight: [700, 400], style: ["normal", "italic"] }],
       fetch: fetchMock,
     });
 
-    expect(new URL(requestedUrl).searchParams.get("family")).toBe(
-      "Open Sans:ital,wght@0,400;0,700;1,400;1,700",
-    );
-    expect(ua).toContain("Chrome");
+    const { url, init } = cssRequest(fetchMock);
+
+    expect(url.searchParams.get("family")).toBe("Open Sans:ital,wght@0,400;0,700;1,400;1,700");
+    expect(new Headers(init?.headers).get("User-Agent") ?? "").toContain("Chrome");
   });
 
   const captureFamily = () => {
-    let requestedUrl = "";
-    const fetchMock = mock((url: string) => {
-      if (url.includes("/css2")) requestedUrl = url;
-      return Promise.resolve(new Response(twoWeightCss));
-    });
-    return { fetchMock, family: () => new URL(requestedUrl).searchParams.get("family") };
+    const fetchMock = cssFetch(twoWeightCss);
+
+    return { fetchMock, family: () => cssRequest(fetchMock).url.searchParams.get("family") };
   };
 
   test("emits a custom variable axis in the css2 tuple", async () => {
@@ -240,32 +227,20 @@ describe("googleFonts", () => {
         src: url(https://fonts.gstatic.com/inter-variable.woff2) format('woff2');
       }
     `;
-    let requestedUrl = "";
-    const fetchMock = mock((url: string) => {
-      if (url.includes("/css2")) requestedUrl = url;
-      return Promise.resolve(
-        url.includes("/css2") ? new Response(variableCss) : new Response(bytes(url)),
-      );
-    });
+    const fetchMock = cssFetch(variableCss);
 
     const fonts = await googleFonts({
       families: [{ name: "Inter", weight: "100..900" }],
       fetch: fetchMock,
     });
 
-    expect(new URL(requestedUrl).searchParams.get("family")).toBe("Inter:wght@100..900");
+    expect(cssRequest(fetchMock).url.searchParams.get("family")).toBe("Inter:wght@100..900");
     expect(fonts).toHaveLength(1);
     expect(fonts[0]?.weight).toBeUndefined();
   });
 
   test("requests every family in a single css2 call", async () => {
-    let requestedUrl = "";
-    const fetchMock = mock((url: string) => {
-      if (url.includes("/css2")) requestedUrl = url;
-      return Promise.resolve(
-        url.includes("/css2") ? new Response(interCss) : new Response(bytes(url)),
-      );
-    });
+    const fetchMock = mockInter();
 
     await googleFonts({
       families: ["Inter", "Noto Sans JP"],
@@ -273,24 +248,17 @@ describe("googleFonts", () => {
       cache: new Map(),
     });
 
-    const families = new URL(requestedUrl).searchParams.getAll("family");
+    const families = cssRequest(fetchMock).url.searchParams.getAll("family");
     expect(families).toEqual(["Inter:wght@400", "Noto Sans JP:wght@400"]);
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
   test("passes display through to the CSS request", async () => {
-    let requestedUrl = "";
-    const fetchMock = mock((url: string) => {
-      if (url.includes("/css2")) requestedUrl = url;
-      return Promise.resolve(
-        url.includes("/css2") ? new Response(interCss) : new Response(bytes(url)),
-      );
-    });
+    const fetchMock = mockInter();
 
     await googleFonts({ families: ["Inter"], display: "swap", fetch: fetchMock });
 
-    const params = new URL(requestedUrl).searchParams;
-    expect(params.get("display")).toBe("swap");
+    expect(cssRequest(fetchMock).url.searchParams.get("display")).toBe("swap");
   });
 
   test("reuses the CSS cache across calls, fetching metadata once", async () => {
@@ -300,7 +268,7 @@ describe("googleFonts", () => {
     await googleFonts({ families: ["Inter"], fetch: fetchMock, cache });
     await googleFonts({ families: ["Inter"], fetch: fetchMock, cache });
 
-    const cssCalls = fetchMock.mock.calls.filter(([url]) => (url as string).includes("/css2"));
+    const cssCalls = fetchMock.mock.calls.filter(([url]) => url.includes("/css2"));
     expect(cssCalls).toHaveLength(1);
   });
 
@@ -311,7 +279,7 @@ describe("googleFonts", () => {
     await googleFonts({ families: ["Roboto Flex"], fetch: fetchMock });
     await googleFonts({ families: ["Roboto Flex"], fetch: fetchMock });
 
-    const cssCalls = fetchMock.mock.calls.filter(([url]) => (url as string).includes("/css2"));
+    const cssCalls = fetchMock.mock.calls.filter(([url]) => url.includes("/css2"));
     expect(cssCalls).toHaveLength(1);
   });
 

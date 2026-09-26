@@ -11,27 +11,15 @@ const fontUint8Array = new Uint8Array(fontArrayBuffer.slice(0));
 const imageBuffer = Buffer.from(imageArrayBuffer);
 const imageUint8Array = new Uint8Array(imageArrayBuffer.slice(0));
 
-const imageNode = container({
-  style: {
-    width: 64,
-    height: 64,
-  },
-  children: [
-    image({
-      src: "test://binary-input-image",
-      width: 64,
-      height: 64,
-    }),
-  ],
-});
-
 const recoveryNode = container({ style: { width: 8, height: 8, backgroundColor: "black" } });
 
-const withImageBytes = (data: Uint8Array) =>
+const withImage = (src: Parameters<typeof image>[0]["src"]) =>
   container({
     style: { width: 64, height: 64 },
-    children: [image({ src: data, width: 64, height: 64 })],
+    children: [image({ src, width: 64, height: 64 })],
   });
+
+const imageNode = withImage("test://binary-input-image");
 
 // Undecodable image sources are skipped at paint like a browser's broken
 // image, so renders complete instead of rejecting; these cases pin that no
@@ -51,7 +39,7 @@ describe("malformed binary inputs", () => {
       corrupt[i] = (i * 37) % 256;
     }
 
-    const result = await renderer.render(withImageBytes(corrupt), { width: 64, height: 64 });
+    const result = await renderer.render(withImage(corrupt), { width: 64, height: 64 });
     expect(result).toBeInstanceOf(Buffer);
     await expectRecovery();
   });
@@ -64,7 +52,7 @@ describe("malformed binary inputs", () => {
   test("malformed inline SVG bytes render without crashing", async () => {
     const bytes = new TextEncoder().encode("<svg garbage");
 
-    const result = await renderer.render(withImageBytes(bytes), { width: 64, height: 64 });
+    const result = await renderer.render(withImage(bytes), { width: 64, height: 64 });
     expect(result).toBeInstanceOf(Buffer);
     await expectRecovery();
   });
@@ -73,7 +61,7 @@ describe("malformed binary inputs", () => {
     const truncated = new Uint8Array(16);
     truncated.set(new TextEncoder().encode("GIF89a"));
 
-    const result = await renderer.render(withImageBytes(truncated), { width: 64, height: 64 });
+    const result = await renderer.render(withImage(truncated), { width: 64, height: 64 });
     expect(result).toBeInstanceOf(Buffer);
     await expectRecovery();
   });
@@ -102,20 +90,14 @@ describe("binary inputs", () => {
       images: [{ src: "test://binary-input-image", data: imageUint8Array }],
     });
 
-    const inline = (src: Uint8Array | ArrayBuffer) =>
-      container({
-        style: { width: 64, height: 64 },
-        children: [image({ src, width: 64, height: 64 })],
-      });
-
-    const fromUint8Array = await renderer.render(inline(imageUint8Array), {
+    const fromUint8Array = await renderer.render(withImage(imageUint8Array), {
       width: 64,
       height: 64,
     });
     expect(fromUint8Array).toBeInstanceOf(Buffer);
     expect(Buffer.compare(fromUint8Array, reference)).toBe(0);
 
-    const fromArrayBuffer = await renderer.render(inline(imageArrayBuffer), {
+    const fromArrayBuffer = await renderer.render(withImage(imageArrayBuffer), {
       width: 64,
       height: 64,
     });
@@ -177,14 +159,8 @@ describe("binary inputs", () => {
     const svg =
       '<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64"><rect width="64" height="64" fill="red"/></svg>';
 
-    const inline = (src: string | Uint8Array) =>
-      container({
-        style: { width: 64, height: 64 },
-        children: [image({ src, width: 64, height: 64 })],
-      });
-
-    const fromString = await renderer.render(inline(svg), { width: 64, height: 64 });
-    const fromBytes = await renderer.render(inline(new TextEncoder().encode(svg)), {
+    const fromString = await renderer.render(withImage(svg), { width: 64, height: 64 });
+    const fromBytes = await renderer.render(withImage(new TextEncoder().encode(svg)), {
       width: 64,
       height: 64,
     });
@@ -196,40 +172,14 @@ describe("binary inputs", () => {
   test("render images accepts Buffer, Uint8Array, and ArrayBuffer", async () => {
     const renderer = new Renderer();
 
-    const fromBuffer = await renderer.render(imageNode, {
-      width: 64,
-      height: 64,
-      images: [
-        {
-          src: "test://binary-input-image",
-          data: imageBuffer,
-        },
-      ],
-    });
-    expect(fromBuffer).toBeInstanceOf(Buffer);
+    for (const data of [imageBuffer, imageUint8Array, imageArrayBuffer]) {
+      const result = await renderer.render(imageNode, {
+        width: 64,
+        height: 64,
+        images: [{ src: "test://binary-input-image", data }],
+      });
 
-    const fromUint8Array = await renderer.render(imageNode, {
-      width: 64,
-      height: 64,
-      images: [
-        {
-          src: "test://binary-input-image",
-          data: imageUint8Array,
-        },
-      ],
-    });
-    expect(fromUint8Array).toBeInstanceOf(Buffer);
-
-    const fromArrayBuffer = await renderer.render(imageNode, {
-      width: 64,
-      height: 64,
-      images: [
-        {
-          src: "test://binary-input-image",
-          data: imageArrayBuffer,
-        },
-      ],
-    });
-    expect(fromArrayBuffer).toBeInstanceOf(Buffer);
+      expect(result).toBeInstanceOf(Buffer);
+    }
   });
 });

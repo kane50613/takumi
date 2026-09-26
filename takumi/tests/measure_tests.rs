@@ -1,11 +1,7 @@
 mod test_utils;
 
 use takumi::prelude::{Length::*, *};
-use test_utils::{CONTEXT, TEST_IMAGES};
-
-fn create_measure_viewport() -> Viewport {
-  Viewport::new((1200, 630))
-}
+use test_utils::{CONTEXT, TEST_IMAGES, create_test_viewport, run_texts};
 
 fn create_measure_viewport_with_dpr(device_pixel_ratio: f32) -> Viewport {
   Viewport::new((
@@ -93,15 +89,7 @@ fn test_measure_simple_container() {
       ))),
   );
 
-  let result = takumi::measure(
-    RenderOptions::builder()
-      .viewport(create_measure_viewport())
-      .node(node)
-      .fonts(&CONTEXT)
-      .images(TEST_IMAGES.clone())
-      .build(),
-  )
-  .unwrap();
+  let result = measure(node, create_test_viewport());
 
   assert_eq!(
     result,
@@ -124,15 +112,7 @@ fn test_measure_text_node() {
       .with(StyleDeclaration::font_size(Px(20.0).into())),
   );
 
-  let result = takumi::measure(
-    RenderOptions::builder()
-      .viewport(create_measure_viewport())
-      .node(node)
-      .fonts(&CONTEXT)
-      .images(TEST_IMAGES.clone())
-      .build(),
-  )
-  .unwrap();
+  let result = measure(node, create_test_viewport());
 
   assert_eq!(
     result,
@@ -171,15 +151,7 @@ fn test_measure_flex_text_node_centers_inner_text() {
       .with(StyleDeclaration::font_size(Px(20.0).into())),
   );
 
-  let result = takumi::measure(
-    RenderOptions::builder()
-      .viewport(create_measure_viewport())
-      .node(node)
-      .fonts(&CONTEXT)
-      .images(TEST_IMAGES.clone())
-      .build(),
-  )
-  .unwrap();
+  let result = measure(node, create_test_viewport());
 
   assert_eq!(result.width, 300.0);
   assert_eq!(result.height, 120.0);
@@ -218,15 +190,7 @@ fn test_measure_flex_text_node_anonymous_item_uses_intrinsic_size() {
       .with(StyleDeclaration::font_size(Px(20.0).into())),
   );
 
-  let result = takumi::measure(
-    RenderOptions::builder()
-      .viewport(create_measure_viewport())
-      .node(node)
-      .fonts(&CONTEXT)
-      .images(TEST_IMAGES.clone())
-      .build(),
-  )
-  .unwrap();
+  let result = measure(node, create_test_viewport());
 
   assert_eq!(result.children.len(), 1);
   let anonymous_item = &result.children[0];
@@ -270,15 +234,7 @@ fn test_measure_inline_layout() {
       .with(StyleDeclaration::display(Display::Block)),
   );
 
-  let result = takumi::measure(
-    RenderOptions::builder()
-      .viewport(create_measure_viewport())
-      .node(node)
-      .fonts(&CONTEXT)
-      .images(TEST_IMAGES.clone())
-      .build(),
-  )
-  .unwrap();
+  let result = measure(node, create_test_viewport());
 
   assert_eq!(result.width, 400.0);
   assert_eq!(result.height, 300.0);
@@ -329,7 +285,7 @@ fn test_measure_text_fit_per_line_grow_scales_run_geometry() {
 
   let no_fit = measure(
     Node::text(text.clone()).with_style(base_style.clone()),
-    create_measure_viewport(),
+    create_test_viewport(),
   );
   let fit = measure(
     Node::text(text).with_style(
@@ -341,7 +297,7 @@ fn test_measure_text_fit_per_line_grow_scales_run_geometry() {
           .build(),
       )),
     ),
-    create_measure_viewport(),
+    create_test_viewport(),
   );
 
   let no_fit_runs = measured_text_runs(&no_fit);
@@ -362,7 +318,7 @@ fn test_measure_padding_wider_than_the_box_does_not_panic() {
     FromHtmlOptions::default(),
   )
   .expect("parse");
-  let out = measure(node, create_measure_viewport());
+  let out = measure(node, create_test_viewport());
 
   assert_close(out.width, 40.0);
 }
@@ -380,7 +336,7 @@ fn test_measure_content_box_wraps_inside_its_padding() {
       FromHtmlOptions::default(),
     )
     .expect("parse"),
-    create_measure_viewport(),
+    create_test_viewport(),
   );
   let border_box = measure(
     Node::from_html(
@@ -390,7 +346,7 @@ fn test_measure_content_box_wraps_inside_its_padding() {
       FromHtmlOptions::default(),
     )
     .expect("parse"),
-    create_measure_viewport(),
+    create_test_viewport(),
   );
 
   assert_close(content_box.height, border_box.height);
@@ -419,10 +375,10 @@ fn test_measure_flow_root_establishes_a_block_formatting_context() {
     .expect("parse")
   };
 
-  let block_margin = measure(margin_container("block"), create_measure_viewport());
-  let flow_root_margin = measure(margin_container("flow-root"), create_measure_viewport());
-  let block_float = measure(float_container("block"), create_measure_viewport());
-  let flow_root_float = measure(float_container("flow-root"), create_measure_viewport());
+  let block_margin = measure(margin_container("block"), create_test_viewport());
+  let flow_root_margin = measure(margin_container("flow-root"), create_test_viewport());
+  let block_float = measure(float_container("block"), create_test_viewport());
+  let flow_root_float = measure(float_container("flow-root"), create_test_viewport());
 
   assert_close(block_margin.children[0].height, 20.0);
   assert_close(flow_root_margin.children[0].height, 60.0);
@@ -444,10 +400,10 @@ fn test_measure_contain_establishes_an_independent_formatting_context() {
     .expect("parse")
   };
 
-  let none = measure(container("none"), create_measure_viewport());
-  let layout = measure(container("layout"), create_measure_viewport());
-  let paint = measure(container("paint"), create_measure_viewport());
-  let size_only = measure(container("size"), create_measure_viewport());
+  let none = measure(container("none"), create_test_viewport());
+  let layout = measure(container("layout"), create_test_viewport());
+  let paint = measure(container("paint"), create_test_viewport());
+  let size_only = measure(container("size"), create_test_viewport());
 
   assert_close(none.children[0].height, 0.0);
   assert_close(layout.children[0].height, 30.0);
@@ -470,11 +426,11 @@ fn test_measure_flex_wrap_balance_evens_out_the_lines() {
     .expect("parse")
   };
 
-  let wrap = measure(container("wrap"), create_measure_viewport());
-  let balance = measure(container("wrap balance"), create_measure_viewport());
+  let wrap = measure(container("wrap"), create_test_viewport());
+  let balance = measure(container("wrap balance"), create_test_viewport());
   let three_lines = measure(
     container("wrap balance; flex-line-count:3"),
-    create_measure_viewport(),
+    create_test_viewport(),
   );
 
   assert_close(wrap.height, 40.0);
@@ -498,8 +454,7 @@ fn test_measure_sizing_keywords_size_from_the_content() {
     )
     .expect("parse")
   };
-  let measured =
-    |width: &str| measure(box_with(width), create_measure_viewport()).children[0].width;
+  let measured = |width: &str| measure(box_with(width), create_test_viewport()).children[0].width;
 
   let min_content = measured("min-content");
   let max_content = measured("max-content");
@@ -517,7 +472,7 @@ fn test_measure_sizing_keywords_size_from_the_content() {
           FromHtmlOptions::default(),
         )
         .expect("parse"),
-        create_measure_viewport(),
+        create_test_viewport(),
       )
       .children[0]
         .width
@@ -548,8 +503,8 @@ fn test_measure_flex_basis_content_ignores_the_width() {
     .expect("parse")
   };
 
-  let from_width = measure(item("auto"), create_measure_viewport()).children[0].width;
-  let from_content = measure(item("content"), create_measure_viewport()).children[0].width;
+  let from_width = measure(item("auto"), create_test_viewport()).children[0].width;
+  let from_content = measure(item("content"), create_test_viewport()).children[0].width;
 
   assert_close(from_width, 40.0);
   assert!(
@@ -569,8 +524,8 @@ fn test_measure_reports_runs_for_a_bare_text_node() {
     )
     .expect("parse")
   };
-  let bare = measure(html("word"), create_measure_viewport());
-  let wrapped = measure(html("<span>word</span>"), create_measure_viewport());
+  let bare = measure(html("word"), create_test_viewport());
+  let wrapped = measure(html("<span>word</span>"), create_test_viewport());
 
   let bare_runs = measured_text_runs(&bare);
   let wrapped_runs = measured_text_runs(&wrapped);
@@ -590,7 +545,7 @@ fn test_measure_inline_block_baseline_follows_its_last_line() {
       FromHtmlOptions::default(),
     )
     .expect("parse"),
-    create_measure_viewport(),
+    create_test_viewport(),
   );
 
   let run = &measured_text_runs(&out)[0];
@@ -610,19 +565,10 @@ fn test_measure_skips_a_hidden_text_node() {
       FromHtmlOptions::default(),
     )
     .expect("parse"),
-    create_measure_viewport(),
+    create_test_viewport(),
   );
 
-  fn runs(node: &MeasuredNode) -> Vec<&str> {
-    node
-      .runs
-      .iter()
-      .map(|run| run.text.as_str())
-      .chain(node.children.iter().flat_map(runs))
-      .collect()
-  }
-
-  assert_eq!(runs(&out), ["shown"]);
+  assert_eq!(run_texts(&out), ["shown"]);
 }
 
 /// Generated block content turns a text node into a box container, but paint
@@ -631,7 +577,7 @@ fn test_measure_skips_a_hidden_text_node() {
 fn test_measure_keeps_authored_text_beside_generated_block_content() {
   let out = takumi::measure(
     RenderOptions::builder()
-      .viewport(create_measure_viewport())
+      .viewport(create_test_viewport())
       .node(
         Node::from_html(r#"<div><p>word</p></div>"#, FromHtmlOptions::default()).expect("parse"),
       )
@@ -644,16 +590,7 @@ fn test_measure_keeps_authored_text_beside_generated_block_content() {
   )
   .unwrap();
 
-  fn runs(node: &MeasuredNode) -> Vec<&str> {
-    node
-      .runs
-      .iter()
-      .map(|run| run.text.as_str())
-      .chain(node.children.iter().flat_map(runs))
-      .collect()
-  }
-
-  assert_eq!(runs(&out), ["word", "!"]);
+  assert_eq!(run_texts(&out), ["word", "!"]);
 }
 
 #[test]
@@ -672,7 +609,7 @@ fn test_measure_text_fit_per_line_shrink_scales_run_geometry() {
 
   let no_fit = measure(
     Node::text(text.clone()).with_style(base_style.clone()),
-    create_measure_viewport(),
+    create_test_viewport(),
   );
   let fit = measure(
     Node::text(text).with_style(
@@ -683,7 +620,7 @@ fn test_measure_text_fit_per_line_shrink_scales_run_geometry() {
           .build(),
       )),
     ),
-    create_measure_viewport(),
+    create_test_viewport(),
   );
 
   let no_fit_runs = measured_text_runs(&no_fit);
@@ -709,7 +646,7 @@ fn test_measure_text_fit_per_line_skips_forced_break_lines() {
 
   let no_fit = measure(
     Node::text(text.clone()).with_style(base_style.clone()),
-    create_measure_viewport(),
+    create_test_viewport(),
   );
   let per_line = measure(
     Node::text(text.clone()).with_style(
@@ -721,7 +658,7 @@ fn test_measure_text_fit_per_line_skips_forced_break_lines() {
           .build(),
       )),
     ),
-    create_measure_viewport(),
+    create_test_viewport(),
   );
   let per_line_all = measure(
     Node::text(text).with_style(
@@ -733,7 +670,7 @@ fn test_measure_text_fit_per_line_skips_forced_break_lines() {
           .build(),
       )),
     ),
-    create_measure_viewport(),
+    create_test_viewport(),
   );
 
   let no_fit_runs = measured_text_runs(&no_fit);
@@ -767,12 +704,12 @@ fn measure_text_fit_line_height(line_height: LineHeight) -> (MeasuredNode, Measu
 
   let no_fit = measure(
     Node::text(text.clone()).with_style(base_style.clone()),
-    create_measure_viewport(),
+    create_test_viewport(),
   );
   let fit = measure(
     Node::text(text)
       .with_style(base_style.with(StyleDeclaration::text_fit(grow_per_line_all_text_fit()))),
-    create_measure_viewport(),
+    create_test_viewport(),
   );
 
   (no_fit, fit)
@@ -819,7 +756,7 @@ fn test_measure_text_fit_grow_preserves_percentage_line_height() {
 
 #[test]
 fn test_measure_text_fit_center_alignment_keeps_scaled_text_centered() {
-  let viewport = create_measure_viewport();
+  let viewport = create_test_viewport();
   let text = "Takumi 1.2 now support the latest.".to_string();
   let base = Style::default()
     .with(StyleDeclaration::display(Display::Block))
@@ -882,8 +819,8 @@ fn test_measure_text_fit_is_disabled_by_floats() {
     .with_style(style)
   };
 
-  let no_fit = measure(node(base_style), create_measure_viewport());
-  let fit = measure(node(fit_style), create_measure_viewport());
+  let no_fit = measure(node(base_style), create_test_viewport());
+  let fit = measure(node(fit_style), create_test_viewport());
 
   assert_measured_node_same(&fit, &no_fit);
 }
@@ -919,8 +856,8 @@ fn test_measure_text_fit_scales_text_around_inline_atomic_content() {
     .with_style(style)
   };
 
-  let no_fit = measure(node(base_style), create_measure_viewport());
-  let fit = measure(node(fit_style), create_measure_viewport());
+  let no_fit = measure(node(base_style), create_test_viewport());
+  let fit = measure(node(fit_style), create_test_viewport());
 
   let no_fit_runs = measured_text_runs(&no_fit);
   let fit_runs = measured_text_runs(&fit);
@@ -966,7 +903,7 @@ fn test_measure_text_fit_applies_with_spacing_adjustments() {
   for style in cases {
     let no_fit = measure(
       Node::text(text.clone()).with_style(style.clone()),
-      create_measure_viewport(),
+      create_test_viewport(),
     );
     let fit = measure(
       Node::text(text.clone()).with_style(
@@ -978,7 +915,7 @@ fn test_measure_text_fit_applies_with_spacing_adjustments() {
             .build(),
         )),
       ),
-      create_measure_viewport(),
+      create_test_viewport(),
     );
 
     let no_fit_runs = measured_text_runs(&no_fit);
@@ -1001,7 +938,7 @@ fn test_measure_text_fit_shrink_applies_with_letter_spacing() {
 
   let no_fit = measure(
     Node::text(text.clone()).with_style(base_style.clone()),
-    create_measure_viewport(),
+    create_test_viewport(),
   );
   let fit = measure(
     Node::text(text).with_style(
@@ -1013,7 +950,7 @@ fn test_measure_text_fit_shrink_applies_with_letter_spacing() {
           .build(),
       )),
     ),
-    create_measure_viewport(),
+    create_test_viewport(),
   );
 
   let no_fit_runs = measured_text_runs(&no_fit);
@@ -1047,7 +984,7 @@ fn test_measure_left_float_offsets_text_runs_until_float_bottom() {
       .with(StyleDeclaration::line_height(LineHeight::Unitless(1.2))),
   );
 
-  let result = measure(node, create_measure_viewport());
+  let result = measure(node, create_test_viewport());
   let float_box = result
     .children
     .iter()
@@ -1107,7 +1044,7 @@ fn test_measure_floated_inline_block_container_is_not_dropped() {
       .with(StyleDeclaration::line_height(LineHeight::Unitless(1.2))),
   );
 
-  let result = measure(node, create_measure_viewport());
+  let result = measure(node, create_test_viewport());
   let float_box = result
     .children
     .iter()
@@ -1154,7 +1091,7 @@ fn test_measure_clear_left_moves_following_float_below_previous_left_float() {
       .with(StyleDeclaration::line_height(LineHeight::Unitless(1.2))),
   );
 
-  let result = measure(node, create_measure_viewport());
+  let result = measure(node, create_test_viewport());
   let first_float = result
     .children
     .iter()
@@ -1215,7 +1152,7 @@ fn test_measure_line_box_reflows_below_float_that_intersects_tall_line() {
       .with(StyleDeclaration::line_height(LineHeight::Unitless(3.0))),
   );
 
-  let result = measure(node, create_measure_viewport());
+  let result = measure(node, create_test_viewport());
   let second_float = result
     .children
     .iter()
@@ -1247,7 +1184,7 @@ fn test_measure_text_indent_first_line_only() {
       .with(StyleDeclaration::text_indent(TextIndent::new(Px(24.0)))),
   );
 
-  let result = measure(node, create_measure_viewport());
+  let result = measure(node, create_test_viewport());
   let runs = measured_text_runs(&result);
 
   assert_eq!(runs.len(), 2);
@@ -1270,7 +1207,7 @@ fn test_measure_text_indent_each_line() {
       )),
   );
 
-  let result = measure(node, create_measure_viewport());
+  let result = measure(node, create_test_viewport());
   let runs = measured_text_runs(&result);
 
   assert_eq!(runs.len(), 3);
@@ -1312,7 +1249,7 @@ fn test_measure_inline_layout_preserves_text_span_boundaries() {
       .with(StyleDeclaration::display(Display::Block)),
   );
 
-  let result = measure(node, create_measure_viewport());
+  let result = measure(node, create_test_viewport());
 
   assert_eq!(
     result
@@ -1352,7 +1289,7 @@ fn test_measure_inline_layout_preserves_space_only_spans() {
       .with(StyleDeclaration::display(Display::Block)),
   );
 
-  let result = measure(node, create_measure_viewport());
+  let result = measure(node, create_test_viewport());
 
   assert_eq!(
     result
@@ -1429,7 +1366,7 @@ fn test_measure_inline_atomic_containers_fixture() {
       .with_white_space(WhiteSpace::pre()),
   );
 
-  let result = measure(node, create_measure_viewport());
+  let result = measure(node, create_test_viewport());
   assert_eq!(result.children.len(), 1);
 
   let inline_container = &result.children[0];
@@ -1461,7 +1398,7 @@ fn test_measure_auto_sized_replaced_element_keeps_its_natural_size() {
     r#"<div style="display:block;width:600px"><img style="display:inline" src="{png}"></div>"#
   );
   let node = Node::from_html(&html, FromHtmlOptions::default()).expect("parse");
-  let measured = measure(node, create_measure_viewport());
+  let measured = measure(node, create_test_viewport());
   let image = &measured.children[0];
 
   assert_close(image.width, 200.0);
@@ -1484,7 +1421,7 @@ fn test_measure_auto_sized_replaced_element_without_a_natural_size_fills_its_con
         .with(StyleDeclaration::width(Px(600.0))),
     );
 
-    let measured = measure(node, create_measure_viewport());
+    let measured = measure(node, create_test_viewport());
     let image = &measured.children[0];
 
     assert_close(image.width, 600.0);
@@ -1501,7 +1438,7 @@ fn test_measure_text_node_centers_glyphs_with_explicit_line_height() {
       .with(StyleDeclaration::line_height(LineHeight::Length(Px(40.0)))),
   );
 
-  let result = measure(node, create_measure_viewport());
+  let result = measure(node, create_test_viewport());
   assert_eq!(result.children.len(), 1);
 
   let anonymous_item = &result.children[0];
@@ -1527,7 +1464,7 @@ fn test_measure_text_node_respects_compact_line_height() {
       .with(StyleDeclaration::line_height(LineHeight::Unitless(0.5))),
   );
 
-  let result = measure(node, create_measure_viewport());
+  let result = measure(node, create_test_viewport());
   assert_eq!(result.children.len(), 1);
 
   let anonymous_item = &result.children[0];
@@ -1564,7 +1501,7 @@ fn test_measure_inline_layout_keeps_compact_text_line_height_with_small_inline_b
       .with(StyleDeclaration::line_height(LineHeight::Unitless(0.5))),
   );
 
-  let result = measure(node, create_measure_viewport());
+  let result = measure(node, create_test_viewport());
   assert_eq!(result.height, 14.0);
   assert_eq!(result.children.len(), 1);
 
@@ -1598,7 +1535,7 @@ fn test_measure_inline_image_uses_replaced_baseline_fallback() {
       .with(StyleDeclaration::line_height(LineHeight::Unitless(1.0))),
   );
 
-  let result = measure(node, create_measure_viewport());
+  let result = measure(node, create_test_viewport());
   assert_eq!(result.children.len(), 1);
 
   let inline_image = &result.children[0];
@@ -1628,8 +1565,8 @@ fn test_measure_inline_image_respects_box_sizing_with_border() {
       .with_style(Style::default().with(StyleDeclaration::display(Display::Block)))
   };
 
-  let content_box = measure(build(BoxSizing::ContentBox), create_measure_viewport());
-  let border_box = measure(build(BoxSizing::BorderBox), create_measure_viewport());
+  let content_box = measure(build(BoxSizing::ContentBox), create_test_viewport());
+  let border_box = measure(build(BoxSizing::BorderBox), create_test_viewport());
 
   assert_eq!(content_box.children.len(), 1);
   assert_eq!(border_box.children.len(), 1);
@@ -1654,7 +1591,7 @@ fn test_measure_inline_image_border_box_single_axis_preserves_aspect_ratio() {
   )])
   .with_style(Style::default().with(StyleDeclaration::display(Display::Block)));
 
-  let result = measure(node, create_measure_viewport());
+  let result = measure(node, create_test_viewport());
   assert_eq!(result.children.len(), 1);
 
   let inline_image = &result.children[0];
@@ -1673,7 +1610,7 @@ fn test_measure_text_node_keeps_first_line_when_height_is_smaller_than_line_heig
       .with(StyleDeclaration::line_height(Px(30.0).into())),
   );
 
-  let result = measure(node, create_measure_viewport());
+  let result = measure(node, create_test_viewport());
   let runs = measured_text_runs(&result);
 
   assert_eq!(runs.len(), 1);
@@ -1720,7 +1657,7 @@ fn test_measure_text_node_rem_font_size_matches_px_when_dpr_is_below_one() {
 
 #[test]
 fn test_measure_lh_resolves_against_explicit_line_height() {
-  let viewport = create_measure_viewport();
+  let viewport = create_test_viewport();
 
   let result = measure(
     Node::container([Node::container([]).with_style(
@@ -1744,7 +1681,7 @@ fn test_measure_lh_resolves_against_explicit_line_height() {
 #[test]
 fn test_measure_rlh_resolves_against_the_document_root_line_height() {
   fn measure_inner_height(root: Node) -> f32 {
-    let result = measure(root, create_measure_viewport());
+    let result = measure(root, create_test_viewport());
 
     assert_eq!(result.children.len(), 1);
     result.children[0].height
@@ -1775,7 +1712,7 @@ fn test_measure_rem_resolves_against_the_document_root_font_size() {
   // A tree built in code is content rather than a document, so `rem` follows the
   // viewport; a tree parsed from a document is rooted at a real `<html>`.
   fn measure_inner_width(root: Node) -> f32 {
-    let result = measure(root, create_measure_viewport());
+    let result = measure(root, create_test_viewport());
 
     assert_eq!(result.children.len(), 1);
     result.children[0].width
@@ -1868,15 +1805,7 @@ fn test_measure_svg_attr_size_in_absolute_flex_container() {
       .with(StyleDeclaration::height(Percentage(100.0))),
   );
 
-  let result = takumi::measure(
-    RenderOptions::builder()
-      .viewport(create_measure_viewport())
-      .node(node)
-      .fonts(&CONTEXT)
-      .images(TEST_IMAGES.clone())
-      .build(),
-  )
-  .unwrap();
+  let result = measure(node, create_test_viewport());
 
   assert_eq!(result.children.len(), 1);
 
@@ -1921,15 +1850,7 @@ fn test_measure_svg_attr_size_in_absolute_flex_container_with_parent_padding() {
       .with_padding(Sides([Px(60.0); 4])),
   );
 
-  let result = takumi::measure(
-    RenderOptions::builder()
-      .viewport(create_measure_viewport())
-      .node(node)
-      .fonts(&CONTEXT)
-      .images(TEST_IMAGES.clone())
-      .build(),
-  )
-  .unwrap();
+  let result = measure(node, create_test_viewport());
 
   assert_eq!(result.children.len(), 1);
 
@@ -1966,15 +1887,7 @@ fn test_measure_svg_with_width_only_preserves_intrinsic_ratio() {
       .with(StyleDeclaration::flex_direction(FlexDirection::Column)),
   );
 
-  let result = takumi::measure(
-    RenderOptions::builder()
-      .viewport(create_measure_viewport())
-      .node(node)
-      .fonts(&CONTEXT)
-      .images(TEST_IMAGES.clone())
-      .build(),
-  )
-  .unwrap();
+  let result = measure(node, create_test_viewport());
 
   assert_eq!(result.children.len(), 1);
   let image = &result.children[0];
@@ -2035,15 +1948,7 @@ fn test_measure_img_svg_attribute_sizing_cases() {
         .with(StyleDeclaration::flex_direction(FlexDirection::Column)),
     );
 
-    let result = takumi::measure(
-      RenderOptions::builder()
-        .viewport(create_measure_viewport())
-        .node(node)
-        .fonts(&CONTEXT)
-        .images(TEST_IMAGES.clone())
-        .build(),
-    )
-    .unwrap();
+    let result = measure(node, create_test_viewport());
 
     assert_eq!(result.children.len(), 1);
     let image = &result.children[0];
@@ -2070,8 +1975,8 @@ fn test_grid_container_drops_whitespace_only_text_children() {
 
   let without_whitespace = Node::container([row(), row()]).with_style(grid_style());
 
-  let with_result = measure(with_whitespace, create_measure_viewport());
-  let without_result = measure(without_whitespace, create_measure_viewport());
+  let with_result = measure(with_whitespace, create_test_viewport());
+  let without_result = measure(without_whitespace, create_test_viewport());
 
   assert_eq!(with_result.children.len(), 2);
   assert_eq!(without_result.children.len(), 2);
@@ -2096,8 +2001,8 @@ fn test_flex_container_drops_whitespace_only_text_children() {
 
   let without_whitespace = Node::container([row(), row()]).with_style(flex_style());
 
-  let with_result = measure(with_whitespace, create_measure_viewport());
-  let without_result = measure(without_whitespace, create_measure_viewport());
+  let with_result = measure(with_whitespace, create_test_viewport());
+  let without_result = measure(without_whitespace, create_test_viewport());
 
   assert_eq!(with_result.children.len(), 2);
   assert_eq!(without_result.children.len(), 2);
@@ -2141,8 +2046,8 @@ fn test_block_container_drops_whitespace_between_absolute_and_in_flow_sibling() 
   let without_whitespace =
     Node::container([absolute_child(), in_flow_child()]).with_style(block_style());
 
-  let with_result = measure(with_whitespace, create_measure_viewport());
-  let without_result = measure(without_whitespace, create_measure_viewport());
+  let with_result = measure(with_whitespace, create_test_viewport());
+  let without_result = measure(without_whitespace, create_test_viewport());
 
   assert_eq!(with_result, without_result);
 }
@@ -2179,8 +2084,8 @@ fn test_block_container_drops_whitespace_between_absolute_only_siblings() {
   let without_whitespace =
     Node::container([absolute_child(), absolute_child()]).with_style(block_style());
 
-  let with_result = measure(with_whitespace, create_measure_viewport());
-  let without_result = measure(without_whitespace, create_measure_viewport());
+  let with_result = measure(with_whitespace, create_test_viewport());
+  let without_result = measure(without_whitespace, create_test_viewport());
 
   assert_eq!(with_result.children.len(), 2);
   assert!(with_result.runs.is_empty());
@@ -2211,7 +2116,7 @@ fn test_block_container_preserves_pre_whitespace_next_to_absolute_sibling() {
       .with(StyleDeclaration::width(Px(200.0))),
   );
 
-  let result = measure(parent, create_measure_viewport());
+  let result = measure(parent, create_test_viewport());
 
   assert!(
     result
@@ -2234,7 +2139,7 @@ fn test_block_container_drops_whitespace_only_child() {
       .with(StyleDeclaration::width(Px(200.0))),
   );
 
-  let result = measure(parent, create_measure_viewport());
+  let result = measure(parent, create_test_viewport());
 
   assert!(result.runs.is_empty());
   assert_close(result.height, 0.0);
@@ -2272,8 +2177,8 @@ fn test_block_container_preserves_whitespace_between_inline_siblings() {
   let without_space =
     Node::container([inline_span("a"), inline_span("b"), block_child()]).with_style(block_style());
 
-  let with_result = measure(with_space, create_measure_viewport());
-  let without_result = measure(without_space, create_measure_viewport());
+  let with_result = measure(with_space, create_test_viewport());
+  let without_result = measure(without_space, create_test_viewport());
 
   assert!(
     with_result.height > without_result.height
@@ -2300,7 +2205,7 @@ fn test_block_container_keeps_absolute_child_next_to_text() {
       .with(StyleDeclaration::width(Px(200.0))),
   );
 
-  let result = measure(parent, create_measure_viewport());
+  let result = measure(parent, create_test_viewport());
 
   assert!(
     result
@@ -2337,8 +2242,8 @@ fn test_padded_flex_text_keeps_one_line() {
     ])
     .with_style(Style::default().with(StyleDeclaration::display(Display::Block)))
   };
-  let wrapped = measure(badge(false), create_measure_viewport());
-  let nowrap = measure(badge(true), create_measure_viewport());
+  let wrapped = measure(badge(false), create_test_viewport());
+  let nowrap = measure(badge(true), create_test_viewport());
 
   assert_eq!(wrapped.children[0].height, nowrap.children[0].height);
   assert_eq!(wrapped.children[0].width, nowrap.children[0].width);
@@ -2360,11 +2265,11 @@ fn test_flex_padding_does_not_narrow_anonymous_text() {
     )
     .expect("parse")
   };
-  let unpadded = measure(container(None, 0.0), create_measure_viewport());
+  let unpadded = measure(container(None, 0.0), create_test_viewport());
   let text = &unpadded.children[0];
   let padded = measure(
     container(Some(text.width + 48.0), 24.0),
-    create_measure_viewport(),
+    create_test_viewport(),
   );
 
   assert_eq!(padded.children[0].height, text.height);
@@ -2382,8 +2287,8 @@ fn test_flow_root_wraps_inline_text_like_block() {
     )
     .expect("parse")
   };
-  let flow_root = measure(container("flow-root"), create_measure_viewport());
-  let block = measure(container("block"), create_measure_viewport());
+  let flow_root = measure(container("flow-root"), create_test_viewport());
+  let block = measure(container("block"), create_test_viewport());
   let line_height = flow_root.runs[0].height;
 
   assert_eq!(flow_root.height, block.height);
@@ -2406,7 +2311,7 @@ fn test_table_auto_columns_share_free_width_by_max_content() {
     FromHtmlOptions::default(),
   )
   .expect("parse");
-  let out = measure(node, create_measure_viewport());
+  let out = measure(node, create_test_viewport());
   let cells = &out.children[0].children;
   let max_content = |cell: &MeasuredNode| cell.runs[0].width + 2.0;
   let (name, description) = (max_content(&cells[3]), max_content(&cells[4]));
@@ -2437,7 +2342,7 @@ fn test_table_keyword_cell_width_leaves_column_auto() {
     )
     .expect("parse");
 
-    measure(node, create_measure_viewport()).children[0].children[3..]
+    measure(node, create_test_viewport()).children[0].children[3..]
       .iter()
       .map(|cell| cell.width)
       .collect::<Vec<_>>()
@@ -2463,7 +2368,7 @@ fn test_table_fixed_layout_keeps_tracks_with_keyword_cell_width() {
       FromHtmlOptions::default(),
     )
     .expect("parse");
-    let table = &measure(node, create_measure_viewport()).children[0];
+    let table = &measure(node, create_test_viewport()).children[0];
 
     (
       table.width,
@@ -2503,8 +2408,8 @@ fn test_inline_span_padding_reserves_advance() {
         .with(StyleDeclaration::font_size(Px(20.0).into())),
     )
   };
-  let plain = measure(paragraph(0.0), create_measure_viewport());
-  let padded = measure(paragraph(8.0), create_measure_viewport());
+  let plain = measure(paragraph(0.0), create_test_viewport());
+  let padded = measure(paragraph(8.0), create_test_viewport());
 
   let line_width = |result: &MeasuredNode| {
     let runs = measured_text_runs(result);
@@ -2529,7 +2434,7 @@ fn test_measure_flex_baseline_aligns_to_the_first_line() {
         FromHtmlOptions::default(),
       )
       .expect("parse"),
-      create_measure_viewport(),
+      create_test_viewport(),
     )
   };
   let label_drop = |out: &MeasuredNode| {
@@ -2553,7 +2458,7 @@ fn test_measure_flex_baseline_aligns_to_the_first_line() {
       FromHtmlOptions::default(),
     )
     .expect("parse"),
-    create_measure_viewport(),
+    create_test_viewport(),
   );
 
   assert_within(
@@ -2592,7 +2497,7 @@ fn test_measure_replaced_element_reads_its_insets_the_way_box_sizing_states_them
         r#"<div style="display:block;width:600px"><img style="display:{display};box-sizing:{sizing};{width}padding:20px;border:5px solid #000" src="{png}"></div>"#
       );
       let node = Node::from_html(&html, FromHtmlOptions::default()).expect("parse");
-      let measured = measure(node, create_measure_viewport());
+      let measured = measure(node, create_test_viewport());
       let image = &measured.children[0];
 
       assert_within(image.width, expected.0, 0.5);
@@ -2629,7 +2534,7 @@ fn test_measure_replaced_element_without_a_ratio_keeps_its_axes_independent() {
         .with(StyleDeclaration::width(Px(600.0))),
     );
 
-    let measured = measure(node, create_measure_viewport());
+    let measured = measure(node, create_test_viewport());
     let image = &measured.children[0];
 
     assert_close(image.width, expected.0);

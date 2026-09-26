@@ -99,26 +99,7 @@ describe("ImageResponse", () => {
     expect(response.arrayBuffer()).resolves.toBeDefined();
   });
 
-  test("should expose rendering errors through ready promise", async () => {
-    const error = new Error("render failed");
-    const renderer = {
-      render: mock(async () => {
-        throw error;
-      }),
-    } as any;
-
-    const response = new ImageResponse(<div>Hello</div>, {
-      renderer,
-      onError: mock(),
-    });
-    const ready = response.ready.catch((caughtError) => caughtError);
-    const bodyResult = response.arrayBuffer().catch((caughtError) => caughtError);
-
-    expect(await ready).toBe(error);
-    expect(await bodyResult).toBe(error);
-  });
-
-  test("should call onError when rendering fails", async () => {
+  test("should expose rendering errors through ready promise and call onError", async () => {
     const error = new Error("primary render failed");
     const renderer = {
       render: mock(async () => {

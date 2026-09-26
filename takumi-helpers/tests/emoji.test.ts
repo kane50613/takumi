@@ -2,6 +2,21 @@ import { describe, expect, it } from "bun:test";
 import { extractEmojis } from "../src/emoji";
 import { container, image, text } from "../src/helpers";
 
+const emojiImage = (src: string) =>
+  image({
+    src,
+    style: {
+      display: "inline-block",
+      width: "1em",
+      height: "1em",
+      margin: "0 0.05em 0 0.1em",
+      verticalAlign: "-0.1em",
+    },
+  });
+
+const twemojiImage = (code: string) =>
+  emojiImage(`https://cdn.jsdelivr.net/gh/jdecked/twemoji@17.0.2/assets/svg/${code}.svg`);
+
 describe("emoji", () => {
   describe("extractEmojis", () => {
     it("should not modify text without emoji", () => {
@@ -17,19 +32,7 @@ describe("emoji", () => {
 
       expect(result).toEqual(
         container({
-          children: [
-            text("Hello "),
-            image({
-              src: "https://cdn.jsdelivr.net/gh/jdecked/twemoji@17.0.2/assets/svg/1f600.svg",
-              style: {
-                display: "inline-block",
-                width: "1em",
-                height: "1em",
-                margin: "0 0.05em 0 0.1em",
-                verticalAlign: "-0.1em",
-              },
-            }),
-          ],
+          children: [text("Hello "), twemojiImage("1f600")],
         }),
       );
     });
@@ -41,29 +44,7 @@ describe("emoji", () => {
 
       expect(result).toEqual(
         container({
-          children: [
-            image({
-              src: "https://cdn.jsdelivr.net/gh/jdecked/twemoji@17.0.2/assets/svg/1f600.svg",
-              style: {
-                display: "inline-block",
-                width: "1em",
-                height: "1em",
-                margin: "0 0.05em 0 0.1em",
-                verticalAlign: "-0.1em",
-              },
-            }),
-            text(" transformation "),
-            image({
-              src: "https://cdn.jsdelivr.net/gh/jdecked/twemoji@17.0.2/assets/svg/1f680.svg",
-              style: {
-                display: "inline-block",
-                width: "1em",
-                height: "1em",
-                margin: "0 0.05em 0 0.1em",
-                verticalAlign: "-0.1em",
-              },
-            }),
-          ],
+          children: [twemojiImage("1f600"), text(" transformation "), twemojiImage("1f680")],
         }),
       );
     });
@@ -76,18 +57,7 @@ describe("emoji", () => {
 
       expect(result).toEqual(
         container({
-          children: [
-            image({
-              src: "https://cdn.jsdelivr.net/gh/jdecked/twemoji@17.0.2/assets/svg/1f468-200d-1f469-200d-1f467-200d-1f466.svg",
-              style: {
-                display: "inline-block",
-                width: "1em",
-                height: "1em",
-                margin: "0 0.05em 0 0.1em",
-                verticalAlign: "-0.1em",
-              },
-            }),
-          ],
+          children: [twemojiImage("1f468-200d-1f469-200d-1f467-200d-1f466")],
         }),
       );
     });
@@ -99,19 +69,7 @@ describe("emoji", () => {
 
       expect(result).toEqual(
         container({
-          children: [
-            text("US flag "),
-            image({
-              src: "https://cdn.jsdelivr.net/gh/jdecked/twemoji@17.0.2/assets/svg/1f1fa-1f1f8.svg",
-              style: {
-                display: "inline-block",
-                width: "1em",
-                height: "1em",
-                margin: "0 0.05em 0 0.1em",
-                verticalAlign: "-0.1em",
-              },
-            }),
-          ],
+          children: [text("US flag "), twemojiImage("1f1fa-1f1f8")],
         }),
       );
     });
@@ -123,20 +81,7 @@ describe("emoji", () => {
 
       expect(result).toEqual(
         container({
-          children: [
-            text("Press "),
-            image({
-              src: "https://cdn.jsdelivr.net/gh/jdecked/twemoji@17.0.2/assets/svg/31-20e3.svg",
-              style: {
-                display: "inline-block",
-                width: "1em",
-                height: "1em",
-                margin: "0 0.05em 0 0.1em",
-                verticalAlign: "-0.1em",
-              },
-            }),
-            text(" now"),
-          ],
+          children: [text("Press "), twemojiImage("31-20e3"), text(" now")],
         }),
       );
     });
@@ -178,18 +123,7 @@ describe("emoji", () => {
         const result = extractEmojis(node, config.type);
         expect(result).toEqual(
           container({
-            children: [
-              image({
-                src: config.expectedSrc,
-                style: {
-                  display: "inline-block",
-                  width: "1em",
-                  height: "1em",
-                  margin: "0 0.05em 0 0.1em",
-                  verticalAlign: "-0.1em",
-                },
-              }),
-            ],
+            children: [emojiImage(config.expectedSrc)],
           }),
         );
       }
@@ -217,18 +151,7 @@ describe("emoji", () => {
 
         expect(result).toEqual(
           container({
-            children: [
-              image({
-                src: `https://cdn.jsdelivr.net/gh/jdecked/twemoji@17.0.2/assets/svg/${code}.svg`,
-                style: {
-                  display: "inline-block",
-                  width: "1em",
-                  height: "1em",
-                  margin: "0 0.05em 0 0.1em",
-                  verticalAlign: "-0.1em",
-                },
-              }),
-            ],
+            children: [twemojiImage(code)],
           }),
         );
       }
@@ -249,18 +172,7 @@ describe("emoji", () => {
           id: "my-emoji",
           className: "emoji-class",
           style: { color: "red" },
-          children: [
-            image({
-              src: "https://cdn.jsdelivr.net/gh/jdecked/twemoji@17.0.2/assets/svg/1f600.svg",
-              style: {
-                display: "inline-block",
-                width: "1em",
-                height: "1em",
-                margin: "0 0.05em 0 0.1em",
-                verticalAlign: "-0.1em",
-              },
-            }),
-          ],
+          children: [twemojiImage("1f600")],
         }),
       );
     });
@@ -286,19 +198,7 @@ describe("emoji", () => {
               id: "inner",
               children: [
                 container({
-                  children: [
-                    text("Nested "),
-                    image({
-                      src: "https://cdn.jsdelivr.net/gh/jdecked/twemoji@17.0.2/assets/svg/1f600.svg",
-                      style: {
-                        display: "inline-block",
-                        width: "1em",
-                        height: "1em",
-                        margin: "0 0.05em 0 0.1em",
-                        verticalAlign: "-0.1em",
-                      },
-                    }),
-                  ],
+                  children: [text("Nested "), twemojiImage("1f600")],
                 }),
               ],
             }),

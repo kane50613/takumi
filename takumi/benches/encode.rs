@@ -8,8 +8,8 @@ use takumi::{
 
 mod common;
 
-const W: u32 = 1200;
-const H: u32 = 630;
+const BENCH_WIDTH: u32 = 1200;
+const BENCH_HEIGHT: u32 = 630;
 const IMAGE_PATH: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../assets/images/yeecord.png");
 
 fn bench_encode(c: &mut Criterion) {
@@ -19,7 +19,7 @@ fn bench_encode(c: &mut Criterion) {
       .with_tw("flex w-full h-full bg-white".parse().unwrap());
   let image = render(
     RenderOptions::builder()
-      .viewport(Viewport::new((W, H)))
+      .viewport(Viewport::new((BENCH_WIDTH, BENCH_HEIGHT)))
       .node(node)
       .fonts(&fonts)
       .build(),

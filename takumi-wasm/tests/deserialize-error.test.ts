@@ -1,10 +1,14 @@
 import { afterAll, expect, test } from "bun:test";
-import { container } from "@takumi-rs/helpers";
+import { container, type Declarations } from "@takumi-rs/helpers";
 import { Renderer } from "../bundlers/node";
 
 const renderer = new Renderer();
 
 afterAll(() => renderer.free());
+
+function renderStyle(style: Declarations) {
+  return () => renderer.render(container({ children: [], style }), { width: 100, height: 100 });
+}
 
 function escapeRegex(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -40,20 +44,10 @@ function expectInvalidValue(
 
 test("report deserialize error for justifyContent with wrong type", () => {
   expectInvalidType(
-    () =>
-      renderer.render(
-        container({
-          children: [],
-          style: {
-            // @ts-expect-error: invalid type test
-            justifyContent: 123,
-          },
-        }),
-        {
-          width: 100,
-          height: 100,
-        },
-      ),
+    renderStyle({
+      // @ts-expect-error: invalid type test
+      justifyContent: 123,
+    }),
     "justifyContent",
     "integer `123`",
     "a value of 'normal', 'stretch', 'space-between', 'space-around', 'space-evenly', 'start', 'end', 'flex-start', 'flex-end', 'center', 'safe' or 'unsafe'; also accepts 'initial', 'unset' or 'inherit'.",
@@ -62,19 +56,9 @@ test("report deserialize error for justifyContent with wrong type", () => {
 
 test("report deserialize error for justifyContent with invalid string value", () => {
   expectInvalidValue(
-    () =>
-      renderer.render(
-        container({
-          children: [],
-          style: {
-            justifyContent: "star",
-          },
-        }),
-        {
-          width: 100,
-          height: 100,
-        },
-      ),
+    renderStyle({
+      justifyContent: "star",
+    }),
     "justifyContent",
     "star",
     "star",
@@ -84,20 +68,10 @@ test("report deserialize error for justifyContent with invalid string value", ()
 
 test("report deserialize error for color property with invalid type", () => {
   expectInvalidType(
-    () =>
-      renderer.render(
-        container({
-          children: [],
-          style: {
-            // @ts-expect-error: invalid type test
-            color: 123,
-          },
-        }),
-        {
-          width: 100,
-          height: 100,
-        },
-      ),
+    renderStyle({
+      // @ts-expect-error: invalid type test
+      color: 123,
+    }),
     "color",
     "integer `123`",
     "a value of 'currentColor' or <color>; also accepts 'initial', 'unset' or 'inherit'.",
@@ -106,20 +80,9 @@ test("report deserialize error for color property with invalid type", () => {
 
 test("report deserialize error for color property with invalid string value", () => {
   expectInvalidValue(
-    () =>
-      renderer.render(
-        {
-          type: "container",
-          children: [],
-          style: {
-            color: "notacolor",
-          },
-        },
-        {
-          width: 100,
-          height: 100,
-        },
-      ),
+    renderStyle({
+      color: "notacolor",
+    }),
     "color",
     "notacolor",
     "notacolor",
@@ -129,20 +92,10 @@ test("report deserialize error for color property with invalid string value", ()
 
 test("report deserialize error for width property with invalid type", () => {
   expectInvalidType(
-    () =>
-      renderer.render(
-        container({
-          children: [],
-          style: {
-            // @ts-expect-error: invalid type test
-            width: true,
-          },
-        }),
-        {
-          width: 100,
-          height: 100,
-        },
-      ),
+    renderStyle({
+      // @ts-expect-error: invalid type test
+      width: true,
+    }),
     "width",
     "boolean `true`",
     "a value of <length>, 'min-content', 'max-content', 'fit-content', 'stretch' or <fit-content()>; also accepts 'initial', 'unset' or 'inherit'.",
@@ -151,20 +104,9 @@ test("report deserialize error for width property with invalid type", () => {
 
 test("report deserialize error for width property with invalid string value", () => {
   expectInvalidValue(
-    () =>
-      renderer.render(
-        {
-          type: "container",
-          children: [],
-          style: {
-            width: "invalid",
-          },
-        },
-        {
-          width: 100,
-          height: 100,
-        },
-      ),
+    renderStyle({
+      width: "invalid",
+    }),
     "width",
     "invalid",
     "invalid",
@@ -174,20 +116,10 @@ test("report deserialize error for width property with invalid string value", ()
 
 test("report deserialize error for alignItems property with invalid type", () => {
   expectInvalidType(
-    () =>
-      renderer.render(
-        container({
-          children: [],
-          style: {
-            // @ts-expect-error: invalid type test
-            alignItems: [],
-          },
-        }),
-        {
-          width: 100,
-          height: 100,
-        },
-      ),
+    renderStyle({
+      // @ts-expect-error: invalid type test
+      alignItems: [],
+    }),
     "alignItems",
     "sequence",
     "a value of 'normal', 'baseline', 'stretch', 'start', 'end', 'flex-start', 'flex-end', 'self-start', 'self-end', 'center', 'safe' or 'unsafe'; also accepts 'initial', 'unset' or 'inherit'.",
@@ -196,19 +128,9 @@ test("report deserialize error for alignItems property with invalid type", () =>
 
 test("report deserialize error for alignItems property with invalid string value", () => {
   expectInvalidValue(
-    () =>
-      renderer.render(
-        container({
-          children: [],
-          style: {
-            alignItems: "invalid",
-          },
-        }),
-        {
-          width: 100,
-          height: 100,
-        },
-      ),
+    renderStyle({
+      alignItems: "invalid",
+    }),
     "alignItems",
     "invalid",
     "invalid",
@@ -218,20 +140,10 @@ test("report deserialize error for alignItems property with invalid string value
 
 test("report deserialize error for borderRadius property with invalid type", () => {
   expectInvalidType(
-    () =>
-      renderer.render(
-        container({
-          children: [],
-          style: {
-            // @ts-expect-error: invalid type test
-            borderRadius: true,
-          },
-        }),
-        {
-          width: 100,
-          height: 100,
-        },
-      ),
+    renderStyle({
+      // @ts-expect-error: invalid type test
+      borderRadius: true,
+    }),
     "borderRadius",
     "boolean `true`",
     "1 to 4 length values for width, optionally followed by '/' and 1 to 4 length values for height; also accepts 'initial', 'unset' or 'inherit'.",
@@ -240,20 +152,9 @@ test("report deserialize error for borderRadius property with invalid type", () 
 
 test("report deserialize error for borderRadius property with invalid string value", () => {
   expectInvalidValue(
-    () =>
-      renderer.render(
-        {
-          type: "container",
-          children: [],
-          style: {
-            borderRadius: "invalid",
-          },
-        },
-        {
-          width: 100,
-          height: 100,
-        },
-      ),
+    renderStyle({
+      borderRadius: "invalid",
+    }),
     "borderRadius",
     "invalid",
     "invalid",
@@ -263,20 +164,9 @@ test("report deserialize error for borderRadius property with invalid string val
 
 test("report deserialize error for borderRadius property with invalid slash syntax", () => {
   expectInvalidValue(
-    () =>
-      renderer.render(
-        {
-          type: "container",
-          children: [],
-          style: {
-            borderRadius: "10px / invalid",
-          },
-        },
-        {
-          width: 100,
-          height: 100,
-        },
-      ),
+    renderStyle({
+      borderRadius: "10px / invalid",
+    }),
     "borderRadius",
     "10px / invalid",
     "invalid",
@@ -287,20 +177,10 @@ test("report deserialize error for borderRadius property with invalid slash synt
 
 test("report deserialize error for padding (Sides) with invalid type", () => {
   expectInvalidType(
-    () =>
-      renderer.render(
-        container({
-          children: [],
-          style: {
-            // @ts-expect-error: invalid type test
-            padding: { top: null },
-          },
-        }),
-        {
-          width: 100,
-          height: 100,
-        },
-      ),
+    renderStyle({
+      // @ts-expect-error: invalid type test
+      padding: { top: null },
+    }),
     "padding",
     "map",
     "1 ~ 4 values of <length>; also accepts 'initial', 'unset' or 'inherit'.",
@@ -309,20 +189,9 @@ test("report deserialize error for padding (Sides) with invalid type", () => {
 
 test("report deserialize error for padding (Sides) with invalid string value", () => {
   expectInvalidValue(
-    () =>
-      renderer.render(
-        {
-          type: "container",
-          children: [],
-          style: {
-            padding: "invalid",
-          },
-        },
-        {
-          width: 100,
-          height: 100,
-        },
-      ),
+    renderStyle({
+      padding: "invalid",
+    }),
     "padding",
     "invalid",
     "invalid",
@@ -332,20 +201,10 @@ test("report deserialize error for padding (Sides) with invalid string value", (
 
 test("report deserialize error for gap (SpacePair) with invalid type", () => {
   expectInvalidType(
-    () =>
-      renderer.render(
-        container({
-          children: [],
-          style: {
-            // @ts-expect-error: invalid type test
-            gap: true,
-          },
-        }),
-        {
-          width: 100,
-          height: 100,
-        },
-      ),
+    renderStyle({
+      // @ts-expect-error: invalid type test
+      gap: true,
+    }),
     "gap",
     "boolean `true`",
     "1 ~ 2 values of 'normal' or <length>; also accepts 'initial', 'unset' or 'inherit'.",
@@ -354,20 +213,9 @@ test("report deserialize error for gap (SpacePair) with invalid type", () => {
 
 test("report deserialize error for gap (SpacePair) with invalid string value", () => {
   expectInvalidValue(
-    () =>
-      renderer.render(
-        {
-          type: "container",
-          children: [],
-          style: {
-            gap: "invalid",
-          },
-        },
-        {
-          width: 100,
-          height: 100,
-        },
-      ),
+    renderStyle({
+      gap: "invalid",
+    }),
     "gap",
     "invalid",
     "invalid",
@@ -378,20 +226,10 @@ test("report deserialize error for gap (SpacePair) with invalid string value", (
 // Tests fallback error messages when neither value_description() nor enum_values() is implemented
 test("report deserialize error for textDecorationLine with invalid type", () => {
   expectInvalidType(
-    () =>
-      renderer.render(
-        container({
-          children: [],
-          style: {
-            // @ts-expect-error: invalid type test
-            textDecorationLine: 123,
-          },
-        }),
-        {
-          width: 100,
-          height: 100,
-        },
-      ),
+    renderStyle({
+      // @ts-expect-error: invalid type test
+      textDecorationLine: 123,
+    }),
     "textDecorationLine",
     "integer `123`",
     "a value of 'underline', 'line-through' or 'overline' or 'none'; also accepts 'initial', 'unset' or 'inherit'.",
@@ -400,20 +238,9 @@ test("report deserialize error for textDecorationLine with invalid type", () => 
 
 test("report deserialize error for textDecorationLine with invalid string value", () => {
   expectInvalidValue(
-    () =>
-      renderer.render(
-        {
-          type: "container",
-          children: [],
-          style: {
-            textDecorationLine: "invalid",
-          },
-        },
-        {
-          width: 100,
-          height: 100,
-        },
-      ),
+    renderStyle({
+      textDecorationLine: "invalid",
+    }),
     "textDecorationLine",
     "invalid",
     "invalid",

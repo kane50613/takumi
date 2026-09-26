@@ -8,18 +8,19 @@ const LONG_TEXT: &str = "Typography is the art and technique of arranging type t
    pairs of letters.";
 
 fn load_global() -> Fonts {
-  let mut g = Fonts::default();
+  let mut fonts = Fonts::default();
   let regular: &[u8] = include_bytes!("../../assets/fonts/geist/Geist[wght].woff2");
-  g.register(
-    FontResource::new(regular.to_vec())
-      .override_info(FontOverride {
-        family_name: Some("Geist".into()),
-        ..Default::default()
-      })
-      .generic_family(GenericFamily::SANS_SERIF),
-  )
-  .unwrap();
-  g
+  fonts
+    .register(
+      FontResource::new(regular.to_vec())
+        .override_info(FontOverride {
+          family_name: Some("Geist".into()),
+          ..Default::default()
+        })
+        .generic_family(GenericFamily::SANS_SERIF),
+    )
+    .unwrap();
+  fonts
 }
 
 fn blur_3xl() -> Node {
@@ -63,53 +64,33 @@ fn long_paragraph() -> Node {
   .with_tw("flex w-full h-full p-12 bg-white".parse().unwrap())
 }
 
-fn render_node(g: &Fonts, node: Node, width: u32, height: u32) {
-  let opts = RenderOptions::builder()
+fn render_node(fonts: &Fonts, node: Node, width: u32, height: u32) {
+  let options = RenderOptions::builder()
     .viewport(Viewport::new((width, height)))
     .node(node)
-    .fonts(g)
+    .fonts(fonts)
     .build();
-  black_box(render(opts).unwrap());
+  black_box(render(options).unwrap());
 }
 
 fn main() {
-  let g = load_global();
+  let fonts = load_global();
   let fixture = env::args().nth(1).unwrap_or_else(|| "blur".to_string());
   let iters: usize = env::args()
     .nth(2)
     .and_then(|s| s.parse().ok())
     .unwrap_or(160);
-  match fixture.as_str() {
-    "blur" => {
-      for _ in 0..iters {
-        render_node(&g, blur_3xl(), 512, 512);
-      }
-    }
-    "shadow" => {
-      for _ in 0..iters {
-        render_node(&g, shadow_2xl(), 512, 512);
-      }
-    }
-    "drop_shadow" => {
-      for _ in 0..iters {
-        render_node(&g, drop_shadow_2xl(), 512, 512);
-      }
-    }
-    "shadowed_decorated" => {
-      for _ in 0..iters {
-        render_node(&g, shadowed_decorated(), 1200, 630);
-      }
-    }
-    "clipped_text" => {
-      for _ in 0..iters {
-        render_node(&g, clipped_text_paragraph(), 1200, 630);
-      }
-    }
-    "long_paragraph" => {
-      for _ in 0..iters {
-        render_node(&g, long_paragraph(), 1200, 630);
-      }
-    }
+  let (node, width, height): (fn() -> Node, u32, u32) = match fixture.as_str() {
+    "blur" => (blur_3xl, 512, 512),
+    "shadow" => (shadow_2xl, 512, 512),
+    "drop_shadow" => (drop_shadow_2xl, 512, 512),
+    "shadowed_decorated" => (shadowed_decorated, 1200, 630),
+    "clipped_text" => (clipped_text_paragraph, 1200, 630),
+    "long_paragraph" => (long_paragraph, 1200, 630),
     other => panic!("unknown fixture: {other}"),
+  };
+
+  for _ in 0..iters {
+    render_node(&fonts, node(), width, height);
   }
 }

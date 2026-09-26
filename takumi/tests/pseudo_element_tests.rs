@@ -2,49 +2,8 @@ mod test_utils;
 
 use std::collections::BTreeMap;
 
-use takumi::{
-  measure,
-  prelude::{Length::*, *},
-};
-use test_utils::CONTEXT;
-
-fn viewport() -> Viewport {
-  Viewport::new((1200, 630))
-}
-
-fn measure_with_css(node: Node, css: &str) -> MeasuredNode {
-  let stylesheet = StyleSheet::parse_loosy(css);
-  measure(
-    RenderOptions::builder()
-      .viewport(viewport())
-      .node(node)
-      .stylesheet(stylesheet.into())
-      .fonts(&CONTEXT)
-      .build(),
-  )
-  .unwrap()
-}
-
-fn measured_text_runs(node: &MeasuredNode) -> Vec<String> {
-  let mut out = Vec::new();
-  collect_runs(node, &mut out);
-  out
-}
-
-fn collect_runs(node: &MeasuredNode, out: &mut Vec<String>) {
-  for run in &node.runs {
-    out.push(run.text.clone());
-  }
-  for child in &node.children {
-    collect_runs(child, out);
-  }
-}
-
-fn box_node(class: &str) -> Node {
-  Node::container([])
-    .with_class_name(class)
-    .with_style(Style::default().with(StyleDeclaration::display(Display::Block)))
-}
+use takumi::prelude::{Length::*, *};
+use test_utils::{block, measure_with_css, run_texts};
 
 #[test]
 fn before_string_content_inserts_text_at_start() {
@@ -52,7 +11,7 @@ fn before_string_content_inserts_text_at_start() {
     .with_class_name("greet")
     .with_style(Style::default().with(StyleDeclaration::display(Display::Block)));
   let result = measure_with_css(root, r#".greet::before { content: "hello"; }"#);
-  let text: String = measured_text_runs(&result).concat();
+  let text = run_texts(&result).concat();
   assert!(
     text.starts_with("hello"),
     "expected leading 'hello' in {text:?}"
@@ -65,7 +24,7 @@ fn after_string_content_inserts_text_at_end() {
     .with_class_name("greet")
     .with_style(Style::default().with(StyleDeclaration::display(Display::Block)));
   let result = measure_with_css(root, r#".greet::after { content: "bye"; }"#);
-  let text: String = measured_text_runs(&result).concat();
+  let text = run_texts(&result).concat();
   assert!(text.ends_with("bye"), "expected trailing 'bye' in {text:?}");
 }
 
@@ -81,8 +40,7 @@ fn before_and_after_around_existing_text() {
       .box::after  { content: " ]"; }
     "#,
   );
-  let runs = measured_text_runs(&result);
-  let text: String = runs.concat();
+  let text = run_texts(&result).concat();
   assert!(text.contains("[ "), "expected '[ ' prefix in {text:?}");
   assert!(text.contains("middle"), "expected 'middle' in {text:?}");
   assert!(text.contains(" ]"), "expected ' ]' suffix in {text:?}");
@@ -90,12 +48,12 @@ fn before_and_after_around_existing_text() {
 
 #[test]
 fn content_normal_or_none_creates_no_pseudo_box() {
-  let root = box_node("greet");
+  let root = block("greet");
   let result_none = measure_with_css(root.clone(), r#".greet::before { content: none; }"#);
   let result_normal = measure_with_css(root, r#".greet::before { content: normal; }"#);
 
-  assert!(measured_text_runs(&result_none).is_empty());
-  assert!(measured_text_runs(&result_normal).is_empty());
+  assert!(run_texts(&result_none).is_empty());
+  assert!(run_texts(&result_normal).is_empty());
 }
 
 #[test]
@@ -105,8 +63,8 @@ fn attr_resolves_against_originating_attributes() {
     .with_attributes(BTreeMap::from([("data-label".into(), "alpha".into())]))
     .with_style(Style::default().with(StyleDeclaration::display(Display::Block)));
   let result = measure_with_css(root, r#".badge::before { content: attr(data-label); }"#);
-  let runs = measured_text_runs(&result);
-  assert!(runs.iter().any(|t| t == "alpha"), "runs = {runs:?}");
+  let runs = run_texts(&result);
+  assert!(runs.contains(&"alpha"), "runs = {runs:?}");
 }
 
 #[test]
@@ -116,36 +74,36 @@ fn attr_resolves_id_against_structured_metadata() {
     .with_class_name("badge")
     .with_style(Style::default().with(StyleDeclaration::display(Display::Block)));
   let result = measure_with_css(root, r#".badge::before { content: attr(id); }"#);
-  let runs = measured_text_runs(&result);
-  assert!(runs.iter().any(|t| t == "hero"), "runs = {runs:?}");
+  let runs = run_texts(&result);
+  assert!(runs.contains(&"hero"), "runs = {runs:?}");
 }
 
 #[test]
 fn attr_uses_fallback_when_attribute_is_missing() {
-  let root = box_node("badge");
+  let root = block("badge");
   let result = measure_with_css(
     root,
     r#".badge::before { content: attr(missing, "fallback-text"); }"#,
   );
-  let runs = measured_text_runs(&result);
-  assert!(runs.iter().any(|t| t == "fallback-text"), "runs = {runs:?}");
+  let runs = run_texts(&result);
+  assert!(runs.contains(&"fallback-text"), "runs = {runs:?}");
 }
 
 #[test]
 fn empty_string_content_creates_no_pseudo_box() {
-  let root = box_node("greet");
+  let root = block("greet");
   let result = measure_with_css(root, r#".greet::before { content: ""; }"#);
-  assert!(measured_text_runs(&result).is_empty());
+  assert!(run_texts(&result).is_empty());
 }
 
 #[test]
 fn unsupported_content_value_creates_no_pseudo_box() {
-  let root = box_node("greet");
+  let root = block("greet");
   let result = measure_with_css(
     root,
     r#".greet::before { content: counter(foo); color: red; }"#,
   );
-  assert!(measured_text_runs(&result).is_empty());
+  assert!(run_texts(&result).is_empty());
 }
 
 #[test]
@@ -164,14 +122,14 @@ fn pseudo_does_not_apply_to_replaced_image_element() {
         .with(StyleDeclaration::height(Px(50.0))),
     );
   let result = measure_with_css(root, r#".logo::before { content: "x"; }"#);
-  assert!(measured_text_runs(&result).is_empty());
+  assert!(run_texts(&result).is_empty());
 }
 
 #[test]
 fn display_none_on_pseudo_creates_no_box() {
-  let root = box_node("greet");
+  let root = block("greet");
   let result = measure_with_css(root, r#".greet::before { content: "x"; display: none; }"#);
-  assert!(measured_text_runs(&result).is_empty());
+  assert!(run_texts(&result).is_empty());
 }
 
 #[test]
@@ -231,7 +189,7 @@ fn display_block_pseudo_creates_block_level_box() {
 
 #[test]
 fn gradient_content_renders_with_default_object_size() {
-  let root = box_node("hero").with_style(
+  let root = block("hero").with_style(
     Style::default()
       .with(StyleDeclaration::display(Display::Block))
       .with(StyleDeclaration::width(Px(400.0))),

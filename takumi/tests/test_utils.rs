@@ -1,26 +1,25 @@
+#![allow(
+  dead_code,
+  reason = "each test binary compiles this module and uses a subset"
+)]
+
 use std::{
   borrow::Cow,
-  collections::{BTreeMap, HashMap},
-  fs::{File, create_dir_all, write},
-  io::Read,
+  collections::HashMap,
+  fs::{self, File},
   path::{Path, PathBuf},
   process::Command,
+  result::Result,
   sync::{Arc, LazyLock, OnceLock},
 };
 
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use takumi::{
-  prelude::*, render, write_animated_gif, write_animated_png, write_animated_webp, write_image,
+  measure, prelude::*, render, write_animated_gif, write_animated_png, write_animated_webp,
+  write_image,
 };
 use takumi_core::resources::image::ResourceCache;
 use takumi_svg::{SvgOptions, render as svg_render};
-
-pub fn repo_base_path(path: &str) -> PathBuf {
-  Path::new(env!("CARGO_MANIFEST_DIR"))
-    .join("../")
-    .join(path)
-    .to_path_buf()
-}
 
 const TEST_FONTS: &[(&str, &str, GenericFamily)] = &[
   (
@@ -81,34 +80,9 @@ const IMAGES: &[&str] = &[
   "assets/images/luma-cover-0dfbf65d-0f58-4941-947c-d84a5b131dc0.jpeg",
 ];
 
-fn create_test_context() -> Fonts {
-  let mut context = Fonts::default();
+const TEST_VIEWPORT: (u32, u32) = (1200, 630);
 
-  for (font, name, generic) in TEST_FONTS {
-    let mut font_data = Vec::new();
-    File::open(repo_base_path(font))
-      .unwrap()
-      .read_to_end(&mut font_data)
-      .unwrap();
-
-    context
-      .register(
-        FontResource::new(font_data)
-          .override_info(FontOverride {
-            family_name: Some((*name).into()),
-            ..Default::default()
-          })
-          .generic_family(*generic),
-      )
-      .unwrap();
-  }
-
-  context
-}
-
-pub fn create_test_viewport() -> Viewport {
-  Viewport::new((1200, 630))
-}
+pub const GENERATED_DIR: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/fixtures-generated");
 
 pub static CONTEXT: LazyLock<Fonts> = LazyLock::new(create_test_context);
 
@@ -120,11 +94,8 @@ pub static TEST_IMAGES: LazyLock<HashMap<Arc<str>, ImageSource>> = LazyLock::new
   let images = IMAGES
     .iter()
     .map(|path| {
-      let mut data = Vec::new();
-      File::open(repo_base_path(path))
-        .unwrap()
-        .read_to_end(&mut data)
-        .unwrap();
+      let data = fs::read(repo_base_path(path)).unwrap();
+
       (
         Arc::from(*path),
         cache.get_or_decode(&data, ImageCacheMode::Auto).unwrap(),
@@ -139,38 +110,158 @@ pub static TEST_IMAGES: LazyLock<HashMap<Arc<str>, ImageSource>> = LazyLock::new
 /// entries across renders.
 static CACHE: OnceLock<ResourceCache> = OnceLock::new();
 
-#[allow(dead_code)]
-pub fn attrs(pairs: &[(&str, &str)]) -> BTreeMap<Box<str>, Box<str>> {
-  pairs
+/// Inclusive edges of the dark ink: left, top, right, bottom.
+pub type InkBounds = (u32, u32, u32, u32);
+
+pub fn repo_base_path(path: &str) -> PathBuf {
+  Path::new(env!("CARGO_MANIFEST_DIR")).join("../").join(path)
+}
+
+pub fn generated_path(file_name: &str) -> PathBuf {
+  Path::new(GENERATED_DIR).join(file_name)
+}
+
+pub fn create_test_viewport() -> Viewport {
+  Viewport::new(TEST_VIEWPORT)
+}
+
+pub fn render_node(node: Node, viewport: Viewport) -> Bitmap {
+  render(
+    RenderOptions::builder()
+      .viewport(viewport)
+      .node(node)
+      .fonts(&CONTEXT)
+      .build(),
+  )
+  .unwrap()
+}
+
+pub fn measure_with_css(node: Node, css: &str) -> MeasuredNode {
+  measure(
+    RenderOptions::builder()
+      .viewport(create_test_viewport())
+      .node(node)
+      .stylesheet(StyleSheet::parse_loosy(css).into())
+      .fonts(&CONTEXT)
+      .build(),
+  )
+  .unwrap()
+}
+
+pub fn block(class: &str) -> Node {
+  Node::container([])
+    .with_class_name(class)
+    .with_style(Style::default().with(StyleDeclaration::display(Display::Block)))
+}
+
+/// Text of every run in the subtree, in tree order.
+pub fn run_texts(node: &MeasuredNode) -> Vec<&str> {
+  node
+    .runs
     .iter()
-    .map(|(key, value)| ((*key).into(), (*value).into()))
+    .map(|run| run.text.as_str())
+    .chain(node.children.iter().flat_map(run_texts))
     .collect()
 }
 
-#[allow(dead_code)]
+/// Edges of the pixels dark enough to count as ink; `(u32::MAX, u32::MAX, 0, 0)`
+/// when there are none.
+pub fn ink_bounds(image: &Bitmap) -> InkBounds {
+  let width = image.width();
+
+  image
+    .as_raw()
+    .as_chunks::<4>()
+    .0
+    .iter()
+    .enumerate()
+    .filter(|(_, pixel)| pixel[3] > 0 && pixel[0].min(pixel[1]).min(pixel[2]) < 160)
+    .fold(
+      (u32::MAX, u32::MAX, 0, 0),
+      |(left, top, right, bottom), (index, _)| {
+        let (x, y) = (index as u32 % width, index as u32 / width);
+        (left.min(x), top.min(y), right.max(x), bottom.max(y))
+      },
+    )
+}
+
 pub fn run_fixture_test(node: Node, fixture_name: &str) {
-  let viewport = create_test_viewport();
+  let (viewport_width, viewport_height) = TEST_VIEWPORT;
   let options = RenderOptions::builder()
-    .viewport(viewport)
+    .viewport(create_test_viewport())
     .node(node)
     .fonts(&CONTEXT)
     .images(TEST_IMAGES.clone())
     .build();
+  let node_html = options.node().to_html();
 
-  run_fixture_test_with_options(options, fixture_name);
+  // `from_html` is a normalizing importer (presets, collapse, text folding), so
+  // round-tripping is a fixpoint: re-serializing a parsed tree reproduces it.
+  // Disable presets/tw so the comparison sees only structure, not injected UA
+  // styles.
+  let round_tripped = Node::from_html(
+    &node_html,
+    FromHtmlOptions::builder()
+      .presets(StylePresets::empty())
+      .build(),
+  )
+  .expect("round-trip parse");
+
+  assert_eq!(
+    node_html,
+    round_tripped.to_html(),
+    "from_html round-trip diverged for {fixture_name}",
+  );
+
+  let html_content = format!(
+    r#"<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>{fixture_name}</title>
+    <base href="../../../" />
+    <link rel="stylesheet" href="takumi/tests/shared.css" />
+  </head>
+  <body style="width: {viewport_width}px; height: {viewport_height}px">
+    {node_html}
+  </body>
+</html>
+"#
+  );
+  let html_path = generated_path(&format!("{fixture_name}.html"));
+
+  fs::write(&html_path, html_content).unwrap();
+  format_generated(&html_path);
+  write_goldens(options, fixture_name).unwrap();
 }
 
-#[allow(dead_code)]
-pub fn run_fixture_test_with_options(options: RenderOptions<'_>, fixture_name: &str) {
-  run_fixture_test_with_css(options, "", fixture_name);
+/// Writes the raster golden and, when the SVG backend can draw the fixture, the
+/// vector one. The SVG backend does not cover every paint feature yet.
+pub fn write_goldens(options: RenderOptions<'_>, fixture_name: &str) -> Result<(), String> {
+  if let Ok(svg) = svg_render(
+    SvgOptions::builder()
+      .node(options.node().clone())
+      .viewport(*options.viewport())
+      .fonts(options.fonts())
+      .stylesheet(options.stylesheet().clone())
+      .images(options.images().clone())
+      .build(),
+  ) {
+    fs::write(generated_path(&format!("{fixture_name}.svg")), svg)
+      .map_err(|error| error.to_string())?;
+  }
+
+  let image = render(options).map_err(|error| format!("render: {error:?}"))?;
+  let mut file = File::create(generated_path(&format!("{fixture_name}.webp")))
+    .map_err(|error| error.to_string())?;
+
+  write_image(&image, &mut file, OutputFormat::WebPLossless).map_err(|error| format!("{error:?}"))
 }
 
-/// Embeds `css` in the repro HTML; `RenderOptions` only carries the parsed
-/// sheet, which cannot serialize back.
 /// Runs the repo's formatter over a generated fixture, so a test run leaves the
 /// tree the way `bun lint` wants it. A checkout without `node_modules` skips.
-#[allow(dead_code)]
-pub fn format_generated(path: &str) {
+pub fn format_generated(path: impl AsRef<Path>) {
+  let path = path.as_ref();
   let binary = if cfg!(windows) { "oxfmt.exe" } else { "oxfmt" };
   let oxfmt = repo_base_path(&format!("node_modules/.bin/{binary}"));
 
@@ -183,96 +274,20 @@ pub fn format_generated(path: &str) {
     .status()
     .unwrap_or_else(|error| panic!("{} should run: {error}", oxfmt.display()));
 
-  assert!(status.success(), "{} rejected {path}", oxfmt.display());
-}
-
-pub fn run_fixture_test_with_css(options: RenderOptions<'_>, css: &str, fixture_name: &str) {
-  let viewport_width = options.viewport().size.width.unwrap_or(1200);
-  let viewport_height = options.viewport().size.height.unwrap_or(630);
-
-  create_dir_all("tests/fixtures-generated").ok();
-
-  let node_html = options.node().to_html();
-
-  // `from_html` is a normalizing importer (presets, collapse, text folding), so
-  // round-tripping is a fixpoint: re-serializing a parsed tree reproduces it.
-  // Disable presets/tw so the comparison sees only structure, not injected UA
-  // styles.
-  #[cfg(feature = "from-html")]
-  {
-    let options = FromHtmlOptions::builder()
-      .presets(StylePresets::empty())
-      .build();
-    let round_tripped = Node::from_html(&node_html, options).expect("round-trip parse");
-    assert_eq!(
-      node_html,
-      round_tripped.to_html(),
-      "from_html round-trip diverged for {fixture_name}",
-    );
-  }
-
-  let style_block = if css.is_empty() {
-    String::new()
-  } else {
-    format!("\n    <style>{css}</style>")
-  };
-  let html_content = format!(
-    r#"<!doctype html>
-<html>
-  <head>
-    <meta charset="utf-8" />
-    <title>{fixture_name}</title>
-    <base href="../../../" />
-    <link rel="stylesheet" href="takumi/tests/shared.css" />{style_block}
-  </head>
-  <body style="width: {viewport_width}px; height: {viewport_height}px">
-    {node_html}
-  </body>
-</html>
-"#
+  assert!(
+    status.success(),
+    "{} rejected {}",
+    oxfmt.display(),
+    path.display()
   );
-
-  let html_path = format!("tests/fixtures-generated/{fixture_name}.html");
-  write(&html_path, html_content).unwrap();
-  format_generated(&html_path);
-
-  // Emit the vector SVG alongside the raster golden (best-effort: the SVG backend
-  // does not cover every paint feature yet, so failures are skipped not fatal).
-  if let Ok(svg) = svg_render(
-    SvgOptions::builder()
-      .node(options.node().clone())
-      .viewport(*options.viewport())
-      .fonts(options.fonts())
-      .stylesheet(options.stylesheet().clone())
-      .images(options.images().clone())
-      .build(),
-  ) {
-    write(format!("tests/fixtures-generated/{fixture_name}.svg"), svg).unwrap();
-  }
-
-  let image = render(options).unwrap();
-  let golden_path = format!("tests/fixtures-generated/{fixture_name}.webp");
-
-  save_image(image, &golden_path, OutputFormat::WebPLossless);
 }
 
-fn save_image<P: AsRef<Path>>(image: Bitmap, path: P, format: OutputFormat) {
-  let path = path.as_ref();
-
-  let mut file = File::create(path).unwrap();
-
-  write_image(&image, &mut file, format).unwrap();
-}
-
-#[allow(dead_code)]
-pub(crate) fn run_animation_fixture_test<'g, Frames>(
+pub(crate) fn run_animation_fixture_test<Frames: IntoAnimationFixtureFrames>(
   frames: Frames,
   fixture_id: &str,
   duration_ms: u32,
   fps: u32,
-) where
-  Frames: IntoAnimationFixtureFrames<'g>,
-{
+) {
   assert!(duration_ms > 0);
   assert!(fps > 0);
 
@@ -300,8 +315,7 @@ pub(crate) fn run_animation_fixture_test<'g, Frames>(
       AnimationFixtureFormat::Png => "png",
       AnimationFixtureFormat::Gif => "gif",
     };
-    let mut file =
-      File::create(format!("tests/fixtures-generated/{fixture_id}.{extension}")).unwrap();
+    let mut file = File::create(generated_path(&format!("{fixture_id}.{extension}"))).unwrap();
 
     match format {
       AnimationFixtureFormat::Webp => {
@@ -327,56 +341,58 @@ pub(crate) fn run_animation_fixture_test<'g, Frames>(
   });
 }
 
-pub(crate) trait IntoAnimationFixtureFrames<'g> {
+pub(crate) trait IntoAnimationFixtureFrames {
   fn into_frames(self, frame_duration_ms: u32) -> Vec<AnimationFrame>;
 }
 
-impl IntoAnimationFixtureFrames<'_> for Vec<AnimationFrame> {
+impl IntoAnimationFixtureFrames for Vec<AnimationFrame> {
   fn into_frames(self, _: u32) -> Vec<AnimationFrame> {
     self
   }
 }
 
-impl IntoAnimationFixtureFrames<'_> for Vec<Node> {
+impl IntoAnimationFixtureFrames for Vec<Node> {
   fn into_frames(self, frame_duration_ms: u32) -> Vec<AnimationFrame> {
     let viewport = create_test_viewport();
+    let options: Vec<_> = self
+      .into_iter()
+      .enumerate()
+      .map(|(index, node)| {
+        let time_ms = (index as u64) * u64::from(frame_duration_ms);
 
-    build_animation_frames(
-      self
-        .into_iter()
-        .enumerate()
-        .map(|(index, node)| {
-          let time_ms = (index as u64) * u64::from(frame_duration_ms);
+        RenderOptions::builder()
+          .viewport(viewport)
+          .node(node)
+          .time_ms(time_ms)
+          .fonts(&CONTEXT)
+          .build()
+      })
+      .collect();
 
-          (
-            RenderOptions::builder()
-              .viewport(viewport)
-              .node(node)
-              .time_ms(time_ms)
-              .fonts(&CONTEXT)
-              .build(),
-            frame_duration_ms,
-          )
-        })
-        .collect(),
-    )
+    options
+      .into_par_iter()
+      .map(|options| AnimationFrame::new(render(options).unwrap(), frame_duration_ms))
+      .collect()
   }
 }
 
-impl<'g> IntoAnimationFixtureFrames<'g> for Vec<RenderOptions<'g>> {
-  fn into_frames(self, frame_duration_ms: u32) -> Vec<AnimationFrame> {
-    build_animation_frames(
-      self
-        .into_iter()
-        .map(|options| (options, frame_duration_ms))
-        .collect(),
-    )
-  }
-}
+fn create_test_context() -> Fonts {
+  let mut context = Fonts::default();
 
-fn build_animation_frames(options: Vec<(RenderOptions<'_>, u32)>) -> Vec<AnimationFrame> {
-  options
-    .into_par_iter()
-    .map(|(options, duration_ms)| AnimationFrame::new(render(options).unwrap(), duration_ms))
-    .collect()
+  for (font, name, generic) in TEST_FONTS {
+    let font_data = fs::read(repo_base_path(font)).unwrap();
+
+    context
+      .register(
+        FontResource::new(font_data)
+          .override_info(FontOverride {
+            family_name: Some((*name).into()),
+            ..Default::default()
+          })
+          .generic_family(*generic),
+      )
+      .unwrap();
+  }
+
+  context
 }

@@ -3,19 +3,18 @@ use std::{collections::HashMap, hint::black_box, sync::Arc};
 use criterion::{Criterion, criterion_group, criterion_main};
 use takumi::{
   prelude::{
-    AlignItems, BackgroundClip, BackgroundImages, BackgroundRepeats, BackgroundSizes, BorderRadius,
-    Color, ColorInput, Display, FlexDirection, FontWeight, Fonts, FromCssStr, ImageSource,
-    JustifyContent,
+    AlignItems, BackgroundImages, BorderRadius, Color, ColorInput, Display, FlexDirection,
+    FontWeight, Fonts, FromCssStr, ImageSource, JustifyContent,
     Length::{Percentage, Px},
-    Node, ObjectFit, Overflow, PositionValues, RenderOptions, Sides, SpacePair, Style,
-    StyleDeclaration, Viewport,
+    Node, ObjectFit, Overflow, RenderOptions, Sides, SpacePair, Style, StyleDeclaration, Viewport,
   },
   render,
 };
 
 const BENCH_WIDTH: u32 = 1200;
 const BENCH_HEIGHT: u32 = 630;
-fn render_fixture(fonts: &Fonts, images: &HashMap<Arc<str>, ImageSource>, node: Node) {
+
+fn render_node(fonts: &Fonts, node: Node, images: &HashMap<Arc<str>, ImageSource>) {
   let options = RenderOptions::builder()
     .viewport(Viewport::new((BENCH_WIDTH, BENCH_HEIGHT)))
     .node(node)
@@ -34,47 +33,6 @@ fn simple_image_blit_fixture() -> Node {
       .with(StyleDeclaration::width(Percentage(100.0)))
       .with(StyleDeclaration::height(Percentage(100.0)))
       .with(StyleDeclaration::object_fit(ObjectFit::Fill)),
-  )
-}
-
-fn gradient_clip_text_fixture() -> Node {
-  let gradient = BackgroundImages::from_css_str(
-    "linear-gradient(90deg, #ff3b30, #ffcc00, #34c759, #007aff, #5856d6)",
-  )
-  .unwrap();
-
-  Node::container([
-    Node::text("Gradient Text Benchmark".to_string()).with_style(
-      Style::default()
-        .with(StyleDeclaration::display(Display::Flex))
-        .with(StyleDeclaration::background_image(Some(gradient)))
-        .with(StyleDeclaration::background_size(
-          BackgroundSizes::from_css_str("100% 100%").unwrap(),
-        ))
-        .with(StyleDeclaration::background_position(
-          PositionValues::from_css_str("0 0").unwrap(),
-        ))
-        .with(StyleDeclaration::background_repeat(
-          BackgroundRepeats::from_css_str("no-repeat").unwrap(),
-        ))
-        .with(StyleDeclaration::background_clip(BackgroundClip::Text))
-        .with(StyleDeclaration::color(ColorInput::Value(
-          Color::transparent(),
-        ))),
-    ),
-  ])
-  .with_style(
-    Style::default()
-      .with(StyleDeclaration::display(Display::Flex))
-      .with(StyleDeclaration::width(Percentage(100.0)))
-      .with(StyleDeclaration::height(Percentage(100.0)))
-      .with(StyleDeclaration::background_color(ColorInput::Value(
-        Color([242, 242, 242, 255]),
-      )))
-      .with(StyleDeclaration::font_size(Px(72.0).into()))
-      .with(StyleDeclaration::font_weight(FontWeight::from(800.0)))
-      .with(StyleDeclaration::align_items(AlignItems::Center))
-      .with(StyleDeclaration::justify_content(JustifyContent::Center)),
   )
 }
 
@@ -140,13 +98,19 @@ fn bench_fixtures(c: &mut Criterion) {
   let mut group = c.benchmark_group("fixtures");
 
   group.bench_function("simple_image_blit", |b| {
-    b.iter(|| render_fixture(&fonts, &images, black_box(simple_image_blit_fixture())))
+    b.iter(|| render_node(&fonts, black_box(simple_image_blit_fixture()), &images))
   });
   group.bench_function("gradient_clip_text", |b| {
-    b.iter(|| render_fixture(&fonts, &images, black_box(gradient_clip_text_fixture())))
+    b.iter(|| {
+      render_node(
+        &fonts,
+        black_box(common::gradient_clip_text_fixture()),
+        &images,
+      )
+    })
   });
   group.bench_function("emoji_social", |b| {
-    b.iter(|| render_fixture(&fonts, &images, black_box(emoji_social_fixture())))
+    b.iter(|| render_node(&fonts, black_box(emoji_social_fixture()), &images))
   });
 
   group.finish();

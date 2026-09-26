@@ -10,14 +10,17 @@
 //! meant to shrink. A fixture that climbs back above the floor must leave the list
 //! (the test fails if a listed fixture now passes), so the debt can't go stale.
 
-use std::{collections::HashMap, fs, path::Path};
+mod test_utils;
+
+use std::{collections::HashMap, convert::identity, fs, path::Path};
 
 use image::ImageReader;
-use rayon::prelude::*;
+use rayon::{iter::Either, prelude::*};
 use resvg::{
   tiny_skia::Pixmap,
   usvg::{Options, Transform, Tree},
 };
+use test_utils::GENERATED_DIR;
 
 /// Per-channel tolerance counted as "matching".
 const TOL: i32 = 16;
@@ -99,9 +102,9 @@ fn parity(svg_path: &Path, webp_path: &Path) -> Option<f32> {
 #[test]
 fn svg_matches_raster_within_tolerance() {
   let known: HashMap<&str, &str> = KNOWN_DIVERGENT.iter().copied().collect();
-  let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures-generated");
+  let dir = Path::new(GENERATED_DIR);
 
-  let svgs: Vec<_> = fs::read_dir(&dir)
+  let svgs: Vec<_> = fs::read_dir(dir)
     .unwrap()
     .filter_map(|e| {
       let path = e.ok()?.path();
@@ -116,27 +119,12 @@ fn svg_matches_raster_within_tolerance() {
       let pct = parity(svg_path, &dir.join(format!("{name}.webp")))?;
       let listed = known.contains_key(name.as_str());
       match (pct < FLOOR, listed) {
-        (true, false) => Some((Some((name, pct)), None)),
-        (false, true) => Some((None, Some(name))),
+        (true, false) => Some(Either::Left((name, pct))),
+        (false, true) => Some(Either::Right(name)),
         _ => None,
       }
     })
-    .fold(
-      || (Vec::new(), Vec::new()),
-      |(mut bf, mut rec), (b, r)| {
-        bf.extend(b);
-        rec.extend(r);
-        (bf, rec)
-      },
-    )
-    .reduce(
-      || (Vec::new(), Vec::new()),
-      |(mut bf, mut rec), (b, r)| {
-        bf.extend(b);
-        rec.extend(r);
-        (bf, rec)
-      },
-    );
+    .partition_map(identity);
 
   below_floor.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap());
   let mut msg = String::new();

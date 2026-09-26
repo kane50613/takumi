@@ -1,26 +1,12 @@
-use std::{
-  assert_matches,
-  fs::File,
-  io::Read,
-  path::{Path, PathBuf},
-};
+mod test_utils;
+
+use std::{assert_matches, fs};
 
 use takumi::{prelude::*, render};
-
-fn font_path(path: &str) -> PathBuf {
-  Path::new(env!("CARGO_MANIFEST_DIR"))
-    .join("../assets/fonts/")
-    .join(path)
-    .to_path_buf()
-}
+use test_utils::repo_base_path;
 
 fn read_font(path: &str) -> Vec<u8> {
-  let mut data = Vec::new();
-  File::open(font_path(path))
-    .unwrap()
-    .read_to_end(&mut data)
-    .unwrap();
-  data
+  fs::read(repo_base_path("assets/fonts").join(path)).unwrap()
 }
 
 /// Registers `path` as a uniquely-named coverage subset of the logical family `logical`.
@@ -128,44 +114,37 @@ fn subset_groups_route_per_family() {
 fn test_ttf_font_loading() {
   let mut context = Fonts::default();
 
-  let mut font_data = Vec::new();
-  File::open(font_path("noto-sans/NotoColorEmoji.ttf"))
-    .unwrap()
-    .read_to_end(&mut font_data)
-    .unwrap();
-
-  assert!(context.register(FontResource::new(font_data)).is_ok());
+  assert!(
+    context
+      .register(FontResource::new(read_font("noto-sans/NotoColorEmoji.ttf")))
+      .is_ok()
+  );
 }
 
 #[test]
 fn test_ttc_font_loading() {
   let mut context = Fonts::default();
 
-  let mut font_data = Vec::new();
-  File::open(font_path("ubuntu/Ubuntu.ttc"))
-    .unwrap()
-    .read_to_end(&mut font_data)
-    .unwrap();
-
-  assert!(context.register(FontResource::new(font_data)).is_ok());
+  assert!(
+    context
+      .register(FontResource::new(read_font("ubuntu/Ubuntu.ttc")))
+      .is_ok()
+  );
 }
 
 #[test]
 fn test_woff2_font_loading() {
   let mut context = Fonts::default();
 
-  let mut font_data = Vec::new();
-  File::open(font_path("geist/Geist[wght].woff2"))
-    .unwrap()
-    .read_to_end(&mut font_data)
-    .unwrap();
-
-  assert!(context.register(FontResource::new(font_data)).is_ok());
+  assert!(
+    context
+      .register(FontResource::new(read_font("geist/Geist[wght].woff2")))
+      .is_ok()
+  );
 }
 
 #[test]
 fn test_invalid_format_detection() {
-  // Test with invalid data
   let invalid_data = vec![0x00, 0x01, 0x02, 0x03];
   let mut context = Fonts::default();
 
@@ -175,7 +154,6 @@ fn test_invalid_format_detection() {
 
 #[test]
 fn test_empty_data() {
-  // Test with empty data
   let empty_data = Vec::<u8>::new();
   let mut context = Fonts::default();
 
@@ -185,7 +163,6 @@ fn test_empty_data() {
 
 #[test]
 fn test_too_short_data() {
-  // Test with data too short for format detection
   let short_data = vec![0x00, 0x01, 0x00];
   let mut context = Fonts::default();
 

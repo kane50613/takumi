@@ -12,20 +12,15 @@
 mod test_utils;
 
 use std::{
-  fs::{self, File},
+  fs,
   path::{Path, PathBuf},
 };
 
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
-use takumi::{
-  prelude::{
-    FromHtml, FromHtmlOptions, Node, OutputFormat, RenderOptions, StylePresets, StyleSheet,
-    Viewport,
-  },
-  render, write_image,
+use takumi::prelude::{
+  FromHtml, FromHtmlOptions, Node, RenderOptions, StylePresets, StyleSheet, Viewport,
 };
-use takumi_svg::{SvgOptions, render as svg_render};
-use test_utils::{CONTEXT, TEST_IMAGES};
+use test_utils::{CONTEXT, TEST_IMAGES, write_goldens};
 
 #[test]
 fn html_fixtures() {
@@ -69,41 +64,18 @@ fn render_fixture(path: &Path, name: &str) -> Result<(), String> {
     .presets(StylePresets::empty())
     .build();
   let node = Node::from_html(body, options).map_err(|error| format!("parse: {error:?}"))?;
-  let stylesheet: std::sync::Arc<StyleSheet> = StyleSheet::parse(css)
-    .map_err(|error| format!("stylesheet: {error:?}"))?
-    .into();
+  let stylesheet = StyleSheet::parse(css).map_err(|error| format!("stylesheet: {error:?}"))?;
 
-  let build_options = || {
+  write_goldens(
     RenderOptions::builder()
       .viewport(viewport)
-      .node(node.clone())
+      .node(node)
       .fonts(&CONTEXT)
       .images(TEST_IMAGES.clone())
-      .stylesheet(stylesheet.clone())
-      .build()
-  };
-
-  let generated = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures-generated");
-
-  // Vector golden is best-effort, matching the Rust-fixture harness: the SVG
-  // backend does not cover every paint feature yet.
-  if let Ok(svg) = svg_render(
-    SvgOptions::builder()
-      .node(node.clone())
-      .viewport(viewport)
-      .fonts(&CONTEXT)
-      .stylesheet(stylesheet.clone())
-      .images(TEST_IMAGES.clone())
+      .stylesheet(stylesheet.into())
       .build(),
-  ) {
-    fs::write(generated.join(format!("{name}.svg")), svg).map_err(|error| error.to_string())?;
-  }
-
-  let image = render(build_options()).map_err(|error| format!("render: {error:?}"))?;
-  let mut file =
-    File::create(generated.join(format!("{name}.webp"))).map_err(|error| error.to_string())?;
-
-  write_image(&image, &mut file, OutputFormat::WebPLossless).map_err(|error| format!("{error:?}"))
+    name,
+  )
 }
 
 fn body_viewport(html: &str) -> Result<Viewport, String> {

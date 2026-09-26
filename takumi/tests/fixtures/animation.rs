@@ -114,14 +114,8 @@ fn keyframe_interpolation_frames() -> Vec<AnimationFrame> {
 }
 
 fn keyframe_interpolation_options() -> RenderOptions<'static> {
-  let stylesheet_result = StyleSheet::parse(keyframe_interpolation_stylesheet());
-  assert!(
-    stylesheet_result.is_ok(),
-    "expected stylesheet to parse: {stylesheet_result:?}"
-  );
-  let Ok(stylesheet) = stylesheet_result else {
-    unreachable!();
-  };
+  let stylesheet = StyleSheet::parse(KEYFRAME_INTERPOLATION_CSS)
+    .unwrap_or_else(|error| panic!("expected stylesheet to parse: {error:?}"));
 
   RenderOptions::builder()
     .viewport(Viewport::new((800, 400)))
@@ -131,8 +125,7 @@ fn keyframe_interpolation_options() -> RenderOptions<'static> {
     .build()
 }
 
-fn keyframe_interpolation_stylesheet() -> &'static str {
-  r#"
+const KEYFRAME_INTERPOLATION_CSS: &str = r#"
     .stage {
       width: 760px;
       height: 320px;
@@ -194,8 +187,7 @@ fn keyframe_interpolation_stylesheet() -> &'static str {
         background-color: rgb(244, 114, 182);
       }
     }
-  "#
-}
+  "#;
 
 #[test]
 fn animation_bouncing_text() {

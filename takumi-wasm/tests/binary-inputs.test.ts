@@ -18,10 +18,10 @@ afterAll(() => {
 
 const recoveryNode = container({ style: { width: 8, height: 8, backgroundColor: "black" } });
 
-const withImageBytes = (data: Uint8Array) =>
+const withImage = (src: Parameters<typeof image>[0]["src"]) =>
   container({
     style: { width: 64, height: 64 },
-    children: [image({ src: data, width: 64, height: 64 })],
+    children: [image({ src, width: 64, height: 64 })],
   });
 
 // Undecodable image sources are skipped at paint like a browser's broken
@@ -40,7 +40,7 @@ describe("malformed binary inputs", () => {
       corrupt[i] = (i * 37) % 256;
     }
 
-    const result = await renderer.render(withImageBytes(corrupt), { width: 64, height: 64 });
+    const result = await renderer.render(withImage(corrupt), { width: 64, height: 64 });
     expect(result).toBeInstanceOf(Uint8Array);
     await expectRecovery();
   });
@@ -53,7 +53,7 @@ describe("malformed binary inputs", () => {
   test("malformed inline SVG bytes render without crashing", async () => {
     const bytes = new TextEncoder().encode("<svg garbage");
 
-    const result = await renderer.render(withImageBytes(bytes), { width: 64, height: 64 });
+    const result = await renderer.render(withImage(bytes), { width: 64, height: 64 });
     expect(result).toBeInstanceOf(Uint8Array);
     await expectRecovery();
   });
@@ -62,7 +62,7 @@ describe("malformed binary inputs", () => {
     const truncated = new Uint8Array(16);
     truncated.set(new TextEncoder().encode("GIF89a"));
 
-    const result = await renderer.render(withImageBytes(truncated), { width: 64, height: 64 });
+    const result = await renderer.render(withImage(truncated), { width: 64, height: 64 });
     expect(result).toBeInstanceOf(Uint8Array);
     await expectRecovery();
   });
