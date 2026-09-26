@@ -522,6 +522,28 @@ fn a_collapsing_table_paints_one_border_per_line() {
   });
 }
 
+/// css-backgrounds-3 §border-style: each side paints its own style, so a
+/// dashed or dotted side keeps its pattern beside sides of other styles.
+#[test]
+fn mixed_border_sides_keep_their_styles() {
+  run_pdf_fixture("border-mixed-sides", |fonts| {
+    let html = r#"<div style="display: flex; gap: 24px">
+      <div style="width: 140px; height: 90px; border-width: 8px; border-style: dashed dotted solid double; border-color: #dc2626 #2563eb #16a34a #9333ea"></div>
+      <div style="width: 140px; height: 90px; border-width: 10px; border-style: dotted solid dashed groove; border-color: #0f172a #f59e0b #0f172a #64748b; border-radius: 24px"></div>
+    </div>"#;
+
+    PdfOptions::builder()
+      .node(from_html(html, FromHtmlOptions::default()).expect("parse mixed borders"))
+      .page(PageOptions {
+        width: 420.0,
+        height: 170.0,
+        margin: PageMargins::uniform(24.0),
+      })
+      .fonts(fonts)
+      .build()
+  });
+}
+
 /// css-tables-3 §repeated-headers: every page that starts inside the table's
 /// body paints the header rows again.
 #[test]

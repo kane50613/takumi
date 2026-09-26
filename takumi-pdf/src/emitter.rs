@@ -911,10 +911,7 @@ impl Emitter<'_> {
     );
   }
 
-  /// Fills the border ring: one even-odd fill for a uniform color, per-side
-  /// trapezoids clipped to the ring otherwise.
-  // ponytail: dashed/dotted/double render as solid; port the stroke-based
-  // patterns from takumi-svg when someone needs them.
+  /// Paints a border at `origin`.
   fn emit_borders(
     &self,
     border: &BorderProperties,
@@ -922,59 +919,7 @@ impl Emitter<'_> {
     origin: CorePoint<f32>,
     surface: &mut Surface,
   ) {
-    if !border.has_visible_sides() {
-      return;
-    }
-    let Some(ring_path) = shape_path(&FillShape::border_ring(border, size), origin) else {
-      return;
-    };
-
-    // The device opens its own artifact per fill, so a border that paints
-    // nothing leaves no empty region behind.
-    if BoxBorderPainter::new(border, size)
-      .paint_fast_path(origin, &mut self.device(surface, self.tagged))
-    {
-      return;
-    }
-    let mut sides = border.painted_sides().peekable();
-
-    if sides.peek().is_none() {
-      return;
-    }
-    // A collapsed border's sides are squared rectangles already inside the
-    // ring, and the clip's antialiased edge leaks the page where two cells
-    // meet.
-    let clipped = !border.collapsed;
-
-    self.in_artifact(surface, |surface| {
-      if clipped {
-        surface.push_clip_path(&ring_path, &FillRule::EvenOdd);
-      }
-      for side in sides {
-        for band in border.side_bands(side) {
-          let mut strip = *border;
-
-          strip.width = band.width;
-          strip.expand_by(band.inset.map(|value| -value));
-
-          let mut polygon = Vec::new();
-
-          strip.append_side_clip_polygon_commands_at(
-            side.side,
-            &mut polygon,
-            size.inset(band.inset),
-            band.inset.top_left(),
-          );
-          if let Some(path) = krilla_path(&polygon, origin) {
-            surface.set_fill(Some(fill_from_rgba(self.filtered(band.color), 1.0)));
-            surface.draw_path(&path);
-          }
-        }
-      }
-      if clipped {
-        surface.pop();
-      }
-    });
+    BoxBorderPainter::new(border, size).paint(origin, &mut self.device(surface, self.tagged));
   }
 
   fn emit_own_content(

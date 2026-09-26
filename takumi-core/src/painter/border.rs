@@ -32,7 +32,7 @@ impl<'b> BoxBorderPainter<'b> {
   /// Paints a border whose visible sides share one colour and style in one pass, reporting
   /// whether it could. A uniform dashed or dotted border strokes the centerline so the pattern
   /// runs round the whole ring, and a double border fills two rings.
-  pub fn paint_fast_path<D: PaintDevice>(&self, origin: Point<f32>, device: &mut D) -> bool {
+  fn paint_fast_path<D: PaintDevice>(&self, origin: Point<f32>, device: &mut D) -> bool {
     let border = self.border;
     let size = self.size;
     let at = Affine::translation(origin.x, origin.y);
