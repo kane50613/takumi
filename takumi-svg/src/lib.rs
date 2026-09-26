@@ -38,14 +38,12 @@ use quick_xml::{
 pub use render::{SvgOptions, render};
 use takumi_core::{
   context::RenderContext,
+  filter::ColorMatrix,
   geometry::{Rect, Size},
   layout::background::background_origin_box,
   painter::{BoxFrame, StrokeStyle},
   shadow::SizedShadow,
-  style::{
-    Affine, BackgroundOrigin, FillRule, Filter, FilterReference, LUMA_WEIGHTS, LineJoin,
-    SEPIA_WEIGHTS, ToCss,
-  },
+  style::{Affine, BackgroundOrigin, FillRule, Filter, FilterReference, LineJoin, ToCss},
 };
 use tiny_skia::PremultipliedColorU8;
 
@@ -751,11 +749,6 @@ impl SvgDocument {
           ("intercept", num(0.5 * (1.0 - v.0)).into()),
         ],
       ),
-      Filter::Grayscale(amount) => self.color_matrix(
-        input,
-        result,
-        &projection_matrix(amount.0.clamp(0.0, 1.0), [LUMA_WEIGHTS; 3]),
-      ),
       Filter::Saturate(v) => self.empty(
         "feColorMatrix",
         &[
@@ -787,11 +780,10 @@ impl SvgDocument {
           ],
         )
       }
-      Filter::Sepia(amount) => self.color_matrix(
-        input,
-        result,
-        &projection_matrix(amount.0.clamp(0.0, 1.0), SEPIA_WEIGHTS),
-      ),
+      Filter::Grayscale(_) | Filter::Sepia(_) => ColorMatrix::from_filter(filter)
+        .map_or(Ok(()), |matrix| {
+          self.color_matrix(input, result, &matrix.fe_color_matrix_values())
+        }),
       Filter::Opacity(v) => {
         self.open(
           "feComponentTransfer",
@@ -933,24 +925,6 @@ fn matrix_attr(transform: Affine) -> String {
   let [a, b, c, d, e, f] = transform.to_cols_array().map(Num);
 
   format!("matrix({a} {b} {c} {d} {e} {f})")
-}
-
-/// CSS `grayscale()`/`sepia()` color matrix (spec form: identity lerped toward
-/// the `weights` projection by `amount`), matching the raster backend.
-fn projection_matrix(amount: f32, weights: [[f32; 3]; 3]) -> [f32; 20] {
-  let mut matrix = [0.0; 20];
-
-  for (row, row_weights) in weights.into_iter().enumerate() {
-    for (column, weight) in row_weights.into_iter().enumerate() {
-      matrix[row * 5 + column] = if row == column {
-        1.0 - amount + amount * weight
-      } else {
-        amount * weight
-      };
-    }
-  }
-  matrix[18] = 1.0;
-  matrix
 }
 
 /// Quantization grid for coordinates, dimensions, and opacities: three decimals.

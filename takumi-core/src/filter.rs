@@ -43,6 +43,18 @@ impl ColorMatrix {
     ]
   }
 
+  /// The matrix as `feColorMatrix` `values`: four rows of five, the alpha row last.
+  pub fn fe_color_matrix_values(self) -> [f32; 20] {
+    let mut values = [0.0; 20];
+
+    for (index, row) in self.rows.iter().enumerate() {
+      values[index * 5..index * 5 + 3].copy_from_slice(&row[..3]);
+      values[index * 5 + 4] = row[3];
+    }
+    values[18] = self.alpha;
+    values
+  }
+
   /// The matrix a colour-transforming `filter` applies, or `None` for one
   /// that needs a convolution.
   pub fn from_filter(filter: &Filter) -> Option<Self> {
