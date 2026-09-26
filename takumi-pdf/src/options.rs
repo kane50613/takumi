@@ -1,7 +1,12 @@
 //! Public option, metadata and error types for the render and measure entry
 //! points, plus the page geometry constants.
 
-use std::{collections::HashMap, sync::Arc};
+use std::{
+  collections::HashMap,
+  error::Error,
+  fmt::{self, Display, Formatter},
+  sync::Arc,
+};
 
 use takumi_core::{
   Fonts,
@@ -17,7 +22,7 @@ use typed_builder::TypedBuilder;
 
 use crate::krilla::{
   configure::{Accessibility, Archival},
-  embed::AssociationKind,
+  embed::{AssociationKind, EmbeddedFile, MimeType},
   error::KrillaError,
   metadata::{DateTime, Metadata},
 };
@@ -68,8 +73,8 @@ pub enum PdfError {
   PageRangesOutOfBounds(usize),
 }
 
-impl std::fmt::Display for PdfError {
-  fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl Display for PdfError {
+  fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
     match self {
       Self::Render(error) => write!(f, "{error}"),
       Self::Font(error) => write!(f, "Font error: {error}"),
@@ -118,8 +123,8 @@ impl std::fmt::Display for PdfError {
   }
 }
 
-impl std::error::Error for PdfError {
-  fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+impl Error for PdfError {
+  fn source(&self) -> Option<&(dyn Error + 'static)> {
     match self {
       Self::Render(error) => Some(error),
       Self::Font(error) => Some(error),
@@ -279,8 +284,8 @@ impl PageRange {
   }
 }
 
-impl std::fmt::Display for PageRange {
-  fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl Display for PageRange {
+  fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
     match (self.from, self.to) {
       (Some(from), Some(to)) if from == to => write!(f, "{from}"),
       (from, to) => write!(
@@ -414,6 +419,14 @@ pub struct PdfOptions<'g> {
   /// What a character no registered font covers turns into on the page.
   #[builder(default)]
   pub uncovered_text: UncoveredText,
+}
+
+impl PdfOptions<'_> {
+  /// Whether the document carries a structure tree: asked for, or required by
+  /// the standard.
+  pub(crate) fn writes_structure(&self) -> bool {
+    self.tagged != Tagging::Off || self.standard.requires_tagging()
+  }
 }
 
 /// What a character no registered font covers turns into on the page.
@@ -568,6 +581,34 @@ pub struct Attachment {
   pub modification_date: Option<PdfDate>,
 }
 
+impl Attachment {
+  /// The file as krilla embeds it, dated `fallback_date` when it carries no
+  /// date of its own.
+  pub(crate) fn embedded_file(
+    self,
+    fallback_date: Option<PdfDate>,
+  ) -> Result<EmbeddedFile, PdfError> {
+    let mime_type = match self.mime_type {
+      Some(mime) => Some(MimeType::new(&mime).ok_or(PdfError::InvalidMimeType(mime))?),
+      None => None,
+    };
+
+    Ok(EmbeddedFile {
+      path: self.name,
+      mime_type,
+      description: self.description,
+      association_kind: self.relationship.association_kind(),
+      data: self.data.into(),
+      modification_date: self
+        .modification_date
+        .or(fallback_date)
+        .map(PdfDate::date_time),
+      compress: None,
+      location: None,
+    })
+  }
+}
+
 /// How an attached file relates to the document it is embedded in.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum AttachmentRelationship {
@@ -644,36 +685,37 @@ pub struct XmpProperty {
   pub description: String,
 }
 
-/// Rejects schemas the XMP writer would serialize into broken XML: it escapes
-/// property values but writes names, prefixes and namespace URIs verbatim.
-pub(crate) fn validate_xmp_schemas(schemas: &[XmpSchema]) -> Result<(), PdfError> {
-  let name_ok = |name: &str| {
-    let mut chars = name.chars();
-
-    chars
-      .next()
-      .is_some_and(|first| first.is_alphabetic() || first == '_')
-      && chars.all(|c| c.is_alphanumeric() || matches!(c, '-' | '_' | '.'))
-  };
-
-  for schema in schemas {
-    if !name_ok(&schema.prefix) {
-      return Err(PdfError::InvalidXmpSchema(schema.prefix.clone()));
+impl XmpSchema {
+  /// Rejects a schema the XMP writer would serialize into broken XML: it
+  /// escapes property values but writes names, prefixes and namespace URIs
+  /// verbatim.
+  fn validate(&self) -> Result<(), PdfError> {
+    if !is_xml_name(&self.prefix) {
+      return Err(PdfError::InvalidXmpSchema(self.prefix.clone()));
     }
-    if schema.namespace.is_empty()
-      || schema
+    if self.namespace.is_empty()
+      || self
         .namespace
         .contains(|c: char| c.is_whitespace() || matches!(c, '"' | '\'' | '<' | '>' | '&'))
     {
-      return Err(PdfError::InvalidXmpSchema(schema.namespace.clone()));
+      return Err(PdfError::InvalidXmpSchema(self.namespace.clone()));
     }
-    for property in &schema.properties {
-      if !name_ok(&property.name) {
+    for property in &self.properties {
+      if !is_xml_name(&property.name) {
         return Err(PdfError::InvalidXmpSchema(property.name.clone()));
       }
     }
+    Ok(())
   }
-  Ok(())
+}
+
+fn is_xml_name(name: &str) -> bool {
+  let mut chars = name.chars();
+
+  chars
+    .next()
+    .is_some_and(|first| first.is_alphabetic() || first == '_')
+    && chars.all(|c| c.is_alphanumeric() || matches!(c, '-' | '_' | '.'))
 }
 
 /// A UTC timestamp for [`PdfMetadata::creation_date`].
@@ -693,44 +735,53 @@ pub struct PdfDate {
   pub second: u8,
 }
 
-pub(crate) fn build_metadata(metadata: &PdfMetadata, lang: Option<Lang>) -> Metadata {
-  let mut result = Metadata::new();
+impl PdfMetadata {
+  /// The metadata krilla writes, in document language `lang`, after checking
+  /// the custom schemas can be written.
+  pub(crate) fn metadata(&self, lang: Option<Lang>) -> Result<Metadata, PdfError> {
+    let mut result = Metadata::new();
 
-  if let Some(title) = &metadata.title {
-    result = result.title(title.clone());
+    for schema in &self.xmp {
+      schema.validate()?;
+    }
+    if let Some(title) = &self.title {
+      result = result.title(title.clone());
+    }
+    if let Some(description) = &self.description {
+      result = result.description(description.clone());
+    }
+    if !self.authors.is_empty() {
+      result = result.authors(self.authors.clone());
+    }
+    if !self.keywords.is_empty() {
+      result = result.keywords(self.keywords.clone());
+    }
+    if let Some(creator) = &self.creator {
+      result = result.creator(creator.clone());
+    }
+    if let Some(lang) = lang {
+      result = result.language(lang.as_str().to_string());
+    }
+    if let Some(date) = self.creation_date {
+      result = result.creation_date(date.date_time());
+    }
+    if !self.xmp.is_empty() {
+      result = result.custom_schemas(self.xmp.clone());
+    }
+    Ok(result)
   }
-  if let Some(description) = &metadata.description {
-    result = result.description(description.clone());
-  }
-  if !metadata.authors.is_empty() {
-    result = result.authors(metadata.authors.clone());
-  }
-  if !metadata.keywords.is_empty() {
-    result = result.keywords(metadata.keywords.clone());
-  }
-  if let Some(creator) = &metadata.creator {
-    result = result.creator(creator.clone());
-  }
-  if let Some(lang) = lang {
-    result = result.language(lang.as_str().to_string());
-  }
-  if let Some(date) = metadata.creation_date {
-    result = result.creation_date(krilla_datetime(date));
-  }
-  if !metadata.xmp.is_empty() {
-    result = result.custom_schemas(metadata.xmp.clone());
-  }
-  result
 }
 
-pub(crate) fn krilla_datetime(date: PdfDate) -> DateTime {
-  DateTime::new(date.year)
-    .month(date.month)
-    .day(date.day)
-    .hour(date.hour)
-    .minute(date.minute)
-    .second(date.second)
-    .utc_offset_hour(0)
+impl PdfDate {
+  pub(crate) fn date_time(self) -> DateTime {
+    DateTime::new(self.year)
+      .month(self.month)
+      .day(self.day)
+      .hour(self.hour)
+      .minute(self.minute)
+      .second(self.second)
+      .utc_offset_hour(0)
+  }
 }
 
 /// A page margin.

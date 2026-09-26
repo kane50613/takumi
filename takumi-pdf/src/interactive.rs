@@ -4,6 +4,7 @@
 use std::{
   cell::RefCell,
   collections::{HashMap, HashSet},
+  str::from_utf8,
 };
 
 use takumi_core::{
@@ -24,12 +25,12 @@ use crate::{
     action::{Action, LinkAction},
     annotation::{Annotation, LinkAnnotation, Target},
     destination::{Destination, XyzDestination},
-    geom::Rect as KrillaRect,
+    geom::{Point, Rect as KrillaRect},
     outline::{Outline, OutlineNode},
     page::Page,
   },
   options::PT_PER_PX,
-  tags::{TagCollector, text_content},
+  tags::{TagCollector, tag_id, text_content},
   tree::PreparedTree,
   window::Window,
 };
@@ -78,6 +79,23 @@ pub(crate) struct HeadingTarget {
   /// Path of the heading element. A heading whose text sits in child elements
   /// paints once per child, and the outline wants one entry.
   pub(crate) path: Vec<usize>,
+}
+
+/// A destination at `point` on output page `page`. PDF/UA-2 destinations
+/// also name the structure element built from `path`.
+pub(crate) fn xyz_destination(
+  page: usize,
+  point: Point,
+  path: &[usize],
+  structural: bool,
+) -> XyzDestination {
+  let destination = XyzDestination::new(page, point);
+
+  if structural {
+    destination.with_structure(tag_id(path))
+  } else {
+    destination
+  }
 }
 
 /// The axis-aligned bounding box of a node-local rect under the node's
@@ -135,6 +153,53 @@ impl Interactive {
       .map(|anchor| anchor.path.clone())
       .chain(self.headings.iter().map(|heading| heading.path.clone()))
       .collect()
+  }
+
+  /// Nests flat headings into an outline tree: a heading adopts the following
+  /// deeper headings as children, like an HTML document outline. A heading
+  /// with no destination (its page is dropped by page ranges) loses its entry
+  /// and its children take its place.
+  pub(crate) fn outline(
+    &self,
+    destination: impl Fn(&HeadingTarget) -> Option<XyzDestination>,
+  ) -> Outline {
+    fn take(
+      headings: &[HeadingTarget],
+      index: &mut usize,
+      level: u8,
+      destination: &impl Fn(&HeadingTarget) -> Option<XyzDestination>,
+    ) -> Vec<OutlineNode> {
+      let mut nodes = Vec::new();
+
+      while let Some(heading) = headings.get(*index) {
+        if heading.level < level {
+          break;
+        }
+        *index += 1;
+        let children = take(headings, index, heading.level + 1, destination);
+
+        match destination(heading) {
+          Some(dest) => {
+            let mut node = OutlineNode::new(heading.text.clone(), dest);
+
+            for child in children {
+              node.push_child(child);
+            }
+            nodes.push(node);
+          }
+          None => nodes.extend(children),
+        }
+      }
+      nodes
+    }
+
+    let mut outline = Outline::new();
+    let mut index = 0;
+
+    for node in take(&self.headings, &mut index, 1, &destination) {
+      outline.push_child(node);
+    }
+    outline
   }
 }
 
@@ -256,7 +321,7 @@ pub(crate) fn percent_decode(fragment: &str) -> String {
 
   while index < bytes.len() {
     let escape = (bytes[index] == b'%' && index + 2 < bytes.len())
-      .then(|| std::str::from_utf8(&bytes[index + 1..index + 3]).ok())
+      .then(|| from_utf8(&bytes[index + 1..index + 3]).ok())
       .flatten()
       .and_then(|hex| u8::from_str_radix(hex, 16).ok());
 
@@ -404,54 +469,5 @@ pub(crate) fn add_link_annotations<'l>(
       }
       None => page.add_annotation(annotation),
     }
-  }
-}
-
-/// Nests flat headings into an outline tree: a heading adopts the following
-/// deeper headings as children, like an HTML document outline. A heading with
-/// no destination (its page is dropped by page ranges) loses its entry and its
-/// children take its place.
-impl Interactive {
-  pub(crate) fn outline(
-    &self,
-    destination: impl Fn(&HeadingTarget) -> Option<XyzDestination>,
-  ) -> Outline {
-    fn take(
-      headings: &[HeadingTarget],
-      index: &mut usize,
-      level: u8,
-      destination: &impl Fn(&HeadingTarget) -> Option<XyzDestination>,
-    ) -> Vec<OutlineNode> {
-      let mut nodes = Vec::new();
-
-      while let Some(heading) = headings.get(*index) {
-        if heading.level < level {
-          break;
-        }
-        *index += 1;
-        let children = take(headings, index, heading.level + 1, destination);
-
-        match destination(heading) {
-          Some(dest) => {
-            let mut node = OutlineNode::new(heading.text.clone(), dest);
-
-            for child in children {
-              node.push_child(child);
-            }
-            nodes.push(node);
-          }
-          None => nodes.extend(children),
-        }
-      }
-      nodes
-    }
-
-    let mut outline = Outline::new();
-    let mut index = 0;
-
-    for node in take(&self.headings, &mut index, 1, &destination) {
-      outline.push_child(node);
-    }
-    outline
   }
 }

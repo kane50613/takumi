@@ -4,21 +4,18 @@
 use std::ops::Range;
 
 use takumi_core::{
-  font_style::SizedFontStyle,
   geometry::{ComputedLayout as Layout, NodeId},
-  layout::{
-    node::NodeKind,
-    tree::{LayoutResults, RenderNode},
-  },
+  layout::tree::{LayoutResults, RenderNode},
   painter::BoxPainter,
   scene::{NodePaint, PaintItemKind, StackingContextNode},
   style::{Affine, BreakBetween, BreakInside},
 };
 
 use crate::{
-  inline::{InlineMap, build_inline_runs, inline_box_atoms, node_inline_items, text_line_atoms},
+  inline::{InlineMap, inline_box_atoms, text_line_atoms, visit_inline_layout},
   options::PdfError,
   pagination::{Atom, Paragraph},
+  tree::OwnContent,
 };
 
 /// What the cut search works around, in content coordinates.
@@ -145,21 +142,16 @@ impl AtomCollector<'_> {
       .is_none_or(<[RenderNode]>::is_empty)
       || BoxPainter::new(&node.context, layout).paints_decorations();
 
-    if node.should_create_inline_layout() {
-      shows = true;
-      self.text_atoms(node, paint.node_id, layout, y, atoms)?;
-    } else if !node.has_anonymous_text_item_child() {
-      match node.node.as_ref().map(|n| &n.kind) {
-        Some(NodeKind::Text(_)) => {
-          shows = true;
-          self.text_atoms(node, paint.node_id, layout, y, atoms)?;
-        }
-        Some(NodeKind::Image(_)) => {
-          shows = true;
-          atoms.extents.push(extent);
-        }
-        _ => {}
+    match OwnContent::of(node) {
+      OwnContent::Text => {
+        shows = true;
+        self.text_atoms(node, paint.node_id, layout, y, atoms)?;
       }
+      OwnContent::Image(_) => {
+        shows = true;
+        atoms.extents.push(extent);
+      }
+      OwnContent::None => {}
     }
     if shows && extent.1 > extent.0 {
       atoms.content.push(extent);
@@ -177,31 +169,17 @@ impl AtomCollector<'_> {
     y: f32,
     atoms: &mut Atoms,
   ) -> Result<(), PdfError> {
-    let start = atoms.extents.len();
-    let owned_runs;
-    let runs = match self.inline.and_then(|map| map.get(&node_id)) {
-      Some(prepared) => &prepared.runs,
-      None => {
-        let context = &node.context;
-        let Some(items) = node_inline_items(node) else {
-          return Ok(());
-        };
-        let font_style = SizedFontStyle::from_style(&context.style, context);
-        let Some((_, runs)) = build_inline_runs(items, &font_style, context, layout)? else {
-          return Ok(());
-        };
+    visit_inline_layout(self.inline, node, node_id, layout, |_, runs, _| {
+      let start = atoms.extents.len();
 
-        owned_runs = runs;
-        &owned_runs
-      }
-    };
+      text_line_atoms(runs, layout, y, &mut atoms.extents);
+      // Box bands are indivisible but not text lines, so widow/orphan control
+      // does not count them.
+      let paragraph_end = atoms.extents.len();
 
-    text_line_atoms(runs, layout, y, &mut atoms.extents);
-    // Box bands are indivisible but not text lines, so widow/orphan control
-    // does not count them.
-    let paragraph_end = atoms.extents.len();
-    inline_box_atoms(runs, layout, y, &mut atoms.extents);
-    atoms.push_paragraph(node, start..paragraph_end);
+      inline_box_atoms(runs, layout, y, &mut atoms.extents);
+      atoms.push_paragraph(node, start..paragraph_end);
+    })?;
     Ok(())
   }
 }
