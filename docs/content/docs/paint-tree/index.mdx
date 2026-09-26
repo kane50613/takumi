@@ -15,7 +15,7 @@ npm i takumi-paint @takumi-rs/helpers
 
 `paint()` returns a `PaintTree`. The tree has a canvas size, a font table, and a root box.
 
-```ts twoslash title="Inspect a paint tree"
+```ts twoslash title="inspect.ts"
 import { paint } from "takumi-paint";
 
 const tree = await paint('<div id="card" style="width: 240px; padding: 16px">Hello</div>', {
@@ -46,7 +46,7 @@ The returned lengths are device pixels. Set `devicePixelRatio` to scale CSS leng
 
 `paint()` uses a shared `Painter`. A dedicated `Painter` keeps its registered fonts separate. Release its WebAssembly memory when finished.
 
-```ts twoslash title="Use a dedicated painter"
+```ts twoslash title="painter.ts"
 import { Painter } from "takumi-paint";
 
 const painter = new Painter();

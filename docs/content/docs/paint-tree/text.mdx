@@ -10,7 +10,7 @@ icon: Type
 
 Use `node.matrix` for the box. Apply `run.transform` after it when present; the walker adds that transform when `text-fit` scales a line.
 
-```ts twoslash title="Read positioned text"
+```ts twoslash title="text-runs.ts"
 import { paint } from "takumi-paint";
 
 const tree = await paint("<p>Hello <b>world</b></p>", { width: 320 });
@@ -42,7 +42,7 @@ A presentation writer can build a text box from `node.contentBox` and `node.text
 | Letter spacing | `run.letterSpacing`    |
 | Baseline       | `run.x`, `run.y`       |
 
-```ts twoslash title="Collect text for a presentation"
+```ts twoslash title="slides.ts"
 import { paint } from "takumi-paint";
 
 const tree = await paint(

@@ -10,7 +10,7 @@ A `PaintNode` is a border box and a compositing group. Its drawing data uses coo
 
 `node.matrix` returns the absolute `transform` when present. Otherwise it returns a translation from `node.x` and `node.y`. Canvas accepts the six matrix values in the same order.
 
-```ts twoslash title="Place a paint node"
+```ts twoslash title="place.ts"
 import type { PaintNode } from "takumi-paint";
 
 function place(ctx: CanvasRenderingContext2D, node: PaintNode) {
@@ -38,7 +38,7 @@ A tree iterator yields parents before children. Within each node, paint these la
 
 An outline follows its children. Recurse through `children` when drawing complete boxes; the flat iterator yields the parent first.
 
-```ts twoslash title="Visit boxes in paint order"
+```ts twoslash title="visit.ts"
 import { paint, type PaintNode } from "takumi-paint";
 
 const tree = await paint('<div style="background: red"><span>Hi</span></div>', {
