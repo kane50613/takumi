@@ -200,14 +200,7 @@ impl<'n> PlacedBox<'n> {
       device.finish()?;
     }
 
-    if self
-      .node
-      .context
-      .style
-      .background_image
-      .as_deref()
-      .is_none_or(<[_]>::is_empty)
-    {
+    if background.layers.is_empty() {
       return Ok(());
     }
     let group = self

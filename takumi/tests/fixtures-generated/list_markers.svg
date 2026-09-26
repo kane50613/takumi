@@ -1,11 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630">
   <rect x="0" y="0" width="1200" height="630" fill="#f3f4f6"/>
   <path d="M24 16h266c4.42 0 8 3.58 8 8v174c0 4.42-3.58 8-8 8h-266c-4.42 0-8-3.58-8-8v-174c0-4.42 3.58-8 8-8Z" fill="#fff"/>
-  <clipPath id="cp0">
-    <path d="M24 16h266c4.42 0 8 3.58 8 8v174c0 4.42-3.58 8-8 8h-266c-4.42 0-8-3.58-8-8v-174c0-4.42 3.58-8 8-8Z"/>
-  </clipPath>
-  <g clip-path="url(#cp0)">
-  </g>
   <g fill="#64748b">
     <use href="#g0" x="28" y="37"/>
     <use href="#g1" x="34.6" y="37"/>
@@ -81,11 +76,6 @@
     <use href="#g14" x="84.9" y="125"/>
   </g>
   <path d="M316 16h266c4.42 0 8 3.58 8 8v174c0 4.42-3.58 8-8 8h-266c-4.42 0-8-3.58-8-8v-174c0-4.42 3.58-8 8-8Z" fill="#fff"/>
-  <clipPath id="cp1">
-    <path d="M316 16h266c4.42 0 8 3.58 8 8v174c0 4.42-3.58 8-8 8h-266c-4.42 0-8-3.58-8-8v-174c0-4.42 3.58-8 8-8Z"/>
-  </clipPath>
-  <g clip-path="url(#cp1)">
-  </g>
   <g fill="#64748b">
     <use href="#g17" x="320" y="37"/>
     <use href="#g18" x="326.6" y="37"/>
@@ -121,11 +111,6 @@
   </g>
   <use href="#g23" x="357" y="110" fill="#111827"/>
   <path d="M608 16h266c4.42 0 8 3.58 8 8v174c0 4.42-3.58 8-8 8h-266c-4.42 0-8-3.58-8-8v-174c0-4.42 3.58-8 8-8Z" fill="#fff"/>
-  <clipPath id="cp2">
-    <path d="M608 16h266c4.42 0 8 3.58 8 8v174c0 4.42-3.58 8-8 8h-266c-4.42 0-8-3.58-8-8v-174c0-4.42 3.58-8 8-8Z"/>
-  </clipPath>
-  <g clip-path="url(#cp2)">
-  </g>
   <g fill="#64748b">
     <use href="#g24" x="612" y="37"/>
     <use href="#g5" x="618.6" y="37"/>
@@ -246,11 +231,6 @@
     <use href="#g12" x="679.22" y="188"/>
   </g>
   <path d="M900 16h266c4.42 0 8 3.58 8 8v174c0 4.42-3.58 8-8 8h-266c-4.42 0-8-3.58-8-8v-174c0-4.42 3.58-8 8-8Z" fill="#fff"/>
-  <clipPath id="cp3">
-    <path d="M900 16h266c4.42 0 8 3.58 8 8v174c0 4.42-3.58 8-8 8h-266c-4.42 0-8-3.58-8-8v-174c0-4.42 3.58-8 8-8Z"/>
-  </clipPath>
-  <g clip-path="url(#cp3)">
-  </g>
   <g fill="#64748b">
     <use href="#g7" x="904" y="37"/>
     <use href="#g8" x="910.6" y="37"/>
@@ -322,11 +302,6 @@
   </g>
   <use href="#g22" x="944" y="104" fill="#111827"/>
   <path d="M24 216h266c4.42 0 8 3.58 8 8v174c0 4.42-3.58 8-8 8h-266c-4.42 0-8-3.58-8-8v-174c0-4.42 3.58-8 8-8Z" fill="#fff"/>
-  <clipPath id="cp4">
-    <path d="M24 216h266c4.42 0 8 3.58 8 8v174c0 4.42-3.58 8-8 8h-266c-4.42 0-8-3.58-8-8v-174c0-4.42 3.58-8 8-8Z"/>
-  </clipPath>
-  <g clip-path="url(#cp4)">
-  </g>
   <g fill="#64748b">
     <use href="#g2" x="28" y="237"/>
     <use href="#g3" x="34.6" y="237"/>
@@ -387,11 +362,6 @@
     <use href="#g14" x="60.59" y="346"/>
   </g>
   <path d="M316 216h266c4.42 0 8 3.58 8 8v174c0 4.42-3.58 8-8 8h-266c-4.42 0-8-3.58-8-8v-174c0-4.42 3.58-8 8-8Z" fill="#fff"/>
-  <clipPath id="cp5">
-    <path d="M316 216h266c4.42 0 8 3.58 8 8v174c0 4.42-3.58 8-8 8h-266c-4.42 0-8-3.58-8-8v-174c0-4.42 3.58-8 8-8Z"/>
-  </clipPath>
-  <g clip-path="url(#cp5)">
-  </g>
   <g fill="#64748b">
     <use href="#g7" x="320" y="237"/>
     <use href="#g8" x="326.6" y="237"/>
@@ -448,11 +418,6 @@
   </g>
   <image x="360" y="296" width="8" height="8" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAgAAAAICAYAAADED76LAAAAEklEQVR42mOwbvr2Hx9mGBkKAKAwrIFG5bLTAAAAAElFTkSuQmCC" preserveAspectRatio="none"/>
   <path d="M608 216h266c4.42 0 8 3.58 8 8v174c0 4.42-3.58 8-8 8h-266c-4.42 0-8-3.58-8-8v-174c0-4.42 3.58-8 8-8Z" fill="#fff"/>
-  <clipPath id="cp6">
-    <path d="M608 216h266c4.42 0 8 3.58 8 8v174c0 4.42-3.58 8-8 8h-266c-4.42 0-8-3.58-8-8v-174c0-4.42 3.58-8 8-8Z"/>
-  </clipPath>
-  <g clip-path="url(#cp6)">
-  </g>
   <g fill="#64748b">
     <use href="#g17" x="612" y="237"/>
     <use href="#g7" x="618.6" y="237"/>
@@ -509,11 +474,6 @@
     <use href="#g14" x="644.9" y="283"/>
   </g>
   <path d="M900 216h266c4.42 0 8 3.58 8 8v174c0 4.42-3.58 8-8 8h-266c-4.42 0-8-3.58-8-8v-174c0-4.42 3.58-8 8-8Z" fill="#fff"/>
-  <clipPath id="cp7">
-    <path d="M900 216h266c4.42 0 8 3.58 8 8v174c0 4.42-3.58 8-8 8h-266c-4.42 0-8-3.58-8-8v-174c0-4.42 3.58-8 8-8Z"/>
-  </clipPath>
-  <g clip-path="url(#cp7)">
-  </g>
   <g fill="#64748b">
     <use href="#g4" x="904" y="237"/>
     <use href="#g8" x="910.6" y="237"/>
