@@ -18,7 +18,7 @@ use super::{
   paint_border, rasterize_layers,
 };
 use crate::{
-  Placement, Result, Style, intersect_alpha_masks,
+  MaskCompositeColor, MaskSamplingOptions, Placement, Result, Style, intersect_alpha_masks,
   layout::{
     inline::{InlineItem, InlineLayoutMode, InlineLayoutRequest, create_inline_layout},
     node::{ImageData, Node, NodeKind, TextData},
@@ -134,21 +134,48 @@ impl<'c> CanvasDevice<'c> {
     )
   }
 
+  /// Limits `coverage` to the open clips, or `None` when nothing is left.
+  fn clipped(&self, coverage: (Vec<u8>, Placement)) -> Option<(Vec<u8>, Placement)> {
+    self
+      .clips
+      .iter()
+      .flatten()
+      .try_fold(coverage, |(mask, placement), (clip, clip_placement)| {
+        intersect_alpha_masks(&mask, placement, clip, *clip_placement)
+      })
+  }
+
   /// Paints `coverage` in `color`, limited to the open clips.
   fn draw_coverage(&mut self, coverage: (Vec<u8>, Placement), color: Color) {
-    let mut coverage = coverage;
-
-    for (clip, placement) in self.clips.iter().flatten() {
-      let Some(clipped) = intersect_alpha_masks(&coverage.0, coverage.1, clip, *placement) else {
-        return;
-      };
-
-      coverage = clipped;
+    if let Some((mask, placement)) = self.clipped(coverage) {
+      self
+        .canvas
+        .draw_mask(&mask, placement, color, BlendMode::Normal);
     }
+  }
 
-    self
-      .canvas
-      .draw_mask(&coverage.0, coverage.1, color, BlendMode::Normal);
+  /// Fills `shape` with `source`, an image laid over the box at the device transform.
+  pub(crate) fn fill_shape_with_source(&mut self, shape: &FillShape, source: PaintSource<'_>) {
+    let Some(canvas_to_source) = self.transform.invert() else {
+      return;
+    };
+    let coverage = self.coverage(shape, Fill::from(shape.rule()).into(), Affine::IDENTITY);
+    let Some((mask, placement)) = self.clipped(coverage) else {
+      return;
+    };
+
+    self.canvas.composite_mask_source(
+      &mask,
+      placement,
+      source,
+      MaskCompositeColor::SourceOnly,
+      MaskSamplingOptions {
+        canvas_to_source,
+        sample_bias: Point::ZERO,
+        algorithm: self.algorithm,
+      },
+      BlendMode::Normal,
+    );
   }
 }
 
@@ -303,10 +330,8 @@ pub(crate) fn draw_background(
 
       draw_clipped_background(clip, layers, context, canvas)?;
     }
-    // Filling the border's own shape with the layers is the clip `border-area`
-    // asks for. The border then paints over it, as it does in Blink.
-    BackgroundClipArea::BorderArea(border_radius) => {
-      let layers = rasterize_layers(
+    BackgroundClipArea::BorderArea(_) => {
+      let tile = rasterize_layers(
         collect_background_layers(&background, context)?,
         layout.size.map(|size| size as u32),
         context,
@@ -314,13 +339,11 @@ pub(crate) fn draw_background(
         Affine::IDENTITY,
       )?;
 
-      paint_border(
-        border_radius,
-        canvas,
-        layout.size,
-        context.transform,
-        layers.as_ref().map(PaintSource::from),
-      );
+      if let Some(tile) = &tile
+        && let Some(shape) = background.clip.shape(layout.size)
+      {
+        device.fill_shape_with_source(&shape, tile.into());
+      }
     }
     BackgroundClipArea::Text => {}
   }
