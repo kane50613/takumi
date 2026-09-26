@@ -2,8 +2,8 @@
 //!
 //! [`paint_tree`] runs layout, builds the same stacking-context scene the raster, SVG, and
 //! PDF backends walk, and records each box's decorations, image placement, and shaped text
-//! runs instead of drawing them. Lengths are device pixels. A node's `transform` is absolute;
-//! everything inside a node is relative to its border box.
+//! runs instead of drawing them. Lengths are device pixels. A node's `x`, `y`, and `transform`
+//! are absolute; everything inside a node is relative to its border box.
 //!
 //! Descendant outlines drift from the backends: they paint after the owning node's children,
 //! while raster and SVG defer a plain node's outline past the siblings that follow it in the
@@ -22,11 +22,11 @@ use crate::{
   Fonts,
   context::RenderContext,
   error::Result,
-  geometry::Size,
+  geometry::{Point, Size},
   layout::{node::Node, tree::RenderNode},
   resources::image::ImageSource,
   scene::Scene,
-  style::{Affine, ComputedStyle, FontFamily, Lang, SizingContext, StyleSheet},
+  style::{ComputedStyle, FontFamily, Lang, SizingContext, StyleSheet},
   viewport::Viewport,
 };
 
@@ -92,16 +92,23 @@ pub fn paint_tree(options: PaintTreeOptions<'_>) -> Result<PaintTree> {
       source: None,
       width,
       height,
-      transform: Affine::IDENTITY.to_cols_array(),
+      x: 0.0,
+      y: 0.0,
+      content_box: PaintRect::new(Point::default(), Size { width, height }),
+      transform: None,
       opacity: 1.0,
       blend_mode: None,
       isolate: false,
       clip: None,
-      box_decoration: None,
+      background: None,
+      border: None,
+      shadows: None,
+      outline: None,
       image: None,
       text_shadows: Vec::new(),
       inline_backgrounds: Vec::new(),
-      runs: Vec::new(),
+      text_runs: Vec::new(),
+      text_align: None,
       unresolved_effects: None,
       children: nodes,
     },

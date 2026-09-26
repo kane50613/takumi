@@ -19,41 +19,53 @@ npm install takumi-paint @takumi-rs/helpers
 
 ## Quick start
 
-```tsx
-import { renderPaintTree, type PaintNode, type PaintTextRun } from "takumi-paint";
+`paint()` lays out the document. The tree iterates its boxes in paint order, so drawing is one loop.
 
-const tree = await renderPaintTree(
-  `<style>.big { font: 700 40px Georgia; color: #B3261E }</style>
-   <div style="width: 640px; padding: 32px; background: #F7F3EC">
-     <div class="big">4,2 %</div>
-     <p>hello <b>world</b></p>
-   </div>`,
+```tsx
+import { paint } from "takumi-paint";
+
+const tree = await paint(
+  <div style={{ width: 640, padding: 32, background: "#F7F3EC", flexDirection: "column", gap: 8 }}>
+    <div style={{ fontSize: 40, fontWeight: 700, color: "#B3261E" }}>Hello paint</div>
+    <div>Every box and text run, with the values the renderer used.</div>
+  </div>,
   { width: 640 },
 );
 
-function* runs(node: PaintNode): Iterable<PaintTextRun> {
-  yield* node.runs ?? [];
-  for (const child of node.children ?? []) yield* runs(child);
+function draw(ctx: CanvasRenderingContext2D) {
+  for (const node of tree) {
+    ctx.setTransform(...node.matrix);
+    if (node.background?.color) {
+      ctx.fillStyle = rgba(node.background.color);
+      ctx.fillRect(0, 0, node.width, node.height);
+    }
+    for (const run of node.textRuns) {
+      ctx.save();
+      if (run.transform) ctx.transform(...run.transform);
+      ctx.font = `${run.font.weight} ${run.fontSize}px ${run.font.family}`;
+      ctx.fillStyle = rgba(run.color);
+      ctx.fillText(run.text, run.x, run.y);
+      ctx.restore();
+    }
+  }
+  ctx.resetTransform();
 }
 
-for (const run of runs(tree.root)) {
-  const font = tree.fonts[run.fontIndex];
-  console.log(run.text, font?.family, font?.weight, run.fontSize, run.color);
-}
+const rgba = ([r, g, b, a]: number[]) => `rgb(${r} ${g} ${b} / ${a / 255})`;
 ```
 
 ## What the tree holds
 
 `takumi-paint` runs Takumi's layout in WebAssembly and walks the same stacking-context scene the image, SVG, and PDF backends paint. Instead of drawing, it records what each box would draw:
 
-- **Box decoration**: the used background, border, shadows, and outline.
-- **Image**: where a replaced image lands after `object-fit`.
-- **Text runs**: every shaped run with the font, size, and color it was shaped with.
+- `background`, `border`, `shadows`, `outline`: the used decorations of each box.
+- `image`: where a replaced image lands after `object-fit`.
+- `textRuns`: every shaped run with the font, size, and color it was shaped with.
 
 ## Coordinates
 
 - Every length is a device pixel.
-- A node's `transform` is absolute.
+- A node's `x` and `y` place its border box on the canvas. `transform` appears only when the box is rotated, scaled, or skewed. `node.matrix` returns whichever of the two applies.
 - Everything inside a node is relative to its border box.
 
 ## Resolved and unresolved values

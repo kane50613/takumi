@@ -31,8 +31,15 @@
       "className": "card"
     },
     "width": 400.0,
-    "height": 214.0,
-    "transform": [1.0, 0.0, 0.0, 1.0, 0.0, 0.0],
+    "height": 220.0,
+    "x": 0.0,
+    "y": 0.0,
+    "contentBox": {
+      "x": 24.0,
+      "y": 24.0,
+      "width": 352.0,
+      "height": 172.0
+    },
     "opacity": 1.0,
     "isolate": false,
     "clip": {
@@ -40,7 +47,7 @@
         "x": 4.0,
         "y": 4.0,
         "width": 392.0,
-        "height": 206.0
+        "height": 212.0
       },
       "radii": [
         [8.0, 8.0],
@@ -51,82 +58,80 @@
       "x": true,
       "y": true
     },
-    "boxDecoration": {
-      "background": {
-        "color": [247, 243, 236, 255],
-        "clip": "border-box",
-        "layers": [
-          {
-            "fill": {
-              "kind": "linear",
-              "css": "linear-gradient(to right, rgb(255, 0, 0), rgb(0, 0, 255))",
-              "repeating": false,
-              "dirX": 1.0,
-              "dirY": 4.371139e-8,
-              "axisLength": 392.0,
-              "stops": [
-                {
-                  "color": [255, 0, 0, 255],
-                  "position": 0.0
-                },
-                {
-                  "color": [0, 0, 255, 255],
-                  "position": 392.0
-                }
-              ]
-            },
-            "tiles": {
-              "xs": [-388, 4, 396],
-              "ys": [-202, 4, 210],
-              "width": 392,
-              "height": 206
-            },
-            "blendMode": "normal"
-          }
-        ]
-      },
-      "border": {
-        "widths": [4.0, 4.0, 4.0, 4.0],
-        "colors": [
-          [179, 38, 30, 255],
-          [179, 38, 30, 255],
-          [179, 38, 30, 255],
-          [179, 38, 30, 255]
-        ],
-        "styles": ["solid", "solid", "solid", "solid"],
-        "radii": [
-          [12.0, 12.0],
-          [12.0, 12.0],
-          [12.0, 12.0],
-          [12.0, 12.0]
-        ]
-      },
-      "shadows": {
-        "inset": [
-          {
-            "offsetX": 0.0,
-            "offsetY": 1.0,
-            "blur": 0.0,
-            "spread": 0.0,
-            "color": [255, 255, 255, 255]
-          }
-        ],
-        "outer": [
-          {
-            "offsetX": 0.0,
-            "offsetY": 4.0,
-            "blur": 8.0,
-            "spread": 0.0,
-            "color": [0, 0, 0, 64]
-          }
-        ]
-      },
-      "outline": {
-        "width": 2.0,
-        "color": [0, 128, 0, 255],
-        "style": "dashed",
-        "offset": 3.0
-      }
+    "background": {
+      "color": [247, 243, 236, 255],
+      "clip": "border-box",
+      "layers": [
+        {
+          "fill": {
+            "kind": "linear",
+            "css": "linear-gradient(to right, rgb(255, 0, 0), rgb(0, 0, 255))",
+            "repeating": false,
+            "dirX": 1.0,
+            "dirY": 4.371139e-8,
+            "axisLength": 392.0,
+            "stops": [
+              {
+                "color": [255, 0, 0, 255],
+                "position": 0.0
+              },
+              {
+                "color": [0, 0, 255, 255],
+                "position": 392.0
+              }
+            ]
+          },
+          "tiles": {
+            "xs": [-388, 4, 396],
+            "ys": [-208, 4, 216],
+            "width": 392,
+            "height": 212
+          },
+          "blendMode": "normal"
+        }
+      ]
+    },
+    "border": {
+      "widths": [4.0, 4.0, 4.0, 4.0],
+      "colors": [
+        [179, 38, 30, 255],
+        [179, 38, 30, 255],
+        [179, 38, 30, 255],
+        [179, 38, 30, 255]
+      ],
+      "styles": ["solid", "solid", "solid", "solid"],
+      "radii": [
+        [12.0, 12.0],
+        [12.0, 12.0],
+        [12.0, 12.0],
+        [12.0, 12.0]
+      ]
+    },
+    "shadows": {
+      "inset": [
+        {
+          "offsetX": 0.0,
+          "offsetY": 1.0,
+          "blur": 0.0,
+          "spread": 0.0,
+          "color": [255, 255, 255, 255]
+        }
+      ],
+      "outer": [
+        {
+          "offsetX": 0.0,
+          "offsetY": 4.0,
+          "blur": 8.0,
+          "spread": 0.0,
+          "color": [0, 0, 0, 64]
+        }
+      ]
+    },
+    "outline": {
+      "width": 2.0,
+      "color": [0, 128, 0, 255],
+      "style": "dashed",
+      "offset": 3.0
     },
     "children": [
       {
@@ -136,19 +141,28 @@
         },
         "width": 352.0,
         "height": 52.0,
-        "transform": [1.0, 0.0, 0.0, 1.0, 24.0, 24.0],
+        "x": 24.0,
+        "y": 24.0,
+        "contentBox": {
+          "x": 0.0,
+          "y": 0.0,
+          "width": 352.0,
+          "height": 52.0
+        },
         "opacity": 1.0,
         "isolate": false,
-        "runs": [
+        "textRuns": [
           {
             "text": "4,2 %",
             "x": 0.0,
             "y": 40.0,
-            "width": 103.92,
+            "width": 113.920006,
             "ascent": 40.2,
             "descent": 11.8,
             "fontIndex": 0,
             "fontSize": 40.0,
+            "lineHeight": 52.0,
+            "letterSpacing": 2.0,
             "color": [179, 38, 30, 255],
             "opacity": 1.0,
             "glyphs": [
@@ -159,22 +173,22 @@
               },
               {
                 "id": 607,
-                "x": 26.24,
+                "x": 28.24,
                 "y": 0.0
               },
               {
                 "id": 510,
-                "x": 35.68,
+                "x": 39.68,
                 "y": 0.0
               },
               {
                 "id": 601,
-                "x": 61.8,
+                "x": 67.8,
                 "y": 0.0
               },
               {
                 "id": 727,
-                "x": 70.92,
+                "x": 78.920006,
                 "y": 0.0
               }
             ],
@@ -182,14 +196,14 @@
               {
                 "line": "underline",
                 "transform": [1.0, 0.0, 0.0, 1.0, 0.0, 44.0],
-                "width": 24.279562,
+                "width": 26.279562,
                 "height": 4.0,
                 "color": [179, 38, 30, 255]
               },
               {
                 "line": "underline",
-                "transform": [1.0, 0.0, 0.0, 1.0, 36.175686, 44.0],
-                "width": 67.82431,
+                "transform": [1.0, 0.0, 0.0, 1.0, 38.175686, 44.0],
+                "width": 75.82431,
                 "height": 4.0,
                 "color": [179, 38, 30, 255]
               }
@@ -197,7 +211,8 @@
             "textByteRange": [3, 8],
             "spanId": 1
           }
-        ]
+        ],
+        "textAlign": "left"
       },
       {
         "source": {
@@ -206,17 +221,24 @@
           "className": "p"
         },
         "width": 352.0,
-        "height": 34.0,
-        "transform": [1.0, 0.0, 0.0, 1.0, 24.0, 76.0],
+        "height": 40.0,
+        "x": 24.0,
+        "y": 76.0,
+        "contentBox": {
+          "x": 0.0,
+          "y": 0.0,
+          "width": 352.0,
+          "height": 40.0
+        },
         "opacity": 1.0,
         "isolate": false,
         "inlineBackgrounds": [
           {
             "rect": {
-              "x": 193.544,
+              "x": 227.93501,
               "y": 0.0,
-              "width": 89.67401,
-              "height": 34.0
+              "width": 89.673996,
+              "height": 40.0
             },
             "radii": [
               [0.0, 0.0],
@@ -228,16 +250,18 @@
             "opacity": 0.5
           }
         ],
-        "runs": [
+        "textRuns": [
           {
             "text": "hello ",
-            "x": 0.0,
-            "y": 26.0,
+            "x": 34.391006,
+            "y": 29.0,
             "width": 64.116,
             "ascent": 26.130001,
             "descent": 7.67,
             "fontIndex": 1,
             "fontSize": 26.0,
+            "lineHeight": 40.0,
+            "letterSpacing": 0.0,
             "color": [20, 17, 15, 255],
             "opacity": 1.0,
             "glyphs": [
@@ -248,7 +272,7 @@
               },
               {
                 "id": 194,
-                "x": 14.794001,
+                "x": 14.793999,
                 "y": 0.0
               },
               {
@@ -263,12 +287,12 @@
               },
               {
                 "id": 247,
-                "x": 42.718,
+                "x": 42.718002,
                 "y": 0.0
               },
               {
                 "id": 601,
-                "x": 57.615997,
+                "x": 57.616005,
                 "y": 0.0
               }
             ],
@@ -277,13 +301,15 @@
           },
           {
             "text": "world",
-            "x": 64.116,
-            "y": 26.0,
+            "x": 98.507,
+            "y": 29.0,
             "width": 71.942,
             "ascent": 26.130001,
             "descent": 7.67,
             "fontIndex": 0,
             "fontSize": 26.0,
+            "lineHeight": 40.0,
+            "letterSpacing": 0.0,
             "color": [0, 0, 255, 255],
             "opacity": 1.0,
             "glyphs": [
@@ -299,7 +325,7 @@
               },
               {
                 "id": 260,
-                "x": 37.154,
+                "x": 37.154007,
                 "y": 0.0
               },
               {
@@ -309,7 +335,7 @@
               },
               {
                 "id": 190,
-                "x": 55.458,
+                "x": 55.458008,
                 "y": 0.0
               }
             ],
@@ -318,13 +344,15 @@
           },
           {
             "text": " and ",
-            "x": 136.058,
-            "y": 26.0,
+            "x": 170.449,
+            "y": 29.0,
             "width": 57.486,
             "ascent": 26.130001,
             "descent": 7.67,
             "fontIndex": 1,
             "fontSize": 26.0,
+            "lineHeight": 40.0,
+            "letterSpacing": 0.0,
             "color": [20, 17, 15, 255],
             "opacity": 1.0,
             "glyphs": [
@@ -359,13 +387,15 @@
           },
           {
             "text": "marked",
-            "x": 193.544,
-            "y": 26.0,
+            "x": 227.93501,
+            "y": 29.0,
             "width": 89.674,
             "ascent": 26.130001,
             "descent": 7.67,
             "fontIndex": 1,
             "fontSize": 26.0,
+            "lineHeight": 40.0,
+            "letterSpacing": 0.0,
             "color": [20, 17, 15, 255],
             "opacity": 1.0,
             "glyphs": [
@@ -376,34 +406,35 @@
               },
               {
                 "id": 171,
-                "x": 22.541992,
+                "x": 22.542007,
                 "y": 0.0
               },
               {
                 "id": 260,
-                "x": 36.763992,
+                "x": 36.764023,
                 "y": 0.0
               },
               {
                 "id": 232,
-                "x": 45.837997,
+                "x": 45.838028,
                 "y": 0.0
               },
               {
                 "id": 194,
-                "x": 59.87799,
+                "x": 59.878036,
                 "y": 0.0
               },
               {
                 "id": 190,
-                "x": 74.20398,
+                "x": 74.204025,
                 "y": 0.0
               }
             ],
             "textByteRange": [19, 25],
             "spanId": 4
           }
-        ]
+        ],
+        "textAlign": "center"
       },
       {
         "source": {
@@ -412,17 +443,18 @@
         },
         "width": 120.0,
         "height": 80.0,
-        "transform": [1.0, 0.0, 0.0, 1.0, 24.0, 110.0],
+        "x": 24.0,
+        "y": 116.0,
+        "contentBox": {
+          "x": 0.0,
+          "y": 0.0,
+          "width": 120.0,
+          "height": 80.0
+        },
         "opacity": 1.0,
         "isolate": false,
         "image": {
           "src": "assets/images/yeecord.png",
-          "contentBox": {
-            "x": 0.0,
-            "y": 0.0,
-            "width": 120.0,
-            "height": 80.0
-          },
           "placement": {
             "x": 0.0,
             "y": -20.0,
@@ -438,7 +470,14 @@
         },
         "width": 352.0,
         "height": 0.0,
-        "transform": [1.0, 0.0, 0.0, 1.0, 24.0, 190.0],
+        "x": 24.0,
+        "y": 196.0,
+        "contentBox": {
+          "x": 0.0,
+          "y": 0.0,
+          "width": 352.0,
+          "height": 0.0
+        },
         "opacity": 1.0,
         "blendMode": "multiply",
         "isolate": false,
