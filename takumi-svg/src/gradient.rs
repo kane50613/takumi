@@ -8,8 +8,8 @@ use takumi_core::{
   layout::background_image_geometry::{BackgroundImageGeometry, BackgroundLayer},
   paint::{ColorLut, ConicGradientTile},
   style::{
-    BackgroundImage, ColorInterpolationMethod, ConicGradient, FillRule, LinearGradient,
-    RadialGradient, ResolvedGradientStop,
+    BackgroundImage, BlendMode, ColorInterpolationMethod, ConicGradient, FillRule, LinearGradient,
+    RadialGradient, ResolvedGradientStop, ToCss,
   },
 };
 
@@ -45,7 +45,18 @@ impl<'a, 'd> LayerEmitter<'a, 'd> {
     }
 
     for layer in layers {
+      let blend = (layer.blend_mode != BlendMode::Normal)
+        .then(|| {
+          self
+            .doc
+            .begin_blend_group(&layer.blend_mode.to_css_string())
+        })
+        .transpose()?;
+
       self.layer(layer.image, &layer.geometry, area, paint)?;
+      if let Some(blend) = blend {
+        self.doc.end_group(blend)?;
+      }
     }
     Ok(())
   }

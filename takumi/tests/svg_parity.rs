@@ -44,8 +44,8 @@ const KNOWN_DIVERGENT: &[(&str, &str)] = &[
   ),
   (
     "showcase_halftone",
-    "background-blend-mode is raster-only: the svg backend paints background \
-     layers independently, so the multiply + contrast() dot screen degrades",
+    "contrast(14) magnifies the gradient sampling differences between resvg \
+     and raster into different halftone dots (80.6%, floor is 90%)",
   ),
   (
     "showcase_chrome_text",

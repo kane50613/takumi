@@ -188,6 +188,13 @@ impl<'n> PlacedBox<'n> {
     if matches!(background.clip, BackgroundClipArea::Text) {
       return Ok(());
     }
+    // A blending layer mixes with the layers and color beneath it and nothing behind the box.
+    let isolate = background
+      .layers
+      .iter()
+      .any(|layer| layer.blend_mode != BlendMode::Normal)
+      .then(|| doc.begin_isolate_group())
+      .transpose()?;
 
     // The colour fill carries the clip shape itself, so it goes outside the
     // group. Only the image layers need the clip.
@@ -218,6 +225,9 @@ impl<'n> PlacedBox<'n> {
     )?;
     if let Some(group) = group {
       doc.end_group(group)?;
+    }
+    if let Some(isolate) = isolate {
+      doc.end_group(isolate)?;
     }
     Ok(())
   }
