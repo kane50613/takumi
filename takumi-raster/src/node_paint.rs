@@ -7,14 +7,14 @@
 use takumi_core::{
   geometry::{ComputedLayout as Layout, Point},
   layout::decoration::{ClipBox, OutlineGeometry},
-  painter::{BackgroundClipArea, BoxBackground, BoxPainter, FillShape, PaintDevice},
+  painter::{BackgroundClipArea, BoxPainter, FillShape, PaintDevice},
   style::{Color, ImageScalingAlgorithm},
 };
 
 use super::{
   BackgroundTile, BorderProperties, Canvas, ColorTile, Fill, PaintSource, RenderContext,
-  SizedFontStyle, TileLayer, background_image_layers, collect_background_layers, draw_image,
-  draw_inset_shadow_to_canvas, draw_outset_shadow, inline_drawing::draw_inline_layout,
+  SizedFontStyle, TileLayer, TileLayers, background_image_layers, collect_background_layers,
+  draw_image, draw_inset_shadow_to_canvas, draw_outset_shadow, inline_drawing::draw_inline_layout,
   paint_border, rasterize_layers,
 };
 use crate::{
@@ -147,9 +147,35 @@ pub(crate) fn draw_background(
     algorithm: context.style.image_rendering,
   };
 
-  painter.background_color(Point::ZERO, &mut device);
+  // A blending layer mixes with the layers and color beneath it and nothing behind the box, so
+  // the whole background composites in one tile, color included.
+  let isolated = background
+    .layers
+    .iter()
+    .any(|layer| layer.blend_mode != BlendMode::Normal);
+
+  if !isolated {
+    painter.background_color(Point::ZERO, &mut device);
+  }
 
   match background.clip {
+    BackgroundClipArea::BorderBox(border_radius) if isolated => {
+      if let Some(tile) = rasterize_layers(
+        collect_background_layers(&background, context)?,
+        layout.size.map(|x| x as u32),
+        context,
+        BorderProperties::default(),
+        Affine::IDENTITY,
+      )? {
+        canvas.overlay_image(
+          &tile,
+          border_radius,
+          context.transform,
+          context.style.image_rendering,
+          BlendMode::Normal,
+        );
+      }
+    }
     BackgroundClipArea::BorderBox(border_radius) => {
       let layers = background_image_layers(&background, context)?;
 
@@ -207,7 +233,13 @@ pub(crate) fn draw_background(
       }
     }
     BackgroundClipArea::Inner(clip) => {
-      draw_clipped_background(clip, &background, context, canvas)?;
+      let layers = if isolated {
+        collect_background_layers(&background, context)?
+      } else {
+        background_image_layers(&background, context)?
+      };
+
+      draw_clipped_background(clip, layers, context, canvas)?;
     }
     // Filling the border's own shape with the layers is the clip `border-area`
     // asks for. The border then paints over it, as it does in Blink.
@@ -238,12 +270,10 @@ pub(crate) fn draw_background(
 /// it. Shared by the padding-box and content-box `background-clip` modes.
 fn draw_clipped_background(
   clip: ClipBox,
-  background: &BoxBackground<'_>,
+  layers: TileLayers,
   context: &RenderContext,
   canvas: &mut Canvas,
 ) -> Result<()> {
-  let layers = background_image_layers(background, context)?;
-
   if let Some(tile) = rasterize_layers(
     layers,
     clip.size.map(|size| size as u32),
