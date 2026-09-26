@@ -203,11 +203,11 @@ pub trait PaintDevice {
   /// Strokes `shape` under `transform`.
   fn stroke_shape(&mut self, _shape: &FillShape, _stroke: &StrokeStyle, _transform: Affine) {}
 
-  /// Saves the drawing state, then clips later draws to the shape under its transform, if any.
-  fn save(&mut self, clip: Option<(&FillShape, Affine)>);
+  /// Clips later draws to `shape` under `transform`, until the matching [`PaintDevice::pop_clip`].
+  fn push_clip(&mut self, shape: &FillShape, transform: Affine);
 
-  /// Restores the state the matching [`PaintDevice::save`] saved.
-  fn restore(&mut self);
+  /// Removes the most recent clip.
+  fn pop_clip(&mut self);
 }
 
 /// How to stroke a shape.

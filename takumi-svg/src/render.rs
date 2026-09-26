@@ -640,23 +640,21 @@ impl PaintDevice for DocumentDevice<'_> {
     }
   }
 
-  fn save(&mut self, clip: Option<(&FillShape, Affine)>) {
+  fn push_clip(&mut self, shape: &FillShape, transform: Affine) {
     if self.error.is_some() {
       return;
     }
-    let group = clip
-      .map(|(shape, transform)| {
-        self.doc.clip_path(
-          &path_data(&shape.to_commands(), transform),
-          shape.rule(),
-          None,
-        )
-      })
-      .transpose()
+    let group = self
+      .doc
+      .clip_path(
+        &path_data(&shape.to_commands(), transform),
+        shape.rule(),
+        None,
+      )
       .and_then(|clip| {
         self
           .doc
-          .begin_group(Affine::IDENTITY, 1.0, clip.as_deref(), None)
+          .begin_group(Affine::IDENTITY, 1.0, Some(&clip), None)
       });
 
     match group {
@@ -665,7 +663,7 @@ impl PaintDevice for DocumentDevice<'_> {
     }
   }
 
-  fn restore(&mut self) {
+  fn pop_clip(&mut self) {
     if self.error.is_some() {
       return;
     }

@@ -869,7 +869,7 @@ impl Emitter<'_> {
       surface,
       filter: self.color_filter.as_deref(),
       artifact,
-      saves: Vec::new(),
+      clips: Vec::new(),
     }
   }
 
@@ -1689,16 +1689,15 @@ struct SurfaceDevice<'s, 'a> {
   /// once something paints leaves no empty region behind, since marked
   /// content does not nest.
   artifact: bool,
-  /// What each open [`PaintDevice::save`] clipped to.
-  saves: Vec<SavedClip>,
+  /// Each open clip.
+  clips: Vec<Clip>,
 }
 
-/// The clip one [`PaintDevice::save`] pushed.
+/// One clip [`PaintDevice::push_clip`] opened.
 #[derive(Clone, Copy, PartialEq)]
-enum SavedClip {
-  None,
+enum Clip {
   Path,
-  /// A clip with no area, which hides every draw until it is restored.
+  /// A clip with no area, which hides every draw until it is popped.
   Empty,
 }
 
@@ -1721,13 +1720,13 @@ impl SurfaceDevice<'_, '_> {
     } else {
       CorePoint::ZERO
     };
-    if self.saves.contains(&SavedClip::Empty) {
+    if self.clips.contains(&Clip::Empty) {
       return;
     }
     let Some(path) = build(origin) else {
       return;
     };
-    let artifact = self.artifact && self.saves.is_empty();
+    let artifact = self.artifact && self.clips.is_empty();
 
     if !flat {
       self
@@ -1795,62 +1794,56 @@ impl PaintDevice for SurfaceDevice<'_, '_> {
     );
   }
 
-  fn save(&mut self, clip: Option<(&FillShape, Affine)>) {
-    // A whole saved state is one artifact, since marked content does not nest.
-    if self.artifact && self.saves.is_empty() {
+  fn push_clip(&mut self, shape: &FillShape, transform: Affine) {
+    // A whole clip is one artifact, since marked content does not nest.
+    if self.artifact && self.clips.is_empty() {
       self.surface.start_tagged(ARTIFACT);
     }
-    let saved = match clip {
-      None => SavedClip::None,
-      Some((shape, transform)) => {
-        let path = if transform.only_translation() {
-          shape_path(
-            shape,
-            CorePoint {
-              x: transform.x,
-              y: transform.y,
-            },
-          )
-        } else {
-          let commands: Vec<_> = shape
-            .to_commands()
-            .into_iter()
-            .map(|command| {
-              command.map_points(|point| {
-                let (x, y) = transform.transform_point(point.x, point.y);
+    let path = if transform.only_translation() {
+      shape_path(
+        shape,
+        CorePoint {
+          x: transform.x,
+          y: transform.y,
+        },
+      )
+    } else {
+      let commands: Vec<_> = shape
+        .to_commands()
+        .into_iter()
+        .map(|command| {
+          command.map_points(|point| {
+            let (x, y) = transform.transform_point(point.x, point.y);
 
-                CorePoint { x, y }
-              })
-            })
-            .collect();
+            CorePoint { x, y }
+          })
+        })
+        .collect();
 
-          krilla_path(&commands, CorePoint::ZERO)
-        };
-
-        match path {
-          Some(path) => {
-            self
-              .surface
-              .push_clip_path(&path, &krilla_fill_rule(shape.rule()));
-            SavedClip::Path
-          }
-          None => SavedClip::Empty,
-        }
+      krilla_path(&commands, CorePoint::ZERO)
+    };
+    let clip = match path {
+      Some(path) => {
+        self
+          .surface
+          .push_clip_path(&path, &krilla_fill_rule(shape.rule()));
+        Clip::Path
       }
+      None => Clip::Empty,
     };
 
-    self.saves.push(saved);
+    self.clips.push(clip);
   }
 
-  fn restore(&mut self) {
-    let Some(saved) = self.saves.pop() else {
+  fn pop_clip(&mut self) {
+    let Some(clip) = self.clips.pop() else {
       return;
     };
 
-    if saved == SavedClip::Path {
+    if clip == Clip::Path {
       self.surface.pop();
     }
-    if self.artifact && self.saves.is_empty() {
+    if self.artifact && self.clips.is_empty() {
       self.surface.end_tagged();
     }
   }

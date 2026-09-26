@@ -108,8 +108,8 @@ pub(crate) struct CanvasDevice<'c> {
   pub(crate) canvas: &'c mut Canvas,
   pub(crate) transform: Affine,
   pub(crate) algorithm: ImageScalingAlgorithm,
-  /// The coverage each open [`PaintDevice::save`] clips to, if it clips.
-  pub(crate) clips: Vec<Option<(Vec<u8>, Placement)>>,
+  /// The coverage of each open clip.
+  pub(crate) clips: Vec<(Vec<u8>, Placement)>,
 }
 
 impl<'c> CanvasDevice<'c> {
@@ -141,7 +141,6 @@ impl<'c> CanvasDevice<'c> {
     self
       .clips
       .iter()
-      .flatten()
       .try_fold(coverage, |(mask, placement), (clip, clip_placement)| {
         intersect_alpha_masks(&mask, placement, clip, *clip_placement)
       })
@@ -183,7 +182,7 @@ impl<'c> CanvasDevice<'c> {
 
 impl PaintDevice for CanvasDevice<'_> {
   fn fill_shape(&mut self, shape: &FillShape, color: Color, transform: Affine) {
-    let unclipped = self.clips.iter().all(Option::is_none);
+    let unclipped = self.clips.is_empty();
     let (border, size, offset) = match shape {
       FillShape::Rect(size) if unclipped => (BorderProperties::default(), *size, Point::ZERO),
       FillShape::RoundedRect {
@@ -217,14 +216,13 @@ impl PaintDevice for CanvasDevice<'_> {
     self.draw_coverage(coverage, stroke.color);
   }
 
-  fn save(&mut self, clip: Option<(&FillShape, Affine)>) {
-    let clip = clip
-      .map(|(shape, transform)| self.coverage(shape, Fill::from(shape.rule()).into(), transform));
+  fn push_clip(&mut self, shape: &FillShape, transform: Affine) {
+    let clip = self.coverage(shape, Fill::from(shape.rule()).into(), transform);
 
     self.clips.push(clip);
   }
 
-  fn restore(&mut self) {
+  fn pop_clip(&mut self) {
     self.clips.pop();
   }
 }
