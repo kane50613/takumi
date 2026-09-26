@@ -5,7 +5,7 @@
     <path d="M158 32h164v92h-164v-92Zm0 10h164v82h-164v-82Z" clip-rule="evenodd"/>
   </clipPath>
   <g clip-path="url(#cp0)">
-    <path d="M158 37 322 37" fill="none" stroke="#111827" stroke-width="10" stroke-dasharray="20 8.8"/>
+    <path d="M158 37h164" fill="none" stroke="#111827" stroke-width="10" stroke-dasharray="20 8.8"/>
   </g>
   <g fill="#1f2937">
     <use href="#g0" x="182" y="152"/>
@@ -27,7 +27,7 @@
     <path d="M398 32h164v92h-164v-92Zm10 0h154v92h-154v-92Z" clip-rule="evenodd"/>
   </clipPath>
   <g clip-path="url(#cp1)">
-    <path d="M403 32 403 124" fill="none" stroke="#111827" stroke-width="10" stroke-dasharray="0 20.49" stroke-linecap="round"/>
+    <path d="M403 32v92" fill="none" stroke="#111827" stroke-width="10" stroke-dasharray="0 20.49" stroke-linecap="round"/>
   </g>
   <g fill="#1f2937">
     <use href="#g0" x="425" y="152"/>
@@ -49,10 +49,10 @@
     <path d="M638 32h164v92h-164v-92Zm13 10h147v75h-147v-75Z" clip-rule="evenodd"/>
   </clipPath>
   <g clip-path="url(#cp2)">
-    <path d="M644.5 37 800 37" fill="none" stroke="#111827" stroke-width="10" stroke-dasharray="20 7.1"/>
-    <path d="M800 37 800 120.5" fill="none" stroke="#111827" stroke-width="4" stroke-dasharray="8 4.583"/>
-    <path d="M644.5 120.5 800 120.5" fill="none" stroke="#111827" stroke-width="7" stroke-dasharray="14 6.214"/>
-    <path d="M644.5 37 644.5 120.5" fill="none" stroke="#111827" stroke-width="13" stroke-dasharray="26 2.75"/>
+    <path d="M644.5 37h155.5" fill="none" stroke="#111827" stroke-width="10" stroke-dasharray="20 7.1"/>
+    <path d="M800 37v83.5" fill="none" stroke="#111827" stroke-width="4" stroke-dasharray="8 4.583"/>
+    <path d="M644.5 120.5h155.5" fill="none" stroke="#111827" stroke-width="7" stroke-dasharray="14 6.214"/>
+    <path d="M644.5 37v83.5" fill="none" stroke="#111827" stroke-width="13" stroke-dasharray="26 2.75"/>
   </g>
   <g fill="#1f2937">
     <use href="#g0" x="638" y="152"/>
@@ -79,10 +79,10 @@
     <path d="M878 32h164v92h-164v-92Zm8 10h148v72h-148v-72Z" clip-rule="evenodd"/>
   </clipPath>
   <g clip-path="url(#cp3)">
-    <path d="M882 37 1038 37" fill="none" stroke="#111827" stroke-width="10" stroke-dasharray="0 20.847" stroke-linecap="round"/>
-    <path d="M1038 37 1038 119" fill="none" stroke="#111827" stroke-width="8" stroke-dasharray="16 6"/>
-    <path d="M882 119 1038 119" fill="none" stroke="#111827" stroke-width="10" stroke-dasharray="0 20.847" stroke-linecap="round"/>
-    <path d="M882 37 882 119" fill="none" stroke="#111827" stroke-width="8" stroke-dasharray="16 6"/>
+    <path d="M882 37h156" fill="none" stroke="#111827" stroke-width="10" stroke-dasharray="0 20.847" stroke-linecap="round"/>
+    <path d="M1038 37v82" fill="none" stroke="#111827" stroke-width="8" stroke-dasharray="16 6"/>
+    <path d="M882 119h156" fill="none" stroke="#111827" stroke-width="10" stroke-dasharray="0 20.847" stroke-linecap="round"/>
+    <path d="M882 37v82" fill="none" stroke="#111827" stroke-width="8" stroke-dasharray="16 6"/>
   </g>
   <g fill="#1f2937">
     <use href="#g17" x="898" y="152"/>

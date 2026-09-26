@@ -6,7 +6,7 @@ use takumi_core::{
   Fonts,
   context::RenderContext,
   error::Result,
-  geometry::{Point, Size},
+  geometry::{PathCommand, Point, Size},
   layout::{
     background_image_geometry::FillLayers,
     border::{BorderProperties, BorderSide, PaintedSide},
@@ -771,20 +771,15 @@ fn emit_side_pattern(
       (half_left, size.height - half_bottom),
     ),
   };
-  let [a, b, c, d, e, f] = transform.to_cols_array();
-  let map = |px: f32, py: f32| (a * px + c * py + e, b * px + d * py + f);
-  let (mx0, my0) = map(x0, y0);
-  let (mx1, my1) = map(x1, y1);
-  let mut path = PathData::with_capacity(4 * APPROX_CHARS_PER_NUMBER);
-  path.command(b'M');
-  path.pair(mx0, my0);
-  path.command(b'L');
-  path.pair(mx1, my1);
+  let line = [
+    PathCommand::MoveTo(Point { x: x0, y: y0 }),
+    PathCommand::LineTo(Point { x: x1, y: y1 }),
+  ];
   let length = ((x1 - x0).powi(2) + (y1 - y0).powi(2)).sqrt();
   let dash = side.style.dash_pattern(side.width, length, false);
 
   doc.stroke_path(
-    &path.into_string(),
+    &path_data(&line, transform),
     &StrokeStyle {
       color: side.color,
       width: side.width,
