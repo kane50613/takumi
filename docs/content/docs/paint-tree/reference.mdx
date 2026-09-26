@@ -1,0 +1,221 @@
+---
+title: Reference
+description: Every option, class, and field of takumi-paint's paint tree.
+icon: BookMarked
+---
+
+## `paint()` and `Painter`
+
+`paint(node, options)` lays out JSX, an HTML string, or a node tree with a shared `Painter` and resolves to a [`PaintTree`](#painttree).
+
+| Member                         | Behavior                                                     |
+| ------------------------------ | ------------------------------------------------------------ |
+| `new Painter()`                | Creates a painter with the bundled fallback fonts            |
+| `painter.paint(node, options)` | Same as `paint()`, with this painter's fonts                 |
+| `painter.registerFont(font)`   | Registers a font ahead of time, deduped against earlier ones |
+| `painter.free()`               | Releases the painter's WebAssembly memory                    |
+
+## Options
+
+<TypeTable
+  type={{
+    width: {
+      type: "number",
+      description: "Canvas width in device pixels. Omit to size the canvas to the content.",
+    },
+    height: {
+      type: "number",
+      description: "Canvas height in device pixels. Omit to size the canvas to the content.",
+    },
+    devicePixelRatio: {
+      type: "number",
+      description: "Device pixels per CSS px. Scales every CSS length. Defaults to 1.",
+    },
+    fonts: {
+      type: "FontLoader[]",
+      description: "Fonts to register before layout, deduped against earlier registrations.",
+    },
+    images: {
+      type: "ImagesInput",
+      description: "Images keyed by the src that nodes reference them with.",
+    },
+    css: {
+      type: "CssInput | CssInput[]",
+      description: "Stylesheet text, or rules written as objects, applied before layout.",
+    },
+    fontFamilies: {
+      type: "string[]",
+      description: "Family names used as the fallback chain for this paint.",
+    },
+    lang: {
+      type: "string",
+      description: "Default BCP-47 language tag applied to the root.",
+    },
+  }}
+/>
+
+## `PaintTree`
+
+| Member            | Value                                              |
+| ----------------- | -------------------------------------------------- |
+| `width`, `height` | Canvas size in device pixels                       |
+| `fonts`           | Every font instance the runs were shaped with      |
+| `root`            | The root [`PaintNode`](#paintnode)                 |
+| `[...tree]`       | Every node in paint order, parents before children |
+| `textRuns()`      | Every run in paint order, as `{ run, node }`       |
+| `find(id)`        | The first node whose source `id` matches           |
+
+## `PaintNode`
+
+Lengths are device pixels. Fields inside a node are relative to its border box.
+
+<TypeTable
+  type={{
+    source: {
+      type: "PaintSource",
+      description:
+        "The input node this box came from: its child-index path, id, tag name, and class name. Absent for an anonymous box.",
+    },
+    x: {
+      type: "number",
+      required: true,
+      description: "Left edge of the border box on the canvas.",
+    },
+    y: { type: "number", required: true, description: "Top edge of the border box on the canvas." },
+    width: { type: "number", required: true, description: "Border-box width." },
+    height: { type: "number", required: true, description: "Border-box height." },
+    contentBox: {
+      type: "PaintRect",
+      required: true,
+      description: "The border box inset by border and padding.",
+    },
+    transform: {
+      type: "Matrix",
+      description: "Absolute transform when the box is rotated, scaled, or skewed.",
+    },
+    matrix: {
+      type: "Matrix",
+      required: true,
+      description: "Getter: transform, or a translation to x and y.",
+    },
+    opacity: { type: "number", required: true, description: "Group opacity from 0 to 1." },
+    blendMode: { type: "string", description: "mix-blend-mode other than normal." },
+    isolate: {
+      type: "boolean",
+      required: true,
+      description: "Whether isolation: isolate applies.",
+    },
+    clip: { type: "PaintClip", description: "The rounded padding box children clip to." },
+    background: {
+      type: "PaintBackground",
+      description: "Background color, clip, and image layers, when any paint.",
+    },
+    border: {
+      type: "PaintBorder",
+      description: "Border widths, colors, styles, and radii, when any side has width.",
+    },
+    shadows: { type: "PaintBoxShadows", description: "Box shadows split into inset and outer." },
+    outline: { type: "PaintOutline", description: "The outline, painted after the children." },
+    image: {
+      type: "PaintImage",
+      description: "Where a replaced image draws after object-fit and object-position.",
+    },
+    textShadows: { type: "PaintShadow[]", description: "text-shadow layers under every run." },
+    inlineBackgrounds: {
+      type: "PaintInlineBackground[]",
+      description: "One rounded rectangle per line for each inline span with a background.",
+    },
+    textRuns: {
+      type: "PaintTextRun[]",
+      required: true,
+      description: "Shaped text runs in visual order.",
+    },
+    textAlign: {
+      type: '"left" | "right" | "center" | "justify"',
+      description: "text-align of the inline content, with start and end resolved.",
+    },
+    unresolvedEffects: {
+      type: "PaintUnresolvedEffects",
+      description: "filter, backdrop-filter, mask-image, and clip-path as CSS text.",
+    },
+    children: {
+      type: "PaintNode[]",
+      required: true,
+      description: "Boxes painted after this one, in paint order.",
+    },
+  }}
+/>
+
+## `PaintTextRun`
+
+<TypeTable
+  type={{
+    text: { type: "string", required: true, description: "The run's text." },
+    x: { type: "number", required: true, description: "Start of the baseline." },
+    y: { type: "number", required: true, description: "The baseline." },
+    width: { type: "number", required: true, description: "Advance of the run." },
+    ascent: {
+      type: "number",
+      required: true,
+      description: "Typographic ascent above the baseline.",
+    },
+    descent: {
+      type: "number",
+      required: true,
+      description: "Typographic descent below the baseline.",
+    },
+    top: { type: "number", required: true, description: "Getter: y - ascent." },
+    bottom: { type: "number", required: true, description: "Getter: y + descent." },
+    font: {
+      type: "PaintFont",
+      required: true,
+      description: "The font instance the run was shaped with.",
+    },
+    fontSize: { type: "number", required: true, description: "Font size the run was shaped at." },
+    lineHeight: {
+      type: "number",
+      required: true,
+      description:
+        "Height of the run's leaded box, grown to a fallback face's own height under line-height: normal.",
+    },
+    letterSpacing: {
+      type: "number",
+      required: true,
+      description: "letter-spacing, already applied to the glyph positions.",
+    },
+    color: { type: "Rgba", required: true, description: "Fill color." },
+    opacity: { type: "number", required: true, description: "The span's opacity." },
+    transform: {
+      type: "Matrix",
+      description: "A transform on top of the node's, when text-fit scales the line.",
+    },
+    glyphs: {
+      type: "PaintGlyph[]",
+      required: true,
+      description: "Glyph ids and offsets from the run origin.",
+    },
+    decorations: {
+      type: "PaintDecoration[]",
+      description: "Underline, overline, and line-through rectangles.",
+    },
+    stroke: { type: "PaintStroke", description: "-webkit-text-stroke, when visible." },
+    textByteRange: {
+      type: "[number, number]",
+      required: true,
+      description: "UTF-8 byte range of the text within the node's inline text.",
+    },
+    spanId: { type: "number", description: "The inline span the run came from." },
+  }}
+/>
+
+## Value formats
+
+| Value                                                  | Form in the tree                                   |
+| ------------------------------------------------------ | -------------------------------------------------- |
+| Colors                                                 | `[r, g, b, a]`, each `0` to `255`                  |
+| Matrices                                               | `[a, b, c, d, e, f]`                               |
+| Corner radii                                           | `[x, y]` pairs from the top-left corner, clockwise |
+| Border sides                                           | Arrays ordered top, right, bottom, left            |
+| Linear and radial gradients                            | Resolved stops and geometry                        |
+| Conic gradients                                        | CSS text                                           |
+| `filter`, `backdrop-filter`, `mask-image`, `clip-path` | CSS text under `unresolvedEffects`                 |

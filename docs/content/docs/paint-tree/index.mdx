@@ -1,0 +1,92 @@
+---
+title: Paint tree
+description: Turn JSX, HTML, and CSS into boxes, images, and text runs with the values the renderer used, for PPTX, Canvas, and native drawing exporters.
+index: true
+icon: BookOpen
+---
+
+`takumi-paint` lays out a document and returns what painting it would draw, instead of an image. Use it when the output is not pixels: an editable PPTX, a Canvas replay, or a native drawing API.
+
+```npm
+npm i takumi-paint @takumi-rs/helpers
+```
+
+## Paint a document
+
+`paint()` takes JSX, an HTML string, or a node tree. Iterating the returned tree yields every box in paint order.
+
+```tsx twoslash title="Draw the tree on a canvas"
+import { paint, type Rgba } from "takumi-paint";
+
+const tree = await paint(
+  <div style={{ width: 640, padding: 32, background: "#F7F3EC", flexDirection: "column", gap: 8 }}>
+    <div style={{ fontSize: 40, fontWeight: 700, color: "#B3261E" }}>Hello paint</div>
+    <div>Every box and text run, with the values the renderer used.</div>
+  </div>,
+  { width: 640 },
+);
+
+function draw(ctx: CanvasRenderingContext2D) {
+  for (const node of tree) {
+    ctx.setTransform(...node.matrix);
+    if (node.background?.color) {
+      ctx.fillStyle = rgba(node.background.color);
+      ctx.fillRect(0, 0, node.width, node.height);
+    }
+    for (const run of node.textRuns) {
+      ctx.save();
+      if (run.transform) ctx.transform(...run.transform);
+      ctx.font = `${run.font.weight} ${run.fontSize}px ${run.font.family}`;
+      ctx.fillStyle = rgba(run.color);
+      ctx.fillText(run.text, run.x, run.y);
+      ctx.restore();
+    }
+  }
+  ctx.resetTransform();
+}
+
+const rgba = ([r, g, b, a]: Rgba) => `rgb(${r} ${g} ${b} / ${a / 255})`;
+```
+
+## What the tree records
+
+`takumi-paint` runs the same layout as `takumi-js` and walks the same stacking-context scene as the image, SVG, and PDF backends. It records used values: a `50%` width is a number, `currentColor` is a color, and `<b>world</b>` is its own run with its own face.
+
+- **Boxes**: position, size, background, border, shadows, outline, and overflow clip.
+- **Images**: where a replaced image draws after `object-fit` and `object-position`.
+- **Text runs**: shaped text with its font, size, color, glyph positions, and decorations.
+
+## Load fonts and images
+
+`fonts` and `images` take the same loaders as `takumi-js`. Only the font subsets the document uses are fetched.
+
+```tsx twoslash title="Paint with Google Fonts"
+import { googleFonts } from "@takumi-rs/helpers";
+import { paint } from "takumi-paint";
+
+const tree = await paint(<p style={{ fontFamily: "Inter" }}>Hello</p>, {
+  width: 400,
+  fonts: await googleFonts(["Inter"]),
+});
+```
+
+## Reuse a painter
+
+`paint()` uses one shared `Painter`. Create a `Painter` to keep its registered fonts apart from other code, and call `free()` to release its WebAssembly memory.
+
+```ts twoslash title="A dedicated painter"
+import { Painter } from "takumi-paint";
+
+const painter = new Painter();
+const tree = await painter.paint("<p>Hello</p>", { width: 400 });
+
+painter.free();
+```
+
+## Choose the next page
+
+| Task                                                     | Page                                          |
+| -------------------------------------------------------- | --------------------------------------------- |
+| Replay boxes with the right position and order           | [Draw a paint tree](/docs/paint-tree/drawing) |
+| Place text, or hand it to a PPTX writer to lay out again | [Text runs](/docs/paint-tree/text)            |
+| Look up a field, option, or method                       | [Reference](/docs/paint-tree/reference)       |

@@ -1,0 +1,76 @@
+---
+title: Draw a paint tree
+description: Place each box of a takumi-paint tree, draw its layers in paint order, and apply its clip and opacity.
+icon: PenTool
+---
+
+A paint tree lists boxes in the order the renderer paints them. This page covers where each box goes and what to draw for it.
+
+## Coordinates
+
+Every length is a device pixel, including the `width` and `height` options. A `20px` font measures `40` under a `devicePixelRatio` of `2`.
+
+A node's `x` and `y` place its border box on the canvas. Everything inside a node, such as `clip`, `background`, `image`, and `textRuns`, is relative to the border box's top-left corner.
+
+## Place a node
+
+`transform` appears only when the box is rotated, scaled, or skewed, and its translation equals `x`, `y`. `node.matrix` returns whichever of the two applies, so one call places any node.
+
+```ts twoslash title="Place a node"
+import type { PaintNode } from "takumi-paint";
+
+function place(ctx: CanvasRenderingContext2D, node: PaintNode) {
+  ctx.setTransform(...node.matrix);
+}
+```
+
+## Paint order
+
+Iterating the tree yields nodes in paint order, parents before children, so `zIndex` does not appear. Within a node, draw these layers in order:
+
+| Layer                   | Field                          |
+| ----------------------- | ------------------------------ |
+| Outer box shadows       | `shadows.outer`                |
+| Background              | `background`                   |
+| Inset box shadows       | `shadows.inset`                |
+| Border                  | `border`                       |
+| Replaced image          | `image`                        |
+| Inline span backgrounds | `inlineBackgrounds`            |
+| Text                    | `textShadows`, then `textRuns` |
+| Child boxes             | `children`                     |
+| Outline                 | `outline`                      |
+
+The outline comes after the children. The flat iteration yields a node before its children, so an exporter that draws outlines recurses over `children` instead.
+
+```ts twoslash title="Draw outlines after the children"
+import type { PaintNode } from "takumi-paint";
+
+function drawBox(ctx: CanvasRenderingContext2D, node: PaintNode) {
+  ctx.setTransform(...node.matrix);
+  // Draw the node's own layers here.
+
+  for (const child of node.children) drawBox(ctx, child);
+
+  if (node.outline) {
+    const { width, offset } = node.outline;
+    const inset = -offset - width / 2;
+    ctx.setTransform(...node.matrix);
+    ctx.lineWidth = width;
+    ctx.strokeRect(inset, inset, node.width - inset * 2, node.height - inset * 2);
+  }
+}
+```
+
+## Compositing groups
+
+Each node is a compositing group. Its `opacity`, `clip`, and `blendMode` apply to everything inside it, children included. Canvas `globalAlpha` applies to each draw call on its own, so a translucent node with overlapping children needs an offscreen layer to match.
+
+`isolate` is `true` when the node sets `isolation: isolate`.
+
+## Overflow clip
+
+`clip` is the rounded padding box that children clip to. `clip.x` and `clip.y` say which axes clip.
+
+## What stays CSS
+
+Linear and radial gradients come resolved: stops in pixels along the axis, plus the tile geometry. A conic gradient is carried as CSS text. `filter`, `backdrop-filter`, `mask-image`, and `clip-path` are carried as CSS text under `unresolvedEffects`, so an exporter decides what to do with them.
