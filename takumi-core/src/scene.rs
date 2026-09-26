@@ -21,6 +21,7 @@ use crate::{
   },
   shadow::SizedShadow,
   style::{Affine, BlurType, ComputedStyle, Display, Filter},
+  viewport::Viewport,
 };
 
 /// A node's resolved paint inputs.
@@ -384,6 +385,41 @@ pub fn build_scene(request: SceneRequest<'_>) -> Result<Vec<StackingContextNode>
   }
 
   Ok(contexts)
+}
+
+/// A render tree laid out, with the stacking contexts that paint it.
+pub struct Scene {
+  /// The tree.
+  pub root: RenderNode,
+  /// Its layout.
+  pub results: LayoutResults,
+  /// Its stacking contexts; the first is the synthetic root.
+  pub contexts: Vec<StackingContextNode>,
+  /// The size it paints at: the viewport on a definite axis, the root's border box otherwise.
+  pub size: Size<f32>,
+}
+
+impl Scene {
+  /// Lays `root` out in `viewport` and builds its scene at the origin.
+  pub fn lay_out(root: RenderNode, viewport: Viewport, paint_bounds: bool) -> Result<Self> {
+    let results = LayoutResults::compute(&root, viewport.into());
+    let container_size = Size::from(viewport.size);
+    let size = container_size.zip_map(results.layout(NodeId::ROOT)?.size, Option::unwrap_or);
+    let contexts = build_scene(SceneRequest {
+      root: &root,
+      layout_results: &results,
+      transform: Affine::IDENTITY,
+      container_size,
+      paint_bounds,
+    })?;
+
+    Ok(Self {
+      root,
+      results,
+      contexts,
+      size,
+    })
+  }
 }
 
 /// How far a shadow's ink reaches past the shape that casts it.

@@ -2,7 +2,7 @@ use std::{collections::HashMap, sync::Arc};
 
 use skrifa::{FontRef, MetadataProvider};
 use takumi_core::{
-  geometry::{ComputedLayout as Layout, Point, Size},
+  geometry::{ComputedLayout as Layout, Point},
   layout::{
     inline_box::{InlineBoxPaint, resolve_inline_box},
     intercept::skip_ink_spans,
@@ -19,10 +19,9 @@ use crate::{
     ProcessedInlineSpan, ShapedRun, VisualInlineBox, outline_island_contour, outline_islands,
   },
   painter::StrokeStyle,
-  rasterize_layers,
-  render::render_node,
-  render_mask, resolve_outline,
+  rasterize_layers, render_mask, resolve_outline,
   resources::{font::FontError, glyph::ResolvedGlyph},
+  stacking_context::ScenePainter,
   style::{Affine, BackgroundClip, BlendMode, Color, TextDecorationLines, TextDecorationSkipInk},
 };
 
@@ -327,22 +326,10 @@ pub(crate) fn draw_inline_box(
 
   match paint {
     InlineBoxPaint::Container(subtree) => {
-      let mut root = subtree.root;
+      let at = subtree.border_box_origin(origin);
+      let mut scene = subtree.into_scene(transform * Affine::translation(at.x, at.y), true)?;
 
-      render_node(
-        &mut root,
-        &subtree.results,
-        canvas,
-        transform
-          * Affine::translation(
-            origin.x + subtree.margin_offset.x,
-            origin.y + subtree.margin_offset.y,
-          ),
-        Size {
-          width: Some(subtree.size.width),
-          height: Some(subtree.size.height),
-        },
-      )
+      ScenePainter::new(&mut scene, canvas).paint_context(0)
     }
     InlineBoxPaint::Replaced { node, layout } => {
       let Some(source) = &node.node else {

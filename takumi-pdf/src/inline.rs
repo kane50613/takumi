@@ -52,10 +52,10 @@ impl<'t> TextBox<'t> {
   }
 
   fn collect_paint(tree: &'t PreparedTree, paint: &NodePaint, boxes: &mut Vec<Self>) {
-    let Some(node) = tree.root.node_at_path(&paint.path) else {
+    let Some(node) = tree.scene.root.node_at_path(&paint.path) else {
       return;
     };
-    let Ok(layout) = tree.results.layout(paint.node_id) else {
+    let Ok(layout) = tree.scene.results.layout(paint.node_id) else {
       return;
     };
     if matches!(OwnContent::of(node), OwnContent::Text) {

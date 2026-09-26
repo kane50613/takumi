@@ -11,8 +11,7 @@ use std::io;
 
 use takumi_core::{
   geometry::{NodeId, Point},
-  layout::tree::{LayoutResults, RenderNode},
-  scene::{NodePaint, PaintItemKind, StackingContextNode},
+  scene::{NodePaint, PaintItemKind, Scene},
   style::{Affine, Filter},
 };
 
@@ -22,11 +21,9 @@ use crate::{
   render::{BoxChrome, PlacedBox},
 };
 
-/// A laid-out tree and its stacking-context scene, emitted in paint order.
+/// A scene, emitted in paint order.
 pub(crate) struct SceneEmitter<'a> {
-  pub(crate) root: &'a RenderNode,
-  pub(crate) contexts: &'a [StackingContextNode],
-  pub(crate) results: &'a LayoutResults,
+  pub(crate) scene: &'a Scene,
 }
 
 impl SceneEmitter<'_> {
@@ -124,10 +121,10 @@ impl SceneEmitter<'_> {
     stop_at: Option<NodeId>,
     doc: &mut SvgDocument,
   ) -> io::Result<Option<(BoxChrome, Affine)>> {
-    let Some(node) = self.root.node_at_path(&np.path) else {
+    let Some(node) = self.scene.root.node_at_path(&np.path) else {
       return Ok(None);
     };
-    let Ok(layout) = self.results.layout(np.node_id) else {
+    let Ok(layout) = self.scene.results.layout(np.node_id) else {
       return Ok(None);
     };
 
@@ -169,7 +166,7 @@ impl SceneEmitter<'_> {
     stop_at: Option<NodeId>,
     doc: &mut SvgDocument,
   ) -> io::Result<bool> {
-    let Some(ctx) = self.contexts.get(id) else {
+    let Some(ctx) = self.scene.contexts.get(id) else {
       return Ok(false);
     };
 

@@ -5,9 +5,9 @@ use std::ops::Range;
 
 use takumi_core::{
   geometry::{ComputedLayout as Layout, NodeId},
-  layout::tree::{LayoutResults, RenderNode},
+  layout::tree::RenderNode,
   painter::BoxPainter,
-  scene::{NodePaint, PaintItemKind, StackingContextNode},
+  scene::{NodePaint, PaintItemKind, Scene},
   style::{Affine, BreakBetween, BreakInside},
 };
 
@@ -56,9 +56,7 @@ impl Atoms {
 /// Walks the scene like the emitter, recording unsplittable vertical extents
 /// instead of painting.
 pub(crate) struct AtomCollector<'a> {
-  pub(crate) root: &'a RenderNode,
-  pub(crate) contexts: &'a [StackingContextNode],
-  pub(crate) results: &'a LayoutResults,
+  pub(crate) scene: &'a Scene,
   pub(crate) inline: Option<&'a InlineMap<'a>>,
 }
 
@@ -71,7 +69,7 @@ impl AtomCollector<'_> {
   }
 
   fn context_atoms(&self, id: usize, parent: Affine, atoms: &mut Atoms) -> Result<(), PdfError> {
-    let Some(context) = self.contexts.get(id) else {
+    let Some(context) = self.scene.contexts.get(id) else {
       return Ok(());
     };
 
@@ -104,10 +102,10 @@ impl AtomCollector<'_> {
     parent: Affine,
     atoms: &mut Atoms,
   ) -> Result<Affine, PdfError> {
-    let Some(node) = self.root.node_at_path(&paint.path) else {
+    let Some(node) = self.scene.root.node_at_path(&paint.path) else {
       return Ok(parent);
     };
-    let Ok(layout) = self.results.layout(paint.node_id) else {
+    let Ok(layout) = self.scene.results.layout(paint.node_id) else {
       return Ok(parent);
     };
 

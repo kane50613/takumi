@@ -4,7 +4,7 @@ use serde::Serialize;
 use takumi_core::{
   geometry::{AvailableSpace, ComputedLayout as Layout, NodeId, Size},
   layout::node::NodeKind,
-  scene::{SceneRequest, build_scene},
+  scene::Scene,
   style::{ComputedStyle, Display, Lang},
 };
 use typed_builder::TypedBuilder;
@@ -18,7 +18,7 @@ use crate::{
       create_inline_layout,
     },
     node::Node,
-    tree::{ContainingBlocks, LayoutResults, LayoutTree, RenderNode},
+    tree::{ContainingBlocks, LayoutResults, RenderNode},
   },
   resources::{font::FontsSnapshot, image::ImageSource},
   stacking_context::ScenePainter,
@@ -151,11 +151,10 @@ impl RenderOptions<'_> {
       .time_ms(time_ms)
       .draw_debug_border(self.draw_debug_border)
       .dither_gradients(self.dithering != DitheringAlgorithm::None)
-      .style(Box::new(ComputedStyle {
-        lang: self.lang,
-        font_family: self.font_families.clone().unwrap_or_default(),
-        ..Default::default()
-      }))
+      .style(Box::new(ComputedStyle::root(
+        self.lang,
+        self.font_families.clone(),
+      )))
       .build()
   }
 }
@@ -201,34 +200,16 @@ impl MeasuredNode {
 pub fn measure<'g>(mut options: RenderOptions<'g>) -> Result<MeasuredNode> {
   let images = Rc::new(mem::take(&mut options.images));
   let render_context = options.render_context(options.fonts_snapshot(), images, options.time_ms);
-  let (mut root, layout_results) = lay_out(&render_context, options.node);
+  let mut root = RenderNode::from_node(&render_context, options.node);
+  let layout_results = LayoutResults::compute(&root, options.viewport.into());
 
   collect_measure_result(
     &mut root,
     &layout_results,
     NodeId::ROOT,
     Affine::IDENTITY,
-    viewport_container_size(options.viewport),
+    options.viewport.size.into(),
   )
-}
-
-/// Builds the render tree for `node` and computes its layout.
-fn lay_out(render_context: &RenderContext, node: Node) -> (RenderNode, LayoutResults) {
-  let root = RenderNode::from_node(render_context, node);
-  let mut tree = LayoutTree::from_render_node(&root);
-
-  tree.compute_layout(render_context.sizing.viewport.into());
-
-  let layout_results = tree.into_results();
-
-  (root, layout_results)
-}
-
-fn viewport_container_size(viewport: Viewport) -> Size<Option<f32>> {
-  Size {
-    width: viewport.size.width.map(|value| value as f32),
-    height: viewport.size.height.map(|value| value as f32),
-  }
 }
 
 /// Lays `items` out in `node`'s content box and reads back the text runs and
@@ -440,32 +421,16 @@ fn render_with_context(
   node: Node,
   viewport: Viewport,
 ) -> Result<Bitmap> {
-  let (mut root, layout_results) = lay_out(&render_context, node);
-  let root_size = layout_results
-    .layout(NodeId::ROOT)?
-    .size
-    .map(|size| size.round() as u32)
-    .zip_map(viewport.into(), |size, viewport| {
-      if let AvailableSpace::Definite(defined) = viewport {
-        defined as u32
-      } else {
-        size
-      }
-    });
+  let mut scene = Scene::lay_out(RenderNode::from_node(&render_context, node), viewport, true)?;
+  let size = scene.size.map(|length| length.round() as u32);
 
-  if root_size.width == 0 || root_size.height == 0 {
+  if size.width == 0 || size.height == 0 {
     return Err(Error::InvalidViewport);
   }
 
-  let mut canvas = Canvas::try_new(root_size).ok_or(Error::InvalidViewport)?;
+  let mut canvas = Canvas::try_new(size).ok_or(Error::InvalidViewport)?;
 
-  render_node(
-    &mut root,
-    &layout_results,
-    &mut canvas,
-    Affine::IDENTITY,
-    viewport_container_size(viewport),
-  )?;
+  ScenePainter::new(&mut scene, &mut canvas).paint_context(0)?;
 
   let image = canvas.into_inner()?;
 
@@ -630,29 +595,6 @@ fn resolve_scene_at_time<'a, 'g>(
 ) -> Option<(&'a SequentialScene<'g>, u64)> {
   resolve_at_time(scenes.len(), |index| scenes[index].duration_ms, time_ms)
     .map(|(index, local_time_ms)| (&scenes[index], local_time_ms))
-}
-
-pub(crate) fn render_node(
-  node: &mut RenderNode,
-  layout_results: &LayoutResults,
-  canvas: &mut Canvas,
-  transform: Affine,
-  container_size: Size<Option<f32>>,
-) -> Result<()> {
-  let contexts = build_scene(SceneRequest {
-    root: node,
-    layout_results,
-    transform,
-    container_size,
-    paint_bounds: true,
-  })?;
-  ScenePainter {
-    root: node,
-    contexts: &contexts,
-    layout_results,
-    canvas,
-  }
-  .paint_context(0)
 }
 
 #[cfg(test)]

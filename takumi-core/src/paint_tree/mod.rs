@@ -22,13 +22,10 @@ use crate::{
   Fonts,
   context::RenderContext,
   error::Result,
-  geometry::{NodeId, Size},
-  layout::{
-    node::Node,
-    tree::{LayoutTree, RenderNode},
-  },
+  geometry::Size,
+  layout::{node::Node, tree::RenderNode},
   resources::image::ImageSource,
-  scene::{SceneRequest, build_scene},
+  scene::Scene,
   style::{Affine, ComputedStyle, FontFamily, Lang, SizingContext, StyleSheet},
   viewport::Viewport,
 };
@@ -72,42 +69,23 @@ pub fn paint_tree(options: PaintTreeOptions<'_>) -> Result<PaintTree> {
     .images(Rc::new(options.images))
     .stylesheet(options.stylesheet)
     .time_ms(options.time_ms)
-    .style(Box::new(ComputedStyle {
-      lang: options.lang,
-      font_family: options.font_families.unwrap_or_default(),
-      ..Default::default()
-    }))
+    .style(Box::new(ComputedStyle::root(
+      options.lang,
+      options.font_families,
+    )))
     .build();
 
-  let root = RenderNode::from_node(&context, options.node);
-  let mut tree = LayoutTree::from_render_node(&root);
-  tree.compute_layout(viewport.into());
-  let results = tree.into_results();
-
-  let root_layout = results.layout(NodeId::ROOT)?;
-  let width = viewport
-    .size
-    .width
-    .map_or(root_layout.size.width, |w| w as f32);
-  let height = viewport
-    .size
-    .height
-    .map_or(root_layout.size.height, |h| h as f32);
-  let contexts = build_scene(SceneRequest {
-    root: &root,
-    layout_results: &results,
-    transform: Affine::IDENTITY,
-    container_size: Size {
-      width: Some(width),
-      height: Some(height),
-    },
-    paint_bounds: false,
-  })?;
+  let scene = Scene::lay_out(
+    RenderNode::from_node(&context, options.node),
+    viewport,
+    false,
+  )?;
+  let Size { width, height } = scene.size;
 
   let mut walker = walk::Walker {
     fonts: fonts::FontTable::default(),
   };
-  let mut nodes = walker.scene(&root, &results, &contexts)?;
+  let mut nodes = walker.scene(&scene.root, &scene.results, &scene.contexts)?;
   let root = match nodes.len() {
     1 => nodes.remove(0),
     _ => PaintNode {

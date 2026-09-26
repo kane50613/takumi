@@ -108,7 +108,7 @@ struct LayoutResultNode {
 
 impl LayoutResults {
   /// Lays out the tree under `root` in `available_space`.
-  pub(super) fn compute(root: &RenderNode, available_space: Size<AvailableSpace>) -> Self {
+  pub fn compute(root: &RenderNode, available_space: Size<AvailableSpace>) -> Self {
     let mut tree = LayoutTree::from_render_node(root);
 
     tree.compute_layout(available_space);
