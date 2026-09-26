@@ -16,6 +16,7 @@ use takumi_core::{
   geometry::{ComputedLayout as Layout, NodeId, Point as CorePoint, Size},
   layout::{
     background::OriginBox,
+    background_image_geometry::{BackgroundImageGeometry, FillLayers},
     border::BorderProperties,
     decoration::{ClipBox, OutlineGeometry},
     inline::{
@@ -41,7 +42,6 @@ use crate::paint::rasterized_image;
 #[cfg(all(feature = "svg", feature = "images"))]
 use crate::svg;
 use crate::{
-  background::{LayerLists, Placement, cycled},
   filter::{ColorFilter, filtered, unsupported_filter},
   glyph::{PdfGlyph, Uncovered, run_glyphs},
   inline::{InlineMap, visit_inline_layout},
@@ -504,13 +504,13 @@ impl Emitter<'_> {
       return;
     };
     let (origin_offset, area) = background_origin_area(style.background_origin, layout);
-    let layers = LayerLists::background(style);
+    let layers = FillLayers::background(style);
 
     self.in_artifact(surface, |surface| {
       surface.push_clip_path(&clip, &krilla_fill_rule(shape.rule()));
       for (index, image) in images.iter().enumerate().rev() {
-        let placement = layers.placement(index, image, area, &node.context);
-        let blend = cycled(&style.background_blend_mode, index);
+        let placement = layers.geometry(index, image, area, &node.context);
+        let blend = layers.blend_mode(index);
         let blended = blend != BlendMode::Normal;
 
         if blended {
@@ -543,7 +543,7 @@ impl Emitter<'_> {
     &self,
     image: &BackgroundImage,
     node: &RenderNode,
-    placement: &Placement,
+    placement: &BackgroundImageGeometry,
     size: Size<f32>,
     rect_at: CorePoint<f32>,
     anchor: CorePoint<f32>,
@@ -811,10 +811,10 @@ impl Emitter<'_> {
       return None;
     }
     let filter = self.color_filter.take();
-    let layers = LayerLists::mask(&node.context.style);
+    let layers = FillLayers::mask(&node.context.style);
     let stream = draw_stream(surface, |content| {
       for (index, image) in images.iter().enumerate().rev() {
-        let placement = layers.placement(index, image, size, &node.context);
+        let placement = layers.geometry(index, image, size, &node.context);
 
         self.layer(
           image,
@@ -1546,7 +1546,7 @@ impl Emitter<'_> {
       fills.push(fill_from_rgba(self.filtered(color), 1.0));
     }
     let (origin_offset, area) = background_origin_area(style.background_origin, layout);
-    let layers = LayerLists::background(style);
+    let layers = FillLayers::background(style);
 
     for (index, image) in style
       .background_image
@@ -1556,7 +1556,7 @@ impl Emitter<'_> {
       .enumerate()
       .rev()
     {
-      let placement = layers.placement(index, image, area, &node.context);
+      let placement = layers.geometry(index, image, area, &node.context);
       // ponytail: one tile per layer; a repeating gradient behind text would
       // need a pattern paint here.
       let tile_origin = frame.origin + origin_offset + placement.origin;

@@ -1,5 +1,7 @@
 /// Resolving where a background layer's tiles land.
 pub mod background;
+/// Tile geometry of background and mask layers.
+pub mod background_image_geometry;
 /// Backend-agnostic border geometry shared across rasterization backends.
 pub mod border;
 pub mod clip;

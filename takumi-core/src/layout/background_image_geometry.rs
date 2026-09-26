@@ -1,59 +1,69 @@
-//! Placement of `background-image` layers: `background-size`, `-position` and
-//! `-repeat` resolved to a tile size, a first-tile origin, and a tiling step.
+//! Where a `background-image` or `mask-image` layer's tiles land: `background-size`,
+//! `-position`, and `-repeat` resolved in exact floats, after Blink's
+//! `BackgroundImageGeometry` (`third_party/blink/renderer/core/paint/background_image_geometry.cc`).
 
-#[cfg(feature = "images")]
-use takumi_core::layout::node::resolve_image;
-use takumi_core::{
+use crate::{
   context::RenderContext,
   geometry::{Point, Size},
+  layout::node::resolve_image,
   style::{
     AutoBackgroundAxis, BackgroundImage, BackgroundRepeat, BackgroundRepeatStyle, BackgroundSize,
-    ComputedStyle, IntrinsicSizing, Length, PositionComponent, PositionValue,
+    BlendMode, ComputedStyle, IntrinsicSizing, Length, PositionComponent, PositionValue,
   },
 };
 
 /// The value for one layer: CSS cycles the shorter list over the layers.
-pub(crate) fn cycled<T: Copy + Default>(values: &[T], index: usize) -> T {
+fn cycled<T: Copy + Default>(values: &[T], index: usize) -> T {
   if values.is_empty() {
     return T::default();
   }
   values[index % values.len()]
 }
 
-/// The `-size`, `-position` and `-repeat` lists of `background-*` or
-/// `mask-*`, which place the layers of one image list.
-pub(crate) struct LayerLists<'s> {
+/// The `-size`, `-position`, `-repeat`, and `-blend-mode` lists of `background-*` or `mask-*`,
+/// Blink's `FillLayer` chain for one image list.
+pub struct FillLayers<'s> {
   sizes: &'s [BackgroundSize],
   positions: &'s [PositionValue],
   repeats: &'s [BackgroundRepeat],
+  blend_modes: &'s [BlendMode],
 }
 
-impl<'s> LayerLists<'s> {
-  pub(crate) fn background(style: &'s ComputedStyle) -> Self {
+impl<'s> FillLayers<'s> {
+  /// The `background-*` lists.
+  pub fn background(style: &'s ComputedStyle) -> Self {
     Self {
       sizes: &style.background_size,
       positions: &style.background_position,
       repeats: &style.background_repeat,
+      blend_modes: &style.background_blend_mode,
     }
   }
 
-  pub(crate) fn mask(style: &'s ComputedStyle) -> Self {
+  /// The `mask-*` lists, which blend nothing.
+  pub fn mask(style: &'s ComputedStyle) -> Self {
     Self {
       sizes: &style.mask_size,
       positions: &style.mask_position,
       repeats: &style.mask_repeat,
+      blend_modes: &[],
     }
   }
 
+  /// `background-blend-mode` of layer `index`.
+  pub fn blend_mode(&self, index: usize) -> BlendMode {
+    cycled(self.blend_modes, index)
+  }
+
   /// Where layer `index`, drawing `image`, lands inside the positioning `area`.
-  pub(crate) fn placement(
+  pub fn geometry(
     &self,
     index: usize,
     image: &BackgroundImage,
     area: Size<f32>,
     context: &RenderContext,
-  ) -> Placement {
-    Placement::resolve(
+  ) -> BackgroundImageGeometry {
+    BackgroundImageGeometry::resolve(
       area,
       cycled(self.sizes, index),
       cycled(self.positions, index),
@@ -65,7 +75,6 @@ impl<'s> LayerLists<'s> {
 }
 
 /// Intrinsic sizing of a `url()` layer, which `background-size` resolves against.
-#[cfg(feature = "images")]
 fn layer_intrinsic(image: &BackgroundImage, context: &RenderContext) -> Option<IntrinsicSizing> {
   let BackgroundImage::Url(url) = image else {
     return None;
@@ -75,34 +84,30 @@ fn layer_intrinsic(image: &BackgroundImage, context: &RenderContext) -> Option<I
   Some(source.intrinsic_sizing().scale(&context.sizing))
 }
 
-#[cfg(not(feature = "images"))]
-fn layer_intrinsic(_image: &BackgroundImage, _context: &RenderContext) -> Option<IntrinsicSizing> {
-  None
-}
-
-/// Where one background layer's tiles land inside the positioning area.
-pub(crate) struct Placement {
+/// Where one background layer's tiles land inside the positioning area, in exact floats. Blink's
+/// `BackgroundImageGeometry` expresses the same placement as a phase and a spacing.
+pub struct BackgroundImageGeometry {
   /// Whether either axis tiles. A tiling axis becomes a pattern even when one
   /// tile would span the area, because the phase can still pull a second tile
   /// into view.
-  pub(crate) tiles: bool,
+  pub tiles: bool,
   /// Tile size after `background-size`, and after `round` rescales it.
-  pub(crate) tile: Size<f32>,
+  pub tile: Size<f32>,
   /// Top-left of the first tile, relative to the positioning area.
-  pub(crate) origin: Point<f32>,
+  pub origin: Point<f32>,
   /// Distance between tile origins. Equals the tile size for `repeat`, grows
   /// for `space`, and covers the whole area on an axis that does not repeat.
-  pub(crate) step: Size<f32>,
+  pub step: Size<f32>,
 }
 
 /// One axis of a tiled layer.
-struct Axis {
+struct TileAxis {
   tile: f32,
   origin: f32,
   step: f32,
 }
 
-impl Placement {
+impl BackgroundImageGeometry {
   /// Resolves one layer's placement. An image layer carries its intrinsic
   /// sizing, which `auto`, `cover` and `contain` resolve against; a gradient has
   /// none, so those all resolve to the positioning area.
@@ -113,36 +118,36 @@ impl Placement {
     repeat: BackgroundRepeat,
     intrinsic: Option<IntrinsicSizing>,
     context: &RenderContext,
-  ) -> Placement {
+  ) -> Self {
     let (tile, auto) = tile_size(area, size, intrinsic, context);
     // `round` rescales the axis it applies to. An axis left `auto` follows from
     // the image's ratio, so it has to resolve after the one it depends on.
     let (x, y) = match auto {
       Some((AutoBackgroundAxis::Width, ratio)) => {
-        let y = Axis::resolve(area.height, tile.height, position.0.y, repeat.1, context);
+        let y = TileAxis::resolve(area.height, tile.height, position.0.y, repeat.1, context);
         let width = AutoBackgroundAxis::Width
           .size_from_intrinsic(ratio, y.tile)
           .unwrap_or(tile.width);
 
         (
-          Axis::resolve(area.width, width, position.0.x, repeat.0, context),
+          TileAxis::resolve(area.width, width, position.0.x, repeat.0, context),
           y,
         )
       }
       Some((AutoBackgroundAxis::Height, ratio)) => {
-        let x = Axis::resolve(area.width, tile.width, position.0.x, repeat.0, context);
+        let x = TileAxis::resolve(area.width, tile.width, position.0.x, repeat.0, context);
         let height = AutoBackgroundAxis::Height
           .size_from_intrinsic(ratio, x.tile)
           .unwrap_or(tile.height);
 
         (
           x,
-          Axis::resolve(area.height, height, position.0.y, repeat.1, context),
+          TileAxis::resolve(area.height, height, position.0.y, repeat.1, context),
         )
       }
       None => (
-        Axis::resolve(area.width, tile.width, position.0.x, repeat.0, context),
-        Axis::resolve(area.height, tile.height, position.0.y, repeat.1, context),
+        TileAxis::resolve(area.width, tile.width, position.0.x, repeat.0, context),
+        TileAxis::resolve(area.height, tile.height, position.0.y, repeat.1, context),
       ),
     };
 
@@ -217,7 +222,7 @@ fn tile_size(
 /// A repeating axis starts one step before the anchor so the tiles also cover
 /// the area's leading edge. `round` rescales the tile to fit a whole number of
 /// them, and `space` keeps the tile but spreads the leftover between tiles.
-impl Axis {
+impl TileAxis {
   fn resolve(
     area: f32,
     tile: f32,
@@ -276,7 +281,7 @@ impl Axis {
 
 #[cfg(test)]
 mod tests {
-  use takumi_core::{
+  use crate::{
     Fonts,
     context::RenderContext,
     geometry::Size,
@@ -287,7 +292,7 @@ mod tests {
     viewport::Viewport,
   };
 
-  use super::Placement;
+  use super::BackgroundImageGeometry;
 
   /// `round` rescales the axis it applies to, and an `auto` axis follows from
   /// the image's ratio rather than keeping the size it was asked for.
@@ -302,7 +307,7 @@ mod tests {
           .build(),
       )
       .build();
-    let placement = Placement::resolve(
+    let placement = BackgroundImageGeometry::resolve(
       Size {
         width: 1200.0,
         height: 630.0,
