@@ -15,7 +15,9 @@ use takumi_core::{
     node::{ImageData, Node, NodeKind},
     tree::RenderNode,
   },
-  painter::{BoxFrame, BoxPainter, FillShape, PaintDevice, StrokeStyle, paint_border},
+  painter::{
+    BoxFrame, BoxPainter, FillShape, OverflowClip, PaintDevice, StrokeStyle, paint_border,
+  },
   resources::image::ImageSource,
   scene::Scene,
   style::{
@@ -146,18 +148,15 @@ impl<'n> PlacedBox<'n> {
     )
   }
 
-  /// Absolute SVG path `d` the box clips its children to when overflow is not
-  /// visible.
-  fn overflow_clip_path_data(&self) -> String {
-    // With border-radius present the raster backend clips both axes to the rounded
-    // padding box regardless of the per-axis overflow values, so the rounded path is
-    // used as-is. Without radius a two-value overflow (e.g. `overflow-x: hidden;
-    // overflow-y: visible`) must leave the visible axis unbounded.
-    if !self.border().is_zero() {
-      return self.padding_box_path_data();
-    }
-
-    edges_path_data(self.frame.overflow_clip_edges(&self.node.context.style))
+  /// Absolute SVG path `d` the box clips its children to, or `None` when
+  /// overflow is visible.
+  fn overflow_clip_path_data(&self) -> Option<String> {
+    Some(
+      match OverflowClip::of(&self.node.context, self.frame.layout)? {
+        OverflowClip::Rounded(clip) => shape_path_data(&clip.into(), self.frame.origin),
+        OverflowClip::Axes { x, y } => edges_path_data(self.frame.overflow_clip_edges(x, y)),
+      },
+    )
   }
 
   /// The clip path `d` and fill rule for the `background-clip` area.
@@ -533,9 +532,9 @@ impl BoxChrome {
     )?;
 
     // Children, clipped to the (rounded) padding box when overflow is not visible.
-    let child_group = style
-      .clips_overflow()
-      .then(|| doc.begin_clipped_group(&placed.overflow_clip_path_data()))
+    let child_group = placed
+      .overflow_clip_path_data()
+      .map(|data| doc.begin_clipped_group(&data))
       .transpose()?;
 
     Ok(Self {

@@ -27,8 +27,8 @@ use takumi_core::{
   },
   paint::ConicGradientTile,
   painter::{
-    BoxFrame, BoxPainter, BoxShadows, FillShape, PaintDevice, StrokeStyle, paint_border,
-    paint_run_decorations,
+    BoxFrame, BoxPainter, BoxShadows, FillShape, OverflowClip, PaintDevice, StrokeStyle,
+    paint_border, paint_run_decorations,
   },
   scene::{NodePaint, PaintItemKind, Scene},
   shadow::SizedShadow,
@@ -306,11 +306,7 @@ impl Emitter<'_> {
     // is hidden; without radius a per-axis overflow leaves the visible axis
     // unbounded. Counted on its own: the outline paints outside this clip but
     // inside everything else the box pushed.
-    let overflow_clip = if style.clips_overflow() {
-      self.push_overflow_clip(node, frame, relative, surface)
-    } else {
-      0
-    };
+    let overflow_clip = self.push_overflow_clip(node, frame, relative, surface);
 
     self.emit_tagged_content(node, paint, frame, surface)?;
 
@@ -436,22 +432,18 @@ impl Emitter<'_> {
     relative: Affine,
     surface: &mut Surface,
   ) -> usize {
-    let BoxFrame {
-      layout,
-      origin: CorePoint { y, .. },
-    } = frame;
+    let Some(clip) = OverflowClip::of(&node.context, frame.layout) else {
+      return 0;
+    };
 
     if relative.only_translation() {
-      self.window.narrow(y, y + layout.size.height);
+      self
+        .window
+        .narrow(frame.origin.y, frame.origin.y + frame.layout.size.height);
     }
-    let clip_border = BorderProperties::from_context(&node.context, layout.size, layout.border);
-    let path = if clip_border.is_zero() {
-      edges_path(frame.overflow_clip_edges(&node.context.style))
-    } else {
-      shape_path(
-        &ClipBox::padding_box(clip_border, layout).into(),
-        frame.origin,
-      )
+    let path = match clip {
+      OverflowClip::Rounded(clip) => shape_path(&clip.into(), frame.origin),
+      OverflowClip::Axes { x, y } => edges_path(frame.overflow_clip_edges(x, y)),
     };
     let Some(path) = path else {
       return 0;

@@ -347,7 +347,6 @@ impl<'a> ScenePainter<'a> {
       let node_mask = if current.context.style.has_shape_mask() {
         match prepare_node_mask(
           &current.context,
-          &current.context.style,
           layout,
           node_paint.transform,
           canvas.viewport(),
@@ -384,7 +383,6 @@ impl<'a> ScenePainter<'a> {
 
     let mask_action = prepare_node_mask(
       &current.context,
-      &current.context.style,
       layout,
       node_paint.transform,
       canvas.viewport(),
