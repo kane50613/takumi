@@ -12,7 +12,7 @@ use crate::{
   context::RenderContext,
   geometry::{ComputedLayout, PathCommand, Point, Rect, Size},
   layout::{
-    border::BorderProperties,
+    border::{BorderDash, BorderProperties},
     decoration::{ClipBox, OutlineGeometry},
     inline::DecorationRect,
   },
@@ -220,6 +220,18 @@ pub struct StrokeStyle {
   pub dash: Option<[f32; 2]>,
   /// Whether the dashes have round caps, which is how `dotted` draws.
   pub round_cap: bool,
+}
+
+impl StrokeStyle {
+  /// A border or outline stroke in `color`, dashed as `dash` says.
+  pub fn border(color: Color, width: f32, dash: Option<BorderDash>) -> Self {
+    Self {
+      color,
+      width,
+      dash: dash.map(|dash| dash.intervals),
+      round_cap: dash.is_some_and(|dash| dash.round_cap),
+    }
+  }
 }
 
 /// A box's `box-shadow` layers, split by where they fall.

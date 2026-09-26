@@ -7,7 +7,9 @@
 use takumi_core::{
   geometry::{ComputedLayout as Layout, Point},
   layout::decoration::{ClipBox, OutlineGeometry},
-  painter::{BackgroundClipArea, BoxPainter, FillShape, PaintDevice, StrokeStyle},
+  painter::{
+    BackgroundClipArea, BoxBorderPainter, BoxPainter, FillShape, PaintDevice, StrokeStyle,
+  },
   style::{Color, ImageScalingAlgorithm},
 };
 
@@ -15,7 +17,7 @@ use super::{
   BackgroundTile, BorderProperties, Canvas, ColorTile, Fill, PaintSource, RenderContext,
   SizedFontStyle, TileLayer, TileLayers, background_image_layers, collect_background_layers,
   draw_image, draw_inset_shadow_to_canvas, draw_outset_shadow, inline_drawing::draw_inline_layout,
-  paint_border, rasterize_layers,
+  rasterize_layers,
 };
 use crate::{
   MaskCompositeColor, MaskSamplingOptions, Placement, Result, Style, intersect_alpha_masks,
@@ -383,13 +385,10 @@ pub(crate) fn draw_border(
   canvas: &mut Canvas,
   layout: Layout,
 ) -> Result<()> {
-  paint_border(
-    BorderProperties::from_context(context, layout.size, layout.border),
-    canvas,
-    layout.size,
-    context.transform,
-    None,
-  );
+  let painter = BoxPainter::new(context, layout);
+  let mut device = CanvasDevice::new(canvas, context.transform, context.style.image_rendering);
+
+  BoxBorderPainter::new(painter.border(), layout.size).paint(Point::ZERO, &mut device);
 
   Ok(())
 }
@@ -407,7 +406,9 @@ pub(crate) fn resolve_outline(
 }
 
 pub(crate) fn draw_outline(outline: &OutlineGeometry, transform: Affine, canvas: &mut Canvas) {
-  paint_border(outline.border, canvas, outline.size, transform, None);
+  let mut device = CanvasDevice::new(canvas, transform, outline.border.image_rendering);
+
+  BoxBorderPainter::new(&outline.border, outline.size).paint(Point::ZERO, &mut device);
 }
 
 struct SolidColorLayer<'a> {
@@ -498,4 +499,414 @@ fn draw_text_node_content(
   draw_inline_layout(context, canvas, layout, &built, &font_style)?;
 
   Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+  use takumi_core::{
+    geometry::{Point, Rect, Size},
+    layout::border::BorderProperties,
+    painter::{BoxBorderPainter, StrokeStyle},
+    style::{Affine, BorderStyle, Color, ImageScalingAlgorithm, Sides, SpacePair},
+  };
+
+  use super::CanvasDevice;
+  use crate::{Canvas, Cap, Stroke};
+
+  fn paint_border(
+    border: BorderProperties,
+    canvas: &mut Canvas,
+    size: Size<f32>,
+    transform: Affine,
+  ) {
+    let mut device = CanvasDevice::new(canvas, transform, ImageScalingAlgorithm::Auto);
+
+    BoxBorderPainter::new(&border, size).paint(Point::ZERO, &mut device);
+  }
+
+  fn test_border(style: BorderStyle, width: f32) -> BorderProperties {
+    BorderProperties {
+      width: Rect {
+        top: width,
+        right: width,
+        bottom: width,
+        left: width,
+      },
+      color: Rect {
+        top: Color([255, 0, 0, 255]),
+        right: Color([255, 0, 0, 255]),
+        bottom: Color([255, 0, 0, 255]),
+        left: Color([255, 0, 0, 255]),
+      },
+      radius: Sides([SpacePair::from_single(0.0); 4]),
+      style: Rect {
+        top: style,
+        right: style,
+        bottom: style,
+        left: style,
+      },
+      image_rendering: ImageScalingAlgorithm::Auto,
+      collapsed: false,
+      shape: Sides::default(),
+    }
+  }
+
+  #[test]
+  fn solid_border_draws_continuous_edge() {
+    let mut canvas = Canvas::new(Size {
+      width: 48,
+      height: 48,
+    });
+
+    paint_border(
+      test_border(BorderStyle::Solid, 4.0),
+      &mut canvas,
+      Size {
+        width: 48.0,
+        height: 48.0,
+      },
+      Affine::IDENTITY,
+    );
+
+    let image = canvas
+      .into_inner()
+      .unwrap_or_else(|error| unreachable!("test canvas should be readable: {error}"));
+    assert!((8..40).all(|x| image.get_pixel(x, 2).0[3] > 0));
+  }
+
+  #[test]
+  fn hidden_border_does_not_draw() {
+    let mut canvas = Canvas::new(Size {
+      width: 24,
+      height: 24,
+    });
+
+    paint_border(
+      test_border(BorderStyle::Hidden, 4.0),
+      &mut canvas,
+      Size {
+        width: 24.0,
+        height: 24.0,
+      },
+      Affine::IDENTITY,
+    );
+
+    let image = canvas
+      .into_inner()
+      .unwrap_or_else(|error| unreachable!("test canvas should be readable: {error}"));
+    assert!(image.pixels().all(|pixel| pixel.0[3] == 0));
+  }
+
+  #[test]
+  fn dashed_border_draws_pattern() {
+    let mut canvas = Canvas::new(Size {
+      width: 48,
+      height: 48,
+    });
+
+    paint_border(
+      test_border(BorderStyle::Dashed, 4.0),
+      &mut canvas,
+      Size {
+        width: 48.0,
+        height: 48.0,
+      },
+      Affine::IDENTITY,
+    );
+
+    let image = canvas
+      .into_inner()
+      .unwrap_or_else(|error| unreachable!("test canvas should be readable: {error}"));
+
+    let row: Vec<u8> = (0..48).map(|x| image.get_pixel(x, 2).0[3]).collect();
+    let has_opaque = row.iter().any(|&a| a > 0);
+    let has_transparent = row.iter().skip(8).take(32).any(|&a| a == 0);
+
+    assert!(has_opaque, "Dashed border should have opaque pixels");
+    assert!(
+      has_transparent,
+      "Dashed border should have transparent gaps"
+    );
+  }
+
+  #[test]
+  fn dotted_border_draws_pattern() {
+    let mut canvas = Canvas::new(Size {
+      width: 48,
+      height: 48,
+    });
+
+    paint_border(
+      test_border(BorderStyle::Dotted, 4.0),
+      &mut canvas,
+      Size {
+        width: 48.0,
+        height: 48.0,
+      },
+      Affine::IDENTITY,
+    );
+
+    let image = canvas
+      .into_inner()
+      .unwrap_or_else(|error| unreachable!("test canvas should be readable: {error}"));
+
+    let row: Vec<u8> = (0..48).map(|x| image.get_pixel(x, 2).0[3]).collect();
+    let has_opaque = row.iter().any(|&a| a > 0);
+    let has_transparent = row.iter().skip(8).take(32).any(|&a| a == 0);
+
+    assert!(has_opaque, "Dotted border should have opaque pixels");
+    assert!(
+      has_transparent,
+      "Dotted border should have transparent gaps"
+    );
+  }
+
+  #[test]
+  fn dotted_border_thin_width_uses_zero_dash_length() {
+    let stroke = Stroke::from(&StrokeStyle::border(
+      Color::black(),
+      2.0,
+      BorderStyle::Dotted.dash_pattern(2.0, 48.0, false),
+    ));
+    let Some(dash_pattern) = stroke.dash else {
+      unreachable!("thin dotted stroke should produce a dash pattern");
+    };
+    assert_eq!(stroke.cap, Cap::Round);
+    assert_eq!(dash_pattern.intervals[0], 0.0);
+    assert!(dash_pattern.intervals[1] > 0.0);
+  }
+
+  #[test]
+  fn dashed_border_top_only_draws_pattern() {
+    let mut canvas = Canvas::new(Size {
+      width: 48,
+      height: 48,
+    });
+    let mut border = test_border(BorderStyle::Dashed, 0.0);
+    border.width.top = 4.0;
+
+    paint_border(
+      border,
+      &mut canvas,
+      Size {
+        width: 48.0,
+        height: 48.0,
+      },
+      Affine::IDENTITY,
+    );
+
+    let image = canvas
+      .into_inner()
+      .unwrap_or_else(|error| unreachable!("test canvas should be readable: {error}"));
+    let top_row: Vec<u8> = (8..40).map(|x| image.get_pixel(x, 2).0[3]).collect();
+
+    assert!(
+      top_row.iter().any(|&alpha| alpha > 0),
+      "Top dashed side should contain opaque pixels"
+    );
+    assert!(
+      top_row.contains(&0),
+      "Top dashed side should contain transparent gaps"
+    );
+    assert_eq!(
+      image.get_pixel(24, 45).0[3],
+      0,
+      "Bottom side should stay transparent for top-only dashed border"
+    );
+    assert_eq!(
+      image.get_pixel(2, 24).0[3],
+      0,
+      "Left side should stay transparent for top-only dashed border"
+    );
+    assert_eq!(
+      image.get_pixel(45, 24).0[3],
+      0,
+      "Right side should stay transparent for top-only dashed border"
+    );
+  }
+
+  #[test]
+  fn dotted_border_left_only_draws_pattern() {
+    let mut canvas = Canvas::new(Size {
+      width: 48,
+      height: 48,
+    });
+    let mut border = test_border(BorderStyle::Dotted, 0.0);
+    border.width.left = 4.0;
+
+    paint_border(
+      border,
+      &mut canvas,
+      Size {
+        width: 48.0,
+        height: 48.0,
+      },
+      Affine::IDENTITY,
+    );
+
+    let image = canvas
+      .into_inner()
+      .unwrap_or_else(|error| unreachable!("test canvas should be readable: {error}"));
+    let left_column: Vec<u8> = (8..40).map(|y| image.get_pixel(2, y).0[3]).collect();
+
+    assert!(
+      left_column.iter().any(|&alpha| alpha > 0),
+      "Left dotted side should contain opaque pixels"
+    );
+    assert!(
+      left_column.contains(&0),
+      "Left dotted side should contain transparent gaps"
+    );
+    assert_eq!(
+      image.get_pixel(24, 2).0[3],
+      0,
+      "Top side should stay transparent for left-only dotted border"
+    );
+    assert_eq!(
+      image.get_pixel(45, 24).0[3],
+      0,
+      "Right side should stay transparent for left-only dotted border"
+    );
+    assert_eq!(
+      image.get_pixel(24, 45).0[3],
+      0,
+      "Bottom side should stay transparent for left-only dotted border"
+    );
+  }
+
+  #[test]
+  fn solid_fast_path_skips_hidden_side_with_positive_width() {
+    let mut canvas = Canvas::new(Size {
+      width: 48,
+      height: 48,
+    });
+    let mut border = test_border(BorderStyle::Solid, 4.0);
+    border.style.top = BorderStyle::Hidden;
+
+    paint_border(
+      border,
+      &mut canvas,
+      Size {
+        width: 48.0,
+        height: 48.0,
+      },
+      Affine::IDENTITY,
+    );
+
+    let image = canvas
+      .into_inner()
+      .unwrap_or_else(|error| unreachable!("test canvas should be readable: {error}"));
+
+    assert_eq!(
+      image.get_pixel(24, 2).0[3],
+      0,
+      "Hidden top side should stay transparent"
+    );
+    let right_band_has_ink = (44..48).any(|x| image.get_pixel(x, 24).0[3] > 0);
+    assert!(
+      right_band_has_ink,
+      "Visible right side should still be painted"
+    );
+  }
+
+  #[test]
+  fn double_fast_path_skips_hidden_side_with_positive_width() {
+    let mut canvas = Canvas::new(Size {
+      width: 48,
+      height: 48,
+    });
+    let mut border = test_border(BorderStyle::Double, 6.0);
+    border.style.top = BorderStyle::Hidden;
+
+    paint_border(
+      border,
+      &mut canvas,
+      Size {
+        width: 48.0,
+        height: 48.0,
+      },
+      Affine::IDENTITY,
+    );
+
+    let image = canvas
+      .into_inner()
+      .unwrap_or_else(|error| unreachable!("test canvas should be readable: {error}"));
+
+    assert_eq!(
+      image.get_pixel(24, 2).0[3],
+      0,
+      "Hidden top side should stay transparent"
+    );
+    let right_band_has_ink = (42..48).any(|x| image.get_pixel(x, 24).0[3] > 0);
+    assert!(
+      right_band_has_ink,
+      "Visible right side should still be painted"
+    );
+  }
+
+  #[test]
+  fn solid_fallback_ignores_hidden_neighbor_widths() {
+    let mut canvas = Canvas::new(Size {
+      width: 64,
+      height: 64,
+    });
+    let mut border = test_border(BorderStyle::Hidden, 0.0);
+    border.style.top = BorderStyle::Solid;
+    border.width.top = 8.0;
+    border.style.right = BorderStyle::Dashed;
+    border.width.right = 8.0;
+    border.width.left = 24.0;
+
+    paint_border(
+      border,
+      &mut canvas,
+      Size {
+        width: 64.0,
+        height: 64.0,
+      },
+      Affine::IDENTITY,
+    );
+
+    let image = canvas
+      .into_inner()
+      .unwrap_or_else(|error| unreachable!("test canvas should be readable: {error}"));
+
+    assert!(
+      image.get_pixel(4, 3).0[3] > 0,
+      "Visible top side should not be clipped by hidden left width"
+    );
+    assert_eq!(
+      image.get_pixel(3, 32).0[3],
+      0,
+      "Hidden left side should stay transparent"
+    );
+  }
+
+  #[test]
+  fn oversized_solid_border_fills_without_panicking() {
+    let mut canvas = Canvas::new(Size {
+      width: 20,
+      height: 20,
+    });
+    let border = test_border(BorderStyle::Solid, 40.0);
+
+    paint_border(
+      border,
+      &mut canvas,
+      Size {
+        width: 20.0,
+        height: 20.0,
+      },
+      Affine::IDENTITY,
+    );
+
+    let image = canvas
+      .into_inner()
+      .unwrap_or_else(|error| unreachable!("test canvas should be readable: {error}"));
+
+    assert!(
+      image.get_pixel(10, 10).0[3] > 0,
+      "Oversized border should still render a valid filled mask"
+    );
+  }
 }

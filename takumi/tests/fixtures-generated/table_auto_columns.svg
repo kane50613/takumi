@@ -46,22 +46,14 @@
     <use href="#g15" x="365.29" y="31"/>
   </g>
   <rect x="16" y="47" width="1168" height="66" fill="#fff"/>
-  <g>
-    <path d="M16 47h62v1h-62Z" fill="#94a3b8"/>
-    <path d="M16 112h62v1h-62Z" fill="#94a3b8"/>
-    <path d="M16 48h1v64h-1Z" fill="#94a3b8"/>
-  </g>
+  <path d="M16 47h62v1h-62Zm0 65h62v1h-62Zm0-64h1v64h-1Z" fill="#94a3b8"/>
   <g fill="#000">
     <use href="#g16" x="17" y="66"/>
     <use href="#g16" x="29.02" y="66"/>
     <use href="#g16" x="41.05" y="66"/>
     <use href="#g17" x="57.57" y="66"/>
   </g>
-  <g>
-    <path d="M78 47h315v1h-315Z" fill="#94a3b8"/>
-    <path d="M78 112h315v1h-315Z" fill="#94a3b8"/>
-    <path d="M78 48h1v64h-1Z" fill="#94a3b8"/>
-  </g>
+  <path d="M78 47h315v1h-315Zm0 65h315v1h-315Zm0-64h1v64h-1Z" fill="#94a3b8"/>
   <g fill="#000">
     <use href="#g18" x="79" y="66"/>
     <use href="#g18" x="91.1" y="66"/>
@@ -90,11 +82,7 @@
     <use href="#g31" x="334.87" y="66"/>
     <use href="#g20" x="340.97" y="66"/>
   </g>
-  <g>
-    <path d="M393 47h715v1h-715Z" fill="#94a3b8"/>
-    <path d="M393 112h715v1h-715Z" fill="#94a3b8"/>
-    <path d="M393 48h1v64h-1Z" fill="#94a3b8"/>
-  </g>
+  <path d="M393 47h715v1h-715Zm0 65h715v1h-715Zm0-64h1v64h-1Z" fill="#94a3b8"/>
   <g fill="#000">
     <use href="#g32" x="394" y="66"/>
     <use href="#g32" x="406.65" y="66"/>
@@ -196,11 +184,7 @@
     <use href="#g0" x="289.96" y="140"/>
   </g>
   <rect x="16" y="156" width="1168" height="49" fill="#fff"/>
-  <g>
-    <path d="M16 156h1168v1h-1168Z" fill="#94a3b8"/>
-    <path d="M1183 157h1v23h-1Z" fill="#94a3b8"/>
-    <path d="M16 157h1v23h-1Z" fill="#94a3b8"/>
-  </g>
+  <path d="M16 156h1168v1h-1168Zm1167 1h1v23h-1Zm-1167 0h1v23h-1Z" fill="#94a3b8"/>
   <g fill="#000">
     <use href="#g16" x="17" y="175"/>
     <use href="#g16" x="29.02" y="175"/>
@@ -233,11 +217,7 @@
     <use href="#g24" x="309.84" y="175"/>
     <use href="#g20" x="314.54" y="175"/>
   </g>
-  <g>
-    <path d="M16 180h972v1h-972Z" fill="#94a3b8"/>
-    <path d="M16 204h972v1h-972Z" fill="#94a3b8"/>
-    <path d="M16 181h1v23h-1Z" fill="#94a3b8"/>
-  </g>
+  <path d="M16 180h972v1h-972Zm0 24h972v1h-972Zm0-23h1v23h-1Z" fill="#94a3b8"/>
   <g fill="#000">
     <use href="#g18" x="17" y="199"/>
     <use href="#g18" x="29.1" y="199"/>
@@ -312,22 +292,14 @@
     <use href="#g12" x="355.95" y="232"/>
   </g>
   <rect x="16" y="248" width="300" height="117" fill="#fff"/>
-  <g>
-    <path d="M16 248h39v1h-39Z" fill="#94a3b8"/>
-    <path d="M16 364h39v1h-39Z" fill="#94a3b8"/>
-    <path d="M16 249h1v115h-1Z" fill="#94a3b8"/>
-  </g>
+  <path d="M16 248h39v1h-39Zm0 116h39v1h-39Zm0-115h1v115h-1Z" fill="#94a3b8"/>
   <g fill="#000">
     <use href="#g16" x="17" y="267"/>
     <use href="#g16" x="29.02" y="267"/>
     <use href="#g16" x="41.05" y="267"/>
   </g>
   <use href="#g17" x="17" y="290" fill="#000"/>
-  <g>
-    <path d="M55 248h80v1h-80Z" fill="#94a3b8"/>
-    <path d="M55 364h80v1h-80Z" fill="#94a3b8"/>
-    <path d="M55 249h1v115h-1Z" fill="#94a3b8"/>
-  </g>
+  <path d="M55 248h80v1h-80Zm0 116h80v1h-80Zm0-115h1v115h-1Z" fill="#94a3b8"/>
   <g fill="#000">
     <use href="#g18" x="56" y="267"/>
     <use href="#g18" x="68.1" y="267"/>

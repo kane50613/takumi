@@ -22,8 +22,38 @@ pub enum BorderSide {
   Left,
 }
 
+impl BorderSide {
+  /// The two sides that meet this one at its corners.
+  pub fn adjacent(self) -> [Self; 2] {
+    match self {
+      Self::Top | Self::Bottom => [Self::Left, Self::Right],
+      Self::Right | Self::Left => [Self::Top, Self::Bottom],
+    }
+  }
+
+  /// This side's entry in `sides`.
+  pub fn of<T: Copy>(self, sides: Rect<T>) -> T {
+    match self {
+      Self::Top => sides.top,
+      Self::Right => sides.right,
+      Self::Bottom => sides.bottom,
+      Self::Left => sides.left,
+    }
+  }
+
+  /// The indices of this side's corners among radii listed clockwise from the top-left.
+  fn corners(self) -> [usize; 2] {
+    match self {
+      Self::Top => [0, 1],
+      Self::Right => [1, 2],
+      Self::Bottom => [2, 3],
+      Self::Left => [3, 0],
+    }
+  }
+}
+
 /// One strip of a border side: where it sits, how thick it is, and what colour fills it.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub struct SideBand {
   /// How far in from the border box the strip starts, per side.
   pub inset: Rect<f32>,
@@ -139,7 +169,7 @@ impl BorderProperties {
   }
 
   /// Every side, painted or not, clockwise from the top.
-  fn sides(&self) -> [PaintedSide; 4] {
+  pub(crate) fn sides(&self) -> [PaintedSide; 4] {
     [
       (
         BorderSide::Top,
@@ -444,7 +474,7 @@ impl BorderProperties {
       return;
     }
 
-    if self.is_zero() || self.collapsed {
+    if self.collapsed {
       self.append_side_polygon_commands_at(side, path, border_box, offset);
       return;
     }
@@ -553,6 +583,20 @@ impl BorderProperties {
     }
 
     path.close();
+  }
+
+  /// Whether the padding edge curves at either end of `side`.
+  pub fn inner_edge_arcs(&self, side: BorderSide, border_box: Size<f32>) -> bool {
+    let mut inner = *self;
+
+    inner.inset_by_border_width();
+
+    let radii = inner.scaled_corner_radii(border_box.inset(self.width));
+
+    side
+      .corners()
+      .iter()
+      .any(|&corner| radii.0[corner].x > 0.0 && radii.0[corner].y > 0.0)
   }
 
   /// Returns true if all corner radii are zero.
@@ -955,77 +999,6 @@ const DASHED_GAP_RATIO_THICK: f32 = 1.0;
 const DASHED_GAP_RATIO_THIN: f32 = 2.0;
 const DOTTED_ENDPOINT_EPSILON: f32 = 1.0e-2;
 
-/// How a border paints as a whole, before any per-side work.
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub(crate) enum BorderPaint {
-  /// Stroke the centerline with the dash pattern for `style`.
-  Stroked {
-    /// The uniform colour.
-    color: Color,
-    /// The uniform width.
-    width: f32,
-    /// `Dashed` or `Dotted`.
-    style: BorderStyle,
-  },
-  /// Two concentric rings.
-  Double {
-    /// The uniform colour.
-    color: Color,
-    /// The uniform width.
-    width: f32,
-  },
-  /// One even-odd fill of the whole ring.
-  Ring {
-    /// The uniform colour.
-    color: Color,
-  },
-  /// Each side on its own.
-  Sides,
-}
-
-impl BorderProperties {
-  /// Decides how the border paints.
-  pub(crate) fn paint(&self) -> BorderPaint {
-    let Some(color) = self.has_uniform_visible_color() else {
-      return BorderPaint::Sides;
-    };
-    let width = self.width.top;
-
-    for style in [BorderStyle::Dashed, BorderStyle::Dotted] {
-      if self.is_uniform_all_sides_style(style) {
-        return BorderPaint::Stroked {
-          color,
-          width,
-          style,
-        };
-      }
-    }
-    if self.is_uniform_all_sides_style(BorderStyle::Double) {
-      return BorderPaint::Double { color, width };
-    }
-    // Only a solid side fills as part of one ring: a dashed or dotted side breaks
-    // the ring into segments, and the 3D bevels shade each side differently.
-    if !self.visible_sides_match(BorderStyle::Solid) {
-      return BorderPaint::Sides;
-    }
-    // A zero-width side leaves the ring's two contours sharing an edge, which
-    // antialiasing leaks a hairline through. Sides share no edges.
-    if [
-      self.width.top,
-      self.width.right,
-      self.width.bottom,
-      self.width.left,
-    ]
-    .iter()
-    .any(|width| *width <= 0.0)
-    {
-      return BorderPaint::Sides;
-    }
-
-    BorderPaint::Ring { color }
-  }
-}
-
 impl BorderStyle {
   /// Returns a dash interval and round-cap flag for this style.
   pub fn dash_pattern(self, width: f32, length: f32, closed: bool) -> Option<BorderDash> {
@@ -1119,7 +1092,7 @@ fn select_best_dash_gap(length: f32, dash: f32, gap: f32, closed: bool) -> f32 {
 }
 
 impl PaintedSide {
-  fn is_visible(&self) -> bool {
+  pub(crate) fn is_visible(&self) -> bool {
     self.style.is_rendered() && self.width > 0.0
   }
 

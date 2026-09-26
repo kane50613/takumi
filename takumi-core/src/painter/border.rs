@@ -1,17 +1,45 @@
 //! A box's border, painted after Blink's
 //! [`BoxBorderPainter`](https://source.chromium.org/chromium/chromium/src/+/main:third_party/blink/renderer/core/paint/box_border_painter.cc).
 
+use smallvec::SmallVec;
+
 use super::{FillShape, PaintDevice, StrokeStyle};
 use crate::{
-  geometry::{PathCommand, Point, Rect, Size},
-  layout::border::{BorderPaint, BorderProperties, BorderSide, PaintedSide, SideBand},
-  style::{Affine, BorderStyle, FillRule, Sides},
+  geometry::{PathCommand, Point, Size},
+  layout::border::{BorderProperties, BorderSide, PaintedSide, SideBand},
+  style::{Affine, BorderStyle, Color, FillRule},
 };
+
+/// How far a curved dashed side overstrokes its centerline, so the ring clip
+/// rather than the stroke decides where each dash ends.
+const CURVED_DASH_OVERSTROKE: f32 = 2.2;
 
 /// A border on a border box of `size`, ready to paint.
 pub struct BoxBorderPainter<'b> {
   border: &'b BorderProperties,
   size: Size<f32>,
+}
+
+/// How a border paints as a whole, before any per-side work.
+enum BorderPaint {
+  /// One even-odd fill of the whole ring.
+  Ring(Color),
+  /// Two concentric rings, a third of each side's width apiece.
+  Double(Color),
+  /// One dashed or dotted stroke round the rounded centerline.
+  Stroked {
+    color: Color,
+    width: f32,
+    style: BorderStyle,
+  },
+  /// Each side on its own.
+  Sides,
+}
+
+/// The sides that fill one band in one colour, merged so adjacent sides share no seam.
+struct SideFill {
+  band: SideBand,
+  area: Vec<PathCommand>,
 }
 
 impl<'b> BoxBorderPainter<'b> {
@@ -22,143 +50,211 @@ impl<'b> BoxBorderPainter<'b> {
 
   /// Paints the border with the border box's top-left at `origin`.
   pub fn paint<D: PaintDevice>(&self, origin: Point<f32>, device: &mut D) {
-    if !self.border.has_visible_sides() || self.paint_fast_path(origin, device) {
+    if !self.border.has_visible_sides() {
       return;
     }
 
-    self.paint_sides(Affine::translation(origin.x, origin.y), device);
-  }
-
-  /// Paints a border whose visible sides share one colour and style in one pass, reporting
-  /// whether it could. A uniform dashed or dotted border strokes the centerline so the pattern
-  /// runs round the whole ring, and a double border fills two rings.
-  fn paint_fast_path<D: PaintDevice>(&self, origin: Point<f32>, device: &mut D) -> bool {
-    let border = self.border;
-    let size = self.size;
     let at = Affine::translation(origin.x, origin.y);
 
-    match border.paint() {
-      BorderPaint::Sides => return false,
+    match self.kind() {
+      BorderPaint::Sides => self.paint_sides(at, device),
       // A transparent ring is a fill nobody sees, and painting it would only
       // lengthen the output.
-      BorderPaint::Ring { color }
-      | BorderPaint::Double { color, .. }
+      BorderPaint::Ring(color)
+      | BorderPaint::Double(color)
       | BorderPaint::Stroked { color, .. }
         if color.0[3] == 0 => {}
-      BorderPaint::Ring { color } => {
-        device.fill_shape(&FillShape::border_ring(border, size), color, at);
+      BorderPaint::Ring(color) => {
+        device.fill_shape(&FillShape::border_ring(self.border, self.size), color, at);
       }
-      BorderPaint::Double { color, width } => {
-        let third = width / 3.0;
-
-        for inset in [0.0, third * 2.0] {
-          let mut ring = *border;
-
-          ring.expand_by(Rect {
-            top: -inset,
-            right: -inset,
-            bottom: -inset,
-            left: -inset,
-          });
-          ring.width = Sides([third; 4]).into();
-
-          let ring_size = Size {
-            width: (size.width - inset * 2.0).max(0.0),
-            height: (size.height - inset * 2.0).max(0.0),
-          };
-
-          device.fill_shape(
-            &FillShape::border_ring(&ring, ring_size),
-            color,
-            Affine::translation(origin.x + inset, origin.y + inset),
-          );
-        }
-      }
+      BorderPaint::Double(color) => self.paint_double(color, at, device),
       BorderPaint::Stroked {
         color,
         width,
         style,
       } => {
-        let half = width / 2.0;
-        let mut center = *border;
-
-        center.expand_by(Rect {
-          top: -half,
-          right: -half,
-          bottom: -half,
-          left: -half,
-        });
-
-        let center_size = Size {
-          width: (size.width - width).max(0.0),
-          height: (size.height - width).max(0.0),
-        };
-        let mut commands = Vec::with_capacity(BorderProperties::PATH_COMMANDS_AMOUNT);
-
-        center.append_mask_commands(&mut commands, center_size, Point { x: half, y: half });
-
-        let perimeter = center.approximate_rounded_rect_perimeter(center_size);
-        let dash = style.dash_pattern(width, perimeter, true);
+        let (centerline, perimeter) = self.centerline_loop(self.border);
 
         device.stroke_shape(
-          &FillShape::Path {
-            commands,
-            rule: FillRule::NonZero,
-          },
-          &StrokeStyle {
-            color,
-            width,
-            dash: dash.map(|dash| dash.intervals),
-            round_cap: dash.is_some_and(|dash| dash.round_cap),
-          },
+          &centerline,
+          &StrokeStyle::border(color, width, style.dash_pattern(width, perimeter, true)),
           at,
         );
       }
     }
-
-    true
   }
 
-  /// Paints each side on its own inside the ring: solid and 3D sides fill their corner-mitred
-  /// polygon, dashed and dotted sides stroke their centerline.
-  fn paint_sides<D: PaintDevice>(&self, at: Affine, device: &mut D) {
-    let mut sides = self.border.painted_sides().peekable();
+  /// Whether the border paints in one pass, as Blink's `PaintBorderFastPath` does for a solid or
+  /// double border of one colour on all four sides. A rounded dashed or dotted border of one
+  /// width strokes its whole centerline, which is what its per-side strokes add up to.
+  fn kind(&self) -> BorderPaint {
+    let border = self.border;
+    let sides = border.sides();
+    let Some(color) = border.has_uniform_visible_color() else {
+      return BorderPaint::Sides;
+    };
+    let style = sides[0].style;
+    let all_alike = sides
+      .iter()
+      .all(|side| side.is_visible() && side.style == style);
 
-    if sides.peek().is_none() {
-      return;
+    match style {
+      BorderStyle::Solid if all_alike => BorderPaint::Ring(color),
+      BorderStyle::Double if all_alike => BorderPaint::Double(color),
+      BorderStyle::Dashed | BorderStyle::Dotted
+        if !border.is_zero() && border.is_uniform_all_sides_style(style) =>
+      {
+        BorderPaint::Stroked {
+          color,
+          width: border.width.top,
+          style,
+        }
+      }
+      _ => BorderPaint::Sides,
     }
+  }
 
-    // A collapsed border's sides are squared rectangles already inside the
-    // ring, so the clip only adds an antialiased edge that leaks the
-    // background where two cells meet. Patterned sides still need it to trim
-    // their centerlines.
-    let patterned = self
-      .border
-      .painted_sides()
-      .any(|side| matches!(side.style, BorderStyle::Dashed | BorderStyle::Dotted));
-    let ring =
-      (!self.border.collapsed || patterned).then(|| FillShape::border_ring(self.border, self.size));
+  /// Fills the outer and inner thirds of a double border as two rings.
+  fn paint_double<D: PaintDevice>(&self, color: Color, at: Affine, device: &mut D) {
+    let third = self.border.width.map(|width| width / 3.0);
 
-    device.save(ring.as_ref().map(|ring| (ring, at)));
+    for inset in [third.map(|_| 0.0), third.map(|width| width * 2.0)] {
+      let band = SideBand {
+        inset,
+        width: third,
+        color,
+      };
 
-    for side in sides {
+      device.fill_shape(&self.band_ring(self.border, &band), color, at);
+    }
+  }
+
+  /// Paints each side on its own. Sides meet along the diagonal from the outer to the inner
+  /// corner, and sides that fill a band in the same colour merge into one fill. A rounded border
+  /// fills each band's ring clipped to its sides' regions.
+  fn paint_sides<D: PaintDevice>(&self, at: Affine, device: &mut D) {
+    let mut border = *self.border;
+
+    border.width = border.visible_side_widths();
+
+    let rounded = !border.is_zero();
+    let mut fills: SmallVec<[SideFill; 4]> = SmallVec::new();
+
+    for side in border.painted_sides() {
       if matches!(side.style, BorderStyle::Dashed | BorderStyle::Dotted) {
-        self.paint_side_pattern(side, at, device);
+        self.paint_side_pattern(&border, side, at, device);
         continue;
       }
 
-      for band in self.border.side_bands(side) {
-        device.fill_shape(&self.band_polygon(side.side, &band), band.color, at);
+      for band in border.side_bands(side) {
+        let area = if rounded {
+          self.side_region(&border, side.side)
+        } else {
+          self.band_region(&border, side.side, &band)
+        };
+
+        match fills.iter_mut().find(|fill| fill.band == band) {
+          Some(fill) => fill.area.extend(area),
+          None => fills.push(SideFill { band, area }),
+        }
       }
     }
 
-    device.restore();
+    for fill in fills {
+      let area = FillShape::Path {
+        commands: fill.area,
+        rule: FillRule::NonZero,
+      };
+
+      if rounded {
+        device.save(Some((&area, at)));
+        device.fill_shape(&self.band_ring(&border, &fill.band), fill.band.color, at);
+        device.restore();
+      } else {
+        device.fill_shape(&area, fill.band.color, at);
+      }
+    }
   }
 
-  /// The polygon one band of `side` fills, mitred at the corners.
-  fn band_polygon(&self, side: BorderSide, band: &SideBand) -> FillShape {
-    let mut strip = *self.border;
-    let mut commands = Vec::new();
+  /// Strokes a dashed or dotted side along its centerline, clipped to its corner mitres when a
+  /// neighbour has width, and to the ring when the border is rounded.
+  fn paint_side_pattern<D: PaintDevice>(
+    &self,
+    border: &BorderProperties,
+    side: PaintedSide,
+    at: Affine,
+    device: &mut D,
+  ) {
+    let rounded = !border.is_zero();
+    let curved = rounded && border.inner_edge_arcs(side.side, self.size);
+    let widest_neighbour = side
+      .side
+      .adjacent()
+      .iter()
+      .map(|adjacent| adjacent.of(border.width))
+      .fold(0.0, f32::max);
+    let ring = rounded.then(|| FillShape::border_ring(border, self.size));
+    let mitre = (curved || widest_neighbour > 0.0).then(|| FillShape::Path {
+      commands: self.side_region(border, side.side),
+      rule: FillRule::NonZero,
+    });
+    let clips = [&ring, &mitre].into_iter().flatten();
+
+    for clip in clips.clone() {
+      device.save(Some((clip, at)));
+    }
+
+    let (line, length, closed) = if curved {
+      let (centerline, perimeter) = self.centerline_loop(border);
+
+      (centerline, perimeter, true)
+    } else {
+      let (line, length) = self.centerline(side);
+
+      (line, length, false)
+    };
+    let dash = side.style.dash_pattern(side.width, length, closed);
+    let width = if curved && side.style == BorderStyle::Dashed {
+      side.width.max(widest_neighbour) * CURVED_DASH_OVERSTROKE
+    } else {
+      side.width
+    };
+
+    device.stroke_shape(&line, &StrokeStyle::border(side.color, width, dash), at);
+
+    for _ in clips {
+      device.restore();
+    }
+  }
+
+  /// The ring one band of the border fills.
+  fn band_ring(&self, border: &BorderProperties, band: &SideBand) -> FillShape {
+    let mut strip = *border;
+    let mut commands = Vec::with_capacity(BorderProperties::PATH_COMMANDS_AMOUNT * 2);
+
+    strip.width = band.width;
+    strip.expand_by(band.inset.map(|value| -value));
+    strip.append_border_ring_commands_at(
+      &mut commands,
+      self.size.inset(band.inset),
+      band.inset.top_left(),
+    );
+
+    FillShape::Path {
+      commands,
+      rule: FillRule::EvenOdd,
+    }
+  }
+
+  /// The part of one band of `side` between its corner mitres.
+  fn band_region(
+    &self,
+    border: &BorderProperties,
+    side: BorderSide,
+    band: &SideBand,
+  ) -> Vec<PathCommand> {
+    let mut strip = *border;
+    let mut commands = Vec::with_capacity(5);
 
     strip.width = band.width;
     strip.expand_by(band.inset.map(|value| -value));
@@ -169,56 +265,71 @@ impl<'b> BoxBorderPainter<'b> {
       band.inset.top_left(),
     );
 
-    FillShape::Path {
-      commands,
-      rule: FillRule::NonZero,
-    }
+    commands
   }
 
-  /// Strokes a dashed or dotted side along its centerline.
-  fn paint_side_pattern<D: PaintDevice>(&self, side: PaintedSide, at: Affine, device: &mut D) {
-    let [start, end] = self.centerline(side.side);
-    let length = ((end.x - start.x).powi(2) + (end.y - start.y).powi(2)).sqrt();
-    let dash = side.style.dash_pattern(side.width, length, false);
+  /// The region `side` owns, from its outer corners to the padding edge.
+  fn side_region(&self, border: &BorderProperties, side: BorderSide) -> Vec<PathCommand> {
+    let mut commands = Vec::with_capacity(5);
 
-    device.stroke_shape(
-      &FillShape::Path {
+    border.append_side_clip_polygon_commands_at(side, &mut commands, self.size, Point::ZERO);
+
+    commands
+  }
+
+  /// The closed path through the middle of every side, and its length.
+  fn centerline_loop(&self, border: &BorderProperties) -> (FillShape, f32) {
+    let half = border.width.map(|width| width / 2.0);
+    let mut center = *border;
+    let size = self.size.inset(half);
+    let mut commands = Vec::with_capacity(BorderProperties::PATH_COMMANDS_AMOUNT);
+
+    center.expand_by(half.map(|value| -value));
+    center.append_mask_commands(&mut commands, size, half.top_left());
+
+    let perimeter = center.approximate_rounded_rect_perimeter(size);
+
+    (
+      FillShape::Path {
+        commands,
+        rule: FillRule::NonZero,
+      },
+      perimeter,
+    )
+  }
+
+  /// The straight line through the middle of `side` across the whole border box, and the length
+  /// its dashes spread over. Dots stop half a dot short of each end, so the end dots stay inside.
+  fn centerline(&self, side: PaintedSide) -> (FillShape, f32) {
+    let Size { width, height } = self.size;
+    let half = side.width / 2.0;
+    let inset = if side.style == BorderStyle::Dotted {
+      half
+    } else {
+      0.0
+    };
+    let point = |x, y| Point { x, y };
+    let (start, end, length) = match side.side {
+      BorderSide::Top => (point(inset, half), point(width - inset, half), width),
+      BorderSide::Bottom => (
+        point(inset, height - half),
+        point(width - inset, height - half),
+        width,
+      ),
+      BorderSide::Left => (point(half, inset), point(half, height - inset), height),
+      BorderSide::Right => (
+        point(width - half, inset),
+        point(width - half, height - inset),
+        height,
+      ),
+    };
+
+    (
+      FillShape::Path {
         commands: vec![PathCommand::MoveTo(start), PathCommand::LineTo(end)],
         rule: FillRule::NonZero,
       },
-      &StrokeStyle {
-        color: side.color,
-        width: side.width,
-        dash: dash.map(|dash| dash.intervals),
-        round_cap: dash.is_some_and(|dash| dash.round_cap),
-      },
-      at,
-    );
-  }
-
-  /// The ends of the line through the middle of `side`, between the neighbouring sides' middles.
-  fn centerline(&self, side: BorderSide) -> [Point<f32>; 2] {
-    let half = self.border.width.map(|width| width / 2.0);
-    let Size { width, height } = self.size;
-    let point = |x, y| Point { x, y };
-
-    match side {
-      BorderSide::Top => [
-        point(half.left, half.top),
-        point(width - half.right, half.top),
-      ],
-      BorderSide::Right => [
-        point(width - half.right, half.top),
-        point(width - half.right, height - half.bottom),
-      ],
-      BorderSide::Bottom => [
-        point(half.left, height - half.bottom),
-        point(width - half.right, height - half.bottom),
-      ],
-      BorderSide::Left => [
-        point(half.left, half.top),
-        point(half.left, height - half.bottom),
-      ],
-    }
+      length,
+    )
   }
 }

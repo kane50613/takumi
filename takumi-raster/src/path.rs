@@ -172,8 +172,6 @@ impl Style {
 
 pub(crate) type Command = PathCommand;
 
-pub(crate) use takumi_core::geometry::PathBuilder;
-
 pub(crate) fn build_path(commands: &[Command]) -> Option<TinyPath> {
   let mut builder = TinyPathBuilder::new();
 
