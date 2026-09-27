@@ -1,7 +1,9 @@
 use image::Rgba;
 use tiny_skia::PremultipliedColorU8;
 
-use crate::{fast_div_255, fast_div_255_u32, style::BlendMode};
+use crate::{
+  fast_div_255, fast_div_255_u32, resources::image_buffer::premultiply_pixel, style::BlendMode,
+};
 
 #[inline(always)]
 fn composited_alpha(bottom_alpha: u32, top_alpha: u32) -> u32 {
@@ -429,30 +431,6 @@ const DEMUL: [f32; 256] = {
 };
 
 #[inline(always)]
-pub(crate) fn premultiply_rgba_pixel(red: u8, green: u8, blue: u8, alpha: u8) -> [u8; 4] {
-  [
-    fast_div_255(red as u32 * alpha as u32),
-    fast_div_255(green as u32 * alpha as u32),
-    fast_div_255(blue as u32 * alpha as u32),
-    alpha,
-  ]
-}
-
-#[inline(always)]
-pub(crate) fn premultiply_rgba(color: Rgba<u8>) -> [u8; 4] {
-  let [red, green, blue, alpha] = color.0;
-  premultiply_rgba_pixel(red, green, blue, alpha)
-}
-
-/// Premultiplies a straight-alpha pixel into a `tiny_skia`
-/// [`PremultipliedColorU8`].
-pub(crate) fn color_to_premultiplied(color: Rgba<u8>) -> PremultipliedColorU8 {
-  let [red, green, blue, alpha] = premultiply_rgba(color);
-  PremultipliedColorU8::from_rgba(red, green, blue, alpha)
-    .unwrap_or(PremultipliedColorU8::TRANSPARENT)
-}
-
-#[inline(always)]
 pub(crate) fn premultiplied_from_pixel(pixel: PremultipliedColorU8) -> [u8; 4] {
   [pixel.red(), pixel.green(), pixel.blue(), pixel.alpha()]
 }
@@ -548,7 +526,7 @@ fn blend_premultiplied_pixel_slow(dst: &mut [u8; 4], src: [u8; 4], mode: BlendMo
   };
 
   blend_pixel(&mut current, color, mode);
-  *dst = premultiply_rgba(current);
+  *dst = premultiply_pixel(current.0);
 }
 
 #[inline(always)]

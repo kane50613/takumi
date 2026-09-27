@@ -10,13 +10,16 @@ use tiny_skia::{ColorU8, PremultipliedColorU8};
 
 use super::gradient_utils::interpolate_rgba_premultiplied;
 
-use crate::style::{
-  Animatable, Color as CurrentColor, CssDescriptorKind, CssSyntaxKind, CssToken, FromCss,
-  FromCssStr, MakeComputed, ParseResult, PercentageNumber, SizingContext, ToCss,
-  math::fast_div_255,
-  tw::TailwindPropertyParser,
-  tw::{Namespace, extract_arbitrary_value},
-  unexpected_token,
+use crate::{
+  resources::image_buffer::premultiply_pixel,
+  style::{
+    Animatable, Color as CurrentColor, CssDescriptorKind, CssSyntaxKind, CssToken, FromCss,
+    FromCssStr, MakeComputed, ParseResult, PercentageNumber, SizingContext, ToCss,
+    math::fast_div_255,
+    tw::TailwindPropertyParser,
+    tw::{Namespace, extract_arbitrary_value},
+    unexpected_token,
+  },
 };
 
 fn is_cylindrical_color_space(color_space: ColorSpaceTag) -> bool {
@@ -521,13 +524,10 @@ impl Color {
 
   /// Premultiplies the straight-alpha colour into a `tiny_skia`
   /// [`PremultipliedColorU8`].
-  pub(crate) fn premultiplied(self) -> PremultipliedColorU8 {
-    let [r, g, b, a] = self.0;
-    let premul_r = fast_div_255(r as u32 * a as u32);
-    let premul_g = fast_div_255(g as u32 * a as u32);
-    let premul_b = fast_div_255(b as u32 * a as u32);
+  pub fn premultiplied(self) -> PremultipliedColorU8 {
+    let [red, green, blue, alpha] = premultiply_pixel(self.0);
 
-    PremultipliedColorU8::from_rgba(premul_r, premul_g, premul_b, a)
+    PremultipliedColorU8::from_rgba(red, green, blue, alpha)
       .unwrap_or(PremultipliedColorU8::TRANSPARENT)
   }
 

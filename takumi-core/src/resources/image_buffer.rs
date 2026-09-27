@@ -134,6 +134,18 @@ pub fn demultiply_pixel(pixel: &mut [u8; 4]) {
   }
 }
 
+/// Converts one straight-alpha RGBA pixel to premultiplied alpha.
+#[inline(always)]
+pub fn premultiply_pixel([red, green, blue, alpha]: [u8; 4]) -> [u8; 4] {
+  if alpha == u8::MAX {
+    return [red, green, blue, alpha];
+  }
+
+  let scale = |channel: u8| fast_div_255(channel as u32 * alpha as u32);
+
+  [scale(red), scale(green), scale(blue), alpha]
+}
+
 /// Converts premultiplied RGBA bytes to straight alpha in place, truncating
 /// where [`demultiply_pixel`] rounds.
 #[cfg(feature = "png")]
@@ -169,20 +181,9 @@ fn has_opaque_alpha(raw: &[u8]) -> bool {
 #[inline(always)]
 pub(crate) fn premultiply_rgba_in_place(raw: &mut [u8]) {
   for pixel in raw.as_chunks_mut::<4>().0 {
-    let alpha = pixel[3];
-    if alpha == u8::MAX {
-      continue;
+    if pixel[3] != u8::MAX {
+      *pixel = premultiply_pixel(*pixel);
     }
-    if alpha == 0 {
-      pixel[0] = 0;
-      pixel[1] = 0;
-      pixel[2] = 0;
-      continue;
-    }
-    let alpha_u32 = alpha as u32;
-    pixel[0] = fast_div_255(pixel[0] as u32 * alpha_u32);
-    pixel[1] = fast_div_255(pixel[1] as u32 * alpha_u32);
-    pixel[2] = fast_div_255(pixel[2] as u32 * alpha_u32);
   }
 }
 
