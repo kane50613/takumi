@@ -5,6 +5,7 @@ use std::collections::HashMap;
 use crate::{
   context::RenderContext,
   geometry::{LAYOUT_UNIT_EPSILON, PathBuilder, PathCommand, Point},
+  layout::corner_shape::KAPPA,
   style::{BorderStyle, Color, Sides, SpacePair},
 };
 
@@ -58,7 +59,7 @@ pub struct InlineOutlineRect {
   pub(crate) width: f32,
   /// The fragment's border-box height.
   pub(crate) height: f32,
-  /// The fragment's corner radii.
+  /// The element's corner radii resolved against this fragment, wrapped edges included.
   pub(crate) radius: Sides<SpacePair<f32>>,
   /// The element's outline.
   pub(crate) outline: InlineOutline,
@@ -190,6 +191,96 @@ impl OutlineIsland {
     corners
   }
 
+  /// The element's corner radii, resolved against the island's first fragment.
+  pub fn radius(&self) -> Sides<SpacePair<f32>> {
+    self.rects[0].radius
+  }
+
+  /// The contour through [`OutlineIsland::corners`] grown by `expansion`, its convex corners
+  /// rounded by `convex` and its concave ones by `concave`, after Blink's `AddCornerRadiiToPath`
+  /// in `outline_painter.cc`. Follows Blink under the notice in LICENSE-CHROMIUM.
+  pub fn rounded_contour(
+    &self,
+    expansion: f32,
+    convex: Sides<SpacePair<f32>>,
+    concave: Sides<SpacePair<f32>>,
+  ) -> Vec<PathCommand> {
+    let corners = right_angle_corners(self.corners(expansion));
+    let count = corners.len();
+
+    if count < 4 {
+      return self.contour(expansion);
+    }
+
+    let at = |index: usize| corners[(index + count) % count];
+    let radius = |index: usize| {
+      corner_radius(
+        convex,
+        concave,
+        at(index + count - 1),
+        at(index),
+        at(index + 1),
+      )
+    };
+    // Each line runs from corner `index` to the next, shortened by both corners' radii.
+    let lines: Vec<(Point<f32>, Point<f32>)> = (0..count)
+      .map(|index| {
+        let (start, end) = (at(index), at(index + 1));
+        let (first, second) = (radius(index), radius(index + 1));
+        let vertical = start.x == end.x;
+        let length = if vertical {
+          (end.y - start.y).abs()
+        } else {
+          (end.x - start.x).abs()
+        };
+        let (mut near, mut far) = if vertical {
+          (first.y, second.y)
+        } else {
+          (first.x, second.x)
+        };
+
+        if near + far > length {
+          let scale = length / (near + far);
+
+          near = (near * scale).floor();
+          far = (far * scale).floor();
+        }
+
+        let step = |from: Point<f32>, toward: Point<f32>, by: f32| Point {
+          x: from.x + (toward.x - from.x).signum() * if vertical { 0.0 } else { by },
+          y: from.y + (toward.y - from.y).signum() * if vertical { by } else { 0.0 },
+        };
+
+        (step(start, end, near), step(end, start, far))
+      })
+      .collect();
+    let mut path = Vec::with_capacity(count * 2 + 2);
+    let mut current = lines[count - 1].1;
+
+    path.move_to((current.x, current.y));
+
+    for (index, &(start, end)) in lines.iter().enumerate() {
+      let corner = at(index);
+
+      path.push(PathCommand::CubicTo(
+        Point {
+          x: current.x + (corner.x - current.x) * KAPPA,
+          y: current.y + (corner.y - current.y) * KAPPA,
+        },
+        Point {
+          x: start.x + (corner.x - start.x) * KAPPA,
+          y: start.y + (corner.y - start.y) * KAPPA,
+        },
+        start,
+      ));
+      path.line_to((end.x, end.y));
+      current = end;
+    }
+
+    path.close();
+    path
+  }
+
   /// The closed contour through [`OutlineIsland::corners`].
   pub fn contour(&self, expansion: f32) -> Vec<PathCommand> {
     let corners = self.corners(expansion);
@@ -206,5 +297,67 @@ impl OutlineIsland {
 
     path.close();
     path
+  }
+}
+
+/// `corners` without repeated points or points in the middle of a straight run, so each one turns
+/// a right angle.
+fn right_angle_corners(mut corners: Vec<Point<f32>>) -> Vec<Point<f32>> {
+  loop {
+    let count = corners.len();
+    let redundant = (0..count).find(|&index| {
+      let previous = corners[(index + count - 1) % count];
+      let point = corners[index];
+      let next = corners[(index + 1) % count];
+
+      point == previous
+        || (previous.x == point.x && point.x == next.x)
+        || (previous.y == point.y && point.y == next.y)
+    });
+
+    match redundant {
+      Some(index) if count > 4 => {
+        corners.remove(index);
+      }
+      _ => return corners,
+    }
+  }
+}
+
+/// The radius the right-angle corner at `point` takes, coming from `previous` and going to `next`
+/// clockwise: a convex corner takes `convex`'s, a concave one `concave`'s, after Blink's
+/// `GetRadiiCorner`. Radii run top-left, top-right, bottom-right, bottom-left.
+fn corner_radius(
+  convex: Sides<SpacePair<f32>>,
+  concave: Sides<SpacePair<f32>>,
+  previous: Point<f32>,
+  point: Point<f32>,
+  next: Point<f32>,
+) -> SpacePair<f32> {
+  let [convex_tl, convex_tr, convex_br, convex_bl] = convex.0;
+  let [concave_tl, concave_tr, concave_br, concave_bl] = concave.0;
+
+  if previous.x == point.x {
+    if point.y < previous.y {
+      if next.x > point.x {
+        convex_tl
+      } else {
+        concave_tr
+      }
+    } else if next.x > point.x {
+      concave_bl
+    } else {
+      convex_br
+    }
+  } else if previous.x < point.x {
+    if next.y > point.y {
+      convex_tr
+    } else {
+      concave_br
+    }
+  } else if next.y > point.y {
+    concave_tl
+  } else {
+    convex_bl
   }
 }
