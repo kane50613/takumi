@@ -42,7 +42,7 @@ pub use self::{
   decorations::DecorationLine,
   items::{DecorationLink, InlineBoxItem, InlineItem, ProcessedInlineSpan, collect_inline_items},
   metrics::VisualInlineBox,
-  outline::{InlineOutline, InlineOutlineRect, OutlineIsland},
+  outline::{InlineOutline, InlineOutlineRect, OutlineIsland, RightAngleContour},
   runs::{
     InlineRunLayout, MeasuredInlineBox, MeasuredInlineRun, PositionedGlyph, PositionedInlineRun,
     RunMetrics, ShapedRun,
@@ -1823,7 +1823,9 @@ mod tests {
     let island = OutlineIsland::of(&rects).remove(0);
     let radius = Sides([SpacePair::from_single(4.0); 4]);
     let arcs = island
-      .rounded_contour(0.0, radius, radius)
+      .right_angle_path(0.0, 0.0)
+      .expect("an island encloses area")
+      .rounded(radius, radius)
       .iter()
       .filter(|command| matches!(command, PathCommand::CubicTo(..)))
       .count();
