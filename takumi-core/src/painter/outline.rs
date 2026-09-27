@@ -2,7 +2,8 @@
 //! [`OutlinePainter`](https://source.chromium.org/chromium/chromium/src/+/main:third_party/blink/renderer/core/paint/outline_painter.cc).
 
 use super::{
-  BoxBorderPainter, BoxPainter, FillShape, PaintDevice, PaintRole, StrokeStyle, border::StyledLine,
+  BoxBorderPainter, BoxPainter, FillShape, LayerBounds, PaintDevice, PaintRole, StrokeStyle,
+  border::StyledLine,
 };
 use crate::{
   geometry::{PathBuilder, PathCommand, Point, Size},
@@ -82,7 +83,7 @@ impl OutlineIsland {
         y: origin.y + top,
       };
 
-      return device.with_opacity(opacity, |device| {
+      return device.with_opacity(opacity, None, |device| {
         PendingOutline {
           outline: geometry,
           origin,
@@ -98,7 +99,7 @@ impl OutlineIsland {
     let painter = ComplexOutline::new(outer, width, offset, outline.style, outline.color, radius);
 
     device.set_role(PaintRole::Outline);
-    device.with_opacity(opacity, |device| {
+    device.with_opacity(opacity, None, |device| {
       painter.paint(Affine::translation(origin.x, origin.y), device)
     });
   }
@@ -230,7 +231,18 @@ impl ComplexOutline {
       color.0[3] < u8::MAX && !matches!(self.style, BorderStyle::Solid | BorderStyle::Double);
 
     if alpha_layer {
-      device.begin_layer(f32::from(color.0[3]) / f32::from(u8::MAX));
+      let (low, high) = self.outer.bounds();
+
+      device.begin_layer(
+        f32::from(color.0[3]) / f32::from(u8::MAX),
+        Some(LayerBounds {
+          size: Size {
+            width: high.x - low.x,
+            height: high.y - low.y,
+          },
+          transform: at * Affine::translation(low.x, low.y),
+        }),
+      );
       color.0[3] = u8::MAX;
     }
 

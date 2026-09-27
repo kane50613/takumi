@@ -5,7 +5,7 @@ use std::cmp::Ordering;
 
 use smallvec::SmallVec;
 
-use super::{FillShape, PaintDevice, StrokeStyle, box_side::BoxSideRect};
+use super::{FillShape, LayerBounds, PaintDevice, StrokeStyle, box_side::BoxSideRect};
 use crate::{
   geometry::{PathCommand, Point, Size},
   layout::border::{BorderProperties, BorderSide, PaintedSide, SideBand},
@@ -328,7 +328,13 @@ impl<'b> BoxBorderPainter<'b> {
     let alpha = f32::from(group[0].color.0[3]) / f32::from(u8::MAX);
     let layered = alpha != 1.0 && (SideSet::of(group).has_adjacent_pair() || !rest.is_empty());
     let (paint_alpha, opacity) = if layered {
-      device.begin_layer(alpha / opacity);
+      device.begin_layer(
+        alpha / opacity,
+        Some(LayerBounds {
+          size: self.size,
+          transform: at,
+        }),
+      );
       (1.0, alpha)
     } else {
       (alpha / opacity, opacity)
