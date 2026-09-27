@@ -323,6 +323,7 @@ impl SizedFontStyle<'_> {
       .bits()
       .hash(hasher);
     (parent.text_decoration_skip_ink as u8).hash(hasher);
+    discriminant(&parent.text_decoration_style).hash(hasher);
     (parent.font_synthesis_weight as u8).hash(hasher);
     (parent.font_synthesis_style as u8).hash(hasher);
     match &parent.vertical_align {
@@ -390,6 +391,7 @@ impl<'s> From<&'s SizedFontStyle<'s>> for TextStyle<'s, 's, InlineBrush> {
         underline_position: style.parent.text_underline_position,
         decoration_line: style.parent.text_decoration_line.unwrap_or_default(),
         decoration_skip_ink: style.parent.text_decoration_skip_ink,
+        decoration_style: style.parent.text_decoration_style,
         stroke_color: style.text_stroke_color,
         stroke_width: style.stroke_width,
         font_synthesis: FontSynthesis {

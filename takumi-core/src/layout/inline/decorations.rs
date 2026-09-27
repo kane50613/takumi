@@ -6,6 +6,7 @@ use crate::{
   resources::glyph::{ResolvedGlyph, ResolvedOutlineGlyph},
   style::{
     Affine, Color, SizedTextDecorationThickness, TextDecorationLines, TextDecorationSkipInk,
+    TextDecorationStyle,
   },
 };
 use std::{collections::HashMap, sync::Arc};
@@ -26,6 +27,11 @@ pub struct DecorationRect {
   pub over: bool,
   /// Which decoration this is, so a backend can single one out.
   pub line: TextDecorationLines,
+  /// How the line is drawn.
+  pub style: TextDecorationStyle,
+  /// Where the whole line starts and ends from this rect's left edge. `skip-ink` cuts a line
+  /// into several rects, and a pattern keeps its phase across them.
+  pub line_span: (f32, f32),
 }
 
 impl ShapedRun {
@@ -138,6 +144,8 @@ impl ShapedRun {
         transform: matrix.to_cols_array(),
         over,
         line,
+        style: brush.decoration_style,
+        line_span: (snapped_start_x - x, snapped_start_x + width - x),
       });
     };
 

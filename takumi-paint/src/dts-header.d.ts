@@ -214,11 +214,14 @@ export type RawDrawable<Run = number> =
   /**
    * A blurred copy of `shape`, moved by `offset`, visible only on one side of `box`: outside for
    * an outer box shadow, inside for an inset one. `blur` is the Gaussian's standard deviation.
+   * With `stroke`, the shape is stroked instead of filled, as a dashed or wavy text decoration
+   * casts.
    */
   | {
       readonly type: "shadow";
       readonly role: Role;
       readonly shape: Shape;
+      readonly stroke?: Stroke;
       readonly offset: Point;
       readonly blur: number;
       readonly color: Rgba;

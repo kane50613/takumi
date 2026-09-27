@@ -6,8 +6,8 @@ use crate::{
   resources::font::FontClasses,
   style::{
     Color, Direction, FontSynthesis, Lang, Length, SizedTextDecorationThickness,
-    TextDecorationLines, TextDecorationSkipInk, TextFitMode, TextOverflow, TextUnderlinePosition,
-    TextWrapStyle, VerticalAlign, WordBreak,
+    TextDecorationLines, TextDecorationSkipInk, TextDecorationStyle, TextFitMode, TextOverflow,
+    TextUnderlinePosition, TextWrapStyle, VerticalAlign, WordBreak,
   },
   text_processing::{
     MaxHeight, RebreakOptions, apply_text_transform, apply_white_space_collapse,
@@ -411,6 +411,8 @@ pub struct InlineBrush {
   pub decoration_line: TextDecorationLines,
   /// Whether decorations skip over glyph ink.
   pub decoration_skip_ink: TextDecorationSkipInk,
+  /// How the decoration lines are drawn.
+  pub decoration_style: TextDecorationStyle,
   /// `-webkit-text-stroke` colour, which a span may set for itself.
   pub stroke_color: Color,
   /// `-webkit-text-stroke` width in pixels.
@@ -460,6 +462,7 @@ impl Default for InlineBrush {
       underline_position: TextUnderlinePosition::default(),
       decoration_line: TextDecorationLines::empty(),
       decoration_skip_ink: TextDecorationSkipInk::default(),
+      decoration_style: TextDecorationStyle::default(),
       stroke_color: Color::black(),
       stroke_width: 0.0,
       font_synthesis: FontSynthesis::default(),
