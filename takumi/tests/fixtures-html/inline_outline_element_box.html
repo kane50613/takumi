@@ -1,0 +1,36 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>inline_outline_element_box</title>
+    <base href="../../../" />
+    <link rel="stylesheet" href="takumi/tests/shared.css" />
+  </head>
+  <body style="width: 600px; height: 240px">
+    <div
+      style="
+        display: block;
+        width: 100%;
+        height: 100%;
+        padding: 32px;
+        background-color: rgb(255, 255, 255);
+        font-family: Geist;
+        font-size: 26px;
+        line-height: 2.2;
+        color: rgb(15, 23, 42);
+      "
+    >
+      <span style="outline: 3px solid rgb(37, 99, 235)">plain <b>bold</b> text</span>
+      <span
+        style="
+          outline: 3px solid rgb(225, 29, 72);
+          outline-offset: 2px;
+          border: 4px solid rgb(22, 163, 74);
+          padding: 0 8px;
+        "
+        >boxed</span
+      >
+      <span style="outline: 3px solid rgb(147, 51, 234); border-radius: 10px">rounded</span>
+    </div>
+  </body>
+</html>

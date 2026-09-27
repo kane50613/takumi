@@ -199,13 +199,8 @@ impl InlineLines<'_> {
       run.paint(decorations, style, fill, frame, false, device);
     }
 
-    let reach = |span_id: u64| match spans.get(span_id as usize) {
-      Some(ProcessedInlineSpan::Text { style, .. }) => style.outline_offset + style.outline_width,
-      _ => 0.0,
-    };
-
-    for island in OutlineIsland::of(self.outline_rects.clone(), reach) {
-      island.paint(spans, frame.origin, device);
+    for island in OutlineIsland::of(&self.outline_rects) {
+      island.paint(frame.origin, device);
     }
   }
 }

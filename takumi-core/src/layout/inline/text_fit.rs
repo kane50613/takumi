@@ -162,6 +162,36 @@ pub(crate) struct LineScaleState {
   pub(crate) layout_origin: Point<f32>,
 }
 
+/// A glyph run's box on its line, in border-box space.
+#[derive(Clone, Copy)]
+pub(super) struct RunBox {
+  pub(super) x: f32,
+  pub(super) y: f32,
+  pub(super) width: f32,
+  pub(super) height: f32,
+}
+
+impl RunBox {
+  /// The box on a line scaled for text-fit.
+  pub(super) fn scaled(self, state: LineScaleState, static_inline_prefix: f32) -> Self {
+    if (state.scale - 1.0).abs() <= f32::EPSILON {
+      return self;
+    }
+    let x_correction = text_fit_x_correction(
+      state.scale,
+      static_inline_prefix,
+      state.alignment_correction,
+    );
+
+    Self {
+      x: x_correction + state.layout_origin.x + (self.x - state.layout_origin.x) * state.scale,
+      y: state.layout_origin.y + (self.y - state.layout_origin.y) * state.scale,
+      width: self.width * state.scale,
+      height: self.height * state.scale,
+    }
+  }
+}
+
 /// Horizontal correction for a text-fit-scaled line:
 /// `static_inline_prefix * (1 - scale) + alignment_correction`.
 pub(super) fn text_fit_x_correction(

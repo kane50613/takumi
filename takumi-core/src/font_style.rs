@@ -19,9 +19,8 @@ use crate::{
   resources::font::{FontClasses, SubsetGroup},
   shadow::SizedShadow,
   style::{
-    BorderStyle, Color, ComputedStyle, Display, FontFamily, FontSynthesis, Lang,
-    LineHeight as CssLineHeight, SizedTextDecorationThickness, SizingContext, VerticalAlign,
-    WordBreak,
+    Color, ComputedStyle, Display, FontFamily, FontSynthesis, Lang, LineHeight as CssLineHeight,
+    SizedTextDecorationThickness, SizingContext, VerticalAlign, WordBreak,
   },
 };
 
@@ -228,19 +227,11 @@ pub struct SizedFontStyle<'s> {
   pub(crate) line_height_scales_with_text_fit: bool,
   /// Text stroke width in pixels.
   pub stroke_width: f32,
-  /// Outline width in pixels.
-  pub outline_width: f32,
-  /// Gap between outline and border edge, in pixels.
-  pub outline_offset: f32,
   pub(crate) letter_spacing: f32,
   pub(crate) word_spacing: f32,
   /// Resolved text shadows.
   pub text_shadow: SmallVec<[SizedShadow; 4]>,
   pub(crate) color: Color,
-  /// Outline color.
-  pub outline_color: Color,
-  /// Outline line style.
-  pub outline_style: BorderStyle,
   /// Text stroke color.
   pub(crate) text_stroke_color: Color,
   pub(crate) text_decoration_color: Color,
@@ -470,15 +461,6 @@ impl<'s> SizedFontStyle<'s> {
         .webkit_text_stroke_width
         .unwrap_or_default()
         .to_px(&context.sizing, context.sizing.font_size),
-      // Outline is not inherited; a non-inline element paints its outline on its
-      // own border-box (see `draw_outline`), so only a real inline box strokes its
-      // text fragments. https://www.w3.org/TR/css-ui-4/#outline
-      outline_width: if style.display == Display::Inline {
-        style.outline_width.to_used_px(&context.sizing).max(0.0)
-      } else {
-        0.0
-      },
-      outline_offset: style.outline_offset.to_border_px(&context.sizing, 0.0),
       letter_spacing: style
         .letter_spacing
         .to_px(&context.sizing, context.sizing.font_size),
@@ -490,8 +472,6 @@ impl<'s> SizedFontStyle<'s> {
         .webkit_text_fill_color
         .unwrap_or(style.color)
         .resolve(context.current_color),
-      outline_color: style.outline_color.resolve(context.current_color),
-      outline_style: style.outline_style,
       text_stroke_color: style
         .webkit_text_stroke_color
         .unwrap_or_default()

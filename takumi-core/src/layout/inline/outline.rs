@@ -1,48 +1,72 @@
-//! Outline rectangles of an inline formatting context, merged into islands.
+//! Outlines of inline elements: each element's line fragments, grouped into islands.
 
-use crate::geometry::{LAYOUT_UNIT_EPSILON, PathBuilder, PathCommand, Point};
 use std::collections::HashMap;
 
-use super::text_fit::{LineScaleState, text_fit_x_correction};
+use crate::{
+  context::RenderContext,
+  geometry::{LAYOUT_UNIT_EPSILON, PathBuilder, PathCommand, Point},
+  style::{BorderStyle, Color, Sides, SpacePair},
+};
 
-/// A glyph run's text-outline rectangle on a line, in border-box space.
+/// How an inline element draws its outline.
+#[derive(Debug, Clone, Copy)]
+pub struct InlineOutline {
+  /// `outline-width`, in pixels.
+  pub width: f32,
+  /// `outline-offset`, in pixels.
+  pub offset: f32,
+  /// `outline-color`.
+  pub color: Color,
+  /// `outline-style`.
+  pub style: BorderStyle,
+}
+
+impl InlineOutline {
+  /// The outline an element in `context` paints, or `None` when it paints none.
+  pub(crate) fn of(context: &RenderContext) -> Option<Self> {
+    let style = &context.style;
+    let width = style.outline_width.to_used_px(&context.sizing).max(0.0);
+    let color = style.outline_color.resolve(context.current_color);
+
+    (width > 0.0 && style.outline_style.is_rendered() && color.0[3] != 0).then(|| Self {
+      width,
+      offset: style.outline_offset.to_border_px(&context.sizing, 0.0),
+      color,
+      style: style.outline_style,
+    })
+  }
+
+  /// How far the outline's outer edge reaches past the element's border box.
+  pub(crate) fn reach(self) -> f32 {
+    self.offset + self.width
+  }
+}
+
+/// One line fragment of an outlined inline element, in border-box space.
 #[derive(Clone, Copy)]
 #[non_exhaustive]
 pub struct InlineOutlineRect {
-  /// Source inline span id (identifies the styled run the rect belongs to).
-  pub span_id: u64,
-  /// Line index the rect sits on.
+  /// The element the fragment belongs to, unique within its inline layout.
+  pub(crate) owner: usize,
+  /// Line index the fragment sits on.
   pub(crate) line_index: usize,
   /// Left edge in border-box space.
   pub(crate) x: f32,
   /// Top edge in border-box space.
   pub(crate) y: f32,
-  /// Rect width (run advance).
+  /// The fragment's border-box width.
   pub(crate) width: f32,
-  /// Rect height (the font's content area).
+  /// The fragment's border-box height.
   pub(crate) height: f32,
+  /// The fragment's corner radii.
+  pub(crate) radius: Sides<SpacePair<f32>>,
+  /// The element's outline.
+  pub(crate) outline: InlineOutline,
+  /// The element's `opacity`.
+  pub(crate) opacity: f32,
 }
 
 impl InlineOutlineRect {
-  /// The rect on a line scaled for text-fit.
-  pub(super) fn scaled(self, state: LineScaleState, static_inline_prefix: f32) -> Self {
-    if (state.scale - 1.0).abs() <= f32::EPSILON {
-      return self;
-    }
-    let x_correction = text_fit_x_correction(
-      state.scale,
-      static_inline_prefix,
-      state.alignment_correction,
-    );
-    Self {
-      x: x_correction + state.layout_origin.x + (self.x - state.layout_origin.x) * state.scale,
-      y: state.layout_origin.y + (self.y - state.layout_origin.y) * state.scale,
-      width: self.width * state.scale,
-      height: self.height * state.scale,
-      ..self
-    }
-  }
-
   /// Whether the two rects meet, within a layout unit, once both grow by `reach`.
   pub(super) fn meets(self, other: Self, reach: f32) -> bool {
     let slack = 2.0 * reach + LAYOUT_UNIT_EPSILON;
@@ -70,112 +94,55 @@ impl InlineOutlineRect {
   }
 }
 
-/// Merges rects that touch on the same span and line into one rect per contiguous group, sorted by
-/// span then line.
-fn merge_inline_rects(mut rects: Vec<InlineOutlineRect>) -> Vec<InlineOutlineRect> {
-  rects.sort_by(|left, right| {
-    left
-      .span_id
-      .cmp(&right.span_id)
-      .then(left.line_index.cmp(&right.line_index))
-      .then(left.x.total_cmp(&right.x))
-  });
-
-  let mut merged_rects: Vec<InlineOutlineRect> = Vec::with_capacity(rects.len());
-  for rect in rects {
-    let Some(previous_rect) = merged_rects.last_mut() else {
-      merged_rects.push(rect);
-      continue;
-    };
-
-    let same_group =
-      previous_rect.span_id == rect.span_id && previous_rect.line_index == rect.line_index;
-    let touching = rect.x <= previous_rect.x + previous_rect.width + LAYOUT_UNIT_EPSILON;
-    let same_band = (rect.y - previous_rect.y).abs() <= LAYOUT_UNIT_EPSILON
-      && (rect.height - previous_rect.height).abs() <= LAYOUT_UNIT_EPSILON;
-
-    if same_group && same_band && touching {
-      let right_edge = (previous_rect.x + previous_rect.width).max(rect.x + rect.width);
-      previous_rect.x = previous_rect.x.min(rect.x);
-      previous_rect.y = previous_rect.y.min(rect.y);
-      previous_rect.width = right_edge - previous_rect.x;
-      previous_rect.height = previous_rect.height.max(rect.height);
-    } else {
-      merged_rects.push(rect);
-    }
-  }
-  merged_rects
-}
-
-/// Rects of one span's outline that touch from line to line, stroked as one contour.
+/// Fragments of one element's outline that touch from line to line, stroked as one contour.
 pub struct OutlineIsland {
   rects: Vec<InlineOutlineRect>,
-  /// Whether the island's one rect is its span's whole outline.
+  /// Whether the island's one rect is its element's whole outline.
   lone: bool,
 }
 
 impl OutlineIsland {
-  /// Merges adjacent per-line outline rects, then groups the rects of consecutive lines that meet
-  /// once grown by their span's `reach`, as Blink unites the grown rects into one region.
-  pub fn of(outline_rects: Vec<InlineOutlineRect>, reach: impl Fn(u64) -> f32) -> Vec<Self> {
-    let merged_rects = merge_inline_rects(outline_rects);
-    let mut rect_counts: HashMap<u64, usize> = HashMap::new();
-    // The islands whose last rect sits on each span's line, the only ones a rect on the next
-    // line can join.
-    let mut ends: HashMap<(u64, usize), Vec<usize>> = HashMap::new();
+  /// Groups each element's fragments, sorted by element then line, into islands of consecutive
+  /// lines that meet once grown by the outline's reach, as Blink unites the grown rects into one
+  /// region.
+  pub fn of(rects: &[InlineOutlineRect]) -> Vec<Self> {
+    let mut rect_counts: HashMap<usize, usize> = HashMap::new();
     let mut islands: Vec<Self> = Vec::new();
 
-    for rect in &merged_rects {
-      *rect_counts.entry(rect.span_id).or_default() += 1;
+    for rect in rects {
+      *rect_counts.entry(rect.owner).or_default() += 1;
     }
 
-    for rect in merged_rects {
-      let reach = reach(rect.span_id);
-      let joined = rect
-        .line_index
-        .checked_sub(1)
-        .and_then(|line| ends.get_mut(&(rect.span_id, line)))
-        .and_then(|candidates| {
-          let position = candidates.iter().position(|&index| {
-            islands[index]
-              .rects
-              .last()
-              .is_some_and(|previous| previous.meets(rect, reach))
-          })?;
+    for &rect in rects {
+      if let Some(island) = islands.last_mut()
+        && let Some(&previous) = island.rects.last()
+        && previous.owner == rect.owner
+        && previous.line_index + 1 == rect.line_index
+        && previous.meets(rect, rect.outline.reach())
+      {
+        island.rects.push(rect);
+        continue;
+      }
 
-          Some(candidates.remove(position))
-        });
-      let index = match joined {
-        Some(index) => {
-          islands[index].rects.push(rect);
-          index
-        }
-        None => {
-          islands.push(Self {
-            rects: vec![rect],
-            lone: rect_counts[&rect.span_id] == 1,
-          });
-          islands.len() - 1
-        }
-      };
-
-      ends
-        .entry((rect.span_id, rect.line_index))
-        .or_default()
-        .push(index);
+      islands.push(Self {
+        rects: vec![rect],
+        lone: rect_counts[&rect.owner] == 1,
+      });
     }
 
     islands
   }
 
-  /// The rect when it is its span's whole outline, which Blink paints as a box border.
+  /// The rect when it is its element's whole outline, which Blink paints as a box border.
   pub fn lone_rect(&self) -> Option<InlineOutlineRect> {
     self.lone.then(|| self.rects[0])
   }
 
-  /// The span whose outline this is.
-  pub fn span_id(&self) -> Option<u64> {
-    self.rects.first().map(|rect| rect.span_id)
+  /// The element's outline and opacity.
+  pub fn outline(&self) -> (InlineOutline, f32) {
+    let rect = self.rects[0];
+
+    (rect.outline, rect.opacity)
   }
 
   /// The corners of the rectilinear contour around the island, grown by `expansion` past its
