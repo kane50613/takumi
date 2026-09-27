@@ -27,8 +27,8 @@ use super::{
 };
 use crate::{
   BlurType, CanvasSubcanvas, Command, Error, MaskCompositeColor, MaskSamplingOptions, Placement,
-  Result, Stroke, Style, apply_blur_alpha_bytes, attenuate_alpha_by_mask, checked_area, draw_glyph,
-  draw_glyph_clip_image, intersect_alpha_masks,
+  Result, Stroke, Style, apply_blur_alpha_bytes, attenuate_alpha_by_mask, bitmap_coverage,
+  checked_area, draw_glyph, draw_glyph_clip_image, intersect_alpha_masks,
   layout::node::ImageData,
   render_mask,
   style::{Affine, BlendMode},
@@ -272,13 +272,22 @@ impl<'c> CanvasDevice<'c> {
 
     if let Some(shadow) = self.shadow {
       for glyph in &glyph_run.glyphs {
-        let Some(ResolvedGlyph::Outline(outline)) =
-          run.resolved_glyphs.get(&glyph.id).map(AsRef::as_ref)
-        else {
-          continue;
-        };
         let at = placed(glyph);
         let transform = local * Affine::translation(at.x, at.y);
+        let outline = match run.resolved_glyphs.get(&glyph.id).map(AsRef::as_ref) {
+          Some(ResolvedGlyph::Outline(outline)) => outline,
+          Some(ResolvedGlyph::Bitmap(bitmap)) => {
+            if let Some(coverage) = bitmap_coverage(
+              bitmap,
+              self.transform * Affine::translation(shadow.offset_x, shadow.offset_y) * transform,
+              self.shadow_viewport(shadow.blur_radius),
+            ) {
+              self.draw_blurred_coverage(coverage, shadow.blur_radius, shadow.color);
+            }
+            continue;
+          }
+          None => continue,
+        };
 
         self.draw_shadow_of(shadow, outline.paths(), Fill::NonZero.into(), transform);
 
