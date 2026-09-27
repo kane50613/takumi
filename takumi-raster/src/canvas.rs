@@ -20,7 +20,8 @@ use image::{
 };
 use mask::MaskStackEntry;
 pub(crate) use mask::{
-  CanvasViewport, MaskView, NodeMasks, attenuate_alpha_by_mask, intersect_alpha_masks, render_mask,
+  CanvasViewport, MaskView, NodeMasks, attenuate_alpha_by_mask, clip_node_mask,
+  intersect_alpha_masks, render_mask,
 };
 pub(crate) use paint_source::{
   BilinearAxis, MaskCompositeColor, PaintSource, RowSource, SamplingFootprint,
@@ -263,6 +264,7 @@ impl Canvas {
 
     let mut isolated_image = replace(&mut self.image, image);
     self.restore_subcanvas_state(origin, constraint_mask_stack);
+    self.clip_layer(&mut isolated_image, offset);
 
     // A fully opaque subcanvas lands whole-pixel over the parent, so it copies
     // row by row; tiny-skia would take the same draw through its pipeline.
@@ -313,6 +315,29 @@ impl Canvas {
       TinyTransform::identity(),
       None,
     );
+  }
+
+  /// Keeps only what the current clips let through of a layer placed at `offset`, as Skia's
+  /// `restore` draws a layer through the clip it was saved in.
+  fn clip_layer(&self, layer: &mut Pixmap, offset: Point<i32>) {
+    let Some(entry) = self.constraint_mask_stack.last() else {
+      return;
+    };
+    let clip = MaskView {
+      mask: &entry.mask,
+      origin: entry.origin,
+      canvas_origin: self.origin,
+    };
+    let width = layer.width() as usize;
+    let pixels = bytemuck::cast_slice_mut::<_, [u8; 4]>(layer.data_mut());
+
+    for (y, row) in pixels.chunks_exact_mut(width).enumerate() {
+      let alphas = clip.row(offset.y + y as i32, offset.x);
+
+      for (x, pixel) in row.iter_mut().enumerate() {
+        *pixel = scale_premultiplied_pixel(*pixel, alphas.alpha_at_offset(x));
+      }
+    }
   }
 
   pub(crate) fn has_no_constraint_mask(&self) -> bool {

@@ -1,113 +1,312 @@
 use takumi_core::{
-  geometry::{ComputedLayout as Layout, NodeId},
-  scene::{
-    BoxPart, NodePaint, PaintItem, PaintItemKind, PaintPhase, Scene, SceneBounds,
-    StackingContextNode,
-  },
+  geometry::ComputedLayout as Layout,
+  paint_chunk::{ChunkPart, ConversionContext, PaintChunk, PropertySink},
+  paint_property::{ClipId, ClipNode, EffectId, EffectNode},
+  scene::{NodePaint, Scene, SceneBounds},
 };
 use tiny_skia::PixmapMut;
 
 use crate::{
   BorderProperties, Canvas, CanvasSubcanvas, CanvasViewport, DeferredOutline, Error, NodeMasks,
-  Result, apply_backdrop_filter, apply_filters_to_pixmap, draw_box_shell, draw_debug_border,
+  Result, apply_backdrop_filter, apply_filters_to_pixmap, clip_node_mask, draw_box_shell,
+  draw_debug_border,
   inline_drawing::draw_own_content,
   layout::tree::{LayoutResults, RenderNode},
   style::{Affine, BlendMode, Filter, SizingContext},
 };
-enum DeferredNodeRender {
-  Deferred {
-    path: Vec<usize>,
-    finish: PendingFinish,
-  },
-  SkipRendering,
+
+/// Paints `scene` onto `canvas` chunk by chunk, entering each chunk's clips and effects.
+pub(crate) fn paint_scene(scene: &mut Scene, canvas: &mut Canvas) -> Result<()> {
+  let Scene {
+    root,
+    results,
+    contexts,
+    properties,
+    ..
+  } = scene;
+  let chunks = PaintChunk::in_paint_order(contexts);
+  let owners = PaintChunk::effect_owners(&chunks, properties);
+  let mut conversion = ConversionContext::new(
+    properties,
+    ScenePainter {
+      root,
+      results,
+      canvas,
+      owners,
+      effects: Vec::new(),
+      error: None,
+    },
+  );
+
+  for chunk in &chunks {
+    conversion.switch_to(chunk.state());
+    conversion.sink().paint(chunk);
+  }
+
+  conversion.finish().error.map_or(Ok(()), Err)
 }
 
-/// What a painted node leaves open until its descendants are done.
-struct PendingFinish {
-  layout: Layout,
-  /// How many masks the node pushed.
-  constraints: usize,
-  isolated_canvas: Option<Box<CanvasSubcanvas>>,
+/// An effect group open on the canvas.
+struct OpenEffect {
+  /// The group's layer, when it has one.
+  layer: Option<Box<CanvasSubcanvas>>,
+  /// How many `clip-path` and `mask-image` masks it pushed.
+  masks: usize,
+  /// Whether one of those masks hides everything.
+  hidden: bool,
+  owner: Option<Vec<usize>>,
   filter_bounds: Option<SceneBounds>,
-  /// Whether this pass paints the outline.
-  outline: bool,
 }
 
-impl PendingFinish {
-  /// Paints the outline and filters, pops the mask, and composites the layer.
-  fn run(
-    self,
-    node: &mut RenderNode,
-    canvas: &mut Canvas,
-    outlines: Option<&mut Vec<DeferredOutline>>,
-  ) -> Result<()> {
-    // CSS 2.1 Appendix E paints outlines after the box's children.
-    if self.outline
-      && let Some(deferred) = DeferredOutline::of(&node.context, self.layout)
+/// Paints chunks and enters their clips and effects on one canvas.
+struct ScenePainter<'s, 'c> {
+  root: &'s mut RenderNode,
+  results: &'s LayoutResults,
+  canvas: &'c mut Canvas,
+  owners: Vec<Option<&'s NodePaint>>,
+  effects: Vec<OpenEffect>,
+  error: Option<Error>,
+}
+
+impl ScenePainter<'_, '_> {
+  /// Draws one chunk under the clips and effects already entered.
+  fn paint(&mut self, chunk: &PaintChunk<'_>) {
+    if self.error.is_some() || self.effects.iter().any(|effect| effect.hidden) {
+      return;
+    }
+    if let Some(bounds) = chunk.node.paint_bounds
+      && !self.canvas.viewport().intersects(bounds)
     {
-      match outlines {
-        Some(outlines) => outlines.push(deferred),
-        None => deferred.paint(canvas)?,
-      }
+      return;
     }
 
-    if !node.context.style.filter.is_empty() {
-      let viewport = canvas.viewport();
-      let filter_padding = filter_padding(
-        &node.context.style.filter,
-        &node.context.sizing,
-        node.context.transform,
-      );
-      let filter_region = self.filter_bounds.and_then(|bounds| {
-        viewport
-          .clamp_bounds(bounds, filter_padding)
-          .map(|region| region.translate(-(viewport.origin.x as i32), -(viewport.origin.y as i32)))
+    let canvas = &mut *self.canvas;
+    let result =
+      placed(self.root, self.results, chunk.node).and_then(|(node, layout)| match chunk.part {
+        ChunkPart::Decorations if node.paints_own_box() => {
+          draw_box_shell(&node.context, canvas, layout)
+        }
+        ChunkPart::Decorations => Ok(()),
+        ChunkPart::Content => draw_node_content(node, canvas, layout, chunk.node.transform),
+        ChunkPart::Outline => {
+          DeferredOutline::of(&node.context, layout).map_or(Ok(()), |outline| outline.paint(canvas))
+        }
       });
 
-      if let Some(region) = filter_region
-        && region != CanvasViewport::local(viewport.size).placement()
-      {
-        let mut region_raw = canvas.read_region(region);
-        let Some(mut region_pixmap) =
-          PixmapMut::from_bytes(&mut region_raw, region.width, region.height)
-        else {
-          return Ok(());
-        };
+    self.record(result);
+  }
 
-        apply_filters_to_pixmap(
-          &mut region_pixmap,
-          &node.context.sizing,
-          node.context.current_color,
-          node.context.style.filter.iter(),
-        )?;
+  fn record(&mut self, result: Result<()>) {
+    if let Err(error) = result {
+      self.error.get_or_insert(error);
+    }
+  }
 
-        canvas.write_region(region, &region_raw);
+  /// Opens the group of `effect` owned by `paint`: its filtered backdrop, its layer, then its
+  /// `clip-path` and `mask-image` masks.
+  fn open_effect(&mut self, paint: &NodePaint, effect: &EffectNode) -> Result<OpenEffect> {
+    let (node, layout) = placed(self.root, self.results, paint)?;
+    let canvas = &mut *self.canvas;
+    let style = &node.context.style;
+
+    if !style.backdrop_filter.is_empty() {
+      let shell_mask = if style.has_shape_mask() {
+        match NodeMasks::of(&node.context, layout, paint.transform, canvas.viewport())? {
+          Some(masks) => masks.into_shell_mask(),
+          None => return Ok(OpenEffect::hidden(None)),
+        }
       } else {
-        canvas.with_pixmap(|pixmap| {
-          let mut pixmap_mut = pixmap.as_mut();
-          apply_filters_to_pixmap(
-            &mut pixmap_mut,
-            &node.context.sizing,
-            node.context.current_color,
-            node.context.style.filter.iter(),
-          )
-        })?;
-      }
+        None
+      };
+      let border = BorderProperties::from_context(&node.context, layout.size, layout.border);
+
+      apply_backdrop_filter(
+        canvas,
+        border,
+        layout.size,
+        paint.transform,
+        &node.context,
+        shell_mask.as_ref(),
+      )?;
     }
 
-    for _ in 0..self.constraints {
+    let viewport = canvas.viewport();
+    let placement = effect
+      .bounds
+      .and_then(|bounds| viewport.clamp_bounds(bounds, 2))
+      .unwrap_or_else(|| viewport.placement());
+    let layer = Box::new(canvas.begin_subcanvas(placement)?);
+    let Some(masks) = NodeMasks::of(&node.context, layout, paint.transform, canvas.viewport())?
+    else {
+      return Ok(OpenEffect::hidden(Some(layer)));
+    };
+    let count = masks.len();
+
+    for mask in masks.shell {
+      canvas.push_mask(mask);
+    }
+
+    Ok(OpenEffect {
+      layer: Some(layer),
+      masks: count,
+      hidden: false,
+      owner: Some(paint.path.clone()),
+      filter_bounds: effect.bounds,
+    })
+  }
+
+  /// Filters, unmasks and composites the most recent group.
+  fn close_effect(&mut self, effect: OpenEffect) -> Result<()> {
+    let canvas = &mut *self.canvas;
+
+    for _ in 0..effect.masks {
       canvas.pop_mask();
     }
-    if let Some(isolated_canvas) = self.isolated_canvas {
-      canvas.composite_subcanvas(
-        *isolated_canvas,
-        node.context.style.mix_blend_mode,
-        node.context.style.opacity.0,
-      );
+
+    let Some(layer) = effect.layer else {
+      return Ok(());
+    };
+    let node = effect
+      .owner
+      .as_deref()
+      .and_then(|path| self.root.node_at_path(path));
+    let Some(node) = node.filter(|_| !effect.hidden) else {
+      canvas.composite_subcanvas(*layer, BlendMode::Normal, 0.0);
+      return Ok(());
+    };
+
+    if !node.context.style.filter.is_empty() {
+      apply_filters(canvas, node, effect.filter_bounds)?;
     }
+
+    canvas.composite_subcanvas(
+      *layer,
+      node.context.style.mix_blend_mode,
+      node.context.style.opacity.0,
+    );
 
     Ok(())
   }
+}
+
+impl OpenEffect {
+  /// A group that shows nothing it paints, over `layer` when it opened one.
+  fn hidden(layer: Option<Box<CanvasSubcanvas>>) -> Self {
+    Self {
+      layer,
+      masks: 0,
+      hidden: true,
+      owner: None,
+      filter_bounds: None,
+    }
+  }
+}
+
+impl PropertySink for ScenePainter<'_, '_> {
+  fn push_clip(&mut self, _id: ClipId, clip: &ClipNode) {
+    let viewport = self.canvas.viewport();
+
+    match clip_node_mask(clip, viewport) {
+      Some(mask) => self.canvas.push_mask(mask),
+      None => self.record(Err(Error::InvalidViewport)),
+    }
+  }
+
+  fn pop_clip(&mut self) {
+    self.canvas.pop_mask();
+  }
+
+  fn begin_effect(&mut self, id: EffectId, effect: &EffectNode) {
+    let opened = match self.owners[id.index()] {
+      Some(owner) => self.open_effect(owner, effect),
+      None => Err(Error::InvalidLayoutNode(0)),
+    };
+
+    match opened {
+      Ok(open) => self.effects.push(open),
+      Err(error) => {
+        self.effects.push(OpenEffect::hidden(None));
+        self.record(Err(error));
+      }
+    }
+  }
+
+  fn end_effect(&mut self) {
+    if let Some(effect) = self.effects.pop() {
+      let result = self.close_effect(effect);
+
+      self.record(result);
+    }
+  }
+}
+
+/// The box `paint` names in `root` and its layout, set up to paint where the scene placed it.
+fn placed<'r>(
+  root: &'r mut RenderNode,
+  results: &LayoutResults,
+  paint: &NodePaint,
+) -> Result<(&'r mut RenderNode, Layout)> {
+  let Some(node) = root.node_at_path_mut(&paint.path) else {
+    return Err(Error::InvalidLayoutNode(paint.node_id.into()));
+  };
+  let layout = results.layout(paint.node_id)?;
+
+  node
+    .context
+    .sizing
+    .set_container_size(paint.container_size.width, paint.container_size.height);
+  node.context.transform = paint.transform;
+
+  Ok((node, layout))
+}
+
+/// Runs `node`'s filters over the pixels its group painted within `bounds`.
+fn apply_filters(
+  canvas: &mut Canvas,
+  node: &RenderNode,
+  bounds: Option<SceneBounds>,
+) -> Result<()> {
+  let viewport = canvas.viewport();
+  let filter_padding = filter_padding(
+    &node.context.style.filter,
+    &node.context.sizing,
+    node.context.transform,
+  );
+  let filter_region = bounds.and_then(|bounds| {
+    viewport
+      .clamp_bounds(bounds, filter_padding)
+      .map(|region| region.translate(-(viewport.origin.x as i32), -(viewport.origin.y as i32)))
+  });
+
+  if let Some(region) = filter_region
+    && region != CanvasViewport::local(viewport.size).placement()
+  {
+    let mut region_raw = canvas.read_region(region);
+    let Some(mut region_pixmap) =
+      PixmapMut::from_bytes(&mut region_raw, region.width, region.height)
+    else {
+      return Ok(());
+    };
+
+    apply_filters_to_pixmap(
+      &mut region_pixmap,
+      &node.context.sizing,
+      node.context.current_color,
+      node.context.style.filter.iter(),
+    )?;
+    canvas.write_region(region, &region_raw);
+
+    return Ok(());
+  }
+
+  canvas.with_pixmap(|pixmap| {
+    apply_filters_to_pixmap(
+      &mut pixmap.as_mut(),
+      &node.context.sizing,
+      node.context.current_color,
+      node.context.style.filter.iter(),
+    )
+  })
 }
 
 fn filter_padding(filters: &[Filter], sizing: &SizingContext, transform: Affine) -> i32 {
@@ -135,236 +334,6 @@ fn affine_max_scale(transform: Affine) -> f32 {
   }
 }
 
-/// Paints a scene's stacking contexts, in paint order, onto one canvas.
-pub(crate) struct ScenePainter<'a> {
-  pub(crate) root: &'a mut RenderNode,
-  pub(crate) contexts: &'a [StackingContextNode],
-  pub(crate) layout_results: &'a LayoutResults,
-  pub(crate) canvas: &'a mut Canvas,
-}
-
-impl<'a> ScenePainter<'a> {
-  pub(crate) fn new(scene: &'a mut Scene, canvas: &'a mut Canvas) -> Self {
-    Self {
-      root: &mut scene.root,
-      contexts: &scene.contexts,
-      layout_results: &scene.results,
-      canvas,
-    }
-  }
-
-  pub(crate) fn paint_context(&mut self, context_id: usize) -> Result<()> {
-    let contexts = self.contexts;
-    let Some(context) = contexts.get(context_id) else {
-      return Err(Error::InvalidLayoutNode(context_id as u64));
-    };
-
-    if let Some(bounds) = context.paint_bounds()
-      && !self.canvas.viewport().intersects(bounds)
-    {
-      return Ok(());
-    }
-
-    let mut deferred_root = None;
-    let mut outlines = Vec::new();
-
-    if let Some(root_paint) = context.root() {
-      match self.begin_node(
-        root_paint,
-        BoxPart::Decorations,
-        true,
-        context.paint_bounds(),
-        &mut outlines,
-      )? {
-        Some(DeferredNodeRender::SkipRendering) => return Ok(()),
-        Some(deferred_root_render @ DeferredNodeRender::Deferred { .. }) => {
-          deferred_root = Some(deferred_root_render);
-        }
-        None => {}
-      }
-    }
-
-    for phase in context.paint_phases() {
-      match phase {
-        PaintPhase::RootContent => {
-          if let (Some(root_paint), Some(_)) = (context.root(), &deferred_root) {
-            self.paint_content(root_paint)?;
-          }
-        }
-        PaintPhase::Items(items, part) => self.paint_items(items, part, &mut outlines)?,
-      }
-    }
-
-    for outline in &outlines {
-      outline.paint(self.canvas)?;
-    }
-
-    if let Some(DeferredNodeRender::Deferred { path, finish }) = deferred_root {
-      let Some(current) = self.root.node_at_path_mut(&path) else {
-        let node_id = context.root().map_or(NodeId::ROOT, |node| node.node_id);
-        return Err(Error::InvalidLayoutNode(node_id.into()));
-      };
-
-      PendingFinish {
-        filter_bounds: context.paint_bounds().or(finish.filter_bounds),
-        ..finish
-      }
-      .run(current, self.canvas, None)?;
-    }
-
-    Ok(())
-  }
-
-  fn paint_items(
-    &mut self,
-    items: &[PaintItem],
-    part: BoxPart,
-    outlines: &mut Vec<DeferredOutline>,
-  ) -> Result<()> {
-    for item in items {
-      let Some(part) = item.part_in(part) else {
-        continue;
-      };
-
-      match &item.kind {
-        PaintItemKind::Node(node_paint) => {
-          self.begin_node(node_paint, part, false, None, outlines)?;
-        }
-        PaintItemKind::Context(context_id) => self.paint_context(*context_id)?,
-      }
-    }
-    Ok(())
-  }
-
-  /// Paints a context root's own content.
-  fn paint_content(&mut self, node_paint: &NodePaint) -> Result<()> {
-    let Some(current) = self.root.node_at_path_mut(&node_paint.path) else {
-      return Err(Error::InvalidLayoutNode(node_paint.node_id.into()));
-    };
-    let layout = self.layout_results.layout(node_paint.node_id)?;
-
-    draw_node_content(current, self.canvas, layout, node_paint.transform)
-  }
-
-  fn begin_node(
-    &mut self,
-    node_paint: &NodePaint,
-    part: BoxPart,
-    defer_finish: bool,
-    isolation_bounds_hint: Option<SceneBounds>,
-    outlines: &mut Vec<DeferredOutline>,
-  ) -> Result<Option<DeferredNodeRender>> {
-    let canvas = &mut *self.canvas;
-    let Some(current) = self.root.node_at_path_mut(&node_paint.path) else {
-      return Err(Error::InvalidLayoutNode(node_paint.node_id.into()));
-    };
-    let layout = self.layout_results.layout(node_paint.node_id)?;
-    if current.context.style.is_invisible() || !node_paint.transform.is_invertible() {
-      return Ok(None);
-    }
-
-    // Prefer the context's merged bounds: a zero-sized root can still have visible overflowing children.
-    if let Some(bounds) = isolation_bounds_hint.or(node_paint.paint_bounds)
-      && !canvas.viewport().intersects(bounds)
-    {
-      return Ok(Some(DeferredNodeRender::SkipRendering));
-    }
-
-    current.context.sizing.set_container_size(
-      node_paint.container_size.width,
-      node_paint.container_size.height,
-    );
-    current.context.transform = node_paint.transform;
-
-    if part != BoxPart::Content && !current.context.style.backdrop_filter.is_empty() {
-      // Filtered backdrop is clipped by the node's clip-path and mask, like Chromium's
-      // backdrop root: https://drafts.fxtf.org/filter-effects-2/#BackdropRoot
-      let node_masks = if current.context.style.has_shape_mask() {
-        let Some(masks) = NodeMasks::of(
-          &current.context,
-          layout,
-          node_paint.transform,
-          canvas.viewport(),
-        )?
-        else {
-          return Ok(Some(DeferredNodeRender::SkipRendering));
-        };
-
-        masks.into_shell_mask()
-      } else {
-        None
-      };
-
-      let border = BorderProperties::from_context(&current.context, layout.size, layout.border);
-      apply_backdrop_filter(
-        canvas,
-        border,
-        layout.size,
-        node_paint.transform,
-        &current.context,
-        node_masks.as_ref(),
-      )?;
-    }
-
-    let isolated_canvas = if current.context.style.needs_offscreen_compositing() {
-      let viewport = canvas.viewport();
-      let bounds = isolation_bounds_hint
-        .and_then(|bounds| viewport.clamp_bounds(bounds, 2))
-        .unwrap_or_else(|| viewport.placement());
-
-      Some(Box::new(canvas.begin_subcanvas(bounds)?))
-    } else {
-      None
-    };
-
-    let Some(masks) = NodeMasks::of(
-      &current.context,
-      layout,
-      node_paint.transform,
-      canvas.viewport(),
-    )?
-    else {
-      if let Some(isolated_canvas) = isolated_canvas {
-        canvas.composite_subcanvas(*isolated_canvas, BlendMode::Normal, 0.0);
-      }
-      return Ok(Some(DeferredNodeRender::SkipRendering));
-    };
-    let constraints = masks.len();
-
-    for mask in masks.shell {
-      canvas.push_mask(mask);
-    }
-    if part != BoxPart::Content {
-      draw_render_node_shell(current, canvas, layout)?;
-    }
-    if let Some(mask) = masks.content {
-      canvas.push_mask(mask);
-    }
-
-    let finish = PendingFinish {
-      layout,
-      constraints,
-      isolated_canvas,
-      filter_bounds: node_paint.paint_bounds,
-      outline: part != BoxPart::Decorations || defer_finish,
-    };
-
-    if defer_finish {
-      return Ok(Some(DeferredNodeRender::Deferred {
-        path: node_paint.path.clone(),
-        finish,
-      }));
-    }
-    if part != BoxPart::Decorations {
-      draw_node_content(current, canvas, layout, node_paint.transform)?;
-    }
-
-    finish.run(current, canvas, Some(outlines))?;
-
-    Ok(None)
-  }
-}
-
 /// Paints a node's own content and debug border, an inline formatting context over the border.
 fn draw_node_content(
   node: &RenderNode,
@@ -384,14 +353,6 @@ fn draw_node_content(
     draw_own_content(node, &node.context, canvas, layout)?;
   }
   Ok(())
-}
-
-fn draw_render_node_shell(node: &RenderNode, canvas: &mut Canvas, layout: Layout) -> Result<()> {
-  if !node.paints_own_box() {
-    return Ok(());
-  }
-
-  draw_box_shell(&node.context, canvas, layout)
 }
 
 #[cfg(test)]
