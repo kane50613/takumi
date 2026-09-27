@@ -235,31 +235,20 @@ impl DecorationAccumulator {
       // wrap-edge corners stay square, like `box-decoration-break: slice`.
       let (has_start, has_end) = (line_index == min_line, line_index == max_line);
       let (has_left, has_right) = decoration.direction.inline_sides(has_start, has_end);
-      // css-backgrounds-3 corner overlap: one uniform factor shrinks every
-      // radius so adjacent corners never cross.
-      let [top_left, top_right, bottom_right, bottom_left] = decoration.radius.0.map(|radius| {
+      let radii = decoration.radius.0.map(|radius| {
         let radius = radius.to_px(&decoration.sizing, width, height);
 
         (radius.x, radius.y)
       });
-      let raw = [
+      let [top_left, top_right, bottom_right, bottom_left] = radii;
+      let sliced = [
         if has_left { top_left } else { (0.0, 0.0) },
         if has_right { top_right } else { (0.0, 0.0) },
         if has_right { bottom_right } else { (0.0, 0.0) },
         if has_left { bottom_left } else { (0.0, 0.0) },
       ];
-      let [tl, tr, br, bl] = raw;
-      let factor = [
-        width / (tl.0 + tr.0),
-        width / (bl.0 + br.0),
-        height / (tl.1 + bl.1),
-        height / (tr.1 + br.1),
-      ]
-      .into_iter()
-      .filter(|f| f.is_finite())
-      .fold(1.0_f32, f32::min)
-      .max(0.0);
-      border.radius = Sides(raw.map(|(rx, ry)| SpacePair::from_pair(rx * factor, ry * factor)));
+
+      border.radius = fitted_radii(sliced, width, height);
 
       if !has_left {
         border.width.left = 0.0;
@@ -279,7 +268,7 @@ impl DecorationAccumulator {
           y,
           width,
           height,
-          radius: border.radius,
+          radius: fitted_radii(radii, width, height),
           outline,
           opacity: decoration.opacity,
         });
@@ -300,6 +289,24 @@ impl DecorationAccumulator {
 
     (backgrounds, outlines)
   }
+}
+
+/// `radii` shrunk by one uniform factor so adjacent corners never cross, as css-backgrounds-3's
+/// corner overlap rule asks.
+fn fitted_radii(radii: [(f32, f32); 4], width: f32, height: f32) -> Sides<SpacePair<f32>> {
+  let [tl, tr, br, bl] = radii;
+  let factor = [
+    width / (tl.0 + tr.0),
+    width / (bl.0 + br.0),
+    height / (tl.1 + bl.1),
+    height / (tr.1 + br.1),
+  ]
+  .into_iter()
+  .filter(|f| f.is_finite())
+  .fold(1.0_f32, f32::min)
+  .max(0.0);
+
+  Sides(radii.map(|(rx, ry)| SpacePair::from_pair(rx * factor, ry * factor)))
 }
 
 impl InlineBackgroundFragment {

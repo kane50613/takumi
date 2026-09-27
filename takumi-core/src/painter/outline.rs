@@ -53,10 +53,10 @@ impl OutlineIsland {
   /// `origin`: a lone rect as a box border, as Blink's `PaintSingleRectOutline` does, and
   /// anything else after Blink's `ComplexOutlinePainter`.
   ///
-  /// Approximate: a contour around several rects keeps square corners, where Blink rounds them
-  /// when the element has a `border-radius`, and its inner edge follows the rects grown by
-  /// `outline-offset`, where Blink shrinks the outer contour. Follows Blink under the notice in
-  /// LICENSE-CHROMIUM.
+  /// Approximate: a dashed, dotted, inset, outset, groove or ridge contour around several rects
+  /// keeps square corners, where Blink rounds them when the element has a `border-radius`, and a
+  /// contour's inner edge follows the rects grown by `outline-offset`, where Blink shrinks the outer
+  /// contour. Follows Blink under the notice in LICENSE-CHROMIUM.
   pub fn paint<D: PaintDevice>(&self, origin: Point<f32>, device: &mut D) {
     let (outline, opacity) = self.outline();
     let width = outline.width;
@@ -181,11 +181,36 @@ impl OutlineIsland {
     });
   }
 
-  /// The band between the contours `inner` and `outer` past the island's rects.
+  /// The band between the contours `inner` and `outer` past the island's rects, its corners
+  /// rounded when the element has a `border-radius`: each contour's convex corners take the radii
+  /// grown to it, and its concave ones the radii grown to the other contour, as Blink's
+  /// `ComplexOutlinePainter` rounds them.
   fn ring(&self, inner: f32, outer: f32) -> FillShape {
-    let mut commands = self.contour(outer);
+    let radius = self.radius();
+    let commands = if radius
+      .0
+      .iter()
+      .all(|corner| corner.x <= 0.0 || corner.y <= 0.0)
+    {
+      let mut commands = self.contour(outer);
 
-    commands.extend(self.contour(inner));
+      commands.extend(self.contour(inner));
+      commands
+    } else {
+      let grown = |by: f32| {
+        let mut border = BorderProperties {
+          radius,
+          ..BorderProperties::default()
+        };
+
+        border.expand_by(Sides::from(by).into());
+        border.radius
+      };
+      let mut commands = self.rounded_contour(outer, grown(outer), grown(inner));
+
+      commands.extend(self.rounded_contour(inner, grown(inner), grown(outer)));
+      commands
+    };
 
     FillShape::Path {
       commands,
