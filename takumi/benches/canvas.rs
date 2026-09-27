@@ -4,10 +4,11 @@ use criterion::{Criterion, criterion_group, criterion_main};
 use takumi::{
   prelude::{
     AlignItems, BackgroundClip, BackgroundImages, BackgroundRepeats, BackgroundSizes, BorderRadius,
-    Color, ColorInput, Display, FlexWrap, Fonts, FromCssStr, JustifyContent,
+    Color, ColorInput, Display, FlexWrap, Fonts, FromCssStr, FromHtml, FromHtmlOptions,
+    JustifyContent,
     Length::{Percentage, Px},
     Node, ObjectFit, Overflow, PositionValues, RenderOptions, SpacePair, Style, StyleDeclaration,
-    Viewport,
+    StylePresets, Viewport,
   },
   render,
 };
@@ -162,6 +163,21 @@ fn gradient_clip_mask_fixture() -> Node {
   )
 }
 
+/// The `<body>` of an HTML fixture, as the HTML fixture test parses it.
+fn html_fixture(html: &str) -> Node {
+  let body = html
+    .split_once("<body")
+    .and_then(|(_, rest)| rest.split_once('>'))
+    .and_then(|(_, rest)| rest.split_once("</body>"))
+    .map(|(inner, _)| inner.trim())
+    .unwrap();
+  let options = FromHtmlOptions::builder()
+    .presets(StylePresets::empty())
+    .build();
+
+  Node::from_html(body, options).unwrap()
+}
+
 fn bench_canvas(c: &mut Criterion) {
   let fonts = Fonts::default();
   let mut group = c.benchmark_group("canvas");
@@ -177,6 +193,26 @@ fn bench_canvas(c: &mut Criterion) {
   });
   group.bench_function("gradient_clip_mask", |b| {
     b.iter(|| render_node(&fonts, black_box(gradient_clip_mask_fixture())))
+  });
+  group.bench_function("square_border_sides", |b| {
+    b.iter(|| {
+      render_node(
+        &fonts,
+        black_box(html_fixture(include_str!(
+          "../tests/fixtures-html/border_side_miters.html"
+        ))),
+      )
+    })
+  });
+  group.bench_function("rounded_border_sides", |b| {
+    b.iter(|| {
+      render_node(
+        &fonts,
+        black_box(html_fixture(include_str!(
+          "../tests/fixtures-html/border_rounded_sides.html"
+        ))),
+      )
+    })
   });
 
   group.finish();
