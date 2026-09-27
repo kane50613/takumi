@@ -626,6 +626,20 @@ mod tests {
   }
 
   #[test]
+  fn parse_calc_sums_absolute_lengths_into_px() {
+    let parsed = Length::from_css_str("calc(1in + 1cm + 1mm + 1pt + 1pc + 1q + 1px + 1em)");
+
+    assert_eq!(
+      parsed.map(|length| length.to_css_string()),
+      Ok("calc(156.85301px + 1em)".to_string())
+    );
+    assert_eq!(
+      Length::from_css_str("calc(1in + 1px)").map(|length| length.to_css_string()),
+      Ok("calc(97px)".to_string())
+    );
+  }
+
+  #[test]
   fn parse_calc_mixed_returns_formula() {
     assert_eq!(
       Length::from_css_str("calc(100% - 12px)"),
