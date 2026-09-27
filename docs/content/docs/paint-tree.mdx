@@ -35,7 +35,7 @@ The package runs the same layout as `takumi-js` and walks the same stacking-cont
 
 ## Two views of one document
 
-Iterating the document, or a box, yields nodes in document order. `find(id)` returns the box of the element with that `id`. Use this view to rebuild editable objects: `node.parent` and `box.children` follow the input tree, and a `TextRun` names the element it came from.
+Iterating the document, or a box, yields nodes in document order. A paragraph's text is one `TextNode` listed before the inline boxes inside the paragraph, so its runs can come from both sides of them. `find(id)` returns the box of the element with that `id`. Use this view to rebuild editable objects: `node.parent` and `box.children` follow the input tree, and a `TextRun` names the element it came from.
 
 `paintSteps()` yields the steps a renderer takes, in paint order. Use this view to draw:
 
