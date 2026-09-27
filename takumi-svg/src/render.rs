@@ -18,7 +18,8 @@ use takumi_core::{
   },
   painter::{
     BackgroundClipArea, BoxBorderPainter, BoxFrame, BoxPainter, FillShape, GlyphDevice, GlyphFill,
-    OverflowClip, OwnContent, PaintDevice, PendingOutline, ShadowShape, StrokeStyle, UNBOUNDED,
+    LayerBounds, OverflowClip, OwnContent, PaintDevice, PendingOutline, ShadowShape, StrokeStyle,
+    UNBOUNDED,
   },
   path_data::{edges_path_data, path_data},
   resources::image::ImageSource,
@@ -597,7 +598,7 @@ impl PaintDevice for DocumentDevice<'_> {
     self.close_group();
   }
 
-  fn begin_layer(&mut self, opacity: f32) {
+  fn begin_layer(&mut self, opacity: f32, _bounds: Option<LayerBounds>) {
     self.open_group(|doc| doc.begin_group(Affine::IDENTITY, opacity, None, None));
   }
 

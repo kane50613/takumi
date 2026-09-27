@@ -25,8 +25,8 @@ use takumi_core::{
   paint::ConicGradientTile,
   painter::{
     BackgroundClipArea, BoxBackground, BoxBorderPainter, BoxFrame, BoxPainter, FillShape,
-    GlyphDevice, GlyphFill, OverflowClip, OwnContent, PaintDevice, PendingOutline, ShadowShape,
-    StrokeStyle, UNBOUNDED,
+    GlyphDevice, GlyphFill, LayerBounds, OverflowClip, OwnContent, PaintDevice, PendingOutline,
+    ShadowShape, StrokeStyle, UNBOUNDED,
   },
   scene::{BoxPart, NodePaint, PaintItemKind, PaintPhase, Scene},
   shadow::SizedShadow,
@@ -1755,7 +1755,7 @@ impl PaintDevice for SurfaceDevice<'_, '_> {
     self.close();
   }
 
-  fn begin_layer(&mut self, opacity: f32) {
+  fn begin_layer(&mut self, opacity: f32, _bounds: Option<LayerBounds>) {
     self.open(Saved::Layer);
     self.surface.push_opacity(normalized(opacity));
   }
@@ -1778,7 +1778,7 @@ impl PaintDevice for SurfaceDevice<'_, '_> {
     };
 
     if grouped {
-      self.begin_layer(f32::from(color[3]) / f32::from(u8::MAX));
+      self.begin_layer(f32::from(color[3]) / f32::from(u8::MAX), None);
     }
 
     for band in bands {
@@ -1854,10 +1854,10 @@ impl TextDevice<'_, '_, '_> {
     if alpha < u8::MAX {
       self
         .device
-        .begin_layer(f32::from(alpha) / f32::from(u8::MAX));
+        .begin_layer(f32::from(alpha) / f32::from(u8::MAX), None);
     }
     for band in Band::of(shadow.blur_radius) {
-      self.device.begin_layer(band.alpha);
+      self.device.begin_layer(band.alpha, None);
       draw(&mut self.device, opaque, 2.0 * band.spread);
       self.device.end_layer();
     }
@@ -1975,8 +1975,8 @@ impl PaintDevice for TextDevice<'_, '_, '_> {
     self.device.pop_clip();
   }
 
-  fn begin_layer(&mut self, opacity: f32) {
-    self.device.begin_layer(opacity);
+  fn begin_layer(&mut self, opacity: f32, bounds: Option<LayerBounds>) {
+    self.device.begin_layer(opacity, bounds);
   }
 
   fn end_layer(&mut self) {

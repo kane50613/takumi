@@ -113,7 +113,7 @@ impl InlineLines<'_> {
     let at = frame.translation();
 
     for fragment in &self.background_fragments {
-      device.with_opacity(fragment.opacity, |device| {
+      device.with_opacity(fragment.opacity, None, |device| {
         if fragment.color.0[3] != 0 {
           device.set_role(PaintRole::InlineBackground);
           device.fill_shape(
@@ -229,7 +229,7 @@ impl PositionedInlineRun {
     shadow_pass: bool,
     device: &mut D,
   ) {
-    device.with_opacity(self.glyph_run.brush.opacity, |device| {
+    device.with_opacity(self.glyph_run.brush.opacity, None, |device| {
       if !shadow_pass {
         device.set_role(PaintRole::TextDecoration);
       }

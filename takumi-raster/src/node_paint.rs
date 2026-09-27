@@ -13,9 +13,10 @@ use takumi_core::{
   },
   painter::{
     BackgroundClipArea, BoxBorderPainter, BoxFrame, BoxPainter, FillShape, GlyphDevice, GlyphFill,
-    PaintDevice, PendingOutline, ShadowShape, StrokeStyle,
+    LayerBounds, PaintDevice, PendingOutline, ShadowShape, StrokeStyle,
   },
   resources::{font::FontError, glyph::ResolvedGlyph},
+  scene::SceneBounds,
   shadow::SizedShadow,
   style::{Color, ImageScalingAlgorithm},
 };
@@ -132,6 +133,25 @@ impl<'c> CanvasDevice<'c> {
 
   /// Rasterizes `shape` under `transform`, culled to the canvas.
   fn coverage(&self, shape: &FillShape, style: Style, transform: Affine) -> (Vec<u8>, Placement) {
+    let device = self.transform * transform;
+
+    if let FillShape::Rect(size) = shape
+      && style.stroke().is_none()
+      && device.only_translation()
+      && [size.width, size.height, device.x, device.y]
+        .iter()
+        .all(|value| value.fract() == 0.0)
+    {
+      let placement = SceneBounds::of_rect(*size, device)
+        .and_then(|bounds| self.canvas.viewport().clamp_bounds(bounds, 0))
+        .unwrap_or_default();
+
+      return (
+        vec![u8::MAX; placement.width as usize * placement.height as usize],
+        placement,
+      );
+    }
+
     render_mask(
       &shape.to_commands(),
       Some(self.transform * transform),
@@ -503,11 +523,13 @@ impl PaintDevice for CanvasDevice<'_> {
     self.clips.pop();
   }
 
-  fn begin_layer(&mut self, opacity: f32) {
-    let layer = match self
-      .canvas
-      .begin_subcanvas(self.canvas.viewport().placement())
-    {
+  fn begin_layer(&mut self, opacity: f32, bounds: Option<LayerBounds>) {
+    let viewport = self.canvas.viewport();
+    let placement = bounds
+      .and_then(|bounds| SceneBounds::of_rect(bounds.size, self.transform * bounds.transform))
+      .and_then(|bounds| viewport.clamp_bounds(bounds, 1))
+      .unwrap_or_else(|| viewport.placement());
+    let layer = match self.canvas.begin_subcanvas(placement) {
       Ok(subcanvas) => Some((subcanvas, opacity)),
       Err(error) => {
         self.error.get_or_insert(error);

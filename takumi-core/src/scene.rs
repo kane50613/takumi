@@ -54,6 +54,23 @@ pub struct SceneBounds {
 }
 
 impl SceneBounds {
+  /// The pixels a rectangle of `size` at the origin covers under `transform`.
+  pub fn of_rect(size: Size<f32>, transform: Affine) -> Option<Self> {
+    let (min_x, min_y, max_x, max_y) = transformed_rect_extents(Point::ZERO, size, transform)?;
+    let left = (min_x.floor() as i32).max(0) as usize;
+    let top = (min_y.floor() as i32).max(0) as usize;
+    let right = (max_x.ceil() as i32).max(0) as usize;
+    let bottom = (max_y.ceil() as i32).max(0) as usize;
+
+    // Empty bounds mean "paints nothing"; None means "unknown" and forces full-viewport isolation.
+    Some(Self {
+      left,
+      top,
+      right,
+      bottom,
+    })
+  }
+
   /// Whether the bounds enclose zero area.
   pub fn is_empty(self) -> bool {
     self.left >= self.right || self.top >= self.bottom
@@ -607,7 +624,7 @@ fn compute_node_paint_bounds(
   transform: Affine,
 ) -> Option<SceneBounds> {
   let mut bounds = outset_bounds(
-    bounds_for_rect(layout.size, transform),
+    SceneBounds::of_rect(layout.size, transform),
     box_ink_reach(node, layout.size),
     transform,
   );
@@ -803,29 +820,13 @@ fn has_inline_paint_content(node: &RenderNode) -> bool {
     })
 }
 
-fn bounds_for_rect(size: Size<f32>, transform: Affine) -> Option<SceneBounds> {
-  let (min_x, min_y, max_x, max_y) = transformed_rect_extents(Point::ZERO, size, transform)?;
-  let left = (min_x.floor() as i32).max(0) as usize;
-  let top = (min_y.floor() as i32).max(0) as usize;
-  let right = (max_x.ceil() as i32).max(0) as usize;
-  let bottom = (max_y.ceil() as i32).max(0) as usize;
-
-  // Empty bounds mean "paints nothing"; None means "unknown" and forces full-viewport isolation.
-  Some(SceneBounds {
-    left,
-    top,
-    right,
-    bottom,
-  })
-}
-
-/// [`bounds_for_rect`] for a rect at `origin` in `transform`'s space.
+/// [`SceneBounds::of_rect`] for a rect at `origin` in `transform`'s space.
 fn bounds_for_placed_rect(
   origin: Point<f32>,
   size: Size<f32>,
   transform: Affine,
 ) -> Option<SceneBounds> {
-  bounds_for_rect(size, Affine::translation(origin.x, origin.y) * transform)
+  SceneBounds::of_rect(size, Affine::translation(origin.x, origin.y) * transform)
 }
 
 fn merge_bounds(left: Option<SceneBounds>, right: Option<SceneBounds>) -> Option<SceneBounds> {
@@ -846,12 +847,12 @@ fn merge_bounds(left: Option<SceneBounds>, right: Option<SceneBounds>) -> Option
 
 #[cfg(test)]
 mod tests {
-  use super::{SceneBounds, bounds_for_rect, merge_bounds};
+  use super::{SceneBounds, merge_bounds};
   use crate::{geometry::Size, style::Affine};
 
   #[test]
   fn zero_sized_rect_produces_empty_bounds() {
-    let bounds = bounds_for_rect(
+    let bounds = SceneBounds::of_rect(
       Size {
         width: 0.0,
         height: 100.0,

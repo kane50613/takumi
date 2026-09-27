@@ -18,8 +18,8 @@ use crate::{
   geometry::{Point, Size},
   layout::{border::BorderProperties, inline::PositionedInlineRun},
   painter::{
-    BoxBorderPainter, BoxFrame, FillShape, GlyphDevice, GlyphFill, PaintDevice, PaintRole,
-    ShadowShape, StrokeStyle,
+    BoxBorderPainter, BoxFrame, FillShape, GlyphDevice, GlyphFill, LayerBounds, PaintDevice,
+    PaintRole, ShadowShape, StrokeStyle,
   },
   path_data::path_data,
   shadow::SizedShadow,
@@ -327,7 +327,7 @@ impl PaintDevice for Recorder<'_> {
     });
   }
 
-  fn begin_layer(&mut self, opacity: f32) {
+  fn begin_layer(&mut self, opacity: f32, _bounds: Option<LayerBounds>) {
     self.opacities.push(opacity);
   }
 
