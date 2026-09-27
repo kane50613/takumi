@@ -361,6 +361,25 @@ pub struct VisualInlineBox {
   /// Baseline of the in-flow line that owns this box, relative to the inline formatting context's
   /// content-box top edge.
   pub line_baseline: Option<f32>,
+  /// Whether the box floats.
+  pub float: bool,
+}
+
+/// Which draws of an inline formatting context one pass paints: CSS 2.1 Appendix E paints the
+/// floats in a phase of their own, before the line content.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum InlinePass {
+  /// The text and every box that does not float.
+  Content,
+  /// The floats alone.
+  Floats,
+}
+
+impl InlinePass {
+  /// Whether the pass paints `inline_box`.
+  pub fn paints(self, inline_box: &VisualInlineBox) -> bool {
+    inline_box.float == (self == Self::Floats)
+  }
 }
 
 /// Resolve a positioned inline box into its painted geometry.
@@ -383,6 +402,7 @@ pub(super) fn resolve_visual_inline_box(
         width: inline_box.width,
         height: 0.0,
         line_baseline,
+        float: false,
       });
     }
     _ => return None,
@@ -409,5 +429,6 @@ pub(super) fn resolve_visual_inline_box(
     width: item.paint_width,
     height: item.paint_height,
     line_baseline,
+    float: inline_box.kind == InlineBoxKind::CustomOutOfFlow,
   })
 }

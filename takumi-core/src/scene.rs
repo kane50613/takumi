@@ -88,6 +88,9 @@ pub enum PaintItemKind {
   Node(NodePaint),
   /// Index of a nested stacking context.
   Context(usize),
+  /// The floats inside a node's inline content, which paint in the floats phase apart from the
+  /// rest of that content.
+  Floats(NodePaint),
 }
 
 /// A paint entry plus its z-index and source order, which together order it uniquely.
@@ -109,7 +112,7 @@ impl PaintItem {
   /// What the item paints in a phase painting `part`: a nested context paints whole once.
   pub fn part_in(&self, part: BoxPart) -> Option<BoxPart> {
     match (&self.kind, part) {
-      (PaintItemKind::Node(_), part) => Some(part),
+      (PaintItemKind::Node(_) | PaintItemKind::Floats(_), part) => Some(part),
       (PaintItemKind::Context(_), BoxPart::Whole) => Some(BoxPart::Whole),
       (PaintItemKind::Context(_), BoxPart::Decorations) => (!self.atomic).then_some(BoxPart::Whole),
       (PaintItemKind::Context(_), BoxPart::Content) => self.atomic.then_some(BoxPart::Whole),
@@ -125,8 +128,6 @@ enum PaintBucket {
   /// In-flow, non-positioned boxes.
   InFlow,
   /// Non-positioned floats.
-  ///
-  /// Approximate: a float inside inline content paints with that content, not in this phase.
   Float,
   /// Positioned boxes and stacking contexts at `z-index: auto` or `0`, in tree order.
   Positioned,
@@ -393,6 +394,8 @@ impl SceneRequest<'_> {
           .flatten(),
         properties: node_properties,
       };
+      let inline_floats = (current.should_create_inline_layout() && current.has_inline_floats())
+        .then(|| node_paint.clone());
 
       let is_flex_or_grid_item = visit.parent_display.is_some_and(|display| {
         matches!(
@@ -460,6 +463,15 @@ impl SceneRequest<'_> {
       }
 
       if current.should_create_inline_layout() {
+        if let Some(floats) = inline_floats {
+          contexts[context_id].push_item(
+            PaintBucket::Float,
+            PaintItemKind::Floats(floats),
+            0,
+            source_order,
+            true,
+          );
+        }
         continue;
       }
 
@@ -525,7 +537,9 @@ impl SceneRequest<'_> {
       for bucket in contexts[context_id].buckets.in_paint_order() {
         for item in bucket {
           let item_bounds = match &item.kind {
-            PaintItemKind::Node(node_paint) => node_paint.paint_bounds,
+            PaintItemKind::Node(node_paint) | PaintItemKind::Floats(node_paint) => {
+              node_paint.paint_bounds
+            }
             PaintItemKind::Context(child_context_id) => contexts[*child_context_id].paint_bounds,
           };
           match item_bounds {

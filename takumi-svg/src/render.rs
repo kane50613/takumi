@@ -11,7 +11,7 @@ use takumi_core::{
   layout::{
     background_image_geometry::FillLayers,
     border::BorderProperties,
-    inline::{InlineBoxItem, PositionedInlineRun, VisualInlineBox},
+    inline::{InlineBoxItem, InlinePass, PositionedInlineRun, VisualInlineBox},
     inline_box::{InlineBoxPaint, resolve_inline_box},
     node::Node,
     tree::RenderNode,
@@ -312,11 +312,13 @@ impl<'n> PlacedBox<'n> {
 
   /// Emits the node's own content: its inline content or its image. Block children are
   /// painted separately.
-  pub(crate) fn emit_own_content(&self, doc: &mut SvgDocument) -> io::Result<()> {
+  pub(crate) fn emit_own_content(&self, pass: InlinePass, doc: &mut SvgDocument) -> io::Result<()> {
     match OwnContent::of(self.node) {
-      OwnContent::Inline(_) => emit_inline_content(self.node, self.frame, doc),
-      OwnContent::Image(image) => emit_image(image, &self.painter, self.frame, doc),
-      OwnContent::None => Ok(()),
+      OwnContent::Inline(_) => emit_inline_content(self.node, self.frame, pass, doc),
+      OwnContent::Image(image) if pass == InlinePass::Content => {
+        emit_image(image, &self.painter, self.frame, doc)
+      }
+      OwnContent::Image(_) | OwnContent::None => Ok(()),
     }
   }
 }
@@ -680,7 +682,7 @@ pub(crate) fn emit_inline_box(
         .map(|data| doc.begin_clipped_group(&data))
         .transpose()?;
 
-      placed.emit_own_content(doc)?;
+      placed.emit_own_content(InlinePass::Content, doc)?;
       if let Some(group) = content_clip {
         doc.end_group(group)?;
       }

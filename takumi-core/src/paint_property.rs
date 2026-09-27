@@ -285,7 +285,7 @@ mod tests {
           .chain(context.in_paint_order().into_iter().flatten().filter_map(
             |item| match &item.kind {
               PaintItemKind::Node(node) => Some(node),
-              PaintItemKind::Context(_) => None,
+              PaintItemKind::Context(_) | PaintItemKind::Floats(_) => None,
             },
           ))
           .find(|node| node.path == path)

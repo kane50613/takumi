@@ -41,7 +41,7 @@ pub use self::{
   background::InlineBackgroundFragment,
   decorations::DecorationLine,
   items::{DecorationLink, InlineBoxItem, InlineItem, ProcessedInlineSpan, collect_inline_items},
-  metrics::VisualInlineBox,
+  metrics::{InlinePass, VisualInlineBox},
   outline::{InlineOutline, InlineOutlineRect, OutlineIsland, RightAngleContour},
   runs::{
     InlineRunLayout, MeasuredInlineBox, MeasuredInlineRun, PositionedGlyph, PositionedInlineRun,

@@ -9,8 +9,8 @@ use takumi_core::{
   font_style::SizedFontStyle,
   layout::{
     inline::{
-      InlineLayoutMode, InlineLayoutRequest, PositionedInlineRun, ProcessedInlineSpan, ShapedRun,
-      create_inline_layout,
+      InlineLayoutMode, InlineLayoutRequest, InlinePass, PositionedInlineRun, ProcessedInlineSpan,
+      ShapedRun, create_inline_layout,
     },
     tree::RenderNode,
   },
@@ -31,6 +31,7 @@ use crate::{
 pub(crate) fn emit_inline_content(
   node: &RenderNode,
   frame: BoxFrame,
+  pass: InlinePass,
   doc: &mut SvgDocument,
 ) -> io::Result<()> {
   let context = &node.context;
@@ -55,11 +56,17 @@ pub(crate) fn emit_inline_content(
     GlyphFill::Text
   };
 
-  DocumentDevice::paint_text(doc, context, |device| {
-    runs.paint(&built.spans, &font_style, fill, frame, device);
-  })?;
+  if pass == InlinePass::Content {
+    DocumentDevice::paint_text(doc, context, |device| {
+      runs.paint(&built.spans, &font_style, fill, frame, device);
+    })?;
+  }
 
-  for inline_box in &runs.inline_boxes {
+  for inline_box in runs
+    .inline_boxes
+    .iter()
+    .filter(|inline_box| pass.paints(inline_box))
+  {
     if let Some(ProcessedInlineSpan::Box(item)) = built.spans.get(inline_box.id as usize) {
       emit_inline_box(inline_box, item, frame, doc)?;
     }
