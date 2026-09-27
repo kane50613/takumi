@@ -1460,6 +1460,7 @@ impl PropertySink for ChunkWriter<'_, '_, '_> {
     // A clip keeps content off the page but not out of the text layer, so what it cuts away must
     // never be emitted; only a clip in page space maps onto the window's axis.
     if current == Affine::IDENTITY
+      && relative.only_translation()
       && let Some((top, bottom)) = vertical_extent(&clip.shape)
     {
       self

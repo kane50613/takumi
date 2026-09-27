@@ -5199,6 +5199,30 @@ fn the_paper_paints_under_a_repeated_box() {
   );
 }
 
+/// A scaled overflow clip narrows nothing it does not cover on the page, so what it shows stays.
+#[test]
+fn scaled_overflow_clip_keeps_what_it_shows() {
+  let fonts = fonts();
+  let html = r##"<div style="display: block; width: 100px; height: 40px; overflow: hidden; transform: scale(2); transform-origin: 0 0"><div style="display: block; height: 30px"></div><div style="display: block; height: 10px; background-color: #123456"></div></div>"##;
+  let pdf = render(
+    PdfOptions::builder()
+      .node(from_html(html, FromHtmlOptions::default()).expect("parse the doc"))
+      .page(PageOptions {
+        width: 300.0,
+        height: 200.0,
+        margin: PageMargins::uniform(10.0),
+      })
+      .fonts(&fonts)
+      .build(),
+  )
+  .expect("render the doc");
+
+  assert!(
+    inflated_text(&pdf).contains("0.0706 0.2039 0.3373 rg"),
+    "the fill the scaled clip shows is missing"
+  );
+}
+
 /// A badge fragment lands in one page's content stream, the page that owns
 /// its line, not re-clipped into every page's.
 #[test]
