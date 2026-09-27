@@ -55,16 +55,13 @@ impl<'i> FromCss<'i> for TextDecorationLines {
       ));
     };
 
-    while !input.is_exhausted() {
-      let state = input.state();
-      let Ok(ident) = input.expect_ident() else {
-        break;
-      };
-      let Some(line) = Self::from_keyword(ident) else {
-        input.reset(&state);
-        break;
-      };
+    while let Ok(line) = input.try_parse(|input| {
+      let location = input.current_source_location();
+      let ident = input.expect_ident()?;
 
+      Self::from_keyword(ident)
+        .ok_or_else(|| unexpected_token!(location, &Token::Ident(ident.clone())))
+    }) {
       lines |= line;
     }
 
@@ -466,6 +463,20 @@ mod tests {
           .line(TextDecorationLines::LINE_THROUGH)
           .style(TextDecorationStyle::Solid)
           .color(ColorInput::Value(Color([255, 0, 0, 255])))
+          .build()
+      )
+    );
+  }
+
+  #[test]
+  fn a_thickness_right_after_the_line_keeps_its_value() {
+    assert_eq!(
+      TextDecoration::from_css_str("overline 12px red"),
+      Ok(
+        TextDecoration::builder()
+          .line(TextDecorationLines::OVERLINE)
+          .color(ColorInput::Value(Color([255, 0, 0, 255])))
+          .thickness(TextDecorationThickness::Length(Length::Px(12.0)))
           .build()
       )
     );
