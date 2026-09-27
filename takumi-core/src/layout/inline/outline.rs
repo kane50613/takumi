@@ -4,7 +4,7 @@ use std::collections::HashMap;
 
 use crate::{
   context::RenderContext,
-  geometry::{LAYOUT_UNIT_EPSILON, PathBuilder, PathCommand, Point},
+  geometry::{PathBuilder, PathCommand, Point},
   layout::corner_shape::KAPPA,
   style::{BorderStyle, Color, Sides, SpacePair},
 };
@@ -41,6 +41,11 @@ impl InlineOutline {
   pub(crate) fn reach(self) -> f32 {
     self.offset + self.width
   }
+
+  /// The width and offset it paints with, in whole pixels as Blink's `OutlineInfo` holds them.
+  pub(crate) fn painted(self) -> (f32, f32) {
+    (self.width.trunc(), self.offset.trunc())
+  }
 }
 
 /// One line fragment of an outlined inline element, in border-box space.
@@ -68,14 +73,28 @@ pub struct InlineOutlineRect {
 }
 
 impl InlineOutlineRect {
-  /// Whether the two rects meet, within a layout unit, once both grow by `reach`.
-  pub(super) fn meets(self, other: Self, reach: f32) -> bool {
-    let slack = 2.0 * reach + LAYOUT_UNIT_EPSILON;
+  /// Whether the two rects meet once each grows as its outline paints, so one contour can trace
+  /// them both.
+  pub(super) fn meets(self, other: Self) -> bool {
+    let (width, offset) = self.outline.painted();
+    let [a, b] = [self, other].map(|rect| rect.grown(offset, width));
 
-    self.x <= other.x + other.width + slack
-      && other.x <= self.x + self.width + slack
-      && self.y <= other.y + other.height + slack
-      && other.y <= self.y + self.height + slack
+    a[0] <= b[2] && b[0] <= a[2] && a[1] <= b[3] && b[1] <= a[3]
+  }
+
+  /// The pixel-snapped rect grown by `offset`, no further in than half its size, then by
+  /// `outset`, as Blink's `ComputeRightAnglePath` grows it: left, top, right, bottom.
+  pub(super) fn grown(self, offset: f32, outset: f32) -> [f32; 4] {
+    let [left, top, right, bottom] = self.pixel_snapped();
+    let horizontal = offset.max(-((right - left) / 2.0).trunc()) + outset;
+    let vertical = offset.max(-((bottom - top) / 2.0).trunc()) + outset;
+
+    [
+      left - horizontal,
+      top - vertical,
+      right + horizontal,
+      bottom + vertical,
+    ]
   }
 
   /// The rect as Blink's `ToPixelSnappedRect` snaps it: left, top, right, bottom.
@@ -115,7 +134,7 @@ impl OutlineIsland {
         && let Some(&previous) = island.rects.last()
         && previous.owner == rect.owner
         && previous.line_index + 1 == rect.line_index
-        && previous.meets(rect, rect.outline.reach())
+        && previous.meets(rect)
       {
         island.rects.push(rect);
         continue;
@@ -148,18 +167,7 @@ impl OutlineIsland {
     let grown: Vec<[f32; 4]> = self
       .rects
       .iter()
-      .map(|rect| {
-        let [left, top, right, bottom] = rect.pixel_snapped();
-        let horizontal = offset.max(-((right - left) / 2.0).trunc()) + outset;
-        let vertical = offset.max(-((bottom - top) / 2.0).trunc()) + outset;
-
-        [
-          left - horizontal,
-          top - vertical,
-          right + horizontal,
-          bottom + vertical,
-        ]
-      })
+      .map(|rect| rect.grown(offset, outset))
       .filter(|[left, top, right, bottom]| left < right && top < bottom)
       .collect();
 

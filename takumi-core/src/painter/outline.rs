@@ -55,8 +55,7 @@ impl OutlineIsland {
   /// else as Blink's `ComplexOutlinePainter` does.
   pub fn paint<D: PaintDevice>(&self, origin: Point<f32>, device: &mut D) {
     let (outline, opacity) = self.outline();
-    // Blink's `OutlineInfo` holds whole pixels.
-    let (width, offset) = (outline.width.trunc(), outline.offset.trunc());
+    let (width, offset) = outline.painted();
 
     if opacity <= 0.0 || width <= 0.0 {
       return;

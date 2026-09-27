@@ -1834,11 +1834,26 @@ mod tests {
   }
 
   #[test]
-  fn outline_rects_a_layout_unit_apart_touch() {
+  fn outline_rects_that_snap_together_touch() {
     let rect = |x: f32, width: f32| outline_rect(0, 0, x, 0.0, width);
 
-    assert!(rect(0.0, 10.0).meets(rect(10.01, 10.0), 0.0));
-    assert!(!rect(0.0, 10.0).meets(rect(10.1, 10.0), 0.0));
-    assert!(rect(0.0, 10.0).meets(rect(14.0, 10.0), 2.0));
+    assert!(rect(0.0, 10.0).meets(rect(10.4, 10.0)));
+    assert!(!rect(0.0, 10.0).meets(rect(10.6, 10.0)));
+  }
+
+  #[test]
+  fn outline_rects_meet_by_the_whole_pixels_they_paint_with() {
+    let rect = |x: f32| InlineOutlineRect {
+      outline: InlineOutline {
+        width: 1.5,
+        offset: 0.0,
+        color: Color::black(),
+        style: BorderStyle::Solid,
+      },
+      ..outline_rect(0, 0, x, 0.0, 10.0)
+    };
+
+    assert!(rect(0.0).meets(rect(12.0)));
+    assert!(!rect(0.0).meets(rect(13.0)));
   }
 }
