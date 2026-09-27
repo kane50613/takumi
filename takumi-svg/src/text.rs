@@ -9,13 +9,12 @@ use takumi_core::{
   font_style::SizedFontStyle,
   layout::{
     inline::{
-      InlineItem, InlineLayoutMode, InlineLayoutRequest, PositionedInlineRun, ProcessedInlineSpan,
-      ShapedRun, collect_inline_items, create_inline_layout,
+      InlineLayoutMode, InlineLayoutRequest, PositionedInlineRun, ProcessedInlineSpan, ShapedRun,
+      create_inline_layout,
     },
-    node::TextData,
     tree::RenderNode,
   },
-  painter::{BoxFrame, BoxPainter, GlyphFill},
+  painter::{BoxFrame, BoxPainter, GlyphFill, OwnContent},
   path_data::path_data,
   resources::{font::FontError, glyph::ResolvedGlyph, image::to_data_url},
   style::{Affine, BackgroundClip, LineJoin},
@@ -27,57 +26,20 @@ use crate::{
   render::{DocumentDevice, emit_inline_box},
 };
 
-/// Emits a leaf [`TextData`] node at its frame.
-pub(crate) fn emit_text(
-  text: &TextData,
-  context: &RenderContext,
-  frame: BoxFrame,
-  doc: &mut SvgDocument,
-) -> io::Result<()> {
-  if SizedFontStyle::from_style(&context.style, context)
-    .sizing
-    .font_size
-    == 0.0
-  {
-    return Ok(());
-  }
-
-  emit_inline_items(
-    context,
-    || {
-      vec![InlineItem::Text {
-        text: text.text.as_str().into(),
-        context,
-        link: None,
-        decorations: None,
-      }]
-    },
-    frame,
-    doc,
-  )
-}
-
-/// Emits a container's inline formatting context (anonymous text + inline
-/// children) at its frame. Mirrors the raster backend's container inline path.
+/// Emits a node's inline content at its frame: lays out its inline items in the content box,
+/// paints the runs, then recurses into each positioned inline box.
 pub(crate) fn emit_inline_content(
   node: &RenderNode,
   frame: BoxFrame,
   doc: &mut SvgDocument,
 ) -> io::Result<()> {
-  emit_inline_items(&node.context, || collect_inline_items(node), frame, doc)
-}
-
-/// Lays out the inline items in the content box, paints the runs, then recurses
-/// into each positioned inline box.
-fn emit_inline_items<'c>(
-  context: &'c RenderContext,
-  items: impl FnOnce() -> Vec<InlineItem<'c>>,
-  frame: BoxFrame,
-  doc: &mut SvgDocument,
-) -> io::Result<()> {
+  let context = &node.context;
   let font_style = SizedFontStyle::from_style(&context.style, context);
+  let Some(items) = OwnContent::of(node).inline_items(&font_style) else {
+    return Ok(());
+  };
   let built = create_inline_layout(InlineLayoutRequest::in_content_box(
-    items(),
+    items,
     frame.layout.unsnapped_content,
     &font_style,
     context,

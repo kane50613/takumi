@@ -6,16 +6,10 @@ use tiny_skia::{Pixmap, PixmapMut};
 
 use crate::{
   BlurType, BorderProperties, Canvas, CanvasSubcanvas, CanvasViewport, DeferredOutline, Error,
-  NodeMasks, Placement, Result, SizedFontStyle, apply_backdrop_filter, apply_filters_to_pixmap,
-  blend_pixel, color_to_premultiplied, draw_box_shell, draw_debug_border, draw_node_content,
-  inline_drawing::{draw_inline_box, draw_inline_layout},
-  layout::{
-    inline::{
-      InlineLayoutMode, InlineLayoutRequest, ProcessedInlineSpan, collect_inline_items,
-      create_inline_layout,
-    },
-    tree::{LayoutResults, RenderNode},
-  },
+  NodeMasks, Placement, Result, apply_backdrop_filter, apply_filters_to_pixmap, blend_pixel,
+  color_to_premultiplied, draw_box_shell, draw_debug_border,
+  inline_drawing::draw_own_content,
+  layout::tree::{LayoutResults, RenderNode},
   placement_overlap,
   style::{Affine, BlendMode, Filter, SizingContext},
 };
@@ -399,14 +393,18 @@ impl<'a> ScenePainter<'a> {
       filter_bounds: node_paint.paint_bounds,
     };
 
-    draw_render_node_content(current, canvas, layout)?;
+    // An inline formatting context paints over the debug border, text and images under it.
+    let inline = current.should_create_inline_layout();
 
+    if !inline {
+      draw_own_content(current, &current.context, canvas, layout)?;
+    }
     if current.context.draw_debug_border() {
       draw_debug_border(canvas, layout, node_paint.transform);
     }
 
-    if current.should_create_inline_layout() {
-      draw_render_node_inline(current, canvas, layout)?;
+    if inline {
+      draw_own_content(current, &current.context, canvas, layout)?;
     } else if defer_finish {
       return Ok(Some(DeferredNodeRender::Deferred {
         path: node_paint.path.clone(),
@@ -426,49 +424,6 @@ fn draw_render_node_shell(node: &RenderNode, canvas: &mut Canvas, layout: Layout
   }
 
   draw_box_shell(&node.context, canvas, layout)
-}
-
-fn draw_render_node_content(node: &RenderNode, canvas: &mut Canvas, layout: Layout) -> Result<()> {
-  if node.should_create_inline_layout() || node.has_anonymous_text_item_child() {
-    return Ok(());
-  }
-
-  if let Some(inner) = &node.node {
-    draw_node_content(inner, &node.context, canvas, layout)?;
-  }
-  Ok(())
-}
-
-fn draw_render_node_inline(
-  node: &mut RenderNode,
-  canvas: &mut Canvas,
-  layout: Layout,
-) -> Result<()> {
-  if node.context.style.opacity.0 == 0.0 {
-    return Ok(());
-  }
-
-  let font_style = SizedFontStyle::from_style(&node.context.style, &node.context);
-
-  let built = create_inline_layout(InlineLayoutRequest::in_content_box(
-    collect_inline_items(node),
-    layout.unsnapped_content,
-    &font_style,
-    &node.context,
-    InlineLayoutMode::Draw,
-  ));
-  let boxes = built.spans.iter().filter_map(|span| match span {
-    ProcessedInlineSpan::Box(item) => Some(item),
-    _ => None,
-  });
-
-  let positioned_inline_boxes =
-    draw_inline_layout(&node.context, canvas, layout, &built, &font_style)?;
-
-  for (item, positioned) in boxes.zip(positioned_inline_boxes.iter()) {
-    draw_inline_box(positioned, item, layout, canvas, node.context.transform)?;
-  }
-  Ok(())
 }
 
 #[cfg(test)]

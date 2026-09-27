@@ -1,7 +1,7 @@
 //! Walks the stacking-context scene in paint order, recording each node and the steps that
 //! paint it.
 
-use std::{borrow::Cow, collections::HashMap, ptr};
+use std::{collections::HashMap, ptr};
 
 use super::{
   document::{
@@ -19,14 +19,16 @@ use crate::{
   layout::{
     background_image_geometry::{FillLayers, OriginBox},
     inline::{
-      BuiltInlineLayout, InlineItem, InlineLayoutMode, InlineLayoutRequest, InlineRunLayout,
-      ProcessedInlineSpan, collect_inline_items, create_inline_layout,
+      BuiltInlineLayout, InlineLayoutMode, InlineLayoutRequest, InlineRunLayout,
+      ProcessedInlineSpan, create_inline_layout,
     },
     inline_box::{InlineBoxPaint, resolve_inline_box},
     node::{ImageData, ImageSourceInput, NodeKind as InputKind},
     tree::RenderNode,
   },
-  painter::{BackgroundClipArea, BoxFrame, BoxPainter, FillShape, GlyphFill, OverflowClip},
+  painter::{
+    BackgroundClipArea, BoxFrame, BoxPainter, FillShape, GlyphFill, OverflowClip, OwnContent,
+  },
   resources::image::{sniff_mime, to_data_url},
   scene::{NodePaint, PaintItemKind, Scene},
   style::{
@@ -255,39 +257,13 @@ impl Walker {
 
   /// Records the text or image the node lays out.
   fn own_content(&mut self, placed: Placed<'_>) -> Result<()> {
-    let node = placed.node;
-
-    if node.should_create_inline_layout() {
-      return self.inline(placed, collect_inline_items(node));
-    }
-    if node.has_anonymous_text_item_child() {
-      return Ok(());
-    }
-
-    match node.node.as_ref().map(|input| &input.kind) {
-      Some(InputKind::Image(image)) => {
+    match OwnContent::of(placed.node) {
+      OwnContent::Inline(_) => self.inline(placed),
+      OwnContent::Image(image) => {
         self.image(image, placed);
         Ok(())
       }
-      Some(InputKind::Text(text)) => {
-        if SizedFontStyle::from_style(&node.context.style, &node.context)
-          .sizing
-          .font_size
-          == 0.0
-        {
-          return Ok(());
-        }
-
-        let items = vec![InlineItem::Text {
-          text: Cow::Borrowed(text.text.as_str()),
-          context: &node.context,
-          link: None,
-          decorations: None,
-        }];
-
-        self.inline(placed, items)
-      }
-      _ => Ok(()),
+      OwnContent::None => Ok(()),
     }
   }
 
@@ -380,8 +356,8 @@ impl Walker {
     self.draw(id);
   }
 
-  /// Records the node's inline content `items`: its text, then its inline boxes.
-  fn inline<'c>(&mut self, placed: Placed<'c>, items: Vec<InlineItem<'c>>) -> Result<()> {
+  /// Records the node's inline content: its text, then its inline boxes.
+  fn inline(&mut self, placed: Placed<'_>) -> Result<()> {
     let Placed {
       node,
       layout,
@@ -391,7 +367,9 @@ impl Walker {
     } = placed;
     let context = &node.context;
     let font_style = SizedFontStyle::from_style(&context.style, context);
-
+    let Some(items) = OwnContent::of(node).inline_items(&font_style) else {
+      return Ok(());
+    };
     let built = create_inline_layout(InlineLayoutRequest::in_content_box(
       items,
       layout.unsnapped_content,

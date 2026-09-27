@@ -2,6 +2,7 @@
 
 mod background;
 mod border;
+mod content;
 mod outline;
 mod replaced;
 mod shadow;
@@ -10,6 +11,7 @@ mod text;
 pub use self::{
   background::{BackgroundClipArea, BoxBackground},
   border::BoxBorderPainter,
+  content::OwnContent,
   outline::PendingOutline,
   replaced::ReplacedContent,
   shadow::ShadowShape,
