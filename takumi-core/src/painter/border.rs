@@ -197,7 +197,7 @@ impl<'b> BoxBorderPainter<'b> {
     } else {
       let [start, end] = self.side_line(side);
 
-      StyledLine::new(start, end, side.width, side.style, side.color).paint(at, device);
+      StyledLine::box_side(start, end, side.width, side.style, side.color).paint(at, device);
     }
 
     for _ in clips {
@@ -298,6 +298,8 @@ impl<'b> BoxBorderPainter<'b> {
 pub(super) struct StyledLine {
   line: FillShape,
   stroke: StrokeStyle,
+  /// Dots filled on their own at the line's ends, each a top-left and a size.
+  dots: SmallVec<[(Point<f32>, Size<f32>); 2]>,
 }
 
 impl StyledLine {
@@ -340,11 +342,142 @@ impl StyledLine {
         rule: FillRule::NonZero,
       },
       stroke: StrokeStyle::border(color, width, dash),
+      dots: SmallVec::new(),
     }
   }
 
-  /// Strokes the line under `at`.
+  /// A box side's line from `start` to `end`, which run left to right or top to bottom, as
+  /// `DrawLineWithStyle` draws it: a dotted line up to 3px wide gets whole square dots at both
+  /// ends from Blink's `EnforceDotsAtEndpoints`, which fills them itself and moves the line in.
+  pub(super) fn box_side(
+    start: Point<f32>,
+    end: Point<f32>,
+    width: f32,
+    style: BorderStyle,
+    color: Color,
+  ) -> Self {
+    let dot = width.round();
+
+    if style != BorderStyle::Dotted || dot > 3.0 || dot < 1.0 {
+      return Self::new(start, end, width, style, color);
+    }
+
+    let vertical = start.x == end.x;
+    let length = ((end.x - start.x) + (end.y - start.y)).round() as i32;
+    let ends = EndDots::of(dot as i32, length);
+    let mut line = Self::new(start, end, width, style, color);
+    let along = |point: Point<f32>, by: f32| {
+      if vertical {
+        Point {
+          x: point.x,
+          y: point.y + by,
+        }
+      } else {
+        Point {
+          x: point.x + by,
+          y: point.y,
+        }
+      }
+    };
+    let dot_rect = |from: Point<f32>, length: f32| {
+      let half = dot / 2.0;
+
+      if vertical {
+        (
+          Point {
+            x: from.x - half,
+            y: from.y,
+          },
+          Size {
+            width: dot,
+            height: length,
+          },
+        )
+      } else {
+        (
+          Point {
+            x: from.x,
+            y: from.y - half,
+          },
+          Size {
+            width: length,
+            height: dot,
+          },
+        )
+      }
+    };
+    let (mut start, mut end) = (start, end);
+
+    if let Some(growth) = ends.start {
+      line.dots.push(dot_rect(start, dot + growth as f32));
+      start = along(start, 2.0 * dot + ends.start_offset as f32);
+    }
+    if let Some(growth) = ends.end {
+      let size = dot + growth as f32;
+
+      line.dots.push(dot_rect(along(end, -size), size));
+      end = along(end, -(size + 1.0));
+    }
+    line.line = FillShape::Path {
+      commands: vec![PathCommand::MoveTo(start), PathCommand::LineTo(end)],
+      rule: FillRule::NonZero,
+    };
+    line
+  }
+
+  /// Fills the end dots and strokes the line under `at`.
   pub(super) fn paint<D: PaintDevice>(&self, at: Affine, device: &mut D) {
+    for &(origin, size) in &self.dots {
+      device.fill_shape(
+        &FillShape::Rect(size),
+        self.stroke.color,
+        at * Affine::translation(origin.x, origin.y),
+      );
+    }
     device.stroke_shape(&self.line, &self.stroke, at);
+  }
+}
+
+/// The end dots Blink's `EnforceDotsAtEndpoints` fills for a `dot`-wide dotted line `length` long,
+/// so both ends land on a whole dot.
+struct EndDots {
+  /// How much longer the start dot is, when there is one.
+  start: Option<i32>,
+  /// How far the first gap after the start dot shrinks or grows.
+  start_offset: i32,
+  /// How much longer the end dot is, when there is one.
+  end: Option<i32>,
+}
+
+impl EndDots {
+  fn of(dot: i32, length: i32) -> Self {
+    let (mod_4, mod_6) = (length.rem_euclid(4), length.rem_euclid(6));
+    let mut ends = Self {
+      start: None,
+      start_offset: 0,
+      end: None,
+    };
+
+    if (dot == 1 && length % 2 == 0) || (dot == 3 && mod_6 == 0) {
+      ends.start = Some(1);
+      ends.start_offset = 1;
+    }
+    if (dot == 2 && (mod_4 == 0 || mod_4 == 1)) || (dot == 3 && (mod_6 == 1 || mod_6 == 2)) {
+      ends.start = Some(ends.start.unwrap_or(0));
+      ends.start_offset = -1;
+    }
+    if (dot == 2 && mod_4 == 0) || (dot == 3 && mod_6 == 1) {
+      ends.end = Some(0);
+    }
+    if (dot == 2 && mod_4 == 3) || (dot == 3 && (mod_6 == 4 || mod_6 == 5)) {
+      ends.start = Some(ends.start.unwrap_or(0));
+      ends.start_offset = 1;
+    }
+    if dot == 3 && mod_6 == 5 {
+      ends.end = Some(0);
+    } else if dot == 3 && mod_6 == 0 {
+      ends.end = Some(1);
+    }
+    ends
   }
 }

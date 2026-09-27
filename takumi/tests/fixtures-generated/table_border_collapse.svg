@@ -401,13 +401,15 @@
     <path d="M600 201h135v2h-135Z"/>
   </clipPath>
   <g clip-path="url(#cp0)">
-    <path d="M600 202h135" fill="none" stroke="#94a3b8" stroke-width="2" stroke-dasharray="2 2"/>
+    <rect x="600" y="201" width="2" height="2" fill="#94a3b8"/>
+    <path d="M605 202h130" fill="none" stroke="#94a3b8" stroke-width="2" stroke-dasharray="2 2"/>
   </g>
   <clipPath id="cp1">
     <path d="M600 203h2v31h-2Z"/>
   </clipPath>
   <g clip-path="url(#cp1)">
-    <path d="M601 201v33" fill="none" stroke="#94a3b8" stroke-width="2" stroke-dasharray="2 2"/>
+    <rect x="600" y="201" width="2" height="2" fill="#94a3b8"/>
+    <path d="M601 204v30" fill="none" stroke="#94a3b8" stroke-width="2" stroke-dasharray="2 2"/>
   </g>
   <g fill="#000">
     <use href="#g43" x="610" y="225"/>
