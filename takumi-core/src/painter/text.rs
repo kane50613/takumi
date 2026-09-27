@@ -28,10 +28,8 @@ pub enum GlyphFill {
 /// A device that can also draw text: glyph runs, and the shadows text and its decorations cast.
 pub trait GlyphDevice: PaintDevice {
   /// Paints only the shadow of what is drawn until the matching [`GlyphDevice::end_shadow`]:
-  /// each draw moved by the shadow's offset, filled with its colour, and blurred.
-  ///
-  /// Approximate: bitmap glyphs such as colour emoji cast no shadow, where Blink shadows their
-  /// alpha.
+  /// each draw moved by the shadow's offset, filled with its colour, and blurred. A colour glyph
+  /// casts its silhouette, as Blink's shadow fills every glyph with the shadow colour.
   fn begin_shadow(&mut self, shadow: &SizedShadow);
 
   /// Stops painting shadows.

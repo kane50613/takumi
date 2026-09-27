@@ -2270,7 +2270,8 @@ fn color_glyph_text_shadow() {
   });
 }
 
-/// A bitmap glyph's `text-shadow` is its alpha filled with the shadow colour.
+/// A bitmap glyph's `text-shadow` is its alpha, blurred when the shadow blurs, filled with the
+/// shadow colour.
 #[test]
 fn bitmap_glyph_text_shadow() {
   let mut fonts = Fonts::default();
@@ -2283,11 +2284,14 @@ fn bitmap_glyph_text_shadow() {
     .register(FontResource::new(data))
     .expect("load bitmap emoji font");
   run_pdf_fixture_with("bitmap-glyph-text-shadow", &fonts, |fonts| {
-    let source = r##"<div style="width: 100%; height: 100%; padding: 16px; background-color: #ffffff; font-size: 48px; line-height: 1; text-shadow: 8px 8px 0 rgba(37, 99, 235, 0.6);">😀</div>"##;
+    let source = r##"<div style="display: flex; column-gap: 24px; width: 100%; height: 100%; padding: 16px; background-color: #ffffff; font-size: 48px; line-height: 1;">
+      <div style="text-shadow: 8px 8px 0 rgba(37, 99, 235, 0.6);">😀</div>
+      <div style="text-shadow: 8px 8px 8px rgba(220, 38, 38, 0.8);">😀</div>
+    </div>"##;
 
     PdfOptions::builder()
       .node(from_html(source, FromHtmlOptions::default()).expect("parse bitmap glyph shadow"))
-      .viewport(Viewport::new((100, 100)))
+      .viewport(Viewport::new((180, 100)))
       .fonts(fonts)
       .build()
   });
