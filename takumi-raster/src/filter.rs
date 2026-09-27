@@ -429,9 +429,8 @@ pub(crate) fn apply_backdrop_filter(
 }
 
 /// Applies a `drop-shadow()` filter to an image. Its blur length is the Gaussian's standard
-/// deviation, as Filter Effects and Blink read it, not half of it as a box shadow's is.
-///
-/// Approximate: the offset rounds to whole pixels, where Blink shifts by the exact amount.
+/// deviation, as Filter Effects and Blink read it, not half of it as a box shadow's is, and its
+/// offset snaps down to whole pixels, as Chrome paints it.
 fn apply_drop_shadow_filter(pixmap: &mut PixmapMut<'_>, shadow: &SizedShadow) -> Result<()> {
   let canvas_width = pixmap.width();
   let canvas_height = pixmap.height();
@@ -441,8 +440,8 @@ fn apply_drop_shadow_filter(pixmap: &mut PixmapMut<'_>, shadow: &SizedShadow) ->
 
   let padding = (shadow.blur_radius * BlurType::Filter.extent_multiplier()).ceil() as u32;
 
-  let offset_x = shadow.offset_x.round() as i32;
-  let offset_y = shadow.offset_y.round() as i32;
+  let offset_x = shadow.offset_x.floor() as i32;
+  let offset_y = shadow.offset_y.floor() as i32;
 
   let [sr, sg, sb, sa] = shadow.color.0;
   let shadow_rgb = [sr, sg, sb];
