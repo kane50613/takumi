@@ -143,7 +143,7 @@
     <use href="#g2" x="204" y="190"/>
     <use href="#g12" x="215.22" y="190"/>
   </g>
-  <path d="M89.72 208h146.22v40h-146.22Z" fill="#fef9c3"/>
+  <path d="M89.72 215h146.22v26h-146.22Z" fill="#fef9c3"/>
   <g fill="#141414">
     <use href="#g25" x="16" y="235"/>
     <use href="#g9" x="25.64" y="235"/>

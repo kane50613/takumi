@@ -1753,7 +1753,8 @@ mod tests {
       height: 10.0,
     };
 
-    assert!(rect(0.0, 10.0).x_range_touches(rect(10.01, 10.0)));
-    assert!(!rect(0.0, 10.0).x_range_touches(rect(10.1, 10.0)));
+    assert!(rect(0.0, 10.0).meets(rect(10.01, 10.0), 0.0));
+    assert!(!rect(0.0, 10.0).meets(rect(10.1, 10.0), 0.0));
+    assert!(rect(0.0, 10.0).meets(rect(14.0, 10.0), 2.0));
   }
 }
