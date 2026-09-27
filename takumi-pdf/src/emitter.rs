@@ -43,7 +43,7 @@ use crate::paint::rasterized_image;
 use crate::svg;
 use crate::{
   filter::{ColorFilter, filtered, unsupported_filter},
-  glyph::{PdfGlyph, Uncovered, run_glyphs},
+  glyph::{ColorGlyphs, PdfGlyph, Uncovered, run_glyphs},
   inline::{InlineMap, visit_inline_layout},
   krilla::{
     Data,
@@ -69,6 +69,8 @@ use crate::{
   tree::draws,
   window::Window,
 };
+#[cfg(feature = "images")]
+use takumi_core::resources::glyph::ResolvedBitmapGlyph;
 
 /// What a box left on the surface for its caller to unwind.
 #[derive(Default)]
@@ -1907,12 +1909,27 @@ impl GlyphDevice for TextDevice<'_, '_, '_> {
     };
     let shaped = &run.glyph_run;
     let shadow_color = self.shadow.map(|shadow| shadow.color);
-    let paint = fill_from_rgba(
-      self
-        .emitter
-        .filtered(shadow_color.unwrap_or(shaped.brush.color)),
-      1.0,
-    );
+    let rgba = self
+      .emitter
+      .filtered(shadow_color.unwrap_or(shaped.brush.color));
+    let paint = fill_from_rgba(rgba, 1.0);
+    // A shadow paints colour glyphs as silhouettes, so they leave the font's run.
+    let colors = shadow_color.map(|_| {
+      ColorGlyphs::of(
+        run,
+        CorePoint {
+          x: origin.x,
+          y: origin.y,
+        },
+      )
+    });
+    let glyphs = match colors {
+      Some(_) => glyphs
+        .into_iter()
+        .filter(|glyph| !ColorGlyphs::contains(run, glyph.id))
+        .collect(),
+      None => glyphs,
+    };
     let stroke = self.glyph_stroke(shaped, &paint, shadow_color);
     let surface = &mut *self.device.surface;
     let oblique = self.emitter.push_oblique(shaped, origin, surface);
@@ -1955,11 +1972,15 @@ impl GlyphDevice for TextDevice<'_, '_, '_> {
             ..Stroke::default()
           }));
           surface.draw_glyphs(origin, &glyphs, font.clone(), text, shaped.font_size, true);
+          if let Some(outlines) = colors.as_ref().and_then(|colors| colors.outlines.as_ref()) {
+            surface.draw_path(outlines);
+          }
           surface.pop();
         }
         if translucent {
           surface.pop();
         }
+        // TODO: blur a bitmap glyph's silhouette as Blink blurs its alpha.
       }
       None => {
         surface.set_fill(Some(paint));
@@ -1972,6 +1993,13 @@ impl GlyphDevice for TextDevice<'_, '_, '_> {
           shaped.font_size,
           shadow_color.is_some(),
         );
+        if let Some(colors) = &colors {
+          if let Some(outlines) = &colors.outlines {
+            surface.draw_path(outlines);
+          }
+          #[cfg(feature = "images")]
+          draw_silhouettes(&colors.bitmaps, rgba, surface);
+        }
       }
     }
 
@@ -1979,6 +2007,37 @@ impl GlyphDevice for TextDevice<'_, '_, '_> {
       surface.pop();
     }
     surface.set_stroke(None);
+  }
+}
+
+/// Draws each bitmap glyph as its alpha filled with `color`.
+#[cfg(feature = "images")]
+fn draw_silhouettes(
+  bitmaps: &[(&ResolvedBitmapGlyph, Affine)],
+  color: [u8; 4],
+  surface: &mut Surface,
+) {
+  for (bitmap, transform) in bitmaps {
+    let (width, height) = (bitmap.image.width(), bitmap.image.height());
+    let Some(size) = KrillaSize::from_wh(width as f32, height as f32) else {
+      continue;
+    };
+    let data = bitmap
+      .image
+      .data()
+      .as_chunks::<4>()
+      .0
+      .iter()
+      .flat_map(|pixel| {
+        let alpha = (u16::from(pixel[3]) * u16::from(color[3]) + 127) / 255;
+
+        [color[0], color[1], color[2], alpha as u8]
+      })
+      .collect();
+
+    surface.push_transform(&krilla_transform(transform.to_cols_array()));
+    surface.draw_image(KrillaImage::from_rgba8(data, width, height), size);
+    surface.pop();
   }
 }
 
