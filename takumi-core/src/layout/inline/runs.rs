@@ -100,8 +100,8 @@ pub struct ShapedRun {
   pub baseline: f32,
   /// Total horizontal advance of the run.
   pub advance: f32,
-  /// Advance of line-end whitespace inside [`Self::advance`]. Decorations do
-  /// not span it (Blink skips hanging whitespace); naive for RTL, where it
+  /// Advance of line-end whitespace inside [`Self::advance`]. Decorations, inline backgrounds
+  /// and outlines do not span it (Blink skips hanging whitespace); naive for RTL, where it
   /// trims the visual right edge instead of the line-start side.
   pub trailing_whitespace: f32,
   /// Paint attributes carried by the run.
@@ -360,7 +360,7 @@ impl BuiltInlineLayout<'_> {
               line_index,
               x: content.x + glyph_run.offset(),
               y: content.y + glyph_run.baseline() + setup.baseline_shift - ascent,
-              width: glyph_run.advance(),
+              width: glyph_run.advance() - trailing_whitespace,
               height: ascent + metrics.descent.round(),
             }
             .scaled(setup.state, static_inline_prefix)

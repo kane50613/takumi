@@ -180,12 +180,12 @@
   <path d="M1075.73 67l-8 8v44l8 8Zm0 60-8-8h-99.24l-8 8Z" fill="#272d37"/>
   <g opacity=".502">
     <clipPath id="cp8">
-      <path d="M1091.05 65h47.24v64h-47.24Zm6 6h35.24v52h-35.24Z" clip-rule="evenodd"/>
+      <path d="M1091.05 65h38.74v64h-38.74Zm6 6h26.74v52h-26.74Z" clip-rule="evenodd"/>
     </clipPath>
     <g clip-path="url(#cp8)">
-      <path d="M1091.05 68h47.24" fill="none" stroke="#e11d48" stroke-width="6" stroke-dasharray="12 5.617"/>
-      <path d="M1135.29 65v64" fill="none" stroke="#e11d48" stroke-width="6" stroke-dasharray="12 5.333"/>
-      <path d="M1091.05 126h47.24" fill="none" stroke="#e11d48" stroke-width="6" stroke-dasharray="12 5.617"/>
+      <path d="M1091.05 68h38.74" fill="none" stroke="#e11d48" stroke-width="6" stroke-dasharray="12 1.367"/>
+      <path d="M1126.79 65v64" fill="none" stroke="#e11d48" stroke-width="6" stroke-dasharray="12 5.333"/>
+      <path d="M1091.05 126h38.74" fill="none" stroke="#e11d48" stroke-width="6" stroke-dasharray="12 1.367"/>
       <path d="M1094.05 65v64" fill="none" stroke="#e11d48" stroke-width="6" stroke-dasharray="12 5.333"/>
     </g>
   </g>

@@ -1,7 +1,7 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="600" height="320" viewBox="0 0 600 320">
   <rect x="0" y="0" width="600" height="320" fill="#f8fafc"/>
   <path d="M32 39h152.74v36h-152.74Z" fill="#fed7aa"/>
-  <path d="M286.69 39h237.07v36h-237.07Z" fill="#bfdbfe"/>
+  <path d="M286.69 39h230.07v36h-230.07Z" fill="#bfdbfe"/>
   <path d="M32 106.2h375.73v36h-375.73Z" fill="#bfdbfe"/>
   <path d="M414.73 118.2h39.07v21h-39.07Z" fill="#e9d5ff"/>
   <g fill="#0f172a">
@@ -78,12 +78,12 @@
   </g>
   <path d="M188.74 36h93.95v42h-93.95v-42Zm3 3h87.95v36h-87.95v-36Z" fill="#2563eb" fill-rule="evenodd"/>
   <clipPath id="cp0">
-    <path d="M282.69 35h245.07v44h-245.07Zm2 2h241.07v40h-241.07Z" clip-rule="evenodd"/>
+    <path d="M282.69 35h238.07v44h-238.07Zm2 2h234.07v40h-234.07Z" clip-rule="evenodd"/>
   </clipPath>
   <g clip-path="url(#cp0)">
-    <path d="M282.69 36h245.07" fill="none" stroke="#e11d48" stroke-width="2" stroke-dasharray="6 3.962"/>
-    <path d="M526.76 35v44" fill="none" stroke="#e11d48" stroke-width="2" stroke-dasharray="6 3.5"/>
-    <path d="M282.69 78h245.07" fill="none" stroke="#e11d48" stroke-width="2" stroke-dasharray="6 3.962"/>
+    <path d="M282.69 36h238.07" fill="none" stroke="#e11d48" stroke-width="2" stroke-dasharray="6 4.09"/>
+    <path d="M519.76 35v44" fill="none" stroke="#e11d48" stroke-width="2" stroke-dasharray="6 3.5"/>
+    <path d="M282.69 78h238.07" fill="none" stroke="#e11d48" stroke-width="2" stroke-dasharray="6 4.09"/>
     <path d="M283.69 35v44" fill="none" stroke="#e11d48" stroke-width="2" stroke-dasharray="6 3.5"/>
   </g>
   <clipPath id="cp1">
