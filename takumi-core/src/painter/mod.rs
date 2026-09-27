@@ -21,11 +21,12 @@ use crate::{
   geometry::{ComputedLayout, PathCommand, Point, Rect, Size},
   layout::{
     border::{BorderDash, BorderProperties},
+    clip::push_ellipse,
     decoration::{ClipBox, OutlineGeometry},
     inline::DecorationRect,
   },
   shadow::SizedShadow,
-  style::{Affine, BackgroundImage, BoxShadow, Color, FillRule, Overflow},
+  style::{Affine, BackgroundImage, BoxShadow, Color, FillRule, Overflow, SpacePair},
 };
 
 /// A distance far enough out that an edge placed there never shows, for a clip that is unbounded on
@@ -44,6 +45,13 @@ pub enum FillShape {
     size: Size<f32>,
     /// Where the rectangle sits inside the box.
     offset: Point<f32>,
+  },
+  /// An axis-aligned ellipse.
+  Ellipse {
+    /// The centre.
+    center: Point<f32>,
+    /// The horizontal and vertical radii.
+    radius: SpacePair<f32>,
   },
   /// Anything else.
   Path {
@@ -68,6 +76,7 @@ impl FillShape {
         size,
         offset,
       } => border.append_mask_commands(&mut commands, *size, *offset),
+      Self::Ellipse { center, radius } => push_ellipse(&mut commands, *center, *radius),
       Self::Path { commands: path, .. } => commands.extend_from_slice(path),
     }
     commands
@@ -377,6 +386,17 @@ impl<'c> BoxPainter<'c> {
         .filter(visible)
         .collect(),
     }
+  }
+
+  /// The `clip-path` shape the box and its descendants clip to, or `None` when it has none or the
+  /// shape cannot resolve.
+  pub fn clip_path(&self) -> Option<FillShape> {
+    let style = &self.context.style;
+
+    style
+      .clip_path
+      .as_ref()?
+      .fill_shape(self.context, self.layout.size, style.clip_rule)
   }
 
   /// The outline the box paints, or `None` when it paints none.

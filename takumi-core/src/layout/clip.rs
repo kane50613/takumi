@@ -4,9 +4,10 @@ use crate::{
   context::RenderContext,
   geometry::{PathBuilder, PathCommand, Point, Rect, Size},
   layout::border::BorderProperties,
+  painter::FillShape,
   style::{
-    Axis, BasicShape, BorderStyle, Color, ImageScalingAlgorithm, ShapeRadius, Sides, SizingContext,
-    SpacePair,
+    Axis, BasicShape, BorderStyle, Color, EllipseShape, FillRule, ImageScalingAlgorithm,
+    ShapeRadius, Sides, SizingContext, SpacePair,
   },
 };
 
@@ -73,17 +74,9 @@ impl BasicShape {
         );
       }
       BasicShape::Ellipse(shape) => {
-        let center = (
-          shape.position.0.x.to_px(&context.sizing, size.width),
-          shape.position.0.y.to_px(&context.sizing, size.height),
-        );
+        let (center, radius) = shape.resolve(context, size);
 
-        push_ellipse(
-          &mut commands,
-          center,
-          resolve_radius(shape.radius_x, center.0, &context.sizing, size.width),
-          resolve_radius(shape.radius_y, center.1, &context.sizing, size.height),
-        );
+        push_ellipse(&mut commands, center, radius);
       }
       BasicShape::Polygon(shape) => {
         let Some((first, rest)) = shape.coordinates.split_first() else {
@@ -113,12 +106,61 @@ impl BasicShape {
   }
 }
 
+impl BasicShape {
+  /// The shape resolved against a border box as a fill, its rule from `clip_rule` unless the shape
+  /// sets its own, or `None` when it cannot resolve at all.
+  pub fn fill_shape(
+    &self,
+    context: &RenderContext,
+    size: Size<f32>,
+    clip_rule: FillRule,
+  ) -> Option<FillShape> {
+    if let BasicShape::Ellipse(shape) = self {
+      let (center, radius) = shape.resolve(context, size);
+
+      return Some(FillShape::Ellipse { center, radius });
+    }
+
+    Some(FillShape::Path {
+      commands: self.path_commands(context, size)?,
+      rule: self.fill_rule().unwrap_or(clip_rule),
+    })
+  }
+}
+
+impl EllipseShape {
+  /// The ellipse's centre and radii in a border box of `size`.
+  fn resolve(&self, context: &RenderContext, size: Size<f32>) -> (Point<f32>, SpacePair<f32>) {
+    let center = Point {
+      x: self.position.0.x.to_px(&context.sizing, size.width),
+      y: self.position.0.y.to_px(&context.sizing, size.height),
+    };
+
+    (
+      center,
+      SpacePair {
+        x: resolve_radius(self.radius_x, center.x, &context.sizing, size.width),
+        y: resolve_radius(self.radius_y, center.y, &context.sizing, size.height),
+      },
+    )
+  }
+}
+
 /// Appends an axis-aligned ellipse outline as four cubics.
-fn push_ellipse(commands: &mut Vec<PathCommand>, center: (f32, f32), radius_x: f32, radius_y: f32) {
+pub(crate) fn push_ellipse(
+  commands: &mut Vec<PathCommand>,
+  center: Point<f32>,
+  radius: SpacePair<f32>,
+) {
+  let SpacePair {
+    x: radius_x,
+    y: radius_y,
+  } = radius;
+
   if radius_x <= 0.0 || radius_y <= 0.0 {
     return;
   }
-  let (cx, cy) = center;
+  let (cx, cy) = (center.x, center.y);
   let (ox, oy) = (radius_x * KAPPA, radius_y * KAPPA);
 
   commands.move_to((cx + radius_x, cy));

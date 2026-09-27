@@ -25,16 +25,16 @@ use takumi_core::{
   scene::Scene,
   shadow::SizedShadow,
   style::{
-    Affine, BackgroundImage, BasicShape, BlendMode, Color, ComputedStyle, FillRule, FontFamily,
-    Isolation, Lang, ShapeRadius, Sides, SizingContext, SpacePair, StyleSheet, ToCss,
+    Affine, BackgroundImage, BlendMode, Color, ComputedStyle, FillRule, FontFamily, Isolation,
+    Lang, SizingContext, StyleSheet, ToCss,
   },
   viewport::Viewport,
 };
 use typed_builder::TypedBuilder;
 
 use crate::{
-  APPROX_CHARS_PER_NUMBER, Frame, GlyphStroke, GroupToken, Num, Rgba, SvgDocument,
-  box_model::{PathData, edges_path_data, path_data, rounded_rect_path_data, shape_path_data},
+  Frame, GlyphStroke, GroupToken, Rgba, SvgDocument,
+  box_model::{edges_path_data, path_data, rounded_rect_path_data, shape_path_data},
   gradient::LayerEmitter,
   image::emit_image,
   scene_emit::SceneEmitter,
@@ -257,99 +257,19 @@ impl<'n> PlacedBox<'n> {
     Ok(Some(doc.begin_masked_group(&reference)?))
   }
 
-  /// Resolves `clip-path` against the border box and opens a clip group wrapping
-  /// the element. Mirrors the raster backend's `render_clip_shape_mask` geometry.
+  /// Opens a group clipping the element and its descendants to its `clip-path`.
   pub(crate) fn begin_clip_path_group(
     &self,
     doc: &mut SvgDocument,
   ) -> io::Result<Option<GroupToken>> {
-    let style = &self.node.context.style;
-    let Some(shape) = style.clip_path.as_ref() else {
+    let Some(shape) = self.painter.clip_path() else {
       return Ok(None);
     };
-    let sizing = &self.node.context.sizing;
-    let Point { x, y } = self.frame.origin;
-    let size = self.frame.layout.size;
-    let clip = match shape {
-      BasicShape::Ellipse(ellipse) => {
-        let cx = x + ellipse.position.0.x.to_px(sizing, size.width);
-        let cy = y + ellipse.position.0.y.to_px(sizing, size.height);
-        // closest/farthest-side measure each axis from the center to BOTH of its
-        // sides, not just the top-left corner.
-        let rx = resolve_shape_radius(
-          ellipse.radius_x,
-          cx - x,
-          x + size.width - cx,
-          sizing,
-          size.width,
-        );
-        let ry = resolve_shape_radius(
-          ellipse.radius_y,
-          cy - y,
-          y + size.height - cy,
-          sizing,
-          size.height,
-        );
-        doc.clip_ellipse(cx, cy, rx, ry)?
-      }
-      BasicShape::Inset(inset) => {
-        let [top_l, right_l, bottom_l, left_l] = inset.inset.0;
-        let top = top_l.to_px(sizing, size.height);
-        let right = right_l.to_px(sizing, size.width);
-        let bottom = bottom_l.to_px(sizing, size.height);
-        let left = left_l.to_px(sizing, size.width);
-        let inner = Size {
-          width: (size.width - left - right).max(0.0),
-          height: (size.height - top - bottom).max(0.0),
-        };
-        let mut border = BorderProperties::default();
-        if let Some(radius) = inset.border_radius {
-          border.radius = Sides(
-            radius
-              .0
-              .map(|corner| SpacePair::from_single(corner.to_px(sizing, size.width))),
-          );
-        }
-        let clip = ClipBox {
-          border,
-          size: inner,
-          offset: Point { x: left, y: top },
-        };
-        doc.clip_path(
-          &shape_path_data(&clip.into(), self.frame.origin),
-          FillRule::NonZero,
-          None,
-        )?
-      }
-      BasicShape::Polygon(polygon) => {
-        if polygon.coordinates.is_empty() {
-          return Ok(None);
-        }
-        let mut data =
-          PathData::with_capacity(polygon.coordinates.len() * (2 * APPROX_CHARS_PER_NUMBER + 1));
-        for (index, coord) in polygon.coordinates.iter().enumerate() {
-          let px = x + coord.x.to_px(sizing, size.width);
-          let py = y + coord.y.to_px(sizing, size.height);
-          data.command(if index == 0 { b'M' } else { b'L' });
-          data.pair(px, py);
-        }
-        data.close();
-        let rule = polygon.fill_rule.unwrap_or(style.clip_rule);
+    let clip = doc.clip_shape(&shape, self.frame.translation())?;
 
-        doc.clip_path(&data.into_string(), rule, None)?
-      }
-      BasicShape::Path(path) => {
-        let rule = path.fill_rule.unwrap_or(style.clip_rule);
-        // Inner scale lifts CSS-px path() coords to device space; translate offsets after.
-        let [tx, ty, scale] = [x, y, sizing.to_device(1.0)].map(Num);
-        let transform = format!("translate({tx} {ty}) scale({scale})");
-        doc.clip_path(&path.path, rule, Some(&transform))?
-      }
-      _ => return Ok(None),
-    };
-    let group = doc.begin_group(Affine::IDENTITY, 1.0, Some(&clip), None)?;
-
-    Ok(Some(group))
+    doc
+      .begin_group(Affine::IDENTITY, 1.0, Some(&clip), None)
+      .map(Some)
   }
 
   /// Emits the outer `box-shadow`s behind the element.
@@ -514,21 +434,6 @@ impl BoxChrome {
   }
 }
 
-/// Resolves a [`ShapeRadius`] to pixels.
-fn resolve_shape_radius(
-  radius: ShapeRadius,
-  near: f32,
-  far: f32,
-  sizing: &SizingContext,
-  full: f32,
-) -> f32 {
-  match radius {
-    ShapeRadius::ClosestSide => near.min(far),
-    ShapeRadius::FarthestSide => near.max(far),
-    ShapeRadius::Length(length) => length.to_px(sizing, full),
-  }
-}
-
 /// A [`PaintDevice`] writing into an [`SvgDocument`], keeping the first write error.
 pub(crate) struct DocumentDevice<'d> {
   doc: &'d mut SvgDocument,
@@ -650,7 +555,11 @@ impl PaintDevice for DocumentDevice<'_> {
   }
 
   fn push_clip(&mut self, shape: &FillShape, transform: Affine) {
-    self.begin_clip(&path_data(&shape.to_commands(), transform), shape.rule());
+    self.open_group(|doc| {
+      let clip = doc.clip_shape(shape, transform)?;
+
+      doc.begin_group(Affine::IDENTITY, 1.0, Some(&clip), None)
+    });
   }
 
   fn push_clip_out(&mut self, shape: &FillShape, transform: Affine) {

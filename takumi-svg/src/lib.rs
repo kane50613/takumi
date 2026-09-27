@@ -30,7 +30,7 @@ mod text;
 
 use std::{borrow::Cow, collections::HashMap, fmt, fmt::Write as _, io, mem};
 
-use box_model::{edges_path_data, quantize_path};
+use box_model::{edges_path_data, path_data, quantize_path};
 use quick_xml::{
   Writer,
   events::{BytesEnd, BytesStart, BytesText, Event},
@@ -41,7 +41,7 @@ use takumi_core::{
   filter::ColorMatrix,
   geometry::{Rect, Size},
   layout::background_image_geometry::OriginBox,
-  painter::{BoxFrame, StrokeStyle},
+  painter::{BoxFrame, FillShape, StrokeStyle},
   shadow::SizedShadow,
   style::{Affine, FillRule, Filter, FilterReference, LineJoin, ToCss},
 };
@@ -354,6 +354,24 @@ impl SvgDocument {
     self.empty("path", &attrs)?;
     self.close("clipPath")?;
     Ok(reference)
+  }
+
+  /// Defines a `<clipPath>` for `shape` under `transform` and returns its `url(#id)`. An ellipse
+  /// under a translation keeps its exact curve.
+  pub(crate) fn clip_shape(&mut self, shape: &FillShape, transform: Affine) -> io::Result<String> {
+    match shape {
+      FillShape::Ellipse { center, radius } if transform.only_translation() => self.clip_ellipse(
+        center.x + transform.x,
+        center.y + transform.y,
+        radius.x,
+        radius.y,
+      ),
+      _ => self.clip_path(
+        &path_data(&shape.to_commands(), transform),
+        shape.rule(),
+        None,
+      ),
+    }
   }
 
   /// Defines an elliptical `<clipPath>` and returns its `url(#id)`.

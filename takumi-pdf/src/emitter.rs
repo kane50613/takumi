@@ -356,7 +356,6 @@ impl Emitter<'_> {
     surface: &mut Surface,
   ) -> usize {
     let BoxFrame { layout, .. } = frame;
-    let style = &node.context.style;
     let mut pushed = 0;
 
     if let Some(mask) = self.mask(node, frame, surface) {
@@ -364,18 +363,13 @@ impl Emitter<'_> {
       pushed += 1;
     }
 
-    if let Some(shape) = &style.clip_path
-      && let Some(commands) = shape.path_commands(&node.context, layout.size)
-    {
+    if let Some(shape) = BoxPainter::new(&node.context, layout).clip_path() {
       // A shape that resolves to no area clips everything away, so a missing
       // path becomes an empty region rather than no clip at all.
-      let path = krilla_path(&commands, frame.origin).or_else(|| empty_path(frame.origin));
+      let path = shape_path(&shape, frame.origin).or_else(|| empty_path(frame.origin));
 
       if let Some(path) = path {
-        surface.push_clip_path(
-          &path,
-          &krilla_fill_rule(shape.fill_rule().unwrap_or(style.clip_rule)),
-        );
+        surface.push_clip_path(&path, &krilla_fill_rule(shape.rule()));
         pushed += 1;
       }
     }

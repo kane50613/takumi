@@ -3,7 +3,7 @@ use std::{borrow::Cow, sync::Arc};
 use takumi_core::{
   geometry::{ComputedLayout as Layout, Point, Size, transformed_rect_extents},
   layout::decoration::ClipBox,
-  painter::{FillShape, OverflowClip},
+  painter::{BoxPainter, FillShape, OverflowClip},
   scene::SceneBounds,
 };
 use tiny_skia::{
@@ -13,8 +13,7 @@ use tiny_skia::{
 
 use crate::{
   Command, Fill, Placement, RenderContext, Result, Style, build_path, checked_area, create_mask,
-  fast_div_255, placement_overlap,
-  style::{Affine, BasicShape},
+  fast_div_255, placement_overlap, style::Affine,
 };
 
 pub(crate) enum NodeMaskAction {
@@ -107,8 +106,8 @@ pub(crate) fn prepare_node_mask(
   transform: Affine,
   viewport: CanvasViewport,
 ) -> Result<NodeMaskAction> {
-  if let Some(clip_path) = &context.style.clip_path {
-    return Ok(clip_path_mask(clip_path, context, layout, viewport));
+  if let Some(shape) = BoxPainter::new(context, layout).clip_path() {
+    return Ok(clip_path_mask(&shape, context, viewport));
   }
 
   let Some(inverse_transform) = transform.invert() else {
@@ -141,12 +140,16 @@ pub(crate) fn prepare_node_mask(
 
 /// The `clip-path` shape as a viewport mask over the box and its descendants.
 fn clip_path_mask(
-  clip_path: &BasicShape,
+  shape: &FillShape,
   context: &RenderContext,
-  layout: Layout,
   viewport: CanvasViewport,
 ) -> NodeMaskAction {
-  let (mask, placement) = render_clip_shape_mask(clip_path, context, layout.size, viewport);
+  let (mask, placement) = render_mask(
+    &shape.to_commands(),
+    Some(context.transform),
+    Some(Fill::from(shape.rule()).into()),
+    Some(viewport),
+  );
   let end_x = placement.left + placement.width as i32;
   let end_y = placement.top + placement.height as i32;
 
@@ -581,21 +584,6 @@ fn transformed_mask_point(
     && original_point.y >= from.y
     && original_point.y < to.y;
   is_contained.then_some(original_point)
-}
-
-pub(crate) fn render_clip_shape_mask(
-  shape: &BasicShape,
-  context: &RenderContext,
-  size: Size<f32>,
-  canvas: CanvasViewport,
-) -> (Vec<u8>, Placement) {
-  let paths = shape.path_commands(context, size).unwrap_or_default();
-  render_mask(
-    &paths,
-    Some(context.transform),
-    Some(Fill::from(shape.fill_rule().unwrap_or(context.style.clip_rule)).into()),
-    Some(canvas),
-  )
 }
 
 /// `cull` bounds the rasterized area for masks the caller only ever reads
