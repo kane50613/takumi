@@ -102,55 +102,6 @@ fn approximate_half_corner(exponent: f64) -> (f32, f32, f32) {
   (a as f32, b as f32, half as f32)
 }
 
-/// Approximate length of a corner contour scaled to `radius_x`/`radius_y`,
-/// by flattening each Bézier segment into chords.
-pub(crate) fn contour_arc_length(contour: &CornerContour, radius_x: f32, radius_y: f32) -> f32 {
-  const SEGMENTS: u32 = 8;
-
-  let scaled_distance = |from: [f32; 2], to: [f32; 2]| {
-    ((to[0] - from[0]) * radius_x).hypot((to[1] - from[1]) * radius_y)
-  };
-
-  match contour {
-    CornerContour::Bevel => radius_x.hypot(radius_y),
-    CornerContour::Notch => radius_x + radius_y,
-    CornerContour::Cubic(cubic) => cubic_arc_length([0.0, 1.0], cubic, SEGMENTS, scaled_distance),
-    CornerContour::Cubics(first, second) => {
-      cubic_arc_length([0.0, 1.0], first, SEGMENTS, scaled_distance)
-        + cubic_arc_length(first[2], second, SEGMENTS, scaled_distance)
-    }
-  }
-}
-
-fn cubic_arc_length(
-  start: [f32; 2],
-  [control1, control2, end]: &[[f32; 2]; 3],
-  segments: u32,
-  distance: impl Fn([f32; 2], [f32; 2]) -> f32,
-) -> f32 {
-  let point_at = |t: f32| {
-    let u = 1.0 - t;
-    let weight = [u * u * u, 3.0 * u * u * t, 3.0 * u * t * t, t * t * t];
-
-    [
-      weight[0] * start[0] + weight[1] * control1[0] + weight[2] * control2[0] + weight[3] * end[0],
-      weight[0] * start[1] + weight[1] * control1[1] + weight[2] * control2[1] + weight[3] * end[1],
-    ]
-  };
-
-  let mut length = 0.0;
-  let mut previous = start;
-
-  for step in 1..=segments {
-    let next = point_at(step as f32 / segments as f32);
-
-    length += distance(previous, next);
-    previous = next;
-  }
-
-  length
-}
-
 #[cfg(test)]
 mod tests {
   use super::*;
@@ -234,20 +185,5 @@ mod tests {
       corner_contour(crate::style::Superellipse::NOTCH),
       CornerContour::Notch
     ));
-  }
-
-  #[test]
-  fn arc_length_matches_known_shapes() {
-    let bevel = contour_arc_length(&CornerContour::Bevel, 3.0, 4.0);
-
-    assert!((bevel - 5.0).abs() < 1e-5);
-
-    let quarter_circle = contour_arc_length(
-      &CornerContour::Cubic([[KAPPA, 1.0], [1.0, KAPPA], [1.0, 0.0]]),
-      10.0,
-      10.0,
-    );
-
-    assert!((quarter_circle - std::f32::consts::FRAC_PI_2 * 10.0).abs() < 0.1);
   }
 }

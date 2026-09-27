@@ -1,16 +1,14 @@
-use std::f32::consts::PI;
-
 use smallvec::SmallVec;
 
 use crate::{
   context::RenderContext,
   geometry::{LAYOUT_UNIT_EPSILON, PathBuilder, PathCommand as Command, Point, Rect, Size},
-  layout::corner_shape::{CornerContour, KAPPA, contour_arc_length, corner_contour},
+  layout::corner_shape::{CornerContour, KAPPA, corner_contour},
   style::{BorderStyle, Color, ImageScalingAlgorithm, Sides, SpacePair, Superellipse},
 };
 
 /// Border side identifier used by per-side geometry and rasterization.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum BorderSide {
   /// Top side.
   Top,
@@ -44,16 +42,6 @@ impl BorderSide {
       Self::Right => sides.right,
       Self::Bottom => sides.bottom,
       Self::Left => sides.left,
-    }
-  }
-
-  /// The indices of this side's corners among radii listed clockwise from the top-left.
-  fn corners(self) -> [usize; 2] {
-    match self {
-      Self::Top => [0, 1],
-      Self::Right => [1, 2],
-      Self::Bottom => [2, 3],
-      Self::Left => [3, 0],
     }
   }
 }
@@ -460,143 +448,6 @@ impl BorderProperties {
     }
   }
 
-  /// Appends a clip polygon for one side that follows the rounded inner contour.
-  pub fn append_side_clip_polygon_commands_at(
-    &self,
-    side: BorderSide,
-    path: &mut Vec<Command>,
-    border_box: Size<f32>,
-    offset: Point<f32>,
-  ) {
-    if border_box.width <= 0.0 || border_box.height <= 0.0 {
-      return;
-    }
-
-    if self.collapsed {
-      self.append_side_polygon_commands_at(side, path, border_box, offset);
-      return;
-    }
-
-    let outer_left = offset.x;
-    let outer_top = offset.y;
-    let outer_right = offset.x + border_box.width;
-    let outer_bottom = offset.y + border_box.height;
-
-    let inner_left = outer_left + self.width.left.min(border_box.width);
-    let inner_top = outer_top + self.width.top.min(border_box.height);
-    let inner_right = (outer_right - self.width.right).max(inner_left);
-    let inner_bottom = (outer_bottom - self.width.bottom).max(inner_top);
-
-    let inner_size = border_box.inset(self.width);
-    let mut inner_border = *self;
-    inner_border.inset_by_border_width();
-    let inner_radii = inner_border.scaled_corner_radii(inner_size);
-    let [top_left, top_right, bottom_right, bottom_left] = inner_radii.0;
-
-    let outer_tl = Point {
-      x: outer_left,
-      y: outer_top,
-    };
-    let outer_tr = Point {
-      x: outer_right,
-      y: outer_top,
-    };
-    let outer_br = Point {
-      x: outer_right,
-      y: outer_bottom,
-    };
-    let outer_bl = Point {
-      x: outer_left,
-      y: outer_bottom,
-    };
-
-    let mut inner_tl = Point {
-      x: inner_left,
-      y: inner_top,
-    };
-    let mut inner_tr = Point {
-      x: inner_right,
-      y: inner_top,
-    };
-    let mut inner_br = Point {
-      x: inner_right,
-      y: inner_bottom,
-    };
-    let mut inner_bl = Point {
-      x: inner_left,
-      y: inner_bottom,
-    };
-
-    match side {
-      BorderSide::Top => {
-        inner_tl = side_clip_inner_corner(self.shape.0[0], outer_tl, inner_tl, top_left, 1.0, 1.0);
-        inner_tr =
-          side_clip_inner_corner(self.shape.0[1], outer_tr, inner_tr, top_right, -1.0, 1.0);
-        path.move_to((outer_tl.x, outer_tl.y));
-        path.line_to((inner_tl.x, inner_tl.y));
-        path.line_to((inner_tr.x, inner_tr.y));
-        path.line_to((outer_tr.x, outer_tr.y));
-      }
-      BorderSide::Right => {
-        inner_tr =
-          side_clip_inner_corner(self.shape.0[1], outer_tr, inner_tr, top_right, -1.0, 1.0);
-        inner_br = side_clip_inner_corner(
-          self.shape.0[2],
-          outer_br,
-          inner_br,
-          bottom_right,
-          -1.0,
-          -1.0,
-        );
-        path.move_to((outer_tr.x, outer_tr.y));
-        path.line_to((inner_tr.x, inner_tr.y));
-        path.line_to((inner_br.x, inner_br.y));
-        path.line_to((outer_br.x, outer_br.y));
-      }
-      BorderSide::Bottom => {
-        inner_bl =
-          side_clip_inner_corner(self.shape.0[3], outer_bl, inner_bl, bottom_left, 1.0, -1.0);
-        inner_br = side_clip_inner_corner(
-          self.shape.0[2],
-          outer_br,
-          inner_br,
-          bottom_right,
-          -1.0,
-          -1.0,
-        );
-        path.move_to((outer_br.x, outer_br.y));
-        path.line_to((inner_br.x, inner_br.y));
-        path.line_to((inner_bl.x, inner_bl.y));
-        path.line_to((outer_bl.x, outer_bl.y));
-      }
-      BorderSide::Left => {
-        inner_tl = side_clip_inner_corner(self.shape.0[0], outer_tl, inner_tl, top_left, 1.0, 1.0);
-        inner_bl =
-          side_clip_inner_corner(self.shape.0[3], outer_bl, inner_bl, bottom_left, 1.0, -1.0);
-        path.move_to((outer_bl.x, outer_bl.y));
-        path.line_to((inner_bl.x, inner_bl.y));
-        path.line_to((inner_tl.x, inner_tl.y));
-        path.line_to((outer_tl.x, outer_tl.y));
-      }
-    }
-
-    path.close();
-  }
-
-  /// Whether the padding edge curves at either end of `side`.
-  pub fn inner_edge_arcs(&self, side: BorderSide, border_box: Size<f32>) -> bool {
-    let mut inner = *self;
-
-    inner.inset_by_border_width();
-
-    let radii = inner.scaled_corner_radii(border_box.inset(self.width));
-
-    side
-      .corners()
-      .iter()
-      .any(|&corner| radii.0[corner].x > 0.0 && radii.0[corner].y > 0.0)
-  }
-
   /// Returns true if all corner radii are zero.
   #[inline]
   pub fn is_zero(&self) -> bool {
@@ -842,30 +693,6 @@ impl BorderProperties {
     path.close();
   }
 
-  /// Perimeter of the border-box outline, including rounded corner arcs.
-  pub fn approximate_rounded_rect_perimeter(&self, border_box: Size<f32>) -> f32 {
-    if border_box.width <= 0.0 || border_box.height <= 0.0 {
-      return 0.0;
-    }
-
-    let radii = self.scaled_corner_radii(border_box);
-    let [top_left, top_right, bottom_right, bottom_left] = radii.0;
-
-    let top = (border_box.width - top_left.x - top_right.x).max(0.0);
-    let right = (border_box.height - top_right.y - bottom_right.y).max(0.0);
-    let bottom = (border_box.width - bottom_left.x - bottom_right.x).max(0.0);
-    let left = (border_box.height - top_left.y - bottom_left.y).max(0.0);
-
-    top
-      + right
-      + bottom
-      + left
-      + corner_arc_length(self.shape.0[0], top_left.x, top_left.y)
-      + corner_arc_length(self.shape.0[1], top_right.x, top_right.y)
-      + corner_arc_length(self.shape.0[2], bottom_right.x, bottom_right.y)
-      + corner_arc_length(self.shape.0[3], bottom_left.x, bottom_left.y)
-  }
-
   pub(crate) fn scaled_corner_radii(&self, border_box: Size<f32>) -> Sides<SpacePair<f32>> {
     let mut scaled = self.radius;
 
@@ -887,58 +714,6 @@ impl BorderProperties {
 
     scaled
   }
-}
-
-/// The corner point where a side's clip polygon meets the inner contour.
-fn side_clip_inner_corner(
-  shape: Superellipse,
-  outer: Point<f32>,
-  inner: Point<f32>,
-  radius: SpacePair<f32>,
-  direction_x: f32,
-  direction_y: f32,
-) -> Point<f32> {
-  if radius.x <= 0.0 || radius.y <= 0.0 {
-    return inner;
-  }
-
-  let chord_x = Point {
-    x: inner.x + direction_x * radius.x,
-    y: inner.y,
-  };
-  let chord_y = Point {
-    x: inner.x,
-    y: inner.y + direction_y * radius.y,
-  };
-
-  if shape.is_concave() {
-    return Point {
-      x: chord_x.x,
-      y: chord_y.y,
-    };
-  }
-
-  line_intersection(outer, inner, chord_x, chord_y).unwrap_or(inner)
-}
-
-fn line_intersection(
-  a0: Point<f32>,
-  a1: Point<f32>,
-  b0: Point<f32>,
-  b1: Point<f32>,
-) -> Option<Point<f32>> {
-  let denom = (a0.x - a1.x) * (b0.y - b1.y) - (a0.y - a1.y) * (b0.x - b1.x);
-  if denom.abs() < 1e-6 {
-    return None;
-  }
-
-  let a_cross = a0.x * a1.y - a0.y * a1.x;
-  let b_cross = b0.x * b1.y - b0.y * b1.x;
-
-  Some(Point {
-    x: (a_cross * (b0.x - b1.x) - (a0.x - a1.x) * b_cross) / denom,
-    y: (a_cross * (b0.y - b1.y) - (a0.y - a1.y) * b_cross) / denom,
-  })
 }
 
 /// Appends a non-`round` corner contour, mapping normalized contour points through `anchor + p[0] *
@@ -983,28 +758,6 @@ fn corner_point(anchor: Point<f32>, u: Point<f32>, v: Point<f32>, point: [f32; 2
     anchor.x + point[0] * u.x + point[1] * v.x,
     anchor.y + point[0] * u.y + point[1] * v.y,
   )
-}
-
-/// Length of one corner's outline arc, honoring its `corner-shape`.
-fn corner_arc_length(shape: Superellipse, radius_x: f32, radius_y: f32) -> f32 {
-  if radius_x <= 0.0 || radius_y <= 0.0 {
-    return 0.0;
-  }
-
-  if shape.is_round() {
-    return approximate_quarter_ellipse_arc_length(radius_x, radius_y);
-  }
-
-  contour_arc_length(&corner_contour(shape), radius_x, radius_y)
-}
-
-fn approximate_quarter_ellipse_arc_length(radius_x: f32, radius_y: f32) -> f32 {
-  // Ramanujan II approximation for ellipse circumference.
-  let sum = radius_x + radius_y;
-  let diff = radius_x - radius_y;
-  let h = (diff * diff) / (sum * sum);
-  let circumference = PI * sum * (1.0 + (3.0 * h) / (10.0 + (4.0 - 3.0 * h).sqrt()));
-  circumference / 4.0
 }
 
 // The dash spacing below derives from Chromium's styled_stroke_data.cc, under

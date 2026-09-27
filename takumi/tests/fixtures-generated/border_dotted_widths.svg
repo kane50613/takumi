@@ -43,5 +43,38 @@
   <rect x="567" y="345" width="3" height="3" fill="#0f172a"/>
   <path d="M568.5 352v153" fill="none" stroke="#0f172a" stroke-width="3" stroke-dasharray="3 3"/>
   <path d="M330 345v160l12-3v-154Z" fill="#2563eb"/>
-  <path d="M654 346h192c12.7 0 23 10.3 23 23v112c0 12.7-10.3 23-23 23h-192c-12.7 0-23-10.3-23-23v-112c0-12.7 10.3-23 23-23Z" fill="none" stroke="#0f172a" stroke-width="2" stroke-dasharray="2 2"/>
+  <clipPath id="cp0">
+    <path d="M654 345h192c13.25 0 24 10.75 24 24v112c0 13.25-10.75 24-24 24h-192c-13.25 0-24-10.75-24-24v-112c0-13.25 10.75-24 24-24Z"/>
+  </clipPath>
+  <g clip-path="url(#cp0)">
+    <clipPath id="cp1">
+      <path d="M-1000000-1000000H1000000V1000000H-1000000ZM654 347h192c12.15 0 22 9.85 22 22v112c0 12.15-9.85 22-22 22h-192c-12.15 0-22-9.85-22-22v-112c0-12.15 9.85-22 22-22Z" clip-rule="evenodd"/>
+    </clipPath>
+    <g clip-path="url(#cp1)">
+      <clipPath id="cp2">
+        <path shape-rendering="crispEdges" d="M630 345l13 13h214l13-13Z"/>
+      </clipPath>
+      <g clip-path="url(#cp2)">
+        <path d="M654 346h192c12.7 0 23 10.3 23 23v112c0 12.7-10.3 23-23 23h-192c-12.7 0-23-10.3-23-23v-112c0-12.7 10.3-23 23-23Z" fill="none" stroke="#0f172a" stroke-width="4.4" stroke-dasharray="2 2"/>
+      </g>
+      <clipPath id="cp3">
+        <path shape-rendering="crispEdges" d="M870 505l-13-13h-214l-13 13Z"/>
+      </clipPath>
+      <g clip-path="url(#cp3)">
+        <path d="M654 346h192c12.7 0 23 10.3 23 23v112c0 12.7-10.3 23-23 23h-192c-12.7 0-23-10.3-23-23v-112c0-12.7 10.3-23 23-23Z" fill="none" stroke="#0f172a" stroke-width="4.4" stroke-dasharray="2 2"/>
+      </g>
+      <clipPath id="cp4">
+        <path shape-rendering="crispEdges" d="M870 345l-13 13v134l13 13Z"/>
+      </clipPath>
+      <g clip-path="url(#cp4)">
+        <path d="M654 346h192c12.7 0 23 10.3 23 23v112c0 12.7-10.3 23-23 23h-192c-12.7 0-23-10.3-23-23v-112c0-12.7 10.3-23 23-23Z" fill="none" stroke="#0f172a" stroke-width="4.4" stroke-dasharray="2 2"/>
+      </g>
+      <clipPath id="cp5">
+        <path shape-rendering="crispEdges" d="M630 505l13-13v-134l-13-13Z"/>
+      </clipPath>
+      <g clip-path="url(#cp5)">
+        <path d="M654 346h192c12.7 0 23 10.3 23 23v112c0 12.7-10.3 23-23 23h-192c-12.7 0-23-10.3-23-23v-112c0-12.7 10.3-23 23-23Z" fill="none" stroke="#0f172a" stroke-width="4.4" stroke-dasharray="2 2"/>
+      </g>
+    </g>
+  </g>
 </svg>

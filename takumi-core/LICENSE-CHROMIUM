@@ -62,8 +62,8 @@ OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 
-3. `Color::inset_outset` in src/style/properties/color.rs, the `StyledLine`,
-   curved dash, side order and `Miter` rules in src/painter/border.rs,
+3. `Color::inset_outset` in src/style/properties/color.rs, `BorderShape`,
+   `Miter`, `StyledLine` and the side order in src/painter/border.rs,
    `BoxSideRect` in src/painter/box_side.rs, `OutlineIsland::paint`
    and `ComplexOutline` in src/painter/outline.rs, `RightAngleContour` in
    src/layout/inline/outline.rs, and the decoration lines in

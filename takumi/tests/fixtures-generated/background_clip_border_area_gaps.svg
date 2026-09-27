@@ -79,18 +79,51 @@
     <rect x="40" y="40" width="120" height="120" fill="url(#pat1)"/>
   </g>
   <mask id="mk3" maskUnits="userSpaceOnUse" style="mask-type:alpha">
-    <path d="M216 46h72c9.94 0 18 8.06 18 18v72c0 9.94-8.06 18-18 18h-72c-9.94 0-18-8.06-18-18v-72c0-9.94 8.06-18 18-18Z" fill="none" stroke="#000" stroke-width="12" stroke-dasharray="0 23.584" stroke-linecap="round"/>
+    <clipPath id="cp4">
+      <path d="M216 40h72c13.25 0 24 10.75 24 24v72c0 13.25-10.75 24-24 24h-72c-13.25 0-24-10.75-24-24v-72c0-13.25 10.75-24 24-24Z"/>
+    </clipPath>
+    <g clip-path="url(#cp4)">
+      <clipPath id="cp5">
+        <path d="M-1000000-1000000H1000000V1000000H-1000000ZM216 52h72c6.63 0 12 5.37 12 12v72c0 6.63-5.37 12-12 12h-72c-6.63 0-12-5.37-12-12v-72c0-6.63 5.37-12 12-12Z" clip-rule="evenodd"/>
+      </clipPath>
+      <g clip-path="url(#cp5)">
+        <clipPath id="cp6">
+          <path shape-rendering="crispEdges" d="M192 40l18 18h84l18-18Z"/>
+        </clipPath>
+        <g clip-path="url(#cp6)">
+          <path d="M216 46h72c9.94 0 18 8.06 18 18v72c0 9.94-8.06 18-18 18h-72c-9.94 0-18-8.06-18-18v-72c0-9.94 8.06-18 18-18Z" fill="none" stroke="#000" stroke-width="12" stroke-dasharray="0 23.578" stroke-linecap="round"/>
+        </g>
+        <clipPath id="cp7">
+          <path shape-rendering="crispEdges" d="M312 160l-18-18h-84l-18 18Z"/>
+        </clipPath>
+        <g clip-path="url(#cp7)">
+          <path d="M216 46h72c9.94 0 18 8.06 18 18v72c0 9.94-8.06 18-18 18h-72c-9.94 0-18-8.06-18-18v-72c0-9.94 8.06-18 18-18Z" fill="none" stroke="#000" stroke-width="12" stroke-dasharray="0 23.578" stroke-linecap="round"/>
+        </g>
+        <clipPath id="cp8">
+          <path shape-rendering="crispEdges" d="M312 40l-18 18v84l18 18Z"/>
+        </clipPath>
+        <g clip-path="url(#cp8)">
+          <path d="M216 46h72c9.94 0 18 8.06 18 18v72c0 9.94-8.06 18-18 18h-72c-9.94 0-18-8.06-18-18v-72c0-9.94 8.06-18 18-18Z" fill="none" stroke="#000" stroke-width="12" stroke-dasharray="0 23.578" stroke-linecap="round"/>
+        </g>
+        <clipPath id="cp9">
+          <path shape-rendering="crispEdges" d="M192 160l18-18v-84l-18-18Z"/>
+        </clipPath>
+        <g clip-path="url(#cp9)">
+          <path d="M216 46h72c9.94 0 18 8.06 18 18v72c0 9.94-8.06 18-18 18h-72c-9.94 0-18-8.06-18-18v-72c0-9.94 8.06-18 18-18Z" fill="none" stroke="#000" stroke-width="12" stroke-dasharray="0 23.578" stroke-linecap="round"/>
+        </g>
+      </g>
+    </g>
   </mask>
   <g mask="url(#mk3)">
     <rect x="192" y="40" width="120" height="120" fill="#16a34a"/>
   </g>
-  <mask id="mk4" maskUnits="userSpaceOnUse" style="mask-type:alpha">
+  <mask id="mk10" maskUnits="userSpaceOnUse" style="mask-type:alpha">
     <path d="M344 40h120v120h-120v-120Zm4 4h112v112h-112v-112Z" fill="#000" fill-rule="evenodd"/>
     <path d="M352 48h104v104h-104v-104Zm4 4h96v96h-96v-96Z" fill="#000" fill-rule="evenodd"/>
   </mask>
-  <g mask="url(#mk4)">
-    <pattern id="pat5" patternUnits="userSpaceOnUse" x="356" y="52" width="96" height="96">
-      <linearGradient id="lg6" gradientUnits="userSpaceOnUse" x1="0" y1="48" x2="96" y2="48">
+  <g mask="url(#mk10)">
+    <pattern id="pat11" patternUnits="userSpaceOnUse" x="356" y="52" width="96" height="96">
+      <linearGradient id="lg12" gradientUnits="userSpaceOnUse" x1="0" y1="48" x2="96" y2="48">
         <stop offset="0" stop-color="#ea580c"/>
         <stop offset=".016" stop-color="#e95710"/>
         <stop offset=".032" stop-color="#e75713"/>
@@ -156,8 +189,8 @@
         <stop offset=".984" stop-color="#9434e6"/>
         <stop offset="1" stop-color="#9333ea"/>
       </linearGradient>
-      <rect x="0" y="0" width="96" height="96" fill="url(#lg6)"/>
+      <rect x="0" y="0" width="96" height="96" fill="url(#lg12)"/>
     </pattern>
-    <rect x="344" y="40" width="120" height="120" fill="url(#pat5)"/>
+    <rect x="344" y="40" width="120" height="120" fill="url(#pat11)"/>
   </g>
 </svg>
