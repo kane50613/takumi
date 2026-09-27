@@ -366,10 +366,6 @@ fn collect_inline_links(
   let context = &node.context;
   let font_style = SizedFontStyle::from_style(&context.style, context);
   let content = layout.content_box_size();
-
-  if font_style.sizing.font_size == 0.0 || content.width <= 0.0 || content.height <= 0.0 {
-    return;
-  }
   let items = collect_inline_items(node);
 
   if !items

@@ -1357,7 +1357,8 @@ impl Emitter<'_> {
     } = frame;
     let shaped = &run.glyph_run;
 
-    if shaped.glyphs.is_empty() {
+    // A zero-sized run shows nothing, and its glyph positions divide by the size.
+    if shaped.glyphs.is_empty() || shaped.font_size == 0.0 {
       return None;
     }
     let font = self.cached_font(shaped)?;

@@ -34,6 +34,14 @@ pub(crate) fn emit_text(
   frame: BoxFrame,
   doc: &mut SvgDocument,
 ) -> io::Result<()> {
+  if SizedFontStyle::from_style(&context.style, context)
+    .sizing
+    .font_size
+    == 0.0
+  {
+    return Ok(());
+  }
+
   emit_inline_items(
     context,
     || {
@@ -68,10 +76,6 @@ fn emit_inline_items<'c>(
   doc: &mut SvgDocument,
 ) -> io::Result<()> {
   let font_style = SizedFontStyle::from_style(&context.style, context);
-  if font_style.sizing.font_size == 0.0 {
-    return Ok(());
-  }
-
   let built = create_inline_layout(InlineLayoutRequest::in_content_box(
     items(),
     frame.layout.unsnapped_content,
