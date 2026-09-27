@@ -69,6 +69,12 @@ fn expand_tabs(input: &str, tab_spaces: usize) -> Cow<'_, str> {
   Cow::Owned(out)
 }
 
+/// The document white space CSS collapses: spaces, tabs, segment breaks, and form feeds.
+pub(crate) const COLLAPSIBLE_WHITESPACE: [char; 5] = [' ', '\t', '\n', '\r', '\u{c}'];
+
+/// The subset `white-space-collapse: preserve-breaks` still collapses.
+pub(crate) const HORIZONTAL_WHITESPACE: [char; 3] = [' ', '\t', '\u{c}'];
+
 /// Applies whitespace collapse rules to the input text according to `WhiteSpaceCollapse`.
 pub(crate) fn apply_white_space_collapse<'a>(
   input: &'a str,
