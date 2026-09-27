@@ -33,7 +33,7 @@ impl<'n> OwnContent<'n> {
 
     match node.node.as_ref().map(|input| &input.kind) {
       Some(NodeKind::Text(_)) => Self::Inline(node),
-      Some(NodeKind::Image(image)) => Self::Image(image),
+      Some(NodeKind::Image(image)) if node.context.style.is_visible() => Self::Image(image),
       _ => Self::None,
     }
   }

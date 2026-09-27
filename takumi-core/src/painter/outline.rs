@@ -70,7 +70,12 @@ impl OutlineIsland {
     let opacity = style.parent.opacity.0;
     let mut color = style.outline_color;
 
-    if width <= 0.0 || !style.outline_style.is_rendered() || color.0[3] == 0 || opacity <= 0.0 {
+    if width <= 0.0
+      || !style.outline_style.is_rendered()
+      || color.0[3] == 0
+      || opacity <= 0.0
+      || !style.parent.is_visible()
+    {
       return;
     }
 
