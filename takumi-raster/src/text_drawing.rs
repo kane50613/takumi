@@ -2,15 +2,15 @@ use std::sync::Arc;
 
 use skrifa::color::ColorPalette;
 use takumi_core::geometry::{Point, Size};
-use tiny_skia::Pixmap;
+use tiny_skia::{FilterQuality, Pixmap, PixmapPaint};
 use xxhash_rust::xxh3::Xxh3;
 
 use crate::{
-  BorderProperties, Canvas, Command, MaskCompositeColor, MaskSamplingOptions, PaintSource,
-  Placement, Result, SamplingOptions, SizedFontStyle, Stroke, checked_area,
+  BorderProperties, Canvas, CanvasViewport, Command, MaskCompositeColor, MaskSamplingOptions,
+  PaintSource, Placement, Result, SamplingOptions, SizedFontStyle, Stroke, checked_area,
   composite_mask_source_to_pixmap, pixmap_ref_from_buffer, render_mask,
   resources::{
-    glyph::{ResolvedColorLayer, ResolvedGlyph},
+    glyph::{ResolvedBitmapGlyph, ResolvedColorLayer, ResolvedGlyph},
     glyph_cache::glyph_mask,
   },
   style::{Affine, BlendMode, Color, ImageScalingAlgorithm},
@@ -454,6 +454,62 @@ fn draw_color_outline_image(
       render_mask(&layer.paths, Some(transform), None, Some(canvas.viewport()));
     canvas.draw_mask(&mask, placement, color, BlendMode::Normal);
   }
+}
+
+/// The alpha coverage `bitmap` leaves on the canvas drawn under `transform`, within `cull`.
+pub(crate) fn bitmap_coverage(
+  bitmap: &ResolvedBitmapGlyph,
+  transform: Affine,
+  cull: CanvasViewport,
+) -> Option<(Vec<u8>, Placement)> {
+  let source = pixmap_ref_from_buffer(&bitmap.image)?;
+  let transform = transform * bitmap.image_transform();
+  let (width, height) = (source.width() as f32, source.height() as f32);
+  let (mut min_x, mut min_y) = (f32::INFINITY, f32::INFINITY);
+  let (mut max_x, mut max_y) = (f32::NEG_INFINITY, f32::NEG_INFINITY);
+
+  for (x, y) in [(0.0, 0.0), (width, 0.0), (0.0, height), (width, height)] {
+    let (x, y) = transform.transform_point(x, y);
+
+    min_x = min_x.min(x);
+    min_y = min_y.min(y);
+    max_x = max_x.max(x);
+    max_y = max_y.max(y);
+  }
+
+  let left = (min_x.floor() as i32).max(cull.origin.x as i32);
+  let top = (min_y.floor() as i32).max(cull.origin.y as i32);
+  let right = (max_x.ceil() as i32).min(cull.right());
+  let bottom = (max_y.ceil() as i32).min(cull.bottom());
+
+  if right <= left || bottom <= top {
+    return None;
+  }
+
+  let placement = Placement {
+    left,
+    top,
+    width: (right - left) as u32,
+    height: (bottom - top) as u32,
+  };
+  let mut pixmap = Pixmap::new(placement.width, placement.height)?;
+
+  pixmap.draw_pixmap(
+    0,
+    0,
+    source,
+    &PixmapPaint {
+      quality: FilterQuality::Bilinear,
+      ..PixmapPaint::default()
+    },
+    (Affine::translation(-left as f32, -top as f32) * transform).into(),
+    None,
+  );
+
+  Some((
+    pixmap.data().iter().skip(3).step_by(4).copied().collect(),
+    placement,
+  ))
 }
 
 #[cfg(test)]

@@ -244,11 +244,8 @@ pub(crate) fn emit_run_glyphs(
         }
       }
       // Color/bitmap glyphs (emoji) have no vector form, so embed the rasterized
-      // pixmap as a `data:image/png` `<image>`. Skipped in the shadow pass.
+      // pixmap as a `data:image/png` `<image>`, as a silhouette in the shadow pass.
       ResolvedGlyph::Bitmap(bitmap) => {
-        if color_override.is_some() {
-          continue;
-        }
         let Some(png) = bitmap.image.encode_png() else {
           continue;
         };
@@ -256,7 +253,10 @@ pub(crate) fn emit_run_glyphs(
         let (width, height) = (bitmap.image.width(), bitmap.image.height());
         let bitmap_matrix = placed * bitmap.image_transform();
         let href = to_data_url("image/png", &png);
-        let group = doc.begin_group(bitmap_matrix, 1.0, None, None)?;
+        let silhouette = color_override
+          .map(|color| doc.silhouette_filter(color))
+          .transpose()?;
+        let group = doc.begin_group(bitmap_matrix, 1.0, None, silhouette.as_deref())?;
         doc.image(
           Frame::new(0.0, 0.0, width as f32, height as f32),
           &href,

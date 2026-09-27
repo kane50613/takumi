@@ -581,6 +581,27 @@ impl SvgDocument {
     }
   }
 
+  /// Defines a filter that fills what it draws with `color`, keeping only the alpha, and returns
+  /// its `url(#id)`.
+  pub(crate) fn silhouette_filter(&mut self, color: Rgba) -> io::Result<String> {
+    let (id, reference) = self.alloc_id("si");
+
+    self.open("filter", &[("id", id.into())])?;
+    self.empty(
+      "feFlood",
+      &[
+        ("flood-color", color.hex().into()),
+        ("flood-opacity", num(color.opacity()).into()),
+      ],
+    )?;
+    self.empty(
+      "feComposite",
+      &[("in2", "SourceAlpha".into()), ("operator", "in".into())],
+    )?;
+    self.close("filter")?;
+    Ok(reference)
+  }
+
   /// Defines a gaussian-blur filter (for text-shadow) and returns its `url(#id)`.
   pub(crate) fn blur_filter(&mut self, std_deviation: f32) -> io::Result<String> {
     let (id, reference) = self.alloc_id("bl");
