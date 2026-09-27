@@ -1279,8 +1279,6 @@ mod tests {
         descent: 10.0,
         underline_offset: -5.0,
         underline_size: 2.0,
-        strikethrough_offset: 20.0,
-        strikethrough_size: 2.0,
       },
       font_size: 100.0,
       font_index: 0,
