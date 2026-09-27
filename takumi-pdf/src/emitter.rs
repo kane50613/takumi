@@ -1723,7 +1723,7 @@ fn device_commands(shape: &FillShape, transform: Affine) -> Vec<PathCommand> {
 /// glyphs draw with text operators so the text stays extractable.
 ///
 /// Approximate: a blurred `text-shadow` fades through the stepped bands of [`Band`], since PDF has
-/// no blur operator, and the shadow a text decoration casts draws sharp.
+/// no blur operator.
 struct TextDevice<'e, 's, 'a> {
   emitter: &'e Emitter<'e>,
   device: SurfaceDevice<'s, 'a>,
@@ -1736,6 +1736,20 @@ struct TextDevice<'e, 's, 'a> {
 
 impl TextDevice<'_, '_, '_> {
   /// `color` and `transform`, or the open shadow's colour and `transform` moved by its offset.
+  /// Runs `draw` once with no spread, or while a blurred shadow is open, once per shadow [`Band`]
+  /// with the stroke width that spreads it, inside a group of the band's opacity.
+  fn in_shadow_bands(&mut self, mut draw: impl FnMut(&mut SurfaceDevice<'_, '_>, f32)) {
+    let Some(shadow) = self.shadow.filter(|shadow| shadow.blur_radius > 0.0) else {
+      return draw(&mut self.device, 0.0);
+    };
+
+    for band in Band::of(shadow.blur_radius) {
+      self.device.begin_layer(band.alpha);
+      draw(&mut self.device, 2.0 * band.spread);
+      self.device.end_layer();
+    }
+  }
+
   fn shadowed(&self, color: Color, transform: Affine) -> (Color, Affine) {
     match self.shadow {
       Some(shadow) => (
@@ -1773,15 +1787,38 @@ impl PaintDevice for TextDevice<'_, '_, '_> {
   fn fill_shape(&mut self, shape: &FillShape, color: Color, transform: Affine) {
     let (color, transform) = self.shadowed(color, transform);
 
-    self.device.fill_shape(shape, color, transform);
+    self.in_shadow_bands(|device, spread| {
+      device.fill_shape(shape, color, transform);
+
+      if spread > 0.0 {
+        device.stroke_shape(
+          shape,
+          &StrokeStyle {
+            color,
+            width: spread,
+            dash: None,
+            round_cap: false,
+          },
+          transform,
+        );
+      }
+    });
   }
 
   fn stroke_shape(&mut self, shape: &FillShape, stroke: &StrokeStyle, transform: Affine) {
     let (color, transform) = self.shadowed(stroke.color, transform);
 
-    self
-      .device
-      .stroke_shape(shape, &StrokeStyle { color, ..*stroke }, transform);
+    self.in_shadow_bands(|device, spread| {
+      device.stroke_shape(
+        shape,
+        &StrokeStyle {
+          color,
+          width: stroke.width + spread,
+          ..*stroke
+        },
+        transform,
+      );
+    });
   }
 
   fn push_clip(&mut self, shape: &FillShape, transform: Affine) {
