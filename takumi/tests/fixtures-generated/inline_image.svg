@@ -17,7 +17,7 @@
     <use href="#g4" x="753.78" y="340"/>
   </g>
   <clipPath id="cp0">
-    <path d="M586.1 276h64v64h-64v-64ZM598.1 288h40v40h-40v-40Z" clip-rule="evenodd"/>
+    <path d="M586.1 276h64v64h-64v-64Zm12 12h40v40h-40v-40Z" clip-rule="evenodd"/>
   </clipPath>
   <g clip-path="url(#cp0)">
     <pattern id="pat1" patternUnits="userSpaceOnUse" x="598.104" y="288" width="40" height="40">
