@@ -215,9 +215,10 @@ struct MirroredRegion {
 }
 
 impl MirroredRegion {
-  fn of(raw: &[u8], region: Placement, padding: u32) -> Self {
-    let width = region.width + padding * 2;
-    let height = region.height + padding * 2;
+  fn of(raw: &[u8], region: Placement, padding: u32) -> Option<Self> {
+    let width = region.width.checked_add(padding.checked_mul(2)?)?;
+    let height = region.height.checked_add(padding.checked_mul(2)?)?;
+    let capacity = checked_area(width, height, 4)?;
     let mirror = |index: u32, size: u32| {
       let period = size as i64 * 2;
       let offset = (index as i64 - padding as i64).rem_euclid(period);
@@ -228,7 +229,7 @@ impl MirroredRegion {
         offset
       }) as usize
     };
-    let mut padded = Vec::with_capacity(width as usize * height as usize * 4);
+    let mut padded = Vec::with_capacity(capacity);
 
     for y in 0..height {
       let row = mirror(y, region.height) * region.width as usize;
@@ -240,12 +241,12 @@ impl MirroredRegion {
       }
     }
 
-    Self {
+    Some(Self {
       raw: padded,
       width,
       height,
       padding,
-    }
+    })
   }
 
   /// The pixels of the original region.
@@ -414,8 +415,12 @@ pub(crate) fn apply_backdrop_filter(
   };
 
   let region_row_bytes = region.width as usize * 4;
-  let padding = backdrop_filter_padding(filters, &context.sizing).max(0) as u32;
-  let mut padded = MirroredRegion::of(&canvas.read_region(region), region, padding);
+  // Padding past the canvas only mirrors the same pixels again, as reading past it used to stop.
+  let padding = backdrop_filter_padding(filters, &context.sizing)
+    .clamp(0, canvas_size.width.max(canvas_size.height) as i32) as u32;
+  let Some(mut padded) = MirroredRegion::of(&canvas.read_region(region), region, padding) else {
+    return Ok(());
+  };
   let Some(mut backdrop_pixmap) =
     PixmapMut::from_bytes(&mut padded.raw, padded.width, padded.height)
   else {
@@ -572,9 +577,32 @@ mod tests {
 
   use super::*;
   use crate::{
+    Fonts, RenderOptions,
+    layout::node::Node,
+    render,
     style::{Angle, PercentageNumber},
     viewport::Viewport,
   };
+
+  #[test]
+  fn a_huge_backdrop_blur_stays_within_the_canvas() {
+    let node: Node = serde_json::from_str(
+      r##"{"type": "container", "style": {"width": "100%", "height": "100%", "backgroundColor": "#ffffff"}, "children": [
+        {"type": "container", "style": {"position": "absolute", "left": "10px", "top": "10px", "width": "40px", "height": "40px", "backdropFilter": "blur(20000px)"}, "children": []}
+      ]}"##,
+    )
+    .unwrap();
+    let fonts = Fonts::default();
+
+    render(
+      RenderOptions::builder()
+        .viewport(Viewport::new((64, 64)))
+        .node(node)
+        .fonts(&fonts)
+        .build(),
+    )
+    .unwrap();
+  }
 
   #[test]
   fn mask_bounds_span_the_first_and_last_visible_pixels() {
