@@ -1972,8 +1972,8 @@ impl GlyphDevice for TextDevice<'_, '_, '_> {
             ..Stroke::default()
           }));
           surface.draw_glyphs(origin, &glyphs, font.clone(), text, shaped.font_size, true);
-          if let Some(outlines) = colors.as_ref().and_then(|colors| colors.outlines.as_ref()) {
-            surface.draw_path(outlines);
+          if let Some(colors) = &colors {
+            colors.draw_outlines(surface);
           }
           surface.pop();
         }
@@ -2003,9 +2003,7 @@ impl GlyphDevice for TextDevice<'_, '_, '_> {
           shadow_color.is_some(),
         );
         if let Some(colors) = &colors {
-          if let Some(outlines) = &colors.outlines {
-            surface.draw_path(outlines);
-          }
+          colors.draw_outlines(surface);
           #[cfg(feature = "images")]
           draw_silhouettes(&colors.bitmaps, rgba, surface);
         }
