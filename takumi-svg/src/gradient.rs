@@ -6,10 +6,9 @@ use takumi_core::{
   context::RenderContext,
   geometry::Rect,
   layout::background_image_geometry::{BackgroundImageGeometry, BackgroundLayer},
-  paint::{ColorLut, ConicGradientTile},
+  paint::{ConicGradientTile, SrgbStop},
   style::{
-    BackgroundImage, BlendMode, ColorInterpolationMethod, ConicGradient, FillRule, LinearGradient,
-    RadialGradient, ResolvedGradientStop, ToCss,
+    BackgroundImage, BlendMode, ConicGradient, FillRule, LinearGradient, RadialGradient, ToCss,
   },
 };
 
@@ -157,12 +156,20 @@ impl<'a, 'd> LayerEmitter<'a, 'd> {
     let (t0, t1, stops) = if gradient.repeating {
       let first = resolved.first().map_or(0.0, |s| s.position);
       let last = resolved.last().map_or(geometry.axis_length, |s| s.position);
-      (first, last, svg_stops(resolved, first, last - first))
+      (
+        first,
+        last,
+        svg_stops(SrgbStop::spanned(resolved, first, last - first)),
+      )
     } else {
       (
         0.0,
         geometry.axis_length,
-        lut_svg_stops(resolved, geometry.axis_length, gradient.interpolation),
+        svg_stops(SrgbStop::sampled(
+          resolved,
+          geometry.axis_length,
+          gradient.interpolation,
+        )),
       )
     };
     let paint = self
@@ -193,12 +200,16 @@ impl<'a, 'd> LayerEmitter<'a, 'd> {
         .map_or(geometry.radius_scale, |s| s.position);
       (
         (last - first).max(1e-6),
-        svg_stops(resolved, first, last - first),
+        svg_stops(SrgbStop::spanned(resolved, first, last - first)),
       )
     } else {
       (
         geometry.radius_scale,
-        lut_svg_stops(resolved, geometry.radius_scale, gradient.interpolation),
+        svg_stops(SrgbStop::sampled(
+          resolved,
+          geometry.radius_scale,
+          gradient.interpolation,
+        )),
       )
     };
     let scale = (
@@ -264,83 +275,12 @@ impl<'a, 'd> LayerEmitter<'a, 'd> {
   }
 }
 
-fn svg_stops(stops: &[ResolvedGradientStop], base: f32, span: f32) -> Vec<GradientStop> {
-  let span = span.max(1e-6);
+fn svg_stops(stops: Vec<SrgbStop>) -> Vec<GradientStop> {
   stops
-    .iter()
+    .into_iter()
     .map(|stop| GradientStop {
-      offset: ((stop.position - base) / span).clamp(0.0, 1.0),
+      offset: stop.offset,
       color: Rgba(stop.color.0),
     })
     .collect()
-}
-
-/// Number of stops sampled from the gradient color LUT for vector emission.
-const GRADIENT_LUT_STOPS: usize = 64;
-
-/// Builds dense SVG gradient stops by sampling takumi's interpolated color LUT, baking the
-/// gradient's interpolation color space (e.g. OKLCH) into evenly-spaced sRGB stops. SVG only
-/// interpolates between stops in sRGB, so sampling the LUT is how the vector output matches the
-/// raster backend for non-sRGB interpolation.
-fn lut_svg_stops(
-  resolved: &[ResolvedGradientStop],
-  axis_length: f32,
-  interpolation: ColorInterpolationMethod,
-) -> Vec<GradientStop> {
-  let lut = ColorLut::new(
-    resolved,
-    axis_length.max(1e-6),
-    GRADIENT_LUT_STOPS,
-    interpolation,
-    false,
-  );
-  let lut = lut.colors();
-  if lut.len() <= 1 {
-    return svg_stops(resolved, 0.0, axis_length);
-  }
-  let span = axis_length.max(1e-6);
-  let cell = 1.0 / (lut.len() - 1) as f32;
-
-  // Hard stops: adjacent resolved stops with (near-)equal positions.
-  let mut hard_stops = Vec::new();
-  for pair in resolved.windows(2) {
-    let (a, b) = (&pair[0], &pair[1]);
-    if (b.position - a.position).abs() <= 1e-3 {
-      hard_stops.push((
-        (a.position / span).clamp(0.0, 1.0),
-        Rgba(a.color.0),
-        Rgba(b.color.0),
-      ));
-    }
-  }
-
-  let mut stops: Vec<GradientStop> = lut
-    .iter()
-    .enumerate()
-    .filter_map(|(index, &premultiplied)| {
-      let offset = index as f32 / (lut.len() - 1) as f32;
-      // Drop LUT samples that straddle a hard stop; the injected pair covers it.
-      let straddles = hard_stops
-        .iter()
-        .any(|(boundary, ..)| (offset - boundary).abs() < cell);
-
-      (!straddles).then(|| GradientStop {
-        offset,
-        color: Rgba::demultiplied(premultiplied),
-      })
-    })
-    .collect();
-
-  for (boundary, before, after) in hard_stops {
-    stops.push(GradientStop {
-      offset: boundary,
-      color: before,
-    });
-    stops.push(GradientStop {
-      offset: boundary,
-      color: after,
-    });
-  }
-  stops.sort_by(|a, b| a.offset.total_cmp(&b.offset));
-  stops
 }

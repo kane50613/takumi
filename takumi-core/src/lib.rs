@@ -64,7 +64,7 @@ pub mod paint {
   pub use crate::style::properties::{
     conic_gradient::ConicGradientTile,
     filter::compose_transfer_table,
-    gradient_utils::{ColorLut, GradientOverlayTile},
+    gradient_utils::{ColorLut, GradientOverlayTile, SrgbStop},
     linear_gradient::{LinearGradientFastPathKind, LinearGradientGeometry, LinearGradientTile},
     radial_gradient::{RadialGradientGeometry, RadialGradientTile},
   };
