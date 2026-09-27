@@ -494,3 +494,25 @@ fn utility_state_stops_at_its_element() {
 
   assert_eq!(result.children[0].width, 80.0);
 }
+
+#[test]
+fn structural_pseudo_classes_skip_text_nodes() {
+  let root = Node::container([
+    Node::text(" "),
+    block("probe"),
+    Node::text(" "),
+    block("probe"),
+    Node::text(" "),
+  ]);
+  let result = measure_with_css(
+    root,
+    r#"
+      .probe:first-child { width: 100px; }
+      .probe:last-child { width: 200px; }
+    "#,
+  );
+  let widths: Vec<f32> = result.children.iter().map(|child| child.width).collect();
+
+  assert!(widths.contains(&100.0), "{widths:?}");
+  assert!(widths.contains(&200.0), "{widths:?}");
+}
