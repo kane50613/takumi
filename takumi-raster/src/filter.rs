@@ -199,12 +199,8 @@ fn mask_bounds(mask: &[u8], width: u32, height: u32) -> Option<Placement> {
 fn backdrop_filter_padding(filters: &[Filter], sizing: &SizingContext) -> i32 {
   filters
     .iter()
-    .filter_map(|filter| match filter {
-      Filter::Blur(radius) => {
-        Some((radius.to_px(sizing, 1.0) * BlurType::Filter.extent_multiplier()).ceil() as i32)
-      }
-      _ => None,
-    })
+    .filter(|filter| !filter.is_drop_shadow())
+    .map(|filter| filter.reach(sizing).ceil() as i32)
     .max()
     .unwrap_or(0)
 }
