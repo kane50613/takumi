@@ -29,6 +29,7 @@ use crate::{
     node::{Node, NodeStyleLayers, TextData},
   },
   matching::{MatchedDeclarationsView, NodeMatchedDeclarations, match_stylesheets_view},
+  resources::font::PrimaryFontMetrics,
   style::{
     Affine, BackgroundImage, BackgroundImages, Color, ComputedStyle, ContentItem, ContentValue,
     Display, Float, Length, LineHeight, ListStylePosition, Position, SizingContext,
@@ -2006,6 +2007,18 @@ impl RenderContext {
     if !matches!(style.line_height, LineHeight::Normal) {
       return 0.0;
     }
+
+    self
+      .primary_font_metrics(style, font_size)
+      .map_or(font_size, PrimaryFontMetrics::line_spacing)
+  }
+
+  /// The metrics of `style`'s primary font at `font_size`.
+  pub(crate) fn primary_font_metrics(
+    &self,
+    style: &ComputedStyle,
+    font_size: f32,
+  ) -> Option<PrimaryFontMetrics> {
     let attributes = Attributes {
       width: style.font_stretch.into_parlance(),
       style: style.font_style.into_parlance(),
@@ -2027,10 +2040,8 @@ impl RenderContext {
     }
     hasher.write_u32(font_size.to_bits());
 
-    self.normal_line_height(hasher.finish(), || {
-      self
-        .first_font_line_spacing(font_family.query_families(), attributes, font_size)
-        .unwrap_or(font_size)
+    self.cached_primary_font_metrics(hasher.finish(), || {
+      self.first_font_metrics(font_family.query_families(), attributes, font_size)
     })
   }
 
