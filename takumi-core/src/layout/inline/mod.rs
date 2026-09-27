@@ -1228,12 +1228,12 @@ mod tests {
   use crate::{
     Fonts,
     context::RenderContext,
-    geometry::{Point, Rect},
+    geometry::{PathCommand, Point, Rect},
     layout::{node::Node, tree::RenderNode},
     resources::font::{FontOverride, FontResource, GenericFamily},
     style::{
       Affine, BorderStyle, Color, ColorInput, Display, FontSize, Length, Sides, SizingContext,
-      Style, StyleDeclaration, WhiteSpace,
+      SpacePair, Style, StyleDeclaration, WhiteSpace,
     },
     viewport::Viewport,
   };
@@ -1785,6 +1785,22 @@ mod tests {
         .collect::<Vec<_>>(),
       [false, false, true]
     );
+  }
+
+  #[test]
+  fn equal_width_lines_round_to_one_rectangle() {
+    let rects: Vec<InlineOutlineRect> = (0..50)
+      .map(|line| outline_rect(0, line, 0.0, line as f32 * 10.0, 40.0))
+      .collect();
+    let island = OutlineIsland::of(&rects).remove(0);
+    let radius = Sides([SpacePair::from_single(4.0); 4]);
+    let arcs = island
+      .rounded_contour(0.0, radius, radius)
+      .iter()
+      .filter(|command| matches!(command, PathCommand::CubicTo(..)))
+      .count();
+
+    assert_eq!(arcs, 4);
   }
 
   #[test]

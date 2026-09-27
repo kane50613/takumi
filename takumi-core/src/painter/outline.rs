@@ -124,7 +124,7 @@ impl OutlineIsland {
           device.fill_shape(&self.ring(inner, inner + third), color, at);
         }
         BorderStyle::Dashed | BorderStyle::Dotted => {
-          device.push_clip(&self.ring(inner, outer), at);
+          device.push_clip(&self.square_ring(inner, outer), at);
 
           let corners = self.corners(inner + width / 2.0);
           let half = width / 2.0;
@@ -187,30 +187,40 @@ impl OutlineIsland {
   /// `ComplexOutlinePainter` rounds them.
   fn ring(&self, inner: f32, outer: f32) -> FillShape {
     let radius = self.radius();
-    let commands = if radius
+
+    if radius
       .0
       .iter()
       .all(|corner| corner.x <= 0.0 || corner.y <= 0.0)
     {
-      let mut commands = self.contour(outer);
+      return self.square_ring(inner, outer);
+    }
 
-      commands.extend(self.contour(inner));
-      commands
-    } else {
-      let grown = |by: f32| {
-        let mut border = BorderProperties {
-          radius,
-          ..BorderProperties::default()
-        };
-
-        border.expand_by(Sides::from(by).into());
-        border.radius
+    let grown = |by: f32| {
+      let mut border = BorderProperties {
+        radius,
+        ..BorderProperties::default()
       };
-      let mut commands = self.rounded_contour(outer, grown(outer), grown(inner));
 
-      commands.extend(self.rounded_contour(inner, grown(inner), grown(outer)));
-      commands
+      border.expand_by(Sides::from(by).into());
+      border.radius
     };
+    let mut commands = self.rounded_contour(outer, grown(outer), grown(inner));
+
+    commands.extend(self.rounded_contour(inner, grown(inner), grown(outer)));
+
+    FillShape::Path {
+      commands,
+      rule: FillRule::EvenOdd,
+    }
+  }
+
+  /// The band between the contours `inner` and `outer` past the island's rects, with square
+  /// corners.
+  fn square_ring(&self, inner: f32, outer: f32) -> FillShape {
+    let mut commands = self.contour(outer);
+
+    commands.extend(self.contour(inner));
 
     FillShape::Path {
       commands,
@@ -233,7 +243,7 @@ impl OutlineIsland {
     let inner_corners = self.corners(inner);
 
     if outer_corners.len() != inner_corners.len() {
-      return device.fill_shape(&self.ring(inner, outer), color, at);
+      return device.fill_shape(&self.square_ring(inner, outer), color, at);
     }
 
     let count = outer_corners.len();
