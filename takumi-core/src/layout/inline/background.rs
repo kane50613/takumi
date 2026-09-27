@@ -68,7 +68,7 @@ impl VerticalExtent {
 
 /// What a covering item contributes vertically to a span's fragment.
 pub(super) enum CoverExtent {
-  /// A glyph run's leaded box; sizes the fragment when the run's font size matches the span's own.
+  /// A glyph run's content area; sizes the fragment when the run's font size matches the span's own.
   Run {
     font_size: f32,
     top: f32,

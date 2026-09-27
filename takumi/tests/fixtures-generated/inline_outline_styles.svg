@@ -115,64 +115,71 @@
     <use href="#g8" x="825.35" y="183.8"/>
     <use href="#g0" x="844.08" y="183.8"/>
   </g>
-  <path d="M74 54h85.64v86.8h-85.64Zm6 6h73.64v74.8h-73.64Z" fill="#2563eb" fill-rule="evenodd"/>
+  <path d="M74 69h85.64v56h-85.64Zm6 6h73.64v44h-73.64Z" fill="#2563eb" fill-rule="evenodd"/>
   <clipPath id="cp0">
-    <path d="M180.96 54h126.07v86.8h-126.07Zm6 6h114.07v74.8h-114.07Z" clip-rule="evenodd"/>
+    <path d="M180.96 69h126.07v56h-126.07Zm6 6h114.07v44h-114.07Z" clip-rule="evenodd"/>
   </clipPath>
   <g clip-path="url(#cp0)">
-    <path d="M180.96 57h126.07" fill="none" stroke="#e11d48" stroke-width="6" stroke-dasharray="12 7.012"/>
-    <path d="M304.03 54v86.8" fill="none" stroke="#e11d48" stroke-width="6" stroke-dasharray="12 6.7"/>
-    <path d="M180.96 137.8h126.07" fill="none" stroke="#e11d48" stroke-width="6" stroke-dasharray="12 7.012"/>
-    <path d="M183.96 54v86.8" fill="none" stroke="#e11d48" stroke-width="6" stroke-dasharray="12 6.7"/>
+    <path d="M180.96 72h126.07" fill="none" stroke="#e11d48" stroke-width="6" stroke-dasharray="12 7.012"/>
+    <path d="M304.03 69v56" fill="none" stroke="#e11d48" stroke-width="6" stroke-dasharray="12 2.667"/>
+    <path d="M180.96 122h126.07" fill="none" stroke="#e11d48" stroke-width="6" stroke-dasharray="12 7.012"/>
+    <path d="M183.96 69v56" fill="none" stroke="#e11d48" stroke-width="6" stroke-dasharray="12 2.667"/>
   </g>
   <clipPath id="cp1">
-    <path d="M328.35 54h112.34v86.8h-112.34Zm6 6h100.34v74.8h-100.34Z" clip-rule="evenodd"/>
+    <path d="M328.35 69h112.34v56h-112.34Zm6 6h100.34v44h-100.34Z" clip-rule="evenodd"/>
   </clipPath>
   <g clip-path="url(#cp1)">
-    <path d="M331.35 57h106.34" fill="none" stroke="#16a34a" stroke-width="6" stroke-dasharray="0 11.805" stroke-linecap="round"/>
-    <path d="M437.69 57v80.8" fill="none" stroke="#16a34a" stroke-width="6" stroke-dasharray="0 11.533" stroke-linecap="round"/>
-    <path d="M331.35 137.8h106.34" fill="none" stroke="#16a34a" stroke-width="6" stroke-dasharray="0 11.805" stroke-linecap="round"/>
-    <path d="M331.35 57v80.8" fill="none" stroke="#16a34a" stroke-width="6" stroke-dasharray="0 11.533" stroke-linecap="round"/>
+    <path d="M331.35 72h106.34" fill="none" stroke="#16a34a" stroke-width="6" stroke-dasharray="0 11.805" stroke-linecap="round"/>
+    <path d="M437.69 72v50" fill="none" stroke="#16a34a" stroke-width="6" stroke-dasharray="0 12.49" stroke-linecap="round"/>
+    <path d="M331.35 122h106.34" fill="none" stroke="#16a34a" stroke-width="6" stroke-dasharray="0 11.805" stroke-linecap="round"/>
+    <path d="M331.35 72v50" fill="none" stroke="#16a34a" stroke-width="6" stroke-dasharray="0 12.49" stroke-linecap="round"/>
   </g>
-  <path d="M459.01 51h124.08v92.8h-124.08Zm3 3h118.08v86.8h-118.08Z" fill="#9333ea" fill-rule="evenodd"/>
-  <path d="M465.01 57h112.08v80.8h-112.08Zm3 3h106.08v74.8h-106.08Z" fill="#9333ea" fill-rule="evenodd"/>
-  <path d="M599.41 52h121.91l-4 4h-113.91Z" fill="#272d37"/>
-  <path d="M721.32 52v90.8l-4-4v-82.8Z" fill="#64748b"/>
-  <path d="M721.32 142.8h-121.91l4-4h113.91Z" fill="#64748b"/>
-  <path d="M599.41 142.8v-90.8l4 4v82.8Z" fill="#272d37"/>
-  <path d="M603.41 56h113.91l-4 4h-105.91Z" fill="#64748b"/>
-  <path d="M717.32 56v82.8l-4-4v-74.8Z" fill="#272d37"/>
-  <path d="M717.32 138.8h-113.91l4-4h105.91Z" fill="#272d37"/>
-  <path d="M603.41 138.8v-82.8l4 4v74.8Z" fill="#64748b"/>
-  <path d="M738.64 52h94.64l-4 4h-86.64Z" fill="#64748b"/>
-  <path d="M833.28 52v90.8l-4-4v-82.8Z" fill="#272d37"/>
-  <path d="M833.28 142.8h-94.64l4-4h86.64Z" fill="#272d37"/>
-  <path d="M738.64 142.8v-90.8l4 4v82.8Z" fill="#64748b"/>
-  <path d="M742.64 56h86.64l-4 4h-78.64Z" fill="#272d37"/>
-  <path d="M829.28 56v82.8l-4-4v-74.8Z" fill="#64748b"/>
-  <path d="M829.28 138.8h-86.64l4-4h78.64Z" fill="#64748b"/>
-  <path d="M742.64 138.8v-82.8l4 4v74.8Z" fill="#272d37"/>
-  <path d="M850.6 52h92.57l-8 8h-76.57Z" fill="#272d37"/>
-  <path d="M943.17 52v90.8l-8-8v-74.8Z" fill="#64748b"/>
-  <path d="M943.17 142.8h-92.57l8-8h76.57Z" fill="#64748b"/>
-  <path d="M850.6 142.8v-90.8l8 8v74.8Z" fill="#272d37"/>
-  <path d="M960.49 52h115.24l-8 8h-99.24Z" fill="#64748b"/>
-  <path d="M1075.73 52v90.8l-8-8v-74.8Z" fill="#272d37"/>
-  <path d="M1075.73 142.8h-115.24l8-8h99.24Z" fill="#272d37"/>
-  <path d="M960.49 142.8v-90.8l8 8v74.8Z" fill="#64748b"/>
+  <path d="M459.01 66h124.08v62h-124.08Zm3 3h118.08v56h-118.08Z" fill="#9333ea" fill-rule="evenodd"/>
+  <path d="M465.01 72h112.08v50h-112.08Zm3 3h106.08v44h-106.08Z" fill="#9333ea" fill-rule="evenodd"/>
+  <path d="M599.41 67h121.91l-4 4h-113.91Z" fill="#272d37"/>
+  <path d="M721.32 67v60l-4-4v-52Z" fill="#64748b"/>
+  <path d="M721.32 127h-121.91l4-4h113.91Z" fill="#64748b"/>
+  <path d="M599.41 127v-60l4 4v52Z" fill="#272d37"/>
+  <path d="M603.41 71h113.91l-4 4h-105.91Z" fill="#64748b"/>
+  <path d="M717.32 71v52l-4-4v-44Z" fill="#272d37"/>
+  <path d="M717.32 123h-113.91l4-4h105.91Z" fill="#272d37"/>
+  <path d="M603.41 123v-52l4 4v44Z" fill="#64748b"/>
+  <path d="M738.64 67h94.64l-4 4h-86.64Z" fill="#64748b"/>
+  <path d="M833.28 67v60l-4-4v-52Z" fill="#272d37"/>
+  <path d="M833.28 127h-94.64l4-4h86.64Z" fill="#272d37"/>
+  <path d="M738.64 127v-60l4 4v52Z" fill="#64748b"/>
+  <path d="M742.64 71h86.64l-4 4h-78.64Z" fill="#272d37"/>
+  <path d="M829.28 71v52l-4-4v-44Z" fill="#64748b"/>
+  <path d="M829.28 123h-86.64l4-4h78.64Z" fill="#64748b"/>
+  <path d="M742.64 123v-52l4 4v44Z" fill="#272d37"/>
+  <path d="M850.6 67h92.57l-8 8h-76.57Z" fill="#272d37"/>
+  <path d="M943.17 67v60l-8-8v-44Z" fill="#64748b"/>
+  <path d="M943.17 127h-92.57l8-8h76.57Z" fill="#64748b"/>
+  <path d="M850.6 127v-60l8 8v44Z" fill="#272d37"/>
+  <path d="M960.49 67h115.24l-8 8h-99.24Z" fill="#64748b"/>
+  <path d="M1075.73 67v60l-8-8v-44Z" fill="#272d37"/>
+  <path d="M1075.73 127h-115.24l8-8h99.24Z" fill="#272d37"/>
+  <path d="M960.49 127v-60l8 8v44Z" fill="#64748b"/>
   <g opacity=".502">
     <clipPath id="cp2">
-      <path d="M1091.05 50h47.24v74.8h-266.53v94.8h-801.76v-74.8h1021.05Zm6 6h35.24v74.8h-266.53v82.8h-789.76v-74.8h1021.05Z" clip-rule="evenodd"/>
+      <path d="M1091.05 65h47.24v64h-47.24Zm6 6h35.24v52h-35.24Z" clip-rule="evenodd"/>
     </clipPath>
     <g clip-path="url(#cp2)">
-      <path d="M1091.05 53h47.24" fill="none" stroke="#e11d48" stroke-width="6" stroke-dasharray="12 5.617"/>
-      <path d="M1135.29 50v80.8" fill="none" stroke="#e11d48" stroke-width="6" stroke-dasharray="12 5.2"/>
-      <path d="M865.76 127.8h272.53" fill="none" stroke="#e11d48" stroke-width="6" stroke-dasharray="12 6.609"/>
-      <path d="M868.76 124.8v94.8" fill="none" stroke="#e11d48" stroke-width="6" stroke-dasharray="12 4.56"/>
-      <path d="M70 216.6h801.76" fill="none" stroke="#e11d48" stroke-width="6" stroke-dasharray="12 5.949"/>
-      <path d="M73 138.8v80.8" fill="none" stroke="#e11d48" stroke-width="6" stroke-dasharray="12 5.2"/>
-      <path d="M70 141.8h1027.05" fill="none" stroke="#e11d48" stroke-width="6" stroke-dasharray="12 6.126"/>
-      <path d="M1094.05 50v94.8" fill="none" stroke="#e11d48" stroke-width="6" stroke-dasharray="12 4.56"/>
+      <path d="M1091.05 68h47.24" fill="none" stroke="#e11d48" stroke-width="6" stroke-dasharray="12 5.617"/>
+      <path d="M1135.29 65v64" fill="none" stroke="#e11d48" stroke-width="6" stroke-dasharray="12 5.333"/>
+      <path d="M1091.05 126h47.24" fill="none" stroke="#e11d48" stroke-width="6" stroke-dasharray="12 5.617"/>
+      <path d="M1094.05 65v64" fill="none" stroke="#e11d48" stroke-width="6" stroke-dasharray="12 5.333"/>
+    </g>
+  </g>
+  <g opacity=".502">
+    <clipPath id="cp3">
+      <path d="M70 139.8h801.76v64h-801.76Zm6 6h789.76v52h-789.76Z" clip-rule="evenodd"/>
+    </clipPath>
+    <g clip-path="url(#cp3)">
+      <path d="M70 142.8h801.76" fill="none" stroke="#e11d48" stroke-width="6" stroke-dasharray="12 5.949"/>
+      <path d="M868.76 139.8v64" fill="none" stroke="#e11d48" stroke-width="6" stroke-dasharray="12 5.333"/>
+      <path d="M70 200.8h801.76" fill="none" stroke="#e11d48" stroke-width="6" stroke-dasharray="12 5.949"/>
+      <path d="M73 139.8v64" fill="none" stroke="#e11d48" stroke-width="6" stroke-dasharray="12 5.333"/>
     </g>
   </g>
   <defs>

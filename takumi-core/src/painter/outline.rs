@@ -53,7 +53,8 @@ impl OutlineIsland {
   /// `origin`, after Blink's `ComplexOutlinePainter`.
   ///
   /// Approximate: the contour keeps square corners, where Blink rounds them when the element has
-  /// a `border-radius`. Follows Blink under the notice in LICENSE-CHROMIUM.
+  /// a `border-radius`, and the inner edge follows the rects grown by `outline-offset`, where Blink
+  /// shrinks the outer contour. Follows Blink under the notice in LICENSE-CHROMIUM.
   pub fn paint<D: PaintDevice>(
     &self,
     spans: &[ProcessedInlineSpan<'_>],

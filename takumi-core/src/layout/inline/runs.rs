@@ -350,44 +350,32 @@ impl BuiltInlineLayout<'_> {
             fonts.resolve_glyphs(&glyph_run, font, glyphs.iter().map(|glyph| glyph.id))
           });
 
-          if need_outline && let Some(span_id) = brush.source_span_id {
-            outline_rects.push(
-              InlineOutlineRect {
-                span_id,
-                line_index,
-                x: content.x + glyph_run.offset(),
-                y: content.y + glyph_run.baseline() + setup.baseline_shift
-                  - setup.resolved_metrics.resolved_ascent,
-                width: glyph_run.advance(),
-                height: setup.resolved_metrics.resolved_line_height,
-              }
-              .scaled(setup.state, static_inline_prefix),
-            );
-          }
-
           let metrics = run.metrics();
-
-          if let Some(span_id) = brush.source_span_id
-            && let Some(ProcessedInlineSpan::Text {
-              decorations: Some(chain),
-              ..
-            }) = spans.get(span_id as usize)
-          {
-            // The run's leaded box, like Blink's inline box fragment
-            // (`InlineBoxState::ComputeTextMetrics` adds the line-height
-            // leading to the font height).
-            let (above, below) =
-              brush.line_box_contribution(metrics.line_height, metrics.ascent, metrics.descent);
-            let rect = InlineOutlineRect {
+          // The font's rounded ascent and descent, without the line-height leading, like the
+          // inline box fragment `InlineBoxState::ComputeTextMetrics` sizes.
+          let ascent = metrics.ascent.round();
+          let content_area = brush.source_span_id.map(|span_id| {
+            InlineOutlineRect {
               span_id,
               line_index,
               x: content.x + glyph_run.offset(),
-              y: content.y + glyph_run.baseline() + setup.baseline_shift - above,
+              y: content.y + glyph_run.baseline() + setup.baseline_shift - ascent,
               width: glyph_run.advance(),
-              height: above + below,
+              height: ascent + metrics.descent.round(),
             }
-            .scaled(setup.state, static_inline_prefix);
+            .scaled(setup.state, static_inline_prefix)
+          });
 
+          if need_outline && let Some(rect) = content_area {
+            outline_rects.push(rect);
+          }
+
+          if let Some(rect) = content_area
+            && let Some(ProcessedInlineSpan::Text {
+              decorations: Some(chain),
+              ..
+            }) = spans.get(rect.span_id as usize)
+          {
             decoration_coverage.cover(
               Some(chain),
               line_index,
@@ -397,7 +385,7 @@ impl BuiltInlineLayout<'_> {
                 font_size: run.font_size(),
                 top: rect.y,
                 bottom: rect.y + rect.height,
-                baseline: rect.y + above * setup.state.scale,
+                baseline: rect.y + ascent * setup.state.scale,
               },
             );
           }
