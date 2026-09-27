@@ -742,13 +742,14 @@ impl<'r> LayoutTree<'r> {
     inputs: LayoutInput,
     block_ctx: Option<&mut BlockContext<'_>>,
   ) -> LayoutOutput {
-    let inputs = self.out_of_flow_inputs(node, inputs);
-
+    // Styles resolve against the space taffy offered, before it shrinks for the insets.
     self.update_node_style_for_available_space(
       node,
       Size::from_taffy(inputs.available_space).map(AvailableSpace::from_taffy),
       Size::from_taffy(inputs.known_dimensions),
     );
+
+    let inputs = self.out_of_flow_inputs(node, inputs);
 
     if inputs.run_mode == RunMode::PerformHiddenLayout {
       return compute_hidden_layout(self, node);
