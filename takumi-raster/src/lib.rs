@@ -36,7 +36,6 @@ mod webp;
 mod write;
 
 pub(crate) use background_drawing::*;
-pub(crate) use blend::*;
 pub(crate) use canvas::*;
 pub(crate) use components::*;
 pub(crate) use debug_drawing::*;
