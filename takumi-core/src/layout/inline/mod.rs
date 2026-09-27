@@ -754,9 +754,9 @@ fn build_inline_layout_tree<'c>(
           index_pos,
           spans.len() as u64,
         ));
-        // An out-of-flow box is opaque to white space collapsing, as Blink's
+        // A float or an out-of-flow box is opaque to white space collapsing, as Blink's
         // `InlineItemsBuilder::AppendOpaque` leaves the spaces around it adjacent.
-        if !render_node.is_out_of_flow() {
+        if render_node.inline_box_kind() == InlineBoxKind::InFlow {
           previous_collapsible_space = false;
           previous_was_line_break = false;
         }

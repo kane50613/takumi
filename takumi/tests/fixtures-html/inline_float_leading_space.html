@@ -1,0 +1,38 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>inline_float_leading_space</title>
+    <base href="../../../" />
+    <link rel="stylesheet" href="takumi/tests/shared.css" />
+  </head>
+  <body style="width: 360px; height: 200px">
+    <div
+      style="
+        display: block;
+        width: 100%;
+        height: 100%;
+        padding: 24px;
+        background-color: rgb(255, 255, 255);
+        font-family: Geist;
+        font-size: 20px;
+        line-height: 32px;
+        color: rgb(15, 23, 42);
+      "
+    >
+      <div style="display: block; background-color: rgb(241, 245, 249)">
+        <span
+          style="float: left; width: 40px; height: 24px; background-color: rgb(147, 197, 253)"
+        ></span>
+        text after a float
+      </div>
+      <div style="display: block; background-color: rgb(241, 245, 249)">
+        a long first line that wraps
+        <span
+          style="float: right; width: 40px; height: 24px; background-color: rgb(252, 165, 165)"
+        ></span>
+        then more
+      </div>
+    </div>
+  </body>
+</html>
