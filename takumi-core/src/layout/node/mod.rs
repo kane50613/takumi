@@ -1,5 +1,6 @@
 mod container;
 mod image;
+mod input;
 mod text;
 
 use std::{
@@ -10,7 +11,6 @@ use std::{
 
 use serde::Deserialize;
 
-use self::container::deserialize_children;
 pub use self::image::resolve_image;
 use crate::{
   Xxh3HashSet,
@@ -26,8 +26,7 @@ use crate::{
 };
 
 /// Shared metadata stored by every renderable node.
-#[derive(Debug, Clone, Default, Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[derive(Debug, Clone, Default)]
 pub(crate) struct NodeMetadata {
   /// The element's tag name.
   pub tag_name: Option<Box<str>>,
@@ -266,26 +265,21 @@ impl From<(Arc<str>, Option<f32>, Option<f32>)> for ImageData {
   }
 }
 
-#[derive(Debug, Clone, Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[derive(Debug, Clone)]
 /// A renderable node with shared metadata and variant-specific content.
 pub struct Node {
-  #[serde(flatten)]
   pub(crate) metadata: NodeMetadata,
   /// The variant-specific content of this node.
-  #[serde(flatten)]
   pub kind: NodeKind,
 }
 
 /// Represents the nodes enum.
-#[derive(Debug, Clone, Deserialize)]
-#[serde(tag = "type", rename_all = "camelCase")]
+#[derive(Debug, Clone)]
 #[non_exhaustive]
 pub enum NodeKind {
   /// A node that contains other nodes.
   Container {
     /// The container child nodes.
-    #[serde(default, deserialize_with = "deserialize_children")]
     children: Vec<Node>,
   },
   /// A node that displays an image.
