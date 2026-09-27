@@ -42,6 +42,8 @@ pub struct ClipNode {
   pub transform: Affine,
   /// The region.
   pub shape: FillShape,
+  /// Child-index path from the root to the box whose `overflow` the clip is.
+  pub owner: Vec<usize>,
 }
 
 /// A group composited as one, such as `opacity` or `filter`.
@@ -106,6 +108,7 @@ impl NodeProperties {
           parent: state.clip,
           transform: transform * Affine::translation(origin.x, origin.y),
           shape,
+          owner: path.to_vec(),
         })
       })
       .or(state.clip);

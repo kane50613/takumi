@@ -1,7 +1,7 @@
 //! Walks the stacking-context scene in paint order, recording each node and the steps that
 //! paint it.
 
-use std::{collections::HashMap, mem, ptr};
+use std::{collections::HashMap, ptr};
 
 use super::{
   document::{
@@ -13,7 +13,7 @@ use super::{
 };
 use crate::{
   context::RenderContext,
-  error::Result,
+  error::{Error, Result},
   font_style::SizedFontStyle,
   geometry::{ComputedLayout, Point, Size},
   layout::{
@@ -26,12 +26,14 @@ use crate::{
     node::{ImageData, ImageSourceInput, NodeKind as InputKind},
     tree::RenderNode,
   },
+  paint_chunk::{ChunkPart, ConversionContext, PaintChunk, PropertySink},
+  paint_property::{ClipId, ClipNode, EffectId, EffectNode},
   painter::{
     BackgroundClipArea, BoxFrame, BoxPainter, FillShape, GlyphFill, OverflowClip, OwnContent,
     PaintDevice,
   },
   resources::image::{sniff_mime, to_data_url},
-  scene::{BoxPart, NodePaint, PaintItemKind, PaintPhase, Scene},
+  scene::{NodePaint, Scene},
   style::{
     Affine, BackgroundClip, BackgroundImage, ComputedStyle, Direction, Filter, Isolation,
     TextAlign, ToCss,
@@ -46,14 +48,6 @@ struct Placed<'n> {
   transform: Affine,
   path: &'n [usize],
   parent: usize,
-}
-
-/// A box whose steps are still open: its group, its overflow clip, and its outline.
-struct OpenBox {
-  node: usize,
-  group: bool,
-  clip: bool,
-  outline: bool,
 }
 
 /// Builds a document's nodes and steps from laid-out scenes.
@@ -81,141 +75,45 @@ impl Walker {
     walker
   }
 
-  /// Records `scene`, its element paths under `prefix`.
+  /// Records `scene`, its element paths under `prefix`, chunk by chunk under their clips and
+  /// effects.
   pub(super) fn scene(&mut self, scene: &Scene, prefix: &[usize]) -> Result<()> {
-    self.context(scene, 0, prefix)
-  }
+    let chunks = PaintChunk::in_paint_order(&scene.contexts);
+    let owners = PaintChunk::effect_owners(&chunks, &scene.properties);
+    let paints: HashMap<&[usize], &NodePaint> = chunks
+      .iter()
+      .map(|chunk| (chunk.node.path.as_slice(), chunk.node))
+      .collect();
+    let mut conversion = ConversionContext::new(
+      &scene.properties,
+      StepWriter {
+        walker: self,
+        scene,
+        prefix,
+        owners: &owners,
+        paints: &paints,
+        boxes: HashMap::new(),
+        open: Vec::new(),
+        error: None,
+      },
+    );
 
-  fn context(&mut self, scene: &Scene, id: usize, prefix: &[usize]) -> Result<()> {
-    let Some(context) = scene.contexts.get(id) else {
-      return Ok(());
-    };
-    let root = match context.root() {
-      Some(paint) => self.open_node(scene, paint, prefix)?,
-      None => None,
-    };
-    // A plain node owns no group, so its outline waits for the nodes that follow it, as Blink's
-    // `kDescendantOutlinesOnly` pass paints them.
-    let mut outlines = Vec::new();
-    // The boxes the decorations phase opened, with their outline flag, for the content phase.
-    let mut decorated: Vec<Option<(usize, bool)>> = Vec::new();
-
-    for phase in context.paint_phases() {
-      let (items, phase_part) = match phase {
-        PaintPhase::RootContent => {
-          if let (Some(paint), Some(open)) = (context.root(), &root) {
-            self.node_content(scene, paint, prefix, open.node)?;
-          }
-          continue;
-        }
-        PaintPhase::Items(items, part) => (items, part),
-      };
-      let mut earlier = mem::take(&mut decorated).into_iter();
-
-      for item in items {
-        let Some(part) = item.part_in(phase_part) else {
-          continue;
-        };
-        let paint = match &item.kind {
-          PaintItemKind::Node(paint) => paint,
-          PaintItemKind::Context(child) => {
-            self.context(scene, *child, prefix)?;
-            continue;
-          }
-        };
-
-        match part {
-          BoxPart::Decorations => {
-            let open = self.open_node(scene, paint, prefix)?;
-
-            decorated.push(open.as_ref().map(|open| (open.node, open.outline)));
-            if let Some(mut open) = open {
-              open.outline = false;
-              self.close(open);
-            }
-          }
-          BoxPart::Content => {
-            if let Some(Some((node, outline))) = earlier.next() {
-              self.node_content(scene, paint, prefix, node)?;
-              if outline {
-                outlines.push(node);
-              }
-            }
-          }
-          BoxPart::Whole => {
-            if let Some(mut open) = self.open_node(scene, paint, prefix)? {
-              self.node_content(scene, paint, prefix, open.node)?;
-              if open.outline {
-                outlines.push(open.node);
-                open.outline = false;
-              }
-              self.close(open);
-            }
-          }
-        }
-      }
+    for chunk in &chunks {
+      conversion.switch_to(chunk.state());
+      conversion.sink().chunk(chunk);
     }
 
-    for node in outlines {
-      self.steps.push(PaintStep::Draw {
-        node,
-        part: DrawPart::Outline,
-      });
-    }
-    if let Some(open) = root {
-      self.close(open);
-    }
-    Ok(())
+    conversion.finish().error.map_or(Ok(()), Err)
   }
 
-  /// Records a scene node's box, leaving its steps open.
-  fn open_node(
-    &mut self,
-    scene: &Scene,
-    paint: &NodePaint,
-    prefix: &[usize],
-  ) -> Result<Option<OpenBox>> {
-    let Some((node, layout)) = recorded(scene, paint)? else {
-      return Ok(None);
-    };
-
-    Ok(Some(self.open_box(
-      node,
-      layout,
-      paint.transform,
-      [prefix, &paint.path].concat(),
-    )))
-  }
-
-  /// Records the own content of a scene node whose box is `parent`.
-  fn node_content(
-    &mut self,
-    scene: &Scene,
-    paint: &NodePaint,
-    prefix: &[usize],
-    parent: usize,
-  ) -> Result<()> {
-    let Some((node, layout)) = recorded(scene, paint)? else {
-      return Ok(());
-    };
-
-    self.own_content(Placed {
-      node,
-      layout,
-      transform: paint.transform,
-      path: &[prefix, &paint.path].concat(),
-      parent,
-    })
-  }
-
-  /// Records a box and opens its group and overflow clip.
-  fn open_box(
+  /// Records a box as a node without steps, and returns the node.
+  fn record_box(
     &mut self,
     node: &RenderNode,
     layout: ComputedLayout,
     transform: Affine,
     path: Vec<usize>,
-  ) -> OpenBox {
+  ) -> usize {
     let context = &node.context;
     let painter = BoxPainter::new(context, layout);
     let size = layout.size;
@@ -237,25 +135,16 @@ impl Walker {
       .style
       .needs_offscreen_compositing()
       .then(|| Box::new(effects(&painter, layout)));
-    let overflow_clip = OverflowClip::of(context, layout).map(|clip| match clip {
-      OverflowClip::Rounded(clip) => Shape::of(&clip.into(), Affine::IDENTITY),
-      OverflowClip::Axes { x, y } => Shape::Rect {
-        rect: BoxFrame::new(layout, Point::ZERO)
-          .overflow_clip_edges(x, y)
-          .into(),
-      },
+    let overflow_clip = OverflowClip::of(context, layout).map(|clip| {
+      let (shape, origin) = clip.shape(layout);
+
+      Shape::of(&shape, Affine::translation(origin.x, origin.y))
     });
-    let open = OpenBox {
-      node: self.nodes.len(),
-      group: effects.is_some(),
-      clip: overflow_clip.is_some(),
-      outline: !outline.is_empty(),
-    };
-    let has_drawables = !drawables.is_empty();
+    let id = self.nodes.len();
 
     self.add(
       PaintNode {
-        id: open.node,
+        id,
         parent: None,
         element: ElementInfo::of(node, path.clone()),
         transform: transform.to_cols_array(),
@@ -280,32 +169,7 @@ impl Walker {
       Some(path),
     );
 
-    if open.group {
-      self.steps.push(PaintStep::BeginGroup { node: open.node });
-    }
-    if has_drawables {
-      self.draw(open.node);
-    }
-    if open.clip {
-      self.steps.push(PaintStep::BeginClip { node: open.node });
-    }
-    open
-  }
-
-  /// Closes a box's clip, paints its outline, and composites its group.
-  fn close(&mut self, open: OpenBox) {
-    if open.clip {
-      self.steps.push(PaintStep::EndClip { node: open.node });
-    }
-    if open.outline {
-      self.steps.push(PaintStep::Draw {
-        node: open.node,
-        part: DrawPart::Outline,
-      });
-    }
-    if open.group {
-      self.steps.push(PaintStep::EndGroup { node: open.node });
-    }
+    id
   }
 
   /// Records the text or image the node lays out.
@@ -457,16 +321,49 @@ impl Walker {
             &node.context.sizing,
           );
           let placed = transform * Affine::translation(offset.x, offset.y) * local;
-          let open = self.open_box(node, layout, placed, box_path.clone());
+          let id = self.record_box(node, layout, placed, box_path.clone());
+          let (group, clip, outline) = match &self.nodes[id].kind {
+            NodeKind::Box {
+              effects,
+              overflow_clip,
+              outline,
+              ..
+            } => (
+              effects.is_some(),
+              overflow_clip.is_some(),
+              !outline.is_empty(),
+            ),
+            _ => (false, false, false),
+          };
 
+          if group {
+            self.steps.push(PaintStep::BeginGroup { node: id });
+          }
+          if !self.nodes[id].drawables.is_empty() {
+            self.draw(id);
+          }
+          if clip {
+            self.steps.push(PaintStep::BeginClip { node: id });
+          }
           self.own_content(Placed {
             node,
             layout,
             transform: placed,
             path: &box_path,
-            parent: open.node,
+            parent: id,
           })?;
-          self.close(open);
+          if clip {
+            self.steps.push(PaintStep::EndClip { node: id });
+          }
+          if outline {
+            self.steps.push(PaintStep::Draw {
+              node: id,
+              part: DrawPart::Outline,
+            });
+          }
+          if group {
+            self.steps.push(PaintStep::EndGroup { node: id });
+          }
         }
       }
     }
@@ -685,6 +582,137 @@ impl Walker {
     for node in &mut self.nodes {
       node.children.sort_by(|a, b| order[*a].cmp(&order[*b]));
     }
+  }
+}
+
+/// A [`PropertySink`] turning a scene's chunks into steps.
+struct StepWriter<'w, 's> {
+  walker: &'w mut Walker,
+  scene: &'s Scene,
+  prefix: &'w [usize],
+  owners: &'w [Option<&'s NodePaint>],
+  /// Every box the chunks paint, by path.
+  paints: &'w HashMap<&'s [usize], &'s NodePaint>,
+  /// The node each box recorded as, by path.
+  boxes: HashMap<Vec<usize>, Option<usize>>,
+  /// The node each open clip or effect belongs to, when it was recorded.
+  open: Vec<Option<usize>>,
+  error: Option<Error>,
+}
+
+impl StepWriter<'_, '_> {
+  /// The node `paint` records as, recording it the first time.
+  fn node(&mut self, paint: &NodePaint) -> Option<usize> {
+    if let Some(&node) = self.boxes.get(&paint.path) {
+      return node;
+    }
+
+    let recorded = match recorded(self.scene, paint) {
+      Ok(recorded) => recorded,
+      Err(error) => {
+        self.error.get_or_insert(error);
+        None
+      }
+    };
+    let node = recorded.map(|(node, layout)| {
+      self.walker.record_box(
+        node,
+        layout,
+        paint.transform,
+        [self.prefix, &paint.path].concat(),
+      )
+    });
+
+    self.boxes.insert(paint.path.clone(), node);
+    node
+  }
+
+  /// Records one chunk's steps.
+  fn chunk(&mut self, chunk: &PaintChunk<'_>) {
+    if self.error.is_some() {
+      return;
+    }
+
+    let Some(node) = self.node(chunk.node) else {
+      return;
+    };
+    let walker = &mut *self.walker;
+
+    match chunk.part {
+      ChunkPart::Decorations => {
+        if !walker.nodes[node].drawables.is_empty() {
+          walker.draw(node);
+        }
+      }
+      ChunkPart::Content => {
+        let result = recorded(self.scene, chunk.node).and_then(|recorded| {
+          let Some((render_node, layout)) = recorded else {
+            return Ok(());
+          };
+
+          walker.own_content(Placed {
+            node: render_node,
+            layout,
+            transform: chunk.node.transform,
+            path: &[self.prefix, &chunk.node.path].concat(),
+            parent: node,
+          })
+        });
+
+        if let Err(error) = result {
+          self.error.get_or_insert(error);
+        }
+      }
+      ChunkPart::Outline => {
+        if let NodeKind::Box { outline, .. } = &walker.nodes[node].kind
+          && !outline.is_empty()
+        {
+          walker.steps.push(PaintStep::Draw {
+            node,
+            part: DrawPart::Outline,
+          });
+        }
+      }
+    }
+  }
+
+  /// Opens the step `begin` makes for the box at `owner`.
+  fn open(&mut self, owner: Option<&NodePaint>, begin: impl FnOnce(usize) -> PaintStep) {
+    let node = owner.and_then(|owner| self.node(owner));
+
+    if let Some(node) = node {
+      self.walker.steps.push(begin(node));
+    }
+    self.open.push(node);
+  }
+
+  /// Closes the most recent step pair with what `end` makes.
+  fn close(&mut self, end: impl FnOnce(usize) -> PaintStep) {
+    if let Some(Some(node)) = self.open.pop() {
+      self.walker.steps.push(end(node));
+    }
+  }
+}
+
+impl PropertySink for StepWriter<'_, '_> {
+  fn push_clip(&mut self, _id: ClipId, clip: &ClipNode) {
+    let owner = self.paints.get(clip.owner.as_slice()).copied();
+
+    self.open(owner, |node| PaintStep::BeginClip { node });
+  }
+
+  fn pop_clip(&mut self) {
+    self.close(|node| PaintStep::EndClip { node });
+  }
+
+  fn begin_effect(&mut self, id: EffectId, _effect: &EffectNode) {
+    let owner = self.owners[id.index()];
+
+    self.open(owner, |node| PaintStep::BeginGroup { node });
+  }
+
+  fn end_effect(&mut self) {
+    self.close(|node| PaintStep::EndGroup { node });
   }
 }
 
