@@ -5,7 +5,10 @@ use crate::{
   font_style::SizedFontStyle,
   geometry::{ComputedLayout, Point, Rect, Size},
   layout::{border::BorderProperties, node::Node, tree::RenderNode},
-  style::{Color, Direction, Display, Float, ResolvedVerticalAlign, WhiteSpaceCollapse},
+  style::{
+    Color, Direction, Display, Float, Length, ResolvedVerticalAlign, Sides, SizingContext,
+    SpacePair, WhiteSpaceCollapse,
+  },
   text_processing::{COLLAPSIBLE_WHITESPACE, HORIZONTAL_WHITESPACE},
 };
 use parley::{InlineBox, InlineBoxKind};
@@ -76,19 +79,20 @@ pub enum ProcessedInlineSpan<'c> {
 
 /// The box decoration a `display: inline` span paints along its line
 /// fragments, resolved from its computed style.
-#[derive(Clone, Copy)]
+#[derive(Clone)]
 pub(crate) struct InlineDecoration {
   pub(crate) color: Color,
   pub(crate) padding: Rect<f32>,
-  /// The border, its radii resolved against an empty box.
+  /// The border's widths, colours and styles; each fragment resolves its radii from `radius`.
   pub(crate) border: BorderProperties,
+  /// The corner radii as specified, since a percentage resolves against each fragment.
+  pub(crate) radius: Sides<SpacePair<Length>>,
   pub(crate) opacity: f32,
   /// The span's direction, which puts its start edge on the left or right.
   pub(crate) direction: Direction,
-  /// The span's own font size. Runs at this size set the fragment height
-  /// (Blink sizes the box from its own text metrics); other sizes only when
-  /// the span has no text of its own.
-  pub(crate) font_size: f32,
+  /// The span's sizing. Runs at its font size set the fragment height (Blink sizes the box
+  /// from its own text metrics); other sizes only when the span has no text of its own.
+  pub(crate) sizing: SizingContext,
 }
 
 /// One open decorated span in the chain of decorated ancestors around an
@@ -310,9 +314,15 @@ fn inline_span_decoration(node: &RenderNode, depth: usize) -> Option<InlineDecor
     color,
     padding: node.padding_px(),
     border,
+    radius: Sides([
+      style.border_top_left_radius,
+      style.border_top_right_radius,
+      style.border_bottom_right_radius,
+      style.border_bottom_left_radius,
+    ]),
     opacity: style.opacity.0,
     direction: style.direction,
-    font_size: node.context.sizing.font_size,
+    sizing: node.context.sizing.clone(),
   })
 }
 

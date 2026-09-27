@@ -125,7 +125,7 @@ impl DecorationAccumulator {
     let id = self.decorations.len();
 
     self.ids.insert(Rc::as_ptr(link), id);
-    self.decorations.push(link.decoration);
+    self.decorations.push(link.decoration.clone());
     id
   }
 
@@ -161,7 +161,7 @@ impl DecorationAccumulator {
           bottom,
           baseline,
         } => {
-          let tier = if (link.decoration.font_size - font_size).abs() < 0.01 {
+          let tier = if (link.decoration.sizing.font_size - font_size).abs() < 0.01 {
             &mut bounds.own
           } else {
             &mut bounds.descendant
@@ -228,8 +228,11 @@ impl DecorationAccumulator {
         let (has_left, has_right) = decoration.direction.inline_sides(has_start, has_end);
         // css-backgrounds-3 corner overlap: one uniform factor shrinks every
         // radius so adjacent corners never cross.
-        let [top_left, top_right, bottom_right, bottom_left] =
-          border.radius.0.map(|radius| (radius.x, radius.y));
+        let [top_left, top_right, bottom_right, bottom_left] = decoration.radius.0.map(|radius| {
+          let radius = radius.to_px(&decoration.sizing, width, height);
+
+          (radius.x, radius.y)
+        });
         let raw = [
           if has_left { top_left } else { (0.0, 0.0) },
           if has_right { top_right } else { (0.0, 0.0) },
