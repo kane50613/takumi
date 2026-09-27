@@ -1,4 +1,4 @@
-//! Per-line background fragments of inline spans.
+//! Per-line fragments of inline spans, which paint their backgrounds, borders and outlines.
 
 use crate::{
   geometry::{PathCommand, Point},
@@ -7,7 +7,10 @@ use crate::{
 };
 use std::{collections::HashMap, rc::Rc};
 
-use super::items::{DecorationLink, InlineDecoration};
+use super::{
+  items::{DecorationLink, InlineDecoration},
+  outline::InlineOutlineRect,
+};
 
 /// A resolved inline background fragment: one rounded rect a decorated span
 /// fills on one line, in border-box space, in paint order (outer spans first).
@@ -179,7 +182,9 @@ impl DecorationAccumulator {
     }
   }
 
-  pub(super) fn into_fragments(self) -> Vec<InlineBackgroundFragment> {
+  /// The spans' background fragments and their outlines' line fragments, both sorted by span
+  /// then line.
+  pub(super) fn into_fragments(self) -> (Vec<InlineBackgroundFragment>, Vec<InlineOutlineRect>) {
     // A span with any text sizes every fragment from runs; the line-extent
     // tier only carries a span with no text at all (padding-only), so a
     // spacer the line breaker strands on its own line stays invisible.
@@ -207,59 +212,80 @@ impl DecorationAccumulator {
     }
     let mut keys: Vec<(usize, usize)> = self.fragments.keys().copied().collect();
 
+    let mut backgrounds = Vec::new();
+    let mut outlines = Vec::new();
+
     keys.sort_unstable();
-    keys
+
+    for key in keys {
+      let (id, line_index) = key;
+      let bounds = &self.fragments[&key];
+
+      let Some((top, bottom, baseline)) = vertical(id, bounds) else {
+        continue;
+      };
+      let decoration = &self.decorations[id];
+      let mut border = decoration.border;
+      let x = bounds.x0;
+      let y = top - decoration.padding.top - border.width.top;
+      let width = bounds.x1 - bounds.x0;
+      let height = bottom - top + decoration.padding.vertical() + border.width.vertical();
+      let (min_line, max_line) = line_range[id];
+      // The start edge sits on the first line, the end edge on the last;
+      // wrap-edge corners stay square, like `box-decoration-break: slice`.
+      let (has_start, has_end) = (line_index == min_line, line_index == max_line);
+      let (has_left, has_right) = decoration.direction.inline_sides(has_start, has_end);
+      // css-backgrounds-3 corner overlap: one uniform factor shrinks every
+      // radius so adjacent corners never cross.
+      let [top_left, top_right, bottom_right, bottom_left] = decoration.radius.0.map(|radius| {
+        let radius = radius.to_px(&decoration.sizing, width, height);
+
+        (radius.x, radius.y)
+      });
+      let raw = [
+        if has_left { top_left } else { (0.0, 0.0) },
+        if has_right { top_right } else { (0.0, 0.0) },
+        if has_right { bottom_right } else { (0.0, 0.0) },
+        if has_left { bottom_left } else { (0.0, 0.0) },
+      ];
+      let [tl, tr, br, bl] = raw;
+      let factor = [
+        width / (tl.0 + tr.0),
+        width / (bl.0 + br.0),
+        height / (tl.1 + bl.1),
+        height / (tr.1 + br.1),
+      ]
       .into_iter()
-      .filter_map(|key| {
-        let (id, line_index) = key;
-        let bounds = &self.fragments[&key];
+      .filter(|f| f.is_finite())
+      .fold(1.0_f32, f32::min)
+      .max(0.0);
+      border.radius = Sides(raw.map(|(rx, ry)| SpacePair::from_pair(rx * factor, ry * factor)));
 
-        let (top, bottom, baseline) = vertical(id, bounds)?;
-        let decoration = &self.decorations[id];
-        let mut border = decoration.border;
-        let x = bounds.x0;
-        let y = top - decoration.padding.top - border.width.top;
-        let width = bounds.x1 - bounds.x0;
-        let height = bottom - top + decoration.padding.vertical() + border.width.vertical();
-        let (min_line, max_line) = line_range[id];
-        // The start edge sits on the first line, the end edge on the last;
-        // wrap-edge corners stay square, like `box-decoration-break: slice`.
-        let (has_start, has_end) = (line_index == min_line, line_index == max_line);
-        let (has_left, has_right) = decoration.direction.inline_sides(has_start, has_end);
-        // css-backgrounds-3 corner overlap: one uniform factor shrinks every
-        // radius so adjacent corners never cross.
-        let [top_left, top_right, bottom_right, bottom_left] = decoration.radius.0.map(|radius| {
-          let radius = radius.to_px(&decoration.sizing, width, height);
+      if !has_left {
+        border.width.left = 0.0;
+      }
+      if !has_right {
+        border.width.right = 0.0;
+      }
 
-          (radius.x, radius.y)
+      if width <= 0.0 || height <= 0.0 {
+        continue;
+      }
+      if let Some(outline) = decoration.outline {
+        outlines.push(InlineOutlineRect {
+          owner: id,
+          line_index,
+          x,
+          y,
+          width,
+          height,
+          radius: border.radius,
+          outline,
+          opacity: decoration.opacity,
         });
-        let raw = [
-          if has_left { top_left } else { (0.0, 0.0) },
-          if has_right { top_right } else { (0.0, 0.0) },
-          if has_right { bottom_right } else { (0.0, 0.0) },
-          if has_left { bottom_left } else { (0.0, 0.0) },
-        ];
-        let [tl, tr, br, bl] = raw;
-        let factor = [
-          width / (tl.0 + tr.0),
-          width / (bl.0 + br.0),
-          height / (tl.1 + bl.1),
-          height / (tr.1 + br.1),
-        ]
-        .into_iter()
-        .filter(|f| f.is_finite())
-        .fold(1.0_f32, f32::min)
-        .max(0.0);
-        border.radius = Sides(raw.map(|(rx, ry)| SpacePair::from_pair(rx * factor, ry * factor)));
-
-        if !has_left {
-          border.width.left = 0.0;
-        }
-        if !has_right {
-          border.width.right = 0.0;
-        }
-
-        (width > 0.0 && height > 0.0).then_some(InlineBackgroundFragment {
+      }
+      if decoration.color.0[3] != 0 || border.has_visible_sides() {
+        backgrounds.push(InlineBackgroundFragment {
           x,
           y,
           width,
@@ -268,9 +294,11 @@ impl DecorationAccumulator {
           color: decoration.color,
           opacity: decoration.opacity,
           baseline,
-        })
-      })
-      .collect()
+        });
+      }
+    }
+
+    (backgrounds, outlines)
   }
 }
 

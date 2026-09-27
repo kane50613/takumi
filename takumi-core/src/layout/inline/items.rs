@@ -12,6 +12,8 @@ use crate::{
   text_processing::{COLLAPSIBLE_WHITESPACE, HORIZONTAL_WHITESPACE},
 };
 use parley::{InlineBox, InlineBoxKind};
+
+use super::outline::InlineOutline;
 use std::{borrow::Cow, ops::Range, rc::Rc, sync::Arc};
 
 /// An inline box and its resolved box-model dimensions.
@@ -87,12 +89,30 @@ pub(crate) struct InlineDecoration {
   pub(crate) border: BorderProperties,
   /// The corner radii as specified, since a percentage resolves against each fragment.
   pub(crate) radius: Sides<SpacePair<Length>>,
+  pub(crate) outline: Option<InlineOutline>,
   pub(crate) opacity: f32,
   /// The span's direction, which puts its start edge on the left or right.
   pub(crate) direction: Direction,
   /// The span's sizing. Runs at its font size set the fragment height (Blink sizes the box
   /// from its own text metrics); other sizes only when the span has no text of its own.
   pub(crate) sizing: SizingContext,
+}
+
+impl InlineDecoration {
+  /// How far the span's fragments and outline reach past its glyph boxes.
+  pub(crate) fn reach(&self) -> f32 {
+    let widths = self.border.width;
+    let edge = [
+      self.padding.top + widths.top,
+      self.padding.right + widths.right,
+      self.padding.bottom + widths.bottom,
+      self.padding.left + widths.left,
+    ]
+    .into_iter()
+    .fold(0.0_f32, f32::max);
+
+    edge + self.outline.map_or(0.0, |outline| outline.reach().max(0.0))
+  }
 }
 
 /// One open decorated span in the chain of decorated ancestors around an
@@ -296,8 +316,8 @@ fn inline_span_spacing(node: &RenderNode, depth: usize) -> (Rect<f32>, Rect<f32>
   )
 }
 
-/// The decoration an inline span paints, or `None` when it paints neither a background nor a
-/// border.
+/// The decoration an inline span paints, or `None` when it paints no background, border or
+/// outline.
 fn inline_span_decoration(node: &RenderNode, depth: usize) -> Option<InlineDecoration> {
   if !is_inline_span(node, depth) || !node.context.style.is_visible() {
     return None;
@@ -305,8 +325,9 @@ fn inline_span_decoration(node: &RenderNode, depth: usize) -> Option<InlineDecor
   let style = &node.context.style;
   let color = style.background_color.resolve(node.context.current_color);
   let border = BorderProperties::from_context(&node.context, Size::ZERO, node.border_px());
+  let outline = InlineOutline::of(&node.context);
 
-  if color.0[3] == 0 && !border.has_visible_sides() {
+  if color.0[3] == 0 && !border.has_visible_sides() && outline.is_none() {
     return None;
   }
 
@@ -320,6 +341,7 @@ fn inline_span_decoration(node: &RenderNode, depth: usize) -> Option<InlineDecor
       style.border_bottom_right_radius,
       style.border_bottom_left_radius,
     ]),
+    outline,
     opacity: style.opacity.0,
     direction: style.direction,
     sizing: node.context.sizing.clone(),

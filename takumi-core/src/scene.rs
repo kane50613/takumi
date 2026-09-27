@@ -526,16 +526,15 @@ fn box_ink_reach(node: &RenderNode, size: Size<f32>) -> f32 {
   shadow_reach.max(outline_reach)
 }
 
-/// How far text shadows, the text stroke and inline outlines reach past glyph ink, in local px.
+/// How far text shadows and the text stroke reach past glyph ink, in local px.
 fn text_ink_reach(font_style: &SizedFontStyle) -> f32 {
   let shadow_reach = font_style
     .text_shadow
     .iter()
     .map(shadow_reach)
     .fold(0.0_f32, f32::max);
-  let outline_reach = (font_style.outline_width + font_style.outline_offset).max(0.0);
 
-  shadow_reach.max(font_style.stroke_width).max(outline_reach)
+  shadow_reach.max(font_style.stroke_width)
 }
 
 /// Grows `bounds` by `reach` local px on every side, taking the transform's per-axis envelope.
@@ -680,8 +679,7 @@ fn compute_node_paint_bounds(
     );
   }
 
-  // An inline-span background grows past the glyph boxes by its padding.
-  let background_padding = built
+  let decoration_reach = built
     .spans
     .iter()
     .filter_map(|span| match span {
@@ -692,13 +690,7 @@ fn compute_node_paint_bounds(
       let mut next = Some(chain);
 
       while let Some(link) = next {
-        let padding = link.decoration.padding;
-
-        max = max
-          .max(padding.top)
-          .max(padding.right)
-          .max(padding.bottom)
-          .max(padding.left);
+        max = max.max(link.decoration.reach());
         next = link.parent.as_ref();
       }
       max
@@ -713,7 +705,7 @@ fn compute_node_paint_bounds(
     })
     .fold(text_ink_reach(&font_style), f32::max);
 
-  outset_bounds(bounds, background_padding.max(text_reach), inline_transform)
+  outset_bounds(bounds, decoration_reach.max(text_reach), inline_transform)
 }
 
 fn has_inline_paint_content(node: &RenderNode) -> bool {

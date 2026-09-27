@@ -42,7 +42,7 @@ pub use self::{
   decorations::DecorationRect,
   items::{DecorationLink, InlineBoxItem, InlineItem, ProcessedInlineSpan, collect_inline_items},
   metrics::VisualInlineBox,
-  outline::{InlineOutlineRect, OutlineIsland},
+  outline::{InlineOutline, InlineOutlineRect, OutlineIsland},
   runs::{
     InlineRunLayout, MeasuredInlineBox, MeasuredInlineRun, PositionedGlyph, PositionedInlineRun,
     RunMetrics, ShapedRun,
@@ -1231,10 +1231,9 @@ mod tests {
     geometry::{Point, Rect},
     layout::{node::Node, tree::RenderNode},
     resources::font::{FontOverride, FontResource, GenericFamily},
-    style::Affine,
     style::{
-      Color, ColorInput, Display, FontSize, Length, SizingContext, Style, StyleDeclaration,
-      WhiteSpace,
+      Affine, BorderStyle, Color, ColorInput, Display, FontSize, Length, Sides, SizingContext,
+      Style, StyleDeclaration, WhiteSpace,
     },
     viewport::Viewport,
   };
@@ -1742,43 +1741,55 @@ mod tests {
     );
   }
 
-  #[test]
-  fn outline_islands_join_only_the_lines_that_meet() {
-    let rect = |line_index: usize, x: f32, y: f32| InlineOutlineRect {
-      span_id: 0,
+  fn outline_rect(
+    owner: usize,
+    line_index: usize,
+    x: f32,
+    y: f32,
+    width: f32,
+  ) -> InlineOutlineRect {
+    InlineOutlineRect {
+      owner,
       line_index,
       x,
       y,
-      width: 10.0,
+      width,
       height: 10.0,
-    };
-    // Two rects share line 0; line 1 meets the first, line 2 continues it, and line 4 stands
-    // apart.
-    let islands = OutlineIsland::of(
-      vec![
-        rect(0, 0.0, 0.0),
-        rect(0, 100.0, 0.0),
-        rect(1, 0.0, 10.0),
-        rect(2, 0.0, 20.0),
-        rect(4, 0.0, 60.0),
-      ],
-      |_| 0.0,
-    );
+      radius: Sides::default(),
+      outline: InlineOutline {
+        width: 0.0,
+        offset: 0.0,
+        color: Color::black(),
+        style: BorderStyle::Solid,
+      },
+      opacity: 1.0,
+    }
+  }
+
+  #[test]
+  fn outline_islands_join_only_the_lines_that_meet() {
+    // The first element's lines 0 to 2 touch and line 4 stands apart; the second has one line.
+    let islands = OutlineIsland::of(&[
+      outline_rect(0, 0, 0.0, 0.0, 10.0),
+      outline_rect(0, 1, 0.0, 10.0, 10.0),
+      outline_rect(0, 2, 0.0, 20.0, 10.0),
+      outline_rect(0, 4, 0.0, 60.0, 10.0),
+      outline_rect(1, 4, 40.0, 60.0, 10.0),
+    ]);
 
     assert_eq!(islands.len(), 3);
-    assert!(islands.iter().all(|island| island.lone_rect().is_none()));
+    assert_eq!(
+      islands
+        .iter()
+        .map(|island| island.lone_rect().is_some())
+        .collect::<Vec<_>>(),
+      [false, false, true]
+    );
   }
 
   #[test]
   fn outline_rects_a_layout_unit_apart_touch() {
-    let rect = |x: f32, width: f32| InlineOutlineRect {
-      span_id: 0,
-      line_index: 0,
-      x,
-      y: 0.0,
-      width,
-      height: 10.0,
-    };
+    let rect = |x: f32, width: f32| outline_rect(0, 0, x, 0.0, width);
 
     assert!(rect(0.0, 10.0).meets(rect(10.01, 10.0), 0.0));
     assert!(!rect(0.0, 10.0).meets(rect(10.1, 10.0), 0.0));

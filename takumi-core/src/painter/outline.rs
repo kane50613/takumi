@@ -9,7 +9,7 @@ use crate::{
   layout::{
     border::{BorderProperties, BorderSide},
     decoration::OutlineGeometry,
-    inline::{OutlineIsland, ProcessedInlineSpan},
+    inline::OutlineIsland,
   },
   style::{Affine, BorderStyle, Color, FillRule, Sides},
 };
@@ -49,49 +49,35 @@ impl BoxPainter<'_> {
 }
 
 impl OutlineIsland {
-  /// Paints the outline of the span that owns the island, with the block's border box at
+  /// Paints the outline of the element that owns the island, with the block's border box at
   /// `origin`: a lone rect as a box border, as Blink's `PaintSingleRectOutline` does, and
   /// anything else after Blink's `ComplexOutlinePainter`.
   ///
-  /// Approximate: the contour keeps square corners, where Blink rounds them when the element has
-  /// a `border-radius`, and the inner edge follows the rects grown by `outline-offset`, where Blink
-  /// shrinks the outer contour. Follows Blink under the notice in LICENSE-CHROMIUM.
-  pub fn paint<D: PaintDevice>(
-    &self,
-    spans: &[ProcessedInlineSpan<'_>],
-    origin: Point<f32>,
-    device: &mut D,
-  ) {
-    let Some(ProcessedInlineSpan::Text { style, .. }) = self
-      .span_id()
-      .and_then(|span_id| spans.get(span_id as usize))
-    else {
-      return;
-    };
-    let width = style.outline_width;
-    let opacity = style.parent.opacity.0;
-    let mut color = style.outline_color;
+  /// Approximate: a contour around several rects keeps square corners, where Blink rounds them
+  /// when the element has a `border-radius`, and its inner edge follows the rects grown by
+  /// `outline-offset`, where Blink shrinks the outer contour. Follows Blink under the notice in
+  /// LICENSE-CHROMIUM.
+  pub fn paint<D: PaintDevice>(&self, origin: Point<f32>, device: &mut D) {
+    let (outline, opacity) = self.outline();
+    let width = outline.width;
+    let mut color = outline.color;
 
-    if width <= 0.0
-      || !style.outline_style.is_rendered()
-      || color.0[3] == 0
-      || opacity <= 0.0
-      || !style.parent.is_visible()
-    {
+    if opacity <= 0.0 {
       return;
     }
 
     if let Some(rect) = self.lone_rect() {
-      let outline = OutlineGeometry::ring(
+      let geometry = OutlineGeometry::ring(
         Size {
           width: rect.width,
           height: rect.height,
         },
-        style.outline_offset,
+        outline.offset,
         BorderProperties {
           width: Sides([width; 4]).into(),
           color: Sides([color; 4]).into(),
-          style: Sides([style.outline_style; 4]).into(),
+          style: Sides([outline.style; 4]).into(),
+          radius: rect.radius,
           ..BorderProperties::default()
         },
       );
@@ -101,17 +87,21 @@ impl OutlineIsland {
       };
 
       return device.with_opacity(opacity, |device| {
-        PendingOutline { outline, origin }.paint(device)
+        PendingOutline {
+          outline: geometry,
+          origin,
+        }
+        .paint(device)
       });
     }
 
     // Blink draws thin double, groove and ridge outlines solid.
-    let outline_style = match style.outline_style {
+    let outline_style = match outline.style {
       BorderStyle::Double if width <= 2.0 => BorderStyle::Solid,
       BorderStyle::Groove | BorderStyle::Ridge if width <= 1.0 => BorderStyle::Solid,
       outline_style => outline_style,
     };
-    let inner = style.outline_offset;
+    let inner = outline.offset;
     let outer = inner + width;
     let at = Affine::translation(origin.x, origin.y);
     // Dashes overlap at the corners, so a translucent colour paints opaque into a layer that
