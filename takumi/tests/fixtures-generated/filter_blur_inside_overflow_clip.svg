@@ -5,23 +5,33 @@
     <path d="M40 40h140v140h-140v-140Z"/>
   </clipPath>
   <g clip-path="url(#cp0)">
-    <filter id="ft1" x="-50%" y="-50%" width="200%" height="200%" color-interpolation-filters="sRGB">
+  </g>
+  <path d="M252 40h76c17.67 0 32 14.33 32 32v76c0 17.67-14.33 32-32 32h-76c-17.67 0-32-14.33-32-32v-76c0-17.67 14.33-32 32-32Z" fill="#e2e8f0"/>
+  <clipPath id="cp1">
+    <path d="M252 40h76c17.67 0 32 14.33 32 32v76c0 17.67-14.33 32-32 32h-76c-17.67 0-32-14.33-32-32v-76c0-17.67 14.33-32 32-32Z"/>
+  </clipPath>
+  <g clip-path="url(#cp1)">
+  </g>
+  <clipPath id="cp2">
+    <path d="M40 40h140v140h-140v-140Z"/>
+  </clipPath>
+  <g clip-path="url(#cp2)">
+    <filter id="ft3" x="-50%" y="-50%" width="200%" height="200%" color-interpolation-filters="sRGB">
       <feGaussianBlur in="SourceGraphic" stdDeviation="24" result="f0"/>
     </filter>
-    <g filter="url(#ft1)">
+    <g filter="url(#ft3)">
       <rect x="60" y="60" width="100" height="100" fill="#000" fill-opacity="0"/>
       <rect x="60" y="60" width="100" height="100" fill="#2563eb"/>
     </g>
   </g>
-  <path d="M252 40h76c17.67 0 32 14.33 32 32v76c0 17.67-14.33 32-32 32h-76c-17.67 0-32-14.33-32-32v-76c0-17.67 14.33-32 32-32Z" fill="#e2e8f0"/>
-  <clipPath id="cp2">
+  <clipPath id="cp4">
     <path d="M252 40h76c17.67 0 32 14.33 32 32v76c0 17.67-14.33 32-32 32h-76c-17.67 0-32-14.33-32-32v-76c0-17.67 14.33-32 32-32Z"/>
   </clipPath>
-  <g clip-path="url(#cp2)">
-    <filter id="ft3" x="-50%" y="-50%" width="200%" height="200%" color-interpolation-filters="sRGB">
+  <g clip-path="url(#cp4)">
+    <filter id="ft5" x="-50%" y="-50%" width="200%" height="200%" color-interpolation-filters="sRGB">
       <feGaussianBlur in="SourceGraphic" stdDeviation="16" result="f0"/>
     </filter>
-    <g opacity=".6" filter="url(#ft3)">
+    <g opacity=".6" filter="url(#ft5)">
       <rect x="240" y="60" width="100" height="100" fill="#000" fill-opacity="0"/>
       <rect x="240" y="60" width="100" height="100" fill="#dc2626"/>
     </g>

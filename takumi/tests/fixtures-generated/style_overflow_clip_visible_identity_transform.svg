@@ -5,6 +5,11 @@
     <path d="M4-1000000h392v2000120.1h-392v-2000120.1Z"/>
   </clipPath>
   <g clip-path="url(#cp0)">
+  </g>
+  <clipPath id="cp1">
+    <path d="M4-1000000h392v2000120.1h-392v-2000120.1Z"/>
+  </clipPath>
+  <g clip-path="url(#cp1)">
     <g fill="#000">
       <use href="#g0" x="28" y="76"/>
       <use href="#g1" x="53.06" y="76"/>
@@ -76,6 +81,11 @@
       <use href="#g8" x="200.37" y="386"/>
       <use href="#g20" x="223.26" y="386"/>
     </g>
+  </g>
+  <clipPath id="cp2">
+    <path d="M4-1000000h392v2000120.1h-392v-2000120.1Z"/>
+  </clipPath>
+  <g clip-path="url(#cp2)">
   </g>
   <defs>
     <path id="g0" d="M11.19 0v-30.05h-10.61v-4.03h25.34v4.03h-10.61v30.05Z"/>
