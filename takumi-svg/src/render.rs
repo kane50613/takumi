@@ -395,15 +395,7 @@ impl<'n> PlacedBox<'n> {
 
   /// Emits an image node's content into its content box.
   fn emit_image(&self, image: &ImageData, doc: &mut SvgDocument) -> io::Result<()> {
-    let context = &self.node.context;
-    let content = Frame::content_box(self.frame);
-    if self.border().is_zero() {
-      return emit_image(image, context, content, doc);
-    }
-
-    let group = doc.begin_clipped_group(&self.padding_box_path_data())?;
-    emit_image(image, context, content, doc)?;
-    doc.end_group(group)
+    emit_image(image, &self.painter, self.frame, doc)
   }
 }
 
@@ -587,7 +579,7 @@ impl<'d> DocumentDevice<'d> {
   }
 
   /// Runs `write` against the document unless an earlier write failed, keeping its error.
-  fn write(&mut self, write: impl FnOnce(&mut SvgDocument) -> io::Result<()>) {
+  pub(crate) fn write(&mut self, write: impl FnOnce(&mut SvgDocument) -> io::Result<()>) {
     if self.error.is_some() {
       return;
     }

@@ -310,9 +310,16 @@ impl<'c> CanvasDevice<'c> {
     Ok(())
   }
 
-  /// Fills `shape` with `source`, an image laid over the box at the device transform.
-  pub(crate) fn fill_shape_with_source(&mut self, shape: &FillShape, source: PaintSource<'_>) {
-    let Some(canvas_to_source) = self.transform.invert() else {
+  /// Fills `shape` with `source`, whose pixels `box_to_source` finds from the box's coordinates,
+  /// sampled with `algorithm`.
+  pub(crate) fn fill_shape_with_source(
+    &mut self,
+    shape: &FillShape,
+    source: PaintSource<'_>,
+    box_to_source: Affine,
+    algorithm: ImageScalingAlgorithm,
+  ) {
+    let Some(canvas_to_box) = self.transform.invert() else {
       return;
     };
     let coverage = self.coverage(shape, Fill::from(shape.rule()).into(), Affine::IDENTITY);
@@ -326,9 +333,9 @@ impl<'c> CanvasDevice<'c> {
       source,
       MaskCompositeColor::SourceOnly,
       MaskSamplingOptions {
-        canvas_to_source,
+        canvas_to_source: box_to_source * canvas_to_box,
         sample_bias: Point::ZERO,
-        algorithm: self.algorithm,
+        algorithm,
       },
       BlendMode::Normal,
     );
@@ -580,7 +587,12 @@ pub(crate) fn draw_background(
       if let Some(tile) = &tile
         && let Some(shape) = background.clip.shape(layout.size)
       {
-        device.fill_shape_with_source(&shape, tile.into());
+        device.fill_shape_with_source(
+          &shape,
+          tile.into(),
+          Affine::IDENTITY,
+          context.style.image_rendering,
+        );
       }
     }
     BackgroundClipArea::Text => {}

@@ -5,10 +5,7 @@ use std::{cell::RefCell, collections::HashMap, ptr, rc::Rc};
 #[cfg(feature = "images")]
 use takumi_core::{
   context::RenderContext,
-  layout::{
-    node::{ImageData, ImageSourceInput, NodeKind, resolve_image},
-    replaced::ReplacedPlacement,
-  },
+  layout::node::{ImageData, ImageSourceInput, NodeKind, resolve_image},
   resources::image::ImageSource,
 };
 use takumi_core::{
@@ -19,7 +16,6 @@ use takumi_core::{
   layout::{
     background_image_geometry::{BackgroundImageGeometry, FillLayers},
     border::BorderProperties,
-    decoration::ClipBox,
     inline::{
       BuiltInlineLayout, InlineRunLayout, PositionedInlineRun, ProcessedInlineSpan, ShapedRun,
     },
@@ -908,14 +904,11 @@ impl Emitter<'_> {
     if iw <= 0.0 || ih <= 0.0 {
       return;
     }
-    let placement = ReplacedPlacement::new(
-      context,
-      content,
-      Size {
-        width: iw,
-        height: ih,
-      },
-    );
+    let replaced = BoxPainter::new(context, layout).replaced_content(Size {
+      width: iw,
+      height: ih,
+    });
+    let placement = replaced.placement;
     let (dw, dh) = (placement.size.width, placement.size.height);
     // SVG sources embed as vector ops; everything else rasterizes. A color
     // filter rasterizes them too, since the transform applies to pixels.
@@ -962,20 +955,13 @@ impl Emitter<'_> {
     let Some(size) = KrillaSize::from_wh(dw, dh) else {
       return;
     };
-    // A replaced element is trimmed to its content edge curve, so a corner radius clips the
-    // image whether or not it overflows.
-    let clip_border = BorderProperties::from_context(context, layout.size, layout.border);
-    let clip_path = if clip_border.is_zero() {
-      placement
-        .overflows(content)
-        .then(|| KrillaRect::from_xywh(bx, by, w, h).and_then(rect_path))
-        .flatten()
-    } else {
-      shape_path(
-        &ClipBox::content_box(clip_border, layout).into(),
-        frame.origin,
-      )
-    };
+    let clip_path = replaced.clip.and_then(|clip| {
+      if clip.border.is_zero() {
+        KrillaRect::from_xywh(bx, by, w, h).and_then(rect_path)
+      } else {
+        shape_path(&clip.into(), frame.origin)
+      }
+    });
 
     if let Some(path) = &clip_path {
       surface.push_clip_path(path, &FillRule::NonZero);

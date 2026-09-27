@@ -3,6 +3,7 @@
 mod background;
 mod border;
 mod outline;
+mod replaced;
 mod shadow;
 mod text;
 
@@ -10,6 +11,7 @@ pub use self::{
   background::{BackgroundClipArea, BoxBackground},
   border::BoxBorderPainter,
   outline::PendingOutline,
+  replaced::ReplacedContent,
   shadow::ShadowShape,
   text::{GlyphDevice, GlyphFill, InlineLines},
 };
@@ -305,6 +307,11 @@ impl<'c> BoxPainter<'c> {
   /// `box-decoration-break: clone` asks for.
   pub fn fragment(context: &'c RenderContext, layout: ComputedLayout, size: Size<f32>) -> Self {
     Self::new(context, ComputedLayout { size, ..layout })
+  }
+
+  /// The context the box paints in.
+  pub fn context(&self) -> &'c RenderContext {
+    self.context
   }
 
   /// The box's border geometry, corners included.
