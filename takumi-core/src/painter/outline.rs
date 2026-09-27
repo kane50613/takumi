@@ -107,9 +107,6 @@ impl OutlineIsland {
 
 /// Blink's `ComplexOutlinePainter`, for an outline around several rects. Follows Blink under the
 /// notice in LICENSE-CHROMIUM.
-///
-/// Approximate: the mitres between a 3D outline's edges clip with antialiasing, where Blink clips
-/// them without.
 struct ComplexOutline {
   /// The contour of the outline's outer edge.
   outer: RightAngleContour,
@@ -403,7 +400,7 @@ impl ComplexOutline {
       let previous = lines[(index + count - 1) % count].0;
       let next = lines[(index + 1) % count].1;
 
-      device.push_clip(&self.miter_clip(previous, start, end, next), at);
+      device.push_aliased_clip(&self.miter_clip(previous, start, end, next), at);
       match &rounded_edges {
         Some(edges) => device.stroke_shape(
           &FillShape::Path {
