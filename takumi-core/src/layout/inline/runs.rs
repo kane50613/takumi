@@ -17,12 +17,12 @@ use std::{collections::HashMap, convert::Infallible, ops::Range, sync::Arc};
 use super::{
   BuiltInlineLayout, InlineBrush, PlacedItem, WalkedLine,
   background::{
-    CoverExtent, DecorationAccumulator, InlineBackgroundFragment, InlineContainingBlock,
+    CoverLine, Covering, DecorationAccumulator, InlineBackgroundFragment, InlineContainingBlock,
   },
   items::ProcessedInlineSpan,
   metrics::{VisualInlineBox, resolve_visual_inline_box},
   outline::InlineOutlineRect,
-  text_fit::{LineScaleState, RunBox},
+  text_fit::LineScaleState,
 };
 
 /// A shaped glyph positioned within its run, in run-local coordinates.
@@ -484,8 +484,9 @@ impl<'c> BuiltInlineLayout<'c> {
     item: &PlacedItem<'_>,
   ) {
     let setup = &line.setup;
-
-    match item {
+    let origin_y = setup.state.layout_origin.y;
+    let line_y = |value: f32| origin_y + (content.y + value - origin_y) * setup.state.scale;
+    let (chain, x0, x1, covering) = match item {
       PlacedItem::Run {
         glyph_run,
         static_inline_prefix,
@@ -497,78 +498,69 @@ impl<'c> BuiltInlineLayout<'c> {
           return;
         }
 
-        let Some(span_id) = brush.source_span_id else {
-          return;
-        };
         let Some(ProcessedInlineSpan::Text {
           decorations: Some(chain),
           ..
-        }) = self.spans.get(span_id as usize)
+        }) = brush
+          .source_span_id
+          .and_then(|span_id| self.spans.get(span_id as usize))
         else {
           return;
         };
-        let run = glyph_run.run();
-        let metrics = run.metrics();
+        let x = glyph_run.offset();
+        let width = glyph_run.advance() - trailing_whitespace;
+        let metrics = glyph_run.run().metrics();
         // The font's rounded ascent and descent, without the line-height leading, like the
         // inline box fragment `InlineBoxState::ComputeTextMetrics` sizes.
-        let ascent = metrics.ascent.round();
-        let rect = RunBox {
-          x: content.x + glyph_run.offset(),
-          y: content.y + glyph_run.baseline() + setup.baseline_shift - ascent,
-          width: glyph_run.advance() - trailing_whitespace,
-          height: ascent + metrics.descent.round(),
-        }
-        .scaled(setup.state, *static_inline_prefix);
+        let baseline = glyph_run.baseline() + setup.baseline_shift;
 
-        coverage.cover(
+        (
           Some(chain),
-          line.index,
-          rect.x,
-          rect.x + rect.width,
-          &CoverExtent::Run {
-            font_size: run.font_size(),
-            top: rect.y,
-            bottom: rect.y + rect.height,
-            baseline: rect.y + ascent * setup.state.scale,
+          content.x + setup.scale_x(x, *static_inline_prefix),
+          content.x + setup.scale_x(x + width, *static_inline_prefix),
+          Covering::Run {
+            top: line_y(baseline - metrics.ascent.round()),
+            bottom: line_y(baseline + metrics.descent.round()),
           },
-        );
+        )
       }
       // A spacer, atomic box or out-of-flow placeholder inside a decorated span stretches the
-      // span's fragment horizontally; runs set its height, like Blink's box metrics ignoring
-      // atomic descendants. The line extent is the last resort so padding-only coverage still
-      // paints.
+      // span's fragment horizontally, like Blink's box metrics ignoring atomic descendants.
       PlacedItem::Box(inline_box) | PlacedItem::Placeholder(inline_box) => {
-        let chain = match self.spans.get(inline_box.id as usize) {
-          Some(ProcessedInlineSpan::Box(item)) => item.decorations.as_ref(),
-          Some(ProcessedInlineSpan::Spacer { decorations, .. }) => decorations.as_ref(),
-          _ => None,
+        let (chain, covering) = match self.spans.get(inline_box.id as usize) {
+          Some(ProcessedInlineSpan::Box(item)) => (item.decorations.as_ref(), Covering::Box),
+          Some(ProcessedInlineSpan::Spacer { decorations, .. }) => {
+            (decorations.as_ref(), Covering::Padding)
+          }
+          _ => (None, Covering::Box),
         };
-
-        if chain.is_none() {
-          return;
-        }
-
         let x0 = content.x + inline_box.x;
         let width = match item {
           PlacedItem::Placeholder(_) => 0.0,
           _ => inline_box.width,
         };
-        let origin_y = setup.state.layout_origin.y;
-        let line_y = |value: f32| origin_y + (content.y + value - origin_y) * setup.state.scale;
 
-        coverage.cover(
-          chain,
-          line.index,
-          x0,
-          x0 + width,
-          &CoverExtent::Line {
-            top: line_y(setup.resolved_metrics.resolved_line_top),
-            bottom: line_y(setup.resolved_metrics.resolved_line_bottom),
-            baseline: line_y(setup.resolved_metrics.resolved_baseline),
-          },
-        );
+        (chain, x0, x0 + width, covering)
       }
+    };
+
+    if chain.is_none() {
+      return;
     }
+
+    coverage.cover(
+      chain,
+      line.index,
+      x0,
+      x1,
+      CoverLine {
+        top: line_y(setup.resolved_metrics.resolved_line_top),
+        bottom: line_y(setup.resolved_metrics.resolved_line_bottom),
+        baseline: line_y(setup.resolved_metrics.resolved_baseline),
+        scale: setup.state.scale,
+      },
+      covering,
+    );
   }
 }
 

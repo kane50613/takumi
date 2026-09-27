@@ -788,23 +788,7 @@ fn build_inline_layout_tree<'c>(
   trim_trailing_space(&mut spans);
 
   let (layout, text) = shape_spans(context, &spans, style, shape_cacheable);
-  let strut = context
-    .primary_font_metrics(&context.style, context.sizing.font_size)
-    .map(|metrics| {
-      let brush = text_style_with_span_id(style, None).brush;
-      let (above, below) = brush.line_box_contribution(
-        metrics.line_spacing(),
-        metrics.ascent,
-        metrics.descent,
-        metrics.line_gap,
-      );
-
-      Strut {
-        above,
-        below,
-        scales_with_text_fit: brush.line_height_scales_with_text_fit,
-      }
-    });
+  let strut = Strut::of(context, style);
 
   BuiltInlineLayout {
     layout,

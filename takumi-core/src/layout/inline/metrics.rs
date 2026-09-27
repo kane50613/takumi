@@ -1,11 +1,18 @@
 //! Vertical line metrics: line-height, baselines and vertical-align.
 
-use crate::style::{ResolvedVerticalAlign, VerticalAlignKeyword};
+use std::{iter::successors, rc::Rc};
+
+use crate::{
+  context::RenderContext,
+  font_style::SizedFontStyle,
+  style::{ResolvedVerticalAlign, VerticalAlignKeyword},
+};
 use parley::{InlineBoxKind, Line, LineMetrics, PositionedInlineBox, PositionedLayoutItem};
 
 use super::{
   InlineBrush, InlineLayout,
-  items::{InlineBoxItem, ProcessedInlineSpan},
+  items::{DecorationLink, InlineBoxItem, ProcessedInlineSpan},
+  text_style_with_span_id,
 };
 
 #[derive(Clone, Copy, Debug)]
@@ -15,13 +22,73 @@ pub(crate) struct ParentFontMetrics {
   pub(crate) text_metrics: (f32, f32),
 }
 
-/// How far the root inline box's strut reaches above and below the baseline.
+/// How far an inline box's strut reaches above and below the baseline.
 #[derive(Clone, Copy, Debug)]
 pub(crate) struct Strut {
   pub(crate) above: f32,
   pub(crate) below: f32,
-  /// Whether the root's line height scales with a line's `text-fit`, as a run's does.
+  /// Whether the box's line height scales with a line's `text-fit`, as a run's does.
   pub(crate) scales_with_text_fit: bool,
+}
+
+impl Strut {
+  /// The strut of the inline box `style` sizes in `context`: its primary font's content area
+  /// with its line height's half-leading, as Blink's `InlineBoxState::ComputeTextMetrics`.
+  pub(crate) fn of(context: &RenderContext, style: &SizedFontStyle<'_>) -> Option<Self> {
+    let metrics = context.primary_font_metrics(&context.style, context.sizing.font_size)?;
+    let brush = text_style_with_span_id(style, None).brush;
+    let (above, below) = brush.line_box_contribution(
+      metrics.line_spacing(),
+      metrics.ascent,
+      metrics.descent,
+      metrics.line_gap,
+    );
+
+    Some(Self {
+      above,
+      below,
+      scales_with_text_fit: brush.line_height_scales_with_text_fit,
+    })
+  }
+
+  /// The strut grown for a line at `line_scale`.
+  fn scaled(self, line_scale: f32) -> (f32, f32) {
+    let scale = if self.scales_with_text_fit {
+      line_scale
+    } else {
+      1.0
+    };
+
+    (self.above * scale, self.below * scale)
+  }
+}
+
+/// How far the inline spans open on a line reach above and below its baseline.
+#[derive(Clone, Copy)]
+struct SpanExtent {
+  above: f32,
+  below: f32,
+}
+
+impl SpanExtent {
+  const EMPTY: Self = Self {
+    above: 0.0,
+    below: f32::NEG_INFINITY,
+  };
+
+  /// Grows by the struts of the spans in `chain`, open on the line an item sits on, as Blink's
+  /// `LogicalLineBuilder::HandleOpenTag` adds every open box to the line box.
+  fn grow(&mut self, chain: Option<&Rc<DecorationLink<'_>>>, line_scale: f32) {
+    for link in successors(chain, |link| link.parent.as_ref()) {
+      let Some(strut) = link.decoration.strut else {
+        continue;
+      };
+      let (above, below) = strut.scaled(line_scale);
+
+      self.above = self.above.max(above);
+      self.below = self.below.max(below);
+    }
+  }
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -121,9 +188,12 @@ pub(super) fn resolve_inline_line_metrics(
   let mut result = Vec::with_capacity(inline_layout.lines().count());
   let mut previous_parley_bottom = 0.0_f32;
   let mut previous_resolved_bottom = 0.0_f32;
-  let has_boxes = spans
-    .iter()
-    .any(|span| matches!(span, ProcessedInlineSpan::Box(_)));
+  let has_boxes = spans.iter().any(|span| {
+    matches!(
+      span,
+      ProcessedInlineSpan::Box(_) | ProcessedInlineSpan::Spacer { .. }
+    )
+  });
   let preserve_first_line_top = spans.iter().any(|span| match span {
     ProcessedInlineSpan::Box(item) => {
       matches!(
@@ -148,6 +218,7 @@ pub(super) fn resolve_inline_line_metrics(
     let mut top_box_heights: Vec<f32> = Vec::new();
     let mut bottom_box_heights: Vec<f32> = Vec::new();
     let mut has_contribution = false;
+    let mut spans_open = SpanExtent::EMPTY;
 
     // Walking runs by cluster style skips the per-fragment glyph re-walk that
     // `line.items()` does, and boxes only exist when a span holds one.
@@ -176,6 +247,13 @@ pub(super) fn resolve_inline_line_metrics(
           resolved_above = resolved_above.max(base_above);
           resolved_below = resolved_below.max(base_below);
         }
+        if let Some(ProcessedInlineSpan::Text { decorations, .. }) = style
+          .brush
+          .source_span_id
+          .and_then(|span_id| spans.get(span_id as usize))
+        {
+          spans_open.grow(decorations.as_ref(), line_scale);
+        }
         has_contribution = true;
       }
     }
@@ -184,12 +262,22 @@ pub(super) fn resolve_inline_line_metrics(
       match item {
         PositionedLayoutItem::GlyphRun(_) => {}
         PositionedLayoutItem::InlineBox(inline_box) => {
+          let item = match spans.get(inline_box.id as usize) {
+            Some(ProcessedInlineSpan::Box(item)) => item,
+            Some(ProcessedInlineSpan::Spacer { decorations, .. }) => {
+              spans_open.grow(decorations.as_ref(), line_scale);
+              continue;
+            }
+            _ => continue,
+          };
+
+          if item.render_node.is_out_of_flow() {
+            spans_open.grow(item.decorations.as_ref(), line_scale);
+          }
           if inline_box.kind != InlineBoxKind::InFlow {
             continue;
           }
-          let Some(ProcessedInlineSpan::Box(item)) = spans.get(inline_box.id as usize) else {
-            continue;
-          };
+          spans_open.grow(item.decorations.as_ref(), line_scale);
           has_contribution = true;
           // `top`/`bottom` boxes attach to the line-box edges, not the baseline, so
           // they grow only the opposite edge after baseline content is measured.
@@ -225,6 +313,9 @@ pub(super) fn resolve_inline_line_metrics(
       }
     }
 
+    resolved_above = resolved_above.max(spans_open.above);
+    resolved_below = resolved_below.max(spans_open.below);
+
     if !top_box_heights.is_empty() || !bottom_box_heights.is_empty() {
       let mut above = resolved_above.max(0.0);
       let mut below = if resolved_below.is_finite() {
@@ -245,14 +336,10 @@ pub(super) fn resolve_inline_line_metrics(
     // CSS 2 §10.8.1: each line box starts with the root inline box's strut, but a line with no
     // content has zero height.
     if has_contribution && let Some(strut) = strut {
-      let scale = if strut.scales_with_text_fit {
-        line_scale
-      } else {
-        1.0
-      };
+      let (above, below) = strut.scaled(line_scale);
 
-      resolved_above = resolved_above.max(strut.above * scale);
-      resolved_below = resolved_below.max(strut.below * scale);
+      resolved_above = resolved_above.max(above);
+      resolved_below = resolved_below.max(below);
     }
 
     if !has_contribution {

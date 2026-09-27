@@ -37,65 +37,36 @@ pub struct InlineBackgroundFragment {
   pub baseline: f32,
 }
 
-/// One tier of a fragment's vertical bounds, unioned over covering items.
+/// Where a covering item's line sits, in border-box space.
 #[derive(Clone, Copy)]
-struct VerticalExtent {
-  top: f32,
-  bottom: f32,
-  baseline: f32,
-  set: bool,
+pub(super) struct CoverLine {
+  pub(super) top: f32,
+  pub(super) bottom: f32,
+  pub(super) baseline: f32,
+  /// The line's `text-fit` scale.
+  pub(super) scale: f32,
 }
 
-impl VerticalExtent {
-  const EMPTY: Self = Self {
-    top: f32::INFINITY,
-    bottom: f32::NEG_INFINITY,
-    baseline: 0.0,
-    set: false,
-  };
-
-  fn merge(&mut self, top: f32, bottom: f32, baseline: f32) {
-    self.top = self.top.min(top);
-    self.bottom = self.bottom.max(bottom);
-    if !self.set {
-      self.baseline = baseline;
-    }
-    self.set = true;
-  }
-
-  fn get(&self) -> Option<(f32, f32, f32)> {
-    self.set.then_some((self.top, self.bottom, self.baseline))
-  }
-}
-
-/// What a covering item contributes vertically to a span's fragment.
-pub(super) enum CoverExtent {
-  /// A glyph run's content area; sizes the fragment when the run's font size matches the span's own.
-  Run {
-    font_size: f32,
-    top: f32,
-    bottom: f32,
-    baseline: f32,
-  },
-  /// The owning line's extent; the last resort for padding-only coverage.
-  Line {
-    top: f32,
-    bottom: f32,
-    baseline: f32,
-  },
+/// What covers a span on a line.
+#[derive(Clone, Copy)]
+pub(super) enum Covering {
+  /// A glyph run, with its font's content area.
+  Run { top: f32, bottom: f32 },
+  /// An atomic box or an out-of-flow placeholder.
+  Box,
+  /// A span's padding.
+  Padding,
 }
 
 /// Per-line bounds of one decorated span, unioned over the items it covers.
 struct FragmentBounds {
   x0: f32,
   x1: f32,
-  /// The span's own runs, like Blink sizing an inline box fragment from the
-  /// box's own text metrics.
-  own: VerticalExtent,
-  /// Descendant runs, used when the span has no text of its own.
-  descendant: VerticalExtent,
-  /// The owning line, used when nothing on the fragment carries text.
-  line: VerticalExtent,
+  line: CoverLine,
+  /// The content area of the runs on the line.
+  runs: Option<(f32, f32)>,
+  /// Whether anything but the span's padding sits on the line.
+  has_content: bool,
 }
 
 /// Accumulates decorated-span coverage per line and resolves it into
@@ -104,11 +75,6 @@ struct FragmentBounds {
 ///
 /// Naive next to Blink; where it drifts:
 /// - only `background-color` fills; gradients and images on a span paint nothing
-/// - the span's own runs are recognized by font size, not by element, so a
-///   same-size fallback font can grow the height where Blink keeps the
-///   primary font's
-/// - a span with no text takes its descendants' runs or the line's extent,
-///   where Blink takes its own font's ascent and descent
 /// - a line taller than a page paints its background only on the page owning
 ///   the line, while Blink spills monolithic overflow onto the next page
 #[derive(Default)]
@@ -140,11 +106,18 @@ impl<'c> DecorationAccumulator<'c> {
     line_index: usize,
     x0: f32,
     x1: f32,
-    extent: &CoverExtent,
+    line: CoverLine,
+    covering: Covering,
   ) {
     let mut next = chain;
 
     while let Some(link) = next {
+      next = link.parent.as_ref();
+
+      if !link.decoration.has_fragments {
+        continue;
+      }
+
       let id = self.ensure(link);
       let bounds = self
         .fragments
@@ -152,88 +125,82 @@ impl<'c> DecorationAccumulator<'c> {
         .or_insert(FragmentBounds {
           x0,
           x1,
-          own: VerticalExtent::EMPTY,
-          descendant: VerticalExtent::EMPTY,
-          line: VerticalExtent::EMPTY,
+          line,
+          runs: None,
+          has_content: false,
         });
 
       bounds.x0 = bounds.x0.min(x0);
       bounds.x1 = bounds.x1.max(x1);
-      match *extent {
-        CoverExtent::Run {
-          font_size,
-          top,
-          bottom,
-          baseline,
-        } => {
-          let tier = if (link.decoration.sizing.font_size - font_size).abs() < 0.01 {
-            &mut bounds.own
-          } else {
-            &mut bounds.descendant
-          };
-
-          tier.merge(top, bottom, baseline);
-        }
-        CoverExtent::Line {
-          top,
-          bottom,
-          baseline,
-        } => bounds.line.merge(top, bottom, baseline),
+      bounds.has_content |= !matches!(covering, Covering::Padding);
+      if let Covering::Run { top, bottom } = covering {
+        bounds.runs = Some(
+          bounds
+            .runs
+            .map_or((top, bottom), |(a, b)| (a.min(top), b.max(bottom))),
+        );
       }
-      next = link.parent.as_ref();
     }
   }
 
   /// Each span's border box on each line it covers, sorted by span then line.
   fn span_fragments(&self) -> Vec<SpanFragment> {
-    // A span with any text sizes every fragment from runs; the line-extent
-    // tier only carries a span with no text at all (padding-only), so a
-    // spacer the line breaker strands on its own line stays invisible.
-    let mut has_text = vec![false; self.decorations.len()];
+    let mut has_content = vec![false; self.decorations.len()];
 
     for ((id, _), bounds) in &self.fragments {
-      has_text[*id] |= bounds.own.set || bounds.descendant.set;
+      has_content[*id] |= bounds.has_content;
     }
-    let vertical = |id: usize, bounds: &FragmentBounds| {
-      bounds
-        .own
-        .get()
-        .or_else(|| bounds.descendant.get())
-        .or_else(|| (!has_text[id]).then(|| bounds.line.get()).flatten())
+    // Parley can leave a span's start padding at the end of a line when the text after it wraps,
+    // where Blink's line breaker carries the open tag along with the text. A span with content
+    // elsewhere drops such a padding-only fragment.
+    let kept = |(id, line_index): &(usize, usize)| {
+      !has_content[*id] || self.fragments[&(*id, *line_index)].has_content
     };
+    let mut keys: Vec<(usize, usize)> = self.fragments.keys().copied().filter(kept).collect();
     let mut line_range = vec![(usize::MAX, 0); self.decorations.len()];
 
-    for ((id, line_index), bounds) in &self.fragments {
-      if vertical(*id, bounds).is_some() {
-        let range = &mut line_range[*id];
+    for (id, line_index) in &keys {
+      let range = &mut line_range[*id];
 
-        range.0 = range.0.min(*line_index);
-        range.1 = range.1.max(*line_index);
-      }
+      range.0 = range.0.min(*line_index);
+      range.1 = range.1.max(*line_index);
     }
-    let mut keys: Vec<(usize, usize)> = self.fragments.keys().copied().collect();
 
     keys.sort_unstable();
 
     keys
       .into_iter()
-      .filter_map(|(id, line_index)| {
-        let bounds = &self.fragments[&(id, line_index)];
-        let (top, bottom, baseline) = vertical(id, bounds)?;
+      .map(|(id, line_index)| {
+        let FragmentBounds {
+          x0, x1, line, runs, ..
+        } = self.fragments[&(id, line_index)];
         let decoration = &self.decorations[id];
+        // The content area of Blink's `InlineBoxState::ComputeTextMetrics`: the span's own
+        // primary font around the baseline, whatever its content. Without a primary font, the
+        // fonts its runs fell back to stand in, then the line.
+        let (top, bottom) = decoration
+          .text_metrics
+          .map(|(ascent, descent)| {
+            (
+              line.baseline - ascent * line.scale,
+              line.baseline + descent * line.scale,
+            )
+          })
+          .or(runs)
+          .unwrap_or((line.top, line.bottom));
         let (min_line, max_line) = line_range[id];
 
-        Some(SpanFragment {
+        SpanFragment {
           id,
           line_index,
-          x: bounds.x0,
+          x: x0,
           y: top - decoration.padding.top - decoration.border.width.top,
-          width: bounds.x1 - bounds.x0,
+          width: x1 - x0,
           height: bottom - top + decoration.padding.vertical() + decoration.border.width.vertical(),
-          baseline,
+          baseline: line.baseline,
           has_start: line_index == min_line,
           has_end: line_index == max_line,
-        })
+        }
       })
       .collect()
   }

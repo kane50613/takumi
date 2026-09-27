@@ -14,7 +14,7 @@ use crate::{
 use parley::{InlineBox, InlineBoxKind};
 use smallvec::SmallVec;
 
-use super::outline::InlineOutline;
+use super::{metrics::Strut, outline::InlineOutline};
 use std::{borrow::Cow, ops::Range, rc::Rc, sync::Arc};
 
 /// An out-of-flow box inside inline content.
@@ -62,7 +62,7 @@ impl<'n> InlineContainers<'n> {
 pub struct InlineBoxItem<'c> {
   /// The render node this box wraps.
   pub render_node: &'c RenderNode,
-  /// Innermost enclosing decorated span, if any.
+  /// Innermost enclosing inline span, if any.
   pub(crate) decorations: Option<Rc<DecorationLink<'c>>>,
   pub(crate) inline_box: InlineBox,
   pub(crate) paint_width: f32,
@@ -182,7 +182,7 @@ pub enum ProcessedInlineSpan<'c> {
     style: Box<SizedFontStyle<'c>>,
     /// URI of the nearest enclosing anchor's `href`, if any.
     link: Option<Arc<str>>,
-    /// Innermost enclosing decorated span, if any.
+    /// Innermost enclosing inline span, if any.
     decorations: Option<Rc<DecorationLink<'c>>>,
   },
   /// An inline box.
@@ -191,19 +191,24 @@ pub enum ProcessedInlineSpan<'c> {
   Spacer {
     /// The box the spacer occupies in the layout.
     inline_box: InlineBox,
-    /// Innermost enclosing decorated span, if any.
+    /// Innermost enclosing inline span, if any.
     decorations: Option<Rc<DecorationLink<'c>>>,
   },
 }
 
-/// The box decoration a `display: inline` span paints along its line
-/// fragments, resolved from its computed style.
+/// The inline box a `display: inline` span opens: what its line fragments paint and how far it
+/// grows the lines it is open on, resolved from its computed style.
 #[derive(Clone)]
 pub(crate) struct InlineDecoration<'c> {
   /// The span, whose fragments also bound the out-of-flow boxes it contains.
   pub(crate) owner: &'c RenderNode,
   /// Whether the fragments paint, which a span kept only as a containing block does not.
   pub(crate) paints: bool,
+  /// Whether the span's line fragments are tracked, to paint or to bound the out-of-flow boxes
+  /// it contains.
+  pub(crate) has_fragments: bool,
+  /// How far the span grows every line it is open on.
+  pub(crate) strut: Option<Strut>,
   pub(crate) color: Color,
   pub(crate) padding: Rect<f32>,
   /// The border's widths, colours and styles; each fragment resolves its radii from `radius`.
@@ -214,9 +219,10 @@ pub(crate) struct InlineDecoration<'c> {
   pub(crate) opacity: f32,
   /// The span's direction, which puts its start edge on the left or right.
   pub(crate) direction: Direction,
-  /// The span's sizing. Runs at its font size set the fragment height (Blink sizes the box
-  /// from its own text metrics); other sizes only when the span has no text of its own.
+  /// The span's sizing, which each fragment resolves its radii against.
   pub(crate) sizing: SizingContext,
+  /// The ascent and descent of the span's primary font, which size every fragment.
+  pub(crate) text_metrics: Option<(f32, f32)>,
 }
 
 impl InlineDecoration<'_> {
@@ -240,9 +246,9 @@ impl InlineDecoration<'_> {
   }
 }
 
-/// One open decorated span in the chain of decorated ancestors around an
-/// inline item, innermost last. Chains share their tails, so the `Rc` pointer
-/// identifies the span across items.
+/// One open inline span in the chain of span ancestors around an inline item,
+/// innermost last. Chains share their tails, so the `Rc` pointer identifies the
+/// span across items.
 pub struct DecorationLink<'c> {
   pub(crate) decoration: InlineDecoration<'c>,
   pub(crate) parent: Option<Rc<DecorationLink<'c>>>,
@@ -254,7 +260,7 @@ pub enum InlineItem<'c> {
   RenderNode {
     /// The node.
     render_node: &'c RenderNode,
-    /// Innermost enclosing decorated span, if any.
+    /// Innermost enclosing inline span, if any.
     decorations: Option<Rc<DecorationLink<'c>>>,
   },
   /// A run of text.
@@ -265,14 +271,14 @@ pub enum InlineItem<'c> {
     context: &'c RenderContext,
     /// URI of the nearest enclosing anchor's `href`, if any.
     link: Option<Arc<str>>,
-    /// Innermost enclosing decorated span, if any.
+    /// Innermost enclosing inline span, if any.
     decorations: Option<Rc<DecorationLink<'c>>>,
   },
   /// Advance an inline span's horizontal padding reserves at its edge.
   Spacer {
     /// The padding width in px.
     width: f32,
-    /// Innermost enclosing decorated span (the padded span itself when it is decorated), if any.
+    /// Innermost enclosing inline span (the padded span itself), if any.
     decorations: Option<Rc<DecorationLink<'c>>>,
   },
 }
@@ -441,8 +447,7 @@ fn inline_span_spacing(node: &RenderNode, depth: usize) -> (Rect<f32>, Rect<f32>
   )
 }
 
-/// The decoration an inline span paints, or `None` when it paints no background, border or
-/// outline and cannot be the containing block of out-of-flow boxes.
+/// The inline box an inline span opens, or `None` for a node that is not one.
 fn inline_span_decoration(node: &RenderNode, depth: usize) -> Option<InlineDecoration<'_>> {
   if !is_inline_span(node, depth) {
     return None;
@@ -454,13 +459,14 @@ fn inline_span_decoration(node: &RenderNode, depth: usize) -> Option<InlineDecor
   let paints =
     style.is_visible() && (color.0[3] != 0 || border.has_visible_sides() || outline.is_some());
 
-  if !paints && !node.contains_absolute_as_inline() {
-    return None;
-  }
-
   Some(InlineDecoration {
     owner: node,
     paints,
+    has_fragments: paints || node.contains_absolute_as_inline(),
+    strut: Strut::of(
+      &node.context,
+      &SizedFontStyle::from_style(style, &node.context),
+    ),
     color,
     padding: node.padding_px(),
     border,
@@ -474,6 +480,10 @@ fn inline_span_decoration(node: &RenderNode, depth: usize) -> Option<InlineDecor
     opacity: style.opacity.0,
     direction: style.direction,
     sizing: node.context.sizing.clone(),
+    text_metrics: node
+      .context
+      .primary_font_metrics(style, node.context.sizing.font_size)
+      .map(|metrics| (metrics.ascent, metrics.descent)),
   })
 }
 
