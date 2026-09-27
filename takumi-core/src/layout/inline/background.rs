@@ -2,8 +2,8 @@
 
 use crate::{
   geometry::{PathCommand, Point},
-  layout::corner_shape::KAPPA,
-  style::Color,
+  layout::{border::BorderProperties, corner_shape::KAPPA},
+  style::{Color, Sides, SpacePair},
 };
 use std::{collections::HashMap, rc::Rc};
 
@@ -24,9 +24,8 @@ pub struct InlineBackgroundFragment {
   pub width: f32,
   /// Fragment height.
   pub height: f32,
-  /// Corner radii as `(x, y)` pairs (top-left, top-right, bottom-right, bottom-left), already
-  /// clamped to the fragment.
-  pub radii: [(f32, f32); 4],
+  /// The border, without the sides a line wraps at, its radii clamped to the fragment.
+  pub border: BorderProperties,
   /// Fill color.
   pub color: Color,
   /// The span's `opacity`.
@@ -101,8 +100,7 @@ struct FragmentBounds {
 /// fragments (`InlineBoxFragmentPainterBase::PaintBackgroundBorderShadow`).
 ///
 /// Naive next to Blink; where it drifts:
-/// - only `background-color` fills; gradients, images, and `border` on a span
-///   paint nothing
+/// - only `background-color` fills; gradients and images on a span paint nothing
 /// - the span's own runs are recognized by font size, not by element, so a
 ///   same-size fallback font can grow the height where Blink keeps the
 ///   primary font's
@@ -218,10 +216,11 @@ impl DecorationAccumulator {
 
         let (top, bottom, baseline) = vertical(id, bounds)?;
         let decoration = &self.decorations[id];
+        let mut border = decoration.border;
         let x = bounds.x0;
-        let y = top - decoration.padding.top;
+        let y = top - decoration.padding.top - border.width.top;
         let width = bounds.x1 - bounds.x0;
-        let height = bottom - top + decoration.padding.vertical();
+        let height = bottom - top + decoration.padding.vertical() + border.width.vertical();
         let (min_line, max_line) = line_range[id];
         // The start edge sits on the first line, the end edge on the last;
         // wrap-edge corners stay square, like `box-decoration-break: slice`.
@@ -229,27 +228,13 @@ impl DecorationAccumulator {
         let (has_left, has_right) = decoration.direction.inline_sides(has_start, has_end);
         // css-backgrounds-3 corner overlap: one uniform factor shrinks every
         // radius so adjacent corners never cross.
+        let [top_left, top_right, bottom_right, bottom_left] =
+          border.radius.0.map(|radius| (radius.x, radius.y));
         let raw = [
-          if has_left {
-            decoration.radii[0]
-          } else {
-            (0.0, 0.0)
-          },
-          if has_right {
-            decoration.radii[1]
-          } else {
-            (0.0, 0.0)
-          },
-          if has_right {
-            decoration.radii[2]
-          } else {
-            (0.0, 0.0)
-          },
-          if has_left {
-            decoration.radii[3]
-          } else {
-            (0.0, 0.0)
-          },
+          if has_left { top_left } else { (0.0, 0.0) },
+          if has_right { top_right } else { (0.0, 0.0) },
+          if has_right { bottom_right } else { (0.0, 0.0) },
+          if has_left { bottom_left } else { (0.0, 0.0) },
         ];
         let [tl, tr, br, bl] = raw;
         let factor = [
@@ -262,14 +247,21 @@ impl DecorationAccumulator {
         .filter(|f| f.is_finite())
         .fold(1.0_f32, f32::min)
         .max(0.0);
-        let radii = raw.map(|(rx, ry)| (rx * factor, ry * factor));
+        border.radius = Sides(raw.map(|(rx, ry)| SpacePair::from_pair(rx * factor, ry * factor)));
+
+        if !has_left {
+          border.width.left = 0.0;
+        }
+        if !has_right {
+          border.width.right = 0.0;
+        }
 
         (width > 0.0 && height > 0.0).then_some(InlineBackgroundFragment {
           x,
           y,
           width,
           height,
-          radii,
+          border,
           color: decoration.color,
           opacity: decoration.opacity,
           baseline,
@@ -287,11 +279,11 @@ impl InlineBackgroundFragment {
       y,
       width,
       height,
-      radii,
+      border,
       ..
     } = *self;
     let point = |x, y| Point { x, y };
-    let [tl, tr, br, bl] = radii.map(|(rx, ry)| {
+    let [tl, tr, br, bl] = border.radius.0.map(|SpacePair { x: rx, y: ry }| {
       if rx > 0.0 && ry > 0.0 {
         (rx, ry)
       } else {

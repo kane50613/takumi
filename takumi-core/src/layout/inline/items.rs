@@ -4,10 +4,8 @@ use crate::{
   context::RenderContext,
   font_style::SizedFontStyle,
   geometry::{ComputedLayout, Point, Rect, Size},
-  layout::{node::Node, tree::RenderNode},
-  style::{
-    Color, Direction, Display, Float, Length, ResolvedVerticalAlign, SpacePair, WhiteSpaceCollapse,
-  },
+  layout::{border::BorderProperties, node::Node, tree::RenderNode},
+  style::{Color, Direction, Display, Float, ResolvedVerticalAlign, WhiteSpaceCollapse},
   text_processing::{COLLAPSIBLE_WHITESPACE, HORIZONTAL_WHITESPACE},
 };
 use parley::{InlineBox, InlineBoxKind};
@@ -82,9 +80,8 @@ pub enum ProcessedInlineSpan<'c> {
 pub(crate) struct InlineDecoration {
   pub(crate) color: Color,
   pub(crate) padding: Rect<f32>,
-  /// Corner radii as `(x, y)` pairs in paint order: top-left, top-right,
-  /// bottom-right, bottom-left.
-  pub(crate) radii: [(f32, f32); 4],
+  /// The border, its radii resolved against an empty box.
+  pub(crate) border: BorderProperties,
   pub(crate) opacity: f32,
   /// The span's direction, which puts its start edge on the left or right.
   pub(crate) direction: Direction,
@@ -196,7 +193,7 @@ fn collect_inline_items_impl<'n>(
   }
 
   let content_start = items.len();
-  let (margin, padding) = inline_span_spacing(node, depth);
+  let (margin, border_padding) = inline_span_spacing(node, depth);
 
   if margin.left > 0.0 {
     items.push(InlineItem::Spacer {
@@ -204,9 +201,9 @@ fn collect_inline_items_impl<'n>(
       decorations: outer_decorations.cloned(),
     });
   }
-  if padding.left > 0.0 {
+  if border_padding.left > 0.0 {
     items.push(InlineItem::Spacer {
-      width: padding.left,
+      width: border_padding.left,
       decorations: decorations.cloned(),
     });
   }
@@ -241,9 +238,9 @@ fn collect_inline_items_impl<'n>(
     }
   }
 
-  if padding.right > 0.0 {
+  if border_padding.right > 0.0 {
     items.push(InlineItem::Spacer {
-      width: padding.right,
+      width: border_padding.right,
       decorations: decorations.cloned(),
     });
   }
@@ -272,8 +269,8 @@ fn is_inline_span(node: &RenderNode, depth: usize) -> bool {
     )
 }
 
-/// The margins and padding an inline span reserves on the line, each side's only where it
-/// starts or ends.
+/// The margins, and the borders with the padding, an inline span reserves on the line, each
+/// side's only where it starts or ends.
 ///
 /// Approximate: a negative margin reserves nothing, where Blink pulls the neighbouring content in.
 fn inline_span_spacing(node: &RenderNode, depth: usize) -> (Rect<f32>, Rect<f32>) {
@@ -281,40 +278,41 @@ fn inline_span_spacing(node: &RenderNode, depth: usize) -> (Rect<f32>, Rect<f32>
     return Default::default();
   }
 
-  (node.margin_px(), node.padding_px())
+  let border = node.border_px();
+  let padding = node.padding_px();
+
+  (
+    node.margin_px(),
+    Rect {
+      top: border.top + padding.top,
+      right: border.right + padding.right,
+      bottom: border.bottom + padding.bottom,
+      left: border.left + padding.left,
+    },
+  )
 }
 
-/// The decoration an inline span paints, or `None` when its background is invisible.
+/// The decoration an inline span paints, or `None` when it paints neither a background nor a
+/// border.
 fn inline_span_decoration(node: &RenderNode, depth: usize) -> Option<InlineDecoration> {
-  if !is_inline_span(node, depth) {
+  if !is_inline_span(node, depth) || !node.context.style.is_visible() {
     return None;
   }
   let style = &node.context.style;
   let color = style.background_color.resolve(node.context.current_color);
+  let border = BorderProperties::from_context(&node.context, Size::ZERO, node.border_px());
 
-  if color.0[3] == 0 || !style.is_visible() {
+  if color.0[3] == 0 && !border.has_visible_sides() {
     return None;
   }
-  let sizing = &node.context.sizing;
-  let radius = |pair: &SpacePair<Length>| {
-    (
-      pair.x.to_px(sizing, 0.0).max(0.0),
-      pair.y.to_px(sizing, 0.0).max(0.0),
-    )
-  };
 
   Some(InlineDecoration {
     color,
     padding: node.padding_px(),
-    radii: [
-      radius(&style.border_top_left_radius),
-      radius(&style.border_top_right_radius),
-      radius(&style.border_bottom_right_radius),
-      radius(&style.border_bottom_left_radius),
-    ],
+    border,
     opacity: style.opacity.0,
     direction: style.direction,
-    font_size: sizing.font_size,
+    font_size: node.context.sizing.font_size,
   })
 }
 
