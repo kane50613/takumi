@@ -6,83 +6,120 @@ icon: Brush
 
 `takumi-paint` lays out a document and returns what painting it would draw, instead of an image. Use it when the output is not pixels: an editable PPTX, a Canvas replay, a native drawing API.
 
-```ts twoslash title="Read the boxes and runs"
-import { renderPaintTree, type PaintNode, type PaintTextRun } from "takumi-paint";
+Every CSS value arrives resolved. You draw shapes, paints, text, and images; you never parse CSS.
 
-const tree = await renderPaintTree(
+```ts twoslash title="Read the boxes and runs"
+import { renderPaintTree } from "takumi-paint";
+
+const document = await renderPaintTree(
   `<style>.big { font: 700 40px Geist; color: #B3261E }</style>
-   <div style="width: 640px; padding: 32px; background: #F7F3EC">
+   <div id="card" style="width: 640px; padding: 32px; background: #F7F3EC; border-radius: 12px">
      <div class="big">4,2 %</div>
      <p>hello <b>world</b></p>
    </div>`,
   { width: 640 },
 );
 
-const card = tree.root;
-card.boxDecoration?.background.color; // [247, 243, 236, 255]
+const card = document.find("card");
+card?.drawables[0]; // { type: "fill", role: "background", shape: { type: "rounded-rect", … }, paint: { type: "color", color: [247, 243, 236, 255] } }
 
-function* runs(node: PaintNode): Iterable<PaintTextRun> {
-  yield* node.runs ?? [];
-  for (const child of node.children ?? []) yield* runs(child);
-}
-
-for (const run of runs(card)) {
-  const font = tree.fonts[run.fontIndex];
-  console.log(run.text, font?.family, font?.weight, run.fontSize, run.color);
+for (const node of document) {
+  if (node.type !== "text") continue;
+  for (const run of node.runs) {
+    console.log(run.text, run.element?.tagName, run.font.family, run.font.weight, run.fontSize);
+  }
 }
 ```
 
-The package runs the same layout as `takumi-js` and walks the same stacking-context scene the image, SVG, and PDF backends paint. It records used values: a `50%` width is a number, `currentColor` is a color, and `<b>world</b>` is its own run with its own face.
+The package runs the same layout as `takumi-js` and walks the same stacking-context scene the image, SVG, and PDF backends paint.
+
+## Two views of one document
+
+Iterating the document, or a box, yields nodes in document order. `find(id)` returns the box of the element with that `id`. Use this view to rebuild editable objects: `node.parent` and `box.children` follow the input tree, and a `TextRun` names the element it came from.
+
+`paintSteps()` yields the steps a renderer takes, in paint order. Use this view to draw:
+
+```ts twoslash title="Replay the steps"
+import type { Drawable, PaintDocument } from "takumi-paint";
+
+declare function draw(ctx: CanvasRenderingContext2D, drawable: Drawable): void;
+declare function newLayer(): CanvasRenderingContext2D;
+
+function replay(ctx: CanvasRenderingContext2D, document: PaintDocument) {
+  const layers: CanvasRenderingContext2D[] = [];
+  let target = ctx;
+
+  for (const step of document.paintSteps()) {
+    switch (step.type) {
+      case "draw":
+        target.setTransform(...step.node.transform);
+        for (const drawable of step.drawables) draw(target, drawable);
+        break;
+      case "begin-clip":
+        target.save();
+        target.setTransform(...step.node.transform);
+        // Clip to step.clip.
+        break;
+      case "end-clip":
+        target.restore();
+        break;
+      case "begin-group":
+        layers.push(target);
+        target = newLayer();
+        break;
+      case "end-group": {
+        const parent = layers.pop() ?? ctx;
+        // Filter, clip, and mask the layer per step.node.effects, then blend it into parent.
+        parent.resetTransform();
+        parent.globalAlpha = step.node.effects?.opacity ?? 1;
+        parent.drawImage(target.canvas, 0, 0);
+        parent.globalAlpha = 1;
+        target = parent;
+        break;
+      }
+    }
+  }
+}
+```
+
+`z-index`, negative stacking, and outlines that paint after later siblings are already in the step order.
 
 ## Coordinates
 
 Every length is a device pixel, and so are the `width` and `height` options. A `20px` font measures `40` under a `devicePixelRatio` of `2`.
 
-A node's `transform` is an absolute matrix placing its border box on the canvas. Everything inside a node, such as `clip`, `boxDecoration`, `image`, and `runs`, is relative to the node's border-box top-left.
+A node's `transform` maps its local space onto the canvas. Its drawables sit in that local space:
 
-## Paint order
+- A box's local space is its border box.
+- A text node shares its box's space. A run's `x` and `y` are the start of its baseline.
+- An image node's local space is its content box.
 
-Nodes come in the order the renderer paints them, so `zIndex` does not appear: draw a node's `boxDecoration`, then its `image`, `inlineBackgrounds`, and `runs`, then its `children`, then its `boxDecoration.outline`.
+## The vocabulary
 
-Each node is a compositing group. Its `opacity`, `clip`, and `blendMode` apply to everything inside it, children included.
+| Concept    | Variants                                                                            |
+| ---------- | ----------------------------------------------------------------------------------- |
+| `Shape`    | `rect`, `rounded-rect`, `path` (SVG path data, as `new Path2D()` takes it)          |
+| `Paint`    | `color`, `linear-gradient`, `radial-gradient`, `conic-gradient`, `image`, `pattern` |
+| `Stroke`   | width, dash, cap, join                                                              |
+| `Drawable` | `fill`, `stroke`, `shadow`, `glyphs`, `image`                                       |
+| `Filter`   | `blur`, `color-matrix`, `drop-shadow`, `unsupported`                                |
+| `Effects`  | opacity, blend mode, isolation, filters, backdrop filters, clip, mask               |
 
-## Fields
+Gradient stops interpolate in sRGB. Takumi adds stops where the CSS interpolation space, such as the default Oklab, would differ, and unrolls repeating gradients over the area they cover. Background and mask layers arrive as `pattern` paints: one tile drawn at every `x` and `y`.
 
-<TypeTable
-  type={{
-    source: {
-      type: "PaintSource",
-      description:
-        "The input node this box came from: its child-index path, id, tag name, and class name",
-    },
-    boxDecoration: {
-      type: "PaintBoxDecoration",
-      description:
-        "Used background, border widths, colors, styles and radii, box shadows split inset and outer, and the outline",
-    },
-    image: {
-      type: "PaintImage",
-      description:
-        "The content box an image sits in and where it draws after object-fit and object-position",
-    },
-    runs: {
-      type: "PaintTextRun[]",
-      description:
-        "Shaped text runs with their font instance, size, color, decorations, and glyph positions",
-    },
-    inlineBackgrounds: {
-      type: "PaintInlineBackground[]",
-      description: "One rounded rectangle per line for each inline span with a background",
-    },
-    unresolvedEffects: {
-      type: "PaintUnresolvedEffects",
-      description: "filter, backdrop-filter, mask-image, and clip-path as CSS text",
-    },
-  }}
-/>
+A `shadow` drawable is a blurred copy of its `shape`, moved by `offset`, and visible only outside or inside its `box`. `blur` is the Gaussian's standard deviation, half of a CSS blur radius.
 
-Runs reference `tree.fonts` by index. A font instance names the registered family, the face index, the weight and style after variations, and any synthetic bold or skew the shaper applied.
+Every drawable carries a `role`, such as `background`, `border`, `box-shadow`, `outline`, `text`, or `text-decoration`, so an exporter can put a box's background, border, and shadow back into one shape.
 
-## What stays CSS
+## Text
 
-Linear and radial gradients come resolved: stops in pixels along the axis, plus the tile geometry. A conic gradient is carried as CSS text. `filter`, `backdrop-filter`, `mask-image`, and `clip-path` are carried as CSS text under `unresolvedEffects`, so an exporter can decide what to do with them.
+A `TextRun` holds the final text, its font, and its glyph ids and positions. `run.outline()` returns the glyphs as SVG path data from the baseline start, so a consumer can draw the text without a font engine. `run.font.data()` returns the font file for a native text API.
+
+A `glyphs` drawable fills a run's outline with a `paint` in the node's space: the text color, a text shadow's color with a `blur`, or the box's background for `background-clip: text`. With `stroke`, it strokes the outline instead, as `-webkit-text-stroke` does.
+
+## What stays unresolved
+
+- `filter: url(#id)` arrives as `{ type: "unsupported", css }`.
+- `backdrop-filter` needs what is already drawn behind the node, which targets such as PPTX cannot read.
+- A translucent layer inside a box, such as a span's `opacity`, is multiplied into each draw, so overlapping draws in it paint darker than the renderer's layer.
+- Bitmap glyphs, such as some emoji fonts, are left out.

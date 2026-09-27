@@ -1,11 +1,11 @@
-//! WebAssembly bindings for takumi's paint tree.
+//! WebAssembly bindings for takumi's paint document.
 #![deny(missing_docs)]
 #![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
 use std::sync::RwLock;
 
-use serde::Deserialize;
-use serde_wasm_bindgen::{from_value, to_value};
+use serde::{Deserialize, Serialize};
+use serde_wasm_bindgen::{Serializer, from_value, to_value};
 use takumi_bindings_common::{
   default_fonts,
   input::{Font, ImageSource, decode_images, register_font},
@@ -14,7 +14,7 @@ use takumi_bindings_common::{
 use takumi_core::{
   Fonts,
   layout::node::Node,
-  paint_tree::{PaintTreeOptions, paint_tree},
+  paint_tree::{PaintTree, PaintTreeOptions, paint_tree},
   resources::image::ResourceCache,
   style::{CssSource, FontFamily, Lang},
   viewport::{DEFAULT_DEVICE_PIXEL_RATIO, Viewport},
@@ -34,7 +34,7 @@ extern "C" {
   #[wasm_bindgen(typescript_type = "Node")]
   pub type NodeType;
   /// JavaScript type for font input (details object or raw buffer).
-  #[wasm_bindgen(typescript_type = "Font")]
+  #[wasm_bindgen(typescript_type = "FontInput")]
   pub type FontType;
   /// JavaScript type for the families produced by `registerFont`.
   #[wasm_bindgen(typescript_type = "RegisteredFamily[]")]
@@ -42,9 +42,9 @@ extern "C" {
   /// JavaScript object representing render options.
   #[wasm_bindgen(typescript_type = "PaintTreeOptions")]
   pub type RenderOptionsType;
-  /// JavaScript object representing a paint tree.
-  #[wasm_bindgen(typescript_type = "PaintTree")]
-  pub type PaintTreeType;
+  /// JavaScript object representing a painted document.
+  #[wasm_bindgen(typescript_type = "RawPaintDocument")]
+  pub type PaintDocumentType;
 }
 
 /// Options for [`PaintTreeRenderer::render`].
@@ -100,7 +100,7 @@ impl PaintTreeRenderer {
     &self,
     node: NodeType,
     options: Option<RenderOptionsType>,
-  ) -> Result<PaintTreeType, js_sys::Error> {
+  ) -> Result<RenderedPaint, js_sys::Error> {
     let node: Node = from_value(node.into()).map_err(map_error)?;
     let options: RenderOptions = options
       .map(|options| from_value(options.into()).map_err(map_error))
@@ -139,6 +139,34 @@ impl PaintTreeRenderer {
         .build(),
     )
     .map_err(map_error)?;
-    Ok(to_value(&tree).map_err(map_error)?.unchecked_into())
+
+    Ok(RenderedPaint { tree })
+  }
+}
+
+/// A painted document and the font files its runs use.
+#[wasm_bindgen]
+pub struct RenderedPaint {
+  tree: PaintTree,
+}
+
+#[wasm_bindgen]
+impl RenderedPaint {
+  /// The document.
+  pub fn document(&self) -> Result<PaintDocumentType, js_sys::Error> {
+    Ok(
+      self
+        .tree
+        .document
+        .serialize(&Serializer::json_compatible())
+        .map_err(map_error)?
+        .unchecked_into(),
+    )
+  }
+
+  /// The file of the document's font at `index`.
+  #[wasm_bindgen(js_name = fontData)]
+  pub fn font_data(&self, index: usize) -> Option<Vec<u8>> {
+    self.tree.font_data(index).map(<[u8]>::to_vec)
   }
 }

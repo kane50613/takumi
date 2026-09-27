@@ -10,37 +10,43 @@ import {
   subsetFonts,
 } from "@takumi-rs/helpers";
 import type { ReactNode } from "react";
-import {
-  PaintTreeRenderer as PaintTreeRendererInternal,
-  type PaintTree,
-} from "../pkg/takumi_paint_wasm";
+import { PaintTreeRenderer as PaintTreeRendererInternal } from "../pkg/takumi_paint_wasm";
+import { PaintDocument } from "./document";
 
 export { default, initSync } from "../pkg/takumi_paint_wasm";
 export type { FontLoader, ImagesInput } from "@takumi-rs/helpers/renderer";
 export type {
+  BlendMode,
+  ColorStop,
+  CornerRadii,
+  ElementInfo,
+  Filter,
+  Glyph,
+  Gradient,
+  ImagePaint,
+  ImageSource,
   Matrix,
-  PaintBackground,
-  PaintBackgroundLayer,
-  PaintBorder,
-  PaintBoxDecoration,
-  PaintClip,
-  PaintDecoration,
-  PaintFill,
-  PaintFont,
-  PaintGradientStop,
-  PaintImage,
-  PaintInlineBackground,
-  PaintNode,
-  PaintOutline,
-  PaintRect,
-  PaintTextRun,
-  PaintShadow,
-  PaintSource,
-  PaintTree,
-  PaintUnresolvedEffects,
-  Radii,
+  Paint,
+  Point,
+  Rect,
   Rgba,
+  Role,
+  Sampling,
+  Shape,
+  Stroke,
 } from "../pkg/takumi_paint_wasm";
+export { PaintDocument } from "./document";
+export type {
+  BoxNode,
+  Drawable,
+  Effects,
+  Font,
+  ImageNode,
+  PaintNode,
+  PaintStep,
+  TextNode,
+  TextRun,
+} from "./document";
 
 /** A document input: a takumi node tree, JSX, or an HTML string. */
 export type NodeInput = Node | ReactNode | ReactElementLike | string;
@@ -90,7 +96,7 @@ export class PaintTreeRenderer {
   );
 
   /** Lays out a node tree, JSX, or an HTML string and returns what painting it would draw. */
-  async render(node: NodeInput, options: PaintTreeOptions = {}): Promise<PaintTree> {
+  async render(node: NodeInput, options: PaintTreeOptions = {}): Promise<PaintDocument> {
     const { fonts, images, css, fontFamilies, ...rest } = options;
     const main = await resolveNode(node);
     const resources = await this.fonts.resolveResources(
@@ -101,12 +107,14 @@ export class PaintTreeRenderer {
     const own = css === undefined ? [] : isCssList(css) ? [...css] : [css];
     const sheets = [...own, ...main.css];
 
-    return this.inner.render(main.node, {
+    const rendered = this.inner.render(main.node, {
       ...rest,
       css: sheets.length > 0 ? sheets : undefined,
       images: resources.images,
       fontFamilies: resources.fontFamilies,
     });
+
+    return new PaintDocument(rendered.document(), (index) => rendered.fontData(index));
   }
 
   /** Registers a font ahead of time, deduped against earlier registrations. */
@@ -123,7 +131,10 @@ export class PaintTreeRenderer {
 let shared: PaintTreeRenderer | undefined;
 
 /** Renders with a lazily created shared {@link PaintTreeRenderer}. */
-export function renderPaintTree(node: NodeInput, options?: PaintTreeOptions): Promise<PaintTree> {
+export function renderPaintTree(
+  node: NodeInput,
+  options?: PaintTreeOptions,
+): Promise<PaintDocument> {
   shared ??= new PaintTreeRenderer();
   return shared.render(node, options);
 }

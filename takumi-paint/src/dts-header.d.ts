@@ -25,7 +25,7 @@ export type FontDetails = {
   generic?: string;
 };
 
-export type Font = FontDetails | ByteBuf;
+export type FontInput = FontDetails | ByteBuf;
 
 export type RegisteredFace = {
   weight: number;
@@ -39,7 +39,7 @@ export type RegisteredFamily = {
   faces: RegisteredFace[];
 };
 
-export type ImageSource = {
+export type ImageInput = {
   src: string;
   data: ByteBuf;
   /** Cache policy for the decoded image. Defaults to `"auto"`. */
@@ -54,7 +54,7 @@ export type PaintTreeOptions = {
   /** Device pixels per CSS px; scales every CSS length. @default 1 */
   devicePixelRatio?: number;
   /** Pre-fetched images keyed by URL. */
-  images?: ImageSource[];
+  images?: ImageInput[];
   /** CSS to apply before layout. */
   css?: CssInput[];
   /** Per-render font stack: ordered family names used as the fallback chain. */
@@ -63,230 +63,295 @@ export type PaintTreeOptions = {
   lang?: string;
 };
 
-/** A color as `[r, g, b, a]`, each `0..=255`. */
+/** `[r, g, b, a]`, each `0..=255`, in sRGB. */
 export type Rgba = [number, number, number, number];
-
-/** A rectangle in the owning node's border-box space. */
-export type PaintRect = { x: number; y: number; width: number; height: number };
-
-/** Corner radii as `[x, y]` pairs: top-left, top-right, bottom-right, bottom-left. */
-export type Radii = [[number, number], [number, number], [number, number], [number, number]];
-
-/** A 2D affine matrix as `[a, b, c, d, e, f]`. */
+/** `[a, b, c, d, e, f]`, the order `CanvasRenderingContext2D.setTransform` takes. */
 export type Matrix = [number, number, number, number, number, number];
-
-/** Everything the backends paint for a node tree, in paint order. */
-export type PaintTree = {
-  /** Canvas width in device pixels. */
-  width: number;
-  /** Canvas height in device pixels. */
-  height: number;
-  /** Font instances the runs reference by index. */
-  fonts: PaintFont[];
-  root: PaintNode;
+export type Point = { readonly x: number; readonly y: number };
+export type Rect = {
+  readonly x: number;
+  readonly y: number;
+  readonly width: number;
+  readonly height: number;
+};
+/** Horizontal and vertical radius of each corner. */
+export type CornerRadii = {
+  readonly topLeft: Point;
+  readonly topRight: Point;
+  readonly bottomRight: Point;
+  readonly bottomLeft: Point;
 };
 
-/** A font instance a run was shaped with. */
-export type PaintFont = {
-  /** The family the face was registered under; absent for a face the registry cannot name. */
-  family?: string;
-  /** Index of the face within its collection. */
-  faceIndex: number;
-  /** Weight class, `wght` applied when the face is variable. */
-  weight: number;
-  style: "normal" | "italic" | "oblique";
-  /** Width as a percentage of normal. */
-  width: number;
-  variations: { tag: string; value: number }[];
-  /** Stroke width in px for synthetic bold. */
-  syntheticBoldWidth?: number;
-  /** Synthetic oblique angle in degrees. */
-  syntheticObliqueAngle?: number;
-};
+export type Shape =
+  | { readonly type: "rect"; readonly rect: Rect }
+  | { readonly type: "rounded-rect"; readonly rect: Rect; readonly radii: CornerRadii }
+  /** SVG path data, the string `new Path2D()` takes. */
+  | { readonly type: "path"; readonly d: string; readonly fillRule: "nonzero" | "evenodd" };
 
 /**
- * One painted box: a compositing group whose `opacity`, `clip`, and `blendMode` apply to
- * everything inside it. Paints in order: `boxDecoration`, `image`, `inlineBackgrounds`, `runs`,
- * `children`, then `boxDecoration.outline`.
+ * A color stop, `offset` in `0..=1`. Interpolate linearly in sRGB between neighbors: takumi adds
+ * stops wherever the CSS interpolation color space, such as the default Oklab, would differ, and
+ * unrolls repeating gradients over the area they cover.
  */
-export type PaintNode = {
-  /** The node this box came from; absent for an anonymous box. */
-  source?: PaintSource;
-  /** Border-box width in device pixels. */
-  width: number;
-  /** Border-box height in device pixels. */
-  height: number;
-  /** Absolute transform placing the border box on the canvas. */
-  transform: Matrix;
-  opacity: number;
-  /** `mix-blend-mode` other than `normal`. */
-  blendMode?: string;
-  /** Whether `isolation: isolate` applies. */
-  isolate: boolean;
-  /** Overflow clip applied to the children. */
-  clip?: PaintClip;
-  /** Box decorations, when the box paints any. */
-  boxDecoration?: PaintBoxDecoration;
-  image?: PaintImage;
-  /** `text-shadow` layers under every run, later-listed shadows lowest. */
-  textShadows?: PaintShadow[];
-  /** Inline-span backgrounds, one rounded rect per line, outer spans first. */
-  inlineBackgrounds?: PaintInlineBackground[];
-  /** Shaped text runs in visual order. */
-  runs?: PaintTextRun[];
-  /** Effects the tree carries as CSS text instead of resolving. */
-  unresolvedEffects?: PaintUnresolvedEffects;
-  /** Boxes painted after this one, in paint order. */
-  children?: PaintNode[];
+export type ColorStop = { readonly offset: number; readonly color: Rgba };
+
+export type Gradient =
+  | {
+      readonly type: "linear-gradient";
+      readonly start: Point;
+      readonly end: Point;
+      readonly stops: readonly ColorStop[];
+    }
+  /** Elliptical when `radiusX !== radiusY`: scale the y axis by `radiusY / radiusX` about `center`. */
+  | {
+      readonly type: "radial-gradient";
+      readonly center: Point;
+      readonly radiusX: number;
+      readonly radiusY: number;
+      readonly stops: readonly ColorStop[];
+    }
+  /** `startAngle` in radians, clockwise from the positive x axis, as `createConicGradient` takes it. */
+  | {
+      readonly type: "conic-gradient";
+      readonly center: Point;
+      readonly startAngle: number;
+      readonly stops: readonly ColorStop[];
+    };
+
+/** A decoded image. */
+export type ImageSource = {
+  /** The `src` the document referenced, or a `data:` URL for image bytes passed inline. */
+  readonly src: string;
+  readonly width: number;
+  readonly height: number;
 };
 
-export type PaintSource = {
+/** `pixelated` means nearest-neighbor sampling. */
+export type Sampling = "smooth" | "pixelated";
+
+export type ImagePaint = {
+  readonly type: "image";
+  readonly image: ImageSource;
+  readonly sampling: Sampling;
+};
+
+export type Paint =
+  | { readonly type: "color"; readonly color: Rgba }
+  | Gradient
+  | ImagePaint
+  /** A tile repeated at every `x` and `y` pair: CSS background and mask layers. */
+  | {
+      readonly type: "pattern";
+      readonly tile: Gradient | ImagePaint;
+      readonly tileWidth: number;
+      readonly tileHeight: number;
+      readonly x: readonly number[];
+      readonly y: readonly number[];
+    };
+
+export type Stroke = {
+  readonly width: number;
+  /** Alternating dash and gap lengths; absent for a solid line. */
+  readonly dash?: readonly number[];
+  readonly cap: "butt" | "round";
+  readonly join: "miter" | "round" | "bevel";
+};
+
+/** What a drawable is for. Only exporters that rebuild editable objects need it. */
+export type Role =
+  | "background"
+  | "border"
+  | "box-shadow"
+  | "outline"
+  | "image"
+  | "text"
+  | "text-shadow"
+  | "text-stroke"
+  | "text-decoration"
+  | "inline-background";
+
+/** Separable and non-separable blend modes; all but `normal` match Canvas `globalCompositeOperation`. */
+export type BlendMode =
+  | "normal"
+  | "multiply"
+  | "screen"
+  | "overlay"
+  | "darken"
+  | "lighten"
+  | "color-dodge"
+  | "color-burn"
+  | "hard-light"
+  | "soft-light"
+  | "difference"
+  | "exclusion"
+  | "hue"
+  | "saturation"
+  | "color"
+  | "luminosity"
+  | "plus-lighter";
+
+/** Something to draw, in the owning node's local space, with glyph runs named by index. */
+export type RawDrawable<Run = number> =
+  /** With `blendMode`, blends with what the enclosing group already holds, as `background-blend-mode` does. */
+  | {
+      readonly type: "fill";
+      readonly role: Role;
+      readonly shape: Shape;
+      readonly paint: Paint;
+      readonly blendMode?: BlendMode;
+      /** Shapes it is clipped to, all at once. */
+      readonly clips?: readonly Shape[];
+    }
+  | {
+      readonly type: "stroke";
+      readonly role: Role;
+      readonly shape: Shape;
+      readonly stroke: Stroke;
+      readonly paint: Paint;
+      /** Shapes it is clipped to, all at once. */
+      readonly clips?: readonly Shape[];
+    }
+  /**
+   * A blurred copy of `shape`, moved by `offset`, visible only on one side of `box`: outside for
+   * an outer box shadow, inside for an inset one. `blur` is the Gaussian's standard deviation.
+   */
+  | {
+      readonly type: "shadow";
+      readonly role: Role;
+      readonly shape: Shape;
+      readonly offset: Point;
+      readonly blur: number;
+      readonly color: Rgba;
+      readonly visible: "outside" | "inside";
+      readonly box: Shape;
+    }
+  /**
+   * A run's glyphs filled with `paint`, which sits in the node's space. With `blur`, a text
+   * shadow. With `stroke`, the outlines are stroked instead of filled.
+   */
+  | {
+      readonly type: "glyphs";
+      readonly role: Role;
+      readonly run: Run;
+      readonly paint: Paint;
+      readonly offset: Point;
+      readonly blur: number;
+      readonly stroke?: Stroke;
+    }
+  | {
+      readonly type: "image";
+      readonly role: Role;
+      readonly image: ImageSource;
+      readonly rect: Rect;
+      readonly clip: Shape;
+      readonly sampling: Sampling;
+    };
+
+export type Filter =
+  /** Gaussian blur; `radius` is the standard deviation in px. */
+  | { readonly type: "blur"; readonly radius: number }
+  /** A 4×5 row-major matrix, as SVG `feColorMatrix type="matrix"`. Brightness, contrast, grayscale, hue-rotate, invert, opacity, saturate, and sepia all become one. */
+  | { readonly type: "color-matrix"; readonly matrix: readonly number[] }
+  | {
+      readonly type: "drop-shadow";
+      readonly offset: Point;
+      readonly blur: number;
+      readonly color: Rgba;
+    }
+  /** A filter takumi cannot resolve, such as `url(#svg-filter)`. */
+  | { readonly type: "unsupported"; readonly css: string };
+
+/** How a node composites, its mask's glyph runs named by index. */
+export type RawEffects<Drawable = RawDrawable> = {
+  readonly opacity: number;
+  readonly blendMode: BlendMode;
+  readonly isolation: boolean;
+  readonly filters: readonly Filter[];
+  /** Filters applied to what is already drawn behind the node, before the node draws. */
+  readonly backdropFilters: readonly Filter[];
+  /** The shape the filtered backdrop shows through: the node's border box. */
+  readonly backdropClip?: Shape;
+  readonly clip?: Shape;
+  /** Draw these into a layer; its alpha masks the node. */
+  readonly mask?: readonly Drawable[];
+};
+
+export type ElementInfo = {
+  readonly id?: string;
+  readonly tagName?: string;
+  readonly className?: string;
   /** Child-index path from the input root. */
-  path: number[];
-  id?: string;
-  tagName?: string;
-  className?: string;
+  readonly path: readonly number[];
 };
 
-export type PaintClip = {
-  rect: PaintRect;
-  radii: Radii;
-  /** Whether the horizontal axis clips. */
-  x: boolean;
-  /** Whether the vertical axis clips. */
-  y: boolean;
+export type Glyph = { readonly id: number; readonly x: number; readonly y: number };
+
+export type RawTextRun = {
+  readonly text: string;
+  readonly element?: ElementInfo;
+  readonly x: number;
+  readonly y: number;
+  readonly width: number;
+  readonly line: number;
+  readonly ascent: number;
+  readonly descent: number;
+  readonly font: number;
+  readonly fontSize: number;
+  readonly lineHeight: number;
+  readonly letterSpacing: number;
+  readonly glyphs: readonly Glyph[];
+  readonly outline: string;
+  readonly transform?: Matrix;
 };
 
-export type PaintBoxDecoration = {
-  background: PaintBackground;
-  border: PaintBorder;
-  shadows: { inset: PaintShadow[]; outer: PaintShadow[] };
-  /** The outline, painted after the children. */
-  outline?: PaintOutline;
+export type RawFont = {
+  readonly family?: string;
+  readonly weight: number;
+  readonly style: "normal" | "italic" | "oblique";
+  readonly stretch: number;
+  readonly variationSettings: readonly { readonly tag: string; readonly value: number }[];
+  readonly faceIndex: number;
 };
 
-export type PaintBackground = {
-  /** `background-color`, when visible. */
-  color?: Rgba;
-  /** `background-clip`; `text` means the background fills the glyphs instead of the box. */
-  clip: string;
-  /** Image layers, bottom to top. */
-  layers?: PaintBackgroundLayer[];
+type RawNodeBase = {
+  readonly id: number;
+  readonly parent?: number;
+  readonly element?: ElementInfo;
+  readonly transform: Matrix;
+  readonly width: number;
+  readonly height: number;
+  readonly bounds: Rect;
+  readonly drawables: readonly RawDrawable[];
+  readonly children: readonly number[];
 };
 
-export type PaintBackgroundLayer = {
-  fill: PaintFill;
-  /** Where the tiles land, in border-box space. */
-  tiles: { xs: number[]; ys: number[]; width: number; height: number };
-  blendMode: string;
-};
+export type RawPaintNode =
+  | (RawNodeBase & {
+      readonly type: "box";
+      readonly contentBox: Rect;
+      readonly outline: readonly RawDrawable[];
+      readonly effects?: RawEffects;
+      readonly overflowClip?: Shape;
+    })
+  | (RawNodeBase & {
+      readonly type: "text";
+      readonly textAlign: "left" | "right" | "center" | "justify";
+      readonly runs: readonly RawTextRun[];
+    })
+  | (RawNodeBase & { readonly type: "image"; readonly image: ImageSource });
 
-export type PaintGradientStop = { color: Rgba; position: number };
-
-export type PaintFill =
+export type RawPaintStep =
+  | { readonly type: "draw"; readonly node: number; readonly part: "drawables" | "outline" }
   | {
-      kind: "linear";
-      css: string;
-      repeating: boolean;
-      dirX: number;
-      dirY: number;
-      /** Length of the gradient axis in px. */
-      axisLength: number;
-      /** Stops in axis px from the axis start. */
-      stops: PaintGradientStop[];
-    }
-  | {
-      kind: "radial";
-      css: string;
-      repeating: boolean;
-      cx: number;
-      cy: number;
-      radiusX: number;
-      radiusY: number;
-      /** Stops in px from the center along the radius. */
-      stops: PaintGradientStop[];
-    }
-  | { kind: "conic"; css: string }
-  | { kind: "image"; src?: string };
+      readonly type: "begin-group" | "end-group" | "begin-clip" | "end-clip";
+      readonly node: number;
+    };
 
-/** Sides ordered top, right, bottom, left. */
-export type PaintBorder = {
-  widths: [number, number, number, number];
-  colors: [Rgba, Rgba, Rgba, Rgba];
-  styles: [string, string, string, string];
-  radii: Radii;
-};
-
-export type PaintShadow = {
-  offsetX: number;
-  offsetY: number;
-  blur: number;
-  spread: number;
-  color: Rgba;
-};
-
-export type PaintOutline = {
-  width: number;
-  color: Rgba;
-  style: string;
-  /** Gap between the border edge and the outline. */
-  offset: number;
-};
-
-export type PaintImage = {
-  /** The image URL, when the source was one. */
-  src?: string;
-  /** The content box the image is placed in and clipped to. */
-  contentBox: PaintRect;
-  /** Where the whole image draws after `object-fit` and `object-position`. */
-  placement: PaintRect;
-};
-
-export type PaintTextRun = {
-  text: string;
-  /** Start of the run's baseline, x. */
-  x: number;
-  /** The run's baseline, y. */
-  y: number;
-  /** Advance of the run. */
-  width: number;
-  ascent: number;
-  descent: number;
-  /** Index into `PaintTree.fonts`. */
-  fontIndex: number;
-  fontSize: number;
-  color: Rgba;
-  opacity: number;
-  /** A transform on top of the node's, when text-fit scales the line. */
-  transform?: Matrix;
-  /** Glyphs relative to the run origin. */
-  glyphs: { id: number; x: number; y: number }[];
-  decorations?: PaintDecoration[];
-  stroke?: { color: Rgba; width: number };
-  /** UTF-8 byte range of the text within the node's inline text. */
-  textByteRange: [number, number];
-  /** The inline span the run came from. */
-  spanId?: number;
-};
-
-export type PaintDecoration = {
-  line: "underline" | "overline" | "line-through";
-  transform: Matrix;
-  width: number;
-  height: number;
-  color: Rgba;
-};
-
-export type PaintInlineBackground = {
-  rect: PaintRect;
-  radii: Radii;
-  color: Rgba;
-  opacity: number;
-};
-
-export type PaintUnresolvedEffects = {
-  filter?: string;
-  backdropFilter?: string;
-  maskImage?: string;
-  clipPath?: string;
+/** The document as the wasm module serializes it, nodes and runs named by index. */
+export type RawPaintDocument = {
+  readonly width: number;
+  readonly height: number;
+  readonly nodes: readonly RawPaintNode[];
+  readonly fonts: readonly RawFont[];
+  readonly steps: readonly RawPaintStep[];
 };

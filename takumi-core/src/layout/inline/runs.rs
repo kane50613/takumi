@@ -9,7 +9,7 @@ use crate::{
   },
   style::{Affine, Color, TextUnderlinePosition},
 };
-use parley::GlyphRun;
+use parley::{GlyphRun, fontique::Blob};
 use skrifa::{FontRef, MetadataProvider, raw::TableProvider};
 use std::{collections::HashMap, ops::Range, sync::Arc};
 
@@ -131,7 +131,7 @@ pub struct ShapedRun {
   /// Synthetic oblique angle in degrees.
   pub synthetic_skew: Option<f32>,
   // Accessor, not a `pub` field: the backing `parley` blob must not leak into the public API.
-  pub(super) font_data: parley::fontique::Blob<u8>,
+  pub(super) font_data: Blob<u8>,
 }
 
 impl ShapedRun {
@@ -143,6 +143,12 @@ impl ShapedRun {
   /// Font bytes for `skrifa::FontRef::from_index`, paired with [`Self::font_index`].
   pub fn font_data(&self) -> &[u8] {
     self.font_data.as_ref()
+  }
+
+  /// The font file the run was shaped with.
+  #[cfg(feature = "paint-tree")]
+  pub fn font_blob(&self) -> Blob<u8> {
+    self.font_data.clone()
   }
 
   /// Stable identifier of the backing font blob, usable as a cache key.

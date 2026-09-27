@@ -183,7 +183,10 @@ impl InlineLines<'_> {
 
 impl PositionedInlineRun {
   /// The style of the span the run came from, when it came from one.
-  fn style<'s>(&self, spans: &'s [ProcessedInlineSpan<'_>]) -> Option<&'s SizedFontStyle<'s>> {
+  pub(crate) fn style<'s>(
+    &self,
+    spans: &'s [ProcessedInlineSpan<'_>],
+  ) -> Option<&'s SizedFontStyle<'s>> {
     let span_id = self.glyph_run.brush.source_span_id?;
 
     match spans.get(span_id as usize)? {

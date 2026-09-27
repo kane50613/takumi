@@ -3,6 +3,6 @@ packages:
   "takumi-paint": minor
 ---
 
-# Export painted values from JSX, HTML, or a node tree
+# Export what the renderer paints from JSX, HTML, or a node tree
 
-`renderPaintTree()` and `PaintTreeRenderer.render()` return used decorations, image placement, and shaped text in paint order with a shared font table.
+`renderPaintTree()` and `PaintTreeRenderer.render()` return a `PaintDocument`: nodes in document order with their shapes, paints, glyph runs, and images resolved from CSS, and `paintSteps()` to draw them in paint order.

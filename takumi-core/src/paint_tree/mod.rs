@@ -1,30 +1,30 @@
-//! A paint tree: what the backends paint for a node tree, with used values, in paint order.
+//! A paint document: what the backends paint for a node tree, with every CSS value resolved.
 //!
-//! [`paint_tree`] runs layout, builds the same stacking-context scene the raster, SVG, and
-//! PDF backends walk, and records each box's decorations, image placement, and shaped text
-//! runs instead of drawing them. Lengths are device pixels. A node's `transform` is absolute;
-//! everything inside a node is relative to its border box.
-//!
-//! Descendant outlines drift from the backends: they paint after the owning node's children,
-//! while raster and SVG defer a plain node's outline past the siblings that follow it in the
-//! same stacking context.
+//! [`paint_tree`] runs layout, walks the same stacking-context scene the raster, SVG, and PDF
+//! backends walk, and records what the shared painters draw instead of drawing it. Lengths are
+//! device pixels. A node's `transform` maps its local space onto the canvas, and its drawables
+//! sit in that local space.
 
+mod document;
 mod fonts;
-mod tree;
+mod paints;
+mod record;
+mod runs;
 mod walk;
 
 use std::{collections::HashMap, rc::Rc, sync::Arc};
 
+use parley::fontique::Blob;
 use typed_builder::TypedBuilder;
 
-pub use self::tree::*;
+pub use self::document::*;
 use crate::{
   Fonts,
   context::RenderContext,
   error::Result,
   geometry::Size,
   layout::{node::Node, tree::RenderNode},
-  resources::image::ImageSource,
+  resources::image::ImageSource as DecodedImage,
   scene::Scene,
   style::{Affine, ComputedStyle, FontFamily, Lang, SizingContext, StyleSheet},
   viewport::Viewport,
@@ -41,7 +41,7 @@ pub struct PaintTreeOptions<'g> {
   pub(crate) node: Node,
   /// Pre-decoded images keyed by `src`.
   #[builder(default)]
-  pub(crate) images: HashMap<Arc<str>, ImageSource>,
+  pub(crate) images: HashMap<Arc<str>, DecodedImage>,
   /// CSS stylesheets to apply before layout.
   #[builder(default)]
   pub(crate) stylesheet: Arc<StyleSheet>,
@@ -54,6 +54,20 @@ pub struct PaintTreeOptions<'g> {
   /// Default BCP-47 language applied to the root.
   #[builder(default)]
   pub(crate) lang: Option<Lang>,
+}
+
+/// A painted document, and the font files its runs use.
+pub struct PaintTree {
+  /// The document.
+  pub document: PaintDocument,
+  fonts: Vec<Blob<u8>>,
+}
+
+impl PaintTree {
+  /// The file of the document's font at `index`.
+  pub fn font_data(&self, index: usize) -> Option<&[u8]> {
+    self.fonts.get(index).map(Blob::as_ref)
+  }
 }
 
 /// Lays out `options.node` and records what painting it would draw.
@@ -81,36 +95,51 @@ pub fn paint_tree(options: PaintTreeOptions<'_>) -> Result<PaintTree> {
     false,
   )?;
   let Size { width, height } = scene.size;
-
-  let mut walker = walk::Walker {
-    fonts: fonts::FontTable::default(),
-  };
-  let mut nodes = walker.scene(&scene.root, &scene.results, &scene.contexts)?;
-  let root = match nodes.len() {
-    1 => nodes.remove(0),
-    _ => PaintNode {
-      source: None,
-      width,
-      height,
-      transform: Affine::IDENTITY.to_cols_array(),
-      opacity: 1.0,
-      blend_mode: None,
-      isolate: false,
-      clip: None,
-      box_decoration: None,
-      image: None,
-      text_shadows: Vec::new(),
-      inline_backgrounds: Vec::new(),
-      runs: Vec::new(),
-      unresolved_effects: None,
-      children: nodes,
-    },
-  };
-
-  Ok(PaintTree {
+  let has_root = scene
+    .contexts
+    .first()
+    .is_some_and(|context| context.root().is_some());
+  let mut walker = walk::Walker::new((!has_root).then(|| PaintNode {
+    id: 0,
+    parent: None,
+    element: None,
+    transform: Affine::IDENTITY.to_cols_array(),
     width,
     height,
-    fonts: walker.fonts.into_fonts(),
-    root,
+    bounds: PaintRect {
+      x: 0.0,
+      y: 0.0,
+      width,
+      height,
+    },
+    drawables: Vec::new(),
+    children: Vec::new(),
+    kind: NodeKind::Box {
+      content_box: PaintRect {
+        x: 0.0,
+        y: 0.0,
+        width,
+        height,
+      },
+      outline: Vec::new(),
+      effects: None,
+      overflow_clip: None,
+    },
+  }));
+
+  walker.scene(&scene, &[])?;
+  walker.link();
+
+  let (fonts, data) = walker.fonts.finish();
+
+  Ok(PaintTree {
+    document: PaintDocument {
+      width,
+      height,
+      nodes: walker.nodes,
+      fonts,
+      steps: walker.steps,
+    },
+    fonts: data,
   })
 }
