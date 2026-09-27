@@ -443,7 +443,7 @@ fn filter_reach(node: &RenderNode) -> f32 {
           .to_px(sizing, 1.0)
           .abs()
           .max(shadow.offset_y.to_px(sizing, 1.0).abs())
-          + shadow.blur_radius.to_px(sizing, 1.0) * BlurType::Shadow.extent_multiplier()
+          + shadow.blur_radius.to_px(sizing, 1.0) * BlurType::Filter.extent_multiplier()
       }
       _ => 0.0,
     })

@@ -762,7 +762,7 @@ impl SvgDocument {
         &[
           ("in", input.into()),
           ("type", "hueRotate".into()),
-          ("values", num((**angle as i32) as f32).into()),
+          ("values", num(**angle).into()),
           ("result", result.into()),
         ],
       ),
