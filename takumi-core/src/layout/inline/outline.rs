@@ -302,26 +302,37 @@ impl OutlineIsland {
 
 /// `corners` without repeated points or points in the middle of a straight run, so each one turns
 /// a right angle.
-fn right_angle_corners(mut corners: Vec<Point<f32>>) -> Vec<Point<f32>> {
-  loop {
-    let count = corners.len();
-    let redundant = (0..count).find(|&index| {
-      let previous = corners[(index + count - 1) % count];
-      let point = corners[index];
-      let next = corners[(index + 1) % count];
+fn right_angle_corners(corners: Vec<Point<f32>>) -> Vec<Point<f32>> {
+  let straight = |a: Point<f32>, b: Point<f32>, c: Point<f32>| {
+    b == a || (a.x == b.x && b.x == c.x) || (a.y == b.y && b.y == c.y)
+  };
+  let mut kept: Vec<Point<f32>> = Vec::with_capacity(corners.len());
 
-      point == previous
-        || (previous.x == point.x && point.x == next.x)
-        || (previous.y == point.y && point.y == next.y)
-    });
-
-    match redundant {
-      Some(index) if count > 4 => {
-        corners.remove(index);
-      }
-      _ => return corners,
+  for point in corners {
+    while let [.., before, last] = kept[..]
+      && straight(before, last, point)
+    {
+      kept.pop();
+    }
+    if kept.last() != Some(&point) {
+      kept.push(point);
     }
   }
+
+  // The closing seam joins the last points to the first, which the pass above never compared.
+  while kept.len() > 4 {
+    let count = kept.len();
+
+    if straight(kept[count - 2], kept[count - 1], kept[0]) {
+      kept.pop();
+    } else if straight(kept[count - 1], kept[0], kept[1]) {
+      kept.remove(0);
+    } else {
+      break;
+    }
+  }
+
+  kept
 }
 
 /// The radius the right-angle corner at `point` takes, coming from `previous` and going to `next`
