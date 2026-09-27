@@ -95,6 +95,9 @@ enum PaintBucket {
   /// block's background before any of their text.
   InFlow,
   /// Non-positioned floats.
+  ///
+  /// Approximate: a float inside inline content paints with that content, where Blink paints it
+  /// in this phase.
   Float,
   /// Positioned boxes and stacking contexts at `z-index: auto` or `0`, in tree order.
   Positioned,
