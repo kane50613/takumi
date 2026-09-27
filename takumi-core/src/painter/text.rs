@@ -29,6 +29,9 @@ pub enum GlyphFill {
 pub trait GlyphDevice: PaintDevice {
   /// Paints only the shadow of what is drawn until the matching [`GlyphDevice::end_shadow`]:
   /// each draw moved by the shadow's offset, filled with its colour, and blurred.
+  ///
+  /// Approximate: bitmap glyphs such as colour emoji cast no shadow, where Blink shadows their
+  /// alpha.
   fn begin_shadow(&mut self, shadow: &SizedShadow);
 
   /// Stops painting shadows.
