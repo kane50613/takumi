@@ -34,6 +34,7 @@ const CSS: &str = r#"
   .collapsed { font-size: 0; }
   .sized { display: inline; font-size: 18px; }
   .fade { opacity: 0.5; }
+  .padded-pic { width: 120px; height: 80px; padding: 10px; border: 2px solid black; }
 "#;
 
 fn card() -> Node {
@@ -260,6 +261,30 @@ fn paint_tree_records_used_values() {
     (depth >= 0).then_some(depth)
   });
   assert_eq!(depth, Some(0));
+}
+
+#[test]
+fn padded_image_clips_to_its_whole_content_box() {
+  let document = build(Node::container([
+    Node::image("assets/images/yeecord.png").with_class_name("padded-pic")
+  ]));
+  let image = document
+    .nodes
+    .iter()
+    .find(|node| matches!(node.kind, NodeKind::Image { .. }))
+    .expect("image node");
+  let Some(Drawable::Image {
+    clip: Shape::Rect { rect },
+    ..
+  }) = image.drawables.first()
+  else {
+    panic!("the image clips to a rect: {:?}", image.drawables.first());
+  };
+
+  assert_eq!(
+    (rect.x, rect.y, rect.width, rect.height),
+    (0.0, 0.0, image.width, image.height)
+  );
 }
 
 #[test]

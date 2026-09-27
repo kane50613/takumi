@@ -324,17 +324,24 @@ impl Walker {
       .map(|source| source.size(&context.sizing))
       .filter(|(width, height)| *width > 0.0 && *height > 0.0);
     let painter = BoxPainter::new(context, layout);
+    let content_rect = PaintRect::sized(Point::ZERO, content);
     let (source, rect, clip) = match intrinsic {
       Some((width, height)) => {
         let replaced = painter.replaced_content(Size { width, height });
+        // The clip is a border-box `ClipBox`; the content box it falls back to is already local.
         let clip = replaced
           .clip
-          .map_or(FillShape::Rect(content), FillShape::from);
+          .map_or(Shape::Rect { rect: content_rect }, |clip| {
+            Shape::of(
+              &FillShape::from(clip),
+              Affine::translation(-offset.x, -offset.y),
+            )
+          });
 
         (
           ImageSource { src, width, height },
           PaintRect::sized(replaced.placement.offset, replaced.placement.size),
-          Shape::of(&clip, Affine::translation(-offset.x, -offset.y)),
+          clip,
         )
       }
       None => (
@@ -343,10 +350,8 @@ impl Walker {
           width: content.width,
           height: content.height,
         },
-        PaintRect::sized(Point::ZERO, content),
-        Shape::Rect {
-          rect: PaintRect::sized(Point::ZERO, content),
-        },
+        content_rect,
+        Shape::Rect { rect: content_rect },
       ),
     };
     let placed = transform * Affine::translation(offset.x, offset.y);
