@@ -95,10 +95,10 @@ pub fn paint_tree(options: PaintTreeOptions<'_>) -> Result<PaintTree> {
     false,
   )?;
   let Size { width, height } = scene.size;
-  let has_root = scene
-    .contexts
-    .first()
-    .is_some_and(|context| context.root().is_some());
+  let has_root = match scene.contexts.first().and_then(|context| context.root()) {
+    Some(paint) => walk::recorded(&scene, paint)?.is_some(),
+    None => false,
+  };
   let mut walker = walk::Walker::new((!has_root).then(|| PaintNode {
     id: 0,
     parent: None,
