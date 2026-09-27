@@ -1,7 +1,7 @@
 //! The page window a prepared tree emits through: what it paints, what it
 //! owns, and the clip and translation that put it on the page.
 
-use takumi_core::{geometry::Point, scene::SceneBounds, style::Affine};
+use takumi_core::{geometry::Point, scene::SceneBounds};
 
 use crate::{
   emitter::Emitter,
@@ -101,7 +101,7 @@ impl ContentWindow {
       self.translate.y,
     ));
     emitter.window = self.window;
-    emitter.emit_context(0, Affine::IDENTITY, surface)?;
+    emitter.emit(surface)?;
     surface.pop();
     surface.pop();
     if self.artifact {

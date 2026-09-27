@@ -9,7 +9,7 @@ use takumi_core::{
   },
 };
 use takumi_core::{
-  geometry::{PathCommand, Point, Rect, Size},
+  geometry::{PathCommand, Point, Size},
   painter::FillShape,
   style::{Affine, BlendMode, Color, FillRule as CoreFillRule, ResolvedGradientStop},
 };
@@ -72,11 +72,6 @@ pub(crate) fn shape_path(shape: &FillShape, origin: Point<f32>) -> Option<Krilla
     }
     _ => krilla_path(&shape.to_commands(), origin),
   }
-}
-
-/// A krilla path tracing `edges`.
-pub(crate) fn edges_path(edges: Rect<f32>) -> Option<KrillaPath> {
-  KrillaRect::from_ltrb(edges.left, edges.top, edges.right, edges.bottom).and_then(rect_path)
 }
 
 /// Why an image that had bytes could not be drawn.

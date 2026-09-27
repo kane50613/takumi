@@ -88,7 +88,7 @@ mod subsetter;
 use takumi_core::{
   geometry::Point as CorePoint,
   layout::tree::RenderNode,
-  style::{Affine, Color, Lang},
+  style::{Color, Lang},
   viewport::MediaTarget,
 };
 
@@ -345,7 +345,7 @@ impl SinglePage {
 
     let mut emitter = content.emitter(state, Some(&inline_map), true);
 
-    emitter.emit_context(0, Affine::IDENTITY, &mut surface)?;
+    emitter.emit(&mut surface)?;
     surface.pop();
     surface.finish();
     let rendered = Self {
