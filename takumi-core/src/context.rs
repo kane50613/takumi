@@ -9,7 +9,10 @@ use typed_builder::TypedBuilder;
 
 use crate::{
   layout::inline::{InlineLayoutCache, MeasureCache, ShapeCache},
-  resources::{font::FontsSnapshot, image::ImageSource},
+  resources::{
+    font::{FontsSnapshot, PrimaryFontMetrics},
+    image::ImageSource,
+  },
   style::{Affine, Color, ComputedStyle, SizingContext, StyleSheet, TwCache},
 };
 
@@ -20,7 +23,7 @@ struct RenderShared {
   stylesheet: Arc<StyleSheet>,
   inline_cache: InlineLayoutCache,
   tw_cache: TwCache,
-  normal_line_heights: RefCell<HashMap<u64, f32>>,
+  primary_font_metrics: RefCell<HashMap<u64, Option<PrimaryFontMetrics>>>,
   time_ms: u64,
   draw_debug_border: bool,
   dither_gradients: bool,
@@ -68,7 +71,7 @@ impl From<RenderContextInit> for RenderContext {
         stylesheet: init.stylesheet,
         inline_cache: InlineLayoutCache::new(init.shape_cache, init.measure_cache),
         tw_cache: TwCache::default(),
-        normal_line_heights: RefCell::new(HashMap::new()),
+        primary_font_metrics: RefCell::new(HashMap::new()),
         time_ms: init.time_ms,
         draw_debug_border: init.draw_debug_border,
         dither_gradients: init.dither_gradients,
@@ -151,18 +154,22 @@ impl RenderContext {
     &self.shared.tw_cache
   }
 
-  /// The `line-height: normal` value for `key`, resolved once per render.
-  pub(crate) fn normal_line_height(&self, key: u64, resolve: impl FnOnce() -> f32) -> f32 {
-    if let Some(height) = self.shared.normal_line_heights.borrow().get(&key) {
-      return *height;
+  /// The primary font metrics for `key`, resolved once per render.
+  pub(crate) fn cached_primary_font_metrics(
+    &self,
+    key: u64,
+    resolve: impl FnOnce() -> Option<PrimaryFontMetrics>,
+  ) -> Option<PrimaryFontMetrics> {
+    if let Some(metrics) = self.shared.primary_font_metrics.borrow().get(&key) {
+      return *metrics;
     }
-    let height = resolve();
+    let metrics = resolve();
     self
       .shared
-      .normal_line_heights
+      .primary_font_metrics
       .borrow_mut()
-      .insert(key, height);
-    height
+      .insert(key, metrics);
+    metrics
   }
 
   /// Blink's `CreateAnonymousStyleWithDisplay`, with the `anonymous` flags of the style

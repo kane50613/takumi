@@ -672,14 +672,30 @@ impl Fonts {
   }
 }
 
+/// A primary font's vertical metrics at a size, each rounded as Blink's `FontMetrics` rounds them.
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct PrimaryFontMetrics {
+  pub(crate) ascent: f32,
+  pub(crate) descent: f32,
+  pub(crate) line_gap: f32,
+}
+
+impl PrimaryFontMetrics {
+  /// The `line-height: normal` these metrics give, as Blink's `FontMetrics::SetLineSpacing`.
+  pub(crate) fn line_spacing(self) -> f32 {
+    self.ascent + self.descent + self.line_gap
+  }
+}
+
 impl RenderContext {
-  /// First available font's line spacing for `families`/`attributes`, scaled to `font_size`.
-  pub(crate) fn first_font_line_spacing<'a>(
+  /// The primary font's vertical metrics for `families`/`attributes` at `font_size`: the first
+  /// available font that covers the space glyph.
+  pub(crate) fn first_font_metrics<'a>(
     &self,
     families: impl IntoIterator<Item = QueryFamily<'a>>,
     attributes: Attributes,
     font_size: f32,
-  ) -> Option<f32> {
+  ) -> Option<PrimaryFontMetrics> {
     self.fonts().with_context(|fonts| {
       let mut query = fonts.inner.collection.query(&mut fonts.inner.source_cache);
       let mut result = None;
@@ -697,10 +713,12 @@ impl RenderContext {
           return QueryStatus::Continue;
         }
         let metrics = font_ref.metrics(Size::new(font_size), LocationRef::default());
-        // Blink: normal line height is lround(ascent) + lround(descent) +
-        // lround(line_gap) of the primary font (FontMetrics::SetLineSpacing).
-        result =
-          Some(metrics.ascent.round() + metrics.descent.abs().round() + metrics.leading.round());
+
+        result = Some(PrimaryFontMetrics {
+          ascent: metrics.ascent.round(),
+          descent: metrics.descent.abs().round(),
+          line_gap: metrics.leading.round(),
+        });
         QueryStatus::Stop
       });
 
