@@ -70,8 +70,9 @@ impl SceneEmitter<'_> {
     let shape_clip = placed.begin_clip_path_group(doc)?;
     let mask = placed.begin_mask_group(doc)?;
 
-    // Alpha restore approximates the edge-duplicated backdrop sampling browsers
-    // use; skipped for opacity(), which lowers alpha on purpose.
+    // The blur feathers the clipped backdrop's alpha at its edges; restoring it averages only the
+    // pixels inside, close to the mirrored edges browsers sample. Skipped for opacity(), which
+    // lowers alpha on purpose.
     let restore_alpha = !filters.iter().any(|f| matches!(f, Filter::Opacity(_)));
     let filter_refs = doc.filter(&filters, context, size, restore_alpha)?;
     let filter_wrappers = doc.begin_filter_wrappers(&filter_refs)?;
@@ -82,6 +83,8 @@ impl SceneEmitter<'_> {
       filter_refs.first().map(String::as_str),
     )?;
 
+    // The filter reads only the backdrop inside the border box, as browsers do.
+    let backdrop_clip = doc.begin_clipped_group(&placed.border_box_path_data())?;
     // The replay is emitted in root coordinates; cancel the current transform.
     let to_root = transform.invert().unwrap_or(Affine::IDENTITY);
     let root_group = (!to_root.is_identity())
@@ -93,6 +96,7 @@ impl SceneEmitter<'_> {
     if let Some(group) = root_group {
       doc.end_group(group)?;
     }
+    doc.end_group(backdrop_clip)?;
     doc.end_group(filter_group)?;
     doc.end_filter_wrappers(filter_wrappers)?;
     if let Some(group) = mask {

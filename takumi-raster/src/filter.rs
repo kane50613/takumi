@@ -205,16 +205,61 @@ fn backdrop_filter_padding(filters: &[Filter], sizing: &SizingContext) -> i32 {
     .unwrap_or(0)
 }
 
-fn backdrop_region(
-  mask_placement: Placement,
-  mask_bounds: Placement,
-  padding: i32,
-  canvas_size: Size<u32>,
-) -> Option<Placement> {
-  mask_bounds
-    .translate(mask_placement.left, mask_placement.top)
-    .inflate(padding)?
-    .clamp_to(canvas_size)
+/// A backdrop grown by `padding` on every side with its own pixels mirrored across its edges, so
+/// a filter reads nothing from outside the element, as Chrome's mirror edge mode does.
+struct MirroredRegion {
+  raw: Vec<u8>,
+  width: u32,
+  height: u32,
+  padding: u32,
+}
+
+impl MirroredRegion {
+  fn of(raw: &[u8], region: Placement, padding: u32) -> Self {
+    let width = region.width + padding * 2;
+    let height = region.height + padding * 2;
+    let mirror = |index: u32, size: u32| {
+      let period = size as i64 * 2;
+      let offset = (index as i64 - padding as i64).rem_euclid(period);
+
+      (if offset >= size as i64 {
+        period - 1 - offset
+      } else {
+        offset
+      }) as usize
+    };
+    let mut padded = Vec::with_capacity(width as usize * height as usize * 4);
+
+    for y in 0..height {
+      let row = mirror(y, region.height) * region.width as usize;
+
+      for x in 0..width {
+        let start = (row + mirror(x, region.width)) * 4;
+
+        padded.extend_from_slice(&raw[start..start + 4]);
+      }
+    }
+
+    Self {
+      raw: padded,
+      width,
+      height,
+      padding,
+    }
+  }
+
+  /// The pixels of the original region.
+  fn inner(&self) -> Vec<u8> {
+    let row_bytes = (self.width - self.padding * 2) as usize * 4;
+
+    (self.padding..self.height - self.padding)
+      .flat_map(|y| {
+        let start = (y * self.width + self.padding) as usize * 4;
+
+        self.raw[start..start + row_bytes].iter().copied()
+      })
+      .collect()
+  }
 }
 
 fn composite_backdrop_with_mask(
@@ -361,15 +406,18 @@ pub(crate) fn apply_backdrop_filter(
     return Ok(());
   };
 
-  let padding = backdrop_filter_padding(filters, &context.sizing);
-  let Some(region) = backdrop_region(placement, mask_bounds, padding, canvas_size) else {
+  let Some(region) = mask_bounds
+    .translate(placement.left, placement.top)
+    .clamp_to(canvas_size)
+  else {
     return Ok(());
   };
 
   let region_row_bytes = region.width as usize * 4;
-  let mut backdrop_raw = canvas.read_region(region);
+  let padding = backdrop_filter_padding(filters, &context.sizing).max(0) as u32;
+  let mut padded = MirroredRegion::of(&canvas.read_region(region), region, padding);
   let Some(mut backdrop_pixmap) =
-    PixmapMut::from_bytes(&mut backdrop_raw, region.width, region.height)
+    PixmapMut::from_bytes(&mut padded.raw, padded.width, padded.height)
   else {
     return Ok(());
   };
@@ -380,6 +428,8 @@ pub(crate) fn apply_backdrop_filter(
     context.current_color,
     filters.iter().filter(|filter| !filter.is_drop_shadow()),
   )?;
+
+  let backdrop_raw = padded.inner();
 
   let mask_offset_x = region.left - placement.left;
   let mask_offset_y = region.top - placement.top;
