@@ -326,6 +326,7 @@ mod tests {
         width: 1.0,
         height: 1.0,
       }),
+      owner: Vec::new(),
     })
   }
 
