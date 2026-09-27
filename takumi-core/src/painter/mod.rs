@@ -257,9 +257,9 @@ pub trait PaintDevice {
     self.end_layer();
   }
 
-  /// Fills `shape` in `color`, blurred by a Gaussian whose standard deviation is half
-  /// `blur_radius`, as a CSS shadow blurs.
-  fn fill_shadow(&mut self, shape: &ShadowShape, color: Color, blur_radius: f32, transform: Affine);
+  /// Fills `shape` moved by `shadow`'s offset, in its colour, blurred by a Gaussian whose standard
+  /// deviation is half its blur radius, as a CSS shadow blurs.
+  fn fill_shadow(&mut self, shape: &ShadowShape, shadow: &SizedShadow, transform: Affine);
 }
 
 /// How to stroke a shape.

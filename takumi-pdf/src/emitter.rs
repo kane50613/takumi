@@ -1674,16 +1674,11 @@ impl PaintDevice for SurfaceDevice<'_, '_> {
     self.close();
   }
 
-  fn fill_shadow(
-    &mut self,
-    shape: &ShadowShape,
-    color: Color,
-    blur_radius: f32,
-    transform: Affine,
-  ) {
-    let color = filtered(self.filter, color);
+  fn fill_shadow(&mut self, shape: &ShadowShape, shadow: &SizedShadow, transform: Affine) {
+    let color = filtered(self.filter, shadow.color);
+    let transform = Affine::translation(shadow.offset_x, shadow.offset_y) * transform;
 
-    for band in Band::of(blur_radius) {
+    for band in Band::of(shadow.blur_radius) {
       let band_shape = shape.spread(band.spread).fill_shape();
       let fill = Fill {
         rule: krilla_fill_rule(band_shape.rule()),
@@ -1801,16 +1796,8 @@ impl PaintDevice for TextDevice<'_, '_, '_> {
     self.device.end_layer();
   }
 
-  fn fill_shadow(
-    &mut self,
-    shape: &ShadowShape,
-    color: Color,
-    blur_radius: f32,
-    transform: Affine,
-  ) {
-    self
-      .device
-      .fill_shadow(shape, color, blur_radius, transform);
+  fn fill_shadow(&mut self, shape: &ShadowShape, shadow: &SizedShadow, transform: Affine) {
+    self.device.fill_shadow(shape, shadow, transform);
   }
 }
 

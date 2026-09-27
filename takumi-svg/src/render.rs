@@ -586,19 +586,16 @@ impl PaintDevice for DocumentDevice<'_> {
     self.close_group();
   }
 
-  fn fill_shadow(
-    &mut self,
-    shape: &ShadowShape,
-    color: Color,
-    blur_radius: f32,
-    transform: Affine,
-  ) {
+  fn fill_shadow(&mut self, shape: &ShadowShape, shadow: &SizedShadow, transform: Affine) {
     let fill = shape.fill_shape();
-    let data = path_data(&fill.to_commands(), transform);
+    let data = path_data(
+      &fill.to_commands(),
+      Affine::translation(shadow.offset_x, shadow.offset_y) * transform,
+    );
 
     self.write(|doc| {
-      doc.with_blur(blur_radius, |doc| {
-        doc.fill_path(&data, Rgba(color.0), fill.rule())
+      doc.with_blur(shadow.blur_radius, |doc| {
+        doc.fill_path(&data, Rgba(shadow.color.0), fill.rule())
       })
     });
   }

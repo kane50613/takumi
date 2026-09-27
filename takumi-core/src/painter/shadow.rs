@@ -87,21 +87,13 @@ impl BoxPainter<'_> {
     device.push_clip_out(&border_box.into(), at);
 
     for shadow in shadows.iter().rev() {
-      let rect = border_box.outset(shadow.spread_radius).shifted(Point {
-        x: shadow.offset_x,
-        y: shadow.offset_y,
-      });
+      let rect = border_box.outset(shadow.spread_radius);
 
       if rect.is_empty() {
         continue;
       }
 
-      device.fill_shadow(
-        &ShadowShape::Inside(rect),
-        shadow.color,
-        shadow.blur_radius,
-        at,
-      );
+      device.fill_shadow(&ShadowShape::Inside(rect), shadow, at);
     }
 
     device.pop_clip();
@@ -122,18 +114,21 @@ impl BoxPainter<'_> {
     device.push_clip(&padding_box.into(), at);
 
     for shadow in shadows.iter().rev() {
-      let hole = padding_box.outset(-shadow.spread_radius).shifted(Point {
-        x: shadow.offset_x,
-        y: shadow.offset_y,
-      });
+      let hole = padding_box.outset(-shadow.spread_radius);
 
       if hole.is_empty() {
         device.fill_shape(&padding_box.into(), shadow.color, at);
         continue;
       }
 
+      // The shape moves by the shadow's offset, so its bounds cover the padding box from where
+      // the shape starts.
       let reach = shadow.blur_radius * BlurType::Shadow.extent_multiplier() + 1.0;
-      let [padding, hole_edges] = [padding_box.edges(), hole.edges()];
+      let padding = padding_box.shifted(Point {
+        x: -shadow.offset_x,
+        y: -shadow.offset_y,
+      });
+      let [padding, hole_edges] = [padding.edges(), hole.edges()];
       let bounds = Rect {
         left: padding.left.min(hole_edges.left) - reach,
         top: padding.top.min(hole_edges.top) - reach,
@@ -141,12 +136,7 @@ impl BoxPainter<'_> {
         bottom: padding.bottom.max(hole_edges.bottom) + reach,
       };
 
-      device.fill_shadow(
-        &ShadowShape::Outside { hole, bounds },
-        shadow.color,
-        shadow.blur_radius,
-        at,
-      );
+      device.fill_shadow(&ShadowShape::Outside { hole, bounds }, shadow, at);
     }
 
     device.pop_clip();

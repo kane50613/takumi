@@ -431,21 +431,14 @@ impl PaintDevice for CanvasDevice<'_> {
     }
   }
 
-  fn fill_shadow(
-    &mut self,
-    shape: &ShadowShape,
-    color: Color,
-    blur_radius: f32,
-    transform: Affine,
-  ) {
+  fn fill_shadow(&mut self, shape: &ShadowShape, shadow: &SizedShadow, transform: Affine) {
     let fill = shape.fill_shape();
 
-    self.draw_blurred(
+    self.draw_shadow_of(
+      *shadow,
       &fill.to_commands(),
       Fill::from(fill.rule()).into(),
       transform,
-      blur_radius,
-      color,
     );
   }
 }
