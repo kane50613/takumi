@@ -21,6 +21,7 @@ use takumi_core::{
     BackgroundClipArea, BoxFrame, BoxPainter, FillShape, GlyphDevice, GlyphFill, OverflowClip,
     PaintDevice, PendingOutline, ShadowShape, StrokeStyle, UNBOUNDED,
   },
+  path_data::{edges_path_data, path_data},
   resources::image::ImageSource,
   scene::Scene,
   shadow::SizedShadow,
@@ -34,7 +35,7 @@ use typed_builder::TypedBuilder;
 
 use crate::{
   Frame, GlyphStroke, GroupToken, Rgba, SvgDocument,
-  box_model::{edges_path_data, path_data, rounded_rect_path_data, shape_path_data},
+  box_model::{rounded_rect_path_data, shape_path_data},
   gradient::LayerEmitter,
   image::emit_image,
   scene_emit::SceneEmitter,

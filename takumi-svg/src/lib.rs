@@ -28,9 +28,8 @@ mod render;
 mod scene_emit;
 mod text;
 
-use std::{borrow::Cow, collections::HashMap, fmt, fmt::Write as _, io, mem};
+use std::{borrow::Cow, collections::HashMap, fmt::Write as _, io, mem};
 
-use box_model::{edges_path_data, path_data, quantize_path};
 use quick_xml::{
   Writer,
   events::{BytesEnd, BytesStart, BytesText, Event},
@@ -42,6 +41,7 @@ use takumi_core::{
   geometry::{Rect, Size},
   layout::background_image_geometry::OriginBox,
   painter::{BoxFrame, FillShape, StrokeStyle},
+  path_data::{APPROX_CHARS_PER_NUMBER, Num, edges_path_data, path_data, quantize_path},
   shadow::SizedShadow,
   style::{Affine, FillRule, Filter, FilterReference, LineJoin, ToCss},
 };
@@ -924,71 +924,6 @@ fn matrix_attr(transform: Affine) -> String {
   let [a, b, c, d, e, f] = transform.to_cols_array().map(Num);
 
   format!("matrix({a} {b} {c} {d} {e} {f})")
-}
-
-/// Quantization grid for coordinates, dimensions, and opacities: three decimals.
-/// SVG rendering is insensitive below this at the raster sizes takumi targets, so
-/// dropping the float tail keeps documents compact without visible drift.
-const COORD_FACTOR: f32 = 1000.0;
-
-/// Rough characters one quantized number serializes to, used to presize buffers.
-pub(crate) const APPROX_CHARS_PER_NUMBER: usize = 8;
-
-/// Finite-guarded, quantized float formatter shared by every SVG numeric
-/// emission site. Non-finite values serialize as `0`; finite values are rounded
-/// to [`COORD_FACTOR`]'s grid and printed with the shortest representation, so
-/// trailing zeros are dropped.
-pub(crate) struct Num(pub f32);
-
-/// Stack buffer for one formatted number, sidestepping the per-coordinate heap
-/// allocation of `f32::to_string`. 32 bytes holds any `f32` Display.
-struct NumBuf {
-  bytes: [u8; 32],
-  len: usize,
-}
-
-impl fmt::Write for NumBuf {
-  fn write_str(&mut self, s: &str) -> fmt::Result {
-    let end = self.len + s.len();
-    if end > self.bytes.len() {
-      return Err(fmt::Error);
-    }
-    self.bytes[self.len..end].copy_from_slice(s.as_bytes());
-    self.len = end;
-    Ok(())
-  }
-}
-
-impl fmt::Display for Num {
-  fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-    if !self.0.is_finite() {
-      return f.write_str("0");
-    }
-    let value = (self.0 * COORD_FACTOR).round() / COORD_FACTOR;
-    if value == 0.0 {
-      return f.write_str("0");
-    }
-    let mut buf = NumBuf {
-      bytes: [0; 32],
-      len: 0,
-    };
-    if write!(buf, "{value}").is_err() {
-      return write!(f, "{value}");
-    }
-    let Ok(text) = str::from_utf8(&buf.bytes[..buf.len]) else {
-      return write!(f, "{value}");
-    };
-    // Drop the redundant integer-part zero: `0.5` -> `.5`, `-0.5` -> `-.5`.
-    if let Some(rest) = text.strip_prefix("0.") {
-      f.write_str(".")?;
-      f.write_str(rest)
-    } else if let Some(rest) = text.strip_prefix("-0.") {
-      f.write_str("-.")?;
-      f.write_str(rest)
-    } else {
-      f.write_str(text)
-    }
-  }
 }
 
 fn num(value: f32) -> String {

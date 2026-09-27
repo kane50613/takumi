@@ -16,13 +16,13 @@ use takumi_core::{
     tree::RenderNode,
   },
   painter::{BoxFrame, BoxPainter, GlyphFill},
+  path_data::path_data,
   resources::{font::FontError, glyph::ResolvedGlyph, image::to_data_url},
   style::{Affine, BackgroundClip, LineJoin},
 };
 
 use crate::{
   Frame, GlyphStroke, Rgba, SvgDocument,
-  box_model::path_data,
   gradient::LayerEmitter,
   render::{DocumentDevice, emit_inline_box},
 };

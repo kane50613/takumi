@@ -34,6 +34,7 @@ pub mod math;
 #[cfg(feature = "paint-tree")]
 pub mod paint_tree;
 pub mod painter;
+pub mod path_data;
 /// Font and image resource management.
 pub mod resources;
 pub mod scene;

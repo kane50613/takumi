@@ -7,14 +7,14 @@ use takumi_core::{
   geometry::Rect,
   layout::background_image_geometry::{BackgroundImageGeometry, BackgroundLayer},
   paint::{ConicGradientTile, SrgbStop},
+  path_data::{APPROX_CHARS_PER_NUMBER, PathData},
   style::{
     BackgroundImage, BlendMode, ConicGradient, FillRule, LinearGradient, RadialGradient, ToCss,
   },
 };
 
 use crate::{
-  APPROX_CHARS_PER_NUMBER, Frame, GradientStop, Rgba, SvgDocument,
-  box_model::PathData,
+  Frame, GradientStop, Rgba, SvgDocument,
   image::{PRESERVE_ASPECT_NONE, data_url_for_url},
 };
 
