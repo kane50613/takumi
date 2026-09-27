@@ -32,6 +32,7 @@ pub mod keyframes;
 pub(crate) mod matching;
 /// Deterministic float math shared by the painting paths.
 pub mod math;
+pub mod paint_property;
 #[cfg(feature = "paint-tree")]
 pub mod paint_tree;
 pub mod painter;
