@@ -209,10 +209,23 @@ impl Period {
   }
 
   /// The periods covering `0..line`, as stops from 0 to 1 along it.
+  ///
+  /// Approximate: past [`MAX_UNROLLED_STOPS`], the gradient paints the period's average colour,
+  /// where a rasterizer shows the stripes it can resolve.
   fn unroll(&self, line: f32) -> Vec<ColorStop> {
-    let first = ((0.0 - self.start) / self.length).floor() as i32;
-    let last = ((line - self.start) / self.length).ceil() as i32;
-    let unrolled: Vec<SrgbStop> = (first..last)
+    let first = ((0.0 - self.start) / self.length).floor();
+    let last = ((line - self.start) / self.length).ceil();
+
+    if (last - first) * self.stops.len() as f32 > MAX_UNROLLED_STOPS as f32 {
+      let color = self.average();
+
+      return vec![
+        ColorStop { offset: 0.0, color },
+        ColorStop { offset: 1.0, color },
+      ];
+    }
+
+    let unrolled: Vec<SrgbStop> = (first as i32..last as i32)
       .flat_map(|period| {
         self.stops.iter().map(move |stop| SrgbStop {
           offset: (self.start + (period as f32 + stop.offset) * self.length) / line,
@@ -223,7 +236,32 @@ impl Period {
 
     compact(clamp_to_unit(&unrolled))
   }
+
+  /// The period's average colour, each stretch between stops weighted by its length.
+  fn average(&self) -> [u8; 4] {
+    let mut sum = [0.0_f32; 4];
+    let mut weight = 0.0;
+
+    for pair in self.stops.windows(2) {
+      let length = pair[1].offset - pair[0].offset;
+
+      for (channel, total) in sum.iter_mut().enumerate() {
+        let [from, to] = [pair[0].color.0[channel], pair[1].color.0[channel]].map(f32::from);
+
+        *total += length * (from + to) / 2.0;
+      }
+      weight += length;
+    }
+
+    match self.stops.first() {
+      Some(stop) if weight <= 0.0 => stop.color.0,
+      _ => sum.map(|total| (total / weight.max(f32::EPSILON)).round() as u8),
+    }
+  }
 }
+
+/// The most stops an unrolled repeating gradient may carry.
+const MAX_UNROLLED_STOPS: usize = 4096;
 
 /// `stops` cut to offsets 0 to 1, with the colours at each end interpolated in.
 fn clamp_to_unit(stops: &[SrgbStop]) -> Vec<SrgbStop> {

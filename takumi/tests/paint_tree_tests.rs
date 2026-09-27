@@ -371,3 +371,48 @@ fn unpainted_root_still_leaves_a_root_box() {
     );
   }
 }
+
+#[test]
+fn a_hairline_repeating_gradient_paints_its_average() {
+  let document = paint_tree(
+    PaintTreeOptions::builder()
+      .viewport(Viewport::new((1000, 100)))
+      .node(Node::container([]).with_class_name("stripes"))
+      .fonts(&CONTEXT)
+      .stylesheet(
+        StyleSheet::parse_loosy(
+          ".stripes { width: 1000px; height: 100px; background-image: repeating-linear-gradient(90deg, rgb(255, 0, 0) 0, rgb(0, 0, 255) 0.002px) }",
+        )
+        .into(),
+      )
+      .build(),
+  )
+  .unwrap()
+  .document;
+
+  let stops = document
+    .nodes
+    .iter()
+    .flat_map(|node| &node.drawables)
+    .find_map(|drawable| match drawable {
+      Drawable::Fill {
+        paint: Paint::Pattern { tile, .. },
+        ..
+      } => match tile.as_ref() {
+        Paint::LinearGradient { stops, .. } => Some(stops.clone()),
+        _ => None,
+      },
+      _ => None,
+    })
+    .expect("the gradient layer");
+
+  let [red, green, blue, alpha] = stops[0].color;
+
+  assert_eq!(stops.len(), 2);
+  assert_eq!(stops[0].color, stops[1].color);
+  assert!(
+    red.abs_diff(blue) <= 2 && green < 8 && alpha == 255,
+    "{:?}",
+    stops[0].color
+  );
+}
