@@ -24,7 +24,7 @@
   </g>
   <g opacity=".3">
     <clipPath id="cp0">
-      <path d="M430 271H770V413H430Z"/>
+      <path d="M430 271h340v142h-340v-142Z"/>
     </clipPath>
     <g clip-path="url(#cp0)">
       <g fill="#e2e8f0" fill-opacity=".949">

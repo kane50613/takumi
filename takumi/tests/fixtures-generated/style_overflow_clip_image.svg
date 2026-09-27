@@ -2,7 +2,7 @@
   <rect x="0" y="0" width="1200" height="630" fill="#fff"/>
   <path d="M500 215h200v200h-200v-200Zm4 4h192v192h-192v-192Z" fill="#f00" fill-rule="evenodd"/>
   <clipPath id="cp0">
-    <path d="M504 219H696V411H504Z"/>
+    <path d="M504 219h192v192h-192v-192Z"/>
   </clipPath>
   <g clip-path="url(#cp0)">
     <path d="M504 219h300v300h-300v-300Zm4 4h292v292h-292v-292Z" fill="#0f0" fill-rule="evenodd"/>

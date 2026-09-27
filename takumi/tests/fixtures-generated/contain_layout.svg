@@ -40,7 +40,7 @@
   <rect x="268" y="118" width="236" height="16" fill="#0f172a"/>
   <rect x="268" y="46" width="236" height="72" fill="#fef9c3"/>
   <clipPath id="cp0">
-    <path d="M268 46H504V118H268Z"/>
+    <path d="M268 46h236v72h-236v-72Z"/>
   </clipPath>
   <g clip-path="url(#cp0)">
     <rect x="268" y="46" width="72" height="72" fill="#ca8a04"/>

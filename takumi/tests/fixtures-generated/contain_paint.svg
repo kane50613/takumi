@@ -35,7 +35,7 @@
   <rect x="220" y="62" width="140" height="90" fill="#e2e8f0"/>
   <path d="M220 62h140v90h-140v-90Zm2 2h136v86h-136v-86Z" fill="#0f172a" fill-rule="evenodd"/>
   <clipPath id="cp0">
-    <path d="M222 64H358V150H222Z"/>
+    <path d="M222 64h136v86h-136v-86Z"/>
   </clipPath>
   <g clip-path="url(#cp0)">
     <rect x="194" y="56" width="200" height="40" fill="#2563eb"/>

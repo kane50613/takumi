@@ -4,7 +4,7 @@
   <rect x="40" y="40" width="320" height="320" fill="#dbeafe"/>
   <path d="M40 40h320v320h-320v-320Zm8 8h304v304h-304v-304Z" fill="#2563eb" fill-rule="evenodd"/>
   <clipPath id="cp0">
-    <path d="M48 48H352V352H48Z"/>
+    <path d="M48 48h304v304h-304v-304Z"/>
   </clipPath>
   <g clip-path="url(#cp0)">
     <rect x="72" y="72" width="256" height="480" fill="#f97316"/>
