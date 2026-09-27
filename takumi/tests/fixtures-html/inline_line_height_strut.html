@@ -1,0 +1,33 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>inline_line_height_strut</title>
+    <base href="../../../" />
+    <link rel="stylesheet" href="takumi/tests/shared.css" />
+  </head>
+  <body style="width: 480px; height: 300px">
+    <div
+      style="
+        display: flex;
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 16px;
+        width: 100%;
+        height: 100%;
+        padding: 24px;
+        background-color: rgb(255, 255, 255);
+        font-family: Geist;
+        font-size: 24px;
+        color: rgb(15, 23, 42);
+      "
+    >
+      <div style="line-height: 2.5; background-color: rgb(219, 234, 254)">
+        <span style="line-height: 1; background-color: rgb(254, 215, 170)">tight span</span>
+      </div>
+      <div style="width: 220px; line-height: 2; background-color: rgb(220, 252, 231)">
+        <span style="line-height: 1">a tight span that wraps onto more lines</span>
+      </div>
+    </div>
+  </body>
+</html>

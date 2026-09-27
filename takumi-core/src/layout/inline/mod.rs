@@ -51,8 +51,9 @@ pub use self::{
 use self::{
   breaking::distribute_trailing_whitespace,
   metrics::{
-    ParentFontMetrics, ResolvedInlineLineState, ResolvedLineMetrics, resolve_inline_line_metrics,
-    resolve_inline_line_states, resolve_visual_inline_box, text_line_box_contribution,
+    ParentFontMetrics, ResolvedInlineLineState, ResolvedLineMetrics, Strut,
+    resolve_inline_line_metrics, resolve_inline_line_states, resolve_visual_inline_box,
+    text_line_box_contribution,
   },
   runs::measured_run_text,
   text_fit::{
@@ -178,6 +179,9 @@ pub struct BuiltInlineLayout<'c> {
   pub line_scales: Vec<f32>,
   /// Whether a height or line limit may have dropped lines.
   pub(crate) clamped: bool,
+  /// The root inline box's strut, which every line holding content grows to, or `None` when the
+  /// root has no primary font.
+  pub(crate) strut: Option<Strut>,
 }
 
 impl BuiltInlineLayout<'_> {
@@ -199,6 +203,7 @@ impl BuiltInlineLayout<'_> {
       &self.spans,
       self.parent_font_metrics(),
       &self.line_scales,
+      self.strut,
     )
   }
 
@@ -427,25 +432,24 @@ pub struct InlineBrush {
 }
 
 impl InlineBrush {
-  /// The run's line-box contribution. Parley's run metrics can carry a
-  /// neighboring span's style at run boundaries, so the brush line height wins
-  /// when it is set. Under `line-height: normal` a fallback-font run grows the
-  /// line to its own rounded height, like Blink's
-  /// `InlineBoxState::AccumulateUsedFonts`.
+  /// The run's line-box contribution from its font's metrics. An explicit `line-height` comes
+  /// off the brush, since parley's run metrics can carry a neighbouring span's style at run
+  /// boundaries. Under `line-height: normal` each font a run uses grows the line to its own leaded
+  /// box, as Blink's `InlineBoxState::AccumulateUsedFonts` does.
   fn line_box_contribution(
     &self,
     metrics_line_height: f32,
     ascent: f32,
     descent: f32,
+    line_gap: f32,
   ) -> (f32, f32) {
-    let line_height = self.line_height_px.unwrap_or(metrics_line_height);
-    let (above, below) = text_line_box_contribution(line_height, ascent, descent);
-
-    if self.line_height_is_normal {
-      (above.max(ascent.round()), below.max(descent.round()))
+    let line_height = if self.line_height_is_normal {
+      ascent.round() + descent.round() + line_gap.round()
     } else {
-      (above, below)
-    }
+      self.line_height_px.unwrap_or(metrics_line_height)
+    };
+
+    text_line_box_contribution(line_height, ascent, descent)
   }
 }
 
@@ -696,6 +700,23 @@ fn build_inline_layout_tree<'c>(
   trim_trailing_space(&mut spans);
 
   let (layout, text) = shape_spans(context, &spans, style, shape_cacheable);
+  let strut = context
+    .primary_font_metrics(&context.style, context.sizing.font_size)
+    .map(|metrics| {
+      let brush = text_style_with_span_id(style, None).brush;
+      let (above, below) = brush.line_box_contribution(
+        metrics.line_spacing(),
+        metrics.ascent,
+        metrics.descent,
+        metrics.line_gap,
+      );
+
+      Strut {
+        above,
+        below,
+        scales_with_text_fit: brush.line_height_scales_with_text_fit,
+      }
+    });
 
   BuiltInlineLayout {
     layout,
@@ -704,6 +725,7 @@ fn build_inline_layout_tree<'c>(
     positioned_floats: Vec::new(),
     line_scales: Vec::new(),
     clamped: false,
+    strut,
   }
 }
 
@@ -1297,7 +1319,7 @@ mod tests {
       line_height_px: Some(0.0),
       ..InlineBrush::default()
     };
-    let (above, below) = brush.line_box_contribution(20.0, 12.0, 4.0);
+    let (above, below) = brush.line_box_contribution(20.0, 12.0, 4.0, 0.0);
 
     assert_eq!((above, below), (4.0, -4.0));
   }

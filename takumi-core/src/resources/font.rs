@@ -689,14 +689,22 @@ impl PrimaryFontMetrics {
 
 impl RenderContext {
   /// The primary font's vertical metrics for `families`/`attributes` at `font_size`: the first
-  /// available font that covers the space glyph.
+  /// available font, skipping a coverage subset without the space glyph, as Blink's
+  /// `FontFallbackList::DeterminePrimarySimpleFontData` skips such a segment.
   pub(crate) fn first_font_metrics<'a>(
     &self,
     families: impl IntoIterator<Item = QueryFamily<'a>>,
     attributes: Attributes,
     font_size: f32,
   ) -> Option<PrimaryFontMetrics> {
+    let groups = self.fonts().groups.clone();
+
     self.fonts().with_context(|fonts| {
+      let subsets: HashSet<_> = groups
+        .values()
+        .flatten()
+        .filter_map(|(_, _, name)| fonts.inner.collection.family_id(name))
+        .collect();
       let mut query = fonts.inner.collection.query(&mut fonts.inner.source_cache);
       let mut result = None;
 
@@ -707,9 +715,7 @@ impl RenderContext {
         let Ok(font_ref) = FontRef::from_index(font.blob.data(), font.index) else {
           return QueryStatus::Continue;
         };
-        // The primary font must cover the space glyph, as Blink requires of
-        // `PrimaryFont`; a coverage subset without it cannot set the line box.
-        if font_ref.charmap().map(' ').is_none() {
+        if subsets.contains(&font.family.0) && font_ref.charmap().map(' ').is_none() {
           return QueryStatus::Continue;
         }
         let metrics = font_ref.metrics(Size::new(font_size), LocationRef::default());
