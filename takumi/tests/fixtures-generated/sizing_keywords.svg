@@ -176,17 +176,17 @@
     <use href="#g3" x="121.87" y="386"/>
   </g>
   <rect x="16" y="400" width="420" height="35" fill="#e2e8f0"/>
-  <rect x="16" y="400" width="108" height="35" fill="#bfdbfe"/>
+  <rect x="16" y="400" width="104" height="35" fill="#bfdbfe"/>
   <g fill="#000">
-    <use href="#g12" x="26.5" y="424"/>
-    <use href="#g13" x="36.24" y="424"/>
-    <use href="#g14" x="40.97" y="424"/>
-    <use href="#g15" x="51.5" y="424"/>
-    <use href="#g12" x="61.78" y="424"/>
-    <use href="#g16" x="76.2" y="424"/>
-    <use href="#g17" x="86.73" y="424"/>
-    <use href="#g18" x="96.29" y="424"/>
-    <use href="#g12" x="103.16" y="424"/>
+    <use href="#g12" x="22" y="424"/>
+    <use href="#g13" x="31.74" y="424"/>
+    <use href="#g14" x="36.47" y="424"/>
+    <use href="#g15" x="47" y="424"/>
+    <use href="#g12" x="57.28" y="424"/>
+    <use href="#g16" x="71.7" y="424"/>
+    <use href="#g17" x="82.23" y="424"/>
+    <use href="#g18" x="91.79" y="424"/>
+    <use href="#g12" x="98.66" y="424"/>
   </g>
   <defs>
     <path id="g0" d="M2.42 0l-2.14-6.89h1.2l1.61 5.75 1.64-5.75h1.18l1.64 5.75 1.62-5.75h1.19l-2.13 6.89h-1.39l-1.53-5.23-1.53 5.23Z"/>
