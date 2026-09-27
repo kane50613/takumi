@@ -7,7 +7,7 @@ use takumi_core::{
   context::RenderContext,
   error::Result,
   font_style::SizedFontStyle,
-  geometry::{Point, Rect, Size},
+  geometry::{Point, Rect},
   layout::{
     background_image_geometry::FillLayers,
     border::BorderProperties,
@@ -18,8 +18,8 @@ use takumi_core::{
     tree::RenderNode,
   },
   painter::{
-    BackgroundClipArea, BoxBorderPainter, BoxFrame, BoxPainter, FillShape, GlyphDevice, GlyphFill,
-    OverflowClip, PaintDevice, PendingOutline, ShadowShape, StrokeStyle, UNBOUNDED,
+    BackgroundClipArea, BoxFrame, BoxPainter, FillShape, GlyphDevice, GlyphFill, OverflowClip,
+    PaintDevice, PendingOutline, ShadowShape, StrokeStyle, UNBOUNDED,
   },
   resources::image::ImageSource,
   scene::Scene,
@@ -384,12 +384,9 @@ impl BoxChrome {
     // the border draws over the ring, as it does in Blink.
     placed.emit_background(doc)?;
     placed.emit_inset_box_shadows(doc)?;
-    emit_borders(
-      placed.border(),
-      placed.frame.layout.size,
-      placed.frame.origin,
-      doc,
-    )?;
+    DocumentDevice::paint(doc, |device| {
+      placed.painter.paint_border(placed.frame.origin, device);
+    })?;
 
     // Children, clipped to the (rounded) padding box when overflow is not visible.
     let child_group = placed
@@ -686,18 +683,6 @@ pub(crate) fn emit_inline_box(
       chrome.close(doc)
     }
   }
-}
-
-/// Emits a border at `origin`.
-fn emit_borders(
-  border: &BorderProperties,
-  size: Size<f32>,
-  origin: Point<f32>,
-  doc: &mut SvgDocument,
-) -> io::Result<()> {
-  DocumentDevice::paint(doc, |device| {
-    BoxBorderPainter::new(border, size).paint(origin, device);
-  })
 }
 
 #[cfg(test)]

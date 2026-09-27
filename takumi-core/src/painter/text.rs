@@ -2,7 +2,7 @@
 //! [css-text-decor-3](https://drafts.csswg.org/css-text-decor-3/#painting-order) gives: shadows,
 //! underlines and overlines, text, then line-through.
 
-use super::{BoxFrame, FillShape, PaintDevice};
+use super::{BoxFrame, FillShape, PaintDevice, PaintRole};
 use crate::{
   font_style::SizedFontStyle,
   geometry::ComputedLayout,
@@ -115,6 +115,8 @@ impl InlineLines<'_> {
   ) {
     let at = frame.translation();
 
+    device.set_role(PaintRole::InlineBackground);
+
     for fragment in &self.background_fragments {
       device.with_opacity(fragment.opacity, |device| {
         device.fill_shape(
@@ -158,10 +160,11 @@ impl InlineLines<'_> {
       };
 
       for shadow in first.painted_text_shadows() {
+        device.set_role(PaintRole::TextShadow);
         device.begin_shadow(shadow);
 
         for ((run, decorations), style) in batch {
-          run.paint(decorations, style, GlyphFill::Text, frame, device);
+          run.paint(decorations, style, GlyphFill::Text, frame, true, device);
         }
 
         device.end_shadow();
@@ -169,7 +172,7 @@ impl InlineLines<'_> {
     }
 
     for ((run, decorations), style) in &runs {
-      run.paint(decorations, style, fill, frame, device);
+      run.paint(decorations, style, fill, frame, false, device);
     }
 
     for island in OutlineIsland::of(self.outline_rects.clone()) {
@@ -190,21 +193,32 @@ impl PositionedInlineRun {
   }
 
   /// Paints the run at its span's opacity: underline and overline, glyphs, then line-through.
+  /// A shadow pass keeps the text-shadow role for everything it draws.
   fn paint<D: GlyphDevice>(
     &self,
     decorations: &[DecorationRect],
     style: &SizedFontStyle,
     fill: GlyphFill,
     frame: BoxFrame,
+    shadow_pass: bool,
     device: &mut D,
   ) {
     device.with_opacity(self.glyph_run.brush.opacity, |device| {
+      if !shadow_pass {
+        device.set_role(PaintRole::TextDecoration);
+      }
       for decoration in decorations.iter().filter(|decoration| !decoration.over) {
         decoration.paint(frame.origin, device);
       }
 
+      if !shadow_pass {
+        device.set_role(PaintRole::Text);
+      }
       device.draw_glyph_run(self, style, fill, frame);
 
+      if !shadow_pass {
+        device.set_role(PaintRole::TextDecoration);
+      }
       for decoration in decorations.iter().filter(|decoration| decoration.over) {
         decoration.paint(frame.origin, device);
       }

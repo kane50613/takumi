@@ -3,7 +3,7 @@
 
 use std::cmp::Ordering;
 
-use super::{BoxBorderPainter, BoxPainter, FillShape, PaintDevice, border::StyledLine};
+use super::{BoxBorderPainter, BoxPainter, FillShape, PaintDevice, PaintRole, border::StyledLine};
 use crate::{
   geometry::{PathBuilder, Point},
   layout::{
@@ -27,6 +27,7 @@ impl PendingOutline {
   pub fn paint<D: PaintDevice>(&self, device: &mut D) {
     let OutlineGeometry { border, size, grow } = self.outline;
 
+    device.set_role(PaintRole::Outline);
     BoxBorderPainter::new(&border, size).paint(
       Point {
         x: self.origin.x - grow,
@@ -87,6 +88,7 @@ impl OutlineIsland {
     let alpha_layer =
       color.0[3] < u8::MAX && !matches!(outline_style, BorderStyle::Solid | BorderStyle::Double);
 
+    device.set_role(PaintRole::Outline);
     device.with_opacity(opacity, |device| {
       if alpha_layer {
         device.begin_layer(f32::from(color.0[3]) / f32::from(u8::MAX));

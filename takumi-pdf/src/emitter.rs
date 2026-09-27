@@ -24,9 +24,8 @@ use takumi_core::{
   },
   paint::ConicGradientTile,
   painter::{
-    BackgroundClipArea, BoxBackground, BoxBorderPainter, BoxFrame, BoxPainter, FillShape,
-    GlyphDevice, GlyphFill, OverflowClip, PaintDevice, PendingOutline, ShadowShape, StrokeStyle,
-    UNBOUNDED,
+    BackgroundClipArea, BoxBackground, BoxFrame, BoxPainter, FillShape, GlyphDevice, GlyphFill,
+    OverflowClip, PaintDevice, PendingOutline, ShadowShape, StrokeStyle, UNBOUNDED,
   },
   scene::{NodePaint, PaintItemKind, Scene},
   shadow::SizedShadow,
@@ -381,14 +380,13 @@ impl Emitter<'_> {
   /// `background-clip` picks the shape a background fills, never when it
   /// paints: the border draws over the ring, as it does in Blink.
   fn emit_decorations(&self, node: &RenderNode, frame: BoxFrame, surface: &mut Surface) {
-    let BoxFrame { layout, .. } = frame;
-    let painter = BoxPainter::new(&node.context, layout);
-    let border = painter.border();
+    let painter = BoxPainter::new(&node.context, frame.layout);
+
     painter.paint_normal_box_shadows(frame.origin, &mut self.device(surface, self.tagged));
     painter.background_color(frame.origin, &mut self.device(surface, self.tagged));
     self.emit_background_layers(node, &painter.background(), frame, surface);
     painter.paint_inset_box_shadows(frame.origin, &mut self.device(surface, self.tagged));
-    self.emit_borders(border, layout.size, frame.origin, surface);
+    painter.paint_border(frame.origin, &mut self.device(surface, self.tagged));
   }
 
   /// Clips children and own content to the padding box, returning how many
@@ -837,17 +835,6 @@ impl Emitter<'_> {
     if let Some(pending) = pending {
       pending.paint(&mut self.device(surface, self.tagged));
     }
-  }
-
-  /// Paints a border at `origin`.
-  fn emit_borders(
-    &self,
-    border: &BorderProperties,
-    size: Size<f32>,
-    origin: CorePoint<f32>,
-    surface: &mut Surface,
-  ) {
-    BoxBorderPainter::new(border, size).paint(origin, &mut self.device(surface, self.tagged));
   }
 
   fn emit_own_content(

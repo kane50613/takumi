@@ -12,8 +12,8 @@ use takumi_core::{
     inline::{PositionedGlyph, PositionedInlineRun},
   },
   painter::{
-    BackgroundClipArea, BoxBorderPainter, BoxFrame, BoxPainter, FillShape, GlyphDevice, GlyphFill,
-    PaintDevice, PendingOutline, ShadowShape, StrokeStyle,
+    BackgroundClipArea, BoxFrame, BoxPainter, FillShape, GlyphDevice, GlyphFill, PaintDevice,
+    PendingOutline, ShadowShape, StrokeStyle,
   },
   resources::{font::FontError, glyph::ResolvedGlyph},
   shadow::SizedShadow,
@@ -626,10 +626,8 @@ pub(crate) fn draw_border(
   canvas: &mut Canvas,
   layout: Layout,
 ) -> Result<()> {
-  let painter = BoxPainter::new(context, layout);
-  let mut device = CanvasDevice::of(canvas, context);
-
-  BoxBorderPainter::new(painter.border(), layout.size).paint(Point::ZERO, &mut device);
+  BoxPainter::new(context, layout)
+    .paint_border(Point::ZERO, &mut CanvasDevice::of(canvas, context));
 
   Ok(())
 }

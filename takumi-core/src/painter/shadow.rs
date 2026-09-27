@@ -2,7 +2,7 @@
 //! `PaintInsetBoxShadow` in
 //! [`box_painter_base.cc`](https://source.chromium.org/chromium/chromium/src/+/main:third_party/blink/renderer/core/paint/box_painter_base.cc).
 
-use super::{BoxPainter, FillShape, PaintDevice};
+use super::{BoxPainter, FillShape, PaintDevice, PaintRole};
 use crate::{
   geometry::{Point, Rect, Size},
   layout::{border::BorderProperties, decoration::ClipBox},
@@ -84,6 +84,7 @@ impl BoxPainter<'_> {
       offset: Point::ZERO,
     };
 
+    device.set_role(PaintRole::BoxShadow);
     device.push_clip_out(&border_box.into(), at);
 
     for shadow in shadows.iter().rev() {
@@ -111,6 +112,7 @@ impl BoxPainter<'_> {
 
     let at = Affine::translation(origin.x, origin.y);
 
+    device.set_role(PaintRole::BoxShadow);
     device.push_clip(&padding_box.into(), at);
 
     for shadow in shadows.iter().rev() {

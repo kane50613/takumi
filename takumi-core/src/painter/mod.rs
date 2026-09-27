@@ -214,8 +214,34 @@ impl OverflowClip {
   }
 }
 
+/// What a draw paints for its box, so a device that records draws can name them.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PaintRole {
+  /// `background-color` and `background-image`.
+  Background,
+  /// `border`.
+  Border,
+  /// `box-shadow`.
+  BoxShadow,
+  /// `outline`.
+  Outline,
+  /// A replaced element's image.
+  Image,
+  /// Glyphs.
+  Text,
+  /// `text-shadow`.
+  TextShadow,
+  /// `text-decoration` lines.
+  TextDecoration,
+  /// An inline element's background.
+  InlineBackground,
+}
+
 /// What a backend has to be able to do for the shared painting code to drive it.
 pub trait PaintDevice {
+  /// Names what the draws that follow paint. Only a device that records draws needs it.
+  fn set_role(&mut self, _role: PaintRole) {}
+
   /// Fills `shape` under `transform`, with a single colour.
   fn fill_shape(&mut self, shape: &FillShape, color: Color, transform: Affine);
 
@@ -353,6 +379,7 @@ impl<'c> BoxPainter<'c> {
       return;
     };
 
+    device.set_role(PaintRole::Background);
     device.fill_shape(&shape, color, Affine::translation(origin.x, origin.y));
   }
 
@@ -386,6 +413,12 @@ impl<'c> BoxPainter<'c> {
         .filter(visible)
         .collect(),
     }
+  }
+
+  /// Paints the box's `border` at `origin`.
+  pub fn paint_border<D: PaintDevice>(&self, origin: Point<f32>, device: &mut D) {
+    device.set_role(PaintRole::Border);
+    BoxBorderPainter::new(&self.border, self.layout.size).paint(origin, device);
   }
 
   /// The `clip-path` shape the box and its descendants clip to, or `None` when it has none or the
