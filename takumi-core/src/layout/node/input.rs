@@ -1,4 +1,4 @@
-use std::fmt;
+use std::{fmt, mem::replace};
 
 use serde::{
   Deserialize, Deserializer,
@@ -10,6 +10,19 @@ use crate::layout::node::{ImageData, Node, NodeKind, NodeMetadata, TextData};
 impl<'de> Deserialize<'de> for Node {
   fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
     deserializer.deserialize_map(NodeVisitor)
+  }
+}
+
+impl<'de> Deserialize<'de> for NodeKind {
+  fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+    let mut node = Node::deserialize(deserializer)?;
+
+    Ok(replace(
+      &mut node.kind,
+      NodeKind::Container {
+        children: Vec::new(),
+      },
+    ))
   }
 }
 
@@ -157,6 +170,14 @@ mod tests {
 
       assert!(matches!(&node.kind, NodeKind::Container { children } if children.is_empty()));
     }
+  }
+
+  #[test]
+  fn reads_a_kind_on_its_own() {
+    let kind: NodeKind =
+      from_value(json!({ "type": "text", "text": "a", "className": "c" })).unwrap();
+
+    assert!(matches!(&kind, NodeKind::Text(data) if data.text == "a"));
   }
 
   #[test]
