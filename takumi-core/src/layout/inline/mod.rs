@@ -624,7 +624,8 @@ fn build_inline_layout_tree<'c>(
   // before `tree_builder` holds the shared font borrow.
   let mut spans: Vec<ProcessedInlineSpan<'c>> = Vec::new();
   let mut index_pos = 0;
-  let mut previous_collapsible_space = false;
+  // A paragraph opens as a line does, so its leading collapsible spaces go.
+  let mut previous_collapsible_space = true;
   let mut previous_was_line_break = false;
 
   if let Some(mark) = direction_mark_span(items, context) {
