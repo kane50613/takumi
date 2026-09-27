@@ -75,25 +75,25 @@ pub(crate) fn build_inline_map<'c>(boxes: &'c [TextBox<'c>]) -> Result<InlineMap
   let mut map = InlineMap::new();
 
   for text_box in boxes {
-    let Some(items) = node_inline_items(text_box.node) else {
+    let Some(items) = node_inline_items(text_box.node, &text_box.font_style) else {
       continue;
     };
 
-    if let Some((built, runs)) = build_inline_runs(
+    let (built, runs) = build_inline_runs(
       items,
       &text_box.font_style,
       &text_box.node.context,
       text_box.layout,
-    )? {
-      map.insert(
-        text_box.node_id,
-        PreparedInline {
-          built,
-          runs,
-          font_style: &text_box.font_style,
-        },
-      );
-    }
+    )?;
+
+    map.insert(
+      text_box.node_id,
+      PreparedInline {
+        built,
+        runs,
+        font_style: &text_box.font_style,
+      },
+    );
   }
   Ok(map)
 }
@@ -114,27 +114,30 @@ pub(crate) fn visit_inline_layout<R>(
       prepared.font_style,
     )));
   }
-  let Some(items) = node_inline_items(node) else {
-    return Ok(None);
-  };
   let font_style = SizedFontStyle::from_style(&node.context.style, &node.context);
-  let Some((built, runs)) = build_inline_runs(items, &font_style, &node.context, layout)? else {
+  let Some(items) = node_inline_items(node, &font_style) else {
     return Ok(None);
   };
+  let (built, runs) = build_inline_runs(items, &font_style, &node.context, layout)?;
 
   Ok(Some(visit(&built, &runs, &font_style)))
 }
 
-/// The inline items an emitted box lays out: the flattened subtree for an
-/// inline formatting context, the lone run for a text node, nothing otherwise.
-fn node_inline_items(node: &RenderNode) -> Option<Vec<InlineItem<'_>>> {
+/// The inline items an emitted box lays out in `font_style`: the flattened subtree for an
+/// inline formatting context, the lone run for a sized text node, nothing otherwise.
+fn node_inline_items<'n>(
+  node: &'n RenderNode,
+  font_style: &SizedFontStyle,
+) -> Option<Vec<InlineItem<'n>>> {
   if node.should_create_inline_layout() {
     return Some(collect_inline_items(node));
   }
-  if let Some(NodeKind::Text(text)) = node.node.as_ref().map(|n| &n.kind) {
-    return Some(single_text_items(text, &node.context));
+  match node.node.as_ref().map(|n| &n.kind) {
+    Some(NodeKind::Text(text)) if font_style.sizing.font_size != 0.0 => {
+      Some(single_text_items(text, &node.context))
+    }
+    _ => None,
   }
-  None
 }
 
 /// One atom per text line: each run's ascent-to-descent band.
@@ -186,22 +189,16 @@ fn single_text_items<'c>(text: &'c TextData, context: &'c RenderContext) -> Vec<
   }]
 }
 
-/// Runs inline layout and resolves the paintable run set. `None` when the font
-/// size or content box is degenerate.
+/// Runs inline layout and resolves the paintable run set.
 fn build_inline_runs<'c>(
   items: Vec<InlineItem<'c>>,
   font_style: &'c SizedFontStyle<'c>,
   context: &'c RenderContext,
   layout: Layout,
-) -> Result<Option<(BuiltInlineLayout<'c>, InlineRunLayout)>, PdfError> {
-  let content = layout.unsnapped_content;
-  if font_style.sizing.font_size == 0.0 || content.width <= 0.0 || content.height <= 0.0 {
-    return Ok(None);
-  }
-
+) -> Result<(BuiltInlineLayout<'c>, InlineRunLayout), PdfError> {
   let built = create_inline_layout(InlineLayoutRequest::in_content_box(
     items,
-    content,
+    layout.unsnapped_content,
     font_style,
     context,
     InlineLayoutMode::Draw,
@@ -210,5 +207,5 @@ fn build_inline_runs<'c>(
     .resolve_runs(context, layout)
     .map_err(PdfError::Font)?;
 
-  Ok(Some((built, runs)))
+  Ok((built, runs))
 }
