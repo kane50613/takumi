@@ -6,7 +6,7 @@
 
 use crate::{
   paint_property::{ClipId, ClipNode, EffectId, EffectNode, PropertyState, PropertyTrees},
-  scene::{BoxPart, NodePaint, PaintItemKind, PaintPhase, Scene},
+  scene::{BoxPart, NodePaint, PaintItemKind, PaintPhase, StackingContextNode},
 };
 
 /// Which draws of a box a chunk holds.
@@ -29,7 +29,32 @@ pub struct PaintChunk<'s> {
   pub part: ChunkPart,
 }
 
-impl PaintChunk<'_> {
+impl<'s> PaintChunk<'s> {
+  /// Every chunk of `contexts` in paint order: a stacking context's root decorations, its phases,
+  /// then the outlines of its items and last its root's.
+  pub fn in_paint_order(contexts: &'s [StackingContextNode]) -> Vec<Self> {
+    let mut chunks = Vec::new();
+
+    push_context_chunks(contexts, 0, &mut chunks);
+
+    chunks
+  }
+
+  /// The box that owns each effect of `trees`, by effect index.
+  pub fn effect_owners(chunks: &[Self], trees: &PropertyTrees) -> Vec<Option<&'s NodePaint>> {
+    let mut owners = vec![None; trees.effect_count()];
+
+    for chunk in chunks {
+      if let Some(id) = chunk.node.properties.border_box.effect
+        && trees.effect(id).owner == chunk.node.path
+      {
+        owners[id.index()] = Some(chunk.node);
+      }
+    }
+
+    owners
+  }
+
   /// The clip and effect the chunk paints under.
   pub fn state(&self) -> PropertyState {
     match self.part {
@@ -39,58 +64,50 @@ impl PaintChunk<'_> {
   }
 }
 
-impl Scene {
-  /// Every chunk in paint order: a stacking context's root decorations, its phases, then the
-  /// outlines of its items and last its root's.
-  pub fn paint_chunks(&self) -> Vec<PaintChunk<'_>> {
-    let mut chunks = Vec::new();
+fn push_context_chunks<'s>(
+  contexts: &'s [StackingContextNode],
+  context_id: usize,
+  chunks: &mut Vec<PaintChunk<'s>>,
+) {
+  let Some(context) = contexts.get(context_id) else {
+    return;
+  };
+  let root = context.root();
+  let mut outlines = Vec::new();
+  let chunk = |node, part| PaintChunk { node, part };
 
-    self.push_context_chunks(0, &mut chunks);
-
-    chunks
+  if let Some(root) = root {
+    chunks.push(chunk(root, ChunkPart::Decorations));
   }
 
-  fn push_context_chunks<'s>(&'s self, context_id: usize, chunks: &mut Vec<PaintChunk<'s>>) {
-    let Some(context) = self.contexts.get(context_id) else {
-      return;
-    };
-    let root = context.root();
-    let mut outlines = Vec::new();
-    let chunk = |node, part| PaintChunk { node, part };
+  for phase in context.paint_phases() {
+    match phase {
+      PaintPhase::RootContent => chunks.extend(root.map(|root| chunk(root, ChunkPart::Content))),
+      PaintPhase::Items(items, phase_part) => {
+        for item in items {
+          let Some(part) = item.part_in(phase_part) else {
+            continue;
+          };
 
-    if let Some(root) = root {
-      chunks.push(chunk(root, ChunkPart::Decorations));
-    }
-
-    for phase in context.paint_phases() {
-      match phase {
-        PaintPhase::RootContent => chunks.extend(root.map(|root| chunk(root, ChunkPart::Content))),
-        PaintPhase::Items(items, phase_part) => {
-          for item in items {
-            let Some(part) = item.part_in(phase_part) else {
-              continue;
-            };
-
-            match &item.kind {
-              PaintItemKind::Node(node) => {
-                if part != BoxPart::Content {
-                  chunks.push(chunk(node, ChunkPart::Decorations));
-                }
-                if part != BoxPart::Decorations {
-                  chunks.push(chunk(node, ChunkPart::Content));
-                  outlines.push(chunk(node, ChunkPart::Outline));
-                }
+          match &item.kind {
+            PaintItemKind::Node(node) => {
+              if part != BoxPart::Content {
+                chunks.push(chunk(node, ChunkPart::Decorations));
               }
-              PaintItemKind::Context(child) => self.push_context_chunks(*child, chunks),
+              if part != BoxPart::Decorations {
+                chunks.push(chunk(node, ChunkPart::Content));
+                outlines.push(chunk(node, ChunkPart::Outline));
+              }
             }
+            PaintItemKind::Context(child) => push_context_chunks(contexts, *child, chunks),
           }
         }
       }
     }
-
-    chunks.extend(outlines);
-    chunks.extend(root.map(|root| chunk(root, ChunkPart::Outline)));
   }
+
+  chunks.extend(outlines);
+  chunks.extend(root.map(|root| chunk(root, ChunkPart::Outline)));
 }
 
 /// What a device does to enter and leave clips and effects.
@@ -321,6 +338,7 @@ mod tests {
       parent,
       output_clip,
       owner: Vec::new(),
+      bounds: None,
     })
   }
 

@@ -16,7 +16,7 @@ use crate::{
   node_paint::draw_image_node_content,
   painter::{BoxFrame, BoxPainter, GlyphFill, OwnContent},
   rasterize_layers,
-  stacking_context::ScenePainter,
+  stacking_context::paint_scene,
   style::{Affine, BackgroundClip},
 };
 
@@ -36,7 +36,7 @@ pub(crate) fn draw_inline_box(
       let at = subtree.border_box_origin(origin);
       let mut scene = subtree.into_scene(transform * Affine::translation(at.x, at.y), true)?;
 
-      ScenePainter::new(&mut scene, canvas).paint_context(0)
+      paint_scene(&mut scene, canvas)
     }
     InlineBoxPaint::Replaced { node, layout } => {
       if !node.paints_own_box() {

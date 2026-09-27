@@ -4,14 +4,11 @@ use smallvec::SmallVec;
 
 use takumi_core::{
   geometry::{ComputedLayout as Layout, Point, Size, transformed_rect_extents},
-  layout::decoration::ClipBox,
-  painter::{BoxPainter, FillShape, OverflowClip},
+  paint_property::ClipNode,
+  painter::{BoxPainter, FillShape},
   scene::SceneBounds,
 };
-use tiny_skia::{
-  FillRule as TinyFillRule, IntSize, Mask as TinyMask, PathBuilder as TinyPathBuilder,
-  Rect as TinyRect, Transform as TinyTransform,
-};
+use tiny_skia::{IntSize, Mask as TinyMask, Transform as TinyTransform};
 
 use crate::{
   Command, Fill, Placement, RenderContext, Result, Style, build_path, checked_area, create_mask,
@@ -20,8 +17,6 @@ use crate::{
 
 pub(crate) enum NodeMaskAction {
   Shell(TinyMask),
-  Content(TinyMask),
-  None,
   SkipRendering,
 }
 
@@ -96,12 +91,10 @@ impl CanvasViewport {
   }
 }
 
-/// The masks a node paints under: its `clip-path` and `mask-image` over the box and its
-/// descendants, and its `overflow` clip over the descendants alone.
+/// The masks a node's `clip-path` and `mask-image` lay over the box and its descendants.
 #[derive(Default)]
 pub(crate) struct NodeMasks {
   pub(crate) shell: SmallVec<[TinyMask; 2]>,
-  pub(crate) content: Option<TinyMask>,
 }
 
 impl NodeMasks {
@@ -137,25 +130,13 @@ impl NodeMasks {
       return Ok(None);
     }
 
-    let overflow = match OverflowClip::of(context, layout) {
-      Some(OverflowClip::Rounded(clip)) => {
-        rounded_overflow_mask(clip, transform, inverse_transform, viewport)
-      }
-      Some(OverflowClip::Axes { x, y }) => {
-        rect_overflow_mask(layout, transform, inverse_transform, viewport, (x, y))
-      }
-      None => NodeMaskAction::None,
-    };
-
-    Ok(masks.add(overflow).then_some(masks))
+    Ok(Some(masks))
   }
 
   /// Adds the mask `action` makes, reporting false when it hides the node.
   fn add(&mut self, action: NodeMaskAction) -> bool {
     match action {
       NodeMaskAction::Shell(mask) => self.shell.push(mask),
-      NodeMaskAction::Content(mask) => self.content = Some(mask),
-      NodeMaskAction::None => {}
       NodeMaskAction::SkipRendering => return false,
     }
 
@@ -178,8 +159,20 @@ impl NodeMasks {
 
   /// How many masks the node pushes.
   pub(crate) fn len(&self) -> usize {
-    self.shell.len() + usize::from(self.content.is_some())
+    self.shell.len()
   }
+}
+
+/// The region `clip` keeps, as a viewport mask.
+pub(crate) fn clip_node_mask(clip: &ClipNode, viewport: CanvasViewport) -> Option<TinyMask> {
+  let (mask, placement) = render_mask(
+    &clip.shape.to_commands(),
+    Some(clip.transform),
+    Some(Fill::from(clip.shape.rule()).into()),
+    Some(viewport),
+  );
+
+  copy_mask_to_viewport(viewport, &mask, placement)
 }
 
 /// The `clip-path` shape as a viewport mask over the box and its descendants.
@@ -245,140 +238,6 @@ fn mask_image_mask(
   };
 
   full_mask.map_or(NodeMaskAction::SkipRendering, NodeMaskAction::Shell)
-}
-
-/// A rounded padding-box mask for `overflow` clipping under `border-radius`.
-fn rounded_overflow_mask(
-  padding_box: ClipBox,
-  transform: Affine,
-  inverse_transform: Affine,
-  viewport: CanvasViewport,
-) -> NodeMaskAction {
-  let paths = FillShape::from(padding_box).to_commands();
-  let (mask_data, local_placement) = render_mask(&paths, None, None, None);
-  if local_placement.width == 0 || local_placement.height == 0 {
-    return NodeMaskAction::SkipRendering;
-  }
-
-  let Some(placement) = transformed_local_placement(local_placement, transform) else {
-    return NodeMaskAction::SkipRendering;
-  };
-
-  let from = Point {
-    x: local_placement.left.max(0) as u32,
-    y: local_placement.top.max(0) as u32,
-  };
-  let to = Point {
-    x: from.x + local_placement.width,
-    y: from.y + local_placement.height,
-  };
-  let full_mask = if transform.is_identity() {
-    copy_mask_to_viewport(viewport, &mask_data, local_placement)
-  } else {
-    rasterize_constraint_mask(viewport, placement, |x, y| {
-      sample_overflow_alpha(
-        from,
-        to,
-        inverse_transform,
-        Some((&mask_data, local_placement.width)),
-        x,
-        y,
-      )
-    })
-  };
-
-  full_mask.map_or(NodeMaskAction::SkipRendering, NodeMaskAction::Content)
-}
-
-/// A rectangular content-box mask for `overflow` clipping on the clipped axes.
-fn rect_overflow_mask(
-  layout: Layout,
-  transform: Affine,
-  inverse_transform: Affine,
-  viewport: CanvasViewport,
-  (clip_x, clip_y): (bool, bool),
-) -> NodeMaskAction {
-  let from = Point {
-    x: if clip_x { layout.border.left as u32 } else { 0 },
-    y: if clip_y { layout.border.top as u32 } else { 0 },
-  };
-  let to = Point {
-    x: if clip_x {
-      from.x + layout.padding_box_width() as u32
-    } else {
-      u32::MAX
-    },
-    y: if clip_y {
-      from.y + layout.padding_box_height() as u32
-    } else {
-      u32::MAX
-    },
-  };
-
-  if transform.is_identity()
-    && from.x <= viewport.origin.x
-    && from.y <= viewport.origin.y
-    && (to.x == u32::MAX || to.x as i32 >= viewport.right())
-    && (to.y == u32::MAX || to.y as i32 >= viewport.bottom())
-  {
-    return NodeMaskAction::None;
-  }
-
-  if to.x != u32::MAX
-    && to.y != u32::MAX
-    && let Some(rect) = TinyRect::from_ltrb(from.x as f32, from.y as f32, to.x as f32, to.y as f32)
-    && let Some(forward_transform) = inverse_transform.invert()
-    && let Some(mut mask) = TinyMask::new(viewport.size.width, viewport.size.height)
-  {
-    mask.data_mut().fill(u8::MAX);
-    let path = TinyPathBuilder::from_rect(rect);
-    let localized_transform =
-      Affine::translation(-(viewport.origin.x as f32), -(viewport.origin.y as f32))
-        * forward_transform;
-    mask.intersect_path(
-      &path,
-      TinyFillRule::Winding,
-      true,
-      TinyTransform::from(localized_transform),
-    );
-    return NodeMaskAction::Content(mask);
-  }
-
-  let Some(placement) = overflow_mask_placement(layout.size, transform, viewport, clip_x, clip_y)
-  else {
-    return NodeMaskAction::SkipRendering;
-  };
-  let mask = if transform.is_identity() {
-    fill_rect_mask(viewport, from, to)
-  } else {
-    rasterize_constraint_mask(viewport, placement, |x, y| {
-      sample_overflow_alpha(from, to, inverse_transform, None, x, y)
-    })
-  };
-
-  mask.map_or(NodeMaskAction::SkipRendering, NodeMaskAction::Content)
-}
-
-fn fill_rect_mask(viewport: CanvasViewport, from: Point<u32>, to: Point<u32>) -> Option<TinyMask> {
-  let mut mask = TinyMask::new(viewport.size.width, viewport.size.height)?;
-  let viewport_right = viewport.right();
-  let viewport_bottom = viewport.bottom();
-  let start_x = (from.x as i32).max(viewport.origin.x as i32);
-  let start_y = (from.y as i32).max(viewport.origin.y as i32);
-  let end_x = viewport_right.min(to.x.min(i32::MAX as u32) as i32);
-  let end_y = viewport_bottom.min(to.y.min(i32::MAX as u32) as i32);
-  if start_x >= end_x || start_y >= end_y {
-    return Some(mask);
-  }
-  let stride = viewport.size.width as usize;
-  let data = mask.data_mut();
-  let span = (end_x - start_x) as usize;
-  for global_y in start_y..end_y {
-    let row = (global_y - viewport.origin.y as i32) as usize * stride
-      + (start_x - viewport.origin.x as i32) as usize;
-    data[row..row + span].fill(u8::MAX);
-  }
-  Some(mask)
 }
 
 struct AlphaOverlap {
@@ -460,36 +319,6 @@ pub(crate) fn attenuate_alpha_by_mask(
   }
 }
 
-fn overflow_mask_placement(
-  size: Size<f32>,
-  transform: Affine,
-  viewport: CanvasViewport,
-  clip_x: bool,
-  clip_y: bool,
-) -> Option<Placement> {
-  let mut placement = transformed_placement(Point::ZERO, size, transform)?;
-
-  if clip_x == clip_y {
-    return Some(placement);
-  }
-
-  if !transform.only_translation() {
-    return Some(viewport.placement());
-  }
-
-  if !clip_x {
-    placement.left = viewport.origin.x as i32;
-    placement.width = viewport.size.width;
-  }
-
-  if !clip_y {
-    placement.top = viewport.origin.y as i32;
-    placement.height = viewport.size.height;
-  }
-
-  Some(placement)
-}
-
 fn copy_mask_into_canvas(
   canvas_mask: &mut TinyMask,
   canvas_origin: Point<u32>,
@@ -569,20 +398,6 @@ fn transformed_placement(
     top.floor() as i32,
     right.ceil() as i32,
     bottom.ceil() as i32,
-  )
-}
-
-fn transformed_local_placement(local_placement: Placement, transform: Affine) -> Option<Placement> {
-  transformed_placement(
-    Point {
-      x: local_placement.left as f32,
-      y: local_placement.top as f32,
-    },
-    Size {
-      width: local_placement.width as f32,
-      height: local_placement.height as f32,
-    },
-    transform,
   )
 }
 

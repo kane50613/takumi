@@ -14,7 +14,7 @@ use crate::{
     tree::{LayoutResults, RenderNode},
   },
   resources::{font::FontsSnapshot, image::ImageSource},
-  stacking_context::ScenePainter,
+  stacking_context::paint_scene,
   style::{FontFamily, SizingContext, StyleSheet},
   viewport::Viewport,
 };
@@ -155,7 +155,7 @@ fn render_with_context(
 
   let mut canvas = Canvas::try_new(size).ok_or(Error::InvalidViewport)?;
 
-  ScenePainter::new(&mut scene, &mut canvas).paint_context(0)?;
+  paint_scene(&mut scene, &mut canvas)?;
 
   let image = canvas.into_inner()?;
 

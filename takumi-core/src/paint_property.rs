@@ -14,6 +14,7 @@ use crate::{
   context::RenderContext,
   geometry::ComputedLayout,
   painter::{FillShape, OverflowClip},
+  scene::SceneBounds,
   style::Affine,
 };
 
@@ -24,6 +25,13 @@ pub struct ClipId(usize);
 /// An effect in [`PropertyTrees`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct EffectId(usize);
+
+impl EffectId {
+  /// The effect's position in its trees.
+  pub fn index(self) -> usize {
+    self.0
+  }
+}
 
 /// A region later draws stay inside.
 #[derive(Debug, Clone)]
@@ -46,6 +54,8 @@ pub struct EffectNode {
   pub output_clip: Option<ClipId>,
   /// Child-index path from the root to the box that owns the effect.
   pub owner: Vec<usize>,
+  /// Device-space bounds of what the group paints, filters included, or `None` when unknown.
+  pub bounds: Option<SceneBounds>,
 }
 
 /// The clip and effect a draw paints under.
@@ -83,6 +93,7 @@ impl NodeProperties {
         parent: state.effect,
         output_clip: state.clip,
         owner: path.to_vec(),
+        bounds: None,
       }))
     } else {
       state.effect
@@ -145,6 +156,21 @@ impl PropertyTrees {
   /// The effect `id` names.
   pub fn effect(&self, id: EffectId) -> &EffectNode {
     &self.effects[id.0]
+  }
+
+  /// How many effects the trees hold.
+  pub fn effect_count(&self) -> usize {
+    self.effects.len()
+  }
+
+  /// Every effect, in the order they were added.
+  pub fn effect_ids(&self) -> impl Iterator<Item = EffectId> + use<> {
+    (0..self.effects.len()).map(EffectId)
+  }
+
+  /// Sets the bounds of the effect `id`.
+  pub(crate) fn set_effect_bounds(&mut self, id: EffectId, bounds: Option<SceneBounds>) {
+    self.effects[id.0].bounds = bounds;
   }
 
   /// Lets every effect from `effect` up to `container` open outside all clips when an

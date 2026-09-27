@@ -20,6 +20,7 @@ use crate::{
     node::Node,
     tree::{ContainingBlocks, LayoutResults, RenderNode},
   },
+  paint_chunk::PaintChunk,
   paint_property::{ContainerContents, NodeProperties, PropertyState, PropertyTrees},
   shadow::SizedShadow,
   style::{Affine, BlurType, ComputedStyle, Display, Float},
@@ -44,7 +45,7 @@ pub struct NodePaint {
 }
 
 /// Device-space integer bounds of a node or stacking context's paint output.
-#[derive(Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct SceneBounds {
   /// Left edge, inclusive.
   pub left: usize,
@@ -548,6 +549,8 @@ impl SceneRequest<'_> {
       contexts[context_id].paint_bounds = if unknown { None } else { paint_bounds };
     }
 
+    set_effect_bounds(root, &contexts, &mut properties);
+
     Ok(SceneLayers {
       contexts,
       properties,
@@ -602,6 +605,49 @@ impl Scene {
       properties,
       size,
     })
+  }
+}
+
+/// Bounds each effect of `properties` by what paints under it, nested effects grown by their
+/// owners' filters first.
+fn set_effect_bounds(
+  root: &RenderNode,
+  contexts: &[StackingContextNode],
+  properties: &mut PropertyTrees,
+) {
+  let chunks = PaintChunk::in_paint_order(contexts);
+  let owners = PaintChunk::effect_owners(&chunks, properties);
+  let mut bounds = vec![(None, false); properties.effect_count()];
+
+  for chunk in &chunks {
+    if let Some(id) = chunk.state().effect {
+      let (union, unknown) = &mut bounds[id.index()];
+
+      match chunk.node.paint_bounds {
+        Some(node_bounds) => *union = merge_bounds(*union, Some(node_bounds)),
+        None => *unknown = true,
+      }
+    }
+  }
+
+  let ids: Vec<_> = properties.effect_ids().collect();
+
+  for &id in ids.iter().rev() {
+    let (union, unknown) = bounds[id.index()];
+    let grown =
+      match owners[id.index()].and_then(|owner| Some((owner, root.node_at_path(&owner.path)?))) {
+        Some((owner, node)) => outset_bounds(union, filter_reach(node), owner.transform),
+        None => union,
+      };
+
+    if let Some(parent) = properties.effect(id).parent {
+      let (parent_union, parent_unknown) = &mut bounds[parent.index()];
+
+      *parent_union = merge_bounds(*parent_union, grown);
+      *parent_unknown |= unknown;
+    }
+
+    properties.set_effect_bounds(id, (!unknown).then_some(grown).flatten());
   }
 }
 
