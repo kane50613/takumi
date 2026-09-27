@@ -51,7 +51,7 @@ use crate::{
     mask::{Mask, MaskType},
     num::NormalizedF32,
     paint::{
-      Fill, FillRule, LineCap, LinearGradient as KrillaLinearGradient, Paint, Pattern,
+      Fill, FillRule, LineCap, LineJoin, LinearGradient as KrillaLinearGradient, Paint, Pattern,
       RadialGradient as KrillaRadialGradient, SpreadMethod, Stroke, StrokeDash, SweepGradient,
     },
     surface::Surface,
@@ -1705,7 +1705,8 @@ fn device_commands(shape: &FillShape, transform: Affine) -> Vec<PathCommand> {
 /// The PDF surface as a [`PaintDevice`] for one block's text: shapes draw as on any surface, and
 /// glyphs draw with text operators so the text stays extractable.
 ///
-/// Approximate: a blurred `text-shadow` draws sharp, since PDF has no blur operator.
+/// Approximate: a blurred `text-shadow` fades through the stepped bands of [`Band`], since PDF has
+/// no blur operator, and the shadow a text decoration casts draws sharp.
 struct TextDevice<'e, 's, 'a> {
   emitter: &'e Emitter<'e>,
   device: SurfaceDevice<'s, 'a>,
@@ -1848,16 +1849,39 @@ impl GlyphDevice for TextDevice<'_, '_, '_> {
       }
     }
 
-    surface.set_fill(Some(paint));
-    surface.set_stroke(stroke);
-    surface.draw_glyphs(
-      origin,
-      &glyphs,
-      font,
-      text,
-      shaped.font_size,
-      shadow_color.is_some(),
-    );
+    match self.shadow.filter(|shadow| shadow.blur_radius > 0.0) {
+      // Each band spreads the glyphs by stroking them, inside a group of the band's opacity so
+      // the fill and stroke, and neighbouring glyphs, don't stack where they overlap.
+      Some(shadow) => {
+        for band in Band::of(shadow.blur_radius) {
+          let width = 2.0 * band.spread + stroke.as_ref().map_or(0.0, |stroke| stroke.width);
+
+          surface.push_opacity(normalized(band.alpha));
+          surface.set_fill(Some(paint.clone()));
+          surface.set_stroke((width > 0.0).then(|| Stroke {
+            paint: paint.paint.clone(),
+            opacity: paint.opacity,
+            width,
+            line_join: LineJoin::Round,
+            ..Stroke::default()
+          }));
+          surface.draw_glyphs(origin, &glyphs, font.clone(), text, shaped.font_size, true);
+          surface.pop();
+        }
+      }
+      None => {
+        surface.set_fill(Some(paint));
+        surface.set_stroke(stroke);
+        surface.draw_glyphs(
+          origin,
+          &glyphs,
+          font,
+          text,
+          shaped.font_size,
+          shadow_color.is_some(),
+        );
+      }
+    }
 
     if oblique {
       surface.pop();
