@@ -1,4 +1,4 @@
-use std::{fmt, mem::replace};
+use std::fmt;
 
 use serde::{
   Deserialize, Deserializer,
@@ -9,24 +9,25 @@ use crate::layout::node::{ImageData, Node, NodeKind, NodeMetadata, TextData};
 
 impl<'de> Deserialize<'de> for Node {
   fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-    deserializer.deserialize_map(NodeVisitor)
+    let (metadata, kind) = deserializer.deserialize_map(NodeVisitor {
+      reads_metadata: true,
+    })?;
+
+    Ok(Node { metadata, kind })
   }
 }
 
 impl<'de> Deserialize<'de> for NodeKind {
   fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-    let mut node = Node::deserialize(deserializer)?;
-
-    Ok(replace(
-      &mut node.kind,
-      NodeKind::Container {
-        children: Vec::new(),
-      },
-    ))
+    deserializer
+      .deserialize_map(NodeVisitor {
+        reads_metadata: false,
+      })
+      .map(|(_, kind)| kind)
   }
 }
 
-#[derive(Deserialize)]
+#[derive(Clone, Copy, Deserialize)]
 #[serde(field_identifier, rename_all = "camelCase")]
 enum NodeField {
   Type,
@@ -48,6 +49,24 @@ enum NodeField {
   Other,
 }
 
+impl NodeField {
+  /// Whether the key belongs to [`NodeMetadata`] rather than to a node type.
+  fn is_metadata(self) -> bool {
+    matches!(
+      self,
+      Self::TagName
+        | Self::ClassName
+        | Self::Id
+        | Self::Attributes
+        | Self::Preset
+        | Self::Style
+        | Self::Tw
+        | Self::Dir
+        | Self::Lang
+    )
+  }
+}
+
 #[derive(Clone, Copy, PartialEq, Eq, Deserialize)]
 #[serde(rename_all = "camelCase")]
 enum NodeType {
@@ -56,16 +75,19 @@ enum NodeType {
   Text,
 }
 
-struct NodeVisitor;
+struct NodeVisitor {
+  /// Whether metadata keys are read, or skipped unread as a bare [`NodeKind`] ignores them.
+  reads_metadata: bool,
+}
 
 impl<'de> Visitor<'de> for NodeVisitor {
-  type Value = Node;
+  type Value = (NodeMetadata, NodeKind);
 
   fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
     formatter.write_str("a node")
   }
 
-  fn visit_map<A: MapAccess<'de>>(self, mut map: A) -> Result<Node, A::Error> {
+  fn visit_map<A: MapAccess<'de>>(self, mut map: A) -> Result<Self::Value, A::Error> {
     let mut node_type = None;
     let mut metadata = NodeMetadata::default();
     let mut children = None;
@@ -79,6 +101,9 @@ impl<'de> Visitor<'de> for NodeVisitor {
       let owns = |kind: NodeType| node_type.is_none_or(|known| known == kind);
 
       match field {
+        _ if field.is_metadata() && !self.reads_metadata => {
+          map.next_value::<IgnoredAny>()?;
+        }
         NodeField::Type => node_type = Some(map.next_value()?),
         NodeField::Children if owns(NodeType::Container) => children = map.next_value()?,
         NodeField::Text if owns(NodeType::Text) => text = Some(map.next_value()?),
@@ -114,7 +139,7 @@ impl<'de> Visitor<'de> for NodeVisitor {
       }),
     };
 
-    Ok(Node { metadata, kind })
+    Ok((metadata, kind))
   }
 }
 
@@ -173,11 +198,12 @@ mod tests {
   }
 
   #[test]
-  fn reads_a_kind_on_its_own() {
-    let kind: NodeKind =
-      from_value(json!({ "type": "text", "text": "a", "className": "c" })).unwrap();
+  fn reads_a_kind_on_its_own_past_metadata() {
+    let input = json!({ "className": 1, "type": "text", "text": "a" });
+    let kind: NodeKind = from_value(input.clone()).unwrap();
 
     assert!(matches!(&kind, NodeKind::Text(data) if data.text == "a"));
+    assert!(error(input).contains("invalid type"));
   }
 
   #[test]
