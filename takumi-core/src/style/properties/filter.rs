@@ -103,6 +103,23 @@ impl Filter {
   pub fn is_drop_shadow(&self) -> bool {
     matches!(self, Filter::DropShadow(_))
   }
+
+  /// How far the filter spreads a layer's ink, in local px.
+  pub fn reach(&self, sizing: &SizingContext) -> f32 {
+    match self {
+      Filter::Blur(radius) => radius.to_px(sizing, 1.0) * BlurType::Filter.extent_multiplier(),
+      Filter::DropShadow(shadow) => {
+        let offset = shadow
+          .offset_x
+          .to_px(sizing, 1.0)
+          .abs()
+          .max(shadow.offset_y.to_px(sizing, 1.0).abs());
+
+        offset + shadow.blur_radius.to_px(sizing, 1.0) * BlurType::Filter.extent_multiplier()
+      }
+      _ => 0.0,
+    }
+  }
 }
 
 /// An ordered list of [`Filter`] values.

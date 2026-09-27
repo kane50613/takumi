@@ -5,9 +5,9 @@ use takumi_core::{
 use tiny_skia::{Pixmap, PixmapMut};
 
 use crate::{
-  BlurType, BorderProperties, Canvas, CanvasSubcanvas, CanvasViewport, DeferredOutline, Error,
-  NodeMasks, Placement, Result, apply_backdrop_filter, apply_filters_to_pixmap, blend_pixel,
-  draw_box_shell, draw_debug_border,
+  BorderProperties, Canvas, CanvasSubcanvas, CanvasViewport, DeferredOutline, Error, NodeMasks,
+  Placement, Result, apply_backdrop_filter, apply_filters_to_pixmap, blend_pixel, draw_box_shell,
+  draw_debug_border,
   inline_drawing::draw_own_content,
   layout::tree::{LayoutResults, RenderNode},
   placement_overlap,
@@ -172,23 +172,10 @@ impl PendingFinish {
 
 fn filter_padding(filters: &[Filter], sizing: &SizingContext, transform: Affine) -> i32 {
   let transform_scale = affine_max_scale(transform);
+
   filters
     .iter()
-    .map(|filter| match filter {
-      Filter::Blur(radius) => {
-        (radius.to_px(sizing, 1.0) * BlurType::Filter.extent_multiplier() * transform_scale).ceil()
-          as i32
-      }
-      Filter::DropShadow(shadow) => {
-        let blur_spread = shadow.blur_radius.to_px(sizing, 1.0)
-          * BlurType::Shadow.extent_multiplier()
-          * transform_scale;
-        let offset_x = shadow.offset_x.to_px(sizing, 1.0).abs() * transform_scale;
-        let offset_y = shadow.offset_y.to_px(sizing, 1.0).abs() * transform_scale;
-        (blur_spread + offset_x.max(offset_y)).ceil() as i32
-      }
-      _ => 0,
-    })
+    .map(|filter| (filter.reach(sizing) * transform_scale).ceil() as i32)
     .sum()
 }
 
