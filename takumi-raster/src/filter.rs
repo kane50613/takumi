@@ -233,18 +233,13 @@ fn composite_backdrop_with_mask(
     let px_idx = x * 4;
     let src = &backdrop_row[px_idx..px_idx + 4];
     let dst = &mut canvas_row[px_idx..px_idx + 4];
+    // The filtered backdrop composites over what it came from, masked by the element's shape.
+    let coverage = fast_div_255(src[3] as u32 * alpha as u32) as u32;
+    let inverse = 255 - coverage;
 
-    if alpha == 255 {
-      dst.copy_from_slice(src);
-      continue;
+    for (dst, src) in dst.iter_mut().zip(src) {
+      *dst = fast_div_255(*src as u32 * alpha as u32 + *dst as u32 * inverse);
     }
-
-    let src_alpha = alpha as u32;
-    let inverse_alpha = 255 - src_alpha;
-    dst[0] = fast_div_255(src[0] as u32 * src_alpha + dst[0] as u32 * inverse_alpha);
-    dst[1] = fast_div_255(src[1] as u32 * src_alpha + dst[1] as u32 * inverse_alpha);
-    dst[2] = fast_div_255(src[2] as u32 * src_alpha + dst[2] as u32 * inverse_alpha);
-    dst[3] = fast_div_255(src[3] as u32 * src_alpha + dst[3] as u32 * inverse_alpha);
   }
 }
 
