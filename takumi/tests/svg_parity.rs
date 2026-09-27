@@ -37,12 +37,6 @@ const KNOWN_DIVERGENT: &[(&str, &str)] = &[
      pattern and the outlines disagree (82.6%, floor is 90%)",
   ),
   (
-    "style_backdrop_filter",
-    "backdrop-filter: opacity() semantics differ: raster replaces the backdrop \
-     pixels, svg (paint-over model, no erase) composites the filtered copy over \
-     the original",
-  ),
-  (
     "showcase_halftone",
     "contrast(14) magnifies the gradient sampling differences between resvg \
      and raster into different halftone dots (80.6%, floor is 90%)",
