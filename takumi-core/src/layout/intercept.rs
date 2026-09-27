@@ -94,7 +94,7 @@ pub fn skip_ink_ranges<'g>(
 
 /// Whether `text-decoration-skip-ink: auto` cuts a decoration around `character`, after Blink's
 /// `Character::CanTextDecorationSkipInk`: never around slashes, the low line, CJK ideographs and
-/// symbols, or Hangul.
+/// symbols, or Hangul. Follows Blink under the notice in LICENSE-CHROMIUM.
 pub fn skips_ink(character: char) -> bool {
   let code = u32::from(character);
 
