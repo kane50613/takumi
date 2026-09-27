@@ -5,7 +5,7 @@ use std::fs::{create_dir_all, write};
 use takumi::prelude::*;
 use takumi_core::paint_tree::{
   Drawable, NodeKind, Paint, PaintDocument, PaintFilter, PaintNode, PaintStep, PaintTreeOptions,
-  Role, Shape, TextRun, paint_tree,
+  Role, Shape, Spread, TextRun, paint_tree,
 };
 use test_utils::{CONTEXT, TEST_IMAGES, format_generated};
 
@@ -373,7 +373,7 @@ fn unpainted_root_still_leaves_a_root_box() {
 }
 
 #[test]
-fn a_hairline_repeating_gradient_paints_its_average() {
+fn a_hairline_repeating_gradient_keeps_one_period_repeating() {
   let document = paint_tree(
     PaintTreeOptions::builder()
       .viewport(Viewport::new((1000, 100)))
@@ -390,7 +390,7 @@ fn a_hairline_repeating_gradient_paints_its_average() {
   .unwrap()
   .document;
 
-  let stops = document
+  let (start, end, stops, spread) = document
     .nodes
     .iter()
     .flat_map(|node| &node.drawables)
@@ -399,20 +399,23 @@ fn a_hairline_repeating_gradient_paints_its_average() {
         paint: Paint::Pattern { tile, .. },
         ..
       } => match tile.as_ref() {
-        Paint::LinearGradient { stops, .. } => Some(stops.clone()),
+        Paint::LinearGradient {
+          start,
+          end,
+          stops,
+          spread,
+        } => Some((*start, *end, stops.clone(), *spread)),
         _ => None,
       },
       _ => None,
     })
     .expect("the gradient layer");
 
-  let [red, green, blue, alpha] = stops[0].color;
-
-  assert_eq!(stops.len(), 2);
-  assert_eq!(stops[0].color, stops[1].color);
+  assert_eq!(spread, Spread::Repeat);
   assert!(
-    red.abs_diff(blue) <= 2 && green < 8 && alpha == 255,
-    "{:?}",
-    stops[0].color
+    ((end.x - start.x) - 0.002).abs() < 1e-4,
+    "{start:?} {end:?}"
   );
+  assert_eq!(stops.first().map(|stop| stop.color), Some([255, 0, 0, 255]));
+  assert_eq!(stops.last().map(|stop| stop.color), Some([0, 0, 255, 255]));
 }

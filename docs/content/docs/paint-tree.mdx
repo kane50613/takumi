@@ -105,7 +105,7 @@ A node's `transform` maps its local space onto the canvas. Its drawables sit in 
 | `Filter`   | `blur`, `color-matrix`, `drop-shadow`, `unsupported`                                |
 | `Effects`  | opacity, blend mode, isolation, filters, backdrop filters, clip, mask               |
 
-Gradient stops interpolate in sRGB. Takumi adds stops where the CSS interpolation space, such as the default Oklab, would differ, and unrolls repeating gradients over the area they cover. Background and mask layers arrive as `pattern` paints: one tile drawn at every `x` and `y`.
+Gradient stops interpolate in sRGB. Takumi adds stops where the CSS interpolation space, such as the default Oklab, would differ. A repeating gradient's stops cover one period with `spread: "repeat"`, as SVG's `spreadMethod` takes it; canvas gradients only pad, so repeat the stops yourself. Background and mask layers arrive as `pattern` paints: one tile drawn at every `x` and `y`.
 
 A `shadow` drawable is a blurred copy of its `shape`, filled or stroked with `stroke`, moved by `offset`, and visible only outside or inside its `box`. `blur` is the Gaussian's standard deviation, half of a CSS blur radius.
 

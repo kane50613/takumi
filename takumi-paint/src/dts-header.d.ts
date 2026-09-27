@@ -90,10 +90,16 @@ export type Shape =
 
 /**
  * A color stop, `offset` in `0..=1`. Interpolate linearly in sRGB between neighbors: takumi adds
- * stops wherever the CSS interpolation color space, such as the default Oklab, would differ, and
- * unrolls repeating gradients over the area they cover.
+ * stops wherever the CSS interpolation color space, such as the default Oklab, would differ.
  */
 export type ColorStop = { readonly offset: number; readonly color: Rgba };
+
+/**
+ * What a gradient paints past offset 0 and 1, as SVG's `spreadMethod`. A repeating gradient's
+ * stops cover one period, which `"repeat"` tiles both ways; canvas gradients only pad, so repeat
+ * the stops across the area yourself.
+ */
+export type Spread = "pad" | "repeat";
 
 export type Gradient =
   | {
@@ -101,21 +107,32 @@ export type Gradient =
       readonly start: Point;
       readonly end: Point;
       readonly stops: readonly ColorStop[];
+      readonly spread: Spread;
     }
-  /** Elliptical when `radiusX !== radiusY`: scale the y axis by `radiusY / radiusX` about `center`. */
+  /**
+   * Elliptical when `radiusX !== radiusY`: scale the y axis by `radiusY / radiusX` about `center`.
+   * Offset 0 sits at `start` times the radii, as `createRadialGradient`'s inner circle.
+   */
   | {
       readonly type: "radial-gradient";
       readonly center: Point;
       readonly radiusX: number;
       readonly radiusY: number;
+      readonly start: number;
       readonly stops: readonly ColorStop[];
+      readonly spread: Spread;
     }
-  /** `startAngle` in radians, clockwise from the positive x axis, as `createConicGradient` takes it. */
+  /**
+   * Angles in radians, clockwise from the positive x axis, as `createConicGradient` takes its
+   * start. The stops span `startAngle` to `endAngle`, a full turn unless the gradient repeats.
+   */
   | {
       readonly type: "conic-gradient";
       readonly center: Point;
       readonly startAngle: number;
+      readonly endAngle: number;
       readonly stops: readonly ColorStop[];
+      readonly spread: Spread;
     };
 
 /** A decoded image. */

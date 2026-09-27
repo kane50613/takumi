@@ -418,7 +418,8 @@
                   "offset": 1.0,
                   "color": [0, 0, 255, 255]
                 }
-              ]
+              ],
+              "spread": "pad"
             },
             "tileWidth": 392.0,
             "tileHeight": 206.0,
