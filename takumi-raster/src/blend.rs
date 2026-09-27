@@ -495,38 +495,25 @@ fn blend_premultiplied_pixel_slow(dst: &mut [u8; 4], src: [u8; 4], mode: BlendMo
     return;
   }
 
-  let dst_a = dst[3];
-  let mut current = if dst_a == 0 {
-    Rgba([0, 0, 0, 0])
-  } else if dst_a == u8::MAX {
-    Rgba([dst[0], dst[1], dst[2], dst_a])
-  } else {
-    let inv = DEMUL[dst_a as usize];
-    Rgba([
-      (dst[0] as f32 * inv + 0.5) as u8,
-      (dst[1] as f32 * inv + 0.5) as u8,
-      (dst[2] as f32 * inv + 0.5) as u8,
-      dst_a,
-    ])
-  };
+  let mut current = demultiplied(*dst);
 
-  let src_a = src[3];
-  let color = if src_a == 0 {
-    Rgba([0, 0, 0, 0])
-  } else if src_a == u8::MAX {
-    Rgba([src[0], src[1], src[2], src_a])
-  } else {
-    let inv = DEMUL[src_a as usize];
-    Rgba([
-      (src[0] as f32 * inv + 0.5) as u8,
-      (src[1] as f32 * inv + 0.5) as u8,
-      (src[2] as f32 * inv + 0.5) as u8,
-      src_a,
-    ])
-  };
-
-  blend_pixel(&mut current, color, mode);
+  blend_pixel(&mut current, demultiplied(src), mode);
   *dst = premultiply_pixel(current.0);
+}
+
+/// Straight alpha from a premultiplied pixel, through the `DEMUL` reciprocal table.
+#[inline(always)]
+fn demultiplied([red, green, blue, alpha]: [u8; 4]) -> Rgba<u8> {
+  match alpha {
+    0 => Rgba([0, 0, 0, 0]),
+    u8::MAX => Rgba([red, green, blue, alpha]),
+    _ => {
+      let inverse = DEMUL[alpha as usize];
+      let scale = |channel: u8| (channel as f32 * inverse + 0.5) as u8;
+
+      Rgba([scale(red), scale(green), scale(blue), alpha])
+    }
+  }
 }
 
 #[inline(always)]
