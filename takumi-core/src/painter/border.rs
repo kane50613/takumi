@@ -298,7 +298,7 @@ impl<'b> BoxBorderPainter<'b> {
 pub(super) struct StyledLine {
   line: FillShape,
   stroke: StrokeStyle,
-  /// Dots filled on their own at the line's ends, each a top-left and a size.
+  /// End dots filled on their own, each a top-left and a size.
   dots: SmallVec<[(Point<f32>, Size<f32>); 2]>,
 }
 
@@ -346,9 +346,7 @@ impl StyledLine {
     }
   }
 
-  /// A box side's line from `start` to `end`, which run left to right or top to bottom, as
-  /// `DrawLineWithStyle` draws it: a dotted line up to 3px wide gets whole square dots at both
-  /// ends from Blink's `EnforceDotsAtEndpoints`, which fills them itself and moves the line in.
+  /// A left-to-right or top-to-bottom box side, as Blink's `DrawLineWithStyle` draws it.
   pub(super) fn box_side(
     start: Point<f32>,
     end: Point<f32>,
@@ -438,14 +436,13 @@ impl StyledLine {
   }
 }
 
-/// The end dots Blink's `EnforceDotsAtEndpoints` fills for a `dot`-wide dotted line `length` long,
-/// so both ends land on a whole dot.
+/// Blink's `EnforceDotsAtEndpoints` for a `dot`-wide dotted line `length` long.
 struct EndDots {
-  /// How much longer the start dot is, when there is one.
+  /// The start dot's growth, when there is one.
   start: Option<i32>,
   /// How far the first gap after the start dot shrinks or grows.
   start_offset: i32,
-  /// How much longer the end dot is, when there is one.
+  /// The end dot's growth, when there is one.
   end: Option<i32>,
 }
 

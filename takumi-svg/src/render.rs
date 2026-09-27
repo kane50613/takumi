@@ -295,8 +295,7 @@ pub(crate) struct BoxChrome {
 }
 
 impl BoxChrome {
-  /// Emits a box's shared chrome and opens its child group: its shadows, background and border
-  /// unless `part` is its content, and its outline unless `part` is its decorations.
+  /// Emits `part` of a box's shared chrome and opens its child group.
   pub(crate) fn open(
     placed: &PlacedBox,
     group_transform: Affine,

@@ -97,8 +97,7 @@ impl<'c> CanvasDevice<'c> {
     }
   }
 
-  /// Whether a `size` rectangle under `transform` covers whole pixels, or is turned so that a tile
-  /// samples its edges; either way a solid tile paints it as its coverage would.
+  /// Whether a solid tile paints a `size` rectangle under `transform` as its coverage would.
   fn tiles_whole_pixels(&self, size: Size<f32>, transform: Affine) -> bool {
     let transform = self.transform * transform;
 

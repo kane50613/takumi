@@ -22,15 +22,14 @@ enum DeferredNodeRender {
   SkipRendering,
 }
 
-/// The state a painted node leaves open until its descendants are done: its
-/// constraint mask, its isolation layer, and the bounds its filters cover.
+/// What a painted node leaves open until its descendants are done.
 struct PendingFinish {
   layout: Layout,
   /// How many masks the node pushed.
   constraints: usize,
   isolated_canvas: Option<Box<CanvasSubcanvas>>,
   filter_bounds: Option<SceneBounds>,
-  /// Whether this pass paints the outline, which goes with a box's content.
+  /// Whether this pass paints the outline.
   outline: bool,
 }
 
@@ -42,8 +41,7 @@ impl PendingFinish {
     canvas: &mut Canvas,
     outlines: Option<&mut Vec<DeferredOutline>>,
   ) -> Result<()> {
-    // CSS 2.1 Appendix E paints the outline last, above the box's children, so a
-    // node whose children follow it in the bucket hands its outline to the caller.
+    // CSS 2.1 Appendix E paints outlines after the box's children.
     if self.outline
       && let Some(deferred) = DeferredOutline::of(&node.context, self.layout)
     {
@@ -238,7 +236,7 @@ impl<'a> ScenePainter<'a> {
     Ok(())
   }
 
-  /// Paints a context root's own content, inside the masks its decorations left open.
+  /// Paints a context root's own content.
   fn paint_content(&mut self, node_paint: &NodePaint) -> Result<()> {
     let Some(current) = self.root.node_at_path_mut(&node_paint.path) else {
       return Err(Error::InvalidLayoutNode(node_paint.node_id.into()));
@@ -348,7 +346,6 @@ impl<'a> ScenePainter<'a> {
       constraints,
       isolated_canvas,
       filter_bounds: node_paint.paint_bounds,
-      // A context root paints its content later, but its outline still closes its layer.
       outline: part != BoxPart::Decorations || defer_finish,
     };
 
@@ -368,8 +365,7 @@ impl<'a> ScenePainter<'a> {
   }
 }
 
-/// Paints a node's own content, and the debug border when it asks for one: an inline formatting
-/// context paints over the debug border, text and images under it.
+/// Paints a node's own content and debug border, an inline formatting context over the border.
 fn draw_node_content(
   node: &RenderNode,
   canvas: &mut Canvas,

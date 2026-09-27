@@ -2243,8 +2243,7 @@ fn text_decoration_shadow() {
   });
 }
 
-/// A colour glyph's `text-shadow` is its silhouette in the shadow colour, as Blink's shadow looper
-/// fills every glyph with the shadow colour through `SrcIn`.
+/// A colour glyph's `text-shadow` is its silhouette in the shadow colour.
 #[test]
 fn color_glyph_text_shadow() {
   let mut fonts = fonts();
@@ -2270,8 +2269,7 @@ fn color_glyph_text_shadow() {
   });
 }
 
-/// A bitmap glyph's `text-shadow` is its alpha, blurred when the shadow blurs, filled with the
-/// shadow colour.
+/// A bitmap glyph's `text-shadow`, sharp and blurred, is its alpha in the shadow colour.
 #[test]
 fn bitmap_glyph_text_shadow() {
   let mut fonts = Fonts::default();

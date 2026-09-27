@@ -89,7 +89,6 @@ impl Walker {
     let Some(context) = scene.contexts.get(id) else {
       return Ok(());
     };
-    // The root's own content waits for its phase.
     let root = match context.root() {
       Some(paint) => self.open_node(scene, paint, prefix)?,
       None => None,
@@ -97,8 +96,7 @@ impl Walker {
     // A plain node owns no group, so its outline waits for the nodes that follow it, as Blink's
     // `kDescendantOutlinesOnly` pass paints them.
     let mut outlines = Vec::new();
-    // The in-flow boxes the decorations phase opened, in order, each with whether it has an
-    // outline, for the content phase to fill.
+    // The boxes the decorations phase opened, with their outline flag, for the content phase.
     let mut decorated: Vec<Option<(usize, bool)>> = Vec::new();
 
     for phase in context.paint_phases() {
