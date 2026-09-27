@@ -21,9 +21,9 @@ use takumi_core::{
 };
 
 use super::{
-  BackgroundTile, BorderProperties, Canvas, ColorTile, Fill, PaintSource, RenderContext,
-  SizedFontStyle, TileLayer, TileLayers, background_image_layers, collect_background_layers,
-  draw_image, rasterize_layers,
+  BackgroundTile, BorderProperties, Canvas, CanvasViewport, ColorTile, Fill, PaintSource,
+  RenderContext, SizedFontStyle, TileLayer, TileLayers, background_image_layers,
+  collect_background_layers, draw_image, rasterize_layers,
 };
 use crate::{
   BlurType, CanvasSubcanvas, Command, Error, MaskCompositeColor, MaskSamplingOptions, Placement,
@@ -176,18 +176,30 @@ impl<'c> CanvasDevice<'c> {
     blur_radius: f32,
     color: Color,
   ) {
-    let reach = if blur_radius > 0.0 {
-      blur_radius * BlurType::Shadow.extent_multiplier()
-    } else {
-      0.0
-    };
-    let (mask, placement) = render_mask(
+    let coverage = render_mask(
       commands,
       Some(self.transform * transform),
       Some(style),
-      Some(self.canvas.viewport().inflate(reach, reach)),
+      Some(self.shadow_viewport(blur_radius)),
     );
 
+    self.draw_blurred_coverage(coverage, blur_radius, color);
+  }
+
+  /// The canvas viewport grown by how far a shadow of `blur_radius` blurs.
+  fn shadow_viewport(&self, blur_radius: f32) -> CanvasViewport {
+    let reach = BlurType::Shadow.extent(blur_radius);
+
+    self.canvas.viewport().inflate(reach, reach)
+  }
+
+  /// Paints `coverage` in `color`, blurred as a CSS shadow of `blur_radius` blurs.
+  fn draw_blurred_coverage(
+    &mut self,
+    (mask, placement): (Vec<u8>, Placement),
+    blur_radius: f32,
+    color: Color,
+  ) {
     if mask.is_empty() {
       return;
     }
@@ -195,7 +207,7 @@ impl<'c> CanvasDevice<'c> {
       return self.draw_coverage((mask, placement), color);
     }
 
-    let padding = reach as u32;
+    let padding = BlurType::Shadow.extent(blur_radius) as u32;
     let width = placement.width.saturating_add(padding * 2);
     let height = placement.height.saturating_add(padding * 2);
     let Some(area) = checked_area(width, height, 1) else {

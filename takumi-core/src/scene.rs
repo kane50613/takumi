@@ -489,7 +489,7 @@ impl Scene {
 fn shadow_reach(shadow: &SizedShadow) -> f32 {
   shadow.offset_x.abs().max(shadow.offset_y.abs())
     + shadow.spread_radius.max(0.0)
-    + shadow.blur_radius * BlurType::Shadow.extent_multiplier()
+    + BlurType::Shadow.extent(shadow.blur_radius)
 }
 
 /// How far the node's filters spread its layer, in local px.

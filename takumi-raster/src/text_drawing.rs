@@ -364,8 +364,7 @@ pub(crate) fn draw_glyph(
       let Some(source) = pixmap_ref_from_buffer(&bitmap.image) else {
         return Ok(());
       };
-      transform *= Affine::translation(bitmap.placement.left as f32, -bitmap.placement.top as f32);
-      transform *= Affine::scale(bitmap.scale_x, bitmap.scale_y);
+      transform *= bitmap.image_transform();
       canvas.overlay_sampled_pixmap(
         source,
         Size {
