@@ -64,7 +64,8 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 3. `Color::inset_outset` in src/style/properties/color.rs, the `StyledLine`
    and curved dash rules in src/painter/border.rs, `OutlineIsland::paint`
-   in src/painter/outline.rs, and the decoration lines in
+   and `ComplexOutline` in src/painter/outline.rs, `RightAngleContour` in
+   src/layout/inline/outline.rs, and the decoration lines in
    src/painter/decoration.rs, from
    third_party/blink/renderer/core/paint/box_border_painter.cc,
    third_party/blink/renderer/core/paint/outline_painter.cc,

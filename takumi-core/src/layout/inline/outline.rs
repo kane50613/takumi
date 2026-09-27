@@ -78,20 +78,16 @@ impl InlineOutlineRect {
       && other.y <= self.y + self.height + slack
   }
 
-  /// The rect grown by `amount` on every side, or `None` once it has no area.
-  fn expanded(self, amount: f32) -> Option<Self> {
-    let width = self.width + amount * 2.0;
-    let height = self.height + amount * 2.0;
-    if width <= 0.0 || height <= 0.0 {
-      return None;
-    }
-    Some(Self {
-      x: self.x - amount,
-      y: self.y - amount,
-      width,
-      height,
-      ..self
-    })
+  /// The rect as Blink's `ToPixelSnappedRect` snaps it: left, top, right, bottom.
+  pub(crate) fn pixel_snapped(self) -> [f32; 4] {
+    let (left, top) = (self.x.round(), self.y.round());
+
+    [
+      left,
+      top,
+      (self.x + self.width).round(),
+      (self.y + self.height).round(),
+    ]
   }
 }
 
@@ -146,86 +142,181 @@ impl OutlineIsland {
     (rect.outline, rect.opacity)
   }
 
-  /// The corners of the rectilinear contour around the island, grown by `expansion` past its
-  /// rects, clockwise from the top-left.
-  pub fn corners(&self, expansion: f32) -> Vec<Point<f32>> {
-    let island = &self.rects;
-    let mut corners = Vec::with_capacity(island.len() * 4);
-    let point = |x, y| Point { x, y };
-    let mut expanded_rects = island.iter().filter_map(|rect| rect.expanded(expansion));
-    let Some(first_rect) = expanded_rects.next() else {
-      return corners;
-    };
-
-    corners.push(point(first_rect.x, first_rect.y));
-    corners.push(point(first_rect.x + first_rect.width, first_rect.y));
-
-    let mut current_rect = first_rect;
-    for next_rect in expanded_rects {
-      corners.push(point(current_rect.x + current_rect.width, next_rect.y));
-      corners.push(point(next_rect.x + next_rect.width, next_rect.y));
-      current_rect = next_rect;
-    }
-    let last_rect = current_rect;
-
-    corners.push(point(
-      last_rect.x + last_rect.width,
-      last_rect.y + last_rect.height,
-    ));
-    corners.push(point(last_rect.x, last_rect.y + last_rect.height));
-
-    let mut expanded_rev = island
+  /// Blink's `ComputeRightAnglePath`: the pixel-snapped rects, each grown by `offset` (no further
+  /// in than half its size) and `outset`, united.
+  pub fn right_angle_path(&self, offset: f32, outset: f32) -> Option<RightAngleContour> {
+    let grown: Vec<[f32; 4]> = self
+      .rects
       .iter()
-      .rev()
-      .filter_map(|rect| rect.expanded(expansion));
-    let Some(mut lower_rect) = expanded_rev.next() else {
-      return corners;
-    };
+      .map(|rect| {
+        let [left, top, right, bottom] = rect.pixel_snapped();
+        let horizontal = offset.max(-((right - left) / 2.0).trunc()) + outset;
+        let vertical = offset.max(-((bottom - top) / 2.0).trunc()) + outset;
 
-    for upper_rect in expanded_rev {
-      corners.push(point(lower_rect.x, upper_rect.y + upper_rect.height));
-      corners.push(point(upper_rect.x, upper_rect.y + upper_rect.height));
-      lower_rect = upper_rect;
-    }
+        [
+          left - horizontal,
+          top - vertical,
+          right + horizontal,
+          bottom + vertical,
+        ]
+      })
+      .filter(|[left, top, right, bottom]| left < right && top < bottom)
+      .collect();
 
-    corners
+    RightAngleContour::of(union_outline(&grown))
   }
 
   /// The element's corner radii, resolved against the island's first fragment.
   pub fn radius(&self) -> Sides<SpacePair<f32>> {
     self.rects[0].radius
   }
+}
 
-  /// The contour through [`OutlineIsland::corners`] grown by `expansion`, its convex corners
-  /// rounded by `convex` and its concave ones by `concave`, after Blink's `AddCornerRadiiToPath`
-  /// in `outline_painter.cc`. Follows Blink under the notice in LICENSE-CHROMIUM.
-  pub fn rounded_contour(
+/// The clockwise outline of rects that, band by band down the page, cover one run each, as an
+/// `SkRegion` traces their union.
+fn union_outline(rects: &[[f32; 4]]) -> Vec<Point<f32>> {
+  let mut edges: Vec<f32> = rects.iter().flat_map(|rect| [rect[1], rect[3]]).collect();
+
+  edges.sort_by(f32::total_cmp);
+  edges.dedup();
+
+  let bands: Vec<(f32, f32, f32, f32)> = edges
+    .windows(2)
+    .filter_map(|band| {
+      let (top, bottom) = (band[0], band[1]);
+      let covering = rects
+        .iter()
+        .filter(|rect| rect[1] < bottom && rect[3] > top);
+      let left = covering.clone().map(|rect| rect[0]).reduce(f32::min)?;
+      let right = covering.map(|rect| rect[2]).reduce(f32::max)?;
+
+      Some((left, top, right, bottom))
+    })
+    .collect();
+  let Some(&(left, top, ..)) = bands.first() else {
+    return Vec::new();
+  };
+  let point = |x, y| Point { x, y };
+  let mut corners = vec![point(left, top)];
+
+  for &(_, top, right, bottom) in &bands {
+    corners.extend([point(right, top), point(right, bottom)]);
+  }
+  for &(left, top, _, bottom) in bands.iter().rev() {
+    corners.extend([point(left, bottom), point(left, top)]);
+  }
+  corners
+}
+
+/// A clockwise contour turning a right angle at every corner, as Blink's `IterateRightAnglePath`
+/// reads it. Follows Blink's `outline_painter.cc` under the notice in LICENSE-CHROMIUM.
+#[derive(Clone, Debug, PartialEq)]
+pub struct RightAngleContour {
+  corners: Vec<Point<f32>>,
+}
+
+impl RightAngleContour {
+  /// The contour through `corners`, or `None` once it encloses nothing.
+  pub fn of(corners: Vec<Point<f32>>) -> Option<Self> {
+    let corners = right_angle_corners(corners);
+
+    (corners.len() >= 4).then_some(Self { corners })
+  }
+
+  fn at(&self, index: usize) -> Point<f32> {
+    self.corners[index % self.corners.len()]
+  }
+
+  fn before(&self, index: usize) -> Point<f32> {
+    self.at(index + self.corners.len() - 1)
+  }
+
+  /// Each edge, from a corner to the next.
+  pub fn lines(&self) -> impl Iterator<Item = (Point<f32>, Point<f32>)> + '_ {
+    (0..self.corners.len()).map(|index| (self.at(index), self.at(index + 1)))
+  }
+
+  /// Blink's `ShrinkRightAnglePath`.
+  pub fn shrunk(&self, inset: f32) -> Self {
+    let corners = (0..self.corners.len())
+      .map(|index| {
+        let (previous, corner, next) = (self.before(index), self.at(index), self.at(index + 1));
+        let (x, y) = if previous.x == corner.x {
+          match (previous.y < corner.y, corner.x < next.x) {
+            (true, true) => (-inset, inset),
+            (true, false) => (-inset, -inset),
+            (false, true) => (inset, inset),
+            (false, false) => (inset, -inset),
+          }
+        } else {
+          match (previous.x < corner.x, corner.y < next.y) {
+            (true, true) => (-inset, inset),
+            (true, false) => (inset, inset),
+            (false, true) => (-inset, -inset),
+            (false, false) => (inset, -inset),
+          }
+        };
+
+        Point {
+          x: corner.x + x,
+          y: corner.y + y,
+        }
+      })
+      .collect();
+
+    Self { corners }
+  }
+
+  /// The contour as a path.
+  pub fn path(&self) -> Vec<PathCommand> {
+    let mut path = Vec::with_capacity(self.corners.len() + 2);
+
+    path.move_to((self.corners[0].x, self.corners[0].y));
+    for corner in &self.corners[1..] {
+      path.line_to((corner.x, corner.y));
+    }
+    path.close();
+    path
+  }
+
+  /// The top-left and bottom-right corners of the rect around the contour.
+  pub fn bounds(&self) -> (Point<f32>, Point<f32>) {
+    self
+      .corners
+      .iter()
+      .fold((self.corners[0], self.corners[0]), |(low, high), corner| {
+        (
+          Point {
+            x: low.x.min(corner.x),
+            y: low.y.min(corner.y),
+          },
+          Point {
+            x: high.x.max(corner.x),
+            y: high.y.max(corner.y),
+          },
+        )
+      })
+  }
+
+  /// Each edge shortened by its corners' radii, Blink's `AdjustLineBetweenCorners`.
+  fn rounded_lines(
     &self,
-    expansion: f32,
     convex: Sides<SpacePair<f32>>,
     concave: Sides<SpacePair<f32>>,
-  ) -> Vec<PathCommand> {
-    let corners = right_angle_corners(self.corners(expansion));
-    let count = corners.len();
-
-    if count < 4 {
-      return self.contour(expansion);
-    }
-
-    let at = |index: usize| corners[(index + count) % count];
+  ) -> Vec<(Point<f32>, Point<f32>)> {
     let radius = |index: usize| {
       corner_radius(
         convex,
         concave,
-        at(index + count - 1),
-        at(index),
-        at(index + 1),
+        self.before(index),
+        self.at(index),
+        self.at(index + 1),
       )
     };
-    // Each line runs from corner `index` to the next, shortened by both corners' radii.
-    let lines: Vec<(Point<f32>, Point<f32>)> = (0..count)
+
+    (0..self.corners.len())
       .map(|index| {
-        let (start, end) = (at(index), at(index + 1));
+        let (start, end) = (self.at(index), self.at(index + 1));
         let (first, second) = (radius(index), radius(index + 1));
         let vertical = start.x == end.x;
         let length = if vertical {
@@ -253,50 +344,104 @@ impl OutlineIsland {
 
         (step(start, end, near), step(end, start, far))
       })
-      .collect();
+      .collect()
+  }
+
+  /// Blink's `AddCornerRadiiToPath`, a quarter ellipse at each corner.
+  pub fn rounded(
+    &self,
+    convex: Sides<SpacePair<f32>>,
+    concave: Sides<SpacePair<f32>>,
+  ) -> Vec<PathCommand> {
+    let lines = self.rounded_lines(convex, concave);
+    let count = lines.len();
     let mut path = Vec::with_capacity(count * 2 + 2);
     let mut current = lines[count - 1].1;
 
     path.move_to((current.x, current.y));
-
     for (index, &(start, end)) in lines.iter().enumerate() {
-      let corner = at(index);
-
-      path.push(PathCommand::CubicTo(
-        Point {
-          x: current.x + (corner.x - current.x) * KAPPA,
-          y: current.y + (corner.y - current.y) * KAPPA,
-        },
-        Point {
-          x: start.x + (corner.x - start.x) * KAPPA,
-          y: start.y + (corner.y - start.y) * KAPPA,
-        },
-        start,
-      ));
+      path.push(arc(current, self.at(index), start));
       path.line_to((end.x, end.y));
       current = end;
     }
-
     path.close();
     path
   }
 
-  /// The closed contour through [`OutlineIsland::corners`].
-  pub fn contour(&self, expansion: f32) -> Vec<PathCommand> {
-    let corners = self.corners(expansion);
-    let mut path = Vec::with_capacity(corners.len() + 1);
-    let Some((first, rest)) = corners.split_first() else {
-      return path;
-    };
+  /// Blink's `RoundedEdgePathIterator`: each edge's stroke through its whole corner arcs, the
+  /// ends run on by `extension` so they fill the corner's mitre.
+  pub fn rounded_edges(
+    &self,
+    convex: Sides<SpacePair<f32>>,
+    concave: Sides<SpacePair<f32>>,
+    extension: f32,
+  ) -> Vec<Vec<PathCommand>> {
+    let lines = self.rounded_lines(convex, concave);
+    let count = lines.len();
 
-    path.move_to((first.x, first.y));
+    (0..count)
+      .map(|index| {
+        let (line_start, line_end) = lines[index];
+        let arc_start = lines[(index + count - 1) % count].1;
+        let arc_end = lines[(index + 1) % count].0;
+        let (first_corner, second_corner) = (self.at(index), self.at(index + 1));
+        let mut path = Vec::with_capacity(6);
 
-    for corner in rest {
-      path.line_to((corner.x, corner.y));
+        if arc_start == line_start {
+          let start = extended(line_start, second_corner, extension);
+
+          path.move_to((start.x, start.y));
+        } else {
+          let start = extended(arc_start, first_corner, extension);
+
+          path.move_to((start.x, start.y));
+          path.line_to((arc_start.x, arc_start.y));
+          path.push(arc(arc_start, first_corner, line_start));
+        }
+        if line_end == arc_end {
+          let end = extended(line_end, first_corner, extension);
+
+          path.line_to((end.x, end.y));
+        } else {
+          let end = extended(arc_end, second_corner, extension);
+
+          path.line_to((line_end.x, line_end.y));
+          path.push(arc(line_end, second_corner, arc_end));
+          path.line_to((end.x, end.y));
+        }
+        path
+      })
+      .collect()
+  }
+}
+
+/// The quarter ellipse from `from` to `to` about the right-angle `corner`.
+fn arc(from: Point<f32>, corner: Point<f32>, to: Point<f32>) -> PathCommand {
+  PathCommand::CubicTo(
+    Point {
+      x: from.x + (corner.x - from.x) * KAPPA,
+      y: from.y + (corner.y - from.y) * KAPPA,
+    },
+    Point {
+      x: to.x + (corner.x - to.x) * KAPPA,
+      y: to.y + (corner.y - to.y) * KAPPA,
+    },
+    to,
+  )
+}
+
+/// `point` moved `by` away from `other`, along the axis they share, Blink's `ExtendLineAtEndpoint`.
+fn extended(point: Point<f32>, other: Point<f32>, by: f32) -> Point<f32> {
+  if point.x == other.x {
+    Point {
+      x: point.x,
+      y: point.y + if point.y < other.y { -by } else { by },
     }
-
-    path.close();
-    path
+  } else {
+    Point {
+      x: point.x + if point.x < other.x { -by } else { by },
+      y: point.y,
+    }
   }
 }
 
