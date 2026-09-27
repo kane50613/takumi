@@ -292,18 +292,30 @@ impl_css_enum!(
   "under" => TextUnderlinePosition::Under
 );
 
-/// Represents text decoration style options (currently only solid is supported).
+/// How a text decoration line is drawn.
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
 #[non_exhaustive]
 pub enum TextDecorationStyle {
-  /// Solid text decoration style.
+  /// One solid line.
   #[default]
   Solid,
+  /// Two solid lines.
+  Double,
+  /// A line of dots.
+  Dotted,
+  /// A line of dashes.
+  Dashed,
+  /// A wavy line.
+  Wavy,
 }
 
 impl_css_enum!(
   TextDecorationStyle,
-  "solid" => TextDecorationStyle::Solid
+  "solid" => TextDecorationStyle::Solid,
+  "double" => TextDecorationStyle::Double,
+  "dotted" => TextDecorationStyle::Dotted,
+  "dashed" => TextDecorationStyle::Dashed,
+  "wavy" => TextDecorationStyle::Wavy
 );
 
 /// Parsed `text-decoration` value.
@@ -313,7 +325,7 @@ impl_css_enum!(
 pub struct TextDecoration {
   /// Text decoration line style.
   pub line: TextDecorationLines,
-  /// Text decoration style (currently only solid is supported).
+  /// Text decoration style.
   pub style: TextDecorationStyle,
   /// Optional text decoration color.
   pub color: ColorInput,
@@ -380,6 +392,10 @@ impl<'i> FromCss<'i> for TextDecoration {
     CssToken::Keyword("line-through"),
     CssToken::Keyword("overline"),
     CssToken::Keyword("solid"),
+    CssToken::Keyword("double"),
+    CssToken::Keyword("dotted"),
+    CssToken::Keyword("dashed"),
+    CssToken::Keyword("wavy"),
     CssToken::Keyword("from-font"),
     CssToken::Syntax(CssSyntaxKind::Color),
     CssToken::Syntax(CssSyntaxKind::Length),
@@ -453,6 +469,26 @@ mod tests {
           .build()
       )
     );
+  }
+
+  #[test]
+  fn test_parse_text_decoration_styles() {
+    for (css, style) in [
+      ("underline double", TextDecorationStyle::Double),
+      ("underline dotted", TextDecorationStyle::Dotted),
+      ("underline dashed", TextDecorationStyle::Dashed),
+      ("underline wavy", TextDecorationStyle::Wavy),
+    ] {
+      assert_eq!(
+        TextDecoration::from_css_str(css),
+        Ok(
+          TextDecoration::builder()
+            .line(TextDecorationLines::UNDERLINE)
+            .style(style)
+            .build()
+        )
+      );
+    }
   }
 
   #[test]

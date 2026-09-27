@@ -2103,6 +2103,32 @@ fn inline_zero_sized_parents() {
   );
 }
 
+/// Each `text-decoration-style` draws its own line, and `skip-ink` keeps a pattern's phase.
+#[test]
+fn text_decoration_styles() {
+  let pdf = run_pdf_fixture("text-decoration-styles", |fonts| {
+    let source = r##"<div style="width: 100%; height: 100%; padding: 24px; background-color: #ffffff; font-size: 24px; color: #0f172a; display: flex; flex-direction: column; gap: 12px;">
+      <div style="text-decoration: underline double;">double</div>
+      <div style="text-decoration: underline dotted;">dotted</div>
+      <div style="text-decoration: underline dashed #16a34a 2px;">dashed</div>
+      <div style="text-decoration: underline wavy #e11d48;">Typing wavy</div>
+    </div>"##;
+    let node = from_html(source, FromHtmlOptions::default()).expect("parse decoration fixture");
+
+    PdfOptions::builder()
+      .node(node)
+      .viewport(Viewport::new((360, 240)))
+      .fonts(fonts)
+      .build()
+  });
+  let content: Vec<Vec<u8>> = content_lines(&pdf).collect();
+
+  assert!(
+    content.iter().any(|line| find(line, b" d").is_some()),
+    "expected a dash pattern for the dotted and dashed lines"
+  );
+}
+
 /// `background-origin` moves the positioning area, `background-clip` shrinks
 /// the painted region, `border-area` paints over the borders, and
 /// `background-blend-mode` blends a layer into the one below.

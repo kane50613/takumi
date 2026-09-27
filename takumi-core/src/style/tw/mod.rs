@@ -547,6 +547,8 @@ pub(crate) enum TailwindProperty {
   TextDecorationLine(TextDecorationLines),
   /// `text-decoration-color` property.
   TextDecorationColor(ColorInput),
+  /// `text-decoration-style` property.
+  TextDecorationStyle(TextDecorationStyle),
   /// `text-decoration-thickness` property.
   TextDecorationThickness(TextDecorationThickness),
   /// `text-transform` property.
@@ -1395,6 +1397,9 @@ impl TailwindProperty {
       ),
       TailwindProperty::TextDecorationColor(color_input) => {
         push_decl!(builder, important, text_decoration_color(color_input))
+      }
+      TailwindProperty::TextDecorationStyle(style) => {
+        push_decl!(builder, important, text_decoration_style(style))
       }
       TailwindProperty::TextDecorationThickness(thickness) => {
         push_decl!(builder, important, text_decoration_thickness(thickness))

@@ -286,6 +286,9 @@ pub enum Drawable {
     role: Role,
     /// The shape that casts it.
     shape: Shape,
+    /// Strokes the shape instead of filling it, as a dashed or wavy text decoration casts.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    stroke: Option<Stroke>,
     /// How far it moves.
     offset: PaintPoint,
     /// The Gaussian's standard deviation.
