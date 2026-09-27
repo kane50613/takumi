@@ -433,7 +433,7 @@ fn apply_drop_shadow_filter(pixmap: &mut PixmapMut<'_>, shadow: &SizedShadow) ->
     return Ok(());
   }
 
-  let padding = (shadow.blur_radius * BlurType::Filter.extent_multiplier()).ceil() as u32;
+  let padding = BlurType::Filter.extent(shadow.blur_radius).ceil() as u32;
 
   let offset_x = shadow.offset_x.floor() as i32;
   let offset_y = shadow.offset_y.floor() as i32;

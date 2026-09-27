@@ -125,7 +125,7 @@ impl BoxPainter<'_> {
 
       // The shape moves by the shadow's offset, so its bounds cover the padding box from where
       // the shape starts.
-      let reach = shadow.blur_radius * BlurType::Shadow.extent_multiplier() + 1.0;
+      let reach = BlurType::Shadow.extent(shadow.blur_radius) + 1.0;
       let padding = padding_box.shifted(Point {
         x: -shadow.offset_x,
         y: -shadow.offset_y,

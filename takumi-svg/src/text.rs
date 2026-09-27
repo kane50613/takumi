@@ -254,9 +254,7 @@ pub(crate) fn emit_run_glyphs(
         };
         doc.flush_glyph_uses(&mut uses, fill, stroke)?;
         let (width, height) = (bitmap.image.width(), bitmap.image.height());
-        let bitmap_matrix = placed
-          * Affine::translation(bitmap.placement.left as f32, -(bitmap.placement.top as f32))
-          * Affine::scale(bitmap.scale_x, bitmap.scale_y);
+        let bitmap_matrix = placed * bitmap.image_transform();
         let href = to_data_url("image/png", &png);
         let group = doc.begin_group(bitmap_matrix, 1.0, None, None)?;
         doc.image(

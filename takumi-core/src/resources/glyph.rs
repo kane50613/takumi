@@ -27,6 +27,7 @@ use crate::{
     glyph_cache::ENTRY_OVERHEAD,
     image_buffer::{ImageBuffer, rgba_len},
   },
+  style::Affine,
 };
 
 /// A resolved glyph, either an embedded bitmap or a vector outline.
@@ -52,6 +53,13 @@ pub struct ResolvedBitmapGlyph {
 }
 
 impl ResolvedBitmapGlyph {
+  /// Where the bitmap's pixels sit in the glyph's space: at its placement, scaled from source
+  /// pixels.
+  pub fn image_transform(&self) -> Affine {
+    Affine::translation(self.placement.left as f32, -(self.placement.top as f32))
+      * Affine::scale(self.scale_x, self.scale_y)
+  }
+
   /// Write the glyph's alpha channel into `mask`, scaling to the placement size.
   pub fn write_alpha_mask(&self, mask: &mut [u8]) {
     let width = self.placement.width as usize;
