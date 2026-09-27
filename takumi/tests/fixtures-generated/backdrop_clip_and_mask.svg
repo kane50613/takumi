@@ -71,7 +71,7 @@
   </clipPath>
   <g clip-path="url(#cp1)">
     <clipPath id="cp2">
-      <ellipse cx="300" cy="160" rx="162" ry="108"/>
+      <ellipse cx="300" cy="160" rx="137.674" ry="137.674"/>
     </clipPath>
     <g clip-path="url(#cp2)">
       <mask id="mk3" maskUnits="userSpaceOnUse" style="mask-type:alpha">
@@ -297,7 +297,7 @@
   </mask>
   <g mask="url(#mk7)">
     <clipPath id="cp9">
-      <ellipse cx="300" cy="160" rx="162" ry="108"/>
+      <ellipse cx="300" cy="160" rx="137.674" ry="137.674"/>
     </clipPath>
     <g clip-path="url(#cp9)">
     </g>
