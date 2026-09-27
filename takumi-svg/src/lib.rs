@@ -811,8 +811,8 @@ impl SvgDocument {
           "feOffset",
           &[
             ("in", "dsb".into()),
-            ("dx", num(resolved.offset_x).into()),
-            ("dy", num(resolved.offset_y).into()),
+            ("dx", num(resolved.offset_x.floor()).into()),
+            ("dy", num(resolved.offset_y.floor()).into()),
             ("result", "dso".into()),
           ],
         )?;
