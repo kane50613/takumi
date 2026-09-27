@@ -507,7 +507,7 @@ impl ComplexOutline {
 }
 
 /// The length of a path of lines and cubics, each cubic measured over sixteen chords.
-fn path_length(path: &[PathCommand]) -> f32 {
+pub(super) fn path_length(path: &[PathCommand]) -> f32 {
   let (mut length, mut current, mut start) = (0.0, Point::ZERO, Point::ZERO);
   let distance = |a: Point<f32>, b: Point<f32>| ((b.x - a.x).powi(2) + (b.y - a.y).powi(2)).sqrt();
 

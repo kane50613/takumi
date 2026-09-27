@@ -501,15 +501,228 @@
             "fillRule": "nonzero"
           },
           "stroke": {
-            "width": 2.0,
-            "dash": [6.0, 4.0205755],
+            "width": 4.4,
+            "dash": [6.0, 4.01626],
             "cap": "butt",
             "join": "miter"
           },
           "paint": {
             "type": "color",
             "color": [0, 128, 0, 255]
-          }
+          },
+          "clips": [
+            {
+              "type": "rounded-rect",
+              "rect": {
+                "x": -5.0,
+                "y": -5.0,
+                "width": 410.0,
+                "height": 224.0
+              },
+              "radii": {
+                "topLeft": {
+                  "x": 17.0,
+                  "y": 17.0
+                },
+                "topRight": {
+                  "x": 17.0,
+                  "y": 17.0
+                },
+                "bottomRight": {
+                  "x": 17.0,
+                  "y": 17.0
+                },
+                "bottomLeft": {
+                  "x": 17.0,
+                  "y": 17.0
+                }
+              }
+            },
+            {
+              "type": "path",
+              "d": "M-1000000-1000000h2000000v2000000h-2000000v-2000000ZM12-3h376c8.28 0 15 6.72 15 15v190c0 8.28-6.72 15-15 15h-376c-8.28 0-15-6.72-15-15v-190c0-8.28 6.72-15 15-15Z",
+              "fillRule": "evenodd"
+            },
+            {
+              "type": "path",
+              "d": "M-5-5l9.5 9.5h391l9.5-9.5Z",
+              "fillRule": "nonzero"
+            }
+          ]
+        },
+        {
+          "type": "stroke",
+          "role": "outline",
+          "shape": {
+            "type": "path",
+            "d": "M12-4h376c8.84 0 16 7.16 16 16v190c0 8.84-7.16 16-16 16h-376c-8.84 0-16-7.16-16-16v-190c0-8.84 7.16-16 16-16Z",
+            "fillRule": "nonzero"
+          },
+          "stroke": {
+            "width": 4.4,
+            "dash": [6.0, 4.01626],
+            "cap": "butt",
+            "join": "miter"
+          },
+          "paint": {
+            "type": "color",
+            "color": [0, 128, 0, 255]
+          },
+          "clips": [
+            {
+              "type": "rounded-rect",
+              "rect": {
+                "x": -5.0,
+                "y": -5.0,
+                "width": 410.0,
+                "height": 224.0
+              },
+              "radii": {
+                "topLeft": {
+                  "x": 17.0,
+                  "y": 17.0
+                },
+                "topRight": {
+                  "x": 17.0,
+                  "y": 17.0
+                },
+                "bottomRight": {
+                  "x": 17.0,
+                  "y": 17.0
+                },
+                "bottomLeft": {
+                  "x": 17.0,
+                  "y": 17.0
+                }
+              }
+            },
+            {
+              "type": "path",
+              "d": "M-1000000-1000000h2000000v2000000h-2000000v-2000000ZM12-3h376c8.28 0 15 6.72 15 15v190c0 8.28-6.72 15-15 15h-376c-8.28 0-15-6.72-15-15v-190c0-8.28 6.72-15 15-15Z",
+              "fillRule": "evenodd"
+            },
+            {
+              "type": "path",
+              "d": "M405 219l-9.5-9.5h-391l-9.5 9.5Z",
+              "fillRule": "nonzero"
+            }
+          ]
+        },
+        {
+          "type": "stroke",
+          "role": "outline",
+          "shape": {
+            "type": "path",
+            "d": "M12-4h376c8.84 0 16 7.16 16 16v190c0 8.84-7.16 16-16 16h-376c-8.84 0-16-7.16-16-16v-190c0-8.84 7.16-16 16-16Z",
+            "fillRule": "nonzero"
+          },
+          "stroke": {
+            "width": 4.4,
+            "dash": [6.0, 4.01626],
+            "cap": "butt",
+            "join": "miter"
+          },
+          "paint": {
+            "type": "color",
+            "color": [0, 128, 0, 255]
+          },
+          "clips": [
+            {
+              "type": "rounded-rect",
+              "rect": {
+                "x": -5.0,
+                "y": -5.0,
+                "width": 410.0,
+                "height": 224.0
+              },
+              "radii": {
+                "topLeft": {
+                  "x": 17.0,
+                  "y": 17.0
+                },
+                "topRight": {
+                  "x": 17.0,
+                  "y": 17.0
+                },
+                "bottomRight": {
+                  "x": 17.0,
+                  "y": 17.0
+                },
+                "bottomLeft": {
+                  "x": 17.0,
+                  "y": 17.0
+                }
+              }
+            },
+            {
+              "type": "path",
+              "d": "M-1000000-1000000h2000000v2000000h-2000000v-2000000ZM12-3h376c8.28 0 15 6.72 15 15v190c0 8.28-6.72 15-15 15h-376c-8.28 0-15-6.72-15-15v-190c0-8.28 6.72-15 15-15Z",
+              "fillRule": "evenodd"
+            },
+            {
+              "type": "path",
+              "d": "M405-5l-9.5 9.5v205l9.5 9.5Z",
+              "fillRule": "nonzero"
+            }
+          ]
+        },
+        {
+          "type": "stroke",
+          "role": "outline",
+          "shape": {
+            "type": "path",
+            "d": "M12-4h376c8.84 0 16 7.16 16 16v190c0 8.84-7.16 16-16 16h-376c-8.84 0-16-7.16-16-16v-190c0-8.84 7.16-16 16-16Z",
+            "fillRule": "nonzero"
+          },
+          "stroke": {
+            "width": 4.4,
+            "dash": [6.0, 4.01626],
+            "cap": "butt",
+            "join": "miter"
+          },
+          "paint": {
+            "type": "color",
+            "color": [0, 128, 0, 255]
+          },
+          "clips": [
+            {
+              "type": "rounded-rect",
+              "rect": {
+                "x": -5.0,
+                "y": -5.0,
+                "width": 410.0,
+                "height": 224.0
+              },
+              "radii": {
+                "topLeft": {
+                  "x": 17.0,
+                  "y": 17.0
+                },
+                "topRight": {
+                  "x": 17.0,
+                  "y": 17.0
+                },
+                "bottomRight": {
+                  "x": 17.0,
+                  "y": 17.0
+                },
+                "bottomLeft": {
+                  "x": 17.0,
+                  "y": 17.0
+                }
+              }
+            },
+            {
+              "type": "path",
+              "d": "M-1000000-1000000h2000000v2000000h-2000000v-2000000ZM12-3h376c8.28 0 15 6.72 15 15v190c0 8.28-6.72 15-15 15h-376c-8.28 0-15-6.72-15-15v-190c0-8.28 6.72-15 15-15Z",
+              "fillRule": "evenodd"
+            },
+            {
+              "type": "path",
+              "d": "M-5 219l9.5-9.5v-205l-9.5-9.5Z",
+              "fillRule": "nonzero"
+            }
+          ]
         }
       ],
       "overflowClip": {
