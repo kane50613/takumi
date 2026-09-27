@@ -7,7 +7,7 @@ use takumi_core::{
   context::RenderContext,
   error::Result,
   font_style::SizedFontStyle,
-  geometry::{Point, Rect},
+  geometry::{Point, Rect, Size},
   layout::{
     background_image_geometry::FillLayers,
     border::BorderProperties,
@@ -17,8 +17,8 @@ use takumi_core::{
     tree::RenderNode,
   },
   painter::{
-    BackgroundClipArea, BoxFrame, BoxPainter, FillShape, GlyphDevice, GlyphFill, OverflowClip,
-    OwnContent, PaintDevice, PendingOutline, ShadowShape, StrokeStyle, UNBOUNDED,
+    BackgroundClipArea, BoxBorderPainter, BoxFrame, BoxPainter, FillShape, GlyphDevice, GlyphFill,
+    OverflowClip, OwnContent, PaintDevice, PendingOutline, ShadowShape, StrokeStyle, UNBOUNDED,
   },
   path_data::{edges_path_data, path_data},
   resources::image::ImageSource,
@@ -187,6 +187,23 @@ impl<'n> PlacedBox<'n> {
     }
 
     if background.layers.is_empty() {
+      return Ok(());
+    }
+    if let Some(mask) = background.clip.border_mask() {
+      DocumentDevice::paint(doc, |device| {
+        device.with_border_mask(&mask, self.frame.layout.size, self.frame.origin, |device| {
+          device.write(|doc| {
+            LayerEmitter::new(&self.node.context, doc).layers(
+              &background.layers,
+              Frame::origin_box(self.frame, background.origin),
+              Frame::border_box(self.frame),
+            )
+          });
+        });
+      })?;
+      if let Some(isolate) = isolate {
+        doc.end_group(isolate)?;
+      }
       return Ok(());
     }
     let group = self
@@ -542,6 +559,31 @@ impl PaintDevice for DocumentDevice<'_> {
   }
 
   fn pop_clip(&mut self) {
+    self.close_group();
+  }
+
+  fn with_border_mask(
+    &mut self,
+    border: &BorderProperties,
+    size: Size<f32>,
+    origin: Point<f32>,
+    content: impl FnOnce(&mut Self),
+  ) {
+    if self.error.is_some() {
+      return;
+    }
+    let (token, reference) = match self.doc.begin_mask() {
+      Ok(mask) => mask,
+      Err(error) => {
+        self.error = Some(error);
+        return;
+      }
+    };
+
+    BoxBorderPainter::new(border, size).paint(origin, self);
+    self.write(|doc| doc.end_mask(token));
+    self.open_group(|doc| doc.begin_masked_group(&reference));
+    content(self);
     self.close_group();
   }
 

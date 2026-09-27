@@ -263,6 +263,17 @@ pub trait PaintDevice {
   /// Removes the most recent clip.
   fn pop_clip(&mut self);
 
+  /// Paints `content` only where `border` paints on a box of `size` at `origin`, as a `DstIn`
+  /// layer keeps it, for `background-clip: border-area`.
+  fn with_border_mask(
+    &mut self,
+    border: &BorderProperties,
+    size: Size<f32>,
+    origin: Point<f32>,
+    content: impl FnOnce(&mut Self),
+  ) where
+    Self: Sized;
+
   /// Draws what follows into a layer that composites at `opacity` on the matching
   /// [`PaintDevice::end_layer`].
   fn begin_layer(&mut self, opacity: f32);
@@ -380,12 +391,19 @@ impl<'c> BoxPainter<'c> {
     if color.0[3] == 0 {
       return;
     }
-    let Some(shape) = self.background_clip().shape(self.layout.size) else {
+    let clip = self.background_clip();
+    let Some(shape) = clip.shape(self.layout.size) else {
       return;
     };
+    let at = Affine::translation(origin.x, origin.y);
 
     device.set_role(PaintRole::Background);
-    device.fill_shape(&shape, color, Affine::translation(origin.x, origin.y));
+    match clip.border_mask() {
+      Some(mask) => device.with_border_mask(&mask, self.layout.size, origin, |device| {
+        device.fill_shape(&FillShape::Rect(self.layout.size), color, at);
+      }),
+      None => device.fill_shape(&shape, color, at),
+    }
   }
 
   /// The box's `box-shadow` layers, resolved and split into the ones that fall inside the box and

@@ -10,7 +10,7 @@ use crate::{
     decoration::ClipBox,
   },
   painter::FillShape,
-  style::{BackgroundClip, Color},
+  style::{BackgroundClip, BorderStyle, Color, Sides},
 };
 
 /// The area a background paints into, from `background-clip`.
@@ -20,10 +20,7 @@ pub enum BackgroundClipArea {
   BorderBox(BorderProperties),
   /// The padding or content box.
   Inner(ClipBox),
-  /// The border ring alone.
-  ///
-  /// Approximate: a dashed, dotted, or double border clips to its whole ring, where Blink clips
-  /// to the dashes and stripes it paints.
+  /// Where the border paints.
   BorderArea(BorderProperties),
   /// The box's glyphs.
   Text,
@@ -39,6 +36,27 @@ impl BackgroundClipArea {
       BackgroundClip::BorderArea => Self::BorderArea(border),
       BackgroundClip::Text => Self::Text,
     }
+  }
+
+  /// The border a `border-area` background is masked by when a side leaves gaps, in opaque black,
+  /// as Blink's `AllBordersFillBorderArea` sends such a border to a `DstIn` mask. A border without
+  /// gaps clips to [`BackgroundClipArea::shape`]'s ring instead.
+  pub fn border_mask(&self) -> Option<BorderProperties> {
+    let Self::BorderArea(border) = self else {
+      return None;
+    };
+    let gaps = border.sides().iter().any(|side| {
+      side.width > 0.0
+        && matches!(
+          side.style,
+          BorderStyle::Dotted | BorderStyle::Dashed | BorderStyle::Double
+        )
+    });
+
+    gaps.then(|| BorderProperties {
+      color: Sides([Color::black(); 4]).into(),
+      ..*border
+    })
   }
 
   /// The clip region of a `size` border box, or `None` for `text` and an empty box.

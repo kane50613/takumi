@@ -226,6 +226,20 @@ impl Canvas {
     })
   }
 
+  /// Ends `subcanvas` without compositing it, returning what was painted into it.
+  pub(crate) fn take_subcanvas(&mut self, subcanvas: CanvasSubcanvas) -> Pixmap {
+    let CanvasSubcanvas {
+      image,
+      origin,
+      constraint_mask_stack,
+      ..
+    } = subcanvas;
+    let painted = replace(&mut self.image, image);
+
+    self.restore_subcanvas_state(origin, constraint_mask_stack);
+    painted
+  }
+
   pub(crate) fn composite_subcanvas(
     &mut self,
     subcanvas: CanvasSubcanvas,
