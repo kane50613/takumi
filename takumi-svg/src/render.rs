@@ -491,6 +491,10 @@ impl<'d> DocumentDevice<'d> {
 }
 
 impl PaintDevice for DocumentDevice<'_> {
+  fn transform(&self) -> Affine {
+    self.doc.transform()
+  }
+
   fn fill_shape(&mut self, shape: &FillShape, color: Color, transform: Affine) {
     let (color, transform) = self.shadowed(color, transform);
 

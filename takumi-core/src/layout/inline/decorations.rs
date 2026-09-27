@@ -1,8 +1,8 @@
-//! Text decoration rectangles and skip-ink outlines.
+//! Text decoration lines and where skip-ink cuts them.
 
 use crate::{
   geometry::{ComputedLayout, Point},
-  layout::intercept::skip_ink_spans,
+  layout::intercept::{Spans, skip_ink_ranges},
   resources::glyph::{ResolvedGlyph, ResolvedOutlineGlyph},
   style::{
     Affine, Color, SizedTextDecorationThickness, TextDecorationLines, TextDecorationSkipInk,
@@ -13,25 +13,29 @@ use std::{collections::HashMap, sync::Arc};
 
 use super::runs::ShapedRun;
 
-/// A text decoration line (underline/overline/line-through) as a fillable rect.
-pub struct DecorationRect {
-  /// Rect width in pixels (run advance, snapped like the raster path).
+/// A text decoration line as Blink's `DecorationGeometry` holds it: unsnapped, in the block's
+/// border box.
+pub struct DecorationLine {
+  /// The line's left end and top.
+  pub origin: Point<f32>,
+  /// The line's length.
   pub width: f32,
-  /// Rect height in pixels (decoration thickness).
-  pub height: f32,
+  /// The line's thickness.
+  pub thickness: f32,
   /// Decoration color, already resolved against `current-color`.
   pub color: Color,
-  /// Affine transform into border-box space (`[a, b, c, d, e, f]`).
-  pub transform: [f32; 6],
+  /// Maps the border box into the device's drawing space.
+  pub transform: Affine,
+  /// Maps the border box onto the output's pixels, where skip-ink rounds its cuts.
+  pub output: Affine,
   /// Whether the line paints above glyphs (line-through) vs below (under/overline).
   pub over: bool,
   /// Which decoration this is, so a backend can single one out.
   pub line: TextDecorationLines,
   /// How the line is drawn.
   pub style: TextDecorationStyle,
-  /// Where the whole line starts and ends from this rect's left edge. `skip-ink` cuts a line
-  /// into several rects, and a pattern keeps its phase across them.
-  pub line_span: (f32, f32),
+  /// The x-ranges `text-decoration-skip-ink` cuts out of the line, sorted.
+  pub skips: Spans,
 }
 
 impl ShapedRun {
@@ -64,8 +68,8 @@ impl ShapedRun {
     Some((top, thickness))
   }
 
-  /// The run's outline glyphs, positioned from `origin`.
-  pub fn glyph_outlines<'g>(
+  /// The outlines of the run's glyphs that `skip-ink` gives way to, positioned from `origin`.
+  fn ink_outlines<'g>(
     &self,
     resolved_glyphs: &'g HashMap<u32, Arc<ResolvedGlyph>>,
     origin: Point<f32>,
@@ -74,6 +78,7 @@ impl ShapedRun {
     self
       .glyphs
       .iter()
+      .filter(|glyph| glyph.skips_ink)
       .filter_map(|glyph| {
         let ResolvedGlyph::Outline(outline) = resolved_glyphs.get(&glyph.id)?.as_ref() else {
           return None;
@@ -90,115 +95,80 @@ impl ShapedRun {
       .collect()
   }
 
-  /// The rectangles the run's `text-decoration` paints.
+  /// The lines the run's `text-decoration` paints, `transform` mapping the block's border box
+  /// into the device's drawing space and `device` mapping that space onto the output. `skip-ink`
+  /// cuts an underline and an overline, not a line-through.
   pub fn decorations(
     &self,
     resolved_glyphs: &HashMap<u32, Arc<ResolvedGlyph>>,
     layout: ComputedLayout,
     baseline_shift: f32,
     transform: Affine,
-  ) -> Vec<DecorationRect> {
-    let mut out = Vec::new();
-    let brush = &self.brush;
-    let lines = brush.decoration_line;
-    if lines.is_empty() {
-      return out;
-    }
-    // A fully trimmed run must not snap up to a 1px decoration.
-    if self.decorated_advance() <= 0.0 {
-      return out;
-    }
+    device: Affine,
+  ) -> Vec<DecorationLine> {
     let content = layout.content_box_offset();
-    let start_x = content.x + self.offset;
-    let snapped_start_x = start_x.floor();
-    let width = (start_x + self.decorated_advance()).ceil() - snapped_start_x;
-    if width <= 0.0 {
-      return out;
+    let mut lines = self.decoration_lines(content, baseline_shift, transform, device * transform);
+
+    if self.brush.decoration_skip_ink == TextDecorationSkipInk::None {
+      return lines;
     }
-    // Blink's `DrawLineAsRect` rounds a line's top to a whole pixel and its thickness down to one,
-    // at least 1px.
-    //
-    // Approximate: the top rounds in the block's border box, where Blink rounds it on the page,
-    // and the ends round outward where Blink antialiases them.
-    let thickness = |value: f32| value.floor().max(1.0);
-    let mut emit = |x: f32,
-                    span_width: f32,
-                    y_offset: f32,
-                    height: f32,
-                    over: bool,
-                    line: TextDecorationLines| {
-      if height <= 0.0 || span_width <= 0.0 {
-        return;
-      }
-      let matrix = transform * Affine::translation(x, (content.y + y_offset + 0.5).floor());
-      out.push(DecorationRect {
-        width: span_width,
-        height,
+
+    let mut outlines = None;
+
+    for decoration in lines.iter_mut().filter(|decoration| !decoration.over) {
+      let band = decoration.bounds();
+      let outlines =
+        outlines.get_or_insert_with(|| self.ink_outlines(resolved_glyphs, content, baseline_shift));
+
+      decoration.skips = skip_ink_ranges(
+        outlines.iter().copied(),
+        band.top,
+        band.bottom,
+        decoration.thickness,
+      );
+    }
+    lines
+  }
+
+  /// The run's decoration lines, uncut, with its content box at `content`.
+  pub(crate) fn decoration_lines(
+    &self,
+    content: Point<f32>,
+    baseline_shift: f32,
+    transform: Affine,
+    output: Affine,
+  ) -> Vec<DecorationLine> {
+    let brush = &self.brush;
+    // A fully trimmed run paints no decoration.
+    if brush.decoration_line.is_empty() || self.decorated_advance() <= 0.0 {
+      return Vec::new();
+    }
+
+    [
+      (TextDecorationLines::UNDERLINE, false),
+      (TextDecorationLines::OVERLINE, false),
+      (TextDecorationLines::LINE_THROUGH, true),
+    ]
+    .into_iter()
+    .filter_map(|(line, over)| {
+      let (top, thickness) = self.decoration_line(line, baseline_shift)?;
+
+      Some(DecorationLine {
+        origin: Point {
+          x: content.x + self.offset,
+          y: content.y + top,
+        },
+        width: self.decorated_advance(),
+        thickness,
         color: brush.decoration_color,
-        transform: matrix.to_cols_array(),
+        transform,
+        output,
         over,
         line,
         style: brush.decoration_style,
-        line_span: (snapped_start_x - x, snapped_start_x + width - x),
-      });
-    };
-
-    if let Some((y_offset, raw_thickness)) =
-      self.decoration_line(TextDecorationLines::UNDERLINE, baseline_shift)
-    {
-      let height = thickness(raw_thickness);
-      // `skip-ink` cuts the line where the glyphs cross it. The pieces carry the
-      // same transform, so a backend paints them exactly as it paints one line.
-      let spans = if brush.decoration_skip_ink == TextDecorationSkipInk::None {
-        [(snapped_start_x, snapped_start_x + width)]
-          .into_iter()
-          .collect()
-      } else {
-        // The band runs from the content box, so the glyphs have to as well.
-        let outlines = self.glyph_outlines(
-          resolved_glyphs,
-          Point {
-            x: content.x,
-            y: 0.0,
-          },
-          baseline_shift,
-        );
-
-        skip_ink_spans(
-          outlines.iter().copied(),
-          snapped_start_x,
-          snapped_start_x + width,
-          y_offset,
-          y_offset + height,
-        )
-      };
-
-      for (start, end) in spans {
-        emit(
-          start,
-          end - start,
-          y_offset,
-          height,
-          false,
-          TextDecorationLines::UNDERLINE,
-        );
-      }
-    }
-    for (line_kind, over) in [
-      (TextDecorationLines::OVERLINE, false),
-      (TextDecorationLines::LINE_THROUGH, true),
-    ] {
-      if let Some((offset, raw_thickness)) = self.decoration_line(line_kind, baseline_shift) {
-        emit(
-          snapped_start_x,
-          width,
-          offset,
-          thickness(raw_thickness),
-          over,
-          line_kind,
-        );
-      }
-    }
-    out
+        skips: Spans::new(),
+      })
+    })
+    .collect()
   }
 }
