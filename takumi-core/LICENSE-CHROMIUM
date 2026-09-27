@@ -68,13 +68,17 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
    and `ComplexOutline` in src/painter/outline.rs, `RightAngleContour` in
    src/layout/inline/outline.rs, the decoration lines in
    src/painter/decoration.rs, the property rules in src/paint_property.rs,
-   and `ConversionContext` in src/paint_chunk.rs, from
+   `ConversionContext` in src/paint_chunk.rs, and the corners and side clips
+   in src/layout/contoured_rect.rs, from
    third_party/blink/renderer/core/paint/box_border_painter.cc,
    third_party/blink/renderer/core/paint/outline_painter.cc,
    third_party/blink/renderer/core/paint/decoration_line_painter.cc,
    third_party/blink/renderer/core/paint/text_decoration_info.cc,
    third_party/blink/renderer/core/paint/text_painter.cc,
-   third_party/blink/renderer/core/paint/paint_property_tree_builder.cc, and
+   third_party/blink/renderer/core/paint/paint_property_tree_builder.cc,
+   third_party/blink/renderer/core/paint/contoured_border_geometry.cc,
+   third_party/blink/renderer/platform/geometry/contoured_rect.cc,
+   third_party/blink/renderer/platform/geometry/path_builder.cc, and
    third_party/blink/renderer/platform/graphics/compositing/paint_chunks_to_cc_layer.cc.
 
 Copyright 2014, 2015 The Chromium Authors

@@ -52,11 +52,6 @@ impl Superellipse {
     self.0 == 1.0
   }
 
-  /// True for concave shapes (`scoop`, `notch`, negative parameters).
-  pub(crate) fn is_concave(self) -> bool {
-    self.0 < 0.0
-  }
-
   fn to_interpolable(self) -> f32 {
     // https://drafts.csswg.org/css-borders-4/#corner-shape-interpolation
     let half_corner = 0.5f32.powf(0.5f32.powf(self.0.abs()));

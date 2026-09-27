@@ -7,8 +7,11 @@
 
 use crate::{
   context::RenderContext,
-  geometry::{ComputedLayout as Layout, Point, Rect, Size},
-  layout::border::BorderProperties,
+  geometry::{ComputedLayout as Layout, PathCommand, Point, Rect, Size},
+  layout::{
+    border::BorderProperties,
+    contoured_rect::{Corner, append_inset_contour, has_round_curvature},
+  },
   style::Sides,
 };
 
@@ -22,6 +25,19 @@ pub struct ClipBox {
   pub size: Size<f32>,
   /// The region's top-left, relative to the border box.
   pub offset: Point<f32>,
+  /// The border box the region was inset from, whose corners its own follow when they are not
+  /// round.
+  pub origin: Option<ContourOrigin>,
+}
+
+/// A border box whose corners an inset region follows, as Blink's `ContouredRect` keeps its
+/// origin rectangle.
+#[derive(Debug, Clone, Copy)]
+pub struct ContourOrigin {
+  /// The border box's corner geometry.
+  pub border: BorderProperties,
+  /// The border box's size.
+  pub size: Size<f32>,
 }
 
 impl ClipBox {
@@ -38,6 +54,10 @@ impl ClipBox {
         height: layout.padding_box_height().max(0.0),
       },
       offset: layout.border.top_left(),
+      origin: Some(ContourOrigin {
+        border,
+        size: layout.size,
+      }),
     }
   }
 
@@ -52,7 +72,48 @@ impl ClipBox {
       border: inner,
       size: layout.content_box_size(),
       offset: layout.content_box_offset(),
+      origin: Some(ContourOrigin {
+        border,
+        size: layout.size,
+      }),
     }
+  }
+
+  /// Whether the region follows its origin's corners rather than being a rounded rectangle of its
+  /// own: it is inset from a border box with a corner that is not round.
+  pub fn follows_origin(&self) -> bool {
+    let Some(origin) = self.origin.filter(|origin| !origin.border.is_zero()) else {
+      return false;
+    };
+    let radii = origin.border.scaled_corner_radii(origin.size);
+
+    self.edges()
+      != (Rect {
+        left: 0.0,
+        top: 0.0,
+        right: origin.size.width,
+        bottom: origin.size.height,
+      })
+      && !has_round_curvature(&radii, Corner::curvatures(&radii, &origin.border.shape))
+  }
+
+  /// Appends the region's contour, its corners aligned to its origin's, as Blink's
+  /// `AddContouredRect` draws an inset contoured rectangle.
+  pub fn append_contour(&self, path: &mut Vec<PathCommand>) {
+    let Some(origin) = self.origin else {
+      return self
+        .border
+        .append_mask_commands(path, self.size, self.offset);
+    };
+    let radii = origin.border.scaled_corner_radii(origin.size);
+
+    append_inset_contour(
+      origin.size,
+      &radii,
+      Corner::curvatures(&radii, &origin.border.shape),
+      self.edges(),
+      path,
+    );
   }
 
   /// The region grown by `spread` on every side, its corner radii with it, or shrunk when
@@ -76,6 +137,7 @@ impl ClipBox {
         x: self.offset.x - spread,
         y: self.offset.y - spread,
       },
+      origin: self.origin.filter(|_| spread <= 0.0),
     }
   }
 

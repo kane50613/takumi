@@ -67,6 +67,9 @@ pub enum FillShape {
     /// The horizontal and vertical radii.
     radius: SpacePair<f32>,
   },
+  /// A region inset from a border box whose corners are not all round, its corners following the
+  /// border box's.
+  Contoured(ClipBox),
   /// Anything else.
   Path {
     /// The path.
@@ -91,6 +94,7 @@ impl FillShape {
         offset,
       } => border.append_mask_commands(&mut commands, *size, *offset),
       Self::Ellipse { center, radius } => push_ellipse(&mut commands, *center, *radius),
+      Self::Contoured(clip) => clip.append_contour(&mut commands),
       Self::Path { commands: path, .. } => commands.extend_from_slice(path),
     }
     commands
@@ -100,6 +104,7 @@ impl FillShape {
   pub fn rule(&self) -> FillRule {
     match self {
       Self::Path { rule, .. } => *rule,
+      Self::Contoured(_) => FillRule::EvenOdd,
       _ => FillRule::NonZero,
     }
   }
@@ -143,6 +148,10 @@ impl FillShape {
 
 impl From<ClipBox> for FillShape {
   fn from(clip: ClipBox) -> Self {
+    if clip.follows_origin() {
+      return Self::Contoured(clip);
+    }
+
     Self::RoundedRect {
       border: clip.border,
       size: clip.size,
@@ -319,6 +328,10 @@ pub trait PaintDevice {
   /// with antialiasing off keeps only the pixels whose centres fall inside, until the matching
   /// [`PaintDevice::pop_clip`].
   fn push_aliased_clip(&mut self, shape: &FillShape, transform: Affine);
+
+  /// Clips later draws to everything outside `shape` under `transform`, keeping only the pixels
+  /// whose centres fall outside, until the matching [`PaintDevice::pop_clip`].
+  fn push_aliased_clip_out(&mut self, shape: &FillShape, transform: Affine);
 
   /// Removes the most recent clip.
   fn pop_clip(&mut self);

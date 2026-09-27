@@ -298,6 +298,10 @@ impl PaintDevice for Recorder<'_> {
     self.push_clip(shape, transform);
   }
 
+  fn push_aliased_clip_out(&mut self, shape: &FillShape, transform: Affine) {
+    self.push_clip_out(shape, transform);
+  }
+
   fn pop_clip(&mut self) {
     self.clips.pop();
   }

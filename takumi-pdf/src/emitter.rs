@@ -1522,6 +1522,7 @@ fn vertical_extent(shape: &FillShape) -> Option<(f32, f32)> {
     FillShape::Rect(size) => Some((0.0, size.height)),
     FillShape::RoundedRect { size, offset, .. } => Some((offset.y, offset.y + size.height)),
     FillShape::Ellipse { center, radius } => Some((center.y - radius.y, center.y + radius.y)),
+    FillShape::Contoured(clip) => Some((clip.offset.y, clip.offset.y + clip.size.height)),
     FillShape::Path { .. } => None,
   }
 }
@@ -1763,6 +1764,10 @@ impl PaintDevice for SurfaceDevice<'_, '_> {
     self.push_clip(shape, transform);
   }
 
+  fn push_aliased_clip_out(&mut self, shape: &FillShape, transform: Affine) {
+    self.push_clip_out(shape, transform);
+  }
+
   fn push_clip_out(&mut self, shape: &FillShape, transform: Affine) {
     let mut commands = Vec::with_capacity(BorderProperties::PATH_COMMANDS_AMOUNT * 2);
 
@@ -2002,6 +2007,10 @@ impl PaintDevice for TextDevice<'_, '_, '_> {
 
   fn push_aliased_clip(&mut self, shape: &FillShape, transform: Affine) {
     self.device.push_aliased_clip(shape, transform);
+  }
+
+  fn push_aliased_clip_out(&mut self, shape: &FillShape, transform: Affine) {
+    self.device.push_aliased_clip_out(shape, transform);
   }
 
   fn pop_clip(&mut self) {

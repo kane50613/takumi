@@ -532,6 +532,22 @@ impl PaintDevice for DocumentDevice<'_> {
     self.begin_clip(&data, FillRule::EvenOdd);
   }
 
+  fn push_aliased_clip_out(&mut self, shape: &FillShape, transform: Affine) {
+    let everywhere = edges_path_data(Rect {
+      left: -UNBOUNDED,
+      top: -UNBOUNDED,
+      right: UNBOUNDED,
+      bottom: UNBOUNDED,
+    });
+    let data = format!("{everywhere}{}", path_data(&shape.to_commands(), transform));
+
+    self.open_group(|doc| {
+      let clip = doc.aliased_clip_path(&data, FillRule::EvenOdd)?;
+
+      doc.begin_group(Affine::IDENTITY, 1.0, Some(&clip), None)
+    });
+  }
+
   fn push_aliased_clip(&mut self, shape: &FillShape, transform: Affine) {
     let data = path_data(&shape.to_commands(), transform);
 

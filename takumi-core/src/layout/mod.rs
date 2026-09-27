@@ -3,6 +3,7 @@ pub mod background_image_geometry;
 /// Backend-agnostic border geometry shared across rasterization backends.
 pub mod border;
 pub mod clip;
+pub(crate) mod contoured_rect;
 pub(crate) mod corner_shape;
 /// Backend-agnostic box-decoration clip geometry.
 pub mod decoration;

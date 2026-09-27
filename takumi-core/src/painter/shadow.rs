@@ -82,6 +82,7 @@ impl BoxPainter<'_> {
       border: *self.border(),
       size: self.layout.size,
       offset: Point::ZERO,
+      origin: None,
     };
 
     device.set_role(PaintRole::BoxShadow);

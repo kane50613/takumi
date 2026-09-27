@@ -176,6 +176,22 @@ impl<'c> CanvasDevice<'c> {
       })
   }
 
+  /// Opens a clip to `shape`, or out of it when `out` is set, keeping whole pixels only.
+  fn open_aliased_clip(&mut self, shape: &FillShape, transform: Affine, out: bool) {
+    let (mut coverage, placement) =
+      self.coverage(shape, Fill::from(shape.rule()).into(), transform);
+
+    // A straight edge covers at least half a pixel exactly when it covers the pixel's centre.
+    coverage
+      .iter_mut()
+      .for_each(|alpha| *alpha = if *alpha >= 128 { u8::MAX } else { 0 });
+    self.clips.push(CanvasClip {
+      coverage,
+      placement,
+      out,
+    });
+  }
+
   /// Opens a clip to `shape`, or out of it when `out` is set.
   fn open_clip(&mut self, shape: &FillShape, transform: Affine, out: bool) {
     let (coverage, placement) = self.coverage(shape, Fill::from(shape.rule()).into(), transform);
@@ -476,18 +492,11 @@ impl PaintDevice for CanvasDevice<'_> {
   }
 
   fn push_aliased_clip(&mut self, shape: &FillShape, transform: Affine) {
-    let (mut coverage, placement) =
-      self.coverage(shape, Fill::from(shape.rule()).into(), transform);
+    self.open_aliased_clip(shape, transform, false);
+  }
 
-    // A straight edge covers at least half a pixel exactly when it covers the pixel's centre.
-    coverage
-      .iter_mut()
-      .for_each(|alpha| *alpha = if *alpha >= 128 { u8::MAX } else { 0 });
-    self.clips.push(CanvasClip {
-      coverage,
-      placement,
-      out: false,
-    });
+  fn push_aliased_clip_out(&mut self, shape: &FillShape, transform: Affine) {
+    self.open_aliased_clip(shape, transform, true);
   }
 
   fn with_border_mask(

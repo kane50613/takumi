@@ -3,7 +3,11 @@ use smallvec::SmallVec;
 use crate::{
   context::RenderContext,
   geometry::{LAYOUT_UNIT_EPSILON, PathBuilder, PathCommand as Command, Point, Rect, Size},
-  layout::corner_shape::{CornerContour, KAPPA, corner_contour},
+  layout::{
+    contoured_rect::{Corner, opposite_corners_factor},
+    corner_shape::{CornerContour, KAPPA, corner_contour},
+    decoration::{ClipBox, ContourOrigin},
+  },
   style::{BorderStyle, Color, ImageScalingAlgorithm, Sides, SpacePair, Superellipse},
 };
 
@@ -277,7 +281,27 @@ impl BorderProperties {
       y: (offset.y + border.width.top).clamp(offset.y, max_inner_y),
     };
     border.inset_by_border_width();
-    border.append_mask_commands(paths, inner_size, inner_offset);
+
+    let inner = ClipBox {
+      border,
+      size: inner_size,
+      offset: inner_offset - offset,
+      origin: Some(ContourOrigin {
+        border: *self,
+        size: border_box,
+      }),
+    };
+
+    if !inner.follows_origin() {
+      return border.append_mask_commands(paths, inner_size, inner_offset);
+    }
+
+    let start = paths.len();
+
+    inner.append_contour(paths);
+    for command in &mut paths[start..] {
+      *command = command.map_points(|point| point + offset);
+    }
   }
 
   /// Appends a trapezoid polygon covering one border side at the given offset.
@@ -528,30 +552,6 @@ impl BorderProperties {
       .min(axis_scale(radii.0[1].y, radii.0[2].y, border_box.height))
   }
 
-  /// Shrinks diagonally-opposite corner pairs involving a concave shape until
-  /// their corner boxes no longer overlap, so concave contours cannot
-  /// self-intersect. Coarser than Chromium's hull-based solve, which scales by
-  /// the curve hull instead of the full corner box.
-  fn constrain_concave_pairs(&self, radii: &mut Sides<SpacePair<f32>>, border_box: Size<f32>) {
-    for (a, b) in [(0, 2), (1, 3)] {
-      if !self.shape.0[a].is_concave() && !self.shape.0[b].is_concave() {
-        continue;
-      }
-
-      let sum_x = radii.0[a].x + radii.0[b].x;
-      let sum_y = radii.0[a].y + radii.0[b].y;
-
-      if sum_x > border_box.width && sum_y > border_box.height {
-        let factor = (border_box.width / sum_x).max(border_box.height / sum_y);
-
-        for corner in [a, b] {
-          radii.0[corner].x *= factor;
-          radii.0[corner].y *= factor;
-        }
-      }
-    }
-  }
-
   /// Append rounded-rect path commands for this border's corner radii.
   pub fn append_mask_commands(
     &self,
@@ -710,7 +710,21 @@ impl BorderProperties {
       corner.y = (corner.y * scale).max(0.0);
     }
 
-    self.constrain_concave_pairs(&mut scaled, border_box);
+    let corners = Corner::of_box(
+      Point::ZERO,
+      border_box,
+      &scaled,
+      Corner::curvatures(&scaled, &self.shape),
+    );
+
+    if corners.iter().any(|corner| corner.curvature < 1.0) {
+      let factor = opposite_corners_factor(&corners);
+
+      for corner in &mut scaled.0 {
+        corner.x *= factor;
+        corner.y *= factor;
+      }
+    }
 
     scaled
   }
@@ -718,7 +732,7 @@ impl BorderProperties {
 
 /// Appends a non-`round` corner contour, mapping normalized contour points through `anchor + p[0] *
 /// u + p[1] * v` into pixel space.
-fn append_shaped_corner(
+pub(crate) fn append_shaped_corner(
   path: &mut Vec<Command>,
   shape: Superellipse,
   anchor: Point<f32>,
