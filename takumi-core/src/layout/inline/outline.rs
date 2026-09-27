@@ -1,6 +1,7 @@
 //! Outline rectangles of an inline formatting context, merged into islands.
 
 use crate::geometry::{LAYOUT_UNIT_EPSILON, PathBuilder, PathCommand, Point};
+use std::collections::HashMap;
 
 use super::text_fit::{LineScaleState, text_fit_x_correction};
 
@@ -109,15 +110,23 @@ fn merge_inline_rects(mut rects: Vec<InlineOutlineRect>) -> Vec<InlineOutlineRec
 /// Rects of one span's outline that touch from line to line, stroked as one contour.
 pub struct OutlineIsland {
   rects: Vec<InlineOutlineRect>,
+  /// Whether the island's one rect is its span's whole outline.
+  lone: bool,
 }
 
 impl OutlineIsland {
   /// Merges adjacent per-line outline rects, then groups the rects of consecutive lines that meet
   /// once grown by their span's `reach`, as Blink unites the grown rects into one region.
   pub fn of(outline_rects: Vec<InlineOutlineRect>, reach: impl Fn(u64) -> f32) -> Vec<Self> {
+    let merged_rects = merge_inline_rects(outline_rects);
+    let mut rect_counts: HashMap<u64, usize> = HashMap::new();
     let mut islands: Vec<Self> = Vec::new();
 
-    for rect in merge_inline_rects(outline_rects) {
+    for rect in &merged_rects {
+      *rect_counts.entry(rect.span_id).or_default() += 1;
+    }
+
+    for rect in merged_rects {
       let reach = reach(rect.span_id);
       let island = islands.iter_mut().find(|island| {
         island.rects.last().is_some_and(|previous| {
@@ -129,11 +138,19 @@ impl OutlineIsland {
 
       match island {
         Some(island) => island.rects.push(rect),
-        None => islands.push(Self { rects: vec![rect] }),
+        None => islands.push(Self {
+          rects: vec![rect],
+          lone: rect_counts[&rect.span_id] == 1,
+        }),
       }
     }
 
     islands
+  }
+
+  /// The rect when it is its span's whole outline, which Blink paints as a box border.
+  pub fn lone_rect(&self) -> Option<InlineOutlineRect> {
+    self.lone.then(|| self.rects[0])
   }
 
   /// The span whose outline this is.

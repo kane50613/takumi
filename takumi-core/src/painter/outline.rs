@@ -5,13 +5,13 @@ use std::cmp::Ordering;
 
 use super::{BoxBorderPainter, BoxPainter, FillShape, PaintDevice, PaintRole, border::StyledLine};
 use crate::{
-  geometry::{PathBuilder, Point},
+  geometry::{PathBuilder, Point, Size},
   layout::{
-    border::BorderSide,
+    border::{BorderProperties, BorderSide},
     decoration::OutlineGeometry,
     inline::{OutlineIsland, ProcessedInlineSpan},
   },
-  style::{Affine, BorderStyle, Color, FillRule},
+  style::{Affine, BorderStyle, Color, FillRule, Sides},
 };
 
 /// A box's outline, held until the box's content has painted, as CSS 2 Appendix E orders them.
@@ -50,7 +50,8 @@ impl BoxPainter<'_> {
 
 impl OutlineIsland {
   /// Paints the outline of the span that owns the island, with the block's border box at
-  /// `origin`, after Blink's `ComplexOutlinePainter`.
+  /// `origin`: a lone rect as a box border, as Blink's `PaintSingleRectOutline` does, and
+  /// anything else after Blink's `ComplexOutlinePainter`.
   ///
   /// Approximate: the contour keeps square corners, where Blink rounds them when the element has
   /// a `border-radius`, and the inner edge follows the rects grown by `outline-offset`, where Blink
@@ -78,6 +79,30 @@ impl OutlineIsland {
       || !style.parent.is_visible()
     {
       return;
+    }
+
+    if let Some(rect) = self.lone_rect() {
+      let outline = OutlineGeometry::ring(
+        Size {
+          width: rect.width,
+          height: rect.height,
+        },
+        style.outline_offset,
+        BorderProperties {
+          width: Sides([width; 4]).into(),
+          color: Sides([color; 4]).into(),
+          style: Sides([style.outline_style; 4]).into(),
+          ..BorderProperties::default()
+        },
+      );
+      let origin = Point {
+        x: origin.x + rect.x,
+        y: origin.y + rect.y,
+      };
+
+      return device.with_opacity(opacity, |device| {
+        PendingOutline { outline, origin }.paint(device)
+      });
     }
 
     // Blink draws thin double, groove and ridge outlines solid.
