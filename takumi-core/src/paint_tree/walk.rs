@@ -133,14 +133,9 @@ impl Walker {
     paint: &NodePaint,
     prefix: &[usize],
   ) -> Result<Option<OpenBox>> {
-    let Some(node) = scene.root.node_at_path(&paint.path) else {
+    let Some((node, layout)) = recorded(scene, paint)? else {
       return Ok(None);
     };
-    let layout = scene.results.layout(paint.node_id)?;
-
-    if node.context.style.is_invisible() || !paint.transform.is_invertible() {
-      return Ok(None);
-    }
 
     let path = [prefix, &paint.path].concat();
     let open = self.open_box(node, layout, paint.transform, path.clone());
@@ -633,6 +628,23 @@ impl Walker {
       node.children.sort_by(|a, b| order[*a].cmp(&order[*b]));
     }
   }
+}
+
+/// The render node `paint` places and its layout, or `None` when it paints nothing: it is gone,
+/// invisible, or flattened by its transform.
+pub(super) fn recorded<'s>(
+  scene: &'s Scene,
+  paint: &NodePaint,
+) -> Result<Option<(&'s RenderNode, ComputedLayout)>> {
+  let Some(node) = scene.root.node_at_path(&paint.path) else {
+    return Ok(None);
+  };
+  let layout = scene.results.layout(paint.node_id)?;
+
+  Ok(
+    (!node.context.style.is_invisible() && paint.transform.is_invertible())
+      .then_some((node, layout)),
+  )
 }
 
 /// The shadows, background, and border the box `painter` paints, bottom first.

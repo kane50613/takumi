@@ -339,3 +339,35 @@ fn zero_font_size_container_keeps_sized_child_runs() {
   );
   assert_eq!(runs[0].font_size, 18.0);
 }
+
+#[test]
+fn unpainted_root_still_leaves_a_root_box() {
+  for class_name in ["card fade-out", "card flatten"] {
+    let document = paint_tree(
+      PaintTreeOptions::builder()
+        .viewport(Viewport::new((200, 100)))
+        .node(Node::container([Node::text("hidden")]).with_class_name(class_name))
+        .fonts(&CONTEXT)
+        .stylesheet(
+          StyleSheet::parse_loosy(
+            ".fade-out { opacity: 0 } .flatten { transform: scale(0) } .card { width: 100px }",
+          )
+          .into(),
+        )
+        .build(),
+    )
+    .unwrap()
+    .document;
+
+    let root = &document.nodes[0];
+    assert!(matches!(root.kind, NodeKind::Box { .. }), "{class_name}");
+    assert_eq!(root.parent, None, "{class_name}");
+    assert!(
+      document
+        .nodes
+        .iter()
+        .skip(1)
+        .all(|node| node.parent.is_some())
+    );
+  }
+}
