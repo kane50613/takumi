@@ -6,7 +6,7 @@
 
 use skrifa::{FontRef, MetadataProvider};
 use takumi_core::{
-  geometry::{ComputedLayout as Layout, Point},
+  geometry::{ComputedLayout as Layout, Point, Size},
   layout::{
     decoration::ClipBox,
     inline::{PositionedGlyph, PositionedInlineRun},
@@ -95,6 +95,17 @@ impl<'c> CanvasDevice<'c> {
       text_background: None,
       error: None,
     }
+  }
+
+  /// Whether a `size` rectangle under `transform` covers whole pixels, or is turned so that a tile
+  /// samples its edges; either way a solid tile paints it as its coverage would.
+  fn tiles_whole_pixels(&self, size: Size<f32>, transform: Affine) -> bool {
+    let transform = self.transform * transform;
+
+    size.width.fract() == 0.0
+      && size.height.fract() == 0.0
+      && (!transform.only_translation()
+        || (transform.x.fract() == 0.0 && transform.y.fract() == 0.0))
   }
 
   /// The canvas as a device for the box `context` paints.
@@ -390,7 +401,9 @@ impl PaintDevice for CanvasDevice<'_> {
 
     let unclipped = self.clips.is_empty();
     let (border, size, offset) = match shape {
-      FillShape::Rect(size) if unclipped => (BorderProperties::default(), *size, Point::ZERO),
+      FillShape::Rect(size) if unclipped && self.tiles_whole_pixels(*size, transform) => {
+        (BorderProperties::default(), *size, Point::ZERO)
+      }
       FillShape::RoundedRect {
         border,
         size,
