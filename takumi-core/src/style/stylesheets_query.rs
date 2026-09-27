@@ -51,9 +51,15 @@ impl ComputedStyle {
     }
   }
 
-  /// Whether the element paints nothing (zero opacity, `display:none`, hidden).
+  /// Whether the element and everything inside it paint nothing: zero opacity or `display:none`.
+  /// A `visibility: hidden` element still lets its visible descendants paint.
   pub fn is_invisible(&self) -> bool {
-    self.opacity.0 == 0.0 || self.display == Display::None || self.visibility == Visibility::Hidden
+    self.opacity.0 == 0.0 || self.display == Display::None
+  }
+
+  /// Whether the element paints its own box and content, which `visibility: hidden` stops.
+  pub fn is_visible(&self) -> bool {
+    self.visibility == Visibility::Visible
   }
 
   /// Whether `z-index` takes effect on this element.

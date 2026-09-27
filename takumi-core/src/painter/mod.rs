@@ -436,6 +436,10 @@ impl<'c> BoxPainter<'c> {
 
   /// The outline the box paints, or `None` when it paints none.
   pub fn outline(&self) -> Option<OutlineGeometry> {
+    if !self.context.style.is_visible() {
+      return None;
+    }
+
     OutlineGeometry::painted(self.context, self.layout.size)
   }
 

@@ -148,7 +148,14 @@ impl InlineLines<'_> {
       .iter()
       .map(|run| run.style(spans).unwrap_or(style))
       .collect();
-    let runs: Vec<_> = self.runs.iter().zip(&decorations).zip(&styles).collect();
+    // A run of `visibility: hidden` text keeps its place on the line but paints nothing.
+    let runs: Vec<_> = self
+      .runs
+      .iter()
+      .zip(&decorations)
+      .zip(&styles)
+      .filter(|(_, style)| style.parent.is_visible())
+      .collect();
 
     // Neighbouring runs that cast the same shadows share each shadow pass, so the passes stay as
     // few as the element's distinct `text-shadow` lists.

@@ -292,7 +292,7 @@ fn inline_span_decoration(node: &RenderNode, depth: usize) -> Option<InlineDecor
   let style = &node.context.style;
   let color = style.background_color.resolve(node.context.current_color);
 
-  if color.0[3] == 0 {
+  if color.0[3] == 0 || !style.is_visible() {
     return None;
   }
   let sizing = &node.context.sizing;
