@@ -1,5 +1,7 @@
 use std::{borrow::Cow, sync::Arc};
 
+use smallvec::SmallVec;
+
 use takumi_core::{
   geometry::{ComputedLayout as Layout, Point, Size, transformed_rect_extents},
   layout::decoration::ClipBox,
@@ -94,48 +96,76 @@ impl CanvasViewport {
   }
 }
 
-impl NodeMaskAction {
-  pub(crate) fn is_some(&self) -> bool {
-    matches!(self, Self::Shell(_) | Self::Content(_))
-  }
+/// The masks a node paints under: its `clip-path` and `mask-image` over the box and its
+/// descendants, and its `overflow` clip over the descendants alone.
+#[derive(Default)]
+pub(crate) struct NodeMasks {
+  pub(crate) shell: SmallVec<[TinyMask; 2]>,
+  pub(crate) content: Option<TinyMask>,
 }
 
-pub(crate) fn prepare_node_mask(
-  context: &RenderContext,
-  layout: Layout,
-  transform: Affine,
-  viewport: CanvasViewport,
-) -> Result<NodeMaskAction> {
-  if let Some(shape) = BoxPainter::new(context, layout).clip_path() {
-    return Ok(clip_path_mask(&shape, context, viewport));
+impl NodeMasks {
+  /// The masks of the node `context` paints at `layout` under `transform`, or `None` when one of
+  /// them hides the node entirely.
+  pub(crate) fn of(
+    context: &RenderContext,
+    layout: Layout,
+    transform: Affine,
+    viewport: CanvasViewport,
+  ) -> Result<Option<Self>> {
+    let mut masks = Self::default();
+
+    if let Some(shape) = BoxPainter::new(context, layout).clip_path()
+      && !masks.add(clip_path_mask(&shape, context, viewport))
+    {
+      return Ok(None);
+    }
+
+    let Some(inverse_transform) = transform.invert() else {
+      return Ok(None);
+    };
+
+    if let Some(mask) = create_mask(context, layout.size)?
+      && !masks.add(mask_image_mask(
+        &mask,
+        layout,
+        transform,
+        inverse_transform,
+        viewport,
+      ))
+    {
+      return Ok(None);
+    }
+
+    let overflow = match OverflowClip::of(context, layout) {
+      Some(OverflowClip::Rounded(clip)) => {
+        rounded_overflow_mask(clip, transform, inverse_transform, viewport)
+      }
+      Some(OverflowClip::Axes { x, y }) => {
+        rect_overflow_mask(layout, transform, inverse_transform, viewport, (x, y))
+      }
+      None => NodeMaskAction::None,
+    };
+
+    Ok(masks.add(overflow).then_some(masks))
   }
 
-  let Some(inverse_transform) = transform.invert() else {
-    return Ok(NodeMaskAction::SkipRendering);
-  };
+  /// Adds the mask `action` makes, reporting false when it hides the node.
+  fn add(&mut self, action: NodeMaskAction) -> bool {
+    match action {
+      NodeMaskAction::Shell(mask) => self.shell.push(mask),
+      NodeMaskAction::Content(mask) => self.content = Some(mask),
+      NodeMaskAction::None => {}
+      NodeMaskAction::SkipRendering => return false,
+    }
 
-  if let Some(mask) = create_mask(context, layout.size)? {
-    return Ok(mask_image_mask(
-      &mask,
-      layout,
-      transform,
-      inverse_transform,
-      viewport,
-    ));
+    true
   }
 
-  let Some(clip) = OverflowClip::of(context, layout) else {
-    return Ok(NodeMaskAction::None);
-  };
-
-  Ok(match clip {
-    OverflowClip::Rounded(clip) => {
-      rounded_overflow_mask(clip, transform, inverse_transform, viewport)
-    }
-    OverflowClip::Axes { x, y } => {
-      rect_overflow_mask(layout, transform, inverse_transform, viewport, (x, y))
-    }
-  })
+  /// How many masks the node pushes.
+  pub(crate) fn len(&self) -> usize {
+    self.shell.len() + usize::from(self.content.is_some())
+  }
 }
 
 /// The `clip-path` shape as a viewport mask over the box and its descendants.
