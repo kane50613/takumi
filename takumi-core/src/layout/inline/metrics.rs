@@ -361,12 +361,13 @@ pub struct VisualInlineBox {
   /// Baseline of the in-flow line that owns this box, relative to the inline formatting context's
   /// content-box top edge.
   pub line_baseline: Option<f32>,
-  /// Whether the box floats.
-  pub float: bool,
+  /// How the box sits in its line.
+  pub kind: InlineBoxKind,
 }
 
 /// Which draws of an inline formatting context one pass paints: CSS 2.1 Appendix E paints the
-/// floats in a phase of their own, before the line content.
+/// floats in a phase of their own, before the line content, and out-of-flow boxes with their
+/// stacking context rather than here.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum InlinePass {
   /// The text and every box that does not float.
@@ -378,7 +379,11 @@ pub enum InlinePass {
 impl InlinePass {
   /// Whether the pass paints `inline_box`.
   pub fn paints(self, inline_box: &VisualInlineBox) -> bool {
-    inline_box.float == (self == Self::Floats)
+    match inline_box.kind {
+      InlineBoxKind::InFlow => self == Self::Content,
+      InlineBoxKind::CustomOutOfFlow => self == Self::Floats,
+      InlineBoxKind::OutOfFlow => false,
+    }
   }
 }
 
@@ -402,7 +407,7 @@ pub(super) fn resolve_visual_inline_box(
         width: inline_box.width,
         height: 0.0,
         line_baseline,
-        float: false,
+        kind: InlineBoxKind::InFlow,
       });
     }
     _ => return None,
@@ -429,6 +434,6 @@ pub(super) fn resolve_visual_inline_box(
     width: item.paint_width,
     height: item.paint_height,
     line_baseline,
-    float: inline_box.kind == InlineBoxKind::CustomOutOfFlow,
+    kind: inline_box.kind,
   })
 }

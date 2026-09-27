@@ -1,0 +1,42 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>inline_absolute_child</title>
+    <base href="../../../" />
+    <link rel="stylesheet" href="takumi/tests/shared.css" />
+  </head>
+  <body style="width: 420px; height: 200px">
+    <div
+      style="
+        display: block;
+        position: relative;
+        width: 100%;
+        height: 100%;
+        padding: 40px;
+        background-color: rgb(255, 255, 255);
+        font-family: Geist;
+        font-size: 24px;
+        line-height: 32px;
+        color: rgb(15, 23, 42);
+      "
+    >
+      Before
+      <span
+        >inline<span
+          style="
+            position: absolute;
+            left: 60px;
+            top: 30px;
+            width: 120px;
+            height: 60px;
+            background-color: rgb(147, 197, 253);
+          "
+          >badge</span
+        >
+        text</span
+      >
+      after the badge, which paints above this line.
+    </div>
+  </body>
+</html>

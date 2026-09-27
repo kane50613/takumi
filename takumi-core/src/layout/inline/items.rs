@@ -12,6 +12,7 @@ use crate::{
   text_processing::{COLLAPSIBLE_WHITESPACE, HORIZONTAL_WHITESPACE},
 };
 use parley::{InlineBox, InlineBoxKind};
+use smallvec::SmallVec;
 
 use super::outline::InlineOutline;
 use std::{borrow::Cow, ops::Range, rc::Rc, sync::Arc};
@@ -44,6 +45,45 @@ impl RenderNode {
         child.has_inline_floats()
       }
     })
+  }
+
+  /// Whether an out-of-flow box sits among the inline content this node lays out, found the way
+  /// [`collect_inline_items`] walks it.
+  pub(crate) fn holds_inline_out_of_flow(&self) -> bool {
+    self.children.iter().flatten().any(|child| {
+      child.is_out_of_flow() || (child.is_inline_span() && child.holds_inline_out_of_flow())
+    })
+  }
+
+  /// The out-of-flow boxes among the inline content this node lays out, each with its child-index
+  /// path from this node, found the way [`collect_inline_items`] walks it.
+  pub(crate) fn inline_out_of_flow(&self) -> Vec<(SmallVec<[usize; 2]>, &RenderNode)> {
+    fn visit<'n>(
+      node: &'n RenderNode,
+      path: &mut SmallVec<[usize; 2]>,
+      found: &mut Vec<(SmallVec<[usize; 2]>, &'n RenderNode)>,
+    ) {
+      for (index, child) in node.children.iter().flatten().enumerate() {
+        path.push(index);
+        if child.is_out_of_flow() {
+          found.push((path.clone(), child));
+        } else if child.is_inline_span() {
+          visit(child, path, found);
+        }
+        path.pop();
+      }
+    }
+
+    let mut found = Vec::new();
+
+    visit(self, &mut SmallVec::new(), &mut found);
+    found
+  }
+
+  /// Whether the node is an inline box whose content joins its parent's lines rather than an
+  /// atomic box of its own.
+  fn is_inline_span(&self) -> bool {
+    self.context.style.display.is_inline() && !self.participates_as_inline_box()
   }
 
   /// How parley places the box standing in for this node.
@@ -198,7 +238,7 @@ fn collect_inline_items_impl<'n>(
   decorations: Option<&Rc<DecorationLink>>,
   items: &mut Vec<InlineItem<'n>>,
 ) {
-  if depth > 0 && node.participates_as_inline_box() {
+  if depth > 0 && (node.participates_as_inline_box() || node.is_out_of_flow()) {
     items.push(InlineItem::RenderNode {
       render_node: node,
       decorations: decorations.cloned(),

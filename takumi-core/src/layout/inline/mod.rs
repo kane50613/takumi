@@ -165,6 +165,15 @@ fn shape_fingerprint(
   hasher.finish()
 }
 
+/// Where an out-of-flow box sits before insets move it.
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct StaticPosition {
+  /// The inline-start and block-start corner of its margin box.
+  pub(crate) point: Point<f32>,
+  /// Whether the inline start is the right edge, in a right-to-left paragraph.
+  pub(crate) from_end: bool,
+}
+
 /// A completed inline layout with its source text, spans, and per-line scales.
 pub struct BuiltInlineLayout<'c> {
   /// The parley layout.
@@ -194,6 +203,67 @@ impl BuiltInlineLayout<'_> {
       x_height: metrics.x_height,
       text_metrics: (metrics.ascent, metrics.descent),
     })
+  }
+
+  /// The static position of each out-of-flow box among the spans, after Blink's
+  /// `LogicalLineBuilder::PlaceOutOfFlowObjects`.
+  pub(crate) fn out_of_flow_static_positions(&self, content_width: f32) -> Vec<StaticPosition> {
+    let metrics = self.line_metrics();
+    let from_end = self.layout.is_rtl();
+    let line_start = if from_end { content_width } else { 0.0 };
+    let mut positions = Vec::new();
+
+    for (line, metrics) in self.layout.lines().zip(&metrics) {
+      let top = metrics.resolved_line_top;
+      let mut preceded = false;
+
+      for item in line.items() {
+        let inline_box = match item {
+          PositionedLayoutItem::GlyphRun(glyph_run) => {
+            preceded |= glyph_run.glyphs().next().is_some();
+            continue;
+          }
+          PositionedLayoutItem::InlineBox(inline_box) => inline_box,
+        };
+
+        match inline_box.kind {
+          InlineBoxKind::InFlow => preceded = true,
+          InlineBoxKind::CustomOutOfFlow => {}
+          InlineBoxKind::OutOfFlow => {
+            let Some(ProcessedInlineSpan::Box(item)) = self.spans.get(inline_box.id as usize)
+            else {
+              continue;
+            };
+            let inline_level = item
+              .render_node
+              .context
+              .style
+              .original_display
+              .is_inline_level();
+
+            let point = if inline_level {
+              Point {
+                x: inline_box.x,
+                y: top,
+              }
+            } else {
+              Point {
+                x: line_start,
+                y: if preceded {
+                  top + metrics.resolved_line_height
+                } else {
+                  top
+                },
+              }
+            };
+
+            positions.push(StaticPosition { point, from_end });
+          }
+        }
+      }
+    }
+
+    positions
   }
 
   /// Resolved metrics for each line.
@@ -677,8 +747,12 @@ fn build_inline_layout_tree<'c>(
           index_pos,
           spans.len() as u64,
         ));
-        previous_collapsible_space = false;
-        previous_was_line_break = false;
+        // An out-of-flow box is opaque to white space collapsing, as Blink's
+        // `InlineItemsBuilder::AppendOpaque` leaves the spaces around it adjacent.
+        if !render_node.is_out_of_flow() {
+          previous_collapsible_space = false;
+          previous_was_line_break = false;
+        }
       }
       // Whitespace flags stay untouched: the padding must not change how the
       // text around it collapses.
@@ -808,6 +882,7 @@ fn inline_box_span<'c>(
   id: u64,
 ) -> ProcessedInlineSpan<'c> {
   let context = &render_node.context;
+  let kind = render_node.inline_box_kind();
   let vertical_align = context.style.vertical_align.resolve(
     &context.sizing,
     context.sizing.font_size,
@@ -841,9 +916,11 @@ fn inline_box_span<'c>(
     }
   });
 
+  // An out-of-flow box only marks its static position, so the line never sizes it.
   let atomic_metrics = render_node
     .node
     .as_ref()
+    .filter(|_| kind != InlineBoxKind::OutOfFlow)
     .map(|_| render_node.measure_inline_box(available_space));
   let content_size = atomic_metrics.map_or(Size::ZERO, |metrics| metrics.size);
   let raw_baseline_offset = atomic_metrics.and_then(|metrics| metrics.baseline_offset);
@@ -861,7 +938,7 @@ fn inline_box_span<'c>(
   let inline_box = InlineBox {
     index,
     id,
-    kind: render_node.inline_box_kind(),
+    kind,
     width: paint_width,
     height: paint_height,
   };

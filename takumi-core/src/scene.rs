@@ -462,17 +462,16 @@ impl SceneRequest<'_> {
         continue;
       }
 
-      if current.should_create_inline_layout() {
-        if let Some(floats) = inline_floats {
-          contexts[context_id].push_item(
-            PaintBucket::Float,
-            PaintItemKind::Floats(floats),
-            0,
-            source_order,
-            true,
-          );
-        }
-        continue;
+      // An inline formatting context paints its content itself; its layout children are the
+      // out-of-flow boxes inside that content, which paint as boxes of their own.
+      if let Some(floats) = inline_floats {
+        contexts[context_id].push_item(
+          PaintBucket::Float,
+          PaintItemKind::Floats(floats),
+          0,
+          source_order,
+          true,
+        );
       }
 
       let layout_children = layout_results.box_children(visit.node_id)?;
@@ -484,7 +483,7 @@ impl SceneRequest<'_> {
 
       for child in layout_children.iter().rev() {
         let mut child_path = visit.path.clone();
-        child_path.push(child.render_index);
+        child.extend_path(&mut child_path);
         let (base_transform, base_container) =
           containing_blocks.base_for(child, current_transform, child_container_size);
         let clip = match child.hoisted_cb.and_then(|cb| contents.get(&cb)) {

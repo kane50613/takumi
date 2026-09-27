@@ -94,7 +94,7 @@ impl MeasuredNode {
           );
           containing_blocks.record_transform(node_id, local_transform);
 
-          if current.should_create_inline_layout() {
+          let (runs, leading) = if current.should_create_inline_layout() {
             let (runs, inline_boxes) =
               measure_inline(current, collect_inline_items(current), layout);
             // Inline layout places boxes against the content box, while every measured node's
@@ -116,21 +116,16 @@ impl MeasuredNode {
               })
               .collect();
 
-            measured_by_node_id.insert(
-              usize::from(node_id),
-              MeasuredNode::from_layout(layout, local_transform, children, runs),
-            );
-            continue;
-          }
-
-          // Paint always draws a text node's own text, even when generated
-          // content gave it box children; its runs sit beside those children.
-          let runs = if current.context.style.display != Display::None
+            (runs, children)
+          } else if current.context.style.display != Display::None
+            // Paint always draws a text node's own text, even when generated
+            // content gave it box children; its runs sit beside those children.
             && !current.has_anonymous_text_item_child()
             && let Some(text) = current.node.as_ref().and_then(|node| match &node.kind {
               NodeKind::Text(data) => Some(data.text.as_str()),
               _ => None,
-            }) {
+            })
+          {
             let item = InlineItem::Text {
               text: text.into(),
               context: &current.context,
@@ -138,9 +133,9 @@ impl MeasuredNode {
               decorations: None,
             };
 
-            measure_inline(current, vec![item], layout).0
+            (measure_inline(current, vec![item], layout).0, Vec::new())
           } else {
-            Vec::new()
+            (Vec::new(), Vec::new())
           };
 
           let layout_children = if current.children.is_some() {
@@ -152,7 +147,7 @@ impl MeasuredNode {
           if layout_children.is_empty() {
             measured_by_node_id.insert(
               usize::from(node_id),
-              MeasuredNode::from_layout(layout, local_transform, Vec::new(), runs),
+              MeasuredNode::from_layout(layout, local_transform, leading, runs),
             );
             continue;
           }
@@ -168,12 +163,13 @@ impl MeasuredNode {
             layout,
             local_transform,
             runs,
+            leading,
             child_ids: layout_children.iter().map(|child| child.node_id).collect(),
           }));
 
           for child in layout_children.iter().rev() {
             let mut child_path = path.clone();
-            child_path.push(child.render_index);
+            child.extend_path(&mut child_path);
             let (base_transform, base_container) =
               containing_blocks.base_for(child, local_transform, child_container_size);
             visits.push(TraversalVisit::Enter(TraversalEnter {
@@ -189,9 +185,12 @@ impl MeasuredNode {
           layout,
           local_transform,
           runs,
+          leading,
           child_ids,
         }) => {
-          let mut children = Vec::with_capacity(child_ids.len());
+          let mut children = leading;
+
+          children.reserve(child_ids.len());
           for child_id in child_ids {
             let Some(child) = measured_by_node_id.remove(&usize::from(child_id)) else {
               return Err(Error::InvalidLayoutNode(child_id.into()));
@@ -245,6 +244,8 @@ struct MeasureExit {
   layout: Layout,
   local_transform: Affine,
   runs: Vec<MeasuredTextRun>,
+  /// The inline boxes an inline formatting context measured, ahead of its layout children.
+  leading: Vec<MeasuredNode>,
   child_ids: Vec<NodeId>,
 }
 
