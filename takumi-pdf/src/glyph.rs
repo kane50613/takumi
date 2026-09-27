@@ -6,7 +6,6 @@ use takumi_core::{
   geometry::{PathCommand, Point},
   layout::inline::{PositionedInlineRun, ShapedRun},
   resources::glyph::{ResolvedBitmapGlyph, ResolvedGlyph},
-  style::Affine,
 };
 
 use crate::{
@@ -24,9 +23,9 @@ use crate::{
 pub(crate) struct ColorGlyphs<'r> {
   /// The colour-layered outlines, placed and joined into one path.
   pub(crate) outlines: Option<KrillaPath>,
-  /// The bitmap glyphs, each with the transform that places its pixels.
+  /// The bitmap glyphs, each with its origin.
   #[cfg_attr(not(feature = "images"), expect(dead_code))]
-  pub(crate) bitmaps: Vec<(&'r ResolvedBitmapGlyph, Affine)>,
+  pub(crate) bitmaps: Vec<(&'r ResolvedBitmapGlyph, Point<f32>)>,
 }
 
 impl<'r> ColorGlyphs<'r> {
@@ -51,10 +50,7 @@ impl<'r> ColorGlyphs<'r> {
           );
         }
         Some(ResolvedGlyph::Bitmap(bitmap)) => {
-          bitmaps.push((
-            bitmap,
-            Affine::translation(at.x, at.y) * bitmap.image_transform(),
-          ));
+          bitmaps.push((bitmap, at));
         }
         _ => {}
       }
