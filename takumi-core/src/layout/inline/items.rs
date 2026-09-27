@@ -184,6 +184,8 @@ fn collect_inline_items_impl<'n>(
       parent: decorations.cloned(),
     })
   });
+  // The margins sit outside the span's own background, on its parent's.
+  let outer_decorations = decorations;
   let decorations = own_decoration.as_ref().or(decorations);
 
   if let Some(marker) = node.marker.as_deref() {
@@ -194,8 +196,14 @@ fn collect_inline_items_impl<'n>(
   }
 
   let content_start = items.len();
-  let padding = inline_span_padding(node, depth);
+  let (margin, padding) = inline_span_spacing(node, depth);
 
+  if margin.left > 0.0 {
+    items.push(InlineItem::Spacer {
+      width: margin.left,
+      decorations: outer_decorations.cloned(),
+    });
+  }
   if padding.left > 0.0 {
     items.push(InlineItem::Spacer {
       width: padding.left,
@@ -239,6 +247,12 @@ fn collect_inline_items_impl<'n>(
       decorations: decorations.cloned(),
     });
   }
+  if margin.right > 0.0 {
+    items.push(InlineItem::Spacer {
+      width: margin.right,
+      decorations: outer_decorations.cloned(),
+    });
+  }
 
   if node.marker.is_some()
     && let Some(first) = items.get_mut(content_start)
@@ -258,13 +272,16 @@ fn is_inline_span(node: &RenderNode, depth: usize) -> bool {
     )
 }
 
-/// The horizontal padding an inline span reserves on the line.
-fn inline_span_padding(node: &RenderNode, depth: usize) -> Rect<f32> {
+/// The margins and padding an inline span reserves on the line, each side's only where it
+/// starts or ends.
+///
+/// Approximate: a negative margin reserves nothing, where Blink pulls the neighbouring content in.
+fn inline_span_spacing(node: &RenderNode, depth: usize) -> (Rect<f32>, Rect<f32>) {
   if !is_inline_span(node, depth) {
-    return Rect::default();
+    return Default::default();
   }
 
-  node.padding_px()
+  (node.margin_px(), node.padding_px())
 }
 
 /// The decoration an inline span paints, or `None` when its background is invisible.
@@ -288,7 +305,7 @@ fn inline_span_decoration(node: &RenderNode, depth: usize) -> Option<InlineDecor
 
   Some(InlineDecoration {
     color,
-    padding: inline_span_padding(node, depth),
+    padding: node.padding_px(),
     radii: [
       radius(&style.border_top_left_radius),
       radius(&style.border_top_right_radius),
