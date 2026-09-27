@@ -2243,6 +2243,56 @@ fn text_decoration_shadow() {
   });
 }
 
+/// A colour glyph's `text-shadow` is its silhouette in the shadow colour, as Blink's shadow looper
+/// fills every glyph with the shadow colour through `SrcIn`.
+#[test]
+fn color_glyph_text_shadow() {
+  let mut fonts = fonts();
+  let data = fs::read(
+    Path::new(env!("CARGO_MANIFEST_DIR")).join("../assets/fonts/twemoji/TwemojiMozilla-colr.woff2"),
+  )
+  .expect("read emoji font");
+
+  fonts
+    .register(FontResource::new(data))
+    .expect("load emoji font");
+  run_pdf_fixture_with("color-glyph-text-shadow", &fonts, |fonts| {
+    let source = r##"<div style="display: flex; flex-direction: column; row-gap: 12px; width: 100%; height: 100%; padding: 16px; background-color: #ffffff; font-size: 40px; color: #111827;">
+      <div style="text-shadow: 6px 6px 0 #2563eb;">Party 🎉🚀</div>
+      <div style="text-shadow: 6px 6px 4px rgba(220, 38, 38, 0.8);">Blur 🎉🚀</div>
+    </div>"##;
+
+    PdfOptions::builder()
+      .node(from_html(source, FromHtmlOptions::default()).expect("parse colour glyph shadow"))
+      .viewport(Viewport::new((320, 150)))
+      .fonts(fonts)
+      .build()
+  });
+}
+
+/// A bitmap glyph's `text-shadow` is its alpha filled with the shadow colour.
+#[test]
+fn bitmap_glyph_text_shadow() {
+  let mut fonts = Fonts::default();
+  let data = fs::read(
+    Path::new(env!("CARGO_MANIFEST_DIR")).join("../assets/fonts/noto-sans/NotoColorEmoji.ttf"),
+  )
+  .expect("read bitmap emoji font");
+
+  fonts
+    .register(FontResource::new(data))
+    .expect("load bitmap emoji font");
+  run_pdf_fixture_with("bitmap-glyph-text-shadow", &fonts, |fonts| {
+    let source = r##"<div style="width: 100%; height: 100%; padding: 16px; background-color: #ffffff; font-size: 48px; line-height: 1; text-shadow: 8px 8px 0 rgba(37, 99, 235, 0.6);">😀</div>"##;
+
+    PdfOptions::builder()
+      .node(from_html(source, FromHtmlOptions::default()).expect("parse bitmap glyph shadow"))
+      .viewport(Viewport::new((100, 100)))
+      .fonts(fonts)
+      .build()
+  });
+}
+
 /// `text-shadow` draws shifted glyph passes under the text, and
 /// `-webkit-text-stroke` strokes the glyph outlines around the fill.
 #[test]

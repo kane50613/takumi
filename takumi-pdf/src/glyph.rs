@@ -2,15 +2,79 @@
 
 use std::ops::Range;
 
-use takumi_core::layout::inline::ShapedRun;
+use takumi_core::{
+  geometry::{PathCommand, Point},
+  layout::inline::{PositionedInlineRun, ShapedRun},
+  resources::glyph::{ResolvedBitmapGlyph, ResolvedGlyph},
+  style::Affine,
+};
 
 use crate::{
   krilla::{
+    geom::Path as KrillaPath,
     surface::Location,
     text::{Glyph, GlyphId},
   },
   options::{PdfError, UncoveredText},
+  paint::krilla_path,
 };
+
+/// A run's colour glyphs, which a shadow paints as silhouettes in its own colour, as Blink's
+/// shadow looper fills every glyph through `SrcIn`, rather than through the font's colours.
+pub(crate) struct ColorGlyphs<'r> {
+  /// The colour-layered outlines, placed and joined into one path.
+  pub(crate) outlines: Option<KrillaPath>,
+  /// The bitmap glyphs, each with the transform that places its pixels.
+  #[cfg_attr(not(feature = "images"), expect(dead_code))]
+  pub(crate) bitmaps: Vec<(&'r ResolvedBitmapGlyph, Affine)>,
+}
+
+impl<'r> ColorGlyphs<'r> {
+  /// The colour glyphs of `run`, its glyphs placed from `origin`.
+  pub(crate) fn of(run: &'r PositionedInlineRun, origin: Point<f32>) -> Self {
+    let mut outlines: Vec<PathCommand> = Vec::new();
+    let mut bitmaps = Vec::new();
+
+    for glyph in &run.glyph_run.glyphs {
+      let at = Point {
+        x: origin.x + glyph.x,
+        y: origin.y + glyph.y,
+      };
+
+      match run.resolved_glyphs.get(&glyph.id).map(AsRef::as_ref) {
+        Some(ResolvedGlyph::Outline(outline)) if outline.color_layers().is_some() => {
+          outlines.extend(
+            outline
+              .paths()
+              .iter()
+              .map(|command| command.map_points(|point| point + at)),
+          );
+        }
+        Some(ResolvedGlyph::Bitmap(bitmap)) => {
+          bitmaps.push((
+            bitmap,
+            Affine::translation(at.x, at.y) * bitmap.image_transform(),
+          ));
+        }
+        _ => {}
+      }
+    }
+
+    Self {
+      outlines: krilla_path(&outlines, Point::ZERO),
+      bitmaps,
+    }
+  }
+
+  /// Whether `run` paints the glyph `id` in the font's own colours.
+  pub(crate) fn contains(run: &PositionedInlineRun, id: GlyphId) -> bool {
+    match run.resolved_glyphs.get(&id.to_u32()).map(AsRef::as_ref) {
+      Some(ResolvedGlyph::Outline(outline)) => outline.color_layers().is_some(),
+      Some(ResolvedGlyph::Bitmap(_)) => true,
+      None => false,
+    }
+  }
+}
 
 /// The characters no registered font covers, and what the render does with them.
 pub(crate) struct Uncovered {
