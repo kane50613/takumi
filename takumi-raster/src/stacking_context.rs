@@ -421,7 +421,7 @@ impl<'a> ScenePainter<'a> {
 }
 
 fn draw_render_node_shell(node: &RenderNode, canvas: &mut Canvas, layout: Layout) -> Result<()> {
-  if node.node.is_none() {
+  if !node.paints_own_box() {
     return Ok(());
   }
 
