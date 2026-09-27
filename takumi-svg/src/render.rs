@@ -6,22 +6,24 @@ use takumi_core::{
   Fonts,
   context::RenderContext,
   error::Result,
+  font_style::SizedFontStyle,
   geometry::{Point, Rect, Size},
   layout::{
     background_image_geometry::FillLayers,
     border::BorderProperties,
     decoration::ClipBox,
-    inline::{InlineBoxItem, VisualInlineBox},
+    inline::{InlineBoxItem, PositionedInlineRun, VisualInlineBox},
     inline_box::{InlineBoxPaint, resolve_inline_box},
     node::{ImageData, Node, NodeKind},
     tree::RenderNode,
   },
   painter::{
-    BackgroundClipArea, BoxBorderPainter, BoxFrame, BoxPainter, FillShape, OverflowClip,
-    PaintDevice, PendingOutline, ShadowShape, StrokeStyle, UNBOUNDED,
+    BackgroundClipArea, BoxBorderPainter, BoxFrame, BoxPainter, FillShape, GlyphDevice, GlyphFill,
+    OverflowClip, PaintDevice, PendingOutline, ShadowShape, StrokeStyle, UNBOUNDED,
   },
   resources::image::ImageSource,
   scene::Scene,
+  shadow::SizedShadow,
   style::{
     Affine, BackgroundImage, BasicShape, BlendMode, Color, ComputedStyle, FillRule, FontFamily,
     Isolation, Lang, ShapeRadius, Sides, SizingContext, SpacePair, StyleSheet, ToCss,
@@ -31,12 +33,12 @@ use takumi_core::{
 use typed_builder::TypedBuilder;
 
 use crate::{
-  APPROX_CHARS_PER_NUMBER, Frame, GroupToken, Num, Rgba, SvgDocument,
+  APPROX_CHARS_PER_NUMBER, Frame, GlyphStroke, GroupToken, Num, Rgba, SvgDocument,
   box_model::{PathData, edges_path_data, path_data, rounded_rect_path_data, shape_path_data},
   gradient::LayerEmitter,
   image::emit_image,
   scene_emit::SceneEmitter,
-  text::{emit_inline_content, emit_text},
+  text::{emit_clip_text_run, emit_inline_content, emit_run_glyphs, emit_text, run_stroke},
 };
 
 /// Inputs for [`render`], built with [`SvgOptions::builder`].
@@ -539,6 +541,10 @@ fn resolve_shape_radius(
 pub(crate) struct DocumentDevice<'d> {
   doc: &'d mut SvgDocument,
   groups: Vec<GroupToken>,
+  /// The shadow every draw becomes while one is open: its colour and offset.
+  shadow: Option<(Color, Point<f32>)>,
+  /// The box whose background `background-clip: text` glyphs show.
+  text_background: Option<&'d RenderContext>,
   error: Option<io::Error>,
 }
 
@@ -547,6 +553,8 @@ impl<'d> DocumentDevice<'d> {
     Self {
       doc,
       groups: Vec::new(),
+      shadow: None,
+      text_background: None,
       error: None,
     }
   }
@@ -564,67 +572,89 @@ impl<'d> DocumentDevice<'d> {
     device.finish()
   }
 
-  /// Closes the most recent group, keeping the first write error.
-  fn close_group(&mut self) {
+  /// [`DocumentDevice::paint`] for the text of the box `context` paints, whose background shows
+  /// through `background-clip: text` glyphs.
+  pub(crate) fn paint_text(
+    doc: &'d mut SvgDocument,
+    context: &'d RenderContext,
+    paint: impl FnOnce(&mut Self),
+  ) -> io::Result<()> {
+    let mut device = Self::new(doc);
+
+    device.text_background = Some(context);
+    paint(&mut device);
+    device.finish()
+  }
+
+  /// Runs `write` against the document unless an earlier write failed, keeping its error.
+  fn write(&mut self, write: impl FnOnce(&mut SvgDocument) -> io::Result<()>) {
     if self.error.is_some() {
       return;
     }
-    if let Some(group) = self.groups.pop()
-      && let Err(error) = self.doc.end_group(group)
-    {
+    if let Err(error) = write(self.doc) {
       self.error = Some(error);
     }
   }
 
-  /// Opens a group clipped to `data`, keeping the first write error.
-  fn begin_clip(&mut self, data: &str, rule: FillRule) {
+  /// Opens the group `open` writes, keeping the first write error.
+  fn open_group(&mut self, open: impl FnOnce(&mut SvgDocument) -> io::Result<GroupToken>) {
     if self.error.is_some() {
       return;
     }
-    let group = self.doc.clip_path(data, rule, None).and_then(|clip| {
-      self
-        .doc
-        .begin_group(Affine::IDENTITY, 1.0, Some(&clip), None)
-    });
 
-    match group {
+    match open(self.doc) {
       Ok(group) => self.groups.push(group),
       Err(error) => self.error = Some(error),
+    }
+  }
+
+  /// Closes the most recent group, keeping the first write error.
+  fn close_group(&mut self) {
+    if let Some(group) = self.groups.pop() {
+      self.write(|doc| doc.end_group(group));
+    }
+  }
+
+  /// Opens a group clipped to `data`.
+  fn begin_clip(&mut self, data: &str, rule: FillRule) {
+    self.open_group(|doc| {
+      let clip = doc.clip_path(data, rule, None)?;
+
+      doc.begin_group(Affine::IDENTITY, 1.0, Some(&clip), None)
+    });
+  }
+
+  /// `color` and `transform`, or the open shadow's colour and `transform` moved by its offset.
+  fn shadowed(&self, color: Color, transform: Affine) -> (Color, Affine) {
+    match self.shadow {
+      Some((shadow, offset)) => (shadow, Affine::translation(offset.x, offset.y) * transform),
+      None => (color, transform),
     }
   }
 }
 
 impl PaintDevice for DocumentDevice<'_> {
   fn fill_shape(&mut self, shape: &FillShape, color: Color, transform: Affine) {
-    if self.error.is_some() {
-      return;
-    }
-    let result = match shape {
-      FillShape::Rect(size) if transform.only_translation() => self.doc.rect(
+    let (color, transform) = self.shadowed(color, transform);
+
+    self.write(|doc| match shape {
+      FillShape::Rect(size) if transform.only_translation() => doc.rect(
         Frame::new(transform.x, transform.y, size.width, size.height),
         Rgba(color.0),
       ),
-      _ => {
-        let data = path_data(&shape.to_commands(), transform);
-
-        self.doc.fill_path(&data, Rgba(color.0), shape.rule())
-      }
-    };
-
-    if let Err(error) = result {
-      self.error = Some(error);
-    }
+      _ => doc.fill_path(
+        &path_data(&shape.to_commands(), transform),
+        Rgba(color.0),
+        shape.rule(),
+      ),
+    });
   }
 
   fn stroke_shape(&mut self, shape: &FillShape, stroke: &StrokeStyle, transform: Affine) {
-    if self.error.is_some() {
-      return;
-    }
-    let data = path_data(&shape.to_commands(), transform);
+    let (color, transform) = self.shadowed(stroke.color, transform);
+    let stroke = StrokeStyle { color, ..*stroke };
 
-    if let Err(error) = self.doc.stroke_path(&data, stroke) {
-      self.error = Some(error);
-    }
+    self.write(|doc| doc.stroke_path(&path_data(&shape.to_commands(), transform), &stroke));
   }
 
   fn push_clip(&mut self, shape: &FillShape, transform: Affine) {
@@ -648,14 +678,7 @@ impl PaintDevice for DocumentDevice<'_> {
   }
 
   fn begin_layer(&mut self, opacity: f32) {
-    if self.error.is_some() {
-      return;
-    }
-
-    match self.doc.begin_group(Affine::IDENTITY, opacity, None, None) {
-      Ok(group) => self.groups.push(group),
-      Err(error) => self.error = Some(error),
-    }
+    self.open_group(|doc| doc.begin_group(Affine::IDENTITY, opacity, None, None));
   }
 
   fn end_layer(&mut self) {
@@ -669,18 +692,68 @@ impl PaintDevice for DocumentDevice<'_> {
     blur_radius: f32,
     transform: Affine,
   ) {
-    if self.error.is_some() {
-      return;
-    }
     let fill = shape.fill_shape();
     let data = path_data(&fill.to_commands(), transform);
-    let result = self.doc.with_blur(blur_radius, |doc| {
-      doc.fill_path(&data, Rgba(color.0), fill.rule())
-    });
 
-    if let Err(error) = result {
-      self.error = Some(error);
+    self.write(|doc| {
+      doc.with_blur(blur_radius, |doc| {
+        doc.fill_path(&data, Rgba(color.0), fill.rule())
+      })
+    });
+  }
+}
+
+impl GlyphDevice for DocumentDevice<'_> {
+  fn begin_shadow(&mut self, shadow: &SizedShadow) {
+    self.open_group(|doc| {
+      let filter = (shadow.blur_radius > 0.0)
+        .then(|| doc.blur_filter(shadow.blur_radius / 2.0))
+        .transpose()?;
+
+      doc.begin_group(Affine::IDENTITY, 1.0, None, filter.as_deref())
+    });
+    self.shadow = Some((
+      shadow.color,
+      Point {
+        x: shadow.offset_x,
+        y: shadow.offset_y,
+      },
+    ));
+  }
+
+  fn end_shadow(&mut self) {
+    self.shadow = None;
+    self.close_group();
+  }
+
+  fn draw_glyph_run(
+    &mut self,
+    run: &PositionedInlineRun,
+    style: &SizedFontStyle,
+    fill: GlyphFill,
+    frame: BoxFrame,
+  ) {
+    let stroke = run_stroke(&run.glyph_run, style);
+
+    if let Some((color, offset)) = self.shadow {
+      let color = Rgba(color.0);
+      let stroke = stroke.map(|stroke| GlyphStroke { color, ..stroke });
+
+      return self
+        .write(|doc| emit_run_glyphs(run, style, frame.shifted(offset), Some(color), stroke, doc));
     }
+
+    let background = self
+      .text_background
+      .filter(|_| fill == GlyphFill::Background);
+
+    self.write(|doc| {
+      if let Some(context) = background {
+        emit_clip_text_run(run, style, context, frame, doc)?;
+      }
+
+      emit_run_glyphs(run, style, frame, None, stroke, doc)
+    });
   }
 }
 

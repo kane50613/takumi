@@ -82,85 +82,80 @@ impl OutlineIsland {
     let inner = style.outline_offset;
     let outer = inner + width;
     let at = Affine::translation(origin.x, origin.y);
-    let layered = opacity < 1.0;
     // Dashes overlap at the corners, so a translucent colour paints opaque into a layer that
     // takes its alpha.
     let alpha_layer =
       color.0[3] < u8::MAX && !matches!(outline_style, BorderStyle::Solid | BorderStyle::Double);
 
-    if layered {
-      device.begin_layer(opacity);
-    }
-    if alpha_layer {
-      device.begin_layer(f32::from(color.0[3]) / f32::from(u8::MAX));
-      color.0[3] = u8::MAX;
-    }
-
-    match outline_style {
-      BorderStyle::Double => {
-        let third = width / 3.0;
-
-        device.fill_shape(&self.ring(outer - third, outer), color, at);
-        device.fill_shape(&self.ring(inner, inner + third), color, at);
+    device.with_opacity(opacity, |device| {
+      if alpha_layer {
+        device.begin_layer(f32::from(color.0[3]) / f32::from(u8::MAX));
+        color.0[3] = u8::MAX;
       }
-      BorderStyle::Dashed | BorderStyle::Dotted => {
-        device.push_clip(&self.ring(inner, outer), at);
 
-        let corners = self.corners(inner + width / 2.0);
-        let half = width / 2.0;
+      match outline_style {
+        BorderStyle::Double => {
+          let third = width / 3.0;
 
-        for (&start, &end) in corners.iter().zip(corners.iter().cycle().skip(1)) {
-          let [start, end] = if start.x > end.x || start.y > end.y {
-            [end, start]
-          } else {
-            [start, end]
-          };
+          device.fill_shape(&self.ring(outer - third, outer), color, at);
+          device.fill_shape(&self.ring(inner, inner + third), color, at);
+        }
+        BorderStyle::Dashed | BorderStyle::Dotted => {
+          device.push_clip(&self.ring(inner, outer), at);
 
-          if start == end {
-            continue;
+          let corners = self.corners(inner + width / 2.0);
+          let half = width / 2.0;
+
+          for (&start, &end) in corners.iter().zip(corners.iter().cycle().skip(1)) {
+            let [start, end] = if start.x > end.x || start.y > end.y {
+              [end, start]
+            } else {
+              [start, end]
+            };
+
+            if start == end {
+              continue;
+            }
+
+            let horizontal = start.y == end.y;
+            let reach = |point: Point<f32>, toward: f32| Point {
+              x: point.x + if horizontal { toward } else { 0.0 },
+              y: point.y + if horizontal { 0.0 } else { toward },
+            };
+
+            StyledLine::new(
+              reach(start, -half),
+              reach(end, half),
+              width,
+              outline_style,
+              color,
+            )
+            .paint(at, device);
           }
 
-          let horizontal = start.y == end.y;
-          let reach = |point: Point<f32>, toward: f32| Point {
-            x: point.x + if horizontal { toward } else { 0.0 },
-            y: point.y + if horizontal { 0.0 } else { toward },
-          };
-
-          StyledLine::new(
-            reach(start, -half),
-            reach(end, half),
-            width,
-            outline_style,
-            color,
-          )
-          .paint(at, device);
+          device.pop_clip();
         }
+        BorderStyle::Inset | BorderStyle::Outset => {
+          self.paint_shaded_band(inner, outer, outline_style, color, at, device);
+        }
+        BorderStyle::Groove | BorderStyle::Ridge => {
+          let (outer_half, inner_half) = if outline_style == BorderStyle::Groove {
+            (BorderStyle::Inset, BorderStyle::Outset)
+          } else {
+            (BorderStyle::Outset, BorderStyle::Inset)
+          };
+          let middle = inner + width / 2.0;
 
-        device.pop_clip();
+          self.paint_shaded_band(middle, outer, outer_half, color, at, device);
+          self.paint_shaded_band(inner, middle, inner_half, color, at, device);
+        }
+        _ => device.fill_shape(&self.ring(inner, outer), color, at),
       }
-      BorderStyle::Inset | BorderStyle::Outset => {
-        self.paint_shaded_band(inner, outer, outline_style, color, at, device);
-      }
-      BorderStyle::Groove | BorderStyle::Ridge => {
-        let (outer_half, inner_half) = if outline_style == BorderStyle::Groove {
-          (BorderStyle::Inset, BorderStyle::Outset)
-        } else {
-          (BorderStyle::Outset, BorderStyle::Inset)
-        };
-        let middle = inner + width / 2.0;
 
-        self.paint_shaded_band(middle, outer, outer_half, color, at, device);
-        self.paint_shaded_band(inner, middle, inner_half, color, at, device);
+      if alpha_layer {
+        device.end_layer();
       }
-      _ => device.fill_shape(&self.ring(inner, outer), color, at),
-    }
-
-    if alpha_layer {
-      device.end_layer();
-    }
-    if layered {
-      device.end_layer();
-    }
+    });
   }
 
   /// The band between the contours `inner` and `outer` past the island's rects.

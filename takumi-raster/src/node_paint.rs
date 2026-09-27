@@ -4,13 +4,19 @@
 //! [`takumi_core::layout::decoration`]; these functions composite it with
 //! tiny-skia, and the SVG backend emits the same geometry as vector paths.
 
+use skrifa::{FontRef, MetadataProvider};
 use takumi_core::{
   geometry::{ComputedLayout as Layout, Point},
-  layout::decoration::ClipBox,
-  painter::{
-    BackgroundClipArea, BoxBorderPainter, BoxPainter, FillShape, PaintDevice, PendingOutline,
-    ShadowShape, StrokeStyle,
+  layout::{
+    decoration::ClipBox,
+    inline::{PositionedGlyph, PositionedInlineRun},
   },
+  painter::{
+    BackgroundClipArea, BoxBorderPainter, BoxFrame, BoxPainter, FillShape, GlyphDevice, GlyphFill,
+    PaintDevice, PendingOutline, ShadowShape, StrokeStyle,
+  },
+  resources::{font::FontError, glyph::ResolvedGlyph},
+  shadow::SizedShadow,
   style::{Color, ImageScalingAlgorithm},
 };
 
@@ -20,8 +26,9 @@ use super::{
   draw_image, inline_drawing::draw_inline_layout, rasterize_layers,
 };
 use crate::{
-  BlurType, CanvasSubcanvas, Error, MaskCompositeColor, MaskSamplingOptions, Placement, Result,
-  Style, apply_blur_alpha_bytes, attenuate_alpha_by_mask, checked_area, intersect_alpha_masks,
+  BlurType, CanvasSubcanvas, Command, Error, MaskCompositeColor, MaskSamplingOptions, Placement,
+  Result, Stroke, Style, apply_blur_alpha_bytes, attenuate_alpha_by_mask, checked_area, draw_glyph,
+  draw_glyph_clip_image, intersect_alpha_masks,
   layout::{
     inline::{InlineItem, InlineLayoutMode, InlineLayoutRequest, create_inline_layout},
     node::{ImageData, Node, NodeKind, TextData},
@@ -56,6 +63,10 @@ pub(crate) struct CanvasDevice<'c> {
   pub(crate) clips: Vec<CanvasClip>,
   /// Each open layer and the opacity it composites at, or `None` when it could not open.
   layers: Vec<Option<(CanvasSubcanvas, f32)>>,
+  /// The shadow every draw becomes while one is open.
+  shadow: Option<SizedShadow>,
+  /// The background `background-clip: text` glyphs show.
+  pub(crate) text_background: Option<PaintSource<'c>>,
   /// The first error a draw hit.
   error: Option<Error>,
 }
@@ -79,6 +90,8 @@ impl<'c> CanvasDevice<'c> {
       algorithm,
       clips: Vec::new(),
       layers: Vec::new(),
+      shadow: None,
+      text_background: None,
       error: None,
     }
   }
@@ -139,6 +152,164 @@ impl<'c> CanvasDevice<'c> {
     }
   }
 
+  /// Paints `commands`, filled or stroked as `style` under `transform`, in `color` blurred as a CSS
+  /// shadow of `blur_radius` blurs.
+  fn draw_blurred(
+    &mut self,
+    commands: &[Command],
+    style: Style,
+    transform: Affine,
+    blur_radius: f32,
+    color: Color,
+  ) {
+    let reach = if blur_radius > 0.0 {
+      blur_radius * BlurType::Shadow.extent_multiplier()
+    } else {
+      0.0
+    };
+    let (mask, placement) = render_mask(
+      commands,
+      Some(self.transform * transform),
+      Some(style),
+      Some(self.canvas.viewport().inflate(reach, reach)),
+    );
+
+    if mask.is_empty() {
+      return;
+    }
+    if blur_radius <= 0.0 {
+      return self.draw_coverage((mask, placement), color);
+    }
+
+    let padding = reach as u32;
+    let width = placement.width.saturating_add(padding * 2);
+    let height = placement.height.saturating_add(padding * 2);
+    let Some(area) = checked_area(width, height, 1) else {
+      return;
+    };
+    let mut blurred = vec![0; area];
+
+    for (row, source) in mask.chunks_exact(placement.width as usize).enumerate() {
+      let start = (row + padding as usize) * width as usize + padding as usize;
+
+      blurred[start..start + source.len()].copy_from_slice(source);
+    }
+
+    if apply_blur_alpha_bytes(&mut blurred, width, height, blur_radius, BlurType::Shadow).is_err() {
+      return;
+    }
+
+    let placement = Placement {
+      left: placement.left - padding as i32,
+      top: placement.top - padding as i32,
+      width,
+      height,
+    };
+
+    self.draw_coverage((blurred, placement), color);
+  }
+
+  /// Paints the shadow the open `shadow` casts from `commands` drawn as `style` under `transform`.
+  fn draw_shadow_of(
+    &mut self,
+    shadow: SizedShadow,
+    commands: &[Command],
+    style: Style,
+    transform: Affine,
+  ) {
+    self.draw_blurred(
+      commands,
+      style,
+      Affine::translation(shadow.offset_x, shadow.offset_y) * transform,
+      shadow.blur_radius,
+      shadow.color,
+    );
+  }
+
+  /// Draws `run`'s glyphs, or their shadow while one is open.
+  fn draw_glyphs(
+    &mut self,
+    run: &PositionedInlineRun,
+    style: &SizedFontStyle,
+    fill: GlyphFill,
+    frame: BoxFrame,
+  ) -> Result<()> {
+    let glyph_run = &run.glyph_run;
+    let local = run.transform(frame.translation());
+    let offset = run.glyph_offset(frame.layout);
+    // A span may set `-webkit-text-stroke` for itself, so it comes off the run.
+    let stroke = (glyph_run.brush.stroke_width, glyph_run.brush.stroke_color);
+    let placed = |glyph: &PositionedGlyph| Point {
+      x: offset.x + glyph.x,
+      y: offset.y + glyph.y,
+    };
+
+    if let Some(shadow) = self.shadow {
+      for glyph in &glyph_run.glyphs {
+        let Some(ResolvedGlyph::Outline(outline)) =
+          run.resolved_glyphs.get(&glyph.id).map(AsRef::as_ref)
+        else {
+          continue;
+        };
+        let at = placed(glyph);
+        let transform = local * Affine::translation(at.x, at.y);
+
+        self.draw_shadow_of(shadow, outline.paths(), Fill::NonZero.into(), transform);
+
+        if stroke.0 > 0.0 {
+          let mut text_stroke = Stroke::new(stroke.0);
+
+          text_stroke.join = style.parent.stroke_linejoin.into();
+          self.draw_shadow_of(shadow, outline.paths(), text_stroke.into(), transform);
+        }
+      }
+
+      return Ok(());
+    }
+
+    let transform = self.transform * local;
+
+    if fill == GlyphFill::Background
+      && let Some(background) = self.text_background
+    {
+      for glyph in &glyph_run.glyphs {
+        if let Some(content) = run.resolved_glyphs.get(&glyph.id) {
+          draw_glyph_clip_image(
+            content,
+            self.canvas,
+            style,
+            stroke,
+            transform,
+            placed(glyph),
+            background,
+          )?;
+        }
+      }
+    }
+
+    let font = FontRef::from_index(glyph_run.font_data(), glyph_run.font_index)
+      .map_err(|_| FontError::InvalidFontIndex)?;
+    let palettes = font.color_palettes();
+    let palette = palettes.get(0);
+
+    for glyph in &glyph_run.glyphs {
+      if let Some(content) = run.resolved_glyphs.get(&glyph.id) {
+        draw_glyph(
+          content,
+          self.canvas,
+          style,
+          stroke,
+          transform,
+          placed(glyph),
+          glyph_run.brush.color,
+          palette.as_ref(),
+        )?;
+      }
+    }
+
+    Ok(())
+  }
+
   /// Fills `shape` with `source`, an image laid over the box at the device transform.
   pub(crate) fn fill_shape_with_source(&mut self, shape: &FillShape, source: PaintSource<'_>) {
     let Some(canvas_to_source) = self.transform.invert() else {
@@ -166,6 +337,15 @@ impl<'c> CanvasDevice<'c> {
 
 impl PaintDevice for CanvasDevice<'_> {
   fn fill_shape(&mut self, shape: &FillShape, color: Color, transform: Affine) {
+    if let Some(shadow) = self.shadow {
+      return self.draw_shadow_of(
+        shadow,
+        &shape.to_commands(),
+        Fill::from(shape.rule()).into(),
+        transform,
+      );
+    }
+
     let unclipped = self.clips.is_empty();
     let (border, size, offset) = match shape {
       FillShape::Rect(size) if unclipped => (BorderProperties::default(), *size, Point::ZERO),
@@ -195,6 +375,15 @@ impl PaintDevice for CanvasDevice<'_> {
   }
 
   fn stroke_shape(&mut self, shape: &FillShape, stroke: &StrokeStyle, transform: Affine) {
+    if let Some(shadow) = self.shadow {
+      return self.draw_shadow_of(
+        shadow,
+        &shape.to_commands(),
+        Style::Stroke(stroke.into()),
+        transform,
+      );
+    }
+
     let coverage = self.coverage(shape, Style::Stroke(stroke.into()), transform);
 
     self.draw_coverage(coverage, stroke.color);
@@ -244,48 +433,35 @@ impl PaintDevice for CanvasDevice<'_> {
   ) {
     let fill = shape.fill_shape();
 
-    if blur_radius <= 0.0 {
-      return self.fill_shape(&fill, color, transform);
-    }
-
-    let reach = blur_radius * BlurType::Shadow.extent_multiplier();
-    let (mask, placement) = render_mask(
+    self.draw_blurred(
       &fill.to_commands(),
-      Some(self.transform * transform),
-      Some(Fill::from(fill.rule()).into()),
-      Some(self.canvas.viewport().inflate(reach, reach)),
+      Fill::from(fill.rule()).into(),
+      transform,
+      blur_radius,
+      color,
     );
+  }
+}
 
-    if mask.is_empty() {
-      return;
+impl GlyphDevice for CanvasDevice<'_> {
+  fn begin_shadow(&mut self, shadow: &SizedShadow) {
+    self.shadow = Some(*shadow);
+  }
+
+  fn end_shadow(&mut self) {
+    self.shadow = None;
+  }
+
+  fn draw_glyph_run(
+    &mut self,
+    run: &PositionedInlineRun,
+    style: &SizedFontStyle,
+    fill: GlyphFill,
+    frame: BoxFrame,
+  ) {
+    if let Err(error) = self.draw_glyphs(run, style, fill, frame) {
+      self.error.get_or_insert(error);
     }
-
-    let padding = reach as u32;
-    let width = placement.width.saturating_add(padding * 2);
-    let height = placement.height.saturating_add(padding * 2);
-    let Some(area) = checked_area(width, height, 1) else {
-      return;
-    };
-    let mut blurred = vec![0; area];
-
-    for (row, source) in mask.chunks_exact(placement.width as usize).enumerate() {
-      let start = (row + padding as usize) * width as usize + padding as usize;
-
-      blurred[start..start + source.len()].copy_from_slice(source);
-    }
-
-    if apply_blur_alpha_bytes(&mut blurred, width, height, blur_radius, BlurType::Shadow).is_err() {
-      return;
-    }
-
-    let placement = Placement {
-      left: placement.left - padding as i32,
-      top: placement.top - padding as i32,
-      width,
-      height,
-    };
-
-    self.draw_coverage((blurred, placement), color);
   }
 }
 

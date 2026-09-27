@@ -18,7 +18,7 @@ use super::{
   background::{CoverExtent, DecorationAccumulator, InlineBackgroundFragment},
   items::ProcessedInlineSpan,
   metrics::{VisualInlineBox, resolve_visual_inline_box},
-  outline::{InlineOutlineRect, OutlineIsland},
+  outline::InlineOutlineRect,
   text_fit::LineScaleState,
 };
 
@@ -271,13 +271,6 @@ pub struct InlineRunLayout {
   pub outline_rects: Vec<InlineOutlineRect>,
   /// Inline-span background fragments, in paint order (outer spans first).
   pub background_fragments: Vec<InlineBackgroundFragment>,
-}
-
-impl InlineRunLayout {
-  /// The outline rects merged into the islands each outline strokes around.
-  pub fn outline_islands(&self) -> Vec<OutlineIsland> {
-    OutlineIsland::of(self.outline_rects.clone())
-  }
 }
 
 impl BuiltInlineLayout<'_> {

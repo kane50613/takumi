@@ -1,29 +1,23 @@
-//! Text / inline-content emission.
-//!
-//! Builds the one shared inline enumeration ([`resolve_inline_runs`], the same
-//! producer the raster backend consumes) and emits each run's glyphs (outline
-//! `<path>`, COLR color layers, or bitmap `<image>`), text decorations,
-//! text-shadows, and `-webkit-text-stroke`. The layout/positioning is shared with
-//! raster; only the painting differs.
+//! Text / inline-content emission: lays out the inline items, lets takumi-core's text painter
+//! order the shadows, decorations, and outlines, and draws each run's glyphs as outline `<path>`s,
+//! COLR colour layers, or bitmap `<image>`s.
 
 use std::{io, sync::Arc};
 
 use takumi_core::{
   context::RenderContext,
   font_style::SizedFontStyle,
-  geometry::Point,
   layout::{
     inline::{
-      DecorationRect, InlineItem, InlineLayoutMode, InlineLayoutRequest, InlineRunLayout,
-      PositionedInlineRun, ProcessedInlineSpan, ShapedRun, collect_inline_items,
-      create_inline_layout,
+      InlineItem, InlineLayoutMode, InlineLayoutRequest, PositionedInlineRun, ProcessedInlineSpan,
+      ShapedRun, collect_inline_items, create_inline_layout,
     },
     node::TextData,
     tree::RenderNode,
   },
-  painter::{BoxFrame, BoxPainter},
+  painter::{BoxFrame, BoxPainter, GlyphFill},
   resources::{font::FontError, glyph::ResolvedGlyph, image::to_data_url},
-  style::{Affine, BackgroundClip, FillRule, LineJoin},
+  style::{Affine, BackgroundClip, LineJoin},
 };
 
 use crate::{
@@ -89,7 +83,15 @@ fn emit_inline_items<'c>(
   let runs = built
     .resolve_runs(context, frame.layout)
     .map_err(font_error)?;
-  emit_runs(&runs, &built.spans, &font_style, context, frame, doc)?;
+  let fill = if context.style.background_clip == BackgroundClip::Text {
+    GlyphFill::Background
+  } else {
+    GlyphFill::Text
+  };
+
+  DocumentDevice::paint_text(doc, context, |device| {
+    runs.paint(&built.spans, &font_style, fill, frame, device);
+  })?;
 
   for inline_box in &runs.inline_boxes {
     if let Some(ProcessedInlineSpan::Box(item)) = built.spans.get(inline_box.id as usize) {
@@ -99,89 +101,9 @@ fn emit_inline_items<'c>(
   Ok(())
 }
 
-/// Paints a resolved run layout in CSS text-decoration order: shadows, under/over
-/// decorations, glyphs, then line-through.
-fn emit_runs(
-  runs: &InlineRunLayout,
-  spans: &[ProcessedInlineSpan<'_>],
-  font_style: &SizedFontStyle,
-  context: &RenderContext,
-  frame: BoxFrame,
-  doc: &mut SvgDocument,
-) -> io::Result<()> {
-  // Inline-span backgrounds fill under every glyph of the formatting context.
-  for fragment in &runs.background_fragments {
-    let data = path_data(&fragment.path(), frame.translation());
-
-    if data.is_empty() {
-      continue;
-    }
-    doc.with_opacity(fragment.opacity, |doc| {
-      doc.fill_path(&data, Rgba(fragment.color.0), FillRule::NonZero)
-    })?;
-  }
-
-  // text-shadow paints below the glyphs; later-listed shadows paint lowest.
-  for shadow in font_style.painted_text_shadows() {
-    let color = Rgba(shadow.color.0);
-    let filter = (shadow.blur_radius > 0.0)
-      .then(|| doc.blur_filter(shadow.blur_radius / 2.0))
-      .transpose()?;
-    let group = doc.begin_group(Affine::IDENTITY, 1.0, None, filter.as_deref())?;
-    let shadow_frame = frame.shifted(Point {
-      x: shadow.offset_x,
-      y: shadow.offset_y,
-    });
-    for run in &runs.runs {
-      emit_run_glyphs(run, font_style, shadow_frame, Some(color), None, doc)?;
-    }
-    doc.end_group(group)?;
-  }
-
-  let decorations: Vec<Vec<DecorationRect>> = runs
-    .runs
-    .iter()
-    .map(|run| {
-      run.glyph_run.decorations(
-        &run.resolved_glyphs,
-        frame.layout,
-        run.baseline_shift,
-        run.transform(Affine::IDENTITY),
-      )
-    })
-    .collect();
-
-  for (run, decorations) in runs.runs.iter().zip(&decorations) {
-    emit_run_decorations(run, decorations, frame, false, doc)?;
-  }
-
-  if context.style.background_clip == BackgroundClip::Text {
-    emit_clip_text_glyphs(runs, font_style, context, frame, doc)?;
-  } else {
-    for run in &runs.runs {
-      let stroke = run_stroke(&run.glyph_run, font_style);
-
-      emit_run_glyphs(run, font_style, frame, None, stroke, doc)?;
-    }
-  }
-
-  // Text outlines stroke between the glyphs and the line-through, matching the
-  // raster backend's painting order.
-  DocumentDevice::paint(doc, |device| {
-    for island in runs.outline_islands() {
-      island.paint(spans, frame.origin, device);
-    }
-  })?;
-
-  for (run, decorations) in runs.runs.iter().zip(&decorations) {
-    emit_run_decorations(run, decorations, frame, true, doc)?;
-  }
-  Ok(())
-}
-
 /// The `-webkit-text-stroke` a run carries. A span may set it for itself, so it
 /// comes off the run; the join is a box-level property and stays with the node.
-fn run_stroke(run: &ShapedRun, font_style: &SizedFontStyle) -> Option<GlyphStroke> {
+pub(crate) fn run_stroke(run: &ShapedRun, font_style: &SizedFontStyle) -> Option<GlyphStroke> {
   let brush = &run.brush;
 
   (brush.stroke_width > 0.0 && brush.stroke_color.0[3] != 0).then_some(GlyphStroke {
@@ -191,41 +113,28 @@ fn run_stroke(run: &ShapedRun, font_style: &SizedFontStyle) -> Option<GlyphStrok
   })
 }
 
-/// Emits glyphs filled by the element's background (`background-clip: text`).
-///
-/// Mirrors the raster backend: the background (color + images) is painted into
-/// the glyph coverage, widened by any `-webkit-text-stroke` (so a transparent
-/// stroke reveals a background-colored outline ring); the `color` (brush) then
-/// fills the un-widened glyph interiors on top, followed by the real text stroke.
-///
-/// The coverage is expressed as an SVG `<mask>` (white glyph fill ∪ stroke)
-/// rather than a `<clipPath>`, because a clip path ignores stroke width and so
-/// can't reach the stroke-widened ring, so the background would only fill the thin
-/// glyph interior. A mask honors the stroke, so the background fills the full
-/// fill+stroke coverage.
-fn emit_clip_text_glyphs(
-  runs: &InlineRunLayout,
+/// Emits the element's background through one run's glyphs (`background-clip: text`), widened
+/// by any `-webkit-text-stroke`, for the run's own paint to cover.
+pub(crate) fn emit_clip_text_run(
+  run: &PositionedInlineRun,
   font_style: &SizedFontStyle,
   context: &RenderContext,
   frame: BoxFrame,
   doc: &mut SvgDocument,
 ) -> io::Result<()> {
-  let join = font_style.parent.stroke_linejoin;
-
   let (mask_token, mask_ref) = doc.begin_mask()?;
-  let mut any = false;
-  for run in &runs.runs {
-    any |= emit_clip_text_mask_glyphs(run, frame, join, doc)?;
-  }
+  let any = emit_clip_text_mask_glyphs(run, frame, font_style.parent.stroke_linejoin, doc)?;
+
   doc.end_mask(mask_token)?;
+
   if !any {
     return Ok(());
   }
 
   let background = BoxPainter::new(context, frame.layout).background();
   let area = Frame::border_box(frame);
-
   let group = doc.begin_masked_group(&mask_ref)?;
+
   if let Some(color) = background.color {
     doc.rect(area, Rgba(color.0))?;
   }
@@ -234,16 +143,7 @@ fn emit_clip_text_glyphs(
     Frame::origin_box(frame, background.origin),
     area,
   )?;
-  doc.end_group(group)?;
-
-  // The `color` (brush) fills the glyph interiors on top of the background, with
-  // the real text stroke (a transparent stroke adds nothing visible).
-  for run in &runs.runs {
-    let stroke = run_stroke(&run.glyph_run, font_style);
-
-    emit_run_glyphs(run, font_style, frame, None, stroke, doc)?;
-  }
-  Ok(())
+  doc.end_group(group)
 }
 
 /// Paints a run's outline glyphs white into the active mask with both fill and
@@ -291,30 +191,9 @@ fn emit_clip_text_mask_glyphs(
   Ok(any)
 }
 
-/// Emits a run's under/overline (`over == false`) or line-through (`over == true`)
-/// decoration rects.
-fn emit_run_decorations(
-  run: &PositionedInlineRun,
-  decorations: &[DecorationRect],
-  frame: BoxFrame,
-  over: bool,
-  doc: &mut SvgDocument,
-) -> io::Result<()> {
-  doc.with_opacity(run.glyph_run.brush.opacity, |doc| {
-    DocumentDevice::paint(doc, |device| {
-      for decoration in decorations
-        .iter()
-        .filter(|decoration| decoration.over == over)
-      {
-        decoration.paint(frame.origin, device);
-      }
-    })
-  })
-}
-
 /// Emits a run's glyphs. `color_override` (for shadows) recolors every glyph and
 /// suppresses bitmaps/COLR; `stroke` adds `-webkit-text-stroke` to outlines.
-fn emit_run_glyphs(
+pub(crate) fn emit_run_glyphs(
   run: &PositionedInlineRun,
   font_style: &SizedFontStyle,
   frame: BoxFrame,
@@ -334,100 +213,96 @@ fn emit_run_glyphs(
   let fill = color_override.unwrap_or(Rgba(fill_color.0));
   let mut uses: Vec<(u32, f32, f32)> = Vec::new();
 
-  // Per-run (inline span) opacity, matching the raster backend's
-  // `draw_with_inline_opacity`.
-  doc.with_opacity(run.glyph_run.brush.opacity, |doc| {
-    for glyph in &run.glyph_run.glyphs {
-      let Some(resolved) = run.resolved_glyphs.get(&glyph.id) else {
-        continue;
-      };
-      let matrix =
-        run_transform * Affine::translation(glyph_offset.x + glyph.x, glyph_offset.y + glyph.y);
-      let placed = frame.place(matrix);
+  for glyph in &run.glyph_run.glyphs {
+    let Some(resolved) = run.resolved_glyphs.get(&glyph.id) else {
+      continue;
+    };
+    let matrix =
+      run_transform * Affine::translation(glyph_offset.x + glyph.x, glyph_offset.y + glyph.y);
+    let placed = frame.place(matrix);
 
-      match resolved.as_ref() {
-        ResolvedGlyph::Outline(outline) => {
-          let color_layers = if color_override.is_some() {
-            Vec::new()
-          } else {
-            run.resolve_color_layers(outline, fill_color)
-          };
-          if color_layers.is_empty() {
-            // Synthesized (faux) bold: the raster backend strokes the glyph with
-            // its own fill color (`outline.embolden()`); mirror that here.
-            match outline.embolden().filter(|embolden| *embolden > 0.0) {
-              Some(embolden) => {
-                let data = path_data(outline.paths(), placed);
-                if data.is_empty() {
-                  continue;
-                }
-                doc.flush_glyph_uses(&mut uses, fill, stroke)?;
-                let bold = GlyphStroke {
-                  color: fill,
-                  width: embolden,
-                  join: bold_join,
-                };
-
-                doc.glyph_path(&data, fill, Some(bold))?;
-                if let Some(text_stroke) = stroke {
-                  doc.glyph_path(&data, Rgba::TRANSPARENT, Some(text_stroke))?;
-                }
-              }
-              None => {
-                let data = path_data(
-                  outline.paths(),
-                  Affine {
-                    x: 0.0,
-                    y: 0.0,
-                    ..placed
-                  },
-                );
-
-                if !data.is_empty() {
-                  uses.push((doc.glyph_ref(data), placed.x, placed.y));
-                }
-              }
-            }
-          } else {
-            doc.flush_glyph_uses(&mut uses, fill, stroke)?;
-            for (color, paths) in color_layers {
-              if color.0[3] == 0 {
+    match resolved.as_ref() {
+      ResolvedGlyph::Outline(outline) => {
+        let color_layers = if color_override.is_some() {
+          Vec::new()
+        } else {
+          run.resolve_color_layers(outline, fill_color)
+        };
+        if color_layers.is_empty() {
+          // Synthesized (faux) bold: the raster backend strokes the glyph with
+          // its own fill color (`outline.embolden()`); mirror that here.
+          match outline.embolden().filter(|embolden| *embolden > 0.0) {
+            Some(embolden) => {
+              let data = path_data(outline.paths(), placed);
+              if data.is_empty() {
                 continue;
               }
-              let data = path_data(paths, placed);
+              doc.flush_glyph_uses(&mut uses, fill, stroke)?;
+              let bold = GlyphStroke {
+                color: fill,
+                width: embolden,
+                join: bold_join,
+              };
+
+              doc.glyph_path(&data, fill, Some(bold))?;
+              if let Some(text_stroke) = stroke {
+                doc.glyph_path(&data, Rgba::TRANSPARENT, Some(text_stroke))?;
+              }
+            }
+            None => {
+              let data = path_data(
+                outline.paths(),
+                Affine {
+                  x: 0.0,
+                  y: 0.0,
+                  ..placed
+                },
+              );
+
               if !data.is_empty() {
-                doc.glyph_path(&data, Rgba(color.0), None)?;
+                uses.push((doc.glyph_ref(data), placed.x, placed.y));
               }
             }
           }
-        }
-        // Color/bitmap glyphs (emoji) have no vector form, so embed the rasterized
-        // pixmap as a `data:image/png` `<image>`. Skipped in the shadow pass.
-        ResolvedGlyph::Bitmap(bitmap) => {
-          if color_override.is_some() {
-            continue;
-          }
-          let Some(png) = bitmap.image.encode_png() else {
-            continue;
-          };
+        } else {
           doc.flush_glyph_uses(&mut uses, fill, stroke)?;
-          let (width, height) = (bitmap.image.width(), bitmap.image.height());
-          let bitmap_matrix = placed
-            * Affine::translation(bitmap.placement.left as f32, -(bitmap.placement.top as f32))
-            * Affine::scale(bitmap.scale_x, bitmap.scale_y);
-          let href = to_data_url("image/png", &png);
-          let group = doc.begin_group(bitmap_matrix, 1.0, None, None)?;
-          doc.image(
-            Frame::new(0.0, 0.0, width as f32, height as f32),
-            &href,
-            None,
-          )?;
-          doc.end_group(group)?;
+          for (color, paths) in color_layers {
+            if color.0[3] == 0 {
+              continue;
+            }
+            let data = path_data(paths, placed);
+            if !data.is_empty() {
+              doc.glyph_path(&data, Rgba(color.0), None)?;
+            }
+          }
         }
       }
+      // Color/bitmap glyphs (emoji) have no vector form, so embed the rasterized
+      // pixmap as a `data:image/png` `<image>`. Skipped in the shadow pass.
+      ResolvedGlyph::Bitmap(bitmap) => {
+        if color_override.is_some() {
+          continue;
+        }
+        let Some(png) = bitmap.image.encode_png() else {
+          continue;
+        };
+        doc.flush_glyph_uses(&mut uses, fill, stroke)?;
+        let (width, height) = (bitmap.image.width(), bitmap.image.height());
+        let bitmap_matrix = placed
+          * Affine::translation(bitmap.placement.left as f32, -(bitmap.placement.top as f32))
+          * Affine::scale(bitmap.scale_x, bitmap.scale_y);
+        let href = to_data_url("image/png", &png);
+        let group = doc.begin_group(bitmap_matrix, 1.0, None, None)?;
+        doc.image(
+          Frame::new(0.0, 0.0, width as f32, height as f32),
+          &href,
+          None,
+        )?;
+        doc.end_group(group)?;
+      }
     }
-    doc.flush_glyph_uses(&mut uses, fill, stroke)
-  })
+  }
+  doc.flush_glyph_uses(&mut uses, fill, stroke)
 }
 
 fn font_error(error: FontError) -> io::Error {

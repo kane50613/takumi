@@ -4,12 +4,14 @@ mod background;
 mod border;
 mod outline;
 mod shadow;
+mod text;
 
 pub use self::{
   background::{BackgroundClipArea, BoxBackground},
   border::BoxBorderPainter,
   outline::PendingOutline,
   shadow::ShadowShape,
+  text::{GlyphDevice, GlyphFill, InlineLines},
 };
 
 use crate::{
@@ -225,6 +227,24 @@ pub trait PaintDevice {
 
   /// Composites the most recent layer.
   fn end_layer(&mut self);
+
+  /// Runs `paint` into a layer at `opacity`, without the layer when the paint is opaque and not
+  /// at all when it is invisible.
+  fn with_opacity(&mut self, opacity: f32, paint: impl FnOnce(&mut Self))
+  where
+    Self: Sized,
+  {
+    if opacity <= 0.0 {
+      return;
+    }
+    if opacity >= 1.0 {
+      return paint(self);
+    }
+
+    self.begin_layer(opacity);
+    paint(self);
+    self.end_layer();
+  }
 
   /// Fills `shape` in `color`, blurred by a Gaussian whose standard deviation is half
   /// `blur_radius`, as a CSS shadow blurs.

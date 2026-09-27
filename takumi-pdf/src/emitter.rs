@@ -29,9 +29,11 @@ use takumi_core::{
   paint::ConicGradientTile,
   painter::{
     BackgroundClipArea, BoxBackground, BoxBorderPainter, BoxFrame, BoxPainter, FillShape,
-    OverflowClip, PaintDevice, PendingOutline, ShadowShape, StrokeStyle, UNBOUNDED,
+    GlyphDevice, GlyphFill, OverflowClip, PaintDevice, PendingOutline, ShadowShape, StrokeStyle,
+    UNBOUNDED,
   },
   scene::{NodePaint, PaintItemKind, Scene},
+  shadow::SizedShadow,
   style::{
     Affine, BackgroundImage, BlendMode, BoxDecorationBreak, Color, ComputedStyle, Display,
     FillRule as CoreFillRule, Filter, Isolation, Lang, ResolvedGradientStop,
@@ -1030,6 +1032,8 @@ impl Emitter<'_> {
     Ok(())
   }
 
+  /// Paints the runs on the lines this page owns through takumi-core's text painter, then the
+  /// inline boxes.
   #[allow(clippy::too_many_arguments)]
   fn draw_runs(
     &mut self,
@@ -1040,122 +1044,24 @@ impl Emitter<'_> {
     font_style: &SizedFontStyle,
     surface: &mut Surface,
   ) {
-    let BoxFrame {
-      layout,
-      origin: CorePoint { y, .. },
-    } = frame;
-
-    // Inline-span backgrounds fill under every glyph of the formatting context.
-    // A fragment paints only on the page that owns its line, like the glyph
-    // pass, so a page cut leaves no background sliver on the neighbor page.
-    for fragment in &runs.background_fragments {
-      if self.window.disowns_line(y + fragment.baseline) {
-        continue;
-      }
-      let Some(path) = krilla_path(&fragment.path(), frame.origin) else {
-        continue;
-      };
-
-      surface.set_fill(Some(fill_from_rgba(
-        self.filtered(fragment.color),
-        fragment.opacity,
-      )));
-      surface.draw_path(&path);
-    }
-
-    // text-shadow paints below the glyphs, later-listed shadows lowest. PDF
-    // has no blur operator, so a blurred text shadow draws sharp.
-    for shadow in font_style.painted_text_shadows() {
-      self.glyph_pass(
-        runs,
-        built,
-        frame,
-        CorePoint {
-          x: shadow.offset_x,
-          y: shadow.offset_y,
-        },
-        Some(shadow.color),
-        surface,
-      );
-    }
     let text_fills = self.text_clip_fills(node, frame, surface);
+    let fill = if text_fills.is_empty() {
+      GlyphFill::Text
+    } else {
+      GlyphFill::Background
+    };
+    let lines = runs.lines(frame.layout, |baseline| {
+      !self.window.disowns_line(frame.origin.y + baseline)
+    });
+    let mut device = TextDevice {
+      emitter: self,
+      device: self.device(surface, false),
+      built,
+      text_fills,
+      shadow: None,
+    };
 
-    for run in &runs.runs {
-      let Some(GlyphRun {
-        font,
-        text,
-        glyphs,
-        origin,
-      }) = self.glyph_run(run, built, frame, y)
-      else {
-        continue;
-      };
-      let shaped = &run.glyph_run;
-      let decorations = shaped.decorations(
-        &run.resolved_glyphs,
-        layout,
-        run.baseline_shift,
-        run.transform(Affine::IDENTITY),
-      );
-
-      let mut device = self.device(surface, false);
-
-      for decoration in decorations.iter().filter(|decoration| !decoration.over) {
-        decoration.paint(frame.origin, &mut device);
-      }
-      let fill = fill_from_rgba(self.filtered(shaped.brush.color), shaped.brush.opacity);
-      let oblique = self.push_oblique(shaped, origin, surface);
-
-      // `background-clip: text` paints the background through the glyphs, under
-      // the text's own (usually transparent) fill. Faux bold widens the glyph
-      // itself, so the background has to fill the widened shape too.
-      for background in &text_fills {
-        surface.set_fill(Some(background.clone()));
-        surface.set_stroke(background_stroke(shaped, background));
-        // Outlined: text extraction keys on the text-showing operator, whatever
-        // the rendering mode, so a second run of glyphs would put the text in
-        // the text layer twice. Paths paint the same pixels and stay out of it.
-        surface.draw_glyphs(origin, &glyphs, font.clone(), text, shaped.font_size, true);
-      }
-
-      surface.set_fill(Some(fill.clone()));
-      // `-webkit-text-stroke` strokes the glyph outlines around the fill, and
-      // takes the run's own width over the faux bold one.
-      let brush = &shaped.brush;
-
-      surface.set_stroke(
-        if brush.stroke_width > 0.0 && brush.stroke_color.0[3] != 0 {
-          let stroke_fill = fill_from_rgba(self.filtered(brush.stroke_color), brush.opacity);
-
-          Some(Stroke {
-            paint: stroke_fill.paint,
-            opacity: stroke_fill.opacity,
-            width: brush.stroke_width,
-            ..Stroke::default()
-          })
-        } else {
-          synthetic_stroke(shaped, &fill)
-        },
-      );
-
-      surface.draw_glyphs(origin, &glyphs, font, text, shaped.font_size, false);
-
-      if oblique {
-        surface.pop();
-      }
-      surface.set_stroke(None);
-      let mut device = self.device(surface, false);
-
-      for decoration in decorations.iter().filter(|decoration| decoration.over) {
-        decoration.paint(frame.origin, &mut device);
-      }
-    }
-
-    let mut device = self.device(surface, false);
-
-    for island in runs.outline_islands() {
-      island.paint(&built.spans, frame.origin, &mut device);
-    }
+    lines.paint(&built.spans, font_style, fill, frame, &mut device);
     self.emit_inline_boxes(node, runs, built, frame, surface);
   }
 
@@ -1465,52 +1371,10 @@ impl Emitter<'_> {
     fills
   }
 
-  /// Draws every run's glyphs once, moved by `shift` and in `color` when set, with no
-  /// decorations: the shadow passes under the real text. A run's page follows its unshifted line.
-  #[allow(clippy::too_many_arguments)]
-  fn glyph_pass(
-    &mut self,
-    runs: &InlineRunLayout,
-    built: &BuiltInlineLayout<'_>,
-    frame: BoxFrame,
-    shift: CorePoint<f32>,
-    color: Option<Color>,
-    surface: &mut Surface,
-  ) {
-    for run in &runs.runs {
-      let Some(GlyphRun {
-        font,
-        text,
-        glyphs,
-        origin,
-      }) = self.glyph_run(run, built, frame.shifted(shift), frame.origin.y)
-      else {
-        continue;
-      };
-      let shaped = &run.glyph_run;
-      let fill = fill_from_rgba(
-        self.filtered(color.unwrap_or(shaped.brush.color)),
-        shaped.brush.opacity,
-      );
-
-      surface.set_fill(Some(fill.clone()));
-      surface.set_stroke(synthetic_stroke(shaped, &fill));
-
-      let oblique = self.push_oblique(shaped, origin, surface);
-
-      surface.draw_glyphs(origin, &glyphs, font, text, shaped.font_size, false);
-
-      if oblique {
-        surface.pop();
-      }
-      surface.set_stroke(None);
-    }
-  }
-
   /// A run this page draws at `(x, y)`, or `None` when it has no glyphs, no
   /// font, or its line at `line_y` belongs to another page.
   fn glyph_run<'r>(
-    &mut self,
+    &self,
     run: &PositionedInlineRun,
     built: &'r BuiltInlineLayout<'_>,
     frame: BoxFrame,
@@ -1574,7 +1438,7 @@ impl Emitter<'_> {
 
   /// A krilla font for a run's backing blob, instanced at the run's variation
   /// coordinates. Copies the blob into the cache once per distinct instance.
-  fn cached_font(&mut self, shaped: &ShapedRun) -> Option<Font> {
+  fn cached_font(&self, shaped: &ShapedRun) -> Option<Font> {
     let key = (
       shaped.font_id(),
       shaped.font_index,
@@ -1871,6 +1735,178 @@ fn device_commands(shape: &FillShape, transform: Affine) -> Vec<PathCommand> {
       })
     })
     .collect()
+}
+
+/// The PDF surface as a [`PaintDevice`] for one block's text: shapes draw as on any surface, and
+/// glyphs draw with text operators so the text stays extractable.
+///
+/// Approximate: a blurred `text-shadow` draws sharp, since PDF has no blur operator.
+struct TextDevice<'e, 's, 'a> {
+  emitter: &'e Emitter<'e>,
+  device: SurfaceDevice<'s, 'a>,
+  built: &'e BuiltInlineLayout<'e>,
+  /// The background fills `background-clip: text` glyphs show, bottom first.
+  text_fills: Vec<Fill>,
+  /// The shadow every draw becomes while one is open.
+  shadow: Option<SizedShadow>,
+}
+
+impl TextDevice<'_, '_, '_> {
+  /// `color` and `transform`, or the open shadow's colour and `transform` moved by its offset.
+  fn shadowed(&self, color: Color, transform: Affine) -> (Color, Affine) {
+    match self.shadow {
+      Some(shadow) => (
+        shadow.color,
+        Affine::translation(shadow.offset_x, shadow.offset_y) * transform,
+      ),
+      None => (color, transform),
+    }
+  }
+
+  /// The stroke a run's glyphs draw with: its `-webkit-text-stroke`, else its faux bold, both in
+  /// `color` when a shadow recolours them.
+  fn glyph_stroke(&self, shaped: &ShapedRun, fill: &Fill, color: Option<Color>) -> Option<Stroke> {
+    let brush = &shaped.brush;
+
+    if brush.stroke_width > 0.0 && brush.stroke_color.0[3] != 0 {
+      let stroke_fill = fill_from_rgba(
+        self.emitter.filtered(color.unwrap_or(brush.stroke_color)),
+        1.0,
+      );
+
+      return Some(Stroke {
+        paint: stroke_fill.paint,
+        opacity: stroke_fill.opacity,
+        width: brush.stroke_width,
+        ..Stroke::default()
+      });
+    }
+
+    synthetic_stroke(shaped, fill)
+  }
+}
+
+impl PaintDevice for TextDevice<'_, '_, '_> {
+  fn fill_shape(&mut self, shape: &FillShape, color: Color, transform: Affine) {
+    let (color, transform) = self.shadowed(color, transform);
+
+    self.device.fill_shape(shape, color, transform);
+  }
+
+  fn stroke_shape(&mut self, shape: &FillShape, stroke: &StrokeStyle, transform: Affine) {
+    let (color, transform) = self.shadowed(stroke.color, transform);
+
+    self
+      .device
+      .stroke_shape(shape, &StrokeStyle { color, ..*stroke }, transform);
+  }
+
+  fn push_clip(&mut self, shape: &FillShape, transform: Affine) {
+    self.device.push_clip(shape, transform);
+  }
+
+  fn push_clip_out(&mut self, shape: &FillShape, transform: Affine) {
+    self.device.push_clip_out(shape, transform);
+  }
+
+  fn pop_clip(&mut self) {
+    self.device.pop_clip();
+  }
+
+  fn begin_layer(&mut self, opacity: f32) {
+    self.device.begin_layer(opacity);
+  }
+
+  fn end_layer(&mut self) {
+    self.device.end_layer();
+  }
+
+  fn fill_shadow(
+    &mut self,
+    shape: &ShadowShape,
+    color: Color,
+    blur_radius: f32,
+    transform: Affine,
+  ) {
+    self
+      .device
+      .fill_shadow(shape, color, blur_radius, transform);
+  }
+}
+
+impl GlyphDevice for TextDevice<'_, '_, '_> {
+  fn begin_shadow(&mut self, shadow: &SizedShadow) {
+    self.shadow = Some(*shadow);
+  }
+
+  fn end_shadow(&mut self) {
+    self.shadow = None;
+  }
+
+  fn draw_glyph_run(
+    &mut self,
+    run: &PositionedInlineRun,
+    _style: &SizedFontStyle,
+    fill: GlyphFill,
+    frame: BoxFrame,
+  ) {
+    let shifted = match self.shadow {
+      Some(shadow) => frame.shifted(CorePoint {
+        x: shadow.offset_x,
+        y: shadow.offset_y,
+      }),
+      None => frame,
+    };
+    let Some(GlyphRun {
+      font,
+      text,
+      glyphs,
+      origin,
+    }) = self
+      .emitter
+      .glyph_run(run, self.built, shifted, frame.origin.y)
+    else {
+      return;
+    };
+    let shaped = &run.glyph_run;
+    let shadow_color = self.shadow.map(|shadow| shadow.color);
+    let paint = fill_from_rgba(
+      self
+        .emitter
+        .filtered(shadow_color.unwrap_or(shaped.brush.color)),
+      1.0,
+    );
+    let stroke = self.glyph_stroke(shaped, &paint, shadow_color);
+    let surface = &mut *self.device.surface;
+    let oblique = self.emitter.push_oblique(shaped, origin, surface);
+
+    // Outlined: text extraction keys on the text-showing operator, whatever the rendering mode,
+    // so glyphs drawn a second time for a shadow or a background would put the text in the text
+    // layer twice. Paths paint the same pixels and stay out of it.
+    if shadow_color.is_none() && fill == GlyphFill::Background {
+      for background in &self.text_fills {
+        surface.set_fill(Some(background.clone()));
+        surface.set_stroke(background_stroke(shaped, background));
+        surface.draw_glyphs(origin, &glyphs, font.clone(), text, shaped.font_size, true);
+      }
+    }
+
+    surface.set_fill(Some(paint));
+    surface.set_stroke(stroke);
+    surface.draw_glyphs(
+      origin,
+      &glyphs,
+      font,
+      text,
+      shaped.font_size,
+      shadow_color.is_some(),
+    );
+
+    if oblique {
+      surface.pop();
+    }
+    surface.set_stroke(None);
+  }
 }
 
 /// A run ready to draw: its font, the text its glyphs map to, and where it

@@ -561,23 +561,6 @@ impl SvgDocument {
     }
   }
 
-  /// Runs `emit` inside an opacity group when `opacity` is below 1, or directly
-  /// otherwise.
-  pub(crate) fn with_opacity(
-    &mut self,
-    opacity: f32,
-    emit: impl FnOnce(&mut Self) -> io::Result<()>,
-  ) -> io::Result<()> {
-    if opacity < 1.0 {
-      let group = self.begin_group(Affine::IDENTITY, opacity, None, None)?;
-
-      emit(self)?;
-      self.end_group(group)
-    } else {
-      emit(self)
-    }
-  }
-
   /// Defines a gaussian-blur filter (for text-shadow) and returns its `url(#id)`.
   pub(crate) fn blur_filter(&mut self, std_deviation: f32) -> io::Result<String> {
     let (id, reference) = self.alloc_id("bl");
