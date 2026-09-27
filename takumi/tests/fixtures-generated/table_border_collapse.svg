@@ -452,8 +452,7 @@
     <use href="#g36" x="634.07" y="258"/>
     <use href="#g43" x="638.28" y="258"/>
   </g>
-  <path d="M735 234h147v35h-147v-35Zm.67.67h145.66v33.66h-145.66v-33.66Z" fill="#94a3b8" fill-rule="evenodd"/>
-  <path d="M736.33 235.33h144.34v32.34h-144.34v-32.34Zm.67.67h143v31h-143v-31Z" fill="#94a3b8" fill-rule="evenodd"/>
+  <path d="M735 234h147v35h-147v-35Zm2 2h143v31h-143v-31Z" fill="#94a3b8" fill-rule="evenodd"/>
   <g fill="#000">
     <use href="#g43" x="745" y="258"/>
     <use href="#g22" x="755.53" y="258"/>

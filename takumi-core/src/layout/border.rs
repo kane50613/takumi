@@ -206,7 +206,7 @@ impl BorderProperties {
       side,
       width,
       color,
-      style,
+      style: style.effective(width),
     })
   }
 
@@ -1017,6 +1017,16 @@ const DASHED_GAP_RATIO_THIN: f32 = 2.0;
 const DOTTED_ENDPOINT_EPSILON: f32 = 1.0e-2;
 
 impl BorderStyle {
+  /// Blink's `BorderEdge::EffectiveStyle`: a double side under 3px and a groove or ridge side up
+  /// to 1px paint solid.
+  pub(crate) fn effective(self, width: f32) -> Self {
+    match self {
+      BorderStyle::Double if width < 3.0 => BorderStyle::Solid,
+      BorderStyle::Groove | BorderStyle::Ridge if width <= 1.0 => BorderStyle::Solid,
+      style => style,
+    }
+  }
+
   /// Returns a dash interval and round-cap flag for this style. A dotted line up to 3px wide
   /// draws square dots, as Blink does, and a box side fills its end dots on its own.
   pub fn dash_pattern(self, width: f32, length: f32, closed: bool) -> Option<BorderDash> {
