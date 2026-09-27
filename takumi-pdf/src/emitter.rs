@@ -1667,12 +1667,25 @@ impl PaintDevice for SurfaceDevice<'_, '_> {
   fn fill_shadow(&mut self, shape: &ShadowShape, shadow: &SizedShadow, transform: Affine) {
     let color = filtered(self.filter, shadow.color);
     let transform = Affine::translation(shadow.offset_x, shadow.offset_y) * transform;
+    let bands = Band::of(shadow.blur_radius);
+    // The bands' alphas add up to the blur's coverage for an opaque colour, so a translucent one
+    // applies its alpha once, over all of them.
+    let grouped = bands.len() > 1 && color[3] < u8::MAX;
+    let band_color = if grouped {
+      [color[0], color[1], color[2], u8::MAX]
+    } else {
+      color
+    };
 
-    for band in Band::of(shadow.blur_radius) {
+    if grouped {
+      self.begin_layer(f32::from(color[3]) / f32::from(u8::MAX));
+    }
+
+    for band in bands {
       let band_shape = shape.spread(band.spread).fill_shape();
       let fill = Fill {
         rule: krilla_fill_rule(band_shape.rule()),
-        ..fill_from_rgba(color, band.alpha)
+        ..fill_from_rgba(band_color, band.alpha)
       };
 
       self.draw(
@@ -1683,6 +1696,10 @@ impl PaintDevice for SurfaceDevice<'_, '_> {
           surface.draw_path(path);
         },
       );
+    }
+
+    if grouped {
+      self.end_layer();
     }
   }
 }
@@ -1853,19 +1870,32 @@ impl GlyphDevice for TextDevice<'_, '_, '_> {
       // Each band spreads the glyphs by stroking them, inside a group of the band's opacity so
       // the fill and stroke, and neighbouring glyphs, don't stack where they overlap.
       Some(shadow) => {
+        // The shadow colour's alpha applies once, over bands drawn opaque.
+        let translucent = paint.opacity != NormalizedF32::ONE;
+
+        if translucent {
+          surface.push_opacity(paint.opacity);
+        }
+
         for band in Band::of(shadow.blur_radius) {
           let width = 2.0 * band.spread + stroke.as_ref().map_or(0.0, |stroke| stroke.width);
 
           surface.push_opacity(normalized(band.alpha));
-          surface.set_fill(Some(paint.clone()));
+          surface.set_fill(Some(Fill {
+            opacity: NormalizedF32::ONE,
+            ..paint.clone()
+          }));
           surface.set_stroke((width > 0.0).then(|| Stroke {
             paint: paint.paint.clone(),
-            opacity: paint.opacity,
+            opacity: NormalizedF32::ONE,
             width,
             line_join: LineJoin::Round,
             ..Stroke::default()
           }));
           surface.draw_glyphs(origin, &glyphs, font.clone(), text, shaped.font_size, true);
+          surface.pop();
+        }
+        if translucent {
           surface.pop();
         }
       }
