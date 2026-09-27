@@ -176,7 +176,7 @@
     <use href="#g3" x="121.87" y="386"/>
   </g>
   <rect x="16" y="400" width="420" height="35" fill="#e2e8f0"/>
-  <rect x="16" y="400" width="104" height="35" fill="#bfdbfe"/>
+  <rect x="16" y="400" width="99" height="35" fill="#bfdbfe"/>
   <g fill="#000">
     <use href="#g12" x="22" y="424"/>
     <use href="#g13" x="31.74" y="424"/>
