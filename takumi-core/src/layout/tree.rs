@@ -1497,22 +1497,36 @@ impl RenderNode {
   }
 
   /// The child-index path to the first node in preorder, `self` included, that `matches` accepts.
-  pub fn path_where(&self, matches: impl Fn(&RenderNode) -> bool + Copy) -> Option<Vec<usize>> {
+  pub fn path_where(&self, matches: impl Fn(&RenderNode) -> bool) -> Option<Vec<usize>> {
+    let mut path = Vec::new();
+    // Each open node with the index of the next child to visit, so a deep tree never recurses.
+    let mut open = vec![(self, 0)];
+
     if matches(self) {
-      return Some(Vec::new());
+      return Some(path);
     }
 
-    self
-      .children
-      .as_deref()?
-      .iter()
-      .enumerate()
-      .find_map(|(index, child)| {
-        let mut path = child.path_where(matches)?;
+    while let Some((node, next)) = open.last_mut() {
+      let Some(child) = node
+        .children
+        .as_deref()
+        .and_then(|children| children.get(*next))
+      else {
+        open.pop();
+        path.pop();
+        continue;
+      };
 
-        path.insert(0, index);
-        Some(path)
-      })
+      path.push(*next);
+      *next += 1;
+
+      if matches(child) {
+        return Some(path);
+      }
+      open.push((child, 0));
+    }
+
+    None
   }
 
   /// Used border widths in pixels.
