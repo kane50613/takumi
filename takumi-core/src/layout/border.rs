@@ -1018,10 +1018,7 @@ const DOTTED_ENDPOINT_EPSILON: f32 = 1.0e-2;
 
 impl BorderStyle {
   /// Returns a dash interval and round-cap flag for this style. A dotted line up to 3px wide
-  /// draws square dots, as Blink does.
-  ///
-  /// Approximate: Blink also nudges thin dotted lines by whole pixels so both ends land on a
-  /// dot; these dots keep an even spacing instead.
+  /// draws square dots, as Blink does, and a box side fills its end dots on its own.
   pub fn dash_pattern(self, width: f32, length: f32, closed: bool) -> Option<BorderDash> {
     if width <= 0.0 || length <= 0.0 {
       return None;
