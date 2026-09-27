@@ -107,7 +107,7 @@ impl PendingFinish {
     if let Some(deferred) = DeferredOutline::of(&node.context, self.layout) {
       match outlines {
         Some(outlines) => outlines.push(deferred),
-        None => deferred.paint(canvas),
+        None => deferred.paint(canvas)?,
       }
     }
 
@@ -243,7 +243,7 @@ impl<'a> ScenePainter<'a> {
     }
 
     for outline in &outlines {
-      outline.paint(self.canvas);
+      outline.paint(self.canvas)?;
     }
 
     if let Some(DeferredNodeRender::Deferred { path, finish }) = deferred_root {

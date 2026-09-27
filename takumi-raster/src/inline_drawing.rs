@@ -48,7 +48,7 @@ pub(crate) fn draw_inline_box(
       draw_box_shell(&context, canvas, layout)?;
       draw_own_content(node, &context, canvas, layout)?;
       if let Some(outline) = DeferredOutline::of(&context, layout) {
-        outline.paint(canvas);
+        outline.paint(canvas)?;
       }
       Ok(())
     }
