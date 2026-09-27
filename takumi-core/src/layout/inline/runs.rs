@@ -44,10 +44,6 @@ pub struct RunMetrics {
   pub underline_offset: f32,
   /// Underline stroke thickness.
   pub underline_size: f32,
-  /// Strikethrough offset from the baseline.
-  pub strikethrough_offset: f32,
-  /// Strikethrough stroke thickness.
-  pub strikethrough_size: f32,
 }
 
 /// Per-glyph cluster text ranges for a [`GlyphRun`], aligned to its positioned glyphs.
@@ -419,8 +415,6 @@ impl BuiltInlineLayout<'_> {
               descent: metrics.descent,
               underline_offset: metrics.underline_offset,
               underline_size: metrics.underline_size,
-              strikethrough_offset: metrics.strikethrough_offset,
-              strikethrough_size: metrics.strikethrough_size,
             },
             font_size: run.font_size(),
             font_index: run.font().index,

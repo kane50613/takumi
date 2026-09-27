@@ -35,7 +35,10 @@ pub struct DecorationRect {
 }
 
 impl ShapedRun {
-  /// Raw metrics for an enabled decoration line.
+  /// The top and thickness of an enabled decoration line, after Blink's `TextDecorationInfo`: an
+  /// underline where [`ShapedRun::underline_offset_from_baseline`] puts it, an overline resting
+  /// on the text's top, and a line-through centred a third of the ascent above the baseline.
+  /// `from-font` takes the font's underline thickness for every line.
   pub fn decoration_line(
     &self,
     line: TextDecorationLines,
@@ -45,30 +48,20 @@ impl ShapedRun {
       return None;
     }
 
-    let metrics = self.metrics;
-    let thickness = |font_thickness: f32| match self.brush.decoration_thickness {
+    let ascent = self.metrics.ascent;
+    let thickness = match self.brush.decoration_thickness {
       SizedTextDecorationThickness::Value(value) => value,
-      SizedTextDecorationThickness::FromFont => font_thickness,
+      SizedTextDecorationThickness::FromFont => self.metrics.underline_size,
     };
-    let (offset, font_thickness) = match line {
-      TextDecorationLines::UNDERLINE => (
-        self.baseline
-          + baseline_shift
-          + self.underline_offset_from_baseline(thickness(metrics.underline_size)),
-        metrics.underline_size,
-      ),
-      TextDecorationLines::OVERLINE => (
-        self.baseline + baseline_shift - metrics.ascent - metrics.underline_offset,
-        metrics.underline_size,
-      ),
-      TextDecorationLines::LINE_THROUGH => (
-        self.baseline + baseline_shift - metrics.strikethrough_offset,
-        metrics.strikethrough_size,
-      ),
+    let baseline = self.baseline + baseline_shift;
+    let top = match line {
+      TextDecorationLines::UNDERLINE => baseline + self.underline_offset_from_baseline(thickness),
+      TextDecorationLines::OVERLINE => baseline - ascent - thickness.floor(),
+      TextDecorationLines::LINE_THROUGH => baseline - ascent / 3.0 - thickness / 2.0,
       _ => return None,
     };
 
-    Some((offset, thickness(font_thickness)))
+    Some((top, thickness))
   }
 
   /// The run's outline glyphs, positioned from `origin`.

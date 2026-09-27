@@ -13,7 +13,7 @@
     <use href="#g2" x="252.02" y="93.72"/>
     <use href="#g6" x="264.54" y="93.72"/>
   </g>
-  <rect x="40" y="78" width="254" height="4" fill="#00f"/>
+  <rect x="40" y="76" width="254" height="4" fill="#00f"/>
   <rect x="943" y="97" width="99" height="4" fill="#f00"/>
   <g fill="#f00">
     <use href="#g7" x="955.1" y="93.72"/>
