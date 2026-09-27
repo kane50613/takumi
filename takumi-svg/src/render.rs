@@ -18,12 +18,11 @@ use takumi_core::{
   },
   painter::{
     BackgroundClipArea, BoxBorderPainter, BoxFrame, BoxPainter, FillShape, GlyphDevice, GlyphFill,
-    LayerBounds, OverflowClip, OwnContent, PaintDevice, PendingOutline, ShadowShape, StrokeStyle,
-    UNBOUNDED,
+    LayerBounds, OverflowClip, OwnContent, PaintDevice, ShadowShape, StrokeStyle, UNBOUNDED,
   },
   path_data::{edges_path_data, path_data},
   resources::image::ImageSource,
-  scene::{BoxPart, Scene},
+  scene::Scene,
   shadow::SizedShadow,
   style::{
     Affine, BackgroundImage, BlendMode, Color, ComputedStyle, FillRule, FontFamily, Isolation,
@@ -287,6 +286,30 @@ impl<'n> PlacedBox<'n> {
     })
   }
 
+  /// Emits the box's shadows, background and border.
+  pub(crate) fn emit_decorations(&self, doc: &mut SvgDocument) -> io::Result<()> {
+    if !self.node.paints_own_box() {
+      return Ok(());
+    }
+
+    self.emit_box_shadows(doc)?;
+    // `background-clip` picks the shape a background fills, never when it paints:
+    // the border draws over the ring, as it does in Blink.
+    self.emit_background(doc)?;
+    self.emit_inset_box_shadows(doc)?;
+    DocumentDevice::paint(doc, |device| {
+      self.painter.paint_border(self.frame.origin, device);
+    })
+  }
+
+  /// Emits the box's outline.
+  pub(crate) fn emit_outline(&self, doc: &mut SvgDocument) -> io::Result<()> {
+    match self.painter.pending_outline(self.frame.origin) {
+      Some(outline) => DocumentDevice::paint(doc, |device| outline.paint(device)),
+      None => Ok(()),
+    }
+  }
+
   /// Emits the node's own content: its inline content or its image. Block children are
   /// painted separately.
   pub(crate) fn emit_own_content(&self, doc: &mut SvgDocument) -> io::Result<()> {
@@ -298,54 +321,42 @@ impl<'n> PlacedBox<'n> {
   }
 }
 
-/// A box's open effect groups and deferred outline, closed after its content.
-pub(crate) struct BoxChrome {
-  /// The outline, painted when the box closes. CSS 2.1 Appendix E puts it
-  /// above the box's own content, so it cannot go with the other decorations.
-  outline: Option<PendingOutline>,
-  blend: Option<GroupToken>,
-  isolate: Option<GroupToken>,
-  mask: Option<GroupToken>,
-  filter_wrappers: Vec<GroupToken>,
-  outer: Option<GroupToken>,
-  clip_group: Option<GroupToken>,
-  child_group: Option<GroupToken>,
-}
+/// The groups a box's effects open around everything it and its descendants paint.
+pub(crate) struct EffectGroups(Vec<GroupToken>);
 
-impl BoxChrome {
-  /// Emits `part` of a box's shared chrome and opens its child group.
+impl EffectGroups {
+  /// Opens `placed`'s blend, isolation, mask, filter and opacity groups, moved by
+  /// `group_transform`, then its `clip-path`.
   pub(crate) fn open(
     placed: &PlacedBox,
     group_transform: Affine,
-    part: BoxPart,
     doc: &mut SvgDocument,
   ) -> io::Result<Self> {
     let context = &placed.node.context;
     let style = &context.style;
+    let mut groups = Vec::new();
 
-    let blend = (style.mix_blend_mode != BlendMode::Normal)
-      .then(|| doc.begin_blend_group(&style.mix_blend_mode.to_css_string()))
-      .transpose()?;
-
-    let isolate = (style.isolation == Isolation::Isolate)
-      .then(|| doc.begin_isolate_group())
-      .transpose()?;
-
-    let mask = placed.begin_mask_group(doc)?;
+    if style.mix_blend_mode != BlendMode::Normal {
+      groups.push(doc.begin_blend_group(&style.mix_blend_mode.to_css_string())?);
+    }
+    if style.isolation == Isolation::Isolate {
+      groups.push(doc.begin_isolate_group()?);
+    }
+    groups.extend(placed.begin_mask_group(doc)?);
 
     let opacity = style.opacity.0;
     let filter_refs = doc.filter(&style.filter, context, placed.frame.layout.size, false)?;
-    let filter_wrappers = doc.begin_filter_wrappers(&filter_refs)?;
-    let outer = (!group_transform.is_identity() || opacity < 1.0 || !filter_refs.is_empty())
-      .then(|| {
-        doc.begin_group(
-          group_transform,
-          opacity,
-          None,
-          filter_refs.first().map(String::as_str),
-        )
-      })
-      .transpose()?;
+
+    groups.extend(doc.begin_filter_wrappers(&filter_refs)?);
+
+    if !group_transform.is_identity() || opacity < 1.0 || !filter_refs.is_empty() {
+      groups.push(doc.begin_group(
+        group_transform,
+        opacity,
+        None,
+        filter_refs.first().map(String::as_str),
+      )?);
+    }
 
     // Anchor the filter region to the border box: the raster backend filters the
     // element's full layer box, but an SVG filter's default objectBoundingBox
@@ -356,59 +367,19 @@ impl BoxChrome {
       doc.rect(Frame::border_box(placed.frame), Rgba::TRANSPARENT)?;
     }
 
-    let clip_group = placed.begin_clip_path_group(doc)?;
+    groups.extend(placed.begin_clip_path_group(doc)?);
 
-    if part != BoxPart::Content && placed.node.paints_own_box() {
-      placed.emit_box_shadows(doc)?;
-
-      // `background-clip` picks the shape a background fills, never when it paints:
-      // the border draws over the ring, as it does in Blink.
-      placed.emit_background(doc)?;
-      placed.emit_inset_box_shadows(doc)?;
-      DocumentDevice::paint(doc, |device| {
-        placed.painter.paint_border(placed.frame.origin, device);
-      })?;
-    }
-
-    // Children, clipped to the (rounded) padding box when overflow is not visible.
-    let child_group = placed
-      .overflow_clip_path_data()
-      .map(|data| doc.begin_clipped_group(&data))
-      .transpose()?;
-
-    Ok(Self {
-      outline: (part != BoxPart::Decorations)
-        .then(|| placed.painter.pending_outline(placed.frame.origin))
-        .flatten(),
-      blend,
-      isolate,
-      mask,
-      filter_wrappers,
-      outer,
-      clip_group,
-      child_group,
-    })
+    Ok(Self(groups))
   }
 
-  pub(crate) fn take_outline(&mut self) -> Option<PendingOutline> {
-    self.outline.take()
+  /// The groups, outermost first.
+  pub(crate) fn into_tokens(self) -> Vec<GroupToken> {
+    self.0
   }
 
-  /// Closes a box's groups and paints its deferred outline.
+  /// Closes the groups, innermost first.
   pub(crate) fn close(self, doc: &mut SvgDocument) -> io::Result<()> {
-    if let Some(group) = self.child_group {
-      doc.end_group(group)?;
-    }
-    if let Some(pending) = self.outline {
-      DocumentDevice::paint(doc, |device| pending.paint(device))?;
-    }
-    let groups = [self.clip_group, self.outer];
-    for group in groups.into_iter().flatten() {
-      doc.end_group(group)?;
-    }
-    doc.end_filter_wrappers(self.filter_wrappers)?;
-    let groups = [self.mask, self.isolate, self.blend];
-    for group in groups.into_iter().flatten() {
+    for group in self.0.into_iter().rev() {
       doc.end_group(group)?;
     }
     Ok(())
@@ -700,10 +671,21 @@ pub(crate) fn emit_inline_box(
     InlineBoxPaint::Replaced { node, layout } => {
       let placed = PlacedBox::new(node, BoxFrame::new(layout, origin));
       let group_transform = placed.element_transform().unwrap_or(Affine::IDENTITY);
-      let chrome = BoxChrome::open(&placed, group_transform, BoxPart::Whole, doc)?;
+      let groups = EffectGroups::open(&placed, group_transform, doc)?;
+
+      placed.emit_decorations(doc)?;
+
+      let content_clip = placed
+        .overflow_clip_path_data()
+        .map(|data| doc.begin_clipped_group(&data))
+        .transpose()?;
 
       placed.emit_own_content(doc)?;
-      chrome.close(doc)
+      if let Some(group) = content_clip {
+        doc.end_group(group)?;
+      }
+      placed.emit_outline(doc)?;
+      groups.close(doc)
     }
   }
 }

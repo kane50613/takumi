@@ -2,6 +2,8 @@
   <rect x="0" y="0" width="1200" height="630" fill="#fff"/>
   <g transform="matrix(.866 .5 -.5 .866 390.833 157.287)">
     <rect x="0" y="0" width="520" height="64" fill="#e2e8f0"/>
+  </g>
+  <g transform="matrix(.866 .5 -.5 .866 390.833 157.287)">
     <g fill="#000">
       <use href="#g0" x="0" y="36"/>
       <use href="#g1" x="16.38" y="36"/>
@@ -23,6 +25,8 @@
       <use href="#g3" x="113.42" y="36"/>
       <use href="#g7" x="128.06" y="36"/>
     </g>
+  </g>
+  <g transform="matrix(.866 .5 -.5 .866 390.833 157.287)">
     <path d="M-16-16h552v96h-552v-96Zm6 6h540v84h-540v-84Z" fill="#16a34a" fill-rule="evenodd"/>
   </g>
   <defs>
