@@ -36,9 +36,10 @@ impl PathData {
     }
   }
 
-  /// Writes a command letter unless the grammar lets it repeat implicitly.
+  /// Writes a command letter unless the grammar lets it repeat implicitly. Pairs after a moveto
+  /// are linetos, so a second moveto keeps its letter.
   pub fn command(&mut self, letter: u8) {
-    let elide = matches!(self.last_command, Some(prev) if prev == letter
+    let elide = matches!(self.last_command, Some(prev) if (prev == letter && !matches!(letter, b'M' | b'm'))
       || (prev == b'M' && letter == b'L')
       || (prev == b'm' && letter == b'l'));
     if !elide {
@@ -453,6 +454,21 @@ mod tests {
       PathCommand::LineTo(pt(1.2345, 6.789)),
     ];
     assert_eq!(path_data(&commands, Affine::IDENTITY), "M0 0l1.23 6.79");
+  }
+
+  #[test]
+  fn consecutive_moves_keep_their_letter() {
+    let commands = [
+      PathCommand::MoveTo(pt(0.0, 0.0)),
+      PathCommand::LineTo(pt(10.0, 0.0)),
+      PathCommand::MoveTo(pt(20.0, 0.0)),
+      PathCommand::MoveTo(pt(30.0, 5.0)),
+      PathCommand::LineTo(pt(40.0, 5.0)),
+    ];
+    assert_eq!(
+      path_data(&commands, Affine::IDENTITY),
+      "M0 0h10m10 0m10 5h10"
+    );
   }
 
   #[test]
