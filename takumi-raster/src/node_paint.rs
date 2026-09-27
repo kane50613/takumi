@@ -389,6 +389,10 @@ impl<'c> CanvasDevice<'c> {
 }
 
 impl PaintDevice for CanvasDevice<'_> {
+  fn transform(&self) -> Affine {
+    self.transform
+  }
+
   fn fill_shape(&mut self, shape: &FillShape, color: Color, transform: Affine) {
     if let Some(shadow) = self.shadow {
       return self.draw_shadow_of(

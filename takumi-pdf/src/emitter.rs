@@ -60,9 +60,9 @@ use crate::{
   },
   options::{PT_PER_PX, PdfError},
   paint::{
-    draw_stream, edges_path, empty_path, expanded_radial_stops, fill_from_rgba, krilla_blend,
-    krilla_fill_rule, krilla_path, krilla_stop, krilla_stops, krilla_transform, normalized,
-    pop_transforms, rect_path, shape_path, spread,
+    core_transform, draw_stream, edges_path, empty_path, expanded_radial_stops, fill_from_rgba,
+    krilla_blend, krilla_fill_rule, krilla_path, krilla_stop, krilla_stops, krilla_transform,
+    normalized, pop_transforms, rect_path, shape_path, spread,
   },
   shadow::Band,
   tags::{ARTIFACT, TagCollector},
@@ -1567,6 +1567,11 @@ impl SurfaceDevice<'_, '_> {
 }
 
 impl PaintDevice for SurfaceDevice<'_, '_> {
+  fn transform(&self) -> Affine {
+    Affine::scale(PT_PER_PX.recip(), PT_PER_PX.recip())
+      * core_transform(self.surface.page_transform())
+  }
+
   fn fill_shape(&mut self, shape: &FillShape, color: Color, transform: Affine) {
     let fill = Fill {
       rule: krilla_fill_rule(shape.rule()),
@@ -1800,6 +1805,10 @@ impl TextDevice<'_, '_, '_> {
 }
 
 impl PaintDevice for TextDevice<'_, '_, '_> {
+  fn transform(&self) -> Affine {
+    self.device.transform()
+  }
+
   fn fill_shape(&mut self, shape: &FillShape, color: Color, transform: Affine) {
     let (color, transform) = self.shadowed(color, transform);
 

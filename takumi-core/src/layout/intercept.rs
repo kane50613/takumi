@@ -1,13 +1,12 @@
 //! Where a glyph outline crosses a horizontal band.
 //!
-//! `text-decoration-skip-ink` punches the glyphs out of an underline. Chromium
-//! asks Skia for the x-ranges the outline occupies inside the band the
-//! decoration covers (`SkFont::getIntercepts`, reached through
-//! `Font::GetTextIntercepts`), then clips those ranges out of the line. This is
-//! the same question, answered from the path itself so every backend can ask
-//! it.
+//! `text-decoration-skip-ink` punches the glyphs out of an underline or overline. Chromium asks
+//! Skia for the x-ranges the outline occupies inside the band the decoration covers
+//! (`SkFont::getIntercepts`, reached through `Font::GetTextIntercepts`), then clips those ranges
+//! out of the line. This is the same question, answered from the path itself so every backend can
+//! ask it.
 
-use std::sync::LazyLock;
+use std::{ops::RangeInclusive, sync::LazyLock};
 
 use quick_cache::sync::Cache;
 use smallvec::SmallVec;
@@ -26,7 +25,7 @@ const CURVE_STEPS: usize = 16;
 const BAND_SAMPLES: usize = 8;
 
 /// Disjoint x-ranges, left to right.
-type Spans = SmallVec<[(f32, f32); 4]>;
+pub type Spans = SmallVec<[(f32, f32); 4]>;
 
 /// The x-ranges `paths` fills between `top` and `bottom`, left to right and
 /// never overlapping.
@@ -60,32 +59,13 @@ const MAX_DILATION: f32 = 13.0;
 /// insetting the decoration bounds before asking for intercepts.
 const MIN_INTERSECTION: f32 = 0.5;
 
-/// The stretches of a decoration that survive `text-decoration-skip-ink`.
+/// The x-ranges a decoration gives up to the glyphs it runs through, dilated as Blink's
+/// `TextPainter::ClipDecorationLine` dilates them.
 ///
-/// `glyphs` places each outline in the decoration's own space; `start` and
-/// `end` bound the line; `top` and `bottom` bound its thickness. Chromium asks
-/// Skia which x-ranges the glyphs occupy inside that band and clips them out,
-/// growing each by the line's thickness so a stroke never touches the line it
-/// interrupts. This answers the same question from the outlines themselves.
-pub fn skip_ink_spans<'g>(
-  glyphs: impl Iterator<Item = (Point<f32>, &'g ResolvedOutlineGlyph)>,
-  start: f32,
-  end: f32,
-  top: f32,
-  bottom: f32,
-) -> SmallVec<[(f32, f32); 4]> {
-  let skips = skip_ink_ranges(glyphs, top, bottom, bottom - top);
-
-  remaining_spans(start, end, &skips)
-}
-
-/// The x-ranges a decoration gives up to the glyphs it runs through.
-///
-/// `glyphs` places each outline in the decoration's own space. `top` and
-/// `bottom` bound the decoration; `thickness` sets how far a skipped range
-/// grows past the ink, which keeps a stroke from touching the line it
-/// interrupts.
-fn skip_ink_ranges<'g>(
+/// `glyphs` places each outline in the decoration's own space. `top` and `bottom` bound the band
+/// the decoration paints; `thickness` sets how far a skipped range grows past the ink, which keeps
+/// a stroke from touching the line it interrupts.
+pub fn skip_ink_ranges<'g>(
   glyphs: impl Iterator<Item = (Point<f32>, &'g ResolvedOutlineGlyph)>,
   top: f32,
   bottom: f32,
@@ -111,6 +91,113 @@ fn skip_ink_ranges<'g>(
 
   merge(ranges)
 }
+
+/// Whether `text-decoration-skip-ink: auto` cuts a decoration around `character`, after Blink's
+/// `Character::CanTextDecorationSkipInk`: never around slashes, the low line, CJK ideographs and
+/// symbols, or Hangul.
+pub fn skips_ink(character: char) -> bool {
+  let code = u32::from(character);
+
+  !matches!(character, '/' | '\\' | '_')
+    && CJK_IDEOGRAPHS_OR_SYMBOLS.binary_search(&code).is_err()
+    && !CJK_IDEOGRAPH_OR_SYMBOL_RANGES
+      .iter()
+      .chain(NO_SKIP_INK_BLOCKS)
+      .any(|range| range.contains(&code))
+}
+
+/// Blink's `kIsCjkIdeographOrSymbolArray`, sorted.
+const CJK_IDEOGRAPHS_OR_SYMBOLS: &[u32] = &[
+  0x2C7, 0x2CA, 0x2CB, 0x2D9, 0x2020, 0x2021, 0x2030, 0x203B, 0x203C, 0x2042, 0x2047, 0x2048,
+  0x2049, 0x2051, 0x20DD, 0x20DE, 0x2100, 0x2103, 0x2105, 0x2109, 0x210A, 0x2113, 0x2116, 0x2121,
+  0x212B, 0x213B, 0x2150, 0x2151, 0x2152, 0x217F, 0x2189, 0x2307, 0x2312, 0x23CE, 0x2423, 0x25A0,
+  0x25A1, 0x25A2, 0x25AA, 0x25AB, 0x25B1, 0x25B2, 0x25B3, 0x25B6, 0x25B7, 0x25BC, 0x25BD, 0x25C0,
+  0x25C1, 0x25C6, 0x25C7, 0x25C9, 0x25CB, 0x25CC, 0x25EF, 0x2605, 0x2606, 0x260E, 0x2616, 0x2617,
+  0x26A0, 0x2713, 0x271A, 0x273F, 0x2740, 0x2756, 0x2763, 0x2B1A, 0xFE10, 0xFE11, 0xFE12, 0xFE19,
+  0xFF1D, 0x1F100, 0x1F200, 0x1F237, 0x1F32C, 0x1F336, 0x1F37D, 0x1F43F, 0x1F54F, 0x1F93B, 0x1F946,
+];
+
+/// Blink's `kIsCjkIdeographOrSymbolRanges`.
+const CJK_IDEOGRAPH_OR_SYMBOL_RANGES: &[RangeInclusive<u32>] = &[
+  0x2E80..=0x2FDF,
+  0x31C0..=0x31EF,
+  0x3400..=0x4DBF,
+  0x4E00..=0x9FFF,
+  0xF900..=0xFAFF,
+  0x20000..=0x2FFFF,
+  0x2156..=0x215A,
+  0x2160..=0x216B,
+  0x2170..=0x217B,
+  0x23BE..=0x23CC,
+  0x2460..=0x2492,
+  0x249C..=0x24FF,
+  0x25CE..=0x25D3,
+  0x25E2..=0x25E6,
+  0x2600..=0x2603,
+  0x2660..=0x266F,
+  0x2672..=0x267D,
+  0x2776..=0x277F,
+  0x2FF0..=0x302D,
+  0x3031..=0x312F,
+  0x3190..=0x31BF,
+  0x3200..=0x33FF,
+  0x4DC0..=0x4DFF,
+  0xF860..=0xF862,
+  0xFE30..=0xFE6F,
+  0xFF00..=0xFF0C,
+  0xFF0E..=0xFF1A,
+  0xFF1F..=0xFFEF,
+  0x16FE0..=0x16FFF,
+  0x17000..=0x187FF,
+  0x18800..=0x18AFF,
+  0x1B000..=0x1B0FF,
+  0x1B100..=0x1B12F,
+  0x1B170..=0x1B2FF,
+  0x1F110..=0x1F129,
+  0x1F130..=0x1F149,
+  0x1F150..=0x1F169,
+  0x1F170..=0x1F189,
+  0x1F202..=0x1F219,
+  0x1F21B..=0x1F22E,
+  0x1F230..=0x1F231,
+  0x1F23B..=0x1F24F,
+  0x1F252..=0x1F2FF,
+  0x1F321..=0x1F32A,
+  0x1F394..=0x1F39F,
+  0x1F3CD..=0x1F3CE,
+  0x1F3D4..=0x1F3DF,
+  0x1F3F1..=0x1F3F2,
+  0x1F3F5..=0x1F3F7,
+  0x1F4FD..=0x1F4FE,
+  0x1F53E..=0x1F54A,
+  0x1F568..=0x1F573,
+  0x1F576..=0x1F579,
+  0x1F57B..=0x1F58F,
+  0x1F591..=0x1F594,
+  0x1F597..=0x1F5A3,
+  0x1F5A5..=0x1F5E7,
+  0x1F5E9..=0x1F5FA,
+  0x1F650..=0x1F67F,
+  0x1F6C6..=0x1F6CB,
+  0x1F6CD..=0x1F6CF,
+  0x1F6D3..=0x1F6D4,
+  0x1F6D9..=0x1F6DB,
+  0x1F6E0..=0x1F6EA,
+  0x1F6ED..=0x1F6F3,
+  0x1F6FD..=0x1F6FF,
+  0x1F900..=0x1F90B,
+  0x1FAC9..=0x1FACC,
+];
+
+/// The Hangul and Linear B Ideogram blocks `CanTextDecorationSkipInk` adds to the CJK table.
+const NO_SKIP_INK_BLOCKS: &[RangeInclusive<u32>] = &[
+  0x1100..=0x11FF,
+  0x3130..=0x318F,
+  0xA960..=0xA97F,
+  0xAC00..=0xD7AF,
+  0xD7B0..=0xD7FF,
+  0x10080..=0x100FF,
+];
 
 /// Intercepts keyed by outline signature and band, shared across runs and renders.
 const INTERCEPT_CACHE_ITEMS: usize = 8192;
@@ -160,9 +247,9 @@ fn reaches_band(paths: &[PathCommand], top: f32, bottom: f32) -> bool {
   max_y >= top && min_y <= bottom
 }
 
-/// What is left of `start..end` once `skips` are taken out of it. `skips` must
-/// be sorted and disjoint, which is what [`skip_ink_ranges`] returns.
-fn remaining_spans(start: f32, end: f32, skips: &[(f32, f32)]) -> Spans {
+/// What is left of `start..end` once `skips` are taken out of it. `skips` must be sorted, as
+/// [`skip_ink_ranges`] returns them.
+pub fn remaining_spans(start: f32, end: f32, skips: &[(f32, f32)]) -> Spans {
   let mut spans = Spans::new();
   let mut left = start;
 

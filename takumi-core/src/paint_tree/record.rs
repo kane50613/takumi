@@ -54,12 +54,15 @@ pub(super) struct Recorder<'r> {
   opacities: Vec<f32>,
   shadow: Option<SizedShadow>,
   text: Option<RecordedText<'r>>,
+  /// Maps the node's space onto the page.
+  transform: Affine,
 }
 
 impl<'r> Recorder<'r> {
-  /// A recorder for a box or image.
-  pub(super) fn new() -> Self {
+  /// A recorder for a box or image whose space `transform` maps onto the page.
+  pub(super) fn new(transform: Affine) -> Self {
     Self {
+      transform,
       drawables: Vec::new(),
       role: Role::Background,
       clips: Vec::new(),
@@ -69,11 +72,11 @@ impl<'r> Recorder<'r> {
     }
   }
 
-  /// A recorder for a text node laying out `text`.
-  pub(super) fn text(text: RecordedText<'r>) -> Self {
+  /// A recorder for a text node laying out `text`, its space mapped onto the page by `transform`.
+  pub(super) fn text(text: RecordedText<'r>, transform: Affine) -> Self {
     Self {
       text: Some(text),
-      ..Self::new()
+      ..Self::new(transform)
     }
   }
 
@@ -212,6 +215,10 @@ fn shadow_offset(shadow: &SizedShadow) -> PaintPoint {
 }
 
 impl PaintDevice for Recorder<'_> {
+  fn transform(&self) -> Affine {
+    self.transform
+  }
+
   fn set_role(&mut self, role: PaintRole) {
     self.role = role.into();
   }

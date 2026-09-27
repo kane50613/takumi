@@ -1,10 +1,10 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630">
   <rect x="0" y="0" width="1200" height="316" fill="#f0f0f0"/>
-  <rect x="76" y="141" width="247.408" height="9" fill="#f00"/>
-  <rect x="349.47" y="141" width="169.009" height="9" fill="#f00"/>
-  <rect x="544.542" y="141" width="79.821" height="9" fill="#f00"/>
-  <rect x="661.607" y="141" width="249.144" height="9" fill="#f00"/>
-  <rect x="968.613" y="141" width="155.387" height="9" fill="#f00"/>
+  <rect x="76.656" y="141" width="246.344" height="9" fill="#f00"/>
+  <rect x="350" y="141" width="168" height="9" fill="#f00"/>
+  <rect x="545" y="141" width="79" height="9" fill="#f00"/>
+  <rect x="662" y="141" width="248" height="9" fill="#f00"/>
+  <rect x="969" y="141" width="154.344" height="9" fill="#f00"/>
   <g fill="#000">
     <use href="#g0" x="76.66" y="136"/>
     <use href="#g1" x="128.59" y="136"/>
@@ -29,7 +29,7 @@
     <use href="#g2" x="1037.33" y="136"/>
     <use href="#g7" x="1073.42" y="136"/>
   </g>
-  <rect x="65" y="293" width="1070" height="9" fill="#f00"/>
+  <rect x="65.856" y="293" width="1068.288" height="9" fill="#f00"/>
   <g fill="#000">
     <use href="#g14" x="65.86" y="288"/>
     <use href="#g3" x="120.48" y="288"/>
