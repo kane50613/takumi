@@ -357,7 +357,7 @@ fn collect_inline_items_impl<'n>(
   let content_start = items.len();
   let (margin, border_padding) = inline_span_spacing(node, depth);
 
-  if margin.left > 0.0 {
+  if margin.left != 0.0 {
     items.push(InlineItem::Spacer {
       width: margin.left,
       decorations: outer_decorations.cloned(),
@@ -406,7 +406,7 @@ fn collect_inline_items_impl<'n>(
       decorations: decorations.cloned(),
     });
   }
-  if margin.right > 0.0 {
+  if margin.right != 0.0 {
     items.push(InlineItem::Spacer {
       width: margin.right,
       decorations: outer_decorations.cloned(),
@@ -432,9 +432,7 @@ fn is_inline_span(node: &RenderNode, depth: usize) -> bool {
 }
 
 /// The margins, and the borders with the padding, an inline span reserves on the line, each
-/// side's only where it starts or ends.
-///
-/// Approximate: a negative margin reserves nothing, where Blink pulls the neighbouring content in.
+/// side's only where it starts or ends. A negative margin pulls the neighbouring content in.
 fn inline_span_spacing(node: &RenderNode, depth: usize) -> (Rect<f32>, Rect<f32>) {
   if !is_inline_span(node, depth) {
     return Default::default();
