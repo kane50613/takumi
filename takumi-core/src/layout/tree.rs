@@ -5,9 +5,10 @@ use std::{
 
 use parley::fontique::{Attributes, FontStyle as FontiqueStyle};
 use taffy::{
-  BlockContext, Cache, CacheTree, Display as TaffyDisplay, Layout, LayoutBlockContainer,
-  LayoutFlexboxContainer, LayoutGridContainer, LayoutInput, LayoutOutput, LayoutPartialTree,
-  NodeId as TaffyNodeId, RequestedAxis, RoundTree, RunMode, Size as TaffySize, SizingMode, Style,
+  AvailableSpace as TaffyAvailableSpace, BlockContext, Cache, CacheTree, Display as TaffyDisplay,
+  Layout, LayoutBlockContainer, LayoutFlexboxContainer, LayoutGridContainer, LayoutInput,
+  LayoutOutput, LayoutPartialTree, MaybeResolve, NodeId as TaffyNodeId, Position as TaffyPosition,
+  RequestedAxis, ResolveOrZero, RoundTree, RunMode, Size as TaffySize, SizingMode, Style,
   TraversePartialTree, TraverseTree, compute_block_layout, compute_cached_layout,
   compute_flexbox_layout, compute_grid_layout, compute_hidden_layout, compute_leaf_layout,
   compute_root_layout,
@@ -703,12 +704,46 @@ impl LayoutPartialTree for LayoutTree<'_> {
 }
 
 impl<'r> LayoutTree<'r> {
+  /// The inputs an absolutely positioned box shrinks to fit: taffy offers it its whole
+  /// containing block, where CSS 2 §10.3.7 leaves out its insets and margins.
+  fn out_of_flow_inputs(&self, node: TaffyNodeId, mut inputs: LayoutInput) -> LayoutInput {
+    let (None, TaffyAvailableSpace::Definite(width)) =
+      (inputs.known_dimensions.width, inputs.available_space.width)
+    else {
+      return inputs;
+    };
+    let Some(style) = self.get_layout_node_ref(node).map(|node| &node.style) else {
+      return inputs;
+    };
+
+    if style.position != TaffyPosition::Absolute {
+      return inputs;
+    }
+
+    let basis = inputs.parent_size.width;
+    let calc = |value, basis| self.resolve_calc_value(value, basis);
+    let reserved = [style.inset.left, style.inset.right]
+      .into_iter()
+      .filter_map(|inset| inset.maybe_resolve(basis, calc))
+      .chain(
+        [style.margin.left, style.margin.right]
+          .into_iter()
+          .map(|margin| margin.resolve_or_zero(basis, calc)),
+      )
+      .sum::<f32>();
+
+    inputs.available_space.width = TaffyAvailableSpace::Definite((width - reserved).max(0.0));
+    inputs
+  }
+
   fn compute_child_layout_inner(
     &mut self,
     node: TaffyNodeId,
     inputs: LayoutInput,
     block_ctx: Option<&mut BlockContext<'_>>,
   ) -> LayoutOutput {
+    let inputs = self.out_of_flow_inputs(node, inputs);
+
     self.update_node_style_for_available_space(
       node,
       Size::from_taffy(inputs.available_space).map(AvailableSpace::from_taffy),
