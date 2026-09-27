@@ -11,7 +11,6 @@ use takumi_core::{
   layout::{
     background_image_geometry::FillLayers,
     border::BorderProperties,
-    decoration::ClipBox,
     inline::{InlineBoxItem, PositionedInlineRun, VisualInlineBox},
     inline_box::{InlineBoxPaint, resolve_inline_box},
     node::Node,
@@ -144,14 +143,6 @@ impl<'n> PlacedBox<'n> {
     rounded_rect_path_data(self.border(), self.frame.layout.size, self.frame.origin)
   }
 
-  /// Absolute SVG path `d` for the rounded padding box.
-  fn padding_box_path_data(&self) -> String {
-    shape_path_data(
-      &ClipBox::padding_box(*self.border(), self.frame.layout).into(),
-      self.frame.origin,
-    )
-  }
-
   /// Absolute SVG path `d` the box clips its children to, or `None` when
   /// overflow is visible.
   fn overflow_clip_path_data(&self) -> Option<String> {
@@ -164,24 +155,11 @@ impl<'n> PlacedBox<'n> {
   }
 
   /// The clip path `d` and fill rule for a background's `clip` area. A square border box needs
-  /// none.
+  /// none, since the layers already stay inside it.
   fn background_clip_path_data(&self, clip: BackgroundClipArea) -> Option<(String, FillRule)> {
-    match clip {
-      BackgroundClipArea::BorderBox(border) => {
-        (!border.is_zero()).then(|| (self.border_box_path_data(), FillRule::NonZero))
-      }
-      BackgroundClipArea::Inner(clip) => Some((
-        shape_path_data(&clip.into(), self.frame.origin),
-        FillRule::NonZero,
-      )),
-      BackgroundClipArea::BorderArea(_) => {
-        // The border ring: the (rounded) border-box with the (rounded) padding box
-        // punched out, drawn even-odd so the background shows only under the border.
-        let outer = self.border_box_path_data();
-        let inner = self.padding_box_path_data();
-        Some((format!("{outer}{inner}"), FillRule::EvenOdd))
-      }
-      BackgroundClipArea::Text => None,
+    match clip.shape(self.frame.layout.size)? {
+      FillShape::Rect(_) => None,
+      shape => Some((shape_path_data(&shape, self.frame.origin), shape.rule())),
     }
   }
 
