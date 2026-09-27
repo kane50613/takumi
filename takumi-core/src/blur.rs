@@ -3,7 +3,9 @@
 //! sigma of 2 (`GaussianPass`), and above it three box passes run as one (`ThreeBoxApproxPass`
 //! for RGBA, `A8Pass` for alpha). Follows Skia under the notice in LICENSE-CHROMIUM.
 
-use std::f32::consts::PI;
+use std::{array, f32::consts::PI};
+
+use crate::geometry::Point;
 
 /// Largest sigma a three-box pass sums without overflowing a `u32`, Skia's `kMaxSigma`.
 pub const MAX_SIGMA: f32 = 135.0;
@@ -41,6 +43,9 @@ fn blur<const N: usize>(
   if width == 0 || height == 0 || pixels.len() != width * height {
     return;
   }
+  if sigma > MAX_SIGMA {
+    return blur_rescaled(pixels, width, height, sigma, rounding);
+  }
   let Some(pass) = Pass::new(sigma, rounding) else {
     return;
   };
@@ -70,6 +75,193 @@ fn blur<const N: usize>(
 /// Rows the horizontal pass turns on their side at once.
 const ROW_STRIP: usize = 16;
 
+/// Blurs past `MAX_SIGMA` as Skia's `FilterResult::Builder::blur` does: the image shrinks by
+/// `MAX_SIGMA / sigma` in `FilterResult::rescale`'s halving steps, blurs there, and scales back up.
+///
+/// Approximate: every resampling filters bilinearly in `f32`, where Skia's raster pipeline may
+/// filter at eight-bit precision, so a channel can land one step apart.
+fn blur_rescaled<const N: usize>(
+  pixels: &mut [[u8; N]],
+  width: usize,
+  height: usize,
+  sigma: f32,
+  rounding: Rounding,
+) {
+  let scale = MAX_SIGMA / sigma;
+  let source = Bounds {
+    left: 0.0,
+    top: 0.0,
+    right: width as f32,
+    bottom: height as f32,
+  };
+  let mut bounds = source;
+  let mut image = Raster {
+    left: 0,
+    top: 0,
+    width,
+    height,
+    pixels: pixels.to_vec(),
+  };
+
+  for step in (0..downscale_step_count(scale)).rev() {
+    let (factor_x, factor_y) = if step > 0 {
+      (0.5, 0.5)
+    } else {
+      (
+        source.width() * scale / bounds.width(),
+        source.height() * scale / bounds.height(),
+      )
+    };
+    let target = scale_about_center(bounds, factor_x, factor_y);
+
+    image = image.resampled(bounds, target);
+    bounds = target;
+  }
+
+  let low_sigma = (sigma * bounds.width() / source.width()).min(MAX_SIGMA);
+
+  blur(
+    &mut image.pixels,
+    image.width,
+    image.height,
+    low_sigma,
+    rounding,
+  );
+
+  for (index, pixel) in pixels.iter_mut().enumerate() {
+    let center = Point {
+      x: (index % width) as f32 + 0.5,
+      y: (index / width) as f32 + 0.5,
+    };
+
+    *pixel = image.sample(map_between(center, source, bounds));
+  }
+}
+
+/// Skia's `downscale_step_count`: how many resampling steps take an image to `scale`, all halving
+/// but the last, which is dropped when it would barely shrink.
+fn downscale_step_count(scale: f32) -> u32 {
+  let mut steps = (1.0 / scale).ceil().log2().ceil() as u32;
+
+  if steps > 0 {
+    let last = scale * (1 << (steps - 1)) as f32;
+    let limit = if steps == 1 { 1.0 - 1e-3 } else { 0.9 };
+
+    if last >= limit {
+      steps -= 1;
+    }
+  }
+  steps
+}
+
+/// `rect` scaled by `factor_x` and `factor_y` about its centre, Skia's `scale_about_center`.
+fn scale_about_center(rect: Bounds, factor_x: f32, factor_y: f32) -> Bounds {
+  let center_x = if factor_x == 1.0 {
+    0.0
+  } else {
+    0.5 * rect.left + 0.5 * rect.right
+  };
+  let center_y = if factor_y == 1.0 {
+    0.0
+  } else {
+    0.5 * rect.top + 0.5 * rect.bottom
+  };
+
+  Bounds {
+    left: center_x + factor_x * (rect.left - center_x),
+    top: center_y + factor_y * (rect.top - center_y),
+    right: center_x + factor_x * (rect.right - center_x),
+    bottom: center_y + factor_y * (rect.bottom - center_y),
+  }
+}
+
+/// `point` in `from` carried to the same place in `to`.
+fn map_between(point: Point<f32>, from: Bounds, to: Bounds) -> Point<f32> {
+  Point {
+    x: to.left + (point.x - from.left) * to.width() / from.width(),
+    y: to.top + (point.y - from.top) * to.height() / from.height(),
+  }
+}
+
+/// A rectangle by its edges, in pixels that need not be whole.
+#[derive(Clone, Copy)]
+struct Bounds {
+  left: f32,
+  top: f32,
+  right: f32,
+  bottom: f32,
+}
+
+impl Bounds {
+  fn width(self) -> f32 {
+    self.right - self.left
+  }
+
+  fn height(self) -> f32 {
+    self.bottom - self.top
+  }
+}
+
+/// An image placed on the pixel grid, its top-left pixel at `left`, `top`.
+struct Raster<const N: usize> {
+  left: i64,
+  top: i64,
+  width: usize,
+  height: usize,
+  pixels: Vec<[u8; N]>,
+}
+
+impl<const N: usize> Raster<N> {
+  /// The image drawn from `from` onto `to` with bilinear filtering, onto the whole pixels `to`
+  /// touches, transparent past its edges.
+  fn resampled(&self, from: Bounds, to: Bounds) -> Self {
+    let (left, top) = (to.left.floor() as i64, to.top.floor() as i64);
+    let width = (to.right.ceil() as i64 - left).max(0) as usize;
+    let height = (to.bottom.ceil() as i64 - top).max(0) as usize;
+    let pixels = (0..width * height)
+      .map(|index| {
+        let center = Point {
+          x: (left + (index % width) as i64) as f32 + 0.5,
+          y: (top + (index / width) as i64) as f32 + 0.5,
+        };
+
+        self.sample(map_between(center, to, from))
+      })
+      .collect();
+
+    Self {
+      left,
+      top,
+      width,
+      height,
+      pixels,
+    }
+  }
+
+  /// The image filtered bilinearly at `point`, transparent past its edges.
+  fn sample(&self, point: Point<f32>) -> [u8; N] {
+    let x = point.x - self.left as f32 - 0.5;
+    let y = point.y - self.top as f32 - 0.5;
+    let (column, row) = (x.floor(), y.floor());
+    let (weight_x, weight_y) = (x - column, y - row);
+    let texel = |column: f32, row: f32| -> [f32; N] {
+      if column < 0.0 || row < 0.0 || column >= self.width as f32 || row >= self.height as f32 {
+        return [0.0; N];
+      }
+      self.pixels[row as usize * self.width + column as usize].map(f32::from)
+    };
+    let (top_left, top_right) = (texel(column, row), texel(column + 1.0, row));
+    let (bottom_left, bottom_right) = (texel(column, row + 1.0), texel(column + 1.0, row + 1.0));
+
+    array::from_fn(|channel| {
+      let top = top_left[channel] + (top_right[channel] - top_left[channel]) * weight_x;
+      let bottom = bottom_left[channel] + (bottom_right[channel] - bottom_left[channel]) * weight_x;
+
+      (top + (bottom - top) * weight_y + 0.5).clamp(0.0, 255.0) as u8
+    })
+  }
+}
+
 /// How a three-box pass rounds its sum to a channel: Skia's RGBA pass seeds the sum with half the
 /// divisor, its alpha pass adds half after scaling.
 #[derive(Clone, Copy)]
@@ -95,8 +287,6 @@ impl Pass {
     if sigma < 2.0 {
       return Some(Self::Gaussian(GaussianPass::new(sigma)));
     }
-    // TODO: past `MAX_SIGMA`, rescale the image as Skia's `FilterResult::rescale` does rather
-    // than clamping the sigma.
     ThreeBoxPass::new(sigma.min(MAX_SIGMA), rounding).map(Self::ThreeBox)
   }
 
@@ -300,13 +490,22 @@ fn box_window(sigma: f32) -> usize {
 
 #[cfg(test)]
 mod tests {
-  use super::{MAX_SIGMA, blur_alpha, blur_rgba, box_window};
+  use super::{MAX_SIGMA, blur_alpha, blur_rgba, box_window, downscale_step_count};
 
   #[test]
   fn the_box_window_follows_skia() {
     assert_eq!(box_window(2.0), 4);
     assert_eq!(box_window(5.0), 9);
     assert!(box_window(MAX_SIGMA) < 255);
+  }
+
+  #[test]
+  fn a_rescale_halves_until_the_last_step() {
+    assert_eq!(downscale_step_count(1.0), 0);
+    assert_eq!(downscale_step_count(0.9995), 0);
+    assert_eq!(downscale_step_count(135.0 / 160.0), 1);
+    assert_eq!(downscale_step_count(0.25), 2);
+    assert_eq!(downscale_step_count(0.46), 1);
   }
 
   #[test]
