@@ -2,10 +2,10 @@
 //! [css-text-decor-3](https://drafts.csswg.org/css-text-decor-3/#painting-order) gives: shadows,
 //! underlines and overlines, text, then line-through.
 
-use super::{BoxFrame, FillShape, PaintDevice, PaintRole};
+use super::{BoxBorderPainter, BoxFrame, FillShape, PaintDevice, PaintRole};
 use crate::{
   font_style::SizedFontStyle,
-  geometry::ComputedLayout,
+  geometry::{ComputedLayout, Point, Size},
   layout::inline::{
     DecorationRect, InlineBackgroundFragment, InlineOutlineRect, InlineRunLayout, OutlineIsland,
     PositionedInlineRun, ProcessedInlineSpan,
@@ -100,7 +100,7 @@ impl InlineRunLayout {
 }
 
 impl InlineLines<'_> {
-  /// Paints the text of the block at `frame`: span backgrounds, the element's text shadows, each
+  /// Paints the text of the block at `frame`: span backgrounds and borders, the element's text shadows, each
   /// run's underline and overline, glyphs and line-through, then the spans' outlines.
   ///
   /// The shadows all paint before any text, so a shadow never lands on a neighbouring run's
@@ -115,17 +115,34 @@ impl InlineLines<'_> {
   ) {
     let at = frame.translation();
 
-    device.set_role(PaintRole::InlineBackground);
-
     for fragment in &self.background_fragments {
       device.with_opacity(fragment.opacity, |device| {
-        device.fill_shape(
-          &FillShape::Path {
-            commands: fragment.path(),
-            rule: FillRule::NonZero,
+        if fragment.color.0[3] != 0 {
+          device.set_role(PaintRole::InlineBackground);
+          device.fill_shape(
+            &FillShape::Path {
+              commands: fragment.path(),
+              rule: FillRule::NonZero,
+            },
+            fragment.color,
+            at,
+          );
+        }
+
+        device.set_role(PaintRole::Border);
+        BoxBorderPainter::new(
+          &fragment.border,
+          Size {
+            width: fragment.width,
+            height: fragment.height,
           },
-          fragment.color,
-          at,
+        )
+        .paint(
+          Point {
+            x: frame.origin.x + fragment.x,
+            y: frame.origin.y + fragment.y,
+          },
+          device,
         );
       });
     }

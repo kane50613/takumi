@@ -251,6 +251,28 @@ fn inline_span_background() {
   );
 }
 
+/// An inline `<span>` with a border strokes it on every line, without the sides the line wraps at.
+#[test]
+fn inline_span_border() {
+  let pdf = run_pdf_fixture("inline-span-border", |fonts| {
+    let source = r##"<div style="width: 100%; height: 100%; padding: 12px; background-color: #ffffff; font-size: 18px; line-height: 2; color: #141414">
+      Due <span style="border: 2px solid #16a34a">August 31</span> at noon, <span style="border: 2px dashed #e11d48; padding: 0 4px; background-color: #fee2e2">a dashed border long enough to wrap</span> done.
+    </div>"##;
+
+    PdfOptions::builder()
+      .node(from_html(source, FromHtmlOptions::default()).expect("parse border fixture"))
+      .viewport(Viewport::new((320, 140)))
+      .fonts(fonts)
+      .build()
+  });
+  let haystack = inflated_text(&pdf);
+
+  assert!(
+    haystack.contains("0.0863 0.6392 0.2902 rg") || haystack.contains("0.0863 0.6392 0.2902 RG"),
+    "the solid border's color is missing from the content stream"
+  );
+}
+
 #[test]
 fn paged_lines() {
   run_pdf_fixture("paged-lines", |fonts| {
