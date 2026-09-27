@@ -380,6 +380,10 @@ impl Emitter<'_> {
   /// `background-clip` picks the shape a background fills, never when it
   /// paints: the border draws over the ring, as it does in Blink.
   fn emit_decorations(&self, node: &RenderNode, frame: BoxFrame, surface: &mut Surface) {
+    if !node.paints_own_box() {
+      return;
+    }
+
     let painter = BoxPainter::new(&node.context, frame.layout);
 
     painter.paint_normal_box_shadows(frame.origin, &mut self.device(surface, self.tagged));

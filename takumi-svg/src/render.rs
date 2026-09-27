@@ -379,15 +379,17 @@ impl BoxChrome {
 
     let clip_group = placed.begin_clip_path_group(doc)?;
 
-    placed.emit_box_shadows(doc)?;
+    if placed.node.paints_own_box() {
+      placed.emit_box_shadows(doc)?;
 
-    // `background-clip` picks the shape a background fills, never when it paints:
-    // the border draws over the ring, as it does in Blink.
-    placed.emit_background(doc)?;
-    placed.emit_inset_box_shadows(doc)?;
-    DocumentDevice::paint(doc, |device| {
-      placed.painter.paint_border(placed.frame.origin, device);
-    })?;
+      // `background-clip` picks the shape a background fills, never when it paints:
+      // the border draws over the ring, as it does in Blink.
+      placed.emit_background(doc)?;
+      placed.emit_inset_box_shadows(doc)?;
+      DocumentDevice::paint(doc, |device| {
+        placed.painter.paint_border(placed.frame.origin, device);
+      })?;
+    }
 
     // Children, clipped to the (rounded) padding box when overflow is not visible.
     let child_group = placed

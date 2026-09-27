@@ -164,8 +164,7 @@ impl Walker {
     let context = &node.context;
     let painter = BoxPainter::new(context, layout);
     let size = layout.size;
-    // An anonymous box paints no decorations of its own.
-    let drawables = if node.node.is_some() {
+    let drawables = if node.paints_own_box() {
       decorations(&painter, size)
     } else {
       Vec::new()

@@ -2,7 +2,6 @@
   <rect x="0" y="0" width="1200" height="630" fill="#fff"/>
   <g opacity=".5">
     <rect x="276" y="205" width="300" height="220" fill="#f0f0f0"/>
-    <rect x="382" y="237" width="88" height="156" fill="#f0f0f0"/>
     <use href="#g0" x="382" y="358" fill="#000"/>
   </g>
   <g opacity=".5">

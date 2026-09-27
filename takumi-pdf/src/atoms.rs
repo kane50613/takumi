@@ -138,7 +138,7 @@ impl AtomCollector<'_> {
       .children
       .as_deref()
       .is_none_or(<[RenderNode]>::is_empty)
-      || BoxPainter::new(&node.context, layout).paints_decorations();
+      || (node.paints_own_box() && BoxPainter::new(&node.context, layout).paints_decorations());
 
     match OwnContent::of(node) {
       OwnContent::Text => {

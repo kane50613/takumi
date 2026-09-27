@@ -1,7 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630">
   <rect x="0" y="0" width="1200" height="630" fill="#000"/>
   <rect x="450" y="100" width="300" height="200" fill="#3b82f6"/>
-  <rect x="522" y="181" width="157" height="39" fill="#3b82f6"/>
   <g fill="#fff">
     <use href="#g0" x="522" y="211"/>
     <use href="#g1" x="538.08" y="211"/>

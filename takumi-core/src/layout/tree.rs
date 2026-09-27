@@ -1207,6 +1207,12 @@ impl RenderNode {
       && self.is_whitespace_only_text_node()
   }
 
+  /// Whether the node paints its own shadows, background, and border. An anonymous box carries
+  /// its parent's background only for the text it wraps to show through `background-clip: text`.
+  pub fn paints_own_box(&self) -> bool {
+    self.node.is_some()
+  }
+
   /// True if any direct child is an anonymous text item.
   pub fn has_anonymous_text_item_child(&self) -> bool {
     self
