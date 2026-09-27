@@ -455,6 +455,21 @@ impl PaintDevice for CanvasDevice<'_> {
     self.open_clip(shape, transform, true);
   }
 
+  fn push_aliased_clip(&mut self, shape: &FillShape, transform: Affine) {
+    let (mut coverage, placement) =
+      self.coverage(shape, Fill::from(shape.rule()).into(), transform);
+
+    // A straight edge covers at least half a pixel exactly when it covers the pixel's centre.
+    coverage
+      .iter_mut()
+      .for_each(|alpha| *alpha = if *alpha >= 128 { u8::MAX } else { 0 });
+    self.clips.push(CanvasClip {
+      coverage,
+      placement,
+      out: false,
+    });
+  }
+
   fn with_border_mask(
     &mut self,
     border: &BorderProperties,
