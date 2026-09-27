@@ -1187,9 +1187,9 @@ impl Emitter<'_> {
     };
     // The subtree root is a clone of `node`, so the box's own path is the
     // prefix that puts the subtree's nodes back on the document tree.
-    let mut box_path = Vec::new();
-    let tagged = self.tagged && node_path(&self.scene.root, node, &mut box_path);
-    let tag_prefix = self.tag_path(&box_path);
+    let box_path = self.tagged.then(|| self.path_of(node)).flatten();
+    let tagged = box_path.is_some();
+    let tag_prefix = self.tag_path(box_path.as_deref().unwrap_or_default());
     let mut emitter = Emitter {
       scene: &scene,
       document: self.document,
@@ -1223,10 +1223,15 @@ impl Emitter<'_> {
   /// Opens the region for a node the paint list never visited, so its content
   /// still reaches the structure tree.
   fn start_tagged_node(&self, node: &RenderNode, surface: &mut Surface) {
-    let mut path = Vec::new();
-    let found = node_path(&self.scene.root, node, &mut path);
+    self.start_node_region(node, self.path_of(node).as_deref(), surface);
+  }
 
-    self.start_node_region(node, found.then_some(path.as_slice()), surface);
+  /// The path of `node` on this emitter's tree, when it lies there.
+  fn path_of(&self, node: &RenderNode) -> Option<Vec<usize>> {
+    self
+      .scene
+      .root
+      .path_where(|candidate| ptr::eq(candidate, node))
   }
 
   /// The document-rooted path of a node this emitter reached at `path`.
@@ -1243,11 +1248,7 @@ impl Emitter<'_> {
   /// Tag target for a generated marker: its nearest `display: list-item` ancestor, whose `Lbl`
   /// holds the label.
   fn marker_tag_target(&self, owner: &RenderNode) -> Option<Vec<usize>> {
-    let mut owner_path = Vec::new();
-
-    if !node_path(&self.scene.root, owner, &mut owner_path) {
-      return None;
-    }
+    let owner_path = self.path_of(owner)?;
     let mut current = &self.scene.root;
     let mut length = owner_path.len();
 
@@ -1881,22 +1882,6 @@ fn image_label(src: &ImageSourceInput) -> &str {
     ImageSourceInput::Url(url) => url,
     _ => "inline image bytes",
   }
-}
-
-/// Fills `path` with the child indices leading from `root` to `target`, matched by identity.
-fn node_path(root: &RenderNode, target: &RenderNode, path: &mut Vec<usize>) -> bool {
-  if ptr::eq(root, target) {
-    return true;
-  }
-  for (index, child) in root.children.iter().flatten().enumerate() {
-    path.push(index);
-
-    if node_path(child, target, path) {
-      return true;
-    }
-    path.pop();
-  }
-  false
 }
 
 /// Whether the node is an image explicitly marked decorative (`alt=""`), so its content is emitted
