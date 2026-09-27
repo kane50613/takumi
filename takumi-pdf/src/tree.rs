@@ -7,9 +7,10 @@ use takumi_core::{
   context::RenderContext,
   geometry::{NodeId, Size},
   layout::{
-    node::{ImageData, Node, NodeKind},
+    node::{Node, NodeKind},
     tree::RenderNode,
   },
+  painter::OwnContent,
   resources::image::ImageSource,
   scene::{NodePaint, PaintItemKind, Scene},
   style::{
@@ -123,37 +124,13 @@ impl TreeInputs<'_> {
   }
 }
 
-/// What a node draws itself, inside its box decorations.
-pub(crate) enum OwnContent<'n> {
-  /// An inline formatting context or a lone text node.
-  Text,
-  Image(#[cfg_attr(not(feature = "images"), allow(dead_code))] &'n ImageData),
-  None,
-}
-
-impl<'n> OwnContent<'n> {
-  pub(crate) fn of(node: &'n RenderNode) -> Self {
-    if node.should_create_inline_layout() {
-      return Self::Text;
-    }
-    if node.has_anonymous_text_item_child() {
-      return Self::None;
-    }
-    match node.node.as_ref().map(|source| &source.kind) {
-      Some(NodeKind::Text(_)) => Self::Text,
-      Some(NodeKind::Image(image)) => Self::Image(image),
-      _ => Self::None,
-    }
-  }
-
-  /// Whether this build draws anything, i.e. whether a tagged content
-  /// sequence around it would be non-empty.
-  pub(crate) fn draws(&self) -> bool {
-    match self {
-      Self::Text => true,
-      Self::Image(_) => cfg!(feature = "images"),
-      Self::None => false,
-    }
+/// Whether a node's own content draws anything, i.e. whether a tagged content sequence around it
+/// would be non-empty.
+pub(crate) fn draws(content: &OwnContent<'_>) -> bool {
+  match content {
+    OwnContent::Inline(_) => true,
+    OwnContent::Image(_) => cfg!(feature = "images"),
+    OwnContent::None => false,
   }
 }
 

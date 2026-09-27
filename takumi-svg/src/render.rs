@@ -14,12 +14,12 @@ use takumi_core::{
     decoration::ClipBox,
     inline::{InlineBoxItem, PositionedInlineRun, VisualInlineBox},
     inline_box::{InlineBoxPaint, resolve_inline_box},
-    node::{ImageData, Node, NodeKind},
+    node::Node,
     tree::RenderNode,
   },
   painter::{
     BackgroundClipArea, BoxFrame, BoxPainter, FillShape, GlyphDevice, GlyphFill, OverflowClip,
-    PaintDevice, PendingOutline, ShadowShape, StrokeStyle, UNBOUNDED,
+    OwnContent, PaintDevice, PendingOutline, ShadowShape, StrokeStyle, UNBOUNDED,
   },
   path_data::{edges_path_data, path_data},
   resources::image::ImageSource,
@@ -39,7 +39,7 @@ use crate::{
   gradient::LayerEmitter,
   image::emit_image,
   scene_emit::SceneEmitter,
-  text::{emit_clip_text_run, emit_inline_content, emit_run_glyphs, emit_text, run_stroke},
+  text::{emit_clip_text_run, emit_inline_content, emit_run_glyphs, run_stroke},
 };
 
 /// Inputs for [`render`], built with [`SvgOptions::builder`].
@@ -291,32 +291,14 @@ impl<'n> PlacedBox<'n> {
     })
   }
 
-  /// Emits the node's own content: its inline run set, or its replaced
-  /// image/text. Block children are painted separately.
+  /// Emits the node's own content: its inline content or its image. Block children are
+  /// painted separately.
   pub(crate) fn emit_own_content(&self, doc: &mut SvgDocument) -> io::Result<()> {
-    if self.node.should_create_inline_layout() {
-      return emit_inline_content(self.node, self.frame, doc);
+    match OwnContent::of(self.node) {
+      OwnContent::Inline(_) => emit_inline_content(self.node, self.frame, doc),
+      OwnContent::Image(image) => emit_image(image, &self.painter, self.frame, doc),
+      OwnContent::None => Ok(()),
     }
-    // A node whose anonymous text became a child item paints that text through the
-    // child, not as its own content (mirroring the raster backend's guard).
-    if self.node.has_anonymous_text_item_child() {
-      return Ok(());
-    }
-    self.emit_replaced_content(doc)
-  }
-
-  /// Emits an image or text leaf.
-  fn emit_replaced_content(&self, doc: &mut SvgDocument) -> io::Result<()> {
-    match self.node.node.as_ref().map(|n| &n.kind) {
-      Some(NodeKind::Image(image)) => self.emit_image(image, doc),
-      Some(NodeKind::Text(text)) => emit_text(text, &self.node.context, self.frame, doc),
-      _ => Ok(()),
-    }
-  }
-
-  /// Emits an image node's content into its content box.
-  fn emit_image(&self, image: &ImageData, doc: &mut SvgDocument) -> io::Result<()> {
-    emit_image(image, &self.painter, self.frame, doc)
   }
 }
 
@@ -682,7 +664,7 @@ pub(crate) fn emit_inline_box(
       let group_transform = placed.element_transform().unwrap_or(Affine::IDENTITY);
       let chrome = BoxChrome::open(&placed, group_transform, doc)?;
 
-      placed.emit_replaced_content(doc)?;
+      placed.emit_own_content(doc)?;
       chrome.close(doc)
     }
   }

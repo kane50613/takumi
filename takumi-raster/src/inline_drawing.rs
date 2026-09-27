@@ -5,9 +5,16 @@ use takumi_core::{
 
 use crate::{
   BorderProperties, Canvas, CanvasDevice, DeferredOutline, PaintSource, RenderContext, Result,
-  SizedFontStyle, collect_background_layers, draw_box_shell, draw_node_content,
-  layout::inline::{BuiltInlineLayout, InlineBoxItem, VisualInlineBox},
-  painter::{BoxFrame, BoxPainter, GlyphFill},
+  SizedFontStyle, collect_background_layers, draw_box_shell,
+  layout::{
+    inline::{
+      BuiltInlineLayout, InlineBoxItem, InlineLayoutMode, InlineLayoutRequest, ProcessedInlineSpan,
+      VisualInlineBox, create_inline_layout,
+    },
+    tree::RenderNode,
+  },
+  node_paint::draw_image_node_content,
+  painter::{BoxFrame, BoxPainter, GlyphFill, OwnContent},
   rasterize_layers,
   stacking_context::ScenePainter,
   style::{Affine, BackgroundClip},
@@ -32,20 +39,57 @@ pub(crate) fn draw_inline_box(
       ScenePainter::new(&mut scene, canvas).paint_context(0)
     }
     InlineBoxPaint::Replaced { node, layout } => {
-      let Some(source) = &node.node else {
+      if !node.paints_own_box() {
         return Ok(());
-      };
+      }
       let mut context = node.context.clone();
       context.transform = transform * Affine::translation(origin.x, origin.y);
 
       draw_box_shell(&context, canvas, layout)?;
-      draw_node_content(source, &context, canvas, layout)?;
+      draw_own_content(node, &context, canvas, layout)?;
       if let Some(outline) = DeferredOutline::of(&context, layout) {
         outline.paint(canvas);
       }
       Ok(())
     }
   }
+}
+
+/// Draws the node's own image or inline content in `context`, then the inline boxes the content
+/// places.
+pub(crate) fn draw_own_content(
+  node: &RenderNode,
+  context: &RenderContext,
+  canvas: &mut Canvas,
+  layout: Layout,
+) -> Result<()> {
+  let content = OwnContent::of(node);
+
+  if let OwnContent::Image(image) = content {
+    return draw_image_node_content(image, context, canvas, layout);
+  }
+
+  let font_style = SizedFontStyle::from_style(&context.style, context);
+  let Some(items) = content.inline_items(&font_style) else {
+    return Ok(());
+  };
+  let built = create_inline_layout(InlineLayoutRequest::in_content_box(
+    items,
+    layout.unsnapped_content,
+    &font_style,
+    context,
+    InlineLayoutMode::Draw,
+  ));
+  let boxes = built.spans.iter().filter_map(|span| match span {
+    ProcessedInlineSpan::Box(item) => Some(item),
+    _ => None,
+  });
+  let positioned_inline_boxes = draw_inline_layout(context, canvas, layout, &built, &font_style)?;
+
+  for (item, positioned) in boxes.zip(positioned_inline_boxes.iter()) {
+    draw_inline_box(positioned, item, layout, canvas, context.transform)?;
+  }
+  Ok(())
 }
 
 pub(crate) fn draw_inline_layout(
