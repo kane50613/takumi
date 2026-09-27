@@ -1736,16 +1736,32 @@ struct TextDevice<'e, 's, 'a> {
 
 impl TextDevice<'_, '_, '_> {
   /// `color` and `transform`, or the open shadow's colour and `transform` moved by its offset.
-  /// Runs `draw` once with no spread, or while a blurred shadow is open, once per shadow [`Band`]
-  /// with the stroke width that spreads it, inside a group of the band's opacity.
-  fn in_shadow_bands(&mut self, mut draw: impl FnMut(&mut SurfaceDevice<'_, '_>, f32)) {
+  /// Runs `draw` once in `color` with no spread, or while a blurred shadow is open, once per shadow
+  /// [`Band`] with the stroke width that spreads it, inside a group of the band's opacity. The
+  /// bands draw `color` opaque inside one group of its alpha, since their alphas add up to the
+  /// blur's coverage for an opaque colour.
+  fn in_shadow_bands(
+    &mut self,
+    color: Color,
+    mut draw: impl FnMut(&mut SurfaceDevice<'_, '_>, Color, f32),
+  ) {
     let Some(shadow) = self.shadow.filter(|shadow| shadow.blur_radius > 0.0) else {
-      return draw(&mut self.device, 0.0);
+      return draw(&mut self.device, color, 0.0);
     };
+    let alpha = color.0[3];
+    let opaque = Color([color.0[0], color.0[1], color.0[2], u8::MAX]);
 
+    if alpha < u8::MAX {
+      self
+        .device
+        .begin_layer(f32::from(alpha) / f32::from(u8::MAX));
+    }
     for band in Band::of(shadow.blur_radius) {
       self.device.begin_layer(band.alpha);
-      draw(&mut self.device, 2.0 * band.spread);
+      draw(&mut self.device, opaque, 2.0 * band.spread);
+      self.device.end_layer();
+    }
+    if alpha < u8::MAX {
       self.device.end_layer();
     }
   }
@@ -1787,7 +1803,7 @@ impl PaintDevice for TextDevice<'_, '_, '_> {
   fn fill_shape(&mut self, shape: &FillShape, color: Color, transform: Affine) {
     let (color, transform) = self.shadowed(color, transform);
 
-    self.in_shadow_bands(|device, spread| {
+    self.in_shadow_bands(color, |device, color, spread| {
       device.fill_shape(shape, color, transform);
 
       if spread > 0.0 {
@@ -1808,7 +1824,7 @@ impl PaintDevice for TextDevice<'_, '_, '_> {
   fn stroke_shape(&mut self, shape: &FillShape, stroke: &StrokeStyle, transform: Affine) {
     let (color, transform) = self.shadowed(stroke.color, transform);
 
-    self.in_shadow_bands(|device, spread| {
+    self.in_shadow_bands(color, |device, color, spread| {
       device.stroke_shape(
         shape,
         &StrokeStyle {
