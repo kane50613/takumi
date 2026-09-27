@@ -2076,13 +2076,14 @@ fn inline_outlines() {
 }
 
 /// Spans that set their own size paint inside a block whose `font-size` is 0, and so does text
-/// that overflows a box with no height.
+/// that overflows a box or an inline block with no height.
 #[test]
 fn inline_zero_sized_parents() {
   let pdf = run_pdf_fixture("inline-zero-sized-parents", |fonts| {
     let source = r##"<div style="width: 100%; height: 100%; padding: 24px; background-color: #ffffff; color: #111827;">
       <div style="font-size: 0;"><span style="font-size: 24px;">Sized</span> <span style="font-size: 24px; color: #be123c;">spans</span></div>
       <div style="height: 0; font-size: 20px;">Overflowing text</div>
+      <div style="font-size: 20px; margin-top: 32px;">Before <span style="display: inline-block; height: 0;">inside</span> after</div>
     </div>"##;
     let node =
       from_html(source, FromHtmlOptions::default()).expect("parse zero-sized parent fixture");
@@ -2098,8 +2099,8 @@ fn inline_zero_sized_parents() {
     .count();
 
   assert!(
-    shown >= 3,
-    "expected both spans and the overflowing text, got {shown} text runs"
+    shown >= 5,
+    "expected both spans, the overflowing text, and the inline block, got {shown} text runs"
   );
 }
 

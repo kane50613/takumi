@@ -1181,9 +1181,6 @@ impl Emitter<'_> {
     origin: CorePoint<f32>,
     surface: &mut Surface,
   ) {
-    if subtree.size.height <= 0.0 {
-      return;
-    }
     let at = subtree.border_box_origin(origin);
     let Ok(scene) = subtree.into_scene(Affine::IDENTITY, true) else {
       return;
