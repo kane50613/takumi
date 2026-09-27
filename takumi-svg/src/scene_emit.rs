@@ -9,6 +9,7 @@ use std::io;
 
 use takumi_core::{
   geometry::Point,
+  layout::inline::InlinePass,
   paint_chunk::{ChunkPart, ConversionContext, PaintChunk, PropertySink},
   paint_property::{ClipId, ClipNode, EffectId, EffectNode},
   painter::BoxFrame,
@@ -134,7 +135,8 @@ impl ChunkWriter<'_, '_, '_> {
 
       match chunk.part {
         ChunkPart::Decorations => placed.emit_decorations(doc)?,
-        ChunkPart::Content => placed.emit_own_content(doc)?,
+        ChunkPart::Content => placed.emit_own_content(InlinePass::Content, doc)?,
+        ChunkPart::Floats => placed.emit_own_content(InlinePass::Floats, doc)?,
         ChunkPart::Outline => placed.emit_outline(doc)?,
       }
 

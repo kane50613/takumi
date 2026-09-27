@@ -19,7 +19,7 @@ use crate::{
   layout::{
     background_image_geometry::{FillLayers, OriginBox},
     inline::{
-      BuiltInlineLayout, InlineLayoutMode, InlineLayoutRequest, InlineRunLayout,
+      BuiltInlineLayout, InlineLayoutMode, InlineLayoutRequest, InlinePass, InlineRunLayout,
       ProcessedInlineSpan, create_inline_layout,
     },
     inline_box::{InlineBoxPaint, resolve_inline_box},
@@ -173,14 +173,14 @@ impl Walker {
   }
 
   /// Records the text or image the node lays out.
-  fn own_content(&mut self, placed: Placed<'_>) -> Result<()> {
+  fn own_content(&mut self, placed: Placed<'_>, pass: InlinePass) -> Result<()> {
     match OwnContent::of(placed.node) {
-      OwnContent::Inline(_) => self.inline(placed),
-      OwnContent::Image(image) => {
+      OwnContent::Inline(_) => self.inline(placed, pass),
+      OwnContent::Image(image) if pass == InlinePass::Content => {
         self.image(image, placed);
         Ok(())
       }
-      OwnContent::None => Ok(()),
+      OwnContent::Image(_) | OwnContent::None => Ok(()),
     }
   }
 
@@ -269,7 +269,7 @@ impl Walker {
   }
 
   /// Records the node's inline content: its text, then its inline boxes.
-  fn inline(&mut self, placed: Placed<'_>) -> Result<()> {
+  fn inline(&mut self, placed: Placed<'_>, pass: InlinePass) -> Result<()> {
     let Placed {
       node,
       layout,
@@ -291,9 +291,15 @@ impl Walker {
     ));
     let runs = built.resolve_runs(context, layout)?;
 
-    self.text(placed, &built, &runs, &font_style);
+    if pass == InlinePass::Content {
+      self.text(placed, &built, &runs, &font_style);
+    }
 
-    for inline_box in &runs.inline_boxes {
+    for inline_box in runs
+      .inline_boxes
+      .iter()
+      .filter(|inline_box| pass.paints(inline_box))
+    {
       let Some(ProcessedInlineSpan::Box(item)) = built.spans.get(inline_box.id as usize) else {
         continue;
       };
@@ -345,13 +351,16 @@ impl Walker {
           if clip {
             self.steps.push(PaintStep::BeginClip { node: id });
           }
-          self.own_content(Placed {
-            node,
-            layout,
-            transform: placed,
-            path: &box_path,
-            parent: id,
-          })?;
+          self.own_content(
+            Placed {
+              node,
+              layout,
+              transform: placed,
+              path: &box_path,
+              parent: id,
+            },
+            InlinePass::Content,
+          )?;
           if clip {
             self.steps.push(PaintStep::EndClip { node: id });
           }
@@ -644,19 +653,27 @@ impl StepWriter<'_, '_> {
           walker.draw(node);
         }
       }
-      ChunkPart::Content => {
+      ChunkPart::Content | ChunkPart::Floats => {
+        let pass = if chunk.part == ChunkPart::Floats {
+          InlinePass::Floats
+        } else {
+          InlinePass::Content
+        };
         let result = recorded(self.scene, chunk.node).and_then(|recorded| {
           let Some((render_node, layout)) = recorded else {
             return Ok(());
           };
 
-          walker.own_content(Placed {
-            node: render_node,
-            layout,
-            transform: chunk.node.transform,
-            path: &[self.prefix, &chunk.node.path].concat(),
-            parent: node,
-          })
+          walker.own_content(
+            Placed {
+              node: render_node,
+              layout,
+              transform: chunk.node.transform,
+              path: &[self.prefix, &chunk.node.path].concat(),
+              parent: node,
+            },
+            pass,
+          )
         });
 
         if let Err(error) = result {

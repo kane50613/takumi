@@ -17,7 +17,8 @@ use takumi_core::{
     background_image_geometry::{BackgroundImageGeometry, FillLayers},
     border::BorderProperties,
     inline::{
-      BuiltInlineLayout, InlineRunLayout, PositionedInlineRun, ProcessedInlineSpan, ShapedRun,
+      BuiltInlineLayout, InlinePass, InlineRunLayout, PositionedInlineRun, ProcessedInlineSpan,
+      ShapedRun,
     },
     inline_box::{InlineBoxPaint, InlineSubtree, resolve_inline_box},
     tree::{NodeOrigin, RenderNode},
@@ -302,14 +303,15 @@ impl Emitter<'_> {
     node: &RenderNode,
     paint: &NodePaint,
     frame: BoxFrame,
+    pass: InlinePass,
     surface: &mut Surface,
   ) -> Result<(), PdfError> {
-    let tagged = self.tagged && draws(&OwnContent::of(node));
+    let tagged = self.tagged && pass == InlinePass::Content && draws(&OwnContent::of(node));
 
     if tagged {
       self.start_node_region(node, Some(&paint.path), surface);
     }
-    self.emit_own_content(node, paint.node_id, frame, surface)?;
+    self.emit_own_content(node, paint.node_id, frame, pass, surface)?;
     if tagged {
       surface.end_tagged();
     }
@@ -720,12 +722,13 @@ impl Emitter<'_> {
     node: &RenderNode,
     node_id: NodeId,
     frame: BoxFrame,
+    pass: InlinePass,
     surface: &mut Surface,
   ) -> Result<(), PdfError> {
     match OwnContent::of(node) {
-      OwnContent::Inline(_) => self.emit_node_text(node, node_id, frame, surface),
+      OwnContent::Inline(_) => self.emit_node_text(node, node_id, frame, pass, surface),
       #[cfg(feature = "images")]
-      OwnContent::Image(image) => {
+      OwnContent::Image(image) if pass == InlinePass::Content => {
         self.emit_image(image, &node.context, frame, surface);
         Ok(())
       }
@@ -863,6 +866,7 @@ impl Emitter<'_> {
     node: &RenderNode,
     node_id: NodeId,
     frame: BoxFrame,
+    pass: InlinePass,
     surface: &mut Surface,
   ) -> Result<(), PdfError> {
     visit_inline_layout(
@@ -870,8 +874,9 @@ impl Emitter<'_> {
       node,
       node_id,
       frame.layout,
-      |built, runs, font_style| {
-        self.draw_runs(node, runs, built, frame, font_style, surface);
+      |built, runs, font_style| match pass {
+        InlinePass::Content => self.draw_runs(node, runs, built, frame, font_style, surface),
+        InlinePass::Floats => self.emit_inline_boxes(node, runs, built, frame, pass, surface),
       },
     )?;
     Ok(())
@@ -907,7 +912,7 @@ impl Emitter<'_> {
     };
 
     lines.paint(&built.spans, font_style, fill, frame, &mut device);
-    self.emit_inline_boxes(node, runs, built, frame, surface);
+    self.emit_inline_boxes(node, runs, built, frame, InlinePass::Content, surface);
   }
 
   /// Paints the inline layout's replaced boxes and nested container subtrees.
@@ -918,6 +923,7 @@ impl Emitter<'_> {
     runs: &InlineRunLayout,
     built: &BuiltInlineLayout<'_>,
     frame: BoxFrame,
+    pass: InlinePass,
     surface: &mut Surface,
   ) {
     let BoxFrame {
@@ -928,9 +934,13 @@ impl Emitter<'_> {
     // The caller opened a marked-content region for the text around these
     // boxes. Marked content does not nest, so each box closes it, takes a
     // region of its own, and hands it back.
-    let owner_tagged = self.tagged && draws(&OwnContent::of(owner));
+    let owner_tagged = self.tagged && pass == InlinePass::Content && draws(&OwnContent::of(owner));
 
-    for positioned in &runs.inline_boxes {
+    for positioned in runs
+      .inline_boxes
+      .iter()
+      .filter(|positioned| pass.paints(positioned))
+    {
       let Some(ProcessedInlineSpan::Box(item)) = built.spans.get(positioned.id as usize) else {
         continue;
       };
@@ -1375,7 +1385,12 @@ impl<'a> ChunkWriter<'_, 'a, '_> {
         emitter.emit_decorations(node, decoration_frame, surface);
         Ok(())
       }
-      ChunkPart::Content => emitter.emit_tagged_content(node, chunk.node, frame, surface),
+      ChunkPart::Content => {
+        emitter.emit_tagged_content(node, chunk.node, frame, InlinePass::Content, surface)
+      }
+      ChunkPart::Floats => {
+        emitter.emit_tagged_content(node, chunk.node, frame, InlinePass::Floats, surface)
+      }
       ChunkPart::Outline => {
         let outline = BoxPainter::new(&node.context, decoration_frame.layout)
           .pending_outline(decoration_frame.origin);
