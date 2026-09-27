@@ -11,7 +11,7 @@ use takumi_core::{
   geometry::Size,
   layout::node::{ImageData, ImageSourceInput, resolve_image},
   painter::{BoxFrame, BoxPainter, PaintDevice},
-  resources::image::{ImageSource, to_data_url},
+  resources::image::{ImageSource, sniff_mime, to_data_url},
   style::ImageScalingAlgorithm,
 };
 
@@ -125,61 +125,5 @@ fn loaded_data_url(source: &ImageSource, context: &RenderContext) -> Option<Stri
         .as_bytes(),
     )),
     _ => None,
-  }
-}
-
-fn sniff_mime(bytes: &[u8]) -> &'static str {
-  match bytes {
-    [0x89, b'P', b'N', b'G', ..] => "image/png",
-    [0xFF, 0xD8, 0xFF, ..] => "image/jpeg",
-    [b'G', b'I', b'F', b'8', ..] => "image/gif",
-    [
-      b'R',
-      b'I',
-      b'F',
-      b'F',
-      _,
-      _,
-      _,
-      _,
-      b'W',
-      b'E',
-      b'B',
-      b'P',
-      ..,
-    ] => "image/webp",
-    _ => {
-      let head = &bytes[..bytes.len().min(256)];
-      if head.starts_with(b"<?xml") || head.windows(4).any(|w| w == b"<svg") {
-        "image/svg+xml"
-      } else {
-        "application/octet-stream"
-      }
-    }
-  }
-}
-
-#[cfg(test)]
-mod tests {
-  use super::*;
-
-  #[test]
-  fn sniffs_common_formats() {
-    assert_eq!(
-      sniff_mime(&[0x89, b'P', b'N', b'G', 0, 0, 0, 0]),
-      "image/png"
-    );
-    assert_eq!(sniff_mime(&[0xFF, 0xD8, 0xFF, 0xE0]), "image/jpeg");
-    assert_eq!(sniff_mime(b"GIF89a"), "image/gif");
-    assert_eq!(sniff_mime(br#"<svg xmlns="...">"#), "image/svg+xml");
-    assert_eq!(sniff_mime(b"\0\0"), "application/octet-stream");
-  }
-
-  #[test]
-  fn encodes_data_url() {
-    assert_eq!(
-      to_data_url("image/png", b"AB"),
-      "data:image/png;base64,QUI="
-    );
   }
 }
