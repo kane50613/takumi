@@ -76,11 +76,26 @@ pub struct PaintItem {
   pub kind: PaintItemKind,
   z_index: i32,
   source_order: usize,
+  /// Whether an in-flow item paints whole with the content, as a flex or grid item paints like an
+  /// inline block.
+  atomic: bool,
 }
 
 impl PaintItem {
   fn z_order(&self) -> (i32, usize) {
     (self.z_index, self.source_order)
+  }
+
+  /// What the item paints in a phase painting `part` of the in-flow boxes, if anything: a node
+  /// paints that part, and a nested context paints whole in one phase only, an atomic one with
+  /// the content and any other with the decorations.
+  pub fn part_in(&self, part: BoxPart) -> Option<BoxPart> {
+    match (&self.kind, part) {
+      (PaintItemKind::Node(_), part) => Some(part),
+      (PaintItemKind::Context(_), BoxPart::Whole) => Some(BoxPart::Whole),
+      (PaintItemKind::Context(_), BoxPart::Decorations) => (!self.atomic).then_some(BoxPart::Whole),
+      (PaintItemKind::Context(_), BoxPart::Content) => self.atomic.then_some(BoxPart::Whole),
+    }
   }
 }
 
@@ -90,10 +105,7 @@ impl PaintItem {
 enum PaintBucket {
   /// Negative `z-index`.
   Negative,
-  /// In-flow, non-positioned boxes, each with its inline content.
-  ///
-  /// Approximate: a box paints its text right after its background, where Blink paints every
-  /// block's background before any of their text.
+  /// In-flow, non-positioned boxes: their decorations before the floats, their content after.
   InFlow,
   /// Non-positioned floats.
   ///
@@ -143,6 +155,26 @@ impl StackingBuckets {
   }
 }
 
+/// Which part of a box a [`PaintPhase`] paints.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum BoxPart {
+  /// Everything the box paints.
+  Whole,
+  /// Its shadows, background and border.
+  Decorations,
+  /// Its text, replaced content and outline.
+  Content,
+}
+
+/// One phase of painting a stacking context, after its root's decorations.
+#[derive(Clone, Copy)]
+pub enum PaintPhase<'a> {
+  /// The context root's own content.
+  RootContent,
+  /// Items in order, each painting what [`PaintItem::part_in`] says for `part`.
+  Items(&'a [PaintItem], BoxPart),
+}
+
 /// One stacking context: an optional root node and its descendants bucketed into CSS paint order.
 pub struct StackingContextNode {
   root: Option<NodePaint>,
@@ -166,6 +198,26 @@ impl StackingContextNode {
     self.buckets.in_paint_order()
   }
 
+  /// The phases the context paints its descendants in, after its root's decorations, following
+  /// [CSS 2.1 Appendix E](https://www.w3.org/TR/CSS21/zindex.html): the in-flow boxes paint their
+  /// backgrounds before the floats and their text after, the root's text first.
+  ///
+  /// Approximate: an in-flow box that clips its overflow paints whole with the decorations, where
+  /// Blink paints its content with the other in-flow boxes' content.
+  pub fn paint_phases(&self) -> [PaintPhase<'_>; 7] {
+    let buckets = &self.buckets;
+
+    [
+      PaintPhase::Items(&buckets.negative, BoxPart::Whole),
+      PaintPhase::Items(&buckets.in_flow, BoxPart::Decorations),
+      PaintPhase::Items(&buckets.floats, BoxPart::Whole),
+      PaintPhase::RootContent,
+      PaintPhase::Items(&buckets.in_flow, BoxPart::Content),
+      PaintPhase::Items(&buckets.positioned, BoxPart::Whole),
+      PaintPhase::Items(&buckets.positive, BoxPart::Whole),
+    ]
+  }
+
   fn with_root(root: Option<NodePaint>) -> Self {
     Self {
       root,
@@ -180,6 +232,7 @@ impl StackingContextNode {
     kind: PaintItemKind,
     z_index: i32,
     source_order: usize,
+    atomic: bool,
   ) {
     self.buckets.push(
       bucket,
@@ -187,6 +240,7 @@ impl StackingContextNode {
         kind,
         z_index,
         source_order,
+        atomic,
       },
     );
   }
@@ -344,10 +398,10 @@ impl SceneRequest<'_> {
         } else {
           visit.context_id
         };
-        // A positioned box or a float paints its descendants atomically, as if it were a
-        // stacking context, but its positioned and z-indexed descendants still paint in the
-        // real one.
-        let atomic = !matches!(bucket, PaintBucket::InFlow);
+        // A positioned box, a float, or a flex or grid item paints its descendants atomically,
+        // as if it were a stacking context, but its positioned and z-indexed descendants still
+        // paint in the real one.
+        let atomic = !matches!(bucket, PaintBucket::InFlow) || is_flex_or_grid_item;
 
         if creates_stacking_context || clips || atomic {
           let child_context = contexts.len();
@@ -358,6 +412,7 @@ impl SceneRequest<'_> {
             PaintItemKind::Context(child_context),
             z_index,
             source_order,
+            atomic,
           );
           context_id = child_context;
           if creates_stacking_context || clips {
@@ -369,6 +424,7 @@ impl SceneRequest<'_> {
             PaintItemKind::Node(node_paint),
             z_index,
             source_order,
+            false,
           );
         }
         source_order += 1;

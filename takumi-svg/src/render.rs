@@ -22,7 +22,7 @@ use takumi_core::{
   },
   path_data::{edges_path_data, path_data},
   resources::image::ImageSource,
-  scene::Scene,
+  scene::{BoxPart, Scene},
   shadow::SizedShadow,
   style::{
     Affine, BackgroundImage, BlendMode, Color, ComputedStyle, FillRule, FontFamily, Isolation,
@@ -295,10 +295,12 @@ pub(crate) struct BoxChrome {
 }
 
 impl BoxChrome {
-  /// Emits a box's shared chrome and opens its child group.
+  /// Emits a box's shared chrome and opens its child group: its shadows, background and border
+  /// unless `part` is its content, and its outline unless `part` is its decorations.
   pub(crate) fn open(
     placed: &PlacedBox,
     group_transform: Affine,
+    part: BoxPart,
     doc: &mut SvgDocument,
   ) -> io::Result<Self> {
     let context = &placed.node.context;
@@ -339,7 +341,7 @@ impl BoxChrome {
 
     let clip_group = placed.begin_clip_path_group(doc)?;
 
-    if placed.node.paints_own_box() {
+    if part != BoxPart::Content && placed.node.paints_own_box() {
       placed.emit_box_shadows(doc)?;
 
       // `background-clip` picks the shape a background fills, never when it paints:
@@ -358,7 +360,9 @@ impl BoxChrome {
       .transpose()?;
 
     Ok(Self {
-      outline: placed.painter.pending_outline(placed.frame.origin),
+      outline: (part != BoxPart::Decorations)
+        .then(|| placed.painter.pending_outline(placed.frame.origin))
+        .flatten(),
       blend,
       isolate,
       mask,
@@ -644,7 +648,7 @@ pub(crate) fn emit_inline_box(
     InlineBoxPaint::Replaced { node, layout } => {
       let placed = PlacedBox::new(node, BoxFrame::new(layout, origin));
       let group_transform = placed.element_transform().unwrap_or(Affine::IDENTITY);
-      let chrome = BoxChrome::open(&placed, group_transform, doc)?;
+      let chrome = BoxChrome::open(&placed, group_transform, BoxPart::Whole, doc)?;
 
       placed.emit_own_content(doc)?;
       chrome.close(doc)
