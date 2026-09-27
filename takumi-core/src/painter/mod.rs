@@ -47,6 +47,7 @@ pub struct LayerBounds {
 pub const UNBOUNDED: f32 = 1.0e6;
 
 /// A closed shape to fill, in the coordinate space of the box that owns it.
+#[derive(Debug, Clone)]
 pub enum FillShape {
   /// An axis-aligned rectangle at the box origin.
   Rect(Size<f32>),
@@ -231,6 +232,24 @@ pub enum OverflowClip {
 }
 
 impl OverflowClip {
+  /// The clip as a shape in the border box of `layout`, with where the shape's origin sits.
+  pub fn shape(self, layout: ComputedLayout) -> (FillShape, Point<f32>) {
+    match self {
+      Self::Rounded(clip) => (clip.into(), Point::ZERO),
+      Self::Axes { x, y } => {
+        let edges = BoxFrame::new(layout, Point::ZERO).overflow_clip_edges(x, y);
+
+        (
+          FillShape::Rect(Size {
+            width: edges.right - edges.left,
+            height: edges.bottom - edges.top,
+          }),
+          edges.top_left(),
+        )
+      }
+    }
+  }
+
   /// What the box at `layout` clips its content to, or `None` when it clips nothing.
   pub fn of(context: &RenderContext, layout: ComputedLayout) -> Option<Self> {
     let overflow = context.style.resolve_overflows();

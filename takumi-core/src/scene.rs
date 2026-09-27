@@ -2,7 +2,7 @@
 //! bounds. Raster and SVG backends consume this instead of each walking the node tree
 //! independently.
 
-use std::convert::Infallible;
+use std::{collections::HashMap, convert::Infallible};
 
 use skrifa::FontRef;
 
@@ -20,6 +20,7 @@ use crate::{
     node::Node,
     tree::{ContainingBlocks, LayoutResults, RenderNode},
   },
+  paint_property::{ContainerContents, NodeProperties, PropertyState, PropertyTrees},
   shadow::SizedShadow,
   style::{Affine, BlurType, ComputedStyle, Display, Float},
   viewport::Viewport,
@@ -38,6 +39,8 @@ pub struct NodePaint {
   pub container_size: Size<Option<f32>>,
   /// Device-space bounds of the paint output, if any.
   pub paint_bounds: Option<SceneBounds>,
+  /// The clips and effects it paints under.
+  pub properties: NodeProperties,
 }
 
 /// Device-space integer bounds of a node or stacking context's paint output.
@@ -260,6 +263,9 @@ struct StackingContextBuildVisit {
   node_id: NodeId,
   transform: Affine,
   container_size: Size<Option<f32>>,
+  /// The clip and effect the box starts from: its parent's contents state, with the clip of its
+  /// containing block's contents when it is hoisted there.
+  state: PropertyState,
   /// The context in-flow boxes and floats paint in.
   context_id: usize,
   /// The nearest stacking context or clipping box, where positioned boxes paint.
@@ -315,7 +321,7 @@ pub struct SceneRequest<'a> {
 
 impl SceneRequest<'_> {
   /// Flattens the node tree into CSS-ordered stacking contexts for painting.
-  pub fn build(self) -> Result<Vec<StackingContextNode>> {
+  pub fn build(self) -> Result<SceneLayers> {
     let SceneRequest {
       root,
       layout_results,
@@ -326,11 +332,14 @@ impl SceneRequest<'_> {
     let mut contexts = vec![StackingContextNode::with_root(None)];
     let mut source_order = 0usize;
     let mut containing_blocks = ContainingBlocks::default();
+    let mut properties = PropertyTrees::default();
+    let mut contents: HashMap<NodeId, ContainerContents> = HashMap::new();
     let mut visits = vec![StackingContextBuildVisit {
       path: Vec::new(),
       node_id: NodeId::ROOT,
       transform,
       container_size,
+      state: PropertyState::default(),
       context_id: 0,
       stacking_id: 0,
       parent_display: None,
@@ -358,6 +367,23 @@ impl SceneRequest<'_> {
       }
       containing_blocks.record_transform(visit.node_id, current_transform);
 
+      let node_properties = NodeProperties::build(
+        &mut properties,
+        visit.state,
+        &visit.path,
+        &current.context,
+        layout,
+        current_transform,
+      );
+
+      contents.insert(
+        visit.node_id,
+        ContainerContents {
+          clip: node_properties.contents.clip,
+          path: visit.path.clone(),
+        },
+      );
+
       let node_paint = NodePaint {
         path: visit.path.clone(),
         node_id: visit.node_id,
@@ -366,6 +392,7 @@ impl SceneRequest<'_> {
         paint_bounds: with_bounds
           .then(|| compute_node_paint_bounds(current, layout, current_transform))
           .flatten(),
+        properties: node_properties,
       };
 
       let is_flex_or_grid_item = visit.parent_display.is_some_and(|display| {
@@ -454,11 +481,23 @@ impl SceneRequest<'_> {
         child_path.push(child.render_index);
         let (base_transform, base_container) =
           containing_blocks.base_for(child, current_transform, child_container_size);
+        let clip = match child.hoisted_cb.and_then(|cb| contents.get(&cb)) {
+          Some(container) => {
+            properties.release_escaped_effects(node_properties.contents.effect, container);
+            container.clip
+          }
+          None => node_properties.contents.clip,
+        };
+
         visits.push(StackingContextBuildVisit {
           path: child_path,
           node_id: child.node_id,
           transform: base_transform,
           container_size: base_container,
+          state: PropertyState {
+            clip,
+            effect: node_properties.contents.effect,
+          },
           context_id,
           stacking_id,
           parent_display: Some(current.context.style.display),
@@ -472,7 +511,10 @@ impl SceneRequest<'_> {
     }
 
     if !with_bounds {
-      return Ok(contexts);
+      return Ok(SceneLayers {
+        contexts,
+        properties,
+      });
     }
 
     // `None` means "unknown extent" and poisons the union; dropping it would
@@ -506,8 +548,19 @@ impl SceneRequest<'_> {
       contexts[context_id].paint_bounds = if unknown { None } else { paint_bounds };
     }
 
-    Ok(contexts)
+    Ok(SceneLayers {
+      contexts,
+      properties,
+    })
   }
+}
+
+/// A scene's stacking contexts and the property trees their boxes paint under.
+pub struct SceneLayers {
+  /// The stacking contexts; the first is the synthetic root.
+  pub contexts: Vec<StackingContextNode>,
+  /// The clips and effects.
+  pub properties: PropertyTrees,
 }
 
 /// A render tree laid out, with the stacking contexts that paint it.
@@ -518,6 +571,8 @@ pub struct Scene {
   pub results: LayoutResults,
   /// Its stacking contexts; the first is the synthetic root.
   pub contexts: Vec<StackingContextNode>,
+  /// The clips and effects its boxes paint under.
+  pub properties: PropertyTrees,
   /// The size it paints at: the viewport on a definite axis, the root's border box otherwise.
   pub size: Size<f32>,
 }
@@ -528,7 +583,10 @@ impl Scene {
     let results = LayoutResults::compute(&root, viewport.into());
     let container_size = Size::from(viewport.size);
     let size = container_size.zip_map(results.layout(NodeId::ROOT)?.size, Option::unwrap_or);
-    let contexts = SceneRequest {
+    let SceneLayers {
+      contexts,
+      properties,
+    } = SceneRequest {
       root: &root,
       layout_results: &results,
       transform: Affine::IDENTITY,
@@ -541,6 +599,7 @@ impl Scene {
       root,
       results,
       contexts,
+      properties,
       size,
     })
   }
