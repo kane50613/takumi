@@ -7,7 +7,7 @@ use crate::{
   style::{
     Color, Direction, FontSynthesis, Lang, Length, SizedTextDecorationThickness,
     TextDecorationLines, TextDecorationSkipInk, TextDecorationStyle, TextFitMode, TextOverflow,
-    TextUnderlinePosition, TextWrapStyle, VerticalAlign, WordBreak,
+    TextUnderlinePosition, TextWrapStyle, VerticalAlign, WhiteSpaceCollapse, WordBreak,
   },
   text_processing::{
     MaxHeight, RebreakOptions, apply_text_transform, apply_white_space_collapse,
@@ -693,6 +693,8 @@ fn build_inline_layout_tree<'c>(
     }
   }
 
+  trim_trailing_space(&mut spans);
+
   let (layout, text) = shape_spans(context, &spans, style, shape_cacheable);
 
   BuiltInlineLayout {
@@ -702,6 +704,42 @@ fn build_inline_layout_tree<'c>(
     positioned_floats: Vec::new(),
     line_scales: Vec::new(),
     clamped: false,
+  }
+}
+
+/// Drops the collapsible space a paragraph ends with, as the end of its last line removes it.
+/// Spacers after the space move back with the text.
+fn trim_trailing_space(spans: &mut [ProcessedInlineSpan<'_>]) {
+  let Some(last) = spans
+    .iter()
+    .rposition(|span| !matches!(span, ProcessedInlineSpan::Spacer { .. }))
+  else {
+    return;
+  };
+  let ProcessedInlineSpan::Text {
+    byte_range,
+    text,
+    style,
+    ..
+  } = &mut spans[last]
+  else {
+    return;
+  };
+
+  if !matches!(
+    style.parent.white_space_collapse,
+    WhiteSpaceCollapse::Collapse | WhiteSpaceCollapse::PreserveBreaks
+  ) || !text.ends_with(' ')
+  {
+    return;
+  }
+
+  text.pop();
+  byte_range.end -= 1;
+  for span in &mut spans[last + 1..] {
+    if let ProcessedInlineSpan::Spacer { inline_box, .. } = span {
+      inline_box.index -= 1;
+    }
   }
 }
 
