@@ -214,9 +214,7 @@ impl Filter {
   /// Classifies the filter as a pixel or complex operation.
   pub fn categorize(&self) -> FilterCategory<'_> {
     match self {
-      Filter::Blur(_) | Filter::DropShadow(_) | Filter::HueRotate(_) => {
-        FilterCategory::Complex(self)
-      }
+      Filter::Blur(_) | Filter::DropShadow(_) => FilterCategory::Complex(self),
       #[cfg(feature = "svg")]
       Filter::Reference(_) => FilterCategory::Complex(self),
       _ => FilterCategory::Pixel(self),
@@ -271,7 +269,7 @@ pub fn compose_transfer_table(existing: &mut TransferTable, next: &TransferTable
 pub enum FilterCategory<'f> {
   /// Pixel filters that can potentially be batched
   Pixel(&'f Filter),
-  /// Complex filters that need special handling (blur, drop-shadow, hue-rotate)
+  /// Complex filters that need special handling (blur, drop-shadow)
   Complex(&'f Filter),
 }
 

@@ -2,7 +2,7 @@ use smallvec::SmallVec;
 #[cfg(feature = "svg")]
 use takumi_core::{Error, resources::image::apply_svg_filter, style::FilterReference};
 use takumi_core::{
-  filter::ColorMatrix,
+  filter::{ColorMatrix, ColorMatrixChain},
   geometry::{Point, Size},
   paint::compose_transfer_table,
 };
@@ -13,14 +13,12 @@ use crate::{
   apply_blur_alpha_bytes, apply_blur_rgba_bytes,
   canvas::demultiply_rgba_in_place,
   checked_area, fast_div_255, intersect_alpha_masks, premultiply_rgba_pixel, render_mask,
-  style::{
-    Affine, Angle, Color, Filter, FilterCategory, SizingContext, TransferChannel, TransferTable,
-  },
+  style::{Affine, Color, Filter, FilterCategory, SizingContext, TransferChannel, TransferTable},
 };
 
 /// Filter prepared for batch execution
 enum PreparedFilter {
-  Matrix(ColorMatrix),
+  Matrices(ColorMatrixChain),
   RgbLut(Box<TransferTable>),
   AlphaLut(Box<TransferTable>),
 }
@@ -50,7 +48,17 @@ fn prepare_pixel_filters(filters: &[&Filter]) -> SmallVec<[PreparedFilter; 4]> {
         if let Some(table) = pending_alpha.take() {
           prepared.push(PreparedFilter::AlphaLut(Box::new(table)));
         }
-        prepared.extend(ColorMatrix::from_filter(filter).map(PreparedFilter::Matrix));
+        if let Some(matrix) = ColorMatrix::from_filter(filter) {
+          match prepared.last_mut() {
+            Some(PreparedFilter::Matrices(chain)) => chain.push(matrix),
+            _ => {
+              let mut chain = ColorMatrixChain::default();
+
+              chain.push(matrix);
+              prepared.push(PreparedFilter::Matrices(chain));
+            }
+          }
+        }
       }
     }
   }
@@ -99,7 +107,7 @@ fn apply_batched_pixel_filters(data: &mut [u8], filters: &[&Filter]) {
     on_straight_alpha(pixel, |pixel| {
       for p in &prepared {
         match p {
-          PreparedFilter::Matrix(matrix) => *pixel = matrix.apply_rgba8(*pixel),
+          PreparedFilter::Matrices(chain) => *pixel = chain.apply_rgba8(*pixel),
           PreparedFilter::RgbLut(t) => {
             pixel[0] = t[pixel[0] as usize];
             pixel[1] = t[pixel[1] as usize];
@@ -111,21 +119,6 @@ fn apply_batched_pixel_filters(data: &mut [u8], filters: &[&Filter]) {
         }
       }
     });
-  }
-}
-
-/// Rotates every visible pixel's hue by `angle`, through the matrix Filter
-/// Effects defines for it.
-fn apply_hue_rotate_rgba_bytes(data: &mut [u8], angle: Angle) {
-  let Some(matrix) = ColorMatrix::from_filter(&Filter::HueRotate(angle)) else {
-    return;
-  };
-
-  for pixel in bytemuck::cast_slice_mut::<u8, [u8; 4]>(data) {
-    if pixel[3] == 0 {
-      continue;
-    }
-    on_straight_alpha(pixel, |pixel| *pixel = matrix.apply_rgba8(*pixel));
   }
 }
 
@@ -277,10 +270,6 @@ pub(crate) fn apply_filters_to_pixmap<'f, F: Iterator<Item = &'f Filter>>(
         pending_pixel_filters.clear();
 
         match f {
-          Filter::HueRotate(angle) => {
-            let raw: &mut [u8] = bytemuck::cast_slice_mut(pixmap.pixels_mut());
-            apply_hue_rotate_rgba_bytes(raw, *angle);
-          }
           Filter::Blur(blur) => {
             let width = pixmap.width();
             let height = pixmap.height();
@@ -541,7 +530,10 @@ mod tests {
   use tiny_skia::PixmapMut;
 
   use super::*;
-  use crate::{style::PercentageNumber, viewport::Viewport};
+  use crate::{
+    style::{Angle, PercentageNumber},
+    viewport::Viewport,
+  };
 
   #[test]
   fn mask_bounds_span_the_first_and_last_visible_pixels() {
@@ -610,7 +602,7 @@ mod tests {
   fn hue_rotate_keeps_a_semi_transparent_pixel_premultiplied() {
     let mut pixel = [128, 0, 0, 128];
 
-    apply_hue_rotate_rgba_bytes(&mut pixel, Angle::new(120.0));
+    apply_batched_pixel_filters(&mut pixel, &[&Filter::HueRotate(Angle::new(120.0))]);
 
     assert!(pixel[..3].iter().all(|channel| *channel <= pixel[3]));
     assert_eq!(pixel[3], 128);
