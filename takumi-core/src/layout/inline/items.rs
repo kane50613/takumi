@@ -6,8 +6,8 @@ use crate::{
   geometry::{ComputedLayout, Point, Rect, Size},
   layout::{border::BorderProperties, node::Node, tree::RenderNode},
   style::{
-    Color, Direction, Display, Float, Length, ResolvedVerticalAlign, Sides, SizingContext,
-    SpacePair, WhiteSpaceCollapse,
+    Color, Direction, Display, Float, Length, Position, ResolvedVerticalAlign, Sides,
+    SizingContext, SpacePair, WhiteSpaceCollapse,
   },
   text_processing::{COLLAPSIBLE_WHITESPACE, HORIZONTAL_WHITESPACE},
 };
@@ -17,12 +17,53 @@ use smallvec::SmallVec;
 use super::outline::InlineOutline;
 use std::{borrow::Cow, ops::Range, rc::Rc, sync::Arc};
 
+/// An out-of-flow box inside inline content.
+#[derive(Clone)]
+pub(crate) struct InlineOutOfFlow<'n> {
+  /// Child-index path from the inline formatting context's root.
+  pub(crate) path: SmallVec<[usize; 2]>,
+  pub(crate) node: &'n RenderNode,
+  /// The inline span that is its containing block, if one is.
+  pub(crate) container: Option<&'n RenderNode>,
+}
+
+/// The innermost inline spans around a point in inline content that contain out-of-flow boxes.
+#[derive(Clone, Copy, Default)]
+struct InlineContainers<'n> {
+  absolute: Option<&'n RenderNode>,
+  fixed: Option<&'n RenderNode>,
+}
+
+impl<'n> InlineContainers<'n> {
+  /// The containers inside `span`.
+  fn within(self, span: &'n RenderNode) -> Self {
+    Self {
+      absolute: span
+        .contains_absolute_as_inline()
+        .then_some(span)
+        .or(self.absolute),
+      fixed: span
+        .contains_fixed_as_inline()
+        .then_some(span)
+        .or(self.fixed),
+    }
+  }
+
+  /// The span containing the out-of-flow `node`.
+  fn of(self, node: &RenderNode) -> Option<&'n RenderNode> {
+    match node.context.style.position {
+      Position::Fixed => self.fixed,
+      _ => self.absolute,
+    }
+  }
+}
+
 /// An inline box and its resolved box-model dimensions.
 pub struct InlineBoxItem<'c> {
   /// The render node this box wraps.
   pub render_node: &'c RenderNode,
   /// Innermost enclosing decorated span, if any.
-  pub(crate) decorations: Option<Rc<DecorationLink>>,
+  pub(crate) decorations: Option<Rc<DecorationLink<'c>>>,
   pub(crate) inline_box: InlineBox,
   pub(crate) paint_width: f32,
   pub(crate) paint_height: f32,
@@ -55,20 +96,25 @@ impl RenderNode {
     })
   }
 
-  /// The out-of-flow boxes among the inline content this node lays out, each with its child-index
-  /// path from this node, found the way [`collect_inline_items`] walks it.
-  pub(crate) fn inline_out_of_flow(&self) -> Vec<(SmallVec<[usize; 2]>, &RenderNode)> {
+  /// The out-of-flow boxes among the inline content this node lays out, found the way
+  /// [`collect_inline_items`] walks it.
+  pub(crate) fn inline_out_of_flow(&self) -> Vec<InlineOutOfFlow<'_>> {
     fn visit<'n>(
       node: &'n RenderNode,
       path: &mut SmallVec<[usize; 2]>,
-      found: &mut Vec<(SmallVec<[usize; 2]>, &'n RenderNode)>,
+      containers: InlineContainers<'n>,
+      found: &mut Vec<InlineOutOfFlow<'n>>,
     ) {
       for (index, child) in node.children.iter().flatten().enumerate() {
         path.push(index);
         if child.is_out_of_flow() {
-          found.push((path.clone(), child));
+          found.push(InlineOutOfFlow {
+            path: path.clone(),
+            node: child,
+            container: containers.of(child),
+          });
         } else if child.is_inline_span() {
-          visit(child, path, found);
+          visit(child, path, containers.within(child), found);
         }
         path.pop();
       }
@@ -76,7 +122,12 @@ impl RenderNode {
 
     let mut found = Vec::new();
 
-    visit(self, &mut SmallVec::new(), &mut found);
+    visit(
+      self,
+      &mut SmallVec::new(),
+      InlineContainers::default(),
+      &mut found,
+    );
     found
   }
 
@@ -84,6 +135,20 @@ impl RenderNode {
   /// atomic box of its own.
   fn is_inline_span(&self) -> bool {
     self.context.style.display.is_inline() && !self.participates_as_inline_box()
+  }
+
+  /// Whether this inline span is the containing block of fixed-position descendants, as Blink's
+  /// `LayoutObject::ComputeIsFixedContainer` decides for a box that is not atomic.
+  fn contains_fixed_as_inline(&self) -> bool {
+    let style = &self.context.style;
+
+    !style.filter.is_empty() || !style.backdrop_filter.is_empty()
+  }
+
+  /// Whether this inline span is the containing block of absolutely positioned descendants, as
+  /// Blink's `LayoutObject::ComputeIsAbsoluteContainer` decides.
+  fn contains_absolute_as_inline(&self) -> bool {
+    self.context.style.position.is_positioned() || self.contains_fixed_as_inline()
   }
 
   /// How parley places the box standing in for this node.
@@ -118,7 +183,7 @@ pub enum ProcessedInlineSpan<'c> {
     /// URI of the nearest enclosing anchor's `href`, if any.
     link: Option<Arc<str>>,
     /// Innermost enclosing decorated span, if any.
-    decorations: Option<Rc<DecorationLink>>,
+    decorations: Option<Rc<DecorationLink<'c>>>,
   },
   /// An inline box.
   Box(InlineBoxItem<'c>),
@@ -127,14 +192,18 @@ pub enum ProcessedInlineSpan<'c> {
     /// The box the spacer occupies in the layout.
     inline_box: InlineBox,
     /// Innermost enclosing decorated span, if any.
-    decorations: Option<Rc<DecorationLink>>,
+    decorations: Option<Rc<DecorationLink<'c>>>,
   },
 }
 
 /// The box decoration a `display: inline` span paints along its line
 /// fragments, resolved from its computed style.
 #[derive(Clone)]
-pub(crate) struct InlineDecoration {
+pub(crate) struct InlineDecoration<'c> {
+  /// The span, whose fragments also bound the out-of-flow boxes it contains.
+  pub(crate) owner: &'c RenderNode,
+  /// Whether the fragments paint, which a span kept only as a containing block does not.
+  pub(crate) paints: bool,
   pub(crate) color: Color,
   pub(crate) padding: Rect<f32>,
   /// The border's widths, colours and styles; each fragment resolves its radii from `radius`.
@@ -150,9 +219,13 @@ pub(crate) struct InlineDecoration {
   pub(crate) sizing: SizingContext,
 }
 
-impl InlineDecoration {
+impl InlineDecoration<'_> {
   /// How far the span's fragments and outline reach past its glyph boxes.
   pub(crate) fn reach(&self) -> f32 {
+    if !self.paints {
+      return 0.0;
+    }
+
     let widths = self.border.width;
     let edge = [
       self.padding.top + widths.top,
@@ -170,9 +243,9 @@ impl InlineDecoration {
 /// One open decorated span in the chain of decorated ancestors around an
 /// inline item, innermost last. Chains share their tails, so the `Rc` pointer
 /// identifies the span across items.
-pub struct DecorationLink {
-  pub(crate) decoration: InlineDecoration,
-  pub(crate) parent: Option<Rc<DecorationLink>>,
+pub struct DecorationLink<'c> {
+  pub(crate) decoration: InlineDecoration<'c>,
+  pub(crate) parent: Option<Rc<DecorationLink<'c>>>,
 }
 
 /// A piece of inline content collected from the tree.
@@ -182,7 +255,7 @@ pub enum InlineItem<'c> {
     /// The node.
     render_node: &'c RenderNode,
     /// Innermost enclosing decorated span, if any.
-    decorations: Option<Rc<DecorationLink>>,
+    decorations: Option<Rc<DecorationLink<'c>>>,
   },
   /// A run of text.
   Text {
@@ -193,14 +266,14 @@ pub enum InlineItem<'c> {
     /// URI of the nearest enclosing anchor's `href`, if any.
     link: Option<Arc<str>>,
     /// Innermost enclosing decorated span, if any.
-    decorations: Option<Rc<DecorationLink>>,
+    decorations: Option<Rc<DecorationLink<'c>>>,
   },
   /// Advance an inline span's horizontal padding reserves at its edge.
   Spacer {
     /// The padding width in px.
     width: f32,
     /// Innermost enclosing decorated span (the padded span itself when it is decorated), if any.
-    decorations: Option<Rc<DecorationLink>>,
+    decorations: Option<Rc<DecorationLink<'c>>>,
   },
 }
 
@@ -235,7 +308,7 @@ fn collect_inline_items_impl<'n>(
   node: &'n RenderNode,
   depth: usize,
   link: Option<&Arc<str>>,
-  decorations: Option<&Rc<DecorationLink>>,
+  decorations: Option<&Rc<DecorationLink<'n>>>,
   items: &mut Vec<InlineItem<'n>>,
 ) {
   if depth > 0 && (node.participates_as_inline_box() || node.is_out_of_flow()) {
@@ -369,21 +442,25 @@ fn inline_span_spacing(node: &RenderNode, depth: usize) -> (Rect<f32>, Rect<f32>
 }
 
 /// The decoration an inline span paints, or `None` when it paints no background, border or
-/// outline.
-fn inline_span_decoration(node: &RenderNode, depth: usize) -> Option<InlineDecoration> {
-  if !is_inline_span(node, depth) || !node.context.style.is_visible() {
+/// outline and cannot be the containing block of out-of-flow boxes.
+fn inline_span_decoration(node: &RenderNode, depth: usize) -> Option<InlineDecoration<'_>> {
+  if !is_inline_span(node, depth) {
     return None;
   }
   let style = &node.context.style;
   let color = style.background_color.resolve(node.context.current_color);
   let border = BorderProperties::from_context(&node.context, Size::ZERO, node.border_px());
   let outline = InlineOutline::of(&node.context);
+  let paints =
+    style.is_visible() && (color.0[3] != 0 || border.has_visible_sides() || outline.is_some());
 
-  if color.0[3] == 0 && !border.has_visible_sides() && outline.is_none() {
+  if !paints && !node.contains_absolute_as_inline() {
     return None;
   }
 
   Some(InlineDecoration {
+    owner: node,
+    paints,
     color,
     padding: node.padding_px(),
     border,

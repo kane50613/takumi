@@ -48,6 +48,7 @@ pub use self::{
     RunMetrics, ShapedRun,
   },
 };
+pub(crate) use self::{background::PaddingBox, items::InlineOutOfFlow};
 use self::{
   breaking::distribute_trailing_whitespace,
   metrics::{
@@ -207,6 +208,10 @@ impl BuiltInlineLayout<'_> {
 
   /// The static position of each out-of-flow box among the spans, after Blink's
   /// `LogicalLineBuilder::PlaceOutOfFlowObjects`.
+  ///
+  /// Naive next to Blink: a box inside a span that opens right after a line's trailing space stays
+  /// on that line, where Blink's `LineBreaker` ends the trailing run at the span's open tag and
+  /// carries the span and the box to the next line.
   pub(crate) fn out_of_flow_static_positions(&self, content_width: f32) -> Vec<StaticPosition> {
     let metrics = self.line_metrics();
     let from_end = self.layout.is_rtl();
@@ -226,7 +231,7 @@ impl BuiltInlineLayout<'_> {
           PositionedLayoutItem::InlineBox(inline_box) => inline_box,
         };
 
-        match inline_box.kind {
+        match self.box_kind(&inline_box) {
           InlineBoxKind::InFlow => preceded = true,
           InlineBoxKind::CustomOutOfFlow => {}
           InlineBoxKind::OutOfFlow => {
@@ -264,6 +269,14 @@ impl BuiltInlineLayout<'_> {
     }
 
     positions
+  }
+
+  /// How `inline_box` sits in its line, which parley's kind does not tell for an out-of-flow box.
+  fn box_kind(&self, inline_box: &PositionedInlineBox) -> InlineBoxKind {
+    match self.spans.get(inline_box.id as usize) {
+      Some(ProcessedInlineSpan::Box(item)) => item.render_node.inline_box_kind(),
+      _ => inline_box.kind,
+    }
   }
 
   /// Resolved metrics for each line.
@@ -396,6 +409,7 @@ impl BuiltInlineLayout<'_> {
             height: inline_box.height,
           });
         }
+        PlacedItem::Placeholder(_) => {}
       }
       Ok(())
     });
@@ -876,7 +890,7 @@ fn direction_mark_span<'c>(
 /// Measures an inline-level node and sizes the box that stands in for it.
 fn inline_box_span<'c>(
   render_node: &'c RenderNode,
-  decorations: Option<Rc<DecorationLink>>,
+  decorations: Option<Rc<DecorationLink<'c>>>,
   available_space: Size<AvailableSpace>,
   index: usize,
   id: u64,
@@ -935,10 +949,15 @@ fn inline_box_span<'c>(
   } else {
     content_size.height + margin.vertical() + padding.vertical() + border.vertical()
   };
+  // Parley breaks the line after every box it places itself, while Blink never breaks at an
+  // out-of-flow object, so the line breaker takes these back and appends them without one.
   let inline_box = InlineBox {
     index,
     id,
-    kind,
+    kind: match kind {
+      InlineBoxKind::OutOfFlow => InlineBoxKind::CustomOutOfFlow,
+      kind => kind,
+    },
     width: paint_width,
     height: paint_height,
   };
@@ -1247,6 +1266,8 @@ pub(crate) enum PlacedItem<'a> {
   },
   /// An in-flow box, its `x` already scaled for text-fit.
   Box(VisualInlineBox),
+  /// Where an out-of-flow box sits in the line, its `x` already scaled for text-fit.
+  Placeholder(VisualInlineBox),
 }
 
 impl BuiltInlineLayout<'_> {
@@ -1294,7 +1315,9 @@ impl BuiltInlineLayout<'_> {
             },
           )?,
           PositionedLayoutItem::InlineBox(inline_box) => {
-            if inline_box.kind != InlineBoxKind::InFlow {
+            let kind = self.box_kind(&inline_box);
+
+            if kind == InlineBoxKind::CustomOutOfFlow {
               continue;
             }
             let Some(resolved) =
@@ -1307,6 +1330,10 @@ impl BuiltInlineLayout<'_> {
               ..resolved
             };
 
+            if kind == InlineBoxKind::OutOfFlow {
+              visit(&walked, PlacedItem::Placeholder(inline_box))?;
+              continue;
+            }
             visit(&walked, PlacedItem::Box(inline_box))?;
             static_inline_prefix += resolved.width;
           }

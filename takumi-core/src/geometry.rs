@@ -36,6 +36,13 @@ impl<T> Point<T> {
   pub(crate) fn from_taffy(p: taffy::geometry::Point<T>) -> Self {
     Self { x: p.x, y: p.y }
   }
+
+  pub(crate) fn into_taffy(self) -> taffy::geometry::Point<T> {
+    taffy::geometry::Point {
+      x: self.x,
+      y: self.y,
+    }
+  }
 }
 
 impl Point<f32> {

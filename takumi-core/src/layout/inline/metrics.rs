@@ -434,6 +434,6 @@ pub(super) fn resolve_visual_inline_box(
     width: item.paint_width,
     height: item.paint_height,
     line_baseline,
-    kind: inline_box.kind,
+    kind: item.render_node.inline_box_kind(),
   })
 }

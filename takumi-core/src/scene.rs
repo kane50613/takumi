@@ -873,6 +873,7 @@ fn compute_node_paint_bounds(
           ),
         );
       }
+      PlacedItem::Placeholder(_) => {}
     }
     Ok(())
   });
