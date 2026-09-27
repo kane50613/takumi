@@ -120,6 +120,9 @@ impl OutlineIsland {
   pub fn of(outline_rects: Vec<InlineOutlineRect>, reach: impl Fn(u64) -> f32) -> Vec<Self> {
     let merged_rects = merge_inline_rects(outline_rects);
     let mut rect_counts: HashMap<u64, usize> = HashMap::new();
+    // The islands whose last rect sits on each span's line, the only ones a rect on the next
+    // line can join.
+    let mut ends: HashMap<(u64, usize), Vec<usize>> = HashMap::new();
     let mut islands: Vec<Self> = Vec::new();
 
     for rect in &merged_rects {
@@ -128,21 +131,38 @@ impl OutlineIsland {
 
     for rect in merged_rects {
       let reach = reach(rect.span_id);
-      let island = islands.iter_mut().find(|island| {
-        island.rects.last().is_some_and(|previous| {
-          previous.span_id == rect.span_id
-            && rect.line_index == previous.line_index + 1
-            && previous.meets(rect, reach)
-        })
-      });
+      let joined = rect
+        .line_index
+        .checked_sub(1)
+        .and_then(|line| ends.get_mut(&(rect.span_id, line)))
+        .and_then(|candidates| {
+          let position = candidates.iter().position(|&index| {
+            islands[index]
+              .rects
+              .last()
+              .is_some_and(|previous| previous.meets(rect, reach))
+          })?;
 
-      match island {
-        Some(island) => island.rects.push(rect),
-        None => islands.push(Self {
-          rects: vec![rect],
-          lone: rect_counts[&rect.span_id] == 1,
-        }),
-      }
+          Some(candidates.remove(position))
+        });
+      let index = match joined {
+        Some(index) => {
+          islands[index].rects.push(rect);
+          index
+        }
+        None => {
+          islands.push(Self {
+            rects: vec![rect],
+            lone: rect_counts[&rect.span_id] == 1,
+          });
+          islands.len() - 1
+        }
+      };
+
+      ends
+        .entry((rect.span_id, rect.line_index))
+        .or_default()
+        .push(index);
     }
 
     islands
