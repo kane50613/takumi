@@ -403,8 +403,8 @@ pub struct InlineBrush {
   pub decoration_color: Color,
   /// Decoration line thickness.
   pub decoration_thickness: SizedTextDecorationThickness,
-  /// Extra offset of the underline away from the text, in pixels.
-  pub underline_offset: f32,
+  /// Extra offset of the underline away from the text, in pixels, or `None` for `auto`.
+  pub underline_offset: Option<f32>,
   /// Which baseline the underline is measured from.
   pub underline_position: TextUnderlinePosition,
   /// Which decoration lines to draw.
@@ -458,7 +458,7 @@ impl Default for InlineBrush {
       color: Color::black(),
       decoration_color: Color::black(),
       decoration_thickness: SizedTextDecorationThickness::Value(0.0),
-      underline_offset: 0.0,
+      underline_offset: None,
       underline_position: TextUnderlinePosition::default(),
       decoration_line: TextDecorationLines::empty(),
       decoration_skip_ink: TextDecorationSkipInk::default(),
@@ -1262,7 +1262,7 @@ mod tests {
     context
   }
 
-  fn shaped_run(position: TextUnderlinePosition, underline_offset: f32) -> ShapedRun {
+  fn shaped_run(position: TextUnderlinePosition, underline_offset: Option<f32>) -> ShapedRun {
     ShapedRun {
       glyphs: Vec::new(),
       offset: 0.0,
@@ -1307,7 +1307,7 @@ mod tests {
 
   #[test]
   fn a_fully_trimmed_run_paints_no_decoration() {
-    let mut run = shaped_run(TextUnderlinePosition::Auto, 0.0);
+    let mut run = shaped_run(TextUnderlinePosition::Auto, None);
     run.brush.decoration_line = TextDecorationLines::UNDERLINE;
     run.brush.decoration_thickness = SizedTextDecorationThickness::Value(2.0);
     run.advance = 5.2;
@@ -1579,31 +1579,38 @@ mod tests {
 
   #[test]
   fn underline_offset_from_baseline_follows_the_underline_position() {
-    // The font's underline offset is negative above the baseline, so `auto` flips it.
+    // `auto` leaves a gap of half the thickness, at least a pixel, under the baseline.
     assert_eq!(
-      shaped_run(TextUnderlinePosition::Auto, 0.0).underline_offset_from_baseline(),
-      5.0
+      shaped_run(TextUnderlinePosition::Auto, None).underline_offset_from_baseline(1.0),
+      1.0
     );
     assert_eq!(
-      shaped_run(TextUnderlinePosition::FromFont, 0.0).underline_offset_from_baseline(),
+      shaped_run(TextUnderlinePosition::Auto, None).underline_offset_from_baseline(5.0),
+      3.0
+    );
+    // The font's underline offset is negative below the baseline.
+    assert_eq!(
+      shaped_run(TextUnderlinePosition::FromFont, None).underline_offset_from_baseline(2.0),
       5.0
     );
-    // 100px em split in the metrics' 40:10 ratio puts the em box bottom 20px down.
+    // 100px em split in the metrics' 40:10 ratio puts the em box bottom 20px down, and the
+    // underline a pixel past it.
     assert_eq!(
-      shaped_run(TextUnderlinePosition::Under, 0.0).underline_offset_from_baseline(),
-      20.0
+      shaped_run(TextUnderlinePosition::Under, None).underline_offset_from_baseline(2.0),
+      21.0
     );
   }
 
   #[test]
   fn underline_offset_from_baseline_adds_the_style_offset() {
+    // A set offset drops `auto`'s gap.
     assert_eq!(
-      shaped_run(TextUnderlinePosition::Auto, 3.0).underline_offset_from_baseline(),
-      8.0
+      shaped_run(TextUnderlinePosition::Auto, Some(3.0)).underline_offset_from_baseline(4.0),
+      3.0
     );
     assert_eq!(
-      shaped_run(TextUnderlinePosition::Under, -4.0).underline_offset_from_baseline(),
-      16.0
+      shaped_run(TextUnderlinePosition::Under, Some(-4.0)).underline_offset_from_baseline(2.0),
+      17.0
     );
   }
 

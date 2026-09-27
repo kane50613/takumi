@@ -46,9 +46,15 @@ impl ShapedRun {
     }
 
     let metrics = self.metrics;
+    let thickness = |font_thickness: f32| match self.brush.decoration_thickness {
+      SizedTextDecorationThickness::Value(value) => value,
+      SizedTextDecorationThickness::FromFont => font_thickness,
+    };
     let (offset, font_thickness) = match line {
       TextDecorationLines::UNDERLINE => (
-        self.baseline + baseline_shift + self.underline_offset_from_baseline(),
+        self.baseline
+          + baseline_shift
+          + self.underline_offset_from_baseline(thickness(metrics.underline_size)),
         metrics.underline_size,
       ),
       TextDecorationLines::OVERLINE => (
@@ -62,12 +68,7 @@ impl ShapedRun {
       _ => return None,
     };
 
-    let thickness = match self.brush.decoration_thickness {
-      SizedTextDecorationThickness::Value(value) => value,
-      SizedTextDecorationThickness::FromFont => font_thickness,
-    };
-
-    Some((offset, thickness))
+    Some((offset, thickness(font_thickness)))
   }
 
   /// The run's outline glyphs, positioned from `origin`.

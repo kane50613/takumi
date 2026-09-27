@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="900" height="520" viewBox="0 0 900 520">
   <rect x="0" y="0" width="900" height="520" fill="#fff"/>
-  <rect x="28" y="61" width="65" height="3" fill="#0f172a"/>
+  <rect x="28" y="60" width="65" height="3" fill="#0f172a"/>
   <g fill="#0f172a">
     <use href="#g0" x="28" y="58"/>
     <use href="#g1" x="43.3" y="58"/>
@@ -8,8 +8,8 @@
     <use href="#g3" x="68.11" y="58"/>
     <use href="#g4" x="75.13" y="58"/>
   </g>
-  <rect x="129" y="61" width="94" height="3" fill="#0f172a"/>
-  <rect x="129" y="65" width="94" height="3" fill="#0f172a"/>
+  <rect x="129" y="60" width="94" height="3" fill="#0f172a"/>
+  <rect x="129" y="64" width="94" height="3" fill="#0f172a"/>
   <g fill="#0f172a">
     <use href="#g4" x="129" y="58"/>
     <use href="#g1" x="146.55" y="58"/>
@@ -18,7 +18,7 @@
     <use href="#g2" x="197.94" y="58"/>
     <use href="#g7" x="205.77" y="58"/>
   </g>
-  <path d="M259 62.5h89" fill="none" stroke="#0f172a" stroke-width="3" stroke-dasharray="3 3"/>
+  <path d="M259 61.5h89" fill="none" stroke="#0f172a" stroke-width="3" stroke-dasharray="3 3"/>
   <g fill="#0f172a">
     <use href="#g4" x="259" y="58"/>
     <use href="#g1" x="276.55" y="58"/>
@@ -26,7 +26,7 @@
     <use href="#g7" x="313.15" y="58"/>
     <use href="#g4" x="329.68" y="58"/>
   </g>
-  <path d="M384 62.5h101" fill="none" stroke="#0f172a" stroke-width="3" stroke-dasharray="6 2.636"/>
+  <path d="M384 61.5h101" fill="none" stroke="#0f172a" stroke-width="3" stroke-dasharray="6 2.636"/>
   <g fill="#0f172a">
     <use href="#g4" x="384" y="58"/>
     <use href="#g9" x="401.55" y="58"/>
@@ -36,16 +36,16 @@
     <use href="#g4" x="466.8" y="58"/>
   </g>
   <clipPath id="cp0">
-    <path d="M521 60h55.89v11h-55.89v-11Z"/>
+    <path d="M521 59h55.89v11h-55.89v-11Z"/>
   </clipPath>
   <g clip-path="url(#cp0)">
-    <path d="M506 65.5c7.5 10.5 7.5-10.5 15 0s7.5-10.5 15 0 7.5-10.5 15 0 7.5-10.5 15 0 7.5-10.5 15 0 7.5-10.5 15 0 7.5-10.5 15 0" fill="none" stroke="#0f172a" stroke-width="3"/>
+    <path d="M506 64.5c7.5 10.5 7.5-10.5 15 0s7.5-10.5 15 0 7.5-10.5 15 0 7.5-10.5 15 0 7.5-10.5 15 0 7.5-10.5 15 0 7.5-10.5 15 0" fill="none" stroke="#0f172a" stroke-width="3"/>
   </g>
   <clipPath id="cp1">
-    <path d="M587.92 60h5.08v11h-5.08v-11Z"/>
+    <path d="M588.6 59h4.4v11h-4.4v-11Z"/>
   </clipPath>
   <g clip-path="url(#cp1)">
-    <path d="M506 65.5c7.5 10.5 7.5-10.5 15 0s7.5-10.5 15 0 7.5-10.5 15 0 7.5-10.5 15 0 7.5-10.5 15 0 7.5-10.5 15 0 7.5-10.5 15 0" fill="none" stroke="#0f172a" stroke-width="3"/>
+    <path d="M506 64.5c7.5 10.5 7.5-10.5 15 0s7.5-10.5 15 0 7.5-10.5 15 0 7.5-10.5 15 0 7.5-10.5 15 0 7.5-10.5 15 0 7.5-10.5 15 0" fill="none" stroke="#0f172a" stroke-width="3"/>
   </g>
   <g fill="#0f172a">
     <use href="#g11" x="521" y="58"/>
@@ -131,14 +131,14 @@
   <g clip-path="url(#cp3)">
     <path d="M405 162.5c7.5 10.5 7.5-10.5 15 0s7.5-10.5 15 0 7.5-10.5 15 0 7.5-10.5 15 0 7.5-10.5 15 0 7.5-10.5 15 0 7.5-10.5 15 0" fill="none" stroke="#0f172a" stroke-width="3"/>
   </g>
-  <rect x="28" y="232" width="14.154" height="4" fill="#e11d48"/>
-  <rect x="28" y="237" width="14.154" height="4" fill="#e11d48"/>
-  <rect x="55.176" y="232" width="1.681" height="4" fill="#e11d48"/>
-  <rect x="55.176" y="237" width="1.681" height="4" fill="#e11d48"/>
-  <rect x="67.372" y="232" width="33.125" height="4" fill="#e11d48"/>
-  <rect x="67.372" y="237" width="33.125" height="4" fill="#e11d48"/>
-  <rect x="117.864" y="232" width="1.136" height="4" fill="#e11d48"/>
-  <rect x="117.864" y="237" width="1.136" height="4" fill="#e11d48"/>
+  <rect x="28" y="231" width="14.154" height="4" fill="#e11d48"/>
+  <rect x="28" y="236" width="14.154" height="4" fill="#e11d48"/>
+  <rect x="55.86" y="231" width=".996" height="4" fill="#e11d48"/>
+  <rect x="55.86" y="236" width=".996" height="4" fill="#e11d48"/>
+  <rect x="67.372" y="231" width="32.069" height="4" fill="#e11d48"/>
+  <rect x="67.372" y="236" width="32.069" height="4" fill="#e11d48"/>
+  <rect x="118.876" y="231" width=".124" height="4" fill="#e11d48"/>
+  <rect x="118.876" y="236" width=".124" height="4" fill="#e11d48"/>
   <g fill="#0f172a">
     <use href="#g14" x="28" y="229"/>
     <use href="#g13" x="43.06" y="229"/>
@@ -148,28 +148,28 @@
     <use href="#g17" x="100.57" y="229"/>
   </g>
   <clipPath id="cp4">
-    <path d="M155 232h14.15v4h-14.15v-4Z"/>
+    <path d="M155 231h14.15v4h-14.15v-4Z"/>
   </clipPath>
   <g clip-path="url(#cp4)">
-    <path d="M157 234h87" fill="none" stroke="#e11d48" stroke-width="4" stroke-dasharray="0 7.899" stroke-linecap="round"/>
+    <path d="M157 233h87" fill="none" stroke="#e11d48" stroke-width="4" stroke-dasharray="0 7.899" stroke-linecap="round"/>
   </g>
   <clipPath id="cp5">
-    <path d="M182.18 232h1.68v4h-1.68v-4Z"/>
+    <path d="M182.86 231h1v4h-1v-4Z"/>
   </clipPath>
   <g clip-path="url(#cp5)">
-    <path d="M157 234h87" fill="none" stroke="#e11d48" stroke-width="4" stroke-dasharray="0 7.899" stroke-linecap="round"/>
+    <path d="M157 233h87" fill="none" stroke="#e11d48" stroke-width="4" stroke-dasharray="0 7.899" stroke-linecap="round"/>
   </g>
   <clipPath id="cp6">
-    <path d="M194.37 232h33.13v4h-33.13v-4Z"/>
+    <path d="M194.37 231h32.07v4h-32.07v-4Z"/>
   </clipPath>
   <g clip-path="url(#cp6)">
-    <path d="M157 234h87" fill="none" stroke="#e11d48" stroke-width="4" stroke-dasharray="0 7.899" stroke-linecap="round"/>
+    <path d="M157 233h87" fill="none" stroke="#e11d48" stroke-width="4" stroke-dasharray="0 7.899" stroke-linecap="round"/>
   </g>
   <clipPath id="cp7">
-    <path d="M244.86 232h1.14v4h-1.14v-4Z"/>
+    <path d="M245.88 231h.12v4h-.12v-4Z"/>
   </clipPath>
   <g clip-path="url(#cp7)">
-    <path d="M157 234h87" fill="none" stroke="#e11d48" stroke-width="4" stroke-dasharray="0 7.899" stroke-linecap="round"/>
+    <path d="M157 233h87" fill="none" stroke="#e11d48" stroke-width="4" stroke-dasharray="0 7.899" stroke-linecap="round"/>
   </g>
   <g fill="#0f172a">
     <use href="#g14" x="155" y="229"/>
@@ -180,28 +180,28 @@
     <use href="#g17" x="227.57" y="229"/>
   </g>
   <clipPath id="cp8">
-    <path d="M282 232h14.15v4h-14.15v-4Z"/>
+    <path d="M282 231h14.15v4h-14.15v-4Z"/>
   </clipPath>
   <g clip-path="url(#cp8)">
-    <path d="M282 234h91" fill="none" stroke="#e11d48" stroke-width="4" stroke-dasharray="8 3.857"/>
+    <path d="M282 233h91" fill="none" stroke="#e11d48" stroke-width="4" stroke-dasharray="8 3.857"/>
   </g>
   <clipPath id="cp9">
-    <path d="M309.18 232h1.68v4h-1.68v-4Z"/>
+    <path d="M309.86 231h1v4h-1v-4Z"/>
   </clipPath>
   <g clip-path="url(#cp9)">
-    <path d="M282 234h91" fill="none" stroke="#e11d48" stroke-width="4" stroke-dasharray="8 3.857"/>
+    <path d="M282 233h91" fill="none" stroke="#e11d48" stroke-width="4" stroke-dasharray="8 3.857"/>
   </g>
   <clipPath id="cp10">
-    <path d="M321.37 232h33.13v4h-33.13v-4Z"/>
+    <path d="M321.37 231h32.07v4h-32.07v-4Z"/>
   </clipPath>
   <g clip-path="url(#cp10)">
-    <path d="M282 234h91" fill="none" stroke="#e11d48" stroke-width="4" stroke-dasharray="8 3.857"/>
+    <path d="M282 233h91" fill="none" stroke="#e11d48" stroke-width="4" stroke-dasharray="8 3.857"/>
   </g>
   <clipPath id="cp11">
-    <path d="M371.86 232h1.14v4h-1.14v-4Z"/>
+    <path d="M372.88 231h.12v4h-.12v-4Z"/>
   </clipPath>
   <g clip-path="url(#cp11)">
-    <path d="M282 234h91" fill="none" stroke="#e11d48" stroke-width="4" stroke-dasharray="8 3.857"/>
+    <path d="M282 233h91" fill="none" stroke="#e11d48" stroke-width="4" stroke-dasharray="8 3.857"/>
   </g>
   <g fill="#0f172a">
     <use href="#g14" x="282" y="229"/>
@@ -212,28 +212,28 @@
     <use href="#g17" x="354.57" y="229"/>
   </g>
   <clipPath id="cp12">
-    <path d="M409 231h14.15v13h-14.15v-13Z"/>
+    <path d="M409 230h14.15v13h-14.15v-13Z"/>
   </clipPath>
   <g clip-path="url(#cp12)">
-    <path d="M390 237.5c9.5 13.5 9.5-13.5 19 0s9.5-13.5 19 0 9.5-13.5 19 0 9.5-13.5 19 0 9.5-13.5 19 0 9.5-13.5 19 0 9.5-13.5 19 0" fill="none" stroke="#e11d48" stroke-width="4"/>
+    <path d="M390 236.5c9.5 13.5 9.5-13.5 19 0s9.5-13.5 19 0 9.5-13.5 19 0 9.5-13.5 19 0 9.5-13.5 19 0 9.5-13.5 19 0 9.5-13.5 19 0" fill="none" stroke="#e11d48" stroke-width="4"/>
   </g>
   <clipPath id="cp13">
-    <path d="M436.18 231h1.68v13h-1.68v-13Z"/>
+    <path d="M436.86 230h1v13h-1v-13Z"/>
   </clipPath>
   <g clip-path="url(#cp13)">
-    <path d="M390 237.5c9.5 13.5 9.5-13.5 19 0s9.5-13.5 19 0 9.5-13.5 19 0 9.5-13.5 19 0 9.5-13.5 19 0 9.5-13.5 19 0 9.5-13.5 19 0" fill="none" stroke="#e11d48" stroke-width="4"/>
+    <path d="M390 236.5c9.5 13.5 9.5-13.5 19 0s9.5-13.5 19 0 9.5-13.5 19 0 9.5-13.5 19 0 9.5-13.5 19 0 9.5-13.5 19 0 9.5-13.5 19 0" fill="none" stroke="#e11d48" stroke-width="4"/>
   </g>
   <clipPath id="cp14">
-    <path d="M448.37 231h33.13v13h-33.13v-13Z"/>
+    <path d="M448.37 230h32.07v13h-32.07v-13Z"/>
   </clipPath>
   <g clip-path="url(#cp14)">
-    <path d="M390 237.5c9.5 13.5 9.5-13.5 19 0s9.5-13.5 19 0 9.5-13.5 19 0 9.5-13.5 19 0 9.5-13.5 19 0 9.5-13.5 19 0 9.5-13.5 19 0" fill="none" stroke="#e11d48" stroke-width="4"/>
+    <path d="M390 236.5c9.5 13.5 9.5-13.5 19 0s9.5-13.5 19 0 9.5-13.5 19 0 9.5-13.5 19 0 9.5-13.5 19 0 9.5-13.5 19 0 9.5-13.5 19 0" fill="none" stroke="#e11d48" stroke-width="4"/>
   </g>
   <clipPath id="cp15">
-    <path d="M498.86 231h1.14v13h-1.14v-13Z"/>
+    <path d="M499.88 230h.12v13h-.12v-13Z"/>
   </clipPath>
   <g clip-path="url(#cp15)">
-    <path d="M390 237.5c9.5 13.5 9.5-13.5 19 0s9.5-13.5 19 0 9.5-13.5 19 0 9.5-13.5 19 0 9.5-13.5 19 0 9.5-13.5 19 0 9.5-13.5 19 0" fill="none" stroke="#e11d48" stroke-width="4"/>
+    <path d="M390 236.5c9.5 13.5 9.5-13.5 19 0s9.5-13.5 19 0 9.5-13.5 19 0 9.5-13.5 19 0 9.5-13.5 19 0 9.5-13.5 19 0 9.5-13.5 19 0" fill="none" stroke="#e11d48" stroke-width="4"/>
   </g>
   <g fill="#0f172a">
     <use href="#g14" x="409" y="229"/>
@@ -248,10 +248,10 @@
   </filter>
   <g filter="url(#bl16)">
     <clipPath id="cp17">
-      <path d="M28 288h141v11h-141v-11Z"/>
+      <path d="M28 287h141v11h-141v-11Z"/>
     </clipPath>
     <g clip-path="url(#cp17)">
-      <path d="M16 296.5c7.5 10.5 7.5-10.5 15 0s7.5-10.5 15 0 7.5-10.5 15 0 7.5-10.5 15 0 7.5-10.5 15 0 7.5-10.5 15 0 7.5-10.5 15 0 7.5-10.5 15 0 7.5-10.5 15 0 7.5-10.5 15 0 7.5-10.5 15 0 7.5-10.5 15 0" fill="none" stroke="#2563eb" stroke-opacity=".6" stroke-width="3"/>
+      <path d="M16 295.5c7.5 10.5 7.5-10.5 15 0s7.5-10.5 15 0 7.5-10.5 15 0 7.5-10.5 15 0 7.5-10.5 15 0 7.5-10.5 15 0 7.5-10.5 15 0 7.5-10.5 15 0 7.5-10.5 15 0 7.5-10.5 15 0 7.5-10.5 15 0 7.5-10.5 15 0" fill="none" stroke="#2563eb" stroke-opacity=".6" stroke-width="3"/>
     </g>
     <g fill="#2563eb" fill-opacity=".6">
       <use href="#g0" x="31" y="289"/>
@@ -265,10 +265,10 @@
     </g>
   </g>
   <clipPath id="cp18">
-    <path d="M28 288h141v11h-141v-11Z"/>
+    <path d="M28 287h141v11h-141v-11Z"/>
   </clipPath>
   <g clip-path="url(#cp18)">
-    <path d="M13 293.5c7.5 10.5 7.5-10.5 15 0s7.5-10.5 15 0 7.5-10.5 15 0 7.5-10.5 15 0 7.5-10.5 15 0 7.5-10.5 15 0 7.5-10.5 15 0 7.5-10.5 15 0 7.5-10.5 15 0 7.5-10.5 15 0 7.5-10.5 15 0 7.5-10.5 15 0" fill="none" stroke="#0f172a" stroke-width="3"/>
+    <path d="M13 292.5c7.5 10.5 7.5-10.5 15 0s7.5-10.5 15 0 7.5-10.5 15 0 7.5-10.5 15 0 7.5-10.5 15 0 7.5-10.5 15 0 7.5-10.5 15 0 7.5-10.5 15 0 7.5-10.5 15 0 7.5-10.5 15 0 7.5-10.5 15 0 7.5-10.5 15 0" fill="none" stroke="#0f172a" stroke-width="3"/>
   </g>
   <g fill="#0f172a">
     <use href="#g0" x="28" y="286"/>
@@ -280,7 +280,7 @@
     <use href="#g7" x="134.56" y="286"/>
     <use href="#g4" x="151.09" y="286"/>
   </g>
-  <path d="M205 290h139" fill="none" stroke="#16a34a" stroke-width="2" stroke-dasharray="6 4.231"/>
+  <path d="M205 288h139" fill="none" stroke="#16a34a" stroke-width="2" stroke-dasharray="6 4.231"/>
   <g fill="#0f172a">
     <use href="#g0" x="205" y="286"/>
     <use href="#g10" x="220.3" y="286"/>

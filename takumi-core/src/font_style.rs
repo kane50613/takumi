@@ -245,7 +245,7 @@ pub struct SizedFontStyle<'s> {
   pub(crate) text_stroke_color: Color,
   pub(crate) text_decoration_color: Color,
   pub(crate) text_decoration_thickness: SizedTextDecorationThickness,
-  pub(crate) text_underline_offset: f32,
+  pub(crate) text_underline_offset: Option<f32>,
   /// Resolved sizing context (font size, etc.).
   pub sizing: SizingContext,
 }
@@ -269,7 +269,7 @@ impl SizedFontStyle<'_> {
     self.sizing.font_size.to_bits().hash(hasher);
     self.letter_spacing.to_bits().hash(hasher);
     self.word_spacing.to_bits().hash(hasher);
-    self.text_underline_offset.to_bits().hash(hasher);
+    self.text_underline_offset.map(f32::to_bits).hash(hasher);
     self.line_height_scales_with_text_fit.hash(hasher);
     self.line_height_is_normal.hash(hasher);
     discriminant(&self.line_height).hash(hasher);
