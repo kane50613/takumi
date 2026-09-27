@@ -1496,6 +1496,25 @@ impl RenderNode {
     .map(|length| length.to_px(&self.context.sizing, 0.0))
   }
 
+  /// The child-index path to the first node in preorder, `self` included, that `matches` accepts.
+  pub fn path_where(&self, matches: impl Fn(&RenderNode) -> bool + Copy) -> Option<Vec<usize>> {
+    if matches(self) {
+      return Some(Vec::new());
+    }
+
+    self
+      .children
+      .as_deref()?
+      .iter()
+      .enumerate()
+      .find_map(|(index, child)| {
+        let mut path = child.path_where(matches)?;
+
+        path.insert(0, index);
+        Some(path)
+      })
+  }
+
   /// Used border widths in pixels.
   pub(super) fn border_px(&self) -> Rect<f32> {
     let style = &self.context.style;
