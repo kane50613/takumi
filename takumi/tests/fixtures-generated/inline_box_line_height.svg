@@ -76,7 +76,7 @@
     <use href="#g21" x="445.42" y="134.2"/>
     <use href="#g21" x="449.53" y="134.2"/>
   </g>
-  <path d="M188.74 36h93.95v42h-93.95Zm3 3h87.95v36h-87.95Z" fill="#2563eb" fill-rule="evenodd"/>
+  <path d="M191.74 36h87.95c1.65 0 3 1.34 3 3v36c0 1.66-1.35 3-3 3h-87.95c-1.66 0-3-1.34-3-3v-36c0-1.66 1.34-3 3-3Zm0 3h87.95v36h-87.95v-36Z" fill="#2563eb" fill-rule="evenodd"/>
   <clipPath id="cp0">
     <path d="M282.69 35h245.07v44h-245.07Zm2 2h241.07v40h-241.07Z" clip-rule="evenodd"/>
   </clipPath>

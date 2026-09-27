@@ -140,6 +140,26 @@ impl OutlineGeometry {
     let offset = style
       .outline_offset
       .to_border_px(&context.sizing, size.width);
+
+    Self::ring(
+      size,
+      offset,
+      BorderProperties {
+        width: Sides([width; 4]).into(),
+        color: Sides([style.outline_color.resolve(context.current_color); 4]).into(),
+        style: Sides([style.outline_style; 4]).into(),
+        image_rendering: style.image_rendering,
+        radius: BorderProperties::resolve_radius_part(context, size),
+        shape: BorderProperties::resolve_shape_part(context),
+        collapsed: false,
+      },
+    )
+  }
+
+  /// The ring `border` draws `offset` past a box of `size`, `border` holding the outline's width,
+  /// colour and style on every side.
+  pub(crate) fn ring(size: Size<f32>, offset: f32, mut border: BorderProperties) -> Self {
+    let width = border.width.top;
     // CSS: the outline shape must not shrink below `2 * outline-width` in either
     // dimension, so a large negative `outline-offset` can't invert the ring.
     let min_grow = (2.0 * width - size.width)
@@ -148,15 +168,6 @@ impl OutlineGeometry {
       / 2.0;
     let grow = (offset + width).max(min_grow);
 
-    let mut border = BorderProperties {
-      width: Sides([width; 4]).into(),
-      color: Sides([style.outline_color.resolve(context.current_color); 4]).into(),
-      style: Sides([style.outline_style; 4]).into(),
-      image_rendering: style.image_rendering,
-      radius: BorderProperties::resolve_radius_part(context, size),
-      shape: BorderProperties::resolve_shape_part(context),
-      collapsed: false,
-    };
     border.expand_by(Sides::from(grow).into());
 
     Self {
