@@ -215,8 +215,6 @@ impl StackingContextNode {
   }
 
   /// The phases after the root's decorations, in [CSS 2.1 Appendix E](https://www.w3.org/TR/CSS21/zindex.html) order.
-  ///
-  /// Approximate: an in-flow box that clips its overflow paints whole with the decorations.
   pub fn paint_phases(&self) -> [PaintPhase<'_>; 7] {
     let buckets = &self.buckets;
 
@@ -269,7 +267,7 @@ struct StackingContextBuildVisit {
   state: PropertyState,
   /// The context in-flow boxes and floats paint in.
   context_id: usize,
-  /// The nearest stacking context or clipping box, where positioned boxes paint.
+  /// The nearest stacking context, where positioned boxes paint.
   stacking_id: usize,
   parent_display: Option<Display>,
   is_root: bool,
@@ -410,11 +408,6 @@ impl SceneRequest<'_> {
           &current.context.sizing,
           is_flex_or_grid_item,
         );
-      let clips = current
-        .context
-        .style
-        .resolve_overflows()
-        .should_clip_content();
 
       let mut context_id = visit.context_id;
       let mut stacking_id = visit.stacking_id;
@@ -435,7 +428,7 @@ impl SceneRequest<'_> {
         // Atomic boxes paint as if stacking contexts, but lift positioned descendants to the real one.
         let atomic = !matches!(bucket, PaintBucket::InFlow) || is_flex_or_grid_item;
 
-        if creates_stacking_context || clips || atomic {
+        if creates_stacking_context || atomic {
           let child_context = contexts.len();
 
           contexts.push(StackingContextNode::with_root(Some(node_paint)));
@@ -447,7 +440,7 @@ impl SceneRequest<'_> {
             atomic,
           );
           context_id = child_context;
-          if creates_stacking_context || clips {
+          if creates_stacking_context {
             stacking_id = child_context;
           }
         } else {
