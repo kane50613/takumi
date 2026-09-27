@@ -81,7 +81,7 @@ struct BoxState {
   overflow_clip: usize,
   /// The outline, painted between the two pops.
   outline: Option<PendingOutline>,
-  /// Where the box's own content paints, which its caller emits when the content's phase comes.
+  /// Where the box's own content paints.
   frame: Option<BoxFrame>,
 }
 
@@ -221,7 +221,6 @@ impl Emitter<'_> {
     }
 
     let outer_window = self.window;
-    // The root's own content waits for its phase.
     let (child_frame, root_state) = match context.root() {
       Some(paint) => self.emit_box(paint, parent, BoxPart::Whole, surface)?,
       None => (parent, BoxState::default()),
@@ -1954,7 +1953,6 @@ impl GlyphDevice for TextDevice<'_, '_, '_> {
       .emitter
       .filtered(shadow_color.unwrap_or(shaped.brush.color));
     let paint = fill_from_rgba(rgba, 1.0);
-    // A shadow paints colour glyphs as silhouettes, so they leave the font's run.
     let colors = shadow_color.map(|_| {
       ColorGlyphs::of(
         run,
@@ -2018,7 +2016,6 @@ impl GlyphDevice for TextDevice<'_, '_, '_> {
           }
           surface.pop();
         }
-        // The silhouettes draw opaque inside the group of the shadow colour's alpha.
         #[cfg(feature = "images")]
         if let Some(colors) = &colors {
           draw_blurred_silhouettes(
@@ -2058,7 +2055,7 @@ impl GlyphDevice for TextDevice<'_, '_, '_> {
   }
 }
 
-/// Draws each bitmap glyph, placed from its origin, as its alpha filled with `color`.
+/// Draws each bitmap glyph's alpha filled with `color`.
 #[cfg(feature = "images")]
 fn draw_silhouettes(
   bitmaps: &[(&ResolvedBitmapGlyph, CorePoint<f32>)],
@@ -2086,9 +2083,7 @@ fn draw_silhouettes(
   }
 }
 
-/// Draws each bitmap glyph's silhouette blurred as a `text-shadow` of `blur_radius` blurs it,
-/// after Blink's `DropShadowPaintFilter`: the glyph drawn at its placement size, its alpha blurred
-/// with Skia's RGBA blur, and filled with `color`.
+/// Draws each bitmap glyph's alpha blurred as Blink's `DropShadowPaintFilter` blurs it.
 #[cfg(feature = "images")]
 fn draw_blurred_silhouettes(
   bitmaps: &[(&ResolvedBitmapGlyph, CorePoint<f32>)],
@@ -2133,7 +2128,7 @@ fn draw_blurred_silhouettes(
   }
 }
 
-/// Draws a `width` by `height` alpha mask, filled with `color`, placed by `transform`.
+/// Draws an alpha mask filled with `color`.
 #[cfg(feature = "images")]
 fn draw_alpha(
   alpha: &[u8],

@@ -178,8 +178,7 @@ pub(crate) struct SvgDocument {
   /// Interned glyph outlines in glyph space, emitted as `<defs>` by [`Self::finish`].
   glyph_defs: Vec<String>,
   glyph_ids: HashMap<String, u32>,
-  /// The transform each open transformed group maps its content onto the root with, innermost
-  /// last.
+  /// Each open transformed group's transform onto the root, innermost last.
   transforms: Vec<Affine>,
 }
 

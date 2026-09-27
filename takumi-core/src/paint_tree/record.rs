@@ -72,7 +72,7 @@ impl<'r> Recorder<'r> {
     }
   }
 
-  /// A recorder for a text node laying out `text`, its space mapped onto the page by `transform`.
+  /// A recorder for a text node laying out `text`.
   pub(super) fn text(text: RecordedText<'r>, transform: Affine) -> Self {
     Self {
       text: Some(text),

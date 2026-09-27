@@ -377,8 +377,7 @@ impl<'a> Surface<'a> {
     self.bd.get().cur_transform()
   }
 
-  /// The current transformation matrix composed through every open group, which starts its
-  /// content stream at the identity.
+  /// The current transformation matrix composed through every open group.
   pub fn page_transform(&self) -> Transform {
     self
       .bd

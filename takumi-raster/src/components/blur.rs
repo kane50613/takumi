@@ -4,7 +4,7 @@ use crate::{Error, Result, checked_area};
 
 pub(crate) use takumi_core::style::BlurType;
 
-/// Blurs a `width` by `height` alpha mask in place by a CSS blur `radius` of `blur_type`.
+/// Blurs an alpha mask in place by a CSS blur `radius`.
 pub(crate) fn apply_blur_alpha_bytes(
   data: &mut [u8],
   width: u32,
@@ -31,8 +31,7 @@ pub(crate) fn apply_blur_alpha_bytes(
   Ok(())
 }
 
-/// Blurs a `width` by `height` premultiplied RGBA image in place by a CSS blur `radius` of
-/// `blur_type`.
+/// Blurs premultiplied RGBA pixels in place by a CSS blur `radius`.
 pub(crate) fn apply_blur_rgba_bytes(
   data: &mut [u8],
   width: u32,

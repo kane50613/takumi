@@ -1,10 +1,5 @@
-//! Where a glyph outline crosses a horizontal band.
-//!
-//! `text-decoration-skip-ink` punches the glyphs out of an underline or overline. Chromium asks
-//! Skia for the x-ranges the outline occupies inside the band the decoration covers
-//! (`SkFont::getIntercepts`, reached through `Font::GetTextIntercepts`), then clips those ranges
-//! out of the line. This is the same question, answered from the path itself so every backend can
-//! ask it.
+//! Where a glyph outline crosses a decoration's band, which Chromium asks Skia's
+//! `SkFont::getIntercepts` for and this answers from the outline so every backend can.
 
 use std::{ops::RangeInclusive, sync::LazyLock};
 
@@ -16,9 +11,7 @@ use crate::{
   resources::glyph::ResolvedOutlineGlyph,
 };
 
-/// Segments a curve is flattened into. A glyph is small enough on screen that
-/// the error from sixteen steps stays well under the half-pixel Chromium
-/// already discards.
+/// Segments a curve is flattened into, whose error stays under the half pixel Chromium discards.
 const CURVE_STEPS: usize = 16;
 
 /// Scanlines taken across the band.
@@ -27,11 +20,7 @@ const BAND_SAMPLES: usize = 8;
 /// Disjoint x-ranges, left to right.
 pub type Spans = SmallVec<[(f32, f32); 4]>;
 
-/// The x-ranges `paths` fills between `top` and `bottom`, left to right and
-/// never overlapping.
-///
-/// Ranges stay separate when the outline leaves the band between them, so the
-/// gap inside a `u` stays a gap rather than being swallowed with the stems.
+/// The disjoint x-ranges `paths` fills between `top` and `bottom`, left to right.
 fn text_intercepts(paths: &[PathCommand], top: f32, bottom: f32) -> Spans {
   let mut spans = Spans::new();
 
@@ -40,8 +29,6 @@ fn text_intercepts(paths: &[PathCommand], top: f32, bottom: f32) -> Spans {
   }
   let edges = flatten(paths);
 
-  // The band is a decoration's thickness, a few pixels at most, so sampling it
-  // costs little and catches a bowl that dips in and back out between its ends.
   for step in 0..=BAND_SAMPLES {
     let y = top + (bottom - top) * step as f32 / BAND_SAMPLES as f32;
 
@@ -51,20 +38,14 @@ fn text_intercepts(paths: &[PathCommand], top: f32, bottom: f32) -> Spans {
   merge(spans)
 }
 
-/// Widest a skipped range grows past the ink on each side, matching Chromium's
-/// `kDecorationClipMaxDilation`.
+/// Chromium's `kDecorationClipMaxDilation`.
 const MAX_DILATION: f32 = 13.0;
 
-/// Intersections thinner than this are ignored, as Chromium ignores them by
-/// insetting the decoration bounds before asking for intercepts.
+/// How far Chromium insets the band, so thinner intersections are ignored.
 const MIN_INTERSECTION: f32 = 0.5;
 
-/// The x-ranges a decoration gives up to the glyphs it runs through, dilated as Blink's
-/// `TextPainter::ClipDecorationLine` dilates them.
-///
-/// `glyphs` places each outline in the decoration's own space. `top` and `bottom` bound the band
-/// the decoration paints; `thickness` sets how far a skipped range grows past the ink, which keeps
-/// a stroke from touching the line it interrupts.
+/// The x-ranges a decoration of `thickness` gives up to `glyphs` between `top` and `bottom`,
+/// dilated as Blink's `TextPainter::ClipDecorationLine` dilates them.
 pub fn skip_ink_ranges<'g>(
   glyphs: impl Iterator<Item = (Point<f32>, &'g ResolvedOutlineGlyph)>,
   top: f32,
@@ -92,9 +73,7 @@ pub fn skip_ink_ranges<'g>(
   merge(ranges)
 }
 
-/// Whether `text-decoration-skip-ink: auto` cuts a decoration around `character`, after Blink's
-/// `Character::CanTextDecorationSkipInk`: never around slashes, the low line, CJK ideographs and
-/// symbols, or Hangul. Follows Blink under the notice in LICENSE-CHROMIUM.
+/// Blink's `Character::CanTextDecorationSkipInk`, under the notice in LICENSE-CHROMIUM.
 pub fn skips_ink(character: char) -> bool {
   let code = u32::from(character);
 
@@ -189,7 +168,7 @@ const CJK_IDEOGRAPH_OR_SYMBOL_RANGES: &[RangeInclusive<u32>] = &[
   0x1FAC9..=0x1FACC,
 ];
 
-/// The Hangul and Linear B Ideogram blocks `CanTextDecorationSkipInk` adds to the CJK table.
+/// The Hangul and Linear B blocks `CanTextDecorationSkipInk` adds.
 const NO_SKIP_INK_BLOCKS: &[RangeInclusive<u32>] = &[
   0x1100..=0x11FF,
   0x3130..=0x318F,
@@ -220,9 +199,7 @@ fn cached_intercepts(outline: &ResolvedOutlineGlyph, top: f32, bottom: f32) -> S
   spans
 }
 
-/// Whether any outline point, control points included, lies in the band. A flattened edge
-/// stays inside the hull of its control points, so an outline that fails this cannot cross a
-/// scanline in the band.
+/// Whether any point, control points included, lies in the band, which a flattened edge must.
 fn reaches_band(paths: &[PathCommand], top: f32, bottom: f32) -> bool {
   let (mut min_y, mut max_y) = (f32::INFINITY, f32::NEG_INFINITY);
   let mut span = |point: &Point<f32>| {
@@ -247,8 +224,7 @@ fn reaches_band(paths: &[PathCommand], top: f32, bottom: f32) -> bool {
   max_y >= top && min_y <= bottom
 }
 
-/// What is left of `start..end` once `skips` are taken out of it. `skips` must be sorted, as
-/// [`skip_ink_ranges`] returns them.
+/// What is left of `start..end` once the sorted `skips` are taken out.
 pub fn remaining_spans(start: f32, end: f32, skips: &[(f32, f32)]) -> Spans {
   let mut spans = Spans::new();
   let mut left = start;

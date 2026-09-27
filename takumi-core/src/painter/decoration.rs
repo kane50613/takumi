@@ -1,11 +1,9 @@
-//! Text decoration lines, painted after Blink's `DecorationLinePainter` in
-//! [`decoration_line_painter.cc`](https://source.chromium.org/chromium/chromium/src/+/main:third_party/blink/renderer/core/paint/decoration_line_painter.cc),
-//! the offsets `TextDecorationInfo::ComputeLineData` gives a double or wavy line, and the cuts
-//! `TextPainter::ClipDecorationLine` makes for `text-decoration-skip-ink`. Follows Blink under the
-//! notice in LICENSE-CHROMIUM.
+//! Text decoration lines, painted after Blink's
+//! [`decoration_line_painter.cc`](https://source.chromium.org/chromium/chromium/src/+/main:third_party/blink/renderer/core/paint/decoration_line_painter.cc)
+//! and `TextPainter::ClipDecorationLine`. Follows Blink under the notice in LICENSE-CHROMIUM.
 //!
-//! A line snaps to whole pixels of the block's border box, which is Blink's transform-node space
-//! since layout places every box on whole pixels.
+//! Lines snap to whole pixels of the border box, which is Blink's transform-node space since
+//! layout places every box on whole pixels.
 
 use super::{FillShape, PaintDevice, StrokeStyle, border::StyledLine};
 use crate::{
@@ -17,16 +15,14 @@ use crate::{
   style::{Affine, BorderStyle, FillRule, TextDecorationLines, TextDecorationStyle},
 };
 
-/// A wave's shape: one cubic Bezier per wavelength, its control points
-/// `control_point_distance` off the midline.
+/// A wave's shape: one cubic Bezier per wavelength.
 struct Wave {
   wavelength: f32,
   control_point_distance: f32,
 }
 
 impl Wave {
-  /// The wave Blink's `MakeWave` draws for a `thickness` line, its steps on half pixels for
-  /// cleaner antialiasing.
+  /// Blink's `MakeWave`.
   fn of(thickness: f32) -> Self {
     let thickness = thickness.max(1.0);
 
@@ -41,8 +37,7 @@ impl Wave {
     self.control_point_distance / (2.0 * 3.0_f32.sqrt())
   }
 
-  /// The centerline from one wavelength before `start` to one past `start + width`, its
-  /// midpoints at `start.y`.
+  /// The centerline from one wavelength before `start` to one past `start + width`.
   fn centerline(&self, start: Point<f32>, width: f32) -> Vec<PathCommand> {
     let end = start.x + width + self.wavelength;
     let half = self.wavelength / 2.0;
@@ -70,12 +65,10 @@ impl Wave {
   }
 }
 
-/// A dashed or dotted line where Blink's `DrawLineAsStroke` draws it: from and to whole pixels, on
-/// a pixel row, a whole number of pixels thick.
+/// Where Blink's `DrawLineAsStroke` draws a dashed or dotted line.
 struct DashedLine {
   start: f32,
   end: f32,
-  /// The centre of the pixel row, before an odd thickness moves the stroke onto the half pixel.
   row: f32,
   thickness: f32,
 }
@@ -119,7 +112,6 @@ impl DecorationLine {
         if self.skips.is_empty() {
           line.paint(self.transform, device);
         } else {
-          // Blink's clip-out rects reach a pixel past the band, so they cover the half-pixel shift.
           self.clip(
             &pieces,
             bounds.top - 1.0,
@@ -157,8 +149,7 @@ impl DecorationLine {
     }
   }
 
-  /// The area the line paints, which `skip-ink` looks for glyphs in, after Blink's
-  /// `DecorationLinePainter::Bounds`.
+  /// Blink's `DecorationLinePainter::Bounds`, where `skip-ink` looks for glyphs.
   pub(crate) fn bounds(&self) -> Rect<f32> {
     let Point { x, y } = self.origin;
     let right = x + self.width;
@@ -205,8 +196,7 @@ impl DecorationLine {
     }
   }
 
-  /// The stretches of `bounds` left once `skip-ink` cuts the glyphs out, each cut on a whole
-  /// device pixel as Blink's unantialiased `ClipOut` makes it.
+  /// What `skip-ink` leaves of `bounds`, cut on whole device pixels as Blink's `ClipOut` cuts.
   fn pieces(&self, bounds: Rect<f32>) -> Spans {
     let cuts: Spans = self
       .skips
@@ -217,8 +207,7 @@ impl DecorationLine {
     remaining_spans(bounds.left, bounds.right, &cuts)
   }
 
-  /// `x` moved to the device pixel edge Skia rounds an unantialiased clip to. Under a rotation or
-  /// skew the clip stays a path whose edges Skia does not move.
+  /// `x` rounded as Skia rounds an unantialiased clip, which a rotation or skew leaves unrounded.
   fn device_pixel_x(&self, x: f32) -> f32 {
     let Affine { a, b, c, x: dx, .. } = self.output;
 
@@ -228,8 +217,7 @@ impl DecorationLine {
     ((a * x + dx + 0.5).floor() - dx) / a
   }
 
-  /// Fills the pieces of the line `offset` below its top, the top on a whole pixel and the
-  /// thickness rounded down to one, as Blink's `DrawLineAsRect` snaps it.
+  /// Fills the pieces `offset` below the top, snapped as Blink's `DrawLineAsRect` snaps them.
   fn fill<D: PaintDevice>(&self, pieces: &[(f32, f32)], offset: f32, device: &mut D) {
     let top = (self.origin.y + offset + 0.5).floor();
     let height = self.thickness.floor().max(1.0);
@@ -286,8 +274,7 @@ impl DecorationLine {
     device.pop_clip();
   }
 
-  /// Where a dashed or dotted line runs: `GetSnappedPointsForTextLine` truncates its ends and
-  /// floors its middle to whole pixels, and `DrawLineAsStroke` rounds its thickness.
+  /// Blink's `GetSnappedPointsForTextLine`, with the thickness `DrawLineAsStroke` rounds.
   fn dashed(&self) -> DashedLine {
     DashedLine {
       start: self.origin.x.floor(),
@@ -297,8 +284,7 @@ impl DecorationLine {
     }
   }
 
-  /// How far a double line's second line sits from the first: below an underline, above an
-  /// overline, and below a line-through, a whole number of pixels there.
+  /// How far a double line's second line sits from the first.
   fn double_offset(&self) -> f32 {
     let offset = self.thickness + 1.0;
 
@@ -309,8 +295,7 @@ impl DecorationLine {
     }
   }
 
-  /// How far a wavy line sits from the straight one: below an underline, above an overline,
-  /// and on a line-through.
+  /// How far a wavy line sits from the straight one.
   fn wavy_offset(&self) -> f32 {
     let offset = self.thickness + 1.0;
 
