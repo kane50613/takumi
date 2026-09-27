@@ -1,13 +1,15 @@
 //! `clip-path` basic shapes resolved to path commands, shared by the backends.
 
+use std::f32::consts::SQRT_2;
+
 use crate::{
   context::RenderContext,
   geometry::{PathBuilder, PathCommand, Point, Rect, Size},
   layout::border::BorderProperties,
   painter::FillShape,
   style::{
-    Axis, BasicShape, BorderStyle, Color, EllipseShape, FillRule, ImageScalingAlgorithm,
-    ShapeRadius, Sides, SizingContext, SpacePair,
+    Axis, BasicShape, BorderStyle, CircleShape, Color, EllipseShape, FillRule,
+    ImageScalingAlgorithm, ShapeRadius, Sides, SizingContext, SpacePair,
   },
 };
 
@@ -73,8 +75,13 @@ impl BasicShape {
           inset.top_left(),
         );
       }
+      BasicShape::Circle(shape) => {
+        let (center, radius) = shape.resolve(&context.sizing, size);
+
+        push_ellipse(&mut commands, center, SpacePair::from_single(radius));
+      }
       BasicShape::Ellipse(shape) => {
-        let (center, radius) = shape.resolve(context, size);
+        let (center, radius) = shape.resolve(&context.sizing, size);
 
         push_ellipse(&mut commands, center, radius);
       }
@@ -115,10 +122,21 @@ impl BasicShape {
     size: Size<f32>,
     clip_rule: FillRule,
   ) -> Option<FillShape> {
-    if let BasicShape::Ellipse(shape) = self {
-      let (center, radius) = shape.resolve(context, size);
+    match self {
+      BasicShape::Circle(shape) => {
+        let (center, radius) = shape.resolve(&context.sizing, size);
 
-      return Some(FillShape::Ellipse { center, radius });
+        return Some(FillShape::Ellipse {
+          center,
+          radius: SpacePair::from_single(radius),
+        });
+      }
+      BasicShape::Ellipse(shape) => {
+        let (center, radius) = shape.resolve(&context.sizing, size);
+
+        return Some(FillShape::Ellipse { center, radius });
+      }
+      _ => {}
     }
 
     Some(FillShape::Path {
@@ -128,19 +146,40 @@ impl BasicShape {
   }
 }
 
-impl EllipseShape {
-  /// The ellipse's centre and radii in a border box of `size`.
-  fn resolve(&self, context: &RenderContext, size: Size<f32>) -> (Point<f32>, SpacePair<f32>) {
-    let center = Point {
-      x: self.position.0.x.to_px(&context.sizing, size.width),
-      y: self.position.0.y.to_px(&context.sizing, size.height),
+impl CircleShape {
+  /// The circle's centre and radius in a reference box of `size`, after
+  /// [CSS Shapes](https://drafts.csswg.org/css-shapes-1/#funcdef-basic-shape-circle): a side
+  /// keyword measures to the nearest or farthest of all four sides, and a percentage resolves
+  /// against the box's diagonal over √2.
+  pub(crate) fn resolve(&self, sizing: &SizingContext, size: Size<f32>) -> (Point<f32>, f32) {
+    let center = self.position.to_point(sizing, size);
+    let [left, right] = side_distances(center.x, size.width);
+    let [top, bottom] = side_distances(center.y, size.height);
+    let radius = match self.radius {
+      ShapeRadius::ClosestSide => left.min(right).min(top).min(bottom),
+      ShapeRadius::FarthestSide => left.max(right).max(top).max(bottom),
+      ShapeRadius::Length(length) => length.to_px(sizing, size.width.hypot(size.height) / SQRT_2),
     };
+
+    (center, radius)
+  }
+}
+
+impl EllipseShape {
+  /// The ellipse's centre and radii in a reference box of `size`, each radius measured along
+  /// its own axis.
+  pub(crate) fn resolve(
+    &self,
+    sizing: &SizingContext,
+    size: Size<f32>,
+  ) -> (Point<f32>, SpacePair<f32>) {
+    let center = self.position.to_point(sizing, size);
 
     (
       center,
       SpacePair {
-        x: resolve_radius(self.radius_x, center.x, &context.sizing, size.width),
-        y: resolve_radius(self.radius_y, center.y, &context.sizing, size.height),
+        x: resolve_radius(self.radius_x, center.x, sizing, size.width),
+        y: resolve_radius(self.radius_y, center.y, sizing, size.height),
       },
     )
   }
@@ -190,14 +229,20 @@ pub(crate) fn push_ellipse(
 /// The keyword radii measure to the sides on the shape's own axis, so both
 /// distances come from the same edge pair: the center's coordinate and what is
 /// left of the box beyond it.
+/// One radius of an ellipse centred at `center` on an axis `full` long.
 fn resolve_radius(radius: ShapeRadius, center: f32, sizing: &SizingContext, full: f32) -> f32 {
-  let (near, far) = (center, full - center);
+  let [near, far] = side_distances(center, full);
 
   match radius {
     ShapeRadius::ClosestSide => near.min(far),
     ShapeRadius::FarthestSide => near.max(far),
     ShapeRadius::Length(length) => length.to_px(sizing, full),
   }
+}
+
+/// How far `center` sits from each end of an axis `full` long.
+fn side_distances(center: f32, full: f32) -> [f32; 2] {
+  [center.abs(), (full - center).abs()]
 }
 
 fn scale_commands(commands: Vec<PathCommand>, scale: f32) -> Vec<PathCommand> {

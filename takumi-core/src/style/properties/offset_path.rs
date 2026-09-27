@@ -13,7 +13,7 @@ use crate::{
   geometry::{Point, Size},
   style::{
     Angle, Animatable, BasicShape, Color, CssSyntaxKind, CssToken, FromCss, Length, MakeComputed,
-    ParseResult, ShapePosition, ShapeRadius, SizingContext, ToCss, discrete, impl_css_enum,
+    ParseResult, ShapePosition, SizingContext, SpacePair, ToCss, discrete, impl_css_enum,
   },
 };
 
@@ -526,17 +526,14 @@ impl<'i> FromCss<'i> for OffsetShorthand {
   const VALID_TOKENS: &'static [CssToken] = OffsetPath::VALID_TOKENS;
 }
 
-fn resolve_radius(
-  radius: ShapeRadius,
-  center: Point<f32>,
-  sizing: &SizingContext,
-  full: f32,
-) -> f64 {
-  f64::from(match radius {
-    ShapeRadius::ClosestSide => center.x.min(center.y),
-    ShapeRadius::FarthestSide => center.x.max(center.y),
-    ShapeRadius::Length(length) => length.to_px(sizing, full),
-  })
+/// An axis-aligned ellipse as a path.
+fn ellipse_path(center: Point<f32>, radius: SpacePair<f32>) -> BezPath {
+  Ellipse::new(
+    (f64::from(center.x), f64::from(center.y)),
+    (f64::from(radius.x), f64::from(radius.y)),
+    0.0,
+  )
+  .to_path(ARCLEN_ACCURACY)
 }
 
 /// Converts an `offset-path` basic shape into a flattened path in the element's
@@ -566,16 +563,15 @@ fn basic_shape_to_bezpath(
       path.close_path();
       Some(path)
     }
+    BasicShape::Circle(circle) => {
+      let (center, radius) = circle.resolve(sizing, size);
+
+      Some(ellipse_path(center, SpacePair::from_single(radius)))
+    }
     BasicShape::Ellipse(ellipse) => {
-      let center = ellipse.position.to_point(sizing, size);
-      let radius_x = resolve_radius(ellipse.radius_x, center, sizing, size.width);
-      let radius_y = resolve_radius(ellipse.radius_y, center, sizing, size.height);
-      let ellipse = Ellipse::new(
-        (f64::from(center.x), f64::from(center.y)),
-        (radius_x, radius_y),
-        0.0,
-      );
-      Some(ellipse.to_path(ARCLEN_ACCURACY))
+      let (center, radius) = ellipse.resolve(sizing, size);
+
+      Some(ellipse_path(center, radius))
     }
     BasicShape::Inset(inset) => {
       // ponytail: rounded-inset corners ignored for offset-path sampling.

@@ -95,6 +95,23 @@ impl MakeComputed for InsetShape {
   }
 }
 
+/// Represents a circle() shape.
+#[derive(Debug, Clone, PartialEq)]
+#[non_exhaustive]
+pub struct CircleShape {
+  /// The radius
+  pub radius: ShapeRadius,
+  /// The center position of the circle
+  pub position: ShapePosition,
+}
+
+impl MakeComputed for CircleShape {
+  fn make_computed(&mut self, sizing: &SizingContext) {
+    self.radius.make_computed(sizing);
+    self.position.make_computed(sizing);
+  }
+}
+
 /// Represents an ellipse() shape.
 #[derive(Debug, Clone, PartialEq)]
 #[non_exhaustive]
@@ -150,6 +167,8 @@ pub struct PathShape {
 pub enum BasicShape {
   /// inset() function
   Inset(Box<InsetShape>),
+  /// circle() function
+  Circle(Box<CircleShape>),
   /// ellipse() function
   Ellipse(Box<EllipseShape>),
   /// polygon() function
@@ -162,6 +181,7 @@ impl MakeComputed for BasicShape {
   fn make_computed(&mut self, sizing: &SizingContext) {
     match self {
       BasicShape::Inset(shape) => shape.make_computed(sizing),
+      BasicShape::Circle(shape) => shape.make_computed(sizing),
       BasicShape::Ellipse(shape) => shape.make_computed(sizing),
       BasicShape::Polygon(shape) => shape.make_computed(sizing),
       BasicShape::Path(_) => {}
@@ -269,7 +289,7 @@ impl<'i> FromCss<'i> for BasicShape {
 
             let position = ShapePosition::parse_at(input)?;
 
-            Ok(BasicShape::Ellipse(Box::new(EllipseShape { radius_x: radius, radius_y: radius, position })))
+            Ok(BasicShape::Circle(Box::new(CircleShape { radius, position })))
           }),
           "ellipse" => parser.parse_nested_block(|input| {
             let radius_x = ShapeRadius::from_css(input)?;
@@ -343,33 +363,32 @@ impl ToCss for BasicShape {
         }
         dest.write_char(')')
       }
-      Self::Ellipse(shape) => {
-        if shape.radius_x == shape.radius_y {
-          dest.write_str("circle(")?;
-          let mut has_radius = false;
-          if shape.radius_x != ShapeRadius::ClosestSide {
-            shape.radius_x.to_css(dest)?;
-            has_radius = true;
-          }
-          if shape.position != ShapePosition::default() {
-            if has_radius {
-              dest.write_char(' ')?;
-            }
-            dest.write_str("at ")?;
-            shape.position.to_css(dest)?;
-          }
-          dest.write_char(')')
-        } else {
-          dest.write_str("ellipse(")?;
-          shape.radius_x.to_css(dest)?;
-          dest.write_char(' ')?;
-          shape.radius_y.to_css(dest)?;
-          if shape.position != ShapePosition::default() {
-            dest.write_str(" at ")?;
-            shape.position.to_css(dest)?;
-          }
-          dest.write_char(')')
+      Self::Circle(shape) => {
+        dest.write_str("circle(")?;
+        let mut has_radius = false;
+        if shape.radius != ShapeRadius::ClosestSide {
+          shape.radius.to_css(dest)?;
+          has_radius = true;
         }
+        if shape.position != ShapePosition::default() {
+          if has_radius {
+            dest.write_char(' ')?;
+          }
+          dest.write_str("at ")?;
+          shape.position.to_css(dest)?;
+        }
+        dest.write_char(')')
+      }
+      Self::Ellipse(shape) => {
+        dest.write_str("ellipse(")?;
+        shape.radius_x.to_css(dest)?;
+        dest.write_char(' ')?;
+        shape.radius_y.to_css(dest)?;
+        if shape.position != ShapePosition::default() {
+          dest.write_str(" at ")?;
+          shape.position.to_css(dest)?;
+        }
+        dest.write_char(')')
       }
       Self::Polygon(shape) => {
         dest.write_str("polygon(")?;
@@ -450,9 +469,8 @@ mod tests {
   fn test_parse_circle_simple() {
     assert_eq!(
       BasicShape::from_css_str("circle(50px)"),
-      Ok(BasicShape::Ellipse(Box::new(EllipseShape {
-        radius_x: ShapeRadius::Length(Px(50.0)),
-        radius_y: ShapeRadius::Length(Px(50.0)),
+      Ok(BasicShape::Circle(Box::new(CircleShape {
+        radius: ShapeRadius::Length(Px(50.0)),
         position: ShapePosition::default(),
       })))
     );
@@ -462,9 +480,8 @@ mod tests {
   fn test_parse_circle_with_position() {
     assert_eq!(
       BasicShape::from_css_str("circle(50px at 25% 75%)"),
-      Ok(BasicShape::Ellipse(Box::new(EllipseShape {
-        radius_x: ShapeRadius::Length(Px(50.0)),
-        radius_y: ShapeRadius::Length(Px(50.0)),
+      Ok(BasicShape::Circle(Box::new(CircleShape {
+        radius: ShapeRadius::Length(Px(50.0)),
         position: ShapePosition(SpacePair {
           x: Length::Percentage(25.0),
           y: Length::Percentage(75.0),
@@ -477,9 +494,8 @@ mod tests {
   fn test_parse_circle_default_radius() {
     assert_eq!(
       BasicShape::from_css_str("circle(at 25% 75%)"),
-      Ok(BasicShape::Ellipse(Box::new(EllipseShape {
-        radius_x: ShapeRadius::ClosestSide,
-        radius_y: ShapeRadius::ClosestSide,
+      Ok(BasicShape::Circle(Box::new(CircleShape {
+        radius: ShapeRadius::ClosestSide,
         position: ShapePosition(SpacePair {
           x: Length::Percentage(25.0),
           y: Length::Percentage(75.0),
@@ -566,9 +582,8 @@ mod tests {
   fn test_parse_circle_percentage_radius() {
     assert_eq!(
       BasicShape::from_css_str("circle(50%)"),
-      Ok(BasicShape::Ellipse(Box::new(EllipseShape {
-        radius_x: ShapeRadius::Length(Length::Percentage(50.0)),
-        radius_y: ShapeRadius::Length(Length::Percentage(50.0)),
+      Ok(BasicShape::Circle(Box::new(CircleShape {
+        radius: ShapeRadius::Length(Length::Percentage(50.0)),
         position: ShapePosition::default(),
       })))
     );
@@ -578,11 +593,24 @@ mod tests {
   fn test_parse_circle_closest_side() {
     assert_eq!(
       BasicShape::from_css_str("circle(closest-side)"),
-      Ok(BasicShape::Ellipse(Box::new(EllipseShape {
-        radius_x: ShapeRadius::ClosestSide,
-        radius_y: ShapeRadius::ClosestSide,
+      Ok(BasicShape::Circle(Box::new(CircleShape {
+        radius: ShapeRadius::ClosestSide,
         position: ShapePosition::default(),
       })))
+    );
+  }
+
+  #[test]
+  fn test_ellipse_with_equal_radii_stays_an_ellipse() {
+    let shape = BasicShape::from_css_str("ellipse(50% 50%)").unwrap();
+
+    assert!(matches!(shape, BasicShape::Ellipse(_)));
+    assert_eq!(shape.to_css_string(), "ellipse(50% 50%)");
+    assert_eq!(
+      BasicShape::from_css_str("circle(50%)")
+        .unwrap()
+        .to_css_string(),
+      "circle(50%)"
     );
   }
 
@@ -590,9 +618,8 @@ mod tests {
   fn test_parse_circle_farthest_side() {
     assert_eq!(
       BasicShape::from_css_str("circle(farthest-side)"),
-      Ok(BasicShape::Ellipse(Box::new(EllipseShape {
-        radius_x: ShapeRadius::FarthestSide,
-        radius_y: ShapeRadius::FarthestSide,
+      Ok(BasicShape::Circle(Box::new(CircleShape {
+        radius: ShapeRadius::FarthestSide,
         position: ShapePosition::default(),
       })))
     );
