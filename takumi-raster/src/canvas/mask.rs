@@ -162,6 +162,20 @@ impl NodeMasks {
     true
   }
 
+  /// The `clip-path` and `mask-image` masks as one: their product, which bounds what the node
+  /// shows of its filtered backdrop.
+  pub(crate) fn into_shell_mask(self) -> Option<TinyMask> {
+    let mut masks = self.shell.into_iter();
+    let mut combined = masks.next()?;
+
+    for mask in masks {
+      for (alpha, other) in combined.data_mut().iter_mut().zip(mask.data()) {
+        *alpha = fast_div_255(*alpha as u32 * *other as u32);
+      }
+    }
+    Some(combined)
+  }
+
   /// How many masks the node pushes.
   pub(crate) fn len(&self) -> usize {
     self.shell.len() + usize::from(self.content.is_some())
