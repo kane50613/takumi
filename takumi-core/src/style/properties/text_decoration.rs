@@ -201,11 +201,11 @@ pub enum TextUnderlineOffset {
 }
 
 impl TextUnderlineOffset {
-  /// Resolves the offset to pixels, with `auto` yielding `0`.
-  pub(crate) fn resolve_px(&self, sizing: &SizingContext) -> f32 {
+  /// Resolves the offset to pixels, or `None` for `auto`.
+  pub(crate) fn resolve_px(&self, sizing: &SizingContext) -> Option<f32> {
     match self {
-      Self::Auto => 0.0,
-      Self::Length(length) => length.to_px(sizing, sizing.font_size),
+      Self::Auto => None,
+      Self::Length(length) => Some(length.to_px(sizing, sizing.font_size)),
     }
   }
 }

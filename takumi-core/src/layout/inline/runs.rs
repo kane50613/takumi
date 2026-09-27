@@ -157,15 +157,25 @@ impl ShapedRun {
   }
 
   /// Underline top edge relative to the run's baseline, positive downwards.
-  pub fn underline_offset_from_baseline(&self) -> f32 {
-    let from_metrics = match self.brush.underline_position {
-      TextUnderlinePosition::Auto | TextUnderlinePosition::FromFont => {
-        -self.metrics.underline_offset
-      }
-      TextUnderlinePosition::Under => self.em_box_descent(),
-    };
+  ///
+  /// Follows Blink's `TextDecorationOffset::ComputeUnderlineOffset`: `auto` leaves a gap of half
+  /// the `thickness`, at least a pixel, under the baseline unless `text-underline-offset` is set,
+  /// `from-font` takes the font's underline position, and `under` sits a pixel past the em box.
+  pub fn underline_offset_from_baseline(&self, thickness: f32) -> f32 {
+    let offset = self.brush.underline_offset.unwrap_or(0.0);
 
-    from_metrics + self.brush.underline_offset
+    match self.brush.underline_position {
+      TextUnderlinePosition::Auto => {
+        let gap = match self.brush.underline_offset {
+          Some(_) => 0.0,
+          None => (thickness / 2.0).ceil().max(1.0),
+        };
+
+        gap + offset.round()
+      }
+      TextUnderlinePosition::FromFont => -self.metrics.underline_offset + offset,
+      TextUnderlinePosition::Under => self.em_box_descent() + 1.0 + offset,
+    }
   }
 
   /// Bottom edge of the em box below the baseline. The typographic ascender and
