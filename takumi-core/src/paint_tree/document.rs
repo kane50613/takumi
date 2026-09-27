@@ -350,6 +350,29 @@ pub enum Drawable {
     /// How it samples.
     sampling: Sampling,
   },
+  /// `content` kept only where `mask` covers, as a `DstIn` layer keeps it.
+  Masked {
+    /// What it is for.
+    role: Role,
+    /// Drawables whose alpha masks the content.
+    mask: Vec<Drawable>,
+    /// The masked drawables.
+    content: Vec<Drawable>,
+  },
+}
+
+impl Drawable {
+  /// What the drawable is for.
+  pub fn role(&self) -> Role {
+    match self {
+      Self::Fill { role, .. }
+      | Self::Stroke { role, .. }
+      | Self::Shadow { role, .. }
+      | Self::Glyphs { role, .. }
+      | Self::Image { role, .. }
+      | Self::Masked { role, .. } => *role,
+    }
+  }
 }
 
 /// A filter a group runs over its layer.

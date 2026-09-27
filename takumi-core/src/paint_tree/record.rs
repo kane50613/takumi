@@ -1,6 +1,6 @@
 //! A paint device that records what the shared painters draw as drawables.
 
-use std::ptr;
+use std::{mem, ptr};
 
 #[cfg(feature = "png")]
 use super::document::{ImageSource, Sampling};
@@ -15,9 +15,11 @@ use super::{
 use crate::resources::image::to_data_url;
 use crate::{
   font_style::SizedFontStyle,
-  layout::inline::PositionedInlineRun,
+  geometry::{Point, Size},
+  layout::{border::BorderProperties, inline::PositionedInlineRun},
   painter::{
-    BoxFrame, FillShape, GlyphDevice, GlyphFill, PaintDevice, PaintRole, ShadowShape, StrokeStyle,
+    BoxBorderPainter, BoxFrame, FillShape, GlyphDevice, GlyphFill, PaintDevice, PaintRole,
+    ShadowShape, StrokeStyle,
   },
   path_data::path_data,
   shadow::SizedShadow,
@@ -293,6 +295,31 @@ impl PaintDevice for Recorder<'_> {
 
   fn pop_clip(&mut self) {
     self.clips.pop();
+  }
+
+  fn with_border_mask(
+    &mut self,
+    border: &BorderProperties,
+    size: Size<f32>,
+    origin: Point<f32>,
+    content: impl FnOnce(&mut Self),
+  ) {
+    let role = self.role;
+    let mut mask = Recorder::new(self.transform);
+
+    BoxBorderPainter::new(border, size).paint(origin, &mut mask);
+
+    let outer = mem::take(&mut self.drawables);
+
+    content(self);
+
+    let content = mem::replace(&mut self.drawables, outer);
+
+    self.drawables.push(Drawable::Masked {
+      role,
+      mask: mask.finish(),
+      content,
+    });
   }
 
   fn begin_layer(&mut self, opacity: f32) {

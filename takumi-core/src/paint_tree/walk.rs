@@ -28,6 +28,7 @@ use crate::{
   },
   painter::{
     BackgroundClipArea, BoxFrame, BoxPainter, FillShape, GlyphFill, OverflowClip, OwnContent,
+    PaintDevice,
   },
   resources::image::{sniff_mime, to_data_url},
   scene::{BoxPart, NodePaint, PaintItemKind, PaintPhase, Scene},
@@ -719,21 +720,32 @@ fn decorations(painter: &BoxPainter<'_>, size: Size<f32>, transform: Affine) -> 
   let background = painter.background();
 
   if let Some(clip) = background.clip.shape(size) {
-    let shape = Shape::of(&clip, Affine::IDENTITY);
-
-    for (paint, blend_mode) in Paint::layers(
+    let mask = background.clip.border_mask();
+    let shape = Shape::of(
+      &mask.map_or(clip, |_| FillShape::Rect(size)),
+      Affine::IDENTITY,
+    );
+    let layers = Paint::layers(
       &background.layers,
       size,
       background.origin,
       painter.context(),
-    ) {
-      recorder.push(Drawable::Fill {
-        role: Role::Background,
-        shape: shape.clone(),
-        paint,
-        blend_mode,
-        clips: Vec::new(),
-      });
+    );
+    let fill = |recorder: &mut Recorder<'_>| {
+      for (paint, blend_mode) in layers {
+        recorder.push(Drawable::Fill {
+          role: Role::Background,
+          shape: shape.clone(),
+          paint,
+          blend_mode,
+          clips: Vec::new(),
+        });
+      }
+    };
+
+    match mask {
+      Some(mask) => recorder.with_border_mask(&mask, size, Point::ZERO, fill),
+      None => fill(&mut recorder),
     }
   }
 

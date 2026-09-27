@@ -103,17 +103,7 @@ fn runs<'d>(document: &'d PaintDocument, node: &'d PaintNode) -> Vec<&'d TextRun
 }
 
 fn roles(node: &PaintNode) -> Vec<Role> {
-  node
-    .drawables
-    .iter()
-    .map(|drawable| match drawable {
-      Drawable::Fill { role, .. }
-      | Drawable::Stroke { role, .. }
-      | Drawable::Shadow { role, .. }
-      | Drawable::Glyphs { role, .. }
-      | Drawable::Image { role, .. } => *role,
-    })
-    .collect()
+  node.drawables.iter().map(Drawable::role).collect()
 }
 
 #[test]

@@ -1,0 +1,50 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>background_clip_border_area_gaps</title>
+    <base href="../../../" />
+    <link rel="stylesheet" href="takumi/tests/shared.css" />
+  </head>
+  <body style="width: 520px; height: 200px">
+    <div
+      style="
+        display: flex;
+        gap: 32px;
+        width: 100%;
+        height: 100%;
+        padding: 40px;
+        background-color: rgb(255, 255, 255);
+      "
+    >
+      <div
+        style="
+          width: 120px;
+          height: 120px;
+          border: 12px dashed transparent;
+          background-clip: border-area;
+          background-image: linear-gradient(135deg, rgb(37, 99, 235), rgb(220, 38, 38));
+        "
+      ></div>
+      <div
+        style="
+          width: 120px;
+          height: 120px;
+          border: 12px dotted transparent;
+          border-radius: 24px;
+          background-clip: border-area;
+          background-color: rgb(22, 163, 74);
+        "
+      ></div>
+      <div
+        style="
+          width: 120px;
+          height: 120px;
+          border: 12px double transparent;
+          background-clip: border-area;
+          background-image: linear-gradient(90deg, rgb(234, 88, 12), rgb(147, 51, 234));
+        "
+      ></div>
+    </div>
+  </body>
+</html>

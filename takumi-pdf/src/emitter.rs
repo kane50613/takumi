@@ -24,8 +24,9 @@ use takumi_core::{
   },
   paint::ConicGradientTile,
   painter::{
-    BackgroundClipArea, BoxBackground, BoxFrame, BoxPainter, FillShape, GlyphDevice, GlyphFill,
-    OverflowClip, OwnContent, PaintDevice, PendingOutline, ShadowShape, StrokeStyle, UNBOUNDED,
+    BackgroundClipArea, BoxBackground, BoxBorderPainter, BoxFrame, BoxPainter, FillShape,
+    GlyphDevice, GlyphFill, OverflowClip, OwnContent, PaintDevice, PendingOutline, ShadowShape,
+    StrokeStyle, UNBOUNDED,
   },
   scene::{BoxPart, NodePaint, PaintItemKind, PaintPhase, Scene},
   shadow::SizedShadow,
@@ -54,6 +55,7 @@ use crate::{
       Fill, FillRule, LineCap, LineJoin, LinearGradient as KrillaLinearGradient, Paint, Pattern,
       RadialGradient as KrillaRadialGradient, SpreadMethod, Stroke, StrokeDash, SweepGradient,
     },
+    stream::Stream,
     surface::Surface,
     tagging::{ContentTag, SpanTag},
     text::{Font, Tag},
@@ -515,12 +517,23 @@ impl Emitter<'_> {
     let Some(shape) = background.clip.shape(layout.size) else {
       return;
     };
-    let Some(clip) = shape_path(&shape, frame.origin) else {
+    let mask = background.clip.border_mask();
+    let clip = shape_path(&shape, frame.origin);
+
+    if mask.is_none() && clip.is_none() {
       return;
-    };
+    }
 
     self.in_artifact(surface, |surface| {
-      surface.push_clip_path(&clip, &krilla_fill_rule(shape.rule()));
+      match (mask, &clip) {
+        (Some(border), _) => {
+          let stream = border_mask_stream(&border, layout.size, frame.origin, surface);
+
+          surface.push_mask(Mask::new(stream, MaskType::Alpha));
+        }
+        (None, Some(clip)) => surface.push_clip_path(clip, &krilla_fill_rule(shape.rule())),
+        (None, None) => return,
+      }
       for layer in &background.layers {
         let blended = layer.blend_mode != BlendMode::Normal;
 
@@ -1608,7 +1621,42 @@ impl SurfaceDevice<'_, '_> {
   }
 }
 
+/// The alpha mask `border` paints on a box of `size` at `origin`.
+fn border_mask_stream(
+  border: &BorderProperties,
+  size: Size<f32>,
+  origin: CorePoint<f32>,
+  surface: &mut Surface,
+) -> Stream {
+  draw_stream(surface, |surface| {
+    BoxBorderPainter::new(border, size).paint(
+      origin,
+      &mut SurfaceDevice {
+        surface,
+        filter: None,
+        artifact: false,
+        stack: Vec::new(),
+      },
+    );
+  })
+}
+
 impl PaintDevice for SurfaceDevice<'_, '_> {
+  fn with_border_mask(
+    &mut self,
+    border: &BorderProperties,
+    size: Size<f32>,
+    origin: CorePoint<f32>,
+    content: impl FnOnce(&mut Self),
+  ) {
+    let stream = border_mask_stream(border, size, origin, self.surface);
+
+    self.open(Saved::Layer);
+    self.surface.push_mask(Mask::new(stream, MaskType::Alpha));
+    content(self);
+    self.close();
+  }
+
   fn transform(&self) -> Affine {
     Affine::scale(PT_PER_PX.recip(), PT_PER_PX.recip())
       * core_transform(self.surface.page_transform())
@@ -1847,6 +1895,24 @@ impl TextDevice<'_, '_, '_> {
 }
 
 impl PaintDevice for TextDevice<'_, '_, '_> {
+  fn with_border_mask(
+    &mut self,
+    border: &BorderProperties,
+    size: Size<f32>,
+    origin: CorePoint<f32>,
+    content: impl FnOnce(&mut Self),
+  ) {
+    let stream = border_mask_stream(border, size, origin, self.device.surface);
+
+    self.device.open(Saved::Layer);
+    self
+      .device
+      .surface
+      .push_mask(Mask::new(stream, MaskType::Alpha));
+    content(self);
+    self.device.close();
+  }
+
   fn transform(&self) -> Affine {
     self.device.transform()
   }

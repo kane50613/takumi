@@ -12,8 +12,8 @@ use takumi_core::{
     inline::{PositionedGlyph, PositionedInlineRun},
   },
   painter::{
-    BackgroundClipArea, BoxFrame, BoxPainter, FillShape, GlyphDevice, GlyphFill, PaintDevice,
-    PendingOutline, ShadowShape, StrokeStyle,
+    BackgroundClipArea, BoxBorderPainter, BoxFrame, BoxPainter, FillShape, GlyphDevice, GlyphFill,
+    PaintDevice, PendingOutline, ShadowShape, StrokeStyle,
   },
   resources::{font::FontError, glyph::ResolvedGlyph},
   shadow::SizedShadow,
@@ -455,6 +455,35 @@ impl PaintDevice for CanvasDevice<'_> {
     self.open_clip(shape, transform, true);
   }
 
+  fn with_border_mask(
+    &mut self,
+    border: &BorderProperties,
+    size: Size<f32>,
+    origin: Point<f32>,
+    content: impl FnOnce(&mut Self),
+  ) {
+    let placement = self.canvas.viewport().placement();
+    let subcanvas = match self.canvas.begin_subcanvas(placement) {
+      Ok(subcanvas) => subcanvas,
+      Err(error) => {
+        self.error.get_or_insert(error);
+        return;
+      }
+    };
+
+    BoxBorderPainter::new(border, size).paint(origin, self);
+
+    let painted = self.canvas.take_subcanvas(subcanvas);
+
+    self.clips.push(CanvasClip {
+      coverage: painted.data().iter().skip(3).step_by(4).copied().collect(),
+      placement,
+      out: false,
+    });
+    content(self);
+    self.clips.pop();
+  }
+
   fn pop_clip(&mut self) {
     self.clips.pop();
   }
@@ -631,12 +660,19 @@ pub(crate) fn draw_background(
       if let Some(tile) = &tile
         && let Some(shape) = background.clip.shape(layout.size)
       {
-        device.fill_shape_with_source(
-          &shape,
-          tile.into(),
-          Affine::IDENTITY,
-          context.style.image_rendering,
-        );
+        let algorithm = context.style.image_rendering;
+
+        match background.clip.border_mask() {
+          Some(mask) => device.with_border_mask(&mask, layout.size, Point::ZERO, |device| {
+            device.fill_shape_with_source(
+              &FillShape::Rect(layout.size),
+              tile.into(),
+              Affine::IDENTITY,
+              algorithm,
+            );
+          }),
+          None => device.fill_shape_with_source(&shape, tile.into(), Affine::IDENTITY, algorithm),
+        }
       }
     }
     BackgroundClipArea::Text => {}

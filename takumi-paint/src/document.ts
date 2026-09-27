@@ -244,9 +244,18 @@ abstract class NodeView<Raw extends RawPaintNode> {
 
   /** `drawable` with its glyph run named by the run itself. */
   protected resolve(drawable: RawDrawable): Drawable {
-    if (drawable.type !== "glyphs") return drawable;
-
-    throw new Error("Only a text node draws glyphs");
+    switch (drawable.type) {
+      case "glyphs":
+        throw new Error("Only a text node draws glyphs");
+      case "masked":
+        return {
+          ...drawable,
+          mask: drawable.mask.map((inner) => this.resolve(inner)),
+          content: drawable.content.map((inner) => this.resolve(inner)),
+        };
+      default:
+        return drawable;
+    }
   }
 }
 
@@ -306,7 +315,7 @@ class TextView extends NodeView<RawNode<"text">> implements TextNode {
   }
 
   protected override resolve(drawable: RawDrawable): Drawable {
-    if (drawable.type !== "glyphs") return drawable;
+    if (drawable.type !== "glyphs") return super.resolve(drawable);
 
     const run = this.runs[drawable.run];
 
