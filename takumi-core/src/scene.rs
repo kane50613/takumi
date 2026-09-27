@@ -774,10 +774,10 @@ fn compute_node_paint_bounds(
       PlacedItem::Run {
         glyph_run,
         static_inline_prefix,
-        trailing_whitespace,
+        hanging,
       } => {
         let baseline_shift = built.run_baseline_shift(line, &glyph_run);
-        let (glyph_origin, glyph_size) = glyph_run_rect(&glyph_run, baseline_shift);
+        let (glyph_origin, glyph_size) = glyph_run_rect(&glyph_run, hanging, baseline_shift);
         let (glyph_origin, glyph_size) =
           setup.scale_rect(glyph_origin, glyph_size, static_inline_prefix);
 
@@ -789,13 +789,7 @@ fn compute_node_paint_bounds(
         // Blink's `InkOverflow::ComputeAppliedDecorationOverflow`.
         let brush = glyph_run.style().brush;
         if !brush.decoration_line.is_empty() {
-          let run = ShapedRun::of(
-            &glyph_run,
-            Vec::new(),
-            trailing_whitespace,
-            brush,
-            Vec::new(),
-          );
+          let run = ShapedRun::of(&glyph_run, Vec::new(), hanging, brush, Vec::new());
           let run_transform = setup
             .state
             .transform(Affine::IDENTITY, static_inline_prefix);
@@ -846,7 +840,7 @@ fn compute_node_paint_bounds(
           };
           let (ink_origin, ink_size) = setup.scale_rect(
             Point {
-              x: glyph.x + min_x,
+              x: glyph.x + hanging.shift + min_x,
               y: glyph.y + baseline_shift + min_y,
             },
             Size {

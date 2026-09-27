@@ -8,27 +8,40 @@ use crate::{
 };
 use parley::{InlineBoxKind, Line, PositionedInlineBox, PositionedLayoutItem, YieldData};
 
-use super::{InlineBrush, InlineLayout, floats::FloatLayoutState, items::ProcessedInlineSpan};
+use super::{
+  InlineBrush, InlineLayout, floats::FloatLayoutState, items::ProcessedInlineSpan,
+  runs::HangingWhitespace,
+};
 
 /// Splits a line's trailing-whitespace advance over its trailing glyph runs, walking back from the
-/// line end so a run keeps at most its own advance.
+/// line's logical end so a run keeps at most its own advance.
 pub(super) fn distribute_trailing_whitespace(
   items: &[PositionedLayoutItem<'_, InlineBrush>],
   line: &Line<'_, InlineBrush>,
-) -> Vec<f32> {
-  let mut shares = vec![0.0_f32; items.len()];
+  rtl_paragraph: bool,
+) -> Vec<HangingWhitespace> {
+  let mut shares = vec![HangingWhitespace::default(); items.len()];
   let mut remaining = line.metrics().trailing_whitespace;
+  let count = items.len();
 
-  for (index, item) in items.iter().enumerate().rev() {
+  // The line's logical end sits at its visual left in a right-to-left paragraph, where parley
+  // measures the whitespace from.
+  for step in 0..count {
+    let index = if rtl_paragraph {
+      step
+    } else {
+      count - 1 - step
+    };
+
     if remaining <= 0.0 {
       break;
     }
-    let PositionedLayoutItem::GlyphRun(glyph_run) = item else {
+    let PositionedLayoutItem::GlyphRun(glyph_run) = &items[index] else {
       break;
     };
     let share = remaining.min(glyph_run.advance());
 
-    shares[index] = share;
+    shares[index] = HangingWhitespace::of(share, glyph_run.run().is_rtl(), rtl_paragraph);
     remaining -= share;
   }
 

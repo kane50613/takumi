@@ -45,8 +45,8 @@ pub use self::{
   metrics::{InlinePass, VisualInlineBox},
   outline::{InlineOutline, InlineOutlineRect, OutlineIsland, RightAngleContour},
   runs::{
-    InlineRunLayout, MeasuredInlineBox, MeasuredInlineRun, PositionedGlyph, PositionedInlineRun,
-    RunMetrics, ShapedRun,
+    HangingWhitespace, InlineRunLayout, MeasuredInlineBox, MeasuredInlineRun, PositionedGlyph,
+    PositionedInlineRun, RunMetrics, ShapedRun,
   },
 };
 pub(crate) use self::{background::PaddingBox, items::InlineOutOfFlow};
@@ -359,7 +359,7 @@ impl BuiltInlineLayout<'_> {
         PlacedItem::Run {
           glyph_run,
           static_inline_prefix,
-          ..
+          hanging,
         } => {
           let span_id = glyph_run.style().brush.source_span_id;
           let text = measured_run_text(&self.text, &self.spans, &glyph_run, span_id);
@@ -369,8 +369,11 @@ impl BuiltInlineLayout<'_> {
             return Ok(());
           }
 
-          let (origin, size) =
-            glyph_run_rect(&glyph_run, self.run_baseline_shift(line, &glyph_run));
+          let (origin, size) = glyph_run_rect(
+            &glyph_run,
+            hanging,
+            self.run_baseline_shift(line, &glyph_run),
+          );
           let (origin, size) = setup.scale_rect(origin, size, static_inline_prefix);
 
           let link = span_id.and_then(|span_id| match self.spans.get(span_id as usize) {
@@ -1211,13 +1214,14 @@ impl LineSetup {
 /// A glyph run's advance by its ascent plus descent, as a line-local top-left and size.
 pub(crate) fn glyph_run_rect(
   glyph_run: &GlyphRun<'_, InlineBrush>,
+  hanging: HangingWhitespace,
   baseline_shift: f32,
 ) -> (Point<f32>, Size<f32>) {
   let metrics = glyph_run.run().metrics();
 
   (
     Point {
-      x: glyph_run.offset(),
+      x: glyph_run.offset() + hanging.shift,
       y: glyph_run.baseline() + baseline_shift - metrics.ascent,
     },
     Size {
@@ -1277,8 +1281,8 @@ pub(crate) enum PlacedItem<'a> {
   Run {
     glyph_run: GlyphRun<'a, InlineBrush>,
     static_inline_prefix: f32,
-    /// The line-end whitespace advance this run carries.
-    trailing_whitespace: f32,
+    /// The line-end whitespace this run carries.
+    hanging: HangingWhitespace,
   },
   /// An in-flow box, its `x` already scaled for text-fit.
   Box(VisualInlineBox),
@@ -1313,7 +1317,7 @@ impl BuiltInlineLayout<'_> {
         state: line_states[index].clone(),
       };
       let items: Vec<_> = line.items().collect();
-      let trailing_whitespace = distribute_trailing_whitespace(&items, &line);
+      let hanging = distribute_trailing_whitespace(&items, &line, self.layout.is_rtl());
       let mut static_inline_prefix = 0.0_f32;
 
       for (item_index, item) in items.into_iter().enumerate() {
@@ -1323,7 +1327,7 @@ impl BuiltInlineLayout<'_> {
             PlacedItem::Run {
               glyph_run,
               static_inline_prefix,
-              trailing_whitespace: trailing_whitespace[item_index],
+              hanging: hanging[item_index],
             },
           )?,
           PositionedLayoutItem::InlineBox(inline_box) => {
@@ -1405,7 +1409,7 @@ mod tests {
       offset: 0.0,
       baseline: 0.0,
       advance: 0.0,
-      trailing_whitespace: 0.0,
+      hanging: HangingWhitespace::default(),
       brush: InlineBrush {
         underline_offset,
         underline_position: position,
@@ -1446,7 +1450,7 @@ mod tests {
     run.brush.decoration_line = TextDecorationLines::UNDERLINE;
     run.brush.decoration_thickness = SizedTextDecorationThickness::Value(2.0);
     run.advance = 5.2;
-    run.trailing_whitespace = 5.2;
+    run.hanging.advance = 5.2;
     run.offset = 10.4;
 
     let layout = ComputedLayout {
@@ -1568,7 +1572,7 @@ mod tests {
     let trailing: Vec<(f32, f32)> = runs
       .runs
       .iter()
-      .map(|run| (run.glyph_run.advance, run.glyph_run.trailing_whitespace))
+      .map(|run| (run.glyph_run.advance, run.glyph_run.hanging.advance))
       .collect();
 
     // The 40px space run hangs entirely; earlier runs keep what layout kept.

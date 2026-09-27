@@ -120,10 +120,9 @@ pub struct ShapedRun {
   pub baseline: f32,
   /// Total horizontal advance of the run.
   pub advance: f32,
-  /// Advance of line-end whitespace inside [`Self::advance`]. Decorations, inline backgrounds
-  /// and outlines do not span it (Blink skips hanging whitespace); naive for RTL, where it
-  /// trims the visual right edge instead of the line-start side.
-  pub trailing_whitespace: f32,
+  /// Line-end whitespace inside [`Self::advance`], which decorations, inline backgrounds and
+  /// outlines do not span, as Blink skips hanging whitespace.
+  pub hanging: HangingWhitespace,
   /// Paint attributes carried by the run.
   pub brush: InlineBrush,
   /// Vertical font metrics for the run.
@@ -150,12 +149,41 @@ pub struct ShapedRun {
   pub(super) font_data: Blob<u8>,
 }
 
+/// The line-end whitespace a run carries, placed where rule L1 of UAX #9 puts it: at the
+/// paragraph's level, past the line's end.
+#[derive(Debug, Clone, Copy, Default, PartialEq)]
+pub struct HangingWhitespace {
+  /// Its advance.
+  pub advance: f32,
+  /// How far the run moves so the whitespace hangs past the line's end, when the run's direction
+  /// differs from the paragraph's and parley left the whitespace inside it.
+  pub shift: f32,
+  /// Whether the whitespace sits at the run's visual start rather than its end.
+  pub at_start: bool,
+}
+
+impl HangingWhitespace {
+  /// The whitespace of a run of `advance` that the line's end holds `share` of, in a paragraph
+  /// that is right-to-left when `rtl_paragraph`.
+  pub(super) fn of(share: f32, run_rtl: bool, rtl_paragraph: bool) -> Self {
+    Self {
+      advance: share,
+      shift: match (rtl_paragraph, run_rtl) {
+        (true, false) => share,
+        (false, true) => -share,
+        _ => 0.0,
+      },
+      at_start: run_rtl,
+    }
+  }
+}
+
 impl ShapedRun {
   /// The run `glyph_run` shapes, carrying `glyphs` and painting with `brush`.
   pub(crate) fn of(
     glyph_run: &GlyphRun<'_, InlineBrush>,
-    glyphs: Vec<PositionedGlyph>,
-    trailing_whitespace: f32,
+    mut glyphs: Vec<PositionedGlyph>,
+    hanging: HangingWhitespace,
     brush: InlineBrush,
     cluster_ranges: Vec<Range<usize>>,
   ) -> Self {
@@ -163,12 +191,16 @@ impl ShapedRun {
     let metrics = run.metrics();
     let synthesis = run_synthesis(glyph_run);
 
+    for glyph in &mut glyphs {
+      glyph.x += hanging.shift;
+    }
+
     Self {
       glyphs,
-      offset: glyph_run.offset(),
+      offset: glyph_run.offset() + hanging.shift,
       baseline: glyph_run.baseline(),
       advance: glyph_run.advance(),
-      trailing_whitespace,
+      hanging,
       brush,
       metrics: RunMetrics {
         ascent: metrics.ascent,
@@ -189,7 +221,16 @@ impl ShapedRun {
 
   /// Advance that decorations span: the run without its line-end whitespace.
   pub fn decorated_advance(&self) -> f32 {
-    self.advance - self.trailing_whitespace
+    self.advance - self.hanging.advance
+  }
+
+  /// Where the decorated span starts past [`Self::offset`].
+  pub fn decorated_offset(&self) -> f32 {
+    if self.hanging.at_start {
+      self.hanging.advance
+    } else {
+      0.0
+    }
   }
 
   /// Font bytes for `skrifa::FontRef::from_index`, paired with [`Self::font_index`].
@@ -369,7 +410,7 @@ impl BuiltInlineLayout<'_> {
         PlacedItem::Run {
           glyph_run,
           static_inline_prefix,
-          trailing_whitespace,
+          hanging,
         } => {
           let run = glyph_run.run();
           // A run carrying only the direction mark paints nothing; a run the
@@ -409,13 +450,7 @@ impl BuiltInlineLayout<'_> {
                 .is_none_or(skips_ink);
           }
           let cluster_ranges = clusters.into_iter().map(|cluster| cluster.range).collect();
-          let shaped = ShapedRun::of(
-            &glyph_run,
-            glyphs,
-            trailing_whitespace,
-            brush,
-            cluster_ranges,
-          );
+          let shaped = ShapedRun::of(&glyph_run, glyphs, hanging, brush, cluster_ranges);
 
           runs.push(PositionedInlineRun {
             glyph_run: shaped,
@@ -491,7 +526,7 @@ impl<'c> BuiltInlineLayout<'c> {
       PlacedItem::Run {
         glyph_run,
         static_inline_prefix,
-        trailing_whitespace,
+        hanging,
       } => {
         let brush = glyph_run.style().brush;
 
@@ -502,8 +537,14 @@ impl<'c> BuiltInlineLayout<'c> {
         let Some(chain) = self.run_chain(glyph_run) else {
           return;
         };
-        let x = glyph_run.offset();
-        let width = glyph_run.advance() - trailing_whitespace;
+        let x = glyph_run.offset()
+          + hanging.shift
+          + if hanging.at_start {
+            hanging.advance
+          } else {
+            0.0
+          };
+        let width = glyph_run.advance() - hanging.advance;
         let metrics = glyph_run.run().metrics();
         // The font's rounded ascent and descent, without the line-height leading, like the
         // inline box fragment `InlineBoxState::ComputeTextMetrics` sizes.
