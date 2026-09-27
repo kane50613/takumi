@@ -2551,7 +2551,7 @@ fn an_absolute_box_shrinks_to_the_width_beside_its_inset() {
   let result = measure_with_css(
     root,
     r#"
-      .root { display: block; width: 400px; height: 200px; }
+      .root { display: block; position: relative; width: 400px; height: 200px; }
       .probe { display: block; position: absolute; left: 300px; margin-left: 20px; font-size: 20px; }
     "#,
   );
