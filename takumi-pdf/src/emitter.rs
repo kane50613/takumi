@@ -1725,6 +1725,11 @@ impl PaintDevice for SurfaceDevice<'_, '_> {
     self.open_clip(path, shape.rule());
   }
 
+  // PDF leaves antialiasing to the viewer, as Skia's PDF backend does.
+  fn push_aliased_clip(&mut self, shape: &FillShape, transform: Affine) {
+    self.push_clip(shape, transform);
+  }
+
   fn push_clip_out(&mut self, shape: &FillShape, transform: Affine) {
     let mut commands = Vec::with_capacity(BorderProperties::PATH_COMMANDS_AMOUNT * 2);
 
@@ -1960,6 +1965,10 @@ impl PaintDevice for TextDevice<'_, '_, '_> {
 
   fn push_clip_out(&mut self, shape: &FillShape, transform: Affine) {
     self.device.push_clip_out(shape, transform);
+  }
+
+  fn push_aliased_clip(&mut self, shape: &FillShape, transform: Affine) {
+    self.device.push_aliased_clip(shape, transform);
   }
 
   fn pop_clip(&mut self) {

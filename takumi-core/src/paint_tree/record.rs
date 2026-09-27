@@ -48,7 +48,8 @@ pub(super) struct RecordedText<'r> {
 ///
 /// Approximate: a layer the painters open multiplies its opacity into each draw inside it, so
 /// draws that overlap inside one layer, such as the dashes of a translucent outline meeting at a
-/// corner, paint darker where a real layer would not.
+/// corner, paint darker where a real layer would not, and an aliased clip records as an
+/// antialiased one.
 pub(super) struct Recorder<'r> {
   drawables: Vec<Drawable>,
   role: Role,
@@ -291,6 +292,10 @@ impl PaintDevice for Recorder<'_> {
       region: Shape::of(shape, transform),
       outside: true,
     });
+  }
+
+  fn push_aliased_clip(&mut self, shape: &FillShape, transform: Affine) {
+    self.push_clip(shape, transform);
   }
 
   fn pop_clip(&mut self) {

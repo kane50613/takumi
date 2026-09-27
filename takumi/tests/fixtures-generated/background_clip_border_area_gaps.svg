@@ -1,34 +1,14 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="520" height="200" viewBox="0 0 520 200">
   <rect x="0" y="0" width="520" height="200" fill="#fff"/>
   <mask id="mk0" maskUnits="userSpaceOnUse" style="mask-type:alpha">
-    <clipPath id="cp1">
-      <path d="M40 40l12 12h96l12-12Z"/>
-    </clipPath>
-    <g clip-path="url(#cp1)">
-      <path d="M40 46h120" fill="none" stroke="#000" stroke-width="12" stroke-dasharray="24 8"/>
-    </g>
-    <clipPath id="cp2">
-      <path d="M160 40l-12 12v96l12 12Z"/>
-    </clipPath>
-    <g clip-path="url(#cp2)">
-      <path d="M154 40v120" fill="none" stroke="#000" stroke-width="12" stroke-dasharray="24 8"/>
-    </g>
-    <clipPath id="cp3">
-      <path d="M160 160l-12-12h-96l-12 12Z"/>
-    </clipPath>
-    <g clip-path="url(#cp3)">
-      <path d="M40 154h120" fill="none" stroke="#000" stroke-width="12" stroke-dasharray="24 8"/>
-    </g>
-    <clipPath id="cp4">
-      <path d="M40 160l12-12v-96l-12-12Z"/>
-    </clipPath>
-    <g clip-path="url(#cp4)">
-      <path d="M46 40v120" fill="none" stroke="#000" stroke-width="12" stroke-dasharray="24 8"/>
-    </g>
+    <path d="M40 46h120" fill="none" stroke="#000" stroke-width="12" stroke-dasharray="24 8"/>
+    <path d="M40 154h120" fill="none" stroke="#000" stroke-width="12" stroke-dasharray="24 8"/>
+    <path d="M154 40v120" fill="none" stroke="#000" stroke-width="12" stroke-dasharray="24 8"/>
+    <path d="M46 40v120" fill="none" stroke="#000" stroke-width="12" stroke-dasharray="24 8"/>
   </mask>
   <g mask="url(#mk0)">
-    <pattern id="pat5" patternUnits="userSpaceOnUse" x="52" y="52" width="96" height="96">
-      <linearGradient id="lg6" gradientUnits="userSpaceOnUse" x1="0" y1="0" x2="96" y2="96">
+    <pattern id="pat1" patternUnits="userSpaceOnUse" x="52" y="52" width="96" height="96">
+      <linearGradient id="lg2" gradientUnits="userSpaceOnUse" x1="0" y1="0" x2="96" y2="96">
         <stop offset="0" stop-color="#2563eb"/>
         <stop offset=".016" stop-color="#2862e8"/>
         <stop offset=".032" stop-color="#2b61e5"/>
@@ -94,23 +74,23 @@
         <stop offset=".984" stop-color="#d92729"/>
         <stop offset="1" stop-color="#dc2626"/>
       </linearGradient>
-      <rect x="0" y="0" width="96" height="96" fill="url(#lg6)"/>
+      <rect x="0" y="0" width="96" height="96" fill="url(#lg2)"/>
     </pattern>
-    <rect x="40" y="40" width="120" height="120" fill="url(#pat5)"/>
+    <rect x="40" y="40" width="120" height="120" fill="url(#pat1)"/>
   </g>
-  <mask id="mk7" maskUnits="userSpaceOnUse" style="mask-type:alpha">
+  <mask id="mk3" maskUnits="userSpaceOnUse" style="mask-type:alpha">
     <path d="M216 46h72c9.94 0 18 8.06 18 18v72c0 9.94-8.06 18-18 18h-72c-9.94 0-18-8.06-18-18v-72c0-9.94 8.06-18 18-18Z" fill="none" stroke="#000" stroke-width="12" stroke-dasharray="0 23.584" stroke-linecap="round"/>
   </mask>
-  <g mask="url(#mk7)">
+  <g mask="url(#mk3)">
     <rect x="192" y="40" width="120" height="120" fill="#16a34a"/>
   </g>
-  <mask id="mk8" maskUnits="userSpaceOnUse" style="mask-type:alpha">
+  <mask id="mk4" maskUnits="userSpaceOnUse" style="mask-type:alpha">
     <path d="M344 40h120v120h-120v-120Zm4 4h112v112h-112v-112Z" fill="#000" fill-rule="evenodd"/>
     <path d="M352 48h104v104h-104v-104Zm4 4h96v96h-96v-96Z" fill="#000" fill-rule="evenodd"/>
   </mask>
-  <g mask="url(#mk8)">
-    <pattern id="pat9" patternUnits="userSpaceOnUse" x="356" y="52" width="96" height="96">
-      <linearGradient id="lg10" gradientUnits="userSpaceOnUse" x1="0" y1="48" x2="96" y2="48">
+  <g mask="url(#mk4)">
+    <pattern id="pat5" patternUnits="userSpaceOnUse" x="356" y="52" width="96" height="96">
+      <linearGradient id="lg6" gradientUnits="userSpaceOnUse" x1="0" y1="48" x2="96" y2="48">
         <stop offset="0" stop-color="#ea580c"/>
         <stop offset=".016" stop-color="#e95710"/>
         <stop offset=".032" stop-color="#e75713"/>
@@ -176,8 +156,8 @@
         <stop offset=".984" stop-color="#9434e6"/>
         <stop offset="1" stop-color="#9333ea"/>
       </linearGradient>
-      <rect x="0" y="0" width="96" height="96" fill="url(#lg10)"/>
+      <rect x="0" y="0" width="96" height="96" fill="url(#lg6)"/>
     </pattern>
-    <rect x="344" y="40" width="120" height="120" fill="url(#pat9)"/>
+    <rect x="344" y="40" width="120" height="120" fill="url(#pat5)"/>
   </g>
 </svg>

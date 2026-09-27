@@ -3,10 +3,34 @@
   <rect x="40" y="56" width="120" height="80" fill="#e2e8f0"/>
   <path d="M30 46h140v100h-140v-100Zm6 6h128v88h-128v-88Z" fill="#2563eb" fill-rule="evenodd"/>
   <rect x="208" y="56" width="120" height="80" fill="#e2e8f0"/>
-  <path d="M200 48l4 4h128l4-4Zm0 96 4-4v-88l-4-4Z" fill="#272d37"/>
-  <path d="M204 52l4 4h120l4-4Zm0 88 4-4v-80l-4-4Z" fill="#a1bae0"/>
-  <path d="M336 48l-4 4v88l4 4Zm0 96-4-4h-128l-4 4Z" fill="#a1bae0"/>
-  <path d="M332 52l-4 4v80l4 4Zm0 88-4-4h-120l-4 4Z" fill="#272d37"/>
+  <rect x="200" y="48" width="136" height="4" fill="#272d37"/>
+  <rect x="200" y="52" width="136" height="4" fill="#a1bae0"/>
+  <rect x="200" y="136" width="136" height="4" fill="#272d37"/>
+  <rect x="200" y="140" width="136" height="4" fill="#a1bae0"/>
+  <clipPath id="cp0">
+    <path d="M336 47.9l-8 8v88.1h8Z"/>
+  </clipPath>
+  <g clip-path="url(#cp0)">
+    <clipPath id="cp1">
+      <path shape-rendering="crispEdges" d="M336 48h-8v88.1l8 8Z"/>
+    </clipPath>
+    <g clip-path="url(#cp1)">
+      <rect x="328" y="48" width="4" height="96" fill="#272d37"/>
+      <rect x="332" y="48" width="4" height="96" fill="#a1bae0"/>
+    </g>
+  </g>
+  <clipPath id="cp2">
+    <path d="M200 144.1l8-8v-88.1h-8Z"/>
+  </clipPath>
+  <g clip-path="url(#cp2)">
+    <clipPath id="cp3">
+      <path shape-rendering="crispEdges" d="M200 144h8v-88.1l-8-8Z"/>
+    </clipPath>
+    <g clip-path="url(#cp3)">
+      <rect x="200" y="48" width="4" height="96" fill="#272d37"/>
+      <rect x="204" y="48" width="4" height="96" fill="#a1bae0"/>
+    </g>
+  </g>
   <path d="M392 56h88c8.84 0 16 7.16 16 16v48c0 8.84-7.16 16-16 16h-88c-8.84 0-16-7.16-16-16v-48c0-8.84 7.16-16 16-16Z" fill="#e2e8f0"/>
   <path d="M392 46h88c14.36 0 26 11.64 26 26v48c0 14.36-11.64 26-26 26h-88c-14.36 0-26-11.64-26-26v-48c0-14.36 11.64-26 26-26Zm0 6h88c11.05 0 20 8.95 20 20v48c0 11.05-8.95 20-20 20h-88c-11.05 0-20-8.95-20-20v-48c0-11.05 8.95-20 20-20Z" fill="#e11d48" fill-rule="evenodd"/>
 </svg>

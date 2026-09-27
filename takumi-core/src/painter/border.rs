@@ -5,14 +5,15 @@ use std::cmp::Ordering;
 
 use smallvec::SmallVec;
 
-use super::{FillShape, PaintDevice, StrokeStyle};
+use super::{FillShape, PaintDevice, StrokeStyle, box_side::BoxSideRect};
 use crate::{
   geometry::{PathCommand, Point, Size},
   layout::border::{BorderProperties, BorderSide, PaintedSide, SideBand},
   style::{Affine, BorderStyle, Color, FillRule},
 };
 
-// The curved dash overstroke and `StyledLine` follow Blink, under the notice in LICENSE-CHROMIUM.
+// The curved dash overstroke, `StyledLine`, the square side order and `Miter` follow Blink, under
+// the notice in LICENSE-CHROMIUM.
 
 /// How far a curved dashed side overstrokes its centerline, so the ring clip
 /// rather than the stroke decides where each dash ends.
@@ -33,6 +34,108 @@ enum BorderPaint {
   Stroked(PaintedSide),
   /// Each side on its own.
   Sides,
+}
+
+/// How one end of a side meets its neighbour, after Blink's `MiterType`.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Miter {
+  /// The side runs through the corner and one of the two overdraws the other.
+  None,
+  /// An antialiased diagonal.
+  Soft,
+  /// An aliased diagonal, so sides of one colour seam without a visible line.
+  Hard,
+}
+
+impl Miter {
+  /// Blink's `ComputeMiter` for where `side` meets `adjacent`, with the `completed` sides painted.
+  fn between(
+    border: &BorderProperties,
+    side: PaintedSide,
+    adjacent: BorderSide,
+    completed: SideSet,
+  ) -> Self {
+    let neighbour = border.sides()[adjacent as usize];
+
+    if neighbour.width == 0.0 {
+      return Self::None;
+    }
+
+    let fills_area = !matches!(
+      neighbour.style,
+      BorderStyle::Dotted | BorderStyle::Dashed | BorderStyle::Double
+    );
+
+    if !completed.includes(adjacent) && fills_area {
+      return Self::None;
+    }
+
+    let shaded = matches!(
+      side.style,
+      BorderStyle::Inset | BorderStyle::Outset | BorderStyle::Groove | BorderStyle::Ridge
+    );
+    let corner = SideSet::default().with(side.side).with(adjacent);
+    let unmatched_shades = shaded
+      && (corner == SideSet::of_sides([BorderSide::Top, BorderSide::Right])
+        || corner == SideSet::of_sides([BorderSide::Bottom, BorderSide::Left]));
+    let colors_match = neighbour.is_visible()
+      && neighbour.color.0[3] != 0
+      && neighbour.color == side.color
+      && !unmatched_shades;
+
+    if !colors_match {
+      return Self::Soft;
+    }
+
+    let dotted_or_dashed = |style| matches!(style, BorderStyle::Dotted | BorderStyle::Dashed);
+    let styles_require_miter = side.style == BorderStyle::Double
+      || matches!(
+        neighbour.style,
+        BorderStyle::Double | BorderStyle::Groove | BorderStyle::Ridge
+      )
+      || dotted_or_dashed(side.style) != dotted_or_dashed(neighbour.style)
+      || side.style != neighbour.style;
+
+    if styles_require_miter {
+      Self::Hard
+    } else {
+      Self::None
+    }
+  }
+}
+
+/// A set of sides, after Blink's `BorderEdgeFlags`.
+#[derive(Clone, Copy, Default, PartialEq, Eq)]
+struct SideSet(u8);
+
+impl SideSet {
+  const ALL: u8 = 0b1111;
+
+  fn of(sides: &[PaintedSide]) -> Self {
+    Self::of_sides(sides.iter().map(|side| side.side))
+  }
+
+  fn of_sides(sides: impl IntoIterator<Item = BorderSide>) -> Self {
+    sides.into_iter().fold(Self::default(), Self::with)
+  }
+
+  fn with(self, side: BorderSide) -> Self {
+    Self(self.0 | 1 << side as u8)
+  }
+
+  fn includes(self, side: BorderSide) -> bool {
+    self.0 & (1 << side as u8) != 0
+  }
+
+  fn complement(self) -> Self {
+    Self(!self.0 & Self::ALL)
+  }
+
+  /// Whether the set holds two sides that meet at a corner.
+  fn has_adjacent_pair(self) -> bool {
+    (self.includes(BorderSide::Top) || self.includes(BorderSide::Bottom))
+      && (self.includes(BorderSide::Left) || self.includes(BorderSide::Right))
+  }
 }
 
 /// The sides that fill one band in one colour, merged so adjacent sides share no seam.
@@ -105,15 +208,20 @@ impl<'b> BoxBorderPainter<'b> {
     }
   }
 
-  /// Paints each side on its own. Sides meet along the diagonal from the outer to the inner
-  /// corner, and sides that fill a band in the same colour merge into one fill. A rounded border
-  /// fills each band's ring clipped to its sides' regions.
+  /// Paints each side on its own. On a rounded or collapsed border, sides meet along the diagonal
+  /// from the outer to the inner corner, and sides that fill a band in the same colour merge into
+  /// one fill. A rounded border fills each band's ring clipped to its sides' regions.
   fn paint_sides<D: PaintDevice>(&self, at: Affine, device: &mut D) {
     let mut border = *self.border;
 
     border.width = border.visible_side_widths();
 
     let rounded = !border.is_zero();
+
+    if !rounded && !border.collapsed {
+      return self.paint_square_sides(&border, at, device);
+    }
+
     let mut fills: SmallVec<[SideFill; 4]> = SmallVec::new();
 
     for side in border.painted_sides() {
@@ -149,6 +257,250 @@ impl<'b> BoxBorderPainter<'b> {
       } else {
         device.fill_shape(&area, fill.band.color, at);
       }
+    }
+  }
+
+  /// Paints a square border side by side, as Blink's `PaintOpacityGroup` does: sides sorted by
+  /// alpha, style and position, each alpha in its own nested layer.
+  fn paint_square_sides<D: PaintDevice>(
+    &self,
+    border: &BorderProperties,
+    at: Affine,
+    device: &mut D,
+  ) {
+    let mut sides: SmallVec<[PaintedSide; 4]> = border.painted_sides().collect();
+
+    if sides.is_empty() {
+      return;
+    }
+
+    if let Some(color) = border.has_uniform_visible_color()
+      && color.0[3] != u8::MAX
+      && sides.iter().all(|side| side.style == BorderStyle::Solid)
+    {
+      let rects = sides
+        .iter()
+        .map(|side| self.side_rect(border, side.side).corners());
+
+      device.fill_shape(&FillShape::polygons(rects), color, at);
+      return;
+    }
+
+    sides.sort_by_key(|side| {
+      let style = match side.style {
+        BorderStyle::None | BorderStyle::Hidden => 0,
+        BorderStyle::Dotted | BorderStyle::Dashed | BorderStyle::Double => 1,
+        BorderStyle::Inset | BorderStyle::Outset | BorderStyle::Groove | BorderStyle::Ridge => 2,
+        BorderStyle::Solid => 3,
+      };
+      let position = match side.side {
+        BorderSide::Top => 0,
+        BorderSide::Bottom => 1,
+        BorderSide::Right => 2,
+        BorderSide::Left => 3,
+      };
+
+      (side.color.0[3], style, position)
+    });
+
+    let groups: SmallVec<[&[PaintedSide]; 4]> = sides
+      .chunk_by(|a, b| a.color.0[3] == b.color.0[3])
+      .collect();
+    let visible = SideSet::of(&sides);
+
+    self.paint_opacity_groups(border, &groups, visible, 1.0, at, device);
+  }
+
+  /// Paints the most opaque of `groups` over the rest inside ancestor layers `opacity` opaque, and
+  /// returns the sides done, counting the `visible` sides' complement as done.
+  fn paint_opacity_groups<D: PaintDevice>(
+    &self,
+    border: &BorderProperties,
+    groups: &[&[PaintedSide]],
+    visible: SideSet,
+    opacity: f32,
+    at: Affine,
+    device: &mut D,
+  ) -> SideSet {
+    let Some((&group, rest)) = groups.split_last() else {
+      return visible.complement();
+    };
+    let alpha = f32::from(group[0].color.0[3]) / f32::from(u8::MAX);
+    let layered = alpha != 1.0 && (SideSet::of(group).has_adjacent_pair() || !rest.is_empty());
+    let (paint_alpha, opacity) = if layered {
+      device.begin_layer(alpha / opacity);
+      (1.0, alpha)
+    } else {
+      (alpha / opacity, opacity)
+    };
+    let mut completed = self.paint_opacity_groups(border, rest, visible, opacity, at, device);
+
+    for &side in group {
+      let mut color = side.color;
+
+      color.0[3] = (paint_alpha * f32::from(u8::MAX)).round() as u8;
+      self.paint_square_side(border, side, color, completed, at, device);
+      completed = completed.with(side.side);
+    }
+
+    if layered {
+      device.end_layer();
+    }
+
+    completed
+  }
+
+  /// Paints one side of a square border in `color`, as Blink's `PaintOneBorderSide` does for a
+  /// straight side, with the `completed` sides already painted.
+  fn paint_square_side<D: PaintDevice>(
+    &self,
+    border: &BorderProperties,
+    side: PaintedSide,
+    color: Color,
+    completed: SideSet,
+    at: Affine,
+    device: &mut D,
+  ) {
+    let adjacent = side.side.adjacent();
+    let miters = adjacent.map(|adjacent| Miter::between(border, side, adjacent, completed));
+    let clipped = miters.contains(&Miter::Hard)
+      || (miters != [Miter::None; 2]
+        && matches!(side.style, BorderStyle::Dashed | BorderStyle::Dotted));
+    let clips = if clipped {
+      self.push_miter_clips(border, side.side, miters, at, device)
+    } else {
+      0
+    };
+    let widths = [0, 1].map(|index| {
+      if clipped || miters[index] == Miter::None {
+        0
+      } else {
+        adjacent[index].of(border.width).round() as i32
+      }
+    });
+
+    self
+      .side_rect(border, side.side)
+      .paint(color, side.style, widths, at, device);
+
+    for _ in 0..clips {
+      device.pop_clip();
+    }
+  }
+
+  /// Clips to the part of `side` between its `miters`, as Blink's `ClipBorderSidePolygon` does
+  /// for a square border, and returns how many clips it pushed.
+  fn push_miter_clips<D: PaintDevice>(
+    &self,
+    border: &BorderProperties,
+    side: BorderSide,
+    [first, second]: [Miter; 2],
+    at: Affine,
+    device: &mut D,
+  ) -> usize {
+    const EXTENSION: f32 = 0.1;
+
+    let Size { width, height } = self.size;
+    let point = |x, y| Point { x, y };
+    let (left, top) = (border.width.left, border.width.top);
+    let right = (width - border.width.right).max(left);
+    let bottom = (height - border.width.bottom).max(top);
+    let outer = [
+      point(0.0, 0.0),
+      point(width, 0.0),
+      point(width, height),
+      point(0.0, height),
+    ];
+    let inner = [
+      point(left, top),
+      point(right, top),
+      point(right, bottom),
+      point(left, bottom),
+    ];
+    let (quad, extension, [first, second]) = match side {
+      BorderSide::Top => (
+        [outer[0], inner[0], inner[1], outer[1]],
+        point(-EXTENSION, 0.0),
+        [first, second],
+      ),
+      BorderSide::Right => (
+        [outer[1], inner[1], inner[2], outer[2]],
+        point(0.0, -EXTENSION),
+        [first, second],
+      ),
+      BorderSide::Bottom => (
+        [outer[2], inner[2], inner[3], outer[3]],
+        point(EXTENSION, 0.0),
+        [second, first],
+      ),
+      BorderSide::Left => (
+        [outer[3], inner[3], inner[0], outer[0]],
+        point(0.0, EXTENSION),
+        [second, first],
+      ),
+    };
+    let [bound_start, bound_end] = match side {
+      BorderSide::Top | BorderSide::Bottom => {
+        [point(quad[0].x, quad[1].y), point(quad[3].x, quad[2].y)]
+      }
+      BorderSide::Left | BorderSide::Right => {
+        [point(quad[1].x, quad[0].y), point(quad[2].x, quad[3].y)]
+      }
+    };
+    let mut clips: SmallVec<[([Point<f32>; 4], Miter); 2]> = SmallVec::new();
+
+    if first == second {
+      clips.push((quad, first));
+    } else {
+      if first != Miter::None {
+        clips.push((
+          [quad[0] + extension, quad[1] + extension, bound_end, quad[3]],
+          first,
+        ));
+      }
+      if second != Miter::None {
+        clips.push((
+          [
+            quad[0],
+            bound_start,
+            quad[2] - extension,
+            quad[3] - extension,
+          ],
+          second,
+        ));
+      }
+    }
+
+    for &(polygon, miter) in &clips {
+      let shape = FillShape::polygons([polygon]);
+
+      if miter == Miter::Hard {
+        device.push_aliased_clip(&shape, at);
+      } else {
+        device.push_clip(&shape, at);
+      }
+    }
+
+    clips.len()
+  }
+
+  /// The rectangle `side` fills on a square border, across the whole border box.
+  fn side_rect(&self, border: &BorderProperties, side: BorderSide) -> BoxSideRect {
+    let Size { width, height } = self.size;
+    let thickness = side.of(border.width);
+    let (x1, y1, x2, y2) = match side {
+      BorderSide::Top => (0.0, 0.0, width, thickness),
+      BorderSide::Bottom => (0.0, height - thickness, width, height),
+      BorderSide::Left => (0.0, 0.0, thickness, height),
+      BorderSide::Right => (width - thickness, 0.0, width, height),
+    };
+
+    BoxSideRect {
+      side,
+      x1,
+      y1,
+      x2,
+      y2,
     }
   }
 

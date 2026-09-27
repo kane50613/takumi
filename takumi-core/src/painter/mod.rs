@@ -2,6 +2,7 @@
 
 mod background;
 mod border;
+mod box_side;
 mod content;
 mod decoration;
 mod outline;
@@ -89,6 +90,31 @@ impl FillShape {
     match self {
       Self::Path { rule, .. } => *rule,
       _ => FillRule::NonZero,
+    }
+  }
+
+  /// Closed polygons of `N` corners each, filled nonzero.
+  pub fn polygons<const N: usize>(polygons: impl IntoIterator<Item = [Point<f32>; N]>) -> Self {
+    let commands = polygons
+      .into_iter()
+      .flat_map(|corners| {
+        corners
+          .into_iter()
+          .enumerate()
+          .map(|(index, corner)| {
+            if index == 0 {
+              PathCommand::MoveTo(corner)
+            } else {
+              PathCommand::LineTo(corner)
+            }
+          })
+          .chain([PathCommand::Close])
+      })
+      .collect();
+
+    Self::Path {
+      commands,
+      rule: FillRule::NonZero,
     }
   }
 
@@ -259,6 +285,11 @@ pub trait PaintDevice {
   /// Clips later draws to everything outside `shape` under `transform`, until the matching
   /// [`PaintDevice::pop_clip`].
   fn push_clip_out(&mut self, shape: &FillShape, transform: Affine);
+
+  /// Clips later draws to `shape` under `transform` without antialiasing its edges, as a Skia clip
+  /// with antialiasing off keeps only the pixels whose centres fall inside, until the matching
+  /// [`PaintDevice::pop_clip`].
+  fn push_aliased_clip(&mut self, shape: &FillShape, transform: Affine);
 
   /// Removes the most recent clip.
   fn pop_clip(&mut self);
