@@ -14,58 +14,13 @@ use crate::{
   canvas::demultiply_rgba_in_place,
   checked_area, fast_div_255, intersect_alpha_masks, premultiply_rgba_pixel, render_mask,
   style::{
-    Affine, Angle, Color, Filter, FilterCategory, LUMA_WEIGHTS, PercentageNumber, SEPIA_WEIGHTS,
-    SizingContext, TransferChannel, TransferTable,
+    Affine, Angle, Color, Filter, FilterCategory, SizingContext, TransferChannel, TransferTable,
   },
 };
 
-/// Calculates the luma of an RGB pixel.
-#[inline(always)]
-fn get_luma(pixel: &[u8]) -> f32 {
-  pixel[0] as f32 * LUMA_WEIGHTS[0]
-    + pixel[1] as f32 * LUMA_WEIGHTS[1]
-    + pixel[2] as f32 * LUMA_WEIGHTS[2]
-}
-
-/// Applies a prepared matrix filter to one pixel.
-#[inline(always)]
-fn apply_single_pixel_filter(pixel: &mut [u8], filter: &Filter) {
-  match *filter {
-    Filter::Grayscale(PercentageNumber(amount)) => {
-      let lum = get_luma(pixel);
-      for channel in pixel.iter_mut().take(3) {
-        *channel = ((*channel as f32 * (1.0 - amount)) + (lum * amount)).clamp(0.0, 255.0) as u8;
-      }
-    }
-    Filter::Saturate(PercentageNumber(value)) => {
-      let lum = get_luma(pixel);
-      for channel in pixel.iter_mut().take(3) {
-        *channel = (lum * (1.0 - value) + *channel as f32 * value).clamp(0.0, 255.0) as u8;
-      }
-    }
-    Filter::Sepia(PercentageNumber(amount)) => {
-      let r = pixel[0] as f32;
-      let g = pixel[1] as f32;
-      let b = pixel[2] as f32;
-
-      let sepia_r = (r * SEPIA_WEIGHTS[0][0] + g * SEPIA_WEIGHTS[0][1] + b * SEPIA_WEIGHTS[0][2])
-        .clamp(0.0, 255.0);
-      let sepia_g = (r * SEPIA_WEIGHTS[1][0] + g * SEPIA_WEIGHTS[1][1] + b * SEPIA_WEIGHTS[1][2])
-        .clamp(0.0, 255.0);
-      let sepia_b = (r * SEPIA_WEIGHTS[2][0] + g * SEPIA_WEIGHTS[2][1] + b * SEPIA_WEIGHTS[2][2])
-        .clamp(0.0, 255.0);
-
-      pixel[0] = (r * (1.0 - amount) + sepia_r * amount).clamp(0.0, 255.0) as u8;
-      pixel[1] = (g * (1.0 - amount) + sepia_g * amount).clamp(0.0, 255.0) as u8;
-      pixel[2] = (b * (1.0 - amount) + sepia_b * amount).clamp(0.0, 255.0) as u8;
-    }
-    _ => {}
-  }
-}
-
 /// Filter prepared for batch execution
-enum PreparedFilter<'a> {
-  Matrix(&'a Filter),
+enum PreparedFilter {
+  Matrix(ColorMatrix),
   RgbLut(Box<TransferTable>),
   AlphaLut(Box<TransferTable>),
 }
@@ -73,7 +28,7 @@ enum PreparedFilter<'a> {
 /// Builds an execution plan that fuses consecutive RGB or alpha transfer tables
 /// into a single composed LUT, so each LUT-only run costs one lookup per channel
 /// regardless of how many filters it represents.
-fn prepare_pixel_filters<'a>(filters: &[&'a Filter]) -> SmallVec<[PreparedFilter<'a>; 4]> {
+fn prepare_pixel_filters(filters: &[&Filter]) -> SmallVec<[PreparedFilter; 4]> {
   let mut prepared: SmallVec<[PreparedFilter; 4]> = SmallVec::new();
   let mut pending_rgb: Option<TransferTable> = None;
   let mut pending_alpha: Option<TransferTable> = None;
@@ -95,7 +50,7 @@ fn prepare_pixel_filters<'a>(filters: &[&'a Filter]) -> SmallVec<[PreparedFilter
         if let Some(table) = pending_alpha.take() {
           prepared.push(PreparedFilter::AlphaLut(Box::new(table)));
         }
-        prepared.push(PreparedFilter::Matrix(filter));
+        prepared.extend(ColorMatrix::from_filter(filter).map(PreparedFilter::Matrix));
       }
     }
   }
@@ -144,7 +99,7 @@ fn apply_batched_pixel_filters(data: &mut [u8], filters: &[&Filter]) {
     on_straight_alpha(pixel, |pixel| {
       for p in &prepared {
         match p {
-          PreparedFilter::Matrix(f) => apply_single_pixel_filter(pixel, f),
+          PreparedFilter::Matrix(matrix) => *pixel = matrix.apply_rgba8(*pixel),
           PreparedFilter::RgbLut(t) => {
             pixel[0] = t[pixel[0] as usize];
             pixel[1] = t[pixel[1] as usize];
@@ -170,19 +125,7 @@ fn apply_hue_rotate_rgba_bytes(data: &mut [u8], angle: Angle) {
     if pixel[3] == 0 {
       continue;
     }
-    on_straight_alpha(pixel, |pixel| {
-      let channel = |value: u8| f32::from(value) / 255.0;
-      let out = matrix.apply([
-        channel(pixel[0]),
-        channel(pixel[1]),
-        channel(pixel[2]),
-        channel(pixel[3]),
-      ]);
-
-      for (slot, value) in pixel.iter_mut().zip(out) {
-        *slot = (value * 255.0).round() as u8;
-      }
-    });
+    on_straight_alpha(pixel, |pixel| *pixel = matrix.apply_rgba8(*pixel));
   }
 }
 
@@ -598,7 +541,7 @@ mod tests {
   use tiny_skia::PixmapMut;
 
   use super::*;
-  use crate::viewport::Viewport;
+  use crate::{style::PercentageNumber, viewport::Viewport};
 
   #[test]
   fn mask_bounds_span_the_first_and_last_visible_pixels() {

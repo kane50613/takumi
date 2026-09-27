@@ -43,6 +43,20 @@ impl ColorMatrix {
     ]
   }
 
+  /// [`ColorMatrix::apply`] on an 8-bit straight colour, rounding each channel to the nearest step.
+  pub fn apply_rgba8(self, rgba: [u8; 4]) -> [u8; 4] {
+    let [r, g, b, a] = rgba.map(f32::from);
+    let quantize = |value: f32| value.clamp(0.0, 255.0).round() as u8;
+    let mix = |row: [f32; 4]| quantize(row[0] * r + row[1] * g + row[2] * b + row[3] * 255.0);
+
+    [
+      mix(self.rows[0]),
+      mix(self.rows[1]),
+      mix(self.rows[2]),
+      quantize(a * self.alpha),
+    ]
+  }
+
   /// The matrix as `feColorMatrix` `values`: four rows of five, the alpha row last.
   pub fn fe_color_matrix_values(self) -> [f32; 20] {
     let mut values = [0.0; 20];
