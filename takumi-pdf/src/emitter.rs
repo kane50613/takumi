@@ -27,7 +27,7 @@ use takumi_core::{
     BackgroundClipArea, BoxBackground, BoxFrame, BoxPainter, FillShape, GlyphDevice, GlyphFill,
     OverflowClip, OwnContent, PaintDevice, PendingOutline, ShadowShape, StrokeStyle, UNBOUNDED,
   },
-  scene::{NodePaint, PaintItemKind, Scene},
+  scene::{BoxPart, NodePaint, PaintItemKind, PaintPhase, Scene},
   shadow::SizedShadow,
   style::{
     Affine, BackgroundImage, BlendMode, BoxDecorationBreak, Color, ComputedStyle, Display,
@@ -81,6 +81,8 @@ struct BoxState {
   overflow_clip: usize,
   /// The outline, painted between the two pops.
   outline: Option<PendingOutline>,
+  /// Where the box's own content paints, which its caller emits when the content's phase comes.
+  frame: Option<BoxFrame>,
 }
 
 /// Blob identity, collection index, and the variation coordinates the run was shaped at.
@@ -219,13 +221,28 @@ impl Emitter<'_> {
     }
 
     let outer_window = self.window;
+    // The root's own content waits for its phase.
     let (child_frame, root_state) = match context.root() {
-      Some(paint) => self.emit_box(paint, parent, surface)?,
+      Some(paint) => self.emit_box(paint, parent, BoxPart::Whole, surface)?,
       None => (parent, BoxState::default()),
     };
 
-    for bucket in context.in_paint_order() {
+    for phase in context.paint_phases() {
+      let (bucket, phase_part) = match phase {
+        PaintPhase::RootContent => {
+          if let Some(paint) = context.root() {
+            self.emit_box_content(paint, root_state.frame, surface)?;
+          }
+          continue;
+        }
+        PaintPhase::Items(items, part) => (items, part),
+      };
+
       for item in bucket {
+        let Some(part) = item.part_in(phase_part) else {
+          continue;
+        };
+
         match &item.kind {
           PaintItemKind::Node(paint) => {
             // Skipping a node that paints outside the window only saves work;
@@ -235,7 +252,11 @@ impl Emitter<'_> {
             if self.window.excludes_bounds(paint.paint_bounds) {
               continue;
             }
-            let (_, state) = self.emit_box(paint, child_frame, surface)?;
+            let (_, state) = self.emit_box(paint, child_frame, part, surface)?;
+
+            if part != BoxPart::Decorations {
+              self.emit_box_content(paint, state.frame, surface)?;
+            }
             self.finish_box(state, surface);
           }
           PaintItemKind::Context(child) => {
@@ -262,6 +283,7 @@ impl Emitter<'_> {
     &mut self,
     paint: &NodePaint,
     parent: Affine,
+    part: BoxPart,
     surface: &mut Surface,
   ) -> Result<(Affine, BoxState), PdfError> {
     let Some(node) = self.scene.root.node_at_path(&paint.path) else {
@@ -291,15 +313,15 @@ impl Emitter<'_> {
     let decoration_frame = self.decoration_frame(style, frame);
 
     pushed += self.push_mask_and_clip(node, frame, surface);
-    self.emit_decorations(node, decoration_frame, surface);
+    if part != BoxPart::Content {
+      self.emit_decorations(node, decoration_frame, surface);
+    }
 
     // Children and own content clip to the (rounded) padding box when overflow
     // is hidden; without radius a per-axis overflow leaves the visible axis
     // unbounded. Counted on its own: the outline paints outside this clip but
     // inside everything else the box pushed.
     let overflow_clip = self.push_overflow_clip(node, frame, relative, surface);
-
-    self.emit_tagged_content(node, paint, frame, surface)?;
 
     Ok((
       children_space,
@@ -310,8 +332,13 @@ impl Emitter<'_> {
         // overflow clip first, so the outline lands above the content and
         // outside that clip, but still under the box's transform, opacity,
         // mask and blend.
-        outline: BoxPainter::new(&node.context, decoration_frame.layout)
-          .pending_outline(decoration_frame.origin),
+        outline: (part != BoxPart::Decorations)
+          .then(|| {
+            BoxPainter::new(&node.context, decoration_frame.layout)
+              .pending_outline(decoration_frame.origin)
+          })
+          .flatten(),
+        frame: Some(frame),
       },
     ))
   }
@@ -446,6 +473,20 @@ impl Emitter<'_> {
     }
 
     Ok(())
+  }
+
+  /// Emits the own content of the box `paint` placed at `frame`.
+  fn emit_box_content(
+    &mut self,
+    paint: &NodePaint,
+    frame: Option<BoxFrame>,
+    surface: &mut Surface,
+  ) -> Result<(), PdfError> {
+    let (Some(frame), Some(node)) = (frame, self.scene.root.node_at_path(&paint.path)) else {
+      return Ok(());
+    };
+
+    self.emit_tagged_content(node, paint, frame, surface)
   }
 
   /// Finishes a box: leaves its overflow clip, paints the outline above

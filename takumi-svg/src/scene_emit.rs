@@ -12,7 +12,7 @@ use std::io;
 use takumi_core::{
   geometry::{NodeId, Point},
   painter::BoxFrame,
-  scene::{NodePaint, PaintItemKind, Scene},
+  scene::{BoxPart, NodePaint, PaintItemKind, PaintPhase, Scene},
   style::{Affine, Filter},
 };
 
@@ -26,7 +26,7 @@ pub(crate) struct SceneEmitter<'a> {
   pub(crate) scene: &'a Scene,
 }
 
-impl SceneEmitter<'_> {
+impl<'a> SceneEmitter<'a> {
   pub(crate) fn emit(&self, doc: &mut SvgDocument) -> io::Result<()> {
     self.emit_context(0, Affine::IDENTITY, None, doc)?;
     Ok(())
@@ -112,19 +112,20 @@ impl SceneEmitter<'_> {
     Ok(())
   }
 
-  /// Emits a node's decorations and own content positioned by its transform
-  /// relative to `parent`, leaving its chrome groups open for the caller to close
-  /// after the node's children. Returns the chrome and the transform the node's
-  /// children sit in (`parent · group_transform`): a pure translation is folded into
-  /// the draw origin so it leaves no group, so the children's transform is the
-  /// parent's, not the node's.
+  /// Emits a node's chrome positioned by its transform relative to `parent`, drawing `part` of
+  /// it but leaving its own content to the caller, and its groups open for the caller to close
+  /// after the node's children. Returns the chrome, the placed box whose content the caller
+  /// emits, and the transform the node's children sit in (`parent · group_transform`): a pure
+  /// translation is folded into the draw origin so it leaves no group, so the children's
+  /// transform is the parent's, not the node's.
   fn emit_box(
     &self,
     np: &NodePaint,
     parent: Affine,
     stop_at: Option<NodeId>,
+    part: BoxPart,
     doc: &mut SvgDocument,
-  ) -> io::Result<Option<(BoxChrome, Affine)>> {
+  ) -> io::Result<Option<(BoxChrome, PlacedBox<'a>, Affine)>> {
     let Some(node) = self.scene.root.node_at_path(&np.path) else {
       return Ok(None);
     };
@@ -151,13 +152,15 @@ impl SceneEmitter<'_> {
     // without their own backdrop (each level would replay its own prefix, doubling
     // the output per backdrop node in paint order). Stacked backdrop elements
     // therefore see the unfiltered content beneath them in the replay.
-    if stop_at.is_none() && !node.context.style.backdrop_filter.is_empty() {
+    if part != BoxPart::Content
+      && stop_at.is_none()
+      && !node.context.style.backdrop_filter.is_empty()
+    {
       self.emit_backdrop(&placed, np.node_id, child_transform, group_transform, doc)?;
     }
 
-    let chrome = BoxChrome::open(&placed, group_transform, doc)?;
-    placed.emit_own_content(doc)?;
-    Ok(Some((chrome, child_transform)))
+    let chrome = BoxChrome::open(&placed, group_transform, part, doc)?;
+    Ok(Some((chrome, placed, child_transform)))
   }
 
   /// Walks a stacking context in paint order. With `stop_at` set, emission halts
@@ -175,18 +178,18 @@ impl SceneEmitter<'_> {
     };
 
     // Children sit in the root node's child transform; a synthetic root context
-    // keeps the caller's.
-    let (chrome, child_transform) = match ctx.root() {
+    // keeps the caller's. The root's own content waits for its phase.
+    let (chrome, root_placed, child_transform) = match ctx.root() {
       Some(np) => {
         if stop_at == Some(np.node_id) {
           return Ok(true);
         }
-        match self.emit_box(np, parent, stop_at, doc)? {
-          Some((chrome, transform)) => (Some(chrome), transform),
-          None => (None, parent),
+        match self.emit_box(np, parent, stop_at, BoxPart::Whole, doc)? {
+          Some((chrome, placed, transform)) => (Some(chrome), Some(placed), transform),
+          None => (None, None, parent),
         }
       }
-      None => (None, parent),
+      None => (None, None, parent),
     };
 
     let mut stopped = false;
@@ -196,15 +199,34 @@ impl SceneEmitter<'_> {
     // `kDescendantOutlinesOnly`.
     let mut descendant_outlines = Vec::new();
 
-    'buckets: for bucket in ctx.in_paint_order() {
-      for item in bucket {
+    'phases: for phase in ctx.paint_phases() {
+      let (items, phase_part) = match phase {
+        PaintPhase::RootContent => {
+          if let Some(placed) = &root_placed {
+            placed.emit_own_content(doc)?;
+          }
+          continue;
+        }
+        PaintPhase::Items(items, part) => (items, part),
+      };
+
+      for item in items {
+        let Some(part) = item.part_in(phase_part) else {
+          continue;
+        };
+
         match &item.kind {
           PaintItemKind::Node(np) => {
             if stop_at == Some(np.node_id) {
               stopped = true;
-              break 'buckets;
+              break 'phases;
             }
-            if let Some((mut chrome, _)) = self.emit_box(np, child_transform, stop_at, doc)? {
+            if let Some((mut chrome, placed, _)) =
+              self.emit_box(np, child_transform, stop_at, part, doc)?
+            {
+              if part != BoxPart::Decorations {
+                placed.emit_own_content(doc)?;
+              }
               descendant_outlines.extend(chrome.take_outline());
               chrome.close(doc)?;
             }
@@ -212,7 +234,7 @@ impl SceneEmitter<'_> {
           PaintItemKind::Context(child) => {
             if self.emit_context(*child, child_transform, stop_at, doc)? {
               stopped = true;
-              break 'buckets;
+              break 'phases;
             }
           }
         }
