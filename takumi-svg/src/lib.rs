@@ -42,6 +42,7 @@ use takumi_core::{
   layout::background_image_geometry::OriginBox,
   painter::{BoxFrame, FillShape, StrokeStyle},
   path_data::{APPROX_CHARS_PER_NUMBER, Num, edges_path_data, path_data, quantize_path},
+  resources::image_buffer::demultiply_pixel,
   shadow::SizedShadow,
   style::{Affine, FillRule, Filter, FilterReference, LineJoin, ToCss},
 };
@@ -57,9 +58,10 @@ impl Rgba {
 
   /// Unpremultiplies a tiny-skia pixel.
   pub(crate) fn demultiplied(color: PremultipliedColorU8) -> Self {
-    let color = color.demultiply();
+    let mut pixel = [color.red(), color.green(), color.blue(), color.alpha()];
 
-    Self([color.red(), color.green(), color.blue(), color.alpha()])
+    demultiply_pixel(&mut pixel);
+    Self(pixel)
   }
 
   /// `#rgb` or `#rrggbb` hex; alpha goes in a separate `*-opacity`.
