@@ -96,20 +96,20 @@ pub(crate) fn apply_white_space_collapse<'a>(
       // already ends in whitespace, so carry that state across the mode switch.
       // A span expanded to nothing (all tabs, tab-size 0) carries state through.
       if let Some(last) = expanded.chars().next_back() {
-        *previous_collapsible_space = last.is_whitespace();
+        *previous_collapsible_space = COLLAPSIBLE_WHITESPACE.contains(&last);
         *previous_was_line_break = false;
       }
       expanded
     }
 
-    // Collapse sequences of whitespace (spaces, tabs, line breaks) into a single space
-    // and trim leading/trailing spaces.
+    // Collapse runs of document white space into a single space. Other spaces, such as U+00A0
+    // and U+3000, never collapse.
     WhiteSpaceCollapse::Collapse => {
       let mut out = String::with_capacity(input.len());
       let mut last_was_ws = *previous_collapsible_space;
 
       for ch in input.chars() {
-        if ch.is_whitespace() {
+        if COLLAPSIBLE_WHITESPACE.contains(&ch) {
           if !last_was_ws {
             out.push(' ');
             last_was_ws = true;
