@@ -6,6 +6,8 @@
 //! Blink's `PaintPropertyTreeBuilder` hands out `LocalBorderBoxProperties` and
 //! `ContentsProperties`.
 
+// The property rules follow Blink, under the notice in LICENSE-CHROMIUM.
+
 use std::iter::successors;
 
 use crate::{
