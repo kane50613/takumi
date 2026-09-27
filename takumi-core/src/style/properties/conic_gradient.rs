@@ -1,6 +1,7 @@
 use std::{f32::consts::TAU, fmt};
 
 use cssparser::{Parser, Token, match_ignore_ascii_case};
+use smallvec::SmallVec;
 use tiny_skia::PremultipliedColorU8;
 use typed_builder::TypedBuilder;
 
@@ -18,6 +19,9 @@ use crate::{
 };
 
 const LUT_INDEX_BOUNDARY_EPSILON: f32 = 0.001;
+
+/// A full turn, the length of a conic gradient's line.
+const FULL_TURN_DEGREES: f32 = 360.0;
 
 /// Represents a CSS conic-gradient.
 #[derive(Debug, Clone, PartialEq, TypedBuilder)]
@@ -174,15 +178,13 @@ impl ConicGradientTile {
     current_color: Color,
     dither: bool,
   ) -> Self {
-    let cx = Length::from(gradient.center.0.x).to_px(sizing, width as f32);
-    let cy = Length::from(gradient.center.0.y).to_px(sizing, height as f32);
+    let (cx, cy) = gradient.resolve_center(width as f32, height as f32, sizing);
 
     let start_rad = gradient.from_angle.to_radians().rem_euclid(TAU);
     let start_turns = start_rad / TAU;
 
-    let resolved_stops =
-      ResolvedGradientStop::resolve(&gradient.stops, 360.0, sizing, current_color);
-    let axis = LutAxis::new(gradient.repeating, resolved_stops, 360.0);
+    let resolved_stops = gradient.resolve_stops(sizing, current_color);
+    let axis = LutAxis::new(gradient.repeating, resolved_stops, FULL_TURN_DEGREES);
     let lut_size = axis.lut_size_covering(Self::visible_angle_samples(width, height, cx, cy));
     let lut = axis.lut(lut_size, gradient.interpolation, dither);
     let lut_len = lut.len();
@@ -302,6 +304,23 @@ impl ConicGradient {
 
 impl ConicGradient {
   const FUNCTION_NAMES: [&'static str; 2] = ["conic-gradient", "repeating-conic-gradient"];
+
+  /// The centre in a `width` × `height` box.
+  pub fn resolve_center(&self, width: f32, height: f32, sizing: &SizingContext) -> (f32, f32) {
+    (
+      Length::from(self.center.0.x).to_px(sizing, width),
+      Length::from(self.center.0.y).to_px(sizing, height),
+    )
+  }
+
+  /// The stops placed in degrees around the full turn.
+  pub fn resolve_stops(
+    &self,
+    sizing: &SizingContext,
+    current_color: Color,
+  ) -> SmallVec<[ResolvedGradientStop; 4]> {
+    ResolvedGradientStop::resolve(&self.stops, FULL_TURN_DEGREES, sizing, current_color)
+  }
 }
 
 impl<'i> FromCss<'i> for ConicGradient {
