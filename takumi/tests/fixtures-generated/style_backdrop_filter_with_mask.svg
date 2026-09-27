@@ -140,6 +140,32 @@
     <rect x="0" y="0" width="48" height="48" fill="url(#lg3)"/>
   </pattern>
   <rect x="0" y="0" width="1200" height="630" fill="url(#pat2)"/>
+  <g fill="#fff">
+    <use href="#g0" x="275" y="332"/>
+    <use href="#g1" x="308.02" y="332"/>
+    <use href="#g2" x="336.73" y="332"/>
+    <use href="#g3" x="365.24" y="332"/>
+    <use href="#g4" x="384.3" y="332"/>
+    <use href="#g5" x="425.67" y="332"/>
+    <use href="#g6" x="453.9" y="332"/>
+    <use href="#g7" x="482.46" y="332"/>
+    <use href="#g8" x="510.1" y="332"/>
+    <use href="#g6" x="530.79" y="332"/>
+    <use href="#g3" x="559.35" y="332"/>
+    <use href="#g9" x="577.16" y="332"/>
+    <use href="#g10" x="599.43" y="332"/>
+    <use href="#g11" x="629.62" y="332"/>
+    <use href="#g12" x="644.26" y="332"/>
+    <use href="#g3" x="673.4" y="332"/>
+    <use href="#g3" x="692.46" y="332"/>
+    <use href="#g6" x="710.94" y="332"/>
+    <use href="#g13" x="739.5" y="332"/>
+    <use href="#g6" x="780.87" y="332"/>
+    <use href="#g13" x="809.43" y="332"/>
+    <use href="#g14" x="839.38" y="332"/>
+    <use href="#g6" x="869.34" y="332"/>
+    <use href="#g15" x="897.9" y="332"/>
+  </g>
   <mask id="mk4" maskUnits="userSpaceOnUse" style="mask-type:alpha">
     <linearGradient id="lg5" gradientUnits="userSpaceOnUse" x1="600" y1="0" x2="600" y2="630">
       <stop offset="0" stop-color="#000" stop-opacity="0"/>
@@ -434,6 +460,32 @@
           <rect x="0" y="0" width="48" height="48" fill="url(#lg13)"/>
         </pattern>
         <rect x="0" y="0" width="1200" height="630" fill="url(#pat12)"/>
+        <g fill="#fff">
+          <use href="#g0" x="275" y="332"/>
+          <use href="#g1" x="308.02" y="332"/>
+          <use href="#g2" x="336.73" y="332"/>
+          <use href="#g3" x="365.24" y="332"/>
+          <use href="#g4" x="384.3" y="332"/>
+          <use href="#g5" x="425.67" y="332"/>
+          <use href="#g6" x="453.9" y="332"/>
+          <use href="#g7" x="482.46" y="332"/>
+          <use href="#g8" x="510.1" y="332"/>
+          <use href="#g6" x="530.79" y="332"/>
+          <use href="#g3" x="559.35" y="332"/>
+          <use href="#g9" x="577.16" y="332"/>
+          <use href="#g10" x="599.43" y="332"/>
+          <use href="#g11" x="629.62" y="332"/>
+          <use href="#g12" x="644.26" y="332"/>
+          <use href="#g3" x="673.4" y="332"/>
+          <use href="#g3" x="692.46" y="332"/>
+          <use href="#g6" x="710.94" y="332"/>
+          <use href="#g13" x="739.5" y="332"/>
+          <use href="#g6" x="780.87" y="332"/>
+          <use href="#g13" x="809.43" y="332"/>
+          <use href="#g14" x="839.38" y="332"/>
+          <use href="#g6" x="869.34" y="332"/>
+          <use href="#g15" x="897.9" y="332"/>
+        </g>
         <mask id="mk14" maskUnits="userSpaceOnUse" style="mask-type:alpha">
           <linearGradient id="lg15" gradientUnits="userSpaceOnUse" x1="600" y1="0" x2="600" y2="630">
             <stop offset="0" stop-color="#000" stop-opacity="0"/>
@@ -579,32 +631,6 @@
     <rect x="0" y="0" width="1200" height="630" fill="url(#rg17)"/>
   </mask>
   <g mask="url(#mk16)">
-  </g>
-  <g fill="#fff">
-    <use href="#g0" x="275" y="332"/>
-    <use href="#g1" x="308.02" y="332"/>
-    <use href="#g2" x="336.73" y="332"/>
-    <use href="#g3" x="365.24" y="332"/>
-    <use href="#g4" x="384.3" y="332"/>
-    <use href="#g5" x="425.67" y="332"/>
-    <use href="#g6" x="453.9" y="332"/>
-    <use href="#g7" x="482.46" y="332"/>
-    <use href="#g8" x="510.1" y="332"/>
-    <use href="#g6" x="530.79" y="332"/>
-    <use href="#g3" x="559.35" y="332"/>
-    <use href="#g9" x="577.16" y="332"/>
-    <use href="#g10" x="599.43" y="332"/>
-    <use href="#g11" x="629.62" y="332"/>
-    <use href="#g12" x="644.26" y="332"/>
-    <use href="#g3" x="673.4" y="332"/>
-    <use href="#g3" x="692.46" y="332"/>
-    <use href="#g6" x="710.94" y="332"/>
-    <use href="#g13" x="739.5" y="332"/>
-    <use href="#g6" x="780.87" y="332"/>
-    <use href="#g13" x="809.43" y="332"/>
-    <use href="#g14" x="839.38" y="332"/>
-    <use href="#g6" x="869.34" y="332"/>
-    <use href="#g15" x="897.9" y="332"/>
   </g>
   <defs>
     <path id="g0" d="M17.02.77q-4.4 0-7.55-1.49t-4.94-4.17-2.03-6.33l7.34-.37q.28 2.03 1.18 3.45.89 1.41 2.39 2.14 1.51.72 3.7.72 1.83 0 3.11-.44t1.95-1.31q.67-.89.67-2.19 0-1.17-.57-2.08t-2.21-1.65q-1.62-.75-4.81-1.47-4.36-.97-7.03-2.22-2.66-1.25-3.86-3.14-1.2-1.91-1.2-4.8 0-3.05 1.53-5.36t4.39-3.61 6.84-1.29q4.24 0 7.16 1.48t4.58 4.08 2.01 5.97l-7.3.34q-.17-1.76-.98-3.06-.81-1.31-2.2-2.03-1.39-.74-3.36-.74-2.47 0-3.89 1.1-1.41 1.09-1.41 2.87 0 1.27.63 2.11t2.17 1.45q1.53.61 4.28 1.21 4.73.93 7.5 2.42 2.76 1.47 3.94 3.48 1.17 2 1.17 4.6 0 3.17-1.61 5.5t-4.58 3.58q-2.95 1.25-7.01 1.25Z"/>

@@ -1,0 +1,45 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>paint_order_positioned_and_floats</title>
+    <base href="../../../" />
+    <link rel="stylesheet" href="takumi/tests/shared.css" />
+    <style>
+      .cell {
+        display: block;
+        width: 180px;
+        padding: 16px;
+        background-color: rgb(241, 245, 249);
+      }
+      .first {
+        display: block;
+        width: 100px;
+        height: 60px;
+        background-color: rgb(239, 68, 68);
+      }
+      .later {
+        display: block;
+        width: 148px;
+        height: 60px;
+        background-color: rgb(59, 130, 246);
+      }
+    </style>
+  </head>
+  <body style="width: 640px; height: 200px">
+    <div style="display: flex; gap: 24px; padding: 24px; background-color: rgb(255, 255, 255)">
+      <div class="cell">
+        <div class="first" style="position: relative; top: 30px"></div>
+        <div class="later"></div>
+      </div>
+      <div class="cell">
+        <div class="first" style="opacity: 0.9; margin-bottom: -30px"></div>
+        <div class="later"></div>
+      </div>
+      <div class="cell">
+        <div class="first" style="float: left; height: 90px"></div>
+        <div class="later"></div>
+      </div>
+    </div>
+  </body>
+</html>
