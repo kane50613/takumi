@@ -9,6 +9,7 @@ use std::{collections::HashMap, rc::Rc};
 
 use super::{
   items::{DecorationLink, InlineDecoration},
+  line_box::{BoxKey, LineBoxOffsets},
   outline::InlineOutlineRect,
 };
 
@@ -37,14 +38,22 @@ pub struct InlineBackgroundFragment {
   pub baseline: f32,
 }
 
-/// Where a covering item's line sits, in border-box space.
+/// Where a line sits, in border-box space.
 #[derive(Clone, Copy)]
-pub(super) struct CoverLine {
+pub(super) struct LinePosition {
   pub(super) top: f32,
   pub(super) bottom: f32,
   pub(super) baseline: f32,
   /// The line's `text-fit` scale.
   pub(super) scale: f32,
+}
+
+/// The line a covering item sits on.
+pub(super) struct CoverLine<'a> {
+  pub(super) index: usize,
+  pub(super) position: LinePosition,
+  /// Where each box on the line sits below its baseline.
+  pub(super) offsets: &'a LineBoxOffsets,
 }
 
 /// What covers a span on a line.
@@ -62,7 +71,7 @@ pub(super) enum Covering {
 struct FragmentBounds {
   x0: f32,
   x1: f32,
-  line: CoverLine,
+  line: LinePosition,
   /// The content area of the runs on the line.
   runs: Option<(f32, f32)>,
   /// Whether anything but the span's padding sits on the line.
@@ -79,7 +88,8 @@ struct FragmentBounds {
 ///   the line, while Blink spills monolithic overflow onto the next page
 #[derive(Default)]
 pub(super) struct DecorationAccumulator<'c> {
-  ids: HashMap<*const DecorationLink<'c>, usize>,
+  /// Each span's position among `decorations`, by the span's id.
+  ids: HashMap<usize, usize>,
   decorations: Vec<InlineDecoration<'c>>,
   fragments: HashMap<(usize, usize), FragmentBounds>,
 }
@@ -87,7 +97,7 @@ pub(super) struct DecorationAccumulator<'c> {
 impl<'c> DecorationAccumulator<'c> {
   /// The id for `link`, assigning parents first so outer spans paint first.
   fn ensure(&mut self, link: &Rc<DecorationLink<'c>>) -> usize {
-    if let Some(id) = self.ids.get(&Rc::as_ptr(link)) {
+    if let Some(id) = self.ids.get(&link.decoration.id) {
       return *id;
     }
     if let Some(parent) = &link.parent {
@@ -95,7 +105,7 @@ impl<'c> DecorationAccumulator<'c> {
     }
     let id = self.decorations.len();
 
-    self.ids.insert(Rc::as_ptr(link), id);
+    self.ids.insert(link.decoration.id, id);
     self.decorations.push(link.decoration.clone());
     id
   }
@@ -103,10 +113,9 @@ impl<'c> DecorationAccumulator<'c> {
   pub(super) fn cover(
     &mut self,
     chain: Option<&Rc<DecorationLink<'c>>>,
-    line_index: usize,
+    line: &CoverLine<'_>,
     x0: f32,
     x1: f32,
-    line: CoverLine,
     covering: Covering,
   ) {
     let mut next = chain;
@@ -119,13 +128,19 @@ impl<'c> DecorationAccumulator<'c> {
       }
 
       let id = self.ensure(link);
+      let position = line.position;
+      let baseline =
+        position.baseline + line.offsets.of(BoxKey::Span(link.decoration.id)) * position.scale;
       let bounds = self
         .fragments
-        .entry((id, line_index))
+        .entry((id, line.index))
         .or_insert(FragmentBounds {
           x0,
           x1,
-          line,
+          line: LinePosition {
+            baseline,
+            ..position
+          },
           runs: None,
           has_content: false,
         });
@@ -179,11 +194,12 @@ impl<'c> DecorationAccumulator<'c> {
         // primary font around the baseline, whatever its content. Without a primary font, the
         // fonts its runs fell back to stand in, then the line.
         let (top, bottom) = decoration
-          .text_metrics
-          .map(|(ascent, descent)| {
+          .font
+          .metrics
+          .map(|metrics| {
             (
-              line.baseline - ascent * line.scale,
-              line.baseline + descent * line.scale,
+              line.baseline - metrics.ascent * line.scale,
+              line.baseline + metrics.descent * line.scale,
             )
           })
           .or(runs)

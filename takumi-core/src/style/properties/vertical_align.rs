@@ -1,7 +1,6 @@
 use std::fmt;
 
 use cssparser::Parser;
-use parley::LineMetrics;
 
 use crate::style::{tw::TailwindPropertyParser, *};
 
@@ -59,19 +58,14 @@ impl ToCss for VerticalAlign {
   }
 }
 
-/// Computed `vertical-align` data used for placement.
+/// `vertical-align` with its length resolved, as the line box aligns a box by it.
 #[derive(Debug, Clone, Copy, PartialEq)]
 #[non_exhaustive]
 pub enum ResolvedVerticalAlign {
-  /// A keyword-based alignment mode.
+  /// A keyword, which aligns against the parent box or the line box.
   Keyword(VerticalAlignKeyword),
-  /// A baseline shift resolved as: `px + line_height_relative * metrics_line_height`.
-  BaselineShift {
-    /// The absolute pixel component added to the final baseline shift.
-    px: f32,
-    /// The multiplier applied to metrics-derived line height.
-    line_height_relative: f32,
-  },
+  /// How far the baseline rises above the parent's, in pixels.
+  Shift(f32),
 }
 
 impl Default for VerticalAlign {
@@ -109,54 +103,12 @@ impl<'i> FromCss<'i> for VerticalAlign {
 }
 
 impl VerticalAlign {
-  /// Resolves the keyword or length into a `ResolvedVerticalAlign`.
-  pub fn resolve(
-    self,
-    sizing: &SizingContext,
-    font_size: f32,
-    line_height: LineHeight,
-  ) -> ResolvedVerticalAlign {
+  /// Resolves a length against the box's own `line_height` in pixels, which a percentage refers
+  /// to.
+  pub fn resolve(self, sizing: &SizingContext, line_height: f32) -> ResolvedVerticalAlign {
     match self {
-      // Font-size fraction, independent of line-height (CSS sub/super, per Chromium).
-      Self::Keyword(VerticalAlignKeyword::Super) => ResolvedVerticalAlign::BaselineShift {
-        px: font_size / 3.0 + 1.0,
-        line_height_relative: 0.0,
-      },
-      Self::Keyword(VerticalAlignKeyword::Sub) => ResolvedVerticalAlign::BaselineShift {
-        px: -(font_size / 5.0 + 1.0),
-        line_height_relative: 0.0,
-      },
       Self::Keyword(keyword) => ResolvedVerticalAlign::Keyword(keyword),
-      Self::Length(length) => {
-        if line_height == LineHeight::Normal {
-          if let Length::Percentage(value) = length {
-            return ResolvedVerticalAlign::BaselineShift {
-              px: 0.0,
-              line_height_relative: value / 100.0,
-            };
-          }
-
-          if let Length::Calc(formula) = length {
-            let linear = formula.resolve(sizing);
-            let (px, percent) = linear.components();
-
-            return ResolvedVerticalAlign::BaselineShift {
-              px,
-              line_height_relative: percent,
-            };
-          }
-        }
-
-        let shift = match line_height {
-          LineHeight::Normal => length.to_px(sizing, 0.0),
-          LineHeight::Unitless(value) => length.to_px(sizing, value * font_size),
-          LineHeight::Length(value) => length.to_px(sizing, value.to_px(sizing, font_size)),
-        };
-        ResolvedVerticalAlign::BaselineShift {
-          px: shift,
-          line_height_relative: 0.0,
-        }
-      }
+      Self::Length(length) => ResolvedVerticalAlign::Shift(length.to_px(sizing, line_height)),
     }
   }
 }
@@ -165,56 +117,6 @@ impl MakeComputed for VerticalAlign {
   fn make_computed(&mut self, sizing: &SizingContext) {
     if let Self::Length(length) = self {
       length.make_computed(sizing);
-    }
-  }
-}
-
-impl ResolvedVerticalAlign {
-  /// Writes the aligned `y` for a box on a line given its metrics.
-  pub(crate) fn apply(
-    self,
-    y: &mut f32,
-    metrics: &LineMetrics,
-    box_height: f32,
-    baseline_offset: Option<f32>,
-    parent_x_height: Option<f32>,
-    parent_text_metrics: Option<(f32, f32)>,
-  ) {
-    let baseline_offset = baseline_offset.unwrap_or(box_height).clamp(0.0, box_height);
-    let baseline_top = metrics.baseline - baseline_offset;
-    let (parent_text_ascent, parent_text_descent) =
-      parent_text_metrics.unwrap_or((metrics.ascent, metrics.descent));
-
-    match self {
-      ResolvedVerticalAlign::Keyword(keyword) => match keyword {
-        VerticalAlignKeyword::Baseline => *y = baseline_top,
-        VerticalAlignKeyword::Top => {
-          debug_assert!(metrics.block_min_coord.is_finite());
-          *y = metrics.block_min_coord;
-        }
-        VerticalAlignKeyword::Middle => {
-          let x_height = parent_x_height.unwrap_or(metrics.ascent * 0.5);
-          *y = metrics.baseline - (x_height * 0.5) - (box_height / 2.0);
-        }
-        VerticalAlignKeyword::Bottom => {
-          debug_assert!(metrics.block_max_coord.is_finite());
-          *y = metrics.block_max_coord - box_height;
-        }
-        VerticalAlignKeyword::TextTop => *y = metrics.baseline - parent_text_ascent,
-        VerticalAlignKeyword::TextBottom => {
-          *y = metrics.baseline + parent_text_descent - box_height
-        }
-        // resolved to a `BaselineShift` in `VerticalAlign::resolve`
-        VerticalAlignKeyword::Sub | VerticalAlignKeyword::Super => unreachable!(),
-      },
-      ResolvedVerticalAlign::BaselineShift {
-        px,
-        line_height_relative,
-      } => {
-        let line_height_component =
-          (metrics.ascent - metrics.descent + metrics.leading) * line_height_relative;
-        *y = baseline_top - (px + line_height_component);
-      }
     }
   }
 }
@@ -253,23 +155,6 @@ mod tests {
     }
   }
 
-  fn line_metrics() -> LineMetrics {
-    LineMetrics {
-      ascent: 9.0,
-      descent: 3.0,
-      leading: 0.0,
-      line_height: 14.0,
-      baseline: 20.0,
-      offset: 0.0,
-      advance: 100.0,
-      trailing_whitespace: 0.0,
-      inline_min_coord: 0.0,
-      inline_max_coord: 100.0,
-      block_min_coord: 10.0,
-      block_max_coord: 24.0,
-    }
-  }
-
   #[test]
   fn parse_keywords_and_length_percentage() {
     assert_eq!(
@@ -291,214 +176,26 @@ mod tests {
   }
 
   #[test]
-  fn resolve_length_to_baseline_shift_px() {
-    let resolved =
-      VerticalAlign::Length(Length::Px(8.0)).resolve(&sizing(), 12.0, LineHeight::Unitless(1.5));
-    assert_eq!(
-      resolved,
-      ResolvedVerticalAlign::BaselineShift {
-        px: 16.0,
-        line_height_relative: 0.0
-      }
-    );
+  fn resolve_length_to_shift_px() {
+    let resolved = VerticalAlign::Length(Length::Px(8.0)).resolve(&sizing(), 18.0);
+
+    assert_eq!(resolved, ResolvedVerticalAlign::Shift(16.0));
   }
 
   #[test]
-  fn resolve_percentage_uses_line_height_basis() {
-    let unitless = VerticalAlign::Length(Length::Percentage(50.0)).resolve(
-      &sizing(),
-      12.0,
-      LineHeight::Unitless(2.0),
-    );
-    assert_eq!(
-      unitless,
-      ResolvedVerticalAlign::BaselineShift {
-        px: 12.0,
-        line_height_relative: 0.0
-      }
-    );
+  fn resolve_percentage_against_the_line_height() {
+    let resolved = VerticalAlign::Length(Length::Percentage(50.0)).resolve(&sizing(), 18.0);
 
-    let fixed = VerticalAlign::Length(Length::Percentage(50.0)).resolve(
-      &sizing(),
-      12.0,
-      LineHeight::Length(Length::Px(20.0)),
-    );
-    assert_eq!(
-      fixed,
-      ResolvedVerticalAlign::BaselineShift {
-        px: 20.0,
-        line_height_relative: 0.0
-      }
-    );
-
-    let normal =
-      VerticalAlign::Length(Length::Percentage(50.0)).resolve(&sizing(), 12.0, LineHeight::Normal);
-    assert_eq!(
-      normal,
-      ResolvedVerticalAlign::BaselineShift {
-        px: 0.0,
-        line_height_relative: 0.5
-      }
-    );
+    assert_eq!(resolved, ResolvedVerticalAlign::Shift(9.0));
   }
 
   #[test]
-  fn apply_baseline_shift_raises_and_lowers() {
-    let metrics = line_metrics();
-    let baseline = metrics.baseline - 4.0;
-
-    let mut y = 0.0;
-    ResolvedVerticalAlign::BaselineShift {
-      px: 5.0,
-      line_height_relative: 0.0,
-    }
-    .apply(&mut y, &metrics, 4.0, None, None, None);
-    assert_eq!(y, baseline - 5.0);
-
-    ResolvedVerticalAlign::BaselineShift {
-      px: -5.0,
-      line_height_relative: 0.0,
-    }
-    .apply(&mut y, &metrics, 4.0, None, None, None);
-    assert_eq!(y, baseline + 5.0);
-  }
-
-  #[test]
-  fn apply_keyword_top_uses_block_min_coord() {
-    let mut y = 0.0;
-    let metrics = line_metrics();
-
-    ResolvedVerticalAlign::Keyword(VerticalAlignKeyword::Top)
-      .apply(&mut y, &metrics, 8.0, None, None, None);
-
-    assert_eq!(y, metrics.block_min_coord);
-  }
-
-  #[test]
-  fn apply_keyword_bottom_uses_block_max_coord() {
-    let mut y = 0.0;
-    let metrics = line_metrics();
-    let box_height = 8.0;
-
-    ResolvedVerticalAlign::Keyword(VerticalAlignKeyword::Bottom)
-      .apply(&mut y, &metrics, box_height, None, None, None);
-
-    assert_eq!(y, metrics.block_max_coord - box_height);
-  }
-
-  #[test]
-  fn apply_metrics_relative_shift_uses_line_metrics_formula() {
-    let metrics = line_metrics();
-    let baseline = metrics.baseline - 4.0;
-    let mut y = 0.0;
-
-    ResolvedVerticalAlign::BaselineShift {
-      px: 0.0,
-      line_height_relative: 0.5,
-    }
-    .apply(&mut y, &metrics, 4.0, None, None, None);
-    assert_eq!(
-      y,
-      baseline - ((metrics.ascent - metrics.descent + metrics.leading) * 0.5)
-    );
-  }
-
-  #[test]
-  fn resolve_normal_calc_percentage_uses_metrics_relative_px() {
-    let Ok(length) = Length::from_css_str("calc(50% + 4px)") else {
-      return;
-    };
-    let resolved = VerticalAlign::Length(length).resolve(&sizing(), 12.0, LineHeight::Normal);
-    assert_eq!(
-      resolved,
-      ResolvedVerticalAlign::BaselineShift {
-        px: 8.0,
-        line_height_relative: 0.5
-      }
-    );
-  }
-
-  #[test]
-  fn apply_metrics_relative_px_shift_uses_line_metrics_formula_plus_px() {
-    let metrics = line_metrics();
-    let baseline = metrics.baseline - 4.0;
-    let mut y = 0.0;
-
-    ResolvedVerticalAlign::BaselineShift {
-      px: 3.0,
-      line_height_relative: 0.5,
-    }
-    .apply(&mut y, &metrics, 4.0, None, None, None);
-    assert_eq!(
-      y,
-      baseline - ((metrics.ascent - metrics.descent + metrics.leading) * 0.5 + 3.0)
-    );
-  }
-
-  #[test]
-  fn keyword_apply_matches_previous_baseline_behavior() {
-    let metrics = line_metrics();
-    let mut y = 0.0;
-    ResolvedVerticalAlign::Keyword(VerticalAlignKeyword::Baseline)
-      .apply(&mut y, &metrics, 4.0, None, None, None);
-    assert_eq!(y, metrics.baseline - 4.0);
-  }
-
-  #[test]
-  fn keyword_apply_uses_inline_box_baseline_when_available() {
-    let metrics = line_metrics();
-    let mut y = 0.0;
-    ResolvedVerticalAlign::Keyword(VerticalAlignKeyword::Baseline).apply(
-      &mut y,
-      &metrics,
-      20.0,
-      Some(12.0),
-      None,
-      None,
-    );
-    assert_eq!(y, metrics.baseline - 12.0);
-  }
-
-  #[test]
-  fn sub_and_super_shift_by_font_size_fraction() {
-    let metrics = line_metrics();
-    let font_size = 40.0;
-
-    let sub = VerticalAlign::Keyword(VerticalAlignKeyword::Sub).resolve(
-      &sizing(),
-      font_size,
-      LineHeight::Normal,
-    );
-    assert_eq!(
-      sub,
-      ResolvedVerticalAlign::BaselineShift {
-        px: -(font_size / 5.0 + 1.0),
-        line_height_relative: 0.0,
-      }
-    );
-    let mut sub_y = 0.0;
-    sub.apply(&mut sub_y, &metrics, 20.0, Some(12.0), None, None);
-    assert_eq!(sub_y, (metrics.baseline - 12.0) + (font_size / 5.0 + 1.0));
-
-    let sup = VerticalAlign::Keyword(VerticalAlignKeyword::Super).resolve(
-      &sizing(),
-      font_size,
-      LineHeight::Normal,
-    );
-    let mut super_y = 0.0;
-    sup.apply(&mut super_y, &metrics, 20.0, Some(12.0), None, None);
-    assert_eq!(super_y, (metrics.baseline - 12.0) - (font_size / 3.0 + 1.0));
-  }
-
-  #[test]
-  fn sub_and_super_shift_is_line_height_independent() {
-    let font_size = 40.0;
-    for keyword in [VerticalAlignKeyword::Sub, VerticalAlignKeyword::Super] {
-      let normal =
-        VerticalAlign::Keyword(keyword).resolve(&sizing(), font_size, LineHeight::Normal);
-      let unitless =
-        VerticalAlign::Keyword(keyword).resolve(&sizing(), font_size, LineHeight::Unitless(2.0));
-      assert_eq!(normal, unitless);
+  fn resolve_keeps_keywords_for_the_line_box() {
+    for keyword in [VerticalAlignKeyword::Sub, VerticalAlignKeyword::Middle] {
+      assert_eq!(
+        VerticalAlign::Keyword(keyword).resolve(&sizing(), 18.0),
+        ResolvedVerticalAlign::Keyword(keyword)
+      );
     }
   }
 }

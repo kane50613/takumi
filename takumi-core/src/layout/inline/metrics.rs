@@ -1,26 +1,14 @@
 //! Vertical line metrics: line-height, baselines and vertical-align.
 
-use std::{iter::successors, rc::Rc};
-
-use crate::{
-  context::RenderContext,
-  font_style::SizedFontStyle,
-  style::{ResolvedVerticalAlign, VerticalAlignKeyword},
-};
-use parley::{InlineBoxKind, Line, LineMetrics, PositionedInlineBox, PositionedLayoutItem};
+use crate::{context::RenderContext, font_style::SizedFontStyle};
+use parley::{InlineBoxKind, LineMetrics, PositionedInlineBox, PositionedLayoutItem};
 
 use super::{
-  InlineBrush, InlineLayout,
-  items::{DecorationLink, InlineBoxItem, ProcessedInlineSpan},
+  InlineLayout,
+  items::ProcessedInlineSpan,
+  line_box::{BoxFont, BoxKey, FontHeight, LineBoxOffsets, LineBoxTree},
   text_style_with_span_id,
 };
-
-#[derive(Clone, Copy, Debug)]
-/// x-height and ascent/descent of the parent font.
-pub(crate) struct ParentFontMetrics {
-  pub(crate) x_height: Option<f32>,
-  pub(crate) text_metrics: (f32, f32),
-}
 
 /// How far an inline box's strut reaches above and below the baseline.
 #[derive(Clone, Copy, Debug)]
@@ -52,46 +40,21 @@ impl Strut {
   }
 
   /// The strut grown for a line at `line_scale`.
-  fn scaled(self, line_scale: f32) -> (f32, f32) {
+  pub(super) fn height(self, line_scale: f32) -> FontHeight {
     let scale = if self.scales_with_text_fit {
       line_scale
     } else {
       1.0
     };
 
-    (self.above * scale, self.below * scale)
-  }
-}
-
-/// How far the inline spans open on a line reach above and below its baseline.
-#[derive(Clone, Copy)]
-struct SpanExtent {
-  above: f32,
-  below: f32,
-}
-
-impl SpanExtent {
-  const EMPTY: Self = Self {
-    above: 0.0,
-    below: f32::NEG_INFINITY,
-  };
-
-  /// Grows by the struts of the spans in `chain`, open on the line an item sits on, as Blink's
-  /// `LogicalLineBuilder::HandleOpenTag` adds every open box to the line box.
-  fn grow(&mut self, chain: Option<&Rc<DecorationLink<'_>>>, line_scale: f32) {
-    for link in successors(chain, |link| link.parent.as_ref()) {
-      let Some(strut) = link.decoration.strut else {
-        continue;
-      };
-      let (above, below) = strut.scaled(line_scale);
-
-      self.above = self.above.max(above);
-      self.below = self.below.max(below);
+    FontHeight {
+      ascent: self.above * scale,
+      descent: self.below * scale,
     }
   }
 }
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Debug)]
 /// Final vertical metrics computed for one inline line.
 pub(crate) struct ResolvedLineMetrics {
   pub(crate) resolved_ascent: f32,
@@ -103,6 +66,8 @@ pub(crate) struct ResolvedLineMetrics {
   pub(crate) resolved_line_top: f32,
   pub(crate) resolved_line_bottom: f32,
   pub(crate) baseline_shift: f32,
+  /// Where each box on the line sits below its baseline.
+  pub(crate) offsets: LineBoxOffsets,
 }
 
 fn quantized_baseline(line_height: f32, ascent: f32, descent: f32) -> f32 {
@@ -122,66 +87,11 @@ pub(super) fn text_line_box_contribution(
   (above, line_height - above)
 }
 
-fn parent_baseline_offset_for_box(
-  line: &Line<'_, InlineBrush>,
-  item: &InlineBoxItem<'_>,
-  inline_box: &PositionedInlineBox,
-  baseline_in_item: f32,
-  effective_parent_x_height: Option<f32>,
-  effective_parent_text_metrics: Option<(f32, f32)>,
-) -> f32 {
-  let mut top = 0.0;
-  item.vertical_align.apply(
-    &mut top,
-    line.metrics(),
-    inline_box.height,
-    Some(baseline_in_item),
-    effective_parent_x_height,
-    effective_parent_text_metrics,
-  );
-  top - (line.metrics().baseline - baseline_in_item)
-}
-
-fn effective_parent_x_height_for_line(
-  line: &Line<'_, InlineBrush>,
-  parent_font_metrics: Option<ParentFontMetrics>,
-) -> Option<f32> {
-  let parent_x_height = parent_font_metrics.and_then(|metrics| metrics.x_height);
-  if parent_x_height.is_some() {
-    return parent_x_height;
-  }
-
-  let mut text_ascent_max = 0.0_f32;
-  for item in line.items() {
-    if let PositionedLayoutItem::GlyphRun(glyph_run) = item {
-      text_ascent_max = text_ascent_max.max(glyph_run.run().metrics().ascent);
-    }
-  }
-
-  (text_ascent_max > 0.0).then_some(text_ascent_max * 0.5)
-}
-
-fn effective_parent_text_metrics_for_line(
-  line: &Line<'_, InlineBrush>,
-  parent_font_metrics: Option<ParentFontMetrics>,
-) -> Option<(f32, f32)> {
-  let parent_text_metrics = parent_font_metrics.map(|metrics| metrics.text_metrics);
-  if parent_text_metrics.is_some() {
-    return parent_text_metrics;
-  }
-
-  let has_glyph = line
-    .items()
-    .any(|item| matches!(item, PositionedLayoutItem::GlyphRun(_)));
-
-  has_glyph.then_some((line.metrics().ascent, line.metrics().descent))
-}
-
 /// Resolve per-line metrics from the laid-out lines and spans.
 pub(super) fn resolve_inline_line_metrics(
   inline_layout: &InlineLayout,
   spans: &[ProcessedInlineSpan<'_>],
-  parent_font_metrics: Option<ParentFontMetrics>,
+  font: BoxFont,
   line_scales: &[f32],
   strut: Option<Strut>,
 ) -> Vec<ResolvedLineMetrics> {
@@ -208,17 +118,9 @@ pub(super) fn resolve_inline_line_metrics(
 
   for (line_index, line) in inline_layout.lines().enumerate() {
     let line_scale = line_scales.get(line_index).copied().unwrap_or(1.0);
-    let effective_parent_x_height = effective_parent_x_height_for_line(&line, parent_font_metrics);
-    let effective_parent_text_metrics =
-      effective_parent_text_metrics_for_line(&line, parent_font_metrics);
-
     let line_metrics = line.metrics();
-    let mut resolved_above = 0.0_f32;
-    let mut resolved_below = f32::NEG_INFINITY;
-    let mut top_box_heights: Vec<f32> = Vec::new();
-    let mut bottom_box_heights: Vec<f32> = Vec::new();
+    let mut tree = LineBoxTree::new(FontHeight::EMPTY, font);
     let mut has_contribution = false;
-    let mut spans_open = SpanExtent::EMPTY;
 
     // Walking runs by cluster style skips the per-fragment glyph re-walk that
     // `line.items()` does, and boxes only exist when a span holds one.
@@ -234,123 +136,93 @@ pub(super) fn resolve_inline_line_metrics(
         }
         seen = Some(glyph.style_index());
         let style = cluster.first_style();
-        let (base_above, base_below) = style.brush.line_box_contribution(
+        let (above, below) = style.brush.line_box_contribution(
           metrics.line_height,
           metrics.ascent,
           metrics.descent,
           metrics.leading,
         );
-        if (line_scale - 1.0).abs() > f32::EPSILON && style.brush.line_height_scales_with_text_fit {
-          resolved_above = resolved_above.max(base_above * line_scale);
-          resolved_below = resolved_below.max(base_below * line_scale);
+        let scale = if style.brush.line_height_scales_with_text_fit {
+          line_scale
         } else {
-          resolved_above = resolved_above.max(base_above);
-          resolved_below = resolved_below.max(base_below);
-        }
-        if let Some(ProcessedInlineSpan::Text { decorations, .. }) = style
+          1.0
+        };
+        let chain = match style
           .brush
           .source_span_id
           .and_then(|span_id| spans.get(span_id as usize))
         {
-          spans_open.grow(decorations.as_ref(), line_scale);
-        }
+          Some(ProcessedInlineSpan::Text { decorations, .. }) => decorations.as_ref(),
+          _ => None,
+        };
+        let parent = tree.open_chain(chain, line_scale);
+
+        tree.add(
+          parent,
+          FontHeight {
+            ascent: above * scale,
+            descent: below * scale,
+          },
+        );
         has_contribution = true;
       }
     }
 
     for item in has_boxes.then(|| line.items()).into_iter().flatten() {
-      match item {
-        PositionedLayoutItem::GlyphRun(_) => {}
-        PositionedLayoutItem::InlineBox(inline_box) => {
-          let item = match spans.get(inline_box.id as usize) {
-            Some(ProcessedInlineSpan::Box(item)) => item,
-            Some(ProcessedInlineSpan::Spacer { decorations, .. }) => {
-              spans_open.grow(decorations.as_ref(), line_scale);
-              continue;
-            }
-            _ => continue,
-          };
-
-          if item.render_node.is_out_of_flow() {
-            spans_open.grow(item.decorations.as_ref(), line_scale);
-          }
-          if inline_box.kind != InlineBoxKind::InFlow {
-            continue;
-          }
-          spans_open.grow(item.decorations.as_ref(), line_scale);
-          has_contribution = true;
-          // `top`/`bottom` boxes attach to the line-box edges, not the baseline, so
-          // they grow only the opposite edge after baseline content is measured.
-          match item.vertical_align {
-            ResolvedVerticalAlign::Keyword(VerticalAlignKeyword::Top) => {
-              top_box_heights.push(inline_box.height);
-              continue;
-            }
-            ResolvedVerticalAlign::Keyword(VerticalAlignKeyword::Bottom) => {
-              bottom_box_heights.push(inline_box.height);
-              continue;
-            }
-            _ => {}
-          }
-          let baseline_in_item = item
-            .baseline_offset
-            .unwrap_or(inline_box.height)
-            .clamp(0.0, inline_box.height);
-          let parent_baseline_offset = parent_baseline_offset_for_box(
-            &line,
-            item,
-            &inline_box,
-            baseline_in_item,
-            effective_parent_x_height,
-            effective_parent_text_metrics,
-          );
-          let ascent_contrib = (baseline_in_item - parent_baseline_offset).max(0.0);
-          let descent_contrib =
-            (inline_box.height - baseline_in_item + parent_baseline_offset).max(0.0);
-          resolved_above = resolved_above.max(ascent_contrib);
-          resolved_below = resolved_below.max(descent_contrib);
-        }
-      }
-    }
-
-    resolved_above = resolved_above.max(spans_open.above);
-    resolved_below = resolved_below.max(spans_open.below);
-
-    if !top_box_heights.is_empty() || !bottom_box_heights.is_empty() {
-      let mut above = resolved_above.max(0.0);
-      let mut below = if resolved_below.is_finite() {
-        resolved_below.max(0.0)
-      } else {
-        0.0
+      let PositionedLayoutItem::InlineBox(inline_box) = item else {
+        continue;
       };
-      for height in top_box_heights {
-        below = below.max(height - above);
+      let item = match spans.get(inline_box.id as usize) {
+        Some(ProcessedInlineSpan::Box(item)) => item,
+        Some(ProcessedInlineSpan::Spacer { decorations, .. }) => {
+          tree.open_chain(decorations.as_ref(), line_scale);
+          continue;
+        }
+        _ => continue,
+      };
+
+      if item.render_node.is_out_of_flow() {
+        tree.open_chain(item.decorations.as_ref(), line_scale);
       }
-      for height in bottom_box_heights {
-        above = above.max(height - below);
+      if inline_box.kind != InlineBoxKind::InFlow {
+        continue;
       }
-      resolved_above = above;
-      resolved_below = below;
+
+      let parent = tree.open_chain(item.decorations.as_ref(), line_scale);
+      let baseline_in_item = item
+        .baseline_offset
+        .unwrap_or(inline_box.height)
+        .clamp(0.0, inline_box.height);
+
+      tree.open(
+        BoxKey::Atomic(inline_box.id),
+        parent,
+        FontHeight {
+          ascent: baseline_in_item,
+          descent: inline_box.height - baseline_in_item,
+        },
+        item.vertical_align,
+        None,
+      );
+      has_contribution = true;
     }
 
     // CSS 2 §10.8.1: each line box starts with the root inline box's strut, but a line with no
     // content has zero height.
     if has_contribution && let Some(strut) = strut {
-      let (above, below) = strut.scaled(line_scale);
-
-      resolved_above = resolved_above.max(above);
-      resolved_below = resolved_below.max(below);
+      tree.add(0, strut.height(line_scale));
     }
 
-    if !has_contribution {
-      let (above, below) = text_line_box_contribution(
+    let (height, offsets) = tree.resolve();
+    let (resolved_above, resolved_below) = if has_contribution {
+      (height.ascent.max(0.0), height.descent)
+    } else {
+      text_line_box_contribution(
         line_metrics.line_height,
         line_metrics.ascent.max(0.0),
         line_metrics.descent.max(0.0),
-      );
-      resolved_above = above;
-      resolved_below = below;
-    }
+      )
+    };
 
     let resolved_line_height = resolved_above + resolved_below;
     let resolved_ascent = resolved_above.max(0.0);
@@ -383,6 +255,7 @@ pub(super) fn resolve_inline_line_metrics(
       resolved_line_top,
       resolved_line_bottom,
       baseline_shift,
+      offsets,
     });
 
     previous_parley_bottom = line_metrics.block_max_coord;
@@ -394,7 +267,7 @@ pub(super) fn resolve_inline_line_metrics(
 
 impl ResolvedLineMetrics {
   /// Parley's `line_metrics` with the vertical metrics replaced by these.
-  fn apply_to(self, line_metrics: &LineMetrics) -> LineMetrics {
+  fn apply_to(&self, line_metrics: &LineMetrics) -> LineMetrics {
     let mut adjusted = *line_metrics;
     adjusted.ascent = self.resolved_ascent;
     adjusted.descent = self.resolved_descent;
@@ -407,27 +280,25 @@ impl ResolvedLineMetrics {
   }
 }
 
-#[derive(Clone, Copy, Debug)]
-/// Resolved metrics and parent context for a single inline line.
+#[derive(Clone, Debug)]
+/// Resolved metrics for a single inline line.
 pub(crate) struct ResolvedInlineLineState {
   pub(crate) adjusted_metrics: LineMetrics,
-  pub(crate) parent_x_height: Option<f32>,
-  pub(crate) parent_text_metrics: Option<(f32, f32)>,
+  /// Where each box on the line sits below its baseline.
+  pub(crate) offsets: LineBoxOffsets,
 }
 
 /// Resolve per-line state used when placing inline boxes and glyphs.
 pub(super) fn resolve_inline_line_states(
   inline_layout: &InlineLayout,
-  parent_font_metrics: Option<ParentFontMetrics>,
   line_metrics: &[ResolvedLineMetrics],
 ) -> Vec<ResolvedInlineLineState> {
   inline_layout
     .lines()
-    .zip(line_metrics.iter().cloned())
+    .zip(line_metrics)
     .map(|(line, resolved)| ResolvedInlineLineState {
       adjusted_metrics: resolved.apply_to(line.metrics()),
-      parent_x_height: effective_parent_x_height_for_line(&line, parent_font_metrics),
-      parent_text_metrics: effective_parent_text_metrics_for_line(&line, parent_font_metrics),
+      offsets: resolved.offsets.clone(),
     })
     .collect()
 }
@@ -477,7 +348,7 @@ impl InlinePass {
 /// Resolve a positioned inline box into its painted geometry.
 pub(super) fn resolve_visual_inline_box(
   inline_box: PositionedInlineBox,
-  line_state: Option<ResolvedInlineLineState>,
+  line_state: Option<&ResolvedInlineLineState>,
   spans: &[ProcessedInlineSpan<'_>],
 ) -> Option<VisualInlineBox> {
   let line_baseline = line_state.map(|state| state.adjusted_metrics.baseline);
@@ -503,15 +374,13 @@ pub(super) fn resolve_visual_inline_box(
 
   if inline_box.kind == InlineBoxKind::InFlow {
     let line_state = line_state?;
+    let baseline_in_item = item
+      .baseline_offset
+      .unwrap_or(inline_box.height)
+      .clamp(0.0, inline_box.height);
 
-    item.vertical_align.apply(
-      &mut y,
-      &line_state.adjusted_metrics,
-      inline_box.height,
-      item.baseline_offset,
-      line_state.parent_x_height,
-      line_state.parent_text_metrics,
-    );
+    y = line_state.adjusted_metrics.baseline + line_state.offsets.of(BoxKey::Atomic(inline_box.id))
+      - baseline_in_item;
   }
 
   Some(VisualInlineBox {

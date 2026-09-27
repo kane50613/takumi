@@ -14,7 +14,7 @@ use crate::{
 use parley::{InlineBox, InlineBoxKind};
 use smallvec::SmallVec;
 
-use super::{metrics::Strut, outline::InlineOutline};
+use super::{line_box::BoxFont, metrics::Strut, outline::InlineOutline};
 use std::{borrow::Cow, ops::Range, rc::Rc, sync::Arc};
 
 /// An out-of-flow box inside inline content.
@@ -202,6 +202,12 @@ pub enum ProcessedInlineSpan<'c> {
 pub(crate) struct InlineDecoration<'c> {
   /// The span, whose fragments also bound the out-of-flow boxes it contains.
   pub(crate) owner: &'c RenderNode,
+  /// Unique among the spans one collection opens.
+  pub(crate) id: usize,
+  /// How the span aligns against its parent.
+  pub(crate) vertical_align: ResolvedVerticalAlign,
+  /// The font the span's fragments and its children align by.
+  pub(crate) font: BoxFont,
   /// Whether the fragments paint, which a span kept only as a containing block does not.
   pub(crate) paints: bool,
   /// Whether the span's line fragments are tracked, to paint or to bound the out-of-flow boxes
@@ -221,8 +227,6 @@ pub(crate) struct InlineDecoration<'c> {
   pub(crate) direction: Direction,
   /// The span's sizing, which each fragment resolves its radii against.
   pub(crate) sizing: SizingContext,
-  /// The ascent and descent of the span's primary font, which size every fragment.
-  pub(crate) text_metrics: Option<(f32, f32)>,
 }
 
 impl InlineDecoration<'_> {
@@ -286,7 +290,7 @@ pub enum InlineItem<'c> {
 /// Flatten a render node subtree into its inline items.
 pub fn collect_inline_items<'n>(root: &'n RenderNode) -> Vec<InlineItem<'n>> {
   let mut items = Vec::new();
-  collect_inline_items_impl(root, 0, None, None, &mut items);
+  collect_inline_items_impl(root, 0, None, None, &mut 0, &mut items);
   items
 }
 
@@ -315,6 +319,7 @@ fn collect_inline_items_impl<'n>(
   depth: usize,
   link: Option<&Arc<str>>,
   decorations: Option<&Rc<DecorationLink<'n>>>,
+  next_span: &mut usize,
   items: &mut Vec<InlineItem<'n>>,
 ) {
   if depth > 0 && (node.participates_as_inline_box() || node.is_out_of_flow()) {
@@ -330,7 +335,9 @@ fn collect_inline_items_impl<'n>(
     .and_then(Node::href)
     .map(Arc::<str>::from);
   let link = anchor.as_ref().or(link);
-  let own_decoration = inline_span_decoration(node, depth).map(|decoration| {
+  let own_decoration = inline_span_decoration(node, depth, *next_span).map(|decoration| {
+    *next_span += 1;
+
     Rc::new(DecorationLink {
       decoration,
       parent: decorations.cloned(),
@@ -389,7 +396,7 @@ fn collect_inline_items_impl<'n>(
 
   if let Some(children) = &node.children {
     for child in children {
-      collect_inline_items_impl(child, depth + 1, link, decorations, items);
+      collect_inline_items_impl(child, depth + 1, link, decorations, next_span, items);
     }
   }
 
@@ -447,8 +454,12 @@ fn inline_span_spacing(node: &RenderNode, depth: usize) -> (Rect<f32>, Rect<f32>
   )
 }
 
-/// The inline box an inline span opens, or `None` for a node that is not one.
-fn inline_span_decoration(node: &RenderNode, depth: usize) -> Option<InlineDecoration<'_>> {
+/// The inline box an inline span opens with `id`, or `None` for a node that is not one.
+fn inline_span_decoration(
+  node: &RenderNode,
+  depth: usize,
+  id: usize,
+) -> Option<InlineDecoration<'_>> {
   if !is_inline_span(node, depth) {
     return None;
   }
@@ -461,6 +472,11 @@ fn inline_span_decoration(node: &RenderNode, depth: usize) -> Option<InlineDecor
 
   Some(InlineDecoration {
     owner: node,
+    id,
+    vertical_align: style
+      .vertical_align
+      .resolve(&node.context.sizing, node.context.sizing.line_height),
+    font: BoxFont::of(&node.context),
     paints,
     has_fragments: paints || node.contains_absolute_as_inline(),
     strut: Strut::of(
@@ -480,10 +496,6 @@ fn inline_span_decoration(node: &RenderNode, depth: usize) -> Option<InlineDecor
     opacity: style.opacity.0,
     direction: style.direction,
     sizing: node.context.sizing.clone(),
-    text_metrics: node
-      .context
-      .primary_font_metrics(style, node.context.sizing.font_size)
-      .map(|metrics| (metrics.ascent, metrics.descent)),
   })
 }
 

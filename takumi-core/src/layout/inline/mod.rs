@@ -31,6 +31,7 @@ mod cache;
 mod decorations;
 mod floats;
 mod items;
+mod line_box;
 mod metrics;
 mod outline;
 mod runs;
@@ -51,10 +52,10 @@ pub use self::{
 pub(crate) use self::{background::PaddingBox, items::InlineOutOfFlow};
 use self::{
   breaking::distribute_trailing_whitespace,
+  line_box::{BoxFont, BoxKey},
   metrics::{
-    ParentFontMetrics, ResolvedInlineLineState, ResolvedLineMetrics, Strut,
-    resolve_inline_line_metrics, resolve_inline_line_states, resolve_visual_inline_box,
-    text_line_box_contribution,
+    ResolvedInlineLineState, ResolvedLineMetrics, Strut, resolve_inline_line_metrics,
+    resolve_inline_line_states, resolve_visual_inline_box, text_line_box_contribution,
   },
   runs::measured_run_text,
   text_fit::{
@@ -192,20 +193,11 @@ pub struct BuiltInlineLayout<'c> {
   /// The root inline box's strut, which every line holding content grows to, or `None` when the
   /// root has no primary font.
   pub(crate) strut: Option<Strut>,
+  /// The root inline box's font, which its children align against.
+  pub(crate) font: BoxFont,
 }
 
 impl BuiltInlineLayout<'_> {
-  /// Parent font metrics from the first run.
-  fn parent_font_metrics(&self) -> Option<ParentFontMetrics> {
-    let run = self.layout.lines().find_map(|line| line.runs().next())?;
-    let metrics = run.metrics();
-
-    Some(ParentFontMetrics {
-      x_height: metrics.x_height,
-      text_metrics: (metrics.ascent, metrics.descent),
-    })
-  }
-
   /// The static position of each out-of-flow box among the spans, after Blink's
   /// `LogicalLineBuilder::PlaceOutOfFlowObjects`.
   ///
@@ -284,7 +276,7 @@ impl BuiltInlineLayout<'_> {
     resolve_inline_line_metrics(
       &self.layout,
       &self.spans,
-      self.parent_font_metrics(),
+      self.font,
       &self.line_scales,
       self.strut,
     )
@@ -377,7 +369,8 @@ impl BuiltInlineLayout<'_> {
             return Ok(());
           }
 
-          let (origin, size) = glyph_run_rect(&glyph_run, setup.baseline_shift);
+          let (origin, size) =
+            glyph_run_rect(&glyph_run, self.run_baseline_shift(line, &glyph_run));
           let (origin, size) = setup.scale_rect(origin, size, static_inline_prefix);
 
           let link = span_id.and_then(|span_id| match self.spans.get(span_id as usize) {
@@ -789,6 +782,7 @@ fn build_inline_layout_tree<'c>(
 
   let (layout, text) = shape_spans(context, &spans, style, shape_cacheable);
   let strut = Strut::of(context, style);
+  let font = BoxFont::of(context);
 
   BuiltInlineLayout {
     layout,
@@ -798,6 +792,7 @@ fn build_inline_layout_tree<'c>(
     line_scales: Vec::new(),
     clamped: false,
     strut,
+    font,
   }
 }
 
@@ -881,11 +876,10 @@ fn inline_box_span<'c>(
 ) -> ProcessedInlineSpan<'c> {
   let context = &render_node.context;
   let kind = render_node.inline_box_kind();
-  let vertical_align = context.style.vertical_align.resolve(
-    &context.sizing,
-    context.sizing.font_size,
-    context.style.line_height,
-  );
+  let vertical_align = context
+    .style
+    .vertical_align
+    .resolve(&context.sizing, context.sizing.line_height);
   let margin = render_node.margin_px();
   let padding = render_node.padding_px();
   let border = Rect {
@@ -1147,7 +1141,7 @@ impl LineSetup {
     line_scales: &[f32],
     line_index: usize,
   ) -> Option<Self> {
-    let resolved_metrics = *line_vertical_metrics.get(line_index)?;
+    let resolved_metrics = line_vertical_metrics.get(line_index)?.clone();
     let line_scale = line_scales.get(line_index).copied().unwrap_or(1.0);
     let (line_scale_origin_x, alignment_correction) =
       text_fit_line_alignment_correction(line, line_scale, layout.unsnapped_content.width);
@@ -1240,6 +1234,44 @@ pub(crate) struct WalkedLine {
   pub(crate) state: ResolvedInlineLineState,
 }
 
+impl WalkedLine {
+  /// The baseline shift of content inside the innermost span of `chain`, which `vertical-align`
+  /// moves off the line's own.
+  pub(crate) fn baseline_shift_in(&self, chain: Option<&Rc<DecorationLink<'_>>>) -> f32 {
+    self.setup.baseline_shift
+      + chain.map_or(0.0, |link| {
+        self.state.offsets.of(BoxKey::Span(link.decoration.id))
+      })
+  }
+}
+
+impl<'c> BuiltInlineLayout<'c> {
+  /// The spans around `glyph_run`, innermost first.
+  pub(crate) fn run_chain(
+    &self,
+    glyph_run: &GlyphRun<'_, InlineBrush>,
+  ) -> Option<&Rc<DecorationLink<'c>>> {
+    match glyph_run
+      .style()
+      .brush
+      .source_span_id
+      .and_then(|span_id| self.spans.get(span_id as usize))
+    {
+      Some(ProcessedInlineSpan::Text { decorations, .. }) => decorations.as_ref(),
+      _ => None,
+    }
+  }
+
+  /// The baseline shift `glyph_run` sits at on `line`.
+  pub(crate) fn run_baseline_shift(
+    &self,
+    line: &WalkedLine,
+    glyph_run: &GlyphRun<'_, InlineBrush>,
+  ) -> f32 {
+    line.baseline_shift_in(self.run_chain(glyph_run))
+  }
+}
+
 /// One item placed on a walked line, with the static advance of the boxes before it.
 pub(crate) enum PlacedItem<'a> {
   Run {
@@ -1263,11 +1295,7 @@ impl BuiltInlineLayout<'_> {
     mut visit: impl FnMut(&WalkedLine, PlacedItem<'_>) -> Result<(), E>,
   ) -> Result<(), E> {
     let line_vertical_metrics = self.line_metrics();
-    let line_states = resolve_inline_line_states(
-      &self.layout,
-      self.parent_font_metrics(),
-      &line_vertical_metrics,
-    );
+    let line_states = resolve_inline_line_states(&self.layout, &line_vertical_metrics);
 
     for (index, line) in self.layout.lines().enumerate() {
       let Some(setup) = LineSetup::new(
@@ -1282,7 +1310,7 @@ impl BuiltInlineLayout<'_> {
       let walked = WalkedLine {
         index,
         setup,
-        state: line_states[index],
+        state: line_states[index].clone(),
       };
       let items: Vec<_> = line.items().collect();
       let trailing_whitespace = distribute_trailing_whitespace(&items, &line);
@@ -1305,7 +1333,7 @@ impl BuiltInlineLayout<'_> {
               continue;
             }
             let Some(resolved) =
-              resolve_visual_inline_box(inline_box, Some(walked.state), &self.spans)
+              resolve_visual_inline_box(inline_box, Some(&walked.state), &self.spans)
             else {
               continue;
             };

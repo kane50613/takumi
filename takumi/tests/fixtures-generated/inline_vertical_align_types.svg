@@ -102,8 +102,8 @@
     <use href="#g3" x="476.39" y="154"/>
     <use href="#g12" x="494.02" y="154"/>
   </g>
-  <rect x="350.696" y="123.52" width="44" height="44" fill="#10b981" fill-opacity=".627"/>
-  <path d="M350.7 123.52h44v44h-44v-44Zm2 2h40v40h-40v-40Z" fill="#1e1e1e" fill-rule="evenodd"/>
+  <rect x="350.696" y="124" width="44" height="44" fill="#10b981" fill-opacity=".627"/>
+  <path d="M350.7 124h44v44h-44v-44Zm2 2h40v40h-40v-40Z" fill="#1e1e1e" fill-rule="evenodd"/>
   <rect x="588" y="102" width="568.32" height="82" fill="#f8f8f8"/>
   <path d="M588 102h568.32v82h-568.32v-82Zm1 1h566.32v80h-566.32v-80Z" fill="#b4b4b4" fill-rule="evenodd"/>
   <rect x="597" y="156" width="334.432" height="3" fill="#dc2626"/>
@@ -173,8 +173,8 @@
     <use href="#g3" x="496.78" y="244"/>
     <use href="#g12" x="514.41" y="244"/>
   </g>
-  <rect x="371.08" y="211.84" width="44" height="44" fill="#0ea5e9" fill-opacity=".627"/>
-  <path d="M371.08 211.84h44v44h-44v-44Zm2 2h40v40h-40v-40Z" fill="#1e1e1e" fill-rule="evenodd"/>
+  <rect x="371.08" y="212" width="44" height="44" fill="#0ea5e9" fill-opacity=".627"/>
+  <path d="M371.08 212h44v44h-44v-44Zm2 2h40v40h-40v-40Z" fill="#1e1e1e" fill-rule="evenodd"/>
   <rect x="588" y="192" width="568.32" height="154" fill="#f8f8f8"/>
   <path d="M588 192h568.32v154h-568.32v-154Zm1 1h566.32v152h-566.32v-152Z" fill="#b4b4b4" fill-rule="evenodd"/>
   <rect x="597" y="246" width="404.832" height="3" fill="#dc2626"/>
@@ -212,8 +212,8 @@
     <use href="#g3" x="670.7" y="316"/>
     <use href="#g12" x="688.33" y="316"/>
   </g>
-  <rect x="1001.832" y="209.44" width="44" height="44" fill="#a855f7" fill-opacity=".627"/>
-  <path d="M1001.83 209.44h44v44h-44v-44Zm2 2h40v40h-40v-40Z" fill="#1e1e1e" fill-rule="evenodd"/>
+  <rect x="1001.832" y="209" width="44" height="44" fill="#a855f7" fill-opacity=".627"/>
+  <path d="M1001.83 209h44v44h-44v-44Zm2 2h40v40h-40v-40Z" fill="#1e1e1e" fill-rule="evenodd"/>
   <rect x="12" y="354" width="568.32" height="91" fill="#f8f8f8"/>
   <path d="M12 354h568.32v91h-568.32v-91Zm1 1h566.32v89h-566.32v-89Z" fill="#b4b4b4" fill-rule="evenodd"/>
   <rect x="21" y="408" width="283.872" height="3" fill="#dc2626"/>

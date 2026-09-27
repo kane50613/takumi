@@ -1,0 +1,469 @@
+//! The inline boxes open on one line, aligned by `vertical-align` as Blink's
+//! `InlineLayoutStateStack::ApplyBaselineShift` aligns them, and the line box they make.
+//!
+//! Naive next to Blink: shifts stay in floats rather than Blink's 1/64 px `LayoutUnit`, and
+//! `top` and `bottom` measure an inline span by its strut, where Blink also counts its borders.
+
+// The alignment rules follow Blink, under the notice in LICENSE-CHROMIUM.
+
+use std::{cmp::Reverse, mem::take, rc::Rc};
+
+use smallvec::{SmallVec, smallvec};
+
+use super::items::DecorationLink;
+use crate::{
+  context::RenderContext,
+  resources::font::PrimaryFontMetrics,
+  style::{ResolvedVerticalAlign, VerticalAlignKeyword},
+};
+
+/// How far a box reaches above and below its baseline, as Blink's `FontHeight`; positive
+/// `descent` is below.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(super) struct FontHeight {
+  pub(super) ascent: f32,
+  pub(super) descent: f32,
+}
+
+impl FontHeight {
+  /// Nothing yet, which any height unites to.
+  pub(super) const EMPTY: Self = Self {
+    ascent: f32::NEG_INFINITY,
+    descent: f32::NEG_INFINITY,
+  };
+
+  /// A box with no height, what Blink's `FontHeight()` gives an empty box it must align.
+  const ZERO: Self = Self {
+    ascent: 0.0,
+    descent: 0.0,
+  };
+
+  pub(super) fn is_empty(self) -> bool {
+    self == Self::EMPTY
+  }
+
+  pub(super) fn unite(&mut self, other: Self) {
+    self.ascent = self.ascent.max(other.ascent);
+    self.descent = self.descent.max(other.descent);
+  }
+
+  /// Moves the box down by `delta`.
+  fn moved(self, delta: f32) -> Self {
+    if self.is_empty() {
+      return self;
+    }
+
+    Self {
+      ascent: self.ascent - delta,
+      descent: self.descent + delta,
+    }
+  }
+}
+
+/// The font a box aligns its children against.
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct BoxFont {
+  /// The computed `font-size`.
+  pub(crate) size: f32,
+  /// The primary font's metrics.
+  pub(crate) metrics: Option<PrimaryFontMetrics>,
+}
+
+impl BoxFont {
+  /// The font of the box `context` styles.
+  pub(crate) fn of(context: &RenderContext) -> Self {
+    Self {
+      size: context.sizing.font_size,
+      metrics: context.primary_font_metrics(&context.style, context.sizing.font_size),
+    }
+  }
+}
+
+/// What a box is, as the line box tree keys it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) enum BoxKey {
+  /// An inline span, by its id.
+  Span(usize),
+  /// An atomic inline, by its inline box id.
+  Atomic(u64),
+}
+
+/// One box open on the line.
+struct OpenBox {
+  key: Option<BoxKey>,
+  parent: usize,
+  depth: usize,
+  /// Its own strut, then everything aligned inside it.
+  metrics: FontHeight,
+  align: ResolvedVerticalAlign,
+  font: Option<BoxFont>,
+  /// Children whose alignment waits for this box's metrics.
+  pending: Vec<usize>,
+  /// How far the box sits below its parent's baseline.
+  shift: f32,
+}
+
+/// The boxes open on one line, the root inline box first.
+pub(super) struct LineBoxTree {
+  boxes: SmallVec<[OpenBox; 1]>,
+}
+
+/// Where each box on a line sits once aligned.
+#[derive(Clone, Debug, Default)]
+pub(crate) struct LineBoxOffsets {
+  offsets: Vec<(BoxKey, f32)>,
+}
+
+impl LineBoxOffsets {
+  /// How far the box `key` sits below the line's baseline.
+  pub(super) fn of(&self, key: BoxKey) -> f32 {
+    self
+      .offsets
+      .iter()
+      .find(|(candidate, _)| *candidate == key)
+      .map_or(0.0, |(_, offset)| *offset)
+  }
+}
+
+impl LineBoxTree {
+  /// A line holding only the root inline box, which starts with `strut`.
+  pub(super) fn new(strut: FontHeight, font: BoxFont) -> Self {
+    Self {
+      boxes: smallvec![OpenBox {
+        key: None,
+        parent: 0,
+        depth: 0,
+        metrics: strut,
+        align: ResolvedVerticalAlign::Keyword(VerticalAlignKeyword::Baseline),
+        font: Some(font),
+        pending: Vec::new(),
+        shift: 0.0,
+      }],
+    }
+  }
+
+  /// The box `key`, opening it inside `parent` with `strut` if it is not open yet.
+  pub(super) fn open(
+    &mut self,
+    key: BoxKey,
+    parent: usize,
+    strut: FontHeight,
+    align: ResolvedVerticalAlign,
+    font: Option<BoxFont>,
+  ) -> usize {
+    if let Some(index) = self.boxes.iter().position(|open| open.key == Some(key)) {
+      return index;
+    }
+
+    self.boxes.push(OpenBox {
+      key: Some(key),
+      parent,
+      depth: self.boxes[parent].depth + 1,
+      metrics: strut,
+      align,
+      font,
+      pending: Vec::new(),
+      shift: 0.0,
+    });
+    self.boxes.len() - 1
+  }
+
+  /// The innermost span in `chain`, opening it and its ancestors with their struts grown for a
+  /// line at `line_scale`, or the root when `chain` is empty.
+  pub(super) fn open_chain(
+    &mut self,
+    chain: Option<&Rc<DecorationLink<'_>>>,
+    line_scale: f32,
+  ) -> usize {
+    let Some(link) = chain else {
+      return 0;
+    };
+    let decoration = &link.decoration;
+    let key = BoxKey::Span(decoration.id);
+
+    if let Some(index) = self.boxes.iter().position(|open| open.key == Some(key)) {
+      return index;
+    }
+
+    let parent = self.open_chain(link.parent.as_ref(), line_scale);
+    let strut = decoration
+      .strut
+      .map_or(FontHeight::EMPTY, |strut| strut.height(line_scale));
+
+    self.open(
+      key,
+      parent,
+      strut,
+      decoration.vertical_align,
+      Some(decoration.font),
+    )
+  }
+
+  /// Grows the box `index` by content sitting on its baseline.
+  pub(super) fn add(&mut self, index: usize, height: FontHeight) {
+    self.boxes[index].metrics.unite(height);
+  }
+
+  /// Aligns every box, deepest first as each closes, and returns the root's height and where
+  /// each box sits.
+  pub(super) fn resolve(mut self) -> (FontHeight, LineBoxOffsets) {
+    if self.boxes.len() == 1 {
+      return (self.boxes[0].metrics, LineBoxOffsets::default());
+    }
+
+    let mut order: Vec<usize> = (1..self.boxes.len()).collect();
+
+    order.sort_by_key(|&index| Reverse(self.boxes[index].depth));
+    for index in order {
+      self.apply_pending(index);
+      self.apply_baseline_shift(index);
+    }
+    self.apply_pending(0);
+
+    let mut offsets = vec![0.0_f32; self.boxes.len()];
+
+    for index in 1..self.boxes.len() {
+      // A parent always precedes its children.
+      offsets[index] = offsets[self.boxes[index].parent] + self.boxes[index].shift;
+    }
+
+    (
+      self.boxes[0].metrics,
+      LineBoxOffsets {
+        offsets: self
+          .boxes
+          .iter()
+          .zip(offsets)
+          .filter_map(|(open, offset)| open.key.map(|key| (key, offset)))
+          .collect(),
+      },
+    )
+  }
+
+  /// Aligns the children of `index` that wait for its metrics, after Blink's
+  /// `ApplyBaselineShift` resolving `pending_descendants`.
+  fn apply_pending(&mut self, index: usize) {
+    let pending = take(&mut self.boxes[index].pending);
+    let text = self.boxes[index].font.and_then(|font| font.metrics);
+    let mut has_top_or_bottom = false;
+
+    for &child in &pending {
+      let metrics = &mut self.boxes[child].metrics;
+
+      if metrics.is_empty() {
+        *metrics = FontHeight::ZERO;
+      }
+    }
+
+    for &child in &pending {
+      let metrics = self.boxes[child].metrics;
+      let shift = match self.boxes[child].align {
+        ResolvedVerticalAlign::Keyword(VerticalAlignKeyword::TextTop) => {
+          metrics.ascent - text.map_or(0.0, |text| text.ascent)
+        }
+        ResolvedVerticalAlign::Keyword(VerticalAlignKeyword::TextBottom) => {
+          text.map_or(0.0, |text| text.descent) - metrics.descent
+        }
+        _ => {
+          has_top_or_bottom = true;
+          continue;
+        }
+      };
+
+      self.place(child, index, metrics, shift);
+    }
+
+    if !has_top_or_bottom {
+      return;
+    }
+
+    // `top` and `bottom` align to the subtree the other values already aligned, grown to a taller
+    // `top` or `bottom` box by its other edge, as Blink's `MetricsForTopAndBottomAlign`.
+    let aligned = self.boxes[index].metrics;
+    let aligned = if aligned.is_empty() {
+      FontHeight::ZERO
+    } else {
+      aligned
+    };
+    let mut max = aligned;
+
+    for &child in &pending {
+      let child = &self.boxes[child];
+      let height = child.metrics.ascent + child.metrics.descent;
+
+      if height <= max.ascent + max.descent {
+        continue;
+      }
+      match child.align {
+        ResolvedVerticalAlign::Keyword(VerticalAlignKeyword::Top) => {
+          max = FontHeight {
+            ascent: aligned.ascent,
+            descent: height - aligned.ascent,
+          };
+        }
+        ResolvedVerticalAlign::Keyword(VerticalAlignKeyword::Bottom) => {
+          max = FontHeight {
+            ascent: height - aligned.descent,
+            descent: aligned.descent,
+          };
+        }
+        _ => {}
+      }
+    }
+
+    for &child in &pending {
+      let metrics = self.boxes[child].metrics;
+      let shift = match self.boxes[child].align {
+        ResolvedVerticalAlign::Keyword(VerticalAlignKeyword::Top) => metrics.ascent - max.ascent,
+        ResolvedVerticalAlign::Keyword(VerticalAlignKeyword::Bottom) => {
+          max.descent - metrics.descent
+        }
+        _ => continue,
+      };
+
+      self.place(child, index, metrics, shift);
+    }
+  }
+
+  /// Aligns the box `index` against its parent once its own content is aligned, or queues it on
+  /// the box whose metrics it needs.
+  fn apply_baseline_shift(&mut self, index: usize) {
+    let parent = self.boxes[index].parent;
+    let parent_font = self.boxes[parent].font;
+    let metrics = self.boxes[index].metrics;
+    let shift = match self.boxes[index].align {
+      ResolvedVerticalAlign::Shift(px) => -px,
+      ResolvedVerticalAlign::Keyword(keyword) => match keyword {
+        VerticalAlignKeyword::Baseline => 0.0,
+        VerticalAlignKeyword::Sub => parent_font.map_or(0.0, |font| font.size / 5.0 + 1.0),
+        VerticalAlignKeyword::Super => parent_font.map_or(0.0, |font| -(font.size / 3.0 + 1.0)),
+        VerticalAlignKeyword::Middle => {
+          let x_height = parent_font
+            .and_then(|font| font.metrics)
+            .and_then(|metrics| metrics.x_height)
+            .map_or(0.0, |x_height| (x_height / 2.0).round());
+
+          (metrics.ascent - metrics.descent) / 2.0 - x_height
+        }
+        VerticalAlignKeyword::TextTop | VerticalAlignKeyword::TextBottom => {
+          self.boxes[parent].pending.push(index);
+          return;
+        }
+        VerticalAlignKeyword::Top | VerticalAlignKeyword::Bottom => {
+          let mut ancestor = parent;
+
+          while ancestor > 0
+            && !matches!(
+              self.boxes[ancestor].align,
+              ResolvedVerticalAlign::Keyword(
+                VerticalAlignKeyword::Top | VerticalAlignKeyword::Bottom
+              )
+            )
+          {
+            ancestor = self.boxes[ancestor].parent;
+          }
+          self.boxes[ancestor].pending.push(index);
+          return;
+        }
+      },
+    };
+
+    self.place(index, parent, metrics, shift);
+  }
+
+  /// Moves the box `index` by `shift` and grows `into` by it.
+  fn place(&mut self, index: usize, into: usize, metrics: FontHeight, shift: f32) {
+    let moved = metrics.moved(shift);
+
+    self.boxes[index].shift = shift;
+    self.boxes[into].metrics.unite(moved);
+  }
+}
+
+#[cfg(test)]
+mod tests {
+  use super::{BoxFont, BoxKey, FontHeight, LineBoxTree};
+  use crate::style::{ResolvedVerticalAlign, VerticalAlignKeyword};
+
+  const FONT: BoxFont = BoxFont {
+    size: 20.0,
+    metrics: None,
+  };
+
+  fn height(ascent: f32, descent: f32) -> FontHeight {
+    FontHeight { ascent, descent }
+  }
+
+  fn keyword(keyword: VerticalAlignKeyword) -> ResolvedVerticalAlign {
+    ResolvedVerticalAlign::Keyword(keyword)
+  }
+
+  #[test]
+  fn sub_and_super_shift_by_the_parent_font_size() {
+    let mut tree = LineBoxTree::new(height(16.0, 4.0), FONT);
+
+    tree.open(
+      BoxKey::Span(0),
+      0,
+      height(8.0, 2.0),
+      keyword(VerticalAlignKeyword::Sub),
+      None,
+    );
+    tree.open(
+      BoxKey::Span(1),
+      0,
+      height(8.0, 2.0),
+      keyword(VerticalAlignKeyword::Super),
+      None,
+    );
+
+    let (_, offsets) = tree.resolve();
+
+    assert_eq!(offsets.of(BoxKey::Span(0)), 5.0);
+    assert_eq!(offsets.of(BoxKey::Span(1)), -(20.0 / 3.0 + 1.0));
+  }
+
+  #[test]
+  fn top_and_bottom_boxes_taller_than_the_line_grow_its_other_edge() {
+    let mut tree = LineBoxTree::new(height(10.0, 5.0), FONT);
+
+    tree.open(
+      BoxKey::Atomic(0),
+      0,
+      height(30.0, 0.0),
+      keyword(VerticalAlignKeyword::Top),
+      None,
+    );
+    tree.open(
+      BoxKey::Atomic(1),
+      0,
+      height(40.0, 0.0),
+      keyword(VerticalAlignKeyword::Bottom),
+      None,
+    );
+
+    let (line, offsets) = tree.resolve();
+
+    assert_eq!(line, height(35.0, 5.0));
+    assert_eq!(offsets.of(BoxKey::Atomic(0)), -5.0);
+    assert_eq!(offsets.of(BoxKey::Atomic(1)), 5.0);
+  }
+
+  #[test]
+  fn an_empty_box_aligns_as_a_zero_height_one() {
+    let mut tree = LineBoxTree::new(height(10.0, 5.0), FONT);
+
+    tree.open(
+      BoxKey::Span(0),
+      0,
+      FontHeight::EMPTY,
+      keyword(VerticalAlignKeyword::Top),
+      None,
+    );
+
+    let (line, offsets) = tree.resolve();
+
+    assert_eq!(line, height(10.0, 5.0));
+    assert_eq!(offsets.of(BoxKey::Span(0)), -10.0);
+  }
+}

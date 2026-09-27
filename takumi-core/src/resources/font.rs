@@ -678,6 +678,8 @@ pub(crate) struct PrimaryFontMetrics {
   pub(crate) ascent: f32,
   pub(crate) descent: f32,
   pub(crate) line_gap: f32,
+  /// Unrounded, as Blink's `FontMetrics::XHeight`.
+  pub(crate) x_height: Option<f32>,
 }
 
 impl PrimaryFontMetrics {
@@ -724,6 +726,7 @@ impl RenderContext {
           ascent: metrics.ascent.round(),
           descent: metrics.descent.abs().round(),
           line_gap: metrics.leading.round(),
+          x_height: metrics.x_height,
         });
         QueryStatus::Stop
       });

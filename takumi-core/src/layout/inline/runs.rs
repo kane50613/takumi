@@ -18,6 +18,7 @@ use super::{
   BuiltInlineLayout, InlineBrush, PlacedItem, WalkedLine,
   background::{
     CoverLine, Covering, DecorationAccumulator, InlineBackgroundFragment, InlineContainingBlock,
+    LinePosition,
   },
   items::ProcessedInlineSpan,
   metrics::{VisualInlineBox, resolve_visual_inline_box},
@@ -421,7 +422,7 @@ impl BuiltInlineLayout<'_> {
             resolved_glyphs,
             line_scale: setup.state,
             static_inline_prefix,
-            baseline_shift: setup.baseline_shift,
+            baseline_shift: self.run_baseline_shift(line, &glyph_run),
           });
         }
         PlacedItem::Box(inline_box) => {
@@ -498,13 +499,7 @@ impl<'c> BuiltInlineLayout<'c> {
           return;
         }
 
-        let Some(ProcessedInlineSpan::Text {
-          decorations: Some(chain),
-          ..
-        }) = brush
-          .source_span_id
-          .and_then(|span_id| self.spans.get(span_id as usize))
-        else {
+        let Some(chain) = self.run_chain(glyph_run) else {
           return;
         };
         let x = glyph_run.offset();
@@ -512,7 +507,7 @@ impl<'c> BuiltInlineLayout<'c> {
         let metrics = glyph_run.run().metrics();
         // The font's rounded ascent and descent, without the line-height leading, like the
         // inline box fragment `InlineBoxState::ComputeTextMetrics` sizes.
-        let baseline = glyph_run.baseline() + setup.baseline_shift;
+        let baseline = glyph_run.baseline() + line.baseline_shift_in(Some(chain));
 
         (
           Some(chain),
@@ -550,15 +545,18 @@ impl<'c> BuiltInlineLayout<'c> {
 
     coverage.cover(
       chain,
-      line.index,
+      &CoverLine {
+        index: line.index,
+        position: LinePosition {
+          top: line_y(setup.resolved_metrics.resolved_line_top),
+          bottom: line_y(setup.resolved_metrics.resolved_line_bottom),
+          baseline: line_y(setup.resolved_metrics.resolved_baseline),
+          scale: setup.state.scale,
+        },
+        offsets: &line.state.offsets,
+      },
       x0,
       x1,
-      CoverLine {
-        top: line_y(setup.resolved_metrics.resolved_line_top),
-        bottom: line_y(setup.resolved_metrics.resolved_line_bottom),
-        baseline: line_y(setup.resolved_metrics.resolved_baseline),
-        scale: setup.state.scale,
-      },
       covering,
     );
   }

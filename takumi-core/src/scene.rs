@@ -776,7 +776,8 @@ fn compute_node_paint_bounds(
         static_inline_prefix,
         trailing_whitespace,
       } => {
-        let (glyph_origin, glyph_size) = glyph_run_rect(&glyph_run, setup.baseline_shift);
+        let baseline_shift = built.run_baseline_shift(line, &glyph_run);
+        let (glyph_origin, glyph_size) = glyph_run_rect(&glyph_run, baseline_shift);
         let (glyph_origin, glyph_size) =
           setup.scale_rect(glyph_origin, glyph_size, static_inline_prefix);
 
@@ -800,9 +801,7 @@ fn compute_node_paint_bounds(
             .transform(Affine::IDENTITY, static_inline_prefix);
           let output = transform * run_transform;
 
-          for line in
-            run.decoration_lines(content_offset, setup.baseline_shift, run_transform, output)
-          {
+          for line in run.decoration_lines(content_offset, baseline_shift, run_transform, output) {
             let area = line.bounds();
 
             bounds = merge_bounds(
@@ -848,7 +847,7 @@ fn compute_node_paint_bounds(
           let (ink_origin, ink_size) = setup.scale_rect(
             Point {
               x: glyph.x + min_x,
-              y: glyph.y + setup.baseline_shift + min_y,
+              y: glyph.y + baseline_shift + min_y,
             },
             Size {
               width: max_x - min_x,
