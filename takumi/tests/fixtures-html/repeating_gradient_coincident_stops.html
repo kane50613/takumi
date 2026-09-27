@@ -1,0 +1,55 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>repeating_gradient_coincident_stops</title>
+    <base href="../../../" />
+    <link rel="stylesheet" href="takumi/tests/shared.css" />
+  </head>
+  <body style="width: 320px; height: 120px">
+    <div
+      style="
+        display: flex;
+        gap: 16px;
+        width: 100%;
+        height: 100%;
+        padding: 16px;
+        background-color: rgb(255, 255, 255);
+      "
+    >
+      <div
+        style="
+          width: 80px;
+          height: 80px;
+          background-image: repeating-linear-gradient(
+            90deg,
+            rgb(239, 68, 68) 30px,
+            rgb(59, 130, 246) 30px
+          );
+        "
+      ></div>
+      <div
+        style="
+          width: 80px;
+          height: 80px;
+          background-image: repeating-radial-gradient(
+            circle,
+            rgb(239, 68, 68) 20px,
+            rgb(34, 197, 94) 20px
+          );
+        "
+      ></div>
+      <div
+        style="
+          width: 80px;
+          height: 80px;
+          background-image: repeating-linear-gradient(
+            90deg,
+            rgb(239, 68, 68) 0,
+            rgb(59, 130, 246) 12px
+          );
+        "
+      ></div>
+    </div>
+  </body>
+</html>
