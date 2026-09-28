@@ -5,9 +5,9 @@ use crate::{
   layout::tree::RenderNode,
   resources::font::FontClasses,
   style::{
-    Color, Direction, FontSynthesis, Lang, Length, SizedTextDecorationThickness,
-    TextDecorationLines, TextDecorationSkipInk, TextDecorationStyle, TextFitMode, TextOverflow,
-    TextUnderlinePosition, TextWrapStyle, VerticalAlign, WhiteSpaceCollapse, WordBreak,
+    AppliedTextDecorations, Color, Direction, FontSynthesis, Lang, Length, TextDecorationSkipInk,
+    TextFitMode, TextOverflow, TextUnderlinePosition, TextWrapStyle, VerticalAlign,
+    WhiteSpaceCollapse, WordBreak,
   },
   text_processing::{
     MaxHeight, RebreakOptions, apply_text_transform, apply_white_space_collapse,
@@ -278,7 +278,7 @@ impl BuiltInlineLayout<'_> {
       &self.spans,
       self.font,
       &self.line_scales,
-      self.strut,
+      self.strut.as_ref(),
     )
   }
 
@@ -475,7 +475,7 @@ impl InlineMeasureOptions {
   }
 }
 
-#[derive(Clone, PartialEq, Copy, Debug)]
+#[derive(Clone, PartialEq, Debug)]
 /// Paint attributes carried per glyph run through the inline layout.
 pub struct InlineBrush {
   /// Span this run originated from, if any.
@@ -486,20 +486,12 @@ pub struct InlineBrush {
   pub opacity: f32,
   /// Text fill color.
   pub color: Color,
-  /// Text decoration color.
-  pub decoration_color: Color,
-  /// Decoration line thickness.
-  pub decoration_thickness: SizedTextDecorationThickness,
-  /// Extra offset of the underline away from the text, in pixels, or `None` for `auto`.
-  pub underline_offset: Option<f32>,
+  /// The decorations the run paints.
+  pub decorations: AppliedTextDecorations,
   /// Which baseline the underline is measured from.
   pub underline_position: TextUnderlinePosition,
-  /// Which decoration lines to draw.
-  pub decoration_line: TextDecorationLines,
   /// Whether decorations skip over glyph ink.
   pub decoration_skip_ink: TextDecorationSkipInk,
-  /// How the decoration lines are drawn.
-  pub decoration_style: TextDecorationStyle,
   /// `-webkit-text-stroke` colour, which a span may set for itself.
   pub stroke_color: Color,
   /// `-webkit-text-stroke` width in pixels.
@@ -576,13 +568,9 @@ impl Default for InlineBrush {
       is_direction_mark: false,
       opacity: 1.0,
       color: Color::black(),
-      decoration_color: Color::black(),
-      decoration_thickness: SizedTextDecorationThickness::Value(0.0),
-      underline_offset: None,
       underline_position: TextUnderlinePosition::default(),
-      decoration_line: TextDecorationLines::empty(),
+      decorations: AppliedTextDecorations::default(),
       decoration_skip_ink: TextDecorationSkipInk::default(),
-      decoration_style: TextDecorationStyle::default(),
       stroke_color: Color::black(),
       stroke_width: 0.0,
       font_synthesis: FontSynthesis::default(),
@@ -1425,8 +1413,9 @@ mod tests {
     layout::{node::Node, tree::RenderNode},
     resources::font::{FontOverride, FontResource, GenericFamily},
     style::{
-      Affine, BorderStyle, Color, ColorInput, Display, FontSize, Length, Sides, SizingContext,
-      SpacePair, Style, StyleDeclaration, WhiteSpace,
+      Affine, AppliedTextDecoration, BorderStyle, Color, ColorInput, Display, FontSize, Length,
+      Sides, SizedTextDecorationThickness, SizingContext, SpacePair, Style, StyleDeclaration,
+      TextDecorationLines, TextDecorationStyle, WhiteSpace,
     },
     viewport::Viewport,
   };
@@ -1454,7 +1443,7 @@ mod tests {
     context
   }
 
-  fn shaped_run(position: TextUnderlinePosition, underline_offset: Option<f32>) -> ShapedRun {
+  fn shaped_run(position: TextUnderlinePosition) -> ShapedRun {
     ShapedRun {
       glyphs: Vec::new(),
       offset: 0.0,
@@ -1462,7 +1451,6 @@ mod tests {
       advance: 0.0,
       hanging: HangingWhitespace::default(),
       brush: InlineBrush {
-        underline_offset,
         underline_position: position,
         ..Default::default()
       },
@@ -1497,9 +1485,16 @@ mod tests {
 
   #[test]
   fn a_fully_trimmed_run_paints_no_decoration() {
-    let mut run = shaped_run(TextUnderlinePosition::Auto, None);
-    run.brush.decoration_line = TextDecorationLines::UNDERLINE;
-    run.brush.decoration_thickness = SizedTextDecorationThickness::Value(2.0);
+    let mut run = shaped_run(TextUnderlinePosition::Auto);
+    run.brush.decorations = [AppliedTextDecoration {
+      line: TextDecorationLines::UNDERLINE,
+      style: TextDecorationStyle::Solid,
+      color: Color::black(),
+      thickness: SizedTextDecorationThickness::Value(2.0),
+      underline_offset: None,
+    }]
+    .into_iter()
+    .collect();
     run.advance = 5.2;
     run.hanging.advance = 5.2;
     run.offset = 10.4;
@@ -1777,22 +1772,22 @@ mod tests {
   fn underline_offset_from_baseline_follows_the_underline_position() {
     // `auto` leaves a gap of half the thickness, at least a pixel, under the baseline.
     assert_eq!(
-      shaped_run(TextUnderlinePosition::Auto, None).underline_offset_from_baseline(1.0),
+      shaped_run(TextUnderlinePosition::Auto).underline_offset_from_baseline(1.0, None),
       1.0
     );
     assert_eq!(
-      shaped_run(TextUnderlinePosition::Auto, None).underline_offset_from_baseline(5.0),
+      shaped_run(TextUnderlinePosition::Auto).underline_offset_from_baseline(5.0, None),
       3.0
     );
     // The font's underline offset is negative below the baseline.
     assert_eq!(
-      shaped_run(TextUnderlinePosition::FromFont, None).underline_offset_from_baseline(2.0),
+      shaped_run(TextUnderlinePosition::FromFont).underline_offset_from_baseline(2.0, None),
       5.0
     );
     // 100px em split in the metrics' 40:10 ratio puts the em box bottom 20px down, and the
     // underline a pixel past it.
     assert_eq!(
-      shaped_run(TextUnderlinePosition::Under, None).underline_offset_from_baseline(2.0),
+      shaped_run(TextUnderlinePosition::Under).underline_offset_from_baseline(2.0, None),
       21.0
     );
   }
@@ -1801,11 +1796,11 @@ mod tests {
   fn underline_offset_from_baseline_adds_the_style_offset() {
     // A set offset drops `auto`'s gap.
     assert_eq!(
-      shaped_run(TextUnderlinePosition::Auto, Some(3.0)).underline_offset_from_baseline(4.0),
+      shaped_run(TextUnderlinePosition::Auto).underline_offset_from_baseline(4.0, Some(3.0)),
       3.0
     );
     assert_eq!(
-      shaped_run(TextUnderlinePosition::Under, Some(-4.0)).underline_offset_from_baseline(2.0),
+      shaped_run(TextUnderlinePosition::Under).underline_offset_from_baseline(2.0, Some(-4.0)),
       17.0
     );
   }

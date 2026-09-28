@@ -5,8 +5,8 @@ use crate::{
   layout::intercept::{Spans, skip_ink_ranges},
   resources::glyph::{ResolvedGlyph, ResolvedOutlineGlyph},
   style::{
-    Affine, Color, SizedTextDecorationThickness, TextDecorationLines, TextDecorationSkipInk,
-    TextDecorationStyle,
+    Affine, AppliedTextDecoration, Color, SizedTextDecorationThickness, TextDecorationLines,
+    TextDecorationSkipInk, TextDecorationStyle,
   },
 };
 use std::{collections::HashMap, sync::Arc};
@@ -38,24 +38,28 @@ pub struct DecorationLine {
 }
 
 impl ShapedRun {
-  /// The top and thickness of an enabled decoration line, after Blink's `TextDecorationInfo`.
+  /// The top and thickness of `decoration`'s `line`, when it draws one, after Blink's
+  /// `TextDecorationInfo`.
   pub fn decoration_line(
     &self,
+    decoration: &AppliedTextDecoration,
     line: TextDecorationLines,
     baseline_shift: f32,
   ) -> Option<(f32, f32)> {
-    if !self.brush.decoration_line.contains(line) {
+    if !decoration.line.contains(line) {
       return None;
     }
 
     let ascent = self.metrics.ascent;
-    let thickness = match self.brush.decoration_thickness {
+    let thickness = match decoration.thickness {
       SizedTextDecorationThickness::Value(value) => value,
       SizedTextDecorationThickness::FromFont => self.metrics.underline_size,
     };
     let baseline = self.baseline + baseline_shift;
     let top = match line {
-      TextDecorationLines::UNDERLINE => baseline + self.underline_offset_from_baseline(thickness),
+      TextDecorationLines::UNDERLINE => {
+        baseline + self.underline_offset_from_baseline(thickness, decoration.underline_offset)
+      }
       TextDecorationLines::OVERLINE => baseline - ascent - thickness.floor(),
       TextDecorationLines::LINE_THROUGH => baseline - ascent / 3.0 - thickness / 2.0,
       _ => return None,
@@ -132,36 +136,41 @@ impl ShapedRun {
     transform: Affine,
     output: Affine,
   ) -> Vec<DecorationLine> {
-    let brush = &self.brush;
-    if brush.decoration_line.is_empty() || self.decorated_advance() <= 0.0 {
+    if self.decorated_advance() <= 0.0 {
       return Vec::new();
     }
 
-    [
-      (TextDecorationLines::UNDERLINE, false),
-      (TextDecorationLines::OVERLINE, false),
-      (TextDecorationLines::LINE_THROUGH, true),
-    ]
-    .into_iter()
-    .filter_map(|(line, over)| {
-      let (top, thickness) = self.decoration_line(line, baseline_shift)?;
+    let decorations = self.brush.decorations.as_slice();
 
-      Some(DecorationLine {
-        origin: Point {
-          x: content.x + self.offset + self.decorated_offset(),
-          y: content.y + top,
-        },
-        width: self.decorated_advance(),
-        thickness,
-        color: brush.decoration_color,
-        transform,
-        output,
-        over,
-        line,
-        style: brush.decoration_style,
-        skips: Spans::new(),
+    decorations
+      .iter()
+      .flat_map(|decoration| {
+        [
+          (TextDecorationLines::UNDERLINE, false),
+          (TextDecorationLines::OVERLINE, false),
+          (TextDecorationLines::LINE_THROUGH, true),
+        ]
+        .map(|(line, over)| (decoration, line, over))
       })
-    })
-    .collect()
+      .filter_map(|(decoration, line, over)| {
+        let (top, thickness) = self.decoration_line(decoration, line, baseline_shift)?;
+
+        Some(DecorationLine {
+          origin: Point {
+            x: content.x + self.offset + self.decorated_offset(),
+            y: content.y + top,
+          },
+          width: self.decorated_advance(),
+          thickness,
+          color: decoration.color,
+          transform,
+          output,
+          over,
+          line,
+          style: decoration.style,
+          skips: Spans::new(),
+        })
+      })
+      .collect()
   }
 }

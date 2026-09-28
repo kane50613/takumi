@@ -188,6 +188,7 @@ impl LineBoxTree {
     let parent = self.open_chain(link.parent.as_ref(), line_scale);
     let strut = decoration
       .strut
+      .as_ref()
       .map_or(FontHeight::EMPTY, |strut| strut.height(line_scale));
 
     self.open(

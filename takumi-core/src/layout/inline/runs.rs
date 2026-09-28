@@ -256,12 +256,16 @@ impl ShapedRun {
   /// Follows Blink's `TextDecorationOffset::ComputeUnderlineOffset`: `auto` leaves a gap of half
   /// the `thickness`, at least a pixel, under the baseline unless `text-underline-offset` is set,
   /// `from-font` takes the font's underline position, and `under` sits a pixel past the em box.
-  pub fn underline_offset_from_baseline(&self, thickness: f32) -> f32 {
-    let offset = self.brush.underline_offset.unwrap_or(0.0);
+  pub fn underline_offset_from_baseline(
+    &self,
+    thickness: f32,
+    underline_offset: Option<f32>,
+  ) -> f32 {
+    let offset = underline_offset.unwrap_or(0.0);
 
     match self.brush.underline_position {
       TextUnderlinePosition::Auto => {
-        let gap = match self.brush.underline_offset {
+        let gap = match underline_offset {
           Some(_) => 0.0,
           None => (thickness / 2.0).ceil().max(1.0),
         };
@@ -419,7 +423,7 @@ impl BuiltInlineLayout<'_> {
           // A run carrying only the direction mark paints nothing; a run the
           // mark's cluster merged into (emoji sequences) paints as the first
           // real span.
-          let mut brush = glyph_run.style().brush;
+          let mut brush = glyph_run.style().brush.clone();
           if brush.is_direction_mark {
             if glyph_run.advance() == 0.0 {
               return Ok(());
@@ -532,7 +536,7 @@ impl<'c> BuiltInlineLayout<'c> {
         hanging,
         stretch,
       } => {
-        let brush = glyph_run.style().brush;
+        let brush = &glyph_run.style().brush;
 
         if brush.is_direction_mark && glyph_run.advance() == 0.0 {
           return;

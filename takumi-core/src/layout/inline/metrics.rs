@@ -14,7 +14,7 @@ use super::{
 
 /// An inline box's strut: its primary font's content area with its line height's half-leading,
 /// as Blink's `InlineBoxState::ComputeTextMetrics`.
-#[derive(Clone, Copy)]
+#[derive(Clone)]
 pub(crate) struct Strut {
   brush: InlineBrush,
   metrics: PrimaryFontMetrics,
@@ -30,7 +30,7 @@ impl Strut {
   }
 
   /// The strut on a line `text-fit` scales by `line_scale`.
-  pub(super) fn height(self, line_scale: f32) -> FontHeight {
+  pub(super) fn height(&self, line_scale: f32) -> FontHeight {
     let exact = self.metrics.exact;
 
     self.brush.line_box_height(
@@ -82,7 +82,7 @@ pub(super) fn resolve_inline_line_metrics(
   spans: &[ProcessedInlineSpan<'_>],
   font: BoxFont,
   line_scales: &[f32],
-  strut: Option<Strut>,
+  strut: Option<&Strut>,
 ) -> Vec<ResolvedLineMetrics> {
   let mut result = Vec::with_capacity(inline_layout.lines().count());
   let mut previous_parley_bottom = 0.0_f32;

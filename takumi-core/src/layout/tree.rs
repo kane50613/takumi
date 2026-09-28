@@ -1364,19 +1364,8 @@ impl RenderNode {
 
   /// An element's own text, moved into a child so generated content can precede it.
   fn generated_sibling_text(parent_context: &RenderContext, text: String) -> Self {
-    let (mut style, sizing, current_color) =
+    let (style, sizing, current_color) =
       parent_context.resolve_pseudo_style(&MatchedDeclarationsView::default());
-    let parent_style = &parent_context.style;
-
-    style
-      .text_decoration_line
-      .clone_from(&parent_style.text_decoration_line);
-    style.text_decoration_style = parent_style.text_decoration_style;
-    style
-      .text_decoration_color
-      .clone_from(&parent_style.text_decoration_color);
-    style.text_decoration_thickness = parent_style.text_decoration_thickness;
-
     let context = RenderContext::from_parent(parent_context, style, sizing, current_color);
 
     Self::text_item(context, text)

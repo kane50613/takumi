@@ -247,24 +247,30 @@
     <feGaussianBlur stdDeviation="3"/>
   </filter>
   <g filter="url(#bl0)">
+    <path d="M853 224.4h59v3.14h-59v-3.14Z" fill="#45556e" fill-opacity=".706"/>
+    <path d="M924 224.4h23.78v3.14h-23.78v-3.14Z" fill="#45556e" fill-opacity=".706"/>
     <g fill="#45556e" fill-opacity=".706">
       <use href="#g97" x="853" y="220.54"/>
       <use href="#g98" x="879.61" y="220.54"/>
       <use href="#g99" x="903.08" y="220.54"/>
       <use href="#g100" x="913.29" y="220.54"/>
     </g>
+    <path d="M973.78 224.4h89.22v3.14h-89.22v-3.14Z" fill="#45556e" fill-opacity=".706"/>
     <g fill="#45556e" fill-opacity=".706">
       <use href="#g101" x="983.98" y="220.54"/>
       <use href="#g102" x="1007.2" y="220.54"/>
       <use href="#g103" x="1029.57" y="220.54"/>
     </g>
   </g>
+  <path d="M852 222.4h59v3.14h-59v-3.14Z" fill="#3182ce"/>
+  <path d="M923 222.4h23.78v3.14h-23.78v-3.14Z" fill="#3182ce"/>
   <g fill="#000">
     <use href="#g97" x="852" y="218.54"/>
     <use href="#g98" x="878.61" y="218.54"/>
     <use href="#g99" x="902.08" y="218.54"/>
     <use href="#g100" x="912.29" y="218.54"/>
   </g>
+  <path d="M972.78 222.4h89.22v3.14h-89.22v-3.14Z" fill="#3182ce"/>
   <g fill="#000">
     <use href="#g101" x="982.98" y="218.54"/>
     <use href="#g102" x="1006.2" y="218.54"/>

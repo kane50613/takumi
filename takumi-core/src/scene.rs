@@ -789,9 +789,16 @@ fn compute_node_paint_bounds(
         );
 
         // Blink's `InkOverflow::ComputeAppliedDecorationOverflow`.
-        let brush = glyph_run.style().brush;
-        if !brush.decoration_line.is_empty() {
-          let run = ShapedRun::of(&glyph_run, Vec::new(), hanging, &stretch, brush, Vec::new());
+        let brush = &glyph_run.style().brush;
+        if !brush.decorations.is_empty() {
+          let run = ShapedRun::of(
+            &glyph_run,
+            Vec::new(),
+            hanging,
+            &stretch,
+            brush.clone(),
+            Vec::new(),
+          );
           let run_transform = setup
             .state
             .transform(Affine::IDENTITY, static_inline_prefix);

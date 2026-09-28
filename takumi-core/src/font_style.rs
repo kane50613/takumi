@@ -19,8 +19,9 @@ use crate::{
   resources::font::{FontClasses, SubsetGroup},
   shadow::SizedShadow,
   style::{
-    Color, ComputedStyle, Display, FontFamily, FontSynthesis, Lang, LineHeight as CssLineHeight,
-    SizedTextDecorationThickness, SizingContext, VerticalAlign, WordBreak,
+    AppliedTextDecorations, Color, ComputedStyle, Display, FontFamily, FontSynthesis, Lang,
+    LineHeight as CssLineHeight, SizedTextDecorationThickness, SizingContext, VerticalAlign,
+    WordBreak,
   },
 };
 
@@ -234,9 +235,7 @@ pub struct SizedFontStyle<'s> {
   pub(crate) color: Color,
   /// Text stroke color.
   pub(crate) text_stroke_color: Color,
-  pub(crate) text_decoration_color: Color,
-  pub(crate) text_decoration_thickness: SizedTextDecorationThickness,
-  pub(crate) text_underline_offset: Option<f32>,
+  pub(crate) text_decorations: AppliedTextDecorations,
   /// Resolved sizing context (font size, etc.).
   pub sizing: SizingContext,
 }
@@ -262,7 +261,6 @@ impl SizedFontStyle<'_> {
     self.word_spacing.to_bits().hash(hasher);
     self.parent.letter_spacing.has_percentage().hash(hasher);
     self.parent.word_spacing.has_percentage().hash(hasher);
-    self.text_underline_offset.map(f32::to_bits).hash(hasher);
     self.line_height_scales_with_text_fit.hash(hasher);
     self.line_height_is_normal.hash(hasher);
     discriminant(&self.line_height).hash(hasher);
@@ -272,16 +270,21 @@ impl SizedFontStyle<'_> {
       | LineHeight::MetricsRelative(value) => value.to_bits().hash(hasher),
     }
     self.color.0.hash(hasher);
-    self.text_decoration_color.0.hash(hasher);
     self.text_stroke_color.0.hash(hasher);
     self.stroke_width.to_bits().hash(hasher);
     self.font_family.hash_tokens(hasher);
-    match self.text_decoration_thickness {
-      SizedTextDecorationThickness::FromFont => 0_u8.hash(hasher),
-      SizedTextDecorationThickness::Value(value) => {
-        1_u8.hash(hasher);
-        value.to_bits().hash(hasher);
+    for decoration in self.text_decorations.as_slice() {
+      decoration.line.bits().hash(hasher);
+      discriminant(&decoration.style).hash(hasher);
+      decoration.color.0.hash(hasher);
+      match decoration.thickness {
+        SizedTextDecorationThickness::FromFont => 0_u8.hash(hasher),
+        SizedTextDecorationThickness::Value(value) => {
+          1_u8.hash(hasher);
+          value.to_bits().hash(hasher);
+        }
       }
+      decoration.underline_offset.map(f32::to_bits).hash(hasher);
     }
 
     let parent = self.parent;
@@ -310,13 +313,7 @@ impl SizedFontStyle<'_> {
     discriminant(&parent.display).hash(hasher);
     parent.opacity.0.to_bits().hash(hasher);
     (parent.text_underline_position as u8).hash(hasher);
-    parent
-      .text_decoration_line
-      .unwrap_or_default()
-      .bits()
-      .hash(hasher);
     (parent.text_decoration_skip_ink as u8).hash(hasher);
-    discriminant(&parent.text_decoration_style).hash(hasher);
     (parent.font_synthesis_weight as u8).hash(hasher);
     (parent.font_synthesis_style as u8).hash(hasher);
     match &parent.vertical_align {
@@ -378,13 +375,9 @@ impl<'s> From<&'s SizedFontStyle<'s>> for TextStyle<'s, 's, InlineBrush> {
           1.0
         },
         color: style.color,
-        decoration_color: style.text_decoration_color,
-        decoration_thickness: style.text_decoration_thickness,
-        underline_offset: style.text_underline_offset,
+        decorations: style.text_decorations.clone(),
         underline_position: style.parent.text_underline_position,
-        decoration_line: style.parent.text_decoration_line.unwrap_or_default(),
         decoration_skip_ink: style.parent.text_decoration_skip_ink,
-        decoration_style: style.parent.text_decoration_style,
         stroke_color: style.text_stroke_color,
         stroke_width: style.stroke_width,
         font_synthesis: FontSynthesis {
@@ -488,9 +481,7 @@ impl<'s> SizedFontStyle<'s> {
         .webkit_text_stroke_color
         .unwrap_or_default()
         .resolve(context.current_color),
-      text_decoration_color: style.text_decoration_color.resolve(context.current_color),
-      text_decoration_thickness: style.resolved_text_decoration_thickness(&context.sizing),
-      text_underline_offset: style.text_underline_offset.resolve_px(&context.sizing),
+      text_decorations: context.text_decorations.clone(),
     }
   }
 }
