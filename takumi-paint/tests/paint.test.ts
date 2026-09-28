@@ -5,7 +5,7 @@ import { type PaintTree, type TextRun, Painter } from "takumi-paint";
 const painter = new Painter();
 
 function box(tree: PaintTree, id: string) {
-  return [...tree].find((node) => node.type === "box" && node.element?.id === id);
+  return Iterator.from(tree).find((node) => node.type === "box" && node.element?.id === id);
 }
 
 function runs(tree: PaintTree): TextRun[] {

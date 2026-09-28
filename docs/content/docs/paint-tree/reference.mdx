@@ -30,15 +30,15 @@ icon: BookMarked
 
 ## PaintTree
 
-| Member                | Value                                                                   |
-| --------------------- | ----------------------------------------------------------------------- |
-| `width`, `height`     | Canvas size in device pixels                                            |
-| `fonts`               | Every `Font` the runs use                                               |
-| `root`                | The root `BoxNode`                                                      |
-| `[...tree]`           | Every node in document order                                            |
-| `node(index)`         | The node listed at `index`                                              |
-| `Iterator.from(tree)` | The same nodes with `find`, `filter`, and other ES2025 iterator helpers |
-| `paintSteps()`        | Steps a renderer takes, in paint order                                  |
+| Member                     | Value                                                                                                                  |
+| -------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| `width`, `height`          | Canvas size in device pixels                                                                                           |
+| `fonts`                    | Every `Font` the runs use                                                                                              |
+| `root`                     | The root `BoxNode`                                                                                                     |
+| `for (const node of tree)` | Every node in document order, produced one at a time                                                                   |
+| `node(index)`              | The node listed at `index`                                                                                             |
+| `Iterator.from(tree)`      | The same nodes with `find`, `filter`, and the other ES2025 iterator helpers, which stop as soon as they have an answer |
+| `paintSteps()`             | Steps a renderer takes, in paint order                                                                                 |
 
 ## Nodes
 
