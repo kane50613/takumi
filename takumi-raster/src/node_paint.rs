@@ -176,6 +176,9 @@ impl<'c> CanvasDevice<'c> {
     blur_radius: f32,
     color: Color,
   ) {
+    let transform = self.transform * transform;
+    // Skia's blur mask filter maps its sigma through the CTM (`SkMatrix::mapRadius`).
+    let blur_radius = blur_radius * transform.uniform_scale();
     let reach = if blur_radius > 0.0 {
       blur_radius * BlurType::Shadow.extent_multiplier()
     } else {
@@ -183,7 +186,7 @@ impl<'c> CanvasDevice<'c> {
     };
     let (mask, placement) = render_mask(
       commands,
-      Some(self.transform * transform),
+      Some(transform),
       Some(style),
       Some(self.canvas.viewport().inflate(reach, reach)),
     );

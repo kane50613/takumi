@@ -103,17 +103,21 @@ fn runs<'d>(document: &'d PaintDocument, node: &'d PaintNode) -> Vec<&'d TextRun
 }
 
 fn roles(node: &PaintNode) -> Vec<Role> {
-  node
-    .drawables
-    .iter()
-    .map(|drawable| match drawable {
-      Drawable::Fill { role, .. }
-      | Drawable::Stroke { role, .. }
-      | Drawable::Shadow { role, .. }
-      | Drawable::Glyphs { role, .. }
-      | Drawable::Image { role, .. } => *role,
-    })
-    .collect()
+  fn roles_of(drawables: &[Drawable]) -> Vec<Role> {
+    drawables
+      .iter()
+      .flat_map(|drawable| match drawable {
+        Drawable::Fill { role, .. }
+        | Drawable::Stroke { role, .. }
+        | Drawable::Shadow { role, .. }
+        | Drawable::Glyphs { role, .. }
+        | Drawable::Image { role, .. } => vec![*role],
+        Drawable::Group { drawables, .. } => roles_of(drawables),
+      })
+      .collect()
+  }
+
+  roles_of(&node.drawables)
 }
 
 #[test]
@@ -203,13 +207,17 @@ fn paint_tree_records_used_values() {
     .expect("paragraph text");
   assert!(text.drawables.iter().any(|drawable| matches!(
     drawable,
-    Drawable::Fill {
-      role: Role::InlineBackground,
-      paint: Paint::Color {
-        color: [255, 255, 0, 128]
-      },
-      ..
-    }
+    Drawable::Group { opacity, drawables }
+      if *opacity == 0.5 && matches!(
+        drawables.as_slice(),
+        [Drawable::Fill {
+          role: Role::InlineBackground,
+          paint: Paint::Color {
+            color: [255, 255, 0, 255]
+          },
+          ..
+        }]
+      )
   )));
   assert!(text.drawables.iter().any(|drawable| matches!(
     drawable,

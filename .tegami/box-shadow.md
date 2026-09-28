@@ -11,3 +11,4 @@ packages:
 - SVG no longer paints an outer shadow under a translucent box.
 - A PDF outer shadow no longer leaves a hairline around the box, and no longer fills the box when the offset moves the shadow clear of it.
 - The image output places shadows at fractional offsets instead of rounding them toward zero.
+- The image output blurs the shadows of a scaled or rotated box by the transformed radius, as Skia maps a blur through the transform.

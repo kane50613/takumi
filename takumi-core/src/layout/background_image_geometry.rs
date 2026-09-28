@@ -6,7 +6,7 @@ use smallvec::{SmallVec, smallvec};
 
 use crate::{
   context::RenderContext,
-  geometry::{ComputedLayout as Layout, Point, Rect, Size},
+  geometry::{ComputedLayout as Layout, LAYOUT_UNIT_EPSILON, Point, Rect, Size},
   layout::node::resolve_image,
   style::{
     AutoBackgroundAxis, BackgroundImage, BackgroundOrigin, BackgroundRepeat, BackgroundRepeatStyle,
@@ -239,10 +239,19 @@ impl BackgroundImageGeometry {
       ),
     };
 
+    // Blink sizes tiles in LayoutUnits, so a tile under one truncates to empty and paints nothing.
+    let paintable = |tile: f32| {
+      if tile < LAYOUT_UNIT_EPSILON {
+        0.0
+      } else {
+        tile
+      }
+    };
+
     Self {
       tile_size: Size {
-        width: x.tile,
-        height: y.tile,
+        width: paintable(x.tile),
+        height: paintable(y.tile),
       },
       phase: Point {
         x: -x.origin,
@@ -534,6 +543,40 @@ mod tests {
     // is `auto` against a square image, so it follows rather than staying 80.
     assert_eq!(placement.tile_size.height, 78.75);
     assert_eq!(placement.tile_size.width, 78.75);
+  }
+
+  /// A tile under one LayoutUnit truncates to empty in Blink, so it lists no run of tiles.
+  #[test]
+  fn a_tile_under_a_layout_unit_is_empty() {
+    let fonts = Fonts::default();
+    let context = RenderContext::builder()
+      .fonts(fonts.snapshot_with_fallbacks(None))
+      .sizing(
+        SizingContext::builder()
+          .viewport(Viewport::new((1000, 100)))
+          .build(),
+      )
+      .build();
+    let geometry = BackgroundImageGeometry::resolve(
+      Size {
+        width: 1000.0,
+        height: 100.0,
+      },
+      BackgroundSizes::from_css_str("0.000001px 1px").unwrap()[0],
+      PositionValues::from_css_str("left top").unwrap()[0],
+      BackgroundRepeats::from_css_str("repeat").unwrap()[0],
+      None,
+      &context,
+    );
+    let (xs, _) = geometry.tile_origins(Rect {
+      left: 0.0,
+      top: 0.0,
+      right: 1000.0,
+      bottom: 100.0,
+    });
+
+    assert_eq!(geometry.tile_size.width, 0.0);
+    assert!(xs.len() <= 1);
   }
 
   #[test]
