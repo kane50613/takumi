@@ -1868,11 +1868,17 @@ impl TextDevice<'_, '_, '_> {
 
   fn shadowed(&self, color: Color, transform: Affine) -> (Color, Affine) {
     match self.shadow {
-      Some(shadow) => (
-        shadow.color,
-        Affine::translation(shadow.offset_x, shadow.offset_y) * transform,
-      ),
+      Some(shadow) => (shadow.color, self.shadow_moved(transform)),
       None => (color, transform),
+    }
+  }
+
+  /// `transform` moved by the open shadow's offset. A clip opened inside a shadow clips what casts
+  /// it, as Blink draws a text shadow's content into a `DropShadowPaintFilter` layer.
+  fn shadow_moved(&self, transform: Affine) -> Affine {
+    match self.shadow {
+      Some(shadow) => Affine::translation(shadow.offset_x, shadow.offset_y) * transform,
+      None => transform,
     }
   }
 
@@ -1960,10 +1966,14 @@ impl PaintDevice for TextDevice<'_, '_, '_> {
   }
 
   fn push_clip(&mut self, shape: &FillShape, transform: Affine) {
+    let transform = self.shadow_moved(transform);
+
     self.device.push_clip(shape, transform);
   }
 
   fn push_clip_out(&mut self, shape: &FillShape, transform: Affine) {
+    let transform = self.shadow_moved(transform);
+
     self.device.push_clip_out(shape, transform);
   }
 
