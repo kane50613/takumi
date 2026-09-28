@@ -13,3 +13,4 @@ packages:
 - A one-line inline outline paints like a box outline, so its 3D styles shade like a border.
 - An inline outline wraps the element's border box on each line, including its padding, border and nested elements. `plain <b>bold</b> text` used to get no outline at all.
 - A wrapped `solid` or `double` inline outline rounds its corners by the element's `border-radius`.
+- A wrapped inline outline follows Chrome's shape. Its inner edge shrinks from the outer contour, dashed and dotted outlines round their corners, and 3D styles shade each edge with aliased mitred corners.
