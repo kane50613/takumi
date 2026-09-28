@@ -25,7 +25,7 @@ const tree = await paint(
   { width: 320 },
 );
 
-const card = [...tree].find((node) => node.type === "box" && node.element?.id === "card");
+const card = Iterator.from(tree).find((node) => node.type === "box" && node.element?.id === "card");
 console.log(card?.drawables[0]); // { type: "fill", role: "background", shape: { type: "rect", … }, … }
 
 for (const node of tree) {
