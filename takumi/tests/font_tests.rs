@@ -235,3 +235,45 @@ fn a_bitmap_glyph_casts_a_text_shadow() {
     "the SVG emoji casts no shadow: {vector} red pixels"
   );
 }
+
+#[test]
+fn an_off_canvas_bitmap_glyph_blurs_its_shadow_onto_the_canvas() {
+  let mut fonts = Fonts::default();
+
+  fonts
+    .register(FontResource::new(read_font("noto-sans/NotoColorEmoji.ttf")))
+    .unwrap();
+
+  let paint = |shadow: &str| {
+    let stylesheet: Arc<StyleSheet> = StyleSheet::parse(&format!(
+      ".emoji {{ font-size: 64px; line-height: 1; text-shadow: {shadow}; }}"
+    ))
+    .unwrap()
+    .into();
+
+    render(
+      RenderOptions::builder()
+        .viewport(Viewport::new((120, 80)))
+        .node(Node::text("😀".to_string()).with_class_name("emoji"))
+        .fonts(&fonts)
+        .stylesheet(stylesheet)
+        .build(),
+    )
+    .unwrap()
+  };
+  let shadowed = paint("-72px 0 16px rgb(255, 0, 0)");
+  let plain = paint("none");
+  let changed = shadowed
+    .as_raw()
+    .as_chunks::<4>()
+    .0
+    .iter()
+    .zip(plain.as_raw().as_chunks::<4>().0)
+    .filter(|(shadowed, plain)| shadowed != plain)
+    .count();
+
+  assert!(
+    changed > 500,
+    "the shadow loses its off-canvas part before the blur: {changed} pixels"
+  );
+}
