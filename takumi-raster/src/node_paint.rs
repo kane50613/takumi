@@ -186,13 +186,25 @@ impl<'c> CanvasDevice<'c> {
   }
 
   /// Opens a clip to `shape`, or out of it when `out` is set.
-  fn open_clip(&mut self, shape: &FillShape, transform: Affine, out: bool) {
+  fn open_clip(&mut self, shape: &FillShape, transform: Affine, out: bool, aliased: bool) {
     let transform = match self.shadow {
       Some(shadow) => Affine::translation(shadow.offset_x, shadow.offset_y) * transform,
       None => transform,
     };
-    let (coverage, placement) = self.coverage(shape, Fill::from(shape.rule()).into(), transform);
+    let (mut coverage, placement) =
+      self.coverage(shape, Fill::from(shape.rule()).into(), transform);
 
+    if aliased {
+      // A straight edge covers at least half a pixel exactly when it covers the pixel's centre.
+      coverage
+        .iter_mut()
+        .for_each(|alpha| *alpha = if *alpha >= 128 { u8::MAX } else { 0 });
+    }
+    self.push_clip_coverage(coverage, placement, out);
+  }
+
+  /// Opens a clip to `coverage` at `placement`, or out of it when `out` is set.
+  fn push_clip_coverage(&mut self, coverage: Vec<u8>, placement: Placement, out: bool) {
     self.clips.push(CanvasClip {
       coverage,
       placement,
@@ -492,26 +504,15 @@ impl PaintDevice for CanvasDevice<'_> {
   }
 
   fn push_clip(&mut self, shape: &FillShape, transform: Affine) {
-    self.open_clip(shape, transform, false);
+    self.open_clip(shape, transform, false, false);
   }
 
   fn push_clip_out(&mut self, shape: &FillShape, transform: Affine) {
-    self.open_clip(shape, transform, true);
+    self.open_clip(shape, transform, true, false);
   }
 
   fn push_aliased_clip(&mut self, shape: &FillShape, transform: Affine) {
-    let (mut coverage, placement) =
-      self.coverage(shape, Fill::from(shape.rule()).into(), transform);
-
-    // A straight edge covers at least half a pixel exactly when it covers the pixel's centre.
-    coverage
-      .iter_mut()
-      .for_each(|alpha| *alpha = if *alpha >= 128 { u8::MAX } else { 0 });
-    self.clips.push(CanvasClip {
-      coverage,
-      placement,
-      out: false,
-    });
+    self.open_clip(shape, transform, false, true);
   }
 
   fn with_border_mask(
@@ -534,11 +535,11 @@ impl PaintDevice for CanvasDevice<'_> {
 
     let painted = self.canvas.take_subcanvas(subcanvas);
 
-    self.clips.push(CanvasClip {
-      coverage: painted.data().iter().skip(3).step_by(4).copied().collect(),
+    self.push_clip_coverage(
+      painted.data().iter().skip(3).step_by(4).copied().collect(),
       placement,
-      out: false,
-    });
+      false,
+    );
     content(self);
     self.clips.pop();
   }

@@ -574,7 +574,7 @@ impl PaintDevice for DocumentDevice<'_> {
   }
 
   fn push_aliased_clip(&mut self, shape: &FillShape, transform: Affine) {
-    let data = path_data(&shape.to_commands(), transform);
+    let data = path_data(&shape.to_commands(), self.shadow_moved(transform));
 
     self.open_group(|doc| {
       let clip = doc.aliased_clip_path(&data, shape.rule())?;

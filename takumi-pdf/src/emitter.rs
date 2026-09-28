@@ -1978,6 +1978,8 @@ impl PaintDevice for TextDevice<'_, '_, '_> {
   }
 
   fn push_aliased_clip(&mut self, shape: &FillShape, transform: Affine) {
+    let transform = self.shadow_moved(transform);
+
     self.device.push_aliased_clip(shape, transform);
   }
 
