@@ -44,6 +44,29 @@ pub trait GlyphDevice: PaintDevice {
   );
 }
 
+/// A pass over a line's runs, and which of their pieces it draws.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum RunPass {
+  /// Decorations and glyphs themselves.
+  Proper,
+  /// The shadow of decorations and glyphs.
+  Shadow,
+  /// The shadow of decorations alone.
+  DecorationShadow,
+  /// The shadow of glyphs alone.
+  GlyphShadow,
+}
+
+impl RunPass {
+  fn paints_decorations(self) -> bool {
+    self != Self::GlyphShadow
+  }
+
+  fn paints_glyphs(self) -> bool {
+    self != Self::DecorationShadow
+  }
+}
+
 /// Some of an inline layout's lines: the runs, span backgrounds, and outline rects on them.
 pub struct InlineLines<'l> {
   runs: Vec<&'l PositionedInlineRun>,
@@ -165,29 +188,45 @@ impl InlineLines<'_> {
       .filter(|(_, style)| style.parent.is_visible())
       .collect();
 
-    // Neighbouring runs that cast the same shadows share each shadow pass, so the passes stay as
-    // few as the element's distinct `text-shadow` lists.
-    for batch in runs.chunk_by(|(_, left), (_, right)| {
-      left.painted_text_shadows().eq(right.painted_text_shadows())
+    // Neighbouring runs that cast the same shadows at the same `text-fit` scale share each shadow
+    // pass, so the passes stay as few as the element's distinct `text-shadow` lists.
+    for batch in runs.chunk_by(|((left_run, _), left), ((right_run, _), right)| {
+      left_run.line_scale.scale == right_run.line_scale.scale
+        && left.painted_text_shadows().eq(right.painted_text_shadows())
     }) {
-      let Some((_, first)) = batch.first() else {
+      let Some(((first_run, _), first)) = batch.first() else {
         continue;
       };
+      let scale = first_run.line_scale.scale;
 
       for shadow in first.painted_text_shadows() {
         device.set_role(PaintRole::TextShadow);
-        device.begin_shadow(shadow);
 
-        for ((run, decorations), style) in batch {
-          run.paint(decorations, style, GlyphFill::Text, frame, true, device);
+        // Blink paints a scaled line's glyphs, shadows included, through `text-fit`'s scale, and
+        // its decorations outside it.
+        let passes: &[(SizedShadow, RunPass)] = if scale == 1.0 {
+          &[(*shadow, RunPass::Shadow)]
+        } else {
+          &[
+            (*shadow, RunPass::DecorationShadow),
+            (shadow.scaled(scale), RunPass::GlyphShadow),
+          ]
+        };
+
+        for (shadow, pass) in passes {
+          device.begin_shadow(shadow);
+
+          for ((run, decorations), style) in batch {
+            run.paint(decorations, style, GlyphFill::Text, frame, *pass, device);
+          }
+
+          device.end_shadow();
         }
-
-        device.end_shadow();
       }
     }
 
     for ((run, decorations), style) in &runs {
-      run.paint(decorations, style, fill, frame, false, device);
+      run.paint(decorations, style, fill, frame, RunPass::Proper, device);
     }
 
     for island in OutlineIsland::of(&self.outline_rects) {
@@ -210,35 +249,44 @@ impl PositionedInlineRun {
     }
   }
 
-  /// Paints the run at its span's opacity: underline and overline, glyphs, then line-through.
-  /// A shadow pass keeps the text-shadow role for everything it draws.
+  /// Paints what `pass` draws of the run at its span's opacity: underline and overline, glyphs,
+  /// then line-through. A shadow pass keeps the text-shadow role for everything it draws.
   fn paint<D: GlyphDevice>(
     &self,
     decorations: &[DecorationLine],
     style: &SizedFontStyle,
     fill: GlyphFill,
     frame: BoxFrame,
-    shadow_pass: bool,
+    pass: RunPass,
     device: &mut D,
   ) {
+    let shadow_pass = pass != RunPass::Proper;
+    let paints_decorations = pass.paints_decorations();
+
     device.with_opacity(self.glyph_run.brush.opacity, None, |device| {
-      if !shadow_pass {
-        device.set_role(PaintRole::TextDecoration);
-      }
-      for decoration in decorations.iter().filter(|decoration| !decoration.over) {
-        decoration.paint(device);
+      if paints_decorations {
+        if !shadow_pass {
+          device.set_role(PaintRole::TextDecoration);
+        }
+        for decoration in decorations.iter().filter(|decoration| !decoration.over) {
+          decoration.paint(device);
+        }
       }
 
-      if !shadow_pass {
-        device.set_role(PaintRole::Text);
+      if pass.paints_glyphs() {
+        if !shadow_pass {
+          device.set_role(PaintRole::Text);
+        }
+        device.draw_glyph_run(self, style, fill, frame);
       }
-      device.draw_glyph_run(self, style, fill, frame);
 
-      if !shadow_pass {
-        device.set_role(PaintRole::TextDecoration);
-      }
-      for decoration in decorations.iter().filter(|decoration| decoration.over) {
-        decoration.paint(device);
+      if paints_decorations {
+        if !shadow_pass {
+          device.set_role(PaintRole::TextDecoration);
+        }
+        for decoration in decorations.iter().filter(|decoration| decoration.over) {
+          decoration.paint(device);
+        }
       }
     });
   }

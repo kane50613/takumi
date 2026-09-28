@@ -249,17 +249,22 @@
   <g filter="url(#bl0)">
     <rect x="853" y="223" width="57" height="4" fill="#45556e" fill-opacity=".706"/>
     <rect x="926" y="223" width="21.776" height="4" fill="#45556e" fill-opacity=".706"/>
-    <g fill="#45556e" fill-opacity=".706">
-      <use href="#g97" x="853" y="220.54"/>
-      <use href="#g98" x="879.61" y="220.54"/>
-      <use href="#g99" x="903.08" y="220.54"/>
-      <use href="#g100" x="913.29" y="220.54"/>
-    </g>
     <rect x="973.776" y="223" width="89.224" height="4" fill="#45556e" fill-opacity=".706"/>
+  </g>
+  <filter id="bl1">
+    <feGaussianBlur stdDeviation="4.71"/>
+  </filter>
+  <g filter="url(#bl1)">
     <g fill="#45556e" fill-opacity=".706">
-      <use href="#g101" x="983.98" y="220.54"/>
-      <use href="#g102" x="1007.2" y="220.54"/>
-      <use href="#g103" x="1029.57" y="220.54"/>
+      <use href="#g97" x="853.57" y="221.68"/>
+      <use href="#g98" x="880.18" y="221.68"/>
+      <use href="#g99" x="903.65" y="221.68"/>
+      <use href="#g100" x="913.86" y="221.68"/>
+    </g>
+    <g fill="#45556e" fill-opacity=".706">
+      <use href="#g101" x="984.55" y="221.68"/>
+      <use href="#g102" x="1007.77" y="221.68"/>
+      <use href="#g103" x="1030.14" y="221.68"/>
     </g>
   </g>
   <rect x="852" y="221" width="57" height="4" fill="#3182ce"/>

@@ -51,4 +51,16 @@ impl SizedShadow {
       color: shadow.color.resolve(current_color),
     }
   }
+
+  /// The shadow drawn through a transform that scales by `scale`, as Skia's
+  /// `kShadowRespectsTransforms` scales it.
+  pub(crate) fn scaled(self, scale: f32) -> Self {
+    Self {
+      offset_x: self.offset_x * scale,
+      offset_y: self.offset_y * scale,
+      blur_radius: self.blur_radius * scale,
+      spread_radius: self.spread_radius * scale,
+      ..self
+    }
+  }
 }
