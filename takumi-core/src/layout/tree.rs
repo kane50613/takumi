@@ -29,6 +29,7 @@ use crate::{
     },
     list_marker::{ListCounter, is_list_element, list_marker, owns_list_counter},
     node::{Node, NodeStyleLayers, TextData},
+    table_columns::TableColumns,
   },
   matching::{MatchedDeclarationsView, NodeMatchedDeclarations, match_stylesheets_view},
   resources::font::PrimaryFontMetrics,
@@ -180,6 +181,8 @@ struct LayoutNodeState {
   final_layout: Layout,
   first_baseline_y: Option<f32>,
   is_inline_children: bool,
+  /// Whether the node is a flex or grid item, which its container may stretch.
+  flex_or_grid_item: bool,
   children: Box<[TaffyNodeId]>,
   box_children: Box<[OrderedChild]>,
 }
@@ -237,6 +240,8 @@ pub struct RenderNode {
   pub table_header_lines: Option<(i16, i16)>,
   /// The role this box had in a source table, kept through table lowering.
   pub table_part: Option<TablePart>,
+  /// A lowered table's columns, sized once its width is known.
+  pub(crate) table_columns: Option<Box<TableColumns>>,
 }
 
 /// Drops the render tree iteratively; recursive drop glue overflows the stack
@@ -413,7 +418,8 @@ impl<'r> LayoutTree<'r> {
         // agrees across two large containers and disagrees with a small one.
         sizing.container_read.set(false);
         let style = render_node.layout_style(sizing);
-        let independent = !sizing.container_read.get();
+        // A table's width follows the space it is offered.
+        let independent = !sizing.container_read.get() && render_node.table_columns.is_none();
 
         (style, independent)
       };
@@ -426,6 +432,7 @@ impl<'r> LayoutTree<'r> {
         final_layout: Layout::new(),
         first_baseline_y: None,
         is_inline_children,
+        flex_or_grid_item: false,
         children: Box::new([]),
         box_children: Box::new([]),
       });
@@ -467,6 +474,7 @@ impl<'r> LayoutTree<'r> {
         final_layout: Layout::new(),
         first_baseline_y: None,
         is_inline_children: false,
+        flex_or_grid_item: false,
         children: Box::new([]),
         box_children: Box::new([]),
       });
@@ -535,6 +543,9 @@ impl<'r> LayoutTree<'r> {
         nodes[idx].style.display,
         TaffyDisplay::Flex | TaffyDisplay::Grid
       ) {
+        for &child in &taffy_children {
+          nodes[usize::from(child)].flex_or_grid_item = true;
+        }
         sort_children_by_order(&mut taffy_children, |child_id| {
           let child_idx: usize = child_id.into();
           render_nodes
@@ -816,6 +827,13 @@ impl<'r> LayoutTree<'r> {
         .or(available_space.height.into_option()),
     };
     node.style = render_node.layout_style(&sizing);
+    render_node.size_table(
+      &mut node.style,
+      available_space.width,
+      known_dimensions.width,
+      node.flex_or_grid_item,
+      &sizing,
+    );
   }
 }
 
@@ -978,6 +996,20 @@ impl<'r> LayoutTree<'r> {
     inputs
   }
 
+  /// The inputs a block-level `auto`-width table lays out with: without the width a block
+  /// container stretches its children to, since a table shrinks to fit it instead.
+  fn shrunk_table_inputs(&self, node: TaffyNodeId, mut inputs: LayoutInput) -> LayoutInput {
+    let idx = usize::from(node);
+    let (Some(state), Some(render_node)) = (self.nodes.get(idx), self.render_nodes.get(idx)) else {
+      return inputs;
+    };
+
+    if render_node.shrinks_to_fit_as_table() && !state.flex_or_grid_item {
+      inputs.known_dimensions.width = None;
+    }
+    inputs
+  }
+
   fn compute_child_layout_inner(
     &mut self,
     node: TaffyNodeId,
@@ -992,6 +1024,7 @@ impl<'r> LayoutTree<'r> {
     );
 
     let inputs = self.out_of_flow_inputs(node, inputs);
+    let inputs = self.shrunk_table_inputs(node, inputs);
 
     if inputs.run_mode == RunMode::PerformHiddenLayout {
       return compute_hidden_layout(self, node);
@@ -1279,6 +1312,7 @@ impl RenderNode {
       force_inline_layout: false,
       table_header_lines: None,
       table_part: None,
+      table_columns: None,
     }
   }
 

@@ -24,5 +24,6 @@ pub mod replaced;
 mod table;
 
 mod table_borders;
+mod table_columns;
 /// Layout tree: render nodes and their computed layout results.
 pub mod tree;

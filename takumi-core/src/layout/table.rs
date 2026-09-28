@@ -11,25 +11,23 @@
 //! `block_layout_algorithm_utils.cc`. `baseline` is naive: it uses block-start
 //! borders and padding instead of a measured first baseline.
 //!
-//! An all-`auto` table sizes its columns with `fr` tracks weighted by
-//! max-content, which is Blink's `kAboveMax` in `table_layout_utils.cc` written
-//! as a ratio. A table narrower than its content still drifts: Blink
-//! interpolates between min-content and max-content there, and no track
-//! function expresses that.
+//! Columns take the widths `table_columns` shares out once layout knows the
+//! table's width, as fixed tracks.
 
-use taffy::LengthPercentageAuto;
+use taffy::{LengthPercentageAuto, Style, style_helpers::length};
 
 use crate::{
   geometry::{AvailableSpace, Size},
   layout::{
     node::NodeKind,
     table_borders::CollapsedBorders,
+    table_columns::{CellConstraint, ColspanCell, TableColumns},
     tree::{LayoutResults, NodeOrigin, RenderNode, TablePart},
   },
   style::{
-    BorderCollapse, BorderStyle, CaptionSide, ColorInput, ComputedStyle, Display, FlexDirection,
-    FromCssStr, Gap, GridPlacement, GridPlacementSpan, GridTemplateComponents, JustifyContent,
-    Length, LineWidth, SizingContext, SpacePair, TableLayout, ToCss, VerticalAlign,
+    BorderCollapse, BorderStyle, BoxSizing, CaptionSide, ColorInput, ComputedStyle, Display,
+    FlexDirection, FromCssStr, Gap, GridPlacement, GridPlacementSpan, GridTemplateComponents,
+    JustifyContent, Length, LineWidth, SizingContext, SpacePair, TableLayout, VerticalAlign,
     VerticalAlignKeyword,
   },
 };
@@ -225,133 +223,31 @@ impl TableGrid {
       .flat_map(|(row, cells)| row.cells().zip(cells))
   }
 
-  /// Naive: a spanning cell spreads its width over the columns it covers in
-  /// proportion to their max-content, which is only the `kAboveMax` branch of
-  /// Blink's `DistributeColspanCellsToColumns`. Narrower spans land first, as
-  /// Blink sorts them, and the border spacing a span covers comes off the
-  /// width before it is shared.
-  fn column_widths(&self, rows: &[RenderNode], spacing: f32) -> ColumnWidths {
-    let columns = self.columns;
-    let mut widths = vec![(0.0f32, 0.0f32); usize::from(columns)];
-    let mut spanning = Vec::new();
-
-    for (cell, (column, colspan)) in self.placed_cells(rows, rows.len()) {
-      let (min, max) = cell.intrinsic_widths();
-
-      if !min.is_finite() || !max.is_finite() {
-        continue;
-      }
-
-      let end = (column + usize::from(*colspan)).min(usize::from(columns));
-
-      if *colspan == 1 {
-        if let Some(track) = widths.get_mut(*column) {
-          track.0 = track.0.max(min);
-          track.1 = track.1.max(max);
-        }
-      } else if *column < end {
-        spanning.push((*column, end, min, max));
-      }
-    }
-
-    spanning.sort_by_key(|(column, end, ..)| (end - column, *column));
-
-    for (column, end, min, max) in spanning {
-      let covered = &mut widths[column..end];
-      let count = covered.len() as f32;
-      let inner = spacing * (count - 1.0);
-      let total: f32 = covered.iter().map(|(_, max)| *max).sum();
-      let min = (min - inner).max(0.0);
-      let max = (max - inner).max(0.0);
-
-      for track in covered.iter_mut() {
-        let ratio = if total > 0.0 {
-          track.1 / total
-        } else {
-          1.0 / count
-        };
-
-        track.0 = track.0.max(min * ratio);
-        track.1 = track.1.max(max * ratio);
-      }
-    }
-
-    ColumnWidths(widths)
-  }
-
-  /// Approximates Blink constrained columns from the first declared cell width.
-  /// `table-layout: fixed` reads only the first row and shares the rest of the
-  /// space evenly, so column widths stop following the content. CSS 2.2 §17.5.2
-  /// only reaches that algorithm when the table's width is not `auto`. A
-  /// spanning cell splits its declared width evenly across the tracks it
-  /// covers; a percentage width on one is ignored. Like Blink's
-  /// `InlineSizesFromStyle`, only a fixed or percentage width constrains a
-  /// column, so a sizing keyword leaves it `auto`.
-  ///
-  /// Columns that stay `auto` after that pass become `fr` tracks weighted by
-  /// max-content, so free space follows content the way Blink's `kAboveMax`
-  /// distributes it.
-  fn track_sizes(&self, rows: &[RenderNode], fixed: bool, spacing: f32) -> GridTemplateComponents {
-    let columns = self.columns;
-    let mut tracks = vec![String::from(if fixed { "1fr" } else { "auto" }); usize::from(columns)];
+  /// The columns the rows constrain, or in a `fixed` table its first row only, with `spacing`
+  /// between them, as Blink's `ComputeColumnConstraints` gathers them.
+  fn column_constraints(&self, rows: &[RenderNode], fixed: bool, spacing: f32) -> TableColumns {
+    let mut cells: Vec<Option<CellConstraint>> = vec![None; usize::from(self.columns)];
+    let mut colspan_cells = Vec::new();
     let measured = if fixed { 1 } else { rows.len() };
 
     for (cell, (column, colspan)) in self.placed_cells(rows, measured) {
-      let Some(width) = cell.context.style.width.as_length() else {
-        continue;
-      };
+      let constraint = cell.inline_constraint(fixed);
 
-      if width == Length::Auto {
-        continue;
-      }
-
-      let free = |track: &String| track == "auto" || track == "1fr";
-
-      if *colspan == 1 {
-        if tracks.get(*column).is_some_and(free) {
-          tracks[*column] = width.to_css_string();
-        }
-      } else if fixed && !matches!(width, Length::Percentage(_)) {
-        let share = width.to_px(&cell.context.sizing, 0.0) / f32::from(*colspan);
-
-        for track in tracks
-          .iter_mut()
-          .take((*column + usize::from(*colspan)).min(usize::from(columns)))
-          .skip(*column)
-          .filter(|track| free(track))
-        {
-          *track = format!("{share}px");
+      if *colspan > 1 {
+        colspan_cells.push(ColspanCell {
+          constraint,
+          start: *column,
+          span: usize::from(*colspan),
+        });
+      } else if let Some(slot) = cells.get_mut(*column) {
+        match slot {
+          Some(merged) => merged.encompass(constraint),
+          None => *slot = Some(constraint),
         }
       }
     }
 
-    if !fixed && tracks.iter().any(|track| track == "auto") {
-      for (track, measured) in tracks
-        .iter_mut()
-        .zip(self.column_widths(rows, spacing).tracks())
-      {
-        if track == "auto"
-          && let Some(measured) = measured
-        {
-          *track = measured;
-        }
-      }
-    }
-
-    GridTemplateComponents::from_css_str(&tracks.join(" ")).unwrap_or_default()
-  }
-}
-
-/// Min- and max-content width per column, Blink's `TableTypes::Column`.
-struct ColumnWidths(Vec<(f32, f32)>);
-
-impl ColumnWidths {
-  /// One track per column; a column that measured nothing stays `auto`.
-  fn tracks(&self) -> impl Iterator<Item = Option<String>> + '_ {
-    self
-      .0
-      .iter()
-      .map(|(min, max)| (*max > 0.0).then(|| format!("minmax({min}px, {max}fr)")))
+    TableColumns::new(&cells, colspan_cells, spacing, fixed)
   }
 }
 
@@ -416,7 +312,7 @@ impl RenderNode {
   fn lower_table(&mut self) {
     let TableSlots {
       captions,
-      rows,
+      mut rows,
       header_rows,
       footer_rows,
       strays,
@@ -428,7 +324,6 @@ impl RenderNode {
     let sizing = self.context.sizing.clone();
     let fixed =
       self.context.style.table_layout == TableLayout::Fixed && !self.context.style.width.is_auto();
-    let tracks = grid.track_sizes(&rows, fixed, spacing.x.to_px(&sizing, 0.0));
     let collapsed = collapse.then(|| {
       CollapsedBorders::resolve(
         &self.context.style,
@@ -437,6 +332,28 @@ impl RenderNode {
         usize::from(columns),
       )
     });
+
+    if let Some(collapsed) = collapsed.as_ref() {
+      for (index, row) in rows.iter_mut().enumerate() {
+        for (cell_index, cell) in row
+          .children
+          .as_deref_mut()
+          .unwrap_or_default()
+          .iter_mut()
+          .filter(|cell| cell.is_cell())
+          .enumerate()
+        {
+          collapsed.apply(index, cell_index, &mut cell.context.style);
+        }
+      }
+    }
+
+    let spacing_px = if collapse {
+      0.0
+    } else {
+      spacing.x.to_px(&sizing, 0.0)
+    };
+    let table_columns = grid.column_constraints(&rows, fixed, spacing_px);
     let placements = grid.placements;
     let mut items = Vec::new();
     let mut line: i16 = 1;
@@ -472,12 +389,6 @@ impl RenderNode {
 
       cells.retain(RenderNode::is_cell);
 
-      if let Some(collapsed) = collapsed.as_ref() {
-        for (cell_index, cell) in cells.iter_mut().enumerate() {
-          collapsed.apply(index, cell_index, &mut cell.context.style);
-        }
-      }
-
       align_row_baselines(&mut cells);
 
       for mut cell in cells {
@@ -512,7 +423,8 @@ impl RenderNode {
     let style = &mut self.context.style;
 
     style.display = Display::Grid;
-    style.grid_template_columns = Some(tracks);
+    style.grid_template_columns =
+      GridTemplateComponents::from_css_str(&vec!["auto"; usize::from(columns)].join(" ")).ok();
 
     if collapse {
       style.column_gap = Gap::Length(Length::zero());
@@ -525,13 +437,19 @@ impl RenderNode {
     }
 
     self.children = Some(items.into_boxed_slice());
+    self.table_columns = Some(Box::new(table_columns));
   }
 
   /// Places the self explicitly: taffy's cursor does not return to the row start
   /// on a row a `rowspan` reaches into.
   fn lower_cell(&mut self, line: i16, column: usize, colspan: u16, collapse: bool) {
     let rowspan = self.rowspan();
+    let style = &mut self.context.style;
 
+    // A cell fills its columns; its widths only constrained them.
+    style.width = Default::default();
+    style.min_width = Default::default();
+    style.max_width = Default::default();
     self.context.collapsed_borders = collapse;
 
     if self.context.style.display == Display::TableCell {
@@ -642,7 +560,12 @@ impl RenderNode {
   /// below it out again.
   fn intrinsic_widths(&self) -> (f32, f32) {
     let mut cell = self.clone();
+    let style = &mut cell.context.style;
 
+    // Blink's `MinMaxSizes` of the cell's content; its own widths constrain the column apart.
+    style.width = Default::default();
+    style.min_width = Default::default();
+    style.max_width = Default::default();
     cell.lower_cell(1, 0, 1, false);
     cell.context.style.display.blockify();
 
@@ -662,6 +585,171 @@ impl RenderNode {
       measure(AvailableSpace::MinContent),
       measure(AvailableSpace::MaxContent),
     )
+  }
+}
+
+impl RenderNode {
+  /// What this cell asks of its columns, Blink's `CreateCellInlineConstraint`; a `fixed` table
+  /// gives it no minimum.
+  fn inline_constraint(&self, fixed: bool) -> CellConstraint {
+    let style = &self.context.style;
+    let sizing = &self.context.sizing;
+    let border = |style_rendered: bool, width: LineWidth| {
+      if style_rendered {
+        Length::from(width).to_px(sizing, 0.0)
+      } else {
+        0.0
+      }
+    };
+    let padding = |length: Length| match length {
+      Length::Percentage(_) | Length::Auto => 0.0,
+      length => length.to_px(sizing, 0.0),
+    };
+    let border_padding = border(
+      style.border_left_style.is_rendered(),
+      style.border_left_width,
+    ) + border(
+      style.border_right_style.is_rendered(),
+      style.border_right_width,
+    ) + padding(style.padding_left)
+      + padding(style.padding_right);
+    let content_box = style.box_sizing == BoxSizing::ContentBox;
+    let fixed_px = |length: Option<Length>| match length? {
+      Length::Auto | Length::Percentage(_) => None,
+      length if content_box => Some(length.to_px(sizing, 0.0) + border_padding),
+      length => Some(length.to_px(sizing, 0.0).max(border_padding)),
+    };
+    let width = fixed_px(style.width.as_length());
+    let min_width = fixed_px(Some(style.min_width));
+    let max_width =
+      fixed_px(style.max_width.as_length()).map(|max| max.max(min_width.unwrap_or(max)));
+    let percent = match style.width.as_length() {
+      Some(Length::Percentage(percent)) => Some(match style.max_width.as_length() {
+        Some(Length::Percentage(max)) => percent.min(max),
+        _ => percent,
+      }),
+      _ => None,
+    };
+    let (content_min, content_max) = self.intrinsic_widths();
+    let mut min = if fixed {
+      0.0
+    } else {
+      content_min.max(min_width.unwrap_or_default())
+    };
+    let mut max = width.unwrap_or(content_max);
+
+    if let Some(max_width) = max_width {
+      max = max.min(max_width);
+      min = min.min(max_width);
+    }
+
+    CellConstraint {
+      min,
+      max: max.max(min),
+      percent,
+      constrained: width.is_some(),
+    }
+  }
+
+  /// Whether this is a lowered table whose `width` is `auto`, which fits its content rather than
+  /// its container.
+  pub(super) fn shrinks_to_fit_as_table(&self) -> bool {
+    self.table_columns.is_some()
+      && self
+        .context
+        .style
+        .width
+        .as_length()
+        .is_none_or(|width| width == Length::Auto)
+  }
+
+  /// Sizes a lowered table, and its columns, for `available` width across, as Blink's
+  /// `TableLayoutAlgorithm::ComputeTableInlineSize` does. A flex or grid `item` takes the `known`
+  /// width its container stretches it to; a block-level table shrinks to fit whatever width its
+  /// container would stretch it to.
+  pub(super) fn size_table(
+    &self,
+    style: &mut Style,
+    available: AvailableSpace,
+    known: Option<f32>,
+    item: bool,
+    sizing: &SizingContext,
+  ) {
+    let Some(columns) = self.table_columns.as_deref() else {
+      return;
+    };
+    let table = &self.context.style;
+    let basis = available.into_option();
+    let px = |length: Length| match length {
+      Length::Auto => 0.0,
+      length => length.to_px(sizing, basis.unwrap_or_default()),
+    };
+    let rendered = |style_rendered: bool, width: LineWidth| {
+      if style_rendered {
+        px(Length::from(width))
+      } else {
+        0.0
+      }
+    };
+    // The padding already holds the border spacing around the grid's edges.
+    let edges = rendered(
+      table.border_left_style.is_rendered(),
+      table.border_left_width,
+    ) + rendered(
+      table.border_right_style.is_rendered(),
+      table.border_right_width,
+    ) + px(table.padding_left)
+      + px(table.padding_right);
+    let undistributable = columns.undistributable(edges);
+    let (grid_min, grid_max) = columns.min_max(undistributable);
+    let content_box = table.box_sizing == BoxSizing::ContentBox;
+    // A border-box width, as the style's own box sizing counts it.
+    let styled = |border_box: f32| {
+      if content_box {
+        border_box - edges
+      } else {
+        border_box
+      }
+    };
+    let specified = |length: Option<Length>| match length? {
+      Length::Auto => None,
+      // A percentage of an indefinite width behaves as `auto`.
+      Length::Percentage(_) if basis.is_none() => None,
+      length if content_box => Some(px(length) + edges - columns.edge_spacing()),
+      length => Some(px(length)),
+    };
+    let min_width = specified(Some(table.min_width)).map_or(grid_min, |min| min.max(grid_min));
+    let auto = table
+      .width
+      .as_length()
+      .is_none_or(|width| width == Length::Auto);
+    let width = match known {
+      Some(known) if item || !auto => known,
+      _ => {
+        let fit = match available {
+          AvailableSpace::Definite(space) => {
+            (space - px(table.margin_left) - px(table.margin_right)).clamp(grid_min, grid_max)
+          }
+          AvailableSpace::MinContent => grid_min,
+          AvailableSpace::MaxContent => grid_max,
+        };
+        let width = specified(table.width.as_length()).unwrap_or(fit);
+        let width = specified(table.max_width.as_length()).map_or(width, |max| width.min(max));
+
+        width.max(min_width)
+      }
+    };
+
+    // A block-level table shrinks to fit rather than stretching.
+    if auto && !item {
+      style.size.width = length(styled(width));
+    }
+    style.min_size.width = length(styled(min_width));
+    style.grid_template_columns = columns
+      .widths((width - undistributable).max(0.0))
+      .into_iter()
+      .map(length)
+      .collect();
   }
 }
 
@@ -798,6 +886,15 @@ mod tests {
       .build();
 
     RenderNode::from_node(&context, root)
+  }
+
+  /// The width each column of the lowered `table` takes when `assignable` is shared out.
+  fn column_widths(table: &RenderNode, assignable: f32) -> Vec<f32> {
+    table
+      .table_columns
+      .as_deref()
+      .expect("the table's columns")
+      .widths(assignable)
   }
 
   fn cell(id: &str) -> Node {
@@ -1106,17 +1203,10 @@ mod tests {
       .with_style(Style::default().with(StyleDeclaration::width(Length::Px(220.0))));
     let tree =
       lower(Node::container([row([stylesheet_width, cell("b")])]).with_class_name("table"));
+    let widths = column_widths(&tree, 400.0);
 
-    assert_eq!(
-      tree
-        .context
-        .style
-        .grid_template_columns
-        .as_ref()
-        .expect("template")
-        .to_css_string(),
-      "220px auto"
-    );
+    assert_eq!(widths[0], 220.0);
+    assert_eq!(widths[1], 180.0);
   }
 
   #[test]
@@ -1171,16 +1261,7 @@ mod tests {
         .with_class_name("table"),
     );
 
-    assert_eq!(
-      tree
-        .context
-        .style
-        .grid_template_columns
-        .as_ref()
-        .expect("template")
-        .to_css_string(),
-      "auto 220px"
-    );
+    assert_eq!(column_widths(&tree, 400.0)[1], 220.0);
   }
 
   #[test]
@@ -1456,15 +1537,7 @@ mod tests {
     let table =
       lower(Node::container([row([cell("a"), cell("b"), cell("c")])]).with_class_name("fixed"));
 
-    assert_eq!(
-      table
-        .context
-        .style
-        .grid_template_columns
-        .as_ref()
-        .map(ToCss::to_css_string),
-      Some(String::from("1fr 1fr 1fr"))
-    );
+    assert_eq!(column_widths(&table, 300.0), [100.0, 100.0, 100.0]);
   }
 
   #[test]
@@ -1482,15 +1555,7 @@ mod tests {
       .with_class_name("fixed"),
     );
 
-    assert_eq!(
-      table
-        .context
-        .style
-        .grid_template_columns
-        .as_ref()
-        .map(ToCss::to_css_string),
-      Some(String::from("80px 1fr"))
-    );
+    assert_eq!(column_widths(&table, 300.0), [80.0, 220.0]);
   }
 
   #[test]
@@ -1524,15 +1589,7 @@ mod tests {
       .with_class_name("fixed"),
     );
 
-    assert_eq!(
-      table
-        .context
-        .style
-        .grid_template_columns
-        .as_ref()
-        .map(ToCss::to_css_string),
-      Some(String::from("40px 40px 1fr"))
-    );
+    assert_eq!(column_widths(&table, 300.0), [40.0, 40.0, 220.0]);
   }
 
   #[test]

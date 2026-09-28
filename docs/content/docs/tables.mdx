@@ -4,7 +4,7 @@ description: Render HTML tables with Takumi, set column widths, and understand d
 icon: Table
 ---
 
-Takumi renders `display: table` by rewriting the table into a grid before layout, so every row shares one set of column tracks. It is a **naive implementation**, not the CSS table algorithm. This page lists what carries over and where it drifts.
+Takumi renders `display: table` by rewriting the table into a grid, so every row shares one set of column tracks. Column widths follow the CSS table width algorithm as Chrome runs it. This page lists what carries over and where it drifts.
 
 ## What works
 
@@ -13,7 +13,9 @@ Takumi renders `display: table` by rewriting the table into a grid before layout
 - `colspan` and `rowspan` span tracks. The HTML attributes and the JSX `colSpan` / `rowSpan` casings both count.
 - `caption` renders above the table, or below it with `caption-side: bottom`.
 - A row's background is copied to cells that have none of their own, so zebra striping and header bands work. The `border-spacing` gaps stay unpainted.
-- `border-spacing` defaults to `2px`. Set `gap` on the table to change it.
+- An `auto`-width table shrinks to fit its content, and columns share the table's width in proportion to their content, as in Chrome. Percentage and fixed cell widths constrain their columns.
+- `border-collapse: collapse` merges adjacent borders.
+- `border-spacing` defaults to `2px`.
 - Paged PDF output splits rows across pages. Column positions stay identical on every page.
 
 ```tsx twoslash title="Set a table column width"
@@ -36,14 +38,11 @@ Takumi renders `display: table` by rewriting the table into a grid before layout
 
 ## Where it drifts
 
-| Behavior           | In a browser                                   | In Takumi                                                                        |
-| :----------------- | :--------------------------------------------- | :------------------------------------------------------------------------------- |
-| Auto column widths | Grow in proportion to their content            | Share free space equally                                                         |
-| `vertical-align`   | `baseline` aligns the first baselines of a row | `top`, `middle`, and `bottom` follow the browser. `baseline` falls back to `top` |
-| `border-collapse`  | Merges adjacent borders                        | Not implemented; borders stay separate                                           |
-| Row borders        | Drawn on the row box                           | Dropped; put borders on the cells                                                |
-
-The width drift appears when the table is wider than its content and the free space splits across two or more `auto` columns, fixed-width neighbors included. **Declare a width on a single-column cell in each column** to keep the columns close to Chrome. A width on a spanning cell does not size a column.
+| Behavior              | In a browser                                   | In Takumi                                                                        |
+| :-------------------- | :--------------------------------------------- | :------------------------------------------------------------------------------- |
+| `vertical-align`      | `baseline` aligns the first baselines of a row | `top`, `middle`, and `bottom` follow the browser. `baseline` falls back to `top` |
+| `<col>`, `<colgroup>` | Their widths size columns                      | Ignored; declare the width on a cell                                             |
+| Caption width         | A wide caption widens the table                | The caption wraps to the table's width                                           |
 
 <Callout type="info">
   Cells keep their box: padding, borders, and backgrounds cover the full grid area, including rows
