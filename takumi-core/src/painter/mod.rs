@@ -354,6 +354,13 @@ pub trait PaintDevice {
   /// Composites the most recent layer.
   fn end_layer(&mut self);
 
+  /// Fills `shape` moved by `shadow`'s offset, in its colour, blurred by a Gaussian whose standard
+  /// deviation is half its blur radius, as a CSS shadow blurs.
+  fn fill_shadow(&mut self, shape: &ShadowShape, shadow: &SizedShadow, transform: Affine);
+}
+
+/// Opacity layers for every device, trait objects included.
+pub(crate) trait OpacityLayer: PaintDevice {
   /// Runs `paint` into a layer at `opacity` reaching no further than `bounds`, without the layer
   /// when the paint is opaque and not at all when it is invisible.
   fn with_opacity(
@@ -361,9 +368,7 @@ pub trait PaintDevice {
     opacity: f32,
     bounds: Option<LayerBounds>,
     paint: impl FnOnce(&mut Self),
-  ) where
-    Self: Sized,
-  {
+  ) {
     if opacity <= 0.0 {
       return;
     }
@@ -375,11 +380,9 @@ pub trait PaintDevice {
     paint(self);
     self.end_layer();
   }
-
-  /// Fills `shape` moved by `shadow`'s offset, in its colour, blurred by a Gaussian whose standard
-  /// deviation is half its blur radius, as a CSS shadow blurs.
-  fn fill_shadow(&mut self, shape: &ShadowShape, shadow: &SizedShadow, transform: Affine);
 }
+
+impl<D: PaintDevice + ?Sized> OpacityLayer for D {}
 
 /// How to stroke a shape.
 pub struct StrokeStyle {
@@ -516,7 +519,7 @@ impl<'c> BoxPainter<'c> {
   }
 
   /// Paints the box's `border` at `origin`.
-  pub fn paint_border<D: PaintDevice>(&self, origin: Point<f32>, device: &mut D) {
+  pub fn paint_border(&self, origin: Point<f32>, device: &mut dyn PaintDevice) {
     device.set_role(PaintRole::Border);
     BoxBorderPainter::new(&self.border, self.layout.size).paint(origin, device);
   }

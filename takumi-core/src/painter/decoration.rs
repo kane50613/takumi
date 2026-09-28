@@ -75,7 +75,7 @@ struct DashedLine {
 
 impl DecorationLine {
   /// Paints the line, cut where `text-decoration-skip-ink` gives way to the glyphs.
-  pub fn paint<D: PaintDevice>(&self, device: &mut D) {
+  pub fn paint(&self, device: &mut dyn PaintDevice) {
     if self.color.0[3] == 0 || self.width <= 0.0 {
       return;
     }
@@ -218,7 +218,7 @@ impl DecorationLine {
   }
 
   /// Fills the pieces `offset` below the top, snapped as Blink's `DrawLineAsRect` snaps them.
-  fn fill<D: PaintDevice>(&self, pieces: &[(f32, f32)], offset: f32, device: &mut D) {
+  fn fill(&self, pieces: &[(f32, f32)], offset: f32, device: &mut dyn PaintDevice) {
     let top = (self.origin.y + offset + 0.5).floor();
     let height = self.thickness.floor().max(1.0);
 
@@ -235,13 +235,13 @@ impl DecorationLine {
   }
 
   /// Runs `paint` clipped to the pieces of the line, from `top` to `bottom`.
-  fn clip<D: PaintDevice>(
+  fn clip(
     &self,
     pieces: &[(f32, f32)],
     top: f32,
     bottom: f32,
-    device: &mut D,
-    paint: impl FnOnce(&mut D),
+    device: &mut dyn PaintDevice,
+    paint: impl FnOnce(&mut dyn PaintDevice),
   ) {
     if pieces.is_empty() {
       return;

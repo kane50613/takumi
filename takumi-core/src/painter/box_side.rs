@@ -47,13 +47,13 @@ impl BoxSideRect {
   }
 
   /// Paints the side in `style`, mitred into sides `adjacent` wide.
-  pub(super) fn paint<D: PaintDevice>(
+  pub(super) fn paint(
     self,
     color: Color,
     style: BorderStyle,
     adjacent: [i32; 2],
     at: Affine,
-    device: &mut D,
+    device: &mut dyn PaintDevice,
   ) {
     let (thickness, length) = match self.side {
       BorderSide::Top | BorderSide::Bottom => (self.y2 - self.y1, self.x2 - self.x1),
@@ -87,13 +87,13 @@ impl BoxSideRect {
   }
 
   /// Blink's `DrawDashedOrDottedBoxSide`: the line through the middle of the rectangle.
-  fn paint_pattern<D: PaintDevice>(
+  fn paint_pattern(
     self,
     color: Color,
     style: BorderStyle,
     thickness: i32,
     at: Affine,
-    device: &mut D,
+    device: &mut dyn PaintDevice,
   ) {
     let half = thickness as f32 / 2.0;
     let (start, end) = match self.side {
@@ -123,12 +123,12 @@ impl BoxSideRect {
   }
 
   /// Blink's `DrawSolidBoxSide`.
-  fn paint_solid<D: PaintDevice>(
+  fn paint_solid(
     self,
     color: Color,
     [first, second]: [i32; 2],
     at: Affine,
-    device: &mut D,
+    device: &mut dyn PaintDevice,
   ) {
     let Self {
       side,
@@ -184,13 +184,13 @@ impl BoxSideRect {
   }
 
   /// Blink's `DrawDoubleBoxSide`: two solid thirds, each mitred a third of the way in.
-  fn paint_double<D: PaintDevice>(
+  fn paint_double(
     self,
     color: Color,
     thickness: i32,
     [first, second]: [i32; 2],
     at: Affine,
-    device: &mut D,
+    device: &mut dyn PaintDevice,
   ) {
     let third = ((thickness + 1) / 3) as f32;
     let Self {
@@ -250,13 +250,13 @@ impl BoxSideRect {
   }
 
   /// Blink's `DrawRidgeOrGrooveBoxSide`: an `inset` half and an `outset` half.
-  fn paint_ridge_or_groove<D: PaintDevice>(
+  fn paint_ridge_or_groove(
     self,
     color: Color,
     style: BorderStyle,
     [first, second]: [i32; 2],
     at: Affine,
-    device: &mut D,
+    device: &mut dyn PaintDevice,
   ) {
     let (s1, s2) = if style == BorderStyle::Groove {
       (BorderStyle::Inset, BorderStyle::Outset)
