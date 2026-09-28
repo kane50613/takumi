@@ -2315,7 +2315,13 @@ fn test_table_auto_columns_share_free_width_by_max_content() {
   .expect("parse");
   let out = measure(node, create_test_viewport());
   let cells = &out.children[0].children;
-  let max_content = |cell: &MeasuredNode| cell.runs[0].width + 2.0;
+  fn first_run(node: &MeasuredNode) -> Option<&MeasuredTextRun> {
+    node
+      .runs
+      .first()
+      .or_else(|| node.children.iter().find_map(first_run))
+  }
+  let max_content = |cell: &MeasuredNode| first_run(cell).expect("a run").width + 2.0;
   let (name, description) = (max_content(&cells[3]), max_content(&cells[4]));
   // 352px less the 48px column and four 2px spacings.
   let free = 296.0;
@@ -2560,4 +2566,35 @@ fn an_absolute_box_shrinks_to_the_width_beside_its_inset() {
   let probe = &result.children[0];
 
   assert!(probe.width <= 80.0, "{}", probe.width);
+}
+
+/// A table's cells inherit `vertical-align: middle` from the row group the parser inserts, as
+/// Chrome's UA stylesheet gives `tbody`.
+#[test]
+fn test_measure_table_cells_default_to_the_middle() {
+  fn cell_with<'n>(node: &'n MeasuredNode, text: &str) -> Option<&'n MeasuredNode> {
+    if node.runs.iter().any(|run| run.text == text) {
+      return Some(node);
+    }
+
+    node
+      .children
+      .iter()
+      .find_map(|child| cell_with(child, text))
+  }
+
+  let node = Node::from_html(
+    r#"<table style="border-spacing:0"><tr><td style="padding:0"><div style="height:60px; width:20px"></div></td><td style="padding:0; font-size:20px; line-height:20px">x</td></tr></table>"#,
+    FromHtmlOptions::default(),
+  )
+  .expect("parse");
+  let out = measure(node, create_test_viewport());
+  let cell = cell_with(&out, "x").expect("the text cell");
+  let run = cell
+    .runs
+    .iter()
+    .find(|run| run.text == "x")
+    .expect("the run");
+
+  assert_within(cell.transform[5] + run.y + run.height / 2.0, 30.0, 1.0);
 }

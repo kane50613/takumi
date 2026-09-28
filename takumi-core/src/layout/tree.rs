@@ -1362,8 +1362,9 @@ impl RenderNode {
     }
   }
 
-  /// An element's own text, moved into a child so generated content can precede it.
-  fn generated_sibling_text(parent_context: &RenderContext, text: String) -> Self {
+  /// An element's own text, moved into a child so generated content can precede it or its
+  /// content can align.
+  pub(super) fn generated_sibling_text(parent_context: &RenderContext, text: String) -> Self {
     let (style, sizing, current_color) =
       parent_context.resolve_pseudo_style(&MatchedDeclarationsView::default());
     let context = RenderContext::from_parent(parent_context, style, sizing, current_color);

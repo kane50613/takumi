@@ -590,8 +590,15 @@ impl RenderNode {
 
   /// Wraps content to preserve its formatting context during alignment.
   fn wrap_cell_content(&mut self) -> Option<&mut RenderNode> {
-    let children = self.children.take()?;
-    let content = RenderNode::anonymous_block_container(&self.context, children.into_vec());
+    let children = match self.children.take() {
+      Some(children) => children.into_vec(),
+      // A cell holding only text folded it into itself; it goes back into a child to align.
+      None => vec![RenderNode::generated_sibling_text(
+        &self.context,
+        self.node.as_mut()?.take_text()?,
+      )],
+    };
+    let content = RenderNode::anonymous_block_container(&self.context, children);
 
     self.children = Some(Box::new([content]));
     self.children.as_deref_mut()?.first_mut()
