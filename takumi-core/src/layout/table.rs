@@ -30,8 +30,8 @@ use crate::{
   style::{
     BorderCollapse, BorderStyle, BoxSizing, CaptionSide, ColorInput, ComputedStyle, Display,
     FlexDirection, FromCssStr, Gap, GridPlacement, GridPlacementSpan, GridTemplateComponents,
-    JustifyContent, Length, LineWidth, SizingContext, SpacePair, TableLayout, VerticalAlign,
-    VerticalAlignKeyword,
+    JustifyContent, Length, LineWidth, Size as StyleSize, SizingContext, SpacePair, TableLayout,
+    VerticalAlign, VerticalAlignKeyword,
   },
 };
 
@@ -781,21 +781,33 @@ impl RenderNode {
       length => Some(px(length)),
     };
     let min_width = specified(Some(table.min_width)).map_or(grid_min, |min| min.max(grid_min));
-    let auto = table
-      .width
-      .as_length()
-      .is_none_or(|width| width == Length::Auto);
+    // `auto` and the sizing keywords size the table from its grid, which the grid's minimum and
+    // maximum stand in for as the table's content sizes, as Blink's
+    // `ComputeUsedInlineSizeForTableFragment` hands them to the inline-size resolution.
+    let sized_by_grid = !matches!(table.width, StyleSize::Length(length) if length != Length::Auto);
     let width = match known {
-      Some(known) if item || !auto => known,
+      Some(known) if item || !sized_by_grid => known,
       _ => {
-        let fit = match available {
+        let stretch = match available {
           AvailableSpace::Definite(space) => {
-            (space - px(table.margin_left) - px(table.margin_right)).clamp(grid_min, grid_max)
+            Some(space - px(table.margin_left) - px(table.margin_right))
           }
+          AvailableSpace::MinContent | AvailableSpace::MaxContent => None,
+        };
+        let fit = match available {
           AvailableSpace::MinContent => grid_min,
           AvailableSpace::MaxContent => grid_max,
+          AvailableSpace::Definite(_) => {
+            stretch.map_or(grid_max, |stretch| stretch.clamp(grid_min, grid_max))
+          }
         };
-        let width = specified(table.width.as_length()).unwrap_or(fit);
+        let width = match table.width {
+          StyleSize::MinContent => grid_min,
+          StyleSize::MaxContent => grid_max,
+          StyleSize::Stretch => stretch.unwrap_or(fit),
+          StyleSize::FitContent => fit,
+          StyleSize::Length(length) => specified(Some(length)).unwrap_or(fit),
+        };
         let width = specified(table.max_width.as_length()).map_or(width, |max| width.min(max));
 
         width.max(min_width)
@@ -803,7 +815,7 @@ impl RenderNode {
     };
 
     // A block-level table shrinks to fit rather than stretching.
-    if auto && !item {
+    if sized_by_grid && !item {
       style.size.width = length(styled(width));
     }
     style.min_size.width = length(styled(min_width));
