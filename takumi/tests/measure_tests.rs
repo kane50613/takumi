@@ -467,7 +467,6 @@ fn test_measure_sizing_keywords_size_from_the_content() {
   let min_content = measured("min-content");
   let max_content = measured("max-content");
   let fit_content = measured("fit-content");
-  let limited = measured("fit-content(120px)");
   let stretch = measured("stretch");
   let widest_word = ["alpha", "beta", "gamma", "delta"]
     .into_iter()
@@ -494,7 +493,6 @@ fn test_measure_sizing_keywords_size_from_the_content() {
   );
   assert!(max_content <= 400.0);
   assert_close(fit_content, max_content);
-  assert_close(limited, 120.0);
   assert_close(stretch, 400.0);
 }
 

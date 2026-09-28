@@ -1,17 +1,17 @@
 use std::fmt;
 
 use cssparser::{Parser, Token, match_ignore_ascii_case};
-use taffy::{CompactLength, Dimension};
+use taffy::Dimension;
 
 use crate::style::{
-  Animatable, Color, CssDescriptorKind, CssSyntaxKind, CssToken, FromCss, Length, MakeComputed,
-  ParseResult, SizingContext, ToCss, discrete,
+  Animatable, Color, CssSyntaxKind, CssToken, FromCss, Length, MakeComputed, ParseResult,
+  SizingContext, ToCss, discrete,
   tw::{Namespace, TailwindPropertyParser},
   unexpected_token,
 };
 
-/// Represents a `width`/`height` value: a `<length-percentage>`, `auto`, or a
-/// CSS Sizing Level 3 keyword.
+/// Represents a `width`/`height` value: a `<length-percentage>`, `auto`, or a CSS Sizing Level 3
+/// keyword. `fit-content(<length-percentage>)` is invalid here, as Chrome leaves it to grid tracks.
 #[derive(Debug, Clone, Copy, PartialEq)]
 #[non_exhaustive]
 pub enum Size {
@@ -23,8 +23,6 @@ pub enum Size {
   MaxContent,
   /// `fit-content`: `max(min-content, min(max-content, stretch))`.
   FitContent,
-  /// `fit-content(<length-percentage>)`: `max(min-content, min(max-content, <length-percentage>))`.
-  FitContentLimit(Length),
   /// `stretch`: the size the box takes when it fills the available space.
   Stretch,
 }
@@ -66,17 +64,6 @@ impl Size {
       Self::MinContent => Dimension::min_content(),
       Self::MaxContent => Dimension::max_content(),
       Self::FitContent => Dimension::fit_content(),
-      Self::FitContentLimit(limit) => {
-        let compact = limit.resolve_to_length_percentage(sizing).into_raw();
-
-        match compact.tag() {
-          CompactLength::PERCENT_TAG => Dimension::fit_content_percent(compact.value()),
-          CompactLength::LENGTH_TAG => Dimension::fit_content_px(compact.value()),
-          // taffy has no `calc()` limit, so a mixed one falls back to the
-          // unlimited keyword.
-          _ => Dimension::fit_content(),
-        }
-      }
       Self::Stretch => Dimension::stretch(),
     }
   }
@@ -90,9 +77,8 @@ impl From<Length> for Size {
 
 impl MakeComputed for Size {
   fn make_computed(&mut self, sizing: &SizingContext) {
-    match self {
-      Self::Length(length) | Self::FitContentLimit(length) => length.make_computed(sizing),
-      _ => {}
+    if let Self::Length(length) = self {
+      length.make_computed(sizing);
     }
   }
 }
@@ -114,9 +100,6 @@ impl Animatable for Size {
         sizing,
         current_color,
       )),
-      (Self::FitContentLimit(from), Self::FitContentLimit(to)) => Self::FitContentLimit(
-        Length::interpolated(from, to, progress, sizing, current_color),
-      ),
       _ => discrete(from, to, progress),
     };
   }
@@ -129,7 +112,6 @@ impl<'i> FromCss<'i> for Size {
     CssToken::Keyword("max-content"),
     CssToken::Keyword("fit-content"),
     CssToken::Keyword("stretch"),
-    CssToken::Descriptor(CssDescriptorKind::FitContentFn),
   ];
 
   fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
@@ -153,15 +135,6 @@ fn parse_sizing_keyword<'i>(input: &mut Parser<'i, '_>) -> ParseResult<'i, Size>
       "stretch" => Ok(Size::Stretch),
       _ => Err(unexpected_token!(Size, location, &token)),
     },
-    Token::Function(name) if name.eq_ignore_ascii_case("fit-content") => {
-      let limit = input.parse_nested_block(Length::from_css)?;
-
-      if limit == Length::Auto {
-        return Err(unexpected_token!(Size, location, &token));
-      }
-
-      Ok(Size::FitContentLimit(limit))
-    }
     _ => Err(unexpected_token!(Size, location, &token)),
   }
 }
@@ -173,11 +146,6 @@ impl ToCss for Size {
       Self::MinContent => dest.write_str("min-content"),
       Self::MaxContent => dest.write_str("max-content"),
       Self::FitContent => dest.write_str("fit-content"),
-      Self::FitContentLimit(limit) => {
-        dest.write_str("fit-content(")?;
-        limit.to_css(dest)?;
-        dest.write_char(')')
-      }
       Self::Stretch => dest.write_str("stretch"),
     }
   }
@@ -224,14 +192,6 @@ mod tests {
       ("max-content", Size::MaxContent),
       ("fit-content", Size::FitContent),
       ("stretch", Size::Stretch),
-      (
-        "fit-content(20rem)",
-        Size::FitContentLimit(Length::Rem(20.0)),
-      ),
-      (
-        "fit-content(50%)",
-        Size::FitContentLimit(Length::Percentage(50.0)),
-      ),
     ] {
       let parsed = Size::from_css_str(css).unwrap();
 
@@ -239,8 +199,9 @@ mod tests {
       assert_eq!(parsed.to_css_string(), css);
     }
 
-    assert!(Size::from_css_str("fit-content(auto)").is_err());
-    assert!(Size::from_css_str("fit-content()").is_err());
+    // Chrome leaves `fit-content()` to grid tracks.
+    assert!(Size::from_css_str("fit-content(20rem)").is_err());
+    assert!(Size::from_css_str("fit-content(50%)").is_err());
     assert!(Size::from_css_str("content").is_err());
   }
 
@@ -261,14 +222,6 @@ mod tests {
     assert_eq!(
       Size::Stretch.resolve_to_dimension(&sizing),
       Dimension::stretch()
-    );
-    assert_eq!(
-      Size::FitContentLimit(Length::Px(30.0)).resolve_to_dimension(&sizing),
-      Dimension::fit_content_px(30.0)
-    );
-    assert_eq!(
-      Size::FitContentLimit(Length::Percentage(40.0)).resolve_to_dimension(&sizing),
-      Dimension::fit_content_percent(0.4)
     );
   }
 

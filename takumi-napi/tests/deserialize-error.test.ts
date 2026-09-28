@@ -96,7 +96,7 @@ test("report deserialize error for width property with invalid type", () => {
     }),
     "width",
     "boolean `true`",
-    "a value of <length>, 'min-content', 'max-content', 'fit-content', 'stretch' or <fit-content()>; also accepts 'initial', 'unset' or 'inherit'.",
+    "a value of <length>, 'min-content', 'max-content', 'fit-content' or 'stretch'; also accepts 'initial', 'unset' or 'inherit'.",
   );
 });
 
@@ -108,7 +108,7 @@ test("report deserialize error for width property with invalid string value", ()
     "width",
     "invalid",
     "invalid",
-    "a value of <length>, 'min-content', 'max-content', 'fit-content', 'stretch' or <fit-content()>; also accepts 'initial', 'unset' or 'inherit'.",
+    "a value of <length>, 'min-content', 'max-content', 'fit-content' or 'stretch'; also accepts 'initial', 'unset' or 'inherit'.",
   );
 });
 
