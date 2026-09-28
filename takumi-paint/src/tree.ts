@@ -181,9 +181,24 @@ export class PaintTree {
   }
 }
 
-/** `node` and its descendants in document order. */
-function inDocumentOrder(node: PaintNode): PaintNode[] {
-  return node.type === "box" ? [node, ...node.children.flatMap(inDocumentOrder)] : [node];
+/** `root` and its descendants in document order. */
+function inDocumentOrder(root: BoxNode): PaintNode[] {
+  const ordered: PaintNode[] = [];
+  const pending: PaintNode[] = [root];
+
+  for (let node = pending.pop(); node; node = pending.pop()) {
+    ordered.push(node);
+    if (node.type !== "box") continue;
+
+    const { children } = node;
+
+    for (let index = children.length - 1; index >= 0; index--) {
+      const child = children[index];
+
+      if (child) pending.push(child);
+    }
+  }
+  return ordered;
 }
 
 /** The nodes as the serialized tree lists them, which is how nodes and steps name each other. */
@@ -256,20 +271,30 @@ abstract class NodeView<Raw extends RawPaintNode> {
     return this.#drawables;
   }
 
-  /** `drawable` with its glyph run named by the run itself. */
+  /** `drawable` with its glyph runs, inside groups too, named by the runs themselves. */
   protected resolve(drawable: RawDrawable): Drawable {
     switch (drawable.type) {
       case "glyphs":
-        throw new Error("Only a text node draws glyphs");
+        return this.resolveRun(drawable);
       case "masked":
         return {
           ...drawable,
           mask: drawable.mask.map((inner) => this.resolve(inner)),
           content: drawable.content.map((inner) => this.resolve(inner)),
         };
+      case "group":
+        return {
+          ...drawable,
+          drawables: drawable.drawables.map((inner) => this.resolve(inner)),
+        };
       default:
         return drawable;
     }
+  }
+
+  /** A glyphs drawable with its run named by the run itself. */
+  protected resolveRun(_drawable: Extract<RawDrawable, { type: "glyphs" }>): Drawable {
+    throw new Error("Only a text node draws glyphs");
   }
 }
 
@@ -277,6 +302,7 @@ class BoxView extends NodeView<RawNode<"box">> implements BoxNode {
   readonly type = "box";
   #outline: readonly Drawable[] | undefined;
   #effects: Effects | undefined;
+  #children: readonly PaintNode[] | undefined;
 
   get contentBox(): Rect {
     return this.raw.contentBox;
@@ -303,7 +329,8 @@ class BoxView extends NodeView<RawNode<"box">> implements BoxNode {
   }
 
   get children(): readonly PaintNode[] {
-    return this.raw.children.map((child) => this.listing.at(child));
+    this.#children ??= this.raw.children.map((child) => this.listing.at(child));
+    return this.#children;
   }
 }
 
@@ -320,9 +347,7 @@ class TextView extends NodeView<RawNode<"text">> implements TextNode {
     return this.#runs;
   }
 
-  protected override resolve(drawable: RawDrawable): Drawable {
-    if (drawable.type !== "glyphs") return super.resolve(drawable);
-
+  protected override resolveRun(drawable: Extract<RawDrawable, { type: "glyphs" }>): Drawable {
     const run = this.runs[drawable.run];
 
     if (!run) throw new Error(`The text node has no run ${drawable.run}`);

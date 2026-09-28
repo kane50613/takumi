@@ -941,17 +941,23 @@
       },
       "drawables": [
         {
-          "type": "fill",
-          "role": "inline-background",
-          "shape": {
-            "type": "path",
-            "d": "M193.54 0h89.68v34h-89.68Z",
-            "fillRule": "nonzero"
-          },
-          "paint": {
-            "type": "color",
-            "color": [255, 255, 0, 128]
-          }
+          "type": "group",
+          "opacity": 0.5,
+          "drawables": [
+            {
+              "type": "fill",
+              "role": "inline-background",
+              "shape": {
+                "type": "path",
+                "d": "M193.54 0h89.68v34h-89.68Z",
+                "fillRule": "nonzero"
+              },
+              "paint": {
+                "type": "color",
+                "color": [255, 255, 0, 255]
+              }
+            }
+          ]
         },
         {
           "type": "glyphs",
