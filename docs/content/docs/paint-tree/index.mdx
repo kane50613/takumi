@@ -13,7 +13,7 @@ npm i takumi-paint @takumi-rs/helpers
 
 ## Paint JSX
 
-`paint()` returns a `PaintTree`. Iterating it yields every node in document order.
+`paint()` returns a `PaintTree`. `tree.nodes` lists every node in document order.
 
 ```tsx twoslash title="inspect.tsx"
 import { paint } from "takumi-paint";
@@ -25,10 +25,10 @@ const tree = await paint(
   { width: 320 },
 );
 
-const card = Iterator.from(tree).find((node) => node.type === "box" && node.element?.id === "card");
+const card = tree.nodes.find((node) => node.type === "box" && node.element?.id === "card");
 console.log(card?.drawables[0]); // { type: "fill", role: "background", shape: { type: "rect", … }, … }
 
-for (const node of tree) {
+for (const node of tree.nodes) {
   if (node.type !== "text") continue;
   for (const run of node.runs) console.log(run.text, run.element?.tagName, run.font.family);
 }

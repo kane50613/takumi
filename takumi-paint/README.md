@@ -31,15 +31,15 @@ const tree = await paint(
   { width: 640 },
 );
 
-Iterator.from(tree).find((node) => node.element?.id === "card")?.drawables; // the background fill, with its resolved shape and color
+tree.nodes.find((node) => node.element?.id === "card")?.drawables; // the background fill, with its resolved shape and color
 
-for (const node of tree) {
+for (const node of tree.nodes) {
   if (node.type !== "text") continue;
   for (const run of node.runs)
     console.log(run.text, run.font.family, run.font.weight, run.fontSize);
 }
 
-for (const step of tree.paintSteps()) {
+for (const step of tree.steps) {
   // draw, begin-group/end-group, and begin-clip/end-clip, in paint order
 }
 ```

@@ -75,8 +75,8 @@ interface NodeBase {
   readonly drawables: readonly Drawable[];
 }
 
-/** A CSS box. Iterating it yields the box and its descendants in document order. */
-export interface BoxNode extends NodeBase, Iterable<PaintNode> {
+/** A CSS box. */
+export interface BoxNode extends NodeBase {
   readonly type: "box";
   /** The box inset by border and padding, in local space. */
   readonly contentBox: Rect;
@@ -118,14 +118,22 @@ export type PaintStep =
 
 type RawNode<Type extends RawPaintNode["type"]> = Extract<RawPaintNode, { type: Type }>;
 
-/** A painted tree. Lengths are device pixels. Iterating it yields every node in document order. */
-export class PaintTree implements Iterable<PaintNode> {
+/** A painted tree. Lengths are device pixels. */
+export class PaintTree {
   readonly width: number;
   readonly height: number;
   /** Every font the runs use. */
   readonly fonts: readonly Font[];
+  /** The box every other node descends from. */
+  readonly root: BoxNode;
+  /**
+   * Every node in document order: a box before its descendants, and a paragraph's text node
+   * before the inline boxes inside it.
+   */
+  readonly nodes: readonly PaintNode[];
   readonly #raw: RawPaintTree;
-  readonly #nodes: readonly PaintNode[];
+  readonly #listing: Listing;
+  #steps: readonly PaintStep[] | undefined;
 
   /** Wraps the serialized tree `raw`, reading font files through `fontData`. */
   constructor(raw: RawPaintTree, fontData: (index: number) => Uint8Array | undefined) {
@@ -136,7 +144,56 @@ export class PaintTree implements Iterable<PaintNode> {
       ...font,
       data: () => fontData(index) ?? new Uint8Array(),
     }));
-    this.#nodes = raw.nodes.map((node) => {
+    this.#listing = new Listing(raw.nodes, this.fonts);
+
+    const root = this.#listing.at(0);
+
+    if (root.type !== "box") throw new Error("The tree's root is not a box");
+    this.root = root;
+    this.nodes = inDocumentOrder(root);
+  }
+
+  /** The steps a renderer takes, in paint order. */
+  get steps(): readonly PaintStep[] {
+    this.#steps ??= this.#raw.steps.flatMap((step): PaintStep[] => {
+      const node = this.#listing.at(step.node);
+
+      if (step.type === "draw") {
+        return [
+          {
+            type: "draw",
+            node,
+            drawables:
+              step.part === "outline" && node.type === "box" ? node.outline : node.drawables,
+          },
+        ];
+      }
+      if (node.type !== "box") return [];
+      if (step.type === "begin-group") {
+        return node.effects ? [{ type: step.type, node, effects: node.effects }] : [];
+      }
+      if (step.type === "begin-clip") {
+        return node.overflowClip ? [{ type: step.type, node, clip: node.overflowClip }] : [];
+      }
+      return [{ type: step.type, node }];
+    });
+    return this.#steps;
+  }
+}
+
+/** `node` and its descendants in document order. */
+function inDocumentOrder(node: PaintNode): PaintNode[] {
+  return node.type === "box" ? [node, ...node.children.flatMap(inDocumentOrder)] : [node];
+}
+
+/** The nodes as the serialized tree lists them, which is how nodes and steps name each other. */
+class Listing {
+  readonly fonts: readonly Font[];
+  readonly #nodes: readonly PaintNode[];
+
+  constructor(raw: readonly RawPaintNode[], fonts: readonly Font[]) {
+    this.fonts = fonts;
+    this.#nodes = raw.map((node) => {
       switch (node.type) {
         case "box":
           return new BoxView(node, this);
@@ -149,58 +206,23 @@ export class PaintTree implements Iterable<PaintNode> {
   }
 
   /** The node listed at `index`. */
-  node(index: number): PaintNode {
+  at(index: number): PaintNode {
     const node = this.#nodes[index];
 
     if (!node) throw new Error(`The tree lists no node ${index}`);
     return node;
   }
-
-  /** The first node, the box every other node descends from. */
-  get root(): BoxNode {
-    const root = this.node(0);
-
-    if (root.type !== "box") throw new Error("The tree's root is not a box");
-    return root;
-  }
-
-  /** The steps a renderer takes, in paint order. */
-  *paintSteps(): Generator<PaintStep> {
-    for (const step of this.#raw.steps) {
-      const node = this.node(step.node);
-
-      if (step.type === "draw") {
-        yield {
-          type: "draw",
-          node,
-          drawables: step.part === "outline" && node.type === "box" ? node.outline : node.drawables,
-        };
-      } else if (node.type === "box") {
-        if (step.type === "begin-group") {
-          if (node.effects) yield { type: step.type, node, effects: node.effects };
-        } else if (step.type === "begin-clip") {
-          if (node.overflowClip) yield { type: step.type, node, clip: node.overflowClip };
-        } else {
-          yield { type: step.type, node };
-        }
-      }
-    }
-  }
-
-  [Symbol.iterator](): Iterator<PaintNode> {
-    return this.root[Symbol.iterator]();
-  }
 }
 
-/** A node read from its raw form, its links resolved through the tree. */
+/** A node read from its raw form, its links resolved through the listing. */
 abstract class NodeView<Raw extends RawPaintNode> {
   protected readonly raw: Raw;
-  protected readonly tree: PaintTree;
+  protected readonly listing: Listing;
   #drawables: readonly Drawable[] | undefined;
 
-  constructor(raw: Raw, tree: PaintTree) {
+  constructor(raw: Raw, listing: Listing) {
     this.raw = raw;
-    this.tree = tree;
+    this.listing = listing;
   }
 
   get element(): ElementInfo | undefined {
@@ -224,7 +246,7 @@ abstract class NodeView<Raw extends RawPaintNode> {
   }
 
   get parent(): BoxNode | undefined {
-    const parent = this.raw.parent === undefined ? undefined : this.tree.node(this.raw.parent);
+    const parent = this.raw.parent === undefined ? undefined : this.listing.at(this.raw.parent);
 
     return parent?.type === "box" ? parent : undefined;
   }
@@ -272,15 +294,7 @@ class BoxView extends NodeView<RawNode<"box">> implements BoxNode {
   }
 
   get children(): readonly PaintNode[] {
-    return this.raw.children.map((child) => this.tree.node(child));
-  }
-
-  *[Symbol.iterator](): Iterator<PaintNode> {
-    yield this;
-    for (const child of this.children) {
-      if (child.type === "box") yield* child;
-      else yield child;
-    }
+    return this.raw.children.map((child) => this.listing.at(child));
   }
 }
 
@@ -308,7 +322,7 @@ class TextView extends NodeView<RawNode<"text">> implements TextNode {
 
   private wrap(raw: RawTextRun): TextRun {
     const { outline, font, ...fields } = raw;
-    const resolved = this.tree.fonts[font];
+    const resolved = this.listing.fonts[font];
 
     if (!resolved) throw new Error(`The tree lists no font ${font}`);
     return { ...fields, font: resolved, outline: () => outline };
