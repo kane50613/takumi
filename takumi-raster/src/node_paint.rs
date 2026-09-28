@@ -4,6 +4,8 @@
 //! [`takumi_core::layout::decoration`]; these functions composite it with
 //! tiny-skia, and the SVG backend emits the same geometry as vector paths.
 
+use std::collections::HashMap;
+
 use skrifa::{FontRef, MetadataProvider};
 use takumi_core::{
   geometry::{ComputedLayout as Layout, Point, Size},
@@ -69,6 +71,10 @@ pub(crate) struct CanvasDevice<'c> {
   shadow: Option<SizedShadow>,
   /// The background `background-clip: text` glyphs show.
   pub(crate) text_background: Option<PaintSource<'c>>,
+  /// The span background strips already rasterized, by span id and strip size, since a span
+  /// paints the same strip on every line. A device paints one inline layout, whose span ids are
+  /// unique.
+  strip_tiles: HashMap<(usize, u32, u32), Option<BackgroundTile>>,
   /// The first error a draw hit.
   error: Option<Error>,
 }
@@ -97,6 +103,7 @@ impl<'c> CanvasDevice<'c> {
       layers: Vec::new(),
       shadow: None,
       text_background: None,
+      strip_tiles: HashMap::new(),
       error: None,
     }
   }
@@ -596,29 +603,36 @@ impl GlyphDevice for CanvasDevice<'_> {
     transform: Affine,
   ) {
     let context = &span.node.context;
-    let tile = background_image_layers(&span.background, context).and_then(|layers| {
-      rasterize_layers(
-        layers,
-        span.strip.layout.size.map(|size| size as u32),
-        context,
-        BorderProperties::default(),
-        Affine::IDENTITY,
-      )
-    });
+    let size = span.strip.layout.size.map(|size| size as u32);
+    let key = (span.span, size.width, size.height);
+    let tile = match self.strip_tiles.remove(&key) {
+      Some(tile) => tile,
+      None => background_image_layers(&span.background, context)
+        .and_then(|layers| {
+          rasterize_layers(
+            layers,
+            size,
+            context,
+            BorderProperties::default(),
+            Affine::IDENTITY,
+          )
+        })
+        .unwrap_or_else(|error| {
+          self.error.get_or_insert(error);
+          None
+        }),
+    };
 
-    match tile {
-      Ok(Some(tile)) => self.fill_shape_with_source(
+    if let Some(tile) = &tile {
+      self.fill_shape_with_source(
         clip,
         transform,
-        (&tile).into(),
+        tile.into(),
         Affine::translation(-span.strip.origin.x, -span.strip.origin.y),
         context.style.image_rendering,
-      ),
-      Ok(None) => {}
-      Err(error) => {
-        self.error.get_or_insert(error);
-      }
+      );
     }
+    self.strip_tiles.insert(key, tile);
   }
 
   fn draw_glyph_run_through(
