@@ -15,3 +15,5 @@ packages:
 - A line spans the text exactly, with antialiased ends, instead of widening to whole pixels. A double or wavy line keeps its offset from the unrounded thickness.
 - `text-decoration-skip-ink` cuts on whole device pixels, also cuts overlines, and looks for glyphs across the whole band a wavy or double line paints. It no longer cuts around CJK characters, Hangul, emoji, `/`, `\` or `_`.
 - Text under `opacity`, `filter` or a blend mode keeps the part of a decoration line that reaches past its box.
+- An underline sits against the baseline and font of the element that sets it, and a line-through takes its height from that element's font.
+- A `text-decoration` reaches the text of every in-flow box inside the element that sets it, and nested decorations all draw. Inline blocks, floats, absolutely positioned boxes and outside list markers still stop it.
