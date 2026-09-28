@@ -176,9 +176,10 @@ impl<'c> CanvasDevice<'c> {
     blur_radius: f32,
     color: Color,
   ) {
+    // Skia's blur mask filter maps its sigma through the CTM (`SkMatrix::mapRadius`). A `text-fit`
+    // scale on the run comes from the painter, which scales the shadow it passes.
+    let blur_radius = blur_radius * self.transform.uniform_scale();
     let transform = self.transform * transform;
-    // Skia's blur mask filter maps its sigma through the CTM (`SkMatrix::mapRadius`).
-    let blur_radius = blur_radius * transform.uniform_scale();
     let reach = if blur_radius > 0.0 {
       blur_radius * BlurType::Shadow.extent_multiplier()
     } else {
