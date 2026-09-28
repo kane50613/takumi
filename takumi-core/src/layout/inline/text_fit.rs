@@ -220,7 +220,9 @@ pub(super) fn text_fit_line_scales(
     if text_advance <= 0.0 {
       continue;
     }
-    if flexible_fit_width <= 0.0 && text_fit.mode != TextFitMode::Shrink {
+    // Blink's `MeasurePerBlockScale` skips a line whose fixed parts already fill it, and Chrome
+    // leaves such a line unscaled under `per-line` too.
+    if flexible_fit_width <= 0.0 {
       continue;
     }
 
