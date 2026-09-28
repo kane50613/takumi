@@ -1,15 +1,6 @@
 use std::mem::take;
 
-use serde::{Deserialize, Deserializer};
-
 use crate::layout::node::{Node, NodeKind};
-
-pub(crate) fn deserialize_children<'de, D>(deserializer: D) -> Result<Vec<Node>, D::Error>
-where
-  D: Deserializer<'de>,
-{
-  Option::<Vec<Node>>::deserialize(deserializer).map(Option::unwrap_or_default)
-}
 
 impl Node {
   pub(crate) fn children(&self) -> Option<&[Node]> {
