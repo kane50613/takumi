@@ -4,6 +4,10 @@ import { type PaintTree, type TextRun, Painter } from "takumi-paint";
 
 const painter = new Painter();
 
+function box(tree: PaintTree, id: string) {
+  return [...tree].find((node) => node.type === "box" && node.element?.id === id);
+}
+
 function runs(tree: PaintTree): TextRun[] {
   return [...tree].flatMap((node) => (node.type === "text" ? node.runs : []));
 }
@@ -27,7 +31,7 @@ describe("Painter.paint", () => {
     );
 
     expect([tree.width, tree.height]).toEqual([600, 300]);
-    const card = tree.find("card");
+    const card = box(tree, "card");
     expect(card?.drawables.map((drawable) => drawable.role)).toEqual(["background", "border"]);
     expect(card?.drawables[0]).toMatchObject({
       type: "fill",
@@ -70,7 +74,7 @@ describe("Painter.paint", () => {
     const picture = [...tree].find((node) => node.type === "image");
     expect([picture?.width, picture?.height]).toEqual([192, 48]);
     expect(picture?.type === "image" && picture.image.src).toBe(svg);
-    expect(picture?.parent?.parent).toBe(tree.find("wrap"));
+    expect(picture?.parent?.parent).toBe(box(tree, "wrap"));
   });
 
   it("names the element a nested span's run comes from", async () => {
