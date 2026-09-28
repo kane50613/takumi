@@ -273,6 +273,26 @@ fn inline_span_background_image() {
     haystack.matches(" scn").count() >= 2,
     "the span gradients are missing from the content stream"
   );
+
+  let fonts = fonts();
+  let clipped = render_pinned(
+    PdfOptions::builder()
+      .node(
+        from_html(
+          r##"<div style="font-size: 32px">Make it <span style="background-image: linear-gradient(90deg, #6366f1, #ec4899); background-clip: text; color: transparent">shine</span></div>"##,
+          FromHtmlOptions::default(),
+        )
+        .expect("parse clip-text fixture"),
+      )
+      .viewport(Viewport::new((420, 100)))
+      .fonts(&fonts)
+      .build(),
+  );
+
+  assert!(
+    inflated_text(&clipped).contains(" scn"),
+    "the clip-text span's gradient does not fill its glyphs"
+  );
 }
 
 /// An inline `<span>` with a border strokes it on every line, without the sides the line wraps at.
