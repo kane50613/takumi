@@ -5,11 +5,11 @@ import { type PaintTree, type TextRun, Painter } from "takumi-paint";
 const painter = new Painter();
 
 function box(tree: PaintTree, id: string) {
-  return Iterator.from(tree).find((node) => node.type === "box" && node.element?.id === id);
+  return tree.nodes.find((node) => node.type === "box" && node.element?.id === id);
 }
 
 function runs(tree: PaintTree): TextRun[] {
-  return [...tree].flatMap((node) => (node.type === "text" ? node.runs : []));
+  return tree.nodes.flatMap((node) => (node.type === "text" ? node.runs : []));
 }
 
 describe("Painter.paint", () => {
@@ -46,7 +46,7 @@ describe("Painter.paint", () => {
     expect(run?.font.data().byteLength).toBeGreaterThan(0);
     expect(run?.outline()).toStartWith("M");
 
-    const glyphs = [...tree.paintSteps()]
+    const glyphs = tree.steps
       .flatMap((step) => (step.type === "draw" ? step.drawables : []))
       .find((drawable) => drawable.type === "glyphs");
     expect(glyphs).toMatchObject({ role: "text", paint: { color: [0, 0, 255, 255] } });
@@ -71,7 +71,7 @@ describe("Painter.paint", () => {
       height: 200,
     });
 
-    const picture = [...tree].find((node) => node.type === "image");
+    const picture = tree.nodes.find((node) => node.type === "image");
     expect([picture?.width, picture?.height]).toEqual([192, 48]);
     expect(picture?.type === "image" && picture.image.src).toBe(svg);
     expect(picture?.parent?.parent).toBe(box(tree, "wrap"));
@@ -95,12 +95,28 @@ describe("Painter.paint", () => {
       { width: 200, height: 100 },
     );
 
-    expect([...tree.paintSteps()].map((step) => step.type)).toEqual([
+    expect(tree.steps.map((step) => step.type)).toEqual([
       "begin-group",
       "begin-clip",
       "draw",
       "end-clip",
       "end-group",
     ]);
+  });
+
+  it("lists nodes in document order, whatever order they paint in", async () => {
+    const tree = await painter.paint(
+      `<div id="a"><p id="p">text</p><div id="behind" style="position: absolute; z-index: -1">behind</div></div>`,
+      { width: 200 },
+    );
+
+    expect(tree.nodes.map((node) => `${node.type}:${node.element?.id}`)).toEqual([
+      "box:a",
+      "box:p",
+      "text:p",
+      "box:behind",
+      "text:behind",
+    ]);
+    expect(tree.root).toBe(tree.nodes[0]);
   });
 });
