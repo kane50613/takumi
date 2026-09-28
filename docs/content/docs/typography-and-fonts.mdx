@@ -282,13 +282,12 @@ The stroke color defaults to `color` when you omit it.
 
 ### Decoration & transform
 
-`text-decoration` draws `underline`, `line-through`, and `overline`. Combine them, and set color and thickness. `text-transform` changes the case.
+`text-decoration` draws `underline`, `line-through`, and `overline`. The shorthand also takes a style, color, and thickness, in any order. `text-transform` changes the case.
 
 ```tsx title="Decoration & transform"
 <div
   style={{
-    textDecoration: "underline overline",
-    textDecorationColor: "red",
+    textDecoration: "underline overline 2px red",
     textTransform: "uppercase",
   }}
 >
