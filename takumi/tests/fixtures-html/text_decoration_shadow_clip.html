@@ -1,0 +1,37 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>text_decoration_shadow_clip</title>
+    <base href="../../../" />
+    <link rel="stylesheet" href="takumi/tests/shared.css" />
+    <style>
+      .root {
+        display: block;
+        padding: 16px 20px;
+        width: 100%;
+        height: 100%;
+        background: rgb(248, 250, 252);
+        font-family: "Geist";
+        font-size: 28px;
+        line-height: 64px;
+      }
+      p {
+        display: block;
+        margin: 0;
+        text-shadow: 0 20px 0 rgb(220, 38, 38);
+        text-decoration-color: rgb(37, 99, 235);
+        text-decoration-thickness: 3px;
+      }
+    </style>
+  </head>
+  <body style="width: 420px; height: 240px">
+    <div class="root">
+      <p style="text-decoration-line: underline; text-decoration-style: wavy">wavy line</p>
+      <p style="text-decoration-line: underline; text-decoration-style: dotted">dotted gypsy</p>
+      <p style="text-decoration-line: underline; text-shadow: 6px 18px 3px rgb(220, 38, 38)">
+        solid gypsy
+      </p>
+    </div>
+  </body>
+</html>
