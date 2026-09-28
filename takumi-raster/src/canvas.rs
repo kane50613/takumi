@@ -20,7 +20,7 @@ use image::{
 };
 use mask::MaskStackEntry;
 pub(crate) use mask::{
-  CanvasViewport, MaskView, NodeMasks, attenuate_alpha_by_mask, clip_node_mask,
+  CanvasViewport, MaskView, NodeMasks, attenuate_alpha_by_mask, clip_node_mask, cull_bounds,
   intersect_alpha_masks, render_mask,
 };
 pub(crate) use paint_source::{
