@@ -245,6 +245,12 @@ export type RawDrawable<Run = number> =
       readonly rect: Rect;
       readonly clip: Shape;
       readonly sampling: Sampling;
+    }
+  /** Draw `drawables` into a layer, then composite it at `opacity`. */
+  | {
+      readonly type: "group";
+      readonly opacity: number;
+      readonly drawables: readonly RawDrawable<Run>[];
     };
 
 export type Filter =
