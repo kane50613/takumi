@@ -5,19 +5,6 @@
   <path d="M91.54 66h143.63" fill="none" stroke="#1e293b" stroke-width="4" stroke-dasharray="8 4.33"/>
   <path d="M233.17 20v48" fill="none" stroke="#1e293b" stroke-width="4" stroke-dasharray="8 5.333"/>
   <path d="M93.54 20v48" fill="none" stroke="#1e293b" stroke-width="4" stroke-dasharray="8 5.333"/>
-  <path d="M331.95 24h102.99v40h-102.99v-40Z" fill="#facc15"/>
-  <path d="M327.95 22h106.99" fill="none" stroke="#1e293b" stroke-width="4" stroke-dasharray="8 4.374"/>
-  <path d="M327.95 66h106.99" fill="none" stroke="#1e293b" stroke-width="4" stroke-dasharray="8 4.374"/>
-  <path d="M329.95 20v48" fill="none" stroke="#1e293b" stroke-width="4" stroke-dasharray="8 5.333"/>
-  <path d="M20 72h49.25v40h-49.25v-40Z" fill="#facc15"/>
-  <path d="M20 70h53.25" fill="none" stroke="#1e293b" stroke-width="4" stroke-dasharray="8 3.312"/>
-  <path d="M20 114h53.25" fill="none" stroke="#1e293b" stroke-width="4" stroke-dasharray="8 3.312"/>
-  <path d="M71.25 68v48" fill="none" stroke="#1e293b" stroke-width="4" stroke-dasharray="8 5.333"/>
-  <path d="M177.25 78h239.53v28h-239.53v-28Z" fill="#facc15"/>
-  <path d="M161.25 70h271.53" fill="none" stroke="#1e293b" stroke-width="4" stroke-dasharray="8 3.979"/>
-  <path d="M161.25 114h271.53" fill="none" stroke="#1e293b" stroke-width="4" stroke-dasharray="8 3.979"/>
-  <path d="M430.78 68v48" fill="none" stroke="#1e293b" stroke-width="4" stroke-dasharray="8 5.333"/>
-  <path d="M163.25 68v48" fill="none" stroke="#1e293b" stroke-width="4" stroke-dasharray="8 5.333"/>
   <g fill="#000">
     <use href="#g0" x="20" y="52"/>
     <use href="#g1" x="32.87" y="52"/>
@@ -38,60 +25,68 @@
     <use href="#g1" x="194.8" y="52"/>
     <use href="#g6" x="206.3" y="52"/>
   </g>
+  <path d="M111.27 72h152.24v40h-152.24v-40Z" fill="#facc15"/>
+  <path d="M107.27 70h160.24" fill="none" stroke="#1e293b" stroke-width="4" stroke-dasharray="8 3.711"/>
+  <path d="M107.27 114h160.24" fill="none" stroke="#1e293b" stroke-width="4" stroke-dasharray="8 3.711"/>
+  <path d="M265.51 68v48" fill="none" stroke="#1e293b" stroke-width="4" stroke-dasharray="8 5.333"/>
+  <path d="M109.27 68v48" fill="none" stroke="#1e293b" stroke-width="4" stroke-dasharray="8 5.333"/>
   <g fill="#000">
-    <use href="#g7" x="240.67" y="52"/>
-    <use href="#g8" x="253.85" y="52"/>
-    <use href="#g3" x="265.84" y="52"/>
-    <use href="#g3" x="278.71" y="52"/>
-    <use href="#g9" x="291.36" y="52"/>
-    <use href="#g10" x="296.86" y="52"/>
-    <use href="#g11" x="309.38" y="52"/>
+    <use href="#g7" x="20" y="100"/>
+    <use href="#g8" x="33.18" y="100"/>
+    <use href="#g3" x="45.17" y="100"/>
+    <use href="#g3" x="58.04" y="100"/>
+    <use href="#g9" x="70.69" y="100"/>
+    <use href="#g10" x="76.19" y="100"/>
+    <use href="#g11" x="88.71" y="100"/>
   </g>
   <g fill="#000">
-    <use href="#g7" x="343.95" y="52"/>
-    <use href="#g8" x="357.12" y="52"/>
-    <use href="#g3" x="369.11" y="52"/>
-    <use href="#g3" x="381.98" y="52"/>
-    <use href="#g9" x="394.63" y="52"/>
-    <use href="#g10" x="400.13" y="52"/>
-    <use href="#g11" x="412.65" y="52"/>
-    <use href="#g5" x="425.72" y="52"/>
+    <use href="#g7" x="123.27" y="100"/>
+    <use href="#g8" x="136.45" y="100"/>
+    <use href="#g3" x="148.44" y="100"/>
+    <use href="#g3" x="161.31" y="100"/>
+    <use href="#g9" x="173.96" y="100"/>
+    <use href="#g10" x="179.46" y="100"/>
+    <use href="#g11" x="191.98" y="100"/>
+    <use href="#g5" x="205.05" y="100"/>
+    <use href="#g0" x="214.27" y="100"/>
+    <use href="#g1" x="227.14" y="100"/>
+    <use href="#g6" x="238.64" y="100"/>
+  </g>
+  <path d="M118.5 126h239.54v28h-239.54v-28Z" fill="#facc15"/>
+  <path d="M102.5 118h271.54" fill="none" stroke="#1e293b" stroke-width="4" stroke-dasharray="8 3.979"/>
+  <path d="M102.5 162h271.54" fill="none" stroke="#1e293b" stroke-width="4" stroke-dasharray="8 3.979"/>
+  <path d="M372.04 116v48" fill="none" stroke="#1e293b" stroke-width="4" stroke-dasharray="8 5.333"/>
+  <path d="M104.5 116v48" fill="none" stroke="#1e293b" stroke-width="4" stroke-dasharray="8 5.333"/>
+  <g fill="#000">
+    <use href="#g12" x="20" y="148"/>
+    <use href="#g1" x="31.79" y="148"/>
+    <use href="#g10" x="44.18" y="148"/>
+    <use href="#g13" x="56.08" y="148"/>
+    <use href="#g4" x="64.35" y="148"/>
+    <use href="#g10" x="76.47" y="148"/>
+    <use href="#g13" x="88.38" y="148"/>
   </g>
   <g fill="#000">
-    <use href="#g0" x="20" y="100"/>
-    <use href="#g1" x="32.87" y="100"/>
-    <use href="#g6" x="44.38" y="100"/>
-  </g>
-  <g fill="#000">
-    <use href="#g12" x="78.75" y="100"/>
-    <use href="#g1" x="90.54" y="100"/>
-    <use href="#g10" x="102.92" y="100"/>
-    <use href="#g13" x="114.83" y="100"/>
-    <use href="#g4" x="123.1" y="100"/>
-    <use href="#g10" x="135.22" y="100"/>
-    <use href="#g13" x="147.12" y="100"/>
-  </g>
-  <g fill="#000">
-    <use href="#g12" x="177.25" y="100"/>
-    <use href="#g1" x="189.04" y="100"/>
-    <use href="#g10" x="201.42" y="100"/>
-    <use href="#g13" x="213.33" y="100"/>
-    <use href="#g4" x="221.6" y="100"/>
-    <use href="#g10" x="233.72" y="100"/>
-    <use href="#g13" x="245.62" y="100"/>
-    <use href="#g5" x="253.59" y="100"/>
-    <use href="#g0" x="262.8" y="100"/>
-    <use href="#g1" x="275.67" y="100"/>
-    <use href="#g6" x="287.18" y="100"/>
-    <use href="#g14" x="305.55" y="100"/>
-    <use href="#g2" x="323.04" y="100"/>
-    <use href="#g8" x="330.5" y="100"/>
-    <use href="#g7" x="342.53" y="100"/>
-    <use href="#g15" x="355.4" y="100"/>
-    <use href="#g16" x="372.34" y="100"/>
-    <use href="#g4" x="384.86" y="100"/>
-    <use href="#g2" x="396.98" y="100"/>
-    <use href="#g4" x="404.44" y="100"/>
+    <use href="#g12" x="118.5" y="148"/>
+    <use href="#g1" x="130.29" y="148"/>
+    <use href="#g10" x="142.68" y="148"/>
+    <use href="#g13" x="154.58" y="148"/>
+    <use href="#g4" x="162.85" y="148"/>
+    <use href="#g10" x="174.97" y="148"/>
+    <use href="#g13" x="186.88" y="148"/>
+    <use href="#g5" x="194.84" y="148"/>
+    <use href="#g0" x="204.06" y="148"/>
+    <use href="#g1" x="216.93" y="148"/>
+    <use href="#g6" x="228.43" y="148"/>
+    <use href="#g14" x="246.8" y="148"/>
+    <use href="#g2" x="264.29" y="148"/>
+    <use href="#g8" x="271.75" y="148"/>
+    <use href="#g7" x="283.79" y="148"/>
+    <use href="#g15" x="296.66" y="148"/>
+    <use href="#g16" x="313.6" y="148"/>
+    <use href="#g4" x="326.11" y="148"/>
+    <use href="#g2" x="338.24" y="148"/>
+    <use href="#g4" x="345.69" y="148"/>
   </g>
   <defs>
     <path id="g0" d="M7.11.27q-1.22 0-2.17-.54-.94-.54-1.44-1.5l-.06 1.77h-1.67v-15.63l1.84.01v5.59q.44-.74 1.36-1.31.92-.58 2.14-.58 1.53 0 2.66.75t1.73 2.11q.63 1.36.63 3.23t-.63 3.24q-.61 1.36-1.73 2.11t-2.66.75Zm-.11-1.77q1.47 0 2.33-1.16t.86-3.17q0-2.03-.86-3.17-.86-1.16-2.28-1.16-1.08 0-1.86.52-.77.52-1.17 1.48-.41.97-.41 2.33 0 1.31.41 2.3t1.15 1.51q.77.52 1.83.52Z"/>
