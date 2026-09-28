@@ -521,7 +521,12 @@ pub(super) fn path_length(path: &[PathCommand]) -> f32 {
         current = point;
       }
       PathCommand::QuadTo(control, point) => {
-        length += bezier_length(current, control, control, point);
+        let lift = |from: Point<f32>| Point {
+          x: from.x + (control.x - from.x) * 2.0 / 3.0,
+          y: from.y + (control.y - from.y) * 2.0 / 3.0,
+        };
+
+        length += bezier_length(current, lift(current), lift(point), point);
         current = point;
       }
       PathCommand::CubicTo(first, second, point) => {
@@ -565,4 +570,19 @@ fn bezier_length(from: Point<f32>, first: Point<f32>, second: Point<f32>, to: Po
       chord
     })
     .sum()
+}
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+
+  #[test]
+  fn a_quadratic_measures_as_its_degree_elevated_cubic() {
+    let path = [
+      PathCommand::MoveTo(Point::ZERO),
+      PathCommand::QuadTo(Point { x: 10.0, y: 10.0 }, Point { x: 20.0, y: 0.0 }),
+    ];
+
+    assert!((path_length(&path) - 22.956).abs() < 0.05);
+  }
 }
