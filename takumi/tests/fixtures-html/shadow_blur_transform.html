@@ -1,0 +1,63 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>shadow_blur_transform</title>
+    <base href="../../../" />
+    <link rel="stylesheet" href="takumi/tests/shared.css" />
+    <style>
+      .card {
+        position: absolute;
+        width: 60px;
+        height: 40px;
+        background-color: rgb(255, 255, 255);
+        transform-origin: 0 0;
+        font-family: "Geist";
+        font-size: 16px;
+      }
+    </style>
+  </head>
+  <body style="width: 480px; height: 260px">
+    <div style="display: block; width: 100%; height: 100%; background-color: rgb(226, 232, 240)">
+      <div
+        class="card"
+        style="left: 20px; top: 20px; transform: scale(2); box-shadow: 6px 6px 8px rgb(15, 23, 42)"
+      ></div>
+      <div
+        class="card"
+        style="
+          left: 180px;
+          top: 20px;
+          transform: scale(2);
+          box-shadow: inset 0 0 8px 2px rgb(220, 38, 38);
+        "
+      ></div>
+      <div
+        class="card"
+        style="
+          left: 340px;
+          top: 20px;
+          width: 60px;
+          transform: scale(1.5, 3);
+          background-color: transparent;
+          text-shadow: 4px 4px 3px rgb(37, 99, 235);
+        "
+      >
+        Blur
+      </div>
+      <div
+        class="card"
+        style="left: 20px; top: 150px; box-shadow: 6px 6px 16px rgb(15, 23, 42)"
+      ></div>
+      <div
+        class="card"
+        style="
+          left: 180px;
+          top: 150px;
+          transform: rotate(30deg) scale(1.5);
+          box-shadow: 4px 4px 6px rgb(15, 23, 42);
+        "
+      ></div>
+    </div>
+  </body>
+</html>
