@@ -9,7 +9,7 @@ use super::{
     PaintGlyph, PaintNode, PaintRect, PaintStep, Role, Sampling, Shape, TextRun,
   },
   fonts::FontTable,
-  record::{RecordedText, Recorder},
+  record::Recorder,
 };
 use crate::{
   context::RenderContext,
@@ -459,10 +459,7 @@ impl Walker {
       }
       GlyphFill::Text => Vec::new(),
     };
-    let mut recorder = Recorder::text(RecordedText {
-      runs: &runs.runs,
-      background,
-    });
+    let mut recorder = Recorder::text(background);
 
     runs.paint(
       spans,

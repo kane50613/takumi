@@ -1,6 +1,6 @@
 //! A paint device that records what the shared painters draw as drawables.
 
-use std::ptr;
+use std::mem;
 
 #[cfg(feature = "png")]
 use super::document::{ImageSource, Sampling};
@@ -34,45 +34,36 @@ struct Clip {
   outside: bool,
 }
 
-/// The runs a text node lays out, and what `background-clip: text` shows through them.
-pub(super) struct RecordedText<'r> {
-  /// The runs, indexed as the node's `runs` are.
-  pub(super) runs: &'r [PositionedInlineRun],
-  /// The box's background layers, bottom first, in the node's space.
-  pub(super) background: Vec<Paint>,
-}
-
 /// Records draws in a node's local space as [`Drawable`]s.
-///
-/// Approximate: a layer the painters open multiplies its opacity into each draw inside it, so
-/// draws that overlap inside one layer, such as the dashes of a translucent outline meeting at a
-/// corner, paint darker where a real layer would not.
-pub(super) struct Recorder<'r> {
+pub(super) struct Recorder {
   drawables: Vec<Drawable>,
   role: Role,
   clips: Vec<Clip>,
-  opacities: Vec<f32>,
+  /// The open layers, innermost last: each one's opacity and the drawables outside it.
+  layers: Vec<(f32, Vec<Drawable>)>,
   shadow: Option<SizedShadow>,
-  text: Option<RecordedText<'r>>,
+  /// For a text node, the box's background layers that `background-clip: text` shows through its
+  /// glyphs, bottom first, in the node's space.
+  text_background: Option<Vec<Paint>>,
 }
 
-impl<'r> Recorder<'r> {
+impl Recorder {
   /// A recorder for a box or image.
   pub(super) fn new() -> Self {
     Self {
       drawables: Vec::new(),
       role: Role::Background,
       clips: Vec::new(),
-      opacities: Vec::new(),
+      layers: Vec::new(),
       shadow: None,
-      text: None,
+      text_background: None,
     }
   }
 
-  /// A recorder for a text node laying out `text`.
-  pub(super) fn text(text: RecordedText<'r>) -> Self {
+  /// A recorder for a text node, whose glyphs show `background` under `background-clip: text`.
+  pub(super) fn text(background: Vec<Paint>) -> Self {
     Self {
-      text: Some(text),
+      text_background: Some(background),
       ..Self::new()
     }
   }
@@ -87,13 +78,9 @@ impl<'r> Recorder<'r> {
     self.drawables.push(drawable);
   }
 
-  /// `color` at the opacity of the open layers, or `None` when it shows nothing.
+  /// `color`, or `None` when it shows nothing.
   fn visible(&self, color: Color) -> Option<[u8; 4]> {
-    let opacity: f32 = self.opacities.iter().product();
-    let [r, g, b, a] = color.0;
-    let alpha = (f32::from(a) * opacity).round() as u8;
-
-    (alpha > 0).then_some([r, g, b, alpha])
+    (color.0[3] > 0).then_some(color.0)
   }
 
   /// The open clips, as shapes to clip to at once.
@@ -211,7 +198,7 @@ fn shadow_offset(shadow: &SizedShadow) -> PaintPoint {
   }
 }
 
-impl PaintDevice for Recorder<'_> {
+impl PaintDevice for Recorder {
   fn set_role(&mut self, role: PaintRole) {
     self.role = role.into();
   }
@@ -289,11 +276,23 @@ impl PaintDevice for Recorder<'_> {
   }
 
   fn begin_layer(&mut self, opacity: f32) {
-    self.opacities.push(opacity);
+    let outside = mem::take(&mut self.drawables);
+
+    self.layers.push((opacity, outside));
   }
 
   fn end_layer(&mut self) {
-    self.opacities.pop();
+    let Some((opacity, outside)) = self.layers.pop() else {
+      return;
+    };
+    let inside = mem::replace(&mut self.drawables, outside);
+
+    if !inside.is_empty() {
+      self.drawables.push(Drawable::Group {
+        opacity,
+        drawables: inside,
+      });
+    }
   }
 
   fn fill_shadow(&mut self, shape: &ShadowShape, shadow: &SizedShadow, transform: Affine) {
@@ -301,7 +300,7 @@ impl PaintDevice for Recorder<'_> {
   }
 }
 
-impl GlyphDevice for Recorder<'_> {
+impl GlyphDevice for Recorder {
   fn begin_shadow(&mut self, shadow: &SizedShadow) {
     self.shadow = Some(*shadow);
   }
@@ -317,19 +316,13 @@ impl GlyphDevice for Recorder<'_> {
     fill: GlyphFill,
     frame: BoxFrame,
   ) {
-    let Some((index, background)) = self.text.as_ref().and_then(|text| {
-      let index = text
-        .runs
-        .iter()
-        .position(|candidate| ptr::eq(candidate, run))?;
-      let background = match fill {
-        GlyphFill::Background => text.background.clone(),
-        GlyphFill::Text => Vec::new(),
-      };
-
-      Some((index, background))
-    }) else {
+    let Some(text_background) = self.text_background.as_ref() else {
       return;
+    };
+    let index = run.index;
+    let background = match fill {
+      GlyphFill::Background => text_background.clone(),
+      GlyphFill::Text => Vec::new(),
     };
     let brush = &run.glyph_run.brush;
     let join = style.parent.stroke_linejoin;
