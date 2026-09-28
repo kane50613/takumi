@@ -8,7 +8,7 @@ use xxhash_rust::xxh3::Xxh3;
 use crate::{
   BorderProperties, Canvas, CanvasViewport, Command, MaskCompositeColor, MaskSamplingOptions,
   PaintSource, Placement, Result, SamplingOptions, SizedFontStyle, Stroke, checked_area,
-  composite_mask_source_to_pixmap, pixmap_ref_from_buffer, render_mask,
+  composite_mask_source_to_pixmap, cull_bounds, pixmap_ref_from_buffer, render_mask,
   resources::{
     glyph::{ResolvedBitmapGlyph, ResolvedColorLayer, ResolvedGlyph},
     glyph_cache::glyph_mask,
@@ -477,21 +477,18 @@ pub(crate) fn bitmap_coverage(
     max_y = max_y.max(y);
   }
 
-  let left = (min_x.floor() as i32).max(cull.origin.x as i32);
-  let top = (min_y.floor() as i32).max(cull.origin.y as i32);
-  let right = (max_x.ceil() as i32).min(cull.right());
-  let bottom = (max_y.ceil() as i32).min(cull.bottom());
+  let placement = cull_bounds(
+    [
+      min_x.floor() as i32,
+      min_y.floor() as i32,
+      max_x.ceil() as i32,
+      max_y.ceil() as i32,
+    ],
+    Some(cull),
+  )?;
 
-  if right <= left || bottom <= top {
-    return None;
-  }
+  checked_area(placement.width, placement.height, 4)?;
 
-  let placement = Placement {
-    left,
-    top,
-    width: (right - left) as u32,
-    height: (bottom - top) as u32,
-  };
   let mut pixmap = Pixmap::new(placement.width, placement.height)?;
 
   pixmap.draw_pixmap(
@@ -502,7 +499,7 @@ pub(crate) fn bitmap_coverage(
       quality: FilterQuality::Bilinear,
       ..PixmapPaint::default()
     },
-    (Affine::translation(-left as f32, -top as f32) * transform).into(),
+    (Affine::translation(-placement.left as f32, -placement.top as f32) * transform).into(),
     None,
   );
 
