@@ -130,12 +130,9 @@ impl GlyphPaintCtx<'_, '_> {
     stroke
   }
 
-  /// The `-webkit-text-stroke`, divided by the transform's scale so it lands at
-  /// its specified width.
-  fn scaled_text_stroke(&self) -> Stroke {
-    let scale = self.transform.uniform_scale().max(f32::EPSILON);
-
-    self.stroke_of(self.stroke.0 / scale)
+  /// The `-webkit-text-stroke`, in glyph space so transforms and `text-fit` scale it.
+  fn text_stroke(&self) -> Stroke {
+    self.stroke_of(self.stroke.0)
   }
 
   fn draw_text_stroke(&mut self) {
@@ -143,7 +140,7 @@ impl GlyphPaintCtx<'_, '_> {
       return;
     }
 
-    self.draw_stroke(self.scaled_text_stroke(), self.stroke.1);
+    self.draw_stroke(self.text_stroke(), self.stroke.1);
   }
 
   fn draw_embolden(&mut self, embolden: f32, color: Color) {
@@ -171,7 +168,7 @@ impl GlyphPaintCtx<'_, '_> {
     }
 
     self.composite_stroke(
-      self.scaled_text_stroke(),
+      self.text_stroke(),
       MaskCompositeColor::color_over_source(self.stroke.1),
       clip_image,
     );
