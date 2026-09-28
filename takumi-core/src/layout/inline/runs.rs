@@ -345,8 +345,12 @@ impl BuiltInlineLayout<'_> {
 
           let metrics = run.metrics();
           // The run's leaded box: the font height plus the line-height leading.
-          let (above, below) =
-            brush.line_box_contribution(metrics.line_height, metrics.ascent, metrics.descent);
+          let (above, below) = brush.line_box_contribution(
+            metrics.line_height,
+            metrics.ascent,
+            metrics.descent,
+            metrics.leading,
+          );
           // The font's rounded ascent and descent, without the line-height leading, like the
           // inline box fragment `InlineBoxState::ComputeTextMetrics` sizes.
           let ascent = metrics.ascent.round();
