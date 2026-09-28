@@ -50,6 +50,9 @@ pub struct RunMetrics {
   pub ascent: f32,
   /// Typographic descent.
   pub descent: f32,
+  /// Height of the run's leaded box: the used line height, grown to a fallback face's own
+  /// height under `line-height: normal`.
+  pub line_height: f32,
   /// Underline offset from the baseline.
   pub underline_offset: f32,
   /// Underline stroke thickness.
@@ -196,6 +199,13 @@ impl ShapedRun {
     let run = glyph_run.run();
     let metrics = run.metrics();
     let synthesis = run_synthesis(glyph_run);
+    // The run's leaded box: the font height plus the line-height leading.
+    let (above, below) = brush.line_box_contribution(
+      metrics.line_height,
+      metrics.ascent,
+      metrics.descent,
+      metrics.leading,
+    );
 
     for (index, glyph) in glyphs.iter_mut().enumerate() {
       glyph.x += hanging.shift + stretch.shift(index);
@@ -211,6 +221,7 @@ impl ShapedRun {
       metrics: RunMetrics {
         ascent: metrics.ascent,
         descent: metrics.descent,
+        line_height: above + below,
         underline_offset: metrics.underline_offset,
         underline_size: metrics.underline_size,
       },

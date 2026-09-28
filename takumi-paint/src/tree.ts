@@ -6,7 +6,7 @@ import type {
   RawDrawable,
   RawEffects,
   RawFont,
-  RawPaintDocument,
+  RawPaintTree,
   RawPaintNode,
   RawTextRun,
   Rect,
@@ -105,7 +105,7 @@ export interface ImageNode extends NodeBase {
   readonly image: ImageSource;
 }
 
-/** One step of painting the document, bottom to top. */
+/** One step of painting the tree, bottom to top. */
 export type PaintStep =
   /** Draw these in order, under `node.transform`. */
   | { readonly type: "draw"; readonly node: PaintNode; readonly drawables: readonly Drawable[] }
@@ -118,17 +118,17 @@ export type PaintStep =
 
 type RawNode<Type extends RawPaintNode["type"]> = Extract<RawPaintNode, { type: Type }>;
 
-/** A painted document. Lengths are device pixels. Iterating it yields every node in document order. */
-export class PaintDocument implements Iterable<PaintNode> {
+/** A painted tree. Lengths are device pixels. Iterating it yields every node in document order. */
+export class PaintTree implements Iterable<PaintNode> {
   readonly width: number;
   readonly height: number;
   /** Every font the runs use. */
   readonly fonts: readonly Font[];
-  readonly #raw: RawPaintDocument;
+  readonly #raw: RawPaintTree;
   readonly #nodes: readonly PaintNode[];
 
-  /** Wraps the document `raw`, reading font files through `fontData`. */
-  constructor(raw: RawPaintDocument, fontData: (index: number) => Uint8Array | undefined) {
+  /** Wraps the serialized tree `raw`, reading font files through `fontData`. */
+  constructor(raw: RawPaintTree, fontData: (index: number) => Uint8Array | undefined) {
     this.#raw = raw;
     this.width = raw.width;
     this.height = raw.height;
@@ -152,7 +152,7 @@ export class PaintDocument implements Iterable<PaintNode> {
   node(index: number): PaintNode {
     const node = this.#nodes[index];
 
-    if (!node) throw new Error(`The document lists no node ${index}`);
+    if (!node) throw new Error(`The tree lists no node ${index}`);
     return node;
   }
 
@@ -160,7 +160,7 @@ export class PaintDocument implements Iterable<PaintNode> {
   get root(): BoxNode {
     const root = this.node(0);
 
-    if (root.type !== "box") throw new Error("The document's root is not a box");
+    if (root.type !== "box") throw new Error("The tree's root is not a box");
     return root;
   }
 
@@ -200,15 +200,15 @@ export class PaintDocument implements Iterable<PaintNode> {
   }
 }
 
-/** A node read from its raw form, its links resolved through the document. */
+/** A node read from its raw form, its links resolved through the tree. */
 abstract class NodeView<Raw extends RawPaintNode> {
   protected readonly raw: Raw;
-  protected readonly document: PaintDocument;
+  protected readonly tree: PaintTree;
   #drawables: readonly Drawable[] | undefined;
 
-  constructor(raw: Raw, document: PaintDocument) {
+  constructor(raw: Raw, tree: PaintTree) {
     this.raw = raw;
-    this.document = document;
+    this.tree = tree;
   }
 
   get element(): ElementInfo | undefined {
@@ -232,7 +232,7 @@ abstract class NodeView<Raw extends RawPaintNode> {
   }
 
   get parent(): BoxNode | undefined {
-    const parent = this.raw.parent === undefined ? undefined : this.document.node(this.raw.parent);
+    const parent = this.raw.parent === undefined ? undefined : this.tree.node(this.raw.parent);
 
     return parent?.type === "box" ? parent : undefined;
   }
@@ -289,7 +289,7 @@ class BoxView extends NodeView<RawNode<"box">> implements BoxNode {
   }
 
   get children(): readonly PaintNode[] {
-    return this.raw.children.map((child) => this.document.node(child));
+    return this.raw.children.map((child) => this.tree.node(child));
   }
 
   *[Symbol.iterator](): Iterator<PaintNode> {
@@ -325,9 +325,9 @@ class TextView extends NodeView<RawNode<"text">> implements TextNode {
 
   private wrap(raw: RawTextRun): TextRun {
     const { outline, font, ...fields } = raw;
-    const resolved = this.document.fonts[font];
+    const resolved = this.tree.fonts[font];
 
-    if (!resolved) throw new Error(`The document lists no font ${font}`);
+    if (!resolved) throw new Error(`The tree lists no font ${font}`);
     return { ...fields, font: resolved, outline: () => outline };
   }
 }
