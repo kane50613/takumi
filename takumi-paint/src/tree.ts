@@ -164,14 +164,6 @@ export class PaintTree implements Iterable<PaintNode> {
     return root;
   }
 
-  /** The box of the element with this `id`. */
-  find(id: string): BoxNode | undefined {
-    for (const node of this) {
-      if (node.type === "box" && node.element?.id === id) return node;
-    }
-    return undefined;
-  }
-
   /** The steps a renderer takes, in paint order. */
   *paintSteps(): Generator<PaintStep> {
     for (const step of this.#raw.steps) {
