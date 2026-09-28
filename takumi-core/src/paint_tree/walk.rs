@@ -109,7 +109,14 @@ impl Walker {
         }
         PaintPhase::Items(items, part) => (items, part),
       };
-      let mut earlier = mem::take(&mut decorated).into_iter();
+      // Floats paint between the decorations and the content phases, so only the content phase
+      // takes the boxes the decorations phase opened.
+      let mut earlier = if phase_part == BoxPart::Content {
+        mem::take(&mut decorated)
+      } else {
+        Vec::new()
+      }
+      .into_iter();
 
       for item in items {
         let Some(part) = item.part_in(phase_part) else {
