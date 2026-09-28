@@ -1466,6 +1466,7 @@ mod tests {
       metrics: RunMetrics {
         ascent: 40.0,
         descent: 10.0,
+        line_height: 50.0,
         underline_offset: -5.0,
         underline_size: 2.0,
       },
