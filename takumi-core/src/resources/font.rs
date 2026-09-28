@@ -680,6 +680,16 @@ pub(crate) struct PrimaryFontMetrics {
   pub(crate) line_gap: f32,
   /// Unrounded, as Blink's `FontMetrics::XHeight`.
   pub(crate) x_height: Option<f32>,
+  /// The ascent, descent and line gap before rounding, which a scaled font rounds anew.
+  pub(crate) exact: ExactFontMetrics,
+}
+
+/// A font's vertical metrics at a size, unrounded.
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct ExactFontMetrics {
+  pub(crate) ascent: f32,
+  pub(crate) descent: f32,
+  pub(crate) line_gap: f32,
 }
 
 impl PrimaryFontMetrics {
@@ -727,6 +737,11 @@ impl RenderContext {
           descent: metrics.descent.abs().round(),
           line_gap: metrics.leading.round(),
           x_height: metrics.x_height,
+          exact: ExactFontMetrics {
+            ascent: metrics.ascent,
+            descent: metrics.descent.abs(),
+            line_gap: metrics.leading,
+          },
         });
         QueryStatus::Stop
       });

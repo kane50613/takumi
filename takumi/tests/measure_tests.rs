@@ -954,7 +954,7 @@ fn test_measure_text_fit_shrink_applies_with_letter_spacing() {
         TextFit::builder()
           .mode(TextFitMode::Shrink)
           .target(TextFitTarget::Consistent)
-          .limit(Some(0.3))
+          .limit(Some(0.1))
           .build(),
       )),
     ),

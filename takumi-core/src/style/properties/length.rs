@@ -11,7 +11,7 @@ use taffy::{CompactLength, Dimension, LengthPercentage, LengthPercentageAuto};
 use crate::style::{
   AspectRatio, CssSyntaxKind, CssToken, FromCss, FromCssStr, MakeComputed, ParseResult,
   SizingContext, ToCss,
-  calc::{CalcLinear, CalcTerms, CalcValue, parse_calc_sum},
+  calc::{CalcLinear, CalcTerms, CalcUnit, CalcValue, parse_calc_sum},
   tw::Namespace,
   tw::{TW_VAR_SPACING, TailwindPropertyParser},
   unexpected_token,
@@ -297,6 +297,15 @@ impl Neg for Length {
 }
 
 impl Length {
+  /// Whether the length refers to a percentage, which Blink's `Length::IsFixed` rules out.
+  pub(crate) fn has_percentage(self) -> bool {
+    match self {
+      Self::Percentage(_) => true,
+      Self::Calc(terms) => terms.terms().any(|term| term.unit == CalcUnit::Percent),
+      _ => false,
+    }
+  }
+
   /// Returns a zero pixel length unit.
   pub const fn zero() -> Self {
     Self::Px(0.0)

@@ -52,14 +52,14 @@ pub use self::{
 pub(crate) use self::{background::PaddingBox, items::InlineOutOfFlow};
 use self::{
   breaking::distribute_trailing_whitespace,
-  line_box::{BoxFont, BoxKey},
+  line_box::{BoxFont, BoxKey, FontHeight},
   metrics::{
     ResolvedInlineLineState, ResolvedLineMetrics, Strut, resolve_inline_line_metrics,
     resolve_inline_line_states, resolve_visual_inline_box, text_line_box_contribution,
   },
   runs::measured_run_text,
   text_fit::{
-    LineScaleState, text_fit_is_applicable, text_fit_line_advance,
+    GlyphCursor, LineScaleState, SpacingStretch, text_fit_is_applicable, text_fit_line_advance,
     text_fit_line_alignment_correction, text_fit_line_scales, text_fit_x_correction,
   },
   truncation::make_ellipsis_layout,
@@ -300,7 +300,7 @@ impl BuiltInlineLayout<'_> {
           return metrics.inline_min_coord + metrics.advance;
         }
 
-        let (text_advance, static_advance) = text_fit_line_advance(&line);
+        let (text_advance, static_advance) = text_fit_line_advance(&line, self.layout.is_rtl());
         let scale = self.line_scales.get(index).copied().unwrap_or(1.0);
 
         metrics.inline_min_coord + static_advance + text_advance * scale
@@ -360,6 +360,7 @@ impl BuiltInlineLayout<'_> {
           glyph_run,
           static_inline_prefix,
           hanging,
+          stretch,
         } => {
           let span_id = glyph_run.style().brush.source_span_id;
           let text = measured_run_text(&self.text, &self.spans, &glyph_run, span_id);
@@ -372,6 +373,7 @@ impl BuiltInlineLayout<'_> {
           let (origin, size) = glyph_run_rect(
             &glyph_run,
             hanging,
+            &stretch,
             self.run_baseline_shift(line, &glyph_run),
           );
           let (origin, size) = setup.scale_rect(origin, size, static_inline_prefix);
@@ -508,6 +510,11 @@ pub struct InlineBrush {
   pub(crate) line_height_px: Option<f32>,
   /// Whether the line height is `normal`, letting fallback-font runs grow the line.
   pub(crate) line_height_is_normal: bool,
+  /// `letter-spacing` in pixels when it is fixed rather than a percentage, which `text-fit`
+  /// leaves unscaled.
+  pub(crate) fixed_letter_spacing: f32,
+  /// `word-spacing` in pixels when it is fixed rather than a percentage.
+  pub(crate) fixed_word_spacing: f32,
   pub(crate) vertical_align: VerticalAlign,
 }
 
@@ -531,6 +538,35 @@ impl InlineBrush {
 
     text_line_box_contribution(line_height, ascent, descent)
   }
+
+  /// The run's line-box contribution on a line `text-fit` scales by `line_scale`. A line height
+  /// that scales grows whole; a fixed one keeps its height around the scaled font's content area,
+  /// as Blink's `InlineBoxState::ComputeTextMetrics` measures the scaled font.
+  fn line_box_height(
+    &self,
+    metrics_line_height: f32,
+    ascent: f32,
+    descent: f32,
+    line_gap: f32,
+    line_scale: f32,
+  ) -> FontHeight {
+    let (font_scale, box_scale) = if self.line_height_scales_with_text_fit {
+      (1.0, line_scale)
+    } else {
+      (line_scale, 1.0)
+    };
+    let (above, below) = self.line_box_contribution(
+      metrics_line_height,
+      ascent * font_scale,
+      descent * font_scale,
+      line_gap * font_scale,
+    );
+
+    FontHeight {
+      ascent: above * box_scale,
+      descent: below * box_scale,
+    }
+  }
 }
 
 impl Default for InlineBrush {
@@ -553,6 +589,8 @@ impl Default for InlineBrush {
       line_height_scales_with_text_fit: false,
       line_height_px: None,
       line_height_is_normal: false,
+      fixed_letter_spacing: 0.0,
+      fixed_word_spacing: 0.0,
       vertical_align: VerticalAlign::default(),
     }
   }
@@ -1143,11 +1181,12 @@ impl LineSetup {
     line_vertical_metrics: &[ResolvedLineMetrics],
     line_scales: &[f32],
     line_index: usize,
+    rtl: bool,
   ) -> Option<Self> {
     let resolved_metrics = line_vertical_metrics.get(line_index)?.clone();
     let line_scale = line_scales.get(line_index).copied().unwrap_or(1.0);
     let (line_scale_origin_x, alignment_correction) =
-      text_fit_line_alignment_correction(line, line_scale, layout.unsnapped_content.width);
+      text_fit_line_alignment_correction(line, line_scale, layout.unsnapped_content.width, rtl);
     let content = layout.content_box_offset();
 
     Some(Self {
@@ -1211,10 +1250,12 @@ impl LineSetup {
   }
 }
 
-/// A glyph run's advance by its ascent plus descent, as a line-local top-left and size.
+/// A glyph run's advance, stretched by `stretch`, by its ascent plus descent, as a line-local
+/// top-left and size.
 pub(crate) fn glyph_run_rect(
   glyph_run: &GlyphRun<'_, InlineBrush>,
   hanging: HangingWhitespace,
+  stretch: &SpacingStretch,
   baseline_shift: f32,
 ) -> (Point<f32>, Size<f32>) {
   let metrics = glyph_run.run().metrics();
@@ -1225,7 +1266,7 @@ pub(crate) fn glyph_run_rect(
       y: glyph_run.baseline() + baseline_shift - metrics.ascent,
     },
     Size {
-      width: glyph_run.advance(),
+      width: glyph_run.advance() + stretch.advance,
       height: metrics.ascent + metrics.descent,
     },
   )
@@ -1283,6 +1324,8 @@ pub(crate) enum PlacedItem<'a> {
     static_inline_prefix: f32,
     /// The line-end whitespace this run carries.
     hanging: HangingWhitespace,
+    /// How far `text-fit` moves the run's glyphs so its fixed spacing stays unscaled.
+    stretch: SpacingStretch,
   },
   /// An in-flow box, its `x` already scaled for text-fit.
   Box(VisualInlineBox),
@@ -1308,6 +1351,7 @@ impl BuiltInlineLayout<'_> {
         &line_vertical_metrics,
         &self.line_scales,
         index,
+        self.layout.is_rtl(),
       ) else {
         continue;
       };
@@ -1319,17 +1363,24 @@ impl BuiltInlineLayout<'_> {
       let items: Vec<_> = line.items().collect();
       let hanging = distribute_trailing_whitespace(&items, &line, self.layout.is_rtl());
       let mut static_inline_prefix = 0.0_f32;
+      let mut cursor = GlyphCursor::default();
 
       for (item_index, item) in items.into_iter().enumerate() {
         match item {
-          PositionedLayoutItem::GlyphRun(glyph_run) => visit(
-            &walked,
-            PlacedItem::Run {
-              glyph_run,
-              static_inline_prefix,
-              hanging: hanging[item_index],
-            },
-          )?,
+          PositionedLayoutItem::GlyphRun(glyph_run) => {
+            let (stretch, spacing) = cursor.stretch(&glyph_run, walked.setup.state.scale);
+
+            visit(
+              &walked,
+              PlacedItem::Run {
+                glyph_run,
+                static_inline_prefix,
+                hanging: hanging[item_index],
+                stretch,
+              },
+            )?;
+            static_inline_prefix += spacing;
+          }
           PositionedLayoutItem::InlineBox(inline_box) => {
             let kind = self.box_kind(&inline_box);
 

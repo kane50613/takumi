@@ -5,7 +5,9 @@ use crate::{
   geometry::Point,
   style::{Affine, TextFitMode, TextFitTarget},
 };
-use parley::{BreakReason, InlineBoxKind, Line, PositionedInlineBox, PositionedLayoutItem};
+use parley::{
+  BreakReason, Cluster, GlyphRun, InlineBoxKind, Line, PositionedInlineBox, PositionedLayoutItem,
+};
 
 use super::{InlineBrush, InlineLayout};
 
@@ -35,23 +37,161 @@ pub(super) fn text_fit_is_applicable(positioned_floats: &[PositionedInlineBox]) 
   positioned_floats.is_empty()
 }
 
-/// Returns `(text_advance, static_advance)` for a line.
-pub(super) fn text_fit_line_advance(line: &Line<'_, InlineBrush>) -> (f32, f32) {
+/// The fixed letter- and word-spacing `cluster` carries, which `text-fit` leaves unscaled as
+/// Blink's `PercentageSpacingDescription` drops it before measuring.
+fn cluster_fixed_spacing(cluster: &Cluster<'_, InlineBrush>) -> f32 {
+  let brush = &cluster.first_style().brush;
+  let word = if cluster.is_space_or_nbsp() {
+    brush.fixed_word_spacing
+  } else {
+    0.0
+  };
+
+  brush.fixed_letter_spacing + word
+}
+
+/// How far `text-fit` moves a glyph run's glyphs and end before scaling, so the fixed spacing
+/// between them stays unscaled.
+#[derive(Clone, Default)]
+pub(crate) struct SpacingStretch {
+  /// The shift of each glyph, in visual order; empty when none moves.
+  shifts: Vec<f32>,
+  /// The shift of the run's end.
+  pub(crate) advance: f32,
+}
+
+impl SpacingStretch {
+  /// The stretch of `glyph_run`, whose glyphs start at `glyph_start` among its parley run's, on a
+  /// line `text-fit` scales by `scale`, with the fixed spacing it carries.
+  fn of(glyph_run: &GlyphRun<'_, InlineBrush>, glyph_start: usize, scale: f32) -> (Self, f32) {
+    let brush = &glyph_run.style().brush;
+
+    if brush.fixed_letter_spacing == 0.0 && brush.fixed_word_spacing == 0.0 {
+      return (Self::default(), 0.0);
+    }
+
+    let stretch = (1.0 - scale) / scale;
+    let mut shifts = Vec::new();
+    let mut total = 0.0;
+
+    for after in glyph_run
+      .run()
+      .visual_clusters()
+      .flat_map(|cluster| {
+        let spacing = cluster_fixed_spacing(&cluster);
+        let count = cluster.glyphs().count();
+
+        (0..count).map(move |index| if index + 1 == count { spacing } else { 0.0 })
+      })
+      .skip(glyph_start)
+      .take(glyph_run.glyphs().count())
+    {
+      shifts.push(total * stretch);
+      total += after;
+    }
+
+    (
+      Self {
+        shifts,
+        advance: total * stretch,
+      },
+      total,
+    )
+  }
+
+  /// The shift of the glyph at `index`.
+  pub(crate) fn shift(&self, index: usize) -> f32 {
+    self.shifts.get(index).copied().unwrap_or(0.0)
+  }
+}
+
+/// Where each glyph run on a line starts among its parley run's glyphs, tracked as parley's
+/// `GlyphRunIter` splits a run where the style changes.
+#[derive(Default)]
+pub(crate) struct GlyphCursor {
+  run: Option<usize>,
+  end: usize,
+}
+
+impl GlyphCursor {
+  /// The stretch of the next glyph run, `glyph_run`, on a line `text-fit` scales by `scale`, with
+  /// the fixed spacing it carries.
+  pub(crate) fn stretch(
+    &mut self,
+    glyph_run: &GlyphRun<'_, InlineBrush>,
+    scale: f32,
+  ) -> (SpacingStretch, f32) {
+    if (scale - 1.0).abs() <= f32::EPSILON {
+      return (SpacingStretch::default(), 0.0);
+    }
+
+    let run = glyph_run.run().index();
+    let start = if self.run == Some(run) { self.end } else { 0 };
+
+    self.run = Some(run);
+    self.end = start + glyph_run.glyphs().count();
+    SpacingStretch::of(glyph_run, start, scale)
+  }
+}
+
+/// The fixed spacing on `line` outside its trailing whitespace, whose advance `text-fit` leaves
+/// out, in a paragraph that is right-to-left when `rtl`.
+fn line_fixed_spacing(line: &Line<'_, InlineBrush>, rtl: bool) -> f32 {
+  let mut clusters: Vec<(f32, bool)> = Vec::new();
+  let mut last_run = None;
+
+  for item in line.items() {
+    let PositionedLayoutItem::GlyphRun(glyph_run) = item else {
+      continue;
+    };
+    let run = glyph_run.run();
+
+    if last_run.replace(run.index()) == Some(run.index()) {
+      continue;
+    }
+    clusters.extend(run.visual_clusters().map(|cluster| {
+      (
+        cluster_fixed_spacing(&cluster),
+        cluster.is_space_or_nbsp() || cluster.is_hard_line_break(),
+      )
+    }));
+  }
+
+  let total: f32 = clusters.iter().map(|(spacing, _)| spacing).sum();
+  let trailing = |clusters: &mut dyn Iterator<Item = &(f32, bool)>| -> f32 {
+    clusters
+      .take_while(|(_, whitespace)| *whitespace)
+      .map(|(spacing, _)| spacing)
+      .sum()
+  };
+
+  total
+    - if rtl {
+      trailing(&mut clusters.iter())
+    } else {
+      trailing(&mut clusters.iter().rev())
+    }
+}
+
+/// Returns `(text_advance, static_advance)` for a line in a paragraph that is right-to-left when
+/// `rtl`. Fixed spacing counts as static, as Blink's `LineFitter` measures text without it.
+pub(super) fn text_fit_line_advance(line: &Line<'_, InlineBrush>, rtl: bool) -> (f32, f32) {
   let metrics = line.metrics();
-  let static_advance: f32 = line
+  let boxes: f32 = line
     .items()
     .filter_map(|item| match item {
       PositionedLayoutItem::InlineBox(b) if b.kind == InlineBoxKind::InFlow => Some(b.width),
       _ => None,
     })
     .sum();
+  let spacing = line_fixed_spacing(line, rtl);
+  let static_advance = boxes + spacing;
   let text_advance = (metrics.advance - metrics.trailing_whitespace - static_advance).max(0.0);
+
   (text_advance, static_advance)
 }
 
-/// Naive next to Blink's `text_fit_utils.cc`: fixed letter/word-spacing scales
-/// with the glyphs instead of staying constant, though the fitted line width
-/// matches.
+/// The scale `text-fit` gives each line, after Blink's `text_fit_utils.cc`.
 pub(super) fn text_fit_line_scales(
   layout: &InlineLayout,
   max_width: f32,
@@ -73,7 +213,7 @@ pub(super) fn text_fit_line_scales(
       continue;
     }
 
-    let (text_advance, static_advance) = text_fit_line_advance(&line);
+    let (text_advance, static_advance) = text_fit_line_advance(&line, layout.is_rtl());
     let flexible_fit_width =
       (max_width - line.metrics().inline_min_coord - static_advance).max(0.0);
 
@@ -122,6 +262,7 @@ pub(super) fn text_fit_line_alignment_correction(
   line: &Line<'_, InlineBrush>,
   line_scale: f32,
   container_width: f32,
+  rtl: bool,
 ) -> (f32, f32) {
   let metrics = line.metrics();
   let line_start = metrics.inline_min_coord + metrics.offset;
@@ -130,7 +271,7 @@ pub(super) fn text_fit_line_alignment_correction(
     return (line_start, 0.0);
   }
 
-  let (text_advance, static_advance) = text_fit_line_advance(line);
+  let (text_advance, static_advance) = text_fit_line_advance(line, rtl);
   let scaled_line_width = static_advance + text_advance * line_scale;
 
   // free_space_pre_scale = room left for alignment before text-fit scaling.

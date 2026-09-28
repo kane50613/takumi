@@ -260,6 +260,8 @@ impl SizedFontStyle<'_> {
     self.sizing.font_size.to_bits().hash(hasher);
     self.letter_spacing.to_bits().hash(hasher);
     self.word_spacing.to_bits().hash(hasher);
+    self.parent.letter_spacing.has_percentage().hash(hasher);
+    self.parent.word_spacing.has_percentage().hash(hasher);
     self.text_underline_offset.map(f32::to_bits).hash(hasher);
     self.line_height_scales_with_text_fit.hash(hasher);
     self.line_height_is_normal.hash(hasher);
@@ -392,6 +394,16 @@ impl<'s> From<&'s SizedFontStyle<'s>> for TextStyle<'s, 's, InlineBrush> {
         line_height_scales_with_text_fit: style.line_height_scales_with_text_fit,
         line_height_px: style.line_height_px,
         line_height_is_normal: style.line_height_is_normal,
+        fixed_letter_spacing: if style.parent.letter_spacing.has_percentage() {
+          0.0
+        } else {
+          style.letter_spacing
+        },
+        fixed_word_spacing: if style.parent.word_spacing.has_percentage() {
+          0.0
+        } else {
+          style.word_spacing
+        },
         vertical_align: style.parent.vertical_align,
       },
       text_wrap_mode: style.parent.resolved_text_wrap_mode().into_parley(),

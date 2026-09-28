@@ -23,7 +23,7 @@ use super::{
   items::ProcessedInlineSpan,
   metrics::{VisualInlineBox, resolve_visual_inline_box},
   outline::InlineOutlineRect,
-  text_fit::LineScaleState,
+  text_fit::{LineScaleState, SpacingStretch},
 };
 
 /// A shaped glyph positioned within its run, in run-local coordinates.
@@ -179,11 +179,13 @@ impl HangingWhitespace {
 }
 
 impl ShapedRun {
-  /// The run `glyph_run` shapes, carrying `glyphs` and painting with `brush`.
+  /// The run `glyph_run` shapes, carrying `glyphs` stretched by `stretch` and painting with
+  /// `brush`.
   pub(crate) fn of(
     glyph_run: &GlyphRun<'_, InlineBrush>,
     mut glyphs: Vec<PositionedGlyph>,
     hanging: HangingWhitespace,
+    stretch: &SpacingStretch,
     brush: InlineBrush,
     cluster_ranges: Vec<Range<usize>>,
   ) -> Self {
@@ -191,15 +193,15 @@ impl ShapedRun {
     let metrics = run.metrics();
     let synthesis = run_synthesis(glyph_run);
 
-    for glyph in &mut glyphs {
-      glyph.x += hanging.shift;
+    for (index, glyph) in glyphs.iter_mut().enumerate() {
+      glyph.x += hanging.shift + stretch.shift(index);
     }
 
     Self {
       glyphs,
       offset: glyph_run.offset() + hanging.shift,
       baseline: glyph_run.baseline(),
-      advance: glyph_run.advance(),
+      advance: glyph_run.advance() + stretch.advance,
       hanging,
       brush,
       metrics: RunMetrics {
@@ -411,6 +413,7 @@ impl BuiltInlineLayout<'_> {
           glyph_run,
           static_inline_prefix,
           hanging,
+          stretch,
         } => {
           let run = glyph_run.run();
           // A run carrying only the direction mark paints nothing; a run the
@@ -450,7 +453,7 @@ impl BuiltInlineLayout<'_> {
                 .is_none_or(skips_ink);
           }
           let cluster_ranges = clusters.into_iter().map(|cluster| cluster.range).collect();
-          let shaped = ShapedRun::of(&glyph_run, glyphs, hanging, brush, cluster_ranges);
+          let shaped = ShapedRun::of(&glyph_run, glyphs, hanging, &stretch, brush, cluster_ranges);
 
           runs.push(PositionedInlineRun {
             glyph_run: shaped,
@@ -527,6 +530,7 @@ impl<'c> BuiltInlineLayout<'c> {
         glyph_run,
         static_inline_prefix,
         hanging,
+        stretch,
       } => {
         let brush = glyph_run.style().brush;
 
@@ -544,7 +548,7 @@ impl<'c> BuiltInlineLayout<'c> {
           } else {
             0.0
           };
-        let width = glyph_run.advance() - hanging.advance;
+        let width = glyph_run.advance() + stretch.advance - hanging.advance;
         let metrics = glyph_run.run().metrics();
         // The font's rounded ascent and descent, without the line-height leading, like the
         // inline box fragment `InlineBoxState::ComputeTextMetrics` sizes.
