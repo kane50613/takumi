@@ -14,9 +14,12 @@
 //! Columns take the widths `table_columns` shares out once layout knows the
 //! table's width, as fixed tracks.
 
-use taffy::{LengthPercentageAuto, Style, style_helpers::length};
+use std::mem::take;
+
+use taffy::{Style, style_helpers::length};
 
 use crate::{
+  context::RenderContext,
   geometry::{AvailableSpace, Size},
   layout::{
     node::NodeKind,
@@ -293,6 +296,52 @@ impl RenderNode {
       .filter(|cell| cell.is_cell())
   }
 
+  /// Wraps each run of this row's children that are not table cells in an anonymous cell, as
+  /// CSS 2.2 §17.2.1 fixes a table up.
+  fn wrap_anonymous_cells(&mut self) {
+    let Some(children) = self.children.take() else {
+      return;
+    };
+    let mut wrapped = Vec::with_capacity(children.len());
+    let mut run = Vec::new();
+
+    for child in children {
+      if child.context.style.display != Display::TableCell && child.is_cell() {
+        run.push(child);
+        continue;
+      }
+      if !run.is_empty() {
+        wrapped.push(self.anonymous_cell(take(&mut run)));
+      }
+      wrapped.push(child);
+    }
+    if !run.is_empty() {
+      wrapped.push(self.anonymous_cell(run));
+    }
+
+    self.children = Some(wrapped.into_boxed_slice());
+  }
+
+  /// A table cell this row generates around `children`, styled only by what it inherits.
+  fn anonymous_cell(&self, children: Vec<RenderNode>) -> RenderNode {
+    let mut style = ComputedStyle::from_parent(&self.context.style);
+
+    style.display = Display::TableCell;
+    style.make_computed(&self.context.sizing);
+
+    RenderNode::new(
+      RenderContext::from_parent(
+        &self.context,
+        style,
+        self.context.sizing.clone(),
+        self.context.current_color,
+      ),
+      NodeOrigin::Anonymous,
+      None,
+      Some(children.into_boxed_slice()),
+    )
+  }
+
   /// Recognizes authored cells without CSS anonymous table-box fixup.
   fn is_cell(&self) -> bool {
     let display = self.context.style.display;
@@ -317,6 +366,11 @@ impl RenderNode {
       footer_rows,
       strays,
     } = TableSlots::collect(self);
+
+    for row in &mut rows {
+      row.wrap_anonymous_cells();
+    }
+
     let grid = TableGrid::resolve(&rows);
     let columns = grid.columns;
     let collapse = self.context.style.border_collapse == BorderCollapse::Collapse;
@@ -389,7 +443,7 @@ impl RenderNode {
 
       cells.retain(RenderNode::is_cell);
 
-      align_row_baselines(&mut cells);
+      wrap_row_baselines(&mut cells);
 
       for mut cell in cells {
         let Some((column, colspan)) = positions.next() else {
@@ -538,19 +592,15 @@ impl RenderNode {
     style.justify_content = justify;
   }
 
-  /// Approximates the first-baseline offset as block-start border and padding.
-  /// It drops the first line's ascent and half-leading, so cells drift once a
-  /// row mixes fonts or line heights.
-  fn content_inset_top(&self) -> f32 {
-    let style = &self.context.style;
-    let sizing = &self.context.sizing;
-    let border = if style.border_top_style.is_rendered() {
-      Length::from(style.border_top_width).to_px(sizing, 0.0)
-    } else {
-      0.0
-    };
-
-    border + style.padding_top.to_px(sizing, 0.0)
+  /// Whether this lowered cell aligns its content to its row's baseline: a baseline-aligned cell
+  /// whose content a row of several such cells wrapped for layout to move.
+  pub(super) fn aligns_to_row_baseline(&self) -> bool {
+    self.table_part.is_some_and(TablePart::is_cell)
+      && CellAlignment::of(&self.context.style) == CellAlignment::Baseline
+      && matches!(
+        self.children.as_deref(),
+        Some([content]) if content.origin == NodeOrigin::Anonymous
+      )
   }
 
   /// Widths a cell subtree takes when nothing constrains it and when everything
@@ -758,35 +808,18 @@ impl RenderNode {
   }
 }
 
-fn align_row_baselines(cells: &mut [RenderNode]) {
-  let baselines: Vec<usize> = cells
-    .iter()
-    .enumerate()
-    .filter(|(_, cell)| CellAlignment::of(&cell.context.style) == CellAlignment::Baseline)
-    .map(|(index, _)| index)
-    .collect();
+/// Wraps the content of a row's baseline-aligned cells, when it has several, for layout to move
+/// each down to the row's baseline.
+fn wrap_row_baselines(cells: &mut [RenderNode]) {
+  let baseline =
+    |cell: &RenderNode| CellAlignment::of(&cell.context.style) == CellAlignment::Baseline;
 
-  if baselines.len() < 2 {
+  if cells.iter().filter(|cell| baseline(cell)).count() < 2 {
     return;
   }
 
-  let deepest = baselines
-    .iter()
-    .map(|&index| cells[index].content_inset_top())
-    .fold(0.0, f32::max);
-
-  for index in baselines {
-    let shift = deepest - cells[index].content_inset_top();
-
-    if shift <= 0.0 {
-      continue;
-    }
-
-    if let Some(content) = cells[index].wrap_cell_content()
-      && let Some(layout_style) = content.layout_style_override.as_mut()
-    {
-      layout_style.margin.top = LengthPercentageAuto::length(shift);
-    }
+  for cell in cells.iter_mut().filter(|cell| baseline(cell)) {
+    cell.wrap_cell_content();
   }
 }
 
@@ -826,11 +859,12 @@ impl ComputedStyle {
 mod tests {
   use std::sync::Arc;
 
-  use taffy::LengthPercentageAuto;
-
   use crate::{
     context::RenderContext,
-    layout::{node::Node, tree::RenderNode},
+    layout::{
+      node::Node,
+      tree::{NodeOrigin, RenderNode},
+    },
     resources::font::Fonts,
     style::{
       BorderStyle, Color, ColorInput, Display, FlexDirection, Gap, GridPlacement,
@@ -1086,35 +1120,6 @@ mod tests {
   }
 
   #[test]
-  fn a_baseline_cell_drops_to_the_deepest_padding_in_its_row() {
-    let tree = lower(
-      Node::container([row([
-        Node::container([Node::text("padded")])
-          .with_class_name("padded")
-          .with_id("padded"),
-        cell("flush"),
-      ])])
-      .with_class_name("table"),
-    );
-
-    let cells = tree.children.as_deref().expect("children");
-    let margin_top = |cell: &RenderNode| {
-      cell
-        .children
-        .as_deref()
-        .and_then(<[RenderNode]>::first)
-        .and_then(|content| content.layout_style_override.as_ref())
-        .map(|style| style.margin.top)
-    };
-
-    assert_eq!(margin_top(&cells[0]), None);
-    assert_eq!(
-      margin_top(&cells[1]),
-      Some(LengthPercentageAuto::length(10.0))
-    );
-  }
-
-  #[test]
   fn a_cell_that_is_not_a_table_cell_keeps_its_display_and_its_track() {
     let tree = lower(
       Node::container([row([
@@ -1126,13 +1131,34 @@ mod tests {
       .with_class_name("table"),
     );
 
-    assert_eq!(ids(&tree), ["flex", "b"]);
+    // An anonymous cell wraps the flex box, which keeps its display inside it.
+    assert_eq!(ids(&tree), ["", "b"]);
+
+    fn find<'n>(node: &'n RenderNode, id: &str) -> Option<&'n RenderNode> {
+      if node
+        .node
+        .as_ref()
+        .and_then(|node| node.metadata.id.as_deref())
+        == Some(id)
+      {
+        return Some(node);
+      }
+
+      node
+        .children
+        .as_deref()
+        .unwrap_or_default()
+        .iter()
+        .find_map(|child| find(child, id))
+    }
 
     let cell = &tree.children.as_deref().expect("children")[0];
+    let flex = find(cell, "flex").expect("the flex box inside the anonymous cell");
 
-    assert_eq!(cell.context.style.display, Display::Flex);
-    assert_eq!(cell.context.style.flex_direction, FlexDirection::Row);
+    assert_eq!(cell.origin, NodeOrigin::Anonymous);
     assert_eq!(cell.context.style.grid_column_start, GridPlacement::Line(1));
+    assert_eq!(flex.context.style.display, Display::Flex);
+    assert_eq!(flex.context.style.flex_direction, FlexDirection::Row);
   }
 
   #[test]
@@ -1442,53 +1468,6 @@ mod tests {
       .expect("lowered cell");
 
     assert_eq!(cell.context.style.border_top_style, BorderStyle::Ridge);
-  }
-
-  #[test]
-  fn a_baseline_row_measures_the_border_it_collapsed_to() {
-    let table = lower(
-      Node::container([
-        named_row(
-          "top",
-          [
-            bordered_cell("heavy", "heavy-under"),
-            bordered_cell("light", "bordered"),
-          ],
-        ),
-        named_row(
-          "bottom",
-          [
-            bordered_cell("under-heavy", "bordered"),
-            bordered_cell("under-light", "bordered"),
-          ],
-        ),
-      ])
-      .with_class_name("collapse"),
-    );
-    let margin_top = |id: &str| {
-      table
-        .children
-        .as_deref()
-        .unwrap_or_default()
-        .iter()
-        .find(|child| {
-          child
-            .node
-            .as_ref()
-            .and_then(|node| node.metadata.id.as_deref())
-            == Some(id)
-        })
-        .and_then(|cell| cell.children.as_deref())
-        .and_then(<[RenderNode]>::first)
-        .and_then(|content| content.layout_style_override.as_ref())
-        .map(|style| style.margin.top)
-    };
-
-    assert_eq!(borders(&table, "under-heavy")[0], 4.0);
-    assert_eq!(
-      margin_top("under-light"),
-      Some(LengthPercentageAuto::length(3.0))
-    );
   }
 
   #[test]

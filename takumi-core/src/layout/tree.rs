@@ -8,7 +8,7 @@ use smallvec::SmallVec;
 use taffy::{
   AvailableSpace as TaffyAvailableSpace, BlockContext, Cache, CacheTree, Display as TaffyDisplay,
   Layout, LayoutBlockContainer, LayoutFlexboxContainer, LayoutGridContainer, LayoutInput,
-  LayoutOutput, LayoutPartialTree, Line, MaybeResolve, NodeId as TaffyNodeId,
+  LayoutOutput, LayoutPartialTree, LengthPercentageAuto, Line, MaybeResolve, NodeId as TaffyNodeId,
   Position as TaffyPosition, RequestedAxis, ResolveOrZero, RoundTree, RunMode, Size as TaffySize,
   SizingMode, Style, TraversePartialTree, TraverseTree, compute_block_layout,
   compute_cached_layout, compute_flexbox_layout, compute_grid_layout, compute_hidden_layout,
@@ -35,7 +35,7 @@ use crate::{
   resources::font::PrimaryFontMetrics,
   style::{
     Affine, BackgroundImage, BackgroundImages, Color, ComputedStyle, ContentItem, ContentValue,
-    Display, Float, Length, LineHeight, ListStylePosition, Position, SizingContext,
+    Display, Float, GridPlacement, Length, LineHeight, ListStylePosition, Position, SizingContext,
     Style as NodeStyle, StyleDeclaration, StyleDeclarationBlock, StyleSheet, TextWrapMode,
     TwBlocks, WhiteSpaceCollapse, apply_stylesheet_animations,
   },
@@ -183,6 +183,8 @@ struct LayoutNodeState {
   is_inline_children: bool,
   /// Whether the node is a flex or grid item, which its container may stretch.
   flex_or_grid_item: bool,
+  /// How far a table cell's content moves down to its row's baseline.
+  row_baseline_shift: f32,
   children: Box<[TaffyNodeId]>,
   box_children: Box<[OrderedChild]>,
 }
@@ -216,6 +218,13 @@ pub enum TablePart {
   BodyCell,
   /// A cell from a `table-footer-group` row.
   FooterCell,
+}
+
+impl TablePart {
+  /// Whether the box is a cell.
+  pub(crate) fn is_cell(self) -> bool {
+    matches!(self, Self::HeaderCell | Self::BodyCell | Self::FooterCell)
+  }
 }
 
 /// A styled node plus its children, ready for layout.
@@ -433,6 +442,7 @@ impl<'r> LayoutTree<'r> {
         first_baseline_y: None,
         is_inline_children,
         flex_or_grid_item: false,
+        row_baseline_shift: 0.0,
         children: Box::new([]),
         box_children: Box::new([]),
       });
@@ -475,6 +485,7 @@ impl<'r> LayoutTree<'r> {
         first_baseline_y: None,
         is_inline_children: false,
         flex_or_grid_item: false,
+        row_baseline_shift: 0.0,
         children: Box::new([]),
         box_children: Box::new([]),
       });
@@ -827,6 +838,9 @@ impl<'r> LayoutTree<'r> {
         .or(available_space.height.into_option()),
     };
     node.style = render_node.layout_style(&sizing);
+    if node.row_baseline_shift != 0.0 {
+      node.style.margin.top = LengthPercentageAuto::length(node.row_baseline_shift);
+    }
     render_node.size_table(
       &mut node.style,
       available_space.width,
@@ -996,6 +1010,83 @@ impl<'r> LayoutTree<'r> {
     inputs
   }
 
+  /// Lays out a grid, and the rows of a table lowered to one as Blink's `RowBaselineTabulator` aligns
+  /// them: once to read its baseline-aligned cells' first baselines, then again with each one's
+  /// content moved down to the deepest of its row. The deepest ascent plus descent then sizes the
+  /// row, as the moved content grows the cells.
+  fn compute_table_layout(&mut self, node: TaffyNodeId, inputs: LayoutInput) -> LayoutOutput {
+    let cells: Vec<(TaffyNodeId, TaffyNodeId, i16)> = self
+      .get_layout_node_ref(node)
+      .map(|state| state.children.clone())
+      .unwrap_or_default()
+      .iter()
+      .filter_map(|&cell| {
+        let render_node = self.render_nodes.get(usize::from(cell))?;
+        let GridPlacement::Line(row) = render_node.context.style.grid_row_start else {
+          return None;
+        };
+        let content = *self.get_layout_node_ref(cell)?.children.first()?;
+
+        render_node
+          .aligns_to_row_baseline()
+          .then_some((cell, content, row))
+      })
+      .collect();
+
+    if cells.is_empty() {
+      return compute_grid_layout(self, node, inputs);
+    }
+
+    for &(cell, content, _) in &cells {
+      self.shift_to_row_baseline(cell, content, 0.0);
+    }
+    compute_grid_layout(
+      self,
+      node,
+      LayoutInput {
+        run_mode: RunMode::PerformLayout,
+        ..inputs
+      },
+    );
+
+    let baselines: Vec<Option<f32>> = cells
+      .iter()
+      .map(|&(cell, ..)| self.get_layout_node_ref(cell)?.first_baseline_y)
+      .collect();
+    let mut rows: HashMap<i16, f32> = HashMap::new();
+
+    for (&(.., row), baseline) in cells.iter().zip(&baselines) {
+      if let Some(baseline) = *baseline {
+        let deepest = rows.entry(row).or_insert(baseline);
+
+        *deepest = deepest.max(baseline);
+      }
+    }
+    for (&(cell, content, row), baseline) in cells.iter().zip(baselines) {
+      if let (Some(baseline), Some(deepest)) = (baseline, rows.get(&row)) {
+        self.shift_to_row_baseline(cell, content, deepest - baseline);
+      }
+    }
+
+    compute_grid_layout(self, node, inputs)
+  }
+
+  /// Moves `cell`'s `content` down by `shift`, dropping what the cell laid out before.
+  fn shift_to_row_baseline(&mut self, cell: TaffyNodeId, content: TaffyNodeId, shift: f32) {
+    let Some(state) = self.get_layout_node_mut_ref(content) else {
+      return;
+    };
+
+    if state.row_baseline_shift == shift {
+      return;
+    }
+    state.row_baseline_shift = shift;
+    state.style.margin.top = LengthPercentageAuto::length(shift);
+    if let Some(cell) = self.get_layout_node_mut_ref(cell) {
+      cell.cache.clear();
+    }
+  }
+
   /// The inputs a block-level `auto`-width table lays out with: without the width a block
   /// container stretches its children to, since a table shrinks to fit it instead.
   fn shrunk_table_inputs(&self, node: TaffyNodeId, mut inputs: LayoutInput) -> LayoutInput {
@@ -1048,7 +1139,7 @@ impl<'r> LayoutTree<'r> {
         // its parent's context. <https://drafts.csswg.org/css-display-3/#valdef-display-flow-root>
         (TaffyDisplay::FlowRoot, true) => compute_block_layout(tree, node, inputs, None),
         (TaffyDisplay::Flex, true) => compute_flexbox_layout(tree, node, inputs),
-        (TaffyDisplay::Grid, true) => compute_grid_layout(tree, node, inputs),
+        (TaffyDisplay::Grid, true) => tree.compute_table_layout(node, inputs),
         (_, false) => {
           let idx: usize = node.into();
           let Some(&render_node) = tree.render_nodes.get(idx) else {

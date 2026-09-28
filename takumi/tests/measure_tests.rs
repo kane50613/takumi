@@ -2598,3 +2598,70 @@ fn test_measure_table_cells_default_to_the_middle() {
 
   assert_within(cell.transform[5] + run.y + run.height / 2.0, 30.0, 1.0);
 }
+
+/// The top of each text run under `node`, by its text, in the node's space.
+fn run_tops(node: &MeasuredNode) -> Vec<(String, f32)> {
+  node
+    .runs
+    .iter()
+    .map(|run| (run.text.clone(), node.transform[5] + run.y))
+    .chain(node.children.iter().flat_map(run_tops))
+    .collect()
+}
+
+/// Blink moves each baseline-aligned cell's content down to the deepest first baseline in its row,
+/// whether a cell's padding or a border it collapsed to pushed that baseline down.
+#[test]
+fn test_table_baseline_cells_share_their_rows_baseline() {
+  for table in [
+    r#"<table style="border-spacing:0"><tr style="vertical-align:baseline"><td style="padding:10px 0 0">padded</td><td style="padding:0">flush</td></tr></table>"#,
+    r#"<table style="border-collapse:collapse"><tr style="vertical-align:baseline"><td style="padding:0; border-top:6px solid black">heavy</td><td style="padding:0; border-top:1px solid black">light</td></tr></table>"#,
+  ] {
+    let out = measure(
+      Node::from_html(table, FromHtmlOptions::default()).expect("parse"),
+      create_test_viewport(),
+    );
+    let tops = run_tops(&out);
+
+    assert_eq!(tops.len(), 2, "{tops:?}");
+    assert_within(tops[0].1, tops[1].1, 0.01);
+  }
+}
+
+/// Cells whose fonts differ in size still share their row's baseline: one font puts its baseline
+/// the same fraction `r` down each run, so every pair of runs agrees on `r`.
+#[test]
+fn test_table_baseline_cells_of_different_sizes_share_their_rows_baseline() {
+  let out = measure(
+    Node::from_html(
+      r#"<table style="border-spacing:0"><tr style="vertical-align:baseline"><td style="padding:0; font-size:12px">a</td><td style="padding:0; font-size:36px">b</td><td style="padding:0; font-size:20px">c</td></tr></table>"#,
+      FromHtmlOptions::default(),
+    )
+    .expect("parse"),
+    create_test_viewport(),
+  );
+  let runs: Vec<(f32, f32)> = run_tops(&out)
+    .into_iter()
+    .zip(
+      out
+        .children
+        .iter()
+        .flat_map(|cell| cell_runs(cell))
+        .map(|run| run.height),
+    )
+    .map(|((_, top), height)| (top, height))
+    .collect();
+  let fraction = |a: (f32, f32), b: (f32, f32)| (a.0 - b.0) / (b.1 - a.1);
+
+  assert_eq!(runs.len(), 3);
+  assert_within(fraction(runs[0], runs[1]), fraction(runs[0], runs[2]), 0.02);
+}
+
+/// The text runs under `node`, depth first.
+fn cell_runs(node: &MeasuredNode) -> Vec<&MeasuredTextRun> {
+  node
+    .runs
+    .iter()
+    .chain(node.children.iter().flat_map(cell_runs))
+    .collect()
+}
