@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="360" height="160" viewBox="0 0 360 160">
   <rect x="0" y="0" width="360" height="160" fill="#fff"/>
-  <path d="M70.6 27h56.28v26h-56.28Z" fill="#bfdbfe"/>
+  <rect x="70.6" y="27" width="56.28" height="26" fill="#bfdbfe"/>
   <g fill="#0f172a">
     <use href="#g0" x="24" y="47"/>
     <use href="#g1" x="35.7" y="47"/>
@@ -24,7 +24,7 @@
     <use href="#g1" x="152.24" y="47"/>
     <use href="#g4" x="163.26" y="47"/>
   </g>
-  <path d="M54.46 59h67.34v26h-67.34Z" fill="#fca5a5"/>
+  <rect x="54.46" y="59" width="67.34" height="26" fill="#fca5a5"/>
   <g fill="#0f172a">
     <use href="#g7" x="24" y="79"/>
     <use href="#g1" x="29.22" y="79"/>
