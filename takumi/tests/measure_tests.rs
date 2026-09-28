@@ -129,7 +129,7 @@ fn test_measure_text_node() {
       height: 26.0,
       transform: Affine::IDENTITY.to_cols_array(),
       children: vec![MeasuredNode {
-        width: 106.0,
+        width: 105.46875,
         height: 26.0,
         transform: Affine::IDENTITY.to_cols_array(),
         children: Vec::new(),

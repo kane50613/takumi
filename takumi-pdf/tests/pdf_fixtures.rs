@@ -5056,8 +5056,19 @@ fn a_fixed_box_fills_its_page_counters() {
     shown[0], shown[2],
     "expected the page number to change between pages"
   );
+  // The page number before it may be a fraction of a pixel wider on one page, which moves it.
+  let text = |line: &[u8]| {
+    let at = line
+      .windows(2)
+      .rposition(|window| window == b"Tm")
+      .map_or(0, |at| at + 2);
+
+    line[at..].to_vec()
+  };
+
   assert_eq!(
-    shown[1], shown[3],
+    text(&shown[1]),
+    text(&shown[3]),
     "expected the total to stay the same on both pages"
   );
 }

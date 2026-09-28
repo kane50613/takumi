@@ -1,11 +1,11 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630">
   <rect x="0" y="0" width="1200" height="630" fill="#fff"/>
   <g fill="#000">
-    <use href="#g0" x="370" y="341"/>
-    <use href="#g1" x="418.38" y="341"/>
-    <use href="#g2" x="440.78" y="341"/>
-    <use href="#g3" x="482.97" y="341"/>
-    <use href="#g4" x="503.63" y="341"/>
+    <use href="#g0" x="371" y="341"/>
+    <use href="#g1" x="419.38" y="341"/>
+    <use href="#g2" x="441.78" y="341"/>
+    <use href="#g3" x="483.97" y="341"/>
+    <use href="#g4" x="504.63" y="341"/>
   </g>
   <g fill="#000" stroke="#f00" stroke-width="4">
     <use href="#g5" x="548" y="341"/>

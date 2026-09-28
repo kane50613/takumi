@@ -1,7 +1,7 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630">
   <rect x="0" y="0" width="1200" height="630" fill="#000"/>
   <clipPath id="cp0">
-    <path d="M403 151.5h394v163.5h-394v-163.5Z"/>
+    <path d="M300 151.5h600v163.5h-600v-163.5Z"/>
   </clipPath>
   <g clip-path="url(#cp0)">
     <g fill="#fff">
@@ -34,7 +34,7 @@
     </g>
   </g>
   <clipPath id="cp1">
-    <path d="M403 315h394v163.5h-394v-163.5Z"/>
+    <path d="M300 315h600v163.5h-600v-163.5Z"/>
   </clipPath>
   <g clip-path="url(#cp1)">
     <g fill="#000" fill-opacity="0" stroke="#808080" stroke-width="2">

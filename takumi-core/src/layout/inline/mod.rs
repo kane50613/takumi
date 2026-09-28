@@ -14,7 +14,7 @@ use crate::{
   },
 };
 use parley::{
-  GlyphRun, IndentOptions, InlineBox, InlineBoxKind, Line, PositionedInlineBox,
+  BreakReason, GlyphRun, IndentOptions, InlineBox, InlineBoxKind, Line, PositionedInlineBox,
   PositionedLayoutItem, TextStyle, TreeBuilder,
 };
 use std::{
@@ -322,17 +322,27 @@ impl BuiltInlineLayout<'_> {
       .fold(0.0, f32::max);
 
     let measured_width = if ceil_width {
-      max_run_width.max(float_box_width).ceil()
+      layout_unit_ceil(max_run_width.max(float_box_width))
     } else {
       max_run_width.max(float_box_width)
     };
 
+    // Blink's fit-content width, `max(min-content, min(max-content, available))`: lines that wrapped
+    // mean the content is wider than `max_width`, and the widest of them past it is a word no
+    // opportunity breaks, which the min-content holds; lines that did not are the max-content.
+    let wrapped = self.layout.lines().any(|line| {
+      matches!(
+        line.break_reason(),
+        BreakReason::Regular | BreakReason::Emergency
+      )
+    });
+
     InlineMeasurement {
       size: Size {
-        width: if min_content_query {
+        width: if min_content_query || !wrapped {
           measured_width
         } else {
-          measured_width.min(max_width)
+          measured_width.max(max_width)
         },
         height: total_height.max(float_box_height).ceil(),
       },
@@ -1143,6 +1153,12 @@ pub(crate) fn resolve_inline_max_height(
       (font_style.parent.text_overflow == TextOverflow::Ellipsis)
         .then_some(MaxHeight::Absolute(content_box_height))
     })
+}
+
+/// `value` rounded up to Blink's `LayoutUnit`, a 64th of a pixel, as `LayoutUnit::FromFloatCeil`
+/// rounds a measured inline size.
+fn layout_unit_ceil(value: f32) -> f32 {
+  (value * 64.0).ceil() / 64.0
 }
 
 /// Per-line setup (scale state, baseline shift, resolved metrics) for the inline painting walk.

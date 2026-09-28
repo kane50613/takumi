@@ -147,10 +147,11 @@ impl LayoutResults {
   }
 
   /// The root's border-box size, zero when the tree is empty.
+  /// The root's border-box size before pixel snapping, which Blink keeps in `LayoutUnit`s.
   pub(super) fn root_size(&self) -> Size<f32> {
     self
-      .layout(NodeId::ROOT)
-      .map_or(Size::ZERO, |layout| layout.size)
+      .node(NodeId::ROOT)
+      .map_or(Size::ZERO, |node| Size::from_taffy(node.unsnapped.size))
   }
 
   fn node(&self, node_id: NodeId) -> crate::Result<&LayoutResultNode> {
@@ -2238,21 +2239,12 @@ impl RenderNode {
       AvailableSpace::MaxContent => max_content.width,
     };
     let results = LayoutResults::compute(self, at_width(AvailableSpace::Definite(used_width)));
+    let size = results.root_size();
 
-    results.layout(NodeId::ROOT).map_or(
-      AtomicInlineMetrics {
-        size: Size::ZERO,
-        baseline_offset: None,
-      },
-      |layout| AtomicInlineMetrics {
-        size: layout.size,
-        baseline_offset: self.resolve_inline_baseline_offset(
-          available_space,
-          layout.size,
-          &results,
-        ),
-      },
-    )
+    AtomicInlineMetrics {
+      size,
+      baseline_offset: self.resolve_inline_baseline_offset(available_space, size, &results),
+    }
   }
 
   pub(crate) fn measure(
