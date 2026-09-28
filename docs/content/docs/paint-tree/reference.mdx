@@ -1,0 +1,92 @@
+---
+title: Reference
+description: Paint options, tree methods, and serialized field formats.
+icon: BookMarked
+---
+
+## Entry points
+
+| API                             | Result                                        |
+| ------------------------------- | --------------------------------------------- |
+| `paint(node, options?)`         | A `Promise<PaintTree>` using a shared painter |
+| `new Painter()`                 | A painter with its own registered fonts       |
+| `painter.paint(node, options?)` | A `Promise<PaintTree>` using that painter     |
+| `painter.registerFont(font)`    | Registers a font before painting              |
+| `painter.free()`                | Releases the painter's WebAssembly memory     |
+
+`node` accepts JSX, an HTML string, or a takumi node tree.
+
+## Paint options
+
+| Option             | Type                              | Effect                                                          |
+| ------------------ | --------------------------------- | --------------------------------------------------------------- |
+| `width`, `height`  | `number`                          | Canvas size in device pixels; omitted dimensions follow content |
+| `devicePixelRatio` | `number`                          | Device pixels per CSS pixel; default `1`                        |
+| `fonts`            | `FontLoader[]`                    | Fonts registered before layout                                  |
+| `images`           | `ImagesInput`                     | Images keyed by the referenced `src`                            |
+| `css`              | `CssInput \| readonly CssInput[]` | Stylesheets applied before layout                               |
+| `fontFamilies`     | `string[]`                        | Fallback family chain for this call                             |
+| `lang`             | `string`                          | Default BCP-47 language tag on the root                         |
+
+## PaintTree
+
+| Member            | Value                                                |
+| ----------------- | ---------------------------------------------------- |
+| `width`, `height` | Canvas size in device pixels                         |
+| `fonts`           | Font instances referenced by run `fontIndex`         |
+| `root`            | Root `PaintNode`                                     |
+| `[...tree]`       | Nodes in paint order, parents before children        |
+| `textRuns()`      | `{ run, node }` pairs in paint order                 |
+| `find(id)`        | First node whose `source.id` matches, or `undefined` |
+
+## PaintNode
+
+| Field                                    | Value                                                                 |
+| ---------------------------------------- | --------------------------------------------------------------------- |
+| `source?`                                | Input path, ID, tag name, and class name; absent for an anonymous box |
+| `x`, `y`, `width`, `height`              | Canvas origin and border-box size                                     |
+| `contentBox`                             | Rect inset by border and padding, in border-box space                 |
+| `transform?`                             | Absolute matrix for a rotated, scaled, or skewed box                  |
+| `matrix`                                 | Getter: `transform`, or translation by `x` and `y`                    |
+| `opacity`                                | Group opacity from `0` to `1`                                         |
+| `blendMode?`, `isolate`                  | Group blend mode and isolation                                        |
+| `clip?`                                  | Rounded padding-box clip with `x` and `y` axis flags                  |
+| `background?`                            | Color, clip mode, and bottom-to-top image layers                      |
+| `border?`, `shadows?`, `outline?`        | Box decorations                                                       |
+| `image?`                                 | Replaced image source and placement after object fit and position     |
+| `inlineBackgrounds?`                     | Rounded inline-span rectangles                                        |
+| `textShadows?`, `textRuns`, `textAlign?` | Text drawing and alignment data                                       |
+| `unresolvedEffects?`                     | CSS text for filter, backdrop filter, mask image, and clip path       |
+| `children`                               | Child boxes in paint order                                            |
+
+## PaintTextRun
+
+| Field                                     | Value                                      |
+| ----------------------------------------- | ------------------------------------------ |
+| `text`                                    | Run text                                   |
+| `x`, `y`                                  | Baseline start in border-box space         |
+| `width`                                   | Advance                                    |
+| `ascent`, `descent`                       | Typographic distances from the baseline    |
+| `top`, `bottom`                           | Getters: `y - ascent` and `y + descent`    |
+| `fontIndex`, `font`                       | Font table index and resolved font object  |
+| `fontSize`, `lineHeight`, `letterSpacing` | Used text metrics in device pixels         |
+| `color`, `opacity`                        | Fill color and span opacity                |
+| `transform?`                              | Additional text-fit matrix                 |
+| `glyphs`                                  | Glyph IDs and offsets from run origin      |
+| `decorations?`, `stroke?`                 | Text decoration rectangles and text stroke |
+| `textByteRange`, `spanId?`                | UTF-8 source byte range and inline span ID |
+
+`PaintFont` records `family?`, `faceIndex`, `weight`, `style`, `width`, `variations`, `syntheticBoldWidth?`, and `syntheticObliqueAngle?`. The optional family is absent when the registry cannot name the face.
+
+## Value formats
+
+| Type                   | Format                                                              |
+| ---------------------- | ------------------------------------------------------------------- |
+| `Rgba`                 | `[r, g, b, a]`, each byte from `0` to `255`                         |
+| `Matrix`               | `[a, b, c, d, e, f]`                                                |
+| `PaintRect`            | `{ x, y, width, height }`                                           |
+| `Radii`                | Four `[x, y]` pairs: top-left, top-right, bottom-right, bottom-left |
+| Border sides           | Arrays ordered top, right, bottom, left                             |
+| `PaintBackgroundLayer` | `fill`, `tiles` (`xs`, `ys`, `width`, `height`), `blendMode`        |
+| `PaintFill`            | Discriminated `linear`, `radial`, `conic`, or `image` fill          |
+| `PaintShadow`          | `offsetX`, `offsetY`, `blur`, `spread`, `color`                     |
