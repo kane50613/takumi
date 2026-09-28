@@ -1,3 +1,5 @@
+use std::iter::successors;
+
 use smallvec::SmallVec;
 #[cfg(feature = "svg")]
 use takumi_core::{Error, resources::image::apply_svg_filter, style::FilterReference};
@@ -215,10 +217,17 @@ struct MirroredRegion {
 }
 
 impl MirroredRegion {
+  /// Halves `padding` until the grown region fits the pixel budget.
   fn of(raw: &[u8], region: Placement, padding: u32) -> Option<Self> {
-    let width = region.width.checked_add(padding.checked_mul(2)?)?;
-    let height = region.height.checked_add(padding.checked_mul(2)?)?;
-    let capacity = checked_area(width, height, 4)?;
+    let (width, height, capacity, padding) = successors(Some(padding), |&padding| {
+      (padding > 0).then_some(padding / 2)
+    })
+    .find_map(|padding| {
+      let width = region.width.checked_add(padding.checked_mul(2)?)?;
+      let height = region.height.checked_add(padding.checked_mul(2)?)?;
+
+      Some((width, height, checked_area(width, height, 4)?, padding))
+    })?;
     let mirror = |index: u32, size: u32| {
       let period = size as i64 * 2;
       let offset = (index as i64 - padding as i64).rem_euclid(period);
