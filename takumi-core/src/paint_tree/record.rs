@@ -104,6 +104,15 @@ impl Recorder {
     (color.0[3] > 0).then_some(color.0)
   }
 
+  /// `transform` moved by the open text shadow's offset. A clip opened inside a text shadow clips
+  /// what casts it, as Blink draws a text shadow's content into a `DropShadowPaintFilter` layer.
+  fn shadow_moved(&self, transform: Affine) -> Affine {
+    match self.shadow {
+      Some(shadow) => Affine::translation(shadow.offset_x, shadow.offset_y) * transform,
+      None => transform,
+    }
+  }
+
   /// The open clips, as shapes to clip to at once.
   fn clips(&self) -> Vec<Shape> {
     self.clips.iter().map(|clip| clip.shape.clone()).collect()
@@ -279,7 +288,7 @@ impl PaintDevice for Recorder {
   }
 
   fn push_clip(&mut self, shape: &FillShape, transform: Affine) {
-    let region = Shape::of(shape, transform);
+    let region = Shape::of(shape, self.shadow_moved(transform));
 
     self.clips.push(Clip {
       shape: region.clone(),
@@ -289,6 +298,8 @@ impl PaintDevice for Recorder {
   }
 
   fn push_clip_out(&mut self, shape: &FillShape, transform: Affine) {
+    let transform = self.shadow_moved(transform);
+
     self.clips.push(Clip {
       shape: Shape::outside(shape, transform),
       region: Shape::of(shape, transform),

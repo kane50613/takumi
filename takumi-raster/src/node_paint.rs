@@ -78,6 +78,9 @@ pub(crate) struct CanvasClip {
   coverage: Vec<u8>,
   placement: Placement,
   out: bool,
+  /// Opened inside a text shadow, so it clips what casts the shadow, moved with it, before the
+  /// blur, as Blink draws a text shadow's content into a `DropShadowPaintFilter` layer.
+  casts_shadow: bool,
 }
 
 impl<'c> CanvasDevice<'c> {
@@ -160,11 +163,17 @@ impl<'c> CanvasDevice<'c> {
     )
   }
 
-  /// Limits `coverage` to the open clips, or `None` when nothing is left.
-  fn clipped(&self, coverage: (Vec<u8>, Placement)) -> Option<(Vec<u8>, Placement)> {
+  /// Limits `coverage` to the open clips that `casts_shadow` selects, or `None` when nothing is
+  /// left.
+  fn clipped(
+    &self,
+    coverage: (Vec<u8>, Placement),
+    casts_shadow: bool,
+  ) -> Option<(Vec<u8>, Placement)> {
     self
       .clips
       .iter()
+      .filter(|clip| clip.casts_shadow == casts_shadow)
       .try_fold(coverage, |(mut mask, placement), clip| {
         if clip.out {
           attenuate_alpha_by_mask(&mut mask, placement, &clip.coverage, clip.placement);
@@ -176,36 +185,37 @@ impl<'c> CanvasDevice<'c> {
       })
   }
 
-  /// Opens a clip to `shape`, or out of it when `out` is set, keeping whole pixels only.
-  fn open_aliased_clip(&mut self, shape: &FillShape, transform: Affine, out: bool) {
+  /// Opens a clip to `shape`, or out of it when `out` is set.
+  fn open_clip(&mut self, shape: &FillShape, transform: Affine, out: bool, aliased: bool) {
+    let transform = match self.shadow {
+      Some(shadow) => Affine::translation(shadow.offset_x, shadow.offset_y) * transform,
+      None => transform,
+    };
     let (mut coverage, placement) =
       self.coverage(shape, Fill::from(shape.rule()).into(), transform);
 
-    // A straight edge covers at least half a pixel exactly when it covers the pixel's centre.
-    coverage
-      .iter_mut()
-      .for_each(|alpha| *alpha = if *alpha >= 128 { u8::MAX } else { 0 });
-    self.clips.push(CanvasClip {
-      coverage,
-      placement,
-      out,
-    });
+    if aliased {
+      // A straight edge covers at least half a pixel exactly when it covers the pixel's centre.
+      coverage
+        .iter_mut()
+        .for_each(|alpha| *alpha = if *alpha >= 128 { u8::MAX } else { 0 });
+    }
+    self.push_clip_coverage(coverage, placement, out);
   }
 
-  /// Opens a clip to `shape`, or out of it when `out` is set.
-  fn open_clip(&mut self, shape: &FillShape, transform: Affine, out: bool) {
-    let (coverage, placement) = self.coverage(shape, Fill::from(shape.rule()).into(), transform);
-
+  /// Opens a clip to `coverage` at `placement`, or out of it when `out` is set.
+  fn push_clip_coverage(&mut self, coverage: Vec<u8>, placement: Placement, out: bool) {
     self.clips.push(CanvasClip {
       coverage,
       placement,
       out,
+      casts_shadow: self.shadow.is_some(),
     });
   }
 
   /// Paints `coverage` in `color`, limited to the open clips.
   fn draw_coverage(&mut self, coverage: (Vec<u8>, Placement), color: Color) {
-    if let Some((mask, placement)) = self.clipped(coverage) {
+    if let Some((mask, placement)) = self.clipped(coverage, false) {
       self
         .canvas
         .draw_mask(&mask, placement, color, BlendMode::Normal);
@@ -250,6 +260,10 @@ impl<'c> CanvasDevice<'c> {
     blur_radius: f32,
     color: Color,
   ) {
+    let Some((mask, placement)) = self.clipped((mask, placement), true) else {
+      return;
+    };
+
     if mask.is_empty() {
       return;
     }
@@ -409,7 +423,7 @@ impl<'c> CanvasDevice<'c> {
       return;
     };
     let coverage = self.coverage(shape, Fill::from(shape.rule()).into(), transform);
-    let Some((mask, placement)) = self.clipped(coverage) else {
+    let Some((mask, placement)) = self.clipped(coverage, false) else {
       return;
     };
 
@@ -489,19 +503,19 @@ impl PaintDevice for CanvasDevice<'_> {
   }
 
   fn push_clip(&mut self, shape: &FillShape, transform: Affine) {
-    self.open_clip(shape, transform, false);
+    self.open_clip(shape, transform, false, false);
   }
 
   fn push_clip_out(&mut self, shape: &FillShape, transform: Affine) {
-    self.open_clip(shape, transform, true);
+    self.open_clip(shape, transform, true, false);
   }
 
   fn push_aliased_clip(&mut self, shape: &FillShape, transform: Affine) {
-    self.open_aliased_clip(shape, transform, false);
+    self.open_clip(shape, transform, false, true);
   }
 
   fn push_aliased_clip_out(&mut self, shape: &FillShape, transform: Affine) {
-    self.open_aliased_clip(shape, transform, true);
+    self.open_clip(shape, transform, true, true);
   }
 
   fn with_border_mask(
@@ -524,11 +538,11 @@ impl PaintDevice for CanvasDevice<'_> {
 
     let painted = self.canvas.take_subcanvas(subcanvas);
 
-    self.clips.push(CanvasClip {
-      coverage: painted.data().iter().skip(3).step_by(4).copied().collect(),
+    self.push_clip_coverage(
+      painted.data().iter().skip(3).step_by(4).copied().collect(),
       placement,
-      out: false,
-    });
+      false,
+    );
     content(self);
     self.clips.pop();
   }
