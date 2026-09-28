@@ -12,3 +12,4 @@ packages:
 - PDF text shadows no longer repeat the shadowed words when the text is copied or extracted.
 - Color bitmap glyphs, such as Noto Color Emoji, cast a shadow that follows the glyph's shape in image and SVG output.
 - A blurred `text-shadow` fades out in PDF output, through the same stepped bands a blurred `box-shadow` uses, and so does the shadow its decorations cast.
+- PDF shadows color glyphs, such as COLR and bitmap emoji, as a silhouette in the shadow color, blurred as Chrome blurs it.
