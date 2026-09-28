@@ -39,7 +39,7 @@ mod truncation;
 
 pub(crate) use self::{background::PaddingBox, items::InlineOutOfFlow};
 pub use self::{
-  background::{FragmentImage, InlineBackgroundFragment},
+  background::{FragmentBackground, InlineBackgroundFragment},
   decorations::DecorationLine,
   items::{DecorationLink, InlineBoxItem, InlineItem, ProcessedInlineSpan, collect_inline_items},
   metrics::{InlinePass, VisualInlineBox},

@@ -35,11 +35,11 @@
   </g>
   <path d="M320.04 35h102.2c4.42 0 8 3.58 8 8v26c0 4.42-3.58 8-8 8h-102.2c-4.42 0-8-3.58-8-8v-26c0-4.42 3.58-8 8-8Z" fill="#dbeafe"/>
   <path d="M320.04 35h102.2c4.42 0 8 3.58 8 8v26c0 4.42-3.58 8-8 8h-102.2c-4.42 0-8-3.58-8-8v-26c0-4.42 3.58-8 8-8Zm0 2h102.2c3.31 0 6 2.69 6 6v26c0 3.31-2.69 6-6 6h-102.2c-3.32 0-6-2.69-6-6v-26c0-3.31 2.68-6 6-6Z" fill="#2563eb" fill-rule="evenodd"/>
-  <path d="M436.74 37h133.63v40h-133.63Z" fill="#f3e8ff"/>
+  <rect x="436.738" y="37" width="133.634" height="40" fill="#f3e8ff"/>
   <rect x="436.738" y="37" width="133.634" height="2" fill="#9333ea"/>
   <rect x="436.738" y="73" width="133.634" height="4" fill="#9333ea"/>
   <path d="M436.74 37v40l6-4v-34Z" fill="#eab308"/>
-  <path d="M32 94.2h396.6v40h-396.6Z" fill="#f3e8ff"/>
+  <rect x="32" y="94.2" width="396.598" height="40" fill="#f3e8ff"/>
   <rect x="32" y="94.2" width="396.598" height="2" fill="#9333ea"/>
   <rect x="32" y="130.2" width="396.598" height="4" fill="#9333ea"/>
   <path d="M422.6 96.2v34l6 4v-40Z" fill="#eab308"/>
