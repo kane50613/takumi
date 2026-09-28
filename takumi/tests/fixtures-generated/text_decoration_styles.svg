@@ -186,7 +186,7 @@
   </filter>
   <g filter="url(#bl6)">
     <clipPath id="cp7">
-      <path d="M28 287h140.94v11h-140.94Z"/>
+      <path d="M31 290h140.94v11h-140.94Z"/>
     </clipPath>
     <g clip-path="url(#cp7)">
       <path d="M16 295.5c7.5 10.5 7.5-10.5 15 0s7.5-10.5 15 0 7.5-10.5 15 0 7.5-10.5 15 0 7.5-10.5 15 0 7.5-10.5 15 0 7.5-10.5 15 0 7.5-10.5 15 0 7.5-10.5 15 0 7.5-10.5 15 0 7.5-10.5 15 0 7.5-10.5 15 0" fill="none" stroke="#2563eb" stroke-opacity=".6" stroke-width="3"/>
