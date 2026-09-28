@@ -272,6 +272,12 @@ export type RawDrawable<Run = number> =
       readonly role: Role;
       readonly mask: readonly RawDrawable<Run>[];
       readonly content: readonly RawDrawable<Run>[];
+    }
+  /** Draw `drawables` into a layer, then composite it at `opacity`. */
+  | {
+      readonly type: "group";
+      readonly opacity: number;
+      readonly drawables: readonly RawDrawable<Run>[];
     };
 
 export type Filter =

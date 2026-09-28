@@ -1,0 +1,98 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="480" height="260" viewBox="0 0 480 260">
+  <rect x="0" y="0" width="480" height="260" fill="#e2e8f0"/>
+  <g transform="matrix(2 0 0 2 20 20)">
+    <clipPath id="cp0">
+      <path d="M-1000000-1000000H1000000V1000000H-1000000ZM0 0h60v40h-60v-40Z" clip-rule="evenodd"/>
+    </clipPath>
+    <g clip-path="url(#cp0)">
+      <filter id="bl1">
+        <feGaussianBlur stdDeviation="4"/>
+      </filter>
+      <g filter="url(#bl1)">
+        <path d="M6 6h60v40h-60v-40Z" fill="#0f172a"/>
+      </g>
+    </g>
+    <rect x="0" y="0" width="60" height="40" fill="#fff"/>
+  </g>
+  <g transform="matrix(2 0 0 2 20 20)">
+  </g>
+  <g transform="matrix(2 0 0 2 20 20)">
+  </g>
+  <g transform="matrix(2 0 0 2 180 20)">
+    <rect x="0" y="0" width="60" height="40" fill="#fff"/>
+    <clipPath id="cp2">
+      <path d="M0 0h60v40h-60v-40Z"/>
+    </clipPath>
+    <g clip-path="url(#cp2)">
+      <filter id="bl3">
+        <feGaussianBlur stdDeviation="4"/>
+      </filter>
+      <g filter="url(#bl3)">
+        <path d="M-13-13h86v66h-86v-66Zm15 15h56v36h-56v-36Z" fill="#dc2626" fill-rule="evenodd"/>
+      </g>
+    </g>
+  </g>
+  <g transform="matrix(2 0 0 2 180 20)">
+  </g>
+  <g transform="matrix(2 0 0 2 180 20)">
+  </g>
+  <g transform="matrix(1.5 0 0 3 340 20)">
+  </g>
+  <g transform="matrix(1.5 0 0 3 340 20)">
+    <filter id="bl4">
+      <feGaussianBlur stdDeviation="1.5"/>
+    </filter>
+    <g filter="url(#bl4)">
+      <g fill="#2563eb">
+        <use href="#g0" x="4" y="20"/>
+        <use href="#g1" x="14.72" y="20"/>
+        <use href="#g2" x="18.83" y="20"/>
+        <use href="#g3" x="28.03" y="20"/>
+      </g>
+    </g>
+    <g fill="#000">
+      <use href="#g0" x="0" y="16"/>
+      <use href="#g1" x="10.72" y="16"/>
+      <use href="#g2" x="14.83" y="16"/>
+      <use href="#g3" x="24.03" y="16"/>
+    </g>
+  </g>
+  <g transform="matrix(1.5 0 0 3 340 20)">
+  </g>
+  <clipPath id="cp5">
+    <path d="M-1000000-1000000H1000000V1000000H-1000000ZM20 150h60v40h-60v-40Z" clip-rule="evenodd"/>
+  </clipPath>
+  <g clip-path="url(#cp5)">
+    <filter id="bl6">
+      <feGaussianBlur stdDeviation="8"/>
+    </filter>
+    <g filter="url(#bl6)">
+      <path d="M26 156h60v40h-60v-40Z" fill="#0f172a"/>
+    </g>
+  </g>
+  <rect x="20" y="150" width="60" height="40" fill="#fff"/>
+  <g transform="matrix(1.299 .75 -.75 1.299 180 150)">
+    <clipPath id="cp7">
+      <path d="M-1000000-1000000H1000000V1000000H-1000000ZM0 0h60v40h-60v-40Z" clip-rule="evenodd"/>
+    </clipPath>
+    <g clip-path="url(#cp7)">
+      <filter id="bl8">
+        <feGaussianBlur stdDeviation="3"/>
+      </filter>
+      <g filter="url(#bl8)">
+        <path d="M4 4h60v40h-60v-40Z" fill="#0f172a"/>
+      </g>
+    </g>
+    <rect x="0" y="0" width="60" height="40" fill="#fff"/>
+  </g>
+  <g transform="matrix(1.299 .75 -.75 1.299 180 150)">
+  </g>
+  <g transform="matrix(1.299 .75 -.75 1.299 180 150)">
+  </g>
+  <defs>
+    <path id="g0" d="M1.47 0v-11.36h3.91q2.01 0 3.01.73 1.02.74 1.02 2.33 0 .74-.33 1.3-.31.55-.91.86t-1.4.31l-.02-.09q1.45 0 2.3.78.84.76.84 2.01 0 1.57-1.02 2.35-.99.78-2.85.78Zm1.37-1.34h3.18q1.17 0 1.79-.47.64-.49.64-1.39t-.64-1.39q-.62-.52-1.79-.52h-3.18Zm0-5.11h2.54q1.24 0 1.92-.47.67-.47.67-1.31 0-.91-.66-1.35-.64-.44-1.94-.44h-2.53Z"/>
+    <path id="g1" d="M2.94 0q-.74 0-1.21-.38-.45-.39-.45-1.21v-9.77h1.35l-.01 9.64q.01.27.13.41.14.12.41.12h.73v1.19Z"/>
+    <path id="g2" d="M4.06.19q-1.26 0-2.03-.85-.75-.86-.75-2.37v-5.45h1.35l-.01 5.09q.01 1.23.44 1.83.44.58 1.36.58 1 0 1.58-.65t.58-1.79v-5.06h1.34v8.48h-1.28v-2.09l.2.11q-.25 1.04-.97 1.61-.71.56-1.81.56Z"/>
+    <path id="g3" d="M1.28 0v-8.48h1.19l.06 2.14-.12-.05q.15-1.08.68-1.58.54-.51 1.44-.51h.83v1.28h-.81q-.64 0-1.07.23-.42.24-.64.69t-.21 1.16l-.01 5.12Z"/>
+  </defs>
+</svg>

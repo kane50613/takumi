@@ -312,6 +312,9 @@ pub struct PositionedInlineRun {
   pub baseline_shift: f32,
   /// Where the run's decorations go.
   pub(crate) decoration_placement: DecorationPlacement,
+  /// Where the run sits among its block's runs.
+  #[cfg(feature = "paint-tree")]
+  pub(crate) index: usize,
 }
 
 impl PositionedInlineRun {
@@ -484,6 +487,8 @@ impl<'c> BuiltInlineLayout<'c> {
             static_inline_prefix,
             baseline_shift: self.run_baseline_shift(line, &glyph_run),
             decoration_placement,
+            #[cfg(feature = "paint-tree")]
+            index: runs.len(),
           });
         }
         PlacedItem::Box(inline_box) => {
