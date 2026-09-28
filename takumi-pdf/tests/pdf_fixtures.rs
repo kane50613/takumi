@@ -2810,6 +2810,26 @@ fn overflow_clipping() {
   });
 }
 
+/// An overflow clip on a scaled box scales its content once.
+#[test]
+fn transformed_overflow_clip() {
+  run_pdf_fixture("transformed-overflow-clip", |fonts| {
+    let source = r#"<div style="display: block; width: 100%; height: 100%; background-color: #ffffff;">
+      <div style="width: 100px; height: 100px; transform: scale(2); transform-origin: 0 0; overflow: hidden; background-color: #e2e8f0;">
+        <div style="width: 10px; height: 10px; background-color: #ff0000;"></div>
+      </div>
+    </div>"#;
+    let node =
+      from_html(source, FromHtmlOptions::default()).expect("parse transformed clip fixture");
+
+    PdfOptions::builder()
+      .node(node)
+      .viewport(Viewport::new((240, 240)))
+      .fonts(fonts)
+      .build()
+  });
+}
+
 /// Repeating gradient variants and a stacked multi-layer background.
 #[test]
 fn repeating_gradients() {
