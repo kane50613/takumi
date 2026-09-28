@@ -46,7 +46,7 @@ export type ImageInput = {
   cache?: ImageCacheMode;
 };
 
-export type PaintTreeOptions = {
+export type PaintOptions = {
   /** Canvas width in device pixels. Omit to size the canvas to the content. */
   width?: number;
   /** Canvas height in device pixels. Omit to size the canvas to the content. */
@@ -367,8 +367,8 @@ export type RawPaintStep =
       readonly node: number;
     };
 
-/** The document as the wasm module serializes it, nodes and runs named by index. */
-export type RawPaintDocument = {
+/** The tree as the wasm module serializes it, nodes and runs named by index. */
+export type RawPaintTree = {
   readonly width: number;
   readonly height: number;
   readonly nodes: readonly RawPaintNode[];

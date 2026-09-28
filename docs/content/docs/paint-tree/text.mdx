@@ -1,0 +1,63 @@
+---
+title: Text
+description: Draw shaped runs or collect values for a text exporter.
+icon: Type
+---
+
+A paragraph's text is one `TextNode`. It is listed before the inline boxes inside the paragraph, so its runs can come from both sides of them. `node.runs` holds the runs in visual order, and a run's `element` names the inline element it came from, such as a `<b>`.
+
+A run's `x` and `y` mark the start of its baseline in the text node's local space. `run.transform` is present when `text-fit` scales the line; apply it before placing the run at `x`, `y`.
+
+## Draw glyphs
+
+`run.outline()` returns the glyphs as SVG path data from the baseline start, so a consumer can draw text without a font engine. A `glyphs` drawable fills that outline with a `paint` in the node's space: the text color, a text shadow's color with a `blur`, or the box's background for `background-clip: text`. With `stroke`, it strokes the outline, as `-webkit-text-stroke` does.
+
+For a native text API, `run.glyphs` holds glyph IDs in `run.font` and their positions from the baseline start. `run.font.data()` returns the font file. Runs shaped with the same face share one `Font` object.
+
+## Lay text out again
+
+A presentation writer can build a text box from the paragraph's box and the run fields.
+
+| Value          | Field                    |
+| -------------- | ------------------------ |
+| Text box       | `node.parent.contentBox` |
+| Alignment      | `node.textAlign`         |
+| Line           | `run.line`               |
+| Text and face  | `run.text`, `run.font`   |
+| Font size      | `run.fontSize`           |
+| Line height    | `run.lineHeight`         |
+| Letter spacing | `run.letterSpacing`      |
+| Baseline       | `run.x`, `run.y`         |
+
+```tsx twoslash title="slides.tsx"
+import { paint } from "takumi-paint";
+
+const tree = await paint(
+  <div style={{ width: 240, padding: 12, textAlign: "center", lineHeight: "30px" }}>Title</div>,
+  { width: 320 },
+);
+
+const paragraphs = [...tree].flatMap((node) =>
+  node.type === "text"
+    ? [
+        {
+          box: node.parent?.contentBox,
+          matrix: node.transform,
+          align: node.textAlign,
+          runs: node.runs.map((run) => ({
+            text: run.text,
+            font: run.font,
+            fontSize: run.fontSize,
+            lineHeight: run.lineHeight,
+            letterSpacing: run.letterSpacing,
+            baseline: [run.x, run.y],
+          })),
+        },
+      ]
+    : [],
+);
+
+console.log(paragraphs);
+```
+
+`run.ascent` and `run.descent` are typographic distances from the baseline. `run.letterSpacing` is already applied to the glyph positions. Under `line-height: normal`, a fallback face can grow `run.lineHeight` to its own height.

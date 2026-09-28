@@ -40,6 +40,9 @@ pub struct RunMetrics {
   pub ascent: f32,
   /// Typographic descent.
   pub descent: f32,
+  /// Height of the run's leaded box: the used line height, grown to a fallback face's own
+  /// height under `line-height: normal`.
+  pub line_height: f32,
   /// Underline offset from the baseline.
   pub underline_offset: f32,
   /// Underline stroke thickness.
@@ -351,6 +354,9 @@ impl BuiltInlineLayout<'_> {
           });
 
           let metrics = run.metrics();
+          // The run's leaded box: the font height plus the line-height leading.
+          let (above, below) =
+            brush.line_box_contribution(metrics.line_height, metrics.ascent, metrics.descent);
           // The font's rounded ascent and descent, without the line-height leading, like the
           // inline box fragment `InlineBoxState::ComputeTextMetrics` sizes.
           let ascent = metrics.ascent.round();
@@ -401,6 +407,7 @@ impl BuiltInlineLayout<'_> {
             metrics: RunMetrics {
               ascent: metrics.ascent,
               descent: metrics.descent,
+              line_height: above + below,
               underline_offset: metrics.underline_offset,
               underline_size: metrics.underline_size,
             },
