@@ -271,10 +271,23 @@ abstract class NodeView<Raw extends RawPaintNode> {
     return this.#drawables;
   }
 
-  /** `drawable` with its glyph run named by the run itself. */
+  /** `drawable` with its glyph runs, inside groups too, named by the runs themselves. */
   protected resolve(drawable: RawDrawable): Drawable {
-    if (drawable.type !== "glyphs") return drawable;
+    switch (drawable.type) {
+      case "glyphs":
+        return this.resolveRun(drawable);
+      case "group":
+        return {
+          ...drawable,
+          drawables: drawable.drawables.map((inner) => this.resolve(inner)),
+        };
+      default:
+        return drawable;
+    }
+  }
 
+  /** A glyphs drawable with its run named by the run itself. */
+  protected resolveRun(_drawable: Extract<RawDrawable, { type: "glyphs" }>): Drawable {
     throw new Error("Only a text node draws glyphs");
   }
 }
@@ -328,9 +341,7 @@ class TextView extends NodeView<RawNode<"text">> implements TextNode {
     return this.#runs;
   }
 
-  protected override resolve(drawable: RawDrawable): Drawable {
-    if (drawable.type !== "glyphs") return drawable;
-
+  protected override resolveRun(drawable: Extract<RawDrawable, { type: "glyphs" }>): Drawable {
     const run = this.runs[drawable.run];
 
     if (!run) throw new Error(`The text node has no run ${drawable.run}`);

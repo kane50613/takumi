@@ -87,7 +87,7 @@ Every node has these fields.
 | `Shape`       | `rect`, `rounded-rect`, or `path` (SVG path data, as `new Path2D()` takes it)       |
 | `Paint`       | `color`, `linear-gradient`, `radial-gradient`, `conic-gradient`, `image`, `pattern` |
 | `Stroke`      | `width`, `dash?`, `cap`, `join`                                                     |
-| `Drawable`    | `fill`, `stroke`, `shadow`, `glyphs`, `image`                                       |
+| `Drawable`    | `fill`, `stroke`, `shadow`, `glyphs`, `image`, `group`                              |
 | `Filter`      | `blur`, `color-matrix`, `drop-shadow`, `unsupported`                                |
 | `Effects`     | `opacity`, `blendMode`, `isolation`, `filters`, `backdropFilters`, `clip`, `mask`   |
 
@@ -95,5 +95,4 @@ Every node has these fields.
 
 - `filter: url(#id)` arrives as `{ type: "unsupported", css }`.
 - `backdrop-filter` needs what is already drawn behind the node, which targets such as PPTX cannot read.
-- A translucent layer inside a box, such as a span's `opacity`, is multiplied into each draw, so overlapping draws in it paint darker than the renderer's layer.
 - Bitmap glyphs, such as some emoji fonts, are left out of `run.outline()`.

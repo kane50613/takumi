@@ -327,6 +327,14 @@ pub enum Drawable {
     /// How it samples.
     sampling: Sampling,
   },
+  /// Drawables composited into one layer at `opacity`, as a translucent inline element or a
+  /// translucent outline paints.
+  Group {
+    /// The layer's opacity.
+    opacity: f32,
+    /// What the layer holds, bottom first.
+    drawables: Vec<Drawable>,
+  },
 }
 
 /// A filter a group runs over its layer.

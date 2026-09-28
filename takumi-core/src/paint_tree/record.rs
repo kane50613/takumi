@@ -1,5 +1,7 @@
 //! A paint device that records what the shared painters draw as drawables.
 
+use std::mem;
+
 #[cfg(feature = "png")]
 use super::document::{ImageSource, Sampling};
 use super::{
@@ -33,15 +35,12 @@ struct Clip {
 }
 
 /// Records draws in a node's local space as [`Drawable`]s.
-///
-/// Approximate: a layer the painters open multiplies its opacity into each draw inside it, so
-/// draws that overlap inside one layer, such as the dashes of a translucent outline meeting at a
-/// corner, paint darker where a real layer would not.
 pub(super) struct Recorder {
   drawables: Vec<Drawable>,
   role: Role,
   clips: Vec<Clip>,
-  opacities: Vec<f32>,
+  /// The open layers, innermost last: each one's opacity and the drawables outside it.
+  layers: Vec<(f32, Vec<Drawable>)>,
   shadow: Option<SizedShadow>,
   /// For a text node, the box's background layers that `background-clip: text` shows through its
   /// glyphs, bottom first, in the node's space.
@@ -55,7 +54,7 @@ impl Recorder {
       drawables: Vec::new(),
       role: Role::Background,
       clips: Vec::new(),
-      opacities: Vec::new(),
+      layers: Vec::new(),
       shadow: None,
       text_background: None,
     }
@@ -79,13 +78,9 @@ impl Recorder {
     self.drawables.push(drawable);
   }
 
-  /// `color` at the opacity of the open layers, or `None` when it shows nothing.
+  /// `color`, or `None` when it shows nothing.
   fn visible(&self, color: Color) -> Option<[u8; 4]> {
-    let opacity: f32 = self.opacities.iter().product();
-    let [r, g, b, a] = color.0;
-    let alpha = (f32::from(a) * opacity).round() as u8;
-
-    (alpha > 0).then_some([r, g, b, alpha])
+    (color.0[3] > 0).then_some(color.0)
   }
 
   /// The open clips, as shapes to clip to at once.
@@ -273,11 +268,23 @@ impl PaintDevice for Recorder {
   }
 
   fn begin_layer(&mut self, opacity: f32) {
-    self.opacities.push(opacity);
+    let outside = mem::take(&mut self.drawables);
+
+    self.layers.push((opacity, outside));
   }
 
   fn end_layer(&mut self) {
-    self.opacities.pop();
+    let Some((opacity, outside)) = self.layers.pop() else {
+      return;
+    };
+    let inside = mem::replace(&mut self.drawables, outside);
+
+    if !inside.is_empty() {
+      self.drawables.push(Drawable::Group {
+        opacity,
+        drawables: inside,
+      });
+    }
   }
 
   fn fill_shadow(&mut self, shape: &ShadowShape, shadow: &SizedShadow, transform: Affine) {
