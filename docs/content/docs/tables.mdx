@@ -16,6 +16,7 @@ Takumi renders `display: table` by rewriting the table into a grid, so every row
 - A block-level `auto`-width table shrinks to fit its content; in a flex or grid container it still stretches. Columns share the table's width by their content, as in Chrome. Percentage and fixed cell widths constrain their columns.
 - `border-collapse: collapse` merges adjacent borders.
 - `border-spacing` defaults to `2px`.
+- `vertical-align` places cell content as in Chrome, and `baseline` cells line their first lines up across a row.
 - Paged PDF output splits rows across pages. Column positions stay identical on every page.
 
 ```tsx twoslash title="Set a table column width"
@@ -38,11 +39,10 @@ Takumi renders `display: table` by rewriting the table into a grid, so every row
 
 ## Where it drifts
 
-| Behavior              | In a browser                                   | In Takumi                                                                        |
-| :-------------------- | :--------------------------------------------- | :------------------------------------------------------------------------------- |
-| `vertical-align`      | `baseline` aligns the first baselines of a row | `top`, `middle`, and `bottom` follow the browser. `baseline` falls back to `top` |
-| `<col>`, `<colgroup>` | Their widths size columns                      | Ignored; declare the width on a cell                                             |
-| Caption width         | A wide caption widens the table                | The caption wraps to the table's width                                           |
+| Behavior              | In a browser                    | In Takumi                              |
+| :-------------------- | :------------------------------ | :------------------------------------- |
+| `<col>`, `<colgroup>` | Their widths size columns       | Ignored; declare the width on a cell   |
+| Caption width         | A wide caption widens the table | The caption wraps to the table's width |
 
 <Callout type="info">
   Cells keep their box: padding, borders, and backgrounds cover the full grid area, including rows
