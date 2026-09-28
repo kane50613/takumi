@@ -16,7 +16,7 @@ All lengths use device pixels. With `devicePixelRatio: 2`, a CSS length of `20px
 
 ## Replay the steps
 
-`tree.paintSteps()` yields the steps a renderer takes, bottom to top. `z-index`, negative stacking, and outlines that paint after later siblings are already in order.
+`tree.steps` lists the steps a renderer takes, bottom to top. `z-index`, negative stacking, and outlines that paint after later siblings are already in order.
 
 ```ts twoslash title="replay.ts"
 import type { Drawable, PaintTree } from "takumi-paint";
@@ -28,7 +28,7 @@ function replay(ctx: CanvasRenderingContext2D, tree: PaintTree) {
   const layers: CanvasRenderingContext2D[] = [];
   let target = ctx;
 
-  for (const step of tree.paintSteps()) {
+  for (const step of tree.steps) {
     switch (step.type) {
       case "draw":
         target.setTransform(...step.node.transform);

@@ -37,7 +37,7 @@ const tree = await paint(
   { width: 320 },
 );
 
-const paragraphs = [...tree].flatMap((node) =>
+const paragraphs = tree.nodes.flatMap((node) =>
   node.type === "text"
     ? [
         {
