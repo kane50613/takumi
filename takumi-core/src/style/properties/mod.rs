@@ -464,6 +464,18 @@ impl_from_taffy_enum!(
   TextAlign, into_parley -> Alignment, Left, Right, Center, Justify, Start, End
 );
 
+impl TextAlign {
+  /// The physical side `start` and `end` name under `direction`.
+  #[cfg(feature = "paint-tree")]
+  pub(crate) fn resolve(self, direction: Direction) -> Self {
+    match (self, direction) {
+      (Self::Start, Direction::Ltr) | (Self::End, Direction::Rtl) => Self::Left,
+      (Self::Start, Direction::Rtl) | (Self::End, Direction::Ltr) => Self::Right,
+      (align, _) => align,
+    }
+  }
+}
+
 /// Defines whether an element creates a new stacking context.
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
 #[non_exhaustive]
