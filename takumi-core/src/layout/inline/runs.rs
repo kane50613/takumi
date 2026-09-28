@@ -273,6 +273,7 @@ impl ShapedRun {
       descent,
       underline_offset,
       underline_size,
+      ..
     } = self.metrics;
     let font = FontRef::from_index(self.font_data(), self.font_index).ok();
     let em_descent = em_box_descent(font.as_ref(), self.font_size, ascent, descent);
