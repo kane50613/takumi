@@ -441,7 +441,7 @@ impl<'c> CanvasDevice<'c> {
       MaskCompositeColor::SourceOnly,
       MaskSamplingOptions {
         canvas_to_source: box_to_source * canvas_to_box,
-        sample_bias: Point::ZERO,
+        sample_bias: Point { x: 0.5, y: 0.5 },
         algorithm,
       },
       BlendMode::Normal,
