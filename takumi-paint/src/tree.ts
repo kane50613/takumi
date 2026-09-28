@@ -181,9 +181,24 @@ export class PaintTree {
   }
 }
 
-/** `node` and its descendants in document order. */
-function inDocumentOrder(node: PaintNode): PaintNode[] {
-  return node.type === "box" ? [node, ...node.children.flatMap(inDocumentOrder)] : [node];
+/** `root` and its descendants in document order. */
+function inDocumentOrder(root: BoxNode): PaintNode[] {
+  const ordered: PaintNode[] = [];
+  const pending: PaintNode[] = [root];
+
+  for (let node = pending.pop(); node; node = pending.pop()) {
+    ordered.push(node);
+    if (node.type !== "box") continue;
+
+    const { children } = node;
+
+    for (let index = children.length - 1; index >= 0; index--) {
+      const child = children[index];
+
+      if (child) pending.push(child);
+    }
+  }
+  return ordered;
 }
 
 /** The nodes as the serialized tree lists them, which is how nodes and steps name each other. */
@@ -268,6 +283,7 @@ class BoxView extends NodeView<RawNode<"box">> implements BoxNode {
   readonly type = "box";
   #outline: readonly Drawable[] | undefined;
   #effects: Effects | undefined;
+  #children: readonly PaintNode[] | undefined;
 
   get contentBox(): Rect {
     return this.raw.contentBox;
@@ -294,7 +310,8 @@ class BoxView extends NodeView<RawNode<"box">> implements BoxNode {
   }
 
   get children(): readonly PaintNode[] {
-    return this.raw.children.map((child) => this.listing.at(child));
+    this.#children ??= this.raw.children.map((child) => this.listing.at(child));
+    return this.#children;
   }
 }
 
