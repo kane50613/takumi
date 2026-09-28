@@ -40,6 +40,9 @@ pub struct RunMetrics {
   pub ascent: f32,
   /// Typographic descent.
   pub descent: f32,
+  /// Height of the run's leaded box: the used line height, grown to a fallback face's own
+  /// height under `line-height: normal`.
+  pub line_height: f32,
   /// Underline offset from the baseline.
   pub underline_offset: f32,
   /// Underline stroke thickness.
@@ -354,6 +357,11 @@ impl BuiltInlineLayout<'_> {
           }
 
           let metrics = run.metrics();
+          // The run's leaded box, like Blink's inline box fragment
+          // (`InlineBoxState::ComputeTextMetrics` adds the line-height
+          // leading to the font height).
+          let (above, below) =
+            brush.line_box_contribution(metrics.line_height, metrics.ascent, metrics.descent);
 
           if let Some(span_id) = brush.source_span_id
             && let Some(ProcessedInlineSpan::Text {
@@ -361,11 +369,6 @@ impl BuiltInlineLayout<'_> {
               ..
             }) = spans.get(span_id as usize)
           {
-            // The run's leaded box, like Blink's inline box fragment
-            // (`InlineBoxState::ComputeTextMetrics` adds the line-height
-            // leading to the font height).
-            let (above, below) =
-              brush.line_box_contribution(metrics.line_height, metrics.ascent, metrics.descent);
             let rect = InlineOutlineRect {
               span_id,
               line_index,
@@ -401,6 +404,7 @@ impl BuiltInlineLayout<'_> {
             metrics: RunMetrics {
               ascent: metrics.ascent,
               descent: metrics.descent,
+              line_height: above + below,
               underline_offset: metrics.underline_offset,
               underline_size: metrics.underline_size,
               strikethrough_offset: metrics.strikethrough_offset,

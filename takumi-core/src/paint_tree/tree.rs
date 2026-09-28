@@ -2,7 +2,11 @@
 
 use serde::Serialize;
 
-use crate::style::Color;
+use crate::{
+  geometry::{Point, Size},
+  layout::node::Node,
+  shadow::SizedShadow,
+};
 
 /// A color as `[r, g, b, a]`, each `0..=255`.
 pub type Rgba = [u8; 4];
@@ -20,6 +24,18 @@ pub struct PaintRect {
   pub height: f32,
 }
 
+impl PaintRect {
+  /// The rectangle at `offset` with `size`.
+  pub fn new(offset: Point<f32>, size: Size<f32>) -> Self {
+    Self {
+      x: offset.x,
+      y: offset.y,
+      width: size.width,
+      height: size.height,
+    }
+  }
+}
+
 /// Corner radii as `[x, y]` pairs: top-left, top-right, bottom-right, bottom-left.
 pub type Radii = [[f32; 2]; 4];
 
@@ -35,6 +51,13 @@ pub struct PaintTree {
   pub fonts: Vec<PaintFont>,
   /// The root node.
   pub root: PaintNode,
+}
+
+impl PaintTree {
+  /// The font instance `run` was shaped with.
+  pub fn font(&self, run: &PaintTextRun) -> Option<&PaintFont> {
+    self.fonts.get(run.font_index)
+  }
 }
 
 /// A font instance a run was shaped with.
@@ -71,8 +94,8 @@ pub struct PaintVariation {
 }
 
 /// One painted box: a compositing group whose `opacity`, `clip`, and blend apply to everything
-/// inside it. Paints in order: `box_decoration`, `image`, `inline_backgrounds`, `runs`,
-/// `children`, then `box_decoration.outline`.
+/// inside it. Paints in order: `shadows.outer`, `background`, `shadows.inset`, `border`, `image`,
+/// `inline_backgrounds`, `text_runs`, `children`, then `outline`.
 #[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PaintNode {
@@ -83,8 +106,16 @@ pub struct PaintNode {
   pub width: f32,
   /// Border-box height in device pixels.
   pub height: f32,
-  /// Absolute transform placing the border box on the canvas, as `[a, b, c, d, e, f]`.
-  pub transform: [f32; 6],
+  /// Left edge of the border box on the canvas.
+  pub x: f32,
+  /// Top edge of the border box on the canvas.
+  pub y: f32,
+  /// The content box: the border box inset by border and padding.
+  pub content_box: PaintRect,
+  /// Absolute transform as `[a, b, c, d, e, f]` when the box is rotated, scaled, or skewed;
+  /// absent for a plain translation. Its translation is `x`, `y`.
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub transform: Option<[f32; 6]>,
   /// Group opacity, `0..=1`.
   pub opacity: f32,
   /// `mix-blend-mode` other than `normal`.
@@ -95,9 +126,18 @@ pub struct PaintNode {
   /// Overflow clip applied to the children.
   #[serde(skip_serializing_if = "Option::is_none")]
   pub clip: Option<PaintClip>,
-  /// Box decorations, when the box paints any.
+  /// The background, when it paints a color or a layer.
   #[serde(skip_serializing_if = "Option::is_none")]
-  pub box_decoration: Option<PaintBoxDecoration>,
+  pub background: Option<PaintBackground>,
+  /// The border, when any side has width.
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub border: Option<PaintBorder>,
+  /// `box-shadow` layers, when any.
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub shadows: Option<PaintBoxShadows>,
+  /// The outline, painted after the children.
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub outline: Option<PaintOutline>,
   /// Replaced image content.
   #[serde(skip_serializing_if = "Option::is_none")]
   pub image: Option<PaintImage>,
@@ -109,7 +149,10 @@ pub struct PaintNode {
   pub inline_backgrounds: Vec<PaintInlineBackground>,
   /// Shaped text runs in visual order.
   #[serde(skip_serializing_if = "Vec::is_empty")]
-  pub runs: Vec<PaintTextRun>,
+  pub text_runs: Vec<PaintTextRun>,
+  /// `text-align` of the inline content, `start` and `end` resolved to `left` or `right`.
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub text_align: Option<String>,
   /// Effects the tree carries as CSS text instead of resolving.
   #[serde(skip_serializing_if = "Option::is_none")]
   pub unresolved_effects: Option<PaintUnresolvedEffects>,
@@ -135,6 +178,18 @@ pub struct PaintSource {
   pub class_name: Option<String>,
 }
 
+impl PaintSource {
+  /// The source of the box `node` generates at `path`.
+  pub(super) fn new(path: Vec<usize>, node: Option<&Node>) -> Self {
+    Self {
+      path,
+      id: node.and_then(Node::id).map(str::to_owned),
+      tag_name: node.and_then(Node::tag_name).map(str::to_owned),
+      class_name: node.and_then(Node::class_name).map(str::to_owned),
+    }
+  }
+}
+
 /// The rounded padding box children clip to, and which axes clip.
 #[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -147,21 +202,6 @@ pub struct PaintClip {
   pub x: bool,
   /// Whether the vertical axis clips.
   pub y: bool,
-}
-
-/// A box's decorations.
-#[derive(Debug, Clone, PartialEq, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct PaintBoxDecoration {
-  /// The background.
-  pub background: PaintBackground,
-  /// The border.
-  pub border: PaintBorder,
-  /// `box-shadow` layers.
-  pub shadows: PaintBoxShadows,
-  /// The outline, painted after the children.
-  #[serde(skip_serializing_if = "Option::is_none")]
-  pub outline: Option<PaintOutline>,
 }
 
 /// A box's background.
@@ -302,6 +342,18 @@ pub struct PaintShadow {
   pub color: Rgba,
 }
 
+impl From<&SizedShadow> for PaintShadow {
+  fn from(shadow: &SizedShadow) -> Self {
+    Self {
+      offset_x: shadow.offset_x,
+      offset_y: shadow.offset_y,
+      blur: shadow.blur_radius,
+      spread: shadow.spread_radius,
+      color: shadow.color.0,
+    }
+  }
+}
+
 /// A box's outline, drawn outside the border box.
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct PaintOutline {
@@ -315,15 +367,13 @@ pub struct PaintOutline {
   pub offset: f32,
 }
 
-/// Replaced image content placed inside its content box.
+/// Replaced image content, clipped to the node's content box.
 #[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PaintImage {
   /// The image URL, when the source was one.
   #[serde(skip_serializing_if = "Option::is_none")]
   pub src: Option<String>,
-  /// The content box the image is placed in and clipped to.
-  pub content_box: PaintRect,
   /// Where the whole image draws after `object-fit` and `object-position`.
   pub placement: PaintRect,
 }
@@ -348,6 +398,11 @@ pub struct PaintTextRun {
   pub font_index: usize,
   /// Font size the run was shaped at.
   pub font_size: f32,
+  /// Height of the run's leaded box: the used line height, grown to a fallback face's own
+  /// height under `line-height: normal`.
+  pub line_height: f32,
+  /// `letter-spacing`, already applied to the glyph positions.
+  pub letter_spacing: f32,
   /// Fill color.
   pub color: Rgba,
   /// The span's `opacity`.
@@ -434,9 +489,4 @@ pub struct PaintUnresolvedEffects {
   /// `clip-path`.
   #[serde(skip_serializing_if = "Option::is_none")]
   pub clip_path: Option<String>,
-}
-
-/// The `[r, g, b, a]` form of a color.
-pub(super) fn rgba(color: Color) -> Rgba {
-  color.0
 }

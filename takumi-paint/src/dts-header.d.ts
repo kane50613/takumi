@@ -46,7 +46,7 @@ export type ImageSource = {
   cache?: ImageCacheMode;
 };
 
-export type PaintTreeOptions = {
+export type PaintOptions = {
   /** Canvas width in device pixels. Omit to size the canvas to the content. */
   width?: number;
   /** Canvas height in device pixels. Omit to size the canvas to the content. */
@@ -76,14 +76,14 @@ export type Radii = [[number, number], [number, number], [number, number], [numb
 export type Matrix = [number, number, number, number, number, number];
 
 /** Everything the backends paint for a node tree, in paint order. */
-export type PaintTree = {
+export type PaintTreeData = {
   /** Canvas width in device pixels. */
   width: number;
   /** Canvas height in device pixels. */
   height: number;
   /** Font instances the runs reference by index. */
   fonts: PaintFont[];
-  root: PaintNode;
+  root: PaintNodeData;
 };
 
 /** A font instance a run was shaped with. */
@@ -104,40 +104,30 @@ export type PaintFont = {
   syntheticObliqueAngle?: number;
 };
 
-/**
- * One painted box: a compositing group whose `opacity`, `clip`, and `blendMode` apply to
- * everything inside it. Paints in order: `boxDecoration`, `image`, `inlineBackgrounds`, `runs`,
- * `children`, then `boxDecoration.outline`.
- */
-export type PaintNode = {
-  /** The node this box came from; absent for an anonymous box. */
+/** The serialized form of the `PaintNode` class. */
+export type PaintNodeData = {
   source?: PaintSource;
-  /** Border-box width in device pixels. */
   width: number;
-  /** Border-box height in device pixels. */
   height: number;
-  /** Absolute transform placing the border box on the canvas. */
-  transform: Matrix;
+  x: number;
+  y: number;
+  contentBox: PaintRect;
+  transform?: Matrix;
   opacity: number;
-  /** `mix-blend-mode` other than `normal`. */
   blendMode?: string;
-  /** Whether `isolation: isolate` applies. */
   isolate: boolean;
-  /** Overflow clip applied to the children. */
   clip?: PaintClip;
-  /** Box decorations, when the box paints any. */
-  boxDecoration?: PaintBoxDecoration;
+  background?: PaintBackground;
+  border?: PaintBorder;
+  shadows?: PaintBoxShadows;
+  outline?: PaintOutline;
   image?: PaintImage;
-  /** `text-shadow` layers under every run, later-listed shadows lowest. */
   textShadows?: PaintShadow[];
-  /** Inline-span backgrounds, one rounded rect per line, outer spans first. */
   inlineBackgrounds?: PaintInlineBackground[];
-  /** Shaped text runs in visual order. */
-  runs?: PaintTextRun[];
-  /** Effects the tree carries as CSS text instead of resolving. */
+  textRuns?: PaintTextRunData[];
+  textAlign?: "left" | "right" | "center" | "justify";
   unresolvedEffects?: PaintUnresolvedEffects;
-  /** Boxes painted after this one, in paint order. */
-  children?: PaintNode[];
+  children?: PaintNodeData[];
 };
 
 export type PaintSource = {
@@ -157,13 +147,8 @@ export type PaintClip = {
   y: boolean;
 };
 
-export type PaintBoxDecoration = {
-  background: PaintBackground;
-  border: PaintBorder;
-  shadows: { inset: PaintShadow[]; outer: PaintShadow[] };
-  /** The outline, painted after the children. */
-  outline?: PaintOutline;
-};
+/** `box-shadow` layers split by where they fall. */
+export type PaintBoxShadows = { inset: PaintShadow[]; outer: PaintShadow[] };
 
 export type PaintBackground = {
   /** `background-color`, when visible. */
@@ -233,41 +218,41 @@ export type PaintOutline = {
   offset: number;
 };
 
+/** Replaced image content, clipped to the node's `contentBox`. */
 export type PaintImage = {
   /** The image URL, when the source was one. */
   src?: string;
-  /** The content box the image is placed in and clipped to. */
-  contentBox: PaintRect;
   /** Where the whole image draws after `object-fit` and `object-position`. */
   placement: PaintRect;
 };
 
-export type PaintTextRun = {
+/** The serialized form of the `PaintTextRun` class. */
+export type PaintTextRunData = {
   text: string;
-  /** Start of the run's baseline, x. */
   x: number;
-  /** The run's baseline, y. */
   y: number;
-  /** Advance of the run. */
   width: number;
   ascent: number;
   descent: number;
-  /** Index into `PaintTree.fonts`. */
+  /** Index into `PaintTreeData.fonts`. */
   fontIndex: number;
   fontSize: number;
+  lineHeight: number;
+  letterSpacing: number;
   color: Rgba;
   opacity: number;
-  /** A transform on top of the node's, when text-fit scales the line. */
   transform?: Matrix;
-  /** Glyphs relative to the run origin. */
-  glyphs: { id: number; x: number; y: number }[];
+  glyphs: PaintGlyph[];
   decorations?: PaintDecoration[];
-  stroke?: { color: Rgba; width: number };
-  /** UTF-8 byte range of the text within the node's inline text. */
+  stroke?: PaintStroke;
   textByteRange: [number, number];
-  /** The inline span the run came from. */
   spanId?: number;
 };
+
+/** A glyph id and its offset from the run origin. */
+export type PaintGlyph = { id: number; x: number; y: number };
+
+export type PaintStroke = { color: Rgba; width: number };
 
 export type PaintDecoration = {
   line: "underline" | "overline" | "line-through";

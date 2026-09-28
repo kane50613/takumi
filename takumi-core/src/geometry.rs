@@ -194,6 +194,12 @@ impl<T> Rect<T> {
       bottom: r.bottom,
     }
   }
+
+  /// The edges in CSS order: top, right, bottom, left.
+  #[cfg(feature = "paint-tree")]
+  pub(crate) fn into_array(self) -> [T; 4] {
+    [self.top, self.right, self.bottom, self.left]
+  }
 }
 
 impl<T: Add<Output = T> + Copy> Rect<T> {

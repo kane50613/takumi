@@ -6,30 +6,37 @@ icon: Brush
 
 `takumi-paint` lays out a document and returns what painting it would draw, instead of an image. Use it when the output is not pixels: an editable PPTX, a Canvas replay, a native drawing API.
 
-```ts twoslash title="Read the boxes and runs"
-import { renderPaintTree, type PaintNode, type PaintTextRun } from "takumi-paint";
+```tsx twoslash title="Draw the tree on a canvas"
+import { paint } from "takumi-paint";
 
-const tree = await renderPaintTree(
-  `<style>.big { font: 700 40px Geist; color: #B3261E }</style>
-   <div style="width: 640px; padding: 32px; background: #F7F3EC">
-     <div class="big">4,2 %</div>
-     <p>hello <b>world</b></p>
-   </div>`,
+const tree = await paint(
+  <div style={{ width: 640, padding: 32, background: "#F7F3EC", flexDirection: "column", gap: 8 }}>
+    <div style={{ fontSize: 40, fontWeight: 700, color: "#B3261E" }}>Hello paint</div>
+    <div>Every box and text run, with the values the renderer used.</div>
+  </div>,
   { width: 640 },
 );
 
-const card = tree.root;
-card.boxDecoration?.background.color; // [247, 243, 236, 255]
-
-function* runs(node: PaintNode): Iterable<PaintTextRun> {
-  yield* node.runs ?? [];
-  for (const child of node.children ?? []) yield* runs(child);
+function draw(ctx: CanvasRenderingContext2D) {
+  for (const node of tree) {
+    ctx.setTransform(...node.matrix);
+    if (node.background?.color) {
+      ctx.fillStyle = rgba(node.background.color);
+      ctx.fillRect(0, 0, node.width, node.height);
+    }
+    for (const run of node.textRuns) {
+      ctx.save();
+      if (run.transform) ctx.transform(...run.transform);
+      ctx.font = `${run.font.weight} ${run.fontSize}px ${run.font.family}`;
+      ctx.fillStyle = rgba(run.color);
+      ctx.fillText(run.text, run.x, run.y);
+      ctx.restore();
+    }
+  }
+  ctx.resetTransform();
 }
 
-for (const run of runs(card)) {
-  const font = tree.fonts[run.fontIndex];
-  console.log(run.text, font?.family, font?.weight, run.fontSize, run.color);
-}
+const rgba = ([r, g, b, a]: number[]) => `rgb(${r} ${g} ${b} / ${a / 255})`;
 ```
 
 The package runs the same layout as `takumi-js` and walks the same stacking-context scene the image, SVG, and PDF backends paint. It records used values: a `50%` width is a number, `currentColor` is a color, and `<b>world</b>` is its own run with its own face.
@@ -38,11 +45,11 @@ The package runs the same layout as `takumi-js` and walks the same stacking-cont
 
 Every length is a device pixel, and so are the `width` and `height` options. A `20px` font measures `40` under a `devicePixelRatio` of `2`.
 
-A node's `transform` is an absolute matrix placing its border box on the canvas. Everything inside a node, such as `clip`, `boxDecoration`, `image`, and `runs`, is relative to the node's border-box top-left.
+A node's `x` and `y` place its border box on the canvas. `transform` appears only when the box is rotated, scaled, or skewed, and its translation equals `x`, `y`. `node.matrix` returns whichever of the two applies. Everything inside a node, such as `clip`, `background`, `image`, and `textRuns`, is relative to the node's border-box top-left.
 
 ## Paint order
 
-Nodes come in the order the renderer paints them, so `zIndex` does not appear: draw a node's `boxDecoration`, then its `image`, `inlineBackgrounds`, and `runs`, then its `children`, then its `boxDecoration.outline`.
+Nodes come in the order the renderer paints them, so `zIndex` does not appear. Iterating the tree yields them in that order, parents before children. Within a node, draw `shadows.outer`, `background`, `shadows.inset`, and `border`, then `image`, `inlineBackgrounds`, and `textRuns`, then `children`, then `outline`. The outline comes after the children, so an exporter that draws outlines recurses over `children` instead of the flat iteration.
 
 Each node is a compositing group. Its `opacity`, `clip`, and `blendMode` apply to everything inside it, children included.
 
@@ -55,20 +62,38 @@ Each node is a compositing group. Its `opacity`, `clip`, and `blendMode` apply t
       description:
         "The input node this box came from: its child-index path, id, tag name, and class name",
     },
-    boxDecoration: {
-      type: "PaintBoxDecoration",
-      description:
-        "Used background, border widths, colors, styles and radii, box shadows split inset and outer, and the outline",
+    contentBox: {
+      type: "PaintRect",
+      description: "The border box inset by border and padding",
+    },
+    background: {
+      type: "PaintBackground",
+      description: "Used background color, clip, and image layers",
+    },
+    border: {
+      type: "PaintBorder",
+      description: "Border widths, colors, styles, and radii",
+    },
+    shadows: {
+      type: "PaintBoxShadows",
+      description: "Box shadows split into inset and outer",
+    },
+    outline: {
+      type: "PaintOutline",
+      description: "The outline, painted after the children",
     },
     image: {
       type: "PaintImage",
-      description:
-        "The content box an image sits in and where it draws after object-fit and object-position",
+      description: "Where an image draws after object-fit and object-position",
     },
-    runs: {
+    textRuns: {
       type: "PaintTextRun[]",
       description:
-        "Shaped text runs with their font instance, size, color, decorations, and glyph positions",
+        "Shaped text runs with their font, size, color, decorations, and glyph positions",
+    },
+    textAlign: {
+      type: '"left" | "right" | "center" | "justify"',
+      description: "The text-align of the inline content, with start and end resolved",
     },
     inlineBackgrounds: {
       type: "PaintInlineBackground[]",
@@ -81,7 +106,7 @@ Each node is a compositing group. Its `opacity`, `clip`, and `blendMode` apply t
   }}
 />
 
-Runs reference `tree.fonts` by index. A font instance names the registered family, the face index, the weight and style after variations, and any synthetic bold or skew the shaper applied.
+Each run carries its `font`: the registered family, the face index, the weight and style after variations, and any synthetic bold or skew the shaper applied. Runs shaped with the same face share one object from `tree.fonts`. A run's `y` is its baseline, and `top` and `bottom` add its ascent and descent. `lineHeight` and `letterSpacing` carry the used values, so an exporter that lays the text out again, such as a PPTX writer, can reproduce the lines. `tree.textRuns()` yields every run with the node that paints it, and `tree.find(id)` looks a node up by its source `id`.
 
 ## What stays CSS
 

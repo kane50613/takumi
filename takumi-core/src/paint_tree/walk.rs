@@ -1,13 +1,15 @@
 //! Walks the stacking-context scene and records what each box paints.
 
-use std::borrow::Cow;
+use std::{borrow::Cow, ops::Range};
 
 use crate::{
+  context::RenderContext,
   error::Result,
   font_style::SizedFontStyle,
   geometry::{ComputedLayout, Point, Size},
   layout::{
     background::{BackgroundLayersInput, background_origin_box},
+    border::BorderProperties,
     decoration::ClipBox,
     inline::{
       InlineItem, InlineLayoutMode, InlineLayoutRequest, PositionedInlineRun, ProcessedInlineSpan,
@@ -19,10 +21,10 @@ use crate::{
     tree::{LayoutResults, RenderNode},
   },
   painter::BoxPainter,
+  resources::font::FontsSnapshot,
   scene::{NodePaint, PaintItemKind, StackingContextNode},
-  shadow::SizedShadow,
   style::{
-    Affine, BackgroundClip, BackgroundImage, BlendMode, BorderStyle, Isolation,
+    Affine, BackgroundClip, BackgroundImage, BlendMode, Isolation, Overflow, ResolvedGradientStop,
     TextDecorationLines, ToCss,
   },
 };
@@ -30,10 +32,10 @@ use crate::{
 use super::{
   fonts::FontTable,
   tree::{
-    PaintBackground, PaintBackgroundLayer, PaintBorder, PaintBoxDecoration, PaintBoxShadows,
-    PaintClip, PaintDecoration, PaintFill, PaintGlyph, PaintGradientStop, PaintImage,
-    PaintInlineBackground, PaintNode, PaintOutline, PaintRect, PaintShadow, PaintSource,
-    PaintStroke, PaintTextRun, PaintTiles, PaintUnresolvedEffects, Radii, rgba,
+    PaintBackground, PaintBackgroundLayer, PaintBorder, PaintBoxShadows, PaintClip,
+    PaintDecoration, PaintFill, PaintGlyph, PaintGradientStop, PaintImage, PaintInlineBackground,
+    PaintNode, PaintOutline, PaintRect, PaintShadow, PaintSource, PaintStroke, PaintTextRun,
+    PaintTiles, PaintUnresolvedEffects, Radii,
   },
 };
 
@@ -111,34 +113,30 @@ impl Walker {
   ) -> PaintNode {
     let style = &node.context.style;
     let painter = BoxPainter::new(&node.context, layout);
+    let decorations = BoxDecorations::of(node, layout, &painter);
+    let (x, y) = transform.transform_point(0.0, 0.0);
     PaintNode {
-      source: path.map(|path| PaintSource {
-        path,
-        id: node.node.as_ref().and_then(|n| n.id()).map(str::to_owned),
-        tag_name: node
-          .node
-          .as_ref()
-          .and_then(|n| n.tag_name())
-          .map(str::to_owned),
-        class_name: node
-          .node
-          .as_ref()
-          .and_then(|n| n.class_name())
-          .map(str::to_owned),
-      }),
+      source: path.map(|path| PaintSource::new(path, node.node.as_ref())),
       width: layout.size.width,
       height: layout.size.height,
-      transform: transform.to_cols_array(),
+      x,
+      y,
+      content_box: PaintRect::new(layout.content_box_offset(), layout.content_box_size()),
+      transform: (!transform.only_translation()).then(|| transform.to_cols_array()),
       opacity: style.opacity.0,
       blend_mode: (style.mix_blend_mode != BlendMode::Normal)
         .then(|| style.mix_blend_mode.to_css_string()),
       isolate: style.isolation == Isolation::Isolate,
       clip: overflow_clip(node, layout, painter.border()),
-      box_decoration: box_decoration(node, layout, &painter),
+      background: decorations.background,
+      border: decorations.border,
+      shadows: decorations.shadows,
+      outline: decorations.outline,
       image: None,
       text_shadows: Vec::new(),
       inline_backgrounds: Vec::new(),
-      runs: Vec::new(),
+      text_runs: Vec::new(),
+      text_align: None,
       unresolved_effects: unresolved(node),
       children: Vec::new(),
     }
@@ -195,7 +193,17 @@ impl Walker {
     ));
     let runs = built.resolve_runs(context, layout)?;
 
-    painted.text_shadows = font_style.painted_text_shadows().map(shadow).collect();
+    painted.text_align = Some(
+      context
+        .style
+        .text_align
+        .resolve(context.style.direction)
+        .to_css_string(),
+    );
+    painted.text_shadows = font_style
+      .painted_text_shadows()
+      .map(PaintShadow::from)
+      .collect();
     painted.inline_backgrounds = runs
       .background_fragments
       .iter()
@@ -207,11 +215,11 @@ impl Walker {
           height: fragment.height,
         },
         radii: fragment.radii.map(|(x, y)| [x, y]),
-        color: rgba(fragment.color),
+        color: fragment.color.0,
         opacity: fragment.opacity,
       })
       .collect();
-    painted.runs = runs
+    painted.text_runs = runs
       .runs
       .iter()
       .map(|run| self.run(context.fonts(), &built.text, &built.spans, run, layout))
@@ -250,7 +258,7 @@ impl Walker {
 
   fn run(
     &mut self,
-    fonts: &crate::resources::font::FontsSnapshot,
+    fonts: &FontsSnapshot,
     text: &str,
     spans: &[ProcessedInlineSpan<'_>],
     run: &PositionedInlineRun,
@@ -278,7 +286,7 @@ impl Walker {
         transform: rect.transform,
         width: rect.width,
         height: rect.height,
-        color: rgba(rect.color),
+        color: rect.color.0,
       })
       .collect();
 
@@ -291,7 +299,9 @@ impl Walker {
       descent: shaped.metrics.descent,
       font_index: self.fonts.intern(fonts, shaped),
       font_size: shaped.font_size,
-      color: rgba(brush.color),
+      line_height: shaped.metrics.line_height,
+      letter_spacing: brush.letter_spacing,
+      color: brush.color.0,
       opacity: brush.opacity,
       transform: (!run_transform.is_identity()).then(|| run_transform.to_cols_array()),
       glyphs: shaped
@@ -304,8 +314,8 @@ impl Walker {
         })
         .collect(),
       decorations,
-      stroke: (brush.stroke_width > 0.0 && brush.stroke_color.0[3] != 0).then(|| PaintStroke {
-        color: rgba(brush.stroke_color),
+      stroke: (brush.stroke_width > 0.0 && brush.stroke_color.0[3] != 0).then_some(PaintStroke {
+        color: brush.stroke_color.0,
         width: brush.stroke_width,
       }),
       text_byte_range: [text_range.start, text_range.end],
@@ -317,10 +327,10 @@ impl Walker {
 /// Narrows a parley run's byte range to the span it was shaped for, since several spans can
 /// share one run.
 fn run_text_range(
-  range: std::ops::Range<usize>,
+  range: Range<usize>,
   spans: &[ProcessedInlineSpan<'_>],
   span_id: Option<u64>,
-) -> std::ops::Range<usize> {
+) -> Range<usize> {
   match span_id.and_then(|id| spans.get(id as usize)) {
     Some(ProcessedInlineSpan::Text { byte_range, .. }) => {
       range.start.max(byte_range.start)..range.end.min(byte_range.end)
@@ -330,7 +340,7 @@ fn run_text_range(
 }
 
 /// The run's text without the bidi marks layout inserts.
-fn run_text(text: &str, range: std::ops::Range<usize>) -> String {
+fn run_text(text: &str, range: Range<usize>) -> String {
   let end = range.end.min(text.len());
   let start = text.ceil_char_boundary(range.start.min(end));
   let end = text.floor_char_boundary(end);
@@ -354,24 +364,14 @@ fn decoration_line(line: TextDecorationLines) -> String {
   .to_string()
 }
 
-fn shadow(shadow: &SizedShadow) -> PaintShadow {
-  PaintShadow {
-    offset_x: shadow.offset_x,
-    offset_y: shadow.offset_y,
-    blur: shadow.blur_radius,
-    spread: shadow.spread_radius,
-    color: rgba(shadow.color),
-  }
-}
-
-fn radii(border: &crate::layout::border::BorderProperties) -> Radii {
+fn radii(border: &BorderProperties) -> Radii {
   border.radius.0.map(|pair| [pair.x, pair.y])
 }
 
 fn overflow_clip(
   node: &RenderNode,
   layout: ComputedLayout,
-  border: &crate::layout::border::BorderProperties,
+  border: &BorderProperties,
 ) -> Option<PaintClip> {
   let style = &node.context.style;
   let overflows = style.resolve_overflows();
@@ -380,74 +380,66 @@ fn overflow_clip(
   }
   let clip = ClipBox::padding_box(*border, layout);
   Some(PaintClip {
-    rect: PaintRect {
-      x: clip.offset.x,
-      y: clip.offset.y,
-      width: clip.size.width,
-      height: clip.size.height,
-    },
+    rect: PaintRect::new(clip.offset, clip.size),
     radii: radii(&clip.border),
-    x: overflows.x != crate::style::Overflow::Visible,
-    y: overflows.y != crate::style::Overflow::Visible,
+    x: overflows.x != Overflow::Visible,
+    y: overflows.y != Overflow::Visible,
   })
 }
 
-fn box_decoration(
-  node: &RenderNode,
-  layout: ComputedLayout,
-  painter: &BoxPainter<'_>,
-) -> Option<PaintBoxDecoration> {
-  if !painter.paints_decorations() {
-    return None;
-  }
-  let context = &node.context;
-  let style = &context.style;
-  let border = painter.border();
-  let shadows = painter.shadows();
-  let background_color = style.background_color.resolve(context.current_color);
+/// What a box paints around its content.
+#[derive(Default)]
+struct BoxDecorations {
+  background: Option<PaintBackground>,
+  border: Option<PaintBorder>,
+  shadows: Option<PaintBoxShadows>,
+  outline: Option<PaintOutline>,
+}
 
-  Some(PaintBoxDecoration {
-    background: PaintBackground {
-      color: (background_color.0[3] != 0).then(|| rgba(background_color)),
-      clip: style.background_clip.to_css_string(),
-      layers: background_layers(node, layout),
-    },
-    border: PaintBorder {
-      widths: [
-        border.width.top,
-        border.width.right,
-        border.width.bottom,
-        border.width.left,
-      ],
-      colors: [
-        rgba(border.color.top),
-        rgba(border.color.right),
-        rgba(border.color.bottom),
-        rgba(border.color.left),
-      ],
-      styles: [
-        border.style.top,
-        border.style.right,
-        border.style.bottom,
-        border.style.left,
-      ]
-      .map(|style: BorderStyle| style.to_css_string()),
-      radii: radii(border),
-    },
-    shadows: PaintBoxShadows {
-      inset: shadows.inset.iter().map(shadow).collect(),
-      outer: shadows.outer.iter().map(shadow).collect(),
-    },
-    outline: painter.outline().map(|outline| {
+impl BoxDecorations {
+  fn of(node: &RenderNode, layout: ComputedLayout, painter: &BoxPainter<'_>) -> Self {
+    let outline = painter.outline().map(|outline| {
       let width = outline.border.width.top;
       PaintOutline {
         width,
-        color: rgba(outline.border.color.top),
+        color: outline.border.color.top.0,
         style: outline.border.style.top.to_css_string(),
         offset: outline.grow - width,
       }
-    }),
-  })
+    });
+    if !painter.paints_decorations() {
+      return Self {
+        outline,
+        ..Self::default()
+      };
+    }
+    let context = &node.context;
+    let style = &context.style;
+    let border = painter.border();
+    let shadows = painter.shadows();
+    let background_color = style.background_color.resolve(context.current_color);
+    let background = PaintBackground {
+      color: (background_color.0[3] != 0).then_some(background_color.0),
+      clip: style.background_clip.to_css_string(),
+      layers: background_layers(node, layout),
+    };
+
+    Self {
+      background: (background.color.is_some() || !background.layers.is_empty())
+        .then_some(background),
+      border: border.has_visible_sides().then(|| PaintBorder {
+        widths: border.width.into_array(),
+        colors: border.color.into_array().map(|color| color.0),
+        styles: border.style.into_array().map(|style| style.to_css_string()),
+        radii: radii(border),
+      }),
+      shadows: (!shadows.inset.is_empty() || !shadows.outer.is_empty()).then(|| PaintBoxShadows {
+        inset: shadows.inset.iter().map(PaintShadow::from).collect(),
+        outer: shadows.outer.iter().map(PaintShadow::from).collect(),
+      }),
+      outline,
+    }
+  }
 }
 
 fn background_layers(node: &RenderNode, layout: ComputedLayout) -> Vec<PaintBackgroundLayer> {
@@ -500,13 +492,13 @@ fn fill(
   image: &BackgroundImage,
   width: u32,
   height: u32,
-  context: &crate::context::RenderContext,
+  context: &RenderContext,
 ) -> Option<PaintFill> {
-  let stops = |stops: &[crate::style::ResolvedGradientStop]| {
+  let stops = |stops: &[ResolvedGradientStop]| {
     stops
       .iter()
       .map(|stop| PaintGradientStop {
-        color: rgba(stop.color),
+        color: stop.color.0,
         position: stop.position,
       })
       .collect()
@@ -554,42 +546,29 @@ fn image_content(
   layout: ComputedLayout,
 ) -> Option<PaintImage> {
   let context = &node.context;
-  let content = PaintRect {
-    x: layout.border.left + layout.padding.left,
-    y: layout.border.top + layout.padding.top,
-    width: layout.content_box_width(),
-    height: layout.content_box_height(),
-  };
-  if content.width <= 0.0 || content.height <= 0.0 {
+  let content_size = layout.content_box_size();
+  if content_size.width <= 0.0 || content_size.height <= 0.0 {
     return None;
   }
   let src = match &image.src {
     ImageSourceInput::Url(url) => Some(url.to_string()),
     _ => None,
   };
-  let box_size = Size {
-    width: content.width,
-    height: content.height,
-  };
   let intrinsic = image
     .src
     .resolve(context)
     .ok()
     .map(|source| source.size(&context.sizing))
-    .filter(|(width, height)| *width > 0.0 && *height > 0.0);
-  let placement = match intrinsic {
-    Some((width, height)) => place_replaced(context, box_size, Size { width, height }),
-    None => place_replaced(context, box_size, Size::default()),
-  };
+    .filter(|(width, height)| *width > 0.0 && *height > 0.0)
+    .map(|(width, height)| Size { width, height });
+  let placement = place_replaced(context, content_size, intrinsic.unwrap_or_default());
+
   Some(PaintImage {
     src,
-    content_box: content,
-    placement: PaintRect {
-      x: content.x + placement.offset.x,
-      y: content.y + placement.offset.y,
-      width: placement.size.width,
-      height: placement.size.height,
-    },
+    placement: PaintRect::new(
+      layout.content_box_offset() + placement.offset,
+      placement.size,
+    ),
   })
 }
 
