@@ -10,7 +10,7 @@ A run's `x` and `y` mark the start of its baseline in the text node's local spac
 
 ## Draw glyphs
 
-`run.outline()` returns the glyphs as SVG path data from the baseline start, so a consumer can draw text without a font engine. A `glyphs` drawable fills that outline with a `paint` in the node's space: the text color, a text shadow's color with a `blur`, or the box's background for `background-clip: text`. With `stroke`, it strokes the outline, as `-webkit-text-stroke` does.
+`run.outline()` returns the glyphs as SVG path data from the baseline start, so a consumer can draw text without a font engine. A `glyphs` drawable fills that outline with a `paint` in the node's space: the text color, or a text shadow's color with a `blur`. With `stroke`, it strokes the outline, as `-webkit-text-stroke` does. A background under `background-clip: text` arrives as a `masked` drawable: its layers, masked by the run's glyphs.
 
 For a native text API, `run.glyphs` holds glyph IDs in `run.font` and their positions from the baseline start. `run.font.data()` returns the font file. Runs shaped with the same face share one `Font` object.
 
