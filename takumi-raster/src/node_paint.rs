@@ -77,6 +77,9 @@ pub(crate) struct CanvasClip {
   coverage: Vec<u8>,
   placement: Placement,
   out: bool,
+  /// Opened inside a text shadow, so it clips what casts the shadow, moved with it, before the
+  /// blur, as Blink draws a text shadow's content into a `DropShadowPaintFilter` layer.
+  casts_shadow: bool,
 }
 
 impl<'c> CanvasDevice<'c> {
@@ -141,11 +144,17 @@ impl<'c> CanvasDevice<'c> {
     )
   }
 
-  /// Limits `coverage` to the open clips, or `None` when nothing is left.
-  fn clipped(&self, coverage: (Vec<u8>, Placement)) -> Option<(Vec<u8>, Placement)> {
+  /// Limits `coverage` to the open clips that `casts_shadow` selects, or `None` when nothing is
+  /// left.
+  fn clipped(
+    &self,
+    coverage: (Vec<u8>, Placement),
+    casts_shadow: bool,
+  ) -> Option<(Vec<u8>, Placement)> {
     self
       .clips
       .iter()
+      .filter(|clip| clip.casts_shadow == casts_shadow)
       .try_fold(coverage, |(mut mask, placement), clip| {
         if clip.out {
           attenuate_alpha_by_mask(&mut mask, placement, &clip.coverage, clip.placement);
@@ -159,18 +168,23 @@ impl<'c> CanvasDevice<'c> {
 
   /// Opens a clip to `shape`, or out of it when `out` is set.
   fn open_clip(&mut self, shape: &FillShape, transform: Affine, out: bool) {
+    let transform = match self.shadow {
+      Some(shadow) => Affine::translation(shadow.offset_x, shadow.offset_y) * transform,
+      None => transform,
+    };
     let (coverage, placement) = self.coverage(shape, Fill::from(shape.rule()).into(), transform);
 
     self.clips.push(CanvasClip {
       coverage,
       placement,
       out,
+      casts_shadow: self.shadow.is_some(),
     });
   }
 
   /// Paints `coverage` in `color`, limited to the open clips.
   fn draw_coverage(&mut self, coverage: (Vec<u8>, Placement), color: Color) {
-    if let Some((mask, placement)) = self.clipped(coverage) {
+    if let Some((mask, placement)) = self.clipped(coverage, false) {
       self
         .canvas
         .draw_mask(&mask, placement, color, BlendMode::Normal);
@@ -215,6 +229,10 @@ impl<'c> CanvasDevice<'c> {
     blur_radius: f32,
     color: Color,
   ) {
+    let Some((mask, placement)) = self.clipped((mask, placement), true) else {
+      return;
+    };
+
     if mask.is_empty() {
       return;
     }
@@ -375,7 +393,7 @@ impl<'c> CanvasDevice<'c> {
       return;
     };
     let coverage = self.coverage(shape, Fill::from(shape.rule()).into(), Affine::IDENTITY);
-    let Some((mask, placement)) = self.clipped(coverage) else {
+    let Some((mask, placement)) = self.clipped(coverage, false) else {
       return;
     };
 
