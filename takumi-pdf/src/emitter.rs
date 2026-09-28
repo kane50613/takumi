@@ -1454,6 +1454,7 @@ impl PropertySink for ChunkWriter<'_, '_, '_> {
         .surface
         .push_transform(&krilla_transform(relative.to_cols_array()));
       pushed += 1;
+      self.current = clip.transform;
       CorePoint::ZERO
     };
 
