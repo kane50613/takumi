@@ -151,4 +151,18 @@ describe("Painter.paint", () => {
       { type: "fill", blendMode: "multiply" },
     ]);
   });
+
+  it("isolates a background whose layers blend", async () => {
+    const tree = await painter.paint(
+      `<div id="blend" style="width: 40px; height: 20px; background-color: red; background-image: linear-gradient(blue, blue); background-blend-mode: multiply"></div>`,
+      { width: 100 },
+    );
+    const group = box(tree, "blend")?.drawables.find((drawable) => drawable.type === "group");
+
+    expect(group?.type === "group" && group.opacity).toBe(1);
+    expect(group?.type === "group" && group.drawables).toMatchObject([
+      { type: "fill", paint: { type: "color", color: [255, 0, 0, 255] } },
+      { type: "fill", blendMode: "multiply" },
+    ]);
+  });
 });

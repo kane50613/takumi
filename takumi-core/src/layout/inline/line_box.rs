@@ -6,7 +6,7 @@
 
 // The alignment rules follow Blink, under the notice in LICENSE-CHROMIUM.
 
-use std::{cmp::Reverse, mem::take, rc::Rc};
+use std::{cmp::Reverse, collections::HashMap, mem::take, rc::Rc};
 
 use smallvec::{SmallVec, smallvec};
 
@@ -80,7 +80,7 @@ impl BoxFont {
 }
 
 /// What a box is, as the line box tree keys it.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub(super) enum BoxKey {
   /// An inline span, by its id.
   Span(usize),
@@ -106,22 +106,20 @@ struct OpenBox {
 /// The boxes open on one line, the root inline box first.
 pub(super) struct LineBoxTree {
   boxes: SmallVec<[OpenBox; 1]>,
+  /// Each open box's position among `boxes`, by its key.
+  indices: HashMap<BoxKey, usize>,
 }
 
 /// Where each box on a line sits once aligned.
 #[derive(Clone, Debug, Default)]
 pub(crate) struct LineBoxOffsets {
-  offsets: Vec<(BoxKey, f32)>,
+  offsets: HashMap<BoxKey, f32>,
 }
 
 impl LineBoxOffsets {
   /// How far the box `key` sits below the line's baseline.
   pub(super) fn of(&self, key: BoxKey) -> f32 {
-    self
-      .offsets
-      .iter()
-      .find(|(candidate, _)| *candidate == key)
-      .map_or(0.0, |(_, offset)| *offset)
+    self.offsets.get(&key).copied().unwrap_or(0.0)
   }
 }
 
@@ -139,6 +137,7 @@ impl LineBoxTree {
         pending: Vec::new(),
         shift: 0.0,
       }],
+      indices: HashMap::new(),
     }
   }
 
@@ -151,7 +150,7 @@ impl LineBoxTree {
     align: ResolvedVerticalAlign,
     font: Option<BoxFont>,
   ) -> usize {
-    if let Some(index) = self.boxes.iter().position(|open| open.key == Some(key)) {
+    if let Some(&index) = self.indices.get(&key) {
       return index;
     }
 
@@ -165,7 +164,11 @@ impl LineBoxTree {
       pending: Vec::new(),
       shift: 0.0,
     });
-    self.boxes.len() - 1
+
+    let index = self.boxes.len() - 1;
+
+    self.indices.insert(key, index);
+    index
   }
 
   /// The innermost span in `chain`, opening it and its ancestors with their struts grown for a
@@ -181,7 +184,7 @@ impl LineBoxTree {
     let decoration = &link.decoration;
     let key = BoxKey::Span(decoration.id);
 
-    if let Some(index) = self.boxes.iter().position(|open| open.key == Some(key)) {
+    if let Some(&index) = self.indices.get(&key) {
       return index;
     }
 

@@ -72,6 +72,8 @@ pub trait GlyphDevice: PaintDevice {
 pub struct SpanBackground<'a> {
   /// The span.
   pub node: &'a RenderNode,
+  /// The span's id, unique among the spans of its inline layout.
+  pub span: usize,
   /// Its background.
   pub background: BoxBackground<'a>,
   /// The strip, placed in the block.
@@ -325,6 +327,7 @@ impl<'c> FragmentBackground<'c> {
   fn background(&self, fragment: &InlineBackgroundFragment, frame: BoxFrame) -> SpanBackground<'c> {
     SpanBackground {
       node: self.node,
+      span: fragment.span,
       background: BoxBackground::new(&self.node.context, self.strip, fragment.border),
       strip: BoxFrame::new(self.strip, frame.origin + self.strip_origin),
     }
