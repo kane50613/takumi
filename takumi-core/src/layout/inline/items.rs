@@ -472,8 +472,12 @@ fn inline_span_decoration(
   let color = style.background_color.resolve(node.context.current_color);
   let border = BorderProperties::from_context(&node.context, Size::ZERO, node.border_px());
   let outline = InlineOutline::of(&node.context);
-  let paints =
-    style.is_visible() && (color.0[3] != 0 || border.has_visible_sides() || outline.is_some());
+  let has_images = style
+    .background_image
+    .as_deref()
+    .is_some_and(|images| !images.is_empty());
+  let paints = style.is_visible()
+    && (color.0[3] != 0 || has_images || border.has_visible_sides() || outline.is_some());
 
   Some(InlineDecoration {
     owner: node,

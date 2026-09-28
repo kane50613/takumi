@@ -19,7 +19,7 @@ use crate::{
   layout::{border::BorderProperties, inline::PositionedInlineRun},
   painter::{
     BoxBorderPainter, BoxFrame, FillShape, GlyphDevice, GlyphFill, LayerBounds, PaintDevice,
-    PaintRole, ShadowShape, StrokeStyle,
+    PaintRole, ShadowShape, SpanBackground, StrokeStyle,
   },
   path_data::path_data,
   shadow::SizedShadow,
@@ -345,6 +345,43 @@ impl PaintDevice for Recorder<'_> {
 }
 
 impl GlyphDevice for Recorder<'_> {
+  fn fill_background_layers(
+    &mut self,
+    span: &SpanBackground<'_>,
+    clip: &FillShape,
+    transform: Affine,
+  ) {
+    let shape = Shape::of(clip, transform);
+
+    for (paint, blend_mode) in span_layers(span) {
+      self.drawables.push(Drawable::Fill {
+        role: self.role,
+        shape: shape.clone(),
+        paint,
+        blend_mode,
+        clips: self.clips(),
+      });
+    }
+  }
+
+  fn draw_glyph_run_through(
+    &mut self,
+    run: &PositionedInlineRun,
+    style: &SizedFontStyle,
+    frame: BoxFrame,
+    span: &SpanBackground<'_>,
+  ) {
+    let background = span
+      .background
+      .color
+      .map(|color| Paint::Color { color: color.0 })
+      .into_iter()
+      .chain(span_layers(span).into_iter().map(|(paint, _)| paint))
+      .collect();
+
+    self.record_glyph_run(run, style, background, frame);
+  }
+
   fn begin_shadow(&mut self, shadow: &SizedShadow) {
     self.shadow = Some(*shadow);
   }
@@ -360,17 +397,42 @@ impl GlyphDevice for Recorder<'_> {
     fill: GlyphFill,
     frame: BoxFrame,
   ) {
-    let Some((index, background)) = self.text.as_ref().and_then(|text| {
-      let index = text
+    let background = match (fill, &self.text) {
+      (GlyphFill::Background, Some(text)) => text.background.clone(),
+      _ => Vec::new(),
+    };
+
+    self.record_glyph_run(run, style, background, frame);
+  }
+}
+
+/// `span`'s `background-image` layers, each with its `background-blend-mode`, placed in the block.
+fn span_layers(span: &SpanBackground<'_>) -> Vec<(Paint, Option<String>)> {
+  Paint::layers(
+    &span.background.layers,
+    span.strip.layout.size,
+    span.background.origin,
+    &span.node.context,
+  )
+  .into_iter()
+  .map(|(paint, blend_mode)| (paint.shifted(span.strip.origin), blend_mode))
+  .collect()
+}
+
+impl Recorder<'_> {
+  /// Records `run`'s glyphs, or their shadow while one is open, over `background`.
+  fn record_glyph_run(
+    &mut self,
+    run: &PositionedInlineRun,
+    style: &SizedFontStyle,
+    background: Vec<Paint>,
+    frame: BoxFrame,
+  ) {
+    let Some(index) = self.text.as_ref().and_then(|text| {
+      text
         .runs
         .iter()
-        .position(|candidate| ptr::eq(candidate, run))?;
-      let background = match fill {
-        GlyphFill::Background => text.background.clone(),
-        GlyphFill::Text => Vec::new(),
-      };
-
-      Some((index, background))
+        .position(|candidate| ptr::eq(candidate, run))
     }) else {
       return;
     };

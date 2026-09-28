@@ -376,7 +376,7 @@ impl PositionedInlineRun {
 
 /// A positioned inline paint item shared by the backends.
 #[non_exhaustive]
-pub struct InlineRunLayout {
+pub struct InlineRunLayout<'c> {
   /// Glyph runs in line/visual order.
   pub runs: Vec<PositionedInlineRun>,
   /// In-flow and out-of-flow inline boxes, positioned, sorted by id.
@@ -384,17 +384,17 @@ pub struct InlineRunLayout {
   /// Outlined spans' line fragments, sorted by span then line.
   pub outline_rects: Vec<InlineOutlineRect>,
   /// Inline-span background fragments, in paint order (outer spans first).
-  pub background_fragments: Vec<InlineBackgroundFragment>,
+  pub background_fragments: Vec<InlineBackgroundFragment<'c>>,
 }
 
-impl BuiltInlineLayout<'_> {
+impl<'c> BuiltInlineLayout<'c> {
   /// Resolves every glyph run, inline box, and outline rect into backend-agnostic positioned
   /// drawables.
   pub fn resolve_runs(
     &self,
     context: &RenderContext,
     layout: ComputedLayout,
-  ) -> Result<InlineRunLayout, FontError> {
+  ) -> Result<InlineRunLayout<'c>, FontError> {
     let BuiltInlineLayout {
       spans,
       positioned_floats,

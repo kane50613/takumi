@@ -23,7 +23,7 @@ use crate::{options::PdfError, pagination::Atom, tree::PreparedTree};
 /// collection and every page's emission.
 pub(crate) struct PreparedInline<'c> {
   built: BuiltInlineLayout<'c>,
-  runs: InlineRunLayout,
+  runs: InlineRunLayout<'c>,
   font_style: &'c SizedFontStyle<'c>,
 }
 
@@ -164,7 +164,7 @@ fn build_inline_runs<'c>(
   font_style: &'c SizedFontStyle<'c>,
   context: &'c RenderContext,
   layout: Layout,
-) -> Result<(BuiltInlineLayout<'c>, InlineRunLayout), PdfError> {
+) -> Result<(BuiltInlineLayout<'c>, InlineRunLayout<'c>), PdfError> {
   let built = create_inline_layout(InlineLayoutRequest::in_content_box(
     items,
     layout.unsnapped_content,

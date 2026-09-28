@@ -18,7 +18,8 @@ use takumi_core::{
   },
   painter::{
     BackgroundClipArea, BoxBorderPainter, BoxFrame, BoxPainter, FillShape, GlyphDevice, GlyphFill,
-    LayerBounds, OverflowClip, OwnContent, PaintDevice, ShadowShape, StrokeStyle, UNBOUNDED,
+    LayerBounds, OverflowClip, OwnContent, PaintDevice, ShadowShape, SpanBackground, StrokeStyle,
+    UNBOUNDED,
   },
   path_data::{edges_path_data, path_data},
   resources::image::ImageSource,
@@ -38,7 +39,9 @@ use crate::{
   gradient::LayerEmitter,
   image::emit_image,
   scene_emit::SceneEmitter,
-  text::{emit_clip_text_run, emit_inline_content, emit_run_glyphs, run_stroke},
+  text::{
+    ClipTextBackground, emit_clip_text_run, emit_inline_content, emit_run_glyphs, run_stroke,
+  },
 };
 
 /// Inputs for [`render`], built with [`SvgOptions::builder`].
@@ -611,6 +614,23 @@ impl PaintDevice for DocumentDevice<'_> {
 }
 
 impl GlyphDevice for DocumentDevice<'_> {
+  fn fill_background_layers(
+    &mut self,
+    span: &SpanBackground<'_>,
+    clip: &FillShape,
+    transform: Affine,
+  ) {
+    self.push_clip(clip, transform);
+    self.write(|doc| {
+      LayerEmitter::new(&span.node.context, doc).layers(
+        &span.background.layers,
+        Frame::origin_box(span.strip, span.background.origin),
+        Frame::border_box(span.strip),
+      )
+    });
+    self.pop_clip();
+  }
+
   fn begin_shadow(&mut self, shadow: &SizedShadow) {
     self.open_group(|doc| {
       let filter = (shadow.blur_radius > 0.0)
@@ -650,13 +670,52 @@ impl GlyphDevice for DocumentDevice<'_> {
         .write(|doc| emit_run_glyphs(run, style, frame.shifted(offset), Some(color), stroke, doc));
     }
 
-    let background = self
+    let context = self
       .text_background
       .filter(|_| fill == GlyphFill::Background);
+    let background = context.map(|context| BoxPainter::new(context, frame.layout).background());
+    let fill = context
+      .zip(background.as_ref())
+      .map(|(context, background)| ClipTextBackground {
+        context,
+        background,
+        area: frame,
+      });
+
+    self.emit_glyph_run(run, style, frame, fill.as_ref());
+  }
+
+  fn draw_glyph_run_through(
+    &mut self,
+    run: &PositionedInlineRun,
+    style: &SizedFontStyle,
+    frame: BoxFrame,
+    span: &SpanBackground<'_>,
+  ) {
+    let fill = ClipTextBackground {
+      context: &span.node.context,
+      background: &span.background,
+      area: span.strip,
+    };
+
+    self.emit_glyph_run(run, style, frame, Some(&fill));
+  }
+}
+
+impl DocumentDevice<'_> {
+  /// Emits `run`'s glyphs in the block at `frame`, over `fill` seen through them.
+  fn emit_glyph_run(
+    &mut self,
+    run: &PositionedInlineRun,
+    style: &SizedFontStyle,
+    frame: BoxFrame,
+    fill: Option<&ClipTextBackground<'_>>,
+  ) {
+    let stroke = run_stroke(&run.glyph_run, style);
 
     self.write(|doc| {
-      if let Some(context) = background {
-        emit_clip_text_run(run, style, context, frame, doc)?;
+      if let Some(fill) = fill {
+        emit_clip_text_run(run, style, frame, fill, doc)?;
       }
 
       emit_run_glyphs(run, style, frame, None, stroke, doc)

@@ -251,6 +251,30 @@ fn inline_span_background() {
   );
 }
 
+/// An inline `<span>`'s gradient lays over the strip its fragments make across lines, and a span
+/// with `background-clip: text` shows its gradient through its glyphs.
+#[test]
+fn inline_span_background_image() {
+  let pdf = run_pdf_fixture("inline-span-background-image", |fonts| {
+    let source = r##"<div style="width: 100%; height: 100%; padding: 12px; background-color: #ffffff; font-size: 18px; line-height: 1.6; color: #141414">
+      <div style="width: 220px">Ship <span style="padding: 0 6px; background-image: linear-gradient(90deg, #facc15, #ec4899)">a sliced gradient across lines</span> today</div>
+      <div style="font-size: 32px; font-weight: 700">Make it <span style="background-image: linear-gradient(90deg, #6366f1, #ec4899); background-clip: text; color: transparent">shine</span></div>
+    </div>"##;
+
+    PdfOptions::builder()
+      .node(from_html(source, FromHtmlOptions::default()).expect("parse gradient fixture"))
+      .viewport(Viewport::new((420, 200)))
+      .fonts(fonts)
+      .build()
+  });
+  let haystack = inflated_text(&pdf);
+
+  assert!(
+    haystack.matches(" scn").count() >= 2,
+    "the span gradients are missing from the content stream"
+  );
+}
+
 /// An inline `<span>` with a border strokes it on every line, without the sides the line wraps at.
 #[test]
 fn inline_span_border() {

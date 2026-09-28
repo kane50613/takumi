@@ -37,8 +37,9 @@ mod runs;
 mod text_fit;
 mod truncation;
 
+pub(crate) use self::{background::PaddingBox, items::InlineOutOfFlow};
 pub use self::{
-  background::InlineBackgroundFragment,
+  background::{FragmentImage, InlineBackgroundFragment},
   decorations::DecorationLine,
   items::{DecorationLink, InlineBoxItem, InlineItem, ProcessedInlineSpan, collect_inline_items},
   metrics::{InlinePass, VisualInlineBox},
@@ -48,7 +49,6 @@ pub use self::{
     PositionedInlineRun, RunMetrics, ShapedRun,
   },
 };
-pub(crate) use self::{background::PaddingBox, items::InlineOutOfFlow};
 use self::{
   breaking::distribute_trailing_whitespace,
   line_box::{BoxFont, BoxKey, FontHeight},

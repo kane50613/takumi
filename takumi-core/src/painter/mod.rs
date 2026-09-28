@@ -17,7 +17,7 @@ pub use self::{
   outline::PendingOutline,
   replaced::ReplacedContent,
   shadow::ShadowShape,
-  text::{GlyphDevice, GlyphFill, InlineLines},
+  text::{GlyphDevice, GlyphFill, InlineLines, SpanBackground},
 };
 
 use crate::{

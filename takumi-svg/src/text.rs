@@ -14,7 +14,7 @@ use takumi_core::{
     },
     tree::RenderNode,
   },
-  painter::{BoxFrame, BoxPainter, GlyphFill, OwnContent},
+  painter::{BoxBackground, BoxFrame, GlyphFill, OwnContent},
   path_data::path_data,
   resources::{font::FontError, glyph::ResolvedGlyph, image::to_data_url},
   style::{Affine, BackgroundClip, LineJoin},
@@ -86,13 +86,20 @@ pub(crate) fn run_stroke(run: &ShapedRun, font_style: &SizedFontStyle) -> Option
   })
 }
 
-/// Emits the element's background through one run's glyphs (`background-clip: text`), widened
-/// by any `-webkit-text-stroke`, for the run's own paint to cover.
+/// A background `background-clip: text` shows through glyphs: a box's, laid over `area`.
+pub(crate) struct ClipTextBackground<'b> {
+  pub(crate) context: &'b RenderContext,
+  pub(crate) background: &'b BoxBackground<'b>,
+  pub(crate) area: BoxFrame,
+}
+
+/// Emits `fill` through one run's glyphs in the block at `frame` (`background-clip: text`),
+/// widened by any `-webkit-text-stroke`, for the run's own paint to cover.
 pub(crate) fn emit_clip_text_run(
   run: &PositionedInlineRun,
   font_style: &SizedFontStyle,
-  context: &RenderContext,
   frame: BoxFrame,
+  fill: &ClipTextBackground<'_>,
   doc: &mut SvgDocument,
 ) -> io::Result<()> {
   let (mask_token, mask_ref) = doc.begin_mask()?;
@@ -104,17 +111,21 @@ pub(crate) fn emit_clip_text_run(
     return Ok(());
   }
 
-  let background = BoxPainter::new(context, frame.layout).background();
-  let area = Frame::border_box(frame);
+  let ClipTextBackground {
+    context,
+    background,
+    area,
+  } = *fill;
+  let border_box = Frame::border_box(area);
   let group = doc.begin_masked_group(&mask_ref)?;
 
   if let Some(color) = background.color {
-    doc.rect(area, Rgba(color.0))?;
+    doc.rect(border_box, Rgba(color.0))?;
   }
   LayerEmitter::new(context, doc).layers(
     &background.layers,
-    Frame::origin_box(frame, background.origin),
-    area,
+    Frame::origin_box(area, background.origin),
+    border_box,
   )?;
   doc.end_group(group)
 }

@@ -13,7 +13,7 @@ use takumi_core::{
   },
   painter::{
     BackgroundClipArea, BoxBorderPainter, BoxFrame, BoxPainter, FillShape, GlyphDevice, GlyphFill,
-    LayerBounds, PaintDevice, PendingOutline, ShadowShape, StrokeStyle,
+    LayerBounds, PaintDevice, PendingOutline, ShadowShape, SpanBackground, StrokeStyle,
   },
   resources::{font::FontError, glyph::ResolvedGlyph},
   scene::SceneBounds,
@@ -298,12 +298,12 @@ impl<'c> CanvasDevice<'c> {
     );
   }
 
-  /// Draws `run`'s glyphs, or their shadow while one is open.
+  /// Draws `run`'s glyphs over `background` seen through them, or their shadow while one is open.
   fn draw_glyphs(
     &mut self,
     run: &PositionedInlineRun,
     style: &SizedFontStyle,
-    fill: GlyphFill,
+    background: Option<PaintSource<'_>>,
     frame: BoxFrame,
   ) -> Result<()> {
     let glyph_run = &run.glyph_run;
@@ -350,9 +350,7 @@ impl<'c> CanvasDevice<'c> {
 
     let transform = self.transform * local;
 
-    if fill == GlyphFill::Background
-      && let Some(background) = self.text_background
-    {
+    if let Some(background) = background {
       for glyph in &glyph_run.glyphs {
         if let Some(content) = run.resolved_glyphs.get(&glyph.id) {
           draw_glyph_clip_image(
@@ -391,11 +389,12 @@ impl<'c> CanvasDevice<'c> {
     Ok(())
   }
 
-  /// Fills `shape` with `source`, whose pixels `box_to_source` finds from the box's coordinates,
-  /// sampled with `algorithm`.
+  /// Fills `shape` under `transform` with `source`, whose pixels `box_to_source` finds from the
+  /// box's coordinates, sampled with `algorithm`.
   pub(crate) fn fill_shape_with_source(
     &mut self,
     shape: &FillShape,
+    transform: Affine,
     source: PaintSource<'_>,
     box_to_source: Affine,
     algorithm: ImageScalingAlgorithm,
@@ -403,7 +402,7 @@ impl<'c> CanvasDevice<'c> {
     let Some(canvas_to_box) = self.transform.invert() else {
       return;
     };
-    let coverage = self.coverage(shape, Fill::from(shape.rule()).into(), Affine::IDENTITY);
+    let coverage = self.coverage(shape, Fill::from(shape.rule()).into(), transform);
     let Some((mask, placement)) = self.clipped(coverage) else {
       return;
     };
@@ -570,6 +569,69 @@ impl PaintDevice for CanvasDevice<'_> {
 }
 
 impl GlyphDevice for CanvasDevice<'_> {
+  fn fill_background_layers(
+    &mut self,
+    span: &SpanBackground<'_>,
+    clip: &FillShape,
+    transform: Affine,
+  ) {
+    let context = &span.node.context;
+    let tile = background_image_layers(&span.background, context).and_then(|layers| {
+      rasterize_layers(
+        layers,
+        span.strip.layout.size.map(|size| size as u32),
+        context,
+        BorderProperties::default(),
+        Affine::IDENTITY,
+      )
+    });
+
+    match tile {
+      Ok(Some(tile)) => self.fill_shape_with_source(
+        clip,
+        transform,
+        (&tile).into(),
+        Affine::translation(-span.strip.origin.x, -span.strip.origin.y),
+        context.style.image_rendering,
+      ),
+      Ok(None) => {}
+      Err(error) => {
+        self.error.get_or_insert(error);
+      }
+    }
+  }
+
+  fn draw_glyph_run_through(
+    &mut self,
+    run: &PositionedInlineRun,
+    style: &SizedFontStyle,
+    frame: BoxFrame,
+    span: &SpanBackground<'_>,
+  ) {
+    let context = &span.node.context;
+    let origin = span.strip.origin;
+    let size = span.strip.layout.size;
+    // Glyphs sample their background in the block's space, so the tile reaches from its origin.
+    let result = collect_background_layers(&span.background, context)
+      .and_then(|layers| {
+        rasterize_layers(
+          layers,
+          Size {
+            width: (origin.x + size.width).max(0.0) as u32,
+            height: (origin.y + size.height).max(0.0) as u32,
+          },
+          context,
+          BorderProperties::default(),
+          Affine::translation(origin.x, origin.y),
+        )
+      })
+      .and_then(|tile| self.draw_glyphs(run, style, tile.as_ref().map(PaintSource::from), frame));
+
+    if let Err(error) = result {
+      self.error.get_or_insert(error);
+    }
+  }
+
   fn begin_shadow(&mut self, shadow: &SizedShadow) {
     self.shadow = Some(*shadow);
   }
@@ -585,7 +647,11 @@ impl GlyphDevice for CanvasDevice<'_> {
     fill: GlyphFill,
     frame: BoxFrame,
   ) {
-    if let Err(error) = self.draw_glyphs(run, style, fill, frame) {
+    let background = self
+      .text_background
+      .filter(|_| fill == GlyphFill::Background);
+
+    if let Err(error) = self.draw_glyphs(run, style, background, frame) {
       self.error.get_or_insert(error);
     }
   }
@@ -712,12 +778,19 @@ pub(crate) fn draw_background(
           Some(mask) => device.with_border_mask(&mask, layout.size, Point::ZERO, |device| {
             device.fill_shape_with_source(
               &FillShape::Rect(layout.size),
+              Affine::IDENTITY,
               tile.into(),
               Affine::IDENTITY,
               algorithm,
             );
           }),
-          None => device.fill_shape_with_source(&shape, tile.into(), Affine::IDENTITY, algorithm),
+          None => device.fill_shape_with_source(
+            &shape,
+            Affine::IDENTITY,
+            tile.into(),
+            Affine::IDENTITY,
+            algorithm,
+          ),
         }
       }
     }

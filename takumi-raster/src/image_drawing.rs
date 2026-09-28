@@ -195,6 +195,7 @@ impl ImageRect {
       device.push_clip(&clip.into(), Affine::IDENTITY);
       device.fill_shape_with_source(
         &image,
+        Affine::IDENTITY,
         source,
         logical_to_source * Affine::translation(-self.offset.x, -self.offset.y),
         algorithm,
