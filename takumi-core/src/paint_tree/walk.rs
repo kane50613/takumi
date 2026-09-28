@@ -753,21 +753,27 @@ fn decorations(painter: &BoxPainter<'_>, size: Size<f32>, transform: Affine) -> 
   let mut recorder = Recorder::new(transform);
 
   painter.paint_normal_box_shadows(Point::ZERO, &mut recorder);
-  painter.background_color(Point::ZERO, &mut recorder);
 
   let background = painter.background();
+  let layers = Paint::layers(
+    &background.layers,
+    size,
+    background.origin,
+    painter.context(),
+  );
+  // Blink's `BoxPainterBase::PaintFillLayers` paints a background that blends in a layer of its
+  // own, so its layers blend only with its colour and one another.
+  let isolated = layers.iter().any(|(_, blend_mode)| blend_mode.is_some());
 
+  if isolated {
+    recorder.begin_layer(1.0, None);
+  }
+  painter.background_color(Point::ZERO, &mut recorder);
   if let Some(clip) = background.clip.shape(size) {
     let mask = background.clip.border_mask();
     let shape = Shape::of(
       &mask.map_or(clip, |_| FillShape::Rect(size)),
       Affine::IDENTITY,
-    );
-    let layers = Paint::layers(
-      &background.layers,
-      size,
-      background.origin,
-      painter.context(),
     );
     let fill = |recorder: &mut Recorder| {
       for (paint, blend_mode) in layers {
@@ -785,6 +791,9 @@ fn decorations(painter: &BoxPainter<'_>, size: Size<f32>, transform: Affine) -> 
       Some(mask) => recorder.with_border_mask(&mask, size, Point::ZERO, fill),
       None => fill(&mut recorder),
     }
+  }
+  if isolated {
+    recorder.end_layer();
   }
 
   painter.paint_inset_box_shadows(Point::ZERO, &mut recorder);
