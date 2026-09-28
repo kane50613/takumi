@@ -3,8 +3,8 @@
 //! and `table_layout_algorithm_types.cc`: each column's constraints from its cells, then the
 //! table's width shared out between them. Follows Blink under the notice in LICENSE-CHROMIUM.
 //!
-//! Naive next to Blink: sizes are floats instead of `LayoutUnit`s, `<col>` elements and captions
-//! constrain nothing, and a column no cell starts in still takes border spacing on both sides.
+//! Naive next to Blink: sizes are floats instead of `LayoutUnit`s, and `<col>` elements and
+//! captions constrain nothing.
 
 /// What one cell asks of the columns it spans, Blink's `CellInlineConstraint`.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -358,6 +358,36 @@ impl TableColumns {
     }
 
     (min + undistributable, min.max(max) + undistributable)
+  }
+
+  /// How many grid tracks the columns take: a column no cell starts in merges away, as Blink gives
+  /// it neither size nor border spacing.
+  pub(crate) fn tracks(&self) -> usize {
+    self.track(self.columns.len()).max(1)
+  }
+
+  /// The grid track `column` starts on, past the columns that merged away before it.
+  pub(crate) fn track(&self, column: usize) -> usize {
+    self.columns[..column.min(self.columns.len())]
+      .iter()
+      .filter(|column| !column.mergeable)
+      .count()
+  }
+
+  /// How many grid tracks the `span` columns from `start` cover.
+  pub(crate) fn track_span(&self, start: usize, span: usize) -> usize {
+    (self.track(start + span) - self.track(start)).max(1)
+  }
+
+  /// Each grid track's width once `assignable` is shared out.
+  pub(crate) fn track_widths(&self, assignable: f32) -> Vec<f32> {
+    self
+      .widths(assignable)
+      .into_iter()
+      .zip(&self.columns)
+      .filter(|(_, column)| !column.mergeable)
+      .map(|(width, _)| width)
+      .collect()
   }
 
   /// Each column's width once `assignable` is shared out, Blink's
@@ -764,6 +794,26 @@ mod tests {
 
     assert_eq!(undistributable, 6.0);
     assert_eq!(table.min_max(undistributable), (36.0, 206.0));
+  }
+
+  #[test]
+  fn columns_only_a_span_covers_merge_into_one_track() {
+    let span = ColspanCell {
+      constraint: CellConstraint {
+        min: 30.0,
+        max: 90.0,
+        percent: None,
+        constrained: false,
+      },
+      start: 0,
+      span: 3,
+    };
+    let table = TableColumns::new(&[None, None, None], vec![span], 2.0, false);
+
+    assert_eq!(table.tracks(), 1);
+    assert_eq!(table.track_span(0, 3), 1);
+    assert_eq!(table.undistributable(4.0), 4.0);
+    assert_eq!(table.track_widths(90.0), [90.0]);
   }
 
   #[test]

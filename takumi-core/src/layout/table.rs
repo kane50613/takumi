@@ -415,8 +415,10 @@ impl RenderNode {
       .into_iter()
       .partition(|caption| caption.context.style.caption_side == CaptionSide::Top);
 
+    let tracks = table_columns.tracks() as u16;
+
     for mut caption in top_captions {
-      caption.lower_full_width(line, columns);
+      caption.lower_full_width(line, tracks);
       caption.table_part = Some(TablePart::Caption);
       items.push(caption);
       line = line.saturating_add(1);
@@ -451,7 +453,12 @@ impl RenderNode {
         };
 
         cell.inherit_row_background(&row);
-        cell.lower_cell(line, column, colspan, collapse);
+        cell.lower_cell(
+          line,
+          table_columns.track(column),
+          table_columns.track_span(column, usize::from(colspan)) as u16,
+          collapse,
+        );
         cell.table_part = Some(part);
         items.push(cell);
       }
@@ -460,13 +467,13 @@ impl RenderNode {
     }
 
     for mut stray in strays {
-      stray.lower_full_width(line, columns);
+      stray.lower_full_width(line, tracks);
       items.push(stray);
       line = line.saturating_add(1);
     }
 
     for mut caption in bottom_captions {
-      caption.lower_full_width(line, columns);
+      caption.lower_full_width(line, tracks);
       caption.table_part = Some(TablePart::Caption);
       items.push(caption);
       line = line.saturating_add(1);
@@ -478,7 +485,7 @@ impl RenderNode {
 
     style.display = Display::Grid;
     style.grid_template_columns =
-      GridTemplateComponents::from_css_str(&vec!["auto"; usize::from(columns)].join(" ")).ok();
+      GridTemplateComponents::from_css_str(&vec!["auto"; usize::from(tracks)].join(" ")).ok();
 
     if collapse {
       style.column_gap = Gap::Length(Length::zero());
@@ -801,7 +808,7 @@ impl RenderNode {
     }
     style.min_size.width = length(styled(min_width));
     style.grid_template_columns = columns
-      .widths((width - undistributable).max(0.0))
+      .track_widths((width - undistributable).max(0.0))
       .into_iter()
       .map(length)
       .collect();
@@ -1192,9 +1199,13 @@ mod tests {
   #[test]
   fn jsx_camel_case_span_counts_the_same_as_the_html_attribute() {
     for name in ["colSpan", "colspan"] {
+      // A second row starts a cell in each column, so neither merges away.
       let tree = lower(
-        Node::container([row([with_span(cell("wide"), name, "2"), cell("c")])])
-          .with_class_name("table"),
+        Node::container([
+          row([with_span(cell("wide"), name, "2"), cell("c")]),
+          row([cell("x"), cell("y"), cell("z")]),
+        ])
+        .with_class_name("table"),
       );
       let wide = &tree.children.as_deref().expect("children")[0];
 
@@ -1216,13 +1227,17 @@ mod tests {
       .with_class_name("table"),
     );
 
-    // Blink's kMaxColSpan, and the reason summing the row cannot wrap.
+    // Blink's kMaxColSpan keeps the sum from wrapping; the columns only the spans cover merge
+    // away, leaving each cell one track.
+    let cells = tree.children.as_deref().expect("children");
+
     assert_eq!(
-      tree.children.as_deref().expect("children")[0]
-        .context
-        .style
-        .grid_column_end,
-      GridPlacement::Span(GridPlacementSpan::Span(1000))
+      cells[0].context.style.grid_column_end,
+      GridPlacement::Span(GridPlacementSpan::Span(1))
+    );
+    assert_eq!(
+      cells[1].context.style.grid_column_start,
+      GridPlacement::Line(2)
     );
   }
 
