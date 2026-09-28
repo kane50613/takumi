@@ -222,9 +222,10 @@ impl<'c> CanvasDevice<'c> {
     blur_radius: f32,
     color: Color,
   ) {
+    // Skia's blur mask filter maps its sigma through the CTM (`SkMatrix::mapRadius`). A `text-fit`
+    // scale on the run comes from the painter, which scales the shadow it passes.
+    let blur_radius = blur_radius * self.transform.uniform_scale();
     let transform = self.transform * transform;
-    // Skia's blur mask filter maps its sigma through the CTM (`SkMatrix::mapRadius`).
-    let blur_radius = blur_radius * transform.uniform_scale();
     let coverage = render_mask(
       commands,
       Some(transform),
@@ -328,7 +329,7 @@ impl<'c> CanvasDevice<'c> {
           Some(ResolvedGlyph::Bitmap(bitmap)) => {
             let placed =
               self.transform * Affine::translation(shadow.offset_x, shadow.offset_y) * transform;
-            let blur_radius = shadow.blur_radius * placed.uniform_scale();
+            let blur_radius = shadow.blur_radius * self.transform.uniform_scale();
 
             if let Some(coverage) =
               bitmap_coverage(bitmap, placed, self.shadow_viewport(blur_radius))
