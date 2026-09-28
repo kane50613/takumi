@@ -1,10 +1,10 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="520" height="300" viewBox="0 0 520 300">
   <rect x="0" y="0" width="520" height="300" fill="#fff"/>
-  <path d="M34.7 29.33h33.6v26h-33.6Z" fill="#bfdbfe"/>
-  <path d="M84 42h33.3v26h-33.3Z" fill="#bbf7d0"/>
-  <path d="M134 27h43.34v26h-43.34Z" fill="#fed7aa"/>
-  <path d="M192.64 53h49.8v26h-49.8Z" fill="#e9d5ff"/>
-  <path d="M259.14 44h20.4v16h-20.4Z" fill="#fecaca"/>
+  <rect x="34.7" y="29.333" width="33.6" height="26" fill="#bfdbfe"/>
+  <rect x="84" y="42" width="33.3" height="26" fill="#bbf7d0"/>
+  <rect x="134" y="27" width="43.34" height="26" fill="#fed7aa"/>
+  <rect x="192.64" y="53" width="49.8" height="26" fill="#e9d5ff"/>
+  <rect x="259.14" y="44" width="20.4" height="16" fill="#fecaca"/>
   <use href="#g0" x="24" y="57" fill="#0f172a"/>
   <g fill="#0f172a">
     <use href="#g1" x="34.7" y="49.33"/>
@@ -37,10 +37,10 @@
     <use href="#g11" x="269.59" y="56"/>
     <use href="#g12" x="272.4" y="56"/>
   </g>
-  <path d="M35.7 96h44.81v16h-44.81Z" fill="#bfdbfe"/>
-  <path d="M97.21 90h65.34v16h-65.34Z" fill="#bbf7d0"/>
-  <path d="M179.25 90h18.41v16h-18.41Z" fill="#fed7aa"/>
-  <path d="M214.36 96h38.94v16h-38.94Z" fill="#e9d5ff"/>
+  <rect x="35.7" y="96" width="44.808" height="16" fill="#bfdbfe"/>
+  <rect x="97.208" y="90" width="65.34" height="16" fill="#bbf7d0"/>
+  <rect x="179.248" y="90" width="18.408" height="16" fill="#fed7aa"/>
+  <rect x="214.356" y="96" width="38.94" height="16" fill="#e9d5ff"/>
   <use href="#g0" x="24" y="108" fill="#0f172a"/>
   <g fill="#0f172a">
     <use href="#g13" x="35.7" y="108"/>
@@ -79,9 +79,9 @@
     <use href="#g17" x="236.02" y="108"/>
     <use href="#g10" x="242.77" y="108"/>
   </g>
-  <path d="M35.7 157.33h65.74v18h-65.74Z" fill="#bfdbfe"/>
-  <path d="M69.1 151.67h32.34v18h-32.34Z" fill="#fecaca"/>
-  <path d="M117.14 164h49.86v26h-49.86Z" fill="#bbf7d0"/>
+  <rect x="35.7" y="157.333" width="65.744" height="18" fill="#bfdbfe"/>
+  <rect x="69.104" y="151.667" width="32.34" height="18" fill="#fecaca"/>
+  <rect x="117.144" y="164" width="49.86" height="26" fill="#bbf7d0"/>
   <use href="#g0" x="24" y="179" fill="#0f172a"/>
   <g fill="#0f172a">
     <use href="#g21" x="35.7" y="171.33"/>

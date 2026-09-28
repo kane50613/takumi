@@ -36,17 +36,18 @@ pub struct InlineBackgroundFragment<'c> {
   pub opacity: f32,
   /// Baseline of the owning line in border-box space.
   pub baseline: f32,
-  /// The span's `background-image` layers, or its text its background clips to.
-  pub image: Option<FragmentImage<'c>>,
+  /// The span's background, when it paints one.
+  pub background: Option<FragmentBackground<'c>>,
   /// The span's id.
   pub(crate) span: usize,
 }
 
-/// The `background-image` layers of a span on one line, laid over the strip its fragments would
-/// make on one line, as Blink's `InlineBoxFragmentPainterBase::PaintRectForImageStrip` lays them.
+/// The background of a span on one line: its color, and its `background-image` layers laid over
+/// the strip its fragments would make on one line, as Blink's
+/// `InlineBoxFragmentPainterBase::PaintRectForImageStrip` lays them.
 #[derive(Clone, Copy)]
 #[non_exhaustive]
-pub struct FragmentImage<'c> {
+pub struct FragmentBackground<'c> {
   /// The span.
   pub node: &'c RenderNode,
   /// The strip's top-left, in border-box space.
@@ -347,47 +348,49 @@ impl<'c> DecorationAccumulator<'c> {
       .background_image
       .as_deref()
       .is_some_and(|images| !images.is_empty());
-    let image = (has_images || style.background_clip == BackgroundClip::Text).then(|| {
-      let side = |has: bool, width: f32| if has { width } else { 0.0 };
-      let padding = Rect {
-        left: side(has_left, decoration.padding.left),
-        right: side(has_right, decoration.padding.right),
-        ..decoration.padding
-      };
-      let fragment = ComputedLayout::new(
-        Point { x, y },
-        Size { width, height },
-        border.width,
-        padding,
-      );
-      let (strip_x, strip) = match style.box_decoration_break {
-        BoxDecorationBreak::Clone => (x, fragment),
-        BoxDecorationBreak::Slice => (
-          match decoration.direction {
-            Direction::Rtl => x + width + strip_offset - strip_width,
-            _ => x - strip_offset,
-          },
-          ComputedLayout::new(
-            Point::ZERO,
-            Size {
-              width: strip_width,
-              height,
-            },
-            decoration.border.width,
-            decoration.padding,
-          ),
-        ),
-      };
+    let background =
+      (decoration.color.0[3] != 0 || has_images || style.background_clip == BackgroundClip::Text)
+        .then(|| {
+          let side = |has: bool, width: f32| if has { width } else { 0.0 };
+          let padding = Rect {
+            left: side(has_left, decoration.padding.left),
+            right: side(has_right, decoration.padding.right),
+            ..decoration.padding
+          };
+          let fragment = ComputedLayout::new(
+            Point { x, y },
+            Size { width, height },
+            border.width,
+            padding,
+          );
+          let (strip_x, strip) = match style.box_decoration_break {
+            BoxDecorationBreak::Clone => (x, fragment),
+            BoxDecorationBreak::Slice => (
+              match decoration.direction {
+                Direction::Rtl => x + width + strip_offset - strip_width,
+                _ => x - strip_offset,
+              },
+              ComputedLayout::new(
+                Point::ZERO,
+                Size {
+                  width: strip_width,
+                  height,
+                },
+                decoration.border.width,
+                decoration.padding,
+              ),
+            ),
+          };
 
-      FragmentImage {
-        node: decoration.owner,
-        strip_origin: Point { x: strip_x, y },
-        strip,
-        fragment,
-      }
-    });
+          FragmentBackground {
+            node: decoration.owner,
+            strip_origin: Point { x: strip_x, y },
+            strip,
+            fragment,
+          }
+        });
 
-    if decoration.color.0[3] != 0 || border.has_visible_sides() || image.is_some() {
+    if border.has_visible_sides() || background.is_some() {
       backgrounds.push(InlineBackgroundFragment {
         x,
         y,
@@ -397,7 +400,7 @@ impl<'c> DecorationAccumulator<'c> {
         color: decoration.color,
         opacity: decoration.opacity,
         baseline,
-        image,
+        background,
         span: decoration.id,
       });
     }

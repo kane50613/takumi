@@ -72,6 +72,7 @@ A group needs its own layer. Setting `globalAlpha` on each draw instead darkens 
 | `shadow` | Blur a copy of `shape`, filled or stroked with `stroke`, moved by `offset`, visible only `outside` or `inside` its `box` |
 | `glyphs` | Fill the run's outline with `paint`, blurred by `blur`, or stroke it when `stroke` is set                                |
 | `image`  | Draw `image` into `rect`, clipped to `clip`                                                                              |
+| `masked` | Draw `content` into a layer, keep it only where `mask` covers, then composite it                                         |
 | `group`  | Draw `drawables` into a layer, then composite it at `opacity`                                                            |
 
 A `shadow` or `glyphs` blur is the Gaussian's standard deviation, half of a CSS blur radius.

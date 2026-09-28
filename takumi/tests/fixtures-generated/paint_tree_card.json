@@ -948,9 +948,13 @@
               "type": "fill",
               "role": "inline-background",
               "shape": {
-                "type": "path",
-                "d": "M193.54 0h89.68v34h-89.68Z",
-                "fillRule": "nonzero"
+                "type": "rect",
+                "rect": {
+                  "x": 193.544,
+                  "y": 0.0,
+                  "width": 89.67401,
+                  "height": 34.0
+                }
               },
               "paint": {
                 "type": "color",

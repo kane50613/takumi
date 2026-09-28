@@ -11,13 +11,13 @@ use crate::{
   geometry::{ComputedLayout, Point, Size},
   layout::{
     inline::{
-      DecorationLine, FragmentImage, InlineBackgroundFragment, InlineOutlineRect, InlineRunLayout,
-      OutlineIsland, PositionedInlineRun, ProcessedInlineSpan,
+      DecorationLine, FragmentBackground, InlineBackgroundFragment, InlineOutlineRect,
+      InlineRunLayout, OutlineIsland, PositionedInlineRun, ProcessedInlineSpan,
     },
     tree::RenderNode,
   },
   shadow::SizedShadow,
-  style::{Affine, BackgroundClip, FillRule},
+  style::{Affine, BackgroundClip},
 };
 
 /// What a device fills a run's glyphs with.
@@ -189,22 +189,8 @@ impl InlineLines<'_> {
 
     for fragment in &self.background_fragments {
       device.with_opacity(fragment.opacity, None, |device| {
-        let clips_text = fragment.image.is_some_and(|image| image.clips_text());
-
-        if fragment.color.0[3] != 0 && !clips_text {
-          device.set_role(PaintRole::InlineBackground);
-          device.fill_shape(
-            &FillShape::Path {
-              commands: fragment.path(),
-              rule: FillRule::NonZero,
-            },
-            fragment.color,
-            at,
-          );
-        }
-
-        if let Some(image) = &fragment.image {
-          image.paint(fragment, frame, device);
+        if let Some(background) = &fragment.background {
+          background.paint(fragment, frame, device);
         }
 
         device.set_role(PaintRole::Border);
@@ -325,11 +311,11 @@ impl<'l> InlineLines<'l> {
         fragment.span == span.decoration.id
           && (fragment.y..=fragment.y + fragment.height).contains(&baseline)
       })
-      .and_then(|fragment| Some(fragment.image?.background(fragment, frame)))
+      .and_then(|fragment| Some(fragment.background?.background(fragment, frame)))
   }
 }
 
-impl<'c> FragmentImage<'c> {
+impl<'c> FragmentBackground<'c> {
   /// Whether the span's background shows only through its text.
   fn clips_text(&self) -> bool {
     self.node.context.style.background_clip == BackgroundClip::Text
@@ -344,30 +330,48 @@ impl<'c> FragmentImage<'c> {
     }
   }
 
-  /// Paints the layers on `fragment` of the block at `frame`, clipped by the span's
-  /// `background-clip` to the fragment.
+  /// Paints the color and layers on `fragment` of the block at `frame`, clipped by the span's
+  /// `background-clip` to the fragment, as Blink's `BoxPainterBase::PaintFillLayers` clips both.
+  /// A background clipped to the text shows through the glyphs instead.
   fn paint<D: GlyphDevice>(
     &self,
     fragment: &InlineBackgroundFragment,
     frame: BoxFrame,
     device: &mut D,
   ) {
+    if self.clips_text() {
+      return;
+    }
+
     let context = &self.node.context;
     let Some(clip) =
       BackgroundClipArea::new(context, self.fragment, fragment.border).shape(self.fragment.size)
     else {
       return;
     };
+    let transform = Affine::translation(
+      frame.origin.x + self.fragment.location.x,
+      frame.origin.y + self.fragment.location.y,
+    );
 
     device.set_role(PaintRole::InlineBackground);
-    device.fill_background_layers(
-      &self.background(fragment, frame),
-      &clip,
-      Affine::translation(
-        frame.origin.x + self.fragment.location.x,
-        frame.origin.y + self.fragment.location.y,
-      ),
-    );
+    if fragment.color.0[3] != 0 {
+      device.fill_shape(&clip, fragment.color, transform);
+    }
+    if self.has_layers() {
+      device.fill_background_layers(&self.background(fragment, frame), &clip, transform);
+    }
+  }
+
+  /// Whether the span has `background-image` layers.
+  fn has_layers(&self) -> bool {
+    self
+      .node
+      .context
+      .style
+      .background_image
+      .as_deref()
+      .is_some_and(|images| !images.is_empty())
   }
 }
 

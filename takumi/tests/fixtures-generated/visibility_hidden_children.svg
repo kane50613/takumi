@@ -1,7 +1,7 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="600" height="300" viewBox="0 0 600 300">
   <rect x="0" y="0" width="600" height="300" fill="#f8fafc"/>
   <rect x="44" y="75" width="220" height="60" fill="#3b82f6"/>
-  <path d="M124.66 135h72.08v31h-72.08Z" fill="#facc15"/>
+  <rect x="124.664" y="135" width="72.072" height="31" fill="#facc15"/>
   <g fill="#0f172a">
     <use href="#g0" x="124.66" y="159"/>
     <use href="#g1" x="136.9" y="159"/>
