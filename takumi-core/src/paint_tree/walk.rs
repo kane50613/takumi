@@ -28,6 +28,7 @@ use crate::{
   },
   painter::{
     BackgroundClipArea, BoxFrame, BoxPainter, FillShape, GlyphFill, OverflowClip, OwnContent,
+    PaintDevice,
   },
   resources::image::{sniff_mime, to_data_url},
   scene::{NodePaint, PaintItemKind, Scene},
@@ -645,19 +646,26 @@ fn decorations(painter: &BoxPainter<'_>, size: Size<f32>) -> Vec<Drawable> {
   let mut recorder = Recorder::new();
 
   painter.paint_normal_box_shadows(Point::ZERO, &mut recorder);
-  painter.background_color(Point::ZERO, &mut recorder);
 
   let background = painter.background();
+  let layers = Paint::layers(
+    &background.layers,
+    size,
+    background.origin,
+    painter.context(),
+  );
+  // Blink's `BoxPainterBase::PaintFillLayers` paints a background that blends in a layer of its
+  // own, so its layers blend only with its colour and one another.
+  let isolated = layers.iter().any(|(_, blend_mode)| blend_mode.is_some());
 
+  if isolated {
+    recorder.begin_layer(1.0);
+  }
+  painter.background_color(Point::ZERO, &mut recorder);
   if let Some(clip) = background.clip.shape(size) {
     let shape = Shape::of(&clip, Affine::IDENTITY);
 
-    for (paint, blend_mode) in Paint::layers(
-      &background.layers,
-      size,
-      background.origin,
-      painter.context(),
-    ) {
+    for (paint, blend_mode) in layers {
       recorder.push(Drawable::Fill {
         role: Role::Background,
         shape: shape.clone(),
@@ -666,6 +674,9 @@ fn decorations(painter: &BoxPainter<'_>, size: Size<f32>) -> Vec<Drawable> {
         clips: Vec::new(),
       });
     }
+  }
+  if isolated {
+    recorder.end_layer();
   }
 
   painter.paint_inset_box_shadows(Point::ZERO, &mut recorder);
