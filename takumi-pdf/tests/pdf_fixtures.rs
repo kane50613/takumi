@@ -30,9 +30,9 @@ use takumi_core::{
 };
 use takumi_html::{FromHtmlOptions, from_html};
 use takumi_pdf::{
-  Attachment, AttachmentRelationship, Band, MeasureOptions, PageBand, PageMargins, PageOptions,
-  PageOverride, PageRange, PageRules, PdfDate, PdfError, PdfMetadata, PdfOptions, PdfStandard,
-  Tagging, UncoveredText, XmpProperty, XmpSchema, measure, render,
+  Attachment, AttachmentRelationship, Band, MeasureOptions, PageBand, PageMargin, PageMargins,
+  PageOptions, PageOverride, PageRange, PageRules, PdfDate, PdfError, PdfMetadata, PdfOptions,
+  PdfStandard, Tagging, UncoveredText, XmpProperty, XmpSchema, measure, render,
 };
 
 fn latin_font() -> Fonts {
@@ -63,6 +63,17 @@ fn fonts() -> Fonts {
       .expect("load test font");
   }
   fonts
+}
+
+/// A4 with 36px margins, the bottom one as tall as the invoice footer needs.
+fn invoice_page() -> PageOptions {
+  PageOptions {
+    margin: PageMargins {
+      bottom: PageMargin::Auto,
+      ..PageMargins::uniform(36.0)
+    },
+    ..PageOptions::A4
+  }
 }
 
 fn html_fixture(name: &str) -> Node {
@@ -2985,7 +2996,7 @@ fn invoice() {
   run_pdf_fixture("invoice", |fonts| {
     PdfOptions::builder()
       .node(html_fixture("invoice.html"))
-      .page(PageOptions::A4.with_margin(36.0))
+      .page(invoice_page())
       .footer(html_fixture("invoice-footer.html"))
       .fonts(fonts)
       .build()
@@ -2999,7 +3010,7 @@ fn archival_standards() {
   let a2b = run_pdf_fixture("invoice-pdfa-2b", |fonts| {
     PdfOptions::builder()
       .node(html_fixture("invoice.html"))
-      .page(PageOptions::A4.with_margin(36.0))
+      .page(invoice_page())
       .footer(html_fixture("invoice-footer.html"))
       .standard(PdfStandard::A2b)
       .fonts(fonts)
@@ -3013,7 +3024,7 @@ fn archival_standards() {
   let a4 = run_pdf_fixture("invoice-pdfa-4", |fonts| {
     PdfOptions::builder()
       .node(html_fixture("invoice.html"))
-      .page(PageOptions::A4.with_margin(36.0))
+      .page(invoice_page())
       .footer(html_fixture("invoice-footer.html"))
       .standard(PdfStandard::A4)
       .fonts(fonts)
@@ -3242,7 +3253,7 @@ fn attachments() {
   let a3b = run_pdf_fixture("invoice-pdfa-3b-attachment", |fonts| {
     PdfOptions::builder()
       .node(html_fixture("invoice.html"))
-      .page(PageOptions::A4.with_margin(36.0))
+      .page(invoice_page())
       .footer(html_fixture("invoice-footer.html"))
       .standard(PdfStandard::A3b)
       .metadata(metadata())
@@ -3286,7 +3297,7 @@ fn attachments() {
   let a4f = run_pdf_fixture("invoice-pdfa-4f-attachment", |fonts| {
     PdfOptions::builder()
       .node(html_fixture("invoice.html"))
-      .page(PageOptions::A4.with_margin(36.0))
+      .page(invoice_page())
       .footer(html_fixture("invoice-footer.html"))
       .standard(PdfStandard::A4f)
       .metadata(metadata())
