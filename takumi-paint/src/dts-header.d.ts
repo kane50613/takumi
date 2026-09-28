@@ -156,7 +156,7 @@ export type Paint =
   | { readonly type: "color"; readonly color: Rgba }
   | Gradient
   | ImagePaint
-  /** A tile repeated at every `x` and `y` pair: CSS background and mask layers. */
+  /** A tile repeated at every `x` and `y` pair, showing only inside `area`: CSS background and mask layers. */
   | {
       readonly type: "pattern";
       readonly tile: Gradient | ImagePaint;
@@ -164,6 +164,7 @@ export type Paint =
       readonly tileHeight: number;
       readonly x: readonly number[];
       readonly y: readonly number[];
+      readonly area: Rect;
     };
 
 export type Stroke = {

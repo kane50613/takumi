@@ -2,19 +2,22 @@ use std::sync::Arc;
 
 use smallvec::SmallVec;
 use takumi_core::{
-  geometry::{Point, Size},
-  layout::background_image_geometry::{BackgroundLayer, FillLayers, OriginBox},
+  geometry::{Point, Rect, Size},
+  layout::background_image_geometry::{BackgroundLayer, BoxBackgroundPaintContext, FillLayers},
   paint::{ConicGradientTile, GradientOverlayTile, LinearGradientTile, RadialGradientTile},
   painter::BoxBackground,
 };
-use tiny_skia::{IntSize, Pixmap, PixmapMut, PixmapRef, PremultipliedColorU8};
+use tiny_skia::{
+  FillRule as TinyFillRule, IntSize, Mask as TinyMask, PathBuilder, Pixmap, PixmapMut, PixmapRef,
+  PremultipliedColorU8, Rect as TinyRect, Transform as TinyTransform,
+};
 
 #[cfg(feature = "svg")]
 use crate::pixmap_from_buffer;
 use crate::resources::image::RenderedImage;
 use crate::{
-  BilinearAxis, BorderProperties, DrawTarget, OverlayOptions, PaintSource, RenderContext, Result,
-  RowSource, SamplingFootprint, checked_area, interpolate_with_footprint,
+  BilinearAxis, BorderProperties, DrawTarget, MaskView, OverlayOptions, PaintSource, RenderContext,
+  Result, RowSource, SamplingFootprint, checked_area, interpolate_with_footprint,
   layout::node::resolve_image,
   overlay_image, pixmap_ref_from_buffer,
   resources::{image::ImageSource, image_buffer::ImageBuffer},
@@ -22,19 +25,99 @@ use crate::{
   try_overlay_gradient_tile,
 };
 
+/// One layer's rendered tile and where its copies land, relative to the border box.
+///
+/// Approximate: a tile of a fractional size renders at the next whole pixel and scales down to
+/// it, where Skia samples a bitmap straight into the fractional tile.
 pub(crate) struct TileLayer {
   pub blend_mode: BlendMode,
   pub tile: BackgroundTile,
-  pub xs: SmallVec<[i32; 1]>,
-  pub ys: SmallVec<[i32; 1]>,
+  pub xs: SmallVec<[f32; 1]>,
+  pub ys: SmallVec<[f32; 1]>,
+  /// How much each rendered tile scales to its exact size.
+  pub scale: Size<f32>,
+  /// The whole-pixel rectangle the tiles show in, when it is less than the painted area.
+  pub dest: Option<Rect<f32>>,
+}
+
+impl TileLayer {
+  /// A layer of one `tile` at the border box origin, drawn at its own size and unclipped.
+  pub(crate) fn whole(tile: BackgroundTile, blend_mode: BlendMode) -> Self {
+    Self {
+      blend_mode,
+      tile,
+      xs: [0.0].into(),
+      ys: [0.0].into(),
+      scale: Size {
+        width: 1.0,
+        height: 1.0,
+      },
+      dest: None,
+    }
+  }
+
+  /// Whether every tile draws unscaled on whole pixels and unclipped, so it can blit.
+  pub(crate) fn blits(&self) -> bool {
+    self.dest.is_none()
+      && self.scale.width == 1.0
+      && self.scale.height == 1.0
+      && self
+        .xs
+        .iter()
+        .chain(&self.ys)
+        .all(|&origin| whole_pixel(origin).is_some())
+  }
+
+  /// Where the tile at `(x, y)` draws under `transform`, a translation within float error of whole
+  /// pixels landing on them.
+  pub(crate) fn tile_transform(&self, transform: Affine, x: f32, y: f32) -> Affine {
+    let mut placed =
+      transform * Affine::translation(x, y) * Affine::scale(self.scale.width, self.scale.height);
+
+    if placed.only_translation()
+      && let (Some(x), Some(y)) = (whole_pixel(placed.x), whole_pixel(placed.y))
+    {
+      placed.x = x;
+      placed.y = y;
+    }
+
+    placed
+  }
+
+  /// A mask over a `size` pixmap, `offset` from the border box, keeping only `dest`.
+  fn dest_mask(&self, size: Size<u32>, offset: Point<f32>) -> Option<TinyMask> {
+    let dest = self.dest?;
+    let mut mask = TinyMask::new(size.width, size.height)?;
+    let rect = TinyRect::from_ltrb(
+      dest.left + offset.x,
+      dest.top + offset.y,
+      dest.right + offset.x,
+      dest.bottom + offset.y,
+    )?;
+
+    mask.fill_path(
+      &PathBuilder::from_rect(rect),
+      TinyFillRule::Winding,
+      false,
+      TinyTransform::identity(),
+    );
+    Some(mask)
+  }
 }
 
 pub(crate) type TileLayers = Vec<TileLayer>;
 
+/// The whole pixel `value` lies on, within the float error of the sums that place a tile.
+pub(crate) fn whole_pixel(value: f32) -> Option<f32> {
+  let rounded = value.round();
+
+  ((value - rounded).abs() < 1e-3).then_some(rounded)
+}
+
 fn should_rasterize_repeated_tile(
   tile: &BackgroundTile,
-  xs: &SmallVec<[i32; 1]>,
-  ys: &SmallVec<[i32; 1]>,
+  xs: &SmallVec<[f32; 1]>,
+  ys: &SmallVec<[f32; 1]>,
 ) -> bool {
   xs.len().saturating_mul(ys.len()) > 1
     && matches!(
@@ -92,11 +175,29 @@ pub(crate) fn rasterize_layers(
   };
 
   for layer in layers {
+    let dest_mask = layer.dest_mask(
+      size,
+      Point {
+        x: transform.x,
+        y: transform.y,
+      },
+    );
+    let mask_view = || {
+      dest_mask.as_ref().map(|mask| MaskView {
+        mask,
+        origin: Point { x: 0, y: 0 },
+        canvas_origin: Point { x: 0, y: 0 },
+      })
+    };
+
     for &x in &layer.xs {
       for &y in &layer.ys {
-        let layer_transform = Affine::translation(x as f32, y as f32) * transform;
+        let layer_transform = layer.tile_transform(transform, x, y);
+
         if border.is_zero()
           && layer_transform.only_translation()
+          && layer_transform.x.fract() == 0.0
+          && layer_transform.y.fract() == 0.0
           && layer.blend_mode == BlendMode::Normal
           && try_overlay_gradient_tile(
             &mut pixmap,
@@ -106,7 +207,7 @@ pub(crate) fn rasterize_layers(
               y: layer_transform.y,
             },
             layer.blend_mode,
-            None,
+            mask_view(),
           )
         {
           continue;
@@ -115,7 +216,7 @@ pub(crate) fn rasterize_layers(
         overlay_image(
           &mut DrawTarget {
             pixmap: &mut pixmap,
-            combined_mask: None,
+            combined_mask: mask_view(),
           },
           &layer.tile,
           OverlayOptions {
@@ -488,33 +589,43 @@ pub(crate) fn render_tile(
   })
 }
 
-/// Renders each layer's tile and places it over a `paint` border box, the positioning area at
-/// `origin`.
+/// Renders each layer's tile and places its copies over a `paint` border box.
 pub(crate) fn tile_layers(
   layers: &[BackgroundLayer<'_>],
-  origin: OriginBox,
   paint: Size<f32>,
   context: &RenderContext,
 ) -> Result<TileLayers> {
   let mut resolved = Vec::with_capacity(layers.len());
 
   for layer in layers {
-    let Some(tiles) = layer.geometry.snap(paint, origin.offset) else {
+    let tiling = layer.tiling;
+    let width = tiling.tile.width.ceil() as u32;
+    let height = tiling.tile.height.ceil() as u32;
+    let Some(tile) = render_tile(layer.image, width, height, context)? else {
       continue;
     };
-    let Some(tile) = render_tile(layer.image, tiles.width, tiles.height, context)? else {
-      continue;
-    };
-    let tile = if should_rasterize_repeated_tile(&tile, &tiles.xs, &tiles.ys) {
+    let (xs, ys) = tiling.origins();
+    let tile = if should_rasterize_repeated_tile(&tile, &xs, &ys) {
       rasterize_tile(tile)?
     } else {
       tile
     };
+    let paint_area = Rect {
+      left: 0.0,
+      top: 0.0,
+      right: paint.width,
+      bottom: paint.height,
+    };
 
     resolved.push(TileLayer {
       tile,
-      xs: tiles.xs,
-      ys: tiles.ys,
+      xs,
+      ys,
+      scale: Size {
+        width: tiling.tile.width / width as f32,
+        height: tiling.tile.height / height as f32,
+      },
+      dest: (!tiling.covers(paint_area)).then_some(tiling.dest),
       blend_mode: layer.blend_mode,
     });
   }
@@ -530,13 +641,9 @@ pub(crate) fn create_mask(
   let layers = tile_layers(
     &FillLayers::mask(&context.style).resolve(
       context.style.mask_image.as_deref().unwrap_or(&[]),
-      border_box,
+      &BoxBackgroundPaintContext::sized(border_box),
       context,
     ),
-    OriginBox {
-      offset: Point::ZERO,
-      size: border_box,
-    },
     border_box,
     context,
   )?;
@@ -584,12 +691,7 @@ pub(crate) fn background_image_layers(
   background: &BoxBackground<'_>,
   context: &RenderContext,
 ) -> Result<TileLayers> {
-  tile_layers(
-    &background.layers,
-    background.origin,
-    background.size,
-    context,
-  )
+  tile_layers(&background.layers, background.size, context)
 }
 
 /// The `background-image` layers under a `background-color` layer.
@@ -602,16 +704,14 @@ pub(crate) fn collect_background_layers(
   if let Some(color) = background.color {
     layers.insert(
       0,
-      TileLayer {
-        tile: BackgroundTile::Color(ColorTile::new(
+      TileLayer::whole(
+        BackgroundTile::Color(ColorTile::new(
           color,
           background.size.width as u32,
           background.size.height as u32,
         )),
-        xs: [0].into(),
-        ys: [0].into(),
-        blend_mode: BlendMode::Normal,
-      },
+        BlendMode::Normal,
+      ),
     );
   }
 

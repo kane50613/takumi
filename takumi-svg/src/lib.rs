@@ -39,7 +39,6 @@ use takumi_core::{
   context::RenderContext,
   filter::ColorMatrix,
   geometry::{Rect, Size},
-  layout::background_image_geometry::OriginBox,
   painter::{BoxFrame, FillShape, StrokeStyle},
   path_data::{APPROX_CHARS_PER_NUMBER, Num, edges_path_data, path_data, quantize_path},
   resources::image_buffer::demultiply_pixel,
@@ -117,16 +116,6 @@ impl Frame {
       origin.y + layout.border.top + layout.padding.top,
       layout.content_box_width(),
       layout.content_box_height(),
-    )
-  }
-
-  /// A positioning `area` inside `frame`.
-  pub(crate) fn origin_box(frame: BoxFrame, area: OriginBox) -> Self {
-    Self::new(
-      frame.origin.x + area.offset.x,
-      frame.origin.y + area.offset.y,
-      area.size.width,
-      area.size.height,
     )
   }
 

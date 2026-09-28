@@ -5,6 +5,8 @@
 
 use std::ops::{Add, AddAssign, Div, Mul, Neg, Sub, SubAssign};
 
+use crate::geometry::{Point, Rect, Size};
+
 const FRACTIONAL_BITS: u32 = 6;
 const DENOMINATOR: i32 = 1 << FRACTIONAL_BITS;
 const INT_MAX: i32 = i32::MAX / DENOMINATOR;
@@ -125,6 +127,11 @@ impl LayoutUnit {
   pub const fn int_mod(self, divisor: Self) -> Self {
     Self(self.0 % divisor.0)
   }
+
+  /// Blink's `MulDiv`: `self * multiplier / divisor` without rounding in between.
+  pub fn mul_div(self, multiplier: Self, divisor: Self) -> Self {
+    Self::saturated((i64::from(self.0) * i64::from(multiplier.0) / i64::from(divisor.0)) as f64)
+  }
 }
 
 impl Add for LayoutUnit {
@@ -244,8 +251,24 @@ impl BoxStrut {
   }
 
   /// The offset the top and left sides move a box's origin by.
-  pub fn offset(self) -> (LayoutUnit, LayoutUnit) {
-    (self.left, self.top)
+  pub fn offset(self) -> UnitOffset {
+    UnitOffset {
+      left: self.left,
+      top: self.top,
+    }
+  }
+}
+
+impl Neg for BoxStrut {
+  type Output = Self;
+
+  fn neg(self) -> Self {
+    Self {
+      top: -self.top,
+      right: -self.right,
+      bottom: -self.bottom,
+      left: -self.left,
+    }
   }
 }
 
@@ -262,105 +285,278 @@ impl Add for BoxStrut {
   }
 }
 
-/// Blink's `PhysicalRect`: a rectangle in layout units.
+/// Blink's `PhysicalOffset`: a point in layout units.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-pub struct UnitRect {
-  /// The left edge.
-  pub x: LayoutUnit,
-  /// The top edge.
-  pub y: LayoutUnit,
+pub struct UnitOffset {
+  /// The distance from the left.
+  pub left: LayoutUnit,
+  /// The distance from the top.
+  pub top: LayoutUnit,
+}
+
+impl UnitOffset {
+  /// The offset with a negative side set to zero.
+  pub fn clamp_negative_to_zero(self) -> Self {
+    Self {
+      left: self.left.clamp_negative_to_zero(),
+      top: self.top.clamp_negative_to_zero(),
+    }
+  }
+
+  /// The offset in px.
+  pub fn to_point(self) -> Point<f32> {
+    Point {
+      x: self.left.to_f32(),
+      y: self.top.to_f32(),
+    }
+  }
+}
+
+impl Add for UnitOffset {
+  type Output = Self;
+
+  fn add(self, other: Self) -> Self {
+    Self {
+      left: self.left + other.left,
+      top: self.top + other.top,
+    }
+  }
+}
+
+impl Sub for UnitOffset {
+  type Output = Self;
+
+  fn sub(self, other: Self) -> Self {
+    Self {
+      left: self.left - other.left,
+      top: self.top - other.top,
+    }
+  }
+}
+
+/// Blink's `PhysicalSize`: a size in layout units.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct UnitSize {
   /// The width.
   pub width: LayoutUnit,
   /// The height.
   pub height: LayoutUnit,
 }
 
+impl UnitSize {
+  /// Blink's `FromSizeFFloor`.
+  pub fn from_size_floor(size: Size<f32>) -> Self {
+    Self {
+      width: LayoutUnit::from_f32_floor(size.width),
+      height: LayoutUnit::from_f32_floor(size.height),
+    }
+  }
+
+  /// Blink's `IsEmpty`: whether either side is zero.
+  pub fn is_empty(self) -> bool {
+    self.width == LayoutUnit::ZERO || self.height == LayoutUnit::ZERO
+  }
+
+  /// The size with a negative side set to zero.
+  pub fn clamp_negative_to_zero(self) -> Self {
+    Self {
+      width: self.width.clamp_negative_to_zero(),
+      height: self.height.clamp_negative_to_zero(),
+    }
+  }
+
+  /// Blink's `FitToAspectRatio`: the size scaled on one side to `aspect_ratio`, growing to cover
+  /// or shrinking to fit.
+  pub fn fit_to_aspect_ratio(self, aspect_ratio: Self, grow: bool) -> Self {
+    let constrained_height = self.width.mul_div(aspect_ratio.height, aspect_ratio.width);
+
+    if (grow && constrained_height < self.height) || (!grow && constrained_height > self.height) {
+      return Self {
+        width: self.height.mul_div(aspect_ratio.width, aspect_ratio.height),
+        height: self.height,
+      };
+    }
+
+    Self {
+      width: self.width,
+      height: constrained_height,
+    }
+  }
+
+  /// The size in px.
+  pub fn to_size(self) -> Size<f32> {
+    Size {
+      width: self.width.to_f32(),
+      height: self.height.to_f32(),
+    }
+  }
+}
+
+impl Add for UnitSize {
+  type Output = Self;
+
+  fn add(self, other: Self) -> Self {
+    Self {
+      width: self.width + other.width,
+      height: self.height + other.height,
+    }
+  }
+}
+
+impl Sub for UnitSize {
+  type Output = Self;
+
+  fn sub(self, other: Self) -> Self {
+    Self {
+      width: self.width - other.width,
+      height: self.height - other.height,
+    }
+  }
+}
+
+/// Blink's `PhysicalRect`: a rectangle in layout units.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct UnitRect {
+  /// The top-left corner.
+  pub offset: UnitOffset,
+  /// The size.
+  pub size: UnitSize,
+}
+
 impl UnitRect {
+  /// The rectangle of `size` px at `offset`, each in the nearest layout units.
+  pub fn nearest(offset: Point<f32>, size: Size<f32>) -> Self {
+    Self {
+      offset: UnitOffset {
+        left: LayoutUnit::from_f32_round(offset.x),
+        top: LayoutUnit::from_f32_round(offset.y),
+      },
+      size: UnitSize {
+        width: LayoutUnit::from_f32_round(size.width),
+        height: LayoutUnit::from_f32_round(size.height),
+      },
+    }
+  }
+
+  /// The left edge.
+  pub fn x(self) -> LayoutUnit {
+    self.offset.left
+  }
+
+  /// The top edge.
+  pub fn y(self) -> LayoutUnit {
+    self.offset.top
+  }
+
+  /// The width.
+  pub fn width(self) -> LayoutUnit {
+    self.size.width
+  }
+
+  /// The height.
+  pub fn height(self) -> LayoutUnit {
+    self.size.height
+  }
+
   /// The right edge.
   pub fn right(self) -> LayoutUnit {
-    self.x + self.width
+    self.x() + self.width()
   }
 
   /// The bottom edge.
   pub fn bottom(self) -> LayoutUnit {
-    self.y + self.height
+    self.y() + self.height()
   }
 
   /// Whether the rectangle encloses no area.
   pub fn is_empty(self) -> bool {
-    self.width <= LayoutUnit::ZERO || self.height <= LayoutUnit::ZERO
+    self.size.is_empty()
   }
 
   /// Blink's `Expand`: the rectangle grown by `strut` on each side.
   pub fn expand(self, strut: BoxStrut) -> Self {
     Self {
-      x: self.x - strut.left,
-      y: self.y - strut.top,
-      width: self.width + strut.left + strut.right,
-      height: self.height + strut.top + strut.bottom,
+      offset: UnitOffset {
+        left: self.x() - strut.left,
+        top: self.y() - strut.top,
+      },
+      size: UnitSize {
+        width: self.width() + strut.left + strut.right,
+        height: self.height() + strut.top + strut.bottom,
+      },
     }
   }
 
   /// Blink's `Contract`: the rectangle shrunk by `strut` on each side.
   pub fn contract(self, strut: BoxStrut) -> Self {
-    self.expand(BoxStrut {
-      top: -strut.top,
-      right: -strut.right,
-      bottom: -strut.bottom,
-      left: -strut.left,
-    })
+    self.expand(-strut)
   }
 
   /// The rectangle with a negative width or height set to zero.
   pub fn clamp_negative_size_to_zero(self) -> Self {
     Self {
-      width: self.width.clamp_negative_to_zero(),
-      height: self.height.clamp_negative_to_zero(),
-      ..self
+      offset: self.offset,
+      size: self.size.clamp_negative_to_zero(),
     }
   }
 
-  /// Blink's `ToPixelSnappedRect`, back in layout units.
+  /// Blink's `ToPixelSnappedRect`, back in layout units, a negative size clamped to zero as
+  /// `gfx::Rect` clamps it.
   pub fn pixel_snapped(self) -> Self {
     Self {
-      x: LayoutUnit::from_int(self.x.round()),
-      y: LayoutUnit::from_int(self.y.round()),
-      width: LayoutUnit::from_int(snap_size_to_pixel(self.width, self.x)),
-      height: LayoutUnit::from_int(snap_size_to_pixel(self.height, self.y)),
+      offset: UnitOffset {
+        left: LayoutUnit::from_int(self.x().round()),
+        top: LayoutUnit::from_int(self.y().round()),
+      },
+      size: UnitSize {
+        width: LayoutUnit::from_int(snap_size_to_pixel(self.width(), self.x()).max(0)),
+        height: LayoutUnit::from_int(snap_size_to_pixel(self.height(), self.y()).max(0)),
+      },
     }
   }
 
   /// Blink's `Intersect`: the overlap with `other`, or an empty rectangle at the origin.
   pub fn intersect(self, other: Self) -> Self {
-    let x = self.x.max(other.x);
-    let y = self.y.max(other.y);
+    let left = self.x().max(other.x());
+    let top = self.y().max(other.y());
     let right = self.right().min(other.right());
     let bottom = self.bottom().min(other.bottom());
 
-    if x >= right || y >= bottom {
+    if left >= right || top >= bottom {
       return Self::default();
     }
 
     Self {
-      x,
-      y,
-      width: right - x,
-      height: bottom - y,
+      offset: UnitOffset { left, top },
+      size: UnitSize {
+        width: right - left,
+        height: bottom - top,
+      },
     }
   }
 
   /// Whether `other` lies wholly inside.
   pub fn contains(self, other: Self) -> bool {
-    self.x <= other.x
-      && self.y <= other.y
+    self.x() <= other.x()
+      && self.y() <= other.y()
       && self.right() >= other.right()
       && self.bottom() >= other.bottom()
+  }
+
+  /// The rectangle in px.
+  pub fn to_rect(self) -> Rect<f32> {
+    Rect {
+      left: self.x().to_f32(),
+      top: self.y().to_f32(),
+      right: self.right().to_f32(),
+      bottom: self.bottom().to_f32(),
+    }
   }
 }
 
 #[cfg(test)]
 mod tests {
-  use super::{LayoutUnit, UnitRect};
+  use super::{LayoutUnit, UnitOffset, UnitRect, UnitSize};
 
   #[test]
   fn floats_convert_as_blink_rounds_them() {
@@ -404,15 +600,19 @@ mod tests {
   #[test]
   fn pixel_snapping_follows_the_location_fraction() {
     let rect = UnitRect {
-      x: LayoutUnit::from_f32(10.5),
-      y: LayoutUnit::from_f32(0.25),
-      width: LayoutUnit::from_f32(20.25),
-      height: LayoutUnit::from_f32(0.1),
+      offset: UnitOffset {
+        left: LayoutUnit::from_f32(10.5),
+        top: LayoutUnit::from_f32(0.25),
+      },
+      size: UnitSize {
+        width: LayoutUnit::from_f32(20.25),
+        height: LayoutUnit::from_f32(0.1),
+      },
     }
     .pixel_snapped();
 
-    assert_eq!(rect.x, LayoutUnit::from_int(11));
-    assert_eq!(rect.width, LayoutUnit::from_int(20));
-    assert_eq!(rect.height, LayoutUnit::from_int(1));
+    assert_eq!(rect.x(), LayoutUnit::from_int(11));
+    assert_eq!(rect.width(), LayoutUnit::from_int(20));
+    assert_eq!(rect.height(), LayoutUnit::from_int(1));
   }
 }

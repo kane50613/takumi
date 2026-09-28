@@ -56,7 +56,7 @@ pub struct LinearGradientGeometry {
 }
 
 impl LinearGradient {
-  fn direction_components(&self, width: u32, height: u32) -> (f32, f32) {
+  fn direction_components(&self, width: f32, height: f32) -> (f32, f32) {
     let angle = match self.direction {
       LinearGradientDirection::Angle(angle) => angle,
       LinearGradientDirection::Keyword(keyword_direction) => {
@@ -64,12 +64,12 @@ impl LinearGradient {
           (keyword_direction.horizontal, keyword_direction.vertical)
         {
           let dir_x = match horizontal {
-            HorizontalKeyword::Left => -(height as f32),
-            HorizontalKeyword::Right => height as f32,
+            HorizontalKeyword::Left => -height,
+            HorizontalKeyword::Right => height,
           };
           let dir_y = match vertical {
-            VerticalKeyword::Top => -(width as f32),
-            VerticalKeyword::Bottom => width as f32,
+            VerticalKeyword::Top => -width,
+            VerticalKeyword::Bottom => width,
           };
           let magnitude = dir_x.hypot(dir_y);
 
@@ -89,15 +89,15 @@ impl LinearGradient {
   /// Resolves the geometry and stops for a target viewport.
   pub fn resolve_geometry(
     &self,
-    width: u32,
-    height: u32,
+    width: f32,
+    height: f32,
     sizing: &SizingContext,
     current_color: Color,
   ) -> LinearGradientGeometry {
     let (dir_x, dir_y) = self.direction_components(width, height);
-    let cx = width as f32 / 2.0;
-    let cy = height as f32 / 2.0;
-    let max_extent = ((width as f32 * dir_x.abs()) + (height as f32 * dir_y.abs())) / 2.0;
+    let cx = width / 2.0;
+    let cy = height / 2.0;
+    let max_extent = ((width * dir_x.abs()) + (height * dir_y.abs())) / 2.0;
     let axis_length = 2.0 * max_extent;
 
     LinearGradientGeometry {
@@ -287,7 +287,7 @@ impl LinearGradientTile {
     current_color: Color,
     dither: bool,
   ) -> Self {
-    let geometry = gradient.resolve_geometry(width, height, sizing, current_color);
+    let geometry = gradient.resolve_geometry(width as f32, height as f32, sizing, current_color);
     let (dir_x, dir_y) = (geometry.dir_x, geometry.dir_y);
     let axis_aligned_kind = Self::classify_axis_aligned(dir_x, dir_y);
     let axis = LutAxis::new(gradient.repeating, geometry.stops, geometry.axis_length);

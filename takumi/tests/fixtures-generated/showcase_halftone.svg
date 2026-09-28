@@ -99,7 +99,7 @@
           <rect x="0" y="0" width="1200" height="630" fill="url(#lg2)"/>
         </g>
         <g style="mix-blend-mode:multiply">
-          <pattern id="pat3" patternUnits="userSpaceOnUse" x="0" y="0" width="14.119" height="14">
+          <pattern id="pat3" patternUnits="userSpaceOnUse" x="0" y="0" width="14.109" height="14">
             <radialGradient id="rg4" gradientUnits="userSpaceOnUse" cx="7" cy="7" r="7">
               <stop offset="0" stop-color="#666"/>
               <stop offset=".016" stop-color="#686868"/>

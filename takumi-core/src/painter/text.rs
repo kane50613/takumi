@@ -328,7 +328,12 @@ impl<'c> FragmentBackground<'c> {
     SpanBackground {
       node: self.node,
       span: fragment.span,
-      background: BoxBackground::new(&self.node.context, self.strip, fragment.border),
+      background: BoxBackground::new(
+        &self.node.context,
+        self.strip,
+        fragment.border,
+        self.strip_origin,
+      ),
       strip: BoxFrame::new(self.strip, frame.origin + self.strip_origin),
     }
   }

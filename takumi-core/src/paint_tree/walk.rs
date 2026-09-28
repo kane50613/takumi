@@ -17,7 +17,7 @@ use crate::{
   font_style::SizedFontStyle,
   geometry::{ComputedLayout, Point, Size},
   layout::{
-    background_image_geometry::{FillLayers, OriginBox},
+    background_image_geometry::{BoxBackgroundPaintContext, FillLayers},
     inline::{
       BuiltInlineLayout, InlineLayoutMode, InlineLayoutRequest, InlinePass, InlineRunLayout,
       ProcessedInlineSpan, create_inline_layout,
@@ -417,12 +417,7 @@ impl Walker {
           .color
           .map(|color| (Paint::Color { color: color.0 }, None))
           .into_iter()
-          .chain(Paint::layers(
-            &background.layers,
-            layout.size,
-            background.origin,
-            context,
-          ))
+          .chain(Paint::layers(&background.layers, context))
           .collect(),
       }
     });
@@ -755,12 +750,7 @@ fn decorations(painter: &BoxPainter<'_>, size: Size<f32>, transform: Affine) -> 
   painter.paint_normal_box_shadows(Point::ZERO, &mut recorder);
 
   let background = painter.background();
-  let layers = Paint::layers(
-    &background.layers,
-    size,
-    background.origin,
-    painter.context(),
-  );
+  let layers = Paint::layers(&background.layers, painter.context());
   // Blink's `BoxPainterBase::PaintFillLayers` paints a background that blends in a layer of its
   // own, so its layers blend only with its colour and one another.
   let isolated = layers.iter().any(|(_, blend_mode)| blend_mode.is_some());
@@ -817,13 +807,10 @@ fn effects(painter: &BoxPainter<'_>, layout: ComputedLayout) -> Effects {
     .as_deref()
     .filter(|images| images.iter().any(BackgroundImage::paints))
     .map(|images| {
-      let layers = FillLayers::mask(style).resolve(images, size, context);
-      let area = OriginBox {
-        offset: Point::ZERO,
-        size,
-      };
+      let layers =
+        FillLayers::mask(style).resolve(images, &BoxBackgroundPaintContext::sized(size), context);
 
-      Paint::layers(&layers, size, area, context)
+      Paint::layers(&layers, context)
         .into_iter()
         .map(|(paint, blend_mode)| Drawable::Fill {
           role: Role::Background,

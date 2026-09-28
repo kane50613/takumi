@@ -13,10 +13,7 @@ use crate::{
   context::RenderContext,
   filter::{ColorMatrix, ColorMatrixChain},
   geometry::{Point, Rect, Size},
-  layout::{
-    background_image_geometry::{BackgroundLayer, OriginBox},
-    node::resolve_image,
-  },
+  layout::{background_image_geometry::BackgroundLayer, node::resolve_image},
   paint::SrgbStop,
   painter::{FillShape, UNBOUNDED},
   path_data::path_data,
@@ -229,8 +226,8 @@ impl Paint {
   /// nothing.
   pub(super) fn tile(
     image: &BackgroundImage,
-    width: u32,
-    height: u32,
+    width: f32,
+    height: f32,
     context: &RenderContext,
   ) -> Option<Self> {
     match image {
@@ -255,16 +252,16 @@ impl Paint {
 
   fn linear(
     gradient: &LinearGradient,
-    width: u32,
-    height: u32,
+    width: f32,
+    height: f32,
     context: &RenderContext,
   ) -> Option<Self> {
     let geometry = gradient.resolve_geometry(width, height, &context.sizing, context.current_color);
     let line = geometry.axis_length;
     let half = line / 2.0;
     let at = |t: f32| PaintPoint {
-      x: width as f32 / 2.0 + (t - half) * geometry.dir_x,
-      y: height as f32 / 2.0 + (t - half) * geometry.dir_y,
+      x: width / 2.0 + (t - half) * geometry.dir_x,
+      y: height / 2.0 + (t - half) * geometry.dir_y,
     };
 
     Some(
@@ -296,8 +293,8 @@ impl Paint {
 
   fn radial(
     gradient: &RadialGradient,
-    width: u32,
-    height: u32,
+    width: f32,
+    height: f32,
     context: &RenderContext,
   ) -> Option<Self> {
     let geometry = gradient.resolve_geometry(width, height, &context.sizing, context.current_color);
@@ -354,12 +351,12 @@ impl Paint {
 
   fn conic(
     gradient: &ConicGradient,
-    width: u32,
-    height: u32,
+    width: f32,
+    height: f32,
     context: &RenderContext,
   ) -> Option<Self> {
     let resolved = gradient.resolve_stops(&context.sizing, context.current_color);
-    let (x, y) = gradient.resolve_center(width as f32, height as f32, &context.sizing);
+    let (x, y) = gradient.resolve_center(width, height, &context.sizing);
     let center = PaintPoint { x, y };
     let from = gradient.from_angle.to_radians() - FRAC_PI_2;
 
@@ -401,40 +398,45 @@ impl Paint {
         tile_height,
         x,
         y,
+        area,
       } => Self::Pattern {
         tile,
         tile_width,
         tile_height,
         x: x.into_iter().map(|x| x + offset.x).collect(),
         y: y.into_iter().map(|y| y + offset.y).collect(),
+        area: PaintRect {
+          x: area.x + offset.x,
+          y: area.y + offset.y,
+          ..area
+        },
       },
       paint => paint,
     }
   }
 
-  /// Background or mask `layers` over a border box of `size`, their positioning area at
-  /// `origin`, each with its `background-blend-mode`.
+  /// Background or mask `layers`, each with its `background-blend-mode`.
   pub(super) fn layers(
     layers: &[BackgroundLayer<'_>],
-    size: Size<f32>,
-    origin: OriginBox,
     context: &RenderContext,
   ) -> Vec<(Self, Option<String>)> {
     layers
       .iter()
       .filter_map(|layer| {
-        let tiles = layer.geometry.snap(size, origin.offset)?;
-        let tile = Self::tile(layer.image, tiles.width, tiles.height, context)?;
+        let tiling = layer.tiling;
+        let tile = Self::tile(layer.image, tiling.tile.width, tiling.tile.height, context)?;
+        let (x, y) = tiling.origins();
         let blend_mode =
           (layer.blend_mode != BlendMode::Normal).then(|| layer.blend_mode.to_css_string());
 
         Some((
           Self::Pattern {
             tile: Box::new(tile),
-            tile_width: tiles.width as f32,
-            tile_height: tiles.height as f32,
-            x: tiles.xs.iter().map(|&x| x as f32).collect(),
-            y: tiles.ys.iter().map(|&y| y as f32).collect(),
+            tile_width: tiling.tile.width,
+            tile_height: tiling.tile.height,
+            x: x.into_vec(),
+            y: y.into_vec(),
+            area: tiling.dest.into(),
           },
           blend_mode,
         ))

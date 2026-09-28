@@ -456,8 +456,12 @@ impl<'c> BoxPainter<'c> {
   }
 
   /// The box's background, resolved.
+  ///
+  /// Approximate: it snaps to pixels against the box's offset from its parent, where Blink snaps
+  /// against the offset in its whole transform space; the two agree while the parent sits on whole
+  /// pixels.
   pub fn background(&self) -> BoxBackground<'c> {
-    BoxBackground::new(self.context, self.layout, self.border)
+    BoxBackground::new(self.context, self.layout, self.border, self.layout.location)
   }
 
   /// Paints `background-color`.

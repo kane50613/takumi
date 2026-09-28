@@ -4,8 +4,7 @@ use std::{f32::consts::TAU, io};
 
 use takumi_core::{
   context::RenderContext,
-  geometry::Rect,
-  layout::background_image_geometry::{BackgroundImageGeometry, BackgroundLayer},
+  layout::background_image_geometry::{BackgroundLayer, ImageTiling},
   paint::{ConicGradientTile, SrgbStop},
   path_data::{APPROX_CHARS_PER_NUMBER, PathData},
   style::{
@@ -31,18 +30,13 @@ impl<'a, 'd> LayerEmitter<'a, 'd> {
     Self { context, doc }
   }
 
-  /// Emits resolved background or mask layers, bottom first, positioned in `area` and painted
-  /// over `paint`.
+  /// Emits resolved background or mask layers, bottom first, over a box whose border box is
+  /// `border_box`.
   pub(crate) fn layers(
     &mut self,
     layers: &[BackgroundLayer<'_>],
-    area: Frame,
-    paint: Frame,
+    border_box: Frame,
   ) -> io::Result<()> {
-    if paint.w <= 0.0 || paint.h <= 0.0 {
-      return Ok(());
-    }
-
     for layer in layers {
       let blend = (layer.blend_mode != BlendMode::Normal)
         .then(|| {
@@ -52,7 +46,7 @@ impl<'a, 'd> LayerEmitter<'a, 'd> {
         })
         .transpose()?;
 
-      self.layer(layer.image, &layer.geometry, area, paint)?;
+      self.layer(layer.image, &layer.tiling, border_box)?;
       if let Some(blend) = blend {
         self.doc.end_group(blend)?;
       }
@@ -63,54 +57,49 @@ impl<'a, 'd> LayerEmitter<'a, 'd> {
   fn layer(
     &mut self,
     image: &BackgroundImage,
-    geometry: &BackgroundImageGeometry,
-    area: Frame,
-    paint: Frame,
+    tiling: &ImageTiling,
+    border_box: Frame,
   ) -> io::Result<()> {
-    let tile = geometry.tile_size;
-    if tile.width <= 0.0 || tile.height <= 0.0 {
-      return Ok(());
-    }
-    let (xs, ys) = geometry.tile_origins(Rect {
-      left: paint.x - area.x,
-      top: paint.y - area.y,
-      right: paint.x + paint.w - area.x,
-      bottom: paint.y + paint.h - area.y,
-    });
+    let tile = tiling.tile;
+    let dest = Frame::new(
+      border_box.x + tiling.dest.left,
+      border_box.y + tiling.dest.top,
+      tiling.dest.right - tiling.dest.left,
+      tiling.dest.bottom - tiling.dest.top,
+    );
+    let (xs, ys) = tiling.origins();
 
     // One tile in view draws on its own; a pattern only pays off for several.
     if let ([tile_x], [tile_y]) = (xs.as_slice(), ys.as_slice()) {
-      let rect = Frame::new(area.x + tile_x, area.y + tile_y, tile.width, tile.height);
-      // A `cover`/positioned/origin-shifted tile can extend past the painting box;
-      // clip it so it does not bleed outside the element (matching the raster backend).
-      let overflows = rect.x < paint.x - 1e-3
-        || rect.y < paint.y - 1e-3
-        || rect.x + rect.w > paint.x + paint.w + 1e-3
-        || rect.y + rect.h > paint.y + paint.h + 1e-3;
+      let rect = Frame::new(
+        border_box.x + tile_x,
+        border_box.y + tile_y,
+        tile.width,
+        tile.height,
+      );
+      let overflows = rect.x < dest.x
+        || rect.y < dest.y
+        || rect.x + rect.w > dest.x + dest.w
+        || rect.y + rect.h > dest.y + dest.h;
+
       if overflows {
-        let token = self.doc.begin_clipped_group(&paint.path_data())?;
+        let token = self.doc.begin_clipped_group(&dest.path_data())?;
         self.tile(image, rect)?;
         return self.doc.end_group(token);
       }
       return self.tile(image, rect);
     }
 
-    let first = geometry.first_tile();
-    let period = geometry.pattern_period(Rect {
-      left: paint.x - area.x,
-      top: paint.y - area.y,
-      right: paint.x + paint.w - area.x,
-      bottom: paint.y + paint.h - area.y,
-    });
+    let step = tiling.step();
     let (token, pattern) = self.doc.begin_pattern(Frame::new(
-      area.x + first.x,
-      area.y + first.y,
-      period.width,
-      period.height,
+      border_box.x + tiling.phase.x,
+      border_box.y + tiling.phase.y,
+      step.width,
+      step.height,
     ))?;
     self.tile(image, Frame::new(0.0, 0.0, tile.width, tile.height))?;
     self.doc.end_pattern(token)?;
-    self.doc.rect_paint(paint, &pattern)
+    self.doc.rect_paint(dest, &pattern)
   }
 
   /// Paints one tile of a layer into `rect`.
@@ -133,12 +122,8 @@ impl<'a, 'd> LayerEmitter<'a, 'd> {
 
   fn linear(&mut self, gradient: &LinearGradient, rect: Frame) -> io::Result<()> {
     let Frame { x, y, w, h } = rect;
-    let geometry = gradient.resolve_geometry(
-      w as u32,
-      h as u32,
-      &self.context.sizing,
-      self.context.current_color,
-    );
+    let geometry =
+      gradient.resolve_geometry(w, h, &self.context.sizing, self.context.current_color);
     let resolved = geometry.stops();
     if resolved.is_empty() {
       return Ok(());
@@ -180,12 +165,8 @@ impl<'a, 'd> LayerEmitter<'a, 'd> {
 
   fn radial(&mut self, gradient: &RadialGradient, rect: Frame) -> io::Result<()> {
     let Frame { x, y, w, h } = rect;
-    let geometry = gradient.resolve_geometry(
-      w as u32,
-      h as u32,
-      &self.context.sizing,
-      self.context.current_color,
-    );
+    let geometry =
+      gradient.resolve_geometry(w, h, &self.context.sizing, self.context.current_color);
     let resolved = geometry.stops();
     if resolved.is_empty() {
       return Ok(());
@@ -241,7 +222,8 @@ impl<'a, 'd> LayerEmitter<'a, 'd> {
       return Ok(());
     }
 
-    let (ccx, ccy) = (x + tile.cx, y + tile.cy);
+    let (cx, cy) = gradient.resolve_center(w, h, &self.context.sizing);
+    let (ccx, ccy) = (x + cx, y + cy);
     let radius = [(x, y), (x + w, y), (x, y + h), (x + w, y + h)]
       .into_iter()
       .map(|(px, py)| (px - ccx).hypot(py - ccy))

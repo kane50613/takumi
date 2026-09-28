@@ -1312,6 +1312,7 @@ mod tests {
 
   use image::{Rgba, RgbaImage};
 
+  use crate::geometry::Size;
   #[cfg(feature = "png")]
   use crate::resources::animated::AnimatedFormat;
   #[cfg(any(feature = "png", feature = "webp"))]
@@ -1349,21 +1350,23 @@ mod tests {
       };
       let width = is_absolute("width").then_some(size.0);
       let height = is_absolute("height").then_some(size.1);
-      let ratio = match (width, height) {
-        (Some(width), Some(height)) if width != 0.0 && height != 0.0 => Some(width / height),
+      let aspect_ratio = match (width, height) {
+        (Some(width), Some(height)) if width != 0.0 && height != 0.0 => {
+          Some(Size { width, height })
+        }
         _ => root.attribute("viewBox").and_then(|view_box| {
           let mut numbers = view_box
             .split([' ', ',', '\t', '\n', '\r'])
             .filter(|part| !part.is_empty());
           let width: f32 = numbers.nth(2)?.parse().ok()?;
           let height: f32 = numbers.next()?.parse().ok()?;
-          (width > 0.0 && height > 0.0).then_some(width / height)
+          (width > 0.0 && height > 0.0).then_some(Size { width, height })
         }),
       };
       IntrinsicSizing {
         width,
         height,
-        ratio,
+        aspect_ratio,
       }
     }
 
@@ -1429,7 +1432,7 @@ mod tests {
     // viewBox only: aspect ratio, no intrinsic dimensions.
     let only = intrinsic(format!(r#"<svg {ns} viewBox="0 0 128 128"/>"#));
     assert_eq!(
-      (only.width, only.height, only.ratio),
+      (only.width, only.height, only.ratio()),
       (None, None, Some(1.0))
     );
 
@@ -1437,7 +1440,7 @@ mod tests {
     let sized = intrinsic(format!(r#"<svg {ns} width="102" height="38"/>"#));
     let ratio = Some(102.0 / 38.0);
     assert_eq!(
-      (sized.width, sized.height, sized.ratio),
+      (sized.width, sized.height, sized.ratio()),
       (Some(102.0), Some(38.0), ratio)
     );
 
@@ -1446,7 +1449,7 @@ mod tests {
       r#"<svg {ns} width="100%" height="100%" viewBox="0 0 16 8"/>"#
     ));
     assert_eq!(
-      (percentage.width, percentage.height, percentage.ratio),
+      (percentage.width, percentage.height, percentage.ratio()),
       (None, None, Some(2.0))
     );
   }

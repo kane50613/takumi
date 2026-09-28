@@ -138,17 +138,17 @@ impl RadialGradient {
   /// Resolves the geometry and stops for a target viewport.
   pub fn resolve_geometry(
     &self,
-    width: u32,
-    height: u32,
+    width: f32,
+    height: f32,
     sizing: &SizingContext,
     current_color: Color,
   ) -> RadialGradientGeometry {
-    let cx = Length::from(self.center.0.x).to_px(sizing, width as f32);
-    let cy = Length::from(self.center.0.y).to_px(sizing, height as f32);
+    let cx = Length::from(self.center.0.x).to_px(sizing, width);
+    let cy = Length::from(self.center.0.y).to_px(sizing, height);
     let dx_left = cx.abs();
-    let dx_right = (width as f32 - cx).abs();
+    let dx_right = (width - cx).abs();
     let dy_top = cy.abs();
-    let dy_bottom = (height as f32 - cy).abs();
+    let dy_bottom = (height - cy).abs();
     let corner_distances = [
       (dx_left, dy_top),
       (dx_left, dy_bottom),
@@ -158,8 +158,8 @@ impl RadialGradient {
     .map(|(dx, dy)| (dx * dx + dy * dy).sqrt());
     let (radius_x, radius_y) = match (self.shape, self.size) {
       (shape, RadialSize::Explicit { radius_x, radius_y }) => {
-        let radius_x = radius_x.to_px(sizing, width as f32).max(0.0);
-        let radius_y = radius_y.to_px(sizing, height as f32).max(0.0);
+        let radius_x = radius_x.to_px(sizing, width).max(0.0);
+        let radius_y = radius_y.to_px(sizing, height).max(0.0);
 
         match shape {
           RadialShape::Circle => {
@@ -331,7 +331,7 @@ impl RadialGradientTile {
     current_color: Color,
     dither: bool,
   ) -> Self {
-    let geometry = gradient.resolve_geometry(width, height, sizing, current_color);
+    let geometry = gradient.resolve_geometry(width as f32, height as f32, sizing, current_color);
     let axis = LutAxis::new(gradient.repeating, geometry.stops, geometry.radius_scale);
     let lut_size =
       axis.lut_size_covering((geometry.radius_scale.ceil() as usize).saturating_add(1));

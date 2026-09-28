@@ -7,7 +7,7 @@ use roxmltree::{Document, Node, ParsingOptions};
 use svgtypes::{Length, LengthUnit, ViewBox};
 use thiserror::Error;
 
-use crate::style::IntrinsicSizing;
+use crate::{geometry::Size, style::IntrinsicSizing};
 
 const DPI: f32 = 96.0;
 const FONT_SIZE: f32 = 12.0;
@@ -93,9 +93,9 @@ impl SvgSize {
     };
     let intrinsic_width = absolute(width, width_px);
     let intrinsic_height = absolute(height, height_px);
-    let ratio = match (intrinsic_width, intrinsic_height) {
-      (Some(width), Some(height)) => Some(width / height),
-      _ => view_box.map(|(width, height)| width / height),
+    let aspect_ratio = match (intrinsic_width, intrinsic_height) {
+      (Some(width), Some(height)) => Some(Size { width, height }),
+      _ => view_box.map(|(width, height)| Size { width, height }),
     };
 
     Ok(Self {
@@ -104,7 +104,7 @@ impl SvgSize {
       intrinsic: IntrinsicSizing {
         width: intrinsic_width,
         height: intrinsic_height,
-        ratio,
+        aspect_ratio,
       },
     })
   }
@@ -157,7 +157,7 @@ mod tests {
     assert_eq!((svg.width, svg.height), (192.0, 96.0));
     assert_eq!(svg.intrinsic.width, Some(192.0));
     assert_eq!(svg.intrinsic.height, Some(96.0));
-    assert_eq!(svg.intrinsic.ratio, Some(2.0));
+    assert_eq!(svg.intrinsic.ratio(), Some(2.0));
   }
 
   #[test]
@@ -178,7 +178,10 @@ mod tests {
       IntrinsicSizing {
         width: None,
         height: None,
-        ratio: Some(2.0)
+        aspect_ratio: Some(Size {
+          width: 200.0,
+          height: 100.0
+        })
       }
     );
 
@@ -193,7 +196,7 @@ mod tests {
     let svg = size(r#"width="50%" height="100%" viewBox="0 0 200 100""#);
     assert_eq!((svg.width, svg.height), (100.0, 100.0));
     assert_eq!(svg.intrinsic.width, None);
-    assert_eq!(svg.intrinsic.ratio, Some(2.0));
+    assert_eq!(svg.intrinsic.ratio(), Some(2.0));
   }
 
   #[test]

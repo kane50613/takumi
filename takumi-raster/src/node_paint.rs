@@ -71,10 +71,10 @@ pub(crate) struct CanvasDevice<'c> {
   shadow: Option<SizedShadow>,
   /// The background `background-clip: text` glyphs show.
   pub(crate) text_background: Option<PaintSource<'c>>,
-  /// The span background strips already rasterized, by span id and strip size, since a span
-  /// paints the same strip on every line. A device paints one inline layout, whose span ids are
-  /// unique.
-  strip_tiles: HashMap<(usize, u32, u32), Option<BackgroundTile>>,
+  /// The span background strips already rasterized, by span id, strip size, and the strip's
+  /// offset from the pixel grid, since a span paints the same strip on every line. A device paints
+  /// one inline layout, whose span ids are unique.
+  strip_tiles: HashMap<(usize, u32, u32, u32, u32), Option<BackgroundTile>>,
   /// The first error a draw hit.
   error: Option<Error>,
 }
@@ -603,8 +603,23 @@ impl GlyphDevice for CanvasDevice<'_> {
     transform: Affine,
   ) {
     let context = &span.node.context;
-    let size = span.strip.layout.size.map(|size| size as u32);
-    let key = (span.span, size.width, size.height);
+    // The strip rasterizes on the device pixel grid, so its layers land where they snapped.
+    let origin = span.strip.origin;
+    let fraction = Point {
+      x: origin.x - origin.x.floor(),
+      y: origin.y - origin.y.floor(),
+    };
+    let size = Size {
+      width: (span.strip.layout.size.width + fraction.x).ceil() as u32,
+      height: (span.strip.layout.size.height + fraction.y).ceil() as u32,
+    };
+    let key = (
+      span.span,
+      size.width,
+      size.height,
+      fraction.x.to_bits(),
+      fraction.y.to_bits(),
+    );
     let tile = match self.strip_tiles.remove(&key) {
       Some(tile) => tile,
       None => background_image_layers(&span.background, context)
@@ -614,7 +629,7 @@ impl GlyphDevice for CanvasDevice<'_> {
             size,
             context,
             BorderProperties::default(),
-            Affine::IDENTITY,
+            Affine::translation(fraction.x, fraction.y),
           )
         })
         .unwrap_or_else(|error| {
@@ -628,7 +643,7 @@ impl GlyphDevice for CanvasDevice<'_> {
         clip,
         transform,
         tile.into(),
-        Affine::translation(-span.strip.origin.x, -span.strip.origin.y),
+        Affine::translation(-origin.x.floor(), -origin.y.floor()),
         context.style.image_rendering,
       );
     }
@@ -732,11 +747,11 @@ pub(crate) fn draw_background(
     BackgroundClipArea::BorderBox(border_radius) => {
       let layers = background_image_layers(&background, context)?;
 
-      if border_radius.is_zero() {
+      if border_radius.is_zero() && layers.iter().all(TileLayer::blits) {
         for tile in layers {
           for y in &tile.ys {
             for x in &tile.xs {
-              let transform = context.transform * Affine::translation(*x as f32, *y as f32);
+              let transform = tile.tile_transform(context.transform, *x, *y);
               if transform.only_translation()
                 && canvas.overlay_background_tile_direct(
                   &tile.tile,
@@ -761,7 +776,7 @@ pub(crate) fn draw_background(
           }
         }
       } else if let Some(layer) = single_solid_color_layer(&layers, canvas) {
-        let transform = context.transform * Affine::translation(layer.x as f32, layer.y as f32);
+        let transform = context.transform * Affine::translation(layer.x, layer.y);
         canvas.overlay_image(
           layer.tile,
           border_radius,
@@ -898,8 +913,8 @@ impl DeferredOutline {
 
 struct SolidColorLayer<'a> {
   tile: &'a BackgroundTile,
-  x: i32,
-  y: i32,
+  x: f32,
+  y: f32,
   blend_mode: BlendMode,
 }
 
@@ -916,7 +931,7 @@ fn single_solid_color_layer<'a>(
   if !matches!(layer.tile, BackgroundTile::Color(_)) {
     return None;
   }
-  if layer.xs.len() != 1 || layer.ys.len() != 1 {
+  if layer.xs.len() != 1 || layer.ys.len() != 1 || !layer.blits() {
     return None;
   }
   Some(SolidColorLayer {

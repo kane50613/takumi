@@ -59,20 +59,20 @@ impl ImageData {
     let intrinsic_size = match (intrinsic_sizing.width, intrinsic_sizing.height) {
       (Some(width), Some(height)) => Size { width, height },
       (Some(width), None) => {
-        let height = match intrinsic_sizing.ratio {
+        let height = match intrinsic_sizing.ratio() {
           Some(ratio) if ratio > 0.0 => width / ratio,
           _ => DEFAULT_HEIGHT,
         };
         Size { width, height }
       }
       (None, Some(height)) => {
-        let width = match intrinsic_sizing.ratio {
+        let width = match intrinsic_sizing.ratio() {
           Some(ratio) if ratio > 0.0 => height * ratio,
           _ => DEFAULT_WIDTH,
         };
         Size { width, height }
       }
-      (None, None) => match intrinsic_sizing.ratio {
+      (None, None) => match intrinsic_sizing.ratio() {
         Some(ratio) if ratio > 0.0 => {
           let solution_width = DEFAULT_HEIGHT * ratio;
           if solution_width <= DEFAULT_WIDTH {
@@ -98,7 +98,7 @@ impl ImageData {
     // open states no ratio, so only the source's own ratio or its own two dimensions give
     // one. Without a ratio the other axis keeps the default object dimension.
     let source_ratio = intrinsic_sizing
-      .ratio
+      .ratio()
       .filter(|ratio| *ratio > 0.0)
       .or_else(|| match (intrinsic_sizing.width, intrinsic_sizing.height) {
         (Some(width), Some(height)) if height != 0.0 => Some(width / height),
@@ -131,7 +131,7 @@ impl ImageData {
         && intrinsic_sizing.height.is_none()
         && self.width.is_none()
         && self.height.is_none()
-        && intrinsic_sizing.ratio.is_some_and(|ratio| ratio > 0.0),
+        && intrinsic_sizing.ratio().is_some_and(|ratio| ratio > 0.0),
     })
   }
 

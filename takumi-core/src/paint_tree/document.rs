@@ -178,7 +178,7 @@ pub enum Paint {
     /// How it samples.
     sampling: Sampling,
   },
-  /// A tile repeated at every `x` and `y` pair.
+  /// A tile repeated at every `x` and `y` pair, showing only inside `area`.
   #[serde(rename_all = "camelCase")]
   Pattern {
     /// The tile's paint, in the tile's own space.
@@ -191,6 +191,8 @@ pub enum Paint {
     x: Vec<f32>,
     /// Each tile's top edge.
     y: Vec<f32>,
+    /// The rectangle the tiles show in.
+    area: PaintRect,
   },
 }
 

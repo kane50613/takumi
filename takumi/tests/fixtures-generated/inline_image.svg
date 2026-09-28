@@ -20,7 +20,7 @@
     <path d="M586.1 276h64v64h-64v-64Zm12 12h40v40h-40v-40Z" clip-rule="evenodd"/>
   </clipPath>
   <g clip-path="url(#cp0)">
-    <pattern id="pat1" patternUnits="userSpaceOnUse" x="598.104" y="288" width="40" height="40">
+    <pattern id="pat1" patternUnits="userSpaceOnUse" x="558.104" y="248" width="40" height="40">
       <linearGradient id="lg2" gradientUnits="userSpaceOnUse" x1="0" y1="20" x2="40" y2="20">
         <stop offset="0" stop-color="#f00"/>
         <stop offset=".016" stop-color="#fb0004"/>

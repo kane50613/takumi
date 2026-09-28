@@ -122,11 +122,7 @@ pub(crate) fn emit_clip_text_run(
   if let Some(color) = background.color {
     doc.rect(border_box, Rgba(color.0))?;
   }
-  LayerEmitter::new(context, doc).layers(
-    &background.layers,
-    Frame::origin_box(area, background.origin),
-    border_box,
-  )?;
+  LayerEmitter::new(context, doc).layers(&background.layers, border_box)?;
   doc.end_group(group)
 }
 

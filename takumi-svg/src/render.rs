@@ -9,7 +9,7 @@ use takumi_core::{
   font_style::SizedFontStyle,
   geometry::{Point, Rect, Size},
   layout::{
-    background_image_geometry::FillLayers,
+    background_image_geometry::{BoxBackgroundPaintContext, FillLayers},
     border::BorderProperties,
     inline::{InlineBoxItem, InlinePass, PositionedInlineRun, VisualInlineBox},
     inline_box::{InlineBoxPaint, resolve_inline_box},
@@ -196,11 +196,8 @@ impl<'n> PlacedBox<'n> {
       DocumentDevice::paint(doc, |device| {
         device.with_border_mask(&mask, self.frame.layout.size, self.frame.origin, |device| {
           device.write(|doc| {
-            LayerEmitter::new(&self.node.context, doc).layers(
-              &background.layers,
-              Frame::origin_box(self.frame, background.origin),
-              Frame::border_box(self.frame),
-            )
+            LayerEmitter::new(&self.node.context, doc)
+              .layers(&background.layers, Frame::border_box(self.frame))
           });
         });
       })?;
@@ -217,11 +214,8 @@ impl<'n> PlacedBox<'n> {
         doc.begin_group(Affine::IDENTITY, 1.0, Some(&clip), None)
       })
       .transpose()?;
-    LayerEmitter::new(&self.node.context, doc).layers(
-      &background.layers,
-      Frame::origin_box(self.frame, background.origin),
-      Frame::border_box(self.frame),
-    )?;
+    LayerEmitter::new(&self.node.context, doc)
+      .layers(&background.layers, Frame::border_box(self.frame))?;
     if let Some(group) = group {
       doc.end_group(group)?;
     }
@@ -249,9 +243,13 @@ impl<'n> PlacedBox<'n> {
     let (token, reference) = doc.begin_mask()?;
     let border_box = Frame::border_box(self.frame);
 
-    let layers = FillLayers::mask(style).resolve(images, size, &self.node.context);
+    let layers = FillLayers::mask(style).resolve(
+      images,
+      &BoxBackgroundPaintContext::sized(size),
+      &self.node.context,
+    );
 
-    LayerEmitter::new(&self.node.context, doc).layers(&layers, border_box, border_box)?;
+    LayerEmitter::new(&self.node.context, doc).layers(&layers, border_box)?;
     doc.end_mask(token)?;
     Ok(Some(doc.begin_masked_group(&reference)?))
   }
@@ -639,11 +637,8 @@ impl GlyphDevice for DocumentDevice<'_> {
   ) {
     self.push_clip(clip, transform);
     self.write(|doc| {
-      LayerEmitter::new(&span.node.context, doc).layers(
-        &span.background.layers,
-        Frame::origin_box(span.strip, span.background.origin),
-        Frame::border_box(span.strip),
-      )
+      LayerEmitter::new(&span.node.context, doc)
+        .layers(&span.background.layers, Frame::border_box(span.strip))
     });
     self.pop_clip();
   }
