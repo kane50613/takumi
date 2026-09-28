@@ -6,8 +6,7 @@ use crate::{
   resources::font::FontClasses,
   style::{
     AppliedTextDecorations, Color, Direction, FontSynthesis, Lang, Length, TextDecorationSkipInk,
-    TextFitMode, TextOverflow, TextUnderlinePosition, TextWrapStyle, VerticalAlign,
-    WhiteSpaceCollapse, WordBreak,
+    TextFitMode, TextOverflow, TextWrapStyle, VerticalAlign, WhiteSpaceCollapse, WordBreak,
   },
   text_processing::{
     MaxHeight, RebreakOptions, apply_text_transform, apply_white_space_collapse,
@@ -488,8 +487,6 @@ pub struct InlineBrush {
   pub color: Color,
   /// The decorations the run paints.
   pub decorations: AppliedTextDecorations,
-  /// Which baseline the underline is measured from.
-  pub underline_position: TextUnderlinePosition,
   /// Whether decorations skip over glyph ink.
   pub decoration_skip_ink: TextDecorationSkipInk,
   /// `-webkit-text-stroke` colour, which a span may set for itself.
@@ -568,7 +565,6 @@ impl Default for InlineBrush {
       is_direction_mark: false,
       opacity: 1.0,
       color: Color::black(),
-      underline_position: TextUnderlinePosition::default(),
       decorations: AppliedTextDecorations::default(),
       decoration_skip_ink: TextDecorationSkipInk::default(),
       stroke_color: Color::black(),
@@ -1284,12 +1280,12 @@ impl<'c> BuiltInlineLayout<'c> {
     &self,
     glyph_run: &GlyphRun<'_, InlineBrush>,
   ) -> Option<&Rc<DecorationLink<'c>>> {
-    match glyph_run
-      .style()
-      .brush
-      .source_span_id
-      .and_then(|span_id| self.spans.get(span_id as usize))
-    {
+    self.span_chain(glyph_run.style().brush.source_span_id)
+  }
+
+  /// The spans around the text span `span_id`, innermost first.
+  pub(crate) fn span_chain(&self, span_id: Option<u64>) -> Option<&Rc<DecorationLink<'c>>> {
+    match span_id.and_then(|span_id| self.spans.get(span_id as usize)) {
       Some(ProcessedInlineSpan::Text { decorations, .. }) => decorations.as_ref(),
       _ => None,
     }
@@ -1403,9 +1399,9 @@ impl BuiltInlineLayout<'_> {
 #[cfg(test)]
 #[allow(clippy::panic, clippy::unwrap_used)]
 mod tests {
-  use std::{collections::HashMap, fs::File, io::Read, path::Path, sync::Arc};
+  use std::{fs::File, io::Read, path::Path, sync::Arc};
 
-  use super::{runs::slice_text_at_char_boundaries, *};
+  use super::{decorations::DecorationPlacement, runs::slice_text_at_char_boundaries, *};
   use crate::{
     Fonts,
     context::RenderContext,
@@ -1415,7 +1411,7 @@ mod tests {
     style::{
       Affine, AppliedTextDecoration, BorderStyle, Color, ColorInput, Display, FontSize, Length,
       Sides, SizedTextDecorationThickness, SizingContext, SpacePair, Style, StyleDeclaration,
-      TextDecorationLines, TextDecorationStyle, WhiteSpace,
+      TextDecorationLines, TextDecorationStyle, TextUnderlinePosition, WhiteSpace,
     },
     viewport::Viewport,
   };
@@ -1443,17 +1439,14 @@ mod tests {
     context
   }
 
-  fn shaped_run(position: TextUnderlinePosition) -> ShapedRun {
+  fn shaped_run() -> ShapedRun {
     ShapedRun {
       glyphs: Vec::new(),
       offset: 0.0,
       baseline: 0.0,
       advance: 0.0,
       hanging: HangingWhitespace::default(),
-      brush: InlineBrush {
-        underline_position: position,
-        ..Default::default()
-      },
+      brush: InlineBrush::default(),
       metrics: RunMetrics {
         ascent: 40.0,
         descent: 10.0,
@@ -1467,7 +1460,6 @@ mod tests {
       variations: Vec::new(),
       synthetic_bold: None,
       synthetic_skew: None,
-      // Not a font: `em_box_descent` falls back to the run metrics instead of OS/2.
       font_data: parley::fontique::Blob::new(Arc::new(Vec::new())),
     }
   }
@@ -1485,13 +1477,14 @@ mod tests {
 
   #[test]
   fn a_fully_trimmed_run_paints_no_decoration() {
-    let mut run = shaped_run(TextUnderlinePosition::Auto);
+    let mut run = shaped_run();
     run.brush.decorations = [AppliedTextDecoration {
       line: TextDecorationLines::UNDERLINE,
       style: TextDecorationStyle::Solid,
       color: Color::black(),
       thickness: SizedTextDecorationThickness::Value(2.0),
       underline_offset: None,
+      underline_position: TextUnderlinePosition::Auto,
     }]
     .into_iter()
     .collect();
@@ -1499,17 +1492,8 @@ mod tests {
     run.hanging.advance = 5.2;
     run.offset = 10.4;
 
-    let layout = ComputedLayout {
-      location: crate::geometry::Point::ZERO,
-      size: Size::new(100.0, 100.0),
-      border: crate::geometry::Rect::default(),
-      padding: crate::geometry::Rect::default(),
-      unsnapped_content: Size::new(100.0, 100.0),
-    };
-    let decorations = run.decorations(
-      &HashMap::new(),
-      layout,
-      0.0,
+    let decorations = run.decoration_lines(
+      &DecorationPlacement::default(),
       Affine::IDENTITY,
       Affine::IDENTITY,
     );
@@ -1766,43 +1750,6 @@ mod tests {
 
     assert!((fragment.width - 24.0).abs() < 0.5, "{}", fragment.width);
     assert!(fragment.height > 0.0);
-  }
-
-  #[test]
-  fn underline_offset_from_baseline_follows_the_underline_position() {
-    // `auto` leaves a gap of half the thickness, at least a pixel, under the baseline.
-    assert_eq!(
-      shaped_run(TextUnderlinePosition::Auto).underline_offset_from_baseline(1.0, None),
-      1.0
-    );
-    assert_eq!(
-      shaped_run(TextUnderlinePosition::Auto).underline_offset_from_baseline(5.0, None),
-      3.0
-    );
-    // The font's underline offset is negative below the baseline.
-    assert_eq!(
-      shaped_run(TextUnderlinePosition::FromFont).underline_offset_from_baseline(2.0, None),
-      5.0
-    );
-    // 100px em split in the metrics' 40:10 ratio puts the em box bottom 20px down, and the
-    // underline a pixel past it.
-    assert_eq!(
-      shaped_run(TextUnderlinePosition::Under).underline_offset_from_baseline(2.0, None),
-      21.0
-    );
-  }
-
-  #[test]
-  fn underline_offset_from_baseline_adds_the_style_offset() {
-    // A set offset drops `auto`'s gap.
-    assert_eq!(
-      shaped_run(TextUnderlinePosition::Auto).underline_offset_from_baseline(4.0, Some(3.0)),
-      3.0
-    );
-    assert_eq!(
-      shaped_run(TextUnderlinePosition::Under).underline_offset_from_baseline(2.0, Some(-4.0)),
-      17.0
-    );
   }
 
   #[test]

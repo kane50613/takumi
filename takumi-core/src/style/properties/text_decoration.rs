@@ -128,6 +128,8 @@ impl Animatable for TextDecorationThickness {
 /// Decoration thickness resolved for rendering.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum SizedTextDecorationThickness {
+  /// A tenth of the font size.
+  Auto,
   /// Use the font's own thickness.
   FromFont,
   /// A thickness in pixels.
@@ -148,6 +150,8 @@ pub struct AppliedTextDecoration {
   pub thickness: SizedTextDecorationThickness,
   /// Extra offset of the underline away from the text, in pixels, or `None` for `auto`.
   pub underline_offset: Option<f32>,
+  /// Which baseline the underline is measured from.
+  pub underline_position: TextUnderlinePosition,
 }
 
 /// The decorations a box's text paints, outermost decorating box first, as Blink's
@@ -184,6 +188,7 @@ impl AppliedTextDecorations {
       color: style.text_decoration_color.resolve(current_color),
       thickness: style.resolved_text_decoration_thickness(sizing),
       underline_offset: style.text_underline_offset.resolve_px(sizing),
+      underline_position: style.text_underline_position,
     };
 
     inherited.as_slice().iter().copied().chain([own]).collect()

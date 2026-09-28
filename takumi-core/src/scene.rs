@@ -799,12 +799,15 @@ fn compute_node_paint_bounds(
             brush.clone(),
             Vec::new(),
           );
-          let run_transform = setup
-            .state
-            .transform(Affine::IDENTITY, static_inline_prefix);
-          let output = transform * run_transform;
+          let placement = built.decoration_placement(
+            line,
+            &run,
+            brush.source_span_id,
+            static_inline_prefix,
+            layout,
+          );
 
-          for line in run.decoration_lines(content_offset, baseline_shift, run_transform, output) {
+          for line in run.decoration_lines(&placement, Affine::IDENTITY, transform) {
             let area = line.bounds();
 
             bounds = merge_bounds(
@@ -818,7 +821,7 @@ fn compute_node_paint_bounds(
                   width: area.right - area.left,
                   height: area.bottom - area.top,
                 },
-                output,
+                transform,
               ),
             );
           }

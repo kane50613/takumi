@@ -148,15 +148,7 @@ impl InlineLines<'_> {
     let decorations: Vec<Vec<DecorationLine>> = self
       .runs
       .iter()
-      .map(|run| {
-        run.glyph_run.decorations(
-          &run.resolved_glyphs,
-          frame.layout,
-          run.baseline_shift,
-          run.transform(at),
-          device_transform,
-        )
-      })
+      .map(|run| run.decorations(frame.layout, at, device_transform))
       .collect();
 
     let styles: Vec<&SizedFontStyle> = self

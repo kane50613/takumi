@@ -15,7 +15,7 @@ use parley::{InlineBox, InlineBoxKind};
 use smallvec::SmallVec;
 
 use super::{line_box::BoxFont, metrics::Strut, outline::InlineOutline};
-use std::{borrow::Cow, ops::Range, rc::Rc, sync::Arc};
+use std::{borrow::Cow, iter::successors, ops::Range, rc::Rc, sync::Arc};
 
 /// An out-of-flow box inside inline content.
 #[derive(Clone)]
@@ -256,6 +256,13 @@ impl InlineDecoration<'_> {
 pub struct DecorationLink<'c> {
   pub(crate) decoration: InlineDecoration<'c>,
   pub(crate) parent: Option<Rc<DecorationLink<'c>>>,
+}
+
+impl<'c> DecorationLink<'c> {
+  /// This span and the spans around it, innermost first.
+  pub(crate) fn ancestors(&self) -> impl Iterator<Item = &DecorationLink<'c>> {
+    successors(Some(self), |link| link.parent.as_deref())
+  }
 }
 
 /// A piece of inline content collected from the tree.

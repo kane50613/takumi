@@ -278,6 +278,7 @@ impl SizedFontStyle<'_> {
       discriminant(&decoration.style).hash(hasher);
       decoration.color.0.hash(hasher);
       match decoration.thickness {
+        SizedTextDecorationThickness::Auto => 2_u8.hash(hasher),
         SizedTextDecorationThickness::FromFont => 0_u8.hash(hasher),
         SizedTextDecorationThickness::Value(value) => {
           1_u8.hash(hasher);
@@ -285,6 +286,7 @@ impl SizedFontStyle<'_> {
         }
       }
       decoration.underline_offset.map(f32::to_bits).hash(hasher);
+      (decoration.underline_position as u8).hash(hasher);
     }
 
     let parent = self.parent;
@@ -312,7 +314,6 @@ impl SizedFontStyle<'_> {
     discriminant(&parent.overflow_wrap.into_parley()).hash(hasher);
     discriminant(&parent.display).hash(hasher);
     parent.opacity.0.to_bits().hash(hasher);
-    (parent.text_underline_position as u8).hash(hasher);
     (parent.text_decoration_skip_ink as u8).hash(hasher);
     (parent.font_synthesis_weight as u8).hash(hasher);
     (parent.font_synthesis_style as u8).hash(hasher);
@@ -376,7 +377,6 @@ impl<'s> From<&'s SizedFontStyle<'s>> for TextStyle<'s, 's, InlineBrush> {
         },
         color: style.color,
         decorations: style.text_decorations.clone(),
-        underline_position: style.parent.text_underline_position,
         decoration_skip_ink: style.parent.text_decoration_skip_ink,
         stroke_color: style.text_stroke_color,
         stroke_width: style.stroke_width,
