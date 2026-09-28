@@ -31,7 +31,7 @@ const tree = await paint(
   { width: 640 },
 );
 
-[...tree].find((node) => node.element?.id === "card")?.drawables; // the background fill, with its resolved shape and color
+Iterator.from(tree).find((node) => node.element?.id === "card")?.drawables; // the background fill, with its resolved shape and color
 
 for (const node of tree) {
   if (node.type !== "text") continue;
