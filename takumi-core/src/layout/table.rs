@@ -630,7 +630,12 @@ impl RenderNode {
       }),
       _ => None,
     };
-    let (content_min, content_max) = self.intrinsic_widths();
+    // A fixed table sizes its columns from declared widths only, never from content.
+    let (content_min, content_max) = if fixed {
+      (0.0, 0.0)
+    } else {
+      self.intrinsic_widths()
+    };
     let mut min = if fixed {
       0.0
     } else {

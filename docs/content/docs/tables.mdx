@@ -13,7 +13,7 @@ Takumi renders `display: table` by rewriting the table into a grid, so every row
 - `colspan` and `rowspan` span tracks. The HTML attributes and the JSX `colSpan` / `rowSpan` casings both count.
 - `caption` renders above the table, or below it with `caption-side: bottom`.
 - A row's background is copied to cells that have none of their own, so zebra striping and header bands work. The `border-spacing` gaps stay unpainted.
-- An `auto`-width table shrinks to fit its content, and columns share the table's width in proportion to their content, as in Chrome. Percentage and fixed cell widths constrain their columns.
+- A block-level `auto`-width table shrinks to fit its content; in a flex or grid container it still stretches. Columns share the table's width by their content, as in Chrome. Percentage and fixed cell widths constrain their columns.
 - `border-collapse: collapse` merges adjacent borders.
 - `border-spacing` defaults to `2px`.
 - Paged PDF output splits rows across pages. Column positions stay identical on every page.
