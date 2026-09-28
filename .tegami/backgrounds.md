@@ -10,3 +10,4 @@ packages:
 - Shorter `background-size`, `-position`, `-repeat` and `-blend-mode` lists cycle over the layers instead of repeating their last value.
 - SVG places tiles at exact positions and positions `background-clip: text` layers by `background-origin`. PDF no longer repeats a layer along an axis that does not repeat.
 - `background-blend-mode` in the image output blends only with the box's own layers and color, not with what sits behind the box.
+- A tile smaller than 1/64px paints nothing, as Chrome's `LayoutUnit` sizes truncate it to empty, instead of listing millions of tiles.
