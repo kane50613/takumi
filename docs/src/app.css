@@ -52,6 +52,17 @@
   --ring: rgba(96, 165, 250, 0.3);
 }
 
+.paint-section {
+  --primary: #7c3aed;
+  --ring: rgba(124, 58, 237, 0.3);
+  --color-fd-primary: var(--primary);
+}
+
+.dark .paint-section {
+  --primary: #a78bfa;
+  --ring: rgba(167, 139, 250, 0.3);
+}
+
 .dark {
   --destructive: oklch(0.704 0.191 22.216);
   --input: oklch(1 0 0 / 15%);

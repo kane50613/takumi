@@ -32,8 +32,7 @@ use crate::{
   resources::image::{sniff_mime, to_data_url},
   scene::{NodePaint, PaintItemKind, Scene},
   style::{
-    Affine, BackgroundClip, BackgroundImage, ComputedStyle, Direction, Filter, Isolation,
-    TextAlign, ToCss,
+    Affine, BackgroundClip, BackgroundImage, ComputedStyle, Filter, Isolation, TextAlign, ToCss,
   },
 };
 
@@ -510,10 +509,7 @@ impl Walker {
           descent: shaped.metrics.descent,
           font: self.fonts.intern(context.fonts(), shaped),
           font_size: shaped.font_size,
-          line_height: shaped
-            .brush
-            .line_height_px
-            .unwrap_or(shaped.metrics.ascent + shaped.metrics.descent),
+          line_height: shaped.metrics.line_height,
           letter_spacing: style.letter_spacing,
           glyphs: shaped
             .glyphs
@@ -744,16 +740,11 @@ fn effects(painter: &BoxPainter<'_>, layout: ComputedLayout) -> Effects {
 
 /// `text-align` with `start` and `end` resolved against the direction.
 fn text_align(context: &RenderContext) -> &'static str {
-  let rtl = context.style.direction == Direction::Rtl;
-
-  match context.style.text_align {
-    TextAlign::Left => "left",
+  match context.style.text_align.resolve(context.style.direction) {
     TextAlign::Right => "right",
     TextAlign::Center => "center",
     TextAlign::Justify => "justify",
-    TextAlign::Start if rtl => "right",
-    TextAlign::End if !rtl => "right",
-    TextAlign::Start | TextAlign::End => "left",
+    TextAlign::Left | TextAlign::Start | TextAlign::End => "left",
   }
 }
 

@@ -1,4 +1,4 @@
-//! WebAssembly bindings for takumi's paint document.
+//! WebAssembly bindings for takumi's paint tree.
 #![deny(missing_docs)]
 #![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
@@ -40,14 +40,14 @@ extern "C" {
   #[wasm_bindgen(typescript_type = "RegisteredFamily[]")]
   pub type RegisteredFamiliesType;
   /// JavaScript object representing render options.
-  #[wasm_bindgen(typescript_type = "PaintTreeOptions")]
+  #[wasm_bindgen(typescript_type = "PaintOptions")]
   pub type RenderOptionsType;
-  /// JavaScript object representing a painted document.
-  #[wasm_bindgen(typescript_type = "RawPaintDocument")]
-  pub type PaintDocumentType;
+  /// JavaScript object representing a painted tree.
+  #[wasm_bindgen(typescript_type = "RawPaintTree")]
+  pub type RawPaintTreeType;
 }
 
-/// Options for [`PaintTreeRenderer::render`].
+/// Options for [`Painter::paint`].
 #[derive(Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
 struct RenderOptions {
@@ -66,17 +66,17 @@ struct RenderOptions {
 /// other wasm bindings: a panic mid-call can't leave the wasm-bindgen borrow
 /// flag permanently set.
 #[wasm_bindgen]
-pub struct PaintTreeRenderer {
+pub struct Painter {
   state: RwLock<Fonts>,
   resource_cache: ResourceCache,
 }
 
 #[wasm_bindgen]
-impl PaintTreeRenderer {
+impl Painter {
   /// Creates a renderer with the bundled last-resort fonts.
   #[wasm_bindgen(constructor)]
-  pub fn new() -> Result<PaintTreeRenderer, js_sys::Error> {
-    Ok(PaintTreeRenderer {
+  pub fn new() -> Result<Painter, js_sys::Error> {
+    Ok(Painter {
       state: RwLock::new(default_fonts().map_err(map_error)?),
       resource_cache: ResourceCache::default(),
     })
@@ -96,7 +96,7 @@ impl PaintTreeRenderer {
   }
 
   /// Lays out a node tree and returns what painting it would draw.
-  pub fn render(
+  pub fn paint(
     &self,
     node: NodeType,
     options: Option<RenderOptionsType>,
@@ -144,7 +144,7 @@ impl PaintTreeRenderer {
   }
 }
 
-/// A painted document and the font files its runs use.
+/// A painted tree and the font files its runs use.
 #[wasm_bindgen]
 pub struct RenderedPaint {
   tree: PaintTree,
@@ -152,8 +152,8 @@ pub struct RenderedPaint {
 
 #[wasm_bindgen]
 impl RenderedPaint {
-  /// The document.
-  pub fn document(&self) -> Result<PaintDocumentType, js_sys::Error> {
+  /// The serialized tree.
+  pub fn tree(&self) -> Result<RawPaintTreeType, js_sys::Error> {
     Ok(
       self
         .tree
@@ -164,7 +164,7 @@ impl RenderedPaint {
     )
   }
 
-  /// The file of the document's font at `index`.
+  /// The file of the tree's font at `index`.
   #[wasm_bindgen(js_name = fontData)]
   pub fn font_data(&self, index: usize) -> Option<Vec<u8>> {
     self.tree.font_data(index).map(<[u8]>::to_vec)

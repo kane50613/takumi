@@ -1,0 +1,61 @@
+---
+title: Paint tree
+description: Get the shapes, paints, text runs, and images takumi would paint.
+index: true
+icon: BookOpen
+---
+
+`takumi-paint` lays out JSX, HTML, or a takumi node tree. It returns what painting it would draw, with every CSS value resolved, for Canvas, presentation files, and native drawing APIs.
+
+```npm
+npm i takumi-paint @takumi-rs/helpers
+```
+
+## Paint JSX
+
+`paint()` returns a `PaintTree`. Iterating it yields every node in document order.
+
+```tsx twoslash title="inspect.tsx"
+import { paint } from "takumi-paint";
+
+const tree = await paint(
+  <div id="card" style={{ width: 240, padding: 16, background: "#F7F3EC" }}>
+    Hello <b>world</b>
+  </div>,
+  { width: 320 },
+);
+
+const card = tree.find("card");
+console.log(card?.drawables[0]); // { type: "fill", role: "background", shape: { type: "rect", … }, … }
+
+for (const node of tree) {
+  if (node.type !== "text") continue;
+  for (const run of node.runs) console.log(run.text, run.element?.tagName, run.font.family);
+}
+```
+
+The returned lengths are device pixels. Set `devicePixelRatio` to scale CSS lengths during layout.
+
+## Read the result
+
+| Need                           | Read                                    |
+| ------------------------------ | --------------------------------------- |
+| Draw nodes in order            | [Drawing](/docs/paint-tree/drawing)     |
+| Place text or lay it out again | [Text](/docs/paint-tree/text)           |
+| Check options and field types  | [Reference](/docs/paint-tree/reference) |
+
+## Reuse a painter
+
+`paint()` uses a shared `Painter`. A dedicated `Painter` keeps its registered fonts separate. Release its WebAssembly memory when finished.
+
+```tsx twoslash title="painter.tsx"
+import { Painter } from "takumi-paint";
+
+const painter = new Painter();
+try {
+  const tree = await painter.paint(<p>Hello</p>, { width: 320 });
+  console.log(tree.height);
+} finally {
+  painter.free();
+}
+```
