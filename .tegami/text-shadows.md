@@ -13,3 +13,4 @@ packages:
 - Color bitmap glyphs, such as Noto Color Emoji, cast a shadow that follows the glyph's shape in image and SVG output.
 - A blurred `text-shadow` fades out in PDF output, through the same stepped bands a blurred `box-shadow` uses, and so does the shadow its decorations cast.
 - PDF shadows color glyphs, such as COLR and bitmap emoji, as a silhouette in the shadow color, blurred as Chrome blurs it.
+- A wavy, dotted or dashed underline casts its shadow at the shadow's offset instead of losing it to the clip that shapes the line.
