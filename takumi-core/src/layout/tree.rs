@@ -124,7 +124,6 @@ pub struct LayoutResults {
 
 struct LayoutResultNode {
   layout: Layout,
-  unsnapped: Layout,
   first_baseline_y: Option<f32>,
   box_children: Box<[OrderedChild]>,
 }
@@ -142,7 +141,7 @@ impl LayoutResults {
   pub fn layout(&self, node_id: NodeId) -> crate::Result<ComputedLayout> {
     self
       .node(node_id)
-      .map(|node| ComputedLayout::from_taffy(&node.layout, &node.unsnapped))
+      .map(|node| ComputedLayout::from_taffy(&node.layout))
   }
 
   /// Paint-ordered children of a node.
@@ -155,11 +154,10 @@ impl LayoutResults {
   }
 
   /// The root's border-box size, zero when the tree is empty.
-  /// The root's border-box size before pixel snapping, which Blink keeps in `LayoutUnit`s.
   pub(super) fn root_size(&self) -> Size<f32> {
     self
       .node(NodeId::ROOT)
-      .map_or(Size::ZERO, |node| Size::from_taffy(node.unsnapped.size))
+      .map_or(Size::ZERO, |node| Size::from_taffy(node.layout.size))
   }
 
   fn node(&self, node_id: NodeId) -> crate::Result<&LayoutResultNode> {
@@ -785,7 +783,6 @@ impl<'r> LayoutTree<'r> {
         .into_iter()
         .map(|node| LayoutResultNode {
           layout: node.final_layout,
-          unsnapped: node.unrounded_layout,
           first_baseline_y: node.first_baseline_y,
           box_children: node.box_children,
         })

@@ -79,7 +79,7 @@ pub(crate) fn draw_own_content(
   };
   let built = create_inline_layout(InlineLayoutRequest::in_content_box(
     items,
-    layout.unsnapped_content,
+    layout.content_box_size(),
     &font_style,
     context,
     InlineLayoutMode::Draw,

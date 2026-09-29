@@ -837,7 +837,7 @@ fn compute_node_paint_bounds(
     return bounds;
   }
 
-  let content = layout.unsnapped_content;
+  let content = layout.content_box_size();
   let available_space = Size {
     width: AvailableSpace::Definite(content.width),
     height: AvailableSpace::Definite(content.height),

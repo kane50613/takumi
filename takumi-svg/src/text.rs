@@ -41,7 +41,7 @@ pub(crate) fn emit_inline_content(
   };
   let built = create_inline_layout(InlineLayoutRequest::in_content_box(
     items,
-    frame.layout.unsnapped_content,
+    frame.layout.content_box_size(),
     &font_style,
     context,
     InlineLayoutMode::Draw,

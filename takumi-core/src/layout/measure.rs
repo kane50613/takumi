@@ -260,8 +260,8 @@ fn measure_inline(
   let built = create_inline_layout(InlineLayoutRequest::in_available_space(
     items,
     Size {
-      width: AvailableSpace::Definite(layout.unsnapped_content.width),
-      height: AvailableSpace::Definite(layout.unsnapped_content.height),
+      width: AvailableSpace::Definite(layout.content_box_width()),
+      height: AvailableSpace::Definite(layout.content_box_height()),
     },
     Size::NONE,
     &font_style,
