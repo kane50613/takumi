@@ -56,7 +56,7 @@ impl FontHeight {
 
   /// Blink's `CalculateLeadingSpace` and `AddLeading`: the box grown to `line_height`, the half
   /// above floored to a whole pixel.
-  fn with_leading(self, line_height: LayoutUnit) -> Self {
+  pub(super) fn with_leading(self, line_height: LayoutUnit) -> Self {
     let leading = line_height - (self.ascent + self.descent);
     let above = LayoutUnit::from_int((leading / 2).floor());
 

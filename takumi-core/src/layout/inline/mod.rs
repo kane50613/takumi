@@ -3,6 +3,7 @@ use crate::{
   font_style::{SizedFontStyle, contains_variation_selector, presentation_segments},
   geometry::{AvailableSpace, ComputedLayout, LAYOUT_UNIT_EPSILON, Point, Rect, Size},
   layout::tree::RenderNode,
+  layout_unit::LayoutUnit,
   resources::font::FontClasses,
   style::{
     AppliedTextDecorations, Color, Direction, FontSynthesis, Lang, Length, TextDecorationSkipInk,
@@ -538,9 +539,9 @@ impl InlineBrush {
     text_line_box_contribution(line_height, ascent, descent)
   }
 
-  /// The run's line-box contribution on a line `text-fit` scales by `line_scale`. A line height
-  /// that scales grows whole; a fixed one keeps its height around the scaled font's content area,
-  /// as Blink's `InlineBoxState::ComputeTextMetrics` measures the scaled font.
+  /// The run's line-box contribution on a line `text-fit` scales by `line_scale`, as Blink's
+  /// `InlineBoxState::ComputeTextMetrics` measures it: a scaled line scales the font's layout-unit
+  /// height and a line height that is not a length, then adds the leading.
   fn line_box_height(
     &self,
     metrics_line_height: f32,
@@ -549,19 +550,33 @@ impl InlineBrush {
     line_gap: f32,
     line_scale: f32,
   ) -> FontHeight {
-    let (font_scale, box_scale) = if self.line_height_scales_with_text_fit {
-      (1.0, line_scale)
+    let line_height = if self.line_height_is_normal {
+      ascent.round() + descent.round() + line_gap.round()
     } else {
-      (line_scale, 1.0)
+      self.line_height_px.unwrap_or(metrics_line_height)
     };
-    let (above, below) = self.line_box_contribution(
-      metrics_line_height,
-      ascent * font_scale,
-      descent * font_scale,
-      line_gap * font_scale,
-    );
+    let line_height = LayoutUnit::from_f32_round(line_height);
 
-    FontHeight::nearest(above * box_scale, below * box_scale)
+    if line_scale == 1.0 {
+      return FontHeight {
+        ascent: LayoutUnit::from_f32(ascent.round()),
+        descent: LayoutUnit::from_f32(descent.round()),
+      }
+      .with_leading(line_height);
+    }
+
+    let scaled = |value: LayoutUnit| LayoutUnit::from_f32(value.to_f32() * line_scale);
+    let line_height = if self.line_height_scales_with_text_fit {
+      scaled(line_height)
+    } else {
+      line_height
+    };
+
+    FontHeight {
+      ascent: scaled(LayoutUnit::from_f32_round(ascent)),
+      descent: scaled(LayoutUnit::from_f32_round(descent)),
+    }
+    .with_leading(line_height)
   }
 }
 
