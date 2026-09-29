@@ -33,6 +33,7 @@ fn measure_ellipsis_width(
       builder,
       ellipsis_style,
       None,
+      None,
       ellipsis_char,
       &context.fonts().classes,
     );
@@ -204,6 +205,7 @@ pub(super) fn make_ellipsis_layout<'c>(
       push_presentation_text(
         builder,
         ellipsis_style,
+        None,
         None,
         ellipsis_char,
         &context.fonts().classes,

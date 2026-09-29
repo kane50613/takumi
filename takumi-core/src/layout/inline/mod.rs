@@ -5,8 +5,9 @@ use crate::{
   layout::tree::RenderNode,
   resources::font::FontClasses,
   style::{
-    AppliedTextDecorations, Color, Direction, FontSynthesis, Lang, Length, TextDecorationSkipInk,
-    TextFitMode, TextOverflow, TextWrapStyle, VerticalAlign, WhiteSpaceCollapse, WordBreak,
+    AppliedTextDecorations, Color, Direction, FontFeature, FontSynthesis, Lang, Length,
+    ResolvedVerticalAlign, Tag, TextDecorationSkipInk, TextFitMode, TextOverflow, TextWrapStyle,
+    VerticalAlign, VerticalAlignKeyword, WhiteSpaceCollapse, WordBreak,
   },
   text_processing::{
     MaxHeight, RebreakOptions, apply_text_transform, apply_white_space_collapse,
@@ -14,8 +15,8 @@ use crate::{
   },
 };
 use parley::{
-  BreakReason, GlyphRun, IndentOptions, InlineBox, InlineBoxKind, Line, PositionedInlineBox,
-  PositionedLayoutItem, TextStyle, TreeBuilder,
+  BreakReason, FontFeatures, GlyphRun, IndentOptions, InlineBox, InlineBoxKind, Line,
+  PositionedInlineBox, PositionedLayoutItem, TextStyle, TreeBuilder,
 };
 use std::{
   convert::Infallible,
@@ -157,13 +158,21 @@ fn shape_fingerprint(
   style.hash_shaping_inputs(&mut hasher);
   lang.hash(&mut hasher);
   for (span_id, span) in spans.iter().enumerate() {
-    let (text, style): (&str, _) = match span {
-      ProcessedInlineSpan::DirectionMark { direction, style } => (direction.bidi_mark(), style),
-      ProcessedInlineSpan::Text { text, style, .. } => (text, style),
+    let (text, style, shaping) = match span {
+      ProcessedInlineSpan::DirectionMark { direction, style } => {
+        (direction.bidi_mark(), style, None)
+      }
+      ProcessedInlineSpan::Text {
+        text,
+        style,
+        decorations,
+        ..
+      } => (text.as_str(), style, shaping_box(decorations.as_ref())),
       ProcessedInlineSpan::Box(_) | ProcessedInlineSpan::Spacer { .. } => continue,
     };
 
     span_id.hash(&mut hasher);
+    shaping.hash(&mut hasher);
     text.hash(&mut hasher);
     style.hash_shaping_inputs(&mut hasher);
   }
@@ -638,20 +647,35 @@ pub(super) fn chromium_line_breaks(spans: &[ProcessedInlineSpan<'_>]) -> bool {
 }
 
 /// Pushes `text` under `style`, giving each variation-selector segment a presentation-reordered
-/// font stack.
+/// font stack. Text inside the span `shaping_box` shapes apart from text outside it.
 pub(super) fn push_presentation_text(
   builder: &mut TreeBuilder<'_, InlineBrush>,
   style: &SizedFontStyle,
   span_id: Option<u64>,
+  shaping_box: Option<usize>,
   text: &str,
   classes: &FontClasses,
 ) {
-  builder.push_style_span(text_style_with_span_id(style, span_id));
+  let text_style = || {
+    let mut text_style = text_style_with_span_id(style, span_id);
+
+    if let Some(id) = shaping_box
+      && let FontFeatures::List(features) = &mut text_style.font_features
+    {
+      // No font defines this feature; the distinct list only makes parley split its shaping run.
+      features
+        .to_mut()
+        .push(FontFeature::new(Tag::new(b"TKSB"), id as u16).into_parlance());
+    }
+    text_style
+  };
+
+  builder.push_style_span(text_style());
   if contains_variation_selector(text) {
     for (range, presentation) in presentation_segments(text) {
       match presentation {
         Some(presentation) => {
-          let mut segment_style = text_style_with_span_id(style, span_id);
+          let mut segment_style = text_style();
           segment_style.font_family = style.font_family.with_presentation(presentation, classes);
           builder.push_style_span(segment_style);
           builder.push_text(&text[range]);
@@ -680,8 +704,20 @@ pub(super) fn push_spans_into_builder(
         builder.push_text(direction.bidi_mark());
         builder.pop_style_span();
       }
-      ProcessedInlineSpan::Text { text, style, .. } => {
-        push_presentation_text(builder, style, Some(span_id as u64), text, classes);
+      ProcessedInlineSpan::Text {
+        text,
+        style,
+        decorations,
+        ..
+      } => {
+        push_presentation_text(
+          builder,
+          style,
+          Some(span_id as u64),
+          shaping_box(decorations.as_ref()),
+          text,
+          classes,
+        );
       }
       ProcessedInlineSpan::Box(item) => {
         builder.push_inline_box(item.inline_box.clone());
@@ -691,6 +727,19 @@ pub(super) fn push_spans_into_builder(
       }
     }
   }
+}
+
+/// The innermost span of `chain` whose edges break shaping, one aligned off the baseline, as
+/// Blink's `ShouldBreakShapingBeforeBox` breaks there.
+/// <https://drafts.csswg.org/css-text-3/#boundary-shaping>
+fn shaping_box(chain: Option<&Rc<DecorationLink<'_>>>) -> Option<usize> {
+  chain?
+    .ancestors()
+    .find(|link| {
+      link.decoration.vertical_align
+        != ResolvedVerticalAlign::Keyword(VerticalAlignKeyword::Baseline)
+    })
+    .map(|link| link.decoration.id)
 }
 
 /// The span the direction mark attributes its output to: a run the mark's cluster merged into
