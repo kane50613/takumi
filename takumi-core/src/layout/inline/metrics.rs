@@ -130,16 +130,24 @@ pub(super) fn resolve_inline_line_metrics(
           _ => None,
         };
         let parent = tree.open_chain(chain);
+        let scale = fit.text_scale(parent == 0);
+        // A box whose font stack matched no font takes the fonts its runs fell back to as its
+        // primary font, as Blink always has one.
+        let height = if chain.map_or(strut.is_some(), |link| link.decoration.strut.is_some()) {
+          style
+            .brush
+            .used_font_height(metrics.ascent, metrics.descent, metrics.leading, scale)
+        } else {
+          Some(
+            style
+              .brush
+              .line_box_height(metrics.ascent, metrics.descent, metrics.leading, scale),
+          )
+        };
 
-        tree.add(
-          parent,
-          style.brush.line_box_height(
-            metrics.ascent,
-            metrics.descent,
-            metrics.leading,
-            fit.text_scale(parent == 0),
-          ),
-        );
+        if let Some(height) = height {
+          tree.add(parent, height);
+        }
         has_contribution = true;
       }
     }

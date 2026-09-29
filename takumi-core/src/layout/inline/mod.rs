@@ -3,6 +3,7 @@ use crate::{
   font_style::{BoxLineHeight, SizedFontStyle, contains_variation_selector, presentation_segments},
   geometry::{AvailableSpace, ComputedLayout, LAYOUT_UNIT_EPSILON, Point, Rect, Size},
   layout::tree::RenderNode,
+  layout_unit::LayoutUnit,
   resources::font::FontClasses,
   style::{
     AppliedTextDecorations, Color, Direction, FontFeature, FontSynthesis, Lang, Length,
@@ -549,6 +550,36 @@ impl InlineBrush {
   ) -> FontHeight {
     FontHeight::text(ascent, descent, scale)
       .with_leading(self.line_height.resolve(ascent, descent, line_gap, scale))
+  }
+
+  /// How far the run's own font grows its box, as Blink's `InlineBoxState::AccumulateUsedFonts`
+  /// grows it: each font's leaded box under `line-height: normal`, scaled after its leading, and
+  /// nothing under any other line height, where only the box's strut counts.
+  fn used_font_height(
+    &self,
+    ascent: f32,
+    descent: f32,
+    line_gap: f32,
+    scale: TextScale,
+  ) -> Option<FontHeight> {
+    if self.line_height != BoxLineHeight::Normal {
+      return None;
+    }
+
+    let (font, paint) = match scale {
+      TextScale::Paint(scale) => (TextScale::Paint(1.0), scale),
+      TextScale::Font(_) => (scale, 1.0),
+    };
+    let height = self.line_box_height(ascent, descent, line_gap, font);
+
+    Some(if paint == 1.0 {
+      height
+    } else {
+      FontHeight {
+        ascent: LayoutUnit::from_f32(height.ascent.to_f32() * paint),
+        descent: LayoutUnit::from_f32(height.descent.to_f32() * paint),
+      }
+    })
   }
 }
 
@@ -1471,7 +1502,6 @@ mod tests {
     context::RenderContext,
     geometry::{PathCommand, Point, Rect},
     layout::{node::Node, tree::RenderNode},
-    layout_unit::LayoutUnit,
     resources::font::{FontOverride, FontResource, GenericFamily},
     style::{
       Affine, AppliedTextDecoration, BorderStyle, Color, ColorInput, Display, FontSize, Length,
