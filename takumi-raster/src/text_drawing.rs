@@ -76,6 +76,20 @@ fn glyph_cache_bucket_and_offset(transform: Affine) -> Option<(u64, i32, i32)> {
   Some((bucket_x, int_x, int_y))
 }
 
+/// `transform` with the glyph origin snapped as Skia's axis-aligned subpixel positioning snaps it:
+/// to a quarter pixel across and a whole pixel down, while the baseline stays horizontal.
+fn snap_glyph_origin(transform: Affine) -> Affine {
+  if transform.b != 0.0 {
+    return transform;
+  }
+
+  Affine {
+    x: (transform.x * 4.0).round() / 4.0,
+    y: transform.y.round(),
+    ..transform
+  }
+}
+
 /// Paints `paths` through the mask cache, falling back to a direct rasterization
 /// when the transform or the stroke is outside what the cache keys on.
 fn draw_mask_with_cache(
@@ -94,7 +108,7 @@ fn draw_mask_with_cache(
   let Some((bucket_x, int_x, int_y)) = bucket else {
     let (mask, placement) = render_mask(
       paths,
-      Some(transform),
+      Some(snap_glyph_origin(transform)),
       stroke.map(Into::into),
       Some(canvas.viewport()),
     );
