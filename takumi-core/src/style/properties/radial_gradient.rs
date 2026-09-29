@@ -9,6 +9,7 @@ use super::gradient_utils::{
   ColorLut, GradientOverlayTile, LutAxis, gradient_tile_accessors, parse_gradient_function,
   parse_gradient_stops, push_center_clause, write_gradient_css,
 };
+use crate::geometry::Size;
 use crate::style::{
   Color, ColorInterpolationMethod, CssDescriptorKind, CssToken, FromCss, GradientStop, Length,
   MakeComputed, ParseResult, PositionValue, ResolvedGradientStop, SizingContext, StopPosition,
@@ -331,7 +332,28 @@ impl RadialGradientTile {
     current_color: Color,
     dither: bool,
   ) -> Self {
-    let geometry = gradient.resolve_geometry(width as f32, height as f32, sizing, current_color);
+    Self::sized(
+      gradient,
+      Size {
+        width: width as f32,
+        height: height as f32,
+      },
+      sizing,
+      current_color,
+      dither,
+    )
+  }
+
+  /// Builds a drawing context from a gradient over a tile of `size`, its pixel grid covering it.
+  pub fn sized(
+    gradient: &RadialGradient,
+    size: Size<f32>,
+    sizing: &SizingContext,
+    current_color: Color,
+    dither: bool,
+  ) -> Self {
+    let (width, height) = (size.width.ceil() as u32, size.height.ceil() as u32);
+    let geometry = gradient.resolve_geometry(size.width, size.height, sizing, current_color);
     let axis = LutAxis::new(gradient.repeating, geometry.stops, geometry.radius_scale);
     let lut_size =
       axis.lut_size_covering((geometry.radius_scale.ceil() as usize).saturating_add(1));
@@ -361,8 +383,13 @@ impl RadialGradientTile {
 
   #[inline(always)]
   fn pixel_lut_index(&self, x: u32, y: u32) -> usize {
-    let dx = (x as f32 - self.cx) * self.inv_radius_x;
-    let dy = (y as f32 - self.cy) * self.inv_radius_y;
+    self.point_index(x as f32, y as f32)
+  }
+
+  #[inline(always)]
+  fn point_index(&self, x: f32, y: f32) -> usize {
+    let dx = (x - self.cx) * self.inv_radius_x;
+    let dy = (y - self.cy) * self.inv_radius_y;
     let distance_px = (dx * dx + dy * dy).sqrt() * self.radius_scale;
 
     self.lut_index_for_distance_px_with_len(distance_px, self.lut.len())
@@ -373,6 +400,11 @@ impl GradientOverlayTile for RadialGradientTile {
   type RowState = RadialGradientRowState;
 
   gradient_tile_accessors!();
+
+  #[inline(always)]
+  fn point_lut_index(&self, x: f32, y: f32) -> usize {
+    self.point_index(x, y)
+  }
 
   #[inline(always)]
   fn sample_pixel(&self, x: u32, y: u32) -> PremultipliedColorU8 {

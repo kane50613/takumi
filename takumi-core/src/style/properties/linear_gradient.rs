@@ -12,6 +12,7 @@ use super::gradient_utils::{
   ColorLut, GradientOverlayTile, LutAxis, gradient_tile_accessors, parse_gradient_function,
   parse_gradient_stops, write_gradient_css,
 };
+use crate::geometry::Size;
 use crate::style::{
   Animatable, Color, ColorInput, ColorInterpolationMethod, CssDescriptorKind, CssSyntaxKind,
   CssToken, FromCss, Length, MakeComputed, ParseResult, SizingContext, ToCss, impl_css_enum,
@@ -210,7 +211,12 @@ impl LinearGradientTile {
 
   #[inline(always)]
   fn pixel_lut_index(&self, x: u32, y: u32) -> usize {
-    let projection = self.projection_at(x as f32, y as f32);
+    self.point_index(x as f32, y as f32)
+  }
+
+  #[inline(always)]
+  fn point_index(&self, x: f32, y: f32) -> usize {
+    let projection = self.projection_at(x, y);
     if self.repeating && self.repeat_period > 1e-6 {
       let wrapped = (projection - self.repeat_start).rem_euclid(self.repeat_period);
       ((wrapped * self.position_to_lut_scale).round() as usize).min(self.lut.len() - 1)
@@ -287,7 +293,28 @@ impl LinearGradientTile {
     current_color: Color,
     dither: bool,
   ) -> Self {
-    let geometry = gradient.resolve_geometry(width as f32, height as f32, sizing, current_color);
+    Self::sized(
+      gradient,
+      Size {
+        width: width as f32,
+        height: height as f32,
+      },
+      sizing,
+      current_color,
+      dither,
+    )
+  }
+
+  /// Builds a drawing context from a gradient over a tile of `size`, its pixel grid covering it.
+  pub fn sized(
+    gradient: &LinearGradient,
+    size: Size<f32>,
+    sizing: &SizingContext,
+    current_color: Color,
+    dither: bool,
+  ) -> Self {
+    let (width, height) = (size.width.ceil() as u32, size.height.ceil() as u32);
+    let geometry = gradient.resolve_geometry(size.width, size.height, sizing, current_color);
     let (dir_x, dir_y) = (geometry.dir_x, geometry.dir_y);
     let axis_aligned_kind = Self::classify_axis_aligned(dir_x, dir_y);
     let axis = LutAxis::new(gradient.repeating, geometry.stops, geometry.axis_length);
@@ -335,6 +362,11 @@ impl GradientOverlayTile for LinearGradientTile {
   type RowState = LinearGradientRowState;
 
   gradient_tile_accessors!();
+
+  #[inline(always)]
+  fn point_lut_index(&self, x: f32, y: f32) -> usize {
+    self.point_index(x, y)
+  }
 
   #[inline(always)]
   fn sample_pixel(&self, x: u32, y: u32) -> PremultipliedColorU8 {

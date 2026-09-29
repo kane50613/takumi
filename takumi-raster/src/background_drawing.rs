@@ -3,7 +3,9 @@ use std::sync::Arc;
 use smallvec::SmallVec;
 use takumi_core::{
   geometry::{ComputedLayout as Layout, Point, Rect, Size},
-  layout::background_image_geometry::{BackgroundLayer, BoxBackgroundPaintContext, FillLayers},
+  layout::background_image_geometry::{
+    BackgroundLayer, BoxBackgroundPaintContext, FillLayers, ImageTiling,
+  },
   paint::{ConicGradientTile, GradientOverlayTile, LinearGradientTile, RadialGradientTile},
   painter::{BoxBackground, SnappedBox},
 };
@@ -26,16 +28,11 @@ use crate::{
 };
 
 /// One layer's rendered tile and where its copies land, relative to the border box.
-///
-/// Approximate: a tile of a fractional size renders at the next whole pixel and scales down to
-/// it, where Skia samples a bitmap straight into the fractional tile.
 pub(crate) struct TileLayer {
   pub blend_mode: BlendMode,
   pub tile: BackgroundTile,
   pub xs: SmallVec<[f32; 1]>,
   pub ys: SmallVec<[f32; 1]>,
-  /// How much each rendered tile scales to its exact size.
-  pub scale: Size<f32>,
   /// The whole-pixel rectangle the tiles show in, when it is less than the painted area.
   pub dest: Option<Rect<f32>>,
 }
@@ -48,19 +45,13 @@ impl TileLayer {
       tile,
       xs: [at.x].into(),
       ys: [at.y].into(),
-      scale: Size {
-        width: 1.0,
-        height: 1.0,
-      },
       dest: None,
     }
   }
 
-  /// Whether every tile draws unscaled on whole pixels and unclipped, so it can blit.
+  /// Whether every tile draws on whole pixels and unclipped, so it can blit.
   pub(crate) fn blits(&self) -> bool {
     self.dest.is_none()
-      && self.scale.width == 1.0
-      && self.scale.height == 1.0
       && self
         .xs
         .iter()
@@ -71,8 +62,7 @@ impl TileLayer {
   /// Where the tile at `(x, y)` draws under `transform`, a translation within float error of whole
   /// pixels landing on them.
   pub(crate) fn tile_transform(&self, transform: Affine, x: f32, y: f32) -> Affine {
-    let mut placed =
-      transform * Affine::translation(x, y) * Affine::scale(self.scale.width, self.scale.height);
+    let mut placed = transform * Affine::translation(x, y);
 
     if placed.only_translation()
       && let (Some(x), Some(y)) = (whole_pixel(placed.x), whole_pixel(placed.y))
@@ -599,9 +589,25 @@ pub(crate) fn tile_layers(
 
   for layer in layers {
     let tiling = layer.tiling;
-    let width = tiling.tile.width.ceil() as u32;
-    let height = tiling.tile.height.ceil() as u32;
-    let Some(tile) = render_tile(layer.image, width, height, context)? else {
+
+    if !lands_on_pixels(&tiling) {
+      if let Some(pattern) = rasterize_pattern(layer.image, &tiling, context)? {
+        resolved.push(TileLayer::whole(
+          BackgroundTile::Pixmap(Arc::new(pattern)),
+          tiling.dest.top_left(),
+          layer.blend_mode,
+        ));
+      }
+      continue;
+    }
+
+    let Some(tile) = render_tile(
+      layer.image,
+      tiling.tile.width as u32,
+      tiling.tile.height as u32,
+      context,
+    )?
+    else {
       continue;
     };
     let (xs, ys) = tiling.origins();
@@ -614,16 +620,129 @@ pub(crate) fn tile_layers(
       tile,
       xs,
       ys,
-      scale: Size {
-        width: tiling.tile.width / width as f32,
-        height: tiling.tile.height / height as f32,
-      },
       dest: (!tiling.covers(paint)).then_some(tiling.dest),
       blend_mode: layer.blend_mode,
     });
   }
 
   Ok(resolved)
+}
+
+/// Whether every tile of `tiling` covers whole pixels of its `dest`, so a tile rendered on its own
+/// pixel grid blits.
+fn lands_on_pixels(tiling: &ImageTiling) -> bool {
+  let whole = |value: f32| whole_pixel(value).is_some();
+
+  whole(tiling.tile.width)
+    && whole(tiling.tile.height)
+    && whole(tiling.spacing.width)
+    && whole(tiling.spacing.height)
+    && whole(tiling.phase.x - tiling.dest.left)
+    && whole(tiling.phase.y - tiling.dest.top)
+}
+
+/// Paints `image` over `tiling`'s `dest` as Skia's shaders paint a tiled background: each pixel
+/// centre finds its point in the tile it lands in and samples the image there, a gradient on its
+/// own geometry, a bitmap from its source, and an SVG from its rasterization at the tile's size.
+fn rasterize_pattern(
+  image: &BackgroundImage,
+  tiling: &ImageTiling,
+  context: &RenderContext,
+) -> Result<Option<Pixmap>> {
+  let dest = tiling.dest;
+  let width = (dest.right - dest.left).round() as u32;
+  let height = (dest.bottom - dest.top).round() as u32;
+  let Some(size) = IntSize::from_wh(width, height) else {
+    return Ok(None);
+  };
+  let Some(len) = checked_area(width, height, 4) else {
+    return Ok(None);
+  };
+  let content = match image {
+    BackgroundImage::Linear(gradient) => BackgroundTile::Linear(LinearGradientTile::sized(
+      gradient,
+      tiling.tile,
+      &context.sizing,
+      context.current_color,
+      context.dither_gradients(),
+    )),
+    BackgroundImage::Radial(gradient) => BackgroundTile::Radial(RadialGradientTile::sized(
+      gradient,
+      tiling.tile,
+      &context.sizing,
+      context.current_color,
+      context.dither_gradients(),
+    )),
+    BackgroundImage::Conic(gradient) => BackgroundTile::Conic(ConicGradientTile::sized(
+      gradient,
+      tiling.tile,
+      &context.sizing,
+      context.current_color,
+      context.dither_gradients(),
+    )),
+    image => {
+      let Some(tile) = render_tile(
+        image,
+        tiling.tile.width.ceil() as u32,
+        tiling.tile.height.ceil() as u32,
+        context,
+      )?
+      else {
+        return Ok(None);
+      };
+      tile
+    }
+  };
+  let source = match &content {
+    BackgroundTile::SampledBitmap { source, algo, .. } => {
+      pixmap_ref_from_buffer(source).map(|source| (source, *algo))
+    }
+    BackgroundTile::Pixmap(pixmap) => {
+      Some((pixmap.as_ref().as_ref(), context.style.image_rendering))
+    }
+    _ => None,
+  };
+  let source_per_tile = source.map(|(source, _)| Size {
+    width: source.width() as f32 / tiling.tile.width,
+    height: source.height() as f32 / tiling.tile.height,
+  });
+  let step = tiling.step();
+  let mut data = vec![0; len];
+
+  for (j, row) in data.chunks_exact_mut(width as usize * 4).enumerate() {
+    let v = (dest.top + j as f32 + 0.5 - tiling.phase.y).rem_euclid(step.height);
+
+    if v >= tiling.tile.height {
+      continue;
+    }
+    for (i, pixel) in row.as_chunks_mut::<4>().0.iter_mut().enumerate() {
+      let u = (dest.left + i as f32 + 0.5 - tiling.phase.x).rem_euclid(step.width);
+
+      if u >= tiling.tile.width {
+        continue;
+      }
+      let dither = (i as u32, j as u32);
+      let color = match (&content, source, source_per_tile) {
+        (BackgroundTile::Linear(tile), ..) => tile.sample_point(u - 0.5, v - 0.5, dither),
+        (BackgroundTile::Radial(tile), ..) => tile.sample_point(u - 0.5, v - 0.5, dither),
+        (BackgroundTile::Conic(tile), ..) => tile.sample_point(u - 0.5, v - 0.5, dither),
+        (BackgroundTile::Color(tile), ..) => tile.get_pixel(0, 0),
+        (_, Some((source, algorithm)), Some(scale)) => interpolate_with_footprint(
+          source.into(),
+          algorithm,
+          u * scale.width,
+          v * scale.height,
+          SamplingFootprint::new(scale.width, scale.height),
+        )
+        .unwrap_or(PremultipliedColorU8::TRANSPARENT),
+        _ => PremultipliedColorU8::TRANSPARENT,
+      };
+
+      *pixel = [color.red(), color.green(), color.blue(), color.alpha()];
+    }
+  }
+
+  Ok(Pixmap::from_vec(data, size))
 }
 
 /// A box's `mask-image` alpha over its snapped border box, `offset` from the border box.
