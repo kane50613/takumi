@@ -178,10 +178,7 @@ pub(super) fn resolve_inline_line_metrics(
       tree.open(
         BoxKey::Atomic(inline_box.id),
         parent,
-        FontHeight {
-          ascent: baseline_in_item,
-          descent: inline_box.height - baseline_in_item,
-        },
+        FontHeight::nearest(baseline_in_item, inline_box.height - baseline_in_item),
         item.vertical_align,
         None,
       );
@@ -196,7 +193,7 @@ pub(super) fn resolve_inline_line_metrics(
 
     let (height, offsets) = tree.resolve();
     let (resolved_above, resolved_below) = if has_contribution {
-      (height.ascent.max(0.0), height.descent)
+      (height.ascent.to_f32().max(0.0), height.descent.to_f32())
     } else {
       text_line_box_contribution(
         line_metrics.line_height,

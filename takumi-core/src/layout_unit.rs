@@ -20,6 +20,9 @@ impl LayoutUnit {
   /// Zero.
   pub const ZERO: Self = Self(0);
 
+  /// The least length, Blink's `LayoutUnit::Min()`.
+  pub const MIN: Self = Self(i32::MIN);
+
   /// The unit whose raw fixed-point value is `raw`.
   pub const fn from_raw(raw: i32) -> Self {
     Self(raw)

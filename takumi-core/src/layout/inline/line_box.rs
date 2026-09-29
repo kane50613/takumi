@@ -1,8 +1,6 @@
 //! The inline boxes open on one line, aligned by `vertical-align` as Blink's
 //! `InlineLayoutStateStack::ApplyBaselineShift` aligns them, and the line box they make.
 //!
-//! Naive next to Blink: shifts stay in floats rather than Blink's 1/64 px `LayoutUnit`, and
-//! `top` and `bottom` measure an inline span by its strut, where Blink also counts its borders.
 
 // The alignment rules follow Blink, under the notice in LICENSE-CHROMIUM.
 
@@ -13,6 +11,7 @@ use smallvec::{SmallVec, smallvec};
 use super::items::DecorationLink;
 use crate::{
   context::RenderContext,
+  layout_unit::LayoutUnit,
   resources::font::PrimaryFontMetrics,
   style::{ResolvedVerticalAlign, VerticalAlignKeyword},
 };
@@ -21,22 +20,30 @@ use crate::{
 /// `descent` is below.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(super) struct FontHeight {
-  pub(super) ascent: f32,
-  pub(super) descent: f32,
+  pub(super) ascent: LayoutUnit,
+  pub(super) descent: LayoutUnit,
 }
 
 impl FontHeight {
   /// Nothing yet, which any height unites to.
   pub(super) const EMPTY: Self = Self {
-    ascent: f32::NEG_INFINITY,
-    descent: f32::NEG_INFINITY,
+    ascent: LayoutUnit::MIN,
+    descent: LayoutUnit::MIN,
   };
 
   /// A box with no height, what Blink's `FontHeight()` gives an empty box it must align.
   const ZERO: Self = Self {
-    ascent: 0.0,
-    descent: 0.0,
+    ascent: LayoutUnit::ZERO,
+    descent: LayoutUnit::ZERO,
   };
+
+  /// `ascent` and `descent` px in the nearest layout units.
+  pub(super) fn nearest(ascent: f32, descent: f32) -> Self {
+    Self {
+      ascent: LayoutUnit::from_f32_round(ascent),
+      descent: LayoutUnit::from_f32_round(descent),
+    }
+  }
 
   pub(super) fn is_empty(self) -> bool {
     self == Self::EMPTY
@@ -47,8 +54,20 @@ impl FontHeight {
     self.descent = self.descent.max(other.descent);
   }
 
+  /// Blink's `CalculateLeadingSpace` and `AddLeading`: the box grown to `line_height`, the half
+  /// above floored to a whole pixel.
+  fn with_leading(self, line_height: LayoutUnit) -> Self {
+    let leading = line_height - (self.ascent + self.descent);
+    let above = LayoutUnit::from_int((leading / 2).floor());
+
+    Self {
+      ascent: self.ascent + above,
+      descent: self.descent + (leading - above),
+    }
+  }
+
   /// Moves the box down by `delta`.
-  fn moved(self, delta: f32) -> Self {
+  fn moved(self, delta: LayoutUnit) -> Self {
     if self.is_empty() {
       return self;
     }
@@ -100,7 +119,10 @@ struct OpenBox {
   /// Children whose alignment waits for this box's metrics.
   pending: Vec<usize>,
   /// How far the box sits below its parent's baseline.
-  shift: f32,
+  shift: LayoutUnit,
+  /// Its border box grown by its line height's leading, which `top` and `bottom` align to, or
+  /// empty when it makes no box fragment of its own.
+  box_metrics: FontHeight,
 }
 
 /// The boxes open on one line, the root inline box first.
@@ -135,7 +157,8 @@ impl LineBoxTree {
         align: ResolvedVerticalAlign::Keyword(VerticalAlignKeyword::Baseline),
         font: Some(font),
         pending: Vec::new(),
-        shift: 0.0,
+        shift: LayoutUnit::ZERO,
+        box_metrics: FontHeight::EMPTY,
       }],
       indices: HashMap::new(),
     }
@@ -162,7 +185,8 @@ impl LineBoxTree {
       align,
       font,
       pending: Vec::new(),
-      shift: 0.0,
+      shift: LayoutUnit::ZERO,
+      box_metrics: FontHeight::EMPTY,
     });
 
     let index = self.boxes.len() - 1;
@@ -193,14 +217,31 @@ impl LineBoxTree {
       .strut
       .as_ref()
       .map_or(FontHeight::EMPTY, |strut| strut.height(line_scale));
-
-    self.open(
+    let index = self.open(
       key,
       parent,
       strut,
       decoration.vertical_align,
       Some(decoration.font),
-    )
+    );
+    let border = decoration.border.width;
+
+    if (border.top > 0.0 || border.bottom > 0.0)
+      && !strut.is_empty()
+      && let Some(text) = decoration.font.metrics
+    {
+      // Blink's `MetricsForTopAndBottomAlign`: the box fragment's height less its padding, which
+      // is the font's integer ascent and descent with the borders, grown by the leading its line
+      // height leaves.
+      let content = FontHeight {
+        ascent: LayoutUnit::from_f32(text.ascent) + LayoutUnit::from_f32(border.top),
+        descent: LayoutUnit::from_f32(text.descent) + LayoutUnit::from_f32(border.bottom),
+      };
+
+      self.boxes[index].box_metrics = content.with_leading(strut.ascent + strut.descent);
+    }
+
+    index
   }
 
   /// Grows the box `index` by content sitting on its baseline.
@@ -224,7 +265,7 @@ impl LineBoxTree {
     }
     self.apply_pending(0);
 
-    let mut offsets = vec![0.0_f32; self.boxes.len()];
+    let mut offsets = vec![LayoutUnit::ZERO; self.boxes.len()];
 
     for index in 1..self.boxes.len() {
       // A parent always precedes its children.
@@ -238,7 +279,7 @@ impl LineBoxTree {
           .boxes
           .iter()
           .zip(offsets)
-          .filter_map(|(open, offset)| open.key.map(|key| (key, offset)))
+          .filter_map(|(open, offset)| open.key.map(|key| (key, offset.to_f32())))
           .collect(),
       },
     )
@@ -262,11 +303,15 @@ impl LineBoxTree {
     for &child in &pending {
       let metrics = self.boxes[child].metrics;
       let shift = match self.boxes[child].align {
+        // Blink's `TextTop`: the box's integer text ascent.
         ResolvedVerticalAlign::Keyword(VerticalAlignKeyword::TextTop) => {
-          metrics.ascent - text.map_or(0.0, |text| text.ascent)
+          metrics.ascent - text.map_or(LayoutUnit::ZERO, |text| LayoutUnit::from_f32(text.ascent))
         }
+        // Blink's `FixedDescent`.
         ResolvedVerticalAlign::Keyword(VerticalAlignKeyword::TextBottom) => {
-          text.map_or(0.0, |text| text.descent) - metrics.descent
+          text.map_or(LayoutUnit::ZERO, |text| {
+            LayoutUnit::from_f32_round(text.exact.descent)
+          }) - metrics.descent
         }
         _ => {
           has_top_or_bottom = true;
@@ -281,9 +326,20 @@ impl LineBoxTree {
       return;
     }
 
-    // `top` and `bottom` align to the subtree the other values already aligned, grown to a taller
-    // `top` or `bottom` box by its other edge, as Blink's `MetricsForTopAndBottomAlign`.
-    let aligned = self.boxes[index].metrics;
+    // `top` and `bottom` align to the subtree the other values already aligned, with every box
+    // fragment on the line where it sits, grown to a taller `top` or `bottom` box by its other edge,
+    // as Blink's `MetricsForTopAndBottomAlign`.
+    let mut aligned = self.boxes[index].metrics;
+
+    for other in 1..self.boxes.len() {
+      let open = &self.boxes[other];
+
+      if open.box_metrics.is_empty() || Self::aligns_to_line_edge(open.align) {
+        continue;
+      }
+      aligned.unite(open.box_metrics.moved(self.line_offset(other)));
+    }
+
     let aligned = if aligned.is_empty() {
       FontHeight::ZERO
     } else {
@@ -335,19 +391,24 @@ impl LineBoxTree {
     let parent = self.boxes[index].parent;
     let parent_font = self.boxes[parent].font;
     let metrics = self.boxes[index].metrics;
+    let one = LayoutUnit::from_int(1);
+    // Blink's `ComputedFontSizeAsFixed`.
+    let font_size = parent_font.map(|font| LayoutUnit::from_f32_round(font.size));
     let shift = match self.boxes[index].align {
-      ResolvedVerticalAlign::Shift(px) => -px,
+      ResolvedVerticalAlign::Shift(px) => -LayoutUnit::from_f32(px),
       ResolvedVerticalAlign::Keyword(keyword) => match keyword {
-        VerticalAlignKeyword::Baseline => 0.0,
-        VerticalAlignKeyword::Sub => parent_font.map_or(0.0, |font| font.size / 5.0 + 1.0),
-        VerticalAlignKeyword::Super => parent_font.map_or(0.0, |font| -(font.size / 3.0 + 1.0)),
+        VerticalAlignKeyword::Baseline => LayoutUnit::ZERO,
+        VerticalAlignKeyword::Sub => font_size.map_or(LayoutUnit::ZERO, |size| size / 5 + one),
+        VerticalAlignKeyword::Super => font_size.map_or(LayoutUnit::ZERO, |size| -(size / 3 + one)),
         VerticalAlignKeyword::Middle => {
           let x_height = parent_font
             .and_then(|font| font.metrics)
             .and_then(|metrics| metrics.x_height)
-            .map_or(0.0, |x_height| (x_height / 2.0).round());
+            .map_or(LayoutUnit::ZERO, |x_height| {
+              LayoutUnit::from_f32_round(x_height / 2.0)
+            });
 
-          (metrics.ascent - metrics.descent) / 2.0 - x_height
+          (metrics.ascent - metrics.descent) / 2 - x_height
         }
         VerticalAlignKeyword::TextTop | VerticalAlignKeyword::TextBottom => {
           self.boxes[parent].pending.push(index);
@@ -375,8 +436,29 @@ impl LineBoxTree {
     self.place(index, parent, metrics, shift);
   }
 
+  /// Whether `align` is `top` or `bottom`, which aligns to the line box's edges.
+  fn aligns_to_line_edge(align: ResolvedVerticalAlign) -> bool {
+    matches!(
+      align,
+      ResolvedVerticalAlign::Keyword(VerticalAlignKeyword::Top | VerticalAlignKeyword::Bottom)
+    )
+  }
+
+  /// How far the box `index` sits below the line's baseline so far.
+  fn line_offset(&self, index: usize) -> LayoutUnit {
+    let mut offset = LayoutUnit::ZERO;
+    let mut current = index;
+
+    while current > 0 {
+      offset += self.boxes[current].shift;
+      current = self.boxes[current].parent;
+    }
+
+    offset
+  }
+
   /// Moves the box `index` by `shift` and grows `into` by it.
-  fn place(&mut self, index: usize, into: usize, metrics: FontHeight, shift: f32) {
+  fn place(&mut self, index: usize, into: usize, metrics: FontHeight, shift: LayoutUnit) {
     let moved = metrics.moved(shift);
 
     self.boxes[index].shift = shift;
@@ -395,7 +477,7 @@ mod tests {
   };
 
   fn height(ascent: f32, descent: f32) -> FontHeight {
-    FontHeight { ascent, descent }
+    FontHeight::nearest(ascent, descent)
   }
 
   fn keyword(keyword: VerticalAlignKeyword) -> ResolvedVerticalAlign {
@@ -424,7 +506,8 @@ mod tests {
     let (_, offsets) = tree.resolve();
 
     assert_eq!(offsets.of(BoxKey::Span(0)), 5.0);
-    assert_eq!(offsets.of(BoxKey::Span(1)), -(20.0 / 3.0 + 1.0));
+    // Blink divides the layout units, so 20 / 3 truncates to 6.65625.
+    assert_eq!(offsets.of(BoxKey::Span(1)), -7.65625);
   }
 
   #[test]

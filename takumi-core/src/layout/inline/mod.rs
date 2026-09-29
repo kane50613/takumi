@@ -561,10 +561,7 @@ impl InlineBrush {
       line_gap * font_scale,
     );
 
-    FontHeight {
-      ascent: above * box_scale,
-      descent: below * box_scale,
-    }
+    FontHeight::nearest(above * box_scale, below * box_scale)
   }
 }
 
