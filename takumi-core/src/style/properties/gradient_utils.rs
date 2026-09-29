@@ -305,7 +305,7 @@ pub trait GradientOverlayTile {
   fn dither_active(&self) -> bool {
     false
   }
-  /// LUT index of the point `(x, y)` in tile space, where pixel `(x, y)` samples its top-left.
+  /// LUT index of the point `(x, y)` in tile space, where pixel `(x, y)` samples its centre.
   fn point_lut_index(&self, x: f32, y: f32) -> usize;
   /// Color at the point `(x, y)` in tile space, dithered as pixel `dither` would be.
   fn sample_point(&self, x: f32, y: f32, dither: (u32, u32)) -> PremultipliedColorU8 {

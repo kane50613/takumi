@@ -642,8 +642,9 @@ fn lands_on_pixels(tiling: &ImageTiling) -> bool {
 }
 
 /// Paints `image` over `tiling`'s `dest` as Skia's shaders paint a tiled background: each pixel
-/// centre finds its point in the tile it lands in and samples the image there, a gradient on its
-/// own geometry, a bitmap from its source, and an SVG from its rasterization at the tile's size.
+/// centre finds its point in the tile it lands in and samples the image there, a bitmap from its
+/// source, and a gradient or an SVG from its rasterization at the tile's whole-pixel size, as
+/// Blink's `GeneratedImage::DrawPattern` records the tile for Skia's picture shader.
 fn rasterize_pattern(
   image: &BackgroundImage,
   tiling: &ImageTiling,
@@ -658,29 +659,49 @@ fn rasterize_pattern(
   let Some(len) = checked_area(width, height, 4) else {
     return Ok(None);
   };
-  let content = match image {
-    BackgroundImage::Linear(gradient) => BackgroundTile::Linear(LinearGradientTile::sized(
-      gradient,
+  let dither = context.dither_gradients();
+  let picture = match image {
+    BackgroundImage::Linear(gradient) => Some(picture_tile(
+      &LinearGradientTile::sized(
+        gradient,
+        tiling.tile,
+        &context.sizing,
+        context.current_color,
+        dither,
+      ),
       tiling.tile,
-      &context.sizing,
-      context.current_color,
-      context.dither_gradients(),
     )),
-    BackgroundImage::Radial(gradient) => BackgroundTile::Radial(RadialGradientTile::sized(
-      gradient,
+    BackgroundImage::Radial(gradient) => Some(picture_tile(
+      &RadialGradientTile::sized(
+        gradient,
+        tiling.tile,
+        &context.sizing,
+        context.current_color,
+        dither,
+      ),
       tiling.tile,
-      &context.sizing,
-      context.current_color,
-      context.dither_gradients(),
     )),
-    BackgroundImage::Conic(gradient) => BackgroundTile::Conic(ConicGradientTile::sized(
-      gradient,
+    BackgroundImage::Conic(gradient) => Some(picture_tile(
+      &ConicGradientTile::sized(
+        gradient,
+        tiling.tile,
+        &context.sizing,
+        context.current_color,
+        dither,
+      ),
       tiling.tile,
-      &context.sizing,
-      context.current_color,
-      context.dither_gradients(),
     )),
-    image => {
+    _ => None,
+  };
+  let content = match (picture, image) {
+    (Some(picture), _) => {
+      let Some(picture) = picture else {
+        return Ok(None);
+      };
+
+      BackgroundTile::Pixmap(Arc::new(picture))
+    }
+    (None, image) => {
       let Some(tile) = render_tile(
         image,
         tiling.tile.width.ceil() as u32,
@@ -706,6 +727,10 @@ fn rasterize_pattern(
     width: source.width() as f32 / tiling.tile.width,
     height: source.height() as f32 / tiling.tile.height,
   });
+  let padded = source.and_then(|(source, _)| padded_tile(source, tiling.spacing));
+  let source = source
+    .zip(padded.as_ref())
+    .map(|((_, algorithm), padded)| (padded.as_ref(), algorithm));
   let step = tiling.step();
   let mut data = vec![0; len];
 
@@ -721,17 +746,13 @@ fn rasterize_pattern(
       if u >= tiling.tile.width {
         continue;
       }
-      let dither = (i as u32, j as u32);
       let color = match (&content, source, source_per_tile) {
-        (BackgroundTile::Linear(tile), ..) => tile.sample_point(u, v, dither),
-        (BackgroundTile::Radial(tile), ..) => tile.sample_point(u, v, dither),
-        (BackgroundTile::Conic(tile), ..) => tile.sample_point(u, v, dither),
         (BackgroundTile::Color(tile), ..) => tile.get_pixel(0, 0),
         (_, Some((source, algorithm)), Some(scale)) => interpolate_with_footprint(
           source.into(),
           algorithm,
-          u * scale.width,
-          v * scale.height,
+          u * scale.width + 1.0,
+          v * scale.height + 1.0,
           SamplingFootprint::new(scale.width, scale.height),
         )
         .unwrap_or(PremultipliedColorU8::TRANSPARENT),
@@ -743,6 +764,59 @@ fn rasterize_pattern(
   }
 
   Ok(Pixmap::from_vec(data, size))
+}
+
+/// `source` inside a one-pixel border of what its neighbours show there: the next tile's opposite
+/// edge where tiles abut, as Skia's repeat tiling filters across the seam, and nothing across
+/// `spacing`.
+fn padded_tile(source: PixmapRef<'_>, spacing: Size<f32>) -> Option<Pixmap> {
+  let (width, height) = (source.width() as usize, source.height() as usize);
+  let mut padded = Pixmap::new(width as u32 + 2, height as u32 + 2)?;
+  let pixels = source.pixels();
+  let target = padded.pixels_mut();
+  let wrap = |index: usize, len: usize, gap: f32| match index {
+    0 if gap == 0.0 => Some(len - 1),
+    0 => None,
+    index if index == len + 1 && gap == 0.0 => Some(0),
+    index if index == len + 1 => None,
+    index => Some(index - 1),
+  };
+
+  for y in 0..height + 2 {
+    let Some(source_y) = wrap(y, height, spacing.height) else {
+      continue;
+    };
+
+    for x in 0..width + 2 {
+      if let Some(source_x) = wrap(x, width, spacing.width) {
+        target[y * (width + 2) + x] = pixels[source_y * width + source_x];
+      }
+    }
+  }
+
+  Some(padded)
+}
+
+/// `gradient`'s `tile` rasterized as Skia's picture shader rasterizes a recorded tile: into a
+/// bitmap of whole pixels with the tile stretched to fill it.
+fn picture_tile(gradient: &impl GradientOverlayTile, tile: Size<f32>) -> Option<Pixmap> {
+  let (width, height) = (tile.width.ceil() as u32, tile.height.ceil() as u32);
+  let (scale_x, scale_y) = (tile.width / width as f32, tile.height / height as f32);
+  let mut data = vec![0; checked_area(width, height, 4)?];
+
+  for (j, row) in data.chunks_exact_mut(width as usize * 4).enumerate() {
+    for (i, pixel) in row.as_chunks_mut::<4>().0.iter_mut().enumerate() {
+      let color = gradient.sample_point(
+        (i as f32 + 0.5) * scale_x,
+        (j as f32 + 0.5) * scale_y,
+        (i as u32, j as u32),
+      );
+
+      *pixel = [color.red(), color.green(), color.blue(), color.alpha()];
+    }
+  }
+
+  Pixmap::from_vec(data, IntSize::from_wh(width, height)?)
 }
 
 /// A box's `mask-image` alpha over its snapped border box, `offset` from the border box.
