@@ -18,4 +18,7 @@ packages:
 - Spans on a `text-fit` line keep their `vertical-align` offsets and backgrounds where Chrome puts them, instead of scaling them a second time.
 - Text on a `text-fit` line sits on the baseline Chrome paints it at, and its glyphs snap to the same pixel rows.
 - Text inside a span aligned off the baseline, like `sub` or `super`, no longer kerns against the text around it, as in Chrome.
+- A line with `line-height: normal` grows to fit the fonts its text falls back to, and a line with any other line height no longer does, as in Chrome.
+- A `background-clip: text` background no longer shows past its box through a text stroke, and no longer scales with `text-fit`.
+- Gradients sample each pixel at its centre, as Chrome does, so hard stops land on the same pixels. A tile of fractional size blends across its seams as Chrome's does.
 - A `pattern` paint carries the `area` its tiles show in.
