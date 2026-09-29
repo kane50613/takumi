@@ -8,6 +8,7 @@ use std::{
 use typed_builder::TypedBuilder;
 
 use crate::{
+  geometry::{ComputedLayout, Point},
   layout::inline::{InlineLayoutCache, MeasureCache, ShapeCache},
   resources::{
     font::{FontsSnapshot, PrimaryFontMetrics},
@@ -80,6 +81,7 @@ impl From<RenderContextInit> for RenderContext {
       }),
       sizing: init.sizing,
       transform: init.transform,
+      paint_offset: Point::ZERO,
       current_color: init.current_color,
       style: init.style,
       text_decorations: AppliedTextDecorations::default(),
@@ -98,6 +100,9 @@ pub struct RenderContext {
   pub sizing: SizingContext,
   /// The scale factor for the image renderer.
   pub transform: Affine,
+  /// Blink's paint offset of the space the box's layout location is measured in: where that space
+  /// sits in the space Blink snaps paint to pixels in.
+  pub paint_offset: Point<f32>,
   /// What the `currentColor` value is resolved to.
   pub current_color: Color,
   /// The style after inheritance.
@@ -118,6 +123,11 @@ impl RenderContext {
   /// Starts a root context; `fonts` and `sizing` are required.
   pub fn builder() -> UnsetRenderContextBuilder {
     RenderContextInit::builder()
+  }
+
+  /// Blink's paint offset of the border box at `layout`, the box this context styles.
+  pub fn box_paint_offset(&self, layout: ComputedLayout) -> Point<f32> {
+    self.paint_offset + layout.location
   }
 
   /// The font snapshot this render draws with.
@@ -184,6 +194,7 @@ impl RenderContext {
       shared: parent.shared.clone(),
       sizing: parent.sizing.clone(),
       transform: parent.transform,
+      paint_offset: parent.paint_offset,
       current_color: parent.current_color,
       style: Box::new(ComputedStyle::for_anonymous(&parent.style, &parent.sizing)),
       text_decorations: parent.text_decorations.clone(),
@@ -208,6 +219,7 @@ impl RenderContext {
       ),
       sizing,
       transform: parent.transform,
+      paint_offset: parent.paint_offset,
       current_color,
       style: Box::new(style),
       collapsed_borders: false,

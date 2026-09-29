@@ -12,7 +12,7 @@ use crate::{
     inline::{InlineBoxItem, VisualInlineBox},
     tree::{LayoutResults, RenderNode},
   },
-  scene::{Scene, SceneLayers, SceneRequest},
+  scene::{Scene, SceneRequest},
   style::Affine,
 };
 
@@ -23,7 +23,7 @@ pub enum InlineBoxPaint<'n> {
   Replaced {
     /// The node the box wraps.
     node: &'n RenderNode,
-    /// The box's own layout, in its own coordinate space.
+    /// The box's own layout, its location the box's origin in the container's border box.
     layout: ComputedLayout,
   },
   /// An inline-level container: `inline-block`, `inline-flex`, `inline-grid`,
@@ -41,6 +41,8 @@ pub struct InlineSubtree {
   pub size: Size<f32>,
   /// Offset from the box origin to the subtree origin, i.e. its margins.
   pub margin_offset: Point<f32>,
+  /// Blink's paint offset of the space the subtree root's layout location is measured in.
+  paint_offset: Point<f32>,
 }
 
 /// Resolves what `positioned` paints, and where.
@@ -69,7 +71,10 @@ pub fn resolve_inline_box<'n>(
       origin,
       InlineBoxPaint::Replaced {
         node,
-        layout: ComputedLayout::from(item),
+        layout: ComputedLayout {
+          location: origin,
+          ..ComputedLayout::from(item)
+        },
       },
     ));
   }
@@ -91,6 +96,12 @@ pub fn resolve_inline_box<'n>(
         x: item.margin.left,
         y: item.margin.top,
       },
+      paint_offset: node.context.paint_offset
+        + origin
+        + Point {
+          x: item.margin.left,
+          y: item.margin.top,
+        },
     })),
   ))
 }
@@ -106,24 +117,16 @@ impl InlineSubtree {
 
   /// Builds the subtree's scene, its root placed by `transform`.
   pub fn into_scene(self, transform: Affine, paint_bounds: bool) -> Result<Scene> {
-    let SceneLayers {
-      contexts,
-      properties,
-    } = SceneRequest {
+    let layers = SceneRequest {
       root: &self.root,
       layout_results: &self.results,
       transform,
+      paint_offset: self.paint_offset,
       container_size: self.size.map(Some),
       paint_bounds,
     }
     .build()?;
 
-    Ok(Scene {
-      root: self.root,
-      results: self.results,
-      contexts,
-      properties,
-      size: self.size,
-    })
+    Ok(Scene::new(self.root, self.results, layers, self.size))
   }
 }

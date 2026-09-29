@@ -245,7 +245,7 @@ impl<'n> PlacedBox<'n> {
 
     let layers = FillLayers::mask(style).resolve(
       images,
-      &BoxBackgroundPaintContext::sized(size),
+      &BoxBackgroundPaintContext::mask(size, self.node.context.box_paint_offset(self.frame.layout)),
       &self.node.context,
     );
 

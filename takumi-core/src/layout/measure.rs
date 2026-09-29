@@ -92,7 +92,7 @@ impl MeasuredNode {
             layout.size.height,
             &current.context.sizing,
           );
-          containing_blocks.record_transform(node_id, local_transform);
+          containing_blocks.record_placement(node_id, local_transform);
 
           let (runs, leading) = if current.should_create_inline_layout() {
             let (runs, inline_boxes) =

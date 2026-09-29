@@ -332,7 +332,7 @@ impl<'c> FragmentBackground<'c> {
         &self.node.context,
         self.strip,
         fragment.border,
-        self.strip_origin,
+        self.node.context.paint_offset + self.strip_origin,
       ),
       strip: BoxFrame::new(self.strip, frame.origin + self.strip_origin),
     }

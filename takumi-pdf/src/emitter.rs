@@ -624,10 +624,7 @@ impl Emitter<'_> {
 
   /// Builds the soft mask for `mask-image`, drawing its layers into their own stream.
   fn mask(&mut self, node: &RenderNode, frame: BoxFrame, surface: &mut Surface) -> Option<Mask> {
-    let BoxFrame {
-      layout: Layout { size, .. },
-      ..
-    } = frame;
+    let size = frame.layout.size;
     let images = node.context.style.mask_image.as_deref()?;
 
     if !images.iter().any(BackgroundImage::paints) {
@@ -636,7 +633,7 @@ impl Emitter<'_> {
     let filter = self.color_filter.take();
     let layers = FillLayers::mask(&node.context.style).resolve(
       images,
-      &BoxBackgroundPaintContext::sized(size),
+      &BoxBackgroundPaintContext::mask(size, node.context.box_paint_offset(frame.layout)),
       &node.context,
     );
     let stream = draw_stream(surface, |content| {

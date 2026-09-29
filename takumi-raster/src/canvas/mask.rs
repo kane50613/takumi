@@ -118,7 +118,7 @@ impl NodeMasks {
       return Ok(None);
     };
 
-    if let Some(mask) = create_mask(context, layout.size)?
+    if let Some(mask) = create_mask(context, layout)?
       && !masks.add(mask_image_mask(
         &mask,
         layout,

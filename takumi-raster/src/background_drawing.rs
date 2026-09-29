@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use smallvec::SmallVec;
 use takumi_core::{
-  geometry::{Point, Rect, Size},
+  geometry::{ComputedLayout as Layout, Point, Rect, Size},
   layout::background_image_geometry::{BackgroundLayer, BoxBackgroundPaintContext, FillLayers},
   paint::{ConicGradientTile, GradientOverlayTile, LinearGradientTile, RadialGradientTile},
   painter::BoxBackground,
@@ -633,15 +633,13 @@ pub(crate) fn tile_layers(
   Ok(resolved)
 }
 
-pub(crate) fn create_mask(
-  context: &RenderContext,
-  border_box: Size<f32>,
-) -> Result<Option<Vec<u8>>> {
+pub(crate) fn create_mask(context: &RenderContext, layout: Layout) -> Result<Option<Vec<u8>>> {
+  let border_box = layout.size;
   let size = border_box.map(|x| x as u32);
   let layers = tile_layers(
     &FillLayers::mask(&context.style).resolve(
       context.style.mask_image.as_deref().unwrap_or(&[]),
-      &BoxBackgroundPaintContext::sized(border_box),
+      &BoxBackgroundPaintContext::mask(border_box, context.box_paint_offset(layout)),
       context,
     ),
     border_box,

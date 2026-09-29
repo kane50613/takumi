@@ -807,8 +807,11 @@ fn effects(painter: &BoxPainter<'_>, layout: ComputedLayout) -> Effects {
     .as_deref()
     .filter(|images| images.iter().any(BackgroundImage::paints))
     .map(|images| {
-      let layers =
-        FillLayers::mask(style).resolve(images, &BoxBackgroundPaintContext::sized(size), context);
+      let layers = FillLayers::mask(style).resolve(
+        images,
+        &BoxBackgroundPaintContext::mask(size, context.box_paint_offset(layout)),
+        context,
+      );
 
       Paint::layers(&layers, context)
         .into_iter()

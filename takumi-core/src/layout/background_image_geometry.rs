@@ -310,11 +310,12 @@ impl BoxBackgroundPaintContext {
     }
   }
 
-  /// A context for a box of `size` with no border or padding.
-  pub fn sized(size: Size<f32>) -> Self {
+  /// The context a mask layer of the box of `size` at `paint_offset` sees: its border box alone,
+  /// as `mask-clip` and `mask-origin` both default to it.
+  pub fn mask(size: Size<f32>, paint_offset: Point<f32>) -> Self {
     Self {
-      paint_offset: Point::ZERO,
-      border_box: UnitRect::nearest(Point::ZERO, size),
+      paint_offset,
+      border_box: UnitRect::nearest(paint_offset, size),
       border: BoxStrut::default(),
       padding: BoxStrut::default(),
       obscuring: Rect {
@@ -1132,7 +1133,7 @@ mod tests {
   }
 
   fn calculate(fill_layer: &FillLayer, size: Size<f32>) -> BackgroundImageGeometry {
-    let paint_context = BoxBackgroundPaintContext::sized(size);
+    let paint_context = BoxBackgroundPaintContext::mask(size, Point::ZERO);
 
     BackgroundImageGeometry::calculate(
       fill_layer,
