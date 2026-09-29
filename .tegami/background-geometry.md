@@ -15,4 +15,7 @@ packages:
 - `text-fit` leaves a line within 2px of its box unscaled, and a `grow` limit under 100% or a `shrink` limit over 100% stops the text from scaling, as Chrome does.
 - A line of text keeps its exact height, so a `line-height: 1.2` line at 32px is 38.39px tall instead of 39px.
 - `vertical-align` offsets land on the same 1/64px steps as Chrome's. A `top` or `bottom` box now aligns against the borders of the spans on its line.
+- Spans on a `text-fit` line keep their `vertical-align` offsets and backgrounds where Chrome puts them, instead of scaling them a second time.
+- Text on a `text-fit` line sits on the baseline Chrome paints it at, and its glyphs snap to the same pixel rows.
+- Text inside a span aligned off the baseline, like `sub` or `super`, no longer kerns against the text around it, as in Chrome.
 - A `pattern` paint carries the `area` its tiles show in.
