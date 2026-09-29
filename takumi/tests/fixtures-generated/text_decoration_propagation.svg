@@ -61,7 +61,7 @@
   <g clip-path="url(#cp1)">
     <path d="M100.81 134.5c5.5 7.5 5.5-7.5 11 0s5.5-7.5 11 0 5.5-7.5 11 0 5.5-7.5 11 0 5.5-7.5 11 0 5.5-7.5 11 0 5.5-7.5 11 0 5.5-7.5 11 0 5.5-7.5 11 0" fill="none" stroke="#9333ea" stroke-width="2"/>
   </g>
-  <path d="M111.81 132h73" fill="none" stroke="#ea580c" stroke-width="2" stroke-dasharray="2 2"/>
+  <path d="M111 132h74" fill="none" stroke="#ea580c" stroke-width="2" stroke-dasharray="2 2"/>
   <g fill="#0f172a">
     <use href="#g2" x="111.81" y="130"/>
     <use href="#g18" x="122.77" y="130"/>

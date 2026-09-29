@@ -896,7 +896,12 @@ fn compute_node_paint_bounds(
             layout,
           );
 
-          for line in run.decoration_lines(&placement, Affine::IDENTITY, transform) {
+          for line in run.decoration_lines(
+            &placement,
+            Affine::IDENTITY,
+            transform,
+            node.context.box_paint_offset(layout),
+          ) {
             let area = line.bounds();
 
             bounds = merge_bounds(

@@ -23,7 +23,7 @@ use super::{
     CoverLine, Covering, DecorationAccumulator, InlineBackgroundFragment, InlineContainingBlock,
     LinePosition,
   },
-  decorations::{DecorationLine, DecorationPlacement},
+  decorations::{DecorationLine, DecorationPlacement, DecorationSpace},
   items::ProcessedInlineSpan,
   metrics::{VisualInlineBox, resolve_visual_inline_box},
   outline::InlineOutlineRect,
@@ -312,6 +312,8 @@ pub struct PositionedInlineRun {
   pub baseline_shift: f32,
   /// Where the run's decorations go.
   pub(crate) decoration_placement: DecorationPlacement,
+  /// Where the block's border box sits in the space paint snaps to pixels in.
+  pub(crate) paint_offset: Point<f32>,
   /// Where the run sits among its block's runs.
   #[cfg(feature = "paint-tree")]
   pub(crate) index: usize,
@@ -331,8 +333,11 @@ impl PositionedInlineRun {
       layout,
       &self.decoration_placement,
       self.baseline_shift,
-      base,
-      device,
+      DecorationSpace {
+        transform: base,
+        device,
+        paint_offset: self.paint_offset,
+      },
     )
   }
 
@@ -487,6 +492,7 @@ impl<'c> BuiltInlineLayout<'c> {
             static_inline_prefix,
             baseline_shift: self.run_baseline_shift(line, &glyph_run),
             decoration_placement,
+            paint_offset: context.box_paint_offset(layout),
             #[cfg(feature = "paint-tree")]
             index: runs.len(),
           });

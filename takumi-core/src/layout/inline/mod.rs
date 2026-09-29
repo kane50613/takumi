@@ -1513,6 +1513,7 @@ mod tests {
       &DecorationPlacement::default(),
       Affine::IDENTITY,
       Affine::IDENTITY,
+      Point::ZERO,
     );
 
     assert_eq!(decorations.len(), 0);

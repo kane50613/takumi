@@ -18,7 +18,7 @@
     <use href="#g2" x="197.92" y="58"/>
     <use href="#g7" x="205.75" y="58"/>
   </g>
-  <path d="M258.59 61.5h88" fill="none" stroke="#0f172a" stroke-width="3" stroke-dasharray="3 3"/>
+  <path d="M258 61.5h89" fill="none" stroke="#0f172a" stroke-width="3" stroke-dasharray="3 3"/>
   <g fill="#0f172a">
     <use href="#g4" x="258.59" y="58"/>
     <use href="#g1" x="276.14" y="58"/>
@@ -26,7 +26,7 @@
     <use href="#g7" x="312.74" y="58"/>
     <use href="#g4" x="329.27" y="58"/>
   </g>
-  <path d="M383.13 61.5h100" fill="none" stroke="#0f172a" stroke-width="3" stroke-dasharray="6 3.4"/>
+  <path d="M383 61.5h100" fill="none" stroke="#0f172a" stroke-width="3" stroke-dasharray="6 3.4"/>
   <g fill="#0f172a">
     <use href="#g4" x="383.13" y="58"/>
     <use href="#g9" x="400.68" y="58"/>
@@ -57,7 +57,7 @@
     <use href="#g2" x="96.94" y="115"/>
     <use href="#g7" x="104.77" y="115"/>
   </g>
-  <path d="M157.61 83.5h88" fill="none" stroke="#0f172a" stroke-width="3" stroke-dasharray="3 3"/>
+  <path d="M157 83.5h89" fill="none" stroke="#0f172a" stroke-width="3" stroke-dasharray="3 3"/>
   <g fill="#0f172a">
     <use href="#g4" x="157.61" y="115"/>
     <use href="#g1" x="175.16" y="115"/>
@@ -65,7 +65,7 @@
     <use href="#g7" x="211.76" y="115"/>
     <use href="#g4" x="228.29" y="115"/>
   </g>
-  <path d="M282.14 83.5h100" fill="none" stroke="#0f172a" stroke-width="3" stroke-dasharray="6 3.4"/>
+  <path d="M282 83.5h100" fill="none" stroke="#0f172a" stroke-width="3" stroke-dasharray="6 3.4"/>
   <g fill="#0f172a">
     <use href="#g4" x="282.14" y="115"/>
     <use href="#g9" x="299.69" y="115"/>
@@ -103,7 +103,7 @@
     <use href="#g7" x="211.76" y="172"/>
     <use href="#g4" x="228.29" y="172"/>
   </g>
-  <path d="M157.61 162.5h88" fill="none" stroke="#0f172a" stroke-width="3" stroke-dasharray="3 3"/>
+  <path d="M157 162.5h89" fill="none" stroke="#0f172a" stroke-width="3" stroke-dasharray="3 3"/>
   <g fill="#0f172a">
     <use href="#g4" x="282.14" y="172"/>
     <use href="#g9" x="299.69" y="172"/>
@@ -112,7 +112,7 @@
     <use href="#g7" x="348.41" y="172"/>
     <use href="#g4" x="364.94" y="172"/>
   </g>
-  <path d="M282.14 162.5h100" fill="none" stroke="#0f172a" stroke-width="3" stroke-dasharray="6 3.4"/>
+  <path d="M282 162.5h100" fill="none" stroke="#0f172a" stroke-width="3" stroke-dasharray="6 3.4"/>
   <g fill="#0f172a">
     <use href="#g11" x="418.8" y="172"/>
     <use href="#g9" x="442.71" y="172"/>
@@ -140,10 +140,10 @@
     <use href="#g17" x="100.57" y="229"/>
   </g>
   <clipPath id="cp3">
-    <path d="M154.39 230h14.61v6h-14.61Zm27.61 0h1v6h-1Zm12 0h32v6h-32Z"/>
+    <path d="M154 230h15v6h-15Zm28 0h1v6h-1Zm12 0h32v6h-32Z"/>
   </clipPath>
   <g clip-path="url(#cp3)">
-    <path d="M156.39 233h86" fill="none" stroke="#e11d48" stroke-width="4" stroke-dasharray="0 7.808" stroke-linecap="round"/>
+    <path d="M156 233h86" fill="none" stroke="#e11d48" stroke-width="4" stroke-dasharray="0 7.808" stroke-linecap="round"/>
   </g>
   <g fill="#0f172a">
     <use href="#g14" x="154.39" y="229"/>
@@ -154,10 +154,10 @@
     <use href="#g17" x="226.96" y="229"/>
   </g>
   <clipPath id="cp4">
-    <path d="M280.78 230h14.22v6h-14.22Zm28.22 0h1v6h-1Zm11 0h32v6h-32Z"/>
+    <path d="M280 230h15v6h-15Zm29 0h1v6h-1Zm11 0h32v6h-32Z"/>
   </clipPath>
   <g clip-path="url(#cp4)">
-    <path d="M280.78 233h90" fill="none" stroke="#e11d48" stroke-width="4" stroke-dasharray="8 3.714"/>
+    <path d="M280 233h91" fill="none" stroke="#e11d48" stroke-width="4" stroke-dasharray="8 3.857"/>
   </g>
   <g fill="#0f172a">
     <use href="#g14" x="280.78" y="229"/>
@@ -218,7 +218,7 @@
     <use href="#g7" x="134.56" y="286"/>
     <use href="#g4" x="151.09" y="286"/>
   </g>
-  <path d="M204.95 288h138" fill="none" stroke="#16a34a" stroke-width="2" stroke-dasharray="6 4.154"/>
+  <path d="M204 288h139" fill="none" stroke="#16a34a" stroke-width="2" stroke-dasharray="6 4.231"/>
   <g fill="#0f172a">
     <use href="#g0" x="204.95" y="286"/>
     <use href="#g10" x="220.25" y="286"/>

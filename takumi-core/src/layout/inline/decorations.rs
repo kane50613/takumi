@@ -34,6 +34,8 @@ pub struct DecorationLine {
   pub transform: Affine,
   /// Maps the border box onto the output's pixels.
   pub output: Affine,
+  /// Where the border box sits in the space paint snaps to pixels in.
+  pub paint_offset: Point<f32>,
   /// Whether the line paints above glyphs (line-through) vs below (under/overline).
   pub over: bool,
   /// Which decoration this is, so a backend can single one out.
@@ -42,6 +44,15 @@ pub struct DecorationLine {
   pub style: TextDecorationStyle,
   /// The x-ranges `skip-ink` cuts out, sorted.
   pub skips: Spans,
+}
+
+/// Where a run's decoration lines paint: the border box's transform into the device's drawing
+/// space, the device's transform onto its pixels, and where the border box sits in paint space.
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct DecorationSpace {
+  pub(crate) transform: Affine,
+  pub(crate) device: Affine,
+  pub(crate) paint_offset: Point<f32>,
 }
 
 /// The font a decorating box measures its decorations with, as Blink's `UsedFont`: its primary
@@ -264,11 +275,15 @@ impl ShapedRun {
     layout: ComputedLayout,
     placement: &DecorationPlacement,
     baseline_shift: f32,
-    transform: Affine,
-    device: Affine,
+    space: DecorationSpace,
   ) -> Vec<DecorationLine> {
+    let DecorationSpace {
+      transform,
+      device,
+      paint_offset,
+    } = space;
     let content = layout.content_box_offset();
-    let mut lines = self.decoration_lines(placement, transform, device * transform);
+    let mut lines = self.decoration_lines(placement, transform, device * transform, paint_offset);
 
     if self.brush.decoration_skip_ink == TextDecorationSkipInk::None {
       return lines;
@@ -306,6 +321,7 @@ impl ShapedRun {
     placement: &DecorationPlacement,
     transform: Affine,
     output: Affine,
+    paint_offset: Point<f32>,
   ) -> Vec<DecorationLine> {
     if self.decorated_advance() <= 0.0 {
       return Vec::new();
@@ -351,6 +367,7 @@ impl ShapedRun {
             color: decoration.color,
             transform,
             output,
+            paint_offset,
             over,
             line,
             style: decoration.style,
