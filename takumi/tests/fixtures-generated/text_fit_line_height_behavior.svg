@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630">
-  <rect x="0" y="0" width="1110" height="272" fill="#f6f8fb"/>
-  <rect x="18" y="18" width="258" height="236" fill="#e5eaf0"/>
+  <rect x="0" y="0" width="1110" height="271" fill="#f6f8fb"/>
+  <rect x="18" y="18" width="258" height="235" fill="#e5eaf0"/>
   <rect x="28" y="51" width="226" height="180" fill="#fff"/>
   <g fill="#000">
     <use href="#g0" x="28" y="42"/>
@@ -36,8 +36,8 @@
     <use href="#g24" x="59.82" y="208.49"/>
     <use href="#g25" x="86.45" y="208.49"/>
   </g>
-  <rect x="290" y="18" width="258" height="236" fill="#e5eaf0"/>
-  <rect x="300" y="51" width="226" height="193" fill="#f8fafc"/>
+  <rect x="290" y="18" width="258" height="235" fill="#e5eaf0"/>
+  <rect x="300" y="51" width="226" height="192" fill="#f8fafc"/>
   <g fill="#000">
     <use href="#g26" x="300" y="42"/>
     <use href="#g27" x="306.29" y="42"/>
@@ -51,25 +51,25 @@
     <use href="#g10" x="406.89" y="107.6"/>
   </g>
   <g fill="#000">
-    <use href="#g11" x="308" y="157.47"/>
-    <use href="#g12" x="337.13" y="157.47"/>
-    <use href="#g13" x="364.47" y="157.47"/>
-    <use href="#g14" x="382.4" y="157.47"/>
-    <use href="#g15" x="399.41" y="157.47"/>
-    <use href="#g16" x="425.77" y="157.47"/>
-    <use href="#g17" x="434.05" y="157.47"/>
-    <use href="#g18" x="451.91" y="157.47"/>
-    <use href="#g19" x="469.97" y="157.47"/>
-    <use href="#g20" x="488.49" y="157.47"/>
-    <use href="#g21" x="505.98" y="157.47"/>
+    <use href="#g11" x="308" y="157.45"/>
+    <use href="#g12" x="337.13" y="157.45"/>
+    <use href="#g13" x="364.47" y="157.45"/>
+    <use href="#g14" x="382.4" y="157.45"/>
+    <use href="#g15" x="399.41" y="157.45"/>
+    <use href="#g16" x="425.77" y="157.45"/>
+    <use href="#g17" x="434.05" y="157.45"/>
+    <use href="#g18" x="451.91" y="157.45"/>
+    <use href="#g19" x="469.97" y="157.45"/>
+    <use href="#g20" x="488.49" y="157.45"/>
+    <use href="#g21" x="505.98" y="157.45"/>
   </g>
   <g fill="#000">
-    <use href="#g22" x="308" y="218.54"/>
-    <use href="#g23" x="320.12" y="218.54"/>
-    <use href="#g24" x="331.82" y="218.54"/>
-    <use href="#g25" x="358.45" y="218.54"/>
+    <use href="#g22" x="308" y="218.51"/>
+    <use href="#g23" x="320.12" y="218.51"/>
+    <use href="#g24" x="331.82" y="218.51"/>
+    <use href="#g25" x="358.45" y="218.51"/>
   </g>
-  <rect x="562" y="18" width="258" height="236" fill="#e5eaf0"/>
+  <rect x="562" y="18" width="258" height="235" fill="#e5eaf0"/>
   <rect x="572" y="51" width="226" height="133" fill="#f1f5f9"/>
   <g fill="#000">
     <use href="#g26" x="572" y="42"/>
@@ -110,7 +110,7 @@
     <use href="#g24" x="603.82" y="173"/>
     <use href="#g25" x="630.45" y="173"/>
   </g>
-  <rect x="834" y="18" width="258" height="236" fill="#e5eaf0"/>
+  <rect x="834" y="18" width="258" height="235" fill="#e5eaf0"/>
   <rect x="844" y="51" width="226" height="136" fill="#ecf2ff"/>
   <g fill="#000">
     <use href="#g28" x="844" y="42"/>

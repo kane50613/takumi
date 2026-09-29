@@ -344,7 +344,7 @@ impl BuiltInlineLayout<'_> {
         } else {
           measured_width.max(max_width)
         },
-        height: total_height.max(float_box_height).ceil(),
+        height: total_height.max(float_box_height),
       },
       first_baseline: line_metrics.first().map(|line| line.resolved_baseline),
       last_baseline: line_metrics.last().map(|line| line.resolved_baseline),

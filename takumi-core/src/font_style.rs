@@ -16,6 +16,7 @@ use crate::{
   context::RenderContext,
   geometry::Size,
   layout::inline::InlineBrush,
+  layout_unit::LayoutUnit,
   resources::font::{FontClasses, SubsetGroup},
   shadow::SizedShadow,
   style::{
@@ -438,6 +439,22 @@ fn resolved_text_shadows(
     })
 }
 
+/// `line_height` in layout units, as Blink's `ComputedLineHeightAsFixed` resolves it: a length
+/// rounded to the nearest unit, and a number, which Blink keeps as a percentage, truncated against
+/// the font size rounded to a unit.
+fn layout_unit_line_height(line_height: LineHeight, font_size: f32) -> LineHeight {
+  match line_height {
+    LineHeight::Absolute(value) => LineHeight::Absolute(LayoutUnit::from_f32_round(value).to_f32()),
+    LineHeight::FontSizeRelative(value) if font_size > 0.0 => {
+      let fixed_font_size = LayoutUnit::from_f32_round(font_size).to_f32();
+      let height = LayoutUnit::from_f32(fixed_font_size * (value * 100.0) / 100.0).to_f32();
+
+      LineHeight::FontSizeRelative(height / font_size)
+    }
+    line_height => line_height,
+  }
+}
+
 impl<'s> SizedFontStyle<'s> {
   /// Resolves a sized font style from a computed style and render context.
   pub fn from_style(style: &'s ComputedStyle, context: &RenderContext) -> Self {
@@ -445,7 +462,10 @@ impl<'s> SizedFontStyle<'s> {
     let line_height = if line_height_is_normal {
       LineHeight::Absolute(context.resolve_normal_line_height(style, context.sizing.font_size))
     } else {
-      style.line_height.into_parley(&context.sizing)
+      layout_unit_line_height(
+        style.line_height.into_parley(&context.sizing),
+        context.sizing.font_size,
+      )
     };
 
     let line_height_px = match line_height {
