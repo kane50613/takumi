@@ -869,8 +869,12 @@ fn compute_node_paint_bounds(
         let baseline_shift = built.run_baseline_shift(line, &glyph_run);
         let (glyph_origin, glyph_size) =
           glyph_run_rect(&glyph_run, hanging, &stretch, baseline_shift);
-        let (glyph_origin, glyph_size) =
-          setup.scale_rect(glyph_origin, glyph_size, static_inline_prefix);
+        let (glyph_origin, glyph_size) = setup.scale_rect(
+          glyph_origin,
+          glyph_size,
+          static_inline_prefix,
+          baseline_shift,
+        );
 
         bounds = merge_bounds(
           bounds,
@@ -954,6 +958,7 @@ fn compute_node_paint_bounds(
               height: max_y - min_y,
             },
             static_inline_prefix,
+            baseline_shift,
           );
 
           bounds = merge_bounds(

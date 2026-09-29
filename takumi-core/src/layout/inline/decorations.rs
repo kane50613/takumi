@@ -183,11 +183,10 @@ impl BuiltInlineLayout<'_> {
       return DecorationPlacement::default();
     }
 
-    let state = line.setup.state;
+    let chain = self.span_chain(source_span_id);
+    let state = line.setup.run_scale(line.baseline_shift_in(chain));
     let glyphs = state.transform(Affine::IDENTITY, static_inline_prefix);
     let content = layout.content_box_offset();
-    let chain = self.span_chain(source_span_id);
-    let map_y = |y: f32| glyphs.transform_point(0.0, content.y + y).1;
     let line_baseline = content.y + line.setup.resolved_metrics.resolved_baseline;
     let root = DecoratingBox {
       font: DecorationFont::of(self.font, state.scale, run),
@@ -207,10 +206,7 @@ impl BuiltInlineLayout<'_> {
       })
       .map(|link| DecoratingBox {
         font: DecorationFont::of(link.decoration.font, 1.0, run),
-        baseline: map_y(
-          line.setup.resolved_metrics.resolved_baseline
-            + line.state.offsets.of(BoxKey::Span(link.decoration.id)),
-        ),
+        baseline: line_baseline + line.state.offsets.of(BoxKey::Span(link.decoration.id)),
       })
       .collect();
 
@@ -218,7 +214,7 @@ impl BuiltInlineLayout<'_> {
 
     let text_font = chain.map_or(self.font, |link| link.decoration.font);
     let text = DecorationFont::of(text_font, state.scale, run);
-    let baseline = map_y(run.baseline + line.baseline_shift_in(chain));
+    let baseline = content.y + run.baseline + line.baseline_shift_in(chain);
     let left = content.x + run.offset + run.decorated_offset();
     let (left, _) = glyphs.transform_point(left, 0.0);
     let (right, _) = glyphs.transform_point(

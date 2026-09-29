@@ -6,7 +6,7 @@ use crate::{
 use parley::{InlineBoxKind, LineMetrics, PositionedInlineBox, PositionedLayoutItem};
 
 use super::{
-  InlineBrush, InlineLayout,
+  InlineBrush, InlineLayout, LineFit, TextScale,
   items::ProcessedInlineSpan,
   line_box::{BoxFont, BoxKey, FontHeight, LineBoxOffsets, LineBoxTree},
   text_style_with_span_id,
@@ -29,17 +29,13 @@ impl Strut {
     })
   }
 
-  /// The strut on a line `text-fit` scales by `line_scale`.
-  pub(super) fn height(&self, line_scale: f32) -> FontHeight {
+  /// The strut with its text sized by `scale`.
+  pub(super) fn height(&self, scale: TextScale) -> FontHeight {
     let exact = self.metrics.exact;
 
-    self.brush.line_box_height(
-      self.metrics.line_spacing(),
-      exact.ascent,
-      exact.descent,
-      exact.line_gap,
-      line_scale,
-    )
+    self
+      .brush
+      .line_box_height(exact.ascent, exact.descent, exact.line_gap, scale)
   }
 }
 
@@ -81,7 +77,7 @@ pub(super) fn resolve_inline_line_metrics(
   inline_layout: &InlineLayout,
   spans: &[ProcessedInlineSpan<'_>],
   font: BoxFont,
-  line_scales: &[f32],
+  line_fits: &[LineFit],
   strut: Option<&Strut>,
 ) -> Vec<ResolvedLineMetrics> {
   let mut result = Vec::with_capacity(inline_layout.lines().count());
@@ -106,9 +102,9 @@ pub(super) fn resolve_inline_line_metrics(
   });
 
   for (line_index, line) in inline_layout.lines().enumerate() {
-    let line_scale = line_scales.get(line_index).copied().unwrap_or(1.0);
+    let fit = line_fits.get(line_index).copied().unwrap_or(LineFit::NONE);
     let line_metrics = line.metrics();
-    let mut tree = LineBoxTree::new(FontHeight::EMPTY, font);
+    let mut tree = LineBoxTree::new(FontHeight::EMPTY, font, fit);
     let mut has_contribution = false;
 
     // Walking runs by cluster style skips the per-fragment glyph re-walk that
@@ -133,16 +129,15 @@ pub(super) fn resolve_inline_line_metrics(
           Some(ProcessedInlineSpan::Text { decorations, .. }) => decorations.as_ref(),
           _ => None,
         };
-        let parent = tree.open_chain(chain, line_scale);
+        let parent = tree.open_chain(chain);
 
         tree.add(
           parent,
           style.brush.line_box_height(
-            metrics.line_height,
             metrics.ascent,
             metrics.descent,
             metrics.leading,
-            line_scale,
+            fit.text_scale(parent == 0),
           ),
         );
         has_contribution = true;
@@ -156,20 +151,20 @@ pub(super) fn resolve_inline_line_metrics(
       let item = match spans.get(inline_box.id as usize) {
         Some(ProcessedInlineSpan::Box(item)) => item,
         Some(ProcessedInlineSpan::Spacer { decorations, .. }) => {
-          tree.open_chain(decorations.as_ref(), line_scale);
+          tree.open_chain(decorations.as_ref());
           continue;
         }
         _ => continue,
       };
 
       if item.render_node.is_out_of_flow() {
-        tree.open_chain(item.decorations.as_ref(), line_scale);
+        tree.open_chain(item.decorations.as_ref());
       }
       if inline_box.kind != InlineBoxKind::InFlow {
         continue;
       }
 
-      let parent = tree.open_chain(item.decorations.as_ref(), line_scale);
+      let parent = tree.open_chain(item.decorations.as_ref());
       let baseline_in_item = item
         .baseline_offset
         .unwrap_or(inline_box.height)
@@ -188,7 +183,7 @@ pub(super) fn resolve_inline_line_metrics(
     // CSS 2 §10.8.1: each line box starts with the root inline box's strut, but a line with no
     // content has zero height.
     if has_contribution && let Some(strut) = strut {
-      tree.add(0, strut.height(line_scale));
+      tree.add(0, strut.height(fit.text_scale(true)));
     }
 
     let (height, offsets) = tree.resolve();

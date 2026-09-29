@@ -8,7 +8,10 @@ use std::{cmp::Reverse, collections::HashMap, mem::take, rc::Rc};
 
 use smallvec::{SmallVec, smallvec};
 
-use super::items::DecorationLink;
+use super::{
+  items::DecorationLink,
+  text_fit::{LineFit, TextScale},
+};
 use crate::{
   context::RenderContext,
   layout_unit::LayoutUnit,
@@ -42,6 +45,22 @@ impl FontHeight {
     Self {
       ascent: LayoutUnit::from_f32_round(ascent),
       descent: LayoutUnit::from_f32_round(descent),
+    }
+  }
+
+  /// A font of `ascent` and `descent` px with its text sized by `scale`, as Blink's
+  /// `InlineBoxState::ComputeTextMetrics` measures it: the rounded metrics of the font at its size,
+  /// or the nearest layout units scaled when the text scales as it paints.
+  pub(crate) fn text(ascent: f32, descent: f32, scale: TextScale) -> Self {
+    match scale {
+      TextScale::Paint(scale) if scale != 1.0 => Self {
+        ascent: LayoutUnit::from_f32(LayoutUnit::from_f32_round(ascent).to_f32() * scale),
+        descent: LayoutUnit::from_f32(LayoutUnit::from_f32_round(descent).to_f32() * scale),
+      },
+      scale => Self {
+        ascent: LayoutUnit::from_f32((ascent * scale.font()).round()),
+        descent: LayoutUnit::from_f32((descent * scale.font()).round()),
+      },
     }
   }
 
@@ -128,6 +147,8 @@ struct OpenBox {
 /// The boxes open on one line, the root inline box first.
 pub(super) struct LineBoxTree {
   boxes: SmallVec<[OpenBox; 1]>,
+  /// How `text-fit` fits the line.
+  fit: LineFit,
   /// Each open box's position among `boxes`, by its key.
   indices: HashMap<BoxKey, usize>,
 }
@@ -146,9 +167,10 @@ impl LineBoxOffsets {
 }
 
 impl LineBoxTree {
-  /// A line holding only the root inline box, which starts with `strut`.
-  pub(super) fn new(strut: FontHeight, font: BoxFont) -> Self {
+  /// A line `fit` fits holding only the root inline box, which starts with `strut`.
+  pub(super) fn new(strut: FontHeight, font: BoxFont, fit: LineFit) -> Self {
     Self {
+      fit,
       boxes: smallvec![OpenBox {
         key: None,
         parent: 0,
@@ -195,13 +217,9 @@ impl LineBoxTree {
     index
   }
 
-  /// The innermost span in `chain`, opening it and its ancestors with their struts grown for a
-  /// line at `line_scale`, or the root when `chain` is empty.
-  pub(super) fn open_chain(
-    &mut self,
-    chain: Option<&Rc<DecorationLink<'_>>>,
-    line_scale: f32,
-  ) -> usize {
+  /// The innermost span in `chain`, opening it and its ancestors with their struts, or the root
+  /// when `chain` is empty.
+  pub(super) fn open_chain(&mut self, chain: Option<&Rc<DecorationLink<'_>>>) -> usize {
     let Some(link) = chain else {
       return 0;
     };
@@ -212,11 +230,12 @@ impl LineBoxTree {
       return index;
     }
 
-    let parent = self.open_chain(link.parent.as_ref(), line_scale);
+    let parent = self.open_chain(link.parent.as_ref());
+    let scale = self.fit.text_scale(false);
     let strut = decoration
       .strut
       .as_ref()
-      .map_or(FontHeight::EMPTY, |strut| strut.height(line_scale));
+      .map_or(FontHeight::EMPTY, |strut| strut.height(scale));
     let index = self.open(
       key,
       parent,
@@ -231,11 +250,11 @@ impl LineBoxTree {
       && let Some(text) = decoration.font.metrics
     {
       // Blink's `MetricsForTopAndBottomAlign`: the box fragment's height less its padding, which
-      // is the font's integer ascent and descent with the borders, grown by the leading its line
-      // height leaves.
+      // is the font's text height with the borders, grown by the leading its line height leaves.
+      let text = FontHeight::text(text.exact.ascent, text.exact.descent, scale);
       let content = FontHeight {
-        ascent: LayoutUnit::from_f32(text.ascent) + LayoutUnit::from_f32(border.top),
-        descent: LayoutUnit::from_f32(text.descent) + LayoutUnit::from_f32(border.bottom),
+        ascent: text.ascent + LayoutUnit::from_f32(border.top),
+        descent: text.descent + LayoutUnit::from_f32(border.bottom),
       };
 
       self.boxes[index].box_metrics = content.with_leading(strut.ascent + strut.descent);
@@ -290,6 +309,7 @@ impl LineBoxTree {
   fn apply_pending(&mut self, index: usize) {
     let pending = take(&mut self.boxes[index].pending);
     let text = self.boxes[index].font.and_then(|font| font.metrics);
+    let scale = self.fit.text_scale(index == 0);
     let mut has_top_or_bottom = false;
 
     for &child in &pending {
@@ -303,9 +323,12 @@ impl LineBoxTree {
     for &child in &pending {
       let metrics = self.boxes[child].metrics;
       let shift = match self.boxes[child].align {
-        // Blink's `TextTop`: the box's integer text ascent.
+        // Blink's `TextTop`: the box's text ascent.
         ResolvedVerticalAlign::Keyword(VerticalAlignKeyword::TextTop) => {
-          metrics.ascent - text.map_or(LayoutUnit::ZERO, |text| LayoutUnit::from_f32(text.ascent))
+          metrics.ascent
+            - text.map_or(LayoutUnit::ZERO, |text| {
+              FontHeight::text(text.exact.ascent, text.exact.descent, scale).ascent
+            })
         }
         // Blink's `FixedDescent`.
         ResolvedVerticalAlign::Keyword(VerticalAlignKeyword::TextBottom) => {
@@ -392,8 +415,16 @@ impl LineBoxTree {
     let parent_font = self.boxes[parent].font;
     let metrics = self.boxes[index].metrics;
     let one = LayoutUnit::from_int(1);
-    // Blink's `ComputedFontSizeAsFixed`.
-    let font_size = parent_font.map(|font| LayoutUnit::from_f32_round(font.size));
+    // Blink's `ComputedFontSizeAsFixed`, scaled with the line's text.
+    let font_size = parent_font.map(|font| {
+      let size = LayoutUnit::from_f32_round(font.size);
+
+      if self.fit.scale == 1.0 {
+        size
+      } else {
+        LayoutUnit::from_f32(size.to_f32() * self.fit.scale)
+      }
+    });
     let shift = match self.boxes[index].align {
       ResolvedVerticalAlign::Shift(px) => -LayoutUnit::from_f32(px),
       ResolvedVerticalAlign::Keyword(keyword) => match keyword {
@@ -468,7 +499,7 @@ impl LineBoxTree {
 
 #[cfg(test)]
 mod tests {
-  use super::{BoxFont, BoxKey, FontHeight, LineBoxTree};
+  use super::{BoxFont, BoxKey, FontHeight, LineBoxTree, LineFit};
   use crate::style::{ResolvedVerticalAlign, VerticalAlignKeyword};
 
   const FONT: BoxFont = BoxFont {
@@ -486,7 +517,7 @@ mod tests {
 
   #[test]
   fn sub_and_super_shift_by_the_parent_font_size() {
-    let mut tree = LineBoxTree::new(height(16.0, 4.0), FONT);
+    let mut tree = LineBoxTree::new(height(16.0, 4.0), FONT, LineFit::NONE);
 
     tree.open(
       BoxKey::Span(0),
@@ -512,7 +543,7 @@ mod tests {
 
   #[test]
   fn top_and_bottom_boxes_taller_than_the_line_grow_its_other_edge() {
-    let mut tree = LineBoxTree::new(height(10.0, 5.0), FONT);
+    let mut tree = LineBoxTree::new(height(10.0, 5.0), FONT, LineFit::NONE);
 
     tree.open(
       BoxKey::Atomic(0),
@@ -538,7 +569,7 @@ mod tests {
 
   #[test]
   fn an_empty_box_aligns_as_a_zero_height_one() {
-    let mut tree = LineBoxTree::new(height(10.0, 5.0), FONT);
+    let mut tree = LineBoxTree::new(height(10.0, 5.0), FONT, LineFit::NONE);
 
     tree.open(
       BoxKey::Span(0),
