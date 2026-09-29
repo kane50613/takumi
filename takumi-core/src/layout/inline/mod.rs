@@ -3,7 +3,6 @@ use crate::{
   font_style::{BoxLineHeight, SizedFontStyle, contains_variation_selector, presentation_segments},
   geometry::{AvailableSpace, ComputedLayout, LAYOUT_UNIT_EPSILON, Point, Rect, Size},
   layout::tree::RenderNode,
-  layout_unit::LayoutUnit,
   resources::font::FontClasses,
   style::{
     AppliedTextDecorations, Color, Direction, FontSynthesis, Lang, Length, TextDecorationSkipInk,
@@ -1423,6 +1422,7 @@ mod tests {
     context::RenderContext,
     geometry::{PathCommand, Point, Rect},
     layout::{node::Node, tree::RenderNode},
+    layout_unit::LayoutUnit,
     resources::font::{FontOverride, FontResource, GenericFamily},
     style::{
       Affine, AppliedTextDecoration, BorderStyle, Color, ColorInput, Display, FontSize, Length,
