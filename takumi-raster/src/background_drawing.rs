@@ -5,7 +5,7 @@ use takumi_core::{
   geometry::{ComputedLayout as Layout, Point, Rect, Size},
   layout::background_image_geometry::{BackgroundLayer, BoxBackgroundPaintContext, FillLayers},
   paint::{ConicGradientTile, GradientOverlayTile, LinearGradientTile, RadialGradientTile},
-  painter::BoxBackground,
+  painter::{BoxBackground, SnappedBox},
 };
 use tiny_skia::{
   FillRule as TinyFillRule, IntSize, Mask as TinyMask, PathBuilder, Pixmap, PixmapMut, PixmapRef,
@@ -626,20 +626,29 @@ pub(crate) fn tile_layers(
   Ok(resolved)
 }
 
-pub(crate) fn create_mask(context: &RenderContext, layout: Layout) -> Result<Option<Vec<u8>>> {
-  let border_box = layout.size;
-  let size = border_box.map(|x| x as u32);
+/// A box's `mask-image` alpha over its snapped border box, `offset` from the border box.
+pub(crate) struct BoxMask {
+  pub(crate) alpha: Vec<u8>,
+  pub(crate) offset: Point<f32>,
+  pub(crate) size: Size<u32>,
+}
+
+pub(crate) fn create_mask(context: &RenderContext, layout: Layout) -> Result<Option<BoxMask>> {
+  let paint_offset = context.box_paint_offset(layout);
+  let snapped = SnappedBox::new(paint_offset, layout.size);
+  let offset = snapped.offset();
+  let size = snapped.size().map(|x| x as u32);
   let layers = tile_layers(
     &FillLayers::mask(&context.style).resolve(
       context.style.mask_image.as_deref().unwrap_or(&[]),
-      &BoxBackgroundPaintContext::mask(border_box, context.box_paint_offset(layout)),
+      &BoxBackgroundPaintContext::mask(layout.size, paint_offset),
       context,
     ),
     Rect {
-      left: 0.0,
-      top: 0.0,
-      right: border_box.width,
-      bottom: border_box.height,
+      left: offset.x,
+      top: offset.y,
+      right: offset.x + snapped.size().width,
+      bottom: offset.y + snapped.size().height,
     },
     context,
   )?;
@@ -648,6 +657,11 @@ pub(crate) fn create_mask(context: &RenderContext, layout: Layout) -> Result<Opt
     return Ok(None);
   }
 
+  let empty = BoxMask {
+    alpha: Vec::new(),
+    offset,
+    size,
+  };
   // An empty mask hides the node. A mask this size cannot be rasterized, and
   // dropping it would paint the node unmasked instead.
   let Some(tile) = rasterize_layers(
@@ -655,15 +669,15 @@ pub(crate) fn create_mask(context: &RenderContext, layout: Layout) -> Result<Opt
     size,
     context,
     BorderProperties::default(),
-    Affine::IDENTITY,
+    Affine::translation(-offset.x, -offset.y),
   )?
   else {
-    return Ok(Some(Vec::new()));
+    return Ok(Some(empty));
   };
 
   let (width, height) = tile.dimensions();
   let Some(len) = checked_area(width, height, 1) else {
-    return Ok(Some(Vec::new()));
+    return Ok(Some(empty));
   };
   let mut alpha = vec![0; len];
 
@@ -679,7 +693,11 @@ pub(crate) fn create_mask(context: &RenderContext, layout: Layout) -> Result<Opt
     }
   }
 
-  Ok(Some(alpha))
+  Ok(Some(BoxMask {
+    alpha,
+    offset,
+    size,
+  }))
 }
 
 /// The `background-image` layers only.

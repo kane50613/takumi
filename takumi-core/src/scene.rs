@@ -398,6 +398,7 @@ impl SceneRequest<'_> {
         &current.context,
         layout,
         current_transform,
+        child_base.paint_offset,
       );
 
       contents.insert(

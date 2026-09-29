@@ -1,26 +1,26 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630">
   <rect x="0" y="0" width="1200" height="630" fill="#020617"/>
   <g fill="#f8fafc">
-    <use href="#g0" x="407" y="245"/>
-    <use href="#g1" x="423.8" y="245"/>
-    <use href="#g2" x="440.6" y="245"/>
-    <use href="#g3" x="457.4" y="245"/>
-    <use href="#g4" x="474.2" y="245"/>
-    <use href="#g5" x="491" y="245"/>
-    <use href="#g6" x="507.8" y="245"/>
-    <use href="#g7" x="541.4" y="245"/>
-    <use href="#g3" x="575" y="245"/>
-    <use href="#g0" x="591.8" y="245"/>
-    <use href="#g8" x="608.6" y="245"/>
-    <use href="#g0" x="625.4" y="245"/>
-    <use href="#g9" x="642.2" y="245"/>
-    <use href="#g0" x="675.8" y="245"/>
-    <use href="#g1" x="692.6" y="245"/>
-    <use href="#g2" x="709.4" y="245"/>
-    <use href="#g3" x="726.2" y="245"/>
-    <use href="#g4" x="743" y="245"/>
-    <use href="#g5" x="759.8" y="245"/>
-    <use href="#g6" x="776.6" y="245"/>
+    <use href="#g0" x="406.8" y="245"/>
+    <use href="#g1" x="423.6" y="245"/>
+    <use href="#g2" x="440.4" y="245"/>
+    <use href="#g3" x="457.2" y="245"/>
+    <use href="#g4" x="474" y="245"/>
+    <use href="#g5" x="490.8" y="245"/>
+    <use href="#g6" x="507.6" y="245"/>
+    <use href="#g7" x="541.2" y="245"/>
+    <use href="#g3" x="574.8" y="245"/>
+    <use href="#g0" x="591.6" y="245"/>
+    <use href="#g8" x="608.4" y="245"/>
+    <use href="#g0" x="625.2" y="245"/>
+    <use href="#g9" x="642" y="245"/>
+    <use href="#g0" x="675.6" y="245"/>
+    <use href="#g1" x="692.4" y="245"/>
+    <use href="#g2" x="709.2" y="245"/>
+    <use href="#g3" x="726" y="245"/>
+    <use href="#g4" x="742.8" y="245"/>
+    <use href="#g5" x="759.6" y="245"/>
+    <use href="#g6" x="776.4" y="245"/>
   </g>
   <g opacity=".3">
     <clipPath id="cp0">

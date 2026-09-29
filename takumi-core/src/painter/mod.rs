@@ -28,7 +28,7 @@ use crate::{
   layout::{
     border::{BorderDash, BorderProperties},
     clip::push_ellipse,
-    decoration::{ClipBox, OutlineGeometry},
+    decoration::{ClipBox, ContourOrigin, OutlineGeometry},
   },
   shadow::SizedShadow,
   style::{Affine, BackgroundImage, BoxShadow, Color, FillRule, Overflow, SpacePair},
@@ -198,71 +198,40 @@ impl BoxFrame {
       ..transform
     }
   }
-
-  /// The padding box's edges on each axis that clips, effectively unbounded on the others.
-  pub fn overflow_clip_edges(self, clip_x: bool, clip_y: bool) -> Rect<f32> {
-    let Self {
-      layout,
-      origin: Point { x, y },
-    } = self;
-    let (left, right) = if clip_x {
-      let padding_left = x + layout.border.left;
-      let padding_right = (x + layout.size.width - layout.border.right).max(padding_left);
-      (padding_left, padding_right)
-    } else {
-      (x - UNBOUNDED, x + layout.size.width + UNBOUNDED)
-    };
-    let (top, bottom) = if clip_y {
-      let padding_top = y + layout.border.top;
-      let padding_bottom = (y + layout.size.height - layout.border.bottom).max(padding_top);
-      (padding_top, padding_bottom)
-    } else {
-      (y - UNBOUNDED, y + layout.size.height + UNBOUNDED)
-    };
-
-    Rect {
-      left,
-      top,
-      right,
-      bottom,
-    }
-  }
 }
 
-/// What a box's `overflow` clips its content to.
+/// What a box's `overflow` clips its content to, pixel-snapped as Blink's `ToSnappedClipRect`
+/// and `PixelSnappedContouredInnerBorder` snap an overflow clip.
 pub enum OverflowClip {
   /// The rounded padding box. A corner radius clips both axes, whatever each axis asks for.
   Rounded(Box<ClipBox>),
-  /// The padding box on each axis that clips, the other axis left unbounded.
-  Axes {
-    /// Whether the horizontal axis clips.
-    x: bool,
-    /// Whether the vertical axis clips.
-    y: bool,
-  },
+  /// The padding box on each axis that clips, the other axis left unbounded, relative to the
+  /// border box.
+  Axes(Rect<f32>),
 }
 
 impl OverflowClip {
-  /// The clip as a shape in the border box of `layout`, with where the shape's origin sits.
-  pub fn shape(self, layout: ComputedLayout) -> (FillShape, Point<f32>) {
+  /// The clip as a shape in the border box, with where the shape's origin sits.
+  pub fn shape(self) -> (FillShape, Point<f32>) {
     match self {
       Self::Rounded(clip) => ((*clip).into(), Point::ZERO),
-      Self::Axes { x, y } => {
-        let edges = BoxFrame::new(layout, Point::ZERO).overflow_clip_edges(x, y);
-
-        (
-          FillShape::Rect(Size {
-            width: edges.right - edges.left,
-            height: edges.bottom - edges.top,
-          }),
-          edges.top_left(),
-        )
-      }
+      Self::Axes(edges) => (
+        FillShape::Rect(Size {
+          width: edges.right - edges.left,
+          height: edges.bottom - edges.top,
+        }),
+        edges.top_left(),
+      ),
     }
   }
 
-  /// What the box at `layout` clips its content to, or `None` when it clips nothing.
-  pub fn of(context: &RenderContext, layout: ComputedLayout) -> Option<Self> {
+  /// What the box at `layout`, its border box at `paint_offset`, clips its content to, or `None`
+  /// when it clips nothing.
+  pub fn of(
+    context: &RenderContext,
+    layout: ComputedLayout,
+    paint_offset: Point<f32>,
+  ) -> Option<Self> {
     let overflow = context.style.resolve_overflows();
 
     if !overflow.should_clip_content() {
@@ -270,15 +239,43 @@ impl OverflowClip {
     }
 
     let border = BorderProperties::from_context(context, layout.size, layout.border);
+    let snapped = SnappedBox::new(paint_offset, layout.size);
 
     if !border.is_zero() {
-      return Some(Self::Rounded(Box::new(ClipBox::padding_box(border, layout))));
+      let (offset, size) = snapped.contoured_inset(layout.border, false);
+      let padding_box = ClipBox::padding_box(border, layout);
+
+      return Some(Self::Rounded(Box::new(ClipBox {
+        offset: offset + snapped.offset(),
+        size,
+        origin: padding_box.origin.map(|origin| ContourOrigin {
+          size: snapped.size(),
+          offset: snapped.offset(),
+          ..origin
+        }),
+        ..padding_box
+      })));
     }
 
-    Some(Self::Axes {
-      x: overflow.x != Overflow::Visible,
-      y: overflow.y != Overflow::Visible,
-    })
+    let (offset, size) = snapped.inset(layout.border);
+    let offset = offset + snapped.offset();
+    let (left, right) = if overflow.x == Overflow::Visible {
+      (-UNBOUNDED, layout.size.width + UNBOUNDED)
+    } else {
+      (offset.x, offset.x + size.width)
+    };
+    let (top, bottom) = if overflow.y == Overflow::Visible {
+      (-UNBOUNDED, layout.size.height + UNBOUNDED)
+    } else {
+      (offset.y, offset.y + size.height)
+    };
+
+    Some(Self::Axes(Rect {
+      left,
+      top,
+      right,
+      bottom,
+    }))
   }
 }
 

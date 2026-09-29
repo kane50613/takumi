@@ -12,7 +12,7 @@ use std::iter::successors;
 
 use crate::{
   context::RenderContext,
-  geometry::ComputedLayout,
+  geometry::{ComputedLayout, Point},
   painter::{FillShape, OverflowClip},
   scene::SceneBounds,
   style::Affine,
@@ -89,6 +89,7 @@ impl NodeProperties {
     context: &RenderContext,
     layout: ComputedLayout,
     transform: Affine,
+    paint_offset: Point<f32>,
   ) -> Self {
     let effect = if context.style.needs_offscreen_compositing() {
       Some(trees.add_effect(EffectNode {
@@ -100,9 +101,9 @@ impl NodeProperties {
     } else {
       state.effect
     };
-    let clip = OverflowClip::of(context, layout)
+    let clip = OverflowClip::of(context, layout, paint_offset)
       .map(|clip| {
-        let (shape, origin) = clip.shape(layout);
+        let (shape, origin) = clip.shape();
 
         trees.add_clip(ClipNode {
           parent: state.clip,

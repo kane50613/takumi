@@ -56,19 +56,19 @@
     <use href="#g17" x="78.26" y="130"/>
   </g>
   <clipPath id="cp1">
-    <path d="M112 131h73.72v7h-73.72Z"/>
+    <path d="M111.81 131h73.72v7h-73.72Z"/>
   </clipPath>
   <g clip-path="url(#cp1)">
-    <path d="M101 134.5c5.5 7.5 5.5-7.5 11 0s5.5-7.5 11 0 5.5-7.5 11 0 5.5-7.5 11 0 5.5-7.5 11 0 5.5-7.5 11 0 5.5-7.5 11 0 5.5-7.5 11 0 5.5-7.5 11 0" fill="none" stroke="#9333ea" stroke-width="2"/>
+    <path d="M100.81 134.5c5.5 7.5 5.5-7.5 11 0s5.5-7.5 11 0 5.5-7.5 11 0 5.5-7.5 11 0 5.5-7.5 11 0 5.5-7.5 11 0 5.5-7.5 11 0 5.5-7.5 11 0 5.5-7.5 11 0" fill="none" stroke="#9333ea" stroke-width="2"/>
   </g>
-  <path d="M112 132h73" fill="none" stroke="#ea580c" stroke-width="2" stroke-dasharray="2 2"/>
+  <path d="M111.81 132h73" fill="none" stroke="#ea580c" stroke-width="2" stroke-dasharray="2 2"/>
   <g fill="#0f172a">
-    <use href="#g2" x="112" y="130"/>
-    <use href="#g18" x="122.96" y="130"/>
-    <use href="#g12" x="138.86" y="130"/>
-    <use href="#g9" x="155.48" y="130"/>
-    <use href="#g2" x="163" y="130"/>
-    <use href="#g2" x="174.26" y="130"/>
+    <use href="#g2" x="111.81" y="130"/>
+    <use href="#g18" x="122.77" y="130"/>
+    <use href="#g12" x="138.67" y="130"/>
+    <use href="#g9" x="155.29" y="130"/>
+    <use href="#g2" x="162.81" y="130"/>
+    <use href="#g2" x="174.07" y="130"/>
   </g>
   <rect x="40" y="169" width="72.66" height="2" fill="#0f172a"/>
   <g fill="#0f172a">
@@ -82,8 +82,8 @@
     <use href="#g17" x="95.12" y="168"/>
   </g>
   <g fill="#0f172a">
-    <use href="#g20" x="23" y="168"/>
-    <use href="#g21" x="30.68" y="168"/>
+    <use href="#g20" x="23.3" y="168"/>
+    <use href="#g21" x="30.98" y="168"/>
   </g>
   <rect x="37.4" y="199" width="123.84" height="2" fill="#0f172a"/>
   <g fill="#0f172a">

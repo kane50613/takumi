@@ -64,11 +64,11 @@
   <rect x="208" y="70" width="156" height="31" fill="#e2e8f0"/>
   <path d="M208 70h156v31h-156v-31Zm1 1h154v29h-154v-29Z" fill="#cbd5e1" fill-rule="evenodd"/>
   <g fill="#111827">
-    <use href="#g33" x="217" y="92"/>
-    <use href="#g34" x="227.58" y="92"/>
-    <use href="#g35" x="238.53" y="92"/>
-    <use href="#g29" x="249.45" y="92"/>
-    <use href="#g36" x="259.82" y="92"/>
+    <use href="#g33" x="217.07" y="92"/>
+    <use href="#g34" x="227.65" y="92"/>
+    <use href="#g35" x="238.6" y="92"/>
+    <use href="#g29" x="249.52" y="92"/>
+    <use href="#g36" x="259.89" y="92"/>
   </g>
   <path d="M28 101h180v31h-180v-31Zm1 1h178v29h-178v-29Z" fill="#cbd5e1" fill-rule="evenodd"/>
   <g fill="#111827">
@@ -79,7 +79,7 @@
     <use href="#g37" x="72.28" y="123"/>
   </g>
   <path d="M208 101h156v31h-156v-31Zm1 1h154v29h-154v-29Z" fill="#cbd5e1" fill-rule="evenodd"/>
-  <use href="#g41" x="217" y="123" fill="#111827"/>
+  <use href="#g41" x="217.07" y="123" fill="#111827"/>
   <rect x="28" y="132" width="180" height="31" fill="#f1f5f9"/>
   <path d="M28 132h180v31h-180v-31Zm1 1h178v29h-178v-29Z" fill="#cbd5e1" fill-rule="evenodd"/>
   <g fill="#111827">
@@ -90,7 +90,7 @@
   </g>
   <rect x="208" y="132" width="156" height="31" fill="#f1f5f9"/>
   <path d="M208 132h156v31h-156v-31Zm1 1h154v29h-154v-29Z" fill="#cbd5e1" fill-rule="evenodd"/>
-  <use href="#g45" x="217" y="154" fill="#111827"/>
+  <use href="#g45" x="217.07" y="154" fill="#111827"/>
   <path d="M28 163h180v31h-180v-31Zm1 1h178v29h-178v-29Z" fill="#cbd5e1" fill-rule="evenodd"/>
   <g fill="#111827">
     <use href="#g46" x="37" y="185"/>
@@ -100,7 +100,7 @@
     <use href="#g37" x="88.57" y="185"/>
   </g>
   <path d="M208 163h156v31h-156v-31Zm1 1h154v29h-154v-29Z" fill="#cbd5e1" fill-rule="evenodd"/>
-  <use href="#g48" x="217" y="185" fill="#111827"/>
+  <use href="#g48" x="217.07" y="185" fill="#111827"/>
   <path d="M28 194h180v31h-180v-31Zm1 1h178v29h-178v-29Z" fill="#cbd5e1" fill-rule="evenodd"/>
   <g fill="#111827">
     <use href="#g44" x="37" y="216"/>
@@ -111,8 +111,8 @@
   </g>
   <path d="M208 194h156v31h-156v-31Zm1 1h154v29h-154v-29Z" fill="#cbd5e1" fill-rule="evenodd"/>
   <g fill="#111827">
-    <use href="#g50" x="217" y="216"/>
-    <use href="#g45" x="228.07" y="216"/>
+    <use href="#g50" x="217.07" y="216"/>
+    <use href="#g45" x="228.14" y="216"/>
   </g>
   <path d="M394 16h344c4.42 0 8 3.58 8 8v284c0 4.42-3.58 8-8 8h-344c-4.42 0-8-3.58-8-8v-284c0-4.42 3.58-8 8-8Z" fill="#fff"/>
   <g fill="#64748b">
@@ -241,10 +241,10 @@
   <rect x="1038" y="51" width="66" height="62" fill="#e2e8f0"/>
   <path d="M1038 51h66v62h-66v-62Zm1 1h64v60h-64v-60Z" fill="#cbd5e1" fill-rule="evenodd"/>
   <g fill="#111827">
-    <use href="#g36" x="1047" y="73"/>
-    <use href="#g30" x="1054.87" y="73"/>
-    <use href="#g73" x="1065.38" y="73"/>
-    <use href="#g73" x="1070.83" y="73"/>
+    <use href="#g36" x="1047.24" y="73"/>
+    <use href="#g30" x="1055.1" y="73"/>
+    <use href="#g73" x="1065.62" y="73"/>
+    <use href="#g73" x="1071.07" y="73"/>
   </g>
   <path d="M768 82h122v31h-122v-31Zm1 1h120v29h-120v-29Z" fill="#cbd5e1" fill-rule="evenodd"/>
   <g fill="#111827">
@@ -255,18 +255,18 @@
   </g>
   <path d="M890 82h148v31h-148v-31Zm1 1h146v29h-146v-29Z" fill="#cbd5e1" fill-rule="evenodd"/>
   <g fill="#111827">
-    <use href="#g62" x="899" y="104"/>
-    <use href="#g75" x="905.28" y="104"/>
-    <use href="#g46" x="909.49" y="104"/>
-    <use href="#g40" x="919.92" y="104"/>
-    <use href="#g44" x="929.65" y="104"/>
+    <use href="#g62" x="898.78" y="104"/>
+    <use href="#g75" x="905.06" y="104"/>
+    <use href="#g46" x="909.27" y="104"/>
+    <use href="#g40" x="919.69" y="104"/>
+    <use href="#g44" x="929.43" y="104"/>
   </g>
   <path d="M768 113h122v31h-122v-31Zm1 1h120v29h-120v-29Z" fill="#cbd5e1" fill-rule="evenodd"/>
   <use href="#g37" x="777" y="135" fill="#111827"/>
   <path d="M890 113h148v31h-148v-31Zm1 1h146v29h-146v-29Z" fill="#cbd5e1" fill-rule="evenodd"/>
-  <use href="#g42" x="899" y="135" fill="#111827"/>
+  <use href="#g42" x="898.78" y="135" fill="#111827"/>
   <path d="M1038 113h66v31h-66v-31Zm1 1h64v29h-64v-29Z" fill="#cbd5e1" fill-rule="evenodd"/>
-  <use href="#g57" x="1047" y="135" fill="#111827"/>
+  <use href="#g57" x="1047.24" y="135" fill="#111827"/>
   <path d="M24 326h344c4.42 0 8 3.58 8 8v284c0 4.42-3.58 8-8 8h-344c-4.42 0-8-3.58-8-8v-284c0-4.42 3.58-8 8-8Z" fill="#fff"/>
   <g fill="#64748b">
     <use href="#g76" x="28" y="351"/>
@@ -301,34 +301,34 @@
   </g>
   <path d="M177 361h187v40h-187v-40Zm1 1h185v38h-185v-38Z" fill="#cbd5e1" fill-rule="evenodd"/>
   <g fill="#111827">
-    <use href="#g50" x="186" y="383"/>
-    <use href="#g55" x="196.89" y="383"/>
-    <use href="#g39" x="208.82" y="383"/>
-    <use href="#g56" x="218.63" y="383"/>
-    <use href="#g44" x="233.66" y="383"/>
-    <use href="#g37" x="240.54" y="383"/>
-    <use href="#g38" x="250.28" y="383"/>
-    <use href="#g38" x="254.9" y="383"/>
+    <use href="#g50" x="185.69" y="383"/>
+    <use href="#g55" x="196.58" y="383"/>
+    <use href="#g39" x="208.52" y="383"/>
+    <use href="#g56" x="218.33" y="383"/>
+    <use href="#g44" x="233.36" y="383"/>
+    <use href="#g37" x="240.23" y="383"/>
+    <use href="#g38" x="249.97" y="383"/>
+    <use href="#g38" x="254.6" y="383"/>
   </g>
   <path d="M28 401h149v40h-149v-40Zm1 1h147v38h-147v-38Z" fill="#cbd5e1" fill-rule="evenodd"/>
   <g fill="#111827">
-    <use href="#g47" x="37" y="428"/>
-    <use href="#g75" x="52.68" y="428"/>
-    <use href="#g80" x="56.89" y="428"/>
-    <use href="#g80" x="67.42" y="428"/>
-    <use href="#g38" x="77.95" y="428"/>
-    <use href="#g43" x="82.65" y="428"/>
+    <use href="#g47" x="37" y="427.5"/>
+    <use href="#g75" x="52.68" y="427.5"/>
+    <use href="#g80" x="56.89" y="427.5"/>
+    <use href="#g80" x="67.42" y="427.5"/>
+    <use href="#g38" x="77.95" y="427.5"/>
+    <use href="#g43" x="82.65" y="427.5"/>
   </g>
   <path d="M177 401h187v40h-187v-40Zm1 1h185v38h-185v-38Z" fill="#cbd5e1" fill-rule="evenodd"/>
   <g fill="#111827">
-    <use href="#g50" x="186" y="423"/>
-    <use href="#g55" x="196.89" y="423"/>
-    <use href="#g39" x="208.82" y="423"/>
-    <use href="#g56" x="218.63" y="423"/>
-    <use href="#g44" x="233.66" y="423"/>
-    <use href="#g37" x="240.54" y="423"/>
-    <use href="#g38" x="250.28" y="423"/>
-    <use href="#g38" x="254.9" y="423"/>
+    <use href="#g50" x="185.69" y="423"/>
+    <use href="#g55" x="196.58" y="423"/>
+    <use href="#g39" x="208.52" y="423"/>
+    <use href="#g56" x="218.33" y="423"/>
+    <use href="#g44" x="233.36" y="423"/>
+    <use href="#g37" x="240.23" y="423"/>
+    <use href="#g38" x="249.97" y="423"/>
+    <use href="#g38" x="254.6" y="423"/>
   </g>
   <path d="M28 441h149v40h-149v-40Zm1 1h147v38h-147v-38Z" fill="#cbd5e1" fill-rule="evenodd"/>
   <g fill="#111827">
@@ -340,14 +340,14 @@
   </g>
   <path d="M177 441h187v40h-187v-40Zm1 1h185v38h-185v-38Z" fill="#cbd5e1" fill-rule="evenodd"/>
   <g fill="#111827">
-    <use href="#g50" x="186" y="463"/>
-    <use href="#g55" x="196.89" y="463"/>
-    <use href="#g39" x="208.82" y="463"/>
-    <use href="#g56" x="218.63" y="463"/>
-    <use href="#g44" x="233.66" y="463"/>
-    <use href="#g37" x="240.54" y="463"/>
-    <use href="#g38" x="250.28" y="463"/>
-    <use href="#g38" x="254.9" y="463"/>
+    <use href="#g50" x="185.69" y="463"/>
+    <use href="#g55" x="196.58" y="463"/>
+    <use href="#g39" x="208.52" y="463"/>
+    <use href="#g56" x="218.33" y="463"/>
+    <use href="#g44" x="233.36" y="463"/>
+    <use href="#g37" x="240.23" y="463"/>
+    <use href="#g38" x="249.97" y="463"/>
+    <use href="#g38" x="254.6" y="463"/>
   </g>
   <path d="M28 481h149v31h-149v-31Zm1 1h147v29h-147v-29Z" fill="#cbd5e1" fill-rule="evenodd"/>
   <g fill="#111827">
@@ -361,14 +361,14 @@
   </g>
   <path d="M177 481h187v40h-187v-40Zm1 1h185v38h-185v-38Z" fill="#cbd5e1" fill-rule="evenodd"/>
   <g fill="#111827">
-    <use href="#g50" x="186" y="503"/>
-    <use href="#g55" x="196.89" y="503"/>
-    <use href="#g39" x="208.82" y="503"/>
-    <use href="#g56" x="218.63" y="503"/>
-    <use href="#g44" x="233.66" y="503"/>
-    <use href="#g37" x="240.54" y="503"/>
-    <use href="#g38" x="250.28" y="503"/>
-    <use href="#g38" x="254.9" y="503"/>
+    <use href="#g50" x="185.69" y="503"/>
+    <use href="#g55" x="196.58" y="503"/>
+    <use href="#g39" x="208.52" y="503"/>
+    <use href="#g56" x="218.33" y="503"/>
+    <use href="#g44" x="233.36" y="503"/>
+    <use href="#g37" x="240.23" y="503"/>
+    <use href="#g38" x="249.97" y="503"/>
+    <use href="#g38" x="254.6" y="503"/>
   </g>
   <path d="M28 521h149v31h-149v-31Zm1 1h147v29h-147v-29Z" fill="#cbd5e1" fill-rule="evenodd"/>
   <g fill="#111827">
@@ -383,15 +383,15 @@
   </g>
   <path d="M177 521h187v31h-187v-31Zm1 1h185v29h-185v-29Z" fill="#cbd5e1" fill-rule="evenodd"/>
   <g fill="#111827">
-    <use href="#g59" x="186" y="543"/>
-    <use href="#g49" x="196.24" y="543"/>
-    <use href="#g39" x="211.06" y="543"/>
-    <use href="#g37" x="221.84" y="543"/>
-    <use href="#g80" x="231.65" y="543"/>
-    <use href="#g80" x="242.18" y="543"/>
-    <use href="#g75" x="252.53" y="543"/>
-    <use href="#g59" x="257.03" y="543"/>
-    <use href="#g46" x="267.27" y="543"/>
+    <use href="#g59" x="185.69" y="543"/>
+    <use href="#g49" x="195.93" y="543"/>
+    <use href="#g39" x="210.75" y="543"/>
+    <use href="#g37" x="221.53" y="543"/>
+    <use href="#g80" x="231.34" y="543"/>
+    <use href="#g80" x="241.87" y="543"/>
+    <use href="#g75" x="252.22" y="543"/>
+    <use href="#g59" x="256.72" y="543"/>
+    <use href="#g46" x="266.96" y="543"/>
   </g>
   <defs>
     <path id="g0" d="M4.45 2.44q-.86 0-1.54-.3-.69-.28-1.16-.81-.45-.52-.63-1.21l1.32-.09q.18.55.64.88t1.37.32q1.08 0 1.66-.43.58-.44.58-1.32v-1.28q-.28.63-.92 1-.63.38-1.41.38-1 0-1.8-.49-.78-.5-1.22-1.37t-.43-2q0-1.14.42-2 .44-.86 1.2-1.34.78-.51 1.78-.51.83.01 1.5.4t.94 1.04v-1.26h1.2v7.4q0 .94-.42 1.6t-1.2 1.03q-.78.36-1.88.36Zm-.03-4.07q1.02 0 1.63-.7.62-.72.64-1.95.01-.81-.27-1.41-.26-.59-.8-.92-.51-.33-1.2-.33-1.05 0-1.62.72-.58.72-.58 1.94 0 1.23.59 1.95.6.7 1.61.7Z"/>

@@ -641,7 +641,7 @@ impl<'r> LayoutTree<'r> {
     root_id
   }
 
-  /// Computes and rounds the layout for the whole tree.
+  /// Computes the layout for the whole tree.
   pub fn compute_layout(&mut self, available_space: Size<AvailableSpace>) {
     let root_node_id = NodeId::ROOT.into_taffy();
     compute_root_layout(
@@ -650,7 +650,7 @@ impl<'r> LayoutTree<'r> {
       available_space.map(AvailableSpace::into_taffy).into_taffy(),
     );
     self.place_out_of_flow_at_static_positions(root_node_id);
-    self.snap_layout(root_node_id, 0.0, 0.0);
+    self.finalize_layout(root_node_id);
   }
 
   /// Moves each out-of-flow box inside inline content to its static position on every axis whose
@@ -750,35 +750,16 @@ impl<'r> LayoutTree<'r> {
     );
   }
 
-  /// Snaps every box to whole pixels, both edges in absolute space so a box
-  /// always meets the one beside it. taffy's `round_layout` documents the same
-  /// rule but rounds a location against its parent, which parts two siblings by a
-  /// pixel whenever their parent sits on a fraction.
-  /// Blink snaps the same way, against the absolute offset's fraction
-  /// (`SnapSizeToPixel`, platform/geometry/layout_unit.h).
-  fn snap_layout(&mut self, node_id: TaffyNodeId, parent_x: f32, parent_y: f32) {
+  /// Keeps every box where it laid out, unrounded: Blink holds layout in layout units and snaps a
+  /// box to pixels only as it paints it.
+  fn finalize_layout(&mut self, node_id: TaffyNodeId) {
     let unrounded = self.get_unrounded_layout(node_id);
-    let mut layout = unrounded;
-    let x = parent_x + unrounded.location.x;
-    let y = parent_y + unrounded.location.y;
 
-    layout.location.x = x.round() - parent_x.round();
-    layout.location.y = y.round() - parent_y.round();
-    layout.size.width = (x + unrounded.size.width).round() - x.round();
-    layout.size.height = (y + unrounded.size.height).round() - y.round();
-    layout.padding.left = (x + unrounded.padding.left).round() - x.round();
-    layout.padding.right = (x + unrounded.size.width).round()
-      - (x + unrounded.size.width - unrounded.padding.right).round();
-    layout.padding.top = (y + unrounded.padding.top).round() - y.round();
-    layout.padding.bottom = (y + unrounded.size.height).round()
-      - (y + unrounded.size.height - unrounded.padding.bottom).round();
-
-    self.set_final_layout(node_id, &layout);
-
+    self.set_final_layout(node_id, &unrounded);
     for index in 0..self.child_count(node_id) {
       let child = self.get_child_id(node_id, index);
 
-      self.snap_layout(child, x, y);
+      self.finalize_layout(child);
     }
   }
 
@@ -1372,15 +1353,7 @@ impl RoundTree for LayoutTree<'_> {
       return;
     };
 
-    let mut final_layout = *layout;
-    if node.is_inline_children {
-      final_layout.size.width = node.unrounded_layout.size.width;
-    }
-    // Snap the box, not the stroke: a rounded border width comes out as 2px on
-    // one edge and 3px on another for a uniform 2.5px border, while the
-    // fractional width paints evenly through coverage AA, as browsers do.
-    final_layout.border = node.unrounded_layout.border;
-    node.final_layout = final_layout;
+    node.final_layout = *layout;
   }
 }
 

@@ -150,9 +150,18 @@ impl<'n> PlacedBox<'n> {
   /// overflow is visible.
   fn overflow_clip_path_data(&self) -> Option<String> {
     Some(
-      match OverflowClip::of(&self.node.context, self.frame.layout)? {
+      match OverflowClip::of(
+        &self.node.context,
+        self.frame.layout,
+        self.node.context.box_paint_offset(self.frame.layout),
+      )? {
         OverflowClip::Rounded(clip) => shape_path_data(&(*clip).into(), self.frame.origin),
-        OverflowClip::Axes { x, y } => edges_path_data(self.frame.overflow_clip_edges(x, y)),
+        OverflowClip::Axes(edges) => edges_path_data(Rect {
+          left: self.frame.origin.x + edges.left,
+          top: self.frame.origin.y + edges.top,
+          right: self.frame.origin.x + edges.right,
+          bottom: self.frame.origin.y + edges.bottom,
+        }),
       },
     )
   }

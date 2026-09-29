@@ -134,11 +134,12 @@ impl Walker {
       .style
       .needs_offscreen_compositing()
       .then(|| Box::new(effects(&painter, layout)));
-    let overflow_clip = OverflowClip::of(context, layout).map(|clip| {
-      let (shape, origin) = clip.shape(layout);
+    let overflow_clip =
+      OverflowClip::of(context, layout, context.box_paint_offset(layout)).map(|clip| {
+        let (shape, origin) = clip.shape();
 
-      Shape::of(&shape, Affine::translation(origin.x, origin.y))
-    });
+        Shape::of(&shape, Affine::translation(origin.x, origin.y))
+      });
     let id = self.nodes.len();
 
     self.add(

@@ -11,8 +11,8 @@ use takumi_core::{
 use tiny_skia::{IntSize, Mask as TinyMask, Transform as TinyTransform};
 
 use crate::{
-  Command, Fill, Placement, RenderContext, Result, Style, build_path, checked_area, create_mask,
-  fast_div_255, placement_overlap, style::Affine,
+  BoxMask, Command, Fill, Placement, RenderContext, Result, Style, build_path, checked_area,
+  create_mask, fast_div_255, placement_overlap, style::Affine,
 };
 
 pub(crate) enum NodeMaskAction {
@@ -121,7 +121,6 @@ impl NodeMasks {
     if let Some(mask) = create_mask(context, layout)?
       && !masks.add(mask_image_mask(
         &mask,
-        layout,
         transform,
         inverse_transform,
         viewport,
@@ -200,37 +199,42 @@ fn clip_path_mask(
 
 /// The `mask-image` layers as a viewport mask over the box and its descendants.
 fn mask_image_mask(
-  mask: &[u8],
-  layout: Layout,
+  mask: &BoxMask,
   transform: Affine,
   inverse_transform: Affine,
   viewport: CanvasViewport,
 ) -> NodeMaskAction {
-  if mask.is_empty() {
+  if mask.alpha.is_empty() {
     return NodeMaskAction::SkipRendering;
   }
 
-  let Some(placement) = transformed_placement(Point::ZERO, layout.size, transform) else {
+  let size = mask.size.map(|size| size as f32);
+  let Some(placement) = transformed_placement(mask.offset, size, transform) else {
     return NodeMaskAction::SkipRendering;
   };
-  let mask_placement = Placement {
-    left: 0,
-    top: 0,
-    width: layout.size.width as u32,
-    height: layout.size.height as u32,
-  };
-  let full_mask = if transform.is_identity() {
-    copy_mask_to_viewport(viewport, mask, mask_placement)
+  let full_mask = if transform.is_identity() && mask.offset == Point::ZERO {
+    copy_mask_to_viewport(
+      viewport,
+      &mask.alpha,
+      Placement {
+        left: 0,
+        top: 0,
+        width: mask.size.width,
+        height: mask.size.height,
+      },
+    )
   } else {
+    let inverse_transform = Affine::translation(-mask.offset.x, -mask.offset.y) * inverse_transform;
+
     rasterize_constraint_mask(viewport, placement, |x, y| {
       sample_overflow_alpha(
         Point { x: 0, y: 0 },
         Point {
-          x: mask_placement.width,
-          y: mask_placement.height,
+          x: mask.size.width,
+          y: mask.size.height,
         },
         inverse_transform,
-        Some((mask, mask_placement.width)),
+        Some((&mask.alpha, mask.size.width)),
         x,
         y,
       )

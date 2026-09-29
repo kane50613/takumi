@@ -222,9 +222,9 @@
   </g>
   <path d="M798 38h10c11.6 0 21 9.4 21 21s-9.4 21-21 21h-10c-11.6 0-21-9.4-21-21s9.4-21 21-21Z" fill="#508ab8"/>
   <g fill="#fff">
-    <use href="#g54" x="789.06" y="64"/>
-    <use href="#g55" x="797.29" y="64"/>
-    <use href="#g56" x="806.44" y="64"/>
+    <use href="#g54" x="789.47" y="64"/>
+    <use href="#g55" x="797.69" y="64"/>
+    <use href="#g56" x="806.85" y="64"/>
   </g>
   <rect x="547" y="128" width="180" height="148" fill="#ffecd0"/>
   <path d="M547 128h180v148h-180v-148Zm2 2h176v144h-176v-144Z" fill="#d47616" fill-rule="evenodd"/>

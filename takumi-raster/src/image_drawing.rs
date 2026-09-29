@@ -18,12 +18,14 @@ struct PreparedImage {
   offset: Point<f32>,
 }
 
-/// Sizes and places an image for `object-fit`/`object-position`, rendering
-/// only the part that lands inside the content box.
+/// Renders the part of an image at `placement`, relative to the content box, that lands inside
+/// the `crop` rectangle at `crop_origin` from the content box.
 fn process_image_for_object_fit(
   image: &ImageSource,
   context: &RenderContext,
-  content_box: Size<f32>,
+  placement: ReplacedPlacement,
+  crop_origin: Point<f32>,
+  crop: Size<f32>,
 ) -> Result<PreparedImage> {
   let (image_width, image_height) = image.size(&context.sizing);
   let (source_width, source_height) = match image {
@@ -41,15 +43,11 @@ fn process_image_for_object_fit(
     ImageSource::Svg(svg) => svg.dimensions(),
     _ => (image_width, image_height),
   };
-  let placement = ReplacedPlacement::new(
-    context,
-    content_box,
-    Size {
-      width: image_width,
-      height: image_height,
-    },
-  );
-  let clipped = placement.clipped(content_box);
+  let clipped = ReplacedPlacement {
+    offset: placement.offset - crop_origin,
+    size: placement.size,
+  }
+  .clipped(crop);
   let rendered = image.render_for_layout(
     clipped.size.width as u32,
     clipped.size.height as u32,
@@ -70,7 +68,7 @@ fn process_image_for_object_fit(
   Ok(PreparedImage {
     image: rendered,
     logical_to_source,
-    offset: clipped.origin,
+    offset: crop_origin + clipped.origin,
   })
 }
 
@@ -82,14 +80,18 @@ pub(crate) fn draw_image(
   canvas: &mut Canvas,
   layout: Layout,
 ) -> Result<()> {
-  let prepared = process_image_for_object_fit(image, context, layout.content_box_size())?;
-  let offset = layout.content_box_offset() + prepared.offset;
-  let image_to_box = Affine::translation(offset.x, offset.y);
   let (width, height) = image.size(&context.sizing);
-  let rounded_clip = BoxPainter::new(context, layout)
-    .replaced_content(Size { width, height })
-    .clip
-    .filter(|clip| !clip.border.is_zero());
+  let replaced = BoxPainter::new(context, layout).replaced_content(Size { width, height });
+  let content_offset = layout.content_box_offset();
+  let (crop_origin, crop) = match replaced.clip {
+    Some(clip) => (clip.offset - content_offset, clip.size),
+    None => (replaced.placement.offset, replaced.placement.size),
+  };
+  let prepared =
+    process_image_for_object_fit(image, context, replaced.placement, crop_origin, crop)?;
+  let offset = content_offset + prepared.offset;
+  let image_to_box = Affine::translation(offset.x, offset.y);
+  let rounded_clip = replaced.clip.filter(|clip| !clip.border.is_zero());
 
   match prepared.image {
     RenderedImage::Rasterized(rendered) => {

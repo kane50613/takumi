@@ -1,19 +1,19 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630">
   <rect x="0" y="0" width="1200" height="630" fill="#fff"/>
   <g fill="#000" stroke="#f00" stroke-width="4">
-    <use href="#g0" x="385" y="341"/>
-    <use href="#g1" x="407.03" y="341"/>
-    <use href="#g2" x="450.59" y="341"/>
-    <use href="#g3" x="493.65" y="341"/>
-    <use href="#g4" x="536.49" y="341"/>
-    <use href="#g5" x="565.36" y="341"/>
-    <use href="#g6" x="583.5" y="341"/>
-    <use href="#g3" x="614.54" y="341"/>
-    <use href="#g7" x="657.38" y="341"/>
+    <use href="#g0" x="384.78" y="340.5"/>
+    <use href="#g1" x="406.81" y="340.5"/>
+    <use href="#g2" x="450.37" y="340.5"/>
+    <use href="#g3" x="493.43" y="340.5"/>
+    <use href="#g4" x="536.27" y="340.5"/>
+    <use href="#g5" x="565.14" y="340.5"/>
+    <use href="#g6" x="583.29" y="340.5"/>
+    <use href="#g3" x="614.32" y="340.5"/>
+    <use href="#g7" x="657.16" y="340.5"/>
   </g>
   <g fill="#000">
-    <use href="#g8" x="703" y="341"/>
-    <use href="#g9" x="758.15" y="341"/>
+    <use href="#g8" x="702.81" y="340.5"/>
+    <use href="#g9" x="757.96" y="340.5"/>
   </g>
   <defs>
     <path id="g0" d="M5.33 0v-51.13l10.94.01v51.12Z"/>

@@ -92,17 +92,17 @@
   </g>
   <rect x="12" y="90" width="456" height="72" fill="#dcfce7"/>
   <g fill="#000">
-    <use href="#g21" x="24" y="133"/>
-    <use href="#g2" x="28.7" y="133"/>
-    <use href="#g13" x="38.26" y="133"/>
-    <use href="#g20" x="44.65" y="133"/>
+    <use href="#g21" x="24" y="132.5"/>
+    <use href="#g2" x="28.7" y="132.5"/>
+    <use href="#g13" x="38.26" y="132.5"/>
+    <use href="#g20" x="44.65" y="132.5"/>
   </g>
   <g fill="#000">
-    <use href="#g9" x="418" y="133"/>
-    <use href="#g5" x="424.28" y="133"/>
-    <use href="#g26" x="428.49" y="133"/>
-    <use href="#g1" x="438.92" y="133"/>
-    <use href="#g20" x="448.65" y="133"/>
+    <use href="#g9" x="418.28" y="132.5"/>
+    <use href="#g5" x="424.56" y="132.5"/>
+    <use href="#g26" x="428.78" y="132.5"/>
+    <use href="#g1" x="439.2" y="132.5"/>
+    <use href="#g20" x="448.94" y="132.5"/>
   </g>
   <rect x="12" y="170" width="456" height="96" fill="#fef9c3"/>
   <g fill="#000">

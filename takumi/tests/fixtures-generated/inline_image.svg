@@ -1,20 +1,20 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630">
   <rect x="0" y="0" width="1200" height="630" fill="#fff"/>
-  <path d="M427 274h347v82h-347v-82Zm2 2h343v78h-343v-78Z" fill="#000" fill-rule="evenodd"/>
+  <path d="M427 274h346v82h-346v-82Zm2 2h342v78h-342v-78Z" fill="#000" fill-rule="evenodd"/>
   <g fill="#000">
-    <use href="#g0" x="429" y="340"/>
-    <use href="#g1" x="461.54" y="340"/>
-    <use href="#g2" x="487.03" y="340"/>
-    <use href="#g3" x="503.88" y="340"/>
-    <use href="#g4" x="530.9" y="340"/>
-    <use href="#g1" x="547.18" y="340"/>
+    <use href="#g0" x="428.51" y="340"/>
+    <use href="#g1" x="461.06" y="340"/>
+    <use href="#g2" x="486.54" y="340"/>
+    <use href="#g3" x="503.39" y="340"/>
+    <use href="#g4" x="530.42" y="340"/>
+    <use href="#g1" x="546.69" y="340"/>
   </g>
   <g fill="#000">
-    <use href="#g5" x="662.1" y="340"/>
-    <use href="#g2" x="692.25" y="340"/>
-    <use href="#g6" x="709.29" y="340"/>
-    <use href="#g1" x="727.34" y="340"/>
-    <use href="#g4" x="753.78" y="340"/>
+    <use href="#g5" x="661.62" y="340"/>
+    <use href="#g2" x="691.76" y="340"/>
+    <use href="#g6" x="708.8" y="340"/>
+    <use href="#g1" x="726.85" y="340"/>
+    <use href="#g4" x="753.3" y="340"/>
   </g>
   <clipPath id="cp0">
     <path d="M586 276h64v64h-64v-64Zm12 12h40v40h-40v-40Z" clip-rule="evenodd"/>
