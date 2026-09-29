@@ -1,0 +1,46 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>inline_top_bottom_nested_bordered_span</title>
+    <base href="../../../" />
+    <link rel="stylesheet" href="takumi/tests/shared.css" />
+  </head>
+  <body style="width: 1200px; height: 630px">
+    <div
+      style="
+        display: flex;
+        flex-direction: column;
+        width: 100%;
+        height: 100%;
+        padding-top: 20px;
+        padding-right: 20px;
+        padding-bottom: 20px;
+        padding-left: 20px;
+        background-color: rgb(255, 255, 255);
+      "
+    >
+      <div
+        style="
+          display: block;
+          font-size: 28px;
+          line-height: 32px;
+          background-color: rgb(241, 245, 249);
+        "
+      >
+        <span style="border-bottom: 24px solid rgb(71, 85, 105)">Hx</span
+        ><span style="vertical-align: top; font-size: 20px"
+          >top<span
+            style="
+              display: inline-block;
+              vertical-align: bottom;
+              width: 20px;
+              height: 90px;
+              background-color: rgb(253, 186, 116);
+            "
+          ></span></span
+        ><span style="border-bottom: 40px solid rgb(59, 130, 246)">Hx</span>
+      </div>
+    </div>
+  </body>
+</html>

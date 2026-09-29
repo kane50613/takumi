@@ -4,7 +4,7 @@
 
 // The alignment rules follow Blink, under the notice in LICENSE-CHROMIUM.
 
-use std::{cmp::Reverse, collections::HashMap, mem::take, rc::Rc};
+use std::{collections::HashMap, mem::take, rc::Rc};
 
 use smallvec::{SmallVec, smallvec};
 
@@ -154,7 +154,8 @@ pub(super) enum BoxKey {
 struct OpenBox {
   key: Option<BoxKey>,
   parent: usize,
-  depth: usize,
+  /// Whether the box has closed, which puts its fragment in reach of `top` and `bottom`.
+  closed: bool,
   /// Its own strut, then everything aligned inside it.
   metrics: FontHeight,
   align: ResolvedVerticalAlign,
@@ -198,7 +199,7 @@ impl LineBoxTree {
       boxes: smallvec![OpenBox {
         key: None,
         parent: 0,
-        depth: 0,
+        closed: false,
         metrics: strut,
         align: ResolvedVerticalAlign::Keyword(VerticalAlignKeyword::Baseline),
         font: Some(font),
@@ -226,7 +227,7 @@ impl LineBoxTree {
     self.boxes.push(OpenBox {
       key: Some(key),
       parent,
-      depth: self.boxes[parent].depth + 1,
+      closed: false,
       metrics: strut,
       align,
       font,
@@ -299,10 +300,16 @@ impl LineBoxTree {
       return (self.boxes[0].metrics, LineBoxOffsets::default());
     }
 
-    let mut order: Vec<usize> = (1..self.boxes.len()).collect();
+    let mut children = vec![Vec::new(); self.boxes.len()];
+    let mut order = Vec::with_capacity(self.boxes.len() - 1);
 
-    order.sort_by_key(|&index| Reverse(self.boxes[index].depth));
+    for index in 1..self.boxes.len() {
+      children[self.boxes[index].parent].push(index);
+    }
+    close_order(&children, 0, &mut order);
+    // Blink's `EndBoxState`: each box closes after its children, adds its fragment, then aligns.
     for index in order {
+      self.boxes[index].closed = true;
       self.apply_pending(index);
       self.apply_baseline_shift(index);
     }
@@ -374,14 +381,14 @@ impl LineBoxTree {
     }
 
     // `top` and `bottom` align to the subtree the other values already aligned, with every box
-    // fragment on the line where it sits, grown to a taller `top` or `bottom` box by its other edge,
-    // as Blink's `MetricsForTopAndBottomAlign`.
+    // fragment closed so far where it sits, grown to a taller `top` or `bottom` box by its other
+    // edge, as Blink's `MetricsForTopAndBottomAlign`.
     let mut aligned = self.boxes[index].metrics;
 
     for other in 1..self.boxes.len() {
       let open = &self.boxes[other];
 
-      if open.box_metrics.is_empty() || Self::aligns_to_line_edge(open.align) {
+      if !open.closed || open.box_metrics.is_empty() || Self::aligns_to_line_edge(open.align) {
         continue;
       }
       aligned.unite(open.box_metrics.moved(self.line_offset(other)));
@@ -518,6 +525,14 @@ impl LineBoxTree {
 
     self.boxes[index].shift = shift;
     self.boxes[into].metrics.unite(moved);
+  }
+}
+
+/// Appends the boxes under `index` in the order they close, each after its children.
+fn close_order(children: &[Vec<usize>], index: usize, order: &mut Vec<usize>) {
+  for &child in &children[index] {
+    close_order(children, child, order);
+    order.push(child);
   }
 }
 
