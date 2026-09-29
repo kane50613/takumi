@@ -21,4 +21,6 @@ packages:
 - A line with `line-height: normal` grows to fit the fonts its text falls back to, and a line with any other line height no longer does, as in Chrome.
 - A `background-clip: text` background no longer shows past its box through a text stroke, and no longer scales with `text-fit`.
 - Gradients sample each pixel at its centre, as Chrome does, so hard stops land on the same pixels. A tile of fractional size blends across its seams as Chrome's does.
+- A root with `display: flex`, `grid` or `flow-root` and no width fills the viewport, as a block-level box does in Chrome.
+- An ellipsis follows the last word directly instead of the line's trailing space.
 - A `pattern` paint carries the `area` its tiles show in.
