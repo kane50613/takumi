@@ -49,6 +49,7 @@ fn measure_ellipsis_width(
 struct TruncationCheckpoint {
   cumulative_width: f32,
   byte_end: usize,
+  whitespace: bool,
 }
 
 fn collect_truncation_checkpoints(layout: &InlineLayout) -> Vec<TruncationCheckpoint> {
@@ -80,9 +81,18 @@ fn collect_truncation_checkpoints(layout: &InlineLayout) -> Vec<TruncationCheckp
           checkpoints.push(TruncationCheckpoint {
             cumulative_width,
             byte_end: cluster.text_range().end,
+            whitespace: cluster.is_space_or_nbsp(),
           });
         }
       }
+    }
+  }
+
+  // Blink's line breaker drops the line's trailing spaces before its `LineTruncator` places the
+  // ellipsis after what is left.
+  if !layout.is_rtl() {
+    while checkpoints.last().is_some_and(|checkpoint| checkpoint.whitespace) {
+      checkpoints.pop();
     }
   }
 
