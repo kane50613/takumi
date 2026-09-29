@@ -1295,13 +1295,25 @@ impl<'c> BuiltInlineLayout<'c> {
     }
   }
 
-  /// The baseline shift `glyph_run` sits at on `line`.
+  /// The baseline shift `glyph_run` paints at on `line`.
   pub(crate) fn run_baseline_shift(
     &self,
     line: &WalkedLine,
     glyph_run: &GlyphRun<'_, InlineBrush>,
   ) -> f32 {
-    line.baseline_shift_in(self.run_chain(glyph_run))
+    self.text_baseline_shift(line, self.run_chain(glyph_run))
+  }
+
+  /// The baseline shift text inside the innermost span of `chain` paints at on `line`: its box's
+  /// baseline, moved to where Blink's `TextFragmentPainter` puts a scaled fragment's text origin.
+  pub(crate) fn text_baseline_shift(
+    &self,
+    line: &WalkedLine,
+    chain: Option<&Rc<DecorationLink<'_>>>,
+  ) -> f32 {
+    let font = chain.map_or(self.font, |link| link.decoration.font);
+
+    line.baseline_shift_in(chain) + font.text_origin_shift(line.setup.fit, chain.is_none())
   }
 }
 

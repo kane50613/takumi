@@ -115,6 +115,30 @@ impl BoxFont {
       metrics: context.primary_font_metrics(&context.style, context.sizing.font_size),
     }
   }
+
+  /// How far below its box's baseline text in this font paints on a line `fit` fits, the root
+  /// inline box's text when `root`. Blink's `TextFragmentPainter` puts the text origin at the
+  /// fragment's top, its box's text ascent above the baseline, plus the font's whole-pixel ascent
+  /// as the text scales.
+  pub(crate) fn text_origin_shift(self, fit: LineFit, root: bool) -> f32 {
+    let Some(metrics) = self.metrics else {
+      return 0.0;
+    };
+
+    if fit.scale == 1.0 {
+      return 0.0;
+    }
+
+    let exact = metrics.exact;
+    let painted = if fit.reshaped {
+      LayoutUnit::from_f32((exact.ascent * fit.scale).round())
+    } else {
+      LayoutUnit::from_f32(metrics.ascent * fit.scale)
+    };
+    let text = FontHeight::text(exact.ascent, exact.descent, fit.text_scale(root));
+
+    (painted - text.ascent).to_f32()
+  }
 }
 
 /// What a box is, as the line box tree keys it.

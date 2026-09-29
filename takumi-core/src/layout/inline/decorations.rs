@@ -184,7 +184,8 @@ impl BuiltInlineLayout<'_> {
     }
 
     let chain = self.span_chain(source_span_id);
-    let state = line.setup.run_scale(line.baseline_shift_in(chain));
+    let baseline_shift = self.text_baseline_shift(line, chain);
+    let state = line.setup.run_scale(baseline_shift);
     let glyphs = state.transform(Affine::IDENTITY, static_inline_prefix);
     let content = layout.content_box_offset();
     let line_baseline = content.y + line.setup.resolved_metrics.resolved_baseline;
@@ -214,7 +215,7 @@ impl BuiltInlineLayout<'_> {
 
     let text_font = chain.map_or(self.font, |link| link.decoration.font);
     let text = DecorationFont::of(text_font, state.scale, run);
-    let baseline = content.y + run.baseline + line.baseline_shift_in(chain);
+    let baseline = content.y + run.baseline + baseline_shift;
     let left = content.x + run.offset + run.decorated_offset();
     let (left, _) = glyphs.transform_point(left, 0.0);
     let (right, _) = glyphs.transform_point(
