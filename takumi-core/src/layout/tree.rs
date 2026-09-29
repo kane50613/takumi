@@ -6,13 +6,13 @@ use std::{
 use parley::fontique::{Attributes, FontStyle as FontiqueStyle};
 use smallvec::SmallVec;
 use taffy::{
-  AvailableSpace as TaffyAvailableSpace, BlockContext, Cache, CacheTree, Display as TaffyDisplay,
-  Layout, LayoutBlockContainer, LayoutFlexboxContainer, LayoutGridContainer, LayoutInput,
-  LayoutOutput, LayoutPartialTree, LengthPercentageAuto, Line, MaybeResolve, NodeId as TaffyNodeId,
-  Position as TaffyPosition, RequestedAxis, ResolveOrZero, RoundTree, RunMode, Size as TaffySize,
-  SizingMode, Style, TraversePartialTree, TraverseTree, compute_block_layout,
-  compute_cached_layout, compute_flexbox_layout, compute_grid_layout, compute_hidden_layout,
-  compute_leaf_layout, compute_root_layout,
+  AvailableSpace as TaffyAvailableSpace, BlockContext, BoxSizing, Cache, CacheTree, Dimension,
+  Display as TaffyDisplay, Layout, LayoutBlockContainer, LayoutFlexboxContainer,
+  LayoutGridContainer, LayoutInput, LayoutOutput, LayoutPartialTree, LengthPercentageAuto, Line,
+  MaybeResolve, NodeId as TaffyNodeId, Position as TaffyPosition, RequestedAxis, ResolveOrZero,
+  RoundTree, RunMode, Size as TaffySize, SizingMode, Style, TraversePartialTree, TraverseTree,
+  compute_block_layout, compute_cached_layout, compute_flexbox_layout, compute_grid_layout,
+  compute_hidden_layout, compute_leaf_layout, compute_root_layout,
 };
 use xxhash_rust::xxh3::Xxh3;
 
@@ -642,6 +642,8 @@ impl<'r> LayoutTree<'r> {
   /// Computes the layout for the whole tree.
   pub fn compute_layout(&mut self, available_space: Size<AvailableSpace>) {
     let root_node_id = NodeId::ROOT.into_taffy();
+
+    self.stretch_root(available_space.width);
     compute_root_layout(
       self,
       root_node_id,
@@ -649,6 +651,42 @@ impl<'r> LayoutTree<'r> {
     );
     self.place_out_of_flow_at_static_positions(root_node_id);
     self.finalize_layout(root_node_id);
+  }
+
+  /// Gives a block-level flex, grid or flow-root root with an `auto` width the width a definite
+  /// `available_width` stretches it to, as CSS sizes every block-level box but a table. Taffy
+  /// stretches only a block root, and an atomic inline laid out as a root shrinks to fit.
+  fn stretch_root(&mut self, available_width: AvailableSpace) {
+    let AvailableSpace::Definite(available) = available_width else {
+      return;
+    };
+    let stretches = self.render_nodes.first().is_some_and(|root| {
+      matches!(
+        root.context.style.display,
+        Display::Flex | Display::Grid | Display::FlowRoot
+      )
+    });
+    let style = &self.nodes[0].style;
+
+    if !stretches || !style.size.width.is_auto() {
+      return;
+    }
+
+    let calc = |value, basis| self.resolve_calc_value(value, basis);
+    let margin = style.margin.resolve_or_zero(Some(available), calc);
+    let mut width = available - margin.horizontal_axis_sum();
+
+    if style.box_sizing == BoxSizing::ContentBox {
+      width -= style
+        .padding
+        .resolve_or_zero(Some(available), calc)
+        .horizontal_axis_sum()
+        + style
+          .border
+          .resolve_or_zero(Some(available), calc)
+          .horizontal_axis_sum();
+    }
+    self.nodes[0].style.size.width = Dimension::length(width.max(0.0));
   }
 
   /// Moves each out-of-flow box inside inline content to its static position on every axis whose
