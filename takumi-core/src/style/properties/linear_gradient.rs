@@ -9,8 +9,8 @@ use tiny_skia::PremultipliedColorU8;
 use typed_builder::TypedBuilder;
 
 use super::gradient_utils::{
-  ColorLut, GradientOverlayTile, LutAxis, gradient_tile_accessors, parse_gradient_function,
-  parse_gradient_stops, write_gradient_css,
+  ColorLut, GradientOverlayTile, LutAxis, gradient_tile_accessors, half_pixel_samples,
+  parse_gradient_function, parse_gradient_stops, write_gradient_css,
 };
 use crate::geometry::Size;
 use crate::style::{
@@ -82,9 +82,22 @@ impl LinearGradient {
         keyword_direction.to_angle()
       }
     };
-    let rad = angle.0.to_radians();
+    let degrees = angle.0.rem_euclid(360.0);
 
-    (rad.sin(), -rad.cos())
+    // Blink's `EndPointsFromAngle` takes the four axis angles exactly.
+    if degrees == 0.0 {
+      (0.0, -1.0)
+    } else if degrees == 90.0 {
+      (1.0, 0.0)
+    } else if degrees == 180.0 {
+      (0.0, 1.0)
+    } else if degrees == 270.0 {
+      (-1.0, 0.0)
+    } else {
+      let rad = degrees.to_radians();
+
+      (rad.sin(), -rad.cos())
+    }
   }
 
   /// Resolves the geometry and stops for a target viewport.
@@ -211,7 +224,7 @@ impl LinearGradientTile {
 
   #[inline(always)]
   fn pixel_lut_index(&self, x: u32, y: u32) -> usize {
-    self.point_index(x as f32, y as f32)
+    self.point_index(x as f32 + 0.5, y as f32 + 0.5)
   }
 
   #[inline(always)]
@@ -319,8 +332,12 @@ impl LinearGradientTile {
     let axis_aligned_kind = Self::classify_axis_aligned(dir_x, dir_y);
     let axis = LutAxis::new(gradient.repeating, geometry.stops, geometry.axis_length);
     let lut_size = match axis_aligned_kind {
-      Some(LinearGradientFastPathKind::Horizontal) => axis.lut_size_covering(width as usize + 1),
-      Some(LinearGradientFastPathKind::Vertical) => axis.lut_size_covering(height as usize + 1),
+      Some(LinearGradientFastPathKind::Horizontal) => {
+        axis.lut_size_covering(half_pixel_samples(width as usize))
+      }
+      Some(LinearGradientFastPathKind::Vertical) => {
+        axis.lut_size_covering(half_pixel_samples(height as usize))
+      }
       None => axis.lut_size(),
     };
     let lut = axis.lut(lut_size, gradient.interpolation, dither);
@@ -388,7 +405,7 @@ impl GradientOverlayTile for LinearGradientTile {
 
   #[inline(always)]
   fn begin_row(&self, src_x_start: u32, src_y: u32, lut_len: usize) -> Self::RowState {
-    let projection = self.projection_at(src_x_start as f32, src_y as f32);
+    let projection = self.projection_at(src_x_start as f32 + 0.5, src_y as f32 + 0.5);
     LinearGradientRowState {
       projection,
       projection_step: self.dir_x,
@@ -1366,14 +1383,15 @@ mod tests {
       .build();
     let tile = LinearGradientTile::new(&gradient, 100, 100, &sizing, Color::black(), false);
 
+    // Pixels sample at their centres, as Skia's shaders do, so the first row is half a pixel in.
     let color_top = tile.sample_pixel(50, 0).demultiply();
-    assert_eq!(color_top, ColorU8::from_rgba(255, 0, 0, 255));
+    assert_eq!(color_top, ColorU8::from_rgba(254, 0, 1, 255));
 
     let color_bottom = tile.sample_pixel(50, 100).demultiply();
     assert_eq!(color_bottom, ColorU8::from_rgba(0, 0, 255, 255));
 
     let color_middle = tile.sample_pixel(50, 50).demultiply();
-    assert_eq!(color_middle, ColorU8::from_rgba(127, 0, 128, 255));
+    assert_eq!(color_middle, ColorU8::from_rgba(126, 0, 129, 255));
   }
 
   #[test]
@@ -1395,7 +1413,7 @@ mod tests {
 
     let tile = LinearGradientTile::new(&gradient, 100, 100, &sizing, Color::black(), false);
     let color_left = tile.sample_pixel(0, 50).demultiply();
-    assert_eq!(color_left, ColorU8::from_rgba(255, 0, 0, 255));
+    assert_eq!(color_left, ColorU8::from_rgba(254, 0, 1, 255));
 
     let color_right = tile.sample_pixel(100, 50).demultiply();
     assert_eq!(color_right, ColorU8::from_rgba(0, 0, 255, 255));

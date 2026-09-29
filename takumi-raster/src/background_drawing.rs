@@ -723,9 +723,9 @@ fn rasterize_pattern(
       }
       let dither = (i as u32, j as u32);
       let color = match (&content, source, source_per_tile) {
-        (BackgroundTile::Linear(tile), ..) => tile.sample_point(u - 0.5, v - 0.5, dither),
-        (BackgroundTile::Radial(tile), ..) => tile.sample_point(u - 0.5, v - 0.5, dither),
-        (BackgroundTile::Conic(tile), ..) => tile.sample_point(u - 0.5, v - 0.5, dither),
+        (BackgroundTile::Linear(tile), ..) => tile.sample_point(u, v, dither),
+        (BackgroundTile::Radial(tile), ..) => tile.sample_point(u, v, dither),
+        (BackgroundTile::Conic(tile), ..) => tile.sample_point(u, v, dither),
         (BackgroundTile::Color(tile), ..) => tile.get_pixel(0, 0),
         (_, Some((source, algorithm)), Some(scale)) => interpolate_with_footprint(
           source.into(),

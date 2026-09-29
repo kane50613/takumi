@@ -6,8 +6,8 @@ use tiny_skia::PremultipliedColorU8;
 use typed_builder::TypedBuilder;
 
 use super::gradient_utils::{
-  ColorLut, GradientOverlayTile, LutAxis, gradient_tile_accessors, parse_gradient_function,
-  parse_gradient_stops, push_center_clause, write_gradient_css,
+  ColorLut, GradientOverlayTile, LutAxis, gradient_tile_accessors, half_pixel_samples,
+  parse_gradient_function, parse_gradient_stops, push_center_clause, write_gradient_css,
 };
 use crate::geometry::Size;
 use crate::style::{
@@ -289,15 +289,16 @@ impl RadialGradientTile {
       return None;
     }
 
-    let dy = (src_y as f32 - self.cy) * self.inv_radius_y;
+    let dy = (src_y as f32 + 0.5 - self.cy) * self.inv_radius_y;
     let dy2 = dy * dy;
     if dy2 >= 1.0 {
       return Some((src_x_start, src_x_start));
     }
 
+    // The pixels whose centres fall inside the ellipse.
     let max_dx = (1.0 - dy2).sqrt() / self.inv_radius_x;
-    let active_start = (self.cx - max_dx).floor() as i32 + 1;
-    let active_end = (self.cx + max_dx).ceil() as i32;
+    let active_start = (self.cx - 0.5 - max_dx).floor() as i32 + 1;
+    let active_end = (self.cx - 0.5 + max_dx).ceil() as i32;
     let clamped_start = active_start.max(src_x_start as i32).min(src_x_end as i32) as u32;
     let clamped_end = active_end.max(clamped_start as i32).min(src_x_end as i32) as u32;
     Some((clamped_start, clamped_end))
@@ -356,7 +357,7 @@ impl RadialGradientTile {
     let geometry = gradient.resolve_geometry(size.width, size.height, sizing, current_color);
     let axis = LutAxis::new(gradient.repeating, geometry.stops, geometry.radius_scale);
     let lut_size =
-      axis.lut_size_covering((geometry.radius_scale.ceil() as usize).saturating_add(1));
+      axis.lut_size_covering(half_pixel_samples(geometry.radius_scale.ceil() as usize));
     let lut = axis.lut(lut_size, gradient.interpolation, dither);
     let lut_len = lut.len();
     let inv_radius_x = geometry.inv_radius_x;
@@ -383,7 +384,7 @@ impl RadialGradientTile {
 
   #[inline(always)]
   fn pixel_lut_index(&self, x: u32, y: u32) -> usize {
-    self.point_index(x as f32, y as f32)
+    self.point_index(x as f32 + 0.5, y as f32 + 0.5)
   }
 
   #[inline(always)]
@@ -426,8 +427,8 @@ impl GradientOverlayTile for RadialGradientTile {
 
   #[inline(always)]
   fn begin_row(&self, src_x_start: u32, src_y: u32, lut_len: usize) -> Self::RowState {
-    let dy = (src_y as f32 - self.cy) * self.inv_radius_y;
-    let dx = (src_x_start as f32 - self.cx) * self.inv_radius_x;
+    let dy = (src_y as f32 + 0.5 - self.cy) * self.inv_radius_y;
+    let dx = (src_x_start as f32 + 0.5 - self.cx) * self.inv_radius_x;
     let dx_step = self.inv_radius_x;
     RadialGradientRowState {
       dx2: dx * dx,
@@ -874,9 +875,9 @@ mod tests {
       .build();
     let tile = RadialGradientTile::new(&gradient, 100, 100, &sizing, Color::black(), false);
 
-    // Center (50, 50) should be red
+    // The pixel at (50, 50) samples its centre, half a pixel each way off the gradient's.
     let color_center = tile.sample_pixel(50, 50).demultiply();
-    assert_eq!(color_center, ColorU8::from_rgba(255, 0, 0, 255));
+    assert_eq!(color_center, ColorU8::from_rgba(253, 0, 2, 255));
 
     // Far outside (200, 200) should be clamped to blue
     let color_far = tile.sample_pixel(200, 200).demultiply();

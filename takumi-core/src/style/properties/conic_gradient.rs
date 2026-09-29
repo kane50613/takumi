@@ -239,7 +239,7 @@ impl ConicGradientTile {
 
   #[inline(always)]
   fn pixel_lut_index(&self, x: u32, y: u32) -> usize {
-    self.point_index(x as f32, y as f32)
+    self.point_index(x as f32 + 0.5, y as f32 + 0.5)
   }
 
   #[inline(always)]
@@ -286,8 +286,8 @@ impl GradientOverlayTile for ConicGradientTile {
   #[inline(always)]
   fn begin_row(&self, src_x_start: u32, src_y: u32, lut_len: usize) -> Self::RowState {
     ConicGradientRowState {
-      dx: src_x_start as f32 - self.cx,
-      dy: src_y as f32 - self.cy,
+      dx: src_x_start as f32 + 0.5 - self.cx,
+      dy: src_y as f32 + 0.5 - self.cy,
       lut_len,
     }
   }

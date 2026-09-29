@@ -885,13 +885,9 @@ impl LutAxis {
     }
   }
 
-  /// A LUT size with one entry per pixel of the axis.
+  /// A LUT size with an entry per half pixel of the axis, so pixel centres land on entries.
   pub(crate) fn lut_size(&self) -> usize {
-    self.lut_size_covering(
-      (self.length.ceil() as usize)
-        .saturating_add(1)
-        .max(MIN_GRADIENT_LUT_SIZE),
-    )
+    self.lut_size_covering(half_pixel_samples(self.length.ceil() as usize))
   }
 
   /// A LUT size that covers `visible_samples` and the tightest stop interval.
@@ -933,6 +929,11 @@ impl LutAxis {
   ) -> ColorLut {
     ColorLut::new(&self.stops, self.length, size, interpolation, dither)
   }
+}
+
+/// The LUT entries a run of `pixels` needs for an entry at every pixel's edge and centre.
+pub(crate) fn half_pixel_samples(pixels: usize) -> usize {
+  pixels.saturating_mul(2).saturating_add(1)
 }
 
 impl ResolvedGradientStop {
