@@ -262,7 +262,7 @@
     <use href="#g8" x="99.44" y="96"/>
     <use href="#g13" x="106.02" y="96"/>
   </g>
-  <rect x="124" y="65" width="54.734" height="48" fill="#ffc8c8"/>
+  <rect x="124" y="65" width="55" height="48" fill="#ffc8c8"/>
   <g fill="#000">
     <use href="#g31" x="128" y="96"/>
     <use href="#g11" x="133.52" y="96"/>

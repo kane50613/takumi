@@ -117,7 +117,7 @@ impl Walker {
     let painter = BoxPainter::new(context, layout);
     let size = layout.size;
     let drawables = if node.paints_own_box() {
-      decorations(&painter, size, transform)
+      decorations(&painter, transform)
     } else {
       Vec::new()
     };
@@ -411,7 +411,7 @@ impl Walker {
 
       TextBackground {
         area: Shape::Rect {
-          rect: PaintRect::sized(Point::ZERO, layout.size),
+          rect: PaintRect::sized(background.offset, background.size),
         },
         layers: background
           .color
@@ -744,7 +744,7 @@ pub(super) fn recorded<'s>(
 }
 
 /// The shadows, background, and border the box `painter` paints, bottom first.
-fn decorations(painter: &BoxPainter<'_>, size: Size<f32>, transform: Affine) -> Vec<Drawable> {
+fn decorations(painter: &BoxPainter<'_>, transform: Affine) -> Vec<Drawable> {
   let mut recorder = Recorder::new(transform);
 
   painter.paint_normal_box_shadows(Point::ZERO, &mut recorder);
@@ -759,11 +759,11 @@ fn decorations(painter: &BoxPainter<'_>, size: Size<f32>, transform: Affine) -> 
     recorder.begin_layer(1.0, None);
   }
   painter.background_color(Point::ZERO, &mut recorder);
-  if let Some(clip) = background.clip.shape(size) {
+  if let Some(clip) = background.clip.shape(background.size) {
     let mask = background.clip.border_mask();
     let shape = Shape::of(
-      &mask.map_or(clip, |_| FillShape::Rect(size)),
-      Affine::IDENTITY,
+      &mask.map_or(clip, |_| FillShape::Rect(background.size)),
+      Affine::translation(background.offset.x, background.offset.y),
     );
     let fill = |recorder: &mut Recorder| {
       for (paint, blend_mode) in layers {
@@ -778,7 +778,7 @@ fn decorations(painter: &BoxPainter<'_>, size: Size<f32>, transform: Affine) -> 
     };
 
     match mask {
-      Some(mask) => recorder.with_border_mask(&mask, size, Point::ZERO, fill),
+      Some(mask) => recorder.with_border_mask(&mask, background.size, background.offset, fill),
       None => fill(&mut recorder),
     }
   }

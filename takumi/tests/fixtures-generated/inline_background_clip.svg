@@ -1,10 +1,10 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="480" height="240" viewBox="0 0 480 240">
   <rect x="0" y="0" width="480" height="240" fill="#f1f5f9"/>
-  <rect x="91.544" y="20" width="143.628" height="48" fill="#facc15"/>
-  <path d="M91.54 22h143.63" fill="none" stroke="#1e293b" stroke-width="4" stroke-dasharray="8 4.33"/>
-  <path d="M91.54 66h143.63" fill="none" stroke="#1e293b" stroke-width="4" stroke-dasharray="8 4.33"/>
-  <path d="M233.17 20v48" fill="none" stroke="#1e293b" stroke-width="4" stroke-dasharray="8 5.333"/>
-  <path d="M93.54 20v48" fill="none" stroke="#1e293b" stroke-width="4" stroke-dasharray="8 5.333"/>
+  <rect x="92" y="20" width="143" height="48" fill="#facc15"/>
+  <path d="M92 22h143" fill="none" stroke="#1e293b" stroke-width="4" stroke-dasharray="8 4.273"/>
+  <path d="M92 66h143" fill="none" stroke="#1e293b" stroke-width="4" stroke-dasharray="8 4.273"/>
+  <path d="M233 20v48" fill="none" stroke="#1e293b" stroke-width="4" stroke-dasharray="8 5.333"/>
+  <path d="M94 20v48" fill="none" stroke="#1e293b" stroke-width="4" stroke-dasharray="8 5.333"/>
   <g fill="#000">
     <use href="#g0" x="20" y="52"/>
     <use href="#g1" x="32.87" y="52"/>
@@ -25,11 +25,11 @@
     <use href="#g1" x="194.8" y="52"/>
     <use href="#g6" x="206.3" y="52"/>
   </g>
-  <path d="M111.27 72h152.24v40h-152.24v-40Z" fill="#facc15"/>
-  <path d="M107.27 70h160.24" fill="none" stroke="#1e293b" stroke-width="4" stroke-dasharray="8 3.711"/>
-  <path d="M107.27 114h160.24" fill="none" stroke="#1e293b" stroke-width="4" stroke-dasharray="8 3.711"/>
-  <path d="M265.51 68v48" fill="none" stroke="#1e293b" stroke-width="4" stroke-dasharray="8 5.333"/>
-  <path d="M109.27 68v48" fill="none" stroke="#1e293b" stroke-width="4" stroke-dasharray="8 5.333"/>
+  <path d="M111 72h153v40h-153v-40Z" fill="#facc15"/>
+  <path d="M107 70h161" fill="none" stroke="#1e293b" stroke-width="4" stroke-dasharray="8 3.769"/>
+  <path d="M107 114h161" fill="none" stroke="#1e293b" stroke-width="4" stroke-dasharray="8 3.769"/>
+  <path d="M266 68v48" fill="none" stroke="#1e293b" stroke-width="4" stroke-dasharray="8 5.333"/>
+  <path d="M109 68v48" fill="none" stroke="#1e293b" stroke-width="4" stroke-dasharray="8 5.333"/>
   <g fill="#000">
     <use href="#g7" x="20" y="100"/>
     <use href="#g8" x="33.18" y="100"/>
@@ -52,11 +52,11 @@
     <use href="#g1" x="227.14" y="100"/>
     <use href="#g6" x="238.64" y="100"/>
   </g>
-  <path d="M118.5 126h239.54v28h-239.54v-28Z" fill="#facc15"/>
-  <path d="M102.5 118h271.54" fill="none" stroke="#1e293b" stroke-width="4" stroke-dasharray="8 3.979"/>
-  <path d="M102.5 162h271.54" fill="none" stroke="#1e293b" stroke-width="4" stroke-dasharray="8 3.979"/>
-  <path d="M372.04 116v48" fill="none" stroke="#1e293b" stroke-width="4" stroke-dasharray="8 5.333"/>
-  <path d="M104.5 116v48" fill="none" stroke="#1e293b" stroke-width="4" stroke-dasharray="8 5.333"/>
+  <path d="M119 126h239v28h-239v-28Z" fill="#facc15"/>
+  <path d="M103 118h271" fill="none" stroke="#1e293b" stroke-width="4" stroke-dasharray="8 3.955"/>
+  <path d="M103 162h271" fill="none" stroke="#1e293b" stroke-width="4" stroke-dasharray="8 3.955"/>
+  <path d="M372 116v48" fill="none" stroke="#1e293b" stroke-width="4" stroke-dasharray="8 5.333"/>
+  <path d="M105 116v48" fill="none" stroke="#1e293b" stroke-width="4" stroke-dasharray="8 5.333"/>
   <g fill="#000">
     <use href="#g12" x="20" y="148"/>
     <use href="#g1" x="31.79" y="148"/>

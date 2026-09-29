@@ -5,7 +5,10 @@
 use super::{BoxPainter, FillShape, PaintDevice, PaintRole};
 use crate::{
   geometry::{Point, Rect, Size},
-  layout::{border::BorderProperties, decoration::ClipBox},
+  layout::{
+    border::BorderProperties,
+    decoration::{ClipBox, ContourOrigin},
+  },
   style::{Affine, BlurType, FillRule},
 };
 
@@ -77,10 +80,11 @@ impl BoxPainter<'_> {
       return;
     }
 
+    let origin = origin + self.snapped.offset();
     let at = Affine::translation(origin.x, origin.y);
     let border_box = ClipBox {
       border: *self.border(),
-      size: self.layout.size,
+      size: self.snapped.size(),
       offset: Point::ZERO,
       origin: None,
     };
@@ -105,12 +109,23 @@ impl BoxPainter<'_> {
   /// box.
   pub fn paint_inset_box_shadows<D: PaintDevice>(&self, origin: Point<f32>, device: &mut D) {
     let shadows = self.shadows().inset;
-    let padding_box = ClipBox::padding_box(*self.border(), self.layout);
+    let (offset, size) = self.snapped.contoured_inset(self.layout.border, false);
+    let unsnapped = ClipBox::padding_box(*self.border(), self.layout);
+    let padding_box = ClipBox {
+      offset,
+      size,
+      origin: unsnapped.origin.map(|origin| ContourOrigin {
+        size: self.snapped.size(),
+        ..origin
+      }),
+      ..unsnapped
+    };
 
     if shadows.is_empty() || padding_box.is_empty() {
       return;
     }
 
+    let origin = origin + self.snapped.offset();
     let at = Affine::translation(origin.x, origin.y);
 
     device.set_role(PaintRole::BoxShadow);

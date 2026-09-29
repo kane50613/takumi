@@ -1,7 +1,7 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="420" height="320" viewBox="0 0 420 320">
   <rect x="0" y="0" width="420" height="320" fill="#fff"/>
   <clipPath id="cp0">
-    <path d="M71.73 18h186.29v31h-186.29v-31Z"/>
+    <path d="M72 18h186v31h-186v-31Z"/>
   </clipPath>
   <g clip-path="url(#cp0)">
     <linearGradient id="lg1" gradientUnits="userSpaceOnUse" x1="72" y1="33.5" x2="442" y2="33.5">
@@ -73,7 +73,7 @@
     <rect x="72" y="18" width="370" height="31" fill="url(#lg1)"/>
   </g>
   <clipPath id="cp2">
-    <path d="M16 54h183.84v31h-183.84v-31Z"/>
+    <path d="M16 54h184v31h-184v-31Z"/>
   </clipPath>
   <g clip-path="url(#cp2)">
     <linearGradient id="lg3" gradientUnits="userSpaceOnUse" x1="-170" y1="69.5" x2="200" y2="69.5">
@@ -191,7 +191,7 @@
     <use href="#g16" x="255.06" y="78"/>
   </g>
   <clipPath id="cp4">
-    <path d="M77.63 102h229.11v31h-229.11v-31Z"/>
+    <path d="M78 102h229v31h-229v-31Z"/>
   </clipPath>
   <g clip-path="url(#cp4)">
     <linearGradient id="lg5" gradientUnits="userSpaceOnUse" x1="78" y1="117.5" x2="307" y2="117.5">
@@ -263,7 +263,7 @@
     <rect x="78" y="102" width="229" height="31" fill="url(#lg5)"/>
   </g>
   <clipPath id="cp6">
-    <path d="M16 138h111.05v31h-111.05v-31Z"/>
+    <path d="M16 138h111v31h-111v-31Z"/>
   </clipPath>
   <g clip-path="url(#cp6)">
     <linearGradient id="lg7" gradientUnits="userSpaceOnUse" x1="16" y1="153.5" x2="127" y2="153.5">

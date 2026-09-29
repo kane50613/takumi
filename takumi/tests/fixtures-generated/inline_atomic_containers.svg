@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630">
   <rect x="0" y="0" width="1200" height="630" fill="#fff"/>
-  <path d="M288 281h624.04v69h-624.04v-69Zm6 6h612.04v57h-612.04v-57Z" fill="#282828" fill-rule="evenodd"/>
+  <path d="M288 281h624v69h-624v-69Zm6 6h612v57h-612v-57Z" fill="#282828" fill-rule="evenodd"/>
   <g fill="#000">
     <use href="#g0" x="294" y="324"/>
     <use href="#g1" x="308.04" y="324"/>
@@ -19,8 +19,8 @@
     <use href="#g8" x="734.59" y="324"/>
     <use href="#g7" x="748.25" y="324"/>
   </g>
-  <rect x="370.32" y="287" width="155.936" height="57" fill="#f00" fill-opacity=".392"/>
-  <path d="M370.32 287h155.94v57h-155.94v-57Zm5 5h145.94v47h-145.94v-47Z" fill="#b41414" fill-rule="evenodd"/>
+  <rect x="370" y="287" width="156" height="57" fill="#f00" fill-opacity=".392"/>
+  <path d="M370 287h156v57h-156v-57Zm5 5h146v47h-146v-47Z" fill="#b41414" fill-rule="evenodd"/>
   <g fill="#000">
     <use href="#g6" x="383.32" y="324"/>
     <use href="#g8" x="389.32" y="324"/>
@@ -35,8 +35,8 @@
     <use href="#g11" x="486.23" y="324"/>
     <use href="#g12" x="499.1" y="324"/>
   </g>
-  <rect x="579.056" y="287" width="136" height="57" fill="#0f0" fill-opacity=".392"/>
-  <path d="M579.06 287h136v57h-136v-57Zm5 5h126v47h-126v-47Z" fill="#148c14" fill-rule="evenodd"/>
+  <rect x="579" y="287" width="136" height="57" fill="#0f0" fill-opacity=".392"/>
+  <path d="M579 287h136v57h-136v-57Zm5 5h126v47h-126v-47Z" fill="#148c14" fill-rule="evenodd"/>
   <g fill="#000">
     <use href="#g6" x="592.06" y="324"/>
     <use href="#g8" x="598.06" y="324"/>
@@ -49,8 +49,8 @@
     <use href="#g1" x="676.06" y="324"/>
     <use href="#g14" x="688.32" y="324"/>
   </g>
-  <rect x="768.529" y="287" width="138" height="57" fill="#00f" fill-opacity=".392"/>
-  <path d="M768.53 287h138v57h-138v-57Zm5 5h128v47h-128v-47Z" fill="#1414b4" fill-rule="evenodd"/>
+  <rect x="769" y="287" width="138" height="57" fill="#00f" fill-opacity=".392"/>
+  <path d="M769 287h138v57h-138v-57Zm5 5h128v47h-128v-47Z" fill="#1414b4" fill-rule="evenodd"/>
   <g fill="#000">
     <use href="#g6" x="781.53" y="324"/>
     <use href="#g8" x="787.53" y="324"/>

@@ -3,7 +3,7 @@
 //! underlines and overlines, text, then line-through.
 
 use super::{
-  BoxBorderPainter, BoxFrame, FillShape, OpacityLayer, PaintDevice, PaintRole,
+  BoxBorderPainter, BoxFrame, FillShape, OpacityLayer, PaintDevice, PaintRole, SnappedBox,
   background::{BackgroundClipArea, BoxBackground},
 };
 use crate::{
@@ -195,19 +195,14 @@ impl InlineLines<'_> {
           background.paint(fragment, frame, device);
         }
 
+        let snapped = fragment.snapped_box();
+
         device.set_role(PaintRole::Border);
-        BoxBorderPainter::new(
-          &fragment.border,
-          Size {
-            width: fragment.width,
-            height: fragment.height,
-          },
-        )
-        .paint(
+        BoxBorderPainter::new(&fragment.border, snapped.size()).paint(
           Point {
             x: frame.origin.x + fragment.x,
             y: frame.origin.y + fragment.y,
-          },
+          } + snapped.offset(),
           device,
         );
       });
@@ -352,15 +347,14 @@ impl<'c> FragmentBackground<'c> {
     }
 
     let context = &self.node.context;
-    let Some(clip) =
-      BackgroundClipArea::new(context, self.fragment, fragment.border).shape(self.fragment.size)
+    let snapped = fragment.snapped_box();
+    let Some(clip) = BackgroundClipArea::new(context, self.fragment, fragment.border, &snapped)
+      .shape(snapped.size())
     else {
       return;
     };
-    let transform = Affine::translation(
-      frame.origin.x + self.fragment.location.x,
-      frame.origin.y + self.fragment.location.y,
-    );
+    let at = frame.origin + self.fragment.location + snapped.offset();
+    let transform = Affine::translation(at.x, at.y);
 
     device.set_role(PaintRole::InlineBackground);
     if fragment.color.0[3] != 0 {
@@ -441,5 +435,22 @@ impl PaintedRun<'_> {
         }
       }
     });
+  }
+}
+
+impl InlineBackgroundFragment<'_> {
+  /// The fragment's border box pixel-snapped where its span paints.
+  fn snapped_box(&self) -> SnappedBox {
+    SnappedBox::new(
+      self.owner.context.paint_offset
+        + Point {
+          x: self.x,
+          y: self.y,
+        },
+      Size {
+        width: self.width,
+        height: self.height,
+      },
+    )
   }
 }

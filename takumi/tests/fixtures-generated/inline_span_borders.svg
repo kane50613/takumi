@@ -1,50 +1,50 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="640" height="300" viewBox="0 0 640 300">
   <rect x="0" y="0" width="640" height="300" fill="#f8fafc"/>
-  <path d="M32 36h62.32v40h-62.32v-40Zm3 3h56.32v34h-56.32v-34Z" fill="#16a34a" fill-rule="evenodd"/>
-  <path d="M100.82 37.5h105.23" fill="none" stroke="#e11d48" stroke-width="3" stroke-dasharray="6 3.021"/>
-  <path d="M100.82 74.5h105.23" fill="none" stroke="#e11d48" stroke-width="3" stroke-dasharray="6 3.021"/>
-  <path d="M204.55 36v40" fill="none" stroke="#e11d48" stroke-width="3" stroke-dasharray="6 2.5"/>
-  <path d="M102.32 36v40" fill="none" stroke="#e11d48" stroke-width="3" stroke-dasharray="6 2.5"/>
-  <rect x="212.546" y="33" width="92.99" height="3" fill="#272d37"/>
-  <rect x="212.546" y="36" width="92.99" height="3" fill="#a1bae0"/>
-  <rect x="212.546" y="73" width="92.99" height="3" fill="#272d37"/>
-  <rect x="212.546" y="76" width="92.99" height="3" fill="#a1bae0"/>
+  <path d="M32 36h62v40h-62v-40Zm3 3h56v34h-56v-34Z" fill="#16a34a" fill-rule="evenodd"/>
+  <path d="M101 37.5h105" fill="none" stroke="#e11d48" stroke-width="3" stroke-dasharray="6 3"/>
+  <path d="M101 74.5h105" fill="none" stroke="#e11d48" stroke-width="3" stroke-dasharray="6 3"/>
+  <path d="M204.5 36v40" fill="none" stroke="#e11d48" stroke-width="3" stroke-dasharray="6 2.5"/>
+  <path d="M102.5 36v40" fill="none" stroke="#e11d48" stroke-width="3" stroke-dasharray="6 2.5"/>
+  <rect x="213" y="33" width="93" height="3" fill="#272d37"/>
+  <rect x="213" y="36" width="93" height="3" fill="#a1bae0"/>
+  <rect x="213" y="73" width="93" height="3" fill="#272d37"/>
+  <rect x="213" y="76" width="93" height="3" fill="#a1bae0"/>
   <clipPath id="cp0">
-    <path d="M305.54 32.9l-6 6v40.1h6Z"/>
+    <path d="M306 32.9l-6 6v40.1h6Z"/>
   </clipPath>
   <g clip-path="url(#cp0)">
     <clipPath id="cp1">
-      <path shape-rendering="crispEdges" d="M305.54 33h-6v40.1l6 6Z"/>
+      <path shape-rendering="crispEdges" d="M306 33h-6v40.1l6 6Z"/>
     </clipPath>
     <g clip-path="url(#cp1)">
-      <rect x="299.536" y="33" width="3" height="46" fill="#272d37"/>
-      <rect x="302.536" y="33" width="3" height="46" fill="#a1bae0"/>
+      <rect x="300" y="33" width="3" height="46" fill="#272d37"/>
+      <rect x="303" y="33" width="3" height="46" fill="#a1bae0"/>
     </g>
   </g>
   <clipPath id="cp2">
-    <path d="M212.55 79.1l6-6v-40.1h-6Z"/>
+    <path d="M213 79.1l6-6v-40.1h-6Z"/>
   </clipPath>
   <g clip-path="url(#cp2)">
     <clipPath id="cp3">
-      <path shape-rendering="crispEdges" d="M212.55 79h6v-40.1l-6-6Z"/>
+      <path shape-rendering="crispEdges" d="M213 79h6v-40.1l-6-6Z"/>
     </clipPath>
     <g clip-path="url(#cp3)">
-      <rect x="212.546" y="33" width="3" height="46" fill="#272d37"/>
-      <rect x="215.546" y="33" width="3" height="46" fill="#a1bae0"/>
+      <rect x="213" y="33" width="3" height="46" fill="#272d37"/>
+      <rect x="216" y="33" width="3" height="46" fill="#a1bae0"/>
     </g>
   </g>
-  <path d="M320.04 35h102.2c4.42 0 8 3.58 8 8v26c0 4.42-3.58 8-8 8h-102.2c-4.42 0-8-3.58-8-8v-26c0-4.42 3.58-8 8-8Z" fill="#dbeafe"/>
-  <path d="M320.04 35h102.2c4.42 0 8 3.58 8 8v26c0 4.42-3.58 8-8 8h-102.2c-4.42 0-8-3.58-8-8v-26c0-4.42 3.58-8 8-8Zm0 2h102.2c3.31 0 6 2.69 6 6v26c0 3.31-2.69 6-6 6h-102.2c-3.32 0-6-2.69-6-6v-26c0-3.31 2.68-6 6-6Z" fill="#2563eb" fill-rule="evenodd"/>
-  <rect x="436.738" y="37" width="133.634" height="40" fill="#f3e8ff"/>
-  <rect x="436.738" y="37" width="133.634" height="2" fill="#9333ea"/>
-  <rect x="436.738" y="73" width="133.634" height="4" fill="#9333ea"/>
-  <path d="M436.74 37v40l6-4v-34Z" fill="#eab308"/>
-  <rect x="32" y="94.2" width="396.598" height="40" fill="#f3e8ff"/>
-  <rect x="32" y="94.2" width="396.598" height="2" fill="#9333ea"/>
-  <rect x="32" y="130.2" width="396.598" height="4" fill="#9333ea"/>
-  <path d="M422.6 96.2v34l6 4v-40Z" fill="#eab308"/>
-  <path d="M464.56 94.2c16.27 0 29.46 8.51 29.46 19s-13.19 19-29.46 19-29.46-8.51-29.46-19 13.19-19 29.46-19Z" fill="#dcfce7"/>
-  <path d="M464.56 94.2c16.27 0 29.46 8.51 29.46 19s-13.19 19-29.46 19-29.46-8.51-29.46-19 13.19-19 29.46-19Zm0 2c15.16 0 27.46 7.61 27.46 17s-12.3 17-27.46 17-27.46-7.61-27.46-17 12.29-17 27.46-17Z" fill="#16a34a" fill-rule="evenodd"/>
+  <path d="M320 35h102c4.42 0 8 3.58 8 8v26c0 4.42-3.58 8-8 8h-102c-4.42 0-8-3.58-8-8v-26c0-4.42 3.58-8 8-8Z" fill="#dbeafe"/>
+  <path d="M320 35h102c4.42 0 8 3.58 8 8v26c0 4.42-3.58 8-8 8h-102c-4.42 0-8-3.58-8-8v-26c0-4.42 3.58-8 8-8Zm0 2h102c3.31 0 6 2.69 6 6v26c0 3.31-2.69 6-6 6h-102c-3.31 0-6-2.69-6-6v-26c0-3.31 2.69-6 6-6Z" fill="#2563eb" fill-rule="evenodd"/>
+  <rect x="437" y="37" width="133" height="40" fill="#f3e8ff"/>
+  <rect x="437" y="37" width="133" height="2" fill="#9333ea"/>
+  <rect x="437" y="73" width="133" height="4" fill="#9333ea"/>
+  <path d="M437 37v40l6-4v-34Z" fill="#eab308"/>
+  <rect x="32" y="94" width="397" height="40" fill="#f3e8ff"/>
+  <rect x="32" y="94" width="397" height="2" fill="#9333ea"/>
+  <rect x="32" y="130" width="397" height="4" fill="#9333ea"/>
+  <path d="M423 96v34l6 4v-40Z" fill="#eab308"/>
+  <path d="M464.46 94h.08c16.27 0 29.46 8.51 29.46 19s-13.19 19-29.46 19h-.08c-16.27 0-29.46-8.51-29.46-19s13.19-19 29.46-19Z" fill="#dcfce7"/>
+  <path d="M464.46 94h.08c16.27 0 29.46 8.51 29.46 19s-13.19 19-29.46 19h-.08c-16.27 0-29.46-8.51-29.46-19s13.19-19 29.46-19Zm0 2h.08c15.17 0 27.46 7.61 27.46 17s-12.29 17-27.46 17h-.08c-15.17 0-27.46-7.61-27.46-17s12.29-17 27.46-17Z" fill="#16a34a" fill-rule="evenodd"/>
   <g fill="#0f172a">
     <use href="#g0" x="35" y="65"/>
     <use href="#g1" x="48.26" y="65"/>

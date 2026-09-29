@@ -38,6 +38,8 @@ pub struct ContourOrigin {
   pub border: BorderProperties,
   /// The border box's size.
   pub size: Size<f32>,
+  /// The border box's top-left, in the region's space.
+  pub offset: Point<f32>,
 }
 
 impl ClipBox {
@@ -57,6 +59,7 @@ impl ClipBox {
       origin: Some(ContourOrigin {
         border,
         size: layout.size,
+        offset: Point::ZERO,
       }),
     }
   }
@@ -75,6 +78,7 @@ impl ClipBox {
       origin: Some(ContourOrigin {
         border,
         size: layout.size,
+        offset: Point::ZERO,
       }),
     }
   }
@@ -89,10 +93,10 @@ impl ClipBox {
 
     self.edges()
       != (Rect {
-        left: 0.0,
-        top: 0.0,
-        right: origin.size.width,
-        bottom: origin.size.height,
+        left: origin.offset.x,
+        top: origin.offset.y,
+        right: origin.offset.x + origin.size.width,
+        bottom: origin.offset.y + origin.size.height,
       })
       && !has_round_curvature(&radii, Corner::curvatures(&radii, &origin.border.shape))
   }
@@ -108,6 +112,7 @@ impl ClipBox {
     let radii = origin.border.scaled_corner_radii(origin.size);
 
     append_inset_contour(
+      origin.offset,
       origin.size,
       &radii,
       Corner::curvatures(&radii, &origin.border.shape),

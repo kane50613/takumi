@@ -293,13 +293,13 @@
     <use href="#g51" x="235" y="351"/>
     <use href="#g51" x="244" y="351"/>
   </g>
-  <path d="M28 361h148.69v40h-148.69v-40Zm1 1h146.69v38h-146.69v-38Z" fill="#cbd5e1" fill-rule="evenodd"/>
+  <path d="M28 361h149v40h-149v-40Zm1 1h147v38h-147v-38Z" fill="#cbd5e1" fill-rule="evenodd"/>
   <g fill="#111827">
     <use href="#g44" x="37" y="383"/>
     <use href="#g49" x="43.77" y="383"/>
     <use href="#g39" x="53.9" y="383"/>
   </g>
-  <path d="M177 361h187.31v40h-187.31v-40Zm1 1h185.31v38h-185.31v-38Z" fill="#cbd5e1" fill-rule="evenodd"/>
+  <path d="M177 361h187v40h-187v-40Zm1 1h185v38h-185v-38Z" fill="#cbd5e1" fill-rule="evenodd"/>
   <g fill="#111827">
     <use href="#g50" x="186" y="383"/>
     <use href="#g55" x="196.89" y="383"/>
@@ -319,7 +319,7 @@
     <use href="#g38" x="77.95" y="428"/>
     <use href="#g43" x="82.65" y="428"/>
   </g>
-  <path d="M177 401h187.31v40h-187.31v-40Zm1 1h185.31v38h-185.31v-38Z" fill="#cbd5e1" fill-rule="evenodd"/>
+  <path d="M177 401h187v40h-187v-40Zm1 1h185v38h-185v-38Z" fill="#cbd5e1" fill-rule="evenodd"/>
   <g fill="#111827">
     <use href="#g50" x="186" y="423"/>
     <use href="#g55" x="196.89" y="423"/>
@@ -338,7 +338,7 @@
     <use href="#g49" x="69.49" y="472"/>
     <use href="#g47" x="79.62" y="472"/>
   </g>
-  <path d="M177 441h187.31v40h-187.31v-40Zm1 1h185.31v38h-185.31v-38Z" fill="#cbd5e1" fill-rule="evenodd"/>
+  <path d="M177 441h187v40h-187v-40Zm1 1h185v38h-185v-38Z" fill="#cbd5e1" fill-rule="evenodd"/>
   <g fill="#111827">
     <use href="#g50" x="186" y="463"/>
     <use href="#g55" x="196.89" y="463"/>

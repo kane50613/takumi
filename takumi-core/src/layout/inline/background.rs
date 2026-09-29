@@ -38,6 +38,8 @@ pub struct InlineBackgroundFragment<'c> {
   pub baseline: f32,
   /// The span's background, when it paints one.
   pub background: Option<FragmentBackground<'c>>,
+  /// The span.
+  pub owner: &'c RenderNode,
   /// The span's id.
   pub(crate) span: usize,
 }
@@ -401,6 +403,7 @@ impl<'c> DecorationAccumulator<'c> {
         opacity: decoration.opacity,
         baseline,
         background,
+        owner: decoration.owner,
         span: decoration.id,
       });
     }

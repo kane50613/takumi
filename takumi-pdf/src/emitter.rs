@@ -331,15 +331,15 @@ impl Emitter<'_> {
     frame: BoxFrame,
     surface: &mut Surface,
   ) {
-    let BoxFrame { layout, .. } = frame;
     if background.layers.is_empty() {
       return;
     }
-    let Some(shape) = background.clip.shape(layout.size) else {
+    let Some(shape) = background.clip.shape(background.size) else {
       return;
     };
     let mask = background.clip.border_mask();
-    let clip = shape_path(&shape, frame.origin);
+    let origin = frame.origin + background.offset;
+    let clip = shape_path(&shape, origin);
 
     if mask.is_none() && clip.is_none() {
       return;
@@ -348,7 +348,7 @@ impl Emitter<'_> {
     self.in_artifact(surface, |surface| {
       match (mask, &clip) {
         (Some(border), _) => {
-          let stream = border_mask_stream(&border, layout.size, frame.origin, surface);
+          let stream = border_mask_stream(&border, background.size, origin, surface);
 
           surface.push_mask(Mask::new(stream, MaskType::Alpha));
         }
@@ -1233,11 +1233,27 @@ impl Emitter<'_> {
     surface: &mut Surface,
   ) -> Vec<GlyphBackground> {
     let mut fills = Vec::new();
+    let rect_clip = |left: f32, top: f32, right: f32, bottom: f32| {
+      KrillaRect::from_ltrb(
+        frame.origin.x + left,
+        frame.origin.y + top,
+        frame.origin.x + right,
+        frame.origin.y + bottom,
+      )
+      .and_then(rect_path)
+    };
 
     if let Some(color) = background.color {
+      let offset = background.offset;
+
       fills.push(GlyphBackground {
         fill: fill_from_rgba(self.filtered(color), 1.0),
-        clip: None,
+        clip: rect_clip(
+          offset.x,
+          offset.y,
+          offset.x + background.size.width,
+          offset.y + background.size.height,
+        ),
       });
     }
 
@@ -1246,23 +1262,8 @@ impl Emitter<'_> {
       let Some(paint) = self.layer_pattern(layer.image, node, tiling, frame.origin, surface) else {
         continue;
       };
-      let size = frame.layout.size;
-      let clip = (!tiling.covers(CoreRect {
-        left: 0.0,
-        top: 0.0,
-        right: size.width,
-        bottom: size.height,
-      }))
-      .then(|| {
-        KrillaRect::from_ltrb(
-          frame.origin.x + tiling.dest.left,
-          frame.origin.y + tiling.dest.top,
-          frame.origin.x + tiling.dest.right,
-          frame.origin.y + tiling.dest.bottom,
-        )
-        .and_then(rect_path)
-      })
-      .flatten();
+      let dest = tiling.dest;
+      let clip = rect_clip(dest.left, dest.top, dest.right, dest.bottom);
 
       fills.push(GlyphBackground {
         fill: Fill {
@@ -1911,8 +1912,7 @@ fn device_commands(shape: &FillShape, transform: Affine) -> Vec<PathCommand> {
     .collect()
 }
 
-/// A paint glyphs show under `background-clip: text`, and the rectangle it shows in when that is
-/// less than the box.
+/// A paint glyphs show under `background-clip: text`, and the rectangle it shows in.
 struct GlyphBackground {
   fill: Fill,
   clip: Option<KrillaPath>,

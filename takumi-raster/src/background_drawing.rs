@@ -41,13 +41,13 @@ pub(crate) struct TileLayer {
 }
 
 impl TileLayer {
-  /// A layer of one `tile` at the border box origin, drawn at its own size and unclipped.
-  pub(crate) fn whole(tile: BackgroundTile, blend_mode: BlendMode) -> Self {
+  /// A layer of one `tile` at `at`, drawn at its own size and unclipped.
+  pub(crate) fn whole(tile: BackgroundTile, at: Point<f32>, blend_mode: BlendMode) -> Self {
     Self {
       blend_mode,
       tile,
-      xs: [0.0].into(),
-      ys: [0.0].into(),
+      xs: [at.x].into(),
+      ys: [at.y].into(),
       scale: Size {
         width: 1.0,
         height: 1.0,
@@ -589,10 +589,10 @@ pub(crate) fn render_tile(
   })
 }
 
-/// Renders each layer's tile and places its copies over a `paint` border box.
+/// Renders each layer's tile and places its copies over `paint`, a rectangle in border-box space.
 pub(crate) fn tile_layers(
   layers: &[BackgroundLayer<'_>],
-  paint: Size<f32>,
+  paint: Rect<f32>,
   context: &RenderContext,
 ) -> Result<TileLayers> {
   let mut resolved = Vec::with_capacity(layers.len());
@@ -610,13 +610,6 @@ pub(crate) fn tile_layers(
     } else {
       tile
     };
-    let paint_area = Rect {
-      left: 0.0,
-      top: 0.0,
-      right: paint.width,
-      bottom: paint.height,
-    };
-
     resolved.push(TileLayer {
       tile,
       xs,
@@ -625,7 +618,7 @@ pub(crate) fn tile_layers(
         width: tiling.tile.width / width as f32,
         height: tiling.tile.height / height as f32,
       },
-      dest: (!tiling.covers(paint_area)).then_some(tiling.dest),
+      dest: (!tiling.covers(paint)).then_some(tiling.dest),
       blend_mode: layer.blend_mode,
     });
   }
@@ -642,7 +635,12 @@ pub(crate) fn create_mask(context: &RenderContext, layout: Layout) -> Result<Opt
       &BoxBackgroundPaintContext::mask(border_box, context.box_paint_offset(layout)),
       context,
     ),
-    border_box,
+    Rect {
+      left: 0.0,
+      top: 0.0,
+      right: border_box.width,
+      bottom: border_box.height,
+    },
     context,
   )?;
 
@@ -689,7 +687,16 @@ pub(crate) fn background_image_layers(
   background: &BoxBackground<'_>,
   context: &RenderContext,
 ) -> Result<TileLayers> {
-  tile_layers(&background.layers, background.size, context)
+  tile_layers(
+    &background.layers,
+    Rect {
+      left: background.offset.x,
+      top: background.offset.y,
+      right: background.offset.x + background.size.width,
+      bottom: background.offset.y + background.size.height,
+    },
+    context,
+  )
 }
 
 /// The `background-image` layers under a `background-color` layer.
@@ -708,6 +715,7 @@ pub(crate) fn collect_background_layers(
           background.size.width as u32,
           background.size.height as u32,
         )),
+        background.offset,
         BlendMode::Normal,
       ),
     );

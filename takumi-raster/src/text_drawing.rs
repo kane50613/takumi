@@ -117,7 +117,9 @@ struct GlyphPaintCtx<'a, 'b> {
   /// The run's own `-webkit-text-stroke`, which a span may set for itself.
   stroke: (f32, Color),
   transform: Affine,
-  inline_offset: Point<f32>,
+  /// Where the glyph sits in the `background-clip: text` image, which starts off the block's
+  /// border box.
+  source_offset: Point<f32>,
   paths: &'b [Command],
   glyph_signature: u64,
 }
@@ -219,13 +221,16 @@ impl GlyphPaintCtx<'_, '_> {
   /// pixels back through `inverse`.
   fn clip_sampling(&self, inverse: Affine) -> MaskSamplingOptions {
     MaskSamplingOptions {
-      canvas_to_source: Affine::translation(self.inline_offset.x, self.inline_offset.y) * inverse,
+      canvas_to_source: Affine::translation(self.source_offset.x, self.source_offset.y) * inverse,
       sample_bias: Point { x: 0.5, y: 0.5 },
       algorithm: self.style.parent.image_rendering,
     }
   }
 }
 
+/// Draws `glyph` filled with `clip_image`, whose top-left sits `clip_offset` from the block's
+/// border box.
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn draw_glyph_clip_image(
   glyph: &ResolvedGlyph,
   canvas: &mut Canvas,
@@ -234,8 +239,13 @@ pub(crate) fn draw_glyph_clip_image(
   mut transform: Affine,
   inline_offset: Point<f32>,
   clip_image: PaintSource<'_>,
+  clip_offset: Point<f32>,
 ) -> Result<()> {
   transform *= Affine::translation(inline_offset.x, inline_offset.y);
+  let source_offset = Point {
+    x: inline_offset.x - clip_offset.x,
+    y: inline_offset.y - clip_offset.y,
+  };
 
   match glyph {
     ResolvedGlyph::Bitmap(bitmap) => {
@@ -264,8 +274,8 @@ pub(crate) fn draw_glyph_clip_image(
         },
         MaskSamplingOptions {
           canvas_to_source: Affine::translation(
-            inline_offset.x + bitmap.placement.left as f32,
-            inline_offset.y - bitmap.placement.top as f32,
+            source_offset.x + bitmap.placement.left as f32,
+            source_offset.y - bitmap.placement.top as f32,
           ),
           sample_bias: Point { x: 0.5, y: 0.5 },
           algorithm: ImageScalingAlgorithm::Pixelated,
@@ -299,7 +309,7 @@ pub(crate) fn draw_glyph_clip_image(
         style,
         stroke,
         transform,
-        inline_offset,
+        source_offset,
         paths: outline.paths(),
         glyph_signature: outline.cache_signature(),
       };
@@ -398,7 +408,7 @@ pub(crate) fn draw_glyph(
         style,
         stroke,
         transform,
-        inline_offset,
+        source_offset: inline_offset,
         paths: outline.paths(),
         glyph_signature: outline.cache_signature(),
       };

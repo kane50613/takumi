@@ -32,15 +32,15 @@
     <use href="#g9" x="196.1" y="170"/>
     <use href="#g1" x="223.41" y="170"/>
   </g>
-  <rect x="293.104" y="46" width="125" height="62" fill="#f00" fill-opacity=".502"/>
+  <rect x="293" y="46" width="125" height="62" fill="#f00" fill-opacity=".502"/>
   <g fill="#000">
     <use href="#g4" x="293.1" y="94"/>
     <use href="#g3" x="336.54" y="94"/>
     <use href="#g11" x="364.24" y="94"/>
     <use href="#g12" x="390.3" y="94"/>
   </g>
-  <rect x="418.198" y="40" width="522.469" height="82" fill="#00f" fill-opacity=".502"/>
-  <rect x="428.198" y="50" width="287" height="62" fill="#ff0"/>
+  <rect x="418" y="40" width="523" height="82" fill="#00f" fill-opacity=".502"/>
+  <rect x="428" y="50" width="287" height="62" fill="#ff0"/>
   <g fill="#000">
     <use href="#g13" x="428.2" y="98"/>
     <use href="#g14" x="439.24" y="98"/>
@@ -55,7 +55,7 @@
     <use href="#g22" x="670.55" y="98"/>
     <use href="#g14" x="696.52" y="98"/>
   </g>
-  <rect x="715.338" y="50" width="215" height="62" fill="#008000"/>
+  <rect x="715" y="50" width="215" height="62" fill="#008000"/>
   <g fill="#000">
     <use href="#g23" x="715.34" y="98"/>
     <use href="#g24" x="759.4" y="98"/>

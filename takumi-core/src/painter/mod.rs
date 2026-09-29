@@ -8,6 +8,7 @@ mod decoration;
 mod outline;
 mod replaced;
 mod shadow;
+mod snapped_box;
 mod text;
 
 pub use self::{
@@ -17,6 +18,7 @@ pub use self::{
   outline::PendingOutline,
   replaced::ReplacedContent,
   shadow::ShadowShape,
+  snapped_box::SnappedBox,
   text::{GlyphDevice, GlyphFill, InlineLines, SpanBackground},
 };
 
@@ -230,7 +232,7 @@ impl BoxFrame {
 /// What a box's `overflow` clips its content to.
 pub enum OverflowClip {
   /// The rounded padding box. A corner radius clips both axes, whatever each axis asks for.
-  Rounded(ClipBox),
+  Rounded(Box<ClipBox>),
   /// The padding box on each axis that clips, the other axis left unbounded.
   Axes {
     /// Whether the horizontal axis clips.
@@ -244,7 +246,7 @@ impl OverflowClip {
   /// The clip as a shape in the border box of `layout`, with where the shape's origin sits.
   pub fn shape(self, layout: ComputedLayout) -> (FillShape, Point<f32>) {
     match self {
-      Self::Rounded(clip) => (clip.into(), Point::ZERO),
+      Self::Rounded(clip) => ((*clip).into(), Point::ZERO),
       Self::Axes { x, y } => {
         let edges = BoxFrame::new(layout, Point::ZERO).overflow_clip_edges(x, y);
 
@@ -270,7 +272,7 @@ impl OverflowClip {
     let border = BorderProperties::from_context(context, layout.size, layout.border);
 
     if !border.is_zero() {
-      return Some(Self::Rounded(ClipBox::padding_box(border, layout)));
+      return Some(Self::Rounded(Box::new(ClipBox::padding_box(border, layout))));
     }
 
     Some(Self::Axes {
@@ -422,6 +424,8 @@ pub struct BoxPainter<'c> {
   context: &'c RenderContext,
   layout: ComputedLayout,
   border: BorderProperties,
+  /// The border box its decorations paint in.
+  snapped: SnappedBox,
 }
 
 impl<'c> BoxPainter<'c> {
@@ -431,7 +435,13 @@ impl<'c> BoxPainter<'c> {
       context,
       layout,
       border: BorderProperties::from_context(context, layout.size, layout.border),
+      snapped: SnappedBox::new(context.box_paint_offset(layout), layout.size),
     }
+  }
+
+  /// The pixel-snapped border box the box's decorations paint in.
+  pub fn snapped(&self) -> &SnappedBox {
+    &self.snapped
   }
 
   /// Prepares a fragment of the box that paints its own decorations, which is what
@@ -450,9 +460,10 @@ impl<'c> BoxPainter<'c> {
     &self.border
   }
 
-  /// The area the box clips its background to, per `background-clip`.
+  /// The area the box clips its background to, per `background-clip`, relative to the snapped
+  /// border box.
   pub fn background_clip(&self) -> BackgroundClipArea {
-    BackgroundClipArea::new(self.context, self.layout, self.border)
+    BackgroundClipArea::new(self.context, self.layout, self.border, &self.snapped)
   }
 
   /// The box's background, resolved.
@@ -477,15 +488,17 @@ impl<'c> BoxPainter<'c> {
       return;
     }
     let clip = self.background_clip();
-    let Some(shape) = clip.shape(self.layout.size) else {
+    let size = self.snapped.size();
+    let Some(shape) = clip.shape(size) else {
       return;
     };
+    let origin = origin + self.snapped.offset();
     let at = Affine::translation(origin.x, origin.y);
 
     device.set_role(PaintRole::Background);
     match clip.border_mask() {
-      Some(mask) => device.with_border_mask(&mask, self.layout.size, origin, |device| {
-        device.fill_shape(&FillShape::Rect(self.layout.size), color, at);
+      Some(mask) => device.with_border_mask(&mask, size, origin, |device| {
+        device.fill_shape(&FillShape::Rect(size), color, at);
       }),
       None => device.fill_shape(&shape, color, at),
     }
@@ -526,7 +539,8 @@ impl<'c> BoxPainter<'c> {
   /// Paints the box's `border` at `origin`.
   pub fn paint_border(&self, origin: Point<f32>, device: &mut dyn PaintDevice) {
     device.set_role(PaintRole::Border);
-    BoxBorderPainter::new(&self.border, self.layout.size).paint(origin, device);
+    BoxBorderPainter::new(&self.border, self.snapped.size())
+      .paint(origin + self.snapped.offset(), device);
   }
 
   /// The `clip-path` shape the box and its descendants clip to, or `None` when it has none or the
@@ -546,7 +560,7 @@ impl<'c> BoxPainter<'c> {
       return None;
     }
 
-    OutlineGeometry::painted(self.context, self.layout.size)
+    OutlineGeometry::painted(self.context, self.snapped.size())
   }
 
   /// Whether the box paints a background, border, shadow or outline.
@@ -560,7 +574,7 @@ impl<'c> BoxPainter<'c> {
         .is_some_and(|images| images.iter().any(BackgroundImage::paints));
     let shadows = self.shadows();
 
-    (background && self.background_clip().shape(self.layout.size).is_some())
+    (background && self.background_clip().shape(self.snapped.size()).is_some())
       || self.border.has_visible_sides()
       || !shadows.inset.is_empty()
       || !shadows.outer.is_empty()

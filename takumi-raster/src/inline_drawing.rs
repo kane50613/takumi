@@ -4,7 +4,7 @@ use takumi_core::{
 };
 
 use crate::{
-  BorderProperties, Canvas, CanvasDevice, DeferredOutline, PaintSource, RenderContext, Result,
+  BorderProperties, Canvas, CanvasDevice, ClipImage, DeferredOutline, RenderContext, Result,
   SizedFontStyle, collect_background_layers, draw_box_shell,
   layout::{
     inline::{
@@ -109,16 +109,17 @@ pub(crate) fn draw_inline_layout(
 ) -> Result<Vec<VisualInlineBox>> {
   let resolved = built.resolve_runs(context, layout)?;
   let text_background = if context.style.background_clip == BackgroundClip::Text {
-    let layers =
-      collect_background_layers(&BoxPainter::new(context, layout).background(), context)?;
-
-    rasterize_layers(
-      layers,
-      layout.size.map(|x| x as u32),
+    let background = BoxPainter::new(context, layout).background();
+    let offset = background.offset;
+    let tile = rasterize_layers(
+      collect_background_layers(&background, context)?,
+      background.size.map(|x| x as u32),
       context,
       BorderProperties::default(),
-      Affine::IDENTITY,
-    )?
+      Affine::translation(-offset.x, -offset.y),
+    )?;
+
+    tile.map(|tile| (tile, offset))
   } else {
     None
   };
@@ -129,7 +130,10 @@ pub(crate) fn draw_inline_layout(
   };
   let mut device = CanvasDevice::of(canvas, context);
 
-  device.text_background = text_background.as_ref().map(PaintSource::from);
+  device.text_background = text_background.as_ref().map(|(tile, offset)| ClipImage {
+    source: tile.into(),
+    offset: *offset,
+  });
   resolved.paint(
     &built.spans,
     font_style,

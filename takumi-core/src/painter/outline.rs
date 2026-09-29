@@ -44,7 +44,7 @@ impl BoxPainter<'_> {
   pub fn pending_outline(&self, origin: Point<f32>) -> Option<PendingOutline> {
     Some(PendingOutline {
       outline: self.outline()?,
-      origin,
+      origin: origin + self.snapped.offset(),
     })
   }
 }

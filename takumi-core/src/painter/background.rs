@@ -7,9 +7,9 @@ use crate::{
   layout::{
     background_image_geometry::{BackgroundLayer, BoxBackgroundPaintContext, FillLayers},
     border::BorderProperties,
-    decoration::ClipBox,
+    decoration::{ClipBox, ContourOrigin},
   },
-  painter::FillShape,
+  painter::{FillShape, SnappedBox},
   style::{BackgroundClip, BorderStyle, Color, Sides},
 };
 
@@ -27,12 +27,44 @@ pub enum BackgroundClipArea {
 }
 
 impl BackgroundClipArea {
-  /// The area the box at `layout` clips its background to, its corners from `border`.
-  pub fn new(context: &RenderContext, layout: ComputedLayout, border: BorderProperties) -> Self {
+  /// The area the box at `layout`, snapped to `snapped`, clips its background to, its corners
+  /// from `border`, relative to the snapped box.
+  pub fn new(
+    context: &RenderContext,
+    layout: ComputedLayout,
+    border: BorderProperties,
+    snapped: &SnappedBox,
+  ) -> Self {
+    let inner = |clip: ClipBox, insets: Rect<f32>| {
+      let (offset, size) = if border.is_zero() {
+        snapped.inset(insets)
+      } else {
+        snapped.contoured_inset(insets, true)
+      };
+
+      Self::Inner(ClipBox {
+        offset,
+        size,
+        origin: clip.origin.map(|origin| ContourOrigin {
+          size: snapped.size(),
+          ..origin
+        }),
+        ..clip
+      })
+    };
+
     match context.style.background_clip {
       BackgroundClip::BorderBox => Self::BorderBox(border),
-      BackgroundClip::PaddingBox => Self::Inner(ClipBox::padding_box(border, layout)),
-      BackgroundClip::ContentBox => Self::Inner(ClipBox::content_box(border, layout)),
+      BackgroundClip::PaddingBox => inner(ClipBox::padding_box(border, layout), layout.border),
+      BackgroundClip::ContentBox => inner(
+        ClipBox::content_box(border, layout),
+        Rect {
+          top: layout.border.top + layout.padding.top,
+          right: layout.border.right + layout.padding.right,
+          bottom: layout.border.bottom + layout.padding.bottom,
+          left: layout.border.left + layout.padding.left,
+        },
+      ),
       BackgroundClip::BorderArea => Self::BorderArea(border),
       BackgroundClip::Text => Self::Text,
     }
@@ -98,9 +130,11 @@ impl BackgroundClipArea {
 pub struct BoxBackground<'c> {
   /// `background-color`, when visible.
   pub color: Option<Color>,
-  /// Where the background paints.
+  /// Where the background paints, relative to the snapped border box.
   pub clip: BackgroundClipArea,
-  /// The border-box size.
+  /// The snapped border box's top-left, relative to the border box.
+  pub offset: Point<f32>,
+  /// The snapped border box's size.
   pub size: Size<f32>,
   /// `background-image` layers, bottom first.
   pub layers: Vec<BackgroundLayer<'c>>,
@@ -117,11 +151,13 @@ impl<'c> BoxBackground<'c> {
   ) -> Self {
     let style = &context.style;
     let color = style.background_color.resolve(context.current_color);
+    let snapped = SnappedBox::new(paint_offset, layout.size);
 
     Self {
       color: (color.0[3] != 0).then_some(color),
-      clip: BackgroundClipArea::new(context, layout, border),
-      size: layout.size,
+      clip: BackgroundClipArea::new(context, layout, border, &snapped),
+      offset: snapped.offset(),
+      size: snapped.size(),
       layers: FillLayers::background(style).resolve(
         style.background_image.as_deref().unwrap_or_default(),
         &BoxBackgroundPaintContext::new(style, layout, &border, paint_offset),

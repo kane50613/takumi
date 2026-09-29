@@ -1,10 +1,10 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="520" height="300" viewBox="0 0 520 300">
   <rect x="0" y="0" width="520" height="300" fill="#fff"/>
-  <rect x="34.7" y="29.333" width="33.6" height="26" fill="#bfdbfe"/>
-  <rect x="84" y="42" width="33.3" height="26" fill="#bbf7d0"/>
-  <rect x="134" y="27" width="43.34" height="26" fill="#fed7aa"/>
-  <rect x="192.64" y="53" width="49.8" height="26" fill="#e9d5ff"/>
-  <rect x="259.14" y="44" width="20.4" height="16" fill="#fecaca"/>
+  <rect x="35" y="29" width="33" height="26" fill="#bfdbfe"/>
+  <rect x="84" y="42" width="33" height="26" fill="#bbf7d0"/>
+  <rect x="134" y="27" width="43" height="26" fill="#fed7aa"/>
+  <rect x="193" y="53" width="49" height="26" fill="#e9d5ff"/>
+  <rect x="259" y="44" width="21" height="16" fill="#fecaca"/>
   <use href="#g0" x="24" y="57" fill="#0f172a"/>
   <g fill="#0f172a">
     <use href="#g1" x="34.7" y="49.33"/>
@@ -37,10 +37,10 @@
     <use href="#g11" x="269.59" y="56"/>
     <use href="#g12" x="272.4" y="56"/>
   </g>
-  <rect x="35.7" y="96" width="44.808" height="16" fill="#bfdbfe"/>
-  <rect x="97.208" y="90" width="65.34" height="16" fill="#bbf7d0"/>
-  <rect x="179.248" y="90" width="18.408" height="16" fill="#fed7aa"/>
-  <rect x="214.356" y="96" width="38.94" height="16" fill="#e9d5ff"/>
+  <rect x="36" y="96" width="45" height="16" fill="#bfdbfe"/>
+  <rect x="97" y="90" width="66" height="16" fill="#bbf7d0"/>
+  <rect x="179" y="90" width="19" height="16" fill="#fed7aa"/>
+  <rect x="214" y="96" width="39" height="16" fill="#e9d5ff"/>
   <use href="#g0" x="24" y="108" fill="#0f172a"/>
   <g fill="#0f172a">
     <use href="#g13" x="35.7" y="108"/>
@@ -79,9 +79,9 @@
     <use href="#g17" x="236.02" y="108"/>
     <use href="#g10" x="242.77" y="108"/>
   </g>
-  <rect x="35.7" y="157.333" width="65.744" height="18" fill="#bfdbfe"/>
-  <rect x="69.104" y="151.667" width="32.34" height="18" fill="#fecaca"/>
-  <rect x="117.144" y="164" width="49.86" height="26" fill="#bbf7d0"/>
+  <rect x="36" y="157" width="65" height="18" fill="#bfdbfe"/>
+  <rect x="69" y="152" width="32" height="18" fill="#fecaca"/>
+  <rect x="117" y="164" width="50" height="26" fill="#bbf7d0"/>
   <use href="#g0" x="24" y="179" fill="#0f172a"/>
   <g fill="#0f172a">
     <use href="#g21" x="35.7" y="171.33"/>
@@ -111,7 +111,7 @@
     <use href="#g29" x="197.58" y="139"/>
   </g>
   <use href="#g0" x="208.39" y="179" fill="#0f172a"/>
-  <rect x="151.004" y="171" width="16" height="16" fill="#ea580c"/>
+  <rect x="151" y="171" width="16" height="16" fill="#ea580c"/>
   <defs>
     <path id="g0" d="M.94 0l3.9-5.44-3.7-5.15h1.95l2.79 4 2.7-4h2l-3.66 5.18 3.85 5.41h-1.97l-2.93-4.28-2.93 4.28Z"/>
     <path id="g1" d="M5.45.23q-1.45 0-2.45-.45-.98-.47-1.52-1.26-.53-.82-.61-1.86l1.77-.11q.16.95.78 1.53.64.56 2.03.56 1.1 0 1.68-.34.59-.36.59-1.14 0-.43-.19-.69-.19-.28-.75-.49t-1.64-.42q-1.48-.28-2.33-.7-.83-.42-1.17-1.02t-.34-1.43q0-1.43 1.04-2.33 1.07-.92 2.97-.92 1.41 0 2.3.5.89.48 1.34 1.26.47.78.57 1.64l-1.75.13q-.05-.5-.32-.94-.25-.45-.78-.72-.51-.26-1.39-.26-1.14 0-1.69.43-.53.44-.53 1.11 0 .53.21.86t.75.55q.53.2 1.43.36 1.57.26 2.44.67.89.39 1.24.98t.35 1.43q0 1.46-1.14 2.28-1.12.79-2.89.79Z"/>

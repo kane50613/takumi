@@ -70,7 +70,7 @@ pub(crate) struct CanvasDevice<'c> {
   /// The shadow every draw becomes while one is open.
   shadow: Option<SizedShadow>,
   /// The background `background-clip: text` glyphs show.
-  pub(crate) text_background: Option<PaintSource<'c>>,
+  pub(crate) text_background: Option<ClipImage<'c>>,
   /// The span background strips already rasterized, by span id, strip size, and the strip's
   /// offset from the pixel grid, since a span paints the same strip on every line. A device paints
   /// one inline layout, whose span ids are unique.
@@ -328,7 +328,7 @@ impl<'c> CanvasDevice<'c> {
     &mut self,
     run: &PositionedInlineRun,
     style: &SizedFontStyle,
-    background: Option<PaintSource<'_>>,
+    background: Option<ClipImage<'_>>,
     frame: BoxFrame,
   ) -> Result<()> {
     let glyph_run = &run.glyph_run;
@@ -387,7 +387,8 @@ impl<'c> CanvasDevice<'c> {
             stroke,
             transform,
             placed(glyph),
-            background,
+            background.source,
+            background.offset,
           )?;
         }
       }
@@ -674,7 +675,14 @@ impl GlyphDevice for CanvasDevice<'_> {
           Affine::translation(origin.x, origin.y),
         )
       })
-      .and_then(|tile| self.draw_glyphs(run, style, tile.as_ref().map(PaintSource::from), frame));
+      .and_then(|tile| {
+        let background = tile.as_ref().map(|tile| ClipImage {
+          source: tile.into(),
+          offset: Point::ZERO,
+        });
+
+        self.draw_glyphs(run, style, background, frame)
+      });
 
     if let Err(error) = result {
       self.error.get_or_insert(error);
@@ -706,6 +714,14 @@ impl GlyphDevice for CanvasDevice<'_> {
   }
 }
 
+/// The image `background-clip: text` glyphs show, its top-left `offset` from the block's border
+/// box.
+#[derive(Clone, Copy)]
+pub(crate) struct ClipImage<'c> {
+  pub(crate) source: PaintSource<'c>,
+  pub(crate) offset: Point<f32>,
+}
+
 pub(crate) fn draw_background(
   context: &RenderContext,
   canvas: &mut Canvas,
@@ -726,19 +742,25 @@ pub(crate) fn draw_background(
     painter.background_color(Point::ZERO, &mut device);
   }
 
+  // Layers composite in a pixmap over the snapped border box, where their tiles land on pixels.
+  let size = background.size.map(|size| size as u32);
+  let offset = background.offset;
+  let into_frame = Affine::translation(-offset.x, -offset.y);
+  let frame_transform = context.transform * Affine::translation(offset.x, offset.y);
+
   match background.clip {
     BackgroundClipArea::BorderBox(border_radius) if isolated => {
       if let Some(tile) = rasterize_layers(
         collect_background_layers(&background, context)?,
-        layout.size.map(|x| x as u32),
+        size,
         context,
         BorderProperties::default(),
-        Affine::IDENTITY,
+        into_frame,
       )? {
         canvas.overlay_image(
           &tile,
           border_radius,
-          context.transform,
+          frame_transform,
           context.style.image_rendering,
           BlendMode::Normal,
         );
@@ -786,15 +808,15 @@ pub(crate) fn draw_background(
         );
       } else if let Some(tile) = rasterize_layers(
         layers,
-        layout.size.map(|x| x as u32),
+        size,
         context,
         BorderProperties::default(),
-        Affine::IDENTITY,
+        into_frame,
       )? {
         canvas.overlay_image(
           &tile,
           border_radius,
-          context.transform,
+          frame_transform,
           context.style.image_rendering,
           BlendMode::Normal,
         );
@@ -807,39 +829,34 @@ pub(crate) fn draw_background(
         background_image_layers(&background, context)?
       };
 
-      draw_clipped_background(clip, layers, context, canvas)?;
+      draw_clipped_background(clip, offset, layers, context, canvas)?;
     }
     BackgroundClipArea::BorderArea(_) => {
       let tile = rasterize_layers(
         collect_background_layers(&background, context)?,
-        layout.size.map(|size| size as u32),
+        size,
         context,
         BorderProperties::default(),
-        Affine::IDENTITY,
+        into_frame,
       )?;
 
       if let Some(tile) = &tile
-        && let Some(shape) = background.clip.shape(layout.size)
+        && let Some(shape) = background.clip.shape(background.size)
       {
         let algorithm = context.style.image_rendering;
+        let at = Affine::translation(offset.x, offset.y);
 
         match background.clip.border_mask() {
-          Some(mask) => device.with_border_mask(&mask, layout.size, Point::ZERO, |device| {
+          Some(mask) => device.with_border_mask(&mask, background.size, offset, |device| {
             device.fill_shape_with_source(
-              &FillShape::Rect(layout.size),
-              Affine::IDENTITY,
+              &FillShape::Rect(background.size),
+              at,
               tile.into(),
-              Affine::IDENTITY,
+              into_frame,
               algorithm,
             );
           }),
-          None => device.fill_shape_with_source(
-            &shape,
-            Affine::IDENTITY,
-            tile.into(),
-            Affine::IDENTITY,
-            algorithm,
-          ),
+          None => device.fill_shape_with_source(&shape, at, tile.into(), into_frame, algorithm),
         }
       }
     }
@@ -849,25 +866,29 @@ pub(crate) fn draw_background(
   Ok(())
 }
 
-/// Rasterizes the background layers into `clip`'s rounded region and composites
-/// it. Shared by the padding-box and content-box `background-clip` modes.
+/// Rasterizes the background layers into `clip`'s rounded region, relative to the snapped border
+/// box `offset` from the border box, and composites it. Shared by the padding-box and
+/// content-box `background-clip` modes.
 fn draw_clipped_background(
   clip: ClipBox,
+  offset: Point<f32>,
   layers: TileLayers,
   context: &RenderContext,
   canvas: &mut Canvas,
 ) -> Result<()> {
+  let at = offset + clip.offset;
+
   if let Some(tile) = rasterize_layers(
     layers,
     clip.size.map(|size| size as u32),
     context,
     clip.border,
-    Affine::translation(-clip.offset.x, -clip.offset.y),
+    Affine::translation(-at.x, -at.y),
   )? {
     canvas.overlay_image(
       &tile,
       BorderProperties::default(),
-      context.transform * Affine::translation(clip.offset.x, clip.offset.y),
+      context.transform * Affine::translation(at.x, at.y),
       context.style.image_rendering,
       BlendMode::Normal,
     );

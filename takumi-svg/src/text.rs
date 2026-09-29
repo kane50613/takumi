@@ -120,7 +120,14 @@ pub(crate) fn emit_clip_text_run(
   let group = doc.begin_masked_group(&mask_ref)?;
 
   if let Some(color) = background.color {
-    doc.rect(border_box, Rgba(color.0))?;
+    let snapped = Frame::new(
+      border_box.x + background.offset.x,
+      border_box.y + background.offset.y,
+      background.size.width,
+      background.size.height,
+    );
+
+    doc.rect(snapped, Rgba(color.0))?;
   }
   LayerEmitter::new(context, doc).layers(&background.layers, border_box)?;
   doc.end_group(group)

@@ -1,7 +1,7 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="600" height="400" viewBox="0 0 600 400">
   <rect x="0" y="0" width="600" height="400" fill="#fff"/>
   <g transform="matrix(3 0 0 3 40 40)" opacity=".9">
-    <path d="M70.48-16h26.34c16.02 0 29 12.98 29 29s-12.98 29-29 29h-26.34c-16.02 0-29-12.98-29-29s12.98-29 29-29Z" fill="#fee2e2"/>
+    <path d="M70-16h27c16.02 0 29 12.98 29 29s-12.98 29-29 29h-27c-16.02 0-29-12.98-29-29s12.98-29 29-29Z" fill="#fee2e2"/>
     <g fill="#141414">
       <use href="#g0" x="0" y="20"/>
       <use href="#g1" x="13.96" y="20"/>

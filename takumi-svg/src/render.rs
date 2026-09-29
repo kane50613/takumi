@@ -17,9 +17,9 @@ use takumi_core::{
     tree::RenderNode,
   },
   painter::{
-    BackgroundClipArea, BoxBorderPainter, BoxFrame, BoxPainter, FillShape, GlyphDevice, GlyphFill,
-    LayerBounds, OverflowClip, OwnContent, PaintDevice, ShadowShape, SpanBackground, StrokeStyle,
-    UNBOUNDED,
+    BackgroundClipArea, BoxBackground, BoxBorderPainter, BoxFrame, BoxPainter, FillShape,
+    GlyphDevice, GlyphFill, LayerBounds, OverflowClip, OwnContent, PaintDevice, ShadowShape,
+    SpanBackground, StrokeStyle, UNBOUNDED,
   },
   path_data::{edges_path_data, path_data},
   resources::image::ImageSource,
@@ -151,7 +151,7 @@ impl<'n> PlacedBox<'n> {
   fn overflow_clip_path_data(&self) -> Option<String> {
     Some(
       match OverflowClip::of(&self.node.context, self.frame.layout)? {
-        OverflowClip::Rounded(clip) => shape_path_data(&clip.into(), self.frame.origin),
+        OverflowClip::Rounded(clip) => shape_path_data(&(*clip).into(), self.frame.origin),
         OverflowClip::Axes { x, y } => edges_path_data(self.frame.overflow_clip_edges(x, y)),
       },
     )
@@ -159,10 +159,13 @@ impl<'n> PlacedBox<'n> {
 
   /// The clip path `d` and fill rule for a background's `clip` area. A square border box needs
   /// none, since the layers already stay inside it.
-  fn background_clip_path_data(&self, clip: BackgroundClipArea) -> Option<(String, FillRule)> {
-    match clip.shape(self.frame.layout.size)? {
+  fn background_clip_path_data(&self, background: &BoxBackground) -> Option<(String, FillRule)> {
+    match background.clip.shape(background.size)? {
       FillShape::Rect(_) => None,
-      shape => Some((shape_path_data(&shape, self.frame.origin), shape.rule())),
+      shape => Some((
+        shape_path_data(&shape, self.frame.origin + background.offset),
+        shape.rule(),
+      )),
     }
   }
 
@@ -194,7 +197,9 @@ impl<'n> PlacedBox<'n> {
     }
     if let Some(mask) = background.clip.border_mask() {
       DocumentDevice::paint(doc, |device| {
-        device.with_border_mask(&mask, self.frame.layout.size, self.frame.origin, |device| {
+        let origin = self.frame.origin + background.offset;
+
+        device.with_border_mask(&mask, background.size, origin, |device| {
           device.write(|doc| {
             LayerEmitter::new(&self.node.context, doc)
               .layers(&background.layers, Frame::border_box(self.frame))
@@ -207,7 +212,7 @@ impl<'n> PlacedBox<'n> {
       return Ok(());
     }
     let group = self
-      .background_clip_path_data(background.clip)
+      .background_clip_path_data(&background)
       .map(|(data, rule)| {
         let clip = doc.clip_path(&data, rule, None)?;
 
