@@ -376,8 +376,15 @@ impl<'c> CanvasDevice<'c> {
     }
 
     let transform = self.transform * local;
+    let canvas_to_source = background.and_then(|background| {
+      let to_block = (self.transform * frame.translation()).invert()?;
 
-    if let Some(background) = background {
+      Some(Affine::translation(-background.offset.x, -background.offset.y) * to_block)
+    });
+
+    if let Some(background) = background
+      && let Some(canvas_to_source) = canvas_to_source
+    {
       for glyph in &glyph_run.glyphs {
         if let Some(content) = run.resolved_glyphs.get(&glyph.id) {
           draw_glyph_clip_image(
@@ -388,7 +395,7 @@ impl<'c> CanvasDevice<'c> {
             transform,
             placed(glyph),
             background.source,
-            background.offset,
+            canvas_to_source,
           )?;
         }
       }
