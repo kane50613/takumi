@@ -15,7 +15,7 @@ use std::{
 
 use parley::{
   CHROMIUM_LINE_BREAK_OVERRIDE, GenericFamily as ParleyGenericFamily, GlyphRun, LayoutContext,
-  TextStyle, TreeBuilder,
+  LineBreakContext, LineBreakOverrideFn, TextStyle, TreeBuilder,
   fontique::{
     Attributes, Blob, Collection, CollectionOptions, FallbackKey, FontInfo, FontInfoOverride,
     FontStyle, FontWeight, FontWidth, QueryFamily, QueryStatus, Script, ScriptExt,
@@ -813,7 +813,7 @@ impl RenderContext {
       with_layout_context(|layout| {
         let mut builder = layout.tree_builder(&mut fonts.inner, 1.0, true, &root_style);
         if chromium_line_breaks {
-          builder.set_line_break_override(Some(CHROMIUM_LINE_BREAK_OVERRIDE));
+          builder.set_line_break_override(Some(LINE_BREAK_OVERRIDE));
         }
         func(&mut builder);
         builder.build()
@@ -1127,6 +1127,28 @@ impl<'a> FontResource<'a> {
     let source = self.source.into_decoded()?;
     Ok(Self { source, ..self })
   }
+}
+
+/// Chromium's line breaks, leaving a mandatory break to parley, which in 0.11.1 lets the soft
+/// opportunity after a space hide a newline that follows it.
+// TODO: drop once a parley release carries linebender/parley#781.
+static LINE_BREAK_OVERRIDE: &LineBreakOverrideFn =
+  &(line_break_override as fn(LineBreakContext) -> Option<bool>);
+
+fn line_break_override(context: LineBreakContext) -> Option<bool> {
+  if is_mandatory_break(context.after) {
+    return None;
+  }
+
+  CHROMIUM_LINE_BREAK_OVERRIDE(context)
+}
+
+/// UAX #14's mandatory break classes: BK, CR, LF and NL.
+fn is_mandatory_break(character: char) -> bool {
+  matches!(
+    character,
+    '\n' | '\r' | '\u{0B}' | '\u{0C}' | '\u{85}' | '\u{2028}' | '\u{2029}'
+  )
 }
 
 #[cfg(test)]
