@@ -131,3 +131,7 @@ harness = false
 name = "text"
 harness = false
 
+
+[[bench]]
+name = "blur_large"
+harness = false

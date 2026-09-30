@@ -419,8 +419,10 @@ impl ThreeBoxPass {
     let mut sum0 = vec![0u32; channels];
     let mut sum1 = vec![0u32; channels];
     let mut sum2 = vec![self.seed; channels];
-    let mut first = vec![0u32; pass * channels];
-    let mut second = vec![0u32; pass * channels];
+    // The rings hold what each box drops: a pixel, then a sum of at most `window` of them, which
+    // fits a `u16` since `MAX_SIGMA` keeps `window` under 255.
+    let mut first = vec![0u8; pass * channels];
+    let mut second = vec![0u16; pass * channels];
     let mut third = vec![0u32; last * channels];
     let mut blurred = vec![0u8; channels];
     let (mut slot, mut last_slot) = (0, 0);
@@ -446,10 +448,10 @@ impl ThreeBoxPass {
         blurred[lane] = ((u64::from(sum2[lane]) * u64::from(self.factor) + self.bias) >> 32) as u8;
         sum2[lane] -= third[lane];
         third[lane] = sum1[lane];
-        sum1[lane] -= second[lane];
-        second[lane] = sum0[lane];
-        sum0[lane] -= first[lane];
-        first[lane] = leading;
+        sum1[lane] -= u32::from(second[lane]);
+        second[lane] = sum0[lane] as u16;
+        sum0[lane] -= u32::from(first[lane]);
+        first[lane] = entering[lane];
       }
       if let Some(target) = target {
         target.as_flattened_mut().copy_from_slice(blurred);
