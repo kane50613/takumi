@@ -16,9 +16,10 @@ pub use self::{
   border::BoxBorderPainter,
   content::OwnContent,
   outline::PendingOutline,
+  replaced::ReplacedContent,
   shadow::ShadowShape,
   snapped_box::SnappedBox,
-  text::{GlyphDevice, GlyphFill, SpanBackground},
+  text::{GlyphDevice, GlyphFill, InlineLines, SpanBackground},
 };
 
 use crate::{
