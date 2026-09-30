@@ -3,13 +3,13 @@
 use crate::{
   font_style::SizedFontStyle,
   geometry::Point,
-  style::{Affine, TextFit, TextFitMode, TextFitTarget},
+  style::{Affine, TextAlign, TextFit, TextFitMode, TextFitTarget},
 };
 use parley::{
   BreakReason, Cluster, GlyphRun, InlineBoxKind, Line, PositionedInlineBox, PositionedLayoutItem,
 };
 
-use super::{InlineBrush, InlineLayout};
+use super::{InlineBrush, InlineLayout, LineIndent};
 
 fn text_fit_line_is_scalable(
   line: &Line<'_, InlineBrush>,
@@ -191,6 +191,9 @@ pub(crate) struct LineFit {
   /// Whether the line's text reshapes at the scaled font size, as Blink reshapes a line holding
   /// fixed spacing, instead of scaling as it paints.
   pub(crate) reshaped: bool,
+  /// Where the fitted line's content starts from the line's start, as Blink offsets it by
+  /// `text-indent` and `text-align` after fitting.
+  pub(crate) start: f32,
 }
 
 impl LineFit {
@@ -198,6 +201,7 @@ impl LineFit {
   pub(crate) const NONE: Self = Self {
     scale: 1.0,
     reshaped: false,
+    start: 0.0,
   };
 
   /// How the line sizes the text of a box, the root inline box when `root`. Blink's root box
@@ -245,8 +249,10 @@ fn restrict_scale(scale: f32, is_grow: bool, limit: Option<f32>) -> f32 {
 
 /// One line as `text-fit` measures it.
 struct FitLine {
-  /// Blink's `AvailableWidth` less the line's width, text indent included.
+  /// The available width less the line box's width, which leaves out `text-indent`.
   remaining: f32,
+  /// The line's `text-indent`.
+  indent: f32,
   /// The width of the parts that scale: text without its fixed spacing.
   flexible: f32,
   /// The width of the parts that do not: inline boxes and fixed spacing.
@@ -273,18 +279,23 @@ pub(super) fn text_fit_lines(
 
   let epsilon = 2.0 * style.sizing.viewport.device_pixel_ratio;
   let is_grow = text_fit.mode == TextFitMode::Grow;
+  let rtl = layout.is_rtl();
+  let indents = LineIndent::of(style, max_width).per_line(layout);
   let lines: Vec<FitLine> = layout
     .lines()
-    .map(|line| {
-      let (flexible, fixed) = text_fit_line_advance(&line, layout.is_rtl());
+    .zip(indents)
+    .map(|(line, indent)| {
+      let (flexible, fixed) = text_fit_line_advance(&line, rtl);
 
       FitLine {
         remaining: max_width - line.metrics().inline_min_coord - flexible - fixed,
+        indent,
         flexible,
         fixed,
       }
     })
     .collect();
+  let align = style.parent.text_align;
 
   if text_fit.target == TextFitTarget::Consistent {
     let minimum = lines
@@ -303,11 +314,15 @@ pub(super) fn text_fit_lines(
     };
     let applies = (scale < 1.0 && !is_grow) || (scale > 1.0 && is_grow);
 
+    let scale = if applies { scale } else { 1.0 };
+
     return layout
       .lines()
-      .map(|line| LineFit {
-        scale: if applies { scale } else { 1.0 },
+      .zip(&lines)
+      .map(|(line, fit)| LineFit {
+        scale,
         reshaped: line_has_fixed_spacing(&line),
+        start: fit.start(&line, scale, align, rtl),
       })
       .collect();
   }
@@ -316,11 +331,54 @@ pub(super) fn text_fit_lines(
     .lines()
     .zip(&lines)
     .enumerate()
-    .map(|(index, (line, fit))| LineFit {
-      scale: per_line_scale(&line, fit, index, line_count, max_width, epsilon, text_fit),
-      reshaped: line_has_fixed_spacing(&line),
+    .map(|(index, (line, fit))| {
+      let scale = per_line_scale(&line, fit, index, line_count, max_width, epsilon, text_fit);
+
+      LineFit {
+        scale,
+        reshaped: line_has_fixed_spacing(&line),
+        start: fit.start(&line, scale, align, rtl),
+      }
     })
     .collect()
+}
+
+impl FitLine {
+  /// Where the line's content starts from the line's start once its text scales by `scale`: past
+  /// `text-indent` and the `text-align` offset of the space left, as Blink's
+  /// `InlineLayoutAlgorithm::CreateLine` places a fitted line. Naive for `justify`, which aligns
+  /// to the start where Blink would justify the space a capped scale leaves.
+  fn start(&self, line: &Line<'_, InlineBrush>, scale: f32, align: TextAlign, rtl: bool) -> f32 {
+    let metrics = line.metrics();
+    let available = metrics.inline_max_coord - metrics.inline_min_coord;
+    let space = available - self.indent - self.fixed - self.flexible * scale;
+    let offset = line_offset_for_text_align(align, rtl, space);
+
+    if rtl {
+      offset - metrics.trailing_whitespace * scale
+    } else {
+      self.indent + offset
+    }
+  }
+}
+
+/// Blink's `LineOffsetForTextAlign`: how far `text-align` moves a line with `space` left over,
+/// where a line too wide spills past the end its direction flows to.
+fn line_offset_for_text_align(align: TextAlign, rtl: bool, space: f32) -> f32 {
+  let align = match (align, rtl) {
+    (TextAlign::Start | TextAlign::Justify, false) | (TextAlign::End, true) => TextAlign::Left,
+    (TextAlign::Start | TextAlign::Justify, true) | (TextAlign::End, false) => TextAlign::Right,
+    (align, _) => align,
+  };
+
+  match align {
+    TextAlign::Right if rtl => space,
+    TextAlign::Right => space.max(0.0),
+    TextAlign::Center if rtl && space <= 0.0 => space,
+    TextAlign::Center => (space / 2.0).max(0.0),
+    _ if rtl => space.min(0.0),
+    _ => 0.0,
+  }
 }
 
 /// The scale `text-fit` gives the line `index` of `line_count` when each line fits by itself, as
@@ -335,9 +393,10 @@ fn per_line_scale(
   text_fit: TextFit,
 ) -> f32 {
   let is_grow = text_fit.mode == TextFitMode::Grow;
-  let applies = (fit.remaining > 0.0 && is_grow) || (fit.remaining < 0.0 && !is_grow);
+  let remaining = fit.remaining - fit.indent;
+  let applies = (remaining > 0.0 && is_grow) || (remaining < 0.0 && !is_grow);
 
-  if fit.remaining.abs() < epsilon
+  if remaining.abs() < epsilon
     || !applies
     || !text_fit_line_is_scalable(line, index, line_count, text_fit.target)
     || fit.flexible <= 0.0
@@ -368,38 +427,22 @@ fn line_has_fixed_spacing(line: &Line<'_, InlineBrush>) -> bool {
   })
 }
 
-/// Line start and offset correction for a scaled text-fit line.
+/// The line's start and how far `text-fit` moves it to where the fitted line starts.
 pub(super) fn text_fit_line_alignment_correction(
   line: &Line<'_, InlineBrush>,
-  line_scale: f32,
-  container_width: f32,
-  rtl: bool,
+  fit: LineFit,
 ) -> (f32, f32) {
   let metrics = line.metrics();
   let line_start = metrics.inline_min_coord + metrics.offset;
 
-  if (line_scale - 1.0).abs() <= f32::EPSILON {
+  if (fit.scale - 1.0).abs() <= f32::EPSILON {
     return (line_start, 0.0);
   }
 
-  let (text_advance, static_advance) = text_fit_line_advance(line, rtl);
-  let scaled_line_width = static_advance + text_advance * line_scale;
-
-  // free_space_pre_scale = room left for alignment before text-fit scaling.
-  // metrics.offset encodes alignment shift (LTR start = 0, center = 0.5×free, end = free).
-  // For RTL, offset is negative (−trailing_whitespace); clamping ratio to [0,1] handles it.
-  let line_width = metrics.inline_max_coord - metrics.inline_min_coord;
-  let free_space_pre_scale = (line_width - static_advance - text_advance).max(0.0);
-  let align_ratio = if free_space_pre_scale > 0.0 {
-    (metrics.offset / free_space_pre_scale).clamp(0.0, 1.0)
-  } else {
-    if metrics.offset < 0.0 { 1.0 } else { 0.0 }
-  };
-
-  let free_space_post_scale = (container_width - scaled_line_width).max(0.0);
-  let aligned_line_start = metrics.inline_min_coord + free_space_post_scale * align_ratio;
-
-  (line_start, aligned_line_start - line_start)
+  (
+    line_start,
+    metrics.inline_min_coord + fit.start - line_start,
+  )
 }
 
 /// Per-line text-fit scaling state: `scale` applied about `layout_origin`, plus the horizontal

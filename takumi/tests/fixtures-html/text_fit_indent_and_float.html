@@ -1,0 +1,43 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>text_fit_indent_and_float</title>
+    <base href="../../../" />
+    <link rel="stylesheet" href="takumi/tests/shared.css" />
+    <style>
+      .box {
+        display: block;
+        width: 300px;
+        margin: 0 0 8px 10px;
+        font-family: "Geist";
+        font-size: 16px;
+        line-height: 1.2;
+        color: rgb(15, 23, 42);
+        background: rgb(241, 245, 249);
+        text-indent: 40px;
+      }
+      .grow {
+        text-fit: grow per-line-all 200%;
+      }
+      .float {
+        float: left;
+        width: 60px;
+        height: 30px;
+        background: rgb(96, 165, 250);
+      }
+    </style>
+  </head>
+  <body style="width: 360px; height: 600px">
+    <div class="box" style="text-fit: grow per-line-all">short line<br />another</div>
+    <div class="box grow">short line<br />another</div>
+    <div class="box grow" style="text-align: center">short line<br />another</div>
+    <div class="box grow" style="text-align: right">short line<br />another</div>
+    <div class="box grow" style="direction: rtl">short line<br />another</div>
+    <div class="box" style="text-fit: shrink per-line-all">a much longer line of text here</div>
+    <div class="box grow" style="text-indent: 0">
+      <div class="float"></div>
+      short line<br />another
+    </div>
+  </body>
+</html>

@@ -613,22 +613,57 @@ fn text_style_with_span_id<'s>(
   text_style
 }
 
-fn apply_text_indent(layout: &mut InlineLayout, style: &SizedFontStyle, max_width: f32) {
-  let indent_basis = if max_width.is_finite() {
-    max_width
-  } else {
-    0.0
-  };
-  let amount = style
-    .parent
-    .text_indent
-    .resolve_px(&style.sizing, indent_basis);
-  let options = IndentOptions {
-    each_line: style.parent.text_indent.each_line,
-    hanging: style.parent.text_indent.hanging,
-  };
+/// `text-indent` resolved against the width lines break at.
+#[derive(Clone, Copy)]
+pub(super) struct LineIndent {
+  amount: f32,
+  options: IndentOptions,
+}
 
-  layout.set_text_indent(amount, options);
+impl LineIndent {
+  /// The indent `style` gives lines broken at `max_width`.
+  pub(super) fn of(style: &SizedFontStyle, max_width: f32) -> Self {
+    let indent_basis = if max_width.is_finite() {
+      max_width
+    } else {
+      0.0
+    };
+
+    Self {
+      amount: style
+        .parent
+        .text_indent
+        .resolve_px(&style.sizing, indent_basis),
+      options: IndentOptions {
+        each_line: style.parent.text_indent.each_line,
+        hanging: style.parent.text_indent.hanging,
+      },
+    }
+  }
+
+  fn apply(self, layout: &mut InlineLayout) {
+    layout.set_text_indent(self.amount, self.options);
+  }
+
+  /// The indent of each line of `layout`, as parley's `resolve_indent` gives it while breaking.
+  pub(super) fn per_line(self, layout: &InlineLayout) -> impl Iterator<Item = f32> + '_ {
+    let mut previous = None;
+
+    layout.lines().map(move |line| {
+      let starts_scope = match previous {
+        None => true,
+        Some(reason) => self.options.each_line && reason == BreakReason::Explicit,
+      };
+
+      previous = Some(line.break_reason());
+
+      if starts_scope != self.options.hanging {
+        self.amount
+      } else {
+        0.0
+      }
+    })
+  }
 }
 
 fn inline_line_height_hint(style: &SizedFontStyle) -> f32 {
@@ -1093,7 +1128,7 @@ pub(super) fn break_into_lines(
   spans: &[ProcessedInlineSpan<'_>],
   positioned_floats: &mut Vec<PositionedInlineBox>,
 ) -> bool {
-  apply_text_indent(layout, style, options.max_width);
+  LineIndent::of(style, options.max_width).apply(layout);
   options.rebreak(
     layout,
     LineWidths::uniform(options.max_width),
@@ -1237,12 +1272,10 @@ impl LineSetup {
     line_vertical_metrics: &[ResolvedLineMetrics],
     fit: LineFit,
     line_index: usize,
-    rtl: bool,
   ) -> Option<Self> {
     let resolved_metrics = line_vertical_metrics.get(line_index)?.clone();
     let line_scale = fit.scale;
-    let (line_scale_origin_x, alignment_correction) =
-      text_fit_line_alignment_correction(line, line_scale, layout.content_box_width(), rtl);
+    let (line_scale_origin_x, alignment_correction) = text_fit_line_alignment_correction(line, fit);
     let content = layout.content_box_offset();
 
     Some(Self {
@@ -1431,7 +1464,6 @@ impl BuiltInlineLayout<'_> {
         &line_vertical_metrics,
         self.line_fit(index),
         index,
-        self.layout.is_rtl(),
       ) else {
         continue;
       };
