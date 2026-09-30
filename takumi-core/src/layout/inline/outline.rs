@@ -11,7 +11,7 @@ use crate::{
 
 /// How an inline element draws its outline.
 #[derive(Debug, Clone, Copy)]
-pub struct InlineOutline {
+pub(crate) struct InlineOutline {
   /// `outline-width`, in pixels.
   pub width: f32,
   /// `outline-offset`, in pixels.
@@ -111,7 +111,7 @@ impl InlineOutlineRect {
 }
 
 /// Fragments of one element's outline that touch from line to line, stroked as one contour.
-pub struct OutlineIsland {
+pub(crate) struct OutlineIsland {
   rects: Vec<InlineOutlineRect>,
   /// Whether the island's one rect is its element's whole outline.
   lone: bool,
@@ -150,7 +150,7 @@ impl OutlineIsland {
   }
 
   /// The rect when it is its element's whole outline, which Blink paints as a box border.
-  pub fn lone_rect(&self) -> Option<InlineOutlineRect> {
+  pub(crate) fn lone_rect(&self) -> Option<InlineOutlineRect> {
     self.lone.then(|| self.rects[0])
   }
 
@@ -163,7 +163,7 @@ impl OutlineIsland {
 
   /// Blink's `ComputeRightAnglePath`: the pixel-snapped rects, each grown by `offset` (no further
   /// in than half its size) and `outset`, united.
-  pub fn right_angle_path(&self, offset: f32, outset: f32) -> Option<RightAngleContour> {
+  pub(crate) fn right_angle_path(&self, offset: f32, outset: f32) -> Option<RightAngleContour> {
     let grown: Vec<[f32; 4]> = self
       .rects
       .iter()
@@ -219,7 +219,7 @@ fn union_outline(rects: &[[f32; 4]]) -> Vec<Point<f32>> {
 /// A clockwise contour turning a right angle at every corner, as Blink's `IterateRightAnglePath`
 /// reads it. Follows Blink's `outline_painter.cc` under the notice in LICENSE-CHROMIUM.
 #[derive(Clone, Debug, PartialEq)]
-pub struct RightAngleContour {
+pub(crate) struct RightAngleContour {
   corners: Vec<Point<f32>>,
 }
 
@@ -245,7 +245,7 @@ impl RightAngleContour {
   }
 
   /// Blink's `ShrinkRightAnglePath`.
-  pub fn shrunk(&self, inset: f32) -> Self {
+  pub(crate) fn shrunk(&self, inset: f32) -> Self {
     let corners = (0..self.corners.len())
       .map(|index| {
         let (previous, corner, next) = (self.before(index), self.at(index), self.at(index + 1));
@@ -378,7 +378,7 @@ impl RightAngleContour {
 
   /// Blink's `RoundedEdgePathIterator`: each edge's stroke through its whole corner arcs, the
   /// ends run on by `extension` so they fill the corner's mitre.
-  pub fn rounded_edges(
+  pub(crate) fn rounded_edges(
     &self,
     convex: Sides<SpacePair<f32>>,
     concave: Sides<SpacePair<f32>>,

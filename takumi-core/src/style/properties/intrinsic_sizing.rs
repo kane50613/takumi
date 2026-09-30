@@ -44,7 +44,7 @@ impl IntrinsicSizing {
 
   /// Blink's `ConcreteObjectSize`: the §5.3 default sizing algorithm against a
   /// `default_object_size`.
-  pub fn concrete_object_size(self, default_object_size: Size<f32>) -> Size<f32> {
+  pub(crate) fn concrete_object_size(self, default_object_size: Size<f32>) -> Size<f32> {
     match (self.width, self.height, self.aspect_ratio) {
       (Some(width), Some(height), _) => Size { width, height },
       (Some(width), None, None) => Size {

@@ -46,7 +46,7 @@ const MIN_INTERSECTION: f32 = 0.5;
 
 /// The x-ranges a decoration of `thickness` gives up to `glyphs` between `top` and `bottom`,
 /// dilated as Blink's `TextPainter::ClipDecorationLine` dilates them.
-pub fn skip_ink_ranges<'g>(
+pub(crate) fn skip_ink_ranges<'g>(
   glyphs: impl Iterator<Item = (Point<f32>, &'g ResolvedOutlineGlyph)>,
   top: f32,
   bottom: f32,
@@ -74,7 +74,7 @@ pub fn skip_ink_ranges<'g>(
 }
 
 /// Blink's `Character::CanTextDecorationSkipInk`, under the notice in LICENSE-CHROMIUM.
-pub fn skips_ink(character: char) -> bool {
+pub(crate) fn skips_ink(character: char) -> bool {
   let code = u32::from(character);
 
   !matches!(character, '/' | '\\' | '_')
@@ -225,7 +225,7 @@ fn reaches_band(paths: &[PathCommand], top: f32, bottom: f32) -> bool {
 }
 
 /// What is left of `start..end` once the sorted `skips` are taken out.
-pub fn remaining_spans(start: f32, end: f32, skips: &[(f32, f32)]) -> Spans {
+pub(crate) fn remaining_spans(start: f32, end: f32, skips: &[(f32, f32)]) -> Spans {
   let mut spans = Spans::new();
   let mut left = start;
 

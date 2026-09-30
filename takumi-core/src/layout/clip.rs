@@ -25,7 +25,7 @@ impl BasicShape {
   /// a `path()` in a build without the `svg` feature and its path parser. That is
   /// different from a shape that resolves to no area: callers must not turn it
   /// into an empty clip, which would hide the element.
-  pub fn path_commands(
+  pub(crate) fn path_commands(
     &self,
     context: &RenderContext,
     size: Size<f32>,

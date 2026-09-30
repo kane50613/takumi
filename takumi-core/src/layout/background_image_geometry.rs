@@ -413,7 +413,7 @@ fn obscures_background(width: i32, opaque: bool, style: BorderStyle) -> bool {
 /// Blink's `BackgroundImageGeometry`: where one layer paints, in layout units relative to the
 /// border box.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-pub struct BackgroundImageGeometry {
+pub(crate) struct BackgroundImageGeometry {
   unsnapped_dest_rect: UnitRect,
   snapped_dest_rect: UnitRect,
   phase: UnitOffset,

@@ -14,7 +14,7 @@ const INT_MIN: i32 = i32::MIN / DENOMINATOR;
 
 /// A length in 1/64px.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
-pub struct LayoutUnit(i32);
+pub(crate) struct LayoutUnit(i32);
 
 impl LayoutUnit {
   /// Zero.
@@ -38,12 +38,13 @@ impl LayoutUnit {
   }
 
   /// The raw fixed-point value.
-  pub const fn raw(self) -> i32 {
+  #[cfg(test)]
+  pub(crate) const fn raw(self) -> i32 {
     self.0
   }
 
   /// `value` px, saturated to the whole pixels the unit can hold.
-  pub const fn from_int(value: i32) -> Self {
+  pub(crate) const fn from_int(value: i32) -> Self {
     if value > INT_MAX {
       Self(i32::MAX)
     } else if value < INT_MIN {
@@ -59,27 +60,28 @@ impl LayoutUnit {
   }
 
   /// `value` px rounded down to a 1/64 step.
-  pub fn from_f32_floor(value: f32) -> Self {
+  pub(crate) fn from_f32_floor(value: f32) -> Self {
     Self::saturated(f64::from((value * DENOMINATOR as f32).floor()))
   }
 
   /// `value` px rounded up to a 1/64 step.
-  pub fn from_f32_ceil(value: f32) -> Self {
+  #[cfg(test)]
+  pub(crate) fn from_f32_ceil(value: f32) -> Self {
     Self::saturated(f64::from((value * DENOMINATOR as f32).ceil()))
   }
 
   /// `value` px rounded to the nearest 1/64 step, halves away from zero.
-  pub fn from_f32_round(value: f32) -> Self {
+  pub(crate) fn from_f32_round(value: f32) -> Self {
     Self::saturated(f64::from((value * DENOMINATOR as f32).round()))
   }
 
   /// The length in px.
-  pub fn to_f32(self) -> f32 {
+  pub(crate) fn to_f32(self) -> f32 {
     self.0 as f32 / DENOMINATOR as f32
   }
 
   /// The whole px, truncated toward zero.
-  pub const fn to_int(self) -> i32 {
+  pub(crate) const fn to_int(self) -> i32 {
     self.0 / DENOMINATOR
   }
 
@@ -99,7 +101,8 @@ impl LayoutUnit {
   }
 
   /// The whole px at or above.
-  pub const fn ceil(self) -> i32 {
+  #[cfg(test)]
+  pub(crate) const fn ceil(self) -> i32 {
     if self.0 > i32::MAX - DENOMINATOR {
       return INT_MAX;
     }
@@ -121,18 +124,18 @@ impl LayoutUnit {
   }
 
   /// Zero in place of a negative length.
-  pub const fn clamp_negative_to_zero(self) -> Self {
+  pub(crate) const fn clamp_negative_to_zero(self) -> Self {
     if self.0 < 0 { Self::ZERO } else { self }
   }
 
   /// Blink's `IntMod`: the remainder after a division with a whole result, so that
   /// `a = (a / b).to_int() * b + a.int_mod(b)`.
-  pub const fn int_mod(self, divisor: Self) -> Self {
+  pub(crate) const fn int_mod(self, divisor: Self) -> Self {
     Self(self.0 % divisor.0)
   }
 
   /// Blink's `MulDiv`: `self * multiplier / divisor` without rounding in between.
-  pub fn mul_div(self, multiplier: Self, divisor: Self) -> Self {
+  pub(crate) fn mul_div(self, multiplier: Self, divisor: Self) -> Self {
     Self::saturated((i64::from(self.0) * i64::from(multiplier.0) / i64::from(divisor.0)) as f64)
   }
 }
@@ -217,7 +220,7 @@ impl Div<i32> for LayoutUnit {
 
 /// Blink's `SnapSizeToPixel`: the whole px `size` covers from `location`, never snapping a size
 /// of more than 4/64 px to zero.
-pub fn snap_size_to_pixel(size: LayoutUnit, location: LayoutUnit) -> i32 {
+pub(crate) fn snap_size_to_pixel(size: LayoutUnit, location: LayoutUnit) -> i32 {
   let result = snap_size_to_pixel_allowing_zero(size, location);
 
   if result == 0 && (size.0 > 4 || size.0 < -4) {
@@ -228,7 +231,7 @@ pub fn snap_size_to_pixel(size: LayoutUnit, location: LayoutUnit) -> i32 {
 }
 
 /// Blink's `SnapSizeToPixelAllowingZero`.
-pub fn snap_size_to_pixel_allowing_zero(size: LayoutUnit, location: LayoutUnit) -> i32 {
+pub(crate) fn snap_size_to_pixel_allowing_zero(size: LayoutUnit, location: LayoutUnit) -> i32 {
   let fraction = location.fraction();
 
   (fraction + size).round() - fraction.round()
@@ -236,7 +239,7 @@ pub fn snap_size_to_pixel_allowing_zero(size: LayoutUnit, location: LayoutUnit) 
 
 /// Blink's `PhysicalBoxStrut`: a length on each side of a box.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-pub struct BoxStrut {
+pub(crate) struct BoxStrut {
   /// The top side.
   pub top: LayoutUnit,
   /// The right side.
@@ -290,7 +293,7 @@ impl Add for BoxStrut {
 
 /// Blink's `PhysicalOffset`: a point in layout units.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-pub struct UnitOffset {
+pub(crate) struct UnitOffset {
   /// The distance from the left.
   pub left: LayoutUnit,
   /// The distance from the top.
@@ -298,16 +301,8 @@ pub struct UnitOffset {
 }
 
 impl UnitOffset {
-  /// The offset with a negative side set to zero.
-  pub fn clamp_negative_to_zero(self) -> Self {
-    Self {
-      left: self.left.clamp_negative_to_zero(),
-      top: self.top.clamp_negative_to_zero(),
-    }
-  }
-
   /// The offset in px.
-  pub fn to_point(self) -> Point<f32> {
+  pub(crate) fn to_point(self) -> Point<f32> {
     Point {
       x: self.left.to_f32(),
       y: self.top.to_f32(),
@@ -339,7 +334,7 @@ impl Sub for UnitOffset {
 
 /// Blink's `PhysicalSize`: a size in layout units.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-pub struct UnitSize {
+pub(crate) struct UnitSize {
   /// The width.
   pub width: LayoutUnit,
   /// The height.
@@ -348,7 +343,7 @@ pub struct UnitSize {
 
 impl UnitSize {
   /// Blink's `FromSizeFFloor`.
-  pub fn from_size_floor(size: Size<f32>) -> Self {
+  pub(crate) fn from_size_floor(size: Size<f32>) -> Self {
     Self {
       width: LayoutUnit::from_f32_floor(size.width),
       height: LayoutUnit::from_f32_floor(size.height),
@@ -361,7 +356,7 @@ impl UnitSize {
   }
 
   /// The size with a negative side set to zero.
-  pub fn clamp_negative_to_zero(self) -> Self {
+  pub(crate) fn clamp_negative_to_zero(self) -> Self {
     Self {
       width: self.width.clamp_negative_to_zero(),
       height: self.height.clamp_negative_to_zero(),
@@ -370,7 +365,7 @@ impl UnitSize {
 
   /// Blink's `FitToAspectRatio`: the size scaled on one side to `aspect_ratio`, growing to cover
   /// or shrinking to fit.
-  pub fn fit_to_aspect_ratio(self, aspect_ratio: Self, grow: bool) -> Self {
+  pub(crate) fn fit_to_aspect_ratio(self, aspect_ratio: Self, grow: bool) -> Self {
     let constrained_height = self.width.mul_div(aspect_ratio.height, aspect_ratio.width);
 
     if (grow && constrained_height < self.height) || (!grow && constrained_height > self.height) {
@@ -387,7 +382,7 @@ impl UnitSize {
   }
 
   /// The size in px.
-  pub fn to_size(self) -> Size<f32> {
+  pub(crate) fn to_size(self) -> Size<f32> {
     Size {
       width: self.width.to_f32(),
       height: self.height.to_f32(),
@@ -419,7 +414,7 @@ impl Sub for UnitSize {
 
 /// Blink's `PhysicalRect`: a rectangle in layout units.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-pub struct UnitRect {
+pub(crate) struct UnitRect {
   /// The top-left corner.
   pub offset: UnitOffset,
   /// The size.
@@ -496,7 +491,7 @@ impl UnitRect {
   }
 
   /// The rectangle with a negative width or height set to zero.
-  pub fn clamp_negative_size_to_zero(self) -> Self {
+  pub(crate) fn clamp_negative_size_to_zero(self) -> Self {
     Self {
       offset: self.offset,
       size: self.size.clamp_negative_to_zero(),
@@ -505,7 +500,7 @@ impl UnitRect {
 
   /// Blink's `ToPixelSnappedRect`, back in layout units, a negative size clamped to zero as
   /// `gfx::Rect` clamps it.
-  pub fn pixel_snapped(self) -> Self {
+  pub(crate) fn pixel_snapped(self) -> Self {
     Self {
       offset: UnitOffset {
         left: LayoutUnit::from_int(self.x().round()),
@@ -547,7 +542,7 @@ impl UnitRect {
   }
 
   /// The rectangle in px.
-  pub fn to_rect(self) -> Rect<f32> {
+  pub(crate) fn to_rect(self) -> Rect<f32> {
     Rect {
       left: self.x().to_f32(),
       top: self.y().to_f32(),

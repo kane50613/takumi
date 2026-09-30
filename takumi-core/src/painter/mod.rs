@@ -16,10 +16,9 @@ pub use self::{
   border::BoxBorderPainter,
   content::OwnContent,
   outline::PendingOutline,
-  replaced::ReplacedContent,
   shadow::ShadowShape,
   snapped_box::SnappedBox,
-  text::{GlyphDevice, GlyphFill, InlineLines, SpanBackground},
+  text::{GlyphDevice, GlyphFill, SpanBackground},
 };
 
 use crate::{
@@ -112,7 +111,9 @@ impl FillShape {
   }
 
   /// Closed polygons of `N` corners each, filled nonzero.
-  pub fn polygons<const N: usize>(polygons: impl IntoIterator<Item = [Point<f32>; N]>) -> Self {
+  pub(crate) fn polygons<const N: usize>(
+    polygons: impl IntoIterator<Item = [Point<f32>; N]>,
+  ) -> Self {
     let commands = polygons
       .into_iter()
       .flat_map(|corners| {
@@ -137,7 +138,7 @@ impl FillShape {
   }
 
   /// The ring between the outer and inner edges of `border` on a `size` box.
-  pub fn border_ring(border: &BorderProperties, size: Size<f32>) -> Self {
+  pub(crate) fn border_ring(border: &BorderProperties, size: Size<f32>) -> Self {
     let mut commands = Vec::with_capacity(BorderProperties::PATH_COMMANDS_AMOUNT * 2);
 
     border.append_border_ring_commands(&mut commands, size);

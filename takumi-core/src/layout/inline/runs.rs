@@ -238,7 +238,7 @@ impl ShapedRun {
   }
 
   /// Where the decorated span starts past [`Self::offset`].
-  pub fn decorated_offset(&self) -> f32 {
+  pub(crate) fn decorated_offset(&self) -> f32 {
     if self.hanging.at_start {
       self.hanging.advance
     } else {
@@ -253,7 +253,7 @@ impl ShapedRun {
 
   /// The font file the run was shaped with.
   #[cfg(feature = "paint-tree")]
-  pub fn font_blob(&self) -> Blob<u8> {
+  pub(crate) fn font_blob(&self) -> Blob<u8> {
     self.font_data.clone()
   }
 

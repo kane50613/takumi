@@ -28,7 +28,7 @@ pub mod error;
 pub mod geometry;
 /// `@keyframes` rules and animation timing.
 pub mod keyframes;
-pub mod layout_unit;
+pub(crate) mod layout_unit;
 /// Selector matching against an abstract node tree.
 pub(crate) mod matching;
 /// Deterministic float math shared by the painting paths.

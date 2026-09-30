@@ -346,7 +346,7 @@ impl ConicGradient {
   }
 
   /// The stops placed in degrees around the full turn.
-  pub fn resolve_stops(
+  pub(crate) fn resolve_stops(
     &self,
     sizing: &SizingContext,
     current_color: Color,

@@ -60,7 +60,7 @@ impl ComputedStyle {
   }
 
   /// Whether the element paints its own box and content, which `visibility: hidden` stops.
-  pub fn is_visible(&self) -> bool {
+  pub(crate) fn is_visible(&self) -> bool {
     self.visibility == Visibility::Visible
   }
 

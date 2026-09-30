@@ -378,7 +378,7 @@ impl<'a> Surface<'a> {
   }
 
   /// The current transformation matrix composed through every open group.
-  pub fn page_transform(&self) -> Transform {
+  pub(crate) fn page_transform(&self) -> Transform {
     self
       .bd
       .sub_builders
