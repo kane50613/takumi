@@ -162,14 +162,14 @@ impl Walker {
     let painter = BoxPainter::new(context, layout);
     let size = layout.size;
     let drawables = if node.paints_own_box() {
-      decorations(&painter, size)
+      decorations(&painter, size, transform)
     } else {
       Vec::new()
     };
     let outline = painter
       .pending_outline(Point::ZERO)
       .map(|pending| {
-        let mut recorder = Recorder::new();
+        let mut recorder = Recorder::new(transform);
 
         pending.paint(&mut recorder);
         recorder.finish()
@@ -460,7 +460,7 @@ impl Walker {
       }
       GlyphFill::Text => Vec::new(),
     };
-    let mut recorder = Recorder::text(background);
+    let mut recorder = Recorder::text(background, transform);
 
     runs.paint(
       spans,
@@ -644,8 +644,8 @@ pub(super) fn recorded<'s>(
 }
 
 /// The shadows, background, and border the box `painter` paints, bottom first.
-fn decorations(painter: &BoxPainter<'_>, size: Size<f32>) -> Vec<Drawable> {
-  let mut recorder = Recorder::new();
+fn decorations(painter: &BoxPainter<'_>, size: Size<f32>, transform: Affine) -> Vec<Drawable> {
+  let mut recorder = Recorder::new(transform);
 
   painter.paint_normal_box_shadows(Point::ZERO, &mut recorder);
 

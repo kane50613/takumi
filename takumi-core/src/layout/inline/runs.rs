@@ -3,6 +3,7 @@
 use crate::{
   context::RenderContext,
   geometry::{ComputedLayout, PathCommand, Point},
+  layout::intercept::skips_ink,
   resources::{
     font::{FontError, run_synthesis, run_variations},
     glyph::{ResolvedColorLayer, ResolvedGlyph, ResolvedOutlineGlyph},
@@ -31,6 +32,8 @@ pub struct PositionedGlyph {
   pub x: f32,
   /// Vertical position from the line origin, the run's baseline included.
   pub y: f32,
+  /// Whether `text-decoration-skip-ink` cuts a decoration around the glyph.
+  pub skips_ink: bool,
 }
 
 /// Vertical font metrics for a shaped run, in px.
@@ -49,43 +52,57 @@ pub struct RunMetrics {
   pub underline_size: f32,
 }
 
-/// Per-glyph cluster text ranges for a [`GlyphRun`], aligned to its positioned glyphs.
-fn glyph_cluster_ranges(
+/// The source cluster behind a positioned glyph.
+struct GlyphCluster {
+  range: Range<usize>,
+  emoji: bool,
+}
+
+/// Per-glyph source clusters for a [`GlyphRun`], aligned to its positioned glyphs.
+fn glyph_clusters(
   glyph_run: &GlyphRun<'_, InlineBrush>,
   positioned: &[PositionedGlyph],
-) -> Vec<Range<usize>> {
-  let mut full: Vec<(u32, Range<usize>)> = Vec::new();
+) -> Vec<GlyphCluster> {
+  let mut full: Vec<(u32, GlyphCluster)> = Vec::new();
 
   for cluster in glyph_run.run().visual_clusters() {
     let range = cluster.text_range();
     let before = full.len();
 
     for glyph in cluster.glyphs() {
-      full.push((glyph.id, range.clone()));
+      full.push((
+        glyph.id,
+        GlyphCluster {
+          range: range.clone(),
+          emoji: cluster.is_emoji(),
+        },
+      ));
     }
     // A glyph-less cluster is a ligature continuation: fold its text into the
     // carrying glyph so the ligature maps to its full source text.
     if full.len() == before
       && let Some((_, last)) = full.last_mut()
     {
-      last.start = last.start.min(range.start);
-      last.end = last.end.max(range.end);
+      last.range.start = last.range.start.min(range.start);
+      last.range.end = last.range.end.max(range.end);
     }
   }
   let count = positioned.len();
 
   let matches_at = |start: usize| {
-    full[start..start + count]
-      .iter()
-      .zip(positioned)
-      .all(|((id, _), glyph)| *id == glyph.id)
+    full.get(start..start + count).is_some_and(|window| {
+      window
+        .iter()
+        .zip(positioned)
+        .all(|((id, _), glyph)| *id == glyph.id)
+    })
   };
   let Some(start) = (0..=full.len().saturating_sub(count)).find(|&s| matches_at(s)) else {
     return Vec::new();
   };
-  full[start..start + count]
-    .iter()
-    .map(|(_, range)| range.clone())
+  full
+    .drain(start..start + count)
+    .map(|(_, cluster)| cluster)
     .collect()
 }
 
@@ -134,6 +151,50 @@ pub struct ShapedRun {
 }
 
 impl ShapedRun {
+  /// The run `glyph_run` shapes, carrying `glyphs` and painting with `brush`.
+  pub(crate) fn of(
+    glyph_run: &GlyphRun<'_, InlineBrush>,
+    glyphs: Vec<PositionedGlyph>,
+    trailing_whitespace: f32,
+    brush: InlineBrush,
+    cluster_ranges: Vec<Range<usize>>,
+  ) -> Self {
+    let run = glyph_run.run();
+    let metrics = run.metrics();
+    let synthesis = run_synthesis(glyph_run);
+    // The run's leaded box: the font height plus the line-height leading.
+    let (above, below) = brush.line_box_contribution(
+      metrics.line_height,
+      metrics.ascent,
+      metrics.descent,
+      metrics.leading,
+    );
+
+    Self {
+      glyphs,
+      offset: glyph_run.offset(),
+      baseline: glyph_run.baseline(),
+      advance: glyph_run.advance(),
+      trailing_whitespace,
+      brush,
+      metrics: RunMetrics {
+        ascent: metrics.ascent,
+        descent: metrics.descent,
+        line_height: above + below,
+        underline_offset: metrics.underline_offset,
+        underline_size: metrics.underline_size,
+      },
+      font_size: run.font_size(),
+      font_index: run.font().index,
+      text_range: run.text_range(),
+      cluster_ranges,
+      variations: run_variations(glyph_run),
+      synthetic_bold: synthesis.embolden,
+      synthetic_skew: synthesis.skew,
+      font_data: run.font().data.clone(),
+    }
+  }
+
   /// Advance that decorations span: the run without its line-end whitespace.
   pub fn decorated_advance(&self) -> f32 {
     self.advance - self.trailing_whitespace
@@ -334,12 +395,13 @@ impl BuiltInlineLayout<'_> {
 
           let font = FontRef::from_index(run.font().data.as_ref(), run.font().index)
             .map_err(|_| FontError::InvalidFontIndex)?;
-          let glyphs: Vec<PositionedGlyph> = glyph_run
+          let mut glyphs: Vec<PositionedGlyph> = glyph_run
             .positioned_glyphs()
             .map(|g| PositionedGlyph {
               id: g.id,
               x: g.x,
               y: g.y,
+              skips_ink: true,
             })
             .collect();
           let resolved_glyphs = context.fonts().with_context(|fonts| {
@@ -347,13 +409,6 @@ impl BuiltInlineLayout<'_> {
           });
 
           let metrics = run.metrics();
-          // The run's leaded box: the font height plus the line-height leading.
-          let (above, below) = brush.line_box_contribution(
-            metrics.line_height,
-            metrics.ascent,
-            metrics.descent,
-            metrics.leading,
-          );
           // The font's rounded ascent and descent, without the line-height leading, like the
           // inline box fragment `InlineBoxState::ComputeTextMetrics` sizes.
           let ascent = metrics.ascent.round();
@@ -385,31 +440,24 @@ impl BuiltInlineLayout<'_> {
               },
             );
           }
-          let cluster_ranges = glyph_cluster_ranges(&glyph_run, &glyphs);
-          let synthesis = run_synthesis(&glyph_run);
-          let shaped = ShapedRun {
+          let clusters = glyph_clusters(&glyph_run, &glyphs);
+
+          for (glyph, cluster) in glyphs.iter_mut().zip(&clusters) {
+            glyph.skips_ink = !cluster.emoji
+              && self
+                .text
+                .get(cluster.range.clone())
+                .and_then(|text| text.chars().next())
+                .is_none_or(skips_ink);
+          }
+          let cluster_ranges = clusters.into_iter().map(|cluster| cluster.range).collect();
+          let shaped = ShapedRun::of(
+            &glyph_run,
             glyphs,
-            offset: glyph_run.offset(),
-            baseline: glyph_run.baseline(),
-            advance: glyph_run.advance(),
             trailing_whitespace,
             brush,
-            metrics: RunMetrics {
-              ascent: metrics.ascent,
-              descent: metrics.descent,
-              line_height: above + below,
-              underline_offset: metrics.underline_offset,
-              underline_size: metrics.underline_size,
-            },
-            font_size: run.font_size(),
-            font_index: run.font().index,
-            text_range: run.text_range(),
             cluster_ranges,
-            variations: run_variations(&glyph_run),
-            synthetic_bold: synthesis.embolden,
-            synthetic_skew: synthesis.skew,
-            font_data: run.font().data.clone(),
-          };
+          );
 
           runs.push(PositionedInlineRun {
             glyph_run: shaped,

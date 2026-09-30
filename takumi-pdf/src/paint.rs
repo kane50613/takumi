@@ -11,7 +11,7 @@ use takumi_core::{
 use takumi_core::{
   geometry::{PathCommand, Point, Rect, Size},
   painter::FillShape,
-  style::{BlendMode, Color, FillRule as CoreFillRule, ResolvedGradientStop},
+  style::{Affine, BlendMode, Color, FillRule as CoreFillRule, ResolvedGradientStop},
 };
 
 use crate::krilla::{
@@ -230,6 +230,18 @@ pub(crate) const fn krilla_fill_rule(rule: CoreFillRule) -> FillRule {
 /// An affine in takumi-core's column order, `[a, b, c, d, e, f]`.
 pub(crate) fn krilla_transform([a, b, c, d, e, f]: [f32; 6]) -> Transform {
   Transform::from_row(a, b, c, d, e, f)
+}
+
+/// The inverse of [`krilla_transform`].
+pub(crate) fn core_transform(transform: Transform) -> Affine {
+  Affine {
+    a: transform.sx(),
+    b: transform.ky(),
+    c: transform.kx(),
+    d: transform.sy(),
+    x: transform.tx(),
+    y: transform.ty(),
+  }
 }
 
 pub(crate) const fn krilla_blend(mode: BlendMode) -> KrillaBlendMode {

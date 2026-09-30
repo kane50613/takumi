@@ -2,15 +2,101 @@
 
 use std::ops::Range;
 
-use takumi_core::layout::inline::ShapedRun;
+use takumi_core::{
+  geometry::{PathCommand, Point},
+  layout::inline::{PositionedInlineRun, ShapedRun},
+  resources::glyph::{ResolvedBitmapGlyph, ResolvedGlyph},
+};
 
 use crate::{
   krilla::{
-    surface::Location,
+    geom::Path as KrillaPath,
+    num::NormalizedF32,
+    surface::{Location, Surface},
     text::{Glyph, GlyphId},
   },
   options::{PdfError, UncoveredText},
+  paint::{krilla_path, normalized},
 };
+
+/// A run's colour glyphs, which a shadow paints as silhouettes in its own colour, as Blink's
+/// shadow looper fills every glyph through `SrcIn`, rather than through the font's colours.
+pub(crate) struct ColorGlyphs<'r> {
+  /// The colour-layered outlines, placed, each with the alpha its layer paints at; the opaque
+  /// layers joined into one path.
+  outlines: Vec<(NormalizedF32, KrillaPath)>,
+  /// The bitmap glyphs, each with its origin.
+  #[cfg_attr(not(feature = "images"), expect(dead_code))]
+  pub(crate) bitmaps: Vec<(&'r ResolvedBitmapGlyph, Point<f32>)>,
+}
+
+impl<'r> ColorGlyphs<'r> {
+  /// The colour glyphs of `run`, its glyphs placed from `origin`.
+  pub(crate) fn of(run: &'r PositionedInlineRun, origin: Point<f32>) -> Self {
+    let mut opaque: Vec<PathCommand> = Vec::new();
+    let mut outlines = Vec::new();
+    let mut bitmaps = Vec::new();
+
+    for glyph in &run.glyph_run.glyphs {
+      let at = Point {
+        x: origin.x + glyph.x,
+        y: origin.y + glyph.y,
+      };
+
+      match run.resolved_glyphs.get(&glyph.id).map(AsRef::as_ref) {
+        Some(ResolvedGlyph::Outline(outline)) => {
+          for (color, paths) in run.resolve_color_layers(outline, run.glyph_run.brush.color) {
+            let placed = paths
+              .iter()
+              .map(|command| command.map_points(|point| point + at));
+
+            match color.0[3] {
+              0 => {}
+              u8::MAX => opaque.extend(placed),
+              alpha => outlines.extend(
+                krilla_path(&placed.collect::<Vec<_>>(), Point::ZERO)
+                  .map(|path| (normalized(f32::from(alpha) / 255.0), path)),
+              ),
+            }
+          }
+        }
+        Some(ResolvedGlyph::Bitmap(bitmap)) => {
+          bitmaps.push((bitmap, at));
+        }
+        None => {}
+      }
+    }
+
+    outlines.extend(krilla_path(&opaque, Point::ZERO).map(|path| (NormalizedF32::ONE, path)));
+
+    Self { outlines, bitmaps }
+  }
+
+  /// Fills and strokes the colour-layered outlines with the surface's paint, each layer at its
+  /// alpha, as a shadow's `SrcIn` keeps the alpha the glyph paints with.
+  pub(crate) fn draw_outlines(&self, surface: &mut Surface) {
+    for (alpha, path) in &self.outlines {
+      let translucent = *alpha != NormalizedF32::ONE;
+
+      if translucent {
+        surface.push_opacity(*alpha);
+      }
+      surface.draw_path(path);
+      if translucent {
+        surface.pop();
+      }
+    }
+  }
+
+  /// Whether `run` paints the glyph `id` in the font's own colours.
+  pub(crate) fn contains(run: &PositionedInlineRun, id: GlyphId) -> bool {
+    match run.resolved_glyphs.get(&id.to_u32()).map(AsRef::as_ref) {
+      Some(ResolvedGlyph::Outline(outline)) => outline.color_layers().is_some(),
+      Some(ResolvedGlyph::Bitmap(_)) => true,
+      None => false,
+    }
+  }
+}
 
 /// The characters no registered font covers, and what the render does with them.
 pub(crate) struct Uncovered {

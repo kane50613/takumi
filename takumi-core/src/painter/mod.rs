@@ -244,6 +244,9 @@ pub trait PaintDevice {
   /// Names what the draws that follow paint. Only a device that records draws needs it.
   fn set_role(&mut self, _role: PaintRole) {}
 
+  /// Maps the space draws are placed in onto the output's pixels.
+  fn transform(&self) -> Affine;
+
   /// Fills `shape` under `transform`, with a single colour.
   fn fill_shape(&mut self, shape: &FillShape, color: Color, transform: Affine);
 

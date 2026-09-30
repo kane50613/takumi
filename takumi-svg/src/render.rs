@@ -484,13 +484,26 @@ impl<'d> DocumentDevice<'d> {
   /// `color` and `transform`, or the open shadow's colour and `transform` moved by its offset.
   fn shadowed(&self, color: Color, transform: Affine) -> (Color, Affine) {
     match self.shadow {
-      Some((shadow, offset)) => (shadow, Affine::translation(offset.x, offset.y) * transform),
+      Some((shadow, _)) => (shadow, self.shadow_moved(transform)),
       None => (color, transform),
+    }
+  }
+
+  /// `transform` moved by the open shadow's offset. A clip opened inside a shadow clips what casts
+  /// it, as Blink draws a text shadow's content into a `DropShadowPaintFilter` layer.
+  fn shadow_moved(&self, transform: Affine) -> Affine {
+    match self.shadow {
+      Some((_, offset)) => Affine::translation(offset.x, offset.y) * transform,
+      None => transform,
     }
   }
 }
 
 impl PaintDevice for DocumentDevice<'_> {
+  fn transform(&self) -> Affine {
+    self.doc.transform()
+  }
+
   fn fill_shape(&mut self, shape: &FillShape, color: Color, transform: Affine) {
     let (color, transform) = self.shadowed(color, transform);
 
@@ -515,6 +528,8 @@ impl PaintDevice for DocumentDevice<'_> {
   }
 
   fn push_clip(&mut self, shape: &FillShape, transform: Affine) {
+    let transform = self.shadow_moved(transform);
+
     self.open_group(|doc| {
       let clip = doc.clip_shape(shape, transform)?;
 
@@ -529,7 +544,10 @@ impl PaintDevice for DocumentDevice<'_> {
       right: UNBOUNDED,
       bottom: UNBOUNDED,
     });
-    let data = format!("{everywhere}{}", path_data(&shape.to_commands(), transform));
+    let data = format!(
+      "{everywhere}{}",
+      path_data(&shape.to_commands(), self.shadow_moved(transform))
+    );
 
     self.begin_clip(&data, FillRule::EvenOdd);
   }

@@ -178,6 +178,9 @@ pub(crate) struct SvgDocument {
   /// Interned glyph outlines in glyph space, emitted as `<defs>` by [`Self::finish`].
   glyph_defs: Vec<String>,
   glyph_ids: HashMap<String, u32>,
+  /// The transform each open transformed group maps its content onto the root with, innermost
+  /// last.
+  transforms: Vec<Affine>,
 }
 
 impl SvgDocument {
@@ -198,6 +201,7 @@ impl SvgDocument {
       next_id: 0,
       glyph_defs: Vec::new(),
       glyph_ids: HashMap::new(),
+      transforms: Vec::new(),
     })
   }
 
@@ -412,7 +416,7 @@ impl SvgDocument {
         ("style", "mask-type:alpha".into()),
       ],
     )?;
-    Ok((GroupToken(()), reference))
+    Ok((GroupToken::default(), reference))
   }
 
   /// Closes the most recently opened mask.
@@ -423,7 +427,7 @@ impl SvgDocument {
   /// Opens a `<g mask="url(#id)">` and returns its token.
   pub(crate) fn begin_masked_group(&mut self, mask: &str) -> io::Result<GroupToken> {
     self.open("g", &[("mask", mask.into())])?;
-    Ok(GroupToken(()))
+    Ok(GroupToken::default())
   }
 
   /// Opens a user-space `<pattern>` tile and returns the open token plus its
@@ -434,7 +438,7 @@ impl SvgDocument {
 
     attrs.extend(tile.attrs());
     self.open("pattern", &attrs)?;
-    Ok((GroupToken(()), reference))
+    Ok((GroupToken::default(), reference))
   }
 
   /// Closes the most recently opened pattern.
@@ -480,12 +484,25 @@ impl SvgDocument {
       attrs.push(("filter", filter.into()));
     }
     self.open("g", &attrs)?;
-    Ok(GroupToken(()))
+
+    if transform.is_identity() {
+      return Ok(GroupToken::default());
+    }
+    self.transforms.push(self.transform() * transform);
+    Ok(GroupToken { transformed: true })
   }
 
   /// Closes the most recently opened group.
-  pub(crate) fn end_group(&mut self, _token: GroupToken) -> io::Result<()> {
+  pub(crate) fn end_group(&mut self, token: GroupToken) -> io::Result<()> {
+    if token.transformed {
+      self.transforms.pop();
+    }
     self.close("g")
+  }
+
+  /// Maps what is drawn now onto the root.
+  pub(crate) fn transform(&self) -> Affine {
+    self.transforms.last().copied().unwrap_or(Affine::IDENTITY)
   }
 
   /// Opens a `<g>` carrying a `mix-blend-mode` so the wrapped subtree composites
@@ -495,7 +512,7 @@ impl SvgDocument {
       "g",
       &[("style", format!("mix-blend-mode:{mix_blend_mode}").into())],
     )?;
-    Ok(GroupToken(()))
+    Ok(GroupToken::default())
   }
 
   /// Opens a `<g style="isolation:isolate">` establishing an isolated group, so a
@@ -503,7 +520,7 @@ impl SvgDocument {
   /// against the page backdrop. Returns a token for [`SvgDocument::end_group`].
   pub(crate) fn begin_isolate_group(&mut self) -> io::Result<GroupToken> {
     self.open("g", &[("style", "isolation:isolate".into())])?;
-    Ok(GroupToken(()))
+    Ok(GroupToken::default())
   }
 
   /// Appends a glyph path with an optional stroke.
@@ -941,7 +958,10 @@ impl SvgDocument {
 /// Opaque proof that an element a `begin_*` method opened is still open;
 /// consumed by the matching `end_*`.
 #[must_use]
-pub(crate) struct GroupToken(());
+#[derive(Default)]
+pub(crate) struct GroupToken {
+  transformed: bool,
+}
 
 fn matrix_attr(transform: Affine) -> String {
   let [a, b, c, d, e, f] = transform.to_cols_array().map(Num);

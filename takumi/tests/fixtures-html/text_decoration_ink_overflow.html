@@ -1,0 +1,38 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>text_decoration_ink_overflow</title>
+    <base href="../../../" />
+    <link rel="stylesheet" href="takumi/tests/shared.css" />
+  </head>
+  <body style="width: 480px; height: 260px">
+    <div
+      style="
+        display: flex;
+        flex-direction: column;
+        gap: 48px;
+        width: 100%;
+        height: 100%;
+        padding: 48px 32px;
+        background-color: rgb(255, 255, 255);
+        font-size: 32px;
+        line-height: 1;
+        color: rgb(15, 23, 42);
+      "
+    >
+      <div style="opacity: 0.6; text-decoration: overline 14px rgb(220, 38, 38)"
+        >faded overline</div
+      >
+      <div
+        style="
+          filter: blur(0px);
+          text-decoration: underline wavy 6px rgb(37, 99, 235);
+          text-underline-offset: 12px;
+        "
+      >
+        filtered wavy
+      </div>
+    </div>
+  </body>
+</html>

@@ -377,6 +377,18 @@ impl<'a> Surface<'a> {
     self.bd.get().cur_transform()
   }
 
+  /// The current transformation matrix composed through every open group, which starts its
+  /// content stream at the identity.
+  pub fn page_transform(&self) -> Transform {
+    self
+      .bd
+      .sub_builders
+      .iter()
+      .fold(self.bd.root_builder.cur_transform(), |outer, builder| {
+        outer.pre_concat(builder.cur_transform())
+      })
+  }
+
   /// Concatenate a new transform to the current transformation matrix.
   pub fn push_transform(&mut self, transform: &Transform) {
     self.push_instructions.push(PushInstruction::Transform);

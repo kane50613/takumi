@@ -43,7 +43,7 @@ use crate::paint::rasterized_image;
 use crate::svg;
 use crate::{
   filter::{ColorFilter, filtered, unsupported_filter},
-  glyph::{PdfGlyph, Uncovered, run_glyphs},
+  glyph::{ColorGlyphs, PdfGlyph, Uncovered, run_glyphs},
   inline::{InlineMap, visit_inline_layout},
   krilla::{
     Data,
@@ -60,15 +60,17 @@ use crate::{
   },
   options::{PT_PER_PX, PdfError},
   paint::{
-    draw_stream, edges_path, empty_path, expanded_radial_stops, fill_from_rgba, krilla_blend,
-    krilla_fill_rule, krilla_path, krilla_stop, krilla_stops, krilla_transform, normalized,
-    pop_transforms, rect_path, shape_path, spread,
+    core_transform, draw_stream, edges_path, empty_path, expanded_radial_stops, fill_from_rgba,
+    krilla_blend, krilla_fill_rule, krilla_path, krilla_stop, krilla_stops, krilla_transform,
+    normalized, pop_transforms, rect_path, shape_path, spread,
   },
   shadow::Band,
   tags::{ARTIFACT, TagCollector},
   tree::draws,
   window::Window,
 };
+#[cfg(feature = "images")]
+use takumi_core::{blur::blur_rgba, resources::glyph::ResolvedBitmapGlyph, style::BlurType};
 
 /// What a box left on the surface for its caller to unwind.
 #[derive(Default)]
@@ -1567,6 +1569,11 @@ impl SurfaceDevice<'_, '_> {
 }
 
 impl PaintDevice for SurfaceDevice<'_, '_> {
+  fn transform(&self) -> Affine {
+    Affine::scale(PT_PER_PX.recip(), PT_PER_PX.recip())
+      * core_transform(self.surface.page_transform())
+  }
+
   fn fill_shape(&mut self, shape: &FillShape, color: Color, transform: Affine) {
     let fill = Fill {
       rule: krilla_fill_rule(shape.rule()),
@@ -1768,11 +1775,17 @@ impl TextDevice<'_, '_, '_> {
 
   fn shadowed(&self, color: Color, transform: Affine) -> (Color, Affine) {
     match self.shadow {
-      Some(shadow) => (
-        shadow.color,
-        Affine::translation(shadow.offset_x, shadow.offset_y) * transform,
-      ),
+      Some(shadow) => (shadow.color, self.shadow_moved(transform)),
       None => (color, transform),
+    }
+  }
+
+  /// `transform` moved by the open shadow's offset. A clip opened inside a shadow clips what casts
+  /// it, as Blink draws a text shadow's content into a `DropShadowPaintFilter` layer.
+  fn shadow_moved(&self, transform: Affine) -> Affine {
+    match self.shadow {
+      Some(shadow) => Affine::translation(shadow.offset_x, shadow.offset_y) * transform,
+      None => transform,
     }
   }
 
@@ -1800,6 +1813,10 @@ impl TextDevice<'_, '_, '_> {
 }
 
 impl PaintDevice for TextDevice<'_, '_, '_> {
+  fn transform(&self) -> Affine {
+    self.device.transform()
+  }
+
   fn fill_shape(&mut self, shape: &FillShape, color: Color, transform: Affine) {
     let (color, transform) = self.shadowed(color, transform);
 
@@ -1838,10 +1855,14 @@ impl PaintDevice for TextDevice<'_, '_, '_> {
   }
 
   fn push_clip(&mut self, shape: &FillShape, transform: Affine) {
+    let transform = self.shadow_moved(transform);
+
     self.device.push_clip(shape, transform);
   }
 
   fn push_clip_out(&mut self, shape: &FillShape, transform: Affine) {
+    let transform = self.shadow_moved(transform);
+
     self.device.push_clip_out(shape, transform);
   }
 
@@ -1898,12 +1919,27 @@ impl GlyphDevice for TextDevice<'_, '_, '_> {
     };
     let shaped = &run.glyph_run;
     let shadow_color = self.shadow.map(|shadow| shadow.color);
-    let paint = fill_from_rgba(
-      self
-        .emitter
-        .filtered(shadow_color.unwrap_or(shaped.brush.color)),
-      1.0,
-    );
+    let rgba = self
+      .emitter
+      .filtered(shadow_color.unwrap_or(shaped.brush.color));
+    let paint = fill_from_rgba(rgba, 1.0);
+    // A shadow paints colour glyphs as silhouettes, so they leave the font's run.
+    let colors = shadow_color.map(|_| {
+      ColorGlyphs::of(
+        run,
+        CorePoint {
+          x: origin.x,
+          y: origin.y,
+        },
+      )
+    });
+    let glyphs = match colors {
+      Some(_) => glyphs
+        .into_iter()
+        .filter(|glyph| !ColorGlyphs::contains(run, glyph.id))
+        .collect(),
+      None => glyphs,
+    };
     let stroke = self.glyph_stroke(shaped, &paint, shadow_color);
     let surface = &mut *self.device.surface;
     let oblique = self.emitter.push_oblique(shaped, origin, surface);
@@ -1946,7 +1982,20 @@ impl GlyphDevice for TextDevice<'_, '_, '_> {
             ..Stroke::default()
           }));
           surface.draw_glyphs(origin, &glyphs, font.clone(), text, shaped.font_size, true);
+          if let Some(colors) = &colors {
+            colors.draw_outlines(surface);
+          }
           surface.pop();
+        }
+        // The silhouettes draw opaque inside the group of the shadow colour's alpha.
+        #[cfg(feature = "images")]
+        if let Some(colors) = &colors {
+          draw_blurred_silhouettes(
+            &colors.bitmaps,
+            shadow.blur_radius,
+            [rgba[0], rgba[1], rgba[2], u8::MAX],
+            surface,
+          );
         }
         if translucent {
           surface.pop();
@@ -1963,6 +2012,11 @@ impl GlyphDevice for TextDevice<'_, '_, '_> {
           shaped.font_size,
           shadow_color.is_some(),
         );
+        if let Some(colors) = &colors {
+          colors.draw_outlines(surface);
+          #[cfg(feature = "images")]
+          draw_silhouettes(&colors.bitmaps, rgba, surface);
+        }
       }
     }
 
@@ -1971,6 +2025,108 @@ impl GlyphDevice for TextDevice<'_, '_, '_> {
     }
     surface.set_stroke(None);
   }
+}
+
+/// Draws each bitmap glyph, placed from its origin, as its alpha filled with `color`.
+#[cfg(feature = "images")]
+fn draw_silhouettes(
+  bitmaps: &[(&ResolvedBitmapGlyph, CorePoint<f32>)],
+  color: [u8; 4],
+  surface: &mut Surface,
+) {
+  for (bitmap, origin) in bitmaps {
+    let alpha: Vec<u8> = bitmap
+      .image
+      .data()
+      .iter()
+      .skip(3)
+      .step_by(4)
+      .copied()
+      .collect();
+
+    draw_alpha(
+      &alpha,
+      bitmap.image.width(),
+      bitmap.image.height(),
+      color,
+      Affine::translation(origin.x, origin.y) * bitmap.image_transform(),
+      surface,
+    );
+  }
+}
+
+/// Draws each bitmap glyph's silhouette blurred as a `text-shadow` of `blur_radius` blurs it,
+/// after Blink's `DropShadowPaintFilter`: the glyph drawn at its placement size, its alpha blurred
+/// with Skia's RGBA blur, and filled with `color`.
+#[cfg(feature = "images")]
+fn draw_blurred_silhouettes(
+  bitmaps: &[(&ResolvedBitmapGlyph, CorePoint<f32>)],
+  blur_radius: f32,
+  color: [u8; 4],
+  surface: &mut Surface,
+) {
+  let sigma = BlurType::Shadow.to_sigma(blur_radius);
+  let pad = (3.0 * sigma).ceil() as usize;
+
+  for (bitmap, origin) in bitmaps {
+    let (width, height) = (
+      bitmap.placement.width as usize,
+      bitmap.placement.height as usize,
+    );
+    let padded_width = width + 2 * pad;
+    let padded_height = height + 2 * pad;
+    let mut alpha = vec![0u8; width * height];
+    let mut pixels = vec![[0u8; 4]; padded_width * padded_height];
+
+    bitmap.write_alpha_mask(&mut alpha);
+    for (row, line) in alpha.chunks_exact(width.max(1)).enumerate() {
+      for (column, value) in line.iter().enumerate() {
+        pixels[(row + pad) * padded_width + column + pad][3] = *value;
+      }
+    }
+    blur_rgba(&mut pixels, padded_width, padded_height, sigma);
+
+    let alpha: Vec<u8> = pixels.iter().map(|pixel| pixel[3]).collect();
+
+    draw_alpha(
+      &alpha,
+      padded_width as u32,
+      padded_height as u32,
+      color,
+      Affine::translation(
+        origin.x + bitmap.placement.left as f32 - pad as f32,
+        origin.y - bitmap.placement.top as f32 - pad as f32,
+      ),
+      surface,
+    );
+  }
+}
+
+/// Draws a `width` by `height` alpha mask, filled with `color`, placed by `transform`.
+#[cfg(feature = "images")]
+fn draw_alpha(
+  alpha: &[u8],
+  width: u32,
+  height: u32,
+  color: [u8; 4],
+  transform: Affine,
+  surface: &mut Surface,
+) {
+  let Some(size) = KrillaSize::from_wh(width as f32, height as f32) else {
+    return;
+  };
+  let data = alpha
+    .iter()
+    .flat_map(|alpha| {
+      let alpha = (u16::from(*alpha) * u16::from(color[3]) + 127) / 255;
+
+      [color[0], color[1], color[2], alpha as u8]
+    })
+    .collect();
+
+  surface.push_transform(&krilla_transform(transform.to_cols_array()));
+  surface.draw_image(KrillaImage::from_rgba8(data, width, height), size);
+  surface.pop();
 }
 
 /// A run ready to draw: its font, the text its glyphs map to, and where it

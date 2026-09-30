@@ -39,7 +39,7 @@ mod truncation;
 
 pub use self::{
   background::InlineBackgroundFragment,
-  decorations::DecorationRect,
+  decorations::DecorationLine,
   items::{DecorationLink, InlineBoxItem, InlineItem, ProcessedInlineSpan, collect_inline_items},
   metrics::VisualInlineBox,
   outline::{InlineOutline, InlineOutlineRect, OutlineIsland},
@@ -1341,7 +1341,13 @@ mod tests {
       padding: crate::geometry::Rect::default(),
       unsnapped_content: Size::new(100.0, 100.0),
     };
-    let decorations = run.decorations(&HashMap::new(), layout, 0.0, Affine::IDENTITY);
+    let decorations = run.decorations(
+      &HashMap::new(),
+      layout,
+      0.0,
+      Affine::IDENTITY,
+      Affine::IDENTITY,
+    );
 
     assert_eq!(decorations.len(), 0);
   }

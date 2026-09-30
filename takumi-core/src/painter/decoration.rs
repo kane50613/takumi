@@ -1,17 +1,19 @@
 //! Text decoration lines, painted after Blink's `DecorationLinePainter` in
-//! [`decoration_line_painter.cc`](https://source.chromium.org/chromium/chromium/src/+/main:third_party/blink/renderer/core/paint/decoration_line_painter.cc)
-//! and the offsets `TextDecorationInfo::ComputeLineData` gives a double or wavy line. Follows
-//! Blink under the notice in LICENSE-CHROMIUM.
+//! [`decoration_line_painter.cc`](https://source.chromium.org/chromium/chromium/src/+/main:third_party/blink/renderer/core/paint/decoration_line_painter.cc),
+//! the offsets `TextDecorationInfo::ComputeLineData` gives a double or wavy line, and the cuts
+//! `TextPainter::ClipDecorationLine` makes for `text-decoration-skip-ink`. Follows Blink under the
+//! notice in LICENSE-CHROMIUM.
 //!
-//! Approximate: the lines start from their snapped rectangle, where Blink offsets a double or
-//! wavy line by the unsnapped thickness and places a wave on the unsnapped top, and `skip-ink`
-//! cuts every style where glyphs cross the straight line, where Blink cuts the band each style
-//! fills.
+//! A line snaps to whole pixels of the block's border box, which is Blink's transform-node space
+//! since layout places every box on whole pixels.
 
 use super::{FillShape, PaintDevice, StrokeStyle, border::StyledLine};
 use crate::{
-  geometry::{PathCommand, Point, Size},
-  layout::inline::DecorationRect,
+  geometry::{PathCommand, Point, Rect, Size},
+  layout::{
+    inline::DecorationLine,
+    intercept::{Spans, remaining_spans},
+  },
   style::{Affine, BorderStyle, FillRule, TextDecorationLines, TextDecorationStyle},
 };
 
@@ -68,28 +70,31 @@ impl Wave {
   }
 }
 
-impl DecorationRect {
-  /// Paints the line with its border box at `origin`.
-  pub fn paint<D: PaintDevice>(&self, origin: Point<f32>, device: &mut D) {
-    if self.color.0[3] == 0 || self.width <= 0.0 || self.height <= 0.0 {
+/// A dashed or dotted line where Blink's `DrawLineAsStroke` draws it: from and to whole pixels, on
+/// a pixel row, a whole number of pixels thick.
+struct DashedLine {
+  start: f32,
+  end: f32,
+  /// The centre of the pixel row, before an odd thickness moves the stroke onto the half pixel.
+  row: f32,
+  thickness: f32,
+}
+
+impl DecorationLine {
+  /// Paints the line, cut where `text-decoration-skip-ink` gives way to the glyphs.
+  pub fn paint<D: PaintDevice>(&self, device: &mut D) {
+    if self.color.0[3] == 0 || self.width <= 0.0 {
       return;
     }
 
-    let [a, b, c, d, e, f] = self.transform;
-    let at = Affine {
-      a,
-      b,
-      c,
-      d,
-      x: e + origin.x,
-      y: f + origin.y,
-    };
+    let bounds = self.bounds();
+    let pieces = self.pieces(bounds);
 
     match self.style {
-      TextDecorationStyle::Solid => self.fill(at, device),
+      TextDecorationStyle::Solid => self.fill(&pieces, 0.0, device),
       TextDecorationStyle::Double => {
-        self.fill(at, device);
-        self.fill(Affine::translation(0.0, self.double_offset()) * at, device);
+        self.fill(&pieces, 0.0, device);
+        self.fill(&pieces, self.double_offset(), device);
       }
       TextDecorationStyle::Dotted | TextDecorationStyle::Dashed => {
         let style = if self.style == TextDecorationStyle::Dotted {
@@ -97,93 +102,205 @@ impl DecorationRect {
         } else {
           BorderStyle::Dashed
         };
-        let y = self.height / 2.0;
-        let (start, end) = self.line_span;
+        let dashed = self.dashed();
+        let y = if dashed.thickness % 2.0 == 1.0 {
+          dashed.row + 0.5
+        } else {
+          dashed.row
+        };
         let line = StyledLine::new(
-          Point { x: start, y },
-          Point { x: end, y },
-          self.height,
+          Point { x: dashed.start, y },
+          Point { x: dashed.end, y },
+          dashed.thickness,
           style,
           self.color,
         );
 
-        if self.line_span == (0.0, self.width) {
-          line.paint(at, device);
+        if self.skips.is_empty() {
+          line.paint(self.transform, device);
         } else {
-          self.clip(0.0, self.height, at, device, |device| {
-            line.paint(at, device)
-          });
+          // Blink's clip-out rects reach a pixel past the band, so they cover the half-pixel shift.
+          self.clip(
+            &pieces,
+            bounds.top - 1.0,
+            bounds.bottom + 1.0,
+            device,
+            |device| line.paint(self.transform, device),
+          );
         }
       }
       TextDecorationStyle::Wavy => {
-        let wave = Wave::of(self.height);
-        let midline = self.wavy_offset() + 0.5;
-        let reach = wave.amplitude() + self.height / 2.0;
-        let (start, end) = self.line_span;
-        let top = (midline - reach).floor();
-        let bottom = (midline + reach).ceil();
+        let wave = Wave::of(self.thickness);
 
-        self.clip(top, bottom, at, device, |device| {
+        self.clip(&pieces, bounds.top, bounds.bottom, device, |device| {
           device.stroke_shape(
             &FillShape::Path {
               commands: wave.centerline(
                 Point {
-                  x: start,
-                  y: midline,
+                  x: self.origin.x,
+                  y: self.origin.y + self.wavy_offset() + 0.5,
                 },
-                end - start,
+                self.width,
               ),
               rule: FillRule::NonZero,
             },
             &StrokeStyle {
               color: self.color,
-              width: self.height,
+              width: self.thickness,
               dash: None,
               round_cap: false,
             },
-            at,
+            self.transform,
           );
         });
       }
     }
   }
 
-  /// Fills the rectangle under `at`.
-  fn fill<D: PaintDevice>(&self, at: Affine, device: &mut D) {
-    device.fill_shape(
-      &FillShape::Rect(Size {
-        width: self.width,
-        height: self.height,
-      }),
-      self.color,
-      at,
-    );
+  /// The area the line paints, which `skip-ink` looks for glyphs in, after Blink's
+  /// `DecorationLinePainter::Bounds`.
+  pub(crate) fn bounds(&self) -> Rect<f32> {
+    let Point { x, y } = self.origin;
+    let right = x + self.width;
+
+    match self.style {
+      TextDecorationStyle::Solid => Rect {
+        left: x,
+        top: y,
+        right,
+        bottom: y + self.thickness,
+      },
+      TextDecorationStyle::Double => {
+        let offset = self.double_offset();
+
+        Rect {
+          left: x,
+          top: y + offset.min(0.0),
+          right,
+          bottom: y + self.thickness + offset.max(0.0),
+        }
+      }
+      TextDecorationStyle::Dotted | TextDecorationStyle::Dashed => {
+        let dashed = self.dashed();
+
+        Rect {
+          left: dashed.start,
+          top: dashed.row - dashed.thickness / 2.0,
+          right: dashed.end,
+          bottom: dashed.row + dashed.thickness / 2.0,
+        }
+      }
+      TextDecorationStyle::Wavy => {
+        let wave = Wave::of(self.thickness);
+        let reach = wave.amplitude() + self.thickness / 2.0;
+        let midline = y + self.wavy_offset();
+
+        Rect {
+          left: x,
+          top: midline + (0.5 - reach).floor(),
+          right,
+          bottom: midline + (0.5 + reach).ceil(),
+        }
+      }
+    }
   }
 
-  /// Runs `paint` clipped to this rect's stretch of the line, from `top` to `bottom`.
+  /// The stretches of `bounds` left once `skip-ink` cuts the glyphs out, each cut on a whole
+  /// device pixel as Blink's unantialiased `ClipOut` makes it.
+  fn pieces(&self, bounds: Rect<f32>) -> Spans {
+    let cuts: Spans = self
+      .skips
+      .iter()
+      .map(|&(start, end)| (self.device_pixel_x(start), self.device_pixel_x(end)))
+      .collect();
+
+    remaining_spans(bounds.left, bounds.right, &cuts)
+  }
+
+  /// `x` moved to the device pixel edge Skia rounds an unantialiased clip to. Under a rotation or
+  /// skew the clip stays a path whose edges Skia does not move.
+  fn device_pixel_x(&self, x: f32) -> f32 {
+    let Affine { a, b, c, x: dx, .. } = self.output;
+
+    if b != 0.0 || c != 0.0 || a == 0.0 {
+      return x;
+    }
+    ((a * x + dx + 0.5).floor() - dx) / a
+  }
+
+  /// Fills the pieces of the line `offset` below its top, the top on a whole pixel and the
+  /// thickness rounded down to one, as Blink's `DrawLineAsRect` snaps it.
+  fn fill<D: PaintDevice>(&self, pieces: &[(f32, f32)], offset: f32, device: &mut D) {
+    let top = (self.origin.y + offset + 0.5).floor();
+    let height = self.thickness.floor().max(1.0);
+
+    for &(start, end) in pieces {
+      device.fill_shape(
+        &FillShape::Rect(Size {
+          width: end - start,
+          height,
+        }),
+        self.color,
+        self.transform * Affine::translation(start, top),
+      );
+    }
+  }
+
+  /// Runs `paint` clipped to the pieces of the line, from `top` to `bottom`.
   fn clip<D: PaintDevice>(
     &self,
+    pieces: &[(f32, f32)],
     top: f32,
     bottom: f32,
-    at: Affine,
     device: &mut D,
     paint: impl FnOnce(&mut D),
   ) {
+    if pieces.is_empty() {
+      return;
+    }
+
+    let commands = pieces
+      .iter()
+      .flat_map(|&(start, end)| {
+        [
+          PathCommand::MoveTo(Point { x: start, y: top }),
+          PathCommand::LineTo(Point { x: end, y: top }),
+          PathCommand::LineTo(Point { x: end, y: bottom }),
+          PathCommand::LineTo(Point {
+            x: start,
+            y: bottom,
+          }),
+          PathCommand::Close,
+        ]
+      })
+      .collect();
+
     device.push_clip(
-      &FillShape::Rect(Size {
-        width: self.width,
-        height: bottom - top,
-      }),
-      Affine::translation(0.0, top) * at,
+      &FillShape::Path {
+        commands,
+        rule: FillRule::NonZero,
+      },
+      self.transform,
     );
     paint(device);
     device.pop_clip();
   }
 
+  /// Where a dashed or dotted line runs: `GetSnappedPointsForTextLine` truncates its ends and
+  /// floors its middle to whole pixels, and `DrawLineAsStroke` rounds its thickness.
+  fn dashed(&self) -> DashedLine {
+    DashedLine {
+      start: self.origin.x.floor(),
+      end: (self.origin.x + self.width).floor(),
+      row: (self.origin.y + (self.thickness / 2.0).max(0.5)).floor(),
+      thickness: self.thickness.round().max(1.0),
+    }
+  }
+
   /// How far a double line's second line sits from the first: below an underline, above an
   /// overline, and below a line-through, a whole number of pixels there.
   fn double_offset(&self) -> f32 {
-    let offset = self.height + 1.0;
+    let offset = self.thickness + 1.0;
 
     match self.line {
       TextDecorationLines::OVERLINE => -offset,
@@ -195,7 +312,7 @@ impl DecorationRect {
   /// How far a wavy line sits from the straight one: below an underline, above an overline,
   /// and on a line-through.
   fn wavy_offset(&self) -> f32 {
-    let offset = self.height + 1.0;
+    let offset = self.thickness + 1.0;
 
     match self.line {
       TextDecorationLines::OVERLINE => -offset,

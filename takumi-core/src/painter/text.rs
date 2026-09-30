@@ -7,11 +7,11 @@ use crate::{
   font_style::SizedFontStyle,
   geometry::{ComputedLayout, Point, Size},
   layout::inline::{
-    DecorationRect, InlineBackgroundFragment, InlineOutlineRect, InlineRunLayout, OutlineIsland,
+    DecorationLine, InlineBackgroundFragment, InlineOutlineRect, InlineRunLayout, OutlineIsland,
     PositionedInlineRun, ProcessedInlineSpan,
   },
   shadow::SizedShadow,
-  style::{Affine, FillRule},
+  style::FillRule,
 };
 
 /// What a device fills a run's glyphs with.
@@ -28,10 +28,8 @@ pub enum GlyphFill {
 /// A device that can also draw text: glyph runs, and the shadows text and its decorations cast.
 pub trait GlyphDevice: PaintDevice {
   /// Paints only the shadow of what is drawn until the matching [`GlyphDevice::end_shadow`]:
-  /// each draw moved by the shadow's offset, filled with its colour, and blurred.
-  ///
-  /// Approximate: bitmap glyphs such as colour emoji cast no shadow, where Blink shadows their
-  /// alpha.
+  /// each draw moved by the shadow's offset, filled with its colour, and blurred. A colour glyph
+  /// casts its silhouette, as Blink's shadow fills every glyph with the shadow colour.
   fn begin_shadow(&mut self, shadow: &SizedShadow);
 
   /// Stops painting shadows.
@@ -147,7 +145,8 @@ impl InlineLines<'_> {
       });
     }
 
-    let decorations: Vec<Vec<DecorationRect>> = self
+    let device_transform = device.transform();
+    let decorations: Vec<Vec<DecorationLine>> = self
       .runs
       .iter()
       .map(|run| {
@@ -155,7 +154,8 @@ impl InlineLines<'_> {
           &run.resolved_glyphs,
           frame.layout,
           run.baseline_shift,
-          run.transform(Affine::IDENTITY),
+          run.transform(at),
+          device_transform,
         )
       })
       .collect();
@@ -223,7 +223,7 @@ impl PositionedInlineRun {
   /// A shadow pass keeps the text-shadow role for everything it draws.
   fn paint<D: GlyphDevice>(
     &self,
-    decorations: &[DecorationRect],
+    decorations: &[DecorationLine],
     style: &SizedFontStyle,
     fill: GlyphFill,
     frame: BoxFrame,
@@ -235,7 +235,7 @@ impl PositionedInlineRun {
         device.set_role(PaintRole::TextDecoration);
       }
       for decoration in decorations.iter().filter(|decoration| !decoration.over) {
-        decoration.paint(frame.origin, device);
+        decoration.paint(device);
       }
 
       if !shadow_pass {
@@ -247,7 +247,7 @@ impl PositionedInlineRun {
         device.set_role(PaintRole::TextDecoration);
       }
       for decoration in decorations.iter().filter(|decoration| decoration.over) {
-        decoration.paint(frame.origin, device);
+        decoration.paint(device);
       }
     });
   }

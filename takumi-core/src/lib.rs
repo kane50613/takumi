@@ -11,6 +11,8 @@
 /// Style resolution and box/inline layout.
 pub mod layout;
 
+/// Gaussian blur of pixels, as Skia's raster blur engine runs it.
+pub mod blur;
 /// Render context threading style, sizing, and resources through layout.
 pub mod context;
 /// A CSS `filter` function as a colour matrix.

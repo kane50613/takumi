@@ -45,12 +45,15 @@ pub(super) struct Recorder {
   /// For a text node, the box's background layers that `background-clip: text` shows through its
   /// glyphs, bottom first, in the node's space.
   text_background: Option<Vec<Paint>>,
+  /// Maps the node's space onto the page.
+  transform: Affine,
 }
 
 impl Recorder {
-  /// A recorder for a box or image.
-  pub(super) fn new() -> Self {
+  /// A recorder for a box or image whose space `transform` maps onto the page.
+  pub(super) fn new(transform: Affine) -> Self {
     Self {
+      transform,
       drawables: Vec::new(),
       role: Role::Background,
       clips: Vec::new(),
@@ -60,11 +63,12 @@ impl Recorder {
     }
   }
 
-  /// A recorder for a text node, whose glyphs show `background` under `background-clip: text`.
-  pub(super) fn text(background: Vec<Paint>) -> Self {
+  /// A recorder for a text node, whose glyphs show `background` under `background-clip: text`, its
+  /// space mapped onto the page by `transform`.
+  pub(super) fn text(background: Vec<Paint>, transform: Affine) -> Self {
     Self {
       text_background: Some(background),
-      ..Self::new()
+      ..Self::new(transform)
     }
   }
 
@@ -81,6 +85,15 @@ impl Recorder {
   /// `color`, or `None` when it shows nothing.
   fn visible(&self, color: Color) -> Option<[u8; 4]> {
     (color.0[3] > 0).then_some(color.0)
+  }
+
+  /// `transform` moved by the open text shadow's offset. A clip opened inside a text shadow clips
+  /// what casts it, as Blink draws a text shadow's content into a `DropShadowPaintFilter` layer.
+  fn shadow_moved(&self, transform: Affine) -> Affine {
+    match self.shadow {
+      Some(shadow) => Affine::translation(shadow.offset_x, shadow.offset_y) * transform,
+      None => transform,
+    }
   }
 
   /// The open clips, as shapes to clip to at once.
@@ -199,6 +212,10 @@ fn shadow_offset(shadow: &SizedShadow) -> PaintPoint {
 }
 
 impl PaintDevice for Recorder {
+  fn transform(&self) -> Affine {
+    self.transform
+  }
+
   fn set_role(&mut self, role: PaintRole) {
     self.role = role.into();
   }
@@ -254,7 +271,7 @@ impl PaintDevice for Recorder {
   }
 
   fn push_clip(&mut self, shape: &FillShape, transform: Affine) {
-    let region = Shape::of(shape, transform);
+    let region = Shape::of(shape, self.shadow_moved(transform));
 
     self.clips.push(Clip {
       shape: region.clone(),
@@ -264,6 +281,8 @@ impl PaintDevice for Recorder {
   }
 
   fn push_clip_out(&mut self, shape: &FillShape, transform: Affine) {
+    let transform = self.shadow_moved(transform);
+
     self.clips.push(Clip {
       shape: Shape::outside(shape, transform),
       region: Shape::of(shape, transform),

@@ -14,7 +14,8 @@ use crate::{
     decoration::OutlineGeometry,
     inline::{
       InlineContentKind, InlineLayoutMode, InlineLayoutRequest, PlacedItem, ProcessedInlineSpan,
-      collect_inline_items, create_inline_layout, glyph_run_rect, resolve_inline_max_height,
+      ShapedRun, collect_inline_items, create_inline_layout, glyph_run_rect,
+      resolve_inline_max_height,
     },
     node::Node,
     tree::{ContainingBlocks, LayoutResults, RenderNode},
@@ -602,7 +603,7 @@ fn compute_node_paint_bounds(
       PlacedItem::Run {
         glyph_run,
         static_inline_prefix,
-        ..
+        trailing_whitespace,
       } => {
         let (glyph_origin, glyph_size) = glyph_run_rect(&glyph_run, setup.baseline_shift);
         let (glyph_origin, glyph_size) =
@@ -612,6 +613,44 @@ fn compute_node_paint_bounds(
           bounds,
           bounds_for_placed_rect(glyph_origin, glyph_size, inline_transform),
         );
+
+        // Blink's `InkOverflow::ComputeAppliedDecorationOverflow` unites each decoration line's
+        // painted area into the text's ink overflow.
+        let brush = glyph_run.style().brush;
+        if !brush.decoration_line.is_empty() {
+          let run = ShapedRun::of(
+            &glyph_run,
+            Vec::new(),
+            trailing_whitespace,
+            brush,
+            Vec::new(),
+          );
+          let run_transform = setup
+            .state
+            .transform(Affine::IDENTITY, static_inline_prefix);
+          let output = transform * run_transform;
+
+          for line in
+            run.decoration_lines(content_offset, setup.baseline_shift, run_transform, output)
+          {
+            let area = line.bounds();
+
+            bounds = merge_bounds(
+              bounds,
+              bounds_for_placed_rect(
+                Point {
+                  x: area.left,
+                  y: area.top,
+                },
+                Size {
+                  width: area.right - area.left,
+                  height: area.bottom - area.top,
+                },
+                output,
+              ),
+            );
+          }
+        }
 
         // The metrics box above misses ink outside advance × (ascent+descent):
         // synthetic-italic skew, faux-bold outset, negative bearings, and

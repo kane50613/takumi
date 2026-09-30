@@ -6,7 +6,7 @@
 
 use skrifa::{FontRef, MetadataProvider};
 use takumi_core::{
-  geometry::{ComputedLayout as Layout, Point},
+  geometry::{ComputedLayout as Layout, Point, Size},
   layout::{
     decoration::ClipBox,
     inline::{PositionedGlyph, PositionedInlineRun},
@@ -77,6 +77,9 @@ pub(crate) struct CanvasClip {
   coverage: Vec<u8>,
   placement: Placement,
   out: bool,
+  /// Opened inside a text shadow, so it clips what casts the shadow, moved with it, before the
+  /// blur, as Blink draws a text shadow's content into a `DropShadowPaintFilter` layer.
+  casts_shadow: bool,
 }
 
 impl<'c> CanvasDevice<'c> {
@@ -95,6 +98,17 @@ impl<'c> CanvasDevice<'c> {
       text_background: None,
       error: None,
     }
+  }
+
+  /// Whether a `size` rectangle under `transform` covers whole pixels, or is turned so that a tile
+  /// samples its edges; either way a solid tile paints it as its coverage would.
+  fn tiles_whole_pixels(&self, size: Size<f32>, transform: Affine) -> bool {
+    let transform = self.transform * transform;
+
+    size.width.fract() == 0.0
+      && size.height.fract() == 0.0
+      && (!transform.only_translation()
+        || (transform.x.fract() == 0.0 && transform.y.fract() == 0.0))
   }
 
   /// The canvas as a device for the box `context` paints.
@@ -130,11 +144,17 @@ impl<'c> CanvasDevice<'c> {
     )
   }
 
-  /// Limits `coverage` to the open clips, or `None` when nothing is left.
-  fn clipped(&self, coverage: (Vec<u8>, Placement)) -> Option<(Vec<u8>, Placement)> {
+  /// Limits `coverage` to the open clips that `casts_shadow` selects, or `None` when nothing is
+  /// left.
+  fn clipped(
+    &self,
+    coverage: (Vec<u8>, Placement),
+    casts_shadow: bool,
+  ) -> Option<(Vec<u8>, Placement)> {
     self
       .clips
       .iter()
+      .filter(|clip| clip.casts_shadow == casts_shadow)
       .try_fold(coverage, |(mut mask, placement), clip| {
         if clip.out {
           attenuate_alpha_by_mask(&mut mask, placement, &clip.coverage, clip.placement);
@@ -148,18 +168,23 @@ impl<'c> CanvasDevice<'c> {
 
   /// Opens a clip to `shape`, or out of it when `out` is set.
   fn open_clip(&mut self, shape: &FillShape, transform: Affine, out: bool) {
+    let transform = match self.shadow {
+      Some(shadow) => Affine::translation(shadow.offset_x, shadow.offset_y) * transform,
+      None => transform,
+    };
     let (coverage, placement) = self.coverage(shape, Fill::from(shape.rule()).into(), transform);
 
     self.clips.push(CanvasClip {
       coverage,
       placement,
       out,
+      casts_shadow: self.shadow.is_some(),
     });
   }
 
   /// Paints `coverage` in `color`, limited to the open clips.
   fn draw_coverage(&mut self, coverage: (Vec<u8>, Placement), color: Color) {
-    if let Some((mask, placement)) = self.clipped(coverage) {
+    if let Some((mask, placement)) = self.clipped(coverage, false) {
       self
         .canvas
         .draw_mask(&mask, placement, color, BlendMode::Normal);
@@ -204,6 +229,10 @@ impl<'c> CanvasDevice<'c> {
     blur_radius: f32,
     color: Color,
   ) {
+    let Some((mask, placement)) = self.clipped((mask, placement), true) else {
+      return;
+    };
+
     if mask.is_empty() {
       return;
     }
@@ -364,7 +393,7 @@ impl<'c> CanvasDevice<'c> {
       return;
     };
     let coverage = self.coverage(shape, Fill::from(shape.rule()).into(), Affine::IDENTITY);
-    let Some((mask, placement)) = self.clipped(coverage) else {
+    let Some((mask, placement)) = self.clipped(coverage, false) else {
       return;
     };
 
@@ -384,6 +413,10 @@ impl<'c> CanvasDevice<'c> {
 }
 
 impl PaintDevice for CanvasDevice<'_> {
+  fn transform(&self) -> Affine {
+    self.transform
+  }
+
   fn fill_shape(&mut self, shape: &FillShape, color: Color, transform: Affine) {
     if let Some(shadow) = self.shadow {
       return self.draw_shadow_of(
@@ -396,7 +429,9 @@ impl PaintDevice for CanvasDevice<'_> {
 
     let unclipped = self.clips.is_empty();
     let (border, size, offset) = match shape {
-      FillShape::Rect(size) if unclipped => (BorderProperties::default(), *size, Point::ZERO),
+      FillShape::Rect(size) if unclipped && self.tiles_whole_pixels(*size, transform) => {
+        (BorderProperties::default(), *size, Point::ZERO)
+      }
       FillShape::RoundedRect {
         border,
         size,
