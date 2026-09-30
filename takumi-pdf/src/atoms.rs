@@ -86,6 +86,8 @@ impl AtomCollector<'_> {
           PaintItemKind::Context(child) => {
             self.context_atoms(*child, child_frame, atoms)?;
           }
+          // The node's own item already records its inline content, floats included.
+          PaintItemKind::Floats(_) => {}
         }
       }
     }

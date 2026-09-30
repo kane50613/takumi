@@ -515,6 +515,10 @@ impl PaintDevice for CanvasDevice<'_> {
     self.open_clip(shape, transform, false, true);
   }
 
+  fn push_aliased_clip_out(&mut self, shape: &FillShape, transform: Affine) {
+    self.open_clip(shape, transform, true, true);
+  }
+
   fn with_border_mask(
     &mut self,
     border: &BorderProperties,

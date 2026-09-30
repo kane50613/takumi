@@ -1,24 +1,25 @@
-//! Scene-driven SVG emission: walk the backend-agnostic stacking-context scene
-//! built by takumi-core — the same paint order, z-index buckets, and out-of-flow
-//! hoisting the raster backend consumes — instead of re-deriving them here.
+//! Scene-driven SVG emission: the paint chunks takumi-core flattens a scene into — the same paint
+//! order, clips and effects the raster backend consumes — written as nested groups.
 //!
-//! Each painted node is placed by its transform relative to its parent frame
-//! (`parent⁻¹ · node`), so nesting composes the absolute transform. A pure
-//! translation is folded into the draw origin to keep the output compact; a
-//! rotation/scale becomes the group's `transform`.
+//! Each chunk is placed by its transform relative to the groups open around it, so a pure
+//! translation folds into the draw origin to keep the output compact, and a rotation or scale
+//! becomes a group's `transform`.
 
 use std::io;
 
 use takumi_core::{
-  geometry::{NodeId, Point},
+  geometry::Point,
+  layout::inline::InlinePass,
+  paint_chunk::{ChunkPart, ConversionContext, PaintChunk, PropertySink},
+  paint_property::{ClipId, ClipNode, EffectId, EffectNode},
   painter::BoxFrame,
-  scene::{BoxPart, NodePaint, PaintItemKind, PaintPhase, Scene},
+  scene::{NodePaint, Scene},
   style::{Affine, Filter},
 };
 
 use crate::{
-  SvgDocument,
-  render::{BoxChrome, DocumentDevice, PlacedBox},
+  GroupToken, SvgDocument,
+  render::{EffectGroups, PlacedBox},
 };
 
 /// A scene, emitted in paint order.
@@ -28,19 +29,146 @@ pub(crate) struct SceneEmitter<'a> {
 
 impl<'a> SceneEmitter<'a> {
   pub(crate) fn emit(&self, doc: &mut SvgDocument) -> io::Result<()> {
-    self.emit_context(0, Affine::IDENTITY, None, doc)?;
-    Ok(())
+    let chunks = PaintChunk::in_paint_order(&self.scene.contexts);
+    let owners = PaintChunk::effect_owners(&chunks, &self.scene.properties);
+
+    self.emit_chunks(&chunks, &chunks, &owners, true, doc)
   }
 
-  /// Emits a `backdrop-filter` node's backdrop: the scene replayed up to the node, filtered, and
-  /// clipped to its border box, since SVG has no backdrop source of its own.
-  fn emit_backdrop(
+  /// Emits `emitted`, a prefix of the scene's `chunks`, entering their clips and effects. Only a
+  /// top-level pass replays backdrops, since a replay would replay again for each nested one.
+  fn emit_chunks(
     &self,
-    placed: &PlacedBox,
-    node_id: NodeId,
-    transform: Affine,
-    group_transform: Affine,
+    chunks: &[PaintChunk<'a>],
+    emitted: &[PaintChunk<'a>],
+    owners: &[Option<&'a NodePaint>],
+    backdrops: bool,
     doc: &mut SvgDocument,
+  ) -> io::Result<()> {
+    let base = doc.transform();
+    let mut conversion = ConversionContext::new(
+      &self.scene.properties,
+      ChunkWriter {
+        emitter: self,
+        chunks,
+        owners,
+        backdrops,
+        base,
+        doc,
+        groups: Vec::new(),
+        error: None,
+      },
+    );
+
+    for chunk in emitted {
+      conversion.switch_to(chunk.state());
+      conversion.sink().emit(chunk);
+    }
+
+    conversion.finish().error.map_or(Ok(()), Err)
+  }
+
+  /// The box `paint` names, placed relative to `current`, with the transform its group needs
+  /// beyond a translation.
+  fn place(&self, paint: &NodePaint, current: Affine) -> Option<(PlacedBox<'a>, Affine)> {
+    let node = self.scene.root.node_at_path(&paint.path)?;
+    let layout = self.scene.results.layout(paint.node_id).ok()?;
+    let relative = current.invert().unwrap_or(Affine::IDENTITY) * paint.transform;
+    let (origin, group_transform) = if relative.only_translation() {
+      (
+        Point {
+          x: relative.x,
+          y: relative.y,
+        },
+        Affine::IDENTITY,
+      )
+    } else {
+      (Point::ZERO, relative)
+    };
+
+    Some((
+      PlacedBox::new(node, BoxFrame::new(layout, origin)),
+      group_transform,
+    ))
+  }
+}
+
+/// A [`PropertySink`] writing chunks into an [`SvgDocument`].
+struct ChunkWriter<'e, 'a, 'd> {
+  emitter: &'e SceneEmitter<'a>,
+  chunks: &'e [PaintChunk<'a>],
+  owners: &'e [Option<&'a NodePaint>],
+  backdrops: bool,
+  /// The document transform the scene's transforms are relative to.
+  base: Affine,
+  doc: &'d mut SvgDocument,
+  groups: Vec<Vec<GroupToken>>,
+  error: Option<io::Error>,
+}
+
+impl ChunkWriter<'_, '_, '_> {
+  /// The transform the open groups add to the scene's space.
+  fn current(&self) -> Affine {
+    self.base.invert().unwrap_or(Affine::IDENTITY) * self.doc.transform()
+  }
+
+  fn record(&mut self, result: io::Result<()>) {
+    if let Err(error) = result {
+      self.error.get_or_insert(error);
+    }
+  }
+
+  /// Writes one chunk under the groups already open.
+  fn emit(&mut self, chunk: &PaintChunk<'_>) {
+    if self.error.is_some() {
+      return;
+    }
+
+    let Some((placed, group_transform)) = self.emitter.place(chunk.node, self.current()) else {
+      return;
+    };
+    let doc = &mut *self.doc;
+    let result = (|| {
+      let group = (!group_transform.is_identity())
+        .then(|| doc.begin_group(group_transform, 1.0, None, None))
+        .transpose()?;
+
+      match chunk.part {
+        ChunkPart::Decorations => placed.emit_decorations(doc)?,
+        ChunkPart::Content => placed.emit_own_content(InlinePass::Content, doc)?,
+        ChunkPart::Floats => placed.emit_own_content(InlinePass::Floats, doc)?,
+        ChunkPart::Outline => placed.emit_outline(doc)?,
+      }
+
+      match group {
+        Some(group) => doc.end_group(group),
+        None => Ok(()),
+      }
+    })();
+
+    self.record(result);
+  }
+
+  /// Opens the groups of the effect `paint` owns, after its filtered backdrop.
+  fn open_effect(&mut self, paint: &NodePaint) -> io::Result<Vec<GroupToken>> {
+    let Some((placed, group_transform)) = self.emitter.place(paint, self.current()) else {
+      return Ok(Vec::new());
+    };
+
+    if self.backdrops && !placed.node.context.style.backdrop_filter.is_empty() {
+      self.emit_backdrop(&placed, paint, group_transform)?;
+    }
+
+    Ok(EffectGroups::open(&placed, group_transform, self.doc)?.into_tokens())
+  }
+
+  /// Emits `placed`'s backdrop: the chunks before its own, filtered and clipped to its border box,
+  /// since SVG has no backdrop source of its own.
+  fn emit_backdrop(
+    &mut self,
+    placed: &PlacedBox,
+    paint: &NodePaint,
+    group_transform: Affine,
   ) -> io::Result<()> {
     let context = &placed.node.context;
     let size = placed.frame.layout.size;
@@ -51,19 +179,18 @@ impl<'a> SceneEmitter<'a> {
       .filter(|f| !f.is_drop_shadow())
       .cloned()
       .collect();
+
     if filters.is_empty() || size.width <= 0.0 || size.height <= 0.0 {
       return Ok(());
     }
 
+    let doc = &mut *self.doc;
     let outer = (!group_transform.is_identity())
       .then(|| doc.begin_group(group_transform, 1.0, None, None))
       .transpose()?;
-
     let clip_group = doc.begin_clipped_group(&placed.border_box_path_data())?;
-
     let shape_clip = placed.begin_clip_path_group(doc)?;
     let mask = placed.begin_mask_group(doc)?;
-
     // The blur feathers the clipped backdrop's alpha at its edges; restoring it averages only the
     // pixels inside, close to the mirrored edges browsers sample. Skipped for opacity(), which
     // lowers alpha on purpose.
@@ -76,27 +203,32 @@ impl<'a> SceneEmitter<'a> {
       None,
       filter_refs.first().map(String::as_str),
     )?;
-
     // The filter reads only the backdrop inside the border box, as browsers do.
     let backdrop_clip = doc.begin_clipped_group(&placed.border_box_path_data())?;
-    // The replay is emitted in root coordinates; cancel the current transform.
-    let to_root = transform.invert().unwrap_or(Affine::IDENTITY);
-    let root_group = (!to_root.is_identity())
-      .then(|| doc.begin_group(to_root, 1.0, None, None))
+    // The replay is emitted in the scene's space; cancel the groups open around it.
+    let to_scene = (self.base.invert().unwrap_or(Affine::IDENTITY) * doc.transform())
+      .invert()
+      .unwrap_or(Affine::IDENTITY);
+    let scene_group = (!to_scene.is_identity())
+      .then(|| doc.begin_group(to_scene, 1.0, None, None))
       .transpose()?;
+    let start = self
+      .chunks
+      .iter()
+      .position(|chunk| chunk.node.path == paint.path)
+      .unwrap_or(self.chunks.len());
 
-    self.emit_context(0, Affine::IDENTITY, Some(node_id), doc)?;
+    self
+      .emitter
+      .emit_chunks(self.chunks, &self.chunks[..start], self.owners, false, doc)?;
 
-    if let Some(group) = root_group {
+    if let Some(group) = scene_group {
       doc.end_group(group)?;
     }
     doc.end_group(backdrop_clip)?;
     doc.end_group(filter_group)?;
     doc.end_filter_wrappers(filter_wrappers)?;
-    if let Some(group) = mask {
-      doc.end_group(group)?;
-    }
-    if let Some(group) = shape_clip {
+    for group in [mask, shape_clip].into_iter().flatten() {
       doc.end_group(group)?;
     }
     doc.end_group(clip_group)?;
@@ -106,127 +238,57 @@ impl<'a> SceneEmitter<'a> {
     Ok(())
   }
 
-  /// Opens a node's chrome drawing `part` of it, returning the chrome, the box whose content the
-  /// caller emits, and the transform its children sit in.
-  fn emit_box(
-    &self,
-    np: &NodePaint,
-    parent: Affine,
-    stop_at: Option<NodeId>,
-    part: BoxPart,
-    doc: &mut SvgDocument,
-  ) -> io::Result<Option<(BoxChrome, PlacedBox<'a>, Affine)>> {
-    let Some(node) = self.scene.root.node_at_path(&np.path) else {
-      return Ok(None);
+  fn close(&mut self) {
+    let Some(groups) = self.groups.pop() else {
+      return;
     };
-    let Ok(layout) = self.scene.results.layout(np.node_id) else {
-      return Ok(None);
-    };
+    let doc = &mut *self.doc;
+    let result = groups
+      .into_iter()
+      .rev()
+      .try_for_each(|group| doc.end_group(group));
 
-    let relative = parent.invert().unwrap_or(Affine::IDENTITY) * np.transform;
-    let (origin, group_transform) = if relative.only_translation() {
-      (
-        Point {
-          x: relative.x,
-          y: relative.y,
-        },
-        Affine::IDENTITY,
-      )
-    } else {
-      (Point::ZERO, relative)
-    };
-    let child_transform = parent * group_transform;
-    let placed = PlacedBox::new(node, BoxFrame::new(layout, origin));
+    self.record(result);
+  }
+}
 
-    // A replay skips nested backdrops, which would each replay the prefix again.
-    if part != BoxPart::Content
-      && stop_at.is_none()
-      && !node.context.style.backdrop_filter.is_empty()
-    {
-      self.emit_backdrop(&placed, np.node_id, child_transform, group_transform, doc)?;
+impl PropertySink for ChunkWriter<'_, '_, '_> {
+  fn push_clip(&mut self, _id: ClipId, clip: &ClipNode) {
+    let relative = self.current().invert().unwrap_or(Affine::IDENTITY) * clip.transform;
+    let doc = &mut *self.doc;
+    let opened = doc
+      .clip_shape(&clip.shape, relative)
+      .and_then(|reference| doc.begin_group(Affine::IDENTITY, 1.0, Some(&reference), None));
+
+    match opened {
+      Ok(group) => self.groups.push(vec![group]),
+      Err(error) => {
+        self.groups.push(Vec::new());
+        self.record(Err(error));
+      }
     }
-
-    let chrome = BoxChrome::open(&placed, group_transform, part, doc)?;
-    Ok(Some((chrome, placed, child_transform)))
   }
 
-  /// Walks a stacking context in paint order, stopping before `stop_at`; returns whether it did.
-  fn emit_context(
-    &self,
-    id: usize,
-    parent: Affine,
-    stop_at: Option<NodeId>,
-    doc: &mut SvgDocument,
-  ) -> io::Result<bool> {
-    let Some(ctx) = self.scene.contexts.get(id) else {
-      return Ok(false);
+  fn pop_clip(&mut self) {
+    self.close();
+  }
+
+  fn begin_effect(&mut self, id: EffectId, _effect: &EffectNode) {
+    let opened = match self.owners[id.index()] {
+      Some(owner) => self.open_effect(owner),
+      None => Ok(Vec::new()),
     };
 
-    let (chrome, root_placed, child_transform) = match ctx.root() {
-      Some(np) => {
-        if stop_at == Some(np.node_id) {
-          return Ok(true);
-        }
-        match self.emit_box(np, parent, stop_at, BoxPart::Whole, doc)? {
-          Some((chrome, placed, transform)) => (Some(chrome), Some(placed), transform),
-          None => (None, None, parent),
-        }
-      }
-      None => (None, None, parent),
-    };
-
-    let mut stopped = false;
-    // Blink's `kDescendantOutlinesOnly` pass.
-    let mut descendant_outlines = Vec::new();
-
-    'phases: for phase in ctx.paint_phases() {
-      let (items, phase_part) = match phase {
-        PaintPhase::RootContent => {
-          if let Some(placed) = &root_placed {
-            placed.emit_own_content(doc)?;
-          }
-          continue;
-        }
-        PaintPhase::Items(items, part) => (items, part),
-      };
-
-      for item in items {
-        let Some(part) = item.part_in(phase_part) else {
-          continue;
-        };
-
-        match &item.kind {
-          PaintItemKind::Node(np) => {
-            if stop_at == Some(np.node_id) {
-              stopped = true;
-              break 'phases;
-            }
-            if let Some((mut chrome, placed, _)) =
-              self.emit_box(np, child_transform, stop_at, part, doc)?
-            {
-              if part != BoxPart::Decorations {
-                placed.emit_own_content(doc)?;
-              }
-              descendant_outlines.extend(chrome.take_outline());
-              chrome.close(doc)?;
-            }
-          }
-          PaintItemKind::Context(child) => {
-            if self.emit_context(*child, child_transform, stop_at, doc)? {
-              stopped = true;
-              break 'phases;
-            }
-          }
-        }
+    match opened {
+      Ok(groups) => self.groups.push(groups),
+      Err(error) => {
+        self.groups.push(Vec::new());
+        self.record(Err(error));
       }
     }
+  }
 
-    for pending in &descendant_outlines {
-      DocumentDevice::paint(doc, |device| pending.paint(device))?;
-    }
-    if let Some(chrome) = chrome {
-      chrome.close(doc)?;
-    }
-    Ok(stopped)
+  fn end_effect(&mut self) {
+    self.close();
   }
 }

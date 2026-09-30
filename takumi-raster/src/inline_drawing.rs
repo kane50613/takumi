@@ -8,15 +8,15 @@ use crate::{
   SizedFontStyle, collect_background_layers, draw_box_shell,
   layout::{
     inline::{
-      BuiltInlineLayout, InlineBoxItem, InlineLayoutMode, InlineLayoutRequest, ProcessedInlineSpan,
-      VisualInlineBox, create_inline_layout,
+      BuiltInlineLayout, InlineBoxItem, InlineLayoutMode, InlineLayoutRequest, InlinePass,
+      ProcessedInlineSpan, VisualInlineBox, create_inline_layout,
     },
     tree::RenderNode,
   },
   node_paint::draw_image_node_content,
   painter::{BoxFrame, BoxPainter, GlyphFill, OwnContent},
   rasterize_layers,
-  stacking_context::ScenePainter,
+  stacking_context::paint_scene,
   style::{Affine, BackgroundClip},
 };
 
@@ -36,7 +36,7 @@ pub(crate) fn draw_inline_box(
       let at = subtree.border_box_origin(origin);
       let mut scene = subtree.into_scene(transform * Affine::translation(at.x, at.y), true)?;
 
-      ScenePainter::new(&mut scene, canvas).paint_context(0)
+      paint_scene(&mut scene, canvas)
     }
     InlineBoxPaint::Replaced { node, layout } => {
       if !node.paints_own_box() {
@@ -46,7 +46,7 @@ pub(crate) fn draw_inline_box(
       context.transform = transform * Affine::translation(origin.x, origin.y);
 
       draw_box_shell(&context, canvas, layout)?;
-      draw_own_content(node, &context, canvas, layout)?;
+      draw_own_content(node, &context, canvas, layout, InlinePass::Content)?;
       if let Some(outline) = DeferredOutline::of(&context, layout) {
         outline.paint(canvas)?;
       }
@@ -62,11 +62,15 @@ pub(crate) fn draw_own_content(
   context: &RenderContext,
   canvas: &mut Canvas,
   layout: Layout,
+  pass: InlinePass,
 ) -> Result<()> {
   let content = OwnContent::of(node);
 
   if let OwnContent::Image(image) = content {
-    return draw_image_node_content(image, context, canvas, layout);
+    return match pass {
+      InlinePass::Content => draw_image_node_content(image, context, canvas, layout),
+      InlinePass::Floats => Ok(()),
+    };
   }
 
   let font_style = SizedFontStyle::from_style(&context.style, context);
@@ -84,10 +88,15 @@ pub(crate) fn draw_own_content(
     ProcessedInlineSpan::Box(item) => Some(item),
     _ => None,
   });
-  let positioned_inline_boxes = draw_inline_layout(context, canvas, layout, &built, &font_style)?;
+  let positioned_inline_boxes = match pass {
+    InlinePass::Content => draw_inline_layout(context, canvas, layout, &built, &font_style)?,
+    InlinePass::Floats => built.resolve_runs(context, layout)?.inline_boxes,
+  };
 
   for (item, positioned) in boxes.zip(positioned_inline_boxes.iter()) {
-    draw_inline_box(positioned, item, layout, canvas, context.transform)?;
+    if pass.paints(positioned) {
+      draw_inline_box(positioned, item, layout, canvas, context.transform)?;
+    }
   }
   Ok(())
 }

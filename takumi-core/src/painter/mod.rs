@@ -47,6 +47,7 @@ pub struct LayerBounds {
 pub const UNBOUNDED: f32 = 1.0e6;
 
 /// A closed shape to fill, in the coordinate space of the box that owns it.
+#[derive(Debug, Clone)]
 pub enum FillShape {
   /// An axis-aligned rectangle at the box origin.
   Rect(Size<f32>),
@@ -66,6 +67,9 @@ pub enum FillShape {
     /// The horizontal and vertical radii.
     radius: SpacePair<f32>,
   },
+  /// A region inset from a border box whose corners are not all round, its corners following the
+  /// border box's.
+  Contoured(ClipBox),
   /// Anything else.
   Path {
     /// The path.
@@ -90,6 +94,7 @@ impl FillShape {
         offset,
       } => border.append_mask_commands(&mut commands, *size, *offset),
       Self::Ellipse { center, radius } => push_ellipse(&mut commands, *center, *radius),
+      Self::Contoured(clip) => clip.append_contour(&mut commands),
       Self::Path { commands: path, .. } => commands.extend_from_slice(path),
     }
     commands
@@ -99,6 +104,7 @@ impl FillShape {
   pub fn rule(&self) -> FillRule {
     match self {
       Self::Path { rule, .. } => *rule,
+      Self::Contoured(_) => FillRule::EvenOdd,
       _ => FillRule::NonZero,
     }
   }
@@ -142,6 +148,10 @@ impl FillShape {
 
 impl From<ClipBox> for FillShape {
   fn from(clip: ClipBox) -> Self {
+    if clip.follows_origin() {
+      return Self::Contoured(clip);
+    }
+
     Self::RoundedRect {
       border: clip.border,
       size: clip.size,
@@ -231,6 +241,24 @@ pub enum OverflowClip {
 }
 
 impl OverflowClip {
+  /// The clip as a shape in the border box of `layout`, with where the shape's origin sits.
+  pub fn shape(self, layout: ComputedLayout) -> (FillShape, Point<f32>) {
+    match self {
+      Self::Rounded(clip) => (clip.into(), Point::ZERO),
+      Self::Axes { x, y } => {
+        let edges = BoxFrame::new(layout, Point::ZERO).overflow_clip_edges(x, y);
+
+        (
+          FillShape::Rect(Size {
+            width: edges.right - edges.left,
+            height: edges.bottom - edges.top,
+          }),
+          edges.top_left(),
+        )
+      }
+    }
+  }
+
   /// What the box at `layout` clips its content to, or `None` when it clips nothing.
   pub fn of(context: &RenderContext, layout: ComputedLayout) -> Option<Self> {
     let overflow = context.style.resolve_overflows();
@@ -300,6 +328,10 @@ pub trait PaintDevice {
   /// with antialiasing off keeps only the pixels whose centres fall inside, until the matching
   /// [`PaintDevice::pop_clip`].
   fn push_aliased_clip(&mut self, shape: &FillShape, transform: Affine);
+
+  /// Clips later draws to everything outside `shape` under `transform`, keeping only the pixels
+  /// whose centres fall outside, until the matching [`PaintDevice::pop_clip`].
+  fn push_aliased_clip_out(&mut self, shape: &FillShape, transform: Affine);
 
   /// Removes the most recent clip.
   fn pop_clip(&mut self);

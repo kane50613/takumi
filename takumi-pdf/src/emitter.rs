@@ -17,18 +17,21 @@ use takumi_core::{
     background_image_geometry::{BackgroundImageGeometry, FillLayers},
     border::BorderProperties,
     inline::{
-      BuiltInlineLayout, InlineRunLayout, PositionedInlineRun, ProcessedInlineSpan, ShapedRun,
+      BuiltInlineLayout, InlinePass, InlineRunLayout, PositionedInlineRun, ProcessedInlineSpan,
+      ShapedRun,
     },
     inline_box::{InlineBoxPaint, InlineSubtree, resolve_inline_box},
     tree::{NodeOrigin, RenderNode},
   },
   paint::ConicGradientTile,
+  paint_chunk::{ChunkPart, ConversionContext, PaintChunk, PropertySink},
+  paint_property::{ClipId, ClipNode, EffectId, EffectNode},
   painter::{
     BackgroundClipArea, BoxBackground, BoxBorderPainter, BoxFrame, BoxPainter, FillShape,
-    GlyphDevice, GlyphFill, LayerBounds, OverflowClip, OwnContent, PaintDevice, PendingOutline,
-    ShadowShape, StrokeStyle, UNBOUNDED,
+    GlyphDevice, GlyphFill, LayerBounds, OwnContent, PaintDevice, PendingOutline, ShadowShape,
+    StrokeStyle, UNBOUNDED,
   },
-  scene::{BoxPart, NodePaint, PaintItemKind, PaintPhase, Scene},
+  scene::{NodePaint, Scene},
   shadow::SizedShadow,
   style::{
     Affine, BackgroundImage, BlendMode, BoxDecorationBreak, Color, ComputedStyle, Display,
@@ -62,9 +65,9 @@ use crate::{
   },
   options::{PT_PER_PX, PdfError},
   paint::{
-    core_transform, draw_stream, edges_path, empty_path, expanded_radial_stops, fill_from_rgba,
-    krilla_blend, krilla_fill_rule, krilla_path, krilla_stop, krilla_stops, krilla_transform,
-    normalized, pop_transforms, rect_path, shape_path, spread,
+    core_transform, draw_stream, empty_path, expanded_radial_stops, fill_from_rgba, krilla_blend,
+    krilla_fill_rule, krilla_path, krilla_stop, krilla_stops, krilla_transform, normalized,
+    pop_transforms, rect_path, shape_path, spread,
   },
   shadow::Band,
   tags::{ARTIFACT, TagCollector},
@@ -73,19 +76,6 @@ use crate::{
 };
 #[cfg(feature = "images")]
 use takumi_core::{blur::blur_rgba, resources::glyph::ResolvedBitmapGlyph, style::BlurType};
-
-/// What a box left on the surface for its caller to unwind.
-#[derive(Default)]
-struct BoxState {
-  /// Transforms, clips and layers to pop once the box and its children are done.
-  pushed: usize,
-  /// The `overflow` clip, popped before the outline so the outline escapes it.
-  overflow_clip: usize,
-  /// The outline, painted between the two pops.
-  outline: Option<PendingOutline>,
-  /// Where the box's own content paints.
-  frame: Option<BoxFrame>,
-}
 
 /// Blob identity, collection index, and the variation coordinates the run was shaped at.
 type FontKey = (u64, u32, Vec<([u8; 4], u32)>);
@@ -203,145 +193,29 @@ impl Emitter<'_> {
 }
 
 impl Emitter<'_> {
-  pub(crate) fn emit_context(
-    &mut self,
-    id: usize,
-    parent: Affine,
-    surface: &mut Surface,
-  ) -> Result<(), PdfError> {
-    let Some(context) = self.scene.contexts.get(id) else {
-      return Ok(());
-    };
-
-    let outer_filter = self.color_filter.clone();
-
-    if let Some(node) = context
-      .root()
-      .and_then(|paint| self.scene.root.node_at_path(&paint.path))
-    {
-      self.color_filter = self.composed_filter(outer_filter.as_deref(), &node.context.style.filter);
-    }
-
-    let outer_window = self.window;
-    let (child_frame, root_state) = match context.root() {
-      Some(paint) => self.emit_box(paint, parent, BoxPart::Whole, surface)?,
-      None => (parent, BoxState::default()),
-    };
-
-    for phase in context.paint_phases() {
-      let (bucket, phase_part) = match phase {
-        PaintPhase::RootContent => {
-          if let Some(paint) = context.root() {
-            self.emit_box_content(paint, root_state.frame, surface)?;
-          }
-          continue;
-        }
-        PaintPhase::Items(items, part) => (items, part),
-      };
-
-      for item in bucket {
-        let Some(part) = item.part_in(phase_part) else {
-          continue;
-        };
-
-        match &item.kind {
-          PaintItemKind::Node(paint) => {
-            // Skipping a node that paints outside the window only saves work;
-            // the page's own clip would drop it anyway. A context's root is
-            // never skipped this way, because the clip it opens decides what
-            // its descendants are allowed to emit.
-            if self.window.excludes_bounds(paint.paint_bounds) {
-              continue;
-            }
-            let (_, state) = self.emit_box(paint, child_frame, part, surface)?;
-
-            if part != BoxPart::Decorations {
-              self.emit_box_content(paint, state.frame, surface)?;
-            }
-            self.finish_box(state, surface);
-          }
-          PaintItemKind::Context(child) => {
-            let excluded = self
-              .scene
-              .contexts
-              .get(*child)
-              .is_some_and(|ctx| self.window.excludes_bounds(ctx.paint_bounds()));
-            if !excluded {
-              self.emit_context(*child, child_frame, surface)?;
-            }
-          }
-        }
-      }
-    }
-    self.finish_box(root_state, surface);
-    self.window = outer_window;
-    self.color_filter = outer_filter;
-    Ok(())
-  }
-
-  /// Emits one node's background and own content.
-  fn emit_box(
-    &mut self,
-    paint: &NodePaint,
-    parent: Affine,
-    part: BoxPart,
-    surface: &mut Surface,
-  ) -> Result<(Affine, BoxState), PdfError> {
-    let Some(node) = self.scene.root.node_at_path(&paint.path) else {
-      return Ok((parent, BoxState::default()));
-    };
-    let Ok(layout) = self.scene.results.layout(paint.node_id) else {
-      return Ok((parent, BoxState::default()));
-    };
-
-    let style = &node.context.style;
-    let mut pushed = push_compositing(style, surface);
-    let relative = parent.invert().unwrap_or(Affine::IDENTITY) * paint.transform;
-    let (origin, children_space) = if relative.only_translation() {
-      (
-        CorePoint {
-          x: relative.x,
-          y: relative.y,
-        },
-        parent,
-      )
-    } else {
-      surface.push_transform(&krilla_transform(relative.to_cols_array()));
-      pushed += 1;
-      (CorePoint::ZERO, parent * relative)
-    };
-    let frame = BoxFrame::new(layout, origin);
-    let decoration_frame = self.decoration_frame(style, frame);
-
-    pushed += self.push_mask_and_clip(node, frame, surface);
-    if part != BoxPart::Content {
-      self.emit_decorations(node, decoration_frame, surface);
-    }
-
-    // Children and own content clip to the (rounded) padding box when overflow
-    // is hidden; without radius a per-axis overflow leaves the visible axis
-    // unbounded. Counted on its own: the outline paints outside this clip but
-    // inside everything else the box pushed.
-    let overflow_clip = self.push_overflow_clip(node, frame, relative, surface);
-
-    Ok((
-      children_space,
-      BoxState {
-        pushed,
-        overflow_clip,
-        // CSS 2.1 Appendix E paints the outline last. The caller pops only the
-        // overflow clip first, so the outline lands above the content and
-        // outside that clip, but still under the box's transform, opacity,
-        // mask and blend.
-        outline: (part != BoxPart::Decorations)
-          .then(|| {
-            BoxPainter::new(&node.context, decoration_frame.layout)
-              .pending_outline(decoration_frame.origin)
-          })
-          .flatten(),
-        frame: Some(frame),
+  /// Emits the scene chunk by chunk, entering each chunk's clips and effects.
+  pub(crate) fn emit(&mut self, surface: &mut Surface) -> Result<(), PdfError> {
+    let scene = self.scene;
+    let chunks = PaintChunk::in_paint_order(&scene.contexts);
+    let owners = PaintChunk::effect_owners(&chunks, &scene.properties);
+    let mut conversion = ConversionContext::new(
+      &scene.properties,
+      ChunkWriter {
+        emitter: self,
+        surface,
+        owners: &owners,
+        current: Affine::IDENTITY,
+        entries: Vec::new(),
+        error: None,
       },
-    ))
+    );
+
+    for chunk in &chunks {
+      conversion.switch_to(chunk.state());
+      conversion.sink().emit(chunk);
+    }
+
+    conversion.finish().error.map_or(Ok(()), Err)
   }
 
   /// `box-decoration-break: clone`: the fragment of the box on this page
@@ -423,79 +297,26 @@ impl Emitter<'_> {
     painter.paint_border(frame.origin, &mut self.device(surface, self.tagged));
   }
 
-  /// Clips children and own content to the padding box, returning how many
-  /// states went on. A clip keeps content off the page but not out of the
-  /// text layer, so what it cuts away must never be emitted; only a
-  /// translated frame maps the box onto the window's axis.
-  fn push_overflow_clip(
-    &mut self,
-    node: &RenderNode,
-    frame: BoxFrame,
-    relative: Affine,
-    surface: &mut Surface,
-  ) -> usize {
-    let Some(clip) = OverflowClip::of(&node.context, frame.layout) else {
-      return 0;
-    };
-
-    if relative.only_translation() {
-      self
-        .window
-        .narrow(frame.origin.y, frame.origin.y + frame.layout.size.height);
-    }
-    let path = match clip {
-      OverflowClip::Rounded(clip) => shape_path(&clip.into(), frame.origin),
-      OverflowClip::Axes { x, y } => edges_path(frame.overflow_clip_edges(x, y)),
-    };
-    let Some(path) = path else {
-      return 0;
-    };
-
-    surface.push_clip_path(&path, &FillRule::NonZero);
-    1
-  }
-
   /// Emits the box's own content inside its structure tag when tagging is on.
   fn emit_tagged_content(
     &mut self,
     node: &RenderNode,
     paint: &NodePaint,
     frame: BoxFrame,
+    pass: InlinePass,
     surface: &mut Surface,
   ) -> Result<(), PdfError> {
-    let tagged = self.tagged && draws(&OwnContent::of(node));
+    let tagged = self.tagged && pass == InlinePass::Content && draws(&OwnContent::of(node));
 
     if tagged {
       self.start_node_region(node, Some(&paint.path), surface);
     }
-    self.emit_own_content(node, paint.node_id, frame, surface)?;
+    self.emit_own_content(node, paint.node_id, frame, pass, surface)?;
     if tagged {
       surface.end_tagged();
     }
 
     Ok(())
-  }
-
-  /// Emits the own content of the box `paint` placed at `frame`.
-  fn emit_box_content(
-    &mut self,
-    paint: &NodePaint,
-    frame: Option<BoxFrame>,
-    surface: &mut Surface,
-  ) -> Result<(), PdfError> {
-    let (Some(frame), Some(node)) = (frame, self.scene.root.node_at_path(&paint.path)) else {
-      return Ok(());
-    };
-
-    self.emit_tagged_content(node, paint, frame, surface)
-  }
-
-  /// Finishes a box: leaves its overflow clip, paints the outline above
-  /// everything the box and its children drew, then pops the rest.
-  fn finish_box(&self, state: BoxState, surface: &mut Surface) {
-    pop_transforms(surface, state.overflow_clip);
-    self.paint_outline(state.outline.as_ref(), surface);
-    pop_transforms(surface, state.pushed);
   }
 
   /// Paints `background-image` layers, bottom layer first, clipped to the
@@ -901,12 +722,13 @@ impl Emitter<'_> {
     node: &RenderNode,
     node_id: NodeId,
     frame: BoxFrame,
+    pass: InlinePass,
     surface: &mut Surface,
   ) -> Result<(), PdfError> {
     match OwnContent::of(node) {
-      OwnContent::Inline(_) => self.emit_node_text(node, node_id, frame, surface),
+      OwnContent::Inline(_) => self.emit_node_text(node, node_id, frame, pass, surface),
       #[cfg(feature = "images")]
-      OwnContent::Image(image) => {
+      OwnContent::Image(image) if pass == InlinePass::Content => {
         self.emit_image(image, &node.context, frame, surface);
         Ok(())
       }
@@ -1044,6 +866,7 @@ impl Emitter<'_> {
     node: &RenderNode,
     node_id: NodeId,
     frame: BoxFrame,
+    pass: InlinePass,
     surface: &mut Surface,
   ) -> Result<(), PdfError> {
     visit_inline_layout(
@@ -1051,8 +874,9 @@ impl Emitter<'_> {
       node,
       node_id,
       frame.layout,
-      |built, runs, font_style| {
-        self.draw_runs(node, runs, built, frame, font_style, surface);
+      |built, runs, font_style| match pass {
+        InlinePass::Content => self.draw_runs(node, runs, built, frame, font_style, surface),
+        InlinePass::Floats => self.emit_inline_boxes(node, runs, built, frame, pass, surface),
       },
     )?;
     Ok(())
@@ -1088,7 +912,7 @@ impl Emitter<'_> {
     };
 
     lines.paint(&built.spans, font_style, fill, frame, &mut device);
-    self.emit_inline_boxes(node, runs, built, frame, surface);
+    self.emit_inline_boxes(node, runs, built, frame, InlinePass::Content, surface);
   }
 
   /// Paints the inline layout's replaced boxes and nested container subtrees.
@@ -1099,6 +923,7 @@ impl Emitter<'_> {
     runs: &InlineRunLayout,
     built: &BuiltInlineLayout<'_>,
     frame: BoxFrame,
+    pass: InlinePass,
     surface: &mut Surface,
   ) {
     let BoxFrame {
@@ -1109,9 +934,13 @@ impl Emitter<'_> {
     // The caller opened a marked-content region for the text around these
     // boxes. Marked content does not nest, so each box closes it, takes a
     // region of its own, and hands it back.
-    let owner_tagged = self.tagged && draws(&OwnContent::of(owner));
+    let owner_tagged = self.tagged && pass == InlinePass::Content && draws(&OwnContent::of(owner));
 
-    for positioned in &runs.inline_boxes {
+    for positioned in runs
+      .inline_boxes
+      .iter()
+      .filter(|positioned| pass.paints(positioned))
+    {
       let Some(ProcessedInlineSpan::Box(item)) = built.spans.get(positioned.id as usize) else {
         continue;
       };
@@ -1255,7 +1084,7 @@ impl Emitter<'_> {
       color_filter: self.color_filter.clone(),
     };
     surface.push_transform(&Transform::from_translate(at.x, at.y));
-    let _ = emitter.emit_context(0, Affine::IDENTITY, surface);
+    let _ = emitter.emit(surface);
     surface.pop();
   }
 
@@ -1490,6 +1319,213 @@ impl Emitter<'_> {
 
     self.document.fonts.borrow_mut().insert(key, font.clone());
     Some(font)
+  }
+}
+
+/// What entering a clip or an effect replaced, restored when it is left.
+struct Entered {
+  /// Surface states it pushed.
+  pushed: usize,
+  current: Affine,
+  window: Window,
+  color_filter: Option<Rc<ColorFilter>>,
+}
+
+/// A [`PropertySink`] writing chunks onto a krilla surface.
+struct ChunkWriter<'w, 'a, 's> {
+  emitter: &'w mut Emitter<'a>,
+  surface: &'w mut Surface<'s>,
+  owners: &'w [Option<&'a NodePaint>],
+  /// The transform the pushed surface states add to the scene's space.
+  current: Affine,
+  entries: Vec<Entered>,
+  error: Option<PdfError>,
+}
+
+impl<'a> ChunkWriter<'_, 'a, '_> {
+  /// The box `paint` names and where it sits relative to the pushed transforms, pushing a
+  /// transform when it needs more than a translation. Returns how many states went on.
+  fn place(&mut self, paint: &NodePaint) -> Option<(&'a RenderNode, BoxFrame, usize)> {
+    let scene = self.emitter.scene;
+    let node = scene.root.node_at_path(&paint.path)?;
+    let layout = scene.results.layout(paint.node_id).ok()?;
+    let relative = self.current.invert().unwrap_or(Affine::IDENTITY) * paint.transform;
+
+    if relative.only_translation() {
+      let origin = CorePoint {
+        x: relative.x,
+        y: relative.y,
+      };
+
+      return Some((node, BoxFrame::new(layout, origin), 0));
+    }
+
+    self
+      .surface
+      .push_transform(&krilla_transform(relative.to_cols_array()));
+    Some((node, BoxFrame::new(layout, CorePoint::ZERO), 1))
+  }
+
+  /// Writes one chunk under the states already pushed.
+  fn emit(&mut self, chunk: &PaintChunk<'a>) {
+    // Skipping a chunk that paints outside the window only saves work; the page's own clip would
+    // drop it anyway.
+    if self.error.is_some() || self.emitter.window.excludes_bounds(chunk.node.paint_bounds) {
+      return;
+    }
+
+    let Some((node, frame, pushed)) = self.place(chunk.node) else {
+      return;
+    };
+    let emitter = &mut *self.emitter;
+    let surface = &mut *self.surface;
+    let decoration_frame = emitter.decoration_frame(&node.context.style, frame);
+    let result = match chunk.part {
+      ChunkPart::Decorations => {
+        emitter.emit_decorations(node, decoration_frame, surface);
+        Ok(())
+      }
+      ChunkPart::Content => {
+        emitter.emit_tagged_content(node, chunk.node, frame, InlinePass::Content, surface)
+      }
+      ChunkPart::Floats => {
+        emitter.emit_tagged_content(node, chunk.node, frame, InlinePass::Floats, surface)
+      }
+      ChunkPart::Outline => {
+        let outline = BoxPainter::new(&node.context, decoration_frame.layout)
+          .pending_outline(decoration_frame.origin);
+
+        emitter.paint_outline(outline.as_ref(), surface);
+        Ok(())
+      }
+    };
+
+    pop_transforms(surface, pushed);
+
+    if let Err(error) = result {
+      self.error.get_or_insert(error);
+    }
+  }
+
+  /// Records what entering pushed and what it replaced.
+  fn enter(
+    &mut self,
+    pushed: usize,
+    current: Affine,
+    window: Window,
+    color_filter: Option<Rc<ColorFilter>>,
+  ) {
+    self.entries.push(Entered {
+      pushed,
+      current,
+      window,
+      color_filter,
+    });
+  }
+
+  fn leave(&mut self) {
+    let Some(entered) = self.entries.pop() else {
+      return;
+    };
+
+    pop_transforms(self.surface, entered.pushed);
+    self.current = entered.current;
+    self.emitter.window = entered.window;
+    self.emitter.color_filter = entered.color_filter;
+  }
+}
+
+impl PropertySink for ChunkWriter<'_, '_, '_> {
+  fn push_clip(&mut self, _id: ClipId, clip: &ClipNode) {
+    let (current, window, color_filter) = (
+      self.current,
+      self.emitter.window,
+      self.emitter.color_filter.clone(),
+    );
+    let relative = current.invert().unwrap_or(Affine::IDENTITY) * clip.transform;
+    let mut pushed = 0;
+    let origin = if relative.only_translation() {
+      CorePoint {
+        x: relative.x,
+        y: relative.y,
+      }
+    } else {
+      self
+        .surface
+        .push_transform(&krilla_transform(relative.to_cols_array()));
+      pushed += 1;
+      self.current = clip.transform;
+      CorePoint::ZERO
+    };
+
+    // A clip keeps content off the page but not out of the text layer, so what it cuts away must
+    // never be emitted; only a clip in page space maps onto the window's axis.
+    if current == Affine::IDENTITY
+      && relative.only_translation()
+      && let Some((top, bottom)) = vertical_extent(&clip.shape)
+    {
+      self
+        .emitter
+        .window
+        .narrow(origin.y + top, origin.y + bottom);
+    }
+    if let Some(path) = shape_path(&clip.shape, origin) {
+      self
+        .surface
+        .push_clip_path(&path, &krilla_fill_rule(clip.shape.rule()));
+      pushed += 1;
+    }
+
+    self.enter(pushed, current, window, color_filter);
+  }
+
+  fn pop_clip(&mut self) {
+    self.leave();
+  }
+
+  fn begin_effect(&mut self, id: EffectId, _effect: &EffectNode) {
+    let (current, window, color_filter) = (
+      self.current,
+      self.emitter.window,
+      self.emitter.color_filter.clone(),
+    );
+    let mut pushed = 0;
+
+    if let Some(owner) = self.owners[id.index()]
+      && let Some(node) = self.emitter.scene.root.node_at_path(&owner.path)
+    {
+      let style = &node.context.style;
+
+      pushed += push_compositing(style, self.surface);
+
+      if let Some((_, frame, transformed)) = self.place(owner) {
+        if transformed > 0 {
+          self.current = owner.transform;
+        }
+        pushed += transformed + self.emitter.push_mask_and_clip(node, frame, self.surface);
+      }
+
+      self.emitter.color_filter = self
+        .emitter
+        .composed_filter(color_filter.as_deref(), &style.filter);
+    }
+
+    self.enter(pushed, current, window, color_filter);
+  }
+
+  fn end_effect(&mut self) {
+    self.leave();
+  }
+}
+
+/// How far `shape` reaches down from its origin, as `(top, bottom)`.
+fn vertical_extent(shape: &FillShape) -> Option<(f32, f32)> {
+  match shape {
+    FillShape::Rect(size) => Some((0.0, size.height)),
+    FillShape::RoundedRect { size, offset, .. } => Some((offset.y, offset.y + size.height)),
+    FillShape::Ellipse { center, radius } => Some((center.y - radius.y, center.y + radius.y)),
+    FillShape::Contoured(clip) => Some((clip.offset.y, clip.offset.y + clip.size.height)),
+    FillShape::Path { .. } => None,
   }
 }
 
@@ -1728,6 +1764,10 @@ impl PaintDevice for SurfaceDevice<'_, '_> {
   // PDF leaves antialiasing to the viewer, as Skia's PDF backend does.
   fn push_aliased_clip(&mut self, shape: &FillShape, transform: Affine) {
     self.push_clip(shape, transform);
+  }
+
+  fn push_aliased_clip_out(&mut self, shape: &FillShape, transform: Affine) {
+    self.push_clip_out(shape, transform);
   }
 
   fn push_clip_out(&mut self, shape: &FillShape, transform: Affine) {
@@ -1981,6 +2021,12 @@ impl PaintDevice for TextDevice<'_, '_, '_> {
     let transform = self.shadow_moved(transform);
 
     self.device.push_aliased_clip(shape, transform);
+  }
+
+  fn push_aliased_clip_out(&mut self, shape: &FillShape, transform: Affine) {
+    let transform = self.shadow_moved(transform);
+
+    self.device.push_aliased_clip_out(shape, transform);
   }
 
   fn pop_clip(&mut self) {

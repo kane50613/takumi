@@ -16,3 +16,4 @@ packages:
 - Rounded borders with mixed colors, styles or opacities clip each side and cut their corners as Chrome does.
 - A `double` side under 3px and a 1px `groove` or `ridge` side paint solid.
 - A collapsed table border stays square even with `border-radius`, as the spec requires.
+- Borders and padding-box clips with `corner-shape` values such as `bevel`, `scoop` and `notch` keep one thickness around each corner. Opposite concave corners that would overlap shrink as Chrome shrinks them.

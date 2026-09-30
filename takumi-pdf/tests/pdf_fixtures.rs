@@ -2766,6 +2766,26 @@ fn overflow_clipping() {
   });
 }
 
+/// An overflow clip on a scaled box scales its content once.
+#[test]
+fn transformed_overflow_clip() {
+  run_pdf_fixture("transformed-overflow-clip", |fonts| {
+    let source = r#"<div style="display: block; width: 100%; height: 100%; background-color: #ffffff;">
+      <div style="width: 100px; height: 100px; transform: scale(2); transform-origin: 0 0; overflow: hidden; background-color: #e2e8f0;">
+        <div style="width: 10px; height: 10px; background-color: #ff0000;"></div>
+      </div>
+    </div>"#;
+    let node =
+      from_html(source, FromHtmlOptions::default()).expect("parse transformed clip fixture");
+
+    PdfOptions::builder()
+      .node(node)
+      .viewport(Viewport::new((240, 240)))
+      .fonts(fonts)
+      .build()
+  });
+}
+
 /// Repeating gradient variants and a stacked multi-layer background.
 #[test]
 fn repeating_gradients() {
@@ -5196,6 +5216,30 @@ fn the_paper_paints_under_a_repeated_box() {
   assert!(
     paper < watermark && watermark < text,
     "expected paper, then the box, then the text: {paper} {watermark} {text}"
+  );
+}
+
+/// A scaled overflow clip narrows nothing it does not cover on the page, so what it shows stays.
+#[test]
+fn scaled_overflow_clip_keeps_what_it_shows() {
+  let fonts = fonts();
+  let html = r##"<div style="display: block; width: 100px; height: 40px; overflow: hidden; transform: scale(2); transform-origin: 0 0"><div style="display: block; height: 30px"></div><div style="display: block; height: 10px; background-color: #123456"></div></div>"##;
+  let pdf = render(
+    PdfOptions::builder()
+      .node(from_html(html, FromHtmlOptions::default()).expect("parse the doc"))
+      .page(PageOptions {
+        width: 300.0,
+        height: 200.0,
+        margin: PageMargins::uniform(10.0),
+      })
+      .fonts(&fonts)
+      .build(),
+  )
+  .expect("render the doc");
+
+  assert!(
+    inflated_text(&pdf).contains("0.0706 0.2039 0.3373 rg"),
+    "the fill the scaled clip shows is missing"
   );
 }
 

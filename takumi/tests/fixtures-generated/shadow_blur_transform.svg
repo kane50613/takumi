@@ -14,6 +14,10 @@
     </g>
     <rect x="0" y="0" width="60" height="40" fill="#fff"/>
   </g>
+  <g transform="matrix(2 0 0 2 20 20)">
+  </g>
+  <g transform="matrix(2 0 0 2 20 20)">
+  </g>
   <g transform="matrix(2 0 0 2 180 20)">
     <rect x="0" y="0" width="60" height="40" fill="#fff"/>
     <clipPath id="cp2">
@@ -27,6 +31,12 @@
         <path d="M-13-13h86v66h-86v-66Zm15 15h56v36h-56v-36Z" fill="#dc2626" fill-rule="evenodd"/>
       </g>
     </g>
+  </g>
+  <g transform="matrix(2 0 0 2 180 20)">
+  </g>
+  <g transform="matrix(2 0 0 2 180 20)">
+  </g>
+  <g transform="matrix(1.5 0 0 3 340 20)">
   </g>
   <g transform="matrix(1.5 0 0 3 340 20)">
     <filter id="bl4">
@@ -46,6 +56,8 @@
       <use href="#g2" x="14.83" y="16"/>
       <use href="#g3" x="24.03" y="16"/>
     </g>
+  </g>
+  <g transform="matrix(1.5 0 0 3 340 20)">
   </g>
   <clipPath id="cp5">
     <path d="M-1000000-1000000H1000000V1000000H-1000000ZM20 150h60v40h-60v-40Z" clip-rule="evenodd"/>
@@ -72,6 +84,10 @@
       </g>
     </g>
     <rect x="0" y="0" width="60" height="40" fill="#fff"/>
+  </g>
+  <g transform="matrix(1.299 .75 -.75 1.299 180 150)">
+  </g>
+  <g transform="matrix(1.299 .75 -.75 1.299 180 150)">
   </g>
   <defs>
     <path id="g0" d="M1.47 0v-11.36h3.91q2.01 0 3.01.73 1.02.74 1.02 2.33 0 .74-.33 1.3-.31.55-.91.86t-1.4.31l-.02-.09q1.45 0 2.3.78.84.76.84 2.01 0 1.57-1.02 2.35-.99.78-2.85.78Zm1.37-1.34h3.18q1.17 0 1.79-.47.64-.49.64-1.39t-.64-1.39q-.62-.52-1.79-.52h-3.18Zm0-5.11h2.54q1.24 0 1.92-.47.67-.47.67-1.31 0-.91-.66-1.35-.64-.44-1.94-.44h-2.53Z"/>

@@ -10,7 +10,11 @@ use super::{
 };
 use crate::{
   geometry::{PathCommand, Point, Rect, Size},
-  layout::border::{BorderProperties, BorderSide, PaintedSide, SideBand},
+  layout::{
+    border::{BorderProperties, BorderSide, PaintedSide, SideBand},
+    contoured_rect::{Corner, CornerInfo, aligned_inset_corners, side_clips_from_corners},
+    decoration::{ClipBox, ContourOrigin},
+  },
   style::{Affine, BorderStyle, Color, FillRule, Sides, SpacePair},
 };
 
@@ -275,10 +279,6 @@ impl<'b> BoxBorderPainter<'b> {
 
 /// A border with its sides' used widths, and the outer and inner edges Blink's
 /// `BoxBorderPainter` keeps as `outer_` and `inner_`.
-///
-/// Approximate: a corner shape other than `round`, `squircle` or `square` clips its sides with
-/// the polygon Blink uses for round corners, where Blink's `ClipBorderSidePolygonCloseToEdges`
-/// follows the corner curve.
 struct BorderShape {
   border: BorderProperties,
   size: Size<f32>,
@@ -607,6 +607,10 @@ impl BorderShape {
   ) -> usize {
     const EXTENSION: f32 = 0.1;
 
+    if self.is_rounded() && !self.hyperellipse() {
+      return self.push_clips_close_to_edges(side, miters, at, device);
+    }
+
     let point = |x, y| Point { x, y };
     let meet = |a, b, c, d, fallback| intersection(a, b, c, d).unwrap_or(fallback);
     let Size { width, height } = self.size;
@@ -931,9 +935,112 @@ impl BorderShape {
     clips
   }
 
+  /// Blink's `ClipBorderSidePolygonCloseToEdges`, for corner shapes flatter than `round`: clips to
+  /// the side with its two whole corners, then cuts each corner's other half away at the miter.
+  fn push_clips_close_to_edges<D: PaintDevice>(
+    &self,
+    side: BorderSide,
+    [first, second]: [Miter; 2],
+    at: Affine,
+    device: &mut D,
+  ) -> usize {
+    let radii = self.outer_radii;
+    let curvatures = Corner::curvatures(&radii, &self.border.shape);
+    let [
+      inner_top_left,
+      inner_top_right,
+      inner_bottom_right,
+      inner_bottom_left,
+    ] = self.inner_corners();
+    let inner_rect = Rect {
+      left: inner_top_left.x,
+      top: inner_top_left.y,
+      right: inner_bottom_right.x,
+      bottom: inner_bottom_right.y,
+    };
+    let outer = Corner::of_box(Point::ZERO, self.size, &radii, curvatures);
+    let inner = aligned_inset_corners(self.size, &radii, curvatures, inner_rect);
+    let info = |index: usize, unadjusted_inner_edge| CornerInfo {
+      outer: outer[index],
+      inner: inner[index],
+      unadjusted_inner_edge,
+    };
+    let (top_right, bottom_right, bottom_left, top_left) = (
+      info(0, inner_top_right),
+      info(1, inner_bottom_right),
+      info(2, inner_bottom_left),
+      info(3, inner_top_left),
+    );
+    let (top_or_left, right_or_bottom) = (first == Miter::Soft, second == Miter::Soft);
+    let point = |x, y| Point { x, y };
+    let (corners, first_antialias, second_antialias, width) = match side {
+      BorderSide::Top => (
+        [top_left, top_right, bottom_right, bottom_left],
+        top_or_left,
+        right_or_bottom,
+        point(0.0, inner_rect.top),
+      ),
+      BorderSide::Right => (
+        [top_right, bottom_right, bottom_left, top_left],
+        top_or_left,
+        right_or_bottom,
+        point(inner_rect.right - self.size.width, 0.0),
+      ),
+      BorderSide::Bottom => (
+        [bottom_right, bottom_left, top_left, top_right],
+        right_or_bottom,
+        top_or_left,
+        point(0.0, inner_rect.bottom - self.size.height),
+      ),
+      BorderSide::Left => (
+        [bottom_left, top_left, top_right, bottom_right],
+        right_or_bottom,
+        top_or_left,
+        point(inner_rect.left, 0.0),
+      ),
+    };
+    let style = self.border.style.top;
+    let needs_miters = self.border.has_uniform_visible_color().is_none()
+      || !self
+        .border
+        .painted_sides()
+        .all(|painted| painted.style == style)
+      || matches!(style, BorderStyle::Groove | BorderStyle::Ridge);
+    let clips = side_clips_from_corners(
+      corners,
+      first_antialias,
+      second_antialias,
+      width,
+      needs_miters,
+    );
+
+    let count = clips.len();
+
+    for clip in clips {
+      let shape = FillShape::Path {
+        commands: clip.path,
+        rule: FillRule::NonZero,
+      };
+
+      match (clip.out, clip.antialias) {
+        (false, true) => device.push_clip(&shape, at),
+        (false, false) => device.push_aliased_clip(&shape, at),
+        (true, true) => device.push_clip_out(&shape, at),
+        (true, false) => device.push_aliased_clip_out(&shape, at),
+      }
+    }
+
+    count
+  }
+
   /// Blink's `CalculateAdjustedInnerBorder`: the padding box grown so its radii along `side` fit,
   /// with the other corners square, or `None` when it is empty.
   fn adjusted_inner(&self, side: BorderSide) -> Option<FillShape> {
+    if !self.hyperellipse() {
+      return (self.inner_size.width > 0.0 && self.inner_size.height > 0.0)
+        .then(|| self.inner_rrect());
+    }
+
     let mut radii = self.inner_radii.0;
     let Point { mut x, mut y } = self.inner_origin;
     let Size {
@@ -942,65 +1049,63 @@ impl BorderShape {
     } = self.inner_size;
     let zero = SpacePair::from_single(0.0);
 
-    if self.hyperellipse() {
-      match side {
-        BorderSide::Top | BorderSide::Bottom => {
-          let [near, far] = if side == BorderSide::Top {
-            [0, 1]
-          } else {
-            [3, 2]
-          };
-          let overshoot = radii[near].x + radii[far].x - width;
+    match side {
+      BorderSide::Top | BorderSide::Bottom => {
+        let [near, far] = if side == BorderSide::Top {
+          [0, 1]
+        } else {
+          [3, 2]
+        };
+        let overshoot = radii[near].x + radii[far].x - width;
 
-          if overshoot > 0.1 {
-            width += overshoot;
-            if radii[near].x == 0.0 {
-              x -= overshoot;
-            }
-          }
-
-          let tallest = radii[near].y.max(radii[far].y);
-
-          for corner in [0, 1, 2, 3] {
-            if corner != near && corner != far {
-              radii[corner] = zero;
-            }
-          }
-          if tallest > height {
-            if side == BorderSide::Bottom {
-              y += height - tallest;
-            }
-            height = tallest;
+        if overshoot > 0.1 {
+          width += overshoot;
+          if radii[near].x == 0.0 {
+            x -= overshoot;
           }
         }
-        BorderSide::Left | BorderSide::Right => {
-          let [near, far] = if side == BorderSide::Left {
-            [0, 3]
-          } else {
-            [1, 2]
-          };
-          let overshoot = radii[near].y + radii[far].y - height;
 
-          if overshoot > 0.1 {
-            height += overshoot;
-            if radii[near].y == 0.0 {
-              y -= overshoot;
-            }
-          }
+        let tallest = radii[near].y.max(radii[far].y);
 
-          let widest = radii[near].x.max(radii[far].x);
+        for corner in [0, 1, 2, 3] {
+          if corner != near && corner != far {
+            radii[corner] = zero;
+          }
+        }
+        if tallest > height {
+          if side == BorderSide::Bottom {
+            y += height - tallest;
+          }
+          height = tallest;
+        }
+      }
+      BorderSide::Left | BorderSide::Right => {
+        let [near, far] = if side == BorderSide::Left {
+          [0, 3]
+        } else {
+          [1, 2]
+        };
+        let overshoot = radii[near].y + radii[far].y - height;
 
-          for corner in [0, 1, 2, 3] {
-            if corner != near && corner != far {
-              radii[corner] = zero;
-            }
+        if overshoot > 0.1 {
+          height += overshoot;
+          if radii[near].y == 0.0 {
+            y -= overshoot;
           }
-          if widest > width {
-            if side == BorderSide::Right {
-              x += width - widest;
-            }
-            width = widest;
+        }
+
+        let widest = radii[near].x.max(radii[far].x);
+
+        for corner in [0, 1, 2, 3] {
+          if corner != near && corner != far {
+            radii[corner] = zero;
           }
+        }
+        if widest > width {
+          if side == BorderSide::Right {
+            x += width - widest;
+          }
+          width = widest;
         }
       }
     }
@@ -1052,22 +1157,37 @@ impl BorderShape {
 
   /// The padding box as a rounded rectangle.
   fn inner_rrect(&self) -> FillShape {
-    self.rrect(self.inner_radii, self.inner_origin, self.inner_size)
+    self.inset_rrect(self.border.width)
   }
 
   /// The border box inset by `insets`, its radii shrunk to match, as Blink's
-  /// `PixelSnappedContouredBorderWithOutsets` builds it.
+  /// `PixelSnappedContouredBorderWithOutsets` builds it: its corners follow the border box's when
+  /// they are not round.
   fn inset_rrect(&self, insets: Rect<f32>) -> FillShape {
-    self.rrect(
-      shrink_radii(self.outer_radii, insets),
-      insets.top_left(),
-      self.size.inset(insets),
-    )
+    ClipBox {
+      border: self.corners(shrink_radii(self.outer_radii, insets)),
+      size: self.size.inset(insets),
+      offset: insets.top_left(),
+      origin: Some(ContourOrigin {
+        border: self.border,
+        size: self.size,
+      }),
+    }
+    .into()
   }
 
-  /// A rectangle of `size` at `origin` with `radii`, drawn with the border's corner shapes. A
-  /// corner with a radius at or below zero is square, as Skia's `SkRRect` draws it.
+  /// A rectangle of `size` at `origin` with `radii`, drawn with the border's corner shapes.
   fn rrect(&self, radii: Sides<SpacePair<f32>>, origin: Point<f32>, size: Size<f32>) -> FillShape {
+    FillShape::RoundedRect {
+      border: self.corners(radii),
+      size,
+      offset: origin,
+    }
+  }
+
+  /// The border's corner shapes with `radii`. A corner with a radius at or below zero is square,
+  /// as Skia's `SkRRect` draws it.
+  fn corners(&self, radii: Sides<SpacePair<f32>>) -> BorderProperties {
     let mut border = self.border;
 
     border.radius = Sides(radii.0.map(|radius| {
@@ -1078,11 +1198,7 @@ impl BorderShape {
       }
     }));
 
-    FillShape::RoundedRect {
-      border,
-      size,
-      offset: origin,
-    }
+    border
   }
 
   /// Whether any outer corner is rounded.

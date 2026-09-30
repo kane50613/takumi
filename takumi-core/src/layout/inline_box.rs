@@ -12,7 +12,7 @@ use crate::{
     inline::{InlineBoxItem, VisualInlineBox},
     tree::{LayoutResults, RenderNode},
   },
-  scene::{Scene, SceneRequest},
+  scene::{Scene, SceneLayers, SceneRequest},
   style::Affine,
 };
 
@@ -106,7 +106,10 @@ impl InlineSubtree {
 
   /// Builds the subtree's scene, its root placed by `transform`.
   pub fn into_scene(self, transform: Affine, paint_bounds: bool) -> Result<Scene> {
-    let contexts = SceneRequest {
+    let SceneLayers {
+      contexts,
+      properties,
+    } = SceneRequest {
       root: &self.root,
       layout_results: &self.results,
       transform,
@@ -119,6 +122,7 @@ impl InlineSubtree {
       root: self.root,
       results: self.results,
       contexts,
+      properties,
       size: self.size,
     })
   }

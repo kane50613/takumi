@@ -34,6 +34,18 @@ pub struct InlineBoxItem<'c> {
 }
 
 impl RenderNode {
+  /// Whether a float sits among the inline content this node lays out, found the way
+  /// [`collect_inline_items`] walks it.
+  pub fn has_inline_floats(&self) -> bool {
+    self.children.iter().flatten().any(|child| {
+      if child.participates_as_inline_box() {
+        child.inline_box_kind() == InlineBoxKind::CustomOutOfFlow
+      } else {
+        child.has_inline_floats()
+      }
+    })
+  }
+
   /// How parley places the box standing in for this node.
   pub(super) fn inline_box_kind(&self) -> InlineBoxKind {
     if self.context.style.position.is_out_of_flow() {
