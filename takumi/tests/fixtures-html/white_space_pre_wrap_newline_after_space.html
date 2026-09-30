@@ -1,0 +1,34 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>white_space_pre_wrap_newline_after_space</title>
+    <base href="../../../" />
+    <link rel="stylesheet" href="takumi/tests/shared.css" />
+    <style>
+      .box {
+        display: block;
+        width: 140px;
+        margin: 8px;
+        padding: 4px;
+        font-family: "Geist";
+        font-size: 20px;
+        line-height: 1.2;
+        white-space: pre-wrap;
+        color: rgb(15, 23, 42);
+        background: rgb(241, 245, 249);
+      }
+    </style>
+  </head>
+  <body style="width: 480px; height: 100px">
+    <div style="display: flex; align-items: flex-start">
+    <div class="box">A 
+B</div>
+    <div class="box">A
+ 
+B</div>
+    <div class="box">one two 
+three</div>
+    </div>
+  </body>
+</html>
