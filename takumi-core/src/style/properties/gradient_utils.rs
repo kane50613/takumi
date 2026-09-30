@@ -309,14 +309,17 @@ pub trait GradientOverlayTile {
   fn point_lut_index(&self, x: f32, y: f32) -> usize;
   /// Color at the point `(x, y)` in tile space, dithered as pixel `dither` would be.
   fn sample_point(&self, x: f32, y: f32, dither: (u32, u32)) -> PremultipliedColorU8 {
-    match self.lut_len() {
-      0 => PremultipliedColorU8::TRANSPARENT,
-      1 => self.sample_at(0),
-      _ if self.dither_active() => {
-        self.sample_dithered_at(self.point_lut_index(x, y), dither.0, dither.1)
-      }
-      _ => self.sample_at(self.point_lut_index(x, y)),
+    let index = match self.lut_len() {
+      0 => return PremultipliedColorU8::TRANSPARENT,
+      1 => 0,
+      _ => self.point_lut_index(x, y),
+    };
+
+    if self.dither_active() {
+      return self.sample_dithered_at(index, dither.0, dither.1);
     }
+
+    self.sample_at(index)
   }
   /// Color at pixel `(x, y)`.
   fn sample_pixel(&self, x: u32, y: u32) -> PremultipliedColorU8;
