@@ -39,23 +39,22 @@ mod runs;
 mod text_fit;
 mod truncation;
 
+pub(crate) use self::{
+  background::PaddingBox,
+  items::InlineOutOfFlow,
+  outline::{OutlineIsland, RightAngleContour},
+  text_fit::{LineFit, TextScale},
+};
 pub use self::{
-  background::InlineBackgroundFragment,
-  items::{InlineBoxItem, InlineItem, ProcessedInlineSpan, collect_inline_items},
+  background::{FragmentBackground, InlineBackgroundFragment},
+  decorations::DecorationLine,
+  items::{DecorationLink, InlineBoxItem, InlineItem, ProcessedInlineSpan, collect_inline_items},
   metrics::{InlinePass, VisualInlineBox},
   outline::InlineOutlineRect,
   runs::{
-    InlineRunLayout, MeasuredInlineBox, MeasuredInlineRun, PositionedGlyph, PositionedInlineRun,
-    RunMetrics, ShapedRun,
+    HangingWhitespace, InlineRunLayout, MeasuredInlineBox, MeasuredInlineRun, PositionedGlyph,
+    PositionedInlineRun, RunMetrics, ShapedRun,
   },
-};
-pub(crate) use self::{
-  background::{FragmentBackground, PaddingBox},
-  decorations::DecorationLine,
-  items::{DecorationLink, InlineOutOfFlow},
-  outline::{OutlineIsland, RightAngleContour},
-  runs::HangingWhitespace,
-  text_fit::{LineFit, TextScale},
 };
 use self::{
   breaking::distribute_trailing_whitespace,
