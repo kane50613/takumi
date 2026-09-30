@@ -69,6 +69,12 @@ fn expand_tabs(input: &str, tab_spaces: usize) -> Cow<'_, str> {
   Cow::Owned(out)
 }
 
+/// The document white space CSS collapses: spaces, tabs, segment breaks, and form feeds.
+pub(crate) const COLLAPSIBLE_WHITESPACE: [char; 5] = [' ', '\t', '\n', '\r', '\u{c}'];
+
+/// The subset `white-space-collapse: preserve-breaks` still collapses.
+pub(crate) const HORIZONTAL_WHITESPACE: [char; 3] = [' ', '\t', '\u{c}'];
+
 /// Applies whitespace collapse rules to the input text according to `WhiteSpaceCollapse`.
 pub(crate) fn apply_white_space_collapse<'a>(
   input: &'a str,
@@ -90,20 +96,20 @@ pub(crate) fn apply_white_space_collapse<'a>(
       // already ends in whitespace, so carry that state across the mode switch.
       // A span expanded to nothing (all tabs, tab-size 0) carries state through.
       if let Some(last) = expanded.chars().next_back() {
-        *previous_collapsible_space = last.is_whitespace();
+        *previous_collapsible_space = COLLAPSIBLE_WHITESPACE.contains(&last);
         *previous_was_line_break = false;
       }
       expanded
     }
 
-    // Collapse sequences of whitespace (spaces, tabs, line breaks) into a single space
-    // and trim leading/trailing spaces.
+    // Collapse runs of document white space into a single space. Other spaces, such as U+00A0
+    // and U+3000, never collapse.
     WhiteSpaceCollapse::Collapse => {
       let mut out = String::with_capacity(input.len());
       let mut last_was_ws = *previous_collapsible_space;
 
       for ch in input.chars() {
-        if ch.is_whitespace() {
+        if COLLAPSIBLE_WHITESPACE.contains(&ch) {
           if !last_was_ws {
             out.push(' ');
             last_was_ws = true;

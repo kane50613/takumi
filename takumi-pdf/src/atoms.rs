@@ -6,7 +6,7 @@ use std::ops::Range;
 use takumi_core::{
   geometry::{ComputedLayout as Layout, NodeId},
   layout::tree::RenderNode,
-  painter::BoxPainter,
+  painter::{BoxPainter, OwnContent},
   scene::{NodePaint, PaintItemKind, Scene},
   style::{Affine, BreakBetween, BreakInside},
 };
@@ -15,7 +15,6 @@ use crate::{
   inline::{InlineMap, inline_box_atoms, text_line_atoms, visit_inline_layout},
   options::PdfError,
   pagination::{Atom, Paragraph},
-  tree::OwnContent,
 };
 
 /// What the cut search works around, in content coordinates.
@@ -138,10 +137,10 @@ impl AtomCollector<'_> {
       .children
       .as_deref()
       .is_none_or(<[RenderNode]>::is_empty)
-      || BoxPainter::new(&node.context, layout).paints_decorations();
+      || (node.paints_own_box() && BoxPainter::new(&node.context, layout).paints_decorations());
 
     match OwnContent::of(node) {
-      OwnContent::Text => {
+      OwnContent::Inline(_) => {
         shows = true;
         self.text_atoms(node, paint.node_id, layout, y, atoms)?;
       }

@@ -11,15 +11,14 @@ use takumi_core::{
   layout::{
     background_image_geometry::FillLayers,
     border::BorderProperties,
-    decoration::ClipBox,
     inline::{InlineBoxItem, PositionedInlineRun, VisualInlineBox},
     inline_box::{InlineBoxPaint, resolve_inline_box},
-    node::{ImageData, Node, NodeKind},
+    node::Node,
     tree::RenderNode,
   },
   painter::{
     BackgroundClipArea, BoxFrame, BoxPainter, FillShape, GlyphDevice, GlyphFill, OverflowClip,
-    PaintDevice, PendingOutline, ShadowShape, StrokeStyle, UNBOUNDED,
+    OwnContent, PaintDevice, PendingOutline, ShadowShape, StrokeStyle, UNBOUNDED,
   },
   path_data::{edges_path_data, path_data},
   resources::image::ImageSource,
@@ -39,7 +38,7 @@ use crate::{
   gradient::LayerEmitter,
   image::emit_image,
   scene_emit::SceneEmitter,
-  text::{emit_clip_text_run, emit_inline_content, emit_run_glyphs, emit_text, run_stroke},
+  text::{emit_clip_text_run, emit_inline_content, emit_run_glyphs, run_stroke},
 };
 
 /// Inputs for [`render`], built with [`SvgOptions::builder`].
@@ -144,14 +143,6 @@ impl<'n> PlacedBox<'n> {
     rounded_rect_path_data(self.border(), self.frame.layout.size, self.frame.origin)
   }
 
-  /// Absolute SVG path `d` for the rounded padding box.
-  fn padding_box_path_data(&self) -> String {
-    shape_path_data(
-      &ClipBox::padding_box(*self.border(), self.frame.layout).into(),
-      self.frame.origin,
-    )
-  }
-
   /// Absolute SVG path `d` the box clips its children to, or `None` when
   /// overflow is visible.
   fn overflow_clip_path_data(&self) -> Option<String> {
@@ -164,24 +155,11 @@ impl<'n> PlacedBox<'n> {
   }
 
   /// The clip path `d` and fill rule for a background's `clip` area. A square border box needs
-  /// none.
+  /// none, since the layers already stay inside it.
   fn background_clip_path_data(&self, clip: BackgroundClipArea) -> Option<(String, FillRule)> {
-    match clip {
-      BackgroundClipArea::BorderBox(border) => {
-        (!border.is_zero()).then(|| (self.border_box_path_data(), FillRule::NonZero))
-      }
-      BackgroundClipArea::Inner(clip) => Some((
-        shape_path_data(&clip.into(), self.frame.origin),
-        FillRule::NonZero,
-      )),
-      BackgroundClipArea::BorderArea(_) => {
-        // The border ring: the (rounded) border-box with the (rounded) padding box
-        // punched out, drawn even-odd so the background shows only under the border.
-        let outer = self.border_box_path_data();
-        let inner = self.padding_box_path_data();
-        Some((format!("{outer}{inner}"), FillRule::EvenOdd))
-      }
-      BackgroundClipArea::Text => None,
+    match clip.shape(self.frame.layout.size)? {
+      FillShape::Rect(_) => None,
+      shape => Some((shape_path_data(&shape, self.frame.origin), shape.rule())),
     }
   }
 
@@ -291,32 +269,14 @@ impl<'n> PlacedBox<'n> {
     })
   }
 
-  /// Emits the node's own content: its inline run set, or its replaced
-  /// image/text. Block children are painted separately.
+  /// Emits the node's own content: its inline content or its image. Block children are
+  /// painted separately.
   pub(crate) fn emit_own_content(&self, doc: &mut SvgDocument) -> io::Result<()> {
-    if self.node.should_create_inline_layout() {
-      return emit_inline_content(self.node, self.frame, doc);
+    match OwnContent::of(self.node) {
+      OwnContent::Inline(_) => emit_inline_content(self.node, self.frame, doc),
+      OwnContent::Image(image) => emit_image(image, &self.painter, self.frame, doc),
+      OwnContent::None => Ok(()),
     }
-    // A node whose anonymous text became a child item paints that text through the
-    // child, not as its own content (mirroring the raster backend's guard).
-    if self.node.has_anonymous_text_item_child() {
-      return Ok(());
-    }
-    self.emit_replaced_content(doc)
-  }
-
-  /// Emits an image or text leaf.
-  fn emit_replaced_content(&self, doc: &mut SvgDocument) -> io::Result<()> {
-    match self.node.node.as_ref().map(|n| &n.kind) {
-      Some(NodeKind::Image(image)) => self.emit_image(image, doc),
-      Some(NodeKind::Text(text)) => emit_text(text, &self.node.context, self.frame, doc),
-      _ => Ok(()),
-    }
-  }
-
-  /// Emits an image node's content into its content box.
-  fn emit_image(&self, image: &ImageData, doc: &mut SvgDocument) -> io::Result<()> {
-    emit_image(image, &self.painter, self.frame, doc)
   }
 }
 
@@ -379,15 +339,17 @@ impl BoxChrome {
 
     let clip_group = placed.begin_clip_path_group(doc)?;
 
-    placed.emit_box_shadows(doc)?;
+    if placed.node.paints_own_box() {
+      placed.emit_box_shadows(doc)?;
 
-    // `background-clip` picks the shape a background fills, never when it paints:
-    // the border draws over the ring, as it does in Blink.
-    placed.emit_background(doc)?;
-    placed.emit_inset_box_shadows(doc)?;
-    DocumentDevice::paint(doc, |device| {
-      placed.painter.paint_border(placed.frame.origin, device);
-    })?;
+      // `background-clip` picks the shape a background fills, never when it paints:
+      // the border draws over the ring, as it does in Blink.
+      placed.emit_background(doc)?;
+      placed.emit_inset_box_shadows(doc)?;
+      DocumentDevice::paint(doc, |device| {
+        placed.painter.paint_border(placed.frame.origin, device);
+      })?;
+    }
 
     // Children, clipped to the (rounded) padding box when overflow is not visible.
     let child_group = placed
@@ -680,7 +642,7 @@ pub(crate) fn emit_inline_box(
       let group_transform = placed.element_transform().unwrap_or(Affine::IDENTITY);
       let chrome = BoxChrome::open(&placed, group_transform, doc)?;
 
-      placed.emit_replaced_content(doc)?;
+      placed.emit_own_content(doc)?;
       chrome.close(doc)
     }
   }

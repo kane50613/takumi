@@ -22,6 +22,7 @@ use crate::{
     image_buffer::ImageBuffer,
   },
   style::{Direction, Lang, Style, StyleDeclaration, TailwindValues, ToCss},
+  text_processing::COLLAPSIBLE_WHITESPACE,
   viewport::Viewport,
 };
 
@@ -358,8 +359,8 @@ impl Node {
     };
     data
       .text
-      .bytes()
-      .all(|b| matches!(b, b' ' | b'\t' | b'\n' | b'\r' | 0x0C))
+      .chars()
+      .all(|ch| COLLAPSIBLE_WHITESPACE.contains(&ch))
   }
 
   /// Sets the tag name and returns the updated node.

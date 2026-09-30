@@ -25,7 +25,7 @@ use takumi_core::{
   paint::ConicGradientTile,
   painter::{
     BackgroundClipArea, BoxBackground, BoxFrame, BoxPainter, FillShape, GlyphDevice, GlyphFill,
-    OverflowClip, PaintDevice, PendingOutline, ShadowShape, StrokeStyle, UNBOUNDED,
+    OverflowClip, OwnContent, PaintDevice, PendingOutline, ShadowShape, StrokeStyle, UNBOUNDED,
   },
   scene::{NodePaint, PaintItemKind, Scene},
   shadow::SizedShadow,
@@ -66,7 +66,7 @@ use crate::{
   },
   shadow::Band,
   tags::{ARTIFACT, TagCollector},
-  tree::OwnContent,
+  tree::draws,
   window::Window,
 };
 
@@ -380,6 +380,10 @@ impl Emitter<'_> {
   /// `background-clip` picks the shape a background fills, never when it
   /// paints: the border draws over the ring, as it does in Blink.
   fn emit_decorations(&self, node: &RenderNode, frame: BoxFrame, surface: &mut Surface) {
+    if !node.paints_own_box() {
+      return;
+    }
+
     let painter = BoxPainter::new(&node.context, frame.layout);
 
     painter.paint_normal_box_shadows(frame.origin, &mut self.device(surface, self.tagged));
@@ -429,7 +433,7 @@ impl Emitter<'_> {
     frame: BoxFrame,
     surface: &mut Surface,
   ) -> Result<(), PdfError> {
-    let tagged = self.tagged && OwnContent::of(node).draws();
+    let tagged = self.tagged && draws(&OwnContent::of(node));
 
     if tagged {
       self.start_node_region(node, Some(&paint.path), surface);
@@ -845,7 +849,7 @@ impl Emitter<'_> {
     surface: &mut Surface,
   ) -> Result<(), PdfError> {
     match OwnContent::of(node) {
-      OwnContent::Text => self.emit_node_text(node, node_id, frame, surface),
+      OwnContent::Inline(_) => self.emit_node_text(node, node_id, frame, surface),
       #[cfg(feature = "images")]
       OwnContent::Image(image) => {
         self.emit_image(image, &node.context, frame, surface);
@@ -1050,7 +1054,7 @@ impl Emitter<'_> {
     // The caller opened a marked-content region for the text around these
     // boxes. Marked content does not nest, so each box closes it, takes a
     // region of its own, and hands it back.
-    let owner_tagged = self.tagged && OwnContent::of(owner).draws();
+    let owner_tagged = self.tagged && draws(&OwnContent::of(owner));
 
     for positioned in &runs.inline_boxes {
       let Some(ProcessedInlineSpan::Box(item)) = built.spans.get(positioned.id as usize) else {
@@ -1353,7 +1357,8 @@ impl Emitter<'_> {
     } = frame;
     let shaped = &run.glyph_run;
 
-    if shaped.glyphs.is_empty() {
+    // A zero-sized run shows nothing, and its glyph positions divide by the size.
+    if shaped.glyphs.is_empty() || shaped.font_size == 0.0 {
       return None;
     }
     let font = self.cached_font(shaped)?;

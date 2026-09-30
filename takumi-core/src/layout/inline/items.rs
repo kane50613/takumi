@@ -8,6 +8,7 @@ use crate::{
   style::{
     Color, Direction, Display, Float, Length, ResolvedVerticalAlign, SpacePair, WhiteSpaceCollapse,
   },
+  text_processing::{COLLAPSIBLE_WHITESPACE, HORIZONTAL_WHITESPACE},
 };
 use parley::{InlineBox, InlineBoxKind};
 use std::{borrow::Cow, ops::Range, rc::Rc, sync::Arc};
@@ -136,12 +137,6 @@ pub fn collect_inline_items<'n>(root: &'n RenderNode) -> Vec<InlineItem<'n>> {
   collect_inline_items_impl(root, 0, None, None, &mut items);
   items
 }
-
-/// The whitespace CSS collapses, matching [`crate::layout::node::Node::is_whitespace_only_text`].
-const COLLAPSIBLE_WHITESPACE: [char; 5] = [' ', '\t', '\n', '\r', '\u{c}'];
-
-/// The subset `white-space-collapse: preserve-breaks` still collapses.
-const HORIZONTAL_WHITESPACE: [char; 3] = [' ', '\t', '\u{c}'];
 
 /// A marker holds the start of the line, so the whitespace that a line start
 /// would have collapsed is collapsed against the marker instead.

@@ -2075,6 +2075,34 @@ fn inline_outlines() {
   );
 }
 
+/// Spans that set their own size paint inside a block whose `font-size` is 0, and so does text
+/// that overflows a box with no height.
+#[test]
+fn inline_zero_sized_parents() {
+  let pdf = run_pdf_fixture("inline-zero-sized-parents", |fonts| {
+    let source = r##"<div style="width: 100%; height: 100%; padding: 24px; background-color: #ffffff; color: #111827;">
+      <div style="font-size: 0;"><span style="font-size: 24px;">Sized</span> <span style="font-size: 24px; color: #be123c;">spans</span></div>
+      <div style="height: 0; font-size: 20px;">Overflowing text</div>
+    </div>"##;
+    let node =
+      from_html(source, FromHtmlOptions::default()).expect("parse zero-sized parent fixture");
+
+    PdfOptions::builder()
+      .node(node)
+      .viewport(Viewport::new((360, 160)))
+      .fonts(fonts)
+      .build()
+  });
+  let shown = content_lines(&pdf)
+    .filter(|line| find(line, b"TJ").is_some() || find(line, b"Tj").is_some())
+    .count();
+
+  assert!(
+    shown >= 3,
+    "expected both spans and the overflowing text, got {shown} text runs"
+  );
+}
+
 /// `background-origin` moves the positioning area, `background-clip` shrinks
 /// the painted region, `border-area` paints over the borders, and
 /// `background-blend-mode` blends a layer into the one below.

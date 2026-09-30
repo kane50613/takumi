@@ -1,13 +1,11 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="800" height="200" viewBox="0 0 800 200">
   <rect x="0" y="0" width="800" height="160" fill="#fff"/>
   <rect x="20" y="20" width="240" height="120" fill="#78c878"/>
-  <rect x="127" y="62" width="27" height="36" fill="#78c878"/>
   <g fill="#000">
     <use href="#g0" x="127" y="90"/>
     <use href="#g1" x="142.76" y="90"/>
   </g>
   <rect x="280" y="20" width="240" height="120" fill="#78c878"/>
-  <rect x="356" y="62" width="88" height="36" fill="#78c878"/>
   <g fill="#000">
     <use href="#g2" x="356" y="90"/>
     <use href="#g3" x="371.93" y="90"/>
@@ -17,7 +15,6 @@
     <use href="#g6" x="427.04" y="90"/>
   </g>
   <rect x="540" y="20" width="240" height="120" fill="#c8c8c8"/>
-  <rect x="639" y="62" width="43" height="36" fill="#c8c8c8"/>
   <g fill="#000">
     <use href="#g2" x="639" y="90"/>
     <use href="#g0" x="654.93" y="90"/>

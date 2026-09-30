@@ -1,6 +1,5 @@
 use std::sync::Arc;
 
-use image::Rgba;
 use smallvec::SmallVec;
 use takumi_core::{
   geometry::{Point, Size},
@@ -15,7 +14,7 @@ use crate::pixmap_from_buffer;
 use crate::resources::image::RenderedImage;
 use crate::{
   BilinearAxis, BorderProperties, DrawTarget, OverlayOptions, PaintSource, RenderContext, Result,
-  RowSource, SamplingFootprint, checked_area, color_to_premultiplied, interpolate_with_footprint,
+  RowSource, SamplingFootprint, checked_area, interpolate_with_footprint,
   layout::node::resolve_image,
   overlay_image, pixmap_ref_from_buffer,
   resources::{image::ImageSource, image_buffer::ImageBuffer},
@@ -147,7 +146,7 @@ impl ColorTile {
   pub(crate) fn new(color: Color, width: u32, height: u32) -> Self {
     Self {
       color,
-      premultiplied: color_to_premultiplied(Rgba(color.0)),
+      premultiplied: color.premultiplied(),
       width,
       height,
     }

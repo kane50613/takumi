@@ -20,6 +20,7 @@ use crate::{
   Placement,
   blend::*,
   render_mask,
+  resources::image_buffer::premultiply_pixel,
   style::{Affine, BlendMode, ImageScalingAlgorithm},
 };
 
@@ -372,7 +373,7 @@ pub(crate) fn draw_mask(
     pixmap,
     mask,
     placement,
-    premultiply_rgba(color),
+    premultiply_pixel(color.0),
     mode,
     combined_mask,
   );

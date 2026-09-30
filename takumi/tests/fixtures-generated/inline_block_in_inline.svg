@@ -1,6 +1,5 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630">
   <rect x="0" y="0" width="1200" height="85" fill="#fff"/>
-  <rect x="0" y="0" width="1200" height="31" fill="#fff"/>
   <g fill="#000">
     <use href="#g0" x="0" y="24"/>
     <use href="#g1" x="14.78" y="24"/>
@@ -28,7 +27,6 @@
     <use href="#g10" x="128.77" y="49"/>
     <use href="#g13" x="139.01" y="49"/>
   </g>
-  <rect x="0" y="54" width="1200" height="31" fill="#fff"/>
   <g fill="#000">
     <use href="#g14" x="6" y="78"/>
     <use href="#g15" x="20.47" y="78"/>

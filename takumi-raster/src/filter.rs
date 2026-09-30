@@ -12,7 +12,8 @@ use crate::{
   BlurType, BorderProperties, Canvas, Placement, RenderContext, Result, SizedShadow,
   apply_blur_alpha_bytes, apply_blur_rgba_bytes,
   canvas::demultiply_rgba_in_place,
-  checked_area, fast_div_255, intersect_alpha_masks, premultiply_rgba_pixel, render_mask,
+  checked_area, fast_div_255, intersect_alpha_masks, render_mask,
+  resources::image_buffer::premultiply_pixel,
   style::{Affine, Color, Filter, FilterCategory, SizingContext, TransferChannel, TransferTable},
 };
 
@@ -87,7 +88,7 @@ fn on_straight_alpha(pixel: &mut [u8; 4], transform: impl FnOnce(&mut [u8; 4])) 
   transform(pixel);
 
   if !opaque || pixel[3] != u8::MAX {
-    *pixel = premultiply_rgba_pixel(pixel[0], pixel[1], pixel[2], pixel[3]);
+    *pixel = premultiply_pixel(*pixel);
   }
 }
 
@@ -198,12 +199,8 @@ fn mask_bounds(mask: &[u8], width: u32, height: u32) -> Option<Placement> {
 fn backdrop_filter_padding(filters: &[Filter], sizing: &SizingContext) -> i32 {
   filters
     .iter()
-    .filter_map(|filter| match filter {
-      Filter::Blur(radius) => {
-        Some((radius.to_px(sizing, 1.0) * BlurType::Filter.extent_multiplier()).ceil() as i32)
-      }
-      _ => None,
-    })
+    .filter(|filter| !filter.is_drop_shadow())
+    .map(|filter| filter.reach(sizing).ceil() as i32)
     .max()
     .unwrap_or(0)
 }

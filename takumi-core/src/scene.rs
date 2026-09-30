@@ -20,7 +20,7 @@ use crate::{
     tree::{ContainingBlocks, LayoutResults, RenderNode},
   },
   shadow::SizedShadow,
-  style::{Affine, BlurType, ComputedStyle, Display, Filter},
+  style::{Affine, BlurType, ComputedStyle, Display},
   viewport::Viewport,
 };
 
@@ -426,27 +426,16 @@ fn shadow_reach(shadow: &SizedShadow) -> f32 {
     + shadow.blur_radius * BlurType::Shadow.extent_multiplier()
 }
 
-/// How far the node's filters spread its layer, in local px; mirrors the raster
-/// backend's `filter_padding`.
+/// How far the node's filters spread its layer, in local px.
 fn filter_reach(node: &RenderNode) -> f32 {
   let sizing = &node.context.sizing;
+
   node
     .context
     .style
     .filter
     .iter()
-    .map(|filter| match filter {
-      Filter::Blur(radius) => radius.to_px(sizing, 1.0) * BlurType::Filter.extent_multiplier(),
-      Filter::DropShadow(shadow) => {
-        shadow
-          .offset_x
-          .to_px(sizing, 1.0)
-          .abs()
-          .max(shadow.offset_y.to_px(sizing, 1.0).abs())
-          + shadow.blur_radius.to_px(sizing, 1.0) * BlurType::Filter.extent_multiplier()
-      }
-      _ => 0.0,
-    })
+    .map(|filter| filter.reach(sizing))
     .sum()
 }
 

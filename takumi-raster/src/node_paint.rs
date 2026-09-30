@@ -23,16 +23,13 @@ use takumi_core::{
 use super::{
   BackgroundTile, BorderProperties, Canvas, ColorTile, Fill, PaintSource, RenderContext,
   SizedFontStyle, TileLayer, TileLayers, background_image_layers, collect_background_layers,
-  draw_image, inline_drawing::draw_inline_layout, rasterize_layers,
+  draw_image, rasterize_layers,
 };
 use crate::{
   BlurType, CanvasSubcanvas, Command, Error, MaskCompositeColor, MaskSamplingOptions, Placement,
   Result, Stroke, Style, apply_blur_alpha_bytes, attenuate_alpha_by_mask, checked_area, draw_glyph,
   draw_glyph_clip_image, intersect_alpha_masks,
-  layout::{
-    inline::{InlineItem, InlineLayoutMode, InlineLayoutRequest, create_inline_layout},
-    node::{ImageData, Node, NodeKind, TextData},
-  },
+  layout::node::ImageData,
   render_mask,
   style::{Affine, BlendMode},
 };
@@ -693,21 +690,7 @@ fn single_solid_color_layer<'a>(
   })
 }
 
-pub(crate) fn draw_node_content(
-  node: &Node,
-  context: &RenderContext,
-  canvas: &mut Canvas,
-  layout: Layout,
-) -> Result<()> {
-  match &node.kind {
-    NodeKind::Container { .. } => Ok(()),
-    NodeKind::Image(image) => draw_image_node_content(image, context, canvas, layout),
-    NodeKind::Text(text) => draw_text_node_content(text, context, canvas, layout),
-    _ => Ok(()),
-  }
-}
-
-fn draw_image_node_content(
+pub(crate) fn draw_image_node_content(
   image: &ImageData,
   context: &RenderContext,
   canvas: &mut Canvas,
@@ -718,38 +701,6 @@ fn draw_image_node_content(
   };
 
   draw_image(&image_source, context, canvas, layout)
-}
-
-fn draw_text_node_content(
-  text: &TextData,
-  context: &RenderContext,
-  canvas: &mut Canvas,
-  layout: Layout,
-) -> Result<()> {
-  let font_style = SizedFontStyle::from_style(&context.style, context);
-
-  if font_style.sizing.font_size == 0.0 {
-    return Ok(());
-  }
-
-  let inline_text = InlineItem::Text {
-    text: text.text.as_str().into(),
-    context,
-    link: None,
-    decorations: None,
-  };
-
-  let built = create_inline_layout(InlineLayoutRequest::in_content_box(
-    vec![inline_text],
-    layout.unsnapped_content,
-    &font_style,
-    context,
-    InlineLayoutMode::Draw,
-  ));
-
-  draw_inline_layout(context, canvas, layout, &built, &font_style)?;
-
-  Ok(())
 }
 
 #[cfg(test)]

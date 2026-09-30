@@ -5,7 +5,6 @@
     <path d="M12 12H468V82H12Z"/>
   </clipPath>
   <g clip-path="url(#cp0)">
-    <rect x="24" y="24" width="432" height="46" fill="#dbeafe"/>
     <g fill="#000">
       <use href="#g0" x="28.5" y="42"/>
       <use href="#g1" x="37.9" y="42"/>
