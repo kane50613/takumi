@@ -3,6 +3,7 @@
 use crate::{
   geometry::{ComputedLayout, Point},
   layout::intercept::{Spans, skip_ink_ranges},
+  layout_unit::LayoutUnit,
   resources::{
     font::PrimaryFontMetrics,
     glyph::{ResolvedGlyph, ResolvedOutlineGlyph},
@@ -119,18 +120,14 @@ impl DecorationFont {
         ((self.metrics.ascent + underline.position) * self.scale + style_offset).round()
       }),
       TextUnderlinePosition::Under => {
-        (layout_unit((self.metrics.ascent + self.metrics.em_descent) * self.scale)
-          + layout_unit(style_offset))
-        .floor()
-          + 1.0
+        let offset =
+          LayoutUnit::from_f32_round((self.metrics.ascent + self.metrics.em_descent) * self.scale)
+            + LayoutUnit::from_f32_round(style_offset);
+
+        (offset.floor() + 1) as f32
       }
     }
   }
-}
-
-/// `value` rounded to Blink's `LayoutUnit`, a 64th of a pixel.
-fn layout_unit(value: f32) -> f32 {
-  (value * 64.0).round() / 64.0
 }
 
 /// A box whose decoration a run paints, as Blink's `DecoratingBox`: the font it measures the
