@@ -383,7 +383,9 @@ impl Walker {
       let Some((offset, paint)) = resolve_inline_box(inline_box, item, layout) else {
         continue;
       };
-      let Some(relative) = node.path_where(|candidate| ptr::eq(candidate, item.render_node)) else {
+      let Some(relative) =
+        node.path_where(or_marker(|candidate| ptr::eq(candidate, item.render_node)))
+      else {
         continue;
       };
       let box_path = [path, &relative].concat();
@@ -769,7 +771,9 @@ impl ElementInfo {
   /// The element under `root`, at `path`, whose text takes `style`: an anonymous text node's
   /// parent. `None` for `root` itself.
   fn styled(root: &RenderNode, style: &ComputedStyle, path: &[usize]) -> Option<Self> {
-    let mut relative = root.path_where(|candidate| ptr::eq(&*candidate.context.style, style))?;
+    let mut relative = root.path_where(or_marker(|candidate| {
+      ptr::eq(&*candidate.context.style, style)
+    }))?;
 
     if root
       .node_at_path(&relative)?
@@ -787,24 +791,8 @@ impl ElementInfo {
   }
 }
 
-impl RenderNode {
-  /// The child-index path to the first descendant, `self` included, that `matches` accepts. A
-  /// list item's marker sits at the item's path.
-  fn path_where(&self, matches: impl Fn(&RenderNode) -> bool + Copy) -> Option<Vec<usize>> {
-    if matches(self) || self.marker.as_deref().is_some_and(matches) {
-      return Some(Vec::new());
-    }
-
-    self
-      .children
-      .as_deref()?
-      .iter()
-      .enumerate()
-      .find_map(|(index, child)| {
-        let mut path = child.path_where(matches)?;
-
-        path.insert(0, index);
-        Some(path)
-      })
-  }
+/// Accepts a node when `matches` accepts it or its marker, so a list item's marker sits at the
+/// item's path.
+fn or_marker(matches: impl Fn(&RenderNode) -> bool + Copy) -> impl Fn(&RenderNode) -> bool + Copy {
+  move |node| matches(node) || node.marker.as_deref().is_some_and(matches)
 }

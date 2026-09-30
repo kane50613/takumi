@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="400" height="240" viewBox="0 0 400 240">
+  <rect x="0" y="0" width="400" height="240" fill="#fff"/>
+  <rect x="40" y="40" width="60" height="160" fill="#0f172a"/>
+  <rect x="180" y="90" width="60" height="60" fill="#2563eb"/>
+  <clipPath id="cp0">
+    <path d="M100 40h240v160h-240v-160Z"/>
+  </clipPath>
+  <g clip-path="url(#cp0)">
+    <filter id="ft1" x="-50%" y="-50%" width="200%" height="200%" color-interpolation-filters="sRGB">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="12" result="f0"/>
+      <feComponentTransfer in="f0">
+        <feFuncA type="discrete" tableValues="1"/>
+      </feComponentTransfer>
+    </filter>
+    <g filter="url(#ft1)">
+      <clipPath id="cp2">
+        <path d="M100 40h240v160h-240v-160Z"/>
+      </clipPath>
+      <g clip-path="url(#cp2)">
+        <rect x="0" y="0" width="400" height="240" fill="#fff"/>
+        <rect x="40" y="40" width="60" height="160" fill="#0f172a"/>
+        <rect x="180" y="90" width="60" height="60" fill="#2563eb"/>
+      </g>
+    </g>
+  </g>
+</svg>

@@ -1,3 +1,5 @@
+use std::iter::successors;
+
 use smallvec::SmallVec;
 #[cfg(feature = "svg")]
 use takumi_core::{Error, resources::image::apply_svg_filter, style::FilterReference};
@@ -205,16 +207,69 @@ fn backdrop_filter_padding(filters: &[Filter], sizing: &SizingContext) -> i32 {
     .unwrap_or(0)
 }
 
-fn backdrop_region(
-  mask_placement: Placement,
-  mask_bounds: Placement,
-  padding: i32,
-  canvas_size: Size<u32>,
-) -> Option<Placement> {
-  mask_bounds
-    .translate(mask_placement.left, mask_placement.top)
-    .inflate(padding)?
-    .clamp_to(canvas_size)
+/// A backdrop grown by `padding` on every side with its own pixels mirrored across its edges, so
+/// a filter reads nothing from outside the element, as Chrome's mirror edge mode does.
+struct MirroredRegion {
+  raw: Vec<u8>,
+  width: u32,
+  height: u32,
+  padding: u32,
+}
+
+impl MirroredRegion {
+  /// Halves `padding` until the grown region fits the pixel budget.
+  fn of(raw: &[u8], region: Placement, padding: u32) -> Option<Self> {
+    let (width, height, capacity, padding) = successors(Some(padding), |&padding| {
+      (padding > 0).then_some(padding / 2)
+    })
+    .find_map(|padding| {
+      let width = region.width.checked_add(padding.checked_mul(2)?)?;
+      let height = region.height.checked_add(padding.checked_mul(2)?)?;
+
+      Some((width, height, checked_area(width, height, 4)?, padding))
+    })?;
+    let mirror = |index: u32, size: u32| {
+      let period = size as i64 * 2;
+      let offset = (index as i64 - padding as i64).rem_euclid(period);
+
+      (if offset >= size as i64 {
+        period - 1 - offset
+      } else {
+        offset
+      }) as usize
+    };
+    let mut padded = Vec::with_capacity(capacity);
+
+    for y in 0..height {
+      let row = mirror(y, region.height) * region.width as usize;
+
+      for x in 0..width {
+        let start = (row + mirror(x, region.width)) * 4;
+
+        padded.extend_from_slice(&raw[start..start + 4]);
+      }
+    }
+
+    Some(Self {
+      raw: padded,
+      width,
+      height,
+      padding,
+    })
+  }
+
+  /// The pixels of the original region.
+  fn inner(&self) -> Vec<u8> {
+    let row_bytes = (self.width - self.padding * 2) as usize * 4;
+
+    (self.padding..self.height - self.padding)
+      .flat_map(|y| {
+        let start = (y * self.width + self.padding) as usize * 4;
+
+        self.raw[start..start + row_bytes].iter().copied()
+      })
+      .collect()
+  }
 }
 
 fn composite_backdrop_with_mask(
@@ -361,15 +416,22 @@ pub(crate) fn apply_backdrop_filter(
     return Ok(());
   };
 
-  let padding = backdrop_filter_padding(filters, &context.sizing);
-  let Some(region) = backdrop_region(placement, mask_bounds, padding, canvas_size) else {
+  let Some(region) = mask_bounds
+    .translate(placement.left, placement.top)
+    .clamp_to(canvas_size)
+  else {
     return Ok(());
   };
 
   let region_row_bytes = region.width as usize * 4;
-  let mut backdrop_raw = canvas.read_region(region);
+  // Padding past the canvas only mirrors the same pixels again, as reading past it used to stop.
+  let padding = backdrop_filter_padding(filters, &context.sizing)
+    .clamp(0, canvas_size.width.max(canvas_size.height) as i32) as u32;
+  let Some(mut padded) = MirroredRegion::of(&canvas.read_region(region), region, padding) else {
+    return Ok(());
+  };
   let Some(mut backdrop_pixmap) =
-    PixmapMut::from_bytes(&mut backdrop_raw, region.width, region.height)
+    PixmapMut::from_bytes(&mut padded.raw, padded.width, padded.height)
   else {
     return Ok(());
   };
@@ -380,6 +442,8 @@ pub(crate) fn apply_backdrop_filter(
     context.current_color,
     filters.iter().filter(|filter| !filter.is_drop_shadow()),
   )?;
+
+  let backdrop_raw = padded.inner();
 
   let mask_offset_x = region.left - placement.left;
   let mask_offset_y = region.top - placement.top;
@@ -433,7 +497,7 @@ fn apply_drop_shadow_filter(pixmap: &mut PixmapMut<'_>, shadow: &SizedShadow) ->
     return Ok(());
   }
 
-  let padding = (shadow.blur_radius * BlurType::Filter.extent_multiplier()).ceil() as u32;
+  let padding = BlurType::Filter.extent(shadow.blur_radius).ceil() as u32;
 
   let offset_x = shadow.offset_x.floor() as i32;
   let offset_y = shadow.offset_y.floor() as i32;
@@ -522,9 +586,32 @@ mod tests {
 
   use super::*;
   use crate::{
+    Fonts, RenderOptions,
+    layout::node::Node,
+    render,
     style::{Angle, PercentageNumber},
     viewport::Viewport,
   };
+
+  #[test]
+  fn a_huge_backdrop_blur_stays_within_the_canvas() {
+    let node: Node = serde_json::from_str(
+      r##"{"type": "container", "style": {"width": "100%", "height": "100%", "backgroundColor": "#ffffff"}, "children": [
+        {"type": "container", "style": {"position": "absolute", "left": "10px", "top": "10px", "width": "40px", "height": "40px", "backdropFilter": "blur(20000px)"}, "children": []}
+      ]}"##,
+    )
+    .unwrap();
+    let fonts = Fonts::default();
+
+    render(
+      RenderOptions::builder()
+        .viewport(Viewport::new((64, 64)))
+        .node(node)
+        .fonts(&fonts)
+        .build(),
+    )
+    .unwrap();
+  }
 
   #[test]
   fn mask_bounds_span_the_first_and_last_visible_pixels() {

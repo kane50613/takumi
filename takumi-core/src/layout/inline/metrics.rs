@@ -15,6 +15,15 @@ pub(crate) struct ParentFontMetrics {
   pub(crate) text_metrics: (f32, f32),
 }
 
+/// How far the root inline box's strut reaches above and below the baseline.
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct Strut {
+  pub(crate) above: f32,
+  pub(crate) below: f32,
+  /// Whether the root's line height scales with a line's `text-fit`, as a run's does.
+  pub(crate) scales_with_text_fit: bool,
+}
+
 #[derive(Clone, Copy, Debug)]
 /// Final vertical metrics computed for one inline line.
 pub(crate) struct ResolvedLineMetrics {
@@ -107,6 +116,7 @@ pub(super) fn resolve_inline_line_metrics(
   spans: &[ProcessedInlineSpan<'_>],
   parent_font_metrics: Option<ParentFontMetrics>,
   line_scales: &[f32],
+  strut: Option<Strut>,
 ) -> Vec<ResolvedLineMetrics> {
   let mut result = Vec::with_capacity(inline_layout.lines().count());
   let mut previous_parley_bottom = 0.0_f32;
@@ -153,10 +163,12 @@ pub(super) fn resolve_inline_line_metrics(
         }
         seen = Some(glyph.style_index());
         let style = cluster.first_style();
-        let (base_above, base_below) =
-          style
-            .brush
-            .line_box_contribution(metrics.line_height, metrics.ascent, metrics.descent);
+        let (base_above, base_below) = style.brush.line_box_contribution(
+          metrics.line_height,
+          metrics.ascent,
+          metrics.descent,
+          metrics.leading,
+        );
         if (line_scale - 1.0).abs() > f32::EPSILON && style.brush.line_height_scales_with_text_fit {
           resolved_above = resolved_above.max(base_above * line_scale);
           resolved_below = resolved_below.max(base_below * line_scale);
@@ -228,6 +240,19 @@ pub(super) fn resolve_inline_line_metrics(
       }
       resolved_above = above;
       resolved_below = below;
+    }
+
+    // CSS 2 §10.8.1: each line box starts with the root inline box's strut, but a line with no
+    // content has zero height.
+    if has_contribution && let Some(strut) = strut {
+      let scale = if strut.scales_with_text_fit {
+        line_scale
+      } else {
+        1.0
+      };
+
+      resolved_above = resolved_above.max(strut.above * scale);
+      resolved_below = resolved_below.max(strut.below * scale);
     }
 
     if !has_contribution {

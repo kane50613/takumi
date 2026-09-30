@@ -642,6 +642,35 @@ pub(crate) fn render_mask(
   rasterize_mask(paths, transform, style.unwrap_or_default(), cull).unwrap_or_default()
 }
 
+/// `[left, top, right, bottom]` cut to `cull` once they cover too many pixels to rasterize whole.
+pub(crate) fn cull_bounds(
+  [mut left, mut top, mut right, mut bottom]: [i32; 4],
+  cull: Option<CanvasViewport>,
+) -> Option<Placement> {
+  // The cull rect is a protection layer, not an optimization: culling moves the
+  // buffer origin, which shifts anti-aliasing by a float-rounding hair, so it
+  // only engages once the full mask is too large to be worth rasterizing.
+  const CULL_THRESHOLD_PIXELS: u64 = 1 << 24;
+  // The halo keeps the rasterizer's clip edge away from the visible pixels:
+  // clipping a contour exactly on the cull edge shifts the anti-aliasing of
+  // the boundary row.
+  const CULL_HALO: i32 = 8;
+
+  let full_pixels = (right.saturating_sub(left).max(0) as u64)
+    .saturating_mul(bottom.saturating_sub(top).max(0) as u64);
+
+  if let Some(cull) = cull
+    && full_pixels > CULL_THRESHOLD_PIXELS
+  {
+    left = left.max((cull.origin.x as i32).saturating_sub(CULL_HALO));
+    top = top.max((cull.origin.y as i32).saturating_sub(CULL_HALO));
+    right = right.min(cull.right().saturating_add(CULL_HALO));
+    bottom = bottom.min(cull.bottom().saturating_add(CULL_HALO));
+  }
+
+  Placement::from_bounds(left, top, right, bottom)
+}
+
 fn rasterize_mask(
   paths: &[Command],
   transform: Option<Affine>,
@@ -665,37 +694,20 @@ fn rasterize_mask(
   }
 
   let bounds = path.compute_tight_bounds()?;
-  let mut left = bounds.left().floor() as i32;
-  let mut top = bounds.top().floor() as i32;
-  let mut right = bounds.right().ceil() as i32;
-  let mut bottom = bounds.bottom().ceil() as i32;
-
-  // The cull rect is a protection layer, not an optimization: culling moves the
-  // buffer origin, which shifts anti-aliasing by a float-rounding hair, so it
-  // only engages once the full mask is too large to be worth rasterizing.
-  const CULL_THRESHOLD_PIXELS: u64 = 1 << 24;
-  // The halo keeps the rasterizer's clip edge away from the visible pixels:
-  // clipping a contour exactly on the cull edge shifts the anti-aliasing of
-  // the boundary row.
-  const CULL_HALO: i32 = 8;
-
-  let full_pixels = (right.saturating_sub(left).max(0) as u64)
-    .saturating_mul(bottom.saturating_sub(top).max(0) as u64);
-  if let Some(cull) = cull
-    && full_pixels > CULL_THRESHOLD_PIXELS
-  {
-    left = left.max((cull.origin.x as i32).saturating_sub(CULL_HALO));
-    top = top.max((cull.origin.y as i32).saturating_sub(CULL_HALO));
-    right = right.min(cull.right().saturating_add(CULL_HALO));
-    bottom = bottom.min(cull.bottom().saturating_add(CULL_HALO));
-  }
-
-  if right <= left || bottom <= top {
-    return None;
-  }
-
-  let width = right.checked_sub(left)? as u32;
-  let height = bottom.checked_sub(top)? as u32;
+  let Placement {
+    left,
+    top,
+    width,
+    height,
+  } = cull_bounds(
+    [
+      bounds.left().floor() as i32,
+      bounds.top().floor() as i32,
+      bounds.right().ceil() as i32,
+      bounds.bottom().ceil() as i32,
+    ],
+    cull,
+  )?;
   let size = IntSize::from_wh(width, height)?;
   let buffer = vec![0; checked_area(width, height, 1)?];
   let mut mask = TinyMask::from_vec(buffer, size)?;

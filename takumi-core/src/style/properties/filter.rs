@@ -90,11 +90,17 @@ impl BlurType {
 
   /// Multiplier from radius to the extent the blur visibly reaches.
   #[inline]
-  pub fn extent_multiplier(self) -> f32 {
+  fn extent_multiplier(self) -> f32 {
     match self {
       BlurType::Filter => 3.0,
       BlurType::Shadow => 1.5,
     }
+  }
+
+  /// How far a blur of `radius` visibly reaches.
+  #[inline]
+  pub fn extent(self, radius: f32) -> f32 {
+    radius * self.extent_multiplier()
   }
 }
 
@@ -107,7 +113,7 @@ impl Filter {
   /// How far the filter spreads a layer's ink, in local px.
   pub fn reach(&self, sizing: &SizingContext) -> f32 {
     match self {
-      Filter::Blur(radius) => radius.to_px(sizing, 1.0) * BlurType::Filter.extent_multiplier(),
+      Filter::Blur(radius) => BlurType::Filter.extent(radius.to_px(sizing, 1.0)),
       Filter::DropShadow(shadow) => {
         let offset = shadow
           .offset_x
@@ -115,7 +121,7 @@ impl Filter {
           .abs()
           .max(shadow.offset_y.to_px(sizing, 1.0).abs());
 
-        offset + shadow.blur_radius.to_px(sizing, 1.0) * BlurType::Filter.extent_multiplier()
+        offset + BlurType::Filter.extent(shadow.blur_radius.to_px(sizing, 1.0))
       }
       _ => 0.0,
     }

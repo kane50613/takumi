@@ -5,9 +5,10 @@ use std::{
 
 use parley::fontique::{Attributes, FontStyle as FontiqueStyle};
 use taffy::{
-  BlockContext, Cache, CacheTree, Display as TaffyDisplay, Layout, LayoutBlockContainer,
-  LayoutFlexboxContainer, LayoutGridContainer, LayoutInput, LayoutOutput, LayoutPartialTree,
-  NodeId as TaffyNodeId, RequestedAxis, RoundTree, RunMode, Size as TaffySize, SizingMode, Style,
+  AvailableSpace as TaffyAvailableSpace, BlockContext, Cache, CacheTree, Display as TaffyDisplay,
+  Layout, LayoutBlockContainer, LayoutFlexboxContainer, LayoutGridContainer, LayoutInput,
+  LayoutOutput, LayoutPartialTree, MaybeResolve, NodeId as TaffyNodeId, Position as TaffyPosition,
+  RequestedAxis, ResolveOrZero, RoundTree, RunMode, Size as TaffySize, SizingMode, Style,
   TraversePartialTree, TraverseTree, compute_block_layout, compute_cached_layout,
   compute_flexbox_layout, compute_grid_layout, compute_hidden_layout, compute_leaf_layout,
   compute_root_layout,
@@ -28,6 +29,7 @@ use crate::{
     node::{Node, NodeStyleLayers, TextData},
   },
   matching::{MatchedDeclarationsView, NodeMatchedDeclarations, match_stylesheets_view},
+  resources::font::PrimaryFontMetrics,
   style::{
     Affine, BackgroundImage, BackgroundImages, Color, ComputedStyle, ContentItem, ContentValue,
     Display, Float, Length, LineHeight, ListStylePosition, Position, SizingContext,
@@ -703,17 +705,52 @@ impl LayoutPartialTree for LayoutTree<'_> {
 }
 
 impl<'r> LayoutTree<'r> {
+  /// The inputs an absolutely positioned box shrinks to fit: taffy offers it its whole
+  /// containing block, where CSS 2 §10.3.7 leaves out its insets and margins.
+  fn out_of_flow_inputs(&self, node: TaffyNodeId, mut inputs: LayoutInput) -> LayoutInput {
+    let (None, TaffyAvailableSpace::Definite(width)) =
+      (inputs.known_dimensions.width, inputs.available_space.width)
+    else {
+      return inputs;
+    };
+    let Some(style) = self.get_layout_node_ref(node).map(|node| &node.style) else {
+      return inputs;
+    };
+
+    if style.position != TaffyPosition::Absolute {
+      return inputs;
+    }
+
+    let basis = inputs.parent_size.width;
+    let calc = |value, basis| self.resolve_calc_value(value, basis);
+    let reserved = [style.inset.left, style.inset.right]
+      .into_iter()
+      .filter_map(|inset| inset.maybe_resolve(basis, calc))
+      .chain(
+        [style.margin.left, style.margin.right]
+          .into_iter()
+          .map(|margin| margin.resolve_or_zero(basis, calc)),
+      )
+      .sum::<f32>();
+
+    inputs.available_space.width = TaffyAvailableSpace::Definite((width - reserved).max(0.0));
+    inputs
+  }
+
   fn compute_child_layout_inner(
     &mut self,
     node: TaffyNodeId,
     inputs: LayoutInput,
     block_ctx: Option<&mut BlockContext<'_>>,
   ) -> LayoutOutput {
+    // Styles resolve against the space taffy offered, before it shrinks for the insets.
     self.update_node_style_for_available_space(
       node,
       Size::from_taffy(inputs.available_space).map(AvailableSpace::from_taffy),
       Size::from_taffy(inputs.known_dimensions),
     );
+
+    let inputs = self.out_of_flow_inputs(node, inputs);
 
     if inputs.run_mode == RunMode::PerformHiddenLayout {
       return compute_hidden_layout(self, node);
@@ -1460,6 +1497,39 @@ impl RenderNode {
     .map(|length| length.to_px(&self.context.sizing, 0.0))
   }
 
+  /// The child-index path to the first node in preorder, `self` included, that `matches` accepts.
+  pub fn path_where(&self, matches: impl Fn(&RenderNode) -> bool) -> Option<Vec<usize>> {
+    let mut path = Vec::new();
+    // Each open node with the index of the next child to visit, so a deep tree never recurses.
+    let mut open = vec![(self, 0)];
+
+    if matches(self) {
+      return Some(path);
+    }
+
+    while let Some((node, next)) = open.last_mut() {
+      let Some(child) = node
+        .children
+        .as_deref()
+        .and_then(|children| children.get(*next))
+      else {
+        open.pop();
+        path.pop();
+        continue;
+      };
+
+      path.push(*next);
+      *next += 1;
+
+      if matches(child) {
+        return Some(path);
+      }
+      open.push((child, 0));
+    }
+
+    None
+  }
+
   /// Used border widths in pixels.
   pub(super) fn border_px(&self) -> Rect<f32> {
     let style = &self.context.style;
@@ -1937,6 +2007,18 @@ impl RenderContext {
     if !matches!(style.line_height, LineHeight::Normal) {
       return 0.0;
     }
+
+    self
+      .primary_font_metrics(style, font_size)
+      .map_or(font_size, PrimaryFontMetrics::line_spacing)
+  }
+
+  /// The metrics of `style`'s primary font at `font_size`.
+  pub(crate) fn primary_font_metrics(
+    &self,
+    style: &ComputedStyle,
+    font_size: f32,
+  ) -> Option<PrimaryFontMetrics> {
     let attributes = Attributes {
       width: style.font_stretch.into_parlance(),
       style: style.font_style.into_parlance(),
@@ -1958,10 +2040,8 @@ impl RenderContext {
     }
     hasher.write_u32(font_size.to_bits());
 
-    self.normal_line_height(hasher.finish(), || {
-      self
-        .first_font_line_spacing(font_family.query_families(), attributes, font_size)
-        .unwrap_or(font_size)
+    self.cached_primary_font_metrics(hasher.finish(), || {
+      self.first_font_metrics(font_family.query_families(), attributes, font_size)
     })
   }
 

@@ -1,8 +1,12 @@
 mod test_utils;
 
-use std::{assert_matches, fs};
+use std::{assert_matches, fs, sync::Arc};
 
-use takumi::{prelude::*, render};
+use resvg::{
+  tiny_skia::{Pixmap, Transform},
+  usvg::{Options, Tree},
+};
+use takumi::{prelude::*, render, render_svg};
 use test_utils::repo_base_path;
 
 fn read_font(path: &str) -> Vec<u8> {
@@ -168,4 +172,108 @@ fn test_too_short_data() {
 
   let result = context.register(FontResource::new(short_data));
   assert_matches!(result, Err(FontError::UnsupportedFormat));
+}
+
+/// Pixels at or below row 100 that are opaque red.
+fn red_rows_below_100(pixels: &[[u8; 4]], width: usize) -> usize {
+  pixels
+    .iter()
+    .enumerate()
+    .filter(|(index, pixel)| {
+      index / width >= 100 && pixel[0] > 200 && pixel[1] < 50 && pixel[3] > 200
+    })
+    .count()
+}
+
+#[test]
+fn a_bitmap_glyph_casts_a_text_shadow() {
+  let mut fonts = Fonts::default();
+
+  fonts
+    .register(FontResource::new(read_font("noto-sans/NotoColorEmoji.ttf")))
+    .unwrap();
+
+  let node = Node::text("😀".to_string()).with_class_name("emoji");
+  let stylesheet: Arc<StyleSheet> = StyleSheet::parse(
+    ".emoji { font-size: 64px; line-height: 1; text-shadow: 0 100px 0 rgb(255, 0, 0); }",
+  )
+  .unwrap()
+  .into();
+  let viewport = Viewport::new((120, 200));
+  let bitmap = render(
+    RenderOptions::builder()
+      .viewport(viewport)
+      .node(node.clone())
+      .fonts(&fonts)
+      .stylesheet(stylesheet.clone())
+      .build(),
+  )
+  .unwrap();
+  let svg = render_svg(
+    SvgOptions::builder()
+      .viewport(viewport)
+      .node(node)
+      .fonts(&fonts)
+      .stylesheet(stylesheet)
+      .build(),
+  )
+  .unwrap();
+  let tree = Tree::from_str(&svg, &Options::default()).unwrap();
+  let mut pixmap = Pixmap::new(120, 200).unwrap();
+
+  resvg::render(&tree, Transform::identity(), &mut pixmap.as_mut());
+
+  let raster = red_rows_below_100(bitmap.as_raw().as_chunks::<4>().0, 120);
+  let vector = red_rows_below_100(pixmap.data().as_chunks::<4>().0, 120);
+
+  assert!(
+    raster > 500,
+    "the raster emoji casts no shadow: {raster} red pixels"
+  );
+  assert!(
+    vector > 500,
+    "the SVG emoji casts no shadow: {vector} red pixels"
+  );
+}
+
+#[test]
+fn an_off_canvas_bitmap_glyph_blurs_its_shadow_onto_the_canvas() {
+  let mut fonts = Fonts::default();
+
+  fonts
+    .register(FontResource::new(read_font("noto-sans/NotoColorEmoji.ttf")))
+    .unwrap();
+
+  let paint = |shadow: &str| {
+    let stylesheet: Arc<StyleSheet> = StyleSheet::parse(&format!(
+      ".emoji {{ font-size: 64px; line-height: 1; text-shadow: {shadow}; }}"
+    ))
+    .unwrap()
+    .into();
+
+    render(
+      RenderOptions::builder()
+        .viewport(Viewport::new((120, 80)))
+        .node(Node::text("😀".to_string()).with_class_name("emoji"))
+        .fonts(&fonts)
+        .stylesheet(stylesheet)
+        .build(),
+    )
+    .unwrap()
+  };
+  let shadowed = paint("-72px 0 16px rgb(255, 0, 0)");
+  let plain = paint("none");
+  let changed = shadowed
+    .as_raw()
+    .as_chunks::<4>()
+    .0
+    .iter()
+    .zip(plain.as_raw().as_chunks::<4>().0)
+    .filter(|(shadowed, plain)| shadowed != plain)
+    .count();
+
+  assert!(
+    changed > 500,
+    "the shadow loses its off-canvas part before the blur: {changed} pixels"
+  );
 }

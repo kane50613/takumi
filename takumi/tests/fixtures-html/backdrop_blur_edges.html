@@ -1,0 +1,51 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>backdrop_blur_edges</title>
+    <base href="../../../" />
+    <link rel="stylesheet" href="takumi/tests/shared.css" />
+  </head>
+  <body style="width: 400px; height: 240px">
+    <div
+      style="
+        display: block;
+        position: relative;
+        width: 100%;
+        height: 100%;
+        background-color: rgb(255, 255, 255);
+      "
+    >
+      <div
+        style="
+          position: absolute;
+          left: 40px;
+          top: 40px;
+          width: 60px;
+          height: 160px;
+          background-color: rgb(15, 23, 42);
+        "
+      ></div>
+      <div
+        style="
+          position: absolute;
+          left: 180px;
+          top: 90px;
+          width: 60px;
+          height: 60px;
+          background-color: rgb(37, 99, 235);
+        "
+      ></div>
+      <div
+        style="
+          position: absolute;
+          left: 100px;
+          top: 40px;
+          width: 240px;
+          height: 160px;
+          backdrop-filter: blur(12px);
+        "
+      ></div>
+    </div>
+  </body>
+</html>

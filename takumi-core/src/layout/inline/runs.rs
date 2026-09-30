@@ -19,7 +19,7 @@ use super::{
   items::ProcessedInlineSpan,
   metrics::{VisualInlineBox, resolve_visual_inline_box},
   outline::InlineOutlineRect,
-  text_fit::LineScaleState,
+  text_fit::{LineScaleState, RunBox},
 };
 
 /// A shaped glyph positioned within its run, in run-local coordinates.
@@ -285,7 +285,7 @@ pub struct InlineRunLayout {
   pub runs: Vec<PositionedInlineRun>,
   /// In-flow and out-of-flow inline boxes, positioned, sorted by id.
   pub inline_boxes: Vec<VisualInlineBox>,
-  /// Text-outline rects (unmerged), in collection order.
+  /// Outlined spans' line fragments, sorted by span then line.
   pub outline_rects: Vec<InlineOutlineRect>,
   /// Inline-span background fragments, in paint order (outer spans first).
   pub background_fragments: Vec<InlineBackgroundFragment>,
@@ -304,17 +304,7 @@ impl BuiltInlineLayout<'_> {
       positioned_floats,
       ..
     } = self;
-    let need_outline = spans.iter().any(|span| match span {
-      ProcessedInlineSpan::Text { style, .. } => {
-        style.outline_width > 0.0 && style.outline_style.is_rendered()
-      }
-      ProcessedInlineSpan::DirectionMark { .. }
-      | ProcessedInlineSpan::Box(_)
-      | ProcessedInlineSpan::Spacer { .. } => false,
-    });
-
     let mut runs = Vec::new();
-    let mut outline_rects = Vec::new();
     let mut decoration_coverage = DecorationAccumulator::default();
     let mut positioned_inline_boxes: HashMap<u64, VisualInlineBox> = HashMap::new();
 
@@ -358,33 +348,30 @@ impl BuiltInlineLayout<'_> {
 
           let metrics = run.metrics();
           // The run's leaded box: the font height plus the line-height leading.
-          let (above, below) =
-            brush.line_box_contribution(metrics.line_height, metrics.ascent, metrics.descent);
+          let (above, below) = brush.line_box_contribution(
+            metrics.line_height,
+            metrics.ascent,
+            metrics.descent,
+            metrics.leading,
+          );
           // The font's rounded ascent and descent, without the line-height leading, like the
           // inline box fragment `InlineBoxState::ComputeTextMetrics` sizes.
           let ascent = metrics.ascent.round();
-          let content_area = brush.source_span_id.map(|span_id| {
-            InlineOutlineRect {
-              span_id,
-              line_index,
+
+          if let Some(span_id) = brush.source_span_id
+            && let Some(ProcessedInlineSpan::Text {
+              decorations: Some(chain),
+              ..
+            }) = spans.get(span_id as usize)
+          {
+            let rect = RunBox {
               x: content.x + glyph_run.offset(),
               y: content.y + glyph_run.baseline() + setup.baseline_shift - ascent,
               width: glyph_run.advance() - trailing_whitespace,
               height: ascent + metrics.descent.round(),
             }
-            .scaled(setup.state, static_inline_prefix)
-          });
+            .scaled(setup.state, static_inline_prefix);
 
-          if need_outline && let Some(rect) = content_area {
-            outline_rects.push(rect);
-          }
-
-          if let Some(rect) = content_area
-            && let Some(ProcessedInlineSpan::Text {
-              decorations: Some(chain),
-              ..
-            }) = spans.get(rect.span_id as usize)
-          {
             decoration_coverage.cover(
               Some(chain),
               line_index,
@@ -478,11 +465,13 @@ impl BuiltInlineLayout<'_> {
     let mut inline_boxes: Vec<_> = positioned_inline_boxes.into_values().collect();
     inline_boxes.sort_unstable_by_key(|inline_box| inline_box.id);
 
+    let (background_fragments, outline_rects) = decoration_coverage.into_fragments();
+
     Ok(InlineRunLayout {
       runs,
       inline_boxes,
       outline_rects,
-      background_fragments: decoration_coverage.into_fragments(),
+      background_fragments,
     })
   }
 }

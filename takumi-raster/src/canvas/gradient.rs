@@ -421,7 +421,8 @@ mod tests {
 
   use super::*;
   use crate::{
-    Canvas, Fonts, RenderContext, Result, blend_pixel,
+    Canvas, Fonts, RenderContext, Result,
+    blend::blend_pixel,
     canvas::demultiply_rgba_in_place,
     style::{
       Angle, Color, ColorInterpolationMethod, ConicGradient, FromCssStr, GradientStop, Length,

@@ -21,14 +21,14 @@ use takumi_core::{
 };
 
 use super::{
-  BackgroundTile, BorderProperties, Canvas, ColorTile, Fill, PaintSource, RenderContext,
-  SizedFontStyle, TileLayer, TileLayers, background_image_layers, collect_background_layers,
-  draw_image, rasterize_layers,
+  BackgroundTile, BorderProperties, Canvas, CanvasViewport, ColorTile, Fill, PaintSource,
+  RenderContext, SizedFontStyle, TileLayer, TileLayers, background_image_layers,
+  collect_background_layers, draw_image, rasterize_layers,
 };
 use crate::{
   BlurType, CanvasSubcanvas, Command, Error, MaskCompositeColor, MaskSamplingOptions, Placement,
-  Result, Stroke, Style, apply_blur_alpha_bytes, attenuate_alpha_by_mask, checked_area, draw_glyph,
-  draw_glyph_clip_image, intersect_alpha_masks,
+  Result, Stroke, Style, apply_blur_alpha_bytes, attenuate_alpha_by_mask, bitmap_coverage,
+  checked_area, draw_glyph, draw_glyph_clip_image, intersect_alpha_masks,
   layout::node::ImageData,
   render_mask,
   style::{Affine, BlendMode},
@@ -180,18 +180,30 @@ impl<'c> CanvasDevice<'c> {
     // scale on the run comes from the painter, which scales the shadow it passes.
     let blur_radius = blur_radius * self.transform.uniform_scale();
     let transform = self.transform * transform;
-    let reach = if blur_radius > 0.0 {
-      blur_radius * BlurType::Shadow.extent_multiplier()
-    } else {
-      0.0
-    };
-    let (mask, placement) = render_mask(
+    let coverage = render_mask(
       commands,
       Some(transform),
       Some(style),
-      Some(self.canvas.viewport().inflate(reach, reach)),
+      Some(self.shadow_viewport(blur_radius)),
     );
 
+    self.draw_blurred_coverage(coverage, blur_radius, color);
+  }
+
+  /// The canvas viewport grown by how far a shadow of `blur_radius` blurs.
+  fn shadow_viewport(&self, blur_radius: f32) -> CanvasViewport {
+    let reach = BlurType::Shadow.extent(blur_radius);
+
+    self.canvas.viewport().inflate(reach, reach)
+  }
+
+  /// Paints `coverage` in `color`, blurred as a CSS shadow of `blur_radius` blurs.
+  fn draw_blurred_coverage(
+    &mut self,
+    (mask, placement): (Vec<u8>, Placement),
+    blur_radius: f32,
+    color: Color,
+  ) {
     if mask.is_empty() {
       return;
     }
@@ -199,7 +211,7 @@ impl<'c> CanvasDevice<'c> {
       return self.draw_coverage((mask, placement), color);
     }
 
-    let padding = reach as u32;
+    let padding = BlurType::Shadow.extent(blur_radius) as u32;
     let width = placement.width.saturating_add(padding * 2);
     let height = placement.height.saturating_add(padding * 2);
     let Some(area) = checked_area(width, height, 1) else {
@@ -264,13 +276,24 @@ impl<'c> CanvasDevice<'c> {
 
     if let Some(shadow) = self.shadow {
       for glyph in &glyph_run.glyphs {
-        let Some(ResolvedGlyph::Outline(outline)) =
-          run.resolved_glyphs.get(&glyph.id).map(AsRef::as_ref)
-        else {
-          continue;
-        };
         let at = placed(glyph);
         let transform = local * Affine::translation(at.x, at.y);
+        let outline = match run.resolved_glyphs.get(&glyph.id).map(AsRef::as_ref) {
+          Some(ResolvedGlyph::Outline(outline)) => outline,
+          Some(ResolvedGlyph::Bitmap(bitmap)) => {
+            let placed =
+              self.transform * Affine::translation(shadow.offset_x, shadow.offset_y) * transform;
+            let blur_radius = shadow.blur_radius * self.transform.uniform_scale();
+
+            if let Some(coverage) =
+              bitmap_coverage(bitmap, placed, self.shadow_viewport(blur_radius))
+            {
+              self.draw_blurred_coverage(coverage, blur_radius, shadow.color);
+            }
+            continue;
+          }
+          None => continue,
+        };
 
         self.draw_shadow_of(shadow, outline.paths(), Fill::NonZero.into(), transform);
 

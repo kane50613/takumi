@@ -2229,6 +2229,20 @@ fn text_shadow_stays_on_its_line_page() {
   );
 }
 
+/// A blurred `text-shadow` fades the underline's shadow through the same bands as the glyphs'.
+#[test]
+fn text_decoration_shadow() {
+  run_pdf_fixture("text-decoration-shadow", |fonts| {
+    let source = r##"<div style="width: 100%; height: 100%; padding: 16px; background-color: #ffffff; font-size: 32px; color: #111827; text-decoration: underline 3px; text-shadow: 4px 4px 6px rgba(37, 99, 235, 0.8);">Underlined</div>"##;
+
+    PdfOptions::builder()
+      .node(from_html(source, FromHtmlOptions::default()).expect("parse decoration shadow"))
+      .viewport(Viewport::new((260, 90)))
+      .fonts(fonts)
+      .build()
+  });
+}
+
 /// `text-shadow` draws shifted glyph passes under the text, and
 /// `-webkit-text-stroke` strokes the glyph outlines around the fill.
 #[test]

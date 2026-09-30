@@ -1,81 +1,16 @@
 use takumi_core::{
-  geometry::{ComputedLayout as Layout, NodeId, Point},
+  geometry::{ComputedLayout as Layout, NodeId},
   scene::{NodePaint, PaintItem, PaintItemKind, Scene, SceneBounds, StackingContextNode},
 };
-use tiny_skia::{Pixmap, PixmapMut};
+use tiny_skia::PixmapMut;
 
 use crate::{
   BorderProperties, Canvas, CanvasSubcanvas, CanvasViewport, DeferredOutline, Error, NodeMasks,
-  Placement, Result, apply_backdrop_filter, apply_filters_to_pixmap, blend_pixel, draw_box_shell,
-  draw_debug_border,
+  Result, apply_backdrop_filter, apply_filters_to_pixmap, draw_box_shell, draw_debug_border,
   inline_drawing::draw_own_content,
   layout::tree::{LayoutResults, RenderNode},
-  placement_overlap,
-  style::{Affine, BlendMode, Color, Filter, SizingContext},
+  style::{Affine, BlendMode, Filter, SizingContext},
 };
-
-pub(crate) fn blend_pixmap_software(
-  dst: &mut Pixmap,
-  src: &Pixmap,
-  mode: BlendMode,
-  offset: Point<i32>,
-  opacity: f32,
-) {
-  if opacity <= 0.0 {
-    return;
-  }
-  if offset.x >= dst.width() as i32 || offset.y >= dst.height() as i32 {
-    return;
-  }
-
-  let Some(overlap) = placement_overlap(
-    Placement {
-      left: 0,
-      top: 0,
-      width: dst.width(),
-      height: dst.height(),
-    },
-    Placement {
-      left: offset.x,
-      top: offset.y,
-      width: src.width(),
-      height: src.height(),
-    },
-  ) else {
-    return;
-  };
-  let dst_left = overlap.lhs_offset.x as usize;
-  let dst_top = overlap.lhs_offset.y as usize;
-  let src_left = overlap.rhs_offset.x as usize;
-  let src_top = overlap.rhs_offset.y as usize;
-  let width = overlap.placement.width as usize;
-  let height = overlap.placement.height as usize;
-
-  let dst_width = dst.width() as usize;
-  let src_width = src.width() as usize;
-  let dst_pixels = dst.pixels_mut();
-  let src_pixels = src.pixels();
-  for row in 0..height {
-    let dst_row = (dst_top + row) * dst_width;
-    let src_row = (src_top + row) * src_width;
-    for col in 0..width {
-      let dst_pixel = &mut dst_pixels[dst_row + dst_left + col];
-      let src_pixel = src_pixels[src_row + src_left + col];
-      let s = src_pixel.demultiply();
-      let d = dst_pixel.demultiply();
-      let mut out = image::Rgba([d.red(), d.green(), d.blue(), d.alpha()]);
-      let top = image::Rgba([
-        s.red(),
-        s.green(),
-        s.blue(),
-        ((s.alpha() as f32) * opacity).clamp(0.0, 255.0) as u8,
-      ]);
-      blend_pixel(&mut out, top, mode);
-      *dst_pixel = Color(out.0).premultiplied();
-    }
-  }
-}
-
 enum DeferredNodeRender {
   Deferred {
     path: Vec<usize>,
@@ -416,9 +351,6 @@ fn draw_render_node_shell(node: &RenderNode, canvas: &mut Canvas, layout: Layout
 mod tests {
   use std::error::Error;
 
-  use tiny_skia::Pixmap;
-
-  use super::{BlendMode, Point, blend_pixmap_software};
   use crate::{Fonts, RenderOptions, layout::node::Node, render, viewport::Viewport};
 
   type TestResult = Result<(), Box<dyn Error>>;
@@ -469,23 +401,5 @@ mod tests {
       "overflowing child of zero-sized opacity parent must still paint, got {pixel:?}"
     );
     Ok(())
-  }
-
-  #[test]
-  fn blending_outside_the_destination_leaves_pixels_unchanged() {
-    let mut dst = Pixmap::new(1, 1).unwrap();
-    dst.data_mut().copy_from_slice(&[1, 2, 3, 4]);
-    let mut src = Pixmap::new(1, 1).unwrap();
-    src.data_mut().copy_from_slice(&[5, 6, 7, 8]);
-
-    blend_pixmap_software(
-      &mut dst,
-      &src,
-      BlendMode::Normal,
-      Point::new(i32::MAX, i32::MAX),
-      1.0,
-    );
-
-    assert_eq!(dst.data(), &[1, 2, 3, 4]);
   }
 }

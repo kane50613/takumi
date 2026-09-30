@@ -2,15 +2,15 @@ use std::sync::Arc;
 
 use skrifa::color::ColorPalette;
 use takumi_core::geometry::{Point, Size};
-use tiny_skia::Pixmap;
+use tiny_skia::{FilterQuality, Pixmap, PixmapPaint};
 use xxhash_rust::xxh3::Xxh3;
 
 use crate::{
-  BorderProperties, Canvas, Command, MaskCompositeColor, MaskSamplingOptions, PaintSource,
-  Placement, Result, SamplingOptions, SizedFontStyle, Stroke, checked_area,
-  composite_mask_source_to_pixmap, pixmap_ref_from_buffer, render_mask,
+  BorderProperties, Canvas, CanvasViewport, Command, MaskCompositeColor, MaskSamplingOptions,
+  PaintSource, Placement, Result, SamplingOptions, SizedFontStyle, Stroke, checked_area,
+  composite_mask_source_to_pixmap, cull_bounds, pixmap_ref_from_buffer, render_mask,
   resources::{
-    glyph::{ResolvedColorLayer, ResolvedGlyph},
+    glyph::{ResolvedBitmapGlyph, ResolvedColorLayer, ResolvedGlyph},
     glyph_cache::glyph_mask,
   },
   style::{Affine, BlendMode, Color, ImageScalingAlgorithm},
@@ -364,8 +364,7 @@ pub(crate) fn draw_glyph(
       let Some(source) = pixmap_ref_from_buffer(&bitmap.image) else {
         return Ok(());
       };
-      transform *= Affine::translation(bitmap.placement.left as f32, -bitmap.placement.top as f32);
-      transform *= Affine::scale(bitmap.scale_x, bitmap.scale_y);
+      transform *= bitmap.image_transform();
       canvas.overlay_sampled_pixmap(
         source,
         Size {
@@ -455,6 +454,59 @@ fn draw_color_outline_image(
       render_mask(&layer.paths, Some(transform), None, Some(canvas.viewport()));
     canvas.draw_mask(&mask, placement, color, BlendMode::Normal);
   }
+}
+
+/// The alpha coverage `bitmap` leaves on the canvas drawn under `transform`, within `cull`.
+pub(crate) fn bitmap_coverage(
+  bitmap: &ResolvedBitmapGlyph,
+  transform: Affine,
+  cull: CanvasViewport,
+) -> Option<(Vec<u8>, Placement)> {
+  let source = pixmap_ref_from_buffer(&bitmap.image)?;
+  let transform = transform * bitmap.image_transform();
+  let (width, height) = (source.width() as f32, source.height() as f32);
+  let (mut min_x, mut min_y) = (f32::INFINITY, f32::INFINITY);
+  let (mut max_x, mut max_y) = (f32::NEG_INFINITY, f32::NEG_INFINITY);
+
+  for (x, y) in [(0.0, 0.0), (width, 0.0), (0.0, height), (width, height)] {
+    let (x, y) = transform.transform_point(x, y);
+
+    min_x = min_x.min(x);
+    min_y = min_y.min(y);
+    max_x = max_x.max(x);
+    max_y = max_y.max(y);
+  }
+
+  let placement = cull_bounds(
+    [
+      min_x.floor() as i32,
+      min_y.floor() as i32,
+      max_x.ceil() as i32,
+      max_y.ceil() as i32,
+    ],
+    Some(cull),
+  )?;
+
+  checked_area(placement.width, placement.height, 4)?;
+
+  let mut pixmap = Pixmap::new(placement.width, placement.height)?;
+
+  pixmap.draw_pixmap(
+    0,
+    0,
+    source,
+    &PixmapPaint {
+      quality: FilterQuality::Bilinear,
+      ..PixmapPaint::default()
+    },
+    (Affine::translation(-placement.left as f32, -placement.top as f32) * transform).into(),
+    None,
+  );
+
+  Some((
+    pixmap.data().iter().skip(3).step_by(4).copied().collect(),
+    placement,
+  ))
 }
 
 #[cfg(test)]

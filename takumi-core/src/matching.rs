@@ -16,7 +16,7 @@ use selectors::{
 use smallvec::SmallVec;
 
 use crate::{
-  layout::node::Node,
+  layout::node::{Node, NodeKind},
   style::{
     StyleDeclarationBlock,
     selector::{CssRule, Ident, PseudoClass, PseudoElement, SelectorImpl, StyleSheet},
@@ -184,6 +184,26 @@ impl<'a> ArenaElement<'a> {
       index,
     })
   }
+
+  /// The first element from `index` on, following `next` past text nodes, which selectors do
+  /// not count as siblings or children.
+  fn element_from(
+    &self,
+    mut index: Option<usize>,
+    next: impl Fn(&StyleNode<'_>) -> Option<usize>,
+  ) -> Option<Self> {
+    while let Some(current) = index {
+      let style_node = &self.tree.nodes[current];
+
+      if style_node.node.tag_name().is_some() || !matches!(style_node.node.kind, NodeKind::Text(_))
+      {
+        return self.at(Some(current));
+      }
+      index = next(style_node);
+    }
+
+    None
+  }
 }
 
 impl Element for ArenaElement<'_> {
@@ -210,15 +230,15 @@ impl Element for ArenaElement<'_> {
   }
 
   fn prev_sibling_element(&self) -> Option<Self> {
-    self.at(self.style_node().prev_sibling)
+    self.element_from(self.style_node().prev_sibling, |node| node.prev_sibling)
   }
 
   fn next_sibling_element(&self) -> Option<Self> {
-    self.at(self.style_node().next_sibling)
+    self.element_from(self.style_node().next_sibling, |node| node.next_sibling)
   }
 
   fn first_element_child(&self) -> Option<Self> {
-    self.at(self.style_node().first_child)
+    self.element_from(self.style_node().first_child, |node| node.next_sibling)
   }
 
   fn is_html_element_in_html_document(&self) -> bool {

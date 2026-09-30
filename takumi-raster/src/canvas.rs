@@ -20,7 +20,8 @@ use image::{
 };
 use mask::MaskStackEntry;
 pub(crate) use mask::{
-  CanvasViewport, MaskView, NodeMasks, attenuate_alpha_by_mask, intersect_alpha_masks, render_mask,
+  CanvasViewport, MaskView, NodeMasks, attenuate_alpha_by_mask, cull_bounds, intersect_alpha_masks,
+  render_mask,
 };
 pub(crate) use paint_source::{
   BilinearAxis, MaskCompositeColor, PaintSource, RowSource, SamplingFootprint,
@@ -41,7 +42,6 @@ use crate::{
   blend::*,
   error::Error,
   simd::Simd,
-  stacking_context::blend_pixmap_software,
   style::{Affine, BlendMode, Color, ImageScalingAlgorithm},
 };
 
@@ -248,7 +248,7 @@ impl Canvas {
       return;
     }
 
-    let isolated_image = replace(&mut self.image, image);
+    let mut isolated_image = replace(&mut self.image, image);
     self.restore_subcanvas_state(origin, constraint_mask_stack);
 
     // A fully opaque subcanvas lands whole-pixel over the parent, so it copies
@@ -267,23 +267,39 @@ impl Canvas {
       return;
     }
 
-    if let Some(blend_mode) = to_tiny_blend_mode(mode) {
-      let paint = PixmapPaint {
-        opacity,
-        blend_mode,
-        quality: TinyFilterQuality::Nearest,
-      };
-      self.image.draw_pixmap(
-        offset.x,
-        offset.y,
-        isolated_image.as_ref(),
-        &paint,
-        TinyTransform::identity(),
+    let Some(blend_mode) = to_tiny_blend_mode(mode) else {
+      let alpha = (opacity * f32::from(u8::MAX)).round() as u8;
+
+      for pixel in bytemuck::cast_slice_mut::<_, [u8; 4]>(isolated_image.data_mut()) {
+        *pixel = scale_premultiplied_pixel(*pixel, alpha);
+      }
+
+      blit_paint_source_translation(
+        &mut self.image.as_mut(),
+        PaintSource::Pixmap(isolated_image.as_ref()),
+        Point {
+          x: offset.x as f32,
+          y: offset.y as f32,
+        },
+        mode,
         None,
       );
-    } else {
-      blend_pixmap_software(&mut self.image, &isolated_image, mode, offset, opacity);
-    }
+      return;
+    };
+    let paint = PixmapPaint {
+      opacity,
+      blend_mode,
+      quality: TinyFilterQuality::Nearest,
+    };
+
+    self.image.draw_pixmap(
+      offset.x,
+      offset.y,
+      isolated_image.as_ref(),
+      &paint,
+      TinyTransform::identity(),
+      None,
+    );
   }
 
   pub(crate) fn has_no_constraint_mask(&self) -> bool {

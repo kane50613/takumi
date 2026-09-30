@@ -1,7 +1,7 @@
 mod test_utils;
 
 use takumi::prelude::{Length::*, *};
-use test_utils::{CONTEXT, TEST_IMAGES, create_test_viewport, run_texts};
+use test_utils::{CONTEXT, TEST_IMAGES, create_test_viewport, measure_with_css, run_texts};
 
 fn create_measure_viewport_with_dpr(device_pixel_ratio: f32) -> Viewport {
   Viewport::new((
@@ -2540,4 +2540,22 @@ fn test_measure_replaced_element_without_a_ratio_keeps_its_axes_independent() {
     assert_close(image.width, expected.0);
     assert_close(image.height, expected.1);
   }
+}
+
+#[test]
+fn an_absolute_box_shrinks_to_the_width_beside_its_inset() {
+  let root = Node::container([
+    Node::text("a line of text long enough to need the whole viewport").with_class_name("probe"),
+  ])
+  .with_class_name("root");
+  let result = measure_with_css(
+    root,
+    r#"
+      .root { display: block; position: relative; width: 400px; height: 200px; }
+      .probe { display: block; position: absolute; left: 300px; margin-left: 20px; font-size: 20px; }
+    "#,
+  );
+  let probe = &result.children[0];
+
+  assert!(probe.width <= 80.0, "{}", probe.width);
 }

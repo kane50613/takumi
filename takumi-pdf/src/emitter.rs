@@ -51,7 +51,7 @@ use crate::{
     mask::{Mask, MaskType},
     num::NormalizedF32,
     paint::{
-      Fill, FillRule, LineCap, LinearGradient as KrillaLinearGradient, Paint, Pattern,
+      Fill, FillRule, LineCap, LineJoin, LinearGradient as KrillaLinearGradient, Paint, Pattern,
       RadialGradient as KrillaRadialGradient, SpreadMethod, Stroke, StrokeDash, SweepGradient,
     },
     surface::Surface,
@@ -1187,9 +1187,9 @@ impl Emitter<'_> {
     };
     // The subtree root is a clone of `node`, so the box's own path is the
     // prefix that puts the subtree's nodes back on the document tree.
-    let mut box_path = Vec::new();
-    let tagged = self.tagged && node_path(&self.scene.root, node, &mut box_path);
-    let tag_prefix = self.tag_path(&box_path);
+    let box_path = self.tagged.then(|| self.path_of(node)).flatten();
+    let tagged = box_path.is_some();
+    let tag_prefix = self.tag_path(box_path.as_deref().unwrap_or_default());
     let mut emitter = Emitter {
       scene: &scene,
       document: self.document,
@@ -1223,10 +1223,15 @@ impl Emitter<'_> {
   /// Opens the region for a node the paint list never visited, so its content
   /// still reaches the structure tree.
   fn start_tagged_node(&self, node: &RenderNode, surface: &mut Surface) {
-    let mut path = Vec::new();
-    let found = node_path(&self.scene.root, node, &mut path);
+    self.start_node_region(node, self.path_of(node).as_deref(), surface);
+  }
 
-    self.start_node_region(node, found.then_some(path.as_slice()), surface);
+  /// The path of `node` on this emitter's tree, when it lies there.
+  fn path_of(&self, node: &RenderNode) -> Option<Vec<usize>> {
+    self
+      .scene
+      .root
+      .path_where(|candidate| ptr::eq(candidate, node))
   }
 
   /// The document-rooted path of a node this emitter reached at `path`.
@@ -1243,11 +1248,7 @@ impl Emitter<'_> {
   /// Tag target for a generated marker: its nearest `display: list-item` ancestor, whose `Lbl`
   /// holds the label.
   fn marker_tag_target(&self, owner: &RenderNode) -> Option<Vec<usize>> {
-    let mut owner_path = Vec::new();
-
-    if !node_path(&self.scene.root, owner, &mut owner_path) {
-      return None;
-    }
+    let owner_path = self.path_of(owner)?;
     let mut current = &self.scene.root;
     let mut length = owner_path.len();
 
@@ -1666,12 +1667,25 @@ impl PaintDevice for SurfaceDevice<'_, '_> {
   fn fill_shadow(&mut self, shape: &ShadowShape, shadow: &SizedShadow, transform: Affine) {
     let color = filtered(self.filter, shadow.color);
     let transform = Affine::translation(shadow.offset_x, shadow.offset_y) * transform;
+    let bands = Band::of(shadow.blur_radius);
+    // The bands' alphas add up to the blur's coverage for an opaque colour, so a translucent one
+    // applies its alpha once, over all of them.
+    let grouped = bands.len() > 1 && color[3] < u8::MAX;
+    let band_color = if grouped {
+      [color[0], color[1], color[2], u8::MAX]
+    } else {
+      color
+    };
 
-    for band in Band::of(shadow.blur_radius) {
+    if grouped {
+      self.begin_layer(f32::from(color[3]) / f32::from(u8::MAX));
+    }
+
+    for band in bands {
       let band_shape = shape.spread(band.spread).fill_shape();
       let fill = Fill {
         rule: krilla_fill_rule(band_shape.rule()),
-        ..fill_from_rgba(color, band.alpha)
+        ..fill_from_rgba(band_color, band.alpha)
       };
 
       self.draw(
@@ -1682,6 +1696,10 @@ impl PaintDevice for SurfaceDevice<'_, '_> {
           surface.draw_path(path);
         },
       );
+    }
+
+    if grouped {
+      self.end_layer();
     }
   }
 }
@@ -1704,7 +1722,8 @@ fn device_commands(shape: &FillShape, transform: Affine) -> Vec<PathCommand> {
 /// The PDF surface as a [`PaintDevice`] for one block's text: shapes draw as on any surface, and
 /// glyphs draw with text operators so the text stays extractable.
 ///
-/// Approximate: a blurred `text-shadow` draws sharp, since PDF has no blur operator.
+/// Approximate: a blurred `text-shadow` fades through the stepped bands of [`Band`], since PDF has
+/// no blur operator.
 struct TextDevice<'e, 's, 'a> {
   emitter: &'e Emitter<'e>,
   device: SurfaceDevice<'s, 'a>,
@@ -1717,6 +1736,36 @@ struct TextDevice<'e, 's, 'a> {
 
 impl TextDevice<'_, '_, '_> {
   /// `color` and `transform`, or the open shadow's colour and `transform` moved by its offset.
+  /// Runs `draw` once in `color` with no spread, or while a blurred shadow is open, once per shadow
+  /// [`Band`] with the stroke width that spreads it, inside a group of the band's opacity. The
+  /// bands draw `color` opaque inside one group of its alpha, since their alphas add up to the
+  /// blur's coverage for an opaque colour.
+  fn in_shadow_bands(
+    &mut self,
+    color: Color,
+    mut draw: impl FnMut(&mut SurfaceDevice<'_, '_>, Color, f32),
+  ) {
+    let Some(shadow) = self.shadow.filter(|shadow| shadow.blur_radius > 0.0) else {
+      return draw(&mut self.device, color, 0.0);
+    };
+    let alpha = color.0[3];
+    let opaque = Color([color.0[0], color.0[1], color.0[2], u8::MAX]);
+
+    if alpha < u8::MAX {
+      self
+        .device
+        .begin_layer(f32::from(alpha) / f32::from(u8::MAX));
+    }
+    for band in Band::of(shadow.blur_radius) {
+      self.device.begin_layer(band.alpha);
+      draw(&mut self.device, opaque, 2.0 * band.spread);
+      self.device.end_layer();
+    }
+    if alpha < u8::MAX {
+      self.device.end_layer();
+    }
+  }
+
   fn shadowed(&self, color: Color, transform: Affine) -> (Color, Affine) {
     match self.shadow {
       Some(shadow) => (
@@ -1754,15 +1803,38 @@ impl PaintDevice for TextDevice<'_, '_, '_> {
   fn fill_shape(&mut self, shape: &FillShape, color: Color, transform: Affine) {
     let (color, transform) = self.shadowed(color, transform);
 
-    self.device.fill_shape(shape, color, transform);
+    self.in_shadow_bands(color, |device, color, spread| {
+      device.fill_shape(shape, color, transform);
+
+      if spread > 0.0 {
+        device.stroke_shape(
+          shape,
+          &StrokeStyle {
+            color,
+            width: spread,
+            dash: None,
+            round_cap: false,
+          },
+          transform,
+        );
+      }
+    });
   }
 
   fn stroke_shape(&mut self, shape: &FillShape, stroke: &StrokeStyle, transform: Affine) {
     let (color, transform) = self.shadowed(stroke.color, transform);
 
-    self
-      .device
-      .stroke_shape(shape, &StrokeStyle { color, ..*stroke }, transform);
+    self.in_shadow_bands(color, |device, color, spread| {
+      device.stroke_shape(
+        shape,
+        &StrokeStyle {
+          color,
+          width: stroke.width + spread,
+          ..*stroke
+        },
+        transform,
+      );
+    });
   }
 
   fn push_clip(&mut self, shape: &FillShape, transform: Affine) {
@@ -1847,16 +1919,52 @@ impl GlyphDevice for TextDevice<'_, '_, '_> {
       }
     }
 
-    surface.set_fill(Some(paint));
-    surface.set_stroke(stroke);
-    surface.draw_glyphs(
-      origin,
-      &glyphs,
-      font,
-      text,
-      shaped.font_size,
-      shadow_color.is_some(),
-    );
+    match self.shadow.filter(|shadow| shadow.blur_radius > 0.0) {
+      // Each band spreads the glyphs by stroking them, inside a group of the band's opacity so
+      // the fill and stroke, and neighbouring glyphs, don't stack where they overlap.
+      Some(shadow) => {
+        // The shadow colour's alpha applies once, over bands drawn opaque.
+        let translucent = paint.opacity != NormalizedF32::ONE;
+
+        if translucent {
+          surface.push_opacity(paint.opacity);
+        }
+
+        for band in Band::of(shadow.blur_radius) {
+          let width = 2.0 * band.spread + stroke.as_ref().map_or(0.0, |stroke| stroke.width);
+
+          surface.push_opacity(normalized(band.alpha));
+          surface.set_fill(Some(Fill {
+            opacity: NormalizedF32::ONE,
+            ..paint.clone()
+          }));
+          surface.set_stroke((width > 0.0).then(|| Stroke {
+            paint: paint.paint.clone(),
+            opacity: NormalizedF32::ONE,
+            width,
+            line_join: LineJoin::Round,
+            ..Stroke::default()
+          }));
+          surface.draw_glyphs(origin, &glyphs, font.clone(), text, shaped.font_size, true);
+          surface.pop();
+        }
+        if translucent {
+          surface.pop();
+        }
+      }
+      None => {
+        surface.set_fill(Some(paint));
+        surface.set_stroke(stroke);
+        surface.draw_glyphs(
+          origin,
+          &glyphs,
+          font,
+          text,
+          shaped.font_size,
+          shadow_color.is_some(),
+        );
+      }
+    }
 
     if oblique {
       surface.pop();
@@ -1881,22 +1989,6 @@ fn image_label(src: &ImageSourceInput) -> &str {
     ImageSourceInput::Url(url) => url,
     _ => "inline image bytes",
   }
-}
-
-/// Fills `path` with the child indices leading from `root` to `target`, matched by identity.
-fn node_path(root: &RenderNode, target: &RenderNode, path: &mut Vec<usize>) -> bool {
-  if ptr::eq(root, target) {
-    return true;
-  }
-  for (index, child) in root.children.iter().flatten().enumerate() {
-    path.push(index);
-
-    if node_path(child, target, path) {
-      return true;
-    }
-    path.pop();
-  }
-  false
 }
 
 /// Whether the node is an image explicitly marked decorative (`alt=""`), so its content is emitted

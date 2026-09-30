@@ -42,7 +42,7 @@ pub use self::{
   decorations::DecorationRect,
   items::{DecorationLink, InlineBoxItem, InlineItem, ProcessedInlineSpan, collect_inline_items},
   metrics::VisualInlineBox,
-  outline::{InlineOutlineRect, OutlineIsland},
+  outline::{InlineOutline, InlineOutlineRect, OutlineIsland},
   runs::{
     InlineRunLayout, MeasuredInlineBox, MeasuredInlineRun, PositionedGlyph, PositionedInlineRun,
     RunMetrics, ShapedRun,
@@ -51,8 +51,9 @@ pub use self::{
 use self::{
   breaking::distribute_trailing_whitespace,
   metrics::{
-    ParentFontMetrics, ResolvedInlineLineState, ResolvedLineMetrics, resolve_inline_line_metrics,
-    resolve_inline_line_states, resolve_visual_inline_box, text_line_box_contribution,
+    ParentFontMetrics, ResolvedInlineLineState, ResolvedLineMetrics, Strut,
+    resolve_inline_line_metrics, resolve_inline_line_states, resolve_visual_inline_box,
+    text_line_box_contribution,
   },
   runs::measured_run_text,
   text_fit::{
@@ -178,6 +179,9 @@ pub struct BuiltInlineLayout<'c> {
   pub line_scales: Vec<f32>,
   /// Whether a height or line limit may have dropped lines.
   pub(crate) clamped: bool,
+  /// The root inline box's strut, which every line holding content grows to, or `None` when the
+  /// root has no primary font.
+  pub(crate) strut: Option<Strut>,
 }
 
 impl BuiltInlineLayout<'_> {
@@ -199,6 +203,7 @@ impl BuiltInlineLayout<'_> {
       &self.spans,
       self.parent_font_metrics(),
       &self.line_scales,
+      self.strut,
     )
   }
 
@@ -427,25 +432,24 @@ pub struct InlineBrush {
 }
 
 impl InlineBrush {
-  /// The run's line-box contribution. Parley's run metrics can carry a
-  /// neighboring span's style at run boundaries, so the brush line height wins
-  /// when it is set. Under `line-height: normal` a fallback-font run grows the
-  /// line to its own rounded height, like Blink's
-  /// `InlineBoxState::AccumulateUsedFonts`.
+  /// The run's line-box contribution from its font's metrics. An explicit `line-height` comes
+  /// off the brush, since parley's run metrics can carry a neighbouring span's style at run
+  /// boundaries. Under `line-height: normal` each font a run uses grows the line to its own leaded
+  /// box, as Blink's `InlineBoxState::AccumulateUsedFonts` does.
   fn line_box_contribution(
     &self,
     metrics_line_height: f32,
     ascent: f32,
     descent: f32,
+    line_gap: f32,
   ) -> (f32, f32) {
-    let line_height = self.line_height_px.unwrap_or(metrics_line_height);
-    let (above, below) = text_line_box_contribution(line_height, ascent, descent);
-
-    if self.line_height_is_normal {
-      (above.max(ascent.round()), below.max(descent.round()))
+    let line_height = if self.line_height_is_normal {
+      ascent.round() + descent.round() + line_gap.round()
     } else {
-      (above, below)
-    }
+      self.line_height_px.unwrap_or(metrics_line_height)
+    };
+
+    text_line_box_contribution(line_height, ascent, descent)
   }
 }
 
@@ -696,6 +700,23 @@ fn build_inline_layout_tree<'c>(
   trim_trailing_space(&mut spans);
 
   let (layout, text) = shape_spans(context, &spans, style, shape_cacheable);
+  let strut = context
+    .primary_font_metrics(&context.style, context.sizing.font_size)
+    .map(|metrics| {
+      let brush = text_style_with_span_id(style, None).brush;
+      let (above, below) = brush.line_box_contribution(
+        metrics.line_spacing(),
+        metrics.ascent,
+        metrics.descent,
+        metrics.line_gap,
+      );
+
+      Strut {
+        above,
+        below,
+        scales_with_text_fit: brush.line_height_scales_with_text_fit,
+      }
+    });
 
   BuiltInlineLayout {
     layout,
@@ -704,6 +725,7 @@ fn build_inline_layout_tree<'c>(
     positioned_floats: Vec::new(),
     line_scales: Vec::new(),
     clamped: false,
+    strut,
   }
 }
 
@@ -1228,13 +1250,12 @@ mod tests {
   use crate::{
     Fonts,
     context::RenderContext,
-    geometry::{Point, Rect},
+    geometry::{PathCommand, Point, Rect},
     layout::{node::Node, tree::RenderNode},
     resources::font::{FontOverride, FontResource, GenericFamily},
-    style::Affine,
     style::{
-      Color, ColorInput, Display, FontSize, Length, SizingContext, Style, StyleDeclaration,
-      WhiteSpace,
+      Affine, BorderStyle, Color, ColorInput, Display, FontSize, Length, Sides, SizingContext,
+      SpacePair, Style, StyleDeclaration, WhiteSpace,
     },
     viewport::Viewport,
   };
@@ -1299,7 +1320,7 @@ mod tests {
       line_height_px: Some(0.0),
       ..InlineBrush::default()
     };
-    let (above, below) = brush.line_box_contribution(20.0, 12.0, 4.0);
+    let (above, below) = brush.line_box_contribution(20.0, 12.0, 4.0, 0.0);
 
     assert_eq!((above, below), (4.0, -4.0));
   }
@@ -1743,43 +1764,71 @@ mod tests {
     );
   }
 
-  #[test]
-  fn outline_islands_join_only_the_lines_that_meet() {
-    let rect = |line_index: usize, x: f32, y: f32| InlineOutlineRect {
-      span_id: 0,
+  fn outline_rect(
+    owner: usize,
+    line_index: usize,
+    x: f32,
+    y: f32,
+    width: f32,
+  ) -> InlineOutlineRect {
+    InlineOutlineRect {
+      owner,
       line_index,
       x,
       y,
-      width: 10.0,
+      width,
       height: 10.0,
-    };
-    // Two rects share line 0; line 1 meets the first, line 2 continues it, and line 4 stands
-    // apart.
-    let islands = OutlineIsland::of(
-      vec![
-        rect(0, 0.0, 0.0),
-        rect(0, 100.0, 0.0),
-        rect(1, 0.0, 10.0),
-        rect(2, 0.0, 20.0),
-        rect(4, 0.0, 60.0),
-      ],
-      |_| 0.0,
-    );
+      radius: Sides::default(),
+      outline: InlineOutline {
+        width: 0.0,
+        offset: 0.0,
+        color: Color::black(),
+        style: BorderStyle::Solid,
+      },
+      opacity: 1.0,
+    }
+  }
+
+  #[test]
+  fn outline_islands_join_only_the_lines_that_meet() {
+    // The first element's lines 0 to 2 touch and line 4 stands apart; the second has one line.
+    let islands = OutlineIsland::of(&[
+      outline_rect(0, 0, 0.0, 0.0, 10.0),
+      outline_rect(0, 1, 0.0, 10.0, 10.0),
+      outline_rect(0, 2, 0.0, 20.0, 10.0),
+      outline_rect(0, 4, 0.0, 60.0, 10.0),
+      outline_rect(1, 4, 40.0, 60.0, 10.0),
+    ]);
 
     assert_eq!(islands.len(), 3);
-    assert!(islands.iter().all(|island| island.lone_rect().is_none()));
+    assert_eq!(
+      islands
+        .iter()
+        .map(|island| island.lone_rect().is_some())
+        .collect::<Vec<_>>(),
+      [false, false, true]
+    );
+  }
+
+  #[test]
+  fn equal_width_lines_round_to_one_rectangle() {
+    let rects: Vec<InlineOutlineRect> = (0..50)
+      .map(|line| outline_rect(0, line, 0.0, line as f32 * 10.0, 40.0))
+      .collect();
+    let island = OutlineIsland::of(&rects).remove(0);
+    let radius = Sides([SpacePair::from_single(4.0); 4]);
+    let arcs = island
+      .rounded_contour(0.0, radius, radius)
+      .iter()
+      .filter(|command| matches!(command, PathCommand::CubicTo(..)))
+      .count();
+
+    assert_eq!(arcs, 4);
   }
 
   #[test]
   fn outline_rects_a_layout_unit_apart_touch() {
-    let rect = |x: f32, width: f32| InlineOutlineRect {
-      span_id: 0,
-      line_index: 0,
-      x,
-      y: 0.0,
-      width,
-      height: 10.0,
-    };
+    let rect = |x: f32, width: f32| outline_rect(0, 0, x, 0.0, width);
 
     assert!(rect(0.0, 10.0).meets(rect(10.01, 10.0), 0.0));
     assert!(!rect(0.0, 10.0).meets(rect(10.1, 10.0), 0.0));
