@@ -46,6 +46,16 @@ macro_rules! define_inherited_default {
   };
 }
 
+/// Whether a longhand declared `where inherit = true` inherits.
+macro_rules! longhand_inherits {
+  ($inherit:tt) => {
+    true
+  };
+  () => {
+    false
+  };
+}
+
 /// What an anonymous box takes from the box it stands in for: inherited
 /// properties, plus the ones flagged `anonymous` that apply to that box's own
 /// content but are read from the anonymous box.
@@ -289,6 +299,12 @@ macro_rules! define_style {
         const SNAKE_NAMES: [&'static str; Self::COUNT] = [
           $(stringify!($longhand),)*
           $(stringify!($transient),)*
+        ];
+
+        /// Whether each longhand inherits, which decides what `unset` resets it to.
+        const INHERITED: [bool; Self::COUNT] = [
+          $(longhand_inherits!($($longhand_inherit)?),)*
+          $({ let _ = stringify!($transient); false },)*
         ];
 
         /// The property's CSS name, e.g. `-webkit-text-fill-color`.
@@ -805,6 +821,22 @@ macro_rules! define_style {
         }
       }
 
+      thread_local! {
+        /// Every longhand at its initial value, which `initial` and `unset` copy from.
+        static INITIAL_STYLE: ComputedStyle = ComputedStyle::default();
+      }
+
+      impl ComputedStyle {
+        /// Copies `property`'s value from `source`; a logical-axis longhand has no field of its
+        /// own, so it copies nothing.
+        fn copy_longhand(&mut self, property: LonghandId, source: &Self) {
+          match property {
+            $(LonghandId::[<$longhand:camel>] => self.$longhand.clone_from(&source.$longhand),)*
+            $(LonghandId::[<$transient:camel>] => {})*
+          }
+        }
+      }
+
       /// A single specified declaration stored in a declaration block.
       #[allow(private_interfaces)]
       #[derive(Debug, Clone, PartialEq)]
@@ -996,15 +1028,6 @@ macro_rules! define_style {
             Self::CssWideKeyword(property, keyword) => {
               match property {
                 $(
-                  LonghandId::[<$longhand:camel>] => {
-                    style.$longhand = match keyword {
-                      CssWideKeyword::Initial => define_style!(@default $($longhand_default)?),
-                      CssWideKeyword::Inherit => parent.$longhand.to_owned(),
-                      CssWideKeyword::Unset => define_inherited_default!(parent.$longhand, define_style!(@default $($longhand_default)?) $(, $longhand_inherit)?),
-                    };
-                  }
-                )*
-                $(
                   LonghandId::[<$transient:camel>] => {
                     let target = if is_rtl { &mut style.$transient_rtl } else { &mut style.$transient_ltr };
                     *target = match keyword {
@@ -1019,6 +1042,19 @@ macro_rules! define_style {
                     };
                   }
                 )*
+                _ => {
+                  let inherits = match keyword {
+                    CssWideKeyword::Initial => false,
+                    CssWideKeyword::Inherit => true,
+                    CssWideKeyword::Unset => LonghandId::INHERITED[property.index()],
+                  };
+
+                  if inherits {
+                    style.copy_longhand(property, parent);
+                  } else {
+                    INITIAL_STYLE.with(|initial| style.copy_longhand(property, initial));
+                  }
+                }
               }
             }
             Self::CustomProperty(name, value) => {
@@ -1044,16 +1080,12 @@ macro_rules! define_style {
             Self::CssWideKeyword(property, keyword) => match keyword {
               CssWideKeyword::Initial => match property {
                 $(
-                  LonghandId::[<$longhand:camel>] => {
-                    style.$longhand = define_style!(@default $($longhand_default)?);
-                  }
-                )*
-                $(
                   LonghandId::[<$transient:camel>] => {
                     if is_rtl { style.$transient_rtl = define_style!(@default $($transient_default)?) }
                     else { style.$transient_ltr = define_style!(@default $($transient_default)?) }
                   }
                 )*
+                _ => INITIAL_STYLE.with(|initial| style.copy_longhand(*property, initial)),
               },
               CssWideKeyword::Inherit | CssWideKeyword::Unset => {}
             },
