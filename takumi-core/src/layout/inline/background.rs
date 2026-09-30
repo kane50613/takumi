@@ -3,6 +3,7 @@
 use crate::{
   geometry::{ComputedLayout, PathCommand, Point, Rect, Size},
   layout::{border::BorderProperties, corner_shape::KAPPA, tree::RenderNode},
+  sort_key::sort_by_key,
   style::{BackgroundClip, BoxDecorationBreak, Color, Direction, Sides, SpacePair},
 };
 use std::{collections::HashMap, rc::Rc};
@@ -205,7 +206,7 @@ impl<'c> DecorationAccumulator<'c> {
       range.1 = range.1.max(*line_index);
     }
 
-    keys.sort_unstable();
+    sort_by_key(&mut keys, |&key| key);
 
     keys
       .into_iter()

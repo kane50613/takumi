@@ -17,6 +17,7 @@ use smallvec::SmallVec;
 
 use crate::{
   layout::node::{Node, NodeKind},
+  sort_key::sort_by_key,
   style::{
     StyleDeclarationBlock,
     selector::{CssRule, Ident, PseudoClass, PseudoElement, SelectorImpl, StyleSheet},
@@ -544,7 +545,7 @@ impl RuleIndex {
       out.extend_from_slice(rules);
     }
 
-    out.sort_unstable();
+    sort_by_key(out, |&index| index);
     out.dedup();
   }
 }
@@ -732,7 +733,7 @@ fn finalize_bucket<'a>(
   layer_count: usize,
   matched: &mut MatchedDeclarationsView<'a>,
 ) {
-  rules.sort_unstable_by_key(|rule| {
+  sort_by_key(rules, |rule| {
     (
       rule.important,
       rule.layer_order,

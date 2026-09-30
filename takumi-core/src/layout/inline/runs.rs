@@ -11,6 +11,7 @@ use crate::{
     },
     glyph::{ResolvedColorLayer, ResolvedGlyph, ResolvedOutlineGlyph},
   },
+  sort_key::sort_by_key,
   style::{Affine, Color, Direction},
 };
 use parley::{GlyphRun, fontique::Blob};
@@ -511,7 +512,7 @@ impl<'c> BuiltInlineLayout<'c> {
     }
 
     let mut inline_boxes: Vec<_> = positioned_inline_boxes.into_values().collect();
-    inline_boxes.sort_unstable_by_key(|inline_box| inline_box.id);
+    sort_by_key(&mut inline_boxes, |inline_box| inline_box.id);
 
     let (background_fragments, outline_rects) = decoration_coverage.into_fragments();
 

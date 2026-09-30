@@ -9,6 +9,7 @@ use smallvec::SmallVec;
 use crate::{
   geometry::{PathCommand, Point},
   resources::glyph::ResolvedOutlineGlyph,
+  sort_key::sort_by_key,
 };
 
 /// Segments a curve is flattened into, whose error stays under the half pixel Chromium discards.
@@ -261,7 +262,7 @@ fn filled_at(edges: &[(Point<f32>, Point<f32>)], y: f32) -> Spans {
 
     crossings.push((a.x + (b.x - a.x) * (y - a.y) / (b.y - a.y), winding));
   }
-  crossings.sort_by(|a, b| a.0.total_cmp(&b.0));
+  sort_by_key(&mut crossings, |crossing| crossing.0);
 
   let mut spans = Spans::new();
   let mut winding = 0;
@@ -336,7 +337,7 @@ fn merge(mut spans: Spans) -> Spans {
   if spans.len() < 2 {
     return spans;
   }
-  spans.sort_by(|a, b| a.0.total_cmp(&b.0));
+  sort_by_key(&mut spans, |span| span.0);
 
   let mut merged = Spans::new();
 

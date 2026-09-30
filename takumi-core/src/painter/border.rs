@@ -15,6 +15,7 @@ use crate::{
     contoured_rect::{Corner, CornerInfo, aligned_inset_corners, side_clips_from_corners},
     decoration::{ClipBox, ContourOrigin},
   },
+  sort_key::sort_by_key,
   style::{Affine, BorderStyle, Color, FillRule, Sides, SpacePair},
 };
 
@@ -326,7 +327,7 @@ impl BorderShape {
       device.push_clip_out(&self.inner_rrect(), at);
     }
 
-    sides.sort_by_key(|side| {
+    sort_by_key(&mut sides, |side| {
       let style = match side.style {
         BorderStyle::None | BorderStyle::Hidden => 0,
         BorderStyle::Dotted | BorderStyle::Dashed | BorderStyle::Double => 1,

@@ -23,6 +23,7 @@ use crate::{
   paint_chunk::PaintChunk,
   paint_property::{ContainerContents, NodeProperties, PropertyState, PropertyTrees},
   shadow::SizedShadow,
+  sort_key::sort_by_key,
   style::{Affine, BlurType, ComputedStyle, Display, Float},
   viewport::Viewport,
 };
@@ -159,8 +160,8 @@ impl StackingBuckets {
 
   /// Orders the z-indexed buckets; the others are pushed in tree order already.
   fn sort(&mut self) {
-    self.negative.sort_unstable_by_key(PaintItem::z_order);
-    self.positive.sort_unstable_by_key(PaintItem::z_order);
+    sort_by_key(&mut self.negative, PaintItem::z_order);
+    sort_by_key(&mut self.positive, PaintItem::z_order);
   }
 
   fn in_paint_order(&self) -> [&[PaintItem]; 5] {

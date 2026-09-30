@@ -42,6 +42,7 @@ use crate::{
     glyph::{BOLD_THRESHOLD, GlyphResolveContext, ResolvedGlyph, synthesis_embolden_strength},
     glyph_cache::resolved_glyph,
   },
+  sort_key::sort_by_key,
   style::{FontFamily, FontStyle as CssFontStyle},
 };
 
@@ -607,8 +608,9 @@ impl Fonts {
       .register_fonts(blob.clone(), info_override);
 
     // fontique returns families in hash order; keep a multi-family file in face order.
-    registered_fonts
-      .sort_by_key(|(_, faces)| faces.iter().map(FontInfo::index).min().unwrap_or(u32::MAX));
+    sort_by_key(&mut registered_fonts, |(_, faces)| {
+      faces.iter().map(FontInfo::index).min().unwrap_or(u32::MAX)
+    });
 
     let mut families = Vec::with_capacity(registered_fonts.len());
     for (family, faces) in registered_fonts {

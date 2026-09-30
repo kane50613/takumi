@@ -1,9 +1,10 @@
-use std::{borrow::Cow, cmp::Ordering};
+use std::borrow::Cow;
 
 use serde::Deserialize;
 use typed_builder::TypedBuilder;
 
 use crate::{
+  sort_key::sort_by_key,
   style::{
     StyleDeclarationBlock,
     selector::{MediaQueryList, StyleSheet},
@@ -407,12 +408,7 @@ fn resolve_keyframes(keyframes: &KeyframesRule, base_style: &ComputedStyle) -> R
     })
     .collect::<Vec<_>>();
 
-  points.sort_by(|lhs, rhs| {
-    lhs
-      .offset
-      .partial_cmp(&rhs.offset)
-      .unwrap_or(Ordering::Equal)
-  });
+  sort_by_key(&mut points, |point| point.offset);
 
   let mut styles: Vec<ResolvedKeyframeStyle> = Vec::with_capacity(points.len());
   let mut merged_points: Vec<ResolvedKeyframePoint> = Vec::with_capacity(points.len());

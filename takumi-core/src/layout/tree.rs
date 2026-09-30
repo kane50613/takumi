@@ -33,6 +33,7 @@ use crate::{
   },
   matching::{MatchedDeclarationsView, NodeMatchedDeclarations, match_stylesheets_view},
   resources::font::PrimaryFontMetrics,
+  sort_key::sort_by_key,
   style::{
     Affine, BackgroundImage, BackgroundImages, Color, ComputedStyle, ContentItem, ContentValue,
     Display, Float, GridPlacement, Length, LineHeight, ListStylePosition, Position, SizingContext,
@@ -931,7 +932,7 @@ fn sort_children_by_order(
     return;
   }
 
-  children.sort_by_key(|&child_id| child_order(child_id));
+  sort_by_key(children, |&child_id| child_order(child_id));
 }
 
 impl TraversePartialTree for LayoutTree<'_> {

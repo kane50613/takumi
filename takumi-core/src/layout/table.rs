@@ -27,6 +27,7 @@ use crate::{
     table_columns::{CellConstraint, ColspanCell, TableColumns},
     tree::{LayoutResults, NodeOrigin, RenderNode, TablePart},
   },
+  sort_key::sort_by_key,
   style::{
     BorderCollapse, BorderStyle, BoxSizing, CaptionSide, ColorInput, ComputedStyle, Display,
     FlexDirection, FromCssStr, Gap, GridPlacement, GridPlacementSpan, GridTemplateComponents,
@@ -132,7 +133,7 @@ impl TableSlots {
       }
     }
 
-    groups.sort_unstable_by_key(|(order, index, _)| (*order, *index));
+    sort_by_key(&mut groups, |(order, index, _)| (*order, *index));
 
     let count = |wanted: u8| {
       groups
