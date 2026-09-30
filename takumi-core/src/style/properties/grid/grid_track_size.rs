@@ -4,8 +4,8 @@ use cssparser::{Parser, match_ignore_ascii_case};
 use taffy::{MaxTrackSizingFunction, MinTrackSizingFunction, TrackSizingFunction};
 
 use crate::style::{
-  CssDescriptorKind, CssSyntaxKind, CssToken, FromCss, GridLength, GridMinMaxSize, Length,
-  MakeComputed, ParseResult, SizingContext, ToCss, tw::TailwindPropertyParser,
+  FromCss, GridLength, GridMinMaxSize, Length, MakeComputed, ParseResult, SizingContext, ToCss,
+  tw::TailwindPropertyParser,
 };
 
 /// A list of `GridTrackSize`
@@ -21,7 +21,7 @@ impl<'i> FromCss<'i> for GridTrackSizes {
     Ok(components)
   }
 
-  const VALID_TOKENS: &'static [CssToken] = GridTrackSize::VALID_TOKENS;
+  const VALID_TOKENS: &'static [&'static str] = GridTrackSize::VALID_TOKENS;
 }
 
 /// Represents a grid track size
@@ -82,10 +82,7 @@ impl<'i> FromCss<'i> for GridTrackSize {
     Ok(GridTrackSize::Fixed(length))
   }
 
-  const VALID_TOKENS: &'static [CssToken] = &[
-    CssToken::Descriptor(CssDescriptorKind::MinmaxFn),
-    CssToken::Syntax(CssSyntaxKind::Length),
-  ];
+  const VALID_TOKENS: &'static [&'static str] = &["<minmax()>", "<length>"];
 }
 
 impl MakeComputed for GridTrackSize {

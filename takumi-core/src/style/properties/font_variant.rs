@@ -3,8 +3,8 @@ use std::fmt;
 use cssparser::{Parser, Token, match_ignore_ascii_case};
 
 use crate::style::{
-  Animatable, CssToken, FontFeature, FromCss, MakeComputed, ParseResult, Tag, ToCss, impl_css_enum,
-  unexpected_token, write_keywords,
+  Animatable, FontFeature, FromCss, MakeComputed, ParseResult, Tag, ToCss, impl_css_enum,
+  merge_token_lists, merged_token_len, unexpected_token, write_keywords,
 };
 
 /// Tri-state for one `font-variant-ligatures` group.
@@ -79,17 +79,17 @@ impl<'i> FromCss<'i> for FontVariantLigatures {
     parse_keyword_set(input, Self::set_keyword)
   }
 
-  const VALID_TOKENS: &'static [CssToken] = &[
-    CssToken::Keyword("normal"),
-    CssToken::Keyword("none"),
-    CssToken::Keyword("common-ligatures"),
-    CssToken::Keyword("no-common-ligatures"),
-    CssToken::Keyword("discretionary-ligatures"),
-    CssToken::Keyword("no-discretionary-ligatures"),
-    CssToken::Keyword("historical-ligatures"),
-    CssToken::Keyword("no-historical-ligatures"),
-    CssToken::Keyword("contextual"),
-    CssToken::Keyword("no-contextual"),
+  const VALID_TOKENS: &'static [&'static str] = &[
+    "normal",
+    "none",
+    "common-ligatures",
+    "no-common-ligatures",
+    "discretionary-ligatures",
+    "no-discretionary-ligatures",
+    "historical-ligatures",
+    "no-historical-ligatures",
+    "contextual",
+    "no-contextual",
   ];
 }
 
@@ -203,16 +203,16 @@ impl<'i> FromCss<'i> for FontVariantNumeric {
     parse_keyword_set(input, Self::set_keyword)
   }
 
-  const VALID_TOKENS: &'static [CssToken] = &[
-    CssToken::Keyword("normal"),
-    CssToken::Keyword("lining-nums"),
-    CssToken::Keyword("oldstyle-nums"),
-    CssToken::Keyword("proportional-nums"),
-    CssToken::Keyword("tabular-nums"),
-    CssToken::Keyword("diagonal-fractions"),
-    CssToken::Keyword("stacked-fractions"),
-    CssToken::Keyword("ordinal"),
-    CssToken::Keyword("slashed-zero"),
+  const VALID_TOKENS: &'static [&'static str] = &[
+    "normal",
+    "lining-nums",
+    "oldstyle-nums",
+    "proportional-nums",
+    "tabular-nums",
+    "diagonal-fractions",
+    "stacked-fractions",
+    "ordinal",
+    "slashed-zero",
   ];
 }
 
@@ -319,17 +319,17 @@ impl<'i> FromCss<'i> for FontVariantEastAsian {
     parse_keyword_set(input, Self::set_keyword)
   }
 
-  const VALID_TOKENS: &'static [CssToken] = &[
-    CssToken::Keyword("normal"),
-    CssToken::Keyword("jis78"),
-    CssToken::Keyword("jis83"),
-    CssToken::Keyword("jis90"),
-    CssToken::Keyword("jis04"),
-    CssToken::Keyword("simplified"),
-    CssToken::Keyword("traditional"),
-    CssToken::Keyword("full-width"),
-    CssToken::Keyword("proportional-width"),
-    CssToken::Keyword("ruby"),
+  const VALID_TOKENS: &'static [&'static str] = &[
+    "normal",
+    "jis78",
+    "jis83",
+    "jis90",
+    "jis04",
+    "simplified",
+    "traditional",
+    "full-width",
+    "proportional-width",
+    "ruby",
   ];
 }
 
@@ -505,10 +505,10 @@ impl<'i> FromCss<'i> for FontVariant {
     Ok(value)
   }
 
-  const VALID_TOKENS: &'static [CssToken] = &VARIANT_TOKENS;
+  const VALID_TOKENS: &'static [&'static str] = &VARIANT_TOKENS;
 }
 
-const VARIANT_TOKEN_LISTS: &[&[CssToken]] = &[
+const VARIANT_TOKEN_LISTS: &[&[&str]] = &[
   FontVariantLigatures::VALID_TOKENS,
   FontVariantNumeric::VALID_TOKENS,
   FontVariantEastAsian::VALID_TOKENS,
@@ -516,8 +516,8 @@ const VARIANT_TOKEN_LISTS: &[&[CssToken]] = &[
   FontVariantPosition::VALID_TOKENS,
 ];
 
-const VARIANT_TOKENS: [CssToken; CssToken::merged_len(VARIANT_TOKEN_LISTS)] =
-  CssToken::merge_lists(VARIANT_TOKEN_LISTS);
+const VARIANT_TOKENS: [&str; merged_token_len(VARIANT_TOKEN_LISTS)] =
+  merge_token_lists(VARIANT_TOKEN_LISTS);
 
 #[cfg(test)]
 mod tests {

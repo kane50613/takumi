@@ -2,9 +2,7 @@ use std::{fmt, sync::Arc};
 
 use cssparser::{Parser, Token};
 
-use crate::style::{
-  CssSyntaxKind, CssToken, FromCss, MakeComputed, ParseResult, ToCss, unexpected_token,
-};
+use crate::style::{FromCss, MakeComputed, ParseResult, ToCss, unexpected_token};
 
 /// A 4-byte OpenType tag (for example `wght`, `liga`).
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
@@ -117,10 +115,7 @@ impl<'i> FromCss<'i> for FontFeatureSettings {
     Ok(list.into())
   }
 
-  const VALID_TOKENS: &'static [CssToken] = &[
-    CssToken::Keyword("normal"),
-    CssToken::Syntax(CssSyntaxKind::String),
-  ];
+  const VALID_TOKENS: &'static [&'static str] = &["normal", "<string>"];
 }
 
 impl ToCss for FontFeature {

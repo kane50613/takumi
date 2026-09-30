@@ -4,9 +4,8 @@ use cssparser::{Parser, Token, match_ignore_ascii_case};
 
 use crate::context::RenderContext;
 use crate::style::{
-  Animatable, Color, CssSyntaxKind, CssToken, FromCss, Length, ListInterpolationStrategy,
-  MakeComputed, ParseResult, SizingContext, SpacePair, ToCss, parse_comma_list,
-  tw::TailwindPropertyParser, unexpected_token,
+  Animatable, Color, FromCss, Length, ListInterpolationStrategy, MakeComputed, ParseResult,
+  SizingContext, SpacePair, ToCss, parse_comma_list, tw::TailwindPropertyParser, unexpected_token,
 };
 
 /// Horizontal keywords for `background-position`.
@@ -224,7 +223,7 @@ impl<'i> FromCss<'i> for PositionValue {
     Ok(PositionValue(SpacePair::from_pair(x, y)))
   }
 
-  const VALID_TOKENS: &'static [CssToken] = PositionComponent::VALID_TOKENS;
+  const VALID_TOKENS: &'static [&'static str] = PositionComponent::VALID_TOKENS;
 }
 
 impl<'i> FromCss<'i> for PositionComponent {
@@ -250,14 +249,8 @@ impl<'i> FromCss<'i> for PositionComponent {
     }
   }
 
-  const VALID_TOKENS: &'static [CssToken] = &[
-    CssToken::Keyword("left"),
-    CssToken::Keyword("center"),
-    CssToken::Keyword("right"),
-    CssToken::Keyword("top"),
-    CssToken::Keyword("bottom"),
-    CssToken::Syntax(CssSyntaxKind::Length),
-  ];
+  const VALID_TOKENS: &'static [&'static str] =
+    &["left", "center", "right", "top", "bottom", "<length>"];
 }
 
 /// An ordered list of [`PositionValue`] values.
@@ -268,7 +261,7 @@ impl<'i> FromCss<'i> for PositionValues {
     parse_comma_list(input, PositionValue::from_css)
   }
 
-  const VALID_TOKENS: &'static [CssToken] = PositionValue::VALID_TOKENS;
+  const VALID_TOKENS: &'static [&'static str] = PositionValue::VALID_TOKENS;
 }
 
 impl ToCss for PositionKeywordX {

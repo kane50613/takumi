@@ -1,8 +1,8 @@
 use cssparser::Parser;
 
 use crate::style::{
-  CssSyntaxKind, CssToken, FromCss, GridPlacement, GridPlacementSpan, MakeComputed, ParseResult,
-  SizingContext, tw::TailwindPropertyParser,
+  FromCss, GridPlacement, GridPlacementSpan, MakeComputed, ParseResult, SizingContext,
+  tw::TailwindPropertyParser,
 };
 
 /// Represents a grid line placement
@@ -52,11 +52,7 @@ impl<'i> FromCss<'i> for GridLine {
     Ok(GridLine { start, end })
   }
 
-  const VALID_TOKENS: &'static [CssToken] = &[
-    CssToken::Keyword("span"),
-    CssToken::Syntax(CssSyntaxKind::Number),
-    CssToken::Syntax(CssSyntaxKind::Ident),
-  ];
+  const VALID_TOKENS: &'static [&'static str] = &["span", "<number>", "<ident>"];
 }
 
 impl TailwindPropertyParser for GridLine {

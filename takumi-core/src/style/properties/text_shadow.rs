@@ -5,9 +5,9 @@ use typed_builder::TypedBuilder;
 
 use super::box_shadow::parse_offsets_blur;
 use crate::style::{
-  Animatable, Color, ColorInput, CssSyntaxKind, CssToken, FromCss, Length,
-  ListInterpolationStrategy, MakeComputed, ParseResult, SizingContext, ToCss,
-  impl_comma_list_from_css, next_is_comma, tw::TailwindPropertyParser,
+  Animatable, Color, ColorInput, FromCss, Length, ListInterpolationStrategy, MakeComputed,
+  ParseResult, SizingContext, ToCss, impl_comma_list_from_css, next_is_comma,
+  tw::TailwindPropertyParser,
 };
 
 /// Represents a text shadow with all its properties.
@@ -77,10 +77,7 @@ impl<'i> FromCss<'i> for TextShadow {
     })
   }
 
-  const VALID_TOKENS: &'static [CssToken] = &[
-    CssToken::Syntax(CssSyntaxKind::Length),
-    CssToken::Syntax(CssSyntaxKind::Color),
-  ];
+  const VALID_TOKENS: &'static [&'static str] = &["<length>", "<color>"];
 }
 
 impl TailwindPropertyParser for TextShadow {}

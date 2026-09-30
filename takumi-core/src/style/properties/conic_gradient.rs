@@ -13,9 +13,9 @@ use crate::{
   geometry::Size,
   math,
   style::{
-    Angle, Color, ColorInterpolationMethod, CssDescriptorKind, CssToken, FromCss, GradientStop,
-    Length, MakeComputed, ParseResult, PositionValue, ResolvedGradientStop, SizingContext,
-    StopPosition, ToCss, unexpected_token,
+    Angle, Color, ColorInterpolationMethod, FromCss, GradientStop, Length, MakeComputed,
+    ParseResult, PositionValue, ResolvedGradientStop, SizingContext, StopPosition, ToCss,
+    unexpected_token,
   },
 };
 
@@ -396,8 +396,7 @@ impl<'i> FromCss<'i> for ConicGradient {
     })
   }
 
-  const VALID_TOKENS: &'static [CssToken] =
-    &[CssToken::Descriptor(CssDescriptorKind::ConicGradientFn)];
+  const VALID_TOKENS: &'static [&'static str] = &["<conic-gradient()>"];
 }
 
 impl ToCss for ConicGradient {

@@ -3,8 +3,8 @@ use std::fmt;
 use cssparser::{Parser, match_ignore_ascii_case};
 
 use crate::style::{
-  Animatable, Color, CssSyntaxKind, CssToken, FromCss, FromCssStr, MakeComputed, ParseResult,
-  SizingContext, ToCss, discrete, lerp, tw::Namespace, tw::TailwindPropertyParser,
+  Animatable, Color, FromCss, FromCssStr, MakeComputed, ParseResult, SizingContext, ToCss,
+  discrete, lerp, tw::Namespace, tw::TailwindPropertyParser,
 };
 
 #[derive(Default, Debug, Clone, Copy, PartialEq)]
@@ -98,10 +98,7 @@ impl<'i> FromCss<'i> for AspectRatio {
     Ok(AspectRatio::ratio(first_ratio / second_ratio))
   }
 
-  const VALID_TOKENS: &'static [CssToken] = &[
-    CssToken::Keyword("auto"),
-    CssToken::Syntax(CssSyntaxKind::Number),
-  ];
+  const VALID_TOKENS: &'static [&'static str] = &["auto", "<number>"];
 }
 
 impl ToCss for AspectRatio {

@@ -1,8 +1,6 @@
 use cssparser::Parser;
 
-use crate::style::{
-  ColorInput, CssSyntaxKind, CssToken, FromCss, Length, MakeComputed, ParseResult, SizingContext,
-};
+use crate::style::{ColorInput, FromCss, Length, MakeComputed, ParseResult, SizingContext};
 
 /// Parsed `text-stroke` value.
 ///
@@ -24,10 +22,7 @@ impl<'i> FromCss<'i> for TextStroke {
     Ok(TextStroke { width, color })
   }
 
-  const VALID_TOKENS: &'static [CssToken] = &[
-    CssToken::Syntax(CssSyntaxKind::Length),
-    CssToken::Syntax(CssSyntaxKind::Color),
-  ];
+  const VALID_TOKENS: &'static [&'static str] = &["<length>", "<color>"];
 }
 
 impl MakeComputed for TextStroke {

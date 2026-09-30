@@ -14,8 +14,7 @@ pub(crate) use crate::units::{
 use crate::{
   layout_unit::LayoutUnit,
   style::{
-    AspectRatio, CssSyntaxKind, CssToken, FromCss, FromCssStr, MakeComputed, ParseResult,
-    SizingContext, ToCss,
+    AspectRatio, FromCss, FromCssStr, MakeComputed, ParseResult, SizingContext, ToCss,
     calc::{CalcLinear, CalcTerms, CalcUnit, CalcValue, parse_calc_sum},
     tw::Namespace,
     tw::{TW_VAR_SPACING, TailwindPropertyParser},
@@ -414,7 +413,7 @@ impl<'i> FromCss<'i> for Length {
     }
   }
 
-  const VALID_TOKENS: &'static [CssToken] = &[CssToken::Syntax(CssSyntaxKind::Length)];
+  const VALID_TOKENS: &'static [&'static str] = &["<length>"];
 }
 
 impl Length {

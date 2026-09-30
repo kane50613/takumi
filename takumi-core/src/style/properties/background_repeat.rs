@@ -3,8 +3,8 @@ use std::fmt;
 use cssparser::{Parser, match_ignore_ascii_case};
 
 use crate::style::{
-  Animatable, CssToken, FromCss, ListInterpolationStrategy, MakeComputed, ParseResult, ToCss,
-  impl_css_enum, parse_comma_list,
+  Animatable, FromCss, ListInterpolationStrategy, MakeComputed, ParseResult, ToCss, impl_css_enum,
+  parse_comma_list,
 };
 
 /// Per-axis repeat style.
@@ -86,13 +86,13 @@ impl<'i> FromCss<'i> for BackgroundRepeat {
     Ok(BackgroundRepeat(x, y))
   }
 
-  const VALID_TOKENS: &'static [CssToken] = &[
-    CssToken::Keyword("repeat-x"),
-    CssToken::Keyword("repeat-y"),
-    CssToken::Keyword("repeat"),
-    CssToken::Keyword("no-repeat"),
-    CssToken::Keyword("space"),
-    CssToken::Keyword("round"),
+  const VALID_TOKENS: &'static [&'static str] = &[
+    "repeat-x",
+    "repeat-y",
+    "repeat",
+    "no-repeat",
+    "space",
+    "round",
   ];
 }
 
@@ -104,7 +104,7 @@ impl<'i> FromCss<'i> for BackgroundRepeats {
     parse_comma_list(input, BackgroundRepeat::from_css)
   }
 
-  const VALID_TOKENS: &'static [CssToken] = BackgroundRepeat::VALID_TOKENS;
+  const VALID_TOKENS: &'static [&'static str] = BackgroundRepeat::VALID_TOKENS;
 }
 
 impl ToCss for BackgroundRepeat {

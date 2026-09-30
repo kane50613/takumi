@@ -1,7 +1,7 @@
 use cssparser::{Parser, Token, match_ignore_ascii_case};
 use typed_builder::TypedBuilder;
 
-use crate::style::{CssToken, FromCss, MakeComputed, ParseResult, impl_css_enum, unexpected_token};
+use crate::style::{FromCss, MakeComputed, ParseResult, impl_css_enum, unexpected_token};
 
 /// Controls synthetic font behaviors.
 #[derive(Debug, Clone, Copy, PartialEq, Default, TypedBuilder)]
@@ -42,11 +42,7 @@ impl<'i> FromCss<'i> for FontSynthesis {
     Ok(Self { weight, style })
   }
 
-  const VALID_TOKENS: &'static [CssToken] = &[
-    CssToken::Keyword("none"),
-    CssToken::Keyword("weight"),
-    CssToken::Keyword("style"),
-  ];
+  const VALID_TOKENS: &'static [&'static str] = &["none", "weight", "style"];
 }
 
 /// Control mode for synthetic.

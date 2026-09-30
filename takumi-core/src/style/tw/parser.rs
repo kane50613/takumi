@@ -3,7 +3,6 @@ use std::{ops::Neg, sync::Arc};
 use cssparser::{Parser, match_ignore_ascii_case};
 
 use crate::style::{
-  CssToken,
   Length::{self, *},
   tw::{TailwindPropertyParser, is_ident, parse_opacity_modifier, with_opacity},
   *,
@@ -23,7 +22,7 @@ impl<'i> FromCss<'i> for TwFontSize {
     Ok(Self::new(FontSize::from_css(input)?, None))
   }
 
-  const VALID_TOKENS: &'static [CssToken] = FontSize::VALID_TOKENS;
+  const VALID_TOKENS: &'static [&'static str] = FontSize::VALID_TOKENS;
 }
 
 impl TailwindPropertyParser for TwFontSize {
@@ -105,7 +104,7 @@ impl<'i> FromCss<'i> for TwGridTemplate {
     Ok(Self(GridTemplateComponents::from_css(input)?))
   }
 
-  const VALID_TOKENS: &'static [CssToken] = GridTemplateComponents::VALID_TOKENS;
+  const VALID_TOKENS: &'static [&'static str] = GridTemplateComponents::VALID_TOKENS;
 }
 
 impl TailwindPropertyParser for TwGridTemplate {
@@ -149,7 +148,7 @@ impl<'i> FromCss<'i> for TwLetterSpacing {
     Ok(Self(Length::from_css(input)?))
   }
 
-  const VALID_TOKENS: &'static [CssToken] = Length::VALID_TOKENS;
+  const VALID_TOKENS: &'static [&'static str] = Length::VALID_TOKENS;
 }
 
 impl Neg for TwLetterSpacing {
@@ -188,7 +187,7 @@ impl<'i> FromCss<'i> for TwRounded {
     Ok(TwRounded(Length::from_css(input)?))
   }
 
-  const VALID_TOKENS: &'static [CssToken] = Length::VALID_TOKENS;
+  const VALID_TOKENS: &'static [&'static str] = Length::VALID_TOKENS;
 }
 
 impl TailwindPropertyParser for TwRounded {
@@ -232,7 +231,7 @@ impl<'i> FromCss<'i> for TwGradientPosition {
     Ok(TwGradientPosition(length))
   }
 
-  const VALID_TOKENS: &'static [CssToken] = Length::VALID_TOKENS;
+  const VALID_TOKENS: &'static [&'static str] = Length::VALID_TOKENS;
 }
 
 impl TailwindPropertyParser for TwGradientPosition {
@@ -269,7 +268,7 @@ impl<'i> FromCss<'i> for TwBlur {
     })
   }
 
-  const VALID_TOKENS: &'static [CssToken] = Length::VALID_TOKENS;
+  const VALID_TOKENS: &'static [&'static str] = Length::VALID_TOKENS;
 }
 
 impl TailwindPropertyParser for TwBlur {
@@ -306,7 +305,7 @@ impl<'i> FromCss<'i> for TwDropShadow {
     })
   }
 
-  const VALID_TOKENS: &'static [CssToken] = TextShadow::VALID_TOKENS;
+  const VALID_TOKENS: &'static [&'static str] = TextShadow::VALID_TOKENS;
 }
 
 impl TailwindPropertyParser for TwDropShadow {
@@ -333,7 +332,7 @@ impl<'i> FromCss<'i> for TwAnimation {
     })
   }
 
-  const VALID_TOKENS: &'static [CssToken] = Animations::VALID_TOKENS;
+  const VALID_TOKENS: &'static [&'static str] = Animations::VALID_TOKENS;
 }
 
 impl TailwindPropertyParser for TwAnimation {
@@ -367,7 +366,7 @@ impl<'i> FromCss<'i> for TwVarColor {
     Ok(Self(ColorInput::from_css(input)?.to_css_string().into()))
   }
 
-  const VALID_TOKENS: &'static [CssToken] = ColorInput::VALID_TOKENS;
+  const VALID_TOKENS: &'static [&'static str] = ColorInput::VALID_TOKENS;
 }
 
 impl TailwindPropertyParser for TwVarColor {

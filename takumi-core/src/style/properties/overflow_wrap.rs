@@ -3,7 +3,7 @@ use std::fmt;
 use cssparser::{Parser, Token, match_ignore_ascii_case};
 
 use crate::style::{
-  CssToken, FromCss, MakeComputed, ParseResult, ToCss, tw::TailwindPropertyParser, unexpected_token,
+  FromCss, MakeComputed, ParseResult, ToCss, tw::TailwindPropertyParser, unexpected_token,
 };
 
 /// Controls how text should be overflowed.
@@ -29,11 +29,7 @@ impl<'i> FromCss<'i> for OverflowWrap {
     }
   }
 
-  const VALID_TOKENS: &'static [CssToken] = &[
-    CssToken::Keyword("normal"),
-    CssToken::Keyword("anywhere"),
-    CssToken::Keyword("break-word"),
-  ];
+  const VALID_TOKENS: &'static [&'static str] = &["normal", "anywhere", "break-word"];
 }
 
 impl MakeComputed for OverflowWrap {}

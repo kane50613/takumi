@@ -89,16 +89,16 @@ impl<'i> FromCss<'i> for VerticalAlign {
     Ok(Self::Length(Length::from_css(input)?))
   }
 
-  const VALID_TOKENS: &'static [CssToken] = &[
-    CssToken::Keyword("baseline"),
-    CssToken::Keyword("top"),
-    CssToken::Keyword("middle"),
-    CssToken::Keyword("bottom"),
-    CssToken::Keyword("text-top"),
-    CssToken::Keyword("text-bottom"),
-    CssToken::Keyword("sub"),
-    CssToken::Keyword("super"),
-    CssToken::Syntax(CssSyntaxKind::Length),
+  const VALID_TOKENS: &'static [&'static str] = &[
+    "baseline",
+    "top",
+    "middle",
+    "bottom",
+    "text-top",
+    "text-bottom",
+    "sub",
+    "super",
+    "<length>",
   ];
 }
 

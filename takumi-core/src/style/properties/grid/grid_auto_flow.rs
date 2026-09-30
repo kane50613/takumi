@@ -2,7 +2,7 @@ use std::fmt;
 
 use cssparser::Parser;
 
-use crate::style::{CssToken, FromCss, MakeComputed, ParseResult, ToCss};
+use crate::style::{FromCss, MakeComputed, ParseResult, ToCss};
 
 /// Represents the direction of the grid auto flow.
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
@@ -98,11 +98,7 @@ impl<'i> FromCss<'i> for GridAutoFlow {
     Ok(GridAutoFlow { direction, dense })
   }
 
-  const VALID_TOKENS: &'static [CssToken] = &[
-    CssToken::Keyword("row"),
-    CssToken::Keyword("column"),
-    CssToken::Keyword("dense"),
-  ];
+  const VALID_TOKENS: &'static [&'static str] = &["row", "column", "dense"];
 }
 
 impl ToCss for GridAutoFlow {

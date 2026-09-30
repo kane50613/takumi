@@ -3,8 +3,8 @@ use std::fmt;
 use cssparser::{Parser, Token, match_ignore_ascii_case};
 
 use crate::style::{
-  Animatable, Color, CssSyntaxKind, CssToken, FromCss, Length, MakeComputed, ParseResult,
-  SizingContext, ToCss, impl_css_enum, unexpected_token,
+  Animatable, Color, FromCss, Length, MakeComputed, ParseResult, SizingContext, ToCss,
+  impl_css_enum, unexpected_token,
 };
 
 /// Absolute `font-size` keywords.
@@ -138,18 +138,18 @@ impl<'i> FromCss<'i> for FontSize {
       .or_else(|_| Length::from_css(input).map(Self::Length))
   }
 
-  const VALID_TOKENS: &'static [CssToken] = &[
-    CssToken::Keyword("xx-small"),
-    CssToken::Keyword("x-small"),
-    CssToken::Keyword("small"),
-    CssToken::Keyword("medium"),
-    CssToken::Keyword("large"),
-    CssToken::Keyword("x-large"),
-    CssToken::Keyword("xx-large"),
-    CssToken::Keyword("xxx-large"),
-    CssToken::Keyword("larger"),
-    CssToken::Keyword("smaller"),
-    CssToken::Syntax(CssSyntaxKind::Length),
+  const VALID_TOKENS: &'static [&'static str] = &[
+    "xx-small",
+    "x-small",
+    "small",
+    "medium",
+    "large",
+    "x-large",
+    "xx-large",
+    "xxx-large",
+    "larger",
+    "smaller",
+    "<length>",
   ];
 }
 

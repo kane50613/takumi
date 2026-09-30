@@ -6,7 +6,7 @@ use std::{
 use cssparser::{Parser, Token};
 
 use crate::style::{
-  Animatable, Color, CssSyntaxKind, CssToken, MakeComputed, SizingContext, ToCss, lerp,
+  Animatable, Color, MakeComputed, SizingContext, ToCss, lerp,
   properties::{FromCss, ParseResult},
   tw::TailwindPropertyParser,
   unexpected_token,
@@ -74,10 +74,7 @@ impl<'i> FromCss<'i> for PercentageNumber {
     }
   }
 
-  const VALID_TOKENS: &'static [CssToken] = &[
-    CssToken::Syntax(CssSyntaxKind::Number),
-    CssToken::Syntax(CssSyntaxKind::Percentage),
-  ];
+  const VALID_TOKENS: &'static [&'static str] = &["<number>", "<percentage>"];
 }
 
 impl ToCss for PercentageNumber {

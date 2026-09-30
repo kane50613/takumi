@@ -3,8 +3,7 @@ use std::fmt;
 use cssparser::{BasicParseErrorKind, Parser};
 
 use crate::style::{
-  Animatable, Color, CssSyntaxKind, CssToken, FromCss, MakeComputed, ParseResult, SizingContext,
-  ToCss, lerp,
+  Animatable, Color, FromCss, MakeComputed, ParseResult, SizingContext, ToCss, lerp,
 };
 
 /// `tab-size` as a number of spaces. `<length>` values are not supported; preserved tabs
@@ -62,7 +61,7 @@ impl<'i> FromCss<'i> for TabSize {
     Ok(Self(value))
   }
 
-  const VALID_TOKENS: &'static [CssToken] = &[CssToken::Syntax(CssSyntaxKind::Number)];
+  const VALID_TOKENS: &'static [&'static str] = &["<number>"];
 }
 
 impl ToCss for TabSize {

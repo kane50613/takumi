@@ -4,8 +4,7 @@ use cssparser::{Parser, Token, match_ignore_ascii_case};
 use taffy::Dimension;
 
 use crate::style::{
-  Animatable, Color, CssSyntaxKind, CssToken, FromCss, Length, MakeComputed, ParseResult,
-  SizingContext, ToCss, discrete,
+  Animatable, Color, FromCss, Length, MakeComputed, ParseResult, SizingContext, ToCss, discrete,
   tw::{Namespace, TailwindPropertyParser},
   unexpected_token,
 };
@@ -106,12 +105,12 @@ impl Animatable for Size {
 }
 
 impl<'i> FromCss<'i> for Size {
-  const VALID_TOKENS: &'static [CssToken] = &[
-    CssToken::Syntax(CssSyntaxKind::Length),
-    CssToken::Keyword("min-content"),
-    CssToken::Keyword("max-content"),
-    CssToken::Keyword("fit-content"),
-    CssToken::Keyword("stretch"),
+  const VALID_TOKENS: &'static [&'static str] = &[
+    "<length>",
+    "min-content",
+    "max-content",
+    "fit-content",
+    "stretch",
   ];
 
   fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {

@@ -5,9 +5,9 @@ use cssparser::{Parser, Token};
 use typed_builder::TypedBuilder;
 
 use crate::style::{
-  Animatable, Color, ColorInput, ComputedStyle, CssSyntaxKind, CssToken, Float, FromCss,
-  FromCssStr, Length, MakeComputed, ParseResult, SizingContext, ToCss, discrete, impl_css_enum,
-  tw::TailwindPropertyParser, unexpected_token, write_keywords,
+  Animatable, Color, ColorInput, ComputedStyle, Float, FromCss, FromCssStr, Length, MakeComputed,
+  ParseResult, SizingContext, ToCss, discrete, impl_css_enum, tw::TailwindPropertyParser,
+  unexpected_token, write_keywords,
 };
 
 bitflags! {
@@ -68,11 +68,7 @@ impl<'i> FromCss<'i> for TextDecorationLines {
     Ok(lines)
   }
 
-  const VALID_TOKENS: &'static [CssToken] = &[
-    CssToken::Keyword("underline"),
-    CssToken::Keyword("line-through"),
-    CssToken::Keyword("overline"),
-  ];
+  const VALID_TOKENS: &'static [&'static str] = &["underline", "line-through", "overline"];
 }
 
 impl MakeComputed for TextDecorationLines {}
@@ -225,11 +221,7 @@ impl<'i> FromCss<'i> for TextDecorationThickness {
     Ok(Self::Length(Length::from_css(input)?))
   }
 
-  const VALID_TOKENS: &'static [CssToken] = &[
-    CssToken::Keyword("from-font"),
-    CssToken::Syntax(CssSyntaxKind::Length),
-    CssToken::Syntax(CssSyntaxKind::Percentage),
-  ];
+  const VALID_TOKENS: &'static [&'static str] = &["from-font", "<length>", "<percentage>"];
 }
 
 impl TailwindPropertyParser for TextDecorationThickness {
@@ -330,11 +322,7 @@ impl<'i> FromCss<'i> for TextUnderlineOffset {
     Ok(Self::Length(Length::from_css(input)?))
   }
 
-  const VALID_TOKENS: &'static [CssToken] = &[
-    CssToken::Keyword("auto"),
-    CssToken::Syntax(CssSyntaxKind::Length),
-    CssToken::Syntax(CssSyntaxKind::Percentage),
-  ];
+  const VALID_TOKENS: &'static [&'static str] = &["auto", "<length>", "<percentage>"];
 }
 
 impl ToCss for TextUnderlineOffset {
@@ -462,20 +450,20 @@ impl<'i> FromCss<'i> for TextDecoration {
     })
   }
 
-  const VALID_TOKENS: &'static [CssToken] = &[
-    CssToken::Keyword("none"),
-    CssToken::Keyword("underline"),
-    CssToken::Keyword("line-through"),
-    CssToken::Keyword("overline"),
-    CssToken::Keyword("solid"),
-    CssToken::Keyword("double"),
-    CssToken::Keyword("dotted"),
-    CssToken::Keyword("dashed"),
-    CssToken::Keyword("wavy"),
-    CssToken::Keyword("from-font"),
-    CssToken::Syntax(CssSyntaxKind::Color),
-    CssToken::Syntax(CssSyntaxKind::Length),
-    CssToken::Syntax(CssSyntaxKind::Percentage),
+  const VALID_TOKENS: &'static [&'static str] = &[
+    "none",
+    "underline",
+    "line-through",
+    "overline",
+    "solid",
+    "double",
+    "dotted",
+    "dashed",
+    "wavy",
+    "from-font",
+    "<color>",
+    "<length>",
+    "<percentage>",
   ];
 }
 

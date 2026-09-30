@@ -3,9 +3,8 @@ use std::fmt;
 use cssparser::Parser;
 
 use crate::style::{
-  Animatable, BorderStyle, Color, ColorInput, CssSyntaxKind, CssToken, FromCss, Length,
-  MakeComputed, ParseResult, SizingContext, ToCss, impl_css_enum, tw::TailwindPropertyParser,
-  unexpected_token,
+  Animatable, BorderStyle, Color, ColorInput, FromCss, Length, MakeComputed, ParseResult,
+  SizingContext, ToCss, impl_css_enum, tw::TailwindPropertyParser, unexpected_token,
 };
 
 /// CSSWG `<line-width>` keyword (`thin | medium | thick`).
@@ -79,12 +78,7 @@ impl<'i> FromCss<'i> for LineWidth {
     Ok(Self::Length(Length::from_css(input)?))
   }
 
-  const VALID_TOKENS: &'static [CssToken] = &[
-    CssToken::Keyword("thin"),
-    CssToken::Keyword("medium"),
-    CssToken::Keyword("thick"),
-    CssToken::Syntax(CssSyntaxKind::Length),
-  ];
+  const VALID_TOKENS: &'static [&'static str] = &["thin", "medium", "thick", "<length>"];
 }
 
 impl LineWidth {
@@ -186,11 +180,7 @@ impl<'i> FromCss<'i> for Border {
     })
   }
 
-  const VALID_TOKENS: &'static [CssToken] = &[
-    CssToken::Syntax(CssSyntaxKind::Length),
-    CssToken::Syntax(CssSyntaxKind::BorderStyle),
-    CssToken::Syntax(CssSyntaxKind::Color),
-  ];
+  const VALID_TOKENS: &'static [&'static str] = &["<length>", "<border-style>", "<color>"];
 }
 
 impl MakeComputed for Border {

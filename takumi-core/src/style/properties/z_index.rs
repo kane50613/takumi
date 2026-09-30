@@ -2,9 +2,7 @@ use std::fmt;
 
 use cssparser::Parser;
 
-use crate::style::{
-  Animatable, CssSyntaxKind, CssToken, FromCss, MakeComputed, ParseResult, ToCss,
-};
+use crate::style::{Animatable, FromCss, MakeComputed, ParseResult, ToCss};
 
 /// Represents the CSS `z-index` value for stacking order.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -39,10 +37,7 @@ impl<'i> FromCss<'i> for ZIndex {
     Ok(Self::Auto)
   }
 
-  const VALID_TOKENS: &'static [CssToken] = &[
-    CssToken::Keyword("auto"),
-    CssToken::Syntax(CssSyntaxKind::Integer),
-  ];
+  const VALID_TOKENS: &'static [&'static str] = &["auto", "<integer>"];
 }
 
 impl ToCss for ZIndex {

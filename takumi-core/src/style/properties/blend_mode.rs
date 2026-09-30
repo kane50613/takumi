@@ -1,8 +1,8 @@
 use cssparser::Parser;
 
 use crate::style::{
-  Animatable, CssToken, FromCss, ListInterpolationStrategy, ParseResult, impl_css_enum,
-  parse_comma_list, tw::TailwindPropertyParser,
+  Animatable, FromCss, ListInterpolationStrategy, ParseResult, impl_css_enum, parse_comma_list,
+  tw::TailwindPropertyParser,
 };
 
 /// A list of blend modes.
@@ -13,7 +13,7 @@ impl<'i> FromCss<'i> for BlendModes {
     parse_comma_list(input, BlendMode::from_css)
   }
 
-  const VALID_TOKENS: &'static [CssToken] = BlendMode::VALID_TOKENS;
+  const VALID_TOKENS: &'static [&'static str] = BlendMode::VALID_TOKENS;
 }
 
 /// Defines the blending mode for an element.

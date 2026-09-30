@@ -3,7 +3,7 @@ use std::{fmt, sync::Arc};
 use cssparser::Parser;
 
 use super::font_feature_settings::{Tag, parse_opentype_tag};
-use crate::style::{CssSyntaxKind, CssToken, FromCss, MakeComputed, ParseResult, ToCss};
+use crate::style::{FromCss, MakeComputed, ParseResult, ToCss};
 
 /// An OpenType font variation setting (tag + value) from CSS `font-variation-settings`.
 #[derive(Clone, Copy, PartialEq, Debug)]
@@ -55,10 +55,7 @@ impl<'i> FromCss<'i> for FontVariationSettings {
     Ok(list.into())
   }
 
-  const VALID_TOKENS: &'static [CssToken] = &[
-    CssToken::Keyword("normal"),
-    CssToken::Syntax(CssSyntaxKind::String),
-  ];
+  const VALID_TOKENS: &'static [&'static str] = &["normal", "<string>"];
 }
 
 impl ToCss for FontVariation {

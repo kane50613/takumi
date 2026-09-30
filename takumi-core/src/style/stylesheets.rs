@@ -357,12 +357,12 @@ macro_rules! define_style {
           Ok(smallvec![declaration])
         }
 
-        const EXPECT_INFO: [(CssExpectedMessage, &'static [CssToken]); Self::COUNT] = [
+        const EXPECT_INFO: [(CssExpectedMessage, &'static [&'static str]); Self::COUNT] = [
           $((<$longhand_ty as FromCss>::EXPECT_MESSAGE, <$longhand_ty as FromCss>::VALID_TOKENS),)*
           $((<$transient_ty as FromCss>::EXPECT_MESSAGE, <$transient_ty as FromCss>::VALID_TOKENS),)*
         ];
 
-        fn expect_info(self) -> (CssExpectedMessage, &'static [CssToken]) {
+        fn expect_info(self) -> (CssExpectedMessage, &'static [&'static str]) {
           Self::EXPECT_INFO[self.index()]
         }
       }
@@ -381,12 +381,12 @@ macro_rules! define_style {
           }
         }
 
-        const EXPECT_INFO: [(CssExpectedMessage, &'static [CssToken]);
+        const EXPECT_INFO: [(CssExpectedMessage, &'static [&'static str]);
           [$(Self::[<$shorthand:camel>]),*].len()] = [
           $((<$shorthand_ty as FromCss>::EXPECT_MESSAGE, <$shorthand_ty as FromCss>::VALID_TOKENS),)*
         ];
 
-        fn expect_info(self) -> (CssExpectedMessage, &'static [CssToken]) {
+        fn expect_info(self) -> (CssExpectedMessage, &'static [&'static str]) {
           Self::EXPECT_INFO[self as usize]
         }
 
@@ -1719,11 +1719,7 @@ impl<'i> FromCss<'i> for CssWideKeyword {
     }
   }
 
-  const VALID_TOKENS: &'static [CssToken] = &[
-    CssToken::Keyword("initial"),
-    CssToken::Keyword("inherit"),
-    CssToken::Keyword("unset"),
-  ];
+  const VALID_TOKENS: &'static [&'static str] = &["initial", "inherit", "unset"];
 }
 
 /// The set of properties marked `!important`.

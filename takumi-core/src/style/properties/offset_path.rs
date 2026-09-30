@@ -12,8 +12,8 @@ use kurbo::{
 use crate::{
   geometry::{Point, Size},
   style::{
-    Angle, Animatable, BasicShape, Color, CssSyntaxKind, CssToken, FromCss, Length, MakeComputed,
-    ParseResult, ShapePosition, SizingContext, SpacePair, ToCss, discrete, impl_css_enum,
+    Angle, Animatable, BasicShape, Color, FromCss, Length, MakeComputed, ParseResult,
+    ShapePosition, SizingContext, SpacePair, ToCss, discrete, impl_css_enum,
   },
 };
 
@@ -173,11 +173,7 @@ impl<'i> FromCss<'i> for OffsetPath {
     Ok(OffsetPath::CoordBox(CoordBox::from_css(input)?))
   }
 
-  const VALID_TOKENS: &'static [CssToken] = &[
-    CssToken::Keyword("ray()"),
-    CssToken::Keyword("path()"),
-    CssToken::Keyword("border-box"),
-  ];
+  const VALID_TOKENS: &'static [&'static str] = &["ray()", "path()", "border-box"];
 }
 
 impl ToCss for OffsetPath {
@@ -247,10 +243,7 @@ impl<'i> FromCss<'i> for OffsetAnchor {
     Ok(OffsetAnchor::Position(ShapePosition::from_css(input)?))
   }
 
-  const VALID_TOKENS: &'static [CssToken] = &[
-    CssToken::Keyword("auto"),
-    CssToken::Syntax(CssSyntaxKind::Length),
-  ];
+  const VALID_TOKENS: &'static [&'static str] = &["auto", "<length>"];
 }
 
 impl ToCss for OffsetAnchor {
@@ -308,11 +301,7 @@ impl<'i> FromCss<'i> for OffsetPosition {
     Ok(OffsetPosition::Position(ShapePosition::from_css(input)?))
   }
 
-  const VALID_TOKENS: &'static [CssToken] = &[
-    CssToken::Keyword("normal"),
-    CssToken::Keyword("auto"),
-    CssToken::Syntax(CssSyntaxKind::Length),
-  ];
+  const VALID_TOKENS: &'static [&'static str] = &["normal", "auto", "<length>"];
 }
 
 impl ToCss for OffsetPosition {
@@ -428,11 +417,7 @@ impl<'i> FromCss<'i> for OffsetRotate {
     Ok(Self::Fixed(angle))
   }
 
-  const VALID_TOKENS: &'static [CssToken] = &[
-    CssToken::Syntax(CssSyntaxKind::Angle),
-    CssToken::Keyword("auto"),
-    CssToken::Keyword("reverse"),
-  ];
+  const VALID_TOKENS: &'static [&'static str] = &["<angle>", "auto", "reverse"];
 }
 
 impl ToCss for OffsetRotate {
@@ -523,7 +508,7 @@ impl<'i> FromCss<'i> for OffsetShorthand {
     })
   }
 
-  const VALID_TOKENS: &'static [CssToken] = OffsetPath::VALID_TOKENS;
+  const VALID_TOKENS: &'static [&'static str] = OffsetPath::VALID_TOKENS;
 }
 
 /// An axis-aligned ellipse as a path.

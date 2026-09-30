@@ -13,8 +13,8 @@ use super::gradient_utils::interpolate_rgba_premultiplied;
 use crate::{
   resources::image_buffer::premultiply_pixel,
   style::{
-    Animatable, Color as CurrentColor, CssDescriptorKind, CssSyntaxKind, CssToken, FromCss,
-    FromCssStr, MakeComputed, ParseResult, PercentageNumber, SizingContext, ToCss,
+    Animatable, Color as CurrentColor, FromCss, FromCssStr, MakeComputed, ParseResult,
+    PercentageNumber, SizingContext, ToCss,
     math::fast_div_255,
     tw::TailwindPropertyParser,
     tw::{Namespace, extract_arbitrary_value},
@@ -129,8 +129,7 @@ impl<'i> FromCss<'i> for ColorInterpolationMethod {
     })
   }
 
-  const VALID_TOKENS: &'static [CssToken] =
-    &[CssToken::Descriptor(CssDescriptorKind::InColorSpace)];
+  const VALID_TOKENS: &'static [&'static str] = &["<in <color-space>>"];
 }
 
 impl ToCss for ColorInterpolationMethod {
@@ -712,8 +711,7 @@ impl<'i> FromCss<'i> for ColorMixItem {
     })
   }
 
-  const VALID_TOKENS: &'static [CssToken] =
-    &[CssToken::Descriptor(CssDescriptorKind::ColorAndPercentage)];
+  const VALID_TOKENS: &'static [&'static str] = &["<color and percentage>"];
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -776,7 +774,7 @@ impl<'i> FromCss<'i> for ColorMix {
     })
   }
 
-  const VALID_TOKENS: &'static [CssToken] = &[CssToken::Descriptor(CssDescriptorKind::ColorMixFn)];
+  const VALID_TOKENS: &'static [&'static str] = &["<color-mix()>"];
 }
 
 impl<'i> FromCss<'i> for ColorInput {
@@ -791,10 +789,7 @@ impl<'i> FromCss<'i> for ColorInput {
     Ok(ColorInput::Value(Color::from_css(input)?))
   }
 
-  const VALID_TOKENS: &'static [CssToken] = &[
-    CssToken::Keyword("currentColor"),
-    CssToken::Syntax(CssSyntaxKind::Color),
-  ];
+  const VALID_TOKENS: &'static [&'static str] = &["currentColor", "<color>"];
 }
 
 /// Reference: https://www.w3.org/TR/css-color-5/#relative-colors
@@ -986,7 +981,7 @@ impl<'i> FromCss<'i> for Color {
       _ => Err(unexpected_token!(location, token)),
     }
   }
-  const VALID_TOKENS: &'static [CssToken] = &[CssToken::Syntax(CssSyntaxKind::Color)];
+  const VALID_TOKENS: &'static [&'static str] = &["<color>"];
 }
 
 #[cfg(test)]

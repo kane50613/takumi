@@ -1,8 +1,6 @@
 use cssparser::Parser;
 
-use crate::style::{
-  CssSyntaxKind, CssToken, FromCss, GridPlacement, ParseResult, unexpected_token,
-};
+use crate::style::{FromCss, GridPlacement, ParseResult, unexpected_token};
 
 /// Represents the `grid-area` shorthand.
 #[derive(Debug, Clone, PartialEq, Default)]
@@ -18,12 +16,7 @@ pub struct GridArea {
 }
 
 impl<'i> FromCss<'i> for GridArea {
-  const VALID_TOKENS: &'static [CssToken] = &[
-    CssToken::Keyword("auto"),
-    CssToken::Keyword("span"),
-    CssToken::Syntax(CssSyntaxKind::Ident),
-    CssToken::Syntax(CssSyntaxKind::Number),
-  ];
+  const VALID_TOKENS: &'static [&'static str] = &["auto", "span", "<ident>", "<number>"];
 
   fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
     let mut values = vec![GridPlacement::from_css(input)?];

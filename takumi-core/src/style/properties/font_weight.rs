@@ -4,8 +4,8 @@ use cssparser::{Parser, Token, match_ignore_ascii_case};
 use parley::style::FontWeight as ParleyFontWeight;
 
 use crate::style::{
-  Animatable, Color, CssSyntaxKind, CssToken, FromCss, MakeComputed, ParseResult, SizingContext,
-  ToCss, lerp, tw::Namespace, tw::TailwindPropertyParser, unexpected_token,
+  Animatable, Color, FromCss, MakeComputed, ParseResult, SizingContext, ToCss, lerp, tw::Namespace,
+  tw::TailwindPropertyParser, unexpected_token,
 };
 
 /// Represents font weight value.
@@ -83,13 +83,8 @@ impl<'i> FromCss<'i> for FontWeight {
     }
   }
 
-  const VALID_TOKENS: &'static [CssToken] = &[
-    CssToken::Syntax(CssSyntaxKind::Number),
-    CssToken::Keyword("normal"),
-    CssToken::Keyword("bold"),
-    CssToken::Keyword("bolder"),
-    CssToken::Keyword("lighter"),
-  ];
+  const VALID_TOKENS: &'static [&'static str] =
+    &["<number>", "normal", "bold", "bolder", "lighter"];
 }
 
 impl TailwindPropertyParser for FontWeight {

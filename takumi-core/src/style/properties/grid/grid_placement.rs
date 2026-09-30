@@ -3,8 +3,8 @@ use std::fmt;
 use cssparser::{Parser, Token};
 
 use crate::style::{
-  Animatable, CssSyntaxKind, CssToken, FromCss, MakeComputed, ParseResult, ToCss,
-  tw::TailwindPropertyParser, unexpected_token,
+  Animatable, FromCss, MakeComputed, ParseResult, ToCss, tw::TailwindPropertyParser,
+  unexpected_token,
 };
 
 /// Placement of a grid item along one axis.
@@ -79,7 +79,7 @@ impl<'i> FromCss<'i> for GridPlacementSpan {
     ))
   }
 
-  const VALID_TOKENS: &'static [CssToken] = &[CssToken::Syntax(CssSyntaxKind::Integer)];
+  const VALID_TOKENS: &'static [&'static str] = &["<integer>"];
 }
 
 impl TailwindPropertyParser for GridPlacementSpan {
@@ -127,12 +127,7 @@ impl<'i> FromCss<'i> for GridPlacement {
     }
   }
 
-  const VALID_TOKENS: &'static [CssToken] = &[
-    CssToken::Keyword("auto"),
-    CssToken::Keyword("span"),
-    CssToken::Syntax(CssSyntaxKind::Number),
-    CssToken::Syntax(CssSyntaxKind::Ident),
-  ];
+  const VALID_TOKENS: &'static [&'static str] = &["auto", "span", "<number>", "<ident>"];
 }
 
 impl ToCss for GridPlacementSpan {
