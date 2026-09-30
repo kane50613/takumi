@@ -192,29 +192,13 @@ fn composite_pixel_under(dst: &mut [u8], under_rgb: [u8; 3], under_alpha: u8) {
     return;
   }
 
-  if dst[3] == 0 {
-    dst[0] = under_rgb[0];
-    dst[1] = under_rgb[1];
-    dst[2] = under_rgb[2];
-    dst[3] = under_alpha;
-    return;
-  }
-
-  let dst_alpha = dst[3] as u32;
-  let under_alpha = under_alpha as u32;
-  let result_alpha = dst_alpha + under_alpha - u32::from(fast_div_255(dst_alpha * under_alpha));
-  if result_alpha == 0 {
-    return;
-  }
-
-  let inverse_dst_alpha = 255 - dst_alpha;
+  let uncovered = 255 - u32::from(dst[3]);
+  let under_alpha = u32::from(under_alpha);
   for (channel, src) in dst.iter_mut().take(3).zip(under_rgb) {
-    let dst_premul = *channel as u32 * dst_alpha;
-    let src_premul = src as u32 * under_alpha;
-    let result_premul = dst_premul + (src_premul * inverse_dst_alpha + 127) / 255;
-    *channel = ((result_premul + result_alpha / 2) / result_alpha).min(255) as u8;
+    let src_premul = u32::from(fast_div_255(u32::from(src) * under_alpha));
+    *channel = channel.saturating_add(fast_div_255(src_premul * uncovered));
   }
-  dst[3] = result_alpha.min(255) as u8;
+  dst[3] = dst[3].saturating_add(fast_div_255(under_alpha * uncovered));
 }
 
 fn find_nonzero_bounds<T>(
@@ -688,5 +672,66 @@ mod tests {
     };
 
     apply_drop_shadow_filter(&mut pixmap, &shadow)
+  }
+
+  #[test]
+  fn a_shadow_under_an_empty_pixel_is_premultiplied() {
+    let mut pixel = [0, 0, 0, 0];
+
+    composite_pixel_under(&mut pixel, [255, 0, 0], 128);
+
+    assert_eq!(pixel, [128, 0, 0, 128]);
+  }
+
+  #[test]
+  fn a_shadow_under_a_semi_transparent_pixel_fills_what_it_leaves_uncovered() {
+    let mut pixel = [128, 128, 128, 128];
+    composite_pixel_under(&mut pixel, [255, 0, 0], 255);
+    assert_eq!(pixel, [255, 128, 128, 255]);
+
+    let mut pixel = [128, 128, 128, 128];
+    composite_pixel_under(&mut pixel, [255, 0, 0], 128);
+    assert_eq!(pixel, [192, 128, 128, 192]);
+  }
+
+  #[test]
+  fn a_shadow_leaves_an_opaque_pixel_and_a_clear_shadow_alone() {
+    let mut opaque = [10, 20, 30, 255];
+    composite_pixel_under(&mut opaque, [255, 0, 0], 255);
+    assert_eq!(opaque, [10, 20, 30, 255]);
+
+    let mut pixel = [10, 20, 30, 40];
+    composite_pixel_under(&mut pixel, [255, 0, 0], 0);
+    assert_eq!(pixel, [10, 20, 30, 40]);
+  }
+
+  #[test]
+  fn a_colored_drop_shadow_fades_with_its_alpha() -> Result<()> {
+    let mut image = RgbaImage::new(64, 64);
+    for y in 24..40 {
+      for x in 24..40 {
+        image.put_pixel(x, y, Rgba([0, 0, 0, 255]));
+      }
+    }
+    let Some(mut pixmap) = PixmapMut::from_bytes(image.as_mut(), 64, 64) else {
+      return Ok(());
+    };
+
+    let shadow = SizedShadow {
+      offset_x: 0.0,
+      offset_y: 0.0,
+      blur_radius: 6.0,
+      spread_radius: 0.0,
+      color: Color([255, 0, 0, 255]),
+    };
+    apply_drop_shadow_filter(&mut pixmap, &shadow)?;
+
+    let row: Vec<[u8; 4]> = (40..64).map(|x| image.get_pixel(x, 32).0).collect();
+    assert!(row.iter().all(|p| p[0] == p[3] && p[1] == 0 && p[2] == 0));
+    assert!(row.windows(2).all(|pair| pair[0][3] >= pair[1][3]));
+    assert!(row[0][3] > 0 && row[0][3] < 255);
+    assert_eq!(row.last().map(|p| p[3]), Some(0));
+
+    Ok(())
   }
 }
