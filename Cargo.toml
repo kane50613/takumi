@@ -196,9 +196,6 @@ opt-level = "z"
 debug = true
 strip = "debuginfo"
 
-[profile.release.package.takumi-core]
-opt-level = "z"
-
 # Crates that run at most once per image (parse/decode/encode), never per pixel.
 # Size-optimizing them is perf-neutral (verified via the napi JS bench). Hot
 # raster/shaping and image-webp (wasm webp encode) stay at opt-level 3.
