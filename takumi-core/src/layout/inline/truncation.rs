@@ -91,7 +91,10 @@ fn collect_truncation_checkpoints(layout: &InlineLayout) -> Vec<TruncationCheckp
   // Blink's line breaker drops the line's trailing spaces before its `LineTruncator` places the
   // ellipsis after what is left.
   if !layout.is_rtl() {
-    while checkpoints.last().is_some_and(|checkpoint| checkpoint.whitespace) {
+    while checkpoints
+      .last()
+      .is_some_and(|checkpoint| checkpoint.whitespace)
+    {
       checkpoints.pop();
     }
   }
