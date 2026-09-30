@@ -4,8 +4,7 @@ use cssparser::Parser;
 use taffy::LengthPercentageAuto;
 
 use crate::style::{
-  Animatable, Color, CssSyntaxKind, CssToken, FromCss, Length, MakeComputed, ParseResult,
-  SizingContext, ToCss, discrete,
+  Animatable, Color, FromCss, Length, MakeComputed, ParseResult, SizingContext, ToCss, discrete,
 };
 
 /// Represents the `max-width`/`max-height` value: either `none` (unbounded) or a [`Length`].
@@ -79,11 +78,7 @@ impl<'i> FromCss<'i> for MaxSize {
     Length::from_css(input).map(Self::Length)
   }
 
-  const VALID_TOKENS: &'static [CssToken] = &[
-    CssToken::Keyword("none"),
-    CssToken::Keyword("auto"),
-    CssToken::Syntax(CssSyntaxKind::Length),
-  ];
+  const VALID_TOKENS: &'static [&'static str] = &["none", "auto", "<length>"];
 }
 
 impl From<Length> for MaxSize {

@@ -3,8 +3,8 @@ use std::fmt;
 use cssparser::{Parser, Token, match_ignore_ascii_case};
 
 use crate::style::{
-  Animatable, Color, CssSyntaxKind, CssToken, FromCss, Length, MakeComputed, ParseResult,
-  SizingContext, ToCss, discrete, unexpected_token,
+  Animatable, Color, FromCss, Length, MakeComputed, ParseResult, SizingContext, ToCss, discrete,
+  unexpected_token,
 };
 
 /// Controls indentation of the first line, or hanging/each-line variants.
@@ -104,11 +104,7 @@ impl<'i> FromCss<'i> for TextIndent {
     })
   }
 
-  const VALID_TOKENS: &'static [CssToken] = &[
-    CssToken::Syntax(CssSyntaxKind::Length),
-    CssToken::Keyword("each-line"),
-    CssToken::Keyword("hanging"),
-  ];
+  const VALID_TOKENS: &'static [&'static str] = &["<length>", "each-line", "hanging"];
 }
 
 impl ToCss for TextIndent {

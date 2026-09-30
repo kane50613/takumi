@@ -3,8 +3,9 @@ use std::{fmt, mem};
 use cssparser::{BasicParseErrorKind, Parser, Token, match_ignore_ascii_case};
 
 use crate::style::{
-  Animatable, AspectRatio, Color, CssSyntaxKind, CssToken, FlexDirection, FromCss, FromCssStr,
-  Length, MakeComputed, ParseResult, Size, SizingContext, ToCss, discrete, impl_from_taffy_enum,
+  Animatable, AspectRatio, Color, FlexDirection, FromCss, FromCssStr, Length, MakeComputed,
+  ParseResult, Size, SizingContext, ToCss, discrete, impl_from_taffy_enum, merge_token_lists,
+  merged_token_len,
   tw::{Namespace, TailwindPropertyParser},
   unexpected_token,
 };
@@ -86,14 +87,13 @@ impl Animatable for FlexBasis {
   }
 }
 
-const FLEX_BASIS_TOKEN_LISTS: &[&[CssToken]] =
-  &[&[CssToken::Keyword("content")], Size::VALID_TOKENS];
+const FLEX_BASIS_TOKEN_LISTS: &[&[&str]] = &[&["content"], Size::VALID_TOKENS];
 
-const FLEX_BASIS_TOKENS: [CssToken; CssToken::merged_len(FLEX_BASIS_TOKEN_LISTS)] =
-  CssToken::merge_lists(FLEX_BASIS_TOKEN_LISTS);
+const FLEX_BASIS_TOKENS: [&str; merged_token_len(FLEX_BASIS_TOKEN_LISTS)] =
+  merge_token_lists(FLEX_BASIS_TOKEN_LISTS);
 
 impl<'i> FromCss<'i> for FlexBasis {
-  const VALID_TOKENS: &'static [CssToken] = &FLEX_BASIS_TOKENS;
+  const VALID_TOKENS: &'static [&'static str] = &FLEX_BASIS_TOKENS;
 
   fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
     if input
@@ -160,12 +160,7 @@ impl_from_taffy_enum!(
 );
 
 impl<'i> FromCss<'i> for FlexWrap {
-  const VALID_TOKENS: &'static [CssToken] = &[
-    CssToken::Keyword("nowrap"),
-    CssToken::Keyword("wrap"),
-    CssToken::Keyword("wrap-reverse"),
-    CssToken::Keyword("balance"),
-  ];
+  const VALID_TOKENS: &'static [&'static str] = &["nowrap", "wrap", "wrap-reverse", "balance"];
 
   // `[ nowrap | wrap | wrap-reverse ] || balance`, per CSS Flexbox Level 2.
   // <https://drafts.csswg.org/css-flexbox-2/#balance-values>
@@ -249,7 +244,7 @@ impl MakeComputed for FlexLineCount {}
 impl Animatable for FlexLineCount {}
 
 impl<'i> FromCss<'i> for FlexLineCount {
-  const VALID_TOKENS: &'static [CssToken] = &[CssToken::Syntax(CssSyntaxKind::Number)];
+  const VALID_TOKENS: &'static [&'static str] = &["<number>"];
 
   fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
     let count = input.expect_integer()?;
@@ -344,14 +339,14 @@ pub struct FlexFlow {
 }
 
 impl<'i> FromCss<'i> for FlexFlow {
-  const VALID_TOKENS: &'static [CssToken] = &[
-    CssToken::Keyword("column"),
-    CssToken::Keyword("column-reverse"),
-    CssToken::Keyword("nowrap"),
-    CssToken::Keyword("row"),
-    CssToken::Keyword("row-reverse"),
-    CssToken::Keyword("wrap"),
-    CssToken::Keyword("wrap-reverse"),
+  const VALID_TOKENS: &'static [&'static str] = &[
+    "column",
+    "column-reverse",
+    "nowrap",
+    "row",
+    "row-reverse",
+    "wrap",
+    "wrap-reverse",
   ];
 
   fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
@@ -434,20 +429,12 @@ impl<'i> FromCss<'i> for Flex {
     })
   }
 
-  const VALID_TOKENS: &'static [CssToken] = &FLEX_TOKENS;
+  const VALID_TOKENS: &'static [&'static str] = &FLEX_TOKENS;
 }
 
-const FLEX_TOKEN_LISTS: &[&[CssToken]] = &[
-  &[
-    CssToken::Keyword("none"),
-    CssToken::Keyword("auto"),
-    CssToken::Syntax(CssSyntaxKind::Number),
-  ],
-  FlexBasis::VALID_TOKENS,
-];
+const FLEX_TOKEN_LISTS: &[&[&str]] = &[&["none", "auto", "<number>"], FlexBasis::VALID_TOKENS];
 
-const FLEX_TOKENS: [CssToken; CssToken::merged_len(FLEX_TOKEN_LISTS)] =
-  CssToken::merge_lists(FLEX_TOKEN_LISTS);
+const FLEX_TOKENS: [&str; merged_token_len(FLEX_TOKEN_LISTS)] = merge_token_lists(FLEX_TOKEN_LISTS);
 
 impl MakeComputed for Flex {
   fn make_computed(&mut self, sizing: &SizingContext) {

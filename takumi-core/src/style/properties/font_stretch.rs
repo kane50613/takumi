@@ -4,8 +4,8 @@ use cssparser::{Parser, Token, match_ignore_ascii_case};
 use parley::FontWidth;
 
 use crate::style::{
-  Animatable, Color, CssSyntaxKind, CssToken, FromCss, MakeComputed, ParseResult, SizingContext,
-  ToCss, lerp, tw::TailwindPropertyParser, unexpected_token,
+  Animatable, Color, FromCss, MakeComputed, ParseResult, SizingContext, ToCss, lerp,
+  tw::TailwindPropertyParser, unexpected_token,
 };
 
 /// Controls the width/stretch of text rendering.
@@ -50,17 +50,17 @@ impl<'i> FromCss<'i> for FontStretch {
     }
   }
 
-  const VALID_TOKENS: &'static [CssToken] = &[
-    CssToken::Keyword("normal"),
-    CssToken::Keyword("ultra-condensed"),
-    CssToken::Keyword("extra-condensed"),
-    CssToken::Keyword("condensed"),
-    CssToken::Keyword("semi-condensed"),
-    CssToken::Keyword("semi-expanded"),
-    CssToken::Keyword("expanded"),
-    CssToken::Keyword("extra-expanded"),
-    CssToken::Keyword("ultra-expanded"),
-    CssToken::Syntax(CssSyntaxKind::Percentage),
+  const VALID_TOKENS: &'static [&'static str] = &[
+    "normal",
+    "ultra-condensed",
+    "extra-condensed",
+    "condensed",
+    "semi-condensed",
+    "semi-expanded",
+    "expanded",
+    "extra-expanded",
+    "ultra-expanded",
+    "<percentage>",
   ];
 }
 

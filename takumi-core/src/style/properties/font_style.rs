@@ -3,7 +3,7 @@ use std::fmt;
 use cssparser::{Parser, Token, match_ignore_ascii_case};
 use parley::style::FontStyle as ParleyFontStyle;
 
-use crate::style::{Angle, CssToken, FromCss, MakeComputed, ParseResult, ToCss, unexpected_token};
+use crate::style::{Angle, FromCss, MakeComputed, ParseResult, ToCss, unexpected_token};
 
 /// Controls the slant (italic/oblique) of text rendering.
 #[derive(Default, Debug, Clone, Copy, PartialEq)]
@@ -27,11 +27,7 @@ impl<'i> FromCss<'i> for FontStyle {
     }
   }
 
-  const VALID_TOKENS: &'static [CssToken] = &[
-    CssToken::Keyword("normal"),
-    CssToken::Keyword("italic"),
-    CssToken::Keyword("oblique"),
-  ];
+  const VALID_TOKENS: &'static [&'static str] = &["normal", "italic", "oblique"];
 }
 
 impl FontStyle {

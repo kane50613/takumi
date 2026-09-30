@@ -4,8 +4,7 @@ use cssparser::Parser;
 use taffy::LengthPercentage;
 
 use crate::style::{
-  Animatable, Color, CssSyntaxKind, CssToken, FromCss, Length, MakeComputed, ParseResult,
-  SizingContext, ToCss,
+  Animatable, Color, FromCss, Length, MakeComputed, ParseResult, SizingContext, ToCss,
 };
 
 /// Represents the `column-gap`/`row-gap` value: either `normal` (computes to `0`) or a [`Length`].
@@ -60,10 +59,7 @@ impl<'i> FromCss<'i> for Gap {
     Length::from_css(input).map(Self::Length)
   }
 
-  const VALID_TOKENS: &'static [CssToken] = &[
-    CssToken::Keyword("normal"),
-    CssToken::Syntax(CssSyntaxKind::Length),
-  ];
+  const VALID_TOKENS: &'static [&'static str] = &["normal", "<length>"];
 }
 
 impl From<Length> for Gap {

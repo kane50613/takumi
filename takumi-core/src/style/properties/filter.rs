@@ -11,9 +11,9 @@ use cssparser::{ParseError as CssParseError, ParseErrorKind, SourceLocation};
 #[cfg(feature = "svg")]
 use crate::style::properties::filter_reference::FilterReference;
 use crate::style::{
-  Angle, Animatable, Color, CssDescriptorKind, CssExpectedMessage, CssToken, FromCss, Length,
-  ListInterpolationStrategy, MakeComputed, ParseResult, PercentageNumber, SizingContext,
-  TextShadow, ToCss, discrete, tw::TailwindPropertyParser, unexpected_token,
+  Angle, Animatable, Color, CssExpectedMessage, FromCss, Length, ListInterpolationStrategy,
+  MakeComputed, ParseResult, PercentageNumber, SizingContext, TextShadow, ToCss, discrete,
+  tw::TailwindPropertyParser, unexpected_token,
 };
 
 /// Lookup table for a single 8-bit channel transition.
@@ -310,7 +310,7 @@ impl<'i> FromCss<'i> for Filters {
     Ok(filters)
   }
 
-  const VALID_TOKENS: &'static [CssToken] = Filter::VALID_TOKENS;
+  const VALID_TOKENS: &'static [&'static str] = Filter::VALID_TOKENS;
   const EXPECT_MESSAGE: CssExpectedMessage = CssExpectedMessage::ValueOrNone;
 }
 
@@ -373,19 +373,19 @@ impl<'i> FromCss<'i> for Filter {
     }
   }
 
-  const VALID_TOKENS: &'static [CssToken] = &[
-    CssToken::Descriptor(CssDescriptorKind::BrightnessFn),
-    CssToken::Descriptor(CssDescriptorKind::OpacityFn),
-    CssToken::Descriptor(CssDescriptorKind::ContrastFn),
-    CssToken::Descriptor(CssDescriptorKind::GrayscaleFn),
-    CssToken::Descriptor(CssDescriptorKind::HueRotateFn),
-    CssToken::Descriptor(CssDescriptorKind::InvertFn),
-    CssToken::Descriptor(CssDescriptorKind::SaturateFn),
-    CssToken::Descriptor(CssDescriptorKind::SepiaFn),
-    CssToken::Descriptor(CssDescriptorKind::BlurFn),
-    CssToken::Descriptor(CssDescriptorKind::DropShadowFn),
+  const VALID_TOKENS: &'static [&'static str] = &[
+    "<brightness()>",
+    "<opacity()>",
+    "<contrast()>",
+    "<grayscale()>",
+    "<hue-rotate()>",
+    "<invert()>",
+    "<saturate()>",
+    "<sepia()>",
+    "<blur()>",
+    "<drop-shadow()>",
     #[cfg(feature = "svg")]
-    CssToken::Descriptor(CssDescriptorKind::UrlFn),
+    "<url()>",
   ];
 }
 

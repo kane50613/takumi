@@ -4,8 +4,7 @@ use cssparser::{Parser, Token};
 use typed_builder::TypedBuilder;
 
 use crate::style::{
-  Animatable, CssSyntaxKind, CssToken, FromCss, MakeComputed, ParseResult, ToCss, impl_css_enum,
-  unexpected_token,
+  Animatable, FromCss, MakeComputed, ParseResult, ToCss, impl_css_enum, unexpected_token,
 };
 
 /// Controls whether inline contents are scaled to fit their line box.
@@ -53,14 +52,14 @@ impl<'i> FromCss<'i> for TextFit {
     })
   }
 
-  const VALID_TOKENS: &'static [CssToken] = &[
-    CssToken::Keyword("none"),
-    CssToken::Keyword("grow"),
-    CssToken::Keyword("shrink"),
-    CssToken::Keyword("consistent"),
-    CssToken::Keyword("per-line"),
-    CssToken::Keyword("per-line-all"),
-    CssToken::Syntax(CssSyntaxKind::Percentage),
+  const VALID_TOKENS: &'static [&'static str] = &[
+    "none",
+    "grow",
+    "shrink",
+    "consistent",
+    "per-line",
+    "per-line-all",
+    "<percentage>",
   ];
 }
 

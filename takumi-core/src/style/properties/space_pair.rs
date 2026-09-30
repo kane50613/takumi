@@ -4,8 +4,8 @@ use cssparser::Parser;
 use taffy::Point;
 
 use crate::style::{
-  Animatable, Color, CssExpectedMessage, CssToken, FromCss, Length, MakeComputed, Overflow,
-  ParseResult, SizingContext, ToCss,
+  Animatable, Color, CssExpectedMessage, FromCss, Length, MakeComputed, Overflow, ParseResult,
+  SizingContext, ToCss,
 };
 
 /// A pair of values for horizontal and vertical axes.
@@ -35,7 +35,7 @@ impl<'i, T: Copy + FromCss<'i>> FromCss<'i> for SpacePair<T> {
 
   const EXPECT_MESSAGE: CssExpectedMessage = CssExpectedMessage::OneOrTwoValues;
 
-  const VALID_TOKENS: &'static [CssToken] = T::VALID_TOKENS;
+  const VALID_TOKENS: &'static [&'static str] = T::VALID_TOKENS;
 }
 
 impl<T: Copy> SpacePair<T> {

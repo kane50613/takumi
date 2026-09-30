@@ -4,8 +4,8 @@ use cssparser::Parser;
 
 use super::write_space_separated;
 use crate::style::{
-  CssDescriptorKind, CssSyntaxKind, CssToken, FromCss, GridRepeatTrack, GridRepetitionCount,
-  GridTrackSize, MakeComputed, ParseResult, SizingContext, ToCss,
+  FromCss, GridRepeatTrack, GridRepetitionCount, GridTrackSize, MakeComputed, ParseResult,
+  SizingContext, ToCss,
 };
 
 /// An ordered list of [`GridTemplateComponent`] values.
@@ -108,12 +108,8 @@ impl<'i> FromCss<'i> for GridTemplateComponent {
     Ok(GridTemplateComponent::Single(size))
   }
 
-  const VALID_TOKENS: &'static [CssToken] = &[
-    CssToken::Syntax(CssSyntaxKind::LineNames),
-    CssToken::Descriptor(CssDescriptorKind::RepeatFn),
-    CssToken::Descriptor(CssDescriptorKind::MinmaxFn),
-    CssToken::Syntax(CssSyntaxKind::Length),
-  ];
+  const VALID_TOKENS: &'static [&'static str] =
+    &["<line-names>", "<repeat()>", "<minmax()>", "<length>"];
 }
 
 impl<'i> FromCss<'i> for GridTemplateComponents {
@@ -125,7 +121,7 @@ impl<'i> FromCss<'i> for GridTemplateComponents {
     Ok(components)
   }
 
-  const VALID_TOKENS: &'static [CssToken] = GridTemplateComponent::VALID_TOKENS;
+  const VALID_TOKENS: &'static [&'static str] = GridTemplateComponent::VALID_TOKENS;
 }
 
 pub(crate) fn collect_components_and_names(

@@ -2,7 +2,7 @@ use std::fmt;
 
 use cssparser::{Parser, match_ignore_ascii_case, serialize_string};
 
-use crate::style::{CssSyntaxKind, CssToken, FromCss, MakeComputed, ParseResult, ToCss};
+use crate::style::{FromCss, MakeComputed, ParseResult, ToCss};
 
 /// Defines how text should be overflowed.
 ///
@@ -32,11 +32,7 @@ impl<'i> FromCss<'i> for TextOverflow {
     }
   }
 
-  const VALID_TOKENS: &'static [CssToken] = &[
-    CssToken::Keyword("clip"),
-    CssToken::Keyword("ellipsis"),
-    CssToken::Syntax(CssSyntaxKind::String),
-  ];
+  const VALID_TOKENS: &'static [&'static str] = &["clip", "ellipsis", "<string>"];
 }
 
 impl ToCss for TextOverflow {

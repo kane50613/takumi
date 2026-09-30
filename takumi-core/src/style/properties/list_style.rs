@@ -3,8 +3,8 @@ use std::{fmt, sync::Arc};
 use cssparser::{Parser, Token, match_ignore_ascii_case, serialize_string};
 
 use crate::style::{
-  Animatable, BackgroundImage, CssSyntaxKind, CssToken, Direction, FromCss, MakeComputed,
-  ParseResult, ToCss, impl_css_enum, unexpected_token,
+  Animatable, BackgroundImage, Direction, FromCss, MakeComputed, ParseResult, ToCss, impl_css_enum,
+  merge_token_lists, merged_token_len, unexpected_token,
 };
 
 /// The counter style a list item's marker is generated from.
@@ -67,7 +67,7 @@ impl<'i> FromCss<'i> for ListStyleImage {
     Ok(Self(image.paints().then(|| Arc::new(image))))
   }
 
-  const VALID_TOKENS: &'static [CssToken] = BackgroundImage::VALID_TOKENS;
+  const VALID_TOKENS: &'static [&'static str] = BackgroundImage::VALID_TOKENS;
 }
 
 impl ToCss for ListStyleImage {
@@ -236,20 +236,20 @@ impl MakeComputed for ListStyleType {}
 
 impl Animatable for ListStyleType {}
 
-const LIST_STYLE_TYPE_TOKENS: &[CssToken] = &[
-  CssToken::Keyword("none"),
-  CssToken::Keyword("disc"),
-  CssToken::Keyword("circle"),
-  CssToken::Keyword("square"),
-  CssToken::Keyword("decimal"),
-  CssToken::Keyword("decimal-leading-zero"),
-  CssToken::Keyword("lower-alpha"),
-  CssToken::Keyword("lower-latin"),
-  CssToken::Keyword("upper-alpha"),
-  CssToken::Keyword("upper-latin"),
-  CssToken::Keyword("lower-roman"),
-  CssToken::Keyword("upper-roman"),
-  CssToken::Syntax(CssSyntaxKind::String),
+const LIST_STYLE_TYPE_TOKENS: &[&str] = &[
+  "none",
+  "disc",
+  "circle",
+  "square",
+  "decimal",
+  "decimal-leading-zero",
+  "lower-alpha",
+  "lower-latin",
+  "upper-alpha",
+  "upper-latin",
+  "lower-roman",
+  "upper-roman",
+  "<string>",
 ];
 
 impl<'i> FromCss<'i> for ListStyleType {
@@ -266,7 +266,7 @@ impl<'i> FromCss<'i> for ListStyleType {
     }
   }
 
-  const VALID_TOKENS: &'static [CssToken] = &LIST_STYLE_TOKENS;
+  const VALID_TOKENS: &'static [&'static str] = &LIST_STYLE_TOKENS;
 }
 
 impl ToCss for ListStyleType {
@@ -289,14 +289,14 @@ impl ToCss for ListStyleType {
   }
 }
 
-const LIST_STYLE_TOKEN_LISTS: &[&[CssToken]] = &[
+const LIST_STYLE_TOKEN_LISTS: &[&[&str]] = &[
   LIST_STYLE_TYPE_TOKENS,
   ListStylePosition::VALID_TOKENS,
   BackgroundImage::VALID_TOKENS,
 ];
 
-const LIST_STYLE_TOKENS: [CssToken; CssToken::merged_len(LIST_STYLE_TOKEN_LISTS)] =
-  CssToken::merge_lists(LIST_STYLE_TOKEN_LISTS);
+const LIST_STYLE_TOKENS: [&str; merged_token_len(LIST_STYLE_TOKEN_LISTS)] =
+  merge_token_lists(LIST_STYLE_TOKEN_LISTS);
 
 impl<'i> FromCss<'i> for ListStyleShorthand {
   fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
@@ -339,7 +339,7 @@ impl<'i> FromCss<'i> for ListStyleShorthand {
     })
   }
 
-  const VALID_TOKENS: &'static [CssToken] = LIST_STYLE_TYPE_TOKENS;
+  const VALID_TOKENS: &'static [&'static str] = LIST_STYLE_TYPE_TOKENS;
 }
 
 #[cfg(test)]

@@ -3,8 +3,7 @@ use std::fmt;
 use cssparser::{Parser, serialize_string};
 
 use crate::style::{
-  Animatable, CssSyntaxKind, CssToken, FromCss, MakeComputed, ParseResult, ToCss, impl_css_enum,
-  tw::TailwindPropertyParser,
+  Animatable, FromCss, MakeComputed, ParseResult, ToCss, impl_css_enum, tw::TailwindPropertyParser,
 };
 
 /// `block-ellipsis`: `none | auto | <string>`. Inherited.
@@ -34,11 +33,7 @@ impl<'i> FromCss<'i> for BlockEllipsis {
     Ok(Self::String(input.expect_string_cloned()?.to_string()))
   }
 
-  const VALID_TOKENS: &'static [CssToken] = &[
-    CssToken::Keyword("none"),
-    CssToken::Keyword("auto"),
-    CssToken::Syntax(CssSyntaxKind::String),
-  ];
+  const VALID_TOKENS: &'static [&'static str] = &["none", "auto", "<string>"];
 }
 
 impl ToCss for BlockEllipsis {
@@ -128,11 +123,7 @@ impl<'i> FromCss<'i> for LineClamp {
     Ok(Self::clamp(Some(count as u32), block_ellipsis))
   }
 
-  const VALID_TOKENS: &'static [CssToken] = &[
-    CssToken::Keyword("none"),
-    CssToken::Syntax(CssSyntaxKind::Integer),
-    CssToken::Syntax(CssSyntaxKind::String),
-  ];
+  const VALID_TOKENS: &'static [&'static str] = &["none", "<integer>", "<string>"];
 }
 
 impl TailwindPropertyParser for LineClamp {

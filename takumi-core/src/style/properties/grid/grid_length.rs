@@ -4,7 +4,7 @@ use cssparser::{Parser, Token};
 use taffy::CompactLength;
 
 use crate::style::{
-  CssToken, FromCss, Length, MakeComputed, ParseResult, SizingContext, ToCss, unexpected_token,
+  FromCss, Length, MakeComputed, ParseResult, SizingContext, ToCss, unexpected_token,
 };
 
 /// Represents a grid track sizing function
@@ -46,7 +46,7 @@ impl<'i> FromCss<'i> for GridLength {
     Ok(GridLength::Fr(*value))
   }
 
-  const VALID_TOKENS: &'static [CssToken] = Length::VALID_TOKENS;
+  const VALID_TOKENS: &'static [&'static str] = Length::VALID_TOKENS;
 }
 
 impl MakeComputed for GridLength {

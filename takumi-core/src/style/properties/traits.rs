@@ -65,245 +65,49 @@ where
 }
 
 /// Compact identifiers for frequently reused CSS syntax tokens.
-#[derive(Clone, Copy)]
-#[non_exhaustive]
-pub(crate) enum CssSyntaxKind {
-  /// `<angle>`
-  Angle,
-  /// `<border-style>`
-  BorderStyle,
-  /// `<clip>`
-  Clip,
-  /// `<color>`
-  Color,
-  /// `<custom-ident>`
-  CustomIdent,
-  /// `<easing-function>`
-  EasingFunction,
-  /// `<family-name>`
-  FamilyName,
-  /// `<generic-name>`
-  GenericName,
-  /// `<ident>`
-  Ident,
-  /// `<image>`
-  Image,
-  /// `<integer>`
-  Integer,
-  /// `<length>`
-  Length,
-  /// `<line-names>`
-  LineNames,
-  /// `<number>`
-  Number,
-  /// `<percentage>`
-  Percentage,
-  /// `<position>`
-  Position,
-  /// `<repeat>`
-  Repeat,
-  /// `<string>`
-  String,
-  /// `<time>`
-  Time,
-  /// `<track-size>`
-  TrackSize,
-  /// `<transform-function>`
-  TransformFunction,
+/// Total length of `lists` flattened, for sizing the [`merge_token_lists`] array.
+pub(crate) const fn merged_token_len(lists: &[&[&'static str]]) -> usize {
+  let (mut len, mut list) = (0, 0);
+  while list < lists.len() {
+    len += lists[list].len();
+    list += 1;
+  }
+  len
 }
 
-impl CssSyntaxKind {
-  const fn as_str(self) -> &'static str {
-    match self {
-      Self::Angle => "angle",
-      Self::BorderStyle => "border-style",
-      Self::Clip => "clip",
-      Self::Color => "color",
-      Self::CustomIdent => "custom-ident",
-      Self::EasingFunction => "easing-function",
-      Self::FamilyName => "family-name",
-      Self::GenericName => "generic-name",
-      Self::Ident => "ident",
-      Self::Image => "image",
-      Self::Integer => "integer",
-      Self::Length => "length",
-      Self::LineNames => "line-names",
-      Self::Number => "number",
-      Self::Percentage => "percentage",
-      Self::Position => "position",
-      Self::Repeat => "repeat",
-      Self::String => "string",
-      Self::Time => "time",
-      Self::TrackSize => "track-size",
-      Self::TransformFunction => "transform-function",
+/// Concatenates token lists into a single array, e.g. to build a shorthand's `VALID_TOKENS` from
+/// its longhands'. `N` must be [`merged_token_len`].
+pub(crate) const fn merge_token_lists<const N: usize>(
+  lists: &[&[&'static str]],
+) -> [&'static str; N] {
+  let mut merged = [""; N];
+  let (mut index, mut list) = (0, 0);
+  while list < lists.len() {
+    let tokens = lists[list];
+    let mut token = 0;
+    while token < tokens.len() {
+      merged[index] = tokens[token];
+      index += 1;
+      token += 1;
     }
+    list += 1;
   }
+  merged
 }
 
-/// Compact identifiers for reusable CSS descriptor and function labels.
-#[derive(Clone, Copy)]
-pub(crate) enum CssDescriptorKind {
-  /// `<blur()>`
-  BlurFn,
-  /// `<brightness()>`
-  BrightnessFn,
-  /// `<circle()>`
-  CircleFn,
-  /// `<color and percentage>`
-  ColorAndPercentage,
-  /// `<color-mix()>`
-  ColorMixFn,
-  /// `<conic-gradient()>`
-  ConicGradientFn,
-  /// `<repeating-conic-gradient()>`
-  RepeatingConicGradientFn,
-  /// `<contrast()>`
-  ContrastFn,
-  /// `<cubic-bezier()>`
-  CubicBezierFn,
-  /// `<drop-shadow()>`
-  DropShadowFn,
-  /// `<ellipse()>`
-  EllipseFn,
-  /// `<grayscale()>`
-  GrayscaleFn,
-  /// `<hue-rotate()>`
-  HueRotateFn,
-  /// `<in <color-space>>`
-  InColorSpace,
-  /// `<inset()>`
-  InsetFn,
-  /// `<invert()>`
-  InvertFn,
-  /// `<linear-gradient()>`
-  LinearGradientFn,
-  /// `<repeating-linear-gradient()>`
-  RepeatingLinearGradientFn,
-  /// `<minmax()>`
-  MinmaxFn,
-  /// `<opacity()>`
-  OpacityFn,
-  /// `<path()>`
-  PathFn,
-  /// `<polygon()>`
-  PolygonFn,
-  /// `<radial-gradient()>`
-  RadialGradientFn,
-  /// `<repeating-radial-gradient()>`
-  RepeatingRadialGradientFn,
-  /// `<repeat()>`
-  RepeatFn,
-  /// `<saturate()>`
-  SaturateFn,
-  /// `<sepia()>`
-  SepiaFn,
-  /// `<steps()>`
-  StepsFn,
-  /// `<superellipse()>`
-  SuperellipseFn,
-  /// `<text-wrap-mode>`
-  TextWrapMode,
-  /// `<text-wrap-style>`
-  TextWrapStyle,
-  /// `<url()>`
-  UrlFn,
-  /// `<white-space-collapse>`
-  WhiteSpaceCollapse,
-}
-
-impl CssDescriptorKind {
-  const fn as_str(self) -> &'static str {
-    match self {
-      Self::BlurFn => "blur()",
-      Self::BrightnessFn => "brightness()",
-      Self::CircleFn => "circle()",
-      Self::ColorAndPercentage => "color and percentage",
-      Self::ColorMixFn => "color-mix()",
-      Self::ConicGradientFn => "conic-gradient()",
-      Self::RepeatingConicGradientFn => "repeating-conic-gradient()",
-      Self::ContrastFn => "contrast()",
-      Self::CubicBezierFn => "cubic-bezier()",
-      Self::DropShadowFn => "drop-shadow()",
-      Self::EllipseFn => "ellipse()",
-      Self::GrayscaleFn => "grayscale()",
-      Self::HueRotateFn => "hue-rotate()",
-      Self::InColorSpace => "in <color-space>",
-      Self::InsetFn => "inset()",
-      Self::InvertFn => "invert()",
-      Self::LinearGradientFn => "linear-gradient()",
-      Self::RepeatingLinearGradientFn => "repeating-linear-gradient()",
-      Self::MinmaxFn => "minmax()",
-      Self::OpacityFn => "opacity()",
-      Self::PathFn => "path()",
-      Self::PolygonFn => "polygon()",
-      Self::RadialGradientFn => "radial-gradient()",
-      Self::RepeatingRadialGradientFn => "repeating-radial-gradient()",
-      Self::RepeatFn => "repeat()",
-      Self::SaturateFn => "saturate()",
-      Self::SepiaFn => "sepia()",
-      Self::StepsFn => "steps()",
-      Self::SuperellipseFn => "superellipse()",
-      Self::TextWrapMode => "text-wrap-mode",
-      Self::TextWrapStyle => "text-wrap-style",
-      Self::UrlFn => "url()",
-      Self::WhiteSpaceCollapse => "white-space-collapse",
-    }
-  }
-}
-
-/// Enum representing CSS tokens.
-#[derive(Clone, Copy)]
-#[non_exhaustive]
-pub(crate) enum CssToken {
-  /// A CSS keyword.
-  Keyword(&'static str),
-  /// A common CSS syntax token backed by a compact enum table.
-  Syntax(CssSyntaxKind),
-  /// A reusable CSS descriptor backed by a compact enum table.
-  Descriptor(CssDescriptorKind),
-}
-
-impl CssToken {
-  /// Total length of `lists` flattened, for sizing the [`Self::merge_lists`] array.
-  pub(crate) const fn merged_len(lists: &[&[CssToken]]) -> usize {
-    let (mut len, mut list) = (0, 0);
-    while list < lists.len() {
-      len += lists[list].len();
-      list += 1;
-    }
-    len
-  }
-
-  /// Concatenates token lists into a single array, e.g. to build a shorthand's
-  /// `VALID_TOKENS` from its longhands'. `N` must be [`Self::merged_len`].
-  pub(crate) const fn merge_lists<const N: usize>(lists: &[&[CssToken]]) -> [CssToken; N] {
-    let mut merged = [CssToken::Keyword(""); N];
-    let (mut index, mut list) = (0, 0);
-    while list < lists.len() {
-      let tokens = lists[list];
-      let mut token = 0;
-      while token < tokens.len() {
-        merged[index] = tokens[token];
-        index += 1;
-        token += 1;
-      }
-      list += 1;
-    }
-    merged
-  }
-
-  #[inline(never)]
-  pub(crate) fn keyword_index(ident: &str, tokens: &[CssToken]) -> Option<usize> {
-    tokens.iter().position(
-      |token| matches!(token, Self::Keyword(keyword) if ident.eq_ignore_ascii_case(keyword)),
-    )
-  }
+/// The index of the keyword `ident` names in `tokens`, skipping `<syntax>` entries, which an
+/// escaped ident could otherwise spell.
+#[inline(never)]
+pub(crate) fn keyword_index(ident: &str, tokens: &[&'static str]) -> Option<usize> {
+  tokens
+    .iter()
+    .position(|token| !token.starts_with('<') && ident.eq_ignore_ascii_case(token))
 }
 
 #[inline(never)]
 pub(crate) fn parse_enum_keyword<'i>(
   input: &mut Parser<'i, '_>,
-  valid_tokens: &'static [CssToken],
+  valid_tokens: &'static [&'static str],
   expect: CssExpectedMessage,
 ) -> ParseResult<'i, usize> {
   let location = input.current_source_location();
@@ -318,20 +122,20 @@ pub(crate) fn parse_enum_keyword<'i>(
     ));
   };
 
-  CssToken::keyword_index(ident, valid_tokens)
+  keyword_index(ident, valid_tokens)
     .ok_or_else(|| build_unexpected_token(location, token, expect, valid_tokens))
 }
 
 #[inline(never)]
 pub(crate) fn parse_ident_enum_keyword<'i>(
   input: &mut Parser<'i, '_>,
-  valid_tokens: &'static [CssToken],
+  valid_tokens: &'static [&'static str],
   expect: CssExpectedMessage,
 ) -> ParseResult<'i, usize> {
   let location = input.current_source_location();
   let ident = input.expect_ident()?;
 
-  CssToken::keyword_index(ident, valid_tokens).ok_or_else(|| {
+  keyword_index(ident, valid_tokens).ok_or_else(|| {
     build_unexpected_token(
       location,
       &Token::Ident(ident.to_owned()),
@@ -339,16 +143,6 @@ pub(crate) fn parse_ident_enum_keyword<'i>(
       valid_tokens,
     )
   })
-}
-
-impl fmt::Display for CssToken {
-  fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-    match self {
-      CssToken::Keyword(keyword) => write!(f, "'{keyword}'"),
-      CssToken::Syntax(token) => write!(f, "<{name}>", name = token.as_str()),
-      CssToken::Descriptor(token) => write!(f, "<{name}>", name = token.as_str()),
-    }
-  }
 }
 
 /// Defines reusable message templates for CSS parse errors.
@@ -395,8 +189,9 @@ pub(crate) trait FromCss<'i> {
   where
     Self: Sized;
 
-  /// Returns the list of valid CSS tokens for this type.
-  const VALID_TOKENS: &'static [CssToken];
+  /// The keywords this type accepts, and the `<syntax>` of each other value it takes, for
+  /// parse errors.
+  const VALID_TOKENS: &'static [&'static str];
 
   /// Message template used when building parse errors for this type.
   const EXPECT_MESSAGE: CssExpectedMessage = CssExpectedMessage::OneValue;
@@ -404,7 +199,7 @@ pub(crate) trait FromCss<'i> {
 
 impl<'i, T: FromCss<'i>> FromCss<'i> for Option<T> {
   // 'none' is intentionally omitted and applied in `expect_message`
-  const VALID_TOKENS: &'static [CssToken] = T::VALID_TOKENS;
+  const VALID_TOKENS: &'static [&'static str] = T::VALID_TOKENS;
 
   const EXPECT_MESSAGE: CssExpectedMessage = CssExpectedMessage::ValueOrNone;
 
@@ -418,10 +213,7 @@ impl<'i, T: FromCss<'i>> FromCss<'i> for Option<T> {
 }
 
 impl<'i> FromCss<'i> for String {
-  const VALID_TOKENS: &'static [CssToken] = &[
-    CssToken::Syntax(CssSyntaxKind::String),
-    CssToken::Syntax(CssSyntaxKind::CustomIdent),
-  ];
+  const VALID_TOKENS: &'static [&'static str] = &["<string>", "<custom-ident>"];
 
   fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
     Ok(input.expect_ident_or_string()?.to_string())
@@ -801,7 +593,7 @@ impl MakeComputed for u32 {}
 impl Animatable for u32 {}
 
 impl<'i> FromCss<'i> for u32 {
-  const VALID_TOKENS: &'static [CssToken] = &[CssToken::Syntax(CssSyntaxKind::Integer)];
+  const VALID_TOKENS: &'static [&'static str] = &["<integer>"];
 
   fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
     let value = input.expect_integer()?;
@@ -858,7 +650,7 @@ macro_rules! impl_comma_list_from_css {
           .map(Vec::into_boxed_slice)
       }
 
-      const VALID_TOKENS: &'static [$crate::style::CssToken] = $valid;
+      const VALID_TOKENS: &'static [&'static str] = $valid;
     }
   };
 }
@@ -908,7 +700,7 @@ macro_rules! impl_css_enum {
 
     impl $enum_type {
       fn from_keyword(ident: &str) -> Option<Self> {
-        $crate::style::CssToken::keyword_index(
+        $crate::style::keyword_index(
           ident,
           <Self as $crate::style::properties::FromCss>::VALID_TOKENS,
         )
@@ -929,10 +721,10 @@ macro_rules! impl_css_enum {
     $crate::style::properties::impl_css_enum!(@animatable $animatable $enum_type);
 
     impl<'i> crate::style::FromCss<'i> for $enum_type {
-      const VALID_TOKENS: &'static [crate::style::CssToken] = &[
+      const VALID_TOKENS: &'static [&'static str] = &[
         $(
-          crate::style::CssToken::Keyword($canonical)
-          $(, crate::style::CssToken::Keyword($alias))*
+          $canonical
+          $(, $alias)*
         ),*
       ];
 
@@ -983,11 +775,11 @@ macro_rules! declare_box_alignment_enum_impl {
     impl crate::style::MakeComputed for $enum_type {}
 
     impl<'i> crate::style::FromCss<'i> for $enum_type {
-      const VALID_TOKENS: &'static [crate::style::CssToken] = &[
-        $(crate::style::CssToken::Keyword($plain_css),)*
-        $(crate::style::CssToken::Keyword($safe_css),)*
-        crate::style::CssToken::Keyword("safe"),
-        crate::style::CssToken::Keyword("unsafe"),
+      const VALID_TOKENS: &'static [&'static str] = &[
+        $($plain_css,)*
+        $($safe_css,)*
+        "safe",
+        "unsafe",
       ];
 
       fn from_css(input: &mut cssparser::Parser<'i, '_>) -> crate::style::ParseResult<'i, Self> {

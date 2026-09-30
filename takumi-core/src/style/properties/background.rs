@@ -107,13 +107,8 @@ impl<'i> FromCss<'i> for Background {
     })
   }
 
-  const VALID_TOKENS: &'static [CssToken] = &[
-    CssToken::Syntax(CssSyntaxKind::Color),
-    CssToken::Syntax(CssSyntaxKind::Image),
-    CssToken::Syntax(CssSyntaxKind::Position),
-    CssToken::Syntax(CssSyntaxKind::Repeat),
-    CssToken::Syntax(CssSyntaxKind::Clip),
-  ];
+  const VALID_TOKENS: &'static [&'static str] =
+    &["<color>", "<image>", "<position>", "<repeat>", "<clip>"];
 }
 
 /// A list of background properties (one per layer).

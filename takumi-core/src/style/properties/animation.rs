@@ -4,9 +4,8 @@ use cssparser::{BasicParseErrorKind, Parser, Token, match_ignore_ascii_case, ser
 use typed_builder::TypedBuilder;
 
 use crate::style::{
-  CssDescriptorKind, CssSyntaxKind, CssToken, FromCss, FromCssStr, MakeComputed, ParseResult,
-  ToCss, impl_comma_list_from_css, impl_css_enum, next_is_comma, tw::TailwindPropertyParser,
-  unexpected_token,
+  FromCss, FromCssStr, MakeComputed, ParseResult, ToCss, impl_comma_list_from_css, impl_css_enum,
+  next_is_comma, tw::TailwindPropertyParser, unexpected_token,
 };
 
 /// Represents a CSS animation time value stored in milliseconds.
@@ -41,7 +40,7 @@ impl<'i> FromCss<'i> for AnimationTime {
     }
   }
 
-  const VALID_TOKENS: &'static [CssToken] = &[CssToken::Syntax(CssSyntaxKind::Time)];
+  const VALID_TOKENS: &'static [&'static str] = &["<time>"];
 }
 
 /// Parsed value for one `animation-name`.
@@ -55,11 +54,7 @@ impl MakeComputed for AnimationNames {}
 impl_comma_list_from_css!(
   AnimationNames,
   AnimationName,
-  &[
-    CssToken::Keyword("none"),
-    CssToken::Syntax(CssSyntaxKind::CustomIdent),
-    CssToken::Syntax(CssSyntaxKind::String),
-  ]
+  &["none", "<custom-ident>", "<string>",]
 );
 
 /// Parsed values for `animation-duration` and `animation-delay`.
@@ -136,16 +131,16 @@ impl<'i> FromCss<'i> for AnimationTimingFunction {
     })
   }
 
-  const VALID_TOKENS: &'static [CssToken] = &[
-    CssToken::Keyword("linear"),
-    CssToken::Keyword("ease"),
-    CssToken::Keyword("ease-in"),
-    CssToken::Keyword("ease-out"),
-    CssToken::Keyword("ease-in-out"),
-    CssToken::Keyword("step-start"),
-    CssToken::Keyword("step-end"),
-    CssToken::Descriptor(CssDescriptorKind::StepsFn),
-    CssToken::Descriptor(CssDescriptorKind::CubicBezierFn),
+  const VALID_TOKENS: &'static [&'static str] = &[
+    "linear",
+    "ease",
+    "ease-in",
+    "ease-out",
+    "ease-in-out",
+    "step-start",
+    "step-end",
+    "<steps()>",
+    "<cubic-bezier()>",
   ];
 }
 
@@ -189,10 +184,7 @@ impl<'i> FromCss<'i> for AnimationIterationCount {
     Ok(Self::Number(value))
   }
 
-  const VALID_TOKENS: &'static [CssToken] = &[
-    CssToken::Syntax(CssSyntaxKind::Number),
-    CssToken::Keyword("infinite"),
-  ];
+  const VALID_TOKENS: &'static [&'static str] = &["<number>", "infinite"];
 }
 
 /// Parsed values for `animation-iteration-count`.
@@ -356,7 +348,7 @@ impl<'i> FromCss<'i> for Animation {
     Ok(animation)
   }
 
-  const VALID_TOKENS: &'static [CssToken] = Animations::VALID_TOKENS;
+  const VALID_TOKENS: &'static [&'static str] = Animations::VALID_TOKENS;
 }
 
 /// Parsed values for the `animation` shorthand.
@@ -366,22 +358,22 @@ impl_comma_list_from_css!(
   Animations,
   Animation,
   &[
-    CssToken::Syntax(CssSyntaxKind::Time),
-    CssToken::Syntax(CssSyntaxKind::EasingFunction),
-    CssToken::Syntax(CssSyntaxKind::Number),
-    CssToken::Keyword("infinite"),
-    CssToken::Keyword("normal"),
-    CssToken::Keyword("reverse"),
-    CssToken::Keyword("alternate"),
-    CssToken::Keyword("alternate-reverse"),
-    CssToken::Keyword("none"),
-    CssToken::Keyword("forwards"),
-    CssToken::Keyword("backwards"),
-    CssToken::Keyword("both"),
-    CssToken::Keyword("running"),
-    CssToken::Keyword("paused"),
-    CssToken::Syntax(CssSyntaxKind::CustomIdent),
-    CssToken::Syntax(CssSyntaxKind::String),
+    "<time>",
+    "<easing-function>",
+    "<number>",
+    "infinite",
+    "normal",
+    "reverse",
+    "alternate",
+    "alternate-reverse",
+    "none",
+    "forwards",
+    "backwards",
+    "both",
+    "running",
+    "paused",
+    "<custom-ident>",
+    "<string>",
   ]
 );
 

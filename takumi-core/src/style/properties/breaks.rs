@@ -7,8 +7,7 @@ use std::fmt;
 use cssparser::{BasicParseErrorKind, Parser};
 
 use crate::style::{
-  Animatable, Color, CssSyntaxKind, CssToken, FromCss, MakeComputed, ParseResult, SizingContext,
-  ToCss, impl_css_enum, lerp,
+  Animatable, Color, FromCss, MakeComputed, ParseResult, SizingContext, ToCss, impl_css_enum, lerp,
 };
 
 /// A forced-break value for `break-before` / `break-after`. Pagination has no
@@ -97,7 +96,7 @@ impl<'i> FromCss<'i> for MinLines {
     Ok(Self(value as u32))
   }
 
-  const VALID_TOKENS: &'static [CssToken] = &[CssToken::Syntax(CssSyntaxKind::Number)];
+  const VALID_TOKENS: &'static [&'static str] = &["<number>"];
 }
 
 impl ToCss for MinLines {

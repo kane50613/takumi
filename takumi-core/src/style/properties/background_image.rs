@@ -3,9 +3,9 @@ use std::{fmt, sync::Arc};
 use cssparser::{Parser, Token, match_ignore_ascii_case, serialize_string};
 
 use crate::style::{
-  Animatable, ConicGradient, CssDescriptorKind, CssToken, FromCss, LinearGradient,
-  ListInterpolationStrategy, MakeComputed, ParseResult, RadialGradient, SizingContext, ToCss,
-  parse_comma_list, tw::TailwindPropertyParser, unexpected_token,
+  Animatable, ConicGradient, FromCss, LinearGradient, ListInterpolationStrategy, MakeComputed,
+  ParseResult, RadialGradient, SizingContext, ToCss, parse_comma_list, tw::TailwindPropertyParser,
+  unexpected_token,
 };
 
 /// Background image variants supported by Takumi.
@@ -85,15 +85,15 @@ impl<'i> FromCss<'i> for BackgroundImage {
     }
   }
 
-  const VALID_TOKENS: &'static [CssToken] = &[
-    CssToken::Descriptor(CssDescriptorKind::UrlFn),
-    CssToken::Descriptor(CssDescriptorKind::LinearGradientFn),
-    CssToken::Descriptor(CssDescriptorKind::RepeatingLinearGradientFn),
-    CssToken::Descriptor(CssDescriptorKind::RadialGradientFn),
-    CssToken::Descriptor(CssDescriptorKind::RepeatingRadialGradientFn),
-    CssToken::Descriptor(CssDescriptorKind::ConicGradientFn),
-    CssToken::Descriptor(CssDescriptorKind::RepeatingConicGradientFn),
-    CssToken::Keyword("none"),
+  const VALID_TOKENS: &'static [&'static str] = &[
+    "<url()>",
+    "<linear-gradient()>",
+    "<repeating-linear-gradient()>",
+    "<radial-gradient()>",
+    "<repeating-radial-gradient()>",
+    "<conic-gradient()>",
+    "<repeating-conic-gradient()>",
+    "none",
   ];
 }
 
@@ -105,7 +105,7 @@ impl<'i> FromCss<'i> for BackgroundImages {
     parse_comma_list(input, BackgroundImage::from_css)
   }
 
-  const VALID_TOKENS: &'static [CssToken] = BackgroundImage::VALID_TOKENS;
+  const VALID_TOKENS: &'static [&'static str] = BackgroundImage::VALID_TOKENS;
 }
 
 impl ToCss for BackgroundImage {

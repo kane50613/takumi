@@ -3,8 +3,8 @@ use std::fmt;
 use cssparser::{Parser, Token, match_ignore_ascii_case};
 
 use crate::style::{
-  Animatable, Color, CssDescriptorKind, CssToken, FromCss, MakeComputed, ParseResult,
-  SizingContext, ToCss, lerp, unexpected_token,
+  Animatable, Color, FromCss, MakeComputed, ParseResult, SizingContext, ToCss, lerp,
+  unexpected_token,
 };
 
 /// Superellipse parameter for the CSS `corner-shape` property.
@@ -140,14 +140,14 @@ impl<'i> FromCss<'i> for Superellipse {
     }
   }
 
-  const VALID_TOKENS: &'static [CssToken] = &[
-    CssToken::Keyword("notch"),
-    CssToken::Keyword("scoop"),
-    CssToken::Keyword("bevel"),
-    CssToken::Keyword("round"),
-    CssToken::Keyword("squircle"),
-    CssToken::Keyword("square"),
-    CssToken::Descriptor(CssDescriptorKind::SuperellipseFn),
+  const VALID_TOKENS: &'static [&'static str] = &[
+    "notch",
+    "scoop",
+    "bevel",
+    "round",
+    "squircle",
+    "square",
+    "<superellipse()>",
   ];
 }
 

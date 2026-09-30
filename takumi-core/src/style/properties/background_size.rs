@@ -3,9 +3,8 @@ use std::fmt;
 use cssparser::{Parser, Token, match_ignore_ascii_case};
 
 use crate::style::{
-  Animatable, Color, CssSyntaxKind, CssToken, FromCss, Length, ListInterpolationStrategy,
-  MakeComputed, ParseResult, SizingContext, ToCss, discrete, parse_comma_list,
-  tw::TailwindPropertyParser, unexpected_token,
+  Animatable, Color, FromCss, Length, ListInterpolationStrategy, MakeComputed, ParseResult,
+  SizingContext, ToCss, discrete, parse_comma_list, tw::TailwindPropertyParser, unexpected_token,
 };
 
 /// Parsed `background-size` for one layer.
@@ -67,11 +66,7 @@ impl<'i> FromCss<'i> for BackgroundSize {
     }
   }
 
-  const VALID_TOKENS: &'static [CssToken] = &[
-    CssToken::Keyword("cover"),
-    CssToken::Keyword("contain"),
-    CssToken::Syntax(CssSyntaxKind::Length),
-  ];
+  const VALID_TOKENS: &'static [&'static str] = &["cover", "contain", "<length>"];
 }
 
 impl MakeComputed for BackgroundSize {
@@ -123,7 +118,7 @@ impl<'i> FromCss<'i> for BackgroundSizes {
     parse_comma_list(input, BackgroundSize::from_css)
   }
 
-  const VALID_TOKENS: &'static [CssToken] = BackgroundSize::VALID_TOKENS;
+  const VALID_TOKENS: &'static [&'static str] = BackgroundSize::VALID_TOKENS;
 }
 
 impl ToCss for BackgroundSize {

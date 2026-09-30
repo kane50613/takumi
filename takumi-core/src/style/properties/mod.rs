@@ -210,7 +210,7 @@ pub(crate) fn build_unexpected_token<'i>(
   location: SourceLocation,
   token: &Token<'_>,
   expect: CssExpectedMessage,
-  valid_tokens: &'static [CssToken],
+  valid_tokens: &'static [&'static str],
 ) -> CssParseError<'i, Cow<'i, str>> {
   let token = CssParserToCss::to_css_string(token);
   let message = expect.build_message(&token, merge_enum_values(valid_tokens));
@@ -221,24 +221,24 @@ pub(crate) fn build_unexpected_token<'i>(
   }
 }
 
-/// Helper function to merge enum values into a human-readable format.
-/// - `["fill"]` → `"'fill'"`
-/// - `["fill", "contain"]` → `"'fill' or 'contain'"`
-/// - `["fill", "contain", "cover"]` → `"'fill', 'contain' or 'cover'"`
-pub(crate) fn merge_enum_values(values: &[CssToken]) -> String {
-  match values {
-    [] => String::new(),
-    [only] => only.to_string(),
-    [first, second] => format!("{first} or {second}"),
-    [all_but_last @ .., last] => {
-      let all_but_last = all_but_last
-        .iter()
-        .map(ToString::to_string)
-        .collect::<Vec<_>>()
-        .join(", ");
+/// `tokens` as an error message lists them: keywords quoted, `<syntax>` as is, the last joined
+/// with `or`.
+pub(crate) fn merge_enum_values(tokens: &[&'static str]) -> String {
+  let quoted: Vec<Cow<str>> = tokens
+    .iter()
+    .map(|token| {
+      if token.starts_with('<') {
+        Cow::Borrowed(*token)
+      } else {
+        Cow::Owned(format!("'{token}'"))
+      }
+    })
+    .collect();
 
-      format!("{all_but_last} or {last}")
-    }
+  match quoted.split_last() {
+    None => String::new(),
+    Some((last, [])) => last.to_string(),
+    Some((last, rest)) => format!("{} or {last}", rest.join(", ")),
   }
 }
 
@@ -405,7 +405,7 @@ impl<'i> FromCss<'i> for BorderRadius {
 
   const EXPECT_MESSAGE: CssExpectedMessage = CssExpectedMessage::BorderRadius;
 
-  const VALID_TOKENS: &'static [CssToken] = &[CssToken::Syntax(CssSyntaxKind::Length)];
+  const VALID_TOKENS: &'static [&'static str] = &["<length>"];
 }
 
 /// Defines how the width and height of an element are calculated.
@@ -598,7 +598,7 @@ impl Animatable for BorderSpacing {
 }
 
 impl<'i> FromCss<'i> for BorderSpacing {
-  const VALID_TOKENS: &'static [CssToken] = SpacePair::<Length>::VALID_TOKENS;
+  const VALID_TOKENS: &'static [&'static str] = SpacePair::<Length>::VALID_TOKENS;
   const EXPECT_MESSAGE: CssExpectedMessage = CssExpectedMessage::OneOrTwoValues;
 
   fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {

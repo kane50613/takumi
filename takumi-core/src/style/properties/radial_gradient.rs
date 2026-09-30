@@ -11,9 +11,9 @@ use super::gradient_utils::{
 };
 use crate::geometry::Size;
 use crate::style::{
-  Color, ColorInterpolationMethod, CssDescriptorKind, CssToken, FromCss, GradientStop, Length,
-  MakeComputed, ParseResult, PositionValue, ResolvedGradientStop, SizingContext, StopPosition,
-  ToCss, impl_css_enum, unexpected_token,
+  Color, ColorInterpolationMethod, FromCss, GradientStop, Length, MakeComputed, ParseResult,
+  PositionValue, ResolvedGradientStop, SizingContext, StopPosition, ToCss, impl_css_enum,
+  unexpected_token,
 };
 
 /// Radii of the ellipse through `corner`, as Blink's `EllipseRadius`
@@ -110,11 +110,11 @@ impl<'i> FromCss<'i> for RadialSize {
     }
   }
 
-  const VALID_TOKENS: &'static [CssToken] = &[
-    CssToken::Keyword("closest-side"),
-    CssToken::Keyword("farthest-side"),
-    CssToken::Keyword("closest-corner"),
-    CssToken::Keyword("farthest-corner"),
+  const VALID_TOKENS: &'static [&'static str] = &[
+    "closest-side",
+    "farthest-side",
+    "closest-corner",
+    "farthest-corner",
   ];
 }
 
@@ -513,8 +513,7 @@ impl<'i> FromCss<'i> for RadialGradient {
     })
   }
 
-  const VALID_TOKENS: &'static [CssToken] =
-    &[CssToken::Descriptor(CssDescriptorKind::RadialGradientFn)];
+  const VALID_TOKENS: &'static [&'static str] = &["<radial-gradient()>"];
 }
 
 impl ToCss for RadialSize {

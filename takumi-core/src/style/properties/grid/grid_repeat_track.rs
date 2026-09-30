@@ -3,9 +3,7 @@ use std::fmt;
 use cssparser::Parser;
 
 use super::{parse_line_names, write_space_separated};
-use crate::style::{
-  CssSyntaxKind, CssToken, FromCss, GridTrackSize, MakeComputed, ParseResult, SizingContext, ToCss,
-};
+use crate::style::{FromCss, GridTrackSize, MakeComputed, ParseResult, SizingContext, ToCss};
 
 /// Represents a grid repeat track
 #[derive(Debug, Clone, PartialEq)]
@@ -47,10 +45,7 @@ impl<'i> FromCss<'i> for GridRepeatTrack {
     })
   }
 
-  const VALID_TOKENS: &'static [CssToken] = &[
-    CssToken::Syntax(CssSyntaxKind::LineNames),
-    CssToken::Syntax(CssSyntaxKind::TrackSize),
-  ];
+  const VALID_TOKENS: &'static [&'static str] = &["<line-names>", "<track-size>"];
 }
 
 impl ToCss for GridRepeatTrack {

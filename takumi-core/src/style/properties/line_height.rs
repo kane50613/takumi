@@ -3,8 +3,8 @@ use std::fmt;
 use cssparser::{Parser, match_ignore_ascii_case};
 
 use crate::style::{
-  CssSyntaxKind, CssToken, FromCss, Length, MakeComputed, ParseResult, SizingContext, ToCss,
-  parse_calc_number_expression, tw::Namespace, tw::TailwindPropertyParser,
+  FromCss, Length, MakeComputed, ParseResult, SizingContext, ToCss, parse_calc_number_expression,
+  tw::Namespace, tw::TailwindPropertyParser,
 };
 
 /// Represents a line height value.
@@ -71,11 +71,7 @@ impl<'i> FromCss<'i> for LineHeight {
     Ok(LineHeight::Unitless(number))
   }
 
-  const VALID_TOKENS: &'static [CssToken] = &[
-    CssToken::Syntax(CssSyntaxKind::Number),
-    CssToken::Syntax(CssSyntaxKind::Length),
-    CssToken::Syntax(CssSyntaxKind::Percentage),
-  ];
+  const VALID_TOKENS: &'static [&'static str] = &["<number>", "<length>", "<percentage>"];
 }
 
 impl LineHeight {

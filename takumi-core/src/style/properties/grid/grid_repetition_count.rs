@@ -2,7 +2,7 @@ use std::fmt;
 
 use cssparser::{Parser, Token};
 
-use crate::style::{CssSyntaxKind, CssToken, FromCss, ParseResult, ToCss, unexpected_token};
+use crate::style::{FromCss, ParseResult, ToCss, unexpected_token};
 
 /// Represents grid track repetition keywords
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -73,11 +73,7 @@ impl<'i> FromCss<'i> for GridRepetitionCount {
     }
   }
 
-  const VALID_TOKENS: &'static [CssToken] = &[
-    CssToken::Keyword("auto-fill"),
-    CssToken::Keyword("auto-fit"),
-    CssToken::Syntax(CssSyntaxKind::Number),
-  ];
+  const VALID_TOKENS: &'static [&'static str] = &["auto-fill", "auto-fit", "<number>"];
 }
 
 impl ToCss for GridRepetitionKeyword {

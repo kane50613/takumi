@@ -4,9 +4,9 @@ use cssparser::{BasicParseErrorKind, Parser};
 use typed_builder::TypedBuilder;
 
 use crate::style::{
-  Animatable, Color, ColorInput, CssSyntaxKind, CssToken, FromCss, Length,
-  ListInterpolationStrategy, MakeComputed, ParseResult, SizingContext, ToCss, discrete,
-  impl_comma_list_from_css, next_is_comma, tw::TailwindPropertyParser,
+  Animatable, Color, ColorInput, FromCss, Length, ListInterpolationStrategy, MakeComputed,
+  ParseResult, SizingContext, ToCss, discrete, impl_comma_list_from_css, next_is_comma,
+  tw::TailwindPropertyParser,
 };
 
 /// Represents a box shadow with all its properties.
@@ -124,11 +124,7 @@ impl<'i> FromCss<'i> for BoxShadow {
     })
   }
 
-  const VALID_TOKENS: &'static [CssToken] = &[
-    CssToken::Keyword("inset"),
-    CssToken::Syntax(CssSyntaxKind::Length),
-    CssToken::Syntax(CssSyntaxKind::Color),
-  ];
+  const VALID_TOKENS: &'static [&'static str] = &["inset", "<length>", "<color>"];
 }
 
 impl TailwindPropertyParser for BoxShadow {}

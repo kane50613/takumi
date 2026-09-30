@@ -7,9 +7,8 @@ use cssparser::{Parser, Token, match_ignore_ascii_case};
 use tiny_skia::Transform as TinyTransform;
 
 use crate::style::{
-  Angle, Animatable, Color, CssSyntaxKind, CssToken, FromCss, Length, ListInterpolationStrategy,
-  MakeComputed, ParseResult, PercentageNumber, SizingContext, ToCss, discrete, lerp,
-  unexpected_token,
+  Angle, Animatable, Color, FromCss, Length, ListInterpolationStrategy, MakeComputed, ParseResult,
+  PercentageNumber, SizingContext, ToCss, discrete, lerp, unexpected_token,
 };
 
 const DEFAULT_SCALE: f32 = 1.0;
@@ -342,7 +341,7 @@ impl<'i> FromCss<'i> for Affine {
     Ok(Affine { a, b, c, d, x, y })
   }
 
-  const VALID_TOKENS: &'static [CssToken] = &[CssToken::Syntax(CssSyntaxKind::Number)];
+  const VALID_TOKENS: &'static [&'static str] = &["<number>"];
 }
 
 /// A collection of transform operations that can be applied together
@@ -361,7 +360,7 @@ impl<'i> FromCss<'i> for Transforms {
     Ok(Transforms(transforms.into_boxed_slice()))
   }
 
-  const VALID_TOKENS: &'static [CssToken] = Transform::VALID_TOKENS;
+  const VALID_TOKENS: &'static [&'static str] = Transform::VALID_TOKENS;
 }
 
 impl MakeComputed for Transforms {
@@ -532,7 +531,7 @@ impl<'i> FromCss<'i> for Transform {
     parser.parse_nested_block(parse)
   }
 
-  const VALID_TOKENS: &'static [CssToken] = &[CssToken::Syntax(CssSyntaxKind::TransformFunction)];
+  const VALID_TOKENS: &'static [&'static str] = &["<transform-function>"];
 }
 
 #[cfg(test)]

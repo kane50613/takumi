@@ -14,9 +14,8 @@ use super::gradient_utils::{
 };
 use crate::geometry::Size;
 use crate::style::{
-  Animatable, Color, ColorInput, ColorInterpolationMethod, CssDescriptorKind, CssSyntaxKind,
-  CssToken, FromCss, Length, MakeComputed, ParseResult, SizingContext, ToCss, impl_css_enum,
-  tw::TailwindPropertyParser, unexpected_token,
+  Animatable, Color, ColorInput, ColorInterpolationMethod, FromCss, Length, MakeComputed,
+  ParseResult, SizingContext, ToCss, impl_css_enum, tw::TailwindPropertyParser, unexpected_token,
 };
 
 /// Represents a linear gradient.
@@ -494,7 +493,7 @@ impl<'i> FromCss<'i> for StopPosition {
     Ok(StopPosition(length))
   }
 
-  const VALID_TOKENS: &'static [CssToken] = Length::VALID_TOKENS;
+  const VALID_TOKENS: &'static [&'static str] = Length::VALID_TOKENS;
 }
 
 impl<'i> FromCss<'i> for GradientStop {
@@ -510,10 +509,7 @@ impl<'i> FromCss<'i> for GradientStop {
     Ok(GradientStop::ColorHint { color, hint })
   }
 
-  const VALID_TOKENS: &'static [CssToken] = &[
-    CssToken::Syntax(CssSyntaxKind::Color),
-    CssToken::Syntax(CssSyntaxKind::Length),
-  ];
+  const VALID_TOKENS: &'static [&'static str] = &["<color>", "<length>"];
 }
 
 /// Represents an angle value in degrees.
@@ -725,13 +721,7 @@ impl<'i> FromCss<'i> for GradientKeywordDirection {
     Err(input.new_error_for_next_token())
   }
 
-  const VALID_TOKENS: &'static [CssToken] = &[
-    CssToken::Keyword("to"),
-    CssToken::Keyword("top"),
-    CssToken::Keyword("bottom"),
-    CssToken::Keyword("left"),
-    CssToken::Keyword("right"),
-  ];
+  const VALID_TOKENS: &'static [&'static str] = &["to", "top", "bottom", "left", "right"];
 }
 
 impl<'i> FromCss<'i> for LinearGradientDirection {
@@ -743,7 +733,7 @@ impl<'i> FromCss<'i> for LinearGradientDirection {
     Angle::from_css(input).map(Self::Angle)
   }
 
-  const VALID_TOKENS: &'static [CssToken] = Angle::VALID_TOKENS;
+  const VALID_TOKENS: &'static [&'static str] = Angle::VALID_TOKENS;
 }
 
 impl LinearGradient {
@@ -791,8 +781,7 @@ impl<'i> FromCss<'i> for LinearGradient {
     })
   }
 
-  const VALID_TOKENS: &'static [CssToken] =
-    &[CssToken::Descriptor(CssDescriptorKind::LinearGradientFn)];
+  const VALID_TOKENS: &'static [&'static str] = &["<linear-gradient()>"];
 }
 
 impl<'i> FromCss<'i> for Angle {
@@ -820,10 +809,7 @@ impl<'i> FromCss<'i> for Angle {
     }
   }
 
-  const VALID_TOKENS: &'static [CssToken] = &[
-    CssToken::Syntax(CssSyntaxKind::Angle),
-    CssToken::Keyword("none"),
-  ];
+  const VALID_TOKENS: &'static [&'static str] = &["<angle>", "none"];
 }
 
 impl ToCss for StopPosition {

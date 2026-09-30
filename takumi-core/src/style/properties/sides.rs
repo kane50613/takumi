@@ -5,7 +5,7 @@ use cssparser::Parser;
 use crate::{
   geometry::Rect,
   style::{
-    Animatable, Color, CssExpectedMessage, CssToken, FromCss, Length, MakeComputed, ParseResult,
+    Animatable, Color, CssExpectedMessage, FromCss, Length, MakeComputed, ParseResult,
     SizingContext, ToCss,
   },
 };
@@ -58,7 +58,7 @@ impl<'i, T: Copy + for<'j> FromCss<'j>> FromCss<'i> for Sides<T> {
     })
   }
 
-  const VALID_TOKENS: &'static [CssToken] = T::VALID_TOKENS;
+  const VALID_TOKENS: &'static [&'static str] = T::VALID_TOKENS;
 
   const EXPECT_MESSAGE: CssExpectedMessage = CssExpectedMessage::OneToFourValues;
 }

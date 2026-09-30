@@ -3,8 +3,8 @@ use std::fmt;
 use cssparser::Parser;
 
 use crate::style::{
-  Animatable, Color, CssSyntaxKind, CssToken, FromCss, MakeComputed, ParseResult, SizingContext,
-  ToCss, lerp, tw::TailwindPropertyParser,
+  Animatable, Color, FromCss, MakeComputed, ParseResult, SizingContext, ToCss, lerp,
+  tw::TailwindPropertyParser,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -31,7 +31,7 @@ impl<'i> FromCss<'i> for FlexGrow {
     Ok(FlexGrow(input.expect_number()?))
   }
 
-  const VALID_TOKENS: &'static [CssToken] = &[CssToken::Syntax(CssSyntaxKind::Number)];
+  const VALID_TOKENS: &'static [&'static str] = &["<number>"];
 }
 
 impl TailwindPropertyParser for FlexGrow {

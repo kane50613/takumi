@@ -5,8 +5,8 @@ use cssparser::{Parser, Token, match_ignore_ascii_case, serialize_string};
 use crate::{
   geometry::{Point, Size},
   style::{
-    CssDescriptorKind, CssSyntaxKind, CssToken, FromCss, Length, MakeComputed, ParseResult, Sides,
-    SizingContext, SpacePair, ToCss, impl_css_enum, unexpected_token,
+    FromCss, Length, MakeComputed, ParseResult, Sides, SizingContext, SpacePair, ToCss,
+    impl_css_enum, unexpected_token,
   },
 };
 
@@ -216,11 +216,7 @@ impl<'i> FromCss<'i> for ShapeRadius {
     }
   }
 
-  const VALID_TOKENS: &'static [CssToken] = &[
-    CssToken::Keyword("closest-side"),
-    CssToken::Keyword("farthest-side"),
-    CssToken::Syntax(CssSyntaxKind::Length),
-  ];
+  const VALID_TOKENS: &'static [&'static str] = &["closest-side", "farthest-side", "<length>"];
 }
 
 impl ShapePosition {
@@ -260,7 +256,7 @@ impl<'i> FromCss<'i> for ShapePosition {
     Ok(ShapePosition(SpacePair::from_pair(first, second)))
   }
 
-  const VALID_TOKENS: &'static [CssToken] = Length::VALID_TOKENS;
+  const VALID_TOKENS: &'static [&'static str] = Length::VALID_TOKENS;
 }
 
 impl<'i> FromCss<'i> for BasicShape {
@@ -326,12 +322,12 @@ impl<'i> FromCss<'i> for BasicShape {
     }
   }
 
-  const VALID_TOKENS: &'static [CssToken] = &[
-    CssToken::Descriptor(CssDescriptorKind::InsetFn),
-    CssToken::Descriptor(CssDescriptorKind::CircleFn),
-    CssToken::Descriptor(CssDescriptorKind::EllipseFn),
-    CssToken::Descriptor(CssDescriptorKind::PolygonFn),
-    CssToken::Descriptor(CssDescriptorKind::PathFn),
+  const VALID_TOKENS: &'static [&'static str] = &[
+    "<inset()>",
+    "<circle()>",
+    "<ellipse()>",
+    "<polygon()>",
+    "<path()>",
   ];
 }
 

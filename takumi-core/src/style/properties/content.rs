@@ -3,8 +3,8 @@ use std::{fmt, sync::Arc};
 use cssparser::{Parser, Token, match_ignore_ascii_case, serialize_string};
 
 use crate::style::{
-  Animatable, BackgroundImage, CssSyntaxKind, CssToken, FromCss, MakeComputed, ParseResult,
-  SizingContext, ToCss, tw::TailwindPropertyParser, unexpected_token,
+  Animatable, BackgroundImage, FromCss, MakeComputed, ParseResult, SizingContext, ToCss,
+  tw::TailwindPropertyParser, unexpected_token,
 };
 
 /// CSS `content` property value for `::before` / `::after` pseudo-elements.
@@ -94,12 +94,7 @@ impl<'i> FromCss<'i> for ContentValue {
     Ok(ContentValue::Items(items.into_boxed_slice()))
   }
 
-  const VALID_TOKENS: &'static [CssToken] = &[
-    CssToken::Keyword("none"),
-    CssToken::Keyword("normal"),
-    CssToken::Syntax(CssSyntaxKind::String),
-    CssToken::Syntax(CssSyntaxKind::Image),
-  ];
+  const VALID_TOKENS: &'static [&'static str] = &["none", "normal", "<string>", "<image>"];
 }
 
 impl<'i> FromCss<'i> for ContentItem {
@@ -125,10 +120,7 @@ impl<'i> FromCss<'i> for ContentItem {
     }
   }
 
-  const VALID_TOKENS: &'static [CssToken] = &[
-    CssToken::Syntax(CssSyntaxKind::String),
-    CssToken::Syntax(CssSyntaxKind::Image),
-  ];
+  const VALID_TOKENS: &'static [&'static str] = &["<string>", "<image>"];
 }
 
 impl<'i> FromCss<'i> for AttrRef {
@@ -142,7 +134,7 @@ impl<'i> FromCss<'i> for AttrRef {
     Ok(Self { name, fallback })
   }
 
-  const VALID_TOKENS: &'static [CssToken] = &[CssToken::Syntax(CssSyntaxKind::Ident)];
+  const VALID_TOKENS: &'static [&'static str] = &["<ident>"];
 }
 
 impl ToCss for ContentValue {
