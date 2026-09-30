@@ -34,6 +34,7 @@ use crate::{
   },
   resources::image::{sniff_mime, to_data_url},
   scene::{NodePaint, Scene},
+  sort_key::sort_by_key,
   style::{
     Affine, BackgroundClip, BackgroundImage, ComputedStyle, Filter, Isolation, TextAlign, ToCss,
   },
@@ -440,7 +441,7 @@ impl Walker {
 
     let mut baselines: Vec<f32> = runs.runs.iter().map(|run| run.glyph_run.baseline).collect();
 
-    baselines.sort_by(f32::total_cmp);
+    sort_by_key(&mut baselines, |&baseline| baseline);
     baselines.dedup_by(|a, b| (*a - *b).abs() < 0.01);
 
     let text_runs = runs

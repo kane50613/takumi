@@ -42,6 +42,7 @@ pub mod path_data;
 /// Font and image resource management.
 pub mod resources;
 pub mod scene;
+pub(crate) mod sort_key;
 /// CSS value types, parsing, and the cascade.
 pub mod style;
 pub mod units;

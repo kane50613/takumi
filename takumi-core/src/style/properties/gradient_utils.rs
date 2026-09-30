@@ -7,6 +7,7 @@ use tiny_skia::PremultipliedColorU8;
 
 use crate::{
   geometry::Point,
+  sort_key::sort_by_key,
   style::{
     Color, ColorInput, ColorInterpolationMethod, FromCss, GradientStop, ParseResult, PositionValue,
     ResolvedGradientStop, SizingContext, StopPosition, ToCss, math::fast_div_255, unexpected_token,
@@ -720,7 +721,7 @@ impl SrgbStop {
         color: after,
       });
     }
-    stops.sort_by(|a, b| a.offset.total_cmp(&b.offset));
+    sort_by_key(&mut stops, |stop| stop.offset);
     stops
   }
 }

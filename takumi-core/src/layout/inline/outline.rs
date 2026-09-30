@@ -7,6 +7,7 @@ use crate::{
   geometry::{PathBuilder, PathCommand, Point, Size},
   layout::corner_shape::KAPPA,
   layout_unit::UnitRect,
+  sort_key::sort_by_key,
   style::{BorderStyle, Color, Sides, SpacePair},
 };
 
@@ -192,7 +193,7 @@ impl OutlineIsland {
 fn union_outline(rects: &[[f32; 4]]) -> Vec<Point<f32>> {
   let mut edges: Vec<f32> = rects.iter().flat_map(|rect| [rect[1], rect[3]]).collect();
 
-  edges.sort_by(f32::total_cmp);
+  sort_by_key(&mut edges, |&edge| edge);
   edges.dedup();
 
   let bands: Vec<(f32, f32, f32, f32)> = edges

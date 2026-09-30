@@ -6,6 +6,8 @@
 //! Naive next to Blink: sizes are floats instead of `LayoutUnit`s, and `<col>` elements and
 //! captions constrain nothing.
 
+use crate::sort_key::sort_by_key;
+
 /// What one cell asks of the columns it spans, Blink's `CellInlineConstraint`.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) struct CellConstraint {
@@ -149,7 +151,7 @@ impl TableColumns {
       }
     }
 
-    colspan_cells.sort_by_key(|cell| (cell.span, cell.start));
+    sort_by_key(&mut colspan_cells, |cell| (cell.span, cell.start));
 
     let mut table = Self {
       columns,

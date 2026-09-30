@@ -1,6 +1,7 @@
 // Copyright 2022 the Resvg Authors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
+use crate::sort_key::sort_by_key;
 use std::collections::{HashMap, HashSet};
 use std::num::NonZeroU16;
 use std::sync::Arc;
@@ -1001,7 +1002,7 @@ fn apply_length_adjust(chunk: &TextChunk, clusters: &mut [GlyphCluster]) {
       }
     }
     // Complex scripts can have multi-codepoint clusters therefore we have to remove duplicates.
-    cluster_indexes.sort();
+    sort_by_key(&mut cluster_indexes, |&index| index);
     cluster_indexes.dedup();
 
     for i in &cluster_indexes {
