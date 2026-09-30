@@ -40,7 +40,11 @@ impl SnappedBox {
 
   /// Blink's `PixelSnappedContouredBorderWithOutsets` rectangle `insets` in from the snapped box
   /// when `of_snapped`, else from the border box, relative to the snapped box.
-  pub fn contoured_inset(&self, insets: Rect<f32>, of_snapped: bool) -> (Point<f32>, Size<f32>) {
+  pub(crate) fn contoured_inset(
+    &self,
+    insets: Rect<f32>,
+    of_snapped: bool,
+  ) -> (Point<f32>, Size<f32>) {
     let from = if of_snapped {
       self.snapped
     } else {

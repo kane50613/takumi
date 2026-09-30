@@ -6,7 +6,7 @@ use std::{array, f32::consts::PI};
 use crate::geometry::Point;
 
 /// Largest sigma a three-box pass sums without overflowing a `u32`, Skia's `kMaxSigma`.
-pub const MAX_SIGMA: f32 = 135.0;
+pub(crate) const MAX_SIGMA: f32 = 135.0;
 
 /// Blurs premultiplied RGBA pixels in place, treating pixels past the edges as transparent.
 // Inlined so the loops compile at the caller's opt-level, not takumi-core's "z".

@@ -163,12 +163,12 @@ impl PropertyTrees {
   }
 
   /// How many effects the trees hold.
-  pub fn effect_count(&self) -> usize {
+  pub(crate) fn effect_count(&self) -> usize {
     self.effects.len()
   }
 
   /// Every effect, in the order they were added.
-  pub fn effect_ids(&self) -> impl Iterator<Item = EffectId> + use<> {
+  pub(crate) fn effect_ids(&self) -> impl Iterator<Item = EffectId> + use<> {
     (0..self.effects.len()).map(EffectId)
   }
 
@@ -197,7 +197,7 @@ impl PropertyTrees {
   }
 
   /// Whether `ancestor` is `clip` or contains it.
-  pub fn clip_contains(&self, ancestor: Option<ClipId>, clip: Option<ClipId>) -> bool {
+  pub(crate) fn clip_contains(&self, ancestor: Option<ClipId>, clip: Option<ClipId>) -> bool {
     let Some(ancestor) = ancestor else {
       return true;
     };
@@ -206,26 +206,29 @@ impl PropertyTrees {
   }
 
   /// The deepest clip containing both `a` and `b`.
-  pub fn common_clip(&self, a: Option<ClipId>, b: Option<ClipId>) -> Option<ClipId> {
+  pub(crate) fn common_clip(&self, a: Option<ClipId>, b: Option<ClipId>) -> Option<ClipId> {
     self
       .clip_chain(a)
       .find(|&id| self.clip_contains(Some(id), b))
   }
 
   /// The deepest effect containing both `a` and `b`.
-  pub fn common_effect(&self, a: Option<EffectId>, b: Option<EffectId>) -> Option<EffectId> {
+  pub(crate) fn common_effect(&self, a: Option<EffectId>, b: Option<EffectId>) -> Option<EffectId> {
     self
       .effect_chain(a)
       .find(|&id| self.effect_chain(b).any(|other| other == id))
   }
 
   /// `clip` and its ancestors, innermost first.
-  pub fn clip_chain(&self, clip: Option<ClipId>) -> impl Iterator<Item = ClipId> + '_ {
+  pub(crate) fn clip_chain(&self, clip: Option<ClipId>) -> impl Iterator<Item = ClipId> + '_ {
     successors(clip, |&id| self.clip(id).parent)
   }
 
   /// `effect` and its ancestors, innermost first.
-  pub fn effect_chain(&self, effect: Option<EffectId>) -> impl Iterator<Item = EffectId> + '_ {
+  pub(crate) fn effect_chain(
+    &self,
+    effect: Option<EffectId>,
+  ) -> impl Iterator<Item = EffectId> + '_ {
     successors(effect, |&id| self.effect(id).parent)
   }
 }

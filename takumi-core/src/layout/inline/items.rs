@@ -78,7 +78,7 @@ pub struct InlineBoxItem<'c> {
 impl RenderNode {
   /// Whether a float sits among the inline content this node lays out, found the way
   /// [`collect_inline_items`] walks it.
-  pub fn has_inline_floats(&self) -> bool {
+  pub(crate) fn has_inline_floats(&self) -> bool {
     self.children.iter().flatten().any(|child| {
       if child.participates_as_inline_box() {
         child.inline_box_kind() == InlineBoxKind::CustomOutOfFlow

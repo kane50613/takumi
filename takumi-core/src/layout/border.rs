@@ -35,7 +35,7 @@ impl BorderSide {
 
   /// Whether a 3D `style` shades this side dark: `inset` darkens the top and left, and `outset`
   /// the bottom and right, as Blink's `DarkenBoxSide` decides.
-  pub fn darkened_by(self, style: BorderStyle) -> bool {
+  pub(crate) fn darkened_by(self, style: BorderStyle) -> bool {
     matches!(self, Self::Top | Self::Left) == (style == BorderStyle::Inset)
   }
 
@@ -510,7 +510,7 @@ impl BorderProperties {
   /// Grows the corner radii of a `border_box` whose edges move `outset` outward, after
   /// css-backgrounds-3's [outset-adjusted border radius](https://drafts.csswg.org/css-backgrounds-3/#outset-adjusted-border-radius),
   /// so a small corner stays proportionally sharp and a square one stays square.
-  pub fn outset_radii(&mut self, border_box: Size<f32>, outset: f32) {
+  pub(crate) fn outset_radii(&mut self, border_box: Size<f32>, outset: f32) {
     let used = self.scaled_corner_radii(border_box);
 
     for (corner, used) in self.radius.0.iter_mut().zip(used.0) {
@@ -534,7 +534,7 @@ impl BorderProperties {
   }
 
   /// Shrink radii by the border width to get inner radius path.
-  pub fn inset_by_border_width(&mut self) {
+  pub(crate) fn inset_by_border_width(&mut self) {
     self.expand_by(self.width.map(|size| -size))
   }
 

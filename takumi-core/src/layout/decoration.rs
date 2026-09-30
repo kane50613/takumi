@@ -85,7 +85,7 @@ impl ClipBox {
 
   /// Whether the region follows its origin's corners rather than being a rounded rectangle of its
   /// own: it is inset from a border box with a corner that is not round.
-  pub fn follows_origin(&self) -> bool {
+  pub(crate) fn follows_origin(&self) -> bool {
     let Some(origin) = self.origin.filter(|origin| !origin.border.is_zero()) else {
       return false;
     };
@@ -103,7 +103,7 @@ impl ClipBox {
 
   /// Appends the region's contour, its corners aligned to its origin's, as Blink's
   /// `AddContouredRect` draws an inset contoured rectangle.
-  pub fn append_contour(&self, path: &mut Vec<PathCommand>) {
+  pub(crate) fn append_contour(&self, path: &mut Vec<PathCommand>) {
     let Some(origin) = self.origin else {
       return self
         .border

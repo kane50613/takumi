@@ -48,7 +48,7 @@ impl Default for BoxShadow {
 }
 
 /// Represents a collection of box shadows, have custom `FromCss` implementation for comma-separated values.
-pub(crate) type BoxShadows = Box<[BoxShadow]>;
+pub type BoxShadows = Box<[BoxShadow]>;
 
 impl_comma_list_from_css!(BoxShadows, BoxShadow);
 

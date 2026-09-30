@@ -116,7 +116,7 @@ pub(crate) use font_variation_settings::FontVariationSettings;
 pub use font_weight::*;
 pub use gap::*;
 pub use grid::*;
-pub use intrinsic_sizing::*;
+pub(crate) use intrinsic_sizing::*;
 pub use length::*;
 pub use line_clamp::*;
 pub use line_height::*;

@@ -20,7 +20,7 @@ pub enum MaxSize {
 
 impl MaxSize {
   /// The maximum as a [`Length`], or `None` for `none`.
-  pub fn as_length(self) -> Option<Length> {
+  pub(crate) fn as_length(self) -> Option<Length> {
     match self {
       Self::Length(length) => Some(length),
       Self::None => None,

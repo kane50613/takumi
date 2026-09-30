@@ -57,7 +57,7 @@ pub struct OrderedChild {
 
 impl OrderedChild {
   /// Extends `path`, its parent's, to the child.
-  pub fn extend_path(&self, path: &mut Vec<usize>) {
+  pub(crate) fn extend_path(&self, path: &mut Vec<usize>) {
     path.push(self.render_index);
     path.extend(self.inline_path.iter().flatten());
   }
@@ -66,7 +66,7 @@ impl OrderedChild {
 /// Each visited node's placement and content box, kept so a hoisted out-of-flow child resolves
 /// against its containing block instead of its box-tree parent. A placement is what a child
 /// starts from: a device transform, or one with the paint offset beside it.
-pub struct ContainingBlocks<P = Affine> {
+pub(crate) struct ContainingBlocks<P = Affine> {
   placements: HashMap<NodeId, P>,
   content_boxes: HashMap<NodeId, Size<Option<f32>>>,
 }
@@ -82,7 +82,7 @@ impl<P> Default for ContainingBlocks<P> {
 
 impl<P: Copy> ContainingBlocks<P> {
   /// Records the placement a node's children start from.
-  pub fn record_placement(&mut self, node_id: NodeId, placement: P) {
+  pub(crate) fn record_placement(&mut self, node_id: NodeId, placement: P) {
     self.placements.insert(node_id, placement);
   }
 
@@ -800,7 +800,7 @@ impl<'r> LayoutTree<'r> {
   }
 
   /// Consumes the tree into immutable per-node layout results.
-  pub fn into_results(mut self) -> LayoutResults {
+  pub(crate) fn into_results(mut self) -> LayoutResults {
     // A box an inline containing block holds is placed in the inline formatting context, its
     // box-tree parent, rather than in the node standing in for the containing block.
     for &proxy in &self.inline_containing_blocks {

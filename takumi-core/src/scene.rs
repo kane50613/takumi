@@ -112,7 +112,7 @@ impl PaintItem {
   }
 
   /// What the item paints in a phase painting `part`: a nested context paints whole once.
-  pub fn part_in(&self, part: BoxPart) -> Option<BoxPart> {
+  pub(crate) fn part_in(&self, part: BoxPart) -> Option<BoxPart> {
     match (&self.kind, part) {
       (PaintItemKind::Node(_) | PaintItemKind::Floats(_), part) => Some(part),
       (PaintItemKind::Context(_), BoxPart::Whole) => Some(BoxPart::Whole),
@@ -176,7 +176,7 @@ impl StackingBuckets {
 
 /// Which part of a box a [`PaintPhase`] paints.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum BoxPart {
+pub(crate) enum BoxPart {
   /// Everything the box paints.
   Whole,
   /// Its shadows, background and border.
@@ -187,7 +187,7 @@ pub enum BoxPart {
 
 /// One phase of painting a stacking context.
 #[derive(Clone, Copy)]
-pub enum PaintPhase<'a> {
+pub(crate) enum PaintPhase<'a> {
   /// The context root's own content.
   RootContent,
   /// Items, each painting what [`PaintItem::part_in`] says for `part`.
@@ -218,7 +218,7 @@ impl StackingContextNode {
   }
 
   /// The phases after the root's decorations, in [CSS 2.1 Appendix E](https://www.w3.org/TR/CSS21/zindex.html) order.
-  pub fn paint_phases(&self) -> [PaintPhase<'_>; 7] {
+  pub(crate) fn paint_phases(&self) -> [PaintPhase<'_>; 7] {
     let buckets = &self.buckets;
 
     [
