@@ -1,0 +1,45 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>filter_drop_shadow_colored</title>
+    <base href="../../../" />
+    <link rel="stylesheet" href="takumi/tests/shared.css" />
+    <style>
+      .row {
+        display: flex;
+        width: 100%;
+        height: 100%;
+      }
+      .cell {
+        display: flex;
+        flex: 1;
+        align-items: center;
+        justify-content: center;
+      }
+      .shape {
+        width: 80px;
+        height: 80px;
+      }
+    </style>
+  </head>
+  <body style="width: 480px; height: 160px">
+    <div class="row">
+      <div class="cell" style="background: #000000">
+        <div class="shape" style="background: #ffffff; filter: drop-shadow(0 0 16px #ff0000)"></div>
+      </div>
+      <div class="cell" style="background: #1f2a44">
+        <div
+          class="shape"
+          style="background: #ffffff; filter: drop-shadow(8px 8px 16px #c1121f)"
+        ></div>
+      </div>
+      <div class="cell" style="background: #e4d2ac">
+        <div
+          class="shape"
+          style="background: #ffffff; border-radius: 50%; filter: drop-shadow(6px 6px 0 #1f2a44)"
+        ></div>
+      </div>
+    </div>
+  </body>
+</html>
