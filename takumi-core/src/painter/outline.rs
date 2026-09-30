@@ -2,8 +2,8 @@
 //! [`OutlinePainter`](https://source.chromium.org/chromium/chromium/src/+/main:third_party/blink/renderer/core/paint/outline_painter.cc).
 
 use super::{
-  BoxBorderPainter, BoxPainter, FillShape, LayerBounds, PaintDevice, PaintRole, StrokeStyle,
-  border::StyledLine,
+  BoxBorderPainter, BoxPainter, FillShape, LayerBounds, OpacityLayer, PaintDevice, PaintRole,
+  StrokeStyle, border::StyledLine,
 };
 use crate::{
   geometry::{PathBuilder, PathCommand, Point, Size},
@@ -25,7 +25,7 @@ pub struct PendingOutline {
 impl PendingOutline {
   /// Paints the outline as a ring around the border box, grown by
   /// `outline-offset + outline-width`.
-  pub fn paint<D: PaintDevice>(&self, device: &mut D) {
+  pub fn paint(&self, device: &mut dyn PaintDevice) {
     let OutlineGeometry { border, size, grow } = self.outline;
 
     device.set_role(PaintRole::Outline);
@@ -53,7 +53,7 @@ impl OutlineIsland {
   /// Paints the outline of the element that owns the island, with the block's border box at
   /// `origin`: a lone rect as a box border, as Blink's `PaintSingleRectOutline` does, and anything
   /// else as Blink's `ComplexOutlinePainter` does.
-  pub fn paint<D: PaintDevice>(&self, origin: Point<f32>, device: &mut D) {
+  pub fn paint(&self, origin: Point<f32>, device: &mut dyn PaintDevice) {
     let (outline, opacity) = self.outline();
     let (width, offset) = outline.painted();
 
@@ -186,7 +186,7 @@ impl ComplexOutline {
   }
 
   /// Fills the rect around the outline, which the open clips cut to shape.
-  fn fill_bounds<D: PaintDevice>(&self, color: Color, at: Affine, device: &mut D) {
+  fn fill_bounds(&self, color: Color, at: Affine, device: &mut dyn PaintDevice) {
     let (low, high) = self.outer.bounds();
 
     device.fill_shape(
@@ -221,7 +221,7 @@ impl ComplexOutline {
     }
   }
 
-  fn paint<D: PaintDevice>(&self, at: Affine, device: &mut D) {
+  fn paint(&self, at: Affine, device: &mut dyn PaintDevice) {
     let mut color = self.color;
     let alpha_layer =
       color.0[3] < u8::MAX && !matches!(self.style, BorderStyle::Solid | BorderStyle::Double);
@@ -323,7 +323,7 @@ impl ComplexOutline {
 
   /// Blink's `PaintDottedOrDashedOutline`: a rounded outline strokes its whole centre path, and a
   /// square one each edge on its own so its corners take whole dots or dashes.
-  fn paint_dotted_or_dashed<D: PaintDevice>(&self, color: Color, at: Affine, device: &mut D) {
+  fn paint_dotted_or_dashed(&self, color: Color, at: Affine, device: &mut dyn PaintDevice) {
     let dashed = self.style == BorderStyle::Dashed || self.width <= 3.0;
     let thickness = self.stroke_width(dashed);
     let (center, from_inner) = self.center(false);
@@ -355,12 +355,12 @@ impl ComplexOutline {
   }
 
   /// Blink's `PaintInsetOrOutsetOutline`: the lit edges in the colour, the shaded ones darker.
-  fn paint_inset_or_outset<D: PaintDevice>(
+  fn paint_inset_or_outset(
     &self,
     inset: bool,
     color: Color,
     at: Affine,
-    device: &mut D,
+    device: &mut dyn PaintDevice,
   ) {
     self.paint_top_left_or_bottom_right(!inset, color, at, device);
     self.paint_top_left_or_bottom_right(inset, color.dark(), at, device);
@@ -368,12 +368,12 @@ impl ComplexOutline {
 
   /// Blink's `PaintTopLeftOrBottomRight`: strokes the top and left edges, or the bottom and right
   /// ones, each clipped to its mitres.
-  fn paint_top_left_or_bottom_right<D: PaintDevice>(
+  fn paint_top_left_or_bottom_right(
     &self,
     top_left: bool,
     color: Color,
     at: Affine,
-    device: &mut D,
+    device: &mut dyn PaintDevice,
   ) {
     let thickness = self.stroke_width(true);
     let (center, from_inner) = self.center(false);

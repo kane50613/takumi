@@ -155,7 +155,7 @@ impl<'b> BoxBorderPainter<'b> {
   }
 
   /// Paints the border with the border box's top-left at `origin`.
-  pub fn paint<D: PaintDevice>(&self, origin: Point<f32>, device: &mut D) {
+  pub fn paint(&self, origin: Point<f32>, device: &mut dyn PaintDevice) {
     if !self.border.has_visible_sides() || self.size.width <= 0.0 || self.size.height <= 0.0 {
       return;
     }
@@ -175,7 +175,7 @@ impl<'b> BoxBorderPainter<'b> {
   /// Paints a collapsed table border square, whatever its radii, with each side meeting its
   /// neighbours along the wider one's edge and sides that fill a band in the same colour merged
   /// into one fill.
-  fn paint_collapsed<D: PaintDevice>(&self, border: &BorderProperties, at: Affine, device: &mut D) {
+  fn paint_collapsed(&self, border: &BorderProperties, at: Affine, device: &mut dyn PaintDevice) {
     let mut fills: SmallVec<[SideFill; 4]> = SmallVec::new();
 
     for side in border.painted_sides() {
@@ -206,12 +206,12 @@ impl<'b> BoxBorderPainter<'b> {
 
   /// Strokes a dashed or dotted collapsed side along its centerline, clipped to its own region
   /// when a neighbour has width.
-  fn paint_collapsed_pattern<D: PaintDevice>(
+  fn paint_collapsed_pattern(
     &self,
     border: &BorderProperties,
     side: PaintedSide,
     at: Affine,
-    device: &mut D,
+    device: &mut dyn PaintDevice,
   ) {
     let has_neighbour = side
       .side
@@ -306,7 +306,7 @@ impl BorderShape {
   }
 
   /// Paints every side, as Blink's `BoxBorderPainter::Paint` does.
-  fn paint<D: PaintDevice>(&self, at: Affine, device: &mut D) {
+  fn paint(&self, at: Affine, device: &mut dyn PaintDevice) {
     let mut sides: SmallVec<[PaintedSide; 4]> = self.border.painted_sides().collect();
 
     if sides.is_empty() || self.paint_fast_path(&sides, at, device) {
@@ -359,11 +359,11 @@ impl BorderShape {
 
   /// Blink's `PaintBorderFastPath`: a solid or double border of one colour on all four sides
   /// fills its rings, and a translucent square solid border of one colour fills its sides at once.
-  fn paint_fast_path<D: PaintDevice>(
+  fn paint_fast_path(
     &self,
     sides: &[PaintedSide],
     at: Affine,
-    device: &mut D,
+    device: &mut dyn PaintDevice,
   ) -> bool {
     let Some(color) = self.border.has_uniform_visible_color() else {
       return false;
@@ -410,13 +410,13 @@ impl BorderShape {
 
   /// Paints the most opaque of `groups` over the rest inside ancestor layers `opacity` opaque, and
   /// returns the sides done, counting the `visible` sides' complement as done.
-  fn paint_opacity_groups<D: PaintDevice>(
+  fn paint_opacity_groups(
     &self,
     groups: &[&[PaintedSide]],
     visible: SideSet,
     opacity: f32,
     at: Affine,
-    device: &mut D,
+    device: &mut dyn PaintDevice,
   ) -> SideSet {
     let Some((&group, rest)) = groups.split_last() else {
       return visible.complement();
@@ -454,13 +454,13 @@ impl BorderShape {
 
   /// Paints one side in `color`, as Blink's `PaintOneBorderSide` does, with the `completed` sides
   /// already painted.
-  fn paint_side<D: PaintDevice>(
+  fn paint_side(
     &self,
     side: PaintedSide,
     color: Color,
     completed: SideSet,
     at: Affine,
-    device: &mut D,
+    device: &mut dyn PaintDevice,
   ) {
     let border = &self.border;
     let adjacent = side.side.adjacent();
@@ -529,13 +529,13 @@ impl BorderShape {
 
   /// Blink's `DrawCurvedBoxSide`: fills the whole box, or strokes the whole centerline, for the
   /// clips to cut down to one side. A dashed side strokes `stroke` wide past its own width.
-  fn paint_curved_side<D: PaintDevice>(
+  fn paint_curved_side(
     &self,
     side: PaintedSide,
     color: Color,
     stroke: f32,
     at: Affine,
-    device: &mut D,
+    device: &mut dyn PaintDevice,
   ) {
     let whole = FillShape::Rect(self.size);
     let center = self.border.width.map(|width| (width * 0.5).trunc());
@@ -598,12 +598,12 @@ impl BorderShape {
 
   /// Clips to the part of `side` between its `miters`, as Blink's `ClipBorderSidePolygon` does,
   /// and returns how many clips it pushed.
-  fn push_miter_clips<D: PaintDevice>(
+  fn push_miter_clips(
     &self,
     side: BorderSide,
     miters: [Miter; 2],
     at: Affine,
-    device: &mut D,
+    device: &mut dyn PaintDevice,
   ) -> usize {
     const EXTENSION: f32 = 0.1;
 
@@ -891,7 +891,7 @@ impl BorderShape {
       }
     }
 
-    let push = |shape: FillShape, miter: Miter, device: &mut D| {
+    let push = |shape: FillShape, miter: Miter, device: &mut dyn PaintDevice| {
       if miter == Miter::Hard {
         device.push_aliased_clip(&shape, at);
       } else {
@@ -937,12 +937,12 @@ impl BorderShape {
 
   /// Blink's `ClipBorderSidePolygonCloseToEdges`, for corner shapes flatter than `round`: clips to
   /// the side with its two whole corners, then cuts each corner's other half away at the miter.
-  fn push_clips_close_to_edges<D: PaintDevice>(
+  fn push_clips_close_to_edges(
     &self,
     side: BorderSide,
     [first, second]: [Miter; 2],
     at: Affine,
-    device: &mut D,
+    device: &mut dyn PaintDevice,
   ) -> usize {
     let radii = self.outer_radii;
     let curvatures = Corner::curvatures(&radii, &self.border.shape);
@@ -1458,7 +1458,7 @@ impl StyledLine {
   }
 
   /// Fills the end dots and strokes the line under `at`.
-  pub(super) fn paint<D: PaintDevice>(&self, at: Affine, device: &mut D) {
+  pub(super) fn paint(&self, at: Affine, device: &mut dyn PaintDevice) {
     for &(origin, size) in &self.dots {
       device.fill_shape(
         &FillShape::Rect(size),

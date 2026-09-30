@@ -180,11 +180,16 @@ impl RenderContext {
   /// Blink's `CreateAnonymousStyleWithDisplay`, keeping the parent's applied text decorations.
   /// https://source.chromium.org/chromium/chromium/src/+/main:third_party/blink/renderer/core/css/resolver/style_resolver.cc
   pub(crate) fn for_anonymous(parent: &Self) -> Self {
-    let mut context = parent.clone();
-
-    context.style = Box::new(ComputedStyle::for_anonymous(&parent.style, &parent.sizing));
-    context.text_measure_digest = OnceCell::new();
-    context
+    Self {
+      shared: parent.shared.clone(),
+      sizing: parent.sizing.clone(),
+      transform: parent.transform,
+      current_color: parent.current_color,
+      style: Box::new(ComputedStyle::for_anonymous(&parent.style, &parent.sizing)),
+      text_decorations: parent.text_decorations.clone(),
+      collapsed_borders: parent.collapsed_borders,
+      text_measure_digest: OnceCell::new(),
+    }
   }
 
   pub(crate) fn from_parent(
