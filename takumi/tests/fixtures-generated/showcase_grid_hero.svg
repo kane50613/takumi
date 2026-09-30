@@ -345,7 +345,12 @@
     <stop offset="1" stop-color="#000" stop-opacity="0"/>
   </radialGradient>
   <rect x="0" y="0" width="1200" height="630" fill="url(#rg7)"/>
-  <path d="M366 212h504v243h-504v-243Z" fill="#22c55e"/>
+  <clipPath id="cp8">
+    <path d="M-1000000-1000000H1000000V1000000H-1000000ZM348 194h504v243h-504v-243Z" clip-rule="evenodd"/>
+  </clipPath>
+  <g clip-path="url(#cp8)">
+    <path d="M366 212h504v243h-504v-243Z" fill="#22c55e"/>
+  </g>
   <rect x="348" y="194" width="504" height="243" fill="#fdfdf7"/>
   <path d="M348 194h504v243h-504v-243Zm4 4h496v235h-496v-235Z" fill="#111" fill-rule="evenodd"/>
   <g fill="#16a34a">

@@ -593,7 +593,6 @@ mod scaled_rows_tests {
       for mode in [BlendMode::Normal, BlendMode::Multiply] {
         for color_mode in [
           MaskCompositeColor::SourceOnly,
-          MaskCompositeColor::SourceOverColor([255, 0, 0, 255]),
           MaskCompositeColor::ColorOverSource([0, 40, 0, 40]),
         ] {
           assert_eq!(

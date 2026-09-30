@@ -7,7 +7,7 @@
 
 use crate::{
   context::RenderContext,
-  geometry::{ComputedLayout as Layout, Point, Size},
+  geometry::{ComputedLayout as Layout, Point, Rect, Size},
   layout::border::BorderProperties,
   style::Sides,
 };
@@ -55,28 +55,50 @@ impl ClipBox {
     }
   }
 
-  /// The region an inset `box-shadow` leaves uncovered: the padding box shrunk
-  /// by `spread` on every side and shifted by the shadow `offset`. An inset
-  /// shadow fills the padding box minus this hole.
-  pub fn inset_shadow_hole(
-    border: BorderProperties,
-    padding_box: Size<f32>,
-    spread: f32,
-    offset: Point<f32>,
-  ) -> Self {
-    let mut hole = border;
-    hole.expand_by(Sides::from(-spread).into());
+  /// The region grown by `spread` on every side, its corner radii with it, or shrunk when
+  /// `spread` is negative.
+  pub fn outset(self, spread: f32) -> Self {
+    let mut border = self.border;
+
+    if spread > 0.0 {
+      border.outset_radii(self.size, spread);
+    } else {
+      border.expand_by(Sides::from(spread).into());
+    }
 
     Self {
-      border: hole,
+      border,
       size: Size {
-        width: (padding_box.width - 2.0 * spread).max(0.0),
-        height: (padding_box.height - 2.0 * spread).max(0.0),
+        width: (self.size.width + 2.0 * spread).max(0.0),
+        height: (self.size.height + 2.0 * spread).max(0.0),
       },
       offset: Point {
-        x: offset.x + spread,
-        y: offset.y + spread,
+        x: self.offset.x - spread,
+        y: self.offset.y - spread,
       },
+    }
+  }
+
+  /// The region moved by `delta`.
+  pub fn shifted(self, delta: Point<f32>) -> Self {
+    Self {
+      offset: self.offset + delta,
+      ..self
+    }
+  }
+
+  /// Whether the region covers no area.
+  pub fn is_empty(&self) -> bool {
+    self.size.width <= 0.0 || self.size.height <= 0.0
+  }
+
+  /// The region's edges, relative to the border box.
+  pub fn edges(&self) -> Rect<f32> {
+    Rect {
+      left: self.offset.x,
+      top: self.offset.y,
+      right: self.offset.x + self.size.width,
+      bottom: self.offset.y + self.size.height,
     }
   }
 }
@@ -93,57 +115,57 @@ pub struct OutlineGeometry {
   pub grow: f32,
 }
 
-/// The outline a box paints, or `None` when it paints none.
-///
-/// Matches Blink's `ComputedStyle::HasOutline`: a width that rounds to zero
-/// paints nothing, and otherwise `outline-style` has to draw something. A
-/// transparent colour still counts as an outline, so the decision does not
-/// look at alpha; a backend is free to skip the invisible fill.
-///
-/// Each backend used to guard this differently, and one of them not at all.
-pub(crate) fn outline_paint(context: &RenderContext, size: Size<f32>) -> Option<OutlineGeometry> {
-  let style = &context.style;
-  let width = style.outline_width.to_used_px(&context.sizing).max(0.0);
+impl OutlineGeometry {
+  /// The outline a box paints, or `None` when it paints none.
+  ///
+  /// Matches Blink's `ComputedStyle::HasOutline`: a width that rounds to zero
+  /// paints nothing, and otherwise `outline-style` has to draw something. A
+  /// transparent colour still counts as an outline, so the decision does not
+  /// look at alpha; a backend is free to skip the invisible fill.
+  pub(crate) fn painted(context: &RenderContext, size: Size<f32>) -> Option<Self> {
+    let style = &context.style;
+    let width = style.outline_width.to_used_px(&context.sizing).max(0.0);
 
-  if width <= 0.0 || !style.outline_style.is_rendered() {
-    return None;
+    if width <= 0.0 || !style.outline_style.is_rendered() {
+      return None;
+    }
+    Some(Self::of(context, size))
   }
-  Some(outline_geometry(context, size))
-}
 
-/// The outline ring's border geometry and how far it grows past the border box.
-/// Says nothing about whether the outline paints; see [`outline_paint`].
-fn outline_geometry(context: &RenderContext, size: Size<f32>) -> OutlineGeometry {
-  let style = &context.style;
-  let width = style.outline_width.to_used_px(&context.sizing).max(0.0);
-  let offset = style
-    .outline_offset
-    .to_border_px(&context.sizing, size.width);
-  // CSS: the outline shape must not shrink below `2 * outline-width` in either
-  // dimension, so a large negative `outline-offset` can't invert the ring.
-  let min_grow = (2.0 * width - size.width)
-    .max(2.0 * width - size.height)
-    .min(0.0)
-    / 2.0;
-  let grow = (offset + width).max(min_grow);
+  /// The outline ring's border geometry and how far it grows past the border box, whether or not
+  /// it paints.
+  fn of(context: &RenderContext, size: Size<f32>) -> Self {
+    let style = &context.style;
+    let width = style.outline_width.to_used_px(&context.sizing).max(0.0);
+    let offset = style
+      .outline_offset
+      .to_border_px(&context.sizing, size.width);
+    // CSS: the outline shape must not shrink below `2 * outline-width` in either
+    // dimension, so a large negative `outline-offset` can't invert the ring.
+    let min_grow = (2.0 * width - size.width)
+      .max(2.0 * width - size.height)
+      .min(0.0)
+      / 2.0;
+    let grow = (offset + width).max(min_grow);
 
-  let mut border = BorderProperties {
-    width: Sides([width; 4]).into(),
-    color: Sides([style.outline_color.resolve(context.current_color); 4]).into(),
-    style: Sides([style.outline_style; 4]).into(),
-    image_rendering: style.image_rendering,
-    radius: BorderProperties::resolve_radius_part(context, size),
-    shape: BorderProperties::resolve_shape_part(context),
-    collapsed: false,
-  };
-  border.expand_by(Sides::from(grow).into());
+    let mut border = BorderProperties {
+      width: Sides([width; 4]).into(),
+      color: Sides([style.outline_color.resolve(context.current_color); 4]).into(),
+      style: Sides([style.outline_style; 4]).into(),
+      image_rendering: style.image_rendering,
+      radius: BorderProperties::resolve_radius_part(context, size),
+      shape: BorderProperties::resolve_shape_part(context),
+      collapsed: false,
+    };
+    border.expand_by(Sides::from(grow).into());
 
-  OutlineGeometry {
-    border,
-    size: Size {
-      width: size.width + 2.0 * grow,
-      height: size.height + 2.0 * grow,
-    },
-    grow,
+    Self {
+      border,
+      size: Size {
+        width: size.width + 2.0 * grow,
+        height: size.height + 2.0 * grow,
+      },
+      grow,
+    }
   }
 }

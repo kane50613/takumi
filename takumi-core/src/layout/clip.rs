@@ -4,119 +4,163 @@ use crate::{
   context::RenderContext,
   geometry::{PathBuilder, PathCommand, Point, Rect, Size},
   layout::border::BorderProperties,
+  painter::FillShape,
   style::{
-    Axis, BasicShape, BorderStyle, Color, ImageScalingAlgorithm, ShapeRadius, Sides, SizingContext,
-    SpacePair,
+    Axis, BasicShape, BorderStyle, Color, EllipseShape, FillRule, ImageScalingAlgorithm,
+    ShapeRadius, Sides, SizingContext, SpacePair,
   },
 };
 
 /// Control-point ratio that turns four cubics into a circle.
 const KAPPA: f32 = 0.552_284_8;
 
-/// Resolves a shape against a border box, in the box's own coordinates.
-///
-/// The commands are unclosed for `path()`, which carries its own closes, and
-/// closed for the shapes that describe a region.
-/// Returns `None` when the shape cannot be resolved at all, which today means
-/// a `path()` in a build without the `svg` feature and its path parser. That is
-/// different from a shape that resolves to no area: callers must not turn it
-/// into an empty clip, which would hide the element.
-pub fn clip_shape_commands(
-  shape: &BasicShape,
-  context: &RenderContext,
-  size: Size<f32>,
-) -> Option<Vec<PathCommand>> {
-  let mut commands = Vec::new();
+impl BasicShape {
+  /// Resolves the shape against a border box, in the box's own coordinates.
+  ///
+  /// The commands are unclosed for `path()`, which carries its own closes, and
+  /// closed for the shapes that describe a region.
+  /// Returns `None` when the shape cannot be resolved at all, which today means
+  /// a `path()` in a build without the `svg` feature and its path parser. That is
+  /// different from a shape that resolves to no area: callers must not turn it
+  /// into an empty clip, which would hide the element.
+  pub fn path_commands(
+    &self,
+    context: &RenderContext,
+    size: Size<f32>,
+  ) -> Option<Vec<PathCommand>> {
+    let mut commands = Vec::new();
 
-  match shape {
-    BasicShape::Inset(shape) => {
-      let inset: Rect<f32> = shape
-        .inset
-        .map_axis(|value, axis| {
-          value.to_px(
-            &context.sizing,
-            match axis {
-              Axis::Horizontal => size.width,
-              Axis::Vertical => size.height,
-            },
-          )
-        })
-        .into();
-      let border = BorderProperties {
-        width: Rect::ZERO,
-        color: Sides::from(Color::transparent()).into(),
-        // A corner's horizontal radius resolves against the box width and its
-        // vertical one against the height, like `border-radius`.
-        radius: shape
-          .border_radius
-          .map(|radius| {
-            Sides(radius.0.map(|corner| SpacePair {
-              x: corner.to_px(&context.sizing, size.width),
-              y: corner.to_px(&context.sizing, size.height),
-            }))
+    match self {
+      BasicShape::Inset(shape) => {
+        let inset: Rect<f32> = shape
+          .inset
+          .map_axis(|value, axis| {
+            value.to_px(
+              &context.sizing,
+              match axis {
+                Axis::Horizontal => size.width,
+                Axis::Vertical => size.height,
+              },
+            )
           })
-          .unwrap_or_default(),
-        image_rendering: ImageScalingAlgorithm::Auto,
-        style: Sides::from(BorderStyle::Solid).into(),
-        shape: Sides::default(),
-        collapsed: false,
-      };
+          .into();
+        let border = BorderProperties {
+          width: Rect::ZERO,
+          color: Sides::from(Color::transparent()).into(),
+          // A corner's horizontal radius resolves against the box width and its
+          // vertical one against the height, like `border-radius`.
+          radius: shape
+            .border_radius
+            .map(|radius| {
+              Sides(radius.0.map(|corner| SpacePair {
+                x: corner.to_px(&context.sizing, size.width),
+                y: corner.to_px(&context.sizing, size.height),
+              }))
+            })
+            .unwrap_or_default(),
+          image_rendering: ImageScalingAlgorithm::Auto,
+          style: Sides::from(BorderStyle::Solid).into(),
+          shape: Sides::default(),
+          collapsed: false,
+        };
 
-      border.append_mask_commands(
-        &mut commands,
-        Size {
-          width: size.width - inset.horizontal(),
-          height: size.height - inset.vertical(),
-        },
-        inset.top_left(),
-      );
-    }
-    BasicShape::Ellipse(shape) => {
-      let center = (
-        shape.position.0.x.to_px(&context.sizing, size.width),
-        shape.position.0.y.to_px(&context.sizing, size.height),
-      );
-
-      push_ellipse(
-        &mut commands,
-        center,
-        resolve_radius(shape.radius_x, center.0, &context.sizing, size.width),
-        resolve_radius(shape.radius_y, center.1, &context.sizing, size.height),
-      );
-    }
-    BasicShape::Polygon(shape) => {
-      let Some((first, rest)) = shape.coordinates.split_first() else {
-        return Some(commands);
-      };
-
-      commands.move_to((
-        first.x.to_px(&context.sizing, size.width),
-        first.y.to_px(&context.sizing, size.height),
-      ));
-      for coordinate in rest {
-        commands.line_to((
-          coordinate.x.to_px(&context.sizing, size.width),
-          coordinate.y.to_px(&context.sizing, size.height),
-        ));
+        border.append_mask_commands(
+          &mut commands,
+          Size {
+            width: size.width - inset.horizontal(),
+            height: size.height - inset.vertical(),
+          },
+          inset.top_left(),
+        );
       }
-      commands.close();
-    }
-    BasicShape::Path(shape) => {
-      // path() coordinates are CSS px; scale them like the to_px shapes.
-      let scale = context.sizing.to_device(1.0);
+      BasicShape::Ellipse(shape) => {
+        let (center, radius) = shape.resolve(context, size);
 
-      commands.extend(scale_commands(parse_path(shape.path.as_ref())?, scale));
+        push_ellipse(&mut commands, center, radius);
+      }
+      BasicShape::Polygon(shape) => {
+        let Some((first, rest)) = shape.coordinates.split_first() else {
+          return Some(commands);
+        };
+
+        commands.move_to((
+          first.x.to_px(&context.sizing, size.width),
+          first.y.to_px(&context.sizing, size.height),
+        ));
+        for coordinate in rest {
+          commands.line_to((
+            coordinate.x.to_px(&context.sizing, size.width),
+            coordinate.y.to_px(&context.sizing, size.height),
+          ));
+        }
+        commands.close();
+      }
+      BasicShape::Path(shape) => {
+        // path() coordinates are CSS px; scale them like the to_px shapes.
+        let scale = context.sizing.to_device(1.0);
+
+        commands.extend(scale_commands(parse_path(shape.path.as_ref())?, scale));
+      }
     }
+    Some(commands)
   }
-  Some(commands)
+}
+
+impl BasicShape {
+  /// The shape resolved against a border box as a fill, its rule from `clip_rule` unless the shape
+  /// sets its own, or `None` when it cannot resolve at all.
+  pub fn fill_shape(
+    &self,
+    context: &RenderContext,
+    size: Size<f32>,
+    clip_rule: FillRule,
+  ) -> Option<FillShape> {
+    if let BasicShape::Ellipse(shape) = self {
+      let (center, radius) = shape.resolve(context, size);
+
+      return Some(FillShape::Ellipse { center, radius });
+    }
+
+    Some(FillShape::Path {
+      commands: self.path_commands(context, size)?,
+      rule: self.fill_rule().unwrap_or(clip_rule),
+    })
+  }
+}
+
+impl EllipseShape {
+  /// The ellipse's centre and radii in a border box of `size`.
+  fn resolve(&self, context: &RenderContext, size: Size<f32>) -> (Point<f32>, SpacePair<f32>) {
+    let center = Point {
+      x: self.position.0.x.to_px(&context.sizing, size.width),
+      y: self.position.0.y.to_px(&context.sizing, size.height),
+    };
+
+    (
+      center,
+      SpacePair {
+        x: resolve_radius(self.radius_x, center.x, &context.sizing, size.width),
+        y: resolve_radius(self.radius_y, center.y, &context.sizing, size.height),
+      },
+    )
+  }
 }
 
 /// Appends an axis-aligned ellipse outline as four cubics.
-fn push_ellipse(commands: &mut Vec<PathCommand>, center: (f32, f32), radius_x: f32, radius_y: f32) {
+pub(crate) fn push_ellipse(
+  commands: &mut Vec<PathCommand>,
+  center: Point<f32>,
+  radius: SpacePair<f32>,
+) {
+  let SpacePair {
+    x: radius_x,
+    y: radius_y,
+  } = radius;
+
   if radius_x <= 0.0 || radius_y <= 0.0 {
     return;
   }
-  let (cx, cy) = center;
+  let (cx, cy) = (center.x, center.y);
   let (ox, oy) = (radius_x * KAPPA, radius_y * KAPPA);
 
   commands.move_to((cx + radius_x, cy));

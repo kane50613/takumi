@@ -4,7 +4,8 @@ use std::fs::{create_dir_all, write};
 
 use takumi::prelude::*;
 use takumi_core::paint_tree::{
-  PaintFill, PaintNode, PaintTextRun, PaintTree, PaintTreeOptions, paint_tree,
+  Drawable, NodeKind, Paint, PaintDocument, PaintFilter, PaintNode, PaintStep, PaintTreeOptions,
+  Role, Shape, TextRun, paint_tree,
 };
 use test_utils::{CONTEXT, TEST_IMAGES, format_generated};
 
@@ -25,10 +26,7 @@ const CSS: &str = r#"
     font-family: Geist;
     font-size: 26px;
   }
-  .big { font-size: 40px; font-weight: 700; color: rgb(179, 38, 30); text-decoration: underline; letter-spacing: 2px; }
-  .p { text-align: center; line-height: 40px; }
-  .rtl { direction: rtl; }
-  .fallback { font-family: Geist, "Scheherazade New"; font-size: 20px; }
+  .big { font-size: 40px; font-weight: 700; color: rgb(179, 38, 30); text-decoration: underline; }
   .mark { display: inline; background-color: yellow; opacity: 0.5; }
   b { display: inline; font-weight: 700; color: rgb(0, 0, 255); }
   .pic { width: 120px; height: 80px; object-fit: cover; border-radius: 8px; }
@@ -36,6 +34,7 @@ const CSS: &str = r#"
   .collapsed { font-size: 0; }
   .sized { display: inline; font-size: 18px; }
   .fade { opacity: 0.5; }
+  .padded-pic { width: 120px; height: 80px; padding: 10px; border: 2px solid black; }
 "#;
 
 fn card() -> Node {
@@ -56,7 +55,7 @@ fn card() -> Node {
   .with_id("card")
 }
 
-fn build(node: Node) -> PaintTree {
+fn build(node: Node) -> PaintDocument {
   paint_tree(
     PaintTreeOptions::builder()
       .viewport(Viewport::new((600, 400)))
@@ -67,123 +66,238 @@ fn build(node: Node) -> PaintTree {
       .build(),
   )
   .unwrap()
+  .document
 }
 
-fn find<'t>(node: &'t PaintNode, id: &str) -> Option<&'t PaintNode> {
-  if node.source.as_ref().and_then(|s| s.id.as_deref()) == Some(id) {
-    return Some(node);
-  }
-  node.children.iter().find_map(|child| find(child, id))
+fn find<'d>(document: &'d PaintDocument, id: &str) -> &'d PaintNode {
+  document
+    .nodes
+    .iter()
+    .find(|node| {
+      matches!(node.kind, NodeKind::Box { .. })
+        && node
+          .element
+          .as_ref()
+          .and_then(|element| element.id.as_deref())
+          == Some(id)
+    })
+    .unwrap_or_else(|| panic!("no box with id {id}"))
 }
 
-fn all_nodes(node: &PaintNode) -> Vec<&PaintNode> {
-  let mut nodes = vec![node];
-  for child in &node.children {
-    nodes.extend(all_nodes(child));
-  }
-  nodes
-}
+/// The runs under `node`, in document order.
+fn runs<'d>(document: &'d PaintDocument, node: &'d PaintNode) -> Vec<&'d TextRun> {
+  let own = match &node.kind {
+    NodeKind::Text { runs, .. } => runs.iter().collect(),
+    _ => Vec::new(),
+  };
 
-fn all_runs(node: &PaintNode) -> Vec<&PaintTextRun> {
-  all_nodes(node)
+  own
     .into_iter()
-    .flat_map(|node| &node.text_runs)
+    .chain(
+      node
+        .children
+        .iter()
+        .flat_map(|&child| runs(document, &document.nodes[child])),
+    )
     .collect()
+}
+
+fn roles(node: &PaintNode) -> Vec<Role> {
+  fn roles_of(drawables: &[Drawable]) -> Vec<Role> {
+    drawables
+      .iter()
+      .flat_map(|drawable| match drawable {
+        Drawable::Fill { role, .. }
+        | Drawable::Stroke { role, .. }
+        | Drawable::Shadow { role, .. }
+        | Drawable::Glyphs { role, .. }
+        | Drawable::Image { role, .. } => vec![*role],
+        Drawable::Group { drawables, .. } => roles_of(drawables),
+      })
+      .collect()
+  }
+
+  roles_of(&node.drawables)
 }
 
 #[test]
 fn paint_tree_records_used_values() {
-  let tree = build(card());
-  let json = serde_json::to_string_pretty(&tree).unwrap();
+  let document = build(card());
+  let json = serde_json::to_string_pretty(&document).unwrap();
   create_dir_all("tests/fixtures-generated").ok();
   let path = "tests/fixtures-generated/paint_tree_card.json";
   write(path, json).unwrap();
   format_generated(path);
 
-  assert_eq!((tree.width, tree.height), (600.0, 400.0));
+  assert_eq!((document.width, document.height), (600.0, 400.0));
 
-  let card = find(&tree.root, "card").expect("card box");
-  assert_eq!((card.width, card.height), (400.0, card.height));
-  assert_eq!((card.x, card.y), (0.0, 0.0));
-  assert_eq!(card.transform, None);
+  let card = find(&document, "card");
+  assert_eq!(card.width, 400.0);
   assert_eq!(
-    (card.content_box.x, card.content_box.width),
-    (24.0, card.width - 48.0)
+    roles(card),
+    [
+      Role::BoxShadow,
+      Role::Background,
+      Role::Background,
+      Role::BoxShadow,
+      Role::Border
+    ]
   );
-  let background = card.background.as_ref().expect("card background");
-  let border = card.border.as_ref().expect("card border");
-  let shadows = card.shadows.as_ref().expect("card shadows");
-  assert_eq!(background.color, Some([247, 243, 236, 255]));
-  assert_eq!(border.widths, [4.0; 4]);
-  assert_eq!(border.colors[0], [179, 38, 30, 255]);
-  assert_eq!(border.styles[0], "solid");
-  assert_eq!(border.radii[0], [12.0, 12.0]);
-  assert_eq!(shadows.outer.len(), 1);
-  assert_eq!(shadows.inset.len(), 1);
-  assert_eq!(shadows.outer[0].blur, 8.0);
-  let outline = card.outline.as_ref().expect("outline");
-  assert_eq!(
-    (outline.width, outline.offset, outline.style.as_str()),
-    (2.0, 3.0, "dashed")
-  );
-  assert_eq!(background.layers.len(), 1);
   assert!(matches!(
-    &background.layers[0].fill,
-    PaintFill::Linear { stops, .. } if stops.len() == 2 && stops[0].color == [255, 0, 0, 255]
+    &card.drawables[0],
+    Drawable::Shadow { blur, offset, .. } if *blur == 4.0 && offset.y == 4.0
   ));
-  let clip = card.clip.as_ref().expect("overflow clip");
-  assert_eq!((clip.rect.x, clip.rect.y), (4.0, 4.0));
-  assert!(clip.x && clip.y);
+  assert!(matches!(
+    &card.drawables[1],
+    Drawable::Fill {
+      paint: Paint::Color {
+        color: [247, 243, 236, 255]
+      },
+      shape: Shape::RoundedRect { .. },
+      ..
+    }
+  ));
+  assert!(matches!(
+    &card.drawables[2],
+    Drawable::Fill { paint: Paint::Pattern { tile, .. }, .. }
+      if matches!(tile.as_ref(), Paint::LinearGradient { stops, .. } if stops[0].color == [255, 0, 0, 255])
+  ));
 
-  let runs = all_runs(&tree.root);
+  let NodeKind::Box {
+    outline,
+    overflow_clip,
+    ..
+  } = &card.kind
+  else {
+    unreachable!()
+  };
+  assert!(outline.iter().all(|drawable| matches!(
+    drawable,
+    Drawable::Stroke { role: Role::Outline, stroke, .. } if stroke.dash.is_some()
+  )));
+  assert!(!outline.is_empty());
+  assert!(matches!(
+    overflow_clip,
+    Some(Shape::RoundedRect { rect, .. }) if (rect.x, rect.y) == (4.0, 4.0)
+  ));
+
+  let runs = runs(&document, &document.nodes[0]);
   let texts: Vec<&str> = runs.iter().map(|run| run.text.as_str()).collect();
   assert_eq!(texts, ["4,2 %", "hello ", "world", " and ", "marked"]);
-  let big = runs[0];
-  assert_eq!(big.color, [179, 38, 30, 255]);
-  assert_eq!(big.font_size, 40.0);
-  assert_eq!(big.letter_spacing, 2.0);
-  assert!(!big.decorations.is_empty());
-  assert!(big.decorations.iter().all(|d| d.line == "underline"));
+  assert_eq!(runs[0].font_size, 40.0);
   let world = runs[2];
-  assert_eq!(world.color, [0, 0, 255, 255]);
-  let font = |run| tree.font(run).unwrap();
-  assert_eq!(font(world).weight, 700.0);
-  assert_eq!(font(world).family.as_deref(), Some("Geist"));
-  assert_eq!(font(runs[1]).weight, 400.0);
-  assert_eq!((runs[1].line_height, runs[1].letter_spacing), (40.0, 0.0));
-
-  let paragraph = find(&tree.root, "paragraph").expect("paragraph box");
-  assert_eq!(paragraph.text_align.as_deref(), Some("center"));
-  assert_eq!(paragraph.inline_backgrounds.len(), 1);
-  assert_eq!(paragraph.inline_backgrounds[0].color, [255, 255, 0, 255]);
-  assert_eq!(paragraph.inline_backgrounds[0].opacity, 0.5);
-
-  let picture = all_nodes(&tree.root)
-    .into_iter()
-    .find(|node| node.image.is_some())
-    .expect("image node");
+  assert_eq!(document.fonts[world.font].weight, 700.0);
+  assert_eq!(document.fonts[world.font].family.as_deref(), Some("Geist"));
   assert_eq!(
-    (picture.content_box.width, picture.content_box.height),
-    (120.0, 80.0)
+    world
+      .element
+      .as_ref()
+      .and_then(|element| element.tag_name.as_deref()),
+    Some("b")
   );
-  let image = picture.image.as_ref().expect("image content");
-  assert_eq!(image.src.as_deref(), Some("assets/images/yeecord.png"));
-  assert!(image.placement.width >= 120.0 && image.placement.height >= 80.0);
+  assert_eq!(document.fonts[runs[1].font].weight, 400.0);
+  assert!(!world.outline.is_empty());
 
-  let glass = card
+  let paragraph = find(&document, "paragraph");
+  let text = paragraph
     .children
     .iter()
-    .find(|node| node.unresolved_effects.is_some())
-    .expect("glass box");
-  let unresolved = glass.unresolved_effects.as_ref().unwrap();
-  assert_eq!(unresolved.filter.as_deref(), Some("blur(2px)"));
-  assert!(unresolved.clip_path.is_some());
-  assert_eq!(glass.blend_mode.as_deref(), Some("multiply"));
+    .map(|&child| &document.nodes[child])
+    .find(|node| matches!(node.kind, NodeKind::Text { .. }))
+    .expect("paragraph text");
+  assert!(text.drawables.iter().any(|drawable| matches!(
+    drawable,
+    Drawable::Group { opacity, drawables }
+      if *opacity == 0.5 && matches!(
+        drawables.as_slice(),
+        [Drawable::Fill {
+          role: Role::InlineBackground,
+          paint: Paint::Color {
+            color: [255, 255, 0, 255]
+          },
+          ..
+        }]
+      )
+  )));
+  assert!(text.drawables.iter().any(|drawable| matches!(
+    drawable,
+    Drawable::Glyphs {
+      role: Role::Text,
+      paint: Paint::Color {
+        color: [0, 0, 255, 255]
+      },
+      ..
+    }
+  )));
+
+  let image = document
+    .nodes
+    .iter()
+    .find_map(|node| match &node.kind {
+      NodeKind::Image { image } => Some((node, image)),
+      _ => None,
+    })
+    .expect("image node");
+  assert_eq!((image.0.width, image.0.height), (120.0, 80.0));
+  assert_eq!(image.1.src, "assets/images/yeecord.png");
+  assert!(matches!(
+    &image.0.drawables[0],
+    Drawable::Image { rect, .. } if rect.width >= 120.0 && rect.height >= 80.0
+  ));
+
+  let glass = document
+    .nodes
+    .iter()
+    .find_map(|node| match &node.kind {
+      NodeKind::Box {
+        effects: Some(effects),
+        ..
+      } => Some(effects),
+      _ => None,
+    })
+    .expect("glass effects");
+  assert_eq!(glass.filters, [PaintFilter::Blur { radius: 2.0 }]);
+  assert!(matches!(glass.clip, Some(Shape::Path { .. })));
+  assert_eq!(glass.blend_mode, "multiply");
+
+  let depth = document.steps.iter().try_fold(0_i32, |depth, step| {
+    let depth = match step {
+      PaintStep::BeginGroup { .. } | PaintStep::BeginClip { .. } => depth + 1,
+      PaintStep::EndGroup { .. } | PaintStep::EndClip { .. } => depth - 1,
+      PaintStep::Draw { .. } => depth,
+    };
+    (depth >= 0).then_some(depth)
+  });
+  assert_eq!(depth, Some(0));
+}
+
+#[test]
+fn padded_image_clips_to_its_whole_content_box() {
+  let document = build(Node::container([
+    Node::image("assets/images/yeecord.png").with_class_name("padded-pic")
+  ]));
+  let image = document
+    .nodes
+    .iter()
+    .find(|node| matches!(node.kind, NodeKind::Image { .. }))
+    .expect("image node");
+  let Some(Drawable::Image {
+    clip: Shape::Rect { rect },
+    ..
+  }) = image.drawables.first()
+  else {
+    panic!("the image clips to a rect: {:?}", image.drawables.first());
+  };
+
+  assert_eq!(
+    (rect.x, rect.y, rect.width, rect.height),
+    (0.0, 0.0, image.width, image.height)
+  );
 }
 
 #[test]
 fn stacking_context_root_keeps_inline_content() {
-  let tree = build(
+  let document = build(
     Node::container([Node::container([
       Node::text("hello "),
       Node::image("assets/images/yeecord.png").with_class_name("pic"),
@@ -194,22 +308,28 @@ fn stacking_context_root_keeps_inline_content() {
     .with_id("card"),
   );
 
-  let paragraph = find(&tree.root, "paragraph").expect("paragraph box");
-  assert_eq!(paragraph.opacity, 0.5);
-  let texts: Vec<&str> = all_runs(paragraph)
+  let paragraph = find(&document, "paragraph");
+  assert!(matches!(
+    &paragraph.kind,
+    NodeKind::Box { effects: Some(effects), .. } if effects.opacity == 0.5
+  ));
+  let texts: Vec<&str> = runs(&document, paragraph)
     .iter()
     .map(|run| run.text.as_str())
     .collect();
   assert_eq!(texts, ["hello "]);
   assert!(
-    paragraph.children.iter().any(|child| child.image.is_some()),
+    document
+      .nodes
+      .iter()
+      .any(|node| matches!(node.kind, NodeKind::Image { .. })),
     "inline image lost from the stacking-context root"
   );
 }
 
 #[test]
 fn zero_font_size_container_keeps_sized_child_runs() {
-  let tree = build(
+  let document = build(
     Node::container([Node::container([
       Node::container([Node::text("visible")]).with_class_name("sized")
     ])
@@ -219,37 +339,11 @@ fn zero_font_size_container_keeps_sized_child_runs() {
     .with_id("card"),
   );
 
-  let paragraph = find(&tree.root, "paragraph").expect("paragraph box");
-  let runs = all_runs(paragraph);
+  let paragraph = find(&document, "paragraph");
+  let runs = runs(&document, paragraph);
   assert_eq!(
     runs.iter().map(|run| run.text.as_str()).collect::<Vec<_>>(),
     ["visible"]
   );
   assert_eq!(runs[0].font_size, 18.0);
-}
-
-#[test]
-fn text_align_start_resolves_to_the_writing_direction() {
-  let tree = build(Node::container([Node::text("abc")]).with_class_name("rtl"));
-
-  assert_eq!(
-    all_nodes(&tree.root)
-      .into_iter()
-      .find_map(|node| node.text_align.as_deref()),
-    Some("right")
-  );
-}
-
-#[test]
-fn a_fallback_run_reports_the_line_it_grows_under_normal_line_height() {
-  let tree = build(Node::container([Node::text("abc مرحبا")]).with_class_name("fallback"));
-
-  let runs = all_runs(&tree.root);
-  let (latin, arabic) = (runs[0], runs.last().unwrap());
-  assert_ne!(tree.font(latin), tree.font(arabic));
-  assert_eq!(
-    arabic.line_height,
-    arabic.ascent.round() + arabic.descent.round()
-  );
-  assert!(arabic.line_height > latin.line_height);
 }

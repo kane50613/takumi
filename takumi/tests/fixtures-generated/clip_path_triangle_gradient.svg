@@ -1,7 +1,7 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630">
   <rect x="0" y="0" width="1200" height="630" fill="#fff"/>
   <clipPath id="cp0">
-    <path d="M450 465 750 465 600 201.75Z"/>
+    <path d="M450 465h300l-150-263.25Z"/>
   </clipPath>
   <g clip-path="url(#cp0)">
     <linearGradient id="lg1" gradientUnits="userSpaceOnUse" x1="450" y1="465" x2="750" y2="165">

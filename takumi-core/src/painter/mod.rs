@@ -1,19 +1,37 @@
 //! The seam between deciding what to paint and painting it.
 
+mod background;
+mod border;
+mod outline;
+mod replaced;
+mod shadow;
+mod text;
+
+pub use self::{
+  background::{BackgroundClipArea, BoxBackground},
+  border::BoxBorderPainter,
+  outline::PendingOutline,
+  replaced::ReplacedContent,
+  shadow::ShadowShape,
+  text::{GlyphDevice, GlyphFill, InlineLines},
+};
+
 use crate::{
   context::RenderContext,
   geometry::{ComputedLayout, PathCommand, Point, Rect, Size},
   layout::{
-    border::{BorderPaint, BorderProperties},
-    decoration::{ClipBox, OutlineGeometry, outline_paint},
+    border::{BorderDash, BorderProperties},
+    clip::push_ellipse,
+    decoration::{ClipBox, OutlineGeometry},
     inline::DecorationRect,
   },
   shadow::SizedShadow,
-  style::{
-    Affine, BackgroundClip, BackgroundImage, BoxShadow, Color, FillRule, Overflow, Sides,
-    TextDecorationLines,
-  },
+  style::{Affine, BackgroundImage, BoxShadow, Color, FillRule, Overflow, SpacePair},
 };
+
+/// A distance far enough out that an edge placed there never shows, for a clip that is unbounded on
+/// some side.
+pub const UNBOUNDED: f32 = 1.0e6;
 
 /// A closed shape to fill, in the coordinate space of the box that owns it.
 pub enum FillShape {
@@ -27,6 +45,13 @@ pub enum FillShape {
     size: Size<f32>,
     /// Where the rectangle sits inside the box.
     offset: Point<f32>,
+  },
+  /// An axis-aligned ellipse.
+  Ellipse {
+    /// The centre.
+    center: Point<f32>,
+    /// The horizontal and vertical radii.
+    radius: SpacePair<f32>,
   },
   /// Anything else.
   Path {
@@ -51,6 +76,7 @@ impl FillShape {
         size,
         offset,
       } => border.append_mask_commands(&mut commands, *size, *offset),
+      Self::Ellipse { center, radius } => push_ellipse(&mut commands, *center, *radius),
       Self::Path { commands: path, .. } => commands.extend_from_slice(path),
     }
     commands
@@ -125,8 +151,6 @@ impl BoxFrame {
 
   /// The padding box's edges on each axis that clips, effectively unbounded on the others.
   pub fn overflow_clip_edges(self, clip_x: bool, clip_y: bool) -> Rect<f32> {
-    const UNBOUNDED: f32 = 1.0e6;
-
     let Self {
       layout,
       origin: Point { x, y },
@@ -190,13 +214,78 @@ impl OverflowClip {
   }
 }
 
+/// What a draw paints for its box, so a device that records draws can name them.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PaintRole {
+  /// `background-color` and `background-image`.
+  Background,
+  /// `border`.
+  Border,
+  /// `box-shadow`.
+  BoxShadow,
+  /// `outline`.
+  Outline,
+  /// A replaced element's image.
+  Image,
+  /// Glyphs.
+  Text,
+  /// `text-shadow`.
+  TextShadow,
+  /// `text-decoration` lines.
+  TextDecoration,
+  /// An inline element's background.
+  InlineBackground,
+}
+
 /// What a backend has to be able to do for the shared painting code to drive it.
 pub trait PaintDevice {
+  /// Names what the draws that follow paint. Only a device that records draws needs it.
+  fn set_role(&mut self, _role: PaintRole) {}
+
   /// Fills `shape` under `transform`, with a single colour.
   fn fill_shape(&mut self, shape: &FillShape, color: Color, transform: Affine);
 
   /// Strokes `shape` under `transform`.
   fn stroke_shape(&mut self, _shape: &FillShape, _stroke: &StrokeStyle, _transform: Affine) {}
+
+  /// Clips later draws to `shape` under `transform`, until the matching [`PaintDevice::pop_clip`].
+  fn push_clip(&mut self, shape: &FillShape, transform: Affine);
+
+  /// Clips later draws to everything outside `shape` under `transform`, until the matching
+  /// [`PaintDevice::pop_clip`].
+  fn push_clip_out(&mut self, shape: &FillShape, transform: Affine);
+
+  /// Removes the most recent clip.
+  fn pop_clip(&mut self);
+
+  /// Draws what follows into a layer that composites at `opacity` on the matching
+  /// [`PaintDevice::end_layer`].
+  fn begin_layer(&mut self, opacity: f32);
+
+  /// Composites the most recent layer.
+  fn end_layer(&mut self);
+
+  /// Runs `paint` into a layer at `opacity`, without the layer when the paint is opaque and not
+  /// at all when it is invisible.
+  fn with_opacity(&mut self, opacity: f32, paint: impl FnOnce(&mut Self))
+  where
+    Self: Sized,
+  {
+    if opacity <= 0.0 {
+      return;
+    }
+    if opacity >= 1.0 {
+      return paint(self);
+    }
+
+    self.begin_layer(opacity);
+    paint(self);
+    self.end_layer();
+  }
+
+  /// Fills `shape` moved by `shadow`'s offset, in its colour, blurred by a Gaussian whose standard
+  /// deviation is half its blur radius, as a CSS shadow blurs.
+  fn fill_shadow(&mut self, shape: &ShadowShape, shadow: &SizedShadow, transform: Affine);
 }
 
 /// How to stroke a shape.
@@ -209,6 +298,18 @@ pub struct StrokeStyle {
   pub dash: Option<[f32; 2]>,
   /// Whether the dashes have round caps, which is how `dotted` draws.
   pub round_cap: bool,
+}
+
+impl StrokeStyle {
+  /// A border or outline stroke in `color`, dashed as `dash` says.
+  pub fn border(color: Color, width: f32, dash: Option<BorderDash>) -> Self {
+    Self {
+      color,
+      width,
+      dash: dash.map(|dash| dash.intervals),
+      round_cap: dash.is_some_and(|dash| dash.round_cap),
+    }
+  }
 }
 
 /// A box's `box-shadow` layers, split by where they fall.
@@ -243,29 +344,24 @@ impl<'c> BoxPainter<'c> {
     Self::new(context, ComputedLayout { size, ..layout })
   }
 
+  /// The context the box paints in.
+  pub fn context(&self) -> &'c RenderContext {
+    self.context
+  }
+
   /// The box's border geometry, corners included.
   pub fn border(&self) -> &BorderProperties {
     &self.border
   }
 
-  /// The box a background paints into, per `background-clip`.
-  pub fn background_clip_shape(&self) -> Option<FillShape> {
-    if self.layout.size.width <= 0.0 || self.layout.size.height <= 0.0 {
-      return None;
-    }
+  /// The area the box clips its background to, per `background-clip`.
+  pub fn background_clip(&self) -> BackgroundClipArea {
+    BackgroundClipArea::new(self.context, self.layout, self.border)
+  }
 
-    match self.context.style.background_clip {
-      BackgroundClip::BorderBox if self.border.is_zero() => Some(FillShape::Rect(self.layout.size)),
-      BackgroundClip::BorderBox => Some(FillShape::RoundedRect {
-        border: self.border,
-        size: self.layout.size,
-        offset: Point::ZERO,
-      }),
-      BackgroundClip::PaddingBox => Some(ClipBox::padding_box(self.border, self.layout).into()),
-      BackgroundClip::ContentBox => Some(ClipBox::content_box(self.border, self.layout).into()),
-      BackgroundClip::BorderArea => Some(FillShape::border_ring(&self.border, self.layout.size)),
-      BackgroundClip::Text => None,
-    }
+  /// The box's background, resolved.
+  pub fn background(&self) -> BoxBackground<'c> {
+    BoxBackground::new(self.context, self.layout, self.border)
   }
 
   /// Paints `background-color`.
@@ -279,10 +375,11 @@ impl<'c> BoxPainter<'c> {
     if color.0[3] == 0 {
       return;
     }
-    let Some(shape) = self.background_clip_shape() else {
+    let Some(shape) = self.background_clip().shape(self.layout.size) else {
       return;
     };
 
+    device.set_role(PaintRole::Background);
     device.fill_shape(&shape, color, Affine::translation(origin.x, origin.y));
   }
 
@@ -318,9 +415,26 @@ impl<'c> BoxPainter<'c> {
     }
   }
 
+  /// Paints the box's `border` at `origin`.
+  pub fn paint_border<D: PaintDevice>(&self, origin: Point<f32>, device: &mut D) {
+    device.set_role(PaintRole::Border);
+    BoxBorderPainter::new(&self.border, self.layout.size).paint(origin, device);
+  }
+
+  /// The `clip-path` shape the box and its descendants clip to, or `None` when it has none or the
+  /// shape cannot resolve.
+  pub fn clip_path(&self) -> Option<FillShape> {
+    let style = &self.context.style;
+
+    style
+      .clip_path
+      .as_ref()?
+      .fill_shape(self.context, self.layout.size, style.clip_rule)
+  }
+
   /// The outline the box paints, or `None` when it paints none.
   pub fn outline(&self) -> Option<OutlineGeometry> {
-    outline_paint(self.context, self.layout.size)
+    OutlineGeometry::painted(self.context, self.layout.size)
   }
 
   /// Whether the box paints a background, border, shadow or outline.
@@ -334,7 +448,7 @@ impl<'c> BoxPainter<'c> {
         .is_some_and(|images| images.iter().any(BackgroundImage::paints));
     let shadows = self.shadows();
 
-    (background && self.background_clip_shape().is_some())
+    (background && self.background_clip().shape(self.layout.size).is_some())
       || self.border.has_visible_sides()
       || !shadows.inset.is_empty()
       || !shadows.outer.is_empty()
@@ -342,30 +456,20 @@ impl<'c> BoxPainter<'c> {
   }
 }
 
-/// Paints the decoration lines of one glyph run: `text-decoration` under, over, and through the
-/// text.
-pub fn paint_run_decorations<D: PaintDevice>(
-  decorations: &[DecorationRect],
-  over: bool,
-  skip: TextDecorationLines,
-  origin: Point<f32>,
-  device: &mut D,
-) {
-  for decoration in decorations
-    .iter()
-    .filter(|line| line.over == over && !skip.contains(line.line))
-  {
-    if decoration.color.0[3] == 0 || decoration.width <= 0.0 || decoration.height <= 0.0 {
-      continue;
+impl DecorationRect {
+  /// Paints the line with its border box at `origin`.
+  pub fn paint<D: PaintDevice>(&self, origin: Point<f32>, device: &mut D) {
+    if self.color.0[3] == 0 || self.width <= 0.0 || self.height <= 0.0 {
+      return;
     }
-    let [a, b, c, d, e, f] = decoration.transform;
+    let [a, b, c, d, e, f] = self.transform;
 
     device.fill_shape(
       &FillShape::Rect(Size {
-        width: decoration.width,
-        height: decoration.height,
+        width: self.width,
+        height: self.height,
       }),
-      decoration.color,
+      self.color,
       Affine {
         a,
         b,
@@ -376,96 +480,4 @@ pub fn paint_run_decorations<D: PaintDevice>(
       },
     );
   }
-}
-
-/// Paints a border ring, unless it needs per-side work: a uniform dashed or dotted border strokes
-/// the centerline so the pattern runs round the whole ring, and a double border fills two rings.
-pub fn paint_border<D: PaintDevice>(
-  border: &BorderProperties,
-  size: Size<f32>,
-  origin: Point<f32>,
-  device: &mut D,
-) -> bool {
-  let at = Affine::translation(origin.x, origin.y);
-
-  match border.paint() {
-    BorderPaint::Sides => return false,
-    // A transparent ring is a fill nobody sees, and painting it would only
-    // lengthen the output.
-    BorderPaint::Ring { color }
-    | BorderPaint::Double { color, .. }
-    | BorderPaint::Stroked { color, .. }
-      if color.0[3] == 0 => {}
-    BorderPaint::Ring { color } => {
-      device.fill_shape(&FillShape::border_ring(border, size), color, at);
-    }
-    BorderPaint::Double { color, width } => {
-      let third = width / 3.0;
-
-      for inset in [0.0, third * 2.0] {
-        let mut ring = *border;
-
-        ring.expand_by(Rect {
-          top: -inset,
-          right: -inset,
-          bottom: -inset,
-          left: -inset,
-        });
-        ring.width = Sides([third; 4]).into();
-
-        let ring_size = Size {
-          width: (size.width - inset * 2.0).max(0.0),
-          height: (size.height - inset * 2.0).max(0.0),
-        };
-
-        device.fill_shape(
-          &FillShape::border_ring(&ring, ring_size),
-          color,
-          Affine::translation(origin.x + inset, origin.y + inset),
-        );
-      }
-    }
-    BorderPaint::Stroked {
-      color,
-      width,
-      style,
-    } => {
-      let half = width / 2.0;
-      let mut center = *border;
-
-      center.expand_by(Rect {
-        top: -half,
-        right: -half,
-        bottom: -half,
-        left: -half,
-      });
-
-      let center_size = Size {
-        width: (size.width - width).max(0.0),
-        height: (size.height - width).max(0.0),
-      };
-      let mut commands = Vec::with_capacity(BorderProperties::PATH_COMMANDS_AMOUNT);
-
-      center.append_mask_commands(&mut commands, center_size, Point { x: half, y: half });
-
-      let perimeter = center.approximate_rounded_rect_perimeter(center_size);
-      let dash = style.dash_pattern(width, perimeter, true);
-
-      device.stroke_shape(
-        &FillShape::Path {
-          commands,
-          rule: FillRule::NonZero,
-        },
-        &StrokeStyle {
-          color,
-          width,
-          dash: dash.map(|dash| dash.intervals),
-          round_cap: dash.is_some_and(|dash| dash.round_cap),
-        },
-        at,
-      );
-    }
-  }
-
-  true
 }

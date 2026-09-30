@@ -1,51 +1,33 @@
 ---
 title: Text
-description: Place shaped runs or collect values for a text exporter.
+description: Draw shaped runs or collect values for a text exporter.
 icon: Type
 ---
 
-`node.textRuns` holds shaped runs in visual order. A run's `x` and `y` mark the start of its baseline in the node's border-box space.
+A paragraph's text is one `TextNode`. It is listed before the inline boxes inside the paragraph, so its runs can come from both sides of them. `node.runs` holds the runs in visual order, and a run's `element` names the inline element it came from, such as a `<b>`.
 
-## Place runs
-
-Use `node.matrix` for the box. Apply `run.transform` after it when present; the walker adds that transform when `text-fit` scales a line.
-
-```tsx twoslash title="text-runs.tsx"
-import { paint } from "takumi-paint";
-
-const tree = await paint(
-  <p>
-    Hello <b>world</b>
-  </p>,
-  { width: 320 },
-);
-
-for (const { node, run } of tree.textRuns()) {
-  console.log(node.matrix, run.x, run.y, run.text, run.font.family);
-}
-```
-
-`run.font` is the font instance selected during shaping. `run.fontIndex` refers to the same instance in `tree.fonts`. Runs shaped with the same instance share the same font object.
+A run's `x` and `y` mark the start of its baseline in the text node's local space. `run.transform` is present when `text-fit` scales the line; apply it before placing the run at `x`, `y`.
 
 ## Draw glyphs
 
-`run.glyphs` contains font glyph IDs and positions relative to the run origin. Native drawing APIs can use those values with `run.fontIndex`. `run.width` is the run's advance. `run.letterSpacing` is already reflected in glyph positions.
+`run.outline()` returns the glyphs as SVG path data from the baseline start, so a consumer can draw text without a font engine. A `glyphs` drawable fills that outline with a `paint` in the node's space: the text color, a text shadow's color with a `blur`, or the box's background for `background-clip: text`. With `stroke`, it strokes the outline, as `-webkit-text-stroke` does.
 
-`run.decorations` contains placed underline, overline, or line-through rectangles. `run.stroke` records visible `-webkit-text-stroke`. `node.textShadows` applies under the node's runs.
+For a native text API, `run.glyphs` holds glyph IDs in `run.font` and their positions from the baseline start. `run.font.data()` returns the font file. Runs shaped with the same face share one `Font` object.
 
 ## Lay text out again
 
-A presentation writer can build a text box from `node.contentBox` and `node.textAlign`. The box is relative to the node's border box; transform it through `node.matrix` when needed.
+A presentation writer can build a text box from the paragraph's box and the run fields.
 
-| Value          | Field                  |
-| -------------- | ---------------------- |
-| Text box       | `node.contentBox`      |
-| Alignment      | `node.textAlign`       |
-| Text and face  | `run.text`, `run.font` |
-| Font size      | `run.fontSize`         |
-| Line height    | `run.lineHeight`       |
-| Letter spacing | `run.letterSpacing`    |
-| Baseline       | `run.x`, `run.y`       |
+| Value          | Field                    |
+| -------------- | ------------------------ |
+| Text box       | `node.parent.contentBox` |
+| Alignment      | `node.textAlign`         |
+| Line           | `run.line`               |
+| Text and face  | `run.text`, `run.font`   |
+| Font size      | `run.fontSize`           |
+| Line height    | `run.lineHeight`         |
+| Letter spacing | `run.letterSpacing`      |
+| Baseline       | `run.x`, `run.y`         |
 
 ```tsx twoslash title="slides.tsx"
 import { paint } from "takumi-paint";
@@ -55,27 +37,27 @@ const tree = await paint(
   { width: 320 },
 );
 
-const paragraphs = [...tree]
-  .filter((node) => node.textRuns.length > 0)
-  .map((node) => ({
-    box: node.contentBox,
-    matrix: node.matrix,
-    align: node.textAlign,
-    runs: node.textRuns.map((run) => ({
-      text: run.text,
-      font: run.font,
-      fontSize: run.fontSize,
-      lineHeight: run.lineHeight,
-      letterSpacing: run.letterSpacing,
-      baseline: [run.x, run.y],
-    })),
-  }));
+const paragraphs = tree.nodes.flatMap((node) =>
+  node.type === "text"
+    ? [
+        {
+          box: node.parent?.contentBox,
+          matrix: node.transform,
+          align: node.textAlign,
+          runs: node.runs.map((run) => ({
+            text: run.text,
+            font: run.font,
+            fontSize: run.fontSize,
+            lineHeight: run.lineHeight,
+            letterSpacing: run.letterSpacing,
+            baseline: [run.x, run.y],
+          })),
+        },
+      ]
+    : [],
+);
 
 console.log(paragraphs);
 ```
 
-`run.ascent` and `run.descent` are typographic distances from the baseline. `run.top` equals `run.y - run.ascent`; `run.bottom` equals `run.y + run.descent`. Under `line-height: normal`, a fallback face can grow `run.lineHeight` to its own height.
-
-## Trace source text
-
-`run.textByteRange` identifies the UTF-8 byte range within the node's inline text. `run.spanId` identifies the source inline span when available.
+`run.ascent` and `run.descent` are typographic distances from the baseline. `run.letterSpacing` is already applied to the glyph positions. Under `line-height: normal`, a fallback face can grow `run.lineHeight` to its own height.

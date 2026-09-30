@@ -42,7 +42,7 @@ pub use self::{
   decorations::DecorationRect,
   items::{DecorationLink, InlineBoxItem, InlineItem, ProcessedInlineSpan, collect_inline_items},
   metrics::VisualInlineBox,
-  outline::{InlineOutlineRect, outline_island_contour, outline_islands},
+  outline::{InlineOutlineRect, OutlineIsland},
   runs::{
     InlineRunLayout, MeasuredInlineBox, MeasuredInlineRun, PositionedGlyph, PositionedInlineRun,
     RunMetrics, ShapedRun,
@@ -422,8 +422,6 @@ pub struct InlineBrush {
   /// Whether the line height is `normal`, letting fallback-font runs grow the line.
   pub(crate) line_height_is_normal: bool,
   pub(crate) vertical_align: VerticalAlign,
-  /// `letter-spacing` in px.
-  pub(crate) letter_spacing: f32,
 }
 
 impl InlineBrush {
@@ -469,7 +467,6 @@ impl Default for InlineBrush {
       line_height_px: None,
       line_height_is_normal: false,
       vertical_align: VerticalAlign::default(),
-      letter_spacing: 0.0,
     }
   }
 }

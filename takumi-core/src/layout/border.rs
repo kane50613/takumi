@@ -22,8 +22,44 @@ pub enum BorderSide {
   Left,
 }
 
+impl BorderSide {
+  /// The two sides that meet this one at its corners.
+  pub fn adjacent(self) -> [Self; 2] {
+    match self {
+      Self::Top | Self::Bottom => [Self::Left, Self::Right],
+      Self::Right | Self::Left => [Self::Top, Self::Bottom],
+    }
+  }
+
+  /// Whether a 3D `style` shades this side dark: `inset` darkens the top and left, and `outset`
+  /// the bottom and right, as Blink's `DarkenBoxSide` decides.
+  pub fn darkened_by(self, style: BorderStyle) -> bool {
+    matches!(self, Self::Top | Self::Left) == (style == BorderStyle::Inset)
+  }
+
+  /// This side's entry in `sides`.
+  pub fn of<T: Copy>(self, sides: Rect<T>) -> T {
+    match self {
+      Self::Top => sides.top,
+      Self::Right => sides.right,
+      Self::Bottom => sides.bottom,
+      Self::Left => sides.left,
+    }
+  }
+
+  /// The indices of this side's corners among radii listed clockwise from the top-left.
+  fn corners(self) -> [usize; 2] {
+    match self {
+      Self::Top => [0, 1],
+      Self::Right => [1, 2],
+      Self::Bottom => [2, 3],
+      Self::Left => [3, 0],
+    }
+  }
+}
+
 /// One strip of a border side: where it sits, how thick it is, and what colour fills it.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub struct SideBand {
   /// How far in from the border box the strip starts, per side.
   pub inset: Rect<f32>,
@@ -139,7 +175,7 @@ impl BorderProperties {
   }
 
   /// Every side, painted or not, clockwise from the top.
-  fn sides(&self) -> [PaintedSide; 4] {
+  pub(crate) fn sides(&self) -> [PaintedSide; 4] {
     [
       (
         BorderSide::Top,
@@ -211,14 +247,6 @@ impl BorderProperties {
     let color = colors.next()?;
 
     colors.all(|other| other == color).then_some(color)
-  }
-
-  /// True if all visible sides use the given style.
-  pub fn visible_sides_match(&self, style: BorderStyle) -> bool {
-    self
-      .sides()
-      .iter()
-      .all(|side| !side.is_visible() || side.style == style)
   }
 
   /// True if every side has equal nonzero width and the given style.
@@ -444,7 +472,7 @@ impl BorderProperties {
       return;
     }
 
-    if self.is_zero() || self.collapsed {
+    if self.collapsed {
       self.append_side_polygon_commands_at(side, path, border_box, offset);
       return;
     }
@@ -555,6 +583,20 @@ impl BorderProperties {
     path.close();
   }
 
+  /// Whether the padding edge curves at either end of `side`.
+  pub fn inner_edge_arcs(&self, side: BorderSide, border_box: Size<f32>) -> bool {
+    let mut inner = *self;
+
+    inner.inset_by_border_width();
+
+    let radii = inner.scaled_corner_radii(border_box.inset(self.width));
+
+    side
+      .corners()
+      .iter()
+      .any(|&corner| radii.0[corner].x > 0.0 && radii.0[corner].y > 0.0)
+  }
+
   /// Returns true if all corner radii are zero.
   #[inline]
   pub fn is_zero(&self) -> bool {
@@ -582,23 +624,35 @@ impl BorderProperties {
     self.radius.0[3].y = (self.radius.0[3].y + amount.bottom).max(0.0);
   }
 
+  /// Grows the corner radii of a `border_box` whose edges move `outset` outward, after
+  /// css-backgrounds-3's [outset-adjusted border radius](https://drafts.csswg.org/css-backgrounds-3/#outset-adjusted-border-radius),
+  /// so a small corner stays proportionally sharp and a square one stays square.
+  pub fn outset_radii(&mut self, border_box: Size<f32>, outset: f32) {
+    let used = self.scaled_corner_radii(border_box);
+
+    for (corner, used) in self.radius.0.iter_mut().zip(used.0) {
+      if used.x <= 0.0 && used.y <= 0.0 {
+        *corner = SpacePair::from_single(0.0);
+        continue;
+      }
+
+      let coverage = 2.0 * (used.x / border_box.width).min(used.y / border_box.height);
+      let adjusted = |radius: f32| {
+        if radius > outset || coverage > 1.0 {
+          return radius + outset;
+        }
+
+        radius + outset * (1.0 - (1.0 - radius / outset).powi(3) * (1.0 - coverage.powi(3)))
+      };
+
+      corner.x = adjusted(used.x);
+      corner.y = adjusted(used.y);
+    }
+  }
+
   /// Shrink radii by the border width to get inner radius path.
   pub fn inset_by_border_width(&mut self) {
     self.expand_by(self.width.map(|size| -size))
-  }
-
-  /// Outset `box-shadow` shape: a copy with corner radii expanded by `spread` on every side, paired
-  /// with the spread-expanded box size.
-  pub fn outset_shadow_box(&self, size: Size<f32>, spread: f32) -> (Self, Size<f32>) {
-    let mut expanded = *self;
-    expanded.expand_by(Sides::from(spread).into());
-
-    let spread_size = Size {
-      width: (size.width + 2.0 * spread).max(0.0),
-      height: (size.height + 2.0 * spread).max(0.0),
-    };
-
-    (expanded, spread_size)
   }
 
   /// CSS overlapping-curves scale factor: shrinks corner radii so adjacent radii on a side never
@@ -946,6 +1000,8 @@ fn approximate_quarter_ellipse_arc_length(radius_x: f32, radius_y: f32) -> f32 {
   circumference / 4.0
 }
 
+// The dash spacing below derives from Chromium's styled_stroke_data.cc, under
+// the BSD notice in LICENSE-CHROMIUM.
 const DASHED_THICK_WIDTH_THRESHOLD: f32 = 3.0;
 const DASHED_LENGTH_RATIO_THICK: f32 = 2.0;
 const DASHED_LENGTH_RATIO_THIN: f32 = 3.0;
@@ -953,102 +1009,46 @@ const DASHED_GAP_RATIO_THICK: f32 = 1.0;
 const DASHED_GAP_RATIO_THIN: f32 = 2.0;
 const DOTTED_ENDPOINT_EPSILON: f32 = 1.0e-2;
 
-/// How a border paints as a whole, before any per-side work.
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub(crate) enum BorderPaint {
-  /// Stroke the centerline with the dash pattern for `style`.
-  Stroked {
-    /// The uniform colour.
-    color: Color,
-    /// The uniform width.
-    width: f32,
-    /// `Dashed` or `Dotted`.
-    style: BorderStyle,
-  },
-  /// Two concentric rings.
-  Double {
-    /// The uniform colour.
-    color: Color,
-    /// The uniform width.
-    width: f32,
-  },
-  /// One even-odd fill of the whole ring.
-  Ring {
-    /// The uniform colour.
-    color: Color,
-  },
-  /// Each side on its own.
-  Sides,
-}
-
-impl BorderProperties {
-  /// Decides how the border paints.
-  pub(crate) fn paint(&self) -> BorderPaint {
-    let Some(color) = self.has_uniform_visible_color() else {
-      return BorderPaint::Sides;
-    };
-    let width = self.width.top;
-
-    for style in [BorderStyle::Dashed, BorderStyle::Dotted] {
-      if self.is_uniform_all_sides_style(style) {
-        return BorderPaint::Stroked {
-          color,
-          width,
-          style,
-        };
-      }
-    }
-    if self.is_uniform_all_sides_style(BorderStyle::Double) {
-      return BorderPaint::Double { color, width };
-    }
-    // Only a solid side fills as part of one ring: a dashed or dotted side breaks
-    // the ring into segments, and the 3D bevels shade each side differently.
-    if !self.visible_sides_match(BorderStyle::Solid) {
-      return BorderPaint::Sides;
-    }
-    // A zero-width side leaves the ring's two contours sharing an edge, which
-    // antialiasing leaks a hairline through. Sides share no edges.
-    if [
-      self.width.top,
-      self.width.right,
-      self.width.bottom,
-      self.width.left,
-    ]
-    .iter()
-    .any(|width| *width <= 0.0)
-    {
-      return BorderPaint::Sides;
-    }
-
-    BorderPaint::Ring { color }
-  }
-}
-
 impl BorderStyle {
-  /// Returns a dash interval and round-cap flag for this style.
+  /// Returns a dash interval and round-cap flag for this style. A dotted line up to 3px wide
+  /// draws square dots, as Blink does.
+  ///
+  /// Approximate: Blink also nudges thin dotted lines by whole pixels so both ends land on a
+  /// dot; these dots keep an even spacing instead.
   pub fn dash_pattern(self, width: f32, length: f32, closed: bool) -> Option<BorderDash> {
-    if !matches!(self, BorderStyle::Dashed | BorderStyle::Dotted) || width <= 0.0 || length <= 0.0 {
+    if width <= 0.0 || length <= 0.0 {
       return None;
     }
 
-    if self == BorderStyle::Dashed {
-      let (dash, gap) = compute_dashed_intervals(width, length, closed)?;
-      return Some(BorderDash {
-        intervals: [dash, gap],
-        round_cap: false,
-      });
-    }
+    match self {
+      BorderStyle::Dashed => {
+        let thick = width >= DASHED_THICK_WIDTH_THRESHOLD;
+        let (dash, gap) = if thick {
+          (DASHED_LENGTH_RATIO_THICK, DASHED_GAP_RATIO_THICK)
+        } else {
+          (DASHED_LENGTH_RATIO_THIN, DASHED_GAP_RATIO_THIN)
+        };
 
-    let per_dot_length = width * 2.0;
-    let gap = if length < per_dot_length {
-      per_dot_length
-    } else {
-      select_best_dash_gap(length, width, width, closed) + width - DOTTED_ENDPOINT_EPSILON
-    };
-    Some(BorderDash {
-      intervals: [0.0, gap],
-      round_cap: true,
-    })
+        square_dash(width * dash, width * gap, length, closed, true)
+      }
+      BorderStyle::Dotted if width <= DASHED_THICK_WIDTH_THRESHOLD => {
+        square_dash(width, width, length, closed, false)
+      }
+      BorderStyle::Dotted => {
+        let per_dot_length = width * 2.0;
+        let gap = if length < per_dot_length {
+          per_dot_length
+        } else {
+          select_best_dash_gap(length, width, width, closed) + width - DOTTED_ENDPOINT_EPSILON
+        };
+
+        Some(BorderDash {
+          intervals: [0.0, gap],
+          round_cap: true,
+        })
+      }
+      _ => None,
+    }
   }
 }
 
@@ -1061,39 +1061,29 @@ pub struct BorderDash {
   pub round_cap: bool,
 }
 
-fn compute_dashed_intervals(width: f32, length: f32, closed: bool) -> Option<(f32, f32)> {
-  let thick = width >= DASHED_THICK_WIDTH_THRESHOLD;
-  let dash = width
-    * if thick {
-      DASHED_LENGTH_RATIO_THICK
-    } else {
-      DASHED_LENGTH_RATIO_THIN
-    };
-  let gap = width
-    * if thick {
-      DASHED_GAP_RATIO_THICK
-    } else {
-      DASHED_GAP_RATIO_THIN
-    };
-
+/// Butt-capped dashes of `dash` with gaps near `gap` fitted to `length`, or `None` when two
+/// dashes do not fit and the line draws solid. `spread` stretches the gaps so the line ends on a
+/// dash.
+fn square_dash(dash: f32, gap: f32, length: f32, closed: bool, spread: bool) -> Option<BorderDash> {
   if length <= dash * 2.0 {
     return None;
   }
 
-  let mut applied_dash = dash;
-  let mut applied_gap = gap;
-  let mut two_dashes_with_gap = 2.0 * dash + gap;
-  if closed {
-    two_dashes_with_gap += gap;
-  }
-  if length <= two_dashes_with_gap {
+  let two_dashes_with_gap = 2.0 * dash + gap + if closed { gap } else { 0.0 };
+  let intervals = if length <= two_dashes_with_gap {
     let multiplier = length / two_dashes_with_gap;
-    applied_dash *= multiplier;
-    applied_gap *= multiplier;
+
+    [dash * multiplier, gap * multiplier]
+  } else if spread {
+    [dash, select_best_dash_gap(length, dash, gap, closed)]
   } else {
-    applied_gap = select_best_dash_gap(length, dash, gap, closed);
-  }
-  Some((applied_dash, applied_gap))
+    [dash, gap]
+  };
+
+  Some(BorderDash {
+    intervals,
+    round_cap: false,
+  })
 }
 
 fn select_best_dash_gap(length: f32, dash: f32, gap: f32, closed: bool) -> f32 {
@@ -1117,26 +1107,13 @@ fn select_best_dash_gap(length: f32, dash: f32, gap: f32, closed: bool) -> f32 {
 }
 
 impl PaintedSide {
-  fn is_visible(&self) -> bool {
+  pub(crate) fn is_visible(&self) -> bool {
     self.style.is_rendered() && self.width > 0.0
   }
 
-  /// The side's colour lightened or darkened for `inset`/`outset` 3D shading.
-  fn shaded(&self, style: BorderStyle) -> Color {
-    let lighten = match style {
-      BorderStyle::Outset => matches!(self.side, BorderSide::Top | BorderSide::Left),
-      BorderStyle::Inset => matches!(self.side, BorderSide::Right | BorderSide::Bottom),
-      _ => false,
-    };
-
-    self.color.mix_rgb(
-      if lighten {
-        Color::white()
-      } else {
-        Color::black()
-      },
-      0.35,
-    )
+  /// The side's colour shaded for the `inset` or `outset` half of a 3D style.
+  pub(crate) fn shaded(&self, style: BorderStyle) -> Color {
+    self.color.inset_outset(self.side.darkened_by(style))
   }
 }
 
@@ -1201,6 +1178,7 @@ mod tests {
   use crate::{
     geometry::{PathCommand, Point, Rect, Size},
     layout::border::{BorderProperties, BorderSide},
+    style::{Sides, SpacePair},
   };
 
   fn collapsed_border() -> BorderProperties {
@@ -1253,4 +1231,31 @@ mod tests {
     assert!(left.iter().all(|point| point.x == 0.0 || point.x == 1.0));
     assert!(left.iter().all(|point| point.y == 4.0 || point.y == 49.0));
   }
+
+  #[test]
+  fn an_outset_keeps_square_corners_square() {
+    let mut border = BorderProperties::default();
+
+    border.outset_radii(BOX, 10.0);
+
+    assert!(border.is_zero());
+  }
+
+  #[test]
+  fn an_outset_grows_a_small_corner_less_than_the_outset() {
+    let mut border = BorderProperties {
+      radius: Sides([SpacePair::from_single(2.0); 4]),
+      ..BorderProperties::default()
+    };
+
+    border.outset_radii(BOX, 10.0);
+
+    // 2 + 10 * (1 - (1 - 0.2)^3 * (1 - 0.04^3))
+    assert!((border.radius.0[0].x - 6.88).abs() < 1e-3);
+  }
+
+  const BOX: Size<f32> = Size {
+    width: 100.0,
+    height: 100.0,
+  };
 }

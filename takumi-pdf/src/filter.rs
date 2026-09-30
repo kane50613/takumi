@@ -8,16 +8,15 @@
 //! (`blur`, `drop-shadow`) and referenced SVG filters are left alone.
 
 use takumi_core::{
-  filter::ColorMatrix,
+  filter::{ColorMatrix, ColorMatrixChain},
   style::{Color, Filter, ToCss},
 };
 
 /// The filter list as written, applied in order. CSS clamps each function's
-/// result before handing it to the next, so the matrices stay separate rather
-/// than composing into one.
+/// result before handing it to the next.
 #[derive(Clone, Debug, Default)]
 pub(crate) struct ColorFilter {
-  functions: Vec<ColorMatrix>,
+  functions: ColorMatrixChain,
 }
 
 /// The first filter function that does not fold into a color matrix, written
@@ -39,34 +38,24 @@ impl ColorFilter {
   /// filters the element first and the ancestor's group afterwards, and the
   /// matrices do not commute. Returns `None` when nothing changes color.
   pub(crate) fn compose(outer: Option<&Self>, filters: &[Filter]) -> Option<Self> {
-    let mut functions: Vec<ColorMatrix> = filters
+    let mut functions = ColorMatrixChain::default();
+    let outer = outer
+      .into_iter()
+      .flat_map(|outer| outer.functions.0.iter().copied());
+
+    for matrix in filters
       .iter()
       .filter_map(ColorMatrix::from_filter)
-      .collect();
-
-    if let Some(outer) = outer {
-      functions.extend_from_slice(&outer.functions);
+      .chain(outer)
+    {
+      functions.push(matrix);
     }
-    (!functions.is_empty()).then_some(Self { functions })
+    (!functions.0.is_empty()).then_some(Self { functions })
   }
 
-  /// Applies every filter in order. Each result is clamped before the next one
-  /// runs, as CSS requires, but the pipeline stays in floats so the channels
-  /// are quantized once at the end rather than between functions.
+  /// Applies every filter in order to an 8-bit colour.
   pub(crate) fn apply(&self, rgba: [u8; 4]) -> [u8; 4] {
-    let channel = |value: u8| f32::from(value) / 255.0;
-    let color = [
-      channel(rgba[0]),
-      channel(rgba[1]),
-      channel(rgba[2]),
-      channel(rgba[3]),
-    ];
-    let mixed = self
-      .functions
-      .iter()
-      .fold(color, |color, function| function.apply(color));
-
-    mixed.map(|value| (value * 255.0).round() as u8)
+    self.functions.apply_rgba8(rgba)
   }
 
   /// Applies the filter to a color value.

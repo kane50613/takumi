@@ -1,16 +1,14 @@
 use std::sync::Arc;
 
 use skrifa::color::ColorPalette;
-use takumi_core::geometry::{ComputedLayout as Layout, Point, Size};
+use takumi_core::geometry::{Point, Size};
 use tiny_skia::Pixmap;
 use xxhash_rust::xxh3::Xxh3;
 
 use crate::{
-  BorderProperties, Canvas, ColorTile, Command, MaskCompositeColor, MaskSamplingOptions,
-  PaintSource, Placement, Result, SamplingOptions, SizedFontStyle, Stroke, checked_area,
-  composite_mask_source_to_pixmap, draw_outset_shadow,
-  layout::inline::ShapedRun,
-  pixmap_ref_from_buffer, render_mask,
+  BorderProperties, Canvas, Command, MaskCompositeColor, MaskSamplingOptions, PaintSource,
+  Placement, Result, SamplingOptions, SizedFontStyle, Stroke, checked_area,
+  composite_mask_source_to_pixmap, pixmap_ref_from_buffer, render_mask,
   resources::{
     glyph::{ResolvedColorLayer, ResolvedGlyph},
     glyph_cache::glyph_mask,
@@ -109,68 +107,6 @@ fn draw_mask_with_cache(
     &mask,
     cached_placement.translate(int_x, int_y),
     color,
-    BlendMode::Normal,
-  );
-}
-
-#[derive(Clone, Copy, Debug)]
-pub(crate) struct DecorationSegmentParams {
-  pub(crate) offset: f32,
-  pub(crate) size: f32,
-  pub(crate) start_x: f32,
-  pub(crate) end_x: f32,
-  pub(crate) layout: Layout,
-  pub(crate) transform: Affine,
-}
-
-pub(crate) fn draw_decoration(
-  canvas: &mut Canvas,
-  glyph_run: &ShapedRun,
-  color: Color,
-  offset: f32,
-  size: f32,
-  layout: Layout,
-  transform: Affine,
-) {
-  let start_x = layout.content_box_offset().x + glyph_run.offset;
-  let end_x = start_x + glyph_run.decorated_advance();
-  draw_decoration_segment(
-    canvas,
-    color,
-    DecorationSegmentParams {
-      offset,
-      size,
-      start_x,
-      end_x,
-      layout,
-      transform,
-    },
-  );
-}
-
-pub(crate) fn draw_decoration_segment(
-  canvas: &mut Canvas,
-  color: Color,
-  params: DecorationSegmentParams,
-) {
-  if params.end_x <= params.start_x {
-    return;
-  }
-
-  let snapped_start_x = params.start_x.floor();
-  let width = (params.end_x.ceil() - snapped_start_x) as u32;
-
-  let tile = ColorTile::new(color, width, params.size as u32);
-
-  canvas.overlay_image(
-    &tile,
-    BorderProperties::default(),
-    params.transform
-      * Affine::translation(
-        snapped_start_x,
-        params.layout.content_box_offset().y + params.offset,
-      ),
-    ImageScalingAlgorithm::Auto,
     BlendMode::Normal,
   );
 }
@@ -477,37 +413,6 @@ pub(crate) fn draw_glyph(
 
       ctx.draw_text_stroke();
     }
-  }
-
-  Ok(())
-}
-
-pub(crate) fn draw_glyph_text_shadow(
-  glyph: &ResolvedGlyph,
-  canvas: &mut Canvas,
-  style: &SizedFontStyle,
-  transform: Affine,
-  inline_offset: Point<f32>,
-) -> Result<()> {
-  let ResolvedGlyph::Outline(outline) = glyph else {
-    return Ok(());
-  };
-
-  if style.text_shadow.is_empty() {
-    return Ok(());
-  }
-
-  let transform = transform * Affine::translation(inline_offset.x, inline_offset.y);
-
-  for shadow in style.painted_text_shadows() {
-    draw_outset_shadow(
-      shadow,
-      canvas,
-      outline.paths(),
-      transform,
-      Default::default(),
-      None,
-    )?;
   }
 
   Ok(())

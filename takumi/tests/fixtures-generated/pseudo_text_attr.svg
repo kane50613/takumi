@@ -1,17 +1,17 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630">
   <rect x="0" y="0" width="1200" height="630" fill="#f3f4f6"/>
-  <filter id="bl0">
-    <feGaussianBlur stdDeviation="1"/>
-  </filter>
-  <g filter="url(#bl0)">
-    <path d="M24 17h266c4.42 0 8 3.58 8 8v122c0 4.42-3.58 8-8 8h-266c-4.42 0-8-3.58-8-8v-122c0-4.42 3.58-8 8-8Z" fill="#000" fill-opacity=".051"/>
+  <clipPath id="cp0">
+    <path d="M-1000000-1000000H1000000V1000000H-1000000ZM24 16h266c4.42 0 8 3.58 8 8v122c0 4.42-3.58 8-8 8h-266c-4.42 0-8-3.58-8-8v-122c0-4.42 3.58-8 8-8Z" clip-rule="evenodd"/>
+  </clipPath>
+  <g clip-path="url(#cp0)">
+    <filter id="bl1">
+      <feGaussianBlur stdDeviation="1"/>
+    </filter>
+    <g filter="url(#bl1)">
+      <path d="M24 17h266c4.42 0 8 3.58 8 8v122c0 4.42-3.58 8-8 8h-266c-4.42 0-8-3.58-8-8v-122c0-4.42 3.58-8 8-8Z" fill="#000" fill-opacity=".051"/>
+    </g>
   </g>
   <path d="M24 16h266c4.42 0 8 3.58 8 8v122c0 4.42-3.58 8-8 8h-266c-4.42 0-8-3.58-8-8v-122c0-4.42 3.58-8 8-8Z" fill="#fff"/>
-  <clipPath id="cp1">
-    <path d="M24 16h266c4.42 0 8 3.58 8 8v122c0 4.42-3.58 8-8 8h-266c-4.42 0-8-3.58-8-8v-122c0-4.42 3.58-8 8-8Z"/>
-  </clipPath>
-  <g clip-path="url(#cp1)">
-  </g>
   <g fill="#64748b">
     <use href="#g0" x="28" y="39"/>
     <use href="#g0" x="34.6" y="39"/>
@@ -32,18 +32,18 @@
     <use href="#g11" x="76.45" y="103"/>
     <use href="#g12" x="82.55" y="103"/>
   </g>
-  <filter id="bl2">
-    <feGaussianBlur stdDeviation="1"/>
-  </filter>
-  <g filter="url(#bl2)">
-    <path d="M316 17h266c4.42 0 8 3.58 8 8v122c0 4.42-3.58 8-8 8h-266c-4.42 0-8-3.58-8-8v-122c0-4.42 3.58-8 8-8Z" fill="#000" fill-opacity=".051"/>
+  <clipPath id="cp2">
+    <path d="M-1000000-1000000H1000000V1000000H-1000000ZM316 16h266c4.42 0 8 3.58 8 8v122c0 4.42-3.58 8-8 8h-266c-4.42 0-8-3.58-8-8v-122c0-4.42 3.58-8 8-8Z" clip-rule="evenodd"/>
+  </clipPath>
+  <g clip-path="url(#cp2)">
+    <filter id="bl3">
+      <feGaussianBlur stdDeviation="1"/>
+    </filter>
+    <g filter="url(#bl3)">
+      <path d="M316 17h266c4.42 0 8 3.58 8 8v122c0 4.42-3.58 8-8 8h-266c-4.42 0-8-3.58-8-8v-122c0-4.42 3.58-8 8-8Z" fill="#000" fill-opacity=".051"/>
+    </g>
   </g>
   <path d="M316 16h266c4.42 0 8 3.58 8 8v122c0 4.42-3.58 8-8 8h-266c-4.42 0-8-3.58-8-8v-122c0-4.42 3.58-8 8-8Z" fill="#fff"/>
-  <clipPath id="cp3">
-    <path d="M316 16h266c4.42 0 8 3.58 8 8v122c0 4.42-3.58 8-8 8h-266c-4.42 0-8-3.58-8-8v-122c0-4.42 3.58-8 8-8Z"/>
-  </clipPath>
-  <g clip-path="url(#cp3)">
-  </g>
   <g fill="#64748b">
     <use href="#g0" x="320" y="39"/>
     <use href="#g0" x="326.6" y="39"/>
@@ -63,18 +63,18 @@
     <use href="#g19" x="353.19" y="103"/>
   </g>
   <use href="#g20" x="368.5" y="104" fill="#22c55e"/>
-  <filter id="bl4">
-    <feGaussianBlur stdDeviation="1"/>
-  </filter>
-  <g filter="url(#bl4)">
-    <path d="M608 17h266c4.42 0 8 3.58 8 8v122c0 4.42-3.58 8-8 8h-266c-4.42 0-8-3.58-8-8v-122c0-4.42 3.58-8 8-8Z" fill="#000" fill-opacity=".051"/>
+  <clipPath id="cp4">
+    <path d="M-1000000-1000000H1000000V1000000H-1000000ZM608 16h266c4.42 0 8 3.58 8 8v122c0 4.42-3.58 8-8 8h-266c-4.42 0-8-3.58-8-8v-122c0-4.42 3.58-8 8-8Z" clip-rule="evenodd"/>
+  </clipPath>
+  <g clip-path="url(#cp4)">
+    <filter id="bl5">
+      <feGaussianBlur stdDeviation="1"/>
+    </filter>
+    <g filter="url(#bl5)">
+      <path d="M608 17h266c4.42 0 8 3.58 8 8v122c0 4.42-3.58 8-8 8h-266c-4.42 0-8-3.58-8-8v-122c0-4.42 3.58-8 8-8Z" fill="#000" fill-opacity=".051"/>
+    </g>
   </g>
   <path d="M608 16h266c4.42 0 8 3.58 8 8v122c0 4.42-3.58 8-8 8h-266c-4.42 0-8-3.58-8-8v-122c0-4.42 3.58-8 8-8Z" fill="#fff"/>
-  <clipPath id="cp5">
-    <path d="M608 16h266c4.42 0 8 3.58 8 8v122c0 4.42-3.58 8-8 8h-266c-4.42 0-8-3.58-8-8v-122c0-4.42 3.58-8 8-8Z"/>
-  </clipPath>
-  <g clip-path="url(#cp5)">
-  </g>
   <g fill="#64748b">
     <use href="#g0" x="612" y="37"/>
     <use href="#g0" x="618.6" y="37"/>
@@ -102,18 +102,18 @@
     <use href="#g19" x="643.82" y="102"/>
   </g>
   <use href="#g27" x="654" y="102" fill="#3b82f6"/>
-  <filter id="bl6">
-    <feGaussianBlur stdDeviation="1"/>
-  </filter>
-  <g filter="url(#bl6)">
-    <path d="M900 17h266c4.42 0 8 3.58 8 8v122c0 4.42-3.58 8-8 8h-266c-4.42 0-8-3.58-8-8v-122c0-4.42 3.58-8 8-8Z" fill="#000" fill-opacity=".051"/>
+  <clipPath id="cp6">
+    <path d="M-1000000-1000000H1000000V1000000H-1000000ZM900 16h266c4.42 0 8 3.58 8 8v122c0 4.42-3.58 8-8 8h-266c-4.42 0-8-3.58-8-8v-122c0-4.42 3.58-8 8-8Z" clip-rule="evenodd"/>
+  </clipPath>
+  <g clip-path="url(#cp6)">
+    <filter id="bl7">
+      <feGaussianBlur stdDeviation="1"/>
+    </filter>
+    <g filter="url(#bl7)">
+      <path d="M900 17h266c4.42 0 8 3.58 8 8v122c0 4.42-3.58 8-8 8h-266c-4.42 0-8-3.58-8-8v-122c0-4.42 3.58-8 8-8Z" fill="#000" fill-opacity=".051"/>
+    </g>
   </g>
   <path d="M900 16h266c4.42 0 8 3.58 8 8v122c0 4.42-3.58 8-8 8h-266c-4.42 0-8-3.58-8-8v-122c0-4.42 3.58-8 8-8Z" fill="#fff"/>
-  <clipPath id="cp7">
-    <path d="M900 16h266c4.42 0 8 3.58 8 8v122c0 4.42-3.58 8-8 8h-266c-4.42 0-8-3.58-8-8v-122c0-4.42 3.58-8 8-8Z"/>
-  </clipPath>
-  <g clip-path="url(#cp7)">
-  </g>
   <g fill="#64748b">
     <use href="#g28" x="904" y="37"/>
     <use href="#g4" x="910.6" y="37"/>
@@ -146,18 +146,18 @@
   </g>
   <use href="#g38" x="959" y="102" fill="#6366f1"/>
   <use href="#g27" x="963.93" y="102" fill="#6366f1"/>
-  <filter id="bl8">
-    <feGaussianBlur stdDeviation="1"/>
-  </filter>
-  <g filter="url(#bl8)">
-    <path d="M24 165h266c4.42 0 8 3.58 8 8v122c0 4.42-3.58 8-8 8h-266c-4.42 0-8-3.58-8-8v-122c0-4.42 3.58-8 8-8Z" fill="#000" fill-opacity=".051"/>
+  <clipPath id="cp8">
+    <path d="M-1000000-1000000H1000000V1000000H-1000000ZM24 164h266c4.42 0 8 3.58 8 8v122c0 4.42-3.58 8-8 8h-266c-4.42 0-8-3.58-8-8v-122c0-4.42 3.58-8 8-8Z" clip-rule="evenodd"/>
+  </clipPath>
+  <g clip-path="url(#cp8)">
+    <filter id="bl9">
+      <feGaussianBlur stdDeviation="1"/>
+    </filter>
+    <g filter="url(#bl9)">
+      <path d="M24 165h266c4.42 0 8 3.58 8 8v122c0 4.42-3.58 8-8 8h-266c-4.42 0-8-3.58-8-8v-122c0-4.42 3.58-8 8-8Z" fill="#000" fill-opacity=".051"/>
+    </g>
   </g>
   <path d="M24 164h266c4.42 0 8 3.58 8 8v122c0 4.42-3.58 8-8 8h-266c-4.42 0-8-3.58-8-8v-122c0-4.42 3.58-8 8-8Z" fill="#fff"/>
-  <clipPath id="cp9">
-    <path d="M24 164h266c4.42 0 8 3.58 8 8v122c0 4.42-3.58 8-8 8h-266c-4.42 0-8-3.58-8-8v-122c0-4.42 3.58-8 8-8Z"/>
-  </clipPath>
-  <g clip-path="url(#cp9)">
-  </g>
   <g fill="#64748b">
     <use href="#g13" x="28" y="185"/>
     <use href="#g14" x="34.6" y="185"/>
@@ -183,18 +183,18 @@
   </g>
   <use href="#g44" x="77.7" y="250" fill="#f43f5e"/>
   <use href="#g45" x="99" y="250" fill="#111827"/>
-  <filter id="bl10">
-    <feGaussianBlur stdDeviation="1"/>
-  </filter>
-  <g filter="url(#bl10)">
-    <path d="M316 165h266c4.42 0 8 3.58 8 8v122c0 4.42-3.58 8-8 8h-266c-4.42 0-8-3.58-8-8v-122c0-4.42 3.58-8 8-8Z" fill="#000" fill-opacity=".051"/>
+  <clipPath id="cp10">
+    <path d="M-1000000-1000000H1000000V1000000H-1000000ZM316 164h266c4.42 0 8 3.58 8 8v122c0 4.42-3.58 8-8 8h-266c-4.42 0-8-3.58-8-8v-122c0-4.42 3.58-8 8-8Z" clip-rule="evenodd"/>
+  </clipPath>
+  <g clip-path="url(#cp10)">
+    <filter id="bl11">
+      <feGaussianBlur stdDeviation="1"/>
+    </filter>
+    <g filter="url(#bl11)">
+      <path d="M316 165h266c4.42 0 8 3.58 8 8v122c0 4.42-3.58 8-8 8h-266c-4.42 0-8-3.58-8-8v-122c0-4.42 3.58-8 8-8Z" fill="#000" fill-opacity=".051"/>
+    </g>
   </g>
   <path d="M316 164h266c4.42 0 8 3.58 8 8v122c0 4.42-3.58 8-8 8h-266c-4.42 0-8-3.58-8-8v-122c0-4.42 3.58-8 8-8Z" fill="#fff"/>
-  <clipPath id="cp11">
-    <path d="M316 164h266c4.42 0 8 3.58 8 8v122c0 4.42-3.58 8-8 8h-266c-4.42 0-8-3.58-8-8v-122c0-4.42 3.58-8 8-8Z"/>
-  </clipPath>
-  <g clip-path="url(#cp11)">
-  </g>
   <g fill="#64748b">
     <use href="#g13" x="320" y="185"/>
     <use href="#g14" x="326.6" y="185"/>
@@ -220,18 +220,18 @@
     <use href="#g35" x="330.26" y="250"/>
   </g>
   <use href="#g45" x="347" y="250" fill="#111827"/>
-  <filter id="bl12">
-    <feGaussianBlur stdDeviation="1"/>
-  </filter>
-  <g filter="url(#bl12)">
-    <path d="M608 165h266c4.42 0 8 3.58 8 8v122c0 4.42-3.58 8-8 8h-266c-4.42 0-8-3.58-8-8v-122c0-4.42 3.58-8 8-8Z" fill="#000" fill-opacity=".051"/>
+  <clipPath id="cp12">
+    <path d="M-1000000-1000000H1000000V1000000H-1000000ZM608 164h266c4.42 0 8 3.58 8 8v122c0 4.42-3.58 8-8 8h-266c-4.42 0-8-3.58-8-8v-122c0-4.42 3.58-8 8-8Z" clip-rule="evenodd"/>
+  </clipPath>
+  <g clip-path="url(#cp12)">
+    <filter id="bl13">
+      <feGaussianBlur stdDeviation="1"/>
+    </filter>
+    <g filter="url(#bl13)">
+      <path d="M608 165h266c4.42 0 8 3.58 8 8v122c0 4.42-3.58 8-8 8h-266c-4.42 0-8-3.58-8-8v-122c0-4.42 3.58-8 8-8Z" fill="#000" fill-opacity=".051"/>
+    </g>
   </g>
   <path d="M608 164h266c4.42 0 8 3.58 8 8v122c0 4.42-3.58 8-8 8h-266c-4.42 0-8-3.58-8-8v-122c0-4.42 3.58-8 8-8Z" fill="#fff"/>
-  <clipPath id="cp13">
-    <path d="M608 164h266c4.42 0 8 3.58 8 8v122c0 4.42-3.58 8-8 8h-266c-4.42 0-8-3.58-8-8v-122c0-4.42 3.58-8 8-8Z"/>
-  </clipPath>
-  <g clip-path="url(#cp13)">
-  </g>
   <g fill="#64748b">
     <use href="#g13" x="612" y="185"/>
     <use href="#g14" x="618.6" y="185"/>
@@ -262,18 +262,18 @@
     <use href="#g17" x="646.87" y="250"/>
   </g>
   <use href="#g45" x="662" y="250" fill="#111827"/>
-  <filter id="bl14">
-    <feGaussianBlur stdDeviation="1"/>
-  </filter>
-  <g filter="url(#bl14)">
-    <path d="M900 165h266c4.42 0 8 3.58 8 8v122c0 4.42-3.58 8-8 8h-266c-4.42 0-8-3.58-8-8v-122c0-4.42 3.58-8 8-8Z" fill="#000" fill-opacity=".051"/>
+  <clipPath id="cp14">
+    <path d="M-1000000-1000000H1000000V1000000H-1000000ZM900 164h266c4.42 0 8 3.58 8 8v122c0 4.42-3.58 8-8 8h-266c-4.42 0-8-3.58-8-8v-122c0-4.42 3.58-8 8-8Z" clip-rule="evenodd"/>
+  </clipPath>
+  <g clip-path="url(#cp14)">
+    <filter id="bl15">
+      <feGaussianBlur stdDeviation="1"/>
+    </filter>
+    <g filter="url(#bl15)">
+      <path d="M900 165h266c4.42 0 8 3.58 8 8v122c0 4.42-3.58 8-8 8h-266c-4.42 0-8-3.58-8-8v-122c0-4.42 3.58-8 8-8Z" fill="#000" fill-opacity=".051"/>
+    </g>
   </g>
   <path d="M900 164h266c4.42 0 8 3.58 8 8v122c0 4.42-3.58 8-8 8h-266c-4.42 0-8-3.58-8-8v-122c0-4.42 3.58-8 8-8Z" fill="#fff"/>
-  <clipPath id="cp15">
-    <path d="M900 164h266c4.42 0 8 3.58 8 8v122c0 4.42-3.58 8-8 8h-266c-4.42 0-8-3.58-8-8v-122c0-4.42 3.58-8 8-8Z"/>
-  </clipPath>
-  <g clip-path="url(#cp15)">
-  </g>
   <g fill="#64748b">
     <use href="#g47" x="904" y="185"/>
     <use href="#g29" x="910.6" y="185"/>

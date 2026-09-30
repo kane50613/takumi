@@ -4,8 +4,8 @@
 
 use std::sync::RwLock;
 
-use serde::Deserialize;
-use serde_wasm_bindgen::{from_value, to_value};
+use serde::{Deserialize, Serialize};
+use serde_wasm_bindgen::{Serializer, from_value, to_value};
 use takumi_bindings_common::{
   default_fonts,
   input::{Font, ImageSource, decode_images, register_font},
@@ -14,7 +14,7 @@ use takumi_bindings_common::{
 use takumi_core::{
   Fonts,
   layout::node::Node,
-  paint_tree::{PaintTreeOptions, paint_tree},
+  paint_tree::{PaintTree, PaintTreeOptions, paint_tree},
   resources::image::ResourceCache,
   style::{CssSource, FontFamily, Lang},
   viewport::{DEFAULT_DEVICE_PIXEL_RATIO, Viewport},
@@ -34,23 +34,23 @@ extern "C" {
   #[wasm_bindgen(typescript_type = "Node")]
   pub type NodeType;
   /// JavaScript type for font input (details object or raw buffer).
-  #[wasm_bindgen(typescript_type = "Font")]
+  #[wasm_bindgen(typescript_type = "FontInput")]
   pub type FontType;
   /// JavaScript type for the families produced by `registerFont`.
   #[wasm_bindgen(typescript_type = "RegisteredFamily[]")]
   pub type RegisteredFamiliesType;
-  /// JavaScript object representing paint options.
+  /// JavaScript object representing render options.
   #[wasm_bindgen(typescript_type = "PaintOptions")]
-  pub type PaintOptionsType;
-  /// JavaScript object representing a paint tree.
-  #[wasm_bindgen(typescript_type = "PaintTreeData")]
-  pub type PaintTreeType;
+  pub type RenderOptionsType;
+  /// JavaScript object representing a painted tree.
+  #[wasm_bindgen(typescript_type = "RawPaintTree")]
+  pub type RawPaintTreeType;
 }
 
 /// Options for [`Painter::paint`].
 #[derive(Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
-struct PaintOptions {
+struct RenderOptions {
   width: Option<u32>,
   height: Option<u32>,
   device_pixel_ratio: Option<f32>,
@@ -60,7 +60,7 @@ struct PaintOptions {
   lang: Option<String>,
 }
 
-/// A painter holding registered fonts and a decoded-resource cache.
+/// A renderer holding registered fonts and a decoded-resource cache.
 ///
 /// State lives behind a lock and every method takes `&self`, mirroring the
 /// other wasm bindings: a panic mid-call can't leave the wasm-bindgen borrow
@@ -73,7 +73,7 @@ pub struct Painter {
 
 #[wasm_bindgen]
 impl Painter {
-  /// Creates a painter with the bundled last-resort fonts.
+  /// Creates a renderer with the bundled last-resort fonts.
   #[wasm_bindgen(constructor)]
   pub fn new() -> Result<Painter, js_sys::Error> {
     Ok(Painter {
@@ -90,7 +90,7 @@ impl Painter {
     let mut state = self
       .state
       .try_write()
-      .map_err(|error| js_sys::Error::new(&format!("Painter state is locked: {error}")))?;
+      .map_err(|error| js_sys::Error::new(&format!("Renderer state is locked: {error}")))?;
     let registered = register_font(&mut state, font).map_err(map_error)?;
     Ok(to_value(&registered).map_err(map_error)?.unchecked_into())
   }
@@ -99,10 +99,10 @@ impl Painter {
   pub fn paint(
     &self,
     node: NodeType,
-    options: Option<PaintOptionsType>,
-  ) -> Result<PaintTreeType, js_sys::Error> {
+    options: Option<RenderOptionsType>,
+  ) -> Result<RenderedPaint, js_sys::Error> {
     let node: Node = from_value(node.into()).map_err(map_error)?;
-    let options: PaintOptions = options
+    let options: RenderOptions = options
       .map(|options| from_value(options.into()).map_err(map_error))
       .transpose()?
       .unwrap_or_default();
@@ -120,7 +120,7 @@ impl Painter {
     let state = self
       .state
       .try_read()
-      .map_err(|error| js_sys::Error::new(&format!("Painter state is locked: {error}")))?;
+      .map_err(|error| js_sys::Error::new(&format!("Renderer state is locked: {error}")))?;
     let tree = paint_tree(
       PaintTreeOptions::builder()
         .viewport(
@@ -139,6 +139,34 @@ impl Painter {
         .build(),
     )
     .map_err(map_error)?;
-    Ok(to_value(&tree).map_err(map_error)?.unchecked_into())
+
+    Ok(RenderedPaint { tree })
+  }
+}
+
+/// A painted tree and the font files its runs use.
+#[wasm_bindgen]
+pub struct RenderedPaint {
+  tree: PaintTree,
+}
+
+#[wasm_bindgen]
+impl RenderedPaint {
+  /// The serialized tree.
+  pub fn tree(&self) -> Result<RawPaintTreeType, js_sys::Error> {
+    Ok(
+      self
+        .tree
+        .document
+        .serialize(&Serializer::json_compatible())
+        .map_err(map_error)?
+        .unchecked_into(),
+    )
+  }
+
+  /// The file of the tree's font at `index`.
+  #[wasm_bindgen(js_name = fontData)]
+  pub fn font_data(&self, index: usize) -> Option<Vec<u8>> {
+    self.tree.font_data(index).map(<[u8]>::to_vec)
   }
 }

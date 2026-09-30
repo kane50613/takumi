@@ -522,6 +522,28 @@ fn a_collapsing_table_paints_one_border_per_line() {
   });
 }
 
+/// css-backgrounds-3 §border-style: each side paints its own style, so a
+/// dashed or dotted side keeps its pattern beside sides of other styles.
+#[test]
+fn mixed_border_sides_keep_their_styles() {
+  run_pdf_fixture("border-mixed-sides", |fonts| {
+    let html = r#"<div style="display: flex; gap: 24px">
+      <div style="width: 140px; height: 90px; border-width: 8px; border-style: dashed dotted solid double; border-color: #dc2626 #2563eb #16a34a #9333ea"></div>
+      <div style="width: 140px; height: 90px; border-width: 10px; border-style: dotted solid dashed groove; border-color: #0f172a #f59e0b #0f172a #64748b; border-radius: 24px"></div>
+    </div>"#;
+
+    PdfOptions::builder()
+      .node(from_html(html, FromHtmlOptions::default()).expect("parse mixed borders"))
+      .page(PageOptions {
+        width: 420.0,
+        height: 170.0,
+        margin: PageMargins::uniform(24.0),
+      })
+      .fonts(fonts)
+      .build()
+  });
+}
+
 /// css-tables-3 §repeated-headers: every page that starts inside the table's
 /// body paints the header rows again.
 #[test]
@@ -2025,6 +2047,32 @@ fn outlines() {
       "expected an outline color"
     );
   }
+}
+
+/// An inline box's `outline` follows its text across line breaks as one
+/// contour, at the box's opacity.
+#[test]
+fn inline_outlines() {
+  let pdf = run_pdf_fixture("inline-outlines", |fonts| {
+    let source = r##"<div style="width: 100%; height: 100%; padding: 24px; background-color: #ffffff; font-size: 20px; line-height: 1.6; color: #111827;">
+      Plain words, then <span style="outline: 2px solid #0e7490; outline-offset: 2px;">an outlined phrase that wraps onto the next line</span> and <span style="outline: 3px dashed #be123c; opacity: 0.5;">a faded one</span>.
+    </div>"##;
+    let node = from_html(source, FromHtmlOptions::default()).expect("parse inline outline fixture");
+
+    PdfOptions::builder()
+      .node(node)
+      .viewport(Viewport::new((360, 200)))
+      .fonts(fonts)
+      .build()
+  });
+  let content: Vec<Vec<u8>> = content_lines(&pdf).collect();
+
+  assert!(
+    content
+      .iter()
+      .any(|line| find(line, b"0.0549 0.4549 0.5647 rg").is_some()),
+    "expected the inline outline's color"
+  );
 }
 
 /// `background-origin` moves the positioning area, `background-clip` shrinks

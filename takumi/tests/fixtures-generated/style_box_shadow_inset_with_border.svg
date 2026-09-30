@@ -5,7 +5,7 @@
     <path d="M18 18h204v124h-204v-124Z"/>
   </clipPath>
   <g clip-path="url(#cp0)">
-    <path d="M18 18h204v124h-204v-124ZM48 48h144v64h-144v-64Z" fill="#000" fill-opacity=".6" fill-rule="evenodd"/>
+    <path d="M17 17h206v126h-206v-126Zm31 31h144v64h-144v-64Z" fill="#000" fill-opacity=".6" fill-rule="evenodd"/>
   </g>
   <path d="M16 0h208c8.84 0 16 7.16 16 16v128c0 8.84-7.16 16-16 16h-208c-8.84 0-16-7.16-16-16v-128c0-8.84 7.16-16 16-16Zm2 18h204v124h-204v-124Z" fill="#788cc8" fill-rule="evenodd"/>
 </svg>

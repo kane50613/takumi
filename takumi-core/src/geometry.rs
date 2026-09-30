@@ -194,12 +194,6 @@ impl<T> Rect<T> {
       bottom: r.bottom,
     }
   }
-
-  /// The edges in CSS order: top, right, bottom, left.
-  #[cfg(feature = "paint-tree")]
-  pub(crate) fn into_array(self) -> [T; 4] {
-    [self.top, self.right, self.bottom, self.left]
-  }
 }
 
 impl<T: Add<Output = T> + Copy> Rect<T> {
@@ -407,7 +401,7 @@ pub enum PathCommand {
 
 impl PathCommand {
   /// Maps every point the command carries through `f`.
-  pub(crate) fn map_points(self, mut f: impl FnMut(Point<f32>) -> Point<f32>) -> Self {
+  pub fn map_points(self, mut f: impl FnMut(Point<f32>) -> Point<f32>) -> Self {
     match self {
       Self::MoveTo(point) => Self::MoveTo(f(point)),
       Self::LineTo(point) => Self::LineTo(f(point)),

@@ -18,7 +18,7 @@ use takumi_core::{
 
 use crate::{
   SvgDocument,
-  render::{BoxChrome, PlacedBox},
+  render::{BoxChrome, DocumentDevice, PlacedBox},
 };
 
 /// A scene, emitted in paint order.
@@ -216,7 +216,7 @@ impl SceneEmitter<'_> {
     }
 
     for pending in &descendant_outlines {
-      pending.emit(doc)?;
+      DocumentDevice::paint(doc, |device| pending.paint(device))?;
     }
     if let Some(chrome) = chrome {
       chrome.close(doc)?;

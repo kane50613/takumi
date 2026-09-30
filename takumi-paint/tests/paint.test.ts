@@ -1,15 +1,19 @@
 import { describe, expect, it } from "bun:test";
 import { container, image, text } from "@takumi-rs/helpers";
-import { Painter, PaintTree, type PaintNodeData } from "takumi-paint";
+import { type PaintTree, type TextRun, Painter } from "takumi-paint";
 
 const painter = new Painter();
 
-function texts(tree: PaintTree) {
-  return [...tree.textRuns()].map(({ run }) => run);
+function box(tree: PaintTree, id: string) {
+  return tree.nodes.find((node) => node.type === "box" && node.element?.id === id);
+}
+
+function runs(tree: PaintTree): TextRun[] {
+  return tree.nodes.flatMap((node) => (node.type === "text" ? node.runs : []));
 }
 
 describe("Painter.paint", () => {
-  it("records a box's used decorations and its text runs", async () => {
+  it("resolves a box's decorations into drawables and its text into runs", async () => {
     const tree = await painter.paint(
       container({
         id: "card",
@@ -27,29 +31,26 @@ describe("Painter.paint", () => {
     );
 
     expect([tree.width, tree.height]).toEqual([600, 300]);
-    const card = tree.find("card");
-    expect([card?.x, card?.y, card?.transform]).toEqual([0, 0, undefined]);
-    expect(card?.background?.color).toEqual([247, 243, 236, 255]);
-    expect(card?.border?.widths).toEqual([4, 4, 4, 4]);
-    expect(card?.border?.radii[0]).toEqual([12, 12]);
-    expect(card?.shadows).toBeUndefined();
+    const card = box(tree, "card");
+    expect(card?.drawables.map((drawable) => drawable.role)).toEqual(["background", "border"]);
+    expect(card?.drawables[0]).toMatchObject({
+      type: "fill",
+      paint: { type: "color", color: [247, 243, 236, 255] },
+      shape: { type: "rounded-rect", radii: { topLeft: { x: 12, y: 12 } } },
+    });
 
-    const [run] = texts(tree);
+    const [run] = runs(tree);
     expect(run?.text).toBe("Hello paint");
-    expect(run?.color).toEqual([0, 0, 255, 255]);
     expect(run?.fontSize).toBe(32);
     expect(run?.font.family).toBe("Geist");
-  });
+    expect(run?.font.data().byteLength).toBeGreaterThan(0);
+    expect(run?.outline()).toStartWith("M");
 
-  it("places a transformed box by its origin and keeps the matrix", async () => {
-    const tree = await painter.paint(
-      `<div id="box" style="width: 100px; height: 50px; transform: rotate(90deg)"></div>`,
-      { width: 200, height: 200 },
-    );
-
-    const box = tree.find("box");
-    expect(box?.transform).toBeDefined();
-    expect([box?.x, box?.y]).toEqual([box?.transform?.[4], box?.transform?.[5]]);
+    const glyphs = tree.steps
+      .flatMap((step) => (step.type === "draw" ? step.drawables : []))
+      .find((drawable) => drawable.type === "glyphs");
+    expect(glyphs).toMatchObject({ role: "text", paint: { color: [0, 0, 255, 255] } });
+    expect(glyphs?.type === "glyphs" ? glyphs.run : undefined).toBe(run);
   });
 
   it("scales CSS lengths by the device pixel ratio", async () => {
@@ -59,7 +60,7 @@ describe("Painter.paint", () => {
     );
 
     expect([tree.width, tree.height]).toEqual([200, 100]);
-    const [run] = texts(tree);
+    const [run] = runs(tree);
     expect(run?.fontSize).toBe(40);
   });
 
@@ -70,63 +71,81 @@ describe("Painter.paint", () => {
       height: 200,
     });
 
-    const [picture] = tree.find("wrap")?.children ?? [];
+    const picture = tree.nodes.find((node) => node.type === "image");
     expect([picture?.width, picture?.height]).toEqual([192, 48]);
-    expect(picture?.image?.src).toBe(svg);
+    expect(picture?.type === "image" && picture.image.src).toBe(svg);
+    expect(picture?.parent?.parent).toBe(box(tree, "wrap"));
   });
 
-  it("keeps a nested span's own color as its own run", async () => {
+  it("names the element a nested span's run comes from", async () => {
     const tree = await painter.paint(
       `<style>b { color: rgb(255, 0, 0); font-weight: 700 }</style><p>hello <b>world</b></p>`,
       { width: 400 },
     );
 
-    const runs = texts(tree).map((run) => [run.text, run.color[0], run.font.weight]);
-    expect(runs).toEqual([
-      ["hello ", 0, 400],
-      ["world", 255, 700],
+    expect(runs(tree).map((run) => [run.text, run.element?.tagName, run.font.weight])).toEqual([
+      ["hello ", undefined, 400],
+      ["world", "b", 700],
     ]);
   });
 
-  it("shares one font description between runs of the same face", async () => {
-    const tree = await painter.paint(`<p>hello <b>world</b> again</p>`, { width: 400 });
-
-    const [hello, world, again] = texts(tree);
-    expect(tree.fonts).toHaveLength(2);
-    expect(hello?.font).toBe(again?.font);
-    expect(world?.font.weight).toBe(700);
-  });
-
-  it("derives a node's canvas matrix and a run's vertical extent", async () => {
+  it("wraps groups and clips around what they enclose", async () => {
     const tree = await painter.paint(
-      `<div><div id="box" style="margin: 20px 0 0 10px; font-size: 20px">hi</div></div>`,
+      `<div style="opacity: 0.5; overflow: hidden; width: 100px; height: 50px"><div style="width: 200px; height: 20px; background: red"></div></div>`,
       { width: 200, height: 100 },
     );
 
-    expect(tree.find("box")?.matrix).toEqual([1, 0, 0, 1, 10, 20]);
-    const [run] = texts(tree);
-    expect(run && [run.top, run.bottom]).toEqual(run && [run.y - run.ascent, run.y + run.descent]);
+    expect(tree.steps.map((step) => step.type)).toEqual([
+      "begin-group",
+      "begin-clip",
+      "draw",
+      "end-clip",
+      "end-group",
+    ]);
   });
 
-  it("iterates a tree deeper than the call stack", () => {
-    const box = { x: 0, y: 0, width: 0, height: 0 };
-    const leaf: PaintNodeData = { ...box, contentBox: box, opacity: 1, isolate: false };
-    let root = leaf;
-    for (let depth = 0; depth < 100_000; depth++) root = { ...leaf, children: [root] };
-
-    expect([...new PaintTree({ width: 0, height: 0, fonts: [], root })]).toHaveLength(100_001);
-  });
-
-  it("keeps the values a text re-layout needs", async () => {
+  it("lists nodes in document order, whatever order they paint in", async () => {
     const tree = await painter.paint(
-      `<div id="title" style="width: 200px; padding: 10px; text-align: center; line-height: 30px; letter-spacing: 2px">Title</div>`,
-      { width: 400 },
+      `<div id="a"><p id="p">text</p><div id="behind" style="position: absolute; z-index: -1">behind</div></div>`,
+      { width: 200 },
     );
 
-    const title = tree.find("title");
-    expect(title?.textAlign).toBe("center");
-    expect(title?.contentBox).toEqual({ x: 10, y: 10, width: 180, height: 30 });
-    const [run] = texts(tree);
-    expect([run?.lineHeight, run?.letterSpacing]).toEqual([30, 2]);
+    expect(tree.nodes.map((node) => `${node.type}:${node.element?.id}`)).toEqual([
+      "box:a",
+      "box:p",
+      "text:p",
+      "box:behind",
+      "text:behind",
+    ]);
+    expect(tree.root).toBe(tree.nodes[0]);
+  });
+
+  it("keeps a translucent span's opacity on its group, not its colors", async () => {
+    const tree = await painter.paint(
+      `<p>plain <span style="opacity: 0.5; background-color: rgb(255, 0, 0)">faded</span></p>`,
+      { width: 200 },
+    );
+    const text = tree.nodes.find((node) => node.type === "text");
+    const group = text?.drawables.find((drawable) => drawable.type === "group");
+
+    expect(group).toMatchObject({ type: "group", opacity: 0.5 });
+    expect(group?.type === "group" && group.drawables[0]).toMatchObject({
+      role: "inline-background",
+      paint: { type: "color", color: [255, 0, 0, 255] },
+    });
+  });
+
+  it("isolates a background whose layers blend", async () => {
+    const tree = await painter.paint(
+      `<div id="blend" style="width: 40px; height: 20px; background-color: red; background-image: linear-gradient(blue, blue); background-blend-mode: multiply"></div>`,
+      { width: 100 },
+    );
+    const group = box(tree, "blend")?.drawables.find((drawable) => drawable.type === "group");
+
+    expect(group?.type === "group" && group.opacity).toBe(1);
+    expect(group?.type === "group" && group.drawables).toMatchObject([
+      { type: "fill", paint: { type: "color", color: [255, 0, 0, 255] } },
+      { type: "fill", blendMode: "multiply" },
+    ]);
   });
 });

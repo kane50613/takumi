@@ -1,0 +1,52 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>background_clip_text_origin</title>
+    <base href="../../../" />
+    <link rel="stylesheet" href="takumi/tests/shared.css" />
+  </head>
+  <body style="width: 1200px; height: 630px">
+    <div
+      style="
+        display: flex;
+        flex-direction: column;
+        gap: 40px;
+        width: 100%;
+        height: 100%;
+        padding: 40px;
+        background-color: rgb(255, 255, 255);
+        font-family: Geist;
+        font-size: 120px;
+        font-weight: 700;
+      "
+    >
+      <div
+        style="
+          border: 40px solid transparent;
+          background-image: linear-gradient(90deg, rgb(225, 29, 72), rgb(37, 99, 235));
+          background-size: 50% 100%;
+          background-repeat: no-repeat;
+          background-clip: text;
+          color: transparent;
+        "
+      >
+        Padding box
+      </div>
+      <div
+        style="
+          border: 40px solid transparent;
+          padding: 0 60px;
+          background-image: linear-gradient(90deg, rgb(225, 29, 72), rgb(37, 99, 235));
+          background-size: 50% 100%;
+          background-repeat: no-repeat;
+          background-origin: content-box;
+          background-clip: text;
+          color: transparent;
+        "
+      >
+        Content box
+      </div>
+    </div>
+  </body>
+</html>

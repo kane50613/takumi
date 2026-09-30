@@ -11,7 +11,7 @@ use crate::{
   font_style::SizedFontStyle,
   geometry::{AvailableSpace, ComputedLayout, NodeId, Point, Size, transformed_rect_extents},
   layout::{
-    decoration::outline_paint,
+    decoration::OutlineGeometry,
     inline::{
       InlineContentKind, InlineLayoutMode, InlineLayoutRequest, PlacedItem, ProcessedInlineSpan,
       collect_inline_items, create_inline_layout, glyph_run_rect, resolve_inline_max_height,
@@ -176,24 +176,18 @@ struct StackingContextBuildVisit {
   is_root: bool,
 }
 
-/// A child's effective paint-order z-index.
-pub(crate) fn paint_order_z(style: &ComputedStyle, is_flex_or_grid_item: bool) -> i32 {
-  if style.participates_in_positioned_paint_bucket(is_flex_or_grid_item) {
-    style.z_index.painting_order_value()
-  } else {
-    0
-  }
-}
+impl PaintBucket {
+  /// The bucket a child with `style` paints in, and its z-index there.
+  fn of(style: &ComputedStyle, is_flex_or_grid_item: bool) -> (Self, i32) {
+    let z = style.paint_order_z(is_flex_or_grid_item);
 
-fn classify_bucket(style: &ComputedStyle, is_flex_or_grid_item: bool) -> (PaintBucket, i32) {
-  let z = paint_order_z(style, is_flex_or_grid_item);
-
-  if z < 0 {
-    (PaintBucket::Negative, z)
-  } else if z > 0 {
-    (PaintBucket::Positive, z)
-  } else {
-    (PaintBucket::AutoZero, 0)
+    if z < 0 {
+      (Self::Negative, z)
+    } else if z > 0 {
+      (Self::Positive, z)
+    } else {
+      (Self::AutoZero, 0)
+    }
   }
 }
 
@@ -212,179 +206,181 @@ pub struct SceneRequest<'a> {
   pub paint_bounds: bool,
 }
 
-/// Flattens the node tree into CSS-ordered stacking contexts for painting.
-pub fn build_scene(request: SceneRequest<'_>) -> Result<Vec<StackingContextNode>> {
-  let SceneRequest {
-    root,
-    layout_results,
-    transform,
-    container_size,
-    paint_bounds: with_bounds,
-  } = request;
-  let mut contexts = vec![StackingContextNode::with_root(None)];
-  let mut source_order = 0usize;
-  let mut containing_blocks = ContainingBlocks::default();
-  let mut visits = vec![StackingContextBuildVisit {
-    path: Vec::new(),
-    node_id: NodeId::ROOT,
-    transform,
-    container_size,
-    context_id: 0,
-    parent_display: None,
-    is_root: true,
-  }];
+impl SceneRequest<'_> {
+  /// Flattens the node tree into CSS-ordered stacking contexts for painting.
+  pub fn build(self) -> Result<Vec<StackingContextNode>> {
+    let SceneRequest {
+      root,
+      layout_results,
+      transform,
+      container_size,
+      paint_bounds: with_bounds,
+    } = self;
+    let mut contexts = vec![StackingContextNode::with_root(None)];
+    let mut source_order = 0usize;
+    let mut containing_blocks = ContainingBlocks::default();
+    let mut visits = vec![StackingContextBuildVisit {
+      path: Vec::new(),
+      node_id: NodeId::ROOT,
+      transform,
+      container_size,
+      context_id: 0,
+      parent_display: None,
+      is_root: true,
+    }];
 
-  while let Some(visit) = visits.pop() {
-    let Some(current) = root.node_at_path(&visit.path) else {
-      return Err(Error::InvalidLayoutNode(visit.node_id.into()));
-    };
-    let layout = layout_results.layout(visit.node_id)?;
-    if current.context.style.is_invisible() {
-      continue;
-    }
+    while let Some(visit) = visits.pop() {
+      let Some(current) = root.node_at_path(&visit.path) else {
+        return Err(Error::InvalidLayoutNode(visit.node_id.into()));
+      };
+      let layout = layout_results.layout(visit.node_id)?;
+      if current.context.style.is_invisible() {
+        continue;
+      }
 
-    let mut current_transform = visit.transform;
-    current_transform *= Affine::translation(layout.location.x, layout.location.y);
-    current_transform *= current.context.style.local_transform(
-      layout.size.width,
-      layout.size.height,
-      &current.context.sizing,
-    );
-    if !current_transform.is_invertible() {
-      continue;
-    }
-    containing_blocks.record_transform(visit.node_id, current_transform);
-
-    let node_paint = NodePaint {
-      path: visit.path.clone(),
-      node_id: visit.node_id,
-      transform: current_transform,
-      container_size: visit.container_size,
-      paint_bounds: with_bounds
-        .then(|| compute_node_paint_bounds(current, layout, current_transform))
-        .flatten(),
-    };
-
-    let is_flex_or_grid_item = visit.parent_display.is_some_and(|display| {
-      matches!(
-        display,
-        Display::Flex | Display::InlineFlex | Display::Grid | Display::InlineGrid
-      )
-    });
-
-    let creates_context = if visit.is_root {
-      true
-    } else {
-      current.context.style.creates_stacking_context(
+      let mut current_transform = visit.transform;
+      current_transform *= Affine::translation(layout.location.x, layout.location.y);
+      current_transform *= current.context.style.local_transform(
         layout.size.width,
         layout.size.height,
         &current.context.sizing,
-        is_flex_or_grid_item,
-      ) || current
-        .context
-        .style
-        .resolve_overflows()
-        .should_clip_content()
-    };
-
-    let mut active_context_id = visit.context_id;
-    if visit.is_root {
-      contexts[0].root = Some(node_paint);
-    } else {
-      let (bucket, z_index) = classify_bucket(&current.context.style, is_flex_or_grid_item);
-      if creates_context {
-        let context_id = contexts.len();
-        contexts.push(StackingContextNode::with_root(Some(node_paint)));
-        contexts[visit.context_id].push_item(
-          bucket,
-          PaintItemKind::Context(context_id),
-          z_index,
-          source_order,
-        );
-        active_context_id = context_id;
-      } else {
-        contexts[visit.context_id].push_item(
-          bucket,
-          PaintItemKind::Node(node_paint),
-          z_index,
-          source_order,
-        );
+      );
+      if !current_transform.is_invertible() {
+        continue;
       }
-      source_order += 1;
-    }
+      containing_blocks.record_transform(visit.node_id, current_transform);
 
-    if current.children.is_none() {
-      continue;
-    }
+      let node_paint = NodePaint {
+        path: visit.path.clone(),
+        node_id: visit.node_id,
+        transform: current_transform,
+        container_size: visit.container_size,
+        paint_bounds: with_bounds
+          .then(|| compute_node_paint_bounds(current, layout, current_transform))
+          .flatten(),
+      };
 
-    if current.should_create_inline_layout() {
-      continue;
-    }
-
-    let layout_children = layout_results.box_children(visit.node_id)?;
-    let child_container_size = Size {
-      width: Some(layout.content_box_width()),
-      height: Some(layout.content_box_height()),
-    };
-    containing_blocks.record_content_box(visit.node_id, child_container_size);
-
-    for child in layout_children.iter().rev() {
-      let mut child_path = visit.path.clone();
-      child_path.push(child.render_index);
-      let (base_transform, base_container) =
-        containing_blocks.base_for(child, current_transform, child_container_size);
-      visits.push(StackingContextBuildVisit {
-        path: child_path,
-        node_id: child.node_id,
-        transform: base_transform,
-        container_size: base_container,
-        context_id: active_context_id,
-        parent_display: Some(current.context.style.display),
-        is_root: false,
+      let is_flex_or_grid_item = visit.parent_display.is_some_and(|display| {
+        matches!(
+          display,
+          Display::Flex | Display::InlineFlex | Display::Grid | Display::InlineGrid
+        )
       });
-    }
-  }
 
-  for context in &mut contexts {
-    context.buckets.sort();
-  }
+      let creates_context = if visit.is_root {
+        true
+      } else {
+        current.context.style.creates_stacking_context(
+          layout.size.width,
+          layout.size.height,
+          &current.context.sizing,
+          is_flex_or_grid_item,
+        ) || current
+          .context
+          .style
+          .resolve_overflows()
+          .should_clip_content()
+      };
 
-  if !with_bounds {
-    return Ok(contexts);
-  }
+      let mut active_context_id = visit.context_id;
+      if visit.is_root {
+        contexts[0].root = Some(node_paint);
+      } else {
+        let (bucket, z_index) = PaintBucket::of(&current.context.style, is_flex_or_grid_item);
+        if creates_context {
+          let context_id = contexts.len();
+          contexts.push(StackingContextNode::with_root(Some(node_paint)));
+          contexts[visit.context_id].push_item(
+            bucket,
+            PaintItemKind::Context(context_id),
+            z_index,
+            source_order,
+          );
+          active_context_id = context_id;
+        } else {
+          contexts[visit.context_id].push_item(
+            bucket,
+            PaintItemKind::Node(node_paint),
+            z_index,
+            source_order,
+          );
+        }
+        source_order += 1;
+      }
 
-  // `None` means "unknown extent" and poisons the union; dropping it would
-  // under-report the context and clip or cull visible paint.
-  for context_id in (0..contexts.len()).rev() {
-    let mut paint_bounds = None;
-    let mut unknown = false;
-    if let Some(root) = &contexts[context_id].root {
-      match root.paint_bounds {
-        Some(bounds) => paint_bounds = Some(bounds),
-        None => unknown = true,
+      if current.children.is_none() {
+        continue;
+      }
+
+      if current.should_create_inline_layout() {
+        continue;
+      }
+
+      let layout_children = layout_results.box_children(visit.node_id)?;
+      let child_container_size = Size {
+        width: Some(layout.content_box_width()),
+        height: Some(layout.content_box_height()),
+      };
+      containing_blocks.record_content_box(visit.node_id, child_container_size);
+
+      for child in layout_children.iter().rev() {
+        let mut child_path = visit.path.clone();
+        child_path.push(child.render_index);
+        let (base_transform, base_container) =
+          containing_blocks.base_for(child, current_transform, child_container_size);
+        visits.push(StackingContextBuildVisit {
+          path: child_path,
+          node_id: child.node_id,
+          transform: base_transform,
+          container_size: base_container,
+          context_id: active_context_id,
+          parent_display: Some(current.context.style.display),
+          is_root: false,
+        });
       }
     }
-    for bucket in contexts[context_id].buckets.in_paint_order() {
-      for item in bucket {
-        let item_bounds = match &item.kind {
-          PaintItemKind::Node(node_paint) => node_paint.paint_bounds,
-          PaintItemKind::Context(child_context_id) => contexts[*child_context_id].paint_bounds,
-        };
-        match item_bounds {
-          Some(bounds) => paint_bounds = merge_bounds(paint_bounds, Some(bounds)),
+
+    for context in &mut contexts {
+      context.buckets.sort();
+    }
+
+    if !with_bounds {
+      return Ok(contexts);
+    }
+
+    // `None` means "unknown extent" and poisons the union; dropping it would
+    // under-report the context and clip or cull visible paint.
+    for context_id in (0..contexts.len()).rev() {
+      let mut paint_bounds = None;
+      let mut unknown = false;
+      if let Some(root) = &contexts[context_id].root {
+        match root.paint_bounds {
+          Some(bounds) => paint_bounds = Some(bounds),
           None => unknown = true,
         }
       }
+      for bucket in contexts[context_id].buckets.in_paint_order() {
+        for item in bucket {
+          let item_bounds = match &item.kind {
+            PaintItemKind::Node(node_paint) => node_paint.paint_bounds,
+            PaintItemKind::Context(child_context_id) => contexts[*child_context_id].paint_bounds,
+          };
+          match item_bounds {
+            Some(bounds) => paint_bounds = merge_bounds(paint_bounds, Some(bounds)),
+            None => unknown = true,
+          }
+        }
+      }
+      if let Some(root_paint) = &contexts[context_id].root
+        && let Some(root_node) = root.node_at_path(&root_paint.path)
+      {
+        paint_bounds = outset_bounds(paint_bounds, filter_reach(root_node), root_paint.transform);
+      }
+      contexts[context_id].paint_bounds = if unknown { None } else { paint_bounds };
     }
-    if let Some(root_paint) = &contexts[context_id].root
-      && let Some(root_node) = root.node_at_path(&root_paint.path)
-    {
-      paint_bounds = outset_bounds(paint_bounds, filter_reach(root_node), root_paint.transform);
-    }
-    contexts[context_id].paint_bounds = if unknown { None } else { paint_bounds };
-  }
 
-  Ok(contexts)
+    Ok(contexts)
+  }
 }
 
 /// A render tree laid out, with the stacking contexts that paint it.
@@ -405,13 +401,14 @@ impl Scene {
     let results = LayoutResults::compute(&root, viewport.into());
     let container_size = Size::from(viewport.size);
     let size = container_size.zip_map(results.layout(NodeId::ROOT)?.size, Option::unwrap_or);
-    let contexts = build_scene(SceneRequest {
+    let contexts = SceneRequest {
       root: &root,
       layout_results: &results,
       transform: Affine::IDENTITY,
       container_size,
       paint_bounds,
-    })?;
+    }
+    .build()?;
 
     Ok(Self {
       root,
@@ -446,7 +443,7 @@ fn filter_reach(node: &RenderNode) -> f32 {
           .to_px(sizing, 1.0)
           .abs()
           .max(shadow.offset_y.to_px(sizing, 1.0).abs())
-          + shadow.blur_radius.to_px(sizing, 1.0) * BlurType::Shadow.extent_multiplier()
+          + shadow.blur_radius.to_px(sizing, 1.0) * BlurType::Filter.extent_multiplier()
       }
       _ => 0.0,
     })
@@ -468,7 +465,8 @@ fn box_ink_reach(node: &RenderNode, size: Size<f32>) -> f32 {
       ))
     })
     .fold(0.0_f32, f32::max);
-  let outline_reach = outline_paint(context, size).map_or(0.0, |outline| outline.grow.max(0.0));
+  let outline_reach =
+    OutlineGeometry::painted(context, size).map_or(0.0, |outline| outline.grow.max(0.0));
 
   shadow_reach.max(outline_reach)
 }

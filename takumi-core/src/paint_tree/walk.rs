@@ -1,189 +1,399 @@
-//! Walks the stacking-context scene and records what each box paints.
+//! Walks the stacking-context scene in paint order, recording each node and the steps that
+//! paint it.
 
-use std::{borrow::Cow, ops::Range};
+use std::{borrow::Cow, collections::HashMap, ptr};
 
+use super::{
+  document::{
+    DrawPart, Drawable, Effects, ElementInfo, ImageSource, NodeKind, Paint, PaintFilter,
+    PaintGlyph, PaintNode, PaintRect, PaintStep, Role, Sampling, Shape, TextRun,
+  },
+  fonts::FontTable,
+  record::Recorder,
+};
 use crate::{
   context::RenderContext,
   error::Result,
   font_style::SizedFontStyle,
   geometry::{ComputedLayout, Point, Size},
   layout::{
-    background::{BackgroundLayersInput, background_origin_box},
-    border::BorderProperties,
-    decoration::ClipBox,
+    background_image_geometry::{FillLayers, OriginBox},
     inline::{
-      InlineItem, InlineLayoutMode, InlineLayoutRequest, PositionedInlineRun, ProcessedInlineSpan,
-      collect_inline_items, create_inline_layout,
+      BuiltInlineLayout, InlineItem, InlineLayoutMode, InlineLayoutRequest, InlineRunLayout,
+      ProcessedInlineSpan, collect_inline_items, create_inline_layout,
     },
     inline_box::{InlineBoxPaint, resolve_inline_box},
-    node::{ImageData, ImageSourceInput, NodeKind},
-    replaced::place_replaced,
-    tree::{LayoutResults, RenderNode},
+    node::{ImageData, ImageSourceInput, NodeKind as InputKind},
+    tree::RenderNode,
   },
-  painter::BoxPainter,
-  resources::font::FontsSnapshot,
-  scene::{NodePaint, PaintItemKind, StackingContextNode},
+  painter::{
+    BackgroundClipArea, BoxFrame, BoxPainter, FillShape, GlyphFill, OverflowClip, PaintDevice,
+  },
+  resources::image::{sniff_mime, to_data_url},
+  scene::{NodePaint, PaintItemKind, Scene},
   style::{
-    Affine, BackgroundClip, BackgroundImage, BlendMode, Isolation, Overflow, ResolvedGradientStop,
-    TextDecorationLines, ToCss,
+    Affine, BackgroundClip, BackgroundImage, ComputedStyle, Filter, Isolation, TextAlign, ToCss,
   },
 };
 
-use super::{
-  fonts::FontTable,
-  tree::{
-    PaintBackground, PaintBackgroundLayer, PaintBorder, PaintBoxShadows, PaintClip,
-    PaintDecoration, PaintFill, PaintGlyph, PaintGradientStop, PaintImage, PaintInlineBackground,
-    PaintNode, PaintOutline, PaintRect, PaintShadow, PaintSource, PaintStroke, PaintTextRun,
-    PaintTiles, PaintUnresolvedEffects, Radii,
-  },
-};
+/// A render node placed in the document, inside the box `parent`.
+#[derive(Clone, Copy)]
+struct Placed<'n> {
+  node: &'n RenderNode,
+  layout: ComputedLayout,
+  transform: Affine,
+  path: &'n [usize],
+  parent: usize,
+}
 
-/// Builds paint nodes from a laid-out render tree.
+/// A box whose steps are still open: its group, its overflow clip, and its outline.
+struct OpenBox {
+  node: usize,
+  group: bool,
+  clip: bool,
+  outline: bool,
+}
+
+/// Builds a document's nodes and steps from laid-out scenes.
 pub(super) struct Walker {
   pub(super) fonts: FontTable,
+  pub(super) nodes: Vec<PaintNode>,
+  pub(super) steps: Vec<PaintStep>,
+  /// Each node's element path, `None` for a node without one.
+  paths: Vec<Option<Vec<usize>>>,
 }
 
 impl Walker {
-  /// The nodes a whole scene paints, in paint order.
-  pub(super) fn scene(
-    &mut self,
-    root: &RenderNode,
-    results: &LayoutResults,
-    contexts: &[StackingContextNode],
-  ) -> Result<Vec<PaintNode>> {
-    self.context(root, results, contexts, 0)
+  /// A walker with `root` as its first node.
+  pub(super) fn new(root: Option<PaintNode>) -> Self {
+    let mut walker = Self {
+      fonts: FontTable::default(),
+      nodes: Vec::new(),
+      steps: Vec::new(),
+      paths: Vec::new(),
+    };
+
+    if let Some(root) = root {
+      walker.add(root, None);
+    }
+    walker
   }
 
-  fn context(
-    &mut self,
-    root: &RenderNode,
-    results: &LayoutResults,
-    contexts: &[StackingContextNode],
-    id: usize,
-  ) -> Result<Vec<PaintNode>> {
-    let Some(context) = contexts.get(id) else {
-      return Ok(Vec::new());
+  /// Records `scene`, its element paths under `prefix`.
+  pub(super) fn scene(&mut self, scene: &Scene, prefix: &[usize]) -> Result<()> {
+    self.context(scene, 0, prefix)
+  }
+
+  fn context(&mut self, scene: &Scene, id: usize, prefix: &[usize]) -> Result<()> {
+    let Some(context) = scene.contexts.get(id) else {
+      return Ok(());
     };
-    let mut items = Vec::new();
+    let root = match context.root() {
+      Some(paint) => self.node(scene, paint, prefix)?,
+      None => None,
+    };
+    // A plain node owns no group, so its outline waits for the nodes that follow it, as Blink's
+    // `kDescendantOutlinesOnly` pass paints them.
+    let mut outlines = Vec::new();
+
     for bucket in context.in_paint_order() {
       for item in bucket {
         match &item.kind {
-          PaintItemKind::Node(np) => items.extend(self.node(root, results, np)?),
-          PaintItemKind::Context(child) => {
-            items.extend(self.context(root, results, contexts, *child)?);
+          PaintItemKind::Node(paint) => {
+            if let Some(mut open) = self.node(scene, paint, prefix)? {
+              if open.outline {
+                outlines.push(open.node);
+                open.outline = false;
+              }
+              self.close(open);
+            }
           }
+          PaintItemKind::Context(child) => self.context(scene, *child, prefix)?,
         }
       }
     }
-    match context.root() {
-      Some(np) => Ok(match self.node(root, results, np)? {
-        Some(mut node) => {
-          node.children.extend(items);
-          vec![node]
-        }
-        None => items,
-      }),
-      None => Ok(items),
+
+    for node in outlines {
+      self.steps.push(PaintStep::Draw {
+        node,
+        part: DrawPart::Outline,
+      });
     }
+    if let Some(open) = root {
+      self.close(open);
+    }
+    Ok(())
   }
 
+  /// Records a scene node and its own content, leaving its steps open.
   fn node(
     &mut self,
-    root: &RenderNode,
-    results: &LayoutResults,
-    np: &NodePaint,
-  ) -> Result<Option<PaintNode>> {
-    let Some(node) = root.node_at_path(&np.path) else {
+    scene: &Scene,
+    paint: &NodePaint,
+    prefix: &[usize],
+  ) -> Result<Option<OpenBox>> {
+    let Some(node) = scene.root.node_at_path(&paint.path) else {
       return Ok(None);
     };
-    let layout = results.layout(np.node_id)?;
-    let mut painted = self.box_node(node, layout, np.transform, Some(np.path.clone()));
-    painted.children = self.own_content(node, layout, np.transform, &mut painted)?;
-    Ok(Some(painted))
+    let layout = scene.results.layout(paint.node_id)?;
+
+    if node.context.style.is_invisible() || !paint.transform.is_invertible() {
+      return Ok(None);
+    }
+
+    let path = [prefix, &paint.path].concat();
+    let open = self.open_box(node, layout, paint.transform, path.clone());
+
+    self.own_content(Placed {
+      node,
+      layout,
+      transform: paint.transform,
+      path: &path,
+      parent: open.node,
+    })?;
+    Ok(Some(open))
   }
 
-  /// A node's own box without its content.
-  fn box_node(
+  /// Records a box and opens its group and overflow clip.
+  fn open_box(
     &mut self,
     node: &RenderNode,
     layout: ComputedLayout,
     transform: Affine,
-    path: Option<Vec<usize>>,
-  ) -> PaintNode {
-    let style = &node.context.style;
-    let painter = BoxPainter::new(&node.context, layout);
-    let decorations = BoxDecorations::of(node, layout, &painter);
-    let (x, y) = transform.transform_point(0.0, 0.0);
-    PaintNode {
-      source: path.map(|path| PaintSource::new(path, node.node.as_ref())),
-      width: layout.size.width,
-      height: layout.size.height,
-      x,
-      y,
-      content_box: PaintRect::new(layout.content_box_offset(), layout.content_box_size()),
-      transform: (!transform.only_translation()).then(|| transform.to_cols_array()),
-      opacity: style.opacity.0,
-      blend_mode: (style.mix_blend_mode != BlendMode::Normal)
-        .then(|| style.mix_blend_mode.to_css_string()),
-      isolate: style.isolation == Isolation::Isolate,
-      clip: overflow_clip(node, layout, painter.border()),
-      background: decorations.background,
-      border: decorations.border,
-      shadows: decorations.shadows,
-      outline: decorations.outline,
-      image: None,
-      text_shadows: Vec::new(),
-      inline_backgrounds: Vec::new(),
-      text_runs: Vec::new(),
-      text_align: None,
-      unresolved_effects: unresolved(node),
-      children: Vec::new(),
+    path: Vec<usize>,
+  ) -> OpenBox {
+    let context = &node.context;
+    let painter = BoxPainter::new(context, layout);
+    let size = layout.size;
+    // An anonymous box paints no decorations of its own.
+    let drawables = if node.node.is_some() {
+      decorations(&painter, size)
+    } else {
+      Vec::new()
+    };
+    let outline = painter
+      .pending_outline(Point::ZERO)
+      .map(|pending| {
+        let mut recorder = Recorder::new();
+
+        pending.paint(&mut recorder);
+        recorder.finish()
+      })
+      .unwrap_or_default();
+    let effects = context
+      .style
+      .needs_offscreen_compositing()
+      .then(|| Box::new(effects(&painter, layout)));
+    let overflow_clip = OverflowClip::of(context, layout).map(|clip| match clip {
+      OverflowClip::Rounded(clip) => Shape::of(&clip.into(), Affine::IDENTITY),
+      OverflowClip::Axes { x, y } => Shape::Rect {
+        rect: BoxFrame::new(layout, Point::ZERO)
+          .overflow_clip_edges(x, y)
+          .into(),
+      },
+    });
+    let open = OpenBox {
+      node: self.nodes.len(),
+      group: effects.is_some(),
+      clip: overflow_clip.is_some(),
+      outline: !outline.is_empty(),
+    };
+    let has_drawables = !drawables.is_empty();
+
+    self.add(
+      PaintNode {
+        id: open.node,
+        parent: None,
+        element: ElementInfo::of(node, path.clone()),
+        transform: transform.to_cols_array(),
+        width: size.width,
+        height: size.height,
+        bounds: PaintRect::bounding(size.width, size.height, transform),
+        drawables,
+        children: Vec::new(),
+        kind: NodeKind::Box {
+          content_box: PaintRect::sized(
+            layout.content_box_offset(),
+            Size {
+              width: layout.content_box_width(),
+              height: layout.content_box_height(),
+            },
+          ),
+          outline,
+          effects,
+          overflow_clip,
+        },
+      },
+      Some(path),
+    );
+
+    if open.group {
+      self.steps.push(PaintStep::BeginGroup { node: open.node });
+    }
+    if has_drawables {
+      self.draw(open.node);
+    }
+    if open.clip {
+      self.steps.push(PaintStep::BeginClip { node: open.node });
+    }
+    open
+  }
+
+  /// Closes a box's clip, paints its outline, and composites its group.
+  fn close(&mut self, open: OpenBox) {
+    if open.clip {
+      self.steps.push(PaintStep::EndClip { node: open.node });
+    }
+    if open.outline {
+      self.steps.push(PaintStep::Draw {
+        node: open.node,
+        part: DrawPart::Outline,
+      });
+    }
+    if open.group {
+      self.steps.push(PaintStep::EndGroup { node: open.node });
     }
   }
 
-  /// Fills `painted` with the node's image or text and returns the boxes its inline content adds.
-  fn own_content(
-    &mut self,
-    node: &RenderNode,
-    layout: ComputedLayout,
-    transform: Affine,
-    painted: &mut PaintNode,
-  ) -> Result<Vec<PaintNode>> {
+  /// Records the text or image the node lays out.
+  fn own_content(&mut self, placed: Placed<'_>) -> Result<()> {
+    let node = placed.node;
+
     if node.should_create_inline_layout() {
-      return self.inline_content(node, layout, transform, collect_inline_items(node), painted);
+      return self.inline(placed, collect_inline_items(node));
     }
     if node.has_anonymous_text_item_child() {
-      return Ok(Vec::new());
+      return Ok(());
     }
-    match node.node.as_ref().map(|n| &n.kind) {
-      Some(NodeKind::Image(image)) => {
-        painted.image = image_content(image, node, layout);
-        Ok(Vec::new())
+
+    match node.node.as_ref().map(|input| &input.kind) {
+      Some(InputKind::Image(image)) => {
+        self.image(image, placed);
+        Ok(())
       }
-      Some(NodeKind::Text(text)) => {
+      Some(InputKind::Text(text)) => {
+        if SizedFontStyle::from_style(&node.context.style, &node.context)
+          .sizing
+          .font_size
+          == 0.0
+        {
+          return Ok(());
+        }
+
         let items = vec![InlineItem::Text {
           text: Cow::Borrowed(text.text.as_str()),
           context: &node.context,
           link: None,
           decorations: None,
         }];
-        self.inline_content(node, layout, transform, items, painted)
+
+        self.inline(placed, items)
       }
-      _ => Ok(Vec::new()),
+      _ => Ok(()),
     }
   }
 
-  fn inline_content<'c>(
-    &mut self,
-    node: &'c RenderNode,
-    layout: ComputedLayout,
-    transform: Affine,
-    items: Vec<InlineItem<'c>>,
-    painted: &mut PaintNode,
-  ) -> Result<Vec<PaintNode>> {
+  /// Records a replaced image in the node's content box.
+  fn image(&mut self, image: &ImageData, placed: Placed<'_>) {
+    let Placed {
+      node,
+      layout,
+      transform,
+      parent,
+      ..
+    } = placed;
+    let context = &node.context;
+    let offset = layout.content_box_offset();
+    let content = Size {
+      width: layout.content_box_width(),
+      height: layout.content_box_height(),
+    };
+
+    if content.width <= 0.0 || content.height <= 0.0 {
+      return;
+    }
+
+    let src = match &image.src {
+      ImageSourceInput::Url(url) => url.to_string(),
+      ImageSourceInput::Buffer(bytes) => to_data_url(sniff_mime(bytes), bytes),
+      _ => return,
+    };
+    let intrinsic = image
+      .src
+      .resolve(context)
+      .ok()
+      .map(|source| source.size(&context.sizing))
+      .filter(|(width, height)| *width > 0.0 && *height > 0.0);
+    let painter = BoxPainter::new(context, layout);
+    let content_rect = PaintRect::sized(Point::ZERO, content);
+    let (source, rect, clip) = match intrinsic {
+      Some((width, height)) => {
+        let replaced = painter.replaced_content(Size { width, height });
+        // The clip is a border-box `ClipBox`; the content box it falls back to is already local.
+        let clip = replaced
+          .clip
+          .map_or(Shape::Rect { rect: content_rect }, |clip| {
+            Shape::of(
+              &FillShape::from(clip),
+              Affine::translation(-offset.x, -offset.y),
+            )
+          });
+
+        (
+          ImageSource { src, width, height },
+          PaintRect::sized(replaced.placement.offset, replaced.placement.size),
+          clip,
+        )
+      }
+      None => (
+        ImageSource {
+          src,
+          width: content.width,
+          height: content.height,
+        },
+        content_rect,
+        Shape::Rect { rect: content_rect },
+      ),
+    };
+    let placed = transform * Affine::translation(offset.x, offset.y);
+    let id = self.nodes.len();
+
+    self.add(
+      PaintNode {
+        id,
+        parent: Some(parent),
+        element: self.nodes[parent].element.clone(),
+        transform: placed.to_cols_array(),
+        width: content.width,
+        height: content.height,
+        bounds: PaintRect::bounding(content.width, content.height, placed),
+        drawables: vec![Drawable::Image {
+          role: Role::Image,
+          image: source.clone(),
+          rect,
+          clip,
+          sampling: Sampling::of(context.style.image_rendering),
+        }],
+        children: Vec::new(),
+        kind: NodeKind::Image { image: source },
+      },
+      None,
+    );
+    self.draw(id);
+  }
+
+  /// Records the node's inline content `items`: its text, then its inline boxes.
+  fn inline<'c>(&mut self, placed: Placed<'c>, items: Vec<InlineItem<'c>>) -> Result<()> {
+    let Placed {
+      node,
+      layout,
+      transform,
+      path,
+      ..
+    } = placed;
     let context = &node.context;
     let font_style = SizedFontStyle::from_style(&context.style, context);
+
     let built = create_inline_layout(InlineLayoutRequest::in_content_box(
       items,
       layout.unsnapped_content,
@@ -193,39 +403,8 @@ impl Walker {
     ));
     let runs = built.resolve_runs(context, layout)?;
 
-    painted.text_align = Some(
-      context
-        .style
-        .text_align
-        .resolve(context.style.direction)
-        .to_css_string(),
-    );
-    painted.text_shadows = font_style
-      .painted_text_shadows()
-      .map(PaintShadow::from)
-      .collect();
-    painted.inline_backgrounds = runs
-      .background_fragments
-      .iter()
-      .map(|fragment| PaintInlineBackground {
-        rect: PaintRect {
-          x: fragment.x,
-          y: fragment.y,
-          width: fragment.width,
-          height: fragment.height,
-        },
-        radii: fragment.radii.map(|(x, y)| [x, y]),
-        color: fragment.color.0,
-        opacity: fragment.opacity,
-      })
-      .collect();
-    painted.text_runs = runs
-      .runs
-      .iter()
-      .map(|run| self.run(context.fonts(), &built.text, &built.spans, run, layout))
-      .collect();
+    self.text(placed, &built, &runs, &font_style);
 
-    let mut boxes = Vec::new();
     for inline_box in &runs.inline_boxes {
       let Some(ProcessedInlineSpan::Box(item)) = built.spans.get(inline_box.id as usize) else {
         continue;
@@ -233,12 +412,17 @@ impl Walker {
       let Some((offset, paint)) = resolve_inline_box(inline_box, item, layout) else {
         continue;
       };
+      let Some(relative) = node.path_where(|candidate| ptr::eq(candidate, item.render_node)) else {
+        continue;
+      };
+      let box_path = [path, &relative].concat();
+
       match paint {
         InlineBoxPaint::Container(subtree) => {
           let at = subtree.border_box_origin(offset);
           let scene = subtree.into_scene(transform * Affine::translation(at.x, at.y), false)?;
 
-          boxes.extend(self.scene(&scene.root, &scene.results, &scene.contexts)?);
+          self.scene(&scene, &box_path)?;
         }
         InlineBoxPaint::Replaced { node, layout } => {
           let local = node.context.style.local_transform(
@@ -247,350 +431,392 @@ impl Walker {
             &node.context.sizing,
           );
           let placed = transform * Affine::translation(offset.x, offset.y) * local;
-          let mut painted = self.box_node(node, layout, placed, None);
-          painted.children = self.own_content(node, layout, placed, &mut painted)?;
-          boxes.push(painted);
+          let open = self.open_box(node, layout, placed, box_path.clone());
+
+          self.own_content(Placed {
+            node,
+            layout,
+            transform: placed,
+            path: &box_path,
+            parent: open.node,
+          })?;
+          self.close(open);
         }
       }
     }
-    Ok(boxes)
+    Ok(())
   }
 
-  fn run(
+  /// Records the node's text: the runs `built` lays out, painted in the style `font_style`.
+  fn text(
     &mut self,
-    fonts: &FontsSnapshot,
-    text: &str,
-    spans: &[ProcessedInlineSpan<'_>],
-    run: &PositionedInlineRun,
-    layout: ComputedLayout,
-  ) -> PaintTextRun {
-    let shaped = &run.glyph_run;
-    let brush = &shaped.brush;
-    let text_range = run_text_range(shaped.text_range.clone(), spans, brush.source_span_id);
-    let glyph_offset = run.glyph_offset(layout);
-    let origin = Point {
-      x: glyph_offset.x + shaped.offset,
-      y: glyph_offset.y + shaped.baseline,
+    placed: Placed<'_>,
+    built: &BuiltInlineLayout<'_>,
+    runs: &InlineRunLayout,
+    font_style: &SizedFontStyle,
+  ) {
+    let Placed {
+      node,
+      layout,
+      transform,
+      path,
+      parent,
+    } = placed;
+    let BuiltInlineLayout { spans, text, .. } = built;
+    let context = &node.context;
+    let painter = BoxPainter::new(context, layout);
+    let fill = if context.style.background_clip == BackgroundClip::Text {
+      GlyphFill::Background
+    } else {
+      GlyphFill::Text
     };
-    let run_transform = run.transform(Affine::IDENTITY);
-    let decorations = shaped
-      .decorations(
-        &run.resolved_glyphs,
-        layout,
-        run.baseline_shift,
-        run_transform,
-      )
-      .into_iter()
-      .map(|rect| PaintDecoration {
-        line: decoration_line(rect.line),
-        transform: rect.transform,
-        width: rect.width,
-        height: rect.height,
-        color: rect.color.0,
+    let background = match fill {
+      GlyphFill::Background => {
+        let background = painter.background();
+
+        background
+          .color
+          .map(|color| Paint::Color { color: color.0 })
+          .into_iter()
+          .chain(
+            Paint::layers(&background.layers, layout.size, background.origin, context)
+              .into_iter()
+              .map(|(paint, _)| paint),
+          )
+          .collect()
+      }
+      GlyphFill::Text => Vec::new(),
+    };
+    let mut recorder = Recorder::text(background);
+
+    runs.paint(
+      spans,
+      font_style,
+      fill,
+      BoxFrame::new(layout, Point::ZERO),
+      &mut recorder,
+    );
+
+    let drawables = recorder.finish();
+
+    if drawables.is_empty() && runs.runs.is_empty() {
+      return;
+    }
+
+    let mut baselines: Vec<f32> = runs.runs.iter().map(|run| run.glyph_run.baseline).collect();
+
+    baselines.sort_by(f32::total_cmp);
+    baselines.dedup_by(|a, b| (*a - *b).abs() < 0.01);
+
+    let text_runs = runs
+      .runs
+      .iter()
+      .map(|run| {
+        let shaped = &run.glyph_run;
+        let origin = run.origin(layout);
+        let line_scale = run.transform(Affine::IDENTITY);
+        let style = run.style(spans).unwrap_or(font_style);
+
+        TextRun {
+          text: run.text(text, spans),
+          element: ElementInfo::styled(node, style.parent, path),
+          x: origin.x,
+          y: origin.y,
+          width: shaped.advance,
+          line: baselines
+            .iter()
+            .position(|baseline| (baseline - shaped.baseline).abs() < 0.01)
+            .unwrap_or_default(),
+          ascent: shaped.metrics.ascent,
+          descent: shaped.metrics.descent,
+          font: self.fonts.intern(context.fonts(), shaped),
+          font_size: shaped.font_size,
+          line_height: shaped.metrics.line_height,
+          letter_spacing: style.letter_spacing,
+          glyphs: shaped
+            .glyphs
+            .iter()
+            .map(|glyph| PaintGlyph {
+              id: glyph.id,
+              x: glyph.x - shaped.offset,
+              y: glyph.y - shaped.baseline,
+            })
+            .collect(),
+          outline: run.outline(layout),
+          transform: (!line_scale.is_identity()).then(|| {
+            (Affine::translation(-origin.x, -origin.y)
+              * line_scale
+              * Affine::translation(origin.x, origin.y))
+            .to_cols_array()
+          }),
+        }
+      })
+      .collect();
+    let id = self.nodes.len();
+    let size = layout.size;
+
+    self.add(
+      PaintNode {
+        id,
+        parent: Some(parent),
+        element: self.nodes[parent].element.clone(),
+        transform: transform.to_cols_array(),
+        width: size.width,
+        height: size.height,
+        bounds: PaintRect::bounding(size.width, size.height, transform),
+        drawables,
+        children: Vec::new(),
+        kind: NodeKind::Text {
+          text_align: text_align(context),
+          runs: text_runs,
+        },
+      },
+      None,
+    );
+    self.draw(id);
+  }
+
+  /// Adds `node`, placed in the tree by its element `path` when its parent is not yet known.
+  fn add(&mut self, node: PaintNode, path: Option<Vec<usize>>) {
+    self.nodes.push(node);
+    self.paths.push(path);
+  }
+
+  fn draw(&mut self, node: usize) {
+    self.steps.push(PaintStep::Draw {
+      node,
+      part: DrawPart::Drawables,
+    });
+  }
+
+  /// Links every node to its parent and lists each box's children in document order. A box that
+  /// shares its path with an earlier one, such as a list item's marker, belongs to that box.
+  pub(super) fn link(&mut self) {
+    let mut boxes: HashMap<&[usize], usize> = HashMap::new();
+
+    for (id, path) in self.paths.iter().enumerate() {
+      if let Some(path) = path {
+        boxes.entry(path).or_insert(id);
+      }
+    }
+
+    let parents: Vec<Option<usize>> = self
+      .nodes
+      .iter()
+      .zip(&self.paths)
+      .map(|(node, path)| {
+        if node.id == 0 {
+          return None;
+        }
+        if node.parent.is_some() {
+          return node.parent;
+        }
+
+        let path = path.as_deref().unwrap_or_default();
+
+        if let Some(&owner) = boxes.get(path)
+          && owner != node.id
+        {
+          return Some(owner);
+        }
+
+        Some(
+          (0..path.len())
+            .rev()
+            .find_map(|length| boxes.get(&path[..length]).copied())
+            .unwrap_or_default(),
+        )
       })
       .collect();
 
-    PaintTextRun {
-      text: run_text(text, text_range.clone()),
-      x: origin.x,
-      y: origin.y,
-      width: shaped.advance,
-      ascent: shaped.metrics.ascent,
-      descent: shaped.metrics.descent,
-      font_index: self.fonts.intern(fonts, shaped),
-      font_size: shaped.font_size,
-      line_height: shaped.metrics.line_height,
-      letter_spacing: brush.letter_spacing,
-      color: brush.color.0,
-      opacity: brush.opacity,
-      transform: (!run_transform.is_identity()).then(|| run_transform.to_cols_array()),
-      glyphs: shaped
-        .glyphs
-        .iter()
-        .map(|glyph| PaintGlyph {
-          id: glyph.id,
-          x: glyph.x - shaped.offset,
-          y: glyph.y - shaped.baseline,
-        })
-        .collect(),
-      decorations,
-      stroke: (brush.stroke_width > 0.0 && brush.stroke_color.0[3] != 0).then_some(PaintStroke {
-        color: brush.stroke_color.0,
-        width: brush.stroke_width,
-      }),
-      text_byte_range: [text_range.start, text_range.end],
-      span_id: brush.source_span_id,
-    }
-  }
-}
-
-/// Narrows a parley run's byte range to the span it was shaped for, since several spans can
-/// share one run.
-fn run_text_range(
-  range: Range<usize>,
-  spans: &[ProcessedInlineSpan<'_>],
-  span_id: Option<u64>,
-) -> Range<usize> {
-  match span_id.and_then(|id| spans.get(id as usize)) {
-    Some(ProcessedInlineSpan::Text { byte_range, .. }) => {
-      range.start.max(byte_range.start)..range.end.min(byte_range.end)
-    }
-    _ => range,
-  }
-}
-
-/// The run's text without the bidi marks layout inserts.
-fn run_text(text: &str, range: Range<usize>) -> String {
-  let end = range.end.min(text.len());
-  let start = text.ceil_char_boundary(range.start.min(end));
-  let end = text.floor_char_boundary(end);
-  if start >= end {
-    return String::new();
-  }
-  text[start..end]
-    .chars()
-    .filter(|c| !matches!(c, '\u{200E}' | '\u{200F}'))
-    .collect()
-}
-
-fn decoration_line(line: TextDecorationLines) -> String {
-  if line.contains(TextDecorationLines::UNDERLINE) {
-    "underline"
-  } else if line.contains(TextDecorationLines::OVERLINE) {
-    "overline"
-  } else {
-    "line-through"
-  }
-  .to_string()
-}
-
-fn radii(border: &BorderProperties) -> Radii {
-  border.radius.0.map(|pair| [pair.x, pair.y])
-}
-
-fn overflow_clip(
-  node: &RenderNode,
-  layout: ComputedLayout,
-  border: &BorderProperties,
-) -> Option<PaintClip> {
-  let style = &node.context.style;
-  let overflows = style.resolve_overflows();
-  if !overflows.should_clip_content() {
-    return None;
-  }
-  let clip = ClipBox::padding_box(*border, layout);
-  Some(PaintClip {
-    rect: PaintRect::new(clip.offset, clip.size),
-    radii: radii(&clip.border),
-    x: overflows.x != Overflow::Visible,
-    y: overflows.y != Overflow::Visible,
-  })
-}
-
-/// What a box paints around its content.
-#[derive(Default)]
-struct BoxDecorations {
-  background: Option<PaintBackground>,
-  border: Option<PaintBorder>,
-  shadows: Option<PaintBoxShadows>,
-  outline: Option<PaintOutline>,
-}
-
-impl BoxDecorations {
-  fn of(node: &RenderNode, layout: ComputedLayout, painter: &BoxPainter<'_>) -> Self {
-    let outline = painter.outline().map(|outline| {
-      let width = outline.border.width.top;
-      PaintOutline {
-        width,
-        color: outline.border.color.top.0,
-        style: outline.border.style.top.to_css_string(),
-        offset: outline.grow - width,
+    for (id, parent) in parents.into_iter().enumerate() {
+      self.nodes[id].parent = parent;
+      if let Some(parent) = parent {
+        self.nodes[parent].children.push(id);
       }
-    });
-    if !painter.paints_decorations() {
-      return Self {
-        outline,
-        ..Self::default()
-      };
     }
-    let context = &node.context;
-    let style = &context.style;
-    let border = painter.border();
-    let shadows = painter.shadows();
-    let background_color = style.background_color.resolve(context.current_color);
-    let background = PaintBackground {
-      color: (background_color.0[3] != 0).then_some(background_color.0),
-      clip: style.background_clip.to_css_string(),
-      layers: background_layers(node, layout),
-    };
 
-    Self {
-      background: (background.color.is_some() || !background.layers.is_empty())
-        .then_some(background),
-      border: border.has_visible_sides().then(|| PaintBorder {
-        widths: border.width.into_array(),
-        colors: border.color.into_array().map(|color| color.0),
-        styles: border.style.into_array().map(|style| style.to_css_string()),
-        radii: radii(border),
-      }),
-      shadows: (!shadows.inset.is_empty() || !shadows.outer.is_empty()).then(|| PaintBoxShadows {
-        inset: shadows.inset.iter().map(PaintShadow::from).collect(),
-        outer: shadows.outer.iter().map(PaintShadow::from).collect(),
-      }),
-      outline,
-    }
-  }
-}
-
-fn background_layers(node: &RenderNode, layout: ComputedLayout) -> Vec<PaintBackgroundLayer> {
-  let context = &node.context;
-  let style = &context.style;
-  if style.background_clip == BackgroundClip::Text {
-    return Vec::new();
-  }
-  let images = style.background_image.as_deref().unwrap_or(&[]);
-  if images.is_empty() {
-    return Vec::new();
-  }
-  let origin = background_origin_box(style.background_origin, layout);
-  let resolved = BackgroundLayersInput {
-    images,
-    positions: &style.background_position,
-    sizes: &style.background_size,
-    repeats: &style.background_repeat,
-    blend_modes: &style.background_blend_mode,
-    context,
-    area: origin.size.map(|x| x.max(0.0) as u32),
-    paint: layout.size.map(|x| x as u32),
-    origin_offset: Point {
-      x: origin.offset.x as i32,
-      y: origin.offset.y as i32,
-    },
-  }
-  .resolve();
-
-  resolved
-    .into_iter()
-    .filter_map(|(index, geometry)| {
-      let image = images.get(index)?;
-      let fill = fill(image, geometry.tile_width, geometry.tile_height, context)?;
-      Some(PaintBackgroundLayer {
-        fill,
-        tiles: PaintTiles {
-          xs: geometry.xs.to_vec(),
-          ys: geometry.ys.to_vec(),
-          width: geometry.tile_width,
-          height: geometry.tile_height,
-        },
-        blend_mode: geometry.blend_mode.to_css_string(),
-      })
-    })
-    .collect()
-}
-
-fn fill(
-  image: &BackgroundImage,
-  width: u32,
-  height: u32,
-  context: &RenderContext,
-) -> Option<PaintFill> {
-  let stops = |stops: &[ResolvedGradientStop]| {
-    stops
+    let order: Vec<Vec<usize>> = self
+      .nodes
       .iter()
-      .map(|stop| PaintGradientStop {
-        color: stop.color.0,
-        position: stop.position,
+      .map(|node| {
+        self.paths[node.id]
+          .clone()
+          .or_else(|| node.parent.and_then(|parent| self.paths[parent].clone()))
+          .unwrap_or_default()
       })
-      .collect()
-  };
-  Some(match image {
-    BackgroundImage::None => return None,
-    BackgroundImage::Linear(gradient) => {
-      let geometry =
-        gradient.resolve_geometry(width, height, &context.sizing, context.current_color);
-      PaintFill::Linear {
-        css: image.to_css_string(),
-        repeating: gradient.repeating,
-        dir_x: geometry.dir_x,
-        dir_y: geometry.dir_y,
-        axis_length: geometry.axis_length,
-        stops: stops(geometry.stops()),
-      }
-    }
-    BackgroundImage::Radial(gradient) => {
-      let geometry =
-        gradient.resolve_geometry(width, height, &context.sizing, context.current_color);
-      let radius = |inverse: f32| if inverse > 0.0 { 1.0 / inverse } else { 0.0 };
-      PaintFill::Radial {
-        css: image.to_css_string(),
-        repeating: gradient.repeating,
-        cx: geometry.cx,
-        cy: geometry.cy,
-        radius_x: radius(geometry.inv_radius_x),
-        radius_y: radius(geometry.inv_radius_y),
-        stops: stops(geometry.stops()),
-      }
-    }
-    BackgroundImage::Conic(_) => PaintFill::Conic {
-      css: image.to_css_string(),
-    },
-    BackgroundImage::Url(src) => PaintFill::Image {
-      src: Some(src.to_string()),
-    },
-  })
-}
+      .collect();
 
-fn image_content(
-  image: &ImageData,
-  node: &RenderNode,
-  layout: ComputedLayout,
-) -> Option<PaintImage> {
-  let context = &node.context;
-  let content_size = layout.content_box_size();
-  if content_size.width <= 0.0 || content_size.height <= 0.0 {
-    return None;
+    for node in &mut self.nodes {
+      node.children.sort_by(|a, b| order[*a].cmp(&order[*b]));
+    }
   }
-  let src = match &image.src {
-    ImageSourceInput::Url(url) => Some(url.to_string()),
-    _ => None,
-  };
-  let intrinsic = image
-    .src
-    .resolve(context)
-    .ok()
-    .map(|source| source.size(&context.sizing))
-    .filter(|(width, height)| *width > 0.0 && *height > 0.0)
-    .map(|(width, height)| Size { width, height });
-  let placement = place_replaced(context, content_size, intrinsic.unwrap_or_default());
-
-  Some(PaintImage {
-    src,
-    placement: PaintRect::new(
-      layout.content_box_offset() + placement.offset,
-      placement.size,
-    ),
-  })
 }
 
-fn unresolved(node: &RenderNode) -> Option<PaintUnresolvedEffects> {
-  let style = &node.context.style;
-  let css = |present: bool, css: String| present.then_some(css);
-  let unresolved = PaintUnresolvedEffects {
-    filter: css(!style.filter.is_empty(), style.filter.to_css_string()),
-    backdrop_filter: css(
-      !style.backdrop_filter.is_empty(),
-      style.backdrop_filter.to_css_string(),
-    ),
-    mask_image: style
-      .mask_image
+/// The shadows, background, and border the box `painter` paints, bottom first.
+fn decorations(painter: &BoxPainter<'_>, size: Size<f32>) -> Vec<Drawable> {
+  let mut recorder = Recorder::new();
+
+  painter.paint_normal_box_shadows(Point::ZERO, &mut recorder);
+
+  let background = painter.background();
+  let layers = Paint::layers(
+    &background.layers,
+    size,
+    background.origin,
+    painter.context(),
+  );
+  // Blink's `BoxPainterBase::PaintFillLayers` paints a background that blends in a layer of its
+  // own, so its layers blend only with its colour and one another.
+  let isolated = layers.iter().any(|(_, blend_mode)| blend_mode.is_some());
+
+  if isolated {
+    recorder.begin_layer(1.0);
+  }
+  painter.background_color(Point::ZERO, &mut recorder);
+  if let Some(clip) = background.clip.shape(size) {
+    let shape = Shape::of(&clip, Affine::IDENTITY);
+
+    for (paint, blend_mode) in layers {
+      recorder.push(Drawable::Fill {
+        role: Role::Background,
+        shape: shape.clone(),
+        paint,
+        blend_mode,
+        clips: Vec::new(),
+      });
+    }
+  }
+  if isolated {
+    recorder.end_layer();
+  }
+
+  painter.paint_inset_box_shadows(Point::ZERO, &mut recorder);
+  painter.paint_border(Point::ZERO, &mut recorder);
+  recorder.finish()
+}
+
+/// How the box `painter` paints composites, as a group.
+fn effects(painter: &BoxPainter<'_>, layout: ComputedLayout) -> Effects {
+  let context = painter.context();
+  let style = &context.style;
+  let size = layout.size;
+  let backdrop: Vec<Filter> = style
+    .backdrop_filter
+    .iter()
+    .filter(|filter| !filter.is_drop_shadow())
+    .cloned()
+    .collect();
+  let mask = style
+    .mask_image
+    .as_deref()
+    .filter(|images| images.iter().any(BackgroundImage::paints))
+    .map(|images| {
+      let layers = FillLayers::mask(style).resolve(images, size, context);
+      let area = OriginBox {
+        offset: Point::ZERO,
+        size,
+      };
+
+      Paint::layers(&layers, size, area, context)
+        .into_iter()
+        .map(|(paint, blend_mode)| Drawable::Fill {
+          role: Role::Background,
+          shape: Shape::Rect {
+            rect: PaintRect::sized(Point::ZERO, size),
+          },
+          paint,
+          blend_mode,
+          clips: Vec::new(),
+        })
+        .collect()
+    });
+
+  Effects {
+    opacity: style.opacity.0,
+    blend_mode: style.mix_blend_mode.to_css_string(),
+    isolation: style.isolation == Isolation::Isolate,
+    filters: PaintFilter::chain(&style.filter, size, context),
+    backdrop_clip: (!backdrop.is_empty()).then(|| {
+      Shape::of(
+        &BackgroundClipArea::BorderBox(*painter.border())
+          .shape(size)
+          .unwrap_or(FillShape::Rect(size)),
+        Affine::IDENTITY,
+      )
+    }),
+    backdrop_filters: PaintFilter::chain(&backdrop, size, context),
+    clip: painter
+      .clip_path()
+      .map(|shape| Shape::of(&shape, Affine::IDENTITY)),
+    mask,
+  }
+}
+
+/// `text-align` with `start` and `end` resolved against the direction.
+fn text_align(context: &RenderContext) -> &'static str {
+  match context.style.text_align.resolve(context.style.direction) {
+    TextAlign::Right => "right",
+    TextAlign::Center => "center",
+    TextAlign::Justify => "justify",
+    TextAlign::Left | TextAlign::Start | TextAlign::End => "left",
+  }
+}
+
+impl ElementInfo {
+  /// The element `node` renders, at `path` from the input root, or `None` for an anonymous box.
+  fn of(node: &RenderNode, path: Vec<usize>) -> Option<Self> {
+    let input = node.node.as_ref()?;
+
+    Some(Self {
+      id: input.id().map(str::to_owned),
+      tag_name: input.tag_name().map(str::to_owned),
+      class_name: input.class_name().map(str::to_owned),
+      path,
+    })
+  }
+}
+
+impl ElementInfo {
+  /// The element under `root`, at `path`, whose text takes `style`: an anonymous text node's
+  /// parent. `None` for `root` itself.
+  fn styled(root: &RenderNode, style: &ComputedStyle, path: &[usize]) -> Option<Self> {
+    let mut relative = root.path_where(|candidate| ptr::eq(&*candidate.context.style, style))?;
+
+    if root
+      .node_at_path(&relative)?
+      .node
       .as_ref()
-      .filter(|images| !images.is_empty())
-      .map(ToCss::to_css_string),
-    clip_path: style.clip_path.as_ref().map(ToCss::to_css_string),
-  };
-  (unresolved.filter.is_some()
-    || unresolved.backdrop_filter.is_some()
-    || unresolved.mask_image.is_some()
-    || unresolved.clip_path.is_some())
-  .then_some(unresolved)
+      .is_some_and(|input| matches!(input.kind, InputKind::Text(_)) && input.tag_name().is_none())
+    {
+      relative.pop();
+    }
+    if relative.is_empty() {
+      return None;
+    }
+
+    Self::of(root.node_at_path(&relative)?, [path, &relative].concat())
+  }
+}
+
+impl RenderNode {
+  /// The child-index path to the first descendant, `self` included, that `matches` accepts. A
+  /// list item's marker sits at the item's path.
+  fn path_where(&self, matches: impl Fn(&RenderNode) -> bool + Copy) -> Option<Vec<usize>> {
+    if matches(self) || self.marker.as_deref().is_some_and(matches) {
+      return Some(Vec::new());
+    }
+
+    self
+      .children
+      .as_deref()?
+      .iter()
+      .enumerate()
+      .find_map(|(index, child)| {
+        let mut path = child.path_where(matches)?;
+
+        path.insert(0, index);
+        Some(path)
+      })
+  }
 }

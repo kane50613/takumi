@@ -1,14 +1,13 @@
 use takumi_core::{
   geometry::{ComputedLayout as Layout, NodeId, Point},
-  layout::decoration::OutlineGeometry,
   scene::{NodePaint, PaintItem, PaintItemKind, Scene, SceneBounds, StackingContextNode},
 };
 use tiny_skia::{Pixmap, PixmapMut};
 
 use crate::{
-  BlurType, BorderProperties, Canvas, CanvasSubcanvas, CanvasViewport, Error, NodeMaskAction,
-  Placement, Result, SizedFontStyle, apply_backdrop_filter, apply_filters_to_pixmap, blend_pixel,
-  color_to_premultiplied, draw_box_shell, draw_debug_border, draw_node_content, draw_outline,
+  BlurType, BorderProperties, Canvas, CanvasSubcanvas, CanvasViewport, DeferredOutline, Error,
+  NodeMasks, Placement, Result, SizedFontStyle, apply_backdrop_filter, apply_filters_to_pixmap,
+  blend_pixel, color_to_premultiplied, draw_box_shell, draw_debug_border, draw_node_content,
   inline_drawing::{draw_inline_box, draw_inline_layout},
   layout::{
     inline::{
@@ -17,7 +16,7 @@ use crate::{
     },
     tree::{LayoutResults, RenderNode},
   },
-  placement_overlap, prepare_node_mask, resolve_outline,
+  placement_overlap,
   style::{Affine, BlendMode, Filter, SizingContext},
 };
 
@@ -91,22 +90,12 @@ enum DeferredNodeRender {
   SkipRendering,
 }
 
-pub(crate) struct DeferredOutline {
-  outline: OutlineGeometry,
-  transform: Affine,
-}
-
-impl DeferredOutline {
-  fn paint(&self, canvas: &mut Canvas) {
-    draw_outline(&self.outline, self.transform, canvas);
-  }
-}
-
 /// The state a painted node leaves open until its descendants are done: its
 /// constraint mask, its isolation layer, and the bounds its filters cover.
 struct PendingFinish {
   layout: Layout,
-  has_constraint: bool,
+  /// How many masks the node pushed.
+  constraints: usize,
   isolated_canvas: Option<Box<CanvasSubcanvas>>,
   filter_bounds: Option<SceneBounds>,
 }
@@ -121,9 +110,7 @@ impl PendingFinish {
   ) -> Result<()> {
     // CSS 2.1 Appendix E paints the outline last, above the box's children, so a
     // node whose children follow it in the bucket hands its outline to the caller.
-    if let Some((outline, transform)) = resolve_outline(&node.context, self.layout) {
-      let deferred = DeferredOutline { outline, transform };
-
+    if let Some(deferred) = DeferredOutline::of(&node.context, self.layout) {
       match outlines {
         Some(outlines) => outlines.push(deferred),
         None => deferred.paint(canvas),
@@ -174,7 +161,7 @@ impl PendingFinish {
       }
     }
 
-    if self.has_constraint {
+    for _ in 0..self.constraints {
       canvas.pop_mask();
     }
     if let Some(isolated_canvas) = self.isolated_canvas {
@@ -344,17 +331,19 @@ impl<'a> ScenePainter<'a> {
     if !current.context.style.backdrop_filter.is_empty() {
       // Filtered backdrop is clipped by the node's clip-path and mask, like Chromium's
       // backdrop root: https://drafts.fxtf.org/filter-effects-2/#BackdropRoot
-      let node_mask = if current.context.style.has_shape_mask() {
-        match prepare_node_mask(
+      // ponytail: with both a clip-path and a mask-image, only the first bounds the backdrop.
+      let node_masks = if current.context.style.has_shape_mask() {
+        let Some(masks) = NodeMasks::of(
           &current.context,
           layout,
           node_paint.transform,
           canvas.viewport(),
-        )? {
-          NodeMaskAction::Shell(mask) => Some(mask),
-          NodeMaskAction::SkipRendering => return Ok(Some(DeferredNodeRender::SkipRendering)),
-          _ => None,
-        }
+        )?
+        else {
+          return Ok(Some(DeferredNodeRender::SkipRendering));
+        };
+
+        masks.shell.into_iter().next()
       } else {
         None
       };
@@ -366,7 +355,7 @@ impl<'a> ScenePainter<'a> {
         layout.size,
         node_paint.transform,
         &current.context,
-        node_mask.as_ref(),
+        node_masks.as_ref(),
       )?;
     }
 
@@ -381,39 +370,31 @@ impl<'a> ScenePainter<'a> {
       None
     };
 
-    let mask_action = prepare_node_mask(
+    let Some(masks) = NodeMasks::of(
       &current.context,
       layout,
       node_paint.transform,
       canvas.viewport(),
-    )?;
-    if matches!(mask_action, NodeMaskAction::SkipRendering) {
+    )?
+    else {
       if let Some(isolated_canvas) = isolated_canvas {
         canvas.composite_subcanvas(*isolated_canvas, BlendMode::Normal, 0.0);
       }
       return Ok(Some(DeferredNodeRender::SkipRendering));
+    };
+    let constraints = masks.len();
+
+    for mask in masks.shell {
+      canvas.push_mask(mask);
     }
-
-    let has_constraint = mask_action.is_some();
-
-    match mask_action {
-      NodeMaskAction::None => {
-        draw_render_node_shell(current, canvas, layout)?;
-      }
-      NodeMaskAction::Shell(mask) => {
-        canvas.push_mask(mask);
-        draw_render_node_shell(current, canvas, layout)?;
-      }
-      NodeMaskAction::Content(mask) => {
-        draw_render_node_shell(current, canvas, layout)?;
-        canvas.push_mask(mask);
-      }
-      NodeMaskAction::SkipRendering => return Ok(Some(DeferredNodeRender::SkipRendering)),
+    draw_render_node_shell(current, canvas, layout)?;
+    if let Some(mask) = masks.content {
+      canvas.push_mask(mask);
     }
 
     let finish = PendingFinish {
       layout,
-      has_constraint,
+      constraints,
       isolated_canvas,
       filter_bounds: node_paint.paint_bounds,
     };

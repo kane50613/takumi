@@ -9,7 +9,7 @@
       <feGaussianBlur stdDeviation="9"/>
     </filter>
     <g filter="url(#bl1)">
-      <path d="M16 0h88c8.84 0 16 7.16 16 16v48c0 8.84-7.16 16-16 16h-88c-8.84 0-16-7.16-16-16v-48c0-8.84 7.16-16 16-16ZM20 14h88c4.42 0 8 3.58 8 8v48c0 4.42-3.58 8-8 8h-88c-4.42 0-8-3.58-8-8v-48c0-4.42 3.58-8 8-8Z" fill="#000" fill-opacity=".6" fill-rule="evenodd"/>
+      <path d="M-28-28h176v136h-176v-136Zm48 42h88c4.42 0 8 3.58 8 8v48c0 4.42-3.58 8-8 8h-88c-4.42 0-8-3.58-8-8v-48c0-4.42 3.58-8 8-8Z" fill="#000" fill-opacity=".6" fill-rule="evenodd"/>
     </g>
   </g>
 </svg>

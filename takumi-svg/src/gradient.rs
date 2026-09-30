@@ -4,30 +4,21 @@ use std::{f32::consts::TAU, io};
 
 use takumi_core::{
   context::RenderContext,
-  geometry::{Point, Size},
-  layout::background::{BackgroundLayerInput, LayerTileStyle},
-  paint::{ColorLut, ConicGradientTile},
+  geometry::Rect,
+  layout::background_image_geometry::{BackgroundImageGeometry, BackgroundLayer},
+  paint::{ConicGradientTile, SrgbStop},
+  path_data::{APPROX_CHARS_PER_NUMBER, PathData},
   style::{
-    BackgroundImage, BackgroundRepeat, BackgroundSize, BlendMode, ColorInterpolationMethod,
-    ConicGradient, FillRule, LinearGradient, PositionValue, RadialGradient, ResolvedGradientStop,
+    BackgroundImage, BlendMode, ConicGradient, FillRule, LinearGradient, RadialGradient, ToCss,
   },
 };
 
 use crate::{
-  APPROX_CHARS_PER_NUMBER, Frame, GradientStop, Rgba, SvgDocument,
-  box_model::PathData,
+  Frame, GradientStop, Rgba, SvgDocument,
   image::{PRESERVE_ASPECT_NONE, data_url_for_url},
 };
 
 const CONIC_WEDGES: usize = 180;
-
-/// A resolved background or mask layer.
-struct LayerPlacement {
-  tile_w: f32,
-  tile_h: f32,
-  xs: Vec<f32>,
-  ys: Vec<f32>,
-}
 
 /// Emits background/mask image layers for one node into an SVG document.
 pub(crate) struct LayerEmitter<'a, 'd> {
@@ -40,48 +31,31 @@ impl<'a, 'd> LayerEmitter<'a, 'd> {
     Self { context, doc }
   }
 
-  /// Emits a node's background images in bottom-to-top paint order.
-  pub(crate) fn background_images(
+  /// Emits resolved background or mask layers, bottom first, positioned in `area` and painted
+  /// over `paint`.
+  pub(crate) fn layers(
     &mut self,
-    images: &[BackgroundImage],
-    area: Frame,
-    paint: Frame,
-  ) -> io::Result<()> {
-    self.image_layers(
-      images,
-      &self.context.style.background_size,
-      &self.context.style.background_position,
-      &self.context.style.background_repeat,
-      area,
-      paint,
-    )
-  }
-
-  /// Emits a list of background/mask image layers honoring per-layer size/position/repeat.
-  pub(crate) fn image_layers(
-    &mut self,
-    images: &[BackgroundImage],
-    sizes: &[BackgroundSize],
-    positions: &[PositionValue],
-    repeats: &[BackgroundRepeat],
+    layers: &[BackgroundLayer<'_>],
     area: Frame,
     paint: Frame,
   ) -> io::Result<()> {
     if paint.w <= 0.0 || paint.h <= 0.0 {
       return Ok(());
     }
-    let last_size = sizes.last().copied().unwrap_or_default();
-    let last_position = positions.last().copied().unwrap_or_default();
-    let last_repeat = repeats.last().copied().unwrap_or_default();
 
-    for (index, image) in images.iter().enumerate().rev() {
-      if !image.paints() {
-        continue;
+    for layer in layers {
+      let blend = (layer.blend_mode != BlendMode::Normal)
+        .then(|| {
+          self
+            .doc
+            .begin_blend_group(&layer.blend_mode.to_css_string())
+        })
+        .transpose()?;
+
+      self.layer(layer.image, &layer.geometry, area, paint)?;
+      if let Some(blend) = blend {
+        self.doc.end_group(blend)?;
       }
-      let size = sizes.get(index).copied().unwrap_or(last_size);
-      let position = positions.get(index).copied().unwrap_or(last_position);
-      let repeat = repeats.get(index).copied().unwrap_or(last_repeat);
-      self.layer(image, size, position, repeat, area, paint)?;
     }
     Ok(())
   }
@@ -89,92 +63,54 @@ impl<'a, 'd> LayerEmitter<'a, 'd> {
   fn layer(
     &mut self,
     image: &BackgroundImage,
-    size: BackgroundSize,
-    position: PositionValue,
-    repeat: BackgroundRepeat,
+    geometry: &BackgroundImageGeometry,
     area: Frame,
     paint: Frame,
   ) -> io::Result<()> {
-    let Some(placement) =
-      resolve_placement(image, size, position, repeat, self.context, area, paint)
-    else {
-      return Ok(());
-    };
-    if placement.tile_w <= 0.0 || placement.tile_h <= 0.0 {
+    let tile = geometry.tile_size;
+    if tile.width <= 0.0 || tile.height <= 0.0 {
       return Ok(());
     }
+    let (xs, ys) = geometry.tile_origins(Rect {
+      left: paint.x - area.x,
+      top: paint.y - area.y,
+      right: paint.x + paint.w - area.x,
+      bottom: paint.y + paint.h - area.y,
+    });
 
-    // Tile positions are relative to the painting box, so origin only shifts
-    // placement while the clip stays the painting box.
-    if placement.xs.len() == 1 && placement.ys.len() == 1 {
-      let tile = Frame::new(
-        paint.x + placement.xs[0],
-        paint.y + placement.ys[0],
-        placement.tile_w,
-        placement.tile_h,
-      );
+    // One tile in view draws on its own; a pattern only pays off for several.
+    if let ([tile_x], [tile_y]) = (xs.as_slice(), ys.as_slice()) {
+      let rect = Frame::new(area.x + tile_x, area.y + tile_y, tile.width, tile.height);
       // A `cover`/positioned/origin-shifted tile can extend past the painting box;
       // clip it so it does not bleed outside the element (matching the raster backend).
-      let overflows = tile.x < paint.x - 1e-3
-        || tile.y < paint.y - 1e-3
-        || tile.x + tile.w > paint.x + paint.w + 1e-3
-        || tile.y + tile.h > paint.y + paint.h + 1e-3;
+      let overflows = rect.x < paint.x - 1e-3
+        || rect.y < paint.y - 1e-3
+        || rect.x + rect.w > paint.x + paint.w + 1e-3
+        || rect.y + rect.h > paint.y + paint.h + 1e-3;
       if overflows {
         let token = self.doc.begin_clipped_group(&paint.path_data())?;
-        self.tile(image, tile)?;
+        self.tile(image, rect)?;
         return self.doc.end_group(token);
       }
-      return self.tile(image, tile);
+      return self.tile(image, rect);
     }
 
-    self.tiled_pattern(image, paint, &placement)
-  }
-
-  fn tiled_pattern(
-    &mut self,
-    image: &BackgroundImage,
-    paint_box: Frame,
-    placement: &LayerPlacement,
-  ) -> io::Result<()> {
-    // A `<pattern>` repeats on both axes, so only use it when both axes have
-    // multiple evenly-spaced tiles; otherwise a single row/column would wrongly
-    // repeat on the other axis, so emit the explicit grid.
-    let even_x = even_step(&placement.xs, placement.tile_w);
-    let even_y = even_step(&placement.ys, placement.tile_h);
-    if let (Some(step_x), Some(step_y)) = (even_x, even_y)
-      && placement.xs.len() > 1
-      && placement.ys.len() > 1
-    {
-      let (token, paint) = self.doc.begin_pattern(Frame::new(
-        paint_box.x + placement.xs[0],
-        paint_box.y + placement.ys[0],
-        step_x,
-        step_y,
-      ))?;
-      self.tile(
-        image,
-        Frame::new(0.0, 0.0, placement.tile_w, placement.tile_h),
-      )?;
-      self.doc.end_pattern(token)?;
-      return self.doc.rect_paint(paint_box, &paint);
-    }
-
-    // Explicit tile grid, clipped to the box so edge tiles don't bleed outside.
-    let token = self.doc.begin_clipped_group(&paint_box.path_data())?;
-    for &ty in &placement.ys {
-      for &tx in &placement.xs {
-        self.tile(
-          image,
-          Frame::new(
-            paint_box.x + tx,
-            paint_box.y + ty,
-            placement.tile_w,
-            placement.tile_h,
-          ),
-        )?;
-      }
-    }
-    self.doc.end_group(token)
+    let first = geometry.first_tile();
+    let period = geometry.pattern_period(Rect {
+      left: paint.x - area.x,
+      top: paint.y - area.y,
+      right: paint.x + paint.w - area.x,
+      bottom: paint.y + paint.h - area.y,
+    });
+    let (token, pattern) = self.doc.begin_pattern(Frame::new(
+      area.x + first.x,
+      area.y + first.y,
+      period.width,
+      period.height,
+    ))?;
+    self.tile(image, Frame::new(0.0, 0.0, tile.width, tile.height))?;
+    self.doc.end_pattern(token)?;
+    self.doc.rect_paint(paint, &pattern)
   }
 
   /// Paints one tile of a layer into `rect`.
@@ -220,12 +156,20 @@ impl<'a, 'd> LayerEmitter<'a, 'd> {
     let (t0, t1, stops) = if gradient.repeating {
       let first = resolved.first().map_or(0.0, |s| s.position);
       let last = resolved.last().map_or(geometry.axis_length, |s| s.position);
-      (first, last, svg_stops(resolved, first, last - first))
+      (
+        first,
+        last,
+        svg_stops(SrgbStop::spanned(resolved, first, last - first)),
+      )
     } else {
       (
         0.0,
         geometry.axis_length,
-        lut_svg_stops(resolved, geometry.axis_length, gradient.interpolation),
+        svg_stops(SrgbStop::sampled(
+          resolved,
+          geometry.axis_length,
+          gradient.interpolation,
+        )),
       )
     };
     let paint = self
@@ -256,12 +200,16 @@ impl<'a, 'd> LayerEmitter<'a, 'd> {
         .map_or(geometry.radius_scale, |s| s.position);
       (
         (last - first).max(1e-6),
-        svg_stops(resolved, first, last - first),
+        svg_stops(SrgbStop::spanned(resolved, first, last - first)),
       )
     } else {
       (
         geometry.radius_scale,
-        lut_svg_stops(resolved, geometry.radius_scale, gradient.interpolation),
+        svg_stops(SrgbStop::sampled(
+          resolved,
+          geometry.radius_scale,
+          gradient.interpolation,
+        )),
       )
     };
     let scale = (
@@ -327,142 +275,12 @@ impl<'a, 'd> LayerEmitter<'a, 'd> {
   }
 }
 
-/// Returns the uniform step between positions (tile size when there is a single tile) if the
-/// positions are equally spaced, else `None`.
-fn even_step(positions: &[f32], tile_size: f32) -> Option<f32> {
-  match positions {
-    [] => None,
-    [_] => Some(tile_size),
-    [first, second, ..] => {
-      let step = second - first;
-      positions
-        .windows(2)
-        .all(|w| (w[1] - w[0] - step).abs() < 0.5)
-        .then_some(step)
-    }
-  }
-}
-
-/// Resolves a layer's tile size and per-axis tile origins (box-relative).
-fn resolve_placement(
-  image: &BackgroundImage,
-  size: BackgroundSize,
-  position: PositionValue,
-  repeat: BackgroundRepeat,
-  context: &RenderContext,
-  area: Frame,
-  paint: Frame,
-) -> Option<LayerPlacement> {
-  let geometry = BackgroundLayerInput {
-    area: Size {
-      width: area.w.round().max(0.0) as u32,
-      height: area.h.round().max(0.0) as u32,
-    },
-    paint: Size {
-      width: paint.w.round().max(0.0) as u32,
-      height: paint.h.round().max(0.0) as u32,
-    },
-    origin_offset: Point {
-      x: (area.x - paint.x).round() as i32,
-      y: (area.y - paint.y).round() as i32,
-    },
-    context,
-  }
-  .resolve(
-    image,
-    LayerTileStyle {
-      pos: position,
-      size,
-      repeat,
-      blend_mode: BlendMode::Normal,
-    },
-  )?;
-
-  Some(LayerPlacement {
-    tile_w: geometry.tile_width as f32,
-    tile_h: geometry.tile_height as f32,
-    xs: geometry.xs.iter().map(|x| *x as f32).collect(),
-    ys: geometry.ys.iter().map(|y| *y as f32).collect(),
-  })
-}
-
-fn svg_stops(stops: &[ResolvedGradientStop], base: f32, span: f32) -> Vec<GradientStop> {
-  let span = span.max(1e-6);
+fn svg_stops(stops: Vec<SrgbStop>) -> Vec<GradientStop> {
   stops
-    .iter()
+    .into_iter()
     .map(|stop| GradientStop {
-      offset: ((stop.position - base) / span).clamp(0.0, 1.0),
+      offset: stop.offset,
       color: Rgba(stop.color.0),
     })
     .collect()
-}
-
-/// Number of stops sampled from the gradient color LUT for vector emission.
-const GRADIENT_LUT_STOPS: usize = 64;
-
-/// Builds dense SVG gradient stops by sampling takumi's interpolated color LUT, baking the
-/// gradient's interpolation color space (e.g. OKLCH) into evenly-spaced sRGB stops. SVG only
-/// interpolates between stops in sRGB, so sampling the LUT is how the vector output matches the
-/// raster backend for non-sRGB interpolation.
-fn lut_svg_stops(
-  resolved: &[ResolvedGradientStop],
-  axis_length: f32,
-  interpolation: ColorInterpolationMethod,
-) -> Vec<GradientStop> {
-  let lut = ColorLut::new(
-    resolved,
-    axis_length.max(1e-6),
-    GRADIENT_LUT_STOPS,
-    interpolation,
-    false,
-  );
-  let lut = lut.colors();
-  if lut.len() <= 1 {
-    return svg_stops(resolved, 0.0, axis_length);
-  }
-  let span = axis_length.max(1e-6);
-  let cell = 1.0 / (lut.len() - 1) as f32;
-
-  // Hard stops: adjacent resolved stops with (near-)equal positions.
-  let mut hard_stops = Vec::new();
-  for pair in resolved.windows(2) {
-    let (a, b) = (&pair[0], &pair[1]);
-    if (b.position - a.position).abs() <= 1e-3 {
-      hard_stops.push((
-        (a.position / span).clamp(0.0, 1.0),
-        Rgba(a.color.0),
-        Rgba(b.color.0),
-      ));
-    }
-  }
-
-  let mut stops: Vec<GradientStop> = lut
-    .iter()
-    .enumerate()
-    .filter_map(|(index, &premultiplied)| {
-      let offset = index as f32 / (lut.len() - 1) as f32;
-      // Drop LUT samples that straddle a hard stop; the injected pair covers it.
-      let straddles = hard_stops
-        .iter()
-        .any(|(boundary, ..)| (offset - boundary).abs() < cell);
-
-      (!straddles).then(|| GradientStop {
-        offset,
-        color: Rgba::demultiplied(premultiplied),
-      })
-    })
-    .collect();
-
-  for (boundary, before, after) in hard_stops {
-    stops.push(GradientStop {
-      offset: boundary,
-      color: before,
-    });
-    stops.push(GradientStop {
-      offset: boundary,
-      color: after,
-    });
-  }
-  stops.sort_by(|a, b| a.offset.total_cmp(&b.offset));
-  stops
 }

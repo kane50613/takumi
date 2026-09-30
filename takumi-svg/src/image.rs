@@ -2,22 +2,20 @@
 //!
 //! Raster sources are embedded as `data:` URLs (original encoded bytes when
 //! available, otherwise re-encoded PNG); SVG sources embed their original markup
-//! as `data:image/svg+xml`. CSS `object-fit` maps onto SVG `preserveAspectRatio`.
+//! as `data:image/svg+xml`, drawn where takumi-core's replaced-content placement puts them.
 
 use std::io;
 
 use takumi_core::{
   context::RenderContext,
   geometry::Size,
-  layout::{
-    node::{ImageData, ImageSourceInput, resolve_image},
-    replaced::place_replaced,
-  },
-  resources::image::{ImageSource, to_data_url},
-  style::{ImageScalingAlgorithm, ObjectFit},
+  layout::node::{ImageData, ImageSourceInput, resolve_image},
+  painter::{BoxFrame, BoxPainter, PaintDevice},
+  resources::image::{ImageSource, sniff_mime, to_data_url},
+  style::ImageScalingAlgorithm,
 };
 
-use crate::{Frame, SvgDocument};
+use crate::{Frame, SvgDocument, render::DocumentDevice};
 
 pub(crate) const PRESERVE_ASPECT_NONE: &str = "none";
 
@@ -29,57 +27,54 @@ pub(crate) fn data_url_for_url(url: &str, context: &RenderContext) -> Option<Str
     .and_then(|s| loaded_data_url(&s, context))
 }
 
-/// Emits an image node's content into the given content-box rectangle.
+/// Emits an image node's content into the content box of the box `painter` paints at `frame`,
+/// clipped to the content box's curve or edge where it has to be.
 pub(crate) fn emit_image(
   image: &ImageData,
-  context: &RenderContext,
-  content: Frame,
+  painter: &BoxPainter,
+  frame: BoxFrame,
   doc: &mut SvgDocument,
 ) -> io::Result<()> {
+  let context = painter.context();
+  let content = Frame::content_box(frame);
+
   if content.w <= 0.0 || content.h <= 0.0 {
     return Ok(());
   }
   let Some(href) = data_url(&image.src, context) else {
     return Ok(());
   };
-  if matches!(context.style.object_fit, ObjectFit::Fill) {
-    return doc.image(content, &href, Some(PRESERVE_ASPECT_NONE));
-  }
-
-  let Some((iw, ih)) = intrinsic_size(&image.src, context) else {
-    return doc.image(content, &href, Some("xMidYMid meet"));
-  };
-  let size = Size {
-    width: content.w,
-    height: content.h,
-  };
-  let placement = place_replaced(
-    context,
-    size,
+  let intrinsic = intrinsic_size(&image.src, context);
+  let replaced = painter.replaced_content(intrinsic.map_or(
     Size {
-      width: iw,
-      height: ih,
+      width: content.w,
+      height: content.h,
     },
-  );
-  let group = placement
-    .overflows(size)
-    .then(|| doc.begin_clipped_group(&content.path_data()))
-    .transpose()?;
-
-  doc.image(
-    Frame::new(
-      content.x + placement.offset.x,
-      content.y + placement.offset.y,
-      placement.size.width,
-      placement.size.height,
+    |(width, height)| Size { width, height },
+  ));
+  // Without an intrinsic size the image keeps its own ratio inside the box.
+  let (rect, aspect) = match intrinsic {
+    Some(_) => (
+      Frame::new(
+        content.x + replaced.placement.offset.x,
+        content.y + replaced.placement.offset.y,
+        replaced.placement.size.width,
+        replaced.placement.size.height,
+      ),
+      PRESERVE_ASPECT_NONE,
     ),
-    &href,
-    Some(PRESERVE_ASPECT_NONE),
-  )?;
-  if let Some(group) = group {
-    doc.end_group(group)?;
-  }
-  Ok(())
+    None => (content, "xMidYMid meet"),
+  };
+
+  DocumentDevice::paint(doc, |device| {
+    if let Some(clip) = replaced.clip {
+      device.push_clip(&clip.into(), frame.translation());
+    }
+    device.write(|doc| doc.image(rect, &href, Some(aspect)));
+    if replaced.clip.is_some() {
+      device.pop_clip();
+    }
+  })
 }
 
 fn intrinsic_size(src: &ImageSourceInput, context: &RenderContext) -> Option<(f32, f32)> {
@@ -130,61 +125,5 @@ fn loaded_data_url(source: &ImageSource, context: &RenderContext) -> Option<Stri
         .as_bytes(),
     )),
     _ => None,
-  }
-}
-
-fn sniff_mime(bytes: &[u8]) -> &'static str {
-  match bytes {
-    [0x89, b'P', b'N', b'G', ..] => "image/png",
-    [0xFF, 0xD8, 0xFF, ..] => "image/jpeg",
-    [b'G', b'I', b'F', b'8', ..] => "image/gif",
-    [
-      b'R',
-      b'I',
-      b'F',
-      b'F',
-      _,
-      _,
-      _,
-      _,
-      b'W',
-      b'E',
-      b'B',
-      b'P',
-      ..,
-    ] => "image/webp",
-    _ => {
-      let head = &bytes[..bytes.len().min(256)];
-      if head.starts_with(b"<?xml") || head.windows(4).any(|w| w == b"<svg") {
-        "image/svg+xml"
-      } else {
-        "application/octet-stream"
-      }
-    }
-  }
-}
-
-#[cfg(test)]
-mod tests {
-  use super::*;
-
-  #[test]
-  fn sniffs_common_formats() {
-    assert_eq!(
-      sniff_mime(&[0x89, b'P', b'N', b'G', 0, 0, 0, 0]),
-      "image/png"
-    );
-    assert_eq!(sniff_mime(&[0xFF, 0xD8, 0xFF, 0xE0]), "image/jpeg");
-    assert_eq!(sniff_mime(b"GIF89a"), "image/gif");
-    assert_eq!(sniff_mime(br#"<svg xmlns="...">"#), "image/svg+xml");
-    assert_eq!(sniff_mime(b"\0\0"), "application/octet-stream");
-  }
-
-  #[test]
-  fn encodes_data_url() {
-    assert_eq!(
-      to_data_url("image/png", b"AB"),
-      "data:image/png;base64,QUI="
-    );
   }
 }

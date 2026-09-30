@@ -1,16 +1,21 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630">
   <rect x="0" y="0" width="1200" height="630" fill="#161616"/>
-  <filter id="bl0">
-    <feGaussianBlur stdDeviation="30"/>
-  </filter>
-  <g filter="url(#bl0)">
-    <path d="M274 155h652c13.25 0 24 10.75 24 24v312c0 13.25-10.75 24-24 24h-652c-13.25 0-24-10.75-24-24v-312c0-13.25 10.75-24 24-24Z" fill="#000" fill-opacity=".349"/>
+  <clipPath id="cp0">
+    <path d="M-1000000-1000000H1000000V1000000H-1000000ZM274 135h652c13.25 0 24 10.75 24 24v312c0 13.25-10.75 24-24 24h-652c-13.25 0-24-10.75-24-24v-312c0-13.25 10.75-24 24-24Z" clip-rule="evenodd"/>
+  </clipPath>
+  <g clip-path="url(#cp0)">
+    <filter id="bl1">
+      <feGaussianBlur stdDeviation="30"/>
+    </filter>
+    <g filter="url(#bl1)">
+      <path d="M274 155h652c13.25 0 24 10.75 24 24v312c0 13.25-10.75 24-24 24h-652c-13.25 0-24-10.75-24-24v-312c0-13.25 10.75-24 24-24Z" fill="#000" fill-opacity=".349"/>
+    </g>
   </g>
-  <clipPath id="cp1">
+  <clipPath id="cp2">
     <path d="M274 135h652c13.25 0 24 10.75 24 24v312c0 13.25-10.75 24-24 24h-652c-13.25 0-24-10.75-24-24v-312c0-13.25 10.75-24 24-24Z"/>
   </clipPath>
-  <g clip-path="url(#cp1)">
-    <radialGradient id="rg2" gradientUnits="userSpaceOnUse" cx="390" cy="423" r="629.717">
+  <g clip-path="url(#cp2)">
+    <radialGradient id="rg3" gradientUnits="userSpaceOnUse" cx="390" cy="423" r="629.717">
       <stop offset="0" stop-color="#00e5ff"/>
       <stop offset=".016" stop-color="#00e5ff" stop-opacity=".961"/>
       <stop offset=".032" stop-color="#00e5ff" stop-opacity=".922"/>
@@ -76,8 +81,8 @@
       <stop offset=".984" stop-color="#000" stop-opacity="0"/>
       <stop offset="1" stop-color="#000" stop-opacity="0"/>
     </radialGradient>
-    <rect x="250" y="135" width="700" height="360" fill="url(#rg2)"/>
-    <radialGradient id="rg3" gradientUnits="userSpaceOnUse" cx="810" cy="207" r="629.717">
+    <rect x="250" y="135" width="700" height="360" fill="url(#rg3)"/>
+    <radialGradient id="rg4" gradientUnits="userSpaceOnUse" cx="810" cy="207" r="629.717">
       <stop offset="0" stop-color="#ff3d00"/>
       <stop offset=".016" stop-color="#ff3d00" stop-opacity=".961"/>
       <stop offset=".032" stop-color="#ff3d00" stop-opacity=".922"/>
@@ -143,6 +148,6 @@
       <stop offset=".984" stop-color="#000" stop-opacity="0"/>
       <stop offset="1" stop-color="#000" stop-opacity="0"/>
     </radialGradient>
-    <rect x="250" y="135" width="700" height="360" fill="url(#rg3)"/>
+    <rect x="250" y="135" width="700" height="360" fill="url(#rg4)"/>
   </g>
 </svg>

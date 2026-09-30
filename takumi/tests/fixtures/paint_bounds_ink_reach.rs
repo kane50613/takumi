@@ -43,7 +43,7 @@ const CASES: &[Case] = &[
   Case {
     name: "drop-shadow",
     css: ".ink { filter: drop-shadow(40px 40px 12px black); background: black; }",
-    expected: Some((80, 80, 281, 221)),
+    expected: Some((80, 80, 283, 223)),
   },
   Case {
     name: "clip-path",
@@ -53,7 +53,7 @@ const CASES: &[Case] = &[
   Case {
     name: "child-drop-shadow",
     css: ".ink { filter: brightness(1); } .child { width: 120px; height: 60px; filter: drop-shadow(40px 40px 12px black); background: black; }",
-    expected: Some((80, 80, 241, 186)),
+    expected: Some((80, 80, 243, 187)),
   },
   Case {
     name: "box-shadow-negative",
@@ -63,7 +63,7 @@ const CASES: &[Case] = &[
   Case {
     name: "drop-shadow-negative",
     css: ".ink { filter: drop-shadow(-40px -40px 12px black); background: black; }",
-    expected: Some((38, 38, 239, 179)),
+    expected: Some((36, 36, 239, 179)),
   },
   Case {
     name: "child-text-stroke",

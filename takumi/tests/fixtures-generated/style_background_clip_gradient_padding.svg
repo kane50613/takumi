@@ -4,7 +4,7 @@
     <path d="M487 250h226v130h-226v-130Z"/>
   </clipPath>
   <g clip-path="url(#cp0)">
-    <pattern id="pat1" patternUnits="userSpaceOnUse" x="261" y="120" width="226" height="130">
+    <pattern id="pat1" patternUnits="userSpaceOnUse" x="487" y="250" width="226" height="130">
       <linearGradient id="lg2" gradientUnits="userSpaceOnUse" x1="24" y1="-24" x2="202" y2="154">
         <stop offset="0" stop-color="#667eea"/>
         <stop offset=".016" stop-color="#667de9"/>

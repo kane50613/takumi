@@ -42,7 +42,6 @@
 use std::{mem::take, rc::Rc};
 
 mod atoms;
-mod background;
 mod bands;
 mod counters;
 

@@ -115,8 +115,12 @@ impl ShapedRun {
     if width <= 0.0 {
       return out;
     }
-    // Blink floors every decoration at 1px (`TextDecorationInfo::ResolvedThickness`).
-    let thickness = |value: f32| value.max(1.0);
+    // Blink's `DrawLineAsRect` rounds a line's top to a whole pixel and its thickness down to one,
+    // at least 1px.
+    //
+    // Approximate: the top rounds in the block's border box, where Blink rounds it on the page,
+    // and the ends round outward where Blink antialiases them.
+    let thickness = |value: f32| value.floor().max(1.0);
     let mut emit = |x: f32,
                     span_width: f32,
                     y_offset: f32,
@@ -126,7 +130,7 @@ impl ShapedRun {
       if height <= 0.0 || span_width <= 0.0 {
         return;
       }
-      let matrix = transform * Affine::translation(x, content.y + y_offset);
+      let matrix = transform * Affine::translation(x, (content.y + y_offset + 0.5).floor());
       out.push(DecorationRect {
         width: span_width,
         height,

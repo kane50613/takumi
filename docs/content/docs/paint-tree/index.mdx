@@ -1,11 +1,11 @@
 ---
 title: Paint tree
-description: Get the boxes, images, and shaped text that takumi would paint.
+description: Get the shapes, paints, text runs, and images takumi would paint.
 index: true
 icon: BookOpen
 ---
 
-`takumi-paint` lays out JSX, HTML, or a takumi node tree. It returns drawing data for Canvas, presentation files, and native drawing APIs.
+`takumi-paint` lays out JSX, HTML, or a takumi node tree. It returns what painting it would draw, with every CSS value resolved, for Canvas, presentation files, and native drawing APIs.
 
 ```npm
 npm i takumi-paint @takumi-rs/helpers
@@ -13,26 +13,25 @@ npm i takumi-paint @takumi-rs/helpers
 
 ## Paint JSX
 
-`paint()` returns a `PaintTree`. The tree has a canvas size, a font table, and a root box.
+`paint()` returns a `PaintTree`. `tree.nodes` lists every node in document order.
 
 ```tsx twoslash title="inspect.tsx"
 import { paint } from "takumi-paint";
 
 const tree = await paint(
-  <div id="card" style={{ width: 240, padding: 16 }}>
-    Hello
+  <div id="card" style={{ width: 240, padding: 16, background: "#F7F3EC" }}>
+    Hello <b>world</b>
   </div>,
   { width: 320 },
 );
 
-const card = tree.find("card");
-if (!card) throw new Error("Card was not painted");
+const card = tree.nodes.find((node) => node.type === "box" && node.element?.id === "card");
+console.log(card?.drawables[0]); // { type: "fill", role: "background", shape: { type: "rect", … }, … }
 
-console.log(
-  tree.width,
-  card.contentBox,
-  card.textRuns.map((run) => run.text),
-);
+for (const node of tree.nodes) {
+  if (node.type !== "text") continue;
+  for (const run of node.runs) console.log(run.text, run.element?.tagName, run.font.family);
+}
 ```
 
 The returned lengths are device pixels. Set `devicePixelRatio` to scale CSS lengths during layout.
@@ -41,7 +40,7 @@ The returned lengths are device pixels. Set `devicePixelRatio` to scale CSS leng
 
 | Need                           | Read                                    |
 | ------------------------------ | --------------------------------------- |
-| Draw boxes in order            | [Drawing](/docs/paint-tree/drawing)     |
+| Draw nodes in order            | [Drawing](/docs/paint-tree/drawing)     |
 | Place text or lay it out again | [Text](/docs/paint-tree/text)           |
 | Check options and field types  | [Reference](/docs/paint-tree/reference) |
 

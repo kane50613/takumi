@@ -579,15 +579,89 @@ impl Color {
     )
   }
 
-  /// Mixes `amount` of `target` into the colour, keeping this alpha.
-  pub(crate) fn mix_rgb(self, target: Color, amount: f32) -> Self {
-    let amount = amount.clamp(0.0, 1.0);
-    let inverse = 1.0 - amount;
+  // `dark`, `light`, and `inset_outset` follow Blink, under the notices in LICENSE-CHROMIUM.
+
+  /// The colour darkened as Blink's `Color::Dark` darkens the shadow edge of a 3D border.
+  pub(crate) fn dark(self) -> Self {
+    let v = self.max_channel();
+
+    self.scaled_rgb(if v == 0.0 {
+      0.0
+    } else {
+      ((v - 0.33) / v).max(0.0)
+    })
+  }
+
+  /// The colour lightened as Blink's `Color::Light` lightens the lit edge of a 3D border.
+  pub(crate) fn light(self) -> Self {
+    let v = self.max_channel();
+
+    if v == 0.0 {
+      return Color([84, 84, 84, self.0[3]]);
+    }
+
+    self.scaled_rgb((v + 0.33).min(1.0) / v)
+  }
+
+  /// The colour of one edge of an `inset`, `outset`, `groove` or `ridge` border, as Blink's
+  /// `CalculateInsetOutsetColor` shades it: `darken` picks the shadowed edge.
+  pub(crate) fn inset_outset(self, darken: bool) -> Self {
+    // The relative luminances of rgb(32, 32, 32) and rgb(235, 235, 235).
+    const DARK_LUMINANCE: f32 = 0.014_443_844;
+    const LIGHT_LUMINANCE: f32 = 0.830_77;
+
+    let luminance = self.relative_luminance();
+
+    if luminance <= DARK_LUMINANCE {
+      return if darken {
+        self.light()
+      } else {
+        self.light().light()
+      };
+    }
+    if darken {
+      return self.dark();
+    }
+    if luminance > LIGHT_LUMINANCE {
+      self
+    } else {
+      self.light()
+    }
+  }
+
+  /// The [WCAG relative luminance](https://www.w3.org/TR/WCAG21/#dfn-relative-luminance) of the
+  /// colour, ignoring alpha.
+  fn relative_luminance(self) -> f32 {
+    let linear = |value: u8| {
+      let value = f32::from(value) / 255.0;
+
+      if value <= 0.040_45 {
+        value / 12.92
+      } else {
+        ((value + 0.055) / 1.055).powf(2.4)
+      }
+    };
+
+    0.2126 * linear(self.0[0]) + 0.7152 * linear(self.0[1]) + 0.0722 * linear(self.0[2])
+  }
+
+  /// The largest of the red, green and blue channels, from 0 to 1.
+  fn max_channel(self) -> f32 {
+    f32::from(self.0[0].max(self.0[1]).max(self.0[2])) / 255.0
+  }
+
+  /// Every colour channel multiplied by `factor` and truncated to 8 bits as Blink quantizes them,
+  /// keeping this alpha.
+  fn scaled_rgb(self, factor: f32) -> Self {
+    // Blink's `QuantizeTo8Bit` scales by the float just below 256.
+    const SCALE: f32 = 255.999_98;
+
+    let channel = |value: u8| (f32::from(value) / 255.0 * factor * SCALE) as u8;
 
     Color([
-      (self.0[0] as f32 * inverse + target.0[0] as f32 * amount).round() as u8,
-      (self.0[1] as f32 * inverse + target.0[1] as f32 * amount).round() as u8,
-      (self.0[2] as f32 * inverse + target.0[2] as f32 * amount).round() as u8,
+      channel(self.0[0]),
+      channel(self.0[1]),
+      channel(self.0[2]),
       self.0[3],
     ])
   }
@@ -1253,6 +1327,31 @@ mod tests {
         "linear-gradient(to right, color-mix(in srgb, red, blue), white)"
       )
       .is_ok()
+    );
+  }
+
+  #[test]
+  fn dark_and_light_follow_blink() {
+    assert_eq!(Color::white().dark(), Color([171, 171, 171, 255]));
+    assert_eq!(Color::black().light(), Color([84, 84, 84, 255]));
+    assert_eq!(Color([100, 116, 139, 255]).dark(), Color([39, 45, 55, 255]));
+  }
+
+  #[test]
+  fn a_very_dark_3d_border_lightens_both_edges() {
+    assert_eq!(Color::black().inset_outset(true), Color([84, 84, 84, 255]));
+    assert_eq!(
+      Color::black().inset_outset(false),
+      Color([168, 168, 168, 255])
+    );
+  }
+
+  #[test]
+  fn a_very_light_3d_border_keeps_its_lit_edge() {
+    assert_eq!(Color::white().inset_outset(false), Color::white());
+    assert_eq!(
+      Color::white().inset_outset(true),
+      Color([171, 171, 171, 255])
     );
   }
 }

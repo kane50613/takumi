@@ -268,15 +268,10 @@ impl<'a> From<&'a ColorTile> for PaintSource<'a> {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum MaskCompositeColor {
   SourceOnly,
-  SourceOverColor([u8; 4]),
   ColorOverSource([u8; 4]),
 }
 
 impl MaskCompositeColor {
-  pub(crate) fn source_over_color(color: Color) -> Self {
-    Self::SourceOverColor(premultiply_rgba(Rgba(color.0)))
-  }
-
   pub(crate) fn color_over_source(color: Color) -> Self {
     Self::ColorOverSource(premultiply_rgba(Rgba(color.0)))
   }
@@ -286,11 +281,6 @@ impl MaskCompositeColor {
 pub(super) fn apply_mask_color_mode(src: [u8; 4], color_mode: MaskCompositeColor) -> [u8; 4] {
   match color_mode {
     MaskCompositeColor::SourceOnly => src,
-    MaskCompositeColor::SourceOverColor(color) => {
-      let mut out = color;
-      composite_premultiplied_over(&mut out, src);
-      out
-    }
     MaskCompositeColor::ColorOverSource(color) => {
       let mut out = src;
       composite_premultiplied_over(&mut out, color);

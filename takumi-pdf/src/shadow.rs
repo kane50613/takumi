@@ -1,121 +1,34 @@
-//! `box-shadow` as vector fills.
+//! The blur of a shadow, approximated for PDF, which has no blur operator.
 //!
-//! Everything but the blur is exact: the shadow shape is the border box
-//! offset and spread, and the box itself is cut out with an even-odd fill so
-//! the shadow never paints under an opaque element. The blur is approximated
-//! by stacking bands, since PDF has no blur operator.
-
-use takumi_core::{
-  geometry::{PathCommand, Point as CorePoint, Size},
-  layout::{border::BorderProperties, decoration::ClipBox},
-  shadow::SizedShadow,
-  style::Color,
-};
-
-use crate::{
-  krilla::{
-    paint::{Fill, FillRule},
-    surface::Surface,
-  },
-  paint::{fill_from_rgba, krilla_path},
-};
+//! Approximate: a blurred shadow is a stack of bands, each the shape spread a little further and
+//! a little fainter, so the edge steps through the Gaussian's coverage instead of fading
+//! smoothly. Blink's PDF output rasterizes the blurred mask instead.
 
 /// Bands used to fake one blurred edge. Eight is enough that the steps read as
 /// a gradient at the blur radii interfaces actually use.
-// ponytail: a real Gaussian needs a raster pass or a soft mask; raise this or
-// rasterize the shadow layer if someone lands a design with a huge blur.
 const BLUR_BANDS: usize = 8;
 
-/// Paints the outer shadows of a box, furthest layer first.
-pub(crate) fn emit_outer_shadows(
-  shadows: &[SizedShadow],
-  border: &BorderProperties,
-  size: Size<f32>,
-  origin: CorePoint<f32>,
-  surface: &mut Surface,
-) {
-  let mut element = Vec::with_capacity(BorderProperties::PATH_COMMANDS_AMOUNT);
-
-  border.append_mask_commands(&mut element, size, CorePoint::ZERO);
-
-  for shadow in shadows.iter().rev() {
-    for band in Band::of(shadow) {
-      let mut commands = Vec::with_capacity(BorderProperties::PATH_COMMANDS_AMOUNT * 2);
-      let (shape, spread_size) = border.outset_shadow_box(size, band.spread);
-
-      shape.append_mask_commands(
-        &mut commands,
-        spread_size,
-        CorePoint {
-          x: shadow.offset_x - band.spread,
-          y: shadow.offset_y - band.spread,
-        },
-      );
-      // The element's own shape, unshifted, so the even-odd fill leaves a ring.
-      commands.extend_from_slice(&element);
-      fill(&commands, shadow.color, band.alpha, origin, surface);
-    }
-  }
-}
-
-/// Paints the inset shadows of a box, on top of its background. CSS draws
-/// these inside the padding box, so a border neither carries shadow paint nor
-/// widens it.
-pub(crate) fn emit_inset_shadows(
-  shadows: &[SizedShadow],
-  clip: &ClipBox,
-  origin: CorePoint<f32>,
-  surface: &mut Surface,
-) {
-  let origin = origin + clip.offset;
-
-  for shadow in shadows.iter().rev() {
-    for band in Band::of(shadow) {
-      let mut commands = Vec::with_capacity(BorderProperties::PATH_COMMANDS_AMOUNT * 2);
-
-      // The filled region is the padding box minus the hole the shadow casts
-      // into it, so a positive spread shrinks the hole.
-      clip
-        .border
-        .append_mask_commands(&mut commands, clip.size, CorePoint::ZERO);
-
-      let hole = ClipBox::inset_shadow_hole(
-        clip.border,
-        clip.size,
-        band.spread,
-        CorePoint {
-          x: shadow.offset_x,
-          y: shadow.offset_y,
-        },
-      );
-
-      hole
-        .border
-        .append_mask_commands(&mut commands, hole.size, hole.offset);
-      fill(&commands, shadow.color, band.alpha, origin, surface);
-    }
-  }
-}
-
-/// One drawn ring of a shadow: how far it spreads, and how opaque it is.
-struct Band {
-  spread: f32,
-  alpha: f32,
+/// One drawn copy of a shadow's shape: how much further it spreads, and how opaque it is.
+pub(crate) struct Band {
+  pub(crate) spread: f32,
+  pub(crate) alpha: f32,
 }
 
 impl Band {
   /// A sharp shadow is one band at full alpha. A blurred one is a stack from the
   /// outermost, faintest band inward, with each band's alpha chosen so the fills
   /// composite to the coverage the blur would have had at that distance.
-  fn of(shadow: &SizedShadow) -> Vec<Self> {
-    if shadow.blur_radius <= 0.0 {
-      return vec![Band {
-        spread: shadow.spread_radius,
-        alpha: 1.0,
-      }];
+  pub(crate) fn of(blur_radius: f32) -> Vec<Self> {
+    let core = Band {
+      spread: 0.0,
+      alpha: 1.0,
+    };
+
+    if blur_radius <= 0.0 {
+      return vec![core];
     }
-    // The shifted, unblurred shape is fully opaque; the blur only fades outward
-    // from its edge, so that core is the last band drawn.
+    // The unblurred shape is fully opaque; the blur only fades outward from its
+    // edge, so that core is the last band drawn.
     let mut bands = Vec::with_capacity(BLUR_BANDS + 1);
     let mut covered = 0.0;
 
@@ -128,14 +41,11 @@ impl Band {
 
       covered = target;
       bands.push(Band {
-        spread: shadow.spread_radius + shadow.blur_radius * (1.0 - t),
+        spread: blur_radius * (1.0 - t),
         alpha,
       });
     }
-    bands.push(Band {
-      spread: shadow.spread_radius,
-      alpha: 1.0,
-    });
+    bands.push(core);
     bands
   }
 }
@@ -170,46 +80,17 @@ fn erfc(x: f32) -> f32 {
   1.0 - sign * erf
 }
 
-fn fill(
-  commands: &[PathCommand],
-  color: Color,
-  alpha: f32,
-  origin: CorePoint<f32>,
-  surface: &mut Surface,
-) {
-  let Some(path) = krilla_path(commands, origin) else {
-    return;
-  };
-
-  // The band's own opacity multiplies the color's alpha, so a translucent
-  // shadow stays translucent and a fully transparent one paints nothing.
-  surface.set_fill(Some(Fill {
-    rule: FillRule::EvenOdd,
-    ..fill_from_rgba(color.0, alpha)
-  }));
-  surface.draw_path(&path);
-}
-
 #[cfg(test)]
 mod tests {
-  use takumi_core::{shadow::SizedShadow, style::Color};
-
   use super::{Band, coverage};
 
   #[test]
   fn a_blurred_shadow_has_an_opaque_core() {
-    let shadow = SizedShadow {
-      offset_x: 0.0,
-      offset_y: 0.0,
-      blur_radius: 12.0,
-      spread_radius: 2.0,
-      color: Color([0, 0, 0, 255]),
-    };
-    let bands = Band::of(&shadow);
+    let bands = Band::of(12.0);
     let core = bands.last().expect("a band");
 
     assert_eq!(core.alpha, 1.0);
-    assert_eq!(core.spread, shadow.spread_radius);
+    assert_eq!(core.spread, 0.0);
   }
 
   #[test]

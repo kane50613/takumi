@@ -30,10 +30,10 @@ pub mod keyframes;
 pub(crate) mod matching;
 /// Deterministic float math shared by the painting paths.
 pub mod math;
-/// The seam between deciding what to paint and painting it.
 #[cfg(feature = "paint-tree")]
 pub mod paint_tree;
 pub mod painter;
+pub mod path_data;
 /// Font and image resource management.
 pub mod resources;
 pub mod scene;
@@ -64,7 +64,7 @@ pub mod paint {
   pub use crate::style::properties::{
     conic_gradient::ConicGradientTile,
     filter::compose_transfer_table,
-    gradient_utils::{ColorLut, GradientOverlayTile},
+    gradient_utils::{ColorLut, GradientOverlayTile, SrgbStop},
     linear_gradient::{LinearGradientFastPathKind, LinearGradientGeometry, LinearGradientTile},
     radial_gradient::{RadialGradientGeometry, RadialGradientTile},
   };

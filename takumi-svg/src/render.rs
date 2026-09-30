@@ -6,36 +6,40 @@ use takumi_core::{
   Fonts,
   context::RenderContext,
   error::Result,
-  geometry::{Point, Size},
+  font_style::SizedFontStyle,
+  geometry::{Point, Rect},
   layout::{
-    border::{BorderProperties, BorderSide, PaintedSide},
-    decoration::{ClipBox, OutlineGeometry},
-    inline::{InlineBoxItem, VisualInlineBox},
+    background_image_geometry::FillLayers,
+    border::BorderProperties,
+    decoration::ClipBox,
+    inline::{InlineBoxItem, PositionedInlineRun, VisualInlineBox},
     inline_box::{InlineBoxPaint, resolve_inline_box},
     node::{ImageData, Node, NodeKind},
     tree::RenderNode,
   },
   painter::{
-    BoxFrame, BoxPainter, FillShape, OverflowClip, PaintDevice, StrokeStyle, paint_border,
+    BackgroundClipArea, BoxFrame, BoxPainter, FillShape, GlyphDevice, GlyphFill, OverflowClip,
+    PaintDevice, PendingOutline, ShadowShape, StrokeStyle, UNBOUNDED,
   },
+  path_data::{edges_path_data, path_data},
   resources::image::ImageSource,
   scene::Scene,
+  shadow::SizedShadow,
   style::{
-    Affine, BackgroundClip, BackgroundImage, BasicShape, BlendMode, BorderStyle, Color,
-    ComputedStyle, FillRule, FontFamily, Isolation, Lang, ShapeRadius, Sides, SizingContext,
-    SpacePair, StyleSheet, ToCss,
+    Affine, BackgroundImage, BlendMode, Color, ComputedStyle, FillRule, FontFamily, Isolation,
+    Lang, SizingContext, StyleSheet, ToCss,
   },
   viewport::Viewport,
 };
 use typed_builder::TypedBuilder;
 
 use crate::{
-  APPROX_CHARS_PER_NUMBER, Frame, GroupToken, Num, Rgba, SvgDocument,
-  box_model::{PathData, edges_path_data, path_data, rounded_rect_path_data, shape_path_data},
+  Frame, GlyphStroke, GroupToken, Rgba, SvgDocument,
+  box_model::{rounded_rect_path_data, shape_path_data},
   gradient::LayerEmitter,
   image::emit_image,
   scene_emit::SceneEmitter,
-  text::{emit_inline_content, emit_text},
+  text::{emit_clip_text_run, emit_inline_content, emit_run_glyphs, emit_text, run_stroke},
 };
 
 /// Inputs for [`render`], built with [`SvgOptions::builder`].
@@ -159,75 +163,72 @@ impl<'n> PlacedBox<'n> {
     )
   }
 
-  /// The clip path `d` and fill rule for the `background-clip` area.
-  fn background_clip_path_data(&self) -> Option<(String, FillRule)> {
-    let border = self.border();
-
-    match self.node.context.style.background_clip {
-      BackgroundClip::PaddingBox => Some((self.padding_box_path_data(), FillRule::NonZero)),
-      BackgroundClip::ContentBox => Some((
-        shape_path_data(
-          &ClipBox::content_box(*border, self.frame.layout).into(),
-          self.frame.origin,
-        ),
+  /// The clip path `d` and fill rule for a background's `clip` area. A square border box needs
+  /// none.
+  fn background_clip_path_data(&self, clip: BackgroundClipArea) -> Option<(String, FillRule)> {
+    match clip {
+      BackgroundClipArea::BorderBox(border) => {
+        (!border.is_zero()).then(|| (self.border_box_path_data(), FillRule::NonZero))
+      }
+      BackgroundClipArea::Inner(clip) => Some((
+        shape_path_data(&clip.into(), self.frame.origin),
         FillRule::NonZero,
       )),
-      BackgroundClip::BorderArea => {
+      BackgroundClipArea::BorderArea(_) => {
         // The border ring: the (rounded) border-box with the (rounded) padding box
         // punched out, drawn even-odd so the background shows only under the border.
         let outer = self.border_box_path_data();
         let inner = self.padding_box_path_data();
         Some((format!("{outer}{inner}"), FillRule::EvenOdd))
       }
-      // `text` is handled separately by the text path; anything else clips to the
-      // border box.
-      _ => (!border.is_zero()).then(|| (self.border_box_path_data(), FillRule::NonZero)),
+      BackgroundClipArea::Text => None,
     }
   }
 
   /// Emits the element's background (color then image layers) clipped to the
   /// region selected by `background-clip`.
   fn emit_background(&self, doc: &mut SvgDocument) -> io::Result<()> {
-    let context = &self.node.context;
-    let style = &context.style;
-    if style.background_clip == BackgroundClip::Text {
+    let background = self.painter.background();
+    if matches!(background.clip, BackgroundClipArea::Text) {
       return Ok(());
     }
+    // A blending layer mixes with the layers and color beneath it and nothing behind the box.
+    let isolate = background
+      .layers
+      .iter()
+      .any(|layer| layer.blend_mode != BlendMode::Normal)
+      .then(|| doc.begin_isolate_group())
+      .transpose()?;
 
     // The colour fill carries the clip shape itself, so it goes outside the
     // group. Only the image layers need the clip.
-    if style.background_color.resolve(context.current_color).0[3] != 0 {
-      let mut device = DocumentDevice::new(doc);
-
-      self
-        .painter
-        .background_color(self.frame.origin, &mut device);
-      device.finish()?;
+    if background.color.is_some() {
+      DocumentDevice::paint(doc, |device| {
+        self.painter.background_color(self.frame.origin, device);
+      })?;
     }
 
-    let Some(images) = style
-      .background_image
-      .as_deref()
-      .filter(|images| !images.is_empty())
-    else {
+    if background.layers.is_empty() {
       return Ok(());
-    };
+    }
     let group = self
-      .background_clip_path_data()
+      .background_clip_path_data(background.clip)
       .map(|(data, rule)| {
         let clip = doc.clip_path(&data, rule, None)?;
 
         doc.begin_group(Affine::IDENTITY, 1.0, Some(&clip), None)
       })
       .transpose()?;
-
-    LayerEmitter::new(context, doc).background_images(
-      images,
-      Frame::background_origin_box(self.frame, style.background_origin),
+    LayerEmitter::new(&self.node.context, doc).layers(
+      &background.layers,
+      Frame::origin_box(self.frame, background.origin),
       Frame::border_box(self.frame),
     )?;
     if let Some(group) = group {
       doc.end_group(group)?;
+    }
+    if let Some(isolate) = isolate {
+      doc.end_group(isolate)?;
     }
     Ok(())
   }
@@ -250,176 +251,44 @@ impl<'n> PlacedBox<'n> {
     let (token, reference) = doc.begin_mask()?;
     let border_box = Frame::border_box(self.frame);
 
-    LayerEmitter::new(&self.node.context, doc).image_layers(
-      images,
-      &style.mask_size,
-      &style.mask_position,
-      &style.mask_repeat,
-      border_box,
-      border_box,
-    )?;
+    let layers = FillLayers::mask(style).resolve(images, size, &self.node.context);
+
+    LayerEmitter::new(&self.node.context, doc).layers(&layers, border_box, border_box)?;
     doc.end_mask(token)?;
     Ok(Some(doc.begin_masked_group(&reference)?))
   }
 
-  /// Resolves `clip-path` against the border box and opens a clip group wrapping
-  /// the element. Mirrors the raster backend's `render_clip_shape_mask` geometry.
+  /// Opens a group clipping the element and its descendants to its `clip-path`.
   pub(crate) fn begin_clip_path_group(
     &self,
     doc: &mut SvgDocument,
   ) -> io::Result<Option<GroupToken>> {
-    let style = &self.node.context.style;
-    let Some(shape) = style.clip_path.as_ref() else {
+    let Some(shape) = self.painter.clip_path() else {
       return Ok(None);
     };
-    let sizing = &self.node.context.sizing;
-    let Point { x, y } = self.frame.origin;
-    let size = self.frame.layout.size;
-    let clip = match shape {
-      BasicShape::Ellipse(ellipse) => {
-        let cx = x + ellipse.position.0.x.to_px(sizing, size.width);
-        let cy = y + ellipse.position.0.y.to_px(sizing, size.height);
-        // closest/farthest-side measure each axis from the center to BOTH of its
-        // sides, not just the top-left corner.
-        let rx = resolve_shape_radius(
-          ellipse.radius_x,
-          cx - x,
-          x + size.width - cx,
-          sizing,
-          size.width,
-        );
-        let ry = resolve_shape_radius(
-          ellipse.radius_y,
-          cy - y,
-          y + size.height - cy,
-          sizing,
-          size.height,
-        );
-        doc.clip_ellipse(cx, cy, rx, ry)?
-      }
-      BasicShape::Inset(inset) => {
-        let [top_l, right_l, bottom_l, left_l] = inset.inset.0;
-        let top = top_l.to_px(sizing, size.height);
-        let right = right_l.to_px(sizing, size.width);
-        let bottom = bottom_l.to_px(sizing, size.height);
-        let left = left_l.to_px(sizing, size.width);
-        let inner = Size {
-          width: (size.width - left - right).max(0.0),
-          height: (size.height - top - bottom).max(0.0),
-        };
-        let mut border = BorderProperties::default();
-        if let Some(radius) = inset.border_radius {
-          border.radius = Sides(
-            radius
-              .0
-              .map(|corner| SpacePair::from_single(corner.to_px(sizing, size.width))),
-          );
-        }
-        let clip = ClipBox {
-          border,
-          size: inner,
-          offset: Point { x: left, y: top },
-        };
-        doc.clip_path(
-          &shape_path_data(&clip.into(), self.frame.origin),
-          FillRule::NonZero,
-          None,
-        )?
-      }
-      BasicShape::Polygon(polygon) => {
-        if polygon.coordinates.is_empty() {
-          return Ok(None);
-        }
-        let mut data =
-          PathData::with_capacity(polygon.coordinates.len() * (2 * APPROX_CHARS_PER_NUMBER + 1));
-        for (index, coord) in polygon.coordinates.iter().enumerate() {
-          let px = x + coord.x.to_px(sizing, size.width);
-          let py = y + coord.y.to_px(sizing, size.height);
-          data.command(if index == 0 { b'M' } else { b'L' });
-          data.pair(px, py);
-        }
-        data.close();
-        let rule = polygon.fill_rule.unwrap_or(style.clip_rule);
+    let clip = doc.clip_shape(&shape, self.frame.translation())?;
 
-        doc.clip_path(&data.into_string(), rule, None)?
-      }
-      BasicShape::Path(path) => {
-        let rule = path.fill_rule.unwrap_or(style.clip_rule);
-        // Inner scale lifts CSS-px path() coords to device space; translate offsets after.
-        let [tx, ty, scale] = [x, y, sizing.to_device(1.0)].map(Num);
-        let transform = format!("translate({tx} {ty}) scale({scale})");
-        doc.clip_path(&path.path, rule, Some(&transform))?
-      }
-      _ => return Ok(None),
-    };
-    let group = doc.begin_group(Affine::IDENTITY, 1.0, Some(&clip), None)?;
-
-    Ok(Some(group))
+    doc
+      .begin_group(Affine::IDENTITY, 1.0, Some(&clip), None)
+      .map(Some)
   }
 
-  /// Emits outset `box-shadow`s behind the element as offset, blurred rects.
+  /// Emits the outer `box-shadow`s behind the element.
   fn emit_box_shadows(&self, doc: &mut SvgDocument) -> io::Result<()> {
-    let BoxFrame { layout, origin } = self.frame;
-
-    for resolved in self.painter.shadows().outer {
-      // Shadow shape = the element's rounded border-box, radii expanded by the
-      // spread (shared core geometry with the raster backend).
-      let (shadow, spread_size) = self
-        .border()
-        .outset_shadow_box(layout.size, resolved.spread_radius);
-      if spread_size.width <= 0.0 || spread_size.height <= 0.0 {
-        continue;
-      }
-
-      let shadow_origin = Point {
-        x: origin.x + resolved.offset_x - resolved.spread_radius,
-        y: origin.y + resolved.offset_y - resolved.spread_radius,
-      };
-      let fill = Rgba(resolved.color.0);
-      let data = rounded_rect_path_data(&shadow, spread_size, shadow_origin);
-
-      doc.with_blur(resolved.blur_radius, |doc| {
-        doc.fill_path(&data, fill, FillRule::NonZero)
-      })?;
-    }
-    Ok(())
+    DocumentDevice::paint(doc, |device| {
+      self
+        .painter
+        .paint_normal_box_shadows(self.frame.origin, device);
+    })
   }
 
-  /// Emits inset `box-shadow`s as a blurred ring inside the element's rounded
-  /// padding box.
+  /// Emits the inset `box-shadow`s inside the element's padding box.
   fn emit_inset_box_shadows(&self, doc: &mut SvgDocument) -> io::Result<()> {
-    let BoxFrame { layout, origin } = self.frame;
-    if layout.size.width <= 0.0 || layout.size.height <= 0.0 {
-      return Ok(());
-    }
-    let padding = ClipBox::padding_box(*self.border(), layout);
-    let outer = shape_path_data(&padding.into(), origin);
-    for resolved in self.painter.shadows().inset {
-      let fill = Rgba(resolved.color.0);
-
-      // The shadow fills the padding box minus the hole it leaves uncovered
-      // (shared core geometry with the raster backend), drawn even-odd, blurred,
-      // and clipped to the rounded padding box so the blur stays inside.
-      let hole = ClipBox::inset_shadow_hole(
-        padding.border,
-        padding.size,
-        resolved.spread_radius,
-        Point {
-          x: resolved.offset_x,
-          y: resolved.offset_y,
-        },
-      );
-      let ring = format!(
-        "{outer}{}",
-        shape_path_data(&hole.into(), origin + padding.offset)
-      );
-      let clip_group = doc.begin_clipped_group(&outer)?;
-      doc.with_blur(resolved.blur_radius, |doc| {
-        doc.fill_path(&ring, fill, FillRule::EvenOdd)
-      })?;
-      doc.end_group(clip_group)?;
-    }
-    Ok(())
+    DocumentDevice::paint(doc, |device| {
+      self
+        .painter
+        .paint_inset_box_shadows(self.frame.origin, device);
+    })
   }
 
   /// Emits the node's own content: its inline run set, or its replaced
@@ -447,15 +316,7 @@ impl<'n> PlacedBox<'n> {
 
   /// Emits an image node's content into its content box.
   fn emit_image(&self, image: &ImageData, doc: &mut SvgDocument) -> io::Result<()> {
-    let context = &self.node.context;
-    let content = Frame::content_box(self.frame);
-    if self.border().is_zero() {
-      return emit_image(image, context, content, doc);
-    }
-
-    let group = doc.begin_clipped_group(&self.padding_box_path_data())?;
-    emit_image(image, context, content, doc)?;
-    doc.end_group(group)
+    emit_image(image, &self.painter, self.frame, doc)
   }
 }
 
@@ -524,12 +385,9 @@ impl BoxChrome {
     // the border draws over the ring, as it does in Blink.
     placed.emit_background(doc)?;
     placed.emit_inset_box_shadows(doc)?;
-    emit_borders(
-      placed.border(),
-      placed.frame.layout.size,
-      placed.frame.origin,
-      doc,
-    )?;
+    DocumentDevice::paint(doc, |device| {
+      placed.painter.paint_border(placed.frame.origin, device);
+    })?;
 
     // Children, clipped to the (rounded) padding box when overflow is not visible.
     let child_group = placed
@@ -538,7 +396,7 @@ impl BoxChrome {
       .transpose()?;
 
     Ok(Self {
-      outline: PendingOutline::new(placed),
+      outline: placed.painter.pending_outline(placed.frame.origin),
       blend,
       isolate,
       mask,
@@ -559,7 +417,7 @@ impl BoxChrome {
       doc.end_group(group)?;
     }
     if let Some(pending) = self.outline {
-      pending.emit(doc)?;
+      DocumentDevice::paint(doc, |device| pending.paint(device))?;
     }
     let groups = [self.clip_group, self.outer];
     for group in groups.into_iter().flatten() {
@@ -574,69 +432,224 @@ impl BoxChrome {
   }
 }
 
-/// Resolves a [`ShapeRadius`] to pixels.
-fn resolve_shape_radius(
-  radius: ShapeRadius,
-  near: f32,
-  far: f32,
-  sizing: &SizingContext,
-  full: f32,
-) -> f32 {
-  match radius {
-    ShapeRadius::ClosestSide => near.min(far),
-    ShapeRadius::FarthestSide => near.max(far),
-    ShapeRadius::Length(length) => length.to_px(sizing, full),
-  }
-}
-
 /// A [`PaintDevice`] writing into an [`SvgDocument`], keeping the first write error.
 pub(crate) struct DocumentDevice<'d> {
   doc: &'d mut SvgDocument,
+  groups: Vec<GroupToken>,
+  /// The shadow every draw becomes while one is open: its colour and offset.
+  shadow: Option<(Color, Point<f32>)>,
+  /// The box whose background `background-clip: text` glyphs show.
+  text_background: Option<&'d RenderContext>,
   error: Option<io::Error>,
 }
 
 impl<'d> DocumentDevice<'d> {
   pub(crate) fn new(doc: &'d mut SvgDocument) -> Self {
-    Self { doc, error: None }
+    Self {
+      doc,
+      groups: Vec::new(),
+      shadow: None,
+      text_background: None,
+      error: None,
+    }
   }
 
   /// Surfaces the first write error.
   pub(crate) fn finish(self) -> io::Result<()> {
     self.error.map_or(Ok(()), Err)
   }
-}
 
-impl PaintDevice for DocumentDevice<'_> {
-  fn fill_shape(&mut self, shape: &FillShape, color: Color, transform: Affine) {
+  /// Runs `paint` against `doc`, surfacing the first write error.
+  pub(crate) fn paint(doc: &'d mut SvgDocument, paint: impl FnOnce(&mut Self)) -> io::Result<()> {
+    let mut device = Self::new(doc);
+
+    paint(&mut device);
+    device.finish()
+  }
+
+  /// [`DocumentDevice::paint`] for the text of the box `context` paints, whose background shows
+  /// through `background-clip: text` glyphs.
+  pub(crate) fn paint_text(
+    doc: &'d mut SvgDocument,
+    context: &'d RenderContext,
+    paint: impl FnOnce(&mut Self),
+  ) -> io::Result<()> {
+    let mut device = Self::new(doc);
+
+    device.text_background = Some(context);
+    paint(&mut device);
+    device.finish()
+  }
+
+  /// Runs `write` against the document unless an earlier write failed, keeping its error.
+  pub(crate) fn write(&mut self, write: impl FnOnce(&mut SvgDocument) -> io::Result<()>) {
     if self.error.is_some() {
       return;
     }
-    let result = match shape {
-      FillShape::Rect(size) if transform.only_translation() => self.doc.rect(
-        Frame::new(transform.x, transform.y, size.width, size.height),
-        Rgba(color.0),
-      ),
-      _ => {
-        let data = path_data(&shape.to_commands(), transform);
-
-        self.doc.fill_path(&data, Rgba(color.0), shape.rule())
-      }
-    };
-
-    if let Err(error) = result {
+    if let Err(error) = write(self.doc) {
       self.error = Some(error);
     }
   }
 
-  fn stroke_shape(&mut self, shape: &FillShape, stroke: &StrokeStyle, transform: Affine) {
+  /// Opens the group `open` writes, keeping the first write error.
+  fn open_group(&mut self, open: impl FnOnce(&mut SvgDocument) -> io::Result<GroupToken>) {
     if self.error.is_some() {
       return;
     }
-    let data = path_data(&shape.to_commands(), transform);
 
-    if let Err(error) = self.doc.stroke_path(&data, stroke) {
-      self.error = Some(error);
+    match open(self.doc) {
+      Ok(group) => self.groups.push(group),
+      Err(error) => self.error = Some(error),
     }
+  }
+
+  /// Closes the most recent group, keeping the first write error.
+  fn close_group(&mut self) {
+    if let Some(group) = self.groups.pop() {
+      self.write(|doc| doc.end_group(group));
+    }
+  }
+
+  /// Opens a group clipped to `data`.
+  fn begin_clip(&mut self, data: &str, rule: FillRule) {
+    self.open_group(|doc| {
+      let clip = doc.clip_path(data, rule, None)?;
+
+      doc.begin_group(Affine::IDENTITY, 1.0, Some(&clip), None)
+    });
+  }
+
+  /// `color` and `transform`, or the open shadow's colour and `transform` moved by its offset.
+  fn shadowed(&self, color: Color, transform: Affine) -> (Color, Affine) {
+    match self.shadow {
+      Some((shadow, offset)) => (shadow, Affine::translation(offset.x, offset.y) * transform),
+      None => (color, transform),
+    }
+  }
+}
+
+impl PaintDevice for DocumentDevice<'_> {
+  fn fill_shape(&mut self, shape: &FillShape, color: Color, transform: Affine) {
+    let (color, transform) = self.shadowed(color, transform);
+
+    self.write(|doc| match shape {
+      FillShape::Rect(size) if transform.only_translation() => doc.rect(
+        Frame::new(transform.x, transform.y, size.width, size.height),
+        Rgba(color.0),
+      ),
+      _ => doc.fill_path(
+        &path_data(&shape.to_commands(), transform),
+        Rgba(color.0),
+        shape.rule(),
+      ),
+    });
+  }
+
+  fn stroke_shape(&mut self, shape: &FillShape, stroke: &StrokeStyle, transform: Affine) {
+    let (color, transform) = self.shadowed(stroke.color, transform);
+    let stroke = StrokeStyle { color, ..*stroke };
+
+    self.write(|doc| doc.stroke_path(&path_data(&shape.to_commands(), transform), &stroke));
+  }
+
+  fn push_clip(&mut self, shape: &FillShape, transform: Affine) {
+    self.open_group(|doc| {
+      let clip = doc.clip_shape(shape, transform)?;
+
+      doc.begin_group(Affine::IDENTITY, 1.0, Some(&clip), None)
+    });
+  }
+
+  fn push_clip_out(&mut self, shape: &FillShape, transform: Affine) {
+    let everywhere = edges_path_data(Rect {
+      left: -UNBOUNDED,
+      top: -UNBOUNDED,
+      right: UNBOUNDED,
+      bottom: UNBOUNDED,
+    });
+    let data = format!("{everywhere}{}", path_data(&shape.to_commands(), transform));
+
+    self.begin_clip(&data, FillRule::EvenOdd);
+  }
+
+  fn pop_clip(&mut self) {
+    self.close_group();
+  }
+
+  fn begin_layer(&mut self, opacity: f32) {
+    self.open_group(|doc| doc.begin_group(Affine::IDENTITY, opacity, None, None));
+  }
+
+  fn end_layer(&mut self) {
+    self.close_group();
+  }
+
+  fn fill_shadow(&mut self, shape: &ShadowShape, shadow: &SizedShadow, transform: Affine) {
+    let fill = shape.fill_shape();
+    let data = path_data(
+      &fill.to_commands(),
+      Affine::translation(shadow.offset_x, shadow.offset_y) * transform,
+    );
+
+    self.write(|doc| {
+      doc.with_blur(shadow.blur_radius, |doc| {
+        doc.fill_path(&data, Rgba(shadow.color.0), fill.rule())
+      })
+    });
+  }
+}
+
+impl GlyphDevice for DocumentDevice<'_> {
+  fn begin_shadow(&mut self, shadow: &SizedShadow) {
+    self.open_group(|doc| {
+      let filter = (shadow.blur_radius > 0.0)
+        .then(|| doc.blur_filter(shadow.blur_radius / 2.0))
+        .transpose()?;
+
+      doc.begin_group(Affine::IDENTITY, 1.0, None, filter.as_deref())
+    });
+    self.shadow = Some((
+      shadow.color,
+      Point {
+        x: shadow.offset_x,
+        y: shadow.offset_y,
+      },
+    ));
+  }
+
+  fn end_shadow(&mut self) {
+    self.shadow = None;
+    self.close_group();
+  }
+
+  fn draw_glyph_run(
+    &mut self,
+    run: &PositionedInlineRun,
+    style: &SizedFontStyle,
+    fill: GlyphFill,
+    frame: BoxFrame,
+  ) {
+    let stroke = run_stroke(&run.glyph_run, style);
+
+    if let Some((color, offset)) = self.shadow {
+      let color = Rgba(color.0);
+      let stroke = stroke.map(|stroke| GlyphStroke { color, ..stroke });
+
+      return self
+        .write(|doc| emit_run_glyphs(run, style, frame.shifted(offset), Some(color), stroke, doc));
+    }
+
+    let background = self
+      .text_background
+      .filter(|_| fill == GlyphFill::Background);
+
+    self.write(|doc| {
+      if let Some(context) = background {
+        emit_clip_text_run(run, style, context, frame, doc)?;
+      }
+
+      emit_run_glyphs(run, style, frame, None, stroke, doc)
+    });
   }
 }
 
@@ -670,168 +683,6 @@ pub(crate) fn emit_inline_box(
       placed.emit_replaced_content(doc)?;
       chrome.close(doc)
     }
-  }
-}
-
-/// Emits a border's rings at `origin`, reusing takumi-core's `BorderProperties` geometry.
-fn emit_borders(
-  border: &BorderProperties,
-  size: Size<f32>,
-  origin: Point<f32>,
-  doc: &mut SvgDocument,
-) -> io::Result<()> {
-  if !border.has_visible_sides() {
-    return Ok(());
-  }
-
-  let transform = Affine::translation(origin.x, origin.y);
-  let mut device = DocumentDevice::new(doc);
-
-  if paint_border(border, size, origin, &mut device) {
-    return device.finish();
-  }
-
-  let mut sides = border.painted_sides().peekable();
-
-  if sides.peek().is_none() {
-    return Ok(());
-  }
-  // Mixed per-side styles/colors: clip to the ring; fill solid sides as their
-  // diagonal-split polygon and stroke dashed/dotted sides along their centerline.
-  // A collapsed border's sides are squared rectangles already inside the ring,
-  // so the clip only adds an antialiased edge that leaks the background where
-  // two cells meet. Patterned sides still need it to trim their centerlines.
-  let patterned = border
-    .painted_sides()
-    .any(|side| matches!(side.style, BorderStyle::Dashed | BorderStyle::Dotted));
-  let clip = if border.collapsed && !patterned {
-    None
-  } else {
-    let ring = FillShape::border_ring(border, size);
-
-    Some(doc.clip_path(
-      &path_data(&ring.to_commands(), transform),
-      ring.rule(),
-      None,
-    )?)
-  };
-  let group = doc.begin_group(Affine::IDENTITY, 1.0, clip.as_deref(), None)?;
-  for side in sides {
-    match side.style {
-      BorderStyle::Dashed | BorderStyle::Dotted => {
-        emit_side_pattern(border, side, size, transform, doc)?;
-      }
-      _ => {
-        for band in border.side_bands(side) {
-          let mut strip = *border;
-
-          strip.width = band.width;
-          strip.expand_by(band.inset.map(|value| -value));
-
-          let mut polygon = Vec::new();
-          strip.append_side_clip_polygon_commands_at(
-            side.side,
-            &mut polygon,
-            size.inset(band.inset),
-            band.inset.top_left(),
-          );
-          doc.fill_path(
-            &path_data(&polygon, transform),
-            Rgba(band.color.0),
-            FillRule::NonZero,
-          )?;
-        }
-      }
-    }
-  }
-  doc.end_group(group)
-}
-
-/// Strokes one dashed/dotted border side along its centerline.
-fn emit_side_pattern(
-  border: &BorderProperties,
-  side: PaintedSide,
-  size: Size<f32>,
-  transform: Affine,
-  doc: &mut SvgDocument,
-) -> io::Result<()> {
-  let (half_top, half_right, half_bottom, half_left) = (
-    border.width.top / 2.0,
-    border.width.right / 2.0,
-    border.width.bottom / 2.0,
-    border.width.left / 2.0,
-  );
-  let ((x0, y0), (x1, y1)) = match side.side {
-    BorderSide::Top => ((half_left, half_top), (size.width - half_right, half_top)),
-    BorderSide::Right => (
-      (size.width - half_right, half_top),
-      (size.width - half_right, size.height - half_bottom),
-    ),
-    BorderSide::Bottom => (
-      (half_left, size.height - half_bottom),
-      (size.width - half_right, size.height - half_bottom),
-    ),
-    BorderSide::Left => (
-      (half_left, half_top),
-      (half_left, size.height - half_bottom),
-    ),
-  };
-  let [a, b, c, d, e, f] = transform.to_cols_array();
-  let map = |px: f32, py: f32| (a * px + c * py + e, b * px + d * py + f);
-  let (mx0, my0) = map(x0, y0);
-  let (mx1, my1) = map(x1, y1);
-  let mut path = PathData::with_capacity(4 * APPROX_CHARS_PER_NUMBER);
-  path.command(b'M');
-  path.pair(mx0, my0);
-  path.command(b'L');
-  path.pair(mx1, my1);
-  let length = ((x1 - x0).powi(2) + (y1 - y0).powi(2)).sqrt();
-  let dash = side.style.dash_pattern(side.width, length, false);
-
-  doc.stroke_path(
-    &path.into_string(),
-    &StrokeStyle {
-      color: side.color,
-      width: side.width,
-      dash: dash.map(|dash| dash.intervals),
-      round_cap: dash.is_some_and(|dash| dash.round_cap),
-    },
-  )
-}
-
-/// A box's CSS `outline`, deferred until its content is painted.
-pub(crate) struct PendingOutline {
-  outline: OutlineGeometry,
-  origin: Point<f32>,
-}
-
-impl PendingOutline {
-  fn new(placed: &PlacedBox) -> Option<Self> {
-    let context = &placed.node.context;
-    let color = context.style.outline_color.resolve(context.current_color);
-
-    if color.0[3] == 0 {
-      return None;
-    }
-
-    Some(Self {
-      outline: placed.painter.outline()?,
-      origin: placed.frame.origin,
-    })
-  }
-
-  /// Paints the outline as a ring around the border box, grown by
-  /// `outline-offset + outline-width`.
-  pub(crate) fn emit(&self, doc: &mut SvgDocument) -> io::Result<()> {
-    emit_borders(
-      &self.outline.border,
-      self.outline.size,
-      Point {
-        x: self.origin.x - self.outline.grow,
-        y: self.origin.y - self.outline.grow,
-      },
-      doc,
-    )
   }
 }
 

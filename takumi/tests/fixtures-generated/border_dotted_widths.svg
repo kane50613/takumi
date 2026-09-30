@@ -1,0 +1,119 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630">
+  <rect x="0" y="0" width="1200" height="630" fill="#fff"/>
+  <clipPath id="cp0">
+    <path d="M30 125l1 1h238l1-1Z"/>
+  </clipPath>
+  <g clip-path="url(#cp0)">
+    <path d="M30 125.5h240" fill="none" stroke="#0f172a" stroke-width="1" stroke-dasharray="1 1"/>
+  </g>
+  <clipPath id="cp1">
+    <path d="M270 125l-1 1v158l1 1Z"/>
+  </clipPath>
+  <g clip-path="url(#cp1)">
+    <path d="M269.5 125v160" fill="none" stroke="#0f172a" stroke-width="1" stroke-dasharray="1 1"/>
+  </g>
+  <clipPath id="cp2">
+    <path d="M270 285l-1-1h-238l-1 1Z"/>
+  </clipPath>
+  <g clip-path="url(#cp2)">
+    <path d="M30 284.5h240" fill="none" stroke="#0f172a" stroke-width="1" stroke-dasharray="1 1"/>
+  </g>
+  <clipPath id="cp3">
+    <path d="M30 285l1-1v-158l-1-1Z"/>
+  </clipPath>
+  <g clip-path="url(#cp3)">
+    <path d="M30.5 125v160" fill="none" stroke="#0f172a" stroke-width="1" stroke-dasharray="1 1"/>
+  </g>
+  <clipPath id="cp4">
+    <path d="M330 125l2 2h236l2-2Z"/>
+  </clipPath>
+  <g clip-path="url(#cp4)">
+    <path d="M330 126h240" fill="none" stroke="#0f172a" stroke-width="2" stroke-dasharray="2 2"/>
+  </g>
+  <clipPath id="cp5">
+    <path d="M570 125l-2 2v156l2 2Z"/>
+  </clipPath>
+  <g clip-path="url(#cp5)">
+    <path d="M569 125v160" fill="none" stroke="#0f172a" stroke-width="2" stroke-dasharray="2 2"/>
+  </g>
+  <clipPath id="cp6">
+    <path d="M570 285l-2-2h-236l-2 2Z"/>
+  </clipPath>
+  <g clip-path="url(#cp6)">
+    <path d="M330 284h240" fill="none" stroke="#0f172a" stroke-width="2" stroke-dasharray="2 2"/>
+  </g>
+  <clipPath id="cp7">
+    <path d="M330 285l2-2v-156l-2-2Z"/>
+  </clipPath>
+  <g clip-path="url(#cp7)">
+    <path d="M331 125v160" fill="none" stroke="#0f172a" stroke-width="2" stroke-dasharray="2 2"/>
+  </g>
+  <clipPath id="cp8">
+    <path d="M630 125l3 3h234l3-3Z"/>
+  </clipPath>
+  <g clip-path="url(#cp8)">
+    <path d="M630 126.5h240" fill="none" stroke="#0f172a" stroke-width="3" stroke-dasharray="3 3"/>
+  </g>
+  <clipPath id="cp9">
+    <path d="M870 125l-3 3v154l3 3Z"/>
+  </clipPath>
+  <g clip-path="url(#cp9)">
+    <path d="M868.5 125v160" fill="none" stroke="#0f172a" stroke-width="3" stroke-dasharray="3 3"/>
+  </g>
+  <clipPath id="cp10">
+    <path d="M870 285l-3-3h-234l-3 3Z"/>
+  </clipPath>
+  <g clip-path="url(#cp10)">
+    <path d="M630 283.5h240" fill="none" stroke="#0f172a" stroke-width="3" stroke-dasharray="3 3"/>
+  </g>
+  <clipPath id="cp11">
+    <path d="M630 285l3-3v-154l-3-3Z"/>
+  </clipPath>
+  <g clip-path="url(#cp11)">
+    <path d="M631.5 125v160" fill="none" stroke="#0f172a" stroke-width="3" stroke-dasharray="3 3"/>
+  </g>
+  <clipPath id="cp12">
+    <path d="M930 125l4 4h232l4-4Z"/>
+  </clipPath>
+  <g clip-path="url(#cp12)">
+    <path d="M932 127h236" fill="none" stroke="#0f172a" stroke-width="4" stroke-dasharray="0 7.857" stroke-linecap="round"/>
+  </g>
+  <clipPath id="cp13">
+    <path d="M1170 125l-4 4v152l4 4Z"/>
+  </clipPath>
+  <g clip-path="url(#cp13)">
+    <path d="M1168 127v156" fill="none" stroke="#0f172a" stroke-width="4" stroke-dasharray="0 7.79" stroke-linecap="round"/>
+  </g>
+  <clipPath id="cp14">
+    <path d="M1170 285l-4-4h-232l-4 4Z"/>
+  </clipPath>
+  <g clip-path="url(#cp14)">
+    <path d="M932 283h236" fill="none" stroke="#0f172a" stroke-width="4" stroke-dasharray="0 7.857" stroke-linecap="round"/>
+  </g>
+  <clipPath id="cp15">
+    <path d="M930 285l4-4v-152l-4-4Z"/>
+  </clipPath>
+  <g clip-path="url(#cp15)">
+    <path d="M932 127v156" fill="none" stroke="#0f172a" stroke-width="4" stroke-dasharray="0 7.79" stroke-linecap="round"/>
+  </g>
+  <clipPath id="cp16">
+    <path d="M330 345l12 3h225l3-3Z"/>
+  </clipPath>
+  <g clip-path="url(#cp16)">
+    <path d="M330 346.5h240" fill="none" stroke="#0f172a" stroke-width="3" stroke-dasharray="3 3"/>
+  </g>
+  <clipPath id="cp17">
+    <path d="M570 345l-3 3v154l3 3Z"/>
+  </clipPath>
+  <g clip-path="url(#cp17)">
+    <path d="M568.5 345v160" fill="none" stroke="#0f172a" stroke-width="3" stroke-dasharray="3 3"/>
+  </g>
+  <clipPath id="cp18">
+    <path d="M570 505l-3-3h-225l-12 3Z"/>
+  </clipPath>
+  <g clip-path="url(#cp18)">
+    <path d="M330 503.5h240" fill="none" stroke="#0f172a" stroke-width="3" stroke-dasharray="3 3"/>
+  </g>
+  <path d="M330 505l12-3v-154l-12-3Z" fill="#2563eb"/>
+  <path d="M654 346h192c12.7 0 23 10.3 23 23v112c0 12.7-10.3 23-23 23h-192c-12.7 0-23-10.3-23-23v-112c0-12.7 10.3-23 23-23Z" fill="none" stroke="#0f172a" stroke-width="2" stroke-dasharray="2 2"/>
+</svg>

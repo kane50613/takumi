@@ -5,20 +5,17 @@ use std::{cell::RefCell, collections::HashMap, ptr, rc::Rc};
 #[cfg(feature = "images")]
 use takumi_core::{
   context::RenderContext,
-  layout::{
-    node::{ImageData, ImageSourceInput, NodeKind, resolve_image},
-    replaced::place_replaced,
-  },
+  layout::node::{ImageData, ImageSourceInput, NodeKind, resolve_image},
   resources::image::ImageSource,
 };
 use takumi_core::{
   font_style::SizedFontStyle,
-  geometry::{ComputedLayout as Layout, NodeId, Point as CorePoint, Size},
+  geometry::{
+    ComputedLayout as Layout, NodeId, PathCommand, Point as CorePoint, Rect as CoreRect, Size,
+  },
   layout::{
-    background::background_origin_box,
+    background_image_geometry::{BackgroundImageGeometry, FillLayers},
     border::BorderProperties,
-    clip::clip_shape_commands,
-    decoration::{ClipBox, OutlineGeometry},
     inline::{
       BuiltInlineLayout, InlineRunLayout, PositionedInlineRun, ProcessedInlineSpan, ShapedRun,
     },
@@ -27,15 +24,14 @@ use takumi_core::{
   },
   paint::ConicGradientTile,
   painter::{
-    BoxFrame, BoxPainter, BoxShadows, FillShape, OverflowClip, PaintDevice, StrokeStyle,
-    paint_border, paint_run_decorations,
+    BackgroundClipArea, BoxBackground, BoxFrame, BoxPainter, FillShape, GlyphDevice, GlyphFill,
+    OverflowClip, PaintDevice, PendingOutline, ShadowShape, StrokeStyle, UNBOUNDED,
   },
   scene::{NodePaint, PaintItemKind, Scene},
   shadow::SizedShadow,
   style::{
-    Affine, BackgroundClip, BackgroundImage, BackgroundOrigin, BlendMode, BoxDecorationBreak,
-    Color, ComputedStyle, Display, Filter, Isolation, Lang, ResolvedGradientStop,
-    TextDecorationLines,
+    Affine, BackgroundImage, BlendMode, BoxDecorationBreak, Color, ComputedStyle, Display,
+    FillRule as CoreFillRule, Filter, Isolation, Lang, ResolvedGradientStop,
   },
 };
 
@@ -46,7 +42,6 @@ use crate::paint::rasterized_image;
 #[cfg(all(feature = "svg", feature = "images"))]
 use crate::svg;
 use crate::{
-  background::{LayerLists, Placement, cycled},
   filter::{ColorFilter, filtered, unsupported_filter},
   glyph::{PdfGlyph, Uncovered, run_glyphs},
   inline::{InlineMap, visit_inline_layout},
@@ -69,7 +64,7 @@ use crate::{
     krilla_fill_rule, krilla_path, krilla_stop, krilla_stops, krilla_transform, normalized,
     pop_transforms, rect_path, shape_path, spread,
   },
-  shadow::{emit_inset_shadows, emit_outer_shadows},
+  shadow::Band,
   tags::{ARTIFACT, TagCollector},
   tree::OwnContent,
   window::Window,
@@ -84,12 +79,6 @@ struct BoxState {
   overflow_clip: usize,
   /// The outline, painted between the two pops.
   outline: Option<PendingOutline>,
-}
-
-/// An outline waiting for its box's state to be popped.
-struct PendingOutline {
-  outline: OutlineGeometry,
-  origin: CorePoint<f32>,
 }
 
 /// Blob identity, collection index, and the variation coordinates the run was shaped at.
@@ -319,7 +308,8 @@ impl Emitter<'_> {
         // overflow clip first, so the outline lands above the content and
         // outside that clip, but still under the box's transform, opacity,
         // mask and blend.
-        outline: self.pending_outline(node, decoration_frame),
+        outline: BoxPainter::new(&node.context, decoration_frame.layout)
+          .pending_outline(decoration_frame.origin),
       },
     ))
   }
@@ -365,7 +355,6 @@ impl Emitter<'_> {
     surface: &mut Surface,
   ) -> usize {
     let BoxFrame { layout, .. } = frame;
-    let style = &node.context.style;
     let mut pushed = 0;
 
     if let Some(mask) = self.mask(node, frame, surface) {
@@ -373,18 +362,13 @@ impl Emitter<'_> {
       pushed += 1;
     }
 
-    if let Some(shape) = &style.clip_path
-      && let Some(commands) = clip_shape_commands(shape, &node.context, layout.size)
-    {
+    if let Some(shape) = BoxPainter::new(&node.context, layout).clip_path() {
       // A shape that resolves to no area clips everything away, so a missing
       // path becomes an empty region rather than no clip at all.
-      let path = krilla_path(&commands, frame.origin).or_else(|| empty_path(frame.origin));
+      let path = shape_path(&shape, frame.origin).or_else(|| empty_path(frame.origin));
 
       if let Some(path) = path {
-        surface.push_clip_path(
-          &path,
-          &krilla_fill_rule(shape.fill_rule().unwrap_or(style.clip_rule)),
-        );
+        surface.push_clip_path(&path, &krilla_fill_rule(shape.rule()));
         pushed += 1;
       }
     }
@@ -396,29 +380,13 @@ impl Emitter<'_> {
   /// `background-clip` picks the shape a background fills, never when it
   /// paints: the border draws over the ring, as it does in Blink.
   fn emit_decorations(&self, node: &RenderNode, frame: BoxFrame, surface: &mut Surface) {
-    let BoxFrame { layout, .. } = frame;
-    let painter = BoxPainter::new(&node.context, layout);
-    let border = painter.border();
-    let shadows = self.filtered_shadows(painter.shadows());
+    let painter = BoxPainter::new(&node.context, frame.layout);
 
-    if !shadows.outer.is_empty() {
-      self.in_artifact(surface, |surface| {
-        emit_outer_shadows(&shadows.outer, border, layout.size, frame.origin, surface);
-      });
-    }
+    painter.paint_normal_box_shadows(frame.origin, &mut self.device(surface, self.tagged));
     painter.background_color(frame.origin, &mut self.device(surface, self.tagged));
-    self.emit_background_layers(node, &painter, frame, surface);
-    if !shadows.inset.is_empty() {
-      self.in_artifact(surface, |surface| {
-        emit_inset_shadows(
-          &shadows.inset,
-          &ClipBox::padding_box(*border, layout),
-          frame.origin,
-          surface,
-        );
-      });
-    }
-    self.emit_borders(border, layout.size, frame.origin, surface);
+    self.emit_background_layers(node, &painter.background(), frame, surface);
+    painter.paint_inset_box_shadows(frame.origin, &mut self.device(surface, self.tagged));
+    painter.paint_border(frame.origin, &mut self.device(surface, self.tagged));
   }
 
   /// Clips children and own content to the padding box, returning how many
@@ -490,44 +458,36 @@ impl Emitter<'_> {
   fn emit_background_layers(
     &self,
     node: &RenderNode,
-    painter: &BoxPainter<'_>,
+    background: &BoxBackground<'_>,
     frame: BoxFrame,
     surface: &mut Surface,
   ) {
     let BoxFrame { layout, .. } = frame;
-    let style = &node.context.style;
-    let Some(images) = style.background_image.as_deref() else {
-      return;
-    };
-    if !images.iter().any(BackgroundImage::paints) {
+    if background.layers.is_empty() {
       return;
     }
-    let Some(shape) = painter.background_clip_shape() else {
+    let Some(shape) = background.clip.shape(layout.size) else {
       return;
     };
     let Some(clip) = shape_path(&shape, frame.origin) else {
       return;
     };
-    let (origin_offset, area) = background_origin_area(style.background_origin, layout);
-    let layers = LayerLists::background(style);
 
     self.in_artifact(surface, |surface| {
       surface.push_clip_path(&clip, &krilla_fill_rule(shape.rule()));
-      for (index, image) in images.iter().enumerate().rev() {
-        let placement = layers.placement(index, image, area, &node.context);
-        let blend = cycled(&style.background_blend_mode, index);
-        let blended = blend != BlendMode::Normal;
+      for layer in &background.layers {
+        let blended = layer.blend_mode != BlendMode::Normal;
 
         if blended {
-          surface.push_blend_mode(krilla_blend(blend));
+          surface.push_blend_mode(krilla_blend(layer.blend_mode));
         }
         self.layer(
-          image,
+          layer.image,
           node,
-          &placement,
+          &layer.geometry,
           layout.size,
           frame.origin,
-          frame.origin + origin_offset,
+          frame.origin + background.origin.offset,
           surface,
           Transform::from_scale(PT_PER_PX, PT_PER_PX),
         );
@@ -548,19 +508,19 @@ impl Emitter<'_> {
     &self,
     image: &BackgroundImage,
     node: &RenderNode,
-    placement: &Placement,
+    placement: &BackgroundImageGeometry,
     size: Size<f32>,
     rect_at: CorePoint<f32>,
     anchor: CorePoint<f32>,
     surface: &mut Surface,
     tile_space: Transform,
   ) {
-    if !placement.tiles {
+    if !placement.repeats() {
       self.background_layer(
         image,
         node,
-        placement.tile,
-        anchor + placement.origin,
+        placement.tile_size,
+        anchor + placement.first_tile(),
         surface,
         Transform::identity(),
       );
@@ -570,7 +530,7 @@ impl Emitter<'_> {
       self.background_layer(
         image,
         node,
-        placement.tile,
+        placement.tile_size,
         CorePoint::ZERO,
         tile,
         tile_space,
@@ -581,14 +541,20 @@ impl Emitter<'_> {
     else {
       return;
     };
-    let tile_origin = anchor + placement.origin;
+    let tile_origin = anchor + placement.first_tile();
+    let period = placement.pattern_period(CoreRect {
+      left: rect_at.x - anchor.x,
+      top: rect_at.y - anchor.y,
+      right: rect_at.x + size.width - anchor.x,
+      bottom: rect_at.y + size.height - anchor.y,
+    });
 
     surface.set_fill(Some(Fill {
       paint: Pattern {
         stream,
         transform: Transform::from_translate(tile_origin.x, tile_origin.y),
-        width: placement.step.width,
-        height: placement.step.height,
+        width: period.width,
+        height: period.height,
       }
       .into(),
       opacity: NormalizedF32::ONE,
@@ -791,19 +757,6 @@ impl Emitter<'_> {
     Some(paint)
   }
 
-  /// The shadows in the colors this subtree's `filter` leaves them.
-  fn filtered_shadows(&self, shadows: BoxShadows) -> BoxShadows {
-    let recolor = |shadow: SizedShadow| SizedShadow {
-      color: Color(self.filtered(shadow.color)),
-      ..shadow
-    };
-
-    BoxShadows {
-      inset: shadows.inset.into_iter().map(recolor).collect(),
-      outer: shadows.outer.into_iter().map(recolor).collect(),
-    }
-  }
-
   /// Builds the soft mask for `mask-image`, drawing its layers into their own stream.
   fn mask(&mut self, node: &RenderNode, frame: BoxFrame, surface: &mut Surface) -> Option<Mask> {
     let BoxFrame {
@@ -816,10 +769,10 @@ impl Emitter<'_> {
       return None;
     }
     let filter = self.color_filter.take();
-    let layers = LayerLists::mask(&node.context.style);
+    let layers = FillLayers::mask(&node.context.style);
     let stream = draw_stream(surface, |content| {
       for (index, image) in images.iter().enumerate().rev() {
-        let placement = layers.placement(index, image, size, &node.context);
+        let placement = layers.geometry(index, image, size, &node.context);
 
         self.layer(
           image,
@@ -874,109 +827,14 @@ impl Emitter<'_> {
       surface,
       filter: self.color_filter.as_deref(),
       artifact,
+      stack: Vec::new(),
     }
-  }
-
-  /// The CSS `outline` the box will paint once its own state is popped, a ring
-  /// around the border box expanded outward by `outline-offset +
-  /// outline-width`. A transparent outline is a fill nobody sees, so it is
-  /// skipped to keep the content stream shorter.
-  fn pending_outline(&self, node: &RenderNode, frame: BoxFrame) -> Option<PendingOutline> {
-    if node
-      .context
-      .style
-      .outline_color
-      .resolve(node.context.current_color)
-      .0[3]
-      == 0
-    {
-      return None;
-    }
-
-    Some(PendingOutline {
-      outline: BoxPainter::new(&node.context, frame.layout).outline()?,
-      origin: frame.origin,
-    })
   }
 
   fn paint_outline(&self, pending: Option<&PendingOutline>, surface: &mut Surface) {
-    let Some(pending) = pending else {
-      return;
-    };
-
-    self.emit_borders(
-      &pending.outline.border,
-      pending.outline.size,
-      CorePoint {
-        x: pending.origin.x - pending.outline.grow,
-        y: pending.origin.y - pending.outline.grow,
-      },
-      surface,
-    );
-  }
-
-  /// Fills the border ring: one even-odd fill for a uniform color, per-side
-  /// trapezoids clipped to the ring otherwise.
-  // ponytail: dashed/dotted/double render as solid; port the stroke-based
-  // patterns from takumi-svg when someone needs them.
-  fn emit_borders(
-    &self,
-    border: &BorderProperties,
-    size: Size<f32>,
-    origin: CorePoint<f32>,
-    surface: &mut Surface,
-  ) {
-    if !border.has_visible_sides() {
-      return;
+    if let Some(pending) = pending {
+      pending.paint(&mut self.device(surface, self.tagged));
     }
-    let Some(ring_path) = shape_path(&FillShape::border_ring(border, size), origin) else {
-      return;
-    };
-
-    // The device opens its own artifact per fill, so a border that paints
-    // nothing leaves no empty region behind.
-    if paint_border(border, size, origin, &mut self.device(surface, self.tagged)) {
-      return;
-    }
-    let mut sides = border.painted_sides().peekable();
-
-    if sides.peek().is_none() {
-      return;
-    }
-    // A collapsed border's sides are squared rectangles already inside the
-    // ring, and the clip's antialiased edge leaks the page where two cells
-    // meet.
-    let clipped = !border.collapsed;
-
-    self.in_artifact(surface, |surface| {
-      if clipped {
-        surface.push_clip_path(&ring_path, &FillRule::EvenOdd);
-      }
-      for side in sides {
-        for band in border.side_bands(side) {
-          let mut strip = *border;
-
-          strip.width = band.width;
-          strip.expand_by(band.inset.map(|value| -value));
-
-          let mut polygon = Vec::new();
-
-          strip.append_side_clip_polygon_commands_at(
-            side.side,
-            &mut polygon,
-            size.inset(band.inset),
-            band.inset.top_left(),
-          );
-          if let Some(path) = krilla_path(&polygon, origin) {
-            surface.set_fill(Some(fill_from_rgba(self.filtered(band.color), 1.0)));
-            surface.draw_path(&path);
-          }
-        }
-      }
-      if clipped {
-        surface.pop();
-      }
-    });
   }
 
   fn emit_own_content(
@@ -1027,14 +885,11 @@ impl Emitter<'_> {
     if iw <= 0.0 || ih <= 0.0 {
       return;
     }
-    let placement = place_replaced(
-      context,
-      content,
-      Size {
-        width: iw,
-        height: ih,
-      },
-    );
+    let replaced = BoxPainter::new(context, layout).replaced_content(Size {
+      width: iw,
+      height: ih,
+    });
+    let placement = replaced.placement;
     let (dw, dh) = (placement.size.width, placement.size.height);
     // SVG sources embed as vector ops; everything else rasterizes. A color
     // filter rasterizes them too, since the transform applies to pixels.
@@ -1081,20 +936,13 @@ impl Emitter<'_> {
     let Some(size) = KrillaSize::from_wh(dw, dh) else {
       return;
     };
-    // A replaced element is trimmed to its content edge curve, so a corner radius clips the
-    // image whether or not it overflows.
-    let clip_border = BorderProperties::from_context(context, layout.size, layout.border);
-    let clip_path = if clip_border.is_zero() {
-      placement
-        .overflows(content)
-        .then(|| KrillaRect::from_xywh(bx, by, w, h).and_then(rect_path))
-        .flatten()
-    } else {
-      shape_path(
-        &ClipBox::content_box(clip_border, layout).into(),
-        frame.origin,
-      )
-    };
+    let clip_path = replaced.clip.and_then(|clip| {
+      if clip.border.is_zero() {
+        KrillaRect::from_xywh(bx, by, w, h).and_then(rect_path)
+      } else {
+        shape_path(&clip.into(), frame.origin)
+      }
+    });
 
     if let Some(path) = &clip_path {
       surface.push_clip_path(path, &FillRule::NonZero);
@@ -1151,6 +999,8 @@ impl Emitter<'_> {
     Ok(())
   }
 
+  /// Paints the runs on the lines this page owns through takumi-core's text painter, then the
+  /// inline boxes.
   #[allow(clippy::too_many_arguments)]
   fn draw_runs(
     &mut self,
@@ -1161,120 +1011,24 @@ impl Emitter<'_> {
     font_style: &SizedFontStyle,
     surface: &mut Surface,
   ) {
-    let BoxFrame {
-      layout,
-      origin: CorePoint { y, .. },
-    } = frame;
-
-    // Inline-span backgrounds fill under every glyph of the formatting context.
-    // A fragment paints only on the page that owns its line, like the glyph
-    // pass, so a page cut leaves no background sliver on the neighbor page.
-    for fragment in &runs.background_fragments {
-      if self.window.disowns_line(y + fragment.baseline) {
-        continue;
-      }
-      let Some(path) = krilla_path(&fragment.path(), frame.origin) else {
-        continue;
-      };
-
-      surface.set_fill(Some(fill_from_rgba(
-        self.filtered(fragment.color),
-        fragment.opacity,
-      )));
-      surface.draw_path(&path);
-    }
-
-    // text-shadow paints below the glyphs, later-listed shadows lowest. PDF
-    // has no blur operator, so a blurred text shadow draws sharp.
-    for shadow in font_style.painted_text_shadows() {
-      self.glyph_pass(
-        runs,
-        built,
-        frame,
-        CorePoint {
-          x: shadow.offset_x,
-          y: shadow.offset_y,
-        },
-        Some(shadow.color),
-        surface,
-      );
-    }
     let text_fills = self.text_clip_fills(node, frame, surface);
+    let fill = if text_fills.is_empty() {
+      GlyphFill::Text
+    } else {
+      GlyphFill::Background
+    };
+    let lines = runs.lines(frame.layout, |baseline| {
+      !self.window.disowns_line(frame.origin.y + baseline)
+    });
+    let mut device = TextDevice {
+      emitter: self,
+      device: self.device(surface, false),
+      built,
+      text_fills,
+      shadow: None,
+    };
 
-    for run in &runs.runs {
-      let Some(GlyphRun {
-        font,
-        text,
-        glyphs,
-        origin,
-      }) = self.glyph_run(run, built, frame, y)
-      else {
-        continue;
-      };
-      let shaped = &run.glyph_run;
-      let decorations = shaped.decorations(
-        &run.resolved_glyphs,
-        layout,
-        run.baseline_shift,
-        run.transform(Affine::IDENTITY),
-      );
-
-      paint_run_decorations(
-        &decorations,
-        false,
-        TextDecorationLines::empty(),
-        frame.origin,
-        &mut self.device(surface, false),
-      );
-      let fill = fill_from_rgba(self.filtered(shaped.brush.color), shaped.brush.opacity);
-      let oblique = self.push_oblique(shaped, origin, surface);
-
-      // `background-clip: text` paints the background through the glyphs, under
-      // the text's own (usually transparent) fill. Faux bold widens the glyph
-      // itself, so the background has to fill the widened shape too.
-      for background in &text_fills {
-        surface.set_fill(Some(background.clone()));
-        surface.set_stroke(background_stroke(shaped, background));
-        // Outlined: text extraction keys on the text-showing operator, whatever
-        // the rendering mode, so a second run of glyphs would put the text in
-        // the text layer twice. Paths paint the same pixels and stay out of it.
-        surface.draw_glyphs(origin, &glyphs, font.clone(), text, shaped.font_size, true);
-      }
-
-      surface.set_fill(Some(fill.clone()));
-      // `-webkit-text-stroke` strokes the glyph outlines around the fill, and
-      // takes the run's own width over the faux bold one.
-      let brush = &shaped.brush;
-
-      surface.set_stroke(
-        if brush.stroke_width > 0.0 && brush.stroke_color.0[3] != 0 {
-          let stroke_fill = fill_from_rgba(self.filtered(brush.stroke_color), brush.opacity);
-
-          Some(Stroke {
-            paint: stroke_fill.paint,
-            opacity: stroke_fill.opacity,
-            width: brush.stroke_width,
-            ..Stroke::default()
-          })
-        } else {
-          synthetic_stroke(shaped, &fill)
-        },
-      );
-
-      surface.draw_glyphs(origin, &glyphs, font, text, shaped.font_size, false);
-
-      if oblique {
-        surface.pop();
-      }
-      surface.set_stroke(None);
-      paint_run_decorations(
-        &decorations,
-        true,
-        TextDecorationLines::empty(),
-        frame.origin,
-        &mut self.device(surface, false),
-      );
-    }
+    lines.paint(&built.spans, font_style, fill, frame, &mut device);
     self.emit_inline_boxes(node, runs, built, frame, surface);
   }
 
@@ -1407,7 +1161,12 @@ impl Emitter<'_> {
     if tagged {
       surface.end_tagged();
     }
-    self.paint_outline(self.pending_outline(node, frame).as_ref(), surface);
+    self.paint_outline(
+      BoxPainter::new(&node.context, frame.layout)
+        .pending_outline(frame.origin)
+        .as_ref(),
+      surface,
+    );
   }
 
   /// Paints an inline-level container from the scene it carries.
@@ -1542,46 +1301,29 @@ impl Emitter<'_> {
     frame: BoxFrame,
     surface: &mut Surface,
   ) -> Vec<Fill> {
-    let BoxFrame { layout, .. } = frame;
-    let style = &node.context.style;
+    let background = BoxPainter::new(&node.context, frame.layout).background();
 
-    if style.background_clip != BackgroundClip::Text {
+    if !matches!(background.clip, BackgroundClipArea::Text) {
       return Vec::new();
     }
     let mut fills = Vec::new();
-    let color = style.background_color.resolve(node.context.current_color);
 
-    if color.0[3] != 0 {
+    if let Some(color) = background.color {
       fills.push(fill_from_rgba(self.filtered(color), 1.0));
     }
-    let (origin_offset, area) = background_origin_area(style.background_origin, layout);
-    let layers = LayerLists::background(style);
 
-    for (index, image) in style
-      .background_image
-      .as_deref()
-      .unwrap_or_default()
-      .iter()
-      .enumerate()
-      .rev()
-    {
-      let placement = layers.placement(index, image, area, &node.context);
+    for layer in &background.layers {
+      let tile = layer.geometry.tile_size;
       // ponytail: one tile per layer; a repeating gradient behind text would
       // need a pattern paint here.
-      let tile_origin = frame.origin + origin_offset + placement.origin;
+      let tile_origin = frame.origin + background.origin.offset + layer.geometry.first_tile();
       // An image layer has no paint of its own, so it draws into a pattern the
       // glyphs can be filled with, the way a tiled background already does.
-      let paint = match image {
+      let paint = match layer.image {
         BackgroundImage::Url(_) => {
-          self.image_pattern(image, node, placement.tile, tile_origin, surface)
+          self.image_pattern(layer.image, node, tile, tile_origin, surface)
         }
-        _ => self.gradient_paint(
-          image,
-          node,
-          placement.tile,
-          tile_origin,
-          Transform::identity(),
-        ),
+        _ => self.gradient_paint(layer.image, node, tile, tile_origin, Transform::identity()),
       };
       let Some(paint) = paint else {
         continue;
@@ -1596,52 +1338,10 @@ impl Emitter<'_> {
     fills
   }
 
-  /// Draws every run's glyphs once, moved by `shift` and in `color` when set, with no
-  /// decorations: the shadow passes under the real text. A run's page follows its unshifted line.
-  #[allow(clippy::too_many_arguments)]
-  fn glyph_pass(
-    &mut self,
-    runs: &InlineRunLayout,
-    built: &BuiltInlineLayout<'_>,
-    frame: BoxFrame,
-    shift: CorePoint<f32>,
-    color: Option<Color>,
-    surface: &mut Surface,
-  ) {
-    for run in &runs.runs {
-      let Some(GlyphRun {
-        font,
-        text,
-        glyphs,
-        origin,
-      }) = self.glyph_run(run, built, frame.shifted(shift), frame.origin.y)
-      else {
-        continue;
-      };
-      let shaped = &run.glyph_run;
-      let fill = fill_from_rgba(
-        self.filtered(color.unwrap_or(shaped.brush.color)),
-        shaped.brush.opacity,
-      );
-
-      surface.set_fill(Some(fill.clone()));
-      surface.set_stroke(synthetic_stroke(shaped, &fill));
-
-      let oblique = self.push_oblique(shaped, origin, surface);
-
-      surface.draw_glyphs(origin, &glyphs, font, text, shaped.font_size, false);
-
-      if oblique {
-        surface.pop();
-      }
-      surface.set_stroke(None);
-    }
-  }
-
   /// A run this page draws at `(x, y)`, or `None` when it has no glyphs, no
   /// font, or its line at `line_y` belongs to another page.
   fn glyph_run<'r>(
-    &mut self,
+    &self,
     run: &PositionedInlineRun,
     built: &'r BuiltInlineLayout<'_>,
     frame: BoxFrame,
@@ -1705,7 +1405,7 @@ impl Emitter<'_> {
 
   /// A krilla font for a run's backing blob, instanced at the run's variation
   /// coordinates. Copies the blob into the cache once per distinct instance.
-  fn cached_font(&mut self, shaped: &ShapedRun) -> Option<Font> {
+  fn cached_font(&self, shaped: &ShapedRun) -> Option<Font> {
     let key = (
       shaped.font_id(),
       shaped.font_index,
@@ -1733,19 +1433,6 @@ impl Emitter<'_> {
     self.document.fonts.borrow_mut().insert(key, font.clone());
     Some(font)
   }
-}
-
-/// The positioning area `background-origin` selects, never negative.
-fn background_origin_area(origin: BackgroundOrigin, layout: Layout) -> (CorePoint<f32>, Size<f32>) {
-  let area = background_origin_box(origin, layout);
-
-  (
-    area.offset,
-    Size {
-      width: area.size.width.max(0.0),
-      height: area.size.height.max(0.0),
-    },
-  )
 }
 
 /// Pushes the blend mode, isolation, and opacity a box composites with,
@@ -1780,9 +1467,58 @@ struct SurfaceDevice<'s, 'a> {
   /// once something paints leaves no empty region behind, since marked
   /// content does not nest.
   artifact: bool,
+  /// Each open clip and layer, innermost last.
+  stack: Vec<Saved>,
+}
+
+/// A clip or layer the device holds open.
+#[derive(Clone, Copy, PartialEq)]
+enum Saved {
+  Clip,
+  /// A clip with no area, which hides every draw until it is popped.
+  EmptyClip,
+  Layer,
 }
 
 impl SurfaceDevice<'_, '_> {
+  /// Clips later draws to `path`, or hides them when the clip has no area.
+  fn open_clip(&mut self, path: Option<KrillaPath>, rule: CoreFillRule) {
+    let saved = match &path {
+      Some(_) => Saved::Clip,
+      None => Saved::EmptyClip,
+    };
+
+    self.open(saved);
+
+    if let Some(path) = path {
+      self.surface.push_clip_path(&path, &krilla_fill_rule(rule));
+    }
+  }
+
+  /// Records `saved`, opening the artifact the whole outermost state shares, since marked content
+  /// does not nest.
+  fn open(&mut self, saved: Saved) {
+    if self.artifact && self.stack.is_empty() {
+      self.surface.start_tagged(ARTIFACT);
+    }
+
+    self.stack.push(saved);
+  }
+
+  /// Pops the innermost clip or layer.
+  fn close(&mut self) {
+    let Some(saved) = self.stack.pop() else {
+      return;
+    };
+
+    if saved != Saved::EmptyClip {
+      self.surface.pop();
+    }
+    if self.artifact && self.stack.is_empty() {
+      self.surface.end_tagged();
+    }
+  }
+
   /// Draws the path `build` makes at `transform`'s translation, with the rest
   /// of `transform` pushed around it. A pure translation folds into the path,
   /// which keeps the content stream free of a `cm` pair for every fill.
@@ -1801,23 +1537,27 @@ impl SurfaceDevice<'_, '_> {
     } else {
       CorePoint::ZERO
     };
+    if self.stack.contains(&Saved::EmptyClip) {
+      return;
+    }
     let Some(path) = build(origin) else {
       return;
     };
+    let artifact = self.artifact && self.stack.is_empty();
 
     if !flat {
       self
         .surface
         .push_transform(&krilla_transform(transform.to_cols_array()));
     }
-    if self.artifact {
+    if artifact {
       self.surface.start_tagged(ARTIFACT);
     }
     paint(self.surface, &path);
     if !flat {
       self.surface.pop();
     }
-    if self.artifact {
+    if artifact {
       self.surface.end_tagged();
     }
   }
@@ -1869,6 +1609,257 @@ impl PaintDevice for SurfaceDevice<'_, '_> {
         surface.set_stroke(None);
       },
     );
+  }
+
+  fn push_clip(&mut self, shape: &FillShape, transform: Affine) {
+    let path = if transform.only_translation() {
+      shape_path(
+        shape,
+        CorePoint {
+          x: transform.x,
+          y: transform.y,
+        },
+      )
+    } else {
+      krilla_path(&device_commands(shape, transform), CorePoint::ZERO)
+    };
+
+    self.open_clip(path, shape.rule());
+  }
+
+  fn push_clip_out(&mut self, shape: &FillShape, transform: Affine) {
+    let mut commands = Vec::with_capacity(BorderProperties::PATH_COMMANDS_AMOUNT * 2);
+
+    BorderProperties::default().append_mask_commands(
+      &mut commands,
+      Size {
+        width: UNBOUNDED * 2.0,
+        height: UNBOUNDED * 2.0,
+      },
+      CorePoint {
+        x: -UNBOUNDED,
+        y: -UNBOUNDED,
+      },
+    );
+    commands.extend(device_commands(shape, transform));
+    self.open_clip(
+      krilla_path(&commands, CorePoint::ZERO),
+      CoreFillRule::EvenOdd,
+    );
+  }
+
+  fn pop_clip(&mut self) {
+    self.close();
+  }
+
+  fn begin_layer(&mut self, opacity: f32) {
+    self.open(Saved::Layer);
+    self.surface.push_opacity(normalized(opacity));
+  }
+
+  fn end_layer(&mut self) {
+    self.close();
+  }
+
+  fn fill_shadow(&mut self, shape: &ShadowShape, shadow: &SizedShadow, transform: Affine) {
+    let color = filtered(self.filter, shadow.color);
+    let transform = Affine::translation(shadow.offset_x, shadow.offset_y) * transform;
+
+    for band in Band::of(shadow.blur_radius) {
+      let band_shape = shape.spread(band.spread).fill_shape();
+      let fill = Fill {
+        rule: krilla_fill_rule(band_shape.rule()),
+        ..fill_from_rgba(color, band.alpha)
+      };
+
+      self.draw(
+        transform,
+        |origin| shape_path(&band_shape, origin),
+        |surface, path| {
+          surface.set_fill(Some(fill));
+          surface.draw_path(path);
+        },
+      );
+    }
+  }
+}
+
+/// `shape`'s path with every point mapped through `transform`.
+fn device_commands(shape: &FillShape, transform: Affine) -> Vec<PathCommand> {
+  shape
+    .to_commands()
+    .into_iter()
+    .map(|command| {
+      command.map_points(|point| {
+        let (x, y) = transform.transform_point(point.x, point.y);
+
+        CorePoint { x, y }
+      })
+    })
+    .collect()
+}
+
+/// The PDF surface as a [`PaintDevice`] for one block's text: shapes draw as on any surface, and
+/// glyphs draw with text operators so the text stays extractable.
+///
+/// Approximate: a blurred `text-shadow` draws sharp, since PDF has no blur operator.
+struct TextDevice<'e, 's, 'a> {
+  emitter: &'e Emitter<'e>,
+  device: SurfaceDevice<'s, 'a>,
+  built: &'e BuiltInlineLayout<'e>,
+  /// The background fills `background-clip: text` glyphs show, bottom first.
+  text_fills: Vec<Fill>,
+  /// The shadow every draw becomes while one is open.
+  shadow: Option<SizedShadow>,
+}
+
+impl TextDevice<'_, '_, '_> {
+  /// `color` and `transform`, or the open shadow's colour and `transform` moved by its offset.
+  fn shadowed(&self, color: Color, transform: Affine) -> (Color, Affine) {
+    match self.shadow {
+      Some(shadow) => (
+        shadow.color,
+        Affine::translation(shadow.offset_x, shadow.offset_y) * transform,
+      ),
+      None => (color, transform),
+    }
+  }
+
+  /// The stroke a run's glyphs draw with: its `-webkit-text-stroke`, else its faux bold, both in
+  /// `color` when a shadow recolours them.
+  fn glyph_stroke(&self, shaped: &ShapedRun, fill: &Fill, color: Option<Color>) -> Option<Stroke> {
+    let brush = &shaped.brush;
+
+    if brush.stroke_width > 0.0 && brush.stroke_color.0[3] != 0 {
+      let stroke_fill = fill_from_rgba(
+        self.emitter.filtered(color.unwrap_or(brush.stroke_color)),
+        1.0,
+      );
+
+      return Some(Stroke {
+        paint: stroke_fill.paint,
+        opacity: stroke_fill.opacity,
+        width: brush.stroke_width,
+        ..Stroke::default()
+      });
+    }
+
+    synthetic_stroke(shaped, fill)
+  }
+}
+
+impl PaintDevice for TextDevice<'_, '_, '_> {
+  fn fill_shape(&mut self, shape: &FillShape, color: Color, transform: Affine) {
+    let (color, transform) = self.shadowed(color, transform);
+
+    self.device.fill_shape(shape, color, transform);
+  }
+
+  fn stroke_shape(&mut self, shape: &FillShape, stroke: &StrokeStyle, transform: Affine) {
+    let (color, transform) = self.shadowed(stroke.color, transform);
+
+    self
+      .device
+      .stroke_shape(shape, &StrokeStyle { color, ..*stroke }, transform);
+  }
+
+  fn push_clip(&mut self, shape: &FillShape, transform: Affine) {
+    self.device.push_clip(shape, transform);
+  }
+
+  fn push_clip_out(&mut self, shape: &FillShape, transform: Affine) {
+    self.device.push_clip_out(shape, transform);
+  }
+
+  fn pop_clip(&mut self) {
+    self.device.pop_clip();
+  }
+
+  fn begin_layer(&mut self, opacity: f32) {
+    self.device.begin_layer(opacity);
+  }
+
+  fn end_layer(&mut self) {
+    self.device.end_layer();
+  }
+
+  fn fill_shadow(&mut self, shape: &ShadowShape, shadow: &SizedShadow, transform: Affine) {
+    self.device.fill_shadow(shape, shadow, transform);
+  }
+}
+
+impl GlyphDevice for TextDevice<'_, '_, '_> {
+  fn begin_shadow(&mut self, shadow: &SizedShadow) {
+    self.shadow = Some(*shadow);
+  }
+
+  fn end_shadow(&mut self) {
+    self.shadow = None;
+  }
+
+  fn draw_glyph_run(
+    &mut self,
+    run: &PositionedInlineRun,
+    _style: &SizedFontStyle,
+    fill: GlyphFill,
+    frame: BoxFrame,
+  ) {
+    let shifted = match self.shadow {
+      Some(shadow) => frame.shifted(CorePoint {
+        x: shadow.offset_x,
+        y: shadow.offset_y,
+      }),
+      None => frame,
+    };
+    let Some(GlyphRun {
+      font,
+      text,
+      glyphs,
+      origin,
+    }) = self
+      .emitter
+      .glyph_run(run, self.built, shifted, frame.origin.y)
+    else {
+      return;
+    };
+    let shaped = &run.glyph_run;
+    let shadow_color = self.shadow.map(|shadow| shadow.color);
+    let paint = fill_from_rgba(
+      self
+        .emitter
+        .filtered(shadow_color.unwrap_or(shaped.brush.color)),
+      1.0,
+    );
+    let stroke = self.glyph_stroke(shaped, &paint, shadow_color);
+    let surface = &mut *self.device.surface;
+    let oblique = self.emitter.push_oblique(shaped, origin, surface);
+
+    // Outlined: text extraction keys on the text-showing operator, whatever the rendering mode,
+    // so glyphs drawn a second time for a shadow or a background would put the text in the text
+    // layer twice. Paths paint the same pixels and stay out of it.
+    if shadow_color.is_none() && fill == GlyphFill::Background {
+      for background in &self.text_fills {
+        surface.set_fill(Some(background.clone()));
+        surface.set_stroke(background_stroke(shaped, background));
+        surface.draw_glyphs(origin, &glyphs, font.clone(), text, shaped.font_size, true);
+      }
+    }
+
+    surface.set_fill(Some(paint));
+    surface.set_stroke(stroke);
+    surface.draw_glyphs(
+      origin,
+      &glyphs,
+      font,
+      text,
+      shaped.font_size,
+      shadow_color.is_some(),
+    );
+
+    if oblique {
+      surface.pop();
+    }
+    surface.set_stroke(None);
   }
 }
 

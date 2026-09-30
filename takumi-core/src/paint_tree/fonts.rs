@@ -2,9 +2,10 @@
 
 use std::collections::HashMap;
 
+use parley::fontique::Blob;
 use skrifa::{FontRef, MetadataProvider, attribute::Style};
 
-use super::tree::{PaintFont, PaintVariation};
+use super::document::{PaintFont, PaintVariation};
 use crate::{layout::inline::ShapedRun, resources::font::FontsSnapshot};
 
 #[derive(PartialEq, Eq, Hash)]
@@ -37,6 +38,7 @@ impl FontKey {
 pub(super) struct FontTable {
   indices: HashMap<FontKey, usize>,
   fonts: Vec<PaintFont>,
+  data: Vec<Blob<u8>>,
 }
 
 impl FontTable {
@@ -48,12 +50,14 @@ impl FontTable {
     }
     let index = self.fonts.len();
     self.fonts.push(describe(fonts, run));
+    self.data.push(run.font_blob());
     self.indices.insert(key, index);
     index
   }
 
-  pub(super) fn into_fonts(self) -> Vec<PaintFont> {
-    self.fonts
+  /// The instances, and each one's font file, in table order.
+  pub(super) fn finish(self) -> (Vec<PaintFont>, Vec<Blob<u8>>) {
+    (self.fonts, self.data)
   }
 }
 
@@ -77,7 +81,7 @@ fn describe(fonts: &FontsSnapshot, run: &ShapedRun) -> PaintFont {
     Some(Style::Oblique(_)) => "oblique",
     Some(Style::Normal) | None => "normal",
   };
-  let width = axis(b"wdth")
+  let stretch = axis(b"wdth")
     .or_else(|| attributes.map(|attributes| attributes.stretch.percentage()))
     .unwrap_or(100.0);
 
@@ -85,9 +89,9 @@ fn describe(fonts: &FontsSnapshot, run: &ShapedRun) -> PaintFont {
     family: fonts.face_family(run.font_id(), run.font_index),
     face_index: run.font_index,
     weight,
-    style: style.to_string(),
-    width,
-    variations: run
+    style,
+    stretch,
+    variation_settings: run
       .variations
       .iter()
       .map(|(tag, value)| PaintVariation {
@@ -95,7 +99,5 @@ fn describe(fonts: &FontsSnapshot, run: &ShapedRun) -> PaintFont {
         value: *value,
       })
       .collect(),
-    synthetic_bold_width: run.synthetic_bold,
-    synthetic_oblique_angle: run.synthetic_skew,
   }
 }

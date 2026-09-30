@@ -70,6 +70,16 @@ fn bench_effects(c: &mut Criterion) {
   group.bench_function("drop_shadow_md", |b| {
     b.iter(|| render_node(&fonts, effect_node(black_box("drop-shadow-md"))))
   });
+  group.bench_function("color_filters", |b| {
+    b.iter(|| {
+      render_node(
+        &fonts,
+        effect_node(black_box(
+          "bg-gradient-to-r from-red-500 to-blue-500 grayscale-[50%] sepia saturate-150 hue-rotate-90",
+        )),
+      )
+    })
+  });
   group.bench_function("backdrop_blur_cards", |b| {
     b.iter(|| render_node(&fonts, black_box(backdrop_blur_cards())))
   });

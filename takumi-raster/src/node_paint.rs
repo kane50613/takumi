@@ -4,86 +4,38 @@
 //! [`takumi_core::layout::decoration`]; these functions composite it with
 //! tiny-skia, and the SVG backend emits the same geometry as vector paths.
 
+use skrifa::{FontRef, MetadataProvider};
 use takumi_core::{
   geometry::{ComputedLayout as Layout, Point},
-  layout::decoration::{ClipBox, OutlineGeometry},
-  painter::{BoxPainter, FillShape, PaintDevice},
+  layout::{
+    decoration::ClipBox,
+    inline::{PositionedGlyph, PositionedInlineRun},
+  },
+  painter::{
+    BackgroundClipArea, BoxFrame, BoxPainter, FillShape, GlyphDevice, GlyphFill, PaintDevice,
+    PendingOutline, ShadowShape, StrokeStyle,
+  },
+  resources::{font::FontError, glyph::ResolvedGlyph},
+  shadow::SizedShadow,
   style::{Color, ImageScalingAlgorithm},
 };
 
 use super::{
   BackgroundTile, BorderProperties, Canvas, ColorTile, Fill, PaintSource, RenderContext,
-  SizedFontStyle, TileLayer, background_image_layers, collect_background_layers, draw_image,
-  draw_inset_shadow_to_canvas, draw_outset_shadow, inline_drawing::draw_inline_layout,
-  paint_border, rasterize_layers,
+  SizedFontStyle, TileLayer, TileLayers, background_image_layers, collect_background_layers,
+  draw_image, inline_drawing::draw_inline_layout, rasterize_layers,
 };
 use crate::{
-  Result,
+  BlurType, CanvasSubcanvas, Command, Error, MaskCompositeColor, MaskSamplingOptions, Placement,
+  Result, Stroke, Style, apply_blur_alpha_bytes, attenuate_alpha_by_mask, checked_area, draw_glyph,
+  draw_glyph_clip_image, intersect_alpha_masks,
   layout::{
     inline::{InlineItem, InlineLayoutMode, InlineLayoutRequest, create_inline_layout},
     node::{ImageData, Node, NodeKind, TextData},
   },
-  style::{Affine, BackgroundClip, BlendMode},
+  render_mask,
+  style::{Affine, BlendMode},
 };
-
-pub(crate) fn draw_outset_box_shadow(
-  context: &RenderContext,
-  canvas: &mut Canvas,
-  layout: Layout,
-) -> Result<()> {
-  let painter = BoxPainter::new(context, layout);
-  let shadows = painter.shadows().outer;
-
-  if shadows.is_empty() {
-    return Ok(());
-  }
-
-  let element_border_radius = *painter.border();
-  let mut element_paths = Vec::new();
-
-  element_border_radius.append_mask_commands(&mut element_paths, layout.size, Point::ZERO);
-
-  for shadow in shadows {
-    let mut paths = Vec::new();
-    let (border_radius, spread_size) =
-      element_border_radius.outset_shadow_box(layout.size, shadow.spread_radius);
-
-    border_radius.append_mask_commands(
-      &mut paths,
-      spread_size,
-      Point {
-        x: -shadow.spread_radius,
-        y: -shadow.spread_radius,
-      },
-    );
-
-    draw_outset_shadow(
-      &shadow,
-      canvas,
-      &paths,
-      context.transform,
-      Fill::NonZero.into(),
-      Some(&element_paths),
-    )?;
-  }
-
-  Ok(())
-}
-
-pub(crate) fn draw_inset_box_shadow(
-  context: &RenderContext,
-  canvas: &mut Canvas,
-  layout: Layout,
-) -> Result<()> {
-  let painter = BoxPainter::new(context, layout);
-  let border_radius = *painter.border();
-
-  for shadow in painter.shadows().inset {
-    draw_inset_shadow_to_canvas(&shadow, context.transform, border_radius, canvas, layout)?;
-  }
-
-  Ok(())
-}
 
 /// Paints a box's own decorations, bottom to top: outset shadows, background,
 /// inset shadows, and border.
@@ -92,32 +44,332 @@ pub(crate) fn draw_box_shell(
   canvas: &mut Canvas,
   layout: Layout,
 ) -> Result<()> {
-  draw_outset_box_shadow(context, canvas, layout)?;
+  let painter = BoxPainter::new(context, layout);
+
+  painter.paint_normal_box_shadows(Point::ZERO, &mut CanvasDevice::of(canvas, context));
   draw_background(context, canvas, layout)?;
-  draw_inset_box_shadow(context, canvas, layout)?;
+  painter.paint_inset_box_shadows(Point::ZERO, &mut CanvasDevice::of(canvas, context));
   draw_border(context, canvas, layout)
 }
 
-/// The canvas as a [`PaintDevice`]. A rounded rectangle composites through the
-/// same border machinery the tile path uses, so nothing rasterizes a path that
-/// did not before.
+/// The canvas as a [`PaintDevice`]. An unclipped rounded rectangle composites
+/// through the same border machinery the tile path uses, so a background colour
+/// rasterizes as it always has.
 pub(crate) struct CanvasDevice<'c> {
   pub(crate) canvas: &'c mut Canvas,
   pub(crate) transform: Affine,
   pub(crate) algorithm: ImageScalingAlgorithm,
+  /// Each open clip.
+  pub(crate) clips: Vec<CanvasClip>,
+  /// Each open layer and the opacity it composites at, or `None` when it could not open.
+  layers: Vec<Option<(CanvasSubcanvas, f32)>>,
+  /// The shadow every draw becomes while one is open.
+  shadow: Option<SizedShadow>,
+  /// The background `background-clip: text` glyphs show.
+  pub(crate) text_background: Option<PaintSource<'c>>,
+  /// The first error a draw hit.
+  error: Option<Error>,
+}
+
+/// A clip the canvas device holds: a shape's coverage, and whether draws keep to it or avoid it.
+pub(crate) struct CanvasClip {
+  coverage: Vec<u8>,
+  placement: Placement,
+  out: bool,
+}
+
+impl<'c> CanvasDevice<'c> {
+  pub(crate) fn new(
+    canvas: &'c mut Canvas,
+    transform: Affine,
+    algorithm: ImageScalingAlgorithm,
+  ) -> Self {
+    Self {
+      canvas,
+      transform,
+      algorithm,
+      clips: Vec::new(),
+      layers: Vec::new(),
+      shadow: None,
+      text_background: None,
+      error: None,
+    }
+  }
+
+  /// The canvas as a device for the box `context` paints.
+  pub(crate) fn of(canvas: &'c mut Canvas, context: &RenderContext) -> Self {
+    Self::new(canvas, context.transform, context.style.image_rendering)
+  }
+
+  /// Surfaces the first error a draw hit.
+  pub(crate) fn finish(self) -> Result<()> {
+    self.error.map_or(Ok(()), Err)
+  }
+
+  /// Rasterizes `shape` under `transform`, culled to the canvas.
+  fn coverage(&self, shape: &FillShape, style: Style, transform: Affine) -> (Vec<u8>, Placement) {
+    render_mask(
+      &shape.to_commands(),
+      Some(self.transform * transform),
+      Some(style),
+      Some(self.canvas.viewport()),
+    )
+  }
+
+  /// Limits `coverage` to the open clips, or `None` when nothing is left.
+  fn clipped(&self, coverage: (Vec<u8>, Placement)) -> Option<(Vec<u8>, Placement)> {
+    self
+      .clips
+      .iter()
+      .try_fold(coverage, |(mut mask, placement), clip| {
+        if clip.out {
+          attenuate_alpha_by_mask(&mut mask, placement, &clip.coverage, clip.placement);
+
+          return Some((mask, placement));
+        }
+
+        intersect_alpha_masks(&mask, placement, &clip.coverage, clip.placement)
+      })
+  }
+
+  /// Opens a clip to `shape`, or out of it when `out` is set.
+  fn open_clip(&mut self, shape: &FillShape, transform: Affine, out: bool) {
+    let (coverage, placement) = self.coverage(shape, Fill::from(shape.rule()).into(), transform);
+
+    self.clips.push(CanvasClip {
+      coverage,
+      placement,
+      out,
+    });
+  }
+
+  /// Paints `coverage` in `color`, limited to the open clips.
+  fn draw_coverage(&mut self, coverage: (Vec<u8>, Placement), color: Color) {
+    if let Some((mask, placement)) = self.clipped(coverage) {
+      self
+        .canvas
+        .draw_mask(&mask, placement, color, BlendMode::Normal);
+    }
+  }
+
+  /// Paints `commands`, filled or stroked as `style` under `transform`, in `color` blurred as a CSS
+  /// shadow of `blur_radius` blurs.
+  fn draw_blurred(
+    &mut self,
+    commands: &[Command],
+    style: Style,
+    transform: Affine,
+    blur_radius: f32,
+    color: Color,
+  ) {
+    // Skia's blur mask filter maps its sigma through the CTM (`SkMatrix::mapRadius`). A `text-fit`
+    // scale on the run comes from the painter, which scales the shadow it passes.
+    let blur_radius = blur_radius * self.transform.uniform_scale();
+    let transform = self.transform * transform;
+    let reach = if blur_radius > 0.0 {
+      blur_radius * BlurType::Shadow.extent_multiplier()
+    } else {
+      0.0
+    };
+    let (mask, placement) = render_mask(
+      commands,
+      Some(transform),
+      Some(style),
+      Some(self.canvas.viewport().inflate(reach, reach)),
+    );
+
+    if mask.is_empty() {
+      return;
+    }
+    if blur_radius <= 0.0 {
+      return self.draw_coverage((mask, placement), color);
+    }
+
+    let padding = reach as u32;
+    let width = placement.width.saturating_add(padding * 2);
+    let height = placement.height.saturating_add(padding * 2);
+    let Some(area) = checked_area(width, height, 1) else {
+      return;
+    };
+    let mut blurred = vec![0; area];
+
+    for (row, source) in mask.chunks_exact(placement.width as usize).enumerate() {
+      let start = (row + padding as usize) * width as usize + padding as usize;
+
+      blurred[start..start + source.len()].copy_from_slice(source);
+    }
+
+    if apply_blur_alpha_bytes(&mut blurred, width, height, blur_radius, BlurType::Shadow).is_err() {
+      return;
+    }
+
+    let placement = Placement {
+      left: placement.left - padding as i32,
+      top: placement.top - padding as i32,
+      width,
+      height,
+    };
+
+    self.draw_coverage((blurred, placement), color);
+  }
+
+  /// Paints the shadow the open `shadow` casts from `commands` drawn as `style` under `transform`.
+  fn draw_shadow_of(
+    &mut self,
+    shadow: SizedShadow,
+    commands: &[Command],
+    style: Style,
+    transform: Affine,
+  ) {
+    self.draw_blurred(
+      commands,
+      style,
+      Affine::translation(shadow.offset_x, shadow.offset_y) * transform,
+      shadow.blur_radius,
+      shadow.color,
+    );
+  }
+
+  /// Draws `run`'s glyphs, or their shadow while one is open.
+  fn draw_glyphs(
+    &mut self,
+    run: &PositionedInlineRun,
+    style: &SizedFontStyle,
+    fill: GlyphFill,
+    frame: BoxFrame,
+  ) -> Result<()> {
+    let glyph_run = &run.glyph_run;
+    let local = run.transform(frame.translation());
+    let offset = run.glyph_offset(frame.layout);
+    // A span may set `-webkit-text-stroke` for itself, so it comes off the run.
+    let stroke = (glyph_run.brush.stroke_width, glyph_run.brush.stroke_color);
+    let placed = |glyph: &PositionedGlyph| Point {
+      x: offset.x + glyph.x,
+      y: offset.y + glyph.y,
+    };
+
+    if let Some(shadow) = self.shadow {
+      for glyph in &glyph_run.glyphs {
+        let Some(ResolvedGlyph::Outline(outline)) =
+          run.resolved_glyphs.get(&glyph.id).map(AsRef::as_ref)
+        else {
+          continue;
+        };
+        let at = placed(glyph);
+        let transform = local * Affine::translation(at.x, at.y);
+
+        self.draw_shadow_of(shadow, outline.paths(), Fill::NonZero.into(), transform);
+
+        if stroke.0 > 0.0 {
+          let mut text_stroke = Stroke::new(stroke.0);
+
+          text_stroke.join = style.parent.stroke_linejoin.into();
+          self.draw_shadow_of(shadow, outline.paths(), text_stroke.into(), transform);
+        }
+      }
+
+      return Ok(());
+    }
+
+    let transform = self.transform * local;
+
+    if fill == GlyphFill::Background
+      && let Some(background) = self.text_background
+    {
+      for glyph in &glyph_run.glyphs {
+        if let Some(content) = run.resolved_glyphs.get(&glyph.id) {
+          draw_glyph_clip_image(
+            content,
+            self.canvas,
+            style,
+            stroke,
+            transform,
+            placed(glyph),
+            background,
+          )?;
+        }
+      }
+    }
+
+    let font = FontRef::from_index(glyph_run.font_data(), glyph_run.font_index)
+      .map_err(|_| FontError::InvalidFontIndex)?;
+    let palettes = font.color_palettes();
+    let palette = palettes.get(0);
+
+    for glyph in &glyph_run.glyphs {
+      if let Some(content) = run.resolved_glyphs.get(&glyph.id) {
+        draw_glyph(
+          content,
+          self.canvas,
+          style,
+          stroke,
+          transform,
+          placed(glyph),
+          glyph_run.brush.color,
+          palette.as_ref(),
+        )?;
+      }
+    }
+
+    Ok(())
+  }
+
+  /// Fills `shape` with `source`, whose pixels `box_to_source` finds from the box's coordinates,
+  /// sampled with `algorithm`.
+  pub(crate) fn fill_shape_with_source(
+    &mut self,
+    shape: &FillShape,
+    source: PaintSource<'_>,
+    box_to_source: Affine,
+    algorithm: ImageScalingAlgorithm,
+  ) {
+    let Some(canvas_to_box) = self.transform.invert() else {
+      return;
+    };
+    let coverage = self.coverage(shape, Fill::from(shape.rule()).into(), Affine::IDENTITY);
+    let Some((mask, placement)) = self.clipped(coverage) else {
+      return;
+    };
+
+    self.canvas.composite_mask_source(
+      &mask,
+      placement,
+      source,
+      MaskCompositeColor::SourceOnly,
+      MaskSamplingOptions {
+        canvas_to_source: box_to_source * canvas_to_box,
+        sample_bias: Point::ZERO,
+        algorithm,
+      },
+      BlendMode::Normal,
+    );
+  }
 }
 
 impl PaintDevice for CanvasDevice<'_> {
   fn fill_shape(&mut self, shape: &FillShape, color: Color, transform: Affine) {
+    if let Some(shadow) = self.shadow {
+      return self.draw_shadow_of(
+        shadow,
+        &shape.to_commands(),
+        Fill::from(shape.rule()).into(),
+        transform,
+      );
+    }
+
+    let unclipped = self.clips.is_empty();
     let (border, size, offset) = match shape {
-      FillShape::Rect(size) => (BorderProperties::default(), *size, Point::ZERO),
+      FillShape::Rect(size) if unclipped => (BorderProperties::default(), *size, Point::ZERO),
       FillShape::RoundedRect {
         border,
         size,
         offset,
-      } => (*border, *size, *offset),
-      // A path that is not a rectangle never reaches a background colour.
-      FillShape::Path { .. } => return,
+      } if unclipped => (*border, *size, *offset),
+      _ => {
+        let coverage = self.coverage(shape, Fill::from(shape.rule()).into(), transform);
+
+        return self.draw_coverage(coverage, color);
+      }
     };
     if size.width <= 0.0 || size.height <= 0.0 {
       return;
@@ -132,6 +384,89 @@ impl PaintDevice for CanvasDevice<'_> {
       BlendMode::Normal,
     );
   }
+
+  fn stroke_shape(&mut self, shape: &FillShape, stroke: &StrokeStyle, transform: Affine) {
+    if let Some(shadow) = self.shadow {
+      return self.draw_shadow_of(
+        shadow,
+        &shape.to_commands(),
+        Style::Stroke(stroke.into()),
+        transform,
+      );
+    }
+
+    let coverage = self.coverage(shape, Style::Stroke(stroke.into()), transform);
+
+    self.draw_coverage(coverage, stroke.color);
+  }
+
+  fn push_clip(&mut self, shape: &FillShape, transform: Affine) {
+    self.open_clip(shape, transform, false);
+  }
+
+  fn push_clip_out(&mut self, shape: &FillShape, transform: Affine) {
+    self.open_clip(shape, transform, true);
+  }
+
+  fn pop_clip(&mut self) {
+    self.clips.pop();
+  }
+
+  fn begin_layer(&mut self, opacity: f32) {
+    let layer = match self
+      .canvas
+      .begin_subcanvas(self.canvas.viewport().placement())
+    {
+      Ok(subcanvas) => Some((subcanvas, opacity)),
+      Err(error) => {
+        self.error.get_or_insert(error);
+        None
+      }
+    };
+
+    self.layers.push(layer);
+  }
+
+  fn end_layer(&mut self) {
+    if let Some(Some((subcanvas, opacity))) = self.layers.pop() {
+      self
+        .canvas
+        .composite_subcanvas(subcanvas, BlendMode::Normal, opacity);
+    }
+  }
+
+  fn fill_shadow(&mut self, shape: &ShadowShape, shadow: &SizedShadow, transform: Affine) {
+    let fill = shape.fill_shape();
+
+    self.draw_shadow_of(
+      *shadow,
+      &fill.to_commands(),
+      Fill::from(fill.rule()).into(),
+      transform,
+    );
+  }
+}
+
+impl GlyphDevice for CanvasDevice<'_> {
+  fn begin_shadow(&mut self, shadow: &SizedShadow) {
+    self.shadow = Some(*shadow);
+  }
+
+  fn end_shadow(&mut self) {
+    self.shadow = None;
+  }
+
+  fn draw_glyph_run(
+    &mut self,
+    run: &PositionedInlineRun,
+    style: &SizedFontStyle,
+    fill: GlyphFill,
+    frame: BoxFrame,
+  ) {
+    if let Err(error) = self.draw_glyphs(run, style, fill, frame) {
+      self.error.get_or_insert(error);
+    }
+  }
 }
 
 pub(crate) fn draw_background(
@@ -139,18 +474,41 @@ pub(crate) fn draw_background(
   canvas: &mut Canvas,
   layout: Layout,
 ) -> Result<()> {
-  let border_radius = BorderProperties::from_context(context, layout.size, layout.border);
-  let mut device = CanvasDevice {
-    canvas,
-    transform: context.transform,
-    algorithm: context.style.image_rendering,
-  };
+  let painter = BoxPainter::new(context, layout);
+  let background = painter.background();
+  let mut device = CanvasDevice::of(canvas, context);
 
-  BoxPainter::new(context, layout).background_color(Point::ZERO, &mut device);
+  // A blending layer mixes with the layers and color beneath it and nothing behind the box, so
+  // the whole background composites in one tile, color included.
+  let isolated = background
+    .layers
+    .iter()
+    .any(|layer| layer.blend_mode != BlendMode::Normal);
 
-  match context.style.background_clip {
-    BackgroundClip::BorderBox => {
-      let layers = background_image_layers(context, layout)?;
+  if !isolated && !matches!(background.clip, BackgroundClipArea::BorderArea(_)) {
+    painter.background_color(Point::ZERO, &mut device);
+  }
+
+  match background.clip {
+    BackgroundClipArea::BorderBox(border_radius) if isolated => {
+      if let Some(tile) = rasterize_layers(
+        collect_background_layers(&background, context)?,
+        layout.size.map(|x| x as u32),
+        context,
+        BorderProperties::default(),
+        Affine::IDENTITY,
+      )? {
+        canvas.overlay_image(
+          &tile,
+          border_radius,
+          context.transform,
+          context.style.image_rendering,
+          BlendMode::Normal,
+        );
+      }
+    }
+    BackgroundClipArea::BorderBox(border_radius) => {
+      let layers = background_image_layers(&background, context)?;
 
       if border_radius.is_zero() {
         for tile in layers {
@@ -205,42 +563,36 @@ pub(crate) fn draw_background(
         );
       }
     }
-    BackgroundClip::PaddingBox => {
-      draw_clipped_background(
-        ClipBox::padding_box(border_radius, layout),
-        context,
-        canvas,
-        layout,
-      )?;
+    BackgroundClipArea::Inner(clip) => {
+      let layers = if isolated {
+        collect_background_layers(&background, context)?
+      } else {
+        background_image_layers(&background, context)?
+      };
+
+      draw_clipped_background(clip, layers, context, canvas)?;
     }
-    BackgroundClip::ContentBox => {
-      draw_clipped_background(
-        ClipBox::content_box(border_radius, layout),
-        context,
-        canvas,
-        layout,
-      )?;
-    }
-    // Filling the border's own shape with the layers is the clip `border-area`
-    // asks for. The border then paints over it, as it does in Blink.
-    BackgroundClip::BorderArea => {
-      let layers = rasterize_layers(
-        collect_background_layers(context, layout)?,
+    BackgroundClipArea::BorderArea(_) => {
+      let tile = rasterize_layers(
+        collect_background_layers(&background, context)?,
         layout.size.map(|size| size as u32),
         context,
         BorderProperties::default(),
         Affine::IDENTITY,
       )?;
 
-      paint_border(
-        border_radius,
-        canvas,
-        layout.size,
-        context.transform,
-        layers.as_ref().map(PaintSource::from),
-      );
+      if let Some(tile) = &tile
+        && let Some(shape) = background.clip.shape(layout.size)
+      {
+        device.fill_shape_with_source(
+          &shape,
+          tile.into(),
+          Affine::IDENTITY,
+          context.style.image_rendering,
+        );
+      }
     }
-    _ => {}
+    BackgroundClipArea::Text => {}
   }
 
   Ok(())
@@ -250,12 +602,10 @@ pub(crate) fn draw_background(
 /// it. Shared by the padding-box and content-box `background-clip` modes.
 fn draw_clipped_background(
   clip: ClipBox,
+  layers: TileLayers,
   context: &RenderContext,
   canvas: &mut Canvas,
-  layout: Layout,
 ) -> Result<()> {
-  let layers = background_image_layers(context, layout)?;
-
   if let Some(tile) = rasterize_layers(
     layers,
     clip.size.map(|size| size as u32),
@@ -280,31 +630,36 @@ pub(crate) fn draw_border(
   canvas: &mut Canvas,
   layout: Layout,
 ) -> Result<()> {
-  paint_border(
-    BorderProperties::from_context(context, layout.size, layout.border),
-    canvas,
-    layout.size,
-    context.transform,
-    None,
-  );
+  BoxPainter::new(context, layout)
+    .paint_border(Point::ZERO, &mut CanvasDevice::of(canvas, context));
 
   Ok(())
 }
 
-/// The outline a box paints, resolved against its layout so nothing but the
-/// geometry has to survive until the box's children are done.
-pub(crate) fn resolve_outline(
-  context: &RenderContext,
-  layout: Layout,
-) -> Option<(OutlineGeometry, Affine)> {
-  let outline = BoxPainter::new(context, layout).outline()?;
-  let transform = context.transform * Affine::translation(-outline.grow, -outline.grow);
-
-  Some((outline, transform))
+/// A box's outline and the device state it paints with, kept until the box's children are done.
+pub(crate) struct DeferredOutline {
+  outline: PendingOutline,
+  transform: Affine,
+  algorithm: ImageScalingAlgorithm,
 }
 
-pub(crate) fn draw_outline(outline: &OutlineGeometry, transform: Affine, canvas: &mut Canvas) {
-  paint_border(outline.border, canvas, outline.size, transform, None);
+impl DeferredOutline {
+  /// The outline of the box `context` paints at `layout`, or `None` when it paints none.
+  pub(crate) fn of(context: &RenderContext, layout: Layout) -> Option<Self> {
+    Some(Self {
+      outline: BoxPainter::new(context, layout).pending_outline(Point::ZERO)?,
+      transform: context.transform,
+      algorithm: context.style.image_rendering,
+    })
+  }
+
+  pub(crate) fn paint(&self, canvas: &mut Canvas) {
+    self.outline.paint(&mut CanvasDevice::new(
+      canvas,
+      self.transform,
+      self.algorithm,
+    ));
+  }
 }
 
 struct SolidColorLayer<'a> {
@@ -395,4 +750,414 @@ fn draw_text_node_content(
   draw_inline_layout(context, canvas, layout, &built, &font_style)?;
 
   Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+  use takumi_core::{
+    geometry::{Point, Rect, Size},
+    layout::border::BorderProperties,
+    painter::{BoxBorderPainter, StrokeStyle},
+    style::{Affine, BorderStyle, Color, ImageScalingAlgorithm, Sides, SpacePair},
+  };
+
+  use super::CanvasDevice;
+  use crate::{Canvas, Cap, Stroke};
+
+  fn paint_border(
+    border: BorderProperties,
+    canvas: &mut Canvas,
+    size: Size<f32>,
+    transform: Affine,
+  ) {
+    let mut device = CanvasDevice::new(canvas, transform, ImageScalingAlgorithm::Auto);
+
+    BoxBorderPainter::new(&border, size).paint(Point::ZERO, &mut device);
+  }
+
+  fn test_border(style: BorderStyle, width: f32) -> BorderProperties {
+    BorderProperties {
+      width: Rect {
+        top: width,
+        right: width,
+        bottom: width,
+        left: width,
+      },
+      color: Rect {
+        top: Color([255, 0, 0, 255]),
+        right: Color([255, 0, 0, 255]),
+        bottom: Color([255, 0, 0, 255]),
+        left: Color([255, 0, 0, 255]),
+      },
+      radius: Sides([SpacePair::from_single(0.0); 4]),
+      style: Rect {
+        top: style,
+        right: style,
+        bottom: style,
+        left: style,
+      },
+      image_rendering: ImageScalingAlgorithm::Auto,
+      collapsed: false,
+      shape: Sides::default(),
+    }
+  }
+
+  #[test]
+  fn solid_border_draws_continuous_edge() {
+    let mut canvas = Canvas::new(Size {
+      width: 48,
+      height: 48,
+    });
+
+    paint_border(
+      test_border(BorderStyle::Solid, 4.0),
+      &mut canvas,
+      Size {
+        width: 48.0,
+        height: 48.0,
+      },
+      Affine::IDENTITY,
+    );
+
+    let image = canvas
+      .into_inner()
+      .unwrap_or_else(|error| unreachable!("test canvas should be readable: {error}"));
+    assert!((8..40).all(|x| image.get_pixel(x, 2).0[3] > 0));
+  }
+
+  #[test]
+  fn hidden_border_does_not_draw() {
+    let mut canvas = Canvas::new(Size {
+      width: 24,
+      height: 24,
+    });
+
+    paint_border(
+      test_border(BorderStyle::Hidden, 4.0),
+      &mut canvas,
+      Size {
+        width: 24.0,
+        height: 24.0,
+      },
+      Affine::IDENTITY,
+    );
+
+    let image = canvas
+      .into_inner()
+      .unwrap_or_else(|error| unreachable!("test canvas should be readable: {error}"));
+    assert!(image.pixels().all(|pixel| pixel.0[3] == 0));
+  }
+
+  #[test]
+  fn dashed_border_draws_pattern() {
+    let mut canvas = Canvas::new(Size {
+      width: 48,
+      height: 48,
+    });
+
+    paint_border(
+      test_border(BorderStyle::Dashed, 4.0),
+      &mut canvas,
+      Size {
+        width: 48.0,
+        height: 48.0,
+      },
+      Affine::IDENTITY,
+    );
+
+    let image = canvas
+      .into_inner()
+      .unwrap_or_else(|error| unreachable!("test canvas should be readable: {error}"));
+
+    let row: Vec<u8> = (0..48).map(|x| image.get_pixel(x, 2).0[3]).collect();
+    let has_opaque = row.iter().any(|&a| a > 0);
+    let has_transparent = row.iter().skip(8).take(32).any(|&a| a == 0);
+
+    assert!(has_opaque, "Dashed border should have opaque pixels");
+    assert!(
+      has_transparent,
+      "Dashed border should have transparent gaps"
+    );
+  }
+
+  #[test]
+  fn dotted_border_draws_pattern() {
+    let mut canvas = Canvas::new(Size {
+      width: 48,
+      height: 48,
+    });
+
+    paint_border(
+      test_border(BorderStyle::Dotted, 4.0),
+      &mut canvas,
+      Size {
+        width: 48.0,
+        height: 48.0,
+      },
+      Affine::IDENTITY,
+    );
+
+    let image = canvas
+      .into_inner()
+      .unwrap_or_else(|error| unreachable!("test canvas should be readable: {error}"));
+
+    let row: Vec<u8> = (0..48).map(|x| image.get_pixel(x, 2).0[3]).collect();
+    let has_opaque = row.iter().any(|&a| a > 0);
+    let has_transparent = row.iter().skip(8).take(32).any(|&a| a == 0);
+
+    assert!(has_opaque, "Dotted border should have opaque pixels");
+    assert!(
+      has_transparent,
+      "Dotted border should have transparent gaps"
+    );
+  }
+
+  #[test]
+  fn thin_dotted_border_draws_square_dots() {
+    let stroke = Stroke::from(&StrokeStyle::border(
+      Color::black(),
+      2.0,
+      BorderStyle::Dotted.dash_pattern(2.0, 48.0, false),
+    ));
+    let Some(dash_pattern) = stroke.dash else {
+      unreachable!("thin dotted stroke should produce a dash pattern");
+    };
+
+    assert_eq!(stroke.cap, Cap::Butt);
+    assert_eq!(dash_pattern.intervals, [2.0, 2.0]);
+  }
+
+  #[test]
+  fn dashed_border_top_only_draws_pattern() {
+    let mut canvas = Canvas::new(Size {
+      width: 48,
+      height: 48,
+    });
+    let mut border = test_border(BorderStyle::Dashed, 0.0);
+    border.width.top = 4.0;
+
+    paint_border(
+      border,
+      &mut canvas,
+      Size {
+        width: 48.0,
+        height: 48.0,
+      },
+      Affine::IDENTITY,
+    );
+
+    let image = canvas
+      .into_inner()
+      .unwrap_or_else(|error| unreachable!("test canvas should be readable: {error}"));
+    let top_row: Vec<u8> = (8..40).map(|x| image.get_pixel(x, 2).0[3]).collect();
+
+    assert!(
+      top_row.iter().any(|&alpha| alpha > 0),
+      "Top dashed side should contain opaque pixels"
+    );
+    assert!(
+      top_row.contains(&0),
+      "Top dashed side should contain transparent gaps"
+    );
+    assert_eq!(
+      image.get_pixel(24, 45).0[3],
+      0,
+      "Bottom side should stay transparent for top-only dashed border"
+    );
+    assert_eq!(
+      image.get_pixel(2, 24).0[3],
+      0,
+      "Left side should stay transparent for top-only dashed border"
+    );
+    assert_eq!(
+      image.get_pixel(45, 24).0[3],
+      0,
+      "Right side should stay transparent for top-only dashed border"
+    );
+  }
+
+  #[test]
+  fn dotted_border_left_only_draws_pattern() {
+    let mut canvas = Canvas::new(Size {
+      width: 48,
+      height: 48,
+    });
+    let mut border = test_border(BorderStyle::Dotted, 0.0);
+    border.width.left = 4.0;
+
+    paint_border(
+      border,
+      &mut canvas,
+      Size {
+        width: 48.0,
+        height: 48.0,
+      },
+      Affine::IDENTITY,
+    );
+
+    let image = canvas
+      .into_inner()
+      .unwrap_or_else(|error| unreachable!("test canvas should be readable: {error}"));
+    let left_column: Vec<u8> = (8..40).map(|y| image.get_pixel(2, y).0[3]).collect();
+
+    assert!(
+      left_column.iter().any(|&alpha| alpha > 0),
+      "Left dotted side should contain opaque pixels"
+    );
+    assert!(
+      left_column.contains(&0),
+      "Left dotted side should contain transparent gaps"
+    );
+    assert_eq!(
+      image.get_pixel(24, 2).0[3],
+      0,
+      "Top side should stay transparent for left-only dotted border"
+    );
+    assert_eq!(
+      image.get_pixel(45, 24).0[3],
+      0,
+      "Right side should stay transparent for left-only dotted border"
+    );
+    assert_eq!(
+      image.get_pixel(24, 45).0[3],
+      0,
+      "Bottom side should stay transparent for left-only dotted border"
+    );
+  }
+
+  #[test]
+  fn solid_fast_path_skips_hidden_side_with_positive_width() {
+    let mut canvas = Canvas::new(Size {
+      width: 48,
+      height: 48,
+    });
+    let mut border = test_border(BorderStyle::Solid, 4.0);
+    border.style.top = BorderStyle::Hidden;
+
+    paint_border(
+      border,
+      &mut canvas,
+      Size {
+        width: 48.0,
+        height: 48.0,
+      },
+      Affine::IDENTITY,
+    );
+
+    let image = canvas
+      .into_inner()
+      .unwrap_or_else(|error| unreachable!("test canvas should be readable: {error}"));
+
+    assert_eq!(
+      image.get_pixel(24, 2).0[3],
+      0,
+      "Hidden top side should stay transparent"
+    );
+    let right_band_has_ink = (44..48).any(|x| image.get_pixel(x, 24).0[3] > 0);
+    assert!(
+      right_band_has_ink,
+      "Visible right side should still be painted"
+    );
+  }
+
+  #[test]
+  fn double_fast_path_skips_hidden_side_with_positive_width() {
+    let mut canvas = Canvas::new(Size {
+      width: 48,
+      height: 48,
+    });
+    let mut border = test_border(BorderStyle::Double, 6.0);
+    border.style.top = BorderStyle::Hidden;
+
+    paint_border(
+      border,
+      &mut canvas,
+      Size {
+        width: 48.0,
+        height: 48.0,
+      },
+      Affine::IDENTITY,
+    );
+
+    let image = canvas
+      .into_inner()
+      .unwrap_or_else(|error| unreachable!("test canvas should be readable: {error}"));
+
+    assert_eq!(
+      image.get_pixel(24, 2).0[3],
+      0,
+      "Hidden top side should stay transparent"
+    );
+    let right_band_has_ink = (42..48).any(|x| image.get_pixel(x, 24).0[3] > 0);
+    assert!(
+      right_band_has_ink,
+      "Visible right side should still be painted"
+    );
+  }
+
+  #[test]
+  fn solid_fallback_ignores_hidden_neighbor_widths() {
+    let mut canvas = Canvas::new(Size {
+      width: 64,
+      height: 64,
+    });
+    let mut border = test_border(BorderStyle::Hidden, 0.0);
+    border.style.top = BorderStyle::Solid;
+    border.width.top = 8.0;
+    border.style.right = BorderStyle::Dashed;
+    border.width.right = 8.0;
+    border.width.left = 24.0;
+
+    paint_border(
+      border,
+      &mut canvas,
+      Size {
+        width: 64.0,
+        height: 64.0,
+      },
+      Affine::IDENTITY,
+    );
+
+    let image = canvas
+      .into_inner()
+      .unwrap_or_else(|error| unreachable!("test canvas should be readable: {error}"));
+
+    assert!(
+      image.get_pixel(4, 3).0[3] > 0,
+      "Visible top side should not be clipped by hidden left width"
+    );
+    assert_eq!(
+      image.get_pixel(3, 32).0[3],
+      0,
+      "Hidden left side should stay transparent"
+    );
+  }
+
+  #[test]
+  fn oversized_solid_border_fills_without_panicking() {
+    let mut canvas = Canvas::new(Size {
+      width: 20,
+      height: 20,
+    });
+    let border = test_border(BorderStyle::Solid, 40.0);
+
+    paint_border(
+      border,
+      &mut canvas,
+      Size {
+        width: 20.0,
+        height: 20.0,
+      },
+      Affine::IDENTITY,
+    );
+
+    let image = canvas
+      .into_inner()
+      .unwrap_or_else(|error| unreachable!("test canvas should be readable: {error}"));
+
+    assert!(
+      image.get_pixel(10, 10).0[3] > 0,
+      "Oversized border should still render a valid filled mask"
+    );
+  }
 }

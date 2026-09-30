@@ -610,6 +610,105 @@ fn interpolate_hi(
   entry
 }
 
+/// Stops sampled from a gradient's colour LUT, enough that a consumer interpolating in sRGB
+/// matches another interpolation colour space such as Oklab.
+const SRGB_SAMPLED_STOPS: usize = 64;
+
+/// A gradient stop in straight sRGB, placed along the gradient from 0 to 1.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct SrgbStop {
+  /// Where the stop sits, from 0 to 1.
+  pub offset: f32,
+  /// The stop's colour.
+  pub color: Color,
+}
+
+impl SrgbStop {
+  /// `stops` placed by their position within `span` from `base`, clamped to 0..1.
+  pub fn spanned(stops: &[ResolvedGradientStop], base: f32, span: f32) -> Vec<Self> {
+    let span = span.max(1e-6);
+
+    stops
+      .iter()
+      .map(|stop| Self {
+        offset: ((stop.position - base) / span).clamp(0.0, 1.0),
+        color: stop.color,
+      })
+      .collect()
+  }
+
+  /// Evenly spaced samples of the gradient's colours along `axis_length`, baking
+  /// `interpolation` into stops a consumer can interpolate in sRGB. Hard stops stay exact.
+  pub fn sampled(
+    resolved: &[ResolvedGradientStop],
+    axis_length: f32,
+    interpolation: ColorInterpolationMethod,
+  ) -> Vec<Self> {
+    let lut = ColorLut::new(
+      resolved,
+      axis_length.max(1e-6),
+      SRGB_SAMPLED_STOPS,
+      interpolation,
+      false,
+    );
+    let lut = lut.colors();
+
+    if lut.len() <= 1 {
+      return Self::spanned(resolved, 0.0, axis_length);
+    }
+
+    let span = axis_length.max(1e-6);
+    let cell = 1.0 / (lut.len() - 1) as f32;
+    // Hard stops: adjacent resolved stops with (near-)equal positions.
+    let hard_stops: Vec<(f32, Color, Color)> = resolved
+      .windows(2)
+      .filter(|pair| (pair[1].position - pair[0].position).abs() <= 1e-3)
+      .map(|pair| {
+        (
+          (pair[0].position / span).clamp(0.0, 1.0),
+          pair[0].color,
+          pair[1].color,
+        )
+      })
+      .collect();
+    let mut stops: Vec<Self> = lut
+      .iter()
+      .enumerate()
+      .filter_map(|(index, &premultiplied)| {
+        let offset = index as f32 / (lut.len() - 1) as f32;
+        // Drop samples that straddle a hard stop; the injected pair covers it.
+        let straddles = hard_stops
+          .iter()
+          .any(|(boundary, ..)| (offset - boundary).abs() < cell);
+        let straight = premultiplied.demultiply();
+
+        (!straddles).then(|| Self {
+          offset,
+          color: Color([
+            straight.red(),
+            straight.green(),
+            straight.blue(),
+            straight.alpha(),
+          ]),
+        })
+      })
+      .collect();
+
+    for (boundary, before, after) in hard_stops {
+      stops.push(Self {
+        offset: boundary,
+        color: before,
+      });
+      stops.push(Self {
+        offset: boundary,
+        color: after,
+      });
+    }
+    stops.sort_by(|a, b| a.offset.total_cmp(&b.offset));
+    stops
+  }
+}
+
 /// Precomputed gradient samples: 8-bit for plain reads and, when dithering, premultiplied 8.8 for
 /// dithered ones.
 #[derive(Debug, Clone, Default)]

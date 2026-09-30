@@ -1,10 +1,15 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630">
   <rect x="0" y="0" width="1200" height="630" fill="#f5f5f5"/>
-  <filter id="bl0">
-    <feGaussianBlur stdDeviation="20"/>
-  </filter>
-  <g filter="url(#bl0)">
-    <path d="M344 201h512c13.25 0 24 10.75 24 24v212c0 13.25-10.75 24-24 24h-512c-13.25 0-24-10.75-24-24v-212c0-13.25 10.75-24 24-24Z" fill="#000" fill-opacity=".251"/>
+  <clipPath id="cp0">
+    <path d="M-1000000-1000000H1000000V1000000H-1000000ZM344 185h512c13.25 0 24 10.75 24 24v212c0 13.25-10.75 24-24 24h-512c-13.25 0-24-10.75-24-24v-212c0-13.25 10.75-24 24-24Z" clip-rule="evenodd"/>
+  </clipPath>
+  <g clip-path="url(#cp0)">
+    <filter id="bl1">
+      <feGaussianBlur stdDeviation="20"/>
+    </filter>
+    <g filter="url(#bl1)">
+      <path d="M344 201h512c13.25 0 24 10.75 24 24v212c0 13.25-10.75 24-24 24h-512c-13.25 0-24-10.75-24-24v-212c0-13.25 10.75-24 24-24Z" fill="#000" fill-opacity=".251"/>
+    </g>
   </g>
   <path d="M344 185h512c13.25 0 24 10.75 24 24v212c0 13.25-10.75 24-24 24h-512c-13.25 0-24-10.75-24-24v-212c0-13.25 10.75-24 24-24Z" fill="#111827"/>
   <g fill="#fff">

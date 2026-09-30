@@ -4,7 +4,7 @@ use crate::{
 };
 
 /// Represents a resolved box shadow with all its properties.
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, PartialEq)]
 pub struct SizedShadow {
   /// Horizontal offset of the shadow.
   pub offset_x: f32,

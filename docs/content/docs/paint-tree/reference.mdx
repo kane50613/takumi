@@ -1,6 +1,6 @@
 ---
 title: Reference
-description: Paint options, tree methods, and serialized field formats.
+description: Paint options, tree methods, and node, run, and drawable fields.
 icon: BookMarked
 ---
 
@@ -30,63 +30,69 @@ icon: BookMarked
 
 ## PaintTree
 
-| Member            | Value                                                |
-| ----------------- | ---------------------------------------------------- |
-| `width`, `height` | Canvas size in device pixels                         |
-| `fonts`           | Font instances referenced by run `fontIndex`         |
-| `root`            | Root `PaintNode`                                     |
-| `[...tree]`       | Nodes in paint order, parents before children        |
-| `textRuns()`      | `{ run, node }` pairs in paint order                 |
-| `find(id)`        | First node whose `source.id` matches, or `undefined` |
+| Member            | Value                                               |
+| ----------------- | --------------------------------------------------- |
+| `width`, `height` | Canvas size in device pixels                        |
+| `fonts`           | Every `Font` the runs use                           |
+| `root`            | The root `BoxNode`                                  |
+| `nodes`           | Every node in document order, as an array           |
+| `steps`           | Steps a renderer takes, in paint order, as an array |
 
-## PaintNode
+## Nodes
 
-| Field                                    | Value                                                                 |
-| ---------------------------------------- | --------------------------------------------------------------------- |
-| `source?`                                | Input path, ID, tag name, and class name; absent for an anonymous box |
-| `x`, `y`, `width`, `height`              | Canvas origin and border-box size                                     |
-| `contentBox`                             | Rect inset by border and padding, in border-box space                 |
-| `transform?`                             | Absolute matrix for a rotated, scaled, or skewed box                  |
-| `matrix`                                 | Getter: `transform`, or translation by `x` and `y`                    |
-| `opacity`                                | Group opacity from `0` to `1`                                         |
-| `blendMode?`, `isolate`                  | Group blend mode and isolation                                        |
-| `clip?`                                  | Rounded padding-box clip with `x` and `y` axis flags                  |
-| `background?`                            | Color, clip mode, and bottom-to-top image layers                      |
-| `border?`, `shadows?`, `outline?`        | Box decorations                                                       |
-| `image?`                                 | Replaced image source and placement after object fit and position     |
-| `inlineBackgrounds?`                     | Rounded inline-span rectangles                                        |
-| `textShadows?`, `textRuns`, `textAlign?` | Text drawing and alignment data                                       |
-| `unresolvedEffects?`                     | CSS text for filter, backdrop filter, mask image, and clip path       |
-| `children`                               | Child boxes in paint order                                            |
+Every node has these fields.
 
-## PaintTextRun
+| Field             | Value                                                            |
+| ----------------- | ---------------------------------------------------------------- |
+| `type`            | `box`, `text`, or `image`                                        |
+| `element`         | The input element's `id`, `tagName`, `className`, and child path |
+| `transform`       | Matrix from local space onto the canvas                          |
+| `width`, `height` | Size of the local space                                          |
+| `bounds`          | The node's rectangle on the canvas, after `transform`            |
+| `parent`          | The enclosing `BoxNode`                                          |
+| `drawables`       | What the node draws, in local space                              |
 
-| Field                                     | Value                                      |
-| ----------------------------------------- | ------------------------------------------ |
-| `text`                                    | Run text                                   |
-| `x`, `y`                                  | Baseline start in border-box space         |
-| `width`                                   | Advance                                    |
-| `ascent`, `descent`                       | Typographic distances from the baseline    |
-| `top`, `bottom`                           | Getters: `y - ascent` and `y + descent`    |
-| `fontIndex`, `font`                       | Font table index and resolved font object  |
-| `fontSize`, `lineHeight`, `letterSpacing` | Used text metrics in device pixels         |
-| `color`, `opacity`                        | Fill color and span opacity                |
-| `transform?`                              | Additional text-fit matrix                 |
-| `glyphs`                                  | Glyph IDs and offsets from run origin      |
-| `decorations?`, `stroke?`                 | Text decoration rectangles and text stroke |
-| `textByteRange`, `spanId?`                | UTF-8 source byte range and inline span ID |
+| Node        | Extra fields                                                             |
+| ----------- | ------------------------------------------------------------------------ |
+| `BoxNode`   | `contentBox`, `outline`, `effects`, `overflowClip`, `children`; iterable |
+| `TextNode`  | `textAlign` with `start` and `end` resolved, `runs` in visual order      |
+| `ImageNode` | `image`: the decoded `src`, `width`, and `height`                        |
 
-`PaintFont` records `family?`, `faceIndex`, `weight`, `style`, `width`, `variations`, `syntheticBoldWidth?`, and `syntheticObliqueAngle?`. The optional family is absent when the registry cannot name the face.
+## TextRun
+
+| Field                                     | Value                                           |
+| ----------------------------------------- | ----------------------------------------------- |
+| `text`                                    | Final text, after `text-transform` and ellipsis |
+| `element?`                                | The inline element the run came from            |
+| `x`, `y`                                  | Baseline start in the text node's local space   |
+| `width`                                   | Advance                                         |
+| `line`                                    | Index of the line, from `0`                     |
+| `ascent`, `descent`                       | Typographic distances from the baseline         |
+| `font`                                    | The `Font` the run was shaped with              |
+| `fontSize`, `lineHeight`, `letterSpacing` | Used text metrics in device pixels              |
+| `glyphs`                                  | Glyph IDs and offsets from the baseline start   |
+| `outline()`                               | Glyph outlines as SVG path data                 |
+| `transform?`                              | The `text-fit` scale, applied before `x`, `y`   |
+
+`Font` records `family?`, `weight`, `style`, `stretch`, `variationSettings`, and `faceIndex`. `font.data()` returns the font file.
 
 ## Value formats
 
-| Type                   | Format                                                              |
-| ---------------------- | ------------------------------------------------------------------- |
-| `Rgba`                 | `[r, g, b, a]`, each byte from `0` to `255`                         |
-| `Matrix`               | `[a, b, c, d, e, f]`                                                |
-| `PaintRect`            | `{ x, y, width, height }`                                           |
-| `Radii`                | Four `[x, y]` pairs: top-left, top-right, bottom-right, bottom-left |
-| Border sides           | Arrays ordered top, right, bottom, left                             |
-| `PaintBackgroundLayer` | `fill`, `tiles` (`xs`, `ys`, `width`, `height`), `blendMode`        |
-| `PaintFill`            | Discriminated `linear`, `radial`, `conic`, or `image` fill          |
-| `PaintShadow`          | `offsetX`, `offsetY`, `blur`, `spread`, `color`                     |
+| Type          | Format                                                                              |
+| ------------- | ----------------------------------------------------------------------------------- |
+| `Rgba`        | `[r, g, b, a]`, each byte from `0` to `255`, in sRGB                                |
+| `Matrix`      | `[a, b, c, d, e, f]`, as `setTransform` takes it                                    |
+| `Rect`        | `{ x, y, width, height }`                                                           |
+| `CornerRadii` | `topLeft`, `topRight`, `bottomRight`, `bottomLeft`, each an `{ x, y }` radius       |
+| `Shape`       | `rect`, `rounded-rect`, or `path` (SVG path data, as `new Path2D()` takes it)       |
+| `Paint`       | `color`, `linear-gradient`, `radial-gradient`, `conic-gradient`, `image`, `pattern` |
+| `Stroke`      | `width`, `dash?`, `cap`, `join`                                                     |
+| `Drawable`    | `fill`, `stroke`, `shadow`, `glyphs`, `image`, `group`                              |
+| `Filter`      | `blur`, `color-matrix`, `drop-shadow`, `unsupported`                                |
+| `Effects`     | `opacity`, `blendMode`, `isolation`, `filters`, `backdropFilters`, `clip`, `mask`   |
+
+## What stays unresolved
+
+- `filter: url(#id)` arrives as `{ type: "unsupported", css }`.
+- `backdrop-filter` needs what is already drawn behind the node, which targets such as PPTX cannot read.
+- Bitmap glyphs, such as some emoji fonts, are left out of `run.outline()`.
