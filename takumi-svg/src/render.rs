@@ -7,7 +7,7 @@ use takumi_core::{
   context::RenderContext,
   error::Result,
   font_style::SizedFontStyle,
-  geometry::{Point, Rect},
+  geometry::{Point, Rect, Size},
   layout::{
     background_image_geometry::FillLayers,
     border::BorderProperties,
@@ -17,12 +17,13 @@ use takumi_core::{
     tree::RenderNode,
   },
   painter::{
-    BackgroundClipArea, BoxFrame, BoxPainter, FillShape, GlyphDevice, GlyphFill, OverflowClip,
-    OwnContent, PaintDevice, PendingOutline, ShadowShape, StrokeStyle, UNBOUNDED,
+    BackgroundClipArea, BoxBorderPainter, BoxFrame, BoxPainter, FillShape, GlyphDevice, GlyphFill,
+    LayerBounds, OverflowClip, OwnContent, PaintDevice, PendingOutline, ShadowShape, StrokeStyle,
+    UNBOUNDED,
   },
   path_data::{edges_path_data, path_data},
   resources::image::ImageSource,
-  scene::Scene,
+  scene::{BoxPart, Scene},
   shadow::SizedShadow,
   style::{
     Affine, BackgroundImage, BlendMode, Color, ComputedStyle, FillRule, FontFamily, Isolation,
@@ -189,6 +190,23 @@ impl<'n> PlacedBox<'n> {
     if background.layers.is_empty() {
       return Ok(());
     }
+    if let Some(mask) = background.clip.border_mask() {
+      DocumentDevice::paint(doc, |device| {
+        device.with_border_mask(&mask, self.frame.layout.size, self.frame.origin, |device| {
+          device.write(|doc| {
+            LayerEmitter::new(&self.node.context, doc).layers(
+              &background.layers,
+              Frame::origin_box(self.frame, background.origin),
+              Frame::border_box(self.frame),
+            )
+          });
+        });
+      })?;
+      if let Some(isolate) = isolate {
+        doc.end_group(isolate)?;
+      }
+      return Ok(());
+    }
     let group = self
       .background_clip_path_data(background.clip)
       .map(|(data, rule)| {
@@ -295,10 +313,11 @@ pub(crate) struct BoxChrome {
 }
 
 impl BoxChrome {
-  /// Emits a box's shared chrome and opens its child group.
+  /// Emits `part` of a box's shared chrome and opens its child group.
   pub(crate) fn open(
     placed: &PlacedBox,
     group_transform: Affine,
+    part: BoxPart,
     doc: &mut SvgDocument,
   ) -> io::Result<Self> {
     let context = &placed.node.context;
@@ -339,7 +358,7 @@ impl BoxChrome {
 
     let clip_group = placed.begin_clip_path_group(doc)?;
 
-    if placed.node.paints_own_box() {
+    if part != BoxPart::Content && placed.node.paints_own_box() {
       placed.emit_box_shadows(doc)?;
 
       // `background-clip` picks the shape a background fills, never when it paints:
@@ -358,7 +377,9 @@ impl BoxChrome {
       .transpose()?;
 
     Ok(Self {
-      outline: placed.painter.pending_outline(placed.frame.origin),
+      outline: (part != BoxPart::Decorations)
+        .then(|| placed.painter.pending_outline(placed.frame.origin))
+        .flatten(),
       blend,
       isolate,
       mask,
@@ -552,11 +573,46 @@ impl PaintDevice for DocumentDevice<'_> {
     self.begin_clip(&data, FillRule::EvenOdd);
   }
 
+  fn push_aliased_clip(&mut self, shape: &FillShape, transform: Affine) {
+    let data = path_data(&shape.to_commands(), self.shadow_moved(transform));
+
+    self.open_group(|doc| {
+      let clip = doc.aliased_clip_path(&data, shape.rule())?;
+
+      doc.begin_group(Affine::IDENTITY, 1.0, Some(&clip), None)
+    });
+  }
+
   fn pop_clip(&mut self) {
     self.close_group();
   }
 
-  fn begin_layer(&mut self, opacity: f32) {
+  fn with_border_mask(
+    &mut self,
+    border: &BorderProperties,
+    size: Size<f32>,
+    origin: Point<f32>,
+    content: impl FnOnce(&mut Self),
+  ) {
+    if self.error.is_some() {
+      return;
+    }
+    let (token, reference) = match self.doc.begin_mask() {
+      Ok(mask) => mask,
+      Err(error) => {
+        self.error = Some(error);
+        return;
+      }
+    };
+
+    BoxBorderPainter::new(border, size).paint(origin, self);
+    self.write(|doc| doc.end_mask(token));
+    self.open_group(|doc| doc.begin_masked_group(&reference));
+    content(self);
+    self.close_group();
+  }
+
+  fn begin_layer(&mut self, opacity: f32, _bounds: Option<LayerBounds>) {
     self.open_group(|doc| doc.begin_group(Affine::IDENTITY, opacity, None, None));
   }
 
@@ -658,7 +714,7 @@ pub(crate) fn emit_inline_box(
     InlineBoxPaint::Replaced { node, layout } => {
       let placed = PlacedBox::new(node, BoxFrame::new(layout, origin));
       let group_transform = placed.element_transform().unwrap_or(Affine::IDENTITY);
-      let chrome = BoxChrome::open(&placed, group_transform, doc)?;
+      let chrome = BoxChrome::open(&placed, group_transform, BoxPart::Whole, doc)?;
 
       placed.emit_own_content(doc)?;
       chrome.close(doc)

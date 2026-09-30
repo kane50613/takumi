@@ -2,6 +2,7 @@
 
 mod background;
 mod border;
+mod box_side;
 mod content;
 mod decoration;
 mod outline;
@@ -30,6 +31,16 @@ use crate::{
   shadow::SizedShadow,
   style::{Affine, BackgroundImage, BoxShadow, Color, FillRule, Overflow, SpacePair},
 };
+
+/// How far a layer's paint can reach: a rectangle of `size` at the origin under `transform`, as
+/// Skia's `saveLayer` bounds.
+#[derive(Debug, Clone, Copy)]
+pub struct LayerBounds {
+  /// The rectangle's size.
+  pub size: Size<f32>,
+  /// Where the rectangle sits.
+  pub transform: Affine,
+}
 
 /// A distance far enough out that an edge placed there never shows, for a clip that is unbounded on
 /// some side.
@@ -89,6 +100,31 @@ impl FillShape {
     match self {
       Self::Path { rule, .. } => *rule,
       _ => FillRule::NonZero,
+    }
+  }
+
+  /// Closed polygons of `N` corners each, filled nonzero.
+  pub fn polygons<const N: usize>(polygons: impl IntoIterator<Item = [Point<f32>; N]>) -> Self {
+    let commands = polygons
+      .into_iter()
+      .flat_map(|corners| {
+        corners
+          .into_iter()
+          .enumerate()
+          .map(|(index, corner)| {
+            if index == 0 {
+              PathCommand::MoveTo(corner)
+            } else {
+              PathCommand::LineTo(corner)
+            }
+          })
+          .chain([PathCommand::Close])
+      })
+      .collect();
+
+    Self::Path {
+      commands,
+      rule: FillRule::NonZero,
     }
   }
 
@@ -260,20 +296,40 @@ pub trait PaintDevice {
   /// [`PaintDevice::pop_clip`].
   fn push_clip_out(&mut self, shape: &FillShape, transform: Affine);
 
+  /// Clips later draws to `shape` under `transform` without antialiasing its edges, as a Skia clip
+  /// with antialiasing off keeps only the pixels whose centres fall inside, until the matching
+  /// [`PaintDevice::pop_clip`].
+  fn push_aliased_clip(&mut self, shape: &FillShape, transform: Affine);
+
   /// Removes the most recent clip.
   fn pop_clip(&mut self);
 
+  /// Paints `content` only where `border` paints on a box of `size` at `origin`, as a `DstIn`
+  /// layer keeps it, for `background-clip: border-area`.
+  fn with_border_mask(
+    &mut self,
+    border: &BorderProperties,
+    size: Size<f32>,
+    origin: Point<f32>,
+    content: impl FnOnce(&mut Self),
+  ) where
+    Self: Sized;
+
   /// Draws what follows into a layer that composites at `opacity` on the matching
-  /// [`PaintDevice::end_layer`].
-  fn begin_layer(&mut self, opacity: f32);
+  /// [`PaintDevice::end_layer`], reaching no further than `bounds` when given.
+  fn begin_layer(&mut self, opacity: f32, bounds: Option<LayerBounds>);
 
   /// Composites the most recent layer.
   fn end_layer(&mut self);
 
-  /// Runs `paint` into a layer at `opacity`, without the layer when the paint is opaque and not
-  /// at all when it is invisible.
-  fn with_opacity(&mut self, opacity: f32, paint: impl FnOnce(&mut Self))
-  where
+  /// Runs `paint` into a layer at `opacity` reaching no further than `bounds`, without the layer
+  /// when the paint is opaque and not at all when it is invisible.
+  fn with_opacity(
+    &mut self,
+    opacity: f32,
+    bounds: Option<LayerBounds>,
+    paint: impl FnOnce(&mut Self),
+  ) where
     Self: Sized,
   {
     if opacity <= 0.0 {
@@ -283,7 +339,7 @@ pub trait PaintDevice {
       return paint(self);
     }
 
-    self.begin_layer(opacity);
+    self.begin_layer(opacity, bounds);
     paint(self);
     self.end_layer();
   }
@@ -380,12 +436,19 @@ impl<'c> BoxPainter<'c> {
     if color.0[3] == 0 {
       return;
     }
-    let Some(shape) = self.background_clip().shape(self.layout.size) else {
+    let clip = self.background_clip();
+    let Some(shape) = clip.shape(self.layout.size) else {
       return;
     };
+    let at = Affine::translation(origin.x, origin.y);
 
     device.set_role(PaintRole::Background);
-    device.fill_shape(&shape, color, Affine::translation(origin.x, origin.y));
+    match clip.border_mask() {
+      Some(mask) => device.with_border_mask(&mask, self.layout.size, origin, |device| {
+        device.fill_shape(&FillShape::Rect(self.layout.size), color, at);
+      }),
+      None => device.fill_shape(&shape, color, at),
+    }
   }
 
   /// The box's `box-shadow` layers, resolved and split into the ones that fall inside the box and

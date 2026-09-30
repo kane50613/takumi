@@ -178,8 +178,7 @@ pub(crate) struct SvgDocument {
   /// Interned glyph outlines in glyph space, emitted as `<defs>` by [`Self::finish`].
   glyph_defs: Vec<String>,
   glyph_ids: HashMap<String, u32>,
-  /// The transform each open transformed group maps its content onto the root with, innermost
-  /// last.
+  /// Each open transformed group's transform onto the root, innermost last.
   transforms: Vec<Affine>,
 }
 
@@ -348,14 +347,31 @@ impl SvgDocument {
     rule: FillRule,
     transform: Option<&str>,
   ) -> io::Result<String> {
-    let (id, reference) = self.alloc_id("cp");
-    self.open("clipPath", &[("id", id.into())])?;
-    let mut attrs: Vec<(&str, Cow<'_, str>)> = vec![("d", data.into())];
-    if rule == FillRule::EvenOdd {
-      attrs.push(("clip-rule", "evenodd".into()));
-    }
+    let mut attrs: Vec<(&str, Cow<'_, str>)> = Vec::new();
+
     if let Some(transform) = transform {
       attrs.push(("transform", transform.into()));
+    }
+    self.clip_path_with(data, rule, attrs)
+  }
+
+  /// Defines a `<clipPath>` from SVG path data whose edges keep only the pixels their centres
+  /// cover, and returns its `url(#id)`.
+  pub(crate) fn aliased_clip_path(&mut self, data: &str, rule: FillRule) -> io::Result<String> {
+    self.clip_path_with(data, rule, vec![("shape-rendering", "crispEdges".into())])
+  }
+
+  fn clip_path_with<'a>(
+    &mut self,
+    data: &'a str,
+    rule: FillRule,
+    mut attrs: Vec<(&'a str, Cow<'a, str>)>,
+  ) -> io::Result<String> {
+    let (id, reference) = self.alloc_id("cp");
+    self.open("clipPath", &[("id", id.into())])?;
+    attrs.push(("d", data.into()));
+    if rule == FillRule::EvenOdd {
+      attrs.push(("clip-rule", "evenodd".into()));
     }
     self.empty("path", &attrs)?;
     self.close("clipPath")?;

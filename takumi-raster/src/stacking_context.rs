@@ -1,6 +1,9 @@
 use takumi_core::{
   geometry::{ComputedLayout as Layout, NodeId},
-  scene::{NodePaint, PaintItem, PaintItemKind, Scene, SceneBounds, StackingContextNode},
+  scene::{
+    BoxPart, NodePaint, PaintItem, PaintItemKind, PaintPhase, Scene, SceneBounds,
+    StackingContextNode,
+  },
 };
 use tiny_skia::PixmapMut;
 
@@ -19,14 +22,15 @@ enum DeferredNodeRender {
   SkipRendering,
 }
 
-/// The state a painted node leaves open until its descendants are done: its
-/// constraint mask, its isolation layer, and the bounds its filters cover.
+/// What a painted node leaves open until its descendants are done.
 struct PendingFinish {
   layout: Layout,
   /// How many masks the node pushed.
   constraints: usize,
   isolated_canvas: Option<Box<CanvasSubcanvas>>,
   filter_bounds: Option<SceneBounds>,
+  /// Whether this pass paints the outline.
+  outline: bool,
 }
 
 impl PendingFinish {
@@ -37,9 +41,10 @@ impl PendingFinish {
     canvas: &mut Canvas,
     outlines: Option<&mut Vec<DeferredOutline>>,
   ) -> Result<()> {
-    // CSS 2.1 Appendix E paints the outline last, above the box's children, so a
-    // node whose children follow it in the bucket hands its outline to the caller.
-    if let Some(deferred) = DeferredOutline::of(&node.context, self.layout) {
+    // CSS 2.1 Appendix E paints outlines after the box's children.
+    if self.outline
+      && let Some(deferred) = DeferredOutline::of(&node.context, self.layout)
+    {
       match outlines {
         Some(outlines) => outlines.push(deferred),
         None => deferred.paint(canvas)?,
@@ -164,7 +169,13 @@ impl<'a> ScenePainter<'a> {
     let mut outlines = Vec::new();
 
     if let Some(root_paint) = context.root() {
-      match self.begin_node(root_paint, true, context.paint_bounds(), &mut outlines)? {
+      match self.begin_node(
+        root_paint,
+        BoxPart::Decorations,
+        true,
+        context.paint_bounds(),
+        &mut outlines,
+      )? {
         Some(DeferredNodeRender::SkipRendering) => return Ok(()),
         Some(deferred_root_render @ DeferredNodeRender::Deferred { .. }) => {
           deferred_root = Some(deferred_root_render);
@@ -173,8 +184,15 @@ impl<'a> ScenePainter<'a> {
       }
     }
 
-    for bucket in context.in_paint_order() {
-      self.paint_bucket(bucket, &mut outlines)?;
+    for phase in context.paint_phases() {
+      match phase {
+        PaintPhase::RootContent => {
+          if let (Some(root_paint), Some(_)) = (context.root(), &deferred_root) {
+            self.paint_content(root_paint)?;
+          }
+        }
+        PaintPhase::Items(items, part) => self.paint_items(items, part, &mut outlines)?,
+      }
     }
 
     for outline in &outlines {
@@ -197,27 +215,41 @@ impl<'a> ScenePainter<'a> {
     Ok(())
   }
 
-  fn paint_bucket(
+  fn paint_items(
     &mut self,
     items: &[PaintItem],
+    part: BoxPart,
     outlines: &mut Vec<DeferredOutline>,
   ) -> Result<()> {
     for item in items {
+      let Some(part) = item.part_in(part) else {
+        continue;
+      };
+
       match &item.kind {
         PaintItemKind::Node(node_paint) => {
-          self.begin_node(node_paint, false, None, outlines)?;
+          self.begin_node(node_paint, part, false, None, outlines)?;
         }
-        PaintItemKind::Context(context_id) => {
-          self.paint_context(*context_id)?;
-        }
+        PaintItemKind::Context(context_id) => self.paint_context(*context_id)?,
       }
     }
     Ok(())
   }
 
+  /// Paints a context root's own content.
+  fn paint_content(&mut self, node_paint: &NodePaint) -> Result<()> {
+    let Some(current) = self.root.node_at_path_mut(&node_paint.path) else {
+      return Err(Error::InvalidLayoutNode(node_paint.node_id.into()));
+    };
+    let layout = self.layout_results.layout(node_paint.node_id)?;
+
+    draw_node_content(current, self.canvas, layout, node_paint.transform)
+  }
+
   fn begin_node(
     &mut self,
     node_paint: &NodePaint,
+    part: BoxPart,
     defer_finish: bool,
     isolation_bounds_hint: Option<SceneBounds>,
     outlines: &mut Vec<DeferredOutline>,
@@ -244,7 +276,7 @@ impl<'a> ScenePainter<'a> {
     );
     current.context.transform = node_paint.transform;
 
-    if !current.context.style.backdrop_filter.is_empty() {
+    if part != BoxPart::Content && !current.context.style.backdrop_filter.is_empty() {
       // Filtered backdrop is clipped by the node's clip-path and mask, like Chromium's
       // backdrop root: https://drafts.fxtf.org/filter-effects-2/#BackdropRoot
       let node_masks = if current.context.style.has_shape_mask() {
@@ -302,7 +334,9 @@ impl<'a> ScenePainter<'a> {
     for mask in masks.shell {
       canvas.push_mask(mask);
     }
-    draw_render_node_shell(current, canvas, layout)?;
+    if part != BoxPart::Content {
+      draw_render_node_shell(current, canvas, layout)?;
+    }
     if let Some(mask) = masks.content {
       canvas.push_mask(mask);
     }
@@ -312,31 +346,44 @@ impl<'a> ScenePainter<'a> {
       constraints,
       isolated_canvas,
       filter_bounds: node_paint.paint_bounds,
+      outline: part != BoxPart::Decorations || defer_finish,
     };
 
-    // An inline formatting context paints over the debug border, text and images under it.
-    let inline = current.should_create_inline_layout();
-
-    if !inline {
-      draw_own_content(current, &current.context, canvas, layout)?;
-    }
-    if current.context.draw_debug_border() {
-      draw_debug_border(canvas, layout, node_paint.transform);
-    }
-
-    if inline {
-      draw_own_content(current, &current.context, canvas, layout)?;
-    } else if defer_finish {
+    if defer_finish {
       return Ok(Some(DeferredNodeRender::Deferred {
         path: node_paint.path.clone(),
         finish,
       }));
+    }
+    if part != BoxPart::Decorations {
+      draw_node_content(current, canvas, layout, node_paint.transform)?;
     }
 
     finish.run(current, canvas, Some(outlines))?;
 
     Ok(None)
   }
+}
+
+/// Paints a node's own content and debug border, an inline formatting context over the border.
+fn draw_node_content(
+  node: &RenderNode,
+  canvas: &mut Canvas,
+  layout: Layout,
+  transform: Affine,
+) -> Result<()> {
+  let inline = node.should_create_inline_layout();
+
+  if !inline {
+    draw_own_content(node, &node.context, canvas, layout)?;
+  }
+  if node.context.draw_debug_border() {
+    draw_debug_border(canvas, layout, transform);
+  }
+  if inline {
+    draw_own_content(node, &node.context, canvas, layout)?;
+  }
+  Ok(())
 }
 
 fn draw_render_node_shell(node: &RenderNode, canvas: &mut Canvas, layout: Layout) -> Result<()> {

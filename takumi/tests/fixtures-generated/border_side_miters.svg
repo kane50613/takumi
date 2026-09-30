@@ -1,0 +1,128 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="640" height="280" viewBox="0 0 640 280">
+  <rect x="0" y="0" width="640" height="280" fill="#fff"/>
+  <path d="M24 28.5h56" fill="none" stroke="#2563eb" stroke-width="9" stroke-dasharray="18 1"/>
+  <path d="M24 75.5h56" fill="none" stroke="#2563eb" stroke-width="9" stroke-dasharray="18 1"/>
+  <path d="M75.5 24v56" fill="none" stroke="#2563eb" stroke-width="9" stroke-dasharray="18 1"/>
+  <path d="M28.5 24v56" fill="none" stroke="#2563eb" stroke-width="9" stroke-dasharray="18 1"/>
+  <path d="M107 27h50" fill="none" stroke="#dc2626" stroke-width="6" stroke-dasharray="0 12.49" stroke-linecap="round"/>
+  <path d="M107 77h50" fill="none" stroke="#dc2626" stroke-width="6" stroke-dasharray="0 12.49" stroke-linecap="round"/>
+  <path d="M157 27v50" fill="none" stroke="#dc2626" stroke-width="6" stroke-dasharray="0 12.49" stroke-linecap="round"/>
+  <path d="M107 27v50" fill="none" stroke="#dc2626" stroke-width="6" stroke-dasharray="0 12.49" stroke-linecap="round"/>
+  <clipPath id="cp0">
+    <path d="M184 24l10 10h36l10-10Z"/>
+  </clipPath>
+  <g clip-path="url(#cp0)">
+    <path d="M184 29h56" fill="none" stroke="#2563eb" stroke-width="10" stroke-dasharray="20 16"/>
+  </g>
+  <clipPath id="cp1">
+    <path d="M240 80l-10-10h-36l-10 10Z"/>
+  </clipPath>
+  <g clip-path="url(#cp1)">
+    <path d="M184 75h56" fill="none" stroke="#16a34a" stroke-width="10" stroke-dasharray="20 16"/>
+  </g>
+  <clipPath id="cp2">
+    <path d="M240 24l-10 10v36l10 10Z"/>
+  </clipPath>
+  <g clip-path="url(#cp2)">
+    <path d="M235 24v56" fill="none" stroke="#dc2626" stroke-width="10" stroke-dasharray="20 16"/>
+  </g>
+  <clipPath id="cp3">
+    <path d="M184 80l10-10v-36l-10-10Z"/>
+  </clipPath>
+  <g clip-path="url(#cp3)">
+    <path d="M189 24v56" fill="none" stroke="#eab308" stroke-width="10" stroke-dasharray="20 16"/>
+  </g>
+  <path d="M264 75h56" fill="none" stroke="#7c3aed" stroke-width="10" stroke-dasharray="20 16"/>
+  <path d="M315 24v56" fill="none" stroke="#7c3aed" stroke-width="10" stroke-dasharray="20 16"/>
+  <path d="M269 24v56" fill="none" stroke="#7c3aed" stroke-width="10" stroke-dasharray="20 16"/>
+  <clipPath id="cp4">
+    <path shape-rendering="crispEdges" d="M264 24l10 10h36l10-10Z"/>
+  </clipPath>
+  <g clip-path="url(#cp4)">
+    <rect x="264" y="24" width="56" height="10" fill="#7c3aed"/>
+  </g>
+  <path d="M344 24l4 4h48l4-4Z" fill="#2563eb"/>
+  <path d="M352 32l4 4h32l4-4Z" fill="#2563eb"/>
+  <path d="M356 68l-4 4h40l-4-4Z" fill="#16a34a"/>
+  <path d="M348 76l-4 4h56l-4-4Z" fill="#16a34a"/>
+  <path d="M388 36v32l4 4v-40Z" fill="#dc2626"/>
+  <path d="M396 28v48l4 4v-56Z" fill="#dc2626"/>
+  <path d="M344 24v56l4-4v-48Z" fill="#eab308"/>
+  <path d="M352 32v40l4-4v-32Z" fill="#eab308"/>
+  <rect x="424" y="24" width="56" height="6" fill="#173f97"/>
+  <rect x="424" y="30" width="56" height="6" fill="#286bff"/>
+  <rect x="424" y="68" width="56" height="6" fill="#0a4f23"/>
+  <rect x="424" y="74" width="56" height="6" fill="#21f870"/>
+  <path d="M468 36v32l6 6v-44Z" fill="#881717"/>
+  <path d="M474 30v44l6 6v-56Z" fill="#ff2c2c"/>
+  <path d="M424 24v56l6-6v-44Z" fill="#967305"/>
+  <path d="M430 30v44l6-6v-32Z" fill="#ffc308"/>
+  <rect x="504" y="24" width="56" height="10" fill="#173f97"/>
+  <rect x="504" y="70" width="56" height="10" fill="#286bff"/>
+  <path d="M550 34v46h10v-56Z" fill="#286bff"/>
+  <path d="M504 24v56l10-10v-46Z" fill="#173f97"/>
+  <rect x="24" y="152" width="56" height="10" fill="#ff2c2c"/>
+  <rect x="24" y="198" width="56" height="10" fill="#0a4f23"/>
+  <path d="M70 162v36l10 10v-56Z" fill="#881717"/>
+  <path d="M24 152v56l10-10v-36Z" fill="#21f870"/>
+  <g opacity=".8">
+    <g opacity=".627">
+      <rect x="104" y="152" width="56" height="10" fill="#2563eb"/>
+      <path d="M104 152v56h10v-46Z" fill="#eab308"/>
+    </g>
+    <path d="M150 162v46h10v-56Z" fill="#dc2626"/>
+  </g>
+  <path d="M114 198l-10 10h56l-10-10Z" fill="#16a34a"/>
+  <path d="M184 152h56v10h-56Zm46 0h10v56h-10Zm-46 46h56v10h-56Z" fill="#2563eb" fill-opacity=".502"/>
+  <clipPath id="cp5">
+    <path d="M263.9 152l2 4h54.1v-4Z"/>
+  </clipPath>
+  <g clip-path="url(#cp5)">
+    <path d="M264 154h56" fill="none" stroke="#2563eb" stroke-width="4" stroke-dasharray="8 4"/>
+  </g>
+  <clipPath id="cp6">
+    <path d="M320.1 208l-12-8h-44.1v8Z"/>
+  </clipPath>
+  <g clip-path="url(#cp6)">
+    <path d="M264 204h56" fill="none" stroke="#dc2626" stroke-width="8" stroke-dasharray="16 4"/>
+  </g>
+  <clipPath id="cp7">
+    <path d="M320 152h-12v48.1l12 8Z"/>
+  </clipPath>
+  <g clip-path="url(#cp7)">
+    <path d="M314 152v56" fill="none" stroke="#2563eb" stroke-width="12" stroke-dasharray="22.4 11.2"/>
+  </g>
+  <clipPath id="cp8">
+    <path d="M264 208h2v-52.1l-2-4Z"/>
+  </clipPath>
+  <g clip-path="url(#cp8)">
+    <path d="M265 152v56" fill="none" stroke="#dc2626" stroke-width="2" stroke-dasharray="6 4"/>
+  </g>
+  <clipPath id="cp9">
+    <path shape-rendering="crispEdges" d="M400 208l-12-12h-32l-12 12Z"/>
+  </clipPath>
+  <g clip-path="url(#cp9)">
+    <rect x="344" y="196" width="56" height="4" fill="#16a34a"/>
+    <rect x="344" y="204" width="56" height="4" fill="#16a34a"/>
+  </g>
+  <clipPath id="cp10">
+    <path shape-rendering="crispEdges" d="M400 152h-12v44.1l12 12Z"/>
+  </clipPath>
+  <g clip-path="url(#cp10)">
+    <rect x="388" y="152" width="4" height="56" fill="#16a34a"/>
+    <rect x="396" y="152" width="4" height="56" fill="#16a34a"/>
+  </g>
+  <clipPath id="cp11">
+    <path shape-rendering="crispEdges" d="M344 208.1l12-12v-44.1h-12Z"/>
+  </clipPath>
+  <g clip-path="url(#cp11)">
+    <rect x="344" y="152" width="4" height="56" fill="#16a34a"/>
+    <rect x="352" y="152" width="4" height="56" fill="#16a34a"/>
+  </g>
+  <clipPath id="cp12">
+    <path shape-rendering="crispEdges" d="M344 152l12 12h32l12-12Z"/>
+  </clipPath>
+  <g clip-path="url(#cp12)">
+    <rect x="344" y="152" width="56" height="12" fill="#16a34a"/>
+  </g>
+</svg>

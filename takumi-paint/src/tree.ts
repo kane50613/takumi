@@ -276,6 +276,12 @@ abstract class NodeView<Raw extends RawPaintNode> {
     switch (drawable.type) {
       case "glyphs":
         return this.resolveRun(drawable);
+      case "masked":
+        return {
+          ...drawable,
+          mask: drawable.mask.map((inner) => this.resolve(inner)),
+          content: drawable.content.map((inner) => this.resolve(inner)),
+        };
       case "group":
         return {
           ...drawable,

@@ -12,7 +12,7 @@ use std::io;
 use takumi_core::{
   geometry::{NodeId, Point},
   painter::BoxFrame,
-  scene::{NodePaint, PaintItemKind, Scene},
+  scene::{BoxPart, NodePaint, PaintItemKind, PaintPhase, Scene},
   style::{Affine, Filter},
 };
 
@@ -26,20 +26,14 @@ pub(crate) struct SceneEmitter<'a> {
   pub(crate) scene: &'a Scene,
 }
 
-impl SceneEmitter<'_> {
+impl<'a> SceneEmitter<'a> {
   pub(crate) fn emit(&self, doc: &mut SvgDocument) -> io::Result<()> {
     self.emit_context(0, Affine::IDENTITY, None, doc)?;
     Ok(())
   }
 
-  /// Emits the filtered backdrop of a `backdrop-filter` node: the scene's paint
-  /// order replayed up to (but excluding) this node, run through the node's filter
-  /// chain, then clipped to its border box and attenuated by its mask/clip-path —
-  /// the same semantics the raster backend applies (and Chromium's backdrop root).
-  ///
-  /// SVG has no native backdrop source (SVG 1.1 `BackgroundImage` is dead), so the
-  /// backdrop is re-emitted vector content, wrapped in the inverse of the current
-  /// `transform` to stay in root coordinates.
+  /// Emits a `backdrop-filter` node's backdrop: the scene replayed up to the node, filtered, and
+  /// clipped to its border box, since SVG has no backdrop source of its own.
   fn emit_backdrop(
     &self,
     placed: &PlacedBox,
@@ -112,19 +106,16 @@ impl SceneEmitter<'_> {
     Ok(())
   }
 
-  /// Emits a node's decorations and own content positioned by its transform
-  /// relative to `parent`, leaving its chrome groups open for the caller to close
-  /// after the node's children. Returns the chrome and the transform the node's
-  /// children sit in (`parent · group_transform`): a pure translation is folded into
-  /// the draw origin so it leaves no group, so the children's transform is the
-  /// parent's, not the node's.
+  /// Opens a node's chrome drawing `part` of it, returning the chrome, the box whose content the
+  /// caller emits, and the transform its children sit in.
   fn emit_box(
     &self,
     np: &NodePaint,
     parent: Affine,
     stop_at: Option<NodeId>,
+    part: BoxPart,
     doc: &mut SvgDocument,
-  ) -> io::Result<Option<(BoxChrome, Affine)>> {
+  ) -> io::Result<Option<(BoxChrome, PlacedBox<'a>, Affine)>> {
     let Some(node) = self.scene.root.node_at_path(&np.path) else {
       return Ok(None);
     };
@@ -147,22 +138,19 @@ impl SceneEmitter<'_> {
     let child_transform = parent * group_transform;
     let placed = PlacedBox::new(node, BoxFrame::new(layout, origin));
 
-    // Inside a replay (stop_at set), nested backdrop-filter nodes are emitted
-    // without their own backdrop (each level would replay its own prefix, doubling
-    // the output per backdrop node in paint order). Stacked backdrop elements
-    // therefore see the unfiltered content beneath them in the replay.
-    if stop_at.is_none() && !node.context.style.backdrop_filter.is_empty() {
+    // A replay skips nested backdrops, which would each replay the prefix again.
+    if part != BoxPart::Content
+      && stop_at.is_none()
+      && !node.context.style.backdrop_filter.is_empty()
+    {
       self.emit_backdrop(&placed, np.node_id, child_transform, group_transform, doc)?;
     }
 
-    let chrome = BoxChrome::open(&placed, group_transform, doc)?;
-    placed.emit_own_content(doc)?;
-    Ok(Some((chrome, child_transform)))
+    let chrome = BoxChrome::open(&placed, group_transform, part, doc)?;
+    Ok(Some((chrome, placed, child_transform)))
   }
 
-  /// Walks a stacking context in paint order. With `stop_at` set, emission halts
-  /// (without emitting) at that node — used to replay the backdrop of a
-  /// `backdrop-filter` node. Returns whether the stop node was reached.
+  /// Walks a stacking context in paint order, stopping before `stop_at`; returns whether it did.
   fn emit_context(
     &self,
     id: usize,
@@ -174,37 +162,51 @@ impl SceneEmitter<'_> {
       return Ok(false);
     };
 
-    // Children sit in the root node's child transform; a synthetic root context
-    // keeps the caller's.
-    let (chrome, child_transform) = match ctx.root() {
+    let (chrome, root_placed, child_transform) = match ctx.root() {
       Some(np) => {
         if stop_at == Some(np.node_id) {
           return Ok(true);
         }
-        match self.emit_box(np, parent, stop_at, doc)? {
-          Some((chrome, transform)) => (Some(chrome), transform),
-          None => (None, parent),
+        match self.emit_box(np, parent, stop_at, BoxPart::Whole, doc)? {
+          Some((chrome, placed, transform)) => (Some(chrome), Some(placed), transform),
+          None => (None, None, parent),
         }
       }
-      None => (None, parent),
+      None => (None, None, parent),
     };
 
     let mut stopped = false;
-    // A plain node in a bucket owns no effect groups — anything that would need
-    // one makes the node its own context — so its outline can wait for the
-    // descendants that follow it. Blink runs the same pass as
-    // `kDescendantOutlinesOnly`.
+    // Blink's `kDescendantOutlinesOnly` pass.
     let mut descendant_outlines = Vec::new();
 
-    'buckets: for bucket in ctx.in_paint_order() {
-      for item in bucket {
+    'phases: for phase in ctx.paint_phases() {
+      let (items, phase_part) = match phase {
+        PaintPhase::RootContent => {
+          if let Some(placed) = &root_placed {
+            placed.emit_own_content(doc)?;
+          }
+          continue;
+        }
+        PaintPhase::Items(items, part) => (items, part),
+      };
+
+      for item in items {
+        let Some(part) = item.part_in(phase_part) else {
+          continue;
+        };
+
         match &item.kind {
           PaintItemKind::Node(np) => {
             if stop_at == Some(np.node_id) {
               stopped = true;
-              break 'buckets;
+              break 'phases;
             }
-            if let Some((mut chrome, _)) = self.emit_box(np, child_transform, stop_at, doc)? {
+            if let Some((mut chrome, placed, _)) =
+              self.emit_box(np, child_transform, stop_at, part, doc)?
+            {
+              if part != BoxPart::Decorations {
+                placed.emit_own_content(doc)?;
+              }
               descendant_outlines.extend(chrome.take_outline());
               chrome.close(doc)?;
             }
@@ -212,7 +214,7 @@ impl SceneEmitter<'_> {
           PaintItemKind::Context(child) => {
             if self.emit_context(*child, child_transform, stop_at, doc)? {
               stopped = true;
-              break 'buckets;
+              break 'phases;
             }
           }
         }

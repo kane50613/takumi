@@ -54,6 +54,17 @@ impl<U, T: Add<U>> Add<Point<U>> for Point<T> {
   }
 }
 
+impl<U, T: Sub<U>> Sub<Point<U>> for Point<T> {
+  type Output = Point<<T as Sub<U>>::Output>;
+
+  fn sub(self, rhs: Point<U>) -> Self::Output {
+    Point {
+      x: self.x - rhs.x,
+      y: self.y - rhs.y,
+    }
+  }
+}
+
 /// A 2D size.
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
 pub struct Size<T> {

@@ -35,30 +35,10 @@
     <use href="#g10" x="526.79" y="152"/>
   </g>
   <rect x="638" y="32" width="164" height="92" fill="#38bdf8"/>
-  <clipPath id="cp0">
-    <path d="M638 32l13 10h147l4-10Z"/>
-  </clipPath>
-  <g clip-path="url(#cp0)">
-    <path d="M638 37h164" fill="none" stroke="#111827" stroke-width="10" stroke-dasharray="20 8.8"/>
-  </g>
-  <clipPath id="cp1">
-    <path d="M802 32l-4 10v75l4 7Z"/>
-  </clipPath>
-  <g clip-path="url(#cp1)">
-    <path d="M800 32v92" fill="none" stroke="#111827" stroke-width="4" stroke-dasharray="8 4"/>
-  </g>
-  <clipPath id="cp2">
-    <path d="M802 124l-4-7h-147l-13 7Z"/>
-  </clipPath>
-  <g clip-path="url(#cp2)">
-    <path d="M638 120.5h164" fill="none" stroke="#111827" stroke-width="7" stroke-dasharray="14 7.429"/>
-  </g>
-  <clipPath id="cp3">
-    <path d="M638 124l13-7v-75l-13-10Z"/>
-  </clipPath>
-  <g clip-path="url(#cp3)">
-    <path d="M644.5 32v92" fill="none" stroke="#111827" stroke-width="13" stroke-dasharray="26 7"/>
-  </g>
+  <path d="M638 37h164" fill="none" stroke="#111827" stroke-width="10" stroke-dasharray="20 8.8"/>
+  <path d="M638 120.5h164" fill="none" stroke="#111827" stroke-width="7" stroke-dasharray="14 7.429"/>
+  <path d="M800 32v92" fill="none" stroke="#111827" stroke-width="4" stroke-dasharray="8 4"/>
+  <path d="M644.5 32v92" fill="none" stroke="#111827" stroke-width="13" stroke-dasharray="26 7"/>
   <g fill="#1f2937">
     <use href="#g0" x="638" y="152"/>
     <use href="#g1" x="647.36" y="152"/>
@@ -80,28 +60,28 @@
     <use href="#g2" x="793.52" y="152"/>
   </g>
   <rect x="878" y="32" width="164" height="92" fill="#38bdf8"/>
-  <clipPath id="cp4">
-    <path d="M878 32l8 10h148l8-10Z"/>
+  <clipPath id="cp0">
+    <path shape-rendering="crispEdges" d="M878 32l8 10h148l8-10Z"/>
   </clipPath>
-  <g clip-path="url(#cp4)">
+  <g clip-path="url(#cp0)">
     <path d="M883 37h154" fill="none" stroke="#111827" stroke-width="10" stroke-dasharray="0 19.24" stroke-linecap="round"/>
   </g>
-  <clipPath id="cp5">
-    <path d="M1042 32l-8 10v72l8 10Z"/>
+  <clipPath id="cp1">
+    <path shape-rendering="crispEdges" d="M1042 124l-8-10h-148l-8 10Z"/>
   </clipPath>
-  <g clip-path="url(#cp5)">
-    <path d="M1038 32v92" fill="none" stroke="#111827" stroke-width="8" stroke-dasharray="16 9.333"/>
-  </g>
-  <clipPath id="cp6">
-    <path d="M1042 124l-8-10h-148l-8 10Z"/>
-  </clipPath>
-  <g clip-path="url(#cp6)">
+  <g clip-path="url(#cp1)">
     <path d="M883 119h154" fill="none" stroke="#111827" stroke-width="10" stroke-dasharray="0 19.24" stroke-linecap="round"/>
   </g>
-  <clipPath id="cp7">
-    <path d="M878 124l8-10v-72l-8-10Z"/>
+  <clipPath id="cp2">
+    <path shape-rendering="crispEdges" d="M1042 32l-8 10v72l8 10Z"/>
   </clipPath>
-  <g clip-path="url(#cp7)">
+  <g clip-path="url(#cp2)">
+    <path d="M1038 32v92" fill="none" stroke="#111827" stroke-width="8" stroke-dasharray="16 9.333"/>
+  </g>
+  <clipPath id="cp3">
+    <path shape-rendering="crispEdges" d="M878 124l8-10v-72l-8-10Z"/>
+  </clipPath>
+  <g clip-path="url(#cp3)">
     <path d="M882 32v92" fill="none" stroke="#111827" stroke-width="8" stroke-dasharray="16 9.333"/>
   </g>
   <g fill="#1f2937">

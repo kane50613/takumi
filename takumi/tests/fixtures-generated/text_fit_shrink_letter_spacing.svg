@@ -1,6 +1,7 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="640" height="300" viewBox="0 0 640 300">
   <rect x="0" y="0" width="640" height="236" fill="#f6f8fb"/>
   <rect x="18" y="18" width="604" height="91" fill="#e5eaf0"/>
+  <rect x="28" y="51" width="584" height="48" fill="#fff"/>
   <g fill="#000">
     <use href="#g0" x="28" y="42"/>
     <use href="#g1" x="35.84" y="42"/>
@@ -26,7 +27,6 @@
     <use href="#g11" x="195.66" y="42"/>
     <use href="#g16" x="203.66" y="42"/>
   </g>
-  <rect x="28" y="51" width="584" height="48" fill="#fff"/>
   <g fill="#000">
     <use href="#g17" x="36" y="85.16"/>
     <use href="#g18" x="55.07" y="85.16"/>
@@ -61,6 +61,7 @@
     <use href="#g29" x="582.69" y="85.16"/>
   </g>
   <rect x="18" y="123" width="604" height="95" fill="#e5eaf0"/>
+  <rect x="28" y="156" width="584" height="52" fill="#fff"/>
   <g fill="#000">
     <use href="#g0" x="28" y="147"/>
     <use href="#g1" x="35.84" y="147"/>
@@ -86,7 +87,6 @@
     <use href="#g11" x="198.65" y="147"/>
     <use href="#g16" x="206.64" y="147"/>
   </g>
-  <rect x="28" y="156" width="584" height="52" fill="#fff"/>
   <g fill="#000">
     <use href="#g35" x="36" y="193.59"/>
     <use href="#g36" x="56.51" y="193.59"/>

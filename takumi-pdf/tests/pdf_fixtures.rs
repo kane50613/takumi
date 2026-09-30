@@ -2243,8 +2243,26 @@ fn text_decoration_shadow() {
   });
 }
 
-/// A colour glyph's `text-shadow` is its silhouette in the shadow colour, as Blink's shadow looper
-/// fills every glyph with the shadow colour through `SrcIn`.
+/// `background-clip: border-area` keeps the background where a dashed, dotted or double border
+/// paints.
+#[test]
+fn background_clip_border_area_gaps() {
+  run_pdf_fixture("background-clip-border-area-gaps", |fonts| {
+    let source = r##"<div style="display: flex; gap: 24px; width: 100%; height: 100%; padding: 24px; background-color: #ffffff;">
+      <div style="width: 80px; height: 80px; border: 10px dashed transparent; background-clip: border-area; background-image: linear-gradient(135deg, #2563eb, #dc2626);"></div>
+      <div style="width: 80px; height: 80px; border: 10px dotted transparent; border-radius: 16px; background-clip: border-area; background-color: #16a34a;"></div>
+      <div style="width: 80px; height: 80px; border: 10px double transparent; background-clip: border-area; background-color: #ea580c;"></div>
+    </div>"##;
+
+    PdfOptions::builder()
+      .node(from_html(source, FromHtmlOptions::default()).expect("parse border-area fixture"))
+      .viewport(Viewport::new((400, 160)))
+      .fonts(fonts)
+      .build()
+  });
+}
+
+/// A colour glyph's `text-shadow` is its silhouette in the shadow colour.
 #[test]
 fn color_glyph_text_shadow() {
   let mut fonts = fonts();
@@ -2270,8 +2288,7 @@ fn color_glyph_text_shadow() {
   });
 }
 
-/// A bitmap glyph's `text-shadow` is its alpha, blurred when the shadow blurs, filled with the
-/// shadow colour.
+/// A bitmap glyph's `text-shadow`, sharp and blurred, is its alpha in the shadow colour.
 #[test]
 fn bitmap_glyph_text_shadow() {
   let mut fonts = Fonts::default();

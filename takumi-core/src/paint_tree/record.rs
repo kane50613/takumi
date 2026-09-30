@@ -15,9 +15,11 @@ use super::{
 use crate::resources::image::to_data_url;
 use crate::{
   font_style::SizedFontStyle,
-  layout::inline::PositionedInlineRun,
+  geometry::{Point, Size},
+  layout::{border::BorderProperties, inline::PositionedInlineRun},
   painter::{
-    BoxFrame, FillShape, GlyphDevice, GlyphFill, PaintDevice, PaintRole, ShadowShape, StrokeStyle,
+    BoxBorderPainter, BoxFrame, FillShape, GlyphDevice, GlyphFill, LayerBounds, PaintDevice,
+    PaintRole, ShadowShape, StrokeStyle,
   },
   path_data::path_data,
   shadow::SizedShadow,
@@ -35,6 +37,8 @@ struct Clip {
 }
 
 /// Records draws in a node's local space as [`Drawable`]s.
+///
+/// Approximate: an aliased clip records as an antialiased one.
 pub(super) struct Recorder {
   drawables: Vec<Drawable>,
   role: Role,
@@ -290,11 +294,40 @@ impl PaintDevice for Recorder {
     });
   }
 
+  fn push_aliased_clip(&mut self, shape: &FillShape, transform: Affine) {
+    self.push_clip(shape, transform);
+  }
+
   fn pop_clip(&mut self) {
     self.clips.pop();
   }
 
-  fn begin_layer(&mut self, opacity: f32) {
+  fn with_border_mask(
+    &mut self,
+    border: &BorderProperties,
+    size: Size<f32>,
+    origin: Point<f32>,
+    content: impl FnOnce(&mut Self),
+  ) {
+    let role = self.role;
+    let mut mask = Recorder::new(self.transform);
+
+    BoxBorderPainter::new(border, size).paint(origin, &mut mask);
+
+    let outer = mem::take(&mut self.drawables);
+
+    content(self);
+
+    let content = mem::replace(&mut self.drawables, outer);
+
+    self.drawables.push(Drawable::Masked {
+      role,
+      mask: mask.finish(),
+      content,
+    });
+  }
+
+  fn begin_layer(&mut self, opacity: f32, _bounds: Option<LayerBounds>) {
     let outside = mem::take(&mut self.drawables);
 
     self.layers.push((opacity, outside));

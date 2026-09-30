@@ -5,9 +5,9 @@
   </g>
   <g transform="matrix(.975 -.221 .221 .975 201.995 203.06)">
     <g transform="matrix(1 0 0 1 0 0)">
-    </g>
-    <g transform="matrix(1 0 0 1 0 0)">
-      <use href="#g1" x="0" y="72" fill="#f39237"/>
+      <g transform="matrix(1 0 0 1 0 0)">
+        <use href="#g1" x="0" y="72" fill="#f39237"/>
+      </g>
     </g>
   </g>
   <g transform="matrix(.869 .494 -.494 .869 361.853 222.266)">
@@ -18,9 +18,9 @@
   </g>
   <g transform="matrix(1 -.01 .01 1 560.568 342.332)">
     <g transform="matrix(1 0 0 1 0 0)">
-    </g>
-    <g transform="matrix(1 0 0 1 0 0)">
-      <use href="#g3" x="0" y="72" fill="#1982c4"/>
+      <g transform="matrix(1 0 0 1 0 0)">
+        <use href="#g3" x="0" y="72" fill="#1982c4"/>
+      </g>
     </g>
   </g>
   <g transform="matrix(.74 -.673 .673 .74 655.984 311.933)">

@@ -13,20 +13,19 @@ use std::{collections::HashMap, sync::Arc};
 
 use super::runs::ShapedRun;
 
-/// A text decoration line as Blink's `DecorationGeometry` holds it: unsnapped, in the block's
-/// border box.
+/// A text decoration line as Blink's `DecorationGeometry` holds it, unsnapped.
 pub struct DecorationLine {
-  /// The line's left end and top.
+  /// Left end and top.
   pub origin: Point<f32>,
-  /// The line's length.
+  /// Length.
   pub width: f32,
-  /// The line's thickness.
+  /// Thickness.
   pub thickness: f32,
   /// Decoration color, already resolved against `current-color`.
   pub color: Color,
   /// Maps the border box into the device's drawing space.
   pub transform: Affine,
-  /// Maps the border box onto the output's pixels, where skip-ink rounds its cuts.
+  /// Maps the border box onto the output's pixels.
   pub output: Affine,
   /// Whether the line paints above glyphs (line-through) vs below (under/overline).
   pub over: bool,
@@ -34,15 +33,12 @@ pub struct DecorationLine {
   pub line: TextDecorationLines,
   /// How the line is drawn.
   pub style: TextDecorationStyle,
-  /// The x-ranges `text-decoration-skip-ink` cuts out of the line, sorted.
+  /// The x-ranges `skip-ink` cuts out, sorted.
   pub skips: Spans,
 }
 
 impl ShapedRun {
-  /// The top and thickness of an enabled decoration line, after Blink's `TextDecorationInfo`: an
-  /// underline where [`ShapedRun::underline_offset_from_baseline`] puts it, an overline resting
-  /// on the text's top, and a line-through centred a third of the ascent above the baseline.
-  /// `from-font` takes the font's underline thickness for every line.
+  /// The top and thickness of an enabled decoration line, after Blink's `TextDecorationInfo`.
   pub fn decoration_line(
     &self,
     line: TextDecorationLines,
@@ -68,7 +64,7 @@ impl ShapedRun {
     Some((top, thickness))
   }
 
-  /// The outlines of the run's glyphs that `skip-ink` gives way to, positioned from `origin`.
+  /// The outlines `skip-ink` gives way to, positioned from `origin`.
   fn ink_outlines<'g>(
     &self,
     resolved_glyphs: &'g HashMap<u32, Arc<ResolvedGlyph>>,
@@ -95,9 +91,7 @@ impl ShapedRun {
       .collect()
   }
 
-  /// The lines the run's `text-decoration` paints, `transform` mapping the block's border box
-  /// into the device's drawing space and `device` mapping that space onto the output. `skip-ink`
-  /// cuts an underline and an overline, not a line-through.
+  /// The lines the run's `text-decoration` paints, cut by `skip-ink`.
   pub fn decorations(
     &self,
     resolved_glyphs: &HashMap<u32, Arc<ResolvedGlyph>>,
@@ -139,7 +133,6 @@ impl ShapedRun {
     output: Affine,
   ) -> Vec<DecorationLine> {
     let brush = &self.brush;
-    // A fully trimmed run paints no decoration.
     if brush.decoration_line.is_empty() || self.decorated_advance() <= 0.0 {
       return Vec::new();
     }

@@ -19,8 +19,7 @@ use crate::{
   paint::{krilla_path, normalized},
 };
 
-/// A run's colour glyphs, which a shadow paints as silhouettes in its own colour, as Blink's
-/// shadow looper fills every glyph through `SrcIn`, rather than through the font's colours.
+/// A run's colour glyphs, which a shadow fills as silhouettes, as Blink's does through `SrcIn`.
 pub(crate) struct ColorGlyphs<'r> {
   /// The colour-layered outlines, placed, each with the alpha its layer paints at; the opaque
   /// layers joined into one path.
@@ -31,7 +30,7 @@ pub(crate) struct ColorGlyphs<'r> {
 }
 
 impl<'r> ColorGlyphs<'r> {
-  /// The colour glyphs of `run`, its glyphs placed from `origin`.
+  /// The colour glyphs of `run` placed from `origin`.
   pub(crate) fn of(run: &'r PositionedInlineRun, origin: Point<f32>) -> Self {
     let mut opaque: Vec<PathCommand> = Vec::new();
     let mut outlines = Vec::new();

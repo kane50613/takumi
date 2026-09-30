@@ -1,7 +1,5 @@
-//! Gaussian blur of premultiplied RGBA or alpha pixels, as Skia's raster `SkBlurEngine` runs it
-//! for Chrome's `filter`, `backdrop-filter` and `text-shadow`: a true Gaussian kernel below a
-//! sigma of 2 (`GaussianPass`), and above it three box passes run as one (`ThreeBoxApproxPass`
-//! for RGBA, `A8Pass` for alpha). Follows Skia under the notice in LICENSE-CHROMIUM.
+//! Gaussian blur as Skia's raster `SkBlurEngine` runs it for Chrome's filters and text shadows.
+//! Follows Skia under the notice in LICENSE-CHROMIUM.
 
 use std::{array, f32::consts::PI};
 
@@ -10,18 +8,14 @@ use crate::geometry::Point;
 /// Largest sigma a three-box pass sums without overflowing a `u32`, Skia's `kMaxSigma`.
 pub const MAX_SIGMA: f32 = 135.0;
 
-/// Blurs a `width` by `height` premultiplied RGBA image in place by `sigma` on each axis.
-///
-/// Pixels past the edges count as transparent, so the caller pads the image by as far as the
-/// blur reaches to keep what spreads out.
-// Inlined, like `blur_alpha`, so the per-pixel loops compile in the calling crate at its opt-level
-// rather than at takumi-core's size-optimized one.
+/// Blurs premultiplied RGBA pixels in place, treating pixels past the edges as transparent.
+// Inlined so the loops compile at the caller's opt-level, not takumi-core's "z".
 #[inline]
 pub fn blur_rgba(pixels: &mut [[u8; 4]], width: usize, height: usize, sigma: f32) {
   blur(pixels, width, height, sigma, Rounding::Rgba);
 }
 
-/// Blurs a `width` by `height` alpha mask in place by `sigma` on each axis, as [`blur_rgba`] does.
+/// Blurs an alpha mask in place, as [`blur_rgba`] does.
 #[inline]
 pub fn blur_alpha(alpha: &mut [u8], width: usize, height: usize, sigma: f32) {
   blur(
@@ -49,8 +43,7 @@ fn blur<const N: usize>(
   let Some(pass) = Pass::new(sigma, rounding) else {
     return;
   };
-  // Rows blur as the columns of a strip of them turned on its side, so both axes run the column
-  // pass, which advances a row of lanes at once, and a strip stays small enough to stay cached.
+  // Rows blur as the columns of a transposed strip, so both axes run the vectorized column pass.
   let mut strip = vec![[0u8; N]; ROW_STRIP * width];
 
   for rows in pixels.chunks_mut(ROW_STRIP * width) {
@@ -72,14 +65,12 @@ fn blur<const N: usize>(
   pass.blur_columns(pixels, width, height);
 }
 
-/// Rows the horizontal pass turns on their side at once.
+/// Rows the horizontal pass transposes at once.
 const ROW_STRIP: usize = 16;
 
-/// Blurs past `MAX_SIGMA` as Skia's `FilterResult::Builder::blur` does: the image shrinks by
-/// `MAX_SIGMA / sigma` in `FilterResult::rescale`'s halving steps, blurs there, and scales back up.
+/// Shrinks, blurs and scales back past `MAX_SIGMA`, as Skia's `FilterResult::Builder::blur` does.
 ///
-/// Approximate: every resampling filters bilinearly in `f32`, where Skia's raster pipeline may
-/// filter at eight-bit precision, so a channel can land one step apart.
+/// Approximate: resamples in `f32`, where Skia's raster pipeline may filter at eight bits.
 fn blur_rescaled<const N: usize>(
   pixels: &mut [[u8; N]],
   width: usize,
@@ -138,8 +129,7 @@ fn blur_rescaled<const N: usize>(
   }
 }
 
-/// Skia's `downscale_step_count`: how many resampling steps take an image to `scale`, all halving
-/// but the last, which is dropped when it would barely shrink.
+/// Skia's `downscale_step_count`.
 fn downscale_step_count(scale: f32) -> u32 {
   let mut steps = (1.0 / scale).ceil().log2().ceil() as u32;
 
@@ -154,7 +144,7 @@ fn downscale_step_count(scale: f32) -> u32 {
   steps
 }
 
-/// `rect` scaled by `factor_x` and `factor_y` about its centre, Skia's `scale_about_center`.
+/// Skia's `scale_about_center`.
 fn scale_about_center(rect: Bounds, factor_x: f32, factor_y: f32) -> Bounds {
   let center_x = if factor_x == 1.0 {
     0.0
@@ -175,7 +165,7 @@ fn scale_about_center(rect: Bounds, factor_x: f32, factor_y: f32) -> Bounds {
   }
 }
 
-/// `point` in `from` carried to the same place in `to`.
+/// `point` carried from `from` to `to`.
 fn map_between(point: Point<f32>, from: Bounds, to: Bounds) -> Point<f32> {
   Point {
     x: to.left + (point.x - from.left) * to.width() / from.width(),
@@ -183,7 +173,7 @@ fn map_between(point: Point<f32>, from: Bounds, to: Bounds) -> Point<f32> {
   }
 }
 
-/// A rectangle by its edges, in pixels that need not be whole.
+/// A rectangle by its fractional edges.
 #[derive(Clone, Copy)]
 struct Bounds {
   left: f32,
@@ -202,7 +192,7 @@ impl Bounds {
   }
 }
 
-/// An image placed on the pixel grid, its top-left pixel at `left`, `top`.
+/// An image whose top-left pixel sits at `left`, `top`.
 struct Raster<const N: usize> {
   left: i64,
   top: i64,
@@ -212,8 +202,7 @@ struct Raster<const N: usize> {
 }
 
 impl<const N: usize> Raster<N> {
-  /// The image drawn from `from` onto `to` with bilinear filtering, onto the whole pixels `to`
-  /// touches, transparent past its edges.
+  /// The image mapped from `from` onto the pixels `to` touches, filtered bilinearly.
   fn resampled(&self, from: Bounds, to: Bounds) -> Self {
     let (left, top) = (to.left.floor() as i64, to.top.floor() as i64);
     let width = (to.right.ceil() as i64 - left).max(0) as usize;
@@ -238,7 +227,7 @@ impl<const N: usize> Raster<N> {
     }
   }
 
-  /// The image filtered bilinearly at `point`, transparent past its edges.
+  /// The image filtered bilinearly at `point`, transparent outside.
   fn sample(&self, point: Point<f32>) -> [u8; N] {
     let x = point.x - self.left as f32 - 0.5;
     let y = point.y - self.top as f32 - 0.5;
@@ -262,8 +251,7 @@ impl<const N: usize> Raster<N> {
   }
 }
 
-/// How a three-box pass rounds its sum to a channel: Skia's RGBA pass seeds the sum with half the
-/// divisor, its alpha pass adds half after scaling.
+/// Where a three-box pass adds its rounding half: Skia's RGBA pass to the sum, its alpha pass after.
 #[derive(Clone, Copy)]
 enum Rounding {
   Rgba,
@@ -290,7 +278,6 @@ impl Pass {
     ThreeBoxPass::new(sigma.min(MAX_SIGMA), rounding).map(Self::ThreeBox)
   }
 
-  /// Blurs every column of the `width` by `height` image in place.
   fn blur_columns<const N: usize>(&self, pixels: &mut [[u8; N]], width: usize, height: usize) {
     match self {
       Self::Gaussian(pass) => pass.blur_columns(pixels, width, height),
@@ -299,9 +286,7 @@ impl Pass {
   }
 }
 
-/// Walks the rows of a column pass whose results land `border` rows behind the row read. Runs
-/// `step` with each row read, zeros past the bottom, and the row written, or `None` while the
-/// kernel has yet to reach the first one.
+/// Runs `step` with each row read, zeros past the bottom, and the row `border` behind it, if any.
 fn for_each_row<const N: usize>(
   pixels: &mut [[u8; N]],
   width: usize,
@@ -347,8 +332,7 @@ impl GaussianPass {
 
   fn blur_columns<const N: usize>(&self, pixels: &mut [[u8; N]], width: usize, height: usize) {
     let window = self.kernel.len();
-    // The channels of a row side by side, as the three-box pass lays them out. The ring holds the
-    // last `window` rows read as fractions of full; `next` is the oldest, overwritten next.
+    // Every channel of a row is a lane; `next` is the oldest row in the ring.
     let channels = width * N;
     let mut ring = vec![0.0f32; window * channels];
     let mut sums = vec![0.0f32; channels];
@@ -382,8 +366,7 @@ impl GaussianPass {
   }
 }
 
-/// Skia's `ThreeBoxApproxPass` and `A8Pass`: three box filters of `window` pixels summed at once,
-/// the last one a pixel wider when the window is even.
+/// Skia's `ThreeBoxApproxPass` and `A8Pass`: three `window`-wide boxes summed in one pass.
 struct ThreeBoxPass {
   window: usize,
   border: usize,
@@ -430,8 +413,8 @@ impl ThreeBoxPass {
     } else {
       pass
     };
-    // The channels of a row, side by side: every channel is a lane of its own. Each box keeps a
-    // running sum per lane and the trailing edge it drops `pass`, `pass` and `last` rows back.
+    // Every channel of a row is a lane; each box drops its trailing edge `pass`, `pass` and
+    // `last` rows back.
     let channels = width * N;
     let mut sum0 = vec![0u32; channels];
     let mut sum1 = vec![0u32; channels];
@@ -482,8 +465,7 @@ impl ThreeBoxPass {
   }
 }
 
-/// Skia's `SkBlurEngine::BoxBlurWindow`: the box width three passes of which approximate a
-/// Gaussian of `sigma`.
+/// Skia's `SkBlurEngine::BoxBlurWindow`.
 fn box_window(sigma: f32) -> usize {
   ((sigma * 3.0 * (2.0 * PI).sqrt() / 4.0 + 0.5).floor() as usize).max(1)
 }

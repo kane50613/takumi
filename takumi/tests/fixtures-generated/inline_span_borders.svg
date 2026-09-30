@@ -1,42 +1,48 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="640" height="300" viewBox="0 0 640 300">
   <rect x="0" y="0" width="640" height="300" fill="#f8fafc"/>
   <path d="M32 36h62.32v40h-62.32v-40Zm3 3h56.32v34h-56.32v-34Z" fill="#16a34a" fill-rule="evenodd"/>
+  <path d="M100.82 37.5h105.23" fill="none" stroke="#e11d48" stroke-width="3" stroke-dasharray="6 3.021"/>
+  <path d="M100.82 74.5h105.23" fill="none" stroke="#e11d48" stroke-width="3" stroke-dasharray="6 3.021"/>
+  <path d="M204.55 36v40" fill="none" stroke="#e11d48" stroke-width="3" stroke-dasharray="6 2.5"/>
+  <path d="M102.32 36v40" fill="none" stroke="#e11d48" stroke-width="3" stroke-dasharray="6 2.5"/>
+  <rect x="212.546" y="33" width="92.99" height="3" fill="#272d37"/>
+  <rect x="212.546" y="36" width="92.99" height="3" fill="#a1bae0"/>
+  <rect x="212.546" y="73" width="92.99" height="3" fill="#272d37"/>
+  <rect x="212.546" y="76" width="92.99" height="3" fill="#a1bae0"/>
   <clipPath id="cp0">
-    <path d="M100.82 36l3 3h99.23l3-3Z"/>
+    <path d="M305.54 32.9l-6 6v40.1h6Z"/>
   </clipPath>
   <g clip-path="url(#cp0)">
-    <path d="M100.82 37.5h105.23" fill="none" stroke="#e11d48" stroke-width="3" stroke-dasharray="6 3.021"/>
-  </g>
-  <clipPath id="cp1">
-    <path d="M206.05 36l-3 3v34l3 3Z"/>
-  </clipPath>
-  <g clip-path="url(#cp1)">
-    <path d="M204.55 36v40" fill="none" stroke="#e11d48" stroke-width="3" stroke-dasharray="6 2.5"/>
+    <clipPath id="cp1">
+      <path shape-rendering="crispEdges" d="M305.54 33h-6v40.1l6 6Z"/>
+    </clipPath>
+    <g clip-path="url(#cp1)">
+      <rect x="299.536" y="33" width="3" height="46" fill="#272d37"/>
+      <rect x="302.536" y="33" width="3" height="46" fill="#a1bae0"/>
+    </g>
   </g>
   <clipPath id="cp2">
-    <path d="M206.05 76l-3-3h-99.23l-3 3Z"/>
+    <path d="M212.55 79.1l6-6v-40.1h-6Z"/>
   </clipPath>
   <g clip-path="url(#cp2)">
-    <path d="M100.82 74.5h105.23" fill="none" stroke="#e11d48" stroke-width="3" stroke-dasharray="6 3.021"/>
+    <clipPath id="cp3">
+      <path shape-rendering="crispEdges" d="M212.55 79h6v-40.1l-6-6Z"/>
+    </clipPath>
+    <g clip-path="url(#cp3)">
+      <rect x="212.546" y="33" width="3" height="46" fill="#272d37"/>
+      <rect x="215.546" y="33" width="3" height="46" fill="#a1bae0"/>
+    </g>
   </g>
-  <clipPath id="cp3">
-    <path d="M100.82 76l3-3v-34l-3-3Z"/>
-  </clipPath>
-  <g clip-path="url(#cp3)">
-    <path d="M102.32 36v40" fill="none" stroke="#e11d48" stroke-width="3" stroke-dasharray="6 2.5"/>
-  </g>
-  <path d="M212.55 33l3 3h86.99l3-3Zm0 46 3-3v-40l-3-3Z" fill="#272d37"/>
-  <path d="M215.55 36l3 3h80.99l3-3Zm0 40 3-3v-34l-3-3Z" fill="#a1bae0"/>
-  <path d="M305.54 33l-3 3v40l3 3Zm0 46-3-3h-86.99l-3 3Z" fill="#a1bae0"/>
-  <path d="M302.54 36l-3 3v34l3 3Zm0 40-3-3h-80.99l-3 3Z" fill="#272d37"/>
   <path d="M320.04 35h102.2c4.42 0 8 3.58 8 8v26c0 4.42-3.58 8-8 8h-102.2c-4.42 0-8-3.58-8-8v-26c0-4.42 3.58-8 8-8Z" fill="#dbeafe"/>
   <path d="M320.04 35h102.2c4.42 0 8 3.58 8 8v26c0 4.42-3.58 8-8 8h-102.2c-4.42 0-8-3.58-8-8v-26c0-4.42 3.58-8 8-8Zm0 2h102.2c3.31 0 6 2.69 6 6v26c0 3.31-2.69 6-6 6h-102.2c-3.32 0-6-2.69-6-6v-26c0-3.31 2.68-6 6-6Z" fill="#2563eb" fill-rule="evenodd"/>
   <path d="M436.74 37h133.63v40h-133.63Z" fill="#f3e8ff"/>
-  <path d="M436.74 37l6 2h127.63v-2Zm133.63 40v-4h-127.63l-6 4Z" fill="#9333ea"/>
-  <path d="M436.74 77l6-4v-34l-6-2Z" fill="#eab308"/>
+  <rect x="436.738" y="37" width="133.634" height="2" fill="#9333ea"/>
+  <rect x="436.738" y="73" width="133.634" height="4" fill="#9333ea"/>
+  <path d="M436.74 37v40l6-4v-34Z" fill="#eab308"/>
   <path d="M32 94.2h396.6v40h-396.6Z" fill="#f3e8ff"/>
-  <path d="M32 94.2v2h390.6l6-2Zm396.6 40-6-4h-390.6v4Z" fill="#9333ea"/>
-  <path d="M428.6 94.2l-6 2v34l6 4Z" fill="#eab308"/>
+  <rect x="32" y="94.2" width="396.598" height="2" fill="#9333ea"/>
+  <rect x="32" y="130.2" width="396.598" height="4" fill="#9333ea"/>
+  <path d="M422.6 96.2v34l6 4v-40Z" fill="#eab308"/>
   <path d="M464.56 94.2c16.27 0 29.46 8.51 29.46 19s-13.19 19-29.46 19-29.46-8.51-29.46-19 13.19-19 29.46-19Z" fill="#dcfce7"/>
   <path d="M464.56 94.2c16.27 0 29.46 8.51 29.46 19s-13.19 19-29.46 19-29.46-8.51-29.46-19 13.19-19 29.46-19Zm0 2c15.16 0 27.46 7.61 27.46 17s-12.3 17-27.46 17-27.46-7.61-27.46-17 12.29-17 27.46-17Z" fill="#16a34a" fill-rule="evenodd"/>
   <g fill="#0f172a">

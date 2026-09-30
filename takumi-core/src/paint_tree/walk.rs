@@ -1,7 +1,7 @@
 //! Walks the stacking-context scene in paint order, recording each node and the steps that
 //! paint it.
 
-use std::{collections::HashMap, ptr};
+use std::{collections::HashMap, mem, ptr};
 
 use super::{
   document::{
@@ -31,7 +31,7 @@ use crate::{
     PaintDevice,
   },
   resources::image::{sniff_mime, to_data_url},
-  scene::{NodePaint, PaintItemKind, Scene},
+  scene::{BoxPart, NodePaint, PaintItemKind, PaintPhase, Scene},
   style::{
     Affine, BackgroundClip, BackgroundImage, ComputedStyle, Filter, Isolation, TextAlign, ToCss,
   },
@@ -90,18 +90,67 @@ impl Walker {
       return Ok(());
     };
     let root = match context.root() {
-      Some(paint) => self.node(scene, paint, prefix)?,
+      Some(paint) => self.open_node(scene, paint, prefix)?,
       None => None,
     };
     // A plain node owns no group, so its outline waits for the nodes that follow it, as Blink's
     // `kDescendantOutlinesOnly` pass paints them.
     let mut outlines = Vec::new();
+    // The boxes the decorations phase opened, with their outline flag, for the content phase.
+    let mut decorated: Vec<Option<(usize, bool)>> = Vec::new();
 
-    for bucket in context.in_paint_order() {
-      for item in bucket {
-        match &item.kind {
-          PaintItemKind::Node(paint) => {
-            if let Some(mut open) = self.node(scene, paint, prefix)? {
+    for phase in context.paint_phases() {
+      let (items, phase_part) = match phase {
+        PaintPhase::RootContent => {
+          if let (Some(paint), Some(open)) = (context.root(), &root) {
+            self.node_content(scene, paint, prefix, open.node)?;
+          }
+          continue;
+        }
+        PaintPhase::Items(items, part) => (items, part),
+      };
+      // Floats paint between the decorations and the content phases, so only the content phase
+      // takes the boxes the decorations phase opened.
+      let mut earlier = if phase_part == BoxPart::Content {
+        mem::take(&mut decorated)
+      } else {
+        Vec::new()
+      }
+      .into_iter();
+
+      for item in items {
+        let Some(part) = item.part_in(phase_part) else {
+          continue;
+        };
+        let paint = match &item.kind {
+          PaintItemKind::Node(paint) => paint,
+          PaintItemKind::Context(child) => {
+            self.context(scene, *child, prefix)?;
+            continue;
+          }
+        };
+
+        match part {
+          BoxPart::Decorations => {
+            let open = self.open_node(scene, paint, prefix)?;
+
+            decorated.push(open.as_ref().map(|open| (open.node, open.outline)));
+            if let Some(mut open) = open {
+              open.outline = false;
+              self.close(open);
+            }
+          }
+          BoxPart::Content => {
+            if let Some(Some((node, outline))) = earlier.next() {
+              self.node_content(scene, paint, prefix, node)?;
+              if outline {
+                outlines.push(node);
+              }
+            }
+          }
+          BoxPart::Whole => {
+            if let Some(mut open) = self.open_node(scene, paint, prefix)? {
+              self.node_content(scene, paint, prefix, open.node)?;
               if open.outline {
                 outlines.push(open.node);
                 open.outline = false;
@@ -109,7 +158,6 @@ impl Walker {
               self.close(open);
             }
           }
-          PaintItemKind::Context(child) => self.context(scene, *child, prefix)?,
         }
       }
     }
@@ -126,8 +174,8 @@ impl Walker {
     Ok(())
   }
 
-  /// Records a scene node and its own content, leaving its steps open.
-  fn node(
+  /// Records a scene node's box, leaving its steps open.
+  fn open_node(
     &mut self,
     scene: &Scene,
     paint: &NodePaint,
@@ -137,17 +185,33 @@ impl Walker {
       return Ok(None);
     };
 
-    let path = [prefix, &paint.path].concat();
-    let open = self.open_box(node, layout, paint.transform, path.clone());
+    Ok(Some(self.open_box(
+      node,
+      layout,
+      paint.transform,
+      [prefix, &paint.path].concat(),
+    )))
+  }
+
+  /// Records the own content of a scene node whose box is `parent`.
+  fn node_content(
+    &mut self,
+    scene: &Scene,
+    paint: &NodePaint,
+    prefix: &[usize],
+    parent: usize,
+  ) -> Result<()> {
+    let Some((node, layout)) = recorded(scene, paint)? else {
+      return Ok(());
+    };
 
     self.own_content(Placed {
       node,
       layout,
       transform: paint.transform,
-      path: &path,
-      parent: open.node,
-    })?;
-    Ok(Some(open))
+      path: &[prefix, &paint.path].concat(),
+      parent,
+    })
   }
 
   /// Records a box and opens its group and overflow clip.
@@ -661,20 +725,30 @@ fn decorations(painter: &BoxPainter<'_>, size: Size<f32>, transform: Affine) -> 
   let isolated = layers.iter().any(|(_, blend_mode)| blend_mode.is_some());
 
   if isolated {
-    recorder.begin_layer(1.0);
+    recorder.begin_layer(1.0, None);
   }
   painter.background_color(Point::ZERO, &mut recorder);
   if let Some(clip) = background.clip.shape(size) {
-    let shape = Shape::of(&clip, Affine::IDENTITY);
+    let mask = background.clip.border_mask();
+    let shape = Shape::of(
+      &mask.map_or(clip, |_| FillShape::Rect(size)),
+      Affine::IDENTITY,
+    );
+    let fill = |recorder: &mut Recorder| {
+      for (paint, blend_mode) in layers {
+        recorder.push(Drawable::Fill {
+          role: Role::Background,
+          shape: shape.clone(),
+          paint,
+          blend_mode,
+          clips: Vec::new(),
+        });
+      }
+    };
 
-    for (paint, blend_mode) in layers {
-      recorder.push(Drawable::Fill {
-        role: Role::Background,
-        shape: shape.clone(),
-        paint,
-        blend_mode,
-        clips: Vec::new(),
-      });
+    match mask {
+      Some(mask) => recorder.with_border_mask(&mask, size, Point::ZERO, fill),
+      None => fill(&mut recorder),
     }
   }
   if isolated {

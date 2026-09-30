@@ -1,0 +1,521 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="720" height="300" viewBox="0 0 720 300">
+  <rect x="0" y="0" width="720" height="300" fill="#fff"/>
+  <clipPath id="cp0">
+    <path d="M44 24h24c11.05 0 20 8.95 20 20v24c0 11.05-8.95 20-20 20h-24c-11.05 0-20-8.95-20-20v-24c0-11.05 8.95-20 20-20Z"/>
+  </clipPath>
+  <g clip-path="url(#cp0)">
+    <clipPath id="cp1">
+      <path d="M-1000000-1000000H1000000V1000000H-1000000ZM44 34h24c5.52 0 10 4.48 10 10v24c0 5.52-4.48 10-10 10h-24c-5.52 0-10-4.48-10-10v-24c0-5.52 4.48-10 10-10Z" clip-rule="evenodd"/>
+    </clipPath>
+    <g clip-path="url(#cp1)">
+      <clipPath id="cp2">
+        <path shape-rendering="crispEdges" d="M24 24l15 15h34l15-15Z"/>
+      </clipPath>
+      <g clip-path="url(#cp2)">
+        <path d="M44 29h24c8.28 0 15 6.72 15 15v24c0 8.28-6.72 15-15 15h-24c-8.28 0-15-6.72-15-15v-24c0-8.28 6.72-15 15-15Z" fill="none" stroke="#2563eb" stroke-width="22" stroke-dasharray="20 11.667"/>
+      </g>
+      <clipPath id="cp3">
+        <path shape-rendering="crispEdges" d="M88 88l-15-15h-34l-15 15Z"/>
+      </clipPath>
+      <g clip-path="url(#cp3)">
+        <path d="M44 29h24c8.28 0 15 6.72 15 15v24c0 8.28-6.72 15-15 15h-24c-8.28 0-15-6.72-15-15v-24c0-8.28 6.72-15 15-15Z" fill="none" stroke="#2563eb" stroke-width="22" stroke-dasharray="20 11.667"/>
+      </g>
+      <clipPath id="cp4">
+        <path shape-rendering="crispEdges" d="M88 24l-15 15v34l15 15Z"/>
+      </clipPath>
+      <g clip-path="url(#cp4)">
+        <path d="M44 29h24c8.28 0 15 6.72 15 15v24c0 8.28-6.72 15-15 15h-24c-8.28 0-15-6.72-15-15v-24c0-8.28 6.72-15 15-15Z" fill="none" stroke="#2563eb" stroke-width="22" stroke-dasharray="20 11.667"/>
+      </g>
+      <clipPath id="cp5">
+        <path shape-rendering="crispEdges" d="M24 88l15-15v-34l-15-15Z"/>
+      </clipPath>
+      <g clip-path="url(#cp5)">
+        <path d="M44 29h24c8.28 0 15 6.72 15 15v24c0 8.28-6.72 15-15 15h-24c-8.28 0-15-6.72-15-15v-24c0-8.28 6.72-15 15-15Z" fill="none" stroke="#2563eb" stroke-width="22" stroke-dasharray="20 11.667"/>
+      </g>
+    </g>
+  </g>
+  <clipPath id="cp6">
+    <path d="M136 24h16c13.25 0 24 10.75 24 24v16c0 13.25-10.75 24-24 24h-16c-13.25 0-24-10.75-24-24v-16c0-13.25 10.75-24 24-24Z"/>
+  </clipPath>
+  <g clip-path="url(#cp6)">
+    <clipPath id="cp7">
+      <path d="M-1000000-1000000H1000000V1000000H-1000000ZM136 32h16c8.84 0 16 7.16 16 16v16c0 8.84-7.16 16-16 16h-16c-8.84 0-16-7.16-16-16v-16c0-8.84 7.16-16 16-16Z" clip-rule="evenodd"/>
+    </clipPath>
+    <g clip-path="url(#cp7)">
+      <clipPath id="cp8">
+        <path shape-rendering="crispEdges" d="M112 24l16 16h32l16-16Z"/>
+      </clipPath>
+      <g clip-path="url(#cp8)">
+        <path d="M136 28h16c11.05 0 20 8.95 20 20v16c0 11.05-8.95 20-20 20h-16c-11.05 0-20-8.95-20-20v-16c0-11.05 8.95-20 20-20Z" fill="none" stroke="#dc2626" stroke-width="8" stroke-dasharray="0 15.74" stroke-linecap="round"/>
+      </g>
+      <clipPath id="cp9">
+        <path shape-rendering="crispEdges" d="M176 88l-16-16h-32l-16 16Z"/>
+      </clipPath>
+      <g clip-path="url(#cp9)">
+        <path d="M136 28h16c11.05 0 20 8.95 20 20v16c0 11.05-8.95 20-20 20h-16c-11.05 0-20-8.95-20-20v-16c0-11.05 8.95-20 20-20Z" fill="none" stroke="#dc2626" stroke-width="8" stroke-dasharray="0 15.74" stroke-linecap="round"/>
+      </g>
+      <clipPath id="cp10">
+        <path shape-rendering="crispEdges" d="M176 24l-16 16v32l16 16Z"/>
+      </clipPath>
+      <g clip-path="url(#cp10)">
+        <path d="M136 28h16c11.05 0 20 8.95 20 20v16c0 11.05-8.95 20-20 20h-16c-11.05 0-20-8.95-20-20v-16c0-11.05 8.95-20 20-20Z" fill="none" stroke="#dc2626" stroke-width="8" stroke-dasharray="0 15.74" stroke-linecap="round"/>
+      </g>
+      <clipPath id="cp11">
+        <path shape-rendering="crispEdges" d="M112 88l16-16v-32l-16-16Z"/>
+      </clipPath>
+      <g clip-path="url(#cp11)">
+        <path d="M136 28h16c11.05 0 20 8.95 20 20v16c0 11.05-8.95 20-20 20h-16c-11.05 0-20-8.95-20-20v-16c0-11.05 8.95-20 20-20Z" fill="none" stroke="#dc2626" stroke-width="8" stroke-dasharray="0 15.74" stroke-linecap="round"/>
+      </g>
+    </g>
+  </g>
+  <clipPath id="cp12">
+    <path d="M220 24h24c11.05 0 20 8.95 20 20v24c0 11.05-8.95 20-20 20h-24c-11.05 0-20-8.95-20-20v-24c0-11.05 8.95-20 20-20Z"/>
+  </clipPath>
+  <g clip-path="url(#cp12)">
+    <clipPath id="cp13">
+      <path d="M-1000000-1000000H1000000V1000000H-1000000ZM220 34h24c5.52 0 10 4.48 10 10v24c0 5.52-4.48 10-10 10h-24c-5.52 0-10-4.48-10-10v-24c0-5.52 4.48-10 10-10Z" clip-rule="evenodd"/>
+    </clipPath>
+    <g clip-path="url(#cp13)">
+      <clipPath id="cp14">
+        <path d="M200 24l15 15h34l15-15Z"/>
+      </clipPath>
+      <g clip-path="url(#cp14)">
+        <rect x="200" y="24" width="64" height="64" fill="#2563eb"/>
+      </g>
+      <clipPath id="cp15">
+        <path d="M264 88l-15-15h-34l-15 15Z"/>
+      </clipPath>
+      <g clip-path="url(#cp15)">
+        <rect x="200" y="24" width="64" height="64" fill="#16a34a"/>
+      </g>
+      <clipPath id="cp16">
+        <path d="M264 24l-15 15v34l15 15Z"/>
+      </clipPath>
+      <g clip-path="url(#cp16)">
+        <rect x="200" y="24" width="64" height="64" fill="#dc2626"/>
+      </g>
+      <clipPath id="cp17">
+        <path d="M200 88l15-15v-34l-15-15Z"/>
+      </clipPath>
+      <g clip-path="url(#cp17)">
+        <rect x="200" y="24" width="64" height="64" fill="#eab308"/>
+      </g>
+    </g>
+  </g>
+  <clipPath id="cp18">
+    <path d="M312 24h16c13.25 0 24 10.75 24 24v16c0 13.25-10.75 24-24 24h-16c-13.25 0-24-10.75-24-24v-16c0-13.25 10.75-24 24-24Z"/>
+  </clipPath>
+  <g clip-path="url(#cp18)">
+    <clipPath id="cp19">
+      <path d="M-1000000-1000000H1000000V1000000H-1000000ZM312 36h16c6.63 0 12 5.37 12 12v16c0 6.63-5.37 12-12 12h-16c-6.63 0-12-5.37-12-12v-16c0-6.63 5.37-12 12-12Z" clip-rule="evenodd"/>
+    </clipPath>
+    <g clip-path="url(#cp19)">
+      <clipPath id="cp20">
+        <path d="M288 24l18 18h28l18-18Z"/>
+      </clipPath>
+      <g clip-path="url(#cp20)">
+        <clipPath id="cp21">
+          <path d="M312 32h16c8.84 0 16 7.16 16 16v16c0 8.84-7.16 16-16 16h-16c-8.84 0-16-7.16-16-16v-16c0-8.84 7.16-16 16-16Z"/>
+        </clipPath>
+        <g clip-path="url(#cp21)">
+          <rect x="288" y="24" width="64" height="64" fill="#2563eb"/>
+        </g>
+        <clipPath id="cp22">
+          <path d="M-1000000-1000000H1000000V1000000H-1000000ZM312 28h16c11.05 0 20 8.95 20 20v16c0 11.05-8.95 20-20 20h-16c-11.05 0-20-8.95-20-20v-16c0-11.05 8.95-20 20-20Z" clip-rule="evenodd"/>
+        </clipPath>
+        <g clip-path="url(#cp22)">
+          <rect x="288" y="24" width="64" height="64" fill="#2563eb"/>
+        </g>
+      </g>
+      <clipPath id="cp23">
+        <path d="M352 88l-18-18h-28l-18 18Z"/>
+      </clipPath>
+      <g clip-path="url(#cp23)">
+        <clipPath id="cp24">
+          <path d="M312 32h16c8.84 0 16 7.16 16 16v16c0 8.84-7.16 16-16 16h-16c-8.84 0-16-7.16-16-16v-16c0-8.84 7.16-16 16-16Z"/>
+        </clipPath>
+        <g clip-path="url(#cp24)">
+          <rect x="288" y="24" width="64" height="64" fill="#16a34a"/>
+        </g>
+        <clipPath id="cp25">
+          <path d="M-1000000-1000000H1000000V1000000H-1000000ZM312 28h16c11.05 0 20 8.95 20 20v16c0 11.05-8.95 20-20 20h-16c-11.05 0-20-8.95-20-20v-16c0-11.05 8.95-20 20-20Z" clip-rule="evenodd"/>
+        </clipPath>
+        <g clip-path="url(#cp25)">
+          <rect x="288" y="24" width="64" height="64" fill="#16a34a"/>
+        </g>
+      </g>
+      <clipPath id="cp26">
+        <path d="M352 24l-18 18v28l18 18Z"/>
+      </clipPath>
+      <g clip-path="url(#cp26)">
+        <clipPath id="cp27">
+          <path d="M312 32h16c8.84 0 16 7.16 16 16v16c0 8.84-7.16 16-16 16h-16c-8.84 0-16-7.16-16-16v-16c0-8.84 7.16-16 16-16Z"/>
+        </clipPath>
+        <g clip-path="url(#cp27)">
+          <rect x="288" y="24" width="64" height="64" fill="#dc2626"/>
+        </g>
+        <clipPath id="cp28">
+          <path d="M-1000000-1000000H1000000V1000000H-1000000ZM312 28h16c11.05 0 20 8.95 20 20v16c0 11.05-8.95 20-20 20h-16c-11.05 0-20-8.95-20-20v-16c0-11.05 8.95-20 20-20Z" clip-rule="evenodd"/>
+        </clipPath>
+        <g clip-path="url(#cp28)">
+          <rect x="288" y="24" width="64" height="64" fill="#dc2626"/>
+        </g>
+      </g>
+      <clipPath id="cp29">
+        <path d="M288 88l18-18v-28l-18-18Z"/>
+      </clipPath>
+      <g clip-path="url(#cp29)">
+        <clipPath id="cp30">
+          <path d="M312 32h16c8.84 0 16 7.16 16 16v16c0 8.84-7.16 16-16 16h-16c-8.84 0-16-7.16-16-16v-16c0-8.84 7.16-16 16-16Z"/>
+        </clipPath>
+        <g clip-path="url(#cp30)">
+          <rect x="288" y="24" width="64" height="64" fill="#eab308"/>
+        </g>
+        <clipPath id="cp31">
+          <path d="M-1000000-1000000H1000000V1000000H-1000000ZM312 28h16c11.05 0 20 8.95 20 20v16c0 11.05-8.95 20-20 20h-16c-11.05 0-20-8.95-20-20v-16c0-11.05 8.95-20 20-20Z" clip-rule="evenodd"/>
+        </clipPath>
+        <g clip-path="url(#cp31)">
+          <rect x="288" y="24" width="64" height="64" fill="#eab308"/>
+        </g>
+      </g>
+    </g>
+  </g>
+  <clipPath id="cp32">
+    <path d="M396 24h24c11.05 0 20 8.95 20 20v24c0 11.05-8.95 20-20 20h-24c-11.05 0-20-8.95-20-20v-24c0-11.05 8.95-20 20-20Z"/>
+  </clipPath>
+  <g clip-path="url(#cp32)">
+    <clipPath id="cp33">
+      <path d="M-1000000-1000000H1000000V1000000H-1000000ZM396 36h24c4.42 0 8 3.58 8 8v24c0 4.42-3.58 8-8 8h-24c-4.42 0-8-3.58-8-8v-24c0-4.42 3.58-8 8-8Z" clip-rule="evenodd"/>
+    </clipPath>
+    <g clip-path="url(#cp33)">
+      <clipPath id="cp34">
+        <path shape-rendering="crispEdges" d="M375.9 24l16 16h48.1v-16Z"/>
+      </clipPath>
+      <g clip-path="url(#cp34)">
+        <clipPath id="cp35">
+          <path d="M376 24v16h48.1l16-16Z"/>
+        </clipPath>
+        <g clip-path="url(#cp35)">
+          <rect x="376" y="24" width="64" height="64" fill="#502599"/>
+          <clipPath id="cp36">
+            <path d="M396 30h24c7.73 0 14 6.27 14 14v24c0 7.73-6.27 14-14 14h-24c-7.73 0-14-6.27-14-14v-24c0-7.73 6.27-14 14-14Z"/>
+          </clipPath>
+          <g clip-path="url(#cp36)">
+            <rect x="376" y="24" width="64" height="64" fill="#853eff"/>
+          </g>
+        </g>
+      </g>
+      <clipPath id="cp37">
+        <path shape-rendering="crispEdges" d="M440.1 88l-16-16h-48.1v16Z"/>
+      </clipPath>
+      <g clip-path="url(#cp37)">
+        <clipPath id="cp38">
+          <path d="M440 88v-16h-48.1l-16 16Z"/>
+        </clipPath>
+        <g clip-path="url(#cp38)">
+          <rect x="376" y="24" width="64" height="64" fill="#853eff"/>
+          <clipPath id="cp39">
+            <path d="M396 30h24c7.73 0 14 6.27 14 14v24c0 7.73-6.27 14-14 14h-24c-7.73 0-14-6.27-14-14v-24c0-7.73 6.27-14 14-14Z"/>
+          </clipPath>
+          <g clip-path="url(#cp39)">
+            <rect x="376" y="24" width="64" height="64" fill="#502599"/>
+          </g>
+        </g>
+      </g>
+      <clipPath id="cp40">
+        <path d="M440 23.9l-16 16v48.1h16Z"/>
+      </clipPath>
+      <g clip-path="url(#cp40)">
+        <clipPath id="cp41">
+          <path shape-rendering="crispEdges" d="M440 24h-16v48.1l16 16Z"/>
+        </clipPath>
+        <g clip-path="url(#cp41)">
+          <rect x="376" y="24" width="64" height="64" fill="#853eff"/>
+          <clipPath id="cp42">
+            <path d="M396 30h24c7.73 0 14 6.27 14 14v24c0 7.73-6.27 14-14 14h-24c-7.73 0-14-6.27-14-14v-24c0-7.73 6.27-14 14-14Z"/>
+          </clipPath>
+          <g clip-path="url(#cp42)">
+            <rect x="376" y="24" width="64" height="64" fill="#502599"/>
+          </g>
+        </g>
+      </g>
+      <clipPath id="cp43">
+        <path d="M376 88.1l16-16v-48.1h-16Z"/>
+      </clipPath>
+      <g clip-path="url(#cp43)">
+        <clipPath id="cp44">
+          <path shape-rendering="crispEdges" d="M376 88h16v-48.1l-16-16Z"/>
+        </clipPath>
+        <g clip-path="url(#cp44)">
+          <rect x="376" y="24" width="64" height="64" fill="#502599"/>
+          <clipPath id="cp45">
+            <path d="M396 30h24c7.73 0 14 6.27 14 14v24c0 7.73-6.27 14-14 14h-24c-7.73 0-14-6.27-14-14v-24c0-7.73 6.27-14 14-14Z"/>
+          </clipPath>
+          <g clip-path="url(#cp45)">
+            <rect x="376" y="24" width="64" height="64" fill="#853eff"/>
+          </g>
+        </g>
+      </g>
+    </g>
+  </g>
+  <clipPath id="cp46">
+    <path d="M480 24h32c8.84 0 16 7.16 16 16v32c0 8.84-7.16 16-16 16h-32c-8.84 0-16-7.16-16-16v-32c0-8.84 7.16-16 16-16Z"/>
+  </clipPath>
+  <g clip-path="url(#cp46)">
+    <clipPath id="cp47">
+      <path d="M-1000000-1000000H1000000V1000000H-1000000ZM480 36h32c2.21 0 4 1.79 4 4v32c0 2.21-1.79 4-4 4h-32c-2.21 0-4-1.79-4-4v-32c0-2.21 1.79-4 4-4Z" clip-rule="evenodd"/>
+    </clipPath>
+    <g clip-path="url(#cp47)">
+      <clipPath id="cp48">
+        <path d="M464 24l14 14h36l14-14Z"/>
+      </clipPath>
+      <g clip-path="url(#cp48)">
+        <rect x="464" y="24" width="64" height="64" fill="#286bff"/>
+        <clipPath id="cp49">
+          <path d="M480 30h32c5.52 0 10 4.48 10 10v32c0 5.52-4.48 10-10 10h-32c-5.52 0-10-4.48-10-10v-32c0-5.52 4.48-10 10-10Z"/>
+        </clipPath>
+        <g clip-path="url(#cp49)">
+          <rect x="464" y="24" width="64" height="64" fill="#173f97"/>
+        </g>
+      </g>
+      <clipPath id="cp50">
+        <path d="M528 88l-14-14h-36l-14 14Z"/>
+      </clipPath>
+      <g clip-path="url(#cp50)">
+        <rect x="464" y="24" width="64" height="64" fill="#0a4f23"/>
+        <clipPath id="cp51">
+          <path d="M480 30h32c5.52 0 10 4.48 10 10v32c0 5.52-4.48 10-10 10h-32c-5.52 0-10-4.48-10-10v-32c0-5.52 4.48-10 10-10Z"/>
+        </clipPath>
+        <g clip-path="url(#cp51)">
+          <rect x="464" y="24" width="64" height="64" fill="#21f870"/>
+        </g>
+      </g>
+      <clipPath id="cp52">
+        <path d="M528 24l-14 14v36l14 14Z"/>
+      </clipPath>
+      <g clip-path="url(#cp52)">
+        <rect x="464" y="24" width="64" height="64" fill="#881717"/>
+        <clipPath id="cp53">
+          <path d="M480 30h32c5.52 0 10 4.48 10 10v32c0 5.52-4.48 10-10 10h-32c-5.52 0-10-4.48-10-10v-32c0-5.52 4.48-10 10-10Z"/>
+        </clipPath>
+        <g clip-path="url(#cp53)">
+          <rect x="464" y="24" width="64" height="64" fill="#ff2c2c"/>
+        </g>
+      </g>
+      <clipPath id="cp54">
+        <path d="M464 88l14-14v-36l-14-14Z"/>
+      </clipPath>
+      <g clip-path="url(#cp54)">
+        <rect x="464" y="24" width="64" height="64" fill="#ffc308"/>
+        <clipPath id="cp55">
+          <path d="M480 30h32c5.52 0 10 4.48 10 10v32c0 5.52-4.48 10-10 10h-32c-5.52 0-10-4.48-10-10v-32c0-5.52 4.48-10 10-10Z"/>
+        </clipPath>
+        <g clip-path="url(#cp55)">
+          <rect x="464" y="24" width="64" height="64" fill="#967305"/>
+        </g>
+      </g>
+    </g>
+  </g>
+  <clipPath id="cp56">
+    <path d="M558 24h52c3.31 0 6 2.69 6 6v52c0 3.31-2.69 6-6 6h-52c-3.31 0-6-2.69-6-6v-52c0-3.31 2.69-6 6-6Z"/>
+  </clipPath>
+  <g clip-path="url(#cp56)">
+    <clipPath id="cp57">
+      <path d="M-1000000-1000000H1000000V1000000H-1000000ZM562 34h44v44h-44v-44Z" clip-rule="evenodd"/>
+    </clipPath>
+    <g clip-path="url(#cp57)">
+      <rect x="552" y="24" width="64" height="10" fill="#173f97"/>
+      <rect x="552" y="78" width="64" height="10" fill="#286bff"/>
+      <path d="M606 34v54h10v-64Z" fill="#286bff"/>
+      <path d="M552 24v64l10-10v-54Z" fill="#173f97"/>
+    </g>
+  </g>
+  <clipPath id="cp58">
+    <path d="M44 162h24c11.05 0 20 8.95 20 20v24c0 11.05-8.95 20-20 20h-24c-11.05 0-20-8.95-20-20v-24c0-11.05 8.95-20 20-20Z"/>
+  </clipPath>
+  <g clip-path="url(#cp58)">
+    <clipPath id="cp59">
+      <path d="M-1000000-1000000H1000000V1000000H-1000000ZM44 172h24c5.52 0 10 4.48 10 10v24c0 5.52-4.48 10-10 10h-24c-5.52 0-10-4.48-10-10v-24c0-5.52 4.48-10 10-10Z" clip-rule="evenodd"/>
+    </clipPath>
+    <g clip-path="url(#cp59)">
+      <g opacity=".8">
+        <g opacity=".627">
+          <clipPath id="cp60">
+            <path d="M24 162l15 15h34l15-15Z"/>
+          </clipPath>
+          <g clip-path="url(#cp60)">
+            <rect x="24" y="162" width="64" height="64" fill="#2563eb"/>
+          </g>
+          <clipPath id="cp61">
+            <path d="M24 226l15-15v-34l-15-15Z"/>
+          </clipPath>
+          <g clip-path="url(#cp61)">
+            <rect x="24" y="162" width="64" height="64" fill="#eab308"/>
+          </g>
+        </g>
+        <clipPath id="cp62">
+          <path d="M88 162l-15 15v34l15 15Z"/>
+        </clipPath>
+        <g clip-path="url(#cp62)">
+          <rect x="24" y="162" width="64" height="64" fill="#dc2626"/>
+        </g>
+      </g>
+      <clipPath id="cp63">
+        <path d="M88 226l-15-15h-34l-15 15Z"/>
+      </clipPath>
+      <g clip-path="url(#cp63)">
+        <rect x="24" y="162" width="64" height="64" fill="#16a34a"/>
+      </g>
+    </g>
+  </g>
+  <clipPath id="cp64">
+    <path d="M144 162c17.67 0 32 14.33 32 32s-14.33 32-32 32-32-14.33-32-32 14.33-32 32-32Z"/>
+  </clipPath>
+  <g clip-path="url(#cp64)">
+    <clipPath id="cp65">
+      <path d="M-1000000-1000000H1000000V1000000H-1000000ZM144 166c4.42 0 8 12.54 8 28 0 11.05-3.58 20-8 20-16.57 0-30-8.95-30-20 0-15.46 13.43-28 30-28Z" clip-rule="evenodd"/>
+    </clipPath>
+    <g clip-path="url(#cp65)">
+      <clipPath id="cp66">
+        <path d="M112 162l11.55 23.09 20.81-17.82 31.64-5.27Z"/>
+      </clipPath>
+      <g clip-path="url(#cp66)">
+        <rect x="112" y="162" width="64" height="64" fill="#2563eb"/>
+      </g>
+      <clipPath id="cp67">
+        <path d="M176 226l-30.67-15.33-28.33-14.67-5 30Z"/>
+      </clipPath>
+      <g clip-path="url(#cp67)">
+        <rect x="112" y="162" width="64" height="64" fill="#16a34a"/>
+      </g>
+      <clipPath id="cp68">
+        <path d="M176 162l-31.64 5.27.97 43.4 30.67 15.33Z"/>
+      </clipPath>
+      <g clip-path="url(#cp68)">
+        <rect x="112" y="162" width="64" height="64" fill="#dc2626"/>
+      </g>
+      <clipPath id="cp69">
+        <path d="M112 226l5-30 6.55-10.91-11.55-23.09Z"/>
+      </clipPath>
+      <g clip-path="url(#cp69)">
+        <rect x="112" y="162" width="64" height="64" fill="#eab308"/>
+      </g>
+    </g>
+  </g>
+  <clipPath id="cp70">
+    <path d="M216 162h44c2.21 0 4 1.79 4 4v32c0 15.46-12.54 28-28 28h-36v-48c0-8.84 7.16-16 16-16Z"/>
+  </clipPath>
+  <g clip-path="url(#cp70)">
+    <clipPath id="cp71">
+      <path d="M-1000000-1000000H1000000V1000000H-1000000ZM216 172h38v26c0 9.94-8.06 18-18 18h-26v-38c0-3.31 2.69-6 6-6Z" clip-rule="evenodd"/>
+    </clipPath>
+    <g clip-path="url(#cp71)">
+      <clipPath id="cp72">
+        <path shape-rendering="crispEdges" d="M264 226l-19-19-35 9-10 10Z"/>
+      </clipPath>
+      <g clip-path="url(#cp72)">
+        <path d="M216 167h43v31c0 12.7-10.3 23-23 23h-31v-43c0-6.08 4.92-11 11-11Z" fill="none" stroke="#16a34a" stroke-width="22" stroke-dasharray="20 8.714"/>
+      </g>
+      <clipPath id="cp73">
+        <path shape-rendering="crispEdges" d="M264 162l-10 10-9 35 19 19Z"/>
+      </clipPath>
+      <g clip-path="url(#cp73)">
+        <path d="M216 167h43v31c0 12.7-10.3 23-23 23h-31v-43c0-6.08 4.92-11 11-11Z" fill="none" stroke="#16a34a" stroke-width="22" stroke-dasharray="20 8.714"/>
+      </g>
+      <clipPath id="cp74">
+        <path shape-rendering="crispEdges" d="M200 226l10-10 3-41-13-13Z"/>
+      </clipPath>
+      <g clip-path="url(#cp74)">
+        <path d="M216 167h43v31c0 12.7-10.3 23-23 23h-31v-43c0-6.08 4.92-11 11-11Z" fill="none" stroke="#16a34a" stroke-width="22" stroke-dasharray="20 8.714"/>
+      </g>
+      <clipPath id="cp75">
+        <path shape-rendering="crispEdges" d="M200 162l13 13 41-3 10-10Z"/>
+      </clipPath>
+      <g clip-path="url(#cp75)">
+        <rect x="200" y="162" width="64" height="64" fill="#16a34a"/>
+      </g>
+    </g>
+  </g>
+  <clipPath id="cp76">
+    <path d="M320 162c17.67 0 32 14.33 32 32s-14.33 32-32 32-32-14.33-32-32 14.33-32 32-32Z"/>
+  </clipPath>
+  <g clip-path="url(#cp76)">
+    <clipPath id="cp77">
+      <path d="M-1000000-1000000H1000000V1000000H-1000000ZM320 176c9.94 0 18 8.06 18 18s-8.06 18-18 18-18-8.06-18-18 8.06-18 18-18Z" clip-rule="evenodd"/>
+    </clipPath>
+    <g clip-path="url(#cp77)">
+      <clipPath id="cp78">
+        <path shape-rendering="crispEdges" d="M288 162l23 23h18l23-23Z"/>
+      </clipPath>
+      <g clip-path="url(#cp78)">
+        <rect x="288" y="162" width="64" height="64" fill="#2563eb"/>
+      </g>
+      <clipPath id="cp79">
+        <path d="M352 226l-23-23h-18l-23 23Z"/>
+      </clipPath>
+      <g clip-path="url(#cp79)">
+        <rect x="288" y="162" width="64" height="64" fill="#dc2626"/>
+      </g>
+      <clipPath id="cp80">
+        <path shape-rendering="crispEdges" d="M352 161.9l-23 23v41.1h23Z"/>
+      </clipPath>
+      <g clip-path="url(#cp80)">
+        <clipPath id="cp81">
+          <path d="M352 162h-23v41.1l23 23Z"/>
+        </clipPath>
+        <g clip-path="url(#cp81)">
+          <rect x="288" y="162" width="64" height="64" fill="#2563eb"/>
+        </g>
+      </g>
+      <clipPath id="cp82">
+        <path d="M288 226.1l23-23v-41.1h-23Z"/>
+      </clipPath>
+      <g clip-path="url(#cp82)">
+        <clipPath id="cp83">
+          <path shape-rendering="crispEdges" d="M288 226h23v-41.1l-23-23Z"/>
+        </clipPath>
+        <g clip-path="url(#cp83)">
+          <rect x="288" y="162" width="64" height="64" fill="#2563eb"/>
+        </g>
+      </g>
+    </g>
+  </g>
+  <clipPath id="cp84">
+    <path d="M400 162h16c13.25 0 24 10.75 24 24v16c0 13.25-10.75 24-24 24h-16c-13.25 0-24-10.75-24-24v-16c0-13.25 10.75-24 24-24Z"/>
+  </clipPath>
+  <g clip-path="url(#cp84)">
+    <clipPath id="cp85">
+      <path d="M-1000000-1000000H1000000V1000000H-1000000ZM400 174h16c6.63 0 12 5.37 12 12v16c0 6.63-5.37 12-12 12h-16c-13.25 0-24-5.37-24-12v-16c0-6.63 10.75-12 24-12Z" clip-rule="evenodd"/>
+    </clipPath>
+    <g clip-path="url(#cp85)">
+      <clipPath id="cp86">
+        <path d="M375.9 162v24h64.1v-24Z"/>
+      </clipPath>
+      <g clip-path="url(#cp86)">
+        <clipPath id="cp87">
+          <path shape-rendering="crispEdges" d="M376 162v24h40.1l24-24Z"/>
+        </clipPath>
+        <g clip-path="url(#cp87)">
+          <rect x="376" y="162" width="64" height="64" fill="#eab308"/>
+        </g>
+      </g>
+      <clipPath id="cp88">
+        <path shape-rendering="crispEdges" d="M440.1 226l-24-24h-40.1v24Z"/>
+      </clipPath>
+      <g clip-path="url(#cp88)">
+        <clipPath id="cp89">
+          <path d="M440 226v-24h-64.1v24Z"/>
+        </clipPath>
+        <g clip-path="url(#cp89)">
+          <rect x="376" y="162" width="64" height="64" fill="#eab308"/>
+        </g>
+      </g>
+      <clipPath id="cp90">
+        <path shape-rendering="crispEdges" d="M440 162l-18 18v28l18 18Z"/>
+      </clipPath>
+      <g clip-path="url(#cp90)">
+        <rect x="376" y="162" width="64" height="64" fill="#eab308"/>
+      </g>
+    </g>
+  </g>
+</svg>

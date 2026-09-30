@@ -54,6 +54,23 @@ pub struct SceneBounds {
 }
 
 impl SceneBounds {
+  /// The pixels a rectangle of `size` at the origin covers under `transform`.
+  pub fn of_rect(size: Size<f32>, transform: Affine) -> Option<Self> {
+    let (min_x, min_y, max_x, max_y) = transformed_rect_extents(Point::ZERO, size, transform)?;
+    let left = (min_x.floor() as i32).max(0) as usize;
+    let top = (min_y.floor() as i32).max(0) as usize;
+    let right = (max_x.ceil() as i32).max(0) as usize;
+    let bottom = (max_y.ceil() as i32).max(0) as usize;
+
+    // Empty bounds mean "paints nothing"; None means "unknown" and forces full-viewport isolation.
+    Some(Self {
+      left,
+      top,
+      right,
+      bottom,
+    })
+  }
+
   /// Whether the bounds enclose zero area.
   pub fn is_empty(self) -> bool {
     self.left >= self.right || self.top >= self.bottom
@@ -76,29 +93,36 @@ pub struct PaintItem {
   pub kind: PaintItemKind,
   z_index: i32,
   source_order: usize,
+  /// Whether an in-flow item paints whole with the content, as a flex or grid item does.
+  atomic: bool,
 }
 
 impl PaintItem {
   fn z_order(&self) -> (i32, usize) {
     (self.z_index, self.source_order)
   }
+
+  /// What the item paints in a phase painting `part`: a nested context paints whole once.
+  pub fn part_in(&self, part: BoxPart) -> Option<BoxPart> {
+    match (&self.kind, part) {
+      (PaintItemKind::Node(_), part) => Some(part),
+      (PaintItemKind::Context(_), BoxPart::Whole) => Some(BoxPart::Whole),
+      (PaintItemKind::Context(_), BoxPart::Decorations) => (!self.atomic).then_some(BoxPart::Whole),
+      (PaintItemKind::Context(_), BoxPart::Content) => self.atomic.then_some(BoxPart::Whole),
+    }
+  }
 }
 
 #[derive(Clone, Copy)]
-/// The phases of [CSS 2.1 Appendix E](https://www.w3.org/TR/CSS21/zindex.html) a stacking context
-/// paints its descendants in, after its own background.
+/// The buckets of [CSS 2.1 Appendix E](https://www.w3.org/TR/CSS21/zindex.html) paint order.
 enum PaintBucket {
   /// Negative `z-index`.
   Negative,
-  /// In-flow, non-positioned boxes, each with its inline content.
-  ///
-  /// Approximate: a box paints its text right after its background, where Blink paints every
-  /// block's background before any of their text.
+  /// In-flow, non-positioned boxes.
   InFlow,
   /// Non-positioned floats.
   ///
-  /// Approximate: a float inside inline content paints with that content, where Blink paints it
-  /// in this phase.
+  /// Approximate: a float inside inline content paints with that content, not in this phase.
   Float,
   /// Positioned boxes and stacking contexts at `z-index: auto` or `0`, in tree order.
   Positioned,
@@ -143,6 +167,26 @@ impl StackingBuckets {
   }
 }
 
+/// Which part of a box a [`PaintPhase`] paints.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum BoxPart {
+  /// Everything the box paints.
+  Whole,
+  /// Its shadows, background and border.
+  Decorations,
+  /// Its text, replaced content and outline.
+  Content,
+}
+
+/// One phase of painting a stacking context.
+#[derive(Clone, Copy)]
+pub enum PaintPhase<'a> {
+  /// The context root's own content.
+  RootContent,
+  /// Items, each painting what [`PaintItem::part_in`] says for `part`.
+  Items(&'a [PaintItem], BoxPart),
+}
+
 /// One stacking context: an optional root node and its descendants bucketed into CSS paint order.
 pub struct StackingContextNode {
   root: Option<NodePaint>,
@@ -166,6 +210,23 @@ impl StackingContextNode {
     self.buckets.in_paint_order()
   }
 
+  /// The phases after the root's decorations, in [CSS 2.1 Appendix E](https://www.w3.org/TR/CSS21/zindex.html) order.
+  ///
+  /// Approximate: an in-flow box that clips its overflow paints whole with the decorations.
+  pub fn paint_phases(&self) -> [PaintPhase<'_>; 7] {
+    let buckets = &self.buckets;
+
+    [
+      PaintPhase::Items(&buckets.negative, BoxPart::Whole),
+      PaintPhase::Items(&buckets.in_flow, BoxPart::Decorations),
+      PaintPhase::Items(&buckets.floats, BoxPart::Whole),
+      PaintPhase::RootContent,
+      PaintPhase::Items(&buckets.in_flow, BoxPart::Content),
+      PaintPhase::Items(&buckets.positioned, BoxPart::Whole),
+      PaintPhase::Items(&buckets.positive, BoxPart::Whole),
+    ]
+  }
+
   fn with_root(root: Option<NodePaint>) -> Self {
     Self {
       root,
@@ -180,6 +241,7 @@ impl StackingContextNode {
     kind: PaintItemKind,
     z_index: i32,
     source_order: usize,
+    atomic: bool,
   ) {
     self.buckets.push(
       bucket,
@@ -187,6 +249,7 @@ impl StackingContextNode {
         kind,
         z_index,
         source_order,
+        atomic,
       },
     );
   }
@@ -199,16 +262,14 @@ struct StackingContextBuildVisit {
   container_size: Size<Option<f32>>,
   /// The context in-flow boxes and floats paint in.
   context_id: usize,
-  /// The context positioned boxes and stacking contexts paint in: the nearest stacking context,
-  /// or the nearest box that clips its overflow, which keeps what it clips.
+  /// The nearest stacking context or clipping box, where positioned boxes paint.
   stacking_id: usize,
   parent_display: Option<Display>,
   is_root: bool,
 }
 
 impl PaintBucket {
-  /// The phase a child with `style` paints in, and its z-index there. A stacking context at
-  /// `z-index: auto` paints with the positioned boxes.
+  /// The bucket a child with `style` paints in, and its z-index there.
   fn of(
     style: &ComputedStyle,
     is_flex_or_grid_item: bool,
@@ -231,8 +292,7 @@ impl PaintBucket {
     }
   }
 
-  /// Whether the phase belongs to the nearest stacking context rather than the nearest box that
-  /// paints its descendants atomically.
+  /// Whether the bucket belongs to the nearest stacking context, not the nearest atomic box.
   fn lifts(&self) -> bool {
     matches!(self, Self::Negative | Self::Positioned | Self::Positive)
   }
@@ -344,10 +404,8 @@ impl SceneRequest<'_> {
         } else {
           visit.context_id
         };
-        // A positioned box or a float paints its descendants atomically, as if it were a
-        // stacking context, but its positioned and z-indexed descendants still paint in the
-        // real one.
-        let atomic = !matches!(bucket, PaintBucket::InFlow);
+        // Atomic boxes paint as if stacking contexts, but lift positioned descendants to the real one.
+        let atomic = !matches!(bucket, PaintBucket::InFlow) || is_flex_or_grid_item;
 
         if creates_stacking_context || clips || atomic {
           let child_context = contexts.len();
@@ -358,6 +416,7 @@ impl SceneRequest<'_> {
             PaintItemKind::Context(child_context),
             z_index,
             source_order,
+            atomic,
           );
           context_id = child_context;
           if creates_stacking_context || clips {
@@ -369,6 +428,7 @@ impl SceneRequest<'_> {
             PaintItemKind::Node(node_paint),
             z_index,
             source_order,
+            false,
           );
         }
         source_order += 1;
@@ -564,7 +624,7 @@ fn compute_node_paint_bounds(
   transform: Affine,
 ) -> Option<SceneBounds> {
   let mut bounds = outset_bounds(
-    bounds_for_rect(layout.size, transform),
+    SceneBounds::of_rect(layout.size, transform),
     box_ink_reach(node, layout.size),
     transform,
   );
@@ -614,8 +674,7 @@ fn compute_node_paint_bounds(
           bounds_for_placed_rect(glyph_origin, glyph_size, inline_transform),
         );
 
-        // Blink's `InkOverflow::ComputeAppliedDecorationOverflow` unites each decoration line's
-        // painted area into the text's ink overflow.
+        // Blink's `InkOverflow::ComputeAppliedDecorationOverflow`.
         let brush = glyph_run.style().brush;
         if !brush.decoration_line.is_empty() {
           let run = ShapedRun::of(
@@ -761,29 +820,13 @@ fn has_inline_paint_content(node: &RenderNode) -> bool {
     })
 }
 
-fn bounds_for_rect(size: Size<f32>, transform: Affine) -> Option<SceneBounds> {
-  let (min_x, min_y, max_x, max_y) = transformed_rect_extents(Point::ZERO, size, transform)?;
-  let left = (min_x.floor() as i32).max(0) as usize;
-  let top = (min_y.floor() as i32).max(0) as usize;
-  let right = (max_x.ceil() as i32).max(0) as usize;
-  let bottom = (max_y.ceil() as i32).max(0) as usize;
-
-  // Empty bounds mean "paints nothing"; None means "unknown" and forces full-viewport isolation.
-  Some(SceneBounds {
-    left,
-    top,
-    right,
-    bottom,
-  })
-}
-
-/// [`bounds_for_rect`] for a rect at `origin` in `transform`'s space.
+/// [`SceneBounds::of_rect`] for a rect at `origin` in `transform`'s space.
 fn bounds_for_placed_rect(
   origin: Point<f32>,
   size: Size<f32>,
   transform: Affine,
 ) -> Option<SceneBounds> {
-  bounds_for_rect(size, Affine::translation(origin.x, origin.y) * transform)
+  SceneBounds::of_rect(size, Affine::translation(origin.x, origin.y) * transform)
 }
 
 fn merge_bounds(left: Option<SceneBounds>, right: Option<SceneBounds>) -> Option<SceneBounds> {
@@ -804,12 +847,12 @@ fn merge_bounds(left: Option<SceneBounds>, right: Option<SceneBounds>) -> Option
 
 #[cfg(test)]
 mod tests {
-  use super::{SceneBounds, bounds_for_rect, merge_bounds};
+  use super::{SceneBounds, merge_bounds};
   use crate::{geometry::Size, style::Affine};
 
   #[test]
   fn zero_sized_rect_produces_empty_bounds() {
-    let bounds = bounds_for_rect(
+    let bounds = SceneBounds::of_rect(
       Size {
         width: 0.0,
         height: 100.0,

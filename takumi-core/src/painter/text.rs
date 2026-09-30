@@ -28,8 +28,7 @@ pub enum GlyphFill {
 /// A device that can also draw text: glyph runs, and the shadows text and its decorations cast.
 pub trait GlyphDevice: PaintDevice {
   /// Paints only the shadow of what is drawn until the matching [`GlyphDevice::end_shadow`]:
-  /// each draw moved by the shadow's offset, filled with its colour, and blurred. A colour glyph
-  /// casts its silhouette, as Blink's shadow fills every glyph with the shadow colour.
+  /// each draw moved by the shadow's offset, filled with its colour, and blurred.
   fn begin_shadow(&mut self, shadow: &SizedShadow);
 
   /// Stops painting shadows.
@@ -114,7 +113,7 @@ impl InlineLines<'_> {
     let at = frame.translation();
 
     for fragment in &self.background_fragments {
-      device.with_opacity(fragment.opacity, |device| {
+      device.with_opacity(fragment.opacity, None, |device| {
         if fragment.color.0[3] != 0 {
           device.set_role(PaintRole::InlineBackground);
           device.fill_shape(
@@ -230,7 +229,7 @@ impl PositionedInlineRun {
     shadow_pass: bool,
     device: &mut D,
   ) {
-    device.with_opacity(self.glyph_run.brush.opacity, |device| {
+    device.with_opacity(self.glyph_run.brush.opacity, None, |device| {
       if !shadow_pass {
         device.set_role(PaintRole::TextDecoration);
       }

@@ -111,7 +111,8 @@ fn roles(node: &PaintNode) -> Vec<Role> {
         | Drawable::Stroke { role, .. }
         | Drawable::Shadow { role, .. }
         | Drawable::Glyphs { role, .. }
-        | Drawable::Image { role, .. } => vec![*role],
+        | Drawable::Image { role, .. }
+        | Drawable::Masked { role, .. } => vec![*role],
         Drawable::Group { drawables, .. } => roles_of(drawables),
       })
       .collect()

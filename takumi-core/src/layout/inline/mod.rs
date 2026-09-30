@@ -42,7 +42,7 @@ pub use self::{
   decorations::DecorationLine,
   items::{DecorationLink, InlineBoxItem, InlineItem, ProcessedInlineSpan, collect_inline_items},
   metrics::VisualInlineBox,
-  outline::{InlineOutline, InlineOutlineRect, OutlineIsland},
+  outline::{InlineOutline, InlineOutlineRect, OutlineIsland, RightAngleContour},
   runs::{
     InlineRunLayout, MeasuredInlineBox, MeasuredInlineRun, PositionedGlyph, PositionedInlineRun,
     RunMetrics, ShapedRun,
@@ -1824,7 +1824,9 @@ mod tests {
     let island = OutlineIsland::of(&rects).remove(0);
     let radius = Sides([SpacePair::from_single(4.0); 4]);
     let arcs = island
-      .rounded_contour(0.0, radius, radius)
+      .right_angle_path(0.0, 0.0)
+      .expect("an island encloses area")
+      .rounded(radius, radius)
       .iter()
       .filter(|command| matches!(command, PathCommand::CubicTo(..)))
       .count();
@@ -1833,11 +1835,26 @@ mod tests {
   }
 
   #[test]
-  fn outline_rects_a_layout_unit_apart_touch() {
+  fn outline_rects_that_snap_together_touch() {
     let rect = |x: f32, width: f32| outline_rect(0, 0, x, 0.0, width);
 
-    assert!(rect(0.0, 10.0).meets(rect(10.01, 10.0), 0.0));
-    assert!(!rect(0.0, 10.0).meets(rect(10.1, 10.0), 0.0));
-    assert!(rect(0.0, 10.0).meets(rect(14.0, 10.0), 2.0));
+    assert!(rect(0.0, 10.0).meets(rect(10.4, 10.0)));
+    assert!(!rect(0.0, 10.0).meets(rect(10.6, 10.0)));
+  }
+
+  #[test]
+  fn outline_rects_meet_by_the_whole_pixels_they_paint_with() {
+    let rect = |x: f32| InlineOutlineRect {
+      outline: InlineOutline {
+        width: 1.5,
+        offset: 0.0,
+        color: Color::black(),
+        style: BorderStyle::Solid,
+      },
+      ..outline_rect(0, 0, x, 0.0, 10.0)
+    };
+
+    assert!(rect(0.0).meets(rect(12.0)));
+    assert!(!rect(0.0).meets(rect(13.0)));
   }
 }

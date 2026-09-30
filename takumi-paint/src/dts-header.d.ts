@@ -266,6 +266,13 @@ export type RawDrawable<Run = number> =
       readonly clip: Shape;
       readonly sampling: Sampling;
     }
+  /** `content` kept only where `mask` covers, as `destination-in` compositing keeps it. */
+  | {
+      readonly type: "masked";
+      readonly role: Role;
+      readonly mask: readonly RawDrawable<Run>[];
+      readonly content: readonly RawDrawable<Run>[];
+    }
   /** Draw `drawables` into a layer, then composite it at `opacity`. */
   | {
       readonly type: "group";

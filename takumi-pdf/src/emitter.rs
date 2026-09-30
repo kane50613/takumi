@@ -24,10 +24,11 @@ use takumi_core::{
   },
   paint::ConicGradientTile,
   painter::{
-    BackgroundClipArea, BoxBackground, BoxFrame, BoxPainter, FillShape, GlyphDevice, GlyphFill,
-    OverflowClip, OwnContent, PaintDevice, PendingOutline, ShadowShape, StrokeStyle, UNBOUNDED,
+    BackgroundClipArea, BoxBackground, BoxBorderPainter, BoxFrame, BoxPainter, FillShape,
+    GlyphDevice, GlyphFill, LayerBounds, OverflowClip, OwnContent, PaintDevice, PendingOutline,
+    ShadowShape, StrokeStyle, UNBOUNDED,
   },
-  scene::{NodePaint, PaintItemKind, Scene},
+  scene::{BoxPart, NodePaint, PaintItemKind, PaintPhase, Scene},
   shadow::SizedShadow,
   style::{
     Affine, BackgroundImage, BlendMode, BoxDecorationBreak, Color, ComputedStyle, Display,
@@ -54,6 +55,7 @@ use crate::{
       Fill, FillRule, LineCap, LineJoin, LinearGradient as KrillaLinearGradient, Paint, Pattern,
       RadialGradient as KrillaRadialGradient, SpreadMethod, Stroke, StrokeDash, SweepGradient,
     },
+    stream::Stream,
     surface::Surface,
     tagging::{ContentTag, SpanTag},
     text::{Font, Tag},
@@ -81,6 +83,8 @@ struct BoxState {
   overflow_clip: usize,
   /// The outline, painted between the two pops.
   outline: Option<PendingOutline>,
+  /// Where the box's own content paints.
+  frame: Option<BoxFrame>,
 }
 
 /// Blob identity, collection index, and the variation coordinates the run was shaped at.
@@ -220,12 +224,26 @@ impl Emitter<'_> {
 
     let outer_window = self.window;
     let (child_frame, root_state) = match context.root() {
-      Some(paint) => self.emit_box(paint, parent, surface)?,
+      Some(paint) => self.emit_box(paint, parent, BoxPart::Whole, surface)?,
       None => (parent, BoxState::default()),
     };
 
-    for bucket in context.in_paint_order() {
+    for phase in context.paint_phases() {
+      let (bucket, phase_part) = match phase {
+        PaintPhase::RootContent => {
+          if let Some(paint) = context.root() {
+            self.emit_box_content(paint, root_state.frame, surface)?;
+          }
+          continue;
+        }
+        PaintPhase::Items(items, part) => (items, part),
+      };
+
       for item in bucket {
+        let Some(part) = item.part_in(phase_part) else {
+          continue;
+        };
+
         match &item.kind {
           PaintItemKind::Node(paint) => {
             // Skipping a node that paints outside the window only saves work;
@@ -235,7 +253,11 @@ impl Emitter<'_> {
             if self.window.excludes_bounds(paint.paint_bounds) {
               continue;
             }
-            let (_, state) = self.emit_box(paint, child_frame, surface)?;
+            let (_, state) = self.emit_box(paint, child_frame, part, surface)?;
+
+            if part != BoxPart::Decorations {
+              self.emit_box_content(paint, state.frame, surface)?;
+            }
             self.finish_box(state, surface);
           }
           PaintItemKind::Context(child) => {
@@ -262,6 +284,7 @@ impl Emitter<'_> {
     &mut self,
     paint: &NodePaint,
     parent: Affine,
+    part: BoxPart,
     surface: &mut Surface,
   ) -> Result<(Affine, BoxState), PdfError> {
     let Some(node) = self.scene.root.node_at_path(&paint.path) else {
@@ -291,15 +314,15 @@ impl Emitter<'_> {
     let decoration_frame = self.decoration_frame(style, frame);
 
     pushed += self.push_mask_and_clip(node, frame, surface);
-    self.emit_decorations(node, decoration_frame, surface);
+    if part != BoxPart::Content {
+      self.emit_decorations(node, decoration_frame, surface);
+    }
 
     // Children and own content clip to the (rounded) padding box when overflow
     // is hidden; without radius a per-axis overflow leaves the visible axis
     // unbounded. Counted on its own: the outline paints outside this clip but
     // inside everything else the box pushed.
     let overflow_clip = self.push_overflow_clip(node, frame, relative, surface);
-
-    self.emit_tagged_content(node, paint, frame, surface)?;
 
     Ok((
       children_space,
@@ -310,8 +333,13 @@ impl Emitter<'_> {
         // overflow clip first, so the outline lands above the content and
         // outside that clip, but still under the box's transform, opacity,
         // mask and blend.
-        outline: BoxPainter::new(&node.context, decoration_frame.layout)
-          .pending_outline(decoration_frame.origin),
+        outline: (part != BoxPart::Decorations)
+          .then(|| {
+            BoxPainter::new(&node.context, decoration_frame.layout)
+              .pending_outline(decoration_frame.origin)
+          })
+          .flatten(),
+        frame: Some(frame),
       },
     ))
   }
@@ -448,6 +476,20 @@ impl Emitter<'_> {
     Ok(())
   }
 
+  /// Emits the own content of the box `paint` placed at `frame`.
+  fn emit_box_content(
+    &mut self,
+    paint: &NodePaint,
+    frame: Option<BoxFrame>,
+    surface: &mut Surface,
+  ) -> Result<(), PdfError> {
+    let (Some(frame), Some(node)) = (frame, self.scene.root.node_at_path(&paint.path)) else {
+      return Ok(());
+    };
+
+    self.emit_tagged_content(node, paint, frame, surface)
+  }
+
   /// Finishes a box: leaves its overflow clip, paints the outline above
   /// everything the box and its children drew, then pops the rest.
   fn finish_box(&self, state: BoxState, surface: &mut Surface) {
@@ -475,12 +517,23 @@ impl Emitter<'_> {
     let Some(shape) = background.clip.shape(layout.size) else {
       return;
     };
-    let Some(clip) = shape_path(&shape, frame.origin) else {
+    let mask = background.clip.border_mask();
+    let clip = shape_path(&shape, frame.origin);
+
+    if mask.is_none() && clip.is_none() {
       return;
-    };
+    }
 
     self.in_artifact(surface, |surface| {
-      surface.push_clip_path(&clip, &krilla_fill_rule(shape.rule()));
+      match (mask, &clip) {
+        (Some(border), _) => {
+          let stream = border_mask_stream(&border, layout.size, frame.origin, surface);
+
+          surface.push_mask(Mask::new(stream, MaskType::Alpha));
+        }
+        (None, Some(clip)) => surface.push_clip_path(clip, &krilla_fill_rule(shape.rule())),
+        (None, None) => return,
+      }
       for layer in &background.layers {
         let blended = layer.blend_mode != BlendMode::Normal;
 
@@ -1568,7 +1621,42 @@ impl SurfaceDevice<'_, '_> {
   }
 }
 
+/// The alpha mask `border` paints on a box of `size` at `origin`.
+fn border_mask_stream(
+  border: &BorderProperties,
+  size: Size<f32>,
+  origin: CorePoint<f32>,
+  surface: &mut Surface,
+) -> Stream {
+  draw_stream(surface, |surface| {
+    BoxBorderPainter::new(border, size).paint(
+      origin,
+      &mut SurfaceDevice {
+        surface,
+        filter: None,
+        artifact: false,
+        stack: Vec::new(),
+      },
+    );
+  })
+}
+
 impl PaintDevice for SurfaceDevice<'_, '_> {
+  fn with_border_mask(
+    &mut self,
+    border: &BorderProperties,
+    size: Size<f32>,
+    origin: CorePoint<f32>,
+    content: impl FnOnce(&mut Self),
+  ) {
+    let stream = border_mask_stream(border, size, origin, self.surface);
+
+    self.open(Saved::Layer);
+    self.surface.push_mask(Mask::new(stream, MaskType::Alpha));
+    content(self);
+    self.close();
+  }
+
   fn transform(&self) -> Affine {
     Affine::scale(PT_PER_PX.recip(), PT_PER_PX.recip())
       * core_transform(self.surface.page_transform())
@@ -1637,6 +1725,11 @@ impl PaintDevice for SurfaceDevice<'_, '_> {
     self.open_clip(path, shape.rule());
   }
 
+  // PDF leaves antialiasing to the viewer, as Skia's PDF backend does.
+  fn push_aliased_clip(&mut self, shape: &FillShape, transform: Affine) {
+    self.push_clip(shape, transform);
+  }
+
   fn push_clip_out(&mut self, shape: &FillShape, transform: Affine) {
     let mut commands = Vec::with_capacity(BorderProperties::PATH_COMMANDS_AMOUNT * 2);
 
@@ -1662,7 +1755,7 @@ impl PaintDevice for SurfaceDevice<'_, '_> {
     self.close();
   }
 
-  fn begin_layer(&mut self, opacity: f32) {
+  fn begin_layer(&mut self, opacity: f32, _bounds: Option<LayerBounds>) {
     self.open(Saved::Layer);
     self.surface.push_opacity(normalized(opacity));
   }
@@ -1685,7 +1778,7 @@ impl PaintDevice for SurfaceDevice<'_, '_> {
     };
 
     if grouped {
-      self.begin_layer(f32::from(color[3]) / f32::from(u8::MAX));
+      self.begin_layer(f32::from(color[3]) / f32::from(u8::MAX), None);
     }
 
     for band in bands {
@@ -1761,10 +1854,10 @@ impl TextDevice<'_, '_, '_> {
     if alpha < u8::MAX {
       self
         .device
-        .begin_layer(f32::from(alpha) / f32::from(u8::MAX));
+        .begin_layer(f32::from(alpha) / f32::from(u8::MAX), None);
     }
     for band in Band::of(shadow.blur_radius) {
-      self.device.begin_layer(band.alpha);
+      self.device.begin_layer(band.alpha, None);
       draw(&mut self.device, opaque, 2.0 * band.spread);
       self.device.end_layer();
     }
@@ -1813,6 +1906,24 @@ impl TextDevice<'_, '_, '_> {
 }
 
 impl PaintDevice for TextDevice<'_, '_, '_> {
+  fn with_border_mask(
+    &mut self,
+    border: &BorderProperties,
+    size: Size<f32>,
+    origin: CorePoint<f32>,
+    content: impl FnOnce(&mut Self),
+  ) {
+    let stream = border_mask_stream(border, size, origin, self.device.surface);
+
+    self.device.open(Saved::Layer);
+    self
+      .device
+      .surface
+      .push_mask(Mask::new(stream, MaskType::Alpha));
+    content(self);
+    self.device.close();
+  }
+
   fn transform(&self) -> Affine {
     self.device.transform()
   }
@@ -1866,12 +1977,18 @@ impl PaintDevice for TextDevice<'_, '_, '_> {
     self.device.push_clip_out(shape, transform);
   }
 
+  fn push_aliased_clip(&mut self, shape: &FillShape, transform: Affine) {
+    let transform = self.shadow_moved(transform);
+
+    self.device.push_aliased_clip(shape, transform);
+  }
+
   fn pop_clip(&mut self) {
     self.device.pop_clip();
   }
 
-  fn begin_layer(&mut self, opacity: f32) {
-    self.device.begin_layer(opacity);
+  fn begin_layer(&mut self, opacity: f32, bounds: Option<LayerBounds>) {
+    self.device.begin_layer(opacity, bounds);
   }
 
   fn end_layer(&mut self) {
@@ -1923,7 +2040,6 @@ impl GlyphDevice for TextDevice<'_, '_, '_> {
       .emitter
       .filtered(shadow_color.unwrap_or(shaped.brush.color));
     let paint = fill_from_rgba(rgba, 1.0);
-    // A shadow paints colour glyphs as silhouettes, so they leave the font's run.
     let colors = shadow_color.map(|_| {
       ColorGlyphs::of(
         run,
@@ -1987,7 +2103,6 @@ impl GlyphDevice for TextDevice<'_, '_, '_> {
           }
           surface.pop();
         }
-        // The silhouettes draw opaque inside the group of the shadow colour's alpha.
         #[cfg(feature = "images")]
         if let Some(colors) = &colors {
           draw_blurred_silhouettes(
@@ -2027,7 +2142,7 @@ impl GlyphDevice for TextDevice<'_, '_, '_> {
   }
 }
 
-/// Draws each bitmap glyph, placed from its origin, as its alpha filled with `color`.
+/// Draws each bitmap glyph's alpha filled with `color`.
 #[cfg(feature = "images")]
 fn draw_silhouettes(
   bitmaps: &[(&ResolvedBitmapGlyph, CorePoint<f32>)],
@@ -2055,9 +2170,7 @@ fn draw_silhouettes(
   }
 }
 
-/// Draws each bitmap glyph's silhouette blurred as a `text-shadow` of `blur_radius` blurs it,
-/// after Blink's `DropShadowPaintFilter`: the glyph drawn at its placement size, its alpha blurred
-/// with Skia's RGBA blur, and filled with `color`.
+/// Draws each bitmap glyph's alpha blurred as Blink's `DropShadowPaintFilter` blurs it.
 #[cfg(feature = "images")]
 fn draw_blurred_silhouettes(
   bitmaps: &[(&ResolvedBitmapGlyph, CorePoint<f32>)],
@@ -2102,7 +2215,7 @@ fn draw_blurred_silhouettes(
   }
 }
 
-/// Draws a `width` by `height` alpha mask, filled with `color`, placed by `transform`.
+/// Draws an alpha mask filled with `color`.
 #[cfg(feature = "images")]
 fn draw_alpha(
   alpha: &[u8],

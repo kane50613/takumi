@@ -12,10 +12,11 @@ use takumi_core::{
     inline::{PositionedGlyph, PositionedInlineRun},
   },
   painter::{
-    BackgroundClipArea, BoxFrame, BoxPainter, FillShape, GlyphDevice, GlyphFill, PaintDevice,
-    PendingOutline, ShadowShape, StrokeStyle,
+    BackgroundClipArea, BoxBorderPainter, BoxFrame, BoxPainter, FillShape, GlyphDevice, GlyphFill,
+    LayerBounds, PaintDevice, PendingOutline, ShadowShape, StrokeStyle,
   },
   resources::{font::FontError, glyph::ResolvedGlyph},
+  scene::SceneBounds,
   shadow::SizedShadow,
   style::{Color, ImageScalingAlgorithm},
 };
@@ -100,8 +101,7 @@ impl<'c> CanvasDevice<'c> {
     }
   }
 
-  /// Whether a `size` rectangle under `transform` covers whole pixels, or is turned so that a tile
-  /// samples its edges; either way a solid tile paints it as its coverage would.
+  /// Whether a solid tile paints a `size` rectangle under `transform` as its coverage would.
   fn tiles_whole_pixels(&self, size: Size<f32>, transform: Affine) -> bool {
     let transform = self.transform * transform;
 
@@ -136,6 +136,25 @@ impl<'c> CanvasDevice<'c> {
 
   /// Rasterizes `shape` under `transform`, culled to the canvas.
   fn coverage(&self, shape: &FillShape, style: Style, transform: Affine) -> (Vec<u8>, Placement) {
+    let device = self.transform * transform;
+
+    if let FillShape::Rect(size) = shape
+      && style.stroke().is_none()
+      && device.only_translation()
+      && [size.width, size.height, device.x, device.y]
+        .iter()
+        .all(|value| value.fract() == 0.0)
+    {
+      let placement = SceneBounds::of_rect(*size, device)
+        .and_then(|bounds| self.canvas.viewport().clamp_bounds(bounds, 0))
+        .unwrap_or_default();
+
+      return (
+        vec![u8::MAX; placement.width as usize * placement.height as usize],
+        placement,
+      );
+    }
+
     render_mask(
       &shape.to_commands(),
       Some(self.transform * transform),
@@ -167,13 +186,25 @@ impl<'c> CanvasDevice<'c> {
   }
 
   /// Opens a clip to `shape`, or out of it when `out` is set.
-  fn open_clip(&mut self, shape: &FillShape, transform: Affine, out: bool) {
+  fn open_clip(&mut self, shape: &FillShape, transform: Affine, out: bool, aliased: bool) {
     let transform = match self.shadow {
       Some(shadow) => Affine::translation(shadow.offset_x, shadow.offset_y) * transform,
       None => transform,
     };
-    let (coverage, placement) = self.coverage(shape, Fill::from(shape.rule()).into(), transform);
+    let (mut coverage, placement) =
+      self.coverage(shape, Fill::from(shape.rule()).into(), transform);
 
+    if aliased {
+      // A straight edge covers at least half a pixel exactly when it covers the pixel's centre.
+      coverage
+        .iter_mut()
+        .for_each(|alpha| *alpha = if *alpha >= 128 { u8::MAX } else { 0 });
+    }
+    self.push_clip_coverage(coverage, placement, out);
+  }
+
+  /// Opens a clip to `coverage` at `placement`, or out of it when `out` is set.
+  fn push_clip_coverage(&mut self, coverage: Vec<u8>, placement: Placement, out: bool) {
     self.clips.push(CanvasClip {
       coverage,
       placement,
@@ -473,22 +504,57 @@ impl PaintDevice for CanvasDevice<'_> {
   }
 
   fn push_clip(&mut self, shape: &FillShape, transform: Affine) {
-    self.open_clip(shape, transform, false);
+    self.open_clip(shape, transform, false, false);
   }
 
   fn push_clip_out(&mut self, shape: &FillShape, transform: Affine) {
-    self.open_clip(shape, transform, true);
+    self.open_clip(shape, transform, true, false);
+  }
+
+  fn push_aliased_clip(&mut self, shape: &FillShape, transform: Affine) {
+    self.open_clip(shape, transform, false, true);
+  }
+
+  fn with_border_mask(
+    &mut self,
+    border: &BorderProperties,
+    size: Size<f32>,
+    origin: Point<f32>,
+    content: impl FnOnce(&mut Self),
+  ) {
+    let placement = self.canvas.viewport().placement();
+    let subcanvas = match self.canvas.begin_subcanvas(placement) {
+      Ok(subcanvas) => subcanvas,
+      Err(error) => {
+        self.error.get_or_insert(error);
+        return;
+      }
+    };
+
+    BoxBorderPainter::new(border, size).paint(origin, self);
+
+    let painted = self.canvas.take_subcanvas(subcanvas);
+
+    self.push_clip_coverage(
+      painted.data().iter().skip(3).step_by(4).copied().collect(),
+      placement,
+      false,
+    );
+    content(self);
+    self.clips.pop();
   }
 
   fn pop_clip(&mut self) {
     self.clips.pop();
   }
 
-  fn begin_layer(&mut self, opacity: f32) {
-    let layer = match self
-      .canvas
-      .begin_subcanvas(self.canvas.viewport().placement())
-    {
+  fn begin_layer(&mut self, opacity: f32, bounds: Option<LayerBounds>) {
+    let viewport = self.canvas.viewport();
+    let placement = bounds
+      .and_then(|bounds| SceneBounds::of_rect(bounds.size, self.transform * bounds.transform))
+      .and_then(|bounds| viewport.clamp_bounds(bounds, 1))
+      .unwrap_or_else(|| viewport.placement());
+    let layer = match self.canvas.begin_subcanvas(placement) {
       Ok(subcanvas) => Some((subcanvas, opacity)),
       Err(error) => {
         self.error.get_or_insert(error);
@@ -656,12 +722,19 @@ pub(crate) fn draw_background(
       if let Some(tile) = &tile
         && let Some(shape) = background.clip.shape(layout.size)
       {
-        device.fill_shape_with_source(
-          &shape,
-          tile.into(),
-          Affine::IDENTITY,
-          context.style.image_rendering,
-        );
+        let algorithm = context.style.image_rendering;
+
+        match background.clip.border_mask() {
+          Some(mask) => device.with_border_mask(&mask, layout.size, Point::ZERO, |device| {
+            device.fill_shape_with_source(
+              &FillShape::Rect(layout.size),
+              tile.into(),
+              Affine::IDENTITY,
+              algorithm,
+            );
+          }),
+          None => device.fill_shape_with_source(&shape, tile.into(), Affine::IDENTITY, algorithm),
+        }
       }
     }
     BackgroundClipArea::Text => {}

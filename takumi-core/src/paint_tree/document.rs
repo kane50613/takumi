@@ -350,6 +350,15 @@ pub enum Drawable {
     /// How it samples.
     sampling: Sampling,
   },
+  /// `content` kept only where `mask` covers, as a `DstIn` layer keeps it.
+  Masked {
+    /// What it is for.
+    role: Role,
+    /// Drawables whose alpha masks the content.
+    mask: Vec<Drawable>,
+    /// The masked drawables.
+    content: Vec<Drawable>,
+  },
   /// Drawables composited into one layer at `opacity`, as a translucent inline element or a
   /// translucent outline paints.
   Group {
