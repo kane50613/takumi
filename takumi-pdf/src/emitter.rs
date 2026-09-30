@@ -29,7 +29,7 @@ use takumi_core::{
   painter::{
     BackgroundClipArea, BoxBackground, BoxBorderPainter, BoxFrame, BoxPainter, FillShape,
     GlyphDevice, GlyphFill, LayerBounds, OwnContent, PaintDevice, PendingOutline, ShadowShape,
-    StrokeStyle, UNBOUNDED,
+    SpanBackground, StrokeStyle, UNBOUNDED,
   },
   scene::{NodePaint, Scene},
   shadow::SizedShadow,
@@ -355,26 +355,7 @@ impl Emitter<'_> {
         (None, Some(clip)) => surface.push_clip_path(clip, &krilla_fill_rule(shape.rule())),
         (None, None) => return,
       }
-      for layer in &background.layers {
-        let blended = layer.blend_mode != BlendMode::Normal;
-
-        if blended {
-          surface.push_blend_mode(krilla_blend(layer.blend_mode));
-        }
-        self.layer(
-          layer.image,
-          node,
-          &layer.geometry,
-          layout.size,
-          frame.origin,
-          frame.origin + background.origin.offset,
-          surface,
-          Transform::from_scale(PT_PER_PX, PT_PER_PX),
-        );
-        if blended {
-          surface.pop();
-        }
-      }
+      self.paint_background_layers(node, background, frame, surface);
       surface.pop();
     });
   }
@@ -687,6 +668,36 @@ impl Emitter<'_> {
 
   /// Draws a decoration inside an artifact sequence when tagging is on, so it
   /// stays out of the structure tree.
+  /// Paints `background`'s layers, `node`'s laid over `frame`, unclipped.
+  fn paint_background_layers(
+    &self,
+    node: &RenderNode,
+    background: &BoxBackground<'_>,
+    frame: BoxFrame,
+    surface: &mut Surface,
+  ) {
+    for layer in &background.layers {
+      let blended = layer.blend_mode != BlendMode::Normal;
+
+      if blended {
+        surface.push_blend_mode(krilla_blend(layer.blend_mode));
+      }
+      self.layer(
+        layer.image,
+        node,
+        &layer.geometry,
+        frame.layout.size,
+        frame.origin,
+        frame.origin + background.origin.offset,
+        surface,
+        Transform::from_scale(PT_PER_PX, PT_PER_PX),
+      );
+      if blended {
+        surface.pop();
+      }
+    }
+  }
+
   fn in_artifact(&self, surface: &mut Surface, draw: impl FnOnce(&mut Surface)) {
     if self.tagged {
       surface.start_tagged(ARTIFACT);
@@ -907,7 +918,7 @@ impl Emitter<'_> {
       emitter: self,
       device: self.device(surface, false),
       built,
-      text_fills,
+      text_fills: text_fills.into(),
       shadow: None,
     };
 
@@ -1192,6 +1203,19 @@ impl Emitter<'_> {
     if !matches!(background.clip, BackgroundClipArea::Text) {
       return Vec::new();
     }
+
+    self.background_fills(node, &background, frame, surface)
+  }
+
+  /// The paints `background`, `node`'s laid over `frame`, fills glyphs with: its colour, then
+  /// each layer.
+  fn background_fills(
+    &self,
+    node: &RenderNode,
+    background: &BoxBackground<'_>,
+    frame: BoxFrame,
+    surface: &mut Surface,
+  ) -> Vec<Fill> {
     let mut fills = Vec::new();
 
     if let Some(color) = background.color {
@@ -1869,7 +1893,7 @@ struct TextDevice<'e, 's, 'a> {
   device: SurfaceDevice<'s, 'a>,
   built: &'e BuiltInlineLayout<'e>,
   /// The background fills `background-clip: text` glyphs show, bottom first.
-  text_fills: Vec<Fill>,
+  text_fills: Rc<[Fill]>,
   /// The shadow every draw becomes while one is open.
   shadow: Option<SizedShadow>,
 }
@@ -2047,6 +2071,22 @@ impl PaintDevice for TextDevice<'_, '_, '_> {
 }
 
 impl GlyphDevice for TextDevice<'_, '_, '_> {
+  fn fill_background_layers(
+    &mut self,
+    span: &SpanBackground<'_>,
+    clip: &FillShape,
+    transform: Affine,
+  ) {
+    self.push_clip(clip, transform);
+    self.emitter.paint_background_layers(
+      span.node,
+      &span.background,
+      span.strip,
+      self.device.surface,
+    );
+    self.pop_clip();
+  }
+
   fn begin_shadow(&mut self, shadow: &SizedShadow) {
     self.shadow = Some(*shadow);
   }
@@ -2062,6 +2102,34 @@ impl GlyphDevice for TextDevice<'_, '_, '_> {
     fill: GlyphFill,
     frame: BoxFrame,
   ) {
+    let fills = match fill {
+      GlyphFill::Background => self.text_fills.clone(),
+      GlyphFill::Text => Rc::from([]),
+    };
+
+    self.paint_glyph_run(run, frame, &fills);
+  }
+
+  fn draw_glyph_run_through(
+    &mut self,
+    run: &PositionedInlineRun,
+    _style: &SizedFontStyle,
+    frame: BoxFrame,
+    span: &SpanBackground<'_>,
+  ) {
+    let fills =
+      self
+        .emitter
+        .background_fills(span.node, &span.background, span.strip, self.device.surface);
+
+    self.paint_glyph_run(run, frame, &fills);
+  }
+}
+
+impl TextDevice<'_, '_, '_> {
+  /// Paints `run`'s glyphs in the block at `frame` over `fills` seen through them, or their shadow
+  /// while one is open.
+  fn paint_glyph_run(&mut self, run: &PositionedInlineRun, frame: BoxFrame, fills: &[Fill]) {
     let shifted = match self.shadow {
       Some(shadow) => frame.shifted(CorePoint {
         x: shadow.offset_x,
@@ -2109,8 +2177,8 @@ impl GlyphDevice for TextDevice<'_, '_, '_> {
     // Outlined: text extraction keys on the text-showing operator, whatever the rendering mode,
     // so glyphs drawn a second time for a shadow or a background would put the text in the text
     // layer twice. Paths paint the same pixels and stay out of it.
-    if shadow_color.is_none() && fill == GlyphFill::Background {
-      for background in &self.text_fills {
+    if shadow_color.is_none() {
+      for background in fills {
         surface.set_fill(Some(background.clone()));
         surface.set_stroke(background_stroke(shaped, background));
         surface.draw_glyphs(origin, &glyphs, font.clone(), text, shaped.font_size, true);

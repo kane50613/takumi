@@ -13,7 +13,9 @@ use crate::{
     font::{FontsSnapshot, PrimaryFontMetrics},
     image::ImageSource,
   },
-  style::{Affine, Color, ComputedStyle, SizingContext, StyleSheet, TwCache},
+  style::{
+    Affine, AppliedTextDecorations, Color, ComputedStyle, SizingContext, StyleSheet, TwCache,
+  },
 };
 
 /// What every context of one render shares.
@@ -80,6 +82,7 @@ impl From<RenderContextInit> for RenderContext {
       transform: init.transform,
       current_color: init.current_color,
       style: init.style,
+      text_decorations: AppliedTextDecorations::default(),
       collapsed_borders: init.collapsed_borders,
       text_measure_digest: OnceCell::new(),
     }
@@ -99,6 +102,8 @@ pub struct RenderContext {
   pub current_color: Color,
   /// The style after inheritance.
   pub style: Box<ComputedStyle>,
+  /// The decorations the box's text paints, from it and the boxes around it.
+  pub(crate) text_decorations: AppliedTextDecorations,
   /// Whether this box is a cell of a table that collapses its borders.
   pub(crate) collapsed_borders: bool,
   /// Digest of the style inputs to text measurement, taken on first use.
@@ -172,8 +177,7 @@ impl RenderContext {
     metrics
   }
 
-  /// Blink's `CreateAnonymousStyleWithDisplay`, with the `anonymous` flags of the style
-  /// table standing in for its applied text decorations.
+  /// Blink's `CreateAnonymousStyleWithDisplay`, keeping the parent's applied text decorations.
   /// https://source.chromium.org/chromium/chromium/src/+/main:third_party/blink/renderer/core/css/resolver/style_resolver.cc
   pub(crate) fn for_anonymous(parent: &Self) -> Self {
     let mut context = parent.clone();
@@ -191,6 +195,12 @@ impl RenderContext {
   ) -> Self {
     Self {
       shared: parent.shared.clone(),
+      text_decorations: parent.text_decorations.for_child(
+        &parent.style,
+        &style,
+        &sizing,
+        current_color,
+      ),
       sizing,
       transform: parent.transform,
       current_color,

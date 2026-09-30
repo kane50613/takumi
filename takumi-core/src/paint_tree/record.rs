@@ -1,6 +1,6 @@
 //! A paint device that records what the shared painters draw as drawables.
 
-use std::mem;
+use std::{iter, mem};
 
 #[cfg(feature = "png")]
 use super::document::{ImageSource, Sampling};
@@ -19,7 +19,7 @@ use crate::{
   layout::{border::BorderProperties, inline::PositionedInlineRun},
   painter::{
     BoxBorderPainter, BoxFrame, FillShape, GlyphDevice, GlyphFill, LayerBounds, PaintDevice,
-    PaintRole, ShadowShape, StrokeStyle,
+    PaintRole, ShadowShape, SpanBackground, StrokeStyle,
   },
   path_data::path_data,
   shadow::SizedShadow,
@@ -36,6 +36,16 @@ struct Clip {
   outside: bool,
 }
 
+/// A background `background-clip: text` shows through glyphs, as Blink paints it into a layer that
+/// the text then masks.
+#[derive(Clone)]
+pub(super) struct TextBackground {
+  /// Where the layers paint, in the node's space.
+  pub(super) area: Shape,
+  /// The color and image layers, bottom first, each with its `background-blend-mode`.
+  pub(super) layers: Vec<(Paint, Option<String>)>,
+}
+
 /// Records draws in a node's local space as [`Drawable`]s.
 ///
 /// Approximate: an aliased clip records as an antialiased one.
@@ -46,9 +56,10 @@ pub(super) struct Recorder {
   /// The open layers, innermost last: each one's opacity and the drawables outside it.
   layers: Vec<(f32, Vec<Drawable>)>,
   shadow: Option<SizedShadow>,
-  /// For a text node, the box's background layers that `background-clip: text` shows through its
-  /// glyphs, bottom first, in the node's space.
-  text_background: Option<Vec<Paint>>,
+  /// Whether the recorder records a text node, which alone draws glyph runs.
+  text_node: bool,
+  /// For a text node, the box's background `background-clip: text` shows through its glyphs.
+  text_background: Option<TextBackground>,
   /// Maps the node's space onto the page.
   transform: Affine,
 }
@@ -63,15 +74,17 @@ impl Recorder {
       clips: Vec::new(),
       layers: Vec::new(),
       shadow: None,
+      text_node: false,
       text_background: None,
     }
   }
 
   /// A recorder for a text node, whose glyphs show `background` under `background-clip: text`, its
   /// space mapped onto the page by `transform`.
-  pub(super) fn text(background: Vec<Paint>, transform: Affine) -> Self {
+  pub(super) fn text(background: Option<TextBackground>, transform: Affine) -> Self {
     Self {
-      text_background: Some(background),
+      text_node: true,
+      text_background: background,
       ..Self::new(transform)
     }
   }
@@ -357,6 +370,48 @@ impl PaintDevice for Recorder {
 }
 
 impl GlyphDevice for Recorder {
+  fn fill_background_layers(
+    &mut self,
+    span: &SpanBackground<'_>,
+    clip: &FillShape,
+    transform: Affine,
+  ) {
+    let shape = Shape::of(clip, transform);
+
+    for (paint, blend_mode) in span_layers(span) {
+      self.drawables.push(Drawable::Fill {
+        role: self.role,
+        shape: shape.clone(),
+        paint,
+        blend_mode,
+        clips: self.clips(),
+      });
+    }
+  }
+
+  fn draw_glyph_run_through(
+    &mut self,
+    run: &PositionedInlineRun,
+    style: &SizedFontStyle,
+    frame: BoxFrame,
+    span: &SpanBackground<'_>,
+  ) {
+    let background = TextBackground {
+      area: Shape::Rect {
+        rect: PaintRect::sized(span.strip.origin, span.strip.layout.size),
+      },
+      layers: span
+        .background
+        .color
+        .map(|color| (Paint::Color { color: color.0 }, None))
+        .into_iter()
+        .chain(span_layers(span))
+        .collect(),
+    };
+
+    self.record_glyph_run(run, style, Some(background), frame);
+  }
+
   fn begin_shadow(&mut self, shadow: &SizedShadow) {
     self.shadow = Some(*shadow);
   }
@@ -372,14 +427,42 @@ impl GlyphDevice for Recorder {
     fill: GlyphFill,
     frame: BoxFrame,
   ) {
-    let Some(text_background) = self.text_background.as_ref() else {
-      return;
-    };
-    let index = run.index;
     let background = match fill {
-      GlyphFill::Background => text_background.clone(),
-      GlyphFill::Text => Vec::new(),
+      GlyphFill::Background => self.text_background.clone(),
+      GlyphFill::Text => None,
     };
+
+    self.record_glyph_run(run, style, background, frame);
+  }
+}
+
+/// `span`'s `background-image` layers, each with its `background-blend-mode`, placed in the block.
+fn span_layers(span: &SpanBackground<'_>) -> Vec<(Paint, Option<String>)> {
+  Paint::layers(
+    &span.background.layers,
+    span.strip.layout.size,
+    span.background.origin,
+    &span.node.context,
+  )
+  .into_iter()
+  .map(|(paint, blend_mode)| (paint.shifted(span.strip.origin), blend_mode))
+  .collect()
+}
+
+impl Recorder {
+  /// Records `run`'s glyphs, or their shadow while one is open, over `background`.
+  fn record_glyph_run(
+    &mut self,
+    run: &PositionedInlineRun,
+    style: &SizedFontStyle,
+    background: Option<TextBackground>,
+    frame: BoxFrame,
+  ) {
+    if !self.text_node {
+      return;
+    }
+
+    let index = run.index;
     let brush = &run.glyph_run.brush;
     let join = style.parent.stroke_linejoin;
     let text_stroke = (brush.stroke_width > 0.0)
@@ -416,18 +499,41 @@ impl GlyphDevice for Recorder {
 
     let origin = PaintPoint { x: 0.0, y: 0.0 };
 
-    for paint in background {
-      self.glyphs(Role::Background, index, paint.clone(), origin, 0.0, None);
-      if let Some((stroke, _)) = &text_stroke {
-        self.glyphs(
-          Role::Background,
-          index,
+    if let Some(background) = background.filter(|background| !background.layers.is_empty()) {
+      let glyphs = |stroke| Drawable::Glyphs {
+        role: Role::Background,
+        run: index,
+        paint: Paint::Color {
+          color: [0, 0, 0, 255],
+        },
+        offset: origin,
+        blur: 0.0,
+        stroke,
+      };
+      let mask = iter::once(glyphs(None))
+        .chain(
+          text_stroke
+            .as_ref()
+            .map(|(stroke, _)| glyphs(Some(stroke.clone()))),
+        )
+        .collect();
+      let content = background
+        .layers
+        .into_iter()
+        .map(|(paint, blend_mode)| Drawable::Fill {
+          role: Role::Background,
+          shape: background.area.clone(),
           paint,
-          origin,
-          0.0,
-          Some(stroke.clone()),
-        );
-      }
+          blend_mode,
+          clips: Vec::new(),
+        })
+        .collect();
+
+      self.drawables.push(Drawable::Masked {
+        role: Role::Background,
+        mask,
+        content,
+      });
     }
 
     if let Some(color) = self.visible(brush.color) {

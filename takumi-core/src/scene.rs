@@ -775,9 +775,11 @@ fn compute_node_paint_bounds(
         glyph_run,
         static_inline_prefix,
         hanging,
+        stretch,
       } => {
         let baseline_shift = built.run_baseline_shift(line, &glyph_run);
-        let (glyph_origin, glyph_size) = glyph_run_rect(&glyph_run, hanging, baseline_shift);
+        let (glyph_origin, glyph_size) =
+          glyph_run_rect(&glyph_run, hanging, &stretch, baseline_shift);
         let (glyph_origin, glyph_size) =
           setup.scale_rect(glyph_origin, glyph_size, static_inline_prefix);
 
@@ -787,15 +789,25 @@ fn compute_node_paint_bounds(
         );
 
         // Blink's `InkOverflow::ComputeAppliedDecorationOverflow`.
-        let brush = glyph_run.style().brush;
-        if !brush.decoration_line.is_empty() {
-          let run = ShapedRun::of(&glyph_run, Vec::new(), hanging, brush, Vec::new());
-          let run_transform = setup
-            .state
-            .transform(Affine::IDENTITY, static_inline_prefix);
-          let output = transform * run_transform;
+        let brush = &glyph_run.style().brush;
+        if !brush.decorations.is_empty() {
+          let run = ShapedRun::of(
+            &glyph_run,
+            Vec::new(),
+            hanging,
+            &stretch,
+            brush.clone(),
+            Vec::new(),
+          );
+          let placement = built.decoration_placement(
+            line,
+            &run,
+            brush.source_span_id,
+            static_inline_prefix,
+            layout,
+          );
 
-          for line in run.decoration_lines(content_offset, baseline_shift, run_transform, output) {
+          for line in run.decoration_lines(&placement, Affine::IDENTITY, transform) {
             let area = line.bounds();
 
             bounds = merge_bounds(
@@ -809,7 +821,7 @@ fn compute_node_paint_bounds(
                   width: area.right - area.left,
                   height: area.bottom - area.top,
                 },
-                output,
+                transform,
               ),
             );
           }
@@ -831,7 +843,7 @@ fn compute_node_paint_bounds(
           .fonts()
           .with_context(|fonts| fonts.resolve_glyphs(&glyph_run, font, glyph_ids));
 
-        for glyph in glyph_run.positioned_glyphs() {
+        for (index, glyph) in glyph_run.positioned_glyphs().enumerate() {
           let Some((min_x, min_y, max_x, max_y)) = resolved_glyphs
             .get(&glyph.id)
             .and_then(|glyph| glyph.ink_extents())
@@ -840,7 +852,7 @@ fn compute_node_paint_bounds(
           };
           let (ink_origin, ink_size) = setup.scale_rect(
             Point {
-              x: glyph.x + hanging.shift + min_x,
+              x: glyph.x + hanging.shift + stretch.shift(index) + min_x,
               y: glyph.y + baseline_shift + min_y,
             },
             Size {

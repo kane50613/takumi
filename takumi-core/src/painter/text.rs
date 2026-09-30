@@ -2,16 +2,22 @@
 //! [css-text-decor-3](https://drafts.csswg.org/css-text-decor-3/#painting-order) gives: shadows,
 //! underlines and overlines, text, then line-through.
 
-use super::{BoxBorderPainter, BoxFrame, FillShape, PaintDevice, PaintRole};
+use super::{
+  BoxBorderPainter, BoxFrame, FillShape, PaintDevice, PaintRole,
+  background::{BackgroundClipArea, BoxBackground},
+};
 use crate::{
   font_style::SizedFontStyle,
   geometry::{ComputedLayout, Point, Size},
-  layout::inline::{
-    DecorationLine, InlineBackgroundFragment, InlineOutlineRect, InlineRunLayout, OutlineIsland,
-    PositionedInlineRun, ProcessedInlineSpan,
+  layout::{
+    inline::{
+      DecorationLine, FragmentBackground, InlineBackgroundFragment, InlineOutlineRect,
+      InlineRunLayout, OutlineIsland, PositionedInlineRun, ProcessedInlineSpan,
+    },
+    tree::RenderNode,
   },
   shadow::SizedShadow,
-  style::FillRule,
+  style::{Affine, BackgroundClip},
 };
 
 /// What a device fills a run's glyphs with.
@@ -42,16 +48,87 @@ pub trait GlyphDevice: PaintDevice {
     fill: GlyphFill,
     frame: BoxFrame,
   );
+
+  /// Paints `span`'s `background-image` layers, clipped to `clip` under `transform`.
+  fn fill_background_layers(
+    &mut self,
+    span: &SpanBackground<'_>,
+    clip: &FillShape,
+    transform: Affine,
+  );
+
+  /// Draws `run`'s glyphs in the block at `frame` as [`GlyphFill::Background`] draws them, showing
+  /// `span`'s background, its colour included, in place of the block's.
+  fn draw_glyph_run_through(
+    &mut self,
+    run: &PositionedInlineRun,
+    style: &SizedFontStyle,
+    frame: BoxFrame,
+    span: &SpanBackground<'_>,
+  );
+}
+
+/// An inline span's background, laid over the strip its fragments would make on one line.
+pub struct SpanBackground<'a> {
+  /// The span.
+  pub node: &'a RenderNode,
+  /// The span's id, unique among the spans of its inline layout.
+  pub span: usize,
+  /// Its background.
+  pub background: BoxBackground<'a>,
+  /// The strip, placed in the block.
+  pub strip: BoxFrame,
+}
+
+/// A run as the paint passes see it.
+struct PaintedRun<'r> {
+  run: &'r PositionedInlineRun,
+  decorations: Vec<DecorationLine>,
+  style: &'r SizedFontStyle<'r>,
+  /// The background of a span around the run with `background-clip: text`.
+  span: Option<SpanBackground<'r>>,
+}
+
+/// What a run's glyphs show.
+#[derive(Clone, Copy)]
+enum RunFill<'a> {
+  /// What the device fills glyphs with.
+  Glyphs(GlyphFill),
+  /// The background of a span with `background-clip: text`.
+  Span(&'a SpanBackground<'a>),
+}
+
+/// A pass over a line's runs, and which of their pieces it draws.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum RunPass {
+  /// Decorations and glyphs themselves.
+  Proper,
+  /// The shadow of decorations and glyphs.
+  Shadow,
+  /// The shadow of decorations alone.
+  DecorationShadow,
+  /// The shadow of glyphs alone.
+  GlyphShadow,
+}
+
+impl RunPass {
+  fn paints_decorations(self) -> bool {
+    self != Self::GlyphShadow
+  }
+
+  fn paints_glyphs(self) -> bool {
+    self != Self::DecorationShadow
+  }
 }
 
 /// Some of an inline layout's lines: the runs, span backgrounds, and outline rects on them.
 pub struct InlineLines<'l> {
   runs: Vec<&'l PositionedInlineRun>,
-  background_fragments: Vec<&'l InlineBackgroundFragment>,
+  background_fragments: Vec<&'l InlineBackgroundFragment<'l>>,
   outline_rects: Vec<InlineOutlineRect>,
 }
 
-impl InlineRunLayout {
+impl InlineRunLayout<'_> {
   /// The lines of the block at `layout` whose baseline, in its border box, `keep` accepts, as a
   /// page keeps the lines it owns.
   pub fn lines(&self, layout: ComputedLayout, keep: impl Fn(f32) -> bool) -> InlineLines<'_> {
@@ -114,16 +191,8 @@ impl InlineLines<'_> {
 
     for fragment in &self.background_fragments {
       device.with_opacity(fragment.opacity, None, |device| {
-        if fragment.color.0[3] != 0 {
-          device.set_role(PaintRole::InlineBackground);
-          device.fill_shape(
-            &FillShape::Path {
-              commands: fragment.path(),
-              rule: FillRule::NonZero,
-            },
-            fragment.color,
-            at,
-          );
+        if let Some(background) = &fragment.background {
+          background.paint(fragment, frame, device);
         }
 
         device.set_role(PaintRole::Border);
@@ -145,62 +214,167 @@ impl InlineLines<'_> {
     }
 
     let device_transform = device.transform();
-    let decorations: Vec<Vec<DecorationLine>> = self
+    let runs: Vec<PaintedRun> = self
       .runs
       .iter()
-      .map(|run| {
-        run.glyph_run.decorations(
-          &run.resolved_glyphs,
-          frame.layout,
-          run.baseline_shift,
-          run.transform(at),
-          device_transform,
-        )
+      .filter_map(|&run| {
+        let style = run.style(spans).unwrap_or(style);
+
+        // A run of `visibility: hidden` text keeps its place on the line but paints nothing.
+        style.parent.is_visible().then(|| PaintedRun {
+          run,
+          decorations: run.decorations(frame.layout, at, device_transform),
+          style,
+          span: self.span_background(run, spans, frame),
+        })
       })
       .collect();
 
-    let styles: Vec<&SizedFontStyle> = self
-      .runs
-      .iter()
-      .map(|run| run.style(spans).unwrap_or(style))
-      .collect();
-    // A run of `visibility: hidden` text keeps its place on the line but paints nothing.
-    let runs: Vec<_> = self
-      .runs
-      .iter()
-      .zip(&decorations)
-      .zip(&styles)
-      .filter(|(_, style)| style.parent.is_visible())
-      .collect();
-
-    // Neighbouring runs that cast the same shadows share each shadow pass, so the passes stay as
-    // few as the element's distinct `text-shadow` lists.
-    for batch in runs.chunk_by(|(_, left), (_, right)| {
-      left.painted_text_shadows().eq(right.painted_text_shadows())
+    // Neighbouring runs that cast the same shadows at the same `text-fit` scale share each shadow
+    // pass, so the passes stay as few as the element's distinct `text-shadow` lists.
+    for batch in runs.chunk_by(|left, right| {
+      left.run.line_scale.scale == right.run.line_scale.scale
+        && left
+          .style
+          .painted_text_shadows()
+          .eq(right.style.painted_text_shadows())
     }) {
-      let Some((_, first)) = batch.first() else {
+      let Some(first) = batch.first() else {
         continue;
       };
+      let scale = first.run.line_scale.scale;
 
-      for shadow in first.painted_text_shadows() {
+      for shadow in first.style.painted_text_shadows() {
         device.set_role(PaintRole::TextShadow);
-        device.begin_shadow(shadow);
 
-        for ((run, decorations), style) in batch {
-          run.paint(decorations, style, GlyphFill::Text, frame, true, device);
+        // Blink paints a scaled line's glyphs, shadows included, through `text-fit`'s scale, and
+        // its decorations outside it.
+        let passes: &[(SizedShadow, RunPass)] = if scale == 1.0 {
+          &[(*shadow, RunPass::Shadow)]
+        } else {
+          &[
+            (*shadow, RunPass::DecorationShadow),
+            (shadow.scaled(scale), RunPass::GlyphShadow),
+          ]
+        };
+
+        for (shadow, pass) in passes {
+          device.begin_shadow(shadow);
+
+          for painted in batch {
+            painted.paint(RunFill::Glyphs(GlyphFill::Text), frame, *pass, device);
+          }
+
+          device.end_shadow();
         }
-
-        device.end_shadow();
       }
     }
 
-    for ((run, decorations), style) in &runs {
-      run.paint(decorations, style, fill, frame, false, device);
+    for painted in &runs {
+      let fill = painted
+        .span
+        .as_ref()
+        .map_or(RunFill::Glyphs(fill), RunFill::Span);
+
+      painted.paint(fill, frame, RunPass::Proper, device);
     }
 
     for island in OutlineIsland::of(&self.outline_rects) {
       island.paint(frame.origin, device);
     }
+  }
+}
+
+impl<'l> InlineLines<'l> {
+  /// The background `run`'s glyphs show when a span around it sets `background-clip: text`: the
+  /// innermost such span's on the run's line, in the block at `frame`.
+  fn span_background(
+    &self,
+    run: &PositionedInlineRun,
+    spans: &[ProcessedInlineSpan<'_>],
+    frame: BoxFrame,
+  ) -> Option<SpanBackground<'l>> {
+    let Some(ProcessedInlineSpan::Text {
+      decorations: Some(chain),
+      ..
+    }) = spans.get(run.glyph_run.brush.source_span_id? as usize)
+    else {
+      return None;
+    };
+    let span = chain
+      .ancestors()
+      .find(|link| link.decoration.owner.context.style.background_clip == BackgroundClip::Text)?;
+    let baseline = run.glyph_offset(frame.layout).y + run.glyph_run.baseline;
+
+    self
+      .background_fragments
+      .iter()
+      .find(|fragment| {
+        fragment.span == span.decoration.id
+          && (fragment.y..=fragment.y + fragment.height).contains(&baseline)
+      })
+      .and_then(|fragment| Some(fragment.background?.background(fragment, frame)))
+  }
+}
+
+impl<'c> FragmentBackground<'c> {
+  /// Whether the span's background shows only through its text.
+  fn clips_text(&self) -> bool {
+    self.node.context.style.background_clip == BackgroundClip::Text
+  }
+
+  /// The span's background on `fragment` of the block at `frame`.
+  fn background(&self, fragment: &InlineBackgroundFragment, frame: BoxFrame) -> SpanBackground<'c> {
+    SpanBackground {
+      node: self.node,
+      span: fragment.span,
+      background: BoxBackground::new(&self.node.context, self.strip, fragment.border),
+      strip: BoxFrame::new(self.strip, frame.origin + self.strip_origin),
+    }
+  }
+
+  /// Paints the color and layers on `fragment` of the block at `frame`, clipped by the span's
+  /// `background-clip` to the fragment, as Blink's `BoxPainterBase::PaintFillLayers` clips both.
+  /// A background clipped to the text shows through the glyphs instead.
+  fn paint<D: GlyphDevice>(
+    &self,
+    fragment: &InlineBackgroundFragment,
+    frame: BoxFrame,
+    device: &mut D,
+  ) {
+    if self.clips_text() {
+      return;
+    }
+
+    let context = &self.node.context;
+    let Some(clip) =
+      BackgroundClipArea::new(context, self.fragment, fragment.border).shape(self.fragment.size)
+    else {
+      return;
+    };
+    let transform = Affine::translation(
+      frame.origin.x + self.fragment.location.x,
+      frame.origin.y + self.fragment.location.y,
+    );
+
+    device.set_role(PaintRole::InlineBackground);
+    if fragment.color.0[3] != 0 {
+      device.fill_shape(&clip, fragment.color, transform);
+    }
+    if self.has_layers() {
+      device.fill_background_layers(&self.background(fragment, frame), &clip, transform);
+    }
+  }
+
+  /// Whether the span has `background-image` layers.
+  fn has_layers(&self) -> bool {
+    self
+      .node
+      .context
+      .style
+      .background_image
+      .as_deref()
+      .is_some_and(|images| !images.is_empty())
   }
 }
 
@@ -217,36 +391,55 @@ impl PositionedInlineRun {
       _ => None,
     }
   }
+}
 
-  /// Paints the run at its span's opacity: underline and overline, glyphs, then line-through.
-  /// A shadow pass keeps the text-shadow role for everything it draws.
+impl PaintedRun<'_> {
+  /// Paints what `pass` draws of the run at its span's opacity: underline and overline, glyphs
+  /// showing `fill`, then line-through. A shadow pass keeps the text-shadow role for everything it
+  /// draws.
   fn paint<D: GlyphDevice>(
     &self,
-    decorations: &[DecorationLine],
-    style: &SizedFontStyle,
-    fill: GlyphFill,
+    fill: RunFill<'_>,
     frame: BoxFrame,
-    shadow_pass: bool,
+    pass: RunPass,
     device: &mut D,
   ) {
-    device.with_opacity(self.glyph_run.brush.opacity, None, |device| {
-      if !shadow_pass {
-        device.set_role(PaintRole::TextDecoration);
-      }
-      for decoration in decorations.iter().filter(|decoration| !decoration.over) {
-        decoration.paint(device);
+    let PaintedRun {
+      run,
+      decorations,
+      style,
+      ..
+    } = self;
+    let shadow_pass = pass != RunPass::Proper;
+    let paints_decorations = pass.paints_decorations();
+
+    device.with_opacity(run.glyph_run.brush.opacity, None, |device| {
+      if paints_decorations {
+        if !shadow_pass {
+          device.set_role(PaintRole::TextDecoration);
+        }
+        for decoration in decorations.iter().filter(|decoration| !decoration.over) {
+          decoration.paint(device);
+        }
       }
 
-      if !shadow_pass {
-        device.set_role(PaintRole::Text);
+      if pass.paints_glyphs() {
+        if !shadow_pass {
+          device.set_role(PaintRole::Text);
+        }
+        match fill {
+          RunFill::Glyphs(fill) => device.draw_glyph_run(run, style, fill, frame),
+          RunFill::Span(span) => device.draw_glyph_run_through(run, style, frame, span),
+        }
       }
-      device.draw_glyph_run(self, style, fill, frame);
 
-      if !shadow_pass {
-        device.set_role(PaintRole::TextDecoration);
-      }
-      for decoration in decorations.iter().filter(|decoration| decoration.over) {
-        decoration.paint(device);
+      if paints_decorations {
+        if !shadow_pass {
+          device.set_role(PaintRole::TextDecoration);
+        }
+        for decoration in decorations.iter().filter(|decoration| decoration.over) {
+          decoration.paint(device);
+        }
       }
     });
   }

@@ -40,7 +40,16 @@ pub(super) fn list_marker(item_context: &RenderContext, ordinal: i32) -> Option<
     style.width = Size::zero();
   }
 
-  let context = RenderContext::from_parent(item_context, style, sizing, current_color);
+  let mut context = RenderContext::from_parent(item_context, style, sizing, current_color);
+
+  // Blink's inside marker is an inline box, which the item's decorations reach. Naive: the
+  // marker lays out as an inline flex box here, so the space after its text hangs undecorated.
+  if item_context.style.list_style_position == ListStylePosition::Inside {
+    context
+      .text_decorations
+      .clone_from(&item_context.text_decorations);
+  }
+
   let mut content = match available_marker_image(item_context) {
     Some(image) => marker_image(&context, image, direction),
     None => {

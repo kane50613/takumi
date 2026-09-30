@@ -392,6 +392,26 @@ impl Paint {
     )
   }
 
+  /// The paint moved by `offset`, its tiles with it.
+  pub(super) fn shifted(self, offset: Point<f32>) -> Self {
+    match self {
+      Self::Pattern {
+        tile,
+        tile_width,
+        tile_height,
+        x,
+        y,
+      } => Self::Pattern {
+        tile,
+        tile_width,
+        tile_height,
+        x: x.into_iter().map(|x| x + offset.x).collect(),
+        y: y.into_iter().map(|y| y + offset.y).collect(),
+      },
+      paint => paint,
+    }
+  }
+
   /// Background or mask `layers` over a border box of `size`, their positioning area at
   /// `origin`, each with its `background-blend-mode`.
   pub(super) fn layers(

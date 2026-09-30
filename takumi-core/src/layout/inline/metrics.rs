@@ -1,56 +1,45 @@
 //! Vertical line metrics: line-height, baselines and vertical-align.
 
-use crate::{context::RenderContext, font_style::SizedFontStyle};
+use crate::{
+  context::RenderContext, font_style::SizedFontStyle, resources::font::PrimaryFontMetrics,
+};
 use parley::{InlineBoxKind, LineMetrics, PositionedInlineBox, PositionedLayoutItem};
 
 use super::{
-  InlineLayout,
+  InlineBrush, InlineLayout,
   items::ProcessedInlineSpan,
   line_box::{BoxFont, BoxKey, FontHeight, LineBoxOffsets, LineBoxTree},
   text_style_with_span_id,
 };
 
-/// How far an inline box's strut reaches above and below the baseline.
-#[derive(Clone, Copy, Debug)]
+/// An inline box's strut: its primary font's content area with its line height's half-leading,
+/// as Blink's `InlineBoxState::ComputeTextMetrics`.
+#[derive(Clone)]
 pub(crate) struct Strut {
-  pub(crate) above: f32,
-  pub(crate) below: f32,
-  /// Whether the box's line height scales with a line's `text-fit`, as a run's does.
-  pub(crate) scales_with_text_fit: bool,
+  brush: InlineBrush,
+  metrics: PrimaryFontMetrics,
 }
 
 impl Strut {
-  /// The strut of the inline box `style` sizes in `context`: its primary font's content area
-  /// with its line height's half-leading, as Blink's `InlineBoxState::ComputeTextMetrics`.
+  /// The strut of the inline box `style` sizes in `context`.
   pub(crate) fn of(context: &RenderContext, style: &SizedFontStyle<'_>) -> Option<Self> {
-    let metrics = context.primary_font_metrics(&context.style, context.sizing.font_size)?;
-    let brush = text_style_with_span_id(style, None).brush;
-    let (above, below) = brush.line_box_contribution(
-      metrics.line_spacing(),
-      metrics.ascent,
-      metrics.descent,
-      metrics.line_gap,
-    );
-
     Some(Self {
-      above,
-      below,
-      scales_with_text_fit: brush.line_height_scales_with_text_fit,
+      brush: text_style_with_span_id(style, None).brush,
+      metrics: context.primary_font_metrics(&context.style, context.sizing.font_size)?,
     })
   }
 
-  /// The strut grown for a line at `line_scale`.
-  pub(super) fn height(self, line_scale: f32) -> FontHeight {
-    let scale = if self.scales_with_text_fit {
-      line_scale
-    } else {
-      1.0
-    };
+  /// The strut on a line `text-fit` scales by `line_scale`.
+  pub(super) fn height(&self, line_scale: f32) -> FontHeight {
+    let exact = self.metrics.exact;
 
-    FontHeight {
-      ascent: self.above * scale,
-      descent: self.below * scale,
-    }
+    self.brush.line_box_height(
+      self.metrics.line_spacing(),
+      exact.ascent,
+      exact.descent,
+      exact.line_gap,
+      line_scale,
+    )
   }
 }
 
@@ -93,7 +82,7 @@ pub(super) fn resolve_inline_line_metrics(
   spans: &[ProcessedInlineSpan<'_>],
   font: BoxFont,
   line_scales: &[f32],
-  strut: Option<Strut>,
+  strut: Option<&Strut>,
 ) -> Vec<ResolvedLineMetrics> {
   let mut result = Vec::with_capacity(inline_layout.lines().count());
   let mut previous_parley_bottom = 0.0_f32;
@@ -136,17 +125,6 @@ pub(super) fn resolve_inline_line_metrics(
         }
         seen = Some(glyph.style_index());
         let style = cluster.first_style();
-        let (above, below) = style.brush.line_box_contribution(
-          metrics.line_height,
-          metrics.ascent,
-          metrics.descent,
-          metrics.leading,
-        );
-        let scale = if style.brush.line_height_scales_with_text_fit {
-          line_scale
-        } else {
-          1.0
-        };
         let chain = match style
           .brush
           .source_span_id
@@ -159,10 +137,13 @@ pub(super) fn resolve_inline_line_metrics(
 
         tree.add(
           parent,
-          FontHeight {
-            ascent: above * scale,
-            descent: below * scale,
-          },
+          style.brush.line_box_height(
+            metrics.line_height,
+            metrics.ascent,
+            metrics.descent,
+            metrics.leading,
+            line_scale,
+          ),
         );
         has_contribution = true;
       }

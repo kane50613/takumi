@@ -135,6 +135,23 @@ describe("Painter.paint", () => {
     });
   });
 
+  it("masks a text-clipped background with the glyphs, keeping its blend modes", async () => {
+    const tree = await painter.paint(
+      `<div style="color: transparent; background-color: red; background-image: linear-gradient(blue, blue); background-blend-mode: multiply; background-clip: text">Hi</div>`,
+      { width: 200 },
+    );
+    const text = tree.nodes.find((node) => node.type === "text");
+    const masked = text?.drawables.find((drawable) => drawable.type === "masked");
+
+    expect(masked?.type === "masked" && masked.mask.map((drawable) => drawable.type)).toEqual([
+      "glyphs",
+    ]);
+    expect(masked?.type === "masked" && masked.content).toMatchObject([
+      { type: "fill", paint: { type: "color", color: [255, 0, 0, 255] } },
+      { type: "fill", blendMode: "multiply" },
+    ]);
+  });
+
   it("isolates a background whose layers blend", async () => {
     const tree = await painter.paint(
       `<div id="blend" style="width: 40px; height: 20px; background-color: red; background-image: linear-gradient(blue, blue); background-blend-mode: multiply"></div>`,

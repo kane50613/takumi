@@ -9,7 +9,7 @@ use super::{
     PaintGlyph, PaintNode, PaintRect, PaintStep, Role, Sampling, Shape, TextRun,
   },
   fonts::FontTable,
-  record::Recorder,
+  record::{Recorder, TextBackground},
 };
 use crate::{
   context::RenderContext,
@@ -406,23 +406,26 @@ impl Walker {
     } else {
       GlyphFill::Text
     };
-    let background = match fill {
-      GlyphFill::Background => {
-        let background = painter.background();
+    let background = (fill == GlyphFill::Background).then(|| {
+      let background = painter.background();
 
-        background
+      TextBackground {
+        area: Shape::Rect {
+          rect: PaintRect::sized(Point::ZERO, layout.size),
+        },
+        layers: background
           .color
-          .map(|color| Paint::Color { color: color.0 })
+          .map(|color| (Paint::Color { color: color.0 }, None))
           .into_iter()
-          .chain(
-            Paint::layers(&background.layers, layout.size, background.origin, context)
-              .into_iter()
-              .map(|(paint, _)| paint),
-          )
-          .collect()
+          .chain(Paint::layers(
+            &background.layers,
+            layout.size,
+            background.origin,
+            context,
+          ))
+          .collect(),
       }
-      GlyphFill::Text => Vec::new(),
-    };
+    });
     let mut recorder = Recorder::text(background, transform);
 
     runs.paint(

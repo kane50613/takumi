@@ -11,7 +11,7 @@ use taffy::{CompactLength, Dimension, LengthPercentage, LengthPercentageAuto};
 use crate::style::{
   AspectRatio, CssSyntaxKind, CssToken, FromCss, FromCssStr, MakeComputed, ParseResult,
   SizingContext, ToCss,
-  calc::{CalcLinear, CalcTerms, CalcValue, parse_calc_sum},
+  calc::{CalcLinear, CalcTerms, CalcUnit, CalcValue, parse_calc_sum},
   tw::Namespace,
   tw::{TW_VAR_SPACING, TailwindPropertyParser},
   unexpected_token,
@@ -297,6 +297,15 @@ impl Neg for Length {
 }
 
 impl Length {
+  /// Whether the length refers to a percentage, which Blink's `Length::IsFixed` rules out.
+  pub(crate) fn has_percentage(self) -> bool {
+    match self {
+      Self::Percentage(_) => true,
+      Self::Calc(terms) => terms.terms().any(|term| term.unit == CalcUnit::Percent),
+      _ => false,
+    }
+  }
+
   /// Returns a zero pixel length unit.
   pub const fn zero() -> Self {
     Self::Px(0.0)
@@ -623,6 +632,20 @@ mod tests {
   #[test]
   fn parse_calc_more_than_four_units_fails() {
     assert!(Length::from_css_str("calc(1px + 1em + 1rem + 1vh + 1vw)").is_err());
+  }
+
+  #[test]
+  fn parse_calc_sums_absolute_lengths_into_px() {
+    let parsed = Length::from_css_str("calc(1in + 1cm + 1mm + 1pt + 1pc + 1q + 1px + 1em)");
+
+    assert_eq!(
+      parsed.map(|length| length.to_css_string()),
+      Ok("calc(156.85301px + 1em)".to_string())
+    );
+    assert_eq!(
+      Length::from_css_str("calc(1in + 1px)").map(|length| length.to_css_string()),
+      Ok("calc(97px)".to_string())
+    );
   }
 
   #[test]

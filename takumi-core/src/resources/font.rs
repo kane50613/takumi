@@ -24,7 +24,10 @@ use parley::{
 use skrifa::{
   FontRef, MetadataProvider,
   instance::{LocationRef, Size},
-  raw::types::{F2Dot14, Tag},
+  raw::{
+    TableProvider,
+    types::{F2Dot14, Tag},
+  },
 };
 use thiserror::Error;
 use xxhash_rust::xxh3::{Xxh3, xxh3_64};
@@ -680,6 +683,55 @@ pub(crate) struct PrimaryFontMetrics {
   pub(crate) line_gap: f32,
   /// Unrounded, as Blink's `FontMetrics::XHeight`.
   pub(crate) x_height: Option<f32>,
+  /// The ascent, descent and line gap before rounding, which a scaled font rounds anew.
+  pub(crate) exact: ExactFontMetrics,
+  /// The `post` table's underline, when the font has one.
+  pub(crate) underline: Option<FontUnderline>,
+  /// How far the em box reaches below the baseline.
+  pub(crate) em_descent: f32,
+}
+
+/// A font's own underline.
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct FontUnderline {
+  /// How far below the baseline its top sits.
+  pub(crate) position: f32,
+  pub(crate) thickness: f32,
+}
+
+/// How far the em box of `font` at `font_size` reaches below the baseline: its typographic
+/// ascender and descender, or else `ascent` and `descent`, scaled to sum to the font size.
+/// https://drafts.csswg.org/css-inline-3/#ascent-descent
+pub(crate) fn em_box_descent(
+  font: Option<&FontRef>,
+  font_size: f32,
+  ascent: f32,
+  descent: f32,
+) -> f32 {
+  let (em_ascent, em_descent) = font
+    .and_then(|font| font.os2().ok())
+    .map(|os2| {
+      (
+        f32::from(os2.s_typo_ascender()),
+        -f32::from(os2.s_typo_descender()),
+      )
+    })
+    .filter(|(ascent, descent)| ascent + descent > 0.0)
+    .unwrap_or((ascent, descent));
+
+  if em_ascent + em_descent <= 0.0 || em_ascent < 0.0 {
+    return descent;
+  }
+
+  font_size * em_descent / (em_ascent + em_descent)
+}
+
+/// A font's vertical metrics at a size, unrounded.
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct ExactFontMetrics {
+  pub(crate) ascent: f32,
+  pub(crate) descent: f32,
+  pub(crate) line_gap: f32,
 }
 
 impl PrimaryFontMetrics {
@@ -727,6 +779,21 @@ impl RenderContext {
           descent: metrics.descent.abs().round(),
           line_gap: metrics.leading.round(),
           x_height: metrics.x_height,
+          exact: ExactFontMetrics {
+            ascent: metrics.ascent,
+            descent: metrics.descent.abs(),
+            line_gap: metrics.leading,
+          },
+          underline: metrics.underline.map(|underline| FontUnderline {
+            position: -underline.offset,
+            thickness: underline.thickness,
+          }),
+          em_descent: em_box_descent(
+            Some(&font_ref),
+            font_size,
+            metrics.ascent,
+            metrics.descent.abs(),
+          ),
         });
         QueryStatus::Stop
       });

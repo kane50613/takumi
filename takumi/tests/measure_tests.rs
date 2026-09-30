@@ -604,7 +604,7 @@ fn test_measure_keeps_authored_text_beside_generated_block_content() {
 #[test]
 fn test_measure_text_fit_per_line_shrink_scales_run_geometry() {
   let base_style = Style::default()
-    .with(StyleDeclaration::display(Display::Flex))
+    .with(StyleDeclaration::display(Display::Block))
     .with(StyleDeclaration::width(Px(320.0)))
     .with(StyleDeclaration::font_size(Px(34.0).into()))
     .with(StyleDeclaration::line_height(LineHeight::Unitless(1.0)))
@@ -936,7 +936,7 @@ fn test_measure_text_fit_applies_with_spacing_adjustments() {
 #[test]
 fn test_measure_text_fit_shrink_applies_with_letter_spacing() {
   let base_style = Style::default()
-    .with(StyleDeclaration::display(Display::Flex))
+    .with(StyleDeclaration::display(Display::Block))
     .with(StyleDeclaration::width(Px(320.0)))
     .with(StyleDeclaration::font_size(Px(34.0).into()))
     .with(StyleDeclaration::line_height(LineHeight::Unitless(1.0)))
@@ -954,7 +954,7 @@ fn test_measure_text_fit_shrink_applies_with_letter_spacing() {
         TextFit::builder()
           .mode(TextFitMode::Shrink)
           .target(TextFitTarget::Consistent)
-          .limit(Some(0.3))
+          .limit(Some(0.1))
           .build(),
       )),
     ),

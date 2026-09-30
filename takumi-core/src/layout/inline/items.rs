@@ -15,7 +15,7 @@ use parley::{InlineBox, InlineBoxKind};
 use smallvec::SmallVec;
 
 use super::{line_box::BoxFont, metrics::Strut, outline::InlineOutline};
-use std::{borrow::Cow, ops::Range, rc::Rc, sync::Arc};
+use std::{borrow::Cow, iter::successors, ops::Range, rc::Rc, sync::Arc};
 
 /// An out-of-flow box inside inline content.
 #[derive(Clone)]
@@ -258,6 +258,13 @@ pub struct DecorationLink<'c> {
   pub(crate) parent: Option<Rc<DecorationLink<'c>>>,
 }
 
+impl<'c> DecorationLink<'c> {
+  /// This span and the spans around it, innermost first.
+  pub(crate) fn ancestors(&self) -> impl Iterator<Item = &DecorationLink<'c>> {
+    successors(Some(self), |link| link.parent.as_deref())
+  }
+}
+
 /// A piece of inline content collected from the tree.
 pub enum InlineItem<'c> {
   /// An inline-level render node.
@@ -465,8 +472,12 @@ fn inline_span_decoration(
   let color = style.background_color.resolve(node.context.current_color);
   let border = BorderProperties::from_context(&node.context, Size::ZERO, node.border_px());
   let outline = InlineOutline::of(&node.context);
-  let paints =
-    style.is_visible() && (color.0[3] != 0 || border.has_visible_sides() || outline.is_some());
+  let has_images = style
+    .background_image
+    .as_deref()
+    .is_some_and(|images| !images.is_empty());
+  let paints = style.is_visible()
+    && (color.0[3] != 0 || has_images || border.has_visible_sides() || outline.is_some());
 
   Some(InlineDecoration {
     owner: node,

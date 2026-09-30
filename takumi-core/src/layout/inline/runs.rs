@@ -5,13 +5,16 @@ use crate::{
   geometry::{ComputedLayout, PathCommand, Point},
   layout::intercept::skips_ink,
   resources::{
-    font::{FontError, run_synthesis, run_variations},
+    font::{
+      ExactFontMetrics, FontError, FontUnderline, PrimaryFontMetrics, em_box_descent,
+      run_synthesis, run_variations,
+    },
     glyph::{ResolvedColorLayer, ResolvedGlyph, ResolvedOutlineGlyph},
   },
-  style::{Affine, Color, Direction, TextUnderlinePosition},
+  style::{Affine, Color, Direction},
 };
 use parley::{GlyphRun, fontique::Blob};
-use skrifa::{FontRef, MetadataProvider, raw::TableProvider};
+use skrifa::{FontRef, MetadataProvider};
 use std::{collections::HashMap, convert::Infallible, ops::Range, sync::Arc};
 
 use super::{
@@ -20,10 +23,11 @@ use super::{
     CoverLine, Covering, DecorationAccumulator, InlineBackgroundFragment, InlineContainingBlock,
     LinePosition,
   },
+  decorations::{DecorationLine, DecorationPlacement},
   items::ProcessedInlineSpan,
   metrics::{VisualInlineBox, resolve_visual_inline_box},
   outline::InlineOutlineRect,
-  text_fit::LineScaleState,
+  text_fit::{LineScaleState, SpacingStretch},
 };
 
 /// A shaped glyph positioned within its run, in run-local coordinates.
@@ -182,11 +186,13 @@ impl HangingWhitespace {
 }
 
 impl ShapedRun {
-  /// The run `glyph_run` shapes, carrying `glyphs` and painting with `brush`.
+  /// The run `glyph_run` shapes, carrying `glyphs` stretched by `stretch` and painting with
+  /// `brush`.
   pub(crate) fn of(
     glyph_run: &GlyphRun<'_, InlineBrush>,
     mut glyphs: Vec<PositionedGlyph>,
     hanging: HangingWhitespace,
+    stretch: &SpacingStretch,
     brush: InlineBrush,
     cluster_ranges: Vec<Range<usize>>,
   ) -> Self {
@@ -201,15 +207,15 @@ impl ShapedRun {
       metrics.leading,
     );
 
-    for glyph in &mut glyphs {
-      glyph.x += hanging.shift;
+    for (index, glyph) in glyphs.iter_mut().enumerate() {
+      glyph.x += hanging.shift + stretch.shift(index);
     }
 
     Self {
       glyphs,
       offset: glyph_run.offset() + hanging.shift,
       baseline: glyph_run.baseline(),
-      advance: glyph_run.advance(),
+      advance: glyph_run.advance() + stretch.advance,
       hanging,
       brush,
       metrics: RunMetrics {
@@ -260,54 +266,34 @@ impl ShapedRun {
     self.font_data.id()
   }
 
-  /// Underline top edge relative to the run's baseline, positive downwards.
-  ///
-  /// Follows Blink's `TextDecorationOffset::ComputeUnderlineOffset`: `auto` leaves a gap of half
-  /// the `thickness`, at least a pixel, under the baseline unless `text-underline-offset` is set,
-  /// `from-font` takes the font's underline position, and `under` sits a pixel past the em box.
-  pub fn underline_offset_from_baseline(&self, thickness: f32) -> f32 {
-    let offset = self.brush.underline_offset.unwrap_or(0.0);
+  /// The run's font's metrics, standing in for a primary font a box lacks.
+  pub(crate) fn primary_metrics(&self) -> PrimaryFontMetrics {
+    let RunMetrics {
+      ascent,
+      descent,
+      underline_offset,
+      underline_size,
+      ..
+    } = self.metrics;
+    let font = FontRef::from_index(self.font_data(), self.font_index).ok();
+    let em_descent = em_box_descent(font.as_ref(), self.font_size, ascent, descent);
 
-    match self.brush.underline_position {
-      TextUnderlinePosition::Auto => {
-        let gap = match self.brush.underline_offset {
-          Some(_) => 0.0,
-          None => (thickness / 2.0).ceil().max(1.0),
-        };
-
-        gap + offset.round()
-      }
-      TextUnderlinePosition::FromFont => -self.metrics.underline_offset + offset,
-      TextUnderlinePosition::Under => self.em_box_descent() + 1.0 + offset,
+    PrimaryFontMetrics {
+      ascent: ascent.round(),
+      descent: descent.round(),
+      line_gap: 0.0,
+      x_height: None,
+      exact: ExactFontMetrics {
+        ascent,
+        descent,
+        line_gap: 0.0,
+      },
+      underline: Some(FontUnderline {
+        position: -underline_offset,
+        thickness: underline_size,
+      }),
+      em_descent,
     }
-  }
-
-  /// Bottom edge of the em box below the baseline. The typographic ascender and
-  /// descender are normalized to sum to the font size, keeping their ratio, which is
-  /// how browsers derive the em box: https://drafts.csswg.org/css-inline-3/#ascent-descent
-  fn em_box_descent(&self) -> f32 {
-    let (ascent, descent) = self.typographic_ascent_descent();
-    let height = ascent + descent;
-
-    if height <= 0.0 || ascent < 0.0 {
-      return self.metrics.descent;
-    }
-
-    self.font_size * descent / height
-  }
-
-  fn typographic_ascent_descent(&self) -> (f32, f32) {
-    FontRef::from_index(self.font_data(), self.font_index)
-      .ok()
-      .and_then(|font| font.os2().ok())
-      .map(|os2| {
-        (
-          f32::from(os2.s_typo_ascender()),
-          -f32::from(os2.s_typo_descender()),
-        )
-      })
-      .filter(|(ascent, descent)| ascent + descent > 0.0)
-      .unwrap_or((self.metrics.ascent, self.metrics.descent))
   }
 }
 
@@ -324,12 +310,32 @@ pub struct PositionedInlineRun {
   pub(crate) static_inline_prefix: f32,
   /// Baseline shift applied to glyphs on the line.
   pub baseline_shift: f32,
+  /// Where the run's decorations go.
+  pub(crate) decoration_placement: DecorationPlacement,
   /// Where the run sits among its block's runs.
   #[cfg(feature = "paint-tree")]
   pub(crate) index: usize,
 }
 
 impl PositionedInlineRun {
+  /// The lines the run's `text-decoration` paints in `layout`, drawn through `base` onto a device
+  /// at `device`.
+  pub fn decorations(
+    &self,
+    layout: ComputedLayout,
+    base: Affine,
+    device: Affine,
+  ) -> Vec<DecorationLine> {
+    self.glyph_run.decorations(
+      &self.resolved_glyphs,
+      layout,
+      &self.decoration_placement,
+      self.baseline_shift,
+      base,
+      device,
+    )
+  }
+
   /// The run's affine transform composed onto `base` (the element transform for raster, identity
   /// for vector emission).
   pub fn transform(&self, base: Affine) -> Affine {
@@ -385,7 +391,7 @@ impl PositionedInlineRun {
 
 /// A positioned inline paint item shared by the backends.
 #[non_exhaustive]
-pub struct InlineRunLayout {
+pub struct InlineRunLayout<'c> {
   /// Glyph runs in line/visual order.
   pub runs: Vec<PositionedInlineRun>,
   /// In-flow and out-of-flow inline boxes, positioned, sorted by id.
@@ -393,17 +399,17 @@ pub struct InlineRunLayout {
   /// Outlined spans' line fragments, sorted by span then line.
   pub outline_rects: Vec<InlineOutlineRect>,
   /// Inline-span background fragments, in paint order (outer spans first).
-  pub background_fragments: Vec<InlineBackgroundFragment>,
+  pub background_fragments: Vec<InlineBackgroundFragment<'c>>,
 }
 
-impl BuiltInlineLayout<'_> {
+impl<'c> BuiltInlineLayout<'c> {
   /// Resolves every glyph run, inline box, and outline rect into backend-agnostic positioned
   /// drawables.
   pub fn resolve_runs(
     &self,
     context: &RenderContext,
     layout: ComputedLayout,
-  ) -> Result<InlineRunLayout, FontError> {
+  ) -> Result<InlineRunLayout<'c>, FontError> {
     let BuiltInlineLayout {
       spans,
       positioned_floats,
@@ -425,12 +431,13 @@ impl BuiltInlineLayout<'_> {
           glyph_run,
           static_inline_prefix,
           hanging,
+          stretch,
         } => {
           let run = glyph_run.run();
           // A run carrying only the direction mark paints nothing; a run the
           // mark's cluster merged into (emoji sequences) paints as the first
           // real span.
-          let mut brush = glyph_run.style().brush;
+          let mut brush = glyph_run.style().brush.clone();
           if brush.is_direction_mark {
             if glyph_run.advance() == 0.0 {
               return Ok(());
@@ -464,7 +471,14 @@ impl BuiltInlineLayout<'_> {
                 .is_none_or(skips_ink);
           }
           let cluster_ranges = clusters.into_iter().map(|cluster| cluster.range).collect();
-          let shaped = ShapedRun::of(&glyph_run, glyphs, hanging, brush, cluster_ranges);
+          let shaped = ShapedRun::of(&glyph_run, glyphs, hanging, &stretch, brush, cluster_ranges);
+          let decoration_placement = self.decoration_placement(
+            line,
+            &shaped,
+            glyph_run.style().brush.source_span_id,
+            static_inline_prefix,
+            layout,
+          );
 
           runs.push(PositionedInlineRun {
             glyph_run: shaped,
@@ -472,6 +486,7 @@ impl BuiltInlineLayout<'_> {
             line_scale: setup.state,
             static_inline_prefix,
             baseline_shift: self.run_baseline_shift(line, &glyph_run),
+            decoration_placement,
             #[cfg(feature = "paint-tree")]
             index: runs.len(),
           });
@@ -543,8 +558,9 @@ impl<'c> BuiltInlineLayout<'c> {
         glyph_run,
         static_inline_prefix,
         hanging,
+        stretch,
       } => {
-        let brush = glyph_run.style().brush;
+        let brush = &glyph_run.style().brush;
 
         if brush.is_direction_mark && glyph_run.advance() == 0.0 {
           return;
@@ -560,7 +576,7 @@ impl<'c> BuiltInlineLayout<'c> {
           } else {
             0.0
           };
-        let width = glyph_run.advance() - hanging.advance;
+        let width = glyph_run.advance() + stretch.advance - hanging.advance;
         let metrics = glyph_run.run().metrics();
         // The font's rounded ascent and descent, without the line-height leading, like the
         // inline box fragment `InlineBoxState::ComputeTextMetrics` sizes.

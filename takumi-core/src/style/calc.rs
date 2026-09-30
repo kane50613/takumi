@@ -115,12 +115,6 @@ pub(crate) enum CalcUnit {
   CqMax,
   VMin,
   VMax,
-  Cm,
-  Mm,
-  Inch,
-  Q,
-  Pt,
-  Pc,
 }
 
 impl CalcUnit {
@@ -140,12 +134,6 @@ impl CalcUnit {
       Self::CqMax => "cqmax",
       Self::VMin => "vmin",
       Self::VMax => "vmax",
-      Self::Cm => "cm",
-      Self::Mm => "mm",
-      Self::Inch => "in",
-      Self::Q => "q",
-      Self::Pt => "pt",
-      Self::Pc => "pc",
     }
   }
 }
@@ -169,7 +157,7 @@ impl CalcTerm {
 
 /// A parsed `calc(...)` expression, compressed to its non-zero terms so it
 /// stays inline in `Length`. Naive versus CSS: an expression mixing more than
-/// [`MAX_CALC_TERMS`] distinct units fails to parse.
+/// [`MAX_CALC_TERMS`] distinct units, absolute lengths counting as one, fails to parse.
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
 pub struct CalcTerms {
   units: [CalcUnit; MAX_CALC_TERMS],
@@ -213,12 +201,6 @@ impl CalcTerms {
         // once; every relative unit already resolves against a device-pixel
         // basis.
         CalcUnit::Px => absolute_css += value,
-        CalcUnit::Cm => absolute_css += value * ONE_CM_IN_PX,
-        CalcUnit::Mm => absolute_css += value * ONE_MM_IN_PX,
-        CalcUnit::Inch => absolute_css += value * ONE_IN_PX,
-        CalcUnit::Q => absolute_css += value * ONE_Q_IN_PX,
-        CalcUnit::Pt => absolute_css += value * ONE_PT_IN_PX,
-        CalcUnit::Pc => absolute_css += value * ONE_PC_IN_PX,
         CalcUnit::Percent => percent += value,
         CalcUnit::Rem => px += value * sizing.rem_basis(),
         CalcUnit::Em => px += value * sizing.font_size,
@@ -339,11 +321,19 @@ impl CalcFormula {
     }
   }
 
-  /// Compresses to the non-zero terms, or `None` when more than
-  /// [`MAX_CALC_TERMS`] distinct units appear.
+  /// Compresses to the non-zero terms, the absolute lengths summed into px as CSS Values 4
+  /// simplifies a sum to canonical units, or `None` when more than [`MAX_CALC_TERMS`] distinct
+  /// units remain.
   pub(crate) fn compress(self) -> Option<CalcTerms> {
+    let px = self.px
+      + self.cm * ONE_CM_IN_PX
+      + self.mm * ONE_MM_IN_PX
+      + self.inch * ONE_IN_PX
+      + self.q * ONE_Q_IN_PX
+      + self.pt * ONE_PT_IN_PX
+      + self.pc * ONE_PC_IN_PX;
     let coefficients = [
-      (CalcUnit::Px, self.px),
+      (CalcUnit::Px, px),
       (CalcUnit::Percent, self.percent),
       (CalcUnit::Rem, self.rem),
       (CalcUnit::Em, self.em),
@@ -357,12 +347,6 @@ impl CalcFormula {
       (CalcUnit::CqMax, self.cqmax),
       (CalcUnit::VMin, self.vmin),
       (CalcUnit::VMax, self.vmax),
-      (CalcUnit::Cm, self.cm),
-      (CalcUnit::Mm, self.mm),
-      (CalcUnit::Inch, self.inch),
-      (CalcUnit::Q, self.q),
-      (CalcUnit::Pt, self.pt),
-      (CalcUnit::Pc, self.pc),
     ];
     let mut terms = CalcTerms::default();
     let mut count = 0;

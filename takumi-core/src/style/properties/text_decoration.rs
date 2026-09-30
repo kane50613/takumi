@@ -1,12 +1,12 @@
-use std::fmt;
+use std::{fmt, sync::Arc};
 
 use bitflags::bitflags;
 use cssparser::{Parser, Token};
 use typed_builder::TypedBuilder;
 
 use crate::style::{
-  Animatable, Color, ColorInput, CssSyntaxKind, CssToken, FromCss, FromCssStr, Length,
-  MakeComputed, ParseResult, SizingContext, ToCss, discrete, impl_css_enum,
+  Animatable, Color, ColorInput, ComputedStyle, CssSyntaxKind, CssToken, Float, FromCss,
+  FromCssStr, Length, MakeComputed, ParseResult, SizingContext, ToCss, discrete, impl_css_enum,
   tw::TailwindPropertyParser, unexpected_token, write_keywords,
 };
 
@@ -128,10 +128,89 @@ impl Animatable for TextDecorationThickness {
 /// Decoration thickness resolved for rendering.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum SizedTextDecorationThickness {
+  /// A tenth of the font size.
+  Auto,
   /// Use the font's own thickness.
   FromFont,
   /// A thickness in pixels.
   Value(f32),
+}
+
+/// A decoration a decorating box applies to the text inside it, as Blink's
+/// `AppliedTextDecoration`.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct AppliedTextDecoration {
+  /// Which lines it draws.
+  pub line: TextDecorationLines,
+  /// How it draws them.
+  pub style: TextDecorationStyle,
+  /// Their color.
+  pub color: Color,
+  /// Their thickness.
+  pub thickness: SizedTextDecorationThickness,
+  /// Extra offset of the underline away from the text, in pixels, or `None` for `auto`.
+  pub underline_offset: Option<f32>,
+  /// Which baseline the underline is measured from.
+  pub underline_position: TextUnderlinePosition,
+}
+
+/// The decorations a box's text paints, outermost decorating box first, as Blink's
+/// `AppliedTextDecorations`.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct AppliedTextDecorations(Option<Arc<[AppliedTextDecoration]>>);
+
+impl AppliedTextDecorations {
+  /// The decorations inside a box styled `style` whose parent box, styled `parent`, applies
+  /// these, resolved against `sizing` and `current_color`, as Blink's `StyleAdjuster` propagates
+  /// them.
+  pub(crate) fn for_child(
+    &self,
+    parent: &ComputedStyle,
+    style: &ComputedStyle,
+    sizing: &SizingContext,
+    current_color: Color,
+  ) -> Self {
+    let display = if parent.display.should_blockify_children() {
+      style.display.as_blockified()
+    } else {
+      style.display
+    };
+    let stops = style.float != Float::None
+      || style.position.is_out_of_flow()
+      || (display.is_inline_level() && !display.is_inline());
+    let inherited = if stops { Self::default() } else { self.clone() };
+    let Some(line) = style.text_decoration_line.filter(|line| !line.is_empty()) else {
+      return inherited;
+    };
+    let own = AppliedTextDecoration {
+      line,
+      style: style.text_decoration_style,
+      color: style.text_decoration_color.resolve(current_color),
+      thickness: style.resolved_text_decoration_thickness(sizing),
+      underline_offset: style.text_underline_offset.resolve_px(sizing),
+      underline_position: style.text_underline_position,
+    };
+
+    inherited.as_slice().iter().copied().chain([own]).collect()
+  }
+
+  /// The decorations, outermost first.
+  pub fn as_slice(&self) -> &[AppliedTextDecoration] {
+    self.0.as_deref().unwrap_or_default()
+  }
+
+  /// Whether no decoration applies.
+  pub fn is_empty(&self) -> bool {
+    self.0.is_none()
+  }
+}
+
+impl FromIterator<AppliedTextDecoration> for AppliedTextDecorations {
+  fn from_iter<I: IntoIterator<Item = AppliedTextDecoration>>(iter: I) -> Self {
+    let decorations: Arc<[AppliedTextDecoration]> = iter.into_iter().collect();
+
+    Self((!decorations.is_empty()).then_some(decorations))
+  }
 }
 
 impl<'i> FromCss<'i> for TextDecorationThickness {

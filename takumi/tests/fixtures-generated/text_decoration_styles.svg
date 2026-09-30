@@ -75,10 +75,10 @@
     <use href="#g4" x="365.8" y="115"/>
   </g>
   <clipPath id="cp1">
-    <path d="M420 72.85h71.91v11h-71.91Z"/>
+    <path d="M420 73h71.91v11h-71.91Z"/>
   </clipPath>
   <g clip-path="url(#cp1)">
-    <path d="M405 78.35c7.5 10.5 7.5-10.5 15 0s7.5-10.5 15 0 7.5-10.5 15 0 7.5-10.5 15 0 7.5-10.5 15 0 7.5-10.5 15 0 7.5-10.5 15 0" fill="none" stroke="#0f172a" stroke-width="3"/>
+    <path d="M405 78.5c7.5 10.5 7.5-10.5 15 0s7.5-10.5 15 0 7.5-10.5 15 0 7.5-10.5 15 0 7.5-10.5 15 0 7.5-10.5 15 0 7.5-10.5 15 0" fill="none" stroke="#0f172a" stroke-width="3"/>
   </g>
   <g fill="#0f172a">
     <use href="#g11" x="420" y="115"/>
@@ -94,8 +94,8 @@
     <use href="#g2" x="96.94" y="172"/>
     <use href="#g7" x="104.77" y="172"/>
   </g>
-  <rect x="28" y="160" width="93.6" height="3" fill="#0f172a"/>
-  <rect x="28" y="164" width="93.6" height="3" fill="#0f172a"/>
+  <rect x="28" y="161" width="93.6" height="3" fill="#0f172a"/>
+  <rect x="28" y="165" width="93.6" height="3" fill="#0f172a"/>
   <g fill="#0f172a">
     <use href="#g4" x="158" y="172"/>
     <use href="#g1" x="175.55" y="172"/>
@@ -103,7 +103,7 @@
     <use href="#g7" x="212.15" y="172"/>
     <use href="#g4" x="228.68" y="172"/>
   </g>
-  <path d="M158 161.5h88" fill="none" stroke="#0f172a" stroke-width="3" stroke-dasharray="3 3"/>
+  <path d="M158 162.5h88" fill="none" stroke="#0f172a" stroke-width="3" stroke-dasharray="3 3"/>
   <g fill="#0f172a">
     <use href="#g4" x="283" y="172"/>
     <use href="#g9" x="300.55" y="172"/>
@@ -112,7 +112,7 @@
     <use href="#g7" x="349.27" y="172"/>
     <use href="#g4" x="365.8" y="172"/>
   </g>
-  <path d="M283 161.5h100" fill="none" stroke="#0f172a" stroke-width="3" stroke-dasharray="6 3.4"/>
+  <path d="M283 162.5h100" fill="none" stroke="#0f172a" stroke-width="3" stroke-dasharray="6 3.4"/>
   <g fill="#0f172a">
     <use href="#g11" x="420" y="172"/>
     <use href="#g9" x="443.91" y="172"/>
@@ -120,10 +120,10 @@
     <use href="#g13" x="475.8" y="172"/>
   </g>
   <clipPath id="cp2">
-    <path d="M420 155.45h71.91v11h-71.91Z"/>
+    <path d="M420 155.5h71.91v11h-71.91Z"/>
   </clipPath>
   <g clip-path="url(#cp2)">
-    <path d="M405 160.95c7.5 10.5 7.5-10.5 15 0s7.5-10.5 15 0 7.5-10.5 15 0 7.5-10.5 15 0 7.5-10.5 15 0 7.5-10.5 15 0 7.5-10.5 15 0" fill="none" stroke="#0f172a" stroke-width="3"/>
+    <path d="M405 161c7.5 10.5 7.5-10.5 15 0s7.5-10.5 15 0 7.5-10.5 15 0 7.5-10.5 15 0 7.5-10.5 15 0 7.5-10.5 15 0 7.5-10.5 15 0" fill="none" stroke="#0f172a" stroke-width="3"/>
   </g>
   <rect x="28" y="231" width="14" height="4" fill="#e11d48"/>
   <rect x="56" y="231" width="1" height="4" fill="#e11d48"/>

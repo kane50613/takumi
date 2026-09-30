@@ -5,9 +5,8 @@ use crate::{
   layout::tree::RenderNode,
   resources::font::FontClasses,
   style::{
-    Color, Direction, FontSynthesis, Lang, Length, SizedTextDecorationThickness,
-    TextDecorationLines, TextDecorationSkipInk, TextDecorationStyle, TextFitMode, TextOverflow,
-    TextUnderlinePosition, TextWrapStyle, VerticalAlign, WhiteSpaceCollapse, WordBreak,
+    AppliedTextDecorations, Color, Direction, FontSynthesis, Lang, Length, TextDecorationSkipInk,
+    TextFitMode, TextOverflow, TextWrapStyle, VerticalAlign, WhiteSpaceCollapse, WordBreak,
   },
   text_processing::{
     MaxHeight, RebreakOptions, apply_text_transform, apply_white_space_collapse,
@@ -38,8 +37,9 @@ mod runs;
 mod text_fit;
 mod truncation;
 
+pub(crate) use self::{background::PaddingBox, items::InlineOutOfFlow};
 pub use self::{
-  background::InlineBackgroundFragment,
+  background::{FragmentBackground, InlineBackgroundFragment},
   decorations::DecorationLine,
   items::{DecorationLink, InlineBoxItem, InlineItem, ProcessedInlineSpan, collect_inline_items},
   metrics::{InlinePass, VisualInlineBox},
@@ -49,17 +49,16 @@ pub use self::{
     PositionedInlineRun, RunMetrics, ShapedRun,
   },
 };
-pub(crate) use self::{background::PaddingBox, items::InlineOutOfFlow};
 use self::{
   breaking::distribute_trailing_whitespace,
-  line_box::{BoxFont, BoxKey},
+  line_box::{BoxFont, BoxKey, FontHeight},
   metrics::{
     ResolvedInlineLineState, ResolvedLineMetrics, Strut, resolve_inline_line_metrics,
     resolve_inline_line_states, resolve_visual_inline_box, text_line_box_contribution,
   },
   runs::measured_run_text,
   text_fit::{
-    LineScaleState, text_fit_is_applicable, text_fit_line_advance,
+    GlyphCursor, LineScaleState, SpacingStretch, text_fit_is_applicable, text_fit_line_advance,
     text_fit_line_alignment_correction, text_fit_line_scales, text_fit_x_correction,
   },
   truncation::make_ellipsis_layout,
@@ -278,7 +277,7 @@ impl BuiltInlineLayout<'_> {
       &self.spans,
       self.font,
       &self.line_scales,
-      self.strut,
+      self.strut.as_ref(),
     )
   }
 
@@ -300,7 +299,7 @@ impl BuiltInlineLayout<'_> {
           return metrics.inline_min_coord + metrics.advance;
         }
 
-        let (text_advance, static_advance) = text_fit_line_advance(&line);
+        let (text_advance, static_advance) = text_fit_line_advance(&line, self.layout.is_rtl());
         let scale = self.line_scales.get(index).copied().unwrap_or(1.0);
 
         metrics.inline_min_coord + static_advance + text_advance * scale
@@ -360,6 +359,7 @@ impl BuiltInlineLayout<'_> {
           glyph_run,
           static_inline_prefix,
           hanging,
+          stretch,
         } => {
           let span_id = glyph_run.style().brush.source_span_id;
           let text = measured_run_text(&self.text, &self.spans, &glyph_run, span_id);
@@ -372,6 +372,7 @@ impl BuiltInlineLayout<'_> {
           let (origin, size) = glyph_run_rect(
             &glyph_run,
             hanging,
+            &stretch,
             self.run_baseline_shift(line, &glyph_run),
           );
           let (origin, size) = setup.scale_rect(origin, size, static_inline_prefix);
@@ -473,7 +474,7 @@ impl InlineMeasureOptions {
   }
 }
 
-#[derive(Clone, PartialEq, Copy, Debug)]
+#[derive(Clone, PartialEq, Debug)]
 /// Paint attributes carried per glyph run through the inline layout.
 pub struct InlineBrush {
   /// Span this run originated from, if any.
@@ -484,20 +485,10 @@ pub struct InlineBrush {
   pub opacity: f32,
   /// Text fill color.
   pub color: Color,
-  /// Text decoration color.
-  pub decoration_color: Color,
-  /// Decoration line thickness.
-  pub decoration_thickness: SizedTextDecorationThickness,
-  /// Extra offset of the underline away from the text, in pixels, or `None` for `auto`.
-  pub underline_offset: Option<f32>,
-  /// Which baseline the underline is measured from.
-  pub underline_position: TextUnderlinePosition,
-  /// Which decoration lines to draw.
-  pub decoration_line: TextDecorationLines,
+  /// The decorations the run paints.
+  pub decorations: AppliedTextDecorations,
   /// Whether decorations skip over glyph ink.
   pub decoration_skip_ink: TextDecorationSkipInk,
-  /// How the decoration lines are drawn.
-  pub decoration_style: TextDecorationStyle,
   /// `-webkit-text-stroke` colour, which a span may set for itself.
   pub stroke_color: Color,
   /// `-webkit-text-stroke` width in pixels.
@@ -508,6 +499,11 @@ pub struct InlineBrush {
   pub(crate) line_height_px: Option<f32>,
   /// Whether the line height is `normal`, letting fallback-font runs grow the line.
   pub(crate) line_height_is_normal: bool,
+  /// `letter-spacing` in pixels when it is fixed rather than a percentage, which `text-fit`
+  /// leaves unscaled.
+  pub(crate) fixed_letter_spacing: f32,
+  /// `word-spacing` in pixels when it is fixed rather than a percentage.
+  pub(crate) fixed_word_spacing: f32,
   pub(crate) vertical_align: VerticalAlign,
 }
 
@@ -531,6 +527,35 @@ impl InlineBrush {
 
     text_line_box_contribution(line_height, ascent, descent)
   }
+
+  /// The run's line-box contribution on a line `text-fit` scales by `line_scale`. A line height
+  /// that scales grows whole; a fixed one keeps its height around the scaled font's content area,
+  /// as Blink's `InlineBoxState::ComputeTextMetrics` measures the scaled font.
+  fn line_box_height(
+    &self,
+    metrics_line_height: f32,
+    ascent: f32,
+    descent: f32,
+    line_gap: f32,
+    line_scale: f32,
+  ) -> FontHeight {
+    let (font_scale, box_scale) = if self.line_height_scales_with_text_fit {
+      (1.0, line_scale)
+    } else {
+      (line_scale, 1.0)
+    };
+    let (above, below) = self.line_box_contribution(
+      metrics_line_height,
+      ascent * font_scale,
+      descent * font_scale,
+      line_gap * font_scale,
+    );
+
+    FontHeight {
+      ascent: above * box_scale,
+      descent: below * box_scale,
+    }
+  }
 }
 
 impl Default for InlineBrush {
@@ -540,19 +565,16 @@ impl Default for InlineBrush {
       is_direction_mark: false,
       opacity: 1.0,
       color: Color::black(),
-      decoration_color: Color::black(),
-      decoration_thickness: SizedTextDecorationThickness::Value(0.0),
-      underline_offset: None,
-      underline_position: TextUnderlinePosition::default(),
-      decoration_line: TextDecorationLines::empty(),
+      decorations: AppliedTextDecorations::default(),
       decoration_skip_ink: TextDecorationSkipInk::default(),
-      decoration_style: TextDecorationStyle::default(),
       stroke_color: Color::black(),
       stroke_width: 0.0,
       font_synthesis: FontSynthesis::default(),
       line_height_scales_with_text_fit: false,
       line_height_px: None,
       line_height_is_normal: false,
+      fixed_letter_spacing: 0.0,
+      fixed_word_spacing: 0.0,
       vertical_align: VerticalAlign::default(),
     }
   }
@@ -1143,11 +1165,12 @@ impl LineSetup {
     line_vertical_metrics: &[ResolvedLineMetrics],
     line_scales: &[f32],
     line_index: usize,
+    rtl: bool,
   ) -> Option<Self> {
     let resolved_metrics = line_vertical_metrics.get(line_index)?.clone();
     let line_scale = line_scales.get(line_index).copied().unwrap_or(1.0);
     let (line_scale_origin_x, alignment_correction) =
-      text_fit_line_alignment_correction(line, line_scale, layout.unsnapped_content.width);
+      text_fit_line_alignment_correction(line, line_scale, layout.unsnapped_content.width, rtl);
     let content = layout.content_box_offset();
 
     Some(Self {
@@ -1211,10 +1234,12 @@ impl LineSetup {
   }
 }
 
-/// A glyph run's advance by its ascent plus descent, as a line-local top-left and size.
+/// A glyph run's advance, stretched by `stretch`, by its ascent plus descent, as a line-local
+/// top-left and size.
 pub(crate) fn glyph_run_rect(
   glyph_run: &GlyphRun<'_, InlineBrush>,
   hanging: HangingWhitespace,
+  stretch: &SpacingStretch,
   baseline_shift: f32,
 ) -> (Point<f32>, Size<f32>) {
   let metrics = glyph_run.run().metrics();
@@ -1225,7 +1250,7 @@ pub(crate) fn glyph_run_rect(
       y: glyph_run.baseline() + baseline_shift - metrics.ascent,
     },
     Size {
-      width: glyph_run.advance(),
+      width: glyph_run.advance() + stretch.advance,
       height: metrics.ascent + metrics.descent,
     },
   )
@@ -1255,12 +1280,12 @@ impl<'c> BuiltInlineLayout<'c> {
     &self,
     glyph_run: &GlyphRun<'_, InlineBrush>,
   ) -> Option<&Rc<DecorationLink<'c>>> {
-    match glyph_run
-      .style()
-      .brush
-      .source_span_id
-      .and_then(|span_id| self.spans.get(span_id as usize))
-    {
+    self.span_chain(glyph_run.style().brush.source_span_id)
+  }
+
+  /// The spans around the text span `span_id`, innermost first.
+  pub(crate) fn span_chain(&self, span_id: Option<u64>) -> Option<&Rc<DecorationLink<'c>>> {
+    match span_id.and_then(|span_id| self.spans.get(span_id as usize)) {
       Some(ProcessedInlineSpan::Text { decorations, .. }) => decorations.as_ref(),
       _ => None,
     }
@@ -1283,6 +1308,8 @@ pub(crate) enum PlacedItem<'a> {
     static_inline_prefix: f32,
     /// The line-end whitespace this run carries.
     hanging: HangingWhitespace,
+    /// How far `text-fit` moves the run's glyphs so its fixed spacing stays unscaled.
+    stretch: SpacingStretch,
   },
   /// An in-flow box, its `x` already scaled for text-fit.
   Box(VisualInlineBox),
@@ -1308,6 +1335,7 @@ impl BuiltInlineLayout<'_> {
         &line_vertical_metrics,
         &self.line_scales,
         index,
+        self.layout.is_rtl(),
       ) else {
         continue;
       };
@@ -1319,17 +1347,24 @@ impl BuiltInlineLayout<'_> {
       let items: Vec<_> = line.items().collect();
       let hanging = distribute_trailing_whitespace(&items, &line, self.layout.is_rtl());
       let mut static_inline_prefix = 0.0_f32;
+      let mut cursor = GlyphCursor::default();
 
       for (item_index, item) in items.into_iter().enumerate() {
         match item {
-          PositionedLayoutItem::GlyphRun(glyph_run) => visit(
-            &walked,
-            PlacedItem::Run {
-              glyph_run,
-              static_inline_prefix,
-              hanging: hanging[item_index],
-            },
-          )?,
+          PositionedLayoutItem::GlyphRun(glyph_run) => {
+            let (stretch, spacing) = cursor.stretch(&glyph_run, walked.setup.state.scale);
+
+            visit(
+              &walked,
+              PlacedItem::Run {
+                glyph_run,
+                static_inline_prefix,
+                hanging: hanging[item_index],
+                stretch,
+              },
+            )?;
+            static_inline_prefix += spacing;
+          }
           PositionedLayoutItem::InlineBox(inline_box) => {
             let kind = self.box_kind(&inline_box);
 
@@ -1364,9 +1399,9 @@ impl BuiltInlineLayout<'_> {
 #[cfg(test)]
 #[allow(clippy::panic, clippy::unwrap_used)]
 mod tests {
-  use std::{collections::HashMap, fs::File, io::Read, path::Path, sync::Arc};
+  use std::{fs::File, io::Read, path::Path, sync::Arc};
 
-  use super::{runs::slice_text_at_char_boundaries, *};
+  use super::{decorations::DecorationPlacement, runs::slice_text_at_char_boundaries, *};
   use crate::{
     Fonts,
     context::RenderContext,
@@ -1374,8 +1409,9 @@ mod tests {
     layout::{node::Node, tree::RenderNode},
     resources::font::{FontOverride, FontResource, GenericFamily},
     style::{
-      Affine, BorderStyle, Color, ColorInput, Display, FontSize, Length, Sides, SizingContext,
-      SpacePair, Style, StyleDeclaration, WhiteSpace,
+      Affine, AppliedTextDecoration, BorderStyle, Color, ColorInput, Display, FontSize, Length,
+      Sides, SizedTextDecorationThickness, SizingContext, SpacePair, Style, StyleDeclaration,
+      TextDecorationLines, TextDecorationStyle, TextUnderlinePosition, WhiteSpace,
     },
     viewport::Viewport,
   };
@@ -1403,18 +1439,14 @@ mod tests {
     context
   }
 
-  fn shaped_run(position: TextUnderlinePosition, underline_offset: Option<f32>) -> ShapedRun {
+  fn shaped_run() -> ShapedRun {
     ShapedRun {
       glyphs: Vec::new(),
       offset: 0.0,
       baseline: 0.0,
       advance: 0.0,
       hanging: HangingWhitespace::default(),
-      brush: InlineBrush {
-        underline_offset,
-        underline_position: position,
-        ..Default::default()
-      },
+      brush: InlineBrush::default(),
       metrics: RunMetrics {
         ascent: 40.0,
         descent: 10.0,
@@ -1429,7 +1461,6 @@ mod tests {
       variations: Vec::new(),
       synthetic_bold: None,
       synthetic_skew: None,
-      // Not a font: `em_box_descent` falls back to the run metrics instead of OS/2.
       font_data: parley::fontique::Blob::new(Arc::new(Vec::new())),
     }
   }
@@ -1447,24 +1478,23 @@ mod tests {
 
   #[test]
   fn a_fully_trimmed_run_paints_no_decoration() {
-    let mut run = shaped_run(TextUnderlinePosition::Auto, None);
-    run.brush.decoration_line = TextDecorationLines::UNDERLINE;
-    run.brush.decoration_thickness = SizedTextDecorationThickness::Value(2.0);
+    let mut run = shaped_run();
+    run.brush.decorations = [AppliedTextDecoration {
+      line: TextDecorationLines::UNDERLINE,
+      style: TextDecorationStyle::Solid,
+      color: Color::black(),
+      thickness: SizedTextDecorationThickness::Value(2.0),
+      underline_offset: None,
+      underline_position: TextUnderlinePosition::Auto,
+    }]
+    .into_iter()
+    .collect();
     run.advance = 5.2;
     run.hanging.advance = 5.2;
     run.offset = 10.4;
 
-    let layout = ComputedLayout {
-      location: crate::geometry::Point::ZERO,
-      size: Size::new(100.0, 100.0),
-      border: crate::geometry::Rect::default(),
-      padding: crate::geometry::Rect::default(),
-      unsnapped_content: Size::new(100.0, 100.0),
-    };
-    let decorations = run.decorations(
-      &HashMap::new(),
-      layout,
-      0.0,
+    let decorations = run.decoration_lines(
+      &DecorationPlacement::default(),
       Affine::IDENTITY,
       Affine::IDENTITY,
     );
@@ -1721,43 +1751,6 @@ mod tests {
 
     assert!((fragment.width - 24.0).abs() < 0.5, "{}", fragment.width);
     assert!(fragment.height > 0.0);
-  }
-
-  #[test]
-  fn underline_offset_from_baseline_follows_the_underline_position() {
-    // `auto` leaves a gap of half the thickness, at least a pixel, under the baseline.
-    assert_eq!(
-      shaped_run(TextUnderlinePosition::Auto, None).underline_offset_from_baseline(1.0),
-      1.0
-    );
-    assert_eq!(
-      shaped_run(TextUnderlinePosition::Auto, None).underline_offset_from_baseline(5.0),
-      3.0
-    );
-    // The font's underline offset is negative below the baseline.
-    assert_eq!(
-      shaped_run(TextUnderlinePosition::FromFont, None).underline_offset_from_baseline(2.0),
-      5.0
-    );
-    // 100px em split in the metrics' 40:10 ratio puts the em box bottom 20px down, and the
-    // underline a pixel past it.
-    assert_eq!(
-      shaped_run(TextUnderlinePosition::Under, None).underline_offset_from_baseline(2.0),
-      21.0
-    );
-  }
-
-  #[test]
-  fn underline_offset_from_baseline_adds_the_style_offset() {
-    // A set offset drops `auto`'s gap.
-    assert_eq!(
-      shaped_run(TextUnderlinePosition::Auto, Some(3.0)).underline_offset_from_baseline(4.0),
-      3.0
-    );
-    assert_eq!(
-      shaped_run(TextUnderlinePosition::Under, Some(-4.0)).underline_offset_from_baseline(2.0),
-      17.0
-    );
   }
 
   #[test]
