@@ -20,7 +20,7 @@ use crate::{
     tree::{ContainingBlocks, LayoutResults, RenderNode},
   },
   shadow::SizedShadow,
-  style::{Affine, BlurType, ComputedStyle, Display},
+  style::{Affine, BlurType, ComputedStyle, Display, Float},
   viewport::Viewport,
 };
 
@@ -84,16 +84,33 @@ impl PaintItem {
 }
 
 #[derive(Clone, Copy)]
+/// The phases of [CSS 2.1 Appendix E](https://www.w3.org/TR/CSS21/zindex.html) a stacking context
+/// paints its descendants in, after its own background.
 enum PaintBucket {
+  /// Negative `z-index`.
   Negative,
-  AutoZero,
+  /// In-flow, non-positioned boxes, each with its inline content.
+  ///
+  /// Approximate: a box paints its text right after its background, where Blink paints every
+  /// block's background before any of their text.
+  InFlow,
+  /// Non-positioned floats.
+  ///
+  /// Approximate: a float inside inline content paints with that content, where Blink paints it
+  /// in this phase.
+  Float,
+  /// Positioned boxes and stacking contexts at `z-index: auto` or `0`, in tree order.
+  Positioned,
+  /// Positive `z-index`.
   Positive,
 }
 
 #[derive(Default)]
 struct StackingBuckets {
   negative: Vec<PaintItem>,
-  auto_zero: Vec<PaintItem>,
+  in_flow: Vec<PaintItem>,
+  floats: Vec<PaintItem>,
+  positioned: Vec<PaintItem>,
   positive: Vec<PaintItem>,
 }
 
@@ -101,19 +118,27 @@ impl StackingBuckets {
   fn push(&mut self, bucket: PaintBucket, item: PaintItem) {
     match bucket {
       PaintBucket::Negative => self.negative.push(item),
-      PaintBucket::AutoZero => self.auto_zero.push(item),
+      PaintBucket::InFlow => self.in_flow.push(item),
+      PaintBucket::Float => self.floats.push(item),
+      PaintBucket::Positioned => self.positioned.push(item),
       PaintBucket::Positive => self.positive.push(item),
     }
   }
 
-  /// Orders the z-indexed buckets; `auto_zero` is pushed in source order already.
+  /// Orders the z-indexed buckets; the others are pushed in tree order already.
   fn sort(&mut self) {
     self.negative.sort_unstable_by_key(PaintItem::z_order);
     self.positive.sort_unstable_by_key(PaintItem::z_order);
   }
 
-  fn in_paint_order(&self) -> [&[PaintItem]; 3] {
-    [&self.negative, &self.auto_zero, &self.positive]
+  fn in_paint_order(&self) -> [&[PaintItem]; 5] {
+    [
+      &self.negative,
+      &self.in_flow,
+      &self.floats,
+      &self.positioned,
+      &self.positive,
+    ]
   }
 }
 
@@ -136,7 +161,7 @@ impl StackingContextNode {
   }
 
   /// Paint items grouped by stacking layer in paint order.
-  pub fn in_paint_order(&self) -> [&[PaintItem]; 3] {
+  pub fn in_paint_order(&self) -> [&[PaintItem]; 5] {
     self.buckets.in_paint_order()
   }
 
@@ -171,23 +196,44 @@ struct StackingContextBuildVisit {
   node_id: NodeId,
   transform: Affine,
   container_size: Size<Option<f32>>,
+  /// The context in-flow boxes and floats paint in.
   context_id: usize,
+  /// The context positioned boxes and stacking contexts paint in: the nearest stacking context,
+  /// or the nearest box that clips its overflow, which keeps what it clips.
+  stacking_id: usize,
   parent_display: Option<Display>,
   is_root: bool,
 }
 
 impl PaintBucket {
-  /// The bucket a child with `style` paints in, and its z-index there.
-  fn of(style: &ComputedStyle, is_flex_or_grid_item: bool) -> (Self, i32) {
+  /// The phase a child with `style` paints in, and its z-index there. A stacking context at
+  /// `z-index: auto` paints with the positioned boxes.
+  fn of(
+    style: &ComputedStyle,
+    is_flex_or_grid_item: bool,
+    creates_stacking_context: bool,
+  ) -> (Self, i32) {
     let z = style.paint_order_z(is_flex_or_grid_item);
 
     if z < 0 {
       (Self::Negative, z)
     } else if z > 0 {
       (Self::Positive, z)
+    } else if creates_stacking_context
+      || style.participates_in_positioned_paint_bucket(is_flex_or_grid_item)
+    {
+      (Self::Positioned, 0)
+    } else if style.float != Float::None && !is_flex_or_grid_item {
+      (Self::Float, 0)
     } else {
-      (Self::AutoZero, 0)
+      (Self::InFlow, 0)
     }
+  }
+
+  /// Whether the phase belongs to the nearest stacking context rather than the nearest box that
+  /// paints its descendants atomically.
+  fn lifts(&self) -> bool {
+    matches!(self, Self::Negative | Self::Positioned | Self::Positive)
   }
 }
 
@@ -225,6 +271,7 @@ impl SceneRequest<'_> {
       transform,
       container_size,
       context_id: 0,
+      stacking_id: 0,
       parent_display: None,
       is_root: true,
     }];
@@ -267,38 +314,56 @@ impl SceneRequest<'_> {
         )
       });
 
-      let creates_context = if visit.is_root {
-        true
-      } else {
-        current.context.style.creates_stacking_context(
+      let creates_stacking_context = visit.is_root
+        || current.context.style.creates_stacking_context(
           layout.size.width,
           layout.size.height,
           &current.context.sizing,
           is_flex_or_grid_item,
-        ) || current
-          .context
-          .style
-          .resolve_overflows()
-          .should_clip_content()
-      };
+        );
+      let clips = current
+        .context
+        .style
+        .resolve_overflows()
+        .should_clip_content();
 
-      let mut active_context_id = visit.context_id;
+      let mut context_id = visit.context_id;
+      let mut stacking_id = visit.stacking_id;
+
       if visit.is_root {
         contexts[0].root = Some(node_paint);
       } else {
-        let (bucket, z_index) = PaintBucket::of(&current.context.style, is_flex_or_grid_item);
-        if creates_context {
-          let context_id = contexts.len();
+        let (bucket, z_index) = PaintBucket::of(
+          &current.context.style,
+          is_flex_or_grid_item,
+          creates_stacking_context,
+        );
+        let parent = if bucket.lifts() {
+          visit.stacking_id
+        } else {
+          visit.context_id
+        };
+        // A positioned box or a float paints its descendants atomically, as if it were a
+        // stacking context, but its positioned and z-indexed descendants still paint in the
+        // real one.
+        let atomic = !matches!(bucket, PaintBucket::InFlow);
+
+        if creates_stacking_context || clips || atomic {
+          let child_context = contexts.len();
+
           contexts.push(StackingContextNode::with_root(Some(node_paint)));
-          contexts[visit.context_id].push_item(
+          contexts[parent].push_item(
             bucket,
-            PaintItemKind::Context(context_id),
+            PaintItemKind::Context(child_context),
             z_index,
             source_order,
           );
-          active_context_id = context_id;
+          context_id = child_context;
+          if creates_stacking_context || clips {
+            stacking_id = child_context;
+          }
         } else {
-          contexts[visit.context_id].push_item(
+          contexts[parent].push_item(
             bucket,
             PaintItemKind::Node(node_paint),
             z_index,
@@ -333,7 +398,8 @@ impl SceneRequest<'_> {
           node_id: child.node_id,
           transform: base_transform,
           container_size: base_container,
-          context_id: active_context_id,
+          context_id,
+          stacking_id,
           parent_display: Some(current.context.style.display),
           is_root: false,
         });

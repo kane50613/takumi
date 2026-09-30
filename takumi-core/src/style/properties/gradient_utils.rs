@@ -2,7 +2,7 @@ use std::fmt;
 
 use color::{ColorSpaceTag, HueDirection};
 use cssparser::{Parser, Token};
-use smallvec::SmallVec;
+use smallvec::{SmallVec, smallvec};
 use tiny_skia::PremultipliedColorU8;
 
 use crate::{
@@ -839,6 +839,19 @@ impl LutAxis {
           stops: shifted,
         };
       }
+
+      // Coincident repeating stops make a solid image of the last stop's colour, as Blink's
+      // `NormalizeAndAddStops` has them.
+      return Self {
+        repeating: false,
+        repeat_start: 0.0,
+        repeat_period: 0.0,
+        length: axis_length,
+        stops: smallvec![ResolvedGradientStop {
+          color: last.color,
+          position: 0.0,
+        }],
+      };
     }
 
     Self {

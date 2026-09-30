@@ -611,17 +611,24 @@ impl BorderProperties {
       return;
     }
 
-    self.radius.0[0].x = (self.radius.0[0].x + amount.left).max(0.0);
-    self.radius.0[0].y = (self.radius.0[0].y + amount.top).max(0.0);
+    // A square corner stays square, as Blink's `FloatRoundedRect::Radii::Outset` keeps it.
+    let grow = |radius: &mut f32, by: f32| {
+      if *radius > 0.0 {
+        *radius = (*radius + by).max(0.0);
+      }
+    };
 
-    self.radius.0[1].x = (self.radius.0[1].x + amount.right).max(0.0);
-    self.radius.0[1].y = (self.radius.0[1].y + amount.top).max(0.0);
+    grow(&mut self.radius.0[0].x, amount.left);
+    grow(&mut self.radius.0[0].y, amount.top);
 
-    self.radius.0[2].x = (self.radius.0[2].x + amount.right).max(0.0);
-    self.radius.0[2].y = (self.radius.0[2].y + amount.bottom).max(0.0);
+    grow(&mut self.radius.0[1].x, amount.right);
+    grow(&mut self.radius.0[1].y, amount.top);
 
-    self.radius.0[3].x = (self.radius.0[3].x + amount.left).max(0.0);
-    self.radius.0[3].y = (self.radius.0[3].y + amount.bottom).max(0.0);
+    grow(&mut self.radius.0[2].x, amount.right);
+    grow(&mut self.radius.0[2].y, amount.bottom);
+
+    grow(&mut self.radius.0[3].x, amount.left);
+    grow(&mut self.radius.0[3].y, amount.bottom);
   }
 
   /// Grows the corner radii of a `border_box` whose edges move `outset` outward, after

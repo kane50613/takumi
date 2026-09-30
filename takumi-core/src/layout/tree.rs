@@ -1207,10 +1207,11 @@ impl RenderNode {
       && self.is_whitespace_only_text_node()
   }
 
-  /// Whether the node paints its own shadows, background, and border. An anonymous box carries
-  /// its parent's background only for the text it wraps to show through `background-clip: text`.
+  /// Whether the node paints its own shadows, background, and border: not when
+  /// `visibility: hidden`, nor for an anonymous box, which carries its parent's background only
+  /// for the text it wraps to show through `background-clip: text`.
   pub fn paints_own_box(&self) -> bool {
-    self.node.is_some()
+    self.node.is_some() && self.context.style.is_visible()
   }
 
   /// True if any direct child is an anonymous text item.
@@ -1457,6 +1458,19 @@ impl RenderNode {
       left: style.padding_left,
     }
     .map(|length| length.to_px(&self.context.sizing, 0.0))
+  }
+
+  /// Used border widths in pixels.
+  pub(super) fn border_px(&self) -> Rect<f32> {
+    let style = &self.context.style;
+
+    Rect {
+      top: style.border_top_width,
+      right: style.border_right_width,
+      bottom: style.border_bottom_width,
+      left: style.border_left_width,
+    }
+    .map(|width| width.to_used_px(&self.context.sizing))
   }
 
   /// Margins in pixels, with a percentage resolving to zero.

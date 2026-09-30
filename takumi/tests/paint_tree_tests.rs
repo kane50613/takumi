@@ -5,7 +5,7 @@ use std::fs::{create_dir_all, write};
 use takumi::prelude::*;
 use takumi_core::paint_tree::{
   Drawable, NodeKind, Paint, PaintDocument, PaintFilter, PaintNode, PaintStep, PaintTreeOptions,
-  Role, Shape, TextRun, paint_tree,
+  Role, Shape, Spread, TextRun, paint_tree,
 };
 use test_utils::{CONTEXT, TEST_IMAGES, format_generated};
 
@@ -346,4 +346,84 @@ fn zero_font_size_container_keeps_sized_child_runs() {
     ["visible"]
   );
   assert_eq!(runs[0].font_size, 18.0);
+}
+
+#[test]
+fn unpainted_root_still_leaves_a_root_box() {
+  for class_name in ["card fade-out", "card flatten"] {
+    let document = paint_tree(
+      PaintTreeOptions::builder()
+        .viewport(Viewport::new((200, 100)))
+        .node(Node::container([Node::text("hidden")]).with_class_name(class_name))
+        .fonts(&CONTEXT)
+        .stylesheet(
+          StyleSheet::parse_loosy(
+            ".fade-out { opacity: 0 } .flatten { transform: scale(0) } .card { width: 100px }",
+          )
+          .into(),
+        )
+        .build(),
+    )
+    .unwrap()
+    .document;
+
+    let root = &document.nodes[0];
+    assert!(matches!(root.kind, NodeKind::Box { .. }), "{class_name}");
+    assert_eq!(root.parent, None, "{class_name}");
+    assert!(
+      document
+        .nodes
+        .iter()
+        .skip(1)
+        .all(|node| node.parent.is_some())
+    );
+  }
+}
+
+#[test]
+fn a_hairline_repeating_gradient_keeps_one_period_repeating() {
+  let document = paint_tree(
+    PaintTreeOptions::builder()
+      .viewport(Viewport::new((1000, 100)))
+      .node(Node::container([]).with_class_name("stripes"))
+      .fonts(&CONTEXT)
+      .stylesheet(
+        StyleSheet::parse_loosy(
+          ".stripes { width: 1000px; height: 100px; background-image: repeating-linear-gradient(90deg, rgb(255, 0, 0) 0, rgb(0, 0, 255) 0.002px) }",
+        )
+        .into(),
+      )
+      .build(),
+  )
+  .unwrap()
+  .document;
+
+  let (start, end, stops, spread) = document
+    .nodes
+    .iter()
+    .flat_map(|node| &node.drawables)
+    .find_map(|drawable| match drawable {
+      Drawable::Fill {
+        paint: Paint::Pattern { tile, .. },
+        ..
+      } => match tile.as_ref() {
+        Paint::LinearGradient {
+          start,
+          end,
+          stops,
+          spread,
+        } => Some((*start, *end, stops.clone(), *spread)),
+        _ => None,
+      },
+      _ => None,
+    })
+    .expect("the gradient layer");
+
+  assert_eq!(spread, Spread::Repeat);
+  assert!(
+    ((end.x - start.x) - 0.002).abs() < 1e-4,
+    "{start:?} {end:?}"
+  );
+  assert_eq!(stops.first().map(|stop| stop.color), Some([255, 0, 0, 255]));
+  assert_eq!(stops.last().map(|stop| stop.color), Some([0, 0, 255, 255]));
 }

@@ -107,7 +107,7 @@ impl PendingFinish {
     if let Some(deferred) = DeferredOutline::of(&node.context, self.layout) {
       match outlines {
         Some(outlines) => outlines.push(deferred),
-        None => deferred.paint(canvas),
+        None => deferred.paint(canvas)?,
       }
     }
 
@@ -243,7 +243,7 @@ impl<'a> ScenePainter<'a> {
     }
 
     for outline in &outlines {
-      outline.paint(self.canvas);
+      outline.paint(self.canvas)?;
     }
 
     if let Some(DeferredNodeRender::Deferred { path, finish }) = deferred_root {
@@ -312,7 +312,6 @@ impl<'a> ScenePainter<'a> {
     if !current.context.style.backdrop_filter.is_empty() {
       // Filtered backdrop is clipped by the node's clip-path and mask, like Chromium's
       // backdrop root: https://drafts.fxtf.org/filter-effects-2/#BackdropRoot
-      // ponytail: with both a clip-path and a mask-image, only the first bounds the backdrop.
       let node_masks = if current.context.style.has_shape_mask() {
         let Some(masks) = NodeMasks::of(
           &current.context,
@@ -324,7 +323,7 @@ impl<'a> ScenePainter<'a> {
           return Ok(Some(DeferredNodeRender::SkipRendering));
         };
 
-        masks.shell.into_iter().next()
+        masks.into_shell_mask()
       } else {
         None
       };

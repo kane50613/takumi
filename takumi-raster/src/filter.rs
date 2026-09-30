@@ -233,18 +233,13 @@ fn composite_backdrop_with_mask(
     let px_idx = x * 4;
     let src = &backdrop_row[px_idx..px_idx + 4];
     let dst = &mut canvas_row[px_idx..px_idx + 4];
+    // The filtered backdrop composites over what it came from, masked by the element's shape.
+    let coverage = fast_div_255(src[3] as u32 * alpha as u32) as u32;
+    let inverse = 255 - coverage;
 
-    if alpha == 255 {
-      dst.copy_from_slice(src);
-      continue;
+    for (dst, src) in dst.iter_mut().zip(src) {
+      *dst = fast_div_255(*src as u32 * alpha as u32 + *dst as u32 * inverse);
     }
-
-    let src_alpha = alpha as u32;
-    let inverse_alpha = 255 - src_alpha;
-    dst[0] = fast_div_255(src[0] as u32 * src_alpha + dst[0] as u32 * inverse_alpha);
-    dst[1] = fast_div_255(src[1] as u32 * src_alpha + dst[1] as u32 * inverse_alpha);
-    dst[2] = fast_div_255(src[2] as u32 * src_alpha + dst[2] as u32 * inverse_alpha);
-    dst[3] = fast_div_255(src[3] as u32 * src_alpha + dst[3] as u32 * inverse_alpha);
   }
 }
 
@@ -429,9 +424,8 @@ pub(crate) fn apply_backdrop_filter(
 }
 
 /// Applies a `drop-shadow()` filter to an image. Its blur length is the Gaussian's standard
-/// deviation, as Filter Effects and Blink read it, not half of it as a box shadow's is.
-///
-/// Approximate: the offset rounds to whole pixels, where Blink shifts by the exact amount.
+/// deviation, as Filter Effects and Blink read it, not half of it as a box shadow's is, and its
+/// offset snaps down to whole pixels, as Chrome paints it.
 fn apply_drop_shadow_filter(pixmap: &mut PixmapMut<'_>, shadow: &SizedShadow) -> Result<()> {
   let canvas_width = pixmap.width();
   let canvas_height = pixmap.height();
@@ -441,8 +435,8 @@ fn apply_drop_shadow_filter(pixmap: &mut PixmapMut<'_>, shadow: &SizedShadow) ->
 
   let padding = (shadow.blur_radius * BlurType::Filter.extent_multiplier()).ceil() as u32;
 
-  let offset_x = shadow.offset_x.round() as i32;
-  let offset_y = shadow.offset_y.round() as i32;
+  let offset_x = shadow.offset_x.floor() as i32;
+  let offset_y = shadow.offset_y.floor() as i32;
 
   let [sr, sg, sb, sa] = shadow.color.0;
   let shadow_rgb = [sr, sg, sb];

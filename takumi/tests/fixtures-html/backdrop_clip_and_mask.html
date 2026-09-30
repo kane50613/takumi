@@ -1,0 +1,31 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>backdrop_clip_and_mask</title>
+    <base href="../../../" />
+    <link rel="stylesheet" href="takumi/tests/shared.css" />
+  </head>
+  <body style="width: 600px; height: 320px">
+    <div
+      style="
+        display: flex;
+        width: 100%;
+        height: 100%;
+        align-items: center;
+        justify-content: center;
+        background-image: linear-gradient(90deg, rgb(239, 68, 68), rgb(59, 130, 246));
+      "
+    >
+      <div
+        style="
+          width: 360px;
+          height: 240px;
+          backdrop-filter: invert(1);
+          clip-path: circle(45%);
+          mask-image: linear-gradient(90deg, rgb(0, 0, 0), transparent);
+        "
+      ></div>
+    </div>
+  </body>
+</html>

@@ -1,7 +1,42 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630">
   <rect x="0" y="0" width="1200" height="630" fill="#030409"/>
-  <mask id="mk0" maskUnits="userSpaceOnUse" style="mask-type:alpha">
-    <radialGradient id="rg1" gradientUnits="userSpaceOnUse" cx="600" cy="630" r="840" gradientTransform="matrix(1 0 0 .45 0 346.5)">
+  <clipPath id="cp0">
+    <path d="M-1000000-1000000H1000000V1000000H-1000000ZM348 194h504v243h-504v-243Z" clip-rule="evenodd"/>
+  </clipPath>
+  <g clip-path="url(#cp0)">
+    <path d="M366 212h504v243h-504v-243Z" fill="#22c55e"/>
+  </g>
+  <rect x="348" y="194" width="504" height="243" fill="#fdfdf7"/>
+  <path d="M348 194h504v243h-504v-243Zm4 4h496v235h-496v-235Z" fill="#111" fill-rule="evenodd"/>
+  <g fill="#16a34a">
+    <use href="#g0" x="408" y="264"/>
+    <use href="#g1" x="429.2" y="264"/>
+    <use href="#g2" x="450.4" y="264"/>
+    <use href="#g3" x="471.6" y="264"/>
+    <use href="#g4" x="492.8" y="264"/>
+    <use href="#g5" x="514" y="264"/>
+    <use href="#g6" x="556.4" y="264"/>
+    <use href="#g7" x="598.8" y="264"/>
+    <use href="#g8" x="620" y="264"/>
+    <use href="#g9" x="641.2" y="264"/>
+    <use href="#g10" x="662.4" y="264"/>
+    <use href="#g11" x="683.6" y="264"/>
+    <use href="#g1" x="704.8" y="264"/>
+    <use href="#g7" x="726" y="264"/>
+    <use href="#g12" x="747.2" y="264"/>
+  </g>
+  <g fill="#111">
+    <use href="#g13" x="408" y="364"/>
+    <use href="#g14" x="470.18" y="364"/>
+    <use href="#g15" x="504.72" y="364"/>
+    <use href="#g16" x="527.58" y="364"/>
+    <use href="#g17" x="597" y="364"/>
+    <use href="#g18" x="655.22" y="364"/>
+    <use href="#g14" x="705.72" y="364"/>
+    <use href="#g19" x="738.58" y="364"/>
+  </g>
+  <mask id="mk1" maskUnits="userSpaceOnUse" style="mask-type:alpha">
+    <radialGradient id="rg2" gradientUnits="userSpaceOnUse" cx="600" cy="630" r="840" gradientTransform="matrix(1 0 0 .45 0 346.5)">
       <stop offset="0" stop-color="#000"/>
       <stop offset=".016" stop-color="#000"/>
       <stop offset=".032" stop-color="#000"/>
@@ -67,11 +102,11 @@
       <stop offset=".984" stop-color="#000" stop-opacity=".039"/>
       <stop offset="1" stop-color="#000" stop-opacity="0"/>
     </radialGradient>
-    <rect x="0" y="0" width="1200" height="630" fill="url(#rg1)"/>
+    <rect x="0" y="0" width="1200" height="630" fill="url(#rg2)"/>
   </mask>
-  <g mask="url(#mk0)">
-    <pattern id="pat2" patternUnits="userSpaceOnUse" x="0" y="0" width="40" height="40">
-      <linearGradient id="lg3" gradientUnits="userSpaceOnUse" x1="0" y1="20" x2="40" y2="20">
+  <g mask="url(#mk1)">
+    <pattern id="pat3" patternUnits="userSpaceOnUse" x="0" y="0" width="40" height="40">
+      <linearGradient id="lg4" gradientUnits="userSpaceOnUse" x1="0" y1="20" x2="40" y2="20">
         <stop offset="0" stop-color="#fff" stop-opacity=".09"/>
         <stop offset=".025" stop-color="#fff" stop-opacity=".09"/>
         <stop offset=".025" stop-color="#000" stop-opacity="0"/>
@@ -137,11 +172,11 @@
         <stop offset=".984" stop-color="#000" stop-opacity="0"/>
         <stop offset="1" stop-color="#000" stop-opacity="0"/>
       </linearGradient>
-      <rect x="0" y="0" width="40" height="40" fill="url(#lg3)"/>
+      <rect x="0" y="0" width="40" height="40" fill="url(#lg4)"/>
     </pattern>
-    <rect x="0" y="0" width="1200" height="630" fill="url(#pat2)"/>
-    <pattern id="pat4" patternUnits="userSpaceOnUse" x="0" y="0" width="40" height="40">
-      <linearGradient id="lg5" gradientUnits="userSpaceOnUse" x1="20" y1="0" x2="20" y2="40">
+    <rect x="0" y="0" width="1200" height="630" fill="url(#pat3)"/>
+    <pattern id="pat5" patternUnits="userSpaceOnUse" x="0" y="0" width="40" height="40">
+      <linearGradient id="lg6" gradientUnits="userSpaceOnUse" x1="20" y1="0" x2="20" y2="40">
         <stop offset="0" stop-color="#fff" stop-opacity=".09"/>
         <stop offset=".025" stop-color="#fff" stop-opacity=".09"/>
         <stop offset=".025" stop-color="#000" stop-opacity="0"/>
@@ -207,11 +242,11 @@
         <stop offset=".984" stop-color="#000" stop-opacity="0"/>
         <stop offset="1" stop-color="#000" stop-opacity="0"/>
       </linearGradient>
-      <rect x="0" y="0" width="40" height="40" fill="url(#lg5)"/>
+      <rect x="0" y="0" width="40" height="40" fill="url(#lg6)"/>
     </pattern>
-    <rect x="0" y="0" width="1200" height="630" fill="url(#pat4)"/>
+    <rect x="0" y="0" width="1200" height="630" fill="url(#pat5)"/>
   </g>
-  <radialGradient id="rg6" gradientUnits="userSpaceOnUse" cx="0" cy="0" r="1200" gradientTransform="matrix(1 0 0 .525 0 0)">
+  <radialGradient id="rg7" gradientUnits="userSpaceOnUse" cx="0" cy="0" r="1200" gradientTransform="matrix(1 0 0 .525 0 0)">
     <stop offset="0" stop-color="#39bff8" stop-opacity=".141"/>
     <stop offset=".016" stop-color="#3abdf8" stop-opacity=".137"/>
     <stop offset=".032" stop-color="#3cc3f8" stop-opacity=".133"/>
@@ -277,8 +312,8 @@
     <stop offset=".984" stop-color="#000" stop-opacity="0"/>
     <stop offset="1" stop-color="#000" stop-opacity="0"/>
   </radialGradient>
-  <rect x="0" y="0" width="1200" height="630" fill="url(#rg6)"/>
-  <radialGradient id="rg7" gradientUnits="userSpaceOnUse" cx="1200" cy="630" r="1200" gradientTransform="matrix(1 0 0 .525 0 299.25)">
+  <rect x="0" y="0" width="1200" height="630" fill="url(#rg7)"/>
+  <radialGradient id="rg8" gradientUnits="userSpaceOnUse" cx="1200" cy="630" r="1200" gradientTransform="matrix(1 0 0 .525 0 299.25)">
     <stop offset="0" stop-color="#21c85e" stop-opacity=".18"/>
     <stop offset=".016" stop-color="#22c660" stop-opacity=".176"/>
     <stop offset=".032" stop-color="#23c55d" stop-opacity=".173"/>
@@ -344,42 +379,7 @@
     <stop offset=".984" stop-color="#000" stop-opacity="0"/>
     <stop offset="1" stop-color="#000" stop-opacity="0"/>
   </radialGradient>
-  <rect x="0" y="0" width="1200" height="630" fill="url(#rg7)"/>
-  <clipPath id="cp8">
-    <path d="M-1000000-1000000H1000000V1000000H-1000000ZM348 194h504v243h-504v-243Z" clip-rule="evenodd"/>
-  </clipPath>
-  <g clip-path="url(#cp8)">
-    <path d="M366 212h504v243h-504v-243Z" fill="#22c55e"/>
-  </g>
-  <rect x="348" y="194" width="504" height="243" fill="#fdfdf7"/>
-  <path d="M348 194h504v243h-504v-243Zm4 4h496v235h-496v-235Z" fill="#111" fill-rule="evenodd"/>
-  <g fill="#16a34a">
-    <use href="#g0" x="408" y="264"/>
-    <use href="#g1" x="429.2" y="264"/>
-    <use href="#g2" x="450.4" y="264"/>
-    <use href="#g3" x="471.6" y="264"/>
-    <use href="#g4" x="492.8" y="264"/>
-    <use href="#g5" x="514" y="264"/>
-    <use href="#g6" x="556.4" y="264"/>
-    <use href="#g7" x="598.8" y="264"/>
-    <use href="#g8" x="620" y="264"/>
-    <use href="#g9" x="641.2" y="264"/>
-    <use href="#g10" x="662.4" y="264"/>
-    <use href="#g11" x="683.6" y="264"/>
-    <use href="#g1" x="704.8" y="264"/>
-    <use href="#g7" x="726" y="264"/>
-    <use href="#g12" x="747.2" y="264"/>
-  </g>
-  <g fill="#111">
-    <use href="#g13" x="408" y="364"/>
-    <use href="#g14" x="470.18" y="364"/>
-    <use href="#g15" x="504.72" y="364"/>
-    <use href="#g16" x="527.58" y="364"/>
-    <use href="#g17" x="597" y="364"/>
-    <use href="#g18" x="655.22" y="364"/>
-    <use href="#g14" x="705.72" y="364"/>
-    <use href="#g19" x="738.58" y="364"/>
-  </g>
+  <rect x="0" y="0" width="1200" height="630" fill="url(#rg8)"/>
   <defs>
     <path id="g0" d="M5.66 0v-13.77h-4.79v-1.85l11.44-.01v1.86h-4.76v13.77Z"/>
     <path id="g1" d="M.58 0l4.75-15.63 2.55.01 4.75 15.62h-2.02l-4.02-13.91-4 13.91Zm2.39-4.44.66-1.86h5.93l.67 1.86Z"/>

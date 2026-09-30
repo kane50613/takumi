@@ -19,7 +19,7 @@ pub struct InlineOutlineRect {
   pub(crate) y: f32,
   /// Rect width (run advance).
   pub(crate) width: f32,
-  /// Rect height (resolved line height).
+  /// Rect height (the font's content area).
   pub(crate) height: f32,
 }
 
@@ -43,10 +43,14 @@ impl InlineOutlineRect {
     }
   }
 
-  /// Whether the two rects' x ranges meet, within a layout unit.
-  pub(super) fn x_range_touches(self, other: Self) -> bool {
-    self.x <= other.x + other.width + LAYOUT_UNIT_EPSILON
-      && other.x <= self.x + self.width + LAYOUT_UNIT_EPSILON
+  /// Whether the two rects meet, within a layout unit, once both grow by `reach`.
+  pub(super) fn meets(self, other: Self, reach: f32) -> bool {
+    let slack = 2.0 * reach + LAYOUT_UNIT_EPSILON;
+
+    self.x <= other.x + other.width + slack
+      && other.x <= self.x + self.width + slack
+      && self.y <= other.y + other.height + slack
+      && other.y <= self.y + self.height + slack
   }
 
   /// The rect grown by `amount` on every side, or `None` once it has no area.
@@ -106,54 +110,67 @@ fn merge_inline_rects(mut rects: Vec<InlineOutlineRect>) -> Vec<InlineOutlineRec
 /// Rects of one span's outline that touch from line to line, stroked as one contour.
 pub struct OutlineIsland {
   rects: Vec<InlineOutlineRect>,
+  /// Whether the island's one rect is its span's whole outline.
+  lone: bool,
 }
 
 impl OutlineIsland {
-  /// Merges adjacent per-line outline rects, then groups them into vertically-continuous islands.
-  pub fn of(outline_rects: Vec<InlineOutlineRect>) -> Vec<Self> {
+  /// Merges adjacent per-line outline rects, then groups the rects of consecutive lines that meet
+  /// once grown by their span's `reach`, as Blink unites the grown rects into one region.
+  pub fn of(outline_rects: Vec<InlineOutlineRect>, reach: impl Fn(u64) -> f32) -> Vec<Self> {
     let merged_rects = merge_inline_rects(outline_rects);
+    let mut rect_counts: HashMap<u64, usize> = HashMap::new();
+    // The islands whose last rect sits on each span's line, the only ones a rect on the next
+    // line can join.
+    let mut ends: HashMap<(u64, usize), Vec<usize>> = HashMap::new();
+    let mut islands: Vec<Self> = Vec::new();
 
-    let mut line_rect_counts = HashMap::new();
-    for outline_rect in &merged_rects {
-      *line_rect_counts
-        .entry((outline_rect.span_id, outline_rect.line_index))
-        .or_insert(0usize) += 1;
+    for rect in &merged_rects {
+      *rect_counts.entry(rect.span_id).or_default() += 1;
     }
 
-    let mut islands: Vec<Vec<InlineOutlineRect>> = Vec::new();
-    for outline_rect in merged_rects {
-      let mut matched_island = None;
+    for rect in merged_rects {
+      let reach = reach(rect.span_id);
+      let joined = rect
+        .line_index
+        .checked_sub(1)
+        .and_then(|line| ends.get_mut(&(rect.span_id, line)))
+        .and_then(|candidates| {
+          let position = candidates.iter().position(|&index| {
+            islands[index]
+              .rects
+              .last()
+              .is_some_and(|previous| previous.meets(rect, reach))
+          })?;
 
-      for (index, island) in islands.iter().enumerate() {
-        let Some(previous_rect) = island.last().copied() else {
-          continue;
-        };
-        if previous_rect.span_id != outline_rect.span_id {
-          continue;
+          Some(candidates.remove(position))
+        });
+      let index = match joined {
+        Some(index) => {
+          islands[index].rects.push(rect);
+          index
         }
-        if outline_rect.line_index != previous_rect.line_index + 1 {
-          continue;
+        None => {
+          islands.push(Self {
+            rects: vec![rect],
+            lone: rect_counts[&rect.span_id] == 1,
+          });
+          islands.len() - 1
         }
+      };
 
-        let previous_is_unique =
-          line_rect_counts.get(&(previous_rect.span_id, previous_rect.line_index)) == Some(&1);
-        let current_is_unique =
-          line_rect_counts.get(&(outline_rect.span_id, outline_rect.line_index)) == Some(&1);
-        if (previous_is_unique && current_is_unique) || previous_rect.x_range_touches(outline_rect)
-        {
-          matched_island = Some(index);
-          break;
-        }
-      }
-
-      if let Some(index) = matched_island {
-        islands[index].push(outline_rect);
-      } else {
-        islands.push(vec![outline_rect]);
-      }
+      ends
+        .entry((rect.span_id, rect.line_index))
+        .or_default()
+        .push(index);
     }
 
-    islands.into_iter().map(|rects| Self { rects }).collect()
+    islands
+  }
+
+  /// The rect when it is its span's whole outline, which Blink paints as a box border.
+  pub fn lone_rect(&self) -> Option<InlineOutlineRect> {
+    self.lone.then(|| self.rects[0])
   }
 
   /// The span whose outline this is.

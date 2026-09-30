@@ -47,10 +47,6 @@ pub struct RunMetrics {
   pub underline_offset: f32,
   /// Underline stroke thickness.
   pub underline_size: f32,
-  /// Strikethrough offset from the baseline.
-  pub strikethrough_offset: f32,
-  /// Strikethrough stroke thickness.
-  pub strikethrough_size: f32,
 }
 
 /// Per-glyph cluster text ranges for a [`GlyphRun`], aligned to its positioned glyphs.
@@ -107,8 +103,8 @@ pub struct ShapedRun {
   pub baseline: f32,
   /// Total horizontal advance of the run.
   pub advance: f32,
-  /// Advance of line-end whitespace inside [`Self::advance`]. Decorations do
-  /// not span it (Blink skips hanging whitespace); naive for RTL, where it
+  /// Advance of line-end whitespace inside [`Self::advance`]. Decorations, inline backgrounds
+  /// and outlines do not span it (Blink skips hanging whitespace); naive for RTL, where it
   /// trims the visual right edge instead of the line-start side.
   pub trailing_whitespace: f32,
   /// Paint attributes carried by the run.
@@ -160,15 +156,25 @@ impl ShapedRun {
   }
 
   /// Underline top edge relative to the run's baseline, positive downwards.
-  pub fn underline_offset_from_baseline(&self) -> f32 {
-    let from_metrics = match self.brush.underline_position {
-      TextUnderlinePosition::Auto | TextUnderlinePosition::FromFont => {
-        -self.metrics.underline_offset
-      }
-      TextUnderlinePosition::Under => self.em_box_descent(),
-    };
+  ///
+  /// Follows Blink's `TextDecorationOffset::ComputeUnderlineOffset`: `auto` leaves a gap of half
+  /// the `thickness`, at least a pixel, under the baseline unless `text-underline-offset` is set,
+  /// `from-font` takes the font's underline position, and `under` sits a pixel past the em box.
+  pub fn underline_offset_from_baseline(&self, thickness: f32) -> f32 {
+    let offset = self.brush.underline_offset.unwrap_or(0.0);
 
-    from_metrics + self.brush.underline_offset
+    match self.brush.underline_position {
+      TextUnderlinePosition::Auto => {
+        let gap = match self.brush.underline_offset {
+          Some(_) => 0.0,
+          None => (thickness / 2.0).ceil().max(1.0),
+        };
+
+        gap + offset.round()
+      }
+      TextUnderlinePosition::FromFont => -self.metrics.underline_offset + offset,
+      TextUnderlinePosition::Under => self.em_box_descent() + 1.0 + offset,
+    }
   }
 
   /// Bottom edge of the em box below the baseline. The typographic ascender and
@@ -350,44 +356,35 @@ impl BuiltInlineLayout<'_> {
             fonts.resolve_glyphs(&glyph_run, font, glyphs.iter().map(|glyph| glyph.id))
           });
 
-          if need_outline && let Some(span_id) = brush.source_span_id {
-            outline_rects.push(
-              InlineOutlineRect {
-                span_id,
-                line_index,
-                x: content.x + glyph_run.offset(),
-                y: content.y + glyph_run.baseline() + setup.baseline_shift
-                  - setup.resolved_metrics.resolved_ascent,
-                width: glyph_run.advance(),
-                height: setup.resolved_metrics.resolved_line_height,
-              }
-              .scaled(setup.state, static_inline_prefix),
-            );
-          }
-
           let metrics = run.metrics();
-          // The run's leaded box, like Blink's inline box fragment
-          // (`InlineBoxState::ComputeTextMetrics` adds the line-height
-          // leading to the font height).
+          // The run's leaded box: the font height plus the line-height leading.
           let (above, below) =
             brush.line_box_contribution(metrics.line_height, metrics.ascent, metrics.descent);
-
-          if let Some(span_id) = brush.source_span_id
-            && let Some(ProcessedInlineSpan::Text {
-              decorations: Some(chain),
-              ..
-            }) = spans.get(span_id as usize)
-          {
-            let rect = InlineOutlineRect {
+          // The font's rounded ascent and descent, without the line-height leading, like the
+          // inline box fragment `InlineBoxState::ComputeTextMetrics` sizes.
+          let ascent = metrics.ascent.round();
+          let content_area = brush.source_span_id.map(|span_id| {
+            InlineOutlineRect {
               span_id,
               line_index,
               x: content.x + glyph_run.offset(),
-              y: content.y + glyph_run.baseline() + setup.baseline_shift - above,
-              width: glyph_run.advance(),
-              height: above + below,
+              y: content.y + glyph_run.baseline() + setup.baseline_shift - ascent,
+              width: glyph_run.advance() - trailing_whitespace,
+              height: ascent + metrics.descent.round(),
             }
-            .scaled(setup.state, static_inline_prefix);
+            .scaled(setup.state, static_inline_prefix)
+          });
 
+          if need_outline && let Some(rect) = content_area {
+            outline_rects.push(rect);
+          }
+
+          if let Some(rect) = content_area
+            && let Some(ProcessedInlineSpan::Text {
+              decorations: Some(chain),
+              ..
+            }) = spans.get(rect.span_id as usize)
+          {
             decoration_coverage.cover(
               Some(chain),
               line_index,
@@ -397,7 +394,7 @@ impl BuiltInlineLayout<'_> {
                 font_size: run.font_size(),
                 top: rect.y,
                 bottom: rect.y + rect.height,
-                baseline: rect.y + above * setup.state.scale,
+                baseline: rect.y + ascent * setup.state.scale,
               },
             );
           }
@@ -416,8 +413,6 @@ impl BuiltInlineLayout<'_> {
               line_height: above + below,
               underline_offset: metrics.underline_offset,
               underline_size: metrics.underline_size,
-              strikethrough_offset: metrics.strikethrough_offset,
-              strikethrough_size: metrics.strikethrough_size,
             },
             font_size: run.font_size(),
             font_index: run.font().index,

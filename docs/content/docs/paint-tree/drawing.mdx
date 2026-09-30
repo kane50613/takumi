@@ -65,14 +65,14 @@ A group needs its own layer. Setting `globalAlpha` on each draw instead darkens 
 
 ## Draw a drawable
 
-| Type     | Draw                                                                                      |
-| -------- | ----------------------------------------------------------------------------------------- |
-| `fill`   | Fill `shape` with `paint`, clipped to every shape in `clips`                              |
-| `stroke` | Stroke `shape` with `stroke` and `paint`                                                  |
-| `shadow` | Blur a copy of `shape` moved by `offset`, visible only `outside` or `inside` its `box`    |
-| `glyphs` | Fill the run's outline with `paint`, blurred by `blur`, or stroke it when `stroke` is set |
-| `image`  | Draw `image` into `rect`, clipped to `clip`                                               |
-| `group`  | Draw `drawables` into a layer, then composite it at `opacity`                             |
+| Type     | Draw                                                                                                                     |
+| -------- | ------------------------------------------------------------------------------------------------------------------------ |
+| `fill`   | Fill `shape` with `paint`, clipped to every shape in `clips`                                                             |
+| `stroke` | Stroke `shape` with `stroke` and `paint`                                                                                 |
+| `shadow` | Blur a copy of `shape`, filled or stroked with `stroke`, moved by `offset`, visible only `outside` or `inside` its `box` |
+| `glyphs` | Fill the run's outline with `paint`, blurred by `blur`, or stroke it when `stroke` is set                                |
+| `image`  | Draw `image` into `rect`, clipped to `clip`                                                                              |
+| `group`  | Draw `drawables` into a layer, then composite it at `opacity`                                                            |
 
 A `shadow` or `glyphs` blur is the Gaussian's standard deviation, half of a CSS blur radius.
 
@@ -80,7 +80,7 @@ Every drawable carries a `role`, such as `background`, `border`, `box-shadow`, `
 
 ## Read paints
 
-Gradient stops interpolate in sRGB. Takumi adds stops where the CSS interpolation space, such as the default Oklab, would differ, and unrolls repeating gradients over the area they cover.
+Gradient stops interpolate in sRGB. Takumi adds stops where the CSS interpolation space, such as the default Oklab, would differ. A repeating gradient's stops cover one period with `spread: "repeat"`, as SVG's `spreadMethod` takes it; canvas gradients only pad, so repeat the stops yourself.
 
 Background and mask layers arrive as `pattern` paints: one tile drawn at every `x` and `y`.
 

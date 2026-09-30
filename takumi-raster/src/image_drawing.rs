@@ -105,7 +105,7 @@ pub(crate) fn draw_image(
           pixmap.into(),
           Affine::IDENTITY,
           context.style.image_rendering,
-        );
+        )?;
         return Ok(());
       }
 
@@ -139,7 +139,7 @@ pub(crate) fn draw_image(
           pixmap.into(),
           logical_to_source,
           algorithm,
-        );
+        )?;
         return Ok(());
       }
 
@@ -184,21 +184,22 @@ impl ImageRect {
     source: PaintSource<'_>,
     logical_to_source: Affine,
     algorithm: ImageScalingAlgorithm,
-  ) {
-    let mut device = CanvasDevice::of(canvas, context);
+  ) -> Result<()> {
     let image = FillShape::RoundedRect {
       border: BorderProperties::default(),
       size: self.size,
       offset: self.offset,
     };
 
-    device.push_clip(&clip.into(), Affine::IDENTITY);
-    device.fill_shape_with_source(
-      &image,
-      source,
-      logical_to_source * Affine::translation(-self.offset.x, -self.offset.y),
-      algorithm,
-    );
-    device.pop_clip();
+    CanvasDevice::paint(canvas, context, |device| {
+      device.push_clip(&clip.into(), Affine::IDENTITY);
+      device.fill_shape_with_source(
+        &image,
+        source,
+        logical_to_source * Affine::translation(-self.offset.x, -self.offset.y),
+        algorithm,
+      );
+      device.pop_clip();
+    })
   }
 }

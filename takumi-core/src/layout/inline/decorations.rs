@@ -6,6 +6,7 @@ use crate::{
   resources::glyph::{ResolvedGlyph, ResolvedOutlineGlyph},
   style::{
     Affine, Color, SizedTextDecorationThickness, TextDecorationLines, TextDecorationSkipInk,
+    TextDecorationStyle,
   },
 };
 use std::{collections::HashMap, sync::Arc};
@@ -26,10 +27,18 @@ pub struct DecorationRect {
   pub over: bool,
   /// Which decoration this is, so a backend can single one out.
   pub line: TextDecorationLines,
+  /// How the line is drawn.
+  pub style: TextDecorationStyle,
+  /// Where the whole line starts and ends from this rect's left edge. `skip-ink` cuts a line
+  /// into several rects, and a pattern keeps its phase across them.
+  pub line_span: (f32, f32),
 }
 
 impl ShapedRun {
-  /// Raw metrics for an enabled decoration line.
+  /// The top and thickness of an enabled decoration line, after Blink's `TextDecorationInfo`: an
+  /// underline where [`ShapedRun::underline_offset_from_baseline`] puts it, an overline resting
+  /// on the text's top, and a line-through centred a third of the ascent above the baseline.
+  /// `from-font` takes the font's underline thickness for every line.
   pub fn decoration_line(
     &self,
     line: TextDecorationLines,
@@ -39,29 +48,20 @@ impl ShapedRun {
       return None;
     }
 
-    let metrics = self.metrics;
-    let (offset, font_thickness) = match line {
-      TextDecorationLines::UNDERLINE => (
-        self.baseline + baseline_shift + self.underline_offset_from_baseline(),
-        metrics.underline_size,
-      ),
-      TextDecorationLines::OVERLINE => (
-        self.baseline + baseline_shift - metrics.ascent - metrics.underline_offset,
-        metrics.underline_size,
-      ),
-      TextDecorationLines::LINE_THROUGH => (
-        self.baseline + baseline_shift - metrics.strikethrough_offset,
-        metrics.strikethrough_size,
-      ),
+    let ascent = self.metrics.ascent;
+    let thickness = match self.brush.decoration_thickness {
+      SizedTextDecorationThickness::Value(value) => value,
+      SizedTextDecorationThickness::FromFont => self.metrics.underline_size,
+    };
+    let baseline = self.baseline + baseline_shift;
+    let top = match line {
+      TextDecorationLines::UNDERLINE => baseline + self.underline_offset_from_baseline(thickness),
+      TextDecorationLines::OVERLINE => baseline - ascent - thickness.floor(),
+      TextDecorationLines::LINE_THROUGH => baseline - ascent / 3.0 - thickness / 2.0,
       _ => return None,
     };
 
-    let thickness = match self.brush.decoration_thickness {
-      SizedTextDecorationThickness::Value(value) => value,
-      SizedTextDecorationThickness::FromFont => font_thickness,
-    };
-
-    Some((offset, thickness))
+    Some((top, thickness))
   }
 
   /// The run's outline glyphs, positioned from `origin`.
@@ -138,6 +138,8 @@ impl ShapedRun {
         transform: matrix.to_cols_array(),
         over,
         line,
+        style: brush.decoration_style,
+        line_span: (snapped_start_x - x, snapped_start_x + width - x),
       });
     };
 

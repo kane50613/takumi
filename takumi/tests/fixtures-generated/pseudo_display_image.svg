@@ -214,7 +214,7 @@
     <use href="#g42" x="91.5" y="250"/>
     <use href="#g43" x="96.19" y="250"/>
   </g>
-  <use href="#g44" x="111.5" y="251" fill="#7c3aed"/>
+  <use href="#g44" x="107" y="251" fill="#7c3aed"/>
   <clipPath id="cp10">
     <path d="M-1000000-1000000H1000000V1000000H-1000000ZM316 164h266c4.42 0 8 3.58 8 8v122c0 4.42-3.58 8-8 8h-266c-4.42 0-8-3.58-8-8v-122c0-4.42 3.58-8 8-8Z" clip-rule="evenodd"/>
   </clipPath>

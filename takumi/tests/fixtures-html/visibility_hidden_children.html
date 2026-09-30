@@ -1,0 +1,53 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>visibility_hidden_children</title>
+    <base href="../../../" />
+    <link rel="stylesheet" href="takumi/tests/shared.css" />
+  </head>
+  <body style="width: 600px; height: 300px">
+    <div
+      style="
+        display: flex;
+        gap: 24px;
+        width: 100%;
+        height: 100%;
+        padding: 24px;
+        font-family: Geist;
+        font-size: 24px;
+        color: rgb(15, 23, 42);
+        background-color: rgb(248, 250, 252);
+      "
+    >
+      <div
+        style="
+          display: block;
+          visibility: hidden;
+          width: 260px;
+          padding: 16px;
+          background-color: rgb(239, 68, 68);
+          border: 4px solid rgb(0, 0, 0);
+          outline: 4px solid rgb(0, 0, 0);
+        "
+      >
+        hidden text
+        <div
+          style="
+            display: block;
+            visibility: visible;
+            height: 60px;
+            background-color: rgb(59, 130, 246);
+          "
+        ></div>
+        <p style="display: block; margin: 0">
+          hidden <span style="visibility: visible; background-color: rgb(250, 204, 21)">shown</span>
+        </p>
+      </div>
+      <img
+        src="assets/images/yeecord.png"
+        style="visibility: hidden; width: 120px; height: 120px; outline: 4px solid rgb(0, 0, 0)"
+      />
+    </div>
+  </body>
+</html>

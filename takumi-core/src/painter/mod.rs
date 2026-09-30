@@ -3,6 +3,7 @@
 mod background;
 mod border;
 mod content;
+mod decoration;
 mod outline;
 mod replaced;
 mod shadow;
@@ -25,7 +26,6 @@ use crate::{
     border::{BorderDash, BorderProperties},
     clip::push_ellipse,
     decoration::{ClipBox, OutlineGeometry},
-    inline::DecorationRect,
   },
   shadow::SizedShadow,
   style::{Affine, BackgroundImage, BoxShadow, Color, FillRule, Overflow, SpacePair},
@@ -436,6 +436,10 @@ impl<'c> BoxPainter<'c> {
 
   /// The outline the box paints, or `None` when it paints none.
   pub fn outline(&self) -> Option<OutlineGeometry> {
+    if !self.context.style.is_visible() {
+      return None;
+    }
+
     OutlineGeometry::painted(self.context, self.layout.size)
   }
 
@@ -455,31 +459,5 @@ impl<'c> BoxPainter<'c> {
       || !shadows.inset.is_empty()
       || !shadows.outer.is_empty()
       || (style.outline_color.resolve(current_color).0[3] != 0 && self.outline().is_some())
-  }
-}
-
-impl DecorationRect {
-  /// Paints the line with its border box at `origin`.
-  pub fn paint<D: PaintDevice>(&self, origin: Point<f32>, device: &mut D) {
-    if self.color.0[3] == 0 || self.width <= 0.0 || self.height <= 0.0 {
-      return;
-    }
-    let [a, b, c, d, e, f] = self.transform;
-
-    device.fill_shape(
-      &FillShape::Rect(Size {
-        width: self.width,
-        height: self.height,
-      }),
-      self.color,
-      Affine {
-        a,
-        b,
-        c,
-        d,
-        x: e + origin.x,
-        y: f + origin.y,
-      },
-    );
   }
 }

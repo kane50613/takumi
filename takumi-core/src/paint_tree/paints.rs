@@ -1,14 +1,13 @@
 //! Resolved CSS values turned into the document's shapes, paints, and filters.
 
 use std::{
-  array,
   f32::consts::{FRAC_PI_2, TAU},
   mem,
 };
 
 use super::document::{
   ColorStop, CornerRadii, FillRuleName, ImageSource, Paint, PaintFilter, PaintPoint, PaintRect,
-  Sampling, Shape,
+  Sampling, Shape, Spread,
 };
 use crate::{
   context::RenderContext,
@@ -22,9 +21,10 @@ use crate::{
   painter::{FillShape, UNBOUNDED},
   path_data::path_data,
   shadow::SizedShadow,
+  style::properties::gradient_utils::LutAxis,
   style::{
-    Affine, BackgroundImage, BlendMode, Color, ColorInterpolationMethod, ConicGradient, FillRule,
-    Filter, ImageScalingAlgorithm, LinearGradient, RadialGradient, ResolvedGradientStop, ToCss,
+    Affine, BackgroundImage, BlendMode, ColorInterpolationMethod, ConicGradient, FillRule, Filter,
+    ImageScalingAlgorithm, LinearGradient, RadialGradient, ResolvedGradientStop, ToCss,
   },
 };
 
@@ -169,96 +169,44 @@ impl ColorStop {
   }
 }
 
-/// A gradient's stops over one period, unrolled across `0..length` of its line.
-struct Period {
-  /// Stops within the period, offsets from 0 to 1.
-  stops: Vec<SrgbStop>,
-  /// Where the first period starts on the line.
-  start: f32,
-  /// The period's length.
-  length: f32,
+/// How a gradient's stops lay over its line, after Blink's `NormalizeAndAddStops`.
+enum GradientStops {
+  /// Once over the whole line, padded past its ends.
+  Once(Vec<ColorStop>),
+  /// Over one period, repeated both ways along the line.
+  Repeating {
+    stops: Vec<ColorStop>,
+    /// Where the period starts on the line.
+    start: f32,
+    /// The period's length.
+    length: f32,
+  },
 }
 
-impl Period {
-  /// The period a repeating gradient's `resolved` stops span, their colours sampled in
-  /// `interpolation`; `None` when the stops span nothing.
+impl GradientStops {
+  /// `resolved` stops over a `line`, their colours sampled in `interpolation`, periods found as
+  /// the raster backend's [`LutAxis`] finds them.
   fn of(
     resolved: &[ResolvedGradientStop],
+    line: f32,
+    repeating: bool,
     interpolation: ColorInterpolationMethod,
   ) -> Option<Self> {
-    let start = resolved.first()?.position;
-    let length = resolved.last()?.position - start;
+    resolved.first()?;
 
-    if length <= 1e-3 {
-      return None;
-    }
+    let axis = LutAxis::new(repeating, resolved.iter().cloned().collect(), line);
+    let stops = compact(SrgbStop::sampled(&axis.stops, axis.length, interpolation));
 
-    let shifted: Vec<ResolvedGradientStop> = resolved
-      .iter()
-      .map(|stop| ResolvedGradientStop {
-        position: stop.position - start,
-        ..*stop
-      })
-      .collect();
-
-    Some(Self {
-      stops: SrgbStop::sampled(&shifted, length, interpolation),
-      start,
-      length,
+    Some(if axis.repeating {
+      Self::Repeating {
+        stops,
+        start: axis.repeat_start,
+        length: axis.repeat_period,
+      }
+    } else {
+      Self::Once(stops)
     })
   }
-
-  /// The periods covering `0..line`, as stops from 0 to 1 along it.
-  fn unroll(&self, line: f32) -> Vec<ColorStop> {
-    let first = ((0.0 - self.start) / self.length).floor() as i32;
-    let last = ((line - self.start) / self.length).ceil() as i32;
-    let unrolled: Vec<SrgbStop> = (first..last)
-      .flat_map(|period| {
-        self.stops.iter().map(move |stop| SrgbStop {
-          offset: (self.start + (period as f32 + stop.offset) * self.length) / line,
-          ..*stop
-        })
-      })
-      .collect();
-
-    compact(clamp_to_unit(&unrolled))
-  }
-}
-
-/// `stops` cut to offsets 0 to 1, with the colours at each end interpolated in.
-fn clamp_to_unit(stops: &[SrgbStop]) -> Vec<SrgbStop> {
-  let mut clamped = Vec::with_capacity(stops.len());
-
-  for (index, stop) in stops.iter().enumerate() {
-    let previous = index.checked_sub(1).and_then(|index| stops.get(index));
-
-    for edge in [0.0, 1.0] {
-      if let Some(previous) = previous
-        && previous.offset < edge
-        && stop.offset > edge
-      {
-        clamped.push(SrgbStop {
-          offset: edge,
-          color: mix(previous, stop, edge),
-        });
-      }
-    }
-    if (0.0..=1.0).contains(&stop.offset) {
-      clamped.push(*stop);
-    }
-  }
-  clamped
-}
-
-/// The colour at `offset` between `from` and `to`, interpolated in straight sRGB.
-fn mix(from: &SrgbStop, to: &SrgbStop, offset: f32) -> Color {
-  let t = (offset - from.offset) / (to.offset - from.offset).max(1e-6);
-
-  Color(array::from_fn(|channel| {
-    let [from, to] = [from.color.0[channel], to.color.0[channel]].map(f32::from);
-
-    (from + (to - from) * t).round() as u8
-  }))
 }
 
 /// `stops` without the ones inside a run of the same colour, which change nothing.
@@ -312,30 +260,38 @@ impl Paint {
     context: &RenderContext,
   ) -> Option<Self> {
     let geometry = gradient.resolve_geometry(width, height, &context.sizing, context.current_color);
-    let resolved = geometry.stops();
-
-    resolved.first()?;
-
     let line = geometry.axis_length;
     let half = line / 2.0;
     let at = |t: f32| PaintPoint {
       x: width as f32 / 2.0 + (t - half) * geometry.dir_x,
       y: height as f32 / 2.0 + (t - half) * geometry.dir_y,
     };
-    let stops = match gradient
-      .repeating
-      .then(|| Period::of(resolved, gradient.interpolation))
-      .flatten()
-    {
-      Some(period) => period.unroll(line),
-      None => compact(SrgbStop::sampled(resolved, line, gradient.interpolation)),
-    };
 
-    Some(Self::LinearGradient {
-      start: at(0.0),
-      end: at(line),
-      stops,
-    })
+    Some(
+      match GradientStops::of(
+        geometry.stops(),
+        line,
+        gradient.repeating,
+        gradient.interpolation,
+      )? {
+        GradientStops::Once(stops) => Self::LinearGradient {
+          start: at(0.0),
+          end: at(line),
+          stops,
+          spread: Spread::Pad,
+        },
+        GradientStops::Repeating {
+          stops,
+          start,
+          length,
+        } => Self::LinearGradient {
+          start: at(start),
+          end: at(start + length),
+          stops,
+          spread: Spread::Repeat,
+        },
+      },
+    )
   }
 
   fn radial(
@@ -345,43 +301,55 @@ impl Paint {
     context: &RenderContext,
   ) -> Option<Self> {
     let geometry = gradient.resolve_geometry(width, height, &context.sizing, context.current_color);
-    let resolved = geometry.stops();
-
-    resolved.first()?;
-
     let scale = geometry.radius_scale.max(1e-6);
     let [radius_x, radius_y] = [geometry.inv_radius_x, geometry.inv_radius_y].map(f32::recip);
     let center = PaintPoint {
       x: geometry.cx,
       y: geometry.cy,
     };
-    let (line, stops) = match gradient
-      .repeating
-      .then(|| Period::of(resolved, gradient.interpolation))
-      .flatten()
-    {
-      Some(period) => {
-        // How far along the gradient the tile's farthest corner sits.
-        let reach = [(0.0, 0.0), (width as f32, 0.0), (0.0, height as f32)]
-          .into_iter()
-          .chain([(width as f32, height as f32)])
-          .map(|(x, y)| ((x - center.x) / radius_x).hypot((y - center.y) / radius_y) * scale)
-          .fold(scale, f32::max);
 
-        (reach, period.unroll(reach))
-      }
-      None => (
+    Some(
+      match GradientStops::of(
+        geometry.stops(),
         scale,
-        compact(SrgbStop::sampled(resolved, scale, gradient.interpolation)),
-      ),
-    };
+        gradient.repeating,
+        gradient.interpolation,
+      )? {
+        GradientStops::Once(stops) => Self::RadialGradient {
+          center,
+          radius_x,
+          radius_y,
+          start: 0.0,
+          stops,
+          spread: Spread::Pad,
+        },
+        GradientStops::Repeating {
+          stops,
+          start,
+          length,
+        } => {
+          // Blink's `AdjustGradientRadiiForOffsetRange`: a period starting inside the centre
+          // moves out by whole periods, which repeating hides.
+          let [inner, outer] = [start, start + length].map(|position| position / scale);
+          let span = outer - inner;
+          let shift = if inner < 0.0 {
+            span * (-inner / span).ceil()
+          } else {
+            0.0
+          };
+          let [inner, outer] = [inner + shift, outer + shift];
 
-    Some(Self::RadialGradient {
-      center,
-      radius_x: radius_x * line / scale,
-      radius_y: radius_y * line / scale,
-      stops,
-    })
+          Self::RadialGradient {
+            center,
+            radius_x: radius_x * outer,
+            radius_y: radius_y * outer,
+            start: inner / outer,
+            stops,
+            spread: Spread::Repeat,
+          }
+        }
+      },
+    )
   }
 
   fn conic(
@@ -391,25 +359,37 @@ impl Paint {
     context: &RenderContext,
   ) -> Option<Self> {
     let resolved = gradient.resolve_stops(&context.sizing, context.current_color);
-    let turn = TAU.to_degrees();
-
-    resolved.first()?;
-
-    let stops = match gradient
-      .repeating
-      .then(|| Period::of(&resolved, gradient.interpolation))
-      .flatten()
-    {
-      Some(period) => period.unroll(turn),
-      None => compact(SrgbStop::sampled(&resolved, turn, gradient.interpolation)),
-    };
     let (x, y) = gradient.resolve_center(width as f32, height as f32, &context.sizing);
+    let center = PaintPoint { x, y };
+    let from = gradient.from_angle.to_radians() - FRAC_PI_2;
 
-    Some(Self::ConicGradient {
-      center: PaintPoint { x, y },
-      start_angle: gradient.from_angle.to_radians() - FRAC_PI_2,
-      stops,
-    })
+    Some(
+      match GradientStops::of(
+        &resolved,
+        TAU.to_degrees(),
+        gradient.repeating,
+        gradient.interpolation,
+      )? {
+        GradientStops::Once(stops) => Self::ConicGradient {
+          center,
+          start_angle: from,
+          end_angle: from + TAU,
+          stops,
+          spread: Spread::Pad,
+        },
+        GradientStops::Repeating {
+          stops,
+          start,
+          length,
+        } => Self::ConicGradient {
+          center,
+          start_angle: from + start.to_radians(),
+          end_angle: from + (start + length).to_radians(),
+          stops,
+          spread: Spread::Repeat,
+        },
+      },
+    )
   }
 
   /// Background or mask `layers` over a border box of `size`, their positioning area at

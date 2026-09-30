@@ -251,6 +251,28 @@ fn inline_span_background() {
   );
 }
 
+/// An inline `<span>` with a border strokes it on every line, without the sides the line wraps at.
+#[test]
+fn inline_span_border() {
+  let pdf = run_pdf_fixture("inline-span-border", |fonts| {
+    let source = r##"<div style="width: 100%; height: 100%; padding: 12px; background-color: #ffffff; font-size: 18px; line-height: 2; color: #141414">
+      Due <span style="border: 2px solid #16a34a">August 31</span> at noon, <span style="border: 2px dashed #e11d48; padding: 0 4px; background-color: #fee2e2">a dashed border long enough to wrap</span> done.
+    </div>"##;
+
+    PdfOptions::builder()
+      .node(from_html(source, FromHtmlOptions::default()).expect("parse border fixture"))
+      .viewport(Viewport::new((320, 140)))
+      .fonts(fonts)
+      .build()
+  });
+  let haystack = inflated_text(&pdf);
+
+  assert!(
+    haystack.contains("0.0863 0.6392 0.2902 rg") || haystack.contains("0.0863 0.6392 0.2902 RG"),
+    "the solid border's color is missing from the content stream"
+  );
+}
+
 #[test]
 fn paged_lines() {
   run_pdf_fixture("paged-lines", |fonts| {
@@ -2076,13 +2098,14 @@ fn inline_outlines() {
 }
 
 /// Spans that set their own size paint inside a block whose `font-size` is 0, and so does text
-/// that overflows a box with no height.
+/// that overflows a box or an inline block with no height.
 #[test]
 fn inline_zero_sized_parents() {
   let pdf = run_pdf_fixture("inline-zero-sized-parents", |fonts| {
     let source = r##"<div style="width: 100%; height: 100%; padding: 24px; background-color: #ffffff; color: #111827;">
       <div style="font-size: 0;"><span style="font-size: 24px;">Sized</span> <span style="font-size: 24px; color: #be123c;">spans</span></div>
       <div style="height: 0; font-size: 20px;">Overflowing text</div>
+      <div style="font-size: 20px; margin-top: 32px;">Before <span style="display: inline-block; height: 0;">inside</span> after</div>
     </div>"##;
     let node =
       from_html(source, FromHtmlOptions::default()).expect("parse zero-sized parent fixture");
@@ -2098,8 +2121,34 @@ fn inline_zero_sized_parents() {
     .count();
 
   assert!(
-    shown >= 3,
-    "expected both spans and the overflowing text, got {shown} text runs"
+    shown >= 5,
+    "expected both spans, the overflowing text, and the inline block, got {shown} text runs"
+  );
+}
+
+/// Each `text-decoration-style` draws its own line, and `skip-ink` keeps a pattern's phase.
+#[test]
+fn text_decoration_styles() {
+  let pdf = run_pdf_fixture("text-decoration-styles", |fonts| {
+    let source = r##"<div style="width: 100%; height: 100%; padding: 24px; background-color: #ffffff; font-size: 24px; color: #0f172a; display: flex; flex-direction: column; gap: 12px;">
+      <div style="text-decoration: underline double;">double</div>
+      <div style="text-decoration: underline dotted;">dotted</div>
+      <div style="text-decoration: underline dashed #16a34a 2px;">dashed</div>
+      <div style="text-decoration: underline wavy #e11d48;">Typing wavy</div>
+    </div>"##;
+    let node = from_html(source, FromHtmlOptions::default()).expect("parse decoration fixture");
+
+    PdfOptions::builder()
+      .node(node)
+      .viewport(Viewport::new((360, 240)))
+      .fonts(fonts)
+      .build()
+  });
+  let content: Vec<Vec<u8>> = content_lines(&pdf).collect();
+
+  assert!(
+    content.iter().any(|line| find(line, b" d").is_some()),
+    "expected a dash pattern for the dotted and dashed lines"
   );
 }
 

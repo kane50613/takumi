@@ -113,8 +113,8 @@ impl Recorder {
     }
   }
 
-  /// Records `shape` cast as `shadow`'s blurred shadow.
-  fn cast(&mut self, shape: Shape, shadow: &SizedShadow) {
+  /// Records `shape`, filled or stroked, cast as `shadow`'s blurred shadow.
+  fn cast(&mut self, shape: Shape, stroke: Option<Stroke>, shadow: &SizedShadow) {
     let Some(color) = self.visible(shadow.color) else {
       return;
     };
@@ -123,6 +123,7 @@ impl Recorder {
     self.drawables.push(Drawable::Shadow {
       role: self.role,
       shape,
+      stroke,
       offset: shadow_offset(shadow),
       blur: shadow.blur_radius / 2.0,
       color,
@@ -206,7 +207,7 @@ impl PaintDevice for Recorder {
     let shape = Shape::of(shape, transform);
 
     if let Some(shadow) = self.shadow {
-      return self.cast(shape, &shadow);
+      return self.cast(shape, None, &shadow);
     }
 
     let Some(color) = self.visible(color) else {
@@ -223,23 +224,30 @@ impl PaintDevice for Recorder {
   }
 
   fn stroke_shape(&mut self, shape: &FillShape, stroke: &StrokeStyle, transform: Affine) {
+    let shape = Shape::of(shape, transform);
+    let style = Stroke {
+      width: stroke.width,
+      dash: stroke.dash.map(Vec::from),
+      cap: if stroke.round_cap {
+        LineCapName::Round
+      } else {
+        LineCapName::Butt
+      },
+      join: LineJoinName::Miter,
+    };
+
+    if let Some(shadow) = self.shadow {
+      return self.cast(shape, Some(style), &shadow);
+    }
+
     let Some(color) = self.visible(stroke.color) else {
       return;
     };
 
     self.drawables.push(Drawable::Stroke {
       role: self.role,
-      shape: Shape::of(shape, transform),
-      stroke: Stroke {
-        width: stroke.width,
-        dash: stroke.dash.map(Vec::from),
-        cap: if stroke.round_cap {
-          LineCapName::Round
-        } else {
-          LineCapName::Butt
-        },
-        join: LineJoinName::Miter,
-      },
+      shape,
+      stroke: style,
       paint: Paint::Color { color },
       clips: self.clips(),
     });
@@ -288,7 +296,7 @@ impl PaintDevice for Recorder {
   }
 
   fn fill_shadow(&mut self, shape: &ShadowShape, shadow: &SizedShadow, transform: Affine) {
-    self.cast(Shape::of(&shape.fill_shape(), transform), shadow);
+    self.cast(Shape::of(&shape.fill_shape(), transform), None, shadow);
   }
 }
 

@@ -6,8 +6,8 @@ use crate::{
   resources::font::FontClasses,
   style::{
     Color, Direction, FontSynthesis, Lang, Length, SizedTextDecorationThickness,
-    TextDecorationLines, TextDecorationSkipInk, TextFitMode, TextOverflow, TextUnderlinePosition,
-    TextWrapStyle, VerticalAlign, WordBreak,
+    TextDecorationLines, TextDecorationSkipInk, TextDecorationStyle, TextFitMode, TextOverflow,
+    TextUnderlinePosition, TextWrapStyle, VerticalAlign, WhiteSpaceCollapse, WordBreak,
   },
   text_processing::{
     MaxHeight, RebreakOptions, apply_text_transform, apply_white_space_collapse,
@@ -403,14 +403,16 @@ pub struct InlineBrush {
   pub decoration_color: Color,
   /// Decoration line thickness.
   pub decoration_thickness: SizedTextDecorationThickness,
-  /// Extra offset of the underline away from the text, in pixels.
-  pub underline_offset: f32,
+  /// Extra offset of the underline away from the text, in pixels, or `None` for `auto`.
+  pub underline_offset: Option<f32>,
   /// Which baseline the underline is measured from.
   pub underline_position: TextUnderlinePosition,
   /// Which decoration lines to draw.
   pub decoration_line: TextDecorationLines,
   /// Whether decorations skip over glyph ink.
   pub decoration_skip_ink: TextDecorationSkipInk,
+  /// How the decoration lines are drawn.
+  pub decoration_style: TextDecorationStyle,
   /// `-webkit-text-stroke` colour, which a span may set for itself.
   pub stroke_color: Color,
   /// `-webkit-text-stroke` width in pixels.
@@ -456,10 +458,11 @@ impl Default for InlineBrush {
       color: Color::black(),
       decoration_color: Color::black(),
       decoration_thickness: SizedTextDecorationThickness::Value(0.0),
-      underline_offset: 0.0,
+      underline_offset: None,
       underline_position: TextUnderlinePosition::default(),
       decoration_line: TextDecorationLines::empty(),
       decoration_skip_ink: TextDecorationSkipInk::default(),
+      decoration_style: TextDecorationStyle::default(),
       stroke_color: Color::black(),
       stroke_width: 0.0,
       font_synthesis: FontSynthesis::default(),
@@ -621,7 +624,8 @@ fn build_inline_layout_tree<'c>(
   // before `tree_builder` holds the shared font borrow.
   let mut spans: Vec<ProcessedInlineSpan<'c>> = Vec::new();
   let mut index_pos = 0;
-  let mut previous_collapsible_space = false;
+  // A paragraph opens as a line does, so its leading collapsible spaces go.
+  let mut previous_collapsible_space = true;
   let mut previous_was_line_break = false;
 
   if let Some(mark) = direction_mark_span(items, context) {
@@ -689,6 +693,8 @@ fn build_inline_layout_tree<'c>(
     }
   }
 
+  trim_trailing_space(&mut spans);
+
   let (layout, text) = shape_spans(context, &spans, style, shape_cacheable);
 
   BuiltInlineLayout {
@@ -698,6 +704,42 @@ fn build_inline_layout_tree<'c>(
     positioned_floats: Vec::new(),
     line_scales: Vec::new(),
     clamped: false,
+  }
+}
+
+/// Drops the collapsible space a paragraph ends with, as the end of its last line removes it.
+/// Spacers after the space move back with the text.
+fn trim_trailing_space(spans: &mut [ProcessedInlineSpan<'_>]) {
+  let Some(last) = spans
+    .iter()
+    .rposition(|span| !matches!(span, ProcessedInlineSpan::Spacer { .. }))
+  else {
+    return;
+  };
+  let ProcessedInlineSpan::Text {
+    byte_range,
+    text,
+    style,
+    ..
+  } = &mut spans[last]
+  else {
+    return;
+  };
+
+  if !matches!(
+    style.parent.white_space_collapse,
+    WhiteSpaceCollapse::Collapse | WhiteSpaceCollapse::PreserveBreaks
+  ) || !text.ends_with(' ')
+  {
+    return;
+  }
+
+  text.pop();
+  byte_range.end -= 1;
+  for span in &mut spans[last + 1..] {
+    if let ProcessedInlineSpan::Spacer { inline_box, .. } = span {
+      inline_box.index -= 1;
+    }
   }
 }
 
@@ -1220,7 +1262,7 @@ mod tests {
     context
   }
 
-  fn shaped_run(position: TextUnderlinePosition, underline_offset: f32) -> ShapedRun {
+  fn shaped_run(position: TextUnderlinePosition, underline_offset: Option<f32>) -> ShapedRun {
     ShapedRun {
       glyphs: Vec::new(),
       offset: 0.0,
@@ -1238,8 +1280,6 @@ mod tests {
         line_height: 50.0,
         underline_offset: -5.0,
         underline_size: 2.0,
-        strikethrough_offset: 20.0,
-        strikethrough_size: 2.0,
       },
       font_size: 100.0,
       font_index: 0,
@@ -1266,7 +1306,7 @@ mod tests {
 
   #[test]
   fn a_fully_trimmed_run_paints_no_decoration() {
-    let mut run = shaped_run(TextUnderlinePosition::Auto, 0.0);
+    let mut run = shaped_run(TextUnderlinePosition::Auto, None);
     run.brush.decoration_line = TextDecorationLines::UNDERLINE;
     run.brush.decoration_thickness = SizedTextDecorationThickness::Value(2.0);
     run.advance = 5.2;
@@ -1538,31 +1578,38 @@ mod tests {
 
   #[test]
   fn underline_offset_from_baseline_follows_the_underline_position() {
-    // The font's underline offset is negative above the baseline, so `auto` flips it.
+    // `auto` leaves a gap of half the thickness, at least a pixel, under the baseline.
     assert_eq!(
-      shaped_run(TextUnderlinePosition::Auto, 0.0).underline_offset_from_baseline(),
-      5.0
+      shaped_run(TextUnderlinePosition::Auto, None).underline_offset_from_baseline(1.0),
+      1.0
     );
     assert_eq!(
-      shaped_run(TextUnderlinePosition::FromFont, 0.0).underline_offset_from_baseline(),
+      shaped_run(TextUnderlinePosition::Auto, None).underline_offset_from_baseline(5.0),
+      3.0
+    );
+    // The font's underline offset is negative below the baseline.
+    assert_eq!(
+      shaped_run(TextUnderlinePosition::FromFont, None).underline_offset_from_baseline(2.0),
       5.0
     );
-    // 100px em split in the metrics' 40:10 ratio puts the em box bottom 20px down.
+    // 100px em split in the metrics' 40:10 ratio puts the em box bottom 20px down, and the
+    // underline a pixel past it.
     assert_eq!(
-      shaped_run(TextUnderlinePosition::Under, 0.0).underline_offset_from_baseline(),
-      20.0
+      shaped_run(TextUnderlinePosition::Under, None).underline_offset_from_baseline(2.0),
+      21.0
     );
   }
 
   #[test]
   fn underline_offset_from_baseline_adds_the_style_offset() {
+    // A set offset drops `auto`'s gap.
     assert_eq!(
-      shaped_run(TextUnderlinePosition::Auto, 3.0).underline_offset_from_baseline(),
-      8.0
+      shaped_run(TextUnderlinePosition::Auto, Some(3.0)).underline_offset_from_baseline(4.0),
+      3.0
     );
     assert_eq!(
-      shaped_run(TextUnderlinePosition::Under, -4.0).underline_offset_from_baseline(),
-      16.0
+      shaped_run(TextUnderlinePosition::Under, Some(-4.0)).underline_offset_from_baseline(2.0),
+      17.0
     );
   }
 
@@ -1697,6 +1744,33 @@ mod tests {
   }
 
   #[test]
+  fn outline_islands_join_only_the_lines_that_meet() {
+    let rect = |line_index: usize, x: f32, y: f32| InlineOutlineRect {
+      span_id: 0,
+      line_index,
+      x,
+      y,
+      width: 10.0,
+      height: 10.0,
+    };
+    // Two rects share line 0; line 1 meets the first, line 2 continues it, and line 4 stands
+    // apart.
+    let islands = OutlineIsland::of(
+      vec![
+        rect(0, 0.0, 0.0),
+        rect(0, 100.0, 0.0),
+        rect(1, 0.0, 10.0),
+        rect(2, 0.0, 20.0),
+        rect(4, 0.0, 60.0),
+      ],
+      |_| 0.0,
+    );
+
+    assert_eq!(islands.len(), 3);
+    assert!(islands.iter().all(|island| island.lone_rect().is_none()));
+  }
+
+  #[test]
   fn outline_rects_a_layout_unit_apart_touch() {
     let rect = |x: f32, width: f32| InlineOutlineRect {
       span_id: 0,
@@ -1707,7 +1781,8 @@ mod tests {
       height: 10.0,
     };
 
-    assert!(rect(0.0, 10.0).x_range_touches(rect(10.01, 10.0)));
-    assert!(!rect(0.0, 10.0).x_range_touches(rect(10.1, 10.0)));
+    assert!(rect(0.0, 10.0).meets(rect(10.01, 10.0), 0.0));
+    assert!(!rect(0.0, 10.0).meets(rect(10.1, 10.0), 0.0));
+    assert!(rect(0.0, 10.0).meets(rect(14.0, 10.0), 2.0));
   }
 }

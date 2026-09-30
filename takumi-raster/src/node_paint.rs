@@ -43,9 +43,13 @@ pub(crate) fn draw_box_shell(
 ) -> Result<()> {
   let painter = BoxPainter::new(context, layout);
 
-  painter.paint_normal_box_shadows(Point::ZERO, &mut CanvasDevice::of(canvas, context));
+  CanvasDevice::paint(canvas, context, |device| {
+    painter.paint_normal_box_shadows(Point::ZERO, device);
+  })?;
   draw_background(context, canvas, layout)?;
-  painter.paint_inset_box_shadows(Point::ZERO, &mut CanvasDevice::of(canvas, context));
+  CanvasDevice::paint(canvas, context, |device| {
+    painter.paint_inset_box_shadows(Point::ZERO, device);
+  })?;
   draw_border(context, canvas, layout)
 }
 
@@ -101,6 +105,19 @@ impl<'c> CanvasDevice<'c> {
   /// Surfaces the first error a draw hit.
   pub(crate) fn finish(self) -> Result<()> {
     self.error.map_or(Ok(()), Err)
+  }
+
+  /// Runs `paint` against `canvas` for the box `context` paints, surfacing the first error a
+  /// draw hit.
+  pub(crate) fn paint(
+    canvas: &'c mut Canvas,
+    context: &RenderContext,
+    paint: impl FnOnce(&mut Self),
+  ) -> Result<()> {
+    let mut device = Self::of(canvas, context);
+
+    paint(&mut device);
+    device.finish()
   }
 
   /// Rasterizes `shape` under `transform`, culled to the canvas.
@@ -627,10 +644,9 @@ pub(crate) fn draw_border(
   canvas: &mut Canvas,
   layout: Layout,
 ) -> Result<()> {
-  BoxPainter::new(context, layout)
-    .paint_border(Point::ZERO, &mut CanvasDevice::of(canvas, context));
-
-  Ok(())
+  CanvasDevice::paint(canvas, context, |device| {
+    BoxPainter::new(context, layout).paint_border(Point::ZERO, device);
+  })
 }
 
 /// A box's outline and the device state it paints with, kept until the box's children are done.
@@ -650,12 +666,11 @@ impl DeferredOutline {
     })
   }
 
-  pub(crate) fn paint(&self, canvas: &mut Canvas) {
-    self.outline.paint(&mut CanvasDevice::new(
-      canvas,
-      self.transform,
-      self.algorithm,
-    ));
+  pub(crate) fn paint(&self, canvas: &mut Canvas) -> Result<()> {
+    let mut device = CanvasDevice::new(canvas, self.transform, self.algorithm);
+
+    self.outline.paint(&mut device);
+    device.finish()
   }
 }
 

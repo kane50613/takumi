@@ -34,17 +34,17 @@
     </filter>
     <g filter="url(#bl4)">
       <g fill="#2563eb">
-        <use href="#g0" x="8" y="20"/>
-        <use href="#g1" x="18.72" y="20"/>
-        <use href="#g2" x="22.83" y="20"/>
-        <use href="#g3" x="32.03" y="20"/>
+        <use href="#g0" x="4" y="20"/>
+        <use href="#g1" x="14.72" y="20"/>
+        <use href="#g2" x="18.83" y="20"/>
+        <use href="#g3" x="28.03" y="20"/>
       </g>
     </g>
     <g fill="#000">
-      <use href="#g0" x="4" y="16"/>
-      <use href="#g1" x="14.72" y="16"/>
-      <use href="#g2" x="18.83" y="16"/>
-      <use href="#g3" x="28.03" y="16"/>
+      <use href="#g0" x="0" y="16"/>
+      <use href="#g1" x="10.72" y="16"/>
+      <use href="#g2" x="14.83" y="16"/>
+      <use href="#g3" x="24.03" y="16"/>
     </g>
   </g>
   <clipPath id="cp5">

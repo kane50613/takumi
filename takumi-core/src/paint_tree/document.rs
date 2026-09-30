@@ -111,6 +111,16 @@ pub enum Sampling {
   Pixelated,
 }
 
+/// What a gradient paints past its first and last stop, as SVG's `spreadMethod`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Spread {
+  /// The end colours extend.
+  Pad,
+  /// The stops repeat.
+  Repeat,
+}
+
 /// What a shape or glyphs are filled with.
 #[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(tag = "type", rename_all = "kebab-case")]
@@ -126,8 +136,10 @@ pub enum Paint {
     start: PaintPoint,
     /// Where offset 1 sits.
     end: PaintPoint,
-    /// The stops, unrolled over the area a repeating gradient covers.
+    /// The stops.
     stops: Vec<ColorStop>,
+    /// What lies past offset 0 and 1.
+    spread: Spread,
   },
   /// A radial gradient, elliptical when the radii differ.
   #[serde(rename_all = "camelCase")]
@@ -138,8 +150,12 @@ pub enum Paint {
     radius_x: f32,
     /// Where offset 1 sits vertically.
     radius_y: f32,
-    /// The stops, unrolled over the area a repeating gradient covers.
+    /// Where offset 0 sits, as a fraction of the radii.
+    start: f32,
+    /// The stops.
     stops: Vec<ColorStop>,
+    /// What lies past offset 0 and 1.
+    spread: Spread,
   },
   /// A conic gradient.
   #[serde(rename_all = "camelCase")]
@@ -148,8 +164,12 @@ pub enum Paint {
     center: PaintPoint,
     /// Where offset 0 sits, in radians clockwise from the positive x axis.
     start_angle: f32,
+    /// Where offset 1 sits, a full turn past `start_angle` unless the gradient repeats.
+    end_angle: f32,
     /// The stops.
     stops: Vec<ColorStop>,
+    /// What lies past offset 0 and 1.
+    spread: Spread,
   },
   /// An image stretched over the shape's bounds.
   Image {
@@ -286,6 +306,9 @@ pub enum Drawable {
     role: Role,
     /// The shape that casts it.
     shape: Shape,
+    /// Strokes the shape instead of filling it, as a dashed or wavy text decoration casts.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    stroke: Option<Stroke>,
     /// How far it moves.
     offset: PaintPoint,
     /// The Gaussian's standard deviation.

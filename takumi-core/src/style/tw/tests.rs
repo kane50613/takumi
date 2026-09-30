@@ -703,6 +703,22 @@ fn test_parse_vertical_align() {
 }
 
 #[test]
+fn test_parse_decoration_style() {
+  assert_eq!(
+    parse_property("decoration-wavy"),
+    expect(TailwindProperty::TextDecorationStyle(
+      TextDecorationStyle::Wavy
+    ))
+  );
+  assert_eq!(
+    parse_property("decoration-dotted"),
+    expect(TailwindProperty::TextDecorationStyle(
+      TextDecorationStyle::Dotted
+    ))
+  );
+}
+
+#[test]
 fn test_parse_decoration_thickness() {
   assert_eq!(
     parse_property("decoration-4"),
