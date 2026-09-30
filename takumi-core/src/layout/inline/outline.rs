@@ -4,8 +4,9 @@ use std::collections::HashMap;
 
 use crate::{
   context::RenderContext,
-  geometry::{PathBuilder, PathCommand, Point},
+  geometry::{PathBuilder, PathCommand, Point, Size},
   layout::corner_shape::KAPPA,
+  layout_unit::UnitRect,
   style::{BorderStyle, Color, Sides, SpacePair},
 };
 
@@ -99,14 +100,20 @@ impl InlineOutlineRect {
 
   /// The rect as Blink's `ToPixelSnappedRect` snaps it: left, top, right, bottom.
   pub(crate) fn pixel_snapped(self) -> [f32; 4] {
-    let (left, top) = (self.x.round(), self.y.round());
+    let rect = UnitRect::nearest(
+      Point {
+        x: self.x,
+        y: self.y,
+      },
+      Size {
+        width: self.width,
+        height: self.height,
+      },
+    )
+    .pixel_snapped()
+    .to_rect();
 
-    [
-      left,
-      top,
-      (self.x + self.width).round(),
-      (self.y + self.height).round(),
-    ]
+    [rect.left, rect.top, rect.right, rect.bottom]
   }
 }
 
