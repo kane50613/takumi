@@ -1,30 +1,30 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1200" height="200" viewBox="0 0 1200 200">
-  <rect x="0" y="0" width="860" height="160" fill="#fff"/>
+  <rect x="0" y="0" width="1200" height="160" fill="#fff"/>
   <rect x="20" y="20" width="260" height="120" fill="#78c878"/>
   <g fill="#000">
-    <use href="#g0" x="115" y="92"/>
-    <use href="#g1" x="140.89" y="92"/>
-    <use href="#g2" x="148.38" y="92"/>
-    <use href="#g3" x="167.1" y="92"/>
+    <use href="#g0" x="114.97" y="91.5"/>
+    <use href="#g1" x="140.86" y="91.5"/>
+    <use href="#g2" x="148.34" y="91.5"/>
+    <use href="#g3" x="167.06" y="91.5"/>
   </g>
   <rect x="300" y="20" width="260" height="120" fill="#78c878"/>
   <g fill="#000">
-    <use href="#g4" x="366" y="92"/>
-    <use href="#g3" x="384.72" y="92"/>
-    <use href="#g5" x="401.71" y="92"/>
-    <use href="#g0" x="413.94" y="92"/>
-    <use href="#g3" x="439.31" y="92"/>
-    <use href="#g3" x="456.94" y="92"/>
-    <use href="#g6" x="474.58" y="92"/>
+    <use href="#g4" x="366.41" y="91.5"/>
+    <use href="#g3" x="385.13" y="91.5"/>
+    <use href="#g5" x="402.13" y="91.5"/>
+    <use href="#g0" x="414.35" y="91.5"/>
+    <use href="#g3" x="439.73" y="91.5"/>
+    <use href="#g3" x="457.36" y="91.5"/>
+    <use href="#g6" x="474.99" y="91.5"/>
   </g>
   <rect x="580" y="20" width="260" height="120" fill="#c8c8c8"/>
   <g fill="#000">
-    <use href="#g6" x="659" y="92"/>
-    <use href="#g7" x="677.27" y="92"/>
-    <use href="#g8" x="694.78" y="92"/>
-    <use href="#g8" x="705.62" y="92"/>
-    <use href="#g9" x="716.47" y="92"/>
-    <use href="#g0" x="734.01" y="92"/>
+    <use href="#g6" x="659.39" y="91.5"/>
+    <use href="#g7" x="677.66" y="91.5"/>
+    <use href="#g8" x="695.17" y="91.5"/>
+    <use href="#g8" x="706.01" y="91.5"/>
+    <use href="#g9" x="716.86" y="91.5"/>
+    <use href="#g0" x="734.4" y="91.5"/>
   </g>
   <defs>
     <path id="g0" d="M5.95 0l-5.25-16.95h2.94l3.97 14.14 4.03-14.14h2.89l4.03 14.14 4-14.14h2.94l-5.25 16.95h-3.39l-3.77-12.89-3.78 12.89Z"/>

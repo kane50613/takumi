@@ -9,31 +9,31 @@
   <rect x="348" y="194" width="504" height="243" fill="#fdfdf7"/>
   <path d="M348 194h504v243h-504v-243Zm4 4h496v235h-496v-235Z" fill="#111" fill-rule="evenodd"/>
   <g fill="#16a34a">
-    <use href="#g0" x="408" y="264"/>
-    <use href="#g1" x="429.2" y="264"/>
-    <use href="#g2" x="450.4" y="264"/>
-    <use href="#g3" x="471.6" y="264"/>
-    <use href="#g4" x="492.8" y="264"/>
-    <use href="#g5" x="514" y="264"/>
-    <use href="#g6" x="556.4" y="264"/>
-    <use href="#g7" x="598.8" y="264"/>
-    <use href="#g8" x="620" y="264"/>
-    <use href="#g9" x="641.2" y="264"/>
-    <use href="#g10" x="662.4" y="264"/>
-    <use href="#g11" x="683.6" y="264"/>
-    <use href="#g1" x="704.8" y="264"/>
-    <use href="#g7" x="726" y="264"/>
-    <use href="#g12" x="747.2" y="264"/>
+    <use href="#g0" x="408.48" y="263.5"/>
+    <use href="#g1" x="429.68" y="263.5"/>
+    <use href="#g2" x="450.88" y="263.5"/>
+    <use href="#g3" x="472.08" y="263.5"/>
+    <use href="#g4" x="493.28" y="263.5"/>
+    <use href="#g5" x="514.48" y="263.5"/>
+    <use href="#g6" x="556.88" y="263.5"/>
+    <use href="#g7" x="599.28" y="263.5"/>
+    <use href="#g8" x="620.48" y="263.5"/>
+    <use href="#g9" x="641.68" y="263.5"/>
+    <use href="#g10" x="662.88" y="263.5"/>
+    <use href="#g11" x="684.08" y="263.5"/>
+    <use href="#g1" x="705.28" y="263.5"/>
+    <use href="#g7" x="726.48" y="263.5"/>
+    <use href="#g12" x="747.68" y="263.5"/>
   </g>
   <g fill="#111">
-    <use href="#g13" x="408" y="364"/>
-    <use href="#g14" x="470.18" y="364"/>
-    <use href="#g15" x="504.72" y="364"/>
-    <use href="#g16" x="527.58" y="364"/>
-    <use href="#g17" x="597" y="364"/>
-    <use href="#g18" x="655.22" y="364"/>
-    <use href="#g14" x="705.72" y="364"/>
-    <use href="#g19" x="738.58" y="364"/>
+    <use href="#g13" x="408.48" y="363.5"/>
+    <use href="#g14" x="470.66" y="363.5"/>
+    <use href="#g15" x="505.2" y="363.5"/>
+    <use href="#g16" x="528.06" y="363.5"/>
+    <use href="#g17" x="597.48" y="363.5"/>
+    <use href="#g18" x="655.71" y="363.5"/>
+    <use href="#g14" x="706.21" y="363.5"/>
+    <use href="#g19" x="739.07" y="363.5"/>
   </g>
   <mask id="mk1" maskUnits="userSpaceOnUse" style="mask-type:alpha">
     <radialGradient id="rg2" gradientUnits="userSpaceOnUse" cx="600" cy="630" r="840" gradientTransform="matrix(1 0 0 .45 0 346.5)">

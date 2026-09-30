@@ -6,13 +6,13 @@ use std::{
 use parley::fontique::{Attributes, FontStyle as FontiqueStyle};
 use smallvec::SmallVec;
 use taffy::{
-  AvailableSpace as TaffyAvailableSpace, BlockContext, Cache, CacheTree, Display as TaffyDisplay,
-  Layout, LayoutBlockContainer, LayoutFlexboxContainer, LayoutGridContainer, LayoutInput,
-  LayoutOutput, LayoutPartialTree, LengthPercentageAuto, Line, MaybeResolve, NodeId as TaffyNodeId,
-  Position as TaffyPosition, RequestedAxis, ResolveOrZero, RoundTree, RunMode, Size as TaffySize,
-  SizingMode, Style, TraversePartialTree, TraverseTree, compute_block_layout,
-  compute_cached_layout, compute_flexbox_layout, compute_grid_layout, compute_hidden_layout,
-  compute_leaf_layout, compute_root_layout,
+  AvailableSpace as TaffyAvailableSpace, BlockContext, BoxSizing, Cache, CacheTree, Dimension,
+  Display as TaffyDisplay, Layout, LayoutBlockContainer, LayoutFlexboxContainer,
+  LayoutGridContainer, LayoutInput, LayoutOutput, LayoutPartialTree, LengthPercentageAuto, Line,
+  MaybeResolve, NodeId as TaffyNodeId, Position as TaffyPosition, RequestedAxis, ResolveOrZero,
+  RoundTree, RunMode, Size as TaffySize, SizingMode, Style, TraversePartialTree, TraverseTree,
+  compute_block_layout, compute_cached_layout, compute_flexbox_layout, compute_grid_layout,
+  compute_hidden_layout, compute_leaf_layout, compute_root_layout,
 };
 use xxhash_rust::xxh3::Xxh3;
 
@@ -63,19 +63,27 @@ impl OrderedChild {
   }
 }
 
-/// Each visited node's device transform and content box, kept so a hoisted
-/// out-of-flow child resolves against its containing block instead of its
-/// box-tree parent.
-#[derive(Default)]
-pub struct ContainingBlocks {
-  transforms: HashMap<NodeId, Affine>,
+/// Each visited node's placement and content box, kept so a hoisted out-of-flow child resolves
+/// against its containing block instead of its box-tree parent. A placement is what a child
+/// starts from: a device transform, or one with the paint offset beside it.
+pub struct ContainingBlocks<P = Affine> {
+  placements: HashMap<NodeId, P>,
   content_boxes: HashMap<NodeId, Size<Option<f32>>>,
 }
 
-impl ContainingBlocks {
-  /// Records the device transform a node was placed with.
-  pub fn record_transform(&mut self, node_id: NodeId, transform: Affine) {
-    self.transforms.insert(node_id, transform);
+impl<P> Default for ContainingBlocks<P> {
+  fn default() -> Self {
+    Self {
+      placements: HashMap::new(),
+      content_boxes: HashMap::new(),
+    }
+  }
+}
+
+impl<P: Copy> ContainingBlocks<P> {
+  /// Records the placement a node's children start from.
+  pub fn record_placement(&mut self, node_id: NodeId, placement: P) {
+    self.placements.insert(node_id, placement);
   }
 
   /// Records the content box a node lays its children out in.
@@ -83,28 +91,28 @@ impl ContainingBlocks {
     self.content_boxes.insert(node_id, content_box);
   }
 
-  /// The transform and container size `child` resolves against: its containing
-  /// block's when hoisted, otherwise the parent's.
+  /// The placement and container size `child` resolves against: its containing block's when
+  /// hoisted, otherwise the parent's.
   pub fn base_for(
     &self,
     child: &OrderedChild,
-    parent_transform: Affine,
+    parent_placement: P,
     parent_content_box: Size<Option<f32>>,
-  ) -> (Affine, Size<Option<f32>>) {
+  ) -> (P, Size<Option<f32>>) {
     match child.hoisted_cb {
       Some(cb) => (
         self
-          .transforms
+          .placements
           .get(&cb)
           .copied()
-          .unwrap_or(parent_transform),
+          .unwrap_or(parent_placement),
         self
           .content_boxes
           .get(&cb)
           .copied()
           .unwrap_or(parent_content_box),
       ),
-      None => (parent_transform, parent_content_box),
+      None => (parent_placement, parent_content_box),
     }
   }
 }
@@ -116,7 +124,6 @@ pub struct LayoutResults {
 
 struct LayoutResultNode {
   layout: Layout,
-  unsnapped: Layout,
   first_baseline_y: Option<f32>,
   box_children: Box<[OrderedChild]>,
 }
@@ -134,7 +141,7 @@ impl LayoutResults {
   pub fn layout(&self, node_id: NodeId) -> crate::Result<ComputedLayout> {
     self
       .node(node_id)
-      .map(|node| ComputedLayout::from_taffy(&node.layout, &node.unsnapped))
+      .map(|node| ComputedLayout::from_taffy(&node.layout))
   }
 
   /// Paint-ordered children of a node.
@@ -147,11 +154,10 @@ impl LayoutResults {
   }
 
   /// The root's border-box size, zero when the tree is empty.
-  /// The root's border-box size before pixel snapping, which Blink keeps in `LayoutUnit`s.
   pub(super) fn root_size(&self) -> Size<f32> {
     self
       .node(NodeId::ROOT)
-      .map_or(Size::ZERO, |node| Size::from_taffy(node.unsnapped.size))
+      .map_or(Size::ZERO, |node| Size::from_taffy(node.layout.size))
   }
 
   fn node(&self, node_id: NodeId) -> crate::Result<&LayoutResultNode> {
@@ -633,16 +639,54 @@ impl<'r> LayoutTree<'r> {
     root_id
   }
 
-  /// Computes and rounds the layout for the whole tree.
+  /// Computes the layout for the whole tree.
   pub fn compute_layout(&mut self, available_space: Size<AvailableSpace>) {
     let root_node_id = NodeId::ROOT.into_taffy();
+
+    self.stretch_root(available_space.width);
     compute_root_layout(
       self,
       root_node_id,
       available_space.map(AvailableSpace::into_taffy).into_taffy(),
     );
     self.place_out_of_flow_at_static_positions(root_node_id);
-    self.snap_layout(root_node_id, 0.0, 0.0);
+    self.finalize_layout(root_node_id);
+  }
+
+  /// Gives a block-level flex, grid or flow-root root with an `auto` width the width a definite
+  /// `available_width` stretches it to, as CSS sizes every block-level box but a table. Taffy
+  /// stretches only a block root, and an atomic inline laid out as a root shrinks to fit.
+  fn stretch_root(&mut self, available_width: AvailableSpace) {
+    let AvailableSpace::Definite(available) = available_width else {
+      return;
+    };
+    let stretches = self.render_nodes.first().is_some_and(|root| {
+      matches!(
+        root.context.style.display,
+        Display::Flex | Display::Grid | Display::FlowRoot
+      )
+    });
+    let style = &self.nodes[0].style;
+
+    if !stretches || !style.size.width.is_auto() {
+      return;
+    }
+
+    let calc = |value, basis| self.resolve_calc_value(value, basis);
+    let margin = style.margin.resolve_or_zero(Some(available), calc);
+    let mut width = available - margin.horizontal_axis_sum();
+
+    if style.box_sizing == BoxSizing::ContentBox {
+      width -= style
+        .padding
+        .resolve_or_zero(Some(available), calc)
+        .horizontal_axis_sum()
+        + style
+          .border
+          .resolve_or_zero(Some(available), calc)
+          .horizontal_axis_sum();
+    }
+    self.nodes[0].style.size.width = Dimension::length(width.max(0.0));
   }
 
   /// Moves each out-of-flow box inside inline content to its static position on every axis whose
@@ -742,35 +786,16 @@ impl<'r> LayoutTree<'r> {
     );
   }
 
-  /// Snaps every box to whole pixels, both edges in absolute space so a box
-  /// always meets the one beside it. taffy's `round_layout` documents the same
-  /// rule but rounds a location against its parent, which parts two siblings by a
-  /// pixel whenever their parent sits on a fraction.
-  /// Blink snaps the same way, against the absolute offset's fraction
-  /// (`SnapSizeToPixel`, platform/geometry/layout_unit.h).
-  fn snap_layout(&mut self, node_id: TaffyNodeId, parent_x: f32, parent_y: f32) {
+  /// Keeps every box where it laid out, unrounded: Blink holds layout in layout units and snaps a
+  /// box to pixels only as it paints it.
+  fn finalize_layout(&mut self, node_id: TaffyNodeId) {
     let unrounded = self.get_unrounded_layout(node_id);
-    let mut layout = unrounded;
-    let x = parent_x + unrounded.location.x;
-    let y = parent_y + unrounded.location.y;
 
-    layout.location.x = x.round() - parent_x.round();
-    layout.location.y = y.round() - parent_y.round();
-    layout.size.width = (x + unrounded.size.width).round() - x.round();
-    layout.size.height = (y + unrounded.size.height).round() - y.round();
-    layout.padding.left = (x + unrounded.padding.left).round() - x.round();
-    layout.padding.right = (x + unrounded.size.width).round()
-      - (x + unrounded.size.width - unrounded.padding.right).round();
-    layout.padding.top = (y + unrounded.padding.top).round() - y.round();
-    layout.padding.bottom = (y + unrounded.size.height).round()
-      - (y + unrounded.size.height - unrounded.padding.bottom).round();
-
-    self.set_final_layout(node_id, &layout);
-
+    self.set_final_layout(node_id, &unrounded);
     for index in 0..self.child_count(node_id) {
       let child = self.get_child_id(node_id, index);
 
-      self.snap_layout(child, x, y);
+      self.finalize_layout(child);
     }
   }
 
@@ -796,7 +821,6 @@ impl<'r> LayoutTree<'r> {
         .into_iter()
         .map(|node| LayoutResultNode {
           layout: node.final_layout,
-          unsnapped: node.unrounded_layout,
           first_baseline_y: node.first_baseline_y,
           box_children: node.box_children,
         })
@@ -1364,15 +1388,7 @@ impl RoundTree for LayoutTree<'_> {
       return;
     };
 
-    let mut final_layout = *layout;
-    if node.is_inline_children {
-      final_layout.size.width = node.unrounded_layout.size.width;
-    }
-    // Snap the box, not the stroke: a rounded border width comes out as 2px on
-    // one edge and 3px on another for a uniform 2.5px border, while the
-    // fractional width paints evenly through coverage AA, as browsers do.
-    final_layout.border = node.unrounded_layout.border;
-    node.final_layout = final_layout;
+    node.final_layout = *layout;
   }
 }
 

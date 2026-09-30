@@ -3,7 +3,7 @@
 use crate::{
   font_style::SizedFontStyle,
   geometry::Point,
-  style::{Affine, TextFitMode, TextFitTarget},
+  style::{Affine, TextFit, TextFitMode, TextFitTarget},
 };
 use parley::{
   BreakReason, Cluster, GlyphRun, InlineBoxKind, Line, PositionedInlineBox, PositionedLayoutItem,
@@ -22,14 +22,6 @@ fn text_fit_line_is_scalable(
   }
 
   line_index + 1 != line_count && line.break_reason() != BreakReason::Explicit
-}
-
-fn clamp_text_fit_scale(style: &SizedFontStyle, scale: f32) -> f32 {
-  match (style.parent.text_fit.mode, style.parent.text_fit.limit) {
-    (TextFitMode::Grow, Some(limit)) if limit >= 1.0 => scale.min(limit),
-    (TextFitMode::Shrink, Some(limit)) if limit <= 1.0 => scale.max(limit),
-    _ => scale,
-  }
 }
 
 /// Blink's float carve-out from `text_fit_utils.cc`; in-flow inline boxes scale.
@@ -191,12 +183,84 @@ pub(super) fn text_fit_line_advance(line: &Line<'_, InlineBrush>, rtl: bool) -> 
   (text_advance, static_advance)
 }
 
-/// The scale `text-fit` gives each line, after Blink's `text_fit_utils.cc`.
-pub(super) fn text_fit_line_scales(
+/// How `text-fit` fits one line, as Blink's `LineFitter::FitLine` leaves it.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) struct LineFit {
+  /// Blink's `TextFitScale`: how much the line's text grows or shrinks.
+  pub(crate) scale: f32,
+  /// Whether the line's text reshapes at the scaled font size, as Blink reshapes a line holding
+  /// fixed spacing, instead of scaling as it paints.
+  pub(crate) reshaped: bool,
+}
+
+impl LineFit {
+  /// A line `text-fit` leaves alone.
+  pub(crate) const NONE: Self = Self {
+    scale: 1.0,
+    reshaped: false,
+  };
+
+  /// How the line sizes the text of a box, the root inline box when `root`. Blink's root box
+  /// always scales as it paints, even on a reshaped line.
+  pub(crate) fn text_scale(self, root: bool) -> TextScale {
+    if self.reshaped && !root {
+      TextScale::Font(self.scale)
+    } else {
+      TextScale::Paint(self.scale)
+    }
+  }
+}
+
+/// How a box's text is sized on a `text-fit` line, as Blink's `TextFitBlockScale`.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) enum TextScale {
+  /// At the font's own size, scaled by the factor as it paints.
+  Paint(f32),
+  /// At the font's size times the factor.
+  Font(f32),
+}
+
+impl TextScale {
+  /// The factor the font's own size is multiplied by.
+  pub(crate) fn font(self) -> f32 {
+    match self {
+      Self::Paint(_) => 1.0,
+      Self::Font(scale) => scale,
+    }
+  }
+}
+
+/// Blink's `RestrictScale`: `scale` held to the `text-fit` limit on the side it moves toward.
+fn restrict_scale(scale: f32, is_grow: bool, limit: Option<f32>) -> f32 {
+  let Some(limit) = limit else {
+    return scale;
+  };
+
+  if is_grow {
+    scale.min(limit.max(1.0))
+  } else {
+    scale.max(limit.min(1.0))
+  }
+}
+
+/// One line as `text-fit` measures it.
+struct FitLine {
+  /// Blink's `AvailableWidth` less the line's width, text indent included.
+  remaining: f32,
+  /// The width of the parts that scale: text without its fixed spacing.
+  flexible: f32,
+  /// The width of the parts that do not: inline boxes and fixed spacing.
+  fixed: f32,
+}
+
+/// How `text-fit` fits each line, after Blink's `LineFitter::MeasureScale` for the per-line
+/// targets and `MeasurePerBlockScale` with its caller for `consistent` (`text_fit_utils.cc`,
+/// `block_layout_algorithm.cc`).
+pub(super) fn text_fit_lines(
   layout: &InlineLayout,
   max_width: f32,
   style: &SizedFontStyle,
-) -> Vec<f32> {
+) -> Vec<LineFit> {
   let text_fit = style.parent.text_fit;
   if text_fit.mode == TextFitMode::None || !max_width.is_finite() {
     return Vec::new();
@@ -207,56 +271,101 @@ pub(super) fn text_fit_line_scales(
     return Vec::new();
   }
 
-  let mut scales: Vec<(usize, f32)> = Vec::with_capacity(line_count);
-  for (index, line) in layout.lines().enumerate() {
-    if !text_fit_line_is_scalable(&line, index, line_count, text_fit.target) {
-      continue;
-    }
+  let epsilon = 2.0 * style.sizing.viewport.device_pixel_ratio;
+  let is_grow = text_fit.mode == TextFitMode::Grow;
+  let lines: Vec<FitLine> = layout
+    .lines()
+    .map(|line| {
+      let (flexible, fixed) = text_fit_line_advance(&line, layout.is_rtl());
 
-    let (text_advance, static_advance) = text_fit_line_advance(&line, layout.is_rtl());
-    let flexible_fit_width =
-      (max_width - line.metrics().inline_min_coord - static_advance).max(0.0);
-
-    if text_advance <= 0.0 {
-      continue;
-    }
-    // Blink's `MeasurePerBlockScale` skips a line whose fixed parts already fill it, and Chrome
-    // leaves such a line unscaled under `per-line` too.
-    if flexible_fit_width <= 0.0 {
-      continue;
-    }
-
-    let scale = match text_fit.mode {
-      TextFitMode::Grow if text_advance < flexible_fit_width => flexible_fit_width / text_advance,
-      TextFitMode::Shrink if text_advance > flexible_fit_width => flexible_fit_width / text_advance,
-      _ => 1.0,
-    };
-    scales.push((index, clamp_text_fit_scale(style, scale)));
-  }
+      FitLine {
+        remaining: max_width - line.metrics().inline_min_coord - flexible - fixed,
+        flexible,
+        fixed,
+      }
+    })
+    .collect();
 
   if text_fit.target == TextFitTarget::Consistent {
-    let raw = match text_fit.mode {
-      TextFitMode::Grow => scales.iter().map(|(_, s)| *s).fold(f32::INFINITY, f32::min),
-      TextFitMode::Shrink => scales
-        .iter()
-        .map(|(_, s)| *s)
-        .filter(|s| *s < 1.0)
-        .fold(1.0_f32, f32::min),
-      TextFitMode::None => 1.0,
-    };
-    let consistent_scale = if raw.is_finite() {
-      clamp_text_fit_scale(style, raw)
+    let minimum = lines
+      .iter()
+      .filter(|line| {
+        line.remaining.abs() >= epsilon
+          && line.flexible > 0.0
+          && line.remaining + line.flexible > 0.0
+      })
+      .map(|line| (line.remaining + line.flexible) / line.flexible)
+      .fold(f32::INFINITY, f32::min);
+    let scale = if minimum.is_finite() {
+      restrict_scale(minimum, is_grow, text_fit.limit)
     } else {
       1.0
     };
-    return vec![consistent_scale; line_count];
+    let applies = (scale < 1.0 && !is_grow) || (scale > 1.0 && is_grow);
+
+    return layout
+      .lines()
+      .map(|line| LineFit {
+        scale: if applies { scale } else { 1.0 },
+        reshaped: line_has_fixed_spacing(&line),
+      })
+      .collect();
   }
 
-  let mut result = vec![1.0; line_count];
-  for (index, scale) in scales {
-    result[index] = scale;
+  layout
+    .lines()
+    .zip(&lines)
+    .enumerate()
+    .map(|(index, (line, fit))| LineFit {
+      scale: per_line_scale(&line, fit, index, line_count, max_width, epsilon, text_fit),
+      reshaped: line_has_fixed_spacing(&line),
+    })
+    .collect()
+}
+
+/// The scale `text-fit` gives the line `index` of `line_count` when each line fits by itself, as
+/// Blink's `LineFitter::MeasureScale`.
+fn per_line_scale(
+  line: &Line<'_, InlineBrush>,
+  fit: &FitLine,
+  index: usize,
+  line_count: usize,
+  max_width: f32,
+  epsilon: f32,
+  text_fit: TextFit,
+) -> f32 {
+  let is_grow = text_fit.mode == TextFitMode::Grow;
+  let applies = (fit.remaining > 0.0 && is_grow) || (fit.remaining < 0.0 && !is_grow);
+
+  if fit.remaining.abs() < epsilon
+    || !applies
+    || !text_fit_line_is_scalable(line, index, line_count, text_fit.target)
+    || fit.flexible <= 0.0
+  {
+    return 1.0;
   }
-  result
+
+  let room = max_width - fit.fixed;
+
+  // Chrome leaves a line whose fixed parts already fill it unscaled.
+  if room <= 0.0 {
+    return 1.0;
+  }
+
+  restrict_scale(room / fit.flexible, is_grow, text_fit.limit)
+}
+
+/// Whether any text on `line` has fixed spacing, which makes Blink reshape the line, as its
+/// `HasFixedSpacing`.
+fn line_has_fixed_spacing(line: &Line<'_, InlineBrush>) -> bool {
+  line.items().any(|item| match item {
+    PositionedLayoutItem::GlyphRun(glyph_run) => {
+      let brush = &glyph_run.style().brush;
+
+      brush.fixed_letter_spacing != 0.0 || brush.fixed_word_spacing != 0.0
+    }
+    PositionedLayoutItem::InlineBox(_) => false,
+  })
 }
 
 /// Line start and offset correction for a scaled text-fit line.

@@ -1,12 +1,14 @@
 use crate::{
   context::RenderContext,
-  font_style::{SizedFontStyle, contains_variation_selector, presentation_segments},
+  font_style::{BoxLineHeight, SizedFontStyle, contains_variation_selector, presentation_segments},
   geometry::{AvailableSpace, ComputedLayout, LAYOUT_UNIT_EPSILON, Point, Rect, Size},
   layout::tree::RenderNode,
+  layout_unit::LayoutUnit,
   resources::font::FontClasses,
   style::{
-    AppliedTextDecorations, Color, Direction, FontSynthesis, Lang, Length, TextDecorationSkipInk,
-    TextFitMode, TextOverflow, TextWrapStyle, VerticalAlign, WhiteSpaceCollapse, WordBreak,
+    AppliedTextDecorations, Color, Direction, FontFeature, FontSynthesis, Lang, Length,
+    ResolvedVerticalAlign, Tag, TextDecorationSkipInk, TextFitMode, TextOverflow, TextWrapStyle,
+    VerticalAlign, VerticalAlignKeyword, WhiteSpaceCollapse, WordBreak,
   },
   text_processing::{
     MaxHeight, RebreakOptions, apply_text_transform, apply_white_space_collapse,
@@ -14,8 +16,8 @@ use crate::{
   },
 };
 use parley::{
-  BreakReason, GlyphRun, IndentOptions, InlineBox, InlineBoxKind, Line, PositionedInlineBox,
-  PositionedLayoutItem, TextStyle, TreeBuilder,
+  BreakReason, FontFeatures, GlyphRun, IndentOptions, InlineBox, InlineBoxKind, Line,
+  PositionedInlineBox, PositionedLayoutItem, TextStyle, TreeBuilder,
 };
 use std::{
   convert::Infallible,
@@ -37,7 +39,11 @@ mod runs;
 mod text_fit;
 mod truncation;
 
-pub(crate) use self::{background::PaddingBox, items::InlineOutOfFlow};
+pub(crate) use self::{
+  background::PaddingBox,
+  items::InlineOutOfFlow,
+  text_fit::{LineFit, TextScale},
+};
 pub use self::{
   background::{FragmentBackground, InlineBackgroundFragment},
   decorations::DecorationLine,
@@ -54,12 +60,12 @@ use self::{
   line_box::{BoxFont, BoxKey, FontHeight},
   metrics::{
     ResolvedInlineLineState, ResolvedLineMetrics, Strut, resolve_inline_line_metrics,
-    resolve_inline_line_states, resolve_visual_inline_box, text_line_box_contribution,
+    resolve_inline_line_states, resolve_visual_inline_box,
   },
   runs::measured_run_text,
   text_fit::{
     GlyphCursor, LineScaleState, SpacingStretch, text_fit_is_applicable, text_fit_line_advance,
-    text_fit_line_alignment_correction, text_fit_line_scales, text_fit_x_correction,
+    text_fit_line_alignment_correction, text_fit_lines, text_fit_x_correction,
   },
   truncation::make_ellipsis_layout,
 };
@@ -153,13 +159,21 @@ fn shape_fingerprint(
   style.hash_shaping_inputs(&mut hasher);
   lang.hash(&mut hasher);
   for (span_id, span) in spans.iter().enumerate() {
-    let (text, style): (&str, _) = match span {
-      ProcessedInlineSpan::DirectionMark { direction, style } => (direction.bidi_mark(), style),
-      ProcessedInlineSpan::Text { text, style, .. } => (text, style),
+    let (text, style, shaping) = match span {
+      ProcessedInlineSpan::DirectionMark { direction, style } => {
+        (direction.bidi_mark(), style, None)
+      }
+      ProcessedInlineSpan::Text {
+        text,
+        style,
+        decorations,
+        ..
+      } => (text.as_str(), style, shaping_box(decorations.as_ref())),
       ProcessedInlineSpan::Box(_) | ProcessedInlineSpan::Spacer { .. } => continue,
     };
 
     span_id.hash(&mut hasher);
+    shaping.hash(&mut hasher);
     text.hash(&mut hasher);
     style.hash_shaping_inputs(&mut hasher);
   }
@@ -185,8 +199,8 @@ pub struct BuiltInlineLayout<'c> {
   pub spans: Vec<ProcessedInlineSpan<'c>>,
   /// Out-of-flow inline boxes positioned separately.
   pub(crate) positioned_floats: Vec<PositionedInlineBox>,
-  /// Per-line text-fit scale factors.
-  pub line_scales: Vec<f32>,
+  /// How `text-fit` fits each line, empty when it fits none.
+  pub(crate) line_fits: Vec<LineFit>,
   /// Whether a height or line limit may have dropped lines.
   pub(crate) clamped: bool,
   /// The root inline box's strut, which every line holding content grows to, or `None` when the
@@ -270,13 +284,18 @@ impl BuiltInlineLayout<'_> {
     }
   }
 
+  /// How `text-fit` fits the line `index`.
+  pub(crate) fn line_fit(&self, index: usize) -> LineFit {
+    self.line_fits.get(index).copied().unwrap_or(LineFit::NONE)
+  }
+
   /// Resolved metrics for each line.
   pub(crate) fn line_metrics(&self) -> Vec<ResolvedLineMetrics> {
     resolve_inline_line_metrics(
       &self.layout,
       &self.spans,
       self.font,
-      &self.line_scales,
+      &self.line_fits,
       self.strut.as_ref(),
     )
   }
@@ -300,7 +319,7 @@ impl BuiltInlineLayout<'_> {
         }
 
         let (text_advance, static_advance) = text_fit_line_advance(&line, self.layout.is_rtl());
-        let scale = self.line_scales.get(index).copied().unwrap_or(1.0);
+        let scale = self.line_fit(index).scale;
 
         metrics.inline_min_coord + static_advance + text_advance * scale
       })
@@ -344,7 +363,7 @@ impl BuiltInlineLayout<'_> {
         } else {
           measured_width.max(max_width)
         },
-        height: total_height.max(float_box_height).ceil(),
+        height: total_height.max(float_box_height),
       },
       first_baseline: line_metrics.first().map(|line| line.resolved_baseline),
       last_baseline: line_metrics.last().map(|line| line.resolved_baseline),
@@ -379,13 +398,9 @@ impl BuiltInlineLayout<'_> {
             return Ok(());
           }
 
-          let (origin, size) = glyph_run_rect(
-            &glyph_run,
-            hanging,
-            &stretch,
-            self.run_baseline_shift(line, &glyph_run),
-          );
-          let (origin, size) = setup.scale_rect(origin, size, static_inline_prefix);
+          let baseline_shift = self.run_baseline_shift(line, &glyph_run);
+          let (origin, size) = glyph_run_rect(&glyph_run, hanging, &stretch, baseline_shift);
+          let (origin, size) = setup.scale_rect(origin, size, static_inline_prefix, baseline_shift);
 
           let link = span_id.and_then(|span_id| match self.spans.get(span_id as usize) {
             Some(ProcessedInlineSpan::Text { link, .. }) => link.as_deref(),
@@ -504,11 +519,7 @@ pub struct InlineBrush {
   /// `-webkit-text-stroke` width in pixels.
   pub stroke_width: f32,
   pub(crate) font_synthesis: FontSynthesis,
-  pub(crate) line_height_scales_with_text_fit: bool,
-  /// Used line height in px; `None` falls back to the run metrics.
-  pub(crate) line_height_px: Option<f32>,
-  /// Whether the line height is `normal`, letting fallback-font runs grow the line.
-  pub(crate) line_height_is_normal: bool,
+  pub(crate) line_height: BoxLineHeight,
   /// `letter-spacing` in pixels when it is fixed rather than a percentage, which `text-fit`
   /// leaves unscaled.
   pub(crate) fixed_letter_spacing: f32,
@@ -518,53 +529,57 @@ pub struct InlineBrush {
 }
 
 impl InlineBrush {
-  /// The run's line-box contribution from its font's metrics. An explicit `line-height` comes
-  /// off the brush, since parley's run metrics can carry a neighbouring span's style at run
-  /// boundaries. Under `line-height: normal` each font a run uses grows the line to its own leaded
-  /// box, as Blink's `InlineBoxState::AccumulateUsedFonts` does.
-  fn line_box_contribution(
-    &self,
-    metrics_line_height: f32,
-    ascent: f32,
-    descent: f32,
-    line_gap: f32,
-  ) -> (f32, f32) {
-    let line_height = if self.line_height_is_normal {
-      ascent.round() + descent.round() + line_gap.round()
-    } else {
-      self.line_height_px.unwrap_or(metrics_line_height)
-    };
+  /// The run's line-box contribution from its font's metrics. The line height comes off the
+  /// brush, since parley's run metrics can carry a neighbouring span's style at run boundaries.
+  /// Under `line-height: normal` each font a run uses grows the line to its own leaded box, as
+  /// Blink's `InlineBoxState::AccumulateUsedFonts` does.
+  fn line_box_contribution(&self, ascent: f32, descent: f32, line_gap: f32) -> (f32, f32) {
+    let height = self.line_box_height(ascent, descent, line_gap, TextScale::Paint(1.0));
 
-    text_line_box_contribution(line_height, ascent, descent)
+    (height.ascent.to_f32(), height.descent.to_f32())
   }
 
-  /// The run's line-box contribution on a line `text-fit` scales by `line_scale`. A line height
-  /// that scales grows whole; a fixed one keeps its height around the scaled font's content area,
-  /// as Blink's `InlineBoxState::ComputeTextMetrics` measures the scaled font.
+  /// The run's line-box contribution with its text sized by `scale`, as Blink's
+  /// `InlineBoxState::ComputeTextMetrics` measures it.
   fn line_box_height(
     &self,
-    metrics_line_height: f32,
     ascent: f32,
     descent: f32,
     line_gap: f32,
-    line_scale: f32,
+    scale: TextScale,
   ) -> FontHeight {
-    let (font_scale, box_scale) = if self.line_height_scales_with_text_fit {
-      (1.0, line_scale)
-    } else {
-      (line_scale, 1.0)
-    };
-    let (above, below) = self.line_box_contribution(
-      metrics_line_height,
-      ascent * font_scale,
-      descent * font_scale,
-      line_gap * font_scale,
-    );
+    FontHeight::text(ascent, descent, scale)
+      .with_leading(self.line_height.resolve(ascent, descent, line_gap, scale))
+  }
 
-    FontHeight {
-      ascent: above * box_scale,
-      descent: below * box_scale,
+  /// How far the run's own font grows its box, as Blink's `InlineBoxState::AccumulateUsedFonts`
+  /// grows it: each font's leaded box under `line-height: normal`, scaled after its leading, and
+  /// nothing under any other line height, where only the box's strut counts.
+  fn used_font_height(
+    &self,
+    ascent: f32,
+    descent: f32,
+    line_gap: f32,
+    scale: TextScale,
+  ) -> Option<FontHeight> {
+    if self.line_height != BoxLineHeight::Normal {
+      return None;
     }
+
+    let (font, paint) = match scale {
+      TextScale::Paint(scale) => (TextScale::Paint(1.0), scale),
+      TextScale::Font(_) => (scale, 1.0),
+    };
+    let height = self.line_box_height(ascent, descent, line_gap, font);
+
+    Some(if paint == 1.0 {
+      height
+    } else {
+      FontHeight {
+        ascent: LayoutUnit::from_f32(height.ascent.to_f32() * paint),
+        descent: LayoutUnit::from_f32(height.descent.to_f32() * paint),
+      }
+    })
   }
 }
 
@@ -580,9 +595,7 @@ impl Default for InlineBrush {
       stroke_color: Color::black(),
       stroke_width: 0.0,
       font_synthesis: FontSynthesis::default(),
-      line_height_scales_with_text_fit: false,
-      line_height_px: None,
-      line_height_is_normal: false,
+      line_height: BoxLineHeight::Normal,
       fixed_letter_spacing: 0.0,
       fixed_word_spacing: 0.0,
       vertical_align: VerticalAlign::default(),
@@ -665,20 +678,35 @@ pub(super) fn chromium_line_breaks(spans: &[ProcessedInlineSpan<'_>]) -> bool {
 }
 
 /// Pushes `text` under `style`, giving each variation-selector segment a presentation-reordered
-/// font stack.
+/// font stack. Text inside the span `shaping_box` shapes apart from text outside it.
 pub(super) fn push_presentation_text(
   builder: &mut TreeBuilder<'_, InlineBrush>,
   style: &SizedFontStyle,
   span_id: Option<u64>,
+  shaping_box: Option<usize>,
   text: &str,
   classes: &FontClasses,
 ) {
-  builder.push_style_span(text_style_with_span_id(style, span_id));
+  let text_style = || {
+    let mut text_style = text_style_with_span_id(style, span_id);
+
+    if let Some(id) = shaping_box
+      && let FontFeatures::List(features) = &mut text_style.font_features
+    {
+      // No font defines this feature; the distinct list only makes parley split its shaping run.
+      features
+        .to_mut()
+        .push(FontFeature::new(Tag::new(b"TKSB"), id as u16).into_parlance());
+    }
+    text_style
+  };
+
+  builder.push_style_span(text_style());
   if contains_variation_selector(text) {
     for (range, presentation) in presentation_segments(text) {
       match presentation {
         Some(presentation) => {
-          let mut segment_style = text_style_with_span_id(style, span_id);
+          let mut segment_style = text_style();
           segment_style.font_family = style.font_family.with_presentation(presentation, classes);
           builder.push_style_span(segment_style);
           builder.push_text(&text[range]);
@@ -707,8 +735,20 @@ pub(super) fn push_spans_into_builder(
         builder.push_text(direction.bidi_mark());
         builder.pop_style_span();
       }
-      ProcessedInlineSpan::Text { text, style, .. } => {
-        push_presentation_text(builder, style, Some(span_id as u64), text, classes);
+      ProcessedInlineSpan::Text {
+        text,
+        style,
+        decorations,
+        ..
+      } => {
+        push_presentation_text(
+          builder,
+          style,
+          Some(span_id as u64),
+          shaping_box(decorations.as_ref()),
+          text,
+          classes,
+        );
       }
       ProcessedInlineSpan::Box(item) => {
         builder.push_inline_box(item.inline_box.clone());
@@ -718,6 +758,19 @@ pub(super) fn push_spans_into_builder(
       }
     }
   }
+}
+
+/// The innermost span of `chain` whose edges break shaping, one aligned off the baseline, as
+/// Blink's `ShouldBreakShapingBeforeBox` breaks there.
+/// <https://drafts.csswg.org/css-text-3/#boundary-shaping>
+fn shaping_box(chain: Option<&Rc<DecorationLink<'_>>>) -> Option<usize> {
+  chain?
+    .ancestors()
+    .find(|link| {
+      link.decoration.vertical_align
+        != ResolvedVerticalAlign::Keyword(VerticalAlignKeyword::Baseline)
+    })
+    .map(|link| link.decoration.id)
 }
 
 /// The span the direction mark attributes its output to: a run the mark's cluster merged into
@@ -824,7 +877,7 @@ fn build_inline_layout_tree<'c>(
     text,
     spans,
     positioned_floats: Vec::new(),
-    line_scales: Vec::new(),
+    line_fits: Vec::new(),
     clamped: false,
     strut,
     font,
@@ -1131,7 +1184,7 @@ pub fn create_inline_layout<'c>(request: InlineLayoutRequest<'c>) -> BuiltInline
   if style.parent.text_fit.mode != TextFitMode::None
     && text_fit_is_applicable(&built.positioned_floats)
   {
-    built.line_scales = text_fit_line_scales(&built.layout, max_width, style);
+    built.line_fits = text_fit_lines(&built.layout, max_width, style);
   }
 
   built
@@ -1163,7 +1216,9 @@ fn layout_unit_ceil(value: f32) -> f32 {
 
 /// Per-line setup (scale state, baseline shift, resolved metrics) for the inline painting walk.
 pub(crate) struct LineSetup {
-  /// Text-fit scale state for the line.
+  /// How `text-fit` fits the line.
+  pub(crate) fit: LineFit,
+  /// Text-fit scale state for text on the line's baseline.
   pub(crate) state: LineScaleState,
   /// Baseline shift applied to glyphs on the line.
   pub(crate) baseline_shift: f32,
@@ -1179,17 +1234,18 @@ impl LineSetup {
     line: &Line<'_, InlineBrush>,
     layout: ComputedLayout,
     line_vertical_metrics: &[ResolvedLineMetrics],
-    line_scales: &[f32],
+    fit: LineFit,
     line_index: usize,
     rtl: bool,
   ) -> Option<Self> {
     let resolved_metrics = line_vertical_metrics.get(line_index)?.clone();
-    let line_scale = line_scales.get(line_index).copied().unwrap_or(1.0);
+    let line_scale = fit.scale;
     let (line_scale_origin_x, alignment_correction) =
-      text_fit_line_alignment_correction(line, line_scale, layout.unsnapped_content.width, rtl);
+      text_fit_line_alignment_correction(line, line_scale, layout.content_box_width(), rtl);
     let content = layout.content_box_offset();
 
     Some(Self {
+      fit,
       state: LineScaleState {
         scale: line_scale,
         alignment_correction,
@@ -1202,6 +1258,15 @@ impl LineSetup {
       line_scale_origin_x,
       resolved_metrics,
     })
+  }
+
+  /// The scale state of text shifted `baseline_shift` below the line's layout baseline, scaled
+  /// about its own baseline as Blink scales a text fragment about its text origin.
+  pub(crate) fn run_scale(&self, baseline_shift: f32) -> LineScaleState {
+    let mut state = self.state;
+
+    state.layout_origin.y += baseline_shift - self.baseline_shift;
+    state
   }
 
   /// Scales a line-local `x` for text-fit, mirroring the horizontal correction in
@@ -1222,12 +1287,14 @@ impl LineSetup {
       + (x - self.line_scale_origin_x) * scale
   }
 
-  /// Scales a line-local rect for text-fit about the line's baseline.
+  /// Scales a line-local rect of text shifted `baseline_shift` below the line's layout baseline
+  /// for text-fit, about the text's own baseline.
   pub(crate) fn scale_rect(
     &self,
     origin: Point<f32>,
     size: Size<f32>,
     static_inline_prefix: f32,
+    baseline_shift: f32,
   ) -> (Point<f32>, Size<f32>) {
     let scale = self.state.scale;
 
@@ -1235,7 +1302,7 @@ impl LineSetup {
       return (origin, size);
     }
 
-    let baseline = self.resolved_metrics.resolved_baseline;
+    let baseline = self.resolved_metrics.resolved_baseline + baseline_shift - self.baseline_shift;
 
     (
       Point {
@@ -1307,13 +1374,25 @@ impl<'c> BuiltInlineLayout<'c> {
     }
   }
 
-  /// The baseline shift `glyph_run` sits at on `line`.
+  /// The baseline shift `glyph_run` paints at on `line`.
   pub(crate) fn run_baseline_shift(
     &self,
     line: &WalkedLine,
     glyph_run: &GlyphRun<'_, InlineBrush>,
   ) -> f32 {
-    line.baseline_shift_in(self.run_chain(glyph_run))
+    self.text_baseline_shift(line, self.run_chain(glyph_run))
+  }
+
+  /// The baseline shift text inside the innermost span of `chain` paints at on `line`: its box's
+  /// baseline, moved to where Blink's `TextFragmentPainter` puts a scaled fragment's text origin.
+  pub(crate) fn text_baseline_shift(
+    &self,
+    line: &WalkedLine,
+    chain: Option<&Rc<DecorationLink<'_>>>,
+  ) -> f32 {
+    let font = chain.map_or(self.font, |link| link.decoration.font);
+
+    line.baseline_shift_in(chain) + font.text_origin_shift(line.setup.fit, chain.is_none())
   }
 }
 
@@ -1349,7 +1428,7 @@ impl BuiltInlineLayout<'_> {
         &line,
         layout,
         &line_vertical_metrics,
-        &self.line_scales,
+        self.line_fit(index),
         index,
         self.layout.is_rtl(),
       ) else {
@@ -1484,10 +1563,10 @@ mod tests {
   #[test]
   fn an_explicit_zero_line_height_beats_the_run_metrics() {
     let brush = InlineBrush {
-      line_height_px: Some(0.0),
+      line_height: BoxLineHeight::Length(LayoutUnit::ZERO),
       ..InlineBrush::default()
     };
-    let (above, below) = brush.line_box_contribution(20.0, 12.0, 4.0, 0.0);
+    let (above, below) = brush.line_box_contribution(12.0, 4.0, 0.0);
 
     assert_eq!((above, below), (4.0, -4.0));
   }
@@ -1513,6 +1592,7 @@ mod tests {
       &DecorationPlacement::default(),
       Affine::IDENTITY,
       Affine::IDENTITY,
+      Point::ZERO,
     );
 
     assert_eq!(decorations.len(), 0);
@@ -1612,7 +1692,6 @@ mod tests {
       size: Size::new(1200.0, 630.0),
       border: Rect::default(),
       padding: Rect::default(),
-      unsnapped_content: Size::new(1200.0, 630.0),
     };
     let runs = built.resolve_runs(&render_node.context, layout).unwrap();
 
@@ -1695,7 +1774,6 @@ mod tests {
       size: Size::new(1200.0, 630.0),
       border: crate::geometry::Rect::default(),
       padding: crate::geometry::Rect::default(),
-      unsnapped_content: Size::new(1200.0, 630.0),
     };
     let runs = built.resolve_runs(&render_node.context, layout).unwrap();
 
@@ -1757,7 +1835,6 @@ mod tests {
       size: Size::new(1200.0, 630.0),
       border: crate::geometry::Rect::default(),
       padding: crate::geometry::Rect::default(),
-      unsnapped_content: Size::new(1200.0, 630.0),
     };
     let runs = built.resolve_runs(&render_node.context, layout).unwrap();
     let fragment = runs

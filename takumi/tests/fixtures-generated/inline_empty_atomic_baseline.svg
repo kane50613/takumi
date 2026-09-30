@@ -8,13 +8,13 @@
     <use href="#g0" x="309.24" y="86"/>
     <use href="#g1" x="335.24" y="86"/>
   </g>
-  <rect x="83.76" y="30" width="40" height="56" fill="#fca5a5"/>
-  <path d="M83.76 30h40v56h-40v-56Zm2 2h36v52h-36v-52Z" fill="#1e293b" fill-rule="evenodd"/>
-  <rect x="133.76" y="30" width="40" height="56" fill="#86efac"/>
-  <path d="M133.76 30h40v56h-40v-56Zm2 2h36v52h-36v-52Z" fill="#1e293b" fill-rule="evenodd"/>
-  <rect x="183.76" y="30" width="40" height="56" fill="#93c5fd"/>
-  <path d="M183.76 30h40v56h-40v-56Zm2 2h36v52h-36v-52Z" fill="#1e293b" fill-rule="evenodd"/>
-  <path d="M266.5 24c18.09 0 32.74 14.66 32.74 32.74v30.52c0 18.08-14.65 32.74-32.74 32.74s-32.74-14.66-32.74-32.74v-30.52c0-18.08 14.66-32.74 32.74-32.74Z" fill="#fde047"/>
+  <rect x="84" y="30" width="40" height="56" fill="#fca5a5"/>
+  <path d="M84 30h40v56h-40v-56Zm2 2h36v52h-36v-52Z" fill="#1e293b" fill-rule="evenodd"/>
+  <rect x="134" y="30" width="40" height="56" fill="#86efac"/>
+  <path d="M134 30h40v56h-40v-56Zm2 2h36v52h-36v-52Z" fill="#1e293b" fill-rule="evenodd"/>
+  <rect x="184" y="30" width="40" height="56" fill="#93c5fd"/>
+  <path d="M184 30h40v56h-40v-56Zm2 2h36v52h-36v-52Z" fill="#1e293b" fill-rule="evenodd"/>
+  <path d="M266.5 24c17.95 0 32.5 14.55 32.5 32.5v31c0 17.95-14.55 32.5-32.5 32.5s-32.5-14.55-32.5-32.5v-31c0-17.95 14.55-32.5 32.5-32.5Z" fill="#fde047"/>
   <g fill="#000">
     <use href="#g2" x="247.76" y="86"/>
     <use href="#g3" x="275.48" y="86"/>

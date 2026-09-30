@@ -219,7 +219,7 @@ impl DecorationLine {
 
   /// Fills the pieces `offset` below the top, snapped as Blink's `DrawLineAsRect` snaps them.
   fn fill(&self, pieces: &[(f32, f32)], offset: f32, device: &mut dyn PaintDevice) {
-    let top = (self.origin.y + offset + 0.5).floor();
+    let top = self.paint_floor_y(self.origin.y + offset + 0.5);
     let height = self.thickness.floor().max(1.0);
 
     for &(start, end) in pieces {
@@ -274,12 +274,22 @@ impl DecorationLine {
     device.pop_clip();
   }
 
+  /// `x` floored to a whole pixel where the border box sits in paint space.
+  fn paint_floor_x(&self, x: f32) -> f32 {
+    (self.paint_offset.x + x).floor() - self.paint_offset.x
+  }
+
+  /// `y` floored to a whole pixel where the border box sits in paint space.
+  fn paint_floor_y(&self, y: f32) -> f32 {
+    (self.paint_offset.y + y).floor() - self.paint_offset.y
+  }
+
   /// Blink's `GetSnappedPointsForTextLine`, with the thickness `DrawLineAsStroke` rounds.
   fn dashed(&self) -> DashedLine {
     DashedLine {
-      start: self.origin.x.floor(),
-      end: (self.origin.x + self.width).floor(),
-      row: (self.origin.y + (self.thickness / 2.0).max(0.5)).floor(),
+      start: self.paint_floor_x(self.origin.x),
+      end: self.paint_floor_x(self.origin.x + self.width),
+      row: self.paint_floor_y(self.origin.y + (self.thickness / 2.0).max(0.5)),
       thickness: self.thickness.round().max(1.0),
     }
   }

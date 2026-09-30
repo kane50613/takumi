@@ -10,6 +10,7 @@ use super::gradient_utils::{
   parse_gradient_stops, push_center_clause, write_gradient_css,
 };
 use crate::{
+  geometry::Size,
   math,
   style::{
     Angle, Color, ColorInterpolationMethod, CssDescriptorKind, CssToken, FromCss, GradientStop,
@@ -178,7 +179,28 @@ impl ConicGradientTile {
     current_color: Color,
     dither: bool,
   ) -> Self {
-    let (cx, cy) = gradient.resolve_center(width as f32, height as f32, sizing);
+    Self::sized(
+      gradient,
+      Size {
+        width: width as f32,
+        height: height as f32,
+      },
+      sizing,
+      current_color,
+      dither,
+    )
+  }
+
+  /// Builds a drawing context from a gradient over a tile of `size`, its pixel grid covering it.
+  pub fn sized(
+    gradient: &ConicGradient,
+    size: Size<f32>,
+    sizing: &SizingContext,
+    current_color: Color,
+    dither: bool,
+  ) -> Self {
+    let (width, height) = (size.width.ceil() as u32, size.height.ceil() as u32);
+    let (cx, cy) = gradient.resolve_center(size.width, size.height, sizing);
 
     let start_rad = gradient.from_angle.to_radians().rem_euclid(TAU);
     let start_turns = start_rad / TAU;
@@ -217,8 +239,13 @@ impl ConicGradientTile {
 
   #[inline(always)]
   fn pixel_lut_index(&self, x: u32, y: u32) -> usize {
-    let dx = x as f32 - self.cx;
-    let dy = y as f32 - self.cy;
+    self.point_index(x as f32 + 0.5, y as f32 + 0.5)
+  }
+
+  #[inline(always)]
+  fn point_index(&self, x: f32, y: f32) -> usize {
+    let dx = x - self.cx;
+    let dy = y - self.cy;
     if dx.abs() <= f32::EPSILON && dy.abs() <= f32::EPSILON {
       return 0;
     }
@@ -232,6 +259,11 @@ impl GradientOverlayTile for ConicGradientTile {
   type RowState = ConicGradientRowState;
 
   gradient_tile_accessors!();
+
+  #[inline(always)]
+  fn point_lut_index(&self, x: f32, y: f32) -> usize {
+    self.point_index(x, y)
+  }
 
   #[inline(always)]
   fn sample_pixel(&self, x: u32, y: u32) -> PremultipliedColorU8 {
@@ -254,8 +286,8 @@ impl GradientOverlayTile for ConicGradientTile {
   #[inline(always)]
   fn begin_row(&self, src_x_start: u32, src_y: u32, lut_len: usize) -> Self::RowState {
     ConicGradientRowState {
-      dx: src_x_start as f32 - self.cx,
-      dy: src_y as f32 - self.cy,
+      dx: src_x_start as f32 + 0.5 - self.cx,
+      dy: src_y as f32 + 0.5 - self.cy,
       lut_len,
     }
   }

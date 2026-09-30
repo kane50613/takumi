@@ -2,11 +2,11 @@
   <rect x="0" y="0" width="1200" height="630" fill="#fff"/>
   <g opacity=".5">
     <rect x="276" y="205" width="300" height="220" fill="#f0f0f0"/>
-    <use href="#g0" x="382" y="358" fill="#000"/>
+    <use href="#g0" x="382.2" y="358" fill="#000"/>
   </g>
   <g opacity=".5">
     <rect x="624" y="205" width="300" height="220" fill="#f0f0f0"/>
-    <use href="#g0" x="730" y="358" fill="#000"/>
+    <use href="#g0" x="730.2" y="358" fill="#000"/>
   </g>
   <defs>
     <path id="g0" d="M2.25 0l30.72-85.2h21.62l30.72 85.2h-18.9l-6.29-18.13h-32.73l-6.3 18.13Zm30.27-33.09h22.54l-11.23-32.96Z"/>

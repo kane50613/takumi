@@ -647,21 +647,23 @@ fn inset_corner(
   (!pieces.is_empty()).then_some(pieces)
 }
 
-/// The rectangle at `target` inside the `origin` box, its corners following the origin's
-/// `radii` and `curvatures` as Blink's `AddContouredRect` draws an inset contoured rectangle.
+/// The rectangle at `target` inside the origin box of `origin_size` at `origin_offset`, its
+/// corners following the origin's `radii` and `curvatures` as Blink's `AddContouredRect` draws an
+/// inset contoured rectangle.
 pub(crate) fn append_inset_contour(
+  origin_offset: Point<f32>,
   origin_size: Size<f32>,
   radii: &Sides<SpacePair<f32>>,
   curvatures: [f32; 4],
   target: Rect<f32>,
   path: &mut Vec<PathCommand>,
 ) {
-  let origin_corners = Corner::of_box(Point::ZERO, origin_size, radii, curvatures);
+  let origin_corners = Corner::of_box(origin_offset, origin_size, radii, curvatures);
   let insets = Rect {
-    left: target.left,
-    top: target.top,
-    right: origin_size.width - target.right,
-    bottom: origin_size.height - target.bottom,
+    left: target.left - origin_offset.x,
+    top: target.top - origin_offset.y,
+    right: origin_offset.x + origin_size.width - target.right,
+    bottom: origin_offset.y + origin_size.height - target.bottom,
   };
   let shrink = |radius: f32, inset: f32| {
     if radius > 0.0 {

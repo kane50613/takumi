@@ -7,7 +7,7 @@
     <path d="M46 40v120" fill="none" stroke="#000" stroke-width="12" stroke-dasharray="24 8"/>
   </mask>
   <g mask="url(#mk0)">
-    <pattern id="pat1" patternUnits="userSpaceOnUse" x="52" y="52" width="96" height="96">
+    <pattern id="pat1" patternUnits="userSpaceOnUse" x="-44" y="-44" width="96" height="96">
       <linearGradient id="lg2" gradientUnits="userSpaceOnUse" x1="0" y1="0" x2="96" y2="96">
         <stop offset="0" stop-color="#2563eb"/>
         <stop offset=".016" stop-color="#2862e8"/>
@@ -122,7 +122,7 @@
     <path d="M352 48h104v104h-104v-104Zm4 4h96v96h-96v-96Z" fill="#000" fill-rule="evenodd"/>
   </mask>
   <g mask="url(#mk10)">
-    <pattern id="pat11" patternUnits="userSpaceOnUse" x="356" y="52" width="96" height="96">
+    <pattern id="pat11" patternUnits="userSpaceOnUse" x="260" y="-44" width="96" height="96">
       <linearGradient id="lg12" gradientUnits="userSpaceOnUse" x1="0" y1="48" x2="96" y2="48">
         <stop offset="0" stop-color="#ea580c"/>
         <stop offset=".016" stop-color="#e95710"/>

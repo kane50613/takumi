@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630">
-  <pattern id="pat0" patternUnits="userSpaceOnUse" x="0" y="0" width="171.429" height="126">
-    <radialGradient id="rg1" gradientUnits="userSpaceOnUse" cx="85.5" cy="63" r="106.204">
+  <pattern id="pat0" patternUnits="userSpaceOnUse" x="-4.266" y="-123" width="171.422" height="126">
+    <radialGradient id="rg1" gradientUnits="userSpaceOnUse" cx="85.711" cy="63" r="106.374">
       <stop offset="0" stop-color="#000"/>
       <stop offset=".016" stop-color="#000" stop-opacity=".973"/>
       <stop offset=".032" stop-color="#000" stop-opacity=".949"/>
@@ -66,7 +66,7 @@
       <stop offset=".984" stop-color="#000" stop-opacity="0"/>
       <stop offset="1" stop-color="#000" stop-opacity="0"/>
     </radialGradient>
-    <rect x="0" y="0" width="171.429" height="126" fill="url(#rg1)"/>
+    <rect x="0" y="0" width="171.422" height="126" fill="url(#rg1)"/>
   </pattern>
   <rect x="0" y="0" width="1200" height="630" fill="url(#pat0)"/>
 </svg>

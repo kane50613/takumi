@@ -4,7 +4,7 @@ use taffy::{LengthPercentage, Line, Rect, Size};
 
 use super::ComputedStyle;
 use crate::{
-  geometry::Size as CoreSize,
+  geometry::{Point, Size as CoreSize},
   style::{Lang, SizingContext, properties::*},
 };
 
@@ -111,13 +111,62 @@ impl ComputedStyle {
   pub fn contains_fixed_descendants(&self) -> bool {
     self.contain.contains(Contain::LAYOUT)
       || self.contain.contains(Contain::PAINT)
-      || self.transform.as_ref().is_some_and(|t| !t.0.is_empty())
+      || self.has_transform_related_property()
+      || !self.filter.is_empty()
+      || !self.backdrop_filter.is_empty()
+  }
+
+  /// Blink's `HasTransformRelatedProperty`, for the properties takumi has.
+  pub(crate) fn has_transform_related_property(&self) -> bool {
+    self.transform.as_ref().is_some_and(|t| !t.0.is_empty())
       || self.offset_path.is_some()
       || self.rotate.is_some()
       || self.translate != SpacePair::default()
       || self.scale != SpacePair::default()
-      || !self.filter.is_empty()
-      || !self.backdrop_filter.is_empty()
+  }
+
+  /// Blink's `UpdateForPaintOffsetTranslation`: the paint offset a box with this style paints
+  /// at, from `paint_offset` in its parent's space, after the translation its transform, backdrop
+  /// filter, or containment takes moves the whole pixels out. `local` is the box's transform.
+  pub(crate) fn paint_offset_after_translation(
+    &self,
+    paint_offset: Point<f32>,
+    local: Affine,
+  ) -> Point<f32> {
+    // Blink's `NeedsIsolationNodes`.
+    let isolates = self.contain.contains(Contain::PAINT)
+      || (self.contain.contains(Contain::STYLE) && self.contain.contains(Contain::LAYOUT));
+
+    if isolates {
+      return Point::ZERO;
+    }
+    if !self.has_transform_related_property() && self.backdrop_filter.is_empty() {
+      return paint_offset;
+    }
+
+    // `ToRoundedVector2d` rounds as `LayoutUnit::Round` does, halves up.
+    let subpixel = |offset: f32| offset - (offset + 0.5).floor();
+    // Blink's `CanPropagateSubpixelAccumulation`.
+    let (keep_x, keep_y) = if local.only_translation() {
+      (true, true)
+    } else if local.b == 0.0 && local.c == 0.0 {
+      (local.a == 1.0, local.d == 1.0)
+    } else {
+      (false, false)
+    };
+
+    Point {
+      x: if keep_x {
+        subpixel(paint_offset.x)
+      } else {
+        0.0
+      },
+      y: if keep_y {
+        subpixel(paint_offset.y)
+      } else {
+        0.0
+      },
+    }
   }
 
   /// Whether the element must render to an offscreen layer before compositing.

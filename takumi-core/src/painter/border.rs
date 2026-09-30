@@ -1171,6 +1171,7 @@ impl BorderShape {
       origin: Some(ContourOrigin {
         border: self.border,
         size: self.size,
+        offset: Point::ZERO,
       }),
     }
     .into()

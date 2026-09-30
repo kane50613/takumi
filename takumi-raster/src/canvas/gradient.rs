@@ -196,9 +196,9 @@ fn overlay_linear_gradient_row_lanes(
   }
 
   let max_index = (lut.len() - 1) as u32;
-  let src_x_start = (bounds.x_min - bounds.offset_x) as f32;
+  let src_x_start = (bounds.x_min - bounds.offset_x) as f32 + 0.5;
   let row_projection = |dest_y: i32| {
-    let src_y = (dest_y - bounds.offset_y) as f32;
+    let src_y = (dest_y - bounds.offset_y) as f32 + 0.5;
     src_x_start * gradient.dir_x + src_y * gradient.dir_y + gradient.projection_bias
   };
 

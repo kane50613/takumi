@@ -1,61 +1,61 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630">
   <rect x="0" y="0" width="1200" height="630" fill="#0b0d0c"/>
   <g fill="#c9d4cd">
-    <use href="#g0" x="233" y="202"/>
-    <use href="#g1" x="243.35" y="202"/>
-    <use href="#g2" x="253.52" y="202"/>
-    <use href="#g3" x="263.29" y="202"/>
-    <use href="#g2" x="270.06" y="202"/>
-    <use href="#g4" x="280.2" y="202"/>
-    <use href="#g5" x="290.44" y="202"/>
-    <use href="#g6" x="305.04" y="202"/>
-    <use href="#g1" x="315.57" y="202"/>
-    <use href="#g7" x="325.41" y="202"/>
-    <use href="#g2" x="337.6" y="202"/>
-    <use href="#g4" x="347.73" y="202"/>
+    <use href="#g0" x="233.4" y="202"/>
+    <use href="#g1" x="243.75" y="202"/>
+    <use href="#g2" x="253.92" y="202"/>
+    <use href="#g3" x="263.69" y="202"/>
+    <use href="#g2" x="270.46" y="202"/>
+    <use href="#g4" x="280.59" y="202"/>
+    <use href="#g5" x="290.84" y="202"/>
+    <use href="#g6" x="305.43" y="202"/>
+    <use href="#g1" x="315.96" y="202"/>
+    <use href="#g7" x="325.81" y="202"/>
+    <use href="#g2" x="338" y="202"/>
+    <use href="#g4" x="348.13" y="202"/>
   </g>
   <g fill="#c9d4cd">
-    <use href="#g8" x="845" y="256"/>
-    <use href="#g9" x="851.73" y="256"/>
-    <use href="#g6" x="859.27" y="256"/>
-    <use href="#g10" x="869.8" y="256"/>
-    <use href="#g3" x="873.48" y="256"/>
-    <use href="#g11" x="885.03" y="256"/>
-    <use href="#g12" x="895.56" y="256"/>
-    <use href="#g2" x="905.8" y="256"/>
-    <use href="#g13" x="915.94" y="256"/>
-    <use href="#g11" x="925.12" y="256"/>
-    <use href="#g12" x="935.65" y="256"/>
-    <use href="#g2" x="945.89" y="256"/>
-    <use href="#g14" x="956.02" y="256"/>
+    <use href="#g8" x="845.07" y="256"/>
+    <use href="#g9" x="851.8" y="256"/>
+    <use href="#g6" x="859.34" y="256"/>
+    <use href="#g10" x="869.87" y="256"/>
+    <use href="#g3" x="873.55" y="256"/>
+    <use href="#g11" x="885.1" y="256"/>
+    <use href="#g12" x="895.63" y="256"/>
+    <use href="#g2" x="905.87" y="256"/>
+    <use href="#g13" x="916.01" y="256"/>
+    <use href="#g11" x="925.19" y="256"/>
+    <use href="#g12" x="935.72" y="256"/>
+    <use href="#g2" x="945.96" y="256"/>
+    <use href="#g14" x="956.09" y="256"/>
   </g>
   <g fill="#c9d4cd">
-    <use href="#g15" x="175" y="579"/>
-    <use href="#g2" x="184.65" y="579"/>
-    <use href="#g4" x="194.78" y="579"/>
-    <use href="#g3" x="204.52" y="579"/>
-    <use href="#g14" x="211.67" y="579"/>
-    <use href="#g16" x="217.77" y="579"/>
-    <use href="#g13" x="227.58" y="579"/>
-    <use href="#g3" x="236.4" y="579"/>
-    <use href="#g17" x="247.95" y="579"/>
-    <use href="#g0" x="262.5" y="579"/>
-    <use href="#g10" x="272.85" y="579"/>
-    <use href="#g3" x="276.52" y="579"/>
-    <use href="#g12" x="283.29" y="579"/>
-    <use href="#g5" x="293.53" y="579"/>
-    <use href="#g14" x="303.45" y="579"/>
-    <use href="#g17" x="314.77" y="579"/>
-    <use href="#g6" x="329.31" y="579"/>
-    <use href="#g14" x="339.84" y="579"/>
-    <use href="#g10" x="346.13" y="579"/>
-    <use href="#g18" x="350.34" y="579"/>
-    <use href="#g12" x="360.76" y="579"/>
-    <use href="#g3" x="370.5" y="579"/>
-    <use href="#g4" x="377.64" y="579"/>
-    <use href="#g5" x="387.89" y="579"/>
-    <use href="#g13" x="397.8" y="579"/>
-    <use href="#g13" x="406.98" y="579"/>
+    <use href="#g15" x="175.32" y="579"/>
+    <use href="#g2" x="184.97" y="579"/>
+    <use href="#g4" x="195.1" y="579"/>
+    <use href="#g3" x="204.84" y="579"/>
+    <use href="#g14" x="211.99" y="579"/>
+    <use href="#g16" x="218.09" y="579"/>
+    <use href="#g13" x="227.9" y="579"/>
+    <use href="#g3" x="236.72" y="579"/>
+    <use href="#g17" x="248.27" y="579"/>
+    <use href="#g0" x="262.82" y="579"/>
+    <use href="#g10" x="273.17" y="579"/>
+    <use href="#g3" x="276.84" y="579"/>
+    <use href="#g12" x="283.61" y="579"/>
+    <use href="#g5" x="293.85" y="579"/>
+    <use href="#g14" x="303.77" y="579"/>
+    <use href="#g17" x="315.09" y="579"/>
+    <use href="#g6" x="329.63" y="579"/>
+    <use href="#g14" x="340.16" y="579"/>
+    <use href="#g10" x="346.45" y="579"/>
+    <use href="#g18" x="350.66" y="579"/>
+    <use href="#g12" x="361.08" y="579"/>
+    <use href="#g3" x="370.82" y="579"/>
+    <use href="#g4" x="377.96" y="579"/>
+    <use href="#g5" x="388.21" y="579"/>
+    <use href="#g13" x="398.12" y="579"/>
+    <use href="#g13" x="407.3" y="579"/>
   </g>
   <linearGradient id="lg0" gradientUnits="userSpaceOnUse" x1="794" y1="349" x2="1014" y2="569">
     <stop offset="0" stop-color="#8b5cf6"/>
@@ -126,15 +126,15 @@
   <rect x="774" y="369" width="260" height="180" fill="url(#lg0)"/>
   <path d="M972 387c24.3 0 44 19.7 44 44s-19.7 44-44 44-44-19.7-44-44 19.7-44 44-44Z" fill="#f1f5f9" fill-opacity=".902"/>
   <g fill="#c9d4cd">
-    <use href="#g14" x="865" y="579"/>
-    <use href="#g5" x="871.1" y="579"/>
-    <use href="#g19" x="880.66" y="579"/>
-    <use href="#g5" x="886.98" y="579"/>
-    <use href="#g14" x="896.9" y="579"/>
-    <use href="#g5" x="903" y="579"/>
-    <use href="#g4" x="912.92" y="579"/>
-    <use href="#g15" x="923.16" y="579"/>
-    <use href="#g5" x="932.81" y="579"/>
+    <use href="#g14" x="865.05" y="579"/>
+    <use href="#g5" x="871.15" y="579"/>
+    <use href="#g19" x="880.71" y="579"/>
+    <use href="#g5" x="887.02" y="579"/>
+    <use href="#g14" x="896.94" y="579"/>
+    <use href="#g5" x="903.04" y="579"/>
+    <use href="#g4" x="912.96" y="579"/>
+    <use href="#g15" x="923.2" y="579"/>
+    <use href="#g5" x="932.85" y="579"/>
   </g><filter id="fr1" color-interpolation-filters="sRGB" x="0" y="0" width="100%" height="100%"><feImage href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%224%22%20height%3D%224%22%3E%3Crect%20x%3D%220%22%20y%3D%220%22%20width%3D%221%22%20height%3D%221%22%20fill%3D%22rgb%288%2C8%2C8%29%22%2F%3E%3Crect%20x%3D%221%22%20y%3D%220%22%20width%3D%221%22%20height%3D%221%22%20fill%3D%22rgb%28135%2C135%2C135%29%22%2F%3E%3Crect%20x%3D%222%22%20y%3D%220%22%20width%3D%221%22%20height%3D%221%22%20fill%3D%22rgb%2840%2C40%2C40%29%22%2F%3E%3Crect%20x%3D%223%22%20y%3D%220%22%20width%3D%221%22%20height%3D%221%22%20fill%3D%22rgb%28167%2C167%2C167%29%22%2F%3E%3Crect%20x%3D%220%22%20y%3D%221%22%20width%3D%221%22%20height%3D%221%22%20fill%3D%22rgb%28199%2C199%2C199%29%22%2F%3E%3Crect%20x%3D%221%22%20y%3D%221%22%20width%3D%221%22%20height%3D%221%22%20fill%3D%22rgb%2872%2C72%2C72%29%22%2F%3E%3Crect%20x%3D%222%22%20y%3D%221%22%20width%3D%221%22%20height%3D%221%22%20fill%3D%22rgb%28231%2C231%2C231%29%22%2F%3E%3Crect%20x%3D%223%22%20y%3D%221%22%20width%3D%221%22%20height%3D%221%22%20fill%3D%22rgb%28104%2C104%2C104%29%22%2F%3E%3Crect%20x%3D%220%22%20y%3D%222%22%20width%3D%221%22%20height%3D%221%22%20fill%3D%22rgb%2856%2C56%2C56%29%22%2F%3E%3Crect%20x%3D%221%22%20y%3D%222%22%20width%3D%221%22%20height%3D%221%22%20fill%3D%22rgb%28183%2C183%2C183%29%22%2F%3E%3Crect%20x%3D%222%22%20y%3D%222%22%20width%3D%221%22%20height%3D%221%22%20fill%3D%22rgb%2824%2C24%2C24%29%22%2F%3E%3Crect%20x%3D%223%22%20y%3D%222%22%20width%3D%221%22%20height%3D%221%22%20fill%3D%22rgb%28151%2C151%2C151%29%22%2F%3E%3Crect%20x%3D%220%22%20y%3D%223%22%20width%3D%221%22%20height%3D%221%22%20fill%3D%22rgb%28247%2C247%2C247%29%22%2F%3E%3Crect%20x%3D%221%22%20y%3D%223%22%20width%3D%221%22%20height%3D%221%22%20fill%3D%22rgb%28120%2C120%2C120%29%22%2F%3E%3Crect%20x%3D%222%22%20y%3D%223%22%20width%3D%221%22%20height%3D%221%22%20fill%3D%22rgb%28215%2C215%2C215%29%22%2F%3E%3Crect%20x%3D%223%22%20y%3D%223%22%20width%3D%221%22%20height%3D%221%22%20fill%3D%22rgb%2888%2C88%2C88%29%22%2F%3E%3C%2Fsvg%3E" width="8" height="8" result="b"/><feTile in="b" result="tile"/><feColorMatrix in="SourceGraphic" type="matrix" values="0.2126 0.7152 0.0722 0 0 0.2126 0.7152 0.0722 0 0 0.2126 0.7152 0.0722 0 0 0 0 0 1 0" result="luma"/><feComposite in="luma" in2="tile" operator="arithmetic" k2="1" k3="1" k4="-0.5" result="noised"/><feComponentTransfer in="noised" result="bits"><feFuncR type="discrete" tableValues="0 1"/><feFuncG type="discrete" tableValues="0 1"/><feFuncB type="discrete" tableValues="0 1"/></feComponentTransfer><feComponentTransfer in="bits" result="tinted"><feFuncR type="table" tableValues="0.075 0.31"/><feFuncG type="table" tableValues="0.145 0.553"/><feFuncB type="table" tableValues="0.31 0.976"/></feComponentTransfer><feComposite in="tinted" in2="SourceAlpha" operator="in"/></filter><g filter="url(#fr1)">
     <rect x="186" y="100" width="220" height="72" fill="#000" fill-opacity="0"/>
     <clipPath id="cp2">

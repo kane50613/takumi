@@ -36,6 +36,8 @@ pub struct NodePaint {
   pub node_id: NodeId,
   /// Accumulated transform applied when painting.
   pub transform: Affine,
+  /// Blink's paint offset of the border box: where it sits in the space paint snaps to pixels in.
+  pub paint_offset: Point<f32>,
   /// Containing-block size; `None` on an axis is indefinite.
   pub container_size: Size<Option<f32>>,
   /// Device-space bounds of the paint output, if any.
@@ -258,10 +260,18 @@ impl StackingContextNode {
   }
 }
 
+/// Where a box's children start: the device transform and Blink's paint offset of the space
+/// their layout locations are measured in.
+#[derive(Clone, Copy)]
+struct ChildBase {
+  transform: Affine,
+  paint_offset: Point<f32>,
+}
+
 struct StackingContextBuildVisit {
   path: Vec<usize>,
   node_id: NodeId,
-  transform: Affine,
+  base: ChildBase,
   container_size: Size<Option<f32>>,
   /// The clip and effect the box starts from: its parent's contents state, with the clip of its
   /// containing block's contents when it is hoisted there.
@@ -313,6 +323,8 @@ pub struct SceneRequest<'a> {
   pub layout_results: &'a LayoutResults,
   /// The transform the root paints under.
   pub transform: Affine,
+  /// Blink's paint offset of the space the root's layout location is measured in.
+  pub paint_offset: Point<f32>,
   /// The size percentages of the root resolve against.
   pub container_size: Size<Option<f32>>,
   /// Whether to compute each node's paint bounds, which the raster and SVG backends clip and cull by.
@@ -326,6 +338,7 @@ impl SceneRequest<'_> {
       root,
       layout_results,
       transform,
+      paint_offset,
       container_size,
       paint_bounds: with_bounds,
     } = self;
@@ -337,7 +350,10 @@ impl SceneRequest<'_> {
     let mut visits = vec![StackingContextBuildVisit {
       path: Vec::new(),
       node_id: NodeId::ROOT,
-      transform,
+      base: ChildBase {
+        transform,
+        paint_offset,
+      },
       container_size,
       state: PropertyState::default(),
       context_id: 0,
@@ -355,17 +371,25 @@ impl SceneRequest<'_> {
         continue;
       }
 
-      let mut current_transform = visit.transform;
-      current_transform *= Affine::translation(layout.location.x, layout.location.y);
-      current_transform *= current.context.style.local_transform(
+      let local_transform = current.context.style.local_transform(
         layout.size.width,
         layout.size.height,
         &current.context.sizing,
       );
+      let mut current_transform = visit.base.transform;
+      current_transform *= Affine::translation(layout.location.x, layout.location.y);
+      current_transform *= local_transform;
       if !current_transform.is_invertible() {
         continue;
       }
-      containing_blocks.record_transform(visit.node_id, current_transform);
+      let child_base = ChildBase {
+        transform: current_transform,
+        paint_offset: current.context.style.paint_offset_after_translation(
+          visit.base.paint_offset + layout.location,
+          local_transform,
+        ),
+      };
+      containing_blocks.record_placement(visit.node_id, child_base);
 
       let node_properties = NodeProperties::build(
         &mut properties,
@@ -374,6 +398,7 @@ impl SceneRequest<'_> {
         &current.context,
         layout,
         current_transform,
+        child_base.paint_offset,
       );
 
       contents.insert(
@@ -388,6 +413,7 @@ impl SceneRequest<'_> {
         path: visit.path.clone(),
         node_id: visit.node_id,
         transform: current_transform,
+        paint_offset: child_base.paint_offset,
         container_size: visit.container_size,
         paint_bounds: with_bounds
           .then(|| compute_node_paint_bounds(current, layout, current_transform))
@@ -484,8 +510,8 @@ impl SceneRequest<'_> {
       for child in layout_children.iter().rev() {
         let mut child_path = visit.path.clone();
         child.extend_path(&mut child_path);
-        let (base_transform, base_container) =
-          containing_blocks.base_for(child, current_transform, child_container_size);
+        let (base, base_container) =
+          containing_blocks.base_for(child, child_base, child_container_size);
         let clip = match child.hoisted_cb.and_then(|cb| contents.get(&cb)) {
           Some(container) => {
             properties.release_escaped_effects(node_properties.contents.effect, container);
@@ -497,7 +523,7 @@ impl SceneRequest<'_> {
         visits.push(StackingContextBuildVisit {
           path: child_path,
           node_id: child.node_id,
-          transform: base_transform,
+          base,
           container_size: base_container,
           state: PropertyState {
             clip,
@@ -592,25 +618,88 @@ impl Scene {
     let results = LayoutResults::compute(&root, viewport.into());
     let container_size = Size::from(viewport.size);
     let size = container_size.zip_map(results.layout(NodeId::ROOT)?.size, Option::unwrap_or);
-    let SceneLayers {
-      contexts,
-      properties,
-    } = SceneRequest {
+    let layers = SceneRequest {
       root: &root,
       layout_results: &results,
       transform: Affine::IDENTITY,
+      paint_offset: Point::ZERO,
       container_size,
       paint_bounds,
     }
     .build()?;
 
-    Ok(Self {
+    Ok(Self::new(root, results, layers, size))
+  }
+
+  /// The scene of `root` laid out as `results` and stacked as `layers`, its boxes' contexts set to
+  /// their paint offsets.
+  pub(crate) fn new(
+    mut root: RenderNode,
+    results: LayoutResults,
+    layers: SceneLayers,
+    size: Size<f32>,
+  ) -> Self {
+    let SceneLayers {
+      contexts,
+      properties,
+    } = layers;
+    let mut offsets = HashMap::new();
+
+    for context in &contexts {
+      let items = context.buckets.in_paint_order().into_iter().flatten();
+      let paints = items.filter_map(|item| match &item.kind {
+        PaintItemKind::Node(paint) | PaintItemKind::Floats(paint) => Some(paint),
+        PaintItemKind::Context(_) => None,
+      });
+
+      for paint in context.root.iter().chain(paints) {
+        if let Ok(layout) = results.layout(paint.node_id) {
+          offsets.insert(paint.path.clone(), (paint.paint_offset, layout.location));
+        }
+      }
+    }
+    set_paint_offsets(&mut root, &mut Vec::new(), Point::ZERO, &offsets);
+
+    Self {
       root,
       results,
       contexts,
       properties,
       size,
-    })
+    }
+  }
+}
+
+/// Sets the context of `node`, at `path`, and of its descendants to the paint offset its layout
+/// location adds to: from `offsets` for a box the scene placed, else `inherited`, the offset of the
+/// box whose inline content it paints in.
+fn set_paint_offsets(
+  node: &mut RenderNode,
+  path: &mut Vec<usize>,
+  inherited: Point<f32>,
+  offsets: &HashMap<Vec<usize>, (Point<f32>, Point<f32>)>,
+) {
+  let (base, own) = match offsets.get(path.as_slice()) {
+    Some(&(own, location)) => (
+      Point {
+        x: own.x - location.x,
+        y: own.y - location.y,
+      },
+      own,
+    ),
+    None => (inherited, inherited),
+  };
+
+  node.context.paint_offset = base;
+  for (index, child) in node
+    .children
+    .iter_mut()
+    .flat_map(|children| children.iter_mut())
+    .enumerate()
+  {
+    path.push(index);
+    set_paint_offsets(child, path, own, offsets);
+    path.pop();
   }
 }
 
@@ -748,7 +837,7 @@ fn compute_node_paint_bounds(
     return bounds;
   }
 
-  let content = layout.unsnapped_content;
+  let content = layout.content_box_size();
   let available_space = Size {
     width: AvailableSpace::Definite(content.width),
     height: AvailableSpace::Definite(content.height),
@@ -780,8 +869,12 @@ fn compute_node_paint_bounds(
         let baseline_shift = built.run_baseline_shift(line, &glyph_run);
         let (glyph_origin, glyph_size) =
           glyph_run_rect(&glyph_run, hanging, &stretch, baseline_shift);
-        let (glyph_origin, glyph_size) =
-          setup.scale_rect(glyph_origin, glyph_size, static_inline_prefix);
+        let (glyph_origin, glyph_size) = setup.scale_rect(
+          glyph_origin,
+          glyph_size,
+          static_inline_prefix,
+          baseline_shift,
+        );
 
         bounds = merge_bounds(
           bounds,
@@ -807,7 +900,12 @@ fn compute_node_paint_bounds(
             layout,
           );
 
-          for line in run.decoration_lines(&placement, Affine::IDENTITY, transform) {
+          for line in run.decoration_lines(
+            &placement,
+            Affine::IDENTITY,
+            transform,
+            node.context.box_paint_offset(layout),
+          ) {
             let area = line.bounds();
 
             bounds = merge_bounds(
@@ -860,6 +958,7 @@ fn compute_node_paint_bounds(
               height: max_y - min_y,
             },
             static_inline_prefix,
+            baseline_shift,
           );
 
           bounds = merge_bounds(

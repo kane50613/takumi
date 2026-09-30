@@ -83,7 +83,7 @@ Every drawable carries a `role`, such as `background`, `border`, `box-shadow`, `
 
 Gradient stops interpolate in sRGB. Takumi adds stops where the CSS interpolation space, such as the default Oklab, would differ. A repeating gradient's stops cover one period with `spread: "repeat"`, as SVG's `spreadMethod` takes it; canvas gradients only pad, so repeat the stops yourself.
 
-Background and mask layers arrive as `pattern` paints: one tile drawn at every `x` and `y`.
+Background and mask layers arrive as `pattern` paints: one tile drawn at every `x` and `y`, clipped to `area`.
 
 ## Apply effects
 

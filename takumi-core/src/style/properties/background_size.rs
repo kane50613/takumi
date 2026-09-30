@@ -2,14 +2,10 @@ use std::fmt;
 
 use cssparser::{Parser, Token, match_ignore_ascii_case};
 
-use super::background_size_resolve::*;
-use crate::{
-  geometry::Size,
-  style::{
-    Animatable, Color, CssSyntaxKind, CssToken, FromCss, Length, ListInterpolationStrategy,
-    MakeComputed, ParseResult, SizingContext, ToCss, discrete, parse_comma_list,
-    tw::TailwindPropertyParser, unexpected_token,
-  },
+use crate::style::{
+  Animatable, Color, CssSyntaxKind, CssToken, FromCss, Length, ListInterpolationStrategy,
+  MakeComputed, ParseResult, SizingContext, ToCss, discrete, parse_comma_list,
+  tw::TailwindPropertyParser, unexpected_token,
 };
 
 /// Parsed `background-size` for one layer.
@@ -116,64 +112,6 @@ impl Animatable for BackgroundSize {
       },
       _ => discrete(from, to, progress),
     };
-  }
-}
-
-impl BackgroundSize {
-  /// Resolves this value against the positioning area and intrinsic sizing.
-  pub fn resolve(
-    self,
-    area: Size<u32>,
-    sizing: &SizingContext,
-    intrinsic: IntrinsicSizing,
-  ) -> ResolvedBackgroundSize {
-    match self {
-      BackgroundSize::Explicit { width, height } => {
-        if width != Length::Auto && height != Length::Auto {
-          return ResolvedBackgroundSize {
-            width: width.to_px(sizing, area.width as f32).max(0.0) as u32,
-            height: height.to_px(sizing, area.height as f32).max(0.0) as u32,
-            intrinsic_ratio: None,
-            auto_axis: None,
-          };
-        }
-
-        let (resolved_width, resolved_height) =
-          resolve_auto_background_size(width, height, area, sizing, intrinsic);
-
-        ResolvedBackgroundSize {
-          width: resolved_width,
-          height: resolved_height,
-          intrinsic_ratio: intrinsic.ratio,
-          auto_axis: match (width == Length::Auto, height == Length::Auto) {
-            (true, false) => Some(AutoBackgroundAxis::Width),
-            (false, true) => Some(AutoBackgroundAxis::Height),
-            _ => None,
-          },
-        }
-      }
-      // cover/contain scale the intrinsic ratio to the area; with no ratio the
-      // area is filled (§5.3).
-      BackgroundSize::Cover | BackgroundSize::Contain => {
-        let Some(ratio) = intrinsic.ratio.filter(|ratio| *ratio > 0.0) else {
-          return ResolvedBackgroundSize {
-            width: area.width,
-            height: area.height,
-            intrinsic_ratio: intrinsic.ratio,
-            auto_axis: None,
-          };
-        };
-
-        let (width, height) = fit_ratio_to_area(ratio, area, matches!(self, BackgroundSize::Cover));
-
-        ResolvedBackgroundSize {
-          width,
-          height,
-          intrinsic_ratio: Some(ratio),
-          auto_axis: None,
-        }
-      }
-    }
   }
 }
 

@@ -79,12 +79,6 @@ impl<'i> FromCss<'i> for LineHeight {
 }
 
 impl LineHeight {
-  /// Whether the line height scales under text-fit: non-fixed values do, fixed and percentage ones
-  /// do not, matching Blink's [`InlineBoxState`](https://source.chromium.org/chromium/chromium/src/+/main:third_party/blink/renderer/core/layout/inline/inline_box_state.cc;l=137).
-  pub(crate) const fn scales_with_text_fit(self) -> bool {
-    matches!(self, Self::Normal | Self::Unitless(_))
-  }
-
   /// Converts to parley's line-height representation.
   pub(crate) fn into_parley(self, sizing: &SizingContext) -> parley::LineHeight {
     match self {

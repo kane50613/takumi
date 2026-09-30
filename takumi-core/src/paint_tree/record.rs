@@ -438,15 +438,10 @@ impl GlyphDevice for Recorder {
 
 /// `span`'s `background-image` layers, each with its `background-blend-mode`, placed in the block.
 fn span_layers(span: &SpanBackground<'_>) -> Vec<(Paint, Option<String>)> {
-  Paint::layers(
-    &span.background.layers,
-    span.strip.layout.size,
-    span.background.origin,
-    &span.node.context,
-  )
-  .into_iter()
-  .map(|(paint, blend_mode)| (paint.shifted(span.strip.origin), blend_mode))
-  .collect()
+  Paint::layers(&span.background.layers, &span.node.context)
+    .into_iter()
+    .map(|(paint, blend_mode)| (paint.shifted(span.strip.origin), blend_mode))
+    .collect()
 }
 
 impl Recorder {

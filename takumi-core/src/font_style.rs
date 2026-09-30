@@ -15,7 +15,8 @@ use smallvec::SmallVec;
 use crate::{
   context::RenderContext,
   geometry::Size,
-  layout::inline::InlineBrush,
+  layout::inline::{InlineBrush, TextScale},
+  layout_unit::LayoutUnit,
   resources::font::{FontClasses, SubsetGroup},
   shadow::SizedShadow,
   style::{
@@ -221,11 +222,9 @@ pub struct SizedFontStyle<'s> {
   pub parent: &'s ComputedStyle,
   pub(crate) font_family: ExpandedFontFamily,
   pub(crate) line_height: parley::LineHeight,
-  /// The used line height in pixels, kept on the brush because parley's run
-  /// metrics can carry a neighboring span's style at run boundaries.
-  pub(crate) line_height_px: Option<f32>,
-  pub(crate) line_height_is_normal: bool,
-  pub(crate) line_height_scales_with_text_fit: bool,
+  /// The line height kept on the brush, because parley's run metrics can carry a neighboring
+  /// span's style at run boundaries.
+  pub(crate) box_line_height: BoxLineHeight,
   /// Text stroke width in pixels.
   pub stroke_width: f32,
   pub(crate) letter_spacing: f32,
@@ -261,8 +260,7 @@ impl SizedFontStyle<'_> {
     self.word_spacing.to_bits().hash(hasher);
     self.parent.letter_spacing.has_percentage().hash(hasher);
     self.parent.word_spacing.has_percentage().hash(hasher);
-    self.line_height_scales_with_text_fit.hash(hasher);
-    self.line_height_is_normal.hash(hasher);
+    self.box_line_height.hash(hasher);
     discriminant(&self.line_height).hash(hasher);
     match self.line_height {
       LineHeight::Absolute(value)
@@ -384,9 +382,7 @@ impl<'s> From<&'s SizedFontStyle<'s>> for TextStyle<'s, 's, InlineBrush> {
           weight: style.parent.font_synthesis_weight,
           style: style.parent.font_synthesis_style,
         },
-        line_height_scales_with_text_fit: style.line_height_scales_with_text_fit,
-        line_height_px: style.line_height_px,
-        line_height_is_normal: style.line_height_is_normal,
+        line_height: style.box_line_height,
         fixed_letter_spacing: if style.parent.letter_spacing.has_percentage() {
           0.0
         } else {
@@ -438,6 +434,79 @@ fn resolved_text_shadows(
     })
 }
 
+/// A box's `line-height` as Blink's `ComputedLineHeightAsFixed` resolves it against a font.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) enum BoxLineHeight {
+  /// `normal`: the font's own line spacing.
+  Normal,
+  /// A length, rounded to the nearest layout unit.
+  Length(LayoutUnit),
+  /// A number times the font size.
+  Number { value: f32, font_size: f32 },
+}
+
+impl BoxLineHeight {
+  /// The line height against a font of `ascent`, `descent` and `line_gap` px, sized by `scale`.
+  /// A line height that is not a length scales with text that scales as it paints, as Blink's
+  /// `InlineBoxState::ComputeTextMetrics` scales it.
+  pub(crate) fn resolve(
+    self,
+    ascent: f32,
+    descent: f32,
+    line_gap: f32,
+    scale: TextScale,
+  ) -> LayoutUnit {
+    let font_scale = scale.font();
+    let line_height = match self {
+      Self::Length(line_height) => return line_height,
+      // Blink's `FontMetrics::FixedLineSpacing`.
+      Self::Normal => LayoutUnit::from_f32_round(
+        (ascent * font_scale).round()
+          + (descent * font_scale).round()
+          + (line_gap * font_scale).round(),
+      ),
+      Self::Number { value, font_size } => number_line_height(value, font_size * font_scale),
+    };
+
+    match scale {
+      TextScale::Paint(scale) if scale != 1.0 => LayoutUnit::from_f32(line_height.to_f32() * scale),
+      _ => line_height,
+    }
+  }
+}
+
+impl Hash for BoxLineHeight {
+  fn hash<H: Hasher>(&self, hasher: &mut H) {
+    discriminant(self).hash(hasher);
+    match *self {
+      Self::Normal => {}
+      Self::Length(line_height) => line_height.hash(hasher),
+      Self::Number { value, font_size } => {
+        value.to_bits().hash(hasher);
+        font_size.to_bits().hash(hasher);
+      }
+    }
+  }
+}
+
+/// A number line height, which Blink keeps as a percentage, truncated against the font size
+/// rounded to a layout unit.
+fn number_line_height(value: f32, font_size: f32) -> LayoutUnit {
+  LayoutUnit::from_f32(LayoutUnit::from_f32_round(font_size).to_f32() * (value * 100.0) / 100.0)
+}
+
+/// `line_height` in layout units, as Blink's `ComputedLineHeightAsFixed` resolves it: a length
+/// rounded to the nearest unit, and a number as `number_line_height`.
+fn layout_unit_line_height(line_height: LineHeight, font_size: f32) -> LineHeight {
+  match line_height {
+    LineHeight::Absolute(value) => LineHeight::Absolute(LayoutUnit::from_f32_round(value).to_f32()),
+    LineHeight::FontSizeRelative(value) if font_size > 0.0 => {
+      LineHeight::FontSizeRelative(number_line_height(value, font_size).to_f32() / font_size)
+    }
+    line_height => line_height,
+  }
+}
+
 impl<'s> SizedFontStyle<'s> {
   /// Resolves a sized font style from a computed style and render context.
   pub fn from_style(style: &'s ComputedStyle, context: &RenderContext) -> Self {
@@ -445,13 +514,22 @@ impl<'s> SizedFontStyle<'s> {
     let line_height = if line_height_is_normal {
       LineHeight::Absolute(context.resolve_normal_line_height(style, context.sizing.font_size))
     } else {
-      style.line_height.into_parley(&context.sizing)
+      layout_unit_line_height(
+        style.line_height.into_parley(&context.sizing),
+        context.sizing.font_size,
+      )
     };
 
-    let line_height_px = match line_height {
-      LineHeight::Absolute(value) => Some(value),
-      LineHeight::FontSizeRelative(value) => Some(value * context.sizing.font_size),
-      LineHeight::MetricsRelative(_) => None,
+    let box_line_height = match line_height {
+      _ if line_height_is_normal => BoxLineHeight::Normal,
+      LineHeight::Absolute(value) => BoxLineHeight::Length(LayoutUnit::from_f32(value)),
+      LineHeight::FontSizeRelative(_) | LineHeight::MetricsRelative(_) => match style.line_height {
+        CssLineHeight::Unitless(value) => BoxLineHeight::Number {
+          value,
+          font_size: context.sizing.font_size,
+        },
+        _ => BoxLineHeight::Normal,
+      },
     };
 
     Self {
@@ -459,9 +537,7 @@ impl<'s> SizedFontStyle<'s> {
       parent: style,
       font_family: context.expand_font_family(&style.font_family),
       line_height,
-      line_height_px,
-      line_height_is_normal,
-      line_height_scales_with_text_fit: style.line_height.scales_with_text_fit(),
+      box_line_height,
       stroke_width: style
         .webkit_text_stroke_width
         .unwrap_or_default()

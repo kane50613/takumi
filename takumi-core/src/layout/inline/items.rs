@@ -187,7 +187,8 @@ pub enum ProcessedInlineSpan<'c> {
   },
   /// An inline box.
   Box(InlineBoxItem<'c>),
-  /// A zero-height box reserving an inline span's horizontal padding.
+  /// A zero-height box reserving an inline span's horizontal padding. Naive next to Blink: parley
+  /// may break a line after any inline box, where Blink never breaks at a span's edge.
   Spacer {
     /// The box the spacer occupies in the layout.
     inline_box: InlineBox,

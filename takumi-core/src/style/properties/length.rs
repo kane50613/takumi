@@ -8,16 +8,19 @@ use std::{
 use cssparser::{Parser, Token, match_ignore_ascii_case};
 use taffy::{CompactLength, Dimension, LengthPercentage, LengthPercentageAuto};
 
-use crate::style::{
-  AspectRatio, CssSyntaxKind, CssToken, FromCss, FromCssStr, MakeComputed, ParseResult,
-  SizingContext, ToCss,
-  calc::{CalcLinear, CalcTerms, CalcUnit, CalcValue, parse_calc_sum},
-  tw::Namespace,
-  tw::{TW_VAR_SPACING, TailwindPropertyParser},
-  unexpected_token,
-};
 pub(crate) use crate::units::{
   ONE_CM_IN_PX, ONE_IN_PX, ONE_MM_IN_PX, ONE_PC_IN_PX, ONE_PT_IN_PX, ONE_Q_IN_PX,
+};
+use crate::{
+  layout_unit::LayoutUnit,
+  style::{
+    AspectRatio, CssSyntaxKind, CssToken, FromCss, FromCssStr, MakeComputed, ParseResult,
+    SizingContext, ToCss,
+    calc::{CalcLinear, CalcTerms, CalcUnit, CalcValue, parse_calc_sum},
+    tw::Namespace,
+    tw::{TW_VAR_SPACING, TailwindPropertyParser},
+    unexpected_token,
+  },
 };
 
 const CALC_ZERO_EPSILON: f32 = 1e-6;
@@ -541,6 +544,24 @@ impl Length {
     };
 
     clamp_px_for_integer_cast(value)
+  }
+
+  /// Blink's `MinimumValueForLength`: this length in layout units against `maximum`, `auto` as
+  /// zero.
+  pub(crate) fn minimum_value_for(self, sizing: &SizingContext, maximum: LayoutUnit) -> LayoutUnit {
+    match self {
+      Length::Auto => LayoutUnit::ZERO,
+      Length::Percentage(percent) => LayoutUnit::from_f32(maximum.to_f32() * percent / 100.0),
+      length => LayoutUnit::from_f32(length.to_px(sizing, maximum.to_f32())),
+    }
+  }
+
+  /// Blink's `ValueForLength`: this length in layout units against `maximum`, `auto` as all of it.
+  pub(crate) fn value_for(self, sizing: &SizingContext, maximum: LayoutUnit) -> LayoutUnit {
+    match self {
+      Length::Auto => maximum,
+      length => length.minimum_value_for(sizing, maximum),
+    }
   }
 
   /// Resolves to device pixels, then snaps the result as a border width.

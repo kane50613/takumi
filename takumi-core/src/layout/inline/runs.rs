@@ -18,12 +18,12 @@ use skrifa::{FontRef, MetadataProvider};
 use std::{collections::HashMap, convert::Infallible, ops::Range, sync::Arc};
 
 use super::{
-  BuiltInlineLayout, InlineBrush, PlacedItem, WalkedLine,
+  BuiltInlineLayout, FontHeight, InlineBrush, PlacedItem, WalkedLine,
   background::{
     CoverLine, Covering, DecorationAccumulator, InlineBackgroundFragment, InlineContainingBlock,
     LinePosition,
   },
-  decorations::{DecorationLine, DecorationPlacement},
+  decorations::{DecorationLine, DecorationPlacement, DecorationSpace},
   items::ProcessedInlineSpan,
   metrics::{VisualInlineBox, resolve_visual_inline_box},
   outline::InlineOutlineRect,
@@ -200,12 +200,8 @@ impl ShapedRun {
     let metrics = run.metrics();
     let synthesis = run_synthesis(glyph_run);
     // The run's leaded box: the font height plus the line-height leading.
-    let (above, below) = brush.line_box_contribution(
-      metrics.line_height,
-      metrics.ascent,
-      metrics.descent,
-      metrics.leading,
-    );
+    let (above, below) =
+      brush.line_box_contribution(metrics.ascent, metrics.descent, metrics.leading);
 
     for (index, glyph) in glyphs.iter_mut().enumerate() {
       glyph.x += hanging.shift + stretch.shift(index);
@@ -312,6 +308,8 @@ pub struct PositionedInlineRun {
   pub baseline_shift: f32,
   /// Where the run's decorations go.
   pub(crate) decoration_placement: DecorationPlacement,
+  /// Where the block's border box sits in the space paint snaps to pixels in.
+  pub(crate) paint_offset: Point<f32>,
   /// Where the run sits among its block's runs.
   #[cfg(feature = "paint-tree")]
   pub(crate) index: usize,
@@ -331,8 +329,11 @@ impl PositionedInlineRun {
       layout,
       &self.decoration_placement,
       self.baseline_shift,
-      base,
-      device,
+      DecorationSpace {
+        transform: base,
+        device,
+        paint_offset: self.paint_offset,
+      },
     )
   }
 
@@ -480,13 +481,16 @@ impl<'c> BuiltInlineLayout<'c> {
             layout,
           );
 
+          let baseline_shift = self.run_baseline_shift(line, &glyph_run);
+
           runs.push(PositionedInlineRun {
             glyph_run: shaped,
             resolved_glyphs,
-            line_scale: setup.state,
+            line_scale: setup.run_scale(baseline_shift),
             static_inline_prefix,
-            baseline_shift: self.run_baseline_shift(line, &glyph_run),
+            baseline_shift,
             decoration_placement,
+            paint_offset: context.box_paint_offset(layout),
             #[cfg(feature = "paint-tree")]
             index: runs.len(),
           });
@@ -551,8 +555,6 @@ impl<'c> BuiltInlineLayout<'c> {
     item: &PlacedItem<'_>,
   ) {
     let setup = &line.setup;
-    let origin_y = setup.state.layout_origin.y;
-    let line_y = |value: f32| origin_y + (content.y + value - origin_y) * setup.state.scale;
     let (chain, x0, x1, covering) = match item {
       PlacedItem::Run {
         glyph_run,
@@ -578,17 +580,18 @@ impl<'c> BuiltInlineLayout<'c> {
           };
         let width = glyph_run.advance() + stretch.advance - hanging.advance;
         let metrics = glyph_run.run().metrics();
-        // The font's rounded ascent and descent, without the line-height leading, like the
-        // inline box fragment `InlineBoxState::ComputeTextMetrics` sizes.
-        let baseline = glyph_run.baseline() + line.baseline_shift_in(Some(chain));
+        // The font's text height, without the line-height leading, like the inline box fragment
+        // `InlineBoxState::ComputeTextMetrics` sizes.
+        let text = FontHeight::text(metrics.ascent, metrics.descent, setup.fit.text_scale(false));
+        let baseline = content.y + glyph_run.baseline() + line.baseline_shift_in(Some(chain));
 
         (
           Some(chain),
           content.x + setup.scale_x(x, *static_inline_prefix),
           content.x + setup.scale_x(x + width, *static_inline_prefix),
           Covering::Run {
-            top: line_y(baseline - metrics.ascent.round()),
-            bottom: line_y(baseline + metrics.descent.round()),
+            top: baseline - text.ascent.to_f32(),
+            bottom: baseline + text.descent.to_f32(),
           },
         )
       }
@@ -621,10 +624,10 @@ impl<'c> BuiltInlineLayout<'c> {
       &CoverLine {
         index: line.index,
         position: LinePosition {
-          top: line_y(setup.resolved_metrics.resolved_line_top),
-          bottom: line_y(setup.resolved_metrics.resolved_line_bottom),
-          baseline: line_y(setup.resolved_metrics.resolved_baseline),
-          scale: setup.state.scale,
+          top: content.y + setup.resolved_metrics.resolved_line_top,
+          bottom: content.y + setup.resolved_metrics.resolved_line_bottom,
+          baseline: content.y + setup.resolved_metrics.resolved_baseline,
+          text_scale: setup.fit.text_scale(false),
         },
         offsets: &line.state.offsets,
       },

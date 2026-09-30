@@ -17,7 +17,7 @@ use crate::{
   font_style::SizedFontStyle,
   geometry::{ComputedLayout, Point, Size},
   layout::{
-    background_image_geometry::{FillLayers, OriginBox},
+    background_image_geometry::{BoxBackgroundPaintContext, FillLayers},
     inline::{
       BuiltInlineLayout, InlineLayoutMode, InlineLayoutRequest, InlinePass, InlineRunLayout,
       ProcessedInlineSpan, create_inline_layout,
@@ -117,7 +117,7 @@ impl Walker {
     let painter = BoxPainter::new(context, layout);
     let size = layout.size;
     let drawables = if node.paints_own_box() {
-      decorations(&painter, size, transform)
+      decorations(&painter, transform)
     } else {
       Vec::new()
     };
@@ -134,11 +134,12 @@ impl Walker {
       .style
       .needs_offscreen_compositing()
       .then(|| Box::new(effects(&painter, layout)));
-    let overflow_clip = OverflowClip::of(context, layout).map(|clip| {
-      let (shape, origin) = clip.shape(layout);
+    let overflow_clip =
+      OverflowClip::of(context, layout, context.box_paint_offset(layout)).map(|clip| {
+        let (shape, origin) = clip.shape();
 
-      Shape::of(&shape, Affine::translation(origin.x, origin.y))
-    });
+        Shape::of(&shape, Affine::translation(origin.x, origin.y))
+      });
     let id = self.nodes.len();
 
     self.add(
@@ -288,7 +289,7 @@ impl Walker {
     };
     let built = create_inline_layout(InlineLayoutRequest::in_content_box(
       items,
-      layout.unsnapped_content,
+      layout.content_box_size(),
       &font_style,
       context,
       InlineLayoutMode::Draw,
@@ -411,18 +412,13 @@ impl Walker {
 
       TextBackground {
         area: Shape::Rect {
-          rect: PaintRect::sized(Point::ZERO, layout.size),
+          rect: PaintRect::sized(background.offset, background.size),
         },
         layers: background
           .color
           .map(|color| (Paint::Color { color: color.0 }, None))
           .into_iter()
-          .chain(Paint::layers(
-            &background.layers,
-            layout.size,
-            background.origin,
-            context,
-          ))
+          .chain(Paint::layers(&background.layers, context))
           .collect(),
       }
     });
@@ -749,18 +745,13 @@ pub(super) fn recorded<'s>(
 }
 
 /// The shadows, background, and border the box `painter` paints, bottom first.
-fn decorations(painter: &BoxPainter<'_>, size: Size<f32>, transform: Affine) -> Vec<Drawable> {
+fn decorations(painter: &BoxPainter<'_>, transform: Affine) -> Vec<Drawable> {
   let mut recorder = Recorder::new(transform);
 
   painter.paint_normal_box_shadows(Point::ZERO, &mut recorder);
 
   let background = painter.background();
-  let layers = Paint::layers(
-    &background.layers,
-    size,
-    background.origin,
-    painter.context(),
-  );
+  let layers = Paint::layers(&background.layers, painter.context());
   // Blink's `BoxPainterBase::PaintFillLayers` paints a background that blends in a layer of its
   // own, so its layers blend only with its colour and one another.
   let isolated = layers.iter().any(|(_, blend_mode)| blend_mode.is_some());
@@ -769,11 +760,11 @@ fn decorations(painter: &BoxPainter<'_>, size: Size<f32>, transform: Affine) -> 
     recorder.begin_layer(1.0, None);
   }
   painter.background_color(Point::ZERO, &mut recorder);
-  if let Some(clip) = background.clip.shape(size) {
+  if let Some(clip) = background.clip.shape(background.size) {
     let mask = background.clip.border_mask();
     let shape = Shape::of(
-      &mask.map_or(clip, |_| FillShape::Rect(size)),
-      Affine::IDENTITY,
+      &mask.map_or(clip, |_| FillShape::Rect(background.size)),
+      Affine::translation(background.offset.x, background.offset.y),
     );
     let fill = |recorder: &mut Recorder| {
       for (paint, blend_mode) in layers {
@@ -788,7 +779,7 @@ fn decorations(painter: &BoxPainter<'_>, size: Size<f32>, transform: Affine) -> 
     };
 
     match mask {
-      Some(mask) => recorder.with_border_mask(&mask, size, Point::ZERO, fill),
+      Some(mask) => recorder.with_border_mask(&mask, background.size, background.offset, fill),
       None => fill(&mut recorder),
     }
   }
@@ -817,13 +808,13 @@ fn effects(painter: &BoxPainter<'_>, layout: ComputedLayout) -> Effects {
     .as_deref()
     .filter(|images| images.iter().any(BackgroundImage::paints))
     .map(|images| {
-      let layers = FillLayers::mask(style).resolve(images, size, context);
-      let area = OriginBox {
-        offset: Point::ZERO,
-        size,
-      };
+      let layers = FillLayers::mask(style).resolve(
+        images,
+        &BoxBackgroundPaintContext::mask(size, context.box_paint_offset(layout)),
+        context,
+      );
 
-      Paint::layers(&layers, size, area, context)
+      Paint::layers(&layers, context)
         .into_iter()
         .map(|(paint, blend_mode)| Drawable::Fill {
           role: Role::Background,

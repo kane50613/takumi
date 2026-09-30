@@ -1,9 +1,9 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="420" height="200" viewBox="0 0 420 200">
   <rect x="0" y="0" width="420" height="200" fill="#fff"/>
-  <rect x="77.152" y="55" width="48" height="21" fill="#bfdbfe"/>
-  <rect x="193.504" y="53" width="28" height="25" fill="#fca5a5"/>
-  <path d="M193.5 53h28v25h-28v-25Zm2 2h24v21h-24v-21Z" fill="#b91c1c" fill-rule="evenodd"/>
-  <rect x="32" y="104" width="20.52" height="36" fill="#bbf7d0"/>
+  <rect x="77" y="55" width="48" height="21" fill="#bfdbfe"/>
+  <rect x="194" y="53" width="28" height="25" fill="#fca5a5"/>
+  <path d="M194 53h28v25h-28v-25Zm2 2h24v21h-24v-21Z" fill="#b91c1c" fill-rule="evenodd"/>
+  <rect x="32" y="104" width="21" height="36" fill="#bbf7d0"/>
   <g fill="#0f172a">
     <use href="#g0" x="32" y="71"/>
     <use href="#g1" x="42.24" y="71"/>

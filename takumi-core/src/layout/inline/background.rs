@@ -9,8 +9,9 @@ use std::{collections::HashMap, rc::Rc};
 
 use super::{
   items::{DecorationLink, InlineDecoration},
-  line_box::{BoxKey, LineBoxOffsets},
+  line_box::{BoxKey, FontHeight, LineBoxOffsets},
   outline::InlineOutlineRect,
+  text_fit::TextScale,
 };
 
 /// A resolved inline background fragment: one rounded rect a decorated span
@@ -38,6 +39,8 @@ pub struct InlineBackgroundFragment<'c> {
   pub baseline: f32,
   /// The span's background, when it paints one.
   pub background: Option<FragmentBackground<'c>>,
+  /// The span.
+  pub owner: &'c RenderNode,
   /// The span's id.
   pub(crate) span: usize,
 }
@@ -64,8 +67,8 @@ pub(super) struct LinePosition {
   pub(super) top: f32,
   pub(super) bottom: f32,
   pub(super) baseline: f32,
-  /// The line's `text-fit` scale.
-  pub(super) scale: f32,
+  /// How the line sizes a span's text.
+  pub(super) text_scale: TextScale,
 }
 
 /// The line a covering item sits on.
@@ -151,8 +154,7 @@ impl<'c> DecorationAccumulator<'c> {
 
       let id = self.ensure(link);
       let position = line.position;
-      let baseline =
-        position.baseline + line.offsets.of(BoxKey::Span(link.decoration.id)) * position.scale;
+      let baseline = position.baseline + line.offsets.of(BoxKey::Span(link.decoration.id));
       let bounds = self
         .fragments
         .entry((id, line.index))
@@ -219,9 +221,12 @@ impl<'c> DecorationAccumulator<'c> {
           .font
           .metrics
           .map(|metrics| {
+            let text =
+              FontHeight::text(metrics.exact.ascent, metrics.exact.descent, line.text_scale);
+
             (
-              line.baseline - metrics.ascent * line.scale,
-              line.baseline + metrics.descent * line.scale,
+              line.baseline - text.ascent.to_f32(),
+              line.baseline + text.descent.to_f32(),
             )
           })
           .or(runs)
@@ -401,6 +406,7 @@ impl<'c> DecorationAccumulator<'c> {
         opacity: decoration.opacity,
         baseline,
         background,
+        owner: decoration.owner,
         span: decoration.id,
       });
     }

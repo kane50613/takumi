@@ -2,8 +2,11 @@
 
 use super::BoxPainter;
 use crate::{
-  geometry::Size,
-  layout::{decoration::ClipBox, replaced::ReplacedPlacement},
+  geometry::{Rect, Size},
+  layout::{
+    decoration::{ClipBox, ContourOrigin},
+    replaced::ReplacedPlacement,
+  },
 };
 
 /// Replaced content placed in its content box, and what clips it.
@@ -18,15 +21,42 @@ pub struct ReplacedContent {
 
 impl BoxPainter<'_> {
   /// Places replaced content of `intrinsic` size in the box by `object-fit` and
-  /// `object-position`.
+  /// `object-position`, snapped to pixels as Blink's `ImagePainter::PaintIntoRect` draws it.
   pub fn replaced_content(&self, intrinsic: Size<f32>) -> ReplacedContent {
-    let content_box = ClipBox::content_box(*self.border(), self.layout);
-    let placement = ReplacedPlacement::new(self.context, content_box.size, intrinsic);
-    let clip = if !content_box.border.is_zero() || placement.overflows(content_box.size) {
-      Some(content_box)
-    } else {
-      None
+    let layout = self.layout;
+    let content_box = ClipBox::content_box(*self.border(), layout);
+    let unsnapped = ReplacedPlacement::new(self.context, content_box.size, intrinsic);
+    let content_offset = layout.content_box_offset();
+    let snapped_offset = self.snapped.offset();
+    let (offset, size) = self
+      .snapped
+      .snap(content_offset + unsnapped.offset, unsnapped.size);
+    let placement = ReplacedPlacement {
+      offset: offset + snapped_offset - content_offset,
+      size,
     };
+    let insets = Rect {
+      top: layout.border.top + layout.padding.top,
+      right: layout.border.right + layout.padding.right,
+      bottom: layout.border.bottom + layout.padding.bottom,
+      left: layout.border.left + layout.padding.left,
+    };
+    let (clip_offset, clip_size) = if content_box.border.is_zero() {
+      self.snapped.inset(insets)
+    } else {
+      self.snapped.contoured_inset(insets, false)
+    };
+    let clip =
+      (!content_box.border.is_zero() || unsnapped.overflows(content_box.size)).then(|| ClipBox {
+        offset: clip_offset + snapped_offset,
+        size: clip_size,
+        origin: content_box.origin.map(|origin| ContourOrigin {
+          size: self.snapped.size(),
+          offset: snapped_offset,
+          ..origin
+        }),
+        ..content_box
+      });
 
     ReplacedContent { placement, clip }
   }

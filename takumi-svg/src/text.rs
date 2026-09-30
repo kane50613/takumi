@@ -41,7 +41,7 @@ pub(crate) fn emit_inline_content(
   };
   let built = create_inline_layout(InlineLayoutRequest::in_content_box(
     items,
-    frame.layout.unsnapped_content,
+    frame.layout.content_box_size(),
     &font_style,
     context,
     InlineLayoutMode::Draw,
@@ -120,13 +120,16 @@ pub(crate) fn emit_clip_text_run(
   let group = doc.begin_masked_group(&mask_ref)?;
 
   if let Some(color) = background.color {
-    doc.rect(border_box, Rgba(color.0))?;
+    let snapped = Frame::new(
+      border_box.x + background.offset.x,
+      border_box.y + background.offset.y,
+      background.size.width,
+      background.size.height,
+    );
+
+    doc.rect(snapped, Rgba(color.0))?;
   }
-  LayerEmitter::new(context, doc).layers(
-    &background.layers,
-    Frame::origin_box(area, background.origin),
-    border_box,
-  )?;
+  LayerEmitter::new(context, doc).layers(&background.layers, border_box)?;
   doc.end_group(group)
 }
 

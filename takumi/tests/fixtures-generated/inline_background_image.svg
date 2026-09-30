@@ -1,10 +1,10 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="420" height="320" viewBox="0 0 420 320">
   <rect x="0" y="0" width="420" height="320" fill="#fff"/>
   <clipPath id="cp0">
-    <path d="M71.73 18h186.29v31h-186.29v-31Z"/>
+    <path d="M72 18h186v31h-186v-31Z"/>
   </clipPath>
   <g clip-path="url(#cp0)">
-    <linearGradient id="lg1" gradientUnits="userSpaceOnUse" x1="71.792" y1="33.5" x2="441.792" y2="33.5">
+    <linearGradient id="lg1" gradientUnits="userSpaceOnUse" x1="72" y1="33.5" x2="442" y2="33.5">
       <stop offset="0" stop-color="#facc15"/>
       <stop offset=".016" stop-color="#faca17"/>
       <stop offset=".032" stop-color="#fac819"/>
@@ -70,13 +70,13 @@
       <stop offset=".984" stop-color="#ec4a97"/>
       <stop offset="1" stop-color="#ec4899"/>
     </linearGradient>
-    <rect x="71.728" y="18" width="370.128" height="31" fill="url(#lg1)"/>
+    <rect x="72" y="18" width="370" height="31" fill="url(#lg1)"/>
   </g>
   <clipPath id="cp2">
-    <path d="M16 54h183.84v31h-183.84v-31Z"/>
+    <path d="M16 54h184v31h-184v-31Z"/>
   </clipPath>
   <g clip-path="url(#cp2)">
-    <linearGradient id="lg3" gradientUnits="userSpaceOnUse" x1="-170.224" y1="69.5" x2="199.776" y2="69.5">
+    <linearGradient id="lg3" gradientUnits="userSpaceOnUse" x1="-170" y1="69.5" x2="200" y2="69.5">
       <stop offset="0" stop-color="#facc15"/>
       <stop offset=".016" stop-color="#faca17"/>
       <stop offset=".032" stop-color="#fac819"/>
@@ -142,7 +142,7 @@
       <stop offset=".984" stop-color="#ec4a97"/>
       <stop offset="1" stop-color="#ec4899"/>
     </linearGradient>
-    <rect x="-170.288" y="54" width="370.128" height="31" fill="url(#lg3)"/>
+    <rect x="-170" y="54" width="370" height="31" fill="url(#lg3)"/>
   </g>
   <g fill="#0f172a">
     <use href="#g0" x="16" y="42"/>
@@ -191,10 +191,10 @@
     <use href="#g16" x="255.06" y="78"/>
   </g>
   <clipPath id="cp4">
-    <path d="M77.63 102h229.11v31h-229.11v-31Z"/>
+    <path d="M78 102h229v31h-229v-31Z"/>
   </clipPath>
   <g clip-path="url(#cp4)">
-    <linearGradient id="lg5" gradientUnits="userSpaceOnUse" x1="77.684" y1="117.5" x2="306.684" y2="117.5">
+    <linearGradient id="lg5" gradientUnits="userSpaceOnUse" x1="78" y1="117.5" x2="307" y2="117.5">
       <stop offset="0" stop-color="#22c55e"/>
       <stop offset=".016" stop-color="#22c460"/>
       <stop offset=".032" stop-color="#23c363"/>
@@ -260,13 +260,13 @@
       <stop offset=".984" stop-color="#3b83f4"/>
       <stop offset="1" stop-color="#3b82f6"/>
     </linearGradient>
-    <rect x="77.632" y="102" width="229.104" height="31" fill="url(#lg5)"/>
+    <rect x="78" y="102" width="229" height="31" fill="url(#lg5)"/>
   </g>
   <clipPath id="cp6">
-    <path d="M16 138h111.05v31h-111.05v-31Z"/>
+    <path d="M16 138h111v31h-111v-31Z"/>
   </clipPath>
   <g clip-path="url(#cp6)">
-    <linearGradient id="lg7" gradientUnits="userSpaceOnUse" x1="16.024" y1="153.5" x2="127.024" y2="153.5">
+    <linearGradient id="lg7" gradientUnits="userSpaceOnUse" x1="16" y1="153.5" x2="127" y2="153.5">
       <stop offset="0" stop-color="#22c55e"/>
       <stop offset=".016" stop-color="#22c460"/>
       <stop offset=".032" stop-color="#23c363"/>
@@ -332,7 +332,7 @@
       <stop offset=".984" stop-color="#3b83f4"/>
       <stop offset="1" stop-color="#3b82f6"/>
     </linearGradient>
-    <rect x="16" y="138" width="111.048" height="31" fill="url(#lg7)"/>
+    <rect x="16" y="138" width="111" height="31" fill="url(#lg7)"/>
   </g>
   <g fill="#0f172a">
     <use href="#g17" x="16" y="126"/>
@@ -387,7 +387,7 @@
     <path d="M263.26 222.48q-3.28 0-5.72-1.37-2.44-1.39-3.78-3.92t-1.33-5.91q0-3.39 1.33-5.89 1.34-2.5 3.75-3.91t5.68-1.4q3.19 0 5.57 1.4t3.65 4q1.3 2.6 1.3 6.21v1.2h-15.06q.12 2.55 1.37 3.8 1.27 1.25 3.33 1.25 1.53 0 2.55-.66t1.47-1.97l6.04.35q-.87 3.23-3.59 5.03-2.7 1.79-6.56 1.79Zm-4.61-13.26h8.92q-.11-2.36-1.31-3.52t-3.07-1.17q-1.86 0-3.09 1.22-1.22 1.22-1.45 3.47Z" fill="#fff"/>
   </mask>
   <g mask="url(#mk8)">
-    <linearGradient id="lg9" gradientUnits="userSpaceOnUse" x1="169.06" y1="208" x2="275.06" y2="208">
+    <linearGradient id="lg9" gradientUnits="userSpaceOnUse" x1="169" y1="208" x2="275" y2="208">
       <stop offset="0" stop-color="#6366f1"/>
       <stop offset=".016" stop-color="#6566f0"/>
       <stop offset=".032" stop-color="#6765ee"/>
@@ -453,7 +453,7 @@
       <stop offset=".984" stop-color="#ea489a"/>
       <stop offset="1" stop-color="#ec4899"/>
     </linearGradient>
-    <rect x="168.96" y="182" width="106.2" height="52" fill="url(#lg9)"/>
+    <rect x="169" y="182" width="106" height="52" fill="url(#lg9)"/>
   </g>
   <g fill="#000" fill-opacity="0">
     <use href="#g26" x="168.96" y="222"/>

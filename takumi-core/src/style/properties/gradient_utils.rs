@@ -305,6 +305,19 @@ pub trait GradientOverlayTile {
   fn dither_active(&self) -> bool {
     false
   }
+  /// LUT index of the point `(x, y)` in tile space, where pixel `(x, y)` samples its centre.
+  fn point_lut_index(&self, x: f32, y: f32) -> usize;
+  /// Color at the point `(x, y)` in tile space, dithered as pixel `dither` would be.
+  fn sample_point(&self, x: f32, y: f32, dither: (u32, u32)) -> PremultipliedColorU8 {
+    match self.lut_len() {
+      0 => PremultipliedColorU8::TRANSPARENT,
+      1 => self.sample_at(0),
+      _ if self.dither_active() => {
+        self.sample_dithered_at(self.point_lut_index(x, y), dither.0, dither.1)
+      }
+      _ => self.sample_at(self.point_lut_index(x, y)),
+    }
+  }
   /// Color at pixel `(x, y)`.
   fn sample_pixel(&self, x: u32, y: u32) -> PremultipliedColorU8;
   /// Color at pixel `(x, y)` with gradient dithering applied.
@@ -872,13 +885,9 @@ impl LutAxis {
     }
   }
 
-  /// A LUT size with one entry per pixel of the axis.
+  /// A LUT size with an entry per half pixel of the axis, so pixel centres land on entries.
   pub(crate) fn lut_size(&self) -> usize {
-    self.lut_size_covering(
-      (self.length.ceil() as usize)
-        .saturating_add(1)
-        .max(MIN_GRADIENT_LUT_SIZE),
-    )
+    self.lut_size_covering(half_pixel_samples(self.length.ceil() as usize))
   }
 
   /// A LUT size that covers `visible_samples` and the tightest stop interval.
@@ -920,6 +929,11 @@ impl LutAxis {
   ) -> ColorLut {
     ColorLut::new(&self.stops, self.length, size, interpolation, dither)
   }
+}
+
+/// The LUT entries a run of `pixels` needs for an entry at every pixel's edge and centre.
+pub(crate) fn half_pixel_samples(pixels: usize) -> usize {
+  pixels.saturating_mul(2).saturating_add(1)
 }
 
 impl ResolvedGradientStop {

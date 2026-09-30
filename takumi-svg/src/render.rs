@@ -9,7 +9,7 @@ use takumi_core::{
   font_style::SizedFontStyle,
   geometry::{Point, Rect, Size},
   layout::{
-    background_image_geometry::FillLayers,
+    background_image_geometry::{BoxBackgroundPaintContext, FillLayers},
     border::BorderProperties,
     inline::{InlineBoxItem, InlinePass, PositionedInlineRun, VisualInlineBox},
     inline_box::{InlineBoxPaint, resolve_inline_box},
@@ -17,9 +17,9 @@ use takumi_core::{
     tree::RenderNode,
   },
   painter::{
-    BackgroundClipArea, BoxBorderPainter, BoxFrame, BoxPainter, FillShape, GlyphDevice, GlyphFill,
-    LayerBounds, OverflowClip, OwnContent, PaintDevice, ShadowShape, SpanBackground, StrokeStyle,
-    UNBOUNDED,
+    BackgroundClipArea, BoxBackground, BoxBorderPainter, BoxFrame, BoxPainter, FillShape,
+    GlyphDevice, GlyphFill, LayerBounds, OverflowClip, OwnContent, PaintDevice, ShadowShape,
+    SpanBackground, StrokeStyle, UNBOUNDED,
   },
   path_data::{edges_path_data, path_data},
   resources::image::ImageSource,
@@ -150,19 +150,31 @@ impl<'n> PlacedBox<'n> {
   /// overflow is visible.
   fn overflow_clip_path_data(&self) -> Option<String> {
     Some(
-      match OverflowClip::of(&self.node.context, self.frame.layout)? {
-        OverflowClip::Rounded(clip) => shape_path_data(&clip.into(), self.frame.origin),
-        OverflowClip::Axes { x, y } => edges_path_data(self.frame.overflow_clip_edges(x, y)),
+      match OverflowClip::of(
+        &self.node.context,
+        self.frame.layout,
+        self.node.context.box_paint_offset(self.frame.layout),
+      )? {
+        OverflowClip::Rounded(clip) => shape_path_data(&(*clip).into(), self.frame.origin),
+        OverflowClip::Axes(edges) => edges_path_data(Rect {
+          left: self.frame.origin.x + edges.left,
+          top: self.frame.origin.y + edges.top,
+          right: self.frame.origin.x + edges.right,
+          bottom: self.frame.origin.y + edges.bottom,
+        }),
       },
     )
   }
 
   /// The clip path `d` and fill rule for a background's `clip` area. A square border box needs
   /// none, since the layers already stay inside it.
-  fn background_clip_path_data(&self, clip: BackgroundClipArea) -> Option<(String, FillRule)> {
-    match clip.shape(self.frame.layout.size)? {
+  fn background_clip_path_data(&self, background: &BoxBackground) -> Option<(String, FillRule)> {
+    match background.clip.shape(background.size)? {
       FillShape::Rect(_) => None,
-      shape => Some((shape_path_data(&shape, self.frame.origin), shape.rule())),
+      shape => Some((
+        shape_path_data(&shape, self.frame.origin + background.offset),
+        shape.rule(),
+      )),
     }
   }
 
@@ -194,13 +206,12 @@ impl<'n> PlacedBox<'n> {
     }
     if let Some(mask) = background.clip.border_mask() {
       DocumentDevice::paint(doc, |device| {
-        device.with_border_mask(&mask, self.frame.layout.size, self.frame.origin, |device| {
+        let origin = self.frame.origin + background.offset;
+
+        device.with_border_mask(&mask, background.size, origin, |device| {
           device.write(|doc| {
-            LayerEmitter::new(&self.node.context, doc).layers(
-              &background.layers,
-              Frame::origin_box(self.frame, background.origin),
-              Frame::border_box(self.frame),
-            )
+            LayerEmitter::new(&self.node.context, doc)
+              .layers(&background.layers, Frame::border_box(self.frame))
           });
         });
       })?;
@@ -210,18 +221,15 @@ impl<'n> PlacedBox<'n> {
       return Ok(());
     }
     let group = self
-      .background_clip_path_data(background.clip)
+      .background_clip_path_data(&background)
       .map(|(data, rule)| {
         let clip = doc.clip_path(&data, rule, None)?;
 
         doc.begin_group(Affine::IDENTITY, 1.0, Some(&clip), None)
       })
       .transpose()?;
-    LayerEmitter::new(&self.node.context, doc).layers(
-      &background.layers,
-      Frame::origin_box(self.frame, background.origin),
-      Frame::border_box(self.frame),
-    )?;
+    LayerEmitter::new(&self.node.context, doc)
+      .layers(&background.layers, Frame::border_box(self.frame))?;
     if let Some(group) = group {
       doc.end_group(group)?;
     }
@@ -249,9 +257,13 @@ impl<'n> PlacedBox<'n> {
     let (token, reference) = doc.begin_mask()?;
     let border_box = Frame::border_box(self.frame);
 
-    let layers = FillLayers::mask(style).resolve(images, size, &self.node.context);
+    let layers = FillLayers::mask(style).resolve(
+      images,
+      &BoxBackgroundPaintContext::mask(size, self.node.context.box_paint_offset(self.frame.layout)),
+      &self.node.context,
+    );
 
-    LayerEmitter::new(&self.node.context, doc).layers(&layers, border_box, border_box)?;
+    LayerEmitter::new(&self.node.context, doc).layers(&layers, border_box)?;
     doc.end_mask(token)?;
     Ok(Some(doc.begin_masked_group(&reference)?))
   }
@@ -639,11 +651,8 @@ impl GlyphDevice for DocumentDevice<'_> {
   ) {
     self.push_clip(clip, transform);
     self.write(|doc| {
-      LayerEmitter::new(&span.node.context, doc).layers(
-        &span.background.layers,
-        Frame::origin_box(span.strip, span.background.origin),
-        Frame::border_box(span.strip),
-      )
+      LayerEmitter::new(&span.node.context, doc)
+        .layers(&span.background.layers, Frame::border_box(span.strip))
     });
     self.pop_clip();
   }

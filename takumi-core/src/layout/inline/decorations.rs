@@ -34,6 +34,8 @@ pub struct DecorationLine {
   pub transform: Affine,
   /// Maps the border box onto the output's pixels.
   pub output: Affine,
+  /// Where the border box sits in the space paint snaps to pixels in.
+  pub paint_offset: Point<f32>,
   /// Whether the line paints above glyphs (line-through) vs below (under/overline).
   pub over: bool,
   /// Which decoration this is, so a backend can single one out.
@@ -42,6 +44,15 @@ pub struct DecorationLine {
   pub style: TextDecorationStyle,
   /// The x-ranges `skip-ink` cuts out, sorted.
   pub skips: Spans,
+}
+
+/// Where a run's decoration lines paint: the border box's transform into the device's drawing
+/// space, the device's transform onto its pixels, and where the border box sits in paint space.
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct DecorationSpace {
+  pub(crate) transform: Affine,
+  pub(crate) device: Affine,
+  pub(crate) paint_offset: Point<f32>,
 }
 
 /// The font a decorating box measures its decorations with, as Blink's `UsedFont`: its primary
@@ -172,11 +183,11 @@ impl BuiltInlineLayout<'_> {
       return DecorationPlacement::default();
     }
 
-    let state = line.setup.state;
+    let chain = self.span_chain(source_span_id);
+    let baseline_shift = self.text_baseline_shift(line, chain);
+    let state = line.setup.run_scale(baseline_shift);
     let glyphs = state.transform(Affine::IDENTITY, static_inline_prefix);
     let content = layout.content_box_offset();
-    let chain = self.span_chain(source_span_id);
-    let map_y = |y: f32| glyphs.transform_point(0.0, content.y + y).1;
     let line_baseline = content.y + line.setup.resolved_metrics.resolved_baseline;
     let root = DecoratingBox {
       font: DecorationFont::of(self.font, state.scale, run),
@@ -196,10 +207,7 @@ impl BuiltInlineLayout<'_> {
       })
       .map(|link| DecoratingBox {
         font: DecorationFont::of(link.decoration.font, 1.0, run),
-        baseline: map_y(
-          line.setup.resolved_metrics.resolved_baseline
-            + line.state.offsets.of(BoxKey::Span(link.decoration.id)),
-        ),
+        baseline: line_baseline + line.state.offsets.of(BoxKey::Span(link.decoration.id)),
       })
       .collect();
 
@@ -207,7 +215,7 @@ impl BuiltInlineLayout<'_> {
 
     let text_font = chain.map_or(self.font, |link| link.decoration.font);
     let text = DecorationFont::of(text_font, state.scale, run);
-    let baseline = map_y(run.baseline + line.baseline_shift_in(chain));
+    let baseline = content.y + run.baseline + baseline_shift;
     let left = content.x + run.offset + run.decorated_offset();
     let (left, _) = glyphs.transform_point(left, 0.0);
     let (right, _) = glyphs.transform_point(
@@ -264,11 +272,15 @@ impl ShapedRun {
     layout: ComputedLayout,
     placement: &DecorationPlacement,
     baseline_shift: f32,
-    transform: Affine,
-    device: Affine,
+    space: DecorationSpace,
   ) -> Vec<DecorationLine> {
+    let DecorationSpace {
+      transform,
+      device,
+      paint_offset,
+    } = space;
     let content = layout.content_box_offset();
-    let mut lines = self.decoration_lines(placement, transform, device * transform);
+    let mut lines = self.decoration_lines(placement, transform, device * transform, paint_offset);
 
     if self.brush.decoration_skip_ink == TextDecorationSkipInk::None {
       return lines;
@@ -306,6 +318,7 @@ impl ShapedRun {
     placement: &DecorationPlacement,
     transform: Affine,
     output: Affine,
+    paint_offset: Point<f32>,
   ) -> Vec<DecorationLine> {
     if self.decorated_advance() <= 0.0 {
       return Vec::new();
@@ -351,6 +364,7 @@ impl ShapedRun {
             color: decoration.color,
             transform,
             output,
+            paint_offset,
             over,
             line,
             style: decoration.style,

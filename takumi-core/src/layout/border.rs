@@ -289,6 +289,7 @@ impl BorderProperties {
       origin: Some(ContourOrigin {
         border: *self,
         size: border_box,
+        offset: Point::ZERO,
       }),
     };
 

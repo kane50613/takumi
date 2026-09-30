@@ -14,7 +14,7 @@ use takumi_core::{
     ComputedLayout as Layout, NodeId, PathCommand, Point as CorePoint, Rect as CoreRect, Size,
   },
   layout::{
-    background_image_geometry::{BackgroundImageGeometry, FillLayers},
+    background_image_geometry::{BoxBackgroundPaintContext, FillLayers, ImageTiling},
     border::BorderProperties,
     inline::{
       BuiltInlineLayout, InlinePass, InlineRunLayout, PositionedInlineRun, ProcessedInlineSpan,
@@ -331,15 +331,15 @@ impl Emitter<'_> {
     frame: BoxFrame,
     surface: &mut Surface,
   ) {
-    let BoxFrame { layout, .. } = frame;
     if background.layers.is_empty() {
       return;
     }
-    let Some(shape) = background.clip.shape(layout.size) else {
+    let Some(shape) = background.clip.shape(background.size) else {
       return;
     };
     let mask = background.clip.border_mask();
-    let clip = shape_path(&shape, frame.origin);
+    let origin = frame.origin + background.offset;
+    let clip = shape_path(&shape, origin);
 
     if mask.is_none() && clip.is_none() {
       return;
@@ -348,7 +348,7 @@ impl Emitter<'_> {
     self.in_artifact(surface, |surface| {
       match (mask, &clip) {
         (Some(border), _) => {
-          let stream = border_mask_stream(&border, layout.size, frame.origin, surface);
+          let stream = border_mask_stream(&border, background.size, origin, surface);
 
           surface.push_mask(Mask::new(stream, MaskType::Alpha));
         }
@@ -360,68 +360,72 @@ impl Emitter<'_> {
     });
   }
 
-  /// Draws one layer anchored at `anchor`. A tiling layer draws one tile into
-  /// a pattern and fills the `size` rect at `rect_at` with it, so a repeated
-  /// layer costs one shading instead of one per tile; `tile_space` is the
-  /// space its tile draws in.
-  #[allow(clippy::too_many_arguments)]
+  /// Draws one layer of a box whose border box sits at `origin`: a lone tile on its own, or
+  /// one tile in a pattern filling the layer's `dest`, so a repeated layer costs one shading
+  /// instead of one per tile. `tile_space` is the space the pattern's tile draws in.
   fn layer(
     &self,
     image: &BackgroundImage,
     node: &RenderNode,
-    placement: &BackgroundImageGeometry,
-    size: Size<f32>,
-    rect_at: CorePoint<f32>,
-    anchor: CorePoint<f32>,
+    tiling: &ImageTiling,
+    origin: CorePoint<f32>,
     surface: &mut Surface,
     tile_space: Transform,
   ) {
-    if !placement.repeats() {
+    let dest = tiling.dest;
+    let Some(dest_path) = KrillaRect::from_ltrb(
+      origin.x + dest.left,
+      origin.y + dest.top,
+      origin.x + dest.right,
+      origin.y + dest.bottom,
+    )
+    .and_then(rect_path) else {
+      return;
+    };
+    let (xs, ys) = tiling.origins();
+
+    if let ([x], [y]) = (xs.as_slice(), ys.as_slice()) {
+      let clipped = !tiling.covers(CoreRect {
+        left: *x,
+        top: *y,
+        right: x + tiling.tile.width,
+        bottom: y + tiling.tile.height,
+      });
+
+      if clipped {
+        surface.push_clip_path(&dest_path, &FillRule::NonZero);
+      }
       self.background_layer(
         image,
         node,
-        placement.tile_size,
-        anchor + placement.first_tile(),
+        tiling.tile,
+        origin + CorePoint { x: *x, y: *y },
         surface,
         Transform::identity(),
       );
+      if clipped {
+        surface.pop();
+      }
       return;
     }
+
     let stream = draw_stream(surface, |tile| {
-      self.background_layer(
-        image,
-        node,
-        placement.tile_size,
-        CorePoint::ZERO,
-        tile,
-        tile_space,
-      );
+      self.background_layer(image, node, tiling.tile, CorePoint::ZERO, tile, tile_space);
     });
-    let Some(path) =
-      KrillaRect::from_xywh(rect_at.x, rect_at.y, size.width, size.height).and_then(rect_path)
-    else {
-      return;
-    };
-    let tile_origin = anchor + placement.first_tile();
-    let period = placement.pattern_period(CoreRect {
-      left: rect_at.x - anchor.x,
-      top: rect_at.y - anchor.y,
-      right: rect_at.x + size.width - anchor.x,
-      bottom: rect_at.y + size.height - anchor.y,
-    });
+    let step = tiling.step();
 
     surface.set_fill(Some(Fill {
       paint: Pattern {
         stream,
-        transform: Transform::from_translate(tile_origin.x, tile_origin.y),
-        width: period.width,
-        height: period.height,
+        transform: Transform::from_translate(origin.x + tiling.phase.x, origin.y + tiling.phase.y),
+        width: step.width,
+        height: step.height,
       }
       .into(),
       opacity: NormalizedF32::ONE,
       rule: FillRule::NonZero,
     }));
-    surface.draw_path(&path);
+    surface.draw_path(&dest_path);
   }
 
   fn background_layer(
@@ -493,7 +497,7 @@ impl Emitter<'_> {
 
     let paint: Paint = match image {
       BackgroundImage::Linear(gradient) => {
-        let mut geometry = gradient.resolve_geometry(w as u32, h as u32, sizing, current_color);
+        let mut geometry = gradient.resolve_geometry(w, h, sizing, current_color);
         let axis_length = geometry.axis_length;
         let (dir_x, dir_y) = (geometry.dir_x, geometry.dir_y);
         self.filter_stops(geometry.stops_mut());
@@ -527,7 +531,7 @@ impl Emitter<'_> {
         .into()
       }
       BackgroundImage::Radial(gradient) => {
-        let mut geometry = gradient.resolve_geometry(w as u32, h as u32, sizing, current_color);
+        let mut geometry = gradient.resolve_geometry(w, h, sizing, current_color);
         let (cx, cy) = (geometry.cx, geometry.cy);
         let radius_x = geometry.inv_radius_x.max(1e-6).recip();
         let radius_y = geometry.inv_radius_y.max(1e-6).recip();
@@ -620,27 +624,24 @@ impl Emitter<'_> {
 
   /// Builds the soft mask for `mask-image`, drawing its layers into their own stream.
   fn mask(&mut self, node: &RenderNode, frame: BoxFrame, surface: &mut Surface) -> Option<Mask> {
-    let BoxFrame {
-      layout: Layout { size, .. },
-      ..
-    } = frame;
+    let size = frame.layout.size;
     let images = node.context.style.mask_image.as_deref()?;
 
     if !images.iter().any(BackgroundImage::paints) {
       return None;
     }
     let filter = self.color_filter.take();
-    let layers = FillLayers::mask(&node.context.style);
+    let layers = FillLayers::mask(&node.context.style).resolve(
+      images,
+      &BoxBackgroundPaintContext::mask(size, node.context.box_paint_offset(frame.layout)),
+      &node.context,
+    );
     let stream = draw_stream(surface, |content| {
-      for (index, image) in images.iter().enumerate().rev() {
-        let placement = layers.geometry(index, image, size, &node.context);
-
+      for layer in &layers {
         self.layer(
-          image,
+          layer.image,
           node,
-          &placement,
-          size,
-          frame.origin,
+          &layer.tiling,
           frame.origin,
           content,
           Transform::identity(),
@@ -685,10 +686,8 @@ impl Emitter<'_> {
       self.layer(
         layer.image,
         node,
-        &layer.geometry,
-        frame.layout.size,
+        &layer.tiling,
         frame.origin,
-        frame.origin + background.origin.offset,
         surface,
         Transform::from_scale(PT_PER_PX, PT_PER_PX),
       );
@@ -1160,35 +1159,52 @@ impl Emitter<'_> {
     Some(self.tag_path(&owner_path[..length]))
   }
 
-  /// One image layer drawn into a pattern, so glyphs can be filled with it.
-  fn image_pattern(
+  /// One layer as a pattern glyphs can be filled with, over a box whose border box sits at
+  /// `origin`. An axis with one tile repeats it farther apart than the layer's `dest` reaches.
+  fn layer_pattern(
     &self,
     image: &BackgroundImage,
     node: &RenderNode,
-    tile: Size<f32>,
-    at: CorePoint<f32>,
+    tiling: &ImageTiling,
+    origin: CorePoint<f32>,
     surface: &mut Surface,
   ) -> Option<Paint> {
+    let (xs, ys) = tiling.origins();
+    let (first_x, first_y) = (*xs.first()?, *ys.first()?);
+    let step = tiling.step();
+    let dest = tiling.dest;
+    let lone =
+      |start: f32, end: f32, tile: f32, first: f32| end - start + tile + (first - start).abs();
+    let width = if xs.len() > 1 {
+      step.width
+    } else {
+      lone(dest.left, dest.right, tiling.tile.width, first_x)
+    };
+    let height = if ys.len() > 1 {
+      step.height
+    } else {
+      lone(dest.top, dest.bottom, tiling.tile.height, first_y)
+    };
     let stream = draw_stream(surface, |inner| {
       self.background_layer(
         image,
         node,
-        tile,
+        tiling.tile,
         CorePoint::ZERO,
         inner,
-        Transform::identity(),
+        Transform::from_scale(PT_PER_PX, PT_PER_PX),
       );
     });
 
-    (tile.width > 0.0 && tile.height > 0.0).then(|| {
+    Some(
       Pattern {
         stream,
-        transform: Transform::from_translate(at.x, at.y),
-        width: tile.width,
-        height: tile.height,
+        transform: Transform::from_translate(origin.x + first_x, origin.y + first_y),
+        width,
+        height,
       }
-      .into()
-    })
+      .into(),
+    )
   }
 
   /// The fills painted through a `background-clip: text` box's glyphs.
@@ -1197,7 +1213,7 @@ impl Emitter<'_> {
     node: &RenderNode,
     frame: BoxFrame,
     surface: &mut Surface,
-  ) -> Vec<Fill> {
+  ) -> Vec<GlyphBackground> {
     let background = BoxPainter::new(&node.context, frame.layout).background();
 
     if !matches!(background.clip, BackgroundClipArea::Text) {
@@ -1215,34 +1231,47 @@ impl Emitter<'_> {
     background: &BoxBackground<'_>,
     frame: BoxFrame,
     surface: &mut Surface,
-  ) -> Vec<Fill> {
+  ) -> Vec<GlyphBackground> {
     let mut fills = Vec::new();
+    let rect_clip = |left: f32, top: f32, right: f32, bottom: f32| {
+      KrillaRect::from_ltrb(
+        frame.origin.x + left,
+        frame.origin.y + top,
+        frame.origin.x + right,
+        frame.origin.y + bottom,
+      )
+      .and_then(rect_path)
+    };
 
     if let Some(color) = background.color {
-      fills.push(fill_from_rgba(self.filtered(color), 1.0));
+      let offset = background.offset;
+
+      fills.push(GlyphBackground {
+        fill: fill_from_rgba(self.filtered(color), 1.0),
+        clip: rect_clip(
+          offset.x,
+          offset.y,
+          offset.x + background.size.width,
+          offset.y + background.size.height,
+        ),
+      });
     }
 
     for layer in &background.layers {
-      let tile = layer.geometry.tile_size;
-      // ponytail: one tile per layer; a repeating gradient behind text would
-      // need a pattern paint here.
-      let tile_origin = frame.origin + background.origin.offset + layer.geometry.first_tile();
-      // An image layer has no paint of its own, so it draws into a pattern the
-      // glyphs can be filled with, the way a tiled background already does.
-      let paint = match layer.image {
-        BackgroundImage::Url(_) => {
-          self.image_pattern(layer.image, node, tile, tile_origin, surface)
-        }
-        _ => self.gradient_paint(layer.image, node, tile, tile_origin, Transform::identity()),
-      };
-      let Some(paint) = paint else {
+      let tiling = &layer.tiling;
+      let Some(paint) = self.layer_pattern(layer.image, node, tiling, frame.origin, surface) else {
         continue;
       };
+      let dest = tiling.dest;
+      let clip = rect_clip(dest.left, dest.top, dest.right, dest.bottom);
 
-      fills.push(Fill {
-        paint,
-        opacity: NormalizedF32::ONE,
-        rule: FillRule::NonZero,
+      fills.push(GlyphBackground {
+        fill: Fill {
+          paint,
+          opacity: NormalizedF32::ONE,
+          rule: FillRule::NonZero,
+        },
+        clip,
       });
     }
     fills
@@ -1883,6 +1912,12 @@ fn device_commands(shape: &FillShape, transform: Affine) -> Vec<PathCommand> {
     .collect()
 }
 
+/// A paint glyphs show under `background-clip: text`, and the rectangle it shows in.
+struct GlyphBackground {
+  fill: Fill,
+  clip: Option<KrillaPath>,
+}
+
 /// The PDF surface as a [`PaintDevice`] for one block's text: shapes draw as on any surface, and
 /// glyphs draw with text operators so the text stays extractable.
 ///
@@ -1893,7 +1928,7 @@ struct TextDevice<'e, 's, 'a> {
   device: SurfaceDevice<'s, 'a>,
   built: &'e BuiltInlineLayout<'e>,
   /// The background fills `background-clip: text` glyphs show, bottom first.
-  text_fills: Rc<[Fill]>,
+  text_fills: Rc<[GlyphBackground]>,
   /// The shadow every draw becomes while one is open.
   shadow: Option<SizedShadow>,
 }
@@ -2129,7 +2164,12 @@ impl GlyphDevice for TextDevice<'_, '_, '_> {
 impl TextDevice<'_, '_, '_> {
   /// Paints `run`'s glyphs in the block at `frame` over `fills` seen through them, or their shadow
   /// while one is open.
-  fn paint_glyph_run(&mut self, run: &PositionedInlineRun, frame: BoxFrame, fills: &[Fill]) {
+  fn paint_glyph_run(
+    &mut self,
+    run: &PositionedInlineRun,
+    frame: BoxFrame,
+    fills: &[GlyphBackground],
+  ) {
     let shifted = match self.shadow {
       Some(shadow) => frame.shifted(CorePoint {
         x: shadow.offset_x,
@@ -2179,9 +2219,15 @@ impl TextDevice<'_, '_, '_> {
     // layer twice. Paths paint the same pixels and stay out of it.
     if shadow_color.is_none() {
       for background in fills {
-        surface.set_fill(Some(background.clone()));
-        surface.set_stroke(background_stroke(shaped, background));
+        if let Some(clip) = &background.clip {
+          surface.push_clip_path(clip, &FillRule::NonZero);
+        }
+        surface.set_fill(Some(background.fill.clone()));
+        surface.set_stroke(background_stroke(shaped, &background.fill));
         surface.draw_glyphs(origin, &glyphs, font.clone(), text, shaped.font_size, true);
+        if background.clip.is_some() {
+          surface.pop();
+        }
       }
     }
 
