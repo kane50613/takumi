@@ -41,8 +41,6 @@ pub(crate) fn to_tiny_blend_mode(mode: BlendMode) -> Option<tiny_skia::BlendMode
     BlendMode::Overlay => T::Overlay,
     BlendMode::Darken => T::Darken,
     BlendMode::Lighten => T::Lighten,
-    BlendMode::ColorDodge => T::ColorDodge,
-    BlendMode::ColorBurn => T::ColorBurn,
     BlendMode::HardLight => T::HardLight,
     BlendMode::SoftLight => T::SoftLight,
     BlendMode::Difference => T::Difference,
@@ -167,4 +165,16 @@ fn build_border_path(border: BorderProperties, size: Size<u32>) -> Option<TinyPa
   let mut commands = Vec::new();
   border.append_mask_commands(&mut commands, size.map(|v| v as f32), Point::ZERO);
   build_path(&commands)
+}
+
+#[cfg(test)]
+mod tests {
+  use super::to_tiny_blend_mode;
+  use crate::style::BlendMode;
+
+  #[test]
+  fn color_dodge_and_color_burn_stay_off_the_approximate_reciprocal() {
+    assert!(to_tiny_blend_mode(BlendMode::ColorDodge).is_none());
+    assert!(to_tiny_blend_mode(BlendMode::ColorBurn).is_none());
+  }
 }
