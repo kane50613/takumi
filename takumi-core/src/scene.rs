@@ -658,7 +658,7 @@ impl Scene {
         }
       }
     }
-    set_paint_offsets(&mut root, &mut Vec::new(), Point::ZERO, &offsets);
+    set_paint_offsets(&mut root, &offsets);
 
     Self {
       root,
@@ -670,37 +670,71 @@ impl Scene {
   }
 }
 
-/// Sets the context of `node`, at `path`, and of its descendants to the paint offset its layout
-/// location adds to: from `offsets` for a box the scene placed, else `inherited`, the offset of the
-/// box whose inline content it paints in.
+/// Sets the context of each box under `root` to the paint offset its layout location adds to:
+/// from `offsets`, keyed by child path, for a box the scene placed, else the offset of the box
+/// whose inline content it paints in.
 fn set_paint_offsets(
-  node: &mut RenderNode,
-  path: &mut Vec<usize>,
-  inherited: Point<f32>,
+  root: &mut RenderNode,
   offsets: &HashMap<Vec<usize>, (Point<f32>, Point<f32>)>,
 ) {
-  let (base, own) = match offsets.get(path.as_slice()) {
-    Some(&(own, location)) => (
-      Point {
-        x: own.x - location.x,
-        y: own.y - location.y,
-      },
-      own,
-    ),
-    None => (inherited, inherited),
-  };
+  let mut path = Vec::new();
+  let mut stack = vec![(root, OffsetSlot::Root, Point::ZERO)];
 
-  node.context.paint_offset = base;
-  for (index, child) in node
-    .children
-    .iter_mut()
-    .flat_map(|children| children.iter_mut())
-    .enumerate()
-  {
-    path.push(index);
-    set_paint_offsets(child, path, own, offsets);
-    path.pop();
+  while let Some((node, slot, inherited)) = stack.pop() {
+    let placed = match slot {
+      OffsetSlot::Root => offsets.get(path.as_slice()),
+      OffsetSlot::Child { depth, index } => {
+        path.truncate(depth);
+        path.push(index);
+        offsets.get(path.as_slice())
+      }
+      OffsetSlot::Unplaced => None,
+    };
+    let (base, own) = match placed {
+      Some(&(own, location)) => (
+        Point {
+          x: own.x - location.x,
+          y: own.y - location.y,
+        },
+        own,
+      ),
+      None => (inherited, inherited),
+    };
+    let depth = path.len();
+    let unplaced = matches!(slot, OffsetSlot::Unplaced);
+
+    node.context.paint_offset = base;
+    if let Some(marker) = node.marker.as_deref_mut() {
+      stack.push((marker, OffsetSlot::Unplaced, own));
+    }
+    for (index, child) in node
+      .children
+      .iter_mut()
+      .flat_map(|children| children.iter_mut())
+      .enumerate()
+    {
+      let slot = if unplaced {
+        OffsetSlot::Unplaced
+      } else {
+        OffsetSlot::Child { depth, index }
+      };
+
+      stack.push((child, slot, own));
+    }
   }
+}
+
+/// Where a box sits in the child paths that key the scene's placed boxes.
+#[derive(Clone, Copy)]
+enum OffsetSlot {
+  Root,
+  /// Child `index` of the box whose path is `depth` long.
+  Child {
+    depth: usize,
+    index: usize,
+  },
+  /// A `::marker` box or one inside it, which no path reaches.
+  Unplaced,
 }
 
 /// Bounds each effect of `properties` by what paints under it, nested effects grown by their
@@ -1063,8 +1097,41 @@ fn merge_bounds(left: Option<SceneBounds>, right: Option<SceneBounds>) -> Option
 
 #[cfg(test)]
 mod tests {
-  use super::{SceneBounds, merge_bounds};
-  use crate::{geometry::Size, style::Affine};
+  use std::sync::Arc;
+
+  use super::{Scene, SceneBounds, merge_bounds};
+  use crate::{
+    context::RenderContext,
+    geometry::{Point, Size},
+    layout::{node::Node, tree::RenderNode},
+    resources::font::Fonts,
+    style::{Affine, SizingContext, StyleSheet},
+    viewport::Viewport,
+  };
+
+  #[test]
+  fn a_marker_paints_at_its_host_offset() {
+    let viewport = Viewport::new((200, 200));
+    let stylesheet = StyleSheet::parse(
+      ".list { padding: 10.5px; list-style-type: decimal } \
+       .item { display: list-item; list-style-position: inside }",
+    )
+    .expect("stylesheet parses");
+    let context = RenderContext::builder()
+      .fonts(Fonts::default().snapshot())
+      .sizing(SizingContext::builder().viewport(viewport).build())
+      .stylesheet(Arc::new(stylesheet))
+      .build();
+    let list = Node::container([Node::container([Node::text("item")]).with_class_name("item")])
+      .with_class_name("list");
+
+    let scene = Scene::lay_out(RenderNode::from_node(&context, list), viewport, false)
+      .expect("scene lays out");
+    let item = &scene.root.children.as_deref().expect("children")[0];
+    let marker = item.marker.as_deref().expect("marker");
+
+    assert_eq!(marker.context.paint_offset, Point { x: 10.5, y: 10.5 });
+  }
 
   #[test]
   fn zero_sized_rect_produces_empty_bounds() {
