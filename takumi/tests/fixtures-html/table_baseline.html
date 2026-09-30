@@ -1,0 +1,69 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>table_baseline</title>
+    <base href="../../../" />
+    <link rel="stylesheet" href="takumi/tests/shared.css" />
+    <style>
+      .root {
+        display: block;
+        padding: 16px;
+        width: 100%;
+        height: 100%;
+        background: rgb(243, 244, 246);
+        font-family: "Geist";
+        font-size: 16px;
+      }
+      table {
+        display: table;
+        border-spacing: 2px;
+        background: rgb(255, 255, 255);
+        margin-bottom: 12px;
+      }
+      tbody {
+        display: table-row-group;
+        vertical-align: baseline;
+      }
+      tr {
+        display: table-row;
+        vertical-align: inherit;
+      }
+      td {
+        display: table-cell;
+        vertical-align: inherit;
+        border: 1px solid rgb(148, 163, 184);
+        padding: 2px 6px;
+      }
+    </style>
+  </head>
+  <body style="width: 480px; height: 260px">
+    <div class="root">
+      <table>
+        <tr>
+          <td style="font-size: 12px">small</td>
+          <td style="font-size: 36px">Big</td>
+          <td style="padding-top: 14px">padded</td>
+          <td style="line-height: 40px">tall line</td>
+        </tr>
+        <tr>
+          <td>one</td>
+          <td style="font-size: 24px">two</td>
+          <td style="vertical-align: top">top</td>
+          <td><div style="display: block; font-size: 28px">block</div></td>
+        </tr>
+      </table>
+      <table>
+        <tr>
+          <td rowspan="2" style="font-size: 30px">span</td>
+          <td style="font-size: 14px">first</td>
+          <td style="font-size: 20px">row</td>
+        </tr>
+        <tr>
+          <td style="font-size: 22px">second</td>
+          <td>row</td>
+        </tr>
+      </table>
+    </div>
+  </body>
+</html>

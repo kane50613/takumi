@@ -161,18 +161,15 @@ Applying it broadly makes a render slower, not faster.
 
 ### Sizing
 
-| Property                | Values                                                                                                                                 |
-| :---------------------- | :------------------------------------------------------------------------------------------------------------------------------------- |
-| `width`, `height`       | `<length-percentage>`, `auto`, `min-content`, `max-content`, `fit-content`, `fit-content(<length-percentage>)`, `stretch` <sup>1</sup> |
-| `minWidth`, `minHeight` | `<length-percentage>`, `auto`                                                                                                          |
-| `maxWidth`, `maxHeight` | `<length-percentage>`, `none`, `auto` <sup>2</sup>                                                                                     |
-| `aspectRatio`           | Supported                                                                                                                              |
+| Property                | Values                                                                                |
+| :---------------------- | :------------------------------------------------------------------------------------ |
+| `width`, `height`       | `<length-percentage>`, `auto`, `min-content`, `max-content`, `fit-content`, `stretch` |
+| `minWidth`, `minHeight` | `<length-percentage>`, `auto`                                                         |
+| `maxWidth`, `maxHeight` | `<length-percentage>`, `none`, `auto` <sup>1</sup>                                    |
+| `aspectRatio`           | Supported                                                                             |
 
-<sup>1</sup> A `fit-content()` limit that mixes lengths and percentages in `calc()` falls back to
-plain `fit-content`. This also applies to `flexBasis`.
-
-<sup>2</sup> `maxWidth` and `maxHeight` accept `auto` as an alias for `none` for compatibility. The
-min/max properties reject intrinsic sizing keywords, `fit-content()`, and `stretch`.
+<sup>1</sup> `maxWidth` and `maxHeight` accept `auto` as an alias for `none` for compatibility. The
+min/max properties reject intrinsic sizing keywords and `stretch`.
 
 ### Spacing
 

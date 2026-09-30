@@ -18,6 +18,16 @@ pub enum MaxSize {
   Length(Length),
 }
 
+impl MaxSize {
+  /// The maximum as a [`Length`], or `None` for `none`.
+  pub fn as_length(self) -> Option<Length> {
+    match self {
+      Self::Length(length) => Some(length),
+      Self::None => None,
+    }
+  }
+}
+
 impl MakeComputed for MaxSize {
   fn make_computed(&mut self, sizing: &SizingContext) {
     if let Self::Length(length) = self {

@@ -8,7 +8,7 @@ use smallvec::SmallVec;
 use taffy::{
   AvailableSpace as TaffyAvailableSpace, BlockContext, Cache, CacheTree, Display as TaffyDisplay,
   Layout, LayoutBlockContainer, LayoutFlexboxContainer, LayoutGridContainer, LayoutInput,
-  LayoutOutput, LayoutPartialTree, Line, MaybeResolve, NodeId as TaffyNodeId,
+  LayoutOutput, LayoutPartialTree, LengthPercentageAuto, Line, MaybeResolve, NodeId as TaffyNodeId,
   Position as TaffyPosition, RequestedAxis, ResolveOrZero, RoundTree, RunMode, Size as TaffySize,
   SizingMode, Style, TraversePartialTree, TraverseTree, compute_block_layout,
   compute_cached_layout, compute_flexbox_layout, compute_grid_layout, compute_hidden_layout,
@@ -29,12 +29,13 @@ use crate::{
     },
     list_marker::{ListCounter, is_list_element, list_marker, owns_list_counter},
     node::{Node, NodeStyleLayers, TextData},
+    table_columns::TableColumns,
   },
   matching::{MatchedDeclarationsView, NodeMatchedDeclarations, match_stylesheets_view},
   resources::font::PrimaryFontMetrics,
   style::{
     Affine, BackgroundImage, BackgroundImages, Color, ComputedStyle, ContentItem, ContentValue,
-    Display, Float, Length, LineHeight, ListStylePosition, Position, SizingContext,
+    Display, Float, GridPlacement, Length, LineHeight, ListStylePosition, Position, SizingContext,
     Style as NodeStyle, StyleDeclaration, StyleDeclarationBlock, StyleSheet, TextWrapMode,
     TwBlocks, WhiteSpaceCollapse, apply_stylesheet_animations,
   },
@@ -146,10 +147,11 @@ impl LayoutResults {
   }
 
   /// The root's border-box size, zero when the tree is empty.
+  /// The root's border-box size before pixel snapping, which Blink keeps in `LayoutUnit`s.
   pub(super) fn root_size(&self) -> Size<f32> {
     self
-      .layout(NodeId::ROOT)
-      .map_or(Size::ZERO, |layout| layout.size)
+      .node(NodeId::ROOT)
+      .map_or(Size::ZERO, |node| Size::from_taffy(node.unsnapped.size))
   }
 
   fn node(&self, node_id: NodeId) -> crate::Result<&LayoutResultNode> {
@@ -180,6 +182,10 @@ struct LayoutNodeState {
   final_layout: Layout,
   first_baseline_y: Option<f32>,
   is_inline_children: bool,
+  /// Whether the node is a flex or grid item, which its container may stretch.
+  flex_or_grid_item: bool,
+  /// How far a table cell's content moves down to its row's baseline.
+  row_baseline_shift: f32,
   children: Box<[TaffyNodeId]>,
   box_children: Box<[OrderedChild]>,
 }
@@ -215,6 +221,13 @@ pub enum TablePart {
   FooterCell,
 }
 
+impl TablePart {
+  /// Whether the box is a cell.
+  pub(crate) fn is_cell(self) -> bool {
+    matches!(self, Self::HeaderCell | Self::BodyCell | Self::FooterCell)
+  }
+}
+
 /// A styled node plus its children, ready for layout.
 #[derive(Clone)]
 pub struct RenderNode {
@@ -237,6 +250,8 @@ pub struct RenderNode {
   pub table_header_lines: Option<(i16, i16)>,
   /// The role this box had in a source table, kept through table lowering.
   pub table_part: Option<TablePart>,
+  /// A lowered table's columns, sized once its width is known.
+  pub(crate) table_columns: Option<Box<TableColumns>>,
 }
 
 /// Drops the render tree iteratively; recursive drop glue overflows the stack
@@ -413,7 +428,8 @@ impl<'r> LayoutTree<'r> {
         // agrees across two large containers and disagrees with a small one.
         sizing.container_read.set(false);
         let style = render_node.layout_style(sizing);
-        let independent = !sizing.container_read.get();
+        // A table's width follows the space it is offered.
+        let independent = !sizing.container_read.get() && render_node.table_columns.is_none();
 
         (style, independent)
       };
@@ -426,6 +442,8 @@ impl<'r> LayoutTree<'r> {
         final_layout: Layout::new(),
         first_baseline_y: None,
         is_inline_children,
+        flex_or_grid_item: false,
+        row_baseline_shift: 0.0,
         children: Box::new([]),
         box_children: Box::new([]),
       });
@@ -467,6 +485,8 @@ impl<'r> LayoutTree<'r> {
         final_layout: Layout::new(),
         first_baseline_y: None,
         is_inline_children: false,
+        flex_or_grid_item: false,
+        row_baseline_shift: 0.0,
         children: Box::new([]),
         box_children: Box::new([]),
       });
@@ -535,6 +555,9 @@ impl<'r> LayoutTree<'r> {
         nodes[idx].style.display,
         TaffyDisplay::Flex | TaffyDisplay::Grid
       ) {
+        for &child in &taffy_children {
+          nodes[usize::from(child)].flex_or_grid_item = true;
+        }
         sort_children_by_order(&mut taffy_children, |child_id| {
           let child_idx: usize = child_id.into();
           render_nodes
@@ -816,6 +839,16 @@ impl<'r> LayoutTree<'r> {
         .or(available_space.height.into_option()),
     };
     node.style = render_node.layout_style(&sizing);
+    if node.row_baseline_shift != 0.0 {
+      node.style.margin.top = LengthPercentageAuto::length(node.row_baseline_shift);
+    }
+    render_node.size_table(
+      &mut node.style,
+      available_space.width,
+      known_dimensions.width,
+      node.flex_or_grid_item,
+      &sizing,
+    );
   }
 }
 
@@ -978,6 +1011,97 @@ impl<'r> LayoutTree<'r> {
     inputs
   }
 
+  /// Lays out a grid, and the rows of a table lowered to one as Blink's `RowBaselineTabulator` aligns
+  /// them: once to read its baseline-aligned cells' first baselines, then again with each one's
+  /// content moved down to the deepest of its row. The deepest ascent plus descent then sizes the
+  /// row, as the moved content grows the cells.
+  fn compute_table_layout(&mut self, node: TaffyNodeId, inputs: LayoutInput) -> LayoutOutput {
+    let cells: Vec<(TaffyNodeId, TaffyNodeId, i16)> = self
+      .get_layout_node_ref(node)
+      .map(|state| state.children.clone())
+      .unwrap_or_default()
+      .iter()
+      .filter_map(|&cell| {
+        let render_node = self.render_nodes.get(usize::from(cell))?;
+        let GridPlacement::Line(row) = render_node.context.style.grid_row_start else {
+          return None;
+        };
+        let content = *self.get_layout_node_ref(cell)?.children.first()?;
+
+        render_node
+          .aligns_to_row_baseline()
+          .then_some((cell, content, row))
+      })
+      .collect();
+
+    if cells.is_empty() {
+      return compute_grid_layout(self, node, inputs);
+    }
+
+    for &(cell, content, _) in &cells {
+      self.shift_to_row_baseline(cell, content, 0.0);
+    }
+    compute_grid_layout(
+      self,
+      node,
+      LayoutInput {
+        run_mode: RunMode::PerformLayout,
+        ..inputs
+      },
+    );
+
+    let baselines: Vec<Option<f32>> = cells
+      .iter()
+      .map(|&(cell, ..)| self.get_layout_node_ref(cell)?.first_baseline_y)
+      .collect();
+    let mut rows: HashMap<i16, f32> = HashMap::new();
+
+    for (&(.., row), baseline) in cells.iter().zip(&baselines) {
+      if let Some(baseline) = *baseline {
+        let deepest = rows.entry(row).or_insert(baseline);
+
+        *deepest = deepest.max(baseline);
+      }
+    }
+    for (&(cell, content, row), baseline) in cells.iter().zip(baselines) {
+      if let (Some(baseline), Some(deepest)) = (baseline, rows.get(&row)) {
+        self.shift_to_row_baseline(cell, content, deepest - baseline);
+      }
+    }
+
+    compute_grid_layout(self, node, inputs)
+  }
+
+  /// Moves `cell`'s `content` down by `shift`, dropping what the cell laid out before.
+  fn shift_to_row_baseline(&mut self, cell: TaffyNodeId, content: TaffyNodeId, shift: f32) {
+    let Some(state) = self.get_layout_node_mut_ref(content) else {
+      return;
+    };
+
+    if state.row_baseline_shift == shift {
+      return;
+    }
+    state.row_baseline_shift = shift;
+    state.style.margin.top = LengthPercentageAuto::length(shift);
+    if let Some(cell) = self.get_layout_node_mut_ref(cell) {
+      cell.cache.clear();
+    }
+  }
+
+  /// The inputs a block-level `auto`-width table lays out with: without the width a block
+  /// container stretches its children to, since a table shrinks to fit it instead.
+  fn shrunk_table_inputs(&self, node: TaffyNodeId, mut inputs: LayoutInput) -> LayoutInput {
+    let idx = usize::from(node);
+    let (Some(state), Some(render_node)) = (self.nodes.get(idx), self.render_nodes.get(idx)) else {
+      return inputs;
+    };
+
+    if render_node.shrinks_to_fit_as_table() && !state.flex_or_grid_item {
+      inputs.known_dimensions.width = None;
+    }
+    inputs
+  }
+
   fn compute_child_layout_inner(
     &mut self,
     node: TaffyNodeId,
@@ -992,6 +1116,7 @@ impl<'r> LayoutTree<'r> {
     );
 
     let inputs = self.out_of_flow_inputs(node, inputs);
+    let inputs = self.shrunk_table_inputs(node, inputs);
 
     if inputs.run_mode == RunMode::PerformHiddenLayout {
       return compute_hidden_layout(self, node);
@@ -1015,7 +1140,7 @@ impl<'r> LayoutTree<'r> {
         // its parent's context. <https://drafts.csswg.org/css-display-3/#valdef-display-flow-root>
         (TaffyDisplay::FlowRoot, true) => compute_block_layout(tree, node, inputs, None),
         (TaffyDisplay::Flex, true) => compute_flexbox_layout(tree, node, inputs),
-        (TaffyDisplay::Grid, true) => compute_grid_layout(tree, node, inputs),
+        (TaffyDisplay::Grid, true) => tree.compute_table_layout(node, inputs),
         (_, false) => {
           let idx: usize = node.into();
           let Some(&render_node) = tree.render_nodes.get(idx) else {
@@ -1279,6 +1404,7 @@ impl RenderNode {
       force_inline_layout: false,
       table_header_lines: None,
       table_part: None,
+      table_columns: None,
     }
   }
 
@@ -1362,8 +1488,9 @@ impl RenderNode {
     }
   }
 
-  /// An element's own text, moved into a child so generated content can precede it.
-  fn generated_sibling_text(parent_context: &RenderContext, text: String) -> Self {
+  /// An element's own text, moved into a child so generated content can precede it or its
+  /// content can align.
+  pub(super) fn generated_sibling_text(parent_context: &RenderContext, text: String) -> Self {
     let (style, sizing, current_color) =
       parent_context.resolve_pseudo_style(&MatchedDeclarationsView::default());
     let context = RenderContext::from_parent(parent_context, style, sizing, current_color);
@@ -2112,21 +2239,12 @@ impl RenderNode {
       AvailableSpace::MaxContent => max_content.width,
     };
     let results = LayoutResults::compute(self, at_width(AvailableSpace::Definite(used_width)));
+    let size = results.root_size();
 
-    results.layout(NodeId::ROOT).map_or(
-      AtomicInlineMetrics {
-        size: Size::ZERO,
-        baseline_offset: None,
-      },
-      |layout| AtomicInlineMetrics {
-        size: layout.size,
-        baseline_offset: self.resolve_inline_baseline_offset(
-          available_space,
-          layout.size,
-          &results,
-        ),
-      },
-    )
+    AtomicInlineMetrics {
+      size,
+      baseline_offset: self.resolve_inline_baseline_offset(available_space, size, &results),
+    }
   }
 
   pub(crate) fn measure(

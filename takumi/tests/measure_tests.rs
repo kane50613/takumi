@@ -129,7 +129,7 @@ fn test_measure_text_node() {
       height: 26.0,
       transform: Affine::IDENTITY.to_cols_array(),
       children: vec![MeasuredNode {
-        width: 106.0,
+        width: 105.46875,
         height: 26.0,
         transform: Affine::IDENTITY.to_cols_array(),
         children: Vec::new(),
@@ -467,7 +467,6 @@ fn test_measure_sizing_keywords_size_from_the_content() {
   let min_content = measured("min-content");
   let max_content = measured("max-content");
   let fit_content = measured("fit-content");
-  let limited = measured("fit-content(120px)");
   let stretch = measured("stretch");
   let widest_word = ["alpha", "beta", "gamma", "delta"]
     .into_iter()
@@ -494,7 +493,6 @@ fn test_measure_sizing_keywords_size_from_the_content() {
   );
   assert!(max_content <= 400.0);
   assert_close(fit_content, max_content);
-  assert_close(limited, 120.0);
   assert_close(stretch, 400.0);
 }
 
@@ -2315,7 +2313,13 @@ fn test_table_auto_columns_share_free_width_by_max_content() {
   .expect("parse");
   let out = measure(node, create_test_viewport());
   let cells = &out.children[0].children;
-  let max_content = |cell: &MeasuredNode| cell.runs[0].width + 2.0;
+  fn first_run(node: &MeasuredNode) -> Option<&MeasuredTextRun> {
+    node
+      .runs
+      .first()
+      .or_else(|| node.children.iter().find_map(first_run))
+  }
+  let max_content = |cell: &MeasuredNode| first_run(cell).expect("a run").width + 2.0;
   let (name, description) = (max_content(&cells[3]), max_content(&cells[4]));
   // 352px less the 48px column and four 2px spacings.
   let free = 296.0;
@@ -2560,4 +2564,102 @@ fn an_absolute_box_shrinks_to_the_width_beside_its_inset() {
   let probe = &result.children[0];
 
   assert!(probe.width <= 80.0, "{}", probe.width);
+}
+
+/// A table's cells inherit `vertical-align: middle` from the row group the parser inserts, as
+/// Chrome's UA stylesheet gives `tbody`.
+#[test]
+fn test_measure_table_cells_default_to_the_middle() {
+  fn cell_with<'n>(node: &'n MeasuredNode, text: &str) -> Option<&'n MeasuredNode> {
+    if node.runs.iter().any(|run| run.text == text) {
+      return Some(node);
+    }
+
+    node
+      .children
+      .iter()
+      .find_map(|child| cell_with(child, text))
+  }
+
+  let node = Node::from_html(
+    r#"<table style="border-spacing:0"><tr><td style="padding:0"><div style="height:60px; width:20px"></div></td><td style="padding:0; font-size:20px; line-height:20px">x</td></tr></table>"#,
+    FromHtmlOptions::default(),
+  )
+  .expect("parse");
+  let out = measure(node, create_test_viewport());
+  let cell = cell_with(&out, "x").expect("the text cell");
+  let run = cell
+    .runs
+    .iter()
+    .find(|run| run.text == "x")
+    .expect("the run");
+
+  assert_within(cell.transform[5] + run.y + run.height / 2.0, 30.0, 1.0);
+}
+
+/// The top of each text run under `node`, by its text, in the node's space.
+fn run_tops(node: &MeasuredNode) -> Vec<(String, f32)> {
+  node
+    .runs
+    .iter()
+    .map(|run| (run.text.clone(), node.transform[5] + run.y))
+    .chain(node.children.iter().flat_map(run_tops))
+    .collect()
+}
+
+/// Blink moves each baseline-aligned cell's content down to the deepest first baseline in its row,
+/// whether a cell's padding or a border it collapsed to pushed that baseline down.
+#[test]
+fn test_table_baseline_cells_share_their_rows_baseline() {
+  for table in [
+    r#"<table style="border-spacing:0"><tr style="vertical-align:baseline"><td style="padding:10px 0 0">padded</td><td style="padding:0">flush</td></tr></table>"#,
+    r#"<table style="border-collapse:collapse"><tr style="vertical-align:baseline"><td style="padding:0; border-top:6px solid black">heavy</td><td style="padding:0; border-top:1px solid black">light</td></tr></table>"#,
+  ] {
+    let out = measure(
+      Node::from_html(table, FromHtmlOptions::default()).expect("parse"),
+      create_test_viewport(),
+    );
+    let tops = run_tops(&out);
+
+    assert_eq!(tops.len(), 2, "{tops:?}");
+    assert_within(tops[0].1, tops[1].1, 0.01);
+  }
+}
+
+/// Cells whose fonts differ in size still share their row's baseline: one font puts its baseline
+/// the same fraction `r` down each run, so every pair of runs agrees on `r`.
+#[test]
+fn test_table_baseline_cells_of_different_sizes_share_their_rows_baseline() {
+  let out = measure(
+    Node::from_html(
+      r#"<table style="border-spacing:0"><tr style="vertical-align:baseline"><td style="padding:0; font-size:12px">a</td><td style="padding:0; font-size:36px">b</td><td style="padding:0; font-size:20px">c</td></tr></table>"#,
+      FromHtmlOptions::default(),
+    )
+    .expect("parse"),
+    create_test_viewport(),
+  );
+  let runs: Vec<(f32, f32)> = run_tops(&out)
+    .into_iter()
+    .zip(
+      out
+        .children
+        .iter()
+        .flat_map(|cell| cell_runs(cell))
+        .map(|run| run.height),
+    )
+    .map(|((_, top), height)| (top, height))
+    .collect();
+  let fraction = |a: (f32, f32), b: (f32, f32)| (a.0 - b.0) / (b.1 - a.1);
+
+  assert_eq!(runs.len(), 3);
+  assert_within(fraction(runs[0], runs[1]), fraction(runs[0], runs[2]), 0.02);
+}
+
+/// The text runs under `node`, depth first.
+fn cell_runs(node: &MeasuredNode) -> Vec<&MeasuredTextRun> {
+  node
+    .runs
+    .iter()
+    .chain(node.children.iter().flat_map(cell_runs))
+    .collect()
 }

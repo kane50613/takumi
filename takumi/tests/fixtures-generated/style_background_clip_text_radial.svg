@@ -17,7 +17,7 @@
     <path d="M830.68 338q-5.33 0-7.83-2.47-2.5-2.48-2.5-7.84v-32.05h9.61v30.92q0 2.46 1.03 3.38 1.05.9 3.2.9h4.78v7.16Zm-15.86-27.16v-7.14h24.15v7.14Z" fill="#fff"/>
   </mask>
   <g mask="url(#mk0)">
-    <radialGradient id="rg1" gradientUnits="userSpaceOnUse" cx="600.5" cy="315.5" r="244.054">
+    <radialGradient id="rg1" gradientUnits="userSpaceOnUse" cx="600" cy="315.5" r="243.562">
       <stop offset="0" stop-color="#ff0080"/>
       <stop offset=".016" stop-color="#fb0182"/>
       <stop offset=".032" stop-color="#f60385"/>
@@ -83,7 +83,7 @@
       <stop offset=".984" stop-color="#046ef2"/>
       <stop offset="1" stop-color="#0070f3"/>
     </radialGradient>
-    <rect x="360" y="274" width="481" height="83" fill="url(#rg1)"/>
+    <rect x="360" y="274" width="480.719" height="83" fill="url(#rg1)"/>
   </g>
   <g fill="#000" fill-opacity="0">
     <use href="#g0" x="360" y="338"/>

@@ -150,14 +150,17 @@ const DEFAULT_PRESETS: &[(&str, &str)] = &[
     "table",
     "display:table;box-sizing:border-box;border-spacing:2px",
   ),
-  ("thead", "display:table-header-group"),
-  ("tbody", "display:table-row-group"),
-  ("tfoot", "display:table-footer-group"),
-  ("tr", "display:table-row"),
-  ("td", "display:table-cell;padding:1px"),
+  ("thead", "display:table-header-group;vertical-align:middle"),
+  ("tbody", "display:table-row-group;vertical-align:middle"),
+  ("tfoot", "display:table-footer-group;vertical-align:middle"),
+  ("tr", "display:table-row;vertical-align:inherit"),
+  (
+    "td",
+    "display:table-cell;padding:1px;vertical-align:inherit",
+  ),
   (
     "th",
-    "display:table-cell;padding:1px;font-weight:bold;text-align:center",
+    "display:table-cell;padding:1px;vertical-align:inherit;font-weight:bold;text-align:center",
   ),
   ("caption", "display:table-caption;text-align:center"),
 ];
