@@ -37,6 +37,12 @@ impl LayoutUnit {
     Self(raw.clamp(f64::from(i32::MIN), f64::from(i32::MAX)) as i32)
   }
 
+  /// The raw fixed-point value.
+  #[cfg(test)]
+  pub(crate) const fn raw(self) -> i32 {
+    self.0
+  }
+
   /// `value` px, saturated to the whole pixels the unit can hold.
   pub(crate) const fn from_int(value: i32) -> Self {
     if value > INT_MAX {
@@ -56,6 +62,12 @@ impl LayoutUnit {
   /// `value` px rounded down to a 1/64 step.
   pub(crate) fn from_f32_floor(value: f32) -> Self {
     Self::saturated(f64::from((value * DENOMINATOR as f32).floor()))
+  }
+
+  /// `value` px rounded up to a 1/64 step.
+  #[cfg(test)]
+  pub(crate) fn from_f32_ceil(value: f32) -> Self {
+    Self::saturated(f64::from((value * DENOMINATOR as f32).ceil()))
   }
 
   /// `value` px rounded to the nearest 1/64 step, halves away from zero.
@@ -88,28 +100,6 @@ impl LayoutUnit {
     self.0 >> FRACTIONAL_BITS
   }
 
-  /// The part below a whole px, keeping the sign.
-  pub const fn fraction(self) -> Self {
-    Self(self.0 % DENOMINATOR)
-  }
-
-  /// The length without its sign.
-  pub const fn abs(self) -> Self {
-    Self(self.0.saturating_abs())
-  }
-
-  /// The raw fixed-point value.
-  #[cfg(test)]
-  pub(crate) const fn raw(self) -> i32 {
-    self.0
-  }
-
-  /// `value` px rounded up to a 1/64 step.
-  #[cfg(test)]
-  pub(crate) fn from_f32_ceil(value: f32) -> Self {
-    Self::saturated(f64::from((value * DENOMINATOR as f32).ceil()))
-  }
-
   /// The whole px at or above.
   #[cfg(test)]
   pub(crate) const fn ceil(self) -> i32 {
@@ -121,6 +111,16 @@ impl LayoutUnit {
     }
 
     self.to_int()
+  }
+
+  /// The part below a whole px, keeping the sign.
+  pub const fn fraction(self) -> Self {
+    Self(self.0 % DENOMINATOR)
+  }
+
+  /// The length without its sign.
+  pub const fn abs(self) -> Self {
+    Self(self.0.saturating_abs())
   }
 
   /// Zero in place of a negative length.
