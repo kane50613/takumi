@@ -1,17 +1,18 @@
 use std::{
-  borrow::Cow, collections::HashMap, hash::Hasher, iter::Copied, mem::take, rc::Rc, slice,
+  borrow::Cow, collections::HashMap, hash::Hasher, iter::Copied, mem::take, ptr, rc::Rc, slice,
   vec::IntoIter,
 };
 
 use parley::fontique::{Attributes, FontStyle as FontiqueStyle};
+use smallvec::SmallVec;
 use taffy::{
   AvailableSpace as TaffyAvailableSpace, BlockContext, Cache, CacheTree, Display as TaffyDisplay,
   Layout, LayoutBlockContainer, LayoutFlexboxContainer, LayoutGridContainer, LayoutInput,
-  LayoutOutput, LayoutPartialTree, MaybeResolve, NodeId as TaffyNodeId, Position as TaffyPosition,
-  RequestedAxis, ResolveOrZero, RoundTree, RunMode, Size as TaffySize, SizingMode, Style,
-  TraversePartialTree, TraverseTree, compute_block_layout, compute_cached_layout,
-  compute_flexbox_layout, compute_grid_layout, compute_hidden_layout, compute_leaf_layout,
-  compute_root_layout,
+  LayoutOutput, LayoutPartialTree, Line, MaybeResolve, NodeId as TaffyNodeId,
+  Position as TaffyPosition, RequestedAxis, ResolveOrZero, RoundTree, RunMode, Size as TaffySize,
+  SizingMode, Style, TraversePartialTree, TraverseTree, compute_block_layout,
+  compute_cached_layout, compute_flexbox_layout, compute_grid_layout, compute_hidden_layout,
+  compute_leaf_layout, compute_root_layout,
 };
 use xxhash_rust::xxh3::Xxh3;
 
@@ -19,11 +20,12 @@ use crate::{
   Error,
   context::RenderContext,
   font_style::SizedFontStyle,
-  geometry::{AvailableSpace, ComputedLayout, NodeId, Rect, Size},
+  geometry::{AvailableSpace, ComputedLayout, NodeId, Point, Rect, Size},
   layout::{
     inline::{
       InlineContentKind, InlineItem, InlineLayoutMode, InlineLayoutRequest, InlineMeasureOptions,
-      collect_inline_items, create_inline_constraint, create_inline_layout,
+      InlineOutOfFlow, PaddingBox, StaticPosition, collect_inline_items, create_inline_constraint,
+      create_inline_layout,
     },
     list_marker::{ListCounter, is_list_element, list_marker, owns_list_counter},
     node::{Node, NodeStyleLayers, TextData},
@@ -40,14 +42,24 @@ use crate::{
 };
 
 /// A render-tree child paired with its layout node id.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 pub struct OrderedChild {
-  /// Index of the child in its parent's render order.
+  /// Index of the child, or of the inline box holding it, in its parent's render order.
   pub render_index: usize,
+  /// The rest of the path to an out-of-flow box inside the parent's inline content.
+  pub inline_path: Option<Box<[usize]>>,
   /// Layout node id.
   pub node_id: NodeId,
   /// Containing block the child was hoisted to, if out-of-flow.
   pub hoisted_cb: Option<NodeId>,
+}
+
+impl OrderedChild {
+  /// Extends `path`, its parent's, to the child.
+  pub fn extend_path(&self, path: &mut Vec<usize>) {
+    path.push(self.render_index);
+    path.extend(self.inline_path.iter().flatten());
+  }
 }
 
 /// Each visited node's device transform and content box, kept so a hoisted
@@ -152,6 +164,10 @@ impl LayoutResults {
 pub struct LayoutTree<'r> {
   nodes: Vec<LayoutNodeState>,
   render_nodes: Vec<&'r RenderNode>,
+  /// The static position of each out-of-flow box in an inline formatting context's `box_children`.
+  out_of_flow_positions: HashMap<usize, Vec<StaticPosition>>,
+  /// The nodes standing in for inline containing blocks.
+  inline_containing_blocks: Vec<TaffyNodeId>,
 }
 
 struct LayoutNodeState {
@@ -310,6 +326,8 @@ impl<'r> LayoutTree<'r> {
     let mut tree = Self {
       nodes: Vec::with_capacity(1),
       render_nodes: Vec::with_capacity(1),
+      out_of_flow_positions: HashMap::new(),
+      inline_containing_blocks: Vec::new(),
     };
     let root_id = tree.push_subtree(render_root);
 
@@ -320,12 +338,47 @@ impl<'r> LayoutTree<'r> {
 
   /// Appends the layout nodes of the subtree under `render_root`, returning its root id.
   fn push_subtree(&mut self, render_root: &'r RenderNode) -> TaffyNodeId {
+    /// What the walk descends into: a node's render children, or for an inline formatting
+    /// context the out-of-flow boxes inside its inline content.
+    enum PendingChildren<'r> {
+      Render(&'r [RenderNode]),
+      OutOfFlow(Vec<InlineOutOfFlow<'r>>),
+    }
+
+    impl<'r> PendingChildren<'r> {
+      fn get(&self, index: usize) -> Option<InlineOutOfFlow<'r>> {
+        match self {
+          Self::Render(children) => children.get(index).map(|child| InlineOutOfFlow {
+            path: SmallVec::from_elem(index, 1),
+            node: child,
+            container: None,
+          }),
+          Self::OutOfFlow(children) => children.get(index).cloned(),
+        }
+      }
+
+      fn len(&self) -> usize {
+        match self {
+          Self::Render(children) => children.len(),
+          Self::OutOfFlow(children) => children.len(),
+        }
+      }
+    }
+
     struct PendingNode<'r> {
       node_id: TaffyNodeId,
+      render_node: &'r RenderNode,
+      /// The path from its parent, as its parent's [`OrderedChild`] records it.
+      render_path: SmallVec<[usize; 2]>,
+      /// The inline span containing it, when it is out of flow.
+      inline_container: Option<&'r RenderNode>,
+      /// For an inline formatting context, the node standing in for each inline span, or the
+      /// context itself, that contains out-of-flow boxes.
+      inline_containing_blocks: Vec<(&'r RenderNode, TaffyNodeId)>,
       position: Position,
       contains_fixed: bool,
       next_child_index: usize,
-      children: Option<&'r [RenderNode]>,
+      children: PendingChildren<'r>,
       taffy_child_ids: Vec<TaffyNodeId>,
       box_children: Vec<OrderedChild>,
     }
@@ -333,15 +386,19 @@ impl<'r> LayoutTree<'r> {
     fn push_node_state<'r>(
       nodes: &mut Vec<LayoutNodeState>,
       render_nodes: &mut Vec<&'r RenderNode>,
-      render_node: &'r RenderNode,
+      InlineOutOfFlow {
+        path: render_path,
+        node: render_node,
+        container: inline_container,
+      }: InlineOutOfFlow<'r>,
     ) -> PendingNode<'r> {
       let node_index = nodes.len();
       let node_id = TaffyNodeId::from(node_index);
       let is_inline_children = render_node.should_create_inline_layout();
       let children = if is_inline_children {
-        None
+        PendingChildren::OutOfFlow(render_node.inline_out_of_flow())
       } else {
-        render_node.children.as_deref()
+        PendingChildren::Render(render_node.children.as_deref().unwrap_or_default())
       };
       let position = render_node.context.style.position;
       let contains_fixed = render_node.context.style.contains_fixed_descendants();
@@ -373,9 +430,13 @@ impl<'r> LayoutTree<'r> {
         box_children: Box::new([]),
       });
 
-      let capacity = children.map_or(0, <[RenderNode]>::len);
+      let capacity = children.len();
       PendingNode {
         node_id,
+        render_node,
+        render_path,
+        inline_container,
+        inline_containing_blocks: Vec::new(),
         position,
         contains_fixed,
         next_child_index: 0,
@@ -385,6 +446,33 @@ impl<'r> LayoutTree<'r> {
       }
     }
 
+    /// Appends a block standing in for `container`, laid out over the padding box its fragments
+    /// bound.
+    fn push_inline_containing_block<'r>(
+      nodes: &mut Vec<LayoutNodeState>,
+      render_nodes: &mut Vec<&'r RenderNode>,
+      container: &'r RenderNode,
+    ) -> TaffyNodeId {
+      let node_id = TaffyNodeId::from(nodes.len());
+
+      render_nodes.push(container);
+      nodes.push(LayoutNodeState {
+        style: Style {
+          display: TaffyDisplay::Block,
+          ..Style::DEFAULT
+        },
+        container_independent: true,
+        cache: Cache::new(),
+        unrounded_layout: Layout::new(),
+        final_layout: Layout::new(),
+        first_baseline_y: None,
+        is_inline_children: false,
+        children: Box::new([]),
+        box_children: Box::new([]),
+      });
+      node_id
+    }
+
     // Out-of-flow nodes are re-parented (hoisted) in the taffy tree so taffy's
     // direct-parent positioning resolves against the correct CSS containing
     // block: the nearest ancestor that establishes one. The box (render) tree is
@@ -392,21 +480,29 @@ impl<'r> LayoutTree<'r> {
     let Self {
       nodes,
       render_nodes,
+      inline_containing_blocks,
+      ..
     } = self;
     let mut cb_stack: Vec<TaffyNodeId> = Vec::new();
     let mut fixed_cb_stack: Vec<TaffyNodeId> = Vec::new();
     let mut hoisted: HashMap<TaffyNodeId, Vec<TaffyNodeId>> = HashMap::new();
 
-    let root = push_node_state(nodes, render_nodes, render_root);
+    let root = push_node_state(
+      nodes,
+      render_nodes,
+      InlineOutOfFlow {
+        path: SmallVec::new(),
+        node: render_root,
+        container: None,
+      },
+    );
     let root_id = root.node_id;
     cb_stack.push(root_id);
     fixed_cb_stack.push(root_id);
     let mut stack = vec![root];
 
     while let Some(current) = stack.last_mut() {
-      if let Some(children) = current.children
-        && let Some(child) = children.get(current.next_child_index)
-      {
+      if let Some(child) = current.children.get(current.next_child_index) {
         current.next_child_index += 1;
         let pending = push_node_state(nodes, render_nodes, child);
         if pending.position.is_positioned() || pending.contains_fixed {
@@ -427,6 +523,12 @@ impl<'r> LayoutTree<'r> {
       let mut taffy_children = finished.taffy_child_ids;
       if let Some(extra) = hoisted.remove(&fid) {
         taffy_children.extend(extra);
+      }
+      for &(_, proxy) in &finished.inline_containing_blocks {
+        nodes[usize::from(proxy)].children = hoisted
+          .remove(&proxy)
+          .unwrap_or_default()
+          .into_boxed_slice();
       }
       let idx: usize = fid.into();
       if matches!(
@@ -451,16 +553,40 @@ impl<'r> LayoutTree<'r> {
       }
 
       if let Some(parent) = stack.last_mut() {
-        let render_index = parent.next_child_index - 1;
         let cb = match finished.position {
           Position::Absolute => Some(*cb_stack.last().unwrap_or(&root_id)),
           Position::Fixed => Some(*fixed_cb_stack.last().unwrap_or(&root_id)),
           _ => None,
         };
+        let inline_container = finished.inline_container.or_else(|| {
+          (cb == Some(parent.node_id) && nodes[usize::from(parent.node_id)].is_inline_children)
+            .then_some(parent.render_node)
+        });
+
         // Only re-parent when the containing block differs from the structural
         // parent; otherwise keep the node in place to preserve DOM order (and the
-        // in-flow static position for auto-inset out-of-flow boxes).
+        // in-flow static position for auto-inset out-of-flow boxes). A box an inline span
+        // contains, or the inline formatting context it sits in, goes under a node standing
+        // in for that span, which the context lays out once its lines are known.
         let hoisted_cb = match cb {
+          _ if let Some(container) = inline_container => {
+            let proxy = parent
+              .inline_containing_blocks
+              .iter()
+              .find(|(span, _)| ptr::eq(*span, container))
+              .map(|&(_, proxy)| proxy)
+              .unwrap_or_else(|| {
+                let proxy = push_inline_containing_block(nodes, render_nodes, container);
+
+                inline_containing_blocks.push(proxy);
+                parent.inline_containing_blocks.push((container, proxy));
+                parent.taffy_child_ids.push(proxy);
+                proxy
+              });
+
+            hoisted.entry(proxy).or_default().push(fid);
+            None
+          }
           Some(cb) if cb != parent.node_id => {
             hoisted.entry(cb).or_default().push(fid);
             Some(cb)
@@ -470,8 +596,11 @@ impl<'r> LayoutTree<'r> {
             None
           }
         };
+        let (&render_index, inline_path) = finished.render_path.split_first().unwrap_or((&0, &[]));
+
         parent.box_children.push(OrderedChild {
           render_index,
+          inline_path: (!inline_path.is_empty()).then(|| inline_path.into()),
           node_id: NodeId::from_taffy(fid),
           hoisted_cb: hoisted_cb.map(NodeId::from_taffy),
         });
@@ -489,7 +618,105 @@ impl<'r> LayoutTree<'r> {
       root_node_id,
       available_space.map(AvailableSpace::into_taffy).into_taffy(),
     );
+    self.place_out_of_flow_at_static_positions(root_node_id);
     self.snap_layout(root_node_id, 0.0, 0.0);
+  }
+
+  /// Moves each out-of-flow box inside inline content to its static position on every axis whose
+  /// insets are both `auto`, which taffy took from where the box sits among its containing
+  /// block's children instead of from its place in the line.
+  fn place_out_of_flow_at_static_positions(&mut self, root: TaffyNodeId) {
+    if self.out_of_flow_positions.is_empty() {
+      return;
+    }
+
+    let mut static_positions: HashMap<usize, StaticPosition> = HashMap::new();
+    let mut stack = vec![(root, Point::ZERO)];
+
+    // Taffy lists a containing block's hoisted children after its in-flow ones, so a box's inline
+    // formatting context is always visited before the box.
+    while let Some((node_id, parent)) = stack.pop() {
+      let index = usize::from(node_id);
+
+      if let Some(position) = static_positions.remove(&index) {
+        let node = &mut self.nodes[index];
+        let layout = &mut node.unrounded_layout;
+        let margin = layout.margin;
+
+        if node.style.inset.left.is_auto() && node.style.inset.right.is_auto() {
+          let start = if position.from_end {
+            position.point.x - (margin.left + layout.size.width + margin.right)
+          } else {
+            position.point.x
+          };
+
+          layout.location.x = start + margin.left - parent.x;
+        }
+        if node.style.inset.top.is_auto() && node.style.inset.bottom.is_auto() {
+          layout.location.y = position.point.y + margin.top - parent.y;
+        }
+      }
+
+      let node = &self.nodes[index];
+      let layout = &node.unrounded_layout;
+      let absolute = Point {
+        x: parent.x + layout.location.x,
+        y: parent.y + layout.location.y,
+      };
+      let content = Point {
+        x: absolute.x + layout.border.left + layout.padding.left,
+        y: absolute.y + layout.border.top + layout.padding.top,
+      };
+
+      let positions = self
+        .out_of_flow_positions
+        .get(&index)
+        .map_or(&[][..], Vec::as_slice);
+
+      for (child, position) in node.box_children.iter().zip(positions) {
+        static_positions.insert(
+          usize::from(child.node_id.into_taffy()),
+          StaticPosition {
+            point: content + position.point,
+            from_end: position.from_end,
+          },
+        );
+      }
+      for &child in node.children.iter().rev() {
+        stack.push((child, absolute));
+      }
+    }
+  }
+
+  /// Lays out `proxy`, standing in for an inline containing block, over its padding box.
+  fn lay_out_inline_containing_block(&mut self, proxy: TaffyNodeId, padding_box: PaddingBox) {
+    let PaddingBox { origin, size } = padding_box;
+    let known_dimensions = size.map(Some).into_taffy();
+
+    self.compute_child_layout(
+      proxy,
+      LayoutInput {
+        run_mode: RunMode::PerformLayout,
+        sizing_mode: SizingMode::InherentSize,
+        axis: RequestedAxis::Both,
+        known_dimensions,
+        known_dimensions_are_definite: TaffySize {
+          width: true,
+          height: true,
+        },
+        parent_size: known_dimensions,
+        available_space: size.map(TaffyAvailableSpace::Definite).into_taffy(),
+        vertical_margins_are_collapsible: Line::FALSE,
+      },
+    );
+    self.set_unrounded_layout(
+      proxy,
+      &Layout {
+        location: origin.into_taffy(),
+        size: size.into_taffy(),
+        ..Layout::new()
+      },
+    );
   }
 
   /// Snaps every box to whole pixels, both edges in absolute space so a box
@@ -525,7 +752,21 @@ impl<'r> LayoutTree<'r> {
   }
 
   /// Consumes the tree into immutable per-node layout results.
-  pub fn into_results(self) -> LayoutResults {
+  pub fn into_results(mut self) -> LayoutResults {
+    // A box an inline containing block holds is placed in the inline formatting context, its
+    // box-tree parent, rather than in the node standing in for the containing block.
+    for &proxy in &self.inline_containing_blocks {
+      let proxy = &self.nodes[usize::from(proxy)];
+      let (location, unrounded) = (proxy.final_layout.location, proxy.unrounded_layout.location);
+
+      for child in proxy.children.clone() {
+        let child = &mut self.nodes[usize::from(child)];
+
+        child.final_layout.location = child.final_layout.location + location;
+        child.unrounded_layout.location = child.unrounded_layout.location + unrounded;
+      }
+    }
+
     LayoutResults {
       nodes: self
         .nodes
@@ -756,13 +997,16 @@ impl<'r> LayoutTree<'r> {
       return compute_hidden_layout(self, node);
     }
 
+    let mut out_of_flow_positions = Vec::new();
     let output = compute_cached_layout(self, node, inputs, |tree, node, inputs| {
       let Some(node_data) = tree.get_layout_node_ref(node) else {
         return compute_hidden_layout(tree, node);
       };
 
       let display_mode = node_data.style.display;
-      let has_children = !node_data.children.is_empty();
+      // An inline formatting context's only children stand in for its inline containing blocks,
+      // which it lays out itself.
+      let has_children = !node_data.children.is_empty() && !node_data.is_inline_children;
 
       match (display_mode, has_children) {
         (TaffyDisplay::None, _) => compute_hidden_layout(tree, node),
@@ -774,7 +1018,7 @@ impl<'r> LayoutTree<'r> {
         (TaffyDisplay::Grid, true) => compute_grid_layout(tree, node, inputs),
         (_, false) => {
           let idx: usize = node.into();
-          let Some(render_node) = tree.render_nodes.get(idx) else {
+          let Some(&render_node) = tree.render_nodes.get(idx) else {
             return compute_hidden_layout(tree, node);
           };
 
@@ -831,6 +1075,44 @@ impl<'r> LayoutTree<'r> {
             );
           }
 
+          if node_data.is_inline_children
+            && !node_data.box_children.is_empty()
+            && inputs.run_mode == RunMode::PerformLayout
+          {
+            let calc = |value, basis| tree.resolve_calc_value(value, basis);
+            let layout = ComputedLayout::new(
+              Point::ZERO,
+              Size::from_taffy(output.size),
+              Rect::from_taffy(
+                node_data
+                  .style
+                  .border
+                  .resolve_or_zero(inputs.parent_size.width, calc),
+              ),
+              Rect::from_taffy(
+                node_data
+                  .style
+                  .padding
+                  .resolve_or_zero(inputs.parent_size.width, calc),
+              ),
+            );
+            let proxies = node_data.children.clone();
+            let containers: Vec<&RenderNode> = proxies
+              .iter()
+              .map(|&proxy| tree.render_nodes[usize::from(proxy)])
+              .collect();
+            let (positions, containing_blocks) = render_node.inline_out_of_flow_geometry(
+              Size::from_taffy(inputs.available_space).map(AvailableSpace::from_taffy),
+              layout,
+              &containers,
+            );
+
+            out_of_flow_positions = positions;
+            for (proxy, padding_box) in proxies.iter().zip(containing_blocks) {
+              tree.lay_out_inline_containing_block(*proxy, padding_box);
+            }
+          }
+
           output
         }
       }
@@ -838,6 +1120,11 @@ impl<'r> LayoutTree<'r> {
 
     if let Some(node_data) = self.get_layout_node_mut_ref(node) {
       node_data.first_baseline_y = output.baselines.first;
+    }
+    if !out_of_flow_positions.is_empty() {
+      self
+        .out_of_flow_positions
+        .insert(usize::from(node), out_of_flow_positions);
     }
 
     output
@@ -1313,7 +1600,7 @@ impl RenderNode {
       || self.context.style.float != Float::None
   }
 
-  fn is_out_of_flow(&self) -> bool {
+  pub(crate) fn is_out_of_flow(&self) -> bool {
     self.context.style.position.is_out_of_flow()
   }
 
@@ -1452,15 +1739,18 @@ impl RenderNode {
     let has_block = children
       .iter()
       .any(|child| !child.participates_in_inline_formatting_context());
-    let has_out_of_flow = children.iter().any(RenderNode::is_out_of_flow);
+    let has_out_of_flow = has_inline
+      && children
+        .iter()
+        .any(|child| child.is_out_of_flow() || child.holds_inline_out_of_flow());
     let parent_is_inline = context.style.display.is_inline();
 
     if parent_is_inline && has_block {
       context.style.display = context.style.display.as_blockified();
     }
 
-    // A block parent mixing inline content with out-of-flow children wraps
-    // the inline part so the absolute boxes stay as block-level children.
+    // A block parent whose inline content holds out-of-flow boxes wraps that
+    // content, placeholders included, so the boxes lay out against a block.
     // An inline parent keeps its inline formatting context untouched — an
     // anonymous block there would be dropped by the surrounding line box.
     if !(has_inline && (has_block || (!parent_is_inline && has_out_of_flow))) {
@@ -1470,8 +1760,10 @@ impl RenderNode {
     let mut final_children = Vec::new();
     let mut inline_group = Vec::new();
 
+    // An out-of-flow box stays in the run of inline content around it, as a placeholder
+    // marking its static position, rather than breaking the run into two lines.
     for item in children {
-      if item.participates_in_inline_formatting_context() && !item.is_out_of_flow() {
+      if item.participates_in_inline_formatting_context() {
         inline_group.push(item);
         continue;
       }
@@ -1565,6 +1857,58 @@ impl RenderNode {
     let baseline = self.inline_content_border_box_baseline(available_space, size, use_last_line)?;
 
     Some(self.margin_px().top + baseline)
+  }
+
+  /// Where each out-of-flow box inside this node's inline content sits, relative to its content
+  /// box, and the padding box each of `containers` bounds the boxes it contains with, relative to
+  /// `layout`'s border box: an inline span's from its fragments, this node's its own.
+  fn inline_out_of_flow_geometry(
+    &self,
+    available_space: Size<AvailableSpace>,
+    layout: ComputedLayout,
+    containers: &[&RenderNode],
+  ) -> (Vec<StaticPosition>, Vec<PaddingBox>) {
+    let known_dimensions = Size {
+      width: Some(layout.size.width.max(0.0)),
+      height: None,
+    };
+    let font_style = SizedFontStyle::from_style(&self.context.style, &self.context);
+    let (max_width, _) = create_inline_constraint(&self.context, available_space, known_dimensions);
+
+    let built = create_inline_layout(InlineLayoutRequest {
+      items: collect_inline_items(self),
+      available_space: Size {
+        width: AvailableSpace::Definite(max_width),
+        height: available_space.height,
+      },
+      max_width,
+      max_height: None,
+      style: &font_style,
+      context: &self.context,
+      mode: InlineLayoutMode::Measure,
+      shape_cacheable: true,
+    });
+
+    let spans = if containers.iter().all(|container| ptr::eq(*container, self)) {
+      Vec::new()
+    } else {
+      built.inline_containing_blocks(layout)
+    };
+    let own_padding_box = PaddingBox::of(layout);
+    let containing_blocks = containers
+      .iter()
+      .map(|container| {
+        spans
+          .iter()
+          .find(|span| ptr::eq(span.owner, *container))
+          .map_or(own_padding_box, |span| span.padding_box)
+      })
+      .collect();
+
+    (
+      built.out_of_flow_static_positions(max_width),
+      containing_blocks,
+    )
   }
 
   /// Baseline of the first or last line box, measured from the border box top.
@@ -2216,6 +2560,14 @@ impl RenderContext {
           .clone()
           .apply_with_parent(&mut style, &inherited_parent);
       }
+    }
+
+    // Blink's `LayoutBR` breaks the line whatever `white-space` says.
+    if node
+      .tag_name()
+      .is_some_and(|tag| tag.eq_ignore_ascii_case("br"))
+    {
+      style.white_space_collapse = WhiteSpaceCollapse::PreserveBreaks;
     }
 
     let sizing = self.child_sizing(

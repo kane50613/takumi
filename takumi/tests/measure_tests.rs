@@ -23,6 +23,14 @@ fn measure(node: Node, viewport: Viewport) -> MeasuredNode {
   .unwrap()
 }
 
+/// Whether any node under `node`, at any depth, matches.
+fn has_descendant(node: &MeasuredNode, matches: impl Fn(&MeasuredNode) -> bool + Copy) -> bool {
+  node
+    .children
+    .iter()
+    .any(|child| matches(child) || has_descendant(child, matches))
+}
+
 fn assert_close(actual: f32, expected: f32) {
   assert!(
     (actual - expected).abs() <= 0.01,
@@ -2119,10 +2127,7 @@ fn test_block_container_preserves_pre_whitespace_next_to_absolute_sibling() {
   let result = measure(parent, create_test_viewport());
 
   assert!(
-    result
-      .children
-      .iter()
-      .any(|child| child.width == 40.0 && child.height == 40.0),
+    has_descendant(&result, |child| child.width == 40.0 && child.height == 40.0),
     "absolute child must stay in the layout"
   );
   assert!(
@@ -2208,10 +2213,7 @@ fn test_block_container_keeps_absolute_child_next_to_text() {
   let result = measure(parent, create_test_viewport());
 
   assert!(
-    result
-      .children
-      .iter()
-      .any(|child| child.width == 40.0 && child.height == 40.0),
+    has_descendant(&result, |child| child.width == 40.0 && child.height == 40.0),
     "absolute child must stay in the layout"
   );
   assert!(

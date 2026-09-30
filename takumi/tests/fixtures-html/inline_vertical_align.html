@@ -1,0 +1,73 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>inline_vertical_align</title>
+    <base href="../../../" />
+    <link rel="stylesheet" href="takumi/tests/shared.css" />
+  </head>
+  <body style="width: 520px; height: 300px">
+    <div
+      style="
+        display: block;
+        width: 100%;
+        height: 100%;
+        padding: 24px;
+        background-color: rgb(255, 255, 255);
+        font-family: Geist;
+        font-size: 20px;
+        line-height: 32px;
+        color: rgb(15, 23, 42);
+      "
+    >
+      <div style="display: block">
+        x<span style="vertical-align: super; background-color: rgb(191, 219, 254)">sup</span> x<span
+          style="vertical-align: sub; background-color: rgb(187, 247, 208)"
+          >sub</span
+        >
+        x<span style="vertical-align: 10px; background-color: rgb(254, 215, 170)">10px</span> x<span
+          style="vertical-align: -50%; background-color: rgb(233, 213, 255)"
+          >-50%</span
+        >
+        x<span style="vertical-align: middle; font-size: 12px; background-color: rgb(254, 202, 202)"
+          >mid</span
+        >
+      </div>
+      <div style="display: block">
+        x<span
+          style="vertical-align: text-top; font-size: 12px; background-color: rgb(191, 219, 254)"
+          >text-top</span
+        >
+        x<span
+          style="vertical-align: text-bottom; font-size: 12px; background-color: rgb(187, 247, 208)"
+          >text-bottom</span
+        >
+        x<span style="vertical-align: top; font-size: 12px; background-color: rgb(254, 215, 170)"
+          >top</span
+        >
+        x<span style="vertical-align: bottom; font-size: 12px; background-color: rgb(233, 213, 255)"
+          >bottom</span
+        >
+      </div>
+      <div style="display: block">
+        x<span style="vertical-align: super; font-size: 14px; background-color: rgb(191, 219, 254)"
+          >outer<span style="vertical-align: super; background-color: rgb(254, 202, 202)"
+            >inner</span
+          ></span
+        >
+        x<span style="vertical-align: sub; background-color: rgb(187, 247, 208)"
+          >box<span
+            style="
+              display: inline-block;
+              vertical-align: middle;
+              width: 16px;
+              height: 16px;
+              background-color: rgb(234, 88, 12);
+            "
+          ></span
+        ></span>
+        x<span style="vertical-align: 40px; font-size: 10px">high</span> x
+      </div>
+    </div>
+  </body>
+</html>

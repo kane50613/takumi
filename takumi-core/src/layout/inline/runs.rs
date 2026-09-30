@@ -8,19 +8,22 @@ use crate::{
     font::{FontError, run_synthesis, run_variations},
     glyph::{ResolvedColorLayer, ResolvedGlyph, ResolvedOutlineGlyph},
   },
-  style::{Affine, Color, TextUnderlinePosition},
+  style::{Affine, Color, Direction, TextUnderlinePosition},
 };
 use parley::{GlyphRun, fontique::Blob};
 use skrifa::{FontRef, MetadataProvider, raw::TableProvider};
-use std::{collections::HashMap, ops::Range, sync::Arc};
+use std::{collections::HashMap, convert::Infallible, ops::Range, sync::Arc};
 
 use super::{
-  BuiltInlineLayout, InlineBrush, PlacedItem,
-  background::{CoverExtent, DecorationAccumulator, InlineBackgroundFragment},
+  BuiltInlineLayout, InlineBrush, PlacedItem, WalkedLine,
+  background::{
+    CoverLine, Covering, DecorationAccumulator, InlineBackgroundFragment, InlineContainingBlock,
+    LinePosition,
+  },
   items::ProcessedInlineSpan,
   metrics::{VisualInlineBox, resolve_visual_inline_box},
   outline::InlineOutlineRect,
-  text_fit::{LineScaleState, RunBox},
+  text_fit::LineScaleState,
 };
 
 /// A shaped glyph positioned within its run, in run-local coordinates.
@@ -120,10 +123,9 @@ pub struct ShapedRun {
   pub baseline: f32,
   /// Total horizontal advance of the run.
   pub advance: f32,
-  /// Advance of line-end whitespace inside [`Self::advance`]. Decorations, inline backgrounds
-  /// and outlines do not span it (Blink skips hanging whitespace); naive for RTL, where it
-  /// trims the visual right edge instead of the line-start side.
-  pub trailing_whitespace: f32,
+  /// Line-end whitespace inside [`Self::advance`], which decorations, inline backgrounds and
+  /// outlines do not span, as Blink skips hanging whitespace.
+  pub hanging: HangingWhitespace,
   /// Paint attributes carried by the run.
   pub brush: InlineBrush,
   /// Vertical font metrics for the run.
@@ -150,12 +152,41 @@ pub struct ShapedRun {
   pub(super) font_data: Blob<u8>,
 }
 
+/// The line-end whitespace a run carries, placed where rule L1 of UAX #9 puts it: at the
+/// paragraph's level, past the line's end.
+#[derive(Debug, Clone, Copy, Default, PartialEq)]
+pub struct HangingWhitespace {
+  /// Its advance.
+  pub advance: f32,
+  /// How far the run moves so the whitespace hangs past the line's end, when the run's direction
+  /// differs from the paragraph's and parley left the whitespace inside it.
+  pub shift: f32,
+  /// Whether the whitespace sits at the run's visual start rather than its end.
+  pub at_start: bool,
+}
+
+impl HangingWhitespace {
+  /// The whitespace of a run of `advance` that the line's end holds `share` of, in a paragraph
+  /// that is right-to-left when `rtl_paragraph`.
+  pub(super) fn of(share: f32, run_rtl: bool, rtl_paragraph: bool) -> Self {
+    Self {
+      advance: share,
+      shift: match (rtl_paragraph, run_rtl) {
+        (true, false) => share,
+        (false, true) => -share,
+        _ => 0.0,
+      },
+      at_start: run_rtl,
+    }
+  }
+}
+
 impl ShapedRun {
   /// The run `glyph_run` shapes, carrying `glyphs` and painting with `brush`.
   pub(crate) fn of(
     glyph_run: &GlyphRun<'_, InlineBrush>,
-    glyphs: Vec<PositionedGlyph>,
-    trailing_whitespace: f32,
+    mut glyphs: Vec<PositionedGlyph>,
+    hanging: HangingWhitespace,
     brush: InlineBrush,
     cluster_ranges: Vec<Range<usize>>,
   ) -> Self {
@@ -170,12 +201,16 @@ impl ShapedRun {
       metrics.leading,
     );
 
+    for glyph in &mut glyphs {
+      glyph.x += hanging.shift;
+    }
+
     Self {
       glyphs,
-      offset: glyph_run.offset(),
+      offset: glyph_run.offset() + hanging.shift,
       baseline: glyph_run.baseline(),
       advance: glyph_run.advance(),
-      trailing_whitespace,
+      hanging,
       brush,
       metrics: RunMetrics {
         ascent: metrics.ascent,
@@ -197,7 +232,16 @@ impl ShapedRun {
 
   /// Advance that decorations span: the run without its line-end whitespace.
   pub fn decorated_advance(&self) -> f32 {
-    self.advance - self.trailing_whitespace
+    self.advance - self.hanging.advance
+  }
+
+  /// Where the decorated span starts past [`Self::offset`].
+  pub fn decorated_offset(&self) -> f32 {
+    if self.hanging.at_start {
+      self.hanging.advance
+    } else {
+      0.0
+    }
   }
 
   /// Font bytes for `skrifa::FontRef::from_index`, paired with [`Self::font_index`].
@@ -373,13 +417,14 @@ impl BuiltInlineLayout<'_> {
 
     self.walk_items(layout, |line, item| {
       let setup = &line.setup;
-      let line_index = line.index;
+
+      self.cover(&mut decoration_coverage, content, line, &item);
 
       match item {
         PlacedItem::Run {
           glyph_run,
           static_inline_prefix,
-          trailing_whitespace,
+          hanging,
         } => {
           let run = glyph_run.run();
           // A run carrying only the direction mark paints nothing; a run the
@@ -408,38 +453,6 @@ impl BuiltInlineLayout<'_> {
             fonts.resolve_glyphs(&glyph_run, font, glyphs.iter().map(|glyph| glyph.id))
           });
 
-          let metrics = run.metrics();
-          // The font's rounded ascent and descent, without the line-height leading, like the
-          // inline box fragment `InlineBoxState::ComputeTextMetrics` sizes.
-          let ascent = metrics.ascent.round();
-
-          if let Some(span_id) = brush.source_span_id
-            && let Some(ProcessedInlineSpan::Text {
-              decorations: Some(chain),
-              ..
-            }) = spans.get(span_id as usize)
-          {
-            let rect = RunBox {
-              x: content.x + glyph_run.offset(),
-              y: content.y + glyph_run.baseline() + setup.baseline_shift - ascent,
-              width: glyph_run.advance() - trailing_whitespace,
-              height: ascent + metrics.descent.round(),
-            }
-            .scaled(setup.state, static_inline_prefix);
-
-            decoration_coverage.cover(
-              Some(chain),
-              line_index,
-              rect.x,
-              rect.x + rect.width,
-              &CoverExtent::Run {
-                font_size: run.font_size(),
-                top: rect.y,
-                bottom: rect.y + rect.height,
-                baseline: rect.y + ascent * setup.state.scale,
-              },
-            );
-          }
           let clusters = glyph_clusters(&glyph_run, &glyphs);
 
           for (glyph, cluster) in glyphs.iter_mut().zip(&clusters) {
@@ -451,54 +464,22 @@ impl BuiltInlineLayout<'_> {
                 .is_none_or(skips_ink);
           }
           let cluster_ranges = clusters.into_iter().map(|cluster| cluster.range).collect();
-          let shaped = ShapedRun::of(
-            &glyph_run,
-            glyphs,
-            trailing_whitespace,
-            brush,
-            cluster_ranges,
-          );
+          let shaped = ShapedRun::of(&glyph_run, glyphs, hanging, brush, cluster_ranges);
 
           runs.push(PositionedInlineRun {
             glyph_run: shaped,
             resolved_glyphs,
             line_scale: setup.state,
             static_inline_prefix,
-            baseline_shift: setup.baseline_shift,
+            baseline_shift: self.run_baseline_shift(line, &glyph_run),
             #[cfg(feature = "paint-tree")]
             index: runs.len(),
           });
         }
         PlacedItem::Box(inline_box) => {
-          // A spacer or atomic box inside a decorated span stretches the
-          // span's fragment horizontally; runs set its height, like Blink's
-          // box metrics ignoring atomic descendants. The line extent is the
-          // last resort so padding-only coverage still paints.
-          let chain = match spans.get(inline_box.id as usize) {
-            Some(ProcessedInlineSpan::Box(item)) => item.decorations.as_ref(),
-            Some(ProcessedInlineSpan::Spacer { decorations, .. }) => decorations.as_ref(),
-            _ => None,
-          };
-
-          if chain.is_some() {
-            let x0 = content.x + inline_box.x;
-            let origin_y = setup.state.layout_origin.y;
-            let line_y = |value: f32| origin_y + (content.y + value - origin_y) * setup.state.scale;
-
-            decoration_coverage.cover(
-              chain,
-              line_index,
-              x0,
-              x0 + inline_box.width,
-              &CoverExtent::Line {
-                top: line_y(setup.resolved_metrics.resolved_line_top),
-                bottom: line_y(setup.resolved_metrics.resolved_line_bottom),
-                baseline: line_y(setup.resolved_metrics.resolved_baseline),
-              },
-            );
-          }
           positioned_inline_boxes.insert(inline_box.id, inline_box);
         }
+        PlacedItem::Placeholder(_) => {}
       }
       Ok(())
     })?;
@@ -521,6 +502,120 @@ impl BuiltInlineLayout<'_> {
       outline_rects,
       background_fragments,
     })
+  }
+}
+
+impl<'c> BuiltInlineLayout<'c> {
+  /// The padding box of each inline span that contains out-of-flow boxes, relative to `layout`'s
+  /// border box.
+  pub(crate) fn inline_containing_blocks(
+    &self,
+    layout: ComputedLayout,
+  ) -> Vec<InlineContainingBlock<'c>> {
+    let mut coverage = DecorationAccumulator::default();
+    let content = layout.content_box_offset();
+
+    let Ok(()) = self.walk_items::<Infallible>(layout, |line, item| {
+      self.cover(&mut coverage, content, line, &item);
+      Ok(())
+    });
+
+    coverage.containing_blocks(if self.layout.is_rtl() {
+      Direction::Rtl
+    } else {
+      Direction::Ltr
+    })
+  }
+
+  /// Stretches the fragments of the spans around `item` over it.
+  fn cover(
+    &self,
+    coverage: &mut DecorationAccumulator<'c>,
+    content: Point<f32>,
+    line: &WalkedLine,
+    item: &PlacedItem<'_>,
+  ) {
+    let setup = &line.setup;
+    let origin_y = setup.state.layout_origin.y;
+    let line_y = |value: f32| origin_y + (content.y + value - origin_y) * setup.state.scale;
+    let (chain, x0, x1, covering) = match item {
+      PlacedItem::Run {
+        glyph_run,
+        static_inline_prefix,
+        hanging,
+      } => {
+        let brush = glyph_run.style().brush;
+
+        if brush.is_direction_mark && glyph_run.advance() == 0.0 {
+          return;
+        }
+
+        let Some(chain) = self.run_chain(glyph_run) else {
+          return;
+        };
+        let x = glyph_run.offset()
+          + hanging.shift
+          + if hanging.at_start {
+            hanging.advance
+          } else {
+            0.0
+          };
+        let width = glyph_run.advance() - hanging.advance;
+        let metrics = glyph_run.run().metrics();
+        // The font's rounded ascent and descent, without the line-height leading, like the
+        // inline box fragment `InlineBoxState::ComputeTextMetrics` sizes.
+        let baseline = glyph_run.baseline() + line.baseline_shift_in(Some(chain));
+
+        (
+          Some(chain),
+          content.x + setup.scale_x(x, *static_inline_prefix),
+          content.x + setup.scale_x(x + width, *static_inline_prefix),
+          Covering::Run {
+            top: line_y(baseline - metrics.ascent.round()),
+            bottom: line_y(baseline + metrics.descent.round()),
+          },
+        )
+      }
+      // A spacer, atomic box or out-of-flow placeholder inside a decorated span stretches the
+      // span's fragment horizontally, like Blink's box metrics ignoring atomic descendants.
+      PlacedItem::Box(inline_box) | PlacedItem::Placeholder(inline_box) => {
+        let (chain, covering) = match self.spans.get(inline_box.id as usize) {
+          Some(ProcessedInlineSpan::Box(item)) => (item.decorations.as_ref(), Covering::Box),
+          Some(ProcessedInlineSpan::Spacer { decorations, .. }) => {
+            (decorations.as_ref(), Covering::Padding)
+          }
+          _ => (None, Covering::Box),
+        };
+        let x0 = content.x + inline_box.x;
+        let width = match item {
+          PlacedItem::Placeholder(_) => 0.0,
+          _ => inline_box.width,
+        };
+
+        (chain, x0, x0 + width, covering)
+      }
+    };
+
+    if chain.is_none() {
+      return;
+    }
+
+    coverage.cover(
+      chain,
+      &CoverLine {
+        index: line.index,
+        position: LinePosition {
+          top: line_y(setup.resolved_metrics.resolved_line_top),
+          bottom: line_y(setup.resolved_metrics.resolved_line_bottom),
+          baseline: line_y(setup.resolved_metrics.resolved_baseline),
+          scale: setup.state.scale,
+        },
+        offsets: &line.state.offsets,
+      },
+      x0,
+      x1,
+      covering,
+    );
   }
 }
 

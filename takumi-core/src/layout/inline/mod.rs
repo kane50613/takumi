@@ -31,6 +31,7 @@ mod cache;
 mod decorations;
 mod floats;
 mod items;
+mod line_box;
 mod metrics;
 mod outline;
 mod runs;
@@ -44,16 +45,17 @@ pub use self::{
   metrics::{InlinePass, VisualInlineBox},
   outline::{InlineOutline, InlineOutlineRect, OutlineIsland, RightAngleContour},
   runs::{
-    InlineRunLayout, MeasuredInlineBox, MeasuredInlineRun, PositionedGlyph, PositionedInlineRun,
-    RunMetrics, ShapedRun,
+    HangingWhitespace, InlineRunLayout, MeasuredInlineBox, MeasuredInlineRun, PositionedGlyph,
+    PositionedInlineRun, RunMetrics, ShapedRun,
   },
 };
+pub(crate) use self::{background::PaddingBox, items::InlineOutOfFlow};
 use self::{
   breaking::distribute_trailing_whitespace,
+  line_box::{BoxFont, BoxKey},
   metrics::{
-    ParentFontMetrics, ResolvedInlineLineState, ResolvedLineMetrics, Strut,
-    resolve_inline_line_metrics, resolve_inline_line_states, resolve_visual_inline_box,
-    text_line_box_contribution,
+    ResolvedInlineLineState, ResolvedLineMetrics, Strut, resolve_inline_line_metrics,
+    resolve_inline_line_states, resolve_visual_inline_box, text_line_box_contribution,
   },
   runs::measured_run_text,
   text_fit::{
@@ -165,6 +167,15 @@ fn shape_fingerprint(
   hasher.finish()
 }
 
+/// Where an out-of-flow box sits before insets move it.
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct StaticPosition {
+  /// The inline-start and block-start corner of its margin box.
+  pub(crate) point: Point<f32>,
+  /// Whether the inline start is the right edge, in a right-to-left paragraph.
+  pub(crate) from_end: bool,
+}
+
 /// A completed inline layout with its source text, spans, and per-line scales.
 pub struct BuiltInlineLayout<'c> {
   /// The parley layout.
@@ -182,18 +193,82 @@ pub struct BuiltInlineLayout<'c> {
   /// The root inline box's strut, which every line holding content grows to, or `None` when the
   /// root has no primary font.
   pub(crate) strut: Option<Strut>,
+  /// The root inline box's font, which its children align against.
+  pub(crate) font: BoxFont,
 }
 
 impl BuiltInlineLayout<'_> {
-  /// Parent font metrics from the first run.
-  fn parent_font_metrics(&self) -> Option<ParentFontMetrics> {
-    let run = self.layout.lines().find_map(|line| line.runs().next())?;
-    let metrics = run.metrics();
+  /// The static position of each out-of-flow box among the spans, after Blink's
+  /// `LogicalLineBuilder::PlaceOutOfFlowObjects`.
+  ///
+  /// Naive next to Blink: a box inside a span that opens right after a line's trailing space stays
+  /// on that line, where Blink's `LineBreaker` ends the trailing run at the span's open tag and
+  /// carries the span and the box to the next line.
+  pub(crate) fn out_of_flow_static_positions(&self, content_width: f32) -> Vec<StaticPosition> {
+    let metrics = self.line_metrics();
+    let from_end = self.layout.is_rtl();
+    let line_start = if from_end { content_width } else { 0.0 };
+    let mut positions = Vec::new();
 
-    Some(ParentFontMetrics {
-      x_height: metrics.x_height,
-      text_metrics: (metrics.ascent, metrics.descent),
-    })
+    for (line, metrics) in self.layout.lines().zip(&metrics) {
+      let top = metrics.resolved_line_top;
+      let mut preceded = false;
+
+      for item in line.items() {
+        let inline_box = match item {
+          PositionedLayoutItem::GlyphRun(glyph_run) => {
+            preceded |= glyph_run.glyphs().next().is_some();
+            continue;
+          }
+          PositionedLayoutItem::InlineBox(inline_box) => inline_box,
+        };
+
+        match self.box_kind(&inline_box) {
+          InlineBoxKind::InFlow => preceded = true,
+          InlineBoxKind::CustomOutOfFlow => {}
+          InlineBoxKind::OutOfFlow => {
+            let Some(ProcessedInlineSpan::Box(item)) = self.spans.get(inline_box.id as usize)
+            else {
+              continue;
+            };
+            let inline_level = item
+              .render_node
+              .context
+              .style
+              .original_display
+              .is_inline_level();
+
+            let point = if inline_level {
+              Point {
+                x: inline_box.x,
+                y: top,
+              }
+            } else {
+              Point {
+                x: line_start,
+                y: if preceded {
+                  top + metrics.resolved_line_height
+                } else {
+                  top
+                },
+              }
+            };
+
+            positions.push(StaticPosition { point, from_end });
+          }
+        }
+      }
+    }
+
+    positions
+  }
+
+  /// How `inline_box` sits in its line, which parley's kind does not tell for an out-of-flow box.
+  fn box_kind(&self, inline_box: &PositionedInlineBox) -> InlineBoxKind {
+    match self.spans.get(inline_box.id as usize) {
+      Some(ProcessedInlineSpan::Box(item)) => item.render_node.inline_box_kind(),
+      _ => inline_box.kind,
+    }
   }
 
   /// Resolved metrics for each line.
@@ -201,7 +276,7 @@ impl BuiltInlineLayout<'_> {
     resolve_inline_line_metrics(
       &self.layout,
       &self.spans,
-      self.parent_font_metrics(),
+      self.font,
       &self.line_scales,
       self.strut,
     )
@@ -284,7 +359,7 @@ impl BuiltInlineLayout<'_> {
         PlacedItem::Run {
           glyph_run,
           static_inline_prefix,
-          ..
+          hanging,
         } => {
           let span_id = glyph_run.style().brush.source_span_id;
           let text = measured_run_text(&self.text, &self.spans, &glyph_run, span_id);
@@ -294,7 +369,11 @@ impl BuiltInlineLayout<'_> {
             return Ok(());
           }
 
-          let (origin, size) = glyph_run_rect(&glyph_run, setup.baseline_shift);
+          let (origin, size) = glyph_run_rect(
+            &glyph_run,
+            hanging,
+            self.run_baseline_shift(line, &glyph_run),
+          );
           let (origin, size) = setup.scale_rect(origin, size, static_inline_prefix);
 
           let link = span_id.and_then(|span_id| match self.spans.get(span_id as usize) {
@@ -326,6 +405,7 @@ impl BuiltInlineLayout<'_> {
             height: inline_box.height,
           });
         }
+        PlacedItem::Placeholder(_) => {}
       }
       Ok(())
     });
@@ -677,8 +757,12 @@ fn build_inline_layout_tree<'c>(
           index_pos,
           spans.len() as u64,
         ));
-        previous_collapsible_space = false;
-        previous_was_line_break = false;
+        // A float or an out-of-flow box is opaque to white space collapsing, as Blink's
+        // `InlineItemsBuilder::AppendOpaque` leaves the spaces around it adjacent.
+        if render_node.inline_box_kind() == InlineBoxKind::InFlow {
+          previous_collapsible_space = false;
+          previous_was_line_break = false;
+        }
       }
       // Whitespace flags stay untouched: the padding must not change how the
       // text around it collapses.
@@ -700,23 +784,8 @@ fn build_inline_layout_tree<'c>(
   trim_trailing_space(&mut spans);
 
   let (layout, text) = shape_spans(context, &spans, style, shape_cacheable);
-  let strut = context
-    .primary_font_metrics(&context.style, context.sizing.font_size)
-    .map(|metrics| {
-      let brush = text_style_with_span_id(style, None).brush;
-      let (above, below) = brush.line_box_contribution(
-        metrics.line_spacing(),
-        metrics.ascent,
-        metrics.descent,
-        metrics.line_gap,
-      );
-
-      Strut {
-        above,
-        below,
-        scales_with_text_fit: brush.line_height_scales_with_text_fit,
-      }
-    });
+  let strut = Strut::of(context, style);
+  let font = BoxFont::of(context);
 
   BuiltInlineLayout {
     layout,
@@ -726,6 +795,7 @@ fn build_inline_layout_tree<'c>(
     line_scales: Vec::new(),
     clamped: false,
     strut,
+    font,
   }
 }
 
@@ -802,17 +872,17 @@ fn direction_mark_span<'c>(
 /// Measures an inline-level node and sizes the box that stands in for it.
 fn inline_box_span<'c>(
   render_node: &'c RenderNode,
-  decorations: Option<Rc<DecorationLink>>,
+  decorations: Option<Rc<DecorationLink<'c>>>,
   available_space: Size<AvailableSpace>,
   index: usize,
   id: u64,
 ) -> ProcessedInlineSpan<'c> {
   let context = &render_node.context;
-  let vertical_align = context.style.vertical_align.resolve(
-    &context.sizing,
-    context.sizing.font_size,
-    context.style.line_height,
-  );
+  let kind = render_node.inline_box_kind();
+  let vertical_align = context
+    .style
+    .vertical_align
+    .resolve(&context.sizing, context.sizing.line_height);
   let margin = render_node.margin_px();
   let padding = render_node.padding_px();
   let border = Rect {
@@ -841,9 +911,11 @@ fn inline_box_span<'c>(
     }
   });
 
+  // An out-of-flow box only marks its static position, so the line never sizes it.
   let atomic_metrics = render_node
     .node
     .as_ref()
+    .filter(|_| kind != InlineBoxKind::OutOfFlow)
     .map(|_| render_node.measure_inline_box(available_space));
   let content_size = atomic_metrics.map_or(Size::ZERO, |metrics| metrics.size);
   let raw_baseline_offset = atomic_metrics.and_then(|metrics| metrics.baseline_offset);
@@ -858,10 +930,15 @@ fn inline_box_span<'c>(
   } else {
     content_size.height + margin.vertical() + padding.vertical() + border.vertical()
   };
+  // Parley breaks the line after every box it places itself, while Blink never breaks at an
+  // out-of-flow object, so the line breaker takes these back and appends them without one.
   let inline_box = InlineBox {
     index,
     id,
-    kind: render_node.inline_box_kind(),
+    kind: match kind {
+      InlineBoxKind::OutOfFlow => InlineBoxKind::CustomOutOfFlow,
+      kind => kind,
+    },
     width: paint_width,
     height: paint_height,
   };
@@ -1067,7 +1144,7 @@ impl LineSetup {
     line_scales: &[f32],
     line_index: usize,
   ) -> Option<Self> {
-    let resolved_metrics = *line_vertical_metrics.get(line_index)?;
+    let resolved_metrics = line_vertical_metrics.get(line_index)?.clone();
     let line_scale = line_scales.get(line_index).copied().unwrap_or(1.0);
     let (line_scale_origin_x, alignment_correction) =
       text_fit_line_alignment_correction(line, line_scale, layout.unsnapped_content.width);
@@ -1137,13 +1214,14 @@ impl LineSetup {
 /// A glyph run's advance by its ascent plus descent, as a line-local top-left and size.
 pub(crate) fn glyph_run_rect(
   glyph_run: &GlyphRun<'_, InlineBrush>,
+  hanging: HangingWhitespace,
   baseline_shift: f32,
 ) -> (Point<f32>, Size<f32>) {
   let metrics = glyph_run.run().metrics();
 
   (
     Point {
-      x: glyph_run.offset(),
+      x: glyph_run.offset() + hanging.shift,
       y: glyph_run.baseline() + baseline_shift - metrics.ascent,
     },
     Size {
@@ -1160,16 +1238,56 @@ pub(crate) struct WalkedLine {
   pub(crate) state: ResolvedInlineLineState,
 }
 
+impl WalkedLine {
+  /// The baseline shift of content inside the innermost span of `chain`, which `vertical-align`
+  /// moves off the line's own.
+  pub(crate) fn baseline_shift_in(&self, chain: Option<&Rc<DecorationLink<'_>>>) -> f32 {
+    self.setup.baseline_shift
+      + chain.map_or(0.0, |link| {
+        self.state.offsets.of(BoxKey::Span(link.decoration.id))
+      })
+  }
+}
+
+impl<'c> BuiltInlineLayout<'c> {
+  /// The spans around `glyph_run`, innermost first.
+  pub(crate) fn run_chain(
+    &self,
+    glyph_run: &GlyphRun<'_, InlineBrush>,
+  ) -> Option<&Rc<DecorationLink<'c>>> {
+    match glyph_run
+      .style()
+      .brush
+      .source_span_id
+      .and_then(|span_id| self.spans.get(span_id as usize))
+    {
+      Some(ProcessedInlineSpan::Text { decorations, .. }) => decorations.as_ref(),
+      _ => None,
+    }
+  }
+
+  /// The baseline shift `glyph_run` sits at on `line`.
+  pub(crate) fn run_baseline_shift(
+    &self,
+    line: &WalkedLine,
+    glyph_run: &GlyphRun<'_, InlineBrush>,
+  ) -> f32 {
+    line.baseline_shift_in(self.run_chain(glyph_run))
+  }
+}
+
 /// One item placed on a walked line, with the static advance of the boxes before it.
 pub(crate) enum PlacedItem<'a> {
   Run {
     glyph_run: GlyphRun<'a, InlineBrush>,
     static_inline_prefix: f32,
-    /// The line-end whitespace advance this run carries.
-    trailing_whitespace: f32,
+    /// The line-end whitespace this run carries.
+    hanging: HangingWhitespace,
   },
   /// An in-flow box, its `x` already scaled for text-fit.
   Box(VisualInlineBox),
+  /// Where an out-of-flow box sits in the line, its `x` already scaled for text-fit.
+  Placeholder(VisualInlineBox),
 }
 
 impl BuiltInlineLayout<'_> {
@@ -1181,11 +1299,7 @@ impl BuiltInlineLayout<'_> {
     mut visit: impl FnMut(&WalkedLine, PlacedItem<'_>) -> Result<(), E>,
   ) -> Result<(), E> {
     let line_vertical_metrics = self.line_metrics();
-    let line_states = resolve_inline_line_states(
-      &self.layout,
-      self.parent_font_metrics(),
-      &line_vertical_metrics,
-    );
+    let line_states = resolve_inline_line_states(&self.layout, &line_vertical_metrics);
 
     for (index, line) in self.layout.lines().enumerate() {
       let Some(setup) = LineSetup::new(
@@ -1200,10 +1314,10 @@ impl BuiltInlineLayout<'_> {
       let walked = WalkedLine {
         index,
         setup,
-        state: line_states[index],
+        state: line_states[index].clone(),
       };
       let items: Vec<_> = line.items().collect();
-      let trailing_whitespace = distribute_trailing_whitespace(&items, &line);
+      let hanging = distribute_trailing_whitespace(&items, &line, self.layout.is_rtl());
       let mut static_inline_prefix = 0.0_f32;
 
       for (item_index, item) in items.into_iter().enumerate() {
@@ -1213,15 +1327,17 @@ impl BuiltInlineLayout<'_> {
             PlacedItem::Run {
               glyph_run,
               static_inline_prefix,
-              trailing_whitespace: trailing_whitespace[item_index],
+              hanging: hanging[item_index],
             },
           )?,
           PositionedLayoutItem::InlineBox(inline_box) => {
-            if inline_box.kind != InlineBoxKind::InFlow {
+            let kind = self.box_kind(&inline_box);
+
+            if kind == InlineBoxKind::CustomOutOfFlow {
               continue;
             }
             let Some(resolved) =
-              resolve_visual_inline_box(inline_box, Some(walked.state), &self.spans)
+              resolve_visual_inline_box(inline_box, Some(&walked.state), &self.spans)
             else {
               continue;
             };
@@ -1230,6 +1346,10 @@ impl BuiltInlineLayout<'_> {
               ..resolved
             };
 
+            if kind == InlineBoxKind::OutOfFlow {
+              visit(&walked, PlacedItem::Placeholder(inline_box))?;
+              continue;
+            }
             visit(&walked, PlacedItem::Box(inline_box))?;
             static_inline_prefix += resolved.width;
           }
@@ -1289,7 +1409,7 @@ mod tests {
       offset: 0.0,
       baseline: 0.0,
       advance: 0.0,
-      trailing_whitespace: 0.0,
+      hanging: HangingWhitespace::default(),
       brush: InlineBrush {
         underline_offset,
         underline_position: position,
@@ -1331,7 +1451,7 @@ mod tests {
     run.brush.decoration_line = TextDecorationLines::UNDERLINE;
     run.brush.decoration_thickness = SizedTextDecorationThickness::Value(2.0);
     run.advance = 5.2;
-    run.trailing_whitespace = 5.2;
+    run.hanging.advance = 5.2;
     run.offset = 10.4;
 
     let layout = ComputedLayout {
@@ -1453,7 +1573,7 @@ mod tests {
     let trailing: Vec<(f32, f32)> = runs
       .runs
       .iter()
-      .map(|run| (run.glyph_run.advance, run.glyph_run.trailing_whitespace))
+      .map(|run| (run.glyph_run.advance, run.glyph_run.hanging.advance))
       .collect();
 
     // The 40px space run hangs entirely; earlier runs keep what layout kept.

@@ -146,7 +146,6 @@ const DEFAULT_PRESETS: &[(&str, &str)] = &[
   ("sub", "font-size:smaller;vertical-align:sub"),
   ("sup", "font-size:smaller;vertical-align:super"),
   ("div", "display:block"),
-  ("br", "white-space:pre"),
   (
     "table",
     "display:table;box-sizing:border-box;border-spacing:2px",

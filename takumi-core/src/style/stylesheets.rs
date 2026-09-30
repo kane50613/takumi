@@ -783,6 +783,9 @@ macro_rules! define_style {
         /// Resolved BCP-47 language, inherited from the `lang` attribute. Drives
         /// locale-aware shaping (Han unification, line-breaking). Has no CSS property.
         pub lang: Option<Lang>,
+        /// `display` before an out-of-flow or floating box blockified it, as Blink's
+        /// `OriginalDisplay`.
+        pub original_display: Display,
         $(
           #[doc = concat!("Computed `", stringify!($longhand), "` value.")]
           pub $longhand: $longhand_ty,
@@ -794,6 +797,7 @@ macro_rules! define_style {
           Self {
             custom_properties: Default::default(),
             lang: None,
+            original_display: Display::default(),
             $(
               $longhand: define_style!(@default $($longhand_default)?),
             )*
@@ -830,6 +834,7 @@ macro_rules! define_style {
           Self {
             custom_properties: parent.custom_properties.inherited(),
             lang: parent.lang,
+            original_display: Display::default(),
             $($longhand: define_inherited_default!(parent.$longhand, define_style!(@default $($longhand_default)?) $(, $longhand_inherit)?),)*
           }
         }
@@ -840,6 +845,7 @@ macro_rules! define_style {
           let mut style = Self {
             custom_properties: parent.custom_properties.inherited(),
             lang: parent.lang,
+            original_display: Display::default(),
             $($longhand: define_anonymous_default!(parent.$longhand, define_style!(@default $($longhand_default)?) $(, inherit $longhand_inherit)? $(, anonymous $longhand_anonymous)?),)*
           };
 

@@ -84,17 +84,16 @@ pub(crate) fn draw_own_content(
     context,
     InlineLayoutMode::Draw,
   ));
-  let boxes = built.spans.iter().filter_map(|span| match span {
-    ProcessedInlineSpan::Box(item) => Some(item),
-    _ => None,
-  });
   let positioned_inline_boxes = match pass {
     InlinePass::Content => draw_inline_layout(context, canvas, layout, &built, &font_style)?,
     InlinePass::Floats => built.resolve_runs(context, layout)?.inline_boxes,
   };
 
-  for (item, positioned) in boxes.zip(positioned_inline_boxes.iter()) {
-    if pass.paints(positioned) {
+  for positioned in positioned_inline_boxes
+    .iter()
+    .filter(|positioned| pass.paints(positioned))
+  {
+    if let Some(ProcessedInlineSpan::Box(item)) = built.spans.get(positioned.id as usize) {
       draw_inline_box(positioned, item, layout, canvas, context.transform)?;
     }
   }

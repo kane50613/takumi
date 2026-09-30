@@ -148,7 +148,7 @@ impl ShapedRun {
 
       Some(DecorationLine {
         origin: Point {
-          x: content.x + self.offset,
+          x: content.x + self.offset + self.decorated_offset(),
           y: content.y + top,
         },
         width: self.decorated_advance(),

@@ -462,17 +462,16 @@ impl SceneRequest<'_> {
         continue;
       }
 
-      if current.should_create_inline_layout() {
-        if let Some(floats) = inline_floats {
-          contexts[context_id].push_item(
-            PaintBucket::Float,
-            PaintItemKind::Floats(floats),
-            0,
-            source_order,
-            true,
-          );
-        }
-        continue;
+      // An inline formatting context paints its content itself; its layout children are the
+      // out-of-flow boxes inside that content, which paint as boxes of their own.
+      if let Some(floats) = inline_floats {
+        contexts[context_id].push_item(
+          PaintBucket::Float,
+          PaintItemKind::Floats(floats),
+          0,
+          source_order,
+          true,
+        );
       }
 
       let layout_children = layout_results.box_children(visit.node_id)?;
@@ -484,7 +483,7 @@ impl SceneRequest<'_> {
 
       for child in layout_children.iter().rev() {
         let mut child_path = visit.path.clone();
-        child_path.push(child.render_index);
+        child.extend_path(&mut child_path);
         let (base_transform, base_container) =
           containing_blocks.base_for(child, current_transform, child_container_size);
         let clip = match child.hoisted_cb.and_then(|cb| contents.get(&cb)) {
@@ -775,9 +774,10 @@ fn compute_node_paint_bounds(
       PlacedItem::Run {
         glyph_run,
         static_inline_prefix,
-        trailing_whitespace,
+        hanging,
       } => {
-        let (glyph_origin, glyph_size) = glyph_run_rect(&glyph_run, setup.baseline_shift);
+        let baseline_shift = built.run_baseline_shift(line, &glyph_run);
+        let (glyph_origin, glyph_size) = glyph_run_rect(&glyph_run, hanging, baseline_shift);
         let (glyph_origin, glyph_size) =
           setup.scale_rect(glyph_origin, glyph_size, static_inline_prefix);
 
@@ -789,21 +789,13 @@ fn compute_node_paint_bounds(
         // Blink's `InkOverflow::ComputeAppliedDecorationOverflow`.
         let brush = glyph_run.style().brush;
         if !brush.decoration_line.is_empty() {
-          let run = ShapedRun::of(
-            &glyph_run,
-            Vec::new(),
-            trailing_whitespace,
-            brush,
-            Vec::new(),
-          );
+          let run = ShapedRun::of(&glyph_run, Vec::new(), hanging, brush, Vec::new());
           let run_transform = setup
             .state
             .transform(Affine::IDENTITY, static_inline_prefix);
           let output = transform * run_transform;
 
-          for line in
-            run.decoration_lines(content_offset, setup.baseline_shift, run_transform, output)
-          {
+          for line in run.decoration_lines(content_offset, baseline_shift, run_transform, output) {
             let area = line.bounds();
 
             bounds = merge_bounds(
@@ -848,8 +840,8 @@ fn compute_node_paint_bounds(
           };
           let (ink_origin, ink_size) = setup.scale_rect(
             Point {
-              x: glyph.x + min_x,
-              y: glyph.y + setup.baseline_shift + min_y,
+              x: glyph.x + hanging.shift + min_x,
+              y: glyph.y + baseline_shift + min_y,
             },
             Size {
               width: max_x - min_x,
@@ -874,6 +866,7 @@ fn compute_node_paint_bounds(
           ),
         );
       }
+      PlacedItem::Placeholder(_) => {}
     }
     Ok(())
   });

@@ -44,6 +44,8 @@ impl ComputedStyle {
       self.outline_width = LineWidth::Length(Length::zero());
     }
 
+    self.original_display = self.display;
+
     // https://www.w3.org/TR/css-display-3/#transformations
     // Elements with position: absolute or fixed are blockified
     if self.position.is_out_of_flow() || self.float != Float::None {
