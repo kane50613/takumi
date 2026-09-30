@@ -125,35 +125,23 @@ fn apply_batched_pixel_filters(data: &mut [u8], filters: &[&Filter]) {
   }
 }
 
+/// Draws the premultiplied `dst` over a shadow pixel of colour `under_rgb` and coverage
+/// `under_alpha`, as source-over does.
 #[inline(always)]
 fn composite_pixel_under(dst: &mut [u8], under_rgb: [u8; 3], under_alpha: u8) {
   if under_alpha == 0 || dst[3] == 255 {
     return;
   }
 
-  if dst[3] == 0 {
-    dst[0] = under_rgb[0];
-    dst[1] = under_rgb[1];
-    dst[2] = under_rgb[2];
-    dst[3] = under_alpha;
-    return;
-  }
+  let uncovered = 255 - u32::from(dst[3]);
+  let under_alpha = u32::from(under_alpha);
 
-  let dst_alpha = dst[3] as u32;
-  let under_alpha = under_alpha as u32;
-  let result_alpha = dst_alpha + under_alpha - u32::from(fast_div_255(dst_alpha * under_alpha));
-  if result_alpha == 0 {
-    return;
-  }
+  for (channel, color) in dst.iter_mut().zip(under_rgb) {
+    let under = u32::from(fast_div_255(u32::from(color) * under_alpha));
 
-  let inverse_dst_alpha = 255 - dst_alpha;
-  for (channel, src) in dst.iter_mut().take(3).zip(under_rgb) {
-    let dst_premul = *channel as u32 * dst_alpha;
-    let src_premul = src as u32 * under_alpha;
-    let result_premul = dst_premul + (src_premul * inverse_dst_alpha + 127) / 255;
-    *channel = ((result_premul + result_alpha / 2) / result_alpha).min(255) as u8;
+    *channel = channel.saturating_add(fast_div_255(under * uncovered));
   }
-  dst[3] = result_alpha.min(255) as u8;
+  dst[3] = dst[3].saturating_add(fast_div_255(under_alpha * uncovered));
 }
 
 fn find_nonzero_bounds<T>(
@@ -592,6 +580,36 @@ mod tests {
     style::{Angle, PercentageNumber},
     viewport::Viewport,
   };
+
+  #[test]
+  fn a_shadow_under_a_clear_pixel_is_premultiplied() {
+    let mut pixel = [0, 0, 0, 0];
+
+    composite_pixel_under(&mut pixel, [255, 0, 0], 128);
+    assert_eq!(pixel, [128, 0, 0, 128]);
+  }
+
+  #[test]
+  fn a_shadow_fills_what_a_translucent_pixel_leaves_uncovered() {
+    let mut full = [128, 128, 128, 128];
+    let mut half = [128, 128, 128, 128];
+
+    composite_pixel_under(&mut full, [255, 0, 0], 255);
+    composite_pixel_under(&mut half, [255, 0, 0], 128);
+    assert_eq!(full, [255, 128, 128, 255]);
+    assert_eq!(half, [192, 128, 128, 192]);
+  }
+
+  #[test]
+  fn a_shadow_leaves_an_opaque_pixel_alone() {
+    let mut opaque = [10, 20, 30, 255];
+    let mut clear = [10, 20, 30, 40];
+
+    composite_pixel_under(&mut opaque, [255, 0, 0], 200);
+    composite_pixel_under(&mut clear, [255, 0, 0], 0);
+    assert_eq!(opaque, [10, 20, 30, 255]);
+    assert_eq!(clear, [10, 20, 30, 40]);
+  }
 
   #[test]
   fn a_huge_backdrop_blur_stays_within_the_canvas() {
