@@ -494,14 +494,13 @@ fn paged_page_ranges() {
     )
   });
   let full = render_pinned(document(&fonts(), None));
-  let pages = |pdf: &[u8]| {
-    let text = String::from_utf8_lossy(pdf);
 
-    text.matches("/Type/Page").count() - text.matches("/Type/Pages").count()
-  };
-
-  assert_eq!(pages(&full), 3, "the full report paginates to three pages");
-  assert_eq!(pages(&ranged), 2, "the ranges keep two of them");
+  assert_eq!(
+    page_count(&full),
+    3,
+    "the full report paginates to three pages"
+  );
+  assert_eq!(page_count(&ranged), 2, "the ranges keep two of them");
   assert_ne!(ranged, full);
 }
 
@@ -733,9 +732,7 @@ fn a_table_header_repeats_on_every_page() {
   let repeating = table("");
   // A `table-row-group` header is not a header group, so nothing repeats.
   let plain = table(r#" style="display: table-row-group""#);
-  let pages = String::from_utf8_lossy(&repeating)
-    .matches("/Type/Page/")
-    .count();
+  let pages = page_count(&repeating);
 
   assert!(pages > 1, "the table did not paginate");
   assert_eq!(
@@ -5413,7 +5410,7 @@ fn paged_inline_span_background_paints_once() {
   )
   .expect("render the doc");
   let haystack = inflated_text(&pdf);
-  let pages = haystack.matches("/Type/Page").count() - haystack.matches("/Type/Pages").count();
+  let pages = page_count(&pdf);
 
   assert!(pages > 1, "the document did not paginate");
   assert_eq!(
