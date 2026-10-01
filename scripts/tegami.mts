@@ -1,4 +1,6 @@
-import { $ } from "bun";
+import { readdir, readFile } from "node:fs/promises";
+import { join } from "node:path";
+import { $, YAML } from "bun";
 import {
   tegami,
   type BumpType,
@@ -17,6 +19,28 @@ const oxfmt: TegamiPlugin = {
   enforce: "pre",
   async applyCliDraft() {
     await $`oxfmt --write .`.quiet();
+  },
+};
+
+// tegami silently skips a changelog whose frontmatter has no `packages` map.
+const requirePackages: TegamiPlugin = {
+  name: "require-packages",
+  async init() {
+    const files = (await readdir(this.changelogDir)).filter((file) => file.endsWith(".md"));
+    const unlisted: string[] = [];
+
+    for (const file of files) {
+      const content = await readFile(join(this.changelogDir, file), "utf8");
+      const frontmatter = /^---\r?\n(.+?)\r?\n---/s.exec(content)?.[1];
+      const data: unknown = frontmatter ? YAML.parse(frontmatter) : null;
+      const packages = data instanceof Object && "packages" in data ? data.packages : null;
+
+      if (!(packages instanceof Object) || Object.keys(packages).length === 0) unlisted.push(file);
+    }
+
+    if (unlisted.length > 0) {
+      throw new Error(`List the bumped packages under \`packages\` in ${unlisted.join(", ")}`);
+    }
   },
 };
 
@@ -66,6 +90,7 @@ const bumpDep = ({
 
 const paper = tegami({
   plugins: [
+    requirePackages,
     oxfmt,
     refreshLockfile,
     github({ repo: "kane50613/takumi", versionPr: { base: "master" } }),

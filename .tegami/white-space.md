@@ -11,3 +11,4 @@ packages:
 - A float at the start of a line no longer keeps the space after it.
 - `<br>` always starts a new line, even with the style presets off or `white-space` set to collapse newlines.
 - A right-to-left line that ends in left-to-right words, or the reverse, hangs its line-end space past the edge and leaves it out of decorations and backgrounds.
+- Under `white-space: pre-wrap`, a newline right after a space ends the line. `"A \nB"` used to render as one line.
