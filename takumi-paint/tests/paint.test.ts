@@ -135,9 +135,9 @@ describe("Painter.paint", () => {
     });
   });
 
-  it("masks a text-clipped background with its text's outlines, keeping its blend modes", async () => {
+  it("masks a text-clipped background with the outlines of the text inside it, keeping its blend modes", async () => {
     const tree = await painter.paint(
-      `<div id="clip" style="color: transparent; background-color: red; background-image: linear-gradient(blue, blue); background-blend-mode: multiply; background-clip: text">Hi</div>`,
+      `<div id="clip" style="color: transparent; background-color: red; background-image: linear-gradient(blue, blue); background-blend-mode: multiply; background-clip: text"><div>Hi</div></div>`,
       { width: 200 },
     );
     const group = box(tree, "clip")?.drawables.find((drawable) => drawable.type === "group");
@@ -147,7 +147,7 @@ describe("Painter.paint", () => {
         : undefined;
     const mask = masked?.type === "masked" ? masked.mask : [];
 
-    expect(mask.length).toBeGreaterThan(0);
+    expect(mask).toHaveLength(2);
     expect(mask.every((drawable) => drawable.type === "fill")).toBe(true);
     expect(masked?.type === "masked" && masked.content).toMatchObject([
       { type: "fill", paint: { type: "color", color: [255, 0, 0, 255] } },
