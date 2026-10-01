@@ -1,7 +1,7 @@
 //! The page window a prepared tree emits through: what it paints, what it
 //! owns, and the clip and translation that put it on the page.
 
-use takumi_core::{geometry::Point, scene::SceneBounds};
+use takumi_core::{geometry::Point, painter::LineItem, scene::SceneBounds};
 
 use crate::{
   emitter::Emitter,
@@ -50,10 +50,12 @@ impl Window {
   /// Whether this page draws a line's item spanning `top` to `bottom` on the line at `baseline`:
   /// the page owning the line does, and so does every page an item taller than the page crosses,
   /// as Blink spreads monolithic overflow over the pages after it.
-  pub(crate) fn shows_line_item(&self, baseline: f32, top: f32, bottom: f32) -> bool {
-    let overflows = self.y.is_some_and(|(y0, y1)| bottom - top > y1 - y0);
+  pub(crate) fn shows_line_item(&self, item: LineItem) -> bool {
+    let overflows = self
+      .y
+      .is_some_and(|(y0, y1)| item.bottom - item.top > y1 - y0);
 
-    !self.disowns_line(baseline) || (overflows && !self.excludes(top, bottom))
+    !self.disowns_line(item.baseline) || (overflows && !self.excludes(item.top, item.bottom))
   }
 
   /// Whether a text line at `baseline` belongs to another page. Ownership is

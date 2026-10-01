@@ -149,6 +149,30 @@ pub struct LineItem {
   pub bottom: f32,
 }
 
+impl LineItem {
+  /// `run`'s glyphs in the block at `layout`, between its ascent and descent, or `None` when it
+  /// has none.
+  pub fn of_run(run: &PositionedInlineRun, layout: ComputedLayout) -> Option<Self> {
+    let shaped = &run.glyph_run;
+    let baseline = run.glyph_offset(layout).y + shaped.glyphs.first()?.y;
+
+    Some(Self {
+      baseline,
+      top: baseline - shaped.metrics.ascent,
+      bottom: baseline + shaped.metrics.descent,
+    })
+  }
+
+  /// The item with its block's border box moved down by `y`.
+  pub fn below(self, y: f32) -> Self {
+    Self {
+      baseline: self.baseline + y,
+      top: self.top + y,
+      bottom: self.bottom + y,
+    }
+  }
+}
+
 impl InlineRunLayout<'_> {
   /// The runs, span backgrounds and outline rects of the block at `layout` that `keep` accepts, as
   /// a page keeps the items it shows.
@@ -157,19 +181,7 @@ impl InlineRunLayout<'_> {
       runs: self
         .runs
         .iter()
-        .filter(|run| {
-          let shaped = &run.glyph_run;
-
-          shaped.glyphs.first().is_none_or(|glyph| {
-            let baseline = run.glyph_offset(layout).y + glyph.y;
-
-            keep(LineItem {
-              baseline,
-              top: baseline - shaped.metrics.ascent,
-              bottom: baseline + shaped.metrics.descent,
-            })
-          })
-        })
+        .filter(|run| LineItem::of_run(run, layout).is_none_or(&keep))
         .collect(),
       background_fragments: self
         .background_fragments

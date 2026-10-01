@@ -28,7 +28,7 @@ use takumi_core::{
   paint_property::{ClipId, ClipNode, EffectId, EffectNode},
   painter::{
     BoxBackground, BoxBorderPainter, BoxFrame, BoxPainter, FillShape, GlyphDevice, GlyphFill,
-    LayerBounds, OwnContent, PaintDevice, PendingOutline, ShadowShape, StripBackground,
+    LayerBounds, LineItem, OwnContent, PaintDevice, PendingOutline, ShadowShape, StripBackground,
     StrokeStyle, TextClip, UNBOUNDED,
   },
   scene::{NodePaint, Scene},
@@ -929,9 +929,7 @@ impl Emitter<'_> {
   ) {
     let y = frame.origin.y;
     let lines = runs.lines(frame.layout, |item| {
-      self
-        .window
-        .shows_line_item(y + item.baseline, y + item.top, y + item.bottom)
+      self.window.shows_line_item(item.below(y))
     });
     let mut device = TextDevice {
       emitter: self,
@@ -982,9 +980,11 @@ impl Emitter<'_> {
         let content_y = y + layout.content_box_offset().y;
         let top = content_y + positioned.y;
 
-        !self
-          .window
-          .shows_line_item(content_y + baseline, top, top + positioned.height)
+        !self.window.shows_line_item(LineItem {
+          baseline: content_y + baseline,
+          top,
+          bottom: top + positioned.height,
+        })
       }) {
         continue;
       }
@@ -1306,12 +1306,9 @@ impl Emitter<'_> {
     }
     let font = self.cached_font(shaped)?;
     let offset = run.glyph_offset(layout);
+    let item = LineItem::of_run(run, layout)?.below(line_y);
 
-    if shaped
-      .glyphs
-      .first()
-      .is_some_and(|glyph| self.window.disowns_line(line_y + offset.y + glyph.y))
-    {
+    if self.window.disowns_line(item.baseline) {
       return None;
     }
     let text = built
