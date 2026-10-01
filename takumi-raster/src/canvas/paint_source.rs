@@ -3,9 +3,8 @@ use tiny_skia::{PixmapRef, PremultipliedColorU8};
 use crate::{
   BackgroundTile, BilinearRows, ColorTile, SampledBitmapView,
   blend::premultiplied_from_pixel,
-  canvas::{checked_area, composite_premultiplied_over},
-  resources::image_buffer::premultiply_pixel,
-  style::{Affine, Color, ImageScalingAlgorithm},
+  canvas::checked_area,
+  style::{Affine, ImageScalingAlgorithm},
 };
 
 #[derive(Clone, Copy)]
@@ -262,30 +261,6 @@ impl<'a> From<&'a BackgroundTile> for PaintSource<'a> {
 impl<'a> From<&'a ColorTile> for PaintSource<'a> {
   fn from(value: &'a ColorTile) -> Self {
     Self::ColorTile(value)
-  }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum MaskCompositeColor {
-  SourceOnly,
-  ColorOverSource([u8; 4]),
-}
-
-impl MaskCompositeColor {
-  pub(crate) fn color_over_source(color: Color) -> Self {
-    Self::ColorOverSource(premultiply_pixel(color.0))
-  }
-}
-
-#[inline(always)]
-pub(super) fn apply_mask_color_mode(src: [u8; 4], color_mode: MaskCompositeColor) -> [u8; 4] {
-  match color_mode {
-    MaskCompositeColor::SourceOnly => src,
-    MaskCompositeColor::ColorOverSource(color) => {
-      let mut out = src;
-      composite_premultiplied_over(&mut out, color);
-      out
-    }
   }
 }
 

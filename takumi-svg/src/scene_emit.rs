@@ -12,7 +12,7 @@ use takumi_core::{
   layout::inline::InlinePass,
   paint_chunk::{ChunkPart, ConversionContext, PaintChunk, PropertySink},
   paint_property::{ClipId, ClipNode, EffectId, EffectNode},
-  painter::BoxFrame,
+  painter::{BoxFrame, TextClip},
   scene::{NodePaint, Scene},
   style::{Affine, Filter},
 };
@@ -134,7 +134,13 @@ impl ChunkWriter<'_, '_, '_> {
         .transpose()?;
 
       match chunk.part {
-        ChunkPart::Decorations => placed.emit_decorations(doc)?,
+        ChunkPart::Decorations => {
+          let scene = self.emitter.scene;
+          let text_clip = TextClip::of(&scene.root, &scene.results, self.chunks, chunk.node)
+            .map_err(io::Error::other)?;
+
+          placed.emit_decorations(text_clip.as_ref(), doc)?;
+        }
         ChunkPart::Content => placed.emit_own_content(InlinePass::Content, doc)?,
         ChunkPart::Floats => placed.emit_own_content(InlinePass::Floats, doc)?,
         ChunkPart::Outline => placed.emit_outline(doc)?,

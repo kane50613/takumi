@@ -27,9 +27,9 @@ use takumi_core::{
   paint_chunk::{ChunkPart, ConversionContext, PaintChunk, PropertySink},
   paint_property::{ClipId, ClipNode, EffectId, EffectNode},
   painter::{
-    BackgroundClipArea, BoxBackground, BoxBorderPainter, BoxFrame, BoxPainter, FillShape,
-    GlyphDevice, GlyphFill, LayerBounds, OwnContent, PaintDevice, PendingOutline, ShadowShape,
-    StripBackground, StrokeStyle, UNBOUNDED,
+    BoxBackground, BoxBorderPainter, BoxFrame, BoxPainter, FillShape, GlyphDevice, GlyphFill,
+    LayerBounds, OwnContent, PaintDevice, PendingOutline, ShadowShape, StripBackground,
+    StrokeStyle, TextClip, UNBOUNDED,
   },
   scene::{NodePaint, Scene},
   shadow::SizedShadow,
@@ -203,6 +203,7 @@ impl Emitter<'_> {
       ChunkWriter {
         emitter: self,
         surface,
+        chunks: &chunks,
         owners: &owners,
         current: Affine::IDENTITY,
         entries: Vec::new(),
@@ -283,7 +284,13 @@ impl Emitter<'_> {
   /// Paints shadows, backgrounds, and borders in CSS order.
   /// `background-clip` picks the shape a background fills, never when it
   /// paints: the border draws over the ring, as it does in Blink.
-  fn emit_decorations(&self, node: &RenderNode, frame: BoxFrame, surface: &mut Surface) {
+  fn emit_decorations(
+    &self,
+    node: &RenderNode,
+    frame: BoxFrame,
+    text_clip: Option<&TextClip>,
+    surface: &mut Surface,
+  ) {
     if !node.paints_own_box() {
       return;
     }
@@ -293,6 +300,22 @@ impl Emitter<'_> {
     painter.paint_normal_box_shadows(frame.origin, &mut self.device(surface, self.tagged));
     painter.background_color(frame.origin, &mut self.device(surface, self.tagged));
     self.emit_background_layers(node, &painter.background(), frame, surface);
+    if let Some(text_clip) = text_clip {
+      let painted = text_clip.paint_background(
+        frame.origin,
+        &mut TextDevice {
+          emitter: self,
+          device: self.device(surface, self.tagged),
+          built: None,
+          shadow: None,
+          through: None,
+        },
+      );
+
+      if let Err(error) = painted {
+        self.fail(error.into());
+      }
+    }
     painter.paint_inset_box_shadows(frame.origin, &mut self.device(surface, self.tagged));
     painter.paint_border(frame.origin, &mut self.device(surface, self.tagged));
   }
@@ -904,25 +927,18 @@ impl Emitter<'_> {
     font_style: &SizedFontStyle,
     surface: &mut Surface,
   ) {
-    let text_fills = self.text_clip_fills(node, frame, surface);
-    let fill = if text_fills.is_empty() {
-      GlyphFill::Text
-    } else {
-      GlyphFill::Background
-    };
     let lines = runs.lines(frame.layout, |baseline| {
       !self.window.disowns_line(frame.origin.y + baseline)
     });
     let mut device = TextDevice {
       emitter: self,
       device: self.device(surface, false),
-      built,
-      text_fills: text_fills.into(),
+      built: Some(built),
       shadow: None,
       through: None,
     };
 
-    lines.paint(&built.spans, font_style, fill, frame, &mut device);
+    lines.paint(&built.spans, font_style, frame, &mut device);
     self.emit_inline_boxes(node, runs, built, frame, InlinePass::Content, surface);
   }
 
@@ -1050,7 +1066,7 @@ impl Emitter<'_> {
     tagged: bool,
     surface: &mut Surface,
   ) {
-    self.emit_decorations(node, frame, surface);
+    self.emit_decorations(node, frame, None, surface);
     if tagged {
       self.start_tagged_node(node, surface);
     }
@@ -1208,22 +1224,6 @@ impl Emitter<'_> {
     )
   }
 
-  /// The fills painted through a `background-clip: text` box's glyphs.
-  fn text_clip_fills(
-    &self,
-    node: &RenderNode,
-    frame: BoxFrame,
-    surface: &mut Surface,
-  ) -> Vec<GlyphBackground> {
-    let background = BoxPainter::new(&node.context, frame.layout).background();
-
-    if !matches!(background.clip, BackgroundClipArea::Text) {
-      return Vec::new();
-    }
-
-    self.background_fills(node, &background, frame, surface)
-  }
-
   /// The paints `background`, `node`'s laid over `frame`, fills glyphs with: its colour, then
   /// each layer.
   fn background_fills(
@@ -1278,12 +1278,12 @@ impl Emitter<'_> {
     fills
   }
 
-  /// A run this page draws at `(x, y)`, or `None` when it has no glyphs, no
-  /// font, or its line at `line_y` belongs to another page.
+  /// A run this page draws at `(x, y)`, its text from `built` when given, or `None` when it has
+  /// no glyphs, no font, or its line at `line_y` belongs to another page.
   fn glyph_run<'r>(
     &self,
     run: &PositionedInlineRun,
-    built: &'r BuiltInlineLayout<'_>,
+    built: Option<&'r BuiltInlineLayout<'_>>,
     frame: BoxFrame,
     line_y: f32,
   ) -> Option<GlyphRun<'r>> {
@@ -1308,8 +1308,7 @@ impl Emitter<'_> {
       return None;
     }
     let text = built
-      .text
-      .get(shaped.text_range.clone())
+      .and_then(|built| built.text.get(shaped.text_range.clone()))
       .unwrap_or_default();
     let glyphs = run_glyphs(
       shaped,
@@ -1389,6 +1388,7 @@ struct Entered {
 struct ChunkWriter<'w, 'a, 's> {
   emitter: &'w mut Emitter<'a>,
   surface: &'w mut Surface<'s>,
+  chunks: &'w [PaintChunk<'a>],
   owners: &'w [Option<&'a NodePaint>],
   /// The transform the pushed surface states add to the scene's space.
   current: Affine,
@@ -1436,8 +1436,13 @@ impl<'a> ChunkWriter<'_, 'a, '_> {
     let decoration_frame = emitter.decoration_frame(&node.context.style, frame);
     let result = match chunk.part {
       ChunkPart::Decorations => {
-        emitter.emit_decorations(node, decoration_frame, surface);
-        Ok(())
+        let scene = emitter.scene;
+
+        TextClip::of(&scene.root, &scene.results, self.chunks, chunk.node)
+          .map(|text_clip| {
+            emitter.emit_decorations(node, decoration_frame, text_clip.as_ref(), surface);
+          })
+          .map_err(PdfError::from)
       }
       ChunkPart::Content => {
         emitter.emit_tagged_content(node, chunk.node, frame, InlinePass::Content, surface)
@@ -1997,9 +2002,8 @@ struct GlyphBackground {
 struct TextDevice<'e, 's, 'a> {
   emitter: &'e Emitter<'e>,
   device: SurfaceDevice<'s, 'a>,
-  built: &'e BuiltInlineLayout<'e>,
-  /// The background fills `background-clip: text` glyphs show, bottom first.
-  text_fills: Rc<[GlyphBackground]>,
+  /// The inline layout whose text the glyphs carry, unless they only draw a mask.
+  built: Option<&'e BuiltInlineLayout<'e>>,
   /// The shadow every draw becomes while one is open.
   shadow: Option<SizedShadow>,
   /// While a `background-clip: text` mask draws, the fills each of its shapes and glyphs shows
@@ -2223,7 +2227,6 @@ impl GlyphDevice for TextDevice<'_, '_, '_> {
   ) {
     let (fills, with_paint) = match (fill, &self.through) {
       (GlyphFill::Mask, Some(through)) => (through.clone(), false),
-      (GlyphFill::Background, _) => (self.text_fills.clone(), true),
       (GlyphFill::Text | GlyphFill::Mask, _) => (Rc::from([]), true),
     };
 

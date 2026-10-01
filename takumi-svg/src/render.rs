@@ -19,7 +19,7 @@ use takumi_core::{
   painter::{
     BackgroundClipArea, BoxBackground, BoxBorderPainter, BoxFrame, BoxPainter, FillShape,
     GlyphDevice, GlyphFill, LayerBounds, OverflowClip, OwnContent, PaintDevice, ShadowShape,
-    StripBackground, StrokeStyle, UNBOUNDED,
+    StripBackground, StrokeStyle, TextClip, UNBOUNDED,
   },
   path_data::{edges_path_data, path_data},
   resources::image::ImageSource,
@@ -39,9 +39,7 @@ use crate::{
   gradient::LayerEmitter,
   image::emit_image,
   scene_emit::SceneEmitter,
-  text::{
-    ClipTextBackground, emit_clip_text_run, emit_inline_content, emit_run_glyphs, run_stroke,
-  },
+  text::{emit_inline_content, emit_run_glyphs, run_stroke},
 };
 
 /// Inputs for [`render`], built with [`SvgOptions::builder`].
@@ -179,11 +177,20 @@ impl<'n> PlacedBox<'n> {
   }
 
   /// Emits the element's background (color then image layers) clipped to the
-  /// region selected by `background-clip`.
-  fn emit_background(&self, doc: &mut SvgDocument) -> io::Result<()> {
+  /// region selected by `background-clip`, or through `text_clip` when it has one.
+  fn emit_background(&self, text_clip: Option<&TextClip>, doc: &mut SvgDocument) -> io::Result<()> {
     let background = self.painter.background();
     if matches!(background.clip, BackgroundClipArea::Text) {
-      return Ok(());
+      let Some(text_clip) = text_clip else {
+        return Ok(());
+      };
+      let mut result = Ok(());
+
+      DocumentDevice::paint(doc, |device| {
+        result = text_clip.paint_background(self.frame.origin, device);
+      })?;
+
+      return result.map_err(io::Error::other);
     }
     // A blending layer mixes with the layers and color beneath it and nothing behind the box.
     let isolate = background
@@ -301,8 +308,12 @@ impl<'n> PlacedBox<'n> {
     })
   }
 
-  /// Emits the box's shadows, background and border.
-  pub(crate) fn emit_decorations(&self, doc: &mut SvgDocument) -> io::Result<()> {
+  /// Emits the box's shadows, background, through `text_clip` when it has one, and border.
+  pub(crate) fn emit_decorations(
+    &self,
+    text_clip: Option<&TextClip>,
+    doc: &mut SvgDocument,
+  ) -> io::Result<()> {
     if !self.node.paints_own_box() {
       return Ok(());
     }
@@ -310,7 +321,7 @@ impl<'n> PlacedBox<'n> {
     self.emit_box_shadows(doc)?;
     // `background-clip` picks the shape a background fills, never when it paints:
     // the border draws over the ring, as it does in Blink.
-    self.emit_background(doc)?;
+    self.emit_background(text_clip, doc)?;
     self.emit_inset_box_shadows(doc)?;
     DocumentDevice::paint(doc, |device| {
       self.painter.paint_border(self.frame.origin, device);
@@ -409,8 +420,6 @@ pub(crate) struct DocumentDevice<'d> {
   groups: Vec<GroupToken>,
   /// The shadow every draw becomes while one is open: its colour and offset.
   shadow: Option<(Color, Point<f32>)>,
-  /// The box whose background `background-clip: text` glyphs show.
-  text_background: Option<&'d RenderContext>,
   error: Option<io::Error>,
 }
 
@@ -420,7 +429,6 @@ impl<'d> DocumentDevice<'d> {
       doc,
       groups: Vec::new(),
       shadow: None,
-      text_background: None,
       error: None,
     }
   }
@@ -434,20 +442,6 @@ impl<'d> DocumentDevice<'d> {
   pub(crate) fn paint(doc: &'d mut SvgDocument, paint: impl FnOnce(&mut Self)) -> io::Result<()> {
     let mut device = Self::new(doc);
 
-    paint(&mut device);
-    device.finish()
-  }
-
-  /// [`DocumentDevice::paint`] for the text of the box `context` paints, whose background shows
-  /// through `background-clip: text` glyphs.
-  pub(crate) fn paint_text(
-    doc: &'d mut SvgDocument,
-    context: &'d RenderContext,
-    paint: impl FnOnce(&mut Self),
-  ) -> io::Result<()> {
-    let mut device = Self::new(doc);
-
-    device.text_background = Some(context);
     paint(&mut device);
     device.finish()
   }
@@ -697,19 +691,9 @@ impl GlyphDevice for DocumentDevice<'_> {
       return self.write(|doc| emit_run_glyphs(run, style, frame, Some(black), stroke, doc));
     }
 
-    let context = self
-      .text_background
-      .filter(|_| fill == GlyphFill::Background);
-    let background = context.map(|context| BoxPainter::new(context, frame.layout).background());
-    let fill = context
-      .zip(background.as_ref())
-      .map(|(context, background)| ClipTextBackground {
-        context,
-        background,
-        area: frame,
-      });
+    let stroke = run_stroke(&run.glyph_run, style);
 
-    self.emit_glyph_run(run, style, frame, fill.as_ref());
+    self.write(|doc| emit_run_glyphs(run, style, frame, None, stroke, doc));
   }
 
   fn fill_text_clip(
@@ -727,25 +711,6 @@ impl GlyphDevice for DocumentDevice<'_> {
 }
 
 impl DocumentDevice<'_> {
-  /// Emits `run`'s glyphs in the block at `frame`, over `fill` seen through them.
-  fn emit_glyph_run(
-    &mut self,
-    run: &PositionedInlineRun,
-    style: &SizedFontStyle,
-    frame: BoxFrame,
-    fill: Option<&ClipTextBackground<'_>>,
-  ) {
-    let stroke = run_stroke(&run.glyph_run, style);
-
-    self.write(|doc| {
-      if let Some(fill) = fill {
-        emit_clip_text_run(run, style, frame, fill, doc)?;
-      }
-
-      emit_run_glyphs(run, style, frame, None, stroke, doc)
-    });
-  }
-
   /// Emits what `content` draws in a group masked by the alpha of what `mask` draws.
   fn with_painted_mask(&mut self, mask: impl FnOnce(&mut Self), content: impl FnOnce(&mut Self)) {
     if self.error.is_some() {
@@ -794,7 +759,7 @@ pub(crate) fn emit_inline_box(
       let group_transform = placed.element_transform().unwrap_or(Affine::IDENTITY);
       let groups = EffectGroups::open(&placed, group_transform, doc)?;
 
-      placed.emit_decorations(doc)?;
+      placed.emit_decorations(None, doc)?;
 
       let content_clip = placed
         .overflow_clip_path_data()

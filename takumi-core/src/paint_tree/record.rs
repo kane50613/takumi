@@ -1,6 +1,6 @@
 //! A paint device that records what the shared painters draw as drawables.
 
-use std::{iter, mem};
+use std::mem;
 
 #[cfg(feature = "png")]
 use super::document::{ImageSource, Sampling};
@@ -15,13 +15,14 @@ use super::{
 use crate::resources::image::to_data_url;
 use crate::{
   font_style::SizedFontStyle,
-  geometry::{Point, Size},
+  geometry::{PathCommand, Point, Size},
   layout::{border::BorderProperties, inline::PositionedInlineRun},
   painter::{
     BoxBorderPainter, BoxFrame, FillShape, GlyphDevice, GlyphFill, LayerBounds, PaintDevice,
     PaintRole, ShadowShape, StripBackground, StrokeStyle,
   },
   path_data::path_data,
+  resources::glyph::ResolvedBitmapGlyph,
   shadow::SizedShadow,
   style::{Affine, Color, LineJoin},
 };
@@ -34,16 +35,6 @@ struct Clip {
   region: Shape,
   /// Whether it keeps the outside of `region`.
   outside: bool,
-}
-
-/// A background `background-clip: text` shows through glyphs, as Blink paints it into a layer that
-/// the text then masks.
-#[derive(Clone)]
-pub(super) struct TextBackground {
-  /// Where the layers paint, in the node's space.
-  pub(super) area: Shape,
-  /// The color and image layers, bottom first, each with its `background-blend-mode`.
-  pub(super) layers: Vec<(Paint, Option<String>)>,
 }
 
 /// The paint a mask's drawables take, which shows its content wherever they draw.
@@ -61,8 +52,6 @@ pub(super) struct Recorder {
   shadow: Option<SizedShadow>,
   /// Whether the recorder records a text node, which alone draws glyph runs.
   text_node: bool,
-  /// For a text node, the box's background `background-clip: text` shows through its glyphs.
-  text_background: Option<TextBackground>,
   /// Maps the node's space onto the page.
   transform: Affine,
 }
@@ -78,16 +67,13 @@ impl Recorder {
       layers: Vec::new(),
       shadow: None,
       text_node: false,
-      text_background: None,
     }
   }
 
-  /// A recorder for a text node, whose glyphs show `background` under `background-clip: text`, its
-  /// space mapped onto the page by `transform`.
-  pub(super) fn text(background: Option<TextBackground>, transform: Affine) -> Self {
+  /// A recorder for a text node, its space mapped onto the page by `transform`.
+  pub(super) fn text(transform: Affine) -> Self {
     Self {
       text_node: true,
-      text_background: background,
       ..Self::new(transform)
     }
   }
@@ -409,11 +395,8 @@ impl GlyphDevice for Recorder {
     frame: BoxFrame,
   ) {
     match fill {
-      GlyphFill::Text => self.record_glyph_run(run, style, None, frame),
-      GlyphFill::Background => {
-        self.record_glyph_run(run, style, self.text_background.clone(), frame);
-      }
-      GlyphFill::Mask => self.record_glyph_paint(run, style, frame, true),
+      GlyphFill::Text => self.record_glyph_run(run, style, frame),
+      GlyphFill::Mask => self.record_glyph_mask(run, style, frame),
     }
   }
 }
@@ -430,10 +413,7 @@ impl Recorder {
   /// Records what `content` draws as a [`Drawable::Masked`] showing only where `mask` draws.
   fn with_painted_mask(&mut self, mask: impl FnOnce(&mut Self), content: impl FnOnce(&mut Self)) {
     let role = self.role;
-    let mut recorder = Recorder {
-      text_node: self.text_node,
-      ..Recorder::new(self.transform)
-    };
+    let mut recorder = Recorder::new(self.transform);
 
     mask(&mut recorder);
 
@@ -450,12 +430,11 @@ impl Recorder {
     });
   }
 
-  /// Records `run`'s glyphs, or their shadow while one is open, over `background`.
+  /// Records `run`'s glyphs, or their shadow while one is open.
   fn record_glyph_run(
     &mut self,
     run: &PositionedInlineRun,
     style: &SizedFontStyle,
-    background: Option<TextBackground>,
     frame: BoxFrame,
   ) {
     if !self.text_node {
@@ -493,36 +472,23 @@ impl Recorder {
       return;
     }
 
-    if let Some(background) = background {
-      self.record_text_background(run, style, background);
-    }
-    self.record_glyph_paint(run, style, frame, false);
+    self.record_glyph_paint(run, style, frame);
   }
 
-  /// Records `run`'s glyphs in their own paint, or all in opaque black as a mask does.
+  /// Records `run`'s glyphs in their own paint.
   fn record_glyph_paint(
     &mut self,
     run: &PositionedInlineRun,
     style: &SizedFontStyle,
     frame: BoxFrame,
-    mask: bool,
   ) {
-    if !self.text_node {
-      return;
-    }
-
     let index = run.index;
     let brush = &run.glyph_run.brush;
     let join = style.parent.stroke_linejoin;
     let origin = PaintPoint { x: 0.0, y: 0.0 };
-    let ink = |color: Option<[u8; 4]>| if mask { Some(MASK_INK) } else { color };
-    let text_stroke = if mask {
-      (brush.stroke_width > 0.0).then(|| (Stroke::outline(brush.stroke_width, join), MASK_INK))
-    } else {
-      self.text_stroke(run, style)
-    };
+    let text_stroke = self.text_stroke(run, style);
 
-    if let Some(color) = ink(self.visible(brush.color)) {
+    if let Some(color) = self.visible(brush.color) {
       self.glyphs(self.role, index, Paint::Color { color }, origin, 0.0, None);
       if let Some(embolden) = run.embolden(frame.layout) {
         self.glyphs(
@@ -541,7 +507,7 @@ impl Recorder {
         GlyphPaint::Outline { .. } => {}
         GlyphPaint::Layers(layers) => {
           for (color, paths) in layers {
-            let Some(color) = self.visible(color).and_then(|color| ink(Some(color))) else {
+            let Some(color) = self.visible(color) else {
               continue;
             };
 
@@ -557,32 +523,7 @@ impl Recorder {
             });
           }
         }
-        #[cfg(feature = "png")]
-        GlyphPaint::Bitmap(bitmap) => {
-          let Some(png) = bitmap.image.encode_png() else {
-            continue;
-          };
-          let [width, height] = [bitmap.image.width(), bitmap.image.height()].map(|n| n as f32);
-          let placed = frame.place(glyph.transform)
-            * Affine::translation(bitmap.placement.left as f32, -(bitmap.placement.top as f32))
-            * Affine::scale(bitmap.scale_x, bitmap.scale_y);
-          let rect = PaintRect::bounding(width, height, placed);
-
-          self.drawables.push(Drawable::Image {
-            role: self.role,
-            image: ImageSource {
-              src: to_data_url("image/png", &png),
-              width,
-              height,
-            },
-            rect,
-            clip: Shape::Rect { rect },
-            sampling: Sampling::Smooth,
-          });
-        }
-        // Approximate: without an encoder for the bitmap, it draws nothing.
-        #[cfg(not(feature = "png"))]
-        GlyphPaint::Bitmap(_) => {}
+        GlyphPaint::Bitmap(bitmap) => self.record_bitmap(bitmap, frame.place(glyph.transform)),
       }
     }
 
@@ -598,51 +539,92 @@ impl Recorder {
     }
   }
 
-  /// Records `background` seen through `run`'s glyphs and their stroke.
-  fn record_text_background(
+  /// Records `run`'s glyphs, their stroke and faux bold in opaque black, as outlines any node can
+  /// hold, for a mask.
+  fn record_glyph_mask(
     &mut self,
     run: &PositionedInlineRun,
     style: &SizedFontStyle,
-    background: TextBackground,
+    frame: BoxFrame,
   ) {
-    if !self.text_node || background.layers.is_empty() {
-      return;
+    let paint = Paint::Color { color: MASK_INK };
+    let join = style.parent.stroke_linejoin;
+    let stroke_width = run.glyph_run.brush.stroke_width;
+
+    for glyph in run.placed_glyphs(frame.layout) {
+      let placed = frame.place(glyph.transform);
+      let shape = |paths: &[PathCommand]| Shape::Path {
+        d: path_data(paths, placed),
+        fill_rule: FillRuleName::Nonzero,
+      };
+
+      match glyph.paint {
+        GlyphPaint::Outline { paths, embolden } => {
+          self.drawables.push(Drawable::Fill {
+            role: self.role,
+            shape: shape(paths),
+            paint: paint.clone(),
+            blend_mode: None,
+            clips: Vec::new(),
+          });
+          for width in [Some(stroke_width), embolden].into_iter().flatten() {
+            if width > 0.0 {
+              self.drawables.push(Drawable::Stroke {
+                role: self.role,
+                shape: shape(paths),
+                stroke: Stroke::outline(width, join),
+                paint: paint.clone(),
+                clips: Vec::new(),
+              });
+            }
+          }
+        }
+        GlyphPaint::Layers(layers) => {
+          for (color, paths) in layers {
+            if self.visible(color).is_some() {
+              self.drawables.push(Drawable::Fill {
+                role: self.role,
+                shape: shape(paths),
+                paint: paint.clone(),
+                blend_mode: None,
+                clips: Vec::new(),
+              });
+            }
+          }
+        }
+        GlyphPaint::Bitmap(bitmap) => self.record_bitmap(bitmap, placed),
+      }
     }
+  }
 
-    let text_stroke = self.text_stroke(run, style);
-    let glyphs = |stroke| Drawable::Glyphs {
-      role: Role::Background,
-      run: run.index,
-      paint: Paint::Color { color: MASK_INK },
-      offset: PaintPoint { x: 0.0, y: 0.0 },
-      blur: 0.0,
-      stroke,
+  /// Records a bitmap glyph placed by `transform`.
+  #[cfg(feature = "png")]
+  fn record_bitmap(&mut self, bitmap: &ResolvedBitmapGlyph, transform: Affine) {
+    let Some(png) = bitmap.image.encode_png() else {
+      return;
     };
-    let mask = iter::once(glyphs(None))
-      .chain(
-        text_stroke
-          .as_ref()
-          .map(|(stroke, _)| glyphs(Some(stroke.clone()))),
-      )
-      .collect();
-    let content = background
-      .layers
-      .into_iter()
-      .map(|(paint, blend_mode)| Drawable::Fill {
-        role: Role::Background,
-        shape: background.area.clone(),
-        paint,
-        blend_mode,
-        clips: Vec::new(),
-      })
-      .collect();
+    let [width, height] = [bitmap.image.width(), bitmap.image.height()].map(|n| n as f32);
+    let placed = transform
+      * Affine::translation(bitmap.placement.left as f32, -(bitmap.placement.top as f32))
+      * Affine::scale(bitmap.scale_x, bitmap.scale_y);
+    let rect = PaintRect::bounding(width, height, placed);
 
-    self.drawables.push(Drawable::Masked {
-      role: Role::Background,
-      mask,
-      content,
+    self.drawables.push(Drawable::Image {
+      role: self.role,
+      image: ImageSource {
+        src: to_data_url("image/png", &png),
+        width,
+        height,
+      },
+      rect,
+      clip: Shape::Rect { rect },
+      sampling: Sampling::Smooth,
     });
   }
+
+  /// Approximate: without an encoder for the bitmap, it draws nothing.
+  #[cfg(not(feature = "png"))]
+  fn record_bitmap(&mut self, _bitmap: &ResolvedBitmapGlyph, _transform: Affine) {}
 
   /// The run's `-webkit-text-stroke` and its colour, when it shows.
   fn text_stroke(

@@ -4,8 +4,7 @@ use takumi_core::{
 };
 
 use crate::{
-  BorderProperties, Canvas, CanvasDevice, ClipImage, DeferredOutline, RenderContext, Result,
-  SizedFontStyle, collect_background_layers, draw_box_shell,
+  Canvas, CanvasDevice, DeferredOutline, RenderContext, Result, SizedFontStyle, draw_box_shell,
   layout::{
     inline::{
       BuiltInlineLayout, InlineBoxItem, InlineLayoutMode, InlineLayoutRequest, InlinePass,
@@ -14,10 +13,9 @@ use crate::{
     tree::RenderNode,
   },
   node_paint::draw_image_node_content,
-  painter::{BoxFrame, BoxPainter, GlyphFill, OwnContent},
-  rasterize_layers,
+  painter::{BoxFrame, OwnContent},
   stacking_context::paint_scene,
-  style::{Affine, BackgroundClip},
+  style::Affine,
 };
 
 pub(crate) fn draw_inline_box(
@@ -45,7 +43,7 @@ pub(crate) fn draw_inline_box(
       let mut context = node.context.clone();
       context.transform = transform * Affine::translation(origin.x, origin.y);
 
-      draw_box_shell(&context, canvas, layout)?;
+      draw_box_shell(&context, canvas, layout, None)?;
       draw_own_content(node, &context, canvas, layout, InlinePass::Content)?;
       if let Some(outline) = DeferredOutline::of(&context, layout) {
         outline.paint(canvas)?;
@@ -108,36 +106,11 @@ pub(crate) fn draw_inline_layout(
   font_style: &SizedFontStyle,
 ) -> Result<Vec<VisualInlineBox>> {
   let resolved = built.resolve_runs(context, layout)?;
-  let text_background = if context.style.background_clip == BackgroundClip::Text {
-    let background = BoxPainter::new(context, layout).background();
-    let offset = background.offset;
-    let tile = rasterize_layers(
-      collect_background_layers(&background, context)?,
-      background.size.map(|x| x as u32),
-      context,
-      BorderProperties::default(),
-      Affine::translation(-offset.x, -offset.y),
-    )?;
-
-    tile.map(|tile| (tile, offset))
-  } else {
-    None
-  };
-  let fill = if text_background.is_some() {
-    GlyphFill::Background
-  } else {
-    GlyphFill::Text
-  };
   let mut device = CanvasDevice::of(canvas, context);
 
-  device.text_background = text_background.as_ref().map(|(tile, offset)| ClipImage {
-    source: tile.into(),
-    offset: *offset,
-  });
   resolved.paint(
     &built.spans,
     font_style,
-    fill,
     BoxFrame::new(layout, Point::ZERO),
     &mut device,
   );

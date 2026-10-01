@@ -10,6 +10,7 @@ mod replaced;
 mod shadow;
 mod snapped_box;
 mod text;
+mod text_clip;
 
 pub use self::{
   background::{BackgroundClipArea, BoxBackground},
@@ -20,6 +21,7 @@ pub use self::{
   shadow::ShadowShape,
   snapped_box::SnappedBox,
   text::{GlyphDevice, GlyphFill, InlineLines, StripBackground},
+  text_clip::TextClip,
 };
 
 use crate::{

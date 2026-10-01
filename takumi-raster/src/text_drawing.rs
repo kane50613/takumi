@@ -6,14 +6,13 @@ use tiny_skia::{FilterQuality, Pixmap, PixmapPaint};
 use xxhash_rust::xxh3::Xxh3;
 
 use crate::{
-  BorderProperties, Canvas, CanvasViewport, Command, MaskCompositeColor, MaskSamplingOptions,
-  PaintSource, Placement, Result, SamplingOptions, SizedFontStyle, Stroke, checked_area,
-  composite_mask_source_to_pixmap, cull_bounds, pixmap_ref_from_buffer, render_mask,
+  Canvas, CanvasViewport, Command, Placement, Result, SamplingOptions, SizedFontStyle, Stroke,
+  checked_area, cull_bounds, pixmap_ref_from_buffer, render_mask,
   resources::{
     glyph::{ResolvedBitmapGlyph, ResolvedColorLayer, ResolvedGlyph},
     glyph_cache::glyph_mask,
   },
-  style::{Affine, BlendMode, Color, ImageScalingAlgorithm},
+  style::{Affine, BlendMode, Color},
 };
 
 /// Identifies a mask by everything that changes its pixels: the outline, the
@@ -131,8 +130,6 @@ struct GlyphPaintCtx<'a, 'b> {
   /// The run's own `-webkit-text-stroke`, which a span may set for itself.
   stroke: (f32, Color),
   transform: Affine,
-  /// Maps canvas pixels into the `background-clip: text` image.
-  canvas_to_source: Affine,
   paths: &'b [Command],
   glyph_signature: u64,
 }
@@ -176,221 +173,6 @@ impl GlyphPaintCtx<'_, '_> {
       color,
     );
   }
-
-  fn composite_text_stroke(&mut self, clip_image: PaintSource<'_>) {
-    if self.stroke.0 <= 0.0 {
-      return;
-    }
-
-    self.composite_stroke(
-      self.text_stroke(),
-      MaskCompositeColor::color_over_source(self.stroke.1),
-      clip_image,
-    );
-  }
-
-  fn composite_embolden(&mut self, embolden: f32, clip_image: PaintSource<'_>) {
-    if embolden <= 0.0 {
-      return;
-    }
-
-    self.composite_stroke(
-      self.stroke_of(embolden),
-      MaskCompositeColor::SourceOnly,
-      clip_image,
-    );
-  }
-
-  /// Composites `clip_image` through `stroke` traced around the glyph.
-  fn composite_stroke(
-    &mut self,
-    stroke: Stroke,
-    color_mode: MaskCompositeColor,
-    clip_image: PaintSource<'_>,
-  ) {
-    let sampling = self.clip_sampling();
-    let (mask, placement) = render_mask(
-      self.paths,
-      Some(self.transform),
-      Some(stroke.into()),
-      Some(self.canvas.viewport()),
-    );
-
-    self.composite_clip_image(&mask, placement, clip_image, color_mode, sampling);
-  }
-
-  /// Composites `clip_image` through `mask`, only where the image covers. Blink paints a
-  /// `background-clip: text` background inside its box and masks that with the text, so text
-  /// reaching past the box shows nothing there.
-  fn composite_clip_image(
-    &mut self,
-    mask: &[u8],
-    placement: Placement,
-    clip_image: PaintSource<'_>,
-    color_mode: MaskCompositeColor,
-    sampling: MaskSamplingOptions,
-  ) {
-    let mask = clip_mask_to_image(mask, placement, sampling.canvas_to_source, clip_image);
-
-    self.canvas.composite_mask_source(
-      &mask,
-      placement,
-      clip_image,
-      color_mode,
-      sampling,
-      BlendMode::Normal,
-    );
-  }
-
-  /// Samples the `background-clip: text` image under the glyph.
-  fn clip_sampling(&self) -> MaskSamplingOptions {
-    MaskSamplingOptions {
-      canvas_to_source: self.canvas_to_source,
-      sample_bias: Point { x: 0.5, y: 0.5 },
-      algorithm: self.style.parent.image_rendering,
-    }
-  }
-}
-
-/// `mask` placed at `placement`, cleared wherever a pixel's centre maps through `canvas_to_source`
-/// outside `image`.
-fn clip_mask_to_image(
-  mask: &[u8],
-  placement: Placement,
-  canvas_to_source: Affine,
-  image: PaintSource<'_>,
-) -> Vec<u8> {
-  let (width, height) = (image.width() as f32, image.height() as f32);
-  let mut clipped = mask.to_vec();
-
-  for (index, alpha) in clipped.iter_mut().enumerate() {
-    let x = placement.left as f32 + (index as u32 % placement.width) as f32 + 0.5;
-    let y = placement.top as f32 + (index as u32 / placement.width) as f32 + 0.5;
-    let (source_x, source_y) = canvas_to_source.transform_point(x, y);
-
-    if !(0.0..width).contains(&source_x) || !(0.0..height).contains(&source_y) {
-      *alpha = 0;
-    }
-  }
-
-  clipped
-}
-
-/// Draws `glyph` filled with `clip_image`, which `canvas_to_source` maps canvas pixels into. The
-/// image stays put while `text-fit` scales the glyph, as Blink scales only the text mask.
-#[allow(clippy::too_many_arguments)]
-pub(crate) fn draw_glyph_clip_image(
-  glyph: &ResolvedGlyph,
-  canvas: &mut Canvas,
-  style: &SizedFontStyle,
-  stroke: (f32, Color),
-  mut transform: Affine,
-  inline_offset: Point<f32>,
-  clip_image: PaintSource<'_>,
-  canvas_to_source: Affine,
-) -> Result<()> {
-  transform *= Affine::translation(inline_offset.x, inline_offset.y);
-
-  match glyph {
-    ResolvedGlyph::Bitmap(bitmap) => {
-      transform *= Affine::translation(bitmap.placement.left as f32, -bitmap.placement.top as f32);
-
-      let Some(mask_capacity) = checked_area(bitmap.placement.width, bitmap.placement.height, 1)
-      else {
-        return Ok(());
-      };
-      let mut mask = vec![0; mask_capacity];
-      bitmap.write_alpha_mask(&mut mask);
-
-      let Some(mut bottom) = Pixmap::new(bitmap.placement.width, bitmap.placement.height) else {
-        return Ok(());
-      };
-      let mut bottom_pixmap = bottom.as_mut();
-      let placement = Placement {
-        left: 0,
-        top: 0,
-        width: bitmap.placement.width,
-        height: bitmap.placement.height,
-      };
-      let bitmap_to_source = canvas_to_source * transform;
-
-      composite_mask_source_to_pixmap(
-        &mut bottom_pixmap,
-        &clip_mask_to_image(&mask, placement, bitmap_to_source, clip_image),
-        clip_image,
-        placement,
-        MaskSamplingOptions {
-          canvas_to_source: bitmap_to_source,
-          sample_bias: Point { x: 0.5, y: 0.5 },
-          algorithm: ImageScalingAlgorithm::Pixelated,
-        },
-        BlendMode::Normal,
-        None,
-      );
-
-      canvas.overlay_sampled_pixmap(
-        bottom.as_ref(),
-        Size {
-          width: bottom.width(),
-          height: bottom.height(),
-        },
-        BorderProperties::default(),
-        transform,
-        SamplingOptions {
-          logical_to_source: Affine::IDENTITY,
-          algorithm: ImageScalingAlgorithm::Auto,
-        },
-        BlendMode::Normal,
-      );
-    }
-    ResolvedGlyph::Outline(outline) => {
-      let mut ctx = GlyphPaintCtx {
-        canvas,
-        style,
-        stroke,
-        transform,
-        canvas_to_source,
-        paths: outline.paths(),
-        glyph_signature: outline.cache_signature(),
-      };
-      let sampling = ctx.clip_sampling();
-
-      if let Some((bucket_x, int_x, int_y)) = glyph_cache_bucket_and_offset(transform) {
-        let (mask, cached_placement) = cached_mask(ctx.glyph_signature, bucket_x, ctx.paths, None);
-
-        ctx.composite_clip_image(
-          &mask,
-          cached_placement.translate(int_x, int_y),
-          clip_image,
-          MaskCompositeColor::SourceOnly,
-          sampling,
-        );
-      } else {
-        let (mask, placement) = render_mask(
-          ctx.paths,
-          Some(transform),
-          None,
-          Some(ctx.canvas.viewport()),
-        );
-
-        ctx.composite_clip_image(
-          &mask,
-          placement,
-          clip_image,
-          MaskCompositeColor::SourceOnly,
-          sampling,
-        );
-      }
-
-      if let Some(embolden) = outline.embolden() {
-        ctx.composite_embolden(embolden, clip_image);
-      }
-
-      ctx.composite_text_stroke(clip_image);
-    }
-  }
-
-  Ok(())
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -448,7 +230,6 @@ pub(crate) fn draw_glyph(
         style,
         stroke,
         transform,
-        canvas_to_source: Affine::IDENTITY,
         paths: outline.paths(),
         glyph_signature: outline.cache_signature(),
       };

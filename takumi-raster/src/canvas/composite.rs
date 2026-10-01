@@ -7,9 +7,7 @@ use super::{
   MaskSamplingOptions, MaskView, PaintSource, SamplingFootprint,
   blit::{OverlayBounds, apply_mask_row},
   mask::MaskRow,
-  paint_source::{
-    MaskCompositeColor, ResolvedSource, ScaledRows, apply_mask_color_mode, sample_paint_source,
-  },
+  paint_source::{ResolvedSource, ScaledRows, sample_paint_source},
   whole_pixel_translation,
 };
 use crate::{
@@ -67,7 +65,6 @@ impl DestRegion {
 pub(super) struct Options<'a> {
   pub placement: Placement,
   pub sampling: MaskSamplingOptions,
-  pub color_mode: MaskCompositeColor,
   pub mode: BlendMode,
   pub combined_mask: Option<MaskView<'a>>,
 }
@@ -111,7 +108,7 @@ pub(super) fn source(
       pixmap,
       mask,
       options.placement,
-      apply_mask_color_mode(color, options.color_mode),
+      color,
       options.mode,
       options.combined_mask,
     );
@@ -125,8 +122,7 @@ pub(super) fn source(
     return;
   };
 
-  if options.color_mode == MaskCompositeColor::SourceOnly
-    && options.mode == BlendMode::Normal
+  if options.mode == BlendMode::Normal
     && try_translation_blit(pixmap, mask, source, &options, region)
   {
     return;
@@ -323,7 +319,6 @@ fn source_general(
     resolved,
     transform: options.sampling.canvas_to_source,
     algorithm: options.sampling.algorithm,
-    color_mode: options.color_mode,
     mode: options.mode,
     combined_mask: options.combined_mask,
   }
@@ -346,7 +341,6 @@ pub(super) struct PixelSampler<'a> {
   pub resolved: ResolvedSource<'a>,
   pub transform: Affine,
   pub algorithm: ImageScalingAlgorithm,
-  pub color_mode: MaskCompositeColor,
   pub mode: BlendMode,
   pub combined_mask: Option<MaskView<'a>>,
 }
@@ -393,7 +387,6 @@ impl PixelSampler<'_> {
             mask_alpha,
             combined_row,
             i,
-            self.color_mode,
             self.mode,
           );
         }
@@ -432,15 +425,7 @@ fn source_scaled_rows(
         continue;
       }
 
-      blend_sampled(
-        dst,
-        src,
-        mask_alpha,
-        combined_row,
-        i,
-        options.color_mode,
-        options.mode,
-      );
+      blend_sampled(dst, src, mask_alpha, combined_row, i, options.mode);
     }
   }
 }
@@ -452,10 +437,9 @@ fn blend_sampled(
   mask_alpha: u8,
   combined_row: Option<MaskRow<'_>>,
   offset: usize,
-  color_mode: MaskCompositeColor,
   mode: BlendMode,
 ) {
-  let src = scale_premultiplied_pixel(apply_mask_color_mode(src, color_mode), mask_alpha);
+  let src = scale_premultiplied_pixel(src, mask_alpha);
 
   if src[3] == 0 {
     return;
@@ -493,12 +477,7 @@ mod scaled_rows_tests {
     source
   }
 
-  fn render(
-    scaled: bool,
-    transform: Affine,
-    mode: BlendMode,
-    color_mode: MaskCompositeColor,
-  ) -> Vec<u8> {
+  fn render(scaled: bool, transform: Affine, mode: BlendMode) -> Vec<u8> {
     let source = source();
     let mut canvas = Pixmap::new(40, 30).unwrap();
 
@@ -528,7 +507,6 @@ mod scaled_rows_tests {
         sample_bias: Point { x: 0.5, y: 0.5 },
         algorithm: ImageScalingAlgorithm::Auto,
       },
-      color_mode,
       mode,
       combined_mask: None,
     };
@@ -554,7 +532,6 @@ mod scaled_rows_tests {
         resolved: PaintSource::Pixmap(source.as_ref()).resolve(),
         transform,
         algorithm: options.sampling.algorithm,
-        color_mode,
         mode,
         combined_mask: None,
       }
@@ -591,16 +568,11 @@ mod scaled_rows_tests {
       };
 
       for mode in [BlendMode::Normal, BlendMode::Multiply] {
-        for color_mode in [
-          MaskCompositeColor::SourceOnly,
-          MaskCompositeColor::ColorOverSource([0, 40, 0, 40]),
-        ] {
-          assert_eq!(
-            render(true, transform, mode, color_mode),
-            render(false, transform, mode, color_mode),
-            "a={a} d={d} x={x} y={y} mode={mode:?} color_mode={color_mode:?}"
-          );
-        }
+        assert_eq!(
+          render(true, transform, mode),
+          render(false, transform, mode),
+          "a={a} d={d} x={x} y={y} mode={mode:?}"
+        );
       }
     }
   }

@@ -345,6 +345,29 @@ fn inline_span_background_clip_text_decoration() {
   });
 }
 
+/// A block with `background-clip: text` shows its background through the text of every box inside
+/// it, under a child's own background, and before its text shadows.
+#[test]
+fn background_clip_text_descendants() {
+  run_pdf_fixture("background-clip-text-descendants", |fonts| {
+    let source = r##"<div style="width: 100%; height: 100%; padding: 12px; background-color: #ffffff; font-size: 28px; font-weight: 700; line-height: 1.4">
+      <div style="background-image: linear-gradient(90deg, #2563eb, #db2777); background-clip: text; color: transparent; text-shadow: 2px 2px 0 rgba(15, 23, 42, 0.35)">
+        <div>Nested block</div>
+        <div><span style="display: inline-block; padding: 0 6px">Inline block</span> <span style="text-decoration: underline 3px">line</span></div>
+        <div style="background-color: #fee2e2">Own background</div>
+      </div>
+    </div>"##;
+
+    PdfOptions::builder()
+      .node(
+        from_html(source, FromHtmlOptions::default()).expect("parse clip-text descendants fixture"),
+      )
+      .viewport(Viewport::new((420, 200)))
+      .fonts(fonts)
+      .build()
+  });
+}
+
 /// An inline `<span>` with a border strokes it on every line, without the sides the line wraps at.
 #[test]
 fn inline_span_border() {
