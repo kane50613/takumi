@@ -28,7 +28,8 @@ pub(crate) struct Window {
   /// Text-line ownership window `[this page's cut, next page's cut)`. Wider
   /// than `y` at the edges (first page reaches up to −∞, last to +∞) and
   /// narrower at the bottom when a cut lands above the page's full height, so
-  /// every line is emitted on exactly one page.
+  /// every line is emitted on exactly one page, save the items taller than a
+  /// page, which every page they cross shows.
   pub(crate) lines: Option<(f32, f32)>,
 }
 
@@ -44,6 +45,15 @@ impl Window {
           .x
           .is_some_and(|(x0, x1)| b.right as f32 <= x0 || b.left as f32 >= x1)
     })
+  }
+
+  /// Whether this page draws a line's item spanning `top` to `bottom` on the line at `baseline`:
+  /// the page owning the line does, and so does every page an item taller than the page crosses,
+  /// as Blink spreads monolithic overflow over the pages after it.
+  pub(crate) fn shows_line_item(&self, baseline: f32, top: f32, bottom: f32) -> bool {
+    let overflows = self.y.is_some_and(|(y0, y1)| bottom - top > y1 - y0);
+
+    !self.disowns_line(baseline) || (overflows && !self.excludes(top, bottom))
   }
 
   /// Whether a text line at `baseline` belongs to another page. Ownership is

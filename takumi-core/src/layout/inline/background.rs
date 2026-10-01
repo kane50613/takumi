@@ -106,10 +106,6 @@ struct FragmentBounds {
 /// Accumulates decorated-span coverage per line and resolves it into
 /// [`InlineBackgroundFragment`]s, mirroring Blink's per-line inline box
 /// fragments (`InlineBoxFragmentPainterBase::PaintBackgroundBorderShadow`).
-///
-/// Naive next to Blink; where it drifts:
-/// - a line taller than a page paints its background only on the page owning
-///   the line, while Blink spills monolithic overflow onto the next page
 pub(super) struct DecorationAccumulator<'c> {
   /// Each span's position among `decorations`, by the span's id.
   ids: HashMap<usize, usize>,

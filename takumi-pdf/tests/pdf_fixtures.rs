@@ -2682,6 +2682,38 @@ fn paged_transform_atoms() {
   });
 }
 
+/// A line taller than a page moves to the next page, as content precedes it, then runs on over the
+/// page after it, where its text and the lines after it follow.
+#[test]
+fn paged_monolithic_overflow() {
+  let pdf = run_pdf_fixture("paged-monolithic-overflow", |fonts| {
+    let source = r##"<div style="font-size: 16px; line-height: 24px; color: #141414">
+      <div>Line 1 before the tall line</div>
+      <div>Line 2 before the tall line</div>
+      <div>Line 3 before the tall line</div>
+      <div><span style="display: inline-block; width: 120px; height: 360px; background-image: linear-gradient(#2563eb, #db2777)"></span> tall line text</div>
+      <div>Line A after the tall line</div>
+      <div>Line B after the tall line</div>
+    </div>"##;
+
+    PdfOptions::builder()
+      .node(from_html(source, FromHtmlOptions::default()).expect("parse overflow fixture"))
+      .page(PageOptions {
+        width: 400.0,
+        height: 300.0,
+        margin: PageMargins::uniform(24.0),
+      })
+      .fonts(fonts)
+      .build()
+  });
+
+  assert_eq!(
+    page_count(&pdf),
+    3,
+    "the tall line starts page 2 and runs on into page 3"
+  );
+}
+
 /// Header and footer bands together, counters in both, a forced break, and a
 /// keep-together block taller than the window (hard cut).
 #[test]

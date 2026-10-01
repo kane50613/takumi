@@ -927,8 +927,11 @@ impl Emitter<'_> {
     font_style: &SizedFontStyle,
     surface: &mut Surface,
   ) {
-    let lines = runs.lines(frame.layout, |baseline| {
-      !self.window.disowns_line(frame.origin.y + baseline)
+    let y = frame.origin.y;
+    let lines = runs.lines(frame.layout, |item| {
+      self
+        .window
+        .shows_line_item(y + item.baseline, y + item.top, y + item.bottom)
     });
     let mut device = TextDevice {
       emitter: self,
@@ -976,8 +979,12 @@ impl Emitter<'_> {
       // An in-flow box belongs to the page that owns its line, like the glyph
       // runs beside it.
       if positioned.line_baseline.is_some_and(|baseline| {
-        let absolute = y + layout.content_box_offset().y + baseline;
-        self.window.disowns_line(absolute)
+        let content_y = y + layout.content_box_offset().y;
+        let top = content_y + positioned.y;
+
+        !self
+          .window
+          .shows_line_item(content_y + baseline, top, top + positioned.height)
       }) {
         continue;
       }
