@@ -45,65 +45,69 @@ pub struct InlineSubtree {
   paint_offset: Point<f32>,
 }
 
-/// Resolves what `positioned` paints, and where.
-///
-/// The returned point is the box's origin relative to the container's
-/// border-box origin. A box with zero opacity resolves to nothing.
+/// Resolves what `positioned` paints, and where, or nothing for a box at zero opacity.
 pub fn resolve_inline_box<'n>(
   positioned: &VisualInlineBox,
   item: &InlineBoxItem<'n>,
   container: ComputedLayout,
 ) -> Option<(Point<f32>, InlineBoxPaint<'n>)> {
-  let node = item.render_node;
+  (item.render_node.context.style.opacity.0 != 0.0)
+    .then(|| InlineBoxPaint::of(positioned, item, container))
+}
 
-  if node.context.style.opacity.0 == 0.0 {
-    return None;
-  }
+impl<'n> InlineBoxPaint<'n> {
+  /// What `positioned` holds, and its origin relative to the container's border-box origin.
+  pub fn of(
+    positioned: &VisualInlineBox,
+    item: &InlineBoxItem<'n>,
+    container: ComputedLayout,
+  ) -> (Point<f32>, Self) {
+    let node = item.render_node;
+    let content = container.content_box_offset();
+    let origin = Point {
+      x: content.x + positioned.x,
+      y: content.y + positioned.y,
+    };
 
-  let content = container.content_box_offset();
-  let origin = Point {
-    x: content.x + positioned.x,
-    y: content.y + positioned.y,
-  };
-
-  if !node.participates_as_inline_box() {
-    return Some((
-      origin,
-      InlineBoxPaint::Replaced {
-        node,
-        layout: ComputedLayout {
-          location: origin,
-          ..ComputedLayout::from(item)
+    if !node.participates_as_inline_box() {
+      return (
+        origin,
+        Self::Replaced {
+          node,
+          layout: ComputedLayout {
+            location: origin,
+            ..ComputedLayout::from(item)
+          },
         },
-      },
-    ));
-  }
+      );
+    }
 
-  let size = Size {
-    width: (positioned.width - item.margin.horizontal()).max(0.0),
-    height: (positioned.height - item.margin.vertical()).max(0.0),
-  };
-  let root = node.clone();
-  let results = LayoutResults::compute(&root, size.map(AvailableSpace::Definite));
+    let size = Size {
+      width: (positioned.width - item.margin.horizontal()).max(0.0),
+      height: (positioned.height - item.margin.vertical()).max(0.0),
+    };
+    let root = node.clone();
+    let results = LayoutResults::compute(&root, size.map(AvailableSpace::Definite));
 
-  Some((
-    origin,
-    InlineBoxPaint::Container(Box::new(InlineSubtree {
-      root,
-      results,
-      size,
-      margin_offset: Point {
-        x: item.margin.left,
-        y: item.margin.top,
-      },
-      paint_offset: node.context.paint_offset
-        + origin
-        + Point {
+    (
+      origin,
+      Self::Container(Box::new(InlineSubtree {
+        root,
+        results,
+        size,
+        margin_offset: Point {
           x: item.margin.left,
           y: item.margin.top,
         },
-    })),
-  ))
+        paint_offset: node.context.paint_offset
+          + origin
+          + Point {
+            x: item.margin.left,
+            y: item.margin.top,
+          },
+      })),
+    )
+  }
 }
 
 impl InlineSubtree {
