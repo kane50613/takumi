@@ -17,3 +17,4 @@ packages:
 - Text under `opacity`, `filter` or a blend mode keeps the part of a decoration line that reaches past its box.
 - An underline sits against the baseline and font of the element that sets it, and a line-through takes its height from that element's font.
 - A `text-decoration` reaches the text of every in-flow box inside the element that sets it, and nested decorations all draw. Inline blocks, floats, absolutely positioned boxes and outside list markers still stop it.
+- A `list-style-position: inside` marker in a box at a fractional position snaps its decorations with the text beside it, instead of from the page origin.
