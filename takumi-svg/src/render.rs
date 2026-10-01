@@ -19,7 +19,7 @@ use takumi_core::{
   painter::{
     BackgroundClipArea, BoxBackground, BoxBorderPainter, BoxFrame, BoxPainter, FillShape,
     GlyphDevice, GlyphFill, LayerBounds, OverflowClip, OwnContent, PaintDevice, ShadowShape,
-    SpanBackground, StrokeStyle, UNBOUNDED,
+    StripBackground, StrokeStyle, UNBOUNDED,
   },
   path_data::{edges_path_data, path_data},
   resources::image::ImageSource,
@@ -633,14 +633,16 @@ impl PaintDevice for DocumentDevice<'_> {
 impl GlyphDevice for DocumentDevice<'_> {
   fn fill_background_layers(
     &mut self,
-    span: &SpanBackground<'_>,
+    background: &StripBackground<'_>,
     clip: &FillShape,
     transform: Affine,
   ) {
     self.push_clip(clip, transform);
     self.write(|doc| {
-      LayerEmitter::new(&span.node.context, doc)
-        .layers(&span.background.layers, Frame::border_box(span.strip))
+      LayerEmitter::new(&background.node.context, doc).layers(
+        &background.background.layers,
+        Frame::border_box(background.strip),
+      )
     });
     self.pop_clip();
   }
@@ -712,7 +714,7 @@ impl GlyphDevice for DocumentDevice<'_> {
 
   fn fill_text_clip(
     &mut self,
-    background: &SpanBackground<'_>,
+    background: &StripBackground<'_>,
     clip: &FillShape,
     transform: Affine,
     mask: &mut dyn FnMut(&mut dyn GlyphDevice),

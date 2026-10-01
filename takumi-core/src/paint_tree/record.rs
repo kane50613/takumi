@@ -19,7 +19,7 @@ use crate::{
   layout::{border::BorderProperties, inline::PositionedInlineRun},
   painter::{
     BoxBorderPainter, BoxFrame, FillShape, GlyphDevice, GlyphFill, LayerBounds, PaintDevice,
-    PaintRole, ShadowShape, SpanBackground, StrokeStyle,
+    PaintRole, ShadowShape, StripBackground, StrokeStyle,
   },
   path_data::path_data,
   shadow::SizedShadow,
@@ -363,13 +363,13 @@ impl PaintDevice for Recorder {
 impl GlyphDevice for Recorder {
   fn fill_background_layers(
     &mut self,
-    span: &SpanBackground<'_>,
+    background: &StripBackground<'_>,
     clip: &FillShape,
     transform: Affine,
   ) {
     let shape = Shape::of(clip, transform);
 
-    for (paint, blend_mode) in span_layers(span) {
+    for (paint, blend_mode) in strip_layers(background) {
       self.drawables.push(Drawable::Fill {
         role: self.role,
         shape: shape.clone(),
@@ -382,7 +382,7 @@ impl GlyphDevice for Recorder {
 
   fn fill_text_clip(
     &mut self,
-    background: &SpanBackground<'_>,
+    background: &StripBackground<'_>,
     clip: &FillShape,
     transform: Affine,
     mask: &mut dyn FnMut(&mut dyn GlyphDevice),
@@ -418,11 +418,11 @@ impl GlyphDevice for Recorder {
   }
 }
 
-/// `span`'s `background-image` layers, each with its `background-blend-mode`, placed in the block.
-fn span_layers(span: &SpanBackground<'_>) -> Vec<(Paint, Option<String>)> {
-  Paint::layers(&span.background.layers, &span.node.context)
+/// `background`'s `background-image` layers, each with its `background-blend-mode`, placed in the block.
+fn strip_layers(background: &StripBackground<'_>) -> Vec<(Paint, Option<String>)> {
+  Paint::layers(&background.background.layers, &background.node.context)
     .into_iter()
-    .map(|(paint, blend_mode)| (paint.shifted(span.strip.origin), blend_mode))
+    .map(|(paint, blend_mode)| (paint.shifted(background.strip.origin), blend_mode))
     .collect()
 }
 

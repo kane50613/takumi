@@ -54,10 +54,10 @@ pub trait GlyphDevice: PaintDevice {
     frame: BoxFrame,
   );
 
-  /// Paints `span`'s `background-image` layers, clipped to `clip` under `transform`.
+  /// Paints `background`'s `background-image` layers, clipped to `clip` under `transform`.
   fn fill_background_layers(
     &mut self,
-    span: &SpanBackground<'_>,
+    background: &StripBackground<'_>,
     clip: &FillShape,
     transform: Affine,
   );
@@ -67,26 +67,27 @@ pub trait GlyphDevice: PaintDevice {
   /// `DstIn` text layer.
   fn fill_text_clip(
     &mut self,
-    background: &SpanBackground<'_>,
+    background: &StripBackground<'_>,
     clip: &FillShape,
     transform: Affine,
     mask: &mut dyn FnMut(&mut dyn GlyphDevice),
   );
 }
 
-/// An inline span's background, laid over the strip its fragments would make on one line.
-pub struct SpanBackground<'a> {
-  /// The span.
+/// A background laid over a strip: an inline span's over the strip its fragments would make on
+/// one line, or a box's over its border box.
+pub struct StripBackground<'a> {
+  /// The span or box.
   pub node: &'a RenderNode,
-  /// The span's id, unique among the spans of its inline layout.
-  pub span: usize,
+  /// Unique among the backgrounds one device paints.
+  pub id: usize,
   /// Its background.
   pub background: BoxBackground<'a>,
   /// The strip, placed in the block.
   pub strip: BoxFrame,
 }
 
-impl SpanBackground<'_> {
+impl StripBackground<'_> {
   /// Fills `clip` under `transform` with the colour, then the layers.
   pub fn fill(&self, clip: &FillShape, transform: Affine, device: &mut dyn GlyphDevice) {
     if let Some(color) = self.background.color {
@@ -316,10 +317,14 @@ impl<'c> FragmentBackground<'c> {
   }
 
   /// The span's background on `fragment` of the block at `frame`.
-  fn background(&self, fragment: &InlineBackgroundFragment, frame: BoxFrame) -> SpanBackground<'c> {
-    SpanBackground {
+  fn background(
+    &self,
+    fragment: &InlineBackgroundFragment,
+    frame: BoxFrame,
+  ) -> StripBackground<'c> {
+    StripBackground {
       node: self.node,
-      span: fragment.span,
+      id: fragment.span,
       background: BoxBackground::new(
         &self.node.context,
         self.strip,

@@ -29,7 +29,7 @@ use takumi_core::{
   painter::{
     BackgroundClipArea, BoxBackground, BoxBorderPainter, BoxFrame, BoxPainter, FillShape,
     GlyphDevice, GlyphFill, LayerBounds, OwnContent, PaintDevice, PendingOutline, ShadowShape,
-    SpanBackground, StrokeStyle, UNBOUNDED,
+    StripBackground, StrokeStyle, UNBOUNDED,
   },
   scene::{NodePaint, Scene},
   shadow::SizedShadow,
@@ -2192,15 +2192,15 @@ impl PaintDevice for TextDevice<'_, '_, '_> {
 impl GlyphDevice for TextDevice<'_, '_, '_> {
   fn fill_background_layers(
     &mut self,
-    span: &SpanBackground<'_>,
+    background: &StripBackground<'_>,
     clip: &FillShape,
     transform: Affine,
   ) {
     self.push_clip(clip, transform);
     self.emitter.paint_background_layers(
-      span.node,
-      &span.background,
-      span.strip,
+      background.node,
+      &background.background,
+      background.strip,
       self.device.surface,
     );
     self.pop_clip();
@@ -2235,7 +2235,7 @@ impl GlyphDevice for TextDevice<'_, '_, '_> {
   /// stacks where they overlap, where Blink fills it once through the whole mask.
   fn fill_text_clip(
     &mut self,
-    background: &SpanBackground<'_>,
+    background: &StripBackground<'_>,
     clip: &FillShape,
     transform: Affine,
     mask: &mut dyn FnMut(&mut dyn GlyphDevice),

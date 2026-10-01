@@ -19,7 +19,7 @@ pub use self::{
   replaced::ReplacedContent,
   shadow::ShadowShape,
   snapped_box::SnappedBox,
-  text::{GlyphDevice, GlyphFill, InlineLines, SpanBackground},
+  text::{GlyphDevice, GlyphFill, InlineLines, StripBackground},
 };
 
 use crate::{

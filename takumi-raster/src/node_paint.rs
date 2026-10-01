@@ -15,7 +15,7 @@ use takumi_core::{
   },
   painter::{
     BackgroundClipArea, BoxBorderPainter, BoxFrame, BoxPainter, FillShape, GlyphDevice, GlyphFill,
-    LayerBounds, PaintDevice, PendingOutline, ShadowShape, SpanBackground, StrokeStyle,
+    LayerBounds, PaintDevice, PendingOutline, ShadowShape, StripBackground, StrokeStyle,
   },
   resources::{font::FontError, glyph::ResolvedGlyph},
   scene::SceneBounds,
@@ -640,23 +640,23 @@ impl PaintDevice for CanvasDevice<'_> {
 impl GlyphDevice for CanvasDevice<'_> {
   fn fill_background_layers(
     &mut self,
-    span: &SpanBackground<'_>,
+    background: &StripBackground<'_>,
     clip: &FillShape,
     transform: Affine,
   ) {
-    let context = &span.node.context;
+    let context = &background.node.context;
     // The strip rasterizes on the device pixel grid, so its layers land where they snapped.
-    let origin = span.strip.origin;
+    let origin = background.strip.origin;
     let fraction = Point {
       x: origin.x - origin.x.floor(),
       y: origin.y - origin.y.floor(),
     };
     let size = Size {
-      width: (span.strip.layout.size.width + fraction.x).ceil() as u32,
-      height: (span.strip.layout.size.height + fraction.y).ceil() as u32,
+      width: (background.strip.layout.size.width + fraction.x).ceil() as u32,
+      height: (background.strip.layout.size.height + fraction.y).ceil() as u32,
     };
     let key = (
-      span.span,
+      background.id,
       size.width,
       size.height,
       fraction.x.to_bits(),
@@ -664,7 +664,7 @@ impl GlyphDevice for CanvasDevice<'_> {
     );
     let tile = match self.strip_tiles.remove(&key) {
       Some(tile) => tile,
-      None => background_image_layers(&span.background, context)
+      None => background_image_layers(&background.background, context)
         .and_then(|layers| {
           rasterize_layers(
             layers,
@@ -694,7 +694,7 @@ impl GlyphDevice for CanvasDevice<'_> {
 
   fn fill_text_clip(
     &mut self,
-    background: &SpanBackground<'_>,
+    background: &StripBackground<'_>,
     clip: &FillShape,
     transform: Affine,
     mask: &mut dyn FnMut(&mut dyn GlyphDevice),
