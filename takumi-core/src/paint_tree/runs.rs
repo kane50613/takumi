@@ -22,7 +22,6 @@ pub(super) enum GlyphPaint<'g> {
   /// Colour font layers, bottom first.
   Layers(Vec<(Color, &'g [PathCommand])>),
   /// An embedded bitmap, such as colour emoji.
-  #[cfg_attr(not(feature = "png"), expect(dead_code))]
   Bitmap(&'g ResolvedBitmapGlyph),
 }
 
