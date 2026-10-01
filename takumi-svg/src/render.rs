@@ -683,6 +683,17 @@ impl GlyphDevice for DocumentDevice<'_> {
       return self
         .write(|doc| emit_run_glyphs(run, style, frame.shifted(offset), Some(color), stroke, doc));
     }
+    if fill == GlyphFill::Mask {
+      let black = Rgba(Color::black().0);
+      let brush = &run.glyph_run.brush;
+      let stroke = (brush.stroke_width > 0.0).then_some(GlyphStroke {
+        color: black,
+        width: brush.stroke_width,
+        join: style.parent.stroke_linejoin,
+      });
+
+      return self.write(|doc| emit_run_glyphs(run, style, frame, Some(black), stroke, doc));
+    }
 
     let context = self
       .text_background
@@ -699,20 +710,17 @@ impl GlyphDevice for DocumentDevice<'_> {
     self.emit_glyph_run(run, style, frame, fill.as_ref());
   }
 
-  fn draw_glyph_run_through(
+  fn fill_text_clip(
     &mut self,
-    run: &PositionedInlineRun,
-    style: &SizedFontStyle,
-    frame: BoxFrame,
-    span: &SpanBackground<'_>,
+    background: &SpanBackground<'_>,
+    clip: &FillShape,
+    transform: Affine,
+    mask: &mut dyn FnMut(&mut dyn GlyphDevice),
   ) {
-    let fill = ClipTextBackground {
-      context: &span.node.context,
-      background: &span.background,
-      area: span.strip,
-    };
-
-    self.write(|doc| emit_clip_text_run(run, style, frame, &fill, doc));
+    self.with_painted_mask(
+      |device| mask(device),
+      |device| background.fill(clip, transform, device),
+    );
   }
 }
 

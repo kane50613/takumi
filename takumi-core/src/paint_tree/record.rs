@@ -46,6 +46,9 @@ pub(super) struct TextBackground {
   pub(super) layers: Vec<(Paint, Option<String>)>,
 }
 
+/// The paint a mask's drawables take, which shows its content wherever they draw.
+const MASK_INK: [u8; 4] = [0, 0, 0, 255];
+
 /// Records draws in a node's local space as [`Drawable`]s.
 ///
 /// Approximate: an aliased clip records as an antialiased one.
@@ -377,27 +380,17 @@ impl GlyphDevice for Recorder {
     }
   }
 
-  fn draw_glyph_run_through(
+  fn fill_text_clip(
     &mut self,
-    run: &PositionedInlineRun,
-    style: &SizedFontStyle,
-    _frame: BoxFrame,
-    span: &SpanBackground<'_>,
+    background: &SpanBackground<'_>,
+    clip: &FillShape,
+    transform: Affine,
+    mask: &mut dyn FnMut(&mut dyn GlyphDevice),
   ) {
-    let background = TextBackground {
-      area: Shape::Rect {
-        rect: PaintRect::sized(span.strip.origin, span.strip.layout.size),
-      },
-      layers: span
-        .background
-        .color
-        .map(|color| (Paint::Color { color: color.0 }, None))
-        .into_iter()
-        .chain(span_layers(span))
-        .collect(),
-    };
-
-    self.record_text_background(run, style, background);
+    self.with_painted_mask(
+      |recorder| mask(recorder),
+      |recorder| background.fill(clip, transform, recorder),
+    );
   }
 
   fn begin_shadow(&mut self, shadow: &SizedShadow) {
@@ -415,12 +408,13 @@ impl GlyphDevice for Recorder {
     fill: GlyphFill,
     frame: BoxFrame,
   ) {
-    let background = match fill {
-      GlyphFill::Background => self.text_background.clone(),
-      GlyphFill::Text => None,
-    };
-
-    self.record_glyph_run(run, style, background, frame);
+    match fill {
+      GlyphFill::Text => self.record_glyph_run(run, style, None, frame),
+      GlyphFill::Background => {
+        self.record_glyph_run(run, style, self.text_background.clone(), frame);
+      }
+      GlyphFill::Mask => self.record_glyph_paint(run, style, frame, true),
+    }
   }
 }
 
@@ -436,7 +430,10 @@ impl Recorder {
   /// Records what `content` draws as a [`Drawable::Masked`] showing only where `mask` draws.
   fn with_painted_mask(&mut self, mask: impl FnOnce(&mut Self), content: impl FnOnce(&mut Self)) {
     let role = self.role;
-    let mut recorder = Recorder::new(self.transform);
+    let mut recorder = Recorder {
+      text_node: self.text_node,
+      ..Recorder::new(self.transform)
+    };
 
     mask(&mut recorder);
 
@@ -466,8 +463,6 @@ impl Recorder {
     }
 
     let index = run.index;
-    let brush = &run.glyph_run.brush;
-    let join = style.parent.stroke_linejoin;
     let text_stroke = self.text_stroke(run, style);
 
     if let Some(shadow) = self.shadow {
@@ -498,13 +493,36 @@ impl Recorder {
       return;
     }
 
-    let origin = PaintPoint { x: 0.0, y: 0.0 };
-
     if let Some(background) = background {
       self.record_text_background(run, style, background);
     }
+    self.record_glyph_paint(run, style, frame, false);
+  }
 
-    if let Some(color) = self.visible(brush.color) {
+  /// Records `run`'s glyphs in their own paint, or all in opaque black as a mask does.
+  fn record_glyph_paint(
+    &mut self,
+    run: &PositionedInlineRun,
+    style: &SizedFontStyle,
+    frame: BoxFrame,
+    mask: bool,
+  ) {
+    if !self.text_node {
+      return;
+    }
+
+    let index = run.index;
+    let brush = &run.glyph_run.brush;
+    let join = style.parent.stroke_linejoin;
+    let origin = PaintPoint { x: 0.0, y: 0.0 };
+    let ink = |color: Option<[u8; 4]>| if mask { Some(MASK_INK) } else { color };
+    let text_stroke = if mask {
+      (brush.stroke_width > 0.0).then(|| (Stroke::outline(brush.stroke_width, join), MASK_INK))
+    } else {
+      self.text_stroke(run, style)
+    };
+
+    if let Some(color) = ink(self.visible(brush.color)) {
       self.glyphs(self.role, index, Paint::Color { color }, origin, 0.0, None);
       if let Some(embolden) = run.embolden(frame.layout) {
         self.glyphs(
@@ -523,7 +541,7 @@ impl Recorder {
         GlyphPaint::Outline { .. } => {}
         GlyphPaint::Layers(layers) => {
           for (color, paths) in layers {
-            let Some(color) = self.visible(color) else {
+            let Some(color) = self.visible(color).and_then(|color| ink(Some(color))) else {
               continue;
             };
 
@@ -595,9 +613,7 @@ impl Recorder {
     let glyphs = |stroke| Drawable::Glyphs {
       role: Role::Background,
       run: run.index,
-      paint: Paint::Color {
-        color: [0, 0, 0, 255],
-      },
+      paint: Paint::Color { color: MASK_INK },
       offset: PaintPoint { x: 0.0, y: 0.0 },
       blur: 0.0,
       stroke,

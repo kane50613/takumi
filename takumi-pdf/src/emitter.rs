@@ -919,6 +919,7 @@ impl Emitter<'_> {
       built,
       text_fills: text_fills.into(),
       shadow: None,
+      through: None,
     };
 
     lines.paint(&built.spans, font_style, fill, frame, &mut device);
@@ -1730,6 +1731,98 @@ fn border_mask_stream(
   })
 }
 
+impl SurfaceDevice<'_, '_> {
+  /// Strokes `shape` under `transform` as `stroke` says, in `paint` at `opacity`.
+  fn stroke_path(
+    &mut self,
+    shape: &FillShape,
+    stroke: &StrokeStyle,
+    paint: Paint,
+    opacity: NormalizedF32,
+    transform: Affine,
+  ) {
+    let stroke = Stroke {
+      paint,
+      opacity,
+      width: stroke.width,
+      line_cap: if stroke.round_cap {
+        LineCap::Round
+      } else {
+        LineCap::Butt
+      },
+      dash: stroke.dash.map(|intervals| StrokeDash {
+        array: intervals.to_vec(),
+        offset: 0.0,
+      }),
+      ..Stroke::default()
+    };
+
+    self.draw(
+      transform,
+      |origin| krilla_path(&shape.to_commands(), origin),
+      |surface, path| {
+        surface.set_fill(None);
+        surface.set_stroke(Some(stroke));
+        surface.draw_path(path);
+        surface.set_stroke(None);
+      },
+    );
+  }
+
+  /// Fills `shape` under `transform` with each of `fills` in turn, within its clip.
+  fn fill_shape_with(&mut self, shape: &FillShape, fills: &[GlyphBackground], transform: Affine) {
+    for background in fills {
+      self.within(background, |device| {
+        let fill = Fill {
+          rule: krilla_fill_rule(shape.rule()),
+          ..background.fill.clone()
+        };
+
+        device.draw(
+          transform,
+          |origin| shape_path(shape, origin),
+          |surface, path| {
+            surface.set_fill(Some(fill));
+            surface.draw_path(path);
+          },
+        );
+      });
+    }
+  }
+
+  /// Strokes `shape` under `transform` as `stroke` says, with each of `fills` in turn, within its
+  /// clip.
+  fn stroke_shape_with(
+    &mut self,
+    shape: &FillShape,
+    stroke: &StrokeStyle,
+    fills: &[GlyphBackground],
+    transform: Affine,
+  ) {
+    if stroke.width <= 0.0 {
+      return;
+    }
+    for background in fills {
+      self.within(background, |device| {
+        let fill = &background.fill;
+
+        device.stroke_path(shape, stroke, fill.paint.clone(), fill.opacity, transform);
+      });
+    }
+  }
+
+  /// Runs `draw` within `background`'s clip.
+  fn within(&mut self, background: &GlyphBackground, draw: impl FnOnce(&mut Self)) {
+    if let Some(clip) = &background.clip {
+      self.surface.push_clip_path(clip, &FillRule::NonZero);
+    }
+    draw(self);
+    if background.clip.is_some() {
+      self.surface.pop();
+    }
+  }
+}
+
 impl PaintDevice for SurfaceDevice<'_, '_> {
   fn with_border_mask(
     &mut self,
@@ -1771,31 +1864,9 @@ impl PaintDevice for SurfaceDevice<'_, '_> {
     if stroke.color.0[3] == 0 || stroke.width <= 0.0 {
       return;
     }
-    let stroke = Stroke {
-      paint: fill_from_rgba(filtered(self.filter, stroke.color), 1.0).paint,
-      width: stroke.width,
-      line_cap: if stroke.round_cap {
-        LineCap::Round
-      } else {
-        LineCap::Butt
-      },
-      dash: stroke.dash.map(|intervals| StrokeDash {
-        array: intervals.to_vec(),
-        offset: 0.0,
-      }),
-      ..Stroke::default()
-    };
+    let paint = fill_from_rgba(filtered(self.filter, stroke.color), 1.0).paint;
 
-    self.draw(
-      transform,
-      |origin| krilla_path(&shape.to_commands(), origin),
-      |surface, path| {
-        surface.set_fill(None);
-        surface.set_stroke(Some(stroke));
-        surface.draw_path(path);
-        surface.set_stroke(None);
-      },
-    );
+    self.stroke_path(shape, stroke, paint, NormalizedF32::ONE, transform);
   }
 
   fn push_clip(&mut self, shape: &FillShape, transform: Affine) {
@@ -1931,6 +2002,9 @@ struct TextDevice<'e, 's, 'a> {
   text_fills: Rc<[GlyphBackground]>,
   /// The shadow every draw becomes while one is open.
   shadow: Option<SizedShadow>,
+  /// While a `background-clip: text` mask draws, the fills each of its shapes and glyphs shows
+  /// in place of its own paint.
+  through: Option<Rc<[GlyphBackground]>>,
 }
 
 impl TextDevice<'_, '_, '_> {
@@ -2028,6 +2102,10 @@ impl PaintDevice for TextDevice<'_, '_, '_> {
   }
 
   fn fill_shape(&mut self, shape: &FillShape, color: Color, transform: Affine) {
+    if let Some(fills) = &self.through {
+      return self.device.fill_shape_with(shape, fills, transform);
+    }
+
     let (color, transform) = self.shadowed(color, transform);
 
     self.in_shadow_bands(color, |device, color, spread| {
@@ -2049,6 +2127,12 @@ impl PaintDevice for TextDevice<'_, '_, '_> {
   }
 
   fn stroke_shape(&mut self, shape: &FillShape, stroke: &StrokeStyle, transform: Affine) {
+    if let Some(fills) = &self.through {
+      return self
+        .device
+        .stroke_shape_with(shape, stroke, fills, transform);
+    }
+
     let (color, transform) = self.shadowed(stroke.color, transform);
 
     self.in_shadow_bands(color, |device, color, spread| {
@@ -2137,27 +2221,37 @@ impl GlyphDevice for TextDevice<'_, '_, '_> {
     fill: GlyphFill,
     frame: BoxFrame,
   ) {
-    let fills = match fill {
-      GlyphFill::Background => self.text_fills.clone(),
-      GlyphFill::Text => Rc::from([]),
+    let (fills, with_paint) = match (fill, &self.through) {
+      (GlyphFill::Mask, Some(through)) => (through.clone(), false),
+      (GlyphFill::Background, _) => (self.text_fills.clone(), true),
+      (GlyphFill::Text | GlyphFill::Mask, _) => (Rc::from([]), true),
     };
 
-    self.paint_glyph_run(run, frame, &fills, true);
+    self.paint_glyph_run(run, frame, &fills, with_paint);
   }
 
-  fn draw_glyph_run_through(
+  /// Approximate: PDF viewers disagree on where the patterns inside a soft-mask group land, so each
+  /// shape and glyph of the mask paints the fills on its own instead. A translucent background then
+  /// stacks where they overlap, where Blink fills it once through the whole mask.
+  fn fill_text_clip(
     &mut self,
-    run: &PositionedInlineRun,
-    _style: &SizedFontStyle,
-    frame: BoxFrame,
-    span: &SpanBackground<'_>,
+    background: &SpanBackground<'_>,
+    clip: &FillShape,
+    transform: Affine,
+    mask: &mut dyn FnMut(&mut dyn GlyphDevice),
   ) {
-    let fills =
-      self
-        .emitter
-        .background_fills(span.node, &span.background, span.strip, self.device.surface);
+    let fills = self.emitter.background_fills(
+      background.node,
+      &background.background,
+      background.strip,
+      self.device.surface,
+    );
+    let outer = self.through.replace(fills.into());
 
-    self.paint_glyph_run(run, frame, &fills, false);
+    self.device.push_clip(clip, transform);
+    mask(self);
+    self.device.pop_clip();
+    self.through = outer;
   }
 }
 

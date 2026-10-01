@@ -347,19 +347,25 @@ impl<'c> CanvasDevice<'c> {
     self.clips.pop();
   }
 
-  /// Draws `run`'s glyphs over `background` seen through them, or their shadow while one is open.
+  /// Draws `run`'s glyphs filled as `fill` says, or their shadow while one is open.
   fn draw_glyphs(
     &mut self,
     run: &PositionedInlineRun,
     style: &SizedFontStyle,
-    background: Option<ClipImage<'_>>,
+    fill: GlyphFill,
     frame: BoxFrame,
   ) -> Result<()> {
     let glyph_run = &run.glyph_run;
     let local = run.transform(frame.translation());
     let offset = run.glyph_offset(frame.layout);
+    let (color, stroke_color) = match fill {
+      GlyphFill::Mask => (Color::black(), Color::black()),
+      GlyphFill::Text | GlyphFill::Background => {
+        (glyph_run.brush.color, glyph_run.brush.stroke_color)
+      }
+    };
     // A span may set `-webkit-text-stroke` for itself, so it comes off the run.
-    let stroke = (glyph_run.brush.stroke_width, glyph_run.brush.stroke_color);
+    let stroke = (glyph_run.brush.stroke_width, stroke_color);
     let placed = |glyph: &PositionedGlyph| Point {
       x: offset.x + glyph.x,
       y: offset.y + glyph.y,
@@ -399,7 +405,9 @@ impl<'c> CanvasDevice<'c> {
       return Ok(());
     }
 
-    if let Some(background) = background {
+    if fill == GlyphFill::Background
+      && let Some(background) = self.text_background
+    {
       self.draw_glyphs_through(run, style, background, frame)?;
     }
 
@@ -418,7 +426,7 @@ impl<'c> CanvasDevice<'c> {
           stroke,
           transform,
           placed(glyph),
-          glyph_run.brush.color,
+          color,
           palette.as_ref(),
         )?;
       }
@@ -684,49 +692,17 @@ impl GlyphDevice for CanvasDevice<'_> {
     self.strip_tiles.insert(key, tile);
   }
 
-  fn draw_glyph_run_through(
+  fn fill_text_clip(
     &mut self,
-    run: &PositionedInlineRun,
-    style: &SizedFontStyle,
-    frame: BoxFrame,
-    span: &SpanBackground<'_>,
+    background: &SpanBackground<'_>,
+    clip: &FillShape,
+    transform: Affine,
+    mask: &mut dyn FnMut(&mut dyn GlyphDevice),
   ) {
-    let context = &span.node.context;
-    let origin = span.strip.origin;
-    let size = span.strip.layout.size;
-    // Glyphs sample their background in the block's space, so the tile reaches from its origin.
-    let result = collect_background_layers(&span.background, context)
-      .and_then(|layers| {
-        rasterize_layers(
-          layers,
-          Size {
-            width: (origin.x + size.width).max(0.0) as u32,
-            height: (origin.y + size.height).max(0.0) as u32,
-          },
-          context,
-          BorderProperties::default(),
-          Affine::translation(origin.x, origin.y),
-        )
-      })
-      .and_then(|tile| {
-        let Some(tile) = &tile else {
-          return Ok(());
-        };
-
-        self.draw_glyphs_through(
-          run,
-          style,
-          ClipImage {
-            source: tile.into(),
-            offset: Point::ZERO,
-          },
-          frame,
-        )
-      });
-
-    if let Err(error) = result {
-      self.error.get_or_insert(error);
-    }
+    self.with_painted_mask(
+      |device| mask(device),
+      |device| background.fill(clip, transform, device),
+    );
   }
 
   fn begin_shadow(&mut self, shadow: &SizedShadow) {
@@ -744,11 +720,7 @@ impl GlyphDevice for CanvasDevice<'_> {
     fill: GlyphFill,
     frame: BoxFrame,
   ) {
-    let background = self
-      .text_background
-      .filter(|_| fill == GlyphFill::Background);
-
-    if let Err(error) = self.draw_glyphs(run, style, background, frame) {
+    if let Err(error) = self.draw_glyphs(run, style, fill, frame) {
       self.error.get_or_insert(error);
     }
   }

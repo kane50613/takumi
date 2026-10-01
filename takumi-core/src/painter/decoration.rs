@@ -12,7 +12,7 @@ use crate::{
     inline::DecorationLine,
     intercept::{Spans, remaining_spans},
   },
-  style::{Affine, BorderStyle, FillRule, TextDecorationLines, TextDecorationStyle},
+  style::{Affine, BorderStyle, Color, FillRule, TextDecorationLines, TextDecorationStyle},
 };
 
 /// A wave's shape: one cubic Bezier per wavelength.
@@ -76,7 +76,19 @@ struct DashedLine {
 impl DecorationLine {
   /// Paints the line, cut where `text-decoration-skip-ink` gives way to the glyphs.
   pub fn paint(&self, device: &mut dyn PaintDevice) {
-    if self.color.0[3] == 0 || self.width <= 0.0 {
+    if self.color.0[3] != 0 {
+      self.paint_in(self.color, device);
+    }
+  }
+
+  /// Paints the line in opaque black, whatever its colour, into a `background-clip: text` mask, as
+  /// Blink's `TextDecorationPainter::LineColorForPhase` does in the `kTextClip` phase.
+  pub fn paint_mask(&self, device: &mut dyn PaintDevice) {
+    self.paint_in(Color::black(), device);
+  }
+
+  fn paint_in(&self, color: Color, device: &mut dyn PaintDevice) {
+    if self.width <= 0.0 {
       return;
     }
 
@@ -84,10 +96,10 @@ impl DecorationLine {
     let pieces = self.pieces(bounds);
 
     match self.style {
-      TextDecorationStyle::Solid => self.fill(&pieces, 0.0, device),
+      TextDecorationStyle::Solid => self.fill(&pieces, 0.0, color, device),
       TextDecorationStyle::Double => {
-        self.fill(&pieces, 0.0, device);
-        self.fill(&pieces, self.double_offset(), device);
+        self.fill(&pieces, 0.0, color, device);
+        self.fill(&pieces, self.double_offset(), color, device);
       }
       TextDecorationStyle::Dotted | TextDecorationStyle::Dashed => {
         let style = if self.style == TextDecorationStyle::Dotted {
@@ -106,7 +118,7 @@ impl DecorationLine {
           Point { x: dashed.end, y },
           dashed.thickness,
           style,
-          self.color,
+          color,
         );
 
         if self.skips.is_empty() {
@@ -137,7 +149,7 @@ impl DecorationLine {
               rule: FillRule::NonZero,
             },
             &StrokeStyle {
-              color: self.color,
+              color,
               width: self.thickness,
               dash: None,
               round_cap: false,
@@ -218,7 +230,7 @@ impl DecorationLine {
   }
 
   /// Fills the pieces `offset` below the top, snapped as Blink's `DrawLineAsRect` snaps them.
-  fn fill(&self, pieces: &[(f32, f32)], offset: f32, device: &mut dyn PaintDevice) {
+  fn fill(&self, pieces: &[(f32, f32)], offset: f32, color: Color, device: &mut dyn PaintDevice) {
     let top = self.paint_floor_y(self.origin.y + offset + 0.5);
     let height = self.thickness.floor().max(1.0);
 
@@ -228,7 +240,7 @@ impl DecorationLine {
           width: end - start,
           height,
         }),
-        self.color,
+        color,
         self.transform * Affine::translation(start, top),
       );
     }

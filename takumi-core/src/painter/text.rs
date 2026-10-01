@@ -31,6 +31,9 @@ pub enum GlyphFill {
   /// The box's background seen through the glyphs and their stroke, for
   /// `background-clip: text`, under the run's own paint.
   Background,
+  /// The glyphs and their stroke in opaque black, colour glyphs by their alpha, for a
+  /// [`GlyphDevice::fill_text_clip`] mask.
+  Mask,
 }
 
 /// A device that can also draw text: glyph runs, and the shadows text and its decorations cast.
@@ -59,14 +62,15 @@ pub trait GlyphDevice: PaintDevice {
     transform: Affine,
   );
 
-  /// Shows `span`'s background, its colour included, through `run`'s glyphs and their stroke in
-  /// the block at `frame`, without the run's own paint.
-  fn draw_glyph_run_through(
+  /// Fills `clip` under `transform` with `background`, its colour and layers, only where `mask`
+  /// draws, as Blink's `BoxPainterBase::PaintFillLayerTextFillBox` keeps a background under a
+  /// `DstIn` text layer.
+  fn fill_text_clip(
     &mut self,
-    run: &PositionedInlineRun,
-    style: &SizedFontStyle,
-    frame: BoxFrame,
-    span: &SpanBackground<'_>,
+    background: &SpanBackground<'_>,
+    clip: &FillShape,
+    transform: Affine,
+    mask: &mut dyn FnMut(&mut dyn GlyphDevice),
   );
 }
 
@@ -80,6 +84,18 @@ pub struct SpanBackground<'a> {
   pub background: BoxBackground<'a>,
   /// The strip, placed in the block.
   pub strip: BoxFrame,
+}
+
+impl SpanBackground<'_> {
+  /// Fills `clip` under `transform` with the colour, then the layers.
+  pub fn fill(&self, clip: &FillShape, transform: Affine, device: &mut dyn GlyphDevice) {
+    if let Some(color) = self.background.color {
+      device.fill_shape(clip, color, transform);
+    }
+    if !self.background.layers.is_empty() {
+      device.fill_background_layers(self, clip, transform);
+    }
+  }
 }
 
 /// A run as the paint passes see it.
@@ -316,8 +332,8 @@ impl<'c> FragmentBackground<'c> {
 
   /// Paints the color and layers on `fragment` of the block at `frame`, clipped by the span's
   /// `background-clip` to the fragment, as Blink's `BoxPainterBase::PaintFillLayers` clips both.
-  /// A background clipped to the text shows through the glyphs of the `runs` inside the
-  /// fragment instead, as `BoxPainterBase::PaintFillLayerTextFillBox` masks it.
+  /// A background clipped to the text fills the fragment under a mask of the `runs` inside it, as
+  /// `BoxPainterBase::PaintFillLayerTextFillBox` does.
   fn paint(
     &self,
     fragment: &InlineBackgroundFragment,
@@ -325,44 +341,33 @@ impl<'c> FragmentBackground<'c> {
     runs: &[PaintedRun],
     device: &mut dyn GlyphDevice,
   ) {
+    let context = &self.node.context;
+    let snapped = fragment.snapped_box();
+    let at = frame.origin + self.fragment.location + snapped.offset();
+    let transform = Affine::translation(at.x, at.y);
+    let background = self.background(fragment, frame);
+
     device.set_role(PaintRole::InlineBackground);
 
     if self.clips_text() {
-      let background = self.background(fragment, frame);
-
-      for painted in runs.iter().filter(|painted| painted.lies_in(fragment)) {
-        device.draw_glyph_run_through(painted.run, painted.style, frame, &background);
-      }
+      device.fill_text_clip(
+        &background,
+        &FillShape::Rect(snapped.size()),
+        transform,
+        &mut |mask| {
+          for painted in runs.iter().filter(|painted| painted.lies_in(fragment)) {
+            painted.paint_mask(frame, mask);
+          }
+        },
+      );
       return;
     }
 
-    let context = &self.node.context;
-    let snapped = fragment.snapped_box();
-    let Some(clip) = BackgroundClipArea::new(context, self.fragment, fragment.border, &snapped)
+    if let Some(clip) = BackgroundClipArea::new(context, self.fragment, fragment.border, &snapped)
       .shape(snapped.size())
-    else {
-      return;
-    };
-    let at = frame.origin + self.fragment.location + snapped.offset();
-    let transform = Affine::translation(at.x, at.y);
-
-    if fragment.color.0[3] != 0 {
-      device.fill_shape(&clip, fragment.color, transform);
+    {
+      background.fill(&clip, transform, device);
     }
-    if self.has_layers() {
-      device.fill_background_layers(&self.background(fragment, frame), &clip, transform);
-    }
-  }
-
-  /// Whether the span has `background-image` layers.
-  fn has_layers(&self) -> bool {
-    self
-      .node
-      .context
-      .style
-      .background_image
-      .as_deref()
-      .is_some_and(|images| !images.is_empty())
   }
 }
 
@@ -400,6 +405,15 @@ impl PaintedRun<'_> {
         .ancestors()
         .any(|link| link.decoration.id == fragment.span)
     }) && (fragment.y..=fragment.y + fragment.height).contains(&self.baseline)
+  }
+
+  /// Paints the run's glyphs and decorations into a `background-clip: text` mask, as Blink's
+  /// `kTextClip` phase does: in black, without shadows or opacity.
+  fn paint_mask(&self, frame: BoxFrame, device: &mut dyn GlyphDevice) {
+    for decoration in &self.decorations {
+      decoration.paint_mask(device);
+    }
+    device.draw_glyph_run(self.run, self.style, GlyphFill::Mask, frame);
   }
 
   /// Paints what `pass` draws of the run at its span's opacity: underline and overline, glyphs
