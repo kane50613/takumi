@@ -130,12 +130,9 @@ impl<'r> TextMask<'r> {
       let child_context = &child_node.context;
 
       if child_context.style.display == Display::None
-        || child_context.style.floats_in_own_layer(
-          child_layout.size.width,
-          child_layout.size.height,
-          &child_context.sizing,
-          is_flex_or_grid_item,
-        )
+        || child_context
+          .style
+          .floats_in_own_layer(is_flex_or_grid_item)
       {
         continue;
       }
@@ -197,12 +194,7 @@ impl<'r> TextMask<'r> {
       };
       let root_context = &subtree.root.context;
 
-      if root_context.style.floats_in_own_layer(
-        subtree.size.width,
-        subtree.size.height,
-        &root_context.sizing,
-        false,
-      ) {
+      if root_context.style.floats_in_own_layer(false) {
         continue;
       }
 

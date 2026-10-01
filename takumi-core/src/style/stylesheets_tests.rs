@@ -1013,28 +1013,16 @@ fn test_is_z_index_applicable_matches_supported_scope() {
 
 #[test]
 fn test_creates_stacking_context_from_z_index_scope() {
-  let mut style = ComputedStyle::default();
-  let sizing = SizingContext {
-    viewport: Viewport::new((1200, 630)),
-    container_size: Size::NONE,
-    container_read: Default::default(),
-    font_size: 16.0,
-    root_font_size: None,
-    line_height: 0.0,
-    root_line_height: None,
-    calc_arena: Rc::new(CalcArena::default()),
-  };
-  let border_box = Size {
-    width: 200.0,
-    height: 100.0,
+  let mut style = ComputedStyle {
+    position: Position::Relative,
+    z_index: ZIndex::Integer(1),
+    ..Default::default()
   };
 
-  style.position = Position::Relative;
-  style.z_index = ZIndex::Integer(1);
-  assert!(style.creates_stacking_context(border_box.width, border_box.height, &sizing, false));
+  assert!(style.creates_stacking_context(false));
 
   style.position = Position::Absolute;
-  assert!(style.creates_stacking_context(border_box.width, border_box.height, &sizing, false));
+  assert!(style.creates_stacking_context(false));
 }
 
 #[test]
@@ -1090,7 +1078,7 @@ fn test_offset_path_moves_element_onto_path_and_creates_stacking_context() {
   style.offset_path = OffsetPath::from_css_str("path('M 0 0 L 100 0')").ok();
   style.offset_distance = Length::Percentage(50.0);
 
-  assert!(style.creates_stacking_context(border_box.width, border_box.height, &sizing, false));
+  assert!(style.creates_stacking_context(false));
 
   // The default offset-anchor is transform-origin (the box center). At 50% the
   // anchor lands on the path midpoint (50, 0).
@@ -1110,53 +1098,27 @@ fn test_relative_position_participates_in_positioned_paint_bucket() {
 }
 
 #[test]
-fn test_non_identity_transform_detection() {
+fn test_transform_related_property_creates_stacking_context() {
   let mut style = ComputedStyle::default();
-  let sizing = SizingContext {
-    viewport: Viewport::new((1200, 630)),
-    container_size: Size::NONE,
-    container_read: Default::default(),
-    font_size: 16.0,
-    root_font_size: None,
-    line_height: 0.0,
-    root_line_height: None,
-    calc_arena: Rc::new(CalcArena::default()),
-  };
-  let border_box = Size {
-    width: 200.0,
-    height: 100.0,
-  };
 
-  assert!(!style.has_non_identity_transform(border_box.width, border_box.height, &sizing));
+  assert!(!style.creates_stacking_context(false));
 
   style.transform = Some([Transform::Rotate(Angle::new(0.0))].into());
-  assert!(!style.has_non_identity_transform(border_box.width, border_box.height, &sizing));
+  assert!(style.creates_stacking_context(false));
 
-  style.transform = Some([Transform::Rotate(Angle::new(10.0))].into());
-  assert!(style.has_non_identity_transform(border_box.width, border_box.height, &sizing));
+  style.transform = None;
+  style.position = Position::Fixed;
+  assert!(style.creates_stacking_context(false));
 }
 
 #[test]
 fn test_transform_creates_stacking_context_without_offscreen_compositing() {
-  let mut style = ComputedStyle::default();
-  let sizing = SizingContext {
-    viewport: Viewport::new((1200, 630)),
-    container_size: Size::NONE,
-    container_read: Default::default(),
-    font_size: 16.0,
-    root_font_size: None,
-    line_height: 0.0,
-    root_line_height: None,
-    calc_arena: Rc::new(CalcArena::default()),
-  };
-  let border_box = Size {
-    width: 200.0,
-    height: 100.0,
+  let style = ComputedStyle {
+    transform: Some([Transform::Rotate(Angle::new(10.0))].into()),
+    ..Default::default()
   };
 
-  style.transform = Some([Transform::Rotate(Angle::new(10.0))].into());
-
-  assert!(style.creates_stacking_context(border_box.width, border_box.height, &sizing, false));
+  assert!(style.creates_stacking_context(false));
   assert!(!style.needs_offscreen_compositing());
 }
 
@@ -1596,10 +1558,6 @@ fn paint_containment_keeps_hidden_axis() {
 
 #[test]
 fn layout_containment_creates_a_stacking_context() {
-  let sizing = SizingContext::builder()
-    .viewport(Viewport::new((1200, 630)))
-    .build();
-
   for (css, expected) in [
     ("none", false),
     ("layout", true),
@@ -1609,7 +1567,7 @@ fn layout_containment_creates_a_stacking_context() {
     let style = inherited_style_from_pairs([("contain", css)], &ComputedStyle::default());
 
     assert_eq!(
-      style.creates_stacking_context(100.0, 100.0, &sizing, false),
+      style.creates_stacking_context(false),
       expected,
       "contain: {css}"
     );
