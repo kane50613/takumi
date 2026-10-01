@@ -1286,7 +1286,7 @@ impl Emitter<'_> {
   }
 
   /// A run this page draws at `(x, y)`, its text from `built` when given, or `None` when it has
-  /// no glyphs, no font, or its line at `line_y` belongs to another page.
+  /// no glyphs, no font, or this page does not show it in its block at `line_y`.
   fn glyph_run<'r>(
     &self,
     run: &PositionedInlineRun,
@@ -1308,7 +1308,7 @@ impl Emitter<'_> {
     let offset = run.glyph_offset(layout);
     let item = LineItem::of_run(run, layout)?.below(line_y);
 
-    if self.window.disowns_line(item.baseline) {
+    if !self.window.shows_line_item(item) {
       return None;
     }
     let text = built
@@ -1325,6 +1325,7 @@ impl Emitter<'_> {
       text,
       glyphs,
       origin: Point::from_xy(x + offset.x, y + offset.y),
+      owned: !self.window.disowns_line(item.baseline),
     })
   }
 
@@ -2284,6 +2285,7 @@ impl TextDevice<'_, '_, '_> {
       text,
       glyphs,
       origin,
+      owned,
     }) = self
       .emitter
       .glyph_run(run, self.built, shifted, frame.origin.y)
@@ -2388,7 +2390,7 @@ impl TextDevice<'_, '_, '_> {
             font,
             text,
             shaped.font_size,
-            shadow_color.is_some(),
+            shadow_color.is_some() || !owned,
           );
           if let Some(colors) = &colors {
             colors.draw_outlines(surface);
@@ -2513,6 +2515,8 @@ struct GlyphRun<'r> {
   text: &'r str,
   glyphs: Vec<PdfGlyph>,
   origin: Point,
+  /// Whether this page owns the run's line and shows its text, not just its outlines.
+  owned: bool,
 }
 
 /// Names an image in an error: its URL, or that it came in as raw bytes.

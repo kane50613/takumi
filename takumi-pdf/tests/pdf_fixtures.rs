@@ -2746,6 +2746,40 @@ fn an_overflowing_inline_block_emits_its_text_once() {
   assert_eq!(text_shows(300.0), text_shows(1000.0));
 }
 
+/// A glyph taller than a page is text on the page that owns its line, and outlines on the page it
+/// runs on over.
+#[test]
+fn a_glyph_taller_than_a_page_runs_on_as_outlines() {
+  let fonts = fonts();
+  let pdf = render(
+    PdfOptions::builder()
+      .node(
+        from_html(
+          r#"<div style="font-size: 400px; line-height: 1">g</div>"#,
+          FromHtmlOptions::default(),
+        )
+        .expect("parse the doc"),
+      )
+      .page(PageOptions {
+        width: 400.0,
+        height: 300.0,
+        margin: PageMargins::uniform(24.0),
+      })
+      .fonts(&fonts)
+      .build(),
+  )
+  .expect("render the doc");
+
+  assert_eq!(page_count(&pdf), 2);
+  assert_eq!(
+    content_lines(&pdf)
+      .filter(|line| line.ends_with(b"Tj") || line.ends_with(b"TJ"))
+      .count(),
+    1
+  );
+  assert!(curve_operator_lines(&pdf) > 0);
+}
+
 /// Header and footer bands together, counters in both, a forced break, and a
 /// keep-together block taller than the window (hard cut).
 #[test]
