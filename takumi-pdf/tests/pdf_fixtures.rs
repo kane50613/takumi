@@ -380,7 +380,7 @@ fn background_clip_text_reach() {
         <div style="float: right; opacity: 0.5">Layered</div>
         <div style="opacity: 0">Zero opacity</div>
         <div style="transform: scale(0)">Scale zero</div>
-        <div style="position: absolute; left: 240px; top: 150px">Outside</div>
+        <div style="position: absolute; left: 240px; top: 60px">Outside</div>
       </div>
     </div>"##;
 
