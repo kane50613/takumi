@@ -1402,10 +1402,7 @@ impl<'c> BuiltInlineLayout<'c> {
 
   /// The spans around the text span `span_id`, innermost first.
   pub(crate) fn span_chain(&self, span_id: Option<u64>) -> Option<&Rc<DecorationLink<'c>>> {
-    match span_id.and_then(|span_id| self.spans.get(span_id as usize)) {
-      Some(ProcessedInlineSpan::Text { decorations, .. }) => decorations.as_ref(),
-      _ => None,
-    }
+    self.spans.get(span_id? as usize)?.text_chain()
   }
 
   /// The baseline shift `glyph_run` paints at on `line`.

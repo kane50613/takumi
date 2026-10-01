@@ -1031,10 +1031,7 @@ fn compute_node_paint_bounds(
   let decoration_reach = built
     .spans
     .iter()
-    .filter_map(|span| match span {
-      ProcessedInlineSpan::Text { decorations, .. } => decorations.as_ref(),
-      _ => None,
-    })
+    .filter_map(ProcessedInlineSpan::text_chain)
     .fold(0.0_f32, |mut max, chain| {
       let mut next = Some(chain);
 
