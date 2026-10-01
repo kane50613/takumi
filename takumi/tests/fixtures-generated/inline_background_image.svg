@@ -191,10 +191,10 @@
     <use href="#g16" x="255.06" y="78"/>
   </g>
   <clipPath id="cp4">
-    <path d="M78 102h229v31h-229v-31Z"/>
+    <path d="M78 102h235v31h-235v-31Z"/>
   </clipPath>
   <g clip-path="url(#cp4)">
-    <linearGradient id="lg5" gradientUnits="userSpaceOnUse" x1="78" y1="117.5" x2="307" y2="117.5">
+    <linearGradient id="lg5" gradientUnits="userSpaceOnUse" x1="78" y1="117.5" x2="313" y2="117.5">
       <stop offset="0" stop-color="#22c55e"/>
       <stop offset=".016" stop-color="#22c460"/>
       <stop offset=".032" stop-color="#23c363"/>
@@ -260,13 +260,13 @@
       <stop offset=".984" stop-color="#3b83f4"/>
       <stop offset="1" stop-color="#3b82f6"/>
     </linearGradient>
-    <rect x="78" y="102" width="229" height="31" fill="url(#lg5)"/>
+    <rect x="78" y="102" width="235" height="31" fill="url(#lg5)"/>
   </g>
   <clipPath id="cp6">
-    <path d="M16 138h111v31h-111v-31Z"/>
+    <path d="M16 138h117v31h-117v-31Z"/>
   </clipPath>
   <g clip-path="url(#cp6)">
-    <linearGradient id="lg7" gradientUnits="userSpaceOnUse" x1="16" y1="153.5" x2="127" y2="153.5">
+    <linearGradient id="lg7" gradientUnits="userSpaceOnUse" x1="16" y1="153.5" x2="133" y2="153.5">
       <stop offset="0" stop-color="#22c55e"/>
       <stop offset=".016" stop-color="#22c460"/>
       <stop offset=".032" stop-color="#23c363"/>
@@ -332,7 +332,7 @@
       <stop offset=".984" stop-color="#3b83f4"/>
       <stop offset="1" stop-color="#3b82f6"/>
     </linearGradient>
-    <rect x="16" y="138" width="111" height="31" fill="url(#lg7)"/>
+    <rect x="16" y="138" width="117" height="31" fill="url(#lg7)"/>
   </g>
   <g fill="#0f172a">
     <use href="#g17" x="16" y="126"/>
@@ -361,15 +361,15 @@
     <use href="#g12" x="292.79" y="126"/>
   </g>
   <g fill="#0f172a">
-    <use href="#g8" x="16" y="162"/>
-    <use href="#g19" x="28.86" y="162"/>
-    <use href="#g8" x="41.1" y="162"/>
-    <use href="#g11" x="54.33" y="162"/>
-    <use href="#g16" x="62.82" y="162"/>
-    <use href="#g6" x="81.71" y="162"/>
-    <use href="#g2" x="87.93" y="162"/>
-    <use href="#g12" x="93.93" y="162"/>
-    <use href="#g8" x="107.58" y="162"/>
+    <use href="#g8" x="22" y="162"/>
+    <use href="#g19" x="34.86" y="162"/>
+    <use href="#g8" x="47.1" y="162"/>
+    <use href="#g11" x="60.33" y="162"/>
+    <use href="#g16" x="68.82" y="162"/>
+    <use href="#g6" x="87.71" y="162"/>
+    <use href="#g2" x="93.93" y="162"/>
+    <use href="#g12" x="99.93" y="162"/>
+    <use href="#g8" x="113.58" y="162"/>
   </g>
   <mask id="mk8" maskUnits="userSpaceOnUse" style="mask-type:alpha">
     <g fill="#000">

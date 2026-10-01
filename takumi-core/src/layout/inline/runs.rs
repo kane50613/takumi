@@ -24,6 +24,7 @@ use super::{
     CoverLine, Covering, DecorationAccumulator, InlineBackgroundFragment, InlineContainingBlock,
     LinePosition,
   },
+  decoration_break::ClonedLines,
   decorations::{DecorationLine, DecorationPlacement, DecorationSpace},
   items::ProcessedInlineSpan,
   metrics::{VisualInlineBox, resolve_visual_inline_box},
@@ -418,7 +419,7 @@ impl<'c> BuiltInlineLayout<'c> {
       ..
     } = self;
     let mut runs = Vec::new();
-    let mut decoration_coverage = DecorationAccumulator::default();
+    let mut decoration_coverage = self.decoration_coverage();
     let mut positioned_inline_boxes: HashMap<u64, VisualInlineBox> = HashMap::new();
 
     let content = layout.content_box_offset();
@@ -526,13 +527,18 @@ impl<'c> BuiltInlineLayout<'c> {
 }
 
 impl<'c> BuiltInlineLayout<'c> {
+  /// An accumulator for the spans' line fragments, which knows the edges cloning spans repeat.
+  fn decoration_coverage(&self) -> DecorationAccumulator<'c> {
+    DecorationAccumulator::new(ClonedLines::of(&self.spans, &self.layout))
+  }
+
   /// The padding box of each inline span that contains out-of-flow boxes, relative to `layout`'s
   /// border box.
   pub(crate) fn inline_containing_blocks(
     &self,
     layout: ComputedLayout,
   ) -> Vec<InlineContainingBlock<'c>> {
-    let mut coverage = DecorationAccumulator::default();
+    let mut coverage = self.decoration_coverage();
     let content = layout.content_box_offset();
 
     let Ok(()) = self.walk_items::<Infallible>(layout, |line, item| {

@@ -29,6 +29,7 @@ use xxhash_rust::xxh3::Xxh3;
 mod background;
 mod breaking;
 mod cache;
+mod decoration_break;
 mod decorations;
 mod floats;
 mod items;

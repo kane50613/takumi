@@ -368,6 +368,23 @@ fn background_clip_text_descendants() {
   });
 }
 
+/// A `box-decoration-break: clone` span repeats its border and padding on every line it wraps
+/// onto, and each line makes room for the repeated start edge.
+#[test]
+fn inline_span_box_decoration_break_clone() {
+  run_pdf_fixture("inline-span-box-decoration-break-clone", |fonts| {
+    let source = r##"<div style="width: 100%; height: 100%; padding: 12px; background-color: #ffffff; font-size: 18px; line-height: 2; color: #141414">
+      <div style="width: 220px">Ship <span style="padding: 2px 10px; border: 3px solid #2563eb; border-radius: 8px; background-color: #dbeafe; box-decoration-break: clone">a cloned badge that wraps across lines</span> today</div>
+    </div>"##;
+
+    PdfOptions::builder()
+      .node(from_html(source, FromHtmlOptions::default()).expect("parse clone fixture"))
+      .viewport(Viewport::new((320, 160)))
+      .fonts(fonts)
+      .build()
+  });
+}
+
 /// An inline `<span>` with a border strokes it on every line, without the sides the line wraps at.
 #[test]
 fn inline_span_border() {
