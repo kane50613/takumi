@@ -1112,7 +1112,7 @@ impl Emitter<'_> {
       scene: &scene,
       document: self.document,
       inline: None,
-      window: Window::default(),
+      window: self.window.within(at),
       tagged,
       tag_prefix,
       color_filter: self.color_filter.clone(),

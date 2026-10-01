@@ -68,6 +68,17 @@ impl Window {
       .is_some_and(|(y0, y1)| baseline < y0 || baseline >= y1)
   }
 
+  /// The window in the space of a subtree whose origin sits at `origin`.
+  pub(crate) fn within(self, origin: Point<f32>) -> Self {
+    let shift = |window: Option<(f32, f32)>, by: f32| window.map(|(from, to)| (from - by, to - by));
+
+    Self {
+      y: shift(self.y, origin.y),
+      x: shift(self.x, origin.x),
+      lines: shift(self.lines, origin.y),
+    }
+  }
+
   /// Narrows both vertical windows to a box that clips its overflow. A clip
   /// keeps content off the page but not out of the text layer, so what it
   /// cuts away must never be emitted.

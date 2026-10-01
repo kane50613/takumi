@@ -2714,6 +2714,38 @@ fn paged_monolithic_overflow() {
   );
 }
 
+/// An inline-block taller than a page shows each line of its text on the one page that owns it, so
+/// the text layer holds it once, as it does when the whole block fits on one page.
+#[test]
+fn an_overflowing_inline_block_emits_its_text_once() {
+  let fonts = fonts();
+  let source = r##"<div style="font-size: 16px; line-height: 24px">
+    <div>Before</div>
+    <div><span style="display: inline-block; width: 200px; height: 360px">First inside<br>Second inside<br>Third inside</span> after</div>
+  </div>"##;
+  let text_shows = |height: f32| {
+    let pdf = render(
+      PdfOptions::builder()
+        .node(from_html(source, FromHtmlOptions::default()).expect("parse the doc"))
+        .page(PageOptions {
+          width: 400.0,
+          height,
+          margin: PageMargins::uniform(24.0),
+        })
+        .fonts(&fonts)
+        .build(),
+    )
+    .expect("render the doc");
+
+    content_lines(&pdf)
+      .filter(|line| line.ends_with(b"Tj") || line.ends_with(b"TJ"))
+      .count()
+  };
+
+  assert!(text_shows(1000.0) > 0);
+  assert_eq!(text_shows(300.0), text_shows(1000.0));
+}
+
 /// Header and footer bands together, counters in both, a forced break, and a
 /// keep-together block taller than the window (hard cut).
 #[test]
