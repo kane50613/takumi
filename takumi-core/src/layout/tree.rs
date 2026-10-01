@@ -116,6 +116,19 @@ impl<P: Copy> ContainingBlocks<P> {
       None => (parent_placement, parent_content_box),
     }
   }
+
+  /// The placement `child` resolves against, or `None` when it was hoisted to a containing block
+  /// none of the recorded nodes is.
+  pub(crate) fn recorded_placement_for(
+    &self,
+    child: &OrderedChild,
+    parent_placement: P,
+  ) -> Option<P> {
+    match child.hoisted_cb {
+      Some(cb) => self.placements.get(&cb).copied(),
+      None => Some(parent_placement),
+    }
+  }
 }
 
 /// Immutable per-node layout output after computing a tree.

@@ -203,7 +203,6 @@ impl Emitter<'_> {
       ChunkWriter {
         emitter: self,
         surface,
-        chunks: &chunks,
         owners: &owners,
         current: Affine::IDENTITY,
         entries: Vec::new(),
@@ -1393,7 +1392,6 @@ struct Entered {
 struct ChunkWriter<'w, 'a, 's> {
   emitter: &'w mut Emitter<'a>,
   surface: &'w mut Surface<'s>,
-  chunks: &'w [PaintChunk<'a>],
   owners: &'w [Option<&'a NodePaint>],
   /// The transform the pushed surface states add to the scene's space.
   current: Affine,
@@ -1443,7 +1441,7 @@ impl<'a> ChunkWriter<'_, 'a, '_> {
       ChunkPart::Decorations => {
         let scene = emitter.scene;
 
-        TextClip::of(&scene.root, &scene.results, self.chunks, chunk.node)
+        TextClip::of(&scene.root, &scene.results, chunk.node)
           .map(|text_clip| {
             emitter.emit_decorations(node, decoration_frame, text_clip.as_ref(), surface);
           })

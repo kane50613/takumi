@@ -368,6 +368,30 @@ fn background_clip_text_descendants() {
   });
 }
 
+/// A `background-clip: text` block shows its background through the text of a box at zero opacity
+/// or under a non-invertible transform, but not through a float in a layer of its own or an
+/// out-of-flow box whose containing block is outside it.
+#[test]
+fn background_clip_text_reach() {
+  run_pdf_fixture("background-clip-text-reach", |fonts| {
+    let source = r##"<div style="width: 100%; height: 100%; padding: 12px; background-color: #ffffff; font-size: 28px; font-weight: 700; line-height: 1.4">
+      <div style="background-image: linear-gradient(90deg, #2563eb, #db2777); background-clip: text; color: transparent">
+        <div style="float: right">Float</div>
+        <div style="float: right; opacity: 0.5">Layered</div>
+        <div style="opacity: 0">Zero opacity</div>
+        <div style="transform: scale(0)">Scale zero</div>
+        <div style="position: absolute; left: 240px; top: 150px">Outside</div>
+      </div>
+    </div>"##;
+
+    PdfOptions::builder()
+      .node(from_html(source, FromHtmlOptions::default()).expect("parse clip-text reach fixture"))
+      .viewport(Viewport::new((420, 200)))
+      .fonts(fonts)
+      .build()
+  });
+}
+
 /// A `box-decoration-break: clone` span repeats its border and padding on every line it wraps
 /// onto, and each line makes room for the repeated start edge.
 #[test]

@@ -39,8 +39,6 @@ pub struct NodePaint {
   pub transform: Affine,
   /// Blink's paint offset of the border box: where it sits in the space paint snaps to pixels in.
   pub paint_offset: Point<f32>,
-  /// Where the border box sits in the root's space by layout alone, before any CSS transform.
-  pub layout_origin: Point<f32>,
   /// Containing-block size; `None` on an axis is indefinite.
   pub container_size: Size<Option<f32>>,
   /// Device-space bounds of the paint output, if any.
@@ -269,8 +267,6 @@ impl StackingContextNode {
 struct ChildBase {
   transform: Affine,
   paint_offset: Point<f32>,
-  /// Where the space sits in the root's space by layout alone.
-  origin: Point<f32>,
 }
 
 struct StackingContextBuildVisit {
@@ -358,7 +354,6 @@ impl SceneRequest<'_> {
       base: ChildBase {
         transform,
         paint_offset,
-        origin: Point::ZERO,
       },
       container_size,
       state: PropertyState::default(),
@@ -394,7 +389,6 @@ impl SceneRequest<'_> {
           visit.base.paint_offset + layout.location,
           local_transform,
         ),
-        origin: visit.base.origin + layout.location,
       };
       containing_blocks.record_placement(visit.node_id, child_base);
 
@@ -421,7 +415,6 @@ impl SceneRequest<'_> {
         node_id: visit.node_id,
         transform: current_transform,
         paint_offset: child_base.paint_offset,
-        layout_origin: child_base.origin,
         container_size: visit.container_size,
         paint_bounds: with_bounds
           .then(|| compute_node_paint_bounds(current, layout, current_transform))
