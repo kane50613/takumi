@@ -6,8 +6,6 @@
 //! that are supported are "link annotations", which allow you associate a certain region of
 //! the page with a link.
 
-use core::f32;
-
 use pdf_writer::types::AnnotationFlags;
 use pdf_writer::{Finish, Name, Ref, TextStr};
 
