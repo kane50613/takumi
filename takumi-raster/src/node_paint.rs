@@ -375,32 +375,11 @@ impl<'c> CanvasDevice<'c> {
       return Ok(());
     }
 
-    let transform = self.transform * local;
-    let canvas_to_source = background.and_then(|background| {
-      let to_block = (self.transform * frame.translation()).invert()?;
-
-      Some(Affine::translation(-background.offset.x, -background.offset.y) * to_block)
-    });
-
-    if let Some(background) = background
-      && let Some(canvas_to_source) = canvas_to_source
-    {
-      for glyph in &glyph_run.glyphs {
-        if let Some(content) = run.resolved_glyphs.get(&glyph.id) {
-          draw_glyph_clip_image(
-            content,
-            self.canvas,
-            style,
-            stroke,
-            transform,
-            placed(glyph),
-            background.source,
-            canvas_to_source,
-          )?;
-        }
-      }
+    if let Some(background) = background {
+      self.draw_glyphs_through(run, style, background, frame)?;
     }
 
+    let transform = self.transform * local;
     let font = FontRef::from_index(glyph_run.font_data(), glyph_run.font_index)
       .map_err(|_| FontError::InvalidFontIndex)?;
     let palettes = font.color_palettes();
@@ -417,6 +396,45 @@ impl<'c> CanvasDevice<'c> {
           placed(glyph),
           glyph_run.brush.color,
           palette.as_ref(),
+        )?;
+      }
+    }
+
+    Ok(())
+  }
+
+  /// Draws `background` seen through `run`'s glyphs and their stroke.
+  fn draw_glyphs_through(
+    &mut self,
+    run: &PositionedInlineRun,
+    style: &SizedFontStyle,
+    background: ClipImage<'_>,
+    frame: BoxFrame,
+  ) -> Result<()> {
+    let glyph_run = &run.glyph_run;
+    let transform = self.transform * run.transform(frame.translation());
+    let offset = run.glyph_offset(frame.layout);
+    let stroke = (glyph_run.brush.stroke_width, glyph_run.brush.stroke_color);
+    let Some(to_block) = (self.transform * frame.translation()).invert() else {
+      return Ok(());
+    };
+    let canvas_to_source =
+      Affine::translation(-background.offset.x, -background.offset.y) * to_block;
+
+    for glyph in &glyph_run.glyphs {
+      if let Some(content) = run.resolved_glyphs.get(&glyph.id) {
+        draw_glyph_clip_image(
+          content,
+          self.canvas,
+          style,
+          stroke,
+          transform,
+          Point {
+            x: offset.x + glyph.x,
+            y: offset.y + glyph.y,
+          },
+          background.source,
+          canvas_to_source,
         )?;
       }
     }
@@ -683,12 +701,19 @@ impl GlyphDevice for CanvasDevice<'_> {
         )
       })
       .and_then(|tile| {
-        let background = tile.as_ref().map(|tile| ClipImage {
-          source: tile.into(),
-          offset: Point::ZERO,
-        });
+        let Some(tile) = &tile else {
+          return Ok(());
+        };
 
-        self.draw_glyphs(run, style, background, frame)
+        self.draw_glyphs_through(
+          run,
+          style,
+          ClipImage {
+            source: tile.into(),
+            offset: Point::ZERO,
+          },
+          frame,
+        )
       });
 
     if let Err(error) = result {

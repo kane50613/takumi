@@ -724,7 +724,7 @@ impl GlyphDevice for DocumentDevice<'_> {
       area: span.strip,
     };
 
-    self.emit_glyph_run(run, style, frame, Some(&fill));
+    self.write(|doc| emit_clip_text_run(run, style, frame, &fill, doc));
   }
 }
 

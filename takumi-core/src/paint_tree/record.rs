@@ -393,7 +393,7 @@ impl GlyphDevice for Recorder {
     &mut self,
     run: &PositionedInlineRun,
     style: &SizedFontStyle,
-    frame: BoxFrame,
+    _frame: BoxFrame,
     span: &SpanBackground<'_>,
   ) {
     let background = TextBackground {
@@ -409,7 +409,7 @@ impl GlyphDevice for Recorder {
         .collect(),
     };
 
-    self.record_glyph_run(run, style, Some(background), frame);
+    self.record_text_background(run, style, background);
   }
 
   fn begin_shadow(&mut self, shadow: &SizedShadow) {
@@ -460,9 +460,7 @@ impl Recorder {
     let index = run.index;
     let brush = &run.glyph_run.brush;
     let join = style.parent.stroke_linejoin;
-    let text_stroke = (brush.stroke_width > 0.0)
-      .then(|| Stroke::outline(brush.stroke_width, join))
-      .zip(self.visible(brush.stroke_color));
+    let text_stroke = self.text_stroke(run, style);
 
     if let Some(shadow) = self.shadow {
       let Some(color) = self.visible(shadow.color) else {
@@ -494,41 +492,8 @@ impl Recorder {
 
     let origin = PaintPoint { x: 0.0, y: 0.0 };
 
-    if let Some(background) = background.filter(|background| !background.layers.is_empty()) {
-      let glyphs = |stroke| Drawable::Glyphs {
-        role: Role::Background,
-        run: index,
-        paint: Paint::Color {
-          color: [0, 0, 0, 255],
-        },
-        offset: origin,
-        blur: 0.0,
-        stroke,
-      };
-      let mask = iter::once(glyphs(None))
-        .chain(
-          text_stroke
-            .as_ref()
-            .map(|(stroke, _)| glyphs(Some(stroke.clone()))),
-        )
-        .collect();
-      let content = background
-        .layers
-        .into_iter()
-        .map(|(paint, blend_mode)| Drawable::Fill {
-          role: Role::Background,
-          shape: background.area.clone(),
-          paint,
-          blend_mode,
-          clips: Vec::new(),
-        })
-        .collect();
-
-      self.drawables.push(Drawable::Masked {
-        role: Role::Background,
-        mask,
-        content,
-      });
+    if let Some(background) = background {
+      self.record_text_background(run, style, background);
     }
 
     if let Some(color) = self.visible(brush.color) {
@@ -605,5 +570,66 @@ impl Recorder {
         Some(stroke),
       );
     }
+  }
+
+  /// Records `background` seen through `run`'s glyphs and their stroke.
+  fn record_text_background(
+    &mut self,
+    run: &PositionedInlineRun,
+    style: &SizedFontStyle,
+    background: TextBackground,
+  ) {
+    if !self.text_node || background.layers.is_empty() {
+      return;
+    }
+
+    let text_stroke = self.text_stroke(run, style);
+    let glyphs = |stroke| Drawable::Glyphs {
+      role: Role::Background,
+      run: run.index,
+      paint: Paint::Color {
+        color: [0, 0, 0, 255],
+      },
+      offset: PaintPoint { x: 0.0, y: 0.0 },
+      blur: 0.0,
+      stroke,
+    };
+    let mask = iter::once(glyphs(None))
+      .chain(
+        text_stroke
+          .as_ref()
+          .map(|(stroke, _)| glyphs(Some(stroke.clone()))),
+      )
+      .collect();
+    let content = background
+      .layers
+      .into_iter()
+      .map(|(paint, blend_mode)| Drawable::Fill {
+        role: Role::Background,
+        shape: background.area.clone(),
+        paint,
+        blend_mode,
+        clips: Vec::new(),
+      })
+      .collect();
+
+    self.drawables.push(Drawable::Masked {
+      role: Role::Background,
+      mask,
+      content,
+    });
+  }
+
+  /// The run's `-webkit-text-stroke` and its colour, when it shows.
+  fn text_stroke(
+    &self,
+    run: &PositionedInlineRun,
+    style: &SizedFontStyle,
+  ) -> Option<(Stroke, [u8; 4])> {
+    let brush = &run.glyph_run.brush;
+
+    (brush.stroke_width > 0.0)
+      .then(|| Stroke::outline(brush.stroke_width, style.parent.stroke_linejoin))
+      .zip(self.visible(brush.stroke_color))
   }
 }

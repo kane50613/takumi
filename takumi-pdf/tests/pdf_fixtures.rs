@@ -306,6 +306,24 @@ fn inline_span_background_image() {
   );
 }
 
+/// Nested `background-clip: text` spans each show their background through their glyphs, outer
+/// first, under an inner span's own background.
+#[test]
+fn inline_span_background_clip_text_nested() {
+  run_pdf_fixture("inline-span-background-clip-text-nested", |fonts| {
+    let source = r##"<div style="width: 100%; height: 100%; padding: 12px; background-color: #ffffff; font-size: 32px; font-weight: 700; color: #141414">
+      <div><span style="background-image: linear-gradient(90deg, #2563eb, #db2777); background-clip: text; color: transparent">Base <span style="background-image: linear-gradient(180deg, transparent 50%, #facc15 50%); background-clip: text">over</span> <span style="background-clip: text">bare</span></span></div>
+      <div><span style="background-image: linear-gradient(90deg, #16a34a, #0891b2); background-clip: text; color: transparent">Clip <span style="background-color: #fee2e2">boxed</span></span></div>
+    </div>"##;
+
+    PdfOptions::builder()
+      .node(from_html(source, FromHtmlOptions::default()).expect("parse nested clip-text fixture"))
+      .viewport(Viewport::new((420, 140)))
+      .fonts(fonts)
+      .build()
+  });
+}
+
 /// An inline `<span>` with a border strokes it on every line, without the sides the line wraps at.
 #[test]
 fn inline_span_border() {

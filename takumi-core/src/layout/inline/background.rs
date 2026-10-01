@@ -107,7 +107,6 @@ struct FragmentBounds {
 /// fragments (`InlineBoxFragmentPainterBase::PaintBackgroundBorderShadow`).
 ///
 /// Naive next to Blink; where it drifts:
-/// - `background-clip: text` on nested spans shows only the innermost span's background
 /// - `box-decoration-break: clone` lays the images over each fragment, but the fragments keep
 ///   `slice`'s padding and borders
 /// - a line taller than a page paints its background only on the page owning
