@@ -323,6 +323,30 @@ impl<'c> CanvasDevice<'c> {
     );
   }
 
+  /// Paints what `content` draws only where `mask` draws, as a `DstIn` layer keeps it.
+  fn with_painted_mask(&mut self, mask: impl FnOnce(&mut Self), content: impl FnOnce(&mut Self)) {
+    let placement = self.canvas.viewport().placement();
+    let subcanvas = match self.canvas.begin_subcanvas(placement) {
+      Ok(subcanvas) => subcanvas,
+      Err(error) => {
+        self.error.get_or_insert(error);
+        return;
+      }
+    };
+
+    mask(self);
+
+    let painted = self.canvas.take_subcanvas(subcanvas);
+
+    self.push_clip_coverage(
+      painted.data().iter().skip(3).step_by(4).copied().collect(),
+      placement,
+      false,
+    );
+    content(self);
+    self.clips.pop();
+  }
+
   /// Draws `run`'s glyphs over `background` seen through them, or their shadow while one is open.
   fn draw_glyphs(
     &mut self,
@@ -558,26 +582,10 @@ impl PaintDevice for CanvasDevice<'_> {
     origin: Point<f32>,
     content: impl FnOnce(&mut Self),
   ) {
-    let placement = self.canvas.viewport().placement();
-    let subcanvas = match self.canvas.begin_subcanvas(placement) {
-      Ok(subcanvas) => subcanvas,
-      Err(error) => {
-        self.error.get_or_insert(error);
-        return;
-      }
-    };
-
-    BoxBorderPainter::new(border, size).paint(origin, self);
-
-    let painted = self.canvas.take_subcanvas(subcanvas);
-
-    self.push_clip_coverage(
-      painted.data().iter().skip(3).step_by(4).copied().collect(),
-      placement,
-      false,
+    self.with_painted_mask(
+      |device| BoxBorderPainter::new(border, size).paint(origin, device),
+      content,
     );
-    content(self);
-    self.clips.pop();
   }
 
   fn pop_clip(&mut self) {

@@ -326,22 +326,10 @@ impl PaintDevice for Recorder {
     origin: Point<f32>,
     content: impl FnOnce(&mut Self),
   ) {
-    let role = self.role;
-    let mut mask = Recorder::new(self.transform);
-
-    BoxBorderPainter::new(border, size).paint(origin, &mut mask);
-
-    let outer = mem::take(&mut self.drawables);
-
-    content(self);
-
-    let content = mem::replace(&mut self.drawables, outer);
-
-    self.drawables.push(Drawable::Masked {
-      role,
-      mask: mask.finish(),
+    self.with_painted_mask(
+      |mask| BoxBorderPainter::new(border, size).paint(origin, mask),
       content,
-    });
+    );
   }
 
   fn begin_layer(&mut self, opacity: f32, _bounds: Option<LayerBounds>) {
@@ -445,6 +433,26 @@ fn span_layers(span: &SpanBackground<'_>) -> Vec<(Paint, Option<String>)> {
 }
 
 impl Recorder {
+  /// Records what `content` draws as a [`Drawable::Masked`] showing only where `mask` draws.
+  fn with_painted_mask(&mut self, mask: impl FnOnce(&mut Self), content: impl FnOnce(&mut Self)) {
+    let role = self.role;
+    let mut recorder = Recorder::new(self.transform);
+
+    mask(&mut recorder);
+
+    let outer = mem::take(&mut self.drawables);
+
+    content(self);
+
+    let content = mem::replace(&mut self.drawables, outer);
+
+    self.drawables.push(Drawable::Masked {
+      role,
+      mask: recorder.finish(),
+      content,
+    });
+  }
+
   /// Records `run`'s glyphs, or their shadow while one is open, over `background`.
   fn record_glyph_run(
     &mut self,

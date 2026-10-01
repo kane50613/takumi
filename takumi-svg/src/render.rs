@@ -601,22 +601,10 @@ impl PaintDevice for DocumentDevice<'_> {
     origin: Point<f32>,
     content: impl FnOnce(&mut Self),
   ) {
-    if self.error.is_some() {
-      return;
-    }
-    let (token, reference) = match self.doc.begin_mask() {
-      Ok(mask) => mask,
-      Err(error) => {
-        self.error = Some(error);
-        return;
-      }
-    };
-
-    BoxBorderPainter::new(border, size).paint(origin, self);
-    self.write(|doc| doc.end_mask(token));
-    self.open_group(|doc| doc.begin_masked_group(&reference));
-    content(self);
-    self.close_group();
+    self.with_painted_mask(
+      |device| BoxBorderPainter::new(border, size).paint(origin, device),
+      content,
+    );
   }
 
   fn begin_layer(&mut self, opacity: f32, _bounds: Option<LayerBounds>) {
@@ -746,6 +734,26 @@ impl DocumentDevice<'_> {
 
       emit_run_glyphs(run, style, frame, None, stroke, doc)
     });
+  }
+
+  /// Emits what `content` draws in a group masked by the alpha of what `mask` draws.
+  fn with_painted_mask(&mut self, mask: impl FnOnce(&mut Self), content: impl FnOnce(&mut Self)) {
+    if self.error.is_some() {
+      return;
+    }
+    let (token, reference) = match self.doc.begin_mask() {
+      Ok(mask) => mask,
+      Err(error) => {
+        self.error = Some(error);
+        return;
+      }
+    };
+
+    mask(self);
+    self.write(|doc| doc.end_mask(token));
+    self.open_group(|doc| doc.begin_masked_group(&reference));
+    content(self);
+    self.close_group();
   }
 }
 
