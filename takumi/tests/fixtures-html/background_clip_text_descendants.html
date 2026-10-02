@@ -1,0 +1,43 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>background_clip_text_descendants</title>
+    <base href="../../../" />
+    <link rel="stylesheet" href="takumi/tests/shared.css" />
+  </head>
+  <body style="width: 640px; height: 420px">
+    <div
+      style="
+        display: block;
+        width: 100%;
+        height: 100%;
+        padding: 20px;
+        background-color: rgb(255, 255, 255);
+        font-family: Geist;
+        font-size: 40px;
+        line-height: 56px;
+        font-weight: 700;
+      "
+    >
+      <div
+        style="
+          display: block;
+          background-image: linear-gradient(90deg, rgb(37, 99, 235), rgb(219, 39, 119));
+          background-clip: text;
+          color: rgba(0, 0, 0, 0);
+          text-shadow: 3px 3px 0 rgba(15, 23, 42, 0.35);
+        "
+      >
+        <div style="display: block">Nested block</div>
+        <div style="display: block">
+          <span style="display: inline-block; padding: 0 8px">Inline block</span>
+          <span style="display: inline; text-decoration: underline 4px">line</span>
+        </div>
+        <div style="display: block; position: relative; left: 40px">Positioned</div>
+        <div style="display: block; background-color: rgb(254, 226, 226)">Own background</div>
+        <div style="display: block; transform: rotate(-6deg)">Rotated</div>
+      </div>
+    </div>
+  </body>
+</html>

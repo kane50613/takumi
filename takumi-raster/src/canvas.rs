@@ -10,9 +10,7 @@ mod skia;
 use std::{borrow::Cow, mem::replace, sync::Arc};
 
 use blit::blit_paint_source_translation;
-pub(crate) use blit::{
-  composite_mask_source_to_pixmap, overlay_image, overlay_sampled_paint_source, placement_overlap,
-};
+pub(crate) use blit::{overlay_image, overlay_sampled_paint_source, placement_overlap};
 pub(crate) use gradient::try_overlay_gradient_tile;
 use image::{
   ImageError, Rgba, RgbaImage,
@@ -24,8 +22,7 @@ pub(crate) use mask::{
   intersect_alpha_masks, render_mask,
 };
 pub(crate) use paint_source::{
-  BilinearAxis, MaskCompositeColor, PaintSource, RowSource, SamplingFootprint,
-  interpolate_with_footprint,
+  BilinearAxis, PaintSource, RowSource, SamplingFootprint, interpolate_with_footprint,
 };
 use takumi_core::{
   geometry::{Point, Size},
@@ -420,7 +417,6 @@ impl Canvas {
     mask: &[u8],
     placement: Placement,
     source: PaintSource<'_>,
-    color_mode: MaskCompositeColor,
     sampling: MaskSamplingOptions,
     mode: BlendMode,
   ) {
@@ -434,7 +430,6 @@ impl Canvas {
         composite::Options {
           placement,
           sampling,
-          color_mode,
           mode,
           combined_mask: target.combined_mask,
         },

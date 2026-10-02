@@ -10,7 +10,7 @@ use super::{
   composite,
   composite::PixelSampler,
   mask::MaskRow,
-  paint_source::{MaskCompositeColor, RowSource, ScaledRows},
+  paint_source::{RowSource, ScaledRows},
   skia::{
     FillColorOptions, ImagePathFillOptions, try_draw_image_with_tiny_skia,
     try_fill_color_with_tiny_skia, try_fill_image_path_with_tiny_skia,
@@ -166,7 +166,6 @@ fn blit_sampled_paint_source_translation(
     resolved,
     transform: sampling.logical_to_source,
     algorithm: sampling.algorithm,
-    color_mode: MaskCompositeColor::SourceOnly,
     mode,
     combined_mask,
   }
@@ -329,29 +328,6 @@ fn blit_solid_translation(
   );
 }
 
-pub(crate) fn composite_mask_source_to_pixmap(
-  pixmap: &mut PixmapMut<'_>,
-  mask: &[u8],
-  source: PaintSource<'_>,
-  placement: Placement,
-  sampling: MaskSamplingOptions,
-  mode: BlendMode,
-  combined_mask: Option<MaskView<'_>>,
-) {
-  composite::source(
-    pixmap,
-    mask,
-    source,
-    composite::Options {
-      placement,
-      sampling,
-      color_mode: MaskCompositeColor::SourceOnly,
-      mode,
-      combined_mask,
-    },
-  );
-}
-
 pub(crate) fn draw_mask(
   pixmap: &mut PixmapMut<'_>,
   mask: &[u8],
@@ -505,7 +481,6 @@ fn composite_bordered_source(
           sample_bias: Point { x: 0.5, y: 0.5 },
           algorithm,
         },
-        color_mode: MaskCompositeColor::SourceOnly,
         mode: options.mode,
         combined_mask: target.combined_mask,
       },

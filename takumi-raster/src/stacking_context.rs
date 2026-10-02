@@ -3,6 +3,7 @@ use takumi_core::{
   layout::inline::InlinePass,
   paint_chunk::{ChunkPart, ConversionContext, PaintChunk, PropertySink},
   paint_property::{ClipId, ClipNode, EffectId, EffectNode},
+  painter::TextClip,
   scene::{NodePaint, Scene, SceneBounds},
 };
 use tiny_skia::PixmapMut;
@@ -32,6 +33,7 @@ pub(crate) fn paint_scene(scene: &mut Scene, canvas: &mut Canvas) -> Result<()> 
     ScenePainter {
       root,
       results,
+      chunks: &chunks,
       canvas,
       owners,
       effects: Vec::new(),
@@ -63,6 +65,7 @@ struct OpenEffect {
 struct ScenePainter<'s, 'c> {
   root: &'s mut RenderNode,
   results: &'s LayoutResults,
+  chunks: &'c [PaintChunk<'s>],
   canvas: &'c mut Canvas,
   owners: Vec<Option<&'s NodePaint>>,
   effects: Vec<OpenEffect>,
@@ -81,23 +84,36 @@ impl ScenePainter<'_, '_> {
       return;
     }
 
-    let canvas = &mut *self.canvas;
-    let result =
-      placed(self.root, self.results, chunk.node).and_then(|(node, layout)| match chunk.part {
-        ChunkPart::Decorations if node.paints_own_box() => {
-          draw_box_shell(&node.context, canvas, layout)
-        }
-        ChunkPart::Decorations => Ok(()),
-        ChunkPart::Content => draw_node_content(node, canvas, layout, chunk.node.transform),
-        ChunkPart::Floats => {
-          draw_own_content(node, &node.context, canvas, layout, InlinePass::Floats)
-        }
-        ChunkPart::Outline => {
-          DeferredOutline::of(&node.context, layout).map_or(Ok(()), |outline| outline.paint(canvas))
-        }
-      });
+    let result = placed(self.root, self.results, chunk.node)
+      .map(|(_, layout)| layout)
+      .and_then(|layout| self.paint_part(chunk, layout));
 
     self.record(result);
+  }
+
+  /// Draws `chunk`'s part of its box, laid out at `layout`.
+  fn paint_part(&mut self, chunk: &PaintChunk<'_>, layout: Layout) -> Result<()> {
+    let root: &RenderNode = self.root;
+    let canvas = &mut *self.canvas;
+    let Some(node) = root.node_at_path(&chunk.node.path) else {
+      return Ok(());
+    };
+
+    match chunk.part {
+      ChunkPart::Decorations if node.paints_own_box() => {
+        let text_clip = TextClip::of(root, self.results, self.chunks, chunk.node)?;
+
+        draw_box_shell(&node.context, canvas, layout, text_clip.as_ref())
+      }
+      ChunkPart::Decorations => Ok(()),
+      ChunkPart::Content => draw_node_content(node, canvas, layout, chunk.node.transform),
+      ChunkPart::Floats => {
+        draw_own_content(node, &node.context, canvas, layout, InlinePass::Floats)
+      }
+      ChunkPart::Outline => {
+        DeferredOutline::of(&node.context, layout).map_or(Ok(()), |outline| outline.paint(canvas))
+      }
+    }
   }
 
   fn record(&mut self, result: Result<()>) {

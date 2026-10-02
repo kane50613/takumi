@@ -2,10 +2,9 @@
 //! order the shadows, decorations, and outlines, and draws each run's glyphs as outline `<path>`s,
 //! COLR colour layers, or bitmap `<image>`s.
 
-use std::{io, sync::Arc};
+use std::io;
 
 use takumi_core::{
-  context::RenderContext,
   font_style::SizedFontStyle,
   layout::{
     inline::{
@@ -14,15 +13,14 @@ use takumi_core::{
     },
     tree::RenderNode,
   },
-  painter::{BoxBackground, BoxFrame, GlyphFill, OwnContent},
+  painter::{BoxFrame, OwnContent},
   path_data::path_data,
   resources::{font::FontError, glyph::ResolvedGlyph, image::to_data_url},
-  style::{Affine, BackgroundClip, LineJoin},
+  style::Affine,
 };
 
 use crate::{
   Frame, GlyphStroke, Rgba, SvgDocument,
-  gradient::LayerEmitter,
   render::{DocumentDevice, emit_inline_box},
 };
 
@@ -50,15 +48,9 @@ pub(crate) fn emit_inline_content(
   let runs = built
     .resolve_runs(context, frame.layout)
     .map_err(font_error)?;
-  let fill = if context.style.background_clip == BackgroundClip::Text {
-    GlyphFill::Background
-  } else {
-    GlyphFill::Text
-  };
-
   if pass == InlinePass::Content {
-    DocumentDevice::paint_text(doc, context, |device| {
-      runs.paint(&built.spans, &font_style, fill, frame, device);
+    DocumentDevice::paint(doc, |device| {
+      runs.paint(&built.spans, &font_style, frame, device);
     })?;
   }
 
@@ -84,98 +76,6 @@ pub(crate) fn run_stroke(run: &ShapedRun, font_style: &SizedFontStyle) -> Option
     width: brush.stroke_width,
     join: font_style.parent.stroke_linejoin,
   })
-}
-
-/// A background `background-clip: text` shows through glyphs: a box's, laid over `area`.
-pub(crate) struct ClipTextBackground<'b> {
-  pub(crate) context: &'b RenderContext,
-  pub(crate) background: &'b BoxBackground<'b>,
-  pub(crate) area: BoxFrame,
-}
-
-/// Emits `fill` through one run's glyphs in the block at `frame` (`background-clip: text`),
-/// widened by any `-webkit-text-stroke`, for the run's own paint to cover.
-pub(crate) fn emit_clip_text_run(
-  run: &PositionedInlineRun,
-  font_style: &SizedFontStyle,
-  frame: BoxFrame,
-  fill: &ClipTextBackground<'_>,
-  doc: &mut SvgDocument,
-) -> io::Result<()> {
-  let (mask_token, mask_ref) = doc.begin_mask()?;
-  let any = emit_clip_text_mask_glyphs(run, frame, font_style.parent.stroke_linejoin, doc)?;
-
-  doc.end_mask(mask_token)?;
-
-  if !any {
-    return Ok(());
-  }
-
-  let ClipTextBackground {
-    context,
-    background,
-    area,
-  } = *fill;
-  let border_box = Frame::border_box(area);
-  let group = doc.begin_masked_group(&mask_ref)?;
-
-  if let Some(color) = background.color {
-    let snapped = Frame::new(
-      border_box.x + background.offset.x,
-      border_box.y + background.offset.y,
-      background.size.width,
-      background.size.height,
-    );
-
-    doc.rect(snapped, Rgba(color.0))?;
-  }
-  LayerEmitter::new(context, doc).layers(&background.layers, border_box)?;
-  doc.end_group(group)
-}
-
-/// Paints a run's outline glyphs white into the active mask with both fill and
-/// stroke (and any faux-bold embolden), so the mask covers the full fill+stroke
-/// glyph coverage. Returns whether any glyph was emitted.
-fn emit_clip_text_mask_glyphs(
-  run: &PositionedInlineRun,
-  frame: BoxFrame,
-  join: LineJoin,
-  doc: &mut SvgDocument,
-) -> io::Result<bool> {
-  let run_transform = run.transform(Affine::IDENTITY);
-  let glyph_offset = run.glyph_offset(frame.layout);
-  let stroke_width = run.glyph_run.brush.stroke_width;
-  let mut any = false;
-  for glyph in &run.glyph_run.glyphs {
-    let Some(ResolvedGlyph::Outline(outline)) = run.resolved_glyphs.get(&glyph.id).map(Arc::as_ref)
-    else {
-      continue;
-    };
-    let matrix =
-      run_transform * Affine::translation(glyph_offset.x + glyph.x, glyph_offset.y + glyph.y);
-    let data = path_data(outline.paths(), frame.place(matrix));
-    if data.is_empty() {
-      continue;
-    }
-    any = true;
-    if let Some(embolden) = outline.embolden().filter(|embolden| *embolden > 0.0) {
-      let bold = GlyphStroke {
-        color: Rgba::WHITE,
-        width: embolden,
-        join,
-      };
-
-      doc.glyph_path(&data, Rgba::WHITE, Some(bold))?;
-    }
-    let stroke = (stroke_width > 0.0).then_some(GlyphStroke {
-      color: Rgba::WHITE,
-      width: stroke_width,
-      join,
-    });
-
-    doc.glyph_path(&data, Rgba::WHITE, stroke)?;
-  }
-  Ok(any)
 }
 
 /// Emits a run's glyphs. `color_override` (for shadows) recolors every glyph and

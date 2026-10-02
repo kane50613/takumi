@@ -28,9 +28,6 @@ pub enum GlyphFill {
   /// The run's own paint: its colour or the font's colour layers, faux bold, and
   /// `-webkit-text-stroke`.
   Text,
-  /// The box's background seen through the glyphs and their stroke, for
-  /// `background-clip: text`, under the run's own paint.
-  Background,
   /// The glyphs and their stroke in opaque black, colour glyphs by their alpha, for a
   /// [`GlyphDevice::fill_text_clip`] mask.
   Mask,
@@ -54,10 +51,10 @@ pub trait GlyphDevice: PaintDevice {
     frame: BoxFrame,
   );
 
-  /// Paints `span`'s `background-image` layers, clipped to `clip` under `transform`.
+  /// Paints `background`'s `background-image` layers, clipped to `clip` under `transform`.
   fn fill_background_layers(
     &mut self,
-    span: &SpanBackground<'_>,
+    background: &StripBackground<'_>,
     clip: &FillShape,
     transform: Affine,
   );
@@ -67,26 +64,27 @@ pub trait GlyphDevice: PaintDevice {
   /// `DstIn` text layer.
   fn fill_text_clip(
     &mut self,
-    background: &SpanBackground<'_>,
+    background: &StripBackground<'_>,
     clip: &FillShape,
     transform: Affine,
     mask: &mut dyn FnMut(&mut dyn GlyphDevice),
   );
 }
 
-/// An inline span's background, laid over the strip its fragments would make on one line.
-pub struct SpanBackground<'a> {
-  /// The span.
+/// A background laid over a strip: an inline span's over the strip its fragments would make on
+/// one line, or a box's over its border box.
+pub struct StripBackground<'a> {
+  /// The span or box.
   pub node: &'a RenderNode,
-  /// The span's id, unique among the spans of its inline layout.
-  pub span: usize,
+  /// Unique among the backgrounds one device paints.
+  pub id: usize,
   /// Its background.
   pub background: BoxBackground<'a>,
   /// The strip, placed in the block.
   pub strip: BoxFrame,
 }
 
-impl SpanBackground<'_> {
+impl StripBackground<'_> {
   /// Fills `clip` under `transform` with the colour, then the layers.
   pub fn fill(&self, clip: &FillShape, transform: Affine, device: &mut dyn GlyphDevice) {
     if let Some(color) = self.background.color {
@@ -174,13 +172,12 @@ impl InlineRunLayout<'_> {
     &self,
     spans: &[ProcessedInlineSpan<'_>],
     style: &SizedFontStyle,
-    fill: GlyphFill,
     frame: BoxFrame,
     device: &mut dyn GlyphDevice,
   ) {
     self
       .lines(frame.layout, |_| true)
-      .paint(spans, style, fill, frame, device);
+      .paint(spans, style, frame, device);
   }
 }
 
@@ -190,36 +187,14 @@ impl InlineLines<'_> {
   ///
   /// The shadows all paint before any text, so a shadow never lands on a neighbouring run's
   /// glyphs, as css-text-decor-3 asks of `text-shadow`.
-  ///
-  /// Naive next to Blink, which paints a `GlyphFill::Background` block's background through the
-  /// glyphs first: here each glyph shows it as the glyph paints, over the text shadows, and a glyph
-  /// inside a `background-clip: text` span skips it.
   pub fn paint(
     &self,
     spans: &[ProcessedInlineSpan<'_>],
     style: &SizedFontStyle,
-    fill: GlyphFill,
     frame: BoxFrame,
     device: &mut dyn GlyphDevice,
   ) {
-    let at = frame.translation();
-    let device_transform = device.transform();
-    let runs: Vec<PaintedRun> = self
-      .runs
-      .iter()
-      .filter_map(|&run| {
-        let style = run.style(spans).unwrap_or(style);
-
-        // A run of `visibility: hidden` text keeps its place on the line but paints nothing.
-        style.parent.is_visible().then(|| PaintedRun {
-          run,
-          decorations: run.decorations(frame.layout, at, device_transform),
-          style,
-          chain: run.span_chain(spans),
-          baseline: run.glyph_offset(frame.layout).y + run.glyph_run.baseline,
-        })
-      })
-      .collect();
+    let runs = self.painted_runs(spans, style, frame, device);
 
     for fragment in &self.background_fragments {
       device.with_opacity(fragment.opacity, None, |device| {
@@ -281,13 +256,7 @@ impl InlineLines<'_> {
     }
 
     for painted in &runs {
-      let fill = if self.shows_span_background(painted) {
-        GlyphFill::Text
-      } else {
-        fill
-      };
-
-      painted.paint(fill, frame, RunPass::Proper, device);
+      painted.paint(GlyphFill::Text, frame, RunPass::Proper, device);
     }
 
     for island in OutlineIsland::of(&self.outline_rects) {
@@ -297,15 +266,47 @@ impl InlineLines<'_> {
 }
 
 impl InlineLines<'_> {
-  /// Whether a span around `painted` with `background-clip: text` already shows its background
-  /// through the glyphs, which then skip the block's.
-  fn shows_span_background(&self, painted: &PaintedRun) -> bool {
-    self.background_fragments.iter().any(|fragment| {
-      fragment
-        .background
-        .is_some_and(|background| background.clips_text())
-        && painted.lies_in(fragment)
-    })
+  /// Paints the glyphs and decorations of the visible runs of the block at `frame` into a
+  /// [`GlyphDevice::fill_text_clip`] mask.
+  pub fn paint_mask(
+    &self,
+    spans: &[ProcessedInlineSpan<'_>],
+    style: &SizedFontStyle,
+    frame: BoxFrame,
+    device: &mut dyn GlyphDevice,
+  ) {
+    for painted in self.painted_runs(spans, style, frame, device) {
+      painted.paint_mask(frame, device);
+    }
+  }
+
+  /// The runs that paint, `visibility: hidden` ones left out, each in its span's style or `style`.
+  fn painted_runs<'r>(
+    &'r self,
+    spans: &'r [ProcessedInlineSpan<'_>],
+    style: &'r SizedFontStyle,
+    frame: BoxFrame,
+    device: &dyn GlyphDevice,
+  ) -> Vec<PaintedRun<'r>> {
+    let at = frame.translation();
+    let device_transform = device.transform();
+
+    self
+      .runs
+      .iter()
+      .filter_map(|&run| {
+        let style = run.style(spans).unwrap_or(style);
+
+        // A run of `visibility: hidden` text keeps its place on the line but paints nothing.
+        style.parent.is_visible().then(|| PaintedRun {
+          run,
+          decorations: run.decorations(frame.layout, at, device_transform),
+          style,
+          chain: run.span_chain(spans),
+          baseline: run.glyph_offset(frame.layout).y + run.glyph_run.baseline,
+        })
+      })
+      .collect()
   }
 }
 
@@ -316,10 +317,14 @@ impl<'c> FragmentBackground<'c> {
   }
 
   /// The span's background on `fragment` of the block at `frame`.
-  fn background(&self, fragment: &InlineBackgroundFragment, frame: BoxFrame) -> SpanBackground<'c> {
-    SpanBackground {
+  fn background(
+    &self,
+    fragment: &InlineBackgroundFragment,
+    frame: BoxFrame,
+  ) -> StripBackground<'c> {
+    StripBackground {
       node: self.node,
-      span: fragment.span,
+      id: fragment.span,
       background: BoxBackground::new(
         &self.node.context,
         self.strip,

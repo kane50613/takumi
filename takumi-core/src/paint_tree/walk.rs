@@ -9,7 +9,7 @@ use super::{
     PaintGlyph, PaintNode, PaintRect, PaintStep, Role, Sampling, Shape, TextRun,
   },
   fonts::FontTable,
-  record::{Recorder, TextBackground},
+  record::Recorder,
 };
 use crate::{
   context::RenderContext,
@@ -29,15 +29,13 @@ use crate::{
   paint_chunk::{ChunkPart, ConversionContext, PaintChunk, PropertySink},
   paint_property::{ClipId, ClipNode, EffectId, EffectNode},
   painter::{
-    BackgroundClipArea, BoxFrame, BoxPainter, FillShape, GlyphFill, OverflowClip, OwnContent,
-    PaintDevice,
+    BackgroundClipArea, BoxFrame, BoxPainter, FillShape, OverflowClip, OwnContent, PaintDevice,
+    TextClip,
   },
   resources::image::{sniff_mime, to_data_url},
   scene::{NodePaint, Scene},
   sort_key::sort_by_key,
-  style::{
-    Affine, BackgroundClip, BackgroundImage, ComputedStyle, Filter, Isolation, TextAlign, ToCss,
-  },
+  style::{Affine, BackgroundImage, ComputedStyle, Filter, Isolation, TextAlign, ToCss},
 };
 
 /// A render node placed in the document, inside the box `parent`.
@@ -89,6 +87,7 @@ impl Walker {
       StepWriter {
         walker: self,
         scene,
+        chunks: &chunks,
         prefix,
         owners: &owners,
         paints: &paints,
@@ -106,19 +105,21 @@ impl Walker {
     conversion.finish().error.map_or(Ok(()), Err)
   }
 
-  /// Records a box as a node without steps, and returns the node.
+  /// Records a box as a node without steps, its background shown through `text_clip` when it has
+  /// one, and returns the node.
   fn record_box(
     &mut self,
     node: &RenderNode,
     layout: ComputedLayout,
     transform: Affine,
     path: Vec<usize>,
-  ) -> usize {
+    text_clip: Option<&TextClip>,
+  ) -> Result<usize> {
     let context = &node.context;
     let painter = BoxPainter::new(context, layout);
     let size = layout.size;
     let drawables = if node.paints_own_box() {
-      decorations(&painter, transform)
+      decorations(&painter, transform, text_clip)?
     } else {
       Vec::new()
     };
@@ -170,7 +171,7 @@ impl Walker {
       Some(path),
     );
 
-    id
+    Ok(id)
   }
 
   /// Records the text or image the node lays out.
@@ -333,7 +334,7 @@ impl Walker {
             &node.context.sizing,
           );
           let placed = transform * Affine::translation(offset.x, offset.y) * local;
-          let id = self.record_box(node, layout, placed, box_path.clone());
+          let id = self.record_box(node, layout, placed, box_path.clone(), None)?;
           let (group, clip, outline) = match &self.nodes[id].kind {
             NodeKind::Box {
               effects,
@@ -402,33 +403,11 @@ impl Walker {
     } = placed;
     let BuiltInlineLayout { spans, text, .. } = built;
     let context = &node.context;
-    let painter = BoxPainter::new(context, layout);
-    let fill = if context.style.background_clip == BackgroundClip::Text {
-      GlyphFill::Background
-    } else {
-      GlyphFill::Text
-    };
-    let background = (fill == GlyphFill::Background).then(|| {
-      let background = painter.background();
-
-      TextBackground {
-        area: Shape::Rect {
-          rect: PaintRect::sized(background.offset, background.size),
-        },
-        layers: background
-          .color
-          .map(|color| (Paint::Color { color: color.0 }, None))
-          .into_iter()
-          .chain(Paint::layers(&background.layers, context))
-          .collect(),
-      }
-    });
-    let mut recorder = Recorder::text(background, transform);
+    let mut recorder = Recorder::text(transform);
 
     runs.paint(
       spans,
       font_style,
-      fill,
       BoxFrame::new(layout, Point::ZERO),
       &mut recorder,
     );
@@ -593,6 +572,7 @@ impl Walker {
 struct StepWriter<'w, 's> {
   walker: &'w mut Walker,
   scene: &'s Scene,
+  chunks: &'w [PaintChunk<'s>],
   prefix: &'w [usize],
   owners: &'w [Option<&'s NodePaint>],
   /// Every box the chunks paint, by path.
@@ -611,21 +591,29 @@ impl StepWriter<'_, '_> {
       return node;
     }
 
-    let recorded = match recorded(self.scene, paint) {
-      Ok(recorded) => recorded,
-      Err(error) => {
+    let scene = self.scene;
+    let node = recorded(scene, paint)
+      .and_then(|recorded| {
+        let Some((node, layout)) = recorded else {
+          return Ok(None);
+        };
+        let text_clip = TextClip::of(&scene.root, &scene.results, self.chunks, paint)?;
+
+        self
+          .walker
+          .record_box(
+            node,
+            layout,
+            paint.transform,
+            [self.prefix, &paint.path].concat(),
+            text_clip.as_ref(),
+          )
+          .map(Some)
+      })
+      .unwrap_or_else(|error| {
         self.error.get_or_insert(error);
         None
-      }
-    };
-    let node = recorded.map(|(node, layout)| {
-      self.walker.record_box(
-        node,
-        layout,
-        paint.transform,
-        [self.prefix, &paint.path].concat(),
-      )
-    });
+      });
 
     self.boxes.insert(paint.path.clone(), node);
     node
@@ -746,7 +734,11 @@ pub(super) fn recorded<'s>(
 }
 
 /// The shadows, background, and border the box `painter` paints, bottom first.
-fn decorations(painter: &BoxPainter<'_>, transform: Affine) -> Vec<Drawable> {
+fn decorations(
+  painter: &BoxPainter<'_>,
+  transform: Affine,
+  text_clip: Option<&TextClip>,
+) -> Result<Vec<Drawable>> {
   let mut recorder = Recorder::new(transform);
 
   painter.paint_normal_box_shadows(Point::ZERO, &mut recorder);
@@ -784,13 +776,16 @@ fn decorations(painter: &BoxPainter<'_>, transform: Affine) -> Vec<Drawable> {
       None => fill(&mut recorder),
     }
   }
+  if let Some(text_clip) = text_clip {
+    text_clip.paint_background(Point::ZERO, &mut recorder)?;
+  }
   if isolated {
     recorder.end_layer();
   }
 
   painter.paint_inset_box_shadows(Point::ZERO, &mut recorder);
   painter.paint_border(Point::ZERO, &mut recorder);
-  recorder.finish()
+  Ok(recorder.finish())
 }
 
 /// How the box `painter` paints composites, as a group.

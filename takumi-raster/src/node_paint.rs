@@ -15,7 +15,7 @@ use takumi_core::{
   },
   painter::{
     BackgroundClipArea, BoxBorderPainter, BoxFrame, BoxPainter, FillShape, GlyphDevice, GlyphFill,
-    LayerBounds, PaintDevice, PendingOutline, ShadowShape, SpanBackground, StrokeStyle,
+    LayerBounds, PaintDevice, PendingOutline, ShadowShape, StripBackground, StrokeStyle, TextClip,
   },
   resources::{font::FontError, glyph::ResolvedGlyph},
   scene::SceneBounds,
@@ -29,27 +29,28 @@ use super::{
   collect_background_layers, draw_image, rasterize_layers,
 };
 use crate::{
-  BlurType, CanvasSubcanvas, Command, Error, MaskCompositeColor, MaskSamplingOptions, Placement,
-  Result, Stroke, Style, apply_blur_alpha_bytes, attenuate_alpha_by_mask, bitmap_coverage,
-  checked_area, draw_glyph, draw_glyph_clip_image, intersect_alpha_masks,
+  BlurType, CanvasSubcanvas, Command, Error, MaskSamplingOptions, Placement, Result, Stroke, Style,
+  apply_blur_alpha_bytes, attenuate_alpha_by_mask, bitmap_coverage, checked_area, draw_glyph,
+  intersect_alpha_masks,
   layout::node::ImageData,
   render_mask,
   style::{Affine, BlendMode},
 };
 
-/// Paints a box's own decorations, bottom to top: outset shadows, background,
-/// inset shadows, and border.
+/// Paints a box's own decorations, bottom to top: outset shadows, background, through
+/// `text_clip` when it has one, inset shadows, and border.
 pub(crate) fn draw_box_shell(
   context: &RenderContext,
   canvas: &mut Canvas,
   layout: Layout,
+  text_clip: Option<&TextClip>,
 ) -> Result<()> {
   let painter = BoxPainter::new(context, layout);
 
   CanvasDevice::paint(canvas, context, |device| {
     painter.paint_normal_box_shadows(Point::ZERO, device);
   })?;
-  draw_background(context, canvas, layout)?;
+  draw_background(context, canvas, layout, text_clip)?;
   CanvasDevice::paint(canvas, context, |device| {
     painter.paint_inset_box_shadows(Point::ZERO, device);
   })?;
@@ -69,8 +70,6 @@ pub(crate) struct CanvasDevice<'c> {
   layers: Vec<Option<(CanvasSubcanvas, f32)>>,
   /// The shadow every draw becomes while one is open.
   shadow: Option<SizedShadow>,
-  /// The background `background-clip: text` glyphs show.
-  pub(crate) text_background: Option<ClipImage<'c>>,
   /// The span background strips already rasterized, by span id, strip size, and the strip's
   /// offset from the pixel grid, since a span paints the same strip on every line. A device paints
   /// one inline layout, whose span ids are unique.
@@ -102,7 +101,6 @@ impl<'c> CanvasDevice<'c> {
       clips: Vec::new(),
       layers: Vec::new(),
       shadow: None,
-      text_background: None,
       strip_tiles: HashMap::new(),
       error: None,
     }
@@ -360,9 +358,7 @@ impl<'c> CanvasDevice<'c> {
     let offset = run.glyph_offset(frame.layout);
     let (color, stroke_color) = match fill {
       GlyphFill::Mask => (Color::black(), Color::black()),
-      GlyphFill::Text | GlyphFill::Background => {
-        (glyph_run.brush.color, glyph_run.brush.stroke_color)
-      }
+      GlyphFill::Text => (glyph_run.brush.color, glyph_run.brush.stroke_color),
     };
     // A span may set `-webkit-text-stroke` for itself, so it comes off the run.
     let stroke = (glyph_run.brush.stroke_width, stroke_color);
@@ -405,12 +401,6 @@ impl<'c> CanvasDevice<'c> {
       return Ok(());
     }
 
-    if fill == GlyphFill::Background
-      && let Some(background) = self.text_background
-    {
-      self.draw_glyphs_through(run, style, background, frame)?;
-    }
-
     let transform = self.transform * local;
     let font = FontRef::from_index(glyph_run.font_data(), glyph_run.font_index)
       .map_err(|_| FontError::InvalidFontIndex)?;
@@ -428,45 +418,6 @@ impl<'c> CanvasDevice<'c> {
           placed(glyph),
           color,
           palette.as_ref(),
-        )?;
-      }
-    }
-
-    Ok(())
-  }
-
-  /// Draws `background` seen through `run`'s glyphs and their stroke.
-  fn draw_glyphs_through(
-    &mut self,
-    run: &PositionedInlineRun,
-    style: &SizedFontStyle,
-    background: ClipImage<'_>,
-    frame: BoxFrame,
-  ) -> Result<()> {
-    let glyph_run = &run.glyph_run;
-    let transform = self.transform * run.transform(frame.translation());
-    let offset = run.glyph_offset(frame.layout);
-    let stroke = (glyph_run.brush.stroke_width, glyph_run.brush.stroke_color);
-    let Some(to_block) = (self.transform * frame.translation()).invert() else {
-      return Ok(());
-    };
-    let canvas_to_source =
-      Affine::translation(-background.offset.x, -background.offset.y) * to_block;
-
-    for glyph in &glyph_run.glyphs {
-      if let Some(content) = run.resolved_glyphs.get(&glyph.id) {
-        draw_glyph_clip_image(
-          content,
-          self.canvas,
-          style,
-          stroke,
-          transform,
-          Point {
-            x: offset.x + glyph.x,
-            y: offset.y + glyph.y,
-          },
-          background.source,
-          canvas_to_source,
         )?;
       }
     }
@@ -496,7 +447,6 @@ impl<'c> CanvasDevice<'c> {
       &mask,
       placement,
       source,
-      MaskCompositeColor::SourceOnly,
       MaskSamplingOptions {
         canvas_to_source: box_to_source * canvas_to_box,
         sample_bias: Point { x: 0.5, y: 0.5 },
@@ -640,23 +590,23 @@ impl PaintDevice for CanvasDevice<'_> {
 impl GlyphDevice for CanvasDevice<'_> {
   fn fill_background_layers(
     &mut self,
-    span: &SpanBackground<'_>,
+    background: &StripBackground<'_>,
     clip: &FillShape,
     transform: Affine,
   ) {
-    let context = &span.node.context;
+    let context = &background.node.context;
     // The strip rasterizes on the device pixel grid, so its layers land where they snapped.
-    let origin = span.strip.origin;
+    let origin = background.strip.origin;
     let fraction = Point {
       x: origin.x - origin.x.floor(),
       y: origin.y - origin.y.floor(),
     };
     let size = Size {
-      width: (span.strip.layout.size.width + fraction.x).ceil() as u32,
-      height: (span.strip.layout.size.height + fraction.y).ceil() as u32,
+      width: (background.strip.layout.size.width + fraction.x).ceil() as u32,
+      height: (background.strip.layout.size.height + fraction.y).ceil() as u32,
     };
     let key = (
-      span.span,
+      background.id,
       size.width,
       size.height,
       fraction.x.to_bits(),
@@ -664,7 +614,7 @@ impl GlyphDevice for CanvasDevice<'_> {
     );
     let tile = match self.strip_tiles.remove(&key) {
       Some(tile) => tile,
-      None => background_image_layers(&span.background, context)
+      None => background_image_layers(&background.background, context)
         .and_then(|layers| {
           rasterize_layers(
             layers,
@@ -694,7 +644,7 @@ impl GlyphDevice for CanvasDevice<'_> {
 
   fn fill_text_clip(
     &mut self,
-    background: &SpanBackground<'_>,
+    background: &StripBackground<'_>,
     clip: &FillShape,
     transform: Affine,
     mask: &mut dyn FnMut(&mut dyn GlyphDevice),
@@ -726,18 +676,11 @@ impl GlyphDevice for CanvasDevice<'_> {
   }
 }
 
-/// The image `background-clip: text` glyphs show, its top-left `offset` from the block's border
-/// box.
-#[derive(Clone, Copy)]
-pub(crate) struct ClipImage<'c> {
-  pub(crate) source: PaintSource<'c>,
-  pub(crate) offset: Point<f32>,
-}
-
 pub(crate) fn draw_background(
   context: &RenderContext,
   canvas: &mut Canvas,
   layout: Layout,
+  text_clip: Option<&TextClip>,
 ) -> Result<()> {
   let painter = BoxPainter::new(context, layout);
   let background = painter.background();
@@ -872,7 +815,14 @@ pub(crate) fn draw_background(
         }
       }
     }
-    BackgroundClipArea::Text => {}
+    BackgroundClipArea::Text => {
+      if let Some(text_clip) = text_clip {
+        let mut device = CanvasDevice::of(canvas, context);
+
+        text_clip.paint_background(Point::ZERO, &mut device)?;
+        device.finish()?;
+      }
+    }
   }
 
   Ok(())
