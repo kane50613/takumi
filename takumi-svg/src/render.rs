@@ -601,22 +601,10 @@ impl PaintDevice for DocumentDevice<'_> {
     origin: Point<f32>,
     content: impl FnOnce(&mut Self),
   ) {
-    if self.error.is_some() {
-      return;
-    }
-    let (token, reference) = match self.doc.begin_mask() {
-      Ok(mask) => mask,
-      Err(error) => {
-        self.error = Some(error);
-        return;
-      }
-    };
-
-    BoxBorderPainter::new(border, size).paint(origin, self);
-    self.write(|doc| doc.end_mask(token));
-    self.open_group(|doc| doc.begin_masked_group(&reference));
-    content(self);
-    self.close_group();
+    self.with_painted_mask(
+      |device| BoxBorderPainter::new(border, size).paint(origin, device),
+      content,
+    );
   }
 
   fn begin_layer(&mut self, opacity: f32, _bounds: Option<LayerBounds>) {
@@ -695,6 +683,17 @@ impl GlyphDevice for DocumentDevice<'_> {
       return self
         .write(|doc| emit_run_glyphs(run, style, frame.shifted(offset), Some(color), stroke, doc));
     }
+    if fill == GlyphFill::Mask {
+      let black = Rgba(Color::black().0);
+      let brush = &run.glyph_run.brush;
+      let stroke = (brush.stroke_width > 0.0).then_some(GlyphStroke {
+        color: black,
+        width: brush.stroke_width,
+        join: style.parent.stroke_linejoin,
+      });
+
+      return self.write(|doc| emit_run_glyphs(run, style, frame, Some(black), stroke, doc));
+    }
 
     let context = self
       .text_background
@@ -711,20 +710,17 @@ impl GlyphDevice for DocumentDevice<'_> {
     self.emit_glyph_run(run, style, frame, fill.as_ref());
   }
 
-  fn draw_glyph_run_through(
+  fn fill_text_clip(
     &mut self,
-    run: &PositionedInlineRun,
-    style: &SizedFontStyle,
-    frame: BoxFrame,
-    span: &SpanBackground<'_>,
+    background: &SpanBackground<'_>,
+    clip: &FillShape,
+    transform: Affine,
+    mask: &mut dyn FnMut(&mut dyn GlyphDevice),
   ) {
-    let fill = ClipTextBackground {
-      context: &span.node.context,
-      background: &span.background,
-      area: span.strip,
-    };
-
-    self.write(|doc| emit_clip_text_run(run, style, frame, &fill, doc));
+    self.with_painted_mask(
+      |device| mask(device),
+      |device| background.fill(clip, transform, device),
+    );
   }
 }
 
@@ -746,6 +742,26 @@ impl DocumentDevice<'_> {
 
       emit_run_glyphs(run, style, frame, None, stroke, doc)
     });
+  }
+
+  /// Emits what `content` draws in a group masked by the alpha of what `mask` draws.
+  fn with_painted_mask(&mut self, mask: impl FnOnce(&mut Self), content: impl FnOnce(&mut Self)) {
+    if self.error.is_some() {
+      return;
+    }
+    let (token, reference) = match self.doc.begin_mask() {
+      Ok(mask) => mask,
+      Err(error) => {
+        self.error = Some(error);
+        return;
+      }
+    };
+
+    mask(self);
+    self.write(|doc| doc.end_mask(token));
+    self.open_group(|doc| doc.begin_masked_group(&reference));
+    content(self);
+    self.close_group();
   }
 }
 

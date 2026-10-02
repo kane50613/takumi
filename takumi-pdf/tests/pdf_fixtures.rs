@@ -324,6 +324,27 @@ fn inline_span_background_clip_text_nested() {
   });
 }
 
+/// A `background-clip: text` span shows its background through its decorations and its
+/// `-webkit-text-stroke` too, whatever their colour.
+#[test]
+fn inline_span_background_clip_text_decoration() {
+  run_pdf_fixture("inline-span-background-clip-text-decoration", |fonts| {
+    let source = r##"<div style="width: 100%; height: 100%; padding: 12px; background-color: #ffffff; font-size: 32px; font-weight: 700; line-height: 1.5">
+      <div><span style="background-image: linear-gradient(90deg, #2563eb, #db2777); background-clip: text; color: transparent; text-decoration: underline 4px">Underlined</span></div>
+      <div><span style="background-image: linear-gradient(90deg, #16a34a, #0891b2); background-clip: text; color: transparent; text-decoration: line-through wavy 3px">Wavy strike</span></div>
+      <div><span style="background-image: linear-gradient(90deg, #ea580c, #9333ea); background-clip: text; color: transparent; -webkit-text-stroke: 4px transparent">Stroked</span></div>
+    </div>"##;
+
+    PdfOptions::builder()
+      .node(
+        from_html(source, FromHtmlOptions::default()).expect("parse clip-text decoration fixture"),
+      )
+      .viewport(Viewport::new((420, 200)))
+      .fonts(fonts)
+      .build()
+  });
+}
+
 /// An inline `<span>` with a border strokes it on every line, without the sides the line wraps at.
 #[test]
 fn inline_span_border() {
