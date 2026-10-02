@@ -432,12 +432,10 @@ impl SceneRequest<'_> {
       });
 
       let creates_stacking_context = visit.is_root
-        || current.context.style.creates_stacking_context(
-          layout.size.width,
-          layout.size.height,
-          &current.context.sizing,
-          is_flex_or_grid_item,
-        );
+        || current
+          .context
+          .style
+          .creates_stacking_context(is_flex_or_grid_item);
 
       let mut context_id = visit.context_id;
       let mut stacking_id = visit.stacking_id;

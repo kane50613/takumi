@@ -19,6 +19,11 @@ pub struct PercentageNumber(pub f32);
 impl MakeComputed for PercentageNumber {}
 
 impl Animatable for PercentageNumber {
+  /// `scale: none`, which interpolates as a factor of one.
+  fn missing_value() -> Option<Self> {
+    Some(Self::default())
+  }
+
   fn interpolate(
     &mut self,
     from: &Self,

@@ -83,39 +83,24 @@ impl ComputedStyle {
     self.position.is_positioned() || self.is_z_index_applicable(is_flex_or_grid_item)
   }
 
-  /// Whether the element establishes a new stacking context.
-  ///
-  /// Blink resolves the containment half as `LayoutObject::IsStackingContext`
-  /// (`layout_object.h`).
-  pub(crate) fn creates_stacking_context(
-    &self,
-    width: f32,
-    height: f32,
-    sizing: &SizingContext,
-    is_flex_or_grid_item: bool,
-  ) -> bool {
-    self.isolation == Isolation::Isolate
+  /// Whether the element establishes a new stacking context, as Blink's
+  /// `ComputedStyle::CalculateIsStackingContextWithoutContainment` decides for the properties
+  /// takumi has, plus the containment half of `LayoutObject::IsStackingContext`.
+  pub(crate) fn creates_stacking_context(&self, is_flex_or_grid_item: bool) -> bool {
+    self.position == Position::Fixed
       || self.contain.contains(Contain::LAYOUT)
       || self.contain.contains(Contain::PAINT)
       || self.is_z_index_applicable(is_flex_or_grid_item)
-      || self.offset_path.is_some()
-      || self.has_non_identity_transform(width, height, sizing)
+      || self.has_transform_related_property()
       || self.needs_offscreen_compositing()
   }
 
   /// Whether the element floats in a paint layer of its own, as Blink's floats with a
   /// self-painting layer do.
-  pub(crate) fn floats_in_own_layer(
-    &self,
-    width: f32,
-    height: f32,
-    sizing: &SizingContext,
-    is_flex_or_grid_item: bool,
-  ) -> bool {
+  pub(crate) fn floats_in_own_layer(&self, is_flex_or_grid_item: bool) -> bool {
     self.float != Float::None
       && !is_flex_or_grid_item
-      && (self.position.is_positioned()
-        || self.creates_stacking_context(width, height, sizing, is_flex_or_grid_item))
+      && (self.position.is_positioned() || self.creates_stacking_context(is_flex_or_grid_item))
   }
 
   /// Whether the box is a containing block for `fixed` descendants, and so
@@ -137,7 +122,7 @@ impl ComputedStyle {
       || self.offset_path.is_some()
       || self.rotate.is_some()
       || self.translate != SpacePair::default()
-      || self.scale != SpacePair::default()
+      || self.scale.is_some()
   }
 
   /// Blink's `UpdateForPaintOffsetTranslation`: the paint offset a box with this style paints
@@ -221,8 +206,8 @@ impl ComputedStyle {
     if let Some(rotate) = self.rotate {
       local *= Affine::rotation(rotate);
     }
-    if self.scale != SpacePair::default() {
-      local *= Affine::scale(self.scale.x.0, self.scale.y.0);
+    if let Some(scale) = self.scale {
+      local *= Affine::scale(scale.x.0, scale.y.0);
     }
     // offset-path sits after translate/rotate/scale and before `transform`, and
     // resolves against the containing block (Blink `GetReferenceBox`), proxied
@@ -261,16 +246,6 @@ impl ComputedStyle {
     }
     local *= Affine::translation(-origin_x, -origin_y);
     local
-  }
-
-  /// Whether the resolved local transform differs from identity.
-  pub(crate) fn has_non_identity_transform(
-    &self,
-    width: f32,
-    height: f32,
-    sizing: &SizingContext,
-  ) -> bool {
-    !self.local_transform(width, height, sizing).is_identity()
   }
 
   /// The computed `(overflow-x, overflow-y)` pair. `visible` paired with an axis
