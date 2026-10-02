@@ -1,0 +1,102 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>inline_box_decoration_break_clone</title>
+    <base href="../../../" />
+    <link rel="stylesheet" href="takumi/tests/shared.css" />
+  </head>
+  <body style="width: 640px; height: 480px">
+    <div
+      style="
+        display: flex;
+        flex-wrap: wrap;
+        gap: 24px;
+        width: 100%;
+        height: 100%;
+        padding: 20px;
+        background-color: rgb(255, 255, 255);
+        font-family: Geist;
+        font-size: 20px;
+        line-height: 36px;
+        color: rgb(15, 23, 42);
+      "
+    >
+      <div style="display: block; width: 280px">
+        Ship
+        <span
+          style="
+            display: inline;
+            padding: 2px 10px;
+            border: 3px solid rgb(37, 99, 235);
+            border-radius: 8px;
+            background-color: rgb(219, 234, 254);
+            box-decoration-break: clone;
+          "
+          >a cloned badge that wraps across lines</span
+        >
+        today
+      </div>
+      <div style="display: block; width: 280px; text-align: center">
+        Centered
+        <span
+          style="
+            display: inline;
+            padding: 0 12px;
+            border-left: 4px solid rgb(22, 163, 74);
+            border-right: 8px solid rgb(22, 163, 74);
+            background-color: rgb(220, 252, 231);
+            box-decoration-break: clone;
+          "
+          >cloned edges on every centered line</span
+        >
+      </div>
+      <div
+        style="
+          display: block;
+          width: 280px;
+          direction: rtl;
+          font-family: &quot;Scheherazade New Test&quot;;
+          font-size: 24px;
+        "
+      >
+        مرحبا
+        <span
+          style="
+            display: inline;
+            padding: 0 10px;
+            border-left: 3px solid rgb(234, 88, 12);
+            border-right: 6px solid rgb(147, 51, 234);
+            background-color: rgb(255, 237, 213);
+            box-decoration-break: clone;
+          "
+          >هذا نص طويل يلتف عبر سطرين في الفقرة</span
+        >
+      </div>
+      <div style="display: block; width: 280px">
+        Outer
+        <span
+          style="
+            display: inline;
+            padding: 0 8px;
+            border: 2px solid rgb(219, 39, 119);
+            background-color: rgb(252, 231, 243);
+            box-decoration-break: clone;
+          "
+          >keeps
+          <span
+            style="
+              display: inline;
+              padding: 0 6px;
+              border: 2px solid rgb(8, 145, 178);
+              background-color: rgb(207, 250, 254);
+              box-decoration-break: clone;
+            "
+            >an inner clone wrapping</span
+          >
+          too</span
+        >
+      </div>
+    </div>
+  </body>
+</html>

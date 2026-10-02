@@ -9,7 +9,10 @@ use crate::{
 use parley::{InlineBoxKind, Line, PositionedInlineBox, PositionedLayoutItem, YieldData};
 
 use super::{
-  InlineBrush, InlineLayout, floats::FloatLayoutState, items::ProcessedInlineSpan,
+  InlineBrush, InlineLayout,
+  decoration_break::{ClonedSpans, LineEdges},
+  floats::FloatLayoutState,
+  items::ProcessedInlineSpan,
   runs::HangingWhitespace,
 };
 
@@ -127,7 +130,16 @@ pub(crate) fn has_custom_out_of_flow(layout: &InlineLayout) -> bool {
     .any(|inline_box| inline_box.kind == InlineBoxKind::CustomOutOfFlow)
 }
 
+/// How many times lines break again to settle the edges `box-decoration-break: clone` spans
+/// repeat on them.
+const CLONED_EDGE_PASSES: usize = 4;
+
 /// Breaks `layout` into lines; true when `max_height` may have dropped lines.
+///
+/// Each line reserves the start edges of the `box-decoration-break: clone` spans open where it
+/// starts, as Blink's line breaker does. Parley reports where a line broke only once the paragraph
+/// is laid out, so the lines break again with the edges of the previous breaks until they settle.
+/// Approximate: lines still moving after [`CLONED_EDGE_PASSES`] keep the last breaks.
 pub(crate) fn break_lines(
   layout: &mut InlineLayout,
   widths: LineWidths,
@@ -137,85 +149,151 @@ pub(crate) fn break_lines(
   spans: &[ProcessedInlineSpan<'_>],
   positioned_floats: &mut Vec<PositionedInlineBox>,
 ) -> bool {
-  let inline_boxes = layout.inline_boxes().to_vec();
-  let mut float_layout = FloatLayoutState::new(widths, line_height_hint);
-  let has_custom_out_of_flow = has_custom_out_of_flow(layout);
-  let is_uniform = widths.breaking == widths.alignment;
-
-  if text_wrap_mode == TextWrapMode::NoWrap && !has_custom_out_of_flow && is_uniform {
-    layout.break_all_lines(Some(widths.breaking));
-    return false;
-  }
-
-  if max_height.is_none() && !has_custom_out_of_flow && is_uniform {
-    layout.break_all_lines(Some(widths.breaking));
-    return false;
-  }
-
-  let (limit_height, limit_lines) = match max_height {
-    Some(MaxHeight::Lines(lines)) => (f32::MAX, lines),
-    Some(MaxHeight::Absolute(height)) => (height, u32::MAX),
-    Some(MaxHeight::HeightAndLines(height, lines)) => (height, lines),
-    None => (f32::MAX, u32::MAX),
+  let breaks = LineBreaks {
+    widths,
+    max_height,
+    line_height_hint,
+    text_wrap_mode,
+    spans,
   };
+  let Some(cloned) = ClonedSpans::of(spans) else {
+    return breaks.apply(layout, &[], positioned_floats);
+  };
+  let mut edges: Vec<LineEdges> = Vec::new();
+  let mut clamped = false;
 
-  let mut total_height = 0.0;
-  let mut line_count = 0;
-  let mut line_y = 0.0;
-  let mut breaker = layout.break_lines();
-  let mut exhausted = false;
-  float_layout.update_breaker_line(&mut breaker, line_y);
+  for _ in 0..CLONED_EDGE_PASSES {
+    positioned_floats.clear();
+    clamped = breaks.apply(layout, &edges, positioned_floats);
 
-  loop {
-    let Some(yield_data) = breaker.break_next() else {
-      exhausted = true;
-      break;
-    };
-    if line_count >= limit_lines {
-      breaker.revert();
-      break;
-    }
-    let height = match yield_data {
-      YieldData::LineBreak(data) => data.line_height,
-      YieldData::MaxHeightExceeded(data) => data.line_height,
-      YieldData::InlineBoxBreak(data) => {
-        breaker
-          .state_mut()
-          .append_inline_box_to_line(data.advance, 0.0);
+    let settled: Vec<LineEdges> = layout
+      .lines()
+      .map(|line| cloned.line_edges(line.text_range()))
+      .collect();
 
-        let Some(inline_box) = inline_boxes.get(data.inline_box_index).cloned() else {
-          continue;
-        };
-        let Some(ProcessedInlineSpan::Box(item)) = spans.get(inline_box.id as usize) else {
-          continue;
-        };
-        let Some(side) = item.float_side() else {
-          continue;
-        };
-        let clear = item.clear();
-        let start_y = breaker.state().line_y() as f32;
-        let positioned_float = float_layout.push_float(side, clear, start_y, &inline_box);
-        line_y = float_layout.find_line_y_for_advance(start_y, data.advance);
-        float_layout.update_breaker_line(&mut breaker, line_y);
-        positioned_floats.push(positioned_float);
-        continue;
-      }
-    };
-
-    if !can_commit_line_candidate(total_height, height, line_count, limit_height) {
-      breaker.revert();
+    if settled == edges {
       break;
     }
-
-    breaker.set_prior_line_width(float_layout.line_width(line_y));
-    total_height += height;
-    line_count += 1;
-    line_y = breaker.state().line_y() as f32;
-    float_layout.update_breaker_line(&mut breaker, line_y);
+    edges = settled;
   }
 
-  breaker.finish();
-  !exhausted
+  clamped
+}
+
+/// What lines break against.
+#[derive(Clone, Copy)]
+struct LineBreaks<'s, 'c> {
+  widths: LineWidths,
+  max_height: Option<MaxHeight>,
+  line_height_hint: f32,
+  text_wrap_mode: TextWrapMode,
+  spans: &'s [ProcessedInlineSpan<'c>],
+}
+
+impl LineBreaks<'_, '_> {
+  /// Breaks `layout` into lines, each reserving its cloned `edges`; true when `max_height` may
+  /// have dropped lines.
+  fn apply(
+    self,
+    layout: &mut InlineLayout,
+    edges: &[LineEdges],
+    positioned_floats: &mut Vec<PositionedInlineBox>,
+  ) -> bool {
+    let LineBreaks {
+      widths,
+      max_height,
+      line_height_hint,
+      text_wrap_mode,
+      spans,
+    } = self;
+    let inline_boxes = layout.inline_boxes().to_vec();
+    let mut float_layout = FloatLayoutState::new(widths, line_height_hint);
+    let has_custom_out_of_flow = has_custom_out_of_flow(layout);
+    let is_uniform = widths.breaking == widths.alignment && edges.is_empty();
+    let rtl = layout.is_rtl();
+
+    if text_wrap_mode == TextWrapMode::NoWrap && !has_custom_out_of_flow && is_uniform {
+      layout.break_all_lines(Some(widths.breaking));
+      return false;
+    }
+
+    if max_height.is_none() && !has_custom_out_of_flow && is_uniform {
+      layout.break_all_lines(Some(widths.breaking));
+      return false;
+    }
+
+    let (limit_height, limit_lines) = match max_height {
+      Some(MaxHeight::Lines(lines)) => (f32::MAX, lines),
+      Some(MaxHeight::Absolute(height)) => (height, u32::MAX),
+      Some(MaxHeight::HeightAndLines(height, lines)) => (height, lines),
+      None => (f32::MAX, u32::MAX),
+    };
+
+    let mut total_height = 0.0;
+    let mut line_count = 0;
+    let mut line_y = 0.0;
+    let mut breaker = layout.break_lines();
+    let mut exhausted = false;
+    float_layout.update_breaker_line(&mut breaker, line_y);
+    LineEdges::reserve_on(edges, line_count, &mut breaker, rtl);
+
+    loop {
+      let Some(yield_data) = breaker.break_next() else {
+        exhausted = true;
+        break;
+      };
+      if line_count >= limit_lines {
+        breaker.revert();
+        break;
+      }
+      let height = match yield_data {
+        YieldData::LineBreak(data) => data.line_height,
+        YieldData::MaxHeightExceeded(data) => data.line_height,
+        YieldData::InlineBoxBreak(data) => {
+          breaker
+            .state_mut()
+            .append_inline_box_to_line(data.advance, 0.0);
+
+          let Some(inline_box) = inline_boxes.get(data.inline_box_index).cloned() else {
+            continue;
+          };
+          let Some(ProcessedInlineSpan::Box(item)) = spans.get(inline_box.id as usize) else {
+            continue;
+          };
+          let Some(side) = item.float_side() else {
+            continue;
+          };
+          let clear = item.clear();
+          let start_y = breaker.state().line_y() as f32;
+          let positioned_float = float_layout.push_float(side, clear, start_y, &inline_box);
+          line_y = float_layout.find_line_y_for_advance(start_y, data.advance);
+          float_layout.update_breaker_line(&mut breaker, line_y);
+          LineEdges::reserve_on(edges, line_count, &mut breaker, rtl);
+          positioned_floats.push(positioned_float);
+          continue;
+        }
+      };
+
+      if !can_commit_line_candidate(total_height, height, line_count, limit_height) {
+        breaker.revert();
+        break;
+      }
+
+      let reserved = edges
+        .get(line_count as usize)
+        .map_or(0.0, |edges| edges.start_width + edges.end_width);
+
+      breaker.set_prior_line_width(float_layout.line_width(line_y) - reserved);
+      total_height += height;
+      line_count += 1;
+      line_y = breaker.state().line_y() as f32;
+      float_layout.update_breaker_line(&mut breaker, line_y);
+      LineEdges::reserve_on(edges, line_count, &mut breaker, rtl);
+    }
+
+    breaker.finish();
+    !exhausted
+  }
 }
 
 fn can_commit_line_candidate(

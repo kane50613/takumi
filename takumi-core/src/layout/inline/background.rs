@@ -9,6 +9,7 @@ use crate::{
 use std::{collections::HashMap, rc::Rc};
 
 use super::{
+  decoration_break::ClonedLines,
   items::{DecorationLink, InlineDecoration},
   line_box::{BoxKey, FontHeight, LineBoxOffsets},
   outline::InlineOutlineRect,
@@ -107,19 +108,27 @@ struct FragmentBounds {
 /// fragments (`InlineBoxFragmentPainterBase::PaintBackgroundBorderShadow`).
 ///
 /// Naive next to Blink; where it drifts:
-/// - `box-decoration-break: clone` lays the images over each fragment, but the fragments keep
-///   `slice`'s padding and borders
 /// - a line taller than a page paints its background only on the page owning
 ///   the line, while Blink spills monolithic overflow onto the next page
-#[derive(Default)]
 pub(super) struct DecorationAccumulator<'c> {
   /// Each span's position among `decorations`, by the span's id.
   ids: HashMap<usize, usize>,
   decorations: Vec<InlineDecoration<'c>>,
   fragments: HashMap<(usize, usize), FragmentBounds>,
+  /// The edges `box-decoration-break: clone` spans repeat on each line.
+  cloned: Option<ClonedLines>,
 }
 
 impl<'c> DecorationAccumulator<'c> {
+  pub(super) fn new(cloned: Option<ClonedLines>) -> Self {
+    Self {
+      ids: HashMap::new(),
+      decorations: Vec::new(),
+      fragments: HashMap::new(),
+      cloned,
+    }
+  }
+
   /// The id for `link`, assigning parents first so outer spans paint first.
   fn ensure(&mut self, link: &Rc<DecorationLink<'c>>) -> usize {
     if let Some(id) = self.ids.get(&link.decoration.id) {
@@ -211,9 +220,28 @@ impl<'c> DecorationAccumulator<'c> {
       .into_iter()
       .map(|(id, line_index)| {
         let FragmentBounds {
-          x0, x1, line, runs, ..
+          mut x0,
+          mut x1,
+          line,
+          runs,
+          ..
         } = self.fragments[&(id, line_index)];
         let decoration = &self.decorations[id];
+        let cloned = self
+          .cloned
+          .as_ref()
+          .filter(|cloned| cloned.clones(decoration.id));
+
+        if let Some(cloned) = cloned {
+          let (start, end) = cloned.reach(decoration.id, line_index);
+          let (left, right) = match decoration.direction {
+            Direction::Rtl => (end, start),
+            _ => (start, end),
+          };
+
+          x0 -= left.unwrap_or(0.0);
+          x1 += right.unwrap_or(0.0);
+        }
         // The content area of Blink's `InlineBoxState::ComputeTextMetrics`: the span's own
         // primary font around the baseline, whatever its content. Without a primary font, the
         // fonts its runs fell back to stand in, then the line.
@@ -241,8 +269,8 @@ impl<'c> DecorationAccumulator<'c> {
           width: x1 - x0,
           height: bottom - top + decoration.padding.vertical() + decoration.border.width.vertical(),
           baseline: line.baseline,
-          has_start: line_index == min_line,
-          has_end: line_index == max_line,
+          has_start: cloned.is_some() || line_index == min_line,
+          has_end: cloned.is_some() || line_index == max_line,
         }
       })
       .collect()

@@ -374,16 +374,20 @@ fn collect_inline_items_impl<'n>(
 
   let content_start = items.len();
   let (margin, border_padding) = inline_span_spacing(node, depth);
+  let direction = node.context.style.direction;
+  let (margin_start, margin_end) = direction.inline_sides(margin.left, margin.right);
+  let (border_padding_start, border_padding_end) =
+    direction.inline_sides(border_padding.left, border_padding.right);
 
-  if margin.left != 0.0 {
+  if margin_start != 0.0 {
     items.push(InlineItem::Spacer {
-      width: margin.left,
+      width: margin_start,
       decorations: outer_decorations.cloned(),
     });
   }
-  if border_padding.left > 0.0 {
+  if border_padding_start > 0.0 {
     items.push(InlineItem::Spacer {
-      width: border_padding.left,
+      width: border_padding_start,
       decorations: decorations.cloned(),
     });
   }
@@ -418,15 +422,15 @@ fn collect_inline_items_impl<'n>(
     }
   }
 
-  if border_padding.right > 0.0 {
+  if border_padding_end > 0.0 {
     items.push(InlineItem::Spacer {
-      width: border_padding.right,
+      width: border_padding_end,
       decorations: decorations.cloned(),
     });
   }
-  if margin.right != 0.0 {
+  if margin_end != 0.0 {
     items.push(InlineItem::Spacer {
-      width: margin.right,
+      width: margin_end,
       decorations: outer_decorations.cloned(),
     });
   }
