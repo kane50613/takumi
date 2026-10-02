@@ -197,6 +197,16 @@ pub enum ProcessedInlineSpan<'c> {
   },
 }
 
+impl<'c> ProcessedInlineSpan<'c> {
+  /// The spans around a text span, innermost first.
+  pub(crate) fn text_chain(&self) -> Option<&Rc<DecorationLink<'c>>> {
+    match self {
+      Self::Text { decorations, .. } => decorations.as_ref(),
+      _ => None,
+    }
+  }
+}
+
 /// The inline box a `display: inline` span opens: what its line fragments paint and how far it
 /// grows the lines it is open on, resolved from its computed style.
 #[derive(Clone)]

@@ -121,14 +121,10 @@ pub(super) fn resolve_inline_line_metrics(
         }
         seen = Some(glyph.style_index());
         let style = cluster.first_style();
-        let chain = match style
+        let chain = style
           .brush
           .source_span_id
-          .and_then(|span_id| spans.get(span_id as usize))
-        {
-          Some(ProcessedInlineSpan::Text { decorations, .. }) => decorations.as_ref(),
-          _ => None,
-        };
+          .and_then(|span_id| spans.get(span_id as usize)?.text_chain());
         let parent = tree.open_chain(chain);
         let scale = fit.text_scale(parent == 0);
         // A box whose font stack matched no font takes the fonts its runs fell back to as its

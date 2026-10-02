@@ -2142,7 +2142,7 @@ impl GlyphDevice for TextDevice<'_, '_, '_> {
       GlyphFill::Text => Rc::from([]),
     };
 
-    self.paint_glyph_run(run, frame, &fills);
+    self.paint_glyph_run(run, frame, &fills, true);
   }
 
   fn draw_glyph_run_through(
@@ -2157,18 +2157,19 @@ impl GlyphDevice for TextDevice<'_, '_, '_> {
         .emitter
         .background_fills(span.node, &span.background, span.strip, self.device.surface);
 
-    self.paint_glyph_run(run, frame, &fills);
+    self.paint_glyph_run(run, frame, &fills, false);
   }
 }
 
 impl TextDevice<'_, '_, '_> {
-  /// Paints `run`'s glyphs in the block at `frame` over `fills` seen through them, or their shadow
-  /// while one is open.
+  /// Paints `fills` seen through `run`'s glyphs in the block at `frame`, then the glyphs themselves
+  /// `with_paint`, or their shadow while one is open.
   fn paint_glyph_run(
     &mut self,
     run: &PositionedInlineRun,
     frame: BoxFrame,
     fills: &[GlyphBackground],
+    with_paint: bool,
   ) {
     let shifted = match self.shadow {
       Some(shadow) => frame.shifted(CorePoint {
@@ -2231,66 +2232,68 @@ impl TextDevice<'_, '_, '_> {
       }
     }
 
-    match self.shadow.filter(|shadow| shadow.blur_radius > 0.0) {
-      // Each band spreads the glyphs by stroking them, inside a group of the band's opacity so
-      // the fill and stroke, and neighbouring glyphs, don't stack where they overlap.
-      Some(shadow) => {
-        // The shadow colour's alpha applies once, over bands drawn opaque.
-        let translucent = paint.opacity != NormalizedF32::ONE;
+    if with_paint {
+      match self.shadow.filter(|shadow| shadow.blur_radius > 0.0) {
+        // Each band spreads the glyphs by stroking them, inside a group of the band's opacity so
+        // the fill and stroke, and neighbouring glyphs, don't stack where they overlap.
+        Some(shadow) => {
+          // The shadow colour's alpha applies once, over bands drawn opaque.
+          let translucent = paint.opacity != NormalizedF32::ONE;
 
-        if translucent {
-          surface.push_opacity(paint.opacity);
+          if translucent {
+            surface.push_opacity(paint.opacity);
+          }
+
+          for band in Band::of(shadow.blur_radius) {
+            let width = 2.0 * band.spread + stroke.as_ref().map_or(0.0, |stroke| stroke.width);
+
+            surface.push_opacity(normalized(band.alpha));
+            surface.set_fill(Some(Fill {
+              opacity: NormalizedF32::ONE,
+              ..paint.clone()
+            }));
+            surface.set_stroke((width > 0.0).then(|| Stroke {
+              paint: paint.paint.clone(),
+              opacity: NormalizedF32::ONE,
+              width,
+              line_join: LineJoin::Round,
+              ..Stroke::default()
+            }));
+            surface.draw_glyphs(origin, &glyphs, font.clone(), text, shaped.font_size, true);
+            if let Some(colors) = &colors {
+              colors.draw_outlines(surface);
+            }
+            surface.pop();
+          }
+          #[cfg(feature = "images")]
+          if let Some(colors) = &colors {
+            draw_blurred_silhouettes(
+              &colors.bitmaps,
+              shadow.blur_radius,
+              [rgba[0], rgba[1], rgba[2], u8::MAX],
+              surface,
+            );
+          }
+          if translucent {
+            surface.pop();
+          }
         }
-
-        for band in Band::of(shadow.blur_radius) {
-          let width = 2.0 * band.spread + stroke.as_ref().map_or(0.0, |stroke| stroke.width);
-
-          surface.push_opacity(normalized(band.alpha));
-          surface.set_fill(Some(Fill {
-            opacity: NormalizedF32::ONE,
-            ..paint.clone()
-          }));
-          surface.set_stroke((width > 0.0).then(|| Stroke {
-            paint: paint.paint.clone(),
-            opacity: NormalizedF32::ONE,
-            width,
-            line_join: LineJoin::Round,
-            ..Stroke::default()
-          }));
-          surface.draw_glyphs(origin, &glyphs, font.clone(), text, shaped.font_size, true);
+        None => {
+          surface.set_fill(Some(paint));
+          surface.set_stroke(stroke);
+          surface.draw_glyphs(
+            origin,
+            &glyphs,
+            font,
+            text,
+            shaped.font_size,
+            shadow_color.is_some(),
+          );
           if let Some(colors) = &colors {
             colors.draw_outlines(surface);
+            #[cfg(feature = "images")]
+            draw_silhouettes(&colors.bitmaps, rgba, surface);
           }
-          surface.pop();
-        }
-        #[cfg(feature = "images")]
-        if let Some(colors) = &colors {
-          draw_blurred_silhouettes(
-            &colors.bitmaps,
-            shadow.blur_radius,
-            [rgba[0], rgba[1], rgba[2], u8::MAX],
-            surface,
-          );
-        }
-        if translucent {
-          surface.pop();
-        }
-      }
-      None => {
-        surface.set_fill(Some(paint));
-        surface.set_stroke(stroke);
-        surface.draw_glyphs(
-          origin,
-          &glyphs,
-          font,
-          text,
-          shaped.font_size,
-          shadow_color.is_some(),
-        );
-        if let Some(colors) = &colors {
-          colors.draw_outlines(surface);
-          #[cfg(feature = "images")]
-          draw_silhouettes(&colors.bitmaps, rgba, surface);
         }
       }
     }
