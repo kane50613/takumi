@@ -142,14 +142,14 @@ fn tailwind_animation_keyframes(name: &str) -> Option<KeyframesRule> {
         keyframe(
           0.75,
           [
-            StyleDeclaration::scale(SpacePair::from_single(PercentageNumber(2.0))),
+            StyleDeclaration::scale(Some(SpacePair::from_single(PercentageNumber(2.0)))),
             StyleDeclaration::opacity(PercentageNumber(0.0)),
           ],
         ),
         keyframe(
           1.0,
           [
-            StyleDeclaration::scale(SpacePair::from_single(PercentageNumber(2.0))),
+            StyleDeclaration::scale(Some(SpacePair::from_single(PercentageNumber(2.0)))),
             StyleDeclaration::opacity(PercentageNumber(0.0)),
           ],
         ),
@@ -876,6 +876,20 @@ mod tests {
     );
 
     assert_eq!(target, Some(Angle::new(22.5)));
+  }
+
+  #[test]
+  fn scale_interpolates_from_none_as_identity() {
+    let mut target: Option<SpacePair<PercentageNumber>> = None;
+    target.interpolate(
+      &None,
+      &Some(SpacePair::from_single(PercentageNumber(2.0))),
+      0.5,
+      &sizing(),
+      current_color(),
+    );
+
+    assert_eq!(target, Some(SpacePair::from_single(PercentageNumber(1.5))));
   }
 
   #[test]

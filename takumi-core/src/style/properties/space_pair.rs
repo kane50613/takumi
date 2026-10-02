@@ -67,6 +67,10 @@ impl<T: Copy + MakeComputed> MakeComputed for SpacePair<T> {
 }
 
 impl<T: Animatable + Copy> Animatable for SpacePair<T> {
+  fn missing_value() -> Option<Self> {
+    Some(Self::from_pair(T::missing_value()?, T::missing_value()?))
+  }
+
   fn interpolate(
     &mut self,
     from: &Self,

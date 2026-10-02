@@ -122,7 +122,7 @@ impl ComputedStyle {
       || self.offset_path.is_some()
       || self.rotate.is_some()
       || self.translate != SpacePair::default()
-      || self.scale != SpacePair::default()
+      || self.scale.is_some()
   }
 
   /// Blink's `UpdateForPaintOffsetTranslation`: the paint offset a box with this style paints
@@ -206,8 +206,8 @@ impl ComputedStyle {
     if let Some(rotate) = self.rotate {
       local *= Affine::rotation(rotate);
     }
-    if self.scale != SpacePair::default() {
-      local *= Affine::scale(self.scale.x.0, self.scale.y.0);
+    if let Some(scale) = self.scale {
+      local *= Affine::scale(scale.x.0, scale.y.0);
     }
     // offset-path sits after translate/rotate/scale and before `transform`, and
     // resolves against the containing block (Blink `GetReferenceBox`), proxied

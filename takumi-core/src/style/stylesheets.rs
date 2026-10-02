@@ -1193,7 +1193,7 @@ define_style! {
     z_index: ZIndex,
     position: Position,
     rotate: Option<Angle>,
-    scale: SpacePair<PercentageNumber>,
+    scale: Option<SpacePair<PercentageNumber>>,
     translate: SpacePair<Length>,
     transform: Option<Transforms>,
     transform_origin: PositionValue = PositionValue::center(),

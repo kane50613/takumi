@@ -647,7 +647,10 @@ fn test_transform_utilities_resolve_to_standard_longhands() {
   );
   assert_eq!(
     style.scale,
-    SpacePair::from_pair(PercentageNumber(0.5), PercentageNumber(0.75))
+    Some(SpacePair::from_pair(
+      PercentageNumber(0.5),
+      PercentageNumber(0.75)
+    ))
   );
 }
 

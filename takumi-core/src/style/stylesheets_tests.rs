@@ -1557,6 +1557,25 @@ fn paint_containment_keeps_hidden_axis() {
 }
 
 #[test]
+fn identity_scale_and_translate_create_a_stacking_context() {
+  for (name, css, expected) in [
+    ("scale", "1", true),
+    ("scale", "1 1", true),
+    ("translate", "0", true),
+    ("translate", "0 0", true),
+    ("scale", "none", false),
+  ] {
+    let style = inherited_style_from_pairs([(name, css)], &ComputedStyle::default());
+
+    assert_eq!(
+      style.creates_stacking_context(false),
+      expected,
+      "{name}: {css}"
+    );
+  }
+}
+
+#[test]
 fn layout_containment_creates_a_stacking_context() {
   for (css, expected) in [
     ("none", false),
