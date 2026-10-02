@@ -136,8 +136,8 @@ impl ChunkWriter<'_, '_, '_> {
       match chunk.part {
         ChunkPart::Decorations => {
           let scene = self.emitter.scene;
-          let text_clip = TextClip::of(&scene.root, &scene.results, self.chunks, chunk.node)
-            .map_err(io::Error::other)?;
+          let text_clip =
+            TextClip::of(&scene.root, &scene.results, chunk.node).map_err(io::Error::other)?;
 
           placed.emit_decorations(text_clip.as_ref(), doc)?;
         }

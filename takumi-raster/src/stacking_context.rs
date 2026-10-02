@@ -33,7 +33,6 @@ pub(crate) fn paint_scene(scene: &mut Scene, canvas: &mut Canvas) -> Result<()> 
     ScenePainter {
       root,
       results,
-      chunks: &chunks,
       canvas,
       owners,
       effects: Vec::new(),
@@ -65,7 +64,6 @@ struct OpenEffect {
 struct ScenePainter<'s, 'c> {
   root: &'s mut RenderNode,
   results: &'s LayoutResults,
-  chunks: &'c [PaintChunk<'s>],
   canvas: &'c mut Canvas,
   owners: Vec<Option<&'s NodePaint>>,
   effects: Vec<OpenEffect>,
@@ -101,7 +99,7 @@ impl ScenePainter<'_, '_> {
 
     match chunk.part {
       ChunkPart::Decorations if node.paints_own_box() => {
-        let text_clip = TextClip::of(root, self.results, self.chunks, chunk.node)?;
+        let text_clip = TextClip::of(root, self.results, chunk.node)?;
 
         draw_box_shell(&node.context, canvas, layout, text_clip.as_ref())
       }

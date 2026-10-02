@@ -87,7 +87,6 @@ impl Walker {
       StepWriter {
         walker: self,
         scene,
-        chunks: &chunks,
         prefix,
         owners: &owners,
         paints: &paints,
@@ -572,7 +571,6 @@ impl Walker {
 struct StepWriter<'w, 's> {
   walker: &'w mut Walker,
   scene: &'s Scene,
-  chunks: &'w [PaintChunk<'s>],
   prefix: &'w [usize],
   owners: &'w [Option<&'s NodePaint>],
   /// Every box the chunks paint, by path.
@@ -597,7 +595,7 @@ impl StepWriter<'_, '_> {
         let Some((node, layout)) = recorded else {
           return Ok(None);
         };
-        let text_clip = TextClip::of(&scene.root, &scene.results, self.chunks, paint)?;
+        let text_clip = TextClip::of(&scene.root, &scene.results, paint)?;
 
         self
           .walker

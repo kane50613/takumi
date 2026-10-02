@@ -1,0 +1,50 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>background_clip_text_reach</title>
+    <base href="../../../" />
+    <link rel="stylesheet" href="takumi/tests/shared.css" />
+  </head>
+  <body style="width: 640px; height: 420px">
+    <div
+      style="
+        display: block;
+        width: 100%;
+        height: 100%;
+        padding: 20px;
+        background-color: rgb(255, 255, 255);
+        font-family: Geist;
+        font-size: 32px;
+        line-height: 44px;
+        font-weight: 700;
+      "
+    >
+      <div
+        style="
+          display: block;
+          background-image: linear-gradient(90deg, rgb(37, 99, 235), rgb(219, 39, 119));
+          background-clip: text;
+          color: rgba(0, 0, 0, 0);
+        "
+      >
+        <div style="display: block; float: right">Float</div>
+        <div style="display: block; float: right; opacity: 0.5">Layered</div>
+        <div style="display: block; opacity: 0">Zero opacity</div>
+        <div style="display: block; opacity: 0.3">
+          Faded <span style="display: inline-block; opacity: 0">zero inline</span>
+        </div>
+        <div style="display: block; transform: scale(0)">Scale zero</div>
+        <div style="display: block; visibility: hidden">Hidden</div>
+        <div style="display: block; position: relative">
+          Relative
+          <div style="display: block; position: absolute; left: 260px; top: 0">Inside</div>
+        </div>
+        <div style="display: block; position: absolute; left: 380px; top: 150px">Outside</div>
+        <div style="display: block; opacity: 0">
+          <span style="float: right">Inner float</span>Zero
+        </div>
+      </div>
+    </div>
+  </body>
+</html>

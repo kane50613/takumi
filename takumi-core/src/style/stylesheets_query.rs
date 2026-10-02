@@ -103,6 +103,21 @@ impl ComputedStyle {
       || self.needs_offscreen_compositing()
   }
 
+  /// Whether the element floats in a paint layer of its own, as Blink's floats with a
+  /// self-painting layer do.
+  pub(crate) fn floats_in_own_layer(
+    &self,
+    width: f32,
+    height: f32,
+    sizing: &SizingContext,
+    is_flex_or_grid_item: bool,
+  ) -> bool {
+    self.float != Float::None
+      && !is_flex_or_grid_item
+      && (self.position.is_positioned()
+        || self.creates_stacking_context(width, height, sizing, is_flex_or_grid_item))
+  }
+
   /// Whether the box is a containing block for `fixed` descendants, and so
   /// also for `absolute` ones. Blink resolves this as `ComputeIsFixedContainer`
   /// (`layout_object.cc`); the conditions takumi has properties for are a
