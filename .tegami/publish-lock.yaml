@@ -1,203 +1,300 @@
 core:changelogs:
-  - content: "---\npackages:\n  takumi-pdf:\n    type: patch\n---\n\n# Trim an image to its content edge curve\n\nA `border-radius` on an image was ignored unless the box also clipped its overflow, so a rounded picture came out square.\n"
-    filename: pdf-image-corner-clip.md
+  - content: "---\npackages:\n  takumi-paint:\n    type: minor\n  takumi:\n    type: minor\n---\n\n# Export what the renderer paints from JSX, HTML, or a node tree\n\n`paint()` and `Painter.paint()` return a `PaintTree`: `nodes` in document order with their shapes, paints, glyph runs, and images resolved from CSS, and `steps` to draw them in paint order. A text node reports its resolved `textAlign`, and each run carries its `font`, `lineHeight`, and `letterSpacing`. A translucent inline element's draws come as one `group` at its opacity.\n"
+    filename: takumi-paint.md
     v: 0.0.0
-  - content: "---\npackages:\n  takumi-pdf:\n    type: patch\n---\n\n# Fill a page exactly with a box as tall as the content window\n\nA box sized to the page snapped to a whole pixel past the fractional window and opened an empty page after it.\n"
-    filename: page-cut-snap.md
+  - content: "---\npackages:\n  takumi:\n    type: patch\n  takumi-pdf:\n    type: patch\n---\n\n# Paint SVG and PDF output like the image output\n\n- A block's loose text no longer paints the block's background a second time, so a negative `z-index` child behind it stays visible.\n- Spans that set their own `font-size` inside a `font-size: 0` block paint.\n- PDF paints text that overflows a box with no width or height, and no longer writes `NaN` for a zero-sized run.\n- PDF paints the content that overflows an `inline-block` with `height: 0`.\n- SVG path data keeps the letter of a moveto that follows another, so the second move no longer becomes a stray line.\n"
+    filename: svg-pdf-parity.md
     v: 0.0.0
-  - content: "---\npackages:\n  takumi-pdf:\n    type: patch\n---\n\n# Write the CIDFont default width as an integer\n\nThe PDF spec types `/DW` as an integer. Poppler ignores a real one and falls back to the spec default of 1000, so every glyph the entry covered advanced far too far in poppler-based viewers.\n"
-    filename: pdf-integer-default-width.md
+  - content: "---\npackages:\n  takumi:\n    type: patch\n  takumi-pdf:\n    type: patch\n---\n\n# Paint borders as Chrome does\n\n- Sides that differ in color or style meet along the corner diagonal, and adjacent sides of the same color leave no seam.\n- A dashed side runs the full length of the box, so its dashes start at the corners.\n- A `dotted` border up to 3px wide draws square dots spaced one dot apart and ends each side on a whole dot. Wider dotted lines keep round dots inside the box.\n- `inset`, `outset`, `groove` and `ridge` darken the shadowed edges and keep the color on the lit ones. A very dark color lightens instead, so both edges stay visible.\n- PDF draws dashed and dotted sides next to sides of other styles, which it used to leave out.\n- `background-clip: border-area` keeps the background only where a dashed, dotted or double border paints, and no longer paints a translucent border's color twice in the image output.\n- Square sides with mixed styles, colors or opacities meet with Chrome's miters. A uniform dashed or dotted border shows no diagonal seam, and translucent sides no longer blend twice where they overlap.\n- Rounded borders with mixed colors, styles or opacities clip each side and cut their corners as Chrome does.\n- A `double` side under 3px and a 1px `groove` or `ridge` side paint solid.\n- A collapsed table border stays square even with `border-radius`, as the spec requires.\n- Borders and padding-box clips with `corner-shape` values such as `bevel`, `scoop` and `notch` keep one thickness around each corner. Opposite concave corners that would overlap shrink as Chrome shrinks them.\n"
+    filename: borders.md
     v: 0.0.0
-  - content: "---\npackages:\n  takumi:\n    type: patch\n  takumi-pdf:\n    type: patch\n---\n\n# Text wraps at the width layout measured\n\nA box with a fractional width wrapped its text against the pixel-snapped content box at paint, so a nearly full line pushed its last word onto a line the layout never reserved and it overlapped the block below.\n"
-    filename: text-wrap-measured-width.md
+  - content: "---\npackages:\n  takumi:\n    type: patch\n  takumi-pdf:\n    type: patch\n---\n\n# Paint `box-shadow` as Chrome does\n\n- The first shadow in a list sits on top in SVG and image output, as it already did in PDF.\n- A spread shadow follows the outset-adjusted border radius. A square corner stays square, and a small radius grows less than the spread.\n- SVG no longer paints an outer shadow under a translucent box.\n- A PDF outer shadow no longer leaves a hairline around the box, and no longer fills the box when the offset moves the shadow clear of it.\n- The image output places shadows at fractional offsets instead of rounding them toward zero.\n- A blurred translucent `box-shadow` or `text-shadow` in PDF applies its color's alpha once. The bands that fake the blur used to stack it.\n- The image output blurs the shadows of a scaled or rotated box by the transformed radius, as Skia maps a blur through the transform.\n"
+    filename: box-shadow.md
     v: 0.0.0
-  - content: "---\npackages:\n  takumi-pdf:\n    type: minor\n---\n\n# Override the header and footer on some pages\n\n`pages` takes `{ first, last, odd, even }`, each overriding `header` or `footer` for the pages it covers. A band is a node tree, or `false` to draw none.\n"
-    filename: page-rules.md
+  - content: "---\npackages:\n  takumi-pdf:\n    type: patch\n---\n\n# Render decorated inline images in tagged PDFs\n\nA tagged PDF panicked with \"can't start marked content twice\" when an inline `<img>` had a background, border, or box shadow. The decorations now paint as artifacts outside the image's own tag.\n"
+    filename: pdf-inline-image-decorations.md
     v: 0.0.0
-  - content: "---\npackages:\n  takumi-pdf:\n    type: patch\n---\n\n# Accept object stylesheet rules in PDF bindings\n\nMatch the PDF binding's `css` type to the object rules already accepted at runtime.\n"
-    filename: pdf-css-types.md
+  - content: "---\npackages:\n  takumi:\n    type: patch\n  takumi-pdf:\n    type: patch\n---\n\n# Paint text shadows as Chrome does\n\n- A `text-shadow` set on a `<span>` paints. Only the block's own shadow used to.\n- Text shadows also shadow underlines, overlines and line-throughs, and the first listed shadow sits on top.\n- Each run paints its underline and overline, then its text, then its line-through, before the next run, as CSS 2 orders them.\n- PDF text shadows no longer repeat the shadowed words when the text is copied or extracted.\n- Color bitmap glyphs, such as Noto Color Emoji, cast a shadow that follows the glyph's shape in image and SVG output.\n- A blurred `text-shadow` fades out in PDF output, through the same stepped bands a blurred `box-shadow` uses, and so does the shadow its decorations cast.\n- PDF shadows color glyphs, such as COLR and bitmap emoji, as a silhouette in the shadow color, blurred as Chrome blurs it.\n- A wavy, dotted or dashed underline casts its shadow at the shadow's offset instead of losing it to the clip that shapes the line.\n"
+    filename: text-shadows.md
     v: 0.0.0
-  - content: "---\npackages:\n  takumi-pdf:\n    type: minor\n---\n\n# Render uncovered characters with `uncoveredText`\n\nA single character no registered font covers used to fail the whole render, which leaves a server rendering text someone else wrote with no way through. `uncoveredText: \"placeholder\"` draws the font's glyph 0 instead, and `\"blank\"` draws nothing. Both keep the character's width, so the line does not reflow. The default stays `\"error\"`.\n\nEvery PDF/A level and both PDF/UA levels forbid glyph 0, so `\"placeholder\"` is now rejected there by name instead of failing as a generic write error.\n"
-    filename: pdf-uncovered-text-option.md
+  - content: "---\npackages:\n  takumi:\n    type: minor\n  takumi-pdf:\n    type: minor\n---\n\n# Draw double, dotted, dashed, and wavy text decorations\n\n`text-decoration-style` and the `text-decoration` shorthand now accept `double`, `dotted`, `dashed`, and `wavy`, drawn with Blink's spacing and wave shape, and Tailwind gains `decoration-solid`, `decoration-double`, `decoration-dotted`, `decoration-dashed`, and `decoration-wavy`.\n"
+    filename: text-decoration-styles.md
     v: 0.0.0
-  - content: "---\npackages:\n  takumi-pdf:\n    type: patch\n---\n\n# Forced page breaks no longer open empty pages\n\nA `break-before: page` or `break-after: page` with only spacing beside it on its page is dropped, and trailing spacing past the last content box no longer opens a page.\n"
-    filename: pdf-forced-break-empty-page.md
+  - content: "---\npackages:\n  takumi-pdf:\n    type: patch\n---\n\n# Scale gradient transforms to the page unit\n\nA gradient inside a tiling pattern was built in pixels while its matrix resolves against the page in points, so every gradient drew 4/3 too large and a radial or conic one also landed off-centre.\n"
+    filename: pdf-gradient-page-units.md
     v: 0.0.0
-  - content: "---\npackages:\n  takumi:\n    type: patch\n  takumi-pdf:\n    type: patch\n---\n\n# Resolve viewport units against the page area in paged output\n\n`100vh` in paged content was `0` because the content column lays out at unbounded height; it now equals the page area height, as in print media.\n"
-    filename: page-area-viewport-units.md
+  - content: "---\npackages:\n  takumi:\n    type: minor\n  takumi-pdf:\n    type: minor\n---\n\n# Read node trees faster\n\nEach node's keys are read once instead of being buffered first. A key another node type owns that comes before `type` is now parsed, so a malformed one is an error instead of being ignored.\n"
+    filename: node-input-perf.md
     v: 0.0.0
-  - content: "---\npackages:\n  takumi:\n    type: patch\n---\n\n# Clip overflow at the padding box\n\n`overflow: hidden`, `overflow: clip` and `contain: paint` now clip at the padding edge, as CSS specifies. Content that spilled into a padded box's padding used to be cut at the content edge.\n"
-    filename: overflow-clip-padding-box.md
+  - content: "---\npackages:\n  takumi:\n    type: patch\n  takumi-pdf:\n    type: patch\n---\n\n# Paint in CSS paint order, as Chrome does\n\n- Positioned boxes and stacking contexts at `z-index: auto` paint above later in-flow siblings, and floats above in-flow block backgrounds, following CSS 2.1 Appendix E. A `position: relative` box nudged over the next block no longer disappears under it.\n- Text paints after the backgrounds of every in-flow block and float in its stacking context, so overflowing text stays above the next block's background. Flex and grid items still paint whole, like inline blocks.\n- A float inside text paints before that text.\n- A box with `overflow: hidden` paints its text above the backgrounds of later siblings. A positioned box whose containing block sits outside it escapes its clip, even under an `opacity` in between.\n- A filtered box inside an `overflow: hidden` parent stays inside the parent's edges in the image output.\n- PDF places the content of a scaled or rotated box with `overflow: hidden` once, where it used to apply the box's transform twice.\n"
+    filename: paint-order.md
     v: 0.0.0
-  - content: "---\npackages:\n  takumi:\n    type: minor\n---\n\n# Size boxes from their content or available space\n\n`width` and `height` now accept `min-content`, `max-content`, `fit-content`, `fit-content(<length-percentage>)`, and `stretch`.\n\n```css\n.card {\n  width: fit-content(20rem);\n}\n```\n\nThis fits the card to its content with a preferred limit of `20rem`. Its min-content size remains the lower bound.\n\n`flex-basis` accepts the same values, plus `content` to size a flex item from its content regardless of its main size property.\n\nTailwind utilities map to the new values:\n\n| Value         | Utilities                    |\n| ------------- | ---------------------------- |\n| `min-content` | `w-min`, `h-min`, `size-min` |\n| `max-content` | `w-max`, `h-max`, `size-max` |\n| `fit-content` | `w-fit`, `h-fit`, `size-fit` |\n| `content`     | `basis-content`              |\n\n`min-width`, `max-width`, `min-height`, and `max-height` do not accept the new keywords. Their existing length and percentage values still work.\n"
-    filename: sizing-keywords.md
+  - content: "---\npackages:\n  takumi:\n    type: patch\n  takumi-pdf:\n    type: patch\n---\n\n# Paint visible children of `visibility: hidden` elements\n\nA `visibility: hidden` element now hides only its own box, text, image, and outline, so descendants that set `visibility: visible` paint, as browsers show them. `opacity: 0` and `display: none` still hide the whole subtree.\n"
+    filename: visibility-hidden-children.md
     v: 0.0.0
-  - content: "---\npackages:\n  takumi:\n    type: patch\n---\n\n# Upgrade taffy to 0.14\n\nLayout picks up taffy's flexbox, grid and block fixes from 0.12 through 0.14.\n"
-    filename: taffy-0-14.md
+  - content: "---\npackages:\n  takumi:\n    type: patch\n  takumi-pdf:\n    type: patch\n---\n\n# Draw text decorations as Chrome does\n\n- Underlines, overlines and line-throughs round their top edge to the nearest pixel and their thickness down to a whole pixel, at least 1px.\n- PDF applies a span's `opacity` to its text decorations.\n- An overline rests on top of the text. A line-through sits a third of the ascent above the baseline instead of at the font's strikeout position.\n- `text-underline-position: auto` puts the underline half its thickness, at least 1px, below the baseline. `from-font` keeps the font's underline position, `under` leaves a pixel below the em box, and a set `text-underline-offset` drops the `auto` gap.\n- `text-decoration-thickness: from-font` uses the font's underline thickness for every line.\n- `text-decoration: overline 12px red` keeps a thickness written right after the line keyword.\n- A line spans the text exactly, with antialiased ends, instead of widening to whole pixels. A double or wavy line keeps its offset from the unrounded thickness.\n- `text-decoration-skip-ink` cuts on whole device pixels, also cuts overlines, and looks for glyphs across the whole band a wavy or double line paints. It no longer cuts around CJK characters, Hangul, emoji, `/`, `\\` or `_`.\n- Text under `opacity`, `filter` or a blend mode keeps the part of a decoration line that reaches past its box.\n- An underline sits against the baseline and font of the element that sets it, and a line-through takes its height from that element's font.\n- A `text-decoration` reaches the text of every in-flow box inside the element that sets it, and nested decorations all draw. Inline blocks, floats, absolutely positioned boxes and outside list markers still stop it.\n- A `list-style-position: inside` marker in a box at a fractional position snaps its decorations with the text beside it, instead of from the page origin.\n"
+    filename: text-decorations.md
     v: 0.0.0
-  - content: "---\npackages:\n  takumi:\n    type: patch\n---\n\n# Paint text that overflows a zero-size box\n\nText inside a zero-size box now renders in SVG output like it does in raster output.\n"
-    filename: svg-zero-size-text.md
+  - content: "---\npackages:\n  takumi:\n    type: patch\n  takumi-pdf:\n    type: patch\n---\n\n# Place absolutely positioned boxes as Chrome does\n\n- An `auto`-width absolute box wraps its content to the containing block's width minus its insets and margins, so `left: 50%` text no longer runs past the right edge.\n- An absolute box inside a paragraph keeps the text around it on one line and starts where it sits in that line.\n- An absolute box inside a `position: relative` span takes its offsets from that span's box, and no longer lets a line break inside the word around it.\n"
+    filename: absolute-boxes.md
     v: 0.0.0
-  - content: "---\npackages:\n  takumi:\n    type: minor\n---\n\n# Add balanced flex wrapping, flow-root, self-alignment, and containment\n\nSpread flex items across balanced lines and set a minimum line count:\n\n```css\n.cards {\n  display: flex;\n  flex-wrap: balance;\n  flex-line-count: 2;\n}\n```\n\n`balance` also combines with `wrap` or `wrap-reverse`, in either order. It cannot combine with `nowrap`.\n\n- `display: flow-root` makes the box a block formatting context root.\n- `align-items`, `align-self`, `justify-items`, and `justify-self` accept `self-start` and `self-end` to align to the item's own start or end. `justify-content` and `align-content` reject them.\n- `contain` accepts `none`, `content`, or a space-separated combination of `layout`, `style`, and `paint`, without duplicates. `content` means `layout style paint`.\n\n`contain: paint` clips descendants to the padding box. Either `layout` or `paint` creates a stacking context and a containing block for absolute and fixed descendants.\n\nSize containment is not implemented, so `size`, `inline-size`, and `strict` cause a parse error. `style` parses but has nothing to scope: Takumi has no author-facing counters, and list-item ordinals do not restart at the boundary.\n\nContainment is a correctness feature here, not a performance hint. Takumi renders once, so there is no relayout to skip. Paint containment adds a stacking context and a clip layer per box.\n"
-    filename: layout-keywords.md
+  - content: "---\npackages:\n  takumi:\n    type: patch\n  takumi-pdf:\n    type: patch\n---\n\n# Sum a `calc()`'s absolute lengths into pixels\n\n`calc()` now adds `cm`, `mm`, `in`, `pt`, `pc` and `q` into one pixel term, as CSS simplifies them, so an expression mixing several absolute units no longer fails to parse.\n"
+    filename: calc-absolute-units.md
     v: 0.0.0
-  - content: "---\npackages:\n  takumi:\n    type: patch\n---\n\n# Take an anonymous box's border width down to its used value\n\nAn anonymous box skipped the used-value pass, so it reported the initial `medium` border width even though it has no border style to render it with.\n"
-    filename: anonymous-box-used-values.md
+  - content: "---\npackages:\n  takumi:\n    type: patch\n  takumi-pdf:\n    type: patch\n---\n\n# Lay out inline boxes as Chrome does\n\n- A span's background, border and outline cover its own font's ascent and descent on every line, even when it holds only other spans or padding, instead of the whole `line-height`. A wrapped outline joins its lines only where they touch.\n- A span's background and outline stop at the last glyph before a line break, like its text decoration.\n- A span's left and right margins push the text beside it apart, on the parent's background, and a negative margin overlaps it with its neighbors.\n- Each line grows to the block's own `line-height` and font, even when it holds only a span with a smaller line height. Under `line-height: normal`, a fallback font, such as an emoji font, grows the line by its own line spacing. Under any other line height it does not.\n- A span with a larger font than its text makes its line as tall as Chrome does.\n- `vertical-align` on an inline span moves its text, background and children, and grows the line to fit. `sub` and `super` shift by the parent's font size, percentages refer to the span's own line height, and `middle` uses the parent font's x-height. Offsets land on Chrome's 1/64px steps, and a `top` or `bottom` box aligns against the borders of the spans on its line.\n- Text inside a span aligned off the baseline, like `sub` or `super`, no longer kerns against the text around it.\n- A `background-image` on a span paints across its lines as one continuous strip, and `background-clip: text` shows it through the glyphs, so gradient text inside a heading no longer disappears.\n"
+    filename: inline-boxes.md
     v: 0.0.0
-  - content: "---\npackages:\n  takumi:\n    type: patch\n---\n\n# Place a measured inline box against its parent's content box\n\nAn inline box's transform omitted the parent's border and padding, so it was reported at the border-box origin while every other measured node carries an absolute transform.\n"
-    filename: inline-box-absolute-transform.md
+  - content: "---\npackages:\n  takumi:\n    type: patch\n  takumi-pdf:\n    type: patch\n---\n\n# Clip as Chrome does\n\n- A percentage corner radius in `clip-path: inset(... round ...)` resolves its vertical radius against the box height in the SVG output.\n- A `path()` clip that cannot be parsed no longer hides its element in the image output.\n- An element with more than one of `clip-path`, `mask-image` and a clipping `overflow` applies all of them in the image output.\n- A rounded image clips to the curve of its content box, the border radius less the border and padding.\n- `circle()` in `clip-path` and `offset-path` resolves a percentage radius against the box's diagonal over √2, and `closest-side` or `farthest-side` against all four sides.\n"
+    filename: clipping.md
     v: 0.0.0
-  - content: "---\npackages:\n  takumi:\n    type: patch\n---\n\n# Align flex items to the first line of a wrapped item\n\nA flex item that wraps onto several lines now offers the baseline of its first line to `align-items: baseline`, instead of its bottom edge.\n"
-    filename: flex-first-baseline.md
+  - content: "---\npackages:\n  takumi:\n    type: patch\n  takumi-pdf:\n    type: patch\n---\n\n# Measure content widths as Chrome does\n\nA box sized to its content now takes its text's width rounded up to a 64th of a pixel, as Chrome's `LayoutUnit` does, rather than to a whole pixel. A shrink-to-fit box whose text wraps, such as a flex item, now takes the width it wraps at rather than its widest line.\n\n`width`, `height` and `flex-basis` no longer accept `fit-content(<length-percentage>)`. Chrome treats it as invalid there and keeps it for grid tracks, so the declaration is now ignored.\n"
+    filename: layout-unit-widths.md
     v: 0.0.0
-  - content: "---\npackages:\n  takumi:\n    type: patch\n---\n\n# Reject repeated alignment overflow prefixes\n\nReject repeated `safe` and `unsafe` prefixes in CSS alignment values.\n"
-    filename: alignment-overflow-prefixes.md
+  - content: "---\npackages:\n  takumi:\n    type: patch\n  takumi-pdf:\n    type: patch\n---\n\n# Fit text with `text-fit` as Chrome does\n\n- Fixed `letter-spacing` and `word-spacing` keep their size when `text-fit` scales a line, and a fixed `line-height` keeps its height around the scaled glyphs.\n- `-webkit-text-stroke`, `text-shadow` and text decorations scale with the line.\n- A line within 2px of its box stays unscaled, counting its `text-indent` under `per-line` and `per-line-all`. A `grow` limit under 100% or a `shrink` limit over 100% stops the text from scaling.\n- A line keeps its `text-indent`, and `center`, `right` and right-to-left lines land where Chrome puts them.\n- Spans keep their `vertical-align` offsets and backgrounds instead of scaling them a second time.\n- Text sits on the baseline Chrome paints it at, and its glyphs snap to the same pixel rows.\n- A line whose fixed `letter-spacing` or `word-spacing` already fills its box stays unscaled, as in Chrome, where it used to vanish.\n"
+    filename: text-fit.md
     v: 0.0.0
-  - content: "---\npackages:\n  takumi:\n    type: patch\n---\n\n# Decode character references in `fromHtml` image sources\n\nAn `img` whose `src` holds `&amp;` now yields the decoded URL, matching `attributes.src`.\n"
-    filename: html-image-src-entities.md
+  - content: "---\npackages:\n  takumi:\n    type: patch\n  takumi-pdf:\n    type: patch\n---\n\n# Draw outlines as Chrome does\n\n- An inline element's `outline` draws `double`, `groove`, `ridge`, `inset` and `outset`, which used to paint nothing.\n- Dashed and dotted outlines start each edge on a dash, and a translucent dashed outline no longer darkens where its dashes overlap at the corners.\n- PDF draws the `outline` of an inline element as one contour across line breaks, at the element's opacity.\n- An outline around a box without `border-radius` keeps square corners under `outline-offset` and `outline-width`.\n- A one-line inline outline paints like a box outline, so its 3D styles shade like a border.\n- An inline outline wraps the element's border box on each line, including its padding, border and nested elements. `plain <b>bold</b> text` used to get no outline at all.\n- A wrapped `solid` or `double` inline outline rounds its corners by the element's `border-radius`.\n- A wrapped inline outline follows Chrome's shape. Its inner edge shrinks from the outer contour, dashed and dotted outlines round their corners, and 3D styles shade each edge with aliased mitred corners.\n- An inline element's outline snaps its width and height from 1/64px layout units, so it no longer ends up 1px narrower than Chrome's.\n"
+    filename: outlines.md
     v: 0.0.0
-  - content: "---\npackages:\n  takumi:\n    type: patch\n---\n\n# Size a replaced element the way its source states it\n\nAn `<svg>` carrying only a `viewBox` states a ratio and no size, and as an inline box it took a size the ratio never stated. `box-sizing: border-box` counted an image's padding and border twice, so the picture came out taller than its box. A source stating neither a size nor a ratio had one synthesised from the default object size, so `width` alone moved `height` with it.\n"
-    filename: inline-replaced-intrinsic-width.md
+  - content: "---\npackages:\n  takumi:\n    type: minor\n  takumi-pdf:\n    type: minor\n---\n\n# Drop WOFF1 decoding from the wasm packages\n\n`@takumi-rs/wasm` and `takumi-pdf` load TTF, OTF, and WOFF2 but no longer decode WOFF1. `@takumi-rs/core` keeps WOFF1.\n"
+    filename: wasm-woff1.md
     v: 0.0.0
-  - content: "---\npackages:\n  takumi:\n    type: patch\n---\n\n# Keep balanced lines aligned within the container\n\n`text-wrap: balance` aligned lines against the narrowed balancing width, so RTL, `text-align: right`, and centered paragraphs drifted toward the left edge.\n"
-    filename: balance-alignment.md
+  - content: "---\npackages:\n  takumi:\n    type: patch\n  takumi-pdf:\n    type: patch\n---\n\n# Shrink the wasm packages\n\nBorders, outlines, text and decorations now compile once for every output format instead of once per backend. `@takumi-rs/wasm` is about 18 KB smaller gzipped, and `takumi-pdf` about 7 KB.\n"
+    filename: paint-device-vtable.md
     v: 0.0.0
-  - content: "---\npackages:\n  takumi:\n    type: minor\n---\n\n# Render canvases up to 64 megapixels\n\nThe canvas budget is now 64 megapixels, up from 16. A 7680 × 4320 banner or a 4096 × 16384 page fits.\n\nOver the budget, `render` fails with `InvalidViewport`. The message now states the limit.\n"
-    filename: canvas-pixel-budget.md
+  - content: "---\npackages:\n  takumi-pdf:\n    type: patch\n---\n\n# Keep a text shadow on the page of its line\n\nA text shadow offset past a page cut was assigned to the next page and drawn above its top edge, so it vanished from both pages. It now follows the line it shadows.\n"
+    filename: pdf-text-shadow-page.md
     v: 0.0.0
-  - content: "---\npackages:\n  takumi:\n    type: minor\n---\n\n# Keep decoded photos in the resource cache\n\nThe default `cacheMaxBytes` is now 64 MiB, and one decoded image can use the whole budget. The cache used to split its budget into many small shards and never kept an image larger than one shard, so most photos were decoded again on every render.\n"
-    filename: resource-cache-shards.md
+  - content: "---\npackages:\n  takumi:\n    type: patch\n  takumi-pdf:\n    type: patch\n---\n\n# Collapse white space as Chrome does\n\n- `&nbsp;`, U+3000 and other spaces outside CSS's document white space keep their width under `white-space-collapse: collapse`.\n- Collapsible spaces at the start and end of a paragraph drop out, such as indented HTML or `<span>Label </span>` inside a flex row.\n- A float at the start of a line no longer keeps the space after it.\n- `<br>` always starts a new line, even with the style presets off or `white-space` set to collapse newlines.\n- A right-to-left line that ends in left-to-right words, or the reverse, hangs its line-end space past the edge and leaves it out of decorations and backgrounds.\n- Under `white-space: pre-wrap`, a newline right after a space ends the line. `\"A \\nB\"` used to render as one line.\n"
+    filename: white-space.md
     v: 0.0.0
-  - content: "---\npackages:\n  takumi:\n    type: patch\n---\n\n# Size a table's remaining auto columns by their content\n\nAuto columns next to a column with a declared width now share the free width in proportion to their max-content widths, as they already did when every column was auto.\n"
-    filename: table-auto-columns.md
+  - content: "---\npackages:\n  takumi:\n    type: patch\n  takumi-pdf:\n    type: patch\n---\n\n# Lay out and snap boxes to pixels as Chrome does\n\n- Background and mask tiles are sized, positioned and snapped to pixels in 1/64px layout units, as Chrome does. `round`, `space`, `cover` and `contain` tiles now land on the same pixels as Chrome's.\n- A tile that sits outside the box, or under an opaque border, no longer paints there.\n- A repeating layer seen through `background-clip: text` in PDF repeats across the whole text instead of showing one tile.\n- An image or background drawn through a rounded or clipped shape no longer shifts half a pixel and blurs in the image output.\n- Layout keeps boxes at their exact positions and sizes. Backgrounds, borders, shadows, outlines, images and overflow clips snap to whole pixels as they paint, where Chrome snaps them. `measure` reports the unrounded sizes.\n- A line of text keeps its exact height, so a `line-height: 1.2` line at 32px is 38.39px tall instead of 39px.\n- A `background-clip: text` background no longer shows past its box through a text stroke, and no longer scales with `text-fit`.\n- A root with `display: flex`, `grid` or `flow-root` and no width fills the viewport, as a block-level box does in Chrome.\n- An ellipsis follows the last word directly instead of the line's trailing space.\n- A solid rectangle whose edge falls between pixels, such as a decoration line or an inline box, covers its edge pixels in proportion in the image output, as the SVG output does.\n"
+    filename: background-geometry.md
     v: 0.0.0
-  - content: "---\npackages:\n  takumi:\n    type: patch\n---\n\n# Encode photographic PNG output faster and smaller\n\nPNG output now picks its encoder settings from the image. Photo backgrounds encode about twice as fast and around 30% smaller. Flat art keeps its bytes. Animated PNG picks its settings from the first frame.\n"
-    filename: png-encode-filter.md
+  - content: "---\npackages:\n  takumi:\n    type: patch\n  takumi-pdf:\n    type: patch\n---\n\n# Lay out tables as Chrome does\n\n- A block-level `auto`-width table shrinks to fit its content instead of filling its container.\n- Columns share the table's width through the CSS table width algorithm, so a table narrower than its content no longer squeezes a column to its minimum. Percentage, `min-width` and `max-width` cell widths constrain their columns instead of resizing the cell inside them.\n- The HTML presets give `thead`, `tbody` and `tfoot` Chrome's `vertical-align: middle`, which rows and cells inherit, and a cell that holds only text follows it.\n- Cells with `vertical-align: baseline` line their first lines up on the row's deepest baseline, whatever their fonts, padding or borders.\n- An element inside a row that is not a table cell sits in an anonymous cell, as CSS table fixup puts it.\n- A table's `width: min-content`, `max-content`, `fit-content` and `stretch` size it from its column grid, where they used to act as `auto`.\n"
+    filename: tables.md
     v: 0.0.0
-  - content: "---\npackages:\n  takumi:\n    type: patch\n---\n\n# Stop anonymous boxes inheriting their parent's box model\n\nBare text inside a padded `display: flex` container measured against a content box narrowed by the parent's padding again, so a line that fit was laid out as two.\n"
-    filename: anonymous-box-insets.md
+  - content: "---\npackages:\n  takumi:\n    type: patch\n  takumi-pdf:\n    type: patch\n---\n\n# Paint backgrounds as Chrome does\n\n- `background-repeat: space` spreads the leftover room so the first and last tiles touch the edges, and a single tile follows `background-position`. `round` rounds the tile count to the nearest whole number. Both keep tiling across a painting area larger than the positioning area.\n- Shorter `background-size`, `-position`, `-repeat` and `-blend-mode` lists cycle over the layers instead of repeating their last value.\n- SVG places tiles at exact positions and positions `background-clip: text` layers by `background-origin`. PDF no longer repeats a layer along an axis that does not repeat.\n- `background-blend-mode` in the image output blends only with the box's own layers and color, not with what sits behind the box.\n- Gradients sample each pixel at its center, so hard stops land on the same pixels as Chrome's. A tile of fractional size blends across its seams as Chrome's does.\n- A repeating gradient whose stops all sit at one position paints solid in the last stop's color.\n- A tile smaller than 1/64px paints nothing, as Chrome's `LayoutUnit` sizes truncate it to empty, instead of listing millions of tiles.\n- `background-repeat: repeat bogus`, or a stray token after the last item of `background-size`, `-position` or `-blend-mode`, makes the declaration invalid, as in browsers.\n"
+    filename: backgrounds.md
     v: 0.0.0
-  - content: "---\npackages:\n  takumi:\n    type: patch\n---\n\n# Balance text beside floats against the container\n\n`text-wrap: balance` searched for its width with the floats squeezed into that narrower width, so paragraphs beside a float ended up barely balanced.\n"
-    filename: balance-float-width.md
+  - content: "---\npackages:\n  takumi:\n    type: minor\n---\n\n# Build the paint tree faster\n\n`build_scene(SceneRequest)` replaces `build_stacking_contexts`; its `paint_bounds` flag lets `paint_tree()` skip paint bounds and the text shaping they need. Z-order, cascade, table-group, and inline-box ordering use cheaper sorts.\n"
+    filename: paint-slim.md
+    v: 0.0.0
+  - content: "---\npackages:\n  takumi:\n    type: patch\n---\n\n# Apply `backdrop-filter` as Chrome does\n\n- The filtered backdrop composites over the original instead of replacing it, so `opacity()` no longer punches a translucent hole.\n- An element with both `clip-path` and `mask-image` shows its filtered backdrop only where both let it through.\n- A blurred backdrop reads only what sits inside the element's box, mirrored across its edges, so content just outside no longer bleeds in.\n"
+    filename: backdrop-filter.md
+    v: 0.0.0
+  - content: "---\npackages:\n  takumi:\n    type: minor\n---\n\n# Draw glyph outlines through `draw_outline`\n\n`base::resources::glyph::draw_outline` replaces `ErasedPen`. It draws a skrifa `OutlineGlyph` through `&mut dyn OutlinePen`, the path skrifa's own bounds pen shares.\n"
+    filename: draw-outline.md
+    v: 0.0.0
+  - content: "---\npackages:\n  takumi:\n    type: patch\n---\n\n# Apply filters as Chrome does\n\n- `drop-shadow()` reads its blur length as the Gaussian's standard deviation. The image output used to halve it like a `box-shadow` blur.\n- `grayscale()` and `sepia()` above 100% act as 100% in the image output, and round each channel to the nearest value.\n- A fractional `hue-rotate()` angle no longer rounds to whole degrees in the SVG output.\n- `drop-shadow()` rounds a fractional offset down to whole pixels in the image and SVG output, so `10.5px` lands where Chrome puts it.\n- `blur()`, `backdrop-filter` and `text-shadow` blur with the Gaussian Chrome's software renderer uses: a true kernel for small blurs and three box passes for larger ones. A blur keeps full resolution up to a standard deviation of 135px, then shrinks, blurs and scales back up as Chrome does.\n- A colored `drop-shadow()` fades out as Chrome's does. It used to paint an opaque halo of its color, and an element's anti-aliased edge came out lighter than the shadow behind it.\n"
+    filename: filters.md
+    v: 0.0.0
+  - content: "---\npackages:\n  takumi:\n    type: minor\n---\n\n# Build `takumi` with fewer Cargo features\n\n- `ImageSource::Animated` exists only with `gif`, `png`, or `webp`. A GIF keeps its header size when its decoder is off.\n- The `png` feature is on by default through `image-decoding`. Without it, PNG and APNG sources keep their header size but cannot be drawn, PNG bitmap glyphs are skipped, and `ImageBuffer::encode_png` is gone.\n- `svg-sizing` reads an SVG's `width`, `height`, and `viewBox` without the renderer. The `svg` feature includes it.\n- The raster backend builds without the `svg` feature. Only SVG sources need it.\n"
+    filename: cargo-features.md
+    v: 0.0.0
+  - content: "---\npackages:\n  takumi:\n    type: patch\n---\n\n# Skip text between elements in `:first-child` and sibling selectors\n\n`:first-child`, `:last-child`, `:nth-child()` and the `+` and `~` combinators now skip text nodes, as browsers do. Before, the whitespace between tags in HTML counted as a sibling, so `td:first-child` matched nothing.\n"
+    filename: selector-text-siblings.md
+    v: 0.0.0
+  - content: "---\npackages:\n  takumi:\n    type: patch\n---\n\n# Blend `color-dodge` and `color-burn` with the same result on every platform\n"
+    filename: color-dodge-burn-integer.md
+    v: 0.0.0
+  - content: "---\npackages:\n  takumi:\n    type: patch\n---\n\n# Skip unknown at-rules in `StyleSheet::parse`\n\n`StyleSheet::parse` used to fail the whole sheet on an at-rule it does not implement, such as `@font-face`, `@charset`, or `@page`. It now drops that at-rule and keeps the rest, as browsers do. `parse_loosy` already behaved this way.\n"
+    filename: skip-unknown-at-rules.md
+    v: 0.0.0
+  - content: "---\npackages:\n  takumi:\n    type: minor\n---\n\n# Read painted values from a node tree\n\nWith `paint-tree` enabled, `takumi_core::paint_tree::paint_tree` returns used decorations, image placement, and shaped text in paint order, in device pixels with absolute transforms. `Fonts::face_family` names a shaped run's registered family.\n"
+    filename: paint-tree.md
+    v: 0.0.0
+  - content: "---\npackages:\n  takumi:\n    type: patch\n---\n\n# Render faster\n\n- Shadows, backdrop filters and `blur()` blur faster, with NEON, SSE2 or wasm simd128 on the alpha pass.\n- Text is shaped and measured once per node, and glyph positions, `text-decoration-skip-ink` intercepts and `line-height: normal` metrics are reused within a render.\n- Oblique linear gradients, scaled images, masks and the final alpha pass skip per-pixel work.\n"
+    filename: render-perf.md
+    v: 0.0.0
+  - content: "---\npackages:\n  takumi:\n    type: minor\n---\n\n# ⚠️ Reach custom properties through one type on `ComputedStyle`\n\n`ComputedStyle::custom_properties` and `ComputedStyle::registered_custom_properties` are now one `custom_properties: CustomProperties` field. Read a value with `style.custom_properties.get(name)`, which returns `Option<&str>`. Constructing a `ComputedStyle` with `..Default::default()` is unaffected.\n"
+    filename: custom-properties-type.md
+    v: 0.0.0
+  - content: "---\npackages:\n  takumi:\n    type: minor\n---\n\n# Paint borders on inline spans\n\nA `display: inline` span now paints its `border` around its text on each line, and reserves the border's width at its start and end. A span that wraps leaves out the side at each break, as browsers do by default.\n"
+    filename: inline-span-borders.md
+    v: 0.0.0
+  - content: "---\npackages:\n  takumi:\n    type: minor\n---\n\n# Support `background-blend-mode` in SVG output\n\nThe SVG backend now blends each background layer with the layers and color beneath it, in an isolated group so nothing behind the box takes part.\n"
+    filename: svg-background-blend-mode.md
+    v: 0.0.0
+  - content: "---\npackages:\n  takumi:\n    type: patch\n---\n\n# Cascade custom properties as browsers do\n\n- `--gap: 8px !important` marks the declaration important instead of substituting `8px !important` wherever `var(--gap)` reads it.\n- An `@property` rule with a typed `syntax` and no `initial-value` is ignored, so its name stays an ordinary custom property. `syntax` no longer keeps its quotes.\n- An author's own `--tw-` custom property inherits like any other. Only the state the utility engine writes stops at its element.\n- A `--tw-*` property registered with `@property` keeps its initial value, so Tailwind's compiled gradients that read `var(--tw-gradient-from-position)` paint.\n"
+    filename: custom-properties.md
+    v: 0.0.0
+  - content: "---\npackages:\n  takumi:\n    type: patch\n---\n\n# Escape text inside JSX `<svg>` elements\n\n`fromJsx` now escapes text children of an `<svg>` element, so they can no longer inject SVG markup. It throws on element or attribute names that are not valid XML names, and on `style` entries that would end their own declaration, such as `fill: \"red;stroke:blue\"` or an unclosed quote. Semicolons inside quotes or `url()` still work.\n"
+    filename: svg-serialize-escape.md
     v: 0.0.0
 core:packages:
   - id: npm:takumi-workspace
     updated: false
-  - id: npm:docs
-    updated: false
-  - id: npm:@takumi-rs/wasm
-    updated: true
   - id: npm:takumi-js
+    updated: true
+  - changelogIds:
+      - takumi-paint.md
+    id: npm:takumi-paint
     updated: true
   - id: npm:@takumi-rs/core
     updated: true
   - changelogIds:
-      - pdf-image-corner-clip.md
-      - page-cut-snap.md
-      - pdf-integer-default-width.md
-      - text-wrap-measured-width.md
-      - page-rules.md
-      - pdf-css-types.md
-      - pdf-uncovered-text-option.md
-      - pdf-forced-break-empty-page.md
-      - page-area-viewport-units.md
+      - svg-pdf-parity.md
+      - borders.md
+      - box-shadow.md
+      - pdf-inline-image-decorations.md
+      - text-shadows.md
+      - text-decoration-styles.md
+      - pdf-gradient-page-units.md
+      - node-input-perf.md
+      - paint-order.md
+      - visibility-hidden-children.md
+      - text-decorations.md
+      - absolute-boxes.md
+      - calc-absolute-units.md
+      - inline-boxes.md
+      - clipping.md
+      - layout-unit-widths.md
+      - text-fit.md
+      - outlines.md
+      - wasm-woff1.md
+      - paint-device-vtable.md
+      - pdf-text-shadow-page.md
+      - white-space.md
+      - background-geometry.md
+      - tables.md
+      - backgrounds.md
     id: npm:takumi-pdf
     updated: true
-  - id: npm:@takumi-rs/image-response
+  - id: npm:@takumi-rs/wasm
     updated: true
   - id: npm:@takumi-rs/helpers
     updated: true
-  - id: npm:example-satori-html
-    updated: false
-  - id: npm:example-twitter-images
-    updated: false
-  - id: npm:example-generate-invoice
-    updated: false
-  - id: npm:svelte
-    updated: false
-  - id: npm:example-tanstack-start
+  - id: npm:@takumi-rs/image-response
+    updated: true
+  - id: npm:docs
     updated: false
   - id: npm:waku-ssr
     updated: false
-  - id: npm:pdf-bench
+  - id: npm:example-cloudflare-workers
     updated: false
-  - id: npm:example-e-invoice
+  - id: npm:example-generate-invoice
+    updated: false
+  - id: npm:example-twitter-images
+    updated: false
+  - id: npm:example-satori-html
     updated: false
   - id: npm:example-nextjs
     updated: false
-  - id: npm:example-css-library-integration
+  - id: npm:ffplay
+    updated: false
+  - id: npm:svelte
     updated: false
   - id: npm:example-liquid-glass
     updated: false
-  - id: npm:ffplay
+  - id: npm:example-css-library-integration
     updated: false
-  - id: npm:example-cloudflare-workers
+  - id: npm:pdf-bench
     updated: false
   - id: npm:ffmpeg-keyframe-animation
     updated: false
-  - id: cargo:takumi-svg
+  - id: npm:example-e-invoice
     updated: false
-  - changelogIds:
-      - overflow-clip-padding-box.md
-      - sizing-keywords.md
-      - text-wrap-measured-width.md
-      - taffy-0-14.md
-      - svg-zero-size-text.md
-      - layout-keywords.md
-      - anonymous-box-used-values.md
-      - inline-box-absolute-transform.md
-      - flex-first-baseline.md
-      - alignment-overflow-prefixes.md
-      - html-image-src-entities.md
-      - inline-replaced-intrinsic-width.md
-      - balance-alignment.md
-      - canvas-pixel-budget.md
-      - resource-cache-shards.md
-      - table-auto-columns.md
-      - png-encode-filter.md
-      - anonymous-box-insets.md
-      - balance-float-width.md
-      - page-area-viewport-units.md
-    id: cargo:takumi
-    updated: true
-  - id: cargo:takumi-core
-    updated: false
-  - changelogIds:
-      - pdf-image-corner-clip.md
-      - page-cut-snap.md
-      - pdf-integer-default-width.md
-      - text-wrap-measured-width.md
-      - page-rules.md
-      - pdf-css-types.md
-      - pdf-uncovered-text-option.md
-      - pdf-forced-break-empty-page.md
-      - page-area-viewport-units.md
-    id: cargo:takumi-pdf
-    updated: true
-  - id: cargo:takumi-html
+  - id: npm:example-tanstack-start
     updated: false
   - id: cargo:takumi-raster
     updated: false
+  - changelogIds:
+      - svg-pdf-parity.md
+      - borders.md
+      - box-shadow.md
+      - pdf-inline-image-decorations.md
+      - text-shadows.md
+      - text-decoration-styles.md
+      - pdf-gradient-page-units.md
+      - node-input-perf.md
+      - paint-order.md
+      - visibility-hidden-children.md
+      - text-decorations.md
+      - absolute-boxes.md
+      - calc-absolute-units.md
+      - inline-boxes.md
+      - clipping.md
+      - layout-unit-widths.md
+      - text-fit.md
+      - outlines.md
+      - wasm-woff1.md
+      - paint-device-vtable.md
+      - pdf-text-shadow-page.md
+      - white-space.md
+      - background-geometry.md
+      - tables.md
+      - backgrounds.md
+    id: cargo:takumi-pdf
+    updated: true
+  - changelogIds:
+      - paint-slim.md
+      - svg-pdf-parity.md
+      - borders.md
+      - box-shadow.md
+      - backdrop-filter.md
+      - draw-outline.md
+      - filters.md
+      - text-shadows.md
+      - takumi-paint.md
+      - text-decoration-styles.md
+      - cargo-features.md
+      - selector-text-siblings.md
+      - node-input-perf.md
+      - paint-order.md
+      - color-dodge-burn-integer.md
+      - skip-unknown-at-rules.md
+      - visibility-hidden-children.md
+      - paint-tree.md
+      - text-decorations.md
+      - absolute-boxes.md
+      - render-perf.md
+      - calc-absolute-units.md
+      - inline-boxes.md
+      - clipping.md
+      - layout-unit-widths.md
+      - text-fit.md
+      - outlines.md
+      - wasm-woff1.md
+      - custom-properties-type.md
+      - inline-span-borders.md
+      - paint-device-vtable.md
+      - svg-background-blend-mode.md
+      - white-space.md
+      - custom-properties.md
+      - svg-serialize-escape.md
+      - background-geometry.md
+      - tables.md
+      - backgrounds.md
+    id: cargo:takumi
+    updated: true
+  - id: cargo:takumi-html
+    updated: false
+  - id: cargo:takumi-svg
+    updated: false
+  - id: cargo:takumi-core
+    updated: false
 npm:packages:
   - id: npm:takumi-workspace
-  - id: npm:docs
-  - id: npm:@takumi-rs/wasm
   - id: npm:takumi-js
+  - id: npm:takumi-paint
   - id: npm:@takumi-rs/core
   - id: npm:takumi-pdf
-  - id: npm:@takumi-rs/image-response
+  - id: npm:@takumi-rs/wasm
   - id: npm:@takumi-rs/helpers
-  - id: npm:example-satori-html
-  - id: npm:example-twitter-images
-  - id: npm:example-generate-invoice
-  - id: npm:svelte
-  - id: npm:example-tanstack-start
+  - id: npm:@takumi-rs/image-response
+  - id: npm:docs
   - id: npm:waku-ssr
-  - id: npm:pdf-bench
-  - id: npm:example-e-invoice
-  - id: npm:example-nextjs
-  - id: npm:example-css-library-integration
-  - id: npm:example-liquid-glass
-  - id: npm:ffplay
   - id: npm:example-cloudflare-workers
+  - id: npm:example-generate-invoice
+  - id: npm:example-twitter-images
+  - id: npm:example-satori-html
+  - id: npm:example-nextjs
+  - id: npm:ffplay
+  - id: npm:svelte
+  - id: npm:example-liquid-glass
+  - id: npm:example-css-library-integration
+  - id: npm:pdf-bench
   - id: npm:ffmpeg-keyframe-animation
+  - id: npm:example-e-invoice
+  - id: npm:example-tanstack-start
