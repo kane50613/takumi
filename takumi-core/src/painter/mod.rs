@@ -20,7 +20,7 @@ pub use self::{
   replaced::ReplacedContent,
   shadow::ShadowShape,
   snapped_box::SnappedBox,
-  text::{GlyphDevice, GlyphFill, InlineLines, StripBackground},
+  text::{GlyphDevice, GlyphFill, InlineLines, LineItem, StripBackground},
   text_clip::TextClip,
 };
 

@@ -13,8 +13,10 @@
 //! With [`PdfOptions::page`] set, content lays out at the page's content
 //! width with unbounded height, then slices into pages. Unsplittable atoms
 //! (text lines, images, transformed subtrees) push cut points up, so none of
-//! them is cut in half. Each page re-walks the scene through a vertical
-//! window (clip + translate). Every text line lands on exactly one page.
+//! them is cut in half unless it is taller than a page, which then runs on
+//! over the pages after it. Each page re-walks the scene through a vertical
+//! window (clip + translate). Every text line lands on exactly one page, save
+//! a line taller than a page.
 //!
 //! Pagination honors `break-before: page`, `break-after: page`,
 //! `break-inside: avoid`, and the `widows` / `orphans` minimums (default 2,

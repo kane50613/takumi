@@ -419,9 +419,9 @@ impl Paginated {
 /// Page start offsets for slicing `total` height into windows of `window`
 /// height. Each cut moves up to the top of any atom straddling it, repeated
 /// until no atom straddles (a raised cut can land inside another atom). An
-/// atom taller than the window can never fit a page, so it does not push cuts
-/// at all — matching browsers, where `break-inside: avoid` is dropped for
-/// boxes taller than the fragmentainer.
+/// atom taller than the window moves to the next page only when content
+/// precedes it on its own, then the pages after it cut through it, as Blink
+/// pushes monolithic content and lets its overflow run on.
 ///
 /// A forced cut with no content on its page above it is dropped, per
 /// css-break-3 §forced-breaks. The column ends at its last content box.
@@ -501,9 +501,13 @@ impl Atoms {
           if top <= cut - window {
             break;
           }
-          // An atom moves to the next page only when it fits the capacity that
-          // page actually offers under its repeated headers.
-          if bottom > cut && bottom - top <= window - HeaderBand::replays(headers, top, window).0 {
+          // An atom moves to the next page when it fits the capacity that page
+          // actually offers under its repeated headers. One taller than any page
+          // moves there too when content precedes it on this one, then overflows
+          // onto the pages after it, as Blink pushes monolithic content.
+          let fits = bottom - top <= window - HeaderBand::replays(headers, top, window).0;
+
+          if bottom > cut && (fits || overlaps(y0, top)) {
             pushed_up = pushed_up.min(top);
           }
         }

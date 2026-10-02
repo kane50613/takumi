@@ -494,14 +494,13 @@ fn paged_page_ranges() {
     )
   });
   let full = render_pinned(document(&fonts(), None));
-  let pages = |pdf: &[u8]| {
-    let text = String::from_utf8_lossy(pdf);
 
-    text.matches("/Type/Page").count() - text.matches("/Type/Pages").count()
-  };
-
-  assert_eq!(pages(&full), 3, "the full report paginates to three pages");
-  assert_eq!(pages(&ranged), 2, "the ranges keep two of them");
+  assert_eq!(
+    page_count(&full),
+    3,
+    "the full report paginates to three pages"
+  );
+  assert_eq!(page_count(&ranged), 2, "the ranges keep two of them");
   assert_ne!(ranged, full);
 }
 
@@ -733,9 +732,7 @@ fn a_table_header_repeats_on_every_page() {
   let repeating = table("");
   // A `table-row-group` header is not a header group, so nothing repeats.
   let plain = table(r#" style="display: table-row-group""#);
-  let pages = String::from_utf8_lossy(&repeating)
-    .matches("/Type/Page/")
-    .count();
+  let pages = page_count(&repeating);
 
   assert!(pages > 1, "the table did not paginate");
   assert_eq!(
@@ -2683,6 +2680,104 @@ fn paged_transform_atoms() {
       .fonts(fonts)
       .build()
   });
+}
+
+/// A line taller than a page moves to the next page, as content precedes it, then runs on over the
+/// page after it, where its text and the lines after it follow.
+#[test]
+fn paged_monolithic_overflow() {
+  let pdf = run_pdf_fixture("paged-monolithic-overflow", |fonts| {
+    let source = r##"<div style="font-size: 16px; line-height: 24px; color: #141414">
+      <div>Line 1 before the tall line</div>
+      <div>Line 2 before the tall line</div>
+      <div>Line 3 before the tall line</div>
+      <div><span style="display: inline-block; width: 120px; height: 360px; background-image: linear-gradient(#2563eb, #db2777)"></span> tall line text</div>
+      <div>Line A after the tall line</div>
+      <div>Line B after the tall line</div>
+    </div>"##;
+
+    PdfOptions::builder()
+      .node(from_html(source, FromHtmlOptions::default()).expect("parse overflow fixture"))
+      .page(PageOptions {
+        width: 400.0,
+        height: 300.0,
+        margin: PageMargins::uniform(24.0),
+      })
+      .fonts(fonts)
+      .build()
+  });
+
+  assert_eq!(
+    page_count(&pdf),
+    3,
+    "the tall line starts page 2 and runs on into page 3"
+  );
+}
+
+/// An inline-block taller than a page shows each line of its text on the one page that owns it, so
+/// the text layer holds it once, as it does when the whole block fits on one page.
+#[test]
+fn an_overflowing_inline_block_emits_its_text_once() {
+  let fonts = fonts();
+  let source = r##"<div style="font-size: 16px; line-height: 24px">
+    <div>Before</div>
+    <div><span style="display: inline-block; width: 200px; height: 360px">First inside<br>Second inside<br>Third inside</span> after</div>
+  </div>"##;
+  let text_shows = |height: f32| {
+    let pdf = render(
+      PdfOptions::builder()
+        .node(from_html(source, FromHtmlOptions::default()).expect("parse the doc"))
+        .page(PageOptions {
+          width: 400.0,
+          height,
+          margin: PageMargins::uniform(24.0),
+        })
+        .fonts(&fonts)
+        .build(),
+    )
+    .expect("render the doc");
+
+    content_lines(&pdf)
+      .filter(|line| line.ends_with(b"Tj") || line.ends_with(b"TJ"))
+      .count()
+  };
+
+  assert!(text_shows(1000.0) > 0);
+  assert_eq!(text_shows(300.0), text_shows(1000.0));
+}
+
+/// A glyph taller than a page is text on the page that owns its line, and outlines on the page it
+/// runs on over.
+#[test]
+fn a_glyph_taller_than_a_page_runs_on_as_outlines() {
+  let fonts = fonts();
+  let pdf = render(
+    PdfOptions::builder()
+      .node(
+        from_html(
+          r#"<div style="font-size: 400px; line-height: 1">g</div>"#,
+          FromHtmlOptions::default(),
+        )
+        .expect("parse the doc"),
+      )
+      .page(PageOptions {
+        width: 400.0,
+        height: 300.0,
+        margin: PageMargins::uniform(24.0),
+      })
+      .fonts(&fonts)
+      .build(),
+  )
+  .expect("render the doc");
+
+  assert_eq!(page_count(&pdf), 2);
+  assert_eq!(
+    content_lines(&pdf)
+      .filter(|line| line.ends_with(b"Tj") || line.ends_with(b"TJ"))
+      .count(),
+    1
+  );
+  assert!(curve_operator_lines(&pdf) > 0);
 }
 
 /// Header and footer bands together, counters in both, a forced break, and a
@@ -5413,7 +5508,7 @@ fn paged_inline_span_background_paints_once() {
   )
   .expect("render the doc");
   let haystack = inflated_text(&pdf);
-  let pages = haystack.matches("/Type/Page").count() - haystack.matches("/Type/Pages").count();
+  let pages = page_count(&pdf);
 
   assert!(pages > 1, "the document did not paginate");
   assert_eq!(

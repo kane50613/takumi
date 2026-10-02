@@ -1,7 +1,7 @@
 //! The page window a prepared tree emits through: what it paints, what it
 //! owns, and the clip and translation that put it on the page.
 
-use takumi_core::{geometry::Point, scene::SceneBounds};
+use takumi_core::{geometry::Point, painter::LineItem, scene::SceneBounds};
 
 use crate::{
   emitter::Emitter,
@@ -28,7 +28,8 @@ pub(crate) struct Window {
   /// Text-line ownership window `[this page's cut, next page's cut)`. Wider
   /// than `y` at the edges (first page reaches up to −∞, last to +∞) and
   /// narrower at the bottom when a cut lands above the page's full height, so
-  /// every line is emitted on exactly one page.
+  /// every line is emitted on exactly one page, save the items taller than a
+  /// page, which every page they cross shows.
   pub(crate) lines: Option<(f32, f32)>,
 }
 
@@ -46,6 +47,17 @@ impl Window {
     })
   }
 
+  /// Whether this page draws a line's item spanning `top` to `bottom` on the line at `baseline`:
+  /// the page owning the line does, and so does every page an item taller than the page crosses,
+  /// as Blink spreads monolithic overflow over the pages after it.
+  pub(crate) fn shows_line_item(&self, item: LineItem) -> bool {
+    let overflows = self
+      .y
+      .is_some_and(|(y0, y1)| item.bottom - item.top > y1 - y0);
+
+    !self.disowns_line(item.baseline) || (overflows && !self.excludes(item.top, item.bottom))
+  }
+
   /// Whether a text line at `baseline` belongs to another page. Ownership is
   /// keyed on the baseline (always inside the line's own box, unlike the font
   /// ascent band, which can poke above the container a forced break cut at) and
@@ -54,6 +66,17 @@ impl Window {
     self
       .lines
       .is_some_and(|(y0, y1)| baseline < y0 || baseline >= y1)
+  }
+
+  /// The window in the space of a subtree whose origin sits at `origin`.
+  pub(crate) fn within(self, origin: Point<f32>) -> Self {
+    let shift = |window: Option<(f32, f32)>, by: f32| window.map(|(from, to)| (from - by, to - by));
+
+    Self {
+      y: shift(self.y, origin.y),
+      x: shift(self.x, origin.x),
+      lines: shift(self.lines, origin.y),
+    }
   }
 
   /// Narrows both vertical windows to a box that clips its overflow. A clip

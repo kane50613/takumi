@@ -28,7 +28,7 @@ use takumi_core::{
   paint_property::{ClipId, ClipNode, EffectId, EffectNode},
   painter::{
     BoxBackground, BoxBorderPainter, BoxFrame, BoxPainter, FillShape, GlyphDevice, GlyphFill,
-    LayerBounds, OwnContent, PaintDevice, PendingOutline, ShadowShape, StripBackground,
+    LayerBounds, LineItem, OwnContent, PaintDevice, PendingOutline, ShadowShape, StripBackground,
     StrokeStyle, TextClip, UNBOUNDED,
   },
   scene::{NodePaint, Scene},
@@ -927,8 +927,9 @@ impl Emitter<'_> {
     font_style: &SizedFontStyle,
     surface: &mut Surface,
   ) {
-    let lines = runs.lines(frame.layout, |baseline| {
-      !self.window.disowns_line(frame.origin.y + baseline)
+    let y = frame.origin.y;
+    let lines = runs.lines(frame.layout, |item| {
+      self.window.shows_line_item(item.below(y))
     });
     let mut device = TextDevice {
       emitter: self,
@@ -976,8 +977,14 @@ impl Emitter<'_> {
       // An in-flow box belongs to the page that owns its line, like the glyph
       // runs beside it.
       if positioned.line_baseline.is_some_and(|baseline| {
-        let absolute = y + layout.content_box_offset().y + baseline;
-        self.window.disowns_line(absolute)
+        let content_y = y + layout.content_box_offset().y;
+        let top = content_y + positioned.y;
+
+        !self.window.shows_line_item(LineItem {
+          baseline: content_y + baseline,
+          top,
+          bottom: top + positioned.height,
+        })
       }) {
         continue;
       }
@@ -1105,7 +1112,7 @@ impl Emitter<'_> {
       scene: &scene,
       document: self.document,
       inline: None,
-      window: Window::default(),
+      window: self.window.within(at),
       tagged,
       tag_prefix,
       color_filter: self.color_filter.clone(),
@@ -1279,7 +1286,7 @@ impl Emitter<'_> {
   }
 
   /// A run this page draws at `(x, y)`, its text from `built` when given, or `None` when it has
-  /// no glyphs, no font, or its line at `line_y` belongs to another page.
+  /// no glyphs, no font, or this page does not show it in its block at `line_y`.
   fn glyph_run<'r>(
     &self,
     run: &PositionedInlineRun,
@@ -1299,12 +1306,9 @@ impl Emitter<'_> {
     }
     let font = self.cached_font(shaped)?;
     let offset = run.glyph_offset(layout);
+    let item = LineItem::of_run(run, layout)?.below(line_y);
 
-    if shaped
-      .glyphs
-      .first()
-      .is_some_and(|glyph| self.window.disowns_line(line_y + offset.y + glyph.y))
-    {
+    if !self.window.shows_line_item(item) {
       return None;
     }
     let text = built
@@ -1321,6 +1325,7 @@ impl Emitter<'_> {
       text,
       glyphs,
       origin: Point::from_xy(x + offset.x, y + offset.y),
+      owned: !self.window.disowns_line(item.baseline),
     })
   }
 
@@ -2280,6 +2285,7 @@ impl TextDevice<'_, '_, '_> {
       text,
       glyphs,
       origin,
+      owned,
     }) = self
       .emitter
       .glyph_run(run, self.built, shifted, frame.origin.y)
@@ -2384,7 +2390,7 @@ impl TextDevice<'_, '_, '_> {
             font,
             text,
             shaped.font_size,
-            shadow_color.is_some(),
+            shadow_color.is_some() || !owned,
           );
           if let Some(colors) = &colors {
             colors.draw_outlines(surface);
@@ -2509,6 +2515,8 @@ struct GlyphRun<'r> {
   text: &'r str,
   glyphs: Vec<PdfGlyph>,
   origin: Point,
+  /// Whether this page owns the run's line and shows its text, not just its outlines.
+  owned: bool,
 }
 
 /// Names an image in an error: its URL, or that it came in as raw bytes.

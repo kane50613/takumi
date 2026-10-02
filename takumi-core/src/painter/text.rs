@@ -137,32 +137,74 @@ pub struct InlineLines<'l> {
   outline_rects: Vec<InlineOutlineRect>,
 }
 
+/// Where an item of a line sits, in its block's border box: the line's baseline, and the item's
+/// top and bottom.
+#[derive(Clone, Copy)]
+pub struct LineItem {
+  /// The baseline of the line holding it.
+  pub baseline: f32,
+  /// Its top.
+  pub top: f32,
+  /// Its bottom.
+  pub bottom: f32,
+}
+
+impl LineItem {
+  /// `run`'s glyphs in the block at `layout`, between its ascent and descent, or `None` when it
+  /// has none.
+  pub fn of_run(run: &PositionedInlineRun, layout: ComputedLayout) -> Option<Self> {
+    let shaped = &run.glyph_run;
+    let baseline = run.glyph_offset(layout).y + shaped.glyphs.first()?.y;
+
+    Some(Self {
+      baseline,
+      top: baseline - shaped.metrics.ascent,
+      bottom: baseline + shaped.metrics.descent,
+    })
+  }
+
+  /// The item with its block's border box moved down by `y`.
+  pub fn below(self, y: f32) -> Self {
+    Self {
+      baseline: self.baseline + y,
+      top: self.top + y,
+      bottom: self.bottom + y,
+    }
+  }
+}
+
 impl InlineRunLayout<'_> {
-  /// The lines of the block at `layout` whose baseline, in its border box, `keep` accepts, as a
-  /// page keeps the lines it owns.
-  pub fn lines(&self, layout: ComputedLayout, keep: impl Fn(f32) -> bool) -> InlineLines<'_> {
+  /// The runs, span backgrounds and outline rects of the block at `layout` that `keep` accepts, as
+  /// a page keeps the items it shows.
+  pub fn lines(&self, layout: ComputedLayout, keep: impl Fn(LineItem) -> bool) -> InlineLines<'_> {
     InlineLines {
       runs: self
         .runs
         .iter()
-        .filter(|run| {
-          run
-            .glyph_run
-            .glyphs
-            .first()
-            .is_none_or(|glyph| keep(run.glyph_offset(layout).y + glyph.y))
-        })
+        .filter(|run| LineItem::of_run(run, layout).is_none_or(&keep))
         .collect(),
       background_fragments: self
         .background_fragments
         .iter()
-        .filter(|fragment| keep(fragment.baseline))
+        .filter(|fragment| {
+          keep(LineItem {
+            baseline: fragment.baseline,
+            top: fragment.y,
+            bottom: fragment.y + fragment.height,
+          })
+        })
         .collect(),
       outline_rects: self
         .outline_rects
         .iter()
         .copied()
-        .filter(|rect| keep(rect.y + rect.height / 2.0))
+        .filter(|rect| {
+          keep(LineItem {
+            baseline: rect.y + rect.height / 2.0,
+            top: rect.y,
+            bottom: rect.y + rect.height,
+          })
+        })
         .collect(),
     }
   }
