@@ -9,11 +9,11 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "react": "~19.2.8",
-    "react-dom": "~19.2.8",
-    "react-server-dom-webpack": "~19.2.8",
+    "react": "~19.3.0",
+    "react-dom": "~19.3.0",
+    "react-server-dom-webpack": "~19.3.0",
     "takumi-js": "workspace:*",
-    "waku": "1.0.0-rc.0"
+    "waku": "1.0.0-rc.1"
   },
   "devDependencies": {
     "@tailwindcss/vite": "4.3.3",
