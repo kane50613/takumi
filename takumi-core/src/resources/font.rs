@@ -4,6 +4,7 @@ use std::{
   cell::RefCell,
   collections::{BTreeSet, HashMap, HashSet, hash_map::Entry},
   fmt::{self, Debug, Formatter},
+  hash::{Hash, Hasher},
   iter::once,
   rc::Rc,
   str::FromStr,
@@ -235,8 +236,9 @@ pub struct Fonts {
   #[cfg(feature = "svg")]
   svg_db: Option<Arc<Database>>,
   /// Stamped from a process-wide counter on every registration, so
-  /// font-dependent caches (SVG `<text>` trees, their rasterizations) can
-  /// tell any two registry states apart, including across `Fonts` instances.
+  /// font-dependent caches (SVG `<text>` trees and their rasterizations,
+  /// the cross-render shape cache) can tell any two registry states apart,
+  /// including across `Fonts` instances.
   revision: u64,
 }
 
@@ -270,6 +272,7 @@ pub struct FontsSnapshot {
   context: Rc<RefCell<Fonts>>,
   pub(crate) groups: Arc<HashMap<String, SubsetGroup>>,
   pub(crate) classes: Arc<FontClasses>,
+  fallback_signature: u64,
 }
 
 impl FontsSnapshot {
@@ -296,9 +299,13 @@ impl FontsSnapshot {
   }
 
   /// Registration revision of the underlying font registry.
-  #[cfg(feature = "svg")]
   pub(crate) fn revision(&self) -> u64 {
     self.with_context(|fonts| fonts.revision)
+  }
+
+  /// Identifies the resolved fallback family chain this snapshot was built with.
+  pub(crate) fn fallback_signature(&self) -> u64 {
+    self.fallback_signature
   }
 }
 
@@ -492,6 +499,10 @@ impl Fonts {
       );
     }
 
+    let mut fallback_hasher = Xxh3::new();
+    family_ids.hash(&mut fallback_hasher);
+    let fallback_signature = fallback_hasher.finish();
+
     let (color_order, mono_order) = self
       .order
       .iter()
@@ -517,6 +528,7 @@ impl Fonts {
         color_order,
         mono_order,
       }),
+      fallback_signature,
     }
   }
 
@@ -1480,5 +1492,23 @@ mod tests {
 
     // Must not panic: an unresolved name simply yields an empty fallback bucket.
     let _snapshot = fonts.snapshot_with_fallbacks(Some(&unknown));
+  }
+
+  #[test]
+  fn different_render_fallbacks_get_different_fallback_signatures() {
+    let mut fonts = Fonts::default();
+    register_named(&mut fonts, geist_bytes(), "Geist");
+    register_named(&mut fonts, geist_mono_bytes(), "Geist Mono");
+
+    let default_signature = fonts.snapshot().fallback_signature();
+    let geist_only = fonts
+      .snapshot_with_fallbacks(Some(&FontFamily::from_css_str("Geist").unwrap()))
+      .fallback_signature();
+    let mono_only = fonts
+      .snapshot_with_fallbacks(Some(&FontFamily::from_css_str("Geist Mono").unwrap()))
+      .fallback_signature();
+
+    assert_ne!(default_signature, geist_only);
+    assert_ne!(geist_only, mono_only);
   }
 }

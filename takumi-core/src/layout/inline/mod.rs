@@ -4,7 +4,7 @@ use crate::{
   geometry::{AvailableSpace, ComputedLayout, LAYOUT_UNIT_EPSILON, Point, Rect, Size},
   layout::tree::RenderNode,
   layout_unit::LayoutUnit,
-  resources::font::FontClasses,
+  resources::{font::FontClasses, shape_cache},
   style::{
     AppliedTextDecorations, Color, Direction, FontFeature, FontSynthesis, Lang, Length,
     ResolvedVerticalAlign, Tag, TextDecorationSkipInk, TextFitMode, TextOverflow, TextWrapStyle,
@@ -1111,13 +1111,33 @@ fn shape_spans(
       joined
     })
   });
-  context
+  let global_key = cache_key.map(|fingerprint| {
+    shape_cache::key(
+      fingerprint,
+      context.fonts().revision(),
+      context.fonts().fallback_signature(),
+    )
+  });
+
+  if let Some((key, expected)) = global_key.zip(expected_text.as_deref())
+    && let Some(cached) = shape_cache::get(key, expected)
+  {
+    return cached;
+  }
+
+  let shaped = context
     .inline_cache()
     .get_or_shape(cache_key.zip(expected_text.as_deref()), || {
       context.tree_builder(style.into(), chromium_line_breaks(spans), |builder| {
         push_spans_into_builder(builder, spans, &context.fonts().classes)
       })
-    })
+    });
+
+  if let Some(key) = global_key {
+    shape_cache::insert(key, shaped.clone());
+  }
+
+  shaped
 }
 
 /// Indents `layout` and breaks it at `options.max_width`; true when `options.max_height` may have
@@ -2007,6 +2027,94 @@ mod tests {
     assert!(
       segments.iter().any(|(_, text, _)| text.contains("before")),
       "{segments:#?}"
+    );
+  }
+
+  /// Renders `text` as its own `render()` call against `fonts`, with shaping cacheable.
+  fn render_text_node(text: &str, fonts: &Fonts) {
+    let node = Node::container([Node::text(text.to_string())
+      .with_style(Style::default().with(StyleDeclaration::display(Display::Inline)))])
+    .with_style(Style::default().with(StyleDeclaration::display(Display::Block)));
+
+    let context = RenderContext::builder()
+      .fonts(fonts.snapshot_with_fallbacks(None))
+      .sizing(
+        SizingContext::builder()
+          .viewport(Viewport::new((1200, 630)))
+          .build(),
+      )
+      .build();
+
+    let render_node = RenderNode::from_node(&context, node);
+    let font_style = SizedFontStyle::from_style(&render_node.context.style, &render_node.context);
+    let (max_width, max_height) = create_inline_constraint(
+      &render_node.context,
+      Size {
+        width: AvailableSpace::Definite(1200.0),
+        height: AvailableSpace::Definite(630.0),
+      },
+      Size::NONE,
+    );
+
+    create_inline_layout(InlineLayoutRequest {
+      items: collect_inline_items(&render_node),
+      available_space: Size {
+        width: AvailableSpace::Definite(1200.0),
+        height: AvailableSpace::Definite(630.0),
+      },
+      max_width,
+      max_height,
+      style: &font_style,
+      context: &render_node.context,
+      mode: InlineLayoutMode::Measure,
+      shape_cacheable: true,
+    });
+  }
+
+  #[test]
+  fn identical_text_across_separate_renders_reuses_the_global_cache_entry() {
+    let fonts = create_test_context();
+    let text = "shape cache marker: identical across renders";
+
+    render_text_node(text, &fonts);
+    assert!(
+      shape_cache::take_last_inserted_key_for_test().is_some(),
+      "the first render is a miss and must insert"
+    );
+
+    render_text_node(text, &fonts);
+    assert_eq!(
+      shape_cache::take_last_inserted_key_for_test(),
+      None,
+      "the second render must hit, not insert again"
+    );
+  }
+
+  #[test]
+  fn registering_a_font_makes_earlier_shape_cache_entries_unreachable() {
+    let mut fonts = create_test_context();
+    let text = "shape cache marker: revision bump";
+    render_text_node(text, &fonts);
+    shape_cache::take_last_inserted_key_for_test();
+
+    let revision_before = fonts.snapshot().revision();
+    let path =
+      Path::new(env!("CARGO_MANIFEST_DIR")).join("../assets/fonts/geist/GeistMono[wght].woff2");
+    let mut font_data = Vec::new();
+    File::open(&path)
+      .unwrap_or_else(|error| panic!("failed to open test font {}: {error}", path.display()))
+      .read_to_end(&mut font_data)
+      .unwrap_or_else(|error| panic!("failed to read test font {}: {error}", path.display()));
+    fonts
+      .register(FontResource::new(font_data))
+      .unwrap_or_else(|error| panic!("failed to load test font {}: {error}", path.display()));
+
+    assert_ne!(fonts.snapshot().revision(), revision_before);
+
+    render_text_node(text, &fonts);
+    assert!(
+      shape_cache::take_last_inserted_key_for_test().is_some(),
+      "a render after a registration must miss the pre-registration entry"
     );
   }
 

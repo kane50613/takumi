@@ -2,7 +2,7 @@
 
 use std::fmt::Display;
 
-use takumi_core::resources::glyph_cache;
+use takumi_core::resources::{glyph_cache, shape_cache};
 use wasm_bindgen::prelude::wasm_bindgen;
 
 /// Maps any error to a JavaScript Error object.
@@ -23,4 +23,12 @@ pub fn map_error<E: Display>(err: E) -> js_sys::Error {
 #[wasm_bindgen(js_name = setGlyphCacheMaxBytes)]
 pub fn set_glyph_cache_max_bytes(bytes: f64) {
   glyph_cache::set_glyph_cache_max_bytes(bytes.max(0.0) as usize);
+}
+
+/// Sets the byte budget for the shaped-text cache shared by every renderer
+/// in the module instance; `0` disables it. Call before the first render.
+/// Defaults to 4 MiB.
+#[wasm_bindgen(js_name = setShapeCacheMaxBytes)]
+pub fn set_shape_cache_max_bytes(bytes: f64) {
+  shape_cache::set_shape_cache_max_bytes(bytes.max(0.0) as usize);
 }

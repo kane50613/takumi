@@ -2,7 +2,7 @@
 
 <!-- cargo-rdme start -->
 
-Parse HTML markup into a takumi [`Node`] tree.
+Parse HTML markup into a takumi [`Node`](https://docs.rs/takumi_core/latest/takumi_core/layout/node/struct.Node.html) tree.
 
 ```rust
 use takumi_core::layout::node::Node;

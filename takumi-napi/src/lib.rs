@@ -19,7 +19,7 @@ use napi_derive::napi;
 pub use renderer::Renderer;
 use serde::de::DeserializeOwned;
 use takumi_bindings_common::input::FontOptions;
-use takumi_core::resources::glyph_cache;
+use takumi_core::resources::{glyph_cache, shape_cache};
 
 /// Sets the byte budget shared by the resolved-glyph and glyph-mask caches;
 /// `0` stops caching. Defaults to 8 MiB.
@@ -34,6 +34,13 @@ use takumi_core::resources::glyph_cache;
 #[napi(js_name = "setGlyphCacheMaxBytes")]
 pub fn set_glyph_cache_max_bytes(bytes: f64) {
   glyph_cache::set_glyph_cache_max_bytes(bytes.max(0.0) as usize);
+}
+
+/// Sets the byte budget for the shaped-text cache shared by every renderer
+/// in the process; `0` disables it. Call before the first render. Defaults to 4 MiB.
+#[napi(js_name = "setShapeCacheMaxBytes")]
+pub fn set_shape_cache_max_bytes(bytes: f64) {
+  shape_cache::set_shape_cache_max_bytes(bytes.max(0.0) as usize);
 }
 
 /// A font family produced by `registerFont`, with the faces it contains.

@@ -131,6 +131,10 @@ harness = false
 name = "text"
 harness = false
 
+[[bench]]
+name = "shape_cache"
+harness = false
+
 
 [[bench]]
 name = "blur_large"
