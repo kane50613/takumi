@@ -119,7 +119,7 @@ export type PaintStep =
 type RawNode<Type extends RawPaintNode["type"]> = Extract<RawPaintNode, { type: Type }>;
 
 /** A painted tree. Lengths are device pixels. */
-export class PaintTree {
+export interface PaintTree {
   readonly width: number;
   readonly height: number;
   /** Every font the runs use. */
@@ -130,6 +130,16 @@ export class PaintTree {
    * Every node in document order: a box before its descendants, and a paragraph's text node
    * before the inline boxes inside it.
    */
+  readonly nodes: readonly PaintNode[];
+  /** The steps a renderer takes, in paint order. */
+  readonly steps: readonly PaintStep[];
+}
+
+export class PaintTreeView implements PaintTree {
+  readonly width: number;
+  readonly height: number;
+  readonly fonts: readonly Font[];
+  readonly root: BoxNode;
   readonly nodes: readonly PaintNode[];
   readonly #raw: RawPaintTree;
   readonly #listing: Listing;
@@ -153,7 +163,6 @@ export class PaintTree {
     this.nodes = inDocumentOrder(root);
   }
 
-  /** The steps a renderer takes, in paint order. */
   get steps(): readonly PaintStep[] {
     this.#steps ??= this.#raw.steps.flatMap((step): PaintStep[] => {
       const node = this.#listing.at(step.node);

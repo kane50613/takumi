@@ -1,7 +1,7 @@
 import type { CssInput } from "@takumi-rs/helpers";
 import { fromHtml } from "@takumi-rs/helpers/html";
 import { fromJsx } from "@takumi-rs/helpers/jsx";
-import type { FontLoader, ImagesInput, RegisteredFamilyLike } from "@takumi-rs/helpers/renderer";
+import type { FontLoader, ImagesInput } from "@takumi-rs/helpers/renderer";
 import { FontRegistry } from "@takumi-rs/helpers/renderer";
 import {
   LIST_MARKER_CHARACTERS,
@@ -10,10 +10,15 @@ import {
   subsetFonts,
 } from "@takumi-rs/helpers";
 import type { ReactNode } from "react";
-import { Painter as PainterInternal } from "../pkg/takumi_paint_wasm";
-import { PaintTree } from "./tree";
+import initWasm, {
+  type InitInput,
+  initSync as initWasmSync,
+  Painter as PainterInternal,
+  type RegisteredFamily,
+  type SyncInitInput,
+} from "../pkg/takumi_paint_wasm";
+import { type PaintTree, PaintTreeView } from "./tree";
 
-export { default, initSync } from "../pkg/takumi_paint_wasm";
 export type { FontLoader, ImagesInput } from "@takumi-rs/helpers/renderer";
 export type {
   BlendMode,
@@ -29,13 +34,15 @@ export type {
   Paint,
   Point,
   Rect,
+  RegisteredFace,
+  RegisteredFamily,
   Rgba,
   Role,
   Sampling,
   Shape,
+  Spread,
   Stroke,
 } from "../pkg/takumi_paint_wasm";
-export { PaintTree } from "./tree";
 export type {
   BoxNode,
   Drawable,
@@ -44,6 +51,7 @@ export type {
   ImageNode,
   PaintNode,
   PaintStep,
+  PaintTree,
   TextNode,
   TextRun,
 } from "./tree";
@@ -89,17 +97,27 @@ async function resolveNode(input: NodeInput): Promise<{ node: Node; css: string[
   return fromJsx(input as ReactNode);
 }
 
+/** Loads the wasm module for `takumi-paint/no-init`. The other entries load it on import. */
+export default async function init(source: {
+  module_or_path: InitInput | Promise<InitInput>;
+}): Promise<void> {
+  await initWasm(source);
+}
+
+/** Loads the wasm module from its bytes or a compiled `WebAssembly.Module`. */
+export function initSync(source: { module: SyncInitInput }): void {
+  initWasmSync(source);
+}
+
 export class Painter {
-  private inner = new PainterInternal();
-  private fonts = new FontRegistry<RegisteredFamilyLike>(
-    (font) => this.inner.registerFont(font) as RegisteredFamilyLike[],
-  );
+  #inner = new PainterInternal();
+  #fonts = new FontRegistry<RegisteredFamily>((font) => this.#inner.registerFont(font));
 
   /** Lays out a node tree, JSX, or an HTML string and returns what painting it would draw. */
   async paint(node: NodeInput, options: PaintOptions = {}): Promise<PaintTree> {
     const { fonts, images, css, fontFamilies, ...rest } = options;
     const main = await resolveNode(node);
-    const resources = await this.fonts.resolveResources(
+    const resources = await this.#fonts.resolveResources(
       fonts && subsetFonts({ fonts, source: [main.node, LIST_MARKER_CHARACTERS] }),
       images,
       fontFamilies,
@@ -107,24 +125,24 @@ export class Painter {
     const own = css === undefined ? [] : isCssList(css) ? [...css] : [css];
     const sheets = [...own, ...main.css];
 
-    const painted = this.inner.paint(main.node, {
+    const painted = this.#inner.paint(main.node, {
       ...rest,
       css: sheets.length > 0 ? sheets : undefined,
       images: resources.images,
       fontFamilies: resources.fontFamilies,
     });
 
-    return new PaintTree(painted.tree(), (index) => painted.fontData(index));
+    return new PaintTreeView(painted.tree(), (index) => painted.fontData(index));
   }
 
   /** Registers a font ahead of time, deduped against earlier registrations. */
   registerFont(font: FontLoader) {
-    return this.fonts.register(font);
+    return this.#fonts.register(font);
   }
 
   /** Releases the underlying wasm memory. */
   free() {
-    this.inner.free();
+    this.#inner.free();
   }
 }
 
