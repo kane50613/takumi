@@ -51,6 +51,13 @@ export const showcaseProjects: Project[] = [
     height: 630,
   },
   {
+    title: "seedcord",
+    image: "https://seedcord.org/og.png",
+    url: "https://seedcord.org/",
+    width: 1200,
+    height: 630,
+  },
+  {
     image: "https://raw.githubusercontent.com/pi0/shiki-image/main/test/.snapshot/image.webp",
     url: "https://github.com/pi0/shiki-image",
     width: 1200,
