@@ -69,25 +69,23 @@ function useInspectorSelection(inspection: PaintInspection | undefined) {
   const [hovered, setHovered] = useState<number>();
 
   const nodes = inspection?.nodes;
-  const indexOf = (key: string | undefined) => {
-    const index = nodes?.findIndex((node) => node.key === key) ?? -1;
+  const selectedNode = nodes?.find((node) => node.key === selectedKey);
+  const focusedNode = nodes?.find((node) => node.key === focusedKey);
+  const selected = selectedNode && nodes?.indexOf(selectedNode);
 
-    return index === -1 ? undefined : index;
-  };
-  const selected = indexOf(selectedKey);
-  const focused = indexOf(focusedKey);
-
-  const select = useCallback(
-    (index: number | undefined) =>
-      setSelectedKey(index === undefined ? undefined : nodes?.[index]?.key),
+  const keyOf = useCallback(
+    (index: number | undefined) => (index === undefined ? undefined : nodes?.[index]?.key),
     [nodes],
   );
+  const select = useCallback((index: number | undefined) => setSelectedKey(keyOf(index)), [keyOf]);
   const focus = useCallback(
     (index: number | undefined) => {
-      setFocusedKey(index === undefined ? undefined : nodes?.[index]?.key);
-      if (index !== undefined) select(index);
+      const key = keyOf(index);
+
+      setFocusedKey(key);
+      if (index !== undefined) setSelectedKey(key);
     },
-    [nodes, select],
+    [keyOf],
   );
 
   useEffect(() => setHovered(undefined), [nodes]);
@@ -105,8 +103,8 @@ function useInspectorSelection(inspection: PaintInspection | undefined) {
         event.key === "Enter" ? nodes.findIndex((node) => node.parent === selected) : -1;
 
       if (event.shiftKey && event.code === "Digit2" && selected !== undefined) focus(selected);
-      else if (zoomOut && focused !== undefined) setFocusedKey(undefined);
-      else if (event.key === "Escape" && selected !== undefined) select(nodes[selected]?.parent);
+      else if (zoomOut && focusedNode) setFocusedKey(undefined);
+      else if (event.key === "Escape" && selectedNode) select(selectedNode.parent);
       else if (child !== -1) select(child);
       else return;
 
@@ -116,9 +114,9 @@ function useInspectorSelection(inspection: PaintInspection | undefined) {
     window.addEventListener("keydown", onKeyDown);
 
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [nodes, selected, focused, select, focus]);
+  }, [nodes, selected, selectedNode, focusedNode, select, focus]);
 
-  return { selected, focused, hovered, setHovered, select, focus };
+  return { selected, selectedNode, focusedNode, hovered, setHovered, select, focus };
 }
 
 type InspectorSelection = ReturnType<typeof useInspectorSelection>;
@@ -135,8 +133,7 @@ function FrameOverlay({
   zoomScale: number;
 }) {
   const { width, height, nodes } = inspection;
-  const { selected, hovered, setHovered, select, focus } = selection;
-  const selectedNode = selected === undefined ? undefined : nodes[selected];
+  const { selected, selectedNode, hovered, setHovered, select, focus } = selection;
   const hoveredNode = hovered === undefined || hovered === selected ? undefined : nodes[hovered];
   const svgRef = useRef<SVGSVGElement>(null);
   const [shownWidth, setShownWidth] = useState(width);
@@ -255,7 +252,7 @@ function LayerTree({
   selection: InspectorSelection;
 }) {
   const { nodes } = inspection;
-  const { selected, hovered, setHovered, select, focus } = selection;
+  const { selected, selectedNode, hovered, setHovered, select, focus } = selection;
   // Keys whose open state differs from the depth default.
   const [toggled, setToggled] = useState<ReadonlySet<string>>(new Set());
   const listRef = useRef<HTMLDivElement>(null);
@@ -294,16 +291,15 @@ function LayerTree({
 
   const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
     const position = selected === undefined ? -1 : rows.indexOf(selected);
-    const node = selected === undefined ? undefined : nodes[selected];
 
     if (event.key === "ArrowDown") select(rows[Math.min(position + 1, rows.length - 1)]);
     else if (event.key === "ArrowUp") select(rows[Math.max(position - 1, 0)]);
-    else if (event.key === "ArrowRight" && node?.hasChildren) {
-      if (isOpen(node)) select(rows[position + 1]);
-      else setOpen([node], true);
-    } else if (event.key === "ArrowLeft" && node) {
-      if (node.hasChildren && isOpen(node)) setOpen([node], false);
-      else select(node.parent);
+    else if (event.key === "ArrowRight" && selectedNode?.hasChildren) {
+      if (isOpen(selectedNode)) select(rows[position + 1]);
+      else setOpen([selectedNode], true);
+    } else if (event.key === "ArrowLeft" && selectedNode) {
+      if (selectedNode.hasChildren && isOpen(selectedNode)) setOpen([selectedNode], false);
+      else select(selectedNode.parent);
     } else return;
 
     event.preventDefault();
@@ -379,15 +375,8 @@ function LayerTree({
   );
 }
 
-function Properties({
-  inspection,
-  selection,
-}: {
-  inspection: PaintInspection;
-  selection: InspectorSelection;
-}) {
-  const { selected, select, focus } = selection;
-  const node = selected === undefined ? undefined : inspection.nodes[selected];
+function Properties({ selection }: { selection: InspectorSelection }) {
+  const { selected, selectedNode: node, select, focus } = selection;
 
   if (!node) {
     return (
@@ -447,6 +436,44 @@ function Properties({
   );
 }
 
+/** The layers and properties of the last image render, read from its paint tree. */
+function InspectorPanel({
+  result,
+  selection,
+}: {
+  result: InspectResult | undefined;
+  selection: InspectorSelection;
+}) {
+  if (!result) {
+    return (
+      <div className="flex h-full items-center justify-center gap-2 bg-muted/20 font-mono text-xs text-muted-foreground">
+        <Loader2Icon className="size-3.5 animate-spin" />
+        painting…
+      </div>
+    );
+  }
+
+  if (result.status === "error") {
+    return (
+      <div className="h-full overflow-auto bg-muted/20 px-3 py-2 font-mono text-xs">
+        <pre className="whitespace-pre-wrap text-muted-foreground">{result.message}</pre>
+      </div>
+    );
+  }
+
+  return (
+    <ResizablePanelGroup orientation="horizontal">
+      <ResizablePanel defaultSize={50} minSize={25}>
+        <LayerTree inspection={result.inspection} selection={selection} />
+      </ResizablePanel>
+      <ResizableHandle className="hover:bg-primary/50 transition-colors" />
+      <ResizablePanel defaultSize={50} minSize={25}>
+        <Properties selection={selection} />
+      </ResizablePanel>
+    </ResizablePanelGroup>
+  );
+}
+
 /** The Inspect view's state: the tree it asks for, and the frames and zoom it lays over the render. */
 export function usePaintInspector(
   lastSuccess: RenderSuccess | undefined,
@@ -460,7 +487,7 @@ export function usePaintInspector(
   const result = view === "inspect" && inspection?.id === lastSuccess?.id ? inspection : undefined;
   const tree = result?.status === "success" ? result.inspection : undefined;
   const selection = useInspectorSelection(tree);
-  const focusedNode = selection.focused === undefined ? undefined : tree?.nodes[selection.focused];
+  const { focusedNode } = selection;
   const focus = useMemo<FocusTarget | undefined>(
     () =>
       focusedNode && tree && { rect: focusedNode.bounds, width: tree.width, height: tree.height },
@@ -501,43 +528,5 @@ export function ReferencePane({
       <div className={cn("h-full", inspecting && "hidden")}>{browserPane}</div>
       {inspecting && <InspectorPanel result={result} selection={selection} />}
     </LabeledPane>
-  );
-}
-
-/** The layers and properties of the last image render, read from its paint tree. */
-function InspectorPanel({
-  result,
-  selection,
-}: {
-  result: InspectResult | undefined;
-  selection: InspectorSelection;
-}) {
-  if (!result) {
-    return (
-      <div className="flex h-full items-center justify-center gap-2 bg-muted/20 font-mono text-xs text-muted-foreground">
-        <Loader2Icon className="size-3.5 animate-spin" />
-        painting…
-      </div>
-    );
-  }
-
-  if (result.status === "error") {
-    return (
-      <div className="h-full overflow-auto bg-muted/20 px-3 py-2 font-mono text-xs">
-        <pre className="whitespace-pre-wrap text-muted-foreground">{result.message}</pre>
-      </div>
-    );
-  }
-
-  return (
-    <ResizablePanelGroup orientation="horizontal">
-      <ResizablePanel defaultSize={50} minSize={25}>
-        <LayerTree inspection={result.inspection} selection={selection} />
-      </ResizablePanel>
-      <ResizableHandle className="hover:bg-primary/50 transition-colors" />
-      <ResizablePanel defaultSize={50} minSize={25}>
-        <Properties inspection={result.inspection} selection={selection} />
-      </ResizablePanel>
-    </ResizablePanelGroup>
   );
 }
