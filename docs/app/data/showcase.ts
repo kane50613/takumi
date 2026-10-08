@@ -156,6 +156,13 @@ export const showcaseProjects: Project[] = [
     width: 1200,
     height: 630,
   },
+  {
+    title: "Palgakalkulaator",
+    image: "https://www.palgakalkulaator.ee/en.png",
+    url: "https://www.palgakalkulaator.ee/en?utm_source=takumi&utm_medium=showcase",
+    width: 1200,
+    height: 630,
+  },
 ];
 
 export const showcaseTemplates: Template[] = [
