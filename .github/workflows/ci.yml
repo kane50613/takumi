@@ -96,13 +96,14 @@ jobs:
 
       # The fixtures claim PDF/A and PDF/UA conformance in their metadata. Only
       # the reference validator can tell whether the claim holds.
-      # The download is a rolling "latest", so the checksum pins it: a veraPDF
-      # release fails this step instead of silently changing what CI validates.
+      # Pinned to one release, so a new veraPDF changes what CI validates only
+      # when someone bumps it. The checksum guards the file behind the URL.
       - name: Install veraPDF
         env:
-          VERAPDF_SHA256: 6cc6341cb1af644044054b81f00a6590a7918abb18f762243de115258bcad838
+          VERAPDF_VERSION: 1.30.3
+          VERAPDF_SHA256: b512bf24945503a33fc10738ecffc1f2dccaaf8593a448e94ee9ac86a9559a59
         run: |
-          curl -sL -o verapdf-installer.zip https://software.verapdf.org/rel/verapdf-installer.zip
+          curl -sfL -o verapdf-installer.zip "https://software.verapdf.org/rel/${VERAPDF_VERSION%.*}/verapdf-greenfield-$VERAPDF_VERSION-installer.zip"
           echo "$VERAPDF_SHA256  verapdf-installer.zip" | sha256sum -c -
           unzip -q verapdf-installer.zip
           cat > auto-install.xml <<XML
