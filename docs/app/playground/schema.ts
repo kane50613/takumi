@@ -1,4 +1,5 @@
 import * as z from "zod/mini";
+import type { PaintInspection } from "./inspect-paint";
 import type { PdfInspection } from "./inspect-pdf";
 import type { PlaygroundPdfOptions } from "./options";
 
@@ -100,6 +101,24 @@ const renderRequestSchema = z.object({
   code: z.string(),
 });
 
+// Asks for the paint tree of the image render `id`, which the worker paints only on request.
+const inspectRequestSchema = z.object({
+  type: z.literal("inspect-request"),
+  id: positiveInt,
+});
+
+export const inspectResultSchema = z.object({
+  type: z.literal("inspect-result"),
+  result: z.discriminatedUnion("status", [
+    z.object({
+      status: z.literal("success"),
+      id: positiveInt,
+      inspection: z.custom<PaintInspection>(),
+    }),
+    z.object({ status: z.literal("error"), id: positiveInt, message: z.string() }),
+  ]),
+});
+
 export const renderResultSchema = z.object({
   type: z.literal("render-result"),
   result: z.discriminatedUnion("status", [renderSuccessSchema, renderErrorSchema]),
@@ -134,6 +153,8 @@ export const messageSchema = z.discriminatedUnion("type", [
   readySchema,
   watchdogSchema,
   previewResultSchema,
+  inspectRequestSchema,
+  inspectResultSchema,
 ]);
 
 export type RenderMessageInput = z.input<typeof messageSchema>;

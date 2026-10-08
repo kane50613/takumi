@@ -1,6 +1,7 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { z } from "zod/mini";
 import {
+  type inspectResultSchema,
   messageSchema,
   type previewResultSchema,
   type RenderMessageInput,
@@ -11,6 +12,8 @@ import TakumiWorker from "~/playground/worker?worker";
 export type RenderResult = z.infer<typeof renderResultSchema>["result"];
 export type RenderSuccess = Extract<RenderResult, { status: "success" }> & { outputSize: number };
 export type RenderError = Extract<RenderResult, { status: "error" }>;
+
+export type InspectResult = z.infer<typeof inspectResultSchema>["result"];
 
 export type BrowserPreviewData = Omit<z.infer<typeof previewResultSchema>, "type" | "id">;
 
@@ -44,11 +47,13 @@ export function useRenderWorker(ranCode: string | undefined) {
   const [lastSuccess, setLastSuccess] = useState<RenderSuccess>();
   const [renderError, setRenderError] = useState<RenderError>();
   const [browserPreview, setBrowserPreview] = useState<BrowserPreviewData>();
+  const [inspection, setInspection] = useState<InspectResult>();
   const [generation, setGeneration] = useState(0);
   const currentRequestIdRef = useRef(0);
   const workerRef = useRef<Worker | undefined>(undefined);
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const watchdogRef = useRef<MessagePort>(undefined);
+  const inspectedIdRef = useRef<number>(undefined);
 
   useEffect(() => {
     const worker = new TakumiWorker();
@@ -71,6 +76,7 @@ export function useRenderWorker(ranCode: string | undefined) {
           break;
         }
         case "render-request":
+        case "inspect-request":
         case "watchdog": {
           throw new Error("request is not possible for response");
         }
@@ -87,6 +93,10 @@ export function useRenderWorker(ranCode: string | undefined) {
               theme: message.theme,
             });
           }
+          break;
+        }
+        case "inspect-result": {
+          if (message.result.id === currentRequestIdRef.current) setInspection(message.result);
           break;
         }
         case "render-result": {
@@ -137,6 +147,7 @@ export function useRenderWorker(ranCode: string | undefined) {
       watchdogRef.current = undefined;
       worker.terminate();
       workerRef.current = undefined;
+      inspectedIdRef.current = undefined;
       setIsReady(false);
     };
   }, [generation]);
@@ -150,6 +161,7 @@ export function useRenderWorker(ranCode: string | undefined) {
       setLastSuccess(undefined);
       setRenderError(undefined);
       setBrowserPreview(undefined);
+      setInspection(undefined);
       return;
     }
 
@@ -182,5 +194,13 @@ export function useRenderWorker(ranCode: string | undefined) {
     return () => URL.revokeObjectURL(url);
   }, [lastSuccess]);
 
-  return { isReady, lastSuccess, renderError, browserPreview };
+  /** Asks once per render for its paint tree; the result lands in `inspection`. */
+  const inspect = useCallback((id: number) => {
+    if (inspectedIdRef.current === id) return;
+
+    inspectedIdRef.current = id;
+    workerRef.current?.postMessage({ type: "inspect-request", id } satisfies RenderMessageInput);
+  }, []);
+
+  return { isReady, lastSuccess, renderError, browserPreview, inspection, inspect };
 }

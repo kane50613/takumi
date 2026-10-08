@@ -7,11 +7,14 @@ import pdfWasm from "takumi-pdf/wasm-url";
 // `no-init` over the entry that instantiates the module: the worker has the
 // asset URL already, and instantiating up front would defeat the lazy fetch.
 import initPdf, { PdfRenderer } from "takumi-pdf/no-init";
+import paintWasm from "takumi-paint/wasm-url";
+import initPaint, { Painter } from "takumi-paint/no-init";
 import type { JSXElementConstructor } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { evaluateCodeExports } from "./evaluate";
 import { renderReact } from "./render-react";
 import { FALLBACK_FONT_URL, FONT_FAMILIES } from "./fonts";
+import { inspectPaint } from "./inspect-paint";
 import { inspectPdf } from "./inspect-pdf";
 import { cssEntryToText } from "./preview-css";
 import { messageSchema, type CssEntry, type OutputKind, type RenderMessageInput } from "./schema";
@@ -70,6 +73,15 @@ function loadPdfRenderer() {
   return pdfRenderer;
 }
 
+// The paint module is fetched the first time the inspector asks for a tree.
+let painter: Promise<Painter> | undefined;
+
+function loadPainter() {
+  painter ??= initPaint({ module_or_path: paintWasm }).then(() => new Painter());
+
+  return painter;
+}
+
 /** Everything a render needs beyond the tree itself, fetched once per request. */
 async function loadResources(node: Node, css: CssEntry[]) {
   const [images, fonts] = await Promise.all([
@@ -99,6 +111,9 @@ type Output = {
   kind: OutputKind;
   format: string;
 };
+
+/** The latest single-frame render, kept so the inspector can paint the same input. */
+let lastImage: { id: number; input: Omit<RenderInput, "renderer" | "size"> } | undefined;
 
 /** The options pick the backend: a document, a timeline, or a single frame. */
 async function renderOutput({
@@ -189,6 +204,9 @@ async function renderRequest(renderer: Renderer, id: number, code: string) {
   const duration = performance.now() - start;
   const inspection = output.kind === "pdf" ? await inspectPdf(output.buffer) : undefined;
 
+  lastImage =
+    output.kind === "image" ? { id, input: { node: emojified, options, ...resources } } : undefined;
+
   postMessage(
     {
       type: "render-result",
@@ -208,6 +226,26 @@ async function renderRequest(renderer: Renderer, id: number, code: string) {
   );
 }
 
+async function inspectRequest(id: number) {
+  if (lastImage?.id !== id) throw new Error("a newer render replaced the one to inspect");
+
+  const { node, options, images, fonts, css } = lastImage.input;
+  const paintRenderer = await loadPainter();
+  const tree = await paintRenderer.paint(node, {
+    width: options.width,
+    height: options.height,
+    devicePixelRatio: options.devicePixelRatio,
+    images,
+    fonts,
+    css,
+  });
+
+  postMessage({
+    type: "inspect-result",
+    result: { status: "success", id, inspection: inspectPaint(tree) },
+  });
+}
+
 self.onmessage = async (event: MessageEvent) => {
   const payload = messageSchema.parse(event.data);
 
@@ -220,6 +258,22 @@ self.onmessage = async (event: MessageEvent) => {
       } catch (error) {
         postMessage({
           type: "render-result",
+          result: {
+            status: "error",
+            id: payload.id,
+            message: error instanceof Error ? error.message : "Unknown error",
+          },
+        });
+      }
+
+      break;
+    }
+    case "inspect-request": {
+      try {
+        await inspectRequest(payload.id);
+      } catch (error) {
+        postMessage({
+          type: "inspect-result",
           result: {
             status: "error",
             id: payload.id,
@@ -246,7 +300,8 @@ self.onmessage = async (event: MessageEvent) => {
     }
     case "ready":
     case "render-result":
-    case "preview-result": {
+    case "preview-result":
+    case "inspect-result": {
       throw new Error("Respond message should not be sent from main window.");
     }
     default: {
