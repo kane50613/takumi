@@ -1,13 +1,20 @@
 "use client";
 
-import { AxeIcon, ExternalLinkIcon, GlobeIcon } from "lucide-react";
+import { AxeIcon, ExternalLinkIcon } from "lucide-react";
 import { lazy, Suspense, useEffect, useState } from "react";
-import { cn } from "~/lib/utils";
 import { DEFAULT_TEMPLATE, type Template } from "~/playground/templates";
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "../ui/resizable";
 import { ComponentEditor } from "./component-editor";
 import { LoadingScreen } from "./loading-screen";
-import { LabeledPane, OutputPanel, PDF_VIEWS, type PdfView, type Zoom } from "./output-panel";
+import {
+  LabeledPane,
+  OutputPanel,
+  PDF_VIEWS,
+  type PdfView,
+  ViewToggle,
+  type Zoom,
+} from "./output-panel";
+import { ReferencePane, usePaintInspector } from "./paint-inspector";
 import { Toolbar, type TabId } from "./toolbar";
 import { useSharedCode } from "./use-shared-code";
 import { type RenderSuccess, useRenderWorker } from "./use-render-worker";
@@ -49,12 +56,14 @@ export default function Playground() {
   const [copied, setCopied] = useState(false);
   const [activeTab, setActiveTab] = useState<TabId>("code");
 
-  const { isReady, lastSuccess, renderError, browserPreview } = useRenderWorker(ranCode);
+  const { isReady, lastSuccess, renderError, browserPreview, inspection, inspect } =
+    useRenderWorker(ranCode);
 
   const selectedTemplateName = matchedTemplate?.name ?? "Custom";
   const outputKind = lastSuccess?.outputKind;
   const isStale = code !== undefined && code !== ranCode;
   const isUnrunShare = isShared && ranCode === undefined;
+  const inspector = usePaintInspector(lastSuccess, inspection, inspect);
 
   useEffect(() => {
     setHintDismissed(localStorage.getItem(RUN_HINT_KEY) === "seen");
@@ -161,6 +170,8 @@ export default function Playground() {
       isReady={isReady}
       pdfView={pdfView}
       waitingForRun={isUnrunShare}
+      overlay={inspector.overlay}
+      focus={inspector.focus}
     />
   );
   const browserPane = (
@@ -177,19 +188,7 @@ export default function Playground() {
           actions={
             outputKind === "pdf" && (
               <>
-                {PDF_VIEWS.map(({ id, label }) => (
-                  <button
-                    key={id}
-                    type="button"
-                    onClick={() => setPdfView(id)}
-                    className={cn(
-                      "rounded-sm px-1.5 py-0.5 uppercase transition-colors hover:text-foreground",
-                      pdfView === id && "bg-muted text-foreground",
-                    )}
-                  >
-                    {label}
-                  </button>
-                ))}
+                <ViewToggle views={PDF_VIEWS} value={pdfView} onChange={setPdfView} />
                 {/* Mobile browsers mostly refuse to paint a PDF inside a frame,
                     so the file needs a way out to the viewer. */}
                 {lastSuccess?.outputUrl && (
@@ -214,9 +213,7 @@ export default function Playground() {
         <>
           <ResizableHandle withHandle className="hover:bg-primary/50 transition-colors" />
           <ResizablePanel defaultSize={50} minSize={20}>
-            <LabeledPane label="Browser" icon={GlobeIcon}>
-              {browserPane}
-            </LabeledPane>
+            <ReferencePane inspector={inspector} browserPane={browserPane} />
           </ResizablePanel>
         </>
       )}

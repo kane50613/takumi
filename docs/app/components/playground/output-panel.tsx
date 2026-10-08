@@ -1,7 +1,8 @@
 import { Loader2Icon } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
-import { type ReactNode, useState } from "react";
+import { type ReactNode, useLayoutEffect, useRef, useState } from "react";
 import { cn } from "~/lib/utils";
+import type { Rect } from "takumi-paint";
 import type { PdfInspection, PdfObject } from "~/playground/inspect-pdf";
 import type { RenderError, RenderSuccess } from "./use-render-worker";
 
@@ -14,6 +15,40 @@ export const PDF_VIEWS: { id: PdfView; label: string }[] = [
 ];
 
 export type Zoom = "fit" | "actual";
+
+/** A region of the render to zoom onto, in the render's own pixels. */
+export type FocusTarget = { rect: Rect; width: number; height: number };
+
+/** The largest enlargement a focus zoom applies. */
+const MAX_FOCUS_SCALE = 16;
+
+/** Room left around a focused region, as a share of the pane. */
+const FOCUS_FILL = 0.7;
+
+/** Switches between a pane's views. */
+export function ViewToggle<View extends string>({
+  views,
+  value,
+  onChange,
+}: {
+  views: { id: View; label: string }[];
+  value: View;
+  onChange: (view: View) => void;
+}) {
+  return views.map(({ id, label }) => (
+    <button
+      key={id}
+      type="button"
+      onClick={() => onChange(id)}
+      className={cn(
+        "rounded-sm px-1.5 py-0.5 uppercase transition-colors hover:text-foreground",
+        value === id && "bg-muted text-foreground",
+      )}
+    >
+      {label}
+    </button>
+  ));
+}
 
 export function LabeledPane({
   label,
@@ -238,6 +273,116 @@ function IdlePane({ isReady, waitingForRun }: { isReady: boolean; waitingForRun?
   );
 }
 
+const IDENTITY = { scale: 1, x: 0, y: 0 };
+
+/** The rendered image, with the inspector's frames over it and its focus zoom applied. */
+function ImageOutput({
+  url,
+  zoom,
+  dimmed,
+  overlay,
+  focus,
+}: {
+  url: string | undefined;
+  zoom: Zoom;
+  dimmed: boolean;
+  overlay?: (zoomScale: number) => ReactNode;
+  focus?: FocusTarget;
+}) {
+  const viewportRef = useRef<HTMLDivElement>(null);
+  const frameRef = useRef<HTMLDivElement>(null);
+  const [focusZoom, setFocusZoom] = useState(IDENTITY);
+
+  useLayoutEffect(() => {
+    const viewport = viewportRef.current;
+    const frame = frameRef.current;
+
+    if (!focus || !viewport || !frame) {
+      setFocusZoom(IDENTITY);
+      return;
+    }
+
+    const measure = () => {
+      if (frame.offsetWidth === 0) return;
+
+      const { rect } = focus;
+      const unit = frame.offsetWidth / focus.width;
+      const centerX = (rect.x + rect.width / 2) * unit;
+      const centerY = (rect.y + rect.height / 2) * unit;
+
+      if (zoom === "actual") {
+        setFocusZoom(IDENTITY);
+        viewport.scrollTo({
+          left: frame.offsetLeft + centerX - viewport.clientWidth / 2,
+          top: frame.offsetTop + centerY - viewport.clientHeight / 2,
+          behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth",
+        });
+        return;
+      }
+
+      const fill = Math.min(
+        viewport.clientWidth / (rect.width * unit),
+        viewport.clientHeight / (rect.height * unit),
+      );
+      const scale = Math.min(Math.max(fill * FOCUS_FILL, 1), MAX_FOCUS_SCALE);
+
+      setFocusZoom({
+        scale,
+        x: -(centerX - frame.offsetWidth / 2) * scale,
+        y: -(centerY - frame.offsetHeight / 2) * scale,
+      });
+    };
+
+    measure();
+
+    const observer = new ResizeObserver(measure);
+
+    observer.observe(viewport);
+    observer.observe(frame);
+
+    return () => observer.disconnect();
+  }, [focus, zoom]);
+
+  const image = (
+    <div
+      ref={frameRef}
+      className="relative shrink-0 border transition-transform duration-250 ease-[cubic-bezier(0.77,0,0.175,1)] motion-reduce:transition-none"
+      style={{
+        transform: `translate(${focusZoom.x}px, ${focusZoom.y}px) scale(${focusZoom.scale})`,
+      }}
+    >
+      <img
+        src={url}
+        alt="Rendered output"
+        className={cn(
+          "block",
+          zoom === "fit" ? "max-h-[calc(100cqh-2px)] max-w-[calc(100cqw-2px)]" : "max-w-none",
+          dimmed && "opacity-40",
+        )}
+        // Zoomed in, the render's own pixels are what is being inspected.
+        style={{ imageRendering: focusZoom.scale >= 2 ? "pixelated" : undefined }}
+      />
+      {overlay?.(focusZoom.scale)}
+    </div>
+  );
+
+  return zoom === "fit" ? (
+    <div
+      ref={viewportRef}
+      className="absolute inset-0 flex items-center justify-center"
+      style={{ containerType: "size" }}
+    >
+      {image}
+    </div>
+  ) : (
+    <div ref={viewportRef} className="absolute inset-0 overflow-auto">
+      <div className="flex h-fit min-h-full w-fit min-w-full items-center justify-center">
+        {image}
+      </div>
+    </div>
+  );
+}
+
 export function OutputPanel({
   lastSuccess,
   error,
@@ -245,6 +390,8 @@ export function OutputPanel({
   isReady,
   pdfView,
   waitingForRun,
+  overlay,
+  focus,
 }: {
   lastSuccess: RenderSuccess | undefined;
   error: RenderError | undefined;
@@ -253,6 +400,9 @@ export function OutputPanel({
   pdfView: PdfView;
   /** Shared code renders nothing until the reader has pressed Run themselves. */
   waitingForRun?: boolean;
+  /** Drawn over an image render, in its box. */
+  overlay?: (zoomScale: number) => ReactNode;
+  focus?: FocusTarget;
 }) {
   if (!lastSuccess && !error) {
     return <IdlePane isReady={isReady} waitingForRun={waitingForRun} />;
@@ -265,34 +415,22 @@ export function OutputPanel({
     if (pdfView === "objects") return <ObjectsPanel objects={lastSuccess.inspection.objects} />;
   }
 
-  const output =
-    lastSuccess &&
-    (lastSuccess.outputKind === "pdf" ? (
-      <PdfPreview url={lastSuccess.outputUrl} dimmed={Boolean(error)} />
-    ) : (
-      <img
-        src={lastSuccess.outputUrl}
-        alt="Rendered output"
-        className={cn(
-          "border",
-          zoom === "fit" ? "max-h-full max-w-full object-contain" : "max-w-none",
-          error && "opacity-40",
-        )}
-      />
-    ));
-
   return (
     <div className="relative h-full min-w-0 overflow-hidden bg-muted/20">
       {lastSuccess?.outputKind === "pdf" ? (
-        <div className="absolute inset-0">{output}</div>
-      ) : zoom === "fit" ? (
-        <div className="absolute inset-0 flex items-center justify-center">{output}</div>
-      ) : (
-        <div className="absolute inset-0 overflow-auto">
-          <div className="flex h-fit min-h-full w-fit min-w-full items-center justify-center">
-            {output}
-          </div>
+        <div className="absolute inset-0">
+          <PdfPreview url={lastSuccess.outputUrl} dimmed={Boolean(error)} />
         </div>
+      ) : (
+        lastSuccess && (
+          <ImageOutput
+            url={lastSuccess.outputUrl}
+            zoom={zoom}
+            dimmed={Boolean(error)}
+            overlay={overlay}
+            focus={focus}
+          />
+        )
       )}
       {error && (
         <div className="absolute inset-x-0 bottom-0 border-t bg-background/95 px-3 py-2 font-mono text-xs">
