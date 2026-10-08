@@ -1,14 +1,12 @@
 "use client";
 
-import { AxeIcon, ExternalLinkIcon, GlobeIcon, ScanSearchIcon } from "lucide-react";
-import { lazy, Suspense, useEffect, useMemo, useState } from "react";
-import { cn } from "~/lib/utils";
+import { AxeIcon, ExternalLinkIcon } from "lucide-react";
+import { lazy, Suspense, useEffect, useState } from "react";
 import { DEFAULT_TEMPLATE, type Template } from "~/playground/templates";
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "../ui/resizable";
 import { ComponentEditor } from "./component-editor";
 import { LoadingScreen } from "./loading-screen";
 import {
-  type FocusTarget,
   LabeledPane,
   OutputPanel,
   PDF_VIEWS,
@@ -16,7 +14,7 @@ import {
   ViewToggle,
   type Zoom,
 } from "./output-panel";
-import { FrameOverlay, InspectorPanel, useInspectorSelection } from "./paint-inspector";
+import { ReferencePane, usePaintInspector } from "./paint-inspector";
 import { Toolbar, type TabId } from "./toolbar";
 import { useSharedCode } from "./use-shared-code";
 import { type RenderSuccess, useRenderWorker } from "./use-render-worker";
@@ -24,13 +22,6 @@ import { type RenderSuccess, useRenderWorker } from "./use-render-worker";
 const BrowserPreview = lazy(() => import("./browser-preview"));
 
 const RUN_HINT_KEY = "takumi-playground-run-hint";
-
-type ReferenceView = "browser" | "inspect";
-
-const REFERENCE_VIEWS: { id: ReferenceView; label: string }[] = [
-  { id: "browser", label: "Browser" },
-  { id: "inspect", label: "Inspect" },
-];
 
 function fileName(result: RenderSuccess) {
   const slug = result.label.replace(/[^a-z0-9]+/gi, "-").toLowerCase();
@@ -64,7 +55,6 @@ export default function Playground() {
   const [hintDismissed, setHintDismissed] = useState(true);
   const [copied, setCopied] = useState(false);
   const [activeTab, setActiveTab] = useState<TabId>("code");
-  const [chosenReferenceView, setReferenceView] = useState<ReferenceView>("browser");
 
   const { isReady, lastSuccess, renderError, browserPreview, inspection, inspect } =
     useRenderWorker(ranCode);
@@ -73,29 +63,7 @@ export default function Playground() {
   const outputKind = lastSuccess?.outputKind;
   const isStale = code !== undefined && code !== ranCode;
   const isUnrunShare = isShared && ranCode === undefined;
-  // Only a single frame has a paint tree to read.
-  const referenceView = outputKind === "image" ? chosenReferenceView : "browser";
-  const inspectResult =
-    referenceView === "inspect" && inspection?.id === lastSuccess?.id ? inspection : undefined;
-  const paintInspection =
-    inspectResult?.status === "success" ? inspectResult.inspection : undefined;
-  const selection = useInspectorSelection(paintInspection);
-  const focusedNode =
-    selection.focused === undefined ? undefined : paintInspection?.nodes[selection.focused];
-  const focus = useMemo<FocusTarget | undefined>(
-    () =>
-      focusedNode &&
-      paintInspection && {
-        rect: focusedNode.bounds,
-        width: paintInspection.width,
-        height: paintInspection.height,
-      },
-    [focusedNode, paintInspection],
-  );
-
-  useEffect(() => {
-    if (referenceView === "inspect" && lastSuccess) inspect(lastSuccess.id);
-  }, [referenceView, lastSuccess, inspect]);
+  const inspector = usePaintInspector(lastSuccess, inspection, inspect);
 
   useEffect(() => {
     setHintDismissed(localStorage.getItem(RUN_HINT_KEY) === "seen");
@@ -202,13 +170,8 @@ export default function Playground() {
       isReady={isReady}
       pdfView={pdfView}
       waitingForRun={isUnrunShare}
-      overlay={
-        paintInspection &&
-        ((zoomScale) => (
-          <FrameOverlay inspection={paintInspection} selection={selection} zoomScale={zoomScale} />
-        ))
-      }
-      focus={focus}
+      overlay={inspector.overlay}
+      focus={inspector.focus}
     />
   );
   const browserPane = (
@@ -250,27 +213,7 @@ export default function Playground() {
         <>
           <ResizableHandle withHandle className="hover:bg-primary/50 transition-colors" />
           <ResizablePanel defaultSize={50} minSize={20}>
-            <LabeledPane
-              label={referenceView === "inspect" ? "Inspect" : "Browser"}
-              icon={referenceView === "inspect" ? ScanSearchIcon : GlobeIcon}
-              actions={
-                outputKind === "image" && (
-                  <ViewToggle
-                    views={REFERENCE_VIEWS}
-                    value={referenceView}
-                    onChange={setReferenceView}
-                  />
-                )
-              }
-            >
-              {/* The frame stays mounted so switching back does not reload it. */}
-              <div className={cn("h-full", referenceView === "inspect" && "hidden")}>
-                {browserPane}
-              </div>
-              {referenceView === "inspect" && (
-                <InspectorPanel result={inspectResult} selection={selection} />
-              )}
-            </LabeledPane>
+            <ReferencePane inspector={inspector} browserPane={browserPane} />
           </ResizablePanel>
         </>
       )}

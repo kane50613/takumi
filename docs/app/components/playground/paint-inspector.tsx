@@ -1,9 +1,11 @@
 import {
   ChevronRightIcon,
   CornerLeftUpIcon,
+  GlobeIcon,
   ImageIcon,
   Loader2Icon,
   ScanIcon,
+  ScanSearchIcon,
   SquareIcon,
   TypeIcon,
 } from "lucide-react";
@@ -11,6 +13,7 @@ import type { LucideIcon } from "lucide-react";
 import {
   type KeyboardEvent,
   type MouseEvent,
+  type ReactNode,
   useCallback,
   useEffect,
   useMemo,
@@ -26,7 +29,8 @@ import {
   type Quad,
 } from "~/playground/inspect-paint";
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "../ui/resizable";
-import type { InspectResult } from "./use-render-worker";
+import { type FocusTarget, LabeledPane, ViewToggle } from "./output-panel";
+import type { InspectResult, RenderSuccess } from "./use-render-worker";
 
 const KIND_ICONS: Record<InspectedNode["kind"], LucideIcon> = {
   box: SquareIcon,
@@ -36,6 +40,13 @@ const KIND_ICONS: Record<InspectedNode["kind"], LucideIcon> = {
 
 /** Rows deeper than this start collapsed. */
 const OPEN_DEPTH = 3;
+
+type ReferenceView = "browser" | "inspect";
+
+const REFERENCE_VIEWS: { id: ReferenceView; label: string }[] = [
+  { id: "browser", label: "Browser" },
+  { id: "inspect", label: "Inspect" },
+];
 
 function points(quad: Quad) {
   return quad.map(({ x, y }) => `${x},${y}`).join(" ");
@@ -52,7 +63,7 @@ function isTyping(target: EventTarget | null) {
  * The inspector's selection, hover, and focus. Selection and focus are held by node key,
  * so they survive a re-run that paints the same markup.
  */
-export function useInspectorSelection(inspection: PaintInspection | undefined) {
+function useInspectorSelection(inspection: PaintInspection | undefined) {
   const [selectedKey, setSelectedKey] = useState<string>();
   const [focusedKey, setFocusedKey] = useState<string>();
   const [hovered, setHovered] = useState<number>();
@@ -110,10 +121,10 @@ export function useInspectorSelection(inspection: PaintInspection | undefined) {
   return { selected, focused, hovered, setHovered, select, focus };
 }
 
-export type InspectorSelection = ReturnType<typeof useInspectorSelection>;
+type InspectorSelection = ReturnType<typeof useInspectorSelection>;
 
 /** The frames drawn over the render: the hovered node, and the selected one with its text runs. */
-export function FrameOverlay({
+function FrameOverlay({
   inspection,
   selection,
   zoomScale,
@@ -436,8 +447,65 @@ function Properties({
   );
 }
 
+/** The Inspect view's state: the tree it asks for, and the frames and zoom it lays over the render. */
+export function usePaintInspector(
+  lastSuccess: RenderSuccess | undefined,
+  inspection: InspectResult | undefined,
+  inspect: (id: number) => void,
+) {
+  const [chosenView, setView] = useState<ReferenceView>("browser");
+  // Only a single frame has a paint tree to read.
+  const canInspect = lastSuccess?.outputKind === "image";
+  const view = canInspect ? chosenView : "browser";
+  const result = view === "inspect" && inspection?.id === lastSuccess?.id ? inspection : undefined;
+  const tree = result?.status === "success" ? result.inspection : undefined;
+  const selection = useInspectorSelection(tree);
+  const focusedNode = selection.focused === undefined ? undefined : tree?.nodes[selection.focused];
+  const focus = useMemo<FocusTarget | undefined>(
+    () =>
+      focusedNode && tree && { rect: focusedNode.bounds, width: tree.width, height: tree.height },
+    [focusedNode, tree],
+  );
+
+  useEffect(() => {
+    if (view === "inspect" && lastSuccess) inspect(lastSuccess.id);
+  }, [view, lastSuccess, inspect]);
+
+  const overlay =
+    tree &&
+    ((zoomScale: number) => (
+      <FrameOverlay inspection={tree} selection={selection} zoomScale={zoomScale} />
+    ));
+
+  return { canInspect, view, setView, result, selection, focus, overlay };
+}
+
+/** The pane under the render: the browser's take on the markup, or the inspector. */
+export function ReferencePane({
+  inspector,
+  browserPane,
+}: {
+  inspector: ReturnType<typeof usePaintInspector>;
+  browserPane: ReactNode;
+}) {
+  const { canInspect, view, setView, result, selection } = inspector;
+  const inspecting = view === "inspect";
+
+  return (
+    <LabeledPane
+      label={inspecting ? "Inspect" : "Browser"}
+      icon={inspecting ? ScanSearchIcon : GlobeIcon}
+      actions={canInspect && <ViewToggle views={REFERENCE_VIEWS} value={view} onChange={setView} />}
+    >
+      {/* The frame stays mounted so switching back does not reload it. */}
+      <div className={cn("h-full", inspecting && "hidden")}>{browserPane}</div>
+      {inspecting && <InspectorPanel result={result} selection={selection} />}
+    </LabeledPane>
+  );
+}
+
 /** The layers and properties of the last image render, read from its paint tree. */
-export function InspectorPanel({
+function InspectorPanel({
   result,
   selection,
 }: {
