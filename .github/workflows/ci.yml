@@ -100,8 +100,8 @@ jobs:
       # when someone bumps it. The checksum guards the file behind the URL.
       - name: Install veraPDF
         env:
-          VERAPDF_VERSION: 1.30.2
-          VERAPDF_SHA256: 6cc6341cb1af644044054b81f00a6590a7918abb18f762243de115258bcad838
+          VERAPDF_VERSION: 1.30.3
+          VERAPDF_SHA256: b512bf24945503a33fc10738ecffc1f2dccaaf8593a448e94ee9ac86a9559a59
         run: |
           curl -sfL -o verapdf-installer.zip "https://software.verapdf.org/rel/${VERAPDF_VERSION%.*}/verapdf-greenfield-$VERAPDF_VERSION-installer.zip"
           echo "$VERAPDF_SHA256  verapdf-installer.zip" | sha256sum -c -
