@@ -14,7 +14,7 @@ use crate::{
   bands::{RepeatBounds, Repeatable, RepeatablePage},
   chunks::SceneChunks,
   emitter::DocumentState,
-  inline::{InlineMap, TextBox, build_inline_map},
+  inline::{InlineCache, TextBox},
   interactive::{add_link_annotations, xyz_destination},
   krilla::{
     Document,
@@ -251,13 +251,13 @@ impl PagePlan {
     background: Option<Color>,
   ) -> Result<(), PdfError> {
     let text_boxes = TextBox::collect(&self.paginated.content);
-    let inline_map = build_inline_map(&text_boxes)?;
+    let inline = InlineCache::new(&text_boxes);
     let chunks = SceneChunks::new(&self.paginated.content.scene);
     let composer = PageComposer {
       plan: self,
       inputs,
       page_context: inputs.context(self.frame.page_area),
-      inline_map: &inline_map,
+      inline: &inline,
       chunks: &chunks,
       state,
       background,
@@ -268,6 +268,7 @@ impl PagePlan {
         continue;
       }
       composer.compose(pdf, &self.repeatables, &slice)?;
+      inline.end_page();
     }
     Ok(())
   }
@@ -288,7 +289,7 @@ pub(crate) struct PageComposer<'c, 'g> {
   pub(crate) plan: &'c PagePlan,
   pub(crate) inputs: &'c TreeInputs<'g>,
   pub(crate) page_context: RenderContext,
-  pub(crate) inline_map: &'c InlineMap<'c>,
+  pub(crate) inline: &'c InlineCache<'c>,
   pub(crate) chunks: &'c SceneChunks<'c>,
   pub(crate) state: &'c DocumentState<'c>,
   pub(crate) background: Option<Color>,
@@ -425,7 +426,7 @@ impl PageComposer<'_, '_> {
     .emit(
       paginated
         .content
-        .emitter(self.state, Some(self.inline_map), Some(self.chunks), true),
+        .emitter(self.state, Some(self.inline), Some(self.chunks), true),
       surface,
     )?;
     // Each repeating table header band replays at the top of the window. The
@@ -454,7 +455,7 @@ impl PageComposer<'_, '_> {
       .emit(
         paginated
           .content
-          .emitter(self.state, Some(self.inline_map), Some(self.chunks), false),
+          .emitter(self.state, Some(self.inline), Some(self.chunks), false),
         surface,
       )?;
     }

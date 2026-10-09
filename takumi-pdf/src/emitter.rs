@@ -49,7 +49,7 @@ use crate::{
   chunks::{ResolvedChunk, SceneChunks},
   filter::{ColorFilter, filtered, unsupported_filter},
   glyph::{ColorGlyphs, PdfGlyph, Uncovered, run_glyphs},
-  inline::{InlineMap, visit_inline_layout},
+  inline::{InlineCache, visit_inline_layout},
   krilla::{
     Data,
     geom::{Path as KrillaPath, Point, Rect as KrillaRect, Transform},
@@ -87,8 +87,8 @@ type FontMap = HashMap<FontKey, Font>;
 pub(crate) struct Emitter<'a> {
   pub(crate) scene: &'a Scene,
   pub(crate) document: &'a DocumentState<'a>,
-  /// Pre-built inline layouts for the content tree; band trees build on the fly.
-  pub(crate) inline: Option<&'a InlineMap<'a>>,
+  /// The content tree's inline layouts; band trees build theirs on the fly.
+  pub(crate) inline: Option<&'a InlineCache<'a>>,
   /// Pre-resolved chunks for the content tree; other trees resolve theirs per walk.
   pub(crate) chunks: Option<&'a SceneChunks<'a>>,
   /// The page window this walk paints through.
@@ -2031,8 +2031,8 @@ struct GlyphBackground {
 ///
 /// Approximate: a blurred `text-shadow` fades through the stepped bands of [`Band`], since PDF has
 /// no blur operator.
-struct TextDevice<'e, 's, 'a> {
-  emitter: &'e Emitter<'e>,
+struct TextDevice<'e, 'x, 's, 'a> {
+  emitter: &'e Emitter<'x>,
   device: SurfaceDevice<'s, 'a>,
   /// The inline layout whose text the glyphs carry, unless they only draw a mask.
   built: Option<&'e BuiltInlineLayout<'e>>,
@@ -2043,7 +2043,7 @@ struct TextDevice<'e, 's, 'a> {
   through: Option<Rc<[GlyphBackground]>>,
 }
 
-impl TextDevice<'_, '_, '_> {
+impl TextDevice<'_, '_, '_, '_> {
   /// `color` and `transform`, or the open shadow's colour and `transform` moved by its offset.
   /// Runs `draw` once in `color` with no spread, or while a blurred shadow is open, once per shadow
   /// [`Band`] with the stroke width that spreads it, inside a group of the band's opacity. The
@@ -2114,7 +2114,7 @@ impl TextDevice<'_, '_, '_> {
   }
 }
 
-impl PaintDevice for TextDevice<'_, '_, '_> {
+impl PaintDevice for TextDevice<'_, '_, '_, '_> {
   fn with_border_mask(
     &mut self,
     border: &BorderProperties,
@@ -2225,7 +2225,7 @@ impl PaintDevice for TextDevice<'_, '_, '_> {
   }
 }
 
-impl GlyphDevice for TextDevice<'_, '_, '_> {
+impl GlyphDevice for TextDevice<'_, '_, '_, '_> {
   fn fill_background_layers(
     &mut self,
     background: &StripBackground<'_>,
@@ -2290,7 +2290,7 @@ impl GlyphDevice for TextDevice<'_, '_, '_> {
   }
 }
 
-impl TextDevice<'_, '_, '_> {
+impl TextDevice<'_, '_, '_, '_> {
   /// Paints `fills` seen through `run`'s glyphs in the block at `frame`, then the glyphs themselves
   /// `with_paint`, or their shadow while one is open.
   fn paint_glyph_run(

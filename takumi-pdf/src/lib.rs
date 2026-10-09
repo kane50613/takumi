@@ -106,7 +106,7 @@ pub use crate::options::{
 use crate::{
   emitter::DocumentState,
   glyph::Uncovered,
-  inline::{TextBox, build_inline_map},
+  inline::{InlineCache, TextBox},
   interactive::{Interactive, add_link_annotations, xyz_destination},
   krilla::{
     Document, SerializeSettings,
@@ -339,14 +339,14 @@ impl SinglePage {
     )
     .ok_or(PdfError::InvalidPageSize)?;
     let text_boxes = TextBox::collect(&content);
-    let inline_map = build_inline_map(&text_boxes)?;
+    let inline = InlineCache::new(&text_boxes);
     let mut page = pdf.start_page_with(PageSettings::new(page_size));
     let mut surface = page.surface();
 
     surface.push_transform(&Transform::from_scale(PT_PER_PX, PT_PER_PX));
     paint_page_background(background, content.scene.size, &mut surface);
 
-    let mut emitter = content.emitter(state, Some(&inline_map), None, true);
+    let mut emitter = content.emitter(state, Some(&inline), None, true);
 
     emitter.emit(&mut surface)?;
     surface.pop();
