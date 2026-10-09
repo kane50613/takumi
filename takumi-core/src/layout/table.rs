@@ -734,12 +734,7 @@ impl RenderNode {
     cell.lower_cell(1, 0, 1, false);
     cell.context.style.display.blockify();
 
-    let mut tree = LayoutTree::from_render_node(&cell);
-
-    (
-      tree.root_width(AvailableSpace::MinContent),
-      tree.root_width(AvailableSpace::MaxContent),
-    )
+    LayoutTree::from_render_node(&cell).root_min_max_widths()
   }
 }
 

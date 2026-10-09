@@ -856,33 +856,40 @@ impl<'r> LayoutTree<'r> {
     }
   }
 
-  /// The root's border-box width under `available_width`, sized without laying out its height,
-  /// as Blink's `ComputeMinMaxSizes` sizes a box's inline axis alone.
-  pub(crate) fn root_width(&mut self, available_width: AvailableSpace) -> f32 {
-    let available_space = TaffySize {
-      width: available_width.into_taffy(),
-      height: TaffyAvailableSpace::MaxContent,
+  /// The root's border-box min-content and max-content widths, sized without laying out its
+  /// height, as Blink's `ComputeMinMaxSizes` sizes a box's inline axis alone.
+  pub(crate) fn root_min_max_widths(&mut self) -> (f32, f32) {
+    let mut width = |available_width: TaffyAvailableSpace| {
+      let available_space = TaffySize {
+        width: available_width,
+        height: TaffyAvailableSpace::MaxContent,
+      };
+
+      self
+        .compute_child_layout(
+          NodeId::ROOT.into_taffy(),
+          LayoutInput {
+            run_mode: RunMode::ComputeSize,
+            sizing_mode: SizingMode::InherentSize,
+            axis: RequestedAxis::Horizontal,
+            known_dimensions: TaffySize::NONE,
+            known_dimensions_are_definite: TaffySize {
+              width: true,
+              height: true,
+            },
+            parent_size: available_space.into_options(),
+            available_space,
+            vertical_margins_are_collapsible: Line::FALSE,
+          },
+        )
+        .size
+        .width
     };
 
-    self
-      .compute_child_layout(
-        NodeId::ROOT.into_taffy(),
-        LayoutInput {
-          run_mode: RunMode::ComputeSize,
-          sizing_mode: SizingMode::InherentSize,
-          axis: RequestedAxis::Horizontal,
-          known_dimensions: TaffySize::NONE,
-          known_dimensions_are_definite: TaffySize {
-            width: true,
-            height: true,
-          },
-          parent_size: available_space.into_options(),
-          available_space,
-          vertical_margins_are_collapsible: Line::FALSE,
-        },
-      )
-      .size
-      .width
+    (
+      width(TaffyAvailableSpace::MinContent),
+      width(TaffyAvailableSpace::MaxContent),
+    )
   }
 
   /// Consumes the tree into immutable per-node layout results.
