@@ -26,7 +26,7 @@ use crate::{
   chunks::SceneChunks,
   counters::{has_page_counters, substitute_page_counters, substitute_target_counters},
   emitter::{DocumentState, Emitter},
-  inline::InlineMap,
+  inline::InlineCache,
   options::PdfError,
   page::PageFrame,
   window::Window,
@@ -176,14 +176,8 @@ impl PreparedTree {
   }
 
   /// The scene's atom collector, for pagination.
-  pub(crate) fn atom_collector<'a>(
-    &'a self,
-    inline: Option<&'a InlineMap<'a>>,
-  ) -> AtomCollector<'a> {
-    AtomCollector {
-      scene: &self.scene,
-      inline,
-    }
+  pub(crate) fn atom_collector(&self) -> AtomCollector<'_> {
+    AtomCollector { scene: &self.scene }
   }
 
   /// Visits every node paint of the scene, in paint order.
@@ -213,7 +207,7 @@ impl PreparedTree {
   pub(crate) fn emitter<'a>(
     &'a self,
     state: &'a DocumentState<'a>,
-    inline: Option<&'a InlineMap<'a>>,
+    inline: Option<&'a InlineCache<'a>>,
     chunks: Option<&'a SceneChunks<'a>>,
     tagged: bool,
   ) -> Emitter<'a> {

@@ -12,7 +12,7 @@ use takumi_core::{
 };
 
 use crate::{
-  inline::{InlineMap, inline_box_atoms, text_line_atoms, visit_inline_layout},
+  inline::{inline_box_atoms, text_line_atoms, visit_inline_layout},
   options::PdfError,
   pagination::{Atom, Paragraph},
 };
@@ -56,7 +56,6 @@ impl Atoms {
 /// instead of painting.
 pub(crate) struct AtomCollector<'a> {
   pub(crate) scene: &'a Scene,
-  pub(crate) inline: Option<&'a InlineMap<'a>>,
 }
 
 impl AtomCollector<'_> {
@@ -168,7 +167,7 @@ impl AtomCollector<'_> {
     y: f32,
     atoms: &mut Atoms,
   ) -> Result<(), PdfError> {
-    visit_inline_layout(self.inline, node, node_id, layout, |_, runs, _| {
+    visit_inline_layout(None, node, node_id, layout, |_, runs, _| {
       let start = atoms.extents.len();
 
       text_line_atoms(runs, layout, y, &mut atoms.extents);
