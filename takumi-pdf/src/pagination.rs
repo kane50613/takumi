@@ -434,6 +434,7 @@ impl Atoms {
       forced,
       paragraphs,
       content,
+      ..
     } = &mut self;
     let overlaps = |top: f32, bottom: f32| {
       content
