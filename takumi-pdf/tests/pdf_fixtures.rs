@@ -978,8 +978,6 @@ fn paged_widow_orphan_control() {
           20, 20, 20, 255,
         ]))))
         .with(StyleDeclaration::font_size(FontSize::Length(Px(16.0))))
-        // Air between the line bands, so the widow move is distinguishable
-        // from the atom pass cascading through touching lines.
         .with(StyleDeclaration::line_height(LineHeight::Unitless(1.8))),
     );
     let mut children = rows;
@@ -1056,6 +1054,34 @@ fn a_page_skips_the_clips_of_other_pages() {
   assert!(page_count(&pdf) > 1);
   // One clip per page window, and a box's two clips on its own page only.
   assert_eq!(clips, page_count(&pdf) + 2 * BOXES);
+}
+
+/// A paragraph taller than a page starts on the first page below its margin:
+/// its line boxes meet edge to edge, so a cut between two of them moves
+/// neither.
+#[test]
+fn a_long_paragraph_starts_on_the_first_page() {
+  let doc = format!("<p>{}</p>", "Lorem ipsum dolor sit amet. ".repeat(200));
+  let pdf = render_pinned(
+    PdfOptions::builder()
+      .node(from_html(&doc, FromHtmlOptions::default()).expect("parse paragraph"))
+      .page(PageOptions {
+        width: 400.0,
+        height: 300.0,
+        margin: PageMargins::uniform(20.0),
+      })
+      .fonts(&fonts())
+      .build(),
+  );
+
+  // Page content is ASCII, unlike the embedded font that can spell `]TJ` too.
+  let pages_with_text = content_streams(&pdf)
+    .iter()
+    .filter(|stream| stream.is_ascii() && find(stream, b"]TJ").is_some())
+    .count();
+
+  assert!(page_count(&pdf) > 1);
+  assert_eq!(pages_with_text, page_count(&pdf), "a page is blank");
 }
 
 #[test]
