@@ -117,7 +117,7 @@ const pdf = await render(
 );
 ```
 
-A header or footer taller than a quarter of the page does not repeat, matching Chromium. A header or footer cell whose `rowspan` reaches into the body suppresses repetition for that table.
+A section repeats only with `break-inside: avoid`, which `<thead>` and `<tfoot>` set by default, as in Chrome. A header or footer taller than a quarter of the page does not repeat, matching Chromium. A header or footer cell whose `rowspan` reaches into the body suppresses repetition for that table.
 
 ## Page ranges
 
