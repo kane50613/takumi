@@ -207,6 +207,7 @@ impl Emitter<'_> {
         &resolved
       }
     };
+    let visible = chunks.visible(self.window);
     let mut conversion = ConversionContext::new(
       &scene.properties,
       ChunkWriter {
@@ -219,7 +220,7 @@ impl Emitter<'_> {
       },
     );
 
-    for chunk in &chunks.chunks {
+    for chunk in visible {
       conversion.switch_to(chunk.chunk.state());
       conversion.sink().emit(chunk);
     }
