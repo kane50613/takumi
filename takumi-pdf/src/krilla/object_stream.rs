@@ -1,71 +1,73 @@
-//! Packs the structure tree's dictionaries into an object stream.
+//! Packs the structure tree's dictionaries into object streams.
 //!
 //! A tagged document writes one small dictionary per structure element, and on
 //! a text-heavy page they outweigh everything else: a third of an invoice, one
-//! uncompressed indirect object each, all nearly identical. An object stream
-//! holds them in a single compressed stream instead.
+//! uncompressed indirect object each, all nearly identical. Object streams
+//! hold them compressed instead.
 //!
 //! Their cross-reference rows have to say so, and `pdf-writer` writes only free
-//! and occupied rows. [`ObjectStream::patch_xref`] rewrites the rows afterwards,
+//! and occupied rows. [`ObjectStreams::patch_xref`] rewrites the rows afterwards,
 //! which the fixed row layout of a cross-reference stream makes exact.
 
 use pdf_writer::{Chunk, Filter, Finish, Name, Pdf, Ref};
 
 use crate::krilla::stream::deflate_encode;
 
-/// The objects an object stream holds, and where each one sits in it.
-pub(crate) struct ObjectStream {
-  stream: i32,
-  entries: Vec<(i32, u16)>,
+/// The most objects one stream holds: a cross-reference row gives the index
+/// two bytes.
+const STREAM_CAPACITY: usize = 1 << 16;
+
+/// The objects the object streams hold: each one's number, its stream's
+/// number, and its index there.
+pub(crate) struct ObjectStreams {
+  entries: Vec<(i32, i32, u16)>,
 }
 
-/// Moves a chunk's objects into an object stream written to `pdf`, numbered
-/// from `next_ref`.
+/// Moves a chunk's objects into object streams written to `pdf`, numbered from
+/// `next_ref`.
 ///
 /// Returns `None` when the chunk holds nothing to pack, or when its bytes do
 /// not read back as the plain sequence of dictionaries this expects, in which
 /// case the caller writes the chunk as it stands.
-pub(crate) fn pack(chunk: &Chunk, next_ref: &mut Ref, pdf: &mut Pdf) -> Option<ObjectStream> {
+pub(crate) fn pack(chunk: &Chunk, next_ref: &mut Ref, pdf: &mut Pdf) -> Option<ObjectStreams> {
   let objects = split(chunk)?;
 
   if objects.len() < 2 {
     return None;
   }
 
-  let mut header = Vec::new();
-  let mut bodies = Vec::new();
-  let mut entries = Vec::new();
+  let mut entries = Vec::with_capacity(objects.len());
 
-  for (index, (id, body)) in objects.iter().enumerate() {
-    let index = u16::try_from(index).ok()?;
+  for batch in objects.chunks(STREAM_CAPACITY) {
+    let stream_ref = next_ref.bump();
+    let mut header = Vec::new();
+    let mut bodies = Vec::new();
 
-    header.extend_from_slice(format!("{} {} ", id.get(), bodies.len()).as_bytes());
-    bodies.extend_from_slice(body);
-    bodies.push(b'\n');
-    entries.push((id.get(), index));
+    for (index, (id, body)) in batch.iter().enumerate() {
+      header.extend_from_slice(format!("{} {} ", id.get(), bodies.len()).as_bytes());
+      bodies.extend_from_slice(body);
+      bodies.push(b'\n');
+      entries.push((id.get(), stream_ref.get(), index as u16));
+    }
+
+    let first = header.len();
+
+    header.extend_from_slice(&bodies);
+
+    let data = deflate_encode(&header);
+    let mut stream = pdf.stream(stream_ref, &data);
+
+    stream.pair(Name(b"Type"), Name(b"ObjStm"));
+    stream.pair(Name(b"N"), batch.len() as i32);
+    stream.pair(Name(b"First"), first as i32);
+    stream.filter(Filter::FlateDecode);
+    stream.finish();
   }
 
-  let first = header.len();
-
-  header.extend_from_slice(&bodies);
-
-  let stream_ref = next_ref.bump();
-  let data = deflate_encode(&header);
-  let mut stream = pdf.stream(stream_ref, &data);
-
-  stream.pair(Name(b"Type"), Name(b"ObjStm"));
-  stream.pair(Name(b"N"), entries.len() as i32);
-  stream.pair(Name(b"First"), first as i32);
-  stream.filter(Filter::FlateDecode);
-  stream.finish();
-
-  Some(ObjectStream {
-    stream: stream_ref.get(),
-    entries,
-  })
+  Some(ObjectStreams { entries })
 }
 
-impl ObjectStream {
+impl ObjectStreams {
   /// Rewrites the cross-reference rows of the packed objects.
   ///
   /// A cross-reference stream is a table of fixed-width rows indexed by object
@@ -97,8 +99,8 @@ impl ObjectStream {
       cells[1 + offset_width..].copy_from_slice(&third.to_be_bytes());
     };
 
-    for (number, index) in &self.entries {
-      write(*number, self.stream as u64, *index);
+    for (number, stream, index) in &self.entries {
+      write(*number, *stream as u64, *index);
     }
 
     // Object 0 heads the free list, which now runs through numbers that are no
@@ -171,4 +173,27 @@ fn skip_whitespace(bytes: &[u8], from: usize) -> usize {
   }
 
   at
+}
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+
+  #[test]
+  fn packs_past_one_stream_capacity() {
+    let count = STREAM_CAPACITY as i32 + 1;
+    let mut chunk = Chunk::new();
+
+    for id in 1..=count {
+      chunk.indirect(Ref::new(id)).primitive(0);
+    }
+
+    let mut next_ref = Ref::new(count + 1);
+    let streams = pack(&chunk, &mut next_ref, &mut Pdf::new()).unwrap();
+
+    assert_eq!(next_ref.get(), count + 3);
+    assert_eq!(streams.entries.len(), count as usize);
+    assert_eq!(streams.entries[0], (1, count + 1, 0));
+    assert_eq!(streams.entries.last(), Some(&(count, count + 2, 0)));
+  }
 }
