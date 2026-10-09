@@ -1416,36 +1416,31 @@ fn as_rect(subpath: &[PathSegment]) -> Option<PathOp> {
   })
 }
 
-// Note that this isn't a 100% accurate calculation, it can overestimate (and in a few cases
-// even underestimate), but it should be good enough for the majority of the cases.
-// TODO: Improve this so that `zalgo_text` test case shows up fully in the reference image.
+// The font's bounding box at every glyph's origin: it can overestimate, but it covers every glyph
+// whatever the advances, which takumi's glyphs leave at zero and carry in their offsets instead.
 fn get_glyphs_bbox(glyphs: &[impl Glyph], x: f32, y: f32, size: f32, font: Font) -> Rect {
-  let font_bbox = font.bbox();
-  let (mut bl, mut bt, mut br, mut bb) = font_bbox
+  let (fl, ft, fr, fb) = font
+    .bbox()
     .transform(Transform::from_scale(
       size / font.units_per_em(),
       -size / font.units_per_em(),
     ))
-    .and_then(|b| b.transform(Transform::from_translate(x, y)))
     .map(|b| (b.left(), b.top(), b.right(), b.bottom()))
-    .unwrap_or((x, y, x + 1.0, y + 1.0));
-
+    .unwrap_or((0.0, 0.0, 1.0, 1.0));
+  let (mut bl, mut bt, mut br, mut bb) = (x + fl, y + ft, x + fr, y + fb);
   let mut x = x;
   let mut y = y;
 
   for glyph in glyphs {
-    let xo = glyph.x_offset(size);
-    let xa = glyph.x_advance(size);
-    let yo = glyph.y_offset(size);
-    let ya = glyph.y_advance(size);
+    let gx = x + glyph.x_offset(size);
+    let gy = y - glyph.y_offset(size);
 
-    x += xa;
-    y -= ya;
-
-    bl = bl.min(x + xo);
-    br = br.max(x + xo);
-    bt = bt.min(y - yo);
-    bb = bb.max(y - yo);
+    bl = bl.min(gx + fl);
+    br = br.max(gx + fr);
+    bt = bt.min(gy + ft);
+    bb = bb.max(gy + fb);
+    x += glyph.x_advance(size);
+    y -= glyph.y_advance(size);
   }
 
   Rect::from_ltrb(bl, bt, br, bb).unwrap()
