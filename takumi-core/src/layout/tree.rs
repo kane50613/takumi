@@ -898,6 +898,8 @@ impl<'r> LayoutTree<'r> {
 
   /// Gives a lowered table's [`TablePart::BodyRows`] grids the column tracks it just sized.
   fn share_column_tracks(&mut self, table: TaffyNodeId) {
+    let mut changed = false;
+
     let Some(state) = self.get_layout_node_ref(table) else {
       return;
     };
@@ -919,7 +921,14 @@ impl<'r> LayoutTree<'r> {
       {
         rows.style.grid_template_columns.clone_from(&tracks);
         rows.cache.clear();
+        changed = true;
       }
+    }
+
+    // taffy keys the table's cache on its inputs, which can stay the same while the tracks move:
+    // a known width with percentage padding resolves against the available width.
+    if changed && let Some(state) = self.get_layout_node_mut_ref(table) {
+      state.cache.clear();
     }
   }
 }

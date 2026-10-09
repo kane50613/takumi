@@ -1,5 +1,6 @@
 ---
 packages:
+  "takumi-core": patch
   "takumi": patch
   "takumi-pdf": patch
 ---
