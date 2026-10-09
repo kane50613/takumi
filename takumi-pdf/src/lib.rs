@@ -405,6 +405,7 @@ mod tests {
       forced: forced.to_vec(),
       paragraphs,
       content: vec![(0.0, f32::INFINITY)],
+      ..Atoms::default()
     }
   }
 
