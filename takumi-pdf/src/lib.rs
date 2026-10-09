@@ -45,6 +45,7 @@ use std::{mem::take, rc::Rc};
 
 mod atoms;
 mod bands;
+mod chunks;
 mod counters;
 
 pub use counters::counter_characters;
@@ -345,7 +346,7 @@ impl SinglePage {
     surface.push_transform(&Transform::from_scale(PT_PER_PX, PT_PER_PX));
     paint_page_background(background, content.scene.size, &mut surface);
 
-    let mut emitter = content.emitter(state, Some(&inline_map), true);
+    let mut emitter = content.emitter(state, Some(&inline_map), None, true);
 
     emitter.emit(&mut surface)?;
     surface.pop();

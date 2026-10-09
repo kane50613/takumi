@@ -12,6 +12,7 @@ use std::mem::take;
 
 use crate::{
   bands::{RepeatBounds, Repeatable, RepeatablePage},
+  chunks::SceneChunks,
   emitter::DocumentState,
   inline::{InlineMap, TextBox, build_inline_map},
   interactive::{add_link_annotations, xyz_destination},
@@ -251,11 +252,13 @@ impl PagePlan {
   ) -> Result<(), PdfError> {
     let text_boxes = TextBox::collect(&self.paginated.content);
     let inline_map = build_inline_map(&text_boxes)?;
+    let chunks = SceneChunks::new(&self.paginated.content.scene);
     let composer = PageComposer {
       plan: self,
       inputs,
       page_context: inputs.context(self.frame.page_area),
       inline_map: &inline_map,
+      chunks: &chunks,
       state,
       background,
     };
@@ -286,6 +289,7 @@ pub(crate) struct PageComposer<'c, 'g> {
   pub(crate) inputs: &'c TreeInputs<'g>,
   pub(crate) page_context: RenderContext,
   pub(crate) inline_map: &'c InlineMap<'c>,
+  pub(crate) chunks: &'c SceneChunks<'c>,
   pub(crate) state: &'c DocumentState<'c>,
   pub(crate) background: Option<Color>,
 }
@@ -421,7 +425,7 @@ impl PageComposer<'_, '_> {
     .emit(
       paginated
         .content
-        .emitter(self.state, Some(self.inline_map), true),
+        .emitter(self.state, Some(self.inline_map), Some(self.chunks), true),
       surface,
     )?;
     // Each repeating table header band replays at the top of the window. The
@@ -450,7 +454,7 @@ impl PageComposer<'_, '_> {
       .emit(
         paginated
           .content
-          .emitter(self.state, Some(self.inline_map), false),
+          .emitter(self.state, Some(self.inline_map), Some(self.chunks), false),
         surface,
       )?;
     }
