@@ -34,6 +34,7 @@ phf.workspace = true
 precomputed-hash.workspace = true
 selectors.workspace = true
 thin-vec.workspace = true
+rustc-hash.workspace = true
 
 [dependencies.gif]
 workspace = true
