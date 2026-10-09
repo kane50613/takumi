@@ -362,15 +362,13 @@ impl PageComposer<'_, '_> {
       None,
       anchor,
     );
-    // A replayed table header is an artifact like a repeated box, so its
-    // links annotate per page and stay out of the structure.
-    for &(offset, index) in &slice.replays {
-      let band = &paginated.headers[index];
-
+    // A replayed table header or footer is an artifact like a repeated box,
+    // so its links annotate per page and stay out of the structure.
+    for (offset, index) in slice.section_replays() {
       add_link_annotations(
         &mut pdf_page,
         &paginated.interactive.links,
-        band.window(),
+        paginated.sections[index].window(),
         CorePoint {
           x: frame.margin.left,
           y: frame.margin.top + offset,
@@ -424,27 +422,25 @@ impl PageComposer<'_, '_> {
         .emitter(self.state, Some(self.inline_map), true),
       surface,
     )?;
-    // Each repeating table header band replays at the top of the window. The
-    // first occurrence carried the tags, so a replay is an artifact. Clipping
-    // to the table keeps content beside it out of the replay.
-    for &(offset, index) in &slice.replays {
-      let band = &paginated.headers[index];
+    // Each repeated table header replays at the top of the window and each
+    // repeated footer below the content. The first occurrence carried the
+    // tags, so a replay is an artifact. Clipping to the table keeps content
+    // beside it out of the replay.
+    for (offset, index) in slice.section_replays() {
+      let section = &paginated.sections[index];
 
       ContentWindow {
         clip: (
-          frame.margin.left + band.left,
+          frame.margin.left + section.left,
           frame.margin.top + offset,
-          band.right - band.left,
-          band.height(),
+          section.right - section.left,
+          section.height(),
         ),
         translate: CorePoint {
           x: frame.margin.left,
-          y: frame.margin.top + offset - band.top,
+          y: frame.margin.top + offset - section.top,
         },
-        window: Window {
-          lines: Some((f32::NEG_INFINITY, band.bottom)),
-          ..band.window()
-        },
+        window: section.replay_window(),
         artifact: true,
       }
       .emit(
