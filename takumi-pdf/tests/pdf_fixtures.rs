@@ -5742,3 +5742,40 @@ fn page_rules_pick_first_then_last_then_parity_then_the_document() {
   assert_eq!(name(&footer, 4, 4).as_deref(), Some("last footer"));
   assert!(PageRules::default().footer_band(None).is_none());
 }
+
+/// A table taller than one layout grid keeps every row below the one before
+/// it, and every row in the structure tree.
+#[test]
+fn a_table_taller_than_one_grid_keeps_every_row() {
+  const ROWS: usize = 10_050;
+
+  let doc = format!(
+    r#"<table style="table-layout:fixed;width:100px;border-spacing:0">
+      <thead><tr><th style="height:4px;padding:0"></th></tr></thead>
+      <tbody>{}</tbody>
+    </table>"#,
+    r#"<tr><td style="height:4px;padding:0"></td></tr>"#.repeat(ROWS)
+  );
+  let node = || from_html(&doc, FromHtmlOptions::default()).expect("parse table");
+  let fonts = fonts();
+  let size = measure(
+    MeasureOptions::builder()
+      .node(node())
+      .viewport(Viewport::new((100, 100)))
+      .fonts(&fonts)
+      .build(),
+  )
+  .expect("measure table");
+
+  assert_eq!(size.height, (ROWS + 1) as f32 * 4.0);
+
+  let pdf = render_pinned(
+    PdfOptions::builder()
+      .node(node())
+      .page(PageOptions::A4)
+      .fonts(&fonts)
+      .build(),
+  );
+
+  assert_eq!(inflated_text(&pdf).matches("/S/TR").count(), ROWS + 1);
+}
