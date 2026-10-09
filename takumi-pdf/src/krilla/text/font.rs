@@ -1,8 +1,9 @@
 use std::fmt::{Debug, Formatter};
 use std::hash::{Hash, Hasher};
 use std::ops::Deref;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex, PoisonError};
 
+use rustc_hash::FxHashMap;
 use skrifa::instance::{Location, LocationRef, Size};
 use skrifa::metrics::GlyphMetrics;
 use skrifa::raw::TableProvider;
@@ -65,6 +66,7 @@ impl Font {
       font_data: data,
       font_ref_yoke,
       font_info,
+      advance_widths: Mutex::default(),
     }))))
   }
 
@@ -146,9 +148,14 @@ impl Font {
     self.0.font_data.clone()
   }
 
-  #[inline]
   pub(crate) fn advance_width(&self, glyph_id: GlyphId) -> Option<f32> {
-    self.glyph_metrics().advance_width(glyph_id.to_skrifa())
+    *self
+      .0
+      .advance_widths
+      .lock()
+      .unwrap_or_else(PoisonError::into_inner)
+      .entry(glyph_id.to_u32())
+      .or_insert_with(|| self.glyph_metrics().advance_width(glyph_id.to_skrifa()))
   }
 }
 
@@ -233,6 +240,9 @@ struct Repr {
   font_info: Arc<FontInfo>,
   font_data: Data,
   font_ref_yoke: Yoke<FontRefYoke<'static>, Box<YokeData>>,
+  /// Each glyph's advance once read: a variable font recomputes it from its variation store on
+  /// every read, and a document reads the same few glyphs again and again.
+  advance_widths: Mutex<FxHashMap<u32, Option<f32>>>,
 }
 
 impl Hash for Repr {
