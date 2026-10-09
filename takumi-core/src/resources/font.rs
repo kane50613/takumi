@@ -39,7 +39,7 @@ use crate::{
   font_style::ExpandedFontFamily,
   layout::inline::{InlineBrush, InlineLayout},
   resources::{
-    glyph::{BOLD_THRESHOLD, GlyphResolveContext, ResolvedGlyph, synthesis_embolden_strength},
+    glyph::{BOLD_THRESHOLD, GlyphResolveContext, ResolvedGlyphs, synthesis_embolden_strength},
     glyph_cache::resolved_glyph,
   },
   sort_key::sort_by_key,
@@ -525,7 +525,7 @@ impl Fonts {
     run: &GlyphRun<'_, InlineBrush>,
     font_ref: FontRef,
     glyph_ids: impl Iterator<Item = u32> + Clone,
-  ) -> HashMap<u32, Arc<ResolvedGlyph>> {
+  ) -> ResolvedGlyphs {
     let font_size = run.run().font_size();
     let normalized_coords = run
       .run()
@@ -561,8 +561,8 @@ impl Fonts {
       embolden,
       skew,
     );
-    let mut result: HashMap<u32, Arc<ResolvedGlyph>> =
-      HashMap::with_capacity(glyph_ids.size_hint().0);
+    let mut result =
+      ResolvedGlyphs::with_capacity_and_hasher(glyph_ids.size_hint().0, Default::default());
     for glyph_id in glyph_ids {
       if let Entry::Vacant(slot) = result.entry(glyph_id) {
         let key = resolved_glyph_cache_key(&key_prefix, glyph_id);

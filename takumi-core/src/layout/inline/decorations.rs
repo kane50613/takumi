@@ -6,14 +6,14 @@ use crate::{
   layout_unit::LayoutUnit,
   resources::{
     font::PrimaryFontMetrics,
-    glyph::{ResolvedGlyph, ResolvedOutlineGlyph},
+    glyph::{ResolvedGlyph, ResolvedGlyphs, ResolvedOutlineGlyph},
   },
   style::{
     Affine, Color, SizedTextDecorationThickness, TextDecorationLines, TextDecorationSkipInk,
     TextDecorationStyle, TextUnderlinePosition,
   },
 };
-use std::{collections::HashMap, iter::repeat_n, sync::Arc};
+use std::iter::repeat_n;
 
 use super::{
   BuiltInlineLayout, WalkedLine,
@@ -237,7 +237,7 @@ impl ShapedRun {
   /// The outlines `skip-ink` gives way to, positioned from `origin`.
   fn ink_outlines<'g>(
     &self,
-    resolved_glyphs: &'g HashMap<u32, Arc<ResolvedGlyph>>,
+    resolved_glyphs: &'g ResolvedGlyphs,
     origin: Point<f32>,
     baseline_shift: f32,
   ) -> Vec<(Point<f32>, &'g ResolvedOutlineGlyph)> {
@@ -265,7 +265,7 @@ impl ShapedRun {
   /// `TextPainter::ClipDecorationsStripe` cuts them from the unscaled glyphs.
   pub(crate) fn decorations(
     &self,
-    resolved_glyphs: &HashMap<u32, Arc<ResolvedGlyph>>,
+    resolved_glyphs: &ResolvedGlyphs,
     layout: ComputedLayout,
     placement: &DecorationPlacement,
     baseline_shift: f32,

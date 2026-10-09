@@ -1836,6 +1836,7 @@ dependencies = [
  "precomputed-hash",
  "quick_cache",
  "roxmltree 0.21.1",
+ "rustc-hash",
  "selectors",
  "serde",
  "serde_bytes",
