@@ -856,15 +856,36 @@ impl<'r> LayoutTree<'r> {
     }
   }
 
-  /// Consumes the tree into immutable per-node layout results.
-  /// The root's border-box size after [`Self::compute_layout`], zero when the tree is empty.
-  pub(crate) fn root_size(&self) -> Size<f32> {
+  /// The root's border-box width under `available_width`, sized without laying out its height,
+  /// as Blink's `ComputeMinMaxSizes` sizes a box's inline axis alone.
+  pub(crate) fn root_width(&mut self, available_width: AvailableSpace) -> f32 {
+    let available_space = TaffySize {
+      width: available_width.into_taffy(),
+      height: TaffyAvailableSpace::MaxContent,
+    };
+
     self
-      .nodes
-      .first()
-      .map_or(Size::ZERO, |node| Size::from_taffy(node.final_layout.size))
+      .compute_child_layout(
+        NodeId::ROOT.into_taffy(),
+        LayoutInput {
+          run_mode: RunMode::ComputeSize,
+          sizing_mode: SizingMode::InherentSize,
+          axis: RequestedAxis::Horizontal,
+          known_dimensions: TaffySize::NONE,
+          known_dimensions_are_definite: TaffySize {
+            width: true,
+            height: true,
+          },
+          parent_size: available_space.into_options(),
+          available_space,
+          vertical_margins_are_collapsible: Line::FALSE,
+        },
+      )
+      .size
+      .width
   }
 
+  /// Consumes the tree into immutable per-node layout results.
   pub(crate) fn into_results(mut self) -> LayoutResults {
     // A box an inline containing block holds is placed in the inline formatting context, its
     // box-tree parent, rather than in the node standing in for the containing block.

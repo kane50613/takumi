@@ -25,7 +25,7 @@ use taffy::{Style, style_helpers::length};
 
 use crate::{
   context::RenderContext,
-  geometry::{AvailableSpace, Size},
+  geometry::AvailableSpace,
   layout::{
     node::NodeKind,
     table_borders::CollapsedBorders,
@@ -735,17 +735,10 @@ impl RenderNode {
     cell.context.style.display.blockify();
 
     let mut tree = LayoutTree::from_render_node(&cell);
-    let mut measure = |width| {
-      tree.compute_layout(Size {
-        width,
-        height: AvailableSpace::MaxContent,
-      });
-      tree.root_size().width
-    };
 
     (
-      measure(AvailableSpace::MinContent),
-      measure(AvailableSpace::MaxContent),
+      tree.root_width(AvailableSpace::MinContent),
+      tree.root_width(AvailableSpace::MaxContent),
     )
   }
 }
