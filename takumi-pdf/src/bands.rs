@@ -273,6 +273,6 @@ impl RepeatablePage<'_> {
       window: Window::default(),
       artifact: state.tags.is_some(),
     }
-    .emit(self.tree().emitter(state, None, false), surface)
+    .emit(self.tree().emitter(state, None, None, false), surface)
   }
 }

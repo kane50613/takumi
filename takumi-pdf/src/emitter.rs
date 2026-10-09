@@ -24,7 +24,7 @@ use takumi_core::{
     tree::{NodeOrigin, RenderNode},
   },
   paint::ConicGradientTile,
-  paint_chunk::{ChunkPart, ConversionContext, PaintChunk, PropertySink},
+  paint_chunk::{ChunkPart, ConversionContext, PropertySink},
   paint_property::{ClipId, ClipNode, EffectId, EffectNode},
   painter::{
     BoxBackground, BoxBorderPainter, BoxFrame, BoxPainter, FillShape, GlyphDevice, GlyphFill,
@@ -46,6 +46,7 @@ use crate::paint::rasterized_image;
 #[cfg(all(feature = "svg", feature = "images"))]
 use crate::svg;
 use crate::{
+  chunks::{ResolvedChunk, SceneChunks},
   filter::{ColorFilter, filtered, unsupported_filter},
   glyph::{ColorGlyphs, PdfGlyph, Uncovered, run_glyphs},
   inline::{InlineMap, visit_inline_layout},
@@ -88,6 +89,8 @@ pub(crate) struct Emitter<'a> {
   pub(crate) document: &'a DocumentState<'a>,
   /// Pre-built inline layouts for the content tree; band trees build on the fly.
   pub(crate) inline: Option<&'a InlineMap<'a>>,
+  /// Pre-resolved chunks for the content tree; other trees resolve theirs per walk.
+  pub(crate) chunks: Option<&'a SceneChunks<'a>>,
   /// The page window this walk paints through.
   pub(crate) window: Window,
   /// Whether this walk records marked content for the structure tree.
@@ -196,22 +199,28 @@ impl Emitter<'_> {
   /// Emits the scene chunk by chunk, entering each chunk's clips and effects.
   pub(crate) fn emit(&mut self, surface: &mut Surface) -> Result<(), PdfError> {
     let scene = self.scene;
-    let chunks = PaintChunk::in_paint_order(&scene.contexts);
-    let owners = PaintChunk::effect_owners(&chunks, &scene.properties);
+    let resolved;
+    let chunks = match self.chunks {
+      Some(chunks) => chunks,
+      None => {
+        resolved = SceneChunks::new(scene);
+        &resolved
+      }
+    };
     let mut conversion = ConversionContext::new(
       &scene.properties,
       ChunkWriter {
         emitter: self,
         surface,
-        owners: &owners,
+        owners: &chunks.owners,
         current: Affine::IDENTITY,
         entries: Vec::new(),
         error: None,
       },
     );
 
-    for chunk in &chunks {
-      conversion.switch_to(chunk.state());
+    for chunk in &chunks.chunks {
+      conversion.switch_to(chunk.chunk.state());
       conversion.sink().emit(chunk);
     }
 
@@ -323,17 +332,18 @@ impl Emitter<'_> {
   fn emit_tagged_content(
     &mut self,
     node: &RenderNode,
+    content: &OwnContent<'_>,
     paint: &NodePaint,
     frame: BoxFrame,
     pass: InlinePass,
     surface: &mut Surface,
   ) -> Result<(), PdfError> {
-    let tagged = self.tagged && pass == InlinePass::Content && draws(&OwnContent::of(node));
+    let tagged = self.tagged && pass == InlinePass::Content && draws(content);
 
     if tagged {
       self.start_node_region(node, Some(&paint.path), surface);
     }
-    self.emit_own_content(node, paint.node_id, frame, pass, surface)?;
+    self.emit_own_content(node, content, paint.node_id, frame, pass, surface)?;
     if tagged {
       surface.end_tagged();
     }
@@ -752,12 +762,13 @@ impl Emitter<'_> {
   fn emit_own_content(
     &mut self,
     node: &RenderNode,
+    content: &OwnContent<'_>,
     node_id: NodeId,
     frame: BoxFrame,
     pass: InlinePass,
     surface: &mut Surface,
   ) -> Result<(), PdfError> {
-    match OwnContent::of(node) {
+    match *content {
       OwnContent::Inline(_) => self.emit_node_text(node, node_id, frame, pass, surface),
       #[cfg(feature = "images")]
       OwnContent::Image(image) if pass == InlinePass::Content => {
@@ -1111,6 +1122,7 @@ impl Emitter<'_> {
       scene: &scene,
       document: self.document,
       inline: None,
+      chunks: None,
       window: self.window.within(at),
       tagged,
       tag_prefix,
@@ -1402,9 +1414,13 @@ struct ChunkWriter<'w, 'a, 's> {
 impl<'a> ChunkWriter<'_, 'a, '_> {
   /// The box `paint` names and where it sits relative to the pushed transforms, pushing a
   /// transform when it needs more than a translation. Returns how many states went on.
-  fn place(&mut self, paint: &NodePaint) -> Option<(&'a RenderNode, BoxFrame, usize)> {
+  fn place(
+    &mut self,
+    node: Option<&'a RenderNode>,
+    paint: &NodePaint,
+  ) -> Option<(&'a RenderNode, BoxFrame, usize)> {
     let scene = self.emitter.scene;
-    let node = scene.root.node_at_path(&paint.path)?;
+    let node = node?;
     let layout = scene.results.layout(paint.node_id).ok()?;
     let relative = self.current.invert().unwrap_or(Affine::IDENTITY) * paint.transform;
 
@@ -1424,14 +1440,16 @@ impl<'a> ChunkWriter<'_, 'a, '_> {
   }
 
   /// Writes one chunk under the states already pushed.
-  fn emit(&mut self, chunk: &PaintChunk<'a>) {
+  fn emit(&mut self, resolved: &ResolvedChunk<'a>) {
+    let chunk = &resolved.chunk;
+
     // Skipping a chunk that paints outside the window only saves work; the page's own clip would
     // drop it anyway.
     if self.error.is_some() || self.emitter.window.excludes_bounds(chunk.node.paint_bounds) {
       return;
     }
 
-    let Some((node, frame, pushed)) = self.place(chunk.node) else {
+    let Some((node, frame, pushed)) = self.place(resolved.node, chunk.node) else {
       return;
     };
     let emitter = &mut *self.emitter;
@@ -1447,12 +1465,22 @@ impl<'a> ChunkWriter<'_, 'a, '_> {
           })
           .map_err(PdfError::from)
       }
-      ChunkPart::Content => {
-        emitter.emit_tagged_content(node, chunk.node, frame, InlinePass::Content, surface)
-      }
-      ChunkPart::Floats => {
-        emitter.emit_tagged_content(node, chunk.node, frame, InlinePass::Floats, surface)
-      }
+      ChunkPart::Content => emitter.emit_tagged_content(
+        node,
+        &resolved.content,
+        chunk.node,
+        frame,
+        InlinePass::Content,
+        surface,
+      ),
+      ChunkPart::Floats => emitter.emit_tagged_content(
+        node,
+        &resolved.content,
+        chunk.node,
+        frame,
+        InlinePass::Floats,
+        surface,
+      ),
       ChunkPart::Outline => {
         let outline = BoxPainter::new(&node.context, decoration_frame.layout)
           .pending_outline(decoration_frame.origin);
@@ -1560,7 +1588,7 @@ impl PropertySink for ChunkWriter<'_, '_, '_> {
 
       pushed += push_compositing(style, self.surface);
 
-      if let Some((_, frame, transformed)) = self.place(owner) {
+      if let Some((_, frame, transformed)) = self.place(Some(node), owner) {
         if transformed > 0 {
           self.current = owner.transform;
         }
