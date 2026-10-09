@@ -4,7 +4,7 @@
 use std::{mem::take, ops::Range};
 
 use takumi_core::{
-  geometry::{ComputedLayout as Layout, NodeId},
+  geometry::ComputedLayout as Layout,
   layout::tree::RenderNode,
   painter::{BoxPainter, OwnContent},
   scene::{NodePaint, PaintItemKind, Scene},
@@ -12,7 +12,7 @@ use takumi_core::{
 };
 
 use crate::{
-  inline::{inline_box_atoms, text_line_atoms, visit_inline_layout},
+  inline::{inline_box_atoms, text_line_atoms, visit_inline_lines},
   options::PdfError,
   pagination::{Atom, Paragraph},
 };
@@ -201,7 +201,7 @@ impl AtomCollector<'_> {
     match OwnContent::of(node) {
       OwnContent::Inline(_) => {
         shows = true;
-        self.text_atoms(node, paint.node_id, layout, y, atoms)?;
+        self.text_atoms(node, layout, y, atoms);
       }
       OwnContent::Image(_) => {
         shows = true;
@@ -217,15 +217,8 @@ impl AtomCollector<'_> {
 
   /// One atom per line box.
   /// The lines also form one [`Paragraph`] for the widow/orphan solver.
-  fn text_atoms(
-    &self,
-    node: &RenderNode,
-    node_id: NodeId,
-    layout: Layout,
-    y: f32,
-    atoms: &mut Atoms,
-  ) -> Result<(), PdfError> {
-    visit_inline_layout(None, node, node_id, layout, |built, runs, _| {
+  fn text_atoms(&self, node: &RenderNode, layout: Layout, y: f32, atoms: &mut Atoms) {
+    visit_inline_lines(node, layout, |built, _| {
       let start = atoms.extents.len();
 
       text_line_atoms(built, layout, y, &mut atoms.extents);
@@ -233,9 +226,8 @@ impl AtomCollector<'_> {
       // does not count them.
       let paragraph_end = atoms.extents.len();
 
-      inline_box_atoms(runs, layout, y, &mut atoms.extents);
+      inline_box_atoms(&built.inline_boxes(layout), layout, y, &mut atoms.extents);
       atoms.push_paragraph(node, start..paragraph_end);
-    })?;
-    Ok(())
+    });
   }
 }
