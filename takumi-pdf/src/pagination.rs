@@ -94,12 +94,23 @@ pub(crate) const MAX_PAGES: usize = 20_000;
 /// numbers.
 const COUNTER_PASSES: usize = 3;
 
-/// A table's repeatable header rows, in content coordinates. On every page
-/// that starts inside the table's body, the band paints again at the top of
-/// the window and the body shifts below it.
-pub(crate) struct HeaderBand {
+/// Which of a table's row groups a [`RepeatedSection`] repeats: Blink's
+/// `grouped_children.header` or `grouped_children.footer`.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(crate) enum SectionKind {
+  Header,
+  Footer,
+}
+
+/// A table's repeatable header or footer rows, in content coordinates. A
+/// header paints again at the top of every page that starts inside the table's
+/// body, and the body shifts below it. A footer paints again below the last row
+/// of every page the body breaks across, as in Blink's `TableLayoutAlgorithm`.
+pub(crate) struct RepeatedSection {
+  pub(crate) kind: SectionKind,
   pub(crate) top: f32,
   pub(crate) bottom: f32,
+  pub(crate) table_top: f32,
   pub(crate) table_bottom: f32,
   /// Horizontal extent of the table, which the replay clips to so content
   /// beside the table does not repeat with it.
@@ -107,12 +118,12 @@ pub(crate) struct HeaderBand {
   pub(crate) right: f32,
 }
 
-impl HeaderBand {
+impl RepeatedSection {
   pub(crate) fn height(&self) -> f32 {
     self.bottom - self.top
   }
 
-  /// The band's own extent as a paint window.
+  /// The section's own extent as a paint window.
   pub(crate) fn window(&self) -> Window {
     Window {
       y: Some((self.top, self.bottom)),
@@ -121,32 +132,50 @@ impl HeaderBand {
     }
   }
 
+  /// The window a replay paints through: the section's extent, owning the
+  /// lines on the side the body is not.
+  pub(crate) fn replay_window(&self) -> Window {
+    let lines = match self.kind {
+      SectionKind::Header => (f32::NEG_INFINITY, self.bottom),
+      SectionKind::Footer => (self.top, f32::INFINITY),
+    };
+
+    Window {
+      lines: Some(lines),
+      ..self.window()
+    }
+  }
+
   /// Whether a page starting at `y` shows this header again.
   fn repeats_at(&self, y: f32) -> bool {
-    self.bottom <= y + 0.5 && y + 0.5 < self.table_bottom
+    self.kind == SectionKind::Header && self.bottom <= y + 0.5 && y + 0.5 < self.table_bottom
   }
 
-  /// Every table header band eligible to repeat: css-tables-3 §repeated-headers
-  /// admits a header of at most a quarter of the fragmentainer.
+  /// Whether a page ending at `end` breaks the table's body, so it shows this
+  /// footer again below its last row.
+  fn repeats_before(&self, end: f32) -> bool {
+    self.kind == SectionKind::Footer && self.table_top < end - 0.5 && end <= self.top + 0.5
+  }
+
+  /// Every table header and footer eligible to repeat: css-tables-3
+  /// §repeated-headers admits a section of at most a quarter of the
+  /// fragmentainer.
   fn collect(tree: &PreparedTree, window: f32) -> Vec<Self> {
-    let mut bands = Vec::new();
+    let mut sections = Vec::new();
 
-    tree.for_each_paint(|paint| Self::collect_paint(tree, paint, &mut bands));
-    bands.retain(|band| band.height() > 0.0 && band.height() <= window / 4.0);
-    bands.sort_by(|a, b| a.top.total_cmp(&b.top));
-    bands
+    tree.for_each_paint(|paint| Self::collect_paint(tree, paint, &mut sections));
+    sections.retain(|section| section.height() > 0.0 && section.height() <= window / 4.0);
+    sections.sort_by(|a, b| a.top.total_cmp(&b.top));
+    sections
   }
 
-  fn collect_paint(tree: &PreparedTree, paint: &NodePaint, bands: &mut Vec<Self>) {
+  fn collect_paint(tree: &PreparedTree, paint: &NodePaint, sections: &mut Vec<Self>) {
     let Some(node) = tree.scene.root.node_at_path(&paint.path) else {
       return;
     };
-    let Some((start, end)) = node.table_header_lines else {
-      return;
-    };
     // Cell extents are measured in the table's own space, so anything beyond a
-    // translation would disagree with the transformed band; such a table is a
-    // monolithic atom anyway.
+    // translation would disagree with the transformed section; such a table is
+    // a monolithic atom anyway.
     let transform = paint.transform;
 
     if (transform.a - 1.0).abs() > 1e-3
@@ -159,7 +188,7 @@ impl HeaderBand {
     let Ok(layout) = tree.scene.results.layout(paint.node_id) else {
       return;
     };
-    let Some((table_left, table_top, table_right, table_bottom)) =
+    let Some((left, table_top, right, table_bottom)) =
       transformed_rect_extents(Point::ZERO, layout.size, paint.transform)
     else {
       return;
@@ -171,93 +200,165 @@ impl HeaderBand {
       return;
     };
     let content_top = table_top + layout.border.top + layout.padding.top;
-    let mut header_top = f32::MAX;
-    let mut header_bottom = f32::MIN;
-    let mut body_top = f32::MAX;
-
-    for ordered in children.iter() {
-      let Some(child) = rows.get(ordered.render_index) else {
-        continue;
-      };
-      let GridPlacement::Line(line) = child.context.style.grid_row_start else {
-        continue;
-      };
-      let Ok(cell) = tree.scene.results.layout(ordered.node_id) else {
-        continue;
-      };
-
-      if line >= start && line < end {
-        // A header cell whose rowspan reaches into the body would replay body
-        // area with the band; such a table does not repeat.
+    let cells: Vec<_> = children
+      .iter()
+      .filter_map(|ordered| {
+        let child = rows.get(ordered.render_index)?;
+        let GridPlacement::Line(line) = child.context.style.grid_row_start else {
+          return None;
+        };
         let GridPlacement::Span(GridPlacementSpan::Span(rowspan)) =
           child.context.style.grid_row_end
         else {
-          return;
+          return None;
         };
+        let cell = tree.scene.results.layout(ordered.node_id).ok()?;
+        let top = content_top + cell.location.y;
 
-        if line.saturating_add(rowspan as i16) > end {
-          return;
+        Some((
+          line,
+          line.saturating_add(rowspan as i16),
+          top,
+          top + cell.size.height,
+        ))
+      })
+      .collect();
+    let section = |kind, (start, end): (i16, i16)| {
+      let mut rows_top = f32::MAX;
+      let mut rows_bottom = f32::MIN;
+      // The body edge facing the section, so the `border-spacing` strip
+      // between them repeats with it, as Blink reserves it.
+      let mut body_edge: Option<f32> = None;
+
+      for &(line, span_end, top, bottom) in &cells {
+        if line >= start && line < end {
+          // A section cell whose rowspan reaches past the section would replay
+          // body area with it; such a table does not repeat.
+          if span_end > end {
+            return None;
+          }
+          rows_top = rows_top.min(top);
+          rows_bottom = rows_bottom.max(bottom);
+        } else if kind == SectionKind::Header && line >= end {
+          body_edge = Some(body_edge.map_or(top, |edge| edge.min(top)));
+        } else if kind == SectionKind::Footer && line < start {
+          if span_end > start {
+            return None;
+          }
+          body_edge = Some(body_edge.map_or(bottom, |edge| edge.max(bottom)));
         }
-        header_top = header_top.min(content_top + cell.location.y);
-        header_bottom = header_bottom.max(content_top + cell.location.y + cell.size.height);
-      } else if line >= end {
-        body_top = body_top.min(content_top + cell.location.y);
       }
-    }
+      if rows_top == f32::MAX {
+        return None;
+      }
 
-    // The band starts at the header cells, not the table edge: a top caption
-    // sits between the two and must not repeat. It runs to the first body row,
-    // so the `border-spacing` strip repeats with it, as Blink reserves it.
-    let band_bottom = if body_top < f32::MAX {
-      body_top.max(header_bottom)
-    } else {
-      header_bottom
+      // A header starts at its cells, not the table edge, so a top caption
+      // between the two does not repeat; a footer ends at its cells for the
+      // bottom caption.
+      let (top, bottom) = match kind {
+        SectionKind::Header => (
+          rows_top,
+          body_edge.map_or(rows_bottom, |edge| edge.max(rows_bottom)),
+        ),
+        SectionKind::Footer => (
+          body_edge.map_or(rows_top, |edge| edge.min(rows_top)),
+          rows_bottom,
+        ),
+      };
+
+      (bottom > top).then_some(Self {
+        kind,
+        top,
+        bottom,
+        table_top,
+        table_bottom,
+        left,
+        right,
+      })
     };
 
-    if header_top < f32::MAX && band_bottom > header_top {
-      bands.push(Self {
-        top: header_top,
-        bottom: band_bottom,
-        table_bottom,
-        left: table_left,
-        right: table_right,
-      });
-    }
+    sections.extend(
+      node
+        .table_header_lines
+        .and_then(|lines| section(SectionKind::Header, lines)),
+    );
+    sections.extend(
+      node
+        .table_footer_lines
+        .and_then(|lines| section(SectionKind::Footer, lines)),
+    );
   }
 
-  /// The bands a page starting at `y` replays, each with the window offset its
-  /// strip paints at, and the window height they take together. Bands whose
-  /// source ranges overlap vertically sit side by side, so they share one
-  /// strip instead of stacking; only bands below one another (nested
+  /// The headers a page starting at `y` replays, each with the window offset
+  /// its strip paints at, and the window height they take together. Headers
+  /// whose source ranges overlap vertically sit side by side, so they share
+  /// one strip instead of stacking; only headers below one another (nested
   /// continuations) stack.
-  pub(crate) fn replays(headers: &[Self], y: f32, window: f32) -> (f32, Vec<(f32, usize)>) {
+  pub(crate) fn header_replays(sections: &[Self], y: f32, window: f32) -> (f32, Vec<(f32, usize)>) {
+    Self::replays(sections, |section| section.repeats_at(y), window)
+  }
+
+  /// The footers a page ending at `end` replays below its last row, each with
+  /// its offset below that row, and the height they take together.
+  pub(crate) fn footer_replays(
+    sections: &[Self],
+    end: f32,
+    window: f32,
+  ) -> (f32, Vec<(f32, usize)>) {
+    Self::replays(sections, |section| section.repeats_before(end), window)
+  }
+
+  /// The window height the footers of the tables a page starting at `y` may
+  /// break take: Blink's `repeated_footer_block_size`, reserved while the rest
+  /// of the table does not fit.
+  fn footer_reserve(sections: &[Self], y: f32, window: f32) -> f32 {
+    let room = y + window - Self::header_replays(sections, y, window).0;
+
+    Self::replays(
+      sections,
+      |section| {
+        section.kind == SectionKind::Footer
+          && section.table_top < room
+          && section.top > y + 0.5
+          && section.bottom > room
+      },
+      window,
+    )
+    .0
+  }
+
+  fn replays(
+    sections: &[Self],
+    repeats: impl Fn(&Self) -> bool,
+    window: f32,
+  ) -> (f32, Vec<(f32, usize)>) {
     let mut slots = Vec::new();
     let mut offset = 0.0_f32;
     let mut strip: Option<(f32, f32)> = None;
 
-    for (index, band) in headers.iter().enumerate() {
-      if !band.repeats_at(y) {
+    for (index, section) in sections.iter().enumerate() {
+      if !repeats(section) {
         continue;
       }
       match &mut strip {
-        Some((bottom, height)) if band.top < *bottom => {
+        Some((bottom, height)) if section.top < *bottom => {
           slots.push((offset, index));
-          *bottom = bottom.max(band.bottom);
-          *height = height.max(band.height());
+          *bottom = bottom.max(section.bottom);
+          *height = height.max(section.height());
         }
         _ => {
           if let Some((_, height)) = strip.take() {
             offset += height;
           }
           slots.push((offset, index));
-          strip = Some((band.bottom, band.height()));
+          strip = Some((section.bottom, section.height()));
         }
       }
     }
     let reserved = offset + strip.map_or(0.0, |(_, height)| height);
 
-    // A band stack this tall starves the page; the headers stop repeating
-    // rather than squeezing the body out.
+    // A stack this tall starves the page; the sections stop repeating rather
+    // than squeezing the body out.
     if reserved > window / 2.0 {
       (0.0, Vec::new())
     } else {
@@ -273,7 +374,7 @@ pub(crate) struct Paginated {
   pub(crate) repeated: Vec<Repeatable>,
   pub(crate) starts: Vec<f32>,
   pub(crate) interactive: Interactive,
-  pub(crate) headers: Vec<HeaderBand>,
+  pub(crate) sections: Vec<RepeatedSection>,
   window: f32,
 }
 
@@ -287,8 +388,25 @@ pub(crate) struct PageSlice {
   pub(crate) paint_height: f32,
   /// Window height repeated table headers take above the content.
   pub(crate) reserved: f32,
-  /// The header bands this page replays, with each band's window offset.
+  /// The headers this page replays, with each one's window offset.
   pub(crate) replays: Vec<(f32, usize)>,
+  /// The footers this page replays, with each one's offset below the content.
+  pub(crate) footers: Vec<(f32, usize)>,
+}
+
+impl PageSlice {
+  /// Each section the page replays, with its offset from the window's top:
+  /// headers above the content, footers below it.
+  pub(crate) fn section_replays(&self) -> impl Iterator<Item = (f32, usize)> + '_ {
+    let content_bottom = self.reserved + self.paint_height;
+
+    self.replays.iter().copied().chain(
+      self
+        .footers
+        .iter()
+        .map(move |&(offset, index)| (content_bottom + offset, index)),
+    )
+  }
 }
 
 impl Paginated {
@@ -332,14 +450,14 @@ impl Paginated {
     let text_boxes = TextBox::collect(&content);
     let inline_map = build_inline_map(&text_boxes)?;
     let mut atoms = content.atom_collector(Some(&inline_map)).collect()?;
-    let headers = HeaderBand::collect(&content, frame.window_height);
+    let sections = RepeatedSection::collect(&content, frame.window_height);
 
-    // A repeating header is monolithic: a cut through it would show a partial
-    // header once and the full band again on the next page.
+    // A repeating section is monolithic: a cut through it would show part of
+    // it once and the whole section again on the next page.
     atoms
       .extents
-      .extend(headers.iter().map(|band| (band.top, band.bottom)));
-    let starts = atoms.page_starts(&headers, content.scene.size.height, frame.window_height);
+      .extend(sections.iter().map(|section| (section.top, section.bottom)));
+    let starts = atoms.page_starts(&sections, content.scene.size.height, frame.window_height);
     let interactive = Interactive::collect(&content);
 
     Ok(Self {
@@ -347,7 +465,7 @@ impl Paginated {
       repeated,
       starts,
       interactive,
-      headers,
+      sections,
       window: frame.window_height,
     })
   }
@@ -396,13 +514,14 @@ impl Paginated {
 
   /// Window height repeated headers take on the page starting at `start`.
   pub(crate) fn reserved_at(&self, start: f32) -> f32 {
-    HeaderBand::replays(&self.headers, start, self.window).0
+    RepeatedSection::header_replays(&self.sections, start, self.window).0
   }
 
   pub(crate) fn pages(&self) -> impl Iterator<Item = PageSlice> + '_ {
     self.starts.iter().enumerate().map(|(index, &start)| {
       let end = self.starts.get(index + 1).copied().unwrap_or(f32::INFINITY);
-      let (reserved, replays) = HeaderBand::replays(&self.headers, start, self.window);
+      let (reserved, replays) = RepeatedSection::header_replays(&self.sections, start, self.window);
+      let (_, footers) = RepeatedSection::footer_replays(&self.sections, end, self.window);
 
       PageSlice {
         index,
@@ -411,6 +530,7 @@ impl Paginated {
         paint_height: (end - start).min(self.window - reserved),
         reserved,
         replays,
+        footers,
       }
     })
   }
@@ -431,7 +551,12 @@ impl Paginated {
 /// A cut within that distance of a content edge lands on the edge instead of
 /// leaving a sub-pixel sliver on either page.
 impl Atoms {
-  pub(crate) fn page_starts(mut self, headers: &[HeaderBand], total: f32, window: f32) -> Vec<f32> {
+  pub(crate) fn page_starts(
+    mut self,
+    sections: &[RepeatedSection],
+    total: f32,
+    window: f32,
+  ) -> Vec<f32> {
     let Self {
       extents,
       forced,
@@ -471,7 +596,9 @@ impl Atoms {
 
     loop {
       let limit = edges.snap(
-        y0 + window - HeaderBand::replays(headers, y0, window).0,
+        y0 + window
+          - RepeatedSection::header_replays(sections, y0, window).0
+          - RepeatedSection::footer_reserve(sections, y0, window),
         y0 + 1.0,
       );
 
@@ -505,7 +632,8 @@ impl Atoms {
           // actually offers under its repeated headers. One taller than any page
           // moves there too when content precedes it on this one, then overflows
           // onto the pages after it, as Blink pushes monolithic content.
-          let fits = bottom - top <= window - HeaderBand::replays(headers, top, window).0;
+          let fits =
+            bottom - top <= window - RepeatedSection::header_replays(sections, top, window).0;
 
           if bottom > cut && (fits || overlaps(y0, top)) {
             pushed_up = pushed_up.min(top);

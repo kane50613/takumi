@@ -268,6 +268,9 @@ pub struct RenderNode {
   /// Grid lines a lowered table's header rows cover, as `[start, end)`, for
   /// paged output to repeat per css-tables-3 §repeated-headers.
   pub table_header_lines: Option<(i16, i16)>,
+  /// Grid lines a lowered table's footer rows cover, as `[start, end)`, for
+  /// paged output to repeat per css-tables-3 §repeated-headers.
+  pub table_footer_lines: Option<(i16, i16)>,
   /// The role this box had in a source table, kept through table lowering.
   pub table_part: Option<TablePart>,
   /// A lowered table's columns, sized once its width is known.
@@ -1433,6 +1436,7 @@ impl RenderNode {
       marker: None,
       force_inline_layout: false,
       table_header_lines: None,
+      table_footer_lines: None,
       table_part: None,
       table_columns: None,
     }

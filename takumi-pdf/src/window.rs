@@ -22,7 +22,7 @@ pub(crate) struct Window {
   /// skipped, so clipped-away content never reaches the content stream (or
   /// text extraction).
   pub(crate) y: Option<(f32, f32)>,
-  /// Horizontal paint window `[left, right)`: a repeated table header replays
+  /// Horizontal paint window `[left, right)`: a repeated table section replays
   /// only its own table's column of the scene.
   pub(crate) x: Option<(f32, f32)>,
   /// Text-line ownership window `[this page's cut, next page's cut)`. Wider
