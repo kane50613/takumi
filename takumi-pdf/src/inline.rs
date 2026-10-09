@@ -1,6 +1,8 @@
-//! Inline layout prepared once per render and shared by atom collection and page emission.
+//! Inline layout built on demand: atom collection lays each text box out once
+//! and lets it go, and page emission keeps a box's layout while consecutive
+//! pages show it.
 
-use std::collections::HashMap;
+use std::{cell::RefCell, collections::HashMap, mem::replace, rc::Rc};
 
 use takumi_core::{
   context::RenderContext,
@@ -19,16 +21,20 @@ use takumi_core::{
 
 use crate::{options::PdfError, pagination::Atom, tree::PreparedTree};
 
-/// A text box's inline layout, built once per render and reused by atom
-/// collection and every page's emission.
-pub(crate) struct PreparedInline<'c> {
+/// A text box's inline layout, kept for the pages that show it.
+struct PreparedInline<'c> {
   built: BuiltInlineLayout<'c>,
   runs: InlineRunLayout<'c>,
   font_style: &'c SizedFontStyle<'c>,
 }
 
-/// Inline layouts keyed by the box's layout [`NodeId`].
-pub(crate) type InlineMap<'c> = HashMap<NodeId, PreparedInline<'c>>;
+/// The text boxes' inline layouts, built on first use and dropped once a page
+/// goes by without using them.
+pub(crate) struct InlineCache<'c> {
+  boxes: HashMap<NodeId, &'c TextBox<'c>>,
+  /// Each built layout, and whether the page being emitted used it.
+  built: RefCell<HashMap<NodeId, (Rc<PreparedInline<'c>>, bool)>>,
+}
 
 /// A text-bearing box of a prepared tree, with the resolved font style its
 /// inline layout borrows.
@@ -65,45 +71,67 @@ impl<'t> TextBox<'t> {
   }
 }
 
-/// Builds every text box's inline layout once. Entries borrow the boxes'
-/// font styles, so the map lives no longer than `boxes`.
-pub(crate) fn build_inline_map<'c>(boxes: &'c [TextBox<'c>]) -> Result<InlineMap<'c>, PdfError> {
-  let mut map = InlineMap::new();
+impl<'c> InlineCache<'c> {
+  pub(crate) fn new(boxes: &'c [TextBox<'c>]) -> Self {
+    Self {
+      boxes: boxes
+        .iter()
+        .map(|text_box| (text_box.node_id, text_box))
+        .collect(),
+      built: RefCell::default(),
+    }
+  }
 
-  for text_box in boxes {
-    let Some(items) = OwnContent::of(text_box.node).inline_items(&text_box.font_style) else {
-      continue;
+  /// The layout of the text box at `node_id`, built now if no page kept it.
+  fn get(&self, node_id: NodeId) -> Result<Option<Rc<PreparedInline<'c>>>, PdfError> {
+    if let Some((prepared, used)) = self.built.borrow_mut().get_mut(&node_id) {
+      *used = true;
+      return Ok(Some(Rc::clone(prepared)));
+    }
+    let Some(text_box) = self.boxes.get(&node_id) else {
+      return Ok(None);
     };
-
+    let Some(items) = OwnContent::of(text_box.node).inline_items(&text_box.font_style) else {
+      return Ok(None);
+    };
     let (built, runs) = build_inline_runs(
       items,
       &text_box.font_style,
       &text_box.node.context,
       text_box.layout,
     )?;
+    let prepared = Rc::new(PreparedInline {
+      built,
+      runs,
+      font_style: &text_box.font_style,
+    });
 
-    map.insert(
-      text_box.node_id,
-      PreparedInline {
-        built,
-        runs,
-        font_style: &text_box.font_style,
-      },
-    );
+    self
+      .built
+      .borrow_mut()
+      .insert(node_id, (Rc::clone(&prepared), true));
+    Ok(Some(prepared))
   }
-  Ok(map)
+
+  /// Drops the layouts the page just emitted did not use.
+  pub(crate) fn end_page(&self) {
+    self
+      .built
+      .borrow_mut()
+      .retain(|_, (_, used)| replace(used, false));
+  }
 }
 
-/// Visits a text box's inline layout: the one `map` prepared, or one laid out
+/// Visits a text box's inline layout: the one `cache` holds, or one laid out
 /// now. `None` when the box lays out no runs.
 pub(crate) fn visit_inline_layout<R>(
-  map: Option<&InlineMap<'_>>,
+  cache: Option<&InlineCache<'_>>,
   node: &RenderNode,
   node_id: NodeId,
   layout: Layout,
   visit: impl FnOnce(&BuiltInlineLayout<'_>, &InlineRunLayout, &SizedFontStyle<'_>) -> R,
 ) -> Result<Option<R>, PdfError> {
-  if let Some(prepared) = map.and_then(|map| map.get(&node_id)) {
+  if let Some(prepared) = cache.map(|cache| cache.get(node_id)).transpose()?.flatten() {
     return Ok(Some(visit(
       &prepared.built,
       &prepared.runs,

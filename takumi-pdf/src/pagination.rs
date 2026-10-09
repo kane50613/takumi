@@ -13,7 +13,6 @@ use crate::{
   counters::{
     BoxPages, FlowCounters, has_page_counters, has_target_counters, substitute_target_counters,
   },
-  inline::{TextBox, build_inline_map},
   interactive::Interactive,
   options::PdfError,
   page::PageFrame,
@@ -329,9 +328,7 @@ impl Paginated {
 
   fn build_once(node: Node, inputs: &TreeInputs<'_>, frame: &PageFrame) -> Result<Self, PdfError> {
     let (content, repeated) = inputs.prepare_paged(node, frame)?;
-    let text_boxes = TextBox::collect(&content);
-    let inline_map = build_inline_map(&text_boxes)?;
-    let mut atoms = content.atom_collector(Some(&inline_map)).collect()?;
+    let mut atoms = content.atom_collector().collect()?;
     let headers = HeaderBand::collect(&content, frame.window_height);
 
     // A repeating header is monolithic: a cut through it would show a partial
