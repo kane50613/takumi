@@ -1030,6 +1030,34 @@ fn paged_widow_orphan_control() {
   );
 }
 
+/// A page writes only the clips and groups of the boxes it shows, not empty
+/// ones for every box on the other pages.
+#[test]
+fn a_page_skips_the_clips_of_other_pages() {
+  const BOXES: usize = 12;
+
+  let boxes = r#"<div style="overflow:hidden;height:40px;margin-bottom:10px;break-inside:avoid;border:1px solid #888"><div style="opacity:0.5">clipped</div></div>"#
+    .repeat(BOXES);
+  let pdf = run_pdf_fixture("paged-offpage-clips", |fonts| {
+    PdfOptions::builder()
+      .node(from_html(&boxes, FromHtmlOptions::default()).expect("parse boxes"))
+      .page(PageOptions {
+        width: 400.0,
+        height: 300.0,
+        margin: PageMargins::uniform(20.0),
+      })
+      .fonts(fonts)
+      .build()
+  });
+  let clips = content_lines(&pdf)
+    .filter(|line| line == b"W" || line == b"W*")
+    .count();
+
+  assert!(page_count(&pdf) > 1);
+  // One clip per page window, and a box's two clips on its own page only.
+  assert_eq!(clips, page_count(&pdf) + 2 * BOXES);
+}
+
 #[test]
 fn paged_breaks() {
   run_pdf_fixture("paged-breaks", |fonts| {
