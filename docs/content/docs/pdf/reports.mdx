@@ -106,7 +106,7 @@ Bands draw in the margin, so the margin has to be tall enough. [Headers & footer
 
 ## Long tables
 
-Use `<table>` markup. Rows split across pages, and column positions stay identical on every page. A `<thead>` [that qualifies](/docs/pdf/pagination#repeated-table-headers) repeats at the top of each continuation page:
+Use `<table>` markup. Rows split across pages, and column positions stay identical on every page. A `<thead>` [that qualifies](/docs/pdf/pagination#repeated-table-headers-and-footers) repeats at the top of each continuation page, and a `<tfoot>` below the last row of each page the table breaks across:
 
 ```tsx twoslash title="Repeat table headers"
 declare const rows: { id: string; label: string; amount: string }[];
