@@ -826,6 +826,12 @@ jobs:
           name: pdf-package
           path: takumi-pdf-js
 
+      - name: Download paint artifact
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: paint-package
+          path: takumi-paint
+
       - name: Publish PR previews
         run: >
           bunx pkg-pr-new@latest publish
@@ -836,6 +842,7 @@ jobs:
           ./takumi-js
           ./takumi-image-response
           ./takumi-pdf-js
+          ./takumi-paint
 
   pass-test:
     name: Pass Test
