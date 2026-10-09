@@ -14,10 +14,10 @@
 //! Columns take the widths `table_columns` shares out once layout knows the
 //! table's width, as fixed tracks.
 //!
-//! A grid places at most 10,000 rows, taffy's `MAX_GRID_TRACKS`. A taller table
-//! moves its body rows into grids of their own, cut where no rowspan crosses,
-//! which take the table's column tracks. Rows still overlap past the limit when
-//! a rowspan crosses an edge of the body, or chains more rows than a grid holds.
+//! A table taller than [`MAX_GRID_ROWS`] moves its body rows into grids of
+//! their own, cut where no rowspan crosses, which take the table's column
+//! tracks. Rows overlap past taffy's 10,000-row `MAX_GRID_TRACKS` when a
+//! rowspan crosses an edge of the body, or chains more rows than that.
 
 use std::{mem::take, ops::Range};
 
@@ -47,8 +47,11 @@ const MAX_COLSPAN: u16 = 1000;
 /// Blink's `kMaxRowSpan`.
 const MAX_ROWSPAN: u16 = 65534;
 
-/// The most rows one grid places: taffy clamps its lines to `MAX_GRID_TRACKS`.
-pub(super) const MAX_GRID_ROWS: usize = 10_000;
+/// The most rows a table lays out as one grid. taffy 0.14 scans every track of
+/// an axis for each item's automatic minimum size, so a grid's cost grows with
+/// the square of its rows. Upstream scans only the spanned tracks since
+/// <https://github.com/DioxusLabs/taffy/pull/1228>, not yet released.
+pub(super) const MAX_GRID_ROWS: usize = 2_000;
 
 /// Blink table-cell content alignment from `block_layout_algorithm_utils.cc`.
 #[derive(Clone, Copy, PartialEq)]
