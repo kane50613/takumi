@@ -9,14 +9,14 @@ use crate::{
       ExactFontMetrics, FontError, FontUnderline, PrimaryFontMetrics, RunFace, RunSynthesis,
       em_box_descent, run_normalized_coords, run_synthesis, run_variations,
     },
-    glyph::{ResolvedColorLayer, ResolvedGlyph, ResolvedOutlineGlyph},
+    glyph::{ResolvedColorLayer, ResolvedGlyphs, ResolvedOutlineGlyph},
   },
   sort_key::sort_by_key,
   style::{Affine, Color, Direction},
 };
 use parley::{GlyphRun, fontique::Blob};
 use skrifa::{FontRef, MetadataProvider, raw::types::F2Dot14};
-use std::{collections::HashMap, convert::Infallible, ops::Range, sync::Arc};
+use std::{collections::HashMap, convert::Infallible, ops::Range};
 
 use super::{
   BuiltInlineLayout, FontHeight, InlineBrush, PlacedItem, WalkedLine,
@@ -341,7 +341,7 @@ pub struct PositionedInlineRun {
   /// The shaped glyph run (metrics, brush, positioned glyphs, font).
   pub glyph_run: ShapedRun,
   /// Glyphs resolved to outlines/bitmaps, keyed by glyph id.
-  pub resolved_glyphs: HashMap<u32, Arc<ResolvedGlyph>>,
+  pub resolved_glyphs: ResolvedGlyphs,
   /// Text-fit scale state for the line.
   pub(crate) line_scale: LineScaleState,
   /// Cumulative in-flow inline-box width before this run on the line.
