@@ -147,26 +147,21 @@ pub(crate) fn visit_inline_layout<R>(
   Ok(Some(visit(&built, &runs, &font_style)))
 }
 
-/// One atom per text line: each run's ascent-to-descent band.
+/// One atom per line box: the lines stack edge to edge, so a cut between two
+/// of them straddles neither.
 pub(crate) fn text_line_atoms(
-  runs: &InlineRunLayout,
+  built: &BuiltInlineLayout<'_>,
   layout: Layout,
   y: f32,
   atoms: &mut Vec<Atom>,
 ) {
-  for run in &runs.runs {
-    let shaped = &run.glyph_run;
-    let Some(glyph) = shaped.glyphs.first() else {
-      continue;
-    };
-    let offset = run.glyph_offset(layout);
-    let baseline = y + offset.y + glyph.y;
+  let content_y = y + layout.content_box_offset().y;
 
-    atoms.push((
-      baseline - shaped.metrics.ascent,
-      baseline + shaped.metrics.descent,
-    ));
-  }
+  atoms.extend(
+    built
+      .line_boxes()
+      .map(|(top, bottom)| (content_y + top, content_y + bottom)),
+  );
 }
 
 /// Atomic vertical bands occupied by inline boxes: in-flow ones and floats

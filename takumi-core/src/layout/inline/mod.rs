@@ -291,6 +291,14 @@ impl BuiltInlineLayout<'_> {
     self.line_fits.get(index).copied().unwrap_or(LineFit::NONE)
   }
 
+  /// Each line box's top and bottom, below the content box's top.
+  pub fn line_boxes(&self) -> impl Iterator<Item = (f32, f32)> {
+    self
+      .line_metrics()
+      .into_iter()
+      .map(|line| (line.resolved_line_top, line.resolved_line_bottom))
+  }
+
   /// Resolved metrics for each line.
   pub(crate) fn line_metrics(&self) -> Vec<ResolvedLineMetrics> {
     resolve_inline_line_metrics(
