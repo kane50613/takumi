@@ -297,12 +297,14 @@ export const defaultStylePresets: Partial<Record<keyof JSX.IntrinsicElements, CS
   },
   thead: {
     display: "table-header-group",
+    breakInside: "avoid",
   },
   tbody: {
     display: "table-row-group",
   },
   tfoot: {
     display: "table-footer-group",
+    breakInside: "avoid",
   },
   tr: {
     display: "table-row",

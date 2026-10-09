@@ -150,9 +150,15 @@ const DEFAULT_PRESETS: &[(&str, &str)] = &[
     "table",
     "display:table;box-sizing:border-box;border-spacing:2px",
   ),
-  ("thead", "display:table-header-group;vertical-align:middle"),
+  (
+    "thead",
+    "display:table-header-group;vertical-align:middle;break-inside:avoid",
+  ),
   ("tbody", "display:table-row-group;vertical-align:middle"),
-  ("tfoot", "display:table-footer-group;vertical-align:middle"),
+  (
+    "tfoot",
+    "display:table-footer-group;vertical-align:middle;break-inside:avoid",
+  ),
   ("tr", "display:table-row;vertical-align:inherit"),
   (
     "td",

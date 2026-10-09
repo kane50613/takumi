@@ -29,10 +29,10 @@ use crate::{
   },
   sort_key::sort_by_key,
   style::{
-    BorderCollapse, BorderStyle, BoxSizing, CaptionSide, ColorInput, ComputedStyle, Display,
-    FlexDirection, FromCssStr, Gap, GridPlacement, GridPlacementSpan, GridTemplateComponents,
-    JustifyContent, Length, LineWidth, Size as StyleSize, SizingContext, SpacePair, TableLayout,
-    VerticalAlign, VerticalAlignKeyword,
+    BorderCollapse, BorderStyle, BoxSizing, BreakInside, CaptionSide, ColorInput, ComputedStyle,
+    Display, FlexDirection, FromCssStr, Gap, GridPlacement, GridPlacementSpan,
+    GridTemplateComponents, JustifyContent, Length, LineWidth, Size as StyleSize, SizingContext,
+    SpacePair, TableLayout, VerticalAlign, VerticalAlignKeyword,
   },
 };
 
@@ -92,6 +92,10 @@ struct TableSlots {
   rows: Vec<RenderNode>,
   header_rows: usize,
   footer_rows: usize,
+  /// Whether the first header and footer groups may repeat on every page:
+  /// Blink repeats one only with `break-inside: avoid` (`IsAvoidBreakValue`).
+  header_repeats: bool,
+  footer_repeats: bool,
   strays: Vec<RenderNode>,
 }
 
@@ -109,6 +113,8 @@ impl TableSlots {
     let mut captions = Vec::new();
     let mut groups: Vec<(u8, usize, Vec<RenderNode>)> = Vec::new();
     let mut strays = Vec::new();
+    let mut header_repeats = None;
+    let mut footer_repeats = None;
 
     let children = table.children.take().map_or_else(Vec::new, Vec::from);
 
@@ -118,6 +124,17 @@ impl TableSlots {
         Display::TableRow => groups.push((1, index, vec![child])),
         Display::TableHeaderGroup | Display::TableRowGroup | Display::TableFooterGroup => {
           let order = Self::group_order(child.context.style.display);
+          let avoids = child.context.style.break_inside == BreakInside::Avoid;
+
+          match child.context.style.display {
+            Display::TableHeaderGroup => {
+              header_repeats.get_or_insert(avoids);
+            }
+            Display::TableFooterGroup => {
+              footer_repeats.get_or_insert(avoids);
+            }
+            _ => {}
+          }
           let rows = child.children.take().map_or_else(Vec::new, Vec::from);
 
           groups.push((
@@ -151,6 +168,8 @@ impl TableSlots {
       rows,
       header_rows,
       footer_rows,
+      header_repeats: header_repeats.unwrap_or_default(),
+      footer_repeats: footer_repeats.unwrap_or_default(),
       strays,
     }
   }
@@ -365,6 +384,8 @@ impl RenderNode {
       mut rows,
       header_rows,
       footer_rows,
+      header_repeats,
+      footer_repeats,
       strays,
     } = TableSlots::collect(self);
 
@@ -425,7 +446,7 @@ impl RenderNode {
       line = line.saturating_add(1);
     }
 
-    if header_rows > 0 && header_rows < rows.len() {
+    if header_repeats && header_rows > 0 && header_rows < rows.len() {
       let start = line;
 
       self.table_header_lines = Some((start, start.saturating_add(header_rows as i16)));
@@ -433,7 +454,7 @@ impl RenderNode {
 
     let footer_start = rows.len() - footer_rows;
 
-    let repeats_footer = footer_rows > 0 && footer_rows < rows.len();
+    let repeats_footer = footer_repeats && footer_rows > 0 && footer_rows < rows.len();
 
     for (index, (mut row, positions)) in rows.into_iter().zip(placements).enumerate() {
       if repeats_footer && index == footer_start {
@@ -909,6 +930,8 @@ mod tests {
         .thead { display: table-header-group }
         .tbody { display: table-row-group }
         .tfoot { display: table-footer-group }
+        .thead-avoid { display: table-header-group; break-inside: avoid }
+        .tfoot-avoid { display: table-footer-group; break-inside: avoid }
         .tr { display: table-row }
         .td { display: table-cell }
         .caption { display: table-caption }
@@ -1059,6 +1082,27 @@ mod tests {
     );
 
     assert_eq!(ids(&tree), ["head", "body", "foot"]);
+  }
+
+  #[test]
+  fn only_sections_that_avoid_breaks_repeat() {
+    let table = |thead: &str, tfoot: &str| {
+      lower(
+        Node::container([
+          Node::container([row([cell("head")])]).with_class_name(thead),
+          Node::container([row([cell("body")])]).with_class_name("tbody"),
+          Node::container([row([cell("foot")])]).with_class_name(tfoot),
+        ])
+        .with_class_name("table"),
+      )
+    };
+    let plain = table("thead", "tfoot");
+    let avoiding = table("thead-avoid", "tfoot-avoid");
+
+    assert_eq!(plain.table_header_lines, None);
+    assert_eq!(plain.table_footer_lines, None);
+    assert_eq!(avoiding.table_header_lines, Some((1, 2)));
+    assert_eq!(avoiding.table_footer_lines, Some((3, 4)));
   }
 
   #[test]
