@@ -7,7 +7,7 @@ use crate::krilla::configure::{PdfVersion, ValidationError};
 use crate::krilla::error::KrillaResult;
 use crate::krilla::interchange::metadata::{Metadata, write_custom_properties};
 use crate::krilla::metadata::PageLayout;
-use crate::krilla::object_stream::{self, ObjectStream};
+use crate::krilla::object_stream::{self, ObjectStreams};
 use crate::krilla::serialize::SerializeContext;
 use crate::krilla::util::{Deferred, stable_hash_base64};
 
@@ -101,7 +101,7 @@ impl ChunkContainer {
   pub(crate) fn finish(
     mut self,
     sc: &mut SerializeContext,
-  ) -> KrillaResult<(Pdf, Ref, Option<ObjectStream>)> {
+  ) -> KrillaResult<(Pdf, Ref, Option<ObjectStreams>)> {
     let mut remapped_ref = Ref::new(1);
     let mut remapper = HashMap::new();
 
@@ -141,13 +141,13 @@ impl ChunkContainer {
     }
 
     // The structure tree's dictionaries compress well together and are the
-    // bulk of a tagged document, so they move into an object stream, which
-    // exists from PDF 1.5 onwards like the cross-reference stream that has to
+    // bulk of a tagged document, so they move into object streams, which
+    // exist from PDF 1.5 onwards like the cross-reference stream that has to
     // point at them.
     let object_stream = if sc.serialize_settings().pdf_version() >= PdfVersion::Pdf15 {
       self.non_stream.struct_elements.take().and_then(|chunk| {
         let renumbered = chunk.renumber(|old| remapper[&old]);
-        let packed = object_stream::pack(&renumbered, remapped_ref.bump(), &mut pdf);
+        let packed = object_stream::pack(&renumbered, &mut remapped_ref, &mut pdf);
 
         // Put the chunk back for the visit below to write as it stands.
         if packed.is_none() {
