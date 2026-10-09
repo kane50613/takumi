@@ -19,12 +19,13 @@ pub(crate) struct ObjectStream {
   entries: Vec<(i32, u16)>,
 }
 
-/// Moves a chunk's objects into an object stream written to `pdf`.
+/// Moves a chunk's objects into an object stream written to `pdf`, numbered
+/// from `next_ref`.
 ///
 /// Returns `None` when the chunk holds nothing to pack, or when its bytes do
 /// not read back as the plain sequence of dictionaries this expects, in which
 /// case the caller writes the chunk as it stands.
-pub(crate) fn pack(chunk: &Chunk, stream_ref: Ref, pdf: &mut Pdf) -> Option<ObjectStream> {
+pub(crate) fn pack(chunk: &Chunk, next_ref: &mut Ref, pdf: &mut Pdf) -> Option<ObjectStream> {
   let objects = split(chunk)?;
 
   if objects.len() < 2 {
@@ -48,6 +49,7 @@ pub(crate) fn pack(chunk: &Chunk, stream_ref: Ref, pdf: &mut Pdf) -> Option<Obje
 
   header.extend_from_slice(&bodies);
 
+  let stream_ref = next_ref.bump();
   let data = deflate_encode(&header);
   let mut stream = pdf.stream(stream_ref, &data);
 

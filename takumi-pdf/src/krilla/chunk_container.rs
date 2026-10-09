@@ -147,7 +147,7 @@ impl ChunkContainer {
     let object_stream = if sc.serialize_settings().pdf_version() >= PdfVersion::Pdf15 {
       self.non_stream.struct_elements.take().and_then(|chunk| {
         let renumbered = chunk.renumber(|old| remapper[&old]);
-        let packed = object_stream::pack(&renumbered, remapped_ref.bump(), &mut pdf);
+        let packed = object_stream::pack(&renumbered, &mut remapped_ref, &mut pdf);
 
         // Put the chunk back for the visit below to write as it stands.
         if packed.is_none() {
