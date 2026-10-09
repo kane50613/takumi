@@ -29,6 +29,7 @@ use crate::{
     },
     list_marker::{ListCounter, is_list_element, list_marker, owns_list_counter},
     node::{Node, NodeStyleLayers, TextData},
+    table::MAX_GRID_ROWS,
     table_columns::TableColumns,
   },
   matching::{MatchedDeclarationsView, NodeMatchedDeclarations, match_stylesheets_view},
@@ -239,6 +240,8 @@ pub enum TablePart {
   BodyCell,
   /// A cell from a `table-footer-group` row.
   FooterCell,
+  /// A run of body rows lowered onto a grid of its own, for a table taller than one grid.
+  BodyRows,
 }
 
 impl TablePart {
@@ -887,6 +890,37 @@ impl<'r> LayoutTree<'r> {
       node.flex_or_grid_item,
       &sizing,
     );
+
+    if render_node.table_columns.is_some() {
+      self.share_column_tracks(node_id);
+    }
+  }
+
+  /// Gives a lowered table's [`TablePart::BodyRows`] grids the column tracks it just sized.
+  fn share_column_tracks(&mut self, table: TaffyNodeId) {
+    let Some(state) = self.get_layout_node_ref(table) else {
+      return;
+    };
+    let tracks = state.style.grid_template_columns.clone();
+    let children = state.children.clone();
+
+    for child in children {
+      let index = usize::from(child);
+
+      if self
+        .render_nodes
+        .get(index)
+        .is_none_or(|rows| rows.table_part != Some(TablePart::BodyRows))
+      {
+        continue;
+      }
+      if let Some(rows) = self.nodes.get_mut(index)
+        && rows.style.grid_template_columns != tracks
+      {
+        rows.style.grid_template_columns.clone_from(&tracks);
+        rows.cache.clear();
+      }
+    }
   }
 }
 
@@ -1772,6 +1806,15 @@ impl RenderNode {
 
   /// Builds a render tree from a node under the given parent context.
   pub fn from_node(parent_context: &RenderContext, node: Node) -> Self {
+    Self::from_node_within(parent_context, node, MAX_GRID_ROWS)
+  }
+
+  /// [`Self::from_node`], with every table lowered onto grids of at most `max_rows` rows.
+  pub(super) fn from_node_within(
+    parent_context: &RenderContext,
+    node: Node,
+    max_rows: usize,
+  ) -> Self {
     let matched_styles = match_stylesheets_view(
       &node,
       parent_context.stylesheet(),
@@ -1779,7 +1822,7 @@ impl RenderNode {
     );
     let mut tree = Self::from_node_iterative(parent_context, node, &matched_styles);
 
-    tree.lower_tables();
+    tree.lower_tables(max_rows);
 
     if tree.is_inline_level() {
       tree.context.style.display.blockify();
