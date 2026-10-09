@@ -88,12 +88,13 @@ const pdf = await render(
 );
 ```
 
-## Repeated table headers
+## Repeated table headers and footers
 
-Use `<thead>` for column headings that repeat on continuation pages. The header stays together, including its spacing before the first body row.
+Use `<thead>` for column headings that repeat at the top of continuation pages, and `<tfoot>` for rows that repeat below the last row of every page the table breaks across. Each stays together, including its spacing next to the body.
 
-```tsx twoslash title="Repeated table headers"
+```tsx twoslash title="Repeated table headers and footers"
 declare const rows: import("react").ReactNode;
+declare const total: string;
 // ---cut---
 import { render } from "takumi-pdf";
 
@@ -106,11 +107,17 @@ const pdf = await render(
       </tr>
     </thead>
     <tbody>{rows}</tbody>
+    <tfoot>
+      <tr>
+        <td>Total</td>
+        <td>{total}</td>
+      </tr>
+    </tfoot>
   </table>,
 );
 ```
 
-A header taller than a quarter of the page does not repeat, matching Chromium. A header cell whose `rowspan` reaches into the body suppresses repetition for that table. `<tfoot>` renders once, after the body.
+A header or footer taller than a quarter of the page does not repeat, matching Chromium. A header or footer cell whose `rowspan` reaches into the body suppresses repetition for that table.
 
 ## Page ranges
 
