@@ -2,8 +2,9 @@
 //! bounds. Raster and SVG backends consume this instead of each walking the node tree
 //! independently.
 
-use std::{collections::HashMap, convert::Infallible};
+use std::{collections::HashMap, convert::Infallible, sync::Arc};
 
+use rustc_hash::FxHashMap;
 use skrifa::FontRef;
 
 use crate::{
@@ -22,6 +23,7 @@ use crate::{
   },
   paint_chunk::PaintChunk,
   paint_property::{ContainerContents, NodeProperties, PropertyState, PropertyTrees},
+  resources::glyph::ResolvedGlyph,
   shadow::SizedShadow,
   sort_key::sort_by_key,
   style::{Affine, BlurType, ComputedStyle, Display, Float},
@@ -348,6 +350,7 @@ impl SceneRequest<'_> {
     let mut containing_blocks = ContainingBlocks::default();
     let mut properties = PropertyTrees::default();
     let mut contents: HashMap<NodeId, ContainerContents> = HashMap::new();
+    let mut glyph_ink = GlyphInk::default();
     let mut visits = vec![StackingContextBuildVisit {
       path: Vec::new(),
       node_id: NodeId::ROOT,
@@ -417,7 +420,7 @@ impl SceneRequest<'_> {
         paint_offset: child_base.paint_offset,
         container_size: visit.container_size,
         paint_bounds: with_bounds
-          .then(|| compute_node_paint_bounds(current, layout, current_transform))
+          .then(|| compute_node_paint_bounds(current, layout, current_transform, &mut glyph_ink))
           .flatten(),
         properties: node_properties,
       };
@@ -851,10 +854,29 @@ fn outset_bounds(
   Some(bounds)
 }
 
+/// A glyph's ink box as `(min_x, min_y, max_x, max_y)`, `None` for a glyph with no ink.
+type InkExtents = Option<(f32, f32, f32, f32)>;
+
+/// Each resolved glyph's ink extents once read. An entry holds its glyph, so the address it is
+/// keyed on cannot pass to another glyph while the scene is built.
+#[derive(Default)]
+struct GlyphInk(FxHashMap<*const ResolvedGlyph, (Arc<ResolvedGlyph>, InkExtents)>);
+
+impl GlyphInk {
+  fn extents(&mut self, glyph: &Arc<ResolvedGlyph>) -> InkExtents {
+    self
+      .0
+      .entry(Arc::as_ptr(glyph))
+      .or_insert_with(|| (Arc::clone(glyph), glyph.ink_extents()))
+      .1
+  }
+}
+
 fn compute_node_paint_bounds(
   node: &RenderNode,
   layout: ComputedLayout,
   transform: Affine,
+  glyph_ink: &mut GlyphInk,
 ) -> Option<SceneBounds> {
   let mut bounds = outset_bounds(
     SceneBounds::of_rect(layout.size, transform),
@@ -977,7 +999,7 @@ fn compute_node_paint_bounds(
         for (index, glyph) in glyph_run.positioned_glyphs().enumerate() {
           let Some((min_x, min_y, max_x, max_y)) = resolved_glyphs
             .get(&glyph.id)
-            .and_then(|glyph| glyph.ink_extents())
+            .and_then(|glyph| glyph_ink.extents(glyph))
           else {
             continue;
           };
