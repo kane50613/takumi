@@ -887,6 +887,27 @@ mod matching_tests {
   }
 
   #[test]
+  fn one_stylesheet_matches_media_queries_per_viewport() {
+    let root = container_with_class("card");
+    let stylesheet = parse_stylesheet(
+      r#"
+        .card { width: 10px; }
+        @media (min-width: 600px) {
+          .card { width: 20px; }
+        }
+      "#,
+    );
+
+    for (viewport, width) in [((400, 300), 10.0), ((800, 600), 20.0), ((400, 300), 10.0)] {
+      let matched = match_stylesheets_view(&root, &stylesheet, Viewport::new(viewport));
+      assert_eq!(
+        computed_style_from_matches(matched[0].element()).width,
+        Length::Px(width).into()
+      );
+    }
+  }
+
+  #[test]
   fn nested_selector_uses_parent_list_specificity() {
     let root = Node::container([container_with_class("title")]).with_class_name("card notice");
 

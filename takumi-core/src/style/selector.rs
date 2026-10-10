@@ -3,7 +3,7 @@ use std::{
   fmt::{self, Write},
   mem::take,
   ops::Deref,
-  sync::LazyLock,
+  sync::{Arc, LazyLock},
 };
 
 use cssparser::*;
@@ -17,6 +17,7 @@ pub use crate::style::media_query::MediaQueryList;
 use crate::{
   error::{StyleSheetParseError, StyleSheetParseErrorKind},
   keyframes::parse_keyframe_prelude,
+  matching::RuleIndex,
   style::{
     BreakpointOverrides, FromCssStr, KeyframeRule, KeyframesRule, Length, StyleDeclaration,
     StyleDeclarationBlock, expand_apply, supports::parse_supports_condition,
@@ -1230,8 +1231,10 @@ impl<'i> AtRuleParser<'i> for RuleParser {
 /// Defines a stylesheet with rules, keyframes, and property rules.
 #[derive(Debug, Clone, Default)]
 pub struct StyleSheet {
-  /// Style rules in source order.
-  pub(crate) rules: Vec<CssRule>,
+  /// Style rules in source order, shared by clones.
+  rules: Arc<[CssRule]>,
+  /// Index over `rules`, built with them; `rules` never changes afterwards.
+  rule_index: Arc<RuleIndex>,
   /// `@keyframes` rules.
   pub(crate) keyframes: Vec<KeyframesRule>,
   /// `@property` rules.
@@ -1353,6 +1356,16 @@ const PREFLIGHT_CSS: &str = r"
 ";
 
 impl StyleSheet {
+  /// Style rules in source order.
+  pub(crate) fn rules(&self) -> &[CssRule] {
+    &self.rules
+  }
+
+  /// The index over [`Self::rules`].
+  pub(crate) fn rule_index(&self) -> &RuleIndex {
+    &self.rule_index
+  }
+
   /// The `@property` registrations declared by this stylesheet.
   pub(crate) fn property_rules(&self) -> &[PropertyRule] {
     &self.property_rules
@@ -1441,7 +1454,7 @@ impl StyleSheet {
 
     if preflight {
       static PREFLIGHT_RULES: LazyLock<Vec<CssRule>> =
-        LazyLock::new(|| StyleSheet::parse_loosy(PREFLIGHT_CSS).rules);
+        LazyLock::new(|| StyleSheet::parse_loosy(PREFLIGHT_CSS).rules.to_vec());
 
       let mut preflight_rules = PREFLIGHT_RULES.clone();
       declared_layers.splice(
@@ -1474,7 +1487,8 @@ impl StyleSheet {
 
     Ok(Self {
       breakpoints: collect_breakpoints(&rules),
-      rules,
+      rule_index: Arc::new(RuleIndex::build(&rules)),
+      rules: rules.into(),
       keyframes,
       property_rules,
       layer_count: layer_order.len(),
@@ -2902,7 +2916,7 @@ mod tests {
     let sheet = parse_stylesheet(".card { width: 100px; @apply mt-4; height: 50px; }");
 
     assert_eq!(sheet.rules.len(), 3);
-    for rule in &sheet.rules {
+    for rule in sheet.rules.iter() {
       assert_eq!(selector_text(rule), ".card");
     }
     assert_eq!(
