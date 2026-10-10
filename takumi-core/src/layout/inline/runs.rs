@@ -127,6 +127,7 @@ pub(super) fn glyph_clusters(
 /// A shaped, positioned glyph run — the core-owned replacement for
 /// `parley::GlyphRun`. Owns everything both backends need to paint a run; carries
 /// no borrow into the parley layout.
+#[derive(Clone)]
 pub struct ShapedRun {
   /// The run's glyphs, positioned from the line origin.
   pub glyphs: Vec<PositionedGlyph>,
@@ -439,7 +440,9 @@ impl<'c> BuiltInlineLayout<'c> {
     context: &RenderContext,
     layout: ComputedLayout,
   ) -> Result<InlineRunLayout<'c>, FontError> {
-    self.fragment_items(layout).resolve_runs(context, layout)
+    self
+      .fragment_items(layout)
+      .resolve_runs(&self.spans, context, layout)
   }
 
   /// The placed inline boxes, floats included, in id order, without resolving a glyph: what

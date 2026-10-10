@@ -18,10 +18,7 @@ use crate::{
   geometry::{ComputedLayout, Point, Size},
   layout::{
     background_image_geometry::{BoxBackgroundPaintContext, FillLayers},
-    inline::{
-      BuiltInlineLayout, InlineLayoutMode, InlineLayoutRequest, InlinePass, InlineRunLayout,
-      ProcessedInlineSpan, create_inline_layout,
-    },
+    inline::{InlinePass, ProcessedInlineSpan},
     inline_box::{InlineBoxPaint, resolve_inline_box},
     node::{ImageData, ImageSourceInput, NodeKind as InputKind},
     tree::RenderNode,
@@ -30,7 +27,7 @@ use crate::{
   paint_property::{ClipId, ClipNode, EffectId, EffectNode},
   painter::{
     BackgroundClipArea, BoxFrame, BoxPainter, FillShape, OverflowClip, OwnContent, PaintDevice,
-    TextClip,
+    PaintedInline, TextClip,
   },
   resources::image::{sniff_mime, to_data_url},
   scene::{NodePaint, Scene},
@@ -285,28 +282,22 @@ impl Walker {
     } = placed;
     let context = &node.context;
     let font_style = SizedFontStyle::from_style(&context.style, context);
-    let Some(items) = OwnContent::of(node).inline_items(&font_style) else {
+    let Some(painted) = OwnContent::of(node).lay_out_inline(&font_style, layout) else {
       return Ok(());
     };
-    let built = create_inline_layout(InlineLayoutRequest::in_content_box(
-      items,
-      layout.content_box_size(),
-      &font_style,
-      context,
-      InlineLayoutMode::Draw,
-    ));
-    let runs = built.resolve_runs(context, layout)?;
+    let painted = painted?;
 
     if pass == InlinePass::Content {
-      self.text(placed, &built, &runs, &font_style);
+      self.text(placed, &painted, &font_style);
     }
 
-    for inline_box in runs
+    for inline_box in painted
+      .runs
       .inline_boxes
       .iter()
       .filter(|inline_box| pass.paints(inline_box))
     {
-      let Some(ProcessedInlineSpan::Box(item)) = built.spans.get(inline_box.id as usize) else {
+      let Some(ProcessedInlineSpan::Box(item)) = painted.spans.get(inline_box.id as usize) else {
         continue;
       };
       let Some((offset, paint)) = resolve_inline_box(inline_box, item, layout) else {
@@ -385,14 +376,8 @@ impl Walker {
     Ok(())
   }
 
-  /// Records the node's text: the runs `built` lays out, painted in the style `font_style`.
-  fn text(
-    &mut self,
-    placed: Placed<'_>,
-    built: &BuiltInlineLayout<'_>,
-    runs: &InlineRunLayout,
-    font_style: &SizedFontStyle,
-  ) {
+  /// Records the node's text: the runs `painted` lays out, painted in the style `font_style`.
+  fn text(&mut self, placed: Placed<'_>, painted: &PaintedInline<'_>, font_style: &SizedFontStyle) {
     let Placed {
       node,
       layout,
@@ -400,7 +385,8 @@ impl Walker {
       path,
       parent,
     } = placed;
-    let BuiltInlineLayout { spans, text, .. } = built;
+    let PaintedInline { spans, runs, .. } = painted;
+    let text = painted.text();
     let context = &node.context;
     let mut recorder = Recorder::text(transform);
 

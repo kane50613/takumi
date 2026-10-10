@@ -1,6 +1,6 @@
 use std::{
-  borrow::Cow, collections::HashMap, hash::Hasher, iter::Copied, mem::take, ptr, rc::Rc, slice,
-  vec::IntoIter,
+  borrow::Cow, cell::RefCell, collections::HashMap, hash::Hasher, iter::Copied, mem::take, ptr,
+  rc::Rc, slice, vec::IntoIter,
 };
 
 use parley::fontique::{Attributes, FontStyle as FontiqueStyle};
@@ -23,9 +23,9 @@ use crate::{
   geometry::{AvailableSpace, ComputedLayout, NodeId, Point, Rect, Size},
   layout::{
     inline::{
-      InlineContentKind, InlineItem, InlineLayoutMode, InlineLayoutRequest, InlineMeasureOptions,
-      InlineOutOfFlow, PaddingBox, StaticPosition, collect_inline_items, create_inline_constraint,
-      create_inline_layout,
+      ContentBox, FragmentItems, InlineContentKind, InlineItem, InlineLayoutMode,
+      InlineLayoutRequest, InlineMeasureOptions, InlineOutOfFlow, PaddingBox, StaticPosition,
+      collect_inline_items, create_inline_constraint, create_inline_layout,
     },
     list_marker::{ListCounter, is_list_element, list_marker, owns_list_counter},
     node::{Node, NodeStyleLayers, TextData},
@@ -272,6 +272,8 @@ pub struct RenderNode {
   pub table_part: Option<TablePart>,
   /// A lowered table's columns, sized once its width is known.
   pub(crate) table_columns: Option<Box<TableColumns>>,
+  /// The fragment items its inline content last laid out to.
+  pub(crate) fragment_items: FragmentItemsCache,
 }
 
 /// Drops the render tree iteratively; recursive drop glue overflows the stack
@@ -292,6 +294,23 @@ impl Drop for RenderNode {
     while let Some(mut node) = stack.pop() {
       collect(&mut node, &mut stack);
     }
+  }
+}
+
+/// The fragment items a node's inline content last laid out to. They belong to that node, so a
+/// clone, which may change its style or content, starts without them.
+#[derive(Default)]
+pub(crate) struct FragmentItemsCache(RefCell<Option<Rc<FragmentItems>>>);
+
+impl FragmentItemsCache {
+  pub(crate) fn keep(&self, items: Rc<FragmentItems>) {
+    self.0.replace(Some(items));
+  }
+}
+
+impl Clone for FragmentItemsCache {
+  fn clone(&self) -> Self {
+    Self::default()
   }
 }
 
@@ -1435,6 +1454,31 @@ impl RenderNode {
       table_header_lines: None,
       table_part: None,
       table_columns: None,
+      fragment_items: FragmentItemsCache::default(),
+    }
+  }
+
+  /// The fragment items its inline content laid out to in the content box of `layout`, if it
+  /// laid out there last.
+  pub(crate) fn fragment_items_in(&self, layout: ComputedLayout) -> Option<Rc<FragmentItems>> {
+    self
+      .fragment_items
+      .0
+      .borrow()
+      .as_ref()
+      .filter(|items| items.content_box == ContentBox::of(layout))
+      .map(Rc::clone)
+  }
+
+  /// Forgets the fragment items it and the boxes under it laid out to, which no longer hold once
+  /// the tree may have changed since.
+  pub(crate) fn clear_fragment_items(&self) {
+    let mut stack = vec![self];
+
+    while let Some(node) = stack.pop() {
+      node.fragment_items.0.take();
+      stack.extend(node.children.iter().flatten());
+      stack.extend(node.marker.as_deref());
     }
   }
 
