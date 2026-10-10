@@ -236,9 +236,8 @@ pub struct Fonts {
   #[cfg(feature = "svg")]
   svg_db: Option<Arc<Database>>,
   /// Stamped from a process-wide counter on every registration, so
-  /// font-dependent caches (SVG `<text>` trees and their rasterizations,
-  /// the cross-render shape cache) can tell any two registry states apart,
-  /// including across `Fonts` instances.
+  /// font-dependent caches (SVG `<text>` trees and their rasterizations) can
+  /// tell any two registry states apart, including across `Fonts` instances.
   revision: u64,
 }
 
@@ -306,6 +305,11 @@ impl FontsSnapshot {
   /// Identifies the resolved fallback family chain this snapshot was built with.
   pub(crate) fn fallback_signature(&self) -> u64 {
     self.fallback_signature
+  }
+
+  /// `(revision, fallback_signature)`, what the shape cache keys on besides content.
+  pub(crate) fn cache_stamp(&self) -> (u64, u64) {
+    (self.revision(), self.fallback_signature())
   }
 }
 

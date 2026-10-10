@@ -36,8 +36,7 @@ pub fn set_glyph_cache_max_bytes(bytes: f64) {
   glyph_cache::set_glyph_cache_max_bytes(bytes.max(0.0) as usize);
 }
 
-/// Sets the byte budget for the shaped-text cache shared by every renderer
-/// in the process; `0` disables it. Call before the first render. Defaults to 4 MiB.
+/// Sets the shaped-text cache's byte budget (default 4 MiB); `0` disables it. Call before the first render.
 #[napi(js_name = "setShapeCacheMaxBytes")]
 pub fn set_shape_cache_max_bytes(bytes: f64) {
   shape_cache::set_shape_cache_max_bytes(bytes.max(0.0) as usize);

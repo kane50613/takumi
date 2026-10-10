@@ -1111,33 +1111,31 @@ fn shape_spans(
       joined
     })
   });
-  let global_key = cache_key.map(|fingerprint| {
-    shape_cache::key(
-      fingerprint,
-      context.fonts().revision(),
-      context.fonts().fallback_signature(),
-    )
-  });
-
-  if let Some((key, expected)) = global_key.zip(expected_text.as_deref())
-    && let Some(cached) = shape_cache::get(key, expected)
-  {
-    return cached;
-  }
-
-  let shaped = context
-    .inline_cache()
-    .get_or_shape(cache_key.zip(expected_text.as_deref()), || {
-      context.tree_builder(style.into(), chromium_line_breaks(spans), |builder| {
-        push_spans_into_builder(builder, spans, &context.fonts().classes)
+  let shape_locally = || {
+    context
+      .inline_cache()
+      .get_or_shape(cache_key.zip(expected_text.as_deref()), || {
+        context.tree_builder(style.into(), chromium_line_breaks(spans), |builder| {
+          push_spans_into_builder(builder, spans, &context.fonts().classes)
+        })
       })
-    });
+  };
 
-  if let Some(key) = global_key {
-    shape_cache::insert(key, shaped.clone());
+  match cache_key.zip(expected_text.as_deref()) {
+    Some((fingerprint, expected)) => {
+      let (revision, fallback_signature) = context.fonts().cache_stamp();
+      shape_cache::get_or_shape(
+        shape_cache::CacheKeyParts {
+          fingerprint,
+          revision,
+          fallback_signature,
+        },
+        expected,
+        shape_locally,
+      )
+    }
+    None => shape_locally(),
   }
-
-  shaped
 }
 
 /// Indents `layout` and breaks it at `options.max_width`; true when `options.max_height` may have
