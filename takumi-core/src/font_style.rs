@@ -328,11 +328,11 @@ impl SizedFontStyle<'_> {
       feature.tag.hash(hasher);
       feature.value.hash(hasher);
     }
-    (parent.rare_inherited_data.word_break as u8).hash(hasher);
-    discriminant(&parent.rare_inherited_data.overflow_wrap.into_parley()).hash(hasher);
+    (parent.misc_inherited_data.word_break as u8).hash(hasher);
+    discriminant(&parent.misc_inherited_data.overflow_wrap.into_parley()).hash(hasher);
     discriminant(&parent.base_data.display).hash(hasher);
     parent.svg_data.opacity.0.to_bits().hash(hasher);
-    (parent.rare_inherited_data.text_decoration_skip_ink as u8).hash(hasher);
+    (parent.misc_inherited_data.text_decoration_skip_ink as u8).hash(hasher);
     (parent.inherited_data.font_synthesis_weight as u8).hash(hasher);
     (parent.inherited_data.font_synthesis_style as u8).hash(hasher);
     match &parent.base_data.vertical_align {
@@ -377,13 +377,13 @@ impl<'s> From<&'s SizedFontStyle<'s>> for TextStyle<'s, 's, InlineBrush> {
       font_family: style.font_family.to_parley(),
       letter_spacing: style.letter_spacing,
       word_spacing: style.word_spacing,
-      word_break: style.parent.rare_inherited_data.word_break.into_parley(),
-      overflow_wrap: if style.parent.rare_inherited_data.word_break == WordBreak::BreakWord {
+      word_break: style.parent.misc_inherited_data.word_break.into_parley(),
+      overflow_wrap: if style.parent.misc_inherited_data.word_break == WordBreak::BreakWord {
         // When word-break is break-word, ignore the overflow-wrap property's value.
         // https://developer.mozilla.org/en-US/docs/Web/CSS/word-break#break-word
         parley::OverflowWrap::Anywhere
       } else {
-        style.parent.rare_inherited_data.overflow_wrap.into_parley()
+        style.parent.misc_inherited_data.overflow_wrap.into_parley()
       },
       brush: InlineBrush {
         source_span_id: None,
@@ -396,7 +396,7 @@ impl<'s> From<&'s SizedFontStyle<'s>> for TextStyle<'s, 's, InlineBrush> {
         },
         color: style.color,
         decorations: style.text_decorations.clone(),
-        decoration_skip_ink: style.parent.rare_inherited_data.text_decoration_skip_ink,
+        decoration_skip_ink: style.parent.misc_inherited_data.text_decoration_skip_ink,
         stroke_color: style.text_stroke_color,
         stroke_width: style.stroke_width,
         font_synthesis: FontSynthesis {
@@ -438,7 +438,7 @@ fn resolved_text_shadows(
   context: &RenderContext,
 ) -> SmallVec<[SizedShadow; 4]> {
   style
-    .rare_inherited_data
+    .misc_inherited1_data
     .text_shadow
     .as_ref()
     .map_or_else(SmallVec::new, |shadows| {
@@ -566,7 +566,7 @@ impl<'s> SizedFontStyle<'s> {
       line_height,
       box_line_height,
       stroke_width: style
-        .rare_inherited_data
+        .misc_inherited1_data
         .webkit_text_stroke_width
         .unwrap_or_default()
         .to_px(&context.sizing, context.sizing.font_size),
@@ -580,12 +580,12 @@ impl<'s> SizedFontStyle<'s> {
         .to_px(&context.sizing, context.sizing.font_size),
       text_shadow: resolved_text_shadows(style, context),
       color: style
-        .rare_inherited_data
+        .misc_inherited1_data
         .webkit_text_fill_color
         .unwrap_or(style.inherited_data.color)
         .resolve(context.current_color),
       text_stroke_color: style
-        .rare_inherited_data
+        .misc_inherited1_data
         .webkit_text_stroke_color
         .unwrap_or_default()
         .resolve(context.current_color),

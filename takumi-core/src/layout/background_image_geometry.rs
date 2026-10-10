@@ -107,9 +107,9 @@ impl<'s> FillLayers<'s> {
   pub fn mask(style: &'s ComputedStyle) -> Self {
     Self {
       kind: FillLayerType::Mask,
-      sizes: &style.rare_non_inherited_data.mask_size,
-      positions: &style.rare_non_inherited_data.mask_position,
-      repeats: &style.rare_non_inherited_data.mask_repeat,
+      sizes: &style.misc2_data.mask_size,
+      positions: &style.misc2_data.mask_position,
+      repeats: &style.misc2_data.mask_repeat,
       blend_modes: &[],
       clip: FillBox::Border,
       origin: FillBox::Border,

@@ -404,8 +404,7 @@ impl TableBuilder {
     walk: &mut Walk,
     nesting: Nesting,
   ) {
-    let GridPlacement::Line(line) = cell.context.style.rare_non_inherited_data.grid_row_start
-    else {
+    let GridPlacement::Line(line) = cell.context.style.misc2_data.grid_row_start else {
       return;
     };
     let kind = cell_kind(cell, part);
@@ -440,8 +439,8 @@ fn placement_span(placement: &GridPlacement) -> Option<NonZeroU32> {
 fn cell_kind(cell: &RenderNode, part: TablePart) -> Tag {
   let source = cell.node.as_ref();
   let tag_name = source.and_then(|node| node.tag_name());
-  let row_span = placement_span(&cell.context.style.rare_non_inherited_data.grid_row_end);
-  let col_span = placement_span(&cell.context.style.rare_non_inherited_data.grid_column_end);
+  let row_span = placement_span(&cell.context.style.misc2_data.grid_row_end);
+  let col_span = placement_span(&cell.context.style.misc2_data.grid_column_end);
   let is_header = match tag_name {
     Some("th") => true,
     Some("td") => false,
@@ -618,7 +617,7 @@ fn is_row_flex(node: &RenderNode) -> bool {
     node.context.style.base_data.display,
     Display::Flex | Display::InlineFlex
   ) && matches!(
-    node.context.style.rare_non_inherited_data.flex_direction,
+    node.context.style.misc_data.flex_direction,
     FlexDirection::Row | FlexDirection::RowReverse
   )
 }
@@ -672,7 +671,7 @@ fn role(node: &RenderNode, walk: &mut Walk, nesting: Nesting) -> Option<Tag> {
 /// The numbering the list's counter style advertises; per-item overrides and
 /// marker images are not consulted.
 fn list_numbering(node: &RenderNode) -> ListNumbering {
-  match &node.context.style.rare_inherited_data.list_style_type {
+  match &node.context.style.misc_inherited1_data.list_style_type {
     ListStyleType::None | ListStyleType::String(_) => ListNumbering::None,
     ListStyleType::Disc => ListNumbering::Disc,
     ListStyleType::Circle => ListNumbering::Circle,

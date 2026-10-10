@@ -649,12 +649,12 @@ impl LineIndent {
     Self {
       amount: style
         .parent
-        .rare_inherited_data
+        .misc_inherited1_data
         .text_indent
         .resolve_px(&style.sizing, indent_basis),
       options: IndentOptions {
-        each_line: style.parent.rare_inherited_data.text_indent.each_line,
-        hanging: style.parent.rare_inherited_data.text_indent.hanging,
+        each_line: style.parent.misc_inherited1_data.text_indent.each_line,
+        hanging: style.parent.misc_inherited1_data.text_indent.hanging,
       },
     }
   }
@@ -731,7 +731,7 @@ pub(super) fn chromium_line_breaks(spans: &[ProcessedInlineSpan<'_>]) -> bool {
   !spans.iter().any(|span| {
     matches!(
       span,
-      ProcessedInlineSpan::Text { style, .. } if style.parent.rare_inherited_data.word_break == WordBreak::BreakAll
+      ProcessedInlineSpan::Text { style, .. } if style.parent.misc_inherited_data.word_break == WordBreak::BreakAll
     )
   })
 }
@@ -900,7 +900,7 @@ pub(crate) fn process_inline_spans<'c>(
         let collapsed = apply_white_space_collapse(
           &transformed,
           context.style.inherited_data.white_space_collapse,
-          context.style.rare_inherited_data.tab_size.spaces(),
+          context.style.misc_inherited1_data.tab_size.spaces(),
           &mut previous_collapsible_space,
           &mut previous_was_line_break,
         );
@@ -1226,12 +1226,11 @@ pub fn create_inline_layout<'c>(request: InlineLayoutRequest<'c>) -> BuiltInline
       ..
     } = &mut built;
 
-    let ellipsis_on_overflow =
-      style.parent.rare_non_inherited_data.text_overflow == TextOverflow::Ellipsis;
+    let ellipsis_on_overflow = style.parent.misc4_data.text_overflow == TextOverflow::Ellipsis;
     // Blink ellipses the line at a `line-clamp` cut whatever `text-overflow` says, unless
     // `block-ellipsis` is `none` (InlineLayoutAlgorithm::GetLineClampState in
     // blink/renderer/core/layout/inline/inline_layout_algorithm.cc).
-    let ellipsis_at_clamp = style.parent.rare_inherited_data.block_ellipsis != BlockEllipsis::None
+    let ellipsis_at_clamp = style.parent.misc_inherited1_data.block_ellipsis != BlockEllipsis::None
       && style
         .parent
         .clamp_lines()
@@ -1320,7 +1319,7 @@ pub(crate) fn resolve_inline_max_height(
     .clamp_lines()
     .map(|lines| MaxHeight::HeightAndLines(content_box_height, lines))
     .or_else(|| {
-      (font_style.parent.rare_non_inherited_data.text_overflow == TextOverflow::Ellipsis)
+      (font_style.parent.misc4_data.text_overflow == TextOverflow::Ellipsis)
         .then_some(MaxHeight::Absolute(content_box_height))
     })
 }

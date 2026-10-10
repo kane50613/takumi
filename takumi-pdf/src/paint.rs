@@ -123,7 +123,7 @@ pub(crate) fn rasterized_image(
     .render_for_layout(
       width,
       height,
-      context.style.rare_inherited_data.image_rendering,
+      context.style.misc_inherited_data.image_rendering,
       0,
       context.current_color,
       Some(context.fonts()),

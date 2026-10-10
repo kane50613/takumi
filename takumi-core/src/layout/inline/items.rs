@@ -142,8 +142,7 @@ impl RenderNode {
   fn contains_fixed_as_inline(&self) -> bool {
     let style = &self.context.style;
 
-    !style.rare_non_inherited_data.filter.is_empty()
-      || !style.rare_non_inherited_data.backdrop_filter.is_empty()
+    !style.misc1_data.filter.is_empty() || !style.misc1_data.backdrop_filter.is_empty()
   }
 
   /// Whether this inline span is the containing block of absolutely positioned descendants, as

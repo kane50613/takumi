@@ -165,7 +165,7 @@ impl BorderProperties {
         bottom: context.style.box_data.border_bottom_style,
         left: context.style.box_data.border_left_style,
       },
-      image_rendering: context.style.rare_inherited_data.image_rendering,
+      image_rendering: context.style.misc_inherited_data.image_rendering,
       collapsed: context.collapsed_borders,
     }
   }

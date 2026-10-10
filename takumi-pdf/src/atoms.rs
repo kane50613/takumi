@@ -80,8 +80,8 @@ impl Atoms {
   /// Records the box's lines as a [`Paragraph`] for the widow/orphan solver.
   fn push_paragraph(&mut self, node: &RenderNode, lines: Range<usize>) {
     let style = &node.context.style;
-    let before = style.rare_inherited_data.orphans.get();
-    let after = style.rare_inherited_data.widows.get();
+    let before = style.misc_inherited1_data.orphans.get();
+    let after = style.misc_inherited1_data.widows.get();
 
     if lines.len() < 2 || (before <= 1 && after <= 1) {
       return;
@@ -183,13 +183,13 @@ impl AtomCollector<'_> {
       });
     }
 
-    if style.rare_non_inherited_data.break_before == BreakBetween::Page {
+    if style.misc_data.break_before == BreakBetween::Page {
       atoms.forced.push(y);
     }
-    if style.rare_non_inherited_data.break_after == BreakBetween::Page {
+    if style.misc_data.break_after == BreakBetween::Page {
       atoms.forced.push(y + layout.size.height);
     }
-    if style.rare_non_inherited_data.break_inside == BreakInside::Avoid {
+    if style.misc_data.break_inside == BreakInside::Avoid {
       atoms.extents.push(extent);
     }
     let mut shows = node
