@@ -28,6 +28,7 @@ mod node_paint;
 mod path;
 /// Main image renderer and viewport management
 mod render;
+mod scanline;
 mod simd;
 mod stacking_context;
 /// Text drawing functions

@@ -3,7 +3,6 @@ use std::collections::VecDeque;
 use std::{
   borrow::{Borrow, Cow},
   io::Write,
-  ops::Range,
 };
 
 use gif::{Encoder as GifEncoder, Frame as GifFrame, Repeat};
@@ -22,6 +21,7 @@ use crate::{
   Result,
   error::Error,
   render::{FrameSpan, SequentialScene, frame_spans, prepare_scenes, render_frame},
+  scanline::Scanlines,
   webp::{encode_animated_webp, has_any_alpha_pixel, strip_alpha_channel, write_webp_lossless},
   zlib::compress_segmented,
 };
@@ -247,17 +247,17 @@ const PHOTO_PNG: PngEncoding = PngEncoding {
   segments: 1,
 };
 
-/// Compressed bytes each segment of flat art should come to, so the block header and flush a
-/// segment adds stay a small share of it.
+/// Compressed bytes each segment should come to, so the block header and flush a segment adds stay
+/// a small share of it.
 const SEGMENT_OUTPUT: usize = 2048;
 
-/// Most segments flat art splits into. It does not follow the machine's cores, so every machine
+/// Most segments an image splits into. It does not follow the machine's cores, so every machine
 /// writes the same bytes.
 const MAX_SEGMENTS: usize = 8;
 
 impl PngEncoding {
-  /// Picks the encoding that makes a 1-in-32 row sample of `rgba` smaller, and for flat art, the
-  /// segments the sample's size says the whole image deflates in.
+  /// Picks the encoding that makes a 1-in-32 row sample of `rgba` smaller, and the segments the
+  /// sample's size says the whole image deflates in.
   fn pick(rgba: &[u8], width: u32) -> Self {
     const ROW_STRIDE: usize = 32;
 
@@ -288,42 +288,21 @@ impl PngEncoding {
       written.map(|_| out.len())
     };
 
-    match (encoded_len(FLAT_PNG), encoded_len(PHOTO_PNG)) {
-      (Ok(flat), Ok(photo)) if photo < flat => PHOTO_PNG,
-      (Ok(flat), _) => PngEncoding {
-        segments: (flat * ROW_STRIDE / SEGMENT_OUTPUT).clamp(1, MAX_SEGMENTS),
-        ..FLAT_PNG
-      },
-      _ => FLAT_PNG,
+    let (encoding, sample) = match (encoded_len(FLAT_PNG), encoded_len(PHOTO_PNG)) {
+      (Ok(flat), Ok(photo)) if photo < flat => (PHOTO_PNG, photo),
+      (Ok(flat), _) => (FLAT_PNG, flat),
+      _ => return FLAT_PNG,
+    };
+
+    PngEncoding {
+      segments: (sample * ROW_STRIDE / SEGMENT_OUTPUT).clamp(1, MAX_SEGMENTS),
+      ..encoding
     }
   }
 
   fn apply<T: Write>(self, encoder: &mut png::Encoder<'_, T>) {
     encoder.set_deflate_compression(DeflateCompression::Level(self.level));
     encoder.set_filter(self.filter);
-  }
-}
-
-/// Appends `rows` of `rgba` to `scanlines` as PNG scanlines under the None filter, with alpha
-/// only when `keep_alpha`.
-fn append_unfiltered(
-  rgba: &RgbaImage,
-  rows: Range<usize>,
-  keep_alpha: bool,
-  scanlines: &mut Vec<u8>,
-) {
-  let row_bytes = rgba.width() as usize * 4;
-
-  for pixels in rgba.as_raw()[rows.start * row_bytes..rows.end * row_bytes].chunks_exact(row_bytes)
-  {
-    scanlines.push(0);
-    if keep_alpha {
-      scanlines.extend_from_slice(pixels);
-    } else {
-      for pixel in pixels.as_chunks::<4>().0 {
-        scanlines.extend_from_slice(&pixel[..3]);
-      }
-    }
   }
 }
 
@@ -366,13 +345,14 @@ pub fn write_image<T: Write>(
       let mut writer = encoder.write_header().map_err(Error::encode)?;
 
       if encoding.segments > 1 {
-        let channels = if has_alpha { 4 } else { 3 };
+        let scanlines =
+          Scanlines::new(rgba, has_alpha, matches!(encoding.filter, Filter::Adaptive));
         let stream = compress_segmented(
           image.height() as usize,
-          image.width() as usize * channels + 1,
+          scanlines.len(),
           u32::from(encoding.level),
           encoding.segments,
-          |rows, scanlines| append_unfiltered(rgba, rows, has_alpha, scanlines),
+          |rows, out| scanlines.append(rows, out),
         )?;
 
         writer.write_chunk(IDAT, &stream).map_err(Error::encode)?;
