@@ -1,90 +1,159 @@
 //! zlib streams compressed a segment at a time, so the segments compress at once, as
 //! [pigz](https://zlib.net/pigz/pigz.pdf) does.
 
+use std::ops::Range;
+
 use flate2::{Compress, Compression, FlushCompress, Status};
 #[cfg(feature = "rayon")]
 use rayon::prelude::*;
-use simd_adler32::Adler32;
+use zlib_rs::adler32::{adler32, adler32_combine};
 
 use crate::{Result, error::Error};
 
 /// Bytes of history a segment is primed with: the whole DEFLATE window.
 const WINDOW: usize = 32 * 1024;
 
-/// Compresses `data` at `level` into one zlib stream of up to `segments` raw DEFLATE segments,
-/// each cut on a multiple of `row` bytes and primed with the window before it.
+/// Bytes of rows a segment writes out and feeds the compressor at a time.
+const BATCH: usize = 64 * 1024;
+
+/// A deflated segment: its raw DEFLATE body, and the Adler-32 and length of what it holds.
+struct Segment {
+  body: Vec<u8>,
+  adler: u32,
+  len: u64,
+}
+
+/// Compresses `rows` rows of `row_len` bytes at `level` into one zlib stream of up to `segments`
+/// raw DEFLATE segments, each primed with the window of rows before it. `scanlines` appends the
+/// bytes of a range of rows, so no segment holds more than a batch of them at once.
 pub(crate) fn compress_segmented(
-  data: &[u8],
-  row: usize,
+  rows: usize,
+  row_len: usize,
   level: u32,
   segments: usize,
+  scanlines: impl Fn(Range<usize>, &mut Vec<u8>) + Sync,
 ) -> Result<Vec<u8>> {
-  let rows = (data.len() / row).div_ceil(segments.max(1)).max(1);
-  let starts: Vec<usize> = (0..data.len()).step_by(rows * row).collect();
+  let per_segment = rows.div_ceil(segments.max(1)).max(1);
+  let starts: Vec<usize> = (0..rows).step_by(per_segment).collect();
   let last = starts.len().saturating_sub(1);
   let segment = |(index, &start): (usize, &usize)| {
-    let end = (start + rows * row).min(data.len());
+    let primed = start.saturating_sub(WINDOW.div_ceil(row_len))..start;
 
     deflate_segment(
-      &data[start.saturating_sub(WINDOW)..start],
-      &data[start..end],
+      &scanlines,
+      primed,
+      start..(start + per_segment).min(rows),
+      row_len,
       level,
       index == last,
     )
   };
 
   #[cfg(feature = "rayon")]
-  let bodies: Vec<Vec<u8>> = starts
+  let segments: Vec<Segment> = starts
     .par_iter()
     .enumerate()
     .map(segment)
     .collect::<Result<_>>()?;
   #[cfg(not(feature = "rayon"))]
-  let bodies: Vec<Vec<u8>> = starts
+  let segments: Vec<Segment> = starts
     .iter()
     .enumerate()
     .map(segment)
     .collect::<Result<_>>()?;
 
-  let mut adler = Adler32::new();
-
-  adler.write(data);
-
-  let mut stream = Vec::with_capacity(bodies.iter().map(Vec::len).sum::<usize>() + 6);
+  let adler = segments
+    .iter()
+    .map(|segment| (segment.adler, segment.len))
+    .reduce(|(adler, _), (next, len)| (adler32_combine(adler, next, len), 0))
+    .map_or(1, |(adler, _)| adler);
+  let mut stream = Vec::with_capacity(
+    segments
+      .iter()
+      .map(|segment| segment.body.len())
+      .sum::<usize>()
+      + 6,
+  );
 
   stream.extend_from_slice(&header(level));
-  for body in &bodies {
-    stream.extend_from_slice(body);
+  for segment in &segments {
+    stream.extend_from_slice(&segment.body);
   }
-  stream.extend_from_slice(&adler.finish().to_be_bytes());
+  stream.extend_from_slice(&adler.to_be_bytes());
   Ok(stream)
 }
 
-/// Raw DEFLATE of `segment`, primed with `dictionary`. Every segment but the `last` ends on a sync
-/// flush, which byte-aligns it and leaves the stream open for the next.
-fn deflate_segment(dictionary: &[u8], segment: &[u8], level: u32, last: bool) -> Result<Vec<u8>> {
+/// Raw DEFLATE of the `rows` `scanlines` writes, primed with the `primed` rows before them. Every
+/// segment but the `last` ends on a sync flush, which byte-aligns it and leaves the stream open for
+/// the next.
+fn deflate_segment(
+  scanlines: &impl Fn(Range<usize>, &mut Vec<u8>),
+  primed: Range<usize>,
+  rows: Range<usize>,
+  row_len: usize,
+  level: u32,
+  last: bool,
+) -> Result<Segment> {
   let mut compress = Compress::new_with_window_bits(Compression::new(level), false, 15);
+  let mut batch = Vec::new();
+  let mut body = Vec::with_capacity(rows.len() * row_len / 8 + 64);
+  let mut adler = 1;
+
+  if !primed.is_empty() {
+    scanlines(primed, &mut batch);
+    compress
+      .set_dictionary(&batch[batch.len().saturating_sub(WINDOW)..])
+      .map_err(Error::encode)?;
+  }
+  for start in rows.clone().step_by((BATCH / row_len).max(1)) {
+    batch.clear();
+    scanlines(
+      start..(start + (BATCH / row_len).max(1)).min(rows.end),
+      &mut batch,
+    );
+    adler = adler32(adler, &batch);
+    feed(&mut compress, &batch, FlushCompress::None, &mut body)?;
+  }
+
   let flush = if last {
     FlushCompress::Finish
   } else {
     FlushCompress::Sync
   };
-  let mut body = Vec::with_capacity(segment.len() / 8 + 64);
 
-  if !dictionary.is_empty() {
-    compress.set_dictionary(dictionary).map_err(Error::encode)?;
-  }
+  feed(&mut compress, &[], flush, &mut body)?;
+  Ok(Segment {
+    body,
+    adler,
+    len: (rows.len() * row_len) as u64,
+  })
+}
+
+/// Feeds `input` to `compress` under `flush`, growing `body` until the compressor takes all of it
+/// and, for a finishing flush, ends the stream.
+fn feed(
+  compress: &mut Compress,
+  input: &[u8],
+  flush: FlushCompress,
+  body: &mut Vec<u8>,
+) -> Result<()> {
+  let start = compress.total_in();
+
   loop {
-    let consumed = compress.total_in() as usize;
-    let status = compress
-      .compress_vec(&segment[consumed..], &mut body, flush)
-      .map_err(Error::encode)?;
-    let drained = compress.total_in() as usize == segment.len() && body.len() < body.capacity();
-
-    if status == Status::StreamEnd || (!last && drained) {
-      return Ok(body);
+    if body.len() == body.capacity() {
+      body.reserve(body.capacity().max(4096));
     }
-    body.reserve(body.capacity());
+
+    let consumed = (compress.total_in() - start) as usize;
+    let status = compress
+      .compress_vec(&input[consumed..], body, flush)
+      .map_err(Error::encode)?;
+    let drained =
+      (compress.total_in() - start) as usize == input.len() && body.len() < body.capacity();
+
+    if status == Status::StreamEnd || (drained && !matches!(flush, FlushCompress::Finish)) {
+      return Ok(());
+    }
   }
 }
 
@@ -102,8 +171,9 @@ fn header(level: u32) -> [u8; 2] {
 
 #[cfg(test)]
 mod tests {
-  use flate2::read::ZlibDecoder;
   use std::io::Read;
+
+  use flate2::read::ZlibDecoder;
 
   use super::compress_segmented;
 
@@ -114,18 +184,22 @@ mod tests {
     out
   }
 
+  fn compress(data: &[u8], row_len: usize, segments: usize) -> Vec<u8> {
+    compress_segmented(data.len() / row_len, row_len, 7, segments, |rows, out| {
+      out.extend_from_slice(&data[rows.start * row_len..rows.end * row_len]);
+    })
+    .unwrap()
+  }
+
   #[test]
   fn segments_inflate_back_to_the_input() {
-    let row = 301;
-    let data: Vec<u8> = (0..row * 400)
-      .map(|index| ((index / row) * 7 + (index % row) % 13) as u8)
+    let row_len = 301;
+    let data: Vec<u8> = (0..row_len * 400)
+      .map(|index| ((index / row_len) * 7 + (index % row_len) % 13) as u8)
       .collect();
 
     for segments in [1, 2, 3, 8] {
-      assert_eq!(
-        inflate(&compress_segmented(&data, row, 7, segments).unwrap()),
-        data
-      );
+      assert_eq!(inflate(&compress(&data, row_len, segments)), data);
     }
   }
 
@@ -133,6 +207,6 @@ mod tests {
   fn more_segments_than_rows_still_inflate() {
     let data = vec![9u8; 30];
 
-    assert_eq!(inflate(&compress_segmented(&data, 10, 7, 8).unwrap()), data);
+    assert_eq!(inflate(&compress(&data, 10, 8)), data);
   }
 }

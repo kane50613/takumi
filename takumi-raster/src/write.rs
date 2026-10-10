@@ -3,6 +3,7 @@ use std::collections::VecDeque;
 use std::{
   borrow::{Borrow, Cow},
   io::Write,
+  ops::Range,
 };
 
 use gif::{Encoder as GifEncoder, Frame as GifFrame, Repeat};
@@ -303,14 +304,18 @@ impl PngEncoding {
   }
 }
 
-/// `rgba`'s rows as PNG scanlines under the None filter, with alpha only when `keep_alpha`, and
-/// the length of one.
-fn unfiltered_scanlines(rgba: &RgbaImage, keep_alpha: bool) -> (Vec<u8>, usize) {
-  let channels = if keep_alpha { 4 } else { 3 };
-  let row = rgba.width() as usize * channels + 1;
-  let mut scanlines = Vec::with_capacity(row * rgba.height() as usize);
+/// Appends `rows` of `rgba` to `scanlines` as PNG scanlines under the None filter, with alpha
+/// only when `keep_alpha`.
+fn append_unfiltered(
+  rgba: &RgbaImage,
+  rows: Range<usize>,
+  keep_alpha: bool,
+  scanlines: &mut Vec<u8>,
+) {
+  let row_bytes = rgba.width() as usize * 4;
 
-  for pixels in rgba.as_raw().chunks_exact(rgba.width() as usize * 4) {
+  for pixels in rgba.as_raw()[rows.start * row_bytes..rows.end * row_bytes].chunks_exact(row_bytes)
+  {
     scanlines.push(0);
     if keep_alpha {
       scanlines.extend_from_slice(pixels);
@@ -320,7 +325,6 @@ fn unfiltered_scanlines(rgba: &RgbaImage, keep_alpha: bool) -> (Vec<u8>, usize) 
       }
     }
   }
-  (scanlines, row)
 }
 
 /// Clamps a frame duration to the 16-bit APNG delay numerator, in milliseconds.
@@ -362,12 +366,13 @@ pub fn write_image<T: Write>(
       let mut writer = encoder.write_header().map_err(Error::encode)?;
 
       if encoding.segments > 1 {
-        let (scanlines, row) = unfiltered_scanlines(rgba, has_alpha);
+        let channels = if has_alpha { 4 } else { 3 };
         let stream = compress_segmented(
-          &scanlines,
-          row,
+          image.height() as usize,
+          image.width() as usize * channels + 1,
           u32::from(encoding.level),
           encoding.segments,
+          |rows, scanlines| append_unfiltered(rgba, rows, has_alpha, scanlines),
         )?;
 
         writer.write_chunk(IDAT, &stream).map_err(Error::encode)?;

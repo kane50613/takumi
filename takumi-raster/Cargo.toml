@@ -10,7 +10,6 @@ rust-version = "1.91"
 
 [dependencies]
 png.workspace = true
-simd-adler32.workspace = true
 gif.workspace = true
 color.workspace = true
 tiny-skia.workspace = true
@@ -18,6 +17,7 @@ typed-builder.workspace = true
 smallvec.workspace = true
 skrifa.workspace = true
 xxhash-rust.workspace = true
+zlib-rs.workspace = true
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 image-webp.workspace = true
