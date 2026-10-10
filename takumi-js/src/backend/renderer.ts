@@ -1,5 +1,6 @@
 import { loadBackend } from "#backend";
 import { applyGlyphCacheMaxBytes } from "../glyph-cache";
+import { applyShapeCacheMaxBytes } from "../shape-cache";
 import type { Backend, BackendModule, LoadBackend } from "./types";
 
 export type Renderer = InstanceType<Backend["Renderer"]>;
@@ -28,5 +29,6 @@ export const defaultRenderer = new RendererProvider(async (module) => {
     ? loadBackend()
     : import("./wasm-init").then(({ initWasm }) => initWasm(module)));
   applyGlyphCacheMaxBytes(backend);
+  applyShapeCacheMaxBytes(backend);
   return backend;
 });

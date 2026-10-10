@@ -11,5 +11,6 @@ pub mod image;
 pub mod image_buffer;
 pub(crate) mod image_decoder;
 mod image_resampler;
+pub mod shape_cache;
 #[cfg(feature = "svg-sizing")]
 pub(crate) mod svg_size;

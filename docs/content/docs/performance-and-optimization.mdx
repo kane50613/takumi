@@ -23,6 +23,7 @@ const image = await render(<div tw="p-8 text-4xl">Hello Takumi</div>, {
 | :---------------------------------------------- | :-------------------- | :----------------------------------------------------------------- |
 | Decoded images, SVG rasters, parsed stylesheets | Renderer              | `cacheMaxBytes`, 64 MiB by default                                 |
 | Glyph outlines and rasterized masks             | Loaded backend module | `setGlyphCacheMaxBytes`, 8 MiB by default                          |
+| Shaped text-only layouts                        | Loaded backend module | `setShapeCacheMaxBytes`, 4 MiB by default                          |
 | Parsed Tailwind classes                         | Loaded backend module | Automatic, bounded internally                                      |
 | Resolved Tailwind declarations                  | Render                | Automatic, separated by viewport width, font size, and pixel ratio |
 | Google Fonts CSS                                | Fetch implementation  | Automatic, bounded internally                                      |
@@ -55,6 +56,16 @@ setGlyphCacheMaxBytes(64 * 1024 * 1024); // [!code highlight]
 ```
 
 Call this before the first render. Outlines and masks share the budget across renderers in the same backend module. Large glyph sets or text sizes can benefit from more space, but benchmark your content first.
+
+### Shape cache
+
+```ts twoslash title="Shape cache"
+import { setShapeCacheMaxBytes } from "takumi-js";
+
+setShapeCacheMaxBytes(16 * 1024 * 1024); // [!code highlight]
+```
+
+Call this before the first render. Repeated static text across separate renders is shaped once instead of every time; a renderer with mostly dynamic text sees little benefit from a larger budget.
 
 ## Keep network requests out of repeated work
 
