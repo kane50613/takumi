@@ -115,6 +115,22 @@ describe("form controls", () => {
     expect(textOf(markup)).toBe("Go");
   });
 
+  test("a closed select skips the options a disabled group holds", async () => {
+    const markup = `<select><optgroup disabled><option>A</option></optgroup><option>B</option></select>`;
+    const { node: html } = fromHtml(markup);
+    const { node: jsx } = await fromJsx(
+      <select>
+        <optgroup disabled>
+          <option>A</option>
+        </optgroup>
+        <option>B</option>
+      </select>,
+    );
+
+    expect(textOf(children(html)[0])).toBe("B");
+    expect(textOf(children(jsx)[0])).toBe("B");
+  });
+
   test("markup closes a select the same way", () => {
     const { node } = fromHtml(
       `<select><option label="Annual">A</option><option disabled>Weekly</option></select>`,

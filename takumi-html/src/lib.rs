@@ -571,7 +571,7 @@ fn close_select(select: &mut Node) {
   };
   let mut options = Vec::new();
 
-  collect_options(children, &mut options);
+  collect_options(children, false, &mut options);
 
   let states = options.iter().map(|(state, _)| *state).collect::<Vec<_>>();
   let shown = OptionState::chosen(&states, false, true)
@@ -591,12 +591,16 @@ fn close_select(select: &mut Node) {
   }
 }
 
-/// Every `<option>` under `nodes` with the label it shows.
-fn collect_options(nodes: &[Node], out: &mut Vec<(OptionState, String)>) {
+/// Every `<option>` under `nodes` with the label it shows. An option is disabled when it or the
+/// `<optgroup>` holding it, `in_disabled_group`, carries `disabled`.
+fn collect_options(nodes: &[Node], in_disabled_group: bool, out: &mut Vec<(OptionState, String)>) {
   for node in nodes {
     match node.option_state() {
       Some(state) => out.push((
-        state,
+        OptionState {
+          disabled: state.disabled || in_disabled_group,
+          ..state
+        },
         node
           .option_label()
           .map(str::to_string)
@@ -604,7 +608,7 @@ fn collect_options(nodes: &[Node], out: &mut Vec<(OptionState, String)>) {
       )),
       None => {
         if let NodeKind::Container { children } = &node.kind {
-          collect_options(children, out);
+          collect_options(children, node.disables_options(), out);
         }
       }
     }
@@ -986,6 +990,15 @@ mod tests {
     let html = parse(r#"<select><option label="Annual">A</option></select>"#).to_html();
 
     assert_eq!(select_text(&html), Some("Annual"));
+  }
+
+  #[test]
+  fn a_closed_select_skips_the_options_a_disabled_group_holds() {
+    let html =
+      parse("<select><optgroup disabled><option>A</option></optgroup><option>B</option></select>")
+        .to_html();
+
+    assert_eq!(select_text(&html), Some("B"));
   }
 
   #[test]

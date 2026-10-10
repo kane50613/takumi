@@ -54,6 +54,14 @@ impl Node {
     })
   }
 
+  /// Whether this is an `<optgroup>` carrying `disabled`, which disables the options it holds.
+  pub fn disables_options(&self) -> bool {
+    self
+      .tag_name()
+      .is_some_and(|tag| tag.eq_ignore_ascii_case("optgroup"))
+      && self.attribute("disabled").is_some()
+  }
+
   /// The `label` an `<option>` shows in place of its text, when it carries a
   /// non-empty one.
   pub fn option_label(&self) -> Option<&str> {

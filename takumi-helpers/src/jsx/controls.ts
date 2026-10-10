@@ -27,16 +27,27 @@ export function isListBox(attributes: Record<string, string> | undefined): boole
   return "multiple" in attributes || (size > 1 && size <= 4294967295);
 }
 
+interface CollectedOption {
+  option: Node;
+  /** Whether the option or the `<optgroup>` holding it carries `disabled`. */
+  disabled: boolean;
+}
+
 /** Every `<option>` under `nodes`, in document order. */
-function collectOptions(nodes: Node[], out: Node[]): void {
+function collectOptions(nodes: Node[], out: CollectedOption[], inDisabledGroup = false): void {
   for (const node of nodes) {
     if (node.tagName === "option") {
-      out.push(node);
+      out.push({
+        option: node,
+        disabled: inDisabledGroup || node.attributes?.disabled !== undefined,
+      });
       continue;
     }
 
     if (node.type === "container" && node.children) {
-      collectOptions(node.children, out);
+      const disabledGroup = node.tagName === "optgroup" && node.attributes?.disabled !== undefined;
+
+      collectOptions(node.children, out, disabledGroup);
     }
   }
 }
@@ -84,11 +95,11 @@ export function selectValue(children: Node[], value: unknown): void {
   }
 
   const picked = new Set((Array.isArray(value) ? value : [value]).map(String));
-  const options: Node[] = [];
+  const options: CollectedOption[] = [];
 
   collectOptions(children, options);
 
-  for (const option of options) {
+  for (const { option } of options) {
     const attributes = { ...option.attributes };
 
     if (picked.has(optionValue(option))) {
@@ -110,13 +121,14 @@ export function selectValue(children: Node[], value: unknown): void {
  * https://html.spec.whatwg.org/multipage/form-elements.html#selectedness-setting-algorithm
  */
 export function closeSelect(children: Node[], presets: StylePresets | undefined): Node[] {
-  const options: Node[] = [];
+  const options: CollectedOption[] = [];
 
   collectOptions(children, options);
 
-  const shown =
-    options.findLast((option) => option.attributes?.selected !== undefined) ??
-    options.find((option) => option.attributes?.disabled === undefined);
+  const shown = (
+    options.findLast(({ option }) => option.attributes?.selected !== undefined) ??
+    options.find(({ disabled }) => !disabled)
+  )?.option;
   const hidden = children.map((child) =>
     child.tagName === "option" || child.tagName === "optgroup"
       ? { ...child, preset: { display: "none" as const } }
