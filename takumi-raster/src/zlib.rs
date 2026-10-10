@@ -14,7 +14,7 @@ use crate::{Result, error::Error};
 const WINDOW: usize = 32 * 1024;
 
 /// Bytes of rows a segment writes out and feeds the compressor at a time.
-const BATCH: usize = 64 * 1024;
+const BATCH: usize = 16 * 1024;
 
 /// A deflated segment: its raw DEFLATE body, and the Adler-32 and length of what it holds.
 struct Segment {
@@ -96,7 +96,7 @@ fn deflate_segment(
 ) -> Result<Segment> {
   let mut compress = Compress::new_with_window_bits(Compression::new(level), false, 15);
   let mut batch = Vec::new();
-  let mut body = Vec::with_capacity(rows.len() * row_len / 8 + 64);
+  let mut body = Vec::with_capacity(4096);
   let mut adler = 1;
 
   if !primed.is_empty() {
