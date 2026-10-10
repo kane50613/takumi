@@ -20,8 +20,9 @@ use crate::webp::write_webp_lossy;
 use crate::{
   Result,
   error::Error,
+  palette::Palette,
   render::{FrameSpan, SequentialScene, frame_spans, prepare_scenes, render_frame},
-  scanline::Scanlines,
+  scanline::{Pixels, Scanlines},
   webp::{encode_animated_webp, has_any_alpha_pixel, strip_alpha_channel, write_webp_lossless},
   zlib::compress_segmented,
 };
@@ -255,48 +256,38 @@ const SEGMENT_OUTPUT: usize = 2048;
 /// writes the same bytes.
 const MAX_SEGMENTS: usize = 8;
 
+/// Rows between the ones a [`PngEncoding`] samples.
+const ROW_STRIDE: usize = 32;
+
 impl PngEncoding {
   /// Picks the encoding that makes a 1-in-32 row sample of `rgba` smaller, and the segments the
   /// sample's size says the whole image deflates in.
   fn pick(rgba: &[u8], width: u32) -> Self {
-    const ROW_STRIDE: usize = 32;
-
-    let row_bytes = width as usize * 4;
-    if row_bytes == 0 {
+    let Some(band) = RowSample::of(rgba, width, ColorType::Rgba) else {
       return FLAT_PNG;
-    }
-
-    let band: Vec<u8> = rgba
-      .chunks_exact(row_bytes)
-      .step_by(ROW_STRIDE)
-      .flatten()
-      .copied()
-      .collect();
-    let band_height = (band.len() / row_bytes) as u32;
-    if band_height < 2 {
-      return FLAT_PNG;
-    }
-
-    let encoded_len = |encoding: Self| {
-      let mut out = Vec::new();
-      let mut encoder = png::Encoder::new(&mut out, width, band_height);
-      encoding.apply(&mut encoder);
-      encoder.set_color(ColorType::Rgba);
-      let written = encoder
-        .write_header()
-        .and_then(|mut writer| writer.write_image_data(&band));
-      written.map(|_| out.len())
     };
-
-    let (encoding, sample) = match (encoded_len(FLAT_PNG), encoded_len(PHOTO_PNG)) {
-      (Ok(flat), Ok(photo)) if photo < flat => (PHOTO_PNG, photo),
-      (Ok(flat), _) => (FLAT_PNG, flat),
+    let (encoding, sample) = match (band.encoded_len(FLAT_PNG), band.encoded_len(PHOTO_PNG)) {
+      (Some(flat), Some(photo)) if photo < flat => (PHOTO_PNG, photo),
+      (Some(flat), _) => (FLAT_PNG, flat),
       _ => return FLAT_PNG,
     };
 
+    encoding.with_segments(sample)
+  }
+
+  /// Flat art's encoding for palette `indices`, which deflate best unfiltered too, with the
+  /// segments a 1-in-32 row sample of them says the image deflates in.
+  fn indexed(indices: &[u8], width: u32) -> Self {
+    RowSample::of(indices, width, ColorType::Grayscale)
+      .and_then(|band| band.encoded_len(FLAT_PNG))
+      .map_or(FLAT_PNG, |sample| FLAT_PNG.with_segments(sample))
+  }
+
+  /// This encoding in the segments a 1-in-32 row sample deflating to `sample` bytes calls for.
+  fn with_segments(self, sample: usize) -> Self {
     PngEncoding {
       segments: (sample * ROW_STRIDE / SEGMENT_OUTPUT).clamp(1, MAX_SEGMENTS),
-      ..encoding
+      ..self
     }
   }
 
@@ -304,6 +295,80 @@ impl PngEncoding {
     encoder.set_deflate_compression(DeflateCompression::Level(self.level));
     encoder.set_filter(self.filter);
   }
+}
+
+/// Every 32nd row of an image, stacked into a band for an encoding to be tried on.
+struct RowSample {
+  band: Vec<u8>,
+  width: u32,
+  height: u32,
+  color: ColorType,
+}
+
+impl RowSample {
+  /// The sample of `data`, rows of `width` pixels in `color`, or `None` when it has under two rows.
+  fn of(data: &[u8], width: u32, color: ColorType) -> Option<Self> {
+    let row_bytes = width as usize * color.samples();
+
+    if row_bytes == 0 {
+      return None;
+    }
+
+    let band: Vec<u8> = data
+      .chunks_exact(row_bytes)
+      .step_by(ROW_STRIDE)
+      .flatten()
+      .copied()
+      .collect();
+    let height = (band.len() / row_bytes) as u32;
+
+    (height >= 2).then_some(Self {
+      band,
+      width,
+      height,
+      color,
+    })
+  }
+
+  /// The bytes the sample encodes to under `encoding`.
+  fn encoded_len(&self, encoding: PngEncoding) -> Option<usize> {
+    let mut out = Vec::new();
+    let mut encoder = png::Encoder::new(&mut out, self.width, self.height);
+
+    encoding.apply(&mut encoder);
+    encoder.set_color(self.color);
+    encoder
+      .write_header()
+      .and_then(|mut writer| writer.write_image_data(&self.band))
+      .ok()?;
+    Some(out.len())
+  }
+}
+
+/// Writes `pixels` as the image data `encoding` describes: deflated in segments at once when it
+/// has more than one, else through the png crate.
+fn write_png_data<W: Write>(
+  writer: &mut png::Writer<W>,
+  encoding: PngEncoding,
+  height: u32,
+  pixels: Pixels<'_>,
+) -> Result<()> {
+  if encoding.segments == 1 {
+    return writer
+      .write_image_data(&pixels.packed())
+      .map_err(Error::encode);
+  }
+
+  let scanlines = Scanlines::new(pixels, matches!(encoding.filter, Filter::Adaptive));
+  let stream = compress_segmented(
+    height as usize,
+    scanlines.len(),
+    u32::from(encoding.level),
+    encoding.segments,
+    |rows, out| scanlines.append(rows, out),
+  )?;
+
+  writer.write_chunk(IDAT, &stream).map_err(Error::encode)
 }
 
 /// Clamps a frame duration to the 16-bit APNG delay numerator, in milliseconds.
@@ -330,43 +395,45 @@ pub fn write_image<T: Write>(
     }
     OutputFormat::Png => {
       let mut encoder = png::Encoder::new(destination, image.width(), image.height());
-      let encoding = PngEncoding::pick(image.as_raw(), image.width());
+      let palette = Palette::of(rgba);
+      let (encoding, pixels) = match &palette {
+        Some(palette) => {
+          encoder.set_color(ColorType::Indexed);
+          encoder.set_palette(palette.rgb());
+          if let Some(alphas) = palette.alphas() {
+            encoder.set_trns(alphas);
+          }
+          (
+            PngEncoding::indexed(&palette.indices, image.width()),
+            Pixels::Indexed {
+              indices: &palette.indices,
+              width: image.width() as usize,
+            },
+          )
+        }
+        None => {
+          let keep_alpha = has_any_alpha_pixel(rgba);
+
+          encoder.set_color(if keep_alpha {
+            ColorType::Rgba
+          } else {
+            ColorType::Rgb
+          });
+          (
+            PngEncoding::pick(image.as_raw(), image.width()),
+            Pixels::Rgba {
+              image: rgba,
+              keep_alpha,
+            },
+          )
+        }
+      };
 
       encoding.apply(&mut encoder);
 
-      let has_alpha = has_any_alpha_pixel(rgba);
-
-      encoder.set_color(if has_alpha {
-        ColorType::Rgba
-      } else {
-        ColorType::Rgb
-      });
-
       let mut writer = encoder.write_header().map_err(Error::encode)?;
 
-      if encoding.segments > 1 {
-        let scanlines =
-          Scanlines::new(rgba, has_alpha, matches!(encoding.filter, Filter::Adaptive));
-        let stream = compress_segmented(
-          image.height() as usize,
-          scanlines.len(),
-          u32::from(encoding.level),
-          encoding.segments,
-          |rows, out| scanlines.append(rows, out),
-        )?;
-
-        writer.write_chunk(IDAT, &stream).map_err(Error::encode)?;
-      } else {
-        let image_data = if has_alpha {
-          Cow::Borrowed(image.as_raw())
-        } else {
-          Cow::Owned(strip_alpha_channel(Cow::Borrowed(rgba)))
-        };
-
-        writer
-          .write_image_data(&image_data)
-          .map_err(Error::encode)?;
-      }
+      write_png_data(&mut writer, encoding, image.height(), pixels)?;
       writer.finish().map_err(Error::encode)?;
     }
     #[cfg(not(target_arch = "wasm32"))]

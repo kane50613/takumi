@@ -25,6 +25,7 @@ mod filter;
 mod image_drawing;
 pub(crate) mod inline_drawing;
 mod node_paint;
+mod palette;
 mod path;
 /// Main image renderer and viewport management
 mod render;
