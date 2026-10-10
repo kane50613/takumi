@@ -136,17 +136,34 @@ fn constant_normal(pixels: &mut [[u8; 4]], mask: &[u8], color: [u8; 4], region: 
   for dest_y in region.bounds.y_min..region.bounds.y_max {
     let dst = &mut pixels[region.dst_row(dest_y)];
     let mask_row = &mask[region.mask_row(dest_y)];
+    let (dst_chunks, dst_tail) = dst.as_chunks_mut::<MASK_CHUNK>();
+    let (mask_chunks, mask_tail) = mask_row.as_chunks::<MASK_CHUNK>();
 
-    for (dst_px, &alpha) in dst.iter_mut().zip(mask_row) {
-      if alpha == 0 {
-        continue;
+    for (dst, mask) in dst_chunks.iter_mut().zip(mask_chunks) {
+      match u64::from_ne_bytes(*mask) {
+        0 => {}
+        u64::MAX if color[3] == u8::MAX => dst.fill(color),
+        _ => constant_over(dst, mask, color),
       }
+    }
+    constant_over(dst_tail, mask_tail, color);
+  }
+}
 
-      let src = scale_premultiplied_pixel(color, alpha);
+/// Mask bytes `constant_normal` tests at once for a uniformly empty or full run.
+const MASK_CHUNK: usize = 8;
 
-      if src[3] != 0 {
-        composite_premultiplied_over(dst_px, src);
-      }
+#[inline(always)]
+fn constant_over(dst: &mut [[u8; 4]], mask: &[u8], color: [u8; 4]) {
+  for (dst_px, &alpha) in dst.iter_mut().zip(mask) {
+    if alpha == 0 {
+      continue;
+    }
+
+    let src = scale_premultiplied_pixel(color, alpha);
+
+    if src[3] != 0 {
+      composite_premultiplied_over(dst_px, src);
     }
   }
 }
