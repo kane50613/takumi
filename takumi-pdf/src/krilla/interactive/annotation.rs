@@ -794,7 +794,10 @@ impl WidgetAnnotation {
         }
       }
       FormField::Choice {
-        options, selected, ..
+        options,
+        selected,
+        multi,
+        ..
       } => {
         annotation.pair(Name(b"FT"), Name(b"Ch"));
         annotation.pair(Name(b"DA"), Str(self.default_appearance().as_bytes()));
@@ -838,7 +841,9 @@ impl WidgetAnnotation {
         }
         opt.finish();
 
-        if !selected.is_empty() {
+        // PDF 32000-1:2008, Table 231: `/I` should not be used unless the
+        // field allows more than one selection.
+        if *multi && !selected.is_empty() {
           annotation.insert(Name(b"I")).array().items(
             selected
               .iter()

@@ -5051,6 +5051,9 @@ fn form_choice_browser_values() {
   assert!(pdf.contains("/Opt[(Monthly plan)]"));
   assert!(pdf.contains("/Opt[[(Annual billing)(Annual plan)]]"));
   assert!(pdf.contains("/V["));
+  // Only the list box allows more than one selection, so only it carries
+  // `/I`.
+  assert_eq!(pdf.matches("/I[").count(), 1);
   assert!(pdf.contains("/I[0 2]"));
   assert_eq!(pdf.matches("0.6 0.75686276 0.85490197 rg").count(), 2);
 }
