@@ -15,7 +15,7 @@ mod text_clip;
 pub use self::{
   background::{BackgroundClipArea, BoxBackground},
   border::BoxBorderPainter,
-  content::OwnContent,
+  content::{OwnContent, PaintedInline},
   outline::PendingOutline,
   replaced::ReplacedContent,
   shadow::ShadowShape,

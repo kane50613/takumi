@@ -7,13 +7,10 @@ use std::io;
 use takumi_core::{
   font_style::SizedFontStyle,
   layout::{
-    inline::{
-      InlineLayoutMode, InlineLayoutRequest, InlinePass, PositionedInlineRun, ProcessedInlineSpan,
-      ShapedRun, create_inline_layout,
-    },
+    inline::{InlinePass, PositionedInlineRun, ProcessedInlineSpan, ShapedRun},
     tree::RenderNode,
   },
-  painter::{BoxFrame, OwnContent},
+  painter::{BoxFrame, OwnContent, PaintedInline},
   path_data::path_data,
   resources::{font::FontError, glyph::ResolvedGlyph, image::to_data_url},
   style::Affine,
@@ -34,23 +31,14 @@ pub(crate) fn emit_inline_content(
 ) -> io::Result<()> {
   let context = &node.context;
   let font_style = SizedFontStyle::from_style(&context.style, context);
-  let Some(items) = OwnContent::of(node).inline_items(&font_style) else {
+  let Some(painted) = OwnContent::of(node).lay_out_inline(&font_style, frame.layout) else {
     return Ok(());
   };
-  let built = create_inline_layout(InlineLayoutRequest::in_content_box(
-    items,
-    frame.layout.content_box_size(),
-    &font_style,
-    context,
-    InlineLayoutMode::Draw,
-  ));
+  let PaintedInline { spans, runs, .. } = painted.map_err(font_error)?;
 
-  let runs = built
-    .resolve_runs(context, frame.layout)
-    .map_err(font_error)?;
   if pass == InlinePass::Content {
     DocumentDevice::paint(doc, |device| {
-      runs.paint(&built.spans, &font_style, frame, device);
+      runs.paint(&spans, &font_style, frame, device);
     })?;
   }
 
@@ -59,7 +47,7 @@ pub(crate) fn emit_inline_content(
     .iter()
     .filter(|inline_box| pass.paints(inline_box))
   {
-    if let Some(ProcessedInlineSpan::Box(item)) = built.spans.get(inline_box.id as usize) {
+    if let Some(ProcessedInlineSpan::Box(item)) = spans.get(inline_box.id as usize) {
       emit_inline_box(inline_box, item, frame, doc)?;
     }
   }
