@@ -3,6 +3,7 @@ use std::collections::VecDeque;
 use std::{
   borrow::{Borrow, Cow},
   io::Write,
+  iter::once,
 };
 
 use gif::{Encoder as GifEncoder, Frame as GifFrame, Repeat};
@@ -415,22 +416,56 @@ where
     .set_repeat(options.loop_count.map_or(Repeat::Infinite, Repeat::Finite))
     .map_err(Error::encode)?;
 
-  let mut write_gif_frame = |frame: AnimationFrame| -> Result<()> {
+  let quantize = |frame: Result<AnimationFrame>| -> Result<GifFrame<'static>> {
+    let frame = frame?;
+
     if frame.image.width() != u32::from(width) || frame.image.height() != u32::from(height) {
       return Err(Error::MixedAnimationFrameDimensions);
     }
+
     let mut pixels = frame.image.into_raw();
     let mut gif_frame = GifFrame::from_rgba_speed(width, height, &mut pixels, 28);
-    gif_frame.delay = duration_ms_to_gif_delay(frame.duration_ms);
-    encoder.write_frame(&gif_frame).map_err(Error::encode)
-  };
 
-  write_gif_frame(first)?;
-  for frame in frames {
-    write_gif_frame(frame?)?;
+    gif_frame.delay = duration_ms_to_gif_delay(frame.duration_ms);
+    Ok(gif_frame)
+  };
+  let frames = once(Ok(first)).chain(frames);
+
+  // Each frame quantizes to its own palette, so a batch as large as the one `ChunkedFrames`
+  // renders quantizes at once and is written in order.
+  #[cfg(feature = "rayon")]
+  {
+    use rayon::prelude::*;
+
+    let mut frames = frames;
+
+    loop {
+      let batch: Vec<_> = frames
+        .by_ref()
+        .take(rayon::current_num_threads().max(1))
+        .collect();
+
+      if batch.is_empty() {
+        return Ok(());
+      }
+
+      let quantized: Vec<_> = batch.into_par_iter().map(quantize).collect();
+
+      for gif_frame in quantized {
+        encoder.write_frame(&gif_frame?).map_err(Error::encode)?;
+      }
+    }
   }
 
-  Ok(())
+  #[cfg(not(feature = "rayon"))]
+  {
+    for frame in frames {
+      encoder
+        .write_frame(&quantize(frame)?)
+        .map_err(Error::encode)?;
+    }
+    Ok(())
+  }
 }
 
 /// Encode a sequence of RGBA frames into an animated PNG and write to `destination`.
