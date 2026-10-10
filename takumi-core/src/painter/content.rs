@@ -83,6 +83,24 @@ impl<'n> OwnContent<'n> {
     }
   }
 
+  /// The fragment items the inline content lays out to in the content box of `layout`, styled
+  /// by `font_style`, its node's own, without resolving a glyph; `None` when it has none.
+  pub fn fragment_items(
+    &self,
+    font_style: &SizedFontStyle<'_>,
+    layout: ComputedLayout,
+  ) -> Option<Rc<FragmentItems>> {
+    let Self::Inline(node) = *self else {
+      return None;
+    };
+
+    node.fragment_items_in(layout).or_else(|| {
+      let items = self.inline_items(font_style)?;
+
+      Some(lay_out(node, items, font_style, layout).1)
+    })
+  }
+
   /// The inline content laid out in the content box of `layout`, styled by `font_style`, its
   /// node's own; `None` when it has none. A node keeps the fragment items it laid out to, so
   /// painting it again at the same layout only processes its spans.
@@ -122,19 +140,8 @@ impl<'n> OwnContent<'n> {
       );
     }
 
-    let built = create_inline_layout(InlineLayoutRequest::in_content_box(
-      items,
-      layout.content_box_size(),
-      font_style,
-      context,
-      InlineLayoutMode::Draw,
-    ));
-    let fragment = Rc::new(built.fragment_items(layout));
+    let (built, fragment) = lay_out(node, items, font_style, layout);
     let runs = fragment.resolve_runs(&built.spans, context, layout);
-
-    if !fragment.ellipsized {
-      node.fragment_items.keep(Rc::clone(&fragment));
-    }
     let BuiltInlineLayout { spans, .. } = built;
 
     Some(runs.map(|runs| PaintedInline {
@@ -143,4 +150,31 @@ impl<'n> OwnContent<'n> {
       items: fragment,
     }))
   }
+}
+
+/// Lays `items`, `node`'s inline content, out in the content box of `layout`. Unless
+/// `text-overflow: ellipsis` cut its spans short, the node keeps the fragment items and lets go
+/// of the shaped text no other box shares.
+fn lay_out<'c>(
+  node: &'c RenderNode,
+  items: Vec<InlineItem<'c>>,
+  font_style: &'c SizedFontStyle<'c>,
+  layout: ComputedLayout,
+) -> (BuiltInlineLayout<'c>, Rc<FragmentItems>) {
+  let built = create_inline_layout(InlineLayoutRequest::in_content_box(
+    items,
+    layout.content_box_size(),
+    font_style,
+    &node.context,
+    InlineLayoutMode::Draw,
+  ));
+  let fragment = Rc::new(built.fragment_items(layout, &node.context));
+
+  if !fragment.ellipsized {
+    node.fragment_items.keep(Rc::clone(&fragment));
+    if let Some(key) = built.shape_key {
+      node.context.inline_cache().release_unshared(key);
+    }
+  }
+  (built, fragment)
 }

@@ -12,7 +12,7 @@ use takumi_core::{
 };
 
 use crate::{
-  inline::{inline_box_atoms, text_line_atoms, visit_inline_lines},
+  inline::{fragment_items, inline_box_atoms, text_line_atoms},
   options::PdfError,
   pagination::{Atom, Paragraph},
 };
@@ -218,16 +218,17 @@ impl AtomCollector<'_> {
   /// One atom per line box.
   /// The lines also form one [`Paragraph`] for the widow/orphan solver.
   fn text_atoms(&self, node: &RenderNode, layout: Layout, y: f32, atoms: &mut Atoms) {
-    visit_inline_lines(node, layout, |built, _| {
-      let start = atoms.extents.len();
+    let Some(items) = fragment_items(node, layout) else {
+      return;
+    };
+    let start = atoms.extents.len();
 
-      text_line_atoms(built, layout, y, &mut atoms.extents);
-      // Box bands are indivisible but not text lines, so widow/orphan control
-      // does not count them.
-      let paragraph_end = atoms.extents.len();
+    text_line_atoms(&items, layout, y, &mut atoms.extents);
+    // Box bands are indivisible but not text lines, so widow/orphan control
+    // does not count them.
+    let paragraph_end = atoms.extents.len();
 
-      inline_box_atoms(&built.inline_boxes(layout), layout, y, &mut atoms.extents);
-      atoms.push_paragraph(node, start..paragraph_end);
-    });
+    inline_box_atoms(items.inline_boxes(), layout, y, &mut atoms.extents);
+    atoms.push_paragraph(node, start..paragraph_end);
   }
 }
