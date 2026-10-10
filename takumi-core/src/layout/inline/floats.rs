@@ -176,7 +176,11 @@ impl InlineBoxItem<'_> {
   pub(super) fn float_side(&self) -> Option<FloatSide> {
     let style = &self.render_node.context.style;
 
-    match style.float.resolve(style.direction) {
+    match style
+      .base_data
+      .float
+      .resolve(style.inherited_data.direction)
+    {
       taffy::Float::Left => Some(FloatSide::Left),
       taffy::Float::Right => Some(FloatSide::Right),
       taffy::Float::None => None,
@@ -187,6 +191,9 @@ impl InlineBoxItem<'_> {
   pub(super) fn clear(&self) -> taffy::Clear {
     let style = &self.render_node.context.style;
 
-    style.clear.resolve(style.direction)
+    style
+      .base_data
+      .clear
+      .resolve(style.inherited_data.direction)
   }
 }

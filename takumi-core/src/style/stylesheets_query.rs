@@ -11,68 +11,115 @@ use crate::{
 impl ComputedStyle {
   /// The style a render's root inherits from: its language and font fallback chain.
   pub fn root(lang: Option<Lang>, font_family: Option<FontFamily>) -> Self {
-    Self {
+    let mut style = Self {
       lang,
-      font_family: font_family.unwrap_or_default(),
       ..Self::default()
+    };
+
+    if let Some(font_family) = font_family {
+      style.inherited_data_mut().font_family = font_family;
     }
+    style
   }
 
   /// Normalize inheritable text-related values to computed values for this node.
   pub(crate) fn make_computed(&mut self, sizing: &SizingContext) {
+    #[cfg(debug_assertions)]
+    let expected = {
+      let mut style = self.unshared();
+
+      style.resolve_computed(sizing);
+      style
+    };
+
+    self.share_computed_initial_groups();
+    self.resolve_computed(sizing);
+    #[cfg(debug_assertions)]
+    debug_assert!(
+      *self == expected,
+      "a shared style group resolved differently"
+    );
+  }
+
+  /// [`Self::make_computed`] on the groups this style owns alone, writing a shared group only
+  /// when its value changes.
+  pub(super) fn resolve_computed(&mut self, sizing: &SizingContext) {
     // `font-size` computed value is already resolved in `sizing.font_size`.
     // Keep it as css-px in style to avoid re-resolving descendant inheritance.
-    self.font_size = FontSize::Length(Length::Px(sizing.to_css(sizing.font_size)));
+    let font_size = FontSize::Length(Length::Px(sizing.to_css(sizing.font_size)));
+
+    if self.inherited_data.font_size != font_size {
+      self.inherited_data_mut().font_size = font_size;
+    }
 
     self.make_computed_values(sizing);
 
     // The used value of `border-width`/`outline-width` is zero when the line's
     // style is `none` or `hidden`, even though the computed value is `medium`.
-    if !self.border_top_style.is_rendered() {
-      self.border_top_width = LineWidth::Length(Length::zero());
+    let none = LineWidth::Length(Length::zero());
+    let box_data = &self.box_data;
+    let zeroed = [
+      !box_data.border_top_style.is_rendered() && box_data.border_top_width != none,
+      !box_data.border_right_style.is_rendered() && box_data.border_right_width != none,
+      !box_data.border_bottom_style.is_rendered() && box_data.border_bottom_width != none,
+      !box_data.border_left_style.is_rendered() && box_data.border_left_width != none,
+    ];
+
+    if zeroed.contains(&true) {
+      let box_data = self.box_data_mut();
+      let widths = [
+        &mut box_data.border_top_width,
+        &mut box_data.border_right_width,
+        &mut box_data.border_bottom_width,
+        &mut box_data.border_left_width,
+      ];
+
+      for (width, zeroed) in widths.into_iter().zip(zeroed) {
+        if zeroed {
+          *width = none;
+        }
+      }
     }
-    if !self.border_right_style.is_rendered() {
-      self.border_right_width = LineWidth::Length(Length::zero());
-    }
-    if !self.border_bottom_style.is_rendered() {
-      self.border_bottom_width = LineWidth::Length(Length::zero());
-    }
-    if !self.border_left_style.is_rendered() {
-      self.border_left_width = LineWidth::Length(Length::zero());
-    }
-    if !self.outline_style.is_rendered() {
-      self.outline_width = LineWidth::Length(Length::zero());
+    if !self.rare_non_inherited_data.outline_style.is_rendered()
+      && self.rare_non_inherited_data.outline_width != none
+    {
+      self.rare_non_inherited_data_mut().outline_width = none;
     }
 
-    self.original_display = self.display;
+    self.original_display = self.base_data.display;
 
     // https://www.w3.org/TR/css-display-3/#transformations
     // Elements with position: absolute or fixed are blockified
-    if self.position.is_out_of_flow() || self.float != Float::None {
-      self.display.blockify();
+    let base_data = &self.base_data;
+
+    if (base_data.position.is_out_of_flow() || base_data.float != Float::None)
+      && base_data.display.as_blockified() != base_data.display
+    {
+      self.base_data_mut().display.blockify();
     }
   }
 
   /// Whether the element and everything inside it paint nothing: zero opacity or `display:none`.
   /// A `visibility: hidden` element still lets its visible descendants paint.
   pub fn is_invisible(&self) -> bool {
-    self.opacity.0 == 0.0 || self.display == Display::None
+    self.svg_data.opacity.0 == 0.0 || self.base_data.display == Display::None
   }
 
   /// Whether the element paints its own box and content, which `visibility: hidden` stops.
   pub(crate) fn is_visible(&self) -> bool {
-    self.visibility == Visibility::Visible
+    self.inherited_data.visibility == Visibility::Visible
   }
 
   /// Whether `z-index` takes effect on this element.
   pub(crate) fn is_z_index_applicable(&self, is_flex_or_grid_item: bool) -> bool {
-    !matches!(self.z_index, ZIndex::Auto) && (self.position.is_positioned() || is_flex_or_grid_item)
+    !matches!(self.box_data.z_index, ZIndex::Auto)
+      && (self.base_data.position.is_positioned() || is_flex_or_grid_item)
   }
 
   /// The effective paint-order z-index of a child with this style.
   pub(crate) fn paint_order_z(&self, is_flex_or_grid_item: bool) -> i32 {
     if self.participates_in_positioned_paint_bucket(is_flex_or_grid_item) {
-      self.z_index.painting_order_value()
+      self.box_data.z_index.painting_order_value()
     } else {
       0
     }
@@ -80,16 +127,22 @@ impl ComputedStyle {
 
   /// Whether the element paints in the positioned/z-index bucket.
   pub(crate) fn participates_in_positioned_paint_bucket(&self, is_flex_or_grid_item: bool) -> bool {
-    self.position.is_positioned() || self.is_z_index_applicable(is_flex_or_grid_item)
+    self.base_data.position.is_positioned() || self.is_z_index_applicable(is_flex_or_grid_item)
   }
 
   /// Whether the element establishes a new stacking context, as Blink's
   /// `ComputedStyle::CalculateIsStackingContextWithoutContainment` decides for the properties
   /// takumi has, plus the containment half of `LayoutObject::IsStackingContext`.
   pub(crate) fn creates_stacking_context(&self, is_flex_or_grid_item: bool) -> bool {
-    self.position == Position::Fixed
-      || self.contain.contains(Contain::LAYOUT)
-      || self.contain.contains(Contain::PAINT)
+    self.base_data.position == Position::Fixed
+      || self
+        .rare_non_inherited_data
+        .contain
+        .contains(Contain::LAYOUT)
+      || self
+        .rare_non_inherited_data
+        .contain
+        .contains(Contain::PAINT)
       || self.is_z_index_applicable(is_flex_or_grid_item)
       || self.has_transform_related_property()
       || self.needs_offscreen_compositing()
@@ -98,9 +151,10 @@ impl ComputedStyle {
   /// Whether the element floats in a paint layer of its own, as Blink's floats with a
   /// self-painting layer do.
   pub(crate) fn floats_in_own_layer(&self, is_flex_or_grid_item: bool) -> bool {
-    self.float != Float::None
+    self.base_data.float != Float::None
       && !is_flex_or_grid_item
-      && (self.position.is_positioned() || self.creates_stacking_context(is_flex_or_grid_item))
+      && (self.base_data.position.is_positioned()
+        || self.creates_stacking_context(is_flex_or_grid_item))
   }
 
   /// Whether the box is a containing block for `fixed` descendants, and so
@@ -109,20 +163,30 @@ impl ComputedStyle {
   /// transform-related property, a non-initial `filter` / `backdrop-filter`,
   /// and `layout` or `paint` containment.
   pub fn contains_fixed_descendants(&self) -> bool {
-    self.contain.contains(Contain::LAYOUT)
-      || self.contain.contains(Contain::PAINT)
+    self
+      .rare_non_inherited_data
+      .contain
+      .contains(Contain::LAYOUT)
+      || self
+        .rare_non_inherited_data
+        .contain
+        .contains(Contain::PAINT)
       || self.has_transform_related_property()
-      || !self.filter.is_empty()
-      || !self.backdrop_filter.is_empty()
+      || !self.rare_non_inherited_data.filter.is_empty()
+      || !self.rare_non_inherited_data.backdrop_filter.is_empty()
   }
 
   /// Blink's `HasTransformRelatedProperty`, for the properties takumi has.
   pub(crate) fn has_transform_related_property(&self) -> bool {
-    self.transform.as_ref().is_some_and(|t| !t.0.is_empty())
-      || self.offset_path.is_some()
-      || self.rotate.is_some()
-      || self.translate != SpacePair::default()
-      || self.scale.is_some()
+    self
+      .svg_data
+      .transform
+      .as_ref()
+      .is_some_and(|t| !t.0.is_empty())
+      || self.rare_non_inherited_data.offset_path.is_some()
+      || self.rare_non_inherited_data.rotate.is_some()
+      || self.rare_non_inherited_data.translate != SpacePair::default()
+      || self.rare_non_inherited_data.scale.is_some()
   }
 
   /// Blink's `UpdateForPaintOffsetTranslation`: the paint offset a box with this style paints
@@ -134,13 +198,25 @@ impl ComputedStyle {
     local: Affine,
   ) -> Point<f32> {
     // Blink's `NeedsIsolationNodes`.
-    let isolates = self.contain.contains(Contain::PAINT)
-      || (self.contain.contains(Contain::STYLE) && self.contain.contains(Contain::LAYOUT));
+    let isolates = self
+      .rare_non_inherited_data
+      .contain
+      .contains(Contain::PAINT)
+      || (self
+        .rare_non_inherited_data
+        .contain
+        .contains(Contain::STYLE)
+        && self
+          .rare_non_inherited_data
+          .contain
+          .contains(Contain::LAYOUT));
 
     if isolates {
       return Point::ZERO;
     }
-    if !self.has_transform_related_property() && self.backdrop_filter.is_empty() {
+    if !self.has_transform_related_property()
+      && self.rare_non_inherited_data.backdrop_filter.is_empty()
+    {
       return paint_offset;
     }
 
@@ -171,42 +247,57 @@ impl ComputedStyle {
 
   /// Whether the element must render to an offscreen layer before compositing.
   pub fn needs_offscreen_compositing(&self) -> bool {
-    self.isolation == Isolation::Isolate
-      || *self.opacity < 1.0
-      || !self.filter.is_empty()
-      || !self.backdrop_filter.is_empty()
-      || self.mix_blend_mode != BlendMode::Normal
+    self.rare_non_inherited_data.isolation == Isolation::Isolate
+      || *self.svg_data.opacity < 1.0
+      || !self.rare_non_inherited_data.filter.is_empty()
+      || !self.rare_non_inherited_data.backdrop_filter.is_empty()
+      || self.rare_non_inherited_data.mix_blend_mode != BlendMode::Normal
       || self.has_shape_mask()
   }
 
   /// Whether `clip-path` or a non-empty `mask-image` shapes the element's
   /// visible area.
   pub fn has_shape_mask(&self) -> bool {
-    self.clip_path.is_some()
-      || self.mask_image.as_ref().is_some_and(|images| {
-        images
-          .iter()
-          .any(|image| !matches!(image, BackgroundImage::None))
-      })
+    self.rare_non_inherited_data.clip_path.is_some()
+      || self
+        .rare_non_inherited_data
+        .mask_image
+        .as_ref()
+        .is_some_and(|images| {
+          images
+            .iter()
+            .any(|image| !matches!(image, BackgroundImage::None))
+        })
   }
 
   /// Builds the element's local affine transform around its transform-origin
   /// (CSS Transforms Level 2 order: `T(origin) * translate * rotate * scale *
   /// transform * T(-origin)`).
   pub fn local_transform(&self, width: f32, height: f32, sizing: &SizingContext) -> Affine {
-    let (origin_x, origin_y) = self.transform_origin.to_point(sizing, width, height);
+    let (origin_x, origin_y) = self
+      .svg_data
+      .transform_origin
+      .to_point(sizing, width, height);
     let mut local = Affine::translation(origin_x, origin_y);
 
-    if self.translate != SpacePair::default() {
+    if self.rare_non_inherited_data.translate != SpacePair::default() {
       local *= Affine::translation(
-        self.translate.x.to_px(sizing, width),
-        self.translate.y.to_px(sizing, height),
+        self
+          .rare_non_inherited_data
+          .translate
+          .x
+          .to_px(sizing, width),
+        self
+          .rare_non_inherited_data
+          .translate
+          .y
+          .to_px(sizing, height),
       );
     }
-    if let Some(rotate) = self.rotate {
+    if let Some(rotate) = self.rare_non_inherited_data.rotate {
       local *= Affine::rotation(rotate);
     }
-    if let Some(scale) = self.scale {
+    if let Some(scale) = self.rare_non_inherited_data.scale {
       local *= Affine::scale(scale.x.0, scale.y.0);
     }
     // offset-path sits after translate/rotate/scale and before `transform`, and
@@ -224,10 +315,10 @@ impl ComputedStyle {
       .filter(|height| *height > 0.0)
       .or_else(|| sizing.viewport.size.height.map(|height| height as f32))
       .unwrap_or(height);
-    if let Some(path) = &self.offset_path
+    if let Some(path) = &self.rare_non_inherited_data.offset_path
       && let Some((point, tangent)) = path.sample(
-        self.offset_distance,
-        &self.offset_position,
+        self.rare_non_inherited_data.offset_distance,
+        &self.rare_non_inherited_data.offset_position,
         sizing,
         CoreSize {
           width: reference_width,
@@ -236,12 +327,17 @@ impl ComputedStyle {
       )
     {
       local *= Affine::translation(point.x - origin_x, point.y - origin_y);
-      local *= Affine::rotation_radians(self.offset_rotate.resolve(tangent));
-      if let Some((anchor_x, anchor_y)) = self.offset_anchor.resolve(sizing, width, height) {
+      local *=
+        Affine::rotation_radians(self.rare_non_inherited_data.offset_rotate.resolve(tangent));
+      if let Some((anchor_x, anchor_y)) = self
+        .rare_non_inherited_data
+        .offset_anchor
+        .resolve(sizing, width, height)
+      {
         local *= Affine::translation(origin_x - anchor_x, origin_y - anchor_y);
       }
     }
-    if let Some(node_transform) = &self.transform {
+    if let Some(node_transform) = &self.svg_data.transform {
       local *= Affine::from_transforms(node_transform.iter(), sizing, width, height);
     }
     local *= Affine::translation(-origin_x, -origin_y);
@@ -255,13 +351,17 @@ impl ComputedStyle {
   /// `contain: paint` clips a `visible` axis to the padding edge, as Blink's
   /// `LayoutBox::ComputeOverflowClipAxes` does.
   pub fn resolve_overflows(&self) -> SpacePair<Overflow> {
-    let (mut x, mut y) = match (self.overflow_x, self.overflow_y) {
+    let (mut x, mut y) = match (self.base_data.overflow_x, self.base_data.overflow_y) {
       (Overflow::Visible, other) if !other.is_clip_or_visible() => (Overflow::Hidden, other),
       (other, Overflow::Visible) if !other.is_clip_or_visible() => (other, Overflow::Hidden),
       pair => pair,
     };
 
-    if self.contain.contains(Contain::PAINT) {
+    if self
+      .rare_non_inherited_data
+      .contain
+      .contains(Contain::PAINT)
+    {
       if x == Overflow::Visible {
         x = Overflow::Clip;
       }
@@ -282,13 +382,13 @@ impl ComputedStyle {
   pub(crate) fn ellipsis_char(&self) -> &str {
     const ELLIPSIS_CHAR: &str = "…";
 
-    match &self.text_overflow {
+    match &self.rare_non_inherited_data.text_overflow {
       TextOverflow::Ellipsis => return ELLIPSIS_CHAR,
       TextOverflow::Custom(custom) => return custom.as_str(),
       _ => {}
     }
 
-    match &self.block_ellipsis {
+    match &self.rare_inherited_data.block_ellipsis {
       BlockEllipsis::String(custom) => custom.as_str(),
       BlockEllipsis::None => "",
       BlockEllipsis::Auto => ELLIPSIS_CHAR,
@@ -298,7 +398,8 @@ impl ComputedStyle {
   /// `nowrap` + `ellipsis`: parley lays out all the text even when it overflows,
   /// so this case is rendered by switching to wrapping with a one-line clamp.
   fn forces_single_line_ellipsis(&self) -> bool {
-    self.text_wrap_mode == TextWrapMode::NoWrap && self.text_overflow == TextOverflow::Ellipsis
+    self.inherited_data.text_wrap_mode == TextWrapMode::NoWrap
+      && self.rare_non_inherited_data.text_overflow == TextOverflow::Ellipsis
   }
 
   /// The wrap mode used for layout, forcing wrap for single-line ellipsis.
@@ -306,7 +407,7 @@ impl ComputedStyle {
     if self.forces_single_line_ellipsis() {
       TextWrapMode::Wrap
     } else {
-      self.text_wrap_mode
+      self.inherited_data.text_wrap_mode
     }
   }
 
@@ -320,11 +421,14 @@ impl ComputedStyle {
       return Some(1);
     }
 
-    if self.r#continue != Continue::Collapse {
+    if self.rare_non_inherited_data.r#continue != Continue::Collapse {
       return None;
     }
 
-    self.max_lines.filter(|&count| count >= 1)
+    self
+      .rare_non_inherited_data
+      .max_lines
+      .filter(|&count| count >= 1)
   }
 
   #[inline]
@@ -344,7 +448,7 @@ impl ComputedStyle {
     &self,
     sizing: &SizingContext,
   ) -> SizedTextDecorationThickness {
-    match self.text_decoration_thickness {
+    match self.rare_non_inherited_data.text_decoration_thickness {
       TextDecorationThickness::Length(Length::Auto) => SizedTextDecorationThickness::Auto,
       TextDecorationThickness::FromFont => SizedTextDecorationThickness::FromFont,
       TextDecorationThickness::Length(thickness) => {
@@ -358,18 +462,36 @@ impl ComputedStyle {
   /// `font-variant-*` is active, avoiding an allocation.
   pub(crate) fn resolved_font_features(&self) -> Cow<'_, [FontFeature]> {
     let mut features = Vec::new();
-    self.font_variant_ligatures.append_features(&mut features);
-    self.font_variant_numeric.append_features(&mut features);
-    self.font_variant_east_asian.append_features(&mut features);
-    self.font_variant_caps.append_features(&mut features);
-    self.font_variant_position.append_features(&mut features);
-    self.font_kerning.append_features(&mut features);
+    self
+      .inherited_data
+      .font_variant_ligatures
+      .append_features(&mut features);
+    self
+      .inherited_data
+      .font_variant_numeric
+      .append_features(&mut features);
+    self
+      .inherited_data
+      .font_variant_east_asian
+      .append_features(&mut features);
+    self
+      .inherited_data
+      .font_variant_caps
+      .append_features(&mut features);
+    self
+      .inherited_data
+      .font_variant_position
+      .append_features(&mut features);
+    self
+      .inherited_data
+      .font_kerning
+      .append_features(&mut features);
 
     if features.is_empty() {
-      return Cow::Borrowed(self.font_feature_settings.as_ref());
+      return Cow::Borrowed(self.inherited_data.font_feature_settings.as_ref());
     }
 
-    features.extend_from_slice(&self.font_feature_settings);
+    features.extend_from_slice(&self.inherited_data.font_feature_settings);
     Cow::Owned(features)
   }
 
@@ -377,84 +499,100 @@ impl ComputedStyle {
   pub(crate) fn to_taffy_style(&self, sizing: &SizingContext) -> taffy::Style {
     // Convert grid templates and associated line names
     let (grid_template_columns, grid_template_column_names) =
-      Self::grid_template(&self.grid_template_columns, sizing);
+      Self::grid_template(&self.rare_non_inherited_data.grid_template_columns, sizing);
     let (grid_template_rows, grid_template_row_names) =
-      Self::grid_template(&self.grid_template_rows, sizing);
+      Self::grid_template(&self.rare_non_inherited_data.grid_template_rows, sizing);
 
     taffy::Style {
-      contain: self.contain.into_taffy(),
-      float: self.float.resolve(self.direction),
-      clear: self.clear.resolve(self.direction),
-      direction: self.direction.into_taffy(),
-      box_sizing: self.box_sizing.into_taffy(),
+      contain: self.rare_non_inherited_data.contain.into_taffy(),
+      float: self.base_data.float.resolve(self.inherited_data.direction),
+      clear: self.base_data.clear.resolve(self.inherited_data.direction),
+      direction: self.inherited_data.direction.into_taffy(),
+      box_sizing: self.box_data.box_sizing.into_taffy(),
       size: Size {
-        width: self.width,
-        height: self.height,
+        width: self.box_data.width,
+        height: self.box_data.height,
       }
       .map(|length| length.resolve_to_dimension(sizing)),
       // Used widths are already zeroed for non-rendered styles in `make_computed`.
       border: Rect {
-        top: self.border_top_width,
-        right: self.border_right_width,
-        bottom: self.border_bottom_width,
-        left: self.border_left_width,
+        top: self.box_data.border_top_width,
+        right: self.box_data.border_right_width,
+        bottom: self.box_data.border_bottom_width,
+        left: self.box_data.border_left_width,
       }
       .map(|border| LengthPercentage::length(border.to_used_px(sizing))),
       padding: Rect {
-        top: self.padding_top,
-        right: self.padding_right,
-        bottom: self.padding_bottom,
-        left: self.padding_left,
+        top: self.box_data.padding_top,
+        right: self.box_data.padding_right,
+        bottom: self.box_data.padding_bottom,
+        left: self.box_data.padding_left,
       }
       .map(|padding| padding.resolve_to_length_percentage(sizing)),
-      inset: if self.position == Position::Static {
+      inset: if self.base_data.position == Position::Static {
         Rect::auto()
       } else {
         Rect {
-          top: self.top,
-          right: self.right,
-          bottom: self.bottom,
-          left: self.left,
+          top: self.surround_data.top,
+          right: self.surround_data.right,
+          bottom: self.surround_data.bottom,
+          left: self.surround_data.left,
         }
         .map(|inset| inset.resolve_to_length_percentage_auto(sizing))
       },
       margin: Rect {
-        top: self.margin_top,
-        right: self.margin_right,
-        bottom: self.margin_bottom,
-        left: self.margin_left,
+        top: self.box_data.margin_top,
+        right: self.box_data.margin_right,
+        bottom: self.box_data.margin_bottom,
+        left: self.box_data.margin_left,
       }
       .map(|margin| margin.resolve_to_length_percentage_auto(sizing)),
-      display: self.display.into_taffy(),
-      flex_direction: self.flex_direction.into_taffy(),
-      position: self.position.into_taffy(),
-      justify_content: self.justify_content.into_taffy(),
-      align_content: self.align_content.into_taffy(),
-      justify_items: self.justify_items.into_taffy(),
-      flex_grow: self.flex_grow.map(|grow| grow.0).unwrap_or(0.0),
-      align_items: self.align_items.into_taffy(),
+      display: self.base_data.display.into_taffy(),
+      flex_direction: self.rare_non_inherited_data.flex_direction.into_taffy(),
+      position: self.base_data.position.into_taffy(),
+      justify_content: self.box_data.justify_content.into_taffy(),
+      align_content: self.rare_non_inherited_data.align_content.into_taffy(),
+      justify_items: self.rare_non_inherited_data.justify_items.into_taffy(),
+      flex_grow: self
+        .rare_non_inherited_data
+        .flex_grow
+        .map(|grow| grow.0)
+        .unwrap_or(0.0),
+      align_items: self.box_data.align_items.into_taffy(),
       gap: Size {
-        width: self.column_gap.resolve_to_length_percentage(sizing),
-        height: self.row_gap.resolve_to_length_percentage(sizing),
+        width: self
+          .rare_non_inherited_data
+          .column_gap
+          .resolve_to_length_percentage(sizing),
+        height: self
+          .rare_non_inherited_data
+          .row_gap
+          .resolve_to_length_percentage(sizing),
       },
       flex_basis: self
+        .rare_non_inherited_data
         .flex_basis
         .unwrap_or_default()
         .resolve_to_dimension(sizing),
-      flex_shrink: self.flex_shrink.map(|shrink| shrink.0).unwrap_or(1.0),
-      flex_wrap: self.flex_wrap.into_taffy(),
-      flex_line_count: self.flex_line_count.get(),
+      flex_shrink: self
+        .rare_non_inherited_data
+        .flex_shrink
+        .map(|shrink| shrink.0)
+        .unwrap_or(1.0),
+      flex_wrap: self.rare_non_inherited_data.flex_wrap.into_taffy(),
+      flex_line_count: self.rare_non_inherited_data.flex_line_count.get(),
       min_size: Size {
-        width: self.min_width,
-        height: self.min_height,
+        width: self.box_data.min_width,
+        height: self.box_data.min_height,
       }
       .map(|length| length.resolve_to_length_percentage_auto(sizing)),
       max_size: Size {
-        width: self.max_width,
-        height: self.max_height,
+        width: self.box_data.max_width,
+        height: self.box_data.max_height,
       }
       .map(|length| length.resolve_to_length_percentage_auto(sizing)),
       grid_auto_columns: self
+        .rare_non_inherited_data
         .grid_auto_columns
         .as_ref()
         .map_or_else(Vec::new, |tracks| {
@@ -464,6 +602,7 @@ impl ComputedStyle {
             .collect()
         }),
       grid_auto_rows: self
+        .rare_non_inherited_data
         .grid_auto_rows
         .as_ref()
         .map_or_else(Vec::new, |tracks| {
@@ -472,27 +611,44 @@ impl ComputedStyle {
             .map(|track| track.to_min_max(sizing))
             .collect()
         }),
-      grid_auto_flow: self.grid_auto_flow.into_taffy(),
+      grid_auto_flow: self.rare_non_inherited_data.grid_auto_flow.into_taffy(),
       grid_column: Line {
-        start: self.grid_column_start.clone().into_taffy(),
-        end: self.grid_column_end.clone().into_taffy(),
+        start: self
+          .rare_non_inherited_data
+          .grid_column_start
+          .clone()
+          .into_taffy(),
+        end: self
+          .rare_non_inherited_data
+          .grid_column_end
+          .clone()
+          .into_taffy(),
       },
       grid_row: Line {
-        start: self.grid_row_start.clone().into_taffy(),
-        end: self.grid_row_end.clone().into_taffy(),
+        start: self
+          .rare_non_inherited_data
+          .grid_row_start
+          .clone()
+          .into_taffy(),
+        end: self
+          .rare_non_inherited_data
+          .grid_row_end
+          .clone()
+          .into_taffy(),
       },
       grid_template_columns,
       grid_template_rows,
       grid_template_column_names,
       grid_template_row_names,
       grid_template_areas: self
+        .rare_non_inherited_data
         .grid_template_areas
         .as_ref()
         .cloned()
         .and_then(GridTemplateAreas::into_taffy),
-      aspect_ratio: self.aspect_ratio.into(),
-      align_self: self.align_self.into_taffy(),
-      justify_self: self.justify_self.into_taffy(),
+      aspect_ratio: self.surround_data.aspect_ratio.into(),
+      align_self: self.rare_non_inherited_data.align_self.into_taffy(),
+      justify_self: self.rare_non_inherited_data.justify_self.into_taffy(),
       overflow: self
         .resolve_overflows()
         .into_taffy()

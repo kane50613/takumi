@@ -94,12 +94,12 @@ impl<'s> FillLayers<'s> {
   pub fn background(style: &'s ComputedStyle) -> Self {
     Self {
       kind: FillLayerType::Background,
-      sizes: &style.background_size,
-      positions: &style.background_position,
-      repeats: &style.background_repeat,
-      blend_modes: &style.background_blend_mode,
-      clip: style.background_clip.into(),
-      origin: style.background_origin.into(),
+      sizes: &style.background_data.background_size,
+      positions: &style.background_data.background_position,
+      repeats: &style.background_data.background_repeat,
+      blend_modes: &style.background_data.background_blend_mode,
+      clip: style.background_data.background_clip.into(),
+      origin: style.background_data.background_origin.into(),
     }
   }
 
@@ -107,9 +107,9 @@ impl<'s> FillLayers<'s> {
   pub fn mask(style: &'s ComputedStyle) -> Self {
     Self {
       kind: FillLayerType::Mask,
-      sizes: &style.mask_size,
-      positions: &style.mask_position,
-      repeats: &style.mask_repeat,
+      sizes: &style.rare_non_inherited_data.mask_size,
+      positions: &style.rare_non_inherited_data.mask_position,
+      repeats: &style.rare_non_inherited_data.mask_repeat,
       blend_modes: &[],
       clip: FillBox::Border,
       origin: FillBox::Border,
@@ -306,7 +306,8 @@ impl BoxBackgroundPaintContext {
         ),
         left: obscures(border.width.left, border.color.left.0, border.style.left),
       },
-      disallow_border_derived_adjustment: style.border_collapse == BorderCollapse::Collapse,
+      disallow_border_derived_adjustment: style.inherited_data.border_collapse
+        == BorderCollapse::Collapse,
     }
   }
 

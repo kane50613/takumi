@@ -482,6 +482,7 @@ impl<'c> BoxPainter<'c> {
     let color = self
       .context
       .style
+      .background_data
       .background_color
       .resolve(self.context.current_color);
 
@@ -508,7 +509,13 @@ impl<'c> BoxPainter<'c> {
   /// The box's `box-shadow` layers, resolved and split into the ones that fall inside the box and
   /// the ones outside it.
   pub fn shadows(&self) -> BoxShadows {
-    let Some(shadows) = self.context.style.box_shadow.as_deref() else {
+    let Some(shadows) = self
+      .context
+      .style
+      .rare_non_inherited_data
+      .box_shadow
+      .as_deref()
+    else {
       return BoxShadows::default();
     };
     let resolve = |shadow: &BoxShadow| {
@@ -550,9 +557,14 @@ impl<'c> BoxPainter<'c> {
     let style = &self.context.style;
 
     style
+      .rare_non_inherited_data
       .clip_path
       .as_ref()?
-      .fill_shape(self.context, self.layout.size, style.clip_rule)
+      .fill_shape(
+        self.context,
+        self.layout.size,
+        style.rare_inherited_data.clip_rule,
+      )
   }
 
   /// The outline the box paints, or `None` when it paints none.
@@ -568,8 +580,14 @@ impl<'c> BoxPainter<'c> {
   pub fn paints_decorations(&self) -> bool {
     let style = &self.context.style;
     let current_color = self.context.current_color;
-    let background = style.background_color.resolve(current_color).0[3] != 0
+    let background = style
+      .background_data
+      .background_color
+      .resolve(current_color)
+      .0[3]
+      != 0
       || style
+        .background_data
         .background_image
         .as_deref()
         .is_some_and(|images| images.iter().any(BackgroundImage::paints));
@@ -579,6 +597,12 @@ impl<'c> BoxPainter<'c> {
       || self.border.has_visible_sides()
       || !shadows.inset.is_empty()
       || !shadows.outer.is_empty()
-      || (style.outline_color.resolve(current_color).0[3] != 0 && self.outline().is_some())
+      || (style
+        .rare_non_inherited_data
+        .outline_color
+        .resolve(current_color)
+        .0[3]
+        != 0
+        && self.outline().is_some())
   }
 }

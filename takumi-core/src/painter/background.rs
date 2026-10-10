@@ -53,7 +53,7 @@ impl BackgroundClipArea {
       })
     };
 
-    match context.style.background_clip {
+    match context.style.background_data.background_clip {
       BackgroundClip::BorderBox => Self::BorderBox(border),
       BackgroundClip::PaddingBox => inner(ClipBox::padding_box(border, layout), layout.border),
       BackgroundClip::ContentBox => inner(
@@ -150,7 +150,10 @@ impl<'c> BoxBackground<'c> {
     paint_offset: Point<f32>,
   ) -> Self {
     let style = &context.style;
-    let color = style.background_color.resolve(context.current_color);
+    let color = style
+      .background_data
+      .background_color
+      .resolve(context.current_color);
     let snapped = SnappedBox::new(paint_offset, layout.size);
 
     Self {
@@ -159,7 +162,11 @@ impl<'c> BoxBackground<'c> {
       offset: snapped.offset(),
       size: snapped.size(),
       layers: FillLayers::background(style).resolve(
-        style.background_image.as_deref().unwrap_or_default(),
+        style
+          .background_data
+          .background_image
+          .as_deref()
+          .unwrap_or_default(),
         &BoxBackgroundPaintContext::new(style, layout, &border, paint_offset),
         context,
       ),

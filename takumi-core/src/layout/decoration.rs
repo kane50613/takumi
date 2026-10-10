@@ -191,9 +191,13 @@ impl OutlineGeometry {
   /// look at alpha; a backend is free to skip the invisible fill.
   pub(crate) fn painted(context: &RenderContext, size: Size<f32>) -> Option<Self> {
     let style = &context.style;
-    let width = style.outline_width.to_used_px(&context.sizing).max(0.0);
+    let width = style
+      .rare_non_inherited_data
+      .outline_width
+      .to_used_px(&context.sizing)
+      .max(0.0);
 
-    if width <= 0.0 || !style.outline_style.is_rendered() {
+    if width <= 0.0 || !style.rare_non_inherited_data.outline_style.is_rendered() {
       return None;
     }
     Some(Self::of(context, size))
@@ -203,8 +207,13 @@ impl OutlineGeometry {
   /// it paints.
   fn of(context: &RenderContext, size: Size<f32>) -> Self {
     let style = &context.style;
-    let width = style.outline_width.to_used_px(&context.sizing).max(0.0);
+    let width = style
+      .rare_non_inherited_data
+      .outline_width
+      .to_used_px(&context.sizing)
+      .max(0.0);
     let offset = style
+      .rare_non_inherited_data
       .outline_offset
       .to_border_px(&context.sizing, size.width);
 
@@ -213,9 +222,15 @@ impl OutlineGeometry {
       offset,
       BorderProperties {
         width: Sides([width; 4]).into(),
-        color: Sides([style.outline_color.resolve(context.current_color); 4]).into(),
-        style: Sides([style.outline_style; 4]).into(),
-        image_rendering: style.image_rendering,
+        color: Sides(
+          [style
+            .rare_non_inherited_data
+            .outline_color
+            .resolve(context.current_color); 4],
+        )
+        .into(),
+        style: Sides([style.rare_non_inherited_data.outline_style; 4]).into(),
+        image_rendering: style.rare_inherited_data.image_rendering,
         radius: BorderProperties::resolve_radius_part(context, size),
         shape: BorderProperties::resolve_shape_part(context),
         collapsed: false,

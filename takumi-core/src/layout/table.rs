@@ -53,8 +53,8 @@ enum CellAlignment {
 
 impl CellAlignment {
   fn of(style: &ComputedStyle) -> Self {
-    match style.align_content {
-      JustifyContent::Normal => Self::of_vertical_align(style.vertical_align),
+    match style.rare_non_inherited_data.align_content {
+      JustifyContent::Normal => Self::of_vertical_align(style.base_data.vertical_align),
       JustifyContent::SpaceAround
       | JustifyContent::SpaceEvenly
       | JustifyContent::Center
@@ -113,11 +113,11 @@ impl TableSlots {
     let children = table.children.take().map_or_else(Vec::new, Vec::from);
 
     for (index, mut child) in children.into_iter().enumerate() {
-      match child.context.style.display {
+      match child.context.style.base_data.display {
         Display::TableCaption => captions.push(child),
         Display::TableRow => groups.push((1, index, vec![child])),
         Display::TableHeaderGroup | Display::TableRowGroup | Display::TableFooterGroup => {
-          let order = Self::group_order(child.context.style.display);
+          let order = Self::group_order(child.context.style.base_data.display);
           let rows = child.children.take().map_or_else(Vec::new, Vec::from);
 
           groups.push((
@@ -125,7 +125,7 @@ impl TableSlots {
             index,
             rows
               .into_iter()
-              .filter(|row| row.context.style.display == Display::TableRow)
+              .filter(|row| row.context.style.base_data.display == Display::TableRow)
               .collect(),
           ));
         }
@@ -263,7 +263,7 @@ impl RenderNode {
       }
     }
 
-    if self.context.style.display == Display::Table {
+    if self.context.style.base_data.display == Display::Table {
       self.lower_table();
     }
   }
@@ -307,7 +307,7 @@ impl RenderNode {
     let mut run = Vec::new();
 
     for child in children {
-      if child.context.style.display != Display::TableCell && child.is_cell() {
+      if child.context.style.base_data.display != Display::TableCell && child.is_cell() {
         run.push(child);
         continue;
       }
@@ -327,7 +327,7 @@ impl RenderNode {
   fn anonymous_cell(&self, children: Vec<RenderNode>) -> RenderNode {
     let mut style = ComputedStyle::from_parent(&self.context.style);
 
-    style.display = Display::TableCell;
+    style.base_data_mut().display = Display::TableCell;
     style.make_computed(&self.context.sizing);
 
     RenderNode::new(
@@ -345,7 +345,7 @@ impl RenderNode {
 
   /// Recognizes authored cells without CSS anonymous table-box fixup.
   fn is_cell(&self) -> bool {
-    let display = self.context.style.display;
+    let display = self.context.style.base_data.display;
 
     if display == Display::TableCell {
       return true;
@@ -374,11 +374,11 @@ impl RenderNode {
 
     let grid = TableGrid::resolve(&rows);
     let columns = grid.columns;
-    let collapse = self.context.style.border_collapse == BorderCollapse::Collapse;
-    let spacing = self.context.style.border_spacing.0;
+    let collapse = self.context.style.inherited_data.border_collapse == BorderCollapse::Collapse;
+    let spacing = self.context.style.inherited_data.border_spacing.0;
     let sizing = self.context.sizing.clone();
-    let fixed =
-      self.context.style.table_layout == TableLayout::Fixed && !self.context.style.width.is_auto();
+    let fixed = self.context.style.base_data.table_layout == TableLayout::Fixed
+      && !self.context.style.box_data.width.is_auto();
     let collapsed = collapse.then(|| {
       CollapsedBorders::resolve(
         &self.context.style,
@@ -414,7 +414,7 @@ impl RenderNode {
     let mut line: i16 = 1;
     let (top_captions, bottom_captions): (Vec<_>, Vec<_>) = captions
       .into_iter()
-      .partition(|caption| caption.context.style.caption_side == CaptionSide::Top);
+      .partition(|caption| caption.context.style.inherited_data.caption_side == CaptionSide::Top);
 
     let tracks = table_columns.tracks() as u16;
 
@@ -484,17 +484,17 @@ impl RenderNode {
 
     let style = self.context.style_mut();
 
-    style.display = Display::Grid;
-    style.grid_template_columns =
+    style.base_data_mut().display = Display::Grid;
+    style.rare_non_inherited_data_mut().grid_template_columns =
       GridTemplateComponents::from_css_str(&vec!["auto"; usize::from(tracks)].join(" ")).ok();
 
     if collapse {
-      style.column_gap = Gap::Length(Length::zero());
-      style.row_gap = Gap::Length(Length::zero());
+      style.rare_non_inherited_data_mut().column_gap = Gap::Length(Length::zero());
+      style.rare_non_inherited_data_mut().row_gap = Gap::Length(Length::zero());
       style.clear_border();
     } else {
-      style.column_gap = Gap::Length(spacing.x);
-      style.row_gap = Gap::Length(spacing.y);
+      style.rare_non_inherited_data_mut().column_gap = Gap::Length(spacing.x);
+      style.rare_non_inherited_data_mut().row_gap = Gap::Length(spacing.y);
       style.inset_table_edges(spacing, &sizing);
     }
 
@@ -509,65 +509,105 @@ impl RenderNode {
     let style = self.context.style_mut();
 
     // A cell fills its columns; its widths only constrained them.
-    style.width = Default::default();
-    style.min_width = Default::default();
-    style.max_width = Default::default();
+    style.box_data_mut().width = Default::default();
+    style.box_data_mut().min_width = Default::default();
+    style.box_data_mut().max_width = Default::default();
     self.context.collapsed_borders = collapse;
 
-    if self.context.style.display == Display::TableCell {
+    if self.context.style.base_data.display == Display::TableCell {
       self.align_cell_content();
 
-      if self.context.style.display == Display::TableCell {
-        self.context.style_mut().display = Display::Block;
+      if self.context.style.base_data.display == Display::TableCell {
+        self.context.style_mut().base_data_mut().display = Display::Block;
       }
     }
 
-    self.context.style_mut().grid_row_start = GridPlacement::Line(line);
-    self.context.style_mut().grid_row_end = GridPlacement::Span(GridPlacementSpan::Span(rowspan));
-    self.context.style_mut().grid_column_start = GridPlacement::Line(column as i16 + 1);
-    self.context.style_mut().grid_column_end =
-      GridPlacement::Span(GridPlacementSpan::Span(colspan));
+    self
+      .context
+      .style_mut()
+      .rare_non_inherited_data_mut()
+      .grid_row_start = GridPlacement::Line(line);
+    self
+      .context
+      .style_mut()
+      .rare_non_inherited_data_mut()
+      .grid_row_end = GridPlacement::Span(GridPlacementSpan::Span(rowspan));
+    self
+      .context
+      .style_mut()
+      .rare_non_inherited_data_mut()
+      .grid_column_start = GridPlacement::Line(column as i16 + 1);
+    self
+      .context
+      .style_mut()
+      .rare_non_inherited_data_mut()
+      .grid_column_end = GridPlacement::Span(GridPlacementSpan::Span(colspan));
   }
 
   fn lower_full_width(&mut self, line: i16, columns: u16) {
     // A stray that is itself a lowered table keeps its grid; blocking it would
     // drop the placement its own cells already carry.
-    if self.context.style.display != Display::Grid {
-      self.context.style_mut().display = Display::Block;
+    if self.context.style.base_data.display != Display::Grid {
+      self.context.style_mut().base_data_mut().display = Display::Block;
     }
 
-    self.context.style_mut().grid_row_start = GridPlacement::Line(line);
-    self.context.style_mut().grid_row_end = GridPlacement::Span(GridPlacementSpan::Span(1));
-    self.context.style_mut().grid_column_start = GridPlacement::Line(1);
-    self.context.style_mut().grid_column_end =
-      GridPlacement::Span(GridPlacementSpan::Span(columns));
+    self
+      .context
+      .style_mut()
+      .rare_non_inherited_data_mut()
+      .grid_row_start = GridPlacement::Line(line);
+    self
+      .context
+      .style_mut()
+      .rare_non_inherited_data_mut()
+      .grid_row_end = GridPlacement::Span(GridPlacementSpan::Span(1));
+    self
+      .context
+      .style_mut()
+      .rare_non_inherited_data_mut()
+      .grid_column_start = GridPlacement::Line(1);
+    self
+      .context
+      .style_mut()
+      .rare_non_inherited_data_mut()
+      .grid_column_end = GridPlacement::Span(GridPlacementSpan::Span(columns));
   }
 
   /// Approximation: row backgrounds leave `border-spacing` gaps unpainted.
   fn inherit_row_background(&mut self, row: &RenderNode) {
     let row_style = &row.context.style;
 
-    if row_style.background_color == ColorInput::transparent()
-      && row_style.background_image.is_none()
+    if row_style.background_data.background_color == ColorInput::transparent()
+      && row_style.background_data.background_image.is_none()
     {
       return;
     }
 
-    if self.context.style.background_color != ColorInput::transparent()
-      || self.context.style.background_image.is_some()
+    if self.context.style.background_data.background_color != ColorInput::transparent()
+      || self
+        .context
+        .style
+        .background_data
+        .background_image
+        .is_some()
     {
       return;
     }
 
     let cell_style = self.context.style_mut();
 
-    cell_style.background_color = row_style.background_color;
-    cell_style.background_image = row_style.background_image.clone();
-    cell_style.background_position = row_style.background_position.clone();
-    cell_style.background_size = row_style.background_size.clone();
-    cell_style.background_repeat = row_style.background_repeat.clone();
-    cell_style.background_clip = row_style.background_clip;
-    cell_style.background_origin = row_style.background_origin;
+    cell_style.background_data_mut().background_color = row_style.background_data.background_color;
+    cell_style.background_data_mut().background_image =
+      row_style.background_data.background_image.clone();
+    cell_style.background_data_mut().background_position =
+      row_style.background_data.background_position.clone();
+    cell_style.background_data_mut().background_size =
+      row_style.background_data.background_size.clone();
+    cell_style.background_data_mut().background_repeat =
+      row_style.background_data.background_repeat.clone();
+    cell_style.background_data_mut().background_clip = row_style.background_data.background_clip;
+    cell_style.background_data_mut().background_origin =
+      row_style.background_data.background_origin;
   }
 
   /// Wraps content to preserve its formatting context during alignment.
@@ -597,9 +637,9 @@ impl RenderNode {
 
     let style = self.context.style_mut();
 
-    style.display = Display::Flex;
-    style.flex_direction = FlexDirection::Column;
-    style.justify_content = justify;
+    style.base_data_mut().display = Display::Flex;
+    style.rare_non_inherited_data_mut().flex_direction = FlexDirection::Column;
+    style.box_data_mut().justify_content = justify;
   }
 
   /// Whether this lowered cell aligns its content to its row's baseline: a baseline-aligned cell
@@ -623,9 +663,9 @@ impl RenderNode {
     let style = cell.context.style_mut();
 
     // Blink's `MinMaxSizes` of the cell's content; its own widths constrain the column apart.
-    style.width = Default::default();
-    style.min_width = Default::default();
-    style.max_width = Default::default();
+    style.box_data_mut().width = Default::default();
+    style.box_data_mut().min_width = Default::default();
+    style.box_data_mut().max_width = Default::default();
     cell.lower_cell(1, 0, 1, false);
     cell.context.blockify();
 
@@ -666,25 +706,25 @@ impl RenderNode {
       length => length.to_px(sizing, 0.0),
     };
     let border_padding = border(
-      style.border_left_style.is_rendered(),
-      style.border_left_width,
+      style.box_data.border_left_style.is_rendered(),
+      style.box_data.border_left_width,
     ) + border(
-      style.border_right_style.is_rendered(),
-      style.border_right_width,
-    ) + padding(style.padding_left)
-      + padding(style.padding_right);
-    let content_box = style.box_sizing == BoxSizing::ContentBox;
+      style.box_data.border_right_style.is_rendered(),
+      style.box_data.border_right_width,
+    ) + padding(style.box_data.padding_left)
+      + padding(style.box_data.padding_right);
+    let content_box = style.box_data.box_sizing == BoxSizing::ContentBox;
     let fixed_px = |length: Option<Length>| match length? {
       Length::Auto | Length::Percentage(_) => None,
       length if content_box => Some(length.to_px(sizing, 0.0) + border_padding),
       length => Some(length.to_px(sizing, 0.0).max(border_padding)),
     };
-    let width = fixed_px(style.width.as_length());
-    let min_width = fixed_px(Some(style.min_width));
+    let width = fixed_px(style.box_data.width.as_length());
+    let min_width = fixed_px(Some(style.box_data.min_width));
     let max_width =
-      fixed_px(style.max_width.as_length()).map(|max| max.max(min_width.unwrap_or(max)));
-    let percent = match style.width.as_length() {
-      Some(Length::Percentage(percent)) => Some(match style.max_width.as_length() {
+      fixed_px(style.box_data.max_width.as_length()).map(|max| max.max(min_width.unwrap_or(max)));
+    let percent = match style.box_data.width.as_length() {
+      Some(Length::Percentage(percent)) => Some(match style.box_data.max_width.as_length() {
         Some(Length::Percentage(max)) => percent.min(max),
         _ => percent,
       }),
@@ -723,6 +763,7 @@ impl RenderNode {
       && self
         .context
         .style
+        .box_data
         .width
         .as_length()
         .is_none_or(|width| width == Length::Auto)
@@ -758,16 +799,16 @@ impl RenderNode {
     };
     // The padding already holds the border spacing around the grid's edges.
     let edges = rendered(
-      table.border_left_style.is_rendered(),
-      table.border_left_width,
+      table.box_data.border_left_style.is_rendered(),
+      table.box_data.border_left_width,
     ) + rendered(
-      table.border_right_style.is_rendered(),
-      table.border_right_width,
-    ) + px(table.padding_left)
-      + px(table.padding_right);
+      table.box_data.border_right_style.is_rendered(),
+      table.box_data.border_right_width,
+    ) + px(table.box_data.padding_left)
+      + px(table.box_data.padding_right);
     let undistributable = columns.undistributable(edges);
     let (grid_min, grid_max) = columns.min_max(undistributable);
-    let content_box = table.box_sizing == BoxSizing::ContentBox;
+    let content_box = table.box_data.box_sizing == BoxSizing::ContentBox;
     // A border-box width, as the style's own box sizing counts it.
     let styled = |border_box: f32| {
       if content_box {
@@ -783,17 +824,19 @@ impl RenderNode {
       length if content_box => Some(px(length) + edges - columns.edge_spacing()),
       length => Some(px(length)),
     };
-    let min_width = specified(Some(table.min_width)).map_or(grid_min, |min| min.max(grid_min));
+    let min_width =
+      specified(Some(table.box_data.min_width)).map_or(grid_min, |min| min.max(grid_min));
     // `auto` and the sizing keywords size the table from its grid, which the grid's minimum and
     // maximum stand in for as the table's content sizes, as Blink's
     // `ComputeUsedInlineSizeForTableFragment` hands them to the inline-size resolution.
-    let sized_by_grid = !matches!(table.width, StyleSize::Length(length) if length != Length::Auto);
+    let sized_by_grid =
+      !matches!(table.box_data.width, StyleSize::Length(length) if length != Length::Auto);
     let width = match known {
       Some(known) if item || !sized_by_grid => known,
       _ => {
         let stretch = match available {
           AvailableSpace::Definite(space) => {
-            Some(space - px(table.margin_left) - px(table.margin_right))
+            Some(space - px(table.box_data.margin_left) - px(table.box_data.margin_right))
           }
           AvailableSpace::MinContent | AvailableSpace::MaxContent => None,
         };
@@ -804,14 +847,15 @@ impl RenderNode {
             stretch.map_or(grid_max, |stretch| stretch.clamp(grid_min, grid_max))
           }
         };
-        let width = match table.width {
+        let width = match table.box_data.width {
           StyleSize::MinContent => grid_min,
           StyleSize::MaxContent => grid_max,
           StyleSize::Stretch => stretch.unwrap_or(fit),
           StyleSize::FitContent => fit,
           StyleSize::Length(length) => specified(Some(length)).unwrap_or(fit),
         };
-        let width = specified(table.max_width.as_length()).map_or(width, |max| width.min(max));
+        let width =
+          specified(table.box_data.max_width.as_length()).map_or(width, |max| width.min(max));
 
         width.max(min_width)
       }
@@ -858,22 +902,22 @@ impl ComputedStyle {
       *padding = Length::Px(padding.to_px(sizing, 0.0) + extra.to_px(sizing, 0.0));
     };
 
-    inset(&mut self.padding_top, spacing.y);
-    inset(&mut self.padding_bottom, spacing.y);
-    inset(&mut self.padding_left, spacing.x);
-    inset(&mut self.padding_right, spacing.x);
+    inset(&mut self.box_data_mut().padding_top, spacing.y);
+    inset(&mut self.box_data_mut().padding_bottom, spacing.y);
+    inset(&mut self.box_data_mut().padding_left, spacing.x);
+    inset(&mut self.box_data_mut().padding_right, spacing.x);
   }
 
   /// The collapsed border lives on the edge cells, so the table box stops painting its own.
   fn clear_border(&mut self) {
-    self.border_top_style = BorderStyle::None;
-    self.border_right_style = BorderStyle::None;
-    self.border_bottom_style = BorderStyle::None;
-    self.border_left_style = BorderStyle::None;
-    self.border_top_width = LineWidth::Length(Length::zero());
-    self.border_right_width = LineWidth::Length(Length::zero());
-    self.border_bottom_width = LineWidth::Length(Length::zero());
-    self.border_left_width = LineWidth::Length(Length::zero());
+    self.box_data_mut().border_top_style = BorderStyle::None;
+    self.box_data_mut().border_right_style = BorderStyle::None;
+    self.box_data_mut().border_bottom_style = BorderStyle::None;
+    self.box_data_mut().border_left_style = BorderStyle::None;
+    self.box_data_mut().border_top_width = LineWidth::Length(Length::zero());
+    self.box_data_mut().border_right_width = LineWidth::Length(Length::zero());
+    self.box_data_mut().border_bottom_width = LineWidth::Length(Length::zero());
+    self.box_data_mut().border_left_width = LineWidth::Length(Length::zero());
   }
 }
 
@@ -1007,10 +1051,22 @@ mod tests {
     };
 
     [
-      width(style.border_top_width, style.border_top_style),
-      width(style.border_right_width, style.border_right_style),
-      width(style.border_bottom_width, style.border_bottom_style),
-      width(style.border_left_width, style.border_left_style),
+      width(
+        style.box_data.border_top_width,
+        style.box_data.border_top_style,
+      ),
+      width(
+        style.box_data.border_right_width,
+        style.box_data.border_right_style,
+      ),
+      width(
+        style.box_data.border_bottom_width,
+        style.box_data.border_bottom_style,
+      ),
+      width(
+        style.box_data.border_left_width,
+        style.box_data.border_left_style,
+      ),
     ]
   }
 
@@ -1039,7 +1095,7 @@ mod tests {
         .with_class_name("table"),
     );
 
-    assert_eq!(tree.context.style.display, Display::Grid);
+    assert_eq!(tree.context.style.base_data.display, Display::Grid);
     assert_eq!(ids(&tree), ["a", "b"]);
   }
 
@@ -1074,11 +1130,19 @@ mod tests {
     let caption = &tree.children.as_deref().expect("children")[0];
 
     assert_eq!(
-      caption.context.style.grid_column_start,
+      caption
+        .context
+        .style
+        .rare_non_inherited_data
+        .grid_column_start,
       GridPlacement::Line(1)
     );
     assert_eq!(
-      caption.context.style.grid_column_end,
+      caption
+        .context
+        .style
+        .rare_non_inherited_data
+        .grid_column_end,
       GridPlacement::Span(GridPlacementSpan::Span(3))
     );
   }
@@ -1112,10 +1176,13 @@ mod tests {
 
     let cell = &tree.children.as_deref().expect("children")[0];
 
-    assert_eq!(cell.context.style.display, Display::Flex);
-    assert_eq!(cell.context.style.flex_direction, FlexDirection::Column);
+    assert_eq!(cell.context.style.base_data.display, Display::Flex);
     assert_eq!(
-      cell.context.style.justify_content,
+      cell.context.style.rare_non_inherited_data.flex_direction,
+      FlexDirection::Column
+    );
+    assert_eq!(
+      cell.context.style.box_data.justify_content,
       JustifyContent::SafeCenter
     );
     assert_eq!(cell.children.as_deref().expect("wrapped content").len(), 1);
@@ -1136,7 +1203,7 @@ mod tests {
     let cell = &tree.children.as_deref().expect("children")[0];
 
     assert_eq!(
-      cell.context.style.justify_content,
+      cell.context.style.box_data.justify_content,
       JustifyContent::SafeFlexEnd
     );
   }
@@ -1178,9 +1245,15 @@ mod tests {
     let flex = find(cell, "flex").expect("the flex box inside the anonymous cell");
 
     assert_eq!(cell.origin, NodeOrigin::Anonymous);
-    assert_eq!(cell.context.style.grid_column_start, GridPlacement::Line(1));
-    assert_eq!(flex.context.style.display, Display::Flex);
-    assert_eq!(flex.context.style.flex_direction, FlexDirection::Row);
+    assert_eq!(
+      cell.context.style.rare_non_inherited_data.grid_column_start,
+      GridPlacement::Line(1)
+    );
+    assert_eq!(flex.context.style.base_data.display, Display::Flex);
+    assert_eq!(
+      flex.context.style.rare_non_inherited_data.flex_direction,
+      FlexDirection::Row
+    );
   }
 
   #[test]
@@ -1195,11 +1268,19 @@ mod tests {
     let cells = tree.children.as_deref().expect("children");
 
     assert_eq!(
-      cells[0].context.style.grid_column_start,
+      cells[0]
+        .context
+        .style
+        .rare_non_inherited_data
+        .grid_column_start,
       GridPlacement::Line(1)
     );
     assert_eq!(
-      cells[1].context.style.grid_column_start,
+      cells[1]
+        .context
+        .style
+        .rare_non_inherited_data
+        .grid_column_start,
       GridPlacement::Line(2)
     );
   }
@@ -1225,7 +1306,7 @@ mod tests {
       let wide = &tree.children.as_deref().expect("children")[0];
 
       assert_eq!(
-        wide.context.style.grid_column_end,
+        wide.context.style.rare_non_inherited_data.grid_column_end,
         GridPlacement::Span(GridPlacementSpan::Span(2)),
         "{name} should be read as a column span"
       );
@@ -1247,11 +1328,19 @@ mod tests {
     let cells = tree.children.as_deref().expect("children");
 
     assert_eq!(
-      cells[0].context.style.grid_column_end,
+      cells[0]
+        .context
+        .style
+        .rare_non_inherited_data
+        .grid_column_end,
       GridPlacement::Span(GridPlacementSpan::Span(1))
     );
     assert_eq!(
-      cells[1].context.style.grid_column_start,
+      cells[1]
+        .context
+        .style
+        .rare_non_inherited_data
+        .grid_column_start,
       GridPlacement::Line(2)
     );
   }
@@ -1279,12 +1368,12 @@ mod tests {
     let cells = tree.children.as_deref().expect("children");
 
     assert_ne!(
-      cells[0].context.style.background_color,
+      cells[0].context.style.background_data.background_color,
       ColorInput::transparent()
     );
     assert_eq!(
-      cells[0].context.style.background_color,
-      cells[1].context.style.background_color
+      cells[0].context.style.background_data.background_color,
+      cells[1].context.style.background_data.background_color
     );
   }
 
@@ -1303,6 +1392,7 @@ mod tests {
       tree
         .context
         .style
+        .rare_non_inherited_data
         .grid_template_columns
         .as_ref()
         .expect("template")
@@ -1339,7 +1429,7 @@ mod tests {
     let wide = &tree.children.as_deref().expect("children")[0];
 
     assert_eq!(
-      wide.context.style.grid_column_end,
+      wide.context.style.rare_non_inherited_data.grid_column_end,
       GridPlacement::Span(GridPlacementSpan::Span(2))
     );
   }
@@ -1370,7 +1460,10 @@ mod tests {
     assert_eq!(borders(&table, "b"), [1.0, 1.0, 0.0, 1.0]);
     assert_eq!(borders(&table, "c"), [1.0, 0.0, 1.0, 1.0]);
     assert_eq!(borders(&table, "d"), [1.0, 1.0, 1.0, 1.0]);
-    assert_eq!(table.context.style.column_gap, Gap::Length(Length::zero()));
+    assert_eq!(
+      table.context.style.rare_non_inherited_data.column_gap,
+      Gap::Length(Length::zero())
+    );
   }
 
   #[test]
@@ -1441,7 +1534,7 @@ mod tests {
       .expect("lowered cell");
 
     assert_eq!(
-      cell.context.style.border_top_color,
+      cell.context.style.surround_data.border_top_color,
       ColorInput::Value(Color([255, 0, 0, 255]))
     );
   }
@@ -1497,7 +1590,10 @@ mod tests {
       })
       .expect("lowered cell");
 
-    assert_eq!(cell.context.style.border_top_style, BorderStyle::Ridge);
+    assert_eq!(
+      cell.context.style.box_data.border_top_style,
+      BorderStyle::Ridge
+    );
   }
 
   #[test]
@@ -1577,14 +1673,20 @@ mod tests {
     let spaced = lower(Node::container([row([cell("a"), cell("b")])]).with_class_name("spaced"));
 
     assert_eq!(
-      spaced.context.style.column_gap,
+      spaced.context.style.rare_non_inherited_data.column_gap,
       Gap::Length(Length::Px(4.0))
     );
-    assert_eq!(spaced.context.style.row_gap, Gap::Length(Length::Px(8.0)));
+    assert_eq!(
+      spaced.context.style.rare_non_inherited_data.row_gap,
+      Gap::Length(Length::Px(8.0))
+    );
 
     let tight = lower(Node::container([row([cell("a"), cell("b")])]).with_class_name("tight"));
 
-    assert_eq!(tight.context.style.column_gap, Gap::Length(Length::zero()));
+    assert_eq!(
+      tight.context.style.rare_non_inherited_data.column_gap,
+      Gap::Length(Length::zero())
+    );
   }
 
   #[test]
@@ -1610,12 +1712,12 @@ mod tests {
   fn border_spacing_insets_the_table_edges() {
     let spaced = lower(Node::container([row([cell("a")])]).with_class_name("spaced"));
 
-    assert_eq!(spaced.context.style.padding_left, Length::Px(4.0));
-    assert_eq!(spaced.context.style.padding_top, Length::Px(8.0));
+    assert_eq!(spaced.context.style.box_data.padding_left, Length::Px(4.0));
+    assert_eq!(spaced.context.style.box_data.padding_top, Length::Px(8.0));
 
     let plain = lower(Node::container([row([cell("a")])]).with_class_name("plain"));
 
-    assert_eq!(plain.context.style.padding_left, Length::zero());
+    assert_eq!(plain.context.style.box_data.padding_left, Length::zero());
   }
 
   #[test]
@@ -1626,6 +1728,7 @@ mod tests {
       table
         .context
         .style
+        .rare_non_inherited_data
         .grid_template_columns
         .as_ref()
         .map(ToCss::to_css_string),
@@ -1637,9 +1740,15 @@ mod tests {
   fn border_spacing_outranks_an_authored_gap() {
     let table = lower(Node::container([row([cell("a"), cell("b")])]).with_class_name("gapped"));
 
-    assert_eq!(table.context.style.column_gap, Gap::Length(Length::Px(4.0)));
-    assert_eq!(table.context.style.row_gap, Gap::Length(Length::Px(8.0)));
-    assert_eq!(table.context.style.padding_left, Length::Px(4.0));
-    assert_eq!(table.context.style.padding_top, Length::Px(8.0));
+    assert_eq!(
+      table.context.style.rare_non_inherited_data.column_gap,
+      Gap::Length(Length::Px(4.0))
+    );
+    assert_eq!(
+      table.context.style.rare_non_inherited_data.row_gap,
+      Gap::Length(Length::Px(8.0))
+    );
+    assert_eq!(table.context.style.box_data.padding_left, Length::Px(4.0));
+    assert_eq!(table.context.style.box_data.padding_top, Length::Px(8.0));
   }
 }

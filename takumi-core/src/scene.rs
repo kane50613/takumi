@@ -302,7 +302,7 @@ impl PaintBucket {
       || style.participates_in_positioned_paint_bucket(is_flex_or_grid_item)
     {
       (Self::Positioned, 0)
-    } else if style.float != Float::None && !is_flex_or_grid_item {
+    } else if style.base_data.float != Float::None && !is_flex_or_grid_item {
       (Self::Float, 0)
     } else {
       (Self::InFlow, 0)
@@ -530,7 +530,7 @@ impl SceneRequest<'_> {
           },
           context_id,
           stacking_id,
-          parent_display: Some(current.context.style.display),
+          parent_display: Some(current.context.style.base_data.display),
           is_root: false,
         });
       }
@@ -793,6 +793,7 @@ fn filter_reach(node: &RenderNode) -> f32 {
   node
     .context
     .style
+    .rare_non_inherited_data
     .filter
     .iter()
     .map(|filter| filter.reach(sizing))
@@ -802,7 +803,12 @@ fn filter_reach(node: &RenderNode) -> f32 {
 /// How far box shadows and the outline reach past the border box, in local px.
 fn box_ink_reach(node: &RenderNode, size: Size<f32>) -> f32 {
   let context = &node.context;
-  let shadows = context.style.box_shadow.iter().flatten();
+  let shadows = context
+    .style
+    .rare_non_inherited_data
+    .box_shadow
+    .iter()
+    .flatten();
   let shadow_reach = shadows
     .filter(|shadow| !shadow.inset)
     .map(|shadow| {

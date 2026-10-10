@@ -37,7 +37,9 @@ impl<'s> TextClip<'s> {
       return Ok(None);
     };
 
-    if node.context.style.background_clip != BackgroundClip::Text || !node.paints_own_box() {
+    if node.context.style.background_data.background_clip != BackgroundClip::Text
+      || !node.paints_own_box()
+    {
       return Ok(None);
     }
 
@@ -113,7 +115,12 @@ impl<'r> TextMask<'r> {
 
     self.containing_blocks.record_placement(node_id, origin);
 
-    let is_flex_or_grid_item = node.context.style.display.should_blockify_children();
+    let is_flex_or_grid_item = node
+      .context
+      .style
+      .base_data
+      .display
+      .should_blockify_children();
 
     for child in self.results.box_children(node_id)? {
       let Some(base) = self.containing_blocks.recorded_placement_for(child, origin) else {
@@ -129,7 +136,7 @@ impl<'r> TextMask<'r> {
       let child_layout = self.results.layout(child.node_id)?;
       let child_context = &child_node.context;
 
-      if child_context.style.display == Display::None
+      if child_context.style.base_data.display == Display::None
         || child_context
           .style
           .floats_in_own_layer(is_flex_or_grid_item)

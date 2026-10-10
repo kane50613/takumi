@@ -75,17 +75,17 @@ pub(crate) fn create_inline_constraint(
   // says, so the insets always come off.
   if known_width.is_some() && width_constraint.is_finite() {
     let sizing = &context.sizing;
-    let horizontal_insets = context.style.padding_left.to_px(sizing, 0.0)
-      + context.style.padding_right.to_px(sizing, 0.0)
-      + if !context.style.border_left_style.is_rendered() {
+    let horizontal_insets = context.style.box_data.padding_left.to_px(sizing, 0.0)
+      + context.style.box_data.padding_right.to_px(sizing, 0.0)
+      + if !context.style.box_data.border_left_style.is_rendered() {
         0.0
       } else {
-        Length::from(context.style.border_left_width).to_px(sizing, 0.0)
+        Length::from(context.style.box_data.border_left_width).to_px(sizing, 0.0)
       }
-      + if !context.style.border_right_style.is_rendered() {
+      + if !context.style.box_data.border_right_style.is_rendered() {
         0.0
       } else {
-        Length::from(context.style.border_right_width).to_px(sizing, 0.0)
+        Length::from(context.style.box_data.border_right_width).to_px(sizing, 0.0)
       };
     width_constraint = (width_constraint - horizontal_insets).max(0.0);
   }

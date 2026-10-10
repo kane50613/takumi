@@ -166,25 +166,35 @@ impl AppliedTextDecorations {
     sizing: &SizingContext,
     current_color: Color,
   ) -> Self {
-    let display = if parent.display.should_blockify_children() {
-      style.display.as_blockified()
+    let display = if parent.base_data.display.should_blockify_children() {
+      style.base_data.display.as_blockified()
     } else {
-      style.display
+      style.base_data.display
     };
-    let stops = style.float != Float::None
-      || style.position.is_out_of_flow()
+    let stops = style.base_data.float != Float::None
+      || style.base_data.position.is_out_of_flow()
       || (display.is_inline_level() && !display.is_inline());
     let inherited = if stops { Self::default() } else { self.clone() };
-    let Some(line) = style.text_decoration_line.filter(|line| !line.is_empty()) else {
+    let Some(line) = style
+      .visual_data
+      .text_decoration_line
+      .filter(|line| !line.is_empty())
+    else {
       return inherited;
     };
     let own = AppliedTextDecoration {
       line,
-      style: style.text_decoration_style,
-      color: style.text_decoration_color.resolve(current_color),
+      style: style.rare_non_inherited_data.text_decoration_style,
+      color: style
+        .rare_non_inherited_data
+        .text_decoration_color
+        .resolve(current_color),
       thickness: style.resolved_text_decoration_thickness(sizing),
-      underline_offset: style.text_underline_offset.resolve_px(sizing),
-      underline_position: style.text_underline_position,
+      underline_offset: style
+        .rare_inherited_data
+        .text_underline_offset
+        .resolve_px(sizing),
+      underline_position: style.rare_inherited_data.text_underline_position,
     };
 
     inherited.as_slice().iter().copied().chain([own]).collect()

@@ -258,8 +258,18 @@ impl SizedFontStyle<'_> {
     self.sizing.font_size.to_bits().hash(hasher);
     self.letter_spacing.to_bits().hash(hasher);
     self.word_spacing.to_bits().hash(hasher);
-    self.parent.letter_spacing.has_percentage().hash(hasher);
-    self.parent.word_spacing.has_percentage().hash(hasher);
+    self
+      .parent
+      .inherited_data
+      .letter_spacing
+      .has_percentage()
+      .hash(hasher);
+    self
+      .parent
+      .inherited_data
+      .word_spacing
+      .has_percentage()
+      .hash(hasher);
     self.box_line_height.hash(hasher);
     discriminant(&self.line_height).hash(hasher);
     match self.line_height {
@@ -289,9 +299,14 @@ impl SizedFontStyle<'_> {
 
     let parent = self.parent;
 
-    discriminant(&parent.font_weight).hash(hasher);
-    parent.font_weight.value().to_bits().hash(hasher);
-    match parent.font_style.into_parlance() {
+    discriminant(&parent.inherited_data.font_weight).hash(hasher);
+    parent
+      .inherited_data
+      .font_weight
+      .value()
+      .to_bits()
+      .hash(hasher);
+    match parent.inherited_data.font_style.into_parlance() {
       ParleyFontStyle::Normal => 0_u8.hash(hasher),
       ParleyFontStyle::Italic => 1_u8.hash(hasher),
       ParleyFontStyle::Oblique(angle) => {
@@ -299,8 +314,13 @@ impl SizedFontStyle<'_> {
         angle.map(f32::to_bits).hash(hasher);
       }
     }
-    parent.font_stretch.percentage().to_bits().hash(hasher);
-    for variation in parent.font_variation_settings.iter() {
+    parent
+      .inherited_data
+      .font_stretch
+      .percentage()
+      .to_bits()
+      .hash(hasher);
+    for variation in parent.inherited_data.font_variation_settings.iter() {
       variation.tag.hash(hasher);
       variation.value.to_bits().hash(hasher);
     }
@@ -308,14 +328,14 @@ impl SizedFontStyle<'_> {
       feature.tag.hash(hasher);
       feature.value.hash(hasher);
     }
-    (parent.word_break as u8).hash(hasher);
-    discriminant(&parent.overflow_wrap.into_parley()).hash(hasher);
-    discriminant(&parent.display).hash(hasher);
-    parent.opacity.0.to_bits().hash(hasher);
-    (parent.text_decoration_skip_ink as u8).hash(hasher);
-    (parent.font_synthesis_weight as u8).hash(hasher);
-    (parent.font_synthesis_style as u8).hash(hasher);
-    match &parent.vertical_align {
+    (parent.rare_inherited_data.word_break as u8).hash(hasher);
+    discriminant(&parent.rare_inherited_data.overflow_wrap.into_parley()).hash(hasher);
+    discriminant(&parent.base_data.display).hash(hasher);
+    parent.svg_data.opacity.0.to_bits().hash(hasher);
+    (parent.rare_inherited_data.text_decoration_skip_ink as u8).hash(hasher);
+    (parent.inherited_data.font_synthesis_weight as u8).hash(hasher);
+    (parent.inherited_data.font_synthesis_style as u8).hash(hasher);
+    match &parent.base_data.vertical_align {
       VerticalAlign::Keyword(keyword) => {
         0_u8.hash(hasher);
         (*keyword as u8).hash(hasher);
@@ -335,11 +355,12 @@ impl<'s> From<&'s SizedFontStyle<'s>> for TextStyle<'s, 's, InlineBrush> {
     TextStyle {
       font_size: style.sizing.font_size,
       line_height: style.line_height,
-      font_weight: style.parent.font_weight.into_parlance(),
-      font_style: style.parent.font_style.into_parlance(),
+      font_weight: style.parent.inherited_data.font_weight.into_parlance(),
+      font_style: style.parent.inherited_data.font_style.into_parlance(),
       font_variations: FontVariations::List(Cow::Owned(
         style
           .parent
+          .inherited_data
           .font_variation_settings
           .iter()
           .map(|variation| variation.into_parlance())
@@ -356,47 +377,47 @@ impl<'s> From<&'s SizedFontStyle<'s>> for TextStyle<'s, 's, InlineBrush> {
       font_family: style.font_family.to_parley(),
       letter_spacing: style.letter_spacing,
       word_spacing: style.word_spacing,
-      word_break: style.parent.word_break.into_parley(),
-      overflow_wrap: if style.parent.word_break == WordBreak::BreakWord {
+      word_break: style.parent.rare_inherited_data.word_break.into_parley(),
+      overflow_wrap: if style.parent.rare_inherited_data.word_break == WordBreak::BreakWord {
         // When word-break is break-word, ignore the overflow-wrap property's value.
         // https://developer.mozilla.org/en-US/docs/Web/CSS/word-break#break-word
         parley::OverflowWrap::Anywhere
       } else {
-        style.parent.overflow_wrap.into_parley()
+        style.parent.rare_inherited_data.overflow_wrap.into_parley()
       },
       brush: InlineBrush {
         source_span_id: None,
         is_direction_mark: false,
         // Inline elements don't establish a stacking context, so we handle opacity here.
-        opacity: if style.parent.display == Display::Inline {
-          style.parent.opacity.0
+        opacity: if style.parent.base_data.display == Display::Inline {
+          style.parent.svg_data.opacity.0
         } else {
           1.0
         },
         color: style.color,
         decorations: style.text_decorations.clone(),
-        decoration_skip_ink: style.parent.text_decoration_skip_ink,
+        decoration_skip_ink: style.parent.rare_inherited_data.text_decoration_skip_ink,
         stroke_color: style.text_stroke_color,
         stroke_width: style.stroke_width,
         font_synthesis: FontSynthesis {
-          weight: style.parent.font_synthesis_weight,
-          style: style.parent.font_synthesis_style,
+          weight: style.parent.inherited_data.font_synthesis_weight,
+          style: style.parent.inherited_data.font_synthesis_style,
         },
         line_height: style.box_line_height,
-        fixed_letter_spacing: if style.parent.letter_spacing.has_percentage() {
+        fixed_letter_spacing: if style.parent.inherited_data.letter_spacing.has_percentage() {
           0.0
         } else {
           style.letter_spacing
         },
-        fixed_word_spacing: if style.parent.word_spacing.has_percentage() {
+        fixed_word_spacing: if style.parent.inherited_data.word_spacing.has_percentage() {
           0.0
         } else {
           style.word_spacing
         },
-        vertical_align: style.parent.vertical_align,
+        vertical_align: style.parent.base_data.vertical_align,
       },
       text_wrap_mode: style.parent.resolved_text_wrap_mode().into_parley(),
-      font_width: style.parent.font_stretch.into_parlance(),
+      font_width: style.parent.inherited_data.font_stretch.into_parlance(),
 
       locale: style.parent.lang.map(Lang::into_parlance),
       has_underline: false,
@@ -417,6 +438,7 @@ fn resolved_text_shadows(
   context: &RenderContext,
 ) -> SmallVec<[SizedShadow; 4]> {
   style
+    .rare_inherited_data
     .text_shadow
     .as_ref()
     .map_or_else(SmallVec::new, |shadows| {
@@ -510,12 +532,15 @@ fn layout_unit_line_height(line_height: LineHeight, font_size: f32) -> LineHeigh
 impl<'s> SizedFontStyle<'s> {
   /// Resolves a sized font style from a computed style and render context.
   pub fn from_style(style: &'s ComputedStyle, context: &RenderContext) -> Self {
-    let line_height_is_normal = matches!(style.line_height, CssLineHeight::Normal);
+    let line_height_is_normal = matches!(style.inherited_data.line_height, CssLineHeight::Normal);
     let line_height = if line_height_is_normal {
       LineHeight::Absolute(context.resolve_normal_line_height(style, context.sizing.font_size))
     } else {
       layout_unit_line_height(
-        style.line_height.into_parley(&context.sizing),
+        style
+          .inherited_data
+          .line_height
+          .into_parley(&context.sizing),
         context.sizing.font_size,
       )
     };
@@ -523,37 +548,44 @@ impl<'s> SizedFontStyle<'s> {
     let box_line_height = match line_height {
       _ if line_height_is_normal => BoxLineHeight::Normal,
       LineHeight::Absolute(value) => BoxLineHeight::Length(LayoutUnit::from_f32(value)),
-      LineHeight::FontSizeRelative(_) | LineHeight::MetricsRelative(_) => match style.line_height {
-        CssLineHeight::Unitless(value) => BoxLineHeight::Number {
-          value,
-          font_size: context.sizing.font_size,
-        },
-        _ => BoxLineHeight::Normal,
-      },
+      LineHeight::FontSizeRelative(_) | LineHeight::MetricsRelative(_) => {
+        match style.inherited_data.line_height {
+          CssLineHeight::Unitless(value) => BoxLineHeight::Number {
+            value,
+            font_size: context.sizing.font_size,
+          },
+          _ => BoxLineHeight::Normal,
+        }
+      }
     };
 
     Self {
       sizing: context.sizing.to_owned(),
       parent: style,
-      font_family: context.expand_font_family(&style.font_family),
+      font_family: context.expand_font_family(&style.inherited_data.font_family),
       line_height,
       box_line_height,
       stroke_width: style
+        .rare_inherited_data
         .webkit_text_stroke_width
         .unwrap_or_default()
         .to_px(&context.sizing, context.sizing.font_size),
       letter_spacing: style
+        .inherited_data
         .letter_spacing
         .to_px(&context.sizing, context.sizing.font_size),
       word_spacing: style
+        .inherited_data
         .word_spacing
         .to_px(&context.sizing, context.sizing.font_size),
       text_shadow: resolved_text_shadows(style, context),
       color: style
+        .rare_inherited_data
         .webkit_text_fill_color
-        .unwrap_or(style.color)
+        .unwrap_or(style.inherited_data.color)
         .resolve(context.current_color),
       text_stroke_color: style
+        .rare_inherited_data
         .webkit_text_stroke_color
         .unwrap_or_default()
         .resolve(context.current_color),

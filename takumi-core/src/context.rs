@@ -234,10 +234,10 @@ impl RenderContext {
 
   /// Blockifies `display`, leaving a shared style shared when it is already block-level.
   pub(crate) fn blockify(&mut self) {
-    let display = self.style.display.as_blockified();
+    let display = self.style.base_data.display.as_blockified();
 
-    if display != self.style.display {
-      self.style_mut().display = display;
+    if display != self.style.base_data.display {
+      self.style_mut().base_data_mut().display = display;
     }
   }
 

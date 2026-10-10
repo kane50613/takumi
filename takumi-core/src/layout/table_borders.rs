@@ -69,24 +69,24 @@ impl Side {
   fn of(self, style: &ComputedStyle, sizing: &SizingContext, origin: EdgeOrigin) -> BorderEdge {
     let (width, border_style, color) = match self {
       Self::Top => (
-        style.border_top_width,
-        style.border_top_style,
-        style.border_top_color,
+        style.box_data.border_top_width,
+        style.box_data.border_top_style,
+        style.surround_data.border_top_color,
       ),
       Self::Right => (
-        style.border_right_width,
-        style.border_right_style,
-        style.border_right_color,
+        style.box_data.border_right_width,
+        style.box_data.border_right_style,
+        style.surround_data.border_right_color,
       ),
       Self::Bottom => (
-        style.border_bottom_width,
-        style.border_bottom_style,
-        style.border_bottom_color,
+        style.box_data.border_bottom_width,
+        style.box_data.border_bottom_style,
+        style.surround_data.border_bottom_color,
       ),
       Self::Left => (
-        style.border_left_width,
-        style.border_left_style,
-        style.border_left_color,
+        style.box_data.border_left_width,
+        style.box_data.border_left_style,
+        style.surround_data.border_left_color,
       ),
     };
 
@@ -106,24 +106,24 @@ impl Side {
   fn apply(self, style: &mut ComputedStyle, edge: BorderEdge) {
     match self {
       Self::Top => {
-        style.border_top_width = edge.width;
-        style.border_top_style = edge.style;
-        style.border_top_color = edge.color;
+        style.box_data_mut().border_top_width = edge.width;
+        style.box_data_mut().border_top_style = edge.style;
+        style.surround_data_mut().border_top_color = edge.color;
       }
       Self::Right => {
-        style.border_right_width = edge.width;
-        style.border_right_style = edge.style;
-        style.border_right_color = edge.color;
+        style.box_data_mut().border_right_width = edge.width;
+        style.box_data_mut().border_right_style = edge.style;
+        style.surround_data_mut().border_right_color = edge.color;
       }
       Self::Bottom => {
-        style.border_bottom_width = edge.width;
-        style.border_bottom_style = edge.style;
-        style.border_bottom_color = edge.color;
+        style.box_data_mut().border_bottom_width = edge.width;
+        style.box_data_mut().border_bottom_style = edge.style;
+        style.surround_data_mut().border_bottom_color = edge.color;
       }
       Self::Left => {
-        style.border_left_width = edge.width;
-        style.border_left_style = edge.style;
-        style.border_left_color = edge.color;
+        style.box_data_mut().border_left_width = edge.width;
+        style.box_data_mut().border_left_style = edge.style;
+        style.surround_data_mut().border_left_color = edge.color;
       }
     }
   }

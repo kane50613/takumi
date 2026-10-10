@@ -28,15 +28,26 @@ impl InlineOutline {
   /// The outline an element in `context` paints, or `None` when it paints none.
   pub(crate) fn of(context: &RenderContext) -> Option<Self> {
     let style = &context.style;
-    let width = style.outline_width.to_used_px(&context.sizing).max(0.0);
-    let color = style.outline_color.resolve(context.current_color);
+    let width = style
+      .rare_non_inherited_data
+      .outline_width
+      .to_used_px(&context.sizing)
+      .max(0.0);
+    let color = style
+      .rare_non_inherited_data
+      .outline_color
+      .resolve(context.current_color);
 
-    (width > 0.0 && style.outline_style.is_rendered() && color.0[3] != 0).then(|| Self {
-      width,
-      offset: style.outline_offset.to_border_px(&context.sizing, 0.0),
-      color,
-      style: style.outline_style,
-    })
+    (width > 0.0 && style.rare_non_inherited_data.outline_style.is_rendered() && color.0[3] != 0)
+      .then(|| Self {
+        width,
+        offset: style
+          .rare_non_inherited_data
+          .outline_offset
+          .to_border_px(&context.sizing, 0.0),
+        color,
+        style: style.rare_non_inherited_data.outline_style,
+      })
   }
 
   /// How far the outline's outer edge reaches past the element's border box.

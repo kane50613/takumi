@@ -623,7 +623,7 @@ fn test_filters_append() {
     .inherit(&ComputedStyle::default());
 
   assert_eq!(
-    style.filter,
+    style.rare_non_inherited_data.filter,
     vec![
       Filter::Blur(Length::Px(8.0)),
       Filter::Brightness(PercentageNumber(1.5)),
@@ -642,11 +642,11 @@ fn test_transform_utilities_resolve_to_standard_longhands() {
     .inherit(&ComputedStyle::default());
 
   assert_eq!(
-    style.translate,
+    style.rare_non_inherited_data.translate,
     SpacePair::from_pair(Length::Rem(1.0), Length::Rem(2.0))
   );
   assert_eq!(
-    style.scale,
+    style.rare_non_inherited_data.scale,
     Some(SpacePair::from_pair(
       PercentageNumber(0.5),
       PercentageNumber(0.75)
@@ -759,7 +759,7 @@ fn test_linear_gradient_apply() {
     .inherit(&ComputedStyle::default());
 
   assert_eq!(
-    style.background_image,
+    style.background_data.background_image,
     Some(
       [BackgroundImage::Linear(LinearGradient {
         repeating: false,
@@ -797,7 +797,7 @@ fn test_shadow_color_overrides_shadow_preset_in_any_order() {
       .inherit(&ComputedStyle::default());
 
     assert_eq!(
-      style.box_shadow,
+      style.rare_non_inherited_data.box_shadow,
       Some(
         [
           BoxShadow {
@@ -837,7 +837,7 @@ fn test_text_shadow_color_overrides_preset_in_any_order() {
       .inherit(&ComputedStyle::default());
 
     assert_eq!(
-      style.text_shadow,
+      style.rare_inherited_data.text_shadow,
       Some(
         [
           TextShadow {
@@ -893,10 +893,10 @@ fn test_logical_resolves_to_physical_ltr() {
   let values = TailwindValues::from_str("ms-4 me-2 ps-3 pe-1").unwrap();
   let style = Style::from(values.into_declaration_block(viewport, &Default::default()))
     .inherit(&ComputedStyle::default());
-  assert_eq!(style.margin_left, Length::from_spacing(4.0));
-  assert_eq!(style.margin_right, Length::from_spacing(2.0));
-  assert_eq!(style.padding_left, Length::from_spacing(3.0));
-  assert_eq!(style.padding_right, Length::from_spacing(1.0));
+  assert_eq!(style.box_data.margin_left, Length::from_spacing(4.0));
+  assert_eq!(style.box_data.margin_right, Length::from_spacing(2.0));
+  assert_eq!(style.box_data.padding_left, Length::from_spacing(3.0));
+  assert_eq!(style.box_data.padding_right, Length::from_spacing(1.0));
 }
 
 #[test]
@@ -905,12 +905,12 @@ fn test_logical_physical_cascade_order_ltr() {
   let values = TailwindValues::from_str("ms-2 ml-4").unwrap();
   let style = Style::from(values.into_declaration_block(viewport, &Default::default()))
     .inherit(&ComputedStyle::default());
-  assert_eq!(style.margin_left, Length::from_spacing(4.0));
+  assert_eq!(style.box_data.margin_left, Length::from_spacing(4.0));
 
   let values = TailwindValues::from_str("ml-4 ms-2").unwrap();
   let style = Style::from(values.into_declaration_block(viewport, &Default::default()))
     .inherit(&ComputedStyle::default());
-  assert_eq!(style.margin_left, Length::from_spacing(2.0));
+  assert_eq!(style.box_data.margin_left, Length::from_spacing(2.0));
 }
 
 #[test]
@@ -920,10 +920,10 @@ fn test_logical_resolves_to_physical_rtl() {
   let mut block = values.into_declaration_block(viewport, &Default::default());
   block.push(StyleDeclaration::direction(Direction::Rtl), false);
   let style = Style::from(block).inherit(&ComputedStyle::default());
-  assert_eq!(style.margin_right, Length::from_spacing(4.0));
-  assert_eq!(style.margin_left, Length::from_spacing(2.0));
-  assert_eq!(style.padding_right, Length::from_spacing(3.0));
-  assert_eq!(style.padding_left, Length::from_spacing(1.0));
+  assert_eq!(style.box_data.margin_right, Length::from_spacing(4.0));
+  assert_eq!(style.box_data.margin_left, Length::from_spacing(2.0));
+  assert_eq!(style.box_data.padding_right, Length::from_spacing(3.0));
+  assert_eq!(style.box_data.padding_left, Length::from_spacing(1.0));
 }
 
 #[test]
@@ -933,8 +933,8 @@ fn test_logical_resolves_when_direction_declared_after() {
   let mut block = values.into_declaration_block(viewport, &Default::default());
   block.push(StyleDeclaration::direction(Direction::Rtl), false);
   let style = Style::from(block).inherit(&ComputedStyle::default());
-  assert_eq!(style.margin_right, Length::from_spacing(4.0));
-  assert_eq!(style.margin_left, Length::Px(0.0));
+  assert_eq!(style.box_data.margin_right, Length::from_spacing(4.0));
+  assert_eq!(style.box_data.margin_left, Length::Px(0.0));
 }
 
 #[test]
@@ -943,12 +943,15 @@ fn test_filter_none_clears_previous_filters() {
   let values = TailwindValues::from_str("blur-sm brightness-150 filter-none").unwrap();
   let style = Style::from(values.into_declaration_block(viewport, &Default::default()))
     .inherit(&ComputedStyle::default());
-  assert_eq!(style.filter, Filters::default());
+  assert_eq!(style.rare_non_inherited_data.filter, Filters::default());
 
   let values = TailwindValues::from_str("backdrop-blur-sm backdrop-filter-none").unwrap();
   let style = Style::from(values.into_declaration_block(viewport, &Default::default()))
     .inherit(&ComputedStyle::default());
-  assert_eq!(style.backdrop_filter, Filters::default());
+  assert_eq!(
+    style.rare_non_inherited_data.backdrop_filter,
+    Filters::default()
+  );
 }
 
 #[test]
@@ -1024,7 +1027,14 @@ fn test_shadow_md_is_composite() {
   let values = TailwindValues::from_str("shadow-md").unwrap();
   let style = Style::from(values.into_declaration_block(viewport, &Default::default()))
     .inherit(&ComputedStyle::default());
-  assert_eq!(style.box_shadow.as_ref().map(|s| s.len()), Some(2));
+  assert_eq!(
+    style
+      .rare_non_inherited_data
+      .box_shadow
+      .as_ref()
+      .map(|s| s.len()),
+    Some(2)
+  );
 }
 
 #[test]
@@ -1033,7 +1043,14 @@ fn test_text_shadow_sm_is_composite() {
   let values = TailwindValues::from_str("text-shadow-sm").unwrap();
   let style = Style::from(values.into_declaration_block(viewport, &Default::default()))
     .inherit(&ComputedStyle::default());
-  assert_eq!(style.text_shadow.as_ref().map(|s| s.len()), Some(3));
+  assert_eq!(
+    style
+      .rare_inherited_data
+      .text_shadow
+      .as_ref()
+      .map(|s| s.len()),
+    Some(3)
+  );
 }
 
 #[test]
@@ -1043,7 +1060,10 @@ fn test_shadow_none_overrides_color_in_either_order() {
     let values = TailwindValues::from_str(classes).unwrap();
     let style = Style::from(values.into_declaration_block(viewport, &Default::default()))
       .inherit(&ComputedStyle::default());
-    assert_eq!(style.box_shadow, None, "case: {classes}");
+    assert_eq!(
+      style.rare_non_inherited_data.box_shadow, None,
+      "case: {classes}"
+    );
   }
 }
 
@@ -1062,7 +1082,7 @@ fn test_gradient_stop_position_is_used_in_apply() {
     TailwindValues::from_str("bg-linear-to-r from-red-500 from-10% to-blue-500 to-80%").unwrap();
   let style = Style::from(values.into_declaration_block(viewport, &Default::default()))
     .inherit(&ComputedStyle::default());
-  let images = style.background_image.as_deref().unwrap();
+  let images = style.background_data.background_image.as_deref().unwrap();
   let [BackgroundImage::Linear(gradient)] = images else {
     panic!("expected a single linear gradient");
   };
@@ -1096,18 +1116,21 @@ fn test_border_width_implies_solid_and_per_side_color() {
   };
 
   let top = computed("border-t-8");
-  assert_eq!(top.border_top_width, LineWidth::Length(Length::Px(8.0)));
-  assert_eq!(top.border_top_style, BorderStyle::Solid);
-  assert_eq!(top.border_bottom_style, BorderStyle::None);
+  assert_eq!(
+    top.box_data.border_top_width,
+    LineWidth::Length(Length::Px(8.0))
+  );
+  assert_eq!(top.box_data.border_top_style, BorderStyle::Solid);
+  assert_eq!(top.box_data.border_bottom_style, BorderStyle::None);
 
   let all = computed("border-4");
-  assert_eq!(all.border_top_style, BorderStyle::Solid);
-  assert_eq!(all.border_right_style, BorderStyle::Solid);
-  assert_eq!(all.border_bottom_style, BorderStyle::Solid);
-  assert_eq!(all.border_left_style, BorderStyle::Solid);
+  assert_eq!(all.box_data.border_top_style, BorderStyle::Solid);
+  assert_eq!(all.box_data.border_right_style, BorderStyle::Solid);
+  assert_eq!(all.box_data.border_bottom_style, BorderStyle::Solid);
+  assert_eq!(all.box_data.border_left_style, BorderStyle::Solid);
 
   let dashed = computed("border-2 border-dashed");
-  assert_eq!(dashed.border_top_style, BorderStyle::Dashed);
+  assert_eq!(dashed.box_data.border_top_style, BorderStyle::Dashed);
 
   assert_eq!(
     parse_property("border-t-blue-500"),
@@ -1117,10 +1140,13 @@ fn test_border_width_implies_solid_and_per_side_color() {
   );
 
   let bar = computed("border-t-8 border-t-blue-500");
-  assert_eq!(bar.border_top_width, LineWidth::Length(Length::Px(8.0)));
-  assert_eq!(bar.border_top_style, BorderStyle::Solid);
   assert_eq!(
-    bar.border_top_color,
+    bar.box_data.border_top_width,
+    LineWidth::Length(Length::Px(8.0))
+  );
+  assert_eq!(bar.box_data.border_top_style, BorderStyle::Solid);
+  assert_eq!(
+    bar.surround_data.border_top_color,
     ColorInput::Value(Color([43, 127, 255, 255]))
   );
 }
@@ -1250,8 +1276,8 @@ fn test_logical_side_reads_a_css_variable() {
 
   let computed = style.inherit(&root_with(&[("--spacing-gutter", "3rem")]));
 
-  assert_eq!(computed.margin_left, Length::Rem(3.0));
-  assert_eq!(computed.padding_left, Length::Rem(3.0));
+  assert_eq!(computed.box_data.margin_left, Length::Rem(3.0));
+  assert_eq!(computed.box_data.padding_left, Length::Rem(3.0));
 }
 
 #[test]
@@ -1262,7 +1288,10 @@ fn test_corner_radius_reads_a_css_variable() {
 
   let computed = style.inherit(&root_with(&[("--radius-card", "12px")]));
 
-  assert_eq!(computed.border_top_left_radius.x, Length::Px(12.0));
+  assert_eq!(
+    computed.surround_data.border_top_left_radius.x,
+    Length::Px(12.0)
+  );
 }
 
 #[test]
@@ -1276,7 +1305,7 @@ fn test_shadow_preset_shape_reads_a_css_variable() {
   let computed = style.inherit(&root_with(&[("--shadow-md", "0 5px 5px #ff0000")]));
 
   assert_eq!(
-    computed.box_shadow.as_deref(),
+    computed.rare_non_inherited_data.box_shadow.as_deref(),
     Some(
       &[BoxShadow {
         inset: false,
@@ -1301,7 +1330,7 @@ fn test_text_shadow_preset_shape_reads_a_css_variable() {
   let computed = style.inherit(&root_with(&[("--text-shadow-sm", "1px 1px 0 #00ff00")]));
 
   assert_eq!(
-    computed.text_shadow.as_deref(),
+    computed.rare_inherited_data.text_shadow.as_deref(),
     Some(
       &[TextShadow {
         offset_x: Length::Px(1.0),
@@ -1326,11 +1355,11 @@ fn test_breakpoint_reads_a_css_variable() {
       .into_declaration_block(viewport, &Default::default()),
   )
   .inherit(&ComputedStyle::default());
-  assert_eq!(unthemed.margin_top, Length::Px(0.0));
+  assert_eq!(unthemed.box_data.margin_top, Length::Px(0.0));
 
   let themed = Style::from(values.into_declaration_block(viewport, &overrides))
     .inherit(&ComputedStyle::default());
-  assert_eq!(themed.margin_top, Length::Rem(1.0));
+  assert_eq!(themed.box_data.margin_top, Length::Rem(1.0));
 }
 
 #[test]
@@ -1345,11 +1374,11 @@ fn test_unknown_breakpoint_token_reads_a_css_variable() {
       .into_declaration_block(viewport, &Default::default()),
   )
   .inherit(&ComputedStyle::default());
-  assert_eq!(unthemed.margin_top, Length::Px(0.0));
+  assert_eq!(unthemed.box_data.margin_top, Length::Px(0.0));
 
   let themed = Style::from(values.into_declaration_block(viewport, &overrides))
     .inherit(&ComputedStyle::default());
-  assert_eq!(themed.margin_top, Length::Rem(1.0));
+  assert_eq!(themed.box_data.margin_top, Length::Rem(1.0));
 }
 
 #[test]
@@ -1361,11 +1390,11 @@ fn test_animate_preset_reads_a_css_variable() {
   let computed = style.inherit(&root_with(&[("--animate-spin", "wobble 2s ease-in 3")]));
 
   assert_eq!(
-    computed.animation_name.as_ref(),
+    computed.rare_non_inherited_data.animation_name.as_ref(),
     [Some("wobble".to_string())]
   );
   assert_eq!(
-    computed.animation_duration.as_ref(),
+    computed.rare_non_inherited_data.animation_duration.as_ref(),
     [AnimationTime::from_milliseconds(2000.0)]
   );
 }
@@ -1378,13 +1407,19 @@ fn test_animate_preset_falls_back_to_the_builtin_animation() {
 
   let computed = style.inherit(&ComputedStyle::default());
 
-  assert_eq!(computed.animation_name.as_ref(), [Some("spin".to_string())]);
   assert_eq!(
-    computed.animation_duration.as_ref(),
+    computed.rare_non_inherited_data.animation_name.as_ref(),
+    [Some("spin".to_string())]
+  );
+  assert_eq!(
+    computed.rare_non_inherited_data.animation_duration.as_ref(),
     [AnimationTime::from_milliseconds(1000.0)]
   );
   assert_eq!(
-    computed.animation_iteration_count.as_ref(),
+    computed
+      .rare_non_inherited_data
+      .animation_iteration_count
+      .as_ref(),
     [AnimationIterationCount::Infinite]
   );
 }
@@ -1398,12 +1433,17 @@ fn test_unknown_animate_token_reads_a_css_variable() {
   let themed = style
     .clone()
     .inherit(&root_with(&[("--animate-wiggle", "wiggle 1s linear")]));
-  assert_eq!(themed.animation_name.as_ref(), [Some("wiggle".to_string())]);
+  assert_eq!(
+    themed.rare_non_inherited_data.animation_name.as_ref(),
+    [Some("wiggle".to_string())]
+  );
 
   let unthemed = style.inherit(&ComputedStyle::default());
   assert_eq!(
-    unthemed.animation_name,
-    ComputedStyle::default().animation_name
+    unthemed.rare_non_inherited_data.animation_name,
+    ComputedStyle::default()
+      .rare_non_inherited_data
+      .animation_name
   );
 }
 
@@ -1418,9 +1458,12 @@ fn test_blur_preset_reads_a_css_variable() {
 
   let computed = style.inherit(&root_with(&[("--blur-md", "20px")]));
 
-  assert_eq!(computed.filter, vec![Filter::Blur(Length::Px(20.0))]);
   assert_eq!(
-    computed.backdrop_filter,
+    computed.rare_non_inherited_data.filter,
+    vec![Filter::Blur(Length::Px(20.0))]
+  );
+  assert_eq!(
+    computed.rare_non_inherited_data.backdrop_filter,
     vec![Filter::Blur(Length::Px(20.0))]
   );
 }
@@ -1435,7 +1478,10 @@ fn test_blur_preset_falls_back_to_the_builtin_radius() {
 
   let computed = style.inherit(&ComputedStyle::default());
 
-  assert_eq!(computed.filter, vec![Filter::Blur(Length::Px(12.0))]);
+  assert_eq!(
+    computed.rare_non_inherited_data.filter,
+    vec![Filter::Blur(Length::Px(12.0))]
+  );
 }
 
 #[test]
@@ -1449,7 +1495,7 @@ fn test_drop_shadow_preset_reads_a_css_variable() {
   let computed = style.inherit(&root_with(&[("--drop-shadow-md", "0 5px 5px #ff0000")]));
 
   assert_eq!(
-    computed.filter,
+    computed.rare_non_inherited_data.filter,
     vec![Filter::DropShadow(TextShadow {
       offset_x: Length::Px(0.0),
       offset_y: Length::Px(5.0),
@@ -1469,7 +1515,10 @@ fn test_builtin_token_is_overridable() {
 
   let computed = style.inherit(&root_with(&[("--color-red-500", "#00a63e")]));
 
-  assert_eq!(computed.color, ColorInput::Value(Color::from_rgb(0x00a63e)));
+  assert_eq!(
+    computed.inherited_data.color,
+    ColorInput::Value(Color::from_rgb(0x00a63e))
+  );
 }
 
 #[test]
@@ -1484,7 +1533,7 @@ fn test_spacing_step_scales_numeric_utilities() {
     .build();
 
   // `calc(var(--spacing) * 4)` stays a calc, so read it as the length it is.
-  assert_eq!(computed.margin_left.to_px(&sizing, 0.0), 32.0);
+  assert_eq!(computed.box_data.margin_left.to_px(&sizing, 0.0), 32.0);
 }
 
 /// A prefix that reads two namespaces emits one variable per group, so the same
@@ -1500,8 +1549,14 @@ fn test_overloaded_prefix_reads_either_namespace() {
     .inherit(&root_with(&[("--text-brand", "2rem")]));
   let coloured = style.inherit(&root_with(&[("--color-brand", "#5b21b6")]));
 
-  assert_eq!(sized.font_size, FontSize::Length(Length::Rem(2.0)));
-  assert_eq!(coloured.color, ColorInput::Value(Color::from_rgb(0x5b21b6)));
+  assert_eq!(
+    sized.inherited_data.font_size,
+    FontSize::Length(Length::Rem(2.0))
+  );
+  assert_eq!(
+    coloured.inherited_data.color,
+    ColorInput::Value(Color::from_rgb(0x5b21b6))
+  );
 }
 
 /// An opacity modifier mixes the variable rather than falling back to the
@@ -1515,7 +1570,7 @@ fn test_opacity_modifier_mixes_the_variable() {
   let computed = style.inherit(&root_with(&[("--color-brand-500", "#5b21b6")]));
 
   assert_eq!(
-    computed.background_color,
+    computed.background_data.background_color,
     ColorInput::Value(Color([91, 33, 182, 128]))
   );
 }
@@ -1532,8 +1587,11 @@ fn test_aspect_keywords_survive_the_move_out_of_the_fixed_table() {
     Style::from(video.into_declaration_block(Viewport::new((100, 100)), &Default::default()))
       .inherit(&root_with(&[("--aspect-video", "4/3")]));
 
-  assert_eq!(square.aspect_ratio, AspectRatio::Ratio(1.0));
-  assert_eq!(styled.aspect_ratio, AspectRatio::Ratio(4.0 / 3.0));
+  assert_eq!(square.surround_data.aspect_ratio, AspectRatio::Ratio(1.0));
+  assert_eq!(
+    styled.surround_data.aspect_ratio,
+    AspectRatio::Ratio(4.0 / 3.0)
+  );
 }
 
 /// A custom `--text-*` token spells its line height in the companion variable,
@@ -1552,8 +1610,14 @@ fn test_custom_text_token_line_height_reads_the_companion() {
     ("--text-brand--line-height", "3rem"),
   ]));
 
-  assert_eq!(sized.line_height, ComputedStyle::default().line_height);
-  assert_eq!(leaded.line_height, LineHeight::Length(Length::Rem(3.0)));
+  assert_eq!(
+    sized.inherited_data.line_height,
+    ComputedStyle::default().inherited_data.line_height
+  );
+  assert_eq!(
+    leaded.inherited_data.line_height,
+    LineHeight::Length(Length::Rem(3.0))
+  );
 }
 
 /// With both namespaces defined, `max-w` takes `--container-*`, the namespace
@@ -1570,8 +1634,11 @@ fn test_max_w_prefers_the_container_namespace() {
   ]));
   let spacing_only = style.inherit(&root_with(&[("--spacing-page", "1rem")]));
 
-  assert_eq!(both.max_width, MaxSize::Length(Length::Rem(60.0)));
-  assert_eq!(spacing_only.max_width, MaxSize::Length(Length::Rem(1.0)));
+  assert_eq!(both.box_data.max_width, MaxSize::Length(Length::Rem(60.0)));
+  assert_eq!(
+    spacing_only.box_data.max_width,
+    MaxSize::Length(Length::Rem(1.0))
+  );
 }
 
 /// Numeric `leading-*` multiplies the spacing step, as Tailwind compiles it.
@@ -1586,7 +1653,7 @@ fn test_numeric_leading_scales_with_spacing() {
     .viewport(Viewport::new((100, 100)))
     .build();
 
-  let LineHeight::Length(line_height) = computed.line_height else {
+  let LineHeight::Length(line_height) = computed.inherited_data.line_height else {
     panic!("expected a length line height");
   };
 
@@ -1605,7 +1672,11 @@ fn test_gradient_reads_css_variables() {
     ("--color-red-500", "#00a63e"),
   ]));
 
-  let images = computed.background_image.as_deref().expect("gradient");
+  let images = computed
+    .background_data
+    .background_image
+    .as_deref()
+    .expect("gradient");
   let [BackgroundImage::Linear(gradient)] = images else {
     panic!("expected a single linear gradient");
   };
@@ -1637,7 +1708,9 @@ fn test_gradient_utility_order_does_not_matter() {
 
     Style::from(values.into_declaration_block(Viewport::new((100, 100)), &Default::default()))
       .inherit(&ComputedStyle::default())
+      .background_data
       .background_image
+      .clone()
   };
 
   let forward = compute("bg-linear-to-r from-red-500 to-blue-500");
@@ -1655,7 +1728,7 @@ fn test_stops_without_a_gradient_paint_nothing() {
     Style::from(values.into_declaration_block(Viewport::new((100, 100)), &Default::default()))
       .inherit(&ComputedStyle::default());
 
-  assert_eq!(computed.background_image, None);
+  assert_eq!(computed.background_data.background_image, None);
 }
 
 /// `--tw-*` state is `inherits: false`, so a child gradient starts from its
@@ -1677,7 +1750,7 @@ fn test_gradient_state_does_not_inherit() {
 
   // With the parent's stops out of reach, `var(--tw-gradient-stops)` fails to
   // substitute and the child paints no gradient, as a browser would.
-  assert_eq!(child.background_image, None);
+  assert_eq!(child.background_data.background_image, None);
 }
 
 /// Registering a `--tw-*` name hands it to the `@property` rule, so the child
@@ -1714,7 +1787,11 @@ fn test_shadow_color_reads_css_variables() {
     Style::from(values.into_declaration_block(Viewport::new((100, 100)), &Default::default()))
       .inherit(&root_with(&[("--color-brand-500", "#5b21b6")]));
 
-  let shadows = computed.box_shadow.as_deref().expect("shadows");
+  let shadows = computed
+    .rare_non_inherited_data
+    .box_shadow
+    .as_deref()
+    .expect("shadows");
 
   assert_eq!(shadows.len(), 2);
 
@@ -1732,7 +1809,9 @@ fn test_filters_compose_through_variables() {
 
     Style::from(values.into_declaration_block(Viewport::new((100, 100)), &Default::default()))
       .inherit(&ComputedStyle::default())
+      .rare_non_inherited_data
       .filter
+      .clone()
   };
 
   let forward = compute("blur-sm brightness-125");
@@ -1752,8 +1831,14 @@ fn test_translate_composes_through_variables() {
     Style::from(values.into_declaration_block(Viewport::new((100, 100)), &Default::default()))
       .inherit(&ComputedStyle::default());
 
-  assert_eq!(computed.translate.x, Length::Rem(1.0));
-  assert_eq!(computed.translate.y, Length::Rem(-0.5));
+  assert_eq!(
+    computed.rare_non_inherited_data.translate.x,
+    Length::Rem(1.0)
+  );
+  assert_eq!(
+    computed.rare_non_inherited_data.translate.y,
+    Length::Rem(-0.5)
+  );
 }
 
 #[test]

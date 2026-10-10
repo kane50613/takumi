@@ -412,8 +412,8 @@ fn placement_span(placement: &GridPlacement) -> Option<NonZeroU32> {
 fn cell_kind(cell: &RenderNode, part: TablePart) -> Tag {
   let source = cell.node.as_ref();
   let tag_name = source.and_then(|node| node.tag_name());
-  let row_span = placement_span(&cell.context.style.grid_row_end);
-  let col_span = placement_span(&cell.context.style.grid_column_end);
+  let row_span = placement_span(&cell.context.style.rare_non_inherited_data.grid_row_end);
+  let col_span = placement_span(&cell.context.style.rare_non_inherited_data.grid_column_end);
   let is_header = match tag_name {
     Some("th") => true,
     Some("td") => false,
@@ -490,7 +490,8 @@ fn build_table(
         }
       }
       Some(part @ (TablePart::HeaderCell | TablePart::BodyCell | TablePart::FooterCell)) => {
-        let GridPlacement::Line(line) = child.context.style.grid_row_start else {
+        let GridPlacement::Line(line) = child.context.style.rare_non_inherited_data.grid_row_start
+        else {
           path.pop();
           continue;
         };
@@ -577,7 +578,7 @@ fn figure_alt(node: &RenderNode) -> Option<String> {
 /// for bare text runs.
 fn is_block(node: &RenderNode) -> bool {
   !matches!(
-    node.context.style.display,
+    node.context.style.base_data.display,
     Display::Inline | Display::InlineBlock | Display::InlineFlex | Display::InlineGrid
   )
 }
@@ -585,10 +586,10 @@ fn is_block(node: &RenderNode) -> bool {
 /// Whether the node lays its children out on one horizontal line.
 fn is_row_flex(node: &RenderNode) -> bool {
   matches!(
-    node.context.style.display,
+    node.context.style.base_data.display,
     Display::Flex | Display::InlineFlex
   ) && matches!(
-    node.context.style.flex_direction,
+    node.context.style.rare_non_inherited_data.flex_direction,
     FlexDirection::Row | FlexDirection::RowReverse
   )
 }
@@ -642,7 +643,7 @@ fn role(node: &RenderNode, walk: &mut Walk, nesting: Nesting) -> Option<Tag> {
 /// The numbering the list's counter style advertises; per-item overrides and
 /// marker images are not consulted.
 fn list_numbering(node: &RenderNode) -> ListNumbering {
-  match &node.context.style.list_style_type {
+  match &node.context.style.rare_inherited_data.list_style_type {
     ListStyleType::None | ListStyleType::String(_) => ListNumbering::None,
     ListStyleType::Disc => ListNumbering::Disc,
     ListStyleType::Circle => ListNumbering::Circle,

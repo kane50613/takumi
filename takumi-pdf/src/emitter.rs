@@ -228,7 +228,7 @@ impl Emitter<'_> {
       origin: CorePoint { x, y },
     } = frame;
 
-    if style.box_decoration_break == BoxDecorationBreak::Clone
+    if style.box_data.box_decoration_break == BoxDecorationBreak::Clone
       && let Some((window_top, window_bottom)) = self.window.y
     {
       let top = y.max(window_top);
@@ -647,7 +647,12 @@ impl Emitter<'_> {
   /// Builds the soft mask for `mask-image`, drawing its layers into their own stream.
   fn mask(&mut self, node: &RenderNode, frame: BoxFrame, surface: &mut Surface) -> Option<Mask> {
     let size = frame.layout.size;
-    let images = node.context.style.mask_image.as_deref()?;
+    let images = node
+      .context
+      .style
+      .rare_non_inherited_data
+      .mask_image
+      .as_deref()?;
 
     if !images.iter().any(BackgroundImage::paints) {
       return None;
@@ -998,7 +1003,7 @@ impl Emitter<'_> {
       // The box never reaches `emit_box`, so the state that would paint it
       // there is applied here: its own opacity, and its `filter` composed onto
       // the one the enclosing stacking contexts left.
-      let opacity = node.context.style.opacity.0;
+      let opacity = node.context.style.svg_data.opacity.0;
       let faded = opacity < 1.0;
       // A container box runs its own emitter, which tags every node it walks.
       // A replaced one paints here. Its decorations are artifacts and marked
@@ -1028,7 +1033,10 @@ impl Emitter<'_> {
         surface.push_opacity(normalized(opacity));
       }
       let outer_filter = self.color_filter.clone();
-      self.color_filter = self.composed_filter(outer_filter.as_deref(), &node.context.style.filter);
+      self.color_filter = self.composed_filter(
+        outer_filter.as_deref(),
+        &node.context.style.rare_non_inherited_data.filter,
+      );
 
       let origin = frame.origin + offset;
 
@@ -1170,12 +1178,12 @@ impl Emitter<'_> {
     let mut length = owner_path.len();
 
     for (depth, index) in owner_path.iter().enumerate() {
-      if current.context.style.display == Display::ListItem {
+      if current.context.style.base_data.display == Display::ListItem {
         length = depth;
       }
       current = current.children.as_deref()?.get(*index)?;
     }
-    if current.context.style.display == Display::ListItem {
+    if current.context.style.base_data.display == Display::ListItem {
       length = owner_path.len();
     }
 
@@ -1567,9 +1575,10 @@ impl PropertySink for ChunkWriter<'_, '_, '_> {
         pushed += transformed + self.emitter.push_mask_and_clip(node, frame, self.surface);
       }
 
-      self.emitter.color_filter = self
-        .emitter
-        .composed_filter(color_filter.as_deref(), &style.filter);
+      self.emitter.color_filter = self.emitter.composed_filter(
+        color_filter.as_deref(),
+        &style.rare_non_inherited_data.filter,
+      );
     }
 
     self.enter(pushed, current, window, color_filter);
@@ -1596,15 +1605,15 @@ fn vertical_extent(shape: &FillShape) -> Option<(f32, f32)> {
 fn push_compositing(style: &ComputedStyle, surface: &mut Surface) -> usize {
   let mut pushed = 0;
 
-  if style.mix_blend_mode != BlendMode::Normal {
-    surface.push_blend_mode(krilla_blend(style.mix_blend_mode));
+  if style.rare_non_inherited_data.mix_blend_mode != BlendMode::Normal {
+    surface.push_blend_mode(krilla_blend(style.rare_non_inherited_data.mix_blend_mode));
     pushed += 1;
   }
-  if style.isolation == Isolation::Isolate {
+  if style.rare_non_inherited_data.isolation == Isolation::Isolate {
     surface.push_isolated();
     pushed += 1;
   }
-  let opacity = style.opacity.0;
+  let opacity = style.svg_data.opacity.0;
 
   if opacity < 1.0 {
     surface.push_opacity(normalized(opacity));

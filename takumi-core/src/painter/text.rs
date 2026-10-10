@@ -355,7 +355,7 @@ impl InlineLines<'_> {
 impl<'c> FragmentBackground<'c> {
   /// Whether the span's background shows only through its text.
   fn clips_text(&self) -> bool {
-    self.node.context.style.background_clip == BackgroundClip::Text
+    self.node.context.style.background_data.background_clip == BackgroundClip::Text
   }
 
   /// The span's background on `fragment` of the block at `frame`.

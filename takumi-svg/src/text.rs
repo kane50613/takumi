@@ -74,7 +74,7 @@ pub(crate) fn run_stroke(run: &ShapedRun, font_style: &SizedFontStyle) -> Option
   (brush.stroke_width > 0.0 && brush.stroke_color.0[3] != 0).then_some(GlyphStroke {
     color: Rgba(brush.stroke_color.0),
     width: brush.stroke_width,
-    join: font_style.parent.stroke_linejoin,
+    join: font_style.parent.rare_inherited_data.stroke_linejoin,
   })
 }
 
@@ -91,7 +91,7 @@ pub(crate) fn emit_run_glyphs(
   let run_transform = run.transform(Affine::IDENTITY);
   let glyph_offset = run.glyph_offset(frame.layout);
   let fill_color = run.glyph_run.brush.color;
-  let bold_join = font_style.parent.stroke_linejoin;
+  let bold_join = font_style.parent.rare_inherited_data.stroke_linejoin;
 
   // Plain outline glyphs are interned in glyph space (translation stripped) and
   // emitted as `<use>` references, so repeated glyphs cost one outline plus a
