@@ -626,7 +626,7 @@ pub(crate) fn demultiply_rgba_in_place(data: &mut [u8]) {
 }
 
 /// Clip bytes tested at once for a uniformly empty or full run.
-const CLIP_RUN: usize = 8;
+pub(crate) const CLIP_RUN: usize = 8;
 
 /// `rights` narrowed to where `lefts` also covers, as two stacked clips keep.
 fn intersect_alphas(rights: &mut [u8], lefts: &[u8]) {

@@ -6,8 +6,8 @@ use takumi_core::geometry::{Point, Size};
 use tiny_skia::{PixmapMut, PremultipliedColorU8};
 
 use super::{
-  DrawTarget, MaskSamplingOptions, MaskView, OverlayOptions, PaintSource, SamplingOptions,
-  composite,
+  CLIP_RUN, DrawTarget, MaskSamplingOptions, MaskView, OverlayOptions, PaintSource,
+  SamplingOptions, composite,
   composite::PixelSampler,
   mask::MaskRow,
   paint_source::{RowSource, ScaledRows},
@@ -212,11 +212,31 @@ pub(super) fn blit_rows(
       continue;
     };
     let (first, alphas) = mask_row.covered(row.len());
+    let dst = &mut dst[first..first + alphas.len()];
+    let row = &row[first..first + alphas.len()];
+    let (dst_runs, dst_tail) = dst.as_chunks_mut::<CLIP_RUN>();
+    let (row_runs, row_tail) = row.as_chunks::<CLIP_RUN>();
+    let (alpha_runs, alpha_tail) = alphas.as_chunks::<CLIP_RUN>();
 
-    for ((dst, &src), &alpha) in dst[first..].iter_mut().zip(&row[first..]).zip(alphas) {
-      if src[3] != 0 && alpha != 0 {
-        blend_premultiplied_pixel(dst, scale_premultiplied_pixel(src, alpha), mode);
+    for ((dst, row), alphas) in dst_runs.iter_mut().zip(row_runs).zip(alpha_runs) {
+      match u64::from_ne_bytes(*alphas) {
+        0 => {}
+        u64::MAX => {
+          for (dst, &src) in dst.iter_mut().zip(row) {
+            blend_premultiplied_pixel(dst, src, mode);
+          }
+        }
+        _ => blend_masked(dst, row, alphas, mode),
       }
+    }
+    blend_masked(dst_tail, row_tail, alpha_tail, mode);
+  }
+}
+
+fn blend_masked(dst: &mut [[u8; 4]], row: &[[u8; 4]], alphas: &[u8], mode: BlendMode) {
+  for ((dst, &src), &alpha) in dst.iter_mut().zip(row).zip(alphas) {
+    if src[3] != 0 && alpha != 0 {
+      blend_premultiplied_pixel(dst, scale_premultiplied_pixel(src, alpha), mode);
     }
   }
 }
