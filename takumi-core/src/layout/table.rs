@@ -398,7 +398,7 @@ impl RenderNode {
           .filter(|cell| cell.is_cell())
           .enumerate()
         {
-          collapsed.apply(index, cell_index, &mut cell.context.style);
+          collapsed.apply(index, cell_index, cell.context.style_mut());
         }
       }
     }
@@ -482,7 +482,7 @@ impl RenderNode {
 
     self.table_part = Some(TablePart::Table);
 
-    let style = &mut self.context.style;
+    let style = self.context.style_mut();
 
     style.display = Display::Grid;
     style.grid_template_columns =
@@ -506,7 +506,7 @@ impl RenderNode {
   /// on a row a `rowspan` reaches into.
   fn lower_cell(&mut self, line: i16, column: usize, colspan: u16, collapse: bool) {
     let rowspan = self.rowspan();
-    let style = &mut self.context.style;
+    let style = self.context.style_mut();
 
     // A cell fills its columns; its widths only constrained them.
     style.width = Default::default();
@@ -518,27 +518,29 @@ impl RenderNode {
       self.align_cell_content();
 
       if self.context.style.display == Display::TableCell {
-        self.context.style.display = Display::Block;
+        self.context.style_mut().display = Display::Block;
       }
     }
 
-    self.context.style.grid_row_start = GridPlacement::Line(line);
-    self.context.style.grid_row_end = GridPlacement::Span(GridPlacementSpan::Span(rowspan));
-    self.context.style.grid_column_start = GridPlacement::Line(column as i16 + 1);
-    self.context.style.grid_column_end = GridPlacement::Span(GridPlacementSpan::Span(colspan));
+    self.context.style_mut().grid_row_start = GridPlacement::Line(line);
+    self.context.style_mut().grid_row_end = GridPlacement::Span(GridPlacementSpan::Span(rowspan));
+    self.context.style_mut().grid_column_start = GridPlacement::Line(column as i16 + 1);
+    self.context.style_mut().grid_column_end =
+      GridPlacement::Span(GridPlacementSpan::Span(colspan));
   }
 
   fn lower_full_width(&mut self, line: i16, columns: u16) {
     // A stray that is itself a lowered table keeps its grid; blocking it would
     // drop the placement its own cells already carry.
     if self.context.style.display != Display::Grid {
-      self.context.style.display = Display::Block;
+      self.context.style_mut().display = Display::Block;
     }
 
-    self.context.style.grid_row_start = GridPlacement::Line(line);
-    self.context.style.grid_row_end = GridPlacement::Span(GridPlacementSpan::Span(1));
-    self.context.style.grid_column_start = GridPlacement::Line(1);
-    self.context.style.grid_column_end = GridPlacement::Span(GridPlacementSpan::Span(columns));
+    self.context.style_mut().grid_row_start = GridPlacement::Line(line);
+    self.context.style_mut().grid_row_end = GridPlacement::Span(GridPlacementSpan::Span(1));
+    self.context.style_mut().grid_column_start = GridPlacement::Line(1);
+    self.context.style_mut().grid_column_end =
+      GridPlacement::Span(GridPlacementSpan::Span(columns));
   }
 
   /// Approximation: row backgrounds leave `border-spacing` gaps unpainted.
@@ -551,13 +553,13 @@ impl RenderNode {
       return;
     }
 
-    let cell_style = &mut self.context.style;
-
-    if cell_style.background_color != ColorInput::transparent()
-      || cell_style.background_image.is_some()
+    if self.context.style.background_color != ColorInput::transparent()
+      || self.context.style.background_image.is_some()
     {
       return;
     }
+
+    let cell_style = self.context.style_mut();
 
     cell_style.background_color = row_style.background_color;
     cell_style.background_image = row_style.background_image.clone();
@@ -593,7 +595,7 @@ impl RenderNode {
       return;
     }
 
-    let style = &mut self.context.style;
+    let style = self.context.style_mut();
 
     style.display = Display::Flex;
     style.flex_direction = FlexDirection::Column;
@@ -618,14 +620,14 @@ impl RenderNode {
   /// below it out again.
   fn intrinsic_widths(&self) -> (f32, f32) {
     let mut cell = self.clone();
-    let style = &mut cell.context.style;
+    let style = cell.context.style_mut();
 
     // Blink's `MinMaxSizes` of the cell's content; its own widths constrain the column apart.
     style.width = Default::default();
     style.min_width = Default::default();
     style.max_width = Default::default();
     cell.lower_cell(1, 0, 1, false);
-    cell.context.style.display.blockify();
+    cell.context.blockify();
 
     let measure = |width| {
       LayoutResults::compute(
