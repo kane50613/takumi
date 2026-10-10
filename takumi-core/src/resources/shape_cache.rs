@@ -16,8 +16,12 @@ use xxhash_rust::xxh3::Xxh3;
 use crate::layout::inline::InlineLayout;
 
 const DEFAULT_SHAPE_CACHE_MAX_BYTES: usize = 4 << 20; // 4 MiB
-const ESTIMATED_BYTES_PER_CHAR: usize = 32;
-const ENTRY_OVERHEAD: usize = 128;
+// parley::layout::data::ClusterData (~24B) plus one parley::Glyph (~20B) per
+// character, for simple non-ligature text where clusters and glyphs are 1:1.
+const ESTIMATED_BYTES_PER_CHAR: usize = 48;
+// LayoutData's ten Vec fields (~24B each, even empty) plus one RunData
+// (~110B) and one LineData, amortized per entry rather than per character.
+const ENTRY_OVERHEAD: usize = 384;
 const AVERAGE_ENTRY_CHARS: usize = 64;
 
 static MAX_BYTES: AtomicUsize = AtomicUsize::new(DEFAULT_SHAPE_CACHE_MAX_BYTES);
@@ -27,14 +31,14 @@ pub fn set_shape_cache_max_bytes(bytes: usize) {
   MAX_BYTES.store(bytes, Ordering::Relaxed);
 }
 
-type Entry = Arc<(InlineLayout, String)>;
+type Entry = Arc<(u64, InlineLayout, String)>;
 
 #[derive(Clone)]
 struct ByBytes;
 
 impl Weighter<u64, Entry> for ByBytes {
   fn weight(&self, _key: &u64, entry: &Entry) -> u64 {
-    let (_, text) = entry.as_ref();
+    let (_, _, text) = entry.as_ref();
 
     (text.len() * ESTIMATED_BYTES_PER_CHAR + ENTRY_OVERHEAD) as u64
   }
@@ -71,11 +75,16 @@ pub(crate) fn get_or_shape(
   expected: &str,
   shape: impl FnOnce() -> (InlineLayout, String),
 ) -> (InlineLayout, String) {
+  if MAX_BYTES.load(Ordering::Relaxed) == 0 {
+    return shape();
+  }
+
+  let fingerprint = parts.fingerprint;
   let cache_key = key(parts);
 
   if let Some(entry) = SHARED.get(&cache_key) {
-    let (layout, text) = entry.as_ref();
-    if text == expected {
+    let (entry_fingerprint, layout, text) = entry.as_ref();
+    if *entry_fingerprint == fingerprint && text == expected {
       return (layout.clone(), text.clone());
     }
   }
@@ -85,8 +94,12 @@ pub(crate) fn get_or_shape(
   #[cfg(test)]
   LAST_INSERTED_KEY.with(|cell| cell.set(Some(cache_key)));
 
-  SHARED.insert(cache_key, Arc::new(shaped.clone()));
-  shaped
+  let (layout, text) = shaped;
+  SHARED.insert(
+    cache_key,
+    Arc::new((fingerprint, layout.clone(), text.clone())),
+  );
+  (layout, text)
 }
 
 #[cfg(test)]
@@ -160,10 +173,26 @@ mod tests {
   }
 
   #[test]
+  fn a_mismatched_stored_fingerprint_is_a_miss_even_with_matching_text() {
+    // Simulates an outer-hash collision: an entry stored under a different
+    // fingerprint than this lookup's, landing on the same combined key.
+    let the_key = key(parts(5, 1, 1));
+    SHARED.insert(
+      the_key,
+      Arc::new((999, InlineLayout::new(), "hello".to_owned())),
+    );
+
+    let (_, text) = get_or_shape(parts(5, 1, 1), "hello", || {
+      (InlineLayout::new(), "reshaped".to_owned())
+    });
+    assert_eq!(text, "reshaped");
+  }
+
+  #[test]
   fn weight_scales_with_text_length() {
     let weighter = ByBytes;
-    let short = weighter.weight(&0, &Arc::new((InlineLayout::new(), "hi".to_owned())));
-    let long = weighter.weight(&0, &Arc::new((InlineLayout::new(), "x".repeat(1000))));
+    let short = weighter.weight(&0, &Arc::new((0, InlineLayout::new(), "hi".to_owned())));
+    let long = weighter.weight(&0, &Arc::new((0, InlineLayout::new(), "x".repeat(1000))));
 
     assert!(long > short);
   }
