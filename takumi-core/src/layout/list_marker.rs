@@ -1,3 +1,5 @@
+use std::rc::Rc;
+
 use taffy::{LengthPercentageAuto, Size as TaffySize};
 
 use crate::{
@@ -76,7 +78,7 @@ pub(super) fn list_marker(item_context: &RenderContext, ordinal: i32) -> Option<
   };
 
   if let Some(layout_style) = &mut content.layout_style_override {
-    layout_style.flex_shrink = 0.0;
+    Rc::make_mut(layout_style).flex_shrink = 0.0;
   }
 
   Some(RenderNode::new(
@@ -112,7 +114,7 @@ fn marker_image(
   let mut item = RenderNode::anonymous_image_item(context, image);
 
   if let Some(layout_style) = &mut item.layout_style_override {
-    layout_style.max_size = TaffySize::auto();
+    Rc::make_mut(layout_style).max_size = TaffySize::auto();
   }
   apply_marker_gap(&mut item, context, Length::Px(MARKER_GAP_PX), direction);
 
@@ -129,7 +131,7 @@ fn apply_marker_gap(
   let Some(layout_style) = &mut item.layout_style_override else {
     return;
   };
-  let margin = &mut layout_style.margin;
+  let margin = &mut Rc::make_mut(layout_style).margin;
   let (_, end) = direction.inline_sides(&mut margin.left, &mut margin.right);
 
   *end = LengthPercentageAuto::length(gap.to_px(&context.sizing, 0.0));
