@@ -186,10 +186,8 @@ fn clip_path_mask(
     Some(Fill::from(shape.rule()).into()),
     Some(viewport),
   );
-  let end_x = placement.left + placement.width as i32;
-  let end_y = placement.top + placement.height as i32;
 
-  if end_x < 0 || end_y < 0 {
+  if placement.width == 0 || placement.height == 0 {
     return NodeMaskAction::SkipRendering;
   }
 
@@ -461,14 +459,16 @@ pub(crate) fn render_mask(
   rasterize_mask(paths, transform, style.unwrap_or_default(), cull).unwrap_or_default()
 }
 
-/// `[left, top, right, bottom]` cut to `cull` once they cover too many pixels to rasterize whole.
+/// `[left, top, right, bottom]` cut to `cull` once they cover too many pixels to rasterize whole,
+/// or `None` when they lie wholly outside it.
 pub(crate) fn cull_bounds(
   [mut left, mut top, mut right, mut bottom]: [i32; 4],
   cull: Option<CanvasViewport>,
 ) -> Option<Placement> {
-  // The cull rect is a protection layer, not an optimization: culling moves the
-  // buffer origin, which shifts anti-aliasing by a float-rounding hair, so it
-  // only engages once the full mask is too large to be worth rasterizing.
+  // Cutting a mask that overlaps the cull rect is a protection layer, not an
+  // optimization: it moves the buffer origin, which shifts anti-aliasing by a
+  // float-rounding hair, so it only engages once the full mask is too large to
+  // be worth rasterizing.
   const CULL_THRESHOLD_PIXELS: u64 = 1 << 24;
   // The halo keeps the rasterizer's clip edge away from the visible pixels:
   // clipping a contour exactly on the cull edge shifts the anti-aliasing of
@@ -478,13 +478,21 @@ pub(crate) fn cull_bounds(
   let full_pixels = (right.saturating_sub(left).max(0) as u64)
     .saturating_mul(bottom.saturating_sub(top).max(0) as u64);
 
-  if let Some(cull) = cull
-    && full_pixels > CULL_THRESHOLD_PIXELS
-  {
-    left = left.max((cull.origin.x as i32).saturating_sub(CULL_HALO));
-    top = top.max((cull.origin.y as i32).saturating_sub(CULL_HALO));
-    right = right.min(cull.right().saturating_add(CULL_HALO));
-    bottom = bottom.min(cull.bottom().saturating_add(CULL_HALO));
+  if let Some(cull) = cull {
+    if right <= cull.origin.x as i32
+      || bottom <= cull.origin.y as i32
+      || left >= cull.right()
+      || top >= cull.bottom()
+    {
+      return None;
+    }
+
+    if full_pixels > CULL_THRESHOLD_PIXELS {
+      left = left.max((cull.origin.x as i32).saturating_sub(CULL_HALO));
+      top = top.max((cull.origin.y as i32).saturating_sub(CULL_HALO));
+      right = right.min(cull.right().saturating_add(CULL_HALO));
+      bottom = bottom.min(cull.bottom().saturating_add(CULL_HALO));
+    }
   }
 
   Placement::from_bounds(left, top, right, bottom)
@@ -783,5 +791,27 @@ mod tests {
     assert_eq!(dst[4], 255);
     assert_eq!(dst[5], fast_div_255(255 * (255 - 128)));
     assert_eq!(dst[7], 0);
+  }
+
+  #[test]
+  fn a_mask_outside_the_cull_rect_is_skipped() {
+    let cull = CanvasViewport {
+      origin: Point { x: 100, y: 100 },
+      size: Size {
+        width: 50,
+        height: 50,
+      },
+    };
+
+    assert_eq!(cull_bounds([0, 0, 100, 200], Some(cull)), None);
+    assert_eq!(cull_bounds([150, 120, 160, 130], Some(cull)), None);
+    assert_eq!(
+      cull_bounds([99, 99, 101, 101], Some(cull)),
+      Placement::from_bounds(99, 99, 101, 101)
+    );
+    assert_eq!(
+      cull_bounds([0, 0, 100, 200], None),
+      Placement::from_bounds(0, 0, 100, 200)
+    );
   }
 }
