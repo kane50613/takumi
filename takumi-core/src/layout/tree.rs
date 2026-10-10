@@ -273,7 +273,7 @@ pub struct RenderNode {
   /// A lowered table's columns, sized once its width is known.
   pub(crate) table_columns: Option<Box<TableColumns>>,
   /// The fragment items its inline content last laid out to.
-  pub(crate) fragment_items: RefCell<Option<Rc<FragmentItems>>>,
+  pub(crate) fragment_items: FragmentItemsCache,
 }
 
 /// Drops the render tree iteratively; recursive drop glue overflows the stack
@@ -294,6 +294,23 @@ impl Drop for RenderNode {
     while let Some(mut node) = stack.pop() {
       collect(&mut node, &mut stack);
     }
+  }
+}
+
+/// The fragment items a node's inline content last laid out to. They belong to that node, so a
+/// clone, which may change its style or content, starts without them.
+#[derive(Default)]
+pub(crate) struct FragmentItemsCache(RefCell<Option<Rc<FragmentItems>>>);
+
+impl FragmentItemsCache {
+  pub(crate) fn keep(&self, items: Rc<FragmentItems>) {
+    self.0.replace(Some(items));
+  }
+}
+
+impl Clone for FragmentItemsCache {
+  fn clone(&self) -> Self {
+    Self::default()
   }
 }
 
@@ -1437,7 +1454,7 @@ impl RenderNode {
       table_header_lines: None,
       table_part: None,
       table_columns: None,
-      fragment_items: RefCell::default(),
+      fragment_items: FragmentItemsCache::default(),
     }
   }
 
@@ -1446,10 +1463,23 @@ impl RenderNode {
   pub(crate) fn fragment_items_in(&self, layout: ComputedLayout) -> Option<Rc<FragmentItems>> {
     self
       .fragment_items
+      .0
       .borrow()
       .as_ref()
       .filter(|items| items.content_box == ContentBox::of(layout))
       .map(Rc::clone)
+  }
+
+  /// Forgets the fragment items it and the boxes under it laid out to, which no longer hold once
+  /// the tree may have changed since.
+  pub(crate) fn clear_fragment_items(&self) {
+    let mut stack = vec![self];
+
+    while let Some(node) = stack.pop() {
+      node.fragment_items.0.take();
+      stack.extend(node.children.iter().flatten());
+      stack.extend(node.marker.as_deref());
+    }
   }
 
   /// An anonymous box laid out with `layout_style` instead of its computed style.
