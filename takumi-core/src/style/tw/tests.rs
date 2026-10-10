@@ -623,7 +623,7 @@ fn test_filters_append() {
     .inherit(&ComputedStyle::default());
 
   assert_eq!(
-    style.rare_non_inherited_data.filter,
+    style.misc1_data.filter,
     vec![
       Filter::Blur(Length::Px(8.0)),
       Filter::Brightness(PercentageNumber(1.5)),
@@ -642,11 +642,11 @@ fn test_transform_utilities_resolve_to_standard_longhands() {
     .inherit(&ComputedStyle::default());
 
   assert_eq!(
-    style.rare_non_inherited_data.translate,
+    style.misc4_data.translate,
     SpacePair::from_pair(Length::Rem(1.0), Length::Rem(2.0))
   );
   assert_eq!(
-    style.rare_non_inherited_data.scale,
+    style.misc3_data.scale,
     Some(SpacePair::from_pair(
       PercentageNumber(0.5),
       PercentageNumber(0.75)
@@ -797,7 +797,7 @@ fn test_shadow_color_overrides_shadow_preset_in_any_order() {
       .inherit(&ComputedStyle::default());
 
     assert_eq!(
-      style.rare_non_inherited_data.box_shadow,
+      style.misc1_data.box_shadow,
       Some(
         [
           BoxShadow {
@@ -837,7 +837,7 @@ fn test_text_shadow_color_overrides_preset_in_any_order() {
       .inherit(&ComputedStyle::default());
 
     assert_eq!(
-      style.rare_inherited_data.text_shadow,
+      style.misc_inherited1_data.text_shadow,
       Some(
         [
           TextShadow {
@@ -943,15 +943,12 @@ fn test_filter_none_clears_previous_filters() {
   let values = TailwindValues::from_str("blur-sm brightness-150 filter-none").unwrap();
   let style = Style::from(values.into_declaration_block(viewport, &Default::default()))
     .inherit(&ComputedStyle::default());
-  assert_eq!(style.rare_non_inherited_data.filter, Filters::default());
+  assert_eq!(style.misc1_data.filter, Filters::default());
 
   let values = TailwindValues::from_str("backdrop-blur-sm backdrop-filter-none").unwrap();
   let style = Style::from(values.into_declaration_block(viewport, &Default::default()))
     .inherit(&ComputedStyle::default());
-  assert_eq!(
-    style.rare_non_inherited_data.backdrop_filter,
-    Filters::default()
-  );
+  assert_eq!(style.misc1_data.backdrop_filter, Filters::default());
 }
 
 #[test]
@@ -1028,11 +1025,7 @@ fn test_shadow_md_is_composite() {
   let style = Style::from(values.into_declaration_block(viewport, &Default::default()))
     .inherit(&ComputedStyle::default());
   assert_eq!(
-    style
-      .rare_non_inherited_data
-      .box_shadow
-      .as_ref()
-      .map(|s| s.len()),
+    style.misc1_data.box_shadow.as_ref().map(|s| s.len()),
     Some(2)
   );
 }
@@ -1045,7 +1038,7 @@ fn test_text_shadow_sm_is_composite() {
     .inherit(&ComputedStyle::default());
   assert_eq!(
     style
-      .rare_inherited_data
+      .misc_inherited1_data
       .text_shadow
       .as_ref()
       .map(|s| s.len()),
@@ -1060,10 +1053,7 @@ fn test_shadow_none_overrides_color_in_either_order() {
     let values = TailwindValues::from_str(classes).unwrap();
     let style = Style::from(values.into_declaration_block(viewport, &Default::default()))
       .inherit(&ComputedStyle::default());
-    assert_eq!(
-      style.rare_non_inherited_data.box_shadow, None,
-      "case: {classes}"
-    );
+    assert_eq!(style.misc1_data.box_shadow, None, "case: {classes}");
   }
 }
 
@@ -1305,7 +1295,7 @@ fn test_shadow_preset_shape_reads_a_css_variable() {
   let computed = style.inherit(&root_with(&[("--shadow-md", "0 5px 5px #ff0000")]));
 
   assert_eq!(
-    computed.rare_non_inherited_data.box_shadow.as_deref(),
+    computed.misc1_data.box_shadow.as_deref(),
     Some(
       &[BoxShadow {
         inset: false,
@@ -1330,7 +1320,7 @@ fn test_text_shadow_preset_shape_reads_a_css_variable() {
   let computed = style.inherit(&root_with(&[("--text-shadow-sm", "1px 1px 0 #00ff00")]));
 
   assert_eq!(
-    computed.rare_inherited_data.text_shadow.as_deref(),
+    computed.misc_inherited1_data.text_shadow.as_deref(),
     Some(
       &[TextShadow {
         offset_x: Length::Px(1.0),
@@ -1390,11 +1380,11 @@ fn test_animate_preset_reads_a_css_variable() {
   let computed = style.inherit(&root_with(&[("--animate-spin", "wobble 2s ease-in 3")]));
 
   assert_eq!(
-    computed.rare_non_inherited_data.animation_name.as_ref(),
+    computed.misc1_data.animation_name.as_ref(),
     [Some("wobble".to_string())]
   );
   assert_eq!(
-    computed.rare_non_inherited_data.animation_duration.as_ref(),
+    computed.misc1_data.animation_duration.as_ref(),
     [AnimationTime::from_milliseconds(2000.0)]
   );
 }
@@ -1408,18 +1398,15 @@ fn test_animate_preset_falls_back_to_the_builtin_animation() {
   let computed = style.inherit(&ComputedStyle::default());
 
   assert_eq!(
-    computed.rare_non_inherited_data.animation_name.as_ref(),
+    computed.misc1_data.animation_name.as_ref(),
     [Some("spin".to_string())]
   );
   assert_eq!(
-    computed.rare_non_inherited_data.animation_duration.as_ref(),
+    computed.misc1_data.animation_duration.as_ref(),
     [AnimationTime::from_milliseconds(1000.0)]
   );
   assert_eq!(
-    computed
-      .rare_non_inherited_data
-      .animation_iteration_count
-      .as_ref(),
+    computed.misc1_data.animation_iteration_count.as_ref(),
     [AnimationIterationCount::Infinite]
   );
 }
@@ -1434,16 +1421,14 @@ fn test_unknown_animate_token_reads_a_css_variable() {
     .clone()
     .inherit(&root_with(&[("--animate-wiggle", "wiggle 1s linear")]));
   assert_eq!(
-    themed.rare_non_inherited_data.animation_name.as_ref(),
+    themed.misc1_data.animation_name.as_ref(),
     [Some("wiggle".to_string())]
   );
 
   let unthemed = style.inherit(&ComputedStyle::default());
   assert_eq!(
-    unthemed.rare_non_inherited_data.animation_name,
-    ComputedStyle::default()
-      .rare_non_inherited_data
-      .animation_name
+    unthemed.misc1_data.animation_name,
+    ComputedStyle::default().misc1_data.animation_name
   );
 }
 
@@ -1459,11 +1444,11 @@ fn test_blur_preset_reads_a_css_variable() {
   let computed = style.inherit(&root_with(&[("--blur-md", "20px")]));
 
   assert_eq!(
-    computed.rare_non_inherited_data.filter,
+    computed.misc1_data.filter,
     vec![Filter::Blur(Length::Px(20.0))]
   );
   assert_eq!(
-    computed.rare_non_inherited_data.backdrop_filter,
+    computed.misc1_data.backdrop_filter,
     vec![Filter::Blur(Length::Px(20.0))]
   );
 }
@@ -1479,7 +1464,7 @@ fn test_blur_preset_falls_back_to_the_builtin_radius() {
   let computed = style.inherit(&ComputedStyle::default());
 
   assert_eq!(
-    computed.rare_non_inherited_data.filter,
+    computed.misc1_data.filter,
     vec![Filter::Blur(Length::Px(12.0))]
   );
 }
@@ -1495,7 +1480,7 @@ fn test_drop_shadow_preset_reads_a_css_variable() {
   let computed = style.inherit(&root_with(&[("--drop-shadow-md", "0 5px 5px #ff0000")]));
 
   assert_eq!(
-    computed.rare_non_inherited_data.filter,
+    computed.misc1_data.filter,
     vec![Filter::DropShadow(TextShadow {
       offset_x: Length::Px(0.0),
       offset_y: Length::Px(5.0),
@@ -1787,11 +1772,7 @@ fn test_shadow_color_reads_css_variables() {
     Style::from(values.into_declaration_block(Viewport::new((100, 100)), &Default::default()))
       .inherit(&root_with(&[("--color-brand-500", "#5b21b6")]));
 
-  let shadows = computed
-    .rare_non_inherited_data
-    .box_shadow
-    .as_deref()
-    .expect("shadows");
+  let shadows = computed.misc1_data.box_shadow.as_deref().expect("shadows");
 
   assert_eq!(shadows.len(), 2);
 
@@ -1809,7 +1790,7 @@ fn test_filters_compose_through_variables() {
 
     Style::from(values.into_declaration_block(Viewport::new((100, 100)), &Default::default()))
       .inherit(&ComputedStyle::default())
-      .rare_non_inherited_data
+      .misc1_data
       .filter
       .clone()
   };
@@ -1831,14 +1812,8 @@ fn test_translate_composes_through_variables() {
     Style::from(values.into_declaration_block(Viewport::new((100, 100)), &Default::default()))
       .inherit(&ComputedStyle::default());
 
-  assert_eq!(
-    computed.rare_non_inherited_data.translate.x,
-    Length::Rem(1.0)
-  );
-  assert_eq!(
-    computed.rare_non_inherited_data.translate.y,
-    Length::Rem(-0.5)
-  );
+  assert_eq!(computed.misc4_data.translate.x, Length::Rem(1.0));
+  assert_eq!(computed.misc4_data.translate.y, Length::Rem(-0.5));
 }
 
 #[test]

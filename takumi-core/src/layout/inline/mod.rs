@@ -633,12 +633,12 @@ impl LineIndent {
     Self {
       amount: style
         .parent
-        .rare_inherited_data
+        .misc_inherited1_data
         .text_indent
         .resolve_px(&style.sizing, indent_basis),
       options: IndentOptions {
-        each_line: style.parent.rare_inherited_data.text_indent.each_line,
-        hanging: style.parent.rare_inherited_data.text_indent.hanging,
+        each_line: style.parent.misc_inherited1_data.text_indent.each_line,
+        hanging: style.parent.misc_inherited1_data.text_indent.hanging,
       },
     }
   }
@@ -710,7 +710,7 @@ pub(super) fn chromium_line_breaks(spans: &[ProcessedInlineSpan<'_>]) -> bool {
   !spans.iter().any(|span| {
     matches!(
       span,
-      ProcessedInlineSpan::Text { style, .. } if style.parent.rare_inherited_data.word_break == WordBreak::BreakAll
+      ProcessedInlineSpan::Text { style, .. } if style.parent.misc_inherited_data.word_break == WordBreak::BreakAll
     )
   })
 }
@@ -853,7 +853,7 @@ fn build_inline_layout_tree<'c>(
         let collapsed = apply_white_space_collapse(
           &transformed,
           context.style.inherited_data.white_space_collapse,
-          context.style.rare_inherited_data.tab_size.spaces(),
+          context.style.misc_inherited1_data.tab_size.spaces(),
           &mut previous_collapsible_space,
           &mut previous_was_line_break,
         );
@@ -1179,7 +1179,7 @@ pub fn create_inline_layout<'c>(request: InlineLayoutRequest<'c>) -> BuiltInline
       ..
     } = &mut built;
 
-    if style.parent.rare_non_inherited_data.text_overflow == TextOverflow::Ellipsis {
+    if style.parent.misc4_data.text_overflow == TextOverflow::Ellipsis {
       // A line's advance is an f32 sum over glyphs, so an exactly-fitting line
       // can land a hair past max_width and must not sprout an ellipsis.
       // Overflow shows up two ways: text truncated past the last committed
@@ -1221,7 +1221,7 @@ pub fn create_inline_layout<'c>(request: InlineLayoutRequest<'c>) -> BuiltInline
     }
   }
 
-  if style.parent.rare_inherited_data.text_fit.mode != TextFitMode::None
+  if style.parent.misc_inherited1_data.text_fit.mode != TextFitMode::None
     && text_fit_is_applicable(&built.positioned_floats)
   {
     built.line_fits = text_fit_lines(&built.layout, max_width, style);
@@ -1244,7 +1244,7 @@ pub(crate) fn resolve_inline_max_height(
     .clamp_lines()
     .map(|lines| MaxHeight::HeightAndLines(content_box_height, lines))
     .or_else(|| {
-      (font_style.parent.rare_non_inherited_data.text_overflow == TextOverflow::Ellipsis)
+      (font_style.parent.misc4_data.text_overflow == TextOverflow::Ellipsis)
         .then_some(MaxHeight::Absolute(content_box_height))
     })
 }

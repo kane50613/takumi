@@ -509,13 +509,7 @@ impl<'c> BoxPainter<'c> {
   /// The box's `box-shadow` layers, resolved and split into the ones that fall inside the box and
   /// the ones outside it.
   pub fn shadows(&self) -> BoxShadows {
-    let Some(shadows) = self
-      .context
-      .style
-      .rare_non_inherited_data
-      .box_shadow
-      .as_deref()
-    else {
+    let Some(shadows) = self.context.style.misc1_data.box_shadow.as_deref() else {
       return BoxShadows::default();
     };
     let resolve = |shadow: &BoxShadow| {
@@ -556,15 +550,11 @@ impl<'c> BoxPainter<'c> {
   pub fn clip_path(&self) -> Option<FillShape> {
     let style = &self.context.style;
 
-    style
-      .rare_non_inherited_data
-      .clip_path
-      .as_ref()?
-      .fill_shape(
-        self.context,
-        self.layout.size,
-        style.rare_inherited_data.clip_rule,
-      )
+    style.misc1_data.clip_path.as_ref()?.fill_shape(
+      self.context,
+      self.layout.size,
+      style.misc_inherited_data.clip_rule,
+    )
   }
 
   /// The outline the box paints, or `None` when it paints none.
@@ -597,12 +587,7 @@ impl<'c> BoxPainter<'c> {
       || self.border.has_visible_sides()
       || !shadows.inset.is_empty()
       || !shadows.outer.is_empty()
-      || (style
-        .rare_non_inherited_data
-        .outline_color
-        .resolve(current_color)
-        .0[3]
-        != 0
+      || (style.misc3_data.outline_color.resolve(current_color).0[3] != 0
         && self.outline().is_some())
   }
 }

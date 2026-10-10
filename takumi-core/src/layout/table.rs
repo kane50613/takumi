@@ -31,8 +31,8 @@ use crate::{
   style::{
     BorderCollapse, BorderStyle, BoxSizing, CaptionSide, ColorInput, ComputedStyle, Display,
     FlexDirection, FromCssStr, Gap, GridPlacement, GridPlacementSpan, GridTemplateComponents,
-    JustifyContent, Length, LineWidth, Size as StyleSize, SizingContext, SpacePair, TableLayout,
-    VerticalAlign, VerticalAlignKeyword,
+    JustifyContent, Length, LineWidth, Size as StyleSize, SizingContext, SpacePair, StyleBoxData,
+    TableLayout, VerticalAlign, VerticalAlignKeyword,
   },
 };
 
@@ -53,7 +53,7 @@ enum CellAlignment {
 
 impl CellAlignment {
   fn of(style: &ComputedStyle) -> Self {
-    match style.rare_non_inherited_data.align_content {
+    match style.misc_data.align_content {
       JustifyContent::Normal => Self::of_vertical_align(style.base_data.vertical_align),
       JustifyContent::SpaceAround
       | JustifyContent::SpaceEvenly
@@ -485,17 +485,17 @@ impl RenderNode {
     let style = self.context.style_mut();
 
     style.base_data_mut().display = Display::Grid;
-    style.rare_non_inherited_data_mut().grid_template_columns =
+    style.misc2_data_mut().grid_template_columns =
       GridTemplateComponents::from_css_str(&vec!["auto"; usize::from(tracks)].join(" ")).ok();
 
     if collapse {
-      style.rare_non_inherited_data_mut().column_gap = Gap::Length(Length::zero());
-      style.rare_non_inherited_data_mut().row_gap = Gap::Length(Length::zero());
-      style.clear_border();
+      style.misc1_data_mut().column_gap = Gap::Length(Length::zero());
+      style.misc3_data_mut().row_gap = Gap::Length(Length::zero());
+      style.box_data_mut().clear_border();
     } else {
-      style.rare_non_inherited_data_mut().column_gap = Gap::Length(spacing.x);
-      style.rare_non_inherited_data_mut().row_gap = Gap::Length(spacing.y);
-      style.inset_table_edges(spacing, &sizing);
+      style.misc1_data_mut().column_gap = Gap::Length(spacing.x);
+      style.misc3_data_mut().row_gap = Gap::Length(spacing.y);
+      style.box_data_mut().inset_table_edges(spacing, &sizing);
     }
 
     self.children = Some(items.into_boxed_slice());
@@ -506,12 +506,12 @@ impl RenderNode {
   /// on a row a `rowspan` reaches into.
   fn lower_cell(&mut self, line: i16, column: usize, colspan: u16, collapse: bool) {
     let rowspan = self.rowspan();
-    let style = self.context.style_mut();
+    let box_data = self.context.style_mut().box_data_mut();
 
     // A cell fills its columns; its widths only constrained them.
-    style.box_data_mut().width = Default::default();
-    style.box_data_mut().min_width = Default::default();
-    style.box_data_mut().max_width = Default::default();
+    box_data.width = Default::default();
+    box_data.min_width = Default::default();
+    box_data.max_width = Default::default();
     self.context.collapsed_borders = collapse;
 
     if self.context.style.base_data.display == Display::TableCell {
@@ -522,26 +522,7 @@ impl RenderNode {
       }
     }
 
-    self
-      .context
-      .style_mut()
-      .rare_non_inherited_data_mut()
-      .grid_row_start = GridPlacement::Line(line);
-    self
-      .context
-      .style_mut()
-      .rare_non_inherited_data_mut()
-      .grid_row_end = GridPlacement::Span(GridPlacementSpan::Span(rowspan));
-    self
-      .context
-      .style_mut()
-      .rare_non_inherited_data_mut()
-      .grid_column_start = GridPlacement::Line(column as i16 + 1);
-    self
-      .context
-      .style_mut()
-      .rare_non_inherited_data_mut()
-      .grid_column_end = GridPlacement::Span(GridPlacementSpan::Span(colspan));
+    self.place_in_grid(line, rowspan, column as i16 + 1, colspan);
   }
 
   fn lower_full_width(&mut self, line: i16, columns: u16) {
@@ -551,63 +532,41 @@ impl RenderNode {
       self.context.style_mut().base_data_mut().display = Display::Block;
     }
 
-    self
-      .context
-      .style_mut()
-      .rare_non_inherited_data_mut()
-      .grid_row_start = GridPlacement::Line(line);
-    self
-      .context
-      .style_mut()
-      .rare_non_inherited_data_mut()
-      .grid_row_end = GridPlacement::Span(GridPlacementSpan::Span(1));
-    self
-      .context
-      .style_mut()
-      .rare_non_inherited_data_mut()
-      .grid_column_start = GridPlacement::Line(1);
-    self
-      .context
-      .style_mut()
-      .rare_non_inherited_data_mut()
-      .grid_column_end = GridPlacement::Span(GridPlacementSpan::Span(columns));
+    self.place_in_grid(line, 1, 1, columns);
+  }
+
+  /// Places this box from grid `row` and `column`, spanning `rows` rows and `columns` columns.
+  fn place_in_grid(&mut self, row: i16, rows: u16, column: i16, columns: u16) {
+    let placement = self.context.style_mut().misc2_data_mut();
+
+    placement.grid_row_start = GridPlacement::Line(row);
+    placement.grid_row_end = GridPlacement::Span(GridPlacementSpan::Span(rows));
+    placement.grid_column_start = GridPlacement::Line(column);
+    placement.grid_column_end = GridPlacement::Span(GridPlacementSpan::Span(columns));
   }
 
   /// Approximation: row backgrounds leave `border-spacing` gaps unpainted.
   fn inherit_row_background(&mut self, row: &RenderNode) {
-    let row_style = &row.context.style;
+    let row_background = &row.context.style.background_data;
+    let cell_background = &self.context.style.background_data;
 
-    if row_style.background_data.background_color == ColorInput::transparent()
-      && row_style.background_data.background_image.is_none()
+    if (row_background.background_color == ColorInput::transparent()
+      && row_background.background_image.is_none())
+      || cell_background.background_color != ColorInput::transparent()
+      || cell_background.background_image.is_some()
     {
       return;
     }
 
-    if self.context.style.background_data.background_color != ColorInput::transparent()
-      || self
-        .context
-        .style
-        .background_data
-        .background_image
-        .is_some()
-    {
-      return;
-    }
+    let background = self.context.style_mut().background_data_mut();
 
-    let cell_style = self.context.style_mut();
-
-    cell_style.background_data_mut().background_color = row_style.background_data.background_color;
-    cell_style.background_data_mut().background_image =
-      row_style.background_data.background_image.clone();
-    cell_style.background_data_mut().background_position =
-      row_style.background_data.background_position.clone();
-    cell_style.background_data_mut().background_size =
-      row_style.background_data.background_size.clone();
-    cell_style.background_data_mut().background_repeat =
-      row_style.background_data.background_repeat.clone();
-    cell_style.background_data_mut().background_clip = row_style.background_data.background_clip;
-    cell_style.background_data_mut().background_origin =
-      row_style.background_data.background_origin;
+    background.background_color = row_background.background_color;
+    background.background_image = row_background.background_image.clone();
+    background.background_position = row_background.background_position.clone();
+    background.background_size = row_background.background_size.clone();
+    background.background_repeat = row_background.background_repeat.clone();
+    background.background_clip = row_background.background_clip;
+    background.background_origin = row_background.background_origin;
   }
 
   /// Wraps content to preserve its formatting context during alignment.
@@ -638,7 +597,7 @@ impl RenderNode {
     let style = self.context.style_mut();
 
     style.base_data_mut().display = Display::Flex;
-    style.rare_non_inherited_data_mut().flex_direction = FlexDirection::Column;
+    style.misc_data_mut().flex_direction = FlexDirection::Column;
     style.box_data_mut().justify_content = justify;
   }
 
@@ -660,12 +619,8 @@ impl RenderNode {
   /// below it out again.
   fn intrinsic_widths(&self) -> (f32, f32) {
     let mut cell = self.clone();
-    let style = cell.context.style_mut();
 
     // Blink's `MinMaxSizes` of the cell's content; its own widths constrain the column apart.
-    style.box_data_mut().width = Default::default();
-    style.box_data_mut().min_width = Default::default();
-    style.box_data_mut().max_width = Default::default();
     cell.lower_cell(1, 0, 1, false);
     cell.context.blockify();
 
@@ -889,7 +844,7 @@ fn wrap_row_baselines(cells: &mut [RenderNode]) {
   }
 }
 
-impl ComputedStyle {
+impl StyleBoxData {
   /// CSS 2.2 §17.6.1: separate borders space the outer cells from the table's
   /// edges too, which the grid gap alone does not do. Naive: a percentage or
   /// `auto` padding keeps its own value and takes no inset.
@@ -902,22 +857,22 @@ impl ComputedStyle {
       *padding = Length::Px(padding.to_px(sizing, 0.0) + extra.to_px(sizing, 0.0));
     };
 
-    inset(&mut self.box_data_mut().padding_top, spacing.y);
-    inset(&mut self.box_data_mut().padding_bottom, spacing.y);
-    inset(&mut self.box_data_mut().padding_left, spacing.x);
-    inset(&mut self.box_data_mut().padding_right, spacing.x);
+    inset(&mut self.padding_top, spacing.y);
+    inset(&mut self.padding_bottom, spacing.y);
+    inset(&mut self.padding_left, spacing.x);
+    inset(&mut self.padding_right, spacing.x);
   }
 
   /// The collapsed border lives on the edge cells, so the table box stops painting its own.
   fn clear_border(&mut self) {
-    self.box_data_mut().border_top_style = BorderStyle::None;
-    self.box_data_mut().border_right_style = BorderStyle::None;
-    self.box_data_mut().border_bottom_style = BorderStyle::None;
-    self.box_data_mut().border_left_style = BorderStyle::None;
-    self.box_data_mut().border_top_width = LineWidth::Length(Length::zero());
-    self.box_data_mut().border_right_width = LineWidth::Length(Length::zero());
-    self.box_data_mut().border_bottom_width = LineWidth::Length(Length::zero());
-    self.box_data_mut().border_left_width = LineWidth::Length(Length::zero());
+    self.border_top_style = BorderStyle::None;
+    self.border_right_style = BorderStyle::None;
+    self.border_bottom_style = BorderStyle::None;
+    self.border_left_style = BorderStyle::None;
+    self.border_top_width = LineWidth::Length(Length::zero());
+    self.border_right_width = LineWidth::Length(Length::zero());
+    self.border_bottom_width = LineWidth::Length(Length::zero());
+    self.border_left_width = LineWidth::Length(Length::zero());
   }
 }
 
@@ -1130,19 +1085,11 @@ mod tests {
     let caption = &tree.children.as_deref().expect("children")[0];
 
     assert_eq!(
-      caption
-        .context
-        .style
-        .rare_non_inherited_data
-        .grid_column_start,
+      caption.context.style.misc2_data.grid_column_start,
       GridPlacement::Line(1)
     );
     assert_eq!(
-      caption
-        .context
-        .style
-        .rare_non_inherited_data
-        .grid_column_end,
+      caption.context.style.misc2_data.grid_column_end,
       GridPlacement::Span(GridPlacementSpan::Span(3))
     );
   }
@@ -1178,7 +1125,7 @@ mod tests {
 
     assert_eq!(cell.context.style.base_data.display, Display::Flex);
     assert_eq!(
-      cell.context.style.rare_non_inherited_data.flex_direction,
+      cell.context.style.misc_data.flex_direction,
       FlexDirection::Column
     );
     assert_eq!(
@@ -1246,12 +1193,12 @@ mod tests {
 
     assert_eq!(cell.origin, NodeOrigin::Anonymous);
     assert_eq!(
-      cell.context.style.rare_non_inherited_data.grid_column_start,
+      cell.context.style.misc2_data.grid_column_start,
       GridPlacement::Line(1)
     );
     assert_eq!(flex.context.style.base_data.display, Display::Flex);
     assert_eq!(
-      flex.context.style.rare_non_inherited_data.flex_direction,
+      flex.context.style.misc_data.flex_direction,
       FlexDirection::Row
     );
   }
@@ -1268,19 +1215,11 @@ mod tests {
     let cells = tree.children.as_deref().expect("children");
 
     assert_eq!(
-      cells[0]
-        .context
-        .style
-        .rare_non_inherited_data
-        .grid_column_start,
+      cells[0].context.style.misc2_data.grid_column_start,
       GridPlacement::Line(1)
     );
     assert_eq!(
-      cells[1]
-        .context
-        .style
-        .rare_non_inherited_data
-        .grid_column_start,
+      cells[1].context.style.misc2_data.grid_column_start,
       GridPlacement::Line(2)
     );
   }
@@ -1306,7 +1245,7 @@ mod tests {
       let wide = &tree.children.as_deref().expect("children")[0];
 
       assert_eq!(
-        wide.context.style.rare_non_inherited_data.grid_column_end,
+        wide.context.style.misc2_data.grid_column_end,
         GridPlacement::Span(GridPlacementSpan::Span(2)),
         "{name} should be read as a column span"
       );
@@ -1328,19 +1267,11 @@ mod tests {
     let cells = tree.children.as_deref().expect("children");
 
     assert_eq!(
-      cells[0]
-        .context
-        .style
-        .rare_non_inherited_data
-        .grid_column_end,
+      cells[0].context.style.misc2_data.grid_column_end,
       GridPlacement::Span(GridPlacementSpan::Span(1))
     );
     assert_eq!(
-      cells[1]
-        .context
-        .style
-        .rare_non_inherited_data
-        .grid_column_start,
+      cells[1].context.style.misc2_data.grid_column_start,
       GridPlacement::Line(2)
     );
   }
@@ -1392,7 +1323,7 @@ mod tests {
       tree
         .context
         .style
-        .rare_non_inherited_data
+        .misc2_data
         .grid_template_columns
         .as_ref()
         .expect("template")
@@ -1429,7 +1360,7 @@ mod tests {
     let wide = &tree.children.as_deref().expect("children")[0];
 
     assert_eq!(
-      wide.context.style.rare_non_inherited_data.grid_column_end,
+      wide.context.style.misc2_data.grid_column_end,
       GridPlacement::Span(GridPlacementSpan::Span(2))
     );
   }
@@ -1461,7 +1392,7 @@ mod tests {
     assert_eq!(borders(&table, "c"), [1.0, 0.0, 1.0, 1.0]);
     assert_eq!(borders(&table, "d"), [1.0, 1.0, 1.0, 1.0]);
     assert_eq!(
-      table.context.style.rare_non_inherited_data.column_gap,
+      table.context.style.misc1_data.column_gap,
       Gap::Length(Length::zero())
     );
   }
@@ -1673,18 +1604,18 @@ mod tests {
     let spaced = lower(Node::container([row([cell("a"), cell("b")])]).with_class_name("spaced"));
 
     assert_eq!(
-      spaced.context.style.rare_non_inherited_data.column_gap,
+      spaced.context.style.misc1_data.column_gap,
       Gap::Length(Length::Px(4.0))
     );
     assert_eq!(
-      spaced.context.style.rare_non_inherited_data.row_gap,
+      spaced.context.style.misc3_data.row_gap,
       Gap::Length(Length::Px(8.0))
     );
 
     let tight = lower(Node::container([row([cell("a"), cell("b")])]).with_class_name("tight"));
 
     assert_eq!(
-      tight.context.style.rare_non_inherited_data.column_gap,
+      tight.context.style.misc1_data.column_gap,
       Gap::Length(Length::zero())
     );
   }
@@ -1728,7 +1659,7 @@ mod tests {
       table
         .context
         .style
-        .rare_non_inherited_data
+        .misc2_data
         .grid_template_columns
         .as_ref()
         .map(ToCss::to_css_string),
@@ -1741,11 +1672,11 @@ mod tests {
     let table = lower(Node::container([row([cell("a"), cell("b")])]).with_class_name("gapped"));
 
     assert_eq!(
-      table.context.style.rare_non_inherited_data.column_gap,
+      table.context.style.misc1_data.column_gap,
       Gap::Length(Length::Px(4.0))
     );
     assert_eq!(
-      table.context.style.rare_non_inherited_data.row_gap,
+      table.context.style.misc3_data.row_gap,
       Gap::Length(Length::Px(8.0))
     );
     assert_eq!(table.context.style.box_data.padding_left, Length::Px(4.0));

@@ -51,7 +51,7 @@ fn process_image_for_object_fit(
   let rendered = image.render_for_layout(
     clipped.size.width as u32,
     clipped.size.height as u32,
-    context.style.rare_inherited_data.image_rendering,
+    context.style.misc_inherited_data.image_rendering,
     context.time_ms(),
     context.current_color,
     Some(context.fonts()),
@@ -106,7 +106,7 @@ pub(crate) fn draw_image(
           clip,
           pixmap.into(),
           Affine::IDENTITY,
-          context.style.rare_inherited_data.image_rendering,
+          context.style.misc_inherited_data.image_rendering,
         )?;
         return Ok(());
       }
@@ -115,7 +115,7 @@ pub(crate) fn draw_image(
         pixmap,
         BorderProperties::default(),
         context.transform * image_to_box,
-        context.style.rare_inherited_data.image_rendering,
+        context.style.misc_inherited_data.image_rendering,
         // The node's blend mode applies when its layer composites.
         BlendMode::Normal,
       );

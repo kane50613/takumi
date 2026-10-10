@@ -580,9 +580,9 @@ impl<'r> LayoutTree<'r> {
         }
         sort_children_by_order(&mut taffy_children, |child_id| {
           let child_idx: usize = child_id.into();
-          render_nodes.get(child_idx).map_or(0, |child| {
-            child.context.style.rare_non_inherited_data.order.0
-          })
+          render_nodes
+            .get(child_idx)
+            .map_or(0, |child| child.context.style.misc3_data.order.0)
         });
       }
       nodes[idx].children = taffy_children.into_boxed_slice();
@@ -1061,12 +1061,7 @@ impl<'r> LayoutTree<'r> {
       .iter()
       .filter_map(|&cell| {
         let render_node = self.render_nodes.get(usize::from(cell))?;
-        let GridPlacement::Line(row) = render_node
-          .context
-          .style
-          .rare_non_inherited_data
-          .grid_row_start
-        else {
+        let GridPlacement::Line(row) = render_node.context.style.misc2_data.grid_row_start else {
           return None;
         };
         let content = *self.get_layout_node_ref(cell)?.children.first()?;
@@ -1572,7 +1567,7 @@ impl RenderNode {
       style.base_data_mut().display = Display::Block;
     }
 
-    let items = match take(&mut style.rare_non_inherited_data_mut().content) {
+    let items = match take(&mut style.misc1_data_mut().content) {
       ContentValue::Items(items) => items,
       _ => return None,
     };
@@ -2668,7 +2663,7 @@ impl RenderContext {
         .is_some_and(|tag| tag.eq_ignore_ascii_case("html"));
 
     let mut child_sizing_for_final: Option<SizingContext> = None;
-    if !style.rare_non_inherited_data.animation_name.is_empty() {
+    if !style.misc1_data.animation_name.is_empty() {
       let (animated, child_sizing) = self.animated_style(style);
 
       style = animated;

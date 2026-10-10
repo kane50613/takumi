@@ -121,7 +121,7 @@ impl<'c> CanvasDevice<'c> {
     Self::new(
       canvas,
       context.transform,
-      context.style.rare_inherited_data.image_rendering,
+      context.style.misc_inherited_data.image_rendering,
     )
   }
 
@@ -397,7 +397,7 @@ impl<'c> CanvasDevice<'c> {
         if stroke.0 > 0.0 {
           let mut text_stroke = Stroke::new(stroke.0);
 
-          text_stroke.join = style.parent.rare_inherited_data.stroke_linejoin.into();
+          text_stroke.join = style.parent.misc_inherited_data.stroke_linejoin.into();
           self.draw_shadow_of(shadow, outline.paths(), text_stroke.into(), transform);
         }
       }
@@ -640,7 +640,7 @@ impl GlyphDevice for CanvasDevice<'_> {
         transform,
         tile.into(),
         Affine::translation(-origin.x.floor(), -origin.y.floor()),
-        context.style.rare_inherited_data.image_rendering,
+        context.style.misc_inherited_data.image_rendering,
       );
     }
     self.strip_tiles.insert(key, tile);
@@ -720,7 +720,7 @@ pub(crate) fn draw_background(
           &tile,
           border_radius,
           frame_transform,
-          context.style.rare_inherited_data.image_rendering,
+          context.style.misc_inherited_data.image_rendering,
           BlendMode::Normal,
         );
       }
@@ -750,7 +750,7 @@ pub(crate) fn draw_background(
                 &tile.tile,
                 border_radius,
                 transform,
-                context.style.rare_inherited_data.image_rendering,
+                context.style.misc_inherited_data.image_rendering,
                 tile.blend_mode,
               );
             }
@@ -762,7 +762,7 @@ pub(crate) fn draw_background(
           layer.tile,
           border_radius,
           transform,
-          context.style.rare_inherited_data.image_rendering,
+          context.style.misc_inherited_data.image_rendering,
           layer.blend_mode,
         );
       } else if let Some(tile) = rasterize_layers(
@@ -776,7 +776,7 @@ pub(crate) fn draw_background(
           &tile,
           border_radius,
           frame_transform,
-          context.style.rare_inherited_data.image_rendering,
+          context.style.misc_inherited_data.image_rendering,
           BlendMode::Normal,
         );
       }
@@ -802,7 +802,7 @@ pub(crate) fn draw_background(
       if let Some(tile) = &tile
         && let Some(shape) = background.clip.shape(background.size)
       {
-        let algorithm = context.style.rare_inherited_data.image_rendering;
+        let algorithm = context.style.misc_inherited_data.image_rendering;
         let at = Affine::translation(offset.x, offset.y);
 
         match background.clip.border_mask() {
@@ -855,7 +855,7 @@ fn draw_clipped_background(
       &tile,
       BorderProperties::default(),
       context.transform * Affine::translation(at.x, at.y),
-      context.style.rare_inherited_data.image_rendering,
+      context.style.misc_inherited_data.image_rendering,
       BlendMode::Normal,
     );
   }
@@ -886,7 +886,7 @@ impl DeferredOutline {
     Some(Self {
       outline: BoxPainter::new(context, layout).pending_outline(Point::ZERO)?,
       transform: context.transform,
-      algorithm: context.style.rare_inherited_data.image_rendering,
+      algorithm: context.style.misc_inherited_data.image_rendering,
     })
   }
 

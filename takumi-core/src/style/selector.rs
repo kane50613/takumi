@@ -1735,7 +1735,7 @@ mod tests {
 
     let style = computed_style_from_declarations(&sheet.rules[0].normal_declarations);
     assert_eq!(
-      style.rare_inherited_data.webkit_text_fill_color,
+      style.misc_inherited1_data.webkit_text_fill_color,
       Some(ColorInput::Value(Color([255, 0, 0, 255])))
     );
   }

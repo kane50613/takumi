@@ -27,8 +27,10 @@ pub(super) fn list_marker(item_context: &RenderContext, ordinal: i32) -> Option<
   let (mut style, sizing, current_color) =
     item_context.resolve_pseudo_style(&MatchedDeclarationsView::default());
 
-  style.inherited_data_mut().white_space_collapse = WhiteSpaceCollapse::Preserve;
-  style.inherited_data_mut().text_wrap_mode = TextWrapMode::NoWrap;
+  let inherited = style.inherited_data_mut();
+
+  inherited.white_space_collapse = WhiteSpaceCollapse::Preserve;
+  inherited.text_wrap_mode = TextWrapMode::NoWrap;
   style.base_data_mut().display = Display::InlineFlex;
   // Taffy resolves `Start`/`End` against `direction`, so flow-relative `End`
   // hangs the overflowing content outside the item's content edge either way.
@@ -53,7 +55,7 @@ pub(super) fn list_marker(item_context: &RenderContext, ordinal: i32) -> Option<
   let mut content = match available_marker_image(item_context) {
     Some(image) => marker_image(&context, image, direction),
     None => {
-      let style_type = &item_context.style.rare_inherited_data.list_style_type;
+      let style_type = &item_context.style.misc_inherited1_data.list_style_type;
       let text = style_type.marker_text(ordinal, direction)?;
 
       // Blink spaces a symbol marker with margins, not its suffix
@@ -92,7 +94,7 @@ pub(super) fn list_marker(item_context: &RenderContext, ordinal: i32) -> Option<
 fn available_marker_image(item_context: &RenderContext) -> Option<BackgroundImage> {
   let image = item_context
     .style
-    .rare_inherited_data
+    .misc_inherited1_data
     .list_style_image
     .image()?;
   let BackgroundImage::Url(url) = image else {

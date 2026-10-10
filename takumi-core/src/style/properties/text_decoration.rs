@@ -184,17 +184,17 @@ impl AppliedTextDecorations {
     };
     let own = AppliedTextDecoration {
       line,
-      style: style.rare_non_inherited_data.text_decoration_style,
+      style: style.misc_data.text_decoration_style,
       color: style
-        .rare_non_inherited_data
+        .misc3_data
         .text_decoration_color
         .resolve(current_color),
       thickness: style.resolved_text_decoration_thickness(sizing),
       underline_offset: style
-        .rare_inherited_data
+        .misc_inherited1_data
         .text_underline_offset
         .resolve_px(sizing),
-      underline_position: style.rare_inherited_data.text_underline_position,
+      underline_position: style.misc_inherited_data.text_underline_position,
     };
 
     inherited.as_slice().iter().copied().chain([own]).collect()

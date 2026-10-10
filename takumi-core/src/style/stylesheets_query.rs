@@ -57,33 +57,35 @@ impl ComputedStyle {
     // The used value of `border-width`/`outline-width` is zero when the line's
     // style is `none` or `hidden`, even though the computed value is `medium`.
     let none = LineWidth::Length(Length::zero());
+    let unrendered = |style: BorderStyle, width: LineWidth| !style.is_rendered() && width != none;
     let box_data = &self.box_data;
-    let zeroed = [
-      !box_data.border_top_style.is_rendered() && box_data.border_top_width != none,
-      !box_data.border_right_style.is_rendered() && box_data.border_right_width != none,
-      !box_data.border_bottom_style.is_rendered() && box_data.border_bottom_width != none,
-      !box_data.border_left_style.is_rendered() && box_data.border_left_width != none,
-    ];
 
-    if zeroed.contains(&true) {
+    if unrendered(box_data.border_top_style, box_data.border_top_width)
+      || unrendered(box_data.border_right_style, box_data.border_right_width)
+      || unrendered(box_data.border_bottom_style, box_data.border_bottom_width)
+      || unrendered(box_data.border_left_style, box_data.border_left_width)
+    {
       let box_data = self.box_data_mut();
-      let widths = [
-        &mut box_data.border_top_width,
-        &mut box_data.border_right_width,
-        &mut box_data.border_bottom_width,
-        &mut box_data.border_left_width,
-      ];
 
-      for (width, zeroed) in widths.into_iter().zip(zeroed) {
-        if zeroed {
+      for (style, width) in [
+        (box_data.border_top_style, &mut box_data.border_top_width),
+        (
+          box_data.border_right_style,
+          &mut box_data.border_right_width,
+        ),
+        (
+          box_data.border_bottom_style,
+          &mut box_data.border_bottom_width,
+        ),
+        (box_data.border_left_style, &mut box_data.border_left_width),
+      ] {
+        if !style.is_rendered() {
           *width = none;
         }
       }
     }
-    if !self.rare_non_inherited_data.outline_style.is_rendered()
-      && self.rare_non_inherited_data.outline_width != none
-    {
-      self.rare_non_inherited_data_mut().outline_width = none;
+    if unrendered(self.misc_data.outline_style, self.misc3_data.outline_width) {
+      self.misc3_data_mut().outline_width = none;
     }
 
     self.original_display = self.base_data.display;
@@ -135,14 +137,8 @@ impl ComputedStyle {
   /// takumi has, plus the containment half of `LayoutObject::IsStackingContext`.
   pub(crate) fn creates_stacking_context(&self, is_flex_or_grid_item: bool) -> bool {
     self.base_data.position == Position::Fixed
-      || self
-        .rare_non_inherited_data
-        .contain
-        .contains(Contain::LAYOUT)
-      || self
-        .rare_non_inherited_data
-        .contain
-        .contains(Contain::PAINT)
+      || self.misc_data.contain.contains(Contain::LAYOUT)
+      || self.misc_data.contain.contains(Contain::PAINT)
       || self.is_z_index_applicable(is_flex_or_grid_item)
       || self.has_transform_related_property()
       || self.needs_offscreen_compositing()
@@ -163,17 +159,11 @@ impl ComputedStyle {
   /// transform-related property, a non-initial `filter` / `backdrop-filter`,
   /// and `layout` or `paint` containment.
   pub fn contains_fixed_descendants(&self) -> bool {
-    self
-      .rare_non_inherited_data
-      .contain
-      .contains(Contain::LAYOUT)
-      || self
-        .rare_non_inherited_data
-        .contain
-        .contains(Contain::PAINT)
+    self.misc_data.contain.contains(Contain::LAYOUT)
+      || self.misc_data.contain.contains(Contain::PAINT)
       || self.has_transform_related_property()
-      || !self.rare_non_inherited_data.filter.is_empty()
-      || !self.rare_non_inherited_data.backdrop_filter.is_empty()
+      || !self.misc1_data.filter.is_empty()
+      || !self.misc1_data.backdrop_filter.is_empty()
   }
 
   /// Blink's `HasTransformRelatedProperty`, for the properties takumi has.
@@ -183,10 +173,10 @@ impl ComputedStyle {
       .transform
       .as_ref()
       .is_some_and(|t| !t.0.is_empty())
-      || self.rare_non_inherited_data.offset_path.is_some()
-      || self.rare_non_inherited_data.rotate.is_some()
-      || self.rare_non_inherited_data.translate != SpacePair::default()
-      || self.rare_non_inherited_data.scale.is_some()
+      || self.misc3_data.offset_path.is_some()
+      || self.misc3_data.rotate.is_some()
+      || self.misc4_data.translate != SpacePair::default()
+      || self.misc3_data.scale.is_some()
   }
 
   /// Blink's `UpdateForPaintOffsetTranslation`: the paint offset a box with this style paints
@@ -198,25 +188,14 @@ impl ComputedStyle {
     local: Affine,
   ) -> Point<f32> {
     // Blink's `NeedsIsolationNodes`.
-    let isolates = self
-      .rare_non_inherited_data
-      .contain
-      .contains(Contain::PAINT)
-      || (self
-        .rare_non_inherited_data
-        .contain
-        .contains(Contain::STYLE)
-        && self
-          .rare_non_inherited_data
-          .contain
-          .contains(Contain::LAYOUT));
+    let isolates = self.misc_data.contain.contains(Contain::PAINT)
+      || (self.misc_data.contain.contains(Contain::STYLE)
+        && self.misc_data.contain.contains(Contain::LAYOUT));
 
     if isolates {
       return Point::ZERO;
     }
-    if !self.has_transform_related_property()
-      && self.rare_non_inherited_data.backdrop_filter.is_empty()
-    {
+    if !self.has_transform_related_property() && self.misc1_data.backdrop_filter.is_empty() {
       return paint_offset;
     }
 
@@ -247,27 +226,23 @@ impl ComputedStyle {
 
   /// Whether the element must render to an offscreen layer before compositing.
   pub fn needs_offscreen_compositing(&self) -> bool {
-    self.rare_non_inherited_data.isolation == Isolation::Isolate
+    self.misc_data.isolation == Isolation::Isolate
       || *self.svg_data.opacity < 1.0
-      || !self.rare_non_inherited_data.filter.is_empty()
-      || !self.rare_non_inherited_data.backdrop_filter.is_empty()
-      || self.rare_non_inherited_data.mix_blend_mode != BlendMode::Normal
+      || !self.misc1_data.filter.is_empty()
+      || !self.misc1_data.backdrop_filter.is_empty()
+      || self.misc_data.mix_blend_mode != BlendMode::Normal
       || self.has_shape_mask()
   }
 
   /// Whether `clip-path` or a non-empty `mask-image` shapes the element's
   /// visible area.
   pub fn has_shape_mask(&self) -> bool {
-    self.rare_non_inherited_data.clip_path.is_some()
-      || self
-        .rare_non_inherited_data
-        .mask_image
-        .as_ref()
-        .is_some_and(|images| {
-          images
-            .iter()
-            .any(|image| !matches!(image, BackgroundImage::None))
-        })
+    self.misc1_data.clip_path.is_some()
+      || self.misc2_data.mask_image.as_ref().is_some_and(|images| {
+        images
+          .iter()
+          .any(|image| !matches!(image, BackgroundImage::None))
+      })
   }
 
   /// Builds the element's local affine transform around its transform-origin
@@ -280,24 +255,16 @@ impl ComputedStyle {
       .to_point(sizing, width, height);
     let mut local = Affine::translation(origin_x, origin_y);
 
-    if self.rare_non_inherited_data.translate != SpacePair::default() {
+    if self.misc4_data.translate != SpacePair::default() {
       local *= Affine::translation(
-        self
-          .rare_non_inherited_data
-          .translate
-          .x
-          .to_px(sizing, width),
-        self
-          .rare_non_inherited_data
-          .translate
-          .y
-          .to_px(sizing, height),
+        self.misc4_data.translate.x.to_px(sizing, width),
+        self.misc4_data.translate.y.to_px(sizing, height),
       );
     }
-    if let Some(rotate) = self.rare_non_inherited_data.rotate {
+    if let Some(rotate) = self.misc3_data.rotate {
       local *= Affine::rotation(rotate);
     }
-    if let Some(scale) = self.rare_non_inherited_data.scale {
+    if let Some(scale) = self.misc3_data.scale {
       local *= Affine::scale(scale.x.0, scale.y.0);
     }
     // offset-path sits after translate/rotate/scale and before `transform`, and
@@ -315,10 +282,10 @@ impl ComputedStyle {
       .filter(|height| *height > 0.0)
       .or_else(|| sizing.viewport.size.height.map(|height| height as f32))
       .unwrap_or(height);
-    if let Some(path) = &self.rare_non_inherited_data.offset_path
+    if let Some(path) = &self.misc3_data.offset_path
       && let Some((point, tangent)) = path.sample(
-        self.rare_non_inherited_data.offset_distance,
-        &self.rare_non_inherited_data.offset_position,
+        self.misc3_data.offset_distance,
+        &self.misc3_data.offset_position,
         sizing,
         CoreSize {
           width: reference_width,
@@ -327,12 +294,9 @@ impl ComputedStyle {
       )
     {
       local *= Affine::translation(point.x - origin_x, point.y - origin_y);
-      local *=
-        Affine::rotation_radians(self.rare_non_inherited_data.offset_rotate.resolve(tangent));
-      if let Some((anchor_x, anchor_y)) = self
-        .rare_non_inherited_data
-        .offset_anchor
-        .resolve(sizing, width, height)
+      local *= Affine::rotation_radians(self.misc3_data.offset_rotate.resolve(tangent));
+      if let Some((anchor_x, anchor_y)) =
+        self.misc3_data.offset_anchor.resolve(sizing, width, height)
       {
         local *= Affine::translation(origin_x - anchor_x, origin_y - anchor_y);
       }
@@ -357,11 +321,7 @@ impl ComputedStyle {
       pair => pair,
     };
 
-    if self
-      .rare_non_inherited_data
-      .contain
-      .contains(Contain::PAINT)
-    {
+    if self.misc_data.contain.contains(Contain::PAINT) {
       if x == Overflow::Visible {
         x = Overflow::Clip;
       }
@@ -382,13 +342,13 @@ impl ComputedStyle {
   pub(crate) fn ellipsis_char(&self) -> &str {
     const ELLIPSIS_CHAR: &str = "…";
 
-    match &self.rare_non_inherited_data.text_overflow {
+    match &self.misc4_data.text_overflow {
       TextOverflow::Ellipsis => return ELLIPSIS_CHAR,
       TextOverflow::Custom(custom) => return custom.as_str(),
       _ => {}
     }
 
-    match &self.rare_inherited_data.block_ellipsis {
+    match &self.misc_inherited1_data.block_ellipsis {
       BlockEllipsis::String(custom) => custom.as_str(),
       BlockEllipsis::None => "",
       BlockEllipsis::Auto => ELLIPSIS_CHAR,
@@ -399,7 +359,7 @@ impl ComputedStyle {
   /// so this case is rendered by switching to wrapping with a one-line clamp.
   fn forces_single_line_ellipsis(&self) -> bool {
     self.inherited_data.text_wrap_mode == TextWrapMode::NoWrap
-      && self.rare_non_inherited_data.text_overflow == TextOverflow::Ellipsis
+      && self.misc4_data.text_overflow == TextOverflow::Ellipsis
   }
 
   /// The wrap mode used for layout, forcing wrap for single-line ellipsis.
@@ -421,14 +381,11 @@ impl ComputedStyle {
       return Some(1);
     }
 
-    if self.rare_non_inherited_data.r#continue != Continue::Collapse {
+    if self.misc_data.r#continue != Continue::Collapse {
       return None;
     }
 
-    self
-      .rare_non_inherited_data
-      .max_lines
-      .filter(|&count| count >= 1)
+    self.misc3_data.max_lines.filter(|&count| count >= 1)
   }
 
   #[inline]
@@ -448,7 +405,7 @@ impl ComputedStyle {
     &self,
     sizing: &SizingContext,
   ) -> SizedTextDecorationThickness {
-    match self.rare_non_inherited_data.text_decoration_thickness {
+    match self.misc3_data.text_decoration_thickness {
       TextDecorationThickness::Length(Length::Auto) => SizedTextDecorationThickness::Auto,
       TextDecorationThickness::FromFont => SizedTextDecorationThickness::FromFont,
       TextDecorationThickness::Length(thickness) => {
@@ -499,12 +456,12 @@ impl ComputedStyle {
   pub(crate) fn to_taffy_style(&self, sizing: &SizingContext) -> taffy::Style {
     // Convert grid templates and associated line names
     let (grid_template_columns, grid_template_column_names) =
-      Self::grid_template(&self.rare_non_inherited_data.grid_template_columns, sizing);
+      Self::grid_template(&self.misc2_data.grid_template_columns, sizing);
     let (grid_template_rows, grid_template_row_names) =
-      Self::grid_template(&self.rare_non_inherited_data.grid_template_rows, sizing);
+      Self::grid_template(&self.misc2_data.grid_template_rows, sizing);
 
     taffy::Style {
-      contain: self.rare_non_inherited_data.contain.into_taffy(),
+      contain: self.misc_data.contain.into_taffy(),
       float: self.base_data.float.resolve(self.inherited_data.direction),
       clear: self.base_data.clear.resolve(self.inherited_data.direction),
       direction: self.inherited_data.direction.into_taffy(),
@@ -548,39 +505,32 @@ impl ComputedStyle {
       }
       .map(|margin| margin.resolve_to_length_percentage_auto(sizing)),
       display: self.base_data.display.into_taffy(),
-      flex_direction: self.rare_non_inherited_data.flex_direction.into_taffy(),
+      flex_direction: self.misc_data.flex_direction.into_taffy(),
       position: self.base_data.position.into_taffy(),
       justify_content: self.box_data.justify_content.into_taffy(),
-      align_content: self.rare_non_inherited_data.align_content.into_taffy(),
-      justify_items: self.rare_non_inherited_data.justify_items.into_taffy(),
-      flex_grow: self
-        .rare_non_inherited_data
-        .flex_grow
-        .map(|grow| grow.0)
-        .unwrap_or(0.0),
+      align_content: self.misc_data.align_content.into_taffy(),
+      justify_items: self.misc_data.justify_items.into_taffy(),
+      flex_grow: self.misc1_data.flex_grow.map(|grow| grow.0).unwrap_or(0.0),
       align_items: self.box_data.align_items.into_taffy(),
       gap: Size {
         width: self
-          .rare_non_inherited_data
+          .misc1_data
           .column_gap
           .resolve_to_length_percentage(sizing),
-        height: self
-          .rare_non_inherited_data
-          .row_gap
-          .resolve_to_length_percentage(sizing),
+        height: self.misc3_data.row_gap.resolve_to_length_percentage(sizing),
       },
       flex_basis: self
-        .rare_non_inherited_data
+        .misc1_data
         .flex_basis
         .unwrap_or_default()
         .resolve_to_dimension(sizing),
       flex_shrink: self
-        .rare_non_inherited_data
+        .misc2_data
         .flex_shrink
         .map(|shrink| shrink.0)
         .unwrap_or(1.0),
-      flex_wrap: self.rare_non_inherited_data.flex_wrap.into_taffy(),
-      flex_line_count: self.rare_non_inherited_data.flex_line_count.get(),
+      flex_wrap: self.misc_data.flex_wrap.into_taffy(),
+      flex_line_count: self.misc2_data.flex_line_count.get(),
       min_size: Size {
         width: self.box_data.min_width,
         height: self.box_data.min_height,
@@ -591,18 +541,17 @@ impl ComputedStyle {
         height: self.box_data.max_height,
       }
       .map(|length| length.resolve_to_length_percentage_auto(sizing)),
-      grid_auto_columns: self
-        .rare_non_inherited_data
-        .grid_auto_columns
-        .as_ref()
-        .map_or_else(Vec::new, |tracks| {
+      grid_auto_columns: self.misc2_data.grid_auto_columns.as_ref().map_or_else(
+        Vec::new,
+        |tracks| {
           tracks
             .iter()
             .map(|track| track.to_min_max(sizing))
             .collect()
-        }),
+        },
+      ),
       grid_auto_rows: self
-        .rare_non_inherited_data
+        .misc2_data
         .grid_auto_rows
         .as_ref()
         .map_or_else(Vec::new, |tracks| {
@@ -611,44 +560,28 @@ impl ComputedStyle {
             .map(|track| track.to_min_max(sizing))
             .collect()
         }),
-      grid_auto_flow: self.rare_non_inherited_data.grid_auto_flow.into_taffy(),
+      grid_auto_flow: self.misc2_data.grid_auto_flow.into_taffy(),
       grid_column: Line {
-        start: self
-          .rare_non_inherited_data
-          .grid_column_start
-          .clone()
-          .into_taffy(),
-        end: self
-          .rare_non_inherited_data
-          .grid_column_end
-          .clone()
-          .into_taffy(),
+        start: self.misc2_data.grid_column_start.clone().into_taffy(),
+        end: self.misc2_data.grid_column_end.clone().into_taffy(),
       },
       grid_row: Line {
-        start: self
-          .rare_non_inherited_data
-          .grid_row_start
-          .clone()
-          .into_taffy(),
-        end: self
-          .rare_non_inherited_data
-          .grid_row_end
-          .clone()
-          .into_taffy(),
+        start: self.misc2_data.grid_row_start.clone().into_taffy(),
+        end: self.misc2_data.grid_row_end.clone().into_taffy(),
       },
       grid_template_columns,
       grid_template_rows,
       grid_template_column_names,
       grid_template_row_names,
       grid_template_areas: self
-        .rare_non_inherited_data
+        .misc2_data
         .grid_template_areas
         .as_ref()
         .cloned()
         .and_then(GridTemplateAreas::into_taffy),
       aspect_ratio: self.surround_data.aspect_ratio.into(),
-      align_self: self.rare_non_inherited_data.align_self.into_taffy(),
-      justify_self: self.rare_non_inherited_data.justify_self.into_taffy(),
+      align_self: self.misc_data.align_self.into_taffy(),
+      justify_self: self.misc_data.justify_self.into_taffy(),
       overflow: self
         .resolve_overflows()
         .into_taffy()

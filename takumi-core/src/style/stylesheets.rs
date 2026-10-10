@@ -1035,9 +1035,9 @@ macro_rules! define_style {
 
           // special cases
           if animated_properties.contains(&LonghandId::FlexGrow) {
-            self.rare_non_inherited_data_mut().flex_grow = interpolated_with_missing(
-              &from.rare_non_inherited_data.flex_grow,
-              &to.rare_non_inherited_data.flex_grow,
+            self.misc1_data_mut().flex_grow = interpolated_with_missing(
+              &from.misc1_data.flex_grow,
+              &to.misc1_data.flex_grow,
               FlexGrow(0.0),
               FlexGrow(0.0),
               interpolation_context,
@@ -1045,9 +1045,9 @@ macro_rules! define_style {
           }
 
           if animated_properties.contains(&LonghandId::FlexShrink) {
-            self.rare_non_inherited_data_mut().flex_shrink = interpolated_with_missing(
-              &from.rare_non_inherited_data.flex_shrink,
-              &to.rare_non_inherited_data.flex_shrink,
+            self.misc2_data_mut().flex_shrink = interpolated_with_missing(
+              &from.misc2_data.flex_shrink,
+              &to.misc2_data.flex_shrink,
               FlexGrow(1.0),
               FlexGrow(1.0),
               interpolation_context,
@@ -1055,9 +1055,9 @@ macro_rules! define_style {
           }
 
           if animated_properties.contains(&LonghandId::WebkitTextStrokeWidth) {
-            self.rare_inherited_data_mut().webkit_text_stroke_width = interpolated_with_missing(
-              &from.rare_inherited_data.webkit_text_stroke_width,
-              &to.rare_inherited_data.webkit_text_stroke_width,
+            self.misc_inherited1_data_mut().webkit_text_stroke_width = interpolated_with_missing(
+              &from.misc_inherited1_data.webkit_text_stroke_width,
+              &to.misc_inherited1_data.webkit_text_stroke_width,
               Length::zero(),
               Length::zero(),
               interpolation_context,
@@ -1065,9 +1065,9 @@ macro_rules! define_style {
           }
 
           if animated_properties.contains(&LonghandId::WebkitTextStrokeColor) {
-            self.rare_inherited_data_mut().webkit_text_stroke_color = interpolated_with_missing(
-              &from.rare_inherited_data.webkit_text_stroke_color,
-              &to.rare_inherited_data.webkit_text_stroke_color,
+            self.misc_inherited1_data_mut().webkit_text_stroke_color = interpolated_with_missing(
+              &from.misc_inherited1_data.webkit_text_stroke_color,
+              &to.misc_inherited1_data.webkit_text_stroke_color,
               ColorInput::CurrentColor,
               ColorInput::CurrentColor,
               interpolation_context,
@@ -1075,9 +1075,9 @@ macro_rules! define_style {
           }
 
           if animated_properties.contains(&LonghandId::WebkitTextFillColor) {
-            self.rare_inherited_data_mut().webkit_text_fill_color = interpolated_with_missing(
-              &from.rare_inherited_data.webkit_text_fill_color,
-              &to.rare_inherited_data.webkit_text_fill_color,
+            self.misc_inherited1_data_mut().webkit_text_fill_color = interpolated_with_missing(
+              &from.misc_inherited1_data.webkit_text_fill_color,
+              &to.misc_inherited1_data.webkit_text_fill_color,
               from.inherited_data.color,
               to.inherited_data.color,
               interpolation_context,
@@ -1348,82 +1348,94 @@ define_style! {
     visual_data: StyleVisualData {
       text_decoration_line: Option<TextDecorationLines>,
     }
-    /// Blink's `svg` field group, which also holds `opacity` and `transform` because SVG reads them often.
+    /// Blink's `svg` field group, where it keeps `opacity` and `transform` for SVG to read.
     svg_data: StyleSvgData {
       opacity: PercentageNumber,
       transform: Option<Transforms>,
       transform_origin: PositionValue = PositionValue::center(),
     }
-    /// Blink's rarely set non-inherited fields, its `*` field group.
-    rare_non_inherited_data: StyleRareNonInheritedData {
-      animation_name: AnimationNames,
-      animation_duration: AnimationDurations,
-      animation_delay: AnimationDurations,
-      animation_timing_function: AnimationTimingFunctions,
-      animation_iteration_count: AnimationIterationCounts,
-      animation_direction: AnimationDirections,
-      animation_fill_mode: AnimationFillModes,
-      animation_play_state: AnimationPlayStates,
+    /// Blink's `misc` field group: its rarely set non-inherited fields under eight bits.
+    misc_data: StyleMiscData {
       flex_direction: FlexDirection,
       justify_self: AlignItems,
       align_content: JustifyContent,
       justify_items: AlignItems,
       align_self: AlignItems,
       flex_wrap: FlexWrap,
-      flex_line_count: FlexLineCount,
-      flex_basis: Option<FlexBasis>,
-      order: Order,
-      rotate: Option<Angle>,
-      scale: Option<SpacePair<PercentageNumber>>,
-      translate: SpacePair<Length>,
-      offset_path: Option<OffsetPath>,
-      offset_distance: Length,
-      offset_rotate: OffsetRotate,
-      offset_anchor: OffsetAnchor,
-      offset_position: OffsetPosition,
-      mask_image: Option<BackgroundImages>,
-      mask_size: BackgroundSizes,
-      mask_position: PositionValues,
-      mask_repeat: BackgroundRepeats,
-      column_gap: Gap,
-      row_gap: Gap,
-      flex_grow: Option<FlexGrow>,
-      flex_shrink: Option<FlexGrow>,
-      outline_width: LineWidth,
       outline_style: BorderStyle,
-      outline_color: ColorInput,
-      outline_offset: Length,
       object_fit: ObjectFit where anonymous = true,
-      object_position: PositionValue where anonymous = true = PositionValue::center(),
-      box_shadow: Option<BoxShadows>,
-      grid_auto_columns: Option<GridTrackSizes>,
-      grid_auto_rows: Option<GridTrackSizes>,
-      grid_auto_flow: GridAutoFlow,
-      grid_row_start: GridPlacement,
-      grid_row_end: GridPlacement,
-      grid_column_start: GridPlacement,
-      grid_column_end: GridPlacement,
-      grid_template_columns: Option<GridTemplateComponents>,
-      grid_template_rows: Option<GridTemplateComponents>,
-      grid_template_areas: Option<GridTemplateAreas>,
-      text_overflow: TextOverflow where anonymous = true,
-      filter: Filters,
-      backdrop_filter: Filters,
-      max_lines: Option<u32> where anonymous = true,
       r#continue: Continue where anonymous = true,
       text_decoration_style: TextDecorationStyle,
       break_before: BreakBetween,
       break_after: BreakBetween,
       break_inside: BreakInside,
-      text_decoration_color: ColorInput,
-      text_decoration_thickness: TextDecorationThickness,
-      clip_path: Option<BasicShape>,
       contain: Contain,
       isolation: Isolation,
       mix_blend_mode: BlendMode,
-      content: ContentValue,
     }
-    /// Blink's `inherited` field group, with the fonts and the inherited fields it keeps on `ComputedStyleBase`.
+    /// Blink's `misc->misc1` field group, which Blink nests in `misc`.
+    misc1_data: StyleMisc1Data {
+      animation_delay: AnimationDurations,
+      animation_direction: AnimationDirections,
+      animation_duration: AnimationDurations,
+      animation_fill_mode: AnimationFillModes,
+      animation_iteration_count: AnimationIterationCounts,
+      animation_name: AnimationNames,
+      animation_play_state: AnimationPlayStates,
+      animation_timing_function: AnimationTimingFunctions,
+      backdrop_filter: Filters,
+      box_shadow: Option<BoxShadows>,
+      clip_path: Option<BasicShape>,
+      column_gap: Gap,
+      content: ContentValue,
+      filter: Filters,
+      flex_basis: Option<FlexBasis>,
+      flex_grow: Option<FlexGrow>,
+    }
+    /// Blink's `misc->misc2` field group, which Blink nests in `misc`.
+    misc2_data: StyleMisc2Data {
+      flex_line_count: FlexLineCount,
+      flex_shrink: Option<FlexGrow>,
+      grid_auto_columns: Option<GridTrackSizes>,
+      grid_auto_flow: GridAutoFlow,
+      grid_auto_rows: Option<GridTrackSizes>,
+      grid_column_end: GridPlacement,
+      grid_column_start: GridPlacement,
+      grid_row_end: GridPlacement,
+      grid_row_start: GridPlacement,
+      grid_template_areas: Option<GridTemplateAreas>,
+      grid_template_columns: Option<GridTemplateComponents>,
+      grid_template_rows: Option<GridTemplateComponents>,
+      mask_image: Option<BackgroundImages>,
+      mask_position: PositionValues,
+      mask_repeat: BackgroundRepeats,
+      mask_size: BackgroundSizes,
+    }
+    /// Blink's `misc->misc3` field group, which Blink nests in `misc`.
+    misc3_data: StyleMisc3Data {
+      max_lines: Option<u32> where anonymous = true,
+      object_position: PositionValue where anonymous = true = PositionValue::center(),
+      offset_anchor: OffsetAnchor,
+      offset_distance: Length,
+      offset_path: Option<OffsetPath>,
+      offset_position: OffsetPosition,
+      offset_rotate: OffsetRotate,
+      order: Order,
+      outline_color: ColorInput,
+      outline_offset: Length,
+      outline_width: LineWidth,
+      rotate: Option<Angle>,
+      row_gap: Gap,
+      scale: Option<SpacePair<PercentageNumber>>,
+      text_decoration_color: ColorInput,
+      text_decoration_thickness: TextDecorationThickness,
+    }
+    /// Blink's `misc->misc4` field group, which Blink nests in `misc`.
+    misc4_data: StyleMisc4Data {
+      text_overflow: TextOverflow where anonymous = true,
+      translate: SpacePair<Length>,
+    }
+    /// Blink's `inherited` field group, plus the inherited fields Blink keeps on `ComputedStyleBase` itself.
     inherited_data: StyleInheritedData {
       text_transform: TextTransform where inherit = true,
       font_style: FontStyle where inherit = true,
@@ -1456,28 +1468,31 @@ define_style! {
       border_spacing: BorderSpacing where inherit = true,
       list_style_position: ListStylePosition where inherit = true,
     }
-    /// Blink's rarely set inherited fields, its `*` field group.
-    rare_inherited_data: StyleRareInheritedData {
-      text_fit: TextFit where inherit = true,
-      block_ellipsis: BlockEllipsis where inherit = true,
-      webkit_text_stroke_width: Option<Length> where inherit = true,
-      webkit_text_stroke_color: Option<ColorInput> where inherit = true,
-      webkit_text_fill_color: Option<ColorInput> where inherit = true,
+    /// Blink's `misc-inherited` field group: its rarely set inherited fields under eight bits.
+    misc_inherited_data: StyleMiscInheritedData {
       stroke_linejoin: LineJoin where inherit = true,
-      text_shadow: Option<TextShadows> where inherit = true,
-      widows: MinLines where inherit = true,
-      orphans: MinLines where inherit = true,
-      text_underline_offset: TextUnderlineOffset where inherit = true,
       text_underline_position: TextUnderlinePosition where inherit = true,
       text_decoration_skip_ink: TextDecorationSkipInk where inherit = true,
-      text_indent: TextIndent where inherit = true,
       image_rendering: ImageScalingAlgorithm where inherit = true,
       overflow_wrap: OverflowWrap where inherit = true,
       word_break: WordBreak where inherit = true,
       clip_rule: FillRule where inherit = true,
-      tab_size: TabSize where inherit = true,
-      list_style_type: ListStyleType where inherit = true,
+    }
+    /// Blink's `misc-inherited->misc-inherited1` field group, which Blink nests in `misc-inherited`.
+    misc_inherited1_data: StyleMiscInherited1Data {
+      block_ellipsis: BlockEllipsis where inherit = true,
       list_style_image: ListStyleImage where inherit = true,
+      list_style_type: ListStyleType where inherit = true,
+      orphans: MinLines where inherit = true,
+      tab_size: TabSize where inherit = true,
+      text_fit: TextFit where inherit = true,
+      text_indent: TextIndent where inherit = true,
+      text_shadow: Option<TextShadows> where inherit = true,
+      text_underline_offset: TextUnderlineOffset where inherit = true,
+      webkit_text_fill_color: Option<ColorInput> where inherit = true,
+      webkit_text_stroke_color: Option<ColorInput> where inherit = true,
+      webkit_text_stroke_width: Option<Length> where inherit = true,
+      widows: MinLines where inherit = true,
     }
   }
   transient_longhands {

@@ -25,11 +25,11 @@ fn style_measure_digest(context: &RenderContext) -> u64 {
   SizedFontStyle::from_style(style, context).hash_shaping_inputs(&mut hasher);
   hasher.write_u8(style.inherited_data.text_transform as u8);
   hasher.write_u8(style.inherited_data.white_space_collapse as u8);
-  hasher.write_usize(style.rare_inherited_data.tab_size.spaces());
+  hasher.write_usize(style.misc_inherited1_data.tab_size.spaces());
   hasher.write_u8(style.inherited_data.text_wrap_mode as u8);
   hasher.write_u8(style.inherited_data.text_wrap_style as u8);
   hasher.write_u8(style.inherited_data.text_align as u8);
-  match &style.rare_non_inherited_data.text_overflow {
+  match &style.misc4_data.text_overflow {
     TextOverflow::Clip => hasher.write_u8(0),
     TextOverflow::Ellipsis => hasher.write_u8(1),
     TextOverflow::Custom(marker) => {
@@ -38,17 +38,17 @@ fn style_measure_digest(context: &RenderContext) -> u64 {
     }
   }
   style
-    .rare_inherited_data
+    .misc_inherited1_data
     .text_indent
     .amount
     .hash_bits(&mut hasher);
-  hasher.write_u8(style.rare_inherited_data.text_indent.each_line as u8);
-  hasher.write_u8(style.rare_inherited_data.text_indent.hanging as u8);
-  hasher.write_u8(style.rare_inherited_data.text_fit.mode as u8);
-  hasher.write_u8(style.rare_inherited_data.text_fit.target as u8);
+  hasher.write_u8(style.misc_inherited1_data.text_indent.each_line as u8);
+  hasher.write_u8(style.misc_inherited1_data.text_indent.hanging as u8);
+  hasher.write_u8(style.misc_inherited1_data.text_fit.mode as u8);
+  hasher.write_u8(style.misc_inherited1_data.text_fit.target as u8);
   hasher.write_u32(
     style
-      .rare_inherited_data
+      .misc_inherited1_data
       .text_fit
       .limit
       .unwrap_or(f32::NAN)

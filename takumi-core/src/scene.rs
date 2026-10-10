@@ -793,7 +793,7 @@ fn filter_reach(node: &RenderNode) -> f32 {
   node
     .context
     .style
-    .rare_non_inherited_data
+    .misc1_data
     .filter
     .iter()
     .map(|filter| filter.reach(sizing))
@@ -803,12 +803,7 @@ fn filter_reach(node: &RenderNode) -> f32 {
 /// How far box shadows and the outline reach past the border box, in local px.
 fn box_ink_reach(node: &RenderNode, size: Size<f32>) -> f32 {
   let context = &node.context;
-  let shadows = context
-    .style
-    .rare_non_inherited_data
-    .box_shadow
-    .iter()
-    .flatten();
+  let shadows = context.style.misc1_data.box_shadow.iter().flatten();
   let shadow_reach = shadows
     .filter(|shadow| !shadow.inset)
     .map(|shadow| {

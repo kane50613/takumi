@@ -647,12 +647,7 @@ impl Emitter<'_> {
   /// Builds the soft mask for `mask-image`, drawing its layers into their own stream.
   fn mask(&mut self, node: &RenderNode, frame: BoxFrame, surface: &mut Surface) -> Option<Mask> {
     let size = frame.layout.size;
-    let images = node
-      .context
-      .style
-      .rare_non_inherited_data
-      .mask_image
-      .as_deref()?;
+    let images = node.context.style.misc2_data.mask_image.as_deref()?;
 
     if !images.iter().any(BackgroundImage::paints) {
       return None;
@@ -1035,7 +1030,7 @@ impl Emitter<'_> {
       let outer_filter = self.color_filter.clone();
       self.color_filter = self.composed_filter(
         outer_filter.as_deref(),
-        &node.context.style.rare_non_inherited_data.filter,
+        &node.context.style.misc1_data.filter,
       );
 
       let origin = frame.origin + offset;
@@ -1575,10 +1570,9 @@ impl PropertySink for ChunkWriter<'_, '_, '_> {
         pushed += transformed + self.emitter.push_mask_and_clip(node, frame, self.surface);
       }
 
-      self.emitter.color_filter = self.emitter.composed_filter(
-        color_filter.as_deref(),
-        &style.rare_non_inherited_data.filter,
-      );
+      self.emitter.color_filter = self
+        .emitter
+        .composed_filter(color_filter.as_deref(), &style.misc1_data.filter);
     }
 
     self.enter(pushed, current, window, color_filter);
@@ -1605,11 +1599,11 @@ fn vertical_extent(shape: &FillShape) -> Option<(f32, f32)> {
 fn push_compositing(style: &ComputedStyle, surface: &mut Surface) -> usize {
   let mut pushed = 0;
 
-  if style.rare_non_inherited_data.mix_blend_mode != BlendMode::Normal {
-    surface.push_blend_mode(krilla_blend(style.rare_non_inherited_data.mix_blend_mode));
+  if style.misc_data.mix_blend_mode != BlendMode::Normal {
+    surface.push_blend_mode(krilla_blend(style.misc_data.mix_blend_mode));
     pushed += 1;
   }
-  if style.rare_non_inherited_data.isolation == Isolation::Isolate {
+  if style.misc_data.isolation == Isolation::Isolate {
     surface.push_isolated();
     pushed += 1;
   }

@@ -267,7 +267,7 @@ pub(super) fn text_fit_lines(
   max_width: f32,
   style: &SizedFontStyle,
 ) -> Vec<LineFit> {
-  let text_fit = style.parent.rare_inherited_data.text_fit;
+  let text_fit = style.parent.misc_inherited1_data.text_fit;
   if text_fit.mode == TextFitMode::None || !max_width.is_finite() {
     return Vec::new();
   }

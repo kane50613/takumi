@@ -11,7 +11,7 @@ use crate::{
   geometry::Size,
   style::{
     CalcArena, ComputedStyle, CustomProperties, DeferredDeclaration, SizingContext, Style,
-    StyleBaseData, StyleBoxData, StyleDeclaration, StyleInheritedData, StyleRareNonInheritedData,
+    StyleBaseData, StyleBoxData, StyleDeclaration, StyleInheritedData, StyleMisc4Data,
     StyleSvgData, properties::*,
   },
   viewport::Viewport,
@@ -139,7 +139,7 @@ fn test_deserialize_list_style_properties() -> Result<(), serde_json::Error> {
 
   assert_eq!(computed.base_data.display, Display::ListItem);
   assert_eq!(
-    computed.rare_inherited_data.list_style_type,
+    computed.misc_inherited1_data.list_style_type,
     ListStyleType::Decimal
   );
   assert_eq!(
@@ -421,14 +421,11 @@ fn parse_webkit_line_clamp_matches_line_clamp() {
 
   let webkit = webkit_line_clamp.inherit(&ComputedStyle::default());
   let plain = line_clamp.inherit(&ComputedStyle::default());
-  assert_eq!(webkit.rare_non_inherited_data.max_lines, Some(2));
+  assert_eq!(webkit.misc3_data.max_lines, Some(2));
+  assert_eq!(webkit.misc3_data.max_lines, plain.misc3_data.max_lines);
   assert_eq!(
-    webkit.rare_non_inherited_data.max_lines,
-    plain.rare_non_inherited_data.max_lines
-  );
-  assert_eq!(
-    webkit.rare_inherited_data.block_ellipsis,
-    plain.rare_inherited_data.block_ellipsis
+    webkit.misc_inherited1_data.block_ellipsis,
+    plain.misc_inherited1_data.block_ellipsis
   );
 }
 
@@ -438,22 +435,19 @@ fn line_clamp_shorthand_expands_to_longhands() {
   parent.append_block(parse_declarations("line-clamp", "3 \"...\""));
   let parent = parent.inherit(&ComputedStyle::default());
 
-  assert_eq!(parent.rare_non_inherited_data.max_lines, Some(3));
+  assert_eq!(parent.misc3_data.max_lines, Some(3));
   assert_eq!(
-    parent.rare_inherited_data.block_ellipsis,
+    parent.misc_inherited1_data.block_ellipsis,
     BlockEllipsis::String("...".to_owned())
   );
-  assert_eq!(
-    parent.rare_non_inherited_data.r#continue,
-    Continue::Collapse
-  );
+  assert_eq!(parent.misc_data.r#continue, Continue::Collapse);
 
   // Only `block-ellipsis` inherits; `max-lines` and `continue` do not.
   let child = Style::default().inherit(&parent);
-  assert_eq!(child.rare_non_inherited_data.max_lines, None);
-  assert_eq!(child.rare_non_inherited_data.r#continue, Continue::Normal);
+  assert_eq!(child.misc3_data.max_lines, None);
+  assert_eq!(child.misc_data.r#continue, Continue::Normal);
   assert_eq!(
-    child.rare_inherited_data.block_ellipsis,
+    child.misc_inherited1_data.block_ellipsis,
     BlockEllipsis::String("...".to_owned())
   );
 }
@@ -972,7 +966,7 @@ fn test_merge_from_text_decoration_longhands_clear_lower_priority_color() {
 
   let inherited = preset_style.inherit(&ComputedStyle::default());
   assert_eq!(
-    inherited.rare_non_inherited_data.text_decoration_color,
+    inherited.misc3_data.text_decoration_color,
     ColorInput::default()
   );
   assert_eq!(
@@ -1010,11 +1004,11 @@ fn test_needs_offscreen_compositing_for_clip_path_and_mask_image() {
   let mut style = ComputedStyle::default();
   assert!(!style.needs_offscreen_compositing());
 
-  style.rare_non_inherited_data_mut().clip_path = BasicShape::from_css_str("inset(10px)").ok();
+  style.misc1_data_mut().clip_path = BasicShape::from_css_str("inset(10px)").ok();
   assert!(style.needs_offscreen_compositing());
 
-  style.rare_non_inherited_data_mut().clip_path = None;
-  style.rare_non_inherited_data_mut().mask_image =
+  style.misc1_data_mut().clip_path = None;
+  style.misc2_data_mut().mask_image =
     Some([BackgroundImage::Url("https://example.com/mask.png".into())].into());
   assert!(style.needs_offscreen_compositing());
 }
@@ -1078,15 +1072,12 @@ fn test_offset_properties_parse_from_css() {
   );
 
   assert!(matches!(
-    style.rare_non_inherited_data.offset_path,
+    style.misc3_data.offset_path,
     Some(OffsetPath::Shape(BasicShape::Path(_)))
   ));
+  assert_eq!(style.misc3_data.offset_distance, Length::Percentage(25.0));
   assert_eq!(
-    style.rare_non_inherited_data.offset_distance,
-    Length::Percentage(25.0)
-  );
-  assert_eq!(
-    style.rare_non_inherited_data.offset_rotate,
+    style.misc3_data.offset_rotate,
     OffsetRotate::Reverse(Angle::new(30.0))
   );
 }
@@ -1099,19 +1090,16 @@ fn test_offset_shorthand_expands() {
   );
 
   assert!(matches!(
-    style.rare_non_inherited_data.offset_path,
+    style.misc3_data.offset_path,
     Some(OffsetPath::Ray(_))
   ));
+  assert_eq!(style.misc3_data.offset_distance, Length::Px(10.0));
   assert_eq!(
-    style.rare_non_inherited_data.offset_distance,
-    Length::Px(10.0)
-  );
-  assert_eq!(
-    style.rare_non_inherited_data.offset_rotate,
+    style.misc3_data.offset_rotate,
     OffsetRotate::Auto(Angle::zero())
   );
   assert!(matches!(
-    style.rare_non_inherited_data.offset_anchor,
+    style.misc3_data.offset_anchor,
     OffsetAnchor::Position(_)
   ));
 }
@@ -1134,9 +1122,8 @@ fn test_offset_path_moves_element_onto_path_and_creates_stacking_context() {
     height: 40.0,
   };
 
-  style.rare_non_inherited_data_mut().offset_path =
-    OffsetPath::from_css_str("path('M 0 0 L 100 0')").ok();
-  style.rare_non_inherited_data_mut().offset_distance = Length::Percentage(50.0);
+  style.misc3_data_mut().offset_path = OffsetPath::from_css_str("path('M 0 0 L 100 0')").ok();
+  style.misc3_data_mut().offset_distance = Length::Percentage(50.0);
 
   assert!(style.creates_stacking_context(false));
 
@@ -1195,7 +1182,7 @@ fn test_text_overflow_ellipsis_forces_single_line_clamp_on_nowrap() {
       text_wrap_mode: TextWrapMode::NoWrap,
       ..Default::default()
     }),
-    rare_non_inherited_data: Rc::new(StyleRareNonInheritedData {
+    misc4_data: Rc::new(StyleMisc4Data {
       text_overflow: TextOverflow::Ellipsis,
       ..Default::default()
     }),
@@ -1341,7 +1328,10 @@ fn text_fit_inherits_from_the_parent() {
   let parent = inherited_style_from_pairs([("text-fit", "shrink")], &ComputedStyle::default());
   let child = inherited_style_from_pairs([], &parent);
 
-  assert_eq!(child.rare_inherited_data.text_fit.mode, TextFitMode::Shrink);
+  assert_eq!(
+    child.misc_inherited1_data.text_fit.mode,
+    TextFitMode::Shrink
+  );
 }
 
 #[test]

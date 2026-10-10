@@ -166,7 +166,7 @@ impl ChunkWriter<'_, '_, '_> {
         .node
         .context
         .style
-        .rare_non_inherited_data
+        .misc1_data
         .backdrop_filter
         .is_empty()
     {
@@ -188,7 +188,7 @@ impl ChunkWriter<'_, '_, '_> {
     let size = placed.frame.layout.size;
     let filters: Vec<Filter> = context
       .style
-      .rare_non_inherited_data
+      .misc1_data
       .backdrop_filter
       .iter()
       .filter(|f| !f.is_drop_shadow())

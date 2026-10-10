@@ -48,17 +48,14 @@ pub(crate) fn apply_stylesheet_animations(
   sizing: &SizingContext,
   current_color: Color,
 ) -> ComputedStyle {
-  if base_style.rare_non_inherited_data.animation_name.is_empty() {
+  if base_style.misc1_data.animation_name.is_empty() {
     return base_style;
   }
 
   let base_snapshot = base_style.clone();
 
-  for (animation_index, animation_name) in base_snapshot
-    .rare_non_inherited_data
-    .animation_name
-    .iter()
-    .enumerate()
+  for (animation_index, animation_name) in
+    base_snapshot.misc1_data.animation_name.iter().enumerate()
   {
     let Some(animation_name) = animation_name else {
       continue;
@@ -69,31 +66,25 @@ pub(crate) fn apply_stylesheet_animations(
     };
 
     let duration: AnimationTime = repeated_list_value(
-      &base_snapshot.rare_non_inherited_data.animation_duration,
+      &base_snapshot.misc1_data.animation_duration,
       animation_index,
     );
-    let delay: AnimationTime = repeated_list_value(
-      &base_snapshot.rare_non_inherited_data.animation_delay,
-      animation_index,
-    );
+    let delay: AnimationTime =
+      repeated_list_value(&base_snapshot.misc1_data.animation_delay, animation_index);
     let iteration_count = repeated_list_value(
-      &base_snapshot
-        .rare_non_inherited_data
-        .animation_iteration_count,
+      &base_snapshot.misc1_data.animation_iteration_count,
       animation_index,
     );
     let direction = repeated_list_value(
-      &base_snapshot.rare_non_inherited_data.animation_direction,
+      &base_snapshot.misc1_data.animation_direction,
       animation_index,
     );
     let fill_mode = repeated_list_value(
-      &base_snapshot.rare_non_inherited_data.animation_fill_mode,
+      &base_snapshot.misc1_data.animation_fill_mode,
       animation_index,
     );
     let timing_function: AnimationTimingFunction = repeated_list_value(
-      &base_snapshot
-        .rare_non_inherited_data
-        .animation_timing_function,
+      &base_snapshot.misc1_data.animation_timing_function,
       animation_index,
     );
 
@@ -629,7 +620,7 @@ mod tests {
     .unwrap();
 
     let style = ComputedStyle {
-      rare_non_inherited_data: Rc::new(StyleRareNonInheritedData {
+      misc1_data: Rc::new(StyleMisc1Data {
         animation_name: AnimationNames::from_css_str("morph").unwrap(),
         animation_duration: AnimationDurations::from_css_str("1000ms").unwrap(),
         animation_timing_function: AnimationTimingFunctions::from_css_str("linear").unwrap(),
@@ -1365,7 +1356,7 @@ mod tests {
     let mut base_style = ComputedStyle::default();
     let from = ComputedStyle::default();
     let to = ComputedStyle {
-      rare_non_inherited_data: Rc::new(StyleRareNonInheritedData {
+      misc3_data: Rc::new(StyleMisc3Data {
         rotate: Some(Angle::new(45.0)),
         ..Default::default()
       }),
@@ -1382,10 +1373,7 @@ mod tests {
       current_color(),
     );
 
-    assert_eq!(
-      base_style.rare_non_inherited_data.rotate,
-      Some(Angle::new(22.5))
-    );
+    assert_eq!(base_style.misc3_data.rotate, Some(Angle::new(22.5)));
   }
 
   #[test]
@@ -1393,7 +1381,7 @@ mod tests {
     let mut base_style = ComputedStyle::default();
     let from = ComputedStyle::default();
     let to = ComputedStyle {
-      rare_non_inherited_data: Rc::new(StyleRareNonInheritedData {
+      misc1_data: Rc::new(StyleMisc1Data {
         flex_grow: Some(FlexGrow(4.0)),
         ..Default::default()
       }),
@@ -1410,10 +1398,7 @@ mod tests {
       current_color(),
     );
 
-    assert_eq!(
-      base_style.rare_non_inherited_data.flex_grow,
-      Some(FlexGrow(2.0))
-    );
+    assert_eq!(base_style.misc1_data.flex_grow, Some(FlexGrow(2.0)));
   }
 
   #[test]
@@ -1421,7 +1406,7 @@ mod tests {
     let mut base_style = ComputedStyle::default();
     let from = ComputedStyle::default();
     let to = ComputedStyle {
-      rare_non_inherited_data: Rc::new(StyleRareNonInheritedData {
+      misc2_data: Rc::new(StyleMisc2Data {
         flex_shrink: Some(FlexGrow(3.0)),
         ..Default::default()
       }),
@@ -1438,10 +1423,7 @@ mod tests {
       current_color(),
     );
 
-    assert_eq!(
-      base_style.rare_non_inherited_data.flex_shrink,
-      Some(FlexGrow(2.0))
-    );
+    assert_eq!(base_style.misc2_data.flex_shrink, Some(FlexGrow(2.0)));
   }
 
   #[test]
@@ -1449,7 +1431,7 @@ mod tests {
     let mut base_style = ComputedStyle::default();
     let from = ComputedStyle::default();
     let to = ComputedStyle {
-      rare_inherited_data: Rc::new(StyleRareInheritedData {
+      misc_inherited1_data: Rc::new(StyleMiscInherited1Data {
         webkit_text_stroke_width: Some(Length::Px(6.0)),
         ..Default::default()
       }),
@@ -1468,7 +1450,7 @@ mod tests {
     );
 
     assert_eq!(
-      base_style.rare_inherited_data.webkit_text_stroke_width,
+      base_style.misc_inherited1_data.webkit_text_stroke_width,
       Some(Length::Px(3.0))
     );
   }
@@ -1478,7 +1460,7 @@ mod tests {
     let mut base_style = ComputedStyle::default();
     let from = ComputedStyle::default();
     let to = ComputedStyle {
-      rare_inherited_data: Rc::new(StyleRareInheritedData {
+      misc_inherited1_data: Rc::new(StyleMiscInherited1Data {
         webkit_text_stroke_color: Some(ColorInput::Value(Color([110, 120, 130, 255]))),
         ..Default::default()
       }),
@@ -1497,7 +1479,7 @@ mod tests {
     );
 
     assert_eq!(
-      base_style.rare_inherited_data.webkit_text_stroke_color,
+      base_style.misc_inherited1_data.webkit_text_stroke_color,
       Some(ColorInput::Value(Color([60, 70, 80, 255])))
     );
   }
@@ -1517,7 +1499,7 @@ mod tests {
         color: ColorInput::Value(Color([20, 40, 60, 255])),
         ..Default::default()
       }),
-      rare_inherited_data: Rc::new(StyleRareInheritedData {
+      misc_inherited1_data: Rc::new(StyleMiscInherited1Data {
         webkit_text_fill_color: Some(ColorInput::Value(Color([120, 140, 160, 255]))),
         ..Default::default()
       }),
@@ -1535,7 +1517,7 @@ mod tests {
     );
 
     assert_eq!(
-      base_style.rare_inherited_data.webkit_text_fill_color,
+      base_style.misc_inherited1_data.webkit_text_fill_color,
       Some(ColorInput::Value(Color([70, 90, 110, 255])))
     );
   }

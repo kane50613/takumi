@@ -264,7 +264,7 @@ impl Walker {
           image: source.clone(),
           rect,
           clip,
-          sampling: Sampling::of(context.style.rare_inherited_data.image_rendering),
+          sampling: Sampling::of(context.style.misc_inherited_data.image_rendering),
         }],
         children: Vec::new(),
         kind: NodeKind::Image { image: source },
@@ -792,14 +792,14 @@ fn effects(painter: &BoxPainter<'_>, layout: ComputedLayout) -> Effects {
   let style = &context.style;
   let size = layout.size;
   let backdrop: Vec<Filter> = style
-    .rare_non_inherited_data
+    .misc1_data
     .backdrop_filter
     .iter()
     .filter(|filter| !filter.is_drop_shadow())
     .cloned()
     .collect();
   let mask = style
-    .rare_non_inherited_data
+    .misc2_data
     .mask_image
     .as_deref()
     .filter(|images| images.iter().any(BackgroundImage::paints))
@@ -826,9 +826,9 @@ fn effects(painter: &BoxPainter<'_>, layout: ComputedLayout) -> Effects {
 
   Effects {
     opacity: style.svg_data.opacity.0,
-    blend_mode: style.rare_non_inherited_data.mix_blend_mode.to_css_string(),
-    isolation: style.rare_non_inherited_data.isolation == Isolation::Isolate,
-    filters: PaintFilter::chain(&style.rare_non_inherited_data.filter, size, context),
+    blend_mode: style.misc_data.mix_blend_mode.to_css_string(),
+    isolation: style.misc_data.isolation == Isolation::Isolate,
+    filters: PaintFilter::chain(&style.misc1_data.filter, size, context),
     backdrop_clip: (!backdrop.is_empty()).then(|| {
       Shape::of(
         &BackgroundClipArea::BorderBox(*painter.border())
