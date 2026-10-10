@@ -230,7 +230,7 @@ fn duration_ms_to_gif_delay(duration_ms: u32) -> u16 {
 struct PngEncoding {
   level: u8,
   filter: Filter,
-  /// Segments the image data deflates in at once; one leaves it to the png crate.
+  /// Segments the image data deflates in at once.
   segments: usize,
 }
 
@@ -345,20 +345,13 @@ impl RowSample {
   }
 }
 
-/// Writes `pixels` as the image data `encoding` describes: deflated in segments at once when it
-/// has more than one, else through the png crate.
+/// Writes `pixels` as the image data `encoding` describes, deflated in its segments at once.
 fn write_png_data<W: Write>(
   writer: &mut png::Writer<W>,
   encoding: PngEncoding,
   height: u32,
   pixels: Pixels<'_>,
 ) -> Result<()> {
-  if encoding.segments == 1 {
-    return writer
-      .write_image_data(&pixels.packed())
-      .map_err(Error::encode);
-  }
-
   let scanlines = Scanlines::new(pixels, matches!(encoding.filter, Filter::Adaptive));
   let stream = compress_segmented(
     height as usize,
