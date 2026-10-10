@@ -3,7 +3,7 @@ use std::{
   fmt::{self, Write},
   mem::take,
   ops::Deref,
-  sync::LazyLock,
+  sync::{Arc, LazyLock},
 };
 
 use cssparser::*;
@@ -17,6 +17,7 @@ pub use crate::style::media_query::MediaQueryList;
 use crate::{
   error::{StyleSheetParseError, StyleSheetParseErrorKind},
   keyframes::parse_keyframe_prelude,
+  matching::RuleIndex,
   style::{
     BreakpointOverrides, FromCssStr, KeyframeRule, KeyframesRule, Length, StyleDeclaration,
     StyleDeclarationBlock, expand_apply, supports::parse_supports_condition,
@@ -1231,7 +1232,9 @@ impl<'i> AtRuleParser<'i> for RuleParser {
 #[derive(Debug, Clone, Default)]
 pub struct StyleSheet {
   /// Style rules in source order.
-  pub(crate) rules: Vec<CssRule>,
+  rules: Vec<CssRule>,
+  /// Index over `rules`, built with them; `rules` never changes afterwards.
+  rule_index: Arc<RuleIndex>,
   /// `@keyframes` rules.
   pub(crate) keyframes: Vec<KeyframesRule>,
   /// `@property` rules.
@@ -1353,6 +1356,16 @@ const PREFLIGHT_CSS: &str = r"
 ";
 
 impl StyleSheet {
+  /// Style rules in source order.
+  pub(crate) fn rules(&self) -> &[CssRule] {
+    &self.rules
+  }
+
+  /// The index over [`Self::rules`].
+  pub(crate) fn rule_index(&self) -> &RuleIndex {
+    &self.rule_index
+  }
+
   /// The `@property` registrations declared by this stylesheet.
   pub(crate) fn property_rules(&self) -> &[PropertyRule] {
     &self.property_rules
@@ -1474,6 +1487,7 @@ impl StyleSheet {
 
     Ok(Self {
       breakpoints: collect_breakpoints(&rules),
+      rule_index: Arc::new(RuleIndex::build(&rules)),
       rules,
       keyframes,
       property_rules,
