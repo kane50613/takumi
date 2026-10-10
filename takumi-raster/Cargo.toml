@@ -42,9 +42,8 @@ default-features = false
 workspace = true
 features = ["rc"]
 
-[dependencies.flate2]
+[dependencies.libz-rs-sys]
 workspace = true
-features = ["zlib-rs"]
 
 [dependencies.image]
 workspace = true
@@ -63,6 +62,7 @@ webp = ["takumi-core/webp"]
 rayon = ["dep:rayon"]
 
 [dev-dependencies]
+flate2 = { workspace = true, features = ["zlib-rs"] }
 serde_json.workspace = true
 
 [lints]
