@@ -201,17 +201,22 @@ pub(super) fn blit_rows(
     }
 
     fill((dest_y - bounds.offset_y) as u32, &mut row);
-    let dst_row = dest_y as usize * canvas_width as usize;
-    for (i, (dest_x, &src)) in (bounds.x_min..bounds.x_max).zip(&row).enumerate() {
-      if src[3] == 0 {
-        continue;
+
+    let dst_start = dest_y as usize * canvas_width as usize + bounds.x_min as usize;
+    let dst = &mut pixels[dst_start..dst_start + row.len()];
+
+    let Some(mask_row) = mask_row else {
+      for (dst, &src) in dst.iter_mut().zip(&row) {
+        blend_premultiplied_pixel(dst, src, mode);
       }
+      continue;
+    };
+    let (first, alphas) = mask_row.covered(row.len());
 
-      let Some(src) = apply_mask_row(src, mask_row, i) else {
-        continue;
-      };
-
-      blend_premultiplied_pixel(&mut pixels[dst_row + dest_x as usize], src, mode);
+    for ((dst, &src), &alpha) in dst[first..].iter_mut().zip(&row[first..]).zip(alphas) {
+      if src[3] != 0 && alpha != 0 {
+        blend_premultiplied_pixel(dst, scale_premultiplied_pixel(src, alpha), mode);
+      }
     }
   }
 }
