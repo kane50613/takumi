@@ -303,6 +303,7 @@ impl FontsSnapshot {
 }
 
 /// Synthetic styling still needed after variable axes are applied.
+#[derive(Clone, Copy)]
 pub(crate) struct RunSynthesis {
   /// Stroke width in px for synthetic bold.
   pub embolden: Option<f32>,
@@ -332,6 +333,39 @@ pub(crate) fn run_synthesis(run: &GlyphRun<'_, InlineBrush>) -> RunSynthesis {
       .filter(|_| !has_emoji_cluster)
       .filter(|_| run.style().brush.font_synthesis.style.is_allowed())
       .map(|degrees| -degrees),
+  }
+}
+
+/// The normalized variation coordinates the run was shaped at.
+pub(crate) fn run_normalized_coords(run: &GlyphRun<'_, InlineBrush>) -> Vec<F2Dot14> {
+  run
+    .run()
+    .normalized_coords()
+    .iter()
+    .copied()
+    .map(F2Dot14::from_bits)
+    .collect()
+}
+
+/// What resolving a run's glyphs reads from it: its face, size, instance, and synthesis.
+pub(crate) struct RunFace<'a> {
+  pub(crate) font_id: u64,
+  pub(crate) font_index: u32,
+  pub(crate) font_size: f32,
+  pub(crate) normalized_coords: &'a [F2Dot14],
+  pub(crate) synthesis: RunSynthesis,
+}
+
+impl<'a> RunFace<'a> {
+  /// The face `run` was shaped with, at `normalized_coords`, its [`run_normalized_coords`].
+  pub(crate) fn of(run: &GlyphRun<'_, InlineBrush>, normalized_coords: &'a [F2Dot14]) -> Self {
+    Self {
+      font_id: run.run().font().data.id(),
+      font_index: run.run().font().index,
+      font_size: run.run().font_size(),
+      normalized_coords,
+      synthesis: run_synthesis(run),
+    }
   }
 }
 
@@ -522,22 +556,17 @@ impl Fonts {
 
   pub(crate) fn resolve_glyphs(
     &self,
-    run: &GlyphRun<'_, InlineBrush>,
+    face: RunFace<'_>,
     font_ref: FontRef,
     glyph_ids: impl Iterator<Item = u32> + Clone,
   ) -> HashMap<u32, Arc<ResolvedGlyph>> {
-    let font_size = run.run().font_size();
-    let normalized_coords = run
-      .run()
-      .normalized_coords()
-      .iter()
-      .copied()
-      .map(F2Dot14::from_bits)
-      .collect::<Vec<_>>();
-    let RunSynthesis { embolden, skew } = run_synthesis(run);
-
-    let font_id = run.run().font().data.id();
-    let font_index = run.run().font().index;
+    let RunFace {
+      font_id,
+      font_index,
+      font_size,
+      normalized_coords,
+      synthesis: RunSynthesis { embolden, skew },
+    } = face;
     // Built on the first cache miss; a run whose glyphs are all cached never needs it.
     let resolver = OnceCell::new();
     let resolver = || {
@@ -547,7 +576,7 @@ impl Fonts {
         bitmap_strikes: font_ref.bitmap_strikes(),
         font_size,
         size: Size::new(font_size),
-        location: LocationRef::new(&normalized_coords),
+        location: LocationRef::new(normalized_coords),
         embolden,
         skew,
       })
@@ -557,7 +586,7 @@ impl Fonts {
       font_id,
       font_index,
       font_size,
-      &normalized_coords,
+      normalized_coords,
       embolden,
       skew,
     );

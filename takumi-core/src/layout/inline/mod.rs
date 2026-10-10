@@ -32,6 +32,7 @@ mod cache;
 mod decoration_break;
 mod decorations;
 mod floats;
+mod fragment_items;
 mod items;
 mod line_box;
 mod metrics;
@@ -1598,6 +1599,7 @@ mod tests {
       variations: Vec::new(),
       synthetic_bold: None,
       synthetic_skew: None,
+      normalized_coords: Vec::new(),
       font_data: parley::fontique::Blob::new(Arc::new(Vec::new())),
     }
   }
@@ -1755,6 +1757,48 @@ mod tests {
         "share capped by the run advance: {trailing:?}"
       );
     }
+  }
+
+  #[test]
+  fn plain_text_keeps_its_glyphs_simple() {
+    let fonts = create_test_context();
+    let context = RenderContext::builder()
+      .fonts(fonts.snapshot_with_fallbacks(None))
+      .sizing(
+        SizingContext::builder()
+          .viewport(Viewport::new((200, 630)))
+          .build(),
+      )
+      .build();
+    let node = Node::container([Node::text(
+      "Plain text wraps onto several lines without anything unusual in it.".to_string(),
+    )])
+    .with_style(Style::default().with(StyleDeclaration::display(Display::Block)));
+    let render_node = RenderNode::from_node(&context, node);
+    let font_style = SizedFontStyle::from_style(&render_node.context.style, &render_node.context);
+    let built = create_inline_layout(InlineLayoutRequest {
+      items: collect_inline_items(&render_node),
+      available_space: Size {
+        width: AvailableSpace::Definite(200.0),
+        height: AvailableSpace::Definite(630.0),
+      },
+      max_width: 200.0,
+      max_height: None,
+      style: &font_style,
+      context: &render_node.context,
+      mode: InlineLayoutMode::Draw,
+      shape_cacheable: false,
+    });
+    let layout = ComputedLayout {
+      location: Point::ZERO,
+      size: Size::new(200.0, 630.0),
+      border: Rect::default(),
+      padding: Rect::default(),
+    };
+    let (simple, full) = built.fragment_items(layout).glyph_counts();
+
+    assert!(simple > 50, "{simple} simple glyphs");
+    assert_eq!(full, 0);
   }
 
   #[test]
