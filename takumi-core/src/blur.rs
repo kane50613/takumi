@@ -58,7 +58,7 @@ fn blur<const N: usize>(
       let strip = &mut strip[..rows.len()];
 
       for (lane, row) in rows.chunks_exact(width).enumerate() {
-        for (column, pixel) in strip.chunks_exact_mut(lanes).zip(row.iter()) {
+        for (column, pixel) in strip.chunks_exact_mut(lanes).zip(row) {
           column[lane] = *pixel;
         }
       }
