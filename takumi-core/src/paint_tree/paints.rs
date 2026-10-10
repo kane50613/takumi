@@ -244,7 +244,7 @@ impl Paint {
             width,
             height,
           },
-          sampling: Sampling::of(context.style.image_rendering),
+          sampling: Sampling::of(context.style.rare_inherited_data.image_rendering),
         })
       }
     }

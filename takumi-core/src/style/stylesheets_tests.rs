@@ -11,7 +11,8 @@ use crate::{
   geometry::Size,
   style::{
     CalcArena, ComputedStyle, CustomProperties, DeferredDeclaration, SizingContext, Style,
-    StyleDeclaration, properties::*,
+    StyleBaseData, StyleBoxData, StyleDeclaration, StyleInheritedData, StyleRareNonInheritedData,
+    StyleSvgData, properties::*,
   },
   viewport::Viewport,
 };
@@ -109,9 +110,12 @@ fn test_merge_from_inline_over_tailwind() {
   tw_style.append_block(inline_style.declarations);
 
   let resolved = tw_style.inherit(&ComputedStyle::default());
-  assert_eq!(resolved.width, Length::Px(100.0).into());
-  assert_eq!(resolved.height, Length::Rem(20.0).into());
-  assert_eq!(resolved.color, ColorInput::Value(Color([255, 0, 0, 255])));
+  assert_eq!(resolved.box_data.width, Length::Px(100.0).into());
+  assert_eq!(resolved.box_data.height, Length::Rem(20.0).into());
+  assert_eq!(
+    resolved.inherited_data.color,
+    ColorInput::Value(Color([255, 0, 0, 255]))
+  );
 }
 
 #[test]
@@ -119,7 +123,7 @@ fn test_deserialize_numeric_opacity_preserves_fraction() -> Result<(), serde_jso
   let style = from_value::<Style>(json!({ "opacity": 0.3 }))?;
   let computed = style.inherit(&ComputedStyle::default());
 
-  assert_eq!(computed.opacity, PercentageNumber(0.3));
+  assert_eq!(computed.svg_data.opacity, PercentageNumber(0.3));
   Ok(())
 }
 
@@ -133,9 +137,15 @@ fn test_deserialize_list_style_properties() -> Result<(), serde_json::Error> {
   }))?;
   let computed = style.inherit(&ComputedStyle::default());
 
-  assert_eq!(computed.display, Display::ListItem);
-  assert_eq!(computed.list_style_type, ListStyleType::Decimal);
-  assert_eq!(computed.list_style_position, ListStylePosition::Inside);
+  assert_eq!(computed.base_data.display, Display::ListItem);
+  assert_eq!(
+    computed.rare_inherited_data.list_style_type,
+    ListStyleType::Decimal
+  );
+  assert_eq!(
+    computed.inherited_data.list_style_position,
+    ListStylePosition::Inside
+  );
   Ok(())
 }
 
@@ -221,8 +231,11 @@ fn test_deserialize_skips_null_declarations() -> Result<(), serde_json::Error> {
   let style = from_value::<Style>(json!({ "color": null, "opacity": 0.3 }))?;
   let computed = style.inherit(&ComputedStyle::default());
 
-  assert_eq!(computed.opacity, PercentageNumber(0.3));
-  assert_eq!(computed.color, ComputedStyle::default().color);
+  assert_eq!(computed.svg_data.opacity, PercentageNumber(0.3));
+  assert_eq!(
+    computed.inherited_data.color,
+    ComputedStyle::default().inherited_data.color
+  );
   Ok(())
 }
 
@@ -408,9 +421,15 @@ fn parse_webkit_line_clamp_matches_line_clamp() {
 
   let webkit = webkit_line_clamp.inherit(&ComputedStyle::default());
   let plain = line_clamp.inherit(&ComputedStyle::default());
-  assert_eq!(webkit.max_lines, Some(2));
-  assert_eq!(webkit.max_lines, plain.max_lines);
-  assert_eq!(webkit.block_ellipsis, plain.block_ellipsis);
+  assert_eq!(webkit.rare_non_inherited_data.max_lines, Some(2));
+  assert_eq!(
+    webkit.rare_non_inherited_data.max_lines,
+    plain.rare_non_inherited_data.max_lines
+  );
+  assert_eq!(
+    webkit.rare_inherited_data.block_ellipsis,
+    plain.rare_inherited_data.block_ellipsis
+  );
 }
 
 #[test]
@@ -419,19 +438,22 @@ fn line_clamp_shorthand_expands_to_longhands() {
   parent.append_block(parse_declarations("line-clamp", "3 \"...\""));
   let parent = parent.inherit(&ComputedStyle::default());
 
-  assert_eq!(parent.max_lines, Some(3));
+  assert_eq!(parent.rare_non_inherited_data.max_lines, Some(3));
   assert_eq!(
-    parent.block_ellipsis,
+    parent.rare_inherited_data.block_ellipsis,
     BlockEllipsis::String("...".to_owned())
   );
-  assert_eq!(parent.r#continue, Continue::Collapse);
+  assert_eq!(
+    parent.rare_non_inherited_data.r#continue,
+    Continue::Collapse
+  );
 
   // Only `block-ellipsis` inherits; `max-lines` and `continue` do not.
   let child = Style::default().inherit(&parent);
-  assert_eq!(child.max_lines, None);
-  assert_eq!(child.r#continue, Continue::Normal);
+  assert_eq!(child.rare_non_inherited_data.max_lines, None);
+  assert_eq!(child.rare_non_inherited_data.r#continue, Continue::Normal);
   assert_eq!(
-    child.block_ellipsis,
+    child.rare_inherited_data.block_ellipsis,
     BlockEllipsis::String("...".to_owned())
   );
 }
@@ -949,9 +971,12 @@ fn test_merge_from_text_decoration_longhands_clear_lower_priority_color() {
   preset_style.append_block(inline_style.declarations);
 
   let inherited = preset_style.inherit(&ComputedStyle::default());
-  assert_eq!(inherited.text_decoration_color, ColorInput::default());
   assert_eq!(
-    inherited.text_decoration_line,
+    inherited.rare_non_inherited_data.text_decoration_color,
+    ColorInput::default()
+  );
+  assert_eq!(
+    inherited.visual_data.text_decoration_line,
     Some(TextDecorationLines::UNDERLINE)
   );
 }
@@ -974,7 +999,10 @@ fn test_merge_from_background_longhands_clear_lower_priority_background_color() 
   preset_style.append_block(inline_style.declarations);
 
   let inherited = preset_style.inherit(&ComputedStyle::default());
-  assert_eq!(inherited.background_color, ColorInput::default());
+  assert_eq!(
+    inherited.background_data.background_color,
+    ColorInput::default()
+  );
 }
 
 #[test]
@@ -982,46 +1010,59 @@ fn test_needs_offscreen_compositing_for_clip_path_and_mask_image() {
   let mut style = ComputedStyle::default();
   assert!(!style.needs_offscreen_compositing());
 
-  style.clip_path = BasicShape::from_css_str("inset(10px)").ok();
+  style.rare_non_inherited_data_mut().clip_path = BasicShape::from_css_str("inset(10px)").ok();
   assert!(style.needs_offscreen_compositing());
 
-  style.clip_path = None;
-  style.mask_image = Some([BackgroundImage::Url("https://example.com/mask.png".into())].into());
+  style.rare_non_inherited_data_mut().clip_path = None;
+  style.rare_non_inherited_data_mut().mask_image =
+    Some([BackgroundImage::Url("https://example.com/mask.png".into())].into());
   assert!(style.needs_offscreen_compositing());
 }
 
 #[test]
 fn test_is_z_index_applicable_matches_supported_scope() {
   let mut style = ComputedStyle {
-    z_index: ZIndex::Integer(2),
-    position: Position::Relative,
+    box_data: Rc::new(StyleBoxData {
+      z_index: ZIndex::Integer(2),
+      ..Default::default()
+    }),
+    base_data: Rc::new(StyleBaseData {
+      position: Position::Relative,
+      ..Default::default()
+    }),
     ..Default::default()
   };
   assert!(style.is_z_index_applicable(false));
 
-  style.position = Position::Absolute;
+  style.base_data_mut().position = Position::Absolute;
   assert!(style.is_z_index_applicable(false));
 
   // `z-index` does not apply to a static element.
-  style.position = Position::Static;
+  style.base_data_mut().position = Position::Static;
   assert!(!style.is_z_index_applicable(false));
 
-  style.position = Position::Relative;
-  style.z_index = ZIndex::Auto;
+  style.base_data_mut().position = Position::Relative;
+  style.box_data_mut().z_index = ZIndex::Auto;
   assert!(!style.is_z_index_applicable(false));
 }
 
 #[test]
 fn test_creates_stacking_context_from_z_index_scope() {
   let mut style = ComputedStyle {
-    position: Position::Relative,
-    z_index: ZIndex::Integer(1),
+    base_data: Rc::new(StyleBaseData {
+      position: Position::Relative,
+      ..Default::default()
+    }),
+    box_data: Rc::new(StyleBoxData {
+      z_index: ZIndex::Integer(1),
+      ..Default::default()
+    }),
     ..Default::default()
   };
 
   assert!(style.creates_stacking_context(false));
 
-  style.position = Position::Absolute;
+  style.base_data_mut().position = Position::Absolute;
   assert!(style.creates_stacking_context(false));
 }
 
@@ -1037,11 +1078,17 @@ fn test_offset_properties_parse_from_css() {
   );
 
   assert!(matches!(
-    style.offset_path,
+    style.rare_non_inherited_data.offset_path,
     Some(OffsetPath::Shape(BasicShape::Path(_)))
   ));
-  assert_eq!(style.offset_distance, Length::Percentage(25.0));
-  assert_eq!(style.offset_rotate, OffsetRotate::Reverse(Angle::new(30.0)));
+  assert_eq!(
+    style.rare_non_inherited_data.offset_distance,
+    Length::Percentage(25.0)
+  );
+  assert_eq!(
+    style.rare_non_inherited_data.offset_rotate,
+    OffsetRotate::Reverse(Angle::new(30.0))
+  );
 }
 
 #[test]
@@ -1051,10 +1098,22 @@ fn test_offset_shorthand_expands() {
     &ComputedStyle::default(),
   );
 
-  assert!(matches!(style.offset_path, Some(OffsetPath::Ray(_))));
-  assert_eq!(style.offset_distance, Length::Px(10.0));
-  assert_eq!(style.offset_rotate, OffsetRotate::Auto(Angle::zero()));
-  assert!(matches!(style.offset_anchor, OffsetAnchor::Position(_)));
+  assert!(matches!(
+    style.rare_non_inherited_data.offset_path,
+    Some(OffsetPath::Ray(_))
+  ));
+  assert_eq!(
+    style.rare_non_inherited_data.offset_distance,
+    Length::Px(10.0)
+  );
+  assert_eq!(
+    style.rare_non_inherited_data.offset_rotate,
+    OffsetRotate::Auto(Angle::zero())
+  );
+  assert!(matches!(
+    style.rare_non_inherited_data.offset_anchor,
+    OffsetAnchor::Position(_)
+  ));
 }
 
 #[test]
@@ -1075,8 +1134,9 @@ fn test_offset_path_moves_element_onto_path_and_creates_stacking_context() {
     height: 40.0,
   };
 
-  style.offset_path = OffsetPath::from_css_str("path('M 0 0 L 100 0')").ok();
-  style.offset_distance = Length::Percentage(50.0);
+  style.rare_non_inherited_data_mut().offset_path =
+    OffsetPath::from_css_str("path('M 0 0 L 100 0')").ok();
+  style.rare_non_inherited_data_mut().offset_distance = Length::Percentage(50.0);
 
   assert!(style.creates_stacking_context(false));
 
@@ -1091,7 +1151,10 @@ fn test_offset_path_moves_element_onto_path_and_creates_stacking_context() {
 #[test]
 fn test_relative_position_participates_in_positioned_paint_bucket() {
   let style = ComputedStyle {
-    position: Position::Relative,
+    base_data: Rc::new(StyleBaseData {
+      position: Position::Relative,
+      ..Default::default()
+    }),
     ..Default::default()
   };
   assert!(style.participates_in_positioned_paint_bucket(false));
@@ -1103,18 +1166,21 @@ fn test_transform_related_property_creates_stacking_context() {
 
   assert!(!style.creates_stacking_context(false));
 
-  style.transform = Some([Transform::Rotate(Angle::new(0.0))].into());
+  style.svg_data_mut().transform = Some([Transform::Rotate(Angle::new(0.0))].into());
   assert!(style.creates_stacking_context(false));
 
-  style.transform = None;
-  style.position = Position::Fixed;
+  style.svg_data_mut().transform = None;
+  style.base_data_mut().position = Position::Fixed;
   assert!(style.creates_stacking_context(false));
 }
 
 #[test]
 fn test_transform_creates_stacking_context_without_offscreen_compositing() {
   let style = ComputedStyle {
-    transform: Some([Transform::Rotate(Angle::new(10.0))].into()),
+    svg_data: Rc::new(StyleSvgData {
+      transform: Some([Transform::Rotate(Angle::new(10.0))].into()),
+      ..Default::default()
+    }),
     ..Default::default()
   };
 
@@ -1125,8 +1191,14 @@ fn test_transform_creates_stacking_context_without_offscreen_compositing() {
 #[test]
 fn test_text_overflow_ellipsis_forces_single_line_clamp_on_nowrap() {
   let style = ComputedStyle {
-    text_wrap_mode: TextWrapMode::NoWrap,
-    text_overflow: TextOverflow::Ellipsis,
+    inherited_data: Rc::new(StyleInheritedData {
+      text_wrap_mode: TextWrapMode::NoWrap,
+      ..Default::default()
+    }),
+    rare_non_inherited_data: Rc::new(StyleRareNonInheritedData {
+      text_overflow: TextOverflow::Ellipsis,
+      ..Default::default()
+    }),
     ..Default::default()
   };
 
@@ -1155,7 +1227,7 @@ fn test_position_absolute_blockifies_inline_display() {
 
   style.make_computed(&sizing);
 
-  assert_eq!(style.display, Display::Block);
+  assert_eq!(style.base_data.display, Display::Block);
 }
 
 #[test]
@@ -1189,6 +1261,7 @@ fn test_inherited_em_text_lengths_are_computed_once() {
     calc_arena: Rc::new(CalcArena::default()),
   };
   let inherited_font_size = inherited_child
+    .inherited_data
     .font_size
     .to_px(&inherited_child_sizing, inherited_child_sizing.font_size);
   assert_eq!(inherited_font_size, 32.0);
@@ -1207,11 +1280,12 @@ fn test_inherited_em_text_lengths_are_computed_once() {
   };
 
   let inherited_letter_spacing = child_with_own_font_size
+    .inherited_data
     .letter_spacing
     .to_px(&child_sizing, child_sizing.font_size);
   assert_eq!(inherited_letter_spacing, 32.0);
 
-  let inherited_line_height = match child_with_own_font_size.line_height {
+  let inherited_line_height = match child_with_own_font_size.inherited_data.line_height {
     LineHeight::Length(length) => length.to_px(&child_sizing, child_sizing.font_size),
     _ => 0.0,
   };
@@ -1225,7 +1299,7 @@ fn test_var_resolves_local_custom_property() {
     &ComputedStyle::default(),
   );
 
-  assert_eq!(style.width, Length::Px(24.0).into());
+  assert_eq!(style.box_data.width, Length::Px(24.0).into());
 }
 
 #[test]
@@ -1235,7 +1309,7 @@ fn test_var_uses_fallback_when_missing() {
     &ComputedStyle::default(),
   );
 
-  assert_eq!(style.width, Length::Px(18.0).into());
+  assert_eq!(style.box_data.width, Length::Px(18.0).into());
 }
 
 #[test]
@@ -1249,7 +1323,7 @@ fn test_var_supports_nested_custom_properties() {
     &ComputedStyle::default(),
   );
 
-  assert_eq!(style.padding_left, Length::Px(12.0));
+  assert_eq!(style.box_data.padding_left, Length::Px(12.0));
 }
 
 #[test]
@@ -1259,7 +1333,7 @@ fn test_var_resolves_custom_property_declared_later_on_same_element() {
     &ComputedStyle::default(),
   );
 
-  assert_eq!(style.width, Length::Px(24.0).into());
+  assert_eq!(style.box_data.width, Length::Px(24.0).into());
 }
 
 #[test]
@@ -1267,7 +1341,7 @@ fn text_fit_inherits_from_the_parent() {
   let parent = inherited_style_from_pairs([("text-fit", "shrink")], &ComputedStyle::default());
   let child = inherited_style_from_pairs([], &parent);
 
-  assert_eq!(child.text_fit.mode, TextFitMode::Shrink);
+  assert_eq!(child.rare_inherited_data.text_fit.mode, TextFitMode::Shrink);
 }
 
 #[test]
@@ -1275,7 +1349,7 @@ fn test_var_inherits_custom_properties_from_parent() {
   let parent = inherited_style_from_pairs([("--card-width", "320px")], &ComputedStyle::default());
   let child = inherited_style_from_pairs([("width", "var(--card-width)")], &parent);
 
-  assert_eq!(child.width, Length::Px(320.0).into());
+  assert_eq!(child.box_data.width, Length::Px(320.0).into());
 }
 
 /// The shadcn `@theme inline` pattern: a `:root` token aliases another
@@ -1294,14 +1368,14 @@ fn test_var_chain_resolves_at_consuming_element() {
   let dark = inherited_style_from_pairs([("--background", "20px")], &root);
   let child = inherited_style_from_pairs([("width", "var(--panel-width)")], &dark);
 
-  assert_eq!(child.width, Length::Px(20.0).into());
+  assert_eq!(child.box_data.width, Length::Px(20.0).into());
 }
 
 #[test]
 fn test_var_drops_invalid_declaration_without_fallback() {
   let style = inherited_style_from_pairs([("width", "var(--missing)")], &ComputedStyle::default());
 
-  assert_eq!(style.width, Length::Auto.into());
+  assert_eq!(style.box_data.width, Length::Auto.into());
 }
 
 #[test]
@@ -1315,7 +1389,7 @@ fn test_var_uses_fallback_for_cycles() {
     &ComputedStyle::default(),
   );
 
-  assert_eq!(style.width, Length::Px(14.0).into());
+  assert_eq!(style.box_data.width, Length::Px(14.0).into());
 }
 
 #[test]
@@ -1329,17 +1403,17 @@ fn test_var_resolves_inside_shorthand() {
     &ComputedStyle::default(),
   );
 
-  assert_eq!(style.padding_top, Length::Px(6.0));
-  assert_eq!(style.padding_right, Length::Px(10.0));
-  assert_eq!(style.padding_bottom, Length::Px(6.0));
-  assert_eq!(style.padding_left, Length::Px(10.0));
+  assert_eq!(style.box_data.padding_top, Length::Px(6.0));
+  assert_eq!(style.box_data.padding_right, Length::Px(10.0));
+  assert_eq!(style.box_data.padding_bottom, Length::Px(6.0));
+  assert_eq!(style.box_data.padding_left, Length::Px(10.0));
 }
 
 #[test]
 fn test_var_rejects_non_custom_property_name() {
   let style = inherited_style_from_pairs([("width", "var(size, 18px)")], &ComputedStyle::default());
 
-  assert_eq!(style.width, Length::Auto.into());
+  assert_eq!(style.box_data.width, Length::Auto.into());
 }
 
 /// A substituted value is syntax-checked as a whole, so `24px 10px` is invalid
@@ -1353,7 +1427,7 @@ fn test_var_rejects_trailing_tokens_after_substitution() {
     &ComputedStyle::default(),
   );
 
-  assert_eq!(style.width, Length::Auto.into());
+  assert_eq!(style.box_data.width, Length::Auto.into());
 }
 
 #[test]
@@ -1363,7 +1437,7 @@ fn test_var_rejects_missing_separator_in_function() {
     &ComputedStyle::default(),
   );
 
-  assert_eq!(style.width, Length::Auto.into());
+  assert_eq!(style.box_data.width, Length::Auto.into());
 }
 
 #[test]
@@ -1376,7 +1450,7 @@ fn test_var_supports_nested_fallback_chains() {
     &ComputedStyle::default(),
   );
 
-  assert_eq!(style.width, Length::Px(22.0).into());
+  assert_eq!(style.box_data.width, Length::Px(22.0).into());
 }
 
 #[test]
@@ -1427,7 +1501,7 @@ fn test_var_drops_declaration_when_substitution_stays_invalid() {
     &ComputedStyle::default(),
   );
 
-  assert_eq!(style.width, Length::Auto.into());
+  assert_eq!(style.box_data.width, Length::Auto.into());
 }
 
 #[test]
@@ -1461,7 +1535,7 @@ fn test_var_defers_when_property_parser_accepts_a_prefix() {
   );
 
   assert_eq!(
-    style.background_position.as_ref(),
+    style.background_data.background_position.as_ref(),
     [PositionValue(SpacePair::from_pair(
       PositionComponent::Length(Length::Px(0.0)),
       PositionComponent::Length(Length::Px(150.0)),
@@ -1486,7 +1560,7 @@ fn test_border_radius_calc_infinity_parses_from_stylesheet_declaration() {
     root_line_height: None,
     calc_arena: Rc::new(CalcArena::default()),
   };
-  let radius = style.border_top_left_radius.x.to_px(
+  let radius = style.surround_data.border_top_left_radius.x.to_px(
     &sizing,
     sizing.viewport.size.width.unwrap_or_default() as f32,
   );
@@ -1495,7 +1569,7 @@ fn test_border_radius_calc_infinity_parses_from_stylesheet_declaration() {
     radius,
     i32::MAX as f32,
     "parsed={:?}",
-    style.border_top_left_radius.x
+    style.surround_data.border_top_left_radius.x
   );
 }
 

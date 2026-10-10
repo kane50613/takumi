@@ -364,7 +364,7 @@ pub(crate) fn apply_backdrop_filter(
   context: &RenderContext,
   node_mask: Option<&TinyMask>,
 ) -> Result<()> {
-  let filters = &context.style.backdrop_filter;
+  let filters = &context.style.rare_non_inherited_data.backdrop_filter;
 
   if filters.iter().all(Filter::is_drop_shadow) {
     return Ok(());

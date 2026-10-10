@@ -885,7 +885,9 @@ mod matching_tests {
     let matched = match_stylesheets_view(&root, &stylesheet, Viewport::default());
     assert_eq!(matched.len(), 1);
     assert_eq!(
-      computed_style_from_matches(matched[0].element()).width,
+      computed_style_from_matches(matched[0].element())
+        .box_data
+        .width,
       Length::Px(10.0).into()
     );
   }
@@ -905,7 +907,9 @@ mod matching_tests {
     for (viewport, width) in [((400, 300), 10.0), ((800, 600), 20.0), ((400, 300), 10.0)] {
       let matched = match_stylesheets_view(&root, &stylesheet, Viewport::new(viewport));
       assert_eq!(
-        computed_style_from_matches(matched[0].element()).width,
+        computed_style_from_matches(matched[0].element())
+          .box_data
+          .width,
         Length::Px(width).into()
       );
     }
@@ -928,7 +932,9 @@ mod matching_tests {
     let matched = match_stylesheets_view(&root, &stylesheet, Viewport::default());
     assert_eq!(matched.len(), 2);
     assert_eq!(
-      computed_style_from_matches(matched[1].element()).width,
+      computed_style_from_matches(matched[1].element())
+        .box_data
+        .width,
       Length::Px(10.0).into()
     );
   }
@@ -952,7 +958,9 @@ mod matching_tests {
     let matched = match_stylesheets_view(&root, &stylesheet, Viewport::default());
     assert_eq!(matched.len(), 1);
     assert_eq!(
-      computed_style_from_matches(matched[0].element()).width,
+      computed_style_from_matches(matched[0].element())
+        .box_data
+        .width,
       Length::Px(20.0).into()
     );
   }
@@ -965,7 +973,9 @@ mod matching_tests {
     let matched = match_stylesheets_view(&root, &stylesheet, Viewport::default());
     assert_eq!(matched.len(), 1);
     assert_eq!(
-      computed_style_from_matches(matched[0].element()).width,
+      computed_style_from_matches(matched[0].element())
+        .box_data
+        .width,
       Length::Px(20.0).into()
     );
   }
@@ -990,7 +1000,9 @@ mod matching_tests {
     let matched = match_stylesheets_view(&root, &stylesheet, Viewport::default());
     assert_eq!(matched.len(), 1);
     assert_eq!(
-      computed_style_from_matches(matched[0].element()).width,
+      computed_style_from_matches(matched[0].element())
+        .box_data
+        .width,
       Length::Px(10.0).into()
     );
   }
@@ -1009,7 +1021,9 @@ mod matching_tests {
     let matched = match_stylesheets_view(&root, &stylesheet, Viewport::default());
     assert_eq!(matched.len(), 1);
     assert_eq!(
-      computed_style_from_matches(matched[0].element()).width,
+      computed_style_from_matches(matched[0].element())
+        .box_data
+        .width,
       Length::Px(10.0).into()
     );
   }
@@ -1034,19 +1048,27 @@ mod matching_tests {
     let matched = match_stylesheets_view(&root, &stylesheet, Viewport::default());
     assert_eq!(matched.len(), 5);
     assert_eq!(
-      computed_style_from_matches(matched[2].element()).width,
+      computed_style_from_matches(matched[2].element())
+        .box_data
+        .width,
       Length::Px(10.0).into()
     );
     assert_eq!(
-      computed_style_from_matches(matched[2].element()).height,
+      computed_style_from_matches(matched[2].element())
+        .box_data
+        .height,
       Length::Px(30.0).into()
     );
     assert_eq!(
-      computed_style_from_matches(matched[4].element()).width,
+      computed_style_from_matches(matched[4].element())
+        .box_data
+        .width,
       Length::Px(20.0).into()
     );
     assert_eq!(
-      computed_style_from_matches(matched[4].element()).height,
+      computed_style_from_matches(matched[4].element())
+        .box_data
+        .height,
       Length::Px(30.0).into()
     );
   }
@@ -1075,11 +1097,15 @@ mod matching_tests {
     let matched = match_stylesheets_view(&root, &stylesheet, Viewport::default());
     assert_eq!(matched.len(), 2);
     assert_eq!(
-      computed_style_from_matches(matched[1].element()).width,
+      computed_style_from_matches(matched[1].element())
+        .box_data
+        .width,
       Length::Px(30.0).into()
     );
     assert_eq!(
-      computed_style_from_matches(matched[1].element()).height,
+      computed_style_from_matches(matched[1].element())
+        .box_data
+        .height,
       Length::Px(40.0).into()
     );
   }

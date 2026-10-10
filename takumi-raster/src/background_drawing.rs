@@ -212,7 +212,7 @@ pub(crate) fn rasterize_layers(
           OverlayOptions {
             border,
             transform: layer_transform,
-            algorithm: context.style.image_rendering,
+            algorithm: context.style.rare_inherited_data.image_rendering,
             mode: layer.blend_mode,
           },
         );
@@ -578,7 +578,7 @@ pub(crate) fn render_tile(
           source: bitmap.clone(),
           width: tile_w,
           height: tile_h,
-          algo: context.style.image_rendering,
+          algo: context.style.rare_inherited_data.image_rendering,
         }),
         #[cfg(any(feature = "png", feature = "gif", feature = "webp"))]
         ImageSource::Animated(animated) => Some(BackgroundTile::SampledBitmap {
@@ -586,16 +586,16 @@ pub(crate) fn render_tile(
             context.time_ms(),
             tile_w,
             tile_h,
-            context.style.image_rendering,
+            context.style.rare_inherited_data.image_rendering,
           ),
           width: tile_w,
           height: tile_h,
-          algo: context.style.image_rendering,
+          algo: context.style.rare_inherited_data.image_rendering,
         }),
         ImageSource::Encoded(..) => match source.render_for_layout(
           tile_w,
           tile_h,
-          context.style.image_rendering,
+          context.style.rare_inherited_data.image_rendering,
           context.time_ms(),
           context.current_color,
           Some(context.fonts()),
@@ -604,7 +604,7 @@ pub(crate) fn render_tile(
             source,
             width: tile_w,
             height: tile_h,
-            algo: context.style.image_rendering,
+            algo: context.style.rare_inherited_data.image_rendering,
           }),
           RenderedImage::Rasterized(..) => None,
         },
@@ -612,7 +612,7 @@ pub(crate) fn render_tile(
         ImageSource::Svg(..) => match source.render_for_layout(
           tile_w,
           tile_h,
-          context.style.image_rendering,
+          context.style.rare_inherited_data.image_rendering,
           context.time_ms(),
           context.current_color,
           Some(context.fonts()),
@@ -767,9 +767,10 @@ fn rasterize_pattern(
     BackgroundTile::SampledBitmap { source, algo, .. } => {
       pixmap_ref_from_buffer(source).map(|source| (source, *algo))
     }
-    BackgroundTile::Pixmap(pixmap) => {
-      Some((pixmap.as_ref().as_ref(), context.style.image_rendering))
-    }
+    BackgroundTile::Pixmap(pixmap) => Some((
+      pixmap.as_ref().as_ref(),
+      context.style.rare_inherited_data.image_rendering,
+    )),
     _ => None,
   };
   let source_per_tile = source.map(|(source, _)| Size {
@@ -882,7 +883,12 @@ pub(crate) fn create_mask(context: &RenderContext, layout: Layout) -> Result<Opt
   let size = snapped.size().map(|x| x as u32);
   let layers = tile_layers(
     &FillLayers::mask(&context.style).resolve(
-      context.style.mask_image.as_deref().unwrap_or(&[]),
+      context
+        .style
+        .rare_non_inherited_data
+        .mask_image
+        .as_deref()
+        .unwrap_or(&[]),
       &BoxBackgroundPaintContext::mask(layout.size, paint_offset),
       context,
     ),

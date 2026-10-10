@@ -36,7 +36,7 @@ impl ReplacedPlacement {
   /// `fill` and a missing intrinsic size both stretch to the box, which is what
   /// CSS asks for when there is no ratio to preserve.
   pub fn new(context: &RenderContext, content: Size<f32>, intrinsic: Size<f32>) -> Self {
-    let scale = match context.style.object_fit {
+    let scale = match context.style.rare_non_inherited_data.object_fit {
       _ if intrinsic.width <= 0.0 || intrinsic.height <= 0.0 => None,
       ObjectFit::Fill => None,
       ObjectFit::Contain => {
@@ -59,7 +59,7 @@ impl ReplacedPlacement {
       },
       None => content,
     };
-    let position = context.style.object_position.0;
+    let position = context.style.rare_non_inherited_data.object_position.0;
 
     Self {
       size,

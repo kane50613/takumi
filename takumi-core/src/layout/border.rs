@@ -108,10 +108,10 @@ impl BorderProperties {
 
     Sides(
       [
-        style.border_top_left_radius,
-        style.border_top_right_radius,
-        style.border_bottom_right_radius,
-        style.border_bottom_left_radius,
+        style.surround_data.border_top_left_radius,
+        style.surround_data.border_top_right_radius,
+        style.surround_data.border_bottom_right_radius,
+        style.surround_data.border_bottom_left_radius,
       ]
       .map(|radius| radius.to_px(&context.sizing, border_box.width, border_box.height)),
     )
@@ -120,10 +120,10 @@ impl BorderProperties {
   /// Resolves the corner shapes from the context.
   pub(crate) fn resolve_shape_part(context: &RenderContext) -> Sides<Superellipse> {
     Sides([
-      context.style.corner_top_left_shape,
-      context.style.corner_top_right_shape,
-      context.style.corner_bottom_right_shape,
-      context.style.corner_bottom_left_shape,
+      context.style.surround_data.corner_top_left_shape,
+      context.style.surround_data.corner_top_right_shape,
+      context.style.surround_data.corner_bottom_right_shape,
+      context.style.surround_data.corner_bottom_left_shape,
     ])
   }
 
@@ -138,30 +138,34 @@ impl BorderProperties {
       color: Rect {
         top: context
           .style
+          .surround_data
           .border_top_color
           .resolve(context.current_color),
         right: context
           .style
+          .surround_data
           .border_right_color
           .resolve(context.current_color),
         bottom: context
           .style
+          .surround_data
           .border_bottom_color
           .resolve(context.current_color),
         left: context
           .style
+          .surround_data
           .border_left_color
           .resolve(context.current_color),
       },
       radius: Self::resolve_radius_part(context, border_box),
       shape: Self::resolve_shape_part(context),
       style: Rect {
-        top: context.style.border_top_style,
-        right: context.style.border_right_style,
-        bottom: context.style.border_bottom_style,
-        left: context.style.border_left_style,
+        top: context.style.box_data.border_top_style,
+        right: context.style.box_data.border_right_style,
+        bottom: context.style.box_data.border_bottom_style,
+        left: context.style.box_data.border_left_style,
       },
-      image_rendering: context.style.image_rendering,
+      image_rendering: context.style.rare_inherited_data.image_rendering,
       collapsed: context.collapsed_borders,
     }
   }

@@ -484,7 +484,7 @@ impl Recorder {
   ) {
     let index = run.index;
     let brush = &run.glyph_run.brush;
-    let join = style.parent.stroke_linejoin;
+    let join = style.parent.rare_inherited_data.stroke_linejoin;
     let origin = PaintPoint { x: 0.0, y: 0.0 };
     let text_stroke = self.text_stroke(run, style);
 
@@ -548,7 +548,7 @@ impl Recorder {
     frame: BoxFrame,
   ) {
     let paint = Paint::Color { color: MASK_INK };
-    let join = style.parent.stroke_linejoin;
+    let join = style.parent.rare_inherited_data.stroke_linejoin;
     let stroke_width = run.glyph_run.brush.stroke_width;
 
     for glyph in run.placed_glyphs(frame.layout) {
@@ -635,7 +635,12 @@ impl Recorder {
     let brush = &run.glyph_run.brush;
 
     (brush.stroke_width > 0.0)
-      .then(|| Stroke::outline(brush.stroke_width, style.parent.stroke_linejoin))
+      .then(|| {
+        Stroke::outline(
+          brush.stroke_width,
+          style.parent.rare_inherited_data.stroke_linejoin,
+        )
+      })
       .zip(self.visible(brush.stroke_color))
   }
 }

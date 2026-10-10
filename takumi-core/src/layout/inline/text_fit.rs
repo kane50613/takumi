@@ -29,7 +29,7 @@ pub(super) fn text_fit_applies(
   items: &[InlineItem<'_>],
   max_width: f32,
 ) -> bool {
-  style.parent.text_fit.mode != TextFitMode::None
+  style.parent.rare_inherited_data.text_fit.mode != TextFitMode::None
     && max_width.is_finite()
     && !items.iter().any(|item| {
       matches!(item, InlineItem::RenderNode { render_node, .. }
@@ -310,7 +310,7 @@ pub(super) fn text_fit_lines(
       .collect(),
     None => line_scales(layout, &lines, max_width, style),
   };
-  let align = style.parent.text_align;
+  let align = style.parent.inherited_data.text_align;
 
   layout
     .lines()
@@ -331,7 +331,7 @@ fn line_scales(
   max_width: f32,
   style: &SizedFontStyle,
 ) -> Vec<f32> {
-  let text_fit = style.parent.text_fit;
+  let text_fit = style.parent.rare_inherited_data.text_fit;
   let epsilon = 2.0 * style.sizing.viewport.device_pixel_ratio;
 
   if text_fit.target == TextFitTarget::Consistent {

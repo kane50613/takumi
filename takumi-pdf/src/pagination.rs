@@ -203,11 +203,12 @@ impl RepeatedSection {
       .iter()
       .filter_map(|ordered| {
         let child = rows.get(ordered.render_index)?;
-        let GridPlacement::Line(line) = child.context.style.grid_row_start else {
+        let GridPlacement::Line(line) = child.context.style.rare_non_inherited_data.grid_row_start
+        else {
           return None;
         };
         let GridPlacement::Span(GridPlacementSpan::Span(rowspan)) =
-          child.context.style.grid_row_end
+          child.context.style.rare_non_inherited_data.grid_row_end
         else {
           return None;
         };
