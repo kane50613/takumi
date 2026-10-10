@@ -829,17 +829,15 @@ impl<'r> LayoutTree<'r> {
       }
     }
 
-    LayoutResults {
-      nodes: self
-        .nodes
-        .into_iter()
-        .map(|node| LayoutResultNode {
-          layout: node.final_layout,
-          first_baseline_y: node.first_baseline_y,
-          box_children: node.box_children,
-        })
-        .collect(),
-    }
+    // A fresh allocation: collecting in place keeps the node states' much larger one alive.
+    let mut nodes = Vec::with_capacity(self.nodes.len());
+
+    nodes.extend(self.nodes.into_iter().map(|node| LayoutResultNode {
+      layout: node.final_layout,
+      first_baseline_y: node.first_baseline_y,
+      box_children: node.box_children,
+    }));
+    LayoutResults { nodes }
   }
 
   fn get_layout_node_ref(&self, node_id: TaffyNodeId) -> Option<&LayoutNodeState> {
