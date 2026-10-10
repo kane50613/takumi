@@ -48,3 +48,5 @@ For Node.js, use the native [@takumi-rs/core](https://npmjs.com/package/@takumi-
 ## License
 
 MIT or Apache-2.0
+
+Bundled third-party code is listed in the [third-party notices](https://github.com/kane50613/takumi/blob/master/THIRD-PARTY-NOTICES.md).

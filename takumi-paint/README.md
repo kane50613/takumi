@@ -56,3 +56,9 @@ for (const step of tree.steps) {
 Every length is a device pixel. A node's `transform` maps its local space, where its drawables sit, onto the canvas.
 
 The [paint tree reference](https://takumi.kane.tw/docs/paint-tree/reference) covers the vocabulary and what stays unresolved.
+
+## License
+
+MIT or Apache-2.0
+
+Bundled third-party code is listed in the [third-party notices](https://github.com/kane50613/takumi/blob/master/THIRD-PARTY-NOTICES.md).

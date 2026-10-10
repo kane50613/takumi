@@ -266,6 +266,8 @@ We welcome bug reports, feature requests, doc improvements, and new example inte
 
 MIT or Apache-2.0
 
+Bundled third-party code is listed in the [third-party notices](THIRD-PARTY-NOTICES.md).
+
 <br/>
 <a href="https://vercel.com/oss">
   <img alt="Vercel OSS Program" src="https://vercel.com/oss/program-badge.svg" />

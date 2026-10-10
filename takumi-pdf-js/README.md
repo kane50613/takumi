@@ -84,3 +84,5 @@ See the [PDF renderer comparison](https://takumi.kane.tw/docs/pdf/comparison) fo
 ## License
 
 MIT or Apache-2.0
+
+Bundled third-party code is listed in the [third-party notices](https://github.com/kane50613/takumi/blob/master/THIRD-PARTY-NOTICES.md).
