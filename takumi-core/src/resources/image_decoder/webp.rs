@@ -2,17 +2,29 @@
 //! wasm, and header-only sizing when the decoder is compiled out.
 
 use super::DecodeTarget;
+#[cfg(all(target_arch = "wasm32", feature = "webp"))]
+use std::io::Cursor;
 #[cfg(feature = "webp")]
-use std::{io::Cursor, sync::Arc};
+use std::sync::Arc;
+#[cfg(all(not(target_arch = "wasm32"), feature = "webp"))]
+use std::{
+  marker::PhantomData,
+  mem::MaybeUninit,
+  ptr::{self, NonNull},
+  slice,
+};
 
 use image::ImageResult;
 #[cfg(feature = "webp")]
 use image::{ImageFormat, RgbaImage};
-#[cfg(feature = "webp")]
+#[cfg(all(target_arch = "wasm32", feature = "webp"))]
 use image_webp::{DecodingError as WebPDecodingError, WebPDecoder};
 #[cfg(all(not(target_arch = "wasm32"), feature = "webp"))]
 use libwebp_sys::{
-  VP8StatusCode, WEBP_CSP_MODE, WebPDecode, WebPDecoderConfig, WebPGetInfo, WebPRGBABuffer,
+  VP8StatusCode, WEBP_CSP_MODE, WebPAnimDecoder, WebPAnimDecoderDelete, WebPAnimDecoderGetInfo,
+  WebPAnimDecoderGetNext, WebPAnimDecoderHasMoreFrames, WebPAnimDecoderNew, WebPAnimDecoderOptions,
+  WebPAnimDecoderOptionsInit, WebPAnimInfo, WebPData, WebPDecode, WebPDecoderConfig, WebPGetInfo,
+  WebPRGBABuffer,
 };
 
 #[cfg(all(not(target_arch = "wasm32"), feature = "webp"))]
@@ -193,10 +205,16 @@ fn webp_chunks(bytes: &[u8]) -> impl Iterator<Item = ([u8; 4], &[u8])> {
   })
 }
 
-#[cfg(feature = "webp")]
+#[cfg(all(target_arch = "wasm32", feature = "webp"))]
 pub(crate) fn animated_webp_dimensions(bytes: &[u8]) -> ImageResult<(u32, u32)> {
   let decoder = WebPDecoder::new(Cursor::new(bytes)).map_err(webp_decode_error)?;
   Ok(decoder.dimensions())
+}
+
+/// The canvas size, which `WebPGetInfo` reads from the `VP8X` header.
+#[cfg(all(not(target_arch = "wasm32"), feature = "webp"))]
+pub(crate) fn animated_webp_dimensions(bytes: &[u8]) -> ImageResult<(u32, u32)> {
+  webp_dimensions(bytes)
 }
 
 /// Per-frame delays in milliseconds, in stream order, read from the `ANMF` headers without decoding
@@ -242,7 +260,138 @@ pub(crate) fn webp_frame_infos(bytes: &[u8]) -> ImageResult<Box<[FrameInfo]>> {
 
 /// Decodes animated WebP frames in stream order, passing each frame past the first `skip` to
 /// `push`, up to `limit` pushed frames.
-#[cfg(feature = "webp")]
+#[cfg(all(not(target_arch = "wasm32"), feature = "webp"))]
+pub(crate) fn decode_webp_frames(
+  bytes: &[u8],
+  skip: usize,
+  limit: Option<usize>,
+  target: Option<DecodeTarget>,
+  mut push: impl FnMut(Arc<ImageBuffer>),
+) -> ImageResult<bool> {
+  let mut decoder = AnimDecoder::new(bytes)?;
+  let (width, height) = decoder.canvas;
+  check_pixel_budget(width, height)?;
+  let target = target.filter(|target| target.shrinks(width, height));
+  let mut total_pixels = 0_u64;
+  let mut pushed = 0_usize;
+
+  for index in 0..MAX_ANIMATION_FRAMES {
+    if limit.is_some_and(|limit| pushed >= limit) {
+      return Ok(false);
+    }
+
+    let canvas = match decoder.next_frame() {
+      Some(Some(canvas)) => canvas,
+      None => return Ok(true),
+      Some(None) if index == 0 => {
+        return Err(webp_decode_error(WebPError::InvalidEncodedData));
+      }
+      Some(None) => return Ok(true),
+    };
+
+    total_pixels += width as u64 * height as u64;
+    if total_pixels > MAX_ANIMATION_TOTAL_PIXELS {
+      return Ok(true);
+    }
+
+    if index < skip {
+      continue;
+    }
+
+    push(Arc::new(webp_canvas_to_buffer(
+      canvas, width, height, true, target,
+    )?));
+    pushed += 1;
+  }
+
+  Ok(false)
+}
+
+/// libwebp's animation decoder, which composites each frame onto the canvas as Blink's
+/// `WEBPImageDecoder` does. It reads `bytes` in place rather than copying them.
+#[cfg(all(not(target_arch = "wasm32"), feature = "webp"))]
+struct AnimDecoder<'a> {
+  decoder: NonNull<WebPAnimDecoder>,
+  canvas: (u32, u32),
+  bytes: PhantomData<&'a [u8]>,
+}
+
+#[cfg(all(not(target_arch = "wasm32"), feature = "webp"))]
+impl<'a> AnimDecoder<'a> {
+  fn new(bytes: &'a [u8]) -> ImageResult<Self> {
+    let mut options = MaybeUninit::<WebPAnimDecoderOptions>::zeroed();
+    // SAFETY: `options` is valid for writes, and initializing it reads nothing.
+    if unsafe { WebPAnimDecoderOptionsInit(options.as_mut_ptr()) } == 0 {
+      return Err(webp_decode_error(WebPError::InvalidEncodedData));
+    }
+    // SAFETY: `WebPAnimDecoderOptionsInit` filled every field.
+    let mut options = unsafe { options.assume_init() };
+
+    options.color_mode = WEBP_CSP_MODE::MODE_RGBA;
+    options.use_threads = 0;
+
+    let data = WebPData {
+      bytes: bytes.as_ptr(),
+      size: bytes.len(),
+    };
+    // SAFETY: `data` points at `bytes`, which the returned decoder borrows for `'a`.
+    let decoder = NonNull::new(unsafe { WebPAnimDecoderNew(&data, &options) })
+      .ok_or_else(|| webp_decode_error(WebPError::InvalidEncodedData))?;
+    let mut info = MaybeUninit::<WebPAnimInfo>::zeroed();
+    // SAFETY: `decoder` is live and `info` is valid for writes.
+    let info_ok = unsafe { WebPAnimDecoderGetInfo(decoder.as_ptr(), info.as_mut_ptr()) } != 0;
+    // SAFETY: zeroed is a valid `WebPAnimInfo`, and a successful call filled it.
+    let info = unsafe { info.assume_init() };
+    let decoder = Self {
+      decoder,
+      canvas: (info.canvas_width, info.canvas_height),
+      bytes: PhantomData,
+    };
+
+    if !info_ok {
+      return Err(webp_decode_error(WebPError::InvalidEncodedData));
+    }
+    Ok(decoder)
+  }
+
+  /// The canvas after the next frame, `None` past the last one, or `Some(None)` when that frame
+  /// fails to decode.
+  fn next_frame(&mut self) -> Option<Option<&[u8]>> {
+    // SAFETY: the decoder is live.
+    if unsafe { WebPAnimDecoderHasMoreFrames(self.decoder.as_ptr()) } == 0 {
+      return None;
+    }
+
+    let mut canvas = ptr::null_mut();
+    let mut timestamp = 0;
+    // SAFETY: the decoder is live and both outputs are valid for writes.
+    let decoded =
+      unsafe { WebPAnimDecoderGetNext(self.decoder.as_ptr(), &mut canvas, &mut timestamp) } != 0;
+
+    if !decoded || canvas.is_null() {
+      return Some(None);
+    }
+
+    let (width, height) = self.canvas;
+    // SAFETY: libwebp hands back a `width * height` RGBA canvas it owns until the next call or
+    // the decoder's deletion, both of which need `&mut self`.
+    Some(Some(unsafe {
+      slice::from_raw_parts(canvas, width as usize * height as usize * 4)
+    }))
+  }
+}
+
+#[cfg(all(not(target_arch = "wasm32"), feature = "webp"))]
+impl Drop for AnimDecoder<'_> {
+  fn drop(&mut self) {
+    // SAFETY: the decoder was created in `new` and is deleted once.
+    unsafe { WebPAnimDecoderDelete(self.decoder.as_ptr()) };
+  }
+}
+
+/// Decodes animated WebP frames in stream order, passing each frame past the first `skip` to
+/// `push`, up to `limit` pushed frames.
+#[cfg(all(target_arch = "wasm32", feature = "webp"))]
 pub(crate) fn decode_webp_frames(
   bytes: &[u8],
   skip: usize,
