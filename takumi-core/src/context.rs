@@ -164,6 +164,12 @@ impl RenderContext {
     &self.shared.inline_cache
   }
 
+  /// Drops the shaped text this render keeps to lay the same text out again, once every box
+  /// that needs it holds its fragment items.
+  pub fn release_shaped_text(&self) {
+    self.shared.inline_cache.clear_shapes();
+  }
+
   /// Per-render cache of expanded Tailwind class lists.
   pub(crate) fn tw_cache(&self) -> &TwCache {
     &self.shared.tw_cache
