@@ -11,6 +11,7 @@ rust-version = "1.91"
 [dependencies]
 png.workspace = true
 gif.workspace = true
+jpeg-encoder.workspace = true
 color.workspace = true
 tiny-skia.workspace = true
 typed-builder.workspace = true
@@ -43,7 +44,7 @@ features = ["rc"]
 
 [dependencies.image]
 workspace = true
-features = ["jpeg", "png", "webp", "gif", "ico"]
+features = ["png", "webp", "gif", "ico"]
 
 [dependencies.rayon]
 workspace = true
