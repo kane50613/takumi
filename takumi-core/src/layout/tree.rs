@@ -1760,7 +1760,7 @@ impl RenderNode {
       gradient => {
         let mut context = RenderContext::for_anonymous(parent_context);
 
-        context.style.background_image = Some(BackgroundImages::from([gradient]));
+        context.style_mut().background_image = Some(BackgroundImages::from([gradient]));
         Self::anonymous(
           context,
           Some(Node::container([])),
@@ -2052,7 +2052,7 @@ impl RenderNode {
     tree.lower_tables(max_rows);
 
     if tree.is_inline_level() {
-      tree.context.style.display.blockify();
+      tree.context.blockify();
     }
 
     tree
@@ -2133,7 +2133,7 @@ impl RenderNode {
       let mut children = Vec::from(children);
       children.retain(|child| !child.is_collapsible_whitespace_only_text_node());
       for child in &mut children {
-        child.context.style.display.blockify();
+        child.context.blockify();
       }
 
       return children.into_boxed_slice();
@@ -2162,7 +2162,7 @@ impl RenderNode {
     let parent_is_inline = context.style.display.is_inline();
 
     if parent_is_inline && has_block {
-      context.style.display = context.style.display.as_blockified();
+      context.blockify();
     }
 
     // A block parent whose inline content holds out-of-flow boxes wraps that
