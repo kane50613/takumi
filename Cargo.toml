@@ -81,6 +81,11 @@ features = ["std", "simd"]
 version = "0.7"
 default-features = false
 
+[workspace.dependencies.zlib-rs]
+version = "0.6"
+default-features = false
+features = ["std", "rust-allocator"]
+
 [workspace.dependencies.png]
 version = "0.18"
 features = ["zlib-rs"]

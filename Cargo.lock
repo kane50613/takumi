@@ -1947,6 +1947,7 @@ version = "0.5.1"
 dependencies = [
  "bytemuck",
  "color",
+ "flate2",
  "gif",
  "image",
  "image-webp",
@@ -1961,6 +1962,7 @@ dependencies = [
  "tiny-skia",
  "typed-builder",
  "xxhash-rust",
+ "zlib-rs",
 ]
 
 [[package]]
