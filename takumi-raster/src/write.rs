@@ -6,10 +6,8 @@ use std::{
 };
 
 use gif::{Encoder as GifEncoder, Frame as GifFrame, Repeat};
-use image::{
-  ExtendedColorType, ImageEncoder, RgbaImage,
-  codecs::{ico::IcoEncoder, jpeg::JpegEncoder},
-};
+use image::{ExtendedColorType, ImageEncoder, RgbaImage, codecs::ico::IcoEncoder};
+use jpeg_encoder::{ColorType as JpegColorType, Encoder as JpegEncoder, SamplingFactor};
 use png::{ColorType, DeflateCompression, Filter};
 use typed_builder::TypedBuilder;
 
@@ -300,11 +298,19 @@ pub fn write_image<T: Write>(
 
   match format {
     OutputFormat::Jpeg { quality } => {
-      let rgb = strip_alpha_channel(Cow::Borrowed(rgba));
+      let mut encoder = JpegEncoder::new(destination, quality.get());
 
-      let encoder = JpegEncoder::new_with_quality(destination, quality.get());
+      // 4:2:0 blurs colored text edges, and zune-jpeg 0.5 misreads the
+      // optimized Huffman tables jpeg-encoder writes alongside it.
+      encoder.set_sampling_factor(SamplingFactor::R_4_4_4);
+      encoder.set_optimized_huffman_tables(true);
       encoder
-        .write_image(&rgb, image.width(), image.height(), ExtendedColorType::Rgb8)
+        .encode(
+          image.as_raw(),
+          u16::try_from(image.width()).map_err(Error::encode)?,
+          u16::try_from(image.height()).map_err(Error::encode)?,
+          JpegColorType::Rgba,
+        )
         .map_err(Error::encode)?;
     }
     OutputFormat::Png => {
