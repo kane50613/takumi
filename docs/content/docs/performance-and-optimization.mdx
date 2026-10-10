@@ -56,6 +56,24 @@ setGlyphCacheMaxBytes(64 * 1024 * 1024); // [!code highlight]
 
 Call this before the first render. Outlines and masks share the budget across renderers in the same backend module. Large glyph sets or text sizes can benefit from more space, but benchmark your content first.
 
+## Keep memory flat on Linux servers
+
+Each render allocates a few megabytes for its canvas and encoder buffers. On Linux, glibc keeps freed memory in its arenas, so a long-running process holds more than the renderer retains.
+
+```bash title="Fixed mmap threshold"
+GLIBC_TUNABLES=glibc.malloc.mmap_threshold=262144 node server.js
+```
+
+glibc raises its mmap threshold after a large block is freed, which moves later canvases into the arenas. A fixed threshold keeps buffers over 256 KiB in their own mappings, and glibc unmaps each one when it is freed.
+
+| Setting                                             | RSS over 1,275 renders | Render time                      |
+| :-------------------------------------------------- | :--------------------- | :------------------------------- |
+| Default                                             | 189–235 MB             | Baseline                         |
+| `GLIBC_TUNABLES=glibc.malloc.mmap_threshold=262144` | 114–130 MB             | 5–7% slower                      |
+| `MALLOC_ARENA_MAX=2`                                | 165–211 MB             | 7% slower with 4 renders at once |
+
+Both settings apply to the whole process, so measure your own server first. The figures come from Node 24 on Linux arm64, rendering 65 real OG templates four at a time. Alpine and other musl images use a different allocator.
+
 ## Keep network requests out of repeated work
 
 Bundle fonts for predictable startup without a font service. WOFF2 saves transfer and storage space but needs decompression; TTF avoids that step. A reused renderer decodes a registered file once. See [local fonts and CI](/docs/typography-and-fonts#fonts-in-ci-and-offline-renders).
