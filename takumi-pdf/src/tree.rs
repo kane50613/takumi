@@ -170,7 +170,7 @@ impl PreparedTree {
       .as_deref()
       .and_then(<[RenderNode]>::first)
       .is_some_and(
-        |child| matches!(child.context.style.z_index, ZIndex::Integer(index) if index < 0),
+        |child| matches!(child.context.style.box_data.z_index, ZIndex::Integer(index) if index < 0),
       )
   }
 
@@ -277,7 +277,7 @@ fn take_repeating_fixed(node: &mut RenderNode) -> Vec<(RenderNode, RenderContext
   let mut kept = Vec::with_capacity(children.len());
 
   for mut child in children.into_vec() {
-    if child.context.style.position == Position::Fixed {
+    if child.context.style.base_data.position == Position::Fixed {
       repeating.push((child, parent.clone()));
       continue;
     }

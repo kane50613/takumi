@@ -633,11 +633,12 @@ impl LineIndent {
     Self {
       amount: style
         .parent
+        .misc_inherited1_data
         .text_indent
         .resolve_px(&style.sizing, indent_basis),
       options: IndentOptions {
-        each_line: style.parent.text_indent.each_line,
-        hanging: style.parent.text_indent.hanging,
+        each_line: style.parent.misc_inherited1_data.text_indent.each_line,
+        hanging: style.parent.misc_inherited1_data.text_indent.hanging,
       },
     }
   }
@@ -709,7 +710,7 @@ pub(super) fn chromium_line_breaks(spans: &[ProcessedInlineSpan<'_>]) -> bool {
   !spans.iter().any(|span| {
     matches!(
       span,
-      ProcessedInlineSpan::Text { style, .. } if style.parent.word_break == WordBreak::BreakAll
+      ProcessedInlineSpan::Text { style, .. } if style.parent.misc_inherited_data.word_break == WordBreak::BreakAll
     )
   })
 }
@@ -835,7 +836,7 @@ fn build_inline_layout_tree<'c>(
   let mut previous_was_line_break = false;
 
   if let Some(mark) = direction_mark_span(items, context) {
-    index_pos = context.style.direction.bidi_mark().len();
+    index_pos = context.style.inherited_data.direction.bidi_mark().len();
     spans.push(mark);
   }
 
@@ -848,11 +849,11 @@ fn build_inline_layout_tree<'c>(
         decorations,
       } => {
         let span_style = SizedFontStyle::from_style(&context.style, context);
-        let transformed = apply_text_transform(text, context.style.text_transform);
+        let transformed = apply_text_transform(text, context.style.inherited_data.text_transform);
         let collapsed = apply_white_space_collapse(
           &transformed,
-          context.style.white_space_collapse,
-          context.style.tab_size.spaces(),
+          context.style.inherited_data.white_space_collapse,
+          context.style.misc_inherited1_data.tab_size.spaces(),
           &mut previous_collapsible_space,
           &mut previous_was_line_break,
         );
@@ -941,7 +942,7 @@ fn trim_trailing_space(spans: &mut [ProcessedInlineSpan<'_>]) {
   };
 
   if !matches!(
-    style.parent.white_space_collapse,
+    style.parent.inherited_data.white_space_collapse,
     WhiteSpaceCollapse::Collapse | WhiteSpaceCollapse::PreserveBreaks
   ) || !text.ends_with(' ')
   {
@@ -971,7 +972,8 @@ fn direction_mark_span<'c>(
     _ => None,
   });
 
-  if items.is_empty() || (text_item_context.is_none() && context.style.direction != Direction::Rtl)
+  if items.is_empty()
+    || (text_item_context.is_none() && context.style.inherited_data.direction != Direction::Rtl)
   {
     return None;
   }
@@ -986,7 +988,7 @@ fn direction_mark_span<'c>(
   mark_style.word_spacing = 0.0;
 
   Some(ProcessedInlineSpan::DirectionMark {
-    direction: context.style.direction,
+    direction: context.style.inherited_data.direction,
     style: Box::new(mark_style),
   })
 }
@@ -1003,26 +1005,27 @@ fn inline_box_span<'c>(
   let kind = render_node.inline_box_kind();
   let vertical_align = context
     .style
+    .base_data
     .vertical_align
     .resolve(&context.sizing, context.sizing.line_height);
   let margin = render_node.margin_px();
   let padding = render_node.padding_px();
   let border = Rect {
     top: (
-      context.style.border_top_style,
-      context.style.border_top_width,
+      context.style.box_data.border_top_style,
+      context.style.box_data.border_top_width,
     ),
     right: (
-      context.style.border_right_style,
-      context.style.border_right_width,
+      context.style.box_data.border_right_style,
+      context.style.box_data.border_right_width,
     ),
     bottom: (
-      context.style.border_bottom_style,
-      context.style.border_bottom_width,
+      context.style.box_data.border_bottom_style,
+      context.style.box_data.border_bottom_width,
     ),
     left: (
-      context.style.border_left_style,
-      context.style.border_left_width,
+      context.style.box_data.border_left_style,
+      context.style.box_data.border_left_width,
     ),
   }
   .map(|(border_style, width)| {
@@ -1176,7 +1179,7 @@ pub fn create_inline_layout<'c>(request: InlineLayoutRequest<'c>) -> BuiltInline
       ..
     } = &mut built;
 
-    if style.parent.text_overflow == TextOverflow::Ellipsis {
+    if style.parent.misc4_data.text_overflow == TextOverflow::Ellipsis {
       // A line's advance is an f32 sum over glyphs, so an exactly-fitting line
       // can land a hair past max_width and must not sprout an ellipsis.
       // Overflow shows up two ways: text truncated past the last committed
@@ -1202,7 +1205,7 @@ pub fn create_inline_layout<'c>(request: InlineLayoutRequest<'c>) -> BuiltInline
 
     let line_count = layout.lines().count();
 
-    if style.parent.text_wrap_style == TextWrapStyle::Balance {
+    if style.parent.inherited_data.text_wrap_style == TextWrapStyle::Balance {
       make_balanced_text(
         layout,
         rebreak,
@@ -1213,20 +1216,21 @@ pub fn create_inline_layout<'c>(request: InlineLayoutRequest<'c>) -> BuiltInline
       );
     }
 
-    if style.parent.text_wrap_style == TextWrapStyle::Pretty {
+    if style.parent.inherited_data.text_wrap_style == TextWrapStyle::Pretty {
       make_pretty_text(layout, rebreak, spans, positioned_floats);
     }
   }
 
-  if style.parent.text_fit.mode != TextFitMode::None
+  if style.parent.misc_inherited1_data.text_fit.mode != TextFitMode::None
     && text_fit_is_applicable(&built.positioned_floats)
   {
     built.line_fits = text_fit_lines(&built.layout, max_width, style);
   }
 
-  built
-    .layout
-    .align(style.parent.text_align.into_parley(), Default::default());
+  built.layout.align(
+    style.parent.inherited_data.text_align.into_parley(),
+    Default::default(),
+  );
   built
 }
 
@@ -1240,7 +1244,7 @@ pub(crate) fn resolve_inline_max_height(
     .clamp_lines()
     .map(|lines| MaxHeight::HeightAndLines(content_box_height, lines))
     .or_else(|| {
-      (font_style.parent.text_overflow == TextOverflow::Ellipsis)
+      (font_style.parent.misc4_data.text_overflow == TextOverflow::Ellipsis)
         .then_some(MaxHeight::Absolute(content_box_height))
     })
 }

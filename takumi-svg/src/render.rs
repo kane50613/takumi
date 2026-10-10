@@ -250,7 +250,7 @@ impl<'n> PlacedBox<'n> {
   /// box and opens the masked group wrapping the element.
   pub(crate) fn begin_mask_group(&self, doc: &mut SvgDocument) -> io::Result<Option<GroupToken>> {
     let style = &self.node.context.style;
-    let Some(images) = style.mask_image.as_deref() else {
+    let Some(images) = style.misc2_data.mask_image.as_deref() else {
       return Ok(None);
     };
     if !images.iter().any(BackgroundImage::paints) {
@@ -364,16 +364,21 @@ impl EffectGroups {
     let style = &context.style;
     let mut groups = Vec::new();
 
-    if style.mix_blend_mode != BlendMode::Normal {
-      groups.push(doc.begin_blend_group(&style.mix_blend_mode.to_css_string())?);
+    if style.misc_data.mix_blend_mode != BlendMode::Normal {
+      groups.push(doc.begin_blend_group(&style.misc_data.mix_blend_mode.to_css_string())?);
     }
-    if style.isolation == Isolation::Isolate {
+    if style.misc_data.isolation == Isolation::Isolate {
       groups.push(doc.begin_isolate_group()?);
     }
     groups.extend(placed.begin_mask_group(doc)?);
 
-    let opacity = style.opacity.0;
-    let filter_refs = doc.filter(&style.filter, context, placed.frame.layout.size, false)?;
+    let opacity = style.svg_data.opacity.0;
+    let filter_refs = doc.filter(
+      &style.misc1_data.filter,
+      context,
+      placed.frame.layout.size,
+      false,
+    )?;
 
     groups.extend(doc.begin_filter_wrappers(&filter_refs)?);
 
@@ -685,7 +690,7 @@ impl GlyphDevice for DocumentDevice<'_> {
       let stroke = (brush.stroke_width > 0.0).then_some(GlyphStroke {
         color: black,
         width: brush.stroke_width,
-        join: style.parent.stroke_linejoin,
+        join: style.parent.misc_inherited_data.stroke_linejoin,
       });
 
       return self.write(|doc| emit_run_glyphs(run, style, frame, Some(black), stroke, doc));

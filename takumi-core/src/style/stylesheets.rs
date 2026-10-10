@@ -1,6 +1,7 @@
 use std::{
   borrow::Cow,
   fmt,
+  rc::Rc,
   str::FromStr,
   sync::{Arc, OnceLock},
 };
@@ -22,6 +23,7 @@ use crate::{
     CssInput, CssUnexpected, CssValueSeed, CustomProperties, SizingContext, properties::*,
     selector::StyleDeclarationParser, unexpected_token,
   },
+  viewport::Viewport,
 };
 #[path = "stylesheets_helpers.rs"]
 mod stylesheets_helpers;
@@ -34,17 +36,6 @@ mod stylesheets_vars;
 
 pub(crate) use self::stylesheets_mask::PropertyMask;
 use self::{stylesheets_helpers::*, stylesheets_vars::apply_deferred_declaration};
-
-macro_rules! define_inherited_default {
-  // Inherited property: take the parent's computed value.
-  ($parent:expr, $default:expr, $inherit:tt) => {
-    $parent.to_owned()
-  };
-  // Non-inherited property: reset to the field's initial value.
-  ($parent:expr, $default:expr) => {
-    $default
-  };
-}
 
 /// Whether a longhand declared `where inherit = true` inherits.
 macro_rules! longhand_inherits {
@@ -69,6 +60,33 @@ macro_rules! define_anonymous_default {
   ($parent:expr, $default:expr) => {
     $default
   };
+}
+
+/// Whether a style group's fields inherit; a group holds only inherited or only non-inherited
+/// fields, like Blink's.
+const fn group_inherits(fields: &[bool]) -> bool {
+  let inherits = fields[0];
+  let mut index = 1;
+
+  while index < fields.len() {
+    assert!(
+      fields[index] == inherits,
+      "a style group mixes inherited and non-inherited fields"
+    );
+    index += 1;
+  }
+  inherits
+}
+
+/// `group`, or the parent's or the initial one when it holds the same values.
+fn share_group<T: PartialEq>(group: T, parent: &Rc<T>, initial: &Rc<T>) -> Rc<T> {
+  if group == **parent {
+    Rc::clone(parent)
+  } else if group == **initial {
+    Rc::clone(initial)
+  } else {
+    Rc::new(group)
+  }
 }
 
 type ParsedDeclarations = SmallVec<[StyleDeclaration; 8]>;
@@ -243,21 +261,26 @@ macro_rules! define_style {
     }
   };
   (
-    longhands {
+    groups {
       $(
-        $longhand:ident: $longhand_ty:ty
-          $(where inherit = $longhand_inherit:literal)?
-          $(where anonymous = $longhand_anonymous:literal)?
-          $(where builder = $longhand_builder:ident)?
-          $(= $longhand_default:expr)?,
+        $(#[doc = $group_doc:literal])*
+        $group:ident: $group_ty:ident {
+          $(
+            $longhand:ident: $longhand_ty:ty
+              $(where inherit = $longhand_inherit:literal)?
+              $(where anonymous = $longhand_anonymous:literal)?
+              $(where builder = $longhand_builder:ident)?
+              $(= $longhand_default:expr)?,
+          )*
+        }
       )*
     }
-    // `name: type => (ltr_field, rtl_field)` — apply resolves to one of them.
+    // `name: type => (group.ltr_field, group.rtl_field)` — apply resolves to one of them.
     transient_longhands {
       $(
         $transient:ident: $transient_ty:ty
           $(= $transient_default:expr)?
-          => ($transient_ltr:ident, $transient_rtl:ident),
+          => ($ltr_group:ident . $transient_ltr:ident, $rtl_group:ident . $transient_rtl:ident),
       )*
     }
     shorthands {
@@ -275,10 +298,10 @@ macro_rules! define_style {
       #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
       #[non_exhaustive]
       pub(crate) enum LonghandId {
-        $(
+        $($(
           #[doc = concat!("The `", stringify!($longhand), "` longhand.")]
           [<$longhand:camel>],
-        )*
+        )*)*
         $(
           #[doc = concat!("The `", stringify!($transient), "` logical-axis longhand.")]
           [<$transient:camel>],
@@ -286,9 +309,9 @@ macro_rules! define_style {
       }
 
       impl LonghandId {
-        const COUNT: usize = [$(Self::[<$longhand:camel>]),* $(, Self::[<$transient:camel>])*].len();
+        const COUNT: usize = [$($(Self::[<$longhand:camel>],)*)* $(Self::[<$transient:camel>],)*].len();
         const ALL: [Self; Self::COUNT] = [
-          $(Self::[<$longhand:camel>],)*
+          $($(Self::[<$longhand:camel>],)*)*
           $(Self::[<$transient:camel>],)*
         ];
 
@@ -297,13 +320,13 @@ macro_rules! define_style {
         }
 
         const SNAKE_NAMES: [&'static str; Self::COUNT] = [
-          $(stringify!($longhand),)*
+          $($(stringify!($longhand),)*)*
           $(stringify!($transient),)*
         ];
 
         /// Whether each longhand inherits, which decides what `unset` resets it to.
         const INHERITED: [bool; Self::COUNT] = [
-          $(longhand_inherits!($($longhand_inherit)?),)*
+          $($(longhand_inherits!($($longhand_inherit)?),)*)*
           $({ let _ = stringify!($transient); false },)*
         ];
 
@@ -342,11 +365,11 @@ macro_rules! define_style {
 
           input.reset(&state);
           let declaration = match self {
-            $(
+            $($(
               Self::[<$longhand:camel>] => StyleDeclaration::[<$longhand:camel>](
                 <$longhand_ty as FromCss>::from_css(input)?,
               ),
-            )*
+            )*)*
             $(
               Self::[<$transient:camel>] => StyleDeclaration::[<$transient:camel>](
                 <$transient_ty as FromCss>::from_css(input)?,
@@ -358,7 +381,7 @@ macro_rules! define_style {
         }
 
         const EXPECT_INFO: [(CssExpectedMessage, &'static [&'static str]); Self::COUNT] = [
-          $((<$longhand_ty as FromCss>::EXPECT_MESSAGE, <$longhand_ty as FromCss>::VALID_TOKENS),)*
+          $($((<$longhand_ty as FromCss>::EXPECT_MESSAGE, <$longhand_ty as FromCss>::VALID_TOKENS),)*)*
           $((<$transient_ty as FromCss>::EXPECT_MESSAGE, <$transient_ty as FromCss>::VALID_TOKENS),)*
         ];
 
@@ -420,7 +443,7 @@ macro_rules! define_style {
       impl PropertyId {
         fn from_normalized_name(name: &str) -> Self {
           match name {
-            $(stringify!($longhand) => Self::Longhand(LonghandId::[<$longhand:camel>]),)*
+            $($(stringify!($longhand) => Self::Longhand(LonghandId::[<$longhand:camel>]),)*)*
             $(stringify!($transient) => Self::Longhand(LonghandId::[<$transient:camel>]),)*
             $(stringify!($shorthand) => Self::Shorthand(ShorthandId::[<$shorthand:camel>]),)*
             _ => Self::Ignored,
@@ -751,11 +774,11 @@ macro_rules! define_style {
           // final value even if `direction:` is declared later in the block.
           for declaration in &declarations {
             match declaration {
-              StyleDeclaration::Direction(d) => style.direction = *d,
+              StyleDeclaration::Direction(d) => style.inherited_data_mut().direction = *d,
               StyleDeclaration::CssWideKeyword(LonghandId::Direction, keyword) => {
-                style.direction = match keyword {
+                style.inherited_data_mut().direction = match keyword {
                   CssWideKeyword::Initial => Direction::default(),
-                  CssWideKeyword::Inherit | CssWideKeyword::Unset => parent.direction,
+                  CssWideKeyword::Inherit | CssWideKeyword::Unset => parent.inherited_data.direction,
                 };
               }
               StyleDeclaration::Deferred(deferred)
@@ -767,7 +790,7 @@ macro_rules! define_style {
             }
           }
 
-          let parent_font_weight = parent.font_weight.value();
+          let parent_font_weight = parent.inherited_data.font_weight.value();
           for mut declaration in declarations {
             if let StyleDeclaration::FontWeight(weight) = &mut declaration {
               *weight = weight.resolve_against(parent_font_weight);
@@ -790,8 +813,38 @@ macro_rules! define_style {
         }
       }
 
-      /// The computed style snapshot used during layout and rendering.
-      #[derive(Clone, Debug)]
+      $(
+        $(#[doc = $group_doc])*
+        #[derive(Clone, Debug, PartialEq)]
+        pub struct $group_ty {
+          $(
+            #[doc = concat!("Computed `", stringify!($longhand), "` value.")]
+            pub $longhand: $longhand_ty,
+          )*
+        }
+
+        impl Default for $group_ty {
+          fn default() -> Self {
+            Self {
+              $($longhand: define_style!(@default $($longhand_default)?),)*
+            }
+          }
+        }
+
+        impl $group_ty {
+          /// Whether this group's fields inherit.
+          const INHERITED: bool = group_inherits(&[$(longhand_inherits!($($longhand_inherit)?)),*]);
+
+          /// Resolves relative units against the sizing context.
+          fn make_computed(&mut self, sizing: &SizingContext) {
+            $(self.$longhand.make_computed(sizing);)*
+          }
+        }
+      )*
+
+      /// The computed style snapshot used during layout and rendering, in Blink's field groups:
+      /// boxes that leave a group's values alone share one copy of the group.
+      #[derive(Clone, Debug, PartialEq)]
       pub struct ComputedStyle {
         /// Custom properties in scope: their specified values and the `@property`
         /// rules that govern them.
@@ -803,8 +856,8 @@ macro_rules! define_style {
         /// `OriginalDisplay`.
         pub original_display: Display,
         $(
-          #[doc = concat!("Computed `", stringify!($longhand), "` value.")]
-          pub $longhand: $longhand_ty,
+          $(#[doc = $group_doc])*
+          pub $group: Rc<$group_ty>,
         )*
       }
 
@@ -814,9 +867,7 @@ macro_rules! define_style {
             custom_properties: Default::default(),
             lang: None,
             original_display: Display::default(),
-            $(
-              $longhand: define_style!(@default $($longhand_default)?),
-            )*
+            $($group: Rc::default(),)*
           }
         }
       }
@@ -824,15 +875,66 @@ macro_rules! define_style {
       thread_local! {
         /// Every longhand at its initial value, which `initial` and `unset` copy from.
         static INITIAL_STYLE: ComputedStyle = ComputedStyle::default();
+        /// Every longhand at its initial value made computed, which a box that sets nothing in a
+        /// group shares.
+        static COMPUTED_INITIAL_STYLE: ComputedStyle = {
+          let mut style = ComputedStyle::default();
+
+          style.resolve_computed(&SizingContext::builder().viewport(Viewport::new((0, 0))).build());
+          style
+        };
       }
 
       impl ComputedStyle {
+        $(
+          #[doc = concat!("`", stringify!($group), "` to change in place, copied first when another box shares it.")]
+          pub(crate) fn [<$group _mut>](&mut self) -> &mut $group_ty {
+            Rc::make_mut(&mut self.$group)
+          }
+        )*
+
         /// Copies `property`'s value from `source`; a logical-axis longhand has no field of its
         /// own, so it copies nothing.
         fn copy_longhand(&mut self, property: LonghandId, source: &Self) {
           match property {
-            $(LonghandId::[<$longhand:camel>] => self.$longhand.clone_from(&source.$longhand),)*
+            $($(LonghandId::[<$longhand:camel>] => {
+              if self.$group.$longhand != source.$group.$longhand {
+                self.[<$group _mut>]().$longhand.clone_from(&source.$group.$longhand);
+              }
+            })*)*
             $(LonghandId::[<$transient:camel>] => {})*
+          }
+        }
+
+        /// Points each group still at its initial values to the computed one every such box
+        /// shares.
+        fn share_computed_initial_groups(&mut self) {
+          INITIAL_STYLE.with(|initial| {
+            $(
+              if Rc::ptr_eq(&self.$group, &initial.$group) {
+                self.$group = COMPUTED_INITIAL_STYLE.with(|computed| Rc::clone(&computed.$group));
+              }
+            )*
+          });
+        }
+
+        /// Resolves relative units in the groups this style owns alone. A shared group came
+        /// from the parent or the computed initial style, which resolved it already.
+        fn make_computed_values(&mut self, sizing: &SizingContext) {
+          $(
+            if let Some(group) = Rc::get_mut(&mut self.$group) {
+              group.make_computed(sizing);
+            }
+          )*
+        }
+
+        /// A copy that shares no group, for checking the shared groups against values resolved
+        /// in full.
+        #[cfg(debug_assertions)]
+        fn unshared(&self) -> Self {
+          Self {
+            $($group: Rc::new((*self.$group).clone()),)*
+            ..self.clone()
           }
         }
       }
@@ -842,10 +944,10 @@ macro_rules! define_style {
       #[derive(Debug, Clone, PartialEq)]
       #[non_exhaustive]
       pub enum StyleDeclaration {
-        $(
+        $($(
           /// An explicit specified value for a non-shorthand property.
           [<$longhand:camel>]($longhand_ty),
-        )*
+        )*)*
         $(
           /// Logical-axis value, resolved to a physical side at apply time.
           [<$transient:camel>]($transient_ty),
@@ -861,36 +963,42 @@ macro_rules! define_style {
       }
 
       impl ComputedStyle {
-        /// Builds a child computed style inheriting from a parent.
+        /// Builds a child computed style inheriting from a parent: an inherited group is the
+        /// parent's, a non-inherited one the initial one.
         pub(crate) fn from_parent(parent: &Self) -> Self {
-          Self {
+          INITIAL_STYLE.with(|initial| Self {
             custom_properties: parent.custom_properties.inherited(),
             lang: parent.lang,
             original_display: Display::default(),
-            $($longhand: define_inherited_default!(parent.$longhand, define_style!(@default $($longhand_default)?) $(, $longhand_inherit)?),)*
-          }
+            $(
+              $group: Rc::clone(if $group_ty::INHERITED { &parent.$group } else { &initial.$group }),
+            )*
+          })
         }
 
         /// Builds the style of an anonymous block box generated inside `parent`,
         /// resolved down to its used values like any other box's.
         pub(crate) fn for_anonymous(parent: &Self, sizing: &SizingContext) -> Self {
-          let mut style = Self {
+          let mut style = INITIAL_STYLE.with(|initial| Self {
             custom_properties: parent.custom_properties.inherited(),
             lang: parent.lang,
             original_display: Display::default(),
-            $($longhand: define_anonymous_default!(parent.$longhand, define_style!(@default $($longhand_default)?) $(, inherit $longhand_inherit)? $(, anonymous $longhand_anonymous)?),)*
-          };
+            $(
+              $group: share_group(
+                $group_ty {
+                  $($longhand: define_anonymous_default!(parent.$group.$longhand, define_style!(@default $($longhand_default)?) $(, inherit $longhand_inherit)? $(, anonymous $longhand_anonymous)?),)*
+                },
+                &parent.$group,
+                &initial.$group,
+              ),
+            )*
+          });
 
           // css 2.1 9.2.1.1: an anonymous box is a block container, and `display` starts
           // at its initial `inline`.
-          style.display.blockify();
+          style.base_data_mut().display.blockify();
           style.make_computed(sizing);
           style
-        }
-
-        /// Resolves relative units against the sizing context.
-        pub(crate) fn make_computed_values(&mut self, sizing: &SizingContext) {
-          $(self.$longhand.make_computed(sizing);)*
         }
 
         pub(crate) fn apply_interpolated_properties(
@@ -910,26 +1018,26 @@ macro_rules! define_style {
 
           for property in animated_properties.iter() {
             match property {
-              $(
+              $($(
                 LonghandId::[<$longhand:camel>] => {
-                  self.$longhand.interpolate(
-                    &from.$longhand,
-                    &to.$longhand,
+                  self.[<$group _mut>]().$longhand.interpolate(
+                    &from.$group.$longhand,
+                    &to.$group.$longhand,
                     progress,
                     sizing,
                     current_color,
                   );
                 }
-              )*
+              )*)*
               $(LonghandId::[<$transient:camel>] => {})*
             }
           }
 
           // special cases
           if animated_properties.contains(&LonghandId::FlexGrow) {
-            self.flex_grow = interpolated_with_missing(
-              &from.flex_grow,
-              &to.flex_grow,
+            self.misc1_data_mut().flex_grow = interpolated_with_missing(
+              &from.misc1_data.flex_grow,
+              &to.misc1_data.flex_grow,
               FlexGrow(0.0),
               FlexGrow(0.0),
               interpolation_context,
@@ -937,9 +1045,9 @@ macro_rules! define_style {
           }
 
           if animated_properties.contains(&LonghandId::FlexShrink) {
-            self.flex_shrink = interpolated_with_missing(
-              &from.flex_shrink,
-              &to.flex_shrink,
+            self.misc2_data_mut().flex_shrink = interpolated_with_missing(
+              &from.misc2_data.flex_shrink,
+              &to.misc2_data.flex_shrink,
               FlexGrow(1.0),
               FlexGrow(1.0),
               interpolation_context,
@@ -947,9 +1055,9 @@ macro_rules! define_style {
           }
 
           if animated_properties.contains(&LonghandId::WebkitTextStrokeWidth) {
-            self.webkit_text_stroke_width = interpolated_with_missing(
-              &from.webkit_text_stroke_width,
-              &to.webkit_text_stroke_width,
+            self.misc_inherited1_data_mut().webkit_text_stroke_width = interpolated_with_missing(
+              &from.misc_inherited1_data.webkit_text_stroke_width,
+              &to.misc_inherited1_data.webkit_text_stroke_width,
               Length::zero(),
               Length::zero(),
               interpolation_context,
@@ -957,9 +1065,9 @@ macro_rules! define_style {
           }
 
           if animated_properties.contains(&LonghandId::WebkitTextStrokeColor) {
-            self.webkit_text_stroke_color = interpolated_with_missing(
-              &from.webkit_text_stroke_color,
-              &to.webkit_text_stroke_color,
+            self.misc_inherited1_data_mut().webkit_text_stroke_color = interpolated_with_missing(
+              &from.misc_inherited1_data.webkit_text_stroke_color,
+              &to.misc_inherited1_data.webkit_text_stroke_color,
               ColorInput::CurrentColor,
               ColorInput::CurrentColor,
               interpolation_context,
@@ -967,11 +1075,11 @@ macro_rules! define_style {
           }
 
           if animated_properties.contains(&LonghandId::WebkitTextFillColor) {
-            self.webkit_text_fill_color = interpolated_with_missing(
-              &from.webkit_text_fill_color,
-              &to.webkit_text_fill_color,
-              from.color,
-              to.color,
+            self.misc_inherited1_data_mut().webkit_text_fill_color = interpolated_with_missing(
+              &from.misc_inherited1_data.webkit_text_fill_color,
+              &to.misc_inherited1_data.webkit_text_fill_color,
+              from.inherited_data.color,
+              to.inherited_data.color,
               interpolation_context,
             );
           }
@@ -979,9 +1087,9 @@ macro_rules! define_style {
       }
 
       impl StyleDeclaration {
-        $(
+        $($(
           define_style!(@builder $longhand, $longhand_ty $(, $longhand_builder)?);
-        )*
+        )*)*
         $(
           /// Returns a declaration for this property.
           pub fn $transient(value: $transient_ty) -> Self {
@@ -998,7 +1106,7 @@ macro_rules! define_style {
         /// The longhand this declaration targets.
         pub(crate) fn longhand_id(&self) -> LonghandId {
           match self {
-            $(Self::[<$longhand:camel>](..) => LonghandId::[<$longhand:camel>],)*
+            $($(Self::[<$longhand:camel>](..) => LonghandId::[<$longhand:camel>],)*)*
             $(Self::[<$transient:camel>](..) => LonghandId::[<$transient:camel>],)*
             Self::CustomProperty(..) | Self::Deferred(..) | Self::VarRef(..) => {
               unreachable!("custom and deferred declarations do not map to a single longhand")
@@ -1023,23 +1131,28 @@ macro_rules! define_style {
           style: &mut ComputedStyle,
           parent: &ComputedStyle,
         ) {
-          let is_rtl = style.direction == Direction::Rtl;
+          let is_rtl = style.inherited_data.direction == Direction::Rtl;
           match self {
             Self::CssWideKeyword(property, keyword) => {
               match property {
                 $(
                   LonghandId::[<$transient:camel>] => {
-                    let target = if is_rtl { &mut style.$transient_rtl } else { &mut style.$transient_ltr };
-                    *target = match keyword {
+                    let value = match keyword {
                       CssWideKeyword::Initial | CssWideKeyword::Unset => define_style!(@default $($transient_default)?),
                       CssWideKeyword::Inherit => {
-                        if parent.direction == Direction::Rtl {
-                          parent.$transient_rtl.to_owned()
+                        if parent.inherited_data.direction == Direction::Rtl {
+                          parent.$rtl_group.$transient_rtl.to_owned()
                         } else {
-                          parent.$transient_ltr.to_owned()
+                          parent.$ltr_group.$transient_ltr.to_owned()
                         }
                       }
                     };
+
+                    if is_rtl {
+                      style.[<$rtl_group _mut>]().$transient_rtl = value;
+                    } else {
+                      style.[<$ltr_group _mut>]().$transient_ltr = value;
+                    }
                   }
                 )*
                 _ => {
@@ -1064,10 +1177,14 @@ macro_rules! define_style {
               apply_deferred_declaration(style, Some(parent), &deferred);
             }
             Self::VarRef(var_ref) => var_ref.apply(style, Some(parent)),
-            $(Self::[<$longhand:camel>](value) => style.$longhand = value,)*
+            $($(Self::[<$longhand:camel>](value) => style.[<$group _mut>]().$longhand = value,)*)*
             $(
               Self::[<$transient:camel>](value) => {
-                if is_rtl { style.$transient_rtl = value } else { style.$transient_ltr = value }
+                if is_rtl {
+                  style.[<$rtl_group _mut>]().$transient_rtl = value;
+                } else {
+                  style.[<$ltr_group _mut>]().$transient_ltr = value;
+                }
               }
             )*
           }
@@ -1075,14 +1192,17 @@ macro_rules! define_style {
 
         /// Applies this declaration to a computed style without a parent.
         pub(crate) fn apply_to_computed(&self, style: &mut ComputedStyle) {
-          let is_rtl = style.direction == Direction::Rtl;
+          let is_rtl = style.inherited_data.direction == Direction::Rtl;
           match self {
             Self::CssWideKeyword(property, keyword) => match keyword {
               CssWideKeyword::Initial => match property {
                 $(
                   LonghandId::[<$transient:camel>] => {
-                    if is_rtl { style.$transient_rtl = define_style!(@default $($transient_default)?) }
-                    else { style.$transient_ltr = define_style!(@default $($transient_default)?) }
+                    if is_rtl {
+                      style.[<$rtl_group _mut>]().$transient_rtl = define_style!(@default $($transient_default)?);
+                    } else {
+                      style.[<$ltr_group _mut>]().$transient_ltr = define_style!(@default $($transient_default)?);
+                    }
                   }
                 )*
                 _ => INITIAL_STYLE.with(|initial| style.copy_longhand(*property, initial)),
@@ -1096,11 +1216,14 @@ macro_rules! define_style {
               apply_deferred_declaration(style, None, deferred);
             }
             Self::VarRef(var_ref) => var_ref.apply(style, None),
-            $(Self::[<$longhand:camel>](value) => style.$longhand.clone_from(value),)*
+            $($(Self::[<$longhand:camel>](value) => style.[<$group _mut>]().$longhand.clone_from(value),)*)*
             $(
               Self::[<$transient:camel>](value) => {
-                if is_rtl { style.$transient_rtl.clone_from(value) }
-                else { style.$transient_ltr.clone_from(value) }
+                if is_rtl {
+                  style.[<$rtl_group _mut>]().$transient_rtl.clone_from(value);
+                } else {
+                  style.[<$ltr_group _mut>]().$transient_ltr.clone_from(value);
+                }
               }
             )*
           }
@@ -1110,14 +1233,14 @@ macro_rules! define_style {
       impl ToCss for StyleDeclaration {
         fn to_css<W: fmt::Write>(&self, dest: &mut W) -> fmt::Result {
           match self {
-            $(
+            $($(
               Self::[<$longhand:camel>](value) => {
                 dest.write_str(LonghandId::[<$longhand:camel>].css_name())?;
                 dest.write_str(": ")?;
                 value.to_css(dest)?;
                 dest.write_str(";")
               }
-            )*
+            )*)*
             $(
               Self::[<$transient:camel>](value) => {
                 dest.write_str(LonghandId::[<$transient:camel>].css_name())?;
@@ -1148,193 +1271,235 @@ macro_rules! define_style {
 }
 
 define_style! {
-  longhands {
-    box_sizing: BoxSizing,
-    opacity: PercentageNumber,
-    animation_name: AnimationNames,
-    animation_duration: AnimationDurations,
-    animation_delay: AnimationDurations,
-    animation_timing_function: AnimationTimingFunctions,
-    animation_iteration_count: AnimationIterationCounts,
-    animation_direction: AnimationDirections,
-    animation_fill_mode: AnimationFillModes,
-    animation_play_state: AnimationPlayStates,
-    display: Display,
-    width: Size where builder = manual,
-    height: Size where builder = manual,
-    max_width: MaxSize,
-    max_height: MaxSize,
-    min_width: Length,
-    min_height: Length,
-    aspect_ratio: AspectRatio,
-    padding_top: Length = Length::zero(),
-    padding_right: Length = Length::zero(),
-    padding_bottom: Length = Length::zero(),
-    padding_left: Length = Length::zero(),
-    margin_top: Length = Length::zero(),
-    margin_right: Length = Length::zero(),
-    margin_bottom: Length = Length::zero(),
-    margin_left: Length = Length::zero(),
-    top: Length,
-    right: Length,
-    bottom: Length,
-    left: Length,
-    flex_direction: FlexDirection,
-    justify_self: AlignItems,
-    justify_content: JustifyContent,
-    align_content: JustifyContent,
-    justify_items: AlignItems,
-    align_items: AlignItems,
-    align_self: AlignItems,
-    flex_wrap: FlexWrap,
-    flex_line_count: FlexLineCount,
-    flex_basis: Option<FlexBasis>,
-    order: Order,
-    z_index: ZIndex,
-    position: Position,
-    rotate: Option<Angle>,
-    scale: Option<SpacePair<PercentageNumber>>,
-    translate: SpacePair<Length>,
-    transform: Option<Transforms>,
-    transform_origin: PositionValue = PositionValue::center(),
-    offset_path: Option<OffsetPath>,
-    offset_distance: Length,
-    offset_rotate: OffsetRotate,
-    offset_anchor: OffsetAnchor,
-    offset_position: OffsetPosition,
-    mask_image: Option<BackgroundImages>,
-    mask_size: BackgroundSizes,
-    mask_position: PositionValues,
-    mask_repeat: BackgroundRepeats,
-    column_gap: Gap,
-    row_gap: Gap,
-    flex_grow: Option<FlexGrow>,
-    flex_shrink: Option<FlexGrow>,
-    border_top_left_radius: SpacePair<Length> where anonymous = true = SpacePair::from_single(Length::zero()),
-    border_top_right_radius: SpacePair<Length> where anonymous = true = SpacePair::from_single(Length::zero()),
-    border_bottom_right_radius: SpacePair<Length> where anonymous = true = SpacePair::from_single(Length::zero()),
-    border_bottom_left_radius: SpacePair<Length> where anonymous = true = SpacePair::from_single(Length::zero()),
-    corner_top_left_shape: Superellipse where anonymous = true,
-    corner_top_right_shape: Superellipse where anonymous = true,
-    corner_bottom_right_shape: Superellipse where anonymous = true,
-    corner_bottom_left_shape: Superellipse where anonymous = true,
-    border_top_width: LineWidth,
-    border_right_width: LineWidth,
-    border_bottom_width: LineWidth,
-    border_left_width: LineWidth,
-    border_top_style: BorderStyle,
-    border_right_style: BorderStyle,
-    border_bottom_style: BorderStyle,
-    border_left_style: BorderStyle,
-    border_top_color: ColorInput,
-    border_right_color: ColorInput,
-    border_bottom_color: ColorInput,
-    border_left_color: ColorInput,
-    outline_width: LineWidth,
-    outline_style: BorderStyle,
-    outline_color: ColorInput,
-    outline_offset: Length,
-    object_fit: ObjectFit where anonymous = true,
-    overflow_x: Overflow,
-    overflow_y: Overflow,
-    object_position: PositionValue where anonymous = true = PositionValue::center(),
-    background_image: Option<BackgroundImages> where anonymous = true,
-    background_position: PositionValues where anonymous = true,
-    background_size: BackgroundSizes where anonymous = true,
-    background_repeat: BackgroundRepeats where anonymous = true,
-    background_blend_mode: BlendModes where anonymous = true,
-    background_color: ColorInput where anonymous = true = ColorInput::transparent(),
-    background_clip: BackgroundClip where anonymous = true,
-    background_origin: BackgroundOrigin,
-    box_shadow: Option<BoxShadows>,
-    grid_auto_columns: Option<GridTrackSizes>,
-    grid_auto_rows: Option<GridTrackSizes>,
-    grid_auto_flow: GridAutoFlow,
-    grid_row_start: GridPlacement,
-    grid_row_end: GridPlacement,
-    grid_column_start: GridPlacement,
-    grid_column_end: GridPlacement,
-    grid_template_columns: Option<GridTemplateComponents>,
-    grid_template_rows: Option<GridTemplateComponents>,
-    grid_template_areas: Option<GridTemplateAreas>,
-    text_overflow: TextOverflow where anonymous = true,
-    text_fit: TextFit where inherit = true,
-    text_transform: TextTransform where inherit = true,
-    font_style: FontStyle where inherit = true,
-    font_stretch: FontStretch where inherit = true,
-    color: ColorInput where inherit = true,
-    filter: Filters,
-    backdrop_filter: Filters,
-    font_size: FontSize where inherit = true,
-    font_family: FontFamily where inherit = true,
-    line_height: LineHeight where inherit = true,
-    font_weight: FontWeight where inherit = true,
-    font_variation_settings: FontVariationSettings where inherit = true,
-    font_feature_settings: FontFeatureSettings where inherit = true,
-    font_variant_ligatures: FontVariantLigatures where inherit = true,
-    font_variant_numeric: FontVariantNumeric where inherit = true,
-    font_variant_east_asian: FontVariantEastAsian where inherit = true,
-    font_variant_caps: FontVariantCaps where inherit = true,
-    font_variant_position: FontVariantPosition where inherit = true,
-    font_kerning: FontKerning where inherit = true,
-    font_synthesis_weight: FontSynthesic where inherit = true,
-    font_synthesis_style: FontSynthesic where inherit = true,
-    max_lines: Option<u32> where anonymous = true,
-    block_ellipsis: BlockEllipsis where inherit = true,
-    r#continue: Continue where anonymous = true,
-    text_align: TextAlign where inherit = true,
-    webkit_text_stroke_width: Option<Length> where inherit = true,
-    webkit_text_stroke_color: Option<ColorInput> where inherit = true,
-    webkit_text_fill_color: Option<ColorInput> where inherit = true,
-    stroke_linejoin: LineJoin where inherit = true,
-    text_shadow: Option<TextShadows> where inherit = true,
-    text_decoration_line: Option<TextDecorationLines>,
-    text_decoration_style: TextDecorationStyle,
-    break_before: BreakBetween,
-    break_after: BreakBetween,
-    break_inside: BreakInside,
-    box_decoration_break: BoxDecorationBreak,
-    widows: MinLines where inherit = true,
-    orphans: MinLines where inherit = true,
-    text_decoration_color: ColorInput,
-    text_decoration_thickness: TextDecorationThickness,
-    text_underline_offset: TextUnderlineOffset where inherit = true,
-    text_underline_position: TextUnderlinePosition where inherit = true,
-    text_decoration_skip_ink: TextDecorationSkipInk where inherit = true,
-    text_indent: TextIndent where inherit = true,
-    letter_spacing: Length where inherit = true,
-    word_spacing: Length where inherit = true,
-    image_rendering: ImageScalingAlgorithm where inherit = true,
-    overflow_wrap: OverflowWrap where inherit = true,
-    word_break: WordBreak where inherit = true,
-    clip_path: Option<BasicShape>,
-    clip_rule: FillRule where inherit = true,
-    white_space_collapse: WhiteSpaceCollapse where inherit = true,
-    tab_size: TabSize where inherit = true,
-    text_wrap_mode: TextWrapMode where inherit = true,
-    text_wrap_style: TextWrapStyle where inherit = true,
-    direction: Direction where inherit = true,
-    float: Float,
-    clear: Clear,
-    contain: Contain,
-    isolation: Isolation,
-    mix_blend_mode: BlendMode,
-    visibility: Visibility where inherit = true,
-    caption_side: CaptionSide where inherit = true,
-    border_collapse: BorderCollapse where inherit = true,
-    table_layout: TableLayout,
-    border_spacing: BorderSpacing where inherit = true,
-    vertical_align: VerticalAlign,
-    content: ContentValue,
-    list_style_type: ListStyleType where inherit = true,
-    list_style_position: ListStylePosition where inherit = true,
-    list_style_image: ListStyleImage where inherit = true,
+  groups {
+    /// Non-inherited fields Blink keeps on `ComputedStyleBase` itself rather than in a group.
+    base_data: StyleBaseData {
+      display: Display,
+      position: Position,
+      overflow_x: Overflow,
+      overflow_y: Overflow,
+      float: Float,
+      clear: Clear,
+      table_layout: TableLayout,
+      vertical_align: VerticalAlign,
+    }
+    /// Blink's `box` field group: sizes, margins, padding, and border widths and styles.
+    box_data: StyleBoxData {
+      box_sizing: BoxSizing,
+      width: Size where builder = manual,
+      height: Size where builder = manual,
+      max_width: MaxSize,
+      max_height: MaxSize,
+      min_width: Length,
+      min_height: Length,
+      padding_top: Length = Length::zero(),
+      padding_right: Length = Length::zero(),
+      padding_bottom: Length = Length::zero(),
+      padding_left: Length = Length::zero(),
+      margin_top: Length = Length::zero(),
+      margin_right: Length = Length::zero(),
+      margin_bottom: Length = Length::zero(),
+      margin_left: Length = Length::zero(),
+      justify_content: JustifyContent,
+      align_items: AlignItems,
+      z_index: ZIndex,
+      border_top_width: LineWidth,
+      border_right_width: LineWidth,
+      border_bottom_width: LineWidth,
+      border_left_width: LineWidth,
+      border_top_style: BorderStyle,
+      border_right_style: BorderStyle,
+      border_bottom_style: BorderStyle,
+      border_left_style: BorderStyle,
+      box_decoration_break: BoxDecorationBreak,
+    }
+    /// Blink's `surround` field group: insets, corner radii, and border colors.
+    surround_data: StyleSurroundData {
+      aspect_ratio: AspectRatio,
+      top: Length,
+      right: Length,
+      bottom: Length,
+      left: Length,
+      border_top_left_radius: SpacePair<Length> where anonymous = true = SpacePair::from_single(Length::zero()),
+      border_top_right_radius: SpacePair<Length> where anonymous = true = SpacePair::from_single(Length::zero()),
+      border_bottom_right_radius: SpacePair<Length> where anonymous = true = SpacePair::from_single(Length::zero()),
+      border_bottom_left_radius: SpacePair<Length> where anonymous = true = SpacePair::from_single(Length::zero()),
+      corner_top_left_shape: Superellipse where anonymous = true,
+      corner_top_right_shape: Superellipse where anonymous = true,
+      corner_bottom_right_shape: Superellipse where anonymous = true,
+      corner_bottom_left_shape: Superellipse where anonymous = true,
+      border_top_color: ColorInput,
+      border_right_color: ColorInput,
+      border_bottom_color: ColorInput,
+      border_left_color: ColorInput,
+    }
+    /// Blink's `background` field group.
+    background_data: StyleBackgroundData {
+      background_image: Option<BackgroundImages> where anonymous = true,
+      background_position: PositionValues where anonymous = true,
+      background_size: BackgroundSizes where anonymous = true,
+      background_repeat: BackgroundRepeats where anonymous = true,
+      background_blend_mode: BlendModes where anonymous = true,
+      background_color: ColorInput where anonymous = true = ColorInput::transparent(),
+      background_clip: BackgroundClip where anonymous = true,
+      background_origin: BackgroundOrigin,
+    }
+    /// Blink's `visual` field group.
+    visual_data: StyleVisualData {
+      text_decoration_line: Option<TextDecorationLines>,
+    }
+    /// Blink's `svg` field group, where it keeps `opacity` and `transform` for SVG to read.
+    svg_data: StyleSvgData {
+      opacity: PercentageNumber,
+      transform: Option<Transforms>,
+      transform_origin: PositionValue = PositionValue::center(),
+    }
+    /// Blink's `misc` field group: its rarely set non-inherited fields under eight bits.
+    misc_data: StyleMiscData {
+      flex_direction: FlexDirection,
+      justify_self: AlignItems,
+      align_content: JustifyContent,
+      justify_items: AlignItems,
+      align_self: AlignItems,
+      flex_wrap: FlexWrap,
+      outline_style: BorderStyle,
+      object_fit: ObjectFit where anonymous = true,
+      r#continue: Continue where anonymous = true,
+      text_decoration_style: TextDecorationStyle,
+      break_before: BreakBetween,
+      break_after: BreakBetween,
+      break_inside: BreakInside,
+      contain: Contain,
+      isolation: Isolation,
+      mix_blend_mode: BlendMode,
+    }
+    /// Blink's `misc->misc1` field group, which Blink nests in `misc`.
+    misc1_data: StyleMisc1Data {
+      animation_delay: AnimationDurations,
+      animation_direction: AnimationDirections,
+      animation_duration: AnimationDurations,
+      animation_fill_mode: AnimationFillModes,
+      animation_iteration_count: AnimationIterationCounts,
+      animation_name: AnimationNames,
+      animation_play_state: AnimationPlayStates,
+      animation_timing_function: AnimationTimingFunctions,
+      backdrop_filter: Filters,
+      box_shadow: Option<BoxShadows>,
+      clip_path: Option<BasicShape>,
+      column_gap: Gap,
+      content: ContentValue,
+      filter: Filters,
+      flex_basis: Option<FlexBasis>,
+      flex_grow: Option<FlexGrow>,
+    }
+    /// Blink's `misc->misc2` field group, which Blink nests in `misc`.
+    misc2_data: StyleMisc2Data {
+      flex_line_count: FlexLineCount,
+      flex_shrink: Option<FlexGrow>,
+      grid_auto_columns: Option<GridTrackSizes>,
+      grid_auto_flow: GridAutoFlow,
+      grid_auto_rows: Option<GridTrackSizes>,
+      grid_column_end: GridPlacement,
+      grid_column_start: GridPlacement,
+      grid_row_end: GridPlacement,
+      grid_row_start: GridPlacement,
+      grid_template_areas: Option<GridTemplateAreas>,
+      grid_template_columns: Option<GridTemplateComponents>,
+      grid_template_rows: Option<GridTemplateComponents>,
+      mask_image: Option<BackgroundImages>,
+      mask_position: PositionValues,
+      mask_repeat: BackgroundRepeats,
+      mask_size: BackgroundSizes,
+    }
+    /// Blink's `misc->misc3` field group, which Blink nests in `misc`.
+    misc3_data: StyleMisc3Data {
+      max_lines: Option<u32> where anonymous = true,
+      object_position: PositionValue where anonymous = true = PositionValue::center(),
+      offset_anchor: OffsetAnchor,
+      offset_distance: Length,
+      offset_path: Option<OffsetPath>,
+      offset_position: OffsetPosition,
+      offset_rotate: OffsetRotate,
+      order: Order,
+      outline_color: ColorInput,
+      outline_offset: Length,
+      outline_width: LineWidth,
+      rotate: Option<Angle>,
+      row_gap: Gap,
+      scale: Option<SpacePair<PercentageNumber>>,
+      text_decoration_color: ColorInput,
+      text_decoration_thickness: TextDecorationThickness,
+    }
+    /// Blink's `misc->misc4` field group, which Blink nests in `misc`.
+    misc4_data: StyleMisc4Data {
+      text_overflow: TextOverflow where anonymous = true,
+      translate: SpacePair<Length>,
+    }
+    /// Blink's `inherited` field group, plus the inherited fields Blink keeps on `ComputedStyleBase` itself.
+    inherited_data: StyleInheritedData {
+      text_transform: TextTransform where inherit = true,
+      font_style: FontStyle where inherit = true,
+      font_stretch: FontStretch where inherit = true,
+      color: ColorInput where inherit = true,
+      font_size: FontSize where inherit = true,
+      font_family: FontFamily where inherit = true,
+      line_height: LineHeight where inherit = true,
+      font_weight: FontWeight where inherit = true,
+      font_variation_settings: FontVariationSettings where inherit = true,
+      font_feature_settings: FontFeatureSettings where inherit = true,
+      font_variant_ligatures: FontVariantLigatures where inherit = true,
+      font_variant_numeric: FontVariantNumeric where inherit = true,
+      font_variant_east_asian: FontVariantEastAsian where inherit = true,
+      font_variant_caps: FontVariantCaps where inherit = true,
+      font_variant_position: FontVariantPosition where inherit = true,
+      font_kerning: FontKerning where inherit = true,
+      font_synthesis_weight: FontSynthesic where inherit = true,
+      font_synthesis_style: FontSynthesic where inherit = true,
+      text_align: TextAlign where inherit = true,
+      letter_spacing: Length where inherit = true,
+      word_spacing: Length where inherit = true,
+      white_space_collapse: WhiteSpaceCollapse where inherit = true,
+      text_wrap_mode: TextWrapMode where inherit = true,
+      text_wrap_style: TextWrapStyle where inherit = true,
+      direction: Direction where inherit = true,
+      visibility: Visibility where inherit = true,
+      caption_side: CaptionSide where inherit = true,
+      border_collapse: BorderCollapse where inherit = true,
+      border_spacing: BorderSpacing where inherit = true,
+      list_style_position: ListStylePosition where inherit = true,
+    }
+    /// Blink's `misc-inherited` field group: its rarely set inherited fields under eight bits.
+    misc_inherited_data: StyleMiscInheritedData {
+      stroke_linejoin: LineJoin where inherit = true,
+      text_underline_position: TextUnderlinePosition where inherit = true,
+      text_decoration_skip_ink: TextDecorationSkipInk where inherit = true,
+      image_rendering: ImageScalingAlgorithm where inherit = true,
+      overflow_wrap: OverflowWrap where inherit = true,
+      word_break: WordBreak where inherit = true,
+      clip_rule: FillRule where inherit = true,
+    }
+    /// Blink's `misc-inherited->misc-inherited1` field group, which Blink nests in `misc-inherited`.
+    misc_inherited1_data: StyleMiscInherited1Data {
+      block_ellipsis: BlockEllipsis where inherit = true,
+      list_style_image: ListStyleImage where inherit = true,
+      list_style_type: ListStyleType where inherit = true,
+      orphans: MinLines where inherit = true,
+      tab_size: TabSize where inherit = true,
+      text_fit: TextFit where inherit = true,
+      text_indent: TextIndent where inherit = true,
+      text_shadow: Option<TextShadows> where inherit = true,
+      text_underline_offset: TextUnderlineOffset where inherit = true,
+      webkit_text_fill_color: Option<ColorInput> where inherit = true,
+      webkit_text_stroke_color: Option<ColorInput> where inherit = true,
+      webkit_text_stroke_width: Option<Length> where inherit = true,
+      widows: MinLines where inherit = true,
+    }
   }
   transient_longhands {
-    margin_inline_start: Length = Length::zero() => (margin_left, margin_right),
-    margin_inline_end: Length = Length::zero() => (margin_right, margin_left),
-    padding_inline_start: Length = Length::zero() => (padding_left, padding_right),
-    padding_inline_end: Length = Length::zero() => (padding_right, padding_left),
+    margin_inline_start: Length = Length::zero() => (box_data.margin_left, box_data.margin_right),
+    margin_inline_end: Length = Length::zero() => (box_data.margin_right, box_data.margin_left),
+    padding_inline_start: Length = Length::zero() => (box_data.padding_left, box_data.padding_right),
+    padding_inline_end: Length = Length::zero() => (box_data.padding_right, box_data.padding_left),
   }
   shorthands {
     list_style: ListStyleShorthand => [ListStyleType, ListStylePosition, ListStyleImage] |value, target| {

@@ -199,6 +199,7 @@ impl BuiltInlineLayout<'_> {
           .owner
           .context
           .style
+          .visual_data
           .text_decoration_line
           .is_some_and(|line| !line.is_empty())
       })

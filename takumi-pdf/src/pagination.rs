@@ -179,7 +179,7 @@ impl HeaderBand {
       let Some(child) = rows.get(ordered.render_index) else {
         continue;
       };
-      let GridPlacement::Line(line) = child.context.style.grid_row_start else {
+      let GridPlacement::Line(line) = child.context.style.misc2_data.grid_row_start else {
         continue;
       };
       let Ok(cell) = tree.scene.results.layout(ordered.node_id) else {
@@ -190,7 +190,7 @@ impl HeaderBand {
         // A header cell whose rowspan reaches into the body would replay body
         // area with the band; such a table does not repeat.
         let GridPlacement::Span(GridPlacementSpan::Span(rowspan)) =
-          child.context.style.grid_row_end
+          child.context.style.misc2_data.grid_row_end
         else {
           return;
         };

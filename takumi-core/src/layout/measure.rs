@@ -117,7 +117,7 @@ impl MeasuredNode {
               .collect();
 
             (runs, children)
-          } else if current.context.style.display != Display::None
+          } else if current.context.style.base_data.display != Display::None
             // Paint always draws a text node's own text, even when generated
             // content gave it box children; its runs sit beside those children.
             && !current.has_anonymous_text_item_child()

@@ -264,7 +264,7 @@ impl Walker {
           image: source.clone(),
           rect,
           clip,
-          sampling: Sampling::of(context.style.image_rendering),
+          sampling: Sampling::of(context.style.misc_inherited_data.image_rendering),
         }],
         children: Vec::new(),
         kind: NodeKind::Image { image: source },
@@ -792,12 +792,14 @@ fn effects(painter: &BoxPainter<'_>, layout: ComputedLayout) -> Effects {
   let style = &context.style;
   let size = layout.size;
   let backdrop: Vec<Filter> = style
+    .misc1_data
     .backdrop_filter
     .iter()
     .filter(|filter| !filter.is_drop_shadow())
     .cloned()
     .collect();
   let mask = style
+    .misc2_data
     .mask_image
     .as_deref()
     .filter(|images| images.iter().any(BackgroundImage::paints))
@@ -823,10 +825,10 @@ fn effects(painter: &BoxPainter<'_>, layout: ComputedLayout) -> Effects {
     });
 
   Effects {
-    opacity: style.opacity.0,
-    blend_mode: style.mix_blend_mode.to_css_string(),
-    isolation: style.isolation == Isolation::Isolate,
-    filters: PaintFilter::chain(&style.filter, size, context),
+    opacity: style.svg_data.opacity.0,
+    blend_mode: style.misc_data.mix_blend_mode.to_css_string(),
+    isolation: style.misc_data.isolation == Isolation::Isolate,
+    filters: PaintFilter::chain(&style.misc1_data.filter, size, context),
     backdrop_clip: (!backdrop.is_empty()).then(|| {
       Shape::of(
         &BackgroundClipArea::BorderBox(*painter.border())
@@ -845,7 +847,12 @@ fn effects(painter: &BoxPainter<'_>, layout: ComputedLayout) -> Effects {
 
 /// `text-align` with `start` and `end` resolved against the direction.
 fn text_align(context: &RenderContext) -> &'static str {
-  match context.style.text_align.resolve(context.style.direction) {
+  match context
+    .style
+    .inherited_data
+    .text_align
+    .resolve(context.style.inherited_data.direction)
+  {
     TextAlign::Right => "right",
     TextAlign::Center => "center",
     TextAlign::Justify => "justify",
