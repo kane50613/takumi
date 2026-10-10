@@ -16,6 +16,8 @@ pub mod jpeg_output;
 pub mod paint_bounds_ink_reach;
 #[path = "fixtures/paint_bounds_text_ink.rs"]
 pub mod paint_bounds_text_ink;
+#[path = "fixtures/png_output.rs"]
+pub mod png_output;
 #[path = "fixtures/style_background_image.rs"]
 pub mod style_background_image;
 #[path = "fixtures/style_opacity.rs"]

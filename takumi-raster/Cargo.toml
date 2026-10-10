@@ -10,6 +10,7 @@ rust-version = "1.91"
 
 [dependencies]
 png.workspace = true
+simd-adler32.workspace = true
 gif.workspace = true
 jpeg-encoder.workspace = true
 color.workspace = true
@@ -41,6 +42,10 @@ default-features = false
 [dependencies.serde]
 workspace = true
 features = ["rc"]
+
+[dependencies.flate2]
+workspace = true
+features = ["zlib-rs"]
 
 [dependencies.image]
 workspace = true

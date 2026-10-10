@@ -34,6 +34,7 @@ mod stacking_context;
 mod text_drawing;
 mod webp;
 mod write;
+mod zlib;
 
 pub(crate) use background_drawing::*;
 pub(crate) use canvas::*;
