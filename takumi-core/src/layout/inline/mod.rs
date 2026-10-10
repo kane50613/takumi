@@ -1561,6 +1561,7 @@ mod tests {
     context::RenderContext,
     geometry::{PathCommand, Point, Rect},
     layout::{node::Node, tree::RenderNode},
+    painter::OwnContent,
     resources::font::{FontOverride, FontResource, GenericFamily},
     style::{
       Affine, AppliedTextDecoration, BorderStyle, Color, ColorInput, Display, FontSize, Length,
@@ -1815,6 +1816,40 @@ mod tests {
 
     assert!(simple > 50, "{simple} simple glyphs");
     assert_eq!(full, 0);
+  }
+
+  #[test]
+  fn fragment_items_stay_with_the_node_until_cleared() {
+    let fonts = create_test_context();
+    let context = RenderContext::builder()
+      .fonts(fonts.snapshot_with_fallbacks(None))
+      .sizing(
+        SizingContext::builder()
+          .viewport(Viewport::new((200, 630)))
+          .build(),
+      )
+      .build();
+    let node = Node::container([Node::text("Some text.".to_string())])
+      .with_style(Style::default().with(StyleDeclaration::display(Display::Block)));
+    let render_node = RenderNode::from_node(&context, node);
+    let font_style = SizedFontStyle::from_style(&render_node.context.style, &render_node.context);
+    let layout = ComputedLayout {
+      location: Point::ZERO,
+      size: Size::new(200.0, 630.0),
+      border: Rect::default(),
+      padding: Rect::default(),
+    };
+
+    assert!(
+      OwnContent::of(&render_node)
+        .lay_out_inline(&font_style, layout)
+        .is_some_and(|painted| painted.is_ok())
+    );
+    assert!(render_node.fragment_items_in(layout).is_some());
+    assert!(render_node.clone().fragment_items_in(layout).is_none());
+
+    render_node.clear_fragment_items();
+    assert!(render_node.fragment_items_in(layout).is_none());
   }
 
   #[test]

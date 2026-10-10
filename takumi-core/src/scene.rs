@@ -615,6 +615,7 @@ pub struct Scene {
 impl Scene {
   /// Lays `root` out in `viewport` and builds its scene at the origin.
   pub fn lay_out(root: RenderNode, viewport: Viewport, paint_bounds: bool) -> Result<Self> {
+    root.clear_fragment_items();
     let results = LayoutResults::compute(&root, viewport.into());
     let container_size = Size::from(viewport.size);
     let size = container_size.zip_map(results.layout(NodeId::ROOT)?.size, Option::unwrap_or);

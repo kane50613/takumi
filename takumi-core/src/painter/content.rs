@@ -133,7 +133,7 @@ impl<'n> OwnContent<'n> {
     let runs = fragment.resolve_runs(&built.spans, context, layout);
 
     if !fragment.ellipsized {
-      *node.fragment_items.borrow_mut() = Some(Rc::clone(&fragment));
+      node.fragment_items.keep(Rc::clone(&fragment));
     }
     let BuiltInlineLayout { spans, .. } = built;
 
