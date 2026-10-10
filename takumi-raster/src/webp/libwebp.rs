@@ -171,7 +171,12 @@ pub(crate) fn write_webp_lossy(
   destination: &mut impl Write,
   quality: Quality,
 ) -> Result<()> {
-  write_webp(image, destination, webp_config(false, quality.get(), 1)?)
+  let mut config = webp_config(false, quality.get(), 1)?;
+
+  // A second thread splits the analysis pass and encodes alpha beside the
+  // image. libwebp writes the same bytes either way.
+  config.thread_level = 1;
+  write_webp(image, destination, config)
 }
 
 pub(crate) fn write_webp_lossless(
@@ -401,6 +406,24 @@ mod tests {
       .count();
 
     assert_eq!(differing, 0, "lossless encode altered {differing} pixels");
+  }
+
+  #[test]
+  fn threaded_lossy_writes_the_single_thread_bytes() {
+    let image = RgbaImage::from_fn(256, 256, |x, y| {
+      Rgba([x as u8, y as u8, (x ^ y) as u8, (x + y) as u8])
+    });
+    let mut threaded = Vec::new();
+    write_webp_lossy(Cow::Borrowed(&image), &mut threaded, Quality::default()).unwrap();
+
+    let single = encode_picture(
+      &image,
+      &FrameRegion::full(256, 256),
+      &webp_config(false, Quality::default().get(), 1).unwrap(),
+    )
+    .unwrap();
+
+    assert_eq!(threaded, single.as_ref());
   }
 
   #[test]
