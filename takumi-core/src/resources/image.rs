@@ -958,7 +958,8 @@ pub(crate) type SharedResourceCache = Cache<ResourceCacheKey, CacheEntry, Resour
 
 /// Content-addressed store of decoded render resources — images, SVG rasters,
 /// parsed stylesheets — sharing one byte budget, used by the renderer to avoid
-/// re-decoding and re-parsing.
+/// re-decoding and re-parsing. Clones share the same store.
+#[derive(Clone)]
 pub struct ResourceCache {
   cache: Arc<SharedResourceCache>,
 }

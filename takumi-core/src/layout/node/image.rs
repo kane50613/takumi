@@ -6,7 +6,10 @@ use crate::{
   context::RenderContext,
   geometry::{AvailableSpace, Size},
   layout::node::{ImageData, ImageSourceInput},
-  resources::image::{ImageError, ImageResult, ImageSource, decode_data_uri, is_svg_like},
+  resources::image::{
+    ImageCacheMode, ImageError, ImageResult, ImageSource, ResourceCache, decode_data_uri,
+    is_svg_like,
+  },
   style::{Length, Style, StyleDeclaration},
 };
 
@@ -248,16 +251,20 @@ fn resolve_style_size_axis(
 
 const DATA_URI_PREFIX: &str = "data:";
 
-fn parse_data_uri_image(src: &str) -> ImageResult {
+/// The image a `data:` URI holds, decoded through `cache` when the render has one.
+fn parse_data_uri_image(src: &str, cache: Option<&ResourceCache>) -> ImageResult {
   let decoded = decode_data_uri(src).map_err(|_| ImageError::InvalidDataUriFormat)?;
 
-  ImageSource::from_bytes_lazy(&decoded.bytes, 0, Weak::new())
+  match cache {
+    Some(cache) => cache.get_or_decode(&decoded.bytes, ImageCacheMode::Auto),
+    None => ImageSource::from_bytes_lazy(&decoded.bytes, 0, Weak::new()),
+  }
 }
 
 /// Resolve an image source string (data URI, SVG, or registered URL) to its bytes.
 pub fn resolve_image(src: &str, context: &RenderContext) -> ImageResult {
   if src.starts_with(DATA_URI_PREFIX) {
-    return parse_data_uri_image(src);
+    return parse_data_uri_image(src, context.resource_cache());
   }
 
   if is_svg_like(src) {
@@ -282,7 +289,7 @@ mod tests {
   use serde_json::from_value;
   use taffy::{Dimension, Size as TaffySize, Style};
 
-  #[cfg(feature = "svg")]
+  #[cfg(any(feature = "svg", feature = "png"))]
   use super::parse_data_uri_image;
   use crate::{
     Fonts,
@@ -299,10 +306,37 @@ mod tests {
   fn parse_data_uri_svg_with_unescaped_hash() {
     let source = parse_data_uri_image(
       "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='10'><rect width='10' height='10' fill='#f00'/></svg>",
+      None,
     )
     .unwrap();
 
     assert_matches!(source, ImageSource::Svg(_));
+  }
+
+  #[cfg(feature = "png")]
+  #[test]
+  fn a_data_uri_decodes_once_per_cache() {
+    use std::sync::Arc;
+
+    use image::{ImageEncoder, codecs::png::PngEncoder};
+
+    use crate::resources::image::{ResourceCache, to_data_url};
+
+    let mut png = Vec::new();
+
+    PngEncoder::new(&mut png)
+      .write_image(&[255; 4 * 4 * 4], 4, 4, image::ExtendedColorType::Rgba8)
+      .unwrap();
+
+    let uri = to_data_url("image/png", &png);
+    let cache = ResourceCache::default();
+    let first = parse_data_uri_image(&uri, Some(&cache)).unwrap();
+    let second = parse_data_uri_image(&uri, Some(&cache)).unwrap();
+
+    assert_matches!(
+      (first, second),
+      (ImageSource::Encoded(first), ImageSource::Encoded(second)) if Arc::ptr_eq(&first, &second)
+    );
   }
 
   #[test]
