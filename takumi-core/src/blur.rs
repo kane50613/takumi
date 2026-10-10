@@ -46,9 +46,12 @@ fn blur<const N: usize>(
   let Some(pass) = Pass::new(sigma, rounding) else {
     return;
   };
+  let parallel = pixels.len() * N >= PARALLEL_CHANNELS;
+
   // Rows blur as the columns of a transposed strip, so both axes run the vectorized column pass.
   for_each_with(
     pixels.chunks_mut(ROW_STRIP * width).collect(),
+    parallel,
     || vec![[0u8; N]; ROW_STRIP * width],
     |strip, rows| {
       let lanes = rows.len() / width;
@@ -59,7 +62,7 @@ fn blur<const N: usize>(
           column[lane] = *pixel;
         }
       }
-      pass.blur_columns(strip, lanes);
+      pass.blur_columns(strip, lanes, false);
       for (lane, row) in rows.chunks_exact_mut(width).enumerate() {
         for (column, pixel) in strip.chunks_exact(lanes).zip(row) {
           *pixel = column[lane];
@@ -67,27 +70,33 @@ fn blur<const N: usize>(
       }
     },
   );
-  pass.blur_columns(pixels, width);
-}
-
-/// Runs `work` on each item with scratch state from `init`, across threads with `rayon`.
-fn for_each_with<T: Send, S>(
-  items: Vec<T>,
-  init: impl Fn() -> S + Send + Sync,
-  work: impl Fn(&mut S, T) + Send + Sync,
-) {
-  #[cfg(feature = "rayon")]
-  items.into_par_iter().for_each_init(init, work);
-  #[cfg(not(feature = "rayon"))]
-  {
-    let mut state = init();
-
-    items.into_iter().for_each(|item| work(&mut state, item));
-  }
+  pass.blur_columns(pixels, width, parallel);
 }
 
 /// Rows the horizontal pass transposes at once.
 const ROW_STRIP: usize = 16;
+
+/// Smallest image, in channels, worth spreading across threads; a glyph's shadow mask stays on one.
+const PARALLEL_CHANNELS: usize = 1 << 18;
+
+/// Runs `work` on each item with scratch state from `init`, across threads when `parallel` and
+/// built with `rayon`.
+fn for_each_with<T: Send, S>(
+  items: Vec<T>,
+  #[cfg_attr(not(feature = "rayon"), allow(unused_variables))] parallel: bool,
+  init: impl Fn() -> S + Send + Sync,
+  work: impl Fn(&mut S, T) + Send + Sync,
+) {
+  #[cfg(feature = "rayon")]
+  if parallel {
+    items.into_par_iter().for_each_init(init, work);
+    return;
+  }
+
+  let mut state = init();
+
+  items.into_iter().for_each(|item| work(&mut state, item));
+}
 
 /// Shrinks, blurs and scales back past `MAX_SIGMA`, as Skia's `FilterResult::Builder::blur` does.
 ///
@@ -299,10 +308,10 @@ impl Pass {
     ThreeBoxPass::new(sigma.min(MAX_SIGMA), rounding).map(Self::ThreeBox)
   }
 
-  fn blur_columns<const N: usize>(&self, pixels: &mut [[u8; N]], width: usize) {
+  fn blur_columns<const N: usize>(&self, pixels: &mut [[u8; N]], width: usize, parallel: bool) {
     match self {
-      Self::Gaussian(pass) => pass.blur_columns(pixels, width),
-      Self::ThreeBox(pass) => pass.blur_columns(pixels, width),
+      Self::Gaussian(pass) => pass.blur_columns(pixels, width, parallel),
+      Self::ThreeBox(pass) => pass.blur_columns(pixels, width, parallel),
     }
   }
 }
@@ -374,13 +383,14 @@ impl GaussianPass {
     Self { kernel }
   }
 
-  fn blur_columns<const N: usize>(&self, pixels: &mut [[u8; N]], width: usize) {
+  fn blur_columns<const N: usize>(&self, pixels: &mut [[u8; N]], width: usize, parallel: bool) {
     let window = self.kernel.len();
     // Every channel of a band's row is a lane; `next` is the oldest row in the ring.
     let lanes = band_columns::<N>(width) * N;
 
     for_each_with(
       column_bands(pixels, width),
+      parallel,
       || (vec![0.0f32; window * lanes], vec![0.0f32; lanes]),
       |(ring, sums), mut rows| {
         let channels = rows[0].len() * N;
@@ -458,7 +468,7 @@ impl ThreeBoxPass {
     })
   }
 
-  fn blur_columns<const N: usize>(&self, pixels: &mut [[u8; N]], width: usize) {
+  fn blur_columns<const N: usize>(&self, pixels: &mut [[u8; N]], width: usize, parallel: bool) {
     let pass = self.window - 1;
     let last = if self.window.is_multiple_of(2) {
       pass + 1
@@ -471,6 +481,7 @@ impl ThreeBoxPass {
 
     for_each_with(
       column_bands(pixels, width),
+      parallel,
       || BoxRings::new(lanes, pass, last),
       |rings, mut rows| {
         let channels = rows[0].len() * N;
