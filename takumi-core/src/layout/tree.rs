@@ -1306,11 +1306,12 @@ impl<'r> LayoutTree<'r> {
             )
           };
 
-          // A box measured whole at a definite width mostly lays out at that size, so its
+          // A block-level box measured whole at a definite width lays out at that size, so its
           // fragment items laid out now let its shaped text go before the boxes after it shape
-          // theirs; layout lays it out again only at a size it was not measured at.
+          // theirs. A flex or grid item is measured at sizes its container then changes.
           if tree.keeps_fragment_items
             && lays_out_text
+            && !node_data.flex_or_grid_item
             && inputs.run_mode == RunMode::ComputeSize
             && inputs.axis == RequestedAxis::Both
             && matches!(

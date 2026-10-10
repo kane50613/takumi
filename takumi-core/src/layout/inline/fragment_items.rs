@@ -722,17 +722,23 @@ impl FragmentItems {
       });
     }
 
-    let owners = span_owners(spans);
+    let background_fragments = if self.backgrounds.is_empty() {
+      Vec::new()
+    } else {
+      let owners = span_owners(spans);
+
+      self
+        .backgrounds
+        .iter()
+        .filter_map(|item| Some(item.resolve(*owners.get(&item.span)?)))
+        .collect()
+    };
 
     Ok(InlineRunLayout {
       runs,
       inline_boxes: self.inline_boxes.clone(),
       outline_rects: self.outline_rects.clone(),
-      background_fragments: self
-        .backgrounds
-        .iter()
-        .filter_map(|item| Some(item.resolve(*owners.get(&item.span)?)))
-        .collect(),
+      background_fragments,
     })
   }
 }
