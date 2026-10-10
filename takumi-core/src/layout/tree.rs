@@ -33,6 +33,7 @@ use crate::{
     table_columns::TableColumns,
   },
   matching::{MatchedDeclarationsView, NodeMatchedDeclarations, match_stylesheets_view},
+  painter::OwnContent,
   resources::font::PrimaryFontMetrics,
   sort_key::sort_by_key,
   style::{
@@ -146,8 +147,26 @@ struct LayoutResultNode {
 impl LayoutResults {
   /// Lays out the tree under `root` in `available_space`.
   pub fn compute(root: &RenderNode, available_space: Size<AvailableSpace>) -> Self {
+    Self::lay_out(root, available_space, false)
+  }
+
+  /// [`Self::compute`] for paint: each inline formatting context keeps the fragment items it
+  /// lays out to, and lets go of the shaped text no other box shares.
+  pub(crate) fn compute_for_paint(
+    root: &RenderNode,
+    available_space: Size<AvailableSpace>,
+  ) -> Self {
+    Self::lay_out(root, available_space, true)
+  }
+
+  fn lay_out(
+    root: &RenderNode,
+    available_space: Size<AvailableSpace>,
+    keeps_fragment_items: bool,
+  ) -> Self {
     let mut tree = LayoutTree::from_render_node(root);
 
+    tree.keeps_fragment_items = keeps_fragment_items;
     tree.compute_layout(available_space);
     tree.into_results()
   }
@@ -227,6 +246,9 @@ pub struct LayoutTree<'r> {
   /// both axes, while only inline boxes see the available height, so a context without them is
   /// keyed on its width constraint alone.
   inline_measures: RefCell<HashMap<InlineMeasureKey, Size<f32>>>,
+  /// Whether each inline formatting context keeps the fragment items it lays out to, as a layout
+  /// that paint reads does.
+  keeps_fragment_items: bool,
 }
 
 /// A node and the constraint it is measured under, as bits.
@@ -425,6 +447,7 @@ impl<'r> LayoutTree<'r> {
       out_of_flow_positions: HashMap::new(),
       inline_containing_blocks: Vec::new(),
       inline_measures: RefCell::default(),
+      keeps_fragment_items: false,
     };
     let root_id = tree.push_subtree(render_root);
 
@@ -1139,6 +1162,11 @@ impl LayoutPartialTree for LayoutTree<'_> {
     };
 
     node.unrounded_layout = *layout;
+    if self.keeps_fragment_items
+      && let Some(render_node) = self.render_nodes.get(usize::from(node_id))
+    {
+      render_node.keep_fragment_items(ComputedLayout::from_taffy(layout));
+    }
   }
 
   fn resolve_calc_value(&self, val: *const (), basis: f32) -> f32 {
@@ -1406,12 +1434,10 @@ impl<'r> LayoutTree<'r> {
             );
           }
 
-          if node_data.is_inline_children
-            && !node_data.box_children.is_empty()
-            && inputs.run_mode == RunMode::PerformLayout
-          {
+          let border_box = || {
             let calc = |value, basis| tree.resolve_calc_value(value, basis);
-            let layout = ComputedLayout::new(
+
+            ComputedLayout::new(
               Point::ZERO,
               Size::from_taffy(output.size),
               Rect::from_taffy(
@@ -1426,7 +1452,28 @@ impl<'r> LayoutTree<'r> {
                   .padding
                   .resolve_or_zero(inputs.parent_size.width, calc),
               ),
-            );
+            )
+          };
+
+          // A box measured whole at a definite width mostly lays out at that size, so its
+          // fragment items laid out now let its shaped text go before the boxes after it shape
+          // theirs; layout lays it out again only at a size it was not measured at.
+          if tree.keeps_fragment_items
+            && lays_out_text
+            && inputs.run_mode == RunMode::ComputeSize
+            && inputs.axis == RequestedAxis::Both
+            && matches!(
+              inputs.available_space.width,
+              TaffyAvailableSpace::Definite(_)
+            )
+          {
+            render_node.keep_fragment_items(border_box());
+          }
+
+          if node_data.is_inline_children
+            && !node_data.box_children.is_empty()
+            && inputs.run_mode == RunMode::PerformLayout
+          {
             let proxies = node_data.children.clone();
             let containers: Vec<&RenderNode> = proxies
               .iter()
@@ -1434,7 +1481,7 @@ impl<'r> LayoutTree<'r> {
               .collect();
             let (positions, containing_blocks) = render_node.inline_out_of_flow_geometry(
               Size::from_taffy(inputs.available_space).map(AvailableSpace::from_taffy),
-              layout,
+              border_box(),
               &containers,
             );
 
@@ -1607,6 +1654,14 @@ impl RenderNode {
     }
   }
 
+  /// Lays its inline content out to the fragment items it keeps, in the content box of `layout`,
+  /// unless it keeps ones for that content box already.
+  pub(crate) fn keep_fragment_items(&self, layout: ComputedLayout) {
+    let font_style = SizedFontStyle::from_style(&self.context.style, &self.context);
+
+    OwnContent::of(self).fragment_items(&font_style, layout);
+  }
+
   /// The fragment items its inline content laid out to in the content box of `layout`, if it
   /// laid out there last.
   pub(crate) fn fragment_items_in(&self, layout: ComputedLayout) -> Option<Rc<FragmentItems>> {
@@ -1617,6 +1672,12 @@ impl RenderNode {
       .as_ref()
       .filter(|items| items.content_box == ContentBox::of(layout))
       .map(Rc::clone)
+  }
+
+  /// Whether it keeps fragment items from a layout.
+  #[cfg(test)]
+  pub(crate) fn has_fragment_items(&self) -> bool {
+    self.fragment_items.0.borrow().is_some()
   }
 
   /// Forgets the fragment items it and the boxes under it laid out to, which no longer hold once

@@ -22,6 +22,7 @@ use parley::{
 use std::{
   convert::Infallible,
   hash::{Hash, Hasher},
+  ptr,
   rc::Rc,
 };
 use xxhash_rust::xxh3::Xxh3;
@@ -43,7 +44,7 @@ mod truncation;
 
 pub(crate) use self::{
   background::PaddingBox,
-  fragment_items::{ContentBox, FragmentItems},
+  fragment_items::{ContentBox, InkBox},
   items::InlineOutOfFlow,
   outline::{OutlineIsland, RightAngleContour},
   text_fit::{LineFit, TextScale},
@@ -51,6 +52,7 @@ pub(crate) use self::{
 pub use self::{
   background::{FragmentBackground, InlineBackgroundFragment},
   decorations::DecorationLine,
+  fragment_items::FragmentItems,
   items::{DecorationLink, InlineBoxItem, InlineItem, ProcessedInlineSpan, collect_inline_items},
   metrics::{InlinePass, VisualInlineBox},
   outline::InlineOutlineRect,
@@ -209,6 +211,8 @@ pub struct BuiltInlineLayout<'c> {
   pub(crate) clamped: bool,
   /// Whether `text-overflow: ellipsis` cut the spans short.
   pub(crate) ellipsized: bool,
+  /// Where the render's shape cache keeps its shaped text, when it does.
+  pub(crate) shape_key: Option<u64>,
   /// The root inline box's strut, which every line holding content grows to, or `None` when the
   /// root has no primary font.
   pub(crate) strut: Option<Strut>,
@@ -841,7 +845,7 @@ fn build_inline_layout_tree<'c>(
   // Build spans first: measuring an inline box re-enters layout, so it must run
   // before `tree_builder` holds the shared font borrow.
   let spans = process_inline_spans(items, available_space, context);
-  let (layout, text) = shape_spans(context, &spans, style, shape_cacheable);
+  let (layout, text, shape_key) = shape_spans(context, &spans, style, shape_cacheable);
   let strut = Strut::of(context, style);
   let font = BoxFont::of(context);
 
@@ -853,6 +857,7 @@ fn build_inline_layout_tree<'c>(
     line_fits: Vec::new(),
     clamped: false,
     ellipsized: false,
+    shape_key,
     strut,
     font,
   }
@@ -1111,7 +1116,7 @@ fn shape_spans(
   spans: &[ProcessedInlineSpan<'_>],
   style: &SizedFontStyle,
   shape_cacheable: bool,
-) -> (InlineLayout, String) {
+) -> (InlineLayout, String, Option<u64>) {
   let cacheable = shape_cacheable
     && spans.iter().all(|span| {
       matches!(
@@ -1134,13 +1139,17 @@ fn shape_spans(
       joined
     })
   });
-  context
-    .inline_cache()
-    .get_or_shape(cache_key.zip(expected_text.as_deref()), || {
+  let (layout, text) = context.inline_cache().get_or_shape(
+    cache_key.zip(expected_text.as_deref()),
+    ptr::from_ref(context).addr(),
+    || {
       context.tree_builder(style.into(), chromium_line_breaks(spans), |builder| {
         push_spans_into_builder(builder, spans, &context.fonts().classes)
       })
-    })
+    },
+  );
+
+  (layout, text, cache_key)
 }
 
 /// Indents `layout` and breaks it at `options.max_width`; true when `options.max_height` may have
@@ -1563,6 +1572,7 @@ mod tests {
     layout::{node::Node, tree::RenderNode},
     painter::OwnContent,
     resources::font::{FontOverride, FontResource, GenericFamily},
+    scene::Scene,
     style::{
       Affine, AppliedTextDecoration, BorderStyle, Color, ColorInput, Display, FontSize, Length,
       Sides, SizedTextDecorationThickness, SizingContext, SpacePair, Style, StyleDeclaration,
@@ -1812,7 +1822,9 @@ mod tests {
       border: Rect::default(),
       padding: Rect::default(),
     };
-    let (simple, full) = built.fragment_items(layout).glyph_counts();
+    let (simple, full) = built
+      .fragment_items(layout, &render_node.context)
+      .glyph_counts();
 
     assert!(simple > 50, "{simple} simple glyphs");
     assert_eq!(full, 0);
@@ -1850,6 +1862,33 @@ mod tests {
 
     render_node.clear_fragment_items();
     assert!(render_node.fragment_items_in(layout).is_none());
+  }
+
+  #[test]
+  fn layout_for_paint_keeps_fragment_items_and_lets_shaped_text_go() {
+    let fonts = create_test_context();
+    let context = RenderContext::builder()
+      .fonts(fonts.snapshot_with_fallbacks(None))
+      .sizing(
+        SizingContext::builder()
+          .viewport(Viewport::new((200, None)))
+          .build(),
+      )
+      .build();
+    let paragraph = |text: &str| {
+      Node::container([Node::text(text.to_string())])
+        .with_style(Style::default().with(StyleDeclaration::display(Display::Block)))
+    };
+    let root = RenderNode::from_node(
+      &context,
+      Node::container([paragraph("One paragraph."), paragraph("Another paragraph.")])
+        .with_style(Style::default().with(StyleDeclaration::display(Display::Block))),
+    );
+    let scene = Scene::lay_out(root, Viewport::new((200, None)), true).unwrap();
+    let paragraphs = scene.root.children.as_deref().unwrap();
+
+    assert!(paragraphs.iter().all(RenderNode::has_fragment_items));
+    assert_eq!(context.inline_cache().shape_count(), 0);
   }
 
   #[test]

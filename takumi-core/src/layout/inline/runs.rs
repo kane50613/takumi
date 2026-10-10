@@ -46,7 +46,7 @@ pub struct PositionedGlyph {
 }
 
 /// Vertical font metrics for a shaped run, in px.
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub struct RunMetrics {
   /// Typographic ascent.
   pub ascent: f32,
@@ -261,6 +261,19 @@ impl ShapedRun {
     }
   }
 
+  /// Whether `other` draws in the same face, metrics and brush, wherever and whatever it draws.
+  pub(super) fn same_face(&self, other: &Self) -> bool {
+    self.brush == other.brush
+      && self.metrics == other.metrics
+      && self.font_size == other.font_size
+      && self.font_index == other.font_index
+      && self.font_id() == other.font_id()
+      && self.variations == other.variations
+      && self.synthetic_bold == other.synthetic_bold
+      && self.synthetic_skew == other.synthetic_skew
+      && self.normalized_coords == other.normalized_coords
+  }
+
   /// Advance that decorations span: the run without its line-end whitespace.
   pub fn decorated_advance(&self) -> f32 {
     self.advance - self.hanging.advance
@@ -441,7 +454,7 @@ impl<'c> BuiltInlineLayout<'c> {
     layout: ComputedLayout,
   ) -> Result<InlineRunLayout<'c>, FontError> {
     self
-      .fragment_items(layout)
+      .fragment_items(layout, context)
       .resolve_runs(&self.spans, context, layout)
   }
 
