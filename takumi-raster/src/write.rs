@@ -2,7 +2,8 @@
 use std::collections::VecDeque;
 use std::{
   borrow::{Borrow, Cow},
-  io::Write,
+  io::{self, Write},
+  iter::once,
 };
 
 use gif::{Encoder as GifEncoder, Frame as GifFrame, Repeat};
@@ -10,7 +11,10 @@ use image::{
   ExtendedColorType, ImageEncoder, RgbaImage,
   codecs::{ico::IcoEncoder, jpeg::JpegEncoder},
 };
-use png::{ColorType, DeflateCompression, Filter, chunk::IDAT};
+use png::{
+  ColorType, Filter,
+  chunk::{IDAT, acTL, fcTL, fdAT},
+};
 use typed_builder::TypedBuilder;
 
 /// Encode a sequence of RGBA frames into an animated WebP and write to `destination`.
@@ -289,12 +293,6 @@ impl PngEncoding {
       segments: (sample * ROW_STRIDE / SEGMENT_OUTPUT).clamp(1, MAX_SEGMENTS),
       ..self
     }
-  }
-
-  /// Hands this encoding to the png crate, which deflates APNG frames itself.
-  fn apply<T: Write>(self, encoder: &mut png::Encoder<'_, T>) {
-    encoder.set_deflate_compression(DeflateCompression::Level(self.level));
-    encoder.set_filter(self.filter);
   }
 }
 
@@ -587,42 +585,96 @@ where
   let Some(first) = frames.next().transpose()? else {
     return Err(Error::EmptyAnimationFrames);
   };
-  let first = first.borrow();
-  let width = first.image.width();
-  let height = first.image.height();
-
+  let first_image = &first.borrow().image;
+  let (width, height) = (first_image.width(), first_image.height());
+  let encoding = PngEncoding::pick(first_image.as_raw(), width);
   let mut encoder = png::Encoder::new(destination, width, height);
-  PngEncoding::pick(first.image.as_raw(), width).apply(&mut encoder);
+
   encoder.set_color(ColorType::Rgba);
-  encoder
-    .set_animated(frame_count, options.loop_count.unwrap_or(0) as u32)
-    .map_err(Error::encode)?;
-  encoder
-    .set_frame_delay(duration_ms_to_apng_delay(first.duration_ms), 1000)
-    .map_err(Error::encode)?;
 
   let mut writer = encoder.write_header().map_err(Error::encode)?;
+  let mut animation_control = [0; 8];
+
+  animation_control[..4].copy_from_slice(&frame_count.to_be_bytes());
+  animation_control[4..].copy_from_slice(&u32::from(options.loop_count.unwrap_or(0)).to_be_bytes());
   writer
-    .write_image_data(first.image.as_raw())
+    .write_chunk(acTL, &animation_control)
     .map_err(Error::encode)?;
 
-  for frame in frames {
+  let mut sequence = 0_u32;
+  let mut written = 0_u32;
+
+  for frame in once(Ok(first)).chain(frames) {
     let frame = frame?;
     let frame = frame.borrow();
+
     if frame.image.width() != width || frame.image.height() != height {
       return Err(Error::MixedAnimationFrameDimensions);
     }
+    if written == frame_count {
+      return Err(frame_count_mismatch());
+    }
+
     writer
-      .set_frame_delay(duration_ms_to_apng_delay(frame.duration_ms), 1000)
+      .write_chunk(
+        fcTL,
+        &frame_control(sequence, width, height, frame.duration_ms),
+      )
       .map_err(Error::encode)?;
-    writer
-      .write_image_data(frame.image.as_raw())
-      .map_err(Error::encode)?;
+    sequence += 1;
+
+    let scanlines = Scanlines::new(
+      Pixels::Rgba {
+        image: &frame.image.0,
+        keep_alpha: true,
+      },
+      matches!(encoding.filter, Filter::Adaptive),
+    );
+    let stream = compress_segmented(
+      height as usize,
+      scanlines.len(),
+      u32::from(encoding.level),
+      encoding.segments,
+      |rows, out| scanlines.append(rows, out),
+    )?;
+
+    if written == 0 {
+      writer.write_chunk(IDAT, &stream).map_err(Error::encode)?;
+    } else {
+      let mut frame_data = Vec::with_capacity(4 + stream.len());
+
+      frame_data.extend_from_slice(&sequence.to_be_bytes());
+      frame_data.extend_from_slice(&stream);
+      writer
+        .write_chunk(fdAT, &frame_data)
+        .map_err(Error::encode)?;
+      sequence += 1;
+    }
+    written += 1;
   }
 
-  writer.finish().map_err(Error::encode)?;
+  if written != frame_count {
+    return Err(frame_count_mismatch());
+  }
 
-  Ok(())
+  writer.finish().map_err(Error::encode)
+}
+
+fn frame_count_mismatch() -> Error {
+  Error::encode(io::Error::other("APNG frames do not match the frame count"))
+}
+
+/// An `fcTL` for a whole-canvas frame shown for `duration_ms`, replacing what came before it, as
+/// the png crate writes one by default.
+fn frame_control(sequence: u32, width: u32, height: u32, duration_ms: u32) -> [u8; 26] {
+  let mut control = [0; 26];
+
+  control[..4].copy_from_slice(&sequence.to_be_bytes());
+  control[4..8].copy_from_slice(&width.to_be_bytes());
+  control[8..12].copy_from_slice(&height.to_be_bytes());
+  control[20..22].copy_from_slice(&duration_ms_to_apng_delay(duration_ms).to_be_bytes());
+  control[22..24].copy_from_slice(&1000_u16.to_be_bytes());
+  control
 }
 
 /// Output format and per-format options for [`write_animation`].
