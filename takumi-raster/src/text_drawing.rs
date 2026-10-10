@@ -13,8 +13,7 @@ use crate::{
   style::{Affine, BlendMode, Color},
 };
 
-/// A glyph transform split as Skia's subpixel positioning splits it: the mask is rasterized
-/// under the linear part at a quarter-pixel origin, then blitted at whole pixels.
+/// A glyph transform split into the cached mask's transform and the whole pixels it is blitted at.
 #[derive(Clone, Copy)]
 struct GlyphBucket {
   mask_transform: Affine,
@@ -51,8 +50,7 @@ impl GlyphBucket {
     }
   }
 
-  /// Identifies the mask by everything that changes its pixels: the outline, the transform it
-  /// is rasterized under, and the stroke applied to it.
+  /// Identifies the mask by everything that changes its pixels: outline, transform, and stroke.
   fn mask_key(self, glyph_signature: u64, stroke: Option<Stroke>) -> u64 {
     let Affine { a, b, c, d, x, y } = self.mask_transform;
     let mut hasher = Xxh3::new();
