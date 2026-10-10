@@ -526,15 +526,24 @@ impl WidgetAnnotation {
     if let Some(description) = &self.description {
       annotation.pair(Name(b"TU"), TextStr(description));
     }
-    let FormField::Text { value, max_len, .. } = &self.field;
+    let FormField::Text {
+      value,
+      password,
+      max_len,
+      ..
+    } = &self.field;
 
     annotation.pair(Name(b"FT"), Name(b"Tx"));
     annotation.pair(Name(b"DA"), Str(self.default_appearance().as_bytes()));
     annotation.pair(Name(b"Q"), self.style.align);
-    annotation.pair(Name(b"V"), TextStr(value));
-    // HTML's `value` is what the field resets to, which is also where it
-    // starts.
-    annotation.pair(Name(b"DV"), TextStr(value));
+    // PDF 32000-1:2008, Table 228: a password field's value should never be
+    // stored in the file.
+    if !password {
+      annotation.pair(Name(b"V"), TextStr(value));
+      // HTML's `value` is what the field resets to, which is also where it
+      // starts.
+      annotation.pair(Name(b"DV"), TextStr(value));
+    }
 
     if let Some(max_len) = max_len {
       annotation.pair(Name(b"MaxLen"), *max_len);

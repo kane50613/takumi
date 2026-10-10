@@ -4427,6 +4427,8 @@ fn form_fields_render_as_widgets() {
     assert!(pdf.contains(expected), "form output is missing {expected}");
   }
 
+  // A password field draws its masked value but never stores the real one.
+  assert!(!pdf.contains("hunter2"));
   // A push button carries an action a standalone document cannot bind.
   assert!(!pdf.contains("(Send)"));
   // No `/MK`: the page already paints the box, and an appearance the viewer
