@@ -84,6 +84,7 @@ impl Task for RenderTask {
       takumi_raster::RenderOptions::builder()
         .viewport(self.viewport)
         .images(initialized_images)
+        .resource_cache(self.state.resource_cache.clone())
         .stylesheet(take(&mut self.stylesheet))
         .time_ms(self.time_ms)
         .dithering(self.dithering)
