@@ -4534,6 +4534,25 @@ fn radio_buttons_share_one_name() {
 }
 
 #[test]
+fn a_readonly_radio_leaves_its_group_selectable() {
+  let fonts = fonts();
+  let source = r#"<div><input type="radio" name="ship" value="A" readonly style="width:14px;height:14px" />
+    <input type="radio" name="ship" value="B" required style="width:14px;height:14px" /></div>"#;
+  let bytes = render_pinned(
+    PdfOptions::builder()
+      .node(from_html(source, FromHtmlOptions::default()).expect("parse"))
+      .page(PageOptions::A4)
+      .fonts(&fonts)
+      .form(true)
+      .build(),
+  );
+
+  // Radio and NoToggleToOff, plus the Required one button sets, but not
+  // ReadOnly: HTML's `readonly` does not apply to a radio button.
+  assert!(String::from_utf8_lossy(&bytes).contains("/Ff 49154"));
+}
+
+#[test]
 fn a_radio_name_a_text_field_also_claims_is_rejected() {
   let fonts = fonts();
   let source = r#"<div><input name="ship" style="width:80px;height:20px" />

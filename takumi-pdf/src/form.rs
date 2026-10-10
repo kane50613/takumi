@@ -237,7 +237,7 @@ struct FieldStyle {
 }
 
 impl FieldStyle {
-  fn of(node: &RenderNode, source: &Node) -> Self {
+  fn of(node: &RenderNode, source: &Node, field: &FieldKind) -> Self {
     let style = &node.context.style;
     let color = style.color.resolve(Color([0, 0, 0, 255]));
 
@@ -249,7 +249,8 @@ impl FieldStyle {
         TextAlign::Right | TextAlign::End => 2,
         _ => 0,
       },
-      read_only: source.attribute("readonly").is_some(),
+      // HTML's `readonly` does not apply to a check box or a radio button.
+      read_only: matches!(field, FieldKind::Text { .. }) && source.attribute("readonly").is_some(),
       required: source.attribute("required").is_some(),
       disabled: source.attribute("disabled").is_some(),
     }
@@ -291,8 +292,8 @@ impl FieldTarget {
     Some(Self {
       name: name.to_string(),
       rect,
+      style: FieldStyle::of(node, source, &field),
       field,
-      style: FieldStyle::of(node, source),
       label: FieldLabel::of(source),
       path: path.to_vec(),
     })
