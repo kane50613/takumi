@@ -1,7 +1,7 @@
 use tiny_skia::{PixmapRef, PremultipliedColorU8};
 
 use crate::{
-  BackgroundTile, BilinearRows, ColorTile, SampledBitmapView,
+  BackgroundTile, BilinearRows, BoxRows, ColorTile, SampledBitmapView,
   blend::premultiplied_from_pixel,
   canvas::checked_area,
   style::{Affine, ImageScalingAlgorithm},
@@ -33,11 +33,11 @@ impl SamplingFootprint {
     self.x > 1.0 || self.y > 1.0
   }
 
-  fn box_span_x(self) -> f32 {
+  pub(crate) fn box_span_x(self) -> f32 {
     self.x.max(1.0)
   }
 
-  fn box_span_y(self) -> f32 {
+  pub(crate) fn box_span_y(self) -> f32 {
     self.y.max(1.0)
   }
 }
@@ -116,13 +116,18 @@ impl<'a> PaintSource<'a> {
 
     match self.resolve() {
       ResolvedSource::Direct(Self::Pixmap(source)) => RowSource::Copy { source, x_start },
-      ResolvedSource::Bitmap(view) => match view.bilinear_rows(x_start, width) {
-        Some(rows) => RowSource::Bilinear(rows),
-        None => RowSource::Sampled {
+      ResolvedSource::Bitmap(view) => {
+        if let Some(rows) = view.bilinear_rows(x_start, width) {
+          return RowSource::Bilinear(rows);
+        }
+        if let Some(rows) = view.box_rows(x_start, width) {
+          return RowSource::Box(rows);
+        }
+        RowSource::Sampled {
           source: ResolvedSource::Bitmap(view),
           x_start,
-        },
-      },
+        }
+      }
       source => RowSource::Sampled { source, x_start },
     }
   }
@@ -206,6 +211,7 @@ pub(crate) enum RowSource<'a> {
     x_start: u32,
   },
   Bilinear(BilinearRows<'a>),
+  Box(BoxRows<'a>),
   Constant([u8; 4]),
   Sampled {
     source: ResolvedSource<'a>,
@@ -224,6 +230,7 @@ impl RowSource<'_> {
         ));
       }
       Self::Bilinear(rows) => rows.fill(y, dst),
+      Self::Box(rows) => rows.fill(y, dst),
       Self::Constant(color) => dst.fill(*color),
       Self::Sampled { source, x_start } => {
         for (i, pixel) in dst.iter_mut().enumerate() {
@@ -370,7 +377,14 @@ pub(crate) struct ScaledRows<'a> {
   source: PixmapRef<'a>,
   transform: Affine,
   x_start: f32,
-  columns: Vec<BilinearAxis>,
+  columns: ScaledColumns,
+}
+
+/// What each destination column of a [`ScaledRows`] reads: two bilinear taps when the draw
+/// magnifies, a box span when it minifies.
+enum ScaledColumns {
+  Bilinear(Vec<BilinearAxis>),
+  Box { columns: Vec<BoxAxis>, span_y: f32 },
 }
 
 impl<'a> ScaledRows<'a> {
@@ -389,19 +403,31 @@ impl<'a> ScaledRows<'a> {
     if transform.b != 0.0
       || transform.c != 0.0
       || matches!(algorithm, ImageScalingAlgorithm::Pixelated)
-      || SamplingFootprint::of(transform).is_minifying()
     {
       return None;
     }
 
+    let footprint = SamplingFootprint::of(transform);
     let (mut sample_x, _) = transform.transform_point(x_start, 0.0);
-    let columns = (0..width)
-      .map(|_| {
-        let tap = BilinearAxis::new(sample_x, source.width());
-        sample_x += transform.a;
-        tap
-      })
-      .collect();
+    let mut advance = || {
+      let x = sample_x;
+      sample_x += transform.a;
+      x
+    };
+    let columns = if footprint.is_minifying() {
+      ScaledColumns::Box {
+        columns: (0..width)
+          .map(|_| BoxAxis::new(advance(), footprint.box_span_x(), source.width()))
+          .collect(),
+        span_y: footprint.box_span_y(),
+      }
+    } else {
+      ScaledColumns::Bilinear(
+        (0..width)
+          .map(|_| BilinearAxis::new(advance(), source.width()))
+          .collect(),
+      )
+    };
 
     Some(Self {
       source,
@@ -413,10 +439,26 @@ impl<'a> ScaledRows<'a> {
 
   pub(crate) fn fill(&self, y: f32, out: &mut [[u8; 4]]) {
     let (_, sample_y) = self.transform.transform_point(self.x_start, y);
-    let row = BilinearAxis::new(sample_y, self.source.height()).rows(self.source);
 
-    for (dst, column) in out.iter_mut().zip(&self.columns) {
-      *dst = column.mix(row);
+    match &self.columns {
+      ScaledColumns::Bilinear(columns) => {
+        let row = BilinearAxis::new(sample_y, self.source.height()).rows(self.source);
+
+        for (dst, column) in out.iter_mut().zip(columns) {
+          *dst = column.mix(row);
+        }
+      }
+      ScaledColumns::Box { columns, span_y } => {
+        let row = BoxAxis::new(sample_y, *span_y, self.source.height());
+        let stride = self.source.width() as usize;
+        let pixels = self.source.pixels();
+
+        for (dst, &column) in out.iter_mut().zip(columns) {
+          let average = box_average(column, row, |x, y| pixels[y as usize * stride + x as usize]);
+
+          *dst = premultiplied_from_pixel(average.unwrap_or(PremultipliedColorU8::TRANSPARENT));
+        }
+      }
     }
   }
 }
@@ -499,53 +541,75 @@ fn interpolate_box(
     return None;
   }
 
-  let span_x = footprint.box_span_x();
-  let span_y = footprint.box_span_y();
-  let image_width = width as f32;
-  let image_height = height as f32;
+  box_average(
+    BoxAxis::new(x, footprint.box_span_x(), width),
+    BoxAxis::new(y, footprint.box_span_y(), height),
+    |source_x, source_y| image.get_pixel(source_x, source_y),
+  )
+}
 
-  let center_x = if span_x >= image_width {
-    image_width * 0.5
-  } else {
-    x.clamp(span_x * 0.5, image_width - span_x * 0.5)
-  };
-  let center_y = if span_y >= image_height {
-    image_height * 0.5
-  } else {
-    y.clamp(span_y * 0.5, image_height - span_y * 0.5)
-  };
+/// One axis of a box filter: the source span a destination pixel covers, casts included, so
+/// every sampler matches byte for byte.
+#[derive(Clone, Copy)]
+pub(crate) struct BoxAxis {
+  low: f32,
+  high: f32,
+  start: u32,
+  end: u32,
+}
 
-  let left = (center_x - span_x * 0.5).clamp(0.0, image_width);
-  let right = (center_x + span_x * 0.5).clamp(0.0, image_width);
-  let top = (center_y - span_y * 0.5).clamp(0.0, image_height);
-  let bottom = (center_y + span_y * 0.5).clamp(0.0, image_height);
+impl BoxAxis {
+  pub(crate) fn new(coordinate: f32, span: f32, extent: u32) -> Self {
+    let size = extent as f32;
+    let center = if span >= size {
+      size * 0.5
+    } else {
+      coordinate.clamp(span * 0.5, size - span * 0.5)
+    };
+    let low = (center - span * 0.5).clamp(0.0, size);
+    let high = (center + span * 0.5).clamp(0.0, size);
 
-  let start_x = left.floor() as u32;
-  let end_x = right.ceil().min(image_width) as u32;
-  let start_y = top.floor() as u32;
-  let end_y = bottom.ceil().min(image_height) as u32;
+    Self {
+      low,
+      high,
+      start: low.floor() as u32,
+      end: high.ceil().min(size) as u32,
+    }
+  }
 
+  /// How much of source pixel `index` the span covers.
+  #[inline(always)]
+  fn weight(self, index: u32) -> f32 {
+    let edge = index as f32;
+
+    (self.high.min(edge + 1.0) - self.low.max(edge)).max(0.0)
+  }
+}
+
+/// The box average of the source pixels `columns` and `rows` cover, read through `pixel`.
+#[inline(always)]
+pub(crate) fn box_average(
+  columns: BoxAxis,
+  rows: BoxAxis,
+  pixel: impl Fn(u32, u32) -> PremultipliedColorU8,
+) -> Option<PremultipliedColorU8> {
   let mut sum = [0.0; 4];
   let mut total_weight = 0.0;
 
-  for source_y in start_y..end_y {
-    let pixel_top = source_y as f32;
-    let pixel_bottom = pixel_top + 1.0;
-    let y_weight = (bottom.min(pixel_bottom) - top.max(pixel_top)).max(0.0);
+  for source_y in rows.start..rows.end {
+    let y_weight = rows.weight(source_y);
     if y_weight == 0.0 {
       continue;
     }
 
-    for source_x in start_x..end_x {
-      let pixel_left = source_x as f32;
-      let pixel_right = pixel_left + 1.0;
-      let x_weight = (right.min(pixel_right) - left.max(pixel_left)).max(0.0);
+    for source_x in columns.start..columns.end {
+      let x_weight = columns.weight(source_x);
       if x_weight == 0.0 {
         continue;
       }
 
       let weight = x_weight * y_weight;
-      let pixel = image.get_pixel(source_x, source_y);
+      let pixel = pixel(source_x, source_y);
       sum[0] += pixel.red() as f32 * weight;
       sum[1] += pixel.green() as f32 * weight;
       sum[2] += pixel.blue() as f32 * weight;
@@ -570,8 +634,58 @@ fn interpolate_box(
 mod tests {
   use tiny_skia::{Pixmap, PremultipliedColorU8};
 
-  use super::{SamplingFootprint, interpolate_bilinear, interpolate_with_footprint};
-  use crate::style::ImageScalingAlgorithm;
+  use super::{
+    SamplingFootprint, ScaledRows, interpolate_bilinear, interpolate_with_footprint,
+    sample_paint_source,
+  };
+  use crate::style::{Affine, ImageScalingAlgorithm};
+
+  #[test]
+  fn scaled_rows_match_the_per_pixel_sampler() {
+    let mut pixmap = Pixmap::new(97, 61).unwrap();
+
+    for (index, pixel) in pixmap.pixels_mut().iter_mut().enumerate() {
+      let byte = |shift: u32| ((index as u32).wrapping_mul(2_654_435_761) >> shift) as u8;
+      let alpha = byte(24);
+
+      *pixel = PremultipliedColorU8::from_rgba(
+        byte(3) % (alpha.saturating_add(1)),
+        byte(9) % (alpha.saturating_add(1)),
+        byte(15) % (alpha.saturating_add(1)),
+        alpha,
+      )
+      .unwrap();
+    }
+
+    for (scale_x, scale_y) in [(3.1, 2.4), (2.7, 0.6), (0.8, 1.9)] {
+      let transform = Affine::translation(1.25, -0.5) * Affine::scale(scale_x, scale_y);
+      let footprint = SamplingFootprint::of(transform);
+      let width = 25;
+      let source = pixmap.as_ref().into();
+      let rows =
+        ScaledRows::new(source, transform, ImageScalingAlgorithm::Auto, 0.5, width).unwrap();
+      let mut row = vec![[0; 4]; width];
+
+      for y in 0..20 {
+        let (mut sample_x, sample_y) = transform.transform_point(0.5, y as f32 + 0.5);
+
+        rows.fill(y as f32 + 0.5, &mut row);
+        for &pixel in &row {
+          let expected = sample_paint_source(
+            source,
+            ImageScalingAlgorithm::Auto,
+            sample_x,
+            sample_y,
+            footprint,
+          )
+          .unwrap_or([0; 4]);
+
+          assert_eq!(pixel, expected, "scale {scale_x}x{scale_y} row {y}");
+          sample_x += transform.a;
+        }
+      }
+    }
+  }
 
   /// Sampling takes pixel-centre coordinates: a draw that lands whole-pixel
   /// must read a texel exactly, not blend two of them.

@@ -22,7 +22,8 @@ pub(crate) use mask::{
   intersect_alpha_masks, render_mask,
 };
 pub(crate) use paint_source::{
-  BilinearAxis, PaintSource, RowSource, SamplingFootprint, interpolate_with_footprint,
+  BilinearAxis, BoxAxis, PaintSource, RowSource, SamplingFootprint, box_average,
+  interpolate_with_footprint,
 };
 use takumi_core::{
   geometry::{Point, Size},
