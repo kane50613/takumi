@@ -11,7 +11,7 @@ use takumi_core::{
   layout::{
     inline::{
       BuiltInlineLayout, InlineItem, InlineLayoutMode, InlineLayoutRequest, InlineRunLayout,
-      create_inline_layout,
+      VisualInlineBox, create_inline_layout,
     },
     tree::RenderNode,
   },
@@ -138,13 +138,30 @@ pub(crate) fn visit_inline_layout<R>(
       prepared.font_style,
     )));
   }
-  let font_style = SizedFontStyle::from_style(&node.context.style, &node.context);
-  let Some(items) = OwnContent::of(node).inline_items(&font_style) else {
-    return Ok(None);
-  };
-  let (built, runs) = build_inline_runs(items, &font_style, &node.context, layout)?;
+  visit_inline_lines(node, layout, |built, font_style| {
+    let runs = built
+      .resolve_runs(&node.context, layout)
+      .map_err(PdfError::Font)?;
 
-  Ok(Some(visit(&built, &runs, &font_style)))
+    Ok(visit(built, &runs, font_style))
+  })
+  .transpose()
+}
+
+/// Lays a text box's inline content out without resolving its glyphs, which only painting needs.
+/// `None` when the box lays out no runs.
+pub(crate) fn visit_inline_lines<R>(
+  node: &RenderNode,
+  layout: Layout,
+  visit: impl FnOnce(&BuiltInlineLayout<'_>, &SizedFontStyle<'_>) -> R,
+) -> Option<R> {
+  let font_style = SizedFontStyle::from_style(&node.context.style, &node.context);
+  let items = OwnContent::of(node).inline_items(&font_style)?;
+
+  Some(visit(
+    &build_inline(items, &font_style, &node.context, layout),
+    &font_style,
+  ))
 }
 
 /// One atom per line box: the lines stack edge to edge, so a cut between two
@@ -167,18 +184,34 @@ pub(crate) fn text_line_atoms(
 /// Atomic vertical bands occupied by inline boxes: in-flow ones and floats
 /// alike, so a page cut slices through neither.
 pub(crate) fn inline_box_atoms(
-  runs: &InlineRunLayout,
+  inline_boxes: &[VisualInlineBox],
   layout: Layout,
   y: f32,
   atoms: &mut Vec<Atom>,
 ) {
   let content_y = layout.content_box_offset().y;
 
-  for inline_box in &runs.inline_boxes {
+  for inline_box in inline_boxes {
     let top = y + content_y + inline_box.y;
 
     atoms.push((top, top + inline_box.height));
   }
+}
+
+/// Lays the items out in the box's content area, as painting draws them.
+fn build_inline<'c>(
+  items: Vec<InlineItem<'c>>,
+  font_style: &'c SizedFontStyle<'c>,
+  context: &'c RenderContext,
+  layout: Layout,
+) -> BuiltInlineLayout<'c> {
+  create_inline_layout(InlineLayoutRequest::in_content_box(
+    items,
+    layout.content_box_size(),
+    font_style,
+    context,
+    InlineLayoutMode::Draw,
+  ))
 }
 
 /// Runs inline layout and resolves the paintable run set.
@@ -188,13 +221,7 @@ fn build_inline_runs<'c>(
   context: &'c RenderContext,
   layout: Layout,
 ) -> Result<(BuiltInlineLayout<'c>, InlineRunLayout<'c>), PdfError> {
-  let built = create_inline_layout(InlineLayoutRequest::in_content_box(
-    items,
-    layout.content_box_size(),
-    font_style,
-    context,
-    InlineLayoutMode::Draw,
-  ));
+  let built = build_inline(items, font_style, context, layout);
   let runs = built
     .resolve_runs(context, layout)
     .map_err(PdfError::Font)?;

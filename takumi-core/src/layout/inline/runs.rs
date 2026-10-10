@@ -413,11 +413,6 @@ impl<'c> BuiltInlineLayout<'c> {
     context: &RenderContext,
     layout: ComputedLayout,
   ) -> Result<InlineRunLayout<'c>, FontError> {
-    let BuiltInlineLayout {
-      spans,
-      positioned_floats,
-      ..
-    } = self;
     let mut runs = Vec::new();
     let mut decoration_coverage = self.decoration_coverage();
     let mut positioned_inline_boxes: HashMap<u64, VisualInlineBox> = HashMap::new();
@@ -505,16 +500,7 @@ impl<'c> BuiltInlineLayout<'c> {
       Ok(())
     })?;
 
-    for inline_box in positioned_floats {
-      let Some(inline_box) = resolve_visual_inline_box(inline_box.clone(), None, spans) else {
-        continue;
-      };
-      positioned_inline_boxes.insert(inline_box.id, inline_box);
-    }
-
-    let mut inline_boxes: Vec<_> = positioned_inline_boxes.into_values().collect();
-    sort_by_key(&mut inline_boxes, |inline_box| inline_box.id);
-
+    let inline_boxes = self.with_floats(positioned_inline_boxes);
     let (background_fragments, outline_rects) = decoration_coverage.into_fragments();
 
     Ok(InlineRunLayout {
@@ -523,6 +509,35 @@ impl<'c> BuiltInlineLayout<'c> {
       outline_rects,
       background_fragments,
     })
+  }
+
+  /// The placed inline boxes, floats included, in id order, without resolving a glyph: what
+  /// [`Self::resolve_runs`] places, for a caller that only needs where the boxes sit.
+  pub fn inline_boxes(&self, layout: ComputedLayout) -> Vec<VisualInlineBox> {
+    let mut positioned = HashMap::new();
+    let Ok(()) = self.walk_items::<Infallible>(layout, |_, item| {
+      if let PlacedItem::Box(inline_box) = item {
+        positioned.insert(inline_box.id, inline_box);
+      }
+      Ok(())
+    });
+
+    self.with_floats(positioned)
+  }
+
+  /// The placed in-flow boxes with the floats added, in id order.
+  fn with_floats(&self, mut positioned: HashMap<u64, VisualInlineBox>) -> Vec<VisualInlineBox> {
+    for inline_box in &self.positioned_floats {
+      let Some(inline_box) = resolve_visual_inline_box(inline_box.clone(), None, &self.spans)
+      else {
+        continue;
+      };
+      positioned.insert(inline_box.id, inline_box);
+    }
+
+    let mut inline_boxes: Vec<_> = positioned.into_values().collect();
+    sort_by_key(&mut inline_boxes, |inline_box| inline_box.id);
+    inline_boxes
   }
 }
 
