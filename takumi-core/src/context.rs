@@ -45,8 +45,8 @@ pub struct RenderContextInit {
   transform: Affine,
   #[builder(default = Color::black())]
   current_color: Color,
-  #[builder(default)]
-  style: Box<ComputedStyle>,
+  #[builder(default, setter(into))]
+  style: Rc<ComputedStyle>,
   #[builder(default = 0)]
   time_ms: u64,
   #[builder(default = false)]
@@ -106,7 +106,7 @@ pub struct RenderContext {
   /// What the `currentColor` value is resolved to.
   pub current_color: Color,
   /// The style after inheritance.
-  pub style: Box<ComputedStyle>,
+  pub style: Rc<ComputedStyle>,
   /// The decorations the box's text paints, from it and the boxes around it.
   pub(crate) text_decorations: AppliedTextDecorations,
   /// Whether this box is a cell of a table that collapses its borders.
@@ -196,7 +196,7 @@ impl RenderContext {
       transform: parent.transform,
       paint_offset: parent.paint_offset,
       current_color: parent.current_color,
-      style: Box::new(ComputedStyle::for_anonymous(&parent.style, &parent.sizing)),
+      style: Rc::new(ComputedStyle::for_anonymous(&parent.style, &parent.sizing)),
       text_decorations: parent.text_decorations.clone(),
       collapsed_borders: parent.collapsed_borders,
       text_measure_digest: OnceCell::new(),
@@ -221,9 +221,23 @@ impl RenderContext {
       transform: parent.transform,
       paint_offset: parent.paint_offset,
       current_color,
-      style: Box::new(style),
+      style: Rc::new(style),
       collapsed_borders: false,
       text_measure_digest: OnceCell::new(),
+    }
+  }
+
+  /// The style to change in place, copied first when another box shares it.
+  pub(crate) fn style_mut(&mut self) -> &mut ComputedStyle {
+    Rc::make_mut(&mut self.style)
+  }
+
+  /// Blockifies `display`, leaving a shared style shared when it is already block-level.
+  pub(crate) fn blockify(&mut self) {
+    let display = self.style.display.as_blockified();
+
+    if display != self.style.display {
+      self.style_mut().display = display;
     }
   }
 
