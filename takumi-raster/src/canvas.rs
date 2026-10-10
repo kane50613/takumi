@@ -9,7 +9,7 @@ mod skia;
 
 use std::{borrow::Cow, mem::replace, sync::Arc};
 
-use blit::blit_paint_source_translation;
+use blit::{blit_paint_source_translation, blit_translucent_translation};
 pub(crate) use blit::{overlay_image, overlay_sampled_paint_source, placement_overlap};
 pub(crate) use gradient::try_overlay_gradient_tile;
 use image::{
@@ -275,6 +275,16 @@ impl Canvas {
         },
         mode,
         None,
+      );
+      return;
+    }
+
+    if mode == BlendMode::Normal {
+      blit_translucent_translation(
+        &mut self.image.as_mut(),
+        isolated_image.as_ref(),
+        offset,
+        opacity,
       );
       return;
     }
