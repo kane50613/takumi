@@ -1231,8 +1231,8 @@ impl<'i> AtRuleParser<'i> for RuleParser {
 /// Defines a stylesheet with rules, keyframes, and property rules.
 #[derive(Debug, Clone, Default)]
 pub struct StyleSheet {
-  /// Style rules in source order.
-  rules: Vec<CssRule>,
+  /// Style rules in source order, shared by clones.
+  rules: Arc<[CssRule]>,
   /// Index over `rules`, built with them; `rules` never changes afterwards.
   rule_index: Arc<RuleIndex>,
   /// `@keyframes` rules.
@@ -1454,7 +1454,7 @@ impl StyleSheet {
 
     if preflight {
       static PREFLIGHT_RULES: LazyLock<Vec<CssRule>> =
-        LazyLock::new(|| StyleSheet::parse_loosy(PREFLIGHT_CSS).rules);
+        LazyLock::new(|| StyleSheet::parse_loosy(PREFLIGHT_CSS).rules.to_vec());
 
       let mut preflight_rules = PREFLIGHT_RULES.clone();
       declared_layers.splice(
@@ -1488,7 +1488,7 @@ impl StyleSheet {
     Ok(Self {
       breakpoints: collect_breakpoints(&rules),
       rule_index: Arc::new(RuleIndex::build(&rules)),
-      rules,
+      rules: rules.into(),
       keyframes,
       property_rules,
       layer_count: layer_order.len(),
@@ -2916,7 +2916,7 @@ mod tests {
     let sheet = parse_stylesheet(".card { width: 100px; @apply mt-4; height: 50px; }");
 
     assert_eq!(sheet.rules.len(), 3);
-    for rule in &sheet.rules {
+    for rule in sheet.rules.iter() {
       assert_eq!(selector_text(rule), ".card");
     }
     assert_eq!(
