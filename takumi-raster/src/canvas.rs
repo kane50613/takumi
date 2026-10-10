@@ -329,11 +329,24 @@ impl Canvas {
     let pixels = bytemuck::cast_slice_mut::<_, [u8; 4]>(layer.data_mut());
 
     for (y, row) in pixels.chunks_exact_mut(width).enumerate() {
-      let alphas = clip.row(offset.y + y as i32, offset.x);
+      let (first, alphas) = clip.row(offset.y + y as i32, offset.x).covered(width);
+      let (outside, rest) = row.split_at_mut(first);
+      let (inside, past) = rest.split_at_mut(alphas.len());
 
-      for (x, pixel) in row.iter_mut().enumerate() {
-        *pixel = scale_premultiplied_pixel(*pixel, alphas.alpha_at_offset(x));
+      outside.fill([0; 4]);
+      past.fill([0; 4]);
+
+      let (pixel_runs, pixel_tail) = inside.as_chunks_mut::<CLIP_RUN>();
+      let (alpha_runs, alpha_tail) = alphas.as_chunks::<CLIP_RUN>();
+
+      for (pixels, alphas) in pixel_runs.iter_mut().zip(alpha_runs) {
+        match u64::from_ne_bytes(*alphas) {
+          u64::MAX => {}
+          0 => pixels.fill([0; 4]),
+          _ => scale_by_alphas(pixels, alphas),
+        }
       }
+      scale_by_alphas(pixel_tail, alpha_tail);
     }
   }
 
@@ -549,28 +562,24 @@ impl Canvas {
       canvas_origin: self.origin,
     };
     let mask_width = mask.width() as usize;
-    let mask_height = mask.height();
-    let data = mask.data_mut();
-    for y in 0..mask_height {
-      let row = previous.row(y as i32, 0);
-      let row_start = y as usize * mask_width;
-      for (x, out) in data[row_start..row_start + mask_width]
-        .iter_mut()
-        .enumerate()
-      {
-        let right = *out;
-        if right == 0 {
-          continue;
+
+    for (y, row) in mask.data_mut().chunks_exact_mut(mask_width).enumerate() {
+      let (first, lefts) = previous.row(y as i32, 0).covered(mask_width);
+      let (outside, rest) = row.split_at_mut(first);
+      let (inside, past) = rest.split_at_mut(lefts.len());
+
+      outside.fill(0);
+      past.fill(0);
+
+      let (right_runs, right_tail) = inside.as_chunks_mut::<CLIP_RUN>();
+      let (left_runs, left_tail) = lefts.as_chunks::<CLIP_RUN>();
+
+      for (rights, lefts) in right_runs.iter_mut().zip(left_runs) {
+        if u64::from_ne_bytes(*rights) != 0 && u64::from_ne_bytes(*lefts) != u64::MAX {
+          intersect_alphas(rights, lefts);
         }
-        let left = row.alpha_at_offset(x);
-        *out = if left == u8::MAX {
-          right
-        } else if right == u8::MAX {
-          left
-        } else {
-          ((left as u16 * right as u16 + 128) >> 8) as u8
-        };
       }
+      intersect_alphas(right_tail, left_tail);
     }
     mask
   }
@@ -614,6 +623,32 @@ pub(crate) fn demultiply_rgba_in_place(data: &mut [u8]) {
   Simd::detect().edit_mixed_alpha_runs(data, |pixels| {
     pixels.iter_mut().for_each(demultiply_pixel);
   });
+}
+
+/// Clip bytes tested at once for a uniformly empty or full run.
+pub(crate) const CLIP_RUN: usize = 8;
+
+/// `rights` narrowed to where `lefts` also covers, as two stacked clips keep.
+fn intersect_alphas(rights: &mut [u8], lefts: &[u8]) {
+  for (right, &left) in rights.iter_mut().zip(lefts) {
+    if *right == 0 {
+      continue;
+    }
+
+    *right = if left == u8::MAX {
+      *right
+    } else if *right == u8::MAX {
+      left
+    } else {
+      ((left as u16 * *right as u16 + 128) >> 8) as u8
+    };
+  }
+}
+
+fn scale_by_alphas(pixels: &mut [[u8; 4]], alphas: &[u8]) {
+  for (pixel, &alpha) in pixels.iter_mut().zip(alphas) {
+    *pixel = scale_premultiplied_pixel(*pixel, alpha);
+  }
 }
 
 fn dimension_mismatch() -> Error {
