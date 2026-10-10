@@ -22,6 +22,7 @@ use crate::{
   },
   paint_chunk::PaintChunk,
   paint_property::{ContainerContents, NodeProperties, PropertyState, PropertyTrees},
+  resources::font::{RunFace, run_normalized_coords},
   shadow::SizedShadow,
   sort_key::sort_by_key,
   style::{Affine, BlurType, ComputedStyle, Display, Float},
@@ -969,10 +970,12 @@ fn compute_node_paint_bounds(
           return Ok(());
         };
         let glyph_ids = glyph_run.positioned_glyphs().map(|glyph| glyph.id);
+        let normalized_coords = run_normalized_coords(&glyph_run);
+        let face = RunFace::of(&glyph_run, &normalized_coords);
         let resolved_glyphs = node
           .context
           .fonts()
-          .with_context(|fonts| fonts.resolve_glyphs(&glyph_run, font, glyph_ids));
+          .with_context(|fonts| fonts.resolve_glyphs(face, font, glyph_ids));
 
         for (index, glyph) in glyph_run.positioned_glyphs().enumerate() {
           let Some((min_x, min_y, max_x, max_y)) = resolved_glyphs
