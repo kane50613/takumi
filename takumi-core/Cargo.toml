@@ -70,6 +70,10 @@ features = ["png", "jpeg", "webp", "gif"]
 workspace = true
 optional = true
 
+[dependencies.rayon]
+workspace = true
+optional = true
+
 [dependencies.roxmltree]
 workspace = true
 optional = true
@@ -131,6 +135,7 @@ svg = [
 ]
 woff2 = ["dep:wuff", "wuff/brotli"]
 woff = ["dep:wuff", "wuff/z"]
+rayon = ["dep:rayon"]
 # The paint tree: what the backends paint, as data. Off by default; `takumi-paint` turns it on.
 paint-tree = []
 
