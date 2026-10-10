@@ -646,27 +646,23 @@ fn wrap(value: &str, usable: f32, size: f32) -> Vec<String> {
     .collect()
 }
 
-/// One source line wrapped at a drawn width; an empty one stays one empty
-/// line.
+/// One source line wrapped at a drawn width, keeping its runs of whitespace
+/// as `white-space: pre-wrap` does; an empty one stays one empty line.
 fn wrap_line(value: &str, usable: f32, size: f32) -> Vec<String> {
   let mut lines = Vec::new();
   let mut line = String::new();
 
-  for word in value.split_whitespace() {
-    let candidate = match line.is_empty() {
-      true => word.to_string(),
-      false => format!("{line} {word}"),
-    };
+  for piece in value.split_inclusive(char::is_whitespace) {
+    let word = piece.trim_end();
 
-    if !line.is_empty() && text_width(&candidate, size) > usable {
-      lines.push(std::mem::take(&mut line));
-      line.push_str(word);
-    } else {
-      line = candidate;
+    if !word.is_empty() && !line.is_empty() && text_width(&format!("{line}{word}"), size) > usable {
+      lines.push(line.trim_end().to_string());
+      line.clear();
     }
+    line.push_str(piece);
   }
   if !line.is_empty() || lines.is_empty() {
-    lines.push(line);
+    lines.push(line.trim_end().to_string());
   }
 
   lines
@@ -717,5 +713,20 @@ fn win_ansi_byte(character: char) -> Option<u8> {
       .iter()
       .position(|&mapped| mapped == character)
       .map(|index| C1_BYTES[index]),
+  }
+}
+
+#[cfg(test)]
+mod tests {
+  use super::wrap;
+
+  #[test]
+  fn wrapping_keeps_runs_of_whitespace() {
+    assert_eq!(wrap("  a  b\n\nc", 1000.0, 10.0), ["  a  b", "", "c"]);
+  }
+
+  #[test]
+  fn a_wrapped_line_drops_the_whitespace_it_breaks_at() {
+    assert_eq!(wrap("aaaa   bbbb", 30.0, 10.0), ["aaaa", "bbbb"]);
   }
 }
