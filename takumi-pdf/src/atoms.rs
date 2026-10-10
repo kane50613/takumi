@@ -1,7 +1,7 @@
 //! Unsplittable vertical extents, paragraphs and content boxes collected from
 //! the laid-out scene, which pagination cuts around.
 
-use std::ops::Range;
+use std::{mem::take, ops::Range};
 
 use takumi_core::{
   geometry::{ComputedLayout as Layout, NodeId},
@@ -29,9 +29,54 @@ pub(crate) struct Atoms {
   pub(crate) content: Vec<Atom>,
   /// Text boxes with their `widows` / `orphans` minimums.
   pub(crate) paragraphs: Vec<Paragraph>,
+  /// Boxes with block-start or block-end border and padding.
+  pub(crate) decorated: Vec<Decorated>,
+}
+
+/// A box's border-box edges around its content box's, in content coordinates.
+pub(crate) struct Decorated {
+  top: f32,
+  content: Atom,
+  bottom: f32,
 }
 
 impl Atoms {
+  /// Binds each box's block-start border and padding to the first atom inside
+  /// it, and its block-end ones to the last. Blink takes a break before the
+  /// first child as a break before the box, and one before block-end border
+  /// and padding as a last resort (`fragmentation_utils.cc`). Naive: the
+  /// atoms are matched by height alone, so a box can bind one beside it.
+  fn bind_decorations(&mut self) {
+    let mut by_top = self.extents.clone();
+    let mut by_bottom = self.extents.clone();
+
+    by_top.sort_by(|a, b| a.0.total_cmp(&b.0));
+    by_bottom.sort_by(|a, b| a.1.total_cmp(&b.1));
+
+    for decorated in take(&mut self.decorated) {
+      let (content_top, content_bottom) = decorated.content;
+
+      if content_top > decorated.top {
+        let first = by_top.partition_point(|atom| atom.0 < content_top - 0.5);
+
+        if let Some(atom) = by_top.get(first).filter(|atom| atom.0 < content_bottom) {
+          self.extents.push((decorated.top, atom.1));
+        }
+      }
+      if content_bottom < decorated.bottom {
+        let past = by_bottom.partition_point(|atom| atom.1 <= content_bottom + 0.5);
+
+        if let Some(atom) = past
+          .checked_sub(1)
+          .map(|last| by_bottom[last])
+          .filter(|atom| atom.1 > content_top)
+        {
+          self.extents.push((atom.0, decorated.bottom));
+        }
+      }
+    }
+  }
+
   /// Records the box's lines as a [`Paragraph`] for the widow/orphan solver.
   fn push_paragraph(&mut self, node: &RenderNode, lines: Range<usize>) {
     let style = &node.context.style;
@@ -63,6 +108,7 @@ impl AtomCollector<'_> {
     let mut atoms = Atoms::default();
 
     self.context_atoms(0, Affine::IDENTITY, &mut atoms)?;
+    atoms.bind_decorations();
     Ok(atoms)
   }
 
@@ -124,6 +170,18 @@ impl AtomCollector<'_> {
     let y = relative.y;
     let extent = (y, y + layout.size.height);
     let style = &node.context.style;
+    let content = (
+      y + layout.border.top + layout.padding.top,
+      extent.1 - layout.border.bottom - layout.padding.bottom,
+    );
+
+    if content.0 > y || content.1 < extent.1 {
+      atoms.decorated.push(Decorated {
+        top: y,
+        content,
+        bottom: extent.1,
+      });
+    }
 
     if style.break_before == BreakBetween::Page {
       atoms.forced.push(y);
