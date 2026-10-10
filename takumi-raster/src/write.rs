@@ -10,7 +10,7 @@ use image::{
   ExtendedColorType, ImageEncoder, RgbaImage,
   codecs::{ico::IcoEncoder, jpeg::JpegEncoder},
 };
-use png::{ColorType, DeflateCompression, Filter};
+use png::{ColorType, DeflateCompression, Filter, chunk::IDAT};
 use typed_builder::TypedBuilder;
 
 /// Encode a sequence of RGBA frames into an animated WebP and write to `destination`.
@@ -22,6 +22,7 @@ use crate::{
   error::Error,
   render::{FrameSpan, SequentialScene, frame_spans, prepare_scenes, render_frame},
   webp::{encode_animated_webp, has_any_alpha_pixel, strip_alpha_channel, write_webp_lossless},
+  zlib::compress_segmented,
 };
 
 /// Lossy-encoding quality, clamped to the `0..=100` range (higher means better
@@ -225,24 +226,37 @@ fn duration_ms_to_gif_delay(duration_ms: u32) -> u16 {
 
 #[derive(Clone, Copy)]
 struct PngEncoding {
-  compression: DeflateCompression,
+  level: u8,
   filter: Filter,
+  /// Segments the image data deflates in at once; one leaves it to the png crate.
+  segments: usize,
 }
 
 /// Flat art deflates best unfiltered, where long runs repeat across rows.
 const FLAT_PNG: PngEncoding = PngEncoding {
-  compression: DeflateCompression::Level(7),
+  level: 7,
   filter: Filter::NoFilter,
+  segments: 1,
 };
 
 /// Photographs deflate best filtered, and level 3 already captures most of it.
 const PHOTO_PNG: PngEncoding = PngEncoding {
-  compression: DeflateCompression::Level(3),
+  level: 3,
   filter: Filter::Adaptive,
+  segments: 1,
 };
 
+/// Compressed bytes each segment of flat art should come to, so the block header and flush a
+/// segment adds stay a small share of it.
+const SEGMENT_OUTPUT: usize = 2048;
+
+/// Most segments flat art splits into. It does not follow the machine's cores, so every machine
+/// writes the same bytes.
+const MAX_SEGMENTS: usize = 8;
+
 impl PngEncoding {
-  /// Picks the encoding that makes a 1-in-32 row sample of `rgba` smaller.
+  /// Picks the encoding that makes a 1-in-32 row sample of `rgba` smaller, and for flat art, the
+  /// segments the sample's size says the whole image deflates in.
   fn pick(rgba: &[u8], width: u32) -> Self {
     const ROW_STRIDE: usize = 32;
 
@@ -275,14 +289,38 @@ impl PngEncoding {
 
     match (encoded_len(FLAT_PNG), encoded_len(PHOTO_PNG)) {
       (Ok(flat), Ok(photo)) if photo < flat => PHOTO_PNG,
+      (Ok(flat), _) => PngEncoding {
+        segments: (flat * ROW_STRIDE / SEGMENT_OUTPUT).clamp(1, MAX_SEGMENTS),
+        ..FLAT_PNG
+      },
       _ => FLAT_PNG,
     }
   }
 
   fn apply<T: Write>(self, encoder: &mut png::Encoder<'_, T>) {
-    encoder.set_deflate_compression(self.compression);
+    encoder.set_deflate_compression(DeflateCompression::Level(self.level));
     encoder.set_filter(self.filter);
   }
+}
+
+/// `rgba`'s rows as PNG scanlines under the None filter, with alpha only when `keep_alpha`, and
+/// the length of one.
+fn unfiltered_scanlines(rgba: &RgbaImage, keep_alpha: bool) -> (Vec<u8>, usize) {
+  let channels = if keep_alpha { 4 } else { 3 };
+  let row = rgba.width() as usize * channels + 1;
+  let mut scanlines = Vec::with_capacity(row * rgba.height() as usize);
+
+  for pixels in rgba.as_raw().chunks_exact(rgba.width() as usize * 4) {
+    scanlines.push(0);
+    if keep_alpha {
+      scanlines.extend_from_slice(pixels);
+    } else {
+      for pixel in pixels.as_chunks::<4>().0 {
+        scanlines.extend_from_slice(&pixel[..3]);
+      }
+    }
+  }
+  (scanlines, row)
 }
 
 /// Clamps a frame duration to the 16-bit APNG delay numerator, in milliseconds.
@@ -309,15 +347,11 @@ pub fn write_image<T: Write>(
     }
     OutputFormat::Png => {
       let mut encoder = png::Encoder::new(destination, image.width(), image.height());
-      PngEncoding::pick(image.as_raw(), image.width()).apply(&mut encoder);
+      let encoding = PngEncoding::pick(image.as_raw(), image.width());
+
+      encoding.apply(&mut encoder);
 
       let has_alpha = has_any_alpha_pixel(rgba);
-
-      let image_data = if has_alpha {
-        Cow::Borrowed(image.as_raw())
-      } else {
-        Cow::Owned(strip_alpha_channel(Cow::Borrowed(rgba)))
-      };
 
       encoder.set_color(if has_alpha {
         ColorType::Rgba
@@ -326,9 +360,28 @@ pub fn write_image<T: Write>(
       });
 
       let mut writer = encoder.write_header().map_err(Error::encode)?;
-      writer
-        .write_image_data(&image_data)
-        .map_err(Error::encode)?;
+
+      if encoding.segments > 1 {
+        let (scanlines, row) = unfiltered_scanlines(rgba, has_alpha);
+        let stream = compress_segmented(
+          &scanlines,
+          row,
+          u32::from(encoding.level),
+          encoding.segments,
+        )?;
+
+        writer.write_chunk(IDAT, &stream).map_err(Error::encode)?;
+      } else {
+        let image_data = if has_alpha {
+          Cow::Borrowed(image.as_raw())
+        } else {
+          Cow::Owned(strip_alpha_channel(Cow::Borrowed(rgba)))
+        };
+
+        writer
+          .write_image_data(&image_data)
+          .map_err(Error::encode)?;
+      }
       writer.finish().map_err(Error::encode)?;
     }
     #[cfg(not(target_arch = "wasm32"))]
@@ -666,8 +719,8 @@ mod tests {
 
   use super::{
     AnimatedGifOptions, AnimatedPngOptions, AnimatedWebpOptions, AnimationFrame, Bitmap, Filter,
-    OutputFormat, PngEncoding, write_animated_gif, write_animated_png, write_animated_webp,
-    write_image,
+    MAX_SEGMENTS, OutputFormat, PngEncoding, write_animated_gif, write_animated_png,
+    write_animated_webp, write_image,
   };
 
   fn band(width: u32, height: u32, pixel: impl Fn(u32, u32) -> [u8; 4]) -> Vec<u8> {
@@ -691,6 +744,35 @@ mod tests {
       PngEncoding::pick(&rgba, 256).filter,
       Filter::NoFilter
     ));
+  }
+
+  #[test]
+  fn small_flat_art_deflates_in_one_segment() {
+    let rgba = band(256, 64, |x, _| {
+      if x < 128 {
+        [20, 40, 60, 255]
+      } else {
+        [200, 40, 60, 255]
+      }
+    });
+
+    assert_eq!(PngEncoding::pick(&rgba, 256).segments, 1);
+  }
+
+  #[test]
+  fn detailed_flat_art_deflates_in_segments() {
+    // Dark marks scattered over white, like a page of text.
+    let rgba = band(1200, 630, |x, y| {
+      if ((x / 2).wrapping_mul(2654435761) ^ (y / 3).wrapping_mul(97)) % 7 == 0 {
+        [20, 40, 60, 255]
+      } else {
+        [255, 255, 255, 255]
+      }
+    });
+    let encoding = PngEncoding::pick(&rgba, 1200);
+
+    assert!(matches!(encoding.filter, Filter::NoFilter));
+    assert_eq!(encoding.segments, MAX_SEGMENTS);
   }
 
   #[test]

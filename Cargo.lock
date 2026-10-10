@@ -1947,6 +1947,7 @@ version = "0.5.1"
 dependencies = [
  "bytemuck",
  "color",
+ "flate2",
  "gif",
  "image",
  "image-webp",
@@ -1955,6 +1956,7 @@ dependencies = [
  "rayon",
  "serde",
  "serde_json",
+ "simd-adler32",
  "skrifa",
  "smallvec",
  "takumi-core",
