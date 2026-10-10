@@ -205,10 +205,6 @@ opt-level = "z"
 opt-level = "z"
 [profile.release.package.zune-jpeg]
 opt-level = "z"
-[profile.release.package.brotli-decompressor]
-opt-level = "z"
-[profile.release.package.wuff]
-opt-level = "z"
 [profile.release.package.imagesize]
 opt-level = "z"
 [profile.release.package.cssparser]
@@ -223,6 +219,13 @@ opt-level = 3
 [profile.release.package.miniz_oxide]
 opt-level = 3
 [profile.release.package.fdeflate]
+opt-level = 3
+# WOFF2 decoding is the other exception: it runs on font registration, a cold
+# start's critical path. Size-optimizing these two costs 22-29% there (132ms vs
+# 94ms for a 5.4MB CJK font) and saves 3KB brotli in the wasm bundle.
+[profile.release.package.brotli-decompressor]
+opt-level = 3
+[profile.release.package.wuff]
 opt-level = 3
 [profile.release.package.image]
 opt-level = "z"
