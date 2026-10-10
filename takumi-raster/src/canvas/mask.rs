@@ -672,11 +672,42 @@ impl<'a> MaskRow<'a> {
   pub(crate) fn is_empty(&self) -> bool {
     self.data.is_empty()
   }
+
+  /// The mask bytes under offsets `0..len`: the first covered offset and the bytes from there.
+  /// Offsets outside them read as `0`.
+  pub(crate) fn covered(&self, len: usize) -> (usize, &'a [u8]) {
+    let start = self.local_x_start.max(0);
+    let end = (self.local_x_start + len as i32).min(self.mask_width);
+
+    if self.data.is_empty() || start >= end {
+      return (0, &[]);
+    }
+
+    (
+      (start - self.local_x_start) as usize,
+      &self.data[self.row_offset + start as usize..self.row_offset + end as usize],
+    )
+  }
 }
 
 #[cfg(test)]
 mod tests {
   use super::*;
+
+  #[test]
+  fn a_row_covers_only_the_offsets_inside_the_mask() {
+    let mask = TinyMask::from_vec((0..12).collect(), IntSize::from_wh(4, 3).unwrap()).unwrap();
+    let view = |x: u32| MaskView {
+      mask: &mask,
+      origin: Point { x, y: 0 },
+      canvas_origin: Point { x: 0, y: 0 },
+    };
+
+    assert_eq!(view(0).row(1, -2).covered(3), (2, &[4u8][..]));
+    assert_eq!(view(0).row(1, 2).covered(5), (0, &[6u8, 7][..]));
+    assert_eq!(view(0).row(3, 0).covered(4), (0, &[][..]));
+    assert_eq!(view(10).row(0, 0).covered(4), (0, &[][..]));
+  }
 
   fn attenuate_reference(alpha: u8, mask_alpha: u8) -> u8 {
     if mask_alpha == 0 {

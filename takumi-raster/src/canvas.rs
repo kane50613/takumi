@@ -329,11 +329,24 @@ impl Canvas {
     let pixels = bytemuck::cast_slice_mut::<_, [u8; 4]>(layer.data_mut());
 
     for (y, row) in pixels.chunks_exact_mut(width).enumerate() {
-      let alphas = clip.row(offset.y + y as i32, offset.x);
+      let (first, alphas) = clip.row(offset.y + y as i32, offset.x).covered(width);
+      let (outside, rest) = row.split_at_mut(first);
+      let (inside, past) = rest.split_at_mut(alphas.len());
 
-      for (x, pixel) in row.iter_mut().enumerate() {
-        *pixel = scale_premultiplied_pixel(*pixel, alphas.alpha_at_offset(x));
+      outside.fill([0; 4]);
+      past.fill([0; 4]);
+
+      let (pixel_runs, pixel_tail) = inside.as_chunks_mut::<CLIP_RUN>();
+      let (alpha_runs, alpha_tail) = alphas.as_chunks::<CLIP_RUN>();
+
+      for (pixels, alphas) in pixel_runs.iter_mut().zip(alpha_runs) {
+        match u64::from_ne_bytes(*alphas) {
+          u64::MAX => {}
+          0 => pixels.fill([0; 4]),
+          _ => scale_by_alphas(pixels, alphas),
+        }
       }
+      scale_by_alphas(pixel_tail, alpha_tail);
     }
   }
 
@@ -614,6 +627,15 @@ pub(crate) fn demultiply_rgba_in_place(data: &mut [u8]) {
   Simd::detect().edit_mixed_alpha_runs(data, |pixels| {
     pixels.iter_mut().for_each(demultiply_pixel);
   });
+}
+
+/// Clip bytes `Canvas::clip_layer` tests at once for a uniformly empty or full run.
+const CLIP_RUN: usize = 8;
+
+fn scale_by_alphas(pixels: &mut [[u8; 4]], alphas: &[u8]) {
+  for (pixel, &alpha) in pixels.iter_mut().zip(alphas) {
+    *pixel = scale_premultiplied_pixel(*pixel, alpha);
+  }
 }
 
 fn dimension_mismatch() -> Error {
