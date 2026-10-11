@@ -127,12 +127,25 @@ pub fn demultiply_pixel(pixel: &mut [u8; 4]) {
     return;
   }
 
-  let divisor = alpha * 2;
+  let reciprocal = u64::from(DEMULTIPLY_RECIPROCALS[alpha as usize]);
 
   for channel in &mut pixel[..3] {
-    *channel = ((*channel as u32 * 510 + alpha) / divisor) as u8;
+    *channel = ((u64::from(*channel as u32 * 510 + alpha) * reciprocal) >> 32) as u8;
   }
 }
+
+/// `2^32 / (2 * alpha)` rounded up, which divides `channel * 510 + alpha` exactly for every
+/// byte, so [`demultiply_pixel`] multiplies instead of dividing.
+const DEMULTIPLY_RECIPROCALS: [u32; 256] = {
+  let mut reciprocals = [0; 256];
+  let mut alpha = 1;
+
+  while alpha < 256 {
+    reciprocals[alpha] = (1_u64 << 32).div_ceil(2 * alpha as u64) as u32;
+    alpha += 1;
+  }
+  reciprocals
+};
 
 /// Converts one straight-alpha RGBA pixel to premultiplied alpha.
 #[inline(always)]
@@ -189,7 +202,25 @@ pub(crate) fn premultiply_rgba_in_place(raw: &mut [u8]) {
 
 #[cfg(test)]
 mod tests {
-  use super::has_opaque_alpha;
+  use super::{demultiply_pixel, has_opaque_alpha};
+
+  #[test]
+  fn demultiply_matches_rounded_division_for_every_byte() {
+    for alpha in 1..u8::MAX {
+      for channel in 0..=u8::MAX {
+        let mut pixel = [channel, channel, channel, alpha];
+        let divided =
+          ((u32::from(channel) * 510 + u32::from(alpha)) / (u32::from(alpha) * 2)) as u8;
+
+        demultiply_pixel(&mut pixel);
+        assert_eq!(
+          pixel,
+          [divided, divided, divided, alpha],
+          "{channel} at alpha {alpha}"
+        );
+      }
+    }
+  }
 
   fn pixel(r: u8, g: u8, b: u8, a: u8) -> [u8; 4] {
     [r, g, b, a]
