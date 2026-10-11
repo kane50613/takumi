@@ -16,10 +16,7 @@ use takumi_core::{
   layout::{
     background_image_geometry::{BoxBackgroundPaintContext, FillLayers, ImageTiling},
     border::BorderProperties,
-    inline::{
-      BuiltInlineLayout, InlinePass, InlineRunLayout, PositionedInlineRun, ProcessedInlineSpan,
-      ShapedRun,
-    },
+    inline::{InlinePass, PositionedInlineRun, ProcessedInlineSpan, ShapedRun},
     inline_box::{InlineBoxPaint, InlineSubtree, resolve_inline_box},
     tree::{NodeOrigin, RenderNode},
   },
@@ -28,8 +25,8 @@ use takumi_core::{
   paint_property::{ClipId, ClipNode, EffectId, EffectNode},
   painter::{
     BoxBackground, BoxBorderPainter, BoxFrame, BoxPainter, FillShape, GlyphDevice, GlyphFill,
-    LayerBounds, LineItem, OwnContent, PaintDevice, PendingOutline, ShadowShape, StripBackground,
-    StrokeStyle, TextClip, UNBOUNDED,
+    LayerBounds, LineItem, OwnContent, PaintDevice, PaintedInline, PendingOutline, ShadowShape,
+    StripBackground, StrokeStyle, TextClip, UNBOUNDED,
   },
   scene::{NodePaint, Scene},
   shadow::SizedShadow,
@@ -315,7 +312,7 @@ impl Emitter<'_> {
         &mut TextDevice {
           emitter: self,
           device: self.device(surface, self.tagged),
-          built: None,
+          text: None,
           shadow: None,
           through: None,
         },
@@ -918,9 +915,9 @@ impl Emitter<'_> {
       node,
       node_id,
       frame.layout,
-      |built, runs, font_style| match pass {
-        InlinePass::Content => self.draw_runs(node, runs, built, frame, font_style, surface),
-        InlinePass::Floats => self.emit_inline_boxes(node, runs, built, frame, pass, surface),
+      |painted, font_style| match pass {
+        InlinePass::Content => self.draw_runs(node, painted, frame, font_style, surface),
+        InlinePass::Floats => self.emit_inline_boxes(node, painted, frame, pass, surface),
       },
     )?;
     Ok(())
@@ -928,39 +925,35 @@ impl Emitter<'_> {
 
   /// Paints the runs on the lines this page owns through takumi-core's text painter, then the
   /// inline boxes.
-  #[allow(clippy::too_many_arguments)]
   fn draw_runs(
     &mut self,
     node: &RenderNode,
-    runs: &InlineRunLayout,
-    built: &BuiltInlineLayout<'_>,
+    painted: &PaintedInline<'_>,
     frame: BoxFrame,
     font_style: &SizedFontStyle,
     surface: &mut Surface,
   ) {
     let y = frame.origin.y;
-    let lines = runs.lines(frame.layout, |item| {
+    let lines = painted.runs.lines(frame.layout, |item| {
       self.window.shows_line_item(item.below(y))
     });
     let mut device = TextDevice {
       emitter: self,
       device: self.device(surface, false),
-      built: Some(built),
+      text: Some(painted.text()),
       shadow: None,
       through: None,
     };
 
-    lines.paint(&built.spans, font_style, frame, &mut device);
-    self.emit_inline_boxes(node, runs, built, frame, InlinePass::Content, surface);
+    lines.paint(&painted.spans, font_style, frame, &mut device);
+    self.emit_inline_boxes(node, painted, frame, InlinePass::Content, surface);
   }
 
   /// Paints the inline layout's replaced boxes and nested container subtrees.
-  #[allow(clippy::too_many_arguments)]
   fn emit_inline_boxes(
     &mut self,
     owner: &RenderNode,
-    runs: &InlineRunLayout,
-    built: &BuiltInlineLayout<'_>,
+    painted: &PaintedInline<'_>,
     frame: BoxFrame,
     pass: InlinePass,
     surface: &mut Surface,
@@ -975,12 +968,13 @@ impl Emitter<'_> {
     // region of its own, and hands it back.
     let owner_tagged = self.tagged && pass == InlinePass::Content && draws(&OwnContent::of(owner));
 
-    for positioned in runs
+    for positioned in painted
+      .runs
       .inline_boxes
       .iter()
       .filter(|positioned| pass.paints(positioned))
     {
-      let Some(ProcessedInlineSpan::Box(item)) = built.spans.get(positioned.id as usize) else {
+      let Some(ProcessedInlineSpan::Box(item)) = painted.spans.get(positioned.id as usize) else {
         continue;
       };
       let node = item.render_node;
@@ -1297,12 +1291,12 @@ impl Emitter<'_> {
     fills
   }
 
-  /// A run this page draws at `(x, y)`, its text from `built` when given, or `None` when it has
+  /// A run this page draws at `(x, y)`, its text from `text` when given, or `None` when it has
   /// no glyphs, no font, or this page does not show it in its block at `line_y`.
   fn glyph_run<'r>(
     &self,
     run: &PositionedInlineRun,
-    built: Option<&'r BuiltInlineLayout<'_>>,
+    text: Option<&'r str>,
     frame: BoxFrame,
     line_y: f32,
   ) -> Option<GlyphRun<'r>> {
@@ -1323,8 +1317,8 @@ impl Emitter<'_> {
     if !self.window.shows_line_item(item) {
       return None;
     }
-    let text = built
-      .and_then(|built| built.text.get(shaped.text_range.clone()))
+    let text = text
+      .and_then(|text| text.get(shaped.text_range.clone()))
       .unwrap_or_default();
     let glyphs = run_glyphs(
       shaped,
@@ -2034,8 +2028,8 @@ struct GlyphBackground {
 struct TextDevice<'e, 'x, 's, 'a> {
   emitter: &'e Emitter<'x>,
   device: SurfaceDevice<'s, 'a>,
-  /// The inline layout whose text the glyphs carry, unless they only draw a mask.
-  built: Option<&'e BuiltInlineLayout<'e>>,
+  /// The text the glyphs carry, unless they only draw a mask.
+  text: Option<&'e str>,
   /// The shadow every draw becomes while one is open.
   shadow: Option<SizedShadow>,
   /// While a `background-clip: text` mask draws, the fills each of its shapes and glyphs shows
@@ -2315,7 +2309,7 @@ impl TextDevice<'_, '_, '_, '_> {
       owned,
     }) = self
       .emitter
-      .glyph_run(run, self.built, shifted, frame.origin.y)
+      .glyph_run(run, self.text, shifted, frame.origin.y)
     else {
       return;
     };

@@ -13,8 +13,8 @@ use crate::{
   layout::{
     decoration::OutlineGeometry,
     inline::{
-      InlineContentKind, InlineLayoutMode, InlineLayoutRequest, PlacedItem, ProcessedInlineSpan,
-      ShapedRun, collect_inline_items, create_inline_layout, glyph_run_rect,
+      InkBox, InlineContentKind, InlineLayoutMode, InlineLayoutRequest, PlacedItem,
+      ProcessedInlineSpan, ShapedRun, collect_inline_items, create_inline_layout, glyph_run_rect,
       resolve_inline_max_height,
     },
     node::Node,
@@ -616,7 +616,7 @@ impl Scene {
   /// Lays `root` out in `viewport` and builds its scene at the origin.
   pub fn lay_out(root: RenderNode, viewport: Viewport, paint_bounds: bool) -> Result<Self> {
     root.clear_fragment_items();
-    let results = LayoutResults::compute(&root, viewport.into());
+    let results = LayoutResults::compute_for_paint(&root, viewport.into());
     let container_size = Size::from(viewport.size);
     let size = container_size.zip_map(results.layout(NodeId::ROOT)?.size, Option::unwrap_or);
     let layers = SceneRequest {
@@ -823,7 +823,7 @@ fn box_ink_reach(node: &RenderNode, size: Size<f32>) -> f32 {
 }
 
 /// How far text shadows and the text stroke reach past glyph ink, in local px.
-fn text_ink_reach(font_style: &SizedFontStyle) -> f32 {
+pub(crate) fn text_ink_reach(font_style: &SizedFontStyle) -> f32 {
   let shadow_reach = font_style
     .text_shadow
     .iter()
@@ -872,6 +872,25 @@ fn compute_node_paint_bounds(
     return bounds;
   }
 
+  let content_offset = layout.content_box_offset();
+  let inline_transform = Affine::translation(content_offset.x, content_offset.y) * transform;
+
+  if let Some(items) = node.fragment_items_in(layout) {
+    let placed = |ink: Option<InkBox>, transform| {
+      let (origin, size) = ink?.rect();
+
+      bounds_for_placed_rect(origin, size, transform)
+    };
+
+    bounds = merge_bounds(bounds, placed(items.ink.content, inline_transform));
+    bounds = merge_bounds(bounds, placed(items.ink.decorations, transform));
+    return outset_bounds(
+      bounds,
+      items.span_ink_reach.max(text_ink_reach(&font_style)),
+      inline_transform,
+    );
+  }
+
   let content = layout.content_box_size();
   let available_space = Size {
     width: AvailableSpace::Definite(content.width),
@@ -889,8 +908,6 @@ fn compute_node_paint_bounds(
     mode: InlineLayoutMode::Measure,
     shape_cacheable: true,
   });
-  let content_offset = layout.content_box_offset();
-  let inline_transform = Affine::translation(content_offset.x, content_offset.y) * transform;
   let Ok(()) = built.walk_items::<Infallible>(layout, |line, item| {
     let setup = &line.setup;
 
