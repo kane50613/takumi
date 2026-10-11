@@ -431,8 +431,7 @@ where
   };
   let frames = once(Ok(first)).chain(frames);
 
-  // Each frame quantizes to its own palette, so a batch as large as the one `ChunkedFrames`
-  // renders quantizes at once and is written in order.
+  // Each frame quantizes to its own palette, so a batch quantizes at once and is written in order.
   #[cfg(feature = "rayon")]
   {
     use rayon::prelude::*;
@@ -440,10 +439,7 @@ where
     let mut frames = frames;
 
     loop {
-      let batch: Vec<_> = frames
-        .by_ref()
-        .take(rayon::current_num_threads().max(1))
-        .collect();
+      let batch: Vec<_> = frames.by_ref().take(frame_batch_len()).collect();
 
       if batch.is_empty() {
         return Ok(());
@@ -641,6 +637,12 @@ fn encode_frames<W: Write>(
   }
 }
 
+/// Frames rendered or quantized at once: one for each `rayon` thread.
+#[cfg(feature = "rayon")]
+fn frame_batch_len() -> usize {
+  rayon::current_num_threads().max(1)
+}
+
 /// Renders frames one chunk at a time: `next()` renders a chunk of `rayon`
 /// threads' worth of frames in parallel once the encoder has consumed the
 /// previous chunk, so at most one chunk of raw frames is in memory.
@@ -672,8 +674,7 @@ impl Iterator for ChunkedFrames<'_, '_> {
     use rayon::prelude::*;
 
     if self.ready.is_empty() && self.next < self.spans.len() {
-      let chunk_len = rayon::current_num_threads().max(1);
-      let chunk = &self.spans[self.next..(self.next + chunk_len).min(self.spans.len())];
+      let chunk = &self.spans[self.next..(self.next + frame_batch_len()).min(self.spans.len())];
       self.next += chunk.len();
 
       // `PreparedScene` is not `Send`: each worker prepares and reuses its own copy.
