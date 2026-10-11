@@ -72,23 +72,38 @@ impl OverlayBounds {
   /// when nothing of it lands inside.
   #[inline(always)]
   pub(crate) fn new(canvas: Size<u32>, offset: Point<f32>, size: Size<u32>) -> Option<Self> {
+    Self::at_whole_pixel(
+      canvas,
+      Point {
+        x: offset.x.trunc() as i32,
+        y: offset.y.trunc() as i32,
+      },
+      size,
+    )
+  }
+
+  /// [`Self::new`] for an `offset` already in whole pixels, which `f32` cannot hold past 2^24.
+  #[inline(always)]
+  pub(crate) fn at_whole_pixel(
+    canvas: Size<u32>,
+    offset: Point<i32>,
+    size: Size<u32>,
+  ) -> Option<Self> {
     if size.width == 0 || size.height == 0 {
       return None;
     }
 
-    let offset_x = offset.x.trunc() as i32;
-    let offset_y = offset.y.trunc() as i32;
     let clipped = Placement {
-      left: offset_x,
-      top: offset_y,
+      left: offset.x,
+      top: offset.y,
       width: size.width,
       height: size.height,
     }
     .clamp_to(canvas)?;
 
     Some(Self {
-      offset_x,
-      offset_y,
+      offset_x: offset.x,
+      offset_y: offset.y,
       x_min: clipped.left,
       x_max: clipped.right(),
       y_min: clipped.top,
@@ -285,12 +300,9 @@ pub(super) fn blit_translucent_translation(
   opacity: f32,
 ) {
   let canvas_width = pixmap.width() as usize;
-  let Some(bounds) = OverlayBounds::new(
+  let Some(bounds) = OverlayBounds::at_whole_pixel(
     Size::new(pixmap.width(), pixmap.height()),
-    Point {
-      x: offset.x as f32,
-      y: offset.y as f32,
-    },
+    offset,
     Size::new(source.width(), source.height()),
   ) else {
     return;
@@ -629,6 +641,21 @@ mod tests {
       .unwrap();
     }
     pixmap
+  }
+
+  #[test]
+  fn whole_pixel_bounds_keep_offsets_past_f32_precision() {
+    let bounds = OverlayBounds::at_whole_pixel(
+      Size::new(16_777_218, 1),
+      Point {
+        x: 16_777_217,
+        y: 0,
+      },
+      Size::new(1, 1),
+    )
+    .unwrap();
+
+    assert_eq!((bounds.x_min, bounds.x_max), (16_777_217, 16_777_218));
   }
 
   #[test]
