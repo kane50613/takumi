@@ -383,8 +383,16 @@ pub(crate) struct ScaledRows<'a> {
 /// What each destination column of a [`ScaledRows`] reads: two bilinear taps when the draw
 /// magnifies, a box span when it minifies.
 enum ScaledColumns {
+  /// A whole-pixel shift, whose taps all land on pixel centres: column `i` reads source column
+  /// `start + i`.
+  Shift {
+    start: usize,
+  },
   Bilinear(Vec<BilinearAxis>),
-  Box { columns: Vec<BoxAxis>, span_y: f32 },
+  Box {
+    columns: Vec<BoxAxis>,
+    span_y: f32,
+  },
 }
 
 impl<'a> ScaledRows<'a> {
@@ -409,6 +417,24 @@ impl<'a> ScaledRows<'a> {
 
     let footprint = SamplingFootprint::of(transform);
     let (mut sample_x, _) = transform.transform_point(x_start, 0.0);
+    let start = sample_x - 0.5;
+
+    if transform.a == 1.0
+      && transform.d == 1.0
+      && start.fract() == 0.0
+      && start >= 0.0
+      && start as usize + width <= source.width() as usize
+    {
+      return Some(Self {
+        source,
+        transform,
+        x_start,
+        columns: ScaledColumns::Shift {
+          start: start as usize,
+        },
+      });
+    }
+
     let mut advance = || {
       let x = sample_x;
       sample_x += transform.a;
@@ -441,6 +467,22 @@ impl<'a> ScaledRows<'a> {
     let (_, sample_y) = self.transform.transform_point(self.x_start, y);
 
     match &self.columns {
+      ScaledColumns::Shift { start } => {
+        let row = BilinearAxis::new(sample_y, self.source.height());
+        let stride = self.source.width() as usize;
+        let source: &[[u8; 4]] = bytemuck::cast_slice(self.source.pixels());
+
+        if row.ratio == 0 {
+          out.copy_from_slice(&source[row.floor * stride + start..][..out.len()]);
+          return;
+        }
+
+        let rows = row.rows(self.source);
+
+        for (index, dst) in out.iter_mut().enumerate() {
+          *dst = BilinearAxis::new((start + index) as f32 + 0.5, stride as u32).mix(rows);
+        }
+      }
       ScaledColumns::Bilinear(columns) => {
         let row = BilinearAxis::new(sample_y, self.source.height()).rows(self.source);
 
@@ -641,13 +683,13 @@ mod tests {
   use tiny_skia::{Pixmap, PremultipliedColorU8};
 
   use super::{
-    SamplingFootprint, ScaledRows, interpolate_bilinear, interpolate_with_footprint,
+    SamplingFootprint, ScaledColumns, ScaledRows, interpolate_bilinear, interpolate_with_footprint,
     sample_paint_source,
   };
   use crate::style::{Affine, ImageScalingAlgorithm};
 
-  #[test]
-  fn scaled_rows_match_the_per_pixel_sampler() {
+  /// A 97x61 pixmap of legal premultiplied noise.
+  fn noisy_pixmap() -> Pixmap {
     let mut pixmap = Pixmap::new(97, 61).unwrap();
 
     for (index, pixel) in pixmap.pixels_mut().iter_mut().enumerate() {
@@ -662,6 +704,53 @@ mod tests {
       )
       .unwrap();
     }
+    pixmap
+  }
+
+  #[test]
+  fn shifted_rows_match_the_per_pixel_sampler() {
+    let pixmap = noisy_pixmap();
+    let source = pixmap.as_ref().into();
+    let width = 25;
+
+    // Row offsets off the pixel centre and rows past either edge still read through bilinear taps.
+    for (shift_x, shift_y, row_offset) in [
+      (7.0, 3.0, 0.5),
+      (7.0, 3.0, 0.75),
+      (0.0, -2.0, 0.5),
+      (72.0, 50.0, 0.5),
+    ] {
+      let transform = Affine::translation(shift_x, shift_y);
+      let rows =
+        ScaledRows::new(source, transform, ImageScalingAlgorithm::Auto, 0.5, width).unwrap();
+      let mut row = vec![[0; 4]; width];
+
+      assert!(matches!(rows.columns, ScaledColumns::Shift { .. }));
+      for y in 0..20 {
+        let y = y as f32 + row_offset;
+        let (mut sample_x, sample_y) = transform.transform_point(0.5, y);
+
+        rows.fill(y, &mut row);
+        for &pixel in &row {
+          let expected = sample_paint_source(
+            source,
+            ImageScalingAlgorithm::Auto,
+            sample_x,
+            sample_y,
+            SamplingFootprint::of(transform),
+          )
+          .unwrap_or([0; 4]);
+
+          assert_eq!(pixel, expected, "shift {shift_x},{shift_y} at row {y}");
+          sample_x += 1.0;
+        }
+      }
+    }
+  }
+
+  #[test]
+  fn scaled_rows_match_the_per_pixel_sampler() {
+    let pixmap = noisy_pixmap();
 
     for (scale_x, scale_y) in [(3.1, 2.4), (2.7, 0.6), (0.8, 1.9)] {
       let transform = Affine::translation(1.25, -0.5) * Affine::scale(scale_x, scale_y);
