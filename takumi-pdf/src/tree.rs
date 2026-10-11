@@ -23,6 +23,7 @@ use takumi_core::{
 use crate::{
   atoms::AtomCollector,
   bands::{FixedTemplate, Repeatable},
+  chunks::SceneChunks,
   counters::{has_page_counters, substitute_page_counters, substitute_target_counters},
   emitter::{DocumentState, Emitter},
   inline::InlineMap,
@@ -213,12 +214,14 @@ impl PreparedTree {
     &'a self,
     state: &'a DocumentState<'a>,
     inline: Option<&'a InlineMap<'a>>,
+    chunks: Option<&'a SceneChunks<'a>>,
     tagged: bool,
   ) -> Emitter<'a> {
     Emitter {
       scene: &self.scene,
       document: state,
       inline,
+      chunks,
       window: Window::default(),
       tagged: tagged && state.tags.is_some(),
       tag_prefix: Vec::new(),
