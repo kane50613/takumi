@@ -256,9 +256,17 @@ pub(crate) fn decode_webp_frames(
   target: Option<DecodeTarget>,
   mut push: impl FnMut(Arc<ImageBuffer>),
 ) -> ImageResult<bool> {
-  let mut decoder = AnimDecoder::new(bytes)?;
-  let (width, height) = decoder.canvas;
+  let (width, height) = webp_dimensions(bytes)?;
+
+  // The decoder allocates two canvases when it is created.
   check_pixel_budget(width, height)?;
+
+  let mut decoder = AnimDecoder::new(bytes)?;
+
+  if decoder.canvas != (width, height) {
+    return Err(webp_decode_error(WebPError::InvalidEncodedData));
+  }
+
   let target = target.filter(|target| target.shrinks(width, height));
   let mut total_pixels = 0_u64;
   let mut pushed = 0_usize;
