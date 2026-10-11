@@ -6,9 +6,9 @@ use crate::{
   layout_unit::LayoutUnit,
   resources::font::FontClasses,
   style::{
-    AppliedTextDecorations, Color, Direction, FontFeature, FontSynthesis, Lang, Length,
-    ResolvedVerticalAlign, Tag, TextDecorationSkipInk, TextOverflow, TextWrapStyle, VerticalAlign,
-    VerticalAlignKeyword, WhiteSpaceCollapse, WordBreak,
+    AppliedTextDecorations, BlockEllipsis, Color, Direction, FontFeature, FontSynthesis, Lang,
+    Length, ResolvedVerticalAlign, Tag, TextDecorationSkipInk, TextOverflow, TextWrapStyle,
+    VerticalAlign, VerticalAlignKeyword, WhiteSpaceCollapse, WordBreak,
   },
   text_processing::{
     MaxHeight, RebreakOptions, apply_text_transform, apply_white_space_collapse,
@@ -1223,7 +1223,17 @@ pub fn create_inline_layout<'c>(request: InlineLayoutRequest<'c>) -> BuiltInline
       ..
     } = &mut built;
 
-    if style.parent.text_overflow == TextOverflow::Ellipsis {
+    let ellipsis_on_overflow = style.parent.text_overflow == TextOverflow::Ellipsis;
+    // Blink ellipses the line at a `line-clamp` cut whatever `text-overflow` says, unless
+    // `block-ellipsis` is `none` (InlineLayoutAlgorithm::GetLineClampState in
+    // blink/renderer/core/layout/inline/inline_layout_algorithm.cc).
+    let ellipsis_at_clamp = style.parent.block_ellipsis != BlockEllipsis::None
+      && style
+        .parent
+        .clamp_lines()
+        .is_some_and(|lines| layout.lines().count() >= lines as usize);
+
+    if ellipsis_on_overflow || ellipsis_at_clamp {
       // A line's advance is an f32 sum over glyphs, so an exactly-fitting line
       // can land a hair past max_width and must not sprout an ellipsis.
       // Overflow shows up two ways: text truncated past the last committed
@@ -1247,8 +1257,9 @@ pub fn create_inline_layout<'c>(request: InlineLayoutRequest<'c>) -> BuiltInline
       let indent = LineIndent::of(style, max_width).last_line(layout);
       let is_overflowing = layout.lines().last().is_some_and(|last_line| {
         last_line.text_range().end < text.len()
-          || last_fit.content_end(&last_line, layout.is_rtl(), indent)
-            > max_width + LAYOUT_UNIT_EPSILON
+          || ellipsis_on_overflow
+            && last_fit.content_end(&last_line, layout.is_rtl(), indent)
+              > max_width + LAYOUT_UNIT_EPSILON
       });
 
       if is_overflowing {
