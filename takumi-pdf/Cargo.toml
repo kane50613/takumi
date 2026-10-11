@@ -29,6 +29,7 @@ flate2.workspace = true
 float-cmp.workspace = true
 indexmap.workspace = true
 pdf-writer.workspace = true
+quick_cache.workspace = true
 rustc-hash.workspace = true
 siphasher.workspace = true
 skrifa.workspace = true
