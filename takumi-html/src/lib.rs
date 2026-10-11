@@ -27,7 +27,7 @@ use html5ever::{
 };
 use markup5ever_rcdom::{Handle, NodeData, RcDom, SerializableHandle};
 use takumi_core::{
-  layout::node::{ImageData, ImageSourceInput, Node, NodeKind},
+  layout::node::{ImageData, ImageSourceInput, MAXIMUM_DOM_TREE_DEPTH, Node, NodeKind},
   style::{Direction, FromCssStr, Lang, Style, StyleDeclarationBlock, TailwindValues},
 };
 use typed_builder::TypedBuilder;
@@ -177,10 +177,6 @@ static DEFAULT_STYLE_PRESETS: LazyLock<HashMap<Box<str>, Style>> = LazyLock::new
     .collect()
 });
 
-/// Default cap on element nesting depth, guarding the recursive walk against
-/// stack overflow on hostile input. Matches Blink's limit.
-pub const DEFAULT_MAX_DEPTH: usize = 512;
-
 /// Errors raised while parsing HTML into a node tree.
 #[derive(Debug, thiserror::Error)]
 #[non_exhaustive]
@@ -241,8 +237,8 @@ pub struct FromHtmlOptions {
   #[builder(default, setter(into, strip_option))]
   pub(crate) tailwind_property: Option<Box<str>>,
   /// Maximum element nesting depth before [`HtmlError::MaxDepthExceeded`].
-  /// Defaults to [`DEFAULT_MAX_DEPTH`].
-  #[builder(default = DEFAULT_MAX_DEPTH)]
+  /// Defaults to [`MAXIMUM_DOM_TREE_DEPTH`].
+  #[builder(default = MAXIMUM_DOM_TREE_DEPTH)]
   pub(crate) max_depth: usize,
 }
 

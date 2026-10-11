@@ -26,6 +26,10 @@ use crate::{
   viewport::Viewport,
 };
 
+/// The most levels a node tree nests when it arrives as data: layout and paint
+/// recurse once per level. Blink's `HTMLConstructionSite::kMaximumHTMLParserDOMTreeDepth`.
+pub const MAXIMUM_DOM_TREE_DEPTH: usize = 512;
+
 /// Shared metadata stored by every renderable node.
 #[derive(Debug, Clone, Default)]
 pub(crate) struct NodeMetadata {

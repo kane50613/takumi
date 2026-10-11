@@ -2,18 +2,16 @@ use std::fmt;
 
 use serde::{
   Deserialize, Deserializer,
-  de::{Error, IgnoredAny, MapAccess, Visitor},
+  de::{DeserializeSeed, Error, IgnoredAny, MapAccess, SeqAccess, Visitor},
 };
 
-use crate::layout::node::{ImageData, Node, NodeKind, NodeMetadata, TextData};
+use crate::layout::node::{
+  ImageData, MAXIMUM_DOM_TREE_DEPTH, Node, NodeKind, NodeMetadata, TextData,
+};
 
 impl<'de> Deserialize<'de> for Node {
   fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-    let (metadata, kind) = deserializer.deserialize_map(NodeVisitor {
-      reads_metadata: true,
-    })?;
-
-    Ok(Node { metadata, kind })
+    NodeSeed { depth: 0 }.deserialize(deserializer)
   }
 }
 
@@ -22,8 +20,76 @@ impl<'de> Deserialize<'de> for NodeKind {
     deserializer
       .deserialize_map(NodeVisitor {
         reads_metadata: false,
+        depth: 0,
       })
       .map(|(_, kind)| kind)
+  }
+}
+
+/// A node `depth` levels below the root, refused past [`MAXIMUM_DOM_TREE_DEPTH`].
+struct NodeSeed {
+  depth: usize,
+}
+
+impl<'de> DeserializeSeed<'de> for NodeSeed {
+  type Value = Node;
+
+  fn deserialize<D: Deserializer<'de>>(self, deserializer: D) -> Result<Node, D::Error> {
+    if self.depth >= MAXIMUM_DOM_TREE_DEPTH {
+      return Err(Error::custom(format_args!(
+        "nodes nest deeper than {MAXIMUM_DOM_TREE_DEPTH} levels"
+      )));
+    }
+
+    let (metadata, kind) = deserializer.deserialize_map(NodeVisitor {
+      reads_metadata: true,
+      depth: self.depth,
+    })?;
+
+    Ok(Node { metadata, kind })
+  }
+}
+
+/// A container's children, one level below it: absent, `null`, or a list.
+struct Children {
+  depth: usize,
+}
+
+impl<'de> DeserializeSeed<'de> for Children {
+  type Value = Option<Vec<Node>>;
+
+  fn deserialize<D: Deserializer<'de>>(self, deserializer: D) -> Result<Self::Value, D::Error> {
+    deserializer.deserialize_option(self)
+  }
+}
+
+impl<'de> Visitor<'de> for Children {
+  type Value = Option<Vec<Node>>;
+
+  fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+    formatter.write_str("a sequence")
+  }
+
+  fn visit_none<E: Error>(self) -> Result<Self::Value, E> {
+    Ok(None)
+  }
+
+  fn visit_unit<E: Error>(self) -> Result<Self::Value, E> {
+    Ok(None)
+  }
+
+  fn visit_some<D: Deserializer<'de>>(self, deserializer: D) -> Result<Self::Value, D::Error> {
+    deserializer.deserialize_seq(self)
+  }
+
+  fn visit_seq<A: SeqAccess<'de>>(self, mut seq: A) -> Result<Self::Value, A::Error> {
+    let mut children = Vec::new();
+
+    while let Some(child) = seq.next_element_seed(NodeSeed { depth: self.depth })? {
+      children.push(child);
+    }
+
+    Ok(Some(children))
   }
 }
 
@@ -78,6 +144,8 @@ enum NodeType {
 struct NodeVisitor {
   /// Whether metadata keys are read, or skipped unread as a bare [`NodeKind`] ignores them.
   reads_metadata: bool,
+  /// How many levels below the root the node sits.
+  depth: usize,
 }
 
 impl<'de> Visitor<'de> for NodeVisitor {
@@ -105,7 +173,11 @@ impl<'de> Visitor<'de> for NodeVisitor {
           map.next_value::<IgnoredAny>()?;
         }
         NodeField::Type => node_type = Some(map.next_value()?),
-        NodeField::Children if owns(NodeType::Container) => children = map.next_value()?,
+        NodeField::Children if owns(NodeType::Container) => {
+          children = map.next_value_seed(Children {
+            depth: self.depth + 1,
+          })?;
+        }
         NodeField::Text if owns(NodeType::Text) => text = Some(map.next_value()?),
         NodeField::Src if owns(NodeType::Image) => src = Some(map.next_value()?),
         NodeField::Width if owns(NodeType::Image) => width = map.next_value()?,
@@ -145,9 +217,11 @@ impl<'de> Visitor<'de> for NodeVisitor {
 
 #[cfg(test)]
 mod tests {
+  use std::thread;
+
   use serde_json::{from_str, from_value, json};
 
-  use crate::layout::node::{Node, NodeKind};
+  use crate::layout::node::{MAXIMUM_DOM_TREE_DEPTH, Node, NodeKind};
 
   fn error(value: serde_json::Value) -> String {
     from_value::<Node>(value).unwrap_err().to_string()
@@ -204,6 +278,27 @@ mod tests {
 
     assert!(matches!(&kind, NodeKind::Text(data) if data.text == "a"));
     assert!(error(input).contains("invalid type"));
+  }
+
+  #[test]
+  fn refuses_nodes_nested_past_the_limit() {
+    let nested = |levels: usize| {
+      (1..levels).fold(
+        json!({ "type": "text", "text": "a" }),
+        |child, _| json!({ "type": "container", "children": [child] }),
+      )
+    };
+
+    // A debug build's test thread is too shallow for `serde_json`'s own recursion that deep.
+    thread::Builder::new()
+      .stack_size(64 << 20)
+      .spawn(move || {
+        assert!(from_value::<Node>(nested(MAXIMUM_DOM_TREE_DEPTH)).is_ok());
+        assert!(error(nested(MAXIMUM_DOM_TREE_DEPTH + 1)).contains("nest deeper than"));
+      })
+      .unwrap()
+      .join()
+      .unwrap();
   }
 
   #[test]
