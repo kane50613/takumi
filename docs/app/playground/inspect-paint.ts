@@ -152,7 +152,7 @@ function truncate(text: string, length: number) {
   return flat.length > length ? `${flat.slice(0, length - 1)}…` : flat;
 }
 
-function round(value: number) {
+export function round(value: number) {
   return Math.round(value * 100) / 100;
 }
 
@@ -160,7 +160,7 @@ function hex(value: number) {
   return Math.round(value).toString(16).padStart(2, "0");
 }
 
-function cssColor([r, g, b, a]: Rgba) {
+export function cssColor([r, g, b, a]: Rgba) {
   return `rgba(${r}, ${g}, ${b}, ${round(a / 255)})`;
 }
 

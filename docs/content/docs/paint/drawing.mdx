@@ -1,10 +1,22 @@
 ---
 title: Drawing
-description: Replay paint steps and draw shapes, paints, and effects.
+description: Place nodes with their transform, then replay the steps.
 icon: PenTool
 ---
 
-A node is a rectangle placed on the canvas. Its `drawables` sit in its local space, and `node.transform` maps that space onto the canvas. Canvas accepts the six matrix values in the same order.
+A renderer reads two things from the tree: where each node sits, and the draw order.
+
+## Place a node
+
+Each node has a **local space** from `(0, 0)` to `(width, height)`. Its drawables use that space. `node.transform` maps the space onto the canvas.
+
+Pick a rotation below. The drawables stay the same. Only the transform changes.
+
+<LocalSpace />
+
+`node.bounds` is the node's rectangle on the canvas. It grows when the node rotates.
+
+Canvas takes the matrix in the same order: `ctx.setTransform(...node.transform)`.
 
 | Node    | Local space                                |
 | ------- | ------------------------------------------ |
@@ -12,11 +24,21 @@ A node is a rectangle placed on the canvas. Its `drawables` sit in its local spa
 | `text`  | The border box of the block its lines fill |
 | `image` | Its content box                            |
 
-All lengths use device pixels. With `devicePixelRatio: 2`, a CSS length of `20px` becomes `40` in the tree.
-
 ## Replay the steps
 
-`tree.steps` lists the steps a renderer takes, bottom to top. `z-index`, negative stacking, and outlines that paint after later siblings are already in order.
+`tree.steps` lists every step, bottom to top. The demo draws the card from [Paint JSX](/docs/paint#paint-jsx) one step at a time.
+
+<StepReplay />
+
+The order already handles `z-index` and negative stacking. Outlines that paint after later siblings are in place too.
+
+| Step                        | Do                                                   |
+| --------------------------- | ---------------------------------------------------- |
+| `draw`                      | Draw `drawables` under `node.transform`              |
+| `begin-group` / `end-group` | Draw the steps between them into a layer, then blend |
+| `begin-clip` / `end-clip`   | Clip the steps between them to `clip`, in node space |
+
+This loop replays the steps onto a canvas:
 
 ```ts twoslash title="replay.ts"
 import type { Drawable, PaintTree } from "takumi-paint";
@@ -31,8 +53,8 @@ function replay(ctx: CanvasRenderingContext2D, tree: PaintTree) {
   for (const step of tree.steps) {
     switch (step.type) {
       case "draw":
-        target.setTransform(...step.node.transform);
-        for (const drawable of step.drawables) draw(target, drawable);
+        target.setTransform(...step.node.transform); // [!code highlight]
+        for (const drawable of step.drawables) draw(target, drawable); // [!code highlight]
         break;
       case "begin-clip":
         target.save();
@@ -43,15 +65,15 @@ function replay(ctx: CanvasRenderingContext2D, tree: PaintTree) {
         target.restore();
         break;
       case "begin-group":
-        layers.push(target);
-        target = newLayer();
+        layers.push(target); // [!code highlight]
+        target = newLayer(); // [!code highlight]
         break;
       case "end-group": {
         const parent = layers.pop() ?? ctx;
         // Filter, clip, and mask the layer per step.node.effects, then blend it into parent.
         parent.resetTransform();
         parent.globalAlpha = step.node.effects?.opacity ?? 1;
-        parent.drawImage(target.canvas, 0, 0);
+        parent.drawImage(target.canvas, 0, 0); // [!code highlight]
         parent.globalAlpha = 1;
         target = parent;
         break;
@@ -61,7 +83,7 @@ function replay(ctx: CanvasRenderingContext2D, tree: PaintTree) {
 }
 ```
 
-A group needs its own layer. Setting `globalAlpha` on each draw instead darkens where the group's draws overlap.
+A group needs its own layer. Setting `globalAlpha` per draw darkens the spots where draws overlap.
 
 ## Draw a drawable
 
@@ -75,18 +97,25 @@ A group needs its own layer. Setting `globalAlpha` on each draw instead darkens 
 | `masked` | Draw `content` into a layer, keep it only where `mask` covers, then composite it                                         |
 | `group`  | Draw `drawables` into a layer, then composite it at `opacity`                                                            |
 
-A `shadow` or `glyphs` blur is the Gaussian's standard deviation, half of a CSS blur radius.
+A `shadow` or `glyphs` blur is a Gaussian standard deviation. It is half the CSS blur radius.
 
-Every drawable carries a `role`, such as `background`, `border`, `box-shadow`, `outline`, `text`, or `text-decoration`. An exporter that rebuilds editable objects can use it to put a box's background, border, and shadow back into one shape.
+Every drawable has a `role`, such as `background`, `border`, or `text`. Exporters use it to rebuild editable objects. For example, a slide writer can merge a box's background, border, and shadow into one shape.
 
 ## Read paints
 
-Gradient stops interpolate in sRGB. Takumi adds stops where the CSS interpolation space, such as the default Oklab, would differ. A repeating gradient's stops cover one period with `spread: "repeat"`, as SVG's `spreadMethod` takes it; canvas gradients only pad, so repeat the stops yourself.
+Gradient stops interpolate in sRGB. Takumi adds stops where the CSS color space would differ. Oklab is the CSS default.
 
-Background and mask layers arrive as `pattern` paints: one tile drawn at every `x` and `y`, clipped to `area`.
+A repeating gradient has `spread: "repeat"`. Its stops cover one period, like SVG's `spreadMethod`. Canvas gradients only pad, so repeat the stops yourself.
+
+Background and mask layers arrive as `pattern` paints. A pattern draws one tile at every `x` and `y`, clipped to `area`.
 
 ## Apply effects
 
-A box with `effects` composites as a group. Render the group's steps into a layer, run `filters` over it, clip it to `clip`, multiply it by the alpha of `mask`, then blend it with `opacity` and `blendMode`.
+A box with `effects` composites as a group. Apply them in this order:
 
-`backdropFilters` apply to what is already drawn behind the node, inside `backdropClip`, before the node draws.
+1. Render the group's steps into a layer.
+2. Run `filters` over it.
+3. Clip it to `clip`, and multiply it by the alpha of `mask`.
+4. Blend it with `opacity` and `blendMode`.
+
+`backdropFilters` apply to what is already drawn behind the node. They run inside `backdropClip`, before the node draws.

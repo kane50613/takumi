@@ -1,11 +1,17 @@
 ---
-title: Paint tree
-description: Get the shapes, paints, text runs, and images takumi would paint.
+title: Paint
+description: Lay out JSX or HTML and get the shapes, text runs, and images to draw.
 index: true
 icon: BookOpen
 ---
 
-`takumi-paint` lays out JSX, HTML, or a takumi node tree. It returns what painting it would draw, with every CSS value resolved, for Canvas, presentation files, and native drawing APIs.
+`takumi-paint` lays out JSX, HTML, or a takumi node tree like takumi does. It returns the **paint tree** instead of pixels. The tree says what to draw, where, and in which order. Every CSS value is already resolved.
+
+Draw the tree with Canvas, write it into slides, or pass it to a native drawing API.
+
+<PaintPipeline />
+
+## Install
 
 ```npm
 npm i takumi-paint @takumi-rs/helpers
@@ -13,7 +19,15 @@ npm i takumi-paint @takumi-rs/helpers
 
 ## Paint JSX
 
-`paint()` returns a `PaintTree`. `tree.nodes` lists every node in document order.
+`paint()` lays out a node and returns a `PaintTree`. The demos on these pages paint this card when the site builds.
+
+<include cwd meta='twoslash title="card.tsx" {3,31}'>
+  app/components/mdx/paint/examples/card.tsx
+</include>
+
+## Read the nodes
+
+`tree.nodes` lists every node in document order.
 
 ```tsx twoslash title="inspect.tsx"
 import { paint } from "takumi-paint";
@@ -30,13 +44,19 @@ console.log(card?.drawables[0]); // { type: "fill", role: "background", shape: {
 
 for (const node of tree.nodes) {
   if (node.type !== "text") continue;
-  for (const run of node.runs) console.log(run.text, run.element?.tagName, run.font.family);
+  for (const run of node.runs) console.log(run.text, run.element?.tagName, run.font.family); // [!code highlight]
 }
 ```
 
-The returned lengths are device pixels. Set `devicePixelRatio` to scale CSS lengths during layout.
+| Node    | Holds                                                    |
+| ------- | -------------------------------------------------------- |
+| `box`   | A CSS box: its background, border, shadows, and children |
+| `text`  | One paragraph, as shaped runs in visual order            |
+| `image` | A replaced image, such as `<img>` or an SVG              |
 
-## Read the result
+Lengths are device pixels. `devicePixelRatio` scales CSS lengths during layout.
+
+## Choose a guide
 
 | Need                           | Read                               |
 | ------------------------------ | ---------------------------------- |
@@ -46,7 +66,7 @@ The returned lengths are device pixels. Set `devicePixelRatio` to scale CSS leng
 
 ## Reuse a painter
 
-`paint()` uses a shared `Painter`. A dedicated `Painter` keeps its registered fonts separate. Release its WebAssembly memory when finished.
+`paint()` shares one `Painter`. Create your own `Painter` to keep its fonts separate. Call `free()` to release its WebAssembly memory.
 
 ```tsx twoslash title="painter.tsx"
 import { Painter } from "takumi-paint";
