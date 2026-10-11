@@ -165,6 +165,16 @@ impl StackingBuckets {
     sort_by_key(&mut self.positive, PaintItem::z_order);
   }
 
+  /// Frees the room the buckets grew past their items: most boxes paint one item or none, and a
+  /// scene keeps them all until the render ends.
+  fn shrink_to_fit(&mut self) {
+    self.negative.shrink_to_fit();
+    self.in_flow.shrink_to_fit();
+    self.floats.shrink_to_fit();
+    self.positioned.shrink_to_fit();
+    self.positive.shrink_to_fit();
+  }
+
   fn in_paint_order(&self) -> [&[PaintItem]; 5] {
     [
       &self.negative,
@@ -539,7 +549,9 @@ impl SceneRequest<'_> {
 
     for context in &mut contexts {
       context.buckets.sort();
+      context.buckets.shrink_to_fit();
     }
+    contexts.shrink_to_fit();
 
     if !with_bounds {
       return Ok(SceneLayers {
