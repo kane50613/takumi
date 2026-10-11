@@ -1,11 +1,9 @@
 //! An image's rows as PNG scanlines: a filter-type byte, then the row filtered as
 //! [PNG](https://www.w3.org/TR/png-3/#9Filters) defines.
 
-use std::{borrow::Cow, mem::swap, ops::Range};
+use std::{mem::swap, ops::Range};
 
 use image::RgbaImage;
-
-use crate::webp::strip_alpha_channel;
 
 /// The pixels an image's PNG data holds.
 #[derive(Clone, Copy)]
@@ -101,21 +99,6 @@ impl<'a> Pixels<'a> {
     };
 
     width * self.bytes_per_pixel()
-  }
-
-  /// Every row's pixels back to back, as the png crate takes them.
-  pub(crate) fn packed(self) -> Cow<'a, [u8]> {
-    match self {
-      Self::Rgba {
-        image,
-        keep_alpha: true,
-      } => Cow::Borrowed(image.as_raw()),
-      Self::Rgba {
-        image,
-        keep_alpha: false,
-      } => Cow::Owned(strip_alpha_channel(Cow::Borrowed(image))),
-      Self::Indexed { indices, .. } => Cow::Borrowed(indices),
-    }
   }
 
   /// Appends row `row`'s pixels.
