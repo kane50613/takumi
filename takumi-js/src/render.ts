@@ -219,8 +219,8 @@ function mergeCss(options: PipelineOptions | undefined, extra: string[]): CssInp
   return [...own, ...extra];
 }
 
-/** Resolves the renderer, node tree, images, and CSS a single-scene render needs. */
-async function prepareScene(element: RenderInput, options?: PipelineOptions) {
+/** Resolves the renderer, node tree, and backend options, images and CSS merged in, a single scene needs. */
+async function prepareScene<T extends PipelineOptions>(element: RenderInput, options?: T) {
   options?.signal?.throwIfAborted();
 
   const renderer = await resolveRenderer(options);
@@ -231,7 +231,9 @@ async function prepareScene(element: RenderInput, options?: PipelineOptions) {
   // abort that happened during the async font and image loading before the blocking call.
   options?.signal?.throwIfAborted();
 
-  return { renderer, node, images, css: mergeCss(options, css) };
+  const { css: _, stylesheets: _alias, ...forward } = options ?? {};
+
+  return { renderer, node, options: { ...forward, images, css: mergeCss(options, css) } };
 }
 
 /**
@@ -255,10 +257,30 @@ async function prepareScene(element: RenderInput, options?: PipelineOptions) {
  * @returns A promise that resolves to the rendered image data (Buffer/Uint8Array).
  */
 export async function render(element: RenderInput, options?: RenderOptions) {
-  const { renderer, node, images, css } = await prepareScene(element, options);
-  const { css: _, stylesheets: _alias, ...forward } = options ?? {};
+  const scene = await prepareScene(element, options);
 
-  return renderer.render(node, { ...forward, images, css });
+  return scene.renderer.render(scene.node, scene.options);
+}
+
+/**
+ * Lays out a React element, HTML string, or Takumi node tree without painting it.
+ *
+ * Same input handling, CSS, emoji, and image pipeline as {@link render}, on the same default
+ * renderer, so fonts registered for rendering measure too.
+ *
+ * @example
+ * ```tsx
+ * import { measure } from "takumi-js";
+ *
+ * const { width, height } = await measure(<span tw="text-xl">Hello World</span>);
+ * ```
+ *
+ * @returns A promise that resolves to the measured node tree.
+ */
+export async function measure(element: RenderInput, options?: RenderOptions) {
+  const scene = await prepareScene(element, options);
+
+  return scene.renderer.measure(scene.node, scene.options);
 }
 
 /**
@@ -282,10 +304,9 @@ export async function render(element: RenderInput, options?: RenderOptions) {
  * @returns A promise that resolves to the SVG document string.
  */
 export async function renderSvg(element: RenderInput, options?: RenderSvgOptions): Promise<string> {
-  const { renderer, node, images, css } = await prepareScene(element, options);
-  const { css: _, stylesheets: _alias, ...forward } = options ?? {};
+  const scene = await prepareScene(element, options);
 
-  return renderer.renderSvg(node, { ...forward, images, css });
+  return scene.renderer.renderSvg(scene.node, scene.options);
 }
 
 /**

@@ -24,7 +24,7 @@ export type {
   OutputFormat,
 } from "@takumi-rs/core";
 export { setGlyphCacheMaxBytes } from "./glyph-cache";
-export { render, renderAnimation, renderSvg } from "./render";
+export { measure, render, renderAnimation, renderSvg } from "./render";
 
 export type {
   AnimationScene,
