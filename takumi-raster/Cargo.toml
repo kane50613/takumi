@@ -18,6 +18,7 @@ typed-builder.workspace = true
 smallvec.workspace = true
 skrifa.workspace = true
 xxhash-rust.workspace = true
+zlib-rs.workspace = true
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 image-webp.workspace = true
@@ -41,6 +42,10 @@ default-features = false
 [dependencies.serde]
 workspace = true
 features = ["rc"]
+
+[dependencies.flate2]
+workspace = true
+features = ["zlib-rs"]
 
 [dependencies.image]
 workspace = true
