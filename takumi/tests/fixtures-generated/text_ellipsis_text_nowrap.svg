@@ -5,51 +5,56 @@
   </clipPath>
   <g clip-path="url(#cp0)">
     <path d="M20 20h1160v64h-1160v-64Zm1 1h1158v62h-1158v-62Z" fill="#f00" fill-rule="evenodd"/>
-    <g fill="#000">
-      <use href="#g0" x="21" y="69"/>
-      <use href="#g1" x="46.06" y="69"/>
-      <use href="#g2" x="73.66" y="69"/>
-      <use href="#g3" x="84.89" y="69"/>
-      <use href="#g2" x="121.85" y="69"/>
-      <use href="#g3" x="133.08" y="69"/>
-      <use href="#g4" x="170.04" y="69"/>
-      <use href="#g5" x="208.49" y="69"/>
-      <use href="#g6" x="232.97" y="69"/>
-      <use href="#g7" x="259.42" y="69"/>
-      <use href="#g8" x="276.41" y="69"/>
-      <use href="#g9" x="314.18" y="69"/>
-      <use href="#g10" x="326.71" y="69"/>
-      <use href="#g11" x="353.74" y="69"/>
-      <use href="#g12" x="381.05" y="69"/>
-      <use href="#g13" x="421.56" y="69"/>
-      <use href="#g2" x="449.64" y="69"/>
-      <use href="#g6" x="460.87" y="69"/>
-      <use href="#g14" x="487.32" y="69"/>
-      <use href="#g6" x="513.05" y="69"/>
-      <use href="#g10" x="551.98" y="69"/>
-      <use href="#g15" x="578.04" y="69"/>
-      <use href="#g16" x="609" y="69"/>
-      <use href="#g6" x="627.05" y="69"/>
-      <use href="#g17" x="651.58" y="69"/>
-      <use href="#g16" x="677.11" y="69"/>
-      <use href="#g16" x="707.93" y="69"/>
-      <use href="#g1" x="725.98" y="69"/>
-      <use href="#g4" x="753.38" y="69"/>
-      <use href="#g16" x="777.43" y="69"/>
-      <use href="#g3" x="808.25" y="69"/>
-      <use href="#g1" x="832.73" y="69"/>
-      <use href="#g10" x="860.04" y="69"/>
-      <use href="#g18" x="887.06" y="69"/>
-      <use href="#g9" x="914.66" y="69"/>
-      <use href="#g19" x="927.19" y="69"/>
-      <use href="#g19" x="967.75" y="69"/>
-      <use href="#g6" x="995.83" y="69"/>
-      <use href="#g20" x="1022.28" y="69"/>
-      <use href="#g10" x="1063.8" y="69"/>
-      <use href="#g11" x="1090.82" y="69"/>
-      <use href="#g3" x="1118.14" y="69"/>
+    <clipPath id="cp1">
+      <path d="M21 21h1158v62h-1158v-62Z"/>
+    </clipPath>
+    <g clip-path="url(#cp1)">
+      <g fill="#000">
+        <use href="#g0" x="21" y="69"/>
+        <use href="#g1" x="46.06" y="69"/>
+        <use href="#g2" x="73.66" y="69"/>
+        <use href="#g3" x="84.89" y="69"/>
+        <use href="#g2" x="121.85" y="69"/>
+        <use href="#g3" x="133.08" y="69"/>
+        <use href="#g4" x="170.04" y="69"/>
+        <use href="#g5" x="208.49" y="69"/>
+        <use href="#g6" x="232.97" y="69"/>
+        <use href="#g7" x="259.42" y="69"/>
+        <use href="#g8" x="276.41" y="69"/>
+        <use href="#g9" x="314.18" y="69"/>
+        <use href="#g10" x="326.71" y="69"/>
+        <use href="#g11" x="353.74" y="69"/>
+        <use href="#g12" x="381.05" y="69"/>
+        <use href="#g13" x="421.56" y="69"/>
+        <use href="#g2" x="449.64" y="69"/>
+        <use href="#g6" x="460.87" y="69"/>
+        <use href="#g14" x="487.32" y="69"/>
+        <use href="#g6" x="513.05" y="69"/>
+        <use href="#g10" x="551.98" y="69"/>
+        <use href="#g15" x="578.04" y="69"/>
+        <use href="#g16" x="609" y="69"/>
+        <use href="#g6" x="627.05" y="69"/>
+        <use href="#g17" x="651.58" y="69"/>
+        <use href="#g16" x="677.11" y="69"/>
+        <use href="#g16" x="707.93" y="69"/>
+        <use href="#g1" x="725.98" y="69"/>
+        <use href="#g4" x="753.38" y="69"/>
+        <use href="#g16" x="777.43" y="69"/>
+        <use href="#g3" x="808.25" y="69"/>
+        <use href="#g1" x="832.73" y="69"/>
+        <use href="#g10" x="860.04" y="69"/>
+        <use href="#g18" x="887.06" y="69"/>
+        <use href="#g9" x="914.66" y="69"/>
+        <use href="#g19" x="927.19" y="69"/>
+        <use href="#g19" x="967.75" y="69"/>
+        <use href="#g6" x="995.83" y="69"/>
+        <use href="#g20" x="1022.28" y="69"/>
+        <use href="#g10" x="1063.8" y="69"/>
+        <use href="#g11" x="1090.82" y="69"/>
+        <use href="#g3" x="1118.14" y="69"/>
+      </g>
+      <use href="#g21" x="1143.1" y="69" fill="#000"/>
     </g>
-    <use href="#g21" x="1143.1" y="69" fill="#000"/>
   </g>
   <defs>
     <path id="g0" d="M11.19 0v-30.05h-10.61v-4.03h25.34v4.03h-10.61v30.05Z"/>
