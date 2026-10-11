@@ -157,7 +157,7 @@ impl AtomCollector<'_> {
     Ok(parent)
   }
 
-  /// One atom per text line: the union of each run's ascent-to-descent band.
+  /// One atom per line box.
   /// The lines also form one [`Paragraph`] for the widow/orphan solver.
   fn text_atoms(
     &self,
@@ -167,10 +167,10 @@ impl AtomCollector<'_> {
     y: f32,
     atoms: &mut Atoms,
   ) -> Result<(), PdfError> {
-    visit_inline_layout(None, node, node_id, layout, |_, runs, _| {
+    visit_inline_layout(None, node, node_id, layout, |built, runs, _| {
       let start = atoms.extents.len();
 
-      text_line_atoms(runs, layout, y, &mut atoms.extents);
+      text_line_atoms(built, layout, y, &mut atoms.extents);
       // Box bands are indivisible but not text lines, so widow/orphan control
       // does not count them.
       let paragraph_end = atoms.extents.len();
