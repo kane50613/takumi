@@ -7,8 +7,8 @@ use crate::{
   resources::font::FontClasses,
   style::{
     AppliedTextDecorations, Color, Direction, FontFeature, FontSynthesis, Lang, Length,
-    ResolvedVerticalAlign, Tag, TextDecorationSkipInk, TextFitMode, TextOverflow, TextWrapStyle,
-    VerticalAlign, VerticalAlignKeyword, WhiteSpaceCollapse, WordBreak,
+    ResolvedVerticalAlign, Tag, TextDecorationSkipInk, TextOverflow, TextWrapStyle, VerticalAlign,
+    VerticalAlignKeyword, WhiteSpaceCollapse, WordBreak,
   },
   text_processing::{
     MaxHeight, RebreakOptions, apply_text_transform, apply_white_space_collapse,
@@ -70,7 +70,7 @@ use self::{
   },
   runs::measured_run_text,
   text_fit::{
-    GlyphCursor, LineScaleState, SpacingStretch, text_fit_is_applicable, text_fit_line_advance,
+    GlyphCursor, LineScaleState, SpacingStretch, text_fit_applies, text_fit_line_advance,
     text_fit_line_alignment_correction, text_fit_lines, text_fit_x_correction,
   },
   truncation::make_ellipsis_layout,
@@ -681,6 +681,11 @@ impl LineIndent {
       }
     })
   }
+
+  /// The indent of the last line of `layout`.
+  pub(super) fn last_line(self, layout: &InlineLayout) -> f32 {
+    self.per_line(layout).last().unwrap_or(0.0)
+  }
 }
 
 fn inline_line_height_hint(style: &SizedFontStyle) -> f32 {
@@ -1184,6 +1189,13 @@ pub fn create_inline_layout<'c>(request: InlineLayoutRequest<'c>) -> BuiltInline
   } = request;
   let mut built =
     build_inline_layout_tree(&items, available_space, style, context, shape_cacheable);
+  let fits_text = text_fit_applies(style, &items, max_width);
+  // `text-fit` scales line heights only after breaking, so only a line count clamps fitted lines.
+  let max_height = if fits_text {
+    max_height.and_then(MaxHeight::lines)
+  } else {
+    max_height
+  };
   let rebreak = RebreakOptions {
     max_width,
     max_height,
@@ -1198,6 +1210,8 @@ pub fn create_inline_layout<'c>(request: InlineLayoutRequest<'c>) -> BuiltInline
     &built.spans,
     &mut built.positioned_floats,
   );
+
+  let mut kept_fits = None;
 
   if mode == InlineLayoutMode::Draw {
     let BuiltInlineLayout {
@@ -1221,15 +1235,33 @@ pub fn create_inline_layout<'c>(request: InlineLayoutRequest<'c>) -> BuiltInline
       // than break opportunities (blink/renderer/core/layout/inline/
       // line_truncator.cc). The spec never conditions ellipsing on soft wrap
       // opportunities either: https://drafts.csswg.org/css-overflow-3/#text-overflow
+      // Blink fits a line before it truncates it (LineFitter::FitLine runs
+      // before InlineLayoutAlgorithm::CreateLine), so only a line still too
+      // wide at its fitted scale is ellipsed, at that scale.
+      let fits = if fits_text {
+        text_fit_lines(layout, max_width, style, None)
+      } else {
+        Vec::new()
+      };
+      let last_fit = fits.last().copied().unwrap_or(LineFit::NONE);
+      let indent = LineIndent::of(style, max_width).last_line(layout);
       let is_overflowing = layout.lines().last().is_some_and(|last_line| {
-        let metrics = last_line.metrics();
         last_line.text_range().end < text.len()
-          || metrics.inline_min_coord + metrics.advance - metrics.trailing_whitespace
+          || last_fit.content_end(&last_line, layout.is_rtl(), indent)
             > max_width + LAYOUT_UNIT_EPSILON
       });
 
       if is_overflowing {
-        make_ellipsis_layout(layout, spans, rebreak, style, context, positioned_floats);
+        make_ellipsis_layout(
+          layout,
+          spans,
+          rebreak,
+          last_fit.scale,
+          style,
+          context,
+          positioned_floats,
+        );
+        kept_fits = (!fits.is_empty()).then_some(fits);
         *ellipsized = true;
       }
     }
@@ -1252,10 +1284,8 @@ pub fn create_inline_layout<'c>(request: InlineLayoutRequest<'c>) -> BuiltInline
     }
   }
 
-  if style.parent.text_fit.mode != TextFitMode::None
-    && text_fit_is_applicable(&built.positioned_floats)
-  {
-    built.line_fits = text_fit_lines(&built.layout, max_width, style);
+  if fits_text {
+    built.line_fits = text_fit_lines(&built.layout, max_width, style, kept_fits.as_deref());
   }
 
   built
@@ -1576,7 +1606,8 @@ mod tests {
     style::{
       Affine, AppliedTextDecoration, BorderStyle, Color, ColorInput, Display, FontSize, Length,
       Sides, SizedTextDecorationThickness, SizingContext, SpacePair, Style, StyleDeclaration,
-      TextDecorationLines, TextDecorationStyle, TextUnderlinePosition, WhiteSpace,
+      TextDecorationLines, TextDecorationStyle, TextFit, TextFitMode, TextUnderlinePosition,
+      WhiteSpace,
     },
     viewport::Viewport,
   };
@@ -1712,6 +1743,50 @@ mod tests {
     let three_lines = build(Some(MaxHeight::Lines(3))).layout.height();
     assert!(!build(Some(MaxHeight::Absolute(three_lines))).clamped);
     assert!(build(Some(MaxHeight::Absolute(three_lines * 2.0 / 3.0))).clamped);
+  }
+
+  #[test]
+  fn a_height_clamps_text_fit_lines_measured_at_an_indefinite_width() {
+    let fonts = create_test_context();
+    let context = RenderContext::builder()
+      .fonts(fonts.snapshot_with_fallbacks(None))
+      .sizing(
+        SizingContext::builder()
+          .viewport(Viewport::new((1200, 630)))
+          .build(),
+      )
+      .build();
+    let node = Node::text("a\nb\nc".to_string()).with_style(
+      Style::default()
+        .with(StyleDeclaration::display(Display::Block))
+        .with(StyleDeclaration::text_fit(
+          TextFit::builder().mode(TextFitMode::Shrink).build(),
+        ))
+        .with_white_space(WhiteSpace::pre_wrap()),
+    );
+    let render_node = RenderNode::from_node(&context, node);
+    let font_style = SizedFontStyle::from_style(&render_node.context.style, &render_node.context);
+    let build = |max_width, max_height| {
+      create_inline_layout(InlineLayoutRequest {
+        items: collect_inline_items(&render_node),
+        available_space: Size {
+          width: AvailableSpace::MaxContent,
+          height: AvailableSpace::Definite(630.0),
+        },
+        max_width,
+        max_height,
+        style: &font_style,
+        context: &render_node.context,
+        mode: InlineLayoutMode::Measure,
+        shape_cacheable: false,
+      })
+    };
+    let one_line = build(f32::INFINITY, Some(MaxHeight::Lines(1)))
+      .layout
+      .height();
+
+    assert!(build(f32::INFINITY, Some(MaxHeight::Absolute(one_line))).clamped);
+    assert!(!build(1200.0, Some(MaxHeight::Absolute(one_line))).clamped);
   }
 
   #[test]

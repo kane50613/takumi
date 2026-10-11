@@ -366,6 +366,8 @@ The optional target controls which lines share a scale:
 
 The percentage caps how far the scale can move.
 
+With `text-overflow: ellipsis`, Takumi fits the text first. Only a line that still overflows at its fitted size gets an ellipsis, such as a line the percentage cap holds back. The `line-clamp` count still applies, but the box height does not cut lines.
+
 ### RTL & bidirectional text
 
 Takumi handles Right-to-Left scripts like Arabic and Hebrew, including mixed runs. There's no manual override for text direction yet (see [issue #330](https://github.com/kane50613/takumi/issues/330)). The `direction` property controls layout, not the text run.
