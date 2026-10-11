@@ -10,6 +10,8 @@ pub mod animated_image_sources;
 pub mod animation;
 #[path = "fixtures/deep_nesting.rs"]
 pub mod deep_nesting;
+#[path = "fixtures/jpeg_output.rs"]
+pub mod jpeg_output;
 #[path = "fixtures/paint_bounds_ink_reach.rs"]
 pub mod paint_bounds_ink_reach;
 #[path = "fixtures/paint_bounds_text_ink.rs"]

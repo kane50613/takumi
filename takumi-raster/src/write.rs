@@ -6,10 +6,8 @@ use std::{
 };
 
 use gif::{Encoder as GifEncoder, Frame as GifFrame, Repeat};
-use image::{
-  ExtendedColorType, ImageEncoder, RgbaImage,
-  codecs::{ico::IcoEncoder, jpeg::JpegEncoder},
-};
+use image::{ExtendedColorType, ImageEncoder, RgbaImage, codecs::ico::IcoEncoder};
+use jpeg_encoder::{ColorType as JpegColorType, Encoder as JpegEncoder, SamplingFactor};
 use png::{ColorType, DeflateCompression, Filter};
 use typed_builder::TypedBuilder;
 
@@ -285,6 +283,10 @@ impl PngEncoding {
   }
 }
 
+/// Most pixels a JPEG gets optimized Huffman tables for. jpeg-encoder keeps every block of the
+/// image to count its symbols first, about 9 bytes a pixel at 4:4:4, where standard tables stream.
+const OPTIMIZED_JPEG_MAX_PIXELS: u64 = 1 << 22;
+
 /// Clamps a frame duration to the 16-bit APNG delay numerator, in milliseconds.
 fn duration_ms_to_apng_delay(duration_ms: u32) -> u16 {
   duration_ms.min(u16::MAX as u32) as u16
@@ -300,11 +302,21 @@ pub fn write_image<T: Write>(
 
   match format {
     OutputFormat::Jpeg { quality } => {
-      let rgb = strip_alpha_channel(Cow::Borrowed(rgba));
+      let mut encoder = JpegEncoder::new(destination, quality.get());
 
-      let encoder = JpegEncoder::new_with_quality(destination, quality.get());
+      // 4:2:0 blurs colored text edges, and zune-jpeg 0.5 misreads the
+      // optimized Huffman tables jpeg-encoder writes alongside it.
+      encoder.set_sampling_factor(SamplingFactor::R_4_4_4);
+      encoder.set_optimized_huffman_tables(
+        u64::from(image.width()) * u64::from(image.height()) <= OPTIMIZED_JPEG_MAX_PIXELS,
+      );
       encoder
-        .write_image(&rgb, image.width(), image.height(), ExtendedColorType::Rgb8)
+        .encode(
+          image.as_raw(),
+          u16::try_from(image.width()).map_err(Error::encode)?,
+          u16::try_from(image.height()).map_err(Error::encode)?,
+          JpegColorType::Rgba,
+        )
         .map_err(Error::encode)?;
     }
     OutputFormat::Png => {
@@ -661,13 +673,14 @@ mod tests {
 
   use gif::{ColorOutput, DecodeOptions};
   use image::RgbaImage;
+  use jpeg_encoder::{ColorType as JpegColorType, Encoder as JpegEncoder, SamplingFactor};
   use libwebp_sys::{WEBP_CSP_MODE::MODE_RGBA, *};
   use takumi_core::Error;
 
   use super::{
     AnimatedGifOptions, AnimatedPngOptions, AnimatedWebpOptions, AnimationFrame, Bitmap, Filter,
-    OutputFormat, PngEncoding, write_animated_gif, write_animated_png, write_animated_webp,
-    write_image,
+    OutputFormat, PngEncoding, Quality, write_animated_gif, write_animated_png,
+    write_animated_webp, write_image,
   };
 
   fn band(width: u32, height: u32, pixel: impl Fn(u32, u32) -> [u8; 4]) -> Vec<u8> {
@@ -865,6 +878,33 @@ mod tests {
       bytes.is_empty(),
       "encoder should not write bytes before validating frame dimensions"
     );
+  }
+
+  #[test]
+  fn a_large_jpeg_streams_with_standard_huffman_tables() {
+    let (width, height) = (2048_u16, 2049_u16);
+    let data: Vec<u8> = (0..u32::from(width) * u32::from(height) * 4)
+      .map(|index| (index.wrapping_mul(2_654_435_761) >> 24) as u8 | 0x80)
+      .collect();
+    let image = Bitmap::from_raw(width.into(), height.into(), data.clone()).unwrap();
+    let mut written = Vec::new();
+    let mut standard = Vec::new();
+    let mut encoder = JpegEncoder::new(&mut standard, Quality::default().get());
+
+    write_image(
+      &image,
+      &mut written,
+      OutputFormat::Jpeg {
+        quality: Quality::default(),
+      },
+    )
+    .unwrap();
+    encoder.set_sampling_factor(SamplingFactor::R_4_4_4);
+    encoder
+      .encode(&data, width, height, JpegColorType::Rgba)
+      .unwrap();
+
+    assert!(written == standard);
   }
 
   #[test]
