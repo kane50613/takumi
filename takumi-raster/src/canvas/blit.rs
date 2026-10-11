@@ -1,9 +1,11 @@
 //! Free blitters and the image/mask overlay dispatchers that paint onto a
 //! [`DrawTarget`].
 
+use std::array;
+
 use image::Rgba;
 use takumi_core::geometry::{Point, Size};
-use tiny_skia::{PixmapMut, PremultipliedColorU8};
+use tiny_skia::{PixmapMut, PixmapRef, PremultipliedColorU8};
 
 use super::{
   DrawTarget, MaskSamplingOptions, MaskView, OverlayOptions, PaintSource, SamplingOptions,
@@ -70,23 +72,38 @@ impl OverlayBounds {
   /// when nothing of it lands inside.
   #[inline(always)]
   pub(crate) fn new(canvas: Size<u32>, offset: Point<f32>, size: Size<u32>) -> Option<Self> {
+    Self::at_whole_pixel(
+      canvas,
+      Point {
+        x: offset.x.trunc() as i32,
+        y: offset.y.trunc() as i32,
+      },
+      size,
+    )
+  }
+
+  /// [`Self::new`] for an `offset` already in whole pixels, which `f32` cannot hold past 2^24.
+  #[inline(always)]
+  pub(crate) fn at_whole_pixel(
+    canvas: Size<u32>,
+    offset: Point<i32>,
+    size: Size<u32>,
+  ) -> Option<Self> {
     if size.width == 0 || size.height == 0 {
       return None;
     }
 
-    let offset_x = offset.x.trunc() as i32;
-    let offset_y = offset.y.trunc() as i32;
     let clipped = Placement {
-      left: offset_x,
-      top: offset_y,
+      left: offset.x,
+      top: offset.y,
       width: size.width,
       height: size.height,
     }
     .clamp_to(canvas)?;
 
     Some(Self {
-      offset_x,
-      offset_y,
+      offset_x: offset.x,
+      offset_y: offset.y,
       x_min: clipped.left,
       x_max: clipped.right(),
       y_min: clipped.top,
@@ -271,6 +288,57 @@ pub(super) fn blit_paint_source_translation(
       |src_y, row| rows.fill(src_y, row),
     ),
   }
+}
+
+/// Composites `source` whole-pixel at `offset` over `pixmap` at `opacity`, exactly as tiny-skia's
+/// high-precision pipeline draws a source-over pattern there: each channel scaled to `[0, 1]`, the
+/// source multiplied by `opacity`, `dst * (1 - source alpha) + source`, rounded half to even.
+pub(super) fn blit_translucent_translation(
+  pixmap: &mut PixmapMut<'_>,
+  source: PixmapRef<'_>,
+  offset: Point<i32>,
+  opacity: f32,
+) {
+  let canvas_width = pixmap.width() as usize;
+  let Some(bounds) = OverlayBounds::at_whole_pixel(
+    Size::new(pixmap.width(), pixmap.height()),
+    offset,
+    Size::new(source.width(), source.height()),
+  ) else {
+    return;
+  };
+  let pixels: &mut [[u8; 4]] = bytemuck::cast_slice_mut(pixmap.pixels_mut());
+  let source_pixels: &[[u8; 4]] = bytemuck::cast_slice(source.pixels());
+  let source_width = source.width() as usize;
+  let width = (bounds.x_max - bounds.x_min) as usize;
+
+  for dest_y in bounds.y_min..bounds.y_max {
+    let source_start = (dest_y - bounds.offset_y) as usize * source_width
+      + (bounds.x_min - bounds.offset_x) as usize;
+    let dest_start = dest_y as usize * canvas_width + bounds.x_min as usize;
+
+    for (dest, &source) in pixels[dest_start..dest_start + width]
+      .iter_mut()
+      .zip(&source_pixels[source_start..source_start + width])
+    {
+      *dest = source_over_at_opacity(*dest, source, opacity);
+    }
+  }
+}
+
+/// One pixel of [`blit_translucent_translation`].
+#[inline(always)]
+fn source_over_at_opacity(dest: [u8; 4], source: [u8; 4], opacity: f32) -> [u8; 4] {
+  const UNIT: f32 = 1.0 / 255.0;
+
+  let source = source.map(|channel| f32::from(channel) * UNIT * opacity);
+  let behind = 1.0 - source[3];
+
+  array::from_fn(|channel| {
+    let blended = f32::from(dest[channel]) * UNIT * behind + source[channel];
+
+    (blended.clamp(0.0, 1.0) * 255.0).round_ties_even() as u8
+  })
 }
 
 fn blit_solid_translation(
@@ -541,13 +609,85 @@ pub(crate) fn overlay_sampled_paint_source(
 mod tests {
   use image::{Rgba, RgbaImage};
   use takumi_core::geometry::Size;
-  use tiny_skia::{Mask as TinyMask, PixmapRef};
+  use tiny_skia::{
+    BlendMode as TinyBlendMode, FilterQuality, Mask as TinyMask, Pixmap, PixmapPaint, PixmapRef,
+    PremultipliedColorU8, Transform,
+  };
 
   use super::*;
   use crate::{
     BorderProperties, Canvas, PaintSource, Result, pixmap_from_buffer,
     resources::image_buffer::ImageBuffer, style::ImageScalingAlgorithm,
   };
+
+  /// A pixmap of valid premultiplied pixels, varied by `seed`.
+  fn noisy_pixmap(width: u32, height: u32, seed: u32) -> Pixmap {
+    let mut pixmap = Pixmap::new(width, height).unwrap();
+    let mut state = seed;
+
+    for pixel in pixmap.pixels_mut() {
+      let mut next = || {
+        state = state.wrapping_mul(1_103_515_245).wrapping_add(12_345);
+        (state >> 16) as u8
+      };
+      let alpha = next();
+
+      *pixel = PremultipliedColorU8::from_rgba(
+        next() % (alpha.saturating_add(1)),
+        next() % (alpha.saturating_add(1)),
+        next() % (alpha.saturating_add(1)),
+        alpha,
+      )
+      .unwrap();
+    }
+    pixmap
+  }
+
+  #[test]
+  fn whole_pixel_bounds_keep_offsets_past_f32_precision() {
+    let bounds = OverlayBounds::at_whole_pixel(
+      Size::new(16_777_218, 1),
+      Point {
+        x: 16_777_217,
+        y: 0,
+      },
+      Size::new(1, 1),
+    )
+    .unwrap();
+
+    assert_eq!((bounds.x_min, bounds.x_max), (16_777_217, 16_777_218));
+  }
+
+  #[test]
+  fn translucent_blit_matches_tiny_skia() {
+    let source = noisy_pixmap(37, 23, 7);
+
+    for (offset, opacity) in [
+      (Point { x: 3, y: 4 }, 0.1),
+      (Point { x: -5, y: 2 }, 1.0 / 3.0),
+      (Point { x: 20, y: -6 }, 0.5),
+      (Point { x: 30, y: 30 }, 0.731),
+      (Point { x: 0, y: 0 }, 0.999),
+    ] {
+      let mut ours = noisy_pixmap(50, 40, 11);
+      let mut theirs = ours.clone();
+
+      blit_translucent_translation(&mut ours.as_mut(), source.as_ref(), offset, opacity);
+      theirs.draw_pixmap(
+        offset.x,
+        offset.y,
+        source.as_ref(),
+        &PixmapPaint {
+          opacity,
+          blend_mode: TinyBlendMode::SourceOver,
+          quality: FilterQuality::Nearest,
+        },
+        Transform::identity(),
+        None,
+      );
+      assert!(ours.data() == theirs.data(), "differs at opacity {opacity}");
+    }
+  }
 
   #[test]
   fn placement_overlap_tracks_both_source_offsets() {
