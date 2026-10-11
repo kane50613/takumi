@@ -12,7 +12,7 @@ use crate::{
   layout::inline::{InlineLayoutCache, MeasureCache, ShapeCache},
   resources::{
     font::{FontsSnapshot, PrimaryFontMetrics},
-    image::ImageSource,
+    image::{ImageSource, ResourceCache},
   },
   style::{
     Affine, AppliedTextDecorations, Color, ComputedStyle, SizingContext, StyleSheet, TwCache,
@@ -23,6 +23,7 @@ use crate::{
 struct RenderShared {
   fonts: FontsSnapshot,
   images: Rc<HashMap<Arc<str>, ImageSource>>,
+  resource_cache: Option<ResourceCache>,
   stylesheet: Arc<StyleSheet>,
   inline_cache: InlineLayoutCache,
   tw_cache: TwCache,
@@ -57,6 +58,9 @@ pub struct RenderContextInit {
   collapsed_borders: bool,
   #[builder(default)]
   images: Rc<HashMap<Arc<str>, ImageSource>>,
+  /// The cache `data:` URI images decode through.
+  #[builder(default)]
+  resource_cache: Option<ResourceCache>,
   #[builder(default)]
   stylesheet: Arc<StyleSheet>,
   #[builder(default)]
@@ -71,6 +75,7 @@ impl From<RenderContextInit> for RenderContext {
       shared: Rc::new(RenderShared {
         fonts: init.fonts,
         images: init.images,
+        resource_cache: init.resource_cache,
         stylesheet: init.stylesheet,
         inline_cache: InlineLayoutCache::new(init.shape_cache, init.measure_cache),
         tw_cache: TwCache::default(),
@@ -117,7 +122,7 @@ pub struct RenderContext {
 
 /// A [`RenderContextBuilder`] with nothing set yet.
 type UnsetRenderContextBuilder =
-  RenderContextBuilder<((), (), (), (), (), (), (), (), (), (), (), (), ())>;
+  RenderContextBuilder<((), (), (), (), (), (), (), (), (), (), (), (), (), ())>;
 
 impl RenderContext {
   /// Starts a root context; `fonts` and `sizing` are required.
@@ -153,6 +158,11 @@ impl RenderContext {
   /// The resources fetched externally.
   pub(crate) fn images(&self) -> &HashMap<Arc<str>, ImageSource> {
     &self.shared.images
+  }
+
+  /// The cache `data:` URI images decode through, when the render has one.
+  pub(crate) fn resource_cache(&self) -> Option<&ResourceCache> {
+    self.shared.resource_cache.as_ref()
   }
 
   /// The stylesheets to apply before layout/rendering.
