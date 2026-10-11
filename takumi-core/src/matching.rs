@@ -19,7 +19,7 @@ use crate::{
   layout::node::{Node, NodeKind},
   sort_key::sort_by_key,
   style::{
-    StyleDeclarationBlock,
+    MediaQueryList, StyleDeclarationBlock,
     selector::{CssRule, Ident, PseudoClass, PseudoElement, SelectorImpl, StyleSheet},
   },
   viewport::Viewport,
@@ -477,28 +477,38 @@ fn selector_key(selector: &Selector<SelectorImpl>) -> SelectorKey {
   key
 }
 
-/// Rules grouped by what their rightmost compound requires, so a node visits
-/// only the rules that could match it.
-#[derive(Default)]
-struct RuleIndex {
+/// A stylesheet's rules, by position, grouped by what their rightmost compound
+/// requires, so a node visits only the rules that could match it.
+#[derive(Debug, Default)]
+pub(crate) struct RuleIndex {
   by_id: HashMap<String, Vec<usize>>,
   by_class: HashMap<String, Vec<usize>>,
   by_tag: HashMap<String, Vec<usize>>,
   unindexed: Vec<usize>,
+  /// Each distinct `media_queries` list among the rules.
+  media: Vec<Vec<MediaQueryList>>,
+  /// The position in `media` of each rule's `media_queries`.
+  rule_media: Vec<usize>,
 }
 
 impl RuleIndex {
-  fn build(rules: &[&CssRule]) -> Self {
-    let mut index = Self::default();
+  pub(crate) fn build(rules: &[CssRule]) -> Self {
+    let mut index = Self {
+      rule_media: Vec::with_capacity(rules.len()),
+      ..Self::default()
+    };
 
-    for (order, rule) in rules.iter().enumerate() {
+    for (position, rule) in rules.iter().enumerate() {
+      let media = index.media_id(&rule.media_queries);
+      index.rule_media.push(media);
+
       let keys: SmallVec<[SelectorKey; 4]> =
         rule.selectors.slice().iter().map(selector_key).collect();
 
       // A rule with one unindexable selector has to be visited by every node,
       // so it goes wholly into the unindexed bucket.
       if keys.iter().any(|key| matches!(key, SelectorKey::Any)) {
-        index.unindexed.push(order);
+        index.unindexed.push(position);
         continue;
       }
 
@@ -511,8 +521,8 @@ impl RuleIndex {
         }
         .or_default();
 
-        if bucket.last() != Some(&order) {
-          bucket.push(order);
+        if bucket.last() != Some(&position) {
+          bucket.push(position);
         }
       }
     }
@@ -520,8 +530,28 @@ impl RuleIndex {
     index
   }
 
-  /// Rules that could match `node`, in source order.
-  fn candidates(&self, node: &Node, out: &mut Vec<usize>) {
+  /// The position of `media_queries` in `media`, adding it if it is new.
+  fn media_id(&mut self, media_queries: &[MediaQueryList]) -> usize {
+    // Rules from one `@media` block are adjacent, so search from the latest list.
+    if let Some(id) = self.media.iter().rposition(|media| media == media_queries) {
+      return id;
+    }
+
+    self.media.push(media_queries.to_vec());
+    self.media.len() - 1
+  }
+
+  /// Whether each distinct media query list in `media` matches `viewport`.
+  fn matching_media(&self, viewport: Viewport) -> Vec<bool> {
+    self
+      .media
+      .iter()
+      .map(|media| media.iter().all(|list| list.matches(viewport)))
+      .collect()
+  }
+
+  /// Rules that could match `node` and whose media queries match, in source order.
+  fn candidates(&self, node: &Node, matching_media: &[bool], out: &mut Vec<usize>) {
     out.clear();
     out.extend_from_slice(&self.unindexed);
 
@@ -545,6 +575,7 @@ impl RuleIndex {
       out.extend_from_slice(rules);
     }
 
+    out.retain(|&rule| matching_media[self.rule_media[rule]]);
     sort_by_key(out, |&index| index);
     out.dedup();
   }
@@ -557,24 +588,16 @@ pub(crate) fn match_stylesheets_view<'a>(
   stylesheet: &'a StyleSheet,
   viewport: Viewport,
 ) -> Vec<NodeMatchedDeclarations<'a>> {
-  let flattened_rules: Vec<&CssRule> = stylesheet
-    .rules
-    .iter()
-    .filter(|rule| {
-      rule
-        .media_queries
-        .iter()
-        .all(|media_queries| media_queries.matches(viewport))
-    })
-    .collect();
+  let index = stylesheet.rule_index();
+  let matching_media = index.matching_media(viewport);
 
   let arena = StyleArena::new(root);
   let node_count = arena.nodes.len();
   let mut per_node = vec![NodeMatchedDeclarations::default(); node_count];
 
-  // No rules survive the media-query filter, so every node keeps the default
-  // declarations. Skip the per-node match buckets and the matching walk.
-  if flattened_rules.is_empty() {
+  // Every distinct media query list gates some rule, so none matching means no
+  // rule applies. Skip the per-node match buckets and the matching walk.
+  if !matching_media.contains(&true) {
     return per_node;
   }
 
@@ -585,7 +608,6 @@ pub(crate) fn match_stylesheets_view<'a>(
   let mut ancestor_stack: Vec<usize> = Vec::new();
   let mut selector_ancestor_hashes_cache: HashMap<(usize, usize), AncestorHashes> = HashMap::new();
 
-  let index = RuleIndex::build(&flattened_rules);
   let mut candidates = Vec::new();
 
   let mut element_caches = SelectorCaches::default();
@@ -626,10 +648,10 @@ pub(crate) fn match_stylesheets_view<'a>(
       MatchingForInvalidation::No,
     );
 
-    index.candidates(arena.nodes[i].node, &mut candidates);
+    index.candidates(arena.nodes[i].node, &matching_media, &mut candidates);
 
     for &source_order in &candidates {
-      let rule = flattened_rules[source_order];
+      let rule = &stylesheet.rules()[source_order];
       let mut best_specificities: [Option<u32>; 3] = [None; 3];
 
       for (selector_index, selector) in rule.selectors.slice().iter().enumerate() {
