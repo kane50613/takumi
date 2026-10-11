@@ -30,7 +30,7 @@ use crate::{
     node::NodeKind,
     table_borders::CollapsedBorders,
     table_columns::{CellConstraint, ColspanCell, TableColumns},
-    tree::{LayoutResults, NodeOrigin, RenderNode, TablePart},
+    tree::{LayoutTree, NodeOrigin, RenderNode, TablePart},
   },
   sort_key::sort_by_key,
   style::{
@@ -734,16 +734,13 @@ impl RenderNode {
     cell.lower_cell(1, 0, 1, false);
     cell.context.style.display.blockify();
 
-    let measure = |width| {
-      LayoutResults::compute(
-        &cell,
-        Size {
-          width,
-          height: AvailableSpace::MaxContent,
-        },
-      )
-      .root_size()
-      .width
+    let mut tree = LayoutTree::from_render_node(&cell);
+    let mut measure = |width| {
+      tree.compute_layout(Size {
+        width,
+        height: AvailableSpace::MaxContent,
+      });
+      tree.root_size().width
     };
 
     (

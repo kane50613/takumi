@@ -1,6 +1,6 @@
 use std::{
-  borrow::Cow, collections::HashMap, hash::Hasher, iter::Copied, mem::take, ptr, rc::Rc, slice,
-  vec::IntoIter,
+  borrow::Cow, cell::RefCell, collections::HashMap, hash::Hasher, iter::Copied, mem::take, ptr,
+  rc::Rc, slice, vec::IntoIter,
 };
 
 use parley::fontique::{Attributes, FontStyle as FontiqueStyle};
@@ -24,8 +24,8 @@ use crate::{
   layout::{
     inline::{
       InlineContentKind, InlineItem, InlineLayoutMode, InlineLayoutRequest, InlineMeasureOptions,
-      InlineOutOfFlow, PaddingBox, StaticPosition, collect_inline_items, create_inline_constraint,
-      create_inline_layout,
+      InlineOutOfFlow, PaddingBox, ProcessedInlineSpan, StaticPosition, collect_inline_items,
+      create_inline_constraint, create_inline_layout,
     },
     list_marker::{ListCounter, is_list_element, list_marker, owns_list_counter},
     node::{Node, NodeStyleLayers, TextData},
@@ -183,6 +183,38 @@ impl LayoutResults {
   }
 }
 
+/// A measurement's constraint as bits: each axis's available space as a kind and a size, then
+/// each known size, the height ones left out unless `with_height`.
+fn inline_measure_bits(
+  available_space: Size<AvailableSpace>,
+  known_dimensions: Size<Option<f32>>,
+  with_height: bool,
+) -> [u32; 6] {
+  let available = |space: AvailableSpace| match space {
+    AvailableSpace::Definite(value) => (0, value.to_bits()),
+    AvailableSpace::MinContent => (1, 0),
+    AvailableSpace::MaxContent => (2, 0),
+  };
+  let known = |value: Option<f32>| value.unwrap_or(f32::NAN).to_bits();
+  let (width_kind, width) = available(available_space.width);
+  let (height_kind, height, known_height) = if with_height {
+    let (kind, height) = available(available_space.height);
+
+    (kind, height, known(known_dimensions.height))
+  } else {
+    (u32::MAX, 0, 0)
+  };
+
+  [
+    width_kind,
+    width,
+    height_kind,
+    height,
+    known(known_dimensions.width),
+    known_height,
+  ]
+}
+
 /// Mutable taffy tree wrapping render nodes during layout.
 pub struct LayoutTree<'r> {
   nodes: Vec<LayoutNodeState>,
@@ -191,7 +223,14 @@ pub struct LayoutTree<'r> {
   out_of_flow_positions: HashMap<usize, Vec<StaticPosition>>,
   /// The nodes standing in for inline containing blocks.
   inline_containing_blocks: Vec<TaffyNodeId>,
+  /// Each inline formatting context's measured size per constraint. taffy keys its own cache on
+  /// both axes, while only inline boxes see the available height, so a context without them is
+  /// keyed on its width constraint alone.
+  inline_measures: RefCell<HashMap<InlineMeasureKey, Size<f32>>>,
 }
+
+/// A node and the constraint it is measured under, as bits.
+type InlineMeasureKey = (usize, [u32; 6]);
 
 struct LayoutNodeState {
   style: Style,
@@ -366,6 +405,7 @@ impl<'r> LayoutTree<'r> {
       render_nodes: Vec::with_capacity(1),
       out_of_flow_positions: HashMap::new(),
       inline_containing_blocks: Vec::new(),
+      inline_measures: RefCell::default(),
     };
     let root_id = tree.push_subtree(render_root);
 
@@ -817,6 +857,14 @@ impl<'r> LayoutTree<'r> {
   }
 
   /// Consumes the tree into immutable per-node layout results.
+  /// The root's border-box size after [`Self::compute_layout`], zero when the tree is empty.
+  pub(crate) fn root_size(&self) -> Size<f32> {
+    self
+      .nodes
+      .first()
+      .map_or(Size::ZERO, |node| Size::from_taffy(node.final_layout.size))
+  }
+
   pub(crate) fn into_results(mut self) -> LayoutResults {
     // A box an inline containing block holds is placed in the inline formatting context, its
     // box-tree parent, rather than in the node standing in for the containing block.
@@ -1254,14 +1302,44 @@ impl<'r> LayoutTree<'r> {
                 return TaffySize { width, height };
               }
 
-              render_node
-                .measure(
-                  Size::from_taffy(available_space).map(AvailableSpace::from_taffy),
-                  Size::from_taffy(known_dimensions),
-                  &node_data.style,
-                  node_data.is_inline_children,
-                )
-                .into_taffy()
+              let available_space =
+                Size::from_taffy(available_space).map(AvailableSpace::from_taffy);
+              let known_dimensions = Size::from_taffy(known_dimensions);
+              if !node_data.is_inline_children {
+                return render_node
+                  .measure(available_space, known_dimensions, &node_data.style)
+                  .into_taffy();
+              }
+
+              let across_heights = (
+                idx,
+                inline_measure_bits(available_space, known_dimensions, false),
+              );
+              let exact = (
+                idx,
+                inline_measure_bits(available_space, known_dimensions, true),
+              );
+              let measured = {
+                let measures = tree.inline_measures.borrow();
+
+                measures
+                  .get(&across_heights)
+                  .or_else(|| measures.get(&exact))
+                  .copied()
+              };
+
+              if let Some(size) = measured {
+                return size.into_taffy();
+              }
+
+              let (size, sizes_boxes) =
+                render_node.measure_inline_content(available_space, known_dimensions);
+
+              tree
+                .inline_measures
+                .borrow_mut()
+                .insert(if sizes_boxes { exact } else { across_heights }, size);
+              size.into_taffy()
             },
           );
 
@@ -2329,33 +2407,43 @@ impl RenderNode {
     }
   }
 
+  /// The size of this inline formatting context, and whether it sized inline boxes, the only
+  /// part of it the available height reaches.
+  pub(crate) fn measure_inline_content(
+    &self,
+    available_space: Size<AvailableSpace>,
+    known_dimensions: Size<Option<f32>>,
+  ) -> (Size<f32>, bool) {
+    let font_style = SizedFontStyle::from_style(&self.context.style, &self.context);
+    let request = InlineLayoutRequest::in_available_space(
+      collect_inline_items(self),
+      available_space,
+      known_dimensions,
+      &font_style,
+      &self.context,
+      InlineLayoutMode::Measure,
+    );
+    let options = InlineMeasureOptions::new(
+      request.max_width,
+      font_style.parent.resolved_text_wrap_mode() == TextWrapMode::Wrap,
+      available_space,
+      known_dimensions,
+    );
+    let built = create_inline_layout(request);
+    let sizes_boxes = built
+      .spans
+      .iter()
+      .any(|span| matches!(span, ProcessedInlineSpan::Box(_)));
+
+    (built.measure(options).size, sizes_boxes)
+  }
+
   pub(crate) fn measure(
     &self,
     available_space: Size<AvailableSpace>,
     known_dimensions: Size<Option<f32>>,
     style: &Style,
-    is_inline_children: bool,
   ) -> Size<f32> {
-    if is_inline_children {
-      let font_style = SizedFontStyle::from_style(&self.context.style, &self.context);
-      let request = InlineLayoutRequest::in_available_space(
-        collect_inline_items(self),
-        available_space,
-        known_dimensions,
-        &font_style,
-        &self.context,
-        InlineLayoutMode::Measure,
-      );
-      let options = InlineMeasureOptions::new(
-        request.max_width,
-        font_style.parent.resolved_text_wrap_mode() == TextWrapMode::Wrap,
-        available_space,
-        known_dimensions,
-      );
-
-      return create_inline_layout(request).measure(options).size;
-    }
-
     assert_ne!(
       self.context.style.display,
       Display::Inline,
