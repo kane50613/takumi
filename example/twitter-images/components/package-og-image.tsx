@@ -755,6 +755,7 @@ function PackageTitleBlock({
             opacity: 0.5,
             lineClamp: 1,
             textOverflow: "ellipsis",
+            overflow: "hidden",
             fontFamily: "Geist Mono",
             lineHeight: 1,
             letterSpacing: "-0.03em",
@@ -771,6 +772,7 @@ function PackageTitleBlock({
           lineClamp: 1,
           wordBreak: "break-all",
           textOverflow: "ellipsis",
+          overflow: "hidden",
           fontFamily: "Geist Mono",
         }}
       >

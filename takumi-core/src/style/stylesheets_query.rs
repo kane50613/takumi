@@ -44,6 +44,12 @@ impl ComputedStyle {
       self.outline_width = LineWidth::Length(Length::zero());
     }
 
+    // Text truncates only in a box that clips its overflow
+    // (LayoutBlockFlow::ShouldTruncateOverflowingText).
+    if !self.clips_overflow() {
+      self.text_overflow = TextOverflow::Clip;
+    }
+
     self.original_display = self.display;
 
     // https://www.w3.org/TR/css-display-3/#transformations

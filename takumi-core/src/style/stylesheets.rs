@@ -885,6 +885,8 @@ macro_rules! define_style {
           // at its initial `inline`.
           style.display.blockify();
           style.make_computed(sizing);
+          // An anonymous block truncates as the box it stands in for, which clips for it.
+          style.text_overflow = parent.text_overflow.clone();
           style
         }
 
