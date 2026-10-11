@@ -218,7 +218,7 @@ fn collect_interactive_paint(tree: &PreparedTree, paint: &NodePaint, collected: 
     // `transform` moves where a box paints without moving the flow it left
     // behind, so the flow edge is measured with the box's own transform undone.
     let in_flow = !matches!(
-      node.context.style.position,
+      node.context.style.base_data.position,
       Position::Absolute | Position::Fixed
     );
     let flow_bottom = in_flow

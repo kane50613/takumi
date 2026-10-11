@@ -51,7 +51,7 @@ pub fn resolve_inline_box<'n>(
   item: &InlineBoxItem<'n>,
   container: ComputedLayout,
 ) -> Option<(Point<f32>, InlineBoxPaint<'n>)> {
-  (item.render_node.context.style.opacity.0 != 0.0)
+  (item.render_node.context.style.svg_data.opacity.0 != 0.0)
     .then(|| InlineBoxPaint::of(positioned, item, container))
 }
 

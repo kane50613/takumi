@@ -127,7 +127,7 @@ impl ScenePainter<'_, '_> {
     let canvas = &mut *self.canvas;
     let style = &node.context.style;
 
-    if !style.backdrop_filter.is_empty() {
+    if !style.misc1_data.backdrop_filter.is_empty() {
       let shell_mask = if style.has_shape_mask() {
         match NodeMasks::of(&node.context, layout, paint.transform, canvas.viewport())? {
           Some(masks) => masks.into_shell_mask(),
@@ -193,14 +193,14 @@ impl ScenePainter<'_, '_> {
       return Ok(());
     };
 
-    if !node.context.style.filter.is_empty() {
+    if !node.context.style.misc1_data.filter.is_empty() {
       apply_filters(canvas, node, effect.filter_bounds)?;
     }
 
     canvas.composite_subcanvas(
       *layer,
-      node.context.style.mix_blend_mode,
-      node.context.style.opacity.0,
+      node.context.style.misc_data.mix_blend_mode,
+      node.context.style.svg_data.opacity.0,
     );
 
     Ok(())
@@ -286,7 +286,7 @@ fn apply_filters(
 ) -> Result<()> {
   let viewport = canvas.viewport();
   let filter_padding = filter_padding(
-    &node.context.style.filter,
+    &node.context.style.misc1_data.filter,
     &node.context.sizing,
     node.context.transform,
   );
@@ -310,7 +310,7 @@ fn apply_filters(
       &mut region_pixmap,
       &node.context.sizing,
       node.context.current_color,
-      node.context.style.filter.iter(),
+      node.context.style.misc1_data.filter.iter(),
     )?;
     canvas.write_region(region, &region_raw);
 
@@ -322,7 +322,7 @@ fn apply_filters(
       &mut pixmap.as_mut(),
       &node.context.sizing,
       node.context.current_color,
-      node.context.style.filter.iter(),
+      node.context.style.misc1_data.filter.iter(),
     )
   })
 }

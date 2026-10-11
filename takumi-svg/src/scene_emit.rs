@@ -161,7 +161,15 @@ impl ChunkWriter<'_, '_, '_> {
       return Ok(Vec::new());
     };
 
-    if self.backdrops && !placed.node.context.style.backdrop_filter.is_empty() {
+    if self.backdrops
+      && !placed
+        .node
+        .context
+        .style
+        .misc1_data
+        .backdrop_filter
+        .is_empty()
+    {
       self.emit_backdrop(&placed, paint, group_transform)?;
     }
 
@@ -180,6 +188,7 @@ impl ChunkWriter<'_, '_, '_> {
     let size = placed.frame.layout.size;
     let filters: Vec<Filter> = context
       .style
+      .misc1_data
       .backdrop_filter
       .iter()
       .filter(|f| !f.is_drop_shadow())
