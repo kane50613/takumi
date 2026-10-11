@@ -50,17 +50,10 @@ pub(crate) fn compress_segmented(
   };
 
   #[cfg(feature = "rayon")]
-  let segments: Vec<Segment> = starts
-    .par_iter()
-    .enumerate()
-    .map(segment)
-    .collect::<Result<_>>()?;
+  let starts = starts.par_iter();
   #[cfg(not(feature = "rayon"))]
-  let segments: Vec<Segment> = starts
-    .iter()
-    .enumerate()
-    .map(segment)
-    .collect::<Result<_>>()?;
+  let starts = starts.iter();
+  let segments: Vec<Segment> = starts.enumerate().map(segment).collect::<Result<_>>()?;
 
   let adler = segments
     .iter()
@@ -98,6 +91,7 @@ fn deflate_segment(
   let mut batch = Vec::new();
   let mut body = Vec::with_capacity(4096);
   let mut adler = 1;
+  let batch_rows = (BATCH / row_len).max(1);
 
   if !primed.is_empty() {
     scanlines(primed, &mut batch);
@@ -105,12 +99,9 @@ fn deflate_segment(
       .set_dictionary(&batch[batch.len().saturating_sub(WINDOW)..])
       .map_err(Error::encode)?;
   }
-  for start in rows.clone().step_by((BATCH / row_len).max(1)) {
+  for start in rows.clone().step_by(batch_rows) {
     batch.clear();
-    scanlines(
-      start..(start + (BATCH / row_len).max(1)).min(rows.end),
-      &mut batch,
-    );
+    scanlines(start..(start + batch_rows).min(rows.end), &mut batch);
     adler = adler32(adler, &batch);
     feed(&mut compress, &batch, FlushCompress::None, &mut body)?;
   }
