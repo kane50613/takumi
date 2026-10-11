@@ -27,7 +27,7 @@ use crate::krilla::interchange::outline::Outline;
 use crate::krilla::interchange::tagging::{
   AnnotationIdentifier, PageTagIdentifier, TagId, TagTree,
 };
-use crate::krilla::object_stream::ObjectStream;
+use crate::krilla::object_stream::ObjectStreams;
 use crate::krilla::page::{InternalPage, PageLabel, PageLabelContainer};
 use crate::krilla::resource;
 use crate::krilla::resource::{Resource, Resourceable};
@@ -435,7 +435,7 @@ impl SerializeContext {
   pub(crate) fn finish(
     mut self,
     mut chunk_container: ChunkContainer,
-  ) -> KrillaResult<(Pdf, Ref, Option<ObjectStream>)> {
+  ) -> KrillaResult<(Pdf, Ref, Option<ObjectStreams>)> {
     // We need to be careful here that we serialize the objects in the right order,
     // as in some cases we use MaybeTake::take to remove an object, which means that
     // no object that is serialized afterwards must depend on it.
