@@ -228,3 +228,9 @@
 .paint-in {
   animation: paint-in 240ms cubic-bezier(0.23, 1, 0.32, 1) both;
 }
+
+@media (prefers-reduced-motion: reduce) {
+  .paint-in {
+    animation: none;
+  }
+}
