@@ -1852,6 +1852,7 @@ dependencies = [
  "quick_cache",
  "rayon",
  "roxmltree 0.21.1",
+ "rustc-hash",
  "selectors",
  "serde",
  "serde_bytes",
