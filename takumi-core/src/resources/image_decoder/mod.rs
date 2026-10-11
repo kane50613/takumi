@@ -65,15 +65,15 @@ pub(crate) use self::png::decode_png;
 pub(crate) use self::png::{
   apng_dimensions, apng_frame_infos, decode_apng_frame_alone, decode_apng_frames, is_apng,
 };
+pub(crate) use self::webp::webp_dimensions;
 #[cfg(feature = "webp")]
 pub(crate) use self::webp::{
-  animated_webp_dimensions, decode_webp_frame_alone, decode_webp_frames, is_animated_webp,
-  webp_frame_infos,
+  decode_webp_frame_alone, decode_webp_frames, is_animated_webp, webp_frame_infos,
 };
 use self::{
   jpeg::{JPEG_SIGNATURE, decode_jpeg, jpeg_dimensions},
   png::{decode_png_scaled, png_dimensions},
-  webp::{decode_webp, decode_webp_scaled, webp_dimensions},
+  webp::{decode_webp, decode_webp_scaled},
 };
 
 pub(super) const PNG_SIGNATURE: [u8; 8] = [137, 80, 78, 71, 13, 10, 26, 10];

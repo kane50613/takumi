@@ -1668,6 +1668,29 @@ mod tests {
 
   #[cfg(feature = "webp")]
   #[test]
+  fn an_oversized_webp_canvas_fails_the_pixel_budget() {
+    let mut bytes = encoded_animated_webp(&[(0, 100)]);
+    let canvas = bytes
+      .windows(4)
+      .position(|window| window == b"VP8X")
+      .expect("a VP8X chunk")
+      + 12;
+
+    // A 16384x16384 canvas: each side minus one as a 24-bit value.
+    bytes[canvas..canvas + 6].copy_from_slice(&[0xFF, 0x3F, 0, 0xFF, 0x3F, 0]);
+
+    let error = AnimatedFormat::WebP
+      .decode_frames(&bytes, 0, None, None, |_| {})
+      .unwrap_err();
+
+    assert!(
+      error.to_string().contains("exceed the decode budget"),
+      "{error}"
+    );
+  }
+
+  #[cfg(feature = "webp")]
+  #[test]
   fn a_webp_frame_lying_about_its_size_declines_to_seek() {
     let mut bytes = encoded_animated_webp(&[(0, 100), (1, 100)]);
 
