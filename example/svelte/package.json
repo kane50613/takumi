@@ -14,7 +14,7 @@
     "takumi-js": "workspace:*"
   },
   "devDependencies": {
-    "@sveltejs/adapter-vercel": "^6.3.4",
+    "@sveltejs/adapter-vercel": "^7.0.0",
     "@sveltejs/kit": "^2.70.3",
     "@tailwindcss/vite": "^4.3.3",
     "svelte": "^5.57.0",
