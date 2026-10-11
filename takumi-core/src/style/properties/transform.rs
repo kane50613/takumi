@@ -194,9 +194,31 @@ impl Affine {
       && (self.d - 1.0).abs() < 1e-8
   }
 
-  /// Creates a new rotation transform
+  /// Creates a new rotation transform, exact at whole quarter turns as Chromium's
+  /// [`gfx::SinCosDegrees`](https://source.chromium.org/chromium/chromium/src/+/main:ui/gfx/geometry/sin_cos_degrees.h)
+  /// makes it.
   pub fn rotation(angle: Angle) -> Self {
-    Self::rotation_radians(angle.to_radians())
+    let quarter_turns = *angle / 90.0;
+
+    if quarter_turns.fract() != 0.0 {
+      return Self::rotation_radians(angle.to_radians());
+    }
+
+    let (sin, cos) = match quarter_turns.rem_euclid(4.0) as u8 {
+      0 => (0.0, 1.0),
+      1 => (1.0, 0.0),
+      2 => (0.0, -1.0),
+      _ => (-1.0, 0.0),
+    };
+
+    Self {
+      a: cos,
+      b: sin,
+      c: -sin,
+      d: cos,
+      x: 0.0,
+      y: 0.0,
+    }
   }
 
   /// Creates a new rotation transform from an angle in radians
@@ -616,6 +638,26 @@ mod tests {
       Transform::from_css_str("scaleY(-2)"),
       Ok(Transform::Scale(DEFAULT_SCALE, -2.0))
     );
+  }
+
+  #[test]
+  fn quarter_turns_rotate_exactly() {
+    for (degrees, (sin, cos)) in [
+      (0.0, (0.0, 1.0)),
+      (90.0, (1.0, 0.0)),
+      (180.0, (0.0, -1.0)),
+      (270.0, (-1.0, 0.0)),
+      (-90.0, (-1.0, 0.0)),
+      (450.0, (1.0, 0.0)),
+    ] {
+      let rotation = Affine::rotation(Angle::new(degrees));
+
+      assert_eq!(
+        (rotation.a, rotation.b, rotation.c, rotation.d),
+        (cos, sin, -sin, cos),
+        "{degrees}deg"
+      );
+    }
   }
 
   #[test]
