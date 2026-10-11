@@ -323,7 +323,7 @@ pub struct RenderNode {
   pub origin: NodeOrigin,
   /// Child render nodes.
   pub children: Option<Box<[RenderNode]>>,
-  pub(crate) layout_style_override: Option<Box<Style>>,
+  pub(crate) layout_style_override: Option<Rc<Style>>,
   /// Text for an anonymous inline-text wrapper.
   pub anonymous_text_content: Option<String>,
   /// Generated marker box, emitted before this box's own inline content.
@@ -381,12 +381,16 @@ impl Clone for FragmentItemsCache {
   }
 }
 
-/// The layout an anonymous block box takes in place of a computed style.
-fn block_style() -> Style {
-  Style {
+thread_local! {
+  /// The layout an anonymous block box takes in place of a computed style, shared by all of them.
+  static BLOCK_STYLE: Rc<Style> = Rc::new(Style {
     display: TaffyDisplay::Block,
     ..Style::default()
-  }
+  });
+}
+
+fn block_style() -> Rc<Style> {
+  BLOCK_STYLE.with(Rc::clone)
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -1700,11 +1704,11 @@ impl RenderNode {
     context: RenderContext,
     node: Option<Node>,
     children: Option<Box<[RenderNode]>>,
-    layout_style: Style,
+    layout_style: Rc<Style>,
   ) -> Self {
     let mut anonymous = Self::new(context, NodeOrigin::Anonymous, node, children);
 
-    anonymous.layout_style_override = Some(Box::new(layout_style));
+    anonymous.layout_style_override = Some(layout_style);
     anonymous
   }
 
@@ -1748,10 +1752,10 @@ impl RenderNode {
         RenderContext::for_anonymous(parent_context),
         Some(Node::image(url)),
         None,
-        Style {
+        Rc::new(Style {
           max_size,
           ..Style::default()
-        },
+        }),
       ),
       gradient => {
         let mut context = RenderContext::for_anonymous(parent_context);
@@ -1762,14 +1766,14 @@ impl RenderNode {
           Some(Node::container([])),
           None,
           // css-images-3 §5.1 default object size when the parent is auto.
-          Style {
+          Rc::new(Style {
             size: TaffySize {
               width: taffy::Dimension::length(300.0),
               height: taffy::Dimension::length(150.0),
             },
             max_size,
             ..Style::default()
-          },
+          }),
         )
       }
     }
