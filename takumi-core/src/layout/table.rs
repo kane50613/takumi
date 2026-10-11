@@ -493,7 +493,13 @@ impl RenderNode {
 
     let mut run: Option<(Range<usize>, Vec<RenderNode>)> = None;
 
+    let repeats_footer = footer_rows > 0 && footer_rows < rows.len();
+
     for (index, (row, positions)) in rows.into_iter().zip(placements).enumerate() {
+      if repeats_footer && index == footer_start {
+        self.table_footer_lines = Some((line, line.saturating_add(footer_rows as i16)));
+      }
+
       let part = if index < header_rows {
         TablePart::HeaderCell
       } else if index >= footer_start {
