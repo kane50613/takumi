@@ -1,14 +1,27 @@
 //! An image's rows as PNG scanlines: a filter-type byte, then the row filtered as
 //! [PNG](https://www.w3.org/TR/png-3/#9Filters) defines.
 
-use std::{mem::swap, ops::Range};
+use std::{borrow::Cow, mem::swap, ops::Range};
 
 use image::RgbaImage;
 
+use crate::webp::strip_alpha_channel;
+
+/// The pixels an image's PNG data holds.
+#[derive(Clone, Copy)]
+pub(crate) enum Pixels<'a> {
+  /// RGBA pixels, written with alpha only when `keep_alpha`.
+  Rgba {
+    image: &'a RgbaImage,
+    keep_alpha: bool,
+  },
+  /// One palette index per pixel, `width` to a row.
+  Indexed { indices: &'a [u8], width: usize },
+}
+
 /// An image's rows as PNG scanlines, unfiltered or filtered adaptively.
 pub(crate) struct Scanlines<'a> {
-  rgba: &'a RgbaImage,
-  keep_alpha: bool,
+  pixels: Pixels<'a>,
   adaptive: bool,
 }
 
@@ -23,18 +36,14 @@ enum RowFilter {
 }
 
 impl<'a> Scanlines<'a> {
-  /// The scanlines of `rgba`, with alpha only when `keep_alpha`.
-  pub(crate) fn new(rgba: &'a RgbaImage, keep_alpha: bool, adaptive: bool) -> Self {
-    Self {
-      rgba,
-      keep_alpha,
-      adaptive,
-    }
+  /// The scanlines of `pixels`, filtered adaptively when `adaptive`.
+  pub(crate) fn new(pixels: Pixels<'a>, adaptive: bool) -> Self {
+    Self { pixels, adaptive }
   }
 
   /// Bytes in one scanline, its filter-type byte included.
   pub(crate) fn len(&self) -> usize {
-    self.rgba.width() as usize * self.channels() + 1
+    self.pixels.row_len() + 1
   }
 
   /// Appends the scanlines of `rows`. A filtered row reads the one before it, so a range that
@@ -43,13 +52,13 @@ impl<'a> Scanlines<'a> {
     if !self.adaptive {
       for row in rows {
         out.push(0);
-        self.extend_pixels(row, out);
+        self.pixels.extend_row(row, out);
       }
       return;
     }
 
-    let channels = self.channels();
-    let row_len = self.len() - 1;
+    let bpp = self.pixels.bytes_per_pixel();
+    let row_len = self.pixels.row_len();
     let mut previous = vec![0; row_len];
     let mut current = Vec::with_capacity(row_len);
     let mut best = vec![0; row_len];
@@ -57,31 +66,75 @@ impl<'a> Scanlines<'a> {
 
     if let Some(above) = rows.start.checked_sub(1) {
       previous.clear();
-      self.extend_pixels(above, &mut previous);
+      self.pixels.extend_row(above, &mut previous);
     }
     for row in rows {
       current.clear();
-      self.extend_pixels(row, &mut current);
-      out.push(adaptive_filter(channels, &previous, &current, &mut best, &mut trial) as u8);
+      self.pixels.extend_row(row, &mut current);
+      out.push(adaptive_filter(bpp, &previous, &current, &mut best, &mut trial) as u8);
       out.extend_from_slice(&best);
       swap(&mut previous, &mut current);
     }
   }
+}
 
-  fn channels(&self) -> usize {
-    if self.keep_alpha { 4 } else { 3 }
+impl<'a> Pixels<'a> {
+  /// Bytes each pixel takes in a scanline.
+  pub(crate) fn bytes_per_pixel(self) -> usize {
+    match self {
+      Self::Rgba { keep_alpha, .. } => {
+        if keep_alpha {
+          4
+        } else {
+          3
+        }
+      }
+      Self::Indexed { .. } => 1,
+    }
   }
 
-  /// Appends row `row`'s pixels in the scanlines' channels.
-  fn extend_pixels(&self, row: usize, out: &mut Vec<u8>) {
-    let row_bytes = self.rgba.width() as usize * 4;
-    let pixels = &self.rgba.as_raw()[row * row_bytes..(row + 1) * row_bytes];
+  /// Bytes in one row of pixels.
+  fn row_len(self) -> usize {
+    let width = match self {
+      Self::Rgba { image, .. } => image.width() as usize,
+      Self::Indexed { width, .. } => width,
+    };
 
-    if self.keep_alpha {
-      out.extend_from_slice(pixels);
-    } else {
-      for pixel in pixels.as_chunks::<4>().0 {
-        out.extend_from_slice(&pixel[..3]);
+    width * self.bytes_per_pixel()
+  }
+
+  /// Every row's pixels back to back, as the png crate takes them.
+  pub(crate) fn packed(self) -> Cow<'a, [u8]> {
+    match self {
+      Self::Rgba {
+        image,
+        keep_alpha: true,
+      } => Cow::Borrowed(image.as_raw()),
+      Self::Rgba {
+        image,
+        keep_alpha: false,
+      } => Cow::Owned(strip_alpha_channel(Cow::Borrowed(image))),
+      Self::Indexed { indices, .. } => Cow::Borrowed(indices),
+    }
+  }
+
+  /// Appends row `row`'s pixels.
+  fn extend_row(self, row: usize, out: &mut Vec<u8>) {
+    match self {
+      Self::Rgba { image, keep_alpha } => {
+        let row_bytes = image.width() as usize * 4;
+        let pixels = &image.as_raw()[row * row_bytes..(row + 1) * row_bytes];
+
+        if keep_alpha {
+          out.extend_from_slice(pixels);
+        } else {
+          for pixel in pixels.as_chunks::<4>().0 {
+            out.extend_from_slice(&pixel[..3]);
+          }
+        }
+      }
+      Self::Indexed { indices, width } => {
+        out.extend_from_slice(&indices[row * width..(row + 1) * width]);
       }
     }
   }
@@ -212,7 +265,7 @@ mod tests {
   use image::RgbaImage;
   use png::{ColorType, Filter};
 
-  use super::Scanlines;
+  use super::{Pixels, Scanlines};
 
   fn photo(width: u32, height: u32, alpha: bool) -> RgbaImage {
     RgbaImage::from_fn(width, height, |x, y| {
@@ -281,7 +334,14 @@ mod tests {
       let rgba = photo(97, 23, keep_alpha);
       let mut ours = Vec::new();
 
-      Scanlines::new(&rgba, keep_alpha, true).append(0..23, &mut ours);
+      Scanlines::new(
+        Pixels::Rgba {
+          image: &rgba,
+          keep_alpha,
+        },
+        true,
+      )
+      .append(0..23, &mut ours);
       assert!(ours == png_crate_scanlines(&rgba, keep_alpha));
     }
   }
@@ -289,7 +349,13 @@ mod tests {
   #[test]
   fn a_range_from_mid_image_filters_as_the_whole_image_does() {
     let rgba = photo(40, 12, false);
-    let scanlines = Scanlines::new(&rgba, false, true);
+    let scanlines = Scanlines::new(
+      Pixels::Rgba {
+        image: &rgba,
+        keep_alpha: false,
+      },
+      true,
+    );
     let mut whole = Vec::new();
     let mut tail = Vec::new();
 
