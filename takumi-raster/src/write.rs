@@ -262,7 +262,7 @@ impl PngEncoding {
   /// Picks the encoding that makes a 1-in-32 row sample of `rgba` smaller, and the segments the
   /// sample's size says the whole image deflates in.
   fn pick(rgba: &[u8], width: u32) -> Self {
-    let Some(band) = RowSample::of(rgba, width, ColorType::Rgba) else {
+    let Some(band) = RowSample::rgba(rgba, width) else {
       return FLAT_PNG;
     };
     let (encoding, sample) = match (band.encoded_len(FLAT_PNG), band.encoded_len(PHOTO_PNG)) {
@@ -277,7 +277,7 @@ impl PngEncoding {
   /// Flat art's encoding for palette `indices`, which deflate best unfiltered too, with the
   /// segments a 1-in-32 row sample of them says the image deflates in.
   fn indexed(indices: &[u8], width: u32) -> Self {
-    RowSample::of(indices, width, ColorType::Grayscale)
+    RowSample::indexed(indices, width)
       .and_then(|band| band.encoded_len(FLAT_PNG))
       .map_or(FLAT_PNG, |sample| FLAT_PNG.with_segments(sample))
   }
@@ -290,6 +290,21 @@ impl PngEncoding {
     }
   }
 
+  /// The zlib stream `rows` rows of `pixels` deflate to under this encoding, in its segments at
+  /// once.
+  fn deflate(self, pixels: Pixels<'_>, rows: usize) -> Result<Vec<u8>> {
+    let scanlines = Scanlines::new(pixels, matches!(self.filter, Filter::Adaptive));
+
+    compress_segmented(
+      rows,
+      scanlines.len(),
+      u32::from(self.level),
+      self.segments,
+      |rows, out| scanlines.append(rows, out),
+    )
+  }
+
+  /// Hands this encoding to the png crate, which deflates APNG frames itself.
   fn apply<T: Write>(self, encoder: &mut png::Encoder<'_, T>) {
     encoder.set_deflate_compression(DeflateCompression::Level(self.level));
     encoder.set_filter(self.filter);
@@ -300,70 +315,68 @@ impl PngEncoding {
 /// image to count its symbols first, about 9 bytes a pixel at 4:4:4, where standard tables stream.
 const OPTIMIZED_JPEG_MAX_PIXELS: u64 = 1 << 22;
 /// Every 32nd row of an image, stacked into a band for an encoding to be tried on.
-struct RowSample {
-  band: Vec<u8>,
-  width: u32,
-  height: u32,
-  color: ColorType,
+enum RowSample {
+  Rgba(RgbaImage),
+  Indexed { indices: Vec<u8>, width: usize },
 }
 
 impl RowSample {
-  /// The sample of `data`, rows of `width` pixels in `color`, or `None` when it has under two rows.
-  fn of(data: &[u8], width: u32, color: ColorType) -> Option<Self> {
-    let row_bytes = width as usize * color.samples();
+  /// The sample of RGBA `rgba` rows `width` pixels wide, or `None` when it has under two rows.
+  fn rgba(rgba: &[u8], width: u32) -> Option<Self> {
+    let band = sample_rows(rgba, width as usize * 4)?;
+    let height = band.len() / (width as usize * 4);
 
-    if row_bytes == 0 {
-      return None;
-    }
-
-    let band: Vec<u8> = data
-      .chunks_exact(row_bytes)
-      .step_by(ROW_STRIDE)
-      .flatten()
-      .copied()
-      .collect();
-    let height = (band.len() / row_bytes) as u32;
-
-    (height >= 2).then_some(Self {
-      band,
-      width,
-      height,
-      color,
-    })
+    RgbaImage::from_raw(width, height as u32, band).map(Self::Rgba)
   }
 
-  /// The bytes the sample encodes to under `encoding`.
-  fn encoded_len(&self, encoding: PngEncoding) -> Option<usize> {
-    let mut out = Vec::new();
-    let mut encoder = png::Encoder::new(&mut out, self.width, self.height);
+  /// The sample of palette `indices` rows `width` pixels wide, or `None` when it has under two
+  /// rows.
+  fn indexed(indices: &[u8], width: u32) -> Option<Self> {
+    let width = width as usize;
 
-    encoding.apply(&mut encoder);
-    encoder.set_color(self.color);
-    encoder
-      .write_header()
-      .and_then(|mut writer| writer.write_image_data(&self.band))
-      .ok()?;
-    Some(out.len())
+    sample_rows(indices, width).map(|indices| Self::Indexed { indices, width })
+  }
+
+  /// The bytes the sample's image data deflates to under `encoding`, as `write_image` writes it.
+  fn encoded_len(&self, encoding: PngEncoding) -> Option<usize> {
+    let (pixels, rows) = match self {
+      Self::Rgba(image) => (
+        Pixels::Rgba {
+          image,
+          keep_alpha: true,
+        },
+        image.height() as usize,
+      ),
+      Self::Indexed { indices, width } => (
+        Pixels::Indexed {
+          indices,
+          width: *width,
+        },
+        indices.len() / width,
+      ),
+    };
+
+    encoding
+      .deflate(pixels, rows)
+      .ok()
+      .map(|stream| stream.len())
   }
 }
 
-/// Writes `pixels` as the image data `encoding` describes, deflated in its segments at once.
-fn write_png_data<W: Write>(
-  writer: &mut png::Writer<W>,
-  encoding: PngEncoding,
-  height: u32,
-  pixels: Pixels<'_>,
-) -> Result<()> {
-  let scanlines = Scanlines::new(pixels, matches!(encoding.filter, Filter::Adaptive));
-  let stream = compress_segmented(
-    height as usize,
-    scanlines.len(),
-    u32::from(encoding.level),
-    encoding.segments,
-    |rows, out| scanlines.append(rows, out),
-  )?;
+/// Every [`ROW_STRIDE`]th row of `data`, rows `row_bytes` long, or `None` under two rows.
+fn sample_rows(data: &[u8], row_bytes: usize) -> Option<Vec<u8>> {
+  if row_bytes == 0 {
+    return None;
+  }
 
-  write_idat(writer, &stream)
+  let band: Vec<u8> = data
+    .chunks_exact(row_bytes)
+    .step_by(ROW_STRIDE)
+    .flatten()
+    .copied()
+    .collect();
+
+  (band.len() >= 2 * row_bytes).then_some(band)
 }
 
 /// Longest chunk payload PNG allows.
@@ -446,11 +459,12 @@ pub fn write_image<T: Write>(
         }
       };
 
-      encoding.apply(&mut encoder);
-
       let mut writer = encoder.write_header().map_err(Error::encode)?;
 
-      write_png_data(&mut writer, encoding, image.height(), pixels)?;
+      write_idat(
+        &mut writer,
+        &encoding.deflate(pixels, image.height() as usize)?,
+      )?;
       writer.finish().map_err(Error::encode)?;
     }
     #[cfg(not(target_arch = "wasm32"))]
