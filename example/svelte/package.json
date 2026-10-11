@@ -2,6 +2,9 @@
   "name": "svelte",
   "private": true,
   "type": "module",
+  "imports": {
+    "#lib/*": "./src/lib/*"
+  },
   "scripts": {
     "dev": "vite dev",
     "build": "vite build",
@@ -17,10 +20,10 @@
     "@sveltejs/adapter-vercel": "^7.0.0",
     "@sveltejs/kit": "^3.0.0",
     "@tailwindcss/vite": "^4.3.3",
-    "svelte": "^5.57.0",
+    "svelte": "^5.57.1",
     "svelte-check": "^4.7.6",
     "tailwindcss": "^4.3.3",
-    "typescript": "catalog:",
+    "typescript": "^6.0.3",
     "vite": "catalog:"
   }
 }

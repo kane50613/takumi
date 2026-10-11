@@ -49,6 +49,7 @@ Render a Svelte component to HTML on the server, then pass that HTML and its CSS
     ### Render the component on a server route
 
     - Import the component, and `app.css` if you use Tailwind.
+    - Map `#lib/*` to `./src/lib/*` in the `imports` field of `package.json`.
     - Render to HTML with `render` from `svelte/server`.
     - Return an `ImageResponse`.
 
@@ -56,7 +57,7 @@ Render a Svelte component to HTML on the server, then pass that HTML and its CSS
     import { render } from "svelte/server";
     import style from "../app.css?inline";
     import ImageResponse from "takumi-js/response";
-    import OgImage from "$lib/components/OgImage.svelte";
+    import OgImage from "#lib/components/OgImage.svelte";
     import type { RequestEvent } from "./$types";
 
     export async function GET({ url }: RequestEvent) {
