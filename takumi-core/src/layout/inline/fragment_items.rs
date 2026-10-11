@@ -9,8 +9,9 @@ use skrifa::FontRef;
 
 use super::{
   BuiltInlineLayout, PlacedItem,
-  background::InlineBackgroundFragment,
+  background::{FragmentBackground, InlineBackgroundFragment},
   decorations::DecorationPlacement,
+  items::{DecorationLink, ProcessedInlineSpan},
   metrics::VisualInlineBox,
   outline::InlineOutlineRect,
   runs::{
@@ -19,16 +20,107 @@ use super::{
   },
   text_fit::LineScaleState,
 };
-use crate::{context::RenderContext, geometry::ComputedLayout, resources::font::FontError};
+use crate::{
+  context::RenderContext,
+  geometry::{ComputedLayout, Point, Size},
+  layout::{border::BorderProperties, tree::RenderNode},
+  resources::font::FontError,
+  style::Color,
+};
 
 /// The laid-out content of an inline formatting context.
-pub(crate) struct FragmentItems<'c> {
+pub(crate) struct FragmentItems {
+  /// The content box it laid out in.
+  pub(crate) content_box: ContentBox,
+  /// The text layout shaped.
+  pub(crate) text: String,
+  /// Whether `text-overflow: ellipsis` cut the spans short, which collecting them again does not.
+  pub(crate) ellipsized: bool,
   text_items: Vec<TextItem>,
   glyphs: GlyphStore,
   /// In-flow and out-of-flow inline boxes, sorted by id.
   inline_boxes: Vec<VisualInlineBox>,
   outline_rects: Vec<InlineOutlineRect>,
-  background_fragments: Vec<InlineBackgroundFragment<'c>>,
+  backgrounds: Vec<BackgroundItem>,
+}
+
+/// An [`InlineBackgroundFragment`] naming its span by decoration id instead of holding its node.
+struct BackgroundItem {
+  x: f32,
+  y: f32,
+  width: f32,
+  height: f32,
+  border: BorderProperties,
+  color: Color,
+  opacity: f32,
+  baseline: f32,
+  /// The strip's origin, the strip, and the fragment of the span's background.
+  background: Option<(Point<f32>, ComputedLayout, ComputedLayout)>,
+  span: usize,
+}
+
+impl BackgroundItem {
+  fn of(fragment: InlineBackgroundFragment<'_>) -> Self {
+    Self {
+      x: fragment.x,
+      y: fragment.y,
+      width: fragment.width,
+      height: fragment.height,
+      border: fragment.border,
+      color: fragment.color,
+      opacity: fragment.opacity,
+      baseline: fragment.baseline,
+      background: fragment.background.map(|background| {
+        (
+          background.strip_origin,
+          background.strip,
+          background.fragment,
+        )
+      }),
+      span: fragment.span,
+    }
+  }
+
+  /// The fragment, its span being `owner`.
+  fn resolve<'c>(&self, owner: &'c RenderNode) -> InlineBackgroundFragment<'c> {
+    InlineBackgroundFragment {
+      x: self.x,
+      y: self.y,
+      width: self.width,
+      height: self.height,
+      border: self.border,
+      color: self.color,
+      opacity: self.opacity,
+      baseline: self.baseline,
+      background: self
+        .background
+        .map(|(strip_origin, strip, fragment)| FragmentBackground {
+          node: owner,
+          strip_origin,
+          strip,
+          fragment,
+        }),
+      owner,
+      span: self.span,
+    }
+  }
+}
+
+/// What fragment items read of the layout they lay out in: where its content box sits in its
+/// border box, and the content box's size.
+#[derive(Clone, Copy, PartialEq)]
+pub(crate) struct ContentBox {
+  offset: Point<f32>,
+  size: Size<f32>,
+}
+
+impl ContentBox {
+  pub(crate) fn of(layout: ComputedLayout) -> Self {
+    Self {
+      offset: layout.content_box_offset(),
+      size: layout.content_box_size(),
+    }
+  }
 }
 
 /// A glyph run on its line: Blink's `FragmentItem` of type `kText`.
@@ -111,15 +203,18 @@ struct FullGlyph {
   cluster: (u32, u32),
 }
 
-impl<'c> BuiltInlineLayout<'c> {
+impl BuiltInlineLayout<'_> {
   /// The laid-out content as fragment items.
-  pub(crate) fn fragment_items(&self, layout: ComputedLayout) -> FragmentItems<'c> {
+  pub(crate) fn fragment_items(&self, layout: ComputedLayout) -> FragmentItems {
     let mut items = FragmentItems {
+      content_box: ContentBox::of(layout),
+      text: self.text.clone(),
+      ellipsized: self.ellipsized,
       text_items: Vec::new(),
       glyphs: GlyphStore::default(),
       inline_boxes: Vec::new(),
       outline_rects: Vec::new(),
-      background_fragments: Vec::new(),
+      backgrounds: Vec::new(),
     };
     let mut decoration_coverage = self.decoration_coverage();
     let mut inline_boxes = HashMap::new();
@@ -194,7 +289,10 @@ impl<'c> BuiltInlineLayout<'c> {
     });
 
     items.inline_boxes = self.with_floats(inline_boxes);
-    (items.background_fragments, items.outline_rects) = decoration_coverage.into_fragments();
+    let (backgrounds, outline_rects) = decoration_coverage.into_fragments();
+
+    items.backgrounds = backgrounds.into_iter().map(BackgroundItem::of).collect();
+    items.outline_rects = outline_rects;
     items
   }
 }
@@ -300,36 +398,30 @@ impl GlyphStore {
   }
 }
 
-impl<'c> FragmentItems<'c> {
+impl FragmentItems {
   /// How many glyphs it stores as simple and as full glyphs.
   #[cfg(test)]
   pub(super) fn glyph_counts(&self) -> (usize, usize) {
     (self.glyphs.simple.len(), self.glyphs.full.len())
   }
 
-  /// The runs resolved for painting at `layout` in `context`: their glyphs' outlines and the
-  /// paint offset of the box they paint in.
-  pub(crate) fn resolve_runs(
-    self,
+  /// The runs resolved for painting at `layout` in `context`, among `spans`: their glyphs'
+  /// outlines, the paint offset of the box they paint in, and the nodes of their spans.
+  pub(crate) fn resolve_runs<'c>(
+    &self,
+    spans: &[ProcessedInlineSpan<'c>],
     context: &RenderContext,
     layout: ComputedLayout,
   ) -> Result<InlineRunLayout<'c>, FontError> {
-    let Self {
-      text_items,
-      glyphs,
-      inline_boxes,
-      outline_rects,
-      background_fragments,
-    } = self;
     let paint_offset = context.box_paint_offset(layout);
-    let mut runs = Vec::with_capacity(text_items.len());
+    let mut runs = Vec::with_capacity(self.text_items.len());
 
-    for item in text_items {
-      let (positioned, cluster_ranges) = glyphs.get(&item.glyphs);
+    for item in &self.text_items {
+      let (glyphs, cluster_ranges) = self.glyphs.get(&item.glyphs);
       let glyph_run = ShapedRun {
-        glyphs: positioned,
+        glyphs,
         cluster_ranges,
-        ..item.run
+        ..item.run.clone()
       };
       let font = FontRef::from_index(glyph_run.font_data(), glyph_run.font_index)
         .map_err(|_| FontError::InvalidFontIndex)?;
@@ -347,18 +439,39 @@ impl<'c> FragmentItems<'c> {
         line_scale: item.line_scale,
         static_inline_prefix: item.static_inline_prefix,
         baseline_shift: item.baseline_shift,
-        decoration_placement: item.decoration_placement,
+        decoration_placement: item.decoration_placement.clone(),
         paint_offset,
         #[cfg(feature = "paint-tree")]
         index: runs.len(),
       });
     }
 
+    let owners = span_owners(spans);
+
     Ok(InlineRunLayout {
       runs,
-      inline_boxes,
-      outline_rects,
-      background_fragments,
+      inline_boxes: self.inline_boxes.clone(),
+      outline_rects: self.outline_rects.clone(),
+      background_fragments: self
+        .backgrounds
+        .iter()
+        .filter_map(|item| Some(item.resolve(*owners.get(&item.span)?)))
+        .collect(),
     })
   }
+}
+
+/// The node of every span `spans` open, by decoration id.
+fn span_owners<'c>(spans: &[ProcessedInlineSpan<'c>]) -> HashMap<usize, &'c RenderNode> {
+  spans
+    .iter()
+    .filter_map(|span| match span {
+      ProcessedInlineSpan::Text { decorations, .. }
+      | ProcessedInlineSpan::Spacer { decorations, .. } => decorations.as_deref(),
+      ProcessedInlineSpan::Box(item) => item.decorations.as_deref(),
+      ProcessedInlineSpan::DirectionMark { .. } => None,
+    })
+    .flat_map(DecorationLink::ancestors)
+    .map(|link| (link.decoration.id, link.decoration.owner))
+    .collect()
 }

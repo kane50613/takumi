@@ -43,6 +43,7 @@ mod truncation;
 
 pub(crate) use self::{
   background::PaddingBox,
+  fragment_items::{ContentBox, FragmentItems},
   items::InlineOutOfFlow,
   outline::{OutlineIsland, RightAngleContour},
   text_fit::{LineFit, TextScale},
@@ -206,6 +207,8 @@ pub struct BuiltInlineLayout<'c> {
   pub(crate) line_fits: Vec<LineFit>,
   /// Whether a height or line limit may have dropped lines.
   pub(crate) clamped: bool,
+  /// Whether `text-overflow: ellipsis` cut the spans short.
+  pub(crate) ellipsized: bool,
   /// The root inline box's strut, which every line holding content grows to, or `None` when the
   /// root has no primary font.
   pub(crate) strut: Option<Strut>,
@@ -837,6 +840,31 @@ fn build_inline_layout_tree<'c>(
 ) -> BuiltInlineLayout<'c> {
   // Build spans first: measuring an inline box re-enters layout, so it must run
   // before `tree_builder` holds the shared font borrow.
+  let spans = process_inline_spans(items, available_space, context);
+  let (layout, text) = shape_spans(context, &spans, style, shape_cacheable);
+  let strut = Strut::of(context, style);
+  let font = BoxFont::of(context);
+
+  BuiltInlineLayout {
+    layout,
+    text,
+    spans,
+    positioned_floats: Vec::new(),
+    line_fits: Vec::new(),
+    clamped: false,
+    ellipsized: false,
+    strut,
+    font,
+  }
+}
+
+/// The spans `items` become once their text is transformed and its white space collapsed, and
+/// their inline boxes measured in `available_space`.
+pub(crate) fn process_inline_spans<'c>(
+  items: &[InlineItem<'c>],
+  available_space: Size<AvailableSpace>,
+  context: &'c RenderContext,
+) -> Vec<ProcessedInlineSpan<'c>> {
   let mut spans: Vec<ProcessedInlineSpan<'c>> = Vec::new();
   let mut index_pos = 0;
   // A paragraph opens as a line does, so its leading collapsible spaces go.
@@ -913,21 +941,7 @@ fn build_inline_layout_tree<'c>(
   }
 
   trim_trailing_space(&mut spans);
-
-  let (layout, text) = shape_spans(context, &spans, style, shape_cacheable);
-  let strut = Strut::of(context, style);
-  let font = BoxFont::of(context);
-
-  BuiltInlineLayout {
-    layout,
-    text,
-    spans,
-    positioned_floats: Vec::new(),
-    line_fits: Vec::new(),
-    clamped: false,
-    strut,
-    font,
-  }
+  spans
 }
 
 /// Drops the collapsible space a paragraph ends with, as the end of its last line removes it.
@@ -1182,6 +1196,7 @@ pub fn create_inline_layout<'c>(request: InlineLayoutRequest<'c>) -> BuiltInline
       text,
       spans,
       positioned_floats,
+      ellipsized,
       ..
     } = &mut built;
 
@@ -1206,6 +1221,7 @@ pub fn create_inline_layout<'c>(request: InlineLayoutRequest<'c>) -> BuiltInline
 
       if is_overflowing {
         make_ellipsis_layout(layout, spans, rebreak, style, context, positioned_floats);
+        *ellipsized = true;
       }
     }
 
@@ -1545,6 +1561,7 @@ mod tests {
     context::RenderContext,
     geometry::{PathCommand, Point, Rect},
     layout::{node::Node, tree::RenderNode},
+    painter::OwnContent,
     resources::font::{FontOverride, FontResource, GenericFamily},
     style::{
       Affine, AppliedTextDecoration, BorderStyle, Color, ColorInput, Display, FontSize, Length,
@@ -1799,6 +1816,40 @@ mod tests {
 
     assert!(simple > 50, "{simple} simple glyphs");
     assert_eq!(full, 0);
+  }
+
+  #[test]
+  fn fragment_items_stay_with_the_node_until_cleared() {
+    let fonts = create_test_context();
+    let context = RenderContext::builder()
+      .fonts(fonts.snapshot_with_fallbacks(None))
+      .sizing(
+        SizingContext::builder()
+          .viewport(Viewport::new((200, 630)))
+          .build(),
+      )
+      .build();
+    let node = Node::container([Node::text("Some text.".to_string())])
+      .with_style(Style::default().with(StyleDeclaration::display(Display::Block)));
+    let render_node = RenderNode::from_node(&context, node);
+    let font_style = SizedFontStyle::from_style(&render_node.context.style, &render_node.context);
+    let layout = ComputedLayout {
+      location: Point::ZERO,
+      size: Size::new(200.0, 630.0),
+      border: Rect::default(),
+      padding: Rect::default(),
+    };
+
+    assert!(
+      OwnContent::of(&render_node)
+        .lay_out_inline(&font_style, layout)
+        .is_some_and(|painted| painted.is_ok())
+    );
+    assert!(render_node.fragment_items_in(layout).is_some());
+    assert!(render_node.clone().fragment_items_in(layout).is_none());
+
+    render_node.clear_fragment_items();
+    assert!(render_node.fragment_items_in(layout).is_none());
   }
 
   #[test]
