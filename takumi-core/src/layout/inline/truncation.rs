@@ -4,7 +4,7 @@ use crate::{context::RenderContext, font_style::SizedFontStyle, text_processing:
 use parley::{InlineBoxKind, PositionedInlineBox, PositionedLayoutItem};
 
 use super::{
-  InlineLayout, break_into_lines, chromium_line_breaks, items::ProcessedInlineSpan,
+  InlineLayout, LineIndent, break_into_lines, chromium_line_breaks, items::ProcessedInlineSpan,
   push_presentation_text, push_spans_into_builder, refresh_text_span_ranges,
   text_fit::cluster_fixed_spacing,
 };
@@ -176,7 +176,8 @@ fn text_span_style_by_id<'a, 'c>(
   }
 }
 
-/// Truncates the last line, which `text-fit` scales by `scale`, to `max_width` with an ellipsis.
+/// Truncates the last line, which `text-fit` scales by `scale`, to `max_width` past its indent with
+/// an ellipsis.
 pub(super) fn make_ellipsis_layout<'c>(
   layout: &mut InlineLayout,
   spans: &mut Vec<ProcessedInlineSpan<'c>>,
@@ -188,6 +189,7 @@ pub(super) fn make_ellipsis_layout<'c>(
 ) {
   let ellipsis_char = root_style.parent.ellipsis_char();
   let checkpoints = collect_truncation_checkpoints(layout, scale);
+  let indent = LineIndent::of(root_style, options.max_width).last_line(layout);
   let mut ellipsis_span_id = tail_text_span(spans).map(|(_, span_id)| span_id);
 
   let mut iterations = 0;
@@ -201,7 +203,7 @@ pub(super) fn make_ellipsis_layout<'c>(
     let plan = TruncationPlan::new(
       &checkpoints,
       spans,
-      (options.max_width - ellipsis_w * scale).max(0.0),
+      (options.max_width - indent - ellipsis_w * scale).max(0.0),
     );
     let next_ellipsis_span_id = tail_text_span(&spans[..plan.span_cut]).map(|(_, span_id)| span_id);
 

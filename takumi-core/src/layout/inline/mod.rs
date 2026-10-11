@@ -681,6 +681,11 @@ impl LineIndent {
       }
     })
   }
+
+  /// The indent of the last line of `layout`.
+  pub(super) fn last_line(self, layout: &InlineLayout) -> f32 {
+    self.per_line(layout).last().unwrap_or(0.0)
+  }
 }
 
 fn inline_line_height_hint(style: &SizedFontStyle) -> f32 {
@@ -1232,9 +1237,11 @@ pub fn create_inline_layout<'c>(request: InlineLayoutRequest<'c>) -> BuiltInline
         Vec::new()
       };
       let last_fit = fits.last().copied().unwrap_or(LineFit::NONE);
+      let indent = LineIndent::of(style, max_width).last_line(layout);
       let is_overflowing = layout.lines().last().is_some_and(|last_line| {
         last_line.text_range().end < text.len()
-          || last_fit.content_end(&last_line, layout.is_rtl()) > max_width + LAYOUT_UNIT_EPSILON
+          || last_fit.content_end(&last_line, layout.is_rtl(), indent)
+            > max_width + LAYOUT_UNIT_EPSILON
       });
 
       if is_overflowing {

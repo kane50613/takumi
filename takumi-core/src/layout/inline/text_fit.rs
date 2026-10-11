@@ -204,11 +204,12 @@ impl LineFit {
     start: 0.0,
   };
 
-  /// Where `line`'s content, less trailing whitespace, ends once this fit scales its text.
-  pub(crate) fn content_end(self, line: &Line<'_, InlineBrush>, rtl: bool) -> f32 {
+  /// Where `line`'s content, less trailing whitespace, ends past its `indent` once this fit scales
+  /// its text.
+  pub(crate) fn content_end(self, line: &Line<'_, InlineBrush>, rtl: bool, indent: f32) -> f32 {
     let (flexible, fixed) = text_fit_line_advance(line, rtl);
 
-    line.metrics().inline_min_coord + fixed + flexible * self.scale
+    line.metrics().inline_min_coord + indent + fixed + flexible * self.scale
   }
 
   /// How the line sizes the text of a box, the root inline box when `root`. Blink's root box
