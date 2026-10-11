@@ -6,8 +6,8 @@ use crate::{
   layout::intercept::skips_ink,
   resources::{
     font::{
-      ExactFontMetrics, FontError, FontUnderline, PrimaryFontMetrics, em_box_descent,
-      run_synthesis, run_variations,
+      ExactFontMetrics, FontError, FontUnderline, PrimaryFontMetrics, RunFace, RunSynthesis,
+      em_box_descent, run_normalized_coords, run_synthesis, run_variations,
     },
     glyph::{ResolvedColorLayer, ResolvedGlyph, ResolvedOutlineGlyph},
   },
@@ -15,7 +15,7 @@ use crate::{
   style::{Affine, Color, Direction},
 };
 use parley::{GlyphRun, fontique::Blob};
-use skrifa::{FontRef, MetadataProvider};
+use skrifa::{FontRef, MetadataProvider, raw::types::F2Dot14};
 use std::{collections::HashMap, convert::Infallible, ops::Range, sync::Arc};
 
 use super::{
@@ -62,13 +62,22 @@ pub struct RunMetrics {
 }
 
 /// The source cluster behind a positioned glyph.
-struct GlyphCluster {
-  range: Range<usize>,
-  emoji: bool,
+pub(super) struct GlyphCluster {
+  pub(super) range: Range<usize>,
+  pub(super) emoji: bool,
+}
+
+/// Whether `text-decoration-skip-ink` cuts a decoration around a glyph of the non-emoji cluster
+/// `cluster` of `text`.
+pub(super) fn glyph_skips_ink(text: &str, cluster: Range<usize>) -> bool {
+  text
+    .get(cluster)
+    .and_then(|text| text.chars().next())
+    .is_none_or(skips_ink)
 }
 
 /// Per-glyph source clusters for a [`GlyphRun`], aligned to its positioned glyphs.
-fn glyph_clusters(
+pub(super) fn glyph_clusters(
   glyph_run: &GlyphRun<'_, InlineBrush>,
   positioned: &[PositionedGlyph],
 ) -> Vec<GlyphCluster> {
@@ -154,6 +163,8 @@ pub struct ShapedRun {
   pub synthetic_bold: Option<f32>,
   /// Synthetic oblique angle in degrees.
   pub synthetic_skew: Option<f32>,
+  /// Normalized variation coordinates the run was shaped at.
+  pub(crate) normalized_coords: Vec<F2Dot14>,
   // Accessor, not a `pub` field: the backing `parley` blob must not leak into the public API.
   pub(super) font_data: Blob<u8>,
 }
@@ -230,7 +241,22 @@ impl ShapedRun {
       variations: run_variations(glyph_run),
       synthetic_bold: synthesis.embolden,
       synthetic_skew: synthesis.skew,
+      normalized_coords: run_normalized_coords(glyph_run),
       font_data: run.font().data.clone(),
+    }
+  }
+
+  /// The face its glyphs resolve against.
+  pub(crate) fn face(&self) -> RunFace<'_> {
+    RunFace {
+      font_id: self.font_id(),
+      font_index: self.font_index,
+      font_size: self.font_size,
+      normalized_coords: &self.normalized_coords,
+      synthesis: RunSynthesis {
+        embolden: self.synthetic_bold,
+        skew: self.synthetic_skew,
+      },
     }
   }
 
@@ -413,102 +439,7 @@ impl<'c> BuiltInlineLayout<'c> {
     context: &RenderContext,
     layout: ComputedLayout,
   ) -> Result<InlineRunLayout<'c>, FontError> {
-    let mut runs = Vec::new();
-    let mut decoration_coverage = self.decoration_coverage();
-    let mut positioned_inline_boxes: HashMap<u64, VisualInlineBox> = HashMap::new();
-
-    let content = layout.content_box_offset();
-
-    self.walk_items(layout, |line, item| {
-      let setup = &line.setup;
-
-      self.cover(&mut decoration_coverage, content, line, &item);
-
-      match item {
-        PlacedItem::Run {
-          glyph_run,
-          static_inline_prefix,
-          hanging,
-          stretch,
-        } => {
-          let run = glyph_run.run();
-          // A run carrying only the direction mark paints nothing; a run the
-          // mark's cluster merged into (emoji sequences) paints as the first
-          // real span.
-          let mut brush = glyph_run.style().brush.clone();
-          if brush.is_direction_mark {
-            if glyph_run.advance() == 0.0 {
-              return Ok(());
-            }
-            brush.is_direction_mark = false;
-          }
-
-          let font = FontRef::from_index(run.font().data.as_ref(), run.font().index)
-            .map_err(|_| FontError::InvalidFontIndex)?;
-          let mut glyphs: Vec<PositionedGlyph> = glyph_run
-            .positioned_glyphs()
-            .map(|g| PositionedGlyph {
-              id: g.id,
-              x: g.x,
-              y: g.y,
-              skips_ink: true,
-            })
-            .collect();
-          let resolved_glyphs = context.fonts().with_context(|fonts| {
-            fonts.resolve_glyphs(&glyph_run, font, glyphs.iter().map(|glyph| glyph.id))
-          });
-
-          let clusters = glyph_clusters(&glyph_run, &glyphs);
-
-          for (glyph, cluster) in glyphs.iter_mut().zip(&clusters) {
-            glyph.skips_ink = !cluster.emoji
-              && self
-                .text
-                .get(cluster.range.clone())
-                .and_then(|text| text.chars().next())
-                .is_none_or(skips_ink);
-          }
-          let cluster_ranges = clusters.into_iter().map(|cluster| cluster.range).collect();
-          let shaped = ShapedRun::of(&glyph_run, glyphs, hanging, &stretch, brush, cluster_ranges);
-          let decoration_placement = self.decoration_placement(
-            line,
-            &shaped,
-            glyph_run.style().brush.source_span_id,
-            static_inline_prefix,
-            layout,
-          );
-
-          let baseline_shift = self.run_baseline_shift(line, &glyph_run);
-
-          runs.push(PositionedInlineRun {
-            glyph_run: shaped,
-            resolved_glyphs,
-            line_scale: setup.run_scale(baseline_shift),
-            static_inline_prefix,
-            baseline_shift,
-            decoration_placement,
-            paint_offset: context.box_paint_offset(layout),
-            #[cfg(feature = "paint-tree")]
-            index: runs.len(),
-          });
-        }
-        PlacedItem::Box(inline_box) => {
-          positioned_inline_boxes.insert(inline_box.id, inline_box);
-        }
-        PlacedItem::Placeholder(_) => {}
-      }
-      Ok(())
-    })?;
-
-    let inline_boxes = self.with_floats(positioned_inline_boxes);
-    let (background_fragments, outline_rects) = decoration_coverage.into_fragments();
-
-    Ok(InlineRunLayout {
-      runs,
-      inline_boxes,
-      outline_rects,
-      background_fragments,
-    })
+    self.fragment_items(layout).resolve_runs(context, layout)
   }
 
   /// The placed inline boxes, floats included, in id order, without resolving a glyph: what
@@ -526,7 +457,10 @@ impl<'c> BuiltInlineLayout<'c> {
   }
 
   /// The placed in-flow boxes with the floats added, in id order.
-  fn with_floats(&self, mut positioned: HashMap<u64, VisualInlineBox>) -> Vec<VisualInlineBox> {
+  pub(super) fn with_floats(
+    &self,
+    mut positioned: HashMap<u64, VisualInlineBox>,
+  ) -> Vec<VisualInlineBox> {
     for inline_box in &self.positioned_floats {
       let Some(inline_box) = resolve_visual_inline_box(inline_box.clone(), None, &self.spans)
       else {
@@ -543,7 +477,7 @@ impl<'c> BuiltInlineLayout<'c> {
 
 impl<'c> BuiltInlineLayout<'c> {
   /// An accumulator for the spans' line fragments, which knows the edges cloning spans repeat.
-  fn decoration_coverage(&self) -> DecorationAccumulator<'c> {
+  pub(super) fn decoration_coverage(&self) -> DecorationAccumulator<'c> {
     DecorationAccumulator::new(ClonedLines::of(&self.spans, &self.layout))
   }
 
@@ -569,7 +503,7 @@ impl<'c> BuiltInlineLayout<'c> {
   }
 
   /// Stretches the fragments of the spans around `item` over it.
-  fn cover(
+  pub(super) fn cover(
     &self,
     coverage: &mut DecorationAccumulator<'c>,
     content: Point<f32>,
