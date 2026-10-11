@@ -7,7 +7,7 @@
 
 Shapes, paints, text runs, and images, with every CSS value resolved. Feed it to a PPTX, Canvas, or native drawing API.
 
-[Documentation](https://takumi.kane.tw/docs/paint-tree)
+[Documentation](https://takumi.kane.tw/docs/paint)
 
 </div>
 
@@ -55,7 +55,7 @@ for (const step of tree.steps) {
 
 Every length is a device pixel. A node's `transform` maps its local space, where its drawables sit, onto the canvas.
 
-The [paint tree reference](https://takumi.kane.tw/docs/paint-tree/reference) covers the vocabulary and what stays unresolved.
+The [paint tree reference](https://takumi.kane.tw/docs/paint/reference) covers the vocabulary and what stays unresolved.
 
 ## License
 

@@ -46,7 +46,7 @@ const PAINT_ACCENT = "#8b5cf6";
 
 const SECTION_CLASSES = [
   ["/docs/pdf", "pdf-section"],
-  ["/docs/paint-tree", "paint-section"],
+  ["/docs/paint", "paint-section"],
 ] as const;
 
 function sectionClass(url: string) {
@@ -241,7 +241,7 @@ export default defineConfig({
                 {
                   title: "Paint",
                   description: "Boxes, images, and text runs with takumi-paint",
-                  url: "/docs/paint-tree",
+                  url: "/docs/paint",
                   icon: tabIcon(<Brush size="100%" />, PAINT_ACCENT),
                 },
               ],
