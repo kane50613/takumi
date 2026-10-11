@@ -72,7 +72,7 @@ glibc raises its mmap threshold after a large block is freed, which moves later 
 | `GLIBC_TUNABLES=glibc.malloc.mmap_threshold=262144` | 114–130 MB             | 5–7% slower                      |
 | `MALLOC_ARENA_MAX=2`                                | 165–211 MB             | 7% slower with 4 renders at once |
 
-Both settings apply to the whole process, so measure your own server first. The figures come from Node 24 on Linux arm64, rendering 65 real OG templates four at a time. Alpine and other musl images use a different allocator.
+Both settings apply to the whole process, so measure your own server first. The figures come from the `node:24-bookworm-slim` image on Linux arm64, rendering 65 real OG templates four at a time. Alpine and other musl images use a different allocator.
 
 ## Keep network requests out of repeated work
 
