@@ -609,7 +609,7 @@ impl RenderNode {
   ) -> RenderNode {
     let mut rows = self.anonymous_box(Display::Grid, cells);
 
-    rows.context.style.set_table_grid(tracks, gaps);
+    rows.context.style_mut().set_table_grid(tracks, gaps);
     rows.lower_full_width(line, tracks);
     rows.table_part = Some(TablePart::BodyRows);
     rows
