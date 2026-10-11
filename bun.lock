@@ -281,7 +281,7 @@
         "@types/react": "catalog:",
         "@types/react-dom": "catalog:",
         "lucide-react": "catalog:",
-        "preact": "^10.29.8",
+        "preact": "^11.0.0",
         "react": "catalog:",
         "react-dom": "catalog:",
         "tsdown": "catalog:",
@@ -289,7 +289,7 @@
         "unrun": "catalog:",
       },
       "peerDependencies": {
-        "preact": "^10.0.0",
+        "preact": "^10.0.0 || ^11.0.0",
         "react": "^18.0.0 || ^19.0.0",
       },
       "optionalPeers": [
@@ -2328,7 +2328,7 @@
 
     "postcss-value-parser": ["postcss-value-parser@4.2.0", "", {}, "sha512-1NNCs6uurfkVbeXG4S8JFT9t19m45ICnif8zWLd5oPSZ50QnwMfK+H3jv408d4jw/7Bttv5axS5IiHoLaVNHeQ=="],
 
-    "preact": ["preact@10.29.8", "", { "peerDependencies": { "preact-render-to-string": ">=5" }, "optionalPeers": ["preact-render-to-string"] }, "sha512-ej2aVZ+vZ8WO7tvlQWRM9N63A0KzF9q4mWJfDUHgYaIofWY9hu74QdnQrjoPMmZi2/nZ5gN0bJCQF49xQqx09Q=="],
+    "preact": ["preact@11.0.0", "", { "peerDependencies": { "preact-render-to-string": ">=6.7.0" }, "optionalPeers": ["preact-render-to-string"] }, "sha512-LRTLKuSe6VYPhvBDjwFaX+nuZnpsw6IN2GSboisAvhGsncylBmrbDCERhgKDn6yP2mAwbGvsB5OVyTe33M8gBg=="],
 
     "prettier": ["prettier@3.9.6", "", { "bin": { "prettier": "bin/prettier.cjs" } }, "sha512-OpN0zzVdiaiAhxpuuj5efpIS4sY9j7bY6uR5mnj5yPzGkdkjNKSJeUThPb60Jw29QuAZgA4o+/iB49kFiaBX6g=="],
 
