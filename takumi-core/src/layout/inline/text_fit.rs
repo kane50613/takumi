@@ -23,9 +23,14 @@ fn text_fit_line_is_scalable(
 }
 
 /// Blink's `ShouldApplyTextFit` (`text_fit_utils.cc`): `text-fit` leaves a paragraph holding a
-/// float alone, while in-flow inline boxes scale.
-pub(super) fn text_fit_applies(style: &SizedFontStyle, items: &[InlineItem<'_>]) -> bool {
+/// float alone, while in-flow inline boxes scale. Lines fit only to a definite `max_width`.
+pub(super) fn text_fit_applies(
+  style: &SizedFontStyle,
+  items: &[InlineItem<'_>],
+  max_width: f32,
+) -> bool {
   style.parent.text_fit.mode != TextFitMode::None
+    && max_width.is_finite()
     && !items.iter().any(|item| {
       matches!(item, InlineItem::RenderNode { render_node, .. }
         if render_node.inline_box_kind() == InlineBoxKind::CustomOutOfFlow)
@@ -279,11 +284,6 @@ pub(super) fn text_fit_lines(
   style: &SizedFontStyle,
   kept: Option<&[LineFit]>,
 ) -> Vec<LineFit> {
-  let text_fit = style.parent.text_fit;
-  if text_fit.mode == TextFitMode::None || !max_width.is_finite() {
-    return Vec::new();
-  }
-
   if layout.lines().next().is_none() {
     return Vec::new();
   }

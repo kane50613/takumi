@@ -1189,7 +1189,7 @@ pub fn create_inline_layout<'c>(request: InlineLayoutRequest<'c>) -> BuiltInline
   } = request;
   let mut built =
     build_inline_layout_tree(&items, available_space, style, context, shape_cacheable);
-  let fits_text = text_fit_applies(style, &items);
+  let fits_text = text_fit_applies(style, &items, max_width);
   // `text-fit` scales line heights only after breaking, so only a line count clamps fitted lines.
   let max_height = if fits_text {
     max_height.and_then(MaxHeight::lines)
@@ -1606,7 +1606,8 @@ mod tests {
     style::{
       Affine, AppliedTextDecoration, BorderStyle, Color, ColorInput, Display, FontSize, Length,
       Sides, SizedTextDecorationThickness, SizingContext, SpacePair, Style, StyleDeclaration,
-      TextDecorationLines, TextDecorationStyle, TextUnderlinePosition, WhiteSpace,
+      TextDecorationLines, TextDecorationStyle, TextFit, TextFitMode, TextUnderlinePosition,
+      WhiteSpace,
     },
     viewport::Viewport,
   };
@@ -1742,6 +1743,50 @@ mod tests {
     let three_lines = build(Some(MaxHeight::Lines(3))).layout.height();
     assert!(!build(Some(MaxHeight::Absolute(three_lines))).clamped);
     assert!(build(Some(MaxHeight::Absolute(three_lines * 2.0 / 3.0))).clamped);
+  }
+
+  #[test]
+  fn a_height_clamps_text_fit_lines_measured_at_an_indefinite_width() {
+    let fonts = create_test_context();
+    let context = RenderContext::builder()
+      .fonts(fonts.snapshot_with_fallbacks(None))
+      .sizing(
+        SizingContext::builder()
+          .viewport(Viewport::new((1200, 630)))
+          .build(),
+      )
+      .build();
+    let node = Node::text("a\nb\nc".to_string()).with_style(
+      Style::default()
+        .with(StyleDeclaration::display(Display::Block))
+        .with(StyleDeclaration::text_fit(
+          TextFit::builder().mode(TextFitMode::Shrink).build(),
+        ))
+        .with_white_space(WhiteSpace::pre_wrap()),
+    );
+    let render_node = RenderNode::from_node(&context, node);
+    let font_style = SizedFontStyle::from_style(&render_node.context.style, &render_node.context);
+    let build = |max_width, max_height| {
+      create_inline_layout(InlineLayoutRequest {
+        items: collect_inline_items(&render_node),
+        available_space: Size {
+          width: AvailableSpace::MaxContent,
+          height: AvailableSpace::Definite(630.0),
+        },
+        max_width,
+        max_height,
+        style: &font_style,
+        context: &render_node.context,
+        mode: InlineLayoutMode::Measure,
+        shape_cacheable: false,
+      })
+    };
+    let one_line = build(f32::INFINITY, Some(MaxHeight::Lines(1)))
+      .layout
+      .height();
+
+    assert!(build(f32::INFINITY, Some(MaxHeight::Absolute(one_line))).clamped);
+    assert!(!build(1200.0, Some(MaxHeight::Absolute(one_line))).clamped);
   }
 
   #[test]
