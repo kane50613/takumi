@@ -1920,7 +1920,6 @@ dependencies = [
  "pdf-writer",
  "png",
  "pretty_assertions",
- "quick_cache",
  "rustc-hash",
  "siphasher",
  "skrifa",
