@@ -330,6 +330,18 @@ fn append_unfiltered(
   }
 }
 
+/// Longest chunk payload PNG allows.
+const MAX_CHUNK_LEN: usize = i32::MAX as usize;
+
+/// Writes a zlib `stream` as the image's `IDAT` chunks.
+fn write_idat<W: Write>(writer: &mut png::Writer<W>, stream: &[u8]) -> Result<()> {
+  for chunk in stream.chunks(MAX_CHUNK_LEN) {
+    writer.write_chunk(IDAT, chunk).map_err(Error::encode)?;
+  }
+
+  Ok(())
+}
+
 /// Clamps a frame duration to the 16-bit APNG delay numerator, in milliseconds.
 fn duration_ms_to_apng_delay(duration_ms: u32) -> u16 {
   duration_ms.min(u16::MAX as u32) as u16
@@ -388,7 +400,7 @@ pub fn write_image<T: Write>(
           |rows, scanlines| append_unfiltered(rgba, rows, has_alpha, scanlines),
         )?;
 
-        writer.write_chunk(IDAT, &stream).map_err(Error::encode)?;
+        write_idat(&mut writer, &stream)?;
       } else {
         let image_data = if has_alpha {
           Cow::Borrowed(image.as_raw())
