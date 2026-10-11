@@ -1453,10 +1453,10 @@ impl StyleSheet {
     } = fragment;
 
     if preflight {
-      static PREFLIGHT_RULES: LazyLock<Vec<CssRule>> =
-        LazyLock::new(|| StyleSheet::parse_loosy(PREFLIGHT_CSS).rules.to_vec());
+      static PREFLIGHT_RULES: LazyLock<Arc<[CssRule]>> =
+        LazyLock::new(|| StyleSheet::parse_loosy(PREFLIGHT_CSS).rules);
 
-      let mut preflight_rules = PREFLIGHT_RULES.clone();
+      let mut preflight_rules = PREFLIGHT_RULES.to_vec();
       declared_layers.splice(
         0..0,
         preflight_rules.iter().filter_map(|rule| rule.layer.clone()),
@@ -2916,7 +2916,7 @@ mod tests {
     let sheet = parse_stylesheet(".card { width: 100px; @apply mt-4; height: 50px; }");
 
     assert_eq!(sheet.rules.len(), 3);
-    for rule in sheet.rules.iter() {
+    for rule in sheet.rules() {
       assert_eq!(selector_text(rule), ".card");
     }
     assert_eq!(
