@@ -449,15 +449,7 @@ impl<'a> ScaledRows<'a> {
         }
       }
       ScaledColumns::Box { columns, span_y } => {
-        let row = BoxAxis::new(sample_y, *span_y, self.source.height());
-        let stride = self.source.width() as usize;
-        let pixels = self.source.pixels();
-
-        for (dst, &column) in out.iter_mut().zip(columns) {
-          let average = box_average(column, row, |x, y| pixels[y as usize * stride + x as usize]);
-
-          *dst = premultiplied_from_pixel(average.unwrap_or(PremultipliedColorU8::TRANSPARENT));
-        }
+        BoxAxis::new(sample_y, *span_y, self.source.height()).fill_row(self.source, columns, out);
       }
     }
   }
@@ -584,11 +576,25 @@ impl BoxAxis {
 
     (self.high.min(edge + 1.0) - self.low.max(edge)).max(0.0)
   }
+
+  /// Box-averages `source` across this row span under each of `columns`, into `out`.
+  pub(crate) fn fill_row(self, source: PixmapRef<'_>, columns: &[BoxAxis], out: &mut [[u8; 4]]) {
+    let stride = source.width() as usize;
+    let pixels = source.pixels();
+
+    for (dst, &column) in out.iter_mut().zip(columns) {
+      let average = box_average(column, self, |x, y| {
+        pixels[y as usize * stride + x as usize]
+      });
+
+      *dst = premultiplied_from_pixel(average.unwrap_or(PremultipliedColorU8::TRANSPARENT));
+    }
+  }
 }
 
 /// The box average of the source pixels `columns` and `rows` cover, read through `pixel`.
 #[inline(always)]
-pub(crate) fn box_average(
+fn box_average(
   columns: BoxAxis,
   rows: BoxAxis,
   pixel: impl Fn(u32, u32) -> PremultipliedColorU8,

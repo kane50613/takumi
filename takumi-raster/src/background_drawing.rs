@@ -19,9 +19,7 @@ use crate::pixmap_from_buffer;
 use crate::resources::image::RenderedImage;
 use crate::{
   BilinearAxis, BorderProperties, BoxAxis, DrawTarget, MaskView, OverlayOptions, PaintSource,
-  RenderContext, Result, RowSource, SamplingFootprint,
-  blend::premultiplied_from_pixel,
-  box_average, checked_area, interpolate_with_footprint,
+  RenderContext, Result, RowSource, SamplingFootprint, checked_area, interpolate_with_footprint,
   layout::node::resolve_image,
   overlay_image, pixmap_ref_from_buffer,
   resources::{image::ImageSource, image_buffer::ImageBuffer},
@@ -383,19 +381,13 @@ pub(crate) struct BoxRows<'a> {
 impl BoxRows<'_> {
   pub(crate) fn fill(&self, y: u32, dst: &mut [[u8; 4]]) {
     let source_height = self.source.height();
-    let row = BoxAxis::new(
+
+    BoxAxis::new(
       (y as f32 + 0.5) * source_height as f32 / self.logical_height.max(1) as f32,
       self.span_y,
       source_height,
-    );
-    let stride = self.source.width() as usize;
-    let pixels = self.source.pixels();
-
-    for (out, &column) in dst.iter_mut().zip(&self.columns) {
-      let average = box_average(column, row, |x, y| pixels[y as usize * stride + x as usize]);
-
-      *out = premultiplied_from_pixel(average.unwrap_or(PremultipliedColorU8::TRANSPARENT));
-    }
+    )
+    .fill_row(self.source, &self.columns, dst);
   }
 }
 
@@ -999,6 +991,7 @@ mod tests {
   use super::*;
   use crate::{
     Fonts, RenderOptions,
+    blend::premultiplied_from_pixel,
     layout::node::Node,
     render,
     resources::image::ImageSource,
