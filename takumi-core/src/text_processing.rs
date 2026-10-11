@@ -23,6 +23,16 @@ pub enum MaxHeight {
   HeightAndLines(f32, u32),
 }
 
+impl MaxHeight {
+  /// This constraint's line count alone.
+  pub(crate) fn lines(self) -> Option<Self> {
+    match self {
+      Self::Absolute(_) => None,
+      Self::Lines(lines) | Self::HeightAndLines(_, lines) => Some(Self::Lines(lines)),
+    }
+  }
+}
+
 /// Applies text transform to the input text.
 pub(crate) fn apply_text_transform<'a>(input: &'a str, transform: TextTransform) -> Cow<'a, str> {
   match transform {

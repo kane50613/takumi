@@ -91,12 +91,7 @@ pub(crate) fn create_inline_constraint(
   }
 
   let max_height = match (
-    context
-      .sizing
-      .viewport
-      .size
-      .height
-      .filter(|_| context.style.height_clamps_lines()),
+    context.sizing.viewport.size.height,
     context.style.clamp_lines(),
   ) {
     (Some(height), Some(lines)) => Some(MaxHeight::HeightAndLines(height as f32, lines)),

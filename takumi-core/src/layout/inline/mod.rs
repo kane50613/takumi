@@ -7,8 +7,8 @@ use crate::{
   resources::font::FontClasses,
   style::{
     AppliedTextDecorations, Color, Direction, FontFeature, FontSynthesis, Lang, Length,
-    ResolvedVerticalAlign, Tag, TextDecorationSkipInk, TextFitMode, TextOverflow, TextWrapStyle,
-    VerticalAlign, VerticalAlignKeyword, WhiteSpaceCollapse, WordBreak,
+    ResolvedVerticalAlign, Tag, TextDecorationSkipInk, TextOverflow, TextWrapStyle, VerticalAlign,
+    VerticalAlignKeyword, WhiteSpaceCollapse, WordBreak,
   },
   text_processing::{
     MaxHeight, RebreakOptions, apply_text_transform, apply_white_space_collapse,
@@ -70,7 +70,7 @@ use self::{
   },
   runs::measured_run_text,
   text_fit::{
-    GlyphCursor, LineScaleState, SpacingStretch, text_fit_is_applicable, text_fit_line_advance,
+    GlyphCursor, LineScaleState, SpacingStretch, text_fit_applies, text_fit_line_advance,
     text_fit_line_alignment_correction, text_fit_lines, text_fit_x_correction,
   },
   truncation::make_ellipsis_layout,
@@ -1189,6 +1189,13 @@ pub fn create_inline_layout<'c>(request: InlineLayoutRequest<'c>) -> BuiltInline
   } = request;
   let mut built =
     build_inline_layout_tree(&items, available_space, style, context, shape_cacheable);
+  let fits_text = text_fit_applies(style, &items);
+  // `text-fit` scales line heights only after breaking, so only a line count clamps fitted lines.
+  let max_height = if fits_text {
+    max_height.and_then(MaxHeight::lines)
+  } else {
+    max_height
+  };
   let rebreak = RebreakOptions {
     max_width,
     max_height,
@@ -1231,7 +1238,7 @@ pub fn create_inline_layout<'c>(request: InlineLayoutRequest<'c>) -> BuiltInline
       // Blink fits a line before it truncates it (LineFitter::FitLine runs
       // before InlineLayoutAlgorithm::CreateLine), so only a line still too
       // wide at its fitted scale is ellipsed, at that scale.
-      let fits = if text_fit_is_applicable(positioned_floats) {
+      let fits = if fits_text {
         text_fit_lines(layout, max_width, style, None)
       } else {
         Vec::new()
@@ -1277,9 +1284,7 @@ pub fn create_inline_layout<'c>(request: InlineLayoutRequest<'c>) -> BuiltInline
     }
   }
 
-  if style.parent.text_fit.mode != TextFitMode::None
-    && text_fit_is_applicable(&built.positioned_floats)
-  {
+  if fits_text {
     built.line_fits = text_fit_lines(&built.layout, max_width, style, kept_fits.as_deref());
   }
 
@@ -1294,10 +1299,6 @@ pub(crate) fn resolve_inline_max_height(
   font_style: &SizedFontStyle,
   content_box_height: f32,
 ) -> Option<MaxHeight> {
-  if !font_style.parent.height_clamps_lines() {
-    return font_style.parent.clamp_lines().map(MaxHeight::Lines);
-  }
-
   font_style
     .parent
     .clamp_lines()

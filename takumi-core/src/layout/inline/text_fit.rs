@@ -5,11 +5,9 @@ use crate::{
   geometry::Point,
   style::{Affine, TextAlign, TextFit, TextFitMode, TextFitTarget},
 };
-use parley::{
-  BreakReason, Cluster, GlyphRun, InlineBoxKind, Line, PositionedInlineBox, PositionedLayoutItem,
-};
+use parley::{BreakReason, Cluster, GlyphRun, InlineBoxKind, Line, PositionedLayoutItem};
 
-use super::{InlineBrush, InlineLayout, LineIndent};
+use super::{InlineBrush, InlineItem, InlineLayout, LineIndent};
 
 fn text_fit_line_is_scalable(
   line: &Line<'_, InlineBrush>,
@@ -24,9 +22,14 @@ fn text_fit_line_is_scalable(
   line_index + 1 != line_count && line.break_reason() != BreakReason::Explicit
 }
 
-/// Blink's float carve-out from `text_fit_utils.cc`; in-flow inline boxes scale.
-pub(super) fn text_fit_is_applicable(positioned_floats: &[PositionedInlineBox]) -> bool {
-  positioned_floats.is_empty()
+/// Blink's `ShouldApplyTextFit` (`text_fit_utils.cc`): `text-fit` leaves a paragraph holding a
+/// float alone, while in-flow inline boxes scale.
+pub(super) fn text_fit_applies(style: &SizedFontStyle, items: &[InlineItem<'_>]) -> bool {
+  style.parent.text_fit.mode != TextFitMode::None
+    && !items.iter().any(|item| {
+      matches!(item, InlineItem::RenderNode { render_node, .. }
+        if render_node.inline_box_kind() == InlineBoxKind::CustomOutOfFlow)
+    })
 }
 
 /// The fixed letter- and word-spacing `cluster` carries, which `text-fit` leaves unscaled as
