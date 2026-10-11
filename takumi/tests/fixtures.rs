@@ -22,3 +22,6 @@ pub mod style_background_image;
 pub mod style_opacity;
 #[path = "fixtures/text.rs"]
 pub mod text;
+#[cfg(not(target_arch = "wasm32"))]
+#[path = "fixtures/webp_lossy_output.rs"]
+pub mod webp_lossy_output;
