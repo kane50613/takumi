@@ -328,8 +328,8 @@ fn build_element(
 }
 
 /// Rebuilds `Table → THead/TBody/TFoot → TR → TH/TD` from a lowered table,
-/// whose render tree only has captions and cells left. Rows come back from
-/// each cell's grid line, groups from the [`TablePart`] lowering stamped on
+/// whose render tree only has captions, cells, and the grids a tall table's
+/// body rows move into left. Rows come back from each cell's grid line, groups from the [`TablePart`] lowering stamped on
 /// it. A page-spanning table stays one `Table`, as ISO 14289-2:2024 §8.2.2
 /// requires: replayed header bands are artifacts, so only the first
 /// occurrence carries content.
@@ -339,8 +339,12 @@ struct TableBuilder {
   /// The open row group and the rows collected for it so far.
   section: Option<(TablePart, Vec<TagGroup>)>,
   /// The open row: its grid line and the `TR` collecting its cells.
-  row: Option<(i16, TagGroup)>,
+  row: Option<(GridRow, TagGroup)>,
 }
+
+/// A lowered cell's row: the index of the [`TablePart::BodyRows`] grid holding
+/// it among the table's children, if one does, and its line in its grid.
+type GridRow = (Option<usize>, i16);
 
 impl TableBuilder {
   fn close_row(&mut self) {
@@ -365,7 +369,7 @@ impl TableBuilder {
   }
 
   /// The `TR` for `line` in a `part` row group, opening either as needed.
-  fn row(&mut self, part: TablePart, line: i16) -> &mut TagGroup {
+  fn row(&mut self, part: TablePart, line: GridRow) -> &mut TagGroup {
     if self.section.as_ref().is_none_or(|(open, _)| *open != part) {
       self.close_section();
       self.section = Some((part, Vec::new()));
@@ -387,6 +391,29 @@ impl TableBuilder {
       Tag::TR,
       [tag_group(Tag::table_data(None, None), children)],
     ));
+  }
+
+  /// Adds a lowered `cell` to its row, the grid line it starts on inside the
+  /// `BodyRows` grid at table child index `grid`, if any.
+  fn push_cell(
+    &mut self,
+    cell: &RenderNode,
+    part: TablePart,
+    grid: Option<usize>,
+    path: &mut Vec<usize>,
+    walk: &mut Walk,
+    nesting: Nesting,
+  ) {
+    let GridPlacement::Line(line) = cell.context.style.grid_row_start else {
+      return;
+    };
+    let kind = cell_kind(cell, part);
+
+    // An empty cell still holds its place in the row, so the row keeps
+    // the cell count the spec's regularity asks for.
+    if let Some(element) = build_element(cell, path, walk, kind, nesting, true) {
+      self.row(part, (grid, line)).push(element);
+    }
   }
 
   fn push_caption(&mut self, caption: TagGroup) {
@@ -490,16 +517,18 @@ fn build_table(
         }
       }
       Some(part @ (TablePart::HeaderCell | TablePart::BodyCell | TablePart::FooterCell)) => {
-        let GridPlacement::Line(line) = child.context.style.grid_row_start else {
+        builder.push_cell(child, part, None, path, walk, nesting);
+      }
+      Some(TablePart::BodyRows) => {
+        for (cell_index, cell) in child.children.iter().flatten().enumerate() {
+          path.push(cell_index);
+          if let Some(
+            part @ (TablePart::HeaderCell | TablePart::BodyCell | TablePart::FooterCell),
+          ) = cell.table_part
+          {
+            builder.push_cell(cell, part, Some(index), path, walk, nesting);
+          }
           path.pop();
-          continue;
-        };
-        let kind = cell_kind(child, part);
-
-        // An empty cell still holds its place in the row, so the row keeps
-        // the cell count the spec's regularity asks for.
-        if let Some(cell) = build_element(child, path, walk, kind, nesting, true) {
-          builder.row(part, line).push(cell);
         }
       }
       _ => {

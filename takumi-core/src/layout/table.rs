@@ -13,8 +13,13 @@
 //!
 //! Columns take the widths `table_columns` shares out once layout knows the
 //! table's width, as fixed tracks.
+//!
+//! A grid places at most 10,000 rows, taffy's `MAX_GRID_TRACKS`. A taller table
+//! moves its body rows into grids of their own, cut where no rowspan crosses,
+//! which take the table's column tracks. Rows still overlap past the limit when
+//! a rowspan crosses an edge of the body, or chains more rows than a grid holds.
 
-use std::mem::take;
+use std::{mem::take, ops::Range};
 
 use taffy::{Style, style_helpers::length};
 
@@ -41,6 +46,9 @@ const MAX_COLSPAN: u16 = 1000;
 
 /// Blink's `kMaxRowSpan`.
 const MAX_ROWSPAN: u16 = 65534;
+
+/// The most rows one grid places: taffy clamps its lines to `MAX_GRID_TRACKS`.
+pub(super) const MAX_GRID_ROWS: usize = 10_000;
 
 /// Blink table-cell content alignment from `block_layout_algorithm_utils.cc`.
 #[derive(Clone, Copy, PartialEq)]
@@ -160,6 +168,9 @@ impl TableSlots {
 struct TableGrid {
   placements: Vec<Vec<(usize, u16)>>,
   columns: u16,
+  /// Per row, the row the furthest-reaching rowspan from it or above ends before, capped at the
+  /// row count.
+  reach: Vec<usize>,
 }
 
 impl TableGrid {
@@ -167,8 +178,10 @@ impl TableGrid {
   fn resolve(rows: &[RenderNode]) -> Self {
     let mut covered: Vec<u16> = Vec::new();
     let mut placements = Vec::with_capacity(rows.len());
+    let mut reach = Vec::with_capacity(rows.len());
+    let mut furthest = 0usize;
 
-    for row in rows {
+    for (index, row) in rows.iter().enumerate() {
       let mut column = 0usize;
       let mut cells = Vec::new();
 
@@ -190,10 +203,12 @@ impl TableGrid {
         }
 
         cells.push((column, colspan));
+        furthest = furthest.max(index + usize::from(rowspan));
         column = end;
       }
 
       placements.push(cells);
+      reach.push(furthest.max(index + 1).min(rows.len()));
 
       for track in &mut covered {
         *track = track.saturating_sub(1);
@@ -211,7 +226,34 @@ impl TableGrid {
     Self {
       placements,
       columns,
+      reach,
     }
+  }
+
+  /// The `body` rows cut into runs of `rows_per_run`, each run stretched until no rowspan crosses
+  /// its end. A rowspan across either end of the body leaves no runs.
+  fn body_runs(&self, body: Range<usize>, rows_per_run: usize) -> Vec<Range<usize>> {
+    let clear = |boundary: usize| boundary == 0 || self.reach[boundary - 1] <= boundary;
+
+    if body.is_empty() || !clear(body.start) || !clear(body.end) {
+      return Vec::new();
+    }
+
+    let mut runs = Vec::new();
+    let mut start = body.start;
+
+    while start < body.end {
+      let mut end = (start + rows_per_run.max(1)).min(body.end);
+
+      while !clear(end) {
+        end += 1;
+      }
+
+      runs.push(start..end);
+      start = end;
+    }
+
+    runs
   }
 
   /// The cells of the first `rows_taken` rows with their placements.
@@ -256,15 +298,16 @@ impl TableGrid {
 }
 
 impl RenderNode {
-  pub(crate) fn lower_tables(&mut self) {
+  /// Lowers every table in the subtree onto grids of at most `max_rows` rows each.
+  pub(super) fn lower_tables(&mut self, max_rows: usize) {
     if let Some(children) = self.children.as_mut() {
       for child in children {
-        child.lower_tables();
+        child.lower_tables(max_rows);
       }
     }
 
     if self.context.style.display == Display::Table {
-      self.lower_table();
+      self.lower_table(max_rows);
     }
   }
 
@@ -312,22 +355,22 @@ impl RenderNode {
         continue;
       }
       if !run.is_empty() {
-        wrapped.push(self.anonymous_cell(take(&mut run)));
+        wrapped.push(self.anonymous_box(Display::TableCell, take(&mut run)));
       }
       wrapped.push(child);
     }
     if !run.is_empty() {
-      wrapped.push(self.anonymous_cell(run));
+      wrapped.push(self.anonymous_box(Display::TableCell, run));
     }
 
     self.children = Some(wrapped.into_boxed_slice());
   }
 
-  /// A table cell this row generates around `children`, styled only by what it inherits.
-  fn anonymous_cell(&self, children: Vec<RenderNode>) -> RenderNode {
+  /// A `display` box this one generates around `children`, styled only by what it inherits.
+  fn anonymous_box(&self, display: Display, children: Vec<RenderNode>) -> RenderNode {
     let mut style = ComputedStyle::from_parent(&self.context.style);
 
-    style.display = Display::TableCell;
+    style.display = display;
     style.make_computed(&self.context.sizing);
 
     RenderNode::new(
@@ -359,7 +402,7 @@ impl RenderNode {
         .is_some_and(|node| !matches!(node.kind, NodeKind::Text(_)))
   }
 
-  fn lower_table(&mut self) {
+  fn lower_table(&mut self, max_rows: usize) {
     let TableSlots {
       captions,
       mut rows,
@@ -409,6 +452,15 @@ impl RenderNode {
       spacing.x.to_px(&sizing, 0.0)
     };
     let table_columns = grid.column_constraints(&rows, fixed, spacing_px);
+    let footer_start = rows.len() - footer_rows;
+    let lines = captions.len() + rows.len() + strays.len();
+    let mut body_runs = if lines > max_rows {
+      grid.body_runs(header_rows..footer_start, max_rows / 2)
+    } else {
+      Vec::new()
+    }
+    .into_iter()
+    .peekable();
     let placements = grid.placements;
     let mut items = Vec::new();
     let mut line: i16 = 1;
@@ -417,6 +469,11 @@ impl RenderNode {
       .partition(|caption| caption.context.style.caption_side == CaptionSide::Top);
 
     let tracks = table_columns.tracks() as u16;
+    let gaps = if collapse {
+      SpacePair::from_single(Length::zero())
+    } else {
+      spacing
+    };
 
     for mut caption in top_captions {
       caption.lower_full_width(line, tracks);
@@ -431,9 +488,9 @@ impl RenderNode {
       self.table_header_lines = Some((start, start.saturating_add(header_rows as i16)));
     }
 
-    let footer_start = rows.len() - footer_rows;
+    let mut run: Option<(Range<usize>, Vec<RenderNode>)> = None;
 
-    for (index, (mut row, positions)) in rows.into_iter().zip(placements).enumerate() {
+    for (index, (row, positions)) in rows.into_iter().zip(placements).enumerate() {
       let part = if index < header_rows {
         TablePart::HeaderCell
       } else if index >= footer_start {
@@ -441,30 +498,32 @@ impl RenderNode {
       } else {
         TablePart::BodyCell
       };
-      let mut cells = row.children.take().map_or_else(Vec::new, Vec::from);
-      let mut positions = positions.into_iter();
 
-      cells.retain(RenderNode::is_cell);
-
-      wrap_row_baselines(&mut cells);
-
-      for mut cell in cells {
-        let Some((column, colspan)) = positions.next() else {
-          break;
-        };
-
-        cell.inherit_row_background(&row);
-        cell.lower_cell(
-          line,
-          table_columns.track(column),
-          table_columns.track_span(column, usize::from(colspan)) as u16,
-          collapse,
-        );
-        cell.table_part = Some(part);
-        items.push(cell);
+      if body_runs.peek().is_some_and(|next| next.start == index) {
+        run = body_runs.next().map(|range| (range, Vec::new()));
       }
 
-      line = line.saturating_add(1);
+      let Some((range, cells)) = run.as_mut() else {
+        row.lower_row(line, part, positions, &table_columns, collapse, &mut items);
+        line = line.saturating_add(1);
+        continue;
+      };
+
+      row.lower_row(
+        (index - range.start + 1) as i16,
+        part,
+        positions,
+        &table_columns,
+        collapse,
+        cells,
+      );
+
+      if index + 1 == range.end
+        && let Some((_, cells)) = run.take()
+      {
+        items.push(self.body_rows(cells, line, tracks, gaps));
+        line = line.saturating_add(1);
+      }
     }
 
     for mut stray in strays {
@@ -484,22 +543,67 @@ impl RenderNode {
 
     let style = &mut self.context.style;
 
-    style.display = Display::Grid;
-    style.grid_template_columns =
-      GridTemplateComponents::from_css_str(&vec!["auto"; usize::from(tracks)].join(" ")).ok();
+    style.set_table_grid(tracks, gaps);
 
     if collapse {
-      style.column_gap = Gap::Length(Length::zero());
-      style.row_gap = Gap::Length(Length::zero());
       style.clear_border();
     } else {
-      style.column_gap = Gap::Length(spacing.x);
-      style.row_gap = Gap::Length(spacing.y);
       style.inset_table_edges(spacing, &sizing);
     }
 
     self.children = Some(items.into_boxed_slice());
     self.table_columns = Some(Box::new(table_columns));
+  }
+
+  /// Lowers this row's cells onto grid `line`, appending them to `items`.
+  fn lower_row(
+    mut self,
+    line: i16,
+    part: TablePart,
+    positions: Vec<(usize, u16)>,
+    columns: &TableColumns,
+    collapse: bool,
+    items: &mut Vec<RenderNode>,
+  ) {
+    let mut cells = self.children.take().map_or_else(Vec::new, Vec::from);
+    let mut positions = positions.into_iter();
+
+    cells.retain(RenderNode::is_cell);
+
+    wrap_row_baselines(&mut cells);
+
+    for mut cell in cells {
+      let Some((column, colspan)) = positions.next() else {
+        break;
+      };
+
+      cell.inherit_row_background(&self);
+      cell.lower_cell(
+        line,
+        columns.track(column),
+        columns.track_span(column, usize::from(colspan)) as u16,
+        collapse,
+      );
+      cell.table_part = Some(part);
+      items.push(cell);
+    }
+  }
+
+  /// A grid of its own on table `line` for a run of body rows' `cells`, which layout gives the
+  /// table's column tracks.
+  fn body_rows(
+    &self,
+    cells: Vec<RenderNode>,
+    line: i16,
+    tracks: u16,
+    gaps: SpacePair<Length>,
+  ) -> RenderNode {
+    let mut rows = self.anonymous_box(Display::Grid, cells);
+
+    rows.context.style.set_table_grid(tracks, gaps);
+    rows.lower_full_width(line, tracks);
+    rows.table_part = Some(TablePart::BodyRows);
+    rows
   }
 
   /// Places the self explicitly: taffy's cursor does not return to the row start
@@ -844,6 +948,16 @@ fn wrap_row_baselines(cells: &mut [RenderNode]) {
 }
 
 impl ComputedStyle {
+  /// A grid of `tracks` `auto` columns, which layout fixes once the table's width is known, spaced
+  /// by `gaps`.
+  fn set_table_grid(&mut self, tracks: u16, gaps: SpacePair<Length>) {
+    self.display = Display::Grid;
+    self.grid_template_columns =
+      GridTemplateComponents::from_css_str(&vec!["auto"; usize::from(tracks)].join(" ")).ok();
+    self.column_gap = Gap::Length(gaps.x);
+    self.row_gap = Gap::Length(gaps.y);
+  }
+
   /// CSS 2.2 §17.6.1: separate borders space the outer cells from the table's
   /// edges too, which the grid gap alone does not do. Naive: a percentage or
   /// `auto` padding keeps its own value and takes no inset.
@@ -879,11 +993,13 @@ impl ComputedStyle {
 mod tests {
   use std::sync::Arc;
 
+  use super::MAX_GRID_ROWS;
   use crate::{
     context::RenderContext,
+    geometry::{AvailableSpace, NodeId, Point, Size},
     layout::{
       node::Node,
-      tree::{NodeOrigin, RenderNode},
+      tree::{LayoutResults, NodeOrigin, RenderNode, TablePart},
     },
     resources::font::Fonts,
     style::{
@@ -897,6 +1013,11 @@ mod tests {
   /// Lowers a tree whose displays come from a stylesheet, standing in for the element presets the
   /// HTML and JSX front ends apply.
   fn lower(root: Node) -> RenderNode {
+    lower_within(root, MAX_GRID_ROWS)
+  }
+
+  /// [`lower`], onto grids of at most `max_rows` rows.
+  fn lower_within(root: Node, max_rows: usize) -> RenderNode {
     let stylesheet = StyleSheet::parse(
       r"
         .table { display: table }
@@ -930,6 +1051,8 @@ mod tests {
         .outset-cell { display: table-cell; border: 2px outset rgb(0, 0, 0) }
         .inset-cell { display: table-cell; border: 2px inset rgb(0, 0, 0) }
         .heavy-under { display: table-cell; border: 1px solid rgb(0, 0, 0); border-bottom-width: 4px }
+        .short { display: table-cell; height: 10px; padding: 2px }
+        .tall { display: table-cell; height: 23px }
       ",
     )
     .expect("stylesheet parses");
@@ -944,7 +1067,7 @@ mod tests {
       .stylesheet(Arc::new(stylesheet))
       .build();
 
-    RenderNode::from_node(&context, root)
+    RenderNode::from_node_within(&context, root, max_rows)
   }
 
   /// The width each column of the lowered `table` takes when `assignable` is shared out.
@@ -1639,5 +1762,195 @@ mod tests {
     assert_eq!(table.context.style.row_gap, Gap::Length(Length::Px(8.0)));
     assert_eq!(table.context.style.padding_left, Length::Px(4.0));
     assert_eq!(table.context.style.padding_top, Length::Px(8.0));
+  }
+
+  /// Every identified box's border box, as `[x, y, width, height]` in the root's space.
+  fn boxes(root: &RenderNode) -> Vec<(String, [f32; 4])> {
+    fn collect(
+      node: &RenderNode,
+      node_id: NodeId,
+      origin: Point<f32>,
+      results: &LayoutResults,
+      boxes: &mut Vec<(String, [f32; 4])>,
+    ) {
+      let layout = results.layout(node_id).expect("layout");
+      let x = origin.x + layout.location.x;
+      let y = origin.y + layout.location.y;
+
+      if let Some(id) = node
+        .node
+        .as_ref()
+        .and_then(|node| node.metadata.id.as_deref())
+      {
+        boxes.push((id.to_owned(), [x, y, layout.size.width, layout.size.height]));
+      }
+
+      let content = Point {
+        x: x + layout.border.left + layout.padding.left,
+        y: y + layout.border.top + layout.padding.top,
+      };
+
+      for child in results.box_children(node_id).expect("children") {
+        if let Some(render) = node
+          .children
+          .as_deref()
+          .unwrap_or_default()
+          .get(child.render_index)
+          && child.inline_path.is_none()
+        {
+          collect(render, child.node_id, content, results, boxes);
+        }
+      }
+    }
+
+    let results = LayoutResults::compute(
+      root,
+      Size {
+        width: AvailableSpace::Definite(400.0),
+        height: AvailableSpace::MaxContent,
+      },
+    );
+    let mut boxes = Vec::new();
+
+    collect(root, NodeId::ROOT, Point::ZERO, &results, &mut boxes);
+    boxes
+  }
+
+  /// A table with a header, a footer, captions and rowspans, `body` rows long.
+  fn tall_table(class_name: &str, body: usize) -> Node {
+    let body_rows = (0..body).map(|index| {
+      let mut cells = vec![
+        Node::container([Node::text("a")])
+          .with_class_name(if index % 3 == 0 { "tall" } else { "short" })
+          .with_id(format!("a{index}")),
+      ];
+
+      if index % 4 == 1 && index + 2 < body {
+        cells.push(with_span(
+          Node::container([Node::text("span")])
+            .with_class_name("short")
+            .with_id(format!("span{index}")),
+          "rowspan",
+          "2",
+        ));
+      } else if index % 4 != 2 {
+        cells.push(
+          Node::container([Node::text("b")])
+            .with_class_name("short")
+            .with_id(format!("b{index}")),
+        );
+      }
+
+      Node::container(cells).with_class_name("tr")
+    });
+
+    Node::container([
+      Node::container([Node::text("cap")])
+        .with_class_name("caption")
+        .with_id("cap"),
+      Node::container([row([
+        Node::container([Node::text("h")])
+          .with_class_name("w80")
+          .with_id("h"),
+        Node::container([Node::text("h2")])
+          .with_class_name("tall")
+          .with_id("h2"),
+      ])])
+      .with_class_name("thead"),
+      Node::container(body_rows.collect::<Vec<_>>()).with_class_name("tbody"),
+      Node::container([row([Node::container([Node::text("f")])
+        .with_class_name("short")
+        .with_id("f")])])
+      .with_class_name("tfoot"),
+    ])
+    .with_class_name(class_name)
+  }
+
+  /// The parts of the lowered table's direct children.
+  fn parts(table: &RenderNode) -> Vec<Option<TablePart>> {
+    table
+      .children
+      .as_deref()
+      .unwrap_or_default()
+      .iter()
+      .map(|child| child.table_part)
+      .collect()
+  }
+
+  #[test]
+  fn a_table_taller_than_a_grid_moves_its_body_into_grids_of_its_own() {
+    let table = lower_within(tall_table("spaced", 10), 8);
+    let parts = parts(&table);
+
+    assert_eq!(
+      parts
+        .iter()
+        .filter(|part| **part == Some(TablePart::BodyRows))
+        .count(),
+      3
+    );
+    assert_eq!(parts.first(), Some(&Some(TablePart::Caption)));
+    assert_eq!(parts.last(), Some(&Some(TablePart::FooterCell)));
+  }
+
+  #[test]
+  fn a_body_cut_into_grids_lays_out_as_one_grid() {
+    for class_name in ["spaced", "collapse"] {
+      let cut_table = lower_within(tall_table(class_name, 10), 8);
+
+      assert!(parts(&cut_table).contains(&Some(TablePart::BodyRows)));
+
+      let whole = boxes(&lower(tall_table(class_name, 10)));
+      let cut = boxes(&cut_table);
+
+      assert_eq!(whole.len(), cut.len());
+      for ((id, expected), (cut_id, actual)) in whole.iter().zip(&cut) {
+        assert_eq!(id, cut_id);
+        for (expected, actual) in expected.iter().zip(actual) {
+          assert!(
+            (expected - actual).abs() < 1e-3,
+            "{class_name} {id}: {expected:?} != {actual:?}"
+          );
+        }
+      }
+    }
+  }
+
+  #[test]
+  fn a_rowspan_across_the_body_edge_keeps_the_body_in_the_table_grid() {
+    let table = lower_within(
+      Node::container([
+        Node::container([row([with_span(cell("h"), "rowspan", "2")])]).with_class_name("thead"),
+        Node::container((0..10).map(|_| row([cell("b")])).collect::<Vec<_>>())
+          .with_class_name("tbody"),
+      ])
+      .with_class_name("table"),
+      8,
+    );
+
+    assert!(!parts(&table).contains(&Some(TablePart::BodyRows)));
+  }
+
+  #[test]
+  fn a_cut_waits_for_the_rowspan_above_it_to_end() {
+    let rows: Vec<_> = (0..10)
+      .map(|index| {
+        if index == 2 {
+          row([with_span(cell("long"), "rowspan", "4")])
+        } else {
+          row([cell("b")])
+        }
+      })
+      .collect();
+    let table = lower_within(Node::container(rows).with_class_name("table"), 8);
+    let runs: Vec<_> = table
+      .children
+      .as_deref()
+      .unwrap_or_default()
+      .iter()
+      .map(|grid| grid.children.as_deref().map_or(0, <[RenderNode]>::len))
+      .collect();
+
+    assert_eq!(runs, [6, 4]);
   }
 }
