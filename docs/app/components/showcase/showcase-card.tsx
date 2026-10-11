@@ -1,7 +1,7 @@
 "use client";
 
 import { Link2Icon } from "lucide-react";
-import type { Project } from "~/data/showcase";
+import { PROJECT_LINK_REL, type Project } from "~/data/showcase";
 import { GithubIcon } from "./github-icon";
 
 function projectTitle(project: Project) {
@@ -23,7 +23,7 @@ export function ShowcaseCard({ project }: { project: Project }) {
     <a
       href={project.url}
       target="_blank"
-      rel="noopener noreferrer"
+      rel={PROJECT_LINK_REL}
       className="flex flex-col rounded-xl overflow-hidden group bg-zinc-950/20 border border-border/40 shadow-sm transition-all duration-500 hover:border-primary/30 hover:shadow-[0_0_30px_-5px_--theme(--color-primary/0.15)] relative"
     >
       <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-500 bg-[radial-gradient(circle_at_50%_0%,--theme(--color-primary/0.05)_0%,transparent_50%)] pointer-events-none z-10" />

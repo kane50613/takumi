@@ -203,6 +203,9 @@ export const showcaseTemplates: Template[] = [
   },
 ];
 
+/** Showcase entries arrive by pull request, so their links pass no ranking. */
+export const PROJECT_LINK_REL = "nofollow ugc noopener noreferrer";
+
 export interface Project {
   title?: string;
   image: string;
