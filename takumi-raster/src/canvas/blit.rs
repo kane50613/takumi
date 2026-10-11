@@ -6,7 +6,7 @@ use takumi_core::geometry::{Point, Size};
 use tiny_skia::{PixmapMut, PremultipliedColorU8};
 
 use super::{
-  CLIP_RUN, DrawTarget, MaskSamplingOptions, MaskView, OverlayOptions, PaintSource,
+  DrawTarget, MASK_RUN, MaskSamplingOptions, MaskView, OverlayOptions, PaintSource,
   SamplingOptions, composite,
   composite::PixelSampler,
   mask::MaskRow,
@@ -214,9 +214,9 @@ pub(super) fn blit_rows(
     let (first, alphas) = mask_row.covered(row.len());
     let dst = &mut dst[first..first + alphas.len()];
     let row = &row[first..first + alphas.len()];
-    let (dst_runs, dst_tail) = dst.as_chunks_mut::<CLIP_RUN>();
-    let (row_runs, row_tail) = row.as_chunks::<CLIP_RUN>();
-    let (alpha_runs, alpha_tail) = alphas.as_chunks::<CLIP_RUN>();
+    let (dst_runs, dst_tail) = dst.as_chunks_mut::<MASK_RUN>();
+    let (row_runs, row_tail) = row.as_chunks::<MASK_RUN>();
+    let (alpha_runs, alpha_tail) = alphas.as_chunks::<MASK_RUN>();
 
     for ((dst, row), alphas) in dst_runs.iter_mut().zip(row_runs).zip(alpha_runs) {
       match u64::from_ne_bytes(*alphas) {

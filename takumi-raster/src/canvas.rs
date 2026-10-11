@@ -336,8 +336,8 @@ impl Canvas {
       outside.fill([0; 4]);
       past.fill([0; 4]);
 
-      let (pixel_runs, pixel_tail) = inside.as_chunks_mut::<CLIP_RUN>();
-      let (alpha_runs, alpha_tail) = alphas.as_chunks::<CLIP_RUN>();
+      let (pixel_runs, pixel_tail) = inside.as_chunks_mut::<MASK_RUN>();
+      let (alpha_runs, alpha_tail) = alphas.as_chunks::<MASK_RUN>();
 
       for (pixels, alphas) in pixel_runs.iter_mut().zip(alpha_runs) {
         match u64::from_ne_bytes(*alphas) {
@@ -571,8 +571,8 @@ impl Canvas {
       outside.fill(0);
       past.fill(0);
 
-      let (right_runs, right_tail) = inside.as_chunks_mut::<CLIP_RUN>();
-      let (left_runs, left_tail) = lefts.as_chunks::<CLIP_RUN>();
+      let (right_runs, right_tail) = inside.as_chunks_mut::<MASK_RUN>();
+      let (left_runs, left_tail) = lefts.as_chunks::<MASK_RUN>();
 
       for (rights, lefts) in right_runs.iter_mut().zip(left_runs) {
         if u64::from_ne_bytes(*rights) != 0 && u64::from_ne_bytes(*lefts) != u64::MAX {
@@ -625,8 +625,8 @@ pub(crate) fn demultiply_rgba_in_place(data: &mut [u8]) {
   });
 }
 
-/// Clip bytes tested at once for a uniformly empty or full run.
-pub(crate) const CLIP_RUN: usize = 8;
+/// Mask bytes tested at once for a uniformly empty or full run.
+pub(crate) const MASK_RUN: usize = 8;
 
 /// `rights` narrowed to where `lefts` also covers, as two stacked clips keep.
 fn intersect_alphas(rights: &mut [u8], lefts: &[u8]) {
