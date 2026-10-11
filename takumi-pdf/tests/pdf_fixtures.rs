@@ -978,8 +978,6 @@ fn paged_widow_orphan_control() {
           20, 20, 20, 255,
         ]))))
         .with(StyleDeclaration::font_size(FontSize::Length(Px(16.0))))
-        // Air between the line bands, so the widow move is distinguishable
-        // from the atom pass cascading through touching lines.
         .with(StyleDeclaration::line_height(LineHeight::Unitless(1.8))),
     );
     let mut children = rows;
@@ -1028,6 +1026,62 @@ fn paged_widow_orphan_control() {
     strict, relaxed,
     "default widow/orphan minimums did not move any line across the cut"
   );
+}
+
+/// A page writes only the clips and groups of the boxes it shows, not empty
+/// ones for every box on the other pages.
+#[test]
+fn a_page_skips_the_clips_of_other_pages() {
+  const BOXES: usize = 12;
+
+  let boxes = r#"<div style="overflow:hidden;height:40px;margin-bottom:10px;break-inside:avoid;border:1px solid #888"><div style="opacity:0.5">clipped</div></div>"#
+    .repeat(BOXES);
+  let pdf = run_pdf_fixture("paged-offpage-clips", |fonts| {
+    PdfOptions::builder()
+      .node(from_html(&boxes, FromHtmlOptions::default()).expect("parse boxes"))
+      .page(PageOptions {
+        width: 400.0,
+        height: 300.0,
+        margin: PageMargins::uniform(20.0),
+      })
+      .fonts(fonts)
+      .build()
+  });
+  let clips = content_lines(&pdf)
+    .filter(|line| line == b"W" || line == b"W*")
+    .count();
+
+  assert!(page_count(&pdf) > 1);
+  // One clip per page window, and a box's two clips on its own page only.
+  assert_eq!(clips, page_count(&pdf) + 2 * BOXES);
+}
+
+/// A paragraph taller than a page starts on the first page below its margin:
+/// its line boxes meet edge to edge, so a cut between two of them moves
+/// neither.
+#[test]
+fn a_long_paragraph_starts_on_the_first_page() {
+  let doc = format!("<p>{}</p>", "Lorem ipsum dolor sit amet. ".repeat(200));
+  let pdf = render_pinned(
+    PdfOptions::builder()
+      .node(from_html(&doc, FromHtmlOptions::default()).expect("parse paragraph"))
+      .page(PageOptions {
+        width: 400.0,
+        height: 300.0,
+        margin: PageMargins::uniform(20.0),
+      })
+      .fonts(&fonts())
+      .build(),
+  );
+
+  // Page content is ASCII, unlike the embedded font that can spell `]TJ` too.
+  let pages_with_text = content_streams(&pdf)
+    .iter()
+    .filter(|stream| stream.is_ascii() && find(stream, b"]TJ").is_some())
+    .count();
+
+  assert!(page_count(&pdf) > 1);
+  assert_eq!(pages_with_text, page_count(&pdf), "a page is blank");
 }
 
 #[test]
@@ -5741,4 +5795,41 @@ fn page_rules_pick_first_then_last_then_parity_then_the_document() {
   assert_eq!(name(&footer, 3, 4), None);
   assert_eq!(name(&footer, 4, 4).as_deref(), Some("last footer"));
   assert!(PageRules::default().footer_band(None).is_none());
+}
+
+/// A table taller than one layout grid keeps every row below the one before
+/// it, and every row in the structure tree.
+#[test]
+fn a_table_taller_than_one_grid_keeps_every_row() {
+  const ROWS: usize = 10_050;
+
+  let doc = format!(
+    r#"<table style="table-layout:fixed;width:100px;border-spacing:0">
+      <thead><tr><th style="height:4px;padding:0"></th></tr></thead>
+      <tbody>{}</tbody>
+    </table>"#,
+    r#"<tr><td style="height:4px;padding:0"></td></tr>"#.repeat(ROWS)
+  );
+  let node = || from_html(&doc, FromHtmlOptions::default()).expect("parse table");
+  let fonts = fonts();
+  let size = measure(
+    MeasureOptions::builder()
+      .node(node())
+      .viewport(Viewport::new((100, 100)))
+      .fonts(&fonts)
+      .build(),
+  )
+  .expect("measure table");
+
+  assert_eq!(size.height, (ROWS + 1) as f32 * 4.0);
+
+  let pdf = render_pinned(
+    PdfOptions::builder()
+      .node(node())
+      .page(PageOptions::A4)
+      .fonts(&fonts)
+      .build(),
+  );
+
+  assert_eq!(inflated_text(&pdf).matches("/S/TR").count(), ROWS + 1);
 }

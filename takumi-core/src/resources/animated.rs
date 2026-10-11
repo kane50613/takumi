@@ -3,11 +3,6 @@
 
 use std::sync::{Arc, OnceLock};
 
-#[cfg(feature = "webp")]
-use super::image_decoder::{
-  animated_webp_dimensions, decode_webp_frame_alone, decode_webp_frames, is_animated_webp,
-  webp_frame_infos,
-};
 #[cfg(feature = "png")]
 use super::image_decoder::{
   apng_dimensions, apng_frame_infos, decode_apng_frame_alone, decode_apng_frames, is_apng,
@@ -15,6 +10,10 @@ use super::image_decoder::{
 #[cfg(feature = "gif")]
 use super::image_decoder::{
   decode_gif_frame_alone, decode_gif_frames, gif_dimensions, gif_frame_infos, is_gif,
+};
+#[cfg(feature = "webp")]
+use super::image_decoder::{
+  decode_webp_frame_alone, decode_webp_frames, is_animated_webp, webp_dimensions, webp_frame_infos,
 };
 use super::{
   image::ImageError,
@@ -70,7 +69,7 @@ impl AnimatedFormat {
       #[cfg(feature = "png")]
       Self::Apng => apng_dimensions(bytes),
       #[cfg(feature = "webp")]
-      Self::WebP => animated_webp_dimensions(bytes),
+      Self::WebP => webp_dimensions(bytes),
     }
   }
 

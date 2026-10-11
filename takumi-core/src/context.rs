@@ -12,7 +12,7 @@ use crate::{
   layout::inline::{InlineLayoutCache, MeasureCache, ShapeCache},
   resources::{
     font::{FontsSnapshot, PrimaryFontMetrics},
-    image::ImageSource,
+    image::{ImageSource, ResourceCache},
   },
   style::{
     Affine, AppliedTextDecorations, Color, ComputedStyle, SizingContext, StyleSheet, TwCache,
@@ -23,6 +23,7 @@ use crate::{
 struct RenderShared {
   fonts: FontsSnapshot,
   images: Rc<HashMap<Arc<str>, ImageSource>>,
+  resource_cache: Option<ResourceCache>,
   stylesheet: Arc<StyleSheet>,
   inline_cache: InlineLayoutCache,
   tw_cache: TwCache,
@@ -45,8 +46,8 @@ pub struct RenderContextInit {
   transform: Affine,
   #[builder(default = Color::black())]
   current_color: Color,
-  #[builder(default)]
-  style: Box<ComputedStyle>,
+  #[builder(default, setter(into))]
+  style: Rc<ComputedStyle>,
   #[builder(default = 0)]
   time_ms: u64,
   #[builder(default = false)]
@@ -57,6 +58,9 @@ pub struct RenderContextInit {
   collapsed_borders: bool,
   #[builder(default)]
   images: Rc<HashMap<Arc<str>, ImageSource>>,
+  /// The cache `data:` URI images decode through.
+  #[builder(default)]
+  resource_cache: Option<ResourceCache>,
   #[builder(default)]
   stylesheet: Arc<StyleSheet>,
   #[builder(default)]
@@ -71,6 +75,7 @@ impl From<RenderContextInit> for RenderContext {
       shared: Rc::new(RenderShared {
         fonts: init.fonts,
         images: init.images,
+        resource_cache: init.resource_cache,
         stylesheet: init.stylesheet,
         inline_cache: InlineLayoutCache::new(init.shape_cache, init.measure_cache),
         tw_cache: TwCache::default(),
@@ -106,7 +111,7 @@ pub struct RenderContext {
   /// What the `currentColor` value is resolved to.
   pub current_color: Color,
   /// The style after inheritance.
-  pub style: Box<ComputedStyle>,
+  pub style: Rc<ComputedStyle>,
   /// The decorations the box's text paints, from it and the boxes around it.
   pub(crate) text_decorations: AppliedTextDecorations,
   /// Whether this box is a cell of a table that collapses its borders.
@@ -117,7 +122,7 @@ pub struct RenderContext {
 
 /// A [`RenderContextBuilder`] with nothing set yet.
 type UnsetRenderContextBuilder =
-  RenderContextBuilder<((), (), (), (), (), (), (), (), (), (), (), (), ())>;
+  RenderContextBuilder<((), (), (), (), (), (), (), (), (), (), (), (), (), ())>;
 
 impl RenderContext {
   /// Starts a root context; `fonts` and `sizing` are required.
@@ -155,6 +160,11 @@ impl RenderContext {
     &self.shared.images
   }
 
+  /// The cache `data:` URI images decode through, when the render has one.
+  pub(crate) fn resource_cache(&self) -> Option<&ResourceCache> {
+    self.shared.resource_cache.as_ref()
+  }
+
   /// The stylesheets to apply before layout/rendering.
   pub(crate) fn stylesheet(&self) -> &Arc<StyleSheet> {
     &self.shared.stylesheet
@@ -162,6 +172,12 @@ impl RenderContext {
 
   pub(crate) fn inline_cache(&self) -> &InlineLayoutCache {
     &self.shared.inline_cache
+  }
+
+  /// Drops the shaped text this render keeps to lay the same text out again, once every box
+  /// that needs it holds its fragment items.
+  pub fn release_shaped_text(&self) {
+    self.shared.inline_cache.clear_shapes();
   }
 
   /// Per-render cache of expanded Tailwind class lists.
@@ -196,7 +212,7 @@ impl RenderContext {
       transform: parent.transform,
       paint_offset: parent.paint_offset,
       current_color: parent.current_color,
-      style: Box::new(ComputedStyle::for_anonymous(&parent.style, &parent.sizing)),
+      style: Rc::new(ComputedStyle::for_anonymous(&parent.style, &parent.sizing)),
       text_decorations: parent.text_decorations.clone(),
       collapsed_borders: parent.collapsed_borders,
       text_measure_digest: OnceCell::new(),
@@ -221,9 +237,23 @@ impl RenderContext {
       transform: parent.transform,
       paint_offset: parent.paint_offset,
       current_color,
-      style: Box::new(style),
+      style: Rc::new(style),
       collapsed_borders: false,
       text_measure_digest: OnceCell::new(),
+    }
+  }
+
+  /// The style to change in place, copied first when another box shares it.
+  pub(crate) fn style_mut(&mut self) -> &mut ComputedStyle {
+    Rc::make_mut(&mut self.style)
+  }
+
+  /// Blockifies `display`, leaving a shared style shared when it is already block-level.
+  pub(crate) fn blockify(&mut self) {
+    let display = self.style.base_data.display.as_blockified();
+
+    if display != self.style.base_data.display {
+      self.style_mut().base_data_mut().display = display;
     }
   }
 

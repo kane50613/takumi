@@ -1,7 +1,7 @@
 import { render } from "svelte/server";
 import style from "../app.css?inline";
 import ImageResponse from "takumi-js/response";
-import OgImage from "$lib/components/OgImage.svelte";
+import OgImage from "#lib/components/OgImage.svelte";
 import type { RequestEvent } from "./$types";
 
 export async function GET({ url }: RequestEvent) {

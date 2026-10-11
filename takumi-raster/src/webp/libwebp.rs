@@ -16,6 +16,10 @@ use crate::{
 /// quality: the output is bit-exact at any value.
 const LOSSLESS_EFFORT: f32 = 50.0;
 
+/// libwebp's `method` for a still lossy image. On real cards, 2 writes files about a quarter
+/// smaller than 1 at the same PSNR, for about a quarter more encode time.
+const LOSSY_METHOD: u8 = 2;
+
 fn webp_config(lossless: bool, quality: u8, speed: u8) -> Result<WebPConfig> {
   let mut config = WebPConfig::new_with_preset(
     WebPPreset::WEBP_PRESET_TEXT,
@@ -171,7 +175,7 @@ pub(crate) fn write_webp_lossy(
   destination: &mut impl Write,
   quality: Quality,
 ) -> Result<()> {
-  let mut config = webp_config(false, quality.get(), 1)?;
+  let mut config = webp_config(false, quality.get(), LOSSY_METHOD)?;
 
   // A second thread splits the analysis pass and encodes alpha beside the
   // image. libwebp writes the same bytes either way.
@@ -419,7 +423,7 @@ mod tests {
     let single = encode_picture(
       &image,
       &FrameRegion::full(256, 256),
-      &webp_config(false, Quality::default().get(), 1).unwrap(),
+      &webp_config(false, Quality::default().get(), LOSSY_METHOD).unwrap(),
     )
     .unwrap();
 

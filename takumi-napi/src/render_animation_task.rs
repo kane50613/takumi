@@ -123,6 +123,7 @@ impl Task for RenderAnimationTask {
               RenderOptions::builder()
                 .viewport(self.viewport)
                 .images(initialized_images.clone())
+                .resource_cache(self.state.resource_cache.clone())
                 .stylesheet(stylesheet.clone())
                 .node(node)
                 .fonts(&fonts)

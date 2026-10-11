@@ -51,7 +51,7 @@ impl<'n> InlineContainers<'n> {
 
   /// The span containing the out-of-flow `node`.
   fn of(self, node: &RenderNode) -> Option<&'n RenderNode> {
-    match node.context.style.position {
+    match node.context.style.base_data.position {
       Position::Fixed => self.fixed,
       _ => self.absolute,
     }
@@ -134,7 +134,7 @@ impl RenderNode {
   /// Whether the node is an inline box whose content joins its parent's lines rather than an
   /// atomic box of its own.
   fn is_inline_span(&self) -> bool {
-    self.context.style.display.is_inline() && !self.participates_as_inline_box()
+    self.context.style.base_data.display.is_inline() && !self.participates_as_inline_box()
   }
 
   /// Whether this inline span is the containing block of fixed-position descendants, as Blink's
@@ -142,20 +142,20 @@ impl RenderNode {
   fn contains_fixed_as_inline(&self) -> bool {
     let style = &self.context.style;
 
-    !style.filter.is_empty() || !style.backdrop_filter.is_empty()
+    !style.misc1_data.filter.is_empty() || !style.misc1_data.backdrop_filter.is_empty()
   }
 
   /// Whether this inline span is the containing block of absolutely positioned descendants, as
   /// Blink's `LayoutObject::ComputeIsAbsoluteContainer` decides.
   fn contains_absolute_as_inline(&self) -> bool {
-    self.context.style.position.is_positioned() || self.contains_fixed_as_inline()
+    self.context.style.base_data.position.is_positioned() || self.contains_fixed_as_inline()
   }
 
   /// How parley places the box standing in for this node.
   pub(super) fn inline_box_kind(&self) -> InlineBoxKind {
-    if self.context.style.position.is_out_of_flow() {
+    if self.context.style.base_data.position.is_out_of_flow() {
       InlineBoxKind::OutOfFlow
-    } else if self.context.style.float != Float::None {
+    } else if self.context.style.base_data.float != Float::None {
       InlineBoxKind::CustomOutOfFlow
     } else {
       InlineBoxKind::InFlow
@@ -320,7 +320,7 @@ fn trim_leading_whitespace(item: &mut InlineItem<'_>) {
   };
 
   // `preserve-breaks` keeps its newlines but still collapses spaces and tabs.
-  let collapsible: &[char] = match context.style.white_space_collapse {
+  let collapsible: &[char] = match context.style.inherited_data.white_space_collapse {
     WhiteSpaceCollapse::Collapse => &COLLAPSIBLE_WHITESPACE,
     WhiteSpaceCollapse::PreserveBreaks => &HORIZONTAL_WHITESPACE,
     WhiteSpaceCollapse::Preserve | WhiteSpaceCollapse::PreserveSpaces => return,
@@ -374,7 +374,7 @@ fn collect_inline_items_impl<'n>(
 
   let content_start = items.len();
   let (margin, border_padding) = inline_span_spacing(node, depth);
-  let direction = node.context.style.direction;
+  let direction = node.context.style.inherited_data.direction;
   let (margin_start, margin_end) = direction.inline_sides(margin.left, margin.right);
   let (border_padding_start, border_padding_end) =
     direction.inline_sides(border_padding.left, border_padding.right);
@@ -446,7 +446,7 @@ fn collect_inline_items_impl<'n>(
 /// does not count).
 fn is_inline_span(node: &RenderNode, depth: usize) -> bool {
   depth > 0
-    && node.context.style.display == Display::Inline
+    && node.context.style.base_data.display == Display::Inline
     && !matches!(
       node.node.as_ref().and_then(Node::inline_content),
       Some(InlineContentKind::Box)
@@ -484,10 +484,14 @@ fn inline_span_decoration(
     return None;
   }
   let style = &node.context.style;
-  let color = style.background_color.resolve(node.context.current_color);
+  let color = style
+    .background_data
+    .background_color
+    .resolve(node.context.current_color);
   let border = BorderProperties::from_context(&node.context, Size::ZERO, node.border_px());
   let outline = InlineOutline::of(&node.context);
   let has_images = style
+    .background_data
     .background_image
     .as_deref()
     .is_some_and(|images| !images.is_empty());
@@ -498,6 +502,7 @@ fn inline_span_decoration(
     owner: node,
     id,
     vertical_align: style
+      .base_data
       .vertical_align
       .resolve(&node.context.sizing, node.context.sizing.line_height),
     font: BoxFont::of(&node.context),
@@ -511,14 +516,14 @@ fn inline_span_decoration(
     padding: node.padding_px(),
     border,
     radius: Sides([
-      style.border_top_left_radius,
-      style.border_top_right_radius,
-      style.border_bottom_right_radius,
-      style.border_bottom_left_radius,
+      style.surround_data.border_top_left_radius,
+      style.surround_data.border_top_right_radius,
+      style.surround_data.border_bottom_right_radius,
+      style.surround_data.border_bottom_left_radius,
     ]),
     outline,
-    opacity: style.opacity.0,
-    direction: style.direction,
+    opacity: style.svg_data.opacity.0,
+    direction: style.inherited_data.direction,
     sizing: node.context.sizing.clone(),
   })
 }

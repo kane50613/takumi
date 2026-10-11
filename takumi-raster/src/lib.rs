@@ -25,15 +25,18 @@ mod filter;
 mod image_drawing;
 pub(crate) mod inline_drawing;
 mod node_paint;
+mod palette;
 mod path;
 /// Main image renderer and viewport management
 mod render;
+mod scanline;
 mod simd;
 mod stacking_context;
 /// Text drawing functions
 mod text_drawing;
 mod webp;
 mod write;
+mod zlib;
 
 pub(crate) use background_drawing::*;
 pub(crate) use canvas::*;

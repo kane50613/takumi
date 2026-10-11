@@ -23,9 +23,10 @@ use takumi_core::{
 use crate::{
   atoms::AtomCollector,
   bands::{FixedTemplate, Repeatable},
+  chunks::SceneChunks,
   counters::{has_page_counters, substitute_page_counters, substitute_target_counters},
   emitter::{DocumentState, Emitter},
-  inline::InlineMap,
+  inline::InlineCache,
   options::PdfError,
   page::PageFrame,
   window::Window,
@@ -170,19 +171,13 @@ impl PreparedTree {
       .as_deref()
       .and_then(<[RenderNode]>::first)
       .is_some_and(
-        |child| matches!(child.context.style.z_index, ZIndex::Integer(index) if index < 0),
+        |child| matches!(child.context.style.box_data.z_index, ZIndex::Integer(index) if index < 0),
       )
   }
 
   /// The scene's atom collector, for pagination.
-  pub(crate) fn atom_collector<'a>(
-    &'a self,
-    inline: Option<&'a InlineMap<'a>>,
-  ) -> AtomCollector<'a> {
-    AtomCollector {
-      scene: &self.scene,
-      inline,
-    }
+  pub(crate) fn atom_collector(&self) -> AtomCollector<'_> {
+    AtomCollector { scene: &self.scene }
   }
 
   /// Visits every node paint of the scene, in paint order.
@@ -212,13 +207,15 @@ impl PreparedTree {
   pub(crate) fn emitter<'a>(
     &'a self,
     state: &'a DocumentState<'a>,
-    inline: Option<&'a InlineMap<'a>>,
+    inline: Option<&'a InlineCache<'a>>,
+    chunks: Option<&'a SceneChunks<'a>>,
     tagged: bool,
   ) -> Emitter<'a> {
     Emitter {
       scene: &self.scene,
       document: state,
       inline,
+      chunks,
       window: Window::default(),
       tagged: tagged && state.tags.is_some(),
       tag_prefix: Vec::new(),
@@ -277,7 +274,7 @@ fn take_repeating_fixed(node: &mut RenderNode) -> Vec<(RenderNode, RenderContext
   let mut kept = Vec::with_capacity(children.len());
 
   for mut child in children.into_vec() {
-    if child.context.style.position == Position::Fixed {
+    if child.context.style.base_data.position == Position::Fixed {
       repeating.push((child, parent.clone()));
       continue;
     }

@@ -1,6 +1,6 @@
 use std::{
-  borrow::Cow, collections::HashMap, hash::Hasher, iter::Copied, mem::take, ptr, rc::Rc, slice,
-  vec::IntoIter,
+  borrow::Cow, cell::RefCell, collections::HashMap, hash::Hasher, iter::Copied, mem::take, ptr,
+  rc::Rc, slice, vec::IntoIter,
 };
 
 use parley::fontique::{Attributes, FontStyle as FontiqueStyle};
@@ -23,15 +23,17 @@ use crate::{
   geometry::{AvailableSpace, ComputedLayout, NodeId, Point, Rect, Size},
   layout::{
     inline::{
-      InlineContentKind, InlineItem, InlineLayoutMode, InlineLayoutRequest, InlineMeasureOptions,
-      InlineOutOfFlow, PaddingBox, StaticPosition, collect_inline_items, create_inline_constraint,
-      create_inline_layout,
+      ContentBox, FragmentItems, InlineContentKind, InlineItem, InlineLayoutMode,
+      InlineLayoutRequest, InlineMeasureOptions, InlineOutOfFlow, PaddingBox, ProcessedInlineSpan,
+      StaticPosition, collect_inline_items, create_inline_constraint, create_inline_layout,
     },
     list_marker::{ListCounter, is_list_element, list_marker, owns_list_counter},
     node::{Node, NodeStyleLayers, TextData},
+    table::MAX_GRID_ROWS,
     table_columns::TableColumns,
   },
   matching::{MatchedDeclarationsView, NodeMatchedDeclarations, match_stylesheets_view},
+  painter::OwnContent,
   resources::font::PrimaryFontMetrics,
   sort_key::sort_by_key,
   style::{
@@ -145,8 +147,26 @@ struct LayoutResultNode {
 impl LayoutResults {
   /// Lays out the tree under `root` in `available_space`.
   pub fn compute(root: &RenderNode, available_space: Size<AvailableSpace>) -> Self {
+    Self::lay_out(root, available_space, false)
+  }
+
+  /// [`Self::compute`] for paint: each inline formatting context keeps the fragment items it
+  /// lays out to, and lets go of the shaped text no other box shares.
+  pub(crate) fn compute_for_paint(
+    root: &RenderNode,
+    available_space: Size<AvailableSpace>,
+  ) -> Self {
+    Self::lay_out(root, available_space, true)
+  }
+
+  fn lay_out(
+    root: &RenderNode,
+    available_space: Size<AvailableSpace>,
+    keeps_fragment_items: bool,
+  ) -> Self {
     let mut tree = LayoutTree::from_render_node(root);
 
+    tree.keeps_fragment_items = keeps_fragment_items;
     tree.compute_layout(available_space);
     tree.into_results()
   }
@@ -182,6 +202,38 @@ impl LayoutResults {
   }
 }
 
+/// A measurement's constraint as bits: each axis's available space as a kind and a size, then
+/// each known size, the height ones left out unless `with_height`.
+fn inline_measure_bits(
+  available_space: Size<AvailableSpace>,
+  known_dimensions: Size<Option<f32>>,
+  with_height: bool,
+) -> [u32; 6] {
+  let available = |space: AvailableSpace| match space {
+    AvailableSpace::Definite(value) => (0, value.to_bits()),
+    AvailableSpace::MinContent => (1, 0),
+    AvailableSpace::MaxContent => (2, 0),
+  };
+  let known = |value: Option<f32>| value.unwrap_or(f32::NAN).to_bits();
+  let (width_kind, width) = available(available_space.width);
+  let (height_kind, height, known_height) = if with_height {
+    let (kind, height) = available(available_space.height);
+
+    (kind, height, known(known_dimensions.height))
+  } else {
+    (u32::MAX, 0, 0)
+  };
+
+  [
+    width_kind,
+    width,
+    height_kind,
+    height,
+    known(known_dimensions.width),
+    known_height,
+  ]
+}
+
 /// Mutable taffy tree wrapping render nodes during layout.
 pub struct LayoutTree<'r> {
   nodes: Vec<LayoutNodeState>,
@@ -190,7 +242,17 @@ pub struct LayoutTree<'r> {
   out_of_flow_positions: HashMap<usize, Vec<StaticPosition>>,
   /// The nodes standing in for inline containing blocks.
   inline_containing_blocks: Vec<TaffyNodeId>,
+  /// Each inline formatting context's measured size per constraint. taffy keys its own cache on
+  /// both axes, while only inline boxes see the available height, so a context without them is
+  /// keyed on its width constraint alone.
+  inline_measures: RefCell<HashMap<InlineMeasureKey, Size<f32>>>,
+  /// Whether each inline formatting context keeps the fragment items it lays out to, as a layout
+  /// that paint reads does.
+  keeps_fragment_items: bool,
 }
+
+/// A node and the constraint it is measured under, as bits.
+type InlineMeasureKey = (usize, [u32; 6]);
 
 struct LayoutNodeState {
   style: Style,
@@ -239,6 +301,8 @@ pub enum TablePart {
   BodyCell,
   /// A cell from a `table-footer-group` row.
   FooterCell,
+  /// A run of body rows lowered onto a grid of its own, for a table taller than one grid.
+  BodyRows,
 }
 
 impl TablePart {
@@ -259,7 +323,7 @@ pub struct RenderNode {
   pub origin: NodeOrigin,
   /// Child render nodes.
   pub children: Option<Box<[RenderNode]>>,
-  pub(crate) layout_style_override: Option<Box<Style>>,
+  pub(crate) layout_style_override: Option<Rc<Style>>,
   /// Text for an anonymous inline-text wrapper.
   pub anonymous_text_content: Option<String>,
   /// Generated marker box, emitted before this box's own inline content.
@@ -268,10 +332,15 @@ pub struct RenderNode {
   /// Grid lines a lowered table's header rows cover, as `[start, end)`, for
   /// paged output to repeat per css-tables-3 §repeated-headers.
   pub table_header_lines: Option<(i16, i16)>,
+  /// Grid lines a lowered table's footer rows cover, as `[start, end)`, for
+  /// paged output to repeat per css-tables-3 §repeated-headers.
+  pub table_footer_lines: Option<(i16, i16)>,
   /// The role this box had in a source table, kept through table lowering.
   pub table_part: Option<TablePart>,
   /// A lowered table's columns, sized once its width is known.
   pub(crate) table_columns: Option<Box<TableColumns>>,
+  /// The fragment items its inline content last laid out to.
+  pub(crate) fragment_items: FragmentItemsCache,
 }
 
 /// Drops the render tree iteratively; recursive drop glue overflows the stack
@@ -295,12 +364,33 @@ impl Drop for RenderNode {
   }
 }
 
-/// The layout an anonymous block box takes in place of a computed style.
-fn block_style() -> Style {
-  Style {
+/// The fragment items a node's inline content last laid out to. They belong to that node, so a
+/// clone, which may change its style or content, starts without them.
+#[derive(Default)]
+pub(crate) struct FragmentItemsCache(RefCell<Option<Rc<FragmentItems>>>);
+
+impl FragmentItemsCache {
+  pub(crate) fn keep(&self, items: Rc<FragmentItems>) {
+    self.0.replace(Some(items));
+  }
+}
+
+impl Clone for FragmentItemsCache {
+  fn clone(&self) -> Self {
+    Self::default()
+  }
+}
+
+thread_local! {
+  /// The layout an anonymous block box takes in place of a computed style, shared by all of them.
+  static BLOCK_STYLE: Rc<Style> = Rc::new(Style {
     display: TaffyDisplay::Block,
     ..Style::default()
-  }
+  });
+}
+
+fn block_style() -> Rc<Style> {
+  BLOCK_STYLE.with(Rc::clone)
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -363,6 +453,8 @@ impl<'r> LayoutTree<'r> {
       render_nodes: Vec::with_capacity(1),
       out_of_flow_positions: HashMap::new(),
       inline_containing_blocks: Vec::new(),
+      inline_measures: RefCell::default(),
+      keeps_fragment_items: false,
     };
     let root_id = tree.push_subtree(render_root);
 
@@ -435,7 +527,7 @@ impl<'r> LayoutTree<'r> {
       } else {
         PendingChildren::Render(render_node.children.as_deref().unwrap_or_default())
       };
-      let position = render_node.context.style.position;
+      let position = render_node.context.style.base_data.position;
       let contains_fixed = render_node.context.style.contains_fixed_descendants();
 
       render_nodes.push(render_node);
@@ -582,7 +674,7 @@ impl<'r> LayoutTree<'r> {
           let child_idx: usize = child_id.into();
           render_nodes
             .get(child_idx)
-            .map_or(0, |child| child.context.style.order.0)
+            .map_or(0, |child| child.context.style.misc3_data.order.0)
         });
       }
       nodes[idx].children = taffy_children.into_boxed_slice();
@@ -676,7 +768,7 @@ impl<'r> LayoutTree<'r> {
     };
     let stretches = self.render_nodes.first().is_some_and(|root| {
       matches!(
-        root.context.style.display,
+        root.context.style.base_data.display,
         Display::Flex | Display::Grid | Display::FlowRoot
       )
     });
@@ -813,6 +905,42 @@ impl<'r> LayoutTree<'r> {
     }
   }
 
+  /// The root's border-box min-content and max-content widths, sized without laying out its
+  /// height, as Blink's `ComputeMinMaxSizes` sizes a box's inline axis alone.
+  pub(crate) fn root_min_max_widths(&mut self) -> (f32, f32) {
+    let mut width = |available_width: TaffyAvailableSpace| {
+      let available_space = TaffySize {
+        width: available_width,
+        height: TaffyAvailableSpace::MaxContent,
+      };
+
+      self
+        .compute_child_layout(
+          NodeId::ROOT.into_taffy(),
+          LayoutInput {
+            run_mode: RunMode::ComputeSize,
+            sizing_mode: SizingMode::InherentSize,
+            axis: RequestedAxis::Horizontal,
+            known_dimensions: TaffySize::NONE,
+            known_dimensions_are_definite: TaffySize {
+              width: true,
+              height: true,
+            },
+            parent_size: available_space.into_options(),
+            available_space,
+            vertical_margins_are_collapsible: Line::FALSE,
+          },
+        )
+        .size
+        .width
+    };
+
+    (
+      width(TaffyAvailableSpace::MinContent),
+      width(TaffyAvailableSpace::MaxContent),
+    )
+  }
+
   /// Consumes the tree into immutable per-node layout results.
   pub(crate) fn into_results(mut self) -> LayoutResults {
     // A box an inline containing block holds is placed in the inline formatting context, its
@@ -829,17 +957,15 @@ impl<'r> LayoutTree<'r> {
       }
     }
 
-    LayoutResults {
-      nodes: self
-        .nodes
-        .into_iter()
-        .map(|node| LayoutResultNode {
-          layout: node.final_layout,
-          first_baseline_y: node.first_baseline_y,
-          box_children: node.box_children,
-        })
-        .collect(),
-    }
+    // A fresh allocation: collecting in place keeps the node states' much larger one alive.
+    let mut nodes = Vec::with_capacity(self.nodes.len());
+
+    nodes.extend(self.nodes.into_iter().map(|node| LayoutResultNode {
+      layout: node.final_layout,
+      first_baseline_y: node.first_baseline_y,
+      box_children: node.box_children,
+    }));
+    LayoutResults { nodes }
   }
 
   fn get_layout_node_ref(&self, node_id: TaffyNodeId) -> Option<&LayoutNodeState> {
@@ -887,6 +1013,46 @@ impl<'r> LayoutTree<'r> {
       node.flex_or_grid_item,
       &sizing,
     );
+
+    if render_node.table_columns.is_some() {
+      self.share_column_tracks(node_id);
+    }
+  }
+
+  /// Gives a lowered table's [`TablePart::BodyRows`] grids the column tracks it just sized.
+  fn share_column_tracks(&mut self, table: TaffyNodeId) {
+    let mut changed = false;
+
+    let Some(state) = self.get_layout_node_ref(table) else {
+      return;
+    };
+    let tracks = state.style.grid_template_columns.clone();
+    let children = state.children.clone();
+
+    for child in children {
+      let index = usize::from(child);
+
+      if self
+        .render_nodes
+        .get(index)
+        .is_none_or(|rows| rows.table_part != Some(TablePart::BodyRows))
+      {
+        continue;
+      }
+      if let Some(rows) = self.nodes.get_mut(index)
+        && rows.style.grid_template_columns != tracks
+      {
+        rows.style.grid_template_columns.clone_from(&tracks);
+        rows.cache.clear();
+        changed = true;
+      }
+    }
+
+    // taffy keys the table's cache on its inputs, which can stay the same while the tracks move:
+    // a known width with percentage padding resolves against the available width.
+    if changed && let Some(state) = self.get_layout_node_mut_ref(table) {
+      state.cache.clear();
+    }
   }
 }
 
@@ -1001,6 +1167,11 @@ impl LayoutPartialTree for LayoutTree<'_> {
     };
 
     node.unrounded_layout = *layout;
+    if self.keeps_fragment_items
+      && let Some(render_node) = self.render_nodes.get(usize::from(node_id))
+    {
+      render_node.keep_fragment_items(ComputedLayout::from_taffy(layout));
+    }
   }
 
   fn resolve_calc_value(&self, val: *const (), basis: f32) -> f32 {
@@ -1061,7 +1232,7 @@ impl<'r> LayoutTree<'r> {
       .iter()
       .filter_map(|&cell| {
         let render_node = self.render_nodes.get(usize::from(cell))?;
-        let GridPlacement::Line(row) = render_node.context.style.grid_row_start else {
+        let GridPlacement::Line(row) = render_node.context.style.misc2_data.grid_row_start else {
           return None;
         };
         let content = *self.get_layout_node_ref(cell)?.children.first()?;
@@ -1211,14 +1382,44 @@ impl<'r> LayoutTree<'r> {
                 return TaffySize { width, height };
               }
 
-              render_node
-                .measure(
-                  Size::from_taffy(available_space).map(AvailableSpace::from_taffy),
-                  Size::from_taffy(known_dimensions),
-                  &node_data.style,
-                  node_data.is_inline_children,
-                )
-                .into_taffy()
+              let available_space =
+                Size::from_taffy(available_space).map(AvailableSpace::from_taffy);
+              let known_dimensions = Size::from_taffy(known_dimensions);
+              if !node_data.is_inline_children {
+                return render_node
+                  .measure(available_space, known_dimensions, &node_data.style)
+                  .into_taffy();
+              }
+
+              let across_heights = (
+                idx,
+                inline_measure_bits(available_space, known_dimensions, false),
+              );
+              let exact = (
+                idx,
+                inline_measure_bits(available_space, known_dimensions, true),
+              );
+              let measured = {
+                let measures = tree.inline_measures.borrow();
+
+                measures
+                  .get(&across_heights)
+                  .or_else(|| measures.get(&exact))
+                  .copied()
+              };
+
+              if let Some(size) = measured {
+                return size.into_taffy();
+              }
+
+              let (size, sizes_boxes) =
+                render_node.measure_inline_content(available_space, known_dimensions);
+
+              tree
+                .inline_measures
+                .borrow_mut()
+                .insert(if sizes_boxes { exact } else { across_heights }, size);
+              size.into_taffy()
             },
           );
 
@@ -1238,12 +1439,10 @@ impl<'r> LayoutTree<'r> {
             );
           }
 
-          if node_data.is_inline_children
-            && !node_data.box_children.is_empty()
-            && inputs.run_mode == RunMode::PerformLayout
-          {
+          let border_box = || {
             let calc = |value, basis| tree.resolve_calc_value(value, basis);
-            let layout = ComputedLayout::new(
+
+            ComputedLayout::new(
               Point::ZERO,
               Size::from_taffy(output.size),
               Rect::from_taffy(
@@ -1258,7 +1457,29 @@ impl<'r> LayoutTree<'r> {
                   .padding
                   .resolve_or_zero(inputs.parent_size.width, calc),
               ),
-            );
+            )
+          };
+
+          // A block-level box measured whole at a definite width lays out at that size, so its
+          // fragment items laid out now let its shaped text go before the boxes after it shape
+          // theirs. A flex or grid item is measured at sizes its container then changes.
+          if tree.keeps_fragment_items
+            && lays_out_text
+            && !node_data.flex_or_grid_item
+            && inputs.run_mode == RunMode::ComputeSize
+            && inputs.axis == RequestedAxis::Both
+            && matches!(
+              inputs.available_space.width,
+              TaffyAvailableSpace::Definite(_)
+            )
+          {
+            render_node.keep_fragment_items(border_box());
+          }
+
+          if node_data.is_inline_children
+            && !node_data.box_children.is_empty()
+            && inputs.run_mode == RunMode::PerformLayout
+          {
             let proxies = node_data.children.clone();
             let containers: Vec<&RenderNode> = proxies
               .iter()
@@ -1266,7 +1487,7 @@ impl<'r> LayoutTree<'r> {
               .collect();
             let (positions, containing_blocks) = render_node.inline_out_of_flow_geometry(
               Size::from_taffy(inputs.available_space).map(AvailableSpace::from_taffy),
-              layout,
+              border_box(),
               &containers,
             );
 
@@ -1433,8 +1654,48 @@ impl RenderNode {
       marker: None,
       force_inline_layout: false,
       table_header_lines: None,
+      table_footer_lines: None,
       table_part: None,
       table_columns: None,
+      fragment_items: FragmentItemsCache::default(),
+    }
+  }
+
+  /// Lays its inline content out to the fragment items it keeps, in the content box of `layout`,
+  /// unless it keeps ones for that content box already.
+  pub(crate) fn keep_fragment_items(&self, layout: ComputedLayout) {
+    let font_style = SizedFontStyle::from_style(&self.context.style, &self.context);
+
+    OwnContent::of(self).fragment_items(&font_style, layout);
+  }
+
+  /// The fragment items its inline content laid out to in the content box of `layout`, if it
+  /// laid out there last.
+  pub(crate) fn fragment_items_in(&self, layout: ComputedLayout) -> Option<Rc<FragmentItems>> {
+    self
+      .fragment_items
+      .0
+      .borrow()
+      .as_ref()
+      .filter(|items| items.content_box == ContentBox::of(layout))
+      .map(Rc::clone)
+  }
+
+  /// Whether it keeps fragment items from a layout.
+  #[cfg(test)]
+  pub(crate) fn has_fragment_items(&self) -> bool {
+    self.fragment_items.0.borrow().is_some()
+  }
+
+  /// Forgets the fragment items it and the boxes under it laid out to, which no longer hold once
+  /// the tree may have changed since.
+  pub(crate) fn clear_fragment_items(&self) {
+    let mut stack = vec![self];
+
+    while let Some(node) = stack.pop() {
+      node.fragment_items.0.take();
+      stack.extend(node.children.iter().flatten());
+      stack.extend(node.marker.as_deref());
     }
   }
 
@@ -1443,11 +1704,11 @@ impl RenderNode {
     context: RenderContext,
     node: Option<Node>,
     children: Option<Box<[RenderNode]>>,
-    layout_style: Style,
+    layout_style: Rc<Style>,
   ) -> Self {
     let mut anonymous = Self::new(context, NodeOrigin::Anonymous, node, children);
 
-    anonymous.layout_style_override = Some(Box::new(layout_style));
+    anonymous.layout_style_override = Some(layout_style);
     anonymous
   }
 
@@ -1491,28 +1752,29 @@ impl RenderNode {
         RenderContext::for_anonymous(parent_context),
         Some(Node::image(url)),
         None,
-        Style {
+        Rc::new(Style {
           max_size,
           ..Style::default()
-        },
+        }),
       ),
       gradient => {
         let mut context = RenderContext::for_anonymous(parent_context);
 
-        context.style.background_image = Some(BackgroundImages::from([gradient]));
+        context.style_mut().background_data_mut().background_image =
+          Some(BackgroundImages::from([gradient]));
         Self::anonymous(
           context,
           Some(Node::container([])),
           None,
           // css-images-3 §5.1 default object size when the parent is auto.
-          Style {
+          Rc::new(Style {
             size: TaffySize {
               width: taffy::Dimension::length(300.0),
               height: taffy::Dimension::length(150.0),
             },
             max_size,
             ..Style::default()
-          },
+          }),
         )
       }
     }
@@ -1554,19 +1816,19 @@ impl RenderNode {
   ) -> Option<Self> {
     let (mut style, sizing, current_color) = parent_context.resolve_pseudo_style(pseudo_matched);
 
-    if matches!(style.display, Display::None) {
+    if matches!(style.base_data.display, Display::None) {
       return None;
     }
 
     // flex/grid add no semantics over a flat content list; downgrade per spec §8.
     if matches!(
-      style.display,
+      style.base_data.display,
       Display::Flex | Display::InlineFlex | Display::Grid | Display::InlineGrid
     ) {
-      style.display = Display::Block;
+      style.base_data_mut().display = Display::Block;
     }
 
-    let items = match take(&mut style.content) {
+    let items = match take(&mut style.misc1_data_mut().content) {
       ContentValue::Items(items) => items,
       _ => return None,
     };
@@ -1600,7 +1862,7 @@ impl RenderNode {
       return;
     }
 
-    if marker.context.style.list_style_position == ListStylePosition::Outside
+    if marker.context.style.inherited_data.list_style_position == ListStylePosition::Outside
       && let Some(block) = self.marker_host_child()
     {
       block.attach_marker(marker);
@@ -1642,8 +1904,8 @@ impl RenderNode {
   }
 
   fn hosts_marker_line(&self) -> bool {
-    self.context.style.display == Display::Block
-      && self.context.style.float == Float::None
+    self.context.style.base_data.display == Display::Block
+      && self.context.style.base_data.float == Float::None
       && self.leads_to_a_line()
   }
 
@@ -1673,7 +1935,7 @@ impl RenderNode {
   // keep their spaces, and preserve-breaks may hold a forced break, so a
   // whitespace-only node in any of those still renders.
   fn is_collapsible_whitespace_only_text_node(&self) -> bool {
-    self.context.style.white_space_collapse == WhiteSpaceCollapse::Collapse
+    self.context.style.inherited_data.white_space_collapse == WhiteSpaceCollapse::Collapse
       && self.is_whitespace_only_text_node()
   }
 
@@ -1719,19 +1981,19 @@ impl RenderNode {
   }
 
   pub(crate) fn is_inline_level(&self) -> bool {
-    self.context.style.display.is_inline_level()
+    self.context.style.base_data.display.is_inline_level()
   }
 
   pub(crate) fn is_inline_atomic_container(&self) -> bool {
     matches!(
-      self.context.style.display,
+      self.context.style.base_data.display,
       Display::InlineBlock | Display::InlineFlex | Display::InlineGrid
     )
   }
 
   /// True if this node is laid out as an inline-level box (atomic inline or float).
   pub(crate) fn participates_as_inline_box(&self) -> bool {
-    self.is_inline_atomic_container() || self.context.style.float != Float::None
+    self.is_inline_atomic_container() || self.context.style.base_data.float != Float::None
   }
 
   fn participates_in_inflow_inline_formatting_context(&self) -> bool {
@@ -1743,18 +2005,18 @@ impl RenderNode {
   fn participates_in_inline_formatting_context(&self) -> bool {
     self.participates_in_inflow_inline_formatting_context()
       || self.is_out_of_flow()
-      || self.context.style.float != Float::None
+      || self.context.style.base_data.float != Float::None
   }
 
   pub(crate) fn is_out_of_flow(&self) -> bool {
-    self.context.style.position.is_out_of_flow()
+    self.context.style.base_data.position.is_out_of_flow()
   }
 
   /// True if this node's children form an inline formatting context.
   pub fn should_create_inline_layout(&self) -> bool {
     self.force_inline_layout
       || (matches!(
-        self.context.style.display,
+        self.context.style.base_data.display,
         Display::Block
           | Display::FlowRoot
           | Display::InlineBlock
@@ -1772,6 +2034,15 @@ impl RenderNode {
 
   /// Builds a render tree from a node under the given parent context.
   pub fn from_node(parent_context: &RenderContext, node: Node) -> Self {
+    Self::from_node_within(parent_context, node, MAX_GRID_ROWS)
+  }
+
+  /// [`Self::from_node`], with every table lowered onto grids of at most `max_rows` rows.
+  pub(super) fn from_node_within(
+    parent_context: &RenderContext,
+    node: Node,
+    max_rows: usize,
+  ) -> Self {
     let matched_styles = match_stylesheets_view(
       &node,
       parent_context.stylesheet(),
@@ -1779,10 +2050,10 @@ impl RenderNode {
     );
     let mut tree = Self::from_node_iterative(parent_context, node, &matched_styles);
 
-    tree.lower_tables();
+    tree.lower_tables(max_rows);
 
     if tree.is_inline_level() {
-      tree.context.style.display.blockify();
+      tree.context.blockify();
     }
 
     tree
@@ -1857,13 +2128,13 @@ impl RenderNode {
     context: &mut RenderContext,
     children: Box<[RenderNode]>,
   ) -> Box<[RenderNode]> {
-    if context.style.display.should_blockify_children() {
+    if context.style.base_data.display.should_blockify_children() {
       // CSS Flexbox L1 §4 / Grid L1 §6: collapsible whitespace-only text
       // between items is not rendered; every remaining child blockifies.
       let mut children = Vec::from(children);
       children.retain(|child| !child.is_collapsible_whitespace_only_text_node());
       for child in &mut children {
-        child.context.style.display.blockify();
+        child.context.blockify();
       }
 
       return children.into_boxed_slice();
@@ -1873,9 +2144,11 @@ impl RenderNode {
     // whitespace-only text renders only after an in-flow inline-level
     // sibling, and leading whitespace only inside an inline parent
     // (#711, #992).
-    let children =
-      drop_collapsible_boundary_whitespace(Vec::from(children), context.style.display.is_inline())
-        .into_boxed_slice();
+    let children = drop_collapsible_boundary_whitespace(
+      Vec::from(children),
+      context.style.base_data.display.is_inline(),
+    )
+    .into_boxed_slice();
 
     // https://github.com/kane50613/takumi/issues/738: out-of-flow boxes
     // must not be swept into an anonymous block box.
@@ -1889,10 +2162,10 @@ impl RenderNode {
       && children
         .iter()
         .any(|child| child.is_out_of_flow() || child.holds_inline_out_of_flow());
-    let parent_is_inline = context.style.display.is_inline();
+    let parent_is_inline = context.style.base_data.display.is_inline();
 
     if parent_is_inline && has_block {
-      context.style.display = context.style.display.as_blockified();
+      context.blockify();
     }
 
     // A block parent whose inline content holds out-of-flow boxes wraps that
@@ -1927,10 +2200,10 @@ impl RenderNode {
     let style = &self.context.style;
 
     Rect {
-      top: style.padding_top,
-      right: style.padding_right,
-      bottom: style.padding_bottom,
-      left: style.padding_left,
+      top: style.box_data.padding_top,
+      right: style.box_data.padding_right,
+      bottom: style.box_data.padding_bottom,
+      left: style.box_data.padding_left,
     }
     .map(|length| length.to_px(&self.context.sizing, 0.0))
   }
@@ -1973,10 +2246,10 @@ impl RenderNode {
     let style = &self.context.style;
 
     Rect {
-      top: style.border_top_width,
-      right: style.border_right_width,
-      bottom: style.border_bottom_width,
-      left: style.border_left_width,
+      top: style.box_data.border_top_width,
+      right: style.box_data.border_right_width,
+      bottom: style.box_data.border_bottom_width,
+      left: style.box_data.border_left_width,
     }
     .map(|width| width.to_used_px(&self.context.sizing))
   }
@@ -1986,10 +2259,10 @@ impl RenderNode {
     let style = &self.context.style;
 
     Rect {
-      top: style.margin_top,
-      right: style.margin_right,
-      bottom: style.margin_bottom,
-      left: style.margin_left,
+      top: style.box_data.margin_top,
+      right: style.box_data.margin_right,
+      bottom: style.box_data.margin_bottom,
+      left: style.box_data.margin_left,
     }
     .map(|length| length.to_px(&self.context.sizing, 0.0))
   }
@@ -2124,8 +2397,8 @@ impl RenderNode {
       }
     };
     let sizing = &self.context.sizing;
-    let border_top = Length::from(self.context.style.border_top_width).to_px(sizing, 0.0);
-    let padding_top = self.context.style.padding_top.to_px(sizing, 0.0);
+    let border_top = Length::from(self.context.style.box_data.border_top_width).to_px(sizing, 0.0);
+    let padding_top = self.context.style.box_data.padding_top.to_px(sizing, 0.0);
 
     Some(border_top + padding_top + baseline)
   }
@@ -2163,7 +2436,7 @@ impl RenderNode {
   /// Where an atomic inline box takes its baseline from, in order; an empty list, or no source
   /// that resolves, falls back to the bottom margin edge.
   fn inline_baseline_sources(&self) -> &'static [InlineBaselineSource] {
-    match self.context.style.display {
+    match self.context.style.base_data.display {
       Display::InlineBlock if self.context.style.clips_overflow() => &[],
       Display::InlineBlock => &[
         InlineBaselineSource::InlineContentLastLine,
@@ -2277,35 +2550,45 @@ impl RenderNode {
     }
   }
 
+  /// The size of this inline formatting context, and whether it sized inline boxes, the only
+  /// part of it the available height reaches.
+  pub(crate) fn measure_inline_content(
+    &self,
+    available_space: Size<AvailableSpace>,
+    known_dimensions: Size<Option<f32>>,
+  ) -> (Size<f32>, bool) {
+    let font_style = SizedFontStyle::from_style(&self.context.style, &self.context);
+    let request = InlineLayoutRequest::in_available_space(
+      collect_inline_items(self),
+      available_space,
+      known_dimensions,
+      &font_style,
+      &self.context,
+      InlineLayoutMode::Measure,
+    );
+    let options = InlineMeasureOptions::new(
+      request.max_width,
+      font_style.parent.resolved_text_wrap_mode() == TextWrapMode::Wrap,
+      available_space,
+      known_dimensions,
+    );
+    let built = create_inline_layout(request);
+    let sizes_boxes = built
+      .spans
+      .iter()
+      .any(|span| matches!(span, ProcessedInlineSpan::Box(_)));
+
+    (built.measure(options).size, sizes_boxes)
+  }
+
   pub(crate) fn measure(
     &self,
     available_space: Size<AvailableSpace>,
     known_dimensions: Size<Option<f32>>,
     style: &Style,
-    is_inline_children: bool,
   ) -> Size<f32> {
-    if is_inline_children {
-      let font_style = SizedFontStyle::from_style(&self.context.style, &self.context);
-      let request = InlineLayoutRequest::in_available_space(
-        collect_inline_items(self),
-        available_space,
-        known_dimensions,
-        &font_style,
-        &self.context,
-        InlineLayoutMode::Measure,
-      );
-      let options = InlineMeasureOptions::new(
-        request.max_width,
-        font_style.parent.resolved_text_wrap_mode() == TextWrapMode::Wrap,
-        available_space,
-        known_dimensions,
-      );
-
-      return create_inline_layout(request).measure(options).size;
-    }
-
     assert_ne!(
-      self.context.style.display,
+      self.context.style.base_data.display,
       Display::Inline,
       "Inline nodes should be wrapped in anonymous block boxes"
     );
@@ -2347,7 +2630,7 @@ fn drop_collapsible_boundary_whitespace(
       continue;
     }
 
-    if !child.is_out_of_flow() && child.context.style.float == Float::None {
+    if !child.is_out_of_flow() && child.context.style.base_data.float == Float::None {
       after_in_flow_inline = child.participates_in_inflow_inline_formatting_context();
     }
 
@@ -2391,7 +2674,8 @@ impl PendingRenderNode {
     let context = RenderContext::from_parent(parent_context, style, sizing, current_color);
 
     let element_matched = matched_declarations.get(source_order);
-    let marker_ordinal = (context.style.display == Display::ListItem).then(|| counter.take(&node));
+    let marker_ordinal =
+      (context.style.base_data.display == Display::ListItem).then(|| counter.take(&node));
     let pseudo_before = element_matched
       .and_then(|m| m.before())
       .and_then(|m| RenderNode::from_pseudo_match(&context, &node, m));
@@ -2468,7 +2752,7 @@ impl PendingRenderNode {
 
   /// The text a childless flex or grid item carries, wrapped as its own child.
   fn anonymous_text_child(context: &RenderContext, node: &Node) -> Option<RenderNode> {
-    if !context.style.display.should_blockify_children() {
+    if !context.style.base_data.display.should_blockify_children() {
       return None;
     }
 
@@ -2485,7 +2769,7 @@ impl RenderContext {
   /// The used `line-height: normal` for `style` at `font_size`, or zero for any other
   /// `line-height`.
   pub(crate) fn resolve_normal_line_height(&self, style: &ComputedStyle, font_size: f32) -> f32 {
-    if !matches!(style.line_height, LineHeight::Normal) {
+    if !matches!(style.inherited_data.line_height, LineHeight::Normal) {
       return 0.0;
     }
 
@@ -2501,11 +2785,11 @@ impl RenderContext {
     font_size: f32,
   ) -> Option<PrimaryFontMetrics> {
     let attributes = Attributes {
-      width: style.font_stretch.into_parlance(),
-      style: style.font_style.into_parlance(),
-      weight: style.font_weight.into_parlance(),
+      width: style.inherited_data.font_stretch.into_parlance(),
+      style: style.inherited_data.font_style.into_parlance(),
+      weight: style.inherited_data.font_weight.into_parlance(),
     };
-    let font_family = self.expand_font_family(&style.font_family);
+    let font_family = self.expand_font_family(&style.inherited_data.font_family);
 
     let mut hasher = Xxh3::new();
     font_family.hash_tokens(&mut hasher);
@@ -2622,7 +2906,7 @@ impl RenderContext {
     let (style_layers, _) = self.cascade(NodeStyleLayers::default(), pseudo_matched);
     let mut style = style_layers.inherit(&self.inherited_style());
     let sizing = self.child_sizing(&style, &self.sizing, false);
-    let current_color = style.color.resolve(self.current_color);
+    let current_color = style.inherited_data.color.resolve(self.current_color);
 
     style.make_computed(&sizing);
     (style, sizing, current_color)
@@ -2659,7 +2943,7 @@ impl RenderContext {
         .is_some_and(|tag| tag.eq_ignore_ascii_case("html"));
 
     let mut child_sizing_for_final: Option<SizingContext> = None;
-    if !style.animation_name.is_empty() {
+    if !style.misc1_data.animation_name.is_empty() {
       let (animated, child_sizing) = self.animated_style(style);
 
       style = animated;
@@ -2704,7 +2988,7 @@ impl RenderContext {
       .tag_name()
       .is_some_and(|tag| tag.eq_ignore_ascii_case("br"))
     {
-      style.white_space_collapse = WhiteSpaceCollapse::PreserveBreaks;
+      style.inherited_data_mut().white_space_collapse = WhiteSpaceCollapse::PreserveBreaks;
     }
 
     let sizing = self.child_sizing(
@@ -2712,7 +2996,7 @@ impl RenderContext {
       child_sizing_for_final.as_ref().unwrap_or(&self.sizing),
       is_document_root,
     );
-    let current_color = style.color.resolve(self.current_color);
+    let current_color = style.inherited_data.color.resolve(self.current_color);
     style.make_computed(&sizing);
     (style, sizing, current_color)
   }
@@ -2726,10 +3010,14 @@ impl RenderContext {
     is_document_root: bool,
   ) -> SizingContext {
     let font_size = style
+      .inherited_data
       .font_size
       .to_px(font_size_basis, font_size_basis.font_size);
     let normal_basis = self.resolve_normal_line_height(style, font_size);
-    let line_height = style.line_height.to_px(&self.sizing, normal_basis);
+    let line_height = style
+      .inherited_data
+      .line_height
+      .to_px(&self.sizing, normal_basis);
 
     self.sizing.with_font_metrics(
       font_size,
@@ -2749,7 +3037,7 @@ impl RenderContext {
   /// against the sizing the pre-animation style produces.
   fn animated_style(&self, style: ComputedStyle) -> (ComputedStyle, SizingContext) {
     let child_sizing = self.child_sizing(&style, &self.sizing, false);
-    let child_current_color = style.color.resolve(self.current_color);
+    let child_current_color = style.inherited_data.color.resolve(self.current_color);
     let child_context = RenderContext::from_parent(
       self,
       style.clone(),
@@ -2831,10 +3119,10 @@ mod tests {
 
     // `border-style` is `none`, so the initial `medium` width has a used value
     // of zero: an anonymous box reports no border it cannot render.
-    assert_eq!(style.border_top_width.to_used_px(sizing), 0.0);
-    assert_eq!(style.border_right_width.to_used_px(sizing), 0.0);
-    assert_eq!(style.border_bottom_width.to_used_px(sizing), 0.0);
-    assert_eq!(style.border_left_width.to_used_px(sizing), 0.0);
+    assert_eq!(style.box_data.border_top_width.to_used_px(sizing), 0.0);
+    assert_eq!(style.box_data.border_right_width.to_used_px(sizing), 0.0);
+    assert_eq!(style.box_data.border_bottom_width.to_used_px(sizing), 0.0);
+    assert_eq!(style.box_data.border_left_width.to_used_px(sizing), 0.0);
   }
 
   #[test]
@@ -3241,7 +3529,7 @@ mod tests {
     style.append_block(declarations);
 
     let resolved = style.inherit(&adjusted_parent);
-    assert_eq!(resolved.width, Length::Px(10.0).into());
+    assert_eq!(resolved.box_data.width, Length::Px(10.0).into());
   }
 
   #[test]
@@ -3307,11 +3595,17 @@ mod tests {
       .with_lang(Lang::parse("zh-Hant").unwrap()),
     );
 
-    assert_eq!(tree.context.style.width, Length::Px(10.0).into());
+    assert_eq!(tree.context.style.box_data.width, Length::Px(10.0).into());
 
     let children = tree.children.as_deref().expect("block children");
-    assert_eq!(children[0].context.style.width, Length::Px(10.0).into());
-    assert_eq!(children[1].context.style.width, Length::Px(20.0).into());
+    assert_eq!(
+      children[0].context.style.box_data.width,
+      Length::Px(10.0).into()
+    );
+    assert_eq!(
+      children[1].context.style.box_data.width,
+      Length::Px(20.0).into()
+    );
   }
 
   #[test]
@@ -3348,6 +3642,7 @@ mod tests {
       child
         .context
         .style
+        .box_data
         .width
         .as_length()
         .expect("length width")

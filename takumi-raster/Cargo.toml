@@ -11,12 +11,14 @@ rust-version = "1.91"
 [dependencies]
 png.workspace = true
 gif.workspace = true
+jpeg-encoder.workspace = true
 color.workspace = true
 tiny-skia.workspace = true
 typed-builder.workspace = true
 smallvec.workspace = true
 skrifa.workspace = true
 xxhash-rust.workspace = true
+zlib-rs.workspace = true
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 image-webp.workspace = true
@@ -41,9 +43,12 @@ default-features = false
 workspace = true
 features = ["rc"]
 
+[dependencies.libz-rs-sys]
+workspace = true
+
 [dependencies.image]
 workspace = true
-features = ["jpeg", "png", "webp", "gif", "ico"]
+features = ["png", "webp", "gif", "ico"]
 
 [dependencies.rayon]
 workspace = true
@@ -55,9 +60,10 @@ svg = ["takumi-core/svg"]
 png = ["takumi-core/png"]
 gif = ["takumi-core/gif"]
 webp = ["takumi-core/webp"]
-rayon = ["dep:rayon"]
+rayon = ["dep:rayon", "takumi-core/rayon"]
 
 [dev-dependencies]
+flate2 = { workspace = true, features = ["zlib-rs"] }
 serde_json.workspace = true
 
 [lints]

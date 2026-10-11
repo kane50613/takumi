@@ -83,6 +83,7 @@ export default function XPostImage() {
           display: "flex",
           lineClamp: 1,
           textOverflow: "ellipsis",
+          overflow: "hidden",
           fontSize: "4rem",
           color: "white",
           fontWeight: 300,

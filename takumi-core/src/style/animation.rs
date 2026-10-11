@@ -48,13 +48,15 @@ pub(crate) fn apply_stylesheet_animations(
   sizing: &SizingContext,
   current_color: Color,
 ) -> ComputedStyle {
-  if base_style.animation_name.is_empty() {
+  if base_style.misc1_data.animation_name.is_empty() {
     return base_style;
   }
 
   let base_snapshot = base_style.clone();
 
-  for (animation_index, animation_name) in base_snapshot.animation_name.iter().enumerate() {
+  for (animation_index, animation_name) in
+    base_snapshot.misc1_data.animation_name.iter().enumerate()
+  {
     let Some(animation_name) = animation_name else {
       continue;
     };
@@ -63,15 +65,28 @@ pub(crate) fn apply_stylesheet_animations(
       continue;
     };
 
-    let duration: AnimationTime =
-      repeated_list_value(&base_snapshot.animation_duration, animation_index);
-    let delay: AnimationTime = repeated_list_value(&base_snapshot.animation_delay, animation_index);
-    let iteration_count =
-      repeated_list_value(&base_snapshot.animation_iteration_count, animation_index);
-    let direction = repeated_list_value(&base_snapshot.animation_direction, animation_index);
-    let fill_mode = repeated_list_value(&base_snapshot.animation_fill_mode, animation_index);
-    let timing_function: AnimationTimingFunction =
-      repeated_list_value(&base_snapshot.animation_timing_function, animation_index);
+    let duration: AnimationTime = repeated_list_value(
+      &base_snapshot.misc1_data.animation_duration,
+      animation_index,
+    );
+    let delay: AnimationTime =
+      repeated_list_value(&base_snapshot.misc1_data.animation_delay, animation_index);
+    let iteration_count = repeated_list_value(
+      &base_snapshot.misc1_data.animation_iteration_count,
+      animation_index,
+    );
+    let direction = repeated_list_value(
+      &base_snapshot.misc1_data.animation_direction,
+      animation_index,
+    );
+    let fill_mode = repeated_list_value(
+      &base_snapshot.misc1_data.animation_fill_mode,
+      animation_index,
+    );
+    let timing_function: AnimationTimingFunction = repeated_list_value(
+      &base_snapshot.misc1_data.animation_timing_function,
+      animation_index,
+    );
 
     let Some(sample) = sample_animation_progress(
       time as f32,
@@ -605,15 +620,19 @@ mod tests {
     .unwrap();
 
     let style = ComputedStyle {
-      animation_name: AnimationNames::from_css_str("morph").unwrap(),
-      animation_duration: AnimationDurations::from_css_str("1000ms").unwrap(),
-      animation_timing_function: AnimationTimingFunctions::from_css_str("linear").unwrap(),
-      animation_fill_mode: AnimationFillModes::from_css_str("both").unwrap(),
+      misc1_data: Rc::new(StyleMisc1Data {
+        animation_name: AnimationNames::from_css_str("morph").unwrap(),
+        animation_duration: AnimationDurations::from_css_str("1000ms").unwrap(),
+        animation_timing_function: AnimationTimingFunctions::from_css_str("linear").unwrap(),
+        animation_fill_mode: AnimationFillModes::from_css_str("both").unwrap(),
+        ..Default::default()
+      }),
       ..Default::default()
     };
 
     let at = |time: u64| {
       apply_stylesheet_animations(style.clone(), &stylesheet, time, &sizing(), current_color())
+        .surround_data
         .corner_top_left_shape
     };
 
@@ -1294,18 +1313,27 @@ mod tests {
   #[test]
   fn apply_interpolated_properties_only_updates_masked_fields() {
     let mut base_style = ComputedStyle {
-      width: Length::Px(10.0).into(),
-      height: Length::Px(20.0).into(),
+      box_data: Rc::new(StyleBoxData {
+        width: Length::Px(10.0).into(),
+        height: Length::Px(20.0).into(),
+        ..Default::default()
+      }),
       ..ComputedStyle::default()
     };
     let from = ComputedStyle {
-      width: Length::Px(10.0).into(),
-      height: Length::Px(100.0).into(),
+      box_data: Rc::new(StyleBoxData {
+        width: Length::Px(10.0).into(),
+        height: Length::Px(100.0).into(),
+        ..Default::default()
+      }),
       ..ComputedStyle::default()
     };
     let to = ComputedStyle {
-      width: Length::Px(30.0).into(),
-      height: Length::Px(200.0).into(),
+      box_data: Rc::new(StyleBoxData {
+        width: Length::Px(30.0).into(),
+        height: Length::Px(200.0).into(),
+        ..Default::default()
+      }),
       ..ComputedStyle::default()
     };
     let animated_properties: PropertyMask = [LonghandId::Width].into_iter().collect();
@@ -1319,8 +1347,8 @@ mod tests {
       current_color(),
     );
 
-    assert_eq!(base_style.width, Length::Px(20.0).into());
-    assert_eq!(base_style.height, Length::Px(20.0).into());
+    assert_eq!(base_style.box_data.width, Length::Px(20.0).into());
+    assert_eq!(base_style.box_data.height, Length::Px(20.0).into());
   }
 
   #[test]
@@ -1328,7 +1356,10 @@ mod tests {
     let mut base_style = ComputedStyle::default();
     let from = ComputedStyle::default();
     let to = ComputedStyle {
-      rotate: Some(Angle::new(45.0)),
+      misc3_data: Rc::new(StyleMisc3Data {
+        rotate: Some(Angle::new(45.0)),
+        ..Default::default()
+      }),
       ..ComputedStyle::default()
     };
     let animated_properties: PropertyMask = [LonghandId::Rotate].into_iter().collect();
@@ -1342,7 +1373,7 @@ mod tests {
       current_color(),
     );
 
-    assert_eq!(base_style.rotate, Some(Angle::new(22.5)));
+    assert_eq!(base_style.misc3_data.rotate, Some(Angle::new(22.5)));
   }
 
   #[test]
@@ -1350,7 +1381,10 @@ mod tests {
     let mut base_style = ComputedStyle::default();
     let from = ComputedStyle::default();
     let to = ComputedStyle {
-      flex_grow: Some(FlexGrow(4.0)),
+      misc1_data: Rc::new(StyleMisc1Data {
+        flex_grow: Some(FlexGrow(4.0)),
+        ..Default::default()
+      }),
       ..ComputedStyle::default()
     };
     let animated_properties: PropertyMask = [LonghandId::FlexGrow].into_iter().collect();
@@ -1364,7 +1398,7 @@ mod tests {
       current_color(),
     );
 
-    assert_eq!(base_style.flex_grow, Some(FlexGrow(2.0)));
+    assert_eq!(base_style.misc1_data.flex_grow, Some(FlexGrow(2.0)));
   }
 
   #[test]
@@ -1372,7 +1406,10 @@ mod tests {
     let mut base_style = ComputedStyle::default();
     let from = ComputedStyle::default();
     let to = ComputedStyle {
-      flex_shrink: Some(FlexGrow(3.0)),
+      misc2_data: Rc::new(StyleMisc2Data {
+        flex_shrink: Some(FlexGrow(3.0)),
+        ..Default::default()
+      }),
       ..ComputedStyle::default()
     };
     let animated_properties: PropertyMask = [LonghandId::FlexShrink].into_iter().collect();
@@ -1386,7 +1423,7 @@ mod tests {
       current_color(),
     );
 
-    assert_eq!(base_style.flex_shrink, Some(FlexGrow(2.0)));
+    assert_eq!(base_style.misc2_data.flex_shrink, Some(FlexGrow(2.0)));
   }
 
   #[test]
@@ -1394,7 +1431,10 @@ mod tests {
     let mut base_style = ComputedStyle::default();
     let from = ComputedStyle::default();
     let to = ComputedStyle {
-      webkit_text_stroke_width: Some(Length::Px(6.0)),
+      misc_inherited1_data: Rc::new(StyleMiscInherited1Data {
+        webkit_text_stroke_width: Some(Length::Px(6.0)),
+        ..Default::default()
+      }),
       ..ComputedStyle::default()
     };
     let animated_properties: PropertyMask =
@@ -1409,7 +1449,10 @@ mod tests {
       current_color(),
     );
 
-    assert_eq!(base_style.webkit_text_stroke_width, Some(Length::Px(3.0)));
+    assert_eq!(
+      base_style.misc_inherited1_data.webkit_text_stroke_width,
+      Some(Length::Px(3.0))
+    );
   }
 
   #[test]
@@ -1417,7 +1460,10 @@ mod tests {
     let mut base_style = ComputedStyle::default();
     let from = ComputedStyle::default();
     let to = ComputedStyle {
-      webkit_text_stroke_color: Some(ColorInput::Value(Color([110, 120, 130, 255]))),
+      misc_inherited1_data: Rc::new(StyleMiscInherited1Data {
+        webkit_text_stroke_color: Some(ColorInput::Value(Color([110, 120, 130, 255]))),
+        ..Default::default()
+      }),
       ..ComputedStyle::default()
     };
     let animated_properties: PropertyMask =
@@ -1433,7 +1479,7 @@ mod tests {
     );
 
     assert_eq!(
-      base_style.webkit_text_stroke_color,
+      base_style.misc_inherited1_data.webkit_text_stroke_color,
       Some(ColorInput::Value(Color([60, 70, 80, 255])))
     );
   }
@@ -1442,12 +1488,21 @@ mod tests {
   fn apply_interpolated_properties_interpolates_text_fill_color_from_style_color() {
     let mut base_style = ComputedStyle::default();
     let from = ComputedStyle {
-      color: ColorInput::Value(Color([20, 40, 60, 255])),
+      inherited_data: Rc::new(StyleInheritedData {
+        color: ColorInput::Value(Color([20, 40, 60, 255])),
+        ..Default::default()
+      }),
       ..ComputedStyle::default()
     };
     let to = ComputedStyle {
-      color: ColorInput::Value(Color([20, 40, 60, 255])),
-      webkit_text_fill_color: Some(ColorInput::Value(Color([120, 140, 160, 255]))),
+      inherited_data: Rc::new(StyleInheritedData {
+        color: ColorInput::Value(Color([20, 40, 60, 255])),
+        ..Default::default()
+      }),
+      misc_inherited1_data: Rc::new(StyleMiscInherited1Data {
+        webkit_text_fill_color: Some(ColorInput::Value(Color([120, 140, 160, 255]))),
+        ..Default::default()
+      }),
       ..ComputedStyle::default()
     };
     let animated_properties: PropertyMask = [LonghandId::WebkitTextFillColor].into_iter().collect();
@@ -1462,7 +1517,7 @@ mod tests {
     );
 
     assert_eq!(
-      base_style.webkit_text_fill_color,
+      base_style.misc_inherited1_data.webkit_text_fill_color,
       Some(ColorInput::Value(Color([70, 90, 110, 255])))
     );
   }

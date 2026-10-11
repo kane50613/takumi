@@ -18,8 +18,8 @@ use tiny_skia::{
 use crate::pixmap_from_buffer;
 use crate::resources::image::RenderedImage;
 use crate::{
-  BilinearAxis, BorderProperties, DrawTarget, MaskView, OverlayOptions, PaintSource, RenderContext,
-  Result, RowSource, SamplingFootprint, checked_area, interpolate_with_footprint,
+  BilinearAxis, BorderProperties, BoxAxis, DrawTarget, MaskView, OverlayOptions, PaintSource,
+  RenderContext, Result, RowSource, SamplingFootprint, checked_area, interpolate_with_footprint,
   layout::node::resolve_image,
   overlay_image, pixmap_ref_from_buffer,
   resources::{image::ImageSource, image_buffer::ImageBuffer},
@@ -212,7 +212,7 @@ pub(crate) fn rasterize_layers(
           OverlayOptions {
             border,
             transform: layer_transform,
-            algorithm: context.style.image_rendering,
+            algorithm: context.style.misc_inherited_data.image_rendering,
             mode: layer.blend_mode,
           },
         );
@@ -339,6 +339,55 @@ impl<'a> SampledBitmapView<'a> {
       logical_height: self.logical_size.height,
       columns,
     })
+  }
+
+  /// Column spans for box-filtering destination columns `x_start..x_start + width`, or `None`
+  /// unless the tile minifies with a smooth algorithm.
+  pub(crate) fn box_rows(&self, x_start: u32, width: u32) -> Option<BoxRows<'a>> {
+    if matches!(self.algorithm, ImageScalingAlgorithm::Pixelated) || !self.footprint.is_minifying()
+    {
+      return None;
+    }
+
+    let source_width = self.source.width();
+    let columns = (x_start..x_start.checked_add(width)?)
+      .map(|x| {
+        BoxAxis::new(
+          (x as f32 + 0.5) * source_width as f32 / self.logical_size.width.max(1) as f32,
+          self.footprint.box_span_x(),
+          source_width,
+        )
+      })
+      .collect();
+
+    Some(BoxRows {
+      source: self.source,
+      logical_height: self.logical_size.height,
+      span_y: self.footprint.box_span_y(),
+      columns,
+    })
+  }
+}
+
+/// Box-filtered minification of a scaled tile one destination row at a time, each column's span
+/// worked out once.
+pub(crate) struct BoxRows<'a> {
+  source: PixmapRef<'a>,
+  logical_height: u32,
+  span_y: f32,
+  columns: Vec<BoxAxis>,
+}
+
+impl BoxRows<'_> {
+  pub(crate) fn fill(&self, y: u32, dst: &mut [[u8; 4]]) {
+    let source_height = self.source.height();
+
+    BoxAxis::new(
+      (y as f32 + 0.5) * source_height as f32 / self.logical_height.max(1) as f32,
+      self.span_y,
+      source_height,
+    )
+    .fill_row(self.source, &self.columns, dst);
   }
 }
 
@@ -529,7 +578,7 @@ pub(crate) fn render_tile(
           source: bitmap.clone(),
           width: tile_w,
           height: tile_h,
-          algo: context.style.image_rendering,
+          algo: context.style.misc_inherited_data.image_rendering,
         }),
         #[cfg(any(feature = "png", feature = "gif", feature = "webp"))]
         ImageSource::Animated(animated) => Some(BackgroundTile::SampledBitmap {
@@ -537,16 +586,16 @@ pub(crate) fn render_tile(
             context.time_ms(),
             tile_w,
             tile_h,
-            context.style.image_rendering,
+            context.style.misc_inherited_data.image_rendering,
           ),
           width: tile_w,
           height: tile_h,
-          algo: context.style.image_rendering,
+          algo: context.style.misc_inherited_data.image_rendering,
         }),
         ImageSource::Encoded(..) => match source.render_for_layout(
           tile_w,
           tile_h,
-          context.style.image_rendering,
+          context.style.misc_inherited_data.image_rendering,
           context.time_ms(),
           context.current_color,
           Some(context.fonts()),
@@ -555,7 +604,7 @@ pub(crate) fn render_tile(
             source,
             width: tile_w,
             height: tile_h,
-            algo: context.style.image_rendering,
+            algo: context.style.misc_inherited_data.image_rendering,
           }),
           RenderedImage::Rasterized(..) => None,
         },
@@ -563,7 +612,7 @@ pub(crate) fn render_tile(
         ImageSource::Svg(..) => match source.render_for_layout(
           tile_w,
           tile_h,
-          context.style.image_rendering,
+          context.style.misc_inherited_data.image_rendering,
           context.time_ms(),
           context.current_color,
           Some(context.fonts()),
@@ -718,9 +767,10 @@ fn rasterize_pattern(
     BackgroundTile::SampledBitmap { source, algo, .. } => {
       pixmap_ref_from_buffer(source).map(|source| (source, *algo))
     }
-    BackgroundTile::Pixmap(pixmap) => {
-      Some((pixmap.as_ref().as_ref(), context.style.image_rendering))
-    }
+    BackgroundTile::Pixmap(pixmap) => Some((
+      pixmap.as_ref().as_ref(),
+      context.style.misc_inherited_data.image_rendering,
+    )),
     _ => None,
   };
   let source_per_tile = source.map(|(source, _)| Size {
@@ -833,7 +883,12 @@ pub(crate) fn create_mask(context: &RenderContext, layout: Layout) -> Result<Opt
   let size = snapped.size().map(|x| x as u32);
   let layers = tile_layers(
     &FillLayers::mask(&context.style).resolve(
-      context.style.mask_image.as_deref().unwrap_or(&[]),
+      context
+        .style
+        .misc2_data
+        .mask_image
+        .as_deref()
+        .unwrap_or(&[]),
       &BoxBackgroundPaintContext::mask(layout.size, paint_offset),
       context,
     ),
@@ -942,6 +997,7 @@ mod tests {
   use super::*;
   use crate::{
     Fonts, RenderOptions,
+    blend::premultiplied_from_pixel,
     layout::node::Node,
     render,
     resources::image::ImageSource,
@@ -954,6 +1010,37 @@ mod tests {
 
   const BITMAP_URL: &str = "test://bitmap";
 
+  #[test]
+  fn box_rows_match_the_per_pixel_sampler() {
+    let (width, height) = (97u32, 61u32);
+    let data: Vec<u8> = (0..width * height * 4)
+      .map(|index| (index.wrapping_mul(2_654_435_761u32) >> 13) as u8)
+      .collect();
+    let source = ImageBuffer::from_rgba_bytes(data, width, height).unwrap();
+
+    for (logical_width, logical_height) in [(40, 23), (40, 80), (130, 20), (3, 2)] {
+      let view = SampledBitmapView::new(
+        &source,
+        logical_width,
+        logical_height,
+        ImageScalingAlgorithm::Auto,
+      )
+      .unwrap();
+      let rows = view.box_rows(0, logical_width).unwrap();
+      let mut row = vec![[0; 4]; logical_width as usize];
+
+      for y in 0..logical_height {
+        rows.fill(y, &mut row);
+        for (x, &pixel) in row.iter().enumerate() {
+          assert_eq!(
+            pixel,
+            premultiplied_from_pixel(view.sample(x as u32, y)),
+            "at {x},{y} drawn {logical_width}x{logical_height}"
+          );
+        }
+      }
+    }
+  }
   #[test]
   fn repeated_gradient_tiles_dither_when_active() {
     use crate::{

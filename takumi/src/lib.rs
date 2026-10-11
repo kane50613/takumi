@@ -58,6 +58,8 @@
 /// The glob pulls in common names like `Error`, `Result`, `Style`, and `Color`;
 /// that breadth is intentional for a prelude.
 pub mod prelude {
+  #[cfg(feature = "from-html")]
+  pub use takumi_core::layout::node::MAXIMUM_DOM_TREE_DEPTH as DEFAULT_MAX_DEPTH;
   pub use takumi_core::{
     Error, Fonts, Result,
     layout::node::{ImageData, ImageSourceInput, Node, NodeKind, RgbaImage, TextData},
@@ -69,7 +71,7 @@ pub mod prelude {
     viewport::Viewport,
   };
   #[cfg(feature = "from-html")]
-  pub use takumi_html::{DEFAULT_MAX_DEPTH, FromHtml, FromHtmlOptions, HtmlError, StylePresets};
+  pub use takumi_html::{FromHtml, FromHtmlOptions, HtmlError, StylePresets};
   #[cfg(feature = "raster-backend")]
   pub use takumi_raster::{
     AnimatedGifOptions, AnimatedPngOptions, AnimatedWebpOptions, AnimationFormat, AnimationFrame,

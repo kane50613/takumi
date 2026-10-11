@@ -1,10 +1,21 @@
 ---
 title: The measure() API
-description: Measure node dimensions and text runs with Renderer.measure() before rendering an image.
+description: Measure node dimensions and text runs with measure() before rendering an image.
 icon: Ruler
 ---
 
 `measure()` returns a node's laid-out size without rendering it. Use it to fit a headline into a fixed width, or to place a badge against the measured box.
+
+```tsx twoslash title="Measure an element"
+import { measure } from "takumi-js";
+
+const { width, height } = await measure(<span tw="text-xl">I'm a text node</span>); // [!code highlight]
+//      ^?
+```
+
+`measure()` takes what `render()` takes: JSX, an HTML string, or a node tree, with the same `css`, `fonts`, and `images` options, on the same default renderer.
+
+To measure on a renderer you manage, pass it a node tree:
 
 ```tsx twoslash tab="takumi-js/node" title="Measure with the native renderer"
 import { Renderer } from "takumi-js/node";

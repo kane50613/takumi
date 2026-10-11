@@ -26,6 +26,10 @@ use crate::{
   viewport::Viewport,
 };
 
+/// The most levels a node tree nests when it arrives as data: layout and paint
+/// recurse once per level. Blink's `HTMLConstructionSite::kMaximumHTMLParserDOMTreeDepth`.
+pub const MAXIMUM_DOM_TREE_DEPTH: usize = 512;
+
 /// Shared metadata stored by every renderable node.
 #[derive(Debug, Clone, Default)]
 pub(crate) struct NodeMetadata {
@@ -881,9 +885,34 @@ mod matching_tests {
     let matched = match_stylesheets_view(&root, &stylesheet, Viewport::default());
     assert_eq!(matched.len(), 1);
     assert_eq!(
-      computed_style_from_matches(matched[0].element()).width,
+      computed_style_from_matches(matched[0].element())
+        .box_data
+        .width,
       Length::Px(10.0).into()
     );
+  }
+
+  #[test]
+  fn one_stylesheet_matches_media_queries_per_viewport() {
+    let root = container_with_class("card");
+    let stylesheet = parse_stylesheet(
+      r#"
+        .card { width: 10px; }
+        @media (min-width: 600px) {
+          .card { width: 20px; }
+        }
+      "#,
+    );
+
+    for (viewport, width) in [((400, 300), 10.0), ((800, 600), 20.0), ((400, 300), 10.0)] {
+      let matched = match_stylesheets_view(&root, &stylesheet, Viewport::new(viewport));
+      assert_eq!(
+        computed_style_from_matches(matched[0].element())
+          .box_data
+          .width,
+        Length::Px(width).into()
+      );
+    }
   }
 
   #[test]
@@ -903,7 +932,9 @@ mod matching_tests {
     let matched = match_stylesheets_view(&root, &stylesheet, Viewport::default());
     assert_eq!(matched.len(), 2);
     assert_eq!(
-      computed_style_from_matches(matched[1].element()).width,
+      computed_style_from_matches(matched[1].element())
+        .box_data
+        .width,
       Length::Px(10.0).into()
     );
   }
@@ -927,7 +958,9 @@ mod matching_tests {
     let matched = match_stylesheets_view(&root, &stylesheet, Viewport::default());
     assert_eq!(matched.len(), 1);
     assert_eq!(
-      computed_style_from_matches(matched[0].element()).width,
+      computed_style_from_matches(matched[0].element())
+        .box_data
+        .width,
       Length::Px(20.0).into()
     );
   }
@@ -940,7 +973,9 @@ mod matching_tests {
     let matched = match_stylesheets_view(&root, &stylesheet, Viewport::default());
     assert_eq!(matched.len(), 1);
     assert_eq!(
-      computed_style_from_matches(matched[0].element()).width,
+      computed_style_from_matches(matched[0].element())
+        .box_data
+        .width,
       Length::Px(20.0).into()
     );
   }
@@ -965,7 +1000,9 @@ mod matching_tests {
     let matched = match_stylesheets_view(&root, &stylesheet, Viewport::default());
     assert_eq!(matched.len(), 1);
     assert_eq!(
-      computed_style_from_matches(matched[0].element()).width,
+      computed_style_from_matches(matched[0].element())
+        .box_data
+        .width,
       Length::Px(10.0).into()
     );
   }
@@ -984,7 +1021,9 @@ mod matching_tests {
     let matched = match_stylesheets_view(&root, &stylesheet, Viewport::default());
     assert_eq!(matched.len(), 1);
     assert_eq!(
-      computed_style_from_matches(matched[0].element()).width,
+      computed_style_from_matches(matched[0].element())
+        .box_data
+        .width,
       Length::Px(10.0).into()
     );
   }
@@ -1009,19 +1048,27 @@ mod matching_tests {
     let matched = match_stylesheets_view(&root, &stylesheet, Viewport::default());
     assert_eq!(matched.len(), 5);
     assert_eq!(
-      computed_style_from_matches(matched[2].element()).width,
+      computed_style_from_matches(matched[2].element())
+        .box_data
+        .width,
       Length::Px(10.0).into()
     );
     assert_eq!(
-      computed_style_from_matches(matched[2].element()).height,
+      computed_style_from_matches(matched[2].element())
+        .box_data
+        .height,
       Length::Px(30.0).into()
     );
     assert_eq!(
-      computed_style_from_matches(matched[4].element()).width,
+      computed_style_from_matches(matched[4].element())
+        .box_data
+        .width,
       Length::Px(20.0).into()
     );
     assert_eq!(
-      computed_style_from_matches(matched[4].element()).height,
+      computed_style_from_matches(matched[4].element())
+        .box_data
+        .height,
       Length::Px(30.0).into()
     );
   }
@@ -1050,11 +1097,15 @@ mod matching_tests {
     let matched = match_stylesheets_view(&root, &stylesheet, Viewport::default());
     assert_eq!(matched.len(), 2);
     assert_eq!(
-      computed_style_from_matches(matched[1].element()).width,
+      computed_style_from_matches(matched[1].element())
+        .box_data
+        .width,
       Length::Px(30.0).into()
     );
     assert_eq!(
-      computed_style_from_matches(matched[1].element()).height,
+      computed_style_from_matches(matched[1].element())
+        .box_data
+        .height,
       Length::Px(40.0).into()
     );
   }

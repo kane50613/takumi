@@ -3,13 +3,15 @@
 
 use parley::InlineBoxKind;
 
-use super::{BoxFrame, BoxPainter, FillShape, GlyphDevice, OwnContent, StripBackground};
+use super::{
+  BoxFrame, BoxPainter, FillShape, GlyphDevice, OwnContent, PaintedInline, StripBackground,
+};
 use crate::{
   error::{Error, Result},
   font_style::SizedFontStyle,
   geometry::{ComputedLayout, NodeId, Point},
   layout::{
-    inline::{InlineLayoutMode, InlineLayoutRequest, ProcessedInlineSpan, create_inline_layout},
+    inline::ProcessedInlineSpan,
     inline_box::{InlineBoxPaint, InlineSubtree},
     tree::{ContainingBlocks, LayoutResults, RenderNode},
   },
@@ -37,7 +39,9 @@ impl<'s> TextClip<'s> {
       return Ok(None);
     };
 
-    if node.context.style.background_clip != BackgroundClip::Text || !node.paints_own_box() {
+    if node.context.style.background_data.background_clip != BackgroundClip::Text
+      || !node.paints_own_box()
+    {
       return Ok(None);
     }
 
@@ -113,7 +117,12 @@ impl<'r> TextMask<'r> {
 
     self.containing_blocks.record_placement(node_id, origin);
 
-    let is_flex_or_grid_item = node.context.style.display.should_blockify_children();
+    let is_flex_or_grid_item = node
+      .context
+      .style
+      .base_data
+      .display
+      .should_blockify_children();
 
     for child in self.results.box_children(node_id)? {
       let Some(base) = self.containing_blocks.recorded_placement_for(child, origin) else {
@@ -129,7 +138,7 @@ impl<'r> TextMask<'r> {
       let child_layout = self.results.layout(child.node_id)?;
       let child_context = &child_node.context;
 
-      if child_context.style.display == Display::None
+      if child_context.style.base_data.display == Display::None
         || child_context
           .style
           .floats_in_own_layer(is_flex_or_grid_item)
@@ -160,20 +169,13 @@ impl<'r> TextMask<'r> {
     let context = &node.context;
     let layout = self.results.layout(node_id)?;
     let font_style = SizedFontStyle::from_style(&context.style, context);
-    let Some(items) = OwnContent::of(node).inline_items(&font_style) else {
+    let Some(painted) = OwnContent::of(node).lay_out_inline(&font_style, layout) else {
       return Ok(());
     };
-    let built = create_inline_layout(InlineLayoutRequest::in_content_box(
-      items,
-      layout.content_box_size(),
-      &font_style,
-      context,
-      InlineLayoutMode::Draw,
-    ));
-    let runs = built.resolve_runs(context, layout)?;
+    let PaintedInline { spans, runs, .. } = painted?;
 
     runs.lines(layout, |_| true).paint_mask(
-      &built.spans,
+      &spans,
       &font_style,
       BoxFrame::new(layout, origin),
       device,
@@ -184,7 +186,7 @@ impl<'r> TextMask<'r> {
       .iter()
       .filter(|positioned| positioned.kind != InlineBoxKind::OutOfFlow)
     {
-      let Some(ProcessedInlineSpan::Box(item)) = built.spans.get(positioned.id as usize) else {
+      let Some(ProcessedInlineSpan::Box(item)) = spans.get(positioned.id as usize) else {
         continue;
       };
       let (box_origin, InlineBoxPaint::Container(subtree)) =

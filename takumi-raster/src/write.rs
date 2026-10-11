@@ -2,15 +2,17 @@
 use std::collections::VecDeque;
 use std::{
   borrow::{Borrow, Cow},
-  io::Write,
+  io::{self, Write},
+  iter::once,
 };
 
 use gif::{Encoder as GifEncoder, Frame as GifFrame, Repeat};
-use image::{
-  ExtendedColorType, ImageEncoder, RgbaImage,
-  codecs::{ico::IcoEncoder, jpeg::JpegEncoder},
+use image::{ExtendedColorType, ImageEncoder, RgbaImage, codecs::ico::IcoEncoder};
+use jpeg_encoder::{ColorType as JpegColorType, Encoder as JpegEncoder, SamplingFactor};
+use png::{
+  ColorType, Filter,
+  chunk::{IDAT, acTL, fcTL, fdAT},
 };
-use png::{ColorType, DeflateCompression, Filter};
 use typed_builder::TypedBuilder;
 
 /// Encode a sequence of RGBA frames into an animated WebP and write to `destination`.
@@ -20,8 +22,11 @@ use crate::webp::write_webp_lossy;
 use crate::{
   Result,
   error::Error,
+  palette::Palette,
   render::{FrameSpan, SequentialScene, frame_spans, prepare_scenes, render_frame},
-  webp::{encode_animated_webp, has_any_alpha_pixel, strip_alpha_channel, write_webp_lossless},
+  scanline::{Pixels, Scanlines},
+  webp::{encode_animated_webp, has_any_alpha_pixel, write_webp_lossless},
+  zlib::compress_segmented,
 };
 
 /// Lossy-encoding quality, clamped to the `0..=100` range (higher means better
@@ -225,64 +230,163 @@ fn duration_ms_to_gif_delay(duration_ms: u32) -> u16 {
 
 #[derive(Clone, Copy)]
 struct PngEncoding {
-  compression: DeflateCompression,
+  level: u8,
   filter: Filter,
+  /// Segments the image data deflates in at once.
+  segments: usize,
 }
 
 /// Flat art deflates best unfiltered, where long runs repeat across rows.
 const FLAT_PNG: PngEncoding = PngEncoding {
-  compression: DeflateCompression::Level(7),
+  level: 7,
   filter: Filter::NoFilter,
+  segments: 1,
 };
 
 /// Photographs deflate best filtered, and level 3 already captures most of it.
 const PHOTO_PNG: PngEncoding = PngEncoding {
-  compression: DeflateCompression::Level(3),
+  level: 3,
   filter: Filter::Adaptive,
+  segments: 1,
 };
 
+/// Compressed bytes each segment should come to, so the block header and flush a segment adds stay
+/// a small share of it.
+const SEGMENT_OUTPUT: usize = 2048;
+
+/// Most segments an image splits into. It does not follow the machine's cores, so every machine
+/// writes the same bytes.
+const MAX_SEGMENTS: usize = 8;
+
+/// Rows between the ones a [`PngEncoding`] samples.
+const ROW_STRIDE: usize = 32;
+
 impl PngEncoding {
-  /// Picks the encoding that makes a 1-in-32 row sample of `rgba` smaller.
+  /// Picks the encoding that makes a 1-in-32 row sample of `rgba` smaller, and the segments the
+  /// sample's size says the whole image deflates in.
   fn pick(rgba: &[u8], width: u32) -> Self {
-    const ROW_STRIDE: usize = 32;
-
-    let row_bytes = width as usize * 4;
-    if row_bytes == 0 {
+    let Some(band) = RowSample::rgba(rgba, width) else {
       return FLAT_PNG;
-    }
-
-    let band: Vec<u8> = rgba
-      .chunks_exact(row_bytes)
-      .step_by(ROW_STRIDE)
-      .flatten()
-      .copied()
-      .collect();
-    let band_height = (band.len() / row_bytes) as u32;
-    if band_height < 2 {
-      return FLAT_PNG;
-    }
-
-    let encoded_len = |encoding: Self| {
-      let mut out = Vec::new();
-      let mut encoder = png::Encoder::new(&mut out, width, band_height);
-      encoding.apply(&mut encoder);
-      encoder.set_color(ColorType::Rgba);
-      let written = encoder
-        .write_header()
-        .and_then(|mut writer| writer.write_image_data(&band));
-      written.map(|_| out.len())
+    };
+    let (encoding, sample) = match (band.encoded_len(FLAT_PNG), band.encoded_len(PHOTO_PNG)) {
+      (Some(flat), Some(photo)) if photo < flat => (PHOTO_PNG, photo),
+      (Some(flat), _) => (FLAT_PNG, flat),
+      _ => return FLAT_PNG,
     };
 
-    match (encoded_len(FLAT_PNG), encoded_len(PHOTO_PNG)) {
-      (Ok(flat), Ok(photo)) if photo < flat => PHOTO_PNG,
-      _ => FLAT_PNG,
+    encoding.with_segments(sample)
+  }
+
+  /// Flat art's encoding for palette `indices`, which deflate best unfiltered too, with the
+  /// segments a 1-in-32 row sample of them says the image deflates in.
+  fn indexed(indices: &[u8], width: u32) -> Self {
+    RowSample::indexed(indices, width)
+      .and_then(|band| band.encoded_len(FLAT_PNG))
+      .map_or(FLAT_PNG, |sample| FLAT_PNG.with_segments(sample))
+  }
+
+  /// This encoding in the segments a 1-in-32 row sample deflating to `sample` bytes calls for.
+  fn with_segments(self, sample: usize) -> Self {
+    PngEncoding {
+      segments: (sample * ROW_STRIDE / SEGMENT_OUTPUT).clamp(1, MAX_SEGMENTS),
+      ..self
     }
   }
 
-  fn apply<T: Write>(self, encoder: &mut png::Encoder<'_, T>) {
-    encoder.set_deflate_compression(self.compression);
-    encoder.set_filter(self.filter);
+  /// The zlib stream `rows` rows of `pixels` deflate to under this encoding, in its segments at
+  /// once.
+  fn deflate(self, pixels: Pixels<'_>, rows: usize) -> Result<Vec<u8>> {
+    let scanlines = Scanlines::new(pixels, matches!(self.filter, Filter::Adaptive));
+
+    compress_segmented(
+      rows,
+      scanlines.len(),
+      u32::from(self.level),
+      self.segments,
+      |rows, out| scanlines.append(rows, out),
+    )
   }
+}
+
+/// Most pixels a JPEG gets optimized Huffman tables for. jpeg-encoder keeps every block of the
+/// image to count its symbols first, about 9 bytes a pixel at 4:4:4, where standard tables stream.
+const OPTIMIZED_JPEG_MAX_PIXELS: u64 = 1 << 22;
+
+/// Every 32nd row of an image, stacked into a band for an encoding to be tried on.
+enum RowSample {
+  Rgba(RgbaImage),
+  Indexed { indices: Vec<u8>, width: usize },
+}
+
+impl RowSample {
+  /// The sample of RGBA `rgba` rows `width` pixels wide, or `None` when it has under two rows.
+  fn rgba(rgba: &[u8], width: u32) -> Option<Self> {
+    let band = sample_rows(rgba, width as usize * 4)?;
+    let height = band.len() / (width as usize * 4);
+
+    RgbaImage::from_raw(width, height as u32, band).map(Self::Rgba)
+  }
+
+  /// The sample of palette `indices` rows `width` pixels wide, or `None` when it has under two
+  /// rows.
+  fn indexed(indices: &[u8], width: u32) -> Option<Self> {
+    let width = width as usize;
+
+    sample_rows(indices, width).map(|indices| Self::Indexed { indices, width })
+  }
+
+  /// The bytes the sample's image data deflates to under `encoding`, as `write_image` writes it.
+  fn encoded_len(&self, encoding: PngEncoding) -> Option<usize> {
+    let (pixels, rows) = match self {
+      Self::Rgba(image) => (
+        Pixels::Rgba {
+          image,
+          keep_alpha: true,
+        },
+        image.height() as usize,
+      ),
+      Self::Indexed { indices, width } => (
+        Pixels::Indexed {
+          indices,
+          width: *width,
+        },
+        indices.len() / width,
+      ),
+    };
+
+    encoding
+      .deflate(pixels, rows)
+      .ok()
+      .map(|stream| stream.len())
+  }
+}
+
+/// Every [`ROW_STRIDE`]th row of `data`, rows `row_bytes` long, or `None` under two rows.
+fn sample_rows(data: &[u8], row_bytes: usize) -> Option<Vec<u8>> {
+  if row_bytes == 0 {
+    return None;
+  }
+
+  let band: Vec<u8> = data
+    .chunks_exact(row_bytes)
+    .step_by(ROW_STRIDE)
+    .flatten()
+    .copied()
+    .collect();
+
+  (band.len() >= 2 * row_bytes).then_some(band)
+}
+
+/// Longest chunk payload PNG allows.
+const MAX_CHUNK_LEN: usize = i32::MAX as usize;
+
+/// Writes a zlib `stream` as the image's `IDAT` chunks.
+fn write_idat<W: Write>(writer: &mut png::Writer<W>, stream: &[u8]) -> Result<()> {
+  for chunk in stream.chunks(MAX_CHUNK_LEN) {
+    writer.write_chunk(IDAT, chunk).map_err(Error::encode)?;
+  }
+
+  Ok(())
 }
 
 /// Clamps a frame duration to the 16-bit APNG delay numerator, in milliseconds.
@@ -300,35 +404,65 @@ pub fn write_image<T: Write>(
 
   match format {
     OutputFormat::Jpeg { quality } => {
-      let rgb = strip_alpha_channel(Cow::Borrowed(rgba));
+      let mut encoder = JpegEncoder::new(destination, quality.get());
 
-      let encoder = JpegEncoder::new_with_quality(destination, quality.get());
+      // 4:2:0 blurs colored text edges, and zune-jpeg 0.5 misreads the
+      // optimized Huffman tables jpeg-encoder writes alongside it.
+      encoder.set_sampling_factor(SamplingFactor::R_4_4_4);
+      encoder.set_optimized_huffman_tables(
+        u64::from(image.width()) * u64::from(image.height()) <= OPTIMIZED_JPEG_MAX_PIXELS,
+      );
       encoder
-        .write_image(&rgb, image.width(), image.height(), ExtendedColorType::Rgb8)
+        .encode(
+          image.as_raw(),
+          u16::try_from(image.width()).map_err(Error::encode)?,
+          u16::try_from(image.height()).map_err(Error::encode)?,
+          JpegColorType::Rgba,
+        )
         .map_err(Error::encode)?;
     }
     OutputFormat::Png => {
       let mut encoder = png::Encoder::new(destination, image.width(), image.height());
-      PngEncoding::pick(image.as_raw(), image.width()).apply(&mut encoder);
+      let palette = Palette::of(rgba);
+      let (encoding, pixels) = match &palette {
+        Some(palette) => {
+          encoder.set_color(ColorType::Indexed);
+          encoder.set_palette(palette.rgb());
+          if let Some(alphas) = palette.alphas() {
+            encoder.set_trns(alphas);
+          }
+          (
+            PngEncoding::indexed(&palette.indices, image.width()),
+            Pixels::Indexed {
+              indices: &palette.indices,
+              width: image.width() as usize,
+            },
+          )
+        }
+        None => {
+          let keep_alpha = has_any_alpha_pixel(rgba);
 
-      let has_alpha = has_any_alpha_pixel(rgba);
-
-      let image_data = if has_alpha {
-        Cow::Borrowed(image.as_raw())
-      } else {
-        Cow::Owned(strip_alpha_channel(Cow::Borrowed(rgba)))
+          encoder.set_color(if keep_alpha {
+            ColorType::Rgba
+          } else {
+            ColorType::Rgb
+          });
+          (
+            PngEncoding::pick(image.as_raw(), image.width()),
+            Pixels::Rgba {
+              image: rgba,
+              keep_alpha,
+            },
+          )
+        }
       };
 
-      encoder.set_color(if has_alpha {
-        ColorType::Rgba
-      } else {
-        ColorType::Rgb
-      });
-
       let mut writer = encoder.write_header().map_err(Error::encode)?;
-      writer
-        .write_image_data(&image_data)
-        .map_err(Error::encode)?;
+
+      write_idat(
+        &mut writer,
+        &encoding.deflate(pixels, image.height() as usize)?,
+      )?;
       writer.finish().map_err(Error::encode)?;
     }
     #[cfg(not(target_arch = "wasm32"))]
@@ -415,22 +549,52 @@ where
     .set_repeat(options.loop_count.map_or(Repeat::Infinite, Repeat::Finite))
     .map_err(Error::encode)?;
 
-  let mut write_gif_frame = |frame: AnimationFrame| -> Result<()> {
+  let quantize = |frame: Result<AnimationFrame>| -> Result<GifFrame<'static>> {
+    let frame = frame?;
+
     if frame.image.width() != u32::from(width) || frame.image.height() != u32::from(height) {
       return Err(Error::MixedAnimationFrameDimensions);
     }
+
     let mut pixels = frame.image.into_raw();
     let mut gif_frame = GifFrame::from_rgba_speed(width, height, &mut pixels, 28);
-    gif_frame.delay = duration_ms_to_gif_delay(frame.duration_ms);
-    encoder.write_frame(&gif_frame).map_err(Error::encode)
-  };
 
-  write_gif_frame(first)?;
-  for frame in frames {
-    write_gif_frame(frame?)?;
+    gif_frame.delay = duration_ms_to_gif_delay(frame.duration_ms);
+    Ok(gif_frame)
+  };
+  let frames = once(Ok(first)).chain(frames);
+
+  // Each frame quantizes to its own palette, so a batch quantizes at once and is written in order.
+  #[cfg(feature = "rayon")]
+  {
+    use rayon::prelude::*;
+
+    let mut frames = frames;
+
+    loop {
+      let batch: Vec<_> = frames.by_ref().take(frame_batch_len()).collect();
+
+      if batch.is_empty() {
+        return Ok(());
+      }
+
+      let quantized: Vec<_> = batch.into_par_iter().map(quantize).collect();
+
+      for gif_frame in quantized {
+        encoder.write_frame(&gif_frame?).map_err(Error::encode)?;
+      }
+    }
   }
 
-  Ok(())
+  #[cfg(not(feature = "rayon"))]
+  {
+    for frame in frames {
+      encoder
+        .write_frame(&quantize(frame)?)
+        .map_err(Error::encode)?;
+    }
+    Ok(())
+  }
 }
 
 /// Encode a sequence of RGBA frames into an animated PNG and write to `destination`.
@@ -468,42 +632,92 @@ where
   let Some(first) = frames.next().transpose()? else {
     return Err(Error::EmptyAnimationFrames);
   };
-  let first = first.borrow();
-  let width = first.image.width();
-  let height = first.image.height();
-
+  let first_image = &first.borrow().image;
+  let (width, height) = (first_image.width(), first_image.height());
+  let encoding = PngEncoding::pick(first_image.as_raw(), width);
   let mut encoder = png::Encoder::new(destination, width, height);
-  PngEncoding::pick(first.image.as_raw(), width).apply(&mut encoder);
+
   encoder.set_color(ColorType::Rgba);
-  encoder
-    .set_animated(frame_count, options.loop_count.unwrap_or(0) as u32)
-    .map_err(Error::encode)?;
-  encoder
-    .set_frame_delay(duration_ms_to_apng_delay(first.duration_ms), 1000)
-    .map_err(Error::encode)?;
 
   let mut writer = encoder.write_header().map_err(Error::encode)?;
+  let mut animation_control = [0; 8];
+
+  animation_control[..4].copy_from_slice(&frame_count.to_be_bytes());
+  animation_control[4..].copy_from_slice(&u32::from(options.loop_count.unwrap_or(0)).to_be_bytes());
   writer
-    .write_image_data(first.image.as_raw())
+    .write_chunk(acTL, &animation_control)
     .map_err(Error::encode)?;
 
-  for frame in frames {
+  let mut sequence = 0_u32;
+  let mut written = 0_u32;
+
+  for frame in once(Ok(first)).chain(frames) {
     let frame = frame?;
     let frame = frame.borrow();
+
     if frame.image.width() != width || frame.image.height() != height {
       return Err(Error::MixedAnimationFrameDimensions);
     }
+    if written == frame_count {
+      return Err(frame_count_mismatch());
+    }
+
     writer
-      .set_frame_delay(duration_ms_to_apng_delay(frame.duration_ms), 1000)
+      .write_chunk(
+        fcTL,
+        &frame_control(sequence, width, height, frame.duration_ms),
+      )
       .map_err(Error::encode)?;
-    writer
-      .write_image_data(frame.image.as_raw())
-      .map_err(Error::encode)?;
+    sequence += 1;
+
+    let stream = encoding.deflate(
+      Pixels::Rgba {
+        image: &frame.image.0,
+        keep_alpha: true,
+      },
+      height as usize,
+    )?;
+
+    if written == 0 {
+      write_idat(&mut writer, &stream)?;
+    } else {
+      // Each `fdAT` leads with its own sequence number.
+      for chunk in stream.chunks(MAX_CHUNK_LEN - 4) {
+        let mut frame_data = Vec::with_capacity(4 + chunk.len());
+
+        frame_data.extend_from_slice(&sequence.to_be_bytes());
+        frame_data.extend_from_slice(chunk);
+        writer
+          .write_chunk(fdAT, &frame_data)
+          .map_err(Error::encode)?;
+        sequence += 1;
+      }
+    }
+    written += 1;
   }
 
-  writer.finish().map_err(Error::encode)?;
+  if written != frame_count {
+    return Err(frame_count_mismatch());
+  }
 
-  Ok(())
+  writer.finish().map_err(Error::encode)
+}
+
+fn frame_count_mismatch() -> Error {
+  Error::encode(io::Error::other("APNG frames do not match the frame count"))
+}
+
+/// An `fcTL` for a whole-canvas frame shown for `duration_ms`, replacing what came before it, as
+/// the png crate writes one by default.
+fn frame_control(sequence: u32, width: u32, height: u32, duration_ms: u32) -> [u8; 26] {
+  let mut control = [0; 26];
+
+  control[..4].copy_from_slice(&sequence.to_be_bytes());
+  control[4..8].copy_from_slice(&width.to_be_bytes());
+  control[8..12].copy_from_slice(&height.to_be_bytes());
+  control[20..22].copy_from_slice(&duration_ms_to_apng_delay(duration_ms).to_be_bytes());
+  control[22..24].copy_from_slice(&1000_u16.to_be_bytes());
+  control
 }
 
 /// Output format and per-format options for [`write_animation`].
@@ -606,6 +820,12 @@ fn encode_frames<W: Write>(
   }
 }
 
+/// Frames rendered or quantized at once: one for each `rayon` thread.
+#[cfg(feature = "rayon")]
+fn frame_batch_len() -> usize {
+  rayon::current_num_threads().max(1)
+}
+
 /// Renders frames one chunk at a time: `next()` renders a chunk of `rayon`
 /// threads' worth of frames in parallel once the encoder has consumed the
 /// previous chunk, so at most one chunk of raw frames is in memory.
@@ -637,8 +857,7 @@ impl Iterator for ChunkedFrames<'_, '_> {
     use rayon::prelude::*;
 
     if self.ready.is_empty() && self.next < self.spans.len() {
-      let chunk_len = rayon::current_num_threads().max(1);
-      let chunk = &self.spans[self.next..(self.next + chunk_len).min(self.spans.len())];
+      let chunk = &self.spans[self.next..(self.next + frame_batch_len()).min(self.spans.len())];
       self.next += chunk.len();
 
       // `PreparedScene` is not `Send`: each worker prepares and reuses its own copy.
@@ -661,13 +880,14 @@ mod tests {
 
   use gif::{ColorOutput, DecodeOptions};
   use image::RgbaImage;
+  use jpeg_encoder::{ColorType as JpegColorType, Encoder as JpegEncoder, SamplingFactor};
   use libwebp_sys::{WEBP_CSP_MODE::MODE_RGBA, *};
   use takumi_core::Error;
 
   use super::{
     AnimatedGifOptions, AnimatedPngOptions, AnimatedWebpOptions, AnimationFrame, Bitmap, Filter,
-    OutputFormat, PngEncoding, write_animated_gif, write_animated_png, write_animated_webp,
-    write_image,
+    MAX_SEGMENTS, OutputFormat, PngEncoding, Quality, write_animated_gif, write_animated_png,
+    write_animated_webp, write_image,
   };
 
   fn band(width: u32, height: u32, pixel: impl Fn(u32, u32) -> [u8; 4]) -> Vec<u8> {
@@ -691,6 +911,35 @@ mod tests {
       PngEncoding::pick(&rgba, 256).filter,
       Filter::NoFilter
     ));
+  }
+
+  #[test]
+  fn small_flat_art_deflates_in_one_segment() {
+    let rgba = band(256, 64, |x, _| {
+      if x < 128 {
+        [20, 40, 60, 255]
+      } else {
+        [200, 40, 60, 255]
+      }
+    });
+
+    assert_eq!(PngEncoding::pick(&rgba, 256).segments, 1);
+  }
+
+  #[test]
+  fn detailed_flat_art_deflates_in_segments() {
+    // Dark marks scattered over white, like a page of text.
+    let rgba = band(1200, 630, |x, y| {
+      if ((x / 2).wrapping_mul(2654435761) ^ (y / 3).wrapping_mul(97)) % 7 == 0 {
+        [20, 40, 60, 255]
+      } else {
+        [255, 255, 255, 255]
+      }
+    });
+    let encoding = PngEncoding::pick(&rgba, 1200);
+
+    assert!(matches!(encoding.filter, Filter::NoFilter));
+    assert_eq!(encoding.segments, MAX_SEGMENTS);
   }
 
   #[test]
@@ -865,6 +1114,42 @@ mod tests {
       bytes.is_empty(),
       "encoder should not write bytes before validating frame dimensions"
     );
+  }
+
+  #[test]
+  fn a_large_jpeg_streams_with_standard_huffman_tables() {
+    let (width, height) = (2048_u16, 2049_u16);
+    let data: Vec<u8> = (0..u32::from(width) * u32::from(height) * 4)
+      .map(|index| (index.wrapping_mul(2_654_435_761) >> 24) as u8 | 0x80)
+      .collect();
+    let image = Bitmap::from_raw(width.into(), height.into(), data.clone()).unwrap();
+    let mut written = Vec::new();
+    let mut standard = Vec::new();
+    let mut encoder = JpegEncoder::new(&mut standard, Quality::default().get());
+
+    write_image(
+      &image,
+      &mut written,
+      OutputFormat::Jpeg {
+        quality: Quality::default(),
+      },
+    )
+    .unwrap();
+    encoder.set_sampling_factor(SamplingFactor::R_4_4_4);
+    encoder
+      .encode(&data, width, height, JpegColorType::Rgba)
+      .unwrap();
+
+    assert!(written == standard);
+  }
+
+  #[test]
+  fn write_png_rejects_an_empty_image() {
+    for (width, height) in [(0, 1), (1, 0), (0, 0)] {
+      let image = Bitmap::from_raw(width, height, Vec::new()).unwrap();
+
+      assert!(write_image(&image, &mut Vec::new(), OutputFormat::Png).is_err());
+    }
   }
 
   #[test]

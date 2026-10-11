@@ -16,20 +16,17 @@ use takumi_core::{
   layout::{
     background_image_geometry::{BoxBackgroundPaintContext, FillLayers, ImageTiling},
     border::BorderProperties,
-    inline::{
-      BuiltInlineLayout, InlinePass, InlineRunLayout, PositionedInlineRun, ProcessedInlineSpan,
-      ShapedRun,
-    },
+    inline::{InlinePass, PositionedInlineRun, ProcessedInlineSpan, ShapedRun},
     inline_box::{InlineBoxPaint, InlineSubtree, resolve_inline_box},
     tree::{NodeOrigin, RenderNode},
   },
   paint::ConicGradientTile,
-  paint_chunk::{ChunkPart, ConversionContext, PaintChunk, PropertySink},
+  paint_chunk::{ChunkPart, ConversionContext, PropertySink},
   paint_property::{ClipId, ClipNode, EffectId, EffectNode},
   painter::{
     BoxBackground, BoxBorderPainter, BoxFrame, BoxPainter, FillShape, GlyphDevice, GlyphFill,
-    LayerBounds, LineItem, OwnContent, PaintDevice, PendingOutline, ShadowShape, StripBackground,
-    StrokeStyle, TextClip, UNBOUNDED,
+    LayerBounds, LineItem, OwnContent, PaintDevice, PaintedInline, PendingOutline, ShadowShape,
+    StripBackground, StrokeStyle, TextClip, UNBOUNDED,
   },
   scene::{NodePaint, Scene},
   shadow::SizedShadow,
@@ -46,9 +43,10 @@ use crate::paint::rasterized_image;
 #[cfg(all(feature = "svg", feature = "images"))]
 use crate::svg;
 use crate::{
+  chunks::{ResolvedChunk, SceneChunks},
   filter::{ColorFilter, filtered, unsupported_filter},
   glyph::{ColorGlyphs, PdfGlyph, Uncovered, run_glyphs},
-  inline::{InlineMap, visit_inline_layout},
+  inline::{InlineCache, visit_inline_layout},
   krilla::{
     Data,
     geom::{Path as KrillaPath, Point, Rect as KrillaRect, Transform},
@@ -86,8 +84,10 @@ type FontMap = HashMap<FontKey, Font>;
 pub(crate) struct Emitter<'a> {
   pub(crate) scene: &'a Scene,
   pub(crate) document: &'a DocumentState<'a>,
-  /// Pre-built inline layouts for the content tree; band trees build on the fly.
-  pub(crate) inline: Option<&'a InlineMap<'a>>,
+  /// The content tree's inline layouts; band trees build theirs on the fly.
+  pub(crate) inline: Option<&'a InlineCache<'a>>,
+  /// Pre-resolved chunks for the content tree; other trees resolve theirs per walk.
+  pub(crate) chunks: Option<&'a SceneChunks<'a>>,
   /// The page window this walk paints through.
   pub(crate) window: Window,
   /// Whether this walk records marked content for the structure tree.
@@ -196,22 +196,29 @@ impl Emitter<'_> {
   /// Emits the scene chunk by chunk, entering each chunk's clips and effects.
   pub(crate) fn emit(&mut self, surface: &mut Surface) -> Result<(), PdfError> {
     let scene = self.scene;
-    let chunks = PaintChunk::in_paint_order(&scene.contexts);
-    let owners = PaintChunk::effect_owners(&chunks, &scene.properties);
+    let resolved;
+    let chunks = match self.chunks {
+      Some(chunks) => chunks,
+      None => {
+        resolved = SceneChunks::new(scene);
+        &resolved
+      }
+    };
+    let visible = chunks.visible(self.window);
     let mut conversion = ConversionContext::new(
       &scene.properties,
       ChunkWriter {
         emitter: self,
         surface,
-        owners: &owners,
+        owners: &chunks.owners,
         current: Affine::IDENTITY,
         entries: Vec::new(),
         error: None,
       },
     );
 
-    for chunk in &chunks {
-      conversion.switch_to(chunk.state());
+    for chunk in visible {
+      conversion.switch_to(chunk.chunk.state());
       conversion.sink().emit(chunk);
     }
 
@@ -228,7 +235,7 @@ impl Emitter<'_> {
       origin: CorePoint { x, y },
     } = frame;
 
-    if style.box_decoration_break == BoxDecorationBreak::Clone
+    if style.box_data.box_decoration_break == BoxDecorationBreak::Clone
       && let Some((window_top, window_bottom)) = self.window.y
     {
       let top = y.max(window_top);
@@ -305,7 +312,7 @@ impl Emitter<'_> {
         &mut TextDevice {
           emitter: self,
           device: self.device(surface, self.tagged),
-          built: None,
+          text: None,
           shadow: None,
           through: None,
         },
@@ -323,17 +330,18 @@ impl Emitter<'_> {
   fn emit_tagged_content(
     &mut self,
     node: &RenderNode,
+    content: &OwnContent<'_>,
     paint: &NodePaint,
     frame: BoxFrame,
     pass: InlinePass,
     surface: &mut Surface,
   ) -> Result<(), PdfError> {
-    let tagged = self.tagged && pass == InlinePass::Content && draws(&OwnContent::of(node));
+    let tagged = self.tagged && pass == InlinePass::Content && draws(content);
 
     if tagged {
       self.start_node_region(node, Some(&paint.path), surface);
     }
-    self.emit_own_content(node, paint.node_id, frame, pass, surface)?;
+    self.emit_own_content(node, content, paint.node_id, frame, pass, surface)?;
     if tagged {
       surface.end_tagged();
     }
@@ -647,7 +655,7 @@ impl Emitter<'_> {
   /// Builds the soft mask for `mask-image`, drawing its layers into their own stream.
   fn mask(&mut self, node: &RenderNode, frame: BoxFrame, surface: &mut Surface) -> Option<Mask> {
     let size = frame.layout.size;
-    let images = node.context.style.mask_image.as_deref()?;
+    let images = node.context.style.misc2_data.mask_image.as_deref()?;
 
     if !images.iter().any(BackgroundImage::paints) {
       return None;
@@ -752,12 +760,13 @@ impl Emitter<'_> {
   fn emit_own_content(
     &mut self,
     node: &RenderNode,
+    content: &OwnContent<'_>,
     node_id: NodeId,
     frame: BoxFrame,
     pass: InlinePass,
     surface: &mut Surface,
   ) -> Result<(), PdfError> {
-    match OwnContent::of(node) {
+    match *content {
       OwnContent::Inline(_) => self.emit_node_text(node, node_id, frame, pass, surface),
       #[cfg(feature = "images")]
       OwnContent::Image(image) if pass == InlinePass::Content => {
@@ -906,9 +915,9 @@ impl Emitter<'_> {
       node,
       node_id,
       frame.layout,
-      |built, runs, font_style| match pass {
-        InlinePass::Content => self.draw_runs(node, runs, built, frame, font_style, surface),
-        InlinePass::Floats => self.emit_inline_boxes(node, runs, built, frame, pass, surface),
+      |painted, font_style| match pass {
+        InlinePass::Content => self.draw_runs(node, painted, frame, font_style, surface),
+        InlinePass::Floats => self.emit_inline_boxes(node, painted, frame, pass, surface),
       },
     )?;
     Ok(())
@@ -916,39 +925,35 @@ impl Emitter<'_> {
 
   /// Paints the runs on the lines this page owns through takumi-core's text painter, then the
   /// inline boxes.
-  #[allow(clippy::too_many_arguments)]
   fn draw_runs(
     &mut self,
     node: &RenderNode,
-    runs: &InlineRunLayout,
-    built: &BuiltInlineLayout<'_>,
+    painted: &PaintedInline<'_>,
     frame: BoxFrame,
     font_style: &SizedFontStyle,
     surface: &mut Surface,
   ) {
     let y = frame.origin.y;
-    let lines = runs.lines(frame.layout, |item| {
+    let lines = painted.runs.lines(frame.layout, |item| {
       self.window.shows_line_item(item.below(y))
     });
     let mut device = TextDevice {
       emitter: self,
       device: self.device(surface, false),
-      built: Some(built),
+      text: Some(painted.text()),
       shadow: None,
       through: None,
     };
 
-    lines.paint(&built.spans, font_style, frame, &mut device);
-    self.emit_inline_boxes(node, runs, built, frame, InlinePass::Content, surface);
+    lines.paint(&painted.spans, font_style, frame, &mut device);
+    self.emit_inline_boxes(node, painted, frame, InlinePass::Content, surface);
   }
 
   /// Paints the inline layout's replaced boxes and nested container subtrees.
-  #[allow(clippy::too_many_arguments)]
   fn emit_inline_boxes(
     &mut self,
     owner: &RenderNode,
-    runs: &InlineRunLayout,
-    built: &BuiltInlineLayout<'_>,
+    painted: &PaintedInline<'_>,
     frame: BoxFrame,
     pass: InlinePass,
     surface: &mut Surface,
@@ -963,12 +968,13 @@ impl Emitter<'_> {
     // region of its own, and hands it back.
     let owner_tagged = self.tagged && pass == InlinePass::Content && draws(&OwnContent::of(owner));
 
-    for positioned in runs
+    for positioned in painted
+      .runs
       .inline_boxes
       .iter()
       .filter(|positioned| pass.paints(positioned))
     {
-      let Some(ProcessedInlineSpan::Box(item)) = built.spans.get(positioned.id as usize) else {
+      let Some(ProcessedInlineSpan::Box(item)) = painted.spans.get(positioned.id as usize) else {
         continue;
       };
       let node = item.render_node;
@@ -998,7 +1004,7 @@ impl Emitter<'_> {
       // The box never reaches `emit_box`, so the state that would paint it
       // there is applied here: its own opacity, and its `filter` composed onto
       // the one the enclosing stacking contexts left.
-      let opacity = node.context.style.opacity.0;
+      let opacity = node.context.style.svg_data.opacity.0;
       let faded = opacity < 1.0;
       // A container box runs its own emitter, which tags every node it walks.
       // A replaced one paints here. Its decorations are artifacts and marked
@@ -1028,7 +1034,10 @@ impl Emitter<'_> {
         surface.push_opacity(normalized(opacity));
       }
       let outer_filter = self.color_filter.clone();
-      self.color_filter = self.composed_filter(outer_filter.as_deref(), &node.context.style.filter);
+      self.color_filter = self.composed_filter(
+        outer_filter.as_deref(),
+        &node.context.style.misc1_data.filter,
+      );
 
       let origin = frame.origin + offset;
 
@@ -1111,6 +1120,7 @@ impl Emitter<'_> {
       scene: &scene,
       document: self.document,
       inline: None,
+      chunks: None,
       window: self.window.within(at),
       tagged,
       tag_prefix,
@@ -1170,12 +1180,12 @@ impl Emitter<'_> {
     let mut length = owner_path.len();
 
     for (depth, index) in owner_path.iter().enumerate() {
-      if current.context.style.display == Display::ListItem {
+      if current.context.style.base_data.display == Display::ListItem {
         length = depth;
       }
       current = current.children.as_deref()?.get(*index)?;
     }
-    if current.context.style.display == Display::ListItem {
+    if current.context.style.base_data.display == Display::ListItem {
       length = owner_path.len();
     }
 
@@ -1284,12 +1294,12 @@ impl Emitter<'_> {
     fills
   }
 
-  /// A run this page draws at `(x, y)`, its text from `built` when given, or `None` when it has
+  /// A run this page draws at `(x, y)`, its text from `text` when given, or `None` when it has
   /// no glyphs, no font, or this page does not show it in its block at `line_y`.
   fn glyph_run<'r>(
     &self,
     run: &PositionedInlineRun,
-    built: Option<&'r BuiltInlineLayout<'_>>,
+    text: Option<&'r str>,
     frame: BoxFrame,
     line_y: f32,
   ) -> Option<GlyphRun<'r>> {
@@ -1310,8 +1320,8 @@ impl Emitter<'_> {
     if !self.window.shows_line_item(item) {
       return None;
     }
-    let text = built
-      .and_then(|built| built.text.get(shaped.text_range.clone()))
+    let text = text
+      .and_then(|text| text.get(shaped.text_range.clone()))
       .unwrap_or_default();
     let glyphs = run_glyphs(
       shaped,
@@ -1402,9 +1412,13 @@ struct ChunkWriter<'w, 'a, 's> {
 impl<'a> ChunkWriter<'_, 'a, '_> {
   /// The box `paint` names and where it sits relative to the pushed transforms, pushing a
   /// transform when it needs more than a translation. Returns how many states went on.
-  fn place(&mut self, paint: &NodePaint) -> Option<(&'a RenderNode, BoxFrame, usize)> {
+  fn place(
+    &mut self,
+    node: Option<&'a RenderNode>,
+    paint: &NodePaint,
+  ) -> Option<(&'a RenderNode, BoxFrame, usize)> {
     let scene = self.emitter.scene;
-    let node = scene.root.node_at_path(&paint.path)?;
+    let node = node?;
     let layout = scene.results.layout(paint.node_id).ok()?;
     let relative = self.current.invert().unwrap_or(Affine::IDENTITY) * paint.transform;
 
@@ -1424,14 +1438,16 @@ impl<'a> ChunkWriter<'_, 'a, '_> {
   }
 
   /// Writes one chunk under the states already pushed.
-  fn emit(&mut self, chunk: &PaintChunk<'a>) {
+  fn emit(&mut self, resolved: &ResolvedChunk<'a>) {
+    let chunk = &resolved.chunk;
+
     // Skipping a chunk that paints outside the window only saves work; the page's own clip would
     // drop it anyway.
     if self.error.is_some() || self.emitter.window.excludes_bounds(chunk.node.paint_bounds) {
       return;
     }
 
-    let Some((node, frame, pushed)) = self.place(chunk.node) else {
+    let Some((node, frame, pushed)) = self.place(resolved.node, chunk.node) else {
       return;
     };
     let emitter = &mut *self.emitter;
@@ -1447,12 +1463,22 @@ impl<'a> ChunkWriter<'_, 'a, '_> {
           })
           .map_err(PdfError::from)
       }
-      ChunkPart::Content => {
-        emitter.emit_tagged_content(node, chunk.node, frame, InlinePass::Content, surface)
-      }
-      ChunkPart::Floats => {
-        emitter.emit_tagged_content(node, chunk.node, frame, InlinePass::Floats, surface)
-      }
+      ChunkPart::Content => emitter.emit_tagged_content(
+        node,
+        &resolved.content,
+        chunk.node,
+        frame,
+        InlinePass::Content,
+        surface,
+      ),
+      ChunkPart::Floats => emitter.emit_tagged_content(
+        node,
+        &resolved.content,
+        chunk.node,
+        frame,
+        InlinePass::Floats,
+        surface,
+      ),
       ChunkPart::Outline => {
         let outline = BoxPainter::new(&node.context, decoration_frame.layout)
           .pending_outline(decoration_frame.origin);
@@ -1560,7 +1586,7 @@ impl PropertySink for ChunkWriter<'_, '_, '_> {
 
       pushed += push_compositing(style, self.surface);
 
-      if let Some((_, frame, transformed)) = self.place(owner) {
+      if let Some((_, frame, transformed)) = self.place(Some(node), owner) {
         if transformed > 0 {
           self.current = owner.transform;
         }
@@ -1569,7 +1595,7 @@ impl PropertySink for ChunkWriter<'_, '_, '_> {
 
       self.emitter.color_filter = self
         .emitter
-        .composed_filter(color_filter.as_deref(), &style.filter);
+        .composed_filter(color_filter.as_deref(), &style.misc1_data.filter);
     }
 
     self.enter(pushed, current, window, color_filter);
@@ -1596,15 +1622,15 @@ fn vertical_extent(shape: &FillShape) -> Option<(f32, f32)> {
 fn push_compositing(style: &ComputedStyle, surface: &mut Surface) -> usize {
   let mut pushed = 0;
 
-  if style.mix_blend_mode != BlendMode::Normal {
-    surface.push_blend_mode(krilla_blend(style.mix_blend_mode));
+  if style.misc_data.mix_blend_mode != BlendMode::Normal {
+    surface.push_blend_mode(krilla_blend(style.misc_data.mix_blend_mode));
     pushed += 1;
   }
-  if style.isolation == Isolation::Isolate {
+  if style.misc_data.isolation == Isolation::Isolate {
     surface.push_isolated();
     pushed += 1;
   }
-  let opacity = style.opacity.0;
+  let opacity = style.svg_data.opacity.0;
 
   if opacity < 1.0 {
     surface.push_opacity(normalized(opacity));
@@ -2002,11 +2028,11 @@ struct GlyphBackground {
 ///
 /// Approximate: a blurred `text-shadow` fades through the stepped bands of [`Band`], since PDF has
 /// no blur operator.
-struct TextDevice<'e, 's, 'a> {
-  emitter: &'e Emitter<'e>,
+struct TextDevice<'e, 'x, 's, 'a> {
+  emitter: &'e Emitter<'x>,
   device: SurfaceDevice<'s, 'a>,
-  /// The inline layout whose text the glyphs carry, unless they only draw a mask.
-  built: Option<&'e BuiltInlineLayout<'e>>,
+  /// The text the glyphs carry, unless they only draw a mask.
+  text: Option<&'e str>,
   /// The shadow every draw becomes while one is open.
   shadow: Option<SizedShadow>,
   /// While a `background-clip: text` mask draws, the fills each of its shapes and glyphs shows
@@ -2014,7 +2040,7 @@ struct TextDevice<'e, 's, 'a> {
   through: Option<Rc<[GlyphBackground]>>,
 }
 
-impl TextDevice<'_, '_, '_> {
+impl TextDevice<'_, '_, '_, '_> {
   /// `color` and `transform`, or the open shadow's colour and `transform` moved by its offset.
   /// Runs `draw` once in `color` with no spread, or while a blurred shadow is open, once per shadow
   /// [`Band`] with the stroke width that spreads it, inside a group of the band's opacity. The
@@ -2085,7 +2111,7 @@ impl TextDevice<'_, '_, '_> {
   }
 }
 
-impl PaintDevice for TextDevice<'_, '_, '_> {
+impl PaintDevice for TextDevice<'_, '_, '_, '_> {
   fn with_border_mask(
     &mut self,
     border: &BorderProperties,
@@ -2196,7 +2222,7 @@ impl PaintDevice for TextDevice<'_, '_, '_> {
   }
 }
 
-impl GlyphDevice for TextDevice<'_, '_, '_> {
+impl GlyphDevice for TextDevice<'_, '_, '_, '_> {
   fn fill_background_layers(
     &mut self,
     background: &StripBackground<'_>,
@@ -2261,7 +2287,7 @@ impl GlyphDevice for TextDevice<'_, '_, '_> {
   }
 }
 
-impl TextDevice<'_, '_, '_> {
+impl TextDevice<'_, '_, '_, '_> {
   /// Paints `fills` seen through `run`'s glyphs in the block at `frame`, then the glyphs themselves
   /// `with_paint`, or their shadow while one is open.
   fn paint_glyph_run(
@@ -2286,7 +2312,7 @@ impl TextDevice<'_, '_, '_> {
       owned,
     }) = self
       .emitter
-      .glyph_run(run, self.built, shifted, frame.origin.y)
+      .glyph_run(run, self.text, shifted, frame.origin.y)
     else {
       return;
     };

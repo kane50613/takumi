@@ -64,7 +64,7 @@ serde_json.workspace = true
 
 [dev-dependencies.image]
 workspace = true
-features = ["png", "webp"]
+features = ["jpeg", "png", "webp"]
 
 [dev-dependencies.takumi]
 path = "."

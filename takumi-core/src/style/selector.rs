@@ -3,7 +3,7 @@ use std::{
   fmt::{self, Write},
   mem::take,
   ops::Deref,
-  sync::LazyLock,
+  sync::{Arc, LazyLock},
 };
 
 use cssparser::*;
@@ -17,6 +17,7 @@ pub use crate::style::media_query::MediaQueryList;
 use crate::{
   error::{StyleSheetParseError, StyleSheetParseErrorKind},
   keyframes::parse_keyframe_prelude,
+  matching::RuleIndex,
   style::{
     BreakpointOverrides, FromCssStr, KeyframeRule, KeyframesRule, Length, StyleDeclaration,
     StyleDeclarationBlock, expand_apply, supports::parse_supports_condition,
@@ -1230,8 +1231,10 @@ impl<'i> AtRuleParser<'i> for RuleParser {
 /// Defines a stylesheet with rules, keyframes, and property rules.
 #[derive(Debug, Clone, Default)]
 pub struct StyleSheet {
-  /// Style rules in source order.
-  pub(crate) rules: Vec<CssRule>,
+  /// Style rules in source order, shared by clones.
+  rules: Arc<[CssRule]>,
+  /// Index over `rules`, built with them; `rules` never changes afterwards.
+  rule_index: Arc<RuleIndex>,
   /// `@keyframes` rules.
   pub(crate) keyframes: Vec<KeyframesRule>,
   /// `@property` rules.
@@ -1353,6 +1356,16 @@ const PREFLIGHT_CSS: &str = r"
 ";
 
 impl StyleSheet {
+  /// Style rules in source order.
+  pub(crate) fn rules(&self) -> &[CssRule] {
+    &self.rules
+  }
+
+  /// The index over [`Self::rules`].
+  pub(crate) fn rule_index(&self) -> &RuleIndex {
+    &self.rule_index
+  }
+
   /// The `@property` registrations declared by this stylesheet.
   pub(crate) fn property_rules(&self) -> &[PropertyRule] {
     &self.property_rules
@@ -1440,10 +1453,10 @@ impl StyleSheet {
     } = fragment;
 
     if preflight {
-      static PREFLIGHT_RULES: LazyLock<Vec<CssRule>> =
+      static PREFLIGHT_RULES: LazyLock<Arc<[CssRule]>> =
         LazyLock::new(|| StyleSheet::parse_loosy(PREFLIGHT_CSS).rules);
 
-      let mut preflight_rules = PREFLIGHT_RULES.clone();
+      let mut preflight_rules = PREFLIGHT_RULES.to_vec();
       declared_layers.splice(
         0..0,
         preflight_rules.iter().filter_map(|rule| rule.layer.clone()),
@@ -1474,7 +1487,8 @@ impl StyleSheet {
 
     Ok(Self {
       breakpoints: collect_breakpoints(&rules),
-      rules,
+      rule_index: Arc::new(RuleIndex::build(&rules)),
+      rules: rules.into(),
       keyframes,
       property_rules,
       layer_count: layer_order.len(),
@@ -1563,7 +1577,9 @@ mod tests {
     assert_eq!(sheet.rules.len(), 1);
     assert_eq!(selector_text(&sheet.rules[0]), ".card");
     assert_eq!(
-      computed_style_from_declarations(&sheet.rules[0].normal_declarations).width,
+      computed_style_from_declarations(&sheet.rules[0].normal_declarations)
+        .box_data
+        .width,
       Length::Px(100.0).into()
     );
   }
@@ -1582,7 +1598,9 @@ mod tests {
 
     assert_eq!(rule.selectors.slice().len(), 1);
     assert_eq!(
-      computed_style_from_declarations(&rule.normal_declarations).width,
+      computed_style_from_declarations(&rule.normal_declarations)
+        .box_data
+        .width,
       Length::Px(100.0).into()
     );
   }
@@ -1616,11 +1634,15 @@ mod tests {
 
     assert_eq!(sheet.rules.len(), 2);
     assert_eq!(
-      computed_style_from_declarations(&sheet.rules[0].normal_declarations).width,
+      computed_style_from_declarations(&sheet.rules[0].normal_declarations)
+        .box_data
+        .width,
       Length::Px(10.0).into()
     );
     assert_eq!(
-      computed_style_from_declarations(&sheet.rules[1].normal_declarations).height,
+      computed_style_from_declarations(&sheet.rules[1].normal_declarations)
+        .box_data
+        .height,
       Length::Px(20.0).into()
     );
   }
@@ -1636,7 +1658,9 @@ mod tests {
     assert_eq!(sheet.rules.len(), 1);
     assert_eq!(sheet.rules[0].selectors.slice().len(), 2);
     assert_eq!(
-      computed_style_from_declarations(&sheet.rules[0].normal_declarations).width,
+      computed_style_from_declarations(&sheet.rules[0].normal_declarations)
+        .box_data
+        .width,
       Length::Px(12.0).into()
     );
   }
@@ -1653,7 +1677,9 @@ mod tests {
     assert_eq!(selector_text(&sheet.rules[0]), "*");
     assert_eq!(sheet.rules[0].selectors.slice().len(), 1);
     assert_eq!(
-      computed_style_from_declarations(&sheet.rules[0].normal_declarations).width,
+      computed_style_from_declarations(&sheet.rules[0].normal_declarations)
+        .box_data
+        .width,
       Length::Px(100.0).into()
     );
   }
@@ -1668,11 +1694,15 @@ mod tests {
 
     let rule = &sheet.rules[0];
     assert_eq!(
-      computed_style_from_declarations(&rule.important_declarations).width,
+      computed_style_from_declarations(&rule.important_declarations)
+        .box_data
+        .width,
       Length::Px(10.0).into()
     );
     assert_eq!(
-      computed_style_from_declarations(&rule.normal_declarations).height,
+      computed_style_from_declarations(&rule.normal_declarations)
+        .box_data
+        .height,
       Length::Px(20.0).into()
     );
   }
@@ -1719,7 +1749,7 @@ mod tests {
 
     let style = computed_style_from_declarations(&sheet.rules[0].normal_declarations);
     assert_eq!(
-      style.webkit_text_fill_color,
+      style.misc_inherited1_data.webkit_text_fill_color,
       Some(ColorInput::Value(Color([255, 0, 0, 255])))
     );
   }
@@ -1733,8 +1763,8 @@ mod tests {
     );
 
     let style = computed_style_from_declarations(&sheet.rules[0].normal_declarations);
-    assert_eq!(style.width, Length::Px(14.0).into());
-    assert_eq!(style.height, Length::Px(6.0).into());
+    assert_eq!(style.box_data.width, Length::Px(14.0).into());
+    assert_eq!(style.box_data.height, Length::Px(6.0).into());
   }
 
   #[test]
@@ -2250,7 +2280,9 @@ mod tests {
     assert_eq!(sheet.rules.len(), 1);
     assert_eq!(selector_text(&sheet.rules[0]), ".card");
     assert_eq!(
-      computed_style_from_declarations(&sheet.rules[0].normal_declarations).width,
+      computed_style_from_declarations(&sheet.rules[0].normal_declarations)
+        .box_data
+        .width,
       Length::Px(100.0).into()
     );
   }
@@ -2289,7 +2321,9 @@ mod tests {
     assert_eq!(sheet.rules.len(), 1);
     assert_eq!(selector_text(&sheet.rules[0]), ".valid");
     assert_eq!(
-      computed_style_from_declarations(&sheet.rules[0].normal_declarations).height,
+      computed_style_from_declarations(&sheet.rules[0].normal_declarations)
+        .box_data
+        .height,
       Length::Px(20.0).into()
     );
   }
@@ -2467,7 +2501,9 @@ mod tests {
       assert_eq!(sheet.rules.len(), 1);
       assert_eq!(selector_text(&sheet.rules[0]), ".card");
       assert_eq!(
-        computed_style_from_declarations(&sheet.rules[0].normal_declarations).width,
+        computed_style_from_declarations(&sheet.rules[0].normal_declarations)
+          .box_data
+          .width,
         Length::Px(100.0).into()
       );
     }
@@ -2525,7 +2561,9 @@ mod tests {
     );
     assert_eq!(sheet.rules[0].layer_order, Some(3));
     assert_eq!(
-      computed_style_from_declarations(&sheet.rules[0].normal_declarations).width,
+      computed_style_from_declarations(&sheet.rules[0].normal_declarations)
+        .box_data
+        .width,
       Length::Px(100.0).into()
     );
   }
@@ -2552,7 +2590,9 @@ mod tests {
       ])
     );
     assert_eq!(
-      computed_style_from_declarations(&sheet.rules[0].normal_declarations).width,
+      computed_style_from_declarations(&sheet.rules[0].normal_declarations)
+        .box_data
+        .width,
       Length::Px(100.0).into()
     );
   }
@@ -2582,11 +2622,15 @@ mod tests {
       Some(&vec![LayerName::Named("theme".to_owned())])
     );
     assert_eq!(
-      computed_style_from_declarations(&sheet.rules[0].normal_declarations).width,
+      computed_style_from_declarations(&sheet.rules[0].normal_declarations)
+        .box_data
+        .width,
       Length::Px(100.0).into()
     );
     assert_eq!(
-      computed_style_from_declarations(&sheet.rules[1].normal_declarations).height,
+      computed_style_from_declarations(&sheet.rules[1].normal_declarations)
+        .box_data
+        .height,
       Length::Px(20.0).into()
     );
   }
@@ -2653,7 +2697,9 @@ mod tests {
     assert_eq!(selector_text(&sheet.rules[0]), ".valid");
     assert_eq!(sheet.rules[0].layer, None);
     assert_eq!(
-      computed_style_from_declarations(&sheet.rules[0].normal_declarations).height,
+      computed_style_from_declarations(&sheet.rules[0].normal_declarations)
+        .box_data
+        .height,
       Length::Px(20.0).into()
     );
   }
@@ -2673,13 +2719,17 @@ mod tests {
     assert_eq!(sheet.rules.len(), 3);
     assert_eq!(selector_text(&sheet.rules[0]), ".card");
     assert_eq!(
-      computed_style_from_declarations(&sheet.rules[0].normal_declarations).width,
+      computed_style_from_declarations(&sheet.rules[0].normal_declarations)
+        .box_data
+        .width,
       Length::Px(100.0).into()
     );
     assert_eq!(selector_text(&sheet.rules[1]), ":is(.card) .title");
     assert_eq!(selector_text(&sheet.rules[2]), ".card");
     assert_eq!(
-      computed_style_from_declarations(&sheet.rules[2].normal_declarations).height,
+      computed_style_from_declarations(&sheet.rules[2].normal_declarations)
+        .box_data
+        .height,
       Length::Px(20.0).into()
     );
   }
@@ -2702,8 +2752,8 @@ mod tests {
     assert_eq!(selector_text(&sheet.rules[0]), ".card");
 
     let computed = computed_style_from_declarations(&sheet.rules[0].normal_declarations);
-    assert_eq!(computed.width, Length::Px(100.0).into());
-    assert_eq!(computed.height, Length::Auto.into());
+    assert_eq!(computed.box_data.width, Length::Px(100.0).into());
+    assert_eq!(computed.box_data.height, Length::Auto.into());
   }
 
   #[test]
@@ -2724,7 +2774,9 @@ mod tests {
     assert_eq!(sheet.keyframes.len(), 0);
     assert_eq!(selector_text(&sheet.rules[0]), ".card");
     assert_eq!(
-      computed_style_from_declarations(&sheet.rules[0].normal_declarations).width,
+      computed_style_from_declarations(&sheet.rules[0].normal_declarations)
+        .box_data
+        .width,
       Length::Px(100.0).into()
     );
   }
@@ -2748,7 +2800,9 @@ mod tests {
     assert!(sheet.property_rules.is_empty());
     assert_eq!(selector_text(&sheet.rules[0]), ".card");
     assert_eq!(
-      computed_style_from_declarations(&sheet.rules[0].normal_declarations).width,
+      computed_style_from_declarations(&sheet.rules[0].normal_declarations)
+        .box_data
+        .width,
       Length::Px(100.0).into()
     );
   }
@@ -2780,7 +2834,9 @@ mod tests {
       let sheet = parse_stylesheet(css);
       assert_eq!(sheet.rules.len(), 1, "{css}");
       assert_eq!(
-        computed_style_from_declarations(&sheet.rules[0].normal_declarations).width,
+        computed_style_from_declarations(&sheet.rules[0].normal_declarations)
+          .box_data
+          .width,
         Length::Px(100.0).into(),
         "{css}"
       );
@@ -2902,11 +2958,13 @@ mod tests {
     let sheet = parse_stylesheet(".card { width: 100px; @apply mt-4; height: 50px; }");
 
     assert_eq!(sheet.rules.len(), 3);
-    for rule in &sheet.rules {
+    for rule in sheet.rules() {
       assert_eq!(selector_text(rule), ".card");
     }
     assert_eq!(
-      computed_style_from_declarations(&sheet.rules[1].normal_declarations).margin_top,
+      computed_style_from_declarations(&sheet.rules[1].normal_declarations)
+        .box_data
+        .margin_top,
       Length::Rem(1.0)
     );
   }
@@ -2917,8 +2975,8 @@ mod tests {
 
     assert_eq!(sheet.rules.len(), 1);
     let computed = computed_style_from_declarations(&sheet.rules[0].normal_declarations);
-    assert_eq!(computed.margin_top, Length::Rem(1.0));
-    assert_eq!(computed.padding_top, Length::Rem(0.5));
+    assert_eq!(computed.box_data.margin_top, Length::Rem(1.0));
+    assert_eq!(computed.box_data.padding_top, Length::Rem(0.5));
   }
 
   #[test]

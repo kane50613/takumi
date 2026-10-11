@@ -1,34 +1,35 @@
-//! Inline layout prepared once per render and shared by atom collection and page emission.
+//! Text boxes' inline layout, read from the fragment items layout left on each
+//! box: atom collection reads their line boxes, and page emission keeps a box's
+//! resolved runs while consecutive pages show it.
 
-use std::collections::HashMap;
+use std::{cell::RefCell, collections::HashMap, mem::replace, rc::Rc};
 
 use takumi_core::{
-  context::RenderContext,
   font_style::SizedFontStyle,
   geometry::{ComputedLayout as Layout, NodeId},
   layout::{
-    inline::{
-      BuiltInlineLayout, InlineItem, InlineLayoutMode, InlineLayoutRequest, InlineRunLayout,
-      create_inline_layout,
-    },
+    inline::{FragmentItems, VisualInlineBox},
     tree::RenderNode,
   },
-  painter::OwnContent,
+  painter::{OwnContent, PaintedInline},
   scene::NodePaint,
 };
 
 use crate::{options::PdfError, pagination::Atom, tree::PreparedTree};
 
-/// A text box's inline layout, built once per render and reused by atom
-/// collection and every page's emission.
-pub(crate) struct PreparedInline<'c> {
-  built: BuiltInlineLayout<'c>,
-  runs: InlineRunLayout<'c>,
+/// A text box's resolved runs, kept for the pages that show it.
+struct PreparedInline<'c> {
+  painted: PaintedInline<'c>,
   font_style: &'c SizedFontStyle<'c>,
 }
 
-/// Inline layouts keyed by the box's layout [`NodeId`].
-pub(crate) type InlineMap<'c> = HashMap<NodeId, PreparedInline<'c>>;
+/// The text boxes' resolved runs, resolved on first use and dropped once a page
+/// goes by without using them.
+pub(crate) struct InlineCache<'c> {
+  boxes: HashMap<NodeId, &'c TextBox<'c>>,
+  /// Each built layout, and whether the page being emitted used it.
+  built: RefCell<HashMap<NodeId, (Rc<PreparedInline<'c>>, bool)>>,
+}
 
 /// A text-bearing box of a prepared tree, with the resolved font style its
 /// inline layout borrows.
@@ -65,116 +66,111 @@ impl<'t> TextBox<'t> {
   }
 }
 
-/// Builds every text box's inline layout once. Entries borrow the boxes'
-/// font styles, so the map lives no longer than `boxes`.
-pub(crate) fn build_inline_map<'c>(boxes: &'c [TextBox<'c>]) -> Result<InlineMap<'c>, PdfError> {
-  let mut map = InlineMap::new();
-
-  for text_box in boxes {
-    let Some(items) = OwnContent::of(text_box.node).inline_items(&text_box.font_style) else {
-      continue;
-    };
-
-    let (built, runs) = build_inline_runs(
-      items,
-      &text_box.font_style,
-      &text_box.node.context,
-      text_box.layout,
-    )?;
-
-    map.insert(
-      text_box.node_id,
-      PreparedInline {
-        built,
-        runs,
-        font_style: &text_box.font_style,
-      },
-    );
+impl<'c> InlineCache<'c> {
+  pub(crate) fn new(boxes: &'c [TextBox<'c>]) -> Self {
+    Self {
+      boxes: boxes
+        .iter()
+        .map(|text_box| (text_box.node_id, text_box))
+        .collect(),
+      built: RefCell::default(),
+    }
   }
-  Ok(map)
+
+  /// The layout of the text box at `node_id`, built now if no page kept it.
+  fn get(&self, node_id: NodeId) -> Result<Option<Rc<PreparedInline<'c>>>, PdfError> {
+    if let Some((prepared, used)) = self.built.borrow_mut().get_mut(&node_id) {
+      *used = true;
+      return Ok(Some(Rc::clone(prepared)));
+    }
+    let Some(text_box) = self.boxes.get(&node_id) else {
+      return Ok(None);
+    };
+    let Some(painted) =
+      OwnContent::of(text_box.node).lay_out_inline(&text_box.font_style, text_box.layout)
+    else {
+      return Ok(None);
+    };
+    let prepared = Rc::new(PreparedInline {
+      painted: painted.map_err(PdfError::Font)?,
+      font_style: &text_box.font_style,
+    });
+
+    self
+      .built
+      .borrow_mut()
+      .insert(node_id, (Rc::clone(&prepared), true));
+    Ok(Some(prepared))
+  }
+
+  /// Drops the layouts the page just emitted did not use.
+  pub(crate) fn end_page(&self) {
+    self
+      .built
+      .borrow_mut()
+      .retain(|_, (_, used)| replace(used, false));
+  }
 }
 
-/// Visits a text box's inline layout: the one `map` prepared, or one laid out
+/// Visits a text box's inline layout: the one `cache` holds, or one laid out
 /// now. `None` when the box lays out no runs.
 pub(crate) fn visit_inline_layout<R>(
-  map: Option<&InlineMap<'_>>,
+  cache: Option<&InlineCache<'_>>,
   node: &RenderNode,
   node_id: NodeId,
   layout: Layout,
-  visit: impl FnOnce(&BuiltInlineLayout<'_>, &InlineRunLayout, &SizedFontStyle<'_>) -> R,
+  visit: impl FnOnce(&PaintedInline<'_>, &SizedFontStyle<'_>) -> R,
 ) -> Result<Option<R>, PdfError> {
-  if let Some(prepared) = map.and_then(|map| map.get(&node_id)) {
-    return Ok(Some(visit(
-      &prepared.built,
-      &prepared.runs,
-      prepared.font_style,
-    )));
+  if let Some(prepared) = cache.map(|cache| cache.get(node_id)).transpose()?.flatten() {
+    return Ok(Some(visit(&prepared.painted, prepared.font_style)));
   }
   let font_style = SizedFontStyle::from_style(&node.context.style, &node.context);
-  let Some(items) = OwnContent::of(node).inline_items(&font_style) else {
-    return Ok(None);
-  };
-  let (built, runs) = build_inline_runs(items, &font_style, &node.context, layout)?;
 
-  Ok(Some(visit(&built, &runs, &font_style)))
+  OwnContent::of(node)
+    .lay_out_inline(&font_style, layout)
+    .map(|painted| Ok(visit(&painted.map_err(PdfError::Font)?, &font_style)))
+    .transpose()
 }
 
-/// One atom per text line: each run's ascent-to-descent band.
+/// A text box's fragment items, without resolving its glyphs, which only painting needs. `None`
+/// when the box lays out no runs.
+pub(crate) fn fragment_items(node: &RenderNode, layout: Layout) -> Option<Rc<FragmentItems>> {
+  let font_style = SizedFontStyle::from_style(&node.context.style, &node.context);
+
+  OwnContent::of(node).fragment_items(&font_style, layout)
+}
+
+/// One atom per line box: the lines stack edge to edge, so a cut between two
+/// of them straddles neither.
 pub(crate) fn text_line_atoms(
-  runs: &InlineRunLayout,
+  items: &FragmentItems,
   layout: Layout,
   y: f32,
   atoms: &mut Vec<Atom>,
 ) {
-  for run in &runs.runs {
-    let shaped = &run.glyph_run;
-    let Some(glyph) = shaped.glyphs.first() else {
-      continue;
-    };
-    let offset = run.glyph_offset(layout);
-    let baseline = y + offset.y + glyph.y;
+  let content_y = y + layout.content_box_offset().y;
 
-    atoms.push((
-      baseline - shaped.metrics.ascent,
-      baseline + shaped.metrics.descent,
-    ));
-  }
+  atoms.extend(
+    items
+      .line_boxes()
+      .iter()
+      .map(|(top, bottom)| (content_y + top, content_y + bottom)),
+  );
 }
 
 /// Atomic vertical bands occupied by inline boxes: in-flow ones and floats
 /// alike, so a page cut slices through neither.
 pub(crate) fn inline_box_atoms(
-  runs: &InlineRunLayout,
+  inline_boxes: &[VisualInlineBox],
   layout: Layout,
   y: f32,
   atoms: &mut Vec<Atom>,
 ) {
   let content_y = layout.content_box_offset().y;
 
-  for inline_box in &runs.inline_boxes {
+  for inline_box in inline_boxes {
     let top = y + content_y + inline_box.y;
 
     atoms.push((top, top + inline_box.height));
   }
-}
-
-/// Runs inline layout and resolves the paintable run set.
-fn build_inline_runs<'c>(
-  items: Vec<InlineItem<'c>>,
-  font_style: &'c SizedFontStyle<'c>,
-  context: &'c RenderContext,
-  layout: Layout,
-) -> Result<(BuiltInlineLayout<'c>, InlineRunLayout<'c>), PdfError> {
-  let built = create_inline_layout(InlineLayoutRequest::in_content_box(
-    items,
-    layout.content_box_size(),
-    font_style,
-    context,
-    InlineLayoutMode::Draw,
-  ));
-  let runs = built
-    .resolve_runs(context, layout)
-    .map_err(PdfError::Font)?;
-
-  Ok((built, runs))
 }

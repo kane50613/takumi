@@ -69,3 +69,5 @@ For WebAssembly runtimes (Cloudflare Workers, browsers, edge), use [@takumi-rs/w
 ## License
 
 MIT or Apache-2.0
+
+Bundled third-party code is listed in the [third-party notices](https://github.com/kane50613/takumi/blob/master/THIRD-PARTY-NOTICES.md).

@@ -1,10 +1,10 @@
 //! Unsplittable vertical extents, paragraphs and content boxes collected from
 //! the laid-out scene, which pagination cuts around.
 
-use std::ops::Range;
+use std::{mem::take, ops::Range};
 
 use takumi_core::{
-  geometry::{ComputedLayout as Layout, NodeId},
+  geometry::ComputedLayout as Layout,
   layout::tree::RenderNode,
   painter::{BoxPainter, OwnContent},
   scene::{NodePaint, PaintItemKind, Scene},
@@ -12,7 +12,7 @@ use takumi_core::{
 };
 
 use crate::{
-  inline::{InlineMap, inline_box_atoms, text_line_atoms, visit_inline_layout},
+  inline::{fragment_items, inline_box_atoms, text_line_atoms},
   options::PdfError,
   pagination::{Atom, Paragraph},
 };
@@ -29,14 +29,59 @@ pub(crate) struct Atoms {
   pub(crate) content: Vec<Atom>,
   /// Text boxes with their `widows` / `orphans` minimums.
   pub(crate) paragraphs: Vec<Paragraph>,
+  /// Boxes with block-start or block-end border and padding.
+  pub(crate) decorated: Vec<Decorated>,
+}
+
+/// A box's border-box edges around its content box's, in content coordinates.
+pub(crate) struct Decorated {
+  top: f32,
+  content: Atom,
+  bottom: f32,
 }
 
 impl Atoms {
+  /// Binds each box's block-start border and padding to the first atom inside
+  /// it, and its block-end ones to the last. Blink takes a break before the
+  /// first child as a break before the box, and one before block-end border
+  /// and padding as a last resort (`fragmentation_utils.cc`). Naive: the
+  /// atoms are matched by height alone, so a box can bind one beside it.
+  fn bind_decorations(&mut self) {
+    let mut by_top = self.extents.clone();
+    let mut by_bottom = self.extents.clone();
+
+    by_top.sort_by(|a, b| a.0.total_cmp(&b.0));
+    by_bottom.sort_by(|a, b| a.1.total_cmp(&b.1));
+
+    for decorated in take(&mut self.decorated) {
+      let (content_top, content_bottom) = decorated.content;
+
+      if content_top > decorated.top {
+        let first = by_top.partition_point(|atom| atom.0 < content_top - 0.5);
+
+        if let Some(atom) = by_top.get(first).filter(|atom| atom.0 < content_bottom) {
+          self.extents.push((decorated.top, atom.1));
+        }
+      }
+      if content_bottom < decorated.bottom {
+        let past = by_bottom.partition_point(|atom| atom.1 <= content_bottom + 0.5);
+
+        if let Some(atom) = past
+          .checked_sub(1)
+          .map(|last| by_bottom[last])
+          .filter(|atom| atom.1 > content_top)
+        {
+          self.extents.push((atom.0, decorated.bottom));
+        }
+      }
+    }
+  }
+
   /// Records the box's lines as a [`Paragraph`] for the widow/orphan solver.
   fn push_paragraph(&mut self, node: &RenderNode, lines: Range<usize>) {
     let style = &node.context.style;
-    let before = style.orphans.get();
-    let after = style.widows.get();
+    let before = style.misc_inherited1_data.orphans.get();
+    let after = style.misc_inherited1_data.widows.get();
 
     if lines.len() < 2 || (before <= 1 && after <= 1) {
       return;
@@ -56,7 +101,6 @@ impl Atoms {
 /// instead of painting.
 pub(crate) struct AtomCollector<'a> {
   pub(crate) scene: &'a Scene,
-  pub(crate) inline: Option<&'a InlineMap<'a>>,
 }
 
 impl AtomCollector<'_> {
@@ -64,6 +108,7 @@ impl AtomCollector<'_> {
     let mut atoms = Atoms::default();
 
     self.context_atoms(0, Affine::IDENTITY, &mut atoms)?;
+    atoms.bind_decorations();
     Ok(atoms)
   }
 
@@ -125,14 +170,26 @@ impl AtomCollector<'_> {
     let y = relative.y;
     let extent = (y, y + layout.size.height);
     let style = &node.context.style;
+    let content = (
+      y + layout.border.top + layout.padding.top,
+      extent.1 - layout.border.bottom - layout.padding.bottom,
+    );
 
-    if style.break_before == BreakBetween::Page {
+    if content.0 > y || content.1 < extent.1 {
+      atoms.decorated.push(Decorated {
+        top: y,
+        content,
+        bottom: extent.1,
+      });
+    }
+
+    if style.misc_data.break_before == BreakBetween::Page {
       atoms.forced.push(y);
     }
-    if style.break_after == BreakBetween::Page {
+    if style.misc_data.break_after == BreakBetween::Page {
       atoms.forced.push(y + layout.size.height);
     }
-    if style.break_inside == BreakInside::Avoid {
+    if style.misc_data.break_inside == BreakInside::Avoid {
       atoms.extents.push(extent);
     }
     let mut shows = node
@@ -144,7 +201,7 @@ impl AtomCollector<'_> {
     match OwnContent::of(node) {
       OwnContent::Inline(_) => {
         shows = true;
-        self.text_atoms(node, paint.node_id, layout, y, atoms)?;
+        self.text_atoms(node, layout, y, atoms);
       }
       OwnContent::Image(_) => {
         shows = true;
@@ -158,27 +215,20 @@ impl AtomCollector<'_> {
     Ok(parent)
   }
 
-  /// One atom per text line: the union of each run's ascent-to-descent band.
+  /// One atom per line box.
   /// The lines also form one [`Paragraph`] for the widow/orphan solver.
-  fn text_atoms(
-    &self,
-    node: &RenderNode,
-    node_id: NodeId,
-    layout: Layout,
-    y: f32,
-    atoms: &mut Atoms,
-  ) -> Result<(), PdfError> {
-    visit_inline_layout(self.inline, node, node_id, layout, |_, runs, _| {
-      let start = atoms.extents.len();
+  fn text_atoms(&self, node: &RenderNode, layout: Layout, y: f32, atoms: &mut Atoms) {
+    let Some(items) = fragment_items(node, layout) else {
+      return;
+    };
+    let start = atoms.extents.len();
 
-      text_line_atoms(runs, layout, y, &mut atoms.extents);
-      // Box bands are indivisible but not text lines, so widow/orphan control
-      // does not count them.
-      let paragraph_end = atoms.extents.len();
+    text_line_atoms(&items, layout, y, &mut atoms.extents);
+    // Box bands are indivisible but not text lines, so widow/orphan control
+    // does not count them.
+    let paragraph_end = atoms.extents.len();
 
-      inline_box_atoms(runs, layout, y, &mut atoms.extents);
-      atoms.push_paragraph(node, start..paragraph_end);
-    })?;
-    Ok(())
+    inline_box_atoms(items.inline_boxes(), layout, y, &mut atoms.extents);
+    atoms.push_paragraph(node, start..paragraph_end);
   }
 }

@@ -4,6 +4,9 @@
 //! [`GlyphResolveContext`], memoizing the results per worker thread.
 
 use image::{Rgba, RgbaImage};
+use std::sync::Arc;
+
+use rustc_hash::FxHashMap;
 use skrifa::{
   GlyphId,
   bitmap::{BitmapData, BitmapGlyph, BitmapStrikes, Origin},
@@ -29,6 +32,9 @@ use crate::{
   },
   style::Affine,
 };
+
+/// A run's resolved glyphs by glyph id.
+pub type ResolvedGlyphs = FxHashMap<u32, Arc<ResolvedGlyph>>;
 
 /// A resolved glyph, either an embedded bitmap or a vector outline.
 #[derive(Clone)]

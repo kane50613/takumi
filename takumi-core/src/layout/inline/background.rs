@@ -374,50 +374,52 @@ impl<'c> DecorationAccumulator<'c> {
 
     let style = &decoration.owner.context.style;
     let has_images = style
+      .background_data
       .background_image
       .as_deref()
       .is_some_and(|images| !images.is_empty());
-    let background =
-      (decoration.color.0[3] != 0 || has_images || style.background_clip == BackgroundClip::Text)
-        .then(|| {
-          let side = |has: bool, width: f32| if has { width } else { 0.0 };
-          let padding = Rect {
-            left: side(has_left, decoration.padding.left),
-            right: side(has_right, decoration.padding.right),
-            ..decoration.padding
-          };
-          let fragment = ComputedLayout::new(
-            Point { x, y },
-            Size { width, height },
-            border.width,
-            padding,
-          );
-          let (strip_x, strip) = match style.box_decoration_break {
-            BoxDecorationBreak::Clone => (x, fragment),
-            BoxDecorationBreak::Slice => (
-              match decoration.direction {
-                Direction::Rtl => x + width + strip_offset - strip_width,
-                _ => x - strip_offset,
+    let background = (decoration.color.0[3] != 0
+      || has_images
+      || style.background_data.background_clip == BackgroundClip::Text)
+      .then(|| {
+        let side = |has: bool, width: f32| if has { width } else { 0.0 };
+        let padding = Rect {
+          left: side(has_left, decoration.padding.left),
+          right: side(has_right, decoration.padding.right),
+          ..decoration.padding
+        };
+        let fragment = ComputedLayout::new(
+          Point { x, y },
+          Size { width, height },
+          border.width,
+          padding,
+        );
+        let (strip_x, strip) = match style.box_data.box_decoration_break {
+          BoxDecorationBreak::Clone => (x, fragment),
+          BoxDecorationBreak::Slice => (
+            match decoration.direction {
+              Direction::Rtl => x + width + strip_offset - strip_width,
+              _ => x - strip_offset,
+            },
+            ComputedLayout::new(
+              Point::ZERO,
+              Size {
+                width: strip_width,
+                height,
               },
-              ComputedLayout::new(
-                Point::ZERO,
-                Size {
-                  width: strip_width,
-                  height,
-                },
-                decoration.border.width,
-                decoration.padding,
-              ),
+              decoration.border.width,
+              decoration.padding,
             ),
-          };
+          ),
+        };
 
-          FragmentBackground {
-            node: decoration.owner,
-            strip_origin: Point { x: strip_x, y },
-            strip,
-            fragment,
-          }
-        });
+        FragmentBackground {
+          node: decoration.owner,
+          strip_origin: Point { x: strip_x, y },
+          strip,
+          fragment,
+        }
+      });
 
     if border.has_visible_sides() || background.is_some() {
       backgrounds.push(InlineBackgroundFragment {

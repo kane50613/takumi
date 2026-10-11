@@ -118,7 +118,11 @@ impl<'c> CanvasDevice<'c> {
 
   /// The canvas as a device for the box `context` paints.
   pub(crate) fn of(canvas: &'c mut Canvas, context: &RenderContext) -> Self {
-    Self::new(canvas, context.transform, context.style.image_rendering)
+    Self::new(
+      canvas,
+      context.transform,
+      context.style.misc_inherited_data.image_rendering,
+    )
   }
 
   /// Surfaces the first error a draw hit.
@@ -321,9 +325,25 @@ impl<'c> CanvasDevice<'c> {
     );
   }
 
-  /// Paints what `content` draws only where `mask` draws, as a `DstIn` layer keeps it.
-  fn with_painted_mask(&mut self, mask: impl FnOnce(&mut Self), content: impl FnOnce(&mut Self)) {
-    let placement = self.canvas.viewport().placement();
+  /// The part of the viewport a layer within `bounds` covers, all of it when `bounds` is unknown.
+  fn layer_placement(&self, bounds: Option<LayerBounds>) -> Placement {
+    let viewport = self.canvas.viewport();
+
+    bounds
+      .and_then(|bounds| SceneBounds::of_rect(bounds.size, self.transform * bounds.transform))
+      .and_then(|bounds| viewport.clamp_bounds(bounds, 1))
+      .unwrap_or_else(|| viewport.placement())
+  }
+
+  /// Paints what `content` draws within `bounds` only where `mask` draws, as a `DstIn` layer keeps
+  /// it.
+  fn with_painted_mask(
+    &mut self,
+    bounds: Option<LayerBounds>,
+    mask: impl FnOnce(&mut Self),
+    content: impl FnOnce(&mut Self),
+  ) {
+    let placement = self.layer_placement(bounds);
     let subcanvas = match self.canvas.begin_subcanvas(placement) {
       Ok(subcanvas) => subcanvas,
       Err(error) => {
@@ -393,7 +413,7 @@ impl<'c> CanvasDevice<'c> {
         if stroke.0 > 0.0 {
           let mut text_stroke = Stroke::new(stroke.0);
 
-          text_stroke.join = style.parent.stroke_linejoin.into();
+          text_stroke.join = style.parent.misc_inherited_data.stroke_linejoin.into();
           self.draw_shadow_of(shadow, outline.paths(), text_stroke.into(), transform);
         }
       }
@@ -541,6 +561,10 @@ impl PaintDevice for CanvasDevice<'_> {
     content: impl FnOnce(&mut Self),
   ) {
     self.with_painted_mask(
+      Some(LayerBounds {
+        size,
+        transform: Affine::translation(origin.x, origin.y),
+      }),
       |device| BoxBorderPainter::new(border, size).paint(origin, device),
       content,
     );
@@ -551,11 +575,7 @@ impl PaintDevice for CanvasDevice<'_> {
   }
 
   fn begin_layer(&mut self, opacity: f32, bounds: Option<LayerBounds>) {
-    let viewport = self.canvas.viewport();
-    let placement = bounds
-      .and_then(|bounds| SceneBounds::of_rect(bounds.size, self.transform * bounds.transform))
-      .and_then(|bounds| viewport.clamp_bounds(bounds, 1))
-      .unwrap_or_else(|| viewport.placement());
+    let placement = self.layer_placement(bounds);
     let layer = match self.canvas.begin_subcanvas(placement) {
       Ok(subcanvas) => Some((subcanvas, opacity)),
       Err(error) => {
@@ -636,7 +656,7 @@ impl GlyphDevice for CanvasDevice<'_> {
         transform,
         tile.into(),
         Affine::translation(-origin.x.floor(), -origin.y.floor()),
-        context.style.image_rendering,
+        context.style.misc_inherited_data.image_rendering,
       );
     }
     self.strip_tiles.insert(key, tile);
@@ -649,7 +669,16 @@ impl GlyphDevice for CanvasDevice<'_> {
     transform: Affine,
     mask: &mut dyn FnMut(&mut dyn GlyphDevice),
   ) {
+    let bounds = match clip {
+      FillShape::Rect(size) => Some(LayerBounds {
+        size: *size,
+        transform,
+      }),
+      _ => None,
+    };
+
     self.with_painted_mask(
+      bounds,
       |device| mask(device),
       |device| background.fill(clip, transform, device),
     );
@@ -716,7 +745,7 @@ pub(crate) fn draw_background(
           &tile,
           border_radius,
           frame_transform,
-          context.style.image_rendering,
+          context.style.misc_inherited_data.image_rendering,
           BlendMode::Normal,
         );
       }
@@ -746,7 +775,7 @@ pub(crate) fn draw_background(
                 &tile.tile,
                 border_radius,
                 transform,
-                context.style.image_rendering,
+                context.style.misc_inherited_data.image_rendering,
                 tile.blend_mode,
               );
             }
@@ -758,7 +787,7 @@ pub(crate) fn draw_background(
           layer.tile,
           border_radius,
           transform,
-          context.style.image_rendering,
+          context.style.misc_inherited_data.image_rendering,
           layer.blend_mode,
         );
       } else if let Some(tile) = rasterize_layers(
@@ -772,7 +801,7 @@ pub(crate) fn draw_background(
           &tile,
           border_radius,
           frame_transform,
-          context.style.image_rendering,
+          context.style.misc_inherited_data.image_rendering,
           BlendMode::Normal,
         );
       }
@@ -798,7 +827,7 @@ pub(crate) fn draw_background(
       if let Some(tile) = &tile
         && let Some(shape) = background.clip.shape(background.size)
       {
-        let algorithm = context.style.image_rendering;
+        let algorithm = context.style.misc_inherited_data.image_rendering;
         let at = Affine::translation(offset.x, offset.y);
 
         match background.clip.border_mask() {
@@ -851,7 +880,7 @@ fn draw_clipped_background(
       &tile,
       BorderProperties::default(),
       context.transform * Affine::translation(at.x, at.y),
-      context.style.image_rendering,
+      context.style.misc_inherited_data.image_rendering,
       BlendMode::Normal,
     );
   }
@@ -882,7 +911,7 @@ impl DeferredOutline {
     Some(Self {
       outline: BoxPainter::new(context, layout).pending_outline(Point::ZERO)?,
       transform: context.transform,
-      algorithm: context.style.image_rendering,
+      algorithm: context.style.misc_inherited_data.image_rendering,
     })
   }
 

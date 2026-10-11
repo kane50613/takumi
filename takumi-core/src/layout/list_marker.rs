@@ -1,3 +1,5 @@
+use std::rc::Rc;
+
 use taffy::{LengthPercentageAuto, Size as TaffySize};
 
 use crate::{
@@ -23,28 +25,30 @@ const INSIDE_SYMBOL_GAP_EM: f32 = 1.0;
 
 /// The marker box of a `display: list-item` box, per css-lists-3 §3.
 pub(super) fn list_marker(item_context: &RenderContext, ordinal: i32) -> Option<RenderNode> {
-  let direction = item_context.style.direction;
+  let direction = item_context.style.inherited_data.direction;
   let (mut style, sizing, current_color) =
     item_context.resolve_pseudo_style(&MatchedDeclarationsView::default());
 
-  style.white_space_collapse = WhiteSpaceCollapse::Preserve;
-  style.text_wrap_mode = TextWrapMode::NoWrap;
-  style.display = Display::InlineFlex;
+  let inherited = style.inherited_data_mut();
+
+  inherited.white_space_collapse = WhiteSpaceCollapse::Preserve;
+  inherited.text_wrap_mode = TextWrapMode::NoWrap;
+  style.base_data_mut().display = Display::InlineFlex;
   // Taffy resolves `Start`/`End` against `direction`, so flow-relative `End`
   // hangs the overflowing content outside the item's content edge either way.
-  style.justify_content = JustifyContent::End;
+  style.box_data_mut().justify_content = JustifyContent::End;
 
   // An outside marker hangs at the item's content edge without taking width:
   // a zero-width flex box ends its overflowing content there.
-  if item_context.style.list_style_position == ListStylePosition::Outside {
-    style.width = Size::zero();
+  if item_context.style.inherited_data.list_style_position == ListStylePosition::Outside {
+    style.box_data_mut().width = Size::zero();
   }
 
   let mut context = RenderContext::from_parent(item_context, style, sizing, current_color);
 
   // Blink's inside marker is an inline box, which the item's decorations reach. Naive: the
   // marker lays out as an inline flex box here, so the space after its text hangs undecorated.
-  if item_context.style.list_style_position == ListStylePosition::Inside {
+  if item_context.style.inherited_data.list_style_position == ListStylePosition::Inside {
     context
       .text_decorations
       .clone_from(&item_context.text_decorations);
@@ -53,13 +57,13 @@ pub(super) fn list_marker(item_context: &RenderContext, ordinal: i32) -> Option<
   let mut content = match available_marker_image(item_context) {
     Some(image) => marker_image(&context, image, direction),
     None => {
-      let style_type = &item_context.style.list_style_type;
+      let style_type = &item_context.style.misc_inherited1_data.list_style_type;
       let text = style_type.marker_text(ordinal, direction)?;
 
       // Blink spaces a symbol marker with margins, not its suffix
       // (`InlineMarginsForInside`/`Outside`).
       if style_type.is_symbolic() {
-        let (text, gap) = match item_context.style.list_style_position {
+        let (text, gap) = match item_context.style.inherited_data.list_style_position {
           ListStylePosition::Inside => {
             (text.trim_end().to_owned(), Length::Em(INSIDE_SYMBOL_GAP_EM))
           }
@@ -76,7 +80,7 @@ pub(super) fn list_marker(item_context: &RenderContext, ordinal: i32) -> Option<
   };
 
   if let Some(layout_style) = &mut content.layout_style_override {
-    layout_style.flex_shrink = 0.0;
+    Rc::make_mut(layout_style).flex_shrink = 0.0;
   }
 
   Some(RenderNode::new(
@@ -90,7 +94,11 @@ pub(super) fn list_marker(item_context: &RenderContext, ordinal: i32) -> Option<
 /// css-lists-3 §3.1: an image that is not available leaves the counter style
 /// to draw the marker. Only URL images qualify.
 fn available_marker_image(item_context: &RenderContext) -> Option<BackgroundImage> {
-  let image = item_context.style.list_style_image.image()?;
+  let image = item_context
+    .style
+    .misc_inherited1_data
+    .list_style_image
+    .image()?;
   let BackgroundImage::Url(url) = image else {
     return None;
   };
@@ -112,7 +120,7 @@ fn marker_image(
   let mut item = RenderNode::anonymous_image_item(context, image);
 
   if let Some(layout_style) = &mut item.layout_style_override {
-    layout_style.max_size = TaffySize::auto();
+    Rc::make_mut(layout_style).max_size = TaffySize::auto();
   }
   apply_marker_gap(&mut item, context, Length::Px(MARKER_GAP_PX), direction);
 
@@ -129,7 +137,7 @@ fn apply_marker_gap(
   let Some(layout_style) = &mut item.layout_style_override else {
     return;
   };
-  let margin = &mut layout_style.margin;
+  let margin = &mut Rc::make_mut(layout_style).margin;
   let (_, end) = direction.inline_sides(&mut margin.left, &mut margin.right);
 
   *end = LengthPercentageAuto::length(gap.to_px(&context.sizing, 0.0));

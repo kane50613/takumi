@@ -6,14 +6,11 @@ use takumi_core::{
 use crate::{
   Canvas, CanvasDevice, DeferredOutline, RenderContext, Result, SizedFontStyle, draw_box_shell,
   layout::{
-    inline::{
-      BuiltInlineLayout, InlineBoxItem, InlineLayoutMode, InlineLayoutRequest, InlinePass,
-      ProcessedInlineSpan, VisualInlineBox, create_inline_layout,
-    },
+    inline::{InlineBoxItem, InlinePass, ProcessedInlineSpan, VisualInlineBox},
     tree::RenderNode,
   },
   node_paint::draw_image_node_content,
-  painter::{BoxFrame, OwnContent},
+  painter::{BoxFrame, OwnContent, PaintedInline},
   stacking_context::paint_scene,
   style::Affine,
 };
@@ -72,26 +69,22 @@ pub(crate) fn draw_own_content(
   }
 
   let font_style = SizedFontStyle::from_style(&context.style, context);
-  let Some(items) = content.inline_items(&font_style) else {
+  let Some(painted) = content.lay_out_inline(&font_style, layout) else {
     return Ok(());
   };
-  let built = create_inline_layout(InlineLayoutRequest::in_content_box(
-    items,
-    layout.content_box_size(),
-    &font_style,
-    context,
-    InlineLayoutMode::Draw,
-  ));
-  let positioned_inline_boxes = match pass {
-    InlinePass::Content => draw_inline_layout(context, canvas, layout, &built, &font_style)?,
-    InlinePass::Floats => built.resolve_runs(context, layout)?.inline_boxes,
-  };
+  let painted = painted?;
 
-  for positioned in positioned_inline_boxes
+  if pass == InlinePass::Content {
+    draw_inline_layout(context, canvas, layout, &painted, &font_style)?;
+  }
+
+  for positioned in painted
+    .runs
+    .inline_boxes
     .iter()
     .filter(|positioned| pass.paints(positioned))
   {
-    if let Some(ProcessedInlineSpan::Box(item)) = built.spans.get(positioned.id as usize) {
+    if let Some(ProcessedInlineSpan::Box(item)) = painted.spans.get(positioned.id as usize) {
       draw_inline_box(positioned, item, layout, canvas, context.transform)?;
     }
   }
@@ -102,19 +95,16 @@ pub(crate) fn draw_inline_layout(
   context: &RenderContext,
   canvas: &mut Canvas,
   layout: Layout,
-  built: &BuiltInlineLayout<'_>,
+  painted: &PaintedInline<'_>,
   font_style: &SizedFontStyle,
-) -> Result<Vec<VisualInlineBox>> {
-  let resolved = built.resolve_runs(context, layout)?;
+) -> Result<()> {
   let mut device = CanvasDevice::of(canvas, context);
 
-  resolved.paint(
-    &built.spans,
+  painted.runs.paint(
+    &painted.spans,
     font_style,
     BoxFrame::new(layout, Point::ZERO),
     &mut device,
   );
-  device.finish()?;
-
-  Ok(resolved.inline_boxes)
+  device.finish()
 }

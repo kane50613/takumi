@@ -4,7 +4,7 @@ use takumi_core::geometry::{Point, Size};
 use tiny_skia::PixmapMut;
 
 use super::{
-  MaskSamplingOptions, MaskView, PaintSource, SamplingFootprint,
+  MASK_RUN, MaskSamplingOptions, MaskView, PaintSource, SamplingFootprint,
   blit::{OverlayBounds, apply_mask_row},
   mask::MaskRow,
   paint_source::{ResolvedSource, ScaledRows, sample_paint_source},
@@ -136,17 +136,31 @@ fn constant_normal(pixels: &mut [[u8; 4]], mask: &[u8], color: [u8; 4], region: 
   for dest_y in region.bounds.y_min..region.bounds.y_max {
     let dst = &mut pixels[region.dst_row(dest_y)];
     let mask_row = &mask[region.mask_row(dest_y)];
+    let (dst_runs, dst_tail) = dst.as_chunks_mut::<MASK_RUN>();
+    let (mask_runs, mask_tail) = mask_row.as_chunks::<MASK_RUN>();
 
-    for (dst_px, &alpha) in dst.iter_mut().zip(mask_row) {
-      if alpha == 0 {
-        continue;
+    for (dst, mask) in dst_runs.iter_mut().zip(mask_runs) {
+      match u64::from_ne_bytes(*mask) {
+        0 => {}
+        u64::MAX if color[3] == u8::MAX => dst.fill(color),
+        _ => constant_over(dst, mask, color),
       }
+    }
+    constant_over(dst_tail, mask_tail, color);
+  }
+}
 
-      let src = scale_premultiplied_pixel(color, alpha);
+#[inline(always)]
+fn constant_over(dst: &mut [[u8; 4]], mask: &[u8], color: [u8; 4]) {
+  for (dst_px, &alpha) in dst.iter_mut().zip(mask) {
+    if alpha == 0 {
+      continue;
+    }
 
-      if src[3] != 0 {
-        composite_premultiplied_over(dst_px, src);
-      }
+    let src = scale_premultiplied_pixel(color, alpha);
+
+    if src[3] != 0 {
+      composite_premultiplied_over(dst_px, src);
     }
   }
 }

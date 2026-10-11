@@ -171,7 +171,7 @@ pub(crate) fn clip_node_mask(clip: &ClipNode, viewport: CanvasViewport) -> Optio
     Some(viewport),
   );
 
-  copy_mask_to_viewport(viewport, &mask, placement)
+  viewport_mask(viewport, mask.into(), placement)
 }
 
 /// The `clip-path` shape as a viewport mask over the box and its descendants.
@@ -186,14 +186,12 @@ fn clip_path_mask(
     Some(Fill::from(shape.rule()).into()),
     Some(viewport),
   );
-  let end_x = placement.left + placement.width as i32;
-  let end_y = placement.top + placement.height as i32;
 
-  if end_x < 0 || end_y < 0 {
+  if placement.width == 0 || placement.height == 0 {
     return NodeMaskAction::SkipRendering;
   }
 
-  copy_mask_to_viewport(viewport, &mask, placement)
+  viewport_mask(viewport, mask.into(), placement)
     .map_or(NodeMaskAction::SkipRendering, NodeMaskAction::Shell)
 }
 
@@ -213,9 +211,9 @@ fn mask_image_mask(
     return NodeMaskAction::SkipRendering;
   };
   let full_mask = if transform.is_identity() && mask.offset == Point::ZERO {
-    copy_mask_to_viewport(
+    viewport_mask(
       viewport,
-      &mask.alpha,
+      Cow::Borrowed(&mask.alpha),
       Placement {
         left: 0,
         top: 0,
@@ -354,13 +352,20 @@ fn copy_mask_into_canvas(
   }
 }
 
-fn copy_mask_to_viewport(
+/// `mask` at `placement` as a mask covering `viewport`, reusing its buffer when they coincide.
+fn viewport_mask(
   viewport: CanvasViewport,
-  mask: &[u8],
+  mask: Cow<'_, [u8]>,
   placement: Placement,
 ) -> Option<TinyMask> {
+  if placement == viewport.placement() {
+    let size = IntSize::from_wh(placement.width, placement.height)?;
+
+    return TinyMask::from_vec(mask.into_owned(), size);
+  }
+
   let mut full_mask = TinyMask::new(viewport.size.width, viewport.size.height)?;
-  copy_mask_into_canvas(&mut full_mask, viewport.origin, mask, placement);
+  copy_mask_into_canvas(&mut full_mask, viewport.origin, &mask, placement);
   Some(full_mask)
 }
 
@@ -461,14 +466,16 @@ pub(crate) fn render_mask(
   rasterize_mask(paths, transform, style.unwrap_or_default(), cull).unwrap_or_default()
 }
 
-/// `[left, top, right, bottom]` cut to `cull` once they cover too many pixels to rasterize whole.
+/// `[left, top, right, bottom]` cut to `cull` once they cover too many pixels to rasterize whole,
+/// or `None` when they lie wholly outside it.
 pub(crate) fn cull_bounds(
   [mut left, mut top, mut right, mut bottom]: [i32; 4],
   cull: Option<CanvasViewport>,
 ) -> Option<Placement> {
-  // The cull rect is a protection layer, not an optimization: culling moves the
-  // buffer origin, which shifts anti-aliasing by a float-rounding hair, so it
-  // only engages once the full mask is too large to be worth rasterizing.
+  // Cutting a mask that overlaps the cull rect is a protection layer, not an
+  // optimization: it moves the buffer origin, which shifts anti-aliasing by a
+  // float-rounding hair, so it only engages once the full mask is too large to
+  // be worth rasterizing.
   const CULL_THRESHOLD_PIXELS: u64 = 1 << 24;
   // The halo keeps the rasterizer's clip edge away from the visible pixels:
   // clipping a contour exactly on the cull edge shifts the anti-aliasing of
@@ -478,13 +485,21 @@ pub(crate) fn cull_bounds(
   let full_pixels = (right.saturating_sub(left).max(0) as u64)
     .saturating_mul(bottom.saturating_sub(top).max(0) as u64);
 
-  if let Some(cull) = cull
-    && full_pixels > CULL_THRESHOLD_PIXELS
-  {
-    left = left.max((cull.origin.x as i32).saturating_sub(CULL_HALO));
-    top = top.max((cull.origin.y as i32).saturating_sub(CULL_HALO));
-    right = right.min(cull.right().saturating_add(CULL_HALO));
-    bottom = bottom.min(cull.bottom().saturating_add(CULL_HALO));
+  if let Some(cull) = cull {
+    if right <= cull.origin.x as i32
+      || bottom <= cull.origin.y as i32
+      || left >= cull.right()
+      || top >= cull.bottom()
+    {
+      return None;
+    }
+
+    if full_pixels > CULL_THRESHOLD_PIXELS {
+      left = left.max((cull.origin.x as i32).saturating_sub(CULL_HALO));
+      top = top.max((cull.origin.y as i32).saturating_sub(CULL_HALO));
+      right = right.min(cull.right().saturating_add(CULL_HALO));
+      bottom = bottom.min(cull.bottom().saturating_add(CULL_HALO));
+    }
   }
 
   Placement::from_bounds(left, top, right, bottom)
@@ -672,11 +687,42 @@ impl<'a> MaskRow<'a> {
   pub(crate) fn is_empty(&self) -> bool {
     self.data.is_empty()
   }
+
+  /// The mask bytes under offsets `0..len`: the first covered offset and the bytes from there.
+  /// Offsets outside them read as `0`.
+  pub(crate) fn covered(&self, len: usize) -> (usize, &'a [u8]) {
+    let start = self.local_x_start.max(0);
+    let end = (self.local_x_start + len as i32).min(self.mask_width);
+
+    if self.data.is_empty() || start >= end {
+      return (0, &[]);
+    }
+
+    (
+      (start - self.local_x_start) as usize,
+      &self.data[self.row_offset + start as usize..self.row_offset + end as usize],
+    )
+  }
 }
 
 #[cfg(test)]
 mod tests {
   use super::*;
+
+  #[test]
+  fn a_row_covers_only_the_offsets_inside_the_mask() {
+    let mask = TinyMask::from_vec((0..12).collect(), IntSize::from_wh(4, 3).unwrap()).unwrap();
+    let view = |x: u32| MaskView {
+      mask: &mask,
+      origin: Point { x, y: 0 },
+      canvas_origin: Point { x: 0, y: 0 },
+    };
+
+    assert_eq!(view(0).row(1, -2).covered(3), (2, &[4u8][..]));
+    assert_eq!(view(0).row(1, 2).covered(5), (0, &[6u8, 7][..]));
+    assert_eq!(view(0).row(3, 0).covered(4), (0, &[][..]));
+    assert_eq!(view(10).row(0, 0).covered(4), (0, &[][..]));
+  }
 
   fn attenuate_reference(alpha: u8, mask_alpha: u8) -> u8 {
     if mask_alpha == 0 {
@@ -783,5 +829,27 @@ mod tests {
     assert_eq!(dst[4], 255);
     assert_eq!(dst[5], fast_div_255(255 * (255 - 128)));
     assert_eq!(dst[7], 0);
+  }
+
+  #[test]
+  fn a_mask_outside_the_cull_rect_is_skipped() {
+    let cull = CanvasViewport {
+      origin: Point { x: 100, y: 100 },
+      size: Size {
+        width: 50,
+        height: 50,
+      },
+    };
+
+    assert_eq!(cull_bounds([0, 0, 100, 200], Some(cull)), None);
+    assert_eq!(cull_bounds([150, 120, 160, 130], Some(cull)), None);
+    assert_eq!(
+      cull_bounds([99, 99, 101, 101], Some(cull)),
+      Placement::from_bounds(99, 99, 101, 101)
+    );
+    assert_eq!(
+      cull_bounds([0, 0, 100, 200], None),
+      Placement::from_bounds(0, 0, 100, 200)
+    );
   }
 }

@@ -13,7 +13,10 @@ use crate::{
     node::Node,
     tree::{LayoutResults, RenderNode},
   },
-  resources::{font::FontsSnapshot, image::ImageSource},
+  resources::{
+    font::FontsSnapshot,
+    image::{ImageSource, ResourceCache},
+  },
   stacking_context::paint_scene,
   style::{FontFamily, SizingContext, StyleSheet},
   viewport::Viewport,
@@ -34,6 +37,9 @@ pub struct RenderOptions<'g> {
   /// Pre-decoded images keyed by `src`, resolved when a node references that URL.
   #[builder(default)]
   pub(crate) images: HashMap<Arc<str>, ImageSource>,
+  /// The cache `data:` URI images decode through, so renders that embed the same image share it.
+  #[builder(default, setter(strip_option))]
+  pub(crate) resource_cache: Option<ResourceCache>,
   /// CSS stylesheets to apply before layout/rendering.
   #[builder(default)]
   pub(crate) stylesheet: Arc<StyleSheet>,
@@ -108,6 +114,7 @@ impl RenderOptions<'_> {
       .fonts(fonts)
       .sizing(SizingContext::builder().viewport(self.viewport).build())
       .images(images)
+      .resource_cache(self.resource_cache.clone())
       .stylesheet(self.stylesheet.clone())
       .time_ms(time_ms)
       .draw_debug_border(self.draw_debug_border)

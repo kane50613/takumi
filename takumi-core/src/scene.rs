@@ -2,8 +2,9 @@
 //! bounds. Raster and SVG backends consume this instead of each walking the node tree
 //! independently.
 
-use std::{collections::HashMap, convert::Infallible};
+use std::{collections::HashMap, convert::Infallible, sync::Arc};
 
+use rustc_hash::FxHashMap;
 use skrifa::FontRef;
 
 use crate::{
@@ -13,8 +14,8 @@ use crate::{
   layout::{
     decoration::OutlineGeometry,
     inline::{
-      InlineContentKind, InlineLayoutMode, InlineLayoutRequest, PlacedItem, ProcessedInlineSpan,
-      ShapedRun, collect_inline_items, create_inline_layout, glyph_run_rect,
+      InkBox, InlineContentKind, InlineLayoutMode, InlineLayoutRequest, PlacedItem,
+      ProcessedInlineSpan, ShapedRun, collect_inline_items, create_inline_layout, glyph_run_rect,
       resolve_inline_max_height,
     },
     node::Node,
@@ -22,6 +23,8 @@ use crate::{
   },
   paint_chunk::PaintChunk,
   paint_property::{ContainerContents, NodeProperties, PropertyState, PropertyTrees},
+  resources::font::{RunFace, run_normalized_coords},
+  resources::glyph::ResolvedGlyph,
   shadow::SizedShadow,
   sort_key::sort_by_key,
   style::{Affine, BlurType, ComputedStyle, Display, Float},
@@ -164,6 +167,16 @@ impl StackingBuckets {
     sort_by_key(&mut self.positive, PaintItem::z_order);
   }
 
+  /// Frees the room the buckets grew past their items: most boxes paint one item or none, and a
+  /// scene keeps them all until the render ends.
+  fn shrink_to_fit(&mut self) {
+    self.negative.shrink_to_fit();
+    self.in_flow.shrink_to_fit();
+    self.floats.shrink_to_fit();
+    self.positioned.shrink_to_fit();
+    self.positive.shrink_to_fit();
+  }
+
   fn in_paint_order(&self) -> [&[PaintItem]; 5] {
     [
       &self.negative,
@@ -302,7 +315,7 @@ impl PaintBucket {
       || style.participates_in_positioned_paint_bucket(is_flex_or_grid_item)
     {
       (Self::Positioned, 0)
-    } else if style.float != Float::None && !is_flex_or_grid_item {
+    } else if style.base_data.float != Float::None && !is_flex_or_grid_item {
       (Self::Float, 0)
     } else {
       (Self::InFlow, 0)
@@ -348,6 +361,7 @@ impl SceneRequest<'_> {
     let mut containing_blocks = ContainingBlocks::default();
     let mut properties = PropertyTrees::default();
     let mut contents: HashMap<NodeId, ContainerContents> = HashMap::new();
+    let mut glyph_ink = GlyphInk::default();
     let mut visits = vec![StackingContextBuildVisit {
       path: Vec::new(),
       node_id: NodeId::ROOT,
@@ -417,7 +431,7 @@ impl SceneRequest<'_> {
         paint_offset: child_base.paint_offset,
         container_size: visit.container_size,
         paint_bounds: with_bounds
-          .then(|| compute_node_paint_bounds(current, layout, current_transform))
+          .then(|| compute_node_paint_bounds(current, layout, current_transform, &mut glyph_ink))
           .flatten(),
         properties: node_properties,
       };
@@ -530,7 +544,7 @@ impl SceneRequest<'_> {
           },
           context_id,
           stacking_id,
-          parent_display: Some(current.context.style.display),
+          parent_display: Some(current.context.style.base_data.display),
           is_root: false,
         });
       }
@@ -538,7 +552,9 @@ impl SceneRequest<'_> {
 
     for context in &mut contexts {
       context.buckets.sort();
+      context.buckets.shrink_to_fit();
     }
+    contexts.shrink_to_fit();
 
     if !with_bounds {
       return Ok(SceneLayers {
@@ -614,7 +630,8 @@ pub struct Scene {
 impl Scene {
   /// Lays `root` out in `viewport` and builds its scene at the origin.
   pub fn lay_out(root: RenderNode, viewport: Viewport, paint_bounds: bool) -> Result<Self> {
-    let results = LayoutResults::compute(&root, viewport.into());
+    root.clear_fragment_items();
+    let results = LayoutResults::compute_for_paint(&root, viewport.into());
     let container_size = Size::from(viewport.size);
     let size = container_size.zip_map(results.layout(NodeId::ROOT)?.size, Option::unwrap_or);
     let layers = SceneRequest {
@@ -793,6 +810,7 @@ fn filter_reach(node: &RenderNode) -> f32 {
   node
     .context
     .style
+    .misc1_data
     .filter
     .iter()
     .map(|filter| filter.reach(sizing))
@@ -802,7 +820,7 @@ fn filter_reach(node: &RenderNode) -> f32 {
 /// How far box shadows and the outline reach past the border box, in local px.
 fn box_ink_reach(node: &RenderNode, size: Size<f32>) -> f32 {
   let context = &node.context;
-  let shadows = context.style.box_shadow.iter().flatten();
+  let shadows = context.style.misc1_data.box_shadow.iter().flatten();
   let shadow_reach = shadows
     .filter(|shadow| !shadow.inset)
     .map(|shadow| {
@@ -821,7 +839,7 @@ fn box_ink_reach(node: &RenderNode, size: Size<f32>) -> f32 {
 }
 
 /// How far text shadows and the text stroke reach past glyph ink, in local px.
-fn text_ink_reach(font_style: &SizedFontStyle) -> f32 {
+pub(crate) fn text_ink_reach(font_style: &SizedFontStyle) -> f32 {
   let shadow_reach = font_style
     .text_shadow
     .iter()
@@ -851,10 +869,29 @@ fn outset_bounds(
   Some(bounds)
 }
 
+/// A glyph's ink box as `(min_x, min_y, max_x, max_y)`, `None` for a glyph with no ink.
+type InkExtents = Option<(f32, f32, f32, f32)>;
+
+/// Each resolved glyph's ink extents once read. An entry holds its glyph, so the address it is
+/// keyed on cannot pass to another glyph while the scene is built.
+#[derive(Default)]
+struct GlyphInk(FxHashMap<*const ResolvedGlyph, (Arc<ResolvedGlyph>, InkExtents)>);
+
+impl GlyphInk {
+  fn extents(&mut self, glyph: &Arc<ResolvedGlyph>) -> InkExtents {
+    self
+      .0
+      .entry(Arc::as_ptr(glyph))
+      .or_insert_with(|| (Arc::clone(glyph), glyph.ink_extents()))
+      .1
+  }
+}
+
 fn compute_node_paint_bounds(
   node: &RenderNode,
   layout: ComputedLayout,
   transform: Affine,
+  glyph_ink: &mut GlyphInk,
 ) -> Option<SceneBounds> {
   let mut bounds = outset_bounds(
     SceneBounds::of_rect(layout.size, transform),
@@ -868,6 +905,25 @@ fn compute_node_paint_bounds(
   let font_style = SizedFontStyle::from_style(&node.context.style, &node.context);
   if font_style.sizing.font_size == 0.0 {
     return bounds;
+  }
+
+  let content_offset = layout.content_box_offset();
+  let inline_transform = Affine::translation(content_offset.x, content_offset.y) * transform;
+
+  if let Some(items) = node.fragment_items_in(layout) {
+    let placed = |ink: Option<InkBox>, transform| {
+      let (origin, size) = ink?.rect();
+
+      bounds_for_placed_rect(origin, size, transform)
+    };
+
+    bounds = merge_bounds(bounds, placed(items.ink.content, inline_transform));
+    bounds = merge_bounds(bounds, placed(items.ink.decorations, transform));
+    return outset_bounds(
+      bounds,
+      items.span_ink_reach.max(text_ink_reach(&font_style)),
+      inline_transform,
+    );
   }
 
   let content = layout.content_box_size();
@@ -887,8 +943,6 @@ fn compute_node_paint_bounds(
     mode: InlineLayoutMode::Measure,
     shape_cacheable: true,
   });
-  let content_offset = layout.content_box_offset();
-  let inline_transform = Affine::translation(content_offset.x, content_offset.y) * transform;
   let Ok(()) = built.walk_items::<Infallible>(layout, |line, item| {
     let setup = &line.setup;
 
@@ -969,15 +1023,17 @@ fn compute_node_paint_bounds(
           return Ok(());
         };
         let glyph_ids = glyph_run.positioned_glyphs().map(|glyph| glyph.id);
+        let normalized_coords = run_normalized_coords(&glyph_run);
+        let face = RunFace::of(&glyph_run, &normalized_coords);
         let resolved_glyphs = node
           .context
           .fonts()
-          .with_context(|fonts| fonts.resolve_glyphs(&glyph_run, font, glyph_ids));
+          .with_context(|fonts| fonts.resolve_glyphs(face, font, glyph_ids));
 
         for (index, glyph) in glyph_run.positioned_glyphs().enumerate() {
           let Some((min_x, min_y, max_x, max_y)) = resolved_glyphs
             .get(&glyph.id)
-            .and_then(|glyph| glyph.ink_extents())
+            .and_then(|glyph| glyph_ink.extents(glyph))
           else {
             continue;
           };

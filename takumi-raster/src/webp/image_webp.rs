@@ -6,10 +6,7 @@ use image_webp::{ColorType, EncoderParams, WebPEncoder};
 use crate::{
   Result,
   error::{Error, WebPError},
-  webp::{
-    EncodedFrame, U24_MAX, UniqueFrame, has_any_alpha_pixel, strip_alpha_channel,
-    write_riff_container,
-  },
+  webp::{EncodedFrame, U24_MAX, UniqueFrame, has_any_alpha_pixel, write_riff_container},
   write::{AnimatedWebpOptions, AnimationFrame, Bitmap},
 };
 
@@ -172,4 +169,34 @@ where
   destination.flush()?;
 
   Ok(())
+}
+
+fn strip_alpha_channel(image: Cow<'_, RgbaImage>) -> Vec<u8> {
+  match image {
+    Cow::Owned(image) => {
+      let mut rgba = image.into_raw();
+      let pixels = rgba.len() / 4;
+
+      for pixel_index in 0..pixels {
+        let src_offset = pixel_index * 4;
+        let dst_offset = pixel_index * 3;
+        rgba[dst_offset] = rgba[src_offset];
+        rgba[dst_offset + 1] = rgba[src_offset + 1];
+        rgba[dst_offset + 2] = rgba[src_offset + 2];
+      }
+
+      rgba.truncate(pixels * 3);
+      rgba
+    }
+    Cow::Borrowed(image) => {
+      let pixels = bytemuck::cast_slice::<u8, [u8; 4]>(image.as_raw());
+      let mut rgb = Vec::with_capacity(pixels.len() * 3);
+
+      for [r, g, b, _] in pixels {
+        rgb.extend_from_slice(&[*r, *g, *b]);
+      }
+
+      rgb
+    }
+  }
 }

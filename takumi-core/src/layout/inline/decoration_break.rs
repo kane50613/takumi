@@ -96,7 +96,8 @@ impl ClonedSpans {
       for link in chain.into_iter().flat_map(DecorationLink::ancestors) {
         let decoration = &link.decoration;
 
-        if decoration.owner.context.style.box_decoration_break != BoxDecorationBreak::Clone {
+        if decoration.owner.context.style.box_data.box_decoration_break != BoxDecorationBreak::Clone
+        {
           continue;
         }
         match cloned.iter_mut().find(|span| span.id == decoration.id) {

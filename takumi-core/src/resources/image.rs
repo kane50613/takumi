@@ -958,7 +958,8 @@ pub(crate) type SharedResourceCache = Cache<ResourceCacheKey, CacheEntry, Resour
 
 /// Content-addressed store of decoded render resources — images, SVG rasters,
 /// parsed stylesheets — sharing one byte budget, used by the renderer to avoid
-/// re-decoding and re-parsing.
+/// re-decoding and re-parsing. Clones share the same store.
+#[derive(Clone)]
 pub struct ResourceCache {
   cache: Arc<SharedResourceCache>,
 }
@@ -1663,6 +1664,29 @@ mod tests {
         );
       }
     }
+  }
+
+  #[cfg(feature = "webp")]
+  #[test]
+  fn an_oversized_webp_canvas_fails_the_pixel_budget() {
+    let mut bytes = encoded_animated_webp(&[(0, 100)]);
+    let canvas = bytes
+      .windows(4)
+      .position(|window| window == b"VP8X")
+      .expect("a VP8X chunk")
+      + 12;
+
+    // A 16384x16384 canvas: each side minus one as a 24-bit value.
+    bytes[canvas..canvas + 6].copy_from_slice(&[0xFF, 0x3F, 0, 0xFF, 0x3F, 0]);
+
+    let error = AnimatedFormat::WebP
+      .decode_frames(&bytes, 0, None, None, |_| {})
+      .unwrap_err();
+
+    assert!(
+      error.to_string().contains("exceed the decode budget"),
+      "{error}"
+    );
   }
 
   #[cfg(feature = "webp")]

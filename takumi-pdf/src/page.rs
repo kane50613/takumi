@@ -12,8 +12,9 @@ use std::mem::take;
 
 use crate::{
   bands::{RepeatBounds, Repeatable, RepeatablePage},
+  chunks::SceneChunks,
   emitter::DocumentState,
-  inline::{InlineMap, TextBox, build_inline_map},
+  inline::{InlineCache, TextBox},
   interactive::{add_link_annotations, xyz_destination},
   krilla::{
     Document,
@@ -250,12 +251,14 @@ impl PagePlan {
     background: Option<Color>,
   ) -> Result<(), PdfError> {
     let text_boxes = TextBox::collect(&self.paginated.content);
-    let inline_map = build_inline_map(&text_boxes)?;
+    let inline = InlineCache::new(&text_boxes);
+    let chunks = SceneChunks::new(&self.paginated.content.scene);
     let composer = PageComposer {
       plan: self,
       inputs,
       page_context: inputs.context(self.frame.page_area),
-      inline_map: &inline_map,
+      inline: &inline,
+      chunks: &chunks,
       state,
       background,
     };
@@ -265,6 +268,7 @@ impl PagePlan {
         continue;
       }
       composer.compose(pdf, &self.repeatables, &slice)?;
+      inline.end_page();
     }
     Ok(())
   }
@@ -285,7 +289,8 @@ pub(crate) struct PageComposer<'c, 'g> {
   pub(crate) plan: &'c PagePlan,
   pub(crate) inputs: &'c TreeInputs<'g>,
   pub(crate) page_context: RenderContext,
-  pub(crate) inline_map: &'c InlineMap<'c>,
+  pub(crate) inline: &'c InlineCache<'c>,
+  pub(crate) chunks: &'c SceneChunks<'c>,
   pub(crate) state: &'c DocumentState<'c>,
   pub(crate) background: Option<Color>,
 }
@@ -362,15 +367,13 @@ impl PageComposer<'_, '_> {
       None,
       anchor,
     );
-    // A replayed table header is an artifact like a repeated box, so its
-    // links annotate per page and stay out of the structure.
-    for &(offset, index) in &slice.replays {
-      let band = &paginated.headers[index];
-
+    // A replayed table header or footer is an artifact like a repeated box,
+    // so its links annotate per page and stay out of the structure.
+    for (offset, index) in slice.section_replays() {
       add_link_annotations(
         &mut pdf_page,
         &paginated.interactive.links,
-        band.window(),
+        paginated.sections[index].window(),
         CorePoint {
           x: frame.margin.left,
           y: frame.margin.top + offset,
@@ -421,36 +424,34 @@ impl PageComposer<'_, '_> {
     .emit(
       paginated
         .content
-        .emitter(self.state, Some(self.inline_map), true),
+        .emitter(self.state, Some(self.inline), Some(self.chunks), true),
       surface,
     )?;
-    // Each repeating table header band replays at the top of the window. The
-    // first occurrence carried the tags, so a replay is an artifact. Clipping
-    // to the table keeps content beside it out of the replay.
-    for &(offset, index) in &slice.replays {
-      let band = &paginated.headers[index];
+    // Each repeated table header replays at the top of the window and each
+    // repeated footer below the content. The first occurrence carried the
+    // tags, so a replay is an artifact. Clipping to the table keeps content
+    // beside it out of the replay.
+    for (offset, index) in slice.section_replays() {
+      let section = &paginated.sections[index];
 
       ContentWindow {
         clip: (
-          frame.margin.left + band.left,
+          frame.margin.left + section.left,
           frame.margin.top + offset,
-          band.right - band.left,
-          band.height(),
+          section.right - section.left,
+          section.height(),
         ),
         translate: CorePoint {
           x: frame.margin.left,
-          y: frame.margin.top + offset - band.top,
+          y: frame.margin.top + offset - section.top,
         },
-        window: Window {
-          lines: Some((f32::NEG_INFINITY, band.bottom)),
-          ..band.window()
-        },
+        window: section.replay_window(),
         artifact: true,
       }
       .emit(
         paginated
           .content
-          .emitter(self.state, Some(self.inline_map), false),
+          .emitter(self.state, Some(self.inline), Some(self.chunks), false),
         surface,
       )?;
     }
