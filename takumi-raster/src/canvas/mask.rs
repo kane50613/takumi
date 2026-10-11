@@ -171,7 +171,7 @@ pub(crate) fn clip_node_mask(clip: &ClipNode, viewport: CanvasViewport) -> Optio
     Some(viewport),
   );
 
-  copy_mask_to_viewport(viewport, &mask, placement)
+  viewport_mask(viewport, mask.into(), placement)
 }
 
 /// The `clip-path` shape as a viewport mask over the box and its descendants.
@@ -191,7 +191,7 @@ fn clip_path_mask(
     return NodeMaskAction::SkipRendering;
   }
 
-  copy_mask_to_viewport(viewport, &mask, placement)
+  viewport_mask(viewport, mask.into(), placement)
     .map_or(NodeMaskAction::SkipRendering, NodeMaskAction::Shell)
 }
 
@@ -211,9 +211,9 @@ fn mask_image_mask(
     return NodeMaskAction::SkipRendering;
   };
   let full_mask = if transform.is_identity() && mask.offset == Point::ZERO {
-    copy_mask_to_viewport(
+    viewport_mask(
       viewport,
-      &mask.alpha,
+      Cow::Borrowed(&mask.alpha),
       Placement {
         left: 0,
         top: 0,
@@ -352,13 +352,20 @@ fn copy_mask_into_canvas(
   }
 }
 
-fn copy_mask_to_viewport(
+/// `mask` at `placement` as a mask covering `viewport`, reusing its buffer when they coincide.
+fn viewport_mask(
   viewport: CanvasViewport,
-  mask: &[u8],
+  mask: Cow<'_, [u8]>,
   placement: Placement,
 ) -> Option<TinyMask> {
+  if placement == viewport.placement() {
+    let size = IntSize::from_wh(placement.width, placement.height)?;
+
+    return TinyMask::from_vec(mask.into_owned(), size);
+  }
+
   let mut full_mask = TinyMask::new(viewport.size.width, viewport.size.height)?;
-  copy_mask_into_canvas(&mut full_mask, viewport.origin, mask, placement);
+  copy_mask_into_canvas(&mut full_mask, viewport.origin, &mask, placement);
   Some(full_mask)
 }
 
