@@ -486,6 +486,9 @@ impl ThreeBoxPass {
       |rings, mut rows| {
         let channels = rows[0].len() * N;
         let (mut slot, mut last_slot) = (0, 0);
+
+        rings.reset(self.seed);
+
         let BoxRings {
           sum0,
           sum1,
@@ -496,12 +499,6 @@ impl ThreeBoxPass {
           blurred,
         } = rings;
 
-        sum0.fill(0);
-        sum1.fill(0);
-        sum2.fill(self.seed);
-        first.fill(0);
-        second.fill(0);
-        third.fill(0);
         for_each_row(&mut rows, self.border, |entering, target| {
           let entering = &entering.as_flattened()[..channels];
           let (sum0, sum1, sum2, blurred) = (
@@ -569,6 +566,16 @@ impl BoxRings {
       third: vec![0; last * lanes],
       blurred: vec![0; lanes],
     }
+  }
+
+  /// Empties the rings for a new band, the last sum starting at `seed`.
+  fn reset(&mut self, seed: u32) {
+    self.sum0.fill(0);
+    self.sum1.fill(0);
+    self.sum2.fill(seed);
+    self.first.fill(0);
+    self.second.fill(0);
+    self.third.fill(0);
   }
 }
 
