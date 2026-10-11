@@ -321,9 +321,25 @@ impl<'c> CanvasDevice<'c> {
     );
   }
 
-  /// Paints what `content` draws only where `mask` draws, as a `DstIn` layer keeps it.
-  fn with_painted_mask(&mut self, mask: impl FnOnce(&mut Self), content: impl FnOnce(&mut Self)) {
-    let placement = self.canvas.viewport().placement();
+  /// The part of the viewport a layer within `bounds` covers, all of it when `bounds` is unknown.
+  fn layer_placement(&self, bounds: Option<LayerBounds>) -> Placement {
+    let viewport = self.canvas.viewport();
+
+    bounds
+      .and_then(|bounds| SceneBounds::of_rect(bounds.size, self.transform * bounds.transform))
+      .and_then(|bounds| viewport.clamp_bounds(bounds, 1))
+      .unwrap_or_else(|| viewport.placement())
+  }
+
+  /// Paints what `content` draws within `bounds` only where `mask` draws, as a `DstIn` layer keeps
+  /// it.
+  fn with_painted_mask(
+    &mut self,
+    bounds: Option<LayerBounds>,
+    mask: impl FnOnce(&mut Self),
+    content: impl FnOnce(&mut Self),
+  ) {
+    let placement = self.layer_placement(bounds);
     let subcanvas = match self.canvas.begin_subcanvas(placement) {
       Ok(subcanvas) => subcanvas,
       Err(error) => {
@@ -541,6 +557,10 @@ impl PaintDevice for CanvasDevice<'_> {
     content: impl FnOnce(&mut Self),
   ) {
     self.with_painted_mask(
+      Some(LayerBounds {
+        size,
+        transform: Affine::translation(origin.x, origin.y),
+      }),
       |device| BoxBorderPainter::new(border, size).paint(origin, device),
       content,
     );
@@ -551,11 +571,7 @@ impl PaintDevice for CanvasDevice<'_> {
   }
 
   fn begin_layer(&mut self, opacity: f32, bounds: Option<LayerBounds>) {
-    let viewport = self.canvas.viewport();
-    let placement = bounds
-      .and_then(|bounds| SceneBounds::of_rect(bounds.size, self.transform * bounds.transform))
-      .and_then(|bounds| viewport.clamp_bounds(bounds, 1))
-      .unwrap_or_else(|| viewport.placement());
+    let placement = self.layer_placement(bounds);
     let layer = match self.canvas.begin_subcanvas(placement) {
       Ok(subcanvas) => Some((subcanvas, opacity)),
       Err(error) => {
@@ -649,7 +665,16 @@ impl GlyphDevice for CanvasDevice<'_> {
     transform: Affine,
     mask: &mut dyn FnMut(&mut dyn GlyphDevice),
   ) {
+    let bounds = match clip {
+      FillShape::Rect(size) => Some(LayerBounds {
+        size: *size,
+        transform,
+      }),
+      _ => None,
+    };
+
     self.with_painted_mask(
+      bounds,
       |device| mask(device),
       |device| background.fill(clip, transform, device),
     );
