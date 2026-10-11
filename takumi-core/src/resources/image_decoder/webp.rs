@@ -41,13 +41,13 @@ use crate::resources::image_buffer::ImageBuffer;
 use crate::{error::WebPError, resources::image_buffer::rgba_len};
 
 #[cfg(all(target_arch = "wasm32", feature = "webp"))]
-pub(super) fn webp_dimensions(bytes: &[u8]) -> ImageResult<(u32, u32)> {
+pub(crate) fn webp_dimensions(bytes: &[u8]) -> ImageResult<(u32, u32)> {
   let decoder = WebPDecoder::new(Cursor::new(bytes)).map_err(webp_decode_error)?;
   Ok(decoder.dimensions())
 }
 
 #[cfg(all(not(target_arch = "wasm32"), feature = "webp"))]
-pub(super) fn webp_dimensions(bytes: &[u8]) -> ImageResult<(u32, u32)> {
+pub(crate) fn webp_dimensions(bytes: &[u8]) -> ImageResult<(u32, u32)> {
   let mut width = 0;
   let mut height = 0;
   let header_ok = unsafe {
@@ -205,23 +205,11 @@ fn webp_chunks(bytes: &[u8]) -> impl Iterator<Item = ([u8; 4], &[u8])> {
   })
 }
 
-#[cfg(all(target_arch = "wasm32", feature = "webp"))]
-pub(crate) fn animated_webp_dimensions(bytes: &[u8]) -> ImageResult<(u32, u32)> {
-  let decoder = WebPDecoder::new(Cursor::new(bytes)).map_err(webp_decode_error)?;
-  Ok(decoder.dimensions())
-}
-
-/// The canvas size, which `WebPGetInfo` reads from the `VP8X` header.
-#[cfg(all(not(target_arch = "wasm32"), feature = "webp"))]
-pub(crate) fn animated_webp_dimensions(bytes: &[u8]) -> ImageResult<(u32, u32)> {
-  webp_dimensions(bytes)
-}
-
 /// Per-frame delays in milliseconds, in stream order, read from the `ANMF` headers without decoding
 /// any pixels.
 #[cfg(feature = "webp")]
 pub(crate) fn webp_frame_infos(bytes: &[u8]) -> ImageResult<Box<[FrameInfo]>> {
-  let (width, height) = animated_webp_dimensions(bytes)?;
+  let (width, height) = webp_dimensions(bytes)?;
   let frame_pixels = width as u64 * height as u64;
   let mut total_pixels = 0_u64;
   let mut frames = Vec::new();
@@ -622,7 +610,7 @@ fn webp_canvas_to_buffer(
 }
 
 #[cfg(not(feature = "webp"))]
-pub(super) fn webp_dimensions(bytes: &[u8]) -> ImageResult<(u32, u32)> {
+pub(crate) fn webp_dimensions(bytes: &[u8]) -> ImageResult<(u32, u32)> {
   header_dimensions(bytes)
 }
 
