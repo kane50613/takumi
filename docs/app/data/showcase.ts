@@ -163,6 +163,13 @@ export const showcaseProjects: Project[] = [
     width: 1200,
     height: 630,
   },
+  {
+    title: "Juno",
+    image: "https://junocompanion.com/social/home-brand-v7.png",
+    url: "https://junocompanion.com/",
+    width: 1200,
+    height: 630,
+  },
 ];
 
 export const showcaseTemplates: Template[] = [
