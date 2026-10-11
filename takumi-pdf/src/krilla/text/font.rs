@@ -1,7 +1,8 @@
 use std::fmt::{Debug, Formatter};
 use std::hash::{Hash, Hasher};
 use std::ops::Deref;
-use std::sync::Arc;
+use std::sync::atomic::{AtomicU32, Ordering};
+use std::sync::{Arc, OnceLock};
 
 use skrifa::instance::{Location, LocationRef, Size};
 use skrifa::metrics::GlyphMetrics;
@@ -65,6 +66,7 @@ impl Font {
       font_data: data,
       font_ref_yoke,
       font_info,
+      advance_widths: AdvanceWidths::default(),
     }))))
   }
 
@@ -146,9 +148,13 @@ impl Font {
     self.0.font_data.clone()
   }
 
-  #[inline]
   pub(crate) fn advance_width(&self, glyph_id: GlyphId) -> Option<f32> {
-    self.glyph_metrics().advance_width(glyph_id.to_skrifa())
+    self
+      .0
+      .advance_widths
+      .get_or_read(glyph_id.to_u32(), self.num_glyphs(), || {
+        self.glyph_metrics().advance_width(glyph_id.to_skrifa())
+      })
   }
 }
 
@@ -233,6 +239,47 @@ struct Repr {
   font_info: Arc<FontInfo>,
   font_data: Data,
   font_ref_yoke: Yoke<FontRefYoke<'static>, Box<YokeData>>,
+  /// Each glyph's advance once read: a variable font recomputes it from its variation store on
+  /// every read, and a document reads the same few glyphs again and again.
+  advance_widths: AdvanceWidths,
+}
+
+/// Each glyph's advance once read, by glyph id: a variable font recomputes it from its variation
+/// store on every read, and a document reads the same few glyphs again and again.
+#[derive(Default)]
+struct AdvanceWidths(OnceLock<Box<[AtomicU32]>>);
+
+impl AdvanceWidths {
+  /// The bits of a glyph not read yet, a NaN no advance takes.
+  const UNREAD: u32 = u32::MAX;
+  /// The bits of a glyph without an advance, another NaN no advance takes.
+  const MISSING: u32 = u32::MAX - 1;
+
+  /// The advance of `glyph` among `glyphs`, reading it with `read` the first time.
+  fn get_or_read(
+    &self,
+    glyph: u32,
+    glyphs: u32,
+    read: impl FnOnce() -> Option<f32>,
+  ) -> Option<f32> {
+    let slots = self
+      .0
+      .get_or_init(|| (0..glyphs).map(|_| AtomicU32::new(Self::UNREAD)).collect());
+    let Some(slot) = slots.get(glyph as usize) else {
+      return read();
+    };
+
+    match slot.load(Ordering::Relaxed) {
+      Self::UNREAD => {
+        let width = read();
+
+        slot.store(width.map_or(Self::MISSING, f32::to_bits), Ordering::Relaxed);
+        width
+      }
+      Self::MISSING => None,
+      bits => Some(f32::from_bits(bits)),
+    }
+  }
 }
 
 impl Hash for Repr {
