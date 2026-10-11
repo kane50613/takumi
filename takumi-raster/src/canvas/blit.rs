@@ -598,11 +598,15 @@ mod tests {
   use image::{Rgba, RgbaImage};
   use takumi_core::geometry::Size;
   use tiny_skia::{
-    BlendMode as TinyBlendMode, FilterQuality, Pixmap, PixmapPaint, PremultipliedColorU8, Transform,
+    BlendMode as TinyBlendMode, FilterQuality, Mask as TinyMask, Pixmap, PixmapPaint, PixmapRef,
+    PremultipliedColorU8, Transform,
   };
-  use tiny_skia::{Mask as TinyMask, PixmapRef};
 
   use super::*;
+  use crate::{
+    BorderProperties, Canvas, PaintSource, Result, pixmap_from_buffer,
+    resources::image_buffer::ImageBuffer, style::ImageScalingAlgorithm,
+  };
 
   /// A pixmap of valid premultiplied pixels, varied by `seed`.
   fn noisy_pixmap(width: u32, height: u32, seed: u32) -> Pixmap {
@@ -657,10 +661,6 @@ mod tests {
       assert!(ours.data() == theirs.data(), "differs at opacity {opacity}");
     }
   }
-  use crate::{
-    BorderProperties, Canvas, PaintSource, Result, pixmap_from_buffer,
-    resources::image_buffer::ImageBuffer, style::ImageScalingAlgorithm,
-  };
 
   #[test]
   fn placement_overlap_tracks_both_source_offsets() {
