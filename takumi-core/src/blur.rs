@@ -1,7 +1,7 @@
 //! Gaussian blur as Skia's raster `SkBlurEngine` runs it for Chrome's filters and text shadows.
 //! Follows Skia under the notice in LICENSE-CHROMIUM.
 
-use std::{array, f32::consts::PI};
+use std::{array, f32::consts::PI, ops::Range};
 
 use crate::geometry::Point;
 
@@ -286,27 +286,49 @@ impl Pass {
   }
 }
 
-/// Runs `step` with each row read, zeros past the bottom, and the row `border` behind it, if any.
+/// Runs `step` down the `columns` of each row: the part entering, zeros past the bottom, and the
+/// part of the row `border` behind it, if any.
 fn for_each_row<const N: usize>(
   pixels: &mut [[u8; N]],
   width: usize,
   height: usize,
+  columns: Range<usize>,
   border: usize,
   mut step: impl FnMut(&[[u8; N]], Option<&mut [[u8; N]]>),
 ) {
-  let zeros = vec![[0u8; N]; width];
+  let zeros = vec![[0u8; N]; columns.len()];
 
   for index in 0..height + border {
     // The border is at least a pixel, so the row written lies wholly before the one read.
     let (written, unread) = pixels.split_at_mut((index * width).min(pixels.len()));
-    let entering = unread.get(..width).unwrap_or(&zeros);
-    let target = index
-      .checked_sub(border)
-      .map(|target| &mut written[target * width..(target + 1) * width]);
+    let entering = unread.get(columns.clone()).unwrap_or(&zeros);
+    let target = index.checked_sub(border).map(|target| {
+      let row = target * width;
+
+      &mut written[row + columns.start..row + columns.end]
+    });
 
     step(entering, target);
   }
 }
+
+/// The bands of columns a column pass runs down one at a time, each at most `BAND_LANES` channels
+/// wide.
+fn column_bands<const N: usize>(width: usize) -> impl Iterator<Item = Range<usize>> {
+  let band = band_columns::<N>(width);
+
+  (0..width)
+    .step_by(band)
+    .map(move |start| start..(start + band).min(width))
+}
+
+/// Columns in the widest band of an image `width` pixels wide.
+fn band_columns<const N: usize>(width: usize) -> usize {
+  width.min(BAND_LANES / N)
+}
+
+/// Channels a pass blurs at once, which bounds its rings by the band rather than the image width.
+const BAND_LANES: usize = 256;
 
 /// Skia's `GaussianPass`: a normalised Gaussian kernel `ceil(3 * sigma)` pixels each way.
 struct GaussianPass {
@@ -332,37 +354,50 @@ impl GaussianPass {
 
   fn blur_columns<const N: usize>(&self, pixels: &mut [[u8; N]], width: usize, height: usize) {
     let window = self.kernel.len();
-    // Every channel of a row is a lane; `next` is the oldest row in the ring.
-    let channels = width * N;
-    let mut ring = vec![0.0f32; window * channels];
-    let mut sums = vec![0.0f32; channels];
-    let mut next = 0;
+    // Every channel of a band's row is a lane; `next` is the oldest row in the ring.
+    let lanes = band_columns::<N>(width) * N;
+    let mut ring = vec![0.0f32; window * lanes];
+    let mut sums = vec![0.0f32; lanes];
 
-    for_each_row(pixels, width, height, window / 2, |entering, target| {
-      for (cell, channel) in ring[next * channels..][..channels]
-        .iter_mut()
-        .zip(entering.as_flattened())
-      {
-        *cell = f32::from(*channel) * (1.0 / 255.0);
-      }
-      next = if next + 1 == window { 0 } else { next + 1 };
+    for columns in column_bands::<N>(width) {
+      let channels = columns.len() * N;
+      let mut next = 0;
 
-      let Some(target) = target else {
-        return;
-      };
+      ring.fill(0.0);
+      for_each_row(
+        pixels,
+        width,
+        height,
+        columns,
+        window / 2,
+        |entering, target| {
+          for (cell, channel) in ring[next * channels..][..channels]
+            .iter_mut()
+            .zip(entering.as_flattened())
+          {
+            *cell = f32::from(*channel) * (1.0 / 255.0);
+          }
+          next = if next + 1 == window { 0 } else { next + 1 };
 
-      sums.fill(0.0);
-      for (offset, weight) in self.kernel.iter().enumerate() {
-        let slot = (next + offset) % window;
+          let Some(target) = target else {
+            return;
+          };
+          let sums = &mut sums[..channels];
 
-        for (sum, sample) in sums.iter_mut().zip(&ring[slot * channels..][..channels]) {
-          *sum += sample * weight;
-        }
-      }
-      for (channel, sum) in target.as_flattened_mut().iter_mut().zip(&sums) {
-        *channel = (sum * 255.0 + 0.5).clamp(0.0, 255.0) as u8;
-      }
-    });
+          sums.fill(0.0);
+          for (offset, weight) in self.kernel.iter().enumerate() {
+            let slot = (next + offset) % window;
+
+            for (sum, sample) in sums.iter_mut().zip(&ring[slot * channels..][..channels]) {
+              *sum += sample * weight;
+            }
+          }
+          for (channel, sum) in target.as_flattened_mut().iter_mut().zip(sums.iter()) {
+            *channel = (sum * 255.0 + 0.5).clamp(0.0, 255.0) as u8;
+          }
+        },
+      );
+    }
   }
 }
 
@@ -413,57 +448,75 @@ impl ThreeBoxPass {
     } else {
       pass
     };
-    // Every channel of a row is a lane; each box drops its trailing edge `pass`, `pass` and
-    // `last` rows back.
-    let channels = width * N;
-    let mut sum0 = vec![0u32; channels];
-    let mut sum1 = vec![0u32; channels];
-    let mut sum2 = vec![self.seed; channels];
+    // Every channel of a band's row is a lane; each box drops its trailing edge `pass`, `pass`
+    // and `last` rows back.
+    let lanes = band_columns::<N>(width) * N;
+    let mut sum0 = vec![0u32; lanes];
+    let mut sum1 = vec![0u32; lanes];
+    let mut sum2 = vec![0u32; lanes];
     // The rings hold what each box drops: a pixel, then a sum of at most `window` of them, which
     // fits a `u16` since `MAX_SIGMA` keeps `window` under 255.
-    let mut first = vec![0u8; pass * channels];
-    let mut second = vec![0u16; pass * channels];
-    let mut third = vec![0u32; last * channels];
-    let mut blurred = vec![0u8; channels];
-    let (mut slot, mut last_slot) = (0, 0);
+    let mut first = vec![0u8; pass * lanes];
+    let mut second = vec![0u16; pass * lanes];
+    let mut third = vec![0u32; last * lanes];
+    let mut blurred = vec![0u8; lanes];
 
-    for_each_row(pixels, width, height, self.border, |entering, target| {
-      let entering = &entering.as_flattened()[..channels];
-      let (sum0, sum1, sum2, blurred) = (
-        &mut sum0[..channels],
-        &mut sum1[..channels],
-        &mut sum2[..channels],
-        &mut blurred[..channels],
+    for columns in column_bands::<N>(width) {
+      let channels = columns.len() * N;
+      let (mut slot, mut last_slot) = (0, 0);
+
+      sum0.fill(0);
+      sum1.fill(0);
+      sum2.fill(self.seed);
+      first.fill(0);
+      second.fill(0);
+      third.fill(0);
+      for_each_row(
+        pixels,
+        width,
+        height,
+        columns,
+        self.border,
+        |entering, target| {
+          let entering = &entering.as_flattened()[..channels];
+          let (sum0, sum1, sum2, blurred) = (
+            &mut sum0[..channels],
+            &mut sum1[..channels],
+            &mut sum2[..channels],
+            &mut blurred[..channels],
+          );
+          let first = &mut first[slot * channels..][..channels];
+          let second = &mut second[slot * channels..][..channels];
+          let third = &mut third[last_slot * channels..][..channels];
+
+          for lane in 0..channels {
+            let leading = u32::from(entering[lane]);
+
+            sum0[lane] += leading;
+            sum1[lane] += sum0[lane];
+            sum2[lane] += sum1[lane];
+            blurred[lane] =
+              ((u64::from(sum2[lane]) * u64::from(self.factor) + self.bias) >> 32) as u8;
+            sum2[lane] -= third[lane];
+            third[lane] = sum1[lane];
+            sum1[lane] -= u32::from(second[lane]);
+            second[lane] = sum0[lane] as u16;
+            sum0[lane] -= u32::from(first[lane]);
+            first[lane] = entering[lane];
+          }
+          if let Some(target) = target {
+            target.as_flattened_mut().copy_from_slice(blurred);
+          }
+
+          slot = if slot + 1 == pass { 0 } else { slot + 1 };
+          last_slot = if last_slot + 1 == last {
+            0
+          } else {
+            last_slot + 1
+          };
+        },
       );
-      let first = &mut first[slot * channels..][..channels];
-      let second = &mut second[slot * channels..][..channels];
-      let third = &mut third[last_slot * channels..][..channels];
-
-      for lane in 0..channels {
-        let leading = u32::from(entering[lane]);
-
-        sum0[lane] += leading;
-        sum1[lane] += sum0[lane];
-        sum2[lane] += sum1[lane];
-        blurred[lane] = ((u64::from(sum2[lane]) * u64::from(self.factor) + self.bias) >> 32) as u8;
-        sum2[lane] -= third[lane];
-        third[lane] = sum1[lane];
-        sum1[lane] -= u32::from(second[lane]);
-        second[lane] = sum0[lane] as u16;
-        sum0[lane] -= u32::from(first[lane]);
-        first[lane] = entering[lane];
-      }
-      if let Some(target) = target {
-        target.as_flattened_mut().copy_from_slice(blurred);
-      }
-
-      slot = if slot + 1 == pass { 0 } else { slot + 1 };
-      last_slot = if last_slot + 1 == last {
-        0
-      } else {
-        last_slot + 1
-      };
-    });
+    }
   }
 }
 
@@ -474,7 +527,7 @@ fn box_window(sigma: f32) -> usize {
 
 #[cfg(test)]
 mod tests {
-  use super::{MAX_SIGMA, blur_alpha, blur_rgba, box_window, downscale_step_count};
+  use super::{BAND_LANES, MAX_SIGMA, blur_alpha, blur_rgba, box_window, downscale_step_count};
 
   #[test]
   fn the_box_window_follows_skia() {
@@ -511,6 +564,25 @@ mod tests {
     assert!(before.abs_diff(after) * 100 < before);
     assert!(alpha[30 * width + 30] < 255);
     assert!(alpha[30 * width + 30] > alpha[30 * width + 40]);
+  }
+
+  #[test]
+  fn a_band_edge_leaves_no_seam() {
+    let (width, height) = (BAND_LANES * 2 + 40, 48);
+
+    for sigma in [1.0, 4.0] {
+      // Ink along the bottom edge leaves a band's rings full when it ends.
+      let mut alpha = vec![0u8; width * height];
+
+      alpha[(height - 8) * width..].fill(255);
+      blur_alpha(&mut alpha, width, height, sigma);
+
+      for row in alpha.chunks_exact(width) {
+        for column in [BAND_LANES - 1, BAND_LANES, BAND_LANES * 2] {
+          assert_eq!(row[column], row[width / 2]);
+        }
+      }
+    }
   }
 
   #[test]
