@@ -327,6 +327,11 @@ impl ComputedStyle {
     self.max_lines.filter(|&count| count >= 1)
   }
 
+  /// Whether a height may clamp lines; `text-fit` scales line heights only after breaking.
+  pub(crate) fn height_clamps_lines(&self) -> bool {
+    self.text_fit.mode == TextFitMode::None
+  }
+
   #[inline]
   fn grid_template(
     components: &Option<GridTemplateComponents>,

@@ -1199,6 +1199,8 @@ pub fn create_inline_layout<'c>(request: InlineLayoutRequest<'c>) -> BuiltInline
     &mut built.positioned_floats,
   );
 
+  let mut kept_fits = None;
+
   if mode == InlineLayoutMode::Draw {
     let BuiltInlineLayout {
       layout,
@@ -1221,15 +1223,31 @@ pub fn create_inline_layout<'c>(request: InlineLayoutRequest<'c>) -> BuiltInline
       // than break opportunities (blink/renderer/core/layout/inline/
       // line_truncator.cc). The spec never conditions ellipsing on soft wrap
       // opportunities either: https://drafts.csswg.org/css-overflow-3/#text-overflow
+      // Blink fits a line before it truncates it (LineFitter::FitLine runs
+      // before InlineLayoutAlgorithm::CreateLine), so only a line still too
+      // wide at its fitted scale is ellipsed, at that scale.
+      let fits = if text_fit_is_applicable(positioned_floats) {
+        text_fit_lines(layout, max_width, style, None)
+      } else {
+        Vec::new()
+      };
+      let last_fit = fits.last().copied().unwrap_or(LineFit::NONE);
       let is_overflowing = layout.lines().last().is_some_and(|last_line| {
-        let metrics = last_line.metrics();
         last_line.text_range().end < text.len()
-          || metrics.inline_min_coord + metrics.advance - metrics.trailing_whitespace
-            > max_width + LAYOUT_UNIT_EPSILON
+          || last_fit.content_end(&last_line, layout.is_rtl()) > max_width + LAYOUT_UNIT_EPSILON
       });
 
       if is_overflowing {
-        make_ellipsis_layout(layout, spans, rebreak, style, context, positioned_floats);
+        make_ellipsis_layout(
+          layout,
+          spans,
+          rebreak,
+          last_fit.scale,
+          style,
+          context,
+          positioned_floats,
+        );
+        kept_fits = (!fits.is_empty()).then_some(fits);
         *ellipsized = true;
       }
     }
@@ -1255,7 +1273,7 @@ pub fn create_inline_layout<'c>(request: InlineLayoutRequest<'c>) -> BuiltInline
   if style.parent.text_fit.mode != TextFitMode::None
     && text_fit_is_applicable(&built.positioned_floats)
   {
-    built.line_fits = text_fit_lines(&built.layout, max_width, style);
+    built.line_fits = text_fit_lines(&built.layout, max_width, style, kept_fits.as_deref());
   }
 
   built
@@ -1269,6 +1287,10 @@ pub(crate) fn resolve_inline_max_height(
   font_style: &SizedFontStyle,
   content_box_height: f32,
 ) -> Option<MaxHeight> {
+  if !font_style.parent.height_clamps_lines() {
+    return font_style.parent.clamp_lines().map(MaxHeight::Lines);
+  }
+
   font_style
     .parent
     .clamp_lines()

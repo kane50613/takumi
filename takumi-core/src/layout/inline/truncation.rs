@@ -6,6 +6,7 @@ use parley::{InlineBoxKind, PositionedInlineBox, PositionedLayoutItem};
 use super::{
   InlineLayout, break_into_lines, chromium_line_breaks, items::ProcessedInlineSpan,
   push_presentation_text, push_spans_into_builder, refresh_text_span_ranges,
+  text_fit::cluster_fixed_spacing,
 };
 
 fn tail_text_span<'a, 'c>(
@@ -52,7 +53,8 @@ struct TruncationCheckpoint {
   whitespace: bool,
 }
 
-fn collect_truncation_checkpoints(layout: &InlineLayout) -> Vec<TruncationCheckpoint> {
+/// The truncation points on the last line of `layout`, whose text `text-fit` scales by `scale`.
+fn collect_truncation_checkpoints(layout: &InlineLayout, scale: f32) -> Vec<TruncationCheckpoint> {
   let Some(last_line) = layout.lines().last() else {
     return Vec::new();
   };
@@ -77,7 +79,8 @@ fn collect_truncation_checkpoints(layout: &InlineLayout) -> Vec<TruncationCheckp
         last_run_index = Some(run.index());
 
         for cluster in run.visual_clusters() {
-          cumulative_width += cluster.advance();
+          cumulative_width +=
+            cluster.advance() * scale + cluster_fixed_spacing(&cluster) * (1.0 - scale);
           checkpoints.push(TruncationCheckpoint {
             cumulative_width,
             byte_end: cluster.text_range().end,
@@ -173,17 +176,18 @@ fn text_span_style_by_id<'a, 'c>(
   }
 }
 
-/// Truncates text in the layout to fit within `max_width` and appends an ellipsis.
+/// Truncates the last line, which `text-fit` scales by `scale`, to `max_width` with an ellipsis.
 pub(super) fn make_ellipsis_layout<'c>(
   layout: &mut InlineLayout,
   spans: &mut Vec<ProcessedInlineSpan<'c>>,
   options: RebreakOptions,
+  scale: f32,
   root_style: &'c SizedFontStyle,
   context: &RenderContext,
   positioned_floats: &mut Vec<PositionedInlineBox>,
 ) {
   let ellipsis_char = root_style.parent.ellipsis_char();
-  let checkpoints = collect_truncation_checkpoints(layout);
+  let checkpoints = collect_truncation_checkpoints(layout, scale);
   let mut ellipsis_span_id = tail_text_span(spans).map(|(_, span_id)| span_id);
 
   let mut iterations = 0;
@@ -197,7 +201,7 @@ pub(super) fn make_ellipsis_layout<'c>(
     let plan = TruncationPlan::new(
       &checkpoints,
       spans,
-      (options.max_width - ellipsis_w).max(0.0),
+      (options.max_width - ellipsis_w * scale).max(0.0),
     );
     let next_ellipsis_span_id = tail_text_span(&spans[..plan.span_cut]).map(|(_, span_id)| span_id);
 

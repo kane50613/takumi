@@ -31,7 +31,7 @@ pub(super) fn text_fit_is_applicable(positioned_floats: &[PositionedInlineBox]) 
 
 /// The fixed letter- and word-spacing `cluster` carries, which `text-fit` leaves unscaled as
 /// Blink's `PercentageSpacingDescription` drops it before measuring.
-fn cluster_fixed_spacing(cluster: &Cluster<'_, InlineBrush>) -> f32 {
+pub(super) fn cluster_fixed_spacing(cluster: &Cluster<'_, InlineBrush>) -> f32 {
   let brush = &cluster.first_style().brush;
   let word = if cluster.is_space_or_nbsp() {
     brush.fixed_word_spacing
@@ -204,6 +204,13 @@ impl LineFit {
     start: 0.0,
   };
 
+  /// Where `line`'s content, less trailing whitespace, ends once this fit scales its text.
+  pub(crate) fn content_end(self, line: &Line<'_, InlineBrush>, rtl: bool) -> f32 {
+    let (flexible, fixed) = text_fit_line_advance(line, rtl);
+
+    line.metrics().inline_min_coord + fixed + flexible * self.scale
+  }
+
   /// How the line sizes the text of a box, the root inline box when `root`. Blink's root box
   /// always scales as it paints, even on a reshaped line.
   pub(crate) fn text_scale(self, root: bool) -> TextScale {
@@ -261,24 +268,22 @@ struct FitLine {
 
 /// How `text-fit` fits each line, after Blink's `LineFitter::MeasureScale` for the per-line
 /// targets and `MeasurePerBlockScale` with its caller for `consistent` (`text_fit_utils.cc`,
-/// `block_layout_algorithm.cc`).
+/// `block_layout_algorithm.cc`). Each line keeps the scale `kept` gave it before truncation.
 pub(super) fn text_fit_lines(
   layout: &InlineLayout,
   max_width: f32,
   style: &SizedFontStyle,
+  kept: Option<&[LineFit]>,
 ) -> Vec<LineFit> {
   let text_fit = style.parent.text_fit;
   if text_fit.mode == TextFitMode::None || !max_width.is_finite() {
     return Vec::new();
   }
 
-  let line_count = layout.lines().count();
-  if line_count == 0 {
+  if layout.lines().next().is_none() {
     return Vec::new();
   }
 
-  let epsilon = 2.0 * style.sizing.viewport.device_pixel_ratio;
-  let is_grow = text_fit.mode == TextFitMode::Grow;
   let rtl = layout.is_rtl();
   let indents = LineIndent::of(style, max_width).per_line(layout);
   let lines: Vec<FitLine> = layout
@@ -295,9 +300,38 @@ pub(super) fn text_fit_lines(
       }
     })
     .collect();
+  let scales = match kept {
+    Some(fits) => (0..lines.len())
+      .map(|index| fits.get(index).map_or(1.0, |fit| fit.scale))
+      .collect(),
+    None => line_scales(layout, &lines, max_width, style),
+  };
   let align = style.parent.text_align;
 
+  layout
+    .lines()
+    .zip(&lines)
+    .zip(scales)
+    .map(|((line, fit), scale)| LineFit {
+      scale,
+      reshaped: line_has_fixed_spacing(&line),
+      start: fit.start(&line, scale, align, rtl),
+    })
+    .collect()
+}
+
+/// The scale `text-fit` gives each of `lines`, the measured lines of `layout`.
+fn line_scales(
+  layout: &InlineLayout,
+  lines: &[FitLine],
+  max_width: f32,
+  style: &SizedFontStyle,
+) -> Vec<f32> {
+  let text_fit = style.parent.text_fit;
+  let epsilon = 2.0 * style.sizing.viewport.device_pixel_ratio;
+
   if text_fit.target == TextFitTarget::Consistent {
+    let is_grow = text_fit.mode == TextFitMode::Grow;
     let minimum = lines
       .iter()
       .filter(|line| {
@@ -314,31 +348,15 @@ pub(super) fn text_fit_lines(
     };
     let applies = (scale < 1.0 && !is_grow) || (scale > 1.0 && is_grow);
 
-    let scale = if applies { scale } else { 1.0 };
-
-    return layout
-      .lines()
-      .zip(&lines)
-      .map(|(line, fit)| LineFit {
-        scale,
-        reshaped: line_has_fixed_spacing(&line),
-        start: fit.start(&line, scale, align, rtl),
-      })
-      .collect();
+    return vec![if applies { scale } else { 1.0 }; lines.len()];
   }
 
   layout
     .lines()
-    .zip(&lines)
+    .zip(lines)
     .enumerate()
     .map(|(index, (line, fit))| {
-      let scale = per_line_scale(&line, fit, index, line_count, max_width, epsilon, text_fit);
-
-      LineFit {
-        scale,
-        reshaped: line_has_fixed_spacing(&line),
-        start: fit.start(&line, scale, align, rtl),
-      }
+      per_line_scale(&line, fit, index, lines.len(), max_width, epsilon, text_fit)
     })
     .collect()
 }
