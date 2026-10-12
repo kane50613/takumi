@@ -24,7 +24,7 @@ It runs the same layout as the image, SVG, and PDF renderers, in WebAssembly. Wh
 ## Install
 
 ```bash
-npm install takumi-paint @takumi-rs/helpers
+npm install takumi-paint
 ```
 
 ## Quick start
