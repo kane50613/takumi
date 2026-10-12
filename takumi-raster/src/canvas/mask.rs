@@ -6,7 +6,7 @@ use takumi_core::{
   geometry::{ComputedLayout as Layout, Point, Size, transformed_rect_extents},
   paint_property::ClipNode,
   painter::{BoxPainter, FillShape},
-  resources::glyph_cache::glyph_mask,
+  resources::glyph_cache::{glyph_mask, max_entry_bytes},
   scene::SceneBounds,
 };
 use tiny_skia::{IntSize, Mask as TinyMask, Transform as TinyTransform};
@@ -468,12 +468,17 @@ pub(crate) fn render_mask(
   rasterize_mask(paths, transform, style.unwrap_or_default(), cull).unwrap_or_default()
 }
 
-/// Most pixels a filled mask takes to go through the glyph cache: a card or a pill, not a page.
-const CACHED_MASK_MAX_PIXELS: f32 = (1 << 16) as f32;
+/// Whether a fill of `size` at `transform` fits the glyph cache: its rasterized bounds, a byte a
+/// pixel, within [`max_entry_bytes`].
+fn fits_glyph_cache(size: Size<f32>, transform: Affine) -> bool {
+  transformed_rect_extents(Point::ZERO, size, transform).is_some_and(
+    |(left, top, right, bottom)| (right - left) * (bottom - top) <= max_entry_bytes() as f32,
+  )
+}
 
 /// [`render_mask`] of `paths`, filled at `transform` within `cull`, kept in the glyph cache when
-/// `size`, the local extent of `paths`, is small: a box drawn the same way every frame of a live
-/// view rasterizes once.
+/// it [fits](fits_glyph_cache) for `size`, the local extent of `paths`: a box drawn the same way
+/// every frame of a live view rasterizes once.
 pub(crate) fn render_cached_mask(
   paths: &[Command],
   size: Size<f32>,
@@ -481,11 +486,8 @@ pub(crate) fn render_cached_mask(
   cull: CanvasViewport,
 ) -> (Arc<Vec<u8>>, Placement) {
   let render = || render_mask(paths, Some(transform), None, Some(cull));
-  let fits = transformed_rect_extents(Point::ZERO, size, transform).is_some_and(
-    |(left, top, right, bottom)| (right - left) * (bottom - top) <= CACHED_MASK_MAX_PIXELS,
-  );
 
-  if !fits {
+  if !fits_glyph_cache(size, transform) {
     let (mask, placement) = render();
 
     return (Arc::new(mask), placement);
@@ -784,21 +786,12 @@ mod tests {
   }
 
   #[test]
-  fn a_mask_whose_bounds_pass_the_limit_is_not_cached() {
-    let mut paths = Vec::new();
-    let size = Size::new(400.0, 1.0);
+  fn the_cache_takes_a_fill_by_its_rasterized_bounds() {
+    let strip = Size::new(1_000.0, 1.0);
 
-    BorderProperties::default().append_mask_commands(&mut paths, size, Point::ZERO);
-
-    let rotated = Affine::rotation(Angle::new(45.0));
-    let cull = CanvasViewport {
-      origin: Point { x: 0, y: 0 },
-      size: Size::new(400, 400),
-    };
-    let (first, _) = render_cached_mask(&paths, size, rotated, cull);
-    let (second, _) = render_cached_mask(&paths, size, rotated, cull);
-
-    assert!(!Arc::ptr_eq(&first, &second));
+    assert!(fits_glyph_cache(Size::new(270.0, 70.0), Affine::IDENTITY));
+    assert!(fits_glyph_cache(strip, Affine::IDENTITY));
+    assert!(!fits_glyph_cache(strip, Affine::rotation(Angle::new(45.0))));
   }
 
   #[test]
