@@ -6,9 +6,11 @@ use takumi_core::{
   geometry::{ComputedLayout as Layout, Point, Size, transformed_rect_extents},
   paint_property::ClipNode,
   painter::{BoxPainter, FillShape},
+  resources::glyph_cache::glyph_mask,
   scene::SceneBounds,
 };
 use tiny_skia::{IntSize, Mask as TinyMask, Transform as TinyTransform};
+use xxhash_rust::xxh3::Xxh3;
 
 use crate::{
   BoxMask, Command, Fill, Placement, RenderContext, Result, Style, build_path, checked_area,
@@ -466,6 +468,45 @@ pub(crate) fn render_mask(
   rasterize_mask(paths, transform, style.unwrap_or_default(), cull).unwrap_or_default()
 }
 
+/// Most pixels a filled mask takes to go through the glyph cache: a card or a pill, not a page.
+const CACHED_MASK_MAX_PIXELS: f32 = (1 << 16) as f32;
+
+/// [`render_mask`] of `paths`, filled at `transform` within `cull`, kept in the glyph cache when
+/// `size`, the local extent of `paths`, is small: a box drawn the same way every frame of a live
+/// view rasterizes once.
+pub(crate) fn render_cached_mask(
+  paths: &[Command],
+  size: Size<f32>,
+  transform: Affine,
+  cull: CanvasViewport,
+) -> (Arc<Vec<u8>>, Placement) {
+  let render = || render_mask(paths, Some(transform), None, Some(cull));
+  let Affine { a, b, c, d, x, y } = transform;
+
+  if size.width * size.height * (a * d - b * c).abs() > CACHED_MASK_MAX_PIXELS {
+    let (mask, placement) = render();
+
+    return (Arc::new(mask), placement);
+  }
+
+  let mut hasher = Xxh3::new();
+
+  hasher.update(b"filled-shape");
+  hasher.update(&Command::digest(paths).to_le_bytes());
+  for value in [a, b, c, d, x, y] {
+    hasher.update(&value.to_bits().to_le_bytes());
+  }
+  for value in [
+    cull.origin.x,
+    cull.origin.y,
+    cull.size.width,
+    cull.size.height,
+  ] {
+    hasher.update(&value.to_le_bytes());
+  }
+  glyph_mask(hasher.digest(), render)
+}
+
 /// `[left, top, right, bottom]` cut to `cull` once they cover too many pixels to rasterize whole,
 /// or `None` when they lie wholly outside it.
 pub(crate) fn cull_bounds(
@@ -708,6 +749,30 @@ impl<'a> MaskRow<'a> {
 #[cfg(test)]
 mod tests {
   use super::*;
+
+  #[test]
+  fn a_cached_mask_matches_a_fresh_one_and_is_reused() {
+    let mut paths = Vec::new();
+    let border = takumi_core::layout::border::BorderProperties {
+      radius: takumi_core::style::Sides([takumi_core::style::SpacePair { x: 9.5, y: 9.5 }; 4]),
+      ..Default::default()
+    };
+    let size = Size::new(73.0, 41.0);
+
+    border.append_mask_commands(&mut paths, size, Point::ZERO);
+
+    let transform = Affine::translation(11.25, 7.75);
+    let cull = CanvasViewport {
+      origin: Point { x: 0, y: 0 },
+      size: Size::new(200, 100),
+    };
+    let fresh = render_mask(&paths, Some(transform), None, Some(cull));
+    let (first, placement) = render_cached_mask(&paths, size, transform, cull);
+    let (second, _) = render_cached_mask(&paths, size, transform, cull);
+
+    assert_eq!((first.as_slice(), placement), (fresh.0.as_slice(), fresh.1));
+    assert!(Arc::ptr_eq(&first, &second));
+  }
 
   #[test]
   fn a_row_covers_only_the_offsets_inside_the_mask() {
