@@ -41,6 +41,9 @@ pub struct FragmentItems {
   pub(crate) ellipsized: bool,
   /// Each line box's top and bottom, below the content box's top.
   line_boxes: Vec<(f32, f32)>,
+  /// The first and last line's baselines, below the content box's top; `None` when it has no
+  /// lines or `line-clamp` cut lines off.
+  baselines: Option<(f32, f32)>,
   /// What its ink covers.
   pub(crate) ink: Ink,
   /// How far its spans' decorations, shadows and strokes reach past the glyphs.
@@ -277,11 +280,20 @@ impl BuiltInlineLayout<'_> {
   ) -> FragmentItems {
     let mut ink = None;
     let mut decoration_ink = None;
+    let line_metrics = self.line_metrics();
     let mut items = FragmentItems {
       content_box: ContentBox::of(layout),
       text: self.text.clone(),
       ellipsized: self.ellipsized,
-      line_boxes: self.line_boxes().collect(),
+      line_boxes: line_metrics
+        .iter()
+        .map(|line| (line.resolved_line_top, line.resolved_line_bottom))
+        .collect(),
+      baselines: line_metrics
+        .first()
+        .zip(line_metrics.last())
+        .filter(|_| !self.clamped)
+        .map(|(first, last)| (first.resolved_baseline, last.resolved_baseline)),
       ink: Ink::default(),
       span_ink_reach: self.span_ink_reach(),
       text_items: Vec::new(),
@@ -663,6 +675,13 @@ impl FragmentItems {
   /// Each line box's top and bottom, below the content box's top.
   pub fn line_boxes(&self) -> &[(f32, f32)] {
     &self.line_boxes
+  }
+
+  /// The first line's baseline, or the last's with `use_last_line`, below the content box's top.
+  pub(crate) fn baseline(&self, use_last_line: bool) -> Option<f32> {
+    self
+      .baselines
+      .map(|(first, last)| if use_last_line { last } else { first })
   }
 
   /// The in-flow and out-of-flow inline boxes, sorted by id.
