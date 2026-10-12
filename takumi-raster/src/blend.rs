@@ -441,15 +441,17 @@ pub(crate) fn scale_premultiplied_pixel(pixel: [u8; 4], alpha: u8) -> [u8; 4] {
   pixel.map(|channel| mul_div_255(channel, alpha))
 }
 
-/// [`composite_premultiplied_over`] for each pixel of `src` over `dst`, without branches so it
-/// vectorizes.
+/// [`composite_premultiplied_over`] for each pixel of `src` over `dst`, for every input, with
+/// selects instead of branches so it vectorizes.
 #[inline(always)]
 pub(crate) fn composite_premultiplied_over_row(dst: &mut [[u8; 4]], src: &[[u8; 4]]) {
   for (dst, &src) in dst.iter_mut().zip(src) {
     let inverse = u8::MAX - src[3];
     let over = array::from_fn(|lane| src[lane].saturating_add(mul_div_255(dst[lane], inverse)));
 
-    *dst = if dst[3] == 0 && src[3] != 0 {
+    *dst = if src[3] == 0 {
+      *dst
+    } else if dst[3] == 0 {
       src
     } else {
       over
@@ -596,7 +598,36 @@ pub(crate) fn composite_repeated_premultiplied_pixel_normal(
 mod tests {
   use image::Rgba;
 
-  use crate::{blend::blend_pixel, style::BlendMode};
+  use crate::{
+    blend::{blend_pixel, composite_premultiplied_over, composite_premultiplied_over_row},
+    style::BlendMode,
+  };
+
+  #[test]
+  fn the_row_compositor_matches_the_pixel_one_for_every_input() {
+    let samples = [0, 1, 2, 77, 128, 200, 254, 255];
+
+    for src_alpha in 0..=u8::MAX {
+      for dst_alpha in 0..=u8::MAX {
+        for &src_red in &samples {
+          for &dst_red in &samples {
+            let src = [src_red, src_alpha / 2, 255, src_alpha];
+            let mut expected = [dst_red, dst_alpha / 3, 0, dst_alpha];
+            let mut actual = [expected];
+
+            composite_premultiplied_over(&mut expected, src);
+            composite_premultiplied_over_row(&mut actual, &[src]);
+            assert_eq!(
+              actual[0],
+              expected,
+              "{src:?} over {:?}",
+              [dst_red, dst_alpha]
+            );
+          }
+        }
+      }
+    }
+  }
 
   // https://github.com/kane50613/takumi/issues/447
   #[test]

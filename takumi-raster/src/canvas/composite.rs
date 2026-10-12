@@ -5,17 +5,14 @@ use tiny_skia::PixmapMut;
 
 use super::{
   MASK_RUN, MaskSamplingOptions, MaskView, PaintSource, SamplingFootprint,
-  blit::{OverlayBounds, apply_mask_row},
+  blit::{OverlayBounds, apply_mask_row, composite_run_over},
   mask::MaskRow,
   paint_source::{ResolvedSource, ScaledRows, sample_paint_source},
   whole_pixel_translation,
 };
 use crate::{
   Placement,
-  blend::{
-    blend_premultiplied_pixel, composite_premultiplied_over, composite_premultiplied_over_row,
-    scale_premultiplied_pixel,
-  },
+  blend::{blend_premultiplied_pixel, composite_premultiplied_over, scale_premultiplied_pixel},
   style::{Affine, BlendMode, ImageScalingAlgorithm},
 };
 
@@ -203,18 +200,6 @@ fn constant_clipped_over(dst: &mut [[u8; 4]], mask: &[u8], clip: &[u8], color: [
       scale_premultiplied_pixel(scale_premultiplied_pixel(color, alpha), clip)
     }),
   );
-}
-
-/// `sources` over `dst`, at most a [`MASK_RUN`] long, gathered first so the compositing
-/// vectorizes.
-#[inline(always)]
-fn composite_run_over(dst: &mut [[u8; 4]], sources: impl Iterator<Item = [u8; 4]>) {
-  let mut run = [[0; 4]; MASK_RUN];
-
-  for (slot, source) in run.iter_mut().zip(sources) {
-    *slot = source;
-  }
-  composite_premultiplied_over_row(dst, &run[..dst.len()]);
 }
 
 #[inline]
