@@ -20,12 +20,9 @@ fn blend_plus_lighter(bottom: &mut Rgba<u8>, top: Rgba<u8>) {
     return;
   }
 
-  let top_alpha = top.0[3] as u32;
-  let bottom_alpha = bottom.0[3] as u32;
-
   for i in 0..3 {
-    let top_premul = fast_div_255(top.0[i] as u32 * top_alpha);
-    let bottom_premul = fast_div_255(bottom.0[i] as u32 * bottom_alpha);
+    let top_premul = mul_div_255(top.0[i], top.0[3]);
+    let bottom_premul = mul_div_255(bottom.0[i], bottom.0[3]);
     bottom.0[i] = top_premul.saturating_add(bottom_premul);
   }
 
@@ -141,15 +138,15 @@ fn blend_with_integer(bottom: &mut Rgba<u8>, top: Rgba<u8>, mode: BlendMode) {
 fn blend_channel_integer(mode: BlendMode, bottom: u8, top: u8) -> u8 {
   match mode {
     BlendMode::Multiply => mul_div_255(top, bottom),
-    BlendMode::Screen => 255 - fast_div_255((255 - top as u32) * (255 - bottom as u32)),
+    BlendMode::Screen => 255 - mul_div_255(255 - top, 255 - bottom),
     BlendMode::Darken => top.min(bottom),
     BlendMode::Lighten => top.max(bottom),
     BlendMode::ColorDodge => color_dodge_integer(bottom, top),
     BlendMode::ColorBurn => color_burn_integer(bottom, top),
     BlendMode::Difference => top.abs_diff(bottom),
-    BlendMode::Exclusion => (bottom as u32 + top as u32
-      - (2 * fast_div_255_u32(bottom as u32 * top as u32)))
-    .min(255) as u8,
+    BlendMode::Exclusion => {
+      (u32::from(bottom) + u32::from(top) - 2 * u32::from(mul_div_255(bottom, top))).min(255) as u8
+    }
     _ => top,
   }
 }
