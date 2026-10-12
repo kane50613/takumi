@@ -67,24 +67,64 @@ fn panel_node() -> Node {
   .with_tw("flex flex-col w-full h-full p-4 bg-white".parse().unwrap())
 }
 
-/// A dashboard: a label and a value per row. `tick` rewrites only the first few values, the way an
-/// auto-updating dashboard or a re-rendered template changes a little between renders.
-fn dashboard_node(tick: u64) -> Node {
-  let text =
-    |text: String| Node::text(text).with_tw("text-[20px] text-gray-900 block".parse().unwrap());
+/// The kinds of text a dashboard holds, so a result says which kinds the cache helps.
+#[derive(Clone, Copy)]
+enum Kind {
+  /// Short single-line labels and values, as in a status card.
+  Short,
+  /// Long runs that wrap, like pull request titles or notification bodies.
+  Wrapping,
+  /// Runs with emoji, which shape through the fallback font.
+  Emoji,
+  /// Text around an inline-block, which bakes measured sizes into the layout and never caches.
+  InlineBox,
+}
+
+impl Kind {
+  const ALL: [(&'static str, Kind); 4] = [
+    ("short", Kind::Short),
+    ("wrapping", Kind::Wrapping),
+    ("emoji", Kind::Emoji),
+    ("inline_box", Kind::InlineBox),
+  ];
+
+  fn row(self, row: usize, value: u64) -> Node {
+    let text =
+      |text: String| Node::text(text).with_tw("text-[20px] text-gray-900".parse().unwrap());
+
+    match self {
+      Kind::Short => Node::container([text(format!("Metric number {row}")), text(format!("{value} ms"))]),
+      Kind::Wrapping => Node::container([text(format!(
+        "#{row} Fix flaky layout measurement when a wrapped paragraph is re-rendered with a longer title ({value})"
+      ))])
+      .with_tw("block w-[360px]".parse().unwrap()),
+      Kind::Emoji => Node::container([text(format!("🚀 Deploy {row} ✅ build {value} passed 🔥"))]),
+      Kind::InlineBox => Node::container([
+        text(format!("Review requested on repo {row} ")),
+        Node::container([text(format!("{value}"))])
+          .with_tw("inline-block px-2 bg-gray-200".parse().unwrap()),
+        text(" open".to_string()),
+      ])
+      .with_tw("block".parse().unwrap()),
+    }
+  }
+}
+
+/// Text only: a column of `kind` rows. `tick` rewrites the value in the first few rows and leaves
+/// the rest identical, the way an auto-updating dashboard changes a little between renders.
+fn dashboard_node(kind: Kind, tick: u64) -> Node {
   let rows = (0..DASHBOARD_ROWS).map(|row| {
     let value = if row < DASHBOARD_CHANGING_VALUES {
-      format!("{}", 1000 + tick * 7 + row as u64)
+      1000 + tick * 7 + row as u64
     } else {
-      format!("stable value {row}")
+      row as u64
     };
 
-    Node::container([text(format!("Metric number {row}")), text(value)])
-      .with_tw("flex justify-between w-full".parse().unwrap())
+    kind.row(row, value)
   });
 
   Node::container(rows.collect::<Vec<_>>())
-    .with_tw("flex flex-col w-full h-full p-4 bg-white".parse().unwrap())
+    .with_tw("flex flex-col w-full h-full p-4".parse().unwrap())
 }
 
 fn render_node(fonts: &Fonts, node: Node) {
@@ -140,22 +180,26 @@ fn bench_unique_text_every_call(c: &mut Criterion) {
 
 fn bench_dashboard(c: &mut Criterion) {
   let fonts = common::fonts();
-  let mut group = c.benchmark_group("shape_cache_dashboard");
 
-  for (name, budget) in [("cache_off", 0), ("cache_on", 16 * 1024 * 1024)] {
-    let tick = Cell::new(0u64);
+  for (kind_name, kind) in Kind::ALL {
+    let mut group = c.benchmark_group(format!("shape_cache_dashboard_{kind_name}"));
 
-    group.bench_function(name, |b| {
-      set_shape_cache_max_bytes(budget);
-      b.iter(|| {
-        tick.set(tick.get() + 1);
-        render_node(&fonts, black_box(dashboard_node(tick.get())));
+    for (name, budget) in [("cache_off", 0), ("cache_on", 16 * 1024 * 1024)] {
+      let tick = Cell::new(0u64);
+
+      group.bench_function(name, |b| {
+        set_shape_cache_max_bytes(budget);
+        b.iter(|| {
+          tick.set(tick.get() + 1);
+          render_node(&fonts, black_box(dashboard_node(kind, tick.get())));
+        });
       });
-    });
+    }
+
+    group.finish();
   }
 
   set_shape_cache_max_bytes(0);
-  group.finish();
 }
 
 mod common;
