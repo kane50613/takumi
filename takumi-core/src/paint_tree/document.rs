@@ -623,7 +623,7 @@ pub enum PaintStep {
 }
 
 /// A painted document.
-#[derive(Debug, Clone, PartialEq, Serialize)]
+#[derive(Debug, Clone, Default, PartialEq, Serialize)]
 pub struct PaintDocument {
   /// The canvas width.
   pub width: f32,
