@@ -453,7 +453,7 @@ pub(crate) fn scale_premultiplied_pixel(pixel: [u8; 4], alpha: u8) -> [u8; 4] {
 
 /// `fast_div_255(a * b)` in 16-bit lanes, which the product of two bytes never overflows.
 #[inline(always)]
-fn mul_div_255(a: u8, b: u8) -> u8 {
+pub(crate) fn mul_div_255(a: u8, b: u8) -> u8 {
   let product = u16::from(a) * u16::from(b);
 
   ((product + 128 + (product >> 8)) >> 8) as u8
@@ -579,17 +579,17 @@ pub(crate) fn blend_premultiplied_pixel_normal(dst: &mut [u8], src: Premultiplie
 pub(crate) fn composite_premultiplied_over_span(dst: &mut [u8], pixels: &[PremultipliedColorU8]) {
   for (dst_pixel, src_pixel) in dst.as_chunks_mut::<4>().0.iter_mut().zip(pixels) {
     let src_a = src_pixel.alpha();
-    let inv_src_a = (u8::MAX - src_a) as u32;
+    let inv_src_a = u8::MAX - src_a;
     dst_pixel[0] = src_pixel
       .red()
-      .saturating_add(fast_div_255(dst_pixel[0] as u32 * inv_src_a));
+      .saturating_add(mul_div_255(dst_pixel[0], inv_src_a));
     dst_pixel[1] = src_pixel
       .green()
-      .saturating_add(fast_div_255(dst_pixel[1] as u32 * inv_src_a));
+      .saturating_add(mul_div_255(dst_pixel[1], inv_src_a));
     dst_pixel[2] = src_pixel
       .blue()
-      .saturating_add(fast_div_255(dst_pixel[2] as u32 * inv_src_a));
-    dst_pixel[3] = src_a.saturating_add(fast_div_255(dst_pixel[3] as u32 * inv_src_a));
+      .saturating_add(mul_div_255(dst_pixel[2], inv_src_a));
+    dst_pixel[3] = src_a.saturating_add(mul_div_255(dst_pixel[3], inv_src_a));
   }
 }
 

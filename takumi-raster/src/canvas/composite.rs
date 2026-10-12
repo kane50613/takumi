@@ -156,19 +156,15 @@ fn constant_normal(pixels: &mut [[u8; 4]], mask: &[u8], color: [u8; 4], region: 
   }
 }
 
+/// `color` scaled by `mask` over `dst`, both at most a [`MASK_RUN`] long.
 #[inline(always)]
 fn constant_over(dst: &mut [[u8; 4]], mask: &[u8], color: [u8; 4]) {
-  for (dst_px, &alpha) in dst.iter_mut().zip(mask) {
-    if alpha == 0 {
-      continue;
-    }
-
-    let src = scale_premultiplied_pixel(color, alpha);
-
-    if src[3] != 0 {
-      composite_premultiplied_over(dst_px, src);
-    }
-  }
+  composite_run_over(
+    dst,
+    mask
+      .iter()
+      .map(|&alpha| scale_premultiplied_lanes(color, alpha)),
+  );
 }
 
 /// [`constant_general`]'s normal-mode source-over under `clip`, a run of pixels at a time.
@@ -201,12 +197,24 @@ fn constant_clipped(
 /// `color` scaled by `mask`, then by `clip`, over `dst`, all at most a [`MASK_RUN`] long.
 #[inline(always)]
 fn constant_clipped_over(dst: &mut [[u8; 4]], mask: &[u8], clip: &[u8], color: [u8; 4]) {
-  let mut sources = [[0; 4]; MASK_RUN];
+  composite_run_over(
+    dst,
+    mask.iter().zip(clip).map(|(&alpha, &clip)| {
+      scale_premultiplied_lanes(scale_premultiplied_lanes(color, alpha), clip)
+    }),
+  );
+}
 
-  for ((source, &alpha), &clip) in sources.iter_mut().zip(mask).zip(clip) {
-    *source = scale_premultiplied_lanes(scale_premultiplied_lanes(color, alpha), clip);
+/// `sources` over `dst`, at most a [`MASK_RUN`] long, gathered first so the compositing
+/// vectorizes.
+#[inline(always)]
+fn composite_run_over(dst: &mut [[u8; 4]], sources: impl Iterator<Item = [u8; 4]>) {
+  let mut run = [[0; 4]; MASK_RUN];
+
+  for (slot, source) in run.iter_mut().zip(sources) {
+    *slot = source;
   }
-  composite_premultiplied_over_row(dst, &sources[..dst.len()]);
+  composite_premultiplied_over_row(dst, &run[..dst.len()]);
 }
 
 #[inline]
@@ -641,7 +649,7 @@ mod tests {
   use takumi_core::geometry::{Point, Size};
   use tiny_skia::{IntSize, Mask};
 
-  use super::{DestRegion, MaskView, constant_clipped, constant_general};
+  use super::{DestRegion, MaskView, constant_clipped, constant_general, constant_normal};
   use crate::{Placement, style::BlendMode};
 
   /// Bytes from a fixed hash of `index`, so every run sees the same noise.
@@ -659,7 +667,7 @@ mod tests {
   }
 
   #[test]
-  fn clipped_rows_match_the_pixel_path() {
+  fn constant_runs_match_the_pixel_path() {
     let canvas = Size::new(23, 17);
     let clip = Mask::from_vec(
       (0..20 * 15).map(|index| coverage(index, 7)).collect(),
@@ -693,7 +701,7 @@ mod tests {
         })
         .collect();
       let mut expected = dst.clone();
-      let mut actual = dst;
+      let mut actual = dst.clone();
 
       constant_general(
         &mut expected,
@@ -704,7 +712,21 @@ mod tests {
         region(),
       );
       constant_clipped(&mut actual, &mask, color, view, region());
-      assert_eq!(actual, expected, "case {case}");
+      assert_eq!(actual, expected, "clipped case {case}");
+
+      let mut expected = dst.clone();
+      let mut actual = dst;
+
+      constant_general(
+        &mut expected,
+        &mask,
+        color,
+        BlendMode::Normal,
+        None,
+        region(),
+      );
+      constant_normal(&mut actual, &mask, color, region());
+      assert_eq!(actual, expected, "unclipped case {case}");
     }
   }
 }
