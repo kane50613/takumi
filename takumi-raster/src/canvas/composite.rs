@@ -5,7 +5,7 @@ use tiny_skia::PixmapMut;
 
 use super::{
   MASK_RUN, MaskSamplingOptions, MaskView, PaintSource, SamplingFootprint,
-  blit::{OverlayBounds, apply_mask_row},
+  blit::{OverlayBounds, apply_mask_row, composite_run_over},
   mask::MaskRow,
   paint_source::{ResolvedSource, ScaledRows, sample_paint_source},
   whole_pixel_translation,
@@ -85,8 +85,11 @@ pub(super) fn constant(
     return;
   };
   let pixels: &mut [[u8; 4]] = bytemuck::cast_slice_mut(pixmap.pixels_mut());
-  if mode == BlendMode::Normal && combined_mask.is_none() {
-    constant_normal(pixels, mask, color, region);
+  if mode == BlendMode::Normal {
+    match combined_mask {
+      None => constant_normal(pixels, mask, color, region),
+      Some(clip) => constant_clipped(pixels, mask, color, clip, region),
+    }
     return;
   }
 
@@ -150,19 +153,53 @@ fn constant_normal(pixels: &mut [[u8; 4]], mask: &[u8], color: [u8; 4], region: 
   }
 }
 
+/// `color` scaled by `mask` over `dst`, both at most a [`MASK_RUN`] long.
 #[inline(always)]
 fn constant_over(dst: &mut [[u8; 4]], mask: &[u8], color: [u8; 4]) {
-  for (dst_px, &alpha) in dst.iter_mut().zip(mask) {
-    if alpha == 0 {
-      continue;
-    }
+  composite_run_over(
+    dst,
+    mask
+      .iter()
+      .map(|&alpha| scale_premultiplied_pixel(color, alpha)),
+  );
+}
 
-    let src = scale_premultiplied_pixel(color, alpha);
+/// [`constant_general`]'s normal-mode source-over under `clip`, a run of pixels at a time.
+fn constant_clipped(
+  pixels: &mut [[u8; 4]],
+  mask: &[u8],
+  color: [u8; 4],
+  clip: MaskView<'_>,
+  region: DestRegion,
+) {
+  for dest_y in region.bounds.y_min..region.bounds.y_max {
+    let (first, clip_row) = clip.row(dest_y, region.bounds.x_min).covered(region.span());
+    let dst = &mut pixels[region.dst_row(dest_y)][first..][..clip_row.len()];
+    let mask_row = &mask[region.mask_row(dest_y)][first..][..clip_row.len()];
+    let (dst_runs, dst_tail) = dst.as_chunks_mut::<MASK_RUN>();
+    let (mask_runs, mask_tail) = mask_row.as_chunks::<MASK_RUN>();
+    let (clip_runs, clip_tail) = clip_row.as_chunks::<MASK_RUN>();
 
-    if src[3] != 0 {
-      composite_premultiplied_over(dst_px, src);
+    for ((dst, mask), clip) in dst_runs.iter_mut().zip(mask_runs).zip(clip_runs) {
+      match (u64::from_ne_bytes(*mask), u64::from_ne_bytes(*clip)) {
+        (0, _) | (_, 0) => {}
+        (u64::MAX, u64::MAX) if color[3] == u8::MAX => dst.fill(color),
+        _ => constant_clipped_over(dst, mask, clip, color),
+      }
     }
+    constant_clipped_over(dst_tail, mask_tail, clip_tail, color);
   }
+}
+
+/// `color` scaled by `mask`, then by `clip`, over `dst`, all at most a [`MASK_RUN`] long.
+#[inline(always)]
+fn constant_clipped_over(dst: &mut [[u8; 4]], mask: &[u8], clip: &[u8], color: [u8; 4]) {
+  composite_run_over(
+    dst,
+    mask.iter().zip(clip).map(|(&alpha, &clip)| {
+      scale_premultiplied_pixel(scale_premultiplied_pixel(color, alpha), clip)
+    }),
+  );
 }
 
 #[inline]
@@ -268,7 +305,7 @@ fn try_translation_blit(
           } else if mask_alpha == u8::MAX {
             extra
           } else {
-            crate::fast_div_255(mask_alpha as u32 * extra as u32)
+            crate::mul_div_255(mask_alpha, extra)
           }
         }
         None => mask_alpha,
@@ -588,6 +625,98 @@ mod scaled_rows_tests {
           "a={a} d={d} x={x} y={y} mode={mode:?}"
         );
       }
+    }
+  }
+}
+
+#[cfg(test)]
+mod tests {
+  use takumi_core::geometry::{Point, Size};
+  use tiny_skia::{IntSize, Mask};
+
+  use super::{DestRegion, MaskView, constant_clipped, constant_general, constant_normal};
+  use crate::{Placement, style::BlendMode};
+
+  /// Bytes from a fixed hash of `index`, so every run sees the same noise.
+  fn noise(index: usize, salt: u32) -> u8 {
+    ((index as u32 ^ salt).wrapping_mul(2_654_435_761) >> 13) as u8
+  }
+
+  /// Coverage that runs empty or full, as glyph and clip masks do.
+  fn coverage(index: usize, salt: u32) -> u8 {
+    match noise(index / 16, salt) % 4 {
+      0 => 0,
+      1 => u8::MAX,
+      _ => noise(index, salt + 1),
+    }
+  }
+
+  #[test]
+  fn constant_runs_match_the_pixel_path() {
+    let canvas = Size::new(23, 17);
+    let clip = Mask::from_vec(
+      (0..20 * 15).map(|index| coverage(index, 7)).collect(),
+      IntSize::from_wh(20, 15).unwrap(),
+    )
+    .unwrap();
+
+    for (case, (left, top)) in [(0, 0), (-3, 2), (5, -4), (9, 6)].into_iter().enumerate() {
+      let placement = Placement {
+        left,
+        top,
+        width: 16,
+        height: 12,
+      };
+      let region = || DestRegion::new(canvas, placement).unwrap();
+      let mask: Vec<u8> = (0..16 * 12).map(|index| coverage(index, 3)).collect();
+      let alpha = if case % 2 == 0 { u8::MAX } else { 200 };
+      let color = [noise(case, 1), noise(case, 2), 40, alpha].map(|channel| channel.min(alpha));
+      let view = MaskView {
+        mask: &clip,
+        origin: Point { x: 2, y: 1 },
+        canvas_origin: Point { x: 0, y: 0 },
+      };
+      let canvas_pixels = (canvas.width * canvas.height) as usize;
+      // Every fifth pixel is transparent but keeps colour, which only an exact path leaves alone.
+      let dst: Vec<[u8; 4]> = (0..canvas_pixels)
+        .map(|index| {
+          let [red, green, blue, alpha] = [0, 1, 2, 3].map(|lane| noise(index * 4 + lane, 5));
+
+          [
+            red,
+            green,
+            blue,
+            if index.is_multiple_of(5) { 0 } else { alpha },
+          ]
+        })
+        .collect();
+      let mut expected = dst.clone();
+      let mut actual = dst.clone();
+
+      constant_general(
+        &mut expected,
+        &mask,
+        color,
+        BlendMode::Normal,
+        Some(view),
+        region(),
+      );
+      constant_clipped(&mut actual, &mask, color, view, region());
+      assert_eq!(actual, expected, "clipped case {case}");
+
+      let mut expected = dst.clone();
+      let mut actual = dst;
+
+      constant_general(
+        &mut expected,
+        &mask,
+        color,
+        BlendMode::Normal,
+        None,
+        region(),
+      );
+      constant_normal(&mut actual, &mask, color, region());
+      assert_eq!(actual, expected, "unclipped case {case}");
     }
   }
 }

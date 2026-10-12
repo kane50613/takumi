@@ -10,7 +10,7 @@ use crate::{
   sort_key::sort_by_key,
   style::{
     Color, ColorInput, ColorInterpolationMethod, FromCss, GradientStop, ParseResult, PositionValue,
-    ResolvedGradientStop, SizingContext, StopPosition, ToCss, math::fast_div_255, unexpected_token,
+    ResolvedGradientStop, SizingContext, StopPosition, ToCss, math::mul_div_255, unexpected_token,
   },
 };
 
@@ -408,11 +408,11 @@ pub trait GradientOverlayTile {
           }
           for (dst, &src) in chunk.iter_mut().zip(buf[..n].iter()) {
             let src_a = src[3];
-            let inv_src_a = (u8::MAX - src_a) as u32;
-            dst[0] = src[0].saturating_add(fast_div_255(dst[0] as u32 * inv_src_a));
-            dst[1] = src[1].saturating_add(fast_div_255(dst[1] as u32 * inv_src_a));
-            dst[2] = src[2].saturating_add(fast_div_255(dst[2] as u32 * inv_src_a));
-            dst[3] = src_a.saturating_add(fast_div_255(dst[3] as u32 * inv_src_a));
+            let inv_src_a = u8::MAX - src_a;
+            dst[0] = src[0].saturating_add(mul_div_255(dst[0], inv_src_a));
+            dst[1] = src[1].saturating_add(mul_div_255(dst[1], inv_src_a));
+            dst[2] = src[2].saturating_add(mul_div_255(dst[2], inv_src_a));
+            dst[3] = src_a.saturating_add(mul_div_255(dst[3], inv_src_a));
           }
         }
       }

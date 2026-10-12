@@ -12,7 +12,7 @@ use tiny_skia::{IntSize, Mask as TinyMask, Transform as TinyTransform};
 
 use crate::{
   BoxMask, Command, Fill, Placement, RenderContext, Result, Style, build_path, checked_area,
-  create_mask, fast_div_255, placement_overlap, style::Affine,
+  create_mask, mul_div_255, placement_overlap, style::Affine,
 };
 
 pub(crate) enum NodeMaskAction {
@@ -150,7 +150,7 @@ impl NodeMasks {
 
     for mask in masks {
       for (alpha, other) in combined.data_mut().iter_mut().zip(mask.data()) {
-        *alpha = fast_div_255(*alpha as u32 * *other as u32);
+        *alpha = mul_div_255(*alpha, *other);
       }
     }
     Some(combined)
@@ -287,7 +287,7 @@ pub(crate) fn intersect_alpha_masks(
     }
 
     for index in 0..width {
-      mask_row[index] = fast_div_255(lhs_row[index] as u32 * rhs_row[index] as u32);
+      mask_row[index] = mul_div_255(lhs_row[index], rhs_row[index]);
     }
   }
 
@@ -316,7 +316,7 @@ pub(crate) fn attenuate_alpha_by_mask(
     }
 
     for (alpha, &mask_alpha) in dst_row.iter_mut().zip(mask_row) {
-      *alpha = fast_div_255(*alpha as u32 * (255 - mask_alpha as u32));
+      *alpha = mul_div_255(*alpha, 255 - mask_alpha);
     }
   }
 }
@@ -708,6 +708,7 @@ impl<'a> MaskRow<'a> {
 #[cfg(test)]
 mod tests {
   use super::*;
+  use crate::fast_div_255;
 
   #[test]
   fn a_row_covers_only_the_offsets_inside_the_mask() {
