@@ -23,7 +23,7 @@ const image = await render(<div tw="p-8 text-4xl">Hello Takumi</div>, {
 | :---------------------------------------------- | :-------------------- | :----------------------------------------------------------------- |
 | Decoded images, SVG rasters, parsed stylesheets | Renderer              | `cacheMaxBytes`, 64 MiB by default                                 |
 | Glyph outlines and rasterized masks             | Loaded backend module | `setGlyphCacheMaxBytes`, 8 MiB by default                          |
-| Shaped text-only layouts                        | Loaded backend module | `setShapeCacheMaxBytes`, 4 MiB by default                          |
+| Shaped text-only layouts                        | Loaded backend module | `setShapeCacheMaxBytes`, off by default                            |
 | Parsed Tailwind classes                         | Loaded backend module | Automatic, bounded internally                                      |
 | Resolved Tailwind declarations                  | Render                | Automatic, separated by viewport width, font size, and pixel ratio |
 | Google Fonts CSS                                | Fetch implementation  | Automatic, bounded internally                                      |
@@ -65,7 +65,7 @@ import { setShapeCacheMaxBytes } from "takumi-js";
 setShapeCacheMaxBytes(16 * 1024 * 1024); // [!code highlight]
 ```
 
-Call this before the first render. Repeated static text across separate renders is shaped once instead of every time; a renderer with mostly dynamic text sees little benefit from a larger budget.
+The shape cache is off until you set a budget. Call this before the first render. Repeated static text across separate renders is shaped once instead of every time, which helps a dashboard or template that re-renders with only a few values changed. It holds memory for the whole process (up to about the budget, plus allocator overhead) and does nothing for text that is different on every render, so leave it off for those workloads and benchmark your content before enabling it.
 
 ## Keep memory flat on Linux servers
 

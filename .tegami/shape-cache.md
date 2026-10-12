@@ -6,4 +6,4 @@ packages:
   "takumi-js": minor
 ---
 
-# Reuse shaped text across renders instead of re-shaping it every time
+# Add an opt-in cache that reuses shaped text across renders; enable it with `setShapeCacheMaxBytes`

@@ -15,7 +15,7 @@ use xxhash_rust::xxh3::Xxh3;
 
 use crate::layout::inline::InlineLayout;
 
-const DEFAULT_SHAPE_CACHE_MAX_BYTES: usize = 4 << 20; // 4 MiB
+const DEFAULT_SHAPE_CACHE_MAX_BYTES: usize = 0; // opt in with `set_shape_cache_max_bytes`
 // parley::layout::data::ClusterData (~24B) plus one parley::Glyph (~20B) per
 // character, for simple non-ligature text where clusters and glyphs are 1:1.
 const ESTIMATED_BYTES_PER_CHAR: usize = 48;
@@ -102,6 +102,12 @@ pub(crate) fn get_or_shape(
   (layout, text)
 }
 
+/// The cache is off by default, so tests that exercise it turn it on first.
+#[cfg(test)]
+pub(crate) fn enable_for_test() {
+  set_shape_cache_max_bytes(4 << 20);
+}
+
 #[cfg(test)]
 thread_local! {
   static LAST_INSERTED_KEY: Cell<Option<u64>> = const { Cell::new(None) };
@@ -128,6 +134,7 @@ mod tests {
 
   #[test]
   fn a_cache_hit_returns_the_stored_entry_when_the_text_matches() {
+    enable_for_test();
     get_or_shape(parts(1, 1, 1), "hello", || {
       (InlineLayout::new(), "hello".to_owned())
     });

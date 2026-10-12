@@ -154,7 +154,7 @@ fn bench_dashboard(c: &mut Criterion) {
     });
   }
 
-  set_shape_cache_max_bytes(16 * 1024 * 1024);
+  set_shape_cache_max_bytes(0);
   group.finish();
 }
 

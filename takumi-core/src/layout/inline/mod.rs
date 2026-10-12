@@ -2304,6 +2304,7 @@ mod tests {
 
   #[test]
   fn identical_text_across_separate_renders_reuses_the_global_cache_entry() {
+    shape_cache::enable_for_test();
     let fonts = create_test_context();
     let text = "shape cache marker: identical across renders";
 
@@ -2323,6 +2324,7 @@ mod tests {
 
   #[test]
   fn registering_a_font_makes_earlier_shape_cache_entries_unreachable() {
+    shape_cache::enable_for_test();
     let mut fonts = create_test_context();
     let text = "shape cache marker: revision bump";
     render_text_node(text, &fonts);

@@ -12,7 +12,7 @@ let loaded: ShapeCacheBackend | undefined;
 
 /**
  * Sets the byte budget for the shaped-text cache shared by every render the process
- * makes; `0` disables it. Call before the first render. Defaults to 4 MiB.
+ * makes; `0` disables it. Call before the first render. Off by default.
  */
 export function setShapeCacheMaxBytes(bytes: number): void {
   maxBytes = bytes;
