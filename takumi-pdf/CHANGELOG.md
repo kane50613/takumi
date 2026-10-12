@@ -1,3 +1,31 @@
+## takumi-pdf@0.16.1
+
+### Lay out paragraphs with inline elements faster
+
+A paragraph holding spans no longer lays its text out a second time to find its baseline. Large documents lay out about 8% faster.
+
+### Lay out inline spans faster
+
+An inline span works out its strut from its line height alone, without building its whole text style. Large documents with many spans lay out about 5% faster.
+
+### Lay out Latin text faster
+
+Text below U+02C7, such as Latin, no longer scans the CJK tables to decide whether underlines skip its ink. Large documents lay out about 3% faster.
+
+### Look up glyphs faster
+
+Each glyph's cache key now hashes 12 bytes instead of copying a 600-byte hasher. Large documents lay out about 2% faster.
+
+### Expand each font stack once per render
+
+A `font-family` stack is matched against registered font subsets once per render, not on every text style. Large documents lay out about 4% faster.
+
+### Read each glyph's ink box once
+
+A glyph's ink box is worked out when the glyph is resolved, not on every use. Large documents lay out about 7% faster.
+
+`ResolvedOutlineGlyph::Plain` and `ResolvedOutlineGlyph::Color` gain an `ink` field, which `outline_ink` computes from their paths.
+
 ## takumi-pdf@0.16.0
 
 ### Paint backgrounds as Chrome does
