@@ -85,8 +85,11 @@ pub(crate) fn skips_ink(character: char) -> bool {
 
 /// Blink's `Character::IsCjkIdeographOrSymbol`.
 fn is_cjk_ideograph_or_symbol(code: u32) -> bool {
-  // Blink's shortcut: neither table holds a code point below U+02C7.
-  code >= 0x2C7
+  // U+02C7 CARON, a Bopomofo tone mark, is the lowest code point either table holds; Blink
+  // returns early below it.
+  const LOWEST: u32 = 0x2C7;
+
+  code >= LOWEST
     && (CJK_IDEOGRAPHS_OR_SYMBOLS.binary_search(&code).is_ok()
       || CJK_IDEOGRAPH_OR_SYMBOL_RANGES
         .iter()
