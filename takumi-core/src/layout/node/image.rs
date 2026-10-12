@@ -255,9 +255,20 @@ const DATA_URI_PREFIX: &str = "data:";
 fn parse_data_uri_image(src: &str, cache: Option<&ResourceCache>) -> ImageResult {
   let decoded = decode_data_uri(src).map_err(|_| ImageError::InvalidDataUriFormat)?;
 
+  decode_cached(&decoded.bytes, cache, |bytes| {
+    ImageSource::from_bytes_lazy(bytes, 0, Weak::new())
+  })
+}
+
+/// `bytes` decoded through `cache` when the render has one, and by `uncached` otherwise.
+fn decode_cached(
+  bytes: &[u8],
+  cache: Option<&ResourceCache>,
+  uncached: fn(&[u8]) -> ImageResult,
+) -> ImageResult {
   match cache {
-    Some(cache) => cache.get_or_decode(&decoded.bytes, ImageCacheMode::Auto),
-    None => ImageSource::from_bytes_lazy(&decoded.bytes, 0, Weak::new()),
+    Some(cache) => cache.get_or_decode(bytes, ImageCacheMode::Auto),
+    None => uncached(bytes),
   }
 }
 
@@ -269,7 +280,11 @@ pub fn resolve_image(src: &str, context: &RenderContext) -> ImageResult {
 
   if is_svg_like(src) {
     #[cfg(feature = "svg-sizing")]
-    return ImageSource::from_bytes(src.as_bytes());
+    return decode_cached(
+      src.as_bytes(),
+      context.resource_cache(),
+      ImageSource::from_bytes,
+    );
     #[cfg(not(feature = "svg-sizing"))]
     return Err(ImageError::SvgParseNotSupported);
   }
@@ -336,6 +351,34 @@ mod tests {
     assert_matches!(
       (first, second),
       (ImageSource::Encoded(first), ImageSource::Encoded(second)) if Arc::ptr_eq(&first, &second)
+    );
+  }
+
+  #[cfg(feature = "svg")]
+  #[test]
+  fn inline_svg_parses_once_per_cache() {
+    use std::sync::Arc;
+
+    use super::resolve_image;
+    use crate::resources::image::ResourceCache;
+
+    let fonts = Fonts::default();
+    let context = RenderContext::builder()
+      .fonts(fonts.snapshot())
+      .sizing(
+        SizingContext::builder()
+          .viewport(Viewport::new((1200, 630)))
+          .build(),
+      )
+      .resource_cache(Some(ResourceCache::default()))
+      .build();
+    let svg = "<svg xmlns='http://www.w3.org/2000/svg' width='10' height='10'><rect width='10' height='10'/></svg>";
+    let first = resolve_image(svg, &context).unwrap();
+    let second = resolve_image(svg, &context).unwrap();
+
+    assert_matches!(
+      (first, second),
+      (ImageSource::Svg(first), ImageSource::Svg(second)) if Arc::ptr_eq(&first, &second)
     );
   }
 
