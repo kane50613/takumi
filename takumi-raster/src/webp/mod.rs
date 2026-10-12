@@ -368,9 +368,19 @@ pub(super) fn write_riff_container<W: Write, B: AsRef<[u8]>>(
 }
 
 pub(super) fn has_any_alpha_pixel(image: &RgbaImage) -> bool {
-  bytemuck::cast_slice::<u8, [u8; 4]>(image.as_raw())
-    .iter()
-    .any(|[_, _, _, a]| *a != u8::MAX)
+  // An AND over sixteen pixels at a time vectorizes where a per-pixel `any` cannot.
+  let opaque = |pixels: &[u8]| {
+    let all = pixels
+      .as_chunks::<4>()
+      .0
+      .iter()
+      .fold(u32::MAX, |all, pixel| all & u32::from_le_bytes(*pixel));
+
+    all >> 24 == 0xFF
+  };
+  let (runs, tail) = image.as_raw().as_chunks::<64>();
+
+  !(runs.iter().all(|run| opaque(run)) && opaque(tail))
 }
 
 #[cfg(test)]
@@ -378,6 +388,20 @@ mod tests {
   use image::Rgba;
 
   use super::*;
+
+  #[test]
+  fn any_translucent_pixel_counts_wherever_it_sits() {
+    let opaque = RgbaImage::from_pixel(9, 5, Rgba([10, 20, 30, 255]));
+
+    assert!(!has_any_alpha_pixel(&opaque));
+    assert!(!has_any_alpha_pixel(&RgbaImage::new(0, 0)));
+    for index in [0, 15, 16, 31, 40, 44] {
+      let mut translucent = opaque.clone();
+
+      translucent.put_pixel(index % 9, index / 9, Rgba([10, 20, 30, 254]));
+      assert!(has_any_alpha_pixel(&translucent), "pixel {index}");
+    }
+  }
 
   #[test]
   fn vp8_chunk_reads_chunk_tag_not_chunk_size() {
