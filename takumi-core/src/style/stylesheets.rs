@@ -570,7 +570,7 @@ macro_rules! define_style {
           .map_err(|error| {
             (
               self.expected_message(&source),
-              CssInputParseFailure::new(&source, error),
+              CssInputParseFailure::new(&source, error.location),
             )
           });
 
