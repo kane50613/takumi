@@ -1,3 +1,5 @@
+use std::array;
+
 use tiny_skia::{PixmapRef, PremultipliedColorU8};
 
 use crate::{
@@ -298,6 +300,46 @@ pub(crate) struct BilinearRow<'p> {
   bottom: &'p [PremultipliedColorU8],
 }
 
+impl BilinearRow<'_> {
+  /// [`BilinearAxis::mix`] of each of `columns` into `out`, gathering eight columns' taps before
+  /// mixing them so the arithmetic vectorizes.
+  pub(crate) fn fill(self, columns: &[BilinearAxis], out: &mut [[u8; 4]]) {
+    const RUN: usize = 8;
+
+    let row = self.axis.ratio;
+
+    for (out, columns) in out.chunks_mut(RUN).zip(columns.chunks(RUN)) {
+      let mut taps = [[[0; 4]; 4]; RUN];
+      let mut ratios = [0; RUN];
+
+      for ((taps, ratio), column) in taps.iter_mut().zip(&mut ratios).zip(columns) {
+        *taps = [
+          self.top[column.floor],
+          self.top[column.ceil],
+          self.bottom[column.floor],
+          self.bottom[column.ceil],
+        ]
+        .map(premultiplied_from_pixel);
+        *ratio = column.ratio as u16;
+      }
+      for ((out, [top_left, top_right, bottom_left, bottom_right]), &column) in
+        out.iter_mut().zip(&taps).zip(&ratios)
+      {
+        // A row's lerp peaks at 255 * 256, inside 16 bits; the column lerp needs 32.
+        let lerp =
+          |left: u8, right: u8| u16::from(left) * (256 - column) + u16::from(right) * column;
+
+        *out = array::from_fn(|lane| {
+          let top = u32::from(lerp(top_left[lane], top_right[lane]));
+          let bottom = u32::from(lerp(bottom_left[lane], bottom_right[lane]));
+
+          ((top * (256 - row) + bottom * row) >> 16) as u8
+        });
+      }
+    }
+  }
+}
+
 impl BilinearAxis {
   pub(crate) fn new(coordinate: f32, extent: u32) -> Self {
     let last = extent.saturating_sub(1);
@@ -484,11 +526,9 @@ impl<'a> ScaledRows<'a> {
         }
       }
       ScaledColumns::Bilinear(columns) => {
-        let row = BilinearAxis::new(sample_y, self.source.height()).rows(self.source);
-
-        for (dst, column) in out.iter_mut().zip(columns) {
-          *dst = column.mix(row);
-        }
+        BilinearAxis::new(sample_y, self.source.height())
+          .rows(self.source)
+          .fill(columns, out);
       }
       ScaledColumns::Box { columns, span_y } => {
         BoxAxis::new(sample_y, *span_y, self.source.height()).fill_row(self.source, columns, out);
@@ -683,10 +723,29 @@ mod tests {
   use tiny_skia::{Pixmap, PremultipliedColorU8};
 
   use super::{
-    SamplingFootprint, ScaledColumns, ScaledRows, interpolate_bilinear, interpolate_with_footprint,
-    sample_paint_source,
+    BilinearAxis, SamplingFootprint, ScaledColumns, ScaledRows, interpolate_bilinear,
+    interpolate_with_footprint, sample_paint_source,
   };
   use crate::style::{Affine, ImageScalingAlgorithm};
+
+  #[test]
+  fn a_filled_row_mixes_each_column_alone() {
+    let pixmap = noisy_pixmap();
+
+    for (case, width) in [1, 7, 8, 9, 23, 97].into_iter().enumerate() {
+      let step = 97.0 / width as f32 * 0.83;
+      let columns: Vec<BilinearAxis> = (0..width)
+        .map(|index| BilinearAxis::new(index as f32 * step + 0.1 * case as f32, 97))
+        .collect();
+      let row = BilinearAxis::new(13.37 + case as f32 * 7.9, 61).rows(pixmap.as_ref());
+      let mut filled = vec![[0; 4]; width];
+
+      row.fill(&columns, &mut filled);
+      for (column, filled) in columns.iter().zip(&filled) {
+        assert_eq!(*filled, column.mix(row), "width {width}");
+      }
+    }
+  }
 
   /// A 97x61 pixmap of legal premultiplied noise.
   fn noisy_pixmap() -> Pixmap {

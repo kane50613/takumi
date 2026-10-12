@@ -401,15 +401,13 @@ pub(crate) struct BilinearRows<'a> {
 impl BilinearRows<'_> {
   pub(crate) fn fill(&self, y: u32, dst: &mut [[u8; 4]]) {
     let source_height = self.source.height();
-    let row = BilinearAxis::new(
+
+    BilinearAxis::new(
       (y as f32 + 0.5) * source_height as f32 / self.logical_height.max(1) as f32,
       source_height,
     )
-    .rows(self.source);
-
-    for (out, column) in dst.iter_mut().zip(&self.columns) {
-      *out = column.mix(row);
-    }
+    .rows(self.source)
+    .fill(&self.columns, dst);
   }
 }
 
