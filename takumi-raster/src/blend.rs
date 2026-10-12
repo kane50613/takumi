@@ -3,14 +3,11 @@ use std::array;
 use image::Rgba;
 use tiny_skia::PremultipliedColorU8;
 
-use crate::{
-  fast_div_255, fast_div_255_u32, mul_div_255, resources::image_buffer::premultiply_pixel,
-  style::BlendMode,
-};
+use crate::{div_255, mul_div_255, resources::image_buffer::premultiply_pixel, style::BlendMode};
 
 #[inline(always)]
-fn composited_alpha(bottom_alpha: u32, top_alpha: u32) -> u32 {
-  top_alpha + bottom_alpha - fast_div_255_u32(bottom_alpha * top_alpha)
+fn composited_alpha(bottom_alpha: u8, top_alpha: u8) -> u32 {
+  u32::from(top_alpha) + u32::from(bottom_alpha) - u32::from(mul_div_255(bottom_alpha, top_alpha))
 }
 
 #[inline(always)]
@@ -50,11 +47,13 @@ pub(crate) fn blend_pixel(bottom: &mut Rgba<u8>, top: Rgba<u8>, mode: BlendMode)
       }
 
       if bottom_alpha == 255 {
-        let alpha = top_alpha as u32;
-        let inverse_alpha = 255 - alpha;
+        let inverse_alpha = 255 - top_alpha;
 
         for i in 0..3 {
-          bottom.0[i] = fast_div_255(top[i] as u32 * alpha + bottom[i] as u32 * inverse_alpha);
+          bottom.0[i] = div_255(
+            u16::from(top[i]) * u16::from(top_alpha)
+              + u16::from(bottom[i]) * u16::from(inverse_alpha),
+          );
         }
       } else {
         blend_normal_partial_transparency(bottom, top);
@@ -87,7 +86,7 @@ fn blend_normal_partial_transparency(bottom: &mut Rgba<u8>, top: Rgba<u8>) {
   let top_alpha = top.0[3] as u32;
   let bottom_alpha = bottom.0[3] as u32;
 
-  let result_alpha = composited_alpha(bottom_alpha, top_alpha);
+  let result_alpha = composited_alpha(bottom.0[3], top.0[3]);
 
   if result_alpha == 0 {
     return;
@@ -110,7 +109,7 @@ fn blend_normal_partial_transparency(bottom: &mut Rgba<u8>, top: Rgba<u8>) {
 fn blend_with_integer(bottom: &mut Rgba<u8>, top: Rgba<u8>, mode: BlendMode) {
   let bottom_alpha = bottom.0[3] as u32;
   let top_alpha = top.0[3] as u32;
-  let result_alpha = composited_alpha(bottom_alpha, top_alpha);
+  let result_alpha = composited_alpha(bottom.0[3], top.0[3]);
 
   if result_alpha == 0 {
     return;

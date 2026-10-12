@@ -708,7 +708,6 @@ impl<'a> MaskRow<'a> {
 #[cfg(test)]
 mod tests {
   use super::*;
-  use crate::fast_div_255;
 
   #[test]
   fn a_row_covers_only_the_offsets_inside_the_mask() {
@@ -730,7 +729,7 @@ mod tests {
       return alpha;
     }
 
-    fast_div_255(alpha as u32 * (255 - mask_alpha as u32))
+    mul_div_255(alpha, 255 - mask_alpha)
   }
 
   #[test]
@@ -828,7 +827,7 @@ mod tests {
 
     assert_eq!(dst[0], 255);
     assert_eq!(dst[4], 255);
-    assert_eq!(dst[5], fast_div_255(255 * (255 - 128)));
+    assert_eq!(dst[5], mul_div_255(255, 255 - 128));
     assert_eq!(dst[7], 0);
   }
 
