@@ -23,9 +23,9 @@ use crate::{
   resources::font::{FontClasses, SubsetGroup},
   shadow::SizedShadow,
   style::{
-    AppliedTextDecorations, Color, ComputedStyle, Display, FontFamily, FontFamilyToken,
-    FontSynthesis, Lang, LineHeight as CssLineHeight, SizedTextDecorationThickness, SizingContext,
-    VerticalAlign, WordBreak,
+    AppliedTextDecorations, Color, ComputedStyle, Display, FontFamily, FontSynthesis, Lang,
+    LineHeight as CssLineHeight, SizedTextDecorationThickness, SizingContext, VerticalAlign,
+    WordBreak,
   },
 };
 
@@ -141,22 +141,16 @@ impl ExpandedFontFamily {
   }
 }
 
-/// Each `font-family` stack a render expanded, by the stack it came from. An entry holds its
-/// stack, so the address it is keyed on cannot pass to another stack during the render.
+/// Each `font-family` stack a render expanded, by the id of the stack it came from.
 #[derive(Default)]
-pub(crate) struct ExpandedFamilies(
-  RefCell<FxHashMap<*const FontFamilyToken, (FontFamily, Rc<ExpandedFontFamily>)>>,
-);
+pub(crate) struct ExpandedFamilies(RefCell<FxHashMap<u64, Rc<ExpandedFontFamily>>>);
 
 impl RenderContext {
   pub(crate) fn expand_font_family(&self, family: &FontFamily) -> Rc<ExpandedFontFamily> {
     let mut expanded = self.font_families().0.borrow_mut();
-    let (_, expanded) = expanded.entry(family.as_ptr()).or_insert_with(|| {
-      (
-        family.clone(),
-        Rc::new(ExpandedFontFamily::expand(family, &self.fonts().groups)),
-      )
-    });
+    let expanded = expanded
+      .entry(family.id())
+      .or_insert_with(|| Rc::new(ExpandedFontFamily::expand(family, &self.fonts().groups)));
 
     Rc::clone(expanded)
   }
