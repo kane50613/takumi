@@ -702,7 +702,12 @@ mod tests {
     let pixel = |index: usize, salt: u32| {
       let [red, green, blue, alpha] = [0, 1, 2, 3].map(|lane| noise(index * 4 + lane, salt));
 
-      [red, green, blue, if index % 6 == 0 { 0 } else { alpha }]
+      [
+        red,
+        green,
+        blue,
+        if index.is_multiple_of(6) { 0 } else { alpha },
+      ]
     };
     let bounds = OverlayBounds::new(canvas, Point { x: -2.0, y: 1.0 }, Size::new(27, 14)).unwrap();
     let start: Vec<[u8; 4]> = (0..29 * 13).map(|index| pixel(index, 3)).collect();

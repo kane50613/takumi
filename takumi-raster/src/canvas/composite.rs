@@ -682,7 +682,12 @@ mod tests {
         .map(|index| {
           let [red, green, blue, alpha] = [0, 1, 2, 3].map(|lane| noise(index * 4 + lane, 5));
 
-          [red, green, blue, if index % 5 == 0 { 0 } else { alpha }]
+          [
+            red,
+            green,
+            blue,
+            if index.is_multiple_of(5) { 0 } else { alpha },
+          ]
         })
         .collect();
       let mut expected = dst.clone();
