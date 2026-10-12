@@ -14,7 +14,7 @@ use crate::{
   BlurType, BorderProperties, Canvas, Placement, RenderContext, Result, SizedShadow,
   apply_blur_alpha_bytes, apply_blur_rgba_bytes,
   canvas::demultiply_rgba_in_place,
-  checked_area, fast_div_255, intersect_alpha_masks, mul_div_255, render_mask,
+  checked_area, div_255, intersect_alpha_masks, mul_div_255, render_mask,
   resources::image_buffer::premultiply_pixel,
   style::{Affine, Color, Filter, FilterCategory, SizingContext, TransferChannel, TransferTable},
 };
@@ -276,11 +276,13 @@ fn composite_backdrop_with_mask(
     let src = &backdrop_row[px_idx..px_idx + 4];
     let dst = &mut canvas_row[px_idx..px_idx + 4];
     // The filtered backdrop composites over what it came from, masked by the element's shape.
-    let coverage = u32::from(mul_div_255(src[3], alpha));
-    let inverse = 255 - coverage;
+    let inverse = u8::MAX - mul_div_255(src[3], alpha);
 
-    for (dst, src) in dst.iter_mut().zip(src) {
-      *dst = fast_div_255(*src as u32 * alpha as u32 + *dst as u32 * inverse);
+    for (dst, &src) in dst.iter_mut().zip(src) {
+      let sum = u32::from(src) * u32::from(alpha) + u32::from(*dst) * u32::from(inverse);
+
+      // The weights can sum past 255, but every sum from 255 * 255 up divides to 255.
+      *dst = div_255(sum.min(255 * 255) as u16);
     }
   }
 }
