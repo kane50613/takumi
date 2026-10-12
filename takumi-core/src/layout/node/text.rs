@@ -8,8 +8,8 @@ use crate::{
   geometry::{AvailableSpace, Size},
   layout::{
     inline::{
-      InlineItem, InlineLayoutCache, InlineLayoutMode, InlineLayoutRequest, InlineMeasureOptions,
-      InlineMeasurement, create_inline_constraint, create_inline_layout,
+      InlineItem, InlineLayoutMode, InlineLayoutRequest, InlineMeasureOptions, InlineMeasurement,
+      create_inline_constraint, create_inline_layout,
     },
     node::TextData,
   },
@@ -82,28 +82,28 @@ impl TextData {
     let options = InlineMeasureOptions::new(max_width, true, available_space, known_dimensions);
     let key = self.measure_key(context, max_width, max_height, options.min_content_query);
 
-    let owner = InlineLayoutCache::owner(context);
-
-    context.inline_cache().get_or_measure(key, owner, || {
-      let font_style = SizedFontStyle::from_style(&context.style, context);
-      let built = create_inline_layout(InlineLayoutRequest {
-        items: vec![InlineItem::Text {
-          text: self.text.as_str().into(),
+    context
+      .inline_cache()
+      .get_or_measure(key, context.id(), || {
+        let font_style = SizedFontStyle::from_style(&context.style, context);
+        let built = create_inline_layout(InlineLayoutRequest {
+          items: vec![InlineItem::Text {
+            text: self.text.as_str().into(),
+            context,
+            link: None,
+            decorations: None,
+          }],
+          available_space,
+          max_width,
+          max_height,
+          style: &font_style,
           context,
-          link: None,
-          decorations: None,
-        }],
-        available_space,
-        max_width,
-        max_height,
-        style: &font_style,
-        context,
-        mode: InlineLayoutMode::Measure,
-        shape_cacheable: true,
-      });
+          mode: InlineLayoutMode::Measure,
+          shape_cacheable: true,
+        });
 
-      (built.measure(options), built.shape_key)
-    })
+        (built.measure(options), built.shape_key)
+      })
   }
 
   /// The memo key for a measurement under this constraint.

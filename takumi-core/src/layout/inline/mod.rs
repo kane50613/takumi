@@ -1149,7 +1149,7 @@ fn shape_spans(
   });
   let (layout, text) = context.inline_cache().get_or_shape(
     cache_key.zip(expected_text.as_deref()),
-    InlineLayoutCache::owner(context),
+    context.id(),
     || {
       context.tree_builder(style.into(), chromium_line_breaks(spans), |builder| {
         push_spans_into_builder(builder, spans, &context.fonts().classes)

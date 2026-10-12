@@ -2,12 +2,10 @@ use std::{
   cell::RefCell,
   collections::{HashMap, VecDeque},
   mem::take,
-  ptr,
   rc::Rc,
 };
 
 use super::{InlineLayout, InlineMeasurement, ShapedRun};
-use crate::context::RenderContext;
 
 type ShapedText = (InlineLayout, String);
 pub(crate) type ShapeCache = Rc<RefCell<HashMap<u64, ShapedText>>>;
@@ -33,11 +31,6 @@ impl InlineLayoutCache {
       faces: Rc::default(),
       measurements,
     }
-  }
-
-  /// The owner a box styled by `context` lays text out as.
-  pub(crate) fn owner(context: &RenderContext) -> usize {
-    ptr::from_ref(context).addr()
   }
 
   /// The text `key` names shaped for the box `owner`, shaped now when no box shaped it before.
