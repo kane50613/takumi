@@ -566,8 +566,9 @@ impl InlineBrush {
     line_gap: f32,
     scale: TextScale,
   ) -> FontHeight {
-    FontHeight::text(ascent, descent, scale)
-      .with_leading(self.line_height.resolve(ascent, descent, line_gap, scale))
+    self
+      .line_height
+      .line_box_height(ascent, descent, line_gap, scale)
   }
 
   /// How far the run's own font grows its box, as Blink's `InlineBoxState::AccumulateUsedFonts`
@@ -852,7 +853,7 @@ fn build_inline_layout_tree<'c>(
   // before `tree_builder` holds the shared font borrow.
   let spans = process_inline_spans(items, available_space, context);
   let (layout, text, shape_key) = shape_spans(context, &spans, style, shape_cacheable);
-  let strut = Strut::of(context, style);
+  let strut = Strut::of(context, style.box_line_height);
   let font = BoxFont::of(context);
 
   BuiltInlineLayout {
