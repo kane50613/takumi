@@ -12,8 +12,8 @@ use cssparser::{ParseError as CssParseError, ParseErrorKind, SourceLocation};
 use crate::style::properties::filter_reference::FilterReference;
 use crate::style::{
   Angle, Animatable, Color, CssExpectedMessage, FromCss, Length, ListInterpolationStrategy,
-  MakeComputed, ParseResult, PercentageNumber, SizingContext, TextShadow, ToCss, discrete,
-  tw::TailwindPropertyParser, unexpected_token,
+  MakeComputed, ParseResult, PercentageNumber, SizingContext, TextShadow, ToCss, ValueError,
+  discrete, tw::TailwindPropertyParser, unexpected_token,
 };
 
 /// Lookup table for a single 8-bit channel transition.
@@ -319,7 +319,7 @@ fn parse_filter_reference<'i>(url: &str, location: SourceLocation) -> ParseResul
   FilterReference::from_url(url)
     .map(|reference| Filter::Reference(Arc::new(reference)))
     .map_err(|error| CssParseError {
-      kind: ParseErrorKind::Custom(Cow::Owned(error.to_string())),
+      kind: ParseErrorKind::Custom(ValueError::Message(Cow::Owned(error.to_string()))),
       location,
     })
 }

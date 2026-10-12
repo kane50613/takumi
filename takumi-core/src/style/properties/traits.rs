@@ -1,13 +1,49 @@
 use std::{borrow::Cow, error::Error, fmt, sync::Arc};
 
 use cssparser::{
-  BasicParseErrorKind, ParseError as CssParseError, ParseErrorKind, Parser, ParserInput, Token,
+  BasicParseErrorKind, ParseError as CssParseError, ParseErrorKind, Parser, ParserInput,
+  ToCss as CssParserToCss, Token,
 };
 
-use crate::style::{Color, SizingContext, build_unexpected_token, math::lcm};
+use crate::style::{Color, SizingContext, build_unexpected_token, math::lcm, merge_enum_values};
 
 /// Parser result type alias for CSS property parsers.
-pub(crate) type ParseResult<'i, T> = Result<T, CssParseError<'i, Cow<'i, str>>>;
+pub(crate) type ParseResult<'i, T> = Result<T, CssParseError<'i, ValueError<'i>>>;
+
+/// Why a CSS value failed to parse, put into words only when a caller shows it: parsers try
+/// alternatives and drop most failures.
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) enum ValueError<'i> {
+  Message(Cow<'i, str>),
+  /// `token` where `expect` asked for one of `valid_tokens`.
+  UnexpectedToken {
+    token: Token<'i>,
+    expect: CssExpectedMessage,
+    valid_tokens: &'static [&'static str],
+  },
+}
+
+impl fmt::Display for ValueError<'_> {
+  fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    match self {
+      Self::Message(message) => f.write_str(message),
+      Self::UnexpectedToken {
+        token,
+        expect,
+        valid_tokens,
+      } => f.write_str(&expect.build_message(
+        &CssParserToCss::to_css_string(token),
+        merge_enum_values(valid_tokens),
+      )),
+    }
+  }
+}
+
+impl<'i> From<Cow<'i, str>> for ValueError<'i> {
+  fn from(message: Cow<'i, str>) -> Self {
+    Self::Message(message)
+  }
+}
 
 /// Owned error returned by [`FromCssStr::from_css_str`]. Carries a
 /// human-readable message and borrows nothing from the parser, keeping
@@ -27,7 +63,7 @@ impl Error for ParseError {}
 
 impl ParseError {
   /// Stringifies an internal `cssparser` error into an owned [`ParseError`].
-  pub(crate) fn from_css_error(error: &CssParseError<'_, Cow<'_, str>>) -> Self {
+  pub(crate) fn from_css_error(error: &CssParseError<'_, ValueError<'_>>) -> Self {
     let message = match &error.kind {
       ParseErrorKind::Custom(message) => message.to_string(),
       basic => format!("{basic:?}"),
@@ -146,7 +182,7 @@ pub(crate) fn parse_ident_enum_keyword<'i>(
 }
 
 /// Defines reusable message templates for CSS parse errors.
-#[derive(Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 #[non_exhaustive]
 pub(crate) enum CssExpectedMessage {
   /// Expects a value or the `none` keyword.

@@ -91,8 +91,8 @@ pub use contain::*;
 pub use content::*;
 pub use corner_shape::*;
 use cssparser::{
-  ParseError as CssParseError, ParseErrorKind, Parser, SourceLocation, ToCss as CssParserToCss,
-  Token, match_ignore_ascii_case,
+  ParseError as CssParseError, ParseErrorKind, Parser, SourceLocation, Token,
+  match_ignore_ascii_case,
 };
 pub use filter::{
   BlurType, Filter, FilterCategory, Filters, LUMA_WEIGHTS, SEPIA_WEIGHTS, TransferChannel,
@@ -208,16 +208,17 @@ pub(crate) use unexpected_token;
 #[inline(never)]
 pub(crate) fn build_unexpected_token<'i>(
   location: SourceLocation,
-  token: &Token<'_>,
+  token: &Token<'i>,
   expect: CssExpectedMessage,
   valid_tokens: &'static [&'static str],
-) -> CssParseError<'i, Cow<'i, str>> {
-  let token = CssParserToCss::to_css_string(token);
-  let message = expect.build_message(&token, merge_enum_values(valid_tokens));
-
+) -> CssParseError<'i, ValueError<'i>> {
   CssParseError {
     location,
-    kind: ParseErrorKind::Custom(Cow::Owned(message)),
+    kind: ParseErrorKind::Custom(ValueError::UnexpectedToken {
+      token: token.clone(),
+      expect,
+      valid_tokens,
+    }),
   }
 }
 

@@ -129,9 +129,8 @@ impl CssWideKeyword {
 }
 
 impl CssInputParseFailure {
-  /// Where `error` stopped reading `source`, with the word it stopped at.
-  pub(crate) fn new(source: &str, error: ParseError<'_, Cow<'_, str>>) -> Self {
-    let location = error.location;
+  /// Where a parse stopped reading `source` at `location`, with the word it stopped at.
+  pub(crate) fn new(source: &str, location: SourceLocation) -> Self {
     let detail = source
       .char_indices()
       .nth(location.column.saturating_sub(1) as usize)
