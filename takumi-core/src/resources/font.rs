@@ -104,7 +104,7 @@ thread_local! {
   static LAYOUT_CONTEXT: RefCell<LayoutContext<InlineBrush>> = RefCell::new(LayoutContext::new());
 }
 
-/// Hasher primed with everything but the glyph id of a run's cache key.
+/// Digest of everything but the glyph id of a run's cache key.
 fn glyph_cache_key_prefix(
   font_id: u64,
   font_index: u32,
@@ -112,7 +112,7 @@ fn glyph_cache_key_prefix(
   coords: &[F2Dot14],
   embolden: Option<f32>,
   skew: Option<f32>,
-) -> Xxh3 {
+) -> u64 {
   let mut h = Xxh3::new();
   h.update(&font_id.to_le_bytes());
   h.update(&font_index.to_le_bytes());
@@ -129,13 +129,15 @@ fn glyph_cache_key_prefix(
       None => h.update(&[0u8]),
     }
   }
-  h
+  h.digest()
 }
 
-fn resolved_glyph_cache_key(prefix: &Xxh3, glyph_id: u32) -> u64 {
-  let mut h = prefix.clone();
-  h.update(&glyph_id.to_le_bytes());
-  h.digest()
+fn resolved_glyph_cache_key(prefix: u64, glyph_id: u32) -> u64 {
+  let mut key = [0; 12];
+
+  key[..8].copy_from_slice(&prefix.to_le_bytes());
+  key[8..].copy_from_slice(&glyph_id.to_le_bytes());
+  xxh3_64(&key)
 }
 
 fn with_layout_context<R>(f: impl FnOnce(&mut LayoutContext<InlineBrush>) -> R) -> R {
@@ -594,7 +596,7 @@ impl Fonts {
       ResolvedGlyphs::with_capacity_and_hasher(glyph_ids.size_hint().0, Default::default());
     for glyph_id in glyph_ids {
       if let Entry::Vacant(slot) = result.entry(glyph_id) {
-        let key = resolved_glyph_cache_key(&key_prefix, glyph_id);
+        let key = resolved_glyph_cache_key(key_prefix, glyph_id);
         if let Some(glyph) = resolved_glyph(key, || resolver().resolve_glyph(glyph_id)) {
           slot.insert(glyph);
         }
