@@ -7,6 +7,7 @@
 
 mod document;
 mod fonts;
+mod outlines;
 mod paints;
 mod record;
 mod runs;
@@ -18,6 +19,7 @@ use parley::fontique::Blob;
 use typed_builder::TypedBuilder;
 
 pub use self::document::*;
+use self::outlines::Outlines;
 use crate::{
   Fonts,
   context::RenderContext,
@@ -56,17 +58,25 @@ pub struct PaintTreeOptions<'g> {
   pub(crate) lang: Option<Lang>,
 }
 
-/// A painted document, and the font files its runs use.
+/// A painted document, the font files its runs use, and its runs' glyph outlines.
 pub struct PaintTree {
   /// The document.
   pub document: PaintDocument,
   fonts: Vec<Blob<u8>>,
+  outlines: Outlines,
 }
 
 impl PaintTree {
   /// The file of the document's font at `index`.
   pub fn font_data(&self, index: usize) -> Option<&[u8]> {
     self.fonts.get(index).map(Blob::as_ref)
+  }
+
+  /// The outlines of the glyphs that run `run` of text node `node` fills with its colour, as SVG
+  /// path data from its baseline start. Colour font layers arrive as their own drawables, and
+  /// bitmap glyphs such as some emoji are left out.
+  pub fn run_outline(&self, node: usize, run: usize) -> Option<String> {
+    self.outlines.path_data(node, run)
   }
 }
 
@@ -141,5 +151,6 @@ pub fn paint_tree(options: PaintTreeOptions<'_>) -> Result<PaintTree> {
       steps: walker.steps,
     },
     fonts: data,
+    outlines: walker.outlines,
   })
 }

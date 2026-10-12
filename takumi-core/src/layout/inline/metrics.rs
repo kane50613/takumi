@@ -1,30 +1,29 @@
 //! Vertical line metrics: line-height, baselines and vertical-align.
 
 use crate::{
-  context::RenderContext, font_style::SizedFontStyle, resources::font::PrimaryFontMetrics,
+  context::RenderContext, font_style::BoxLineHeight, resources::font::PrimaryFontMetrics,
 };
 use parley::{InlineBoxKind, LineMetrics, PositionedInlineBox, PositionedLayoutItem};
 
 use super::{
-  InlineBrush, InlineLayout, LineFit, TextScale,
+  InlineLayout, LineFit, TextScale,
   items::ProcessedInlineSpan,
   line_box::{BoxFont, BoxKey, FontHeight, LineBoxOffsets, LineBoxTree},
-  text_style_with_span_id,
 };
 
 /// An inline box's strut: its primary font's content area with its line height's half-leading,
 /// as Blink's `InlineBoxState::ComputeTextMetrics`.
 #[derive(Clone)]
 pub(crate) struct Strut {
-  brush: InlineBrush,
+  line_height: BoxLineHeight,
   metrics: PrimaryFontMetrics,
 }
 
 impl Strut {
-  /// The strut of the inline box `style` sizes in `context`.
-  pub(crate) fn of(context: &RenderContext, style: &SizedFontStyle<'_>) -> Option<Self> {
+  /// The strut of the inline box laid out in `context` with `line_height`.
+  pub(crate) fn of(context: &RenderContext, line_height: BoxLineHeight) -> Option<Self> {
     Some(Self {
-      brush: text_style_with_span_id(style, None).brush,
+      line_height,
       metrics: context.primary_font_metrics(&context.style, context.sizing.font_size)?,
     })
   }
@@ -34,8 +33,23 @@ impl Strut {
     let exact = self.metrics.exact;
 
     self
-      .brush
+      .line_height
       .line_box_height(exact.ascent, exact.descent, exact.line_gap, scale)
+  }
+}
+
+impl BoxLineHeight {
+  /// A box's line-box contribution against a font of `ascent`, `descent` and `line_gap` px,
+  /// sized by `scale`.
+  pub(super) fn line_box_height(
+    self,
+    ascent: f32,
+    descent: f32,
+    line_gap: f32,
+    scale: TextScale,
+  ) -> FontHeight {
+    FontHeight::text(ascent, descent, scale)
+      .with_leading(self.resolve(ascent, descent, line_gap, scale))
   }
 }
 

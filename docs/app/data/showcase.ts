@@ -163,6 +163,13 @@ export const showcaseProjects: Project[] = [
     width: 1200,
     height: 630,
   },
+  {
+    title: "Juno",
+    image: "https://junocompanion.com/social/home-brand-v7.png",
+    url: "https://junocompanion.com/",
+    width: 1200,
+    height: 630,
+  },
 ];
 
 export const showcaseTemplates: Template[] = [
@@ -202,6 +209,9 @@ export const showcaseTemplates: Template[] = [
     href: "/docs/templates#changelog-template",
   },
 ];
+
+/** Showcase entries arrive by pull request, so their links pass no ranking. */
+export const PROJECT_LINK_REL = "nofollow ugc noopener noreferrer";
 
 export interface Project {
   title?: string;

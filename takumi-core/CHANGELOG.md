@@ -1,3 +1,104 @@
+## takumi-core@0.27.0
+
+### Lay out text faster
+
+The glyph cache and per-render font metrics hash their keys with a faster hasher. Text-heavy layouts take about 6% less time.
+
+### Lay out paragraphs with inline elements faster
+
+A paragraph holding spans no longer lays its text out a second time to find its baseline. Large documents lay out about 8% faster.
+
+### Lay out inline spans faster
+
+An inline span works out its strut from its line height alone, without building its whole text style. Large documents with many spans lay out about 5% faster.
+
+### Lay out Latin text faster
+
+Text below U+02C7, such as Latin, no longer scans the CJK tables to decide whether underlines skip its ink. Large documents lay out about 3% faster.
+
+### Look up glyphs faster
+
+Each glyph's cache key now hashes 12 bytes instead of copying a 600-byte hasher. Large documents lay out about 2% faster.
+
+### Write glyph outlines only when a run asks for them
+
+`paint()` no longer writes every run's outline up front. `run.outline()` builds it when called. A 2,000-section document paints 3 times faster in about a third of the memory.
+
+In Rust, `TextRun::outline` is replaced by `PaintTree::run_outline(node, run)`.
+
+### Expand each font stack once per render
+
+A `font-family` stack is matched against registered font subsets once per render, not on every text style. Large documents lay out about 4% faster.
+
+### Write SVG output faster
+
+SVG output and the paint tree's glyph outlines write numbers below 1,000 without float formatting, with the same bytes. A text-heavy SVG renders about twice as fast.
+
+### Read each glyph's ink box once
+
+A glyph's ink box is worked out when the glyph is resolved, not on every use. Large documents lay out about 7% faster.
+
+`ResolvedOutlineGlyph::Plain` and `ResolvedOutlineGlyph::Color` gain an `ink` field, which `outline_ink` computes from their paths.
+
+## takumi-core@0.26.0
+
+### Repeat table headers and footers on every page, as Chrome prints them
+
+- A `tfoot` no taller than a quarter of the page repeats below the last row on each page. The structure tree keeps one `TFoot`.
+- A header or footer group repeats only with `break-inside: avoid`. The `thead` and `tfoot` presets set it, as Chrome's print stylesheet does.
+
+### Share computed styles between boxes
+
+Boxes share the parts of their computed style they leave unchanged, as Chrome's do. An 11,000-row table takes about a quarter less memory.
+
+`ComputedStyle` fields now sit in groups named after Blink's, each behind an `Rc`. `RenderContext::style` is an `Rc<ComputedStyle>`, and `RenderContextBuilder::style` still takes a `Box<ComputedStyle>`.
+
+```rust
+let width = style.box_data.width;
+let color = style.inherited_data.color;
+
+Rc::make_mut(&mut style.box_data).width = Size::default();
+```
+
+### Refuse node trees nested deeper than 512 levels
+
+A deeper tree now fails with `nodes nest deeper than 512 levels`, Blink's parser limit, instead of crashing the process. `takumi_html::DEFAULT_MAX_DEPTH` is now `takumi_core::layout::node::MAXIMUM_DOM_TREE_DEPTH`. `takumi::DEFAULT_MAX_DEPTH` keeps its name.
+
+### Break pages as Chrome prints them
+
+- A page break falls between line boxes. A paragraph taller than a page no longer leaves the first page blank, and short paragraphs can split too.
+- A line or image taller than a page moves to the next page, then continues over the pages after it.
+- A box's top and bottom border and padding stay with its first and last line.
+- A table row whose cell padding does not fit moves to the next page whole.
+
+### Lay text out once
+
+Painting, page breaking and PDF output reuse the lines layout made instead of shaping text again. A 1,500-page document renders in about a sixth less memory and a tenth less time.
+
+`FragmentItems`, `OwnContent::fragment_items` and `RenderContext::release_shaped_text` are new.
+
+### Lay out tables as Chrome does
+
+- An `auto`-width table shrinks to fit its content.
+- Columns share the width through the CSS table algorithm. Percentage, `min-width` and `max-width` cell widths size their columns.
+- `width: min-content`, `max-content`, `fit-content` and `stretch` size a table from its columns.
+- `thead`, `tbody` and `tfoot` default to `vertical-align: middle`, as in Chrome.
+- `vertical-align: baseline` cells line up on the row's deepest baseline.
+- A non-cell inside a row gets wrapped in an anonymous cell.
+- Tables with more than 10,000 rows lay out every row. Rows past the 10,000th used to pile up.
+
+### Lay out a node's inline content in one call
+
+- `OwnContent::lay_out_inline` returns a `PaintedInline` with the node's spans, text and runs. Painting the node again in the same content box reuses it, unless an ellipsis cut the content.
+- `PositionedInlineRun::resolved_glyphs` is a `ResolvedGlyphs`, an `FxHashMap` keyed by glyph id. Code that only calls `get` keeps working.
+
+### Render in less memory
+
+- An 11,000-row table renders in about 110MB less memory, since the layout tree is freed once layout finishes.
+- Anonymous boxes share one layout style, and scenes give back unused list room, so large tables use less memory.
+- A clip that covers the whole image, such as `overflow: hidden` on the root, no longer keeps a second mask.
+- A full-width `blur-3xl` on a 1200×630 image peaks 38% lower.
+
 ## takumi-core@0.25.0
 
 ### Report a capped WebP animation as unfinished

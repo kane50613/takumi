@@ -132,7 +132,7 @@ export class Painter {
       fontFamilies: resources.fontFamilies,
     });
 
-    return new PaintTreeView(painted.tree(), (index) => painted.fontData(index));
+    return new PaintTreeView(painted.tree(), painted);
   }
 
   /** Registers a font ahead of time, deduped against earlier registrations. */

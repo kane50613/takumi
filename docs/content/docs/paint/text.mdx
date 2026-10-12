@@ -1,0 +1,89 @@
+---
+title: Text
+description: Draw shaped runs or collect values for a text exporter.
+icon: Type
+---
+
+A paragraph's text is one `TextNode`. `node.runs` holds its runs in visual order. A run is text shaped with one font and size. A `<b>` starts a new run.
+
+## Read a run
+
+Hover a run to see its fields. The dot marks `run.x` and `run.y`, where the baseline starts.
+
+<TextRuns />
+
+<include cwd meta='twoslash title="paragraph.tsx" {3,7}'>
+  app/components/mdx/paint/examples/paragraph.tsx
+</include>
+
+| Field               | Value                                               |
+| ------------------- | --------------------------------------------------- |
+| `x`, `y`            | Baseline start, in the text node's local space      |
+| `width`             | Advance                                             |
+| `ascent`, `descent` | Typographic distances from the baseline             |
+| `line`              | Index of the line, from `0`                         |
+| `element`           | The inline element the run came from, such as `<b>` |
+
+The text node comes before the inline boxes in its paragraph. Its runs can sit on both sides of those boxes.
+
+`run.transform` is set when `text-fit` scales the line. Apply it before placing the run at `x`, `y`.
+
+## Draw glyphs
+
+`run.outline()` returns the glyphs as SVG path data. The paths start at the baseline start. Drawing them needs no font engine.
+
+| Drawable                               | Draw                                              |
+| -------------------------------------- | ------------------------------------------------- |
+| `glyphs`                               | Fill the outline with `paint`, blurred by `blur`  |
+| `glyphs` with `stroke`                 | Stroke the outline, as `-webkit-text-stroke` does |
+| `masked` under `background-clip: text` | Draw the background layers, masked by the glyphs  |
+
+A native text API reads `run.glyphs` instead. It holds glyph IDs in `run.font` and their offsets from the baseline start. `run.font.data()` returns the font file. Runs in the same face share one `Font` object.
+
+## Lay text out again
+
+A slide writer can rebuild a text box from the paragraph box and the run fields.
+
+```tsx twoslash title="slides.tsx"
+import { paint } from "takumi-paint";
+
+const tree = await paint(
+  <div style={{ width: 240, padding: 12, textAlign: "center", lineHeight: "30px" }}>Title</div>,
+  { width: 320 },
+);
+
+const paragraphs = tree.nodes.flatMap((node) =>
+  node.type === "text"
+    ? [
+        {
+          box: node.parent?.contentBox, // [!code highlight]
+          matrix: node.transform,
+          align: node.textAlign,
+          runs: node.runs.map((run) => ({
+            text: run.text,
+            font: run.font,
+            fontSize: run.fontSize,
+            lineHeight: run.lineHeight,
+            letterSpacing: run.letterSpacing,
+            baseline: [run.x, run.y], // [!code highlight]
+          })),
+        },
+      ]
+    : [],
+);
+
+console.log(paragraphs);
+```
+
+| Value          | Field                    |
+| -------------- | ------------------------ |
+| Text box       | `node.parent.contentBox` |
+| Alignment      | `node.textAlign`         |
+| Line           | `run.line`               |
+| Text and face  | `run.text`, `run.font`   |
+| Font size      | `run.fontSize`           |
+| Line height    | `run.lineHeight`         |
+| Letter spacing | `run.letterSpacing`      |
+| Baseline       | `run.x`, `run.y`         |
+
+`run.letterSpacing` is already in the glyph positions. Under `line-height: normal`, a fallback face can make `run.lineHeight` taller.

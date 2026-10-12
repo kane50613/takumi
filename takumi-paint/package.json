@@ -1,6 +1,6 @@
 {
   "name": "takumi-paint",
-  "version": "0.0.0",
+  "version": "0.1.1",
   "description": "Turn JSX, HTML, and CSS into a paint tree: shapes, paints, text runs, and images with every CSS value resolved.",
   "keywords": [
     "css",
@@ -14,7 +14,7 @@
     "wasm",
     "webassembly"
   ],
-  "homepage": "https://takumi.kane.tw/docs/",
+  "homepage": "https://takumi.kane.tw/docs/paint",
   "bugs": {
     "url": "https://github.com/kane50613/takumi/issues"
   },

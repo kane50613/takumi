@@ -485,10 +485,6 @@ pub struct TextRun {
   pub letter_spacing: f32,
   /// Glyph ids positioned from the baseline start.
   pub glyphs: Vec<PaintGlyph>,
-  /// The outlines of the glyphs the run's colour fills, as SVG path data positioned from the
-  /// baseline start. Colour font layers arrive as their own drawables, and bitmap glyphs such as
-  /// some emoji are left out.
-  pub outline: String,
   /// Present when `text-fit` scales the line; applies on top of the node's transform.
   #[serde(skip_serializing_if = "Option::is_none")]
   pub transform: Option<Matrix>,
@@ -627,7 +623,7 @@ pub enum PaintStep {
 }
 
 /// A painted document.
-#[derive(Debug, Clone, PartialEq, Serialize)]
+#[derive(Debug, Clone, Default, PartialEq, Serialize)]
 pub struct PaintDocument {
   /// The canvas width.
   pub width: f32,

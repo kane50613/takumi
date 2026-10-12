@@ -9,6 +9,7 @@ use super::{
     PaintGlyph, PaintNode, PaintRect, PaintStep, Role, Sampling, Shape, TextRun,
   },
   fonts::FontTable,
+  outlines::Outlines,
   record::Recorder,
 };
 use crate::{
@@ -50,6 +51,7 @@ pub(super) struct Walker {
   pub(super) fonts: FontTable,
   pub(super) nodes: Vec<PaintNode>,
   pub(super) steps: Vec<PaintStep>,
+  pub(super) outlines: Outlines,
   /// Each node's element path, `None` for a node without one.
   paths: Vec<Option<Vec<usize>>>,
 }
@@ -61,6 +63,7 @@ impl Walker {
       fonts: FontTable::default(),
       nodes: Vec::new(),
       steps: Vec::new(),
+      outlines: Outlines::default(),
       paths: Vec::new(),
     };
 
@@ -442,7 +445,6 @@ impl Walker {
               y: glyph.y - shaped.baseline,
             })
             .collect(),
-          outline: run.outline(layout),
           transform: (!line_scale.is_identity()).then(|| {
             (Affine::translation(-origin.x, -origin.y)
               * line_scale
@@ -455,6 +457,10 @@ impl Walker {
     let id = self.nodes.len();
     let size = layout.size;
 
+    self.outlines.insert(
+      id,
+      runs.runs.iter().map(|run| run.outline(layout)).collect(),
+    );
     self.add(
       PaintNode {
         id,

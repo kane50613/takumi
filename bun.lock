@@ -19,6 +19,7 @@
     "docs": {
       "name": "docs",
       "dependencies": {
+        "@base-ui/react": "^1.8.0",
         "@monaco-editor/react": "^4.7.0",
         "@radix-ui/react-accordion": "^1.2.20",
         "@radix-ui/react-slot": "^1.3.3",
@@ -275,7 +276,7 @@
     },
     "takumi-helpers": {
       "name": "@takumi-rs/helpers",
-      "version": "2.14.0",
+      "version": "2.15.1",
       "devDependencies": {
         "@types/bun": "catalog:",
         "@types/react": "catalog:",
@@ -299,7 +300,7 @@
     },
     "takumi-image-response": {
       "name": "@takumi-rs/image-response",
-      "version": "2.14.0",
+      "version": "2.15.1",
       "dependencies": {
         "takumi-js": "workspace:*",
       },
@@ -311,7 +312,7 @@
     },
     "takumi-js": {
       "name": "takumi-js",
-      "version": "2.14.0",
+      "version": "2.15.1",
       "dependencies": {
         "@takumi-rs/core": "workspace:*",
         "@takumi-rs/helpers": "workspace:*",
@@ -327,7 +328,7 @@
     },
     "takumi-napi": {
       "name": "@takumi-rs/core",
-      "version": "2.14.0",
+      "version": "2.15.1",
       "dependencies": {
         "@takumi-rs/helpers": "workspace:*",
       },
@@ -351,7 +352,7 @@
     },
     "takumi-paint": {
       "name": "takumi-paint",
-      "version": "0.0.0",
+      "version": "0.1.1",
       "dependencies": {
         "@takumi-rs/helpers": "workspace:*",
       },
@@ -369,7 +370,7 @@
     },
     "takumi-pdf-js": {
       "name": "takumi-pdf",
-      "version": "0.15.0",
+      "version": "0.16.1",
       "dependencies": {
         "@takumi-rs/helpers": "workspace:*",
       },
@@ -387,7 +388,7 @@
     },
     "takumi-wasm": {
       "name": "@takumi-rs/wasm",
-      "version": "2.14.0",
+      "version": "2.15.1",
       "dependencies": {
         "@takumi-rs/helpers": "workspace:*",
       },

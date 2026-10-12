@@ -3,18 +3,28 @@
 
 # takumi-paint
 
-**Turn JSX, HTML, and CSS into a paint tree.**
+**Lay out JSX, HTML, and CSS. Get back what to draw instead of pixels.**
 
-Shapes, paints, text runs, and images, with every CSS value resolved. Feed it to a PPTX, Canvas, or native drawing API.
+Every box, gradient, shadow, text run, and image, in paint order, with each CSS value resolved.
 
-[Documentation](https://takumi.kane.tw/docs/paint-tree)
+[Documentation](https://takumi.kane.tw/docs/paint) · [Reference](https://takumi.kane.tw/docs/paint/reference)
 
 </div>
+
+## What it is for
+
+Takumi's other packages end in a PNG, an SVG, or a PDF. Use `takumi-paint` when you own the output:
+
+- Write slides where text stays editable, such as PPTX.
+- Draw onto Canvas, Skia, or a native drawing API.
+- Read where layout put each box and line of text.
+
+It runs the same layout as the image, SVG, and PDF renderers, in WebAssembly. Where they draw, it records the **paint tree**.
 
 ## Install
 
 ```bash
-npm install takumi-paint @takumi-rs/helpers
+npm install takumi-paint
 ```
 
 ## Quick start
@@ -23,39 +33,57 @@ npm install takumi-paint @takumi-rs/helpers
 import { paint } from "takumi-paint";
 
 const tree = await paint(
-  `<style>.big { font: 700 40px Georgia; color: #B3261E }</style>
-   <div id="card" style="width: 640px; padding: 32px; background: #F7F3EC">
-     <div class="big">4,2 %</div>
-     <p>hello <b>world</b></p>
-   </div>`,
-  { width: 640 },
+  <div id="card" style={{ width: 240, padding: 16, background: "#F7F3EC" }}>
+    Hello <b>world</b>
+  </div>,
+  { width: 320 },
 );
+```
 
-tree.nodes.find((node) => node.element?.id === "card")?.drawables; // the background fill, with its resolved shape and color
+`tree.nodes` lists every node. Each node lists what it draws:
+
+```tsx
+const card = tree.nodes.find((node) => node.type === "box" && node.element?.id === "card");
+console.log(card?.drawables[0]); // { type: "fill", role: "background", shape: { type: "rect", … }, … }
 
 for (const node of tree.nodes) {
   if (node.type !== "text") continue;
-  for (const run of node.runs)
-    console.log(run.text, run.font.family, run.font.weight, run.fontSize);
-}
-
-for (const step of tree.steps) {
-  // draw, begin-group/end-group, and begin-clip/end-clip, in paint order
+  for (const run of node.runs) console.log(run.text, run.font.family, run.fontSize);
 }
 ```
 
+`tree.steps` is the draw order. Replay it from the bottom up:
+
+```ts
+for (const step of tree.steps) {
+  if (step.type !== "draw") continue; // begin-group, end-group, begin-clip, and end-clip wrap draws
+  ctx.setTransform(...step.node.transform);
+  for (const drawable of step.drawables) draw(ctx, drawable);
+}
+```
+
+`paint()` also takes an HTML string or a Takumi node tree.
+
 ## What the tree holds
 
-`takumi-paint` runs Takumi's layout in WebAssembly and walks the same stacking-context scene the image, SVG, and PDF backends paint. Instead of drawing, it records what each node would draw, with every CSS value resolved:
+| Part      | Contents                                                                    |
+| --------- | --------------------------------------------------------------------------- |
+| Nodes     | `box`, `text`, and `image`, each placed on the canvas by its `transform`    |
+| Drawables | Fills, strokes, shadows, glyph runs, and images, tagged with their CSS role |
+| Paints    | Colors, gradients, images, and tiled patterns                               |
+| Text runs | Text, font, size, line height, and baseline, plus glyphs and outlines       |
+| Steps     | Draws, clips, and groups for opacity, blending, filters, and masks          |
 
-- **Shapes**: rectangles, rounded rectangles, and SVG path data.
-- **Paints**: colors, gradients with sRGB stops, images, and tiled patterns.
-- **Drawables**: fills, strokes, shadows, glyph runs, and images, each tagged with the role it plays.
-- **Effects**: opacity, blend mode, filters, clip, and mask for each composited group.
+Lengths are device pixels.
 
-Every length is a device pixel. A node's `transform` maps its local space, where its drawables sit, onto the canvas.
+## Learn more
 
-The [paint tree reference](https://takumi.kane.tw/docs/paint-tree/reference) covers the vocabulary and what stays unresolved.
+| Need                           | Read                                                     |
+| ------------------------------ | -------------------------------------------------------- |
+| See the tree, step by step     | [Paint](https://takumi.kane.tw/docs/paint)               |
+| Draw nodes in order            | [Drawing](https://takumi.kane.tw/docs/paint/drawing)     |
+| Place text or lay it out again | [Text](https://takumi.kane.tw/docs/paint/text)           |
+| Check options and field types  | [Reference](https://takumi.kane.tw/docs/paint/reference) |
 
 ## License
 

@@ -1,7 +1,0 @@
-{
-  "title": "Paint tree",
-  "description": "Boxes, images, and text runs with takumi-paint",
-  "root": true,
-  "icon": "Brush",
-  "pages": ["index", "--- Guides ---", "drawing", "text", "--- Reference ---", "reference"]
-}

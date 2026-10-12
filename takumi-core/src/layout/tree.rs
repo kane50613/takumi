@@ -1429,16 +1429,6 @@ impl<'r> LayoutTree<'r> {
               Some(InlineContentKind::Text(_))
             );
 
-          // `compute_leaf_layout` reports no baseline, which leaves flexbox
-          // baseline alignment on its bottom margin edge fallback.
-          if lays_out_text && inputs.run_mode == RunMode::PerformLayout {
-            output.baselines.first = render_node.inline_content_border_box_baseline(
-              Size::from_taffy(inputs.available_space).map(AvailableSpace::from_taffy),
-              Size::from_taffy(output.size),
-              false,
-            );
-          }
-
           let border_box = || {
             let calc = |value, basis| tree.resolve_calc_value(value, basis);
 
@@ -1459,6 +1449,22 @@ impl<'r> LayoutTree<'r> {
               ),
             )
           };
+
+          // `compute_leaf_layout` reports no baseline, which leaves flexbox
+          // baseline alignment on its bottom margin edge fallback.
+          if lays_out_text && inputs.run_mode == RunMode::PerformLayout {
+            let kept = tree.keeps_fragment_items.then(border_box);
+
+            if let Some(layout) = kept {
+              render_node.keep_fragment_items(layout);
+            }
+            output.baselines.first = render_node.inline_content_border_box_baseline(
+              Size::from_taffy(inputs.available_space).map(AvailableSpace::from_taffy),
+              Size::from_taffy(output.size),
+              false,
+              kept,
+            );
+          }
 
           // A block-level box measured whole at a definite width lays out at that size, so its
           // fragment items laid out now let its shaped text go before the boxes after it shape
@@ -2273,7 +2279,8 @@ impl RenderNode {
     size: Size<f32>,
     use_last_line: bool,
   ) -> Option<f32> {
-    let baseline = self.inline_content_border_box_baseline(available_space, size, use_last_line)?;
+    let baseline =
+      self.inline_content_border_box_baseline(available_space, size, use_last_line, None)?;
 
     Some(self.margin_px().top + baseline)
   }
@@ -2331,17 +2338,27 @@ impl RenderNode {
   }
 
   /// Baseline of the first or last line box, measured from the border box top.
+  /// Reads the baseline from the fragment items it kept for `kept`, when it kept them, instead of
+  /// laying its content out again.
   fn inline_content_border_box_baseline(
     &self,
     available_space: Size<AvailableSpace>,
     size: Size<f32>,
     use_last_line: bool,
+    kept: Option<ComputedLayout>,
   ) -> Option<f32> {
     if matches!(
       self.node.as_ref().and_then(Node::inline_content),
       Some(InlineContentKind::Box)
     ) {
       return None;
+    }
+
+    if let Some(baseline) = kept
+      .and_then(|layout| self.fragment_items_in(layout))
+      .and_then(|items| items.baseline(use_last_line))
+    {
+      return Some(self.content_top() + baseline);
     }
 
     // An atomic box with no in-flow inline content has no line boxes, so it has
@@ -2396,11 +2413,16 @@ impl RenderNode {
         line.resolved_baseline
       }
     };
+    Some(self.content_top() + baseline)
+  }
+
+  /// The top border and padding the baselines of its inline content sit below.
+  fn content_top(&self) -> f32 {
     let sizing = &self.context.sizing;
     let border_top = Length::from(self.context.style.box_data.border_top_width).to_px(sizing, 0.0);
     let padding_top = self.context.style.box_data.padding_top.to_px(sizing, 0.0);
 
-    Some(border_top + padding_top + baseline)
+    border_top + padding_top
   }
 
   /// This node's text when it lays out exactly as [`TextData::measurement`] does.

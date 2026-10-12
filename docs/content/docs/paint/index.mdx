@@ -1,0 +1,81 @@
+---
+title: Paint
+description: Lay out JSX or HTML and get the shapes, text runs, and images to draw.
+index: true
+icon: BookOpen
+---
+
+`takumi-paint` lays out JSX, HTML, or a takumi node tree like takumi does. It returns the **paint tree** instead of pixels. The tree says what to draw, where, and in which order. Every CSS value is already resolved.
+
+Draw the tree with Canvas, write it into slides, or pass it to a native drawing API.
+
+<PaintPipeline />
+
+## Install
+
+```npm
+npm i takumi-paint
+```
+
+## Paint JSX
+
+`paint()` lays out a node and returns a `PaintTree`. The demos on these pages paint this card when the site builds.
+
+<include cwd meta='twoslash title="card.tsx" {3,31}'>
+  app/components/mdx/paint/examples/card.tsx
+</include>
+
+## Read the nodes
+
+`tree.nodes` lists every node in document order.
+
+```tsx twoslash title="inspect.tsx"
+import { paint } from "takumi-paint";
+
+const tree = await paint(
+  <div id="card" style={{ width: 240, padding: 16, background: "#F7F3EC" }}>
+    Hello <b>world</b>
+  </div>,
+  { width: 320 },
+);
+
+const card = tree.nodes.find((node) => node.type === "box" && node.element?.id === "card");
+console.log(card?.drawables[0]); // { type: "fill", role: "background", shape: { type: "rect", … }, … }
+
+for (const node of tree.nodes) {
+  if (node.type !== "text") continue;
+  for (const run of node.runs) console.log(run.text, run.element?.tagName, run.font.family); // [!code highlight]
+}
+```
+
+| Node    | Holds                                                    |
+| ------- | -------------------------------------------------------- |
+| `box`   | A CSS box: its background, border, shadows, and children |
+| `text`  | One paragraph, as shaped runs in visual order            |
+| `image` | A replaced image, such as `<img>` or an SVG              |
+
+Lengths are device pixels. `devicePixelRatio` scales CSS lengths during layout.
+
+## Choose a guide
+
+| Need                           | Read                               |
+| ------------------------------ | ---------------------------------- |
+| Draw nodes in order            | [Drawing](/docs/paint/drawing)     |
+| Place text or lay it out again | [Text](/docs/paint/text)           |
+| Check options and field types  | [Reference](/docs/paint/reference) |
+
+## Reuse a painter
+
+`paint()` shares one `Painter`. Create your own `Painter` to keep its fonts separate. Call `free()` to release its WebAssembly memory.
+
+```tsx twoslash title="painter.tsx"
+import { Painter } from "takumi-paint";
+
+const painter = new Painter();
+try {
+  const tree = await painter.paint(<p>Hello</p>, { width: 320 });
+  console.log(tree.height);
+} finally {
+  painter.free();
+}
+```

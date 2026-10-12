@@ -1,5 +1,5 @@
 import { Link } from "waku";
-import { showcaseProjects } from "~/data/showcase";
+import { PROJECT_LINK_REL, showcaseProjects } from "~/data/showcase";
 
 function User({ href, children }: { href: string; children: string }) {
   return (
@@ -33,7 +33,7 @@ export function Showcase() {
               key={project.url}
               href={project.url}
               target="_blank"
-              rel="noopener noreferrer"
+              rel={PROJECT_LINK_REL}
               className="border border-border hover:border-primary"
             >
               <img

@@ -38,6 +38,7 @@ import sticker from "./public/sticker.svg?raw";
 import { baseOptions, SITE_NAME, SITE_URL } from "./app/layout-config";
 import { Accordion, Accordions } from "./app/components/accordion";
 import { Mermaid } from "./app/components/mdx/mermaid";
+import { LocalSpace, PaintPipeline, StepReplay, TextRuns } from "./app/components/mdx/paint";
 import { TypeTable } from "./app/components/type-table";
 import { Video } from "./app/components/video";
 
@@ -46,7 +47,7 @@ const PAINT_ACCENT = "#8b5cf6";
 
 const SECTION_CLASSES = [
   ["/docs/pdf", "pdf-section"],
-  ["/docs/paint-tree", "paint-section"],
+  ["/docs/paint", "paint-section"],
 ] as const;
 
 function sectionClass(url: string) {
@@ -163,6 +164,10 @@ export default defineConfig({
           Palette,
           Type,
           Mermaid,
+          PaintPipeline,
+          StepReplay,
+          LocalSpace,
+          TextRuns,
           Step,
           Steps,
           Card,
@@ -241,7 +246,7 @@ export default defineConfig({
                 {
                   title: "Paint",
                   description: "Boxes, images, and text runs with takumi-paint",
-                  url: "/docs/paint-tree",
+                  url: "/docs/paint",
                   icon: tabIcon(<Brush size="100%" />, PAINT_ACCENT),
                 },
               ],

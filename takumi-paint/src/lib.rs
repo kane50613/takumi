@@ -2,7 +2,7 @@
 #![deny(missing_docs)]
 #![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
-use std::sync::RwLock;
+use std::{mem::take, sync::RwLock};
 
 use serde::{Deserialize, Serialize};
 use serde_wasm_bindgen::{Serializer, from_value, to_value};
@@ -121,7 +121,7 @@ impl Painter {
       .state
       .try_read()
       .map_err(|error| js_sys::Error::new(&format!("Renderer state is locked: {error}")))?;
-    let tree = paint_tree(
+    let mut tree = paint_tree(
       PaintTreeOptions::builder()
         .viewport(
           Viewport::new((options.width, options.height)).with_device_pixel_ratio(
@@ -139,34 +139,37 @@ impl Painter {
         .build(),
     )
     .map_err(map_error)?;
+    let raw = take(&mut tree.document)
+      .serialize(&Serializer::json_compatible())
+      .map_err(map_error)?;
 
-    Ok(RenderedPaint { tree })
+    Ok(RenderedPaint { tree, raw })
   }
 }
 
-/// A painted tree and the font files its runs use.
+/// A serialized tree, and the font files and run outlines it keeps in wasm memory.
 #[wasm_bindgen]
 pub struct RenderedPaint {
   tree: PaintTree,
+  raw: JsValue,
 }
 
 #[wasm_bindgen]
 impl RenderedPaint {
   /// The serialized tree.
-  pub fn tree(&self) -> Result<RawPaintTreeType, js_sys::Error> {
-    Ok(
-      self
-        .tree
-        .document
-        .serialize(&Serializer::json_compatible())
-        .map_err(map_error)?
-        .unchecked_into(),
-    )
+  pub fn tree(&self) -> RawPaintTreeType {
+    self.raw.clone().unchecked_into()
   }
 
   /// The file of the tree's font at `index`.
   #[wasm_bindgen(js_name = fontData)]
   pub fn font_data(&self, index: usize) -> Option<Vec<u8>> {
     self.tree.font_data(index).map(<[u8]>::to_vec)
+  }
+
+  /// The SVG path data of run `run` of text node `node`.
+  #[wasm_bindgen(js_name = runOutline)]
+  pub fn run_outline(&self, node: usize, run: usize) -> Option<String> {
+    self.tree.run_outline(node, run)
   }
 }

@@ -1,3 +1,10 @@
+## @takumi-rs/helpers@2.15.0
+
+### Repeat table headers and footers on every page, as Chrome prints them
+
+- A `tfoot` no taller than a quarter of the page repeats below the last row on each page. The structure tree keeps one `TFoot`.
+- A header or footer group repeats only with `break-inside: avoid`. The `thead` and `tfoot` presets set it, as Chrome's print stylesheet does.
+
 ## @takumi-rs/helpers@2.13.6
 
 ### Retry transient font and image requests

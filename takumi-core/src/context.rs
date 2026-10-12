@@ -5,9 +5,11 @@ use std::{
   sync::Arc,
 };
 
+use rustc_hash::FxHashMap;
 use typed_builder::TypedBuilder;
 
 use crate::{
+  font_style::ExpandedFamilies,
   geometry::{ComputedLayout, Point},
   layout::inline::{InlineLayoutCache, MeasureCache, ShapeCache},
   resources::{
@@ -25,9 +27,10 @@ struct RenderShared {
   images: Rc<HashMap<Arc<str>, ImageSource>>,
   resource_cache: Option<ResourceCache>,
   stylesheet: Arc<StyleSheet>,
+  font_families: ExpandedFamilies,
   inline_cache: InlineLayoutCache,
   tw_cache: TwCache,
-  primary_font_metrics: RefCell<HashMap<u64, Option<PrimaryFontMetrics>>>,
+  primary_font_metrics: RefCell<FxHashMap<u64, Option<PrimaryFontMetrics>>>,
   time_ms: u64,
   draw_debug_border: bool,
   dither_gradients: bool,
@@ -77,9 +80,10 @@ impl From<RenderContextInit> for RenderContext {
         images: init.images,
         resource_cache: init.resource_cache,
         stylesheet: init.stylesheet,
+        font_families: ExpandedFamilies::default(),
         inline_cache: InlineLayoutCache::new(init.shape_cache, init.measure_cache),
         tw_cache: TwCache::default(),
-        primary_font_metrics: RefCell::new(HashMap::new()),
+        primary_font_metrics: RefCell::default(),
         time_ms: init.time_ms,
         draw_debug_border: init.draw_debug_border,
         dither_gradients: init.dither_gradients,
@@ -172,6 +176,10 @@ impl RenderContext {
 
   pub(crate) fn inline_cache(&self) -> &InlineLayoutCache {
     &self.shared.inline_cache
+  }
+
+  pub(crate) fn font_families(&self) -> &ExpandedFamilies {
+    &self.shared.font_families
   }
 
   /// Drops the shaped text this render keeps to lay the same text out again, once every box

@@ -1,3 +1,14 @@
+## takumi-html@0.4.0
+
+### Repeat table headers and footers on every page, as Chrome prints them
+
+- A `tfoot` no taller than a quarter of the page repeats below the last row on each page. The structure tree keeps one `TFoot`.
+- A header or footer group repeats only with `break-inside: avoid`. The `thead` and `tfoot` presets set it, as Chrome's print stylesheet does.
+
+### Refuse node trees nested deeper than 512 levels
+
+A deeper tree now fails with `nodes nest deeper than 512 levels`, Blink's parser limit, instead of crashing the process. `takumi_html::DEFAULT_MAX_DEPTH` is now `takumi_core::layout::node::MAXIMUM_DOM_TREE_DEPTH`. `takumi::DEFAULT_MAX_DEPTH` keeps its name.
+
 ## takumi-html@0.3.0
 
 ### Draw list markers for `<ol>` and `<ul>`

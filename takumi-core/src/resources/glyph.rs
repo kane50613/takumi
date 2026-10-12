@@ -125,6 +125,8 @@ pub enum ResolvedOutlineGlyph {
     embolden: Option<f32>,
     /// Hash identifying this outline for caching.
     cache_signature: u64,
+    /// The ink box [`outline_ink`] reads from `paths` and `embolden`.
+    ink: InkExtents,
   },
   /// Multi-layer color outline (COLR).
   Color {
@@ -134,6 +136,8 @@ pub enum ResolvedOutlineGlyph {
     layers: Vec<ResolvedColorLayer>,
     /// Hash identifying this outline for caching.
     cache_signature: u64,
+    /// The ink box [`outline_ink`] reads from `paths`.
+    ink: InkExtents,
   },
 }
 
@@ -207,7 +211,7 @@ impl ResolvedGlyph {
   /// pixels: `(min_x, min_y, max_x, max_y)`. Curve control points are included,
   /// so the box may slightly overestimate but never undercuts, and the
   /// faux-bold stroke outset is accounted for.
-  pub(crate) fn ink_extents(&self) -> Option<(f32, f32, f32, f32)> {
+  pub(crate) fn ink_extents(&self) -> InkExtents {
     match self {
       Self::Bitmap(bitmap) => {
         let placement = bitmap.placement;
@@ -220,52 +224,62 @@ impl ResolvedGlyph {
           )
         })
       }
-      Self::Outline(outline) => {
-        let mut min = Point {
-          x: f32::INFINITY,
-          y: f32::INFINITY,
-        };
-        let mut max = Point {
-          x: f32::NEG_INFINITY,
-          y: f32::NEG_INFINITY,
-        };
-        let mut include = |point: &Point<f32>| {
-          min.x = min.x.min(point.x);
-          min.y = min.y.min(point.y);
-          max.x = max.x.max(point.x);
-          max.y = max.y.max(point.y);
-        };
-
-        for command in outline.paths() {
-          match command {
-            Command::MoveTo(point) | Command::LineTo(point) => include(point),
-            Command::QuadTo(control, point) => {
-              include(control);
-              include(point);
-            }
-            Command::CubicTo(control1, control2, point) => {
-              include(control1);
-              include(control2);
-              include(point);
-            }
-            Command::Close => {}
-          }
-        }
-
-        if !min.x.is_finite() {
-          return None;
-        }
-
-        let outset = outline.embolden().map_or(0.0, |embolden| embolden / 2.0);
-        Some((
-          min.x - outset,
-          min.y - outset,
-          max.x + outset,
-          max.y + outset,
-        ))
-      }
+      Self::Outline(
+        ResolvedOutlineGlyph::Plain { ink, .. } | ResolvedOutlineGlyph::Color { ink, .. },
+      ) => *ink,
     }
   }
+}
+
+/// A glyph's ink box as `(min_x, min_y, max_x, max_y)`, `None` for a glyph with no ink.
+pub type InkExtents = Option<(f32, f32, f32, f32)>;
+
+/// The ink box of an outline: the bounds of `paths`, outset by half the faux-bold `embolden`.
+/// Curve control points count, so it may overestimate but never undercuts.
+pub fn outline_ink(paths: &[Command], embolden: Option<f32>) -> InkExtents {
+  let mut min = Point {
+    x: f32::INFINITY,
+    y: f32::INFINITY,
+  };
+  let mut max = Point {
+    x: f32::NEG_INFINITY,
+    y: f32::NEG_INFINITY,
+  };
+  let mut include = |point: &Point<f32>| {
+    min.x = min.x.min(point.x);
+    min.y = min.y.min(point.y);
+    max.x = max.x.max(point.x);
+    max.y = max.y.max(point.y);
+  };
+
+  for command in paths {
+    match command {
+      Command::MoveTo(point) | Command::LineTo(point) => include(point),
+      Command::QuadTo(control, point) => {
+        include(control);
+        include(point);
+      }
+      Command::CubicTo(control1, control2, point) => {
+        include(control1);
+        include(control2);
+        include(point);
+      }
+      Command::Close => {}
+    }
+  }
+
+  if !min.x.is_finite() {
+    return None;
+  }
+
+  let outset = embolden.map_or(0.0, |embolden| embolden / 2.0);
+
+  Some((
+    min.x - outset,
+    min.y - outset,
+    max.x + outset,
+    max.y + outset,
+  ))
 }
 
 /// CSS `kBoldThreshold` — weights at or above this synthesize bold when no bolder face
@@ -471,6 +485,7 @@ impl<'a> GlyphResolveContext<'a> {
     let cache_signature = hash_path_commands(&paths);
 
     Some(ResolvedOutlineGlyph::Color {
+      ink: outline_ink(&paths, None),
       paths,
       layers: color_layers,
       cache_signature,
@@ -486,6 +501,7 @@ impl<'a> GlyphResolveContext<'a> {
     let cache_signature = hash_path_commands(&paths);
 
     Some(ResolvedOutlineGlyph::Plain {
+      ink: outline_ink(&paths, self.embolden),
       paths,
       embolden: self.embolden,
       cache_signature,
