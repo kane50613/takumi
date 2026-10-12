@@ -1,3 +1,358 @@
+## takumi@2.15.0
+
+### Blend `color-dodge` and `color-burn` the same on every platform
+
+### Apply filters as Chrome does
+
+- `blur()`, `backdrop-filter` and `text-shadow` blur with Chrome's Gaussian, at full resolution up to a 135px standard deviation.
+- `drop-shadow()` reads its blur as the standard deviation, as CSS defines it. Image output used to halve it.
+- A colored `drop-shadow()` fades out instead of painting an opaque halo.
+- `drop-shadow()` rounds a fractional offset down, so `10.5px` lands where Chrome puts it.
+- `grayscale()` and `sepia()` above 100% act as 100%.
+- SVG keeps a fractional `hue-rotate()` angle.
+
+### Paint backgrounds as Chrome does
+
+- `background-repeat: space` puts the first and last tiles on the edges. `round` rounds to the nearest tile count.
+- Shorter `background-size`, `-position`, `-repeat` and `-blend-mode` lists cycle over the layers.
+- `background-blend-mode` in image output blends only with the box's own layers, not with what is behind it.
+- Gradient hard stops land on Chrome's pixels.
+- A repeating gradient with all stops at one position paints its last color.
+- A tile smaller than 1/64px paints nothing.
+- SVG places tiles at exact positions. PDF no longer repeats a layer along an axis that does not repeat.
+- A stray token, as in `background-repeat: repeat bogus`, makes the declaration invalid.
+
+### Draw text decorations as Chrome does
+
+- Underlines, overlines and line-throughs sit and size as Chrome draws them, on whole pixels.
+- `text-underline-position`, `text-underline-offset` and `text-decoration-thickness: from-font` follow Chrome.
+- `text-decoration: overline 12px red` keeps its thickness.
+- A decoration reaches the text of every in-flow box inside its element, and nested decorations all draw.
+- An underline uses the baseline and font of the element that sets it.
+- `text-decoration-skip-ink` also cuts overlines and wavy lines. It no longer cuts around CJK, Hangul, emoji, `/`, `\` or `_`.
+- Text under `opacity`, `filter` or a blend mode keeps decorations that reach past its box.
+- PDF applies a span's `opacity` to its decorations.
+
+### Measure content widths as Chrome does
+
+- A box sized to its content rounds its text width up to 1/64px, as Chrome's `LayoutUnit` does, not to a whole pixel.
+- A shrink-to-fit box whose text wraps, such as a flex item, takes the width it wraps at.
+- `width`, `height` and `flex-basis` ignore `fit-content(<length-percentage>)`, which Chrome allows only in grid tracks.
+
+### Support `background-blend-mode` in SVG output
+
+Each background layer blends with the layers and color beneath it, and nothing behind the box takes part.
+
+### Skip text in `:first-child` and sibling selectors
+
+`:first-child`, `:last-child`, `:nth-child()`, `+` and `~` skip text nodes, as browsers do. `td:first-child` now matches in indented HTML.
+
+### Draw outlines as Chrome does
+
+- An inline element's outline draws `double`, `groove`, `ridge`, `inset` and `outset`.
+- An inline outline wraps the element's border box on each line, nested elements included. `plain <b>bold</b> text` now gets one.
+- A wrapped inline outline follows Chrome's shape, rounds by `border-radius`, and shades 3D styles per edge.
+- A one-line inline outline paints like a box outline.
+- Inline outlines are no longer 1px narrower than Chrome's.
+- Dashed and dotted outlines start each edge on a dash, and translucent ones no longer darken at the corners.
+- A box without `border-radius` keeps square outline corners.
+- PDF draws an inline outline as one contour across lines, at the element's opacity.
+
+### Rotate by quarter turns exactly
+
+`rotate: 90deg`, `180deg` and `270deg` build an exact matrix, as Chrome does. A card with an upside-down image renders 36% faster. A few edge pixels change by one level.
+
+### Paint borders on inline spans
+
+A `display: inline` span paints its `border` on each line. A wrapped span leaves out the side at each break, as browsers do.
+
+### Decode `data:` images once per renderer
+
+A template that inlines its logo or background as a `data:` URI decodes it once, not on every render. Real cards with inlined images render up to 92% faster.
+
+Rust callers pass their `ResourceCache` to `RenderOptions::builder().resource_cache(...)`. `ResourceCache` now implements `Clone`, and clones share one store.
+
+### Start a stacking context for any transform and `position: fixed`
+
+Any transform property, even `translate: 0 0`, and `position: fixed` start a stacking context, as in Chrome. The box paints above later in-flow boxes and keeps its `z-index: -1` children above its background.
+
+### Skip unknown at-rules in `StyleSheet::parse`
+
+An at-rule takumi does not implement, such as `@font-face` or `@page`, is dropped instead of failing the whole sheet.
+
+### Apply `backdrop-filter` as Chrome does
+
+- The filtered backdrop draws over the original, so `opacity()` no longer punches a hole.
+- With both `clip-path` and `mask-image`, the backdrop shows only where both let it through.
+- A blurred backdrop reads only what is inside the element, so content just outside no longer bleeds in.
+
+### Escape text inside JSX `<svg>` elements
+
+`fromJsx` escapes text inside `<svg>`, so it cannot inject markup. It throws on invalid XML names and on `style` values that would end their own declaration, such as `fill: "red;stroke:blue"`.
+
+### Paint SVG and PDF output like the image output
+
+- A block's background no longer paints twice, so a negative `z-index` child behind it shows.
+- Spans with their own `font-size` inside a `font-size: 0` block paint.
+- PDF paints text that overflows a zero-sized box, and content that overflows a `height: 0` inline-block.
+- SVG path data no longer turns a second moveto into a stray line.
+
+### Paint in CSS paint order, as Chrome does
+
+- Positioned boxes and `z-index: auto` stacking contexts paint above later in-flow siblings. A `position: relative` box nudged over the next block stays visible.
+- Floats paint above in-flow block backgrounds, and before the text they sit in.
+- Text paints above every block background in its stacking context, so overflowing text stays visible.
+- A box with `overflow: hidden` paints its text above later siblings' backgrounds.
+- A positioned box whose containing block is outside a clip escapes the clip.
+- A filtered box inside an `overflow: hidden` parent stays inside the parent.
+- PDF applies a scaled or rotated clipping box's transform once, not twice.
+
+### Get what to draw from JSX, HTML, or a node tree
+
+`paint()` lays out the input and returns a `PaintTree` instead of pixels. `nodes` lists each box, text run and image with its CSS resolved. `steps` lists what to draw, in paint order.
+
+### Write smaller JPEG files
+
+JPEG output uses optimized Huffman tables. Text and UI images come out about 29% smaller at the same quality, and photos about 4% smaller.
+
+### Show `background-clip: text` through the text Chrome shows it through
+
+- The background shows through the text of child blocks, inline-blocks, floats and positioned children, not just the box's own text.
+- Nested `background-clip: text` spans each show their background, outer span first.
+- The background shows through underlines, overlines and line-throughs too.
+- It shows through text at `opacity: 0` or `scale(0)`, and skips the floats and positioned boxes Chrome skips.
+- `text-shadow` paints on top of the clipped background, and a child's own background covers it.
+- A clipped background renders about 30% faster and peaks 35% lower in memory.
+
+### Register WOFF2 fonts faster
+
+Registering a WOFF2 font takes about 25% less time, so a cold start with a large CJK font is ready sooner.
+
+### Write smaller lossy WebP
+
+Lossy WebP files are about a quarter smaller at the same quality, with libwebp's method 2. It encodes about a quarter slower, then 13% faster again on two threads.
+
+### Build `takumi` with fewer Cargo features
+
+- `ImageSource::Animated` needs `gif`, `png`, or `webp`. A GIF still reports its size without its decoder.
+- `png` is on by default through `image-decoding`. Without it, PNG sources report their size but cannot draw, PNG bitmap glyphs are skipped, and `ImageBuffer::encode_png` is gone.
+- `svg-sizing` reads an SVG's `width`, `height`, and `viewBox` without the renderer. `svg` includes it.
+- The raster backend builds without `svg`. Only SVG sources need it.
+
+### Fit text with `text-fit` as Chrome does
+
+- Fixed `letter-spacing`, `word-spacing` and `line-height` keep their size when a line scales.
+- Text strokes, shadows and decorations scale with the line.
+- A line within 2px of its box stays unscaled, and so does one that spacing already fills.
+- `grow` limits under 100% and `shrink` limits over 100% stop scaling.
+- Indented, centered, right-aligned and right-to-left lines land where Chrome puts them, on the same baseline.
+- Span offsets and backgrounds no longer scale twice.
+- With `text-overflow: ellipsis`, a line that fits once scaled gets no ellipsis.
+
+### Share computed styles between boxes
+
+Boxes share the parts of their computed style they leave unchanged, as Chrome's do. An 11,000-row table takes about a quarter less memory.
+
+`ComputedStyle` fields now sit in groups named after Blink's, each behind an `Rc`. `RenderContext::style` is an `Rc<ComputedStyle>`, and `RenderContextBuilder::style` still takes a `Box<ComputedStyle>`.
+
+```rust
+let width = style.box_data.width;
+let color = style.inherited_data.color;
+
+Rc::make_mut(&mut style.box_data).width = Size::default();
+```
+
+### Snap boxes to pixels as Chrome does
+
+- Layout keeps exact positions and sizes. Backgrounds, borders, shadows, outlines, images and clips snap to whole pixels as they paint. `measure` reports the exact sizes.
+- A line keeps its exact height: `line-height: 1.2` at 32px is 38.39px, not 39px.
+- Background and mask tiles land on Chrome's pixels, including `round`, `space`, `cover` and `contain`.
+- A tile outside the box, or under an opaque border, no longer paints.
+- An image drawn through a rounded or clipped shape no longer shifts half a pixel and blurs.
+- A solid edge between pixels, such as a decoration line, covers its edge pixels in proportion.
+- A root with `display: flex`, `grid` or `flow-root` and no width fills the viewport.
+- An ellipsis follows the last word, not the trailing space.
+- In PDF, a repeating layer behind `background-clip: text` repeats across the whole text.
+- A `background-clip: text` background no longer shows past its box through a text stroke, and no longer scales with `text-fit`.
+
+### Encode GIF and decode WebP animations faster
+
+- Native builds pick GIF palettes in parallel. A 24-frame 1200x630 GIF encodes 2.5x faster, byte for byte the same.
+- Native builds decode animated WebP with libwebp, about 2.5x faster. The Node.js binary is 180KB smaller.
+
+### Mix absolute units in `calc()`
+
+`calc()` now adds `cm`, `mm`, `in`, `pt`, `pc` and `q` together, so mixing them no longer fails to parse.
+
+### Draw glyph outlines through `draw_outline`
+
+`base::resources::glyph::draw_outline` replaces `ErasedPen`. It draws a skrifa `OutlineGlyph` through `&mut dyn OutlinePen`.
+
+### Read node trees faster
+
+Each node's keys are read once. A key that belongs to another node type and comes before `type` is now parsed, so a malformed one is an error.
+
+### Paint visible children of `visibility: hidden` elements
+
+A `visibility: hidden` element hides only itself, so children with `visibility: visible` paint. `opacity: 0` and `display: none` still hide the whole subtree.
+
+### Place absolutely positioned boxes as Chrome does
+
+- An `auto`-width absolute box wraps to the space its insets and margins leave, so `left: 50%` text stays inside the edge.
+- An absolute box inside a paragraph starts where it sits in the line, and the text around it stays on one line.
+- An absolute box inside a `position: relative` span takes its offsets from the span and no longer breaks the word around it.
+
+### Collapse white space as Chrome does
+
+- `&nbsp;`, U+3000 and other non-CSS spaces keep their width.
+- Spaces at the start and end of a paragraph drop out, as in `<span>Label </span>` inside a flex row.
+- A float at the start of a line no longer keeps the space after it.
+- `<br>` always starts a new line.
+- Under `pre-wrap`, `"A \nB"` renders as two lines.
+- A mixed-direction line hangs its trailing space past the edge.
+
+### Refuse node trees nested deeper than 512 levels
+
+A deeper tree now fails with `nodes nest deeper than 512 levels`, Blink's parser limit, instead of crashing the process. `takumi_html::DEFAULT_MAX_DEPTH` is now `takumi_core::layout::node::MAXIMUM_DOM_TREE_DEPTH`. `takumi::DEFAULT_MAX_DEPTH` keeps its name.
+
+### Lay out inline boxes as Chrome does
+
+- A span's background, border and outline cover its font's ascent and descent, not the whole `line-height`.
+- A span's background and outline stop at the last glyph before a line break.
+- A span's side margins push the text beside it apart. Negative margins overlap it.
+- Each line is at least the block's own `line-height`. Under `line-height: normal`, a fallback font such as emoji grows the line.
+- A span with a larger font makes its line as tall as Chrome does.
+- `vertical-align` on a span moves its text, background and children, and grows the line to fit.
+- Text in a `sub` or `super` span no longer kerns against the text around it.
+- A span's `background-image` paints as one strip across its lines, so gradient text inside a heading shows.
+- `box-decoration-break: clone` repeats a span's border, padding and corners on every line.
+- A `direction: rtl` span puts its start padding, border and margin on the right.
+
+### Drop WOFF1 from the wasm packages
+
+`@takumi-rs/wasm` and `takumi-pdf` load TTF, OTF, and WOFF2, but not WOFF1. `@takumi-rs/core` keeps WOFF1.
+
+### Clip as Chrome does
+
+- An element with more than one of `clip-path`, `mask-image` and a clipping `overflow` applies all of them.
+- A `path()` clip that fails to parse no longer hides the element.
+- A rounded image clips to the curve of its content box.
+- In `circle()`, a percentage radius and `closest-side` or `farthest-side` resolve as CSS defines them.
+- SVG resolves a percentage vertical radius in `inset(... round ...)` against the box height.
+
+### Paint `box-shadow` as Chrome does
+
+- The first shadow in the list sits on top in every output.
+- A spread shadow follows Chrome's corner radius, so square corners stay square.
+- Shadows of scaled or rotated boxes blur by the transformed radius.
+- Image output keeps fractional offsets.
+- SVG no longer paints an outer shadow under a translucent box.
+- PDF shadows no longer leave a hairline, fill a box they moved off, or stack their alpha when blurred.
+
+### Lay text out once
+
+Painting, page breaking and PDF output reuse the lines layout made instead of shaping text again. A 1,500-page document renders in about a sixth less memory and a tenth less time.
+
+`FragmentItems`, `OwnContent::fragment_items` and `RenderContext::release_shaped_text` are new.
+
+### Paint text shadows as Chrome does
+
+- A `text-shadow` on a `<span>` paints.
+- Shadows cover text decorations too, and the first listed shadow sits on top.
+- Color emoji cast a shadow in their own shape.
+- Each run paints underline, text, then line-through, as CSS orders them.
+- Wavy, dotted and dashed underlines keep their shadows.
+- PDF blurs text shadows, colors emoji shadows, and no longer repeats shadowed words when text is copied.
+
+### Lay out tables as Chrome does
+
+- An `auto`-width table shrinks to fit its content.
+- Columns share the width through the CSS table algorithm. Percentage, `min-width` and `max-width` cell widths size their columns.
+- `width: min-content`, `max-content`, `fit-content` and `stretch` size a table from its columns.
+- `thead`, `tbody` and `tfoot` default to `vertical-align: middle`, as in Chrome.
+- `vertical-align: baseline` cells line up on the row's deepest baseline.
+- A non-cell inside a row gets wrapped in an anonymous cell.
+- Tables with more than 10,000 rows lay out every row. Rows past the 10,000th used to pile up.
+
+### Draw double, dotted, dashed, and wavy text decorations
+
+`text-decoration-style` accepts `double`, `dotted`, `dashed`, and `wavy`, drawn as Blink draws them. Tailwind gains `decoration-solid`, `decoration-double`, `decoration-dotted`, `decoration-dashed`, and `decoration-wavy`.
+
+### Render faster
+
+Real cards render up to:
+
+- 69% faster with downscaled photos, and 3 times faster with photos cropped by `object-fit: cover`.
+- 65% faster with translucent overlays.
+- 50% faster with nested clips or large blurred backgrounds.
+- 30% faster when text-heavy.
+- 14-32% faster with big blurred backgrounds, which blur on several threads in native builds.
+- 11% faster when the card ends translucent.
+
+Also:
+
+- Text is shaped and measured once per node.
+- Rotated and scaled glyphs come from the glyph cache. Their edges may move by up to 1/8px, as they now snap the way Chrome's do.
+- Shapes and glyphs outside the image are skipped.
+- A stylesheet is indexed once when parsed, so passing a whole site's CSS no longer slows every render.
+
+### Cascade custom properties as browsers do
+
+- `--gap: 8px !important` marks the declaration important instead of substituting `8px !important`.
+- An `@property` rule with a typed `syntax` and no `initial-value` is ignored. `syntax` no longer keeps its quotes.
+- An author's own `--tw-` property inherits like any other.
+- A `--tw-*` property registered with `@property` keeps its initial value, so Tailwind's compiled gradients paint.
+
+### Read painted values from a node tree
+
+- With takumi-core's `paint-tree` feature, `takumi_core::paint_tree::paint_tree` returns decorations, image placement and shaped text in paint order, in device pixels.
+- `SceneRequest::build` replaces `build_stacking_contexts`. Set `paint_bounds: false` to skip paint bounds and the text shaping they need.
+- `Fonts::face_family` names a shaped run's registered family.
+
+### Apply `text-overflow` only to a box that clips
+
+`text-overflow: ellipsis` needs `overflow` other than `visible`, as in Chrome. Add `overflow: hidden` where you relied on an ellipsis without it. `line-clamp` still adds its own.
+
+### ⚠️ Reach custom properties through one type on `ComputedStyle`
+
+`custom_properties` and `registered_custom_properties` are now one `custom_properties: CustomProperties` field. Read a value with `style.custom_properties.get(name)`, which returns `Option<&str>`. `..Default::default()` still works.
+
+### Render in less memory
+
+- An 11,000-row table renders in about 110MB less memory, since the layout tree is freed once layout finishes.
+- Anonymous boxes share one layout style, and scenes give back unused list room, so large tables use less memory.
+- A clip that covers the whole image, such as `overflow: hidden` on the root, no longer keeps a second mask.
+- A full-width `blur-3xl` on a 1200×630 image peaks 38% lower.
+
+### End clamped text with an ellipsis
+
+`line-clamp` and `-webkit-line-clamp` end the last line with `…`, as Chrome does, so Tailwind's `line-clamp-*` looks as it does in a browser. `line-clamp: 2 none` cuts without one.
+
+### Encode PNG faster and smaller
+
+- A PNG of at most 256 colors, as most text cards are, is stored with a palette. Real cards come out about 37% smaller, with the same pixels.
+- Large PNGs deflate in up to eight segments at once. A 1200×630 card encodes about 2.5 times as fast, and a 1200×630 photo in 6ms instead of 18ms.
+- Every machine writes the same bytes.
+- APNG uses the same path. A 24-frame 1200x630 animation encodes 5x faster and comes out slightly smaller.
+- A shorter match search and a truer settings sample cut encoding time by 10% and 4% across real templates. Files stay within 0.2% of their size.
+
+### Paint borders as Chrome does
+
+- Sides of different colors or styles meet on the corner diagonal, with Chrome's miters and no seams.
+- Rounded borders with mixed sides clip each side and cut corners as Chrome does.
+- Dashes start at the corners.
+- `dotted` up to 3px wide draws square dots that end on a whole dot. Wider ones draw round dots.
+- `inset`, `outset`, `groove` and `ridge` shade like Chrome and stay visible on very dark colors.
+- A `double` side under 3px and a 1px `groove` or `ridge` paint solid.
+- `corner-shape` values such as `bevel`, `scoop` and `notch` keep the border's thickness around the corner.
+- A collapsed table border stays square, even with `border-radius`.
+- `background-clip: border-area` follows dashed, dotted and double borders.
+- PDF draws dashed and dotted sides next to sides of other styles.
+
+### Shrink the wasm packages
+
+`@takumi-rs/wasm` is about 18 KB smaller gzipped, and `takumi-pdf` about 7 KB.
+
 ## takumi@2.14.0
 
 ### Clip overflow at the padding box

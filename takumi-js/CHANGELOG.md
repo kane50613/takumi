@@ -1,3 +1,9 @@
+## takumi-js@2.15.0
+
+### Measure elements with `measure()`
+
+`measure()` lays out JSX, HTML, or a node tree without painting. It takes the same input and options as `render()`.
+
 ## takumi-js@2.13.5
 
 ### Resolve a browser-only entry in client builds
