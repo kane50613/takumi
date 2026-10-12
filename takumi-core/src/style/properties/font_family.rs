@@ -43,6 +43,11 @@ impl FontFamily {
     Self(tokens.into())
   }
 
+  /// Where its families live, which every clone of it shares.
+  pub(crate) fn as_ptr(&self) -> *const FontFamilyToken {
+    Arc::as_ptr(&self.0).cast()
+  }
+
   /// The families as parley `FontFamilyName`s, in declaration order.
   pub(crate) fn names(&self) -> impl Iterator<Item = FontFamilyName<'_>> + Clone {
     self.0.iter().map(|token| match token {

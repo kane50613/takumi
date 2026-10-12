@@ -1,15 +1,18 @@
 use std::{
   borrow::Cow,
+  cell::RefCell,
   collections::HashMap,
   hash::{Hash, Hasher},
   mem::discriminant,
   ops::Range,
+  rc::Rc,
 };
 
 use parley::{
   FontFamily as ParleyFontFamily, FontFamilyName, FontFeatures, FontVariations, GenericFamily,
   LineHeight, TextStyle, fontique::QueryFamily, style::FontStyle as ParleyFontStyle,
 };
+use rustc_hash::FxHashMap;
 use smallvec::SmallVec;
 
 use crate::{
@@ -20,9 +23,9 @@ use crate::{
   resources::font::{FontClasses, SubsetGroup},
   shadow::SizedShadow,
   style::{
-    AppliedTextDecorations, Color, ComputedStyle, Display, FontFamily, FontSynthesis, Lang,
-    LineHeight as CssLineHeight, SizedTextDecorationThickness, SizingContext, VerticalAlign,
-    WordBreak,
+    AppliedTextDecorations, Color, ComputedStyle, Display, FontFamily, FontFamilyToken,
+    FontSynthesis, Lang, LineHeight as CssLineHeight, SizedTextDecorationThickness, SizingContext,
+    VerticalAlign, WordBreak,
   },
 };
 
@@ -138,9 +141,24 @@ impl ExpandedFontFamily {
   }
 }
 
+/// Each `font-family` stack a render expanded, by the stack it came from. An entry holds its
+/// stack, so the address it is keyed on cannot pass to another stack during the render.
+#[derive(Default)]
+pub(crate) struct ExpandedFamilies(
+  RefCell<FxHashMap<*const FontFamilyToken, (FontFamily, Rc<ExpandedFontFamily>)>>,
+);
+
 impl RenderContext {
-  pub(crate) fn expand_font_family(&self, family: &FontFamily) -> ExpandedFontFamily {
-    ExpandedFontFamily::expand(family, &self.fonts().groups)
+  pub(crate) fn expand_font_family(&self, family: &FontFamily) -> Rc<ExpandedFontFamily> {
+    let mut expanded = self.font_families().0.borrow_mut();
+    let (_, expanded) = expanded.entry(family.as_ptr()).or_insert_with(|| {
+      (
+        family.clone(),
+        Rc::new(ExpandedFontFamily::expand(family, &self.fonts().groups)),
+      )
+    });
+
+    Rc::clone(expanded)
   }
 }
 
@@ -220,7 +238,7 @@ pub(crate) fn presentation_segments(text: &str) -> Vec<(Range<usize>, Option<Pre
 pub struct SizedFontStyle<'s> {
   /// Computed style this is derived from.
   pub parent: &'s ComputedStyle,
-  pub(crate) font_family: ExpandedFontFamily,
+  pub(crate) font_family: Rc<ExpandedFontFamily>,
   pub(crate) line_height: parley::LineHeight,
   /// The line height kept on the brush, because parley's run metrics can carry a neighboring
   /// span's style at run boundaries.
