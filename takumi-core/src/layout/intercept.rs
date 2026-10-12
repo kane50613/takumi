@@ -79,11 +79,18 @@ pub(crate) fn skips_ink(character: char) -> bool {
   let code = u32::from(character);
 
   !matches!(character, '/' | '\\' | '_')
-    && CJK_IDEOGRAPHS_OR_SYMBOLS.binary_search(&code).is_err()
-    && !CJK_IDEOGRAPH_OR_SYMBOL_RANGES
-      .iter()
-      .chain(NO_SKIP_INK_BLOCKS)
-      .any(|range| range.contains(&code))
+    && !is_cjk_ideograph_or_symbol(code)
+    && !NO_SKIP_INK_BLOCKS.iter().any(|range| range.contains(&code))
+}
+
+/// Blink's `Character::IsCjkIdeographOrSymbol`.
+fn is_cjk_ideograph_or_symbol(code: u32) -> bool {
+  // Blink's shortcut: neither table holds a code point below U+02C7.
+  code >= 0x2C7
+    && (CJK_IDEOGRAPHS_OR_SYMBOLS.binary_search(&code).is_ok()
+      || CJK_IDEOGRAPH_OR_SYMBOL_RANGES
+        .iter()
+        .any(|range| range.contains(&code)))
 }
 
 /// Blink's `kIsCjkIdeographOrSymbolArray`, sorted.
@@ -394,7 +401,10 @@ fn flatten_cubic(
 
 #[cfg(test)]
 mod tests {
-  use super::{remaining_spans, skip_ink_ranges, text_intercepts};
+  use super::{
+    CJK_IDEOGRAPH_OR_SYMBOL_RANGES, CJK_IDEOGRAPHS_OR_SYMBOLS, NO_SKIP_INK_BLOCKS, remaining_spans,
+    skip_ink_ranges, skips_ink, text_intercepts,
+  };
   use crate::{
     geometry::{PathCommand, Point},
     resources::glyph::ResolvedOutlineGlyph,
@@ -420,6 +430,21 @@ mod tests {
       PathCommand::LineTo(point(left, bottom)),
       PathCommand::Close,
     ]
+  }
+
+  #[test]
+  fn skips_ink_matches_a_scan_of_every_table() {
+    for character in (0..=char::MAX as u32).filter_map(char::from_u32) {
+      let code = u32::from(character);
+      let scanned = !matches!(character, '/' | '\\' | '_')
+        && !CJK_IDEOGRAPHS_OR_SYMBOLS.contains(&code)
+        && !CJK_IDEOGRAPH_OR_SYMBOL_RANGES
+          .iter()
+          .chain(NO_SKIP_INK_BLOCKS)
+          .any(|range| range.contains(&code));
+
+      assert_eq!(skips_ink(character), scanned, "{code:#X}");
+    }
   }
 
   #[test]
