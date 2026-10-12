@@ -5,4 +5,4 @@ packages:
 
 # Write smaller JPEG files
 
-JPEG output now uses optimized Huffman tables, which makes text and UI images about 29% smaller at the same quality. A photograph shrinks by about 4%. The encoder no longer copies the image to drop its alpha channel first.
+JPEG output uses optimized Huffman tables. Text and UI images come out about 29% smaller at the same quality, and photos about 4% smaller.

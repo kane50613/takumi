@@ -6,6 +6,6 @@ packages:
 
 # Place absolutely positioned boxes as Chrome does
 
-- An `auto`-width absolute box wraps its content to the containing block's width minus its insets and margins, so `left: 50%` text no longer runs past the right edge.
-- An absolute box inside a paragraph keeps the text around it on one line and starts where it sits in that line.
-- An absolute box inside a `position: relative` span takes its offsets from that span's box, and no longer lets a line break inside the word around it.
+- An `auto`-width absolute box wraps to the space its insets and margins leave, so `left: 50%` text stays inside the edge.
+- An absolute box inside a paragraph starts where it sits in the line, and the text around it stays on one line.
+- An absolute box inside a `position: relative` span takes its offsets from the span and no longer breaks the word around it.

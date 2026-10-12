@@ -6,10 +6,9 @@ packages:
 
 # Paint `box-shadow` as Chrome does
 
-- The first shadow in a list sits on top in SVG and image output, as it already did in PDF.
-- A spread shadow follows the outset-adjusted border radius. A square corner stays square, and a small radius grows less than the spread.
+- The first shadow in the list sits on top in every output.
+- A spread shadow follows Chrome's corner radius, so square corners stay square.
+- Shadows of scaled or rotated boxes blur by the transformed radius.
+- Image output keeps fractional offsets.
 - SVG no longer paints an outer shadow under a translucent box.
-- A PDF outer shadow no longer leaves a hairline around the box, and no longer fills the box when the offset moves the shadow clear of it.
-- The image output places shadows at fractional offsets instead of rounding them toward zero.
-- A blurred translucent `box-shadow` or `text-shadow` in PDF applies its color's alpha once. The bands that fake the blur used to stack it.
-- The image output blurs the shadows of a scaled or rotated box by the transformed radius, as Skia maps a blur through the transform.
+- PDF shadows no longer leave a hairline, fill a box they moved off, or stack their alpha when blurred.

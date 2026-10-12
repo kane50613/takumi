@@ -5,6 +5,6 @@ packages:
 
 # Apply `backdrop-filter` as Chrome does
 
-- The filtered backdrop composites over the original instead of replacing it, so `opacity()` no longer punches a translucent hole.
-- An element with both `clip-path` and `mask-image` shows its filtered backdrop only where both let it through.
-- A blurred backdrop reads only what sits inside the element's box, mirrored across its edges, so content just outside no longer bleeds in.
+- The filtered backdrop draws over the original, so `opacity()` no longer punches a hole.
+- With both `clip-path` and `mask-image`, the backdrop shows only where both let it through.
+- A blurred backdrop reads only what is inside the element, so content just outside no longer bleeds in.
