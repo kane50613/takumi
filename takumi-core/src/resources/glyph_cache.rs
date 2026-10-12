@@ -13,7 +13,11 @@ use std::sync::{
   atomic::{AtomicUsize, Ordering},
 };
 
-use quick_cache::{Weighter, sync::Cache};
+use quick_cache::{
+  Weighter,
+  sync::{Cache, DefaultLifecycle},
+};
+use rustc_hash::FxBuildHasher;
 
 use crate::{geometry::Placement, resources::glyph::ResolvedGlyph};
 
@@ -61,12 +65,18 @@ impl Weighter<Key, Entry> for ByBytes {
   }
 }
 
-static SHARED: LazyLock<Cache<Key, Entry, ByBytes>> = LazyLock::new(|| {
+static SHARED: LazyLock<Cache<Key, Entry, ByBytes, FxBuildHasher>> = LazyLock::new(|| {
   let max_bytes = MAX_BYTES.load(Ordering::Relaxed) as u64;
   // ~4 KiB average entry ⇒ item-count hint for the budget.
   let estimated_items = (max_bytes / (4 << 10)).max(1) as usize;
 
-  Cache::with_weighter(estimated_items, max_bytes, ByBytes)
+  Cache::with(
+    estimated_items,
+    max_bytes,
+    ByBytes,
+    FxBuildHasher,
+    DefaultLifecycle::default(),
+  )
 });
 
 fn get_or_insert(
