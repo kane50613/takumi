@@ -142,6 +142,7 @@ mod tests {
       paths: Vec::new(),
       embolden: None,
       cache_signature,
+      ink: None,
     })
   }
 
