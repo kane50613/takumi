@@ -269,7 +269,10 @@ pub fn resolve_image(src: &str, context: &RenderContext) -> ImageResult {
 
   if is_svg_like(src) {
     #[cfg(feature = "svg-sizing")]
-    return ImageSource::from_bytes(src.as_bytes());
+    return match context.resource_cache() {
+      Some(cache) => cache.get_or_decode(src.as_bytes(), ImageCacheMode::Auto),
+      None => ImageSource::from_bytes(src.as_bytes()),
+    };
     #[cfg(not(feature = "svg-sizing"))]
     return Err(ImageError::SvgParseNotSupported);
   }
@@ -336,6 +339,34 @@ mod tests {
     assert_matches!(
       (first, second),
       (ImageSource::Encoded(first), ImageSource::Encoded(second)) if Arc::ptr_eq(&first, &second)
+    );
+  }
+
+  #[cfg(feature = "svg")]
+  #[test]
+  fn inline_svg_parses_once_per_cache() {
+    use std::sync::Arc;
+
+    use super::resolve_image;
+    use crate::resources::image::ResourceCache;
+
+    let fonts = Fonts::default();
+    let context = RenderContext::builder()
+      .fonts(fonts.snapshot())
+      .sizing(
+        SizingContext::builder()
+          .viewport(Viewport::new((1200, 630)))
+          .build(),
+      )
+      .resource_cache(Some(ResourceCache::default()))
+      .build();
+    let svg = "<svg xmlns='http://www.w3.org/2000/svg' width='10' height='10'><rect width='10' height='10'/></svg>";
+    let first = resolve_image(svg, &context).unwrap();
+    let second = resolve_image(svg, &context).unwrap();
+
+    assert_matches!(
+      (first, second),
+      (ImageSource::Svg(first), ImageSource::Svg(second)) if Arc::ptr_eq(&first, &second)
     );
   }
 
