@@ -2,7 +2,7 @@
 
 use crate::{
   context::RenderContext,
-  font_style::SizedFontStyle,
+  font_style::{BoxLineHeight, SizedFontStyle},
   geometry::{ComputedLayout, Point, Rect, Size},
   layout::{border::BorderProperties, node::Node, tree::RenderNode},
   style::{
@@ -508,10 +508,7 @@ fn inline_span_decoration(
     font: BoxFont::of(&node.context),
     paints,
     has_fragments: paints || node.contains_absolute_as_inline(),
-    strut: Strut::of(
-      &node.context,
-      &SizedFontStyle::from_style(style, &node.context),
-    ),
+    strut: Strut::of(&node.context, BoxLineHeight::of(style, &node.context)),
     color,
     padding: node.padding_px(),
     border,

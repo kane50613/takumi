@@ -468,6 +468,25 @@ pub(crate) enum BoxLineHeight {
 }
 
 impl BoxLineHeight {
+  /// The line height a box styled `style` keeps on its brush, as [`SizedFontStyle`] resolves it.
+  pub(crate) fn of(style: &ComputedStyle, context: &RenderContext) -> Self {
+    let css = style.inherited_data.line_height;
+
+    if matches!(css, CssLineHeight::Normal) {
+      return Self::Normal;
+    }
+    match layout_unit_line_height(css.into_parley(&context.sizing), context.sizing.font_size) {
+      LineHeight::Absolute(value) => Self::Length(LayoutUnit::from_f32(value)),
+      LineHeight::FontSizeRelative(_) | LineHeight::MetricsRelative(_) => match css {
+        CssLineHeight::Unitless(value) => Self::Number {
+          value,
+          font_size: context.sizing.font_size,
+        },
+        _ => Self::Normal,
+      },
+    }
+  }
+
   /// The line height against a font of `ascent`, `descent` and `line_gap` px, sized by `scale`.
   /// A line height that is not a length scales with text that scales as it paints, as Blink's
   /// `InlineBoxState::ComputeTextMetrics` scales it.
@@ -545,19 +564,7 @@ impl<'s> SizedFontStyle<'s> {
       )
     };
 
-    let box_line_height = match line_height {
-      _ if line_height_is_normal => BoxLineHeight::Normal,
-      LineHeight::Absolute(value) => BoxLineHeight::Length(LayoutUnit::from_f32(value)),
-      LineHeight::FontSizeRelative(_) | LineHeight::MetricsRelative(_) => {
-        match style.inherited_data.line_height {
-          CssLineHeight::Unitless(value) => BoxLineHeight::Number {
-            value,
-            font_size: context.sizing.font_size,
-          },
-          _ => BoxLineHeight::Normal,
-        }
-      }
-    };
+    let box_line_height = BoxLineHeight::of(style, context);
 
     Self {
       sizing: context.sizing.to_owned(),
