@@ -13,8 +13,10 @@ use crate::{
 };
 
 /// libwebp reads `quality` as compression effort when encoding VP8L, not as visual
-/// quality: the output is bit-exact at any value.
-const LOSSLESS_EFFORT: f32 = 50.0;
+/// quality: the output is bit-exact at any value. Below 25 it skips its color cache search and
+/// cost-model backward references (`src/enc/backward_references_enc.c`), which on real cards
+/// takes 40% less time for 11% more bytes than 50.
+const LOSSLESS_EFFORT: f32 = 24.0;
 
 /// libwebp's `method` for a still lossy image. On real cards, 2 writes files about a quarter
 /// smaller than 1 at the same PSNR, for about a quarter more encode time.
