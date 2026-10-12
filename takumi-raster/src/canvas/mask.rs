@@ -481,13 +481,17 @@ pub(crate) fn render_cached_mask(
   cull: CanvasViewport,
 ) -> (Arc<Vec<u8>>, Placement) {
   let render = || render_mask(paths, Some(transform), None, Some(cull));
-  let Affine { a, b, c, d, x, y } = transform;
+  let fits = transformed_rect_extents(Point::ZERO, size, transform).is_some_and(
+    |(left, top, right, bottom)| (right - left) * (bottom - top) <= CACHED_MASK_MAX_PIXELS,
+  );
 
-  if size.width * size.height * (a * d - b * c).abs() > CACHED_MASK_MAX_PIXELS {
+  if !fits {
     let (mask, placement) = render();
 
     return (Arc::new(mask), placement);
   }
+
+  let Affine { a, b, c, d, x, y } = transform;
 
   let mut hasher = Xxh3::new();
 
@@ -748,13 +752,18 @@ impl<'a> MaskRow<'a> {
 
 #[cfg(test)]
 mod tests {
+  use takumi_core::{
+    layout::border::BorderProperties,
+    style::{Angle, Sides, SpacePair},
+  };
+
   use super::*;
 
   #[test]
   fn a_cached_mask_matches_a_fresh_one_and_is_reused() {
     let mut paths = Vec::new();
-    let border = takumi_core::layout::border::BorderProperties {
-      radius: takumi_core::style::Sides([takumi_core::style::SpacePair { x: 9.5, y: 9.5 }; 4]),
+    let border = BorderProperties {
+      radius: Sides([SpacePair { x: 9.5, y: 9.5 }; 4]),
       ..Default::default()
     };
     let size = Size::new(73.0, 41.0);
@@ -772,6 +781,24 @@ mod tests {
 
     assert_eq!((first.as_slice(), placement), (fresh.0.as_slice(), fresh.1));
     assert!(Arc::ptr_eq(&first, &second));
+  }
+
+  #[test]
+  fn a_mask_whose_bounds_pass_the_limit_is_not_cached() {
+    let mut paths = Vec::new();
+    let size = Size::new(10_000.0, 1.0);
+
+    BorderProperties::default().append_mask_commands(&mut paths, size, Point::ZERO);
+
+    let rotated = Affine::rotation(Angle::new(45.0));
+    let cull = CanvasViewport {
+      origin: Point { x: 0, y: 0 },
+      size: Size::new(10_000, 10_000),
+    };
+    let (first, _) = render_cached_mask(&paths, size, rotated, cull);
+    let (second, _) = render_cached_mask(&paths, size, rotated, cull);
+
+    assert!(!Arc::ptr_eq(&first, &second));
   }
 
   #[test]
