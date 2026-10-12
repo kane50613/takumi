@@ -14,6 +14,7 @@ use parley::{
 };
 use rustc_hash::FxHashMap;
 use smallvec::SmallVec;
+use xxhash_rust::xxh3::Xxh3;
 
 use crate::{
   context::RenderContext,
@@ -30,8 +31,18 @@ use crate::{
 };
 
 /// A `font-family` stack with registered subset groups expanded.
-#[derive(Clone, Default)]
-pub(crate) struct ExpandedFontFamily(Vec<ExpandedFamilyToken>);
+#[derive(Clone)]
+pub(crate) struct ExpandedFontFamily {
+  tokens: Vec<ExpandedFamilyToken>,
+  /// The tokens hashed in order, so cache keys hash one word instead of every name.
+  digest: u64,
+}
+
+impl Default for ExpandedFontFamily {
+  fn default() -> Self {
+    Self::new(Vec::new())
+  }
+}
 
 #[derive(Clone)]
 enum ExpandedFamilyToken {
@@ -40,31 +51,41 @@ enum ExpandedFamilyToken {
 }
 
 impl ExpandedFontFamily {
-  /// Hashes the family list in order, names and generics alike.
-  pub(crate) fn hash_tokens(&self, hasher: &mut impl Hasher) {
-    for token in &self.0 {
+  fn new(tokens: Vec<ExpandedFamilyToken>) -> Self {
+    let mut hasher = Xxh3::new();
+
+    for token in &tokens {
       match token {
         ExpandedFamilyToken::Named(name) => {
-          0_u8.hash(hasher);
-          name.hash(hasher);
+          0_u8.hash(&mut hasher);
+          name.hash(&mut hasher);
         }
         ExpandedFamilyToken::Generic(generic) => {
-          1_u8.hash(hasher);
-          (*generic as u8).hash(hasher);
+          1_u8.hash(&mut hasher);
+          (*generic as u8).hash(&mut hasher);
         }
       }
     }
+    Self {
+      tokens,
+      digest: hasher.finish(),
+    }
+  }
+
+  /// Hashes the family list in order, names and generics alike.
+  pub(crate) fn hash_tokens(&self, hasher: &mut impl Hasher) {
+    hasher.write_u64(self.digest);
   }
 
   fn iter(&self) -> impl Iterator<Item = FontFamilyName<'_>> + Clone {
-    self.0.iter().map(|token| match token {
+    self.tokens.iter().map(|token| match token {
       ExpandedFamilyToken::Named(name) => FontFamilyName::Named(name.as_str().into()),
       ExpandedFamilyToken::Generic(generic) => FontFamilyName::Generic(*generic),
     })
   }
 
   pub(crate) fn query_families(&self) -> impl Iterator<Item = QueryFamily<'_>> + Clone {
-    self.0.iter().map(|token| match token {
+    self.tokens.iter().map(|token| match token {
       ExpandedFamilyToken::Named(name) => QueryFamily::Named(name.as_str()),
       ExpandedFamilyToken::Generic(generic) => QueryFamily::Generic(*generic),
     })
@@ -101,20 +122,26 @@ impl ExpandedFontFamily {
       Presentation::Text => &classes.mono_order,
     };
 
-    let mut names: Vec<FontFamilyName<'a>> = Vec::with_capacity(self.0.len());
-    names.extend(self.0.iter().filter(|token| matches(token)).map(owned));
+    let mut names: Vec<FontFamilyName<'a>> = Vec::with_capacity(self.tokens.len());
+    names.extend(self.tokens.iter().filter(|token| matches(token)).map(owned));
     names.extend(
       registered
         .iter()
         .filter(|name| {
           !self
-            .0
+            .tokens
             .iter()
             .any(|token| matches!(token, ExpandedFamilyToken::Named(authored) if authored == *name))
         })
         .map(|name| FontFamilyName::Named(Cow::Owned(name.clone()))),
     );
-    names.extend(self.0.iter().filter(|token| !matches(token)).map(owned));
+    names.extend(
+      self
+        .tokens
+        .iter()
+        .filter(|token| !matches(token))
+        .map(owned),
+    );
 
     ParleyFontFamily::List(Cow::Owned(names))
   }
@@ -137,7 +164,7 @@ impl ExpandedFontFamily {
         FontFamilyName::Generic(generic) => tokens.push(ExpandedFamilyToken::Generic(generic)),
       }
     }
-    Self(tokens)
+    Self::new(tokens)
   }
 }
 
@@ -633,7 +660,7 @@ mod tests {
 
     let hash = |tokens: Vec<ExpandedFamilyToken>| {
       let mut hasher = DefaultHasher::new();
-      ExpandedFontFamily(tokens).hash_tokens(&mut hasher);
+      ExpandedFontFamily::new(tokens).hash_tokens(&mut hasher);
       hasher.finish()
     };
 
@@ -661,7 +688,7 @@ mod tests {
     let family = FontFamily::from_css_str("Geist, serif").unwrap();
     let expanded = ExpandedFontFamily::expand(&family, &HashMap::new());
 
-    assert_eq!(expanded.0.len(), 2);
+    assert_eq!(expanded.tokens.len(), 2);
     assert_eq!(
       names(&expanded),
       vec!["Geist".to_string(), "Serif".to_string()]
@@ -693,7 +720,7 @@ mod tests {
     let family = FontFamily::from_css_str("monospace").unwrap();
     let expanded = ExpandedFontFamily::expand(&family, &HashMap::new());
 
-    assert_eq!(expanded.0.len(), 1);
+    assert_eq!(expanded.tokens.len(), 1);
     assert!(matches!(
       expanded.iter().next(),
       Some(FontFamilyName::Generic(GenericFamily::Monospace))
