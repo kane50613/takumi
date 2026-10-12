@@ -4,6 +4,6 @@ packages:
   "takumi-pdf": minor
 ---
 
-# Drop WOFF1 decoding from the wasm packages
+# Drop WOFF1 from the wasm packages
 
-`@takumi-rs/wasm` and `takumi-pdf` load TTF, OTF, and WOFF2 but no longer decode WOFF1. `@takumi-rs/core` keeps WOFF1.
+`@takumi-rs/wasm` and `takumi-pdf` load TTF, OTF, and WOFF2, but not WOFF1. `@takumi-rs/core` keeps WOFF1.

@@ -6,4 +6,4 @@ packages:
 
 # Read node trees faster
 
-Each node's keys are read once instead of being buffered first. A key another node type owns that comes before `type` is now parsed, so a malformed one is an error instead of being ignored.
+Each node's keys are read once. A key that belongs to another node type and comes before `type` is now parsed, so a malformed one is an error.

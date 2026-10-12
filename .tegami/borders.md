@@ -6,14 +6,13 @@ packages:
 
 # Paint borders as Chrome does
 
-- Sides that differ in color or style meet along the corner diagonal, and adjacent sides of the same color leave no seam.
-- A dashed side runs the full length of the box, so its dashes start at the corners.
-- A `dotted` border up to 3px wide draws square dots spaced one dot apart and ends each side on a whole dot. Wider dotted lines keep round dots inside the box.
-- `inset`, `outset`, `groove` and `ridge` darken the shadowed edges and keep the color on the lit ones. A very dark color lightens instead, so both edges stay visible.
-- PDF draws dashed and dotted sides next to sides of other styles, which it used to leave out.
-- `background-clip: border-area` keeps the background only where a dashed, dotted or double border paints, and no longer paints a translucent border's color twice in the image output.
-- Square sides with mixed styles, colors or opacities meet with Chrome's miters. A uniform dashed or dotted border shows no diagonal seam, and translucent sides no longer blend twice where they overlap.
-- Rounded borders with mixed colors, styles or opacities clip each side and cut their corners as Chrome does.
-- A `double` side under 3px and a 1px `groove` or `ridge` side paint solid.
-- A collapsed table border stays square even with `border-radius`, as the spec requires.
-- Borders and padding-box clips with `corner-shape` values such as `bevel`, `scoop` and `notch` keep one thickness around each corner. Opposite concave corners that would overlap shrink as Chrome shrinks them.
+- Sides of different colors or styles meet on the corner diagonal, with Chrome's miters and no seams.
+- Rounded borders with mixed sides clip each side and cut corners as Chrome does.
+- Dashes start at the corners.
+- `dotted` up to 3px wide draws square dots that end on a whole dot. Wider ones draw round dots.
+- `inset`, `outset`, `groove` and `ridge` shade like Chrome and stay visible on very dark colors.
+- A `double` side under 3px and a 1px `groove` or `ridge` paint solid.
+- `corner-shape` values such as `bevel`, `scoop` and `notch` keep the border's thickness around the corner.
+- A collapsed table border stays square, even with `border-radius`.
+- `background-clip: border-area` follows dashed, dotted and double borders.
+- PDF draws dashed and dotted sides next to sides of other styles.

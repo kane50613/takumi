@@ -4,6 +4,6 @@ packages:
   "takumi-pdf": patch
 ---
 
-# Sum a `calc()`'s absolute lengths into pixels
+# Mix absolute units in `calc()`
 
-`calc()` now adds `cm`, `mm`, `in`, `pt`, `pc` and `q` into one pixel term, as CSS simplifies them, so an expression mixing several absolute units no longer fails to parse.
+`calc()` now adds `cm`, `mm`, `in`, `pt`, `pc` and `q` together, so mixing them no longer fails to parse.
