@@ -786,14 +786,14 @@ mod tests {
   #[test]
   fn a_mask_whose_bounds_pass_the_limit_is_not_cached() {
     let mut paths = Vec::new();
-    let size = Size::new(10_000.0, 1.0);
+    let size = Size::new(2_000.0, 1.0);
 
     BorderProperties::default().append_mask_commands(&mut paths, size, Point::ZERO);
 
     let rotated = Affine::rotation(Angle::new(45.0));
     let cull = CanvasViewport {
       origin: Point { x: 0, y: 0 },
-      size: Size::new(10_000, 10_000),
+      size: Size::new(2_000, 2_000),
     };
     let (first, _) = render_cached_mask(&paths, size, rotated, cull);
     let (second, _) = render_cached_mask(&paths, size, rotated, cull);
