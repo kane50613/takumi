@@ -451,10 +451,18 @@ pub(crate) fn scale_premultiplied_pixel(pixel: [u8; 4], alpha: u8) -> [u8; 4] {
   ]
 }
 
+/// `fast_div_255(a * b)` in 16-bit lanes, which the product of two bytes never overflows.
+#[inline(always)]
+fn mul_div_255(a: u8, b: u8) -> u8 {
+  let product = u16::from(a) * u16::from(b);
+
+  ((product + 128 + (product >> 8)) >> 8) as u8
+}
+
 /// [`scale_premultiplied_pixel`] without its branch, so a loop over pixels vectorizes.
 #[inline(always)]
 pub(crate) fn scale_premultiplied_lanes(pixel: [u8; 4], alpha: u8) -> [u8; 4] {
-  pixel.map(|channel| fast_div_255(u32::from(channel) * u32::from(alpha)))
+  pixel.map(|channel| mul_div_255(channel, alpha))
 }
 
 /// [`composite_premultiplied_over`] for each pixel of `src` over `dst`, without branches so it
@@ -462,9 +470,8 @@ pub(crate) fn scale_premultiplied_lanes(pixel: [u8; 4], alpha: u8) -> [u8; 4] {
 #[inline(always)]
 pub(crate) fn composite_premultiplied_over_row(dst: &mut [[u8; 4]], src: &[[u8; 4]]) {
   for (dst, &src) in dst.iter_mut().zip(src) {
-    let inverse = u32::from(u8::MAX - src[3]);
-    let over =
-      array::from_fn(|lane| src[lane].saturating_add(fast_div_255(u32::from(dst[lane]) * inverse)));
+    let inverse = u8::MAX - src[3];
+    let over = array::from_fn(|lane| src[lane].saturating_add(mul_div_255(dst[lane], inverse)));
 
     *dst = if dst[3] == 0 && src[3] != 0 {
       src
@@ -619,7 +626,20 @@ pub(crate) fn composite_repeated_premultiplied_pixel_normal(
 mod tests {
   use image::Rgba;
 
-  use crate::{blend::blend_pixel, style::BlendMode};
+  use crate::{
+    blend::{blend_pixel, mul_div_255},
+    fast_div_255,
+    style::BlendMode,
+  };
+
+  #[test]
+  fn sixteen_bit_lanes_divide_like_fast_div_255() {
+    for a in 0..=u8::MAX {
+      for b in 0..=u8::MAX {
+        assert_eq!(mul_div_255(a, b), fast_div_255(u32::from(a) * u32::from(b)));
+      }
+    }
+  }
 
   // https://github.com/kane50613/takumi/issues/447
   #[test]
