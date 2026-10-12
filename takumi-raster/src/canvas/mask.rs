@@ -11,8 +11,8 @@ use takumi_core::{
 use tiny_skia::{IntSize, Mask as TinyMask, Transform as TinyTransform};
 
 use crate::{
-  BoxMask, Command, Fill, Placement, RenderContext, Result, Style, blend::mul_div_255, build_path,
-  checked_area, create_mask, placement_overlap, style::Affine,
+  BoxMask, Command, Fill, Placement, RenderContext, Result, Style, build_path, checked_area,
+  create_mask, mul_div_255, placement_overlap, style::Affine,
 };
 
 pub(crate) enum NodeMaskAction {

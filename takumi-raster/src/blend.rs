@@ -4,7 +4,8 @@ use image::Rgba;
 use tiny_skia::PremultipliedColorU8;
 
 use crate::{
-  fast_div_255, fast_div_255_u32, resources::image_buffer::premultiply_pixel, style::BlendMode,
+  fast_div_255, fast_div_255_u32, mul_div_255, resources::image_buffer::premultiply_pixel,
+  style::BlendMode,
 };
 
 #[inline(always)]
@@ -139,7 +140,7 @@ fn blend_with_integer(bottom: &mut Rgba<u8>, top: Rgba<u8>, mode: BlendMode) {
 #[inline(always)]
 fn blend_channel_integer(mode: BlendMode, bottom: u8, top: u8) -> u8 {
   match mode {
-    BlendMode::Multiply => fast_div_255(top as u32 * bottom as u32),
+    BlendMode::Multiply => mul_div_255(top, bottom),
     BlendMode::Screen => 255 - fast_div_255((255 - top as u32) * (255 - bottom as u32)),
     BlendMode::Darken => top.min(bottom),
     BlendMode::Lighten => top.max(bottom),
@@ -437,31 +438,9 @@ pub(crate) fn premultiplied_from_pixel(pixel: PremultipliedColorU8) -> [u8; 4] {
   [pixel.red(), pixel.green(), pixel.blue(), pixel.alpha()]
 }
 
+/// `pixel` scaled by `alpha`, without a branch so a loop over pixels vectorizes.
 #[inline(always)]
 pub(crate) fn scale_premultiplied_pixel(pixel: [u8; 4], alpha: u8) -> [u8; 4] {
-  if alpha == u8::MAX {
-    return pixel;
-  }
-
-  [
-    fast_div_255(pixel[0] as u32 * alpha as u32),
-    fast_div_255(pixel[1] as u32 * alpha as u32),
-    fast_div_255(pixel[2] as u32 * alpha as u32),
-    fast_div_255(pixel[3] as u32 * alpha as u32),
-  ]
-}
-
-/// `fast_div_255(a * b)` in 16-bit lanes, which the product of two bytes never overflows.
-#[inline(always)]
-pub(crate) fn mul_div_255(a: u8, b: u8) -> u8 {
-  let product = u16::from(a) * u16::from(b);
-
-  ((product + 128 + (product >> 8)) >> 8) as u8
-}
-
-/// [`scale_premultiplied_pixel`] without its branch, so a loop over pixels vectorizes.
-#[inline(always)]
-pub(crate) fn scale_premultiplied_lanes(pixel: [u8; 4], alpha: u8) -> [u8; 4] {
   pixel.map(|channel| mul_div_255(channel, alpha))
 }
 
@@ -495,10 +474,10 @@ pub(crate) fn composite_premultiplied_over(dst: &mut [u8; 4], src: [u8; 4]) {
   }
 
   let inverse_alpha = u8::MAX - src_alpha;
-  dst[0] = src[0].saturating_add(fast_div_255(dst[0] as u32 * inverse_alpha as u32));
-  dst[1] = src[1].saturating_add(fast_div_255(dst[1] as u32 * inverse_alpha as u32));
-  dst[2] = src[2].saturating_add(fast_div_255(dst[2] as u32 * inverse_alpha as u32));
-  dst[3] = src_alpha.saturating_add(fast_div_255(dst_alpha as u32 * inverse_alpha as u32));
+  dst[0] = src[0].saturating_add(mul_div_255(dst[0], inverse_alpha));
+  dst[1] = src[1].saturating_add(mul_div_255(dst[1], inverse_alpha));
+  dst[2] = src[2].saturating_add(mul_div_255(dst[2], inverse_alpha));
+  dst[3] = src_alpha.saturating_add(mul_div_255(dst_alpha, inverse_alpha));
 }
 
 #[inline(always)]
@@ -564,16 +543,10 @@ pub(crate) fn blend_premultiplied_pixel_normal(dst: &mut [u8], src: Premultiplie
   }
 
   let inv_src_a = u8::MAX - src_a;
-  dst[0] = src
-    .red()
-    .saturating_add(fast_div_255(dst[0] as u32 * inv_src_a as u32));
-  dst[1] = src
-    .green()
-    .saturating_add(fast_div_255(dst[1] as u32 * inv_src_a as u32));
-  dst[2] = src
-    .blue()
-    .saturating_add(fast_div_255(dst[2] as u32 * inv_src_a as u32));
-  dst[3] = src_a.saturating_add(fast_div_255(dst[3] as u32 * inv_src_a as u32));
+  dst[0] = src.red().saturating_add(mul_div_255(dst[0], inv_src_a));
+  dst[1] = src.green().saturating_add(mul_div_255(dst[1], inv_src_a));
+  dst[2] = src.blue().saturating_add(mul_div_255(dst[2], inv_src_a));
+  dst[3] = src_a.saturating_add(mul_div_255(dst[3], inv_src_a));
 }
 
 pub(crate) fn composite_premultiplied_over_span(dst: &mut [u8], pixels: &[PremultipliedColorU8]) {
@@ -626,20 +599,7 @@ pub(crate) fn composite_repeated_premultiplied_pixel_normal(
 mod tests {
   use image::Rgba;
 
-  use crate::{
-    blend::{blend_pixel, mul_div_255},
-    fast_div_255,
-    style::BlendMode,
-  };
-
-  #[test]
-  fn sixteen_bit_lanes_divide_like_fast_div_255() {
-    for a in 0..=u8::MAX {
-      for b in 0..=u8::MAX {
-        assert_eq!(mul_div_255(a, b), fast_div_255(u32::from(a) * u32::from(b)));
-      }
-    }
-  }
+  use crate::{blend::blend_pixel, style::BlendMode};
 
   // https://github.com/kane50613/takumi/issues/447
   #[test]

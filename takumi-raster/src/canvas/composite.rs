@@ -14,7 +14,7 @@ use crate::{
   Placement,
   blend::{
     blend_premultiplied_pixel, composite_premultiplied_over, composite_premultiplied_over_row,
-    scale_premultiplied_lanes, scale_premultiplied_pixel,
+    scale_premultiplied_pixel,
   },
   style::{Affine, BlendMode, ImageScalingAlgorithm},
 };
@@ -163,7 +163,7 @@ fn constant_over(dst: &mut [[u8; 4]], mask: &[u8], color: [u8; 4]) {
     dst,
     mask
       .iter()
-      .map(|&alpha| scale_premultiplied_lanes(color, alpha)),
+      .map(|&alpha| scale_premultiplied_pixel(color, alpha)),
   );
 }
 
@@ -200,7 +200,7 @@ fn constant_clipped_over(dst: &mut [[u8; 4]], mask: &[u8], clip: &[u8], color: [
   composite_run_over(
     dst,
     mask.iter().zip(clip).map(|(&alpha, &clip)| {
-      scale_premultiplied_lanes(scale_premultiplied_lanes(color, alpha), clip)
+      scale_premultiplied_pixel(scale_premultiplied_pixel(color, alpha), clip)
     }),
   );
 }
@@ -320,7 +320,7 @@ fn try_translation_blit(
           } else if mask_alpha == u8::MAX {
             extra
           } else {
-            crate::fast_div_255(mask_alpha as u32 * extra as u32)
+            crate::mul_div_255(mask_alpha, extra)
           }
         }
         None => mask_alpha,

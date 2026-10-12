@@ -15,7 +15,7 @@ use crate::{
   style::{
     Animatable, Color as CurrentColor, FromCss, FromCssStr, MakeComputed, ParseResult,
     PercentageNumber, SizingContext, ToCss,
-    math::fast_div_255,
+    math::mul_div_255,
     tw::TailwindPropertyParser,
     tw::{Namespace, extract_arbitrary_value},
     unexpected_token,
@@ -667,7 +667,7 @@ impl Color {
 
   /// Apply opacity to alpha channel
   pub(crate) fn with_opacity(mut self, opacity: u8) -> Self {
-    self.0[3] = fast_div_255(self.0[3] as u32 * opacity as u32);
+    self.0[3] = mul_div_255(self.0[3], opacity);
 
     self
   }

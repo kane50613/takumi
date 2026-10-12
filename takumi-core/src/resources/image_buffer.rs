@@ -3,7 +3,7 @@
 #[cfg(feature = "png")]
 use image::{ExtendedColorType, ImageEncoder, codecs::png::PngEncoder};
 
-use crate::style::math::fast_div_255;
+use crate::style::math::mul_div_255;
 
 /// A decoded image as premultiplied, row-major RGBA bytes.
 #[derive(Debug, Clone)]
@@ -154,7 +154,7 @@ pub fn premultiply_pixel([red, green, blue, alpha]: [u8; 4]) -> [u8; 4] {
     return [red, green, blue, alpha];
   }
 
-  let scale = |channel: u8| fast_div_255(channel as u32 * alpha as u32);
+  let scale = |channel: u8| mul_div_255(channel, alpha);
 
   [scale(red), scale(green), scale(blue), alpha]
 }

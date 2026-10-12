@@ -59,7 +59,7 @@ use crate::resources::image_buffer::ImageBuffer;
 pub(crate) use crate::{
   context::RenderContext,
   font_style::*,
-  style::math::{fast_div_255, fast_div_255_u32},
+  style::math::{fast_div_255, fast_div_255_u32, mul_div_255},
 };
 
 /// Borrows an [`ImageBuffer`] as a zero-copy `tiny_skia` pixmap view.
