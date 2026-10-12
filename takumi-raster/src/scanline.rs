@@ -111,8 +111,16 @@ impl<'a> Pixels<'a> {
         if keep_alpha {
           out.extend_from_slice(pixels);
         } else {
-          for pixel in pixels.as_chunks::<4>().0 {
-            out.extend_from_slice(&pixel[..3]);
+          let start = out.len();
+
+          out.resize(start + pixels.len() / 4 * 3, 0);
+          for (rgb, pixel) in out[start..]
+            .as_chunks_mut::<3>()
+            .0
+            .iter_mut()
+            .zip(pixels.as_chunks::<4>().0)
+          {
+            *rgb = [pixel[0], pixel[1], pixel[2]];
           }
         }
       }
