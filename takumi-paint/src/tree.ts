@@ -135,6 +135,12 @@ export interface PaintTree {
   readonly steps: readonly PaintStep[];
 }
 
+/** What the wasm module keeps of a painted tree: its font files and run outlines. */
+interface PaintedFiles {
+  fontData(index: number): Uint8Array | undefined;
+  runOutline(node: number, run: number): string | undefined;
+}
+
 export class PaintTreeView implements PaintTree {
   readonly width: number;
   readonly height: number;
@@ -145,16 +151,16 @@ export class PaintTreeView implements PaintTree {
   readonly #listing: Listing;
   #steps: readonly PaintStep[] | undefined;
 
-  /** Wraps the serialized tree `raw`, reading font files through `fontData`. */
-  constructor(raw: RawPaintTree, fontData: (index: number) => Uint8Array | undefined) {
+  /** Wraps the serialized tree `raw`, reading font files and run outlines from `files`. */
+  constructor(raw: RawPaintTree, files: PaintedFiles) {
     this.#raw = raw;
     this.width = raw.width;
     this.height = raw.height;
     this.fonts = raw.fonts.map((font, index) => ({
       ...font,
-      data: () => fontData(index) ?? new Uint8Array(),
+      data: () => files.fontData(index) ?? new Uint8Array(),
     }));
-    this.#listing = new Listing(raw.nodes, this.fonts);
+    this.#listing = new Listing(raw.nodes, this.fonts, files);
 
     const root = this.#listing.at(0);
 
@@ -213,10 +219,12 @@ function inDocumentOrder(root: BoxNode): PaintNode[] {
 /** The nodes as the serialized tree lists them, which is how nodes and steps name each other. */
 class Listing {
   readonly fonts: readonly Font[];
+  readonly files: PaintedFiles;
   readonly #nodes: readonly PaintNode[];
 
-  constructor(raw: readonly RawPaintNode[], fonts: readonly Font[]) {
+  constructor(raw: readonly RawPaintNode[], fonts: readonly Font[], files: PaintedFiles) {
     this.fonts = fonts;
+    this.files = files;
     this.#nodes = raw.map((node) => {
       switch (node.type) {
         case "box":
@@ -352,7 +360,7 @@ class TextView extends NodeView<RawNode<"text">> implements TextNode {
   }
 
   get runs(): readonly TextRun[] {
-    this.#runs ??= this.raw.runs.map((run) => this.wrap(run));
+    this.#runs ??= this.raw.runs.map((run, index) => this.wrap(run, index));
     return this.#runs;
   }
 
@@ -363,12 +371,16 @@ class TextView extends NodeView<RawNode<"text">> implements TextNode {
     return { ...drawable, run };
   }
 
-  private wrap(raw: RawTextRun): TextRun {
-    const { outline, font, ...fields } = raw;
+  private wrap(raw: RawTextRun, index: number): TextRun {
+    const { font, ...fields } = raw;
     const resolved = this.listing.fonts[font];
 
     if (!resolved) throw new Error(`The tree lists no font ${font}`);
-    return { ...fields, font: resolved, outline: () => outline };
+    return {
+      ...fields,
+      font: resolved,
+      outline: () => this.listing.files.runOutline(this.raw.id, index) ?? "",
+    };
   }
 }
 
