@@ -4,7 +4,9 @@
 
 // The alignment rules follow Blink, under the notice in LICENSE-CHROMIUM.
 
-use std::{collections::HashMap, mem::take, rc::Rc};
+use std::{mem::take, rc::Rc};
+
+use rustc_hash::FxHashMap;
 
 use smallvec::{SmallVec, smallvec};
 
@@ -175,13 +177,13 @@ pub(super) struct LineBoxTree {
   /// How `text-fit` fits the line.
   fit: LineFit,
   /// Each open box's position among `boxes`, by its key.
-  indices: HashMap<BoxKey, usize>,
+  indices: FxHashMap<BoxKey, usize>,
 }
 
 /// Where each box on a line sits once aligned.
 #[derive(Clone, Debug, Default)]
 pub(crate) struct LineBoxOffsets {
-  offsets: HashMap<BoxKey, f32>,
+  offsets: FxHashMap<BoxKey, f32>,
 }
 
 impl LineBoxOffsets {
@@ -207,7 +209,7 @@ impl LineBoxTree {
         shift: LayoutUnit::ZERO,
         box_metrics: FontHeight::EMPTY,
       }],
-      indices: HashMap::new(),
+      indices: FxHashMap::default(),
     }
   }
 
