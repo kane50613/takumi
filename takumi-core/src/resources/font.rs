@@ -238,7 +238,7 @@ pub struct Fonts {
   #[cfg(feature = "svg")]
   svg_db: Option<Arc<Database>>,
   /// Stamped from a process-wide counter on every registration, so
-  /// font-dependent caches (SVG `<text>` trees and their rasterizations) can
+  /// font-dependent caches (SVG `<text>` trees, their rasterizations) can
   /// tell any two registry states apart, including across `Fonts` instances.
   revision: u64,
 }

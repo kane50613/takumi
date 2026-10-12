@@ -1,18 +1,3 @@
-//! Baseline for a cross-render text-shaping cache: text shaping is currently
-//! re-done from scratch on every separate `render()` call, even for
-//! byte-identical static text, because `ShapeCache` is rebuilt fresh per
-//! render. These benches measure the cost of that today, before any fix:
-//!
-//! - `shape_cache_repeated_static_text` / `shape_cache_repeated_panel`: the
-//!   same text (a single line, then several independent labels) rendered
-//!   across many separate `render()` calls sharing one `Fonts` -- the
-//!   pattern a long-running caller (e.g. a status bar re-rendering the same
-//!   labels every tick) hits, and the case a cross-render cache would speed
-//!   up.
-//! - `shape_cache_unique_text_every_call`: different text on every call, so
-//!   no cache could ever hit here -- the baseline a future fix must not
-//!   regress.
-
 use std::{cell::Cell, hint::black_box};
 
 use criterion::{Criterion, criterion_group, criterion_main};
@@ -67,16 +52,16 @@ fn panel_node() -> Node {
   .with_tw("flex flex-col w-full h-full p-4 bg-white".parse().unwrap())
 }
 
-/// The kinds of text a dashboard holds, so a result says which kinds the cache helps.
+/// A kind of dashboard text.
 #[derive(Clone, Copy)]
 enum Kind {
-  /// Short single-line labels and values, as in a status card.
+  /// Short single-line labels and values.
   Short,
-  /// Long runs that wrap, like pull request titles or notification bodies.
+  /// Long runs that wrap.
   Wrapping,
-  /// Runs with emoji, which shape through the fallback font.
+  /// Runs with emoji.
   Emoji,
-  /// Text around an inline-block, which bakes measured sizes into the layout and never caches.
+  /// Text around an inline-block, which is never cached.
   InlineBox,
 }
 
@@ -110,8 +95,7 @@ impl Kind {
   }
 }
 
-/// Text only: a column of `kind` rows. `tick` rewrites the value in the first few rows and leaves
-/// the rest identical, the way an auto-updating dashboard changes a little between renders.
+/// A column of `kind` rows where `tick` changes only the first few values.
 fn dashboard_node(kind: Kind, tick: u64) -> Node {
   let rows = (0..DASHBOARD_ROWS).map(|row| {
     let value = if row < DASHBOARD_CHANGING_VALUES {

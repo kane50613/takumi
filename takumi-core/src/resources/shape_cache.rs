@@ -15,20 +15,20 @@ use xxhash_rust::xxh3::Xxh3;
 
 use crate::layout::inline::InlineLayout;
 
-const DEFAULT_SHAPE_CACHE_MAX_BYTES: usize = 0; // opt in with `set_shape_cache_max_bytes`
-// parley::layout::data::ClusterData (~24B) plus one parley::Glyph (~20B) per
-// character, for simple non-ligature text where clusters and glyphs are 1:1.
+const DEFAULT_SHAPE_CACHE_MAX_BYTES: usize = 0;
 const ESTIMATED_BYTES_PER_CHAR: usize = 48;
-// LayoutData's ten Vec fields (~24B each, even empty) plus one RunData
-// (~110B) and one LineData, amortized per entry rather than per character.
 const ENTRY_OVERHEAD: usize = 384;
 const AVERAGE_ENTRY_CHARS: usize = 64;
 
 static MAX_BYTES: AtomicUsize = AtomicUsize::new(DEFAULT_SHAPE_CACHE_MAX_BYTES);
 
-/// Sets the byte budget for the shape cache. `0` stops caching. Call before the first render.
+/// Sets the byte budget for the shape cache. `0` stops caching.
 pub fn set_shape_cache_max_bytes(bytes: usize) {
   MAX_BYTES.store(bytes, Ordering::Relaxed);
+
+  if let Some(cache) = LazyLock::get(&SHARED) {
+    cache.set_capacity(bytes as u64);
+  }
 }
 
 type Entry = Arc<(u64, InlineLayout, String)>;
@@ -53,7 +53,7 @@ static SHARED: LazyLock<Cache<u64, Entry, ByBytes>> = LazyLock::new(|| {
   Cache::with_weighter(estimated_items, max_bytes, ByBytes)
 });
 
-/// What a shape-cache key is computed from, named so the three `u64`s can't be swapped at a call site.
+/// What a shape-cache key is computed from.
 pub(crate) struct CacheKeyParts {
   pub(crate) fingerprint: u64,
   pub(crate) revision: u64,
@@ -102,7 +102,7 @@ pub(crate) fn get_or_shape(
   (layout, text)
 }
 
-/// The cache is off by default, so tests that exercise it turn it on first.
+/// Turns the cache on for a test.
 #[cfg(test)]
 pub(crate) fn enable_for_test() {
   set_shape_cache_max_bytes(4 << 20);
@@ -113,7 +113,7 @@ thread_local! {
   static LAST_INSERTED_KEY: Cell<Option<u64>> = const { Cell::new(None) };
 }
 
-/// The key this thread last inserted, or `None` since. Test-only; caller and render must share a thread.
+/// The key this thread last inserted, if any.
 #[cfg(test)]
 pub(crate) fn take_last_inserted_key_for_test() -> Option<u64> {
   LAST_INSERTED_KEY.with(|cell| cell.take())
@@ -181,8 +181,6 @@ mod tests {
 
   #[test]
   fn a_mismatched_stored_fingerprint_is_a_miss_even_with_matching_text() {
-    // Simulates an outer-hash collision: an entry stored under a different
-    // fingerprint than this lookup's, landing on the same combined key.
     let the_key = key(parts(5, 1, 1));
     SHARED.insert(
       the_key,
