@@ -301,41 +301,47 @@ pub(crate) struct BilinearRow<'p> {
 }
 
 impl BilinearRow<'_> {
-  /// [`BilinearAxis::mix`] of each of `columns` into `out`, gathering eight columns' taps before
-  /// mixing them so the arithmetic vectorizes.
+  /// [`BilinearAxis::mix`] of each of `columns` into `out`, gathering eight columns' taps into
+  /// one array per tap before mixing them so the arithmetic vectorizes.
   pub(crate) fn fill(self, columns: &[BilinearAxis], out: &mut [[u8; 4]]) {
     const RUN: usize = 8;
+    const LANES: usize = RUN * 4;
 
     let row = self.axis.ratio;
 
     for (out, columns) in out.chunks_mut(RUN).zip(columns.chunks(RUN)) {
-      let mut taps = [[[0; 4]; 4]; RUN];
-      let mut ratios = [0; RUN];
+      let mut taps = [[0; LANES]; 4];
+      let mut ratios = [0; LANES];
 
-      for ((taps, ratio), column) in taps.iter_mut().zip(&mut ratios).zip(columns) {
-        *taps = [
+      for (index, column) in columns.iter().enumerate() {
+        let lanes = index * 4..index * 4 + 4;
+
+        for (tap, pixel) in taps.iter_mut().zip([
           self.top[column.floor],
           self.top[column.ceil],
           self.bottom[column.floor],
           self.bottom[column.ceil],
-        ]
-        .map(premultiplied_from_pixel);
-        *ratio = column.ratio as u16;
+        ]) {
+          tap[lanes.clone()].copy_from_slice(&premultiplied_from_pixel(pixel));
+        }
+        ratios[lanes].fill(column.ratio as u16);
       }
-      for ((out, [top_left, top_right, bottom_left, bottom_right]), &column) in
-        out.iter_mut().zip(&taps).zip(&ratios)
-      {
-        // A row's lerp peaks at 255 * 256, inside 16 bits; the column lerp needs 32.
-        let lerp =
-          |left: u8, right: u8| u16::from(left) * (256 - column) + u16::from(right) * column;
 
-        *out = array::from_fn(|lane| {
-          let top = u32::from(lerp(top_left[lane], top_right[lane]));
-          let bottom = u32::from(lerp(bottom_left[lane], bottom_right[lane]));
+      let [top_left, top_right, bottom_left, bottom_right] = taps;
+      // A row's lerp peaks at 255 * 256, inside 16 bits; the column lerp needs 32.
+      let lerp = |left: u8, right: u8, column: u16| {
+        u32::from(u16::from(left) * (256 - column) + u16::from(right) * column)
+      };
+      let mixed: [u8; LANES] = array::from_fn(|lane| {
+        let top = lerp(top_left[lane], top_right[lane], ratios[lane]);
+        let bottom = lerp(bottom_left[lane], bottom_right[lane], ratios[lane]);
 
-          ((top * (256 - row) + bottom * row) >> 16) as u8
-        });
-      }
+        ((top * (256 - row) + bottom * row) >> 16) as u8
+      });
+
+      let out = out.as_flattened_mut();
+
+      out.copy_from_slice(&mixed[..out.len()]);
     }
   }
 }
