@@ -397,11 +397,12 @@ mod tests {
   use super::{remaining_spans, skip_ink_ranges, text_intercepts};
   use crate::{
     geometry::{PathCommand, Point},
-    resources::glyph::ResolvedOutlineGlyph,
+    resources::glyph::{ResolvedOutlineGlyph, outline_ink},
   };
 
   fn outline(paths: Vec<PathCommand>, signature: u64) -> ResolvedOutlineGlyph {
     ResolvedOutlineGlyph::Plain {
+      ink: outline_ink(&paths, None),
       paths,
       embolden: None,
       cache_signature: signature,
