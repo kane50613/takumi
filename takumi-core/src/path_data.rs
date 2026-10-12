@@ -18,7 +18,6 @@ const NUMBERS_PER_COMMAND: usize = 6;
 /// or with `.` when the previous number already carried a `.`).
 pub struct PathData {
   out: String,
-  scratch: String,
   prev_was_number: bool,
   prev_had_dot: bool,
   last_command: Option<u8>,
@@ -29,7 +28,6 @@ impl PathData {
   pub fn with_capacity(capacity: usize) -> Self {
     Self {
       out: String::with_capacity(capacity),
-      scratch: String::new(),
       prev_was_number: false,
       prev_had_dot: false,
       last_command: None,
@@ -51,15 +49,15 @@ impl PathData {
 
   /// Writes a number.
   pub fn number(&mut self, value: f32) {
-    self.scratch.clear();
-    let _ = write!(self.scratch, "{}", Num(value));
-    let first = self.scratch.as_bytes()[0];
+    let mut buf = NumBuf::new();
+    let text = Num(value).format(&mut buf);
+    let first = text.as_bytes()[0];
     if self.prev_was_number && first != b'-' && !(first == b'.' && self.prev_had_dot) {
       self.out.push(' ');
     }
-    self.out.push_str(&self.scratch);
+    self.out.push_str(text);
     self.prev_was_number = true;
-    self.prev_had_dot = self.scratch.contains('.');
+    self.prev_had_dot = text.contains('.');
   }
 
   /// Writes a coordinate pair.
@@ -302,11 +300,35 @@ pub const APPROX_CHARS_PER_NUMBER: usize = 8;
 /// trailing zeros are dropped.
 pub struct Num(pub f32);
 
-/// Stack buffer for one formatted number, sidestepping the per-coordinate heap
-/// allocation of `f32::to_string`. 32 bytes holds any `f32` Display.
+/// Stack buffer for one formatted number. 48 bytes holds any `f32` Display.
 struct NumBuf {
-  bytes: [u8; 32],
+  bytes: [u8; 48],
   len: usize,
+}
+
+impl NumBuf {
+  const fn new() -> Self {
+    Self {
+      bytes: [0; 48],
+      len: 0,
+    }
+  }
+
+  fn push(&mut self, byte: u8) {
+    self.bytes[self.len] = byte;
+    self.len += 1;
+  }
+
+  /// Writes `digits` decimal digits of `value`, zero-padded on the left.
+  fn push_digits(&mut self, value: u32, digits: usize) {
+    for place in (0..digits).rev() {
+      self.push(b'0' + (value / 10u32.pow(place as u32) % 10) as u8);
+    }
+  }
+
+  fn as_str(&self) -> &str {
+    str::from_utf8(&self.bytes[..self.len]).unwrap_or("0")
+  }
 }
 
 impl fmt::Write for NumBuf {
@@ -321,41 +343,105 @@ impl fmt::Write for NumBuf {
   }
 }
 
+impl Num {
+  /// Formats the number into `buf` and returns its text.
+  fn format<'b>(&self, buf: &'b mut NumBuf) -> &'b str {
+    if !self.0.is_finite() {
+      return "0";
+    }
+    let units = (self.0 * COORD_FACTOR).round();
+    if units == 0.0 {
+      return "0";
+    }
+    // An `f32` round-trips every decimal of up to six significant digits, so the shortest
+    // representation of `units / COORD_FACTOR` is that decimal as written.
+    if units.abs() < 1_000_000.0 {
+      let units = units as i32;
+      let magnitude = units.unsigned_abs();
+      let (whole, mut fraction) = (magnitude / 1000, magnitude % 1000);
+
+      if units < 0 {
+        buf.push(b'-');
+      }
+      if whole > 0 {
+        buf.push_digits(whole, whole.ilog10() as usize + 1);
+      }
+      if fraction > 0 {
+        let mut digits = 3;
+
+        while fraction % 10 == 0 {
+          fraction /= 10;
+          digits -= 1;
+        }
+        buf.push(b'.');
+        buf.push_digits(fraction, digits);
+      }
+      return buf.as_str();
+    }
+    let _ = write!(buf, "{}", units / COORD_FACTOR);
+    buf.as_str()
+  }
+}
+
 impl fmt::Display for Num {
   fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-    if !self.0.is_finite() {
-      return f.write_str("0");
-    }
-    let value = (self.0 * COORD_FACTOR).round() / COORD_FACTOR;
-    if value == 0.0 {
-      return f.write_str("0");
-    }
-    let mut buf = NumBuf {
-      bytes: [0; 32],
-      len: 0,
-    };
-    if write!(buf, "{value}").is_err() {
-      return write!(f, "{value}");
-    }
-    let Ok(text) = str::from_utf8(&buf.bytes[..buf.len]) else {
-      return write!(f, "{value}");
-    };
-    // Drop the redundant integer-part zero: `0.5` -> `.5`, `-0.5` -> `-.5`.
-    if let Some(rest) = text.strip_prefix("0.") {
-      f.write_str(".")?;
-      f.write_str(rest)
-    } else if let Some(rest) = text.strip_prefix("-0.") {
-      f.write_str("-.")?;
-      f.write_str(rest)
-    } else {
-      f.write_str(text)
-    }
+    f.write_str(self.format(&mut NumBuf::new()))
   }
 }
 
 #[cfg(test)]
 mod tests {
   use super::*;
+
+  /// `Num` as float `Display` prints it, the integer-part zero dropped.
+  fn displayed(value: f32) -> String {
+    if !value.is_finite() {
+      return "0".into();
+    }
+    let value = (value * COORD_FACTOR).round() / COORD_FACTOR;
+    if value == 0.0 {
+      return "0".into();
+    }
+    let text = value.to_string();
+    if let Some(rest) = text.strip_prefix("0.") {
+      format!(".{rest}")
+    } else if let Some(rest) = text.strip_prefix("-0.") {
+      format!("-.{rest}")
+    } else {
+      text
+    }
+  }
+
+  #[test]
+  fn num_matches_float_display() {
+    let mut state = 0x2545_F491_4F6C_DD1D_u64;
+
+    for index in 0..200_000_u64 {
+      state ^= state << 13;
+      state ^= state >> 7;
+      state ^= state << 17;
+
+      let value = match index % 4 {
+        0 => f32::from_bits(state as u32),
+        1 => ((state % 2_000_000) as f32 - 1_000_000.0) / 1000.0,
+        2 => ((state % 200_000_000) as f32 - 100_000_000.0) / 7919.0,
+        _ => (state as u32 as f32 / u32::MAX as f32 - 0.5) * 4.0,
+      };
+
+      assert_eq!(Num(value).to_string(), displayed(value), "{value:?}");
+    }
+    for value in [
+      f32::MAX,
+      f32::MIN,
+      999.9995,
+      -999.9995,
+      1000.0,
+      0.0005,
+      -0.0004,
+    ] {
+      assert_eq!(Num(value).to_string(), displayed(value), "{value:?}");
+    }
+  }
 
   fn build(f: impl FnOnce(&mut PathData)) -> String {
     let mut path = PathData::with_capacity(0);
