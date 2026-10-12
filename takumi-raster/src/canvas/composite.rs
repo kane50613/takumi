@@ -668,8 +668,13 @@ mod tests {
         canvas_origin: Point { x: 0, y: 0 },
       };
       let canvas_pixels = (canvas.width * canvas.height) as usize;
+      // Every fifth pixel is transparent but keeps colour, which only an exact path leaves alone.
       let dst: Vec<[u8; 4]> = (0..canvas_pixels)
-        .map(|index| [0, 1, 2, 3].map(|lane| noise(index * 4 + lane, 5)))
+        .map(|index| {
+          let [red, green, blue, alpha] = [0, 1, 2, 3].map(|lane| noise(index * 4 + lane, 5));
+
+          [red, green, blue, if index % 5 == 0 { 0 } else { alpha }]
+        })
         .collect();
       let mut expected = dst.clone();
       let mut actual = dst;
