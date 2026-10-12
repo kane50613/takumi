@@ -8,8 +8,8 @@ use crate::{
   geometry::{AvailableSpace, Size},
   layout::{
     inline::{
-      InlineItem, InlineLayoutMode, InlineLayoutRequest, InlineMeasureOptions, InlineMeasurement,
-      create_inline_constraint, create_inline_layout,
+      InlineItem, InlineLayoutCache, InlineLayoutMode, InlineLayoutRequest, InlineMeasureOptions,
+      InlineMeasurement, create_inline_constraint, create_inline_layout,
     },
     node::TextData,
   },
@@ -82,10 +82,11 @@ impl TextData {
     let options = InlineMeasureOptions::new(max_width, true, available_space, known_dimensions);
     let key = self.measure_key(context, max_width, max_height, options.min_content_query);
 
-    context.inline_cache().get_or_measure(key, || {
-      let font_style = SizedFontStyle::from_style(&context.style, context);
+    let owner = InlineLayoutCache::owner(context);
 
-      create_inline_layout(InlineLayoutRequest {
+    context.inline_cache().get_or_measure(key, owner, || {
+      let font_style = SizedFontStyle::from_style(&context.style, context);
+      let built = create_inline_layout(InlineLayoutRequest {
         items: vec![InlineItem::Text {
           text: self.text.as_str().into(),
           context,
@@ -99,8 +100,9 @@ impl TextData {
         context,
         mode: InlineLayoutMode::Measure,
         shape_cacheable: true,
-      })
-      .measure(options)
+      });
+
+      (built.measure(options), built.shape_key)
     })
   }
 

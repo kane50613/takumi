@@ -2,14 +2,17 @@ use std::{
   cell::RefCell,
   collections::{HashMap, VecDeque},
   mem::take,
+  ptr,
   rc::Rc,
 };
 
 use super::{InlineLayout, InlineMeasurement, ShapedRun};
+use crate::context::RenderContext;
 
 type ShapedText = (InlineLayout, String);
 pub(crate) type ShapeCache = Rc<RefCell<HashMap<u64, ShapedText>>>;
-pub(crate) type MeasureCache = Rc<RefCell<HashMap<(u64, u32), InlineMeasurement>>>;
+/// Each measurement, with the shape its layout drew on.
+pub(crate) type MeasureCache = Rc<RefCell<HashMap<(u64, u32), (InlineMeasurement, Option<u64>)>>>;
 
 /// Render-local text shaping and measurement reuse.
 #[derive(Clone, Default)]
@@ -32,6 +35,11 @@ impl InlineLayoutCache {
     }
   }
 
+  /// The owner a box styled by `context` lays text out as.
+  pub(crate) fn owner(context: &RenderContext) -> usize {
+    ptr::from_ref(context).addr()
+  }
+
   /// The text `key` names shaped for the box `owner`, shaped now when no box shaped it before.
   pub(crate) fn get_or_shape(
     &self,
@@ -43,12 +51,7 @@ impl InlineLayoutCache {
       && let Some((layout, text)) = self.shapes.borrow().get(&fingerprint)
       && text == expected_text
     {
-      let mut owners = self.owners.borrow_mut();
-      let first = owners.entry(fingerprint).or_insert(Some(owner));
-
-      if *first != Some(owner) {
-        *first = None;
-      }
+      self.share(fingerprint, owner);
       return (layout.clone(), text.clone());
     }
 
@@ -58,6 +61,15 @@ impl InlineLayoutCache {
       self.owners.borrow_mut().insert(fingerprint, Some(owner));
     }
     shaped
+  }
+
+  /// Marks the shape at `fingerprint` as laid out by `owner` too, so the first box's draw keeps it.
+  fn share(&self, fingerprint: u64, owner: usize) {
+    if let Some(first) = self.owners.borrow_mut().get_mut(&fingerprint)
+      && *first != Some(owner)
+    {
+      *first = None;
+    }
   }
 
   /// Drops every shaped text, which layout keeps to break the same text again, and the room the
@@ -102,16 +114,22 @@ impl InlineLayoutCache {
     face
   }
 
+  /// The measurement `key` names for the box `owner`, measured now when no box measured it
+  /// before; `measure` also returns the shape it drew on, which a reuse then shares.
   pub(crate) fn get_or_measure(
     &self,
     key: (u64, u32),
-    measure: impl FnOnce() -> InlineMeasurement,
+    owner: usize,
+    measure: impl FnOnce() -> (InlineMeasurement, Option<u64>),
   ) -> InlineMeasurement {
-    if let Some(size) = self.measurements.borrow().get(&key) {
-      return *size;
+    if let Some(&(size, shape)) = self.measurements.borrow().get(&key) {
+      if let Some(fingerprint) = shape {
+        self.share(fingerprint, owner);
+      }
+      return size;
     }
-    let size = measure();
-    self.measurements.borrow_mut().insert(key, size);
+    let (size, shape) = measure();
+    self.measurements.borrow_mut().insert(key, (size, shape));
     size
   }
 }
@@ -174,12 +192,38 @@ mod tests {
       last_baseline: None,
       clamped: true,
     };
-    assert_eq!(cache.get_or_measure((1, 5), || first), first);
-    assert_eq!(cache.clone().get_or_measure((1, 5), || second), first);
-    assert_eq!(cache.get_or_measure((1, 6), || second), second);
+    assert_eq!(cache.get_or_measure((1, 5), 0, || (first, None)), first);
     assert_eq!(
-      InlineLayoutCache::default().get_or_measure((1, 5), || second),
+      cache.clone().get_or_measure((1, 5), 0, || (second, None)),
+      first
+    );
+    assert_eq!(cache.get_or_measure((1, 6), 0, || (second, None)), second);
+    assert_eq!(
+      InlineLayoutCache::default().get_or_measure((1, 5), 0, || (second, None)),
       second
     );
+  }
+
+  #[test]
+  fn a_reused_measurement_keeps_its_shape_for_every_box() {
+    let cache = InlineLayoutCache::default();
+    let measurement = InlineMeasurement {
+      size: Size {
+        width: 10.0,
+        height: 20.0,
+      },
+      first_baseline: None,
+      last_baseline: None,
+      clamped: false,
+    };
+    let shape = || (InlineLayout::new(), "hello".to_owned());
+
+    cache.get_or_measure((1, 5), 0, || {
+      cache.get_or_shape(Some((7, "hello")), 0, shape);
+      (measurement, Some(7))
+    });
+    cache.get_or_measure((1, 5), 1, || (measurement, Some(7)));
+    cache.release_unshared(7);
+    assert_eq!(cache.shape_count(), 1);
   }
 }
