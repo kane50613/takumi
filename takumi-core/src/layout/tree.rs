@@ -2354,18 +2354,19 @@ impl RenderNode {
       return None;
     }
 
+    if let Some(baseline) = kept
+      .and_then(|layout| self.fragment_items_in(layout))
+      .and_then(|items| items.baseline(use_last_line))
+    {
+      return Some(self.content_top() + baseline);
+    }
+
     // An atomic box with no in-flow inline content has no line boxes, so it has
     // no content baseline; the caller must fall back to the bottom margin edge.
     // https://www.w3.org/TR/CSS22/visudet.html#leading
     let items = collect_inline_items(self);
     if items.is_empty() {
       return None;
-    }
-    if let Some(baseline) = kept
-      .and_then(|layout| self.fragment_items_in(layout))
-      .and_then(|items| items.baseline(use_last_line))
-    {
-      return Some(self.content_top() + baseline);
     }
 
     // `size` is the border box, but the content wrapped against the content box.
