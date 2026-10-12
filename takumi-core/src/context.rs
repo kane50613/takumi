@@ -9,6 +9,7 @@ use rustc_hash::FxHashMap;
 use typed_builder::TypedBuilder;
 
 use crate::{
+  font_style::ExpandedFamilies,
   geometry::{ComputedLayout, Point},
   layout::inline::{InlineLayoutCache, MeasureCache, ShapeCache},
   resources::{
@@ -26,6 +27,7 @@ struct RenderShared {
   images: Rc<HashMap<Arc<str>, ImageSource>>,
   resource_cache: Option<ResourceCache>,
   stylesheet: Arc<StyleSheet>,
+  font_families: ExpandedFamilies,
   inline_cache: InlineLayoutCache,
   tw_cache: TwCache,
   primary_font_metrics: RefCell<FxHashMap<u64, Option<PrimaryFontMetrics>>>,
@@ -78,6 +80,7 @@ impl From<RenderContextInit> for RenderContext {
         images: init.images,
         resource_cache: init.resource_cache,
         stylesheet: init.stylesheet,
+        font_families: ExpandedFamilies::default(),
         inline_cache: InlineLayoutCache::new(init.shape_cache, init.measure_cache),
         tw_cache: TwCache::default(),
         primary_font_metrics: RefCell::default(),
@@ -173,6 +176,10 @@ impl RenderContext {
 
   pub(crate) fn inline_cache(&self) -> &InlineLayoutCache {
     &self.shared.inline_cache
+  }
+
+  pub(crate) fn font_families(&self) -> &ExpandedFamilies {
+    &self.shared.font_families
   }
 
   /// Drops the shaped text this render keeps to lay the same text out again, once every box

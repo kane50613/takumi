@@ -1,4 +1,10 @@
-use std::{fmt, sync::Arc};
+use std::{
+  fmt,
+  sync::{
+    Arc,
+    atomic::{AtomicU64, Ordering},
+  },
+};
 
 use cssparser::{Parser, match_ignore_ascii_case, serialize_string};
 use parley::{FontFamilyName, GenericFamily};
@@ -9,8 +15,18 @@ use crate::style::{
 
 /// Represents a font family for text rendering.
 /// Multi value fallback is supported.
-#[derive(Debug, Clone, PartialEq)]
-pub struct FontFamily(Arc<[FontFamilyToken]>);
+#[derive(Debug, Clone)]
+pub struct FontFamily {
+  /// Unique to the stack it was built as, and shared by every clone of it.
+  id: u64,
+  tokens: Arc<[FontFamilyToken]>,
+}
+
+impl PartialEq for FontFamily {
+  fn eq(&self, other: &Self) -> bool {
+    self.tokens == other.tokens
+  }
+}
 
 impl Default for FontFamily {
   fn default() -> Self {
@@ -40,19 +56,33 @@ impl FontFamily {
       .collect::<Vec<_>>();
     tokens.push(FontFamilyToken::Generic(GenericFamily::SansSerif));
 
-    Self(tokens.into())
+    Self::new(tokens)
+  }
+
+  fn new(tokens: impl Into<Arc<[FontFamilyToken]>>) -> Self {
+    static NEXT_ID: AtomicU64 = AtomicU64::new(0);
+
+    Self {
+      id: NEXT_ID.fetch_add(1, Ordering::Relaxed),
+      tokens: tokens.into(),
+    }
+  }
+
+  /// Names the stack it was built as, which every clone of it shares.
+  pub(crate) fn id(&self) -> u64 {
+    self.id
   }
 
   /// The families as parley `FontFamilyName`s, in declaration order.
   pub(crate) fn names(&self) -> impl Iterator<Item = FontFamilyName<'_>> + Clone {
-    self.0.iter().map(|token| match token {
+    self.tokens.iter().map(|token| match token {
       FontFamilyToken::Owned(name) => FontFamilyName::Named(name.as_str().into()),
       FontFamilyToken::Generic(generic) => FontFamilyName::Generic(*generic),
     })
   }
 
   pub(crate) fn from_parlance_generic(generic: GenericFamily) -> Self {
-    Self(Arc::new([FontFamilyToken::Generic(generic)]))
+    Self::new([FontFamilyToken::Generic(generic)])
   }
 }
 
@@ -83,7 +113,7 @@ impl<'i> FromCss<'i> for FontFamily {
   fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
     let list = input.parse_comma_separated(FontFamilyToken::from_css)?;
 
-    Ok(Self(list.into()))
+    Ok(Self::new(list))
   }
 
   const VALID_TOKENS: &'static [&'static str] = FontFamilyToken::VALID_TOKENS;
@@ -132,14 +162,12 @@ impl ToCss for FontFamilyToken {
 
 impl ToCss for FontFamily {
   fn to_css<W: fmt::Write>(&self, dest: &mut W) -> fmt::Result {
-    self.0.to_css(dest)
+    self.tokens.to_css(dest)
   }
 }
 
 #[cfg(test)]
 mod tests {
-  use std::sync::Arc;
-
   use parley::GenericFamily;
 
   use super::{FontFamily, FontFamilyToken};
@@ -149,9 +177,9 @@ mod tests {
   fn parses_single_generic_family() {
     assert_eq!(
       FontFamily::from_css_str("serif"),
-      Ok(FontFamily(Arc::new([FontFamilyToken::Generic(
+      Ok(FontFamily::new([FontFamilyToken::Generic(
         GenericFamily::Serif,
-      )])))
+      )]))
     );
   }
 
@@ -159,11 +187,11 @@ mod tests {
   fn parses_fallback_family_list() {
     assert_eq!(
       FontFamily::from_css_str("\"Inter\", Arial, serif"),
-      Ok(FontFamily(Arc::new([
+      Ok(FontFamily::new([
         FontFamilyToken::Owned(String::from("Inter")),
         FontFamilyToken::Owned(String::from("Arial")),
         FontFamilyToken::Generic(GenericFamily::Serif),
-      ])))
+      ]))
     );
   }
 
@@ -171,9 +199,9 @@ mod tests {
   fn parses_unquoted_multi_word_family_name() {
     assert_eq!(
       FontFamily::from_css_str("Noto Sans TC"),
-      Ok(FontFamily(Arc::new([FontFamilyToken::Owned(
+      Ok(FontFamily::new([FontFamilyToken::Owned(
         "Noto Sans TC".to_string()
-      )])))
+      )]))
     );
   }
 
@@ -181,11 +209,11 @@ mod tests {
   fn from_names_appends_sans_serif_last_resort() {
     assert_eq!(
       FontFamily::from_names(["Geist".to_string(), "Inter".to_string()]),
-      FontFamily(Arc::new([
+      FontFamily::new([
         FontFamilyToken::Owned(String::from("Geist")),
         FontFamilyToken::Owned(String::from("Inter")),
         FontFamilyToken::Generic(GenericFamily::SansSerif),
-      ]))
+      ])
     );
   }
 
@@ -193,15 +221,15 @@ mod tests {
   fn parses_tailwind_aliases() {
     assert_eq!(
       FontFamily::parse_tw("sans"),
-      Some(FontFamily(Arc::new([FontFamilyToken::Generic(
+      Some(FontFamily::new([FontFamilyToken::Generic(
         GenericFamily::SansSerif,
-      )])))
+      )]))
     );
     assert_eq!(
       FontFamily::parse_tw("mono"),
-      Some(FontFamily(Arc::new([FontFamilyToken::Generic(
+      Some(FontFamily::new([FontFamilyToken::Generic(
         GenericFamily::Monospace,
-      )])))
+      )]))
     );
     assert_eq!(FontFamily::parse_tw("display"), None);
   }

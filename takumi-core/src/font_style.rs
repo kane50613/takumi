@@ -1,15 +1,18 @@
 use std::{
   borrow::Cow,
+  cell::RefCell,
   collections::HashMap,
   hash::{Hash, Hasher},
   mem::discriminant,
   ops::Range,
+  rc::Rc,
 };
 
 use parley::{
   FontFamily as ParleyFontFamily, FontFamilyName, FontFeatures, FontVariations, GenericFamily,
   LineHeight, TextStyle, fontique::QueryFamily, style::FontStyle as ParleyFontStyle,
 };
+use rustc_hash::FxHashMap;
 use smallvec::SmallVec;
 
 use crate::{
@@ -138,9 +141,18 @@ impl ExpandedFontFamily {
   }
 }
 
+/// Each `font-family` stack a render expanded, by the id of the stack it came from.
+#[derive(Default)]
+pub(crate) struct ExpandedFamilies(RefCell<FxHashMap<u64, Rc<ExpandedFontFamily>>>);
+
 impl RenderContext {
-  pub(crate) fn expand_font_family(&self, family: &FontFamily) -> ExpandedFontFamily {
-    ExpandedFontFamily::expand(family, &self.fonts().groups)
+  pub(crate) fn expand_font_family(&self, family: &FontFamily) -> Rc<ExpandedFontFamily> {
+    let mut expanded = self.font_families().0.borrow_mut();
+    let expanded = expanded
+      .entry(family.id())
+      .or_insert_with(|| Rc::new(ExpandedFontFamily::expand(family, &self.fonts().groups)));
+
+    Rc::clone(expanded)
   }
 }
 
@@ -220,7 +232,7 @@ pub(crate) fn presentation_segments(text: &str) -> Vec<(Range<usize>, Option<Pre
 pub struct SizedFontStyle<'s> {
   /// Computed style this is derived from.
   pub parent: &'s ComputedStyle,
-  pub(crate) font_family: ExpandedFontFamily,
+  pub(crate) font_family: Rc<ExpandedFontFamily>,
   pub(crate) line_height: parley::LineHeight,
   /// The line height kept on the brush, because parley's run metrics can carry a neighboring
   /// span's style at run boundaries.
