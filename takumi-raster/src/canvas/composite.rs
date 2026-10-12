@@ -12,7 +12,10 @@ use super::{
 };
 use crate::{
   Placement,
-  blend::{blend_premultiplied_pixel, composite_premultiplied_over, scale_premultiplied_pixel},
+  blend::{
+    blend_premultiplied_pixel, composite_premultiplied_over, composite_premultiplied_over_row,
+    scale_premultiplied_lanes, scale_premultiplied_pixel,
+  },
   style::{Affine, BlendMode, ImageScalingAlgorithm},
 };
 
@@ -85,8 +88,11 @@ pub(super) fn constant(
     return;
   };
   let pixels: &mut [[u8; 4]] = bytemuck::cast_slice_mut(pixmap.pixels_mut());
-  if mode == BlendMode::Normal && combined_mask.is_none() {
-    constant_normal(pixels, mask, color, region);
+  if mode == BlendMode::Normal {
+    match combined_mask {
+      None => constant_normal(pixels, mask, color, region),
+      Some(clip) => constant_clipped(pixels, mask, color, clip, region),
+    }
     return;
   }
 
@@ -162,6 +168,29 @@ fn constant_over(dst: &mut [[u8; 4]], mask: &[u8], color: [u8; 4]) {
     if src[3] != 0 {
       composite_premultiplied_over(dst_px, src);
     }
+  }
+}
+
+/// [`constant_general`]'s normal-mode source-over under `clip`, a row of sources at a time.
+fn constant_clipped(
+  pixels: &mut [[u8; 4]],
+  mask: &[u8],
+  color: [u8; 4],
+  clip: MaskView<'_>,
+  region: DestRegion,
+) {
+  let mut sources = Vec::with_capacity(region.span());
+
+  for dest_y in region.bounds.y_min..region.bounds.y_max {
+    let (first, clip_row) = clip.row(dest_y, region.bounds.x_min).covered(region.span());
+    let dst = &mut pixels[region.dst_row(dest_y)][first..][..clip_row.len()];
+    let mask_row = &mask[region.mask_row(dest_y)][first..];
+
+    sources.clear();
+    sources.extend(mask_row.iter().zip(clip_row).map(|(&alpha, &clip)| {
+      scale_premultiplied_lanes(scale_premultiplied_lanes(color, alpha), clip)
+    }));
+    composite_premultiplied_over_row(dst, &sources);
   }
 }
 
@@ -588,6 +617,73 @@ mod scaled_rows_tests {
           "a={a} d={d} x={x} y={y} mode={mode:?}"
         );
       }
+    }
+  }
+}
+
+#[cfg(test)]
+mod tests {
+  use takumi_core::geometry::{Point, Size};
+  use tiny_skia::{IntSize, Mask};
+
+  use super::{DestRegion, MaskView, constant_clipped, constant_general};
+  use crate::{Placement, style::BlendMode};
+
+  /// Bytes from a fixed hash of `index`, so every run sees the same noise.
+  fn noise(index: usize, salt: u32) -> u8 {
+    ((index as u32 ^ salt).wrapping_mul(2_654_435_761) >> 13) as u8
+  }
+
+  /// Coverage that is often empty or full, as glyph and clip masks are.
+  fn coverage(index: usize, salt: u32) -> u8 {
+    match noise(index, salt) % 4 {
+      0 => 0,
+      1 => u8::MAX,
+      _ => noise(index, salt + 1),
+    }
+  }
+
+  #[test]
+  fn clipped_rows_match_the_pixel_path() {
+    let canvas = Size::new(23, 17);
+    let clip = Mask::from_vec(
+      (0..20 * 15).map(|index| coverage(index, 7)).collect(),
+      IntSize::from_wh(20, 15).unwrap(),
+    )
+    .unwrap();
+
+    for (case, (left, top)) in [(0, 0), (-3, 2), (5, -4), (9, 6)].into_iter().enumerate() {
+      let placement = Placement {
+        left,
+        top,
+        width: 16,
+        height: 12,
+      };
+      let region = || DestRegion::new(canvas, placement).unwrap();
+      let mask: Vec<u8> = (0..16 * 12).map(|index| coverage(index, 3)).collect();
+      let color = [noise(case, 1) / 2, noise(case, 2) / 3, 40, 200].map(|channel| channel.min(200));
+      let view = MaskView {
+        mask: &clip,
+        origin: Point { x: 2, y: 1 },
+        canvas_origin: Point { x: 0, y: 0 },
+      };
+      let canvas_pixels = (canvas.width * canvas.height) as usize;
+      let dst: Vec<[u8; 4]> = (0..canvas_pixels)
+        .map(|index| [0, 1, 2, 3].map(|lane| noise(index * 4 + lane, 5)))
+        .collect();
+      let mut expected = dst.clone();
+      let mut actual = dst;
+
+      constant_general(
+        &mut expected,
+        &mask,
+        color,
+        BlendMode::Normal,
+        Some(view),
+        region(),
+      );
+      constant_clipped(&mut actual, &mask, color, view, region());
+      assert_eq!(actual, expected, "case {case}");
     }
   }
 }

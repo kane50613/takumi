@@ -1,3 +1,5 @@
+use std::array;
+
 use image::Rgba;
 use tiny_skia::PremultipliedColorU8;
 
@@ -447,6 +449,29 @@ pub(crate) fn scale_premultiplied_pixel(pixel: [u8; 4], alpha: u8) -> [u8; 4] {
     fast_div_255(pixel[2] as u32 * alpha as u32),
     fast_div_255(pixel[3] as u32 * alpha as u32),
   ]
+}
+
+/// [`scale_premultiplied_pixel`] without its branch, so a loop over pixels vectorizes.
+#[inline(always)]
+pub(crate) fn scale_premultiplied_lanes(pixel: [u8; 4], alpha: u8) -> [u8; 4] {
+  pixel.map(|channel| fast_div_255(u32::from(channel) * u32::from(alpha)))
+}
+
+/// [`composite_premultiplied_over`] for each pixel of `src` over `dst`, without branches so it
+/// vectorizes.
+#[inline(always)]
+pub(crate) fn composite_premultiplied_over_row(dst: &mut [[u8; 4]], src: &[[u8; 4]]) {
+  for (dst, &src) in dst.iter_mut().zip(src) {
+    let inverse = u32::from(u8::MAX - src[3]);
+    let over =
+      array::from_fn(|lane| src[lane].saturating_add(fast_div_255(u32::from(dst[lane]) * inverse)));
+
+    *dst = if dst[3] == 0 && src[3] != 0 {
+      src
+    } else {
+      over
+    };
+  }
 }
 
 #[inline(always)]
