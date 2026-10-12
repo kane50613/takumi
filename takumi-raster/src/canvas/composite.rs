@@ -171,7 +171,7 @@ fn constant_over(dst: &mut [[u8; 4]], mask: &[u8], color: [u8; 4]) {
   }
 }
 
-/// [`constant_general`]'s normal-mode source-over under `clip`, a row of sources at a time.
+/// [`constant_general`]'s normal-mode source-over under `clip`, a run of pixels at a time.
 fn constant_clipped(
   pixels: &mut [[u8; 4]],
   mask: &[u8],
@@ -179,19 +179,34 @@ fn constant_clipped(
   clip: MaskView<'_>,
   region: DestRegion,
 ) {
-  let mut sources = Vec::with_capacity(region.span());
-
   for dest_y in region.bounds.y_min..region.bounds.y_max {
     let (first, clip_row) = clip.row(dest_y, region.bounds.x_min).covered(region.span());
     let dst = &mut pixels[region.dst_row(dest_y)][first..][..clip_row.len()];
-    let mask_row = &mask[region.mask_row(dest_y)][first..];
+    let mask_row = &mask[region.mask_row(dest_y)][first..][..clip_row.len()];
+    let (dst_runs, dst_tail) = dst.as_chunks_mut::<MASK_RUN>();
+    let (mask_runs, mask_tail) = mask_row.as_chunks::<MASK_RUN>();
+    let (clip_runs, clip_tail) = clip_row.as_chunks::<MASK_RUN>();
 
-    sources.clear();
-    sources.extend(mask_row.iter().zip(clip_row).map(|(&alpha, &clip)| {
-      scale_premultiplied_lanes(scale_premultiplied_lanes(color, alpha), clip)
-    }));
-    composite_premultiplied_over_row(dst, &sources);
+    for ((dst, mask), clip) in dst_runs.iter_mut().zip(mask_runs).zip(clip_runs) {
+      match (u64::from_ne_bytes(*mask), u64::from_ne_bytes(*clip)) {
+        (0, _) | (_, 0) => {}
+        (u64::MAX, u64::MAX) if color[3] == u8::MAX => dst.fill(color),
+        _ => constant_clipped_over(dst, mask, clip, color),
+      }
+    }
+    constant_clipped_over(dst_tail, mask_tail, clip_tail, color);
   }
+}
+
+/// `color` scaled by `mask`, then by `clip`, over `dst`, all at most a [`MASK_RUN`] long.
+#[inline(always)]
+fn constant_clipped_over(dst: &mut [[u8; 4]], mask: &[u8], clip: &[u8], color: [u8; 4]) {
+  let mut sources = [[0; 4]; MASK_RUN];
+
+  for ((source, &alpha), &clip) in sources.iter_mut().zip(mask).zip(clip) {
+    *source = scale_premultiplied_lanes(scale_premultiplied_lanes(color, alpha), clip);
+  }
+  composite_premultiplied_over_row(dst, &sources[..dst.len()]);
 }
 
 #[inline]
@@ -634,9 +649,9 @@ mod tests {
     ((index as u32 ^ salt).wrapping_mul(2_654_435_761) >> 13) as u8
   }
 
-  /// Coverage that is often empty or full, as glyph and clip masks are.
+  /// Coverage that runs empty or full, as glyph and clip masks do.
   fn coverage(index: usize, salt: u32) -> u8 {
-    match noise(index, salt) % 4 {
+    match noise(index / 16, salt) % 4 {
       0 => 0,
       1 => u8::MAX,
       _ => noise(index, salt + 1),
@@ -661,7 +676,8 @@ mod tests {
       };
       let region = || DestRegion::new(canvas, placement).unwrap();
       let mask: Vec<u8> = (0..16 * 12).map(|index| coverage(index, 3)).collect();
-      let color = [noise(case, 1) / 2, noise(case, 2) / 3, 40, 200].map(|channel| channel.min(200));
+      let alpha = if case % 2 == 0 { u8::MAX } else { 200 };
+      let color = [noise(case, 1), noise(case, 2), 40, alpha].map(|channel| channel.min(alpha));
       let view = MaskView {
         mask: &clip,
         origin: Point { x: 2, y: 1 },
