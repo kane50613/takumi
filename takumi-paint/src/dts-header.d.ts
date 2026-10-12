@@ -334,7 +334,6 @@ export type RawTextRun = {
   readonly lineHeight: number;
   readonly letterSpacing: number;
   readonly glyphs: readonly Glyph[];
-  readonly outline: string;
   readonly transform?: Matrix;
 };
 

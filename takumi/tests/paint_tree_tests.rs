@@ -4,8 +4,8 @@ use std::fs::{create_dir_all, write};
 
 use takumi::prelude::*;
 use takumi_core::paint_tree::{
-  Drawable, NodeKind, Paint, PaintDocument, PaintFilter, PaintNode, PaintStep, PaintTreeOptions,
-  Role, Shape, Spread, TextRun, paint_tree,
+  Drawable, NodeKind, Paint, PaintDocument, PaintFilter, PaintNode, PaintStep, PaintTree,
+  PaintTreeOptions, Role, Shape, Spread, TextRun, paint_tree,
 };
 use test_utils::{CONTEXT, TEST_IMAGES, format_generated};
 
@@ -55,7 +55,7 @@ fn card() -> Node {
   .with_id("card")
 }
 
-fn build(node: Node) -> PaintDocument {
+fn paint(node: Node) -> PaintTree {
   paint_tree(
     PaintTreeOptions::builder()
       .viewport(Viewport::new((600, 400)))
@@ -66,7 +66,10 @@ fn build(node: Node) -> PaintDocument {
       .build(),
   )
   .unwrap()
-  .document
+}
+
+fn build(node: Node) -> PaintDocument {
+  paint(node).document
 }
 
 fn find<'d>(document: &'d PaintDocument, id: &str) -> &'d PaintNode {
@@ -197,7 +200,6 @@ fn paint_tree_records_used_values() {
     Some("b")
   );
   assert_eq!(document.fonts[runs[1].font].weight, 400.0);
-  assert!(!world.outline.is_empty());
 
   let paragraph = find(&document, "paragraph");
   let text = paragraph
@@ -427,4 +429,28 @@ fn a_hairline_repeating_gradient_keeps_one_period_repeating() {
   );
   assert_eq!(stops.first().map(|stop| stop.color), Some([255, 0, 0, 255]));
   assert_eq!(stops.last().map(|stop| stop.color), Some([0, 0, 255, 255]));
+}
+
+#[test]
+fn run_outline_writes_the_runs_glyphs() {
+  let tree = paint(card());
+  let (node, run) = tree
+    .document
+    .nodes
+    .iter()
+    .find_map(|node| match &node.kind {
+      NodeKind::Text { runs, .. } => runs
+        .iter()
+        .position(|run| run.text == "world")
+        .map(|run| (node.id, run)),
+      _ => None,
+    })
+    .expect("a run reading world");
+
+  assert!(
+    tree
+      .run_outline(node, run)
+      .is_some_and(|outline| outline.starts_with('M'))
+  );
+  assert_eq!(tree.run_outline(node, usize::MAX), None);
 }

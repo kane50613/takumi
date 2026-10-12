@@ -169,4 +169,10 @@ impl RenderedPaint {
   pub fn font_data(&self, index: usize) -> Option<Vec<u8>> {
     self.tree.font_data(index).map(<[u8]>::to_vec)
   }
+
+  /// The SVG path data of run `run` of text node `node`.
+  #[wasm_bindgen(js_name = runOutline)]
+  pub fn run_outline(&self, node: usize, run: usize) -> Option<String> {
+    self.tree.run_outline(node, run)
+  }
 }

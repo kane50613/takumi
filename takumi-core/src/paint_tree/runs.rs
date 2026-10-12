@@ -1,11 +1,11 @@
 //! A laid-out run's text and glyphs, as the document describes them.
 
-use std::ops::Range;
+use std::{ops::Range, sync::Arc};
 
+use super::outlines::{OutlineGlyph, RunOutline};
 use crate::{
   geometry::{ComputedLayout, PathCommand, Point},
   layout::inline::{PositionedInlineRun, ProcessedInlineSpan},
-  path_data::path_data,
   resources::glyph::{ResolvedBitmapGlyph, ResolvedGlyph},
   style::{Affine, Color},
 };
@@ -27,6 +27,8 @@ pub(super) enum GlyphPaint<'g> {
 
 /// A glyph of a run and where it sits.
 pub(super) struct PlacedGlyph<'g> {
+  /// The glyph.
+  pub(super) glyph: &'g Arc<ResolvedGlyph>,
   /// Maps the glyph's own space into the block's border box, the line's `text-fit` scale included.
   pub(super) transform: Affine,
   /// The glyph's origin from the run's baseline start, before the line's scale.
@@ -57,7 +59,8 @@ impl PositionedInlineRun {
     let shaped = &self.glyph_run;
 
     shaped.glyphs.iter().filter_map(move |glyph| {
-      let paint = match self.resolved_glyphs.get(&glyph.id)?.as_ref() {
+      let resolved = self.resolved_glyphs.get(&glyph.id)?;
+      let paint = match resolved.as_ref() {
         ResolvedGlyph::Outline(outline) => {
           let layers = self.resolve_color_layers(outline, shaped.brush.color);
 
@@ -74,6 +77,7 @@ impl PositionedInlineRun {
       };
 
       Some(PlacedGlyph {
+        glyph: resolved,
         transform: run_transform
           * Affine::translation(glyph_offset.x + glyph.x, glyph_offset.y + glyph.y),
         offset: Point {
@@ -85,15 +89,15 @@ impl PositionedInlineRun {
     })
   }
 
-  /// The outlines of the glyphs the run's colour fills, as SVG path data from its baseline start.
-  pub(super) fn outline(&self, layout: ComputedLayout) -> String {
+  /// The glyphs the run's colour fills.
+  pub(super) fn outline(&self, layout: ComputedLayout) -> RunOutline {
     self
       .placed_glyphs(layout)
-      .filter_map(|glyph| match glyph.paint {
-        GlyphPaint::Outline { paths, .. } => Some(path_data(
-          paths,
-          Affine::translation(glyph.offset.x, glyph.offset.y),
-        )),
+      .filter_map(|placed| match placed.paint {
+        GlyphPaint::Outline { .. } => Some(OutlineGlyph {
+          glyph: Arc::clone(placed.glyph),
+          offset: placed.offset,
+        }),
         _ => None,
       })
       .collect()
