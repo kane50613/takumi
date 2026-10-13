@@ -2706,3 +2706,21 @@ fn an_image_line_without_a_matching_family_keeps_the_default_font_strut() {
 
   assert_close(measured.height, 43.0);
 }
+
+#[test]
+fn a_box_hoisted_past_its_parent_keeps_its_static_position() {
+  let node = Node::container([Node::container([
+    Node::container([]).with_tw("block h-[50px]".parse().unwrap()),
+    Node::container([]).with_tw("absolute w-[20px] h-[20px]".parse().unwrap()),
+  ])
+  .with_tw("block pl-[30px]".parse().unwrap())])
+  .with_tw(
+    "relative block w-[400px] h-[300px] p-[10px]"
+      .parse()
+      .unwrap(),
+  );
+  let result = measure(node, create_test_viewport());
+  let hoisted = &result.children[0].children[1];
+
+  assert_eq!((hoisted.transform[4], hoisted.transform[5]), (40.0, 60.0));
+}
