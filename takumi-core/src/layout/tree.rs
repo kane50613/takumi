@@ -1,7 +1,7 @@
 use std::{
   borrow::Cow,
   cell::RefCell,
-  collections::HashMap,
+  collections::{HashMap, HashSet},
   hash::Hasher,
   iter::Copied,
   mem::{replace, take},
@@ -1005,12 +1005,10 @@ impl<'r> LayoutTree<'r> {
     // A box another node than its box-tree parent positioned resolves against that containing
     // block. Inline containing blocks are left out: their boxes now sit in their parent's space.
     let mut containing_blocks: HashMap<TaffyNodeId, TaffyNodeId> = HashMap::new();
+    let proxies: HashSet<TaffyNodeId> = self.inline_containing_blocks.iter().copied().collect();
 
     for (index, node) in self.nodes.iter().enumerate() {
-      if !self
-        .inline_containing_blocks
-        .contains(&TaffyNodeId::from(index))
-      {
+      if !proxies.contains(&TaffyNodeId::from(index)) {
         for &child in &node.hoisted_children {
           containing_blocks.insert(child, TaffyNodeId::from(index));
         }
