@@ -18,11 +18,10 @@ use taffy::{
   ContainingBlockClaims, CoreStyle, DetailedGridInfo, DetailedLayoutInfo, Dimension,
   Display as TaffyDisplay, Layout, LayoutBlockContainer, LayoutContainingBlock,
   LayoutFlexboxContainer, LayoutGridContainer, LayoutInput, LayoutOutput, LayoutPartialTree,
-  LengthPercentageAuto, Line, MaybeResolve, NodeId as TaffyNodeId, Position as TaffyPosition,
-  RequestedAxis, ResolveOrZero, RoundTree, RunMode, Size as TaffySize, SizingMode, Style,
-  TraversePartialTree, TraverseTree, compute_block_layout, compute_cached_layout,
-  compute_flexbox_layout, compute_grid_layout, compute_hidden_layout, compute_leaf_layout,
-  compute_oof_layout_for_area, compute_root_layout,
+  LengthPercentageAuto, Line, NodeId as TaffyNodeId, RequestedAxis, ResolveOrZero, RoundTree,
+  RunMode, Size as TaffySize, SizingMode, Style, TraversePartialTree, TraverseTree,
+  compute_block_layout, compute_cached_layout, compute_flexbox_layout, compute_grid_layout,
+  compute_hidden_layout, compute_leaf_layout, compute_oof_layout_for_area, compute_root_layout,
 };
 use xxhash_rust::xxh3::Xxh3;
 
@@ -155,9 +154,15 @@ struct LayoutResultNode {
 }
 
 impl LayoutResults {
-  /// Lays out the tree under `root` in `available_space`.
+  /// Lays out the tree under `root`, a box its parent placed, in `available_space`. The root's
+  /// margins shrink the space but leave its border box at the origin, where the parent expects it.
   pub fn compute(root: &RenderNode, available_space: Size<AvailableSpace>) -> Self {
-    Self::lay_out(root, available_space, false)
+    let mut results = Self::lay_out(root, available_space, false);
+
+    if let Some(root) = results.nodes.first_mut() {
+      root.layout.location = taffy::Point::ZERO;
+    }
+    results
   }
 
   /// [`Self::compute`] for paint: each inline formatting context keeps the fragment items it
@@ -1228,38 +1233,6 @@ impl<'r> LayoutTree<'r> {
     output.oof_candidates = result.unclaimed;
   }
 
-  /// The inputs an absolutely positioned box shrinks to fit: taffy offers it its whole
-  /// containing block, where CSS 2 §10.3.7 leaves out its insets and margins.
-  fn out_of_flow_inputs(&self, node: TaffyNodeId, mut inputs: LayoutInput) -> LayoutInput {
-    let (None, TaffyAvailableSpace::Definite(width)) =
-      (inputs.known_dimensions.width, inputs.available_space.width)
-    else {
-      return inputs;
-    };
-    let Some(style) = self.get_layout_node_ref(node).map(|node| &node.style) else {
-      return inputs;
-    };
-
-    if style.position != TaffyPosition::Absolute {
-      return inputs;
-    }
-
-    let basis = inputs.parent_size.width;
-    let calc = |value, basis| self.resolve_calc_value(value, basis);
-    let reserved = [style.inset.left, style.inset.right]
-      .into_iter()
-      .filter_map(|inset| inset.maybe_resolve(basis, calc))
-      .chain(
-        [style.margin.left, style.margin.right]
-          .into_iter()
-          .map(|margin| margin.resolve_or_zero(basis, calc)),
-      )
-      .sum::<f32>();
-
-    inputs.available_space.width = TaffyAvailableSpace::Definite((width - reserved).max(0.0));
-    inputs
-  }
-
   /// Lays out a grid, and the rows of a table lowered to one as Blink's `RowBaselineTabulator` aligns
   /// them: once to read its baseline-aligned cells' first baselines, then again with each one's
   /// content moved down to the deepest of its row. The deepest ascent plus descent then sizes the
@@ -1367,14 +1340,12 @@ impl<'r> LayoutTree<'r> {
     inputs: LayoutInput,
     block_ctx: Option<&mut BlockContext<'_>>,
   ) -> LayoutOutput {
-    // Styles resolve against the space taffy offered, before it shrinks for the insets.
     self.update_node_style_for_available_space(
       node,
       Size::from_taffy(inputs.available_space).map(AvailableSpace::from_taffy),
       Size::from_taffy(inputs.known_dimensions),
     );
 
-    let inputs = self.out_of_flow_inputs(node, inputs);
     let inputs = self.shrunk_table_inputs(node, inputs);
 
     if inputs.run_mode == RunMode::PerformHiddenLayout {
