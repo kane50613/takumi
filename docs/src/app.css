@@ -222,25 +222,3 @@
     animation: none;
   }
 }
-
-/* ─── Home outputs: the row slides past as the page scrolls, where scroll timelines exist ─── */
-
-@keyframes output-glide {
-  to {
-    transform: translateX(min(0px, calc(100vw - 100%)));
-  }
-}
-
-@supports (animation-timeline: view()) {
-  @media (prefers-reduced-motion: no-preference) and (min-width: 1024px) {
-    .output-scroller {
-      overflow-x: visible;
-    }
-
-    .output-track {
-      animation: output-glide linear both;
-      animation-timeline: view();
-      animation-range: cover 15% cover 85%;
-    }
-  }
-}

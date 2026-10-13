@@ -1,23 +1,21 @@
 import { Link } from "waku";
 import { Button } from "~/components/ui/button";
 import { cn } from "~/lib/utils";
-import { boxes, CARD, kilobytes, paintSteps, source } from "./card";
+import { boxes, CARD } from "./card";
 import { StageController } from "./stage-controller";
 import { DISPLAY, GUTTER, LEAD, LINK } from "./typography";
+import { UseCaseWall } from "./use-cases";
 
 const steps = [
-  { name: "JSX", detail: "A component with Tailwind classes. No browser, no DOM." },
-  { name: "Layout", detail: `Taffy places all ${boxes.length} boxes with flexbox.` },
-  { name: "Paint", detail: `The boxes become ${paintSteps.length} draw steps.` },
-  {
-    name: "Pixels",
-    detail: `${CARD.width * 2} × ${CARD.height * 2}, ${kilobytes(CARD.image)} as WebP.`,
-  },
+  { name: "Markup", detail: "JSX, HTML, and CSS become a tree of nodes." },
+  { name: "Layout", detail: "Taffy places each box. Parley and Skrifa shape the text." },
+  { name: "Paint", detail: "Each box becomes ordered draw steps: fills, text runs, images." },
+  { name: "Pixels", detail: "The raster backend fills the canvas and encodes the file." },
 ];
 
 /**
- * The homepage's opening: the hero over the card's own source, which scrolling turns into the
- * rendered card while the steps below name each phase.
+ * The homepage's opening: the headline, which scrolling breaks into the rendered card while the
+ * steps below name each phase.
  */
 export function Stage() {
   return (
@@ -31,7 +29,7 @@ export function Stage() {
         className="sticky top-14 flex h-[calc(100svh-3.5rem)] flex-col overflow-hidden"
       >
         <StageController
-          data={{ source, image: CARD.image, width: CARD.width, height: CARD.height, boxes }}
+          data={{ image: CARD.image, width: CARD.width, height: CARD.height, boxes }}
         />
 
         <div className={cn("relative min-h-0 flex-1 pt-[5svh]", GUTTER)}>
@@ -76,18 +74,16 @@ export function Stage() {
         </ol>
 
         <div className={cn("absolute inset-x-0 top-0 pt-[7svh]", GUTTER)}>
-          <div
-            data-hero
-            className="grid gap-x-12 gap-y-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,30rem)] lg:items-end"
-          >
-            <h1 id="home-title" className={DISPLAY}>
-              JSX to images.
-              <br />
-              No browser.
-            </h1>
-            <div className="space-y-5 lg:pb-2">
+          <h1 data-headline id="home-title" className={DISPLAY}>
+            One component,
+            <br />
+            every output.
+          </h1>
+          <div data-hero className="mt-[4svh] space-y-[5svh]">
+            <div className="grid gap-x-12 gap-y-6 lg:grid-cols-[minmax(0,36rem)_auto] lg:items-end">
               <p className={LEAD}>
-                Takumi renders OG images, social cards, and PDFs from JSX and CSS, in Rust.
+                Takumi renders JSX, HTML, and CSS to images, animations, SVG, PDF, or paint data. No
+                headless browser.
               </p>
               <div className="flex flex-wrap items-center gap-x-6 gap-y-3">
                 <Button
@@ -98,26 +94,12 @@ export function Stage() {
                   <Link to="/docs">Get started</Link>
                 </Button>
                 <Link to="/playground" className={cn(LINK, "text-lg")}>
-                  Playground
+                  Open playground
                 </Link>
-                <code className="font-mono text-base select-all">bun i takumi-js</code>
               </div>
             </div>
+            <UseCaseWall />
           </div>
-
-          <pre
-            data-source
-            aria-label="home-demo-card.tsx"
-            className="mt-[6svh] overflow-visible font-mono text-[0.9375rem] leading-[1.7] lg:text-base"
-          >
-            <code>
-              {source.map((line, index) => (
-                <span key={index} className="block whitespace-pre">
-                  {line || " "}
-                </span>
-              ))}
-            </code>
-          </pre>
         </div>
       </div>
     </section>

@@ -18,11 +18,10 @@ export function Live() {
         intro={
           <div className="space-y-4">
             <h2 id="live-title" className={H2}>
-              Now it’s yours.
+              Try it.
             </h2>
             <p className={BODY}>
-              Edit the headline. The same Rust renderer, compiled to WebAssembly, draws the card
-              again.
+              Edit the headline. Takumi’s WebAssembly build renders the card again in your browser.
             </p>
           </div>
         }
@@ -36,15 +35,17 @@ export function Live() {
               >
                 <Link to="/docs">Get started</Link>
               </Button>
+              <Link to="/playground" className={cn(LINK, "text-lg")}>
+                Open the full playground
+              </Link>
               <a
                 href="https://github.com/kane50613/takumi"
                 target="_blank"
                 rel="noopener noreferrer"
                 className={cn(LINK, "text-lg")}
               >
-                GitHub
+                View on GitHub
               </a>
-              <code className="font-mono text-base select-all">bun i takumi-js</code>
             </div>
             <p className={VALUE}>Layout by Taffy. Text by Parley and Skrifa. MIT or Apache-2.0.</p>
           </div>

@@ -15,7 +15,7 @@ type Props = {
 };
 
 /**
- * The homepage's last section: a headline field that takumi-wasm renders into the card on each
+ * The homepage's last section: a headline field that Takumi's WebAssembly build renders into the card on each
  * edit, in a worker that starts once the section comes near.
  */
 export function LiveCard({ node, headline, image, width, height, intro, outro }: Props) {
@@ -81,9 +81,7 @@ export function LiveCard({ node, headline, image, width, height, intro, outro }:
           }
           url = URL.createObjectURL(new Blob([data.image], { type: "image/webp" }));
           setSrc(url);
-          setStatus(
-            `Rendered in ${Math.max(1, Math.round(data.duration))} ms by takumi-wasm, in this tab.`,
-          );
+          setStatus(`Rendered in ${Math.max(1, Math.round(data.duration))} ms in this tab.`);
         } else {
           setStatus(`Could not render: ${data.message}`);
         }
@@ -94,7 +92,7 @@ export function LiveCard({ node, headline, image, width, height, intro, outro }:
       created.postMessage(setup);
       worker.current = created;
       if (pending.current !== undefined) {
-        setStatus("Loading takumi-wasm…");
+        setStatus("Loading the WebAssembly build…");
         sendRef.current(pending.current);
       }
     };
@@ -141,6 +139,7 @@ export function LiveCard({ node, headline, image, width, height, intro, outro }:
             maxLength={80}
             spellCheck={false}
             autoComplete="off"
+            placeholder="Type a new headline"
             onChange={(event) => {
               setText(event.target.value);
               send(event.target.value);

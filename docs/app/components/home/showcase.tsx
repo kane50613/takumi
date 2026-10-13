@@ -8,12 +8,13 @@ export function Showcase() {
     <section aria-labelledby="showcase-title" className={cn("py-[8svh]", GUTTER)}>
       <div className="mb-10 max-w-[52rem] space-y-4">
         <h2 id="showcase-title" className={H2}>
-          In production.
+          Rendering in production.
         </h2>
         <p className={BODY}>
-          Dcard share cards, Fumadocs OG images, and the renderer behind Nuxt OG Image.{" "}
+          Dcard, TanStack, Fumadocs, and Luma render share images with Takumi. Nuxt OG Image ships
+          it as a built-in renderer.{" "}
           <Link to="/showcase" className={LINK}>
-            See all projects
+            View showcase
           </Link>
         </p>
       </div>

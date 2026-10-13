@@ -29,8 +29,8 @@ function canRunScene() {
 }
 
 /**
- * Drives the homepage stage from scroll: the hero leaves, the source hands over to the particle
- * scene, and the steps track the phase. Without the scene, the source fades into the card.
+ * Drives the homepage stage from scroll: the hero leaves, the headline hands over to the particle
+ * scene, and the steps track the phase. Without the scene, the headline fades and the card fades in.
  */
 export function StageController({ data }: { data: StageData }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -40,17 +40,18 @@ export function StageController({ data }: { data: StageData }) {
     const stage = canvas?.closest<HTMLElement>("[data-stage]");
     const view = stage?.querySelector<HTMLElement>("[data-stage-view]");
     const hero = stage?.querySelector<HTMLElement>("[data-hero]");
-    const source = stage?.querySelector<HTMLElement>("[data-source]");
+    const headline = stage?.querySelector<HTMLElement>("[data-headline]");
     const card = stage?.querySelector<HTMLElement>("[data-card]");
     const steps = stage?.querySelector<HTMLElement>("[data-steps]");
     const stepItems = [...(steps?.querySelectorAll<HTMLElement>("li") ?? [])];
 
-    if (!canvas || !stage || !view || !hero || !source || !card || !steps) {
+    if (!canvas || !stage || !view || !hero || !headline || !card || !steps) {
       return;
     }
 
     const reduceMotion = matchMedia("(prefers-reduced-motion: reduce)").matches;
     let scene: ParticleScene | undefined;
+    let sampleInk: ((heading: HTMLElement, origin: DOMRect) => Float32Array) | undefined;
     let disposed = false;
     let frame = 0;
     let target = 0;
@@ -68,25 +69,12 @@ export function StageController({ data }: { data: StageData }) {
 
     const stageLayout = (): StageLayout => {
       const origin = view.getBoundingClientRect();
-      const code = source.querySelector("code") ?? source;
-      const codeRect = code.getBoundingClientRect();
       const cardRect = card.getBoundingClientRect();
-      const style = getComputedStyle(code);
-      const context = document.createElement("canvas").getContext("2d");
-
-      if (context) {
-        context.font = `${style.fontSize} ${style.fontFamily}`;
-      }
 
       return {
         width: origin.width,
         height: origin.height,
-        source: {
-          left: codeRect.left - origin.left,
-          top: codeRect.top - origin.top,
-          charWidth: context?.measureText("0").width ?? parseFloat(style.fontSize) * 0.6,
-          lineHeight: parseFloat(style.lineHeight),
-        },
+        ink: sampleInk?.(headline, origin) ?? new Float32Array(),
         card: {
           left: cardRect.left - origin.left,
           top: cardRect.top - origin.top,
@@ -109,14 +97,14 @@ export function StageController({ data }: { data: StageData }) {
       if (scene) {
         const handedOff = p >= STAGE.handoff;
 
-        source.style.opacity = handedOff ? "0" : "1";
+        headline.style.opacity = handedOff ? "0" : "1";
         card.style.opacity = String(ramp(p, STAGE.image));
         canvas.style.visibility = handedOff && p < STAGE.image[1] ? "visible" : "hidden";
         if (canvas.style.visibility === "visible") {
           scene.render(p);
         }
       } else {
-        source.style.opacity = String(1 - ramp(p, [0.06, 0.2]));
+        headline.style.opacity = String(1 - heroOut);
         card.style.opacity = String(ramp(p, [0.2, 0.4]));
       }
 
@@ -171,16 +159,11 @@ export function StageController({ data }: { data: StageData }) {
       }
       started = true;
 
-      const code = source.querySelector("code") ?? source;
-      const style = getComputedStyle(code);
+      await document.fonts.ready;
 
-      await document.fonts.load(`${style.fontSize} ${style.fontFamily}`);
-
-      const { createParticleScene } = await import("./particle-scene");
-      const created = await createParticleScene(canvas, data, {
-        columns: view.clientWidth >= WIDE_MIN ? 160 : 96,
-        fontRatio: parseFloat(style.fontSize) / parseFloat(style.lineHeight),
-        fontFamily: style.fontFamily,
+      const module = await import("./particle-scene");
+      const created = await module.createParticleScene(canvas, data, {
+        columns: view.clientWidth >= WIDE_MIN ? 200 : 110,
         palette: readPalette(),
       });
 
@@ -189,6 +172,7 @@ export function StageController({ data }: { data: StageData }) {
         return;
       }
       scene = created;
+      sampleInk = module.sampleInk;
       scene.layout(stageLayout());
       apply(progress);
     };
