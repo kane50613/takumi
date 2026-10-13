@@ -1,8 +1,8 @@
-/** The homepage card, painted once while the site builds; every chapter of the scene reads from it. */
+/** The homepage card, rendered and painted once while the site builds; every section reads from it. */
 import { readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
-import { paint } from "takumi-paint";
-import { paintScene } from "~/components/mdx/paint/scene";
+import { fromJsx } from "takumi-js/helpers/jsx";
+import { type Drawable, type Paint, paint } from "takumi-paint";
 import { inspectPaint } from "~/playground/inspect-paint";
 import DemoCard, {
   height,
@@ -16,9 +16,11 @@ export const CARD = {
   width,
   height,
   image: "/images/twitter-images/home-demo-card@2x.webp",
+  png: "/images/twitter-images/home-demo-card.png",
   motion: "/images/twitter-images/home-demo-card-motion.webp",
   svg: "/images/twitter-images/home-demo-card.svg",
   frames: (animation.durationMs * animation.fps) / 1000,
+  headline: "This card is the code beside it.",
 };
 
 /** The size of a file under `public`, such as `32 KB`. */
@@ -34,38 +36,42 @@ export const source = sourceFile
   .trimEnd()
   .split("\n");
 
+/** The card as a node tree, which the live demo edits and renders again. */
+export const { node } = await fromJsx(<DemoCard />);
+
 const tree = await paint(<DemoCard />, { width, height });
 
-export const scene = paintScene(tree);
+function hex([red, green, blue]: readonly number[]) {
+  return `#${[red, green, blue].map((channel) => Math.round(channel).toString(16).padStart(2, "0")).join("")}`;
+}
 
-let sceneStep = -1;
+function paintLabel(value: Paint) {
+  return value.type === "color" ? hex(value.color) : value.type;
+}
 
-/** The scene's draw steps, each named by its index in `tree.steps` and its node. */
-export const layers = tree.steps.flatMap((step, order) => {
-  // paintScene drops draws with nothing to draw, so the scene's step indices skip them too.
-  if (step.type === "draw" && step.drawables.length === 0) {
+function drawableLabel(drawable: Drawable) {
+  switch (drawable.type) {
+    case "fill":
+      return `fill ${drawable.shape.type} ${paintLabel(drawable.paint)}`;
+    case "glyphs":
+      return `glyphs “${drawable.run.text.trim()}” ${paintLabel(drawable.paint)}`;
+    default:
+      return drawable.type;
+  }
+}
+
+/** The draw steps takumi-paint returns for the card, one line each, such as `steps[0] div fill rect #16130f`. */
+export const paintSteps = tree.steps.flatMap((step, index) => {
+  if (step.type !== "draw" || step.drawables.length === 0) {
     return [];
   }
-  sceneStep++;
 
   const name = step.node.type === "box" ? (step.node.element?.tagName ?? "box") : step.node.type;
 
-  return step.type === "draw" ? [{ step: sceneStep, label: `steps[${order}] ${name}` }] : [];
+  return step.drawables.map((drawable) => `steps[${index}] ${name} ${drawableLabel(drawable)}`);
 });
 
-const nodes = inspectPaint(tree).nodes.filter((node) => node.kind === "box" && node.depth > 0);
+const nodes = inspectPaint(tree).nodes.filter((entry) => entry.kind === "box" && entry.depth > 0);
 
 /** Every box below the root, with the rectangle layout gave it. */
-export const boxes = nodes.map(({ name, depth, bounds }) => ({
-  label: `${name} ${Math.round(bounds.width)}×${Math.round(bounds.height)}`,
-  depth,
-  ...bounds,
-  leaf: !nodes.some(
-    (other) =>
-      other.depth > depth &&
-      other.bounds.x >= bounds.x &&
-      other.bounds.y >= bounds.y &&
-      other.bounds.x + other.bounds.width <= bounds.x + bounds.width &&
-      other.bounds.y + other.bounds.height <= bounds.y + bounds.height,
-  ),
-}));
+export const boxes = nodes.map(({ depth, bounds }) => ({ depth, ...bounds }));

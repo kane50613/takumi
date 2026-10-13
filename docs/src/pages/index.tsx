@@ -1,7 +1,8 @@
 import { HomeLayout } from "fumadocs-ui/layouts/home";
-import { CTA } from "~/components/home/cta";
-import { Ecosystem } from "~/components/home/ecosystem";
+import { Live } from "~/components/home/live";
+import { Outputs } from "~/components/home/outputs";
 import { Showcase } from "~/components/home/showcase";
+import { Stage } from "~/components/home/stage";
 import { Seo, SiteJsonLd } from "~/components/seo";
 import { baseOptions } from "~/layout-config";
 
@@ -15,9 +16,10 @@ export default function Home() {
       <Seo title={TITLE} description={DESCRIPTION} path="" />
       <SiteJsonLd />
 
-      <Ecosystem />
+      <Stage />
+      <Outputs />
       <Showcase />
-      <CTA />
+      <Live />
     </HomeLayout>
   );
 }
