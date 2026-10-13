@@ -801,6 +801,71 @@ impl<'r> LayoutTree<'r> {
     self.nodes[0].style.size.width = Dimension::length(width.max(0.0));
   }
 
+  /// Places the out-of-flow boxes inside the inline formatting context `node` lays out as
+  /// `layout`: the ones an inline span or the context contains under the nodes standing in for
+  /// them, and the rest as candidates in `output` for taffy to carry to their containing block.
+  /// Kept out of the recursive layout closure, whose frame every level of the tree pays for.
+  #[inline(never)]
+  fn lay_out_inline_out_of_flow(
+    &mut self,
+    node: TaffyNodeId,
+    available_space: Size<AvailableSpace>,
+    layout: ComputedLayout,
+    output: &mut LayoutOutput,
+  ) {
+    let state = &self.nodes[usize::from(node)];
+    let render_node = self.render_nodes[usize::from(node)];
+    let proxies = state.children.clone();
+    let boxes: Vec<TaffyNodeId> = state
+      .box_children
+      .iter()
+      .map(|child| child.node_id.into_taffy())
+      .collect();
+    let containers: Vec<&RenderNode> = proxies
+      .iter()
+      .map(|&proxy| self.render_nodes[usize::from(proxy)])
+      .collect();
+    let (positions, containing_blocks) =
+      render_node.inline_out_of_flow_geometry(available_space, layout, &containers);
+    // Static positions arrive in the content box; candidates sit in the border box.
+    let content = Point {
+      x: layout.border.left + layout.padding.left,
+      y: layout.border.top + layout.padding.top,
+    };
+    let positions: HashMap<TaffyNodeId, StaticPosition> = boxes
+      .iter()
+      .zip(positions)
+      .map(|(&node, position)| {
+        (
+          node,
+          StaticPosition {
+            point: content + position.point,
+            ..position
+          },
+        )
+      })
+      .collect();
+
+    for (&proxy, padding_box) in proxies.iter().zip(containing_blocks) {
+      self.lay_out_inline_containing_block(proxy, padding_box, &positions);
+    }
+
+    for (order, &node) in boxes.iter().enumerate() {
+      let held = proxies
+        .iter()
+        .any(|&proxy| self.nodes[usize::from(proxy)].children.contains(&node));
+
+      if let (false, Some(position)) = (held, positions.get(&node)) {
+        output.oof_candidates.push(self.out_of_flow_candidate(
+          node,
+          order,
+          position.point,
+          position.from_end,
+        ));
+      }
+    }
+  }
+
   /// Lays out `proxy`, standing in for an inline containing block, over its padding box, and
   /// positions the out-of-flow boxes it contains from their static positions in `positions`.
   fn lay_out_inline_containing_block(
@@ -1483,59 +1548,12 @@ impl<'r> LayoutTree<'r> {
             && !node_data.box_children.is_empty()
             && inputs.run_mode == RunMode::PerformLayout
           {
-            let proxies = node_data.children.clone();
-            let containers: Vec<&RenderNode> = proxies
-              .iter()
-              .map(|&proxy| tree.render_nodes[usize::from(proxy)])
-              .collect();
-            let layout = border_box();
-            let (positions, containing_blocks) = render_node.inline_out_of_flow_geometry(
+            tree.lay_out_inline_out_of_flow(
+              node,
               Size::from_taffy(inputs.available_space).map(AvailableSpace::from_taffy),
-              layout,
-              &containers,
+              border_box(),
+              &mut output,
             );
-            // Static positions arrive in the content box; candidates sit in the border box.
-            let content = Point {
-              x: layout.border.left + layout.padding.left,
-              y: layout.border.top + layout.padding.top,
-            };
-            let boxes: Vec<TaffyNodeId> = node_data
-              .box_children
-              .iter()
-              .map(|child| child.node_id.into_taffy())
-              .collect();
-            let positions: HashMap<TaffyNodeId, StaticPosition> = boxes
-              .iter()
-              .zip(positions)
-              .map(|(&node, position)| {
-                (
-                  node,
-                  StaticPosition {
-                    point: content + position.point,
-                    ..position
-                  },
-                )
-              })
-              .collect();
-
-            for (proxy, padding_box) in proxies.iter().zip(containing_blocks) {
-              tree.lay_out_inline_containing_block(*proxy, padding_box, &positions);
-            }
-
-            // A box no inline span or this context contains escapes to taffy, which carries it up
-            // to its containing block.
-            for (order, &node) in boxes.iter().enumerate() {
-              let held = proxies
-                .iter()
-                .any(|&proxy| tree.nodes[usize::from(proxy)].children.contains(&node));
-
-              if let (false, Some(position)) = (held, positions.get(&node)) {
-                let candidate =
-                  tree.out_of_flow_candidate(node, order, position.point, position.from_end);
-
-                output.oof_candidates.push(candidate);
-              }
-            }
           }
 
           output
