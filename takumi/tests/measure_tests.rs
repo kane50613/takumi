@@ -2723,4 +2723,30 @@ fn a_box_hoisted_past_its_parent_keeps_its_static_position() {
   let hoisted = &result.children[0].children[1];
 
   assert_eq!((hoisted.transform[4], hoisted.transform[5]), (40.0, 60.0));
+||||||| parent of 4b4498974 (Layout: let taffy size images as replaced elements)
+const SQUARE_SVG: &str = r##"<svg width="100" height="100" viewBox="0 0 40 40" xmlns="http://www.w3.org/2000/svg"><rect width="40" height="40" fill="red"/></svg>"##;
+
+#[test]
+fn a_replaced_grid_item_keeps_its_natural_size_under_normal_alignment() {
+  let node = Node::container([Node::image(SQUARE_SVG).with_tag_name("svg")]).with_tw(
+    "grid w-[400px] h-[300px] grid-cols-[200px_200px] grid-rows-[300px]"
+      .parse()
+      .unwrap(),
+  );
+  let result = measure(node, create_test_viewport());
+  let image = &result.children[0];
+
+  assert_eq!((image.width, image.height), (100.0, 100.0));
+}
+
+#[test]
+fn an_absolute_replaced_box_keeps_its_natural_size_between_insets() {
+  let node = Node::container([Node::image(SQUARE_SVG)
+    .with_tag_name("svg")
+    .with_tw("absolute inset-0".parse().unwrap())])
+  .with_tw("relative w-[400px] h-[300px]".parse().unwrap());
+  let result = measure(node, create_test_viewport());
+  let image = &result.children[0];
+
+  assert_eq!((image.width, image.height), (100.0, 100.0));
 }

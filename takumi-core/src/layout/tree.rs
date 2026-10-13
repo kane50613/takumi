@@ -1747,7 +1747,10 @@ impl RenderNode {
   fn layout_style(&self, sizing: &SizingContext) -> taffy::Style {
     match self.layout_style_override.as_deref() {
       Some(style) => style.clone(),
-      None => self.context.style.to_taffy_style(sizing),
+      None => taffy::Style {
+        item_is_replaced: self.node.as_ref().is_some_and(Node::is_replaced_element),
+        ..self.context.style.to_taffy_style(sizing)
+      },
     }
   }
 
