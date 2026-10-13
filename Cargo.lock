@@ -1895,6 +1895,7 @@ dependencies = [
  "napi-derive",
  "rayon",
  "serde",
+ "serde_json",
  "takumi-bindings-common",
  "takumi-core",
  "takumi-raster",

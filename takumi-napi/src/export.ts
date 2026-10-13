@@ -12,6 +12,7 @@ import { Renderer as RendererInternal } from "../index";
 export { setGlyphCacheMaxBytes } from "../index";
 
 import { FontRegistry, prepareRenderInput } from "@takumi-rs/helpers/renderer";
+import { toNativeSource } from "./node-source";
 import type {
   BackendAnimationOptions,
   BackendRenderOptions,
@@ -42,17 +43,17 @@ export class Renderer {
 
   async render(node: Node, options?: RenderOptions) {
     const { options: opts, signal } = await prepareRenderInput(this.fonts, options ?? {}, node);
-    return this.inner.render(node, opts, signal);
+    return this.inner.render(toNativeSource(node), opts, signal);
   }
 
   async renderSvg(node: Node, options?: SvgRenderOptions) {
     const { options: opts, signal } = await prepareRenderInput(this.fonts, options ?? {}, node);
-    return this.inner.renderSvg(node, opts, signal);
+    return this.inner.renderSvg(toNativeSource(node), opts, signal);
   }
 
   async measure(node: Node, options?: RenderOptions) {
     const { options: opts, signal } = await prepareRenderInput(this.fonts, options ?? {}, node);
-    return this.inner.measure(node, opts, signal);
+    return this.inner.measure(toNativeSource(node), opts, signal);
   }
 
   async renderAnimation(options: RenderAnimationOptions) {
