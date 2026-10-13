@@ -28,6 +28,14 @@ describe("fromJsx", () => {
     } satisfies TextNode);
   });
 
+  test("leaves out an empty or null style", async () => {
+    for (const style of [{}, null]) {
+      const { node } = await fromJsx({ type: "div", props: { style, children: "x" } });
+
+      expect(node).not.toHaveProperty("style");
+    }
+  });
+
   test("converts text to TextNode", async () => {
     const { node } = await fromJsx("Hello World");
     expect(node).toEqual({

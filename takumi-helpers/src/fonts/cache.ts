@@ -1,4 +1,5 @@
-import { fetchOk, type FetchLike, type FetchOptions, readBodyLimited } from "../fetch";
+import type { FetchLike, FetchOptions } from "../fetch";
+import { fetchBytes } from "../fetch/bytes";
 
 const chromeUserAgent =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
@@ -75,12 +76,11 @@ export class FontStylesheetCache {
   }
 
   private static read(url: string, options: FetchOptions) {
-    return fetchOk(url, {
-      ...options,
-      init: { headers: { "User-Agent": chromeUserAgent } },
-    })
-      .then((r) => readBodyLimited(r, options.maxBytes ?? maxCssBytes))
-      .then((buffer) => new TextDecoder().decode(buffer));
+    return fetchBytes(
+      url,
+      { ...options, init: { headers: { "User-Agent": chromeUserAgent } } },
+      maxCssBytes,
+    ).then((buffer) => new TextDecoder().decode(buffer));
   }
 
   static load(
