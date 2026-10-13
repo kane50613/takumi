@@ -471,9 +471,9 @@ pub(crate) fn render_mask(
 /// Whether a fill of `size` at `transform` fits the glyph cache: its rasterized bounds, a byte a
 /// pixel, within [`max_entry_bytes`].
 fn fits_glyph_cache(size: Size<f32>, transform: Affine) -> bool {
-  transformed_rect_extents(Point::ZERO, size, transform).is_some_and(
-    |(left, top, right, bottom)| (right - left) * (bottom - top) <= max_entry_bytes() as f32,
-  )
+  transformed_placement(Point::ZERO, size, transform).is_some_and(|placement| {
+    u64::from(placement.width) * u64::from(placement.height) <= max_entry_bytes()
+  })
 }
 
 /// [`render_mask`] of `paths`, filled at `transform` within `cull`, kept in the glyph cache when
@@ -788,10 +788,13 @@ mod tests {
   #[test]
   fn the_cache_takes_a_fill_by_its_rasterized_bounds() {
     let strip = Size::new(1_000.0, 1.0);
+    let widest = Size::new(max_entry_bytes() as f32, 1.0);
 
     assert!(fits_glyph_cache(Size::new(270.0, 70.0), Affine::IDENTITY));
     assert!(fits_glyph_cache(strip, Affine::IDENTITY));
     assert!(!fits_glyph_cache(strip, Affine::rotation(Angle::new(45.0))));
+    assert!(fits_glyph_cache(widest, Affine::IDENTITY));
+    assert!(!fits_glyph_cache(widest, Affine::translation(0.5, 0.5)));
   }
 
   #[test]
