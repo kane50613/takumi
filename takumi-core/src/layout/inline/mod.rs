@@ -656,31 +656,14 @@ impl LineIndent {
   fn apply(self, layout: &mut InlineLayout) {
     layout.set_text_indent(self.amount, self.options);
   }
+}
 
-  /// The indent of each line of `layout`, as parley's `resolve_indent` gives it while breaking.
-  pub(super) fn per_line(self, layout: &InlineLayout) -> impl Iterator<Item = f32> + '_ {
-    let mut previous = None;
-
-    layout.lines().map(move |line| {
-      let starts_scope = match previous {
-        None => true,
-        Some(reason) => self.options.each_line && reason == BreakReason::Explicit,
-      };
-
-      previous = Some(line.break_reason());
-
-      if starts_scope != self.options.hanging {
-        self.amount
-      } else {
-        0.0
-      }
-    })
-  }
-
-  /// The indent of the last line of `layout`.
-  pub(super) fn last_line(self, layout: &InlineLayout) -> f32 {
-    self.per_line(layout).last().unwrap_or(0.0)
-  }
+/// The indent parley gave the last line of `layout`.
+pub(super) fn last_line_indent(layout: &InlineLayout) -> f32 {
+  layout
+    .lines()
+    .last()
+    .map_or(0.0, |line| line.metrics().indent)
 }
 
 fn inline_line_height_hint(style: &SizedFontStyle) -> f32 {
@@ -1250,7 +1233,7 @@ pub fn create_inline_layout<'c>(request: InlineLayoutRequest<'c>) -> BuiltInline
         Vec::new()
       };
       let last_fit = fits.last().copied().unwrap_or(LineFit::NONE);
-      let indent = LineIndent::of(style, max_width).last_line(layout);
+      let indent = last_line_indent(layout);
       let is_overflowing = layout.lines().last().is_some_and(|last_line| {
         last_line.text_range().end < text.len()
           || ellipsis_on_overflow
