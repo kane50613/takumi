@@ -72,6 +72,11 @@ const TEST_FONTS: &[(&str, &str, GenericFamily)] = &[
     "Poppins Bold",
     GenericFamily::SANS_SERIF,
   ),
+  (
+    "assets/fonts/manrope/manrope-latin-wght-normal.woff2",
+    "Manrope",
+    GenericFamily::SANS_SERIF,
+  ),
 ];
 
 const IMAGES: &[&str] = &[

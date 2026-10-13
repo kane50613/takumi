@@ -52,12 +52,15 @@ impl FontVariantLigatures {
     true
   }
 
-  pub(crate) fn append_features(&self, out: &mut Vec<FontFeature>) {
+  /// Non-zero `letter-spacing` turns every group off, as in Blink's `FontFeatures::Initialize`.
+  pub(crate) fn append_features(&self, letter_spacing: bool, out: &mut Vec<FontFeature>) {
+    let ligatures = if letter_spacing { Self::none() } else { *self };
+
     for (state, tags) in [
-      (self.common, &[b"liga", b"clig"][..]),
-      (self.discretionary, &[b"dlig"][..]),
-      (self.historical, &[b"hlig"][..]),
-      (self.contextual, &[b"calt"][..]),
+      (ligatures.common, &[b"liga", b"clig"][..]),
+      (ligatures.discretionary, &[b"dlig"][..]),
+      (ligatures.historical, &[b"hlig"][..]),
+      (ligatures.contextual, &[b"calt"][..]),
     ] {
       let value = match state {
         LigatureState::Normal => continue,
