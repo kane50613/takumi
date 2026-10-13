@@ -2751,3 +2751,21 @@ fn an_absolute_replaced_box_keeps_its_natural_size_between_insets() {
 
   assert_eq!((image.width, image.height), (100.0, 100.0));
 }
+
+#[test]
+fn an_inline_flex_resolves_a_percentage_height_before_sizing_its_width() {
+  let node = Node::container([
+    Node::text("x"),
+    Node::container([Node::container([]).with_tw("block aspect-square".parse().unwrap())])
+      .with_tw("inline-flex h-[50%]".parse().unwrap()),
+  ])
+  .with_tw("block w-[400px] h-[200px] text-[20px]".parse().unwrap());
+  let result = measure(node, create_test_viewport());
+  let sizes: Vec<(f32, f32)> = result
+    .children
+    .iter()
+    .map(|child| (child.width, child.height))
+    .collect();
+
+  assert_eq!(sizes.last(), Some(&(100.0, 100.0)), "{sizes:?}");
+}
