@@ -18,7 +18,7 @@ use image::{
 };
 use mask::MaskStackEntry;
 pub(crate) use mask::{
-  CanvasViewport, MaskView, NodeMasks, attenuate_alpha_by_mask, clip_node_mask, cull_bounds,
+  CanvasViewport, MaskView, NodeMasks, PlacedMask, attenuate_alpha_by_mask, cull_bounds,
   intersect_alpha_masks, render_mask,
 };
 pub(crate) use paint_source::{
@@ -364,11 +364,12 @@ impl Canvas {
     self.constraint_mask_stack.is_empty()
   }
 
-  pub(crate) fn push_mask(&mut self, mask: TinyMask) {
-    let mask = self.intersect_with_constraint_mask(mask);
+  pub(crate) fn push_mask(&mut self, mask: PlacedMask) {
+    let PlacedMask { mask, origin } = self.intersect_with_constraint_mask(mask);
+
     self.constraint_mask_stack.push(MaskStackEntry {
       mask: Arc::new(mask),
-      origin: self.origin,
+      origin,
     });
   }
 
@@ -561,9 +562,9 @@ impl Canvas {
     f(&mut target)
   }
 
-  fn intersect_with_constraint_mask(&self, mut mask: TinyMask) -> TinyMask {
+  fn intersect_with_constraint_mask(&self, mut placed: PlacedMask) -> PlacedMask {
     let Some(previous) = self.constraint_mask_stack.last() else {
-      return mask;
+      return placed;
     };
 
     let previous = MaskView {
@@ -571,10 +572,17 @@ impl Canvas {
       origin: previous.origin,
       canvas_origin: self.origin,
     };
-    let mask_width = mask.width() as usize;
+    let mask_width = placed.mask.width() as usize;
+    let left = placed.origin.x as i32 - self.origin.x as i32;
+    let top = placed.origin.y as i32 - self.origin.y as i32;
 
-    for (y, row) in mask.data_mut().chunks_exact_mut(mask_width).enumerate() {
-      let (first, lefts) = previous.row(y as i32, 0).covered(mask_width);
+    for (y, row) in placed
+      .mask
+      .data_mut()
+      .chunks_exact_mut(mask_width)
+      .enumerate()
+    {
+      let (first, lefts) = previous.row(top + y as i32, left).covered(mask_width);
       let (outside, rest) = row.split_at_mut(first);
       let (inside, past) = rest.split_at_mut(lefts.len());
 
@@ -591,7 +599,7 @@ impl Canvas {
       }
       intersect_alphas(right_tail, left_tail);
     }
-    mask
+    placed
   }
 
   fn localize_transform(&self, transform: Affine) -> Affine {
