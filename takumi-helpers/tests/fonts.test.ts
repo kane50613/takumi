@@ -438,6 +438,36 @@ describe("subsetFonts", () => {
     expect(subsetFonts({ fonts: [fallback, greek], source: "Hi" })).toEqual([fallback]);
   });
 
+  test("keeps the subsets that checking every codepoint against every range keeps", () => {
+    let seed = 1;
+    const random = (limit: number) => {
+      seed = (seed * 1_103_515_245 + 12_345) % 2 ** 31;
+
+      return seed % limit;
+    };
+    const codepoint = () => (random(4) === 0 ? 0x1f000 + random(0x1000) : random(0x3000));
+    const fonts = Array.from({ length: 400 }, (_, index) => ({
+      name: `font ${index}`,
+      ranges: Array.from({ length: random(4) }, (): [number, number] => {
+        const lo = codepoint();
+
+        return [lo, random(5) === 0 ? lo - 1 : lo + random(64)];
+      }),
+    }));
+
+    for (let round = 0; round < 50; round++) {
+      const source = String.fromCodePoint(...Array.from({ length: random(40) }, codepoint));
+      const codepoints = [...source].map((ch) => ch.codePointAt(0) ?? 0);
+      const covering = fonts.filter(
+        ({ ranges }) =>
+          ranges.length === 0 ||
+          codepoints.some((cp) => ranges.some(([lo, hi]) => cp >= lo && cp <= hi)),
+      );
+
+      expect(subsetFonts({ fonts, source })).toEqual(covering);
+    }
+  });
+
   test("keeps a bare URL string (no ranges) regardless of content", () => {
     const url = "https://example.com/Inter.woff2";
 
