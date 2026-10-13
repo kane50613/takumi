@@ -79,6 +79,18 @@ async function render(
   await writeFile(join("output", `${module.name}${frameSuffix}${ratioSuffix}.${format}`), buffer);
 }
 
+async function renderSvgFile(module: Component) {
+  const renderer = new Renderer();
+  const { node, css } = await fromJsx(<module.default />);
+  const svg = await renderer.renderSvg(node, {
+    width: module.width,
+    height: module.height,
+    css: [...css, ...("css" in module ? module.css : [])],
+  });
+
+  await writeFile(join("output", `${module.name}.svg`), svg);
+}
+
 for (const component of components) {
   if ("timestamps" in component) {
     for (const [index, timeMs] of component.timestamps.entries()) {
@@ -89,4 +101,8 @@ for (const component of components) {
 
   await render(component);
   await render(component, 2, "webp");
+
+  if ("svg" in component) {
+    await renderSvgFile(component);
+  }
 }

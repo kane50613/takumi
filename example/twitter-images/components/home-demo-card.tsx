@@ -5,6 +5,9 @@ export const fonts = [];
 export const width = 1200;
 export const height = 630;
 
+// The docs homepage shows the SVG output beside the raster ones.
+export const svg = true;
+
 // Shown verbatim as the code sample on the docs homepage; keep it in sync.
 export default function DemoCard() {
   return (
