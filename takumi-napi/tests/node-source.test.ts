@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
-import { container, image, text } from "@takumi-rs/helpers";
+import { container, type Declarations, image, text } from "@takumi-rs/helpers";
 import { type Node, Renderer } from "../index";
 import { toNativeSource } from "../src/node-source";
 
@@ -12,6 +12,13 @@ await renderer.registerFont(
 );
 
 const options = { width: 240, height: 120, format: "raw" as const };
+
+/** `levels` nodes deep: 2 * `levels` - 1 JSON levels, one more with `style`. */
+const nested = (levels: number, style?: Declarations): Node =>
+  Array.from({ length: levels - 1 }).reduce<Node>(
+    (child) => container({ children: [child] }),
+    text("deep", style),
+  );
 
 const card = container({
   style: {
@@ -52,6 +59,24 @@ describe("toNativeSource", () => {
     expect(toNativeSource(node)).toBe(node);
   });
 
+  test("passes JSON only as deep as the native parser reads", async () => {
+    const deepest = nested(64);
+    const deeper = nested(64, { fontSize: 12 });
+    const source = toNativeSource(deepest);
+
+    expect(typeof source).toBe("string");
+    expect(
+      Buffer.compare(
+        await renderer.render(source, options),
+        await renderer.render(deepest, options),
+      ),
+    ).toBe(0);
+    expect(toNativeSource(deeper)).toBe(deeper);
+    await expect(renderer.render(JSON.stringify(deeper), options)).rejects.toThrow(
+      "recursion limit exceeded",
+    );
+  });
+
   test("keeps a cyclic tree as the tree", () => {
     const node = container({ children: [] });
 
@@ -68,10 +93,19 @@ describe("a JSON source", () => {
     expect(Buffer.compare(fromJson, fromTree)).toBe(0);
   });
 
+  test("renders a tree nested as deep as the tree allows", async () => {
+    const node = nested(512);
+    const fromTree = await renderer.render(node, options);
+    const fromJson = await renderer.render(toNativeSource(node), options);
+
+    expect(Buffer.compare(fromJson, fromTree)).toBe(0);
+  });
+
   test.each([
     ["an unreadable value", text("x", { width: "wider" })],
     ["a value of the wrong type", text("x", { justifyContent: 123 as unknown as "center" })],
     ["no type", { text: "x" } as unknown as Node],
+    ["nesting past the limit", nested(513)],
   ])("fails on %s with the tree's message", async (_, node) => {
     const message = (source: Node | string) =>
       Promise.resolve()
