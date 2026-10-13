@@ -774,6 +774,9 @@ impl RenderContext {
       let mut result = None;
 
       query.set_families(families);
+      // Past the listed families, Blink takes the default font; text without a listed family
+      // shapes with the fallback bucket, which carries one family order for every script.
+      query.set_fallbacks(FallbackKey::new(Script::from_bytes(*b"Latn"), None));
       query.set_attributes(attributes);
 
       query.matches_with(|font| {
