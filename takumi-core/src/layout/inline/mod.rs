@@ -2010,6 +2010,41 @@ mod tests {
   }
 
   #[test]
+  fn a_newline_after_a_space_still_breaks_the_line() {
+    let fonts = create_test_context();
+    let context = RenderContext::builder()
+      .fonts(fonts.snapshot_with_fallbacks(None))
+      .sizing(
+        SizingContext::builder()
+          .viewport(Viewport::new((1200, 630)))
+          .build(),
+      )
+      .build();
+    let node = Node::container([Node::text("ab \ncd".to_string())]).with_style(
+      Style::default()
+        .with(StyleDeclaration::display(Display::Block))
+        .with_white_space(WhiteSpace::pre_wrap()),
+    );
+    let render_node = RenderNode::from_node(&context, node);
+    let font_style = SizedFontStyle::from_style(&render_node.context.style, &render_node.context);
+    let built = create_inline_layout(InlineLayoutRequest {
+      items: collect_inline_items(&render_node),
+      available_space: Size {
+        width: AvailableSpace::Definite(1200.0),
+        height: AvailableSpace::Definite(630.0),
+      },
+      max_width: 1200.0,
+      max_height: None,
+      style: &font_style,
+      context: &render_node.context,
+      mode: InlineLayoutMode::Draw,
+      shape_cacheable: false,
+    });
+
+    assert_eq!(built.layout.lines().count(), 2);
+  }
+
+  #[test]
   fn plain_text_keeps_its_glyphs_simple() {
     let fonts = create_test_context();
     let context = RenderContext::builder()
