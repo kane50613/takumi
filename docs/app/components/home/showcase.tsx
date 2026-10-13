@@ -1,37 +1,27 @@
 import { Link } from "waku";
 import { PROJECT_LINK_REL, showcaseProjects } from "~/data/showcase";
-import { H2, LEAD, LINK, Section, TEXT_COLUMN, VISUAL_COLUMN } from "./section";
-
-function User({ href, children }: { href: string; children: string }) {
-  return (
-    <a href={href} target="_blank" rel="noopener noreferrer" className={`${LINK} text-foreground`}>
-      {children}
-    </a>
-  );
-}
+import { H2, LINE, LINK } from "./typography";
 
 export function Showcase() {
   return (
-    <Section>
-      <div className={`${TEXT_COLUMN} space-y-6`}>
+    <section className="relative z-10 px-6 py-28 lg:px-[max(6vw,2rem)]">
+      <div className="mb-10 space-y-4 lg:w-[26rem]">
         <h2 className={H2}>In production.</h2>
-        <p className={LEAD}>
-          <User href="https://dcard.tw">Dcard</User> share cards.{" "}
-          <User href="https://fumadocs.dev">Fumadocs</User> OG images. Built into{" "}
-          <User href="https://nuxtseo.com/docs/og-image/renderers/takumi">Nuxt OG Image</User>.
+        <p className={LINE}>
+          Dcard share cards, Fumadocs OG images, and the renderer behind Nuxt OG Image.{" "}
+          <Link to="/showcase" className={LINK}>
+            See all projects
+          </Link>
         </p>
-        <Link to="/showcase" className={`${LINK} text-sm`}>
-          View all projects
-        </Link>
       </div>
-      <div className={`${VISUAL_COLUMN} grid grid-cols-2 gap-4`}>
-        {showcaseProjects.slice(0, 6).map((project) => (
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        {showcaseProjects.slice(0, 4).map((project) => (
           <a
             key={project.url}
             href={project.url}
             target="_blank"
             rel={PROJECT_LINK_REL}
-            className="overflow-hidden rounded-lg border transition-[border-color] duration-150 ease-out hover:border-foreground/30"
+            className="overflow-hidden rounded-md border transition-[border-color] duration-150 ease-out hover:border-foreground/40"
           >
             <img
               src={project.image}
@@ -40,11 +30,11 @@ export function Showcase() {
               height={project.height}
               loading="lazy"
               decoding="async"
-              className="w-full h-auto aspect-40/21 object-cover"
+              className="aspect-40/21 h-auto w-full object-cover"
             />
           </a>
         ))}
       </div>
-    </Section>
+    </section>
   );
 }

@@ -189,7 +189,7 @@ function sourceName(src: string) {
   return truncate(src.slice(src.lastIndexOf("/") + 1) || src, NAME_LENGTH);
 }
 
-export function describePaint(paint: Paint): Omit<PropertyRow, "label"> {
+function describePaint(paint: Paint): Omit<PropertyRow, "label"> {
   switch (paint.type) {
     case "color":
       return { value: colorText(paint.color), swatch: cssColor(paint.color) };
@@ -232,7 +232,7 @@ function describeShape(shape: Shape) {
   }
 }
 
-export function describeDrawable(drawable: Drawable): PropertyRow {
+function describeDrawable(drawable: Drawable): PropertyRow {
   switch (drawable.type) {
     case "fill": {
       const { value, swatch } = describePaint(drawable.paint);

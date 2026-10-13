@@ -1,38 +1,31 @@
 import { Link } from "waku";
-import { Code, H2, LEAD, LINK, Section, TEXT_COLUMN, VISUAL_COLUMN } from "./section";
-import type { ThemedHtml } from "./shiki-html";
+import { Button } from "~/components/ui/button";
+import { H2, LINE, LINK, VALUE } from "./typography";
 
-export function CTA({ install }: { install: ThemedHtml }) {
+export function CTA() {
   return (
-    <Section className="pb-32 lg:pb-40">
-      <div className={`${TEXT_COLUMN} space-y-6`}>
+    <section className="relative z-10 px-6 pt-12 pb-36 lg:px-[max(6vw,2rem)]">
+      <div className="space-y-4 lg:w-[26rem]">
         <h2 className={H2}>Render your first image.</h2>
-        <p className={LEAD}>
-          Native on Node.js and Bun. WebAssembly on Workers and browsers. A crate for Rust.
-        </p>
-      </div>
-      <div className={`${VISUAL_COLUMN} space-y-6`}>
-        <Code html={install} />
-        <div className="flex flex-wrap gap-6 text-sm">
-          <Link to="/docs" className={LINK}>
-            Quick start
-          </Link>
-          <Link to="/playground" className={LINK}>
-            Playground
-          </Link>
+        <p className={LINE}>Install the package, then read the quick start.</p>
+        <p className="font-mono text-sm select-all">bun i takumi-js</p>
+        <div className="flex items-center gap-6 pt-2">
+          <Button asChild size="lg" className="px-7 font-semibold active:scale-[0.97]">
+            <Link to="/docs">Get started</Link>
+          </Button>
           <a
             href="https://github.com/kane50613/takumi"
             target="_blank"
             rel="noopener noreferrer"
-            className={LINK}
+            className={`${LINK} text-sm`}
           >
             GitHub
           </a>
         </div>
-        <p className="text-sm text-muted-foreground">
-          Layout by Taffy, text by Parley and Skrifa, SVG by resvg. MIT or Apache-2.0.
+        <p className={`${VALUE} pt-6`}>
+          Layout by Taffy · text by Parley and Skrifa · MIT or Apache-2.0
         </p>
       </div>
-    </Section>
+    </section>
   );
 }
