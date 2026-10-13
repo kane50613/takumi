@@ -1,3 +1,13 @@
+## @takumi-rs/helpers@2.15.2
+
+### Skip emoji scanning for plain text
+
+`extractEmojis` segments text into graphemes only when it holds an `Extended_Pictographic` or `Regional_Indicator` codepoint or a keycap mark (U+20E3). A 48-card dashboard without emoji goes through it in 0.02 ms instead of 0.33 ms per render.
+
+### Pick font subsets faster
+
+`subsetFonts`, which every render with `fonts` runs, finds the subsets the text needs by binary search instead of checking every character against every range. With Noto Sans JP, Noto Sans TC, and Inter from Google Fonts, it takes 0.3 ms per render instead of 3.6 ms.
+
 ## @takumi-rs/helpers@2.15.0
 
 ### Repeat table headers and footers on every page, as Chrome prints them
