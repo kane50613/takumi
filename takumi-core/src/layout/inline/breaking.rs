@@ -31,7 +31,7 @@ pub(super) fn distribute_trailing_whitespace(
   rtl_paragraph: bool,
 ) -> Vec<HangingWhitespace> {
   let mut shares = vec![HangingWhitespace::default(); items.len()];
-  let mut remaining = line.metrics().hanging_advance + unhung_trailing_whitespace(line, text);
+  let mut remaining = hanging_advance(line, text);
   let fraction = alignment_fraction(line, alignment, rtl_paragraph);
   let count = items.len();
 
@@ -57,6 +57,12 @@ pub(super) fn distribute_trailing_whitespace(
   }
 
   shares
+}
+
+/// The width of the whitespace that hangs past the end of `line`: what parley hangs, plus what
+/// [`unhung_trailing_whitespace`] finds it left inside.
+pub(super) fn hanging_advance(line: &Line<'_, InlineBrush>, text: &str) -> f32 {
+  line.metrics().hanging_advance + unhung_trailing_whitespace(line, text)
 }
 
 /// The whitespace at the end of a soft-wrapped `line` that parley leaves inside it.

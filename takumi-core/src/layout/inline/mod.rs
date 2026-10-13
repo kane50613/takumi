@@ -336,7 +336,8 @@ impl BuiltInlineLayout<'_> {
           return metrics.inline_min_coord + metrics.advance;
         }
 
-        let (text_advance, static_advance) = text_fit_line_advance(&line, self.layout.is_rtl());
+        let (text_advance, static_advance) =
+          text_fit_line_advance(&line, &self.text, self.layout.is_rtl());
         let scale = self.line_fit(index).scale;
 
         metrics.inline_min_coord + static_advance + text_advance * scale
@@ -1257,7 +1258,7 @@ pub fn create_inline_layout<'c>(request: InlineLayoutRequest<'c>) -> BuiltInline
       // before InlineLayoutAlgorithm::CreateLine), so only a line still too
       // wide at its fitted scale is ellipsed, at that scale.
       let fits = if fits_text {
-        text_fit_lines(layout, max_width, style, None)
+        text_fit_lines(layout, text, max_width, style, None)
       } else {
         Vec::new()
       };
@@ -1266,7 +1267,7 @@ pub fn create_inline_layout<'c>(request: InlineLayoutRequest<'c>) -> BuiltInline
       let is_overflowing = layout.lines().last().is_some_and(|last_line| {
         last_line.text_range().end < text.len()
           || ellipsis_on_overflow
-            && last_fit.content_end(&last_line, layout.is_rtl(), indent)
+            && last_fit.content_end(&last_line, text, layout.is_rtl(), indent)
               > max_width + LAYOUT_UNIT_EPSILON
       });
 
@@ -1304,7 +1305,13 @@ pub fn create_inline_layout<'c>(request: InlineLayoutRequest<'c>) -> BuiltInline
   }
 
   if fits_text {
-    built.line_fits = text_fit_lines(&built.layout, max_width, style, kept_fits.as_deref());
+    built.line_fits = text_fit_lines(
+      &built.layout,
+      &built.text,
+      max_width,
+      style,
+      kept_fits.as_deref(),
+    );
   }
 
   built.layout.align(
@@ -1618,8 +1625,8 @@ mod tests {
   use std::{fs::File, io::Read, path::Path, sync::Arc};
 
   use super::{
-    decorations::DecorationPlacement, outline::InlineOutline, runs::slice_text_at_char_boundaries,
-    *,
+    breaking::hanging_advance, decorations::DecorationPlacement, outline::InlineOutline,
+    runs::slice_text_at_char_boundaries, *,
   };
   use crate::{
     Fonts,
@@ -1952,6 +1959,54 @@ mod tests {
         first.offset
       );
     }
+  }
+
+  #[test]
+  fn text_fit_measures_an_opposite_direction_run_without_its_hanging_spaces() {
+    const WIDTH: f32 = 160.0;
+
+    let fonts = create_test_context();
+    let context = RenderContext::builder()
+      .fonts(fonts.snapshot_with_fallbacks(None))
+      .sizing(
+        SizingContext::builder()
+          .viewport(Viewport::new((1200, 630)))
+          .build(),
+      )
+      .build();
+    let node = Node::container([Node::text("words that wrap across lines".to_string())])
+      .with_style(
+        Style::default()
+          .with(StyleDeclaration::display(Display::Block))
+          .with(StyleDeclaration::direction(Direction::Rtl))
+          .with(StyleDeclaration::font_size(FontSize::Length(Length::Px(
+            20.0,
+          )))),
+      );
+    let render_node = RenderNode::from_node(&context, node);
+    let font_style = SizedFontStyle::from_style(&render_node.context.style, &render_node.context);
+    let built = create_inline_layout(InlineLayoutRequest {
+      items: collect_inline_items(&render_node),
+      available_space: Size {
+        width: AvailableSpace::Definite(WIDTH),
+        height: AvailableSpace::Definite(630.0),
+      },
+      max_width: WIDTH,
+      max_height: None,
+      style: &font_style,
+      context: &render_node.context,
+      mode: InlineLayoutMode::Draw,
+      shape_cacheable: false,
+    });
+    let line = built.layout.lines().next().unwrap();
+    let hanging = hanging_advance(&line, &built.text);
+    let (text_advance, static_advance) = text_fit_line_advance(&line, &built.text, true);
+
+    assert!(hanging > 0.0, "no space hangs");
+    assert!(
+      (text_advance + static_advance - (line.metrics().advance - hanging)).abs() < 0.01,
+      "text-fit measures {text_advance} + {static_advance} with the hanging {hanging}"
+    );
   }
 
   #[test]
