@@ -302,9 +302,7 @@ class NodeBuilder implements RenderEnv {
       typeof element.type === "string" ? element.type : undefined,
       props,
       props.className ?? props.class,
-      typeof style === "object" && style !== null && Object.keys(style).length > 0
-        ? style
-        : undefined,
+      typeof style === "object" && style !== null ? style : undefined,
     );
   }
 }

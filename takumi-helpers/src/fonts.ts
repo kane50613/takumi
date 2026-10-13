@@ -1,6 +1,7 @@
 import type { GoogleFontShapeFamilies, GoogleFontShapes } from "./google-fonts-catalog";
 import type { Node } from "./types";
-import { defaultMaxFetchBytes, fetchOk, type FetchOptions, readBodyLimited } from "./fetch";
+import type { FetchOptions } from "./fetch";
+import { fetchBytes } from "./fetch/bytes";
 import { FontStylesheetCache } from "./fonts/cache";
 
 type FontStyle = "normal" | "italic";
@@ -187,10 +188,7 @@ function toSubset(
     style: face.style,
     ranges: face.ranges,
     generic,
-    data: () =>
-      fetchOk(face.url, options).then((r) =>
-        readBodyLimited(r, options.maxBytes ?? defaultMaxFetchBytes),
-      ),
+    data: () => fetchBytes(face.url, options),
   };
 }
 
@@ -383,10 +381,7 @@ export function subsetFonts<T>({ fonts, source }: { fonts: T[]; source: Codepoin
 export function fontFromUrl(url: string, options: FetchOptions = {}) {
   return {
     key: url,
-    data: () =>
-      fetchOk(url, options).then((r) =>
-        readBodyLimited(r, options.maxBytes ?? defaultMaxFetchBytes),
-      ),
+    data: () => fetchBytes(url, options),
   };
 }
 

@@ -1,6 +1,7 @@
 import type { CSSProperties } from "react";
 import type { Node } from "./types";
-import { defaultMaxFetchBytes, fetchOk, type FetchOptions, readBodyLimited } from "./fetch";
+import { defaultMaxFetchBytes, type FetchOptions } from "./fetch";
+import { fetchBytes } from "./fetch/bytes";
 import { FetchDeadline } from "./fetch/deadline";
 
 const cssUrlPattern = /url\(\s*(['"]?)(.*?)\1\s*\)/g;
@@ -86,12 +87,10 @@ function fetchImageData(
     });
   }
 
-  const promise = fetchOk(url, options)
-    .then((response) => readBodyLimited(response, maxBytes))
-    .catch((error) => {
-      fetchCache?.delete(url);
-      throw error;
-    });
+  const promise = fetchBytes(url, options).catch((error) => {
+    fetchCache?.delete(url);
+    throw error;
+  });
 
   fetchCache?.set(url, promise);
   return promise;
