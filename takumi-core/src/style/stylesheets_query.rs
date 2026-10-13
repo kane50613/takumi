@@ -492,17 +492,13 @@ impl ComputedStyle {
         left: self.box_data.padding_left,
       }
       .map(|padding| padding.resolve_to_length_percentage(sizing)),
-      inset: if self.base_data.position == Position::Static {
-        Rect::auto()
-      } else {
-        Rect {
-          top: self.surround_data.top,
-          right: self.surround_data.right,
-          bottom: self.surround_data.bottom,
-          left: self.surround_data.left,
-        }
-        .map(|inset| inset.resolve_to_length_percentage_auto(sizing))
-      },
+      inset: Rect {
+        top: self.surround_data.top,
+        right: self.surround_data.right,
+        bottom: self.surround_data.bottom,
+        left: self.surround_data.left,
+      }
+      .map(|inset| inset.resolve_to_length_percentage_auto(sizing)),
       margin: Rect {
         top: self.box_data.margin_top,
         right: self.box_data.margin_right,

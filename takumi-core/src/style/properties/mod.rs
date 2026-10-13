@@ -673,8 +673,10 @@ impl_css_enum!(
 impl Position {
   pub(crate) fn into_taffy(self) -> taffy::Position {
     match self {
-      Position::Relative | Position::Static => taffy::Position::Relative,
-      Position::Absolute | Position::Fixed => taffy::Position::Absolute,
+      Position::Static => taffy::Position::Static,
+      Position::Relative => taffy::Position::Relative,
+      Position::Absolute => taffy::Position::Absolute,
+      Position::Fixed => taffy::Position::Fixed,
     }
   }
 
