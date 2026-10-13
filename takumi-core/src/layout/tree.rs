@@ -1,6 +1,14 @@
 use std::{
-  borrow::Cow, cell::RefCell, collections::HashMap, hash::Hasher, iter::Copied, mem::take, ptr,
-  rc::Rc, slice, vec::IntoIter,
+  borrow::Cow,
+  cell::RefCell,
+  collections::HashMap,
+  hash::Hasher,
+  iter::Copied,
+  mem::{replace, take},
+  ptr,
+  rc::Rc,
+  slice,
+  vec::IntoIter,
 };
 
 use parley::fontique::{Attributes, FontStyle as FontiqueStyle};
@@ -1311,6 +1319,16 @@ impl<'r> LayoutTree<'r> {
     inputs
   }
 
+  /// Lays `node` and every box under it out empty, as `display: none` leaves them, without
+  /// keeping fragment items no paint reads.
+  fn compute_hidden(&mut self, node: TaffyNodeId) -> LayoutOutput {
+    let keeps_fragment_items = replace(&mut self.keeps_fragment_items, false);
+    let output = compute_hidden_layout(self, node);
+
+    self.keeps_fragment_items = keeps_fragment_items;
+    output
+  }
+
   fn compute_child_layout_inner(
     &mut self,
     node: TaffyNodeId,
@@ -1328,13 +1346,13 @@ impl<'r> LayoutTree<'r> {
     let inputs = self.shrunk_table_inputs(node, inputs);
 
     if inputs.run_mode == RunMode::PerformHiddenLayout {
-      return compute_hidden_layout(self, node);
+      return self.compute_hidden(node);
     }
 
     let mut out_of_flow_positions = Vec::new();
     let output = compute_cached_layout(self, node, inputs, |tree, node, inputs| {
       let Some(node_data) = tree.get_layout_node_ref(node) else {
-        return compute_hidden_layout(tree, node);
+        return tree.compute_hidden(node);
       };
 
       let display_mode = node_data.style.display;
@@ -1343,7 +1361,7 @@ impl<'r> LayoutTree<'r> {
       let has_children = !node_data.children.is_empty() && !node_data.is_inline_children;
 
       match (display_mode, has_children) {
-        (TaffyDisplay::None, _) => compute_hidden_layout(tree, node),
+        (TaffyDisplay::None, _) => tree.compute_hidden(node),
         (TaffyDisplay::Block, true) => compute_block_layout(tree, node, inputs, block_ctx),
         // A flow-root box is a block formatting context root, so it never joins
         // its parent's context. <https://drafts.csswg.org/css-display-3/#valdef-display-flow-root>
@@ -1353,7 +1371,7 @@ impl<'r> LayoutTree<'r> {
         (_, false) => {
           let idx: usize = node.into();
           let Some(&render_node) = tree.render_nodes.get(idx) else {
-            return compute_hidden_layout(tree, node);
+            return tree.compute_hidden(node);
           };
 
           let stripped_known_dimensions = |known_dimensions: TaffySize<Option<f32>>| {
