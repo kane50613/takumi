@@ -38,7 +38,7 @@ export function Features() {
 
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-x-8 gap-y-10 max-w-250">
           {INDEX.map(({ label, mono, items }) => (
-            <div key={label} className="border-t border-border pt-4">
+            <div key={label}>
               <h3 className="font-mono text-xs uppercase tracking-[0.18em] text-foreground mb-4">
                 {label}
               </h3>
