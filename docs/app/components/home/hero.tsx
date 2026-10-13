@@ -31,12 +31,8 @@ export function Hero() {
           </div>
         </div>
 
-        <figure className="relative aspect-[2.1] max-md:aspect-[1.3] overflow-hidden rounded-3xl border border-border bg-[#0d0c0b] animate-reveal-up [animation-delay:200ms]">
+        <figure className="relative aspect-[2.1] max-md:aspect-[1.45] overflow-hidden rounded-3xl border border-border bg-[#0d0c0b] animate-reveal-up [animation-delay:200ms]">
           <PixelField />
-          <figcaption className="absolute inset-x-5 bottom-4 flex justify-between font-mono text-xs text-white/50">
-            <span>1200 × 630 · rendered by Takumi</span>
-            <code className="select-all">bun i takumi-js</code>
-          </figcaption>
         </figure>
       </div>
     </section>
