@@ -124,7 +124,7 @@ default-features = false
 features = ["std"]
 
 [workspace.dependencies.parley]
-version = "0.11"
+version = "0.12"
 default-features = false
 features = ["std"]
 
@@ -277,6 +277,10 @@ opt-level = "z"
 [profile.release.package.parley]
 opt-level = "z"
 [profile.release.package.fontique]
+opt-level = "z"
+[profile.release.package.parley_engine]
+opt-level = "z"
+[profile.release.package.parley_emoji]
 opt-level = "z"
 [profile.release.package.kurbo]
 opt-level = "z"

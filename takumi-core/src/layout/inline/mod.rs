@@ -18,6 +18,7 @@ use crate::{
 use parley::{
   BreakReason, FontFeatures, GlyphRun, IndentOptions, InlineBox, InlineBoxKind, Line,
   PositionedInlineBox, PositionedLayoutItem, TextStyle, TreeBuilder,
+  VerticalAlign as ParleyVerticalAlign,
 };
 use std::{
   convert::Infallible,
@@ -335,7 +336,8 @@ impl BuiltInlineLayout<'_> {
           return metrics.inline_min_coord + metrics.advance;
         }
 
-        let (text_advance, static_advance) = text_fit_line_advance(&line, self.layout.is_rtl());
+        let (text_advance, static_advance) =
+          text_fit_line_advance(&line, &self.text, self.layout.is_rtl());
         let scale = self.line_fit(index).scale;
 
         metrics.inline_min_coord + static_advance + text_advance * scale
@@ -944,6 +946,8 @@ pub(crate) fn process_inline_spans<'c>(
             kind: InlineBoxKind::InFlow,
             width: *width,
             height: 0.0,
+            baseline: None,
+            vertical_align: ParleyVerticalAlign::BASELINE,
           },
           decorations: decorations.clone(),
         });
@@ -1099,6 +1103,8 @@ fn inline_box_span<'c>(
     },
     width: paint_width,
     height: paint_height,
+    baseline: None,
+    vertical_align: ParleyVerticalAlign::BASELINE,
   };
   let baseline_offset = raw_baseline_offset.map(|baseline| baseline.clamp(0.0, inline_box.height));
 
@@ -1252,7 +1258,7 @@ pub fn create_inline_layout<'c>(request: InlineLayoutRequest<'c>) -> BuiltInline
       // before InlineLayoutAlgorithm::CreateLine), so only a line still too
       // wide at its fitted scale is ellipsed, at that scale.
       let fits = if fits_text {
-        text_fit_lines(layout, max_width, style, None)
+        text_fit_lines(layout, text, max_width, style, None)
       } else {
         Vec::new()
       };
@@ -1261,7 +1267,7 @@ pub fn create_inline_layout<'c>(request: InlineLayoutRequest<'c>) -> BuiltInline
       let is_overflowing = layout.lines().last().is_some_and(|last_line| {
         last_line.text_range().end < text.len()
           || ellipsis_on_overflow
-            && last_fit.content_end(&last_line, layout.is_rtl(), indent)
+            && last_fit.content_end(&last_line, text, layout.is_rtl(), indent)
               > max_width + LAYOUT_UNIT_EPSILON
       });
 
@@ -1299,7 +1305,13 @@ pub fn create_inline_layout<'c>(request: InlineLayoutRequest<'c>) -> BuiltInline
   }
 
   if fits_text {
-    built.line_fits = text_fit_lines(&built.layout, max_width, style, kept_fits.as_deref());
+    built.line_fits = text_fit_lines(
+      &built.layout,
+      &built.text,
+      max_width,
+      style,
+      kept_fits.as_deref(),
+    );
   }
 
   built.layout.align(
@@ -1439,7 +1451,7 @@ pub(crate) fn glyph_run_rect(
   stretch: &SpacingStretch,
   baseline_shift: f32,
 ) -> (Point<f32>, Size<f32>) {
-  let metrics = glyph_run.run().metrics();
+  let metrics = glyph_run.run().font_metrics();
 
   (
     Point {
@@ -1550,7 +1562,13 @@ impl BuiltInlineLayout<'_> {
         state: line_states[index].clone(),
       };
       let items: Vec<_> = line.items().collect();
-      let hanging = distribute_trailing_whitespace(&items, &line, self.layout.is_rtl());
+      let hanging = distribute_trailing_whitespace(
+        &items,
+        &line,
+        &self.text,
+        self.layout.alignment(),
+        self.layout.is_rtl(),
+      );
       let mut static_inline_prefix = 0.0_f32;
       let mut cursor = GlyphCursor::default();
 
@@ -1607,8 +1625,8 @@ mod tests {
   use std::{fs::File, io::Read, path::Path, sync::Arc};
 
   use super::{
-    decorations::DecorationPlacement, outline::InlineOutline, runs::slice_text_at_char_boundaries,
-    *,
+    breaking::hanging_advance, decorations::DecorationPlacement, outline::InlineOutline,
+    runs::slice_text_at_char_boundaries, *,
   };
   use crate::{
     Fonts,
@@ -1621,8 +1639,8 @@ mod tests {
     style::{
       Affine, AppliedTextDecoration, BorderStyle, Color, ColorInput, Display, FontSize, Length,
       Sides, SizedTextDecorationThickness, SizingContext, SpacePair, Style, StyleDeclaration,
-      TextDecorationLines, TextDecorationStyle, TextFit, TextFitMode, TextUnderlinePosition,
-      WhiteSpace,
+      TextAlign, TextDecorationLines, TextDecorationStyle, TextFit, TextFitMode,
+      TextUnderlinePosition, WhiteSpace,
     },
     viewport::Viewport,
   };
@@ -1824,6 +1842,7 @@ mod tests {
             40.0,
           )))),
       ),
+      Node::text("overflowing".to_string()),
     ])
     .with_style(
       Style::default()
@@ -1831,17 +1850,17 @@ mod tests {
         .with(StyleDeclaration::font_size(FontSize::Length(Length::Px(
           20.0,
         ))))
-        .with_white_space(WhiteSpace::pre()),
+        .with_white_space(WhiteSpace::pre_wrap()),
     );
     let render_node = RenderNode::from_node(&context, node);
     let font_style = SizedFontStyle::from_style(&render_node.context.style, &render_node.context);
     let built = create_inline_layout(InlineLayoutRequest {
       items: collect_inline_items(&render_node),
       available_space: Size {
-        width: AvailableSpace::Definite(1200.0),
+        width: AvailableSpace::Definite(60.0),
         height: AvailableSpace::Definite(630.0),
       },
-      max_width: 1200.0,
+      max_width: 60.0,
       max_height: None,
       style: &font_style,
       context: &render_node.context,
@@ -1862,11 +1881,12 @@ mod tests {
       .map(|run| (run.glyph_run.advance, run.glyph_run.hanging.advance))
       .collect();
 
-    // The 40px space run hangs entirely; earlier runs keep what layout kept.
-    let last = trailing.last().unwrap();
+    // The spaces end a soft-wrapped line, so they hang: the 40px space run entirely, the run
+    // before it only its own trailing space.
+    let space = trailing[1];
     assert!(
-      (last.1 - last.0).abs() < 0.01,
-      "last run is all whitespace: {trailing:?}"
+      (space.1 - space.0).abs() < 0.01,
+      "the space run hangs whole: {trailing:?}"
     );
     for (advance, ws) in &trailing {
       assert!(
@@ -1874,6 +1894,119 @@ mod tests {
         "share capped by the run advance: {trailing:?}"
       );
     }
+  }
+
+  #[test]
+  fn an_opposite_direction_run_hangs_its_line_end_spaces_under_every_alignment() {
+    const WIDTH: f32 = 160.0;
+
+    for (text_align, free_space_share) in [
+      (TextAlign::Start, 1.0),
+      (TextAlign::Center, 0.5),
+      (TextAlign::Left, 0.0),
+    ] {
+      let fonts = create_test_context();
+      let context = RenderContext::builder()
+        .fonts(fonts.snapshot_with_fallbacks(None))
+        .sizing(
+          SizingContext::builder()
+            .viewport(Viewport::new((1200, 630)))
+            .build(),
+        )
+        .build();
+      let node = Node::container([Node::text("words that wrap across lines".to_string())])
+        .with_style(
+          Style::default()
+            .with(StyleDeclaration::display(Display::Block))
+            .with(StyleDeclaration::direction(Direction::Rtl))
+            .with(StyleDeclaration::text_align(text_align))
+            .with(StyleDeclaration::font_size(FontSize::Length(Length::Px(
+              20.0,
+            )))),
+        );
+      let render_node = RenderNode::from_node(&context, node);
+      let font_style = SizedFontStyle::from_style(&render_node.context.style, &render_node.context);
+      let built = create_inline_layout(InlineLayoutRequest {
+        items: collect_inline_items(&render_node),
+        available_space: Size {
+          width: AvailableSpace::Definite(WIDTH),
+          height: AvailableSpace::Definite(630.0),
+        },
+        max_width: WIDTH,
+        max_height: None,
+        style: &font_style,
+        context: &render_node.context,
+        mode: InlineLayoutMode::Draw,
+        shape_cacheable: false,
+      });
+      let layout = ComputedLayout {
+        location: Point::ZERO,
+        size: Size::new(WIDTH, 630.0),
+        border: Rect::default(),
+        padding: Rect::default(),
+      };
+      let runs = built.resolve_runs(&render_node.context, layout).unwrap();
+      let first = &runs.runs[0].glyph_run;
+      let visible_left = (WIDTH - (first.advance - first.hanging.advance)) * free_space_share;
+
+      assert!(
+        first.hanging.advance > 0.0,
+        "{text_align:?}: no space hangs"
+      );
+      assert!(
+        (first.offset - visible_left).abs() < 0.01,
+        "{text_align:?}: text starts at {}, not {visible_left}",
+        first.offset
+      );
+    }
+  }
+
+  #[test]
+  fn text_fit_measures_an_opposite_direction_run_without_its_hanging_spaces() {
+    const WIDTH: f32 = 160.0;
+
+    let fonts = create_test_context();
+    let context = RenderContext::builder()
+      .fonts(fonts.snapshot_with_fallbacks(None))
+      .sizing(
+        SizingContext::builder()
+          .viewport(Viewport::new((1200, 630)))
+          .build(),
+      )
+      .build();
+    let node = Node::container([Node::text("words that wrap across lines".to_string())])
+      .with_style(
+        Style::default()
+          .with(StyleDeclaration::display(Display::Block))
+          .with(StyleDeclaration::direction(Direction::Rtl))
+          .with(StyleDeclaration::font_size(FontSize::Length(Length::Px(
+            20.0,
+          )))),
+      );
+    let render_node = RenderNode::from_node(&context, node);
+    let font_style = SizedFontStyle::from_style(&render_node.context.style, &render_node.context);
+    let built = create_inline_layout(InlineLayoutRequest {
+      items: collect_inline_items(&render_node),
+      available_space: Size {
+        width: AvailableSpace::Definite(WIDTH),
+        height: AvailableSpace::Definite(630.0),
+      },
+      max_width: WIDTH,
+      max_height: None,
+      style: &font_style,
+      context: &render_node.context,
+      mode: InlineLayoutMode::Draw,
+      shape_cacheable: false,
+    });
+    let line = built.layout.lines().next().unwrap();
+    let hanging = hanging_advance(&line, &built.text);
+    let (text_advance, static_advance) = text_fit_line_advance(&line, &built.text, true);
+
+    assert!(hanging > 0.0, "no space hangs");
+    assert!(
+      (text_advance + static_advance - (line.metrics().advance - hanging)).abs() < 0.01,
+      "text-fit measures {text_advance} + {static_advance} with the hanging {hanging}"
+    );
   }
 
   #[test]

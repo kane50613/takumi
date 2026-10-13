@@ -7,7 +7,7 @@ use crate::{
 };
 use parley::{BreakReason, Cluster, GlyphRun, InlineBoxKind, Line, PositionedLayoutItem};
 
-use super::{InlineBrush, InlineItem, InlineLayout, LineIndent};
+use super::{InlineBrush, InlineItem, InlineLayout, LineIndent, breaking::hanging_advance};
 
 fn text_fit_line_is_scalable(
   line: &Line<'_, InlineBrush>,
@@ -40,7 +40,7 @@ pub(super) fn text_fit_applies(
 /// The fixed letter- and word-spacing `cluster` carries, which `text-fit` leaves unscaled as
 /// Blink's `PercentageSpacingDescription` drops it before measuring.
 pub(super) fn cluster_fixed_spacing(cluster: &Cluster<'_, InlineBrush>) -> f32 {
-  let brush = &cluster.first_style().brush;
+  let brush = &cluster.style().brush;
   let word = if cluster.is_space_or_nbsp() {
     brush.fixed_word_spacing
   } else {
@@ -173,9 +173,14 @@ fn line_fixed_spacing(line: &Line<'_, InlineBrush>, rtl: bool) -> f32 {
     }
 }
 
-/// Returns `(text_advance, static_advance)` for a line in a paragraph that is right-to-left when
-/// `rtl`. Fixed spacing counts as static, as Blink's `LineFitter` measures text without it.
-pub(super) fn text_fit_line_advance(line: &Line<'_, InlineBrush>, rtl: bool) -> (f32, f32) {
+/// Returns `(text_advance, static_advance)` for a line of `text` in a paragraph that is
+/// right-to-left when `rtl`. Fixed spacing counts as static, as Blink's `LineFitter` measures text
+/// without it.
+pub(super) fn text_fit_line_advance(
+  line: &Line<'_, InlineBrush>,
+  text: &str,
+  rtl: bool,
+) -> (f32, f32) {
   let metrics = line.metrics();
   let boxes: f32 = line
     .items()
@@ -186,7 +191,7 @@ pub(super) fn text_fit_line_advance(line: &Line<'_, InlineBrush>, rtl: bool) -> 
     .sum();
   let spacing = line_fixed_spacing(line, rtl);
   let static_advance = boxes + spacing;
-  let text_advance = (metrics.advance - metrics.trailing_whitespace - static_advance).max(0.0);
+  let text_advance = (metrics.advance - hanging_advance(line, text) - static_advance).max(0.0);
 
   (text_advance, static_advance)
 }
@@ -214,8 +219,14 @@ impl LineFit {
 
   /// Where `line`'s content, less trailing whitespace, ends past its `indent` once this fit scales
   /// its text.
-  pub(crate) fn content_end(self, line: &Line<'_, InlineBrush>, rtl: bool, indent: f32) -> f32 {
-    let (flexible, fixed) = text_fit_line_advance(line, rtl);
+  pub(crate) fn content_end(
+    self,
+    line: &Line<'_, InlineBrush>,
+    text: &str,
+    rtl: bool,
+    indent: f32,
+  ) -> f32 {
+    let (flexible, fixed) = text_fit_line_advance(line, text, rtl);
 
     line.metrics().inline_min_coord + indent + fixed + flexible * self.scale
   }
@@ -273,6 +284,8 @@ struct FitLine {
   flexible: f32,
   /// The width of the parts that do not: inline boxes and fixed spacing.
   fixed: f32,
+  /// The width of the whitespace hanging past the line's end.
+  hanging: f32,
 }
 
 /// How `text-fit` fits each line, after Blink's `LineFitter::MeasureScale` for the per-line
@@ -280,6 +293,7 @@ struct FitLine {
 /// `block_layout_algorithm.cc`). Each line keeps the scale `kept` gave it before truncation.
 pub(super) fn text_fit_lines(
   layout: &InlineLayout,
+  text: &str,
   max_width: f32,
   style: &SizedFontStyle,
   kept: Option<&[LineFit]>,
@@ -294,13 +308,14 @@ pub(super) fn text_fit_lines(
     .lines()
     .zip(indents)
     .map(|(line, indent)| {
-      let (flexible, fixed) = text_fit_line_advance(&line, rtl);
+      let (flexible, fixed) = text_fit_line_advance(&line, text, rtl);
 
       FitLine {
         remaining: max_width - line.metrics().inline_min_coord - flexible - fixed,
         indent,
         flexible,
         fixed,
+        hanging: hanging_advance(&line, text),
       }
     })
     .collect();
@@ -377,7 +392,7 @@ impl FitLine {
     let offset = line_offset_for_text_align(align, rtl, space);
 
     if rtl {
-      offset - metrics.trailing_whitespace * scale
+      offset - self.hanging * scale
     } else {
       self.indent + offset
     }

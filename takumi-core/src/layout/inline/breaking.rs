@@ -1,12 +1,17 @@
 //! Line breaking against the layout constraint.
 
+use std::cmp::Reverse;
+
 use crate::{
   context::RenderContext,
   geometry::{AvailableSpace, Size},
   style::{Length, TextWrapMode},
   text_processing::MaxHeight,
 };
-use parley::{InlineBoxKind, Line, PositionedInlineBox, PositionedLayoutItem, YieldData};
+use parley::{
+  Alignment, BreakReason, Cluster, InlineBoxKind, Line, PositionedInlineBox, PositionedLayoutItem,
+  YieldData,
+};
 
 use super::{
   InlineBrush, InlineLayout,
@@ -21,10 +26,13 @@ use super::{
 pub(super) fn distribute_trailing_whitespace(
   items: &[PositionedLayoutItem<'_, InlineBrush>],
   line: &Line<'_, InlineBrush>,
+  text: &str,
+  alignment: Option<Alignment>,
   rtl_paragraph: bool,
 ) -> Vec<HangingWhitespace> {
   let mut shares = vec![HangingWhitespace::default(); items.len()];
-  let mut remaining = line.metrics().trailing_whitespace;
+  let mut remaining = hanging_advance(line, text);
+  let fraction = alignment_fraction(line, alignment, rtl_paragraph);
   let count = items.len();
 
   // The line's logical end sits at its visual left in a right-to-left paragraph, where parley
@@ -44,11 +52,78 @@ pub(super) fn distribute_trailing_whitespace(
     };
     let share = remaining.min(glyph_run.advance());
 
-    shares[index] = HangingWhitespace::of(share, glyph_run.run().is_rtl(), rtl_paragraph);
+    shares[index] = HangingWhitespace::of(share, glyph_run.run().is_rtl(), rtl_paragraph, fraction);
     remaining -= share;
   }
 
   shares
+}
+
+/// The width of the whitespace that hangs past the end of `line`: what parley hangs, plus what
+/// [`unhung_trailing_whitespace`] finds it left inside.
+pub(super) fn hanging_advance(line: &Line<'_, InlineBrush>, text: &str) -> f32 {
+  line.metrics().hanging_advance + unhung_trailing_whitespace(line, text)
+}
+
+/// The whitespace at the end of a soft-wrapped `line` that parley leaves inside it.
+///
+/// UAX #9 L1 resets whitespace at the end of a line to the paragraph level, as ICU's
+/// `ubidi_setLine` does for Blink's `BidiParagraph`, so it hangs. Parley 0.12 skips L1 and only hangs whitespace already at
+/// the paragraph level, which leaves the trailing spaces of an opposite-direction run in the line.
+fn unhung_trailing_whitespace(line: &Line<'_, InlineBrush>, text: &str) -> f32 {
+  if !matches!(
+    line.break_reason(),
+    BreakReason::Regular | BreakReason::Emergency
+  ) {
+    return 0.0;
+  }
+
+  let mut clusters: Vec<_> = line.runs().flat_map(|run| run.clusters()).collect();
+
+  clusters.sort_by_key(|cluster| Reverse(cluster.text_range().start));
+
+  let trailing: f32 = clusters
+    .iter()
+    .take_while(|cluster| {
+      text
+        .get(cluster.text_range())
+        .is_some_and(|source| !source.is_empty() && source.chars().all(hangs_at_line_end))
+    })
+    .map(Cluster::advance)
+    .sum();
+
+  (trailing - line.metrics().hanging_advance).max(0.0)
+}
+
+/// The white space CSS Text 4 hangs at the end of a wrapped line.
+fn hangs_at_line_end(character: char) -> bool {
+  matches!(character, ' ' | '\t' | '\u{3000}')
+}
+
+/// The share of its free space `line` took from [`parley::Layout::align`] with default options: 0
+/// when it sits at its left edge, 1 at its right.
+///
+/// Approximate: a justified line takes its start edge's share, though justification spreads the
+/// free space over its gaps.
+fn alignment_fraction(
+  line: &Line<'_, InlineBrush>,
+  alignment: Option<Alignment>,
+  rtl_paragraph: bool,
+) -> f32 {
+  let start = if rtl_paragraph { 1.0 } else { 0.0 };
+  let metrics = line.metrics();
+  let free_space =
+    metrics.inline_max_coord - metrics.inline_min_coord - metrics.indent - metrics.advance
+      + metrics.hanging_advance;
+
+  match alignment {
+    _ if free_space <= 0.0 => start,
+    None | Some(Alignment::Start | Alignment::Justify) => start,
+    Some(Alignment::End) => 1.0 - start,
+    Some(Alignment::Left) => 0.0,
+    Some(Alignment::Right) => 1.0,
+    Some(Alignment::Center) => 0.5,
+  }
 }
 
 /// Resolve the inline layout's max width and optional max height from available space and known
@@ -126,7 +201,6 @@ impl LineWidths {
 pub(crate) fn has_custom_out_of_flow(layout: &InlineLayout) -> bool {
   layout
     .inline_boxes()
-    .iter()
     .any(|inline_box| inline_box.kind == InlineBoxKind::CustomOutOfFlow)
 }
 
@@ -206,7 +280,7 @@ impl LineBreaks<'_, '_> {
       text_wrap_mode,
       spans,
     } = self;
-    let inline_boxes = layout.inline_boxes().to_vec();
+    let inline_boxes: Vec<_> = layout.inline_boxes().cloned().collect();
     let mut float_layout = FloatLayoutState::new(widths, line_height_hint);
     let has_custom_out_of_flow = has_custom_out_of_flow(layout);
     let is_uniform = widths.breaking == widths.alignment && edges.is_empty();
@@ -247,12 +321,12 @@ impl LineBreaks<'_, '_> {
         break;
       }
       let height = match yield_data {
-        YieldData::LineBreak(data) => data.line_height,
+        YieldData::LineBreak(data) => data.metrics.line_height,
         YieldData::MaxHeightExceeded(data) => data.line_height,
         YieldData::InlineBoxBreak(data) => {
           breaker
             .state_mut()
-            .append_inline_box_to_line(data.advance, 0.0);
+            .append_inline_box_to_line(data.advance, 0.0, 0.0);
 
           let Some(inline_box) = inline_boxes.get(data.inline_box_index).cloned() else {
             continue;

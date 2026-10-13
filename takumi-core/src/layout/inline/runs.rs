@@ -184,14 +184,14 @@ pub struct HangingWhitespace {
 }
 
 impl HangingWhitespace {
-  /// The whitespace of a run of `advance` that the line's end holds `share` of, in a paragraph
-  /// that is right-to-left when `rtl_paragraph`.
-  pub(super) fn of(share: f32, run_rtl: bool, rtl_paragraph: bool) -> Self {
+  /// The whitespace of a run that the line's end holds `share` of, in a paragraph that is
+  /// right-to-left when `rtl_paragraph`, on a line that took `fraction` of its free space.
+  pub(super) fn of(share: f32, run_rtl: bool, rtl_paragraph: bool, fraction: f32) -> Self {
     Self {
       advance: share,
       shift: match (rtl_paragraph, run_rtl) {
-        (true, false) => share,
-        (false, true) => -share,
+        (true, false) => share * fraction,
+        (false, true) => -share * (1.0 - fraction),
         _ => 0.0,
       },
       at_start: run_rtl,
@@ -211,7 +211,7 @@ impl ShapedRun {
     cluster_ranges: Vec<Range<usize>>,
   ) -> Self {
     let run = glyph_run.run();
-    let metrics = run.metrics();
+    let metrics = run.font_metrics();
     let synthesis = run_synthesis(glyph_run);
     // The run's leaded box: the font height plus the line-height leading.
     let (above, below) =
@@ -551,7 +551,7 @@ impl<'c> BuiltInlineLayout<'c> {
             0.0
           };
         let width = glyph_run.advance() + stretch.advance - hanging.advance;
-        let metrics = glyph_run.run().metrics();
+        let metrics = glyph_run.run().font_metrics();
         // The font's text height, without the line-height leading, like the inline box fragment
         // `InlineBoxState::ComputeTextMetrics` sizes.
         let text = FontHeight::text(metrics.ascent, metrics.descent, setup.fit.text_scale(false));

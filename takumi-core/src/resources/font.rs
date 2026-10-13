@@ -344,8 +344,7 @@ pub(crate) fn run_normalized_coords(run: &GlyphRun<'_, InlineBrush>) -> Vec<F2Do
     .run()
     .normalized_coords()
     .iter()
-    .copied()
-    .map(F2Dot14::from_bits)
+    .map(|coord| F2Dot14::from_bits(coord.to_bits()))
     .collect()
 }
 
@@ -844,7 +843,9 @@ impl RenderContext {
   ) -> (InlineLayout, String) {
     self.fonts().with_context(|fonts| {
       with_layout_context(|layout| {
-        let mut builder = layout.tree_builder(&mut fonts.inner, 1.0, true, &root_style);
+        // Line boxes resolve their vertical metrics in `LayoutUnit`s, as Blink's do; parley's
+        // pixel rounding would open gaps between lines that read as clearance.
+        let mut builder = layout.tree_builder(&mut fonts.inner, 1.0, false, &root_style);
         if chromium_line_breaks {
           builder.set_line_break_override(Some(LINE_BREAK_OVERRIDE));
         }

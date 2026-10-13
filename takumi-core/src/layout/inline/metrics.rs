@@ -58,7 +58,6 @@ impl BoxLineHeight {
 pub(crate) struct ResolvedLineMetrics {
   pub(crate) resolved_ascent: f32,
   pub(crate) resolved_descent: f32,
-  pub(crate) resolved_leading: f32,
   pub(crate) resolved_line_height: f32,
   /// Baseline position within the line.
   pub resolved_baseline: f32,
@@ -124,17 +123,14 @@ pub(super) fn resolve_inline_line_metrics(
     // Walking runs by cluster style skips the per-fragment glyph re-walk that
     // `line.items()` does, and boxes only exist when a span holds one.
     for run in line.runs() {
-      let metrics = run.metrics();
+      let metrics = run.font_metrics();
       let mut seen = None;
       for cluster in run.clusters() {
-        let Some(glyph) = cluster.glyphs().next() else {
-          continue;
-        };
-        if seen == Some(glyph.style_index()) {
+        if cluster.glyphs().next().is_none() || seen == Some(cluster.style_index()) {
           continue;
         }
-        seen = Some(glyph.style_index());
-        let style = cluster.first_style();
+        seen = Some(cluster.style_index());
+        let style = cluster.style();
         let chain = style
           .brush
           .source_span_id
@@ -210,15 +206,14 @@ pub(super) fn resolve_inline_line_metrics(
     } else {
       text_line_box_contribution(
         line_metrics.line_height,
-        line_metrics.ascent.max(0.0),
-        line_metrics.descent.max(0.0),
+        (line_metrics.baseline - line_metrics.content_block_min_coord).max(0.0),
+        (line_metrics.content_block_max_coord - line_metrics.baseline).max(0.0),
       )
     };
 
     let resolved_line_height = resolved_above + resolved_below;
     let resolved_ascent = resolved_above.max(0.0);
     let resolved_descent = resolved_below.max(0.0);
-    let resolved_leading = resolved_line_height - (resolved_ascent + resolved_descent);
     let interline_gap = if result.is_empty() {
       if preserve_first_line_top {
         line_metrics.block_min_coord.max(0.0)
@@ -240,7 +235,6 @@ pub(super) fn resolve_inline_line_metrics(
     result.push(ResolvedLineMetrics {
       resolved_ascent,
       resolved_descent,
-      resolved_leading,
       resolved_line_height,
       resolved_baseline,
       resolved_line_top,
@@ -260,9 +254,8 @@ impl ResolvedLineMetrics {
   /// Parley's `line_metrics` with the vertical metrics replaced by these.
   fn apply_to(&self, line_metrics: &LineMetrics) -> LineMetrics {
     let mut adjusted = *line_metrics;
-    adjusted.ascent = self.resolved_ascent;
-    adjusted.descent = self.resolved_descent;
-    adjusted.leading = self.resolved_leading;
+    adjusted.content_block_min_coord = self.resolved_baseline - self.resolved_ascent;
+    adjusted.content_block_max_coord = self.resolved_baseline + self.resolved_descent;
     adjusted.baseline = self.resolved_baseline;
     adjusted.block_min_coord = self.resolved_line_top;
     adjusted.block_max_coord = self.resolved_line_bottom;
