@@ -586,8 +586,8 @@ impl ComputedStyle {
         .cloned()
         .and_then(GridTemplateAreas::into_taffy),
       aspect_ratio: self.surround_data.aspect_ratio.into(),
-      align_self: self.misc_data.align_self.into_taffy(),
-      justify_self: self.misc_data.justify_self.into_taffy(),
+      align_self: self.misc_data.align_self.into_taffy_self(),
+      justify_self: self.misc_data.justify_self.into_taffy_self(),
       overflow: self
         .resolve_overflows()
         .into_taffy()
@@ -595,6 +595,7 @@ impl ComputedStyle {
       dummy: PhantomData,
       item_is_table: false,
       item_is_replaced: false,
+      item_is_compressible_replaced: false,
       scrollbar_width: 0.0,
       text_align: taffy::TextAlign::Auto,
     }
