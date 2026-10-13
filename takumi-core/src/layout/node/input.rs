@@ -5,13 +5,14 @@ use serde::{
   de::{DeserializeSeed, Error, IgnoredAny, MapAccess, SeqAccess, Visitor},
 };
 
-use crate::layout::node::{
-  ImageData, MAXIMUM_DOM_TREE_DEPTH, Node, NodeKind, NodeMetadata, TextData,
+use crate::{
+  layout::node::{ImageData, MAXIMUM_DOM_TREE_DEPTH, Node, NodeKind, NodeMetadata, TextData},
+  style::ParsedValues,
 };
 
 impl<'de> Deserialize<'de> for Node {
   fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-    NodeSeed { depth: 0 }.deserialize(deserializer)
+    ParsedValues::scope(|| NodeSeed { depth: 0 }.deserialize(deserializer))
   }
 }
 
@@ -221,10 +222,40 @@ mod tests {
 
   use serde_json::{from_str, from_value, json};
 
-  use crate::layout::node::{MAXIMUM_DOM_TREE_DEPTH, Node, NodeKind};
+  use crate::{
+    layout::node::{MAXIMUM_DOM_TREE_DEPTH, Node, NodeKind},
+    style::Style,
+  };
 
   fn error(value: serde_json::Value) -> String {
     from_value::<Node>(value).unwrap_err().to_string()
+  }
+
+  #[test]
+  fn a_repeated_style_value_reads_as_it_does_alone() {
+    let styles = [
+      json!({ "fontSize": 13, "margin": "1px 2px", "color": "red" }),
+      json!({ "fontSize": 13.0, "padding": "1px 2px", "color": "red" }),
+      json!({ "fontSize": 13, "margin": "1px 2px", "padding": "1px 2px" }),
+    ];
+    let node: Node = from_value(json!({
+      "type": "container",
+      "children": styles
+        .iter()
+        .map(|style| json!({ "type": "text", "text": "a", "style": style }))
+        .collect::<Vec<_>>(),
+    }))
+    .unwrap();
+    let NodeKind::Container { children } = &node.kind else {
+      panic!("expected a container");
+    };
+
+    for (child, style) in children.iter().zip(styles) {
+      assert_eq!(
+        child.metadata.style,
+        Some(from_value::<Style>(style).unwrap())
+      );
+    }
   }
 
   #[test]
