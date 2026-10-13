@@ -805,7 +805,7 @@ mod tests {
     );
     let sizing = sizing();
     let compact = value.to_compact_length(&sizing);
-    assert!(compact.is_calc());
+    assert!(compact.is_plain_calc());
     let resolved = sizing
       .calc_arena
       .resolve_calc_value(compact.calc_value(), 200.0);
@@ -816,7 +816,7 @@ mod tests {
   fn compact_length_percent_does_not_use_calc_pointer() {
     let sizing = sizing();
     let compact = Length::Percentage(50.0).to_compact_length(&sizing);
-    assert!(!compact.is_calc());
+    assert!(!compact.is_plain_calc());
     assert_eq!(compact.tag(), CompactLength::PERCENT_TAG);
     assert_near(compact.value(), 0.5);
   }
@@ -1128,7 +1128,7 @@ mod tests {
       let compact = length.to_compact_length(&sizing);
 
       assert!(
-        compact.is_calc() || compact.value().is_finite(),
+        compact.is_plain_calc() || compact.value().is_finite(),
         "{css} produced a non-finite CompactLength"
       );
     }

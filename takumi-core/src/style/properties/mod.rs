@@ -925,23 +925,23 @@ impl TailwindPropertyParser for JustifyContent {
 }
 
 impl JustifyContent {
-  pub(crate) fn into_taffy(self) -> Option<taffy::JustifyContent> {
+  pub(crate) fn into_taffy(self) -> taffy::JustifyContent {
     match self {
-      JustifyContent::Normal => None,
-      JustifyContent::Start => Some(taffy::JustifyContent::START),
-      JustifyContent::End => Some(taffy::JustifyContent::END),
-      JustifyContent::FlexStart => Some(taffy::JustifyContent::FLEX_START),
-      JustifyContent::FlexEnd => Some(taffy::JustifyContent::FLEX_END),
-      JustifyContent::Center => Some(taffy::JustifyContent::CENTER),
-      JustifyContent::Stretch => Some(taffy::JustifyContent::STRETCH),
-      JustifyContent::SpaceBetween => Some(taffy::JustifyContent::SPACE_BETWEEN),
-      JustifyContent::SpaceAround => Some(taffy::JustifyContent::SPACE_AROUND),
-      JustifyContent::SpaceEvenly => Some(taffy::JustifyContent::SPACE_EVENLY),
-      JustifyContent::SafeStart => Some(taffy::JustifyContent::SAFE_START),
-      JustifyContent::SafeEnd => Some(taffy::JustifyContent::SAFE_END),
-      JustifyContent::SafeFlexStart => Some(taffy::JustifyContent::SAFE_FLEX_START),
-      JustifyContent::SafeFlexEnd => Some(taffy::JustifyContent::SAFE_FLEX_END),
-      JustifyContent::SafeCenter => Some(taffy::JustifyContent::SAFE_CENTER),
+      JustifyContent::Normal => taffy::JustifyContent::NORMAL,
+      JustifyContent::Start => taffy::JustifyContent::START,
+      JustifyContent::End => taffy::JustifyContent::END,
+      JustifyContent::FlexStart => taffy::JustifyContent::FLEX_START,
+      JustifyContent::FlexEnd => taffy::JustifyContent::FLEX_END,
+      JustifyContent::Center => taffy::JustifyContent::CENTER,
+      JustifyContent::Stretch => taffy::JustifyContent::STRETCH,
+      JustifyContent::SpaceBetween => taffy::JustifyContent::SPACE_BETWEEN,
+      JustifyContent::SpaceAround => taffy::JustifyContent::SPACE_AROUND,
+      JustifyContent::SpaceEvenly => taffy::JustifyContent::SPACE_EVENLY,
+      JustifyContent::SafeStart => taffy::JustifyContent::SAFE_START,
+      JustifyContent::SafeEnd => taffy::JustifyContent::SAFE_END,
+      JustifyContent::SafeFlexStart => taffy::JustifyContent::SAFE_FLEX_START,
+      JustifyContent::SafeFlexEnd => taffy::JustifyContent::SAFE_FLEX_END,
+      JustifyContent::SafeCenter => taffy::JustifyContent::SAFE_CENTER,
     }
   }
 }
@@ -1227,26 +1227,31 @@ declare_box_alignment_enum_impl!(
 );
 
 impl AlignItems {
-  pub(crate) fn into_taffy(self) -> Option<taffy::AlignItems> {
+  pub(crate) fn into_taffy(self) -> taffy::AlignItems {
     match self {
-      AlignItems::Normal => None,
-      AlignItems::Start => Some(taffy::AlignItems::START),
-      AlignItems::End => Some(taffy::AlignItems::END),
-      AlignItems::FlexStart => Some(taffy::AlignItems::FLEX_START),
-      AlignItems::FlexEnd => Some(taffy::AlignItems::FLEX_END),
-      AlignItems::Center => Some(taffy::AlignItems::CENTER),
-      AlignItems::Baseline => Some(taffy::AlignItems::BASELINE),
-      AlignItems::Stretch => Some(taffy::AlignItems::STRETCH),
-      AlignItems::SafeStart => Some(taffy::AlignItems::SAFE_START),
-      AlignItems::SafeEnd => Some(taffy::AlignItems::SAFE_END),
-      AlignItems::SafeFlexStart => Some(taffy::AlignItems::SAFE_FLEX_START),
-      AlignItems::SafeFlexEnd => Some(taffy::AlignItems::SAFE_FLEX_END),
-      AlignItems::SelfStart => Some(taffy::AlignItems::SELF_START),
-      AlignItems::SelfEnd => Some(taffy::AlignItems::SELF_END),
-      AlignItems::SafeSelfStart => Some(taffy::AlignItems::SAFE_SELF_START),
-      AlignItems::SafeSelfEnd => Some(taffy::AlignItems::SAFE_SELF_END),
-      AlignItems::SafeCenter => Some(taffy::AlignItems::SAFE_CENTER),
+      AlignItems::Normal => taffy::AlignItems::NORMAL,
+      AlignItems::Start => taffy::AlignItems::START,
+      AlignItems::End => taffy::AlignItems::END,
+      AlignItems::FlexStart => taffy::AlignItems::FLEX_START,
+      AlignItems::FlexEnd => taffy::AlignItems::FLEX_END,
+      AlignItems::Center => taffy::AlignItems::CENTER,
+      AlignItems::Baseline => taffy::AlignItems::BASELINE,
+      AlignItems::Stretch => taffy::AlignItems::STRETCH,
+      AlignItems::SafeStart => taffy::AlignItems::SAFE_START,
+      AlignItems::SafeEnd => taffy::AlignItems::SAFE_END,
+      AlignItems::SafeFlexStart => taffy::AlignItems::SAFE_FLEX_START,
+      AlignItems::SafeFlexEnd => taffy::AlignItems::SAFE_FLEX_END,
+      AlignItems::SelfStart => taffy::AlignItems::SELF_START,
+      AlignItems::SelfEnd => taffy::AlignItems::SELF_END,
+      AlignItems::SafeSelfStart => taffy::AlignItems::SAFE_SELF_START,
+      AlignItems::SafeSelfEnd => taffy::AlignItems::SAFE_SELF_END,
+      AlignItems::SafeCenter => taffy::AlignItems::SAFE_CENTER,
     }
+  }
+
+  /// As `align-self` or `justify-self`, where `Normal` stands for `auto`.
+  pub(crate) fn into_taffy_self(self) -> Option<taffy::AlignSelf> {
+    (self != Self::Normal).then(|| self.into_taffy())
   }
 }
 
