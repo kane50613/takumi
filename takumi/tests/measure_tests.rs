@@ -1,7 +1,11 @@
 mod test_utils;
 
+use std::fs;
+
 use takumi::prelude::{Length::*, *};
-use test_utils::{CONTEXT, TEST_IMAGES, create_test_viewport, measure_with_css, run_texts};
+use test_utils::{
+  CONTEXT, TEST_IMAGES, create_test_viewport, measure_with_css, repo_base_path, run_texts,
+};
 
 fn create_measure_viewport_with_dpr(device_pixel_ratio: f32) -> Viewport {
   Viewport::new((
@@ -2662,4 +2666,43 @@ fn cell_runs(node: &MeasuredNode) -> Vec<&MeasuredTextRun> {
     .iter()
     .chain(node.children.iter().flat_map(cell_runs))
     .collect()
+}
+
+/// A line holding only an image keeps the strut of the default font when no `font-family`
+/// matches, as Blink's falls back to its default font. Chrome lays this line out 43px tall with
+/// Archivo: the 40px image plus Archivo's descent below the baseline.
+#[test]
+fn an_image_line_without_a_matching_family_keeps_the_default_font_strut() {
+  let mut fonts = Fonts::default();
+
+  fonts
+    .register(FontResource::new(
+      fs::read(repo_base_path(
+        "assets/fonts/archivo/Archivo-VariableFont_wdth,wght.ttf",
+      ))
+      .unwrap(),
+    ))
+    .unwrap();
+
+  let node = Node::container([Node::image("assets/images/yeecord.png").with_style(
+    Style::default()
+      .with(StyleDeclaration::width(Px(40.0)))
+      .with(StyleDeclaration::height(Px(40.0))),
+  )])
+  .with_style(
+    Style::default()
+      .with(StyleDeclaration::display(Display::Block))
+      .with(StyleDeclaration::font_size(FontSize::Length(Px(14.0)))),
+  );
+  let measured = takumi::measure(
+    RenderOptions::builder()
+      .viewport(create_test_viewport())
+      .node(node)
+      .fonts(&fonts)
+      .images(TEST_IMAGES.clone())
+      .build(),
+  )
+  .unwrap();
+
+  assert_close(measured.height, 43.0);
 }

@@ -116,7 +116,7 @@ describe("binary inputs", () => {
     };
     const over = (src: Parameters<typeof image>[0]["src"]) =>
       container({
-        style: { width: 8, height: 8, backgroundColor: "black" },
+        style: { display: "flex", width: 8, height: 8, backgroundColor: "black" },
         children: [image({ src })],
       });
     const centerOf = async (src: Parameters<typeof image>[0]["src"]) => {
