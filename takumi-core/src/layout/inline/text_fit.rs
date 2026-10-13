@@ -7,7 +7,7 @@ use crate::{
 };
 use parley::{BreakReason, Cluster, GlyphRun, InlineBoxKind, Line, PositionedLayoutItem};
 
-use super::{InlineBrush, InlineItem, InlineLayout, LineIndent, breaking::hanging_advance};
+use super::{InlineBrush, InlineItem, InlineLayout, breaking::hanging_advance};
 
 fn text_fit_line_is_scalable(
   line: &Line<'_, InlineBrush>,
@@ -303,16 +303,14 @@ pub(super) fn text_fit_lines(
   }
 
   let rtl = layout.is_rtl();
-  let indents = LineIndent::of(style, max_width).per_line(layout);
   let lines: Vec<FitLine> = layout
     .lines()
-    .zip(indents)
-    .map(|(line, indent)| {
+    .map(|line| {
       let (flexible, fixed) = text_fit_line_advance(&line, text, rtl);
 
       FitLine {
         remaining: max_width - line.metrics().inline_min_coord - flexible - fixed,
-        indent,
+        indent: line.metrics().indent,
         flexible,
         fixed,
         hanging: hanging_advance(&line, text),

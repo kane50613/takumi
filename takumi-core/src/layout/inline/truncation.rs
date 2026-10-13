@@ -4,8 +4,8 @@ use crate::{context::RenderContext, font_style::SizedFontStyle, text_processing:
 use parley::{InlineBoxKind, PositionedInlineBox, PositionedLayoutItem};
 
 use super::{
-  InlineLayout, LineIndent, break_into_lines, chromium_line_breaks, items::ProcessedInlineSpan,
-  push_presentation_text, push_spans_into_builder, refresh_text_span_ranges,
+  InlineLayout, break_into_lines, chromium_line_breaks, items::ProcessedInlineSpan,
+  last_line_indent, push_presentation_text, push_spans_into_builder, refresh_text_span_ranges,
   text_fit::cluster_fixed_spacing,
 };
 
@@ -189,7 +189,7 @@ pub(super) fn make_ellipsis_layout<'c>(
 ) {
   let ellipsis_char = root_style.parent.ellipsis_char();
   let checkpoints = collect_truncation_checkpoints(layout, scale);
-  let indent = LineIndent::of(root_style, options.max_width).last_line(layout);
+  let indent = last_line_indent(layout);
   let mut ellipsis_span_id = tail_text_span(spans).map(|(_, span_id)| span_id);
 
   let mut iterations = 0;
