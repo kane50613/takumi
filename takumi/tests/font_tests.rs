@@ -13,17 +13,20 @@ fn read_font(path: &str) -> Vec<u8> {
   fs::read(repo_base_path("assets/fonts").join(path)).unwrap()
 }
 
-/// Registers `path` as a uniquely-named coverage subset of the logical family `logical`.
-fn register_subset(fonts: &mut Fonts, path: &str, unique_name: &str, logical: &str) {
+const LATIN: UnicodeRange = UnicodeRange::new(0x0000, 0x00FF);
+const DEVANAGARI: UnicodeRange = UnicodeRange::new(0x0900, 0x097F);
+
+/// Registers `path` under `family`, serving only `range`, as one `@font-face` subset would.
+fn register_subset(fonts: &mut Fonts, path: &str, family: &str, range: UnicodeRange) {
   fonts
     .register(
       FontResource::new(read_font(path))
         .override_info(FontOverride {
-          family_name: Some(unique_name.into()),
+          family_name: Some(family.into()),
           ..Default::default()
         })
         .generic_family(GenericFamily::SANS_SERIF)
-        .subset_of(logical),
+        .unicode_range(UnicodeRangeSet::from_iter([range])),
     )
     .unwrap();
 }
@@ -70,47 +73,36 @@ fn pixel_diff(a: &Bitmap, b: &Bitmap) -> u32 {
 /// `font-family: Alpha` shapes with Alpha's Devanagari (Noto), `Beta` with Beta's
 /// (Poppins). The pre-fix global fallback bucket was family-blind and gave both the same.
 #[test]
-fn subset_groups_route_per_family() {
+fn subsets_route_per_family() {
   let mut fonts = Fonts::default();
-  register_subset(
-    &mut fonts,
-    "geist/Geist[wght].woff2",
-    "Alpha-latin",
-    "Alpha",
-  );
+  register_subset(&mut fonts, "geist/Geist[wght].woff2", "Alpha", LATIN);
   register_subset(
     &mut fonts,
     "noto-sans/noto-sans-devanagari-v30-devanagari-regular.woff2",
-    "Alpha-deva",
     "Alpha",
+    DEVANAGARI,
   );
   register_subset(
     &mut fonts,
     "archivo/Archivo-VariableFont_wdth,wght.ttf",
-    "Beta-latin",
     "Beta",
+    LATIN,
   );
   register_subset(
     &mut fonts,
     "poppins/poppins-v24-devanagari_latin-regular.woff2",
-    "Beta-deva",
     "Beta",
+    DEVANAGARI,
   );
 
   let alpha = render_devanagari(&fonts, "Alpha");
   let beta = render_devanagari(&fonts, "Beta");
-  let beta_explicit = render_devanagari(&fonts, "\"Beta-latin\", \"Beta-deva\"");
 
   assert!(inked_pixels(&alpha) > 500, "Alpha must render real glyphs");
   assert!(inked_pixels(&beta) > 500, "Beta must render real glyphs");
   assert!(
     pixel_diff(&alpha, &beta) > 1000,
     "per-family routing: Alpha (Noto) and Beta (Poppins) Devanagari must differ"
-  );
-  assert_eq!(
-    pixel_diff(&beta, &beta_explicit),
-    0,
-    "expanding `font-family: Beta` must match the explicit subset stack"
   );
 }
 

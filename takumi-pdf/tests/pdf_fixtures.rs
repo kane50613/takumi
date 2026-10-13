@@ -21,6 +21,7 @@ use takumi_core::{
     font::{FontOverride, FontResource},
     image::{ImageCacheMode, ImageSource, ResourceCache},
     image_buffer::ImageBuffer,
+    unicode_range::{UnicodeRange, UnicodeRangeSet},
   },
   style::{
     BreakBetween, Color, ColorInput, Display, FlexDirection, FontSize, Length::*, LineHeight,
@@ -5052,21 +5053,19 @@ fn stroke_alphas(haystack: &str) -> Vec<f32> {
     .collect()
 }
 
-/// Registers both test fonts as coverage subsets of one logical family, ranked the way
-/// their declared `unicode-range` would rank them.
-fn ranked_subset_fonts() -> Fonts {
+/// Registers both test fonts under one family as two `@font-face` rules would: each at the
+/// default `font-weight: normal`, serving only its declared `unicode-range`.
+fn ranged_subset_fonts() -> Fonts {
   let mut fonts = Fonts::default();
 
-  for (path, name, rank) in [
+  for (path, range) in [
     (
       "tests/fonts/noto-sans-tc-caps.subset.ttf",
-      "Grouped cjk",
-      0x4e00,
+      UnicodeRange::new(0x4E00, 0x9FFF),
     ),
     (
       "../assets/fonts/archivo/Archivo-VariableFont_wdth,wght.ttf",
-      "Grouped latin",
-      0,
+      UnicodeRange::new(0x0000, 0x00FF),
     ),
   ] {
     let data = fs::read(Path::new(env!("CARGO_MANIFEST_DIR")).join(path)).expect("read test font");
@@ -5075,26 +5074,25 @@ fn ranked_subset_fonts() -> Fonts {
       .register(
         FontResource::new(data)
           .override_info(FontOverride {
-            family_name: Some(name.into()),
+            family_name: Some("Grouped".into()),
+            weight: Some(400.0),
             ..Default::default()
           })
-          .subset_of("Grouped")
-          .subset_rank(rank),
+          .unicode_range(UnicodeRangeSet::from_iter([range])),
       )
       .expect("load test font");
   }
   fonts
 }
 
-/// A subset whose `cmap` reaches past the range it was cut for must not steal codepoints
-/// from the subset that declares them. `Grouped cjk` also encodes the ASCII space and the
-/// capitals, and sorts first by name, so without the rank it takes those and leaves the
-/// lowercase to `Grouped latin` — one text object per fragment, each repositioned from
-/// scratch. Extractors rebuild words from glyph geometry, and that is the shape they read
-/// wrong.
+/// A subset whose `cmap` reaches past its `unicode-range` must not steal codepoints from the
+/// subset that declares them. The CJK subset also encodes the ASCII space and the capitals, and
+/// registers first, so without the range it takes those and leaves the lowercase to Archivo —
+/// one text object per fragment, each repositioned from scratch. Extractors rebuild words from
+/// glyph geometry, and that is the shape they read wrong.
 #[test]
-fn a_ranked_subset_group_keeps_a_latin_run_whole() {
-  let fonts = ranked_subset_fonts();
+fn a_ranged_subset_keeps_a_latin_run_whole() {
+  let fonts = ranged_subset_fonts();
   let doc = r#"<main style="font-family:Grouped;font-size:16px;">
     <p>Average App Rating</p>
   </main>"#;
@@ -5105,7 +5103,7 @@ fn a_ranked_subset_group_keeps_a_latin_run_whole() {
       .fonts(&fonts)
       .build(),
   )
-  .expect("render the ranked group");
+  .expect("render the ranged family");
 
   let shows = content_lines(&pdf)
     .filter(|line| line.ends_with(b"TJ") || line.ends_with(b"Tj"))

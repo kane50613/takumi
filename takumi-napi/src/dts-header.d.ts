@@ -31,16 +31,13 @@ export interface FontDetails {
    */
   style?: "normal" | "italic" | "oblique" | `oblique ${number}deg` | (string & {});
   /**
-   * Logical family this font is a coverage subset of. Subsets sharing a `subsetOf` are
-   * kept as distinct families and `font-family: {subsetOf}` expands to all of them, so each
-   * script routes to the subset that covers it. Set by {@link loadGoogleFonts}.
+   * Inclusive codepoint ranges the font serves, as `@font-face` `unicode-range`. Register each
+   * subset of a family under the same `name` with its own ranges.
    */
+  unicodeRange?: [number, number][];
+  /** @deprecated Register under `name` with `unicodeRange` instead. */
   subsetOf?: string;
-  /**
-   * Where this subset sits in its group's fallback order; lowest is tried first, and equal
-   * ranks order by family name. A subset's `cmap` reaches past the range it was cut for, so
-   * the rank is what settles which subset serves a codepoint several of them encode.
-   */
+  /** @deprecated Ignored; `unicodeRange` decides which subset serves a codepoint. */
   subsetRank?: number;
   /**
    * CSS generic family keyword this font resolves for, so stacks ending in e.g.
