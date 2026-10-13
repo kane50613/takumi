@@ -19,7 +19,7 @@ use napi_derive::napi;
 pub use renderer::Renderer;
 use serde::de::DeserializeOwned;
 use takumi_bindings_common::input::FontOptions;
-use takumi_core::resources::glyph_cache;
+use takumi_core::{layout::node::Node, resources::glyph_cache};
 
 /// Sets the byte budget shared by the resolved-glyph and glyph-mask caches;
 /// `0` stops caching. Defaults to 8 MiB.
@@ -134,6 +134,38 @@ pub(crate) fn parse_font_input(env: Env, font: Object) -> Result<(FontOptions, J
 pub(crate) fn deserialize_with_tracing<T: DeserializeOwned>(value: Object) -> Result<T> {
   let mut de = De::new(&value);
   T::deserialize(&mut de).map_err(|e| Error::from_reason(e.to_string()))
+}
+
+/// A node tree from JS: JSON text, parsed on the worker thread, or a tree read from an object.
+pub(crate) enum NodeSource {
+  Json(String),
+  Tree(Box<Node>),
+}
+
+impl NodeSource {
+  /// Reads `source`, leaving JSON text for [`NodeSource::into_node`] to parse.
+  pub(crate) fn from_js(source: Either<String, Object>) -> Result<Self> {
+    match source {
+      Either::A(json) => Ok(Self::Json(json)),
+      Either::B(object) => deserialize_with_tracing(object).map(|node| Self::Tree(Box::new(node))),
+    }
+  }
+
+  /// The node tree, failing with the message the object path reports for the same input.
+  pub(crate) fn into_node(self) -> Result<Node> {
+    let json = match self {
+      Self::Json(json) => json,
+      Self::Tree(node) => return Ok(*node),
+    };
+
+    serde_json::from_str(&json).map_err(|error| {
+      let message = error.to_string();
+      let position = format!(" at line {} column {}", error.line(), error.column());
+      let message = message.strip_suffix(&position).unwrap_or(&message);
+
+      Error::from_reason(format!("{}, {message}", Status::InvalidArg))
+    })
+  }
 }
 
 pub(crate) fn map_error<E: Display>(err: E) -> napi::Error {

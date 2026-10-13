@@ -10,7 +10,6 @@ use serde::Deserialize;
 use takumi_bindings_common::css_or_stylesheets;
 use takumi_core::{
   Fonts,
-  layout::node::Node,
   resources::image::{
     ImageCacheMode as CoreImageCacheMode, ImageSource as LoadedImageSource, ResourceCache,
   },
@@ -21,9 +20,9 @@ use takumi_raster::{
 };
 
 use crate::{
-  De, JsBytes, deserialize_with_tracing, load_font_task::LoadFontTask, map_error,
-  measure_task::MeasureTask, parse_font_input, render_animation_task::RenderAnimationTask,
-  render_task::RenderTask, svg_render_task::SvgRenderTask,
+  De, JsBytes, NodeSource, load_font_task::LoadFontTask, map_error, measure_task::MeasureTask,
+  parse_font_input, render_animation_task::RenderAnimationTask, render_task::RenderTask,
+  svg_render_task::SvgRenderTask,
 };
 
 /// Represents a single run of text in a measured node.
@@ -452,17 +451,17 @@ impl Renderer {
 
   /// Renders a node tree into an image buffer asynchronously.
   #[napi(
-    ts_args_type = "source: Node, options?: RenderOptions, signal?: AbortSignal",
+    ts_args_type = "source: Node | string, options?: RenderOptions, signal?: AbortSignal",
     ts_return_type = "Promise<Buffer<ArrayBuffer>>"
   )]
   pub fn render(
     &self,
     env: Env,
-    source: Object,
+    source: Either<String, Object>,
     options: Option<RenderOptions>,
     signal: Option<AbortSignal>,
   ) -> Result<AsyncTask<RenderTask>> {
-    let node: Node = deserialize_with_tracing(source)?;
+    let node = NodeSource::from_js(source)?;
 
     Ok(AsyncTask::with_optional_signal(
       RenderTask::from_options(
@@ -477,17 +476,17 @@ impl Renderer {
 
   /// Renders a node tree into an SVG document string asynchronously.
   #[napi(
-    ts_args_type = "source: Node, options?: SvgRenderOptions, signal?: AbortSignal",
+    ts_args_type = "source: Node | string, options?: SvgRenderOptions, signal?: AbortSignal",
     ts_return_type = "Promise<string>"
   )]
   pub fn render_svg(
     &self,
     env: Env,
-    source: Object,
+    source: Either<String, Object>,
     options: Option<SvgRenderOptions>,
     signal: Option<AbortSignal>,
   ) -> Result<AsyncTask<SvgRenderTask>> {
-    let node: Node = deserialize_with_tracing(source)?;
+    let node = NodeSource::from_js(source)?;
 
     Ok(AsyncTask::with_optional_signal(
       SvgRenderTask::from_options(
@@ -502,17 +501,17 @@ impl Renderer {
 
   /// Measures a node tree and returns layout information asynchronously.
   #[napi(
-    ts_args_type = "source: Node, options?: RenderOptions, signal?: AbortSignal",
+    ts_args_type = "source: Node | string, options?: RenderOptions, signal?: AbortSignal",
     ts_return_type = "Promise<MeasuredNode>"
   )]
   pub fn measure(
     &self,
     env: Env,
-    source: Object,
+    source: Either<String, Object>,
     options: Option<RenderOptions>,
     signal: Option<AbortSignal>,
   ) -> Result<AsyncTask<MeasureTask>> {
-    let node: Node = deserialize_with_tracing(source)?;
+    let node = NodeSource::from_js(source)?;
 
     Ok(AsyncTask::with_optional_signal(
       MeasureTask::from_options(

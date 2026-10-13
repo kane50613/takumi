@@ -3,14 +3,13 @@ use std::{collections::HashMap, mem::take, sync::Arc};
 use napi::bindgen_prelude::*;
 use takumi_bindings_common::{device_pixel_ratio, parse_lang, stylesheet, time_ms};
 use takumi_core::{
-  layout::node::Node,
   style::{FontFamily, Lang, StyleSheet},
   viewport::Viewport,
 };
 use takumi_raster::measure;
 
 use crate::{
-  JsBytes, map_error,
+  JsBytes, NodeSource, map_error,
   renderer::{
     ImageCacheMode, MeasuredNode, RenderOptions, RendererState, collect_images, decode_images,
     deserialize_css, deserialize_keyframes,
@@ -18,7 +17,7 @@ use crate::{
 };
 
 pub struct MeasureTask {
-  pub(crate) node: Option<Node>,
+  pub(crate) node: Option<NodeSource>,
   pub(crate) state: Arc<RendererState>,
   pub(crate) viewport: Viewport,
   pub(crate) time_ms: u64,
@@ -31,7 +30,7 @@ pub struct MeasureTask {
 impl MeasureTask {
   pub(crate) fn from_options(
     env: Env,
-    node: Node,
+    node: NodeSource,
     options: RenderOptions,
     state: Arc<RendererState>,
   ) -> Result<Self> {
@@ -65,6 +64,7 @@ impl Task for MeasureTask {
     let Some(node) = self.node.take() else {
       unreachable!()
     };
+    let node = node.into_node()?;
 
     let fonts = self.state.fonts.load();
 
