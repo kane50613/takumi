@@ -2650,29 +2650,11 @@ impl RenderNode {
     // CSS shrink-to-fit for inline-level atomic boxes:
     // width = min(max-content, max(min-content, available)).
     // Reference: https://www.w3.org/TR/CSS22/visudet.html#float-width
-    let min_content =
-      LayoutResults::compute(self, at_width(AvailableSpace::MinContent)).root_size();
-    let max_content = {
-      let mut tree = LayoutTree::from_render_node(self);
-      // Hack: Use Flexbox to avoid Block's "expand to fill" behavior when calculating max-content.
-      // We want the content's preferred width, not the container's available width.
-      if let Some(node) = tree.get_layout_node_mut_ref(NodeId::ROOT.into_taffy())
-        && node.style.display == TaffyDisplay::Block
-      {
-        node.style.display = TaffyDisplay::Flex;
-        node.style.flex_direction = taffy::FlexDirection::Row;
-        node.style.justify_content = taffy::JustifyContent::START;
-      }
-
-      tree.compute_layout(at_width(AvailableSpace::MaxContent));
-      tree.into_results().root_size()
-    };
+    let (min_content, max_content) = LayoutTree::from_render_node(self).root_min_max_widths();
     let used_width = match available_space.width {
-      AvailableSpace::Definite(available) => {
-        max_content.width.min(min_content.width.max(available))
-      }
-      AvailableSpace::MinContent => min_content.width,
-      AvailableSpace::MaxContent => max_content.width,
+      AvailableSpace::Definite(available) => max_content.min(min_content.max(available)),
+      AvailableSpace::MinContent => min_content,
+      AvailableSpace::MaxContent => max_content,
     };
     let results = LayoutResults::compute(self, at_width(AvailableSpace::Definite(used_width)));
     let size = results.root_size();
