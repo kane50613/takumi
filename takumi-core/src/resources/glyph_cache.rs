@@ -117,6 +117,17 @@ pub(crate) fn resolved_glyph(
   }
 }
 
+/// The share of the budget one entry may take: a 32nd, what one shard of the cache holds on an
+/// eight-core machine, so a single raster cannot crowd out the glyphs.
+const ENTRY_SHARE: u64 = 32;
+
+/// The most bytes one cached raster should take, a fixed share of the budget.
+pub fn max_entry_bytes() -> u64 {
+  static MAX_ENTRY_BYTES: LazyLock<u64> = LazyLock::new(|| SHARED.capacity() / ENTRY_SHARE);
+
+  *MAX_ENTRY_BYTES
+}
+
 /// The rasterized mask for `key`, rendering on a miss. Concurrent misses for the
 /// same key rasterize once. Charges the capacity the cache retains, not just the
 /// mask length.

@@ -6,9 +6,11 @@ use takumi_core::{
   geometry::{ComputedLayout as Layout, Point, Size, transformed_rect_extents},
   paint_property::ClipNode,
   painter::{BoxPainter, FillShape},
+  resources::glyph_cache::{glyph_mask, max_entry_bytes},
   scene::SceneBounds,
 };
 use tiny_skia::{IntSize, Mask as TinyMask, Transform as TinyTransform};
+use xxhash_rust::xxh3::Xxh3;
 
 use crate::{
   BoxMask, Command, Fill, Placement, RenderContext, Result, Style, build_path, checked_area,
@@ -466,6 +468,51 @@ pub(crate) fn render_mask(
   rasterize_mask(paths, transform, style.unwrap_or_default(), cull).unwrap_or_default()
 }
 
+/// Whether a fill of `size` at `transform` fits the glyph cache: its rasterized bounds, a byte a
+/// pixel, within [`max_entry_bytes`].
+fn fits_glyph_cache(size: Size<f32>, transform: Affine) -> bool {
+  transformed_placement(Point::ZERO, size, transform).is_some_and(|placement| {
+    u64::from(placement.width) * u64::from(placement.height) <= max_entry_bytes()
+  })
+}
+
+/// [`render_mask`] of `paths`, filled at `transform` within `cull`, kept in the glyph cache when
+/// it [fits](fits_glyph_cache) for `size`, the local extent of `paths`: a box drawn the same way
+/// every frame of a live view rasterizes once.
+pub(crate) fn render_cached_mask(
+  paths: &[Command],
+  size: Size<f32>,
+  transform: Affine,
+  cull: CanvasViewport,
+) -> (Arc<Vec<u8>>, Placement) {
+  let render = || render_mask(paths, Some(transform), None, Some(cull));
+
+  if !fits_glyph_cache(size, transform) {
+    let (mask, placement) = render();
+
+    return (Arc::new(mask), placement);
+  }
+
+  let Affine { a, b, c, d, x, y } = transform;
+
+  let mut hasher = Xxh3::new();
+
+  hasher.update(b"filled-shape");
+  hasher.update(&Command::digest(paths).to_le_bytes());
+  for value in [a, b, c, d, x, y] {
+    hasher.update(&value.to_bits().to_le_bytes());
+  }
+  for value in [
+    cull.origin.x,
+    cull.origin.y,
+    cull.size.width,
+    cull.size.height,
+  ] {
+    hasher.update(&value.to_le_bytes());
+  }
+  glyph_mask(hasher.digest(), render)
+}
+
 /// `[left, top, right, bottom]` cut to `cull` once they cover too many pixels to rasterize whole,
 /// or `None` when they lie wholly outside it.
 pub(crate) fn cull_bounds(
@@ -707,7 +754,48 @@ impl<'a> MaskRow<'a> {
 
 #[cfg(test)]
 mod tests {
+  use takumi_core::{
+    layout::border::BorderProperties,
+    style::{Angle, Sides, SpacePair},
+  };
+
   use super::*;
+
+  #[test]
+  fn a_cached_mask_matches_a_fresh_one_and_is_reused() {
+    let mut paths = Vec::new();
+    let border = BorderProperties {
+      radius: Sides([SpacePair { x: 9.5, y: 9.5 }; 4]),
+      ..Default::default()
+    };
+    let size = Size::new(73.0, 41.0);
+
+    border.append_mask_commands(&mut paths, size, Point::ZERO);
+
+    let transform = Affine::translation(11.25, 7.75);
+    let cull = CanvasViewport {
+      origin: Point { x: 0, y: 0 },
+      size: Size::new(200, 100),
+    };
+    let fresh = render_mask(&paths, Some(transform), None, Some(cull));
+    let (first, placement) = render_cached_mask(&paths, size, transform, cull);
+    let (second, _) = render_cached_mask(&paths, size, transform, cull);
+
+    assert_eq!((first.as_slice(), placement), (fresh.0.as_slice(), fresh.1));
+    assert!(Arc::ptr_eq(&first, &second));
+  }
+
+  #[test]
+  fn the_cache_takes_a_fill_by_its_rasterized_bounds() {
+    let strip = Size::new(1_000.0, 1.0);
+    let widest = Size::new(max_entry_bytes() as f32, 1.0);
+
+    assert!(fits_glyph_cache(Size::new(270.0, 70.0), Affine::IDENTITY));
+    assert!(fits_glyph_cache(strip, Affine::IDENTITY));
+    assert!(!fits_glyph_cache(strip, Affine::rotation(Angle::new(45.0))));
+    assert!(fits_glyph_cache(widest, Affine::IDENTITY));
+    assert!(!fits_glyph_cache(widest, Affine::translation(0.5, 0.5)));
+  }
 
   #[test]
   fn a_row_covers_only_the_offsets_inside_the_mask() {

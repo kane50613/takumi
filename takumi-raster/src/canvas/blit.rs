@@ -11,7 +11,7 @@ use super::{
   DrawTarget, MASK_RUN, MaskSamplingOptions, MaskView, OverlayOptions, PaintSource,
   SamplingOptions, composite,
   composite::PixelSampler,
-  mask::MaskRow,
+  mask::{MaskRow, render_cached_mask},
   paint_source::{RowSource, ScaledRows},
   skia::{
     FillColorOptions, ImagePathFillOptions, try_draw_image_with_tiny_skia,
@@ -21,7 +21,6 @@ use super::{
 use crate::{
   Placement,
   blend::*,
-  render_mask,
   resources::image_buffer::premultiply_pixel,
   style::{Affine, BlendMode, ImageScalingAlgorithm},
 };
@@ -575,11 +574,11 @@ fn composite_bordered_source(
     .border
     .append_mask_commands(&mut paths, size.map(|v| v as f32), Point::ZERO);
 
-  let (mask, placement) = render_mask(
+  let (mask, placement) = render_cached_mask(
     &paths,
-    Some(options.transform),
-    None,
-    Some(target.viewport()),
+    size.map(|v| v as f32),
+    options.transform,
+    target.viewport(),
   );
   let canvas_to_source =
     if options.transform.is_identity() && placement.left >= 0 && placement.top >= 0 {
