@@ -5,15 +5,12 @@ import sh from "shiki/langs/sh.mjs";
 import tsx from "shiki/langs/tsx.mjs";
 import githubDarkDefault from "shiki/themes/github-dark-default.mjs";
 import githubLightDefault from "shiki/themes/github-light-default.mjs";
-import { CodeDemo } from "~/components/home/code-demo";
 import { CTA } from "~/components/home/cta";
-import { Features } from "~/components/home/features";
-import { Filmstrip } from "~/components/home/filmstrip";
-import { Hero } from "~/components/home/hero";
-import { PaintTeardown } from "~/components/home/paint-teardown";
 import type { ThemedHtml } from "~/components/home/shiki-html";
 import { Showcase } from "~/components/home/showcase";
+import { Story } from "~/components/home/story";
 import { Seo, SiteJsonLd } from "~/components/seo";
+import * as motion from "../../../example/twitter-images/components/home-demo-card-motion";
 import { baseOptions } from "~/layout-config";
 
 // Source of example/twitter-images/components/home-demo-card.tsx; keep in sync.
@@ -42,19 +39,15 @@ const CODE_SNIPPET = `export default function DemoCard() {
   );
 }`;
 
-// Mirrors the replay loop in takumi-paint/README.md; `draw` is the reader's own.
-const PAINT_SNIPPET = `import { paint } from "takumi-paint";
-
-const tree = await paint(<DemoCard />, {
-  width: 1200,
-  height: 630,
-});
-
-for (const step of tree.steps) {
-  if (step.type !== "draw") continue;
-  ctx.setTransform(...step.node.transform);
-  for (const drawable of step.drawables) draw(ctx, drawable);
-}`;
+// How example/twitter-images/animation.tsx renders home-demo-card-motion.tsx.
+const KEYFRAMES_SNIPPET = `const webp = await renderAnimation({
+  width: ${motion.width},
+  height: ${motion.height},
+  fps: ${motion.animation.fps},
+  format: "webp",
+  css: [morph], // "@keyframes morph { … }"
+  scenes: [{ node: <DemoCardMotion />, durationMs: ${motion.animation.durationMs} }],
+});`;
 
 const CTA_COMMAND = "bun i takumi-js";
 
@@ -75,9 +68,9 @@ function highlight(code: string, lang: "tsx" | "sh"): ThemedHtml {
   };
 }
 
-const highlightedCodeDemo = highlight(CODE_SNIPPET, "tsx");
-const highlightedPaint = highlight(PAINT_SNIPPET, "tsx");
-const highlightedCta = highlight(CTA_COMMAND, "sh");
+const highlightedCard = highlight(CODE_SNIPPET, "tsx");
+const highlightedKeyframes = highlight(KEYFRAMES_SNIPPET, "tsx");
+const highlightedInstall = highlight(CTA_COMMAND, "sh");
 
 export default function Home() {
   return (
@@ -85,13 +78,9 @@ export default function Home() {
       <Seo title={TITLE} description={DESCRIPTION} path="" />
       <SiteJsonLd />
 
-      <Hero />
-      <CodeDemo highlightedHtml={highlightedCodeDemo} />
-      <PaintTeardown highlightedHtml={highlightedPaint} />
-      <Features />
-      <Filmstrip />
+      <Story cardSource={highlightedCard} keyframes={highlightedKeyframes} />
       <Showcase />
-      <CTA highlightedHtml={highlightedCta} />
+      <CTA install={highlightedInstall} />
     </HomeLayout>
   );
 }

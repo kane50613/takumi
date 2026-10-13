@@ -147,19 +147,6 @@
 @theme inline {
   --default-font-family: "Noto Serif", serif;
   --font-mono: "Geist Mono", monospace;
-
-  --animate-reveal-up: reveal-up 0.8s cubic-bezier(0.16, 1, 0.3, 1) both;
-}
-
-@keyframes reveal-up {
-  from {
-    opacity: 0;
-    transform: translateY(28px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
 }
 
 /* ─── Playground boot ─── */
@@ -233,5 +220,116 @@
 @media (prefers-reduced-motion: reduce) {
   .paint-in {
     animation: none;
+  }
+}
+
+/* ─── Home story: one card, shown per stage by [data-state] on the stage ─── */
+
+.story-stage {
+  container-type: inline-size;
+  --story-ease: cubic-bezier(0.77, 0, 0.175, 1);
+}
+
+.story-view {
+  perspective: 240cqw;
+}
+
+.story-card {
+  transform-style: preserve-3d;
+  transition: transform 800ms var(--story-ease);
+}
+
+.story-image,
+.story-motion,
+.story-pixels,
+.story-boxes,
+.story-outline {
+  transition: opacity 300ms ease;
+}
+
+.story-motion,
+.story-pixels,
+.story-boxes,
+.story-outline {
+  opacity: 0;
+}
+
+.story-layers {
+  transform-style: preserve-3d;
+}
+
+.story-layer {
+  opacity: 0;
+  transition:
+    transform 800ms var(--story-ease),
+    opacity 300ms ease;
+}
+
+.story-outline {
+  border-color: rgb(255 255 255 / 0.22);
+  transition-property: opacity, border-color;
+}
+
+.story-stepper a {
+  color: var(--color-muted-foreground);
+  transition: color 150ms ease;
+}
+
+.story-stepper a:hover {
+  color: var(--color-foreground);
+}
+
+[data-state="layout"] .story-image {
+  opacity: 0.3;
+}
+
+[data-state="layout"] .story-boxes {
+  opacity: 1;
+}
+
+[data-state="paint"] .story-card {
+  transform: translateY(-4%) rotateX(52deg) rotateZ(-32deg) scale(0.62);
+}
+
+[data-state="paint"] .story-image {
+  opacity: 0;
+}
+
+[data-state="paint"] .story-layer {
+  opacity: 1;
+  transform: translateZ(calc(var(--offset) * 8cqw));
+}
+
+[data-state="paint"] .story-outline {
+  opacity: 1;
+}
+
+[data-state="pixels"][data-pixels="ready"] .story-pixels,
+[data-state="motion"] .story-motion {
+  opacity: 1;
+}
+
+[data-state="pixels"][data-pixels="ready"] .story-image {
+  opacity: 0;
+}
+
+[data-state="jsx"] [data-goto="jsx"],
+[data-state="layout"] [data-goto="layout"],
+[data-state="paint"] [data-goto="paint"],
+[data-state="pixels"] [data-goto="pixels"],
+[data-state="motion"] [data-goto="motion"] {
+  color: var(--color-foreground);
+}
+
+@media (max-width: 63.99rem) {
+  [data-state="paint"] .story-layer {
+    transform: translateZ(calc(var(--offset) * 6cqw));
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .story-card,
+  .story-layer {
+    transition-duration: 0ms;
   }
 }

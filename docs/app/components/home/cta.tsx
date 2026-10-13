@@ -1,49 +1,38 @@
 import { Link } from "waku";
-import { ShikiHtml, type ThemedHtml } from "./shiki-html";
+import { Code, H2, LEAD, LINK, Section, TEXT_COLUMN, VISUAL_COLUMN } from "./section";
+import type { ThemedHtml } from "./shiki-html";
 
-const linkClass = "underline underline-offset-4 decoration-border hover:decoration-primary";
-
-export function CTA({ highlightedHtml }: { highlightedHtml: ThemedHtml }) {
+export function CTA({ install }: { install: ThemedHtml }) {
   return (
-    <section className="px-6 pt-32 pb-24 max-sm:pt-20 max-sm:pb-16">
-      <div className="max-w-130 mx-auto text-center">
-        <span
-          lang="ja"
-          title="takumi: artisan"
-          className="inline-flex size-9 items-center justify-center bg-primary text-primary-foreground font-bold select-none mb-6"
-        >
-          匠
-        </span>
-        <h2 className="font-[540] text-[clamp(2.25rem,3.5vw,3.25rem)] leading-[1.06] tracking-tight text-balance mb-6">
-          Render your first image.
-        </h2>
-        <ShikiHtml
-          html={highlightedHtml}
-          className="inline-block px-6 py-2.5 border border-dashed border-border font-mono text-sm select-all mb-6"
-        />
-        <div className="flex justify-center gap-6 text-sm mb-8">
-          <Link to="/docs" className={linkClass}>
+    <Section className="pb-32 lg:pb-40">
+      <div className={`${TEXT_COLUMN} space-y-6`}>
+        <h2 className={H2}>Render your first image.</h2>
+        <p className={LEAD}>
+          Native on Node.js and Bun. WebAssembly on Workers and browsers. A crate for Rust.
+        </p>
+      </div>
+      <div className={`${VISUAL_COLUMN} space-y-6`}>
+        <Code html={install} />
+        <div className="flex flex-wrap gap-6 text-sm">
+          <Link to="/docs" className={LINK}>
             Quick start
           </Link>
-          <Link to="/playground" className={linkClass}>
+          <Link to="/playground" className={LINK}>
             Playground
           </Link>
           <a
             href="https://github.com/kane50613/takumi"
             target="_blank"
             rel="noopener noreferrer"
-            className={linkClass}
+            className={LINK}
           >
             GitHub
           </a>
         </div>
-        <div className="font-mono text-xs text-muted-foreground leading-relaxed">
-          <p className="text-balance">
-            Layout by taffy · text by parley &amp; skrifa · SVG by resvg
-          </p>
-          <p>MIT / Apache-2.0</p>
-        </div>
+        <p className="text-sm text-muted-foreground">
+          Layout by Taffy, text by Parley and Skrifa, SVG by resvg. MIT or Apache-2.0.
+        </p>
       </div>
-    </section>
+    </Section>
   );
 }
