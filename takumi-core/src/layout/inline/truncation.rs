@@ -29,7 +29,7 @@ fn measure_ellipsis_width(
   ellipsis_style: &SizedFontStyle,
   ellipsis_char: &str,
 ) -> f32 {
-  let (mut ellipsis_layout, _) = context.tree_builder(ellipsis_style.into(), true, |builder| {
+  let (mut ellipsis_layout, _) = context.tree_builder(ellipsis_style, true, |builder| {
     push_presentation_text(
       builder,
       ellipsis_style,
@@ -219,7 +219,7 @@ pub(super) fn make_ellipsis_layout<'c>(
   let ellipsis_style = tail_text_span(spans).map_or(root_style, |(style, _)| style);
 
   let (mut final_layout, _) =
-    context.tree_builder(root_style.into(), chromium_line_breaks(spans), |builder| {
+    context.tree_builder(root_style, chromium_line_breaks(spans), |builder| {
       push_spans_into_builder(builder, spans, &context.fonts().classes);
       push_presentation_text(
         builder,

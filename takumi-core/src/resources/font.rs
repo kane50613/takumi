@@ -14,8 +14,8 @@ use std::{
 };
 
 use parley::{
-  CHROMIUM_LINE_BREAK_OVERRIDE, GenericFamily as ParleyGenericFamily, GlyphRun, LayoutContext,
-  TextStyle, TreeBuilder,
+  BaseDirection, CHROMIUM_LINE_BREAK_OVERRIDE, GenericFamily as ParleyGenericFamily, GlyphRun,
+  LayoutContext, TreeBuilder,
   fontique::{
     Attributes, Blob, Collection, CollectionOptions, FallbackKey, FontInfo, FontInfoOverride,
     FontStyle, FontWeight, FontWidth, QueryFamily, QueryStatus, Script, ScriptExt,
@@ -39,7 +39,7 @@ use std::collections::HashMap;
 use crate::resvg::usvg::fontdb::Database;
 use crate::{
   context::RenderContext,
-  font_style::ExpandedFontFamily,
+  font_style::{ExpandedFontFamily, SizedFontStyle},
   layout::inline::{InlineBrush, InlineLayout},
   resources::{
     glyph::{BOLD_THRESHOLD, GlyphResolveContext, ResolvedGlyphs, synthesis_embolden_strength},
@@ -47,7 +47,7 @@ use crate::{
     unicode_range::UnicodeRangeSet,
   },
   sort_key::sort_by_key,
-  style::{FontFamily, FontStyle as CssFontStyle},
+  style::{Direction, FontFamily, FontStyle as CssFontStyle},
 };
 
 /// Errors that can occur during font loading and conversion.
@@ -816,18 +816,25 @@ impl RenderContext {
     })
   }
 
-  /// Builds an inline layout with the given root style.
+  /// Builds an inline layout whose paragraph takes `root_style` and its direction.
   pub(crate) fn tree_builder(
     &self,
-    root_style: TextStyle<'_, '_, InlineBrush>,
+    root_style: &SizedFontStyle,
     chromium_line_breaks: bool,
     func: impl FnOnce(&mut TreeBuilder<'_, InlineBrush>),
   ) -> (InlineLayout, String) {
+    let base_direction = match root_style.parent.inherited_data.direction {
+      Direction::Ltr => BaseDirection::Ltr,
+      Direction::Rtl => BaseDirection::Rtl,
+    };
+
     self.fonts().with_context(|fonts| {
       with_layout_context(|layout| {
         // Line boxes resolve their vertical metrics in `LayoutUnit`s, as Blink's do; parley's
         // pixel rounding would open gaps between lines that read as clearance.
-        let mut builder = layout.tree_builder(&mut fonts.inner, 1.0, false, &root_style);
+        let mut builder = layout.tree_builder(&mut fonts.inner, 1.0, false, &root_style.into());
+
+        builder.set_base_direction(base_direction);
         if chromium_line_breaks {
           builder.set_line_break_override(Some(CHROMIUM_LINE_BREAK_OVERRIDE));
         }

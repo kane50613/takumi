@@ -154,7 +154,7 @@ impl<'c> InlineLayoutRequest<'c> {
 }
 
 /// Hashes everything shaping depends on: each span's processed text and
-/// style, plus the root style and language.
+/// style, plus the root style, its direction, and language.
 fn shape_fingerprint(
   spans: &[ProcessedInlineSpan<'_>],
   style: &SizedFontStyle<'_>,
@@ -163,6 +163,7 @@ fn shape_fingerprint(
   let mut hasher = Xxh3::new();
 
   style.hash_shaping_inputs(&mut hasher);
+  (style.parent.inherited_data.direction as u8).hash(&mut hasher);
   lang.hash(&mut hasher);
   for (span_id, span) in spans.iter().enumerate() {
     let (text, style, shaping) = match span {
@@ -970,25 +971,29 @@ fn trim_trailing_space(spans: &mut [ProcessedInlineSpan<'_>]) {
   }
 }
 
-/// The direction mark a paragraph leads with. Parley has no base-direction
-/// API and infers the paragraph level from the first strong character, so
-/// every block leads with its direction's mark; a text-less LTR paragraph
-/// already has that base level, and the mark's line metrics would inflate its
-/// line box.
+/// The direction mark a right-to-left paragraph leads with when an inline box comes before its
+/// first text. Parley gives such a box bidi level 0 whatever the base direction, where Blink
+/// resolves it as U+FFFC at the paragraph level; the mark gives the box a run to take its level
+/// from.
 fn direction_mark_span<'c>(
   items: &[InlineItem<'c>],
   context: &'c RenderContext,
 ) -> Option<ProcessedInlineSpan<'c>> {
-  let text_item_context = items.iter().find_map(|item| match item {
-    InlineItem::Text { context, .. } => Some(*context),
-    _ => None,
-  });
+  let first_text = items
+    .iter()
+    .position(|item| matches!(item, InlineItem::Text { .. }));
 
-  if items.is_empty()
-    || (text_item_context.is_none() && context.style.inherited_data.direction != Direction::Rtl)
+  if context.style.inherited_data.direction != Direction::Rtl
+    || items.is_empty()
+    || first_text == Some(0)
   {
     return None;
   }
+
+  let text_item_context = first_text.and_then(|index| match &items[index] {
+    InlineItem::Text { context, .. } => Some(*context),
+    _ => None,
+  });
 
   // The mark borrows the first text span's style so it resolves to the same
   // font and cannot skew the line's metrics, and it must not advance the
@@ -1127,7 +1132,7 @@ fn shape_spans(
     cache_key.zip(expected_text.as_deref()),
     context.id(),
     || {
-      context.tree_builder(style.into(), chromium_line_breaks(spans), |builder| {
+      context.tree_builder(style, chromium_line_breaks(spans), |builder| {
         push_spans_into_builder(builder, spans, &context.fonts().classes)
       })
     },
@@ -2382,13 +2387,13 @@ mod tests {
     assert!(
       segments
         .iter()
-        .any(|(span_id, _, color)| *span_id == Some(1) && *color == orange),
+        .any(|(span_id, _, color)| *span_id == Some(0) && *color == orange),
       "{segments:#?}"
     );
     assert!(
       segments
         .iter()
-        .any(|(span_id, _, color)| *span_id == Some(3) && *color == blue),
+        .any(|(span_id, _, color)| *span_id == Some(2) && *color == blue),
       "{segments:#?}"
     );
   }
