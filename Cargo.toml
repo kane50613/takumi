@@ -185,6 +185,20 @@ priority = -1
 [profile.dev.package."*"]
 opt-level = 2
 
+# The crates that draw pixels, so tests that render hundreds of fixtures run in seconds.
+# takumi-core stays unoptimized: it changes most often, and optimizing it doubles a rebuild.
+[profile.dev.package.takumi]
+opt-level = 1
+
+[profile.dev.package.takumi-raster]
+opt-level = 1
+
+[profile.dev.package.takumi-pdf]
+opt-level = 1
+
+[profile.dev.package.takumi-svg]
+opt-level = 1
+
 [profile.release]
 strip = true
 opt-level = 3
