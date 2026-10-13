@@ -31,11 +31,13 @@ mod stylesheets_helpers;
 mod stylesheets_mask;
 #[path = "stylesheets_query.rs"]
 mod stylesheets_query;
+#[path = "stylesheets_values.rs"]
+mod stylesheets_values;
 #[path = "stylesheets_vars.rs"]
 mod stylesheets_vars;
 
-pub(crate) use self::stylesheets_mask::PropertyMask;
 use self::{stylesheets_helpers::*, stylesheets_vars::apply_deferred_declaration};
+pub(crate) use self::{stylesheets_mask::PropertyMask, stylesheets_values::ParsedValues};
 
 /// Whether a longhand declared `where inherit = true` inherits.
 macro_rules! longhand_inherits {
@@ -658,8 +660,7 @@ macro_rules! define_style {
                   style
                     .declarations
                     .append_parsed_declarations(
-                      property
-                        .parse_css_input_declarations(css_input)
+                      ParsedValues::parse(property, css_input)
                         .map_err(|error| error.into_serde_error(&key))?,
                       important,
                     );

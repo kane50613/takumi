@@ -5,13 +5,14 @@ use serde::{
   de::{DeserializeSeed, Error, IgnoredAny, MapAccess, SeqAccess, Visitor},
 };
 
-use crate::layout::node::{
-  ImageData, MAXIMUM_DOM_TREE_DEPTH, Node, NodeKind, NodeMetadata, TextData,
+use crate::{
+  layout::node::{ImageData, MAXIMUM_DOM_TREE_DEPTH, Node, NodeKind, NodeMetadata, TextData},
+  style::ParsedValues,
 };
 
 impl<'de> Deserialize<'de> for Node {
   fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-    NodeSeed { depth: 0 }.deserialize(deserializer)
+    ParsedValues::scope(|| NodeSeed { depth: 0 }.deserialize(deserializer))
   }
 }
 
