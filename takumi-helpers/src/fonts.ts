@@ -346,20 +346,34 @@ export function collectCodepoints(source: CodepointSource): Set<number> {
   return codepoints;
 }
 
-function rangesCover(ranges: [number, number][], codepoints: Set<number>): boolean {
-  if (ranges.length === 0) {
-    return true;
-  }
+/** Whether any of the ascending `codepoints` falls in `ranges`; no ranges covers everything. */
+function rangesCover(ranges: [number, number][], codepoints: Uint32Array): boolean {
+  return (
+    ranges.length === 0 ||
+    ranges.some(([lo, hi]) => {
+      const first = codepoints[lowerBound(codepoints, lo)];
 
-  for (const cp of codepoints) {
-    for (const [lo, hi] of ranges) {
-      if (cp >= lo && cp <= hi) {
-        return true;
-      }
+      return first !== undefined && first <= hi;
+    })
+  );
+}
+
+/** The index of the first of the ascending `values` at or above `target`. */
+function lowerBound(values: Uint32Array, target: number): number {
+  let low = 0;
+  let high = values.length;
+
+  while (low < high) {
+    const middle = (low + high) >>> 1;
+
+    if ((values[middle] ?? target) < target) {
+      low = middle + 1;
+    } else {
+      high = middle;
     }
   }
 
-  return false;
+  return low;
 }
 
 /**
@@ -368,7 +382,7 @@ function rangesCover(ranges: [number, number][], codepoints: Set<number>): boole
  * node tree. Works on any descriptor carrying `ranges`; entries without it are kept.
  */
 export function subsetFonts<T>({ fonts, source }: { fonts: T[]; source: CodepointSource }): T[] {
-  const codepoints = collectCodepoints(source);
+  const codepoints = Uint32Array.from(collectCodepoints(source)).sort();
 
   return fonts.filter((font) =>
     rangesCover((font as { ranges?: [number, number][] }).ranges ?? [], codepoints),
