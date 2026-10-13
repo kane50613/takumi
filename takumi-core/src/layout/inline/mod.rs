@@ -1982,6 +1982,42 @@ mod tests {
   }
 
   #[test]
+  fn a_hidden_box_keeps_no_fragment_items() {
+    let fonts = create_test_context();
+    let context = RenderContext::builder()
+      .fonts(fonts.snapshot_with_fallbacks(None))
+      .sizing(
+        SizingContext::builder()
+          .viewport(Viewport::new((200, None)))
+          .build(),
+      )
+      .build();
+    let paragraph = |text: &str, display: Display| {
+      Node::container([Node::text(text.to_string())])
+        .with_style(Style::default().with(StyleDeclaration::display(display)))
+    };
+    let root = RenderNode::from_node(
+      &context,
+      Node::container([
+        paragraph("Shown.", Display::Block),
+        Node::container([paragraph("Hidden.", Display::Block)])
+          .with_style(Style::default().with(StyleDeclaration::display(Display::None))),
+      ])
+      .with_style(Style::default().with(StyleDeclaration::display(Display::Block))),
+    );
+    let scene = Scene::lay_out(root, Viewport::new((200, None)), true).unwrap();
+    let [shown, hidden] = scene.root.children.as_deref().unwrap() else {
+      panic!("expected two children");
+    };
+
+    assert!(shown.has_fragment_items());
+    assert!(
+      !hidden.children.as_deref().unwrap()[0].has_fragment_items(),
+      "the hidden paragraph laid its text out"
+    );
+  }
+
+  #[test]
   fn a_descendant_font_does_not_grow_the_span_background() {
     let fonts = create_test_context();
     let context = RenderContext::builder()
