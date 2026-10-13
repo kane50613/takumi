@@ -119,7 +119,8 @@ fn build_cmap(mappings: impl Iterator<Item = (u32, u32)>, variations: Option<&[u
   for (codepoint, glyph) in mappings {
     match groups.last_mut() {
       Some((start, end, start_glyph))
-        if codepoint == *end + 1 && glyph == *start_glyph + (codepoint - *start) =>
+        if end.checked_add(1) == Some(codepoint)
+          && start_glyph.checked_add(codepoint - *start) == Some(glyph) =>
       {
         *end = codepoint;
       }
@@ -181,7 +182,7 @@ fn variation_subtable(cmap: &[u8]) -> Option<&[u8]> {
       return None;
     }
 
-    cmap.get(offset..offset + read_u32(cmap, offset + 2)? as usize)
+    cmap.get(offset..offset.checked_add(read_u32(cmap, offset.checked_add(2)?)? as usize)?)
   })
 }
 
@@ -201,7 +202,7 @@ fn replace_table(sfnt: &[u8], tag: Tag, table: &[u8]) -> Option<Vec<u8>> {
     } else {
       let offset = read_u32(sfnt, record + 8)? as usize;
 
-      sfnt.get(offset..offset + read_u32(sfnt, record + 12)? as usize)?
+      sfnt.get(offset..offset.checked_add(read_u32(sfnt, record + 12)? as usize)?)?
     };
 
     let offset = out.len() as u32;
@@ -226,11 +227,15 @@ fn checksum(table: &[u8]) -> u32 {
 }
 
 fn read_u16(data: &[u8], at: usize) -> Option<u16> {
-  Some(u16::from_be_bytes(data.get(at..at + 2)?.try_into().ok()?))
+  Some(u16::from_be_bytes(
+    data.get(at..at.checked_add(2)?)?.try_into().ok()?,
+  ))
 }
 
 fn read_u32(data: &[u8], at: usize) -> Option<u32> {
-  Some(u32::from_be_bytes(data.get(at..at + 4)?.try_into().ok()?))
+  Some(u32::from_be_bytes(
+    data.get(at..at.checked_add(4)?)?.try_into().ok()?,
+  ))
 }
 
 fn push_u16(out: &mut Vec<u8>, value: u16) {
