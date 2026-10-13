@@ -18,8 +18,8 @@ use image::{
 };
 use mask::MaskStackEntry;
 pub(crate) use mask::{
-  CanvasViewport, MaskView, NodeMasks, PlacedMask, attenuate_alpha_by_mask, cull_bounds,
-  intersect_alpha_masks, render_mask,
+  CanvasViewport, MaskView, NodeMasks, PlacedMask, alpha_mask, attenuate_alpha_by_mask,
+  cull_bounds, intersect_alpha_masks, render_mask,
 };
 pub(crate) use paint_source::{
   BilinearAxis, BoxAxis, PaintSource, RowSource, SamplingFootprint, interpolate_with_footprint,
