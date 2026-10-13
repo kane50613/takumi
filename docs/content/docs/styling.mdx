@@ -211,7 +211,7 @@ A Tailwind source stylesheet drops into `css` unchanged. The engine reads these 
 | At-rule                 | Reads as                                                                                               | Rejected                |
 | ----------------------- | ------------------------------------------------------------------------------------------------------ | ----------------------- |
 | `@theme`                | its `:root` rule. Nested `@keyframes` register. Modifiers like `reference` and `inline` change nothing | `prefix()`              |
-| `@import "tailwindcss"` | [Preflight](#preflight) as each [entry point](#preflight) brings it, at the top level only             | any other import target |
+| `@import "tailwindcss"` | [Preflight](#preflight) when the entry point brings it, at the top level only                          | any other import target |
 | `@apply`                | the utilities' declarations, expanded in place, `!` suffix included                                    | variants like `md:`     |
 
 ```css title="Define Tailwind utilities"
