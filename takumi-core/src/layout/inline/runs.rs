@@ -184,14 +184,14 @@ pub struct HangingWhitespace {
 }
 
 impl HangingWhitespace {
-  /// The whitespace of a run of `advance` that the line's end holds `share` of, in a paragraph
-  /// that is right-to-left when `rtl_paragraph`.
-  pub(super) fn of(share: f32, run_rtl: bool, rtl_paragraph: bool) -> Self {
+  /// The whitespace of a run that the line's end holds `share` of, in a paragraph that is
+  /// right-to-left when `rtl_paragraph`, on a line that took `fraction` of its free space.
+  pub(super) fn of(share: f32, run_rtl: bool, rtl_paragraph: bool, fraction: f32) -> Self {
     Self {
       advance: share,
       shift: match (rtl_paragraph, run_rtl) {
-        (true, false) => share,
-        (false, true) => -share,
+        (true, false) => share * fraction,
+        (false, true) => -share * (1.0 - fraction),
         _ => 0.0,
       },
       at_start: run_rtl,
