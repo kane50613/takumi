@@ -2,19 +2,32 @@
 
 import { useEffect, useRef } from "react";
 import type { Palette, ParticleScene, StageData, StageLayout } from "./particle-scene";
-import { ramp, STAGE, STEP_STARTS } from "./stage-timeline";
+import {
+  hammerAngle,
+  layoutSpread,
+  paintSpread,
+  STEP_STARTS,
+  STRIKE_STOPS,
+  strikeImpulse,
+  textSpread,
+} from "./stage-timeline";
 
-/** Scroll progress eases toward its target with this time constant. */
-const FOLLOW_MS = 120;
+const FOLLOW_MS = 105;
 const START_AFTER_MS = 3500;
 const WIDE_MIN = 1024;
+const STRIKE_LABELS = [
+  "Strike the anvil",
+  "Strike again · Text",
+  "Strike again · Paint",
+  "Quench into outputs",
+] as const;
 
 function readPalette(): Palette {
   const style = getComputedStyle(document.documentElement);
 
   return {
-    foreground: style.getPropertyValue("--foreground").trim() || "#111111",
-    background: style.getPropertyValue("--background").trim() || "#fafafa",
+    foreground: style.getPropertyValue("--foreground").trim() || "#1a1410",
+    background: style.getPropertyValue("--background").trim() || "#faf5ee",
   };
 }
 
@@ -29,8 +42,8 @@ function canRunScene() {
 }
 
 /**
- * Drives the homepage stage from scroll: the hero leaves, the headline hands over to the particle
- * scene, and the steps track the phase. Without the scene, the headline fades and the card fades in.
+ * Drives the homepage hammer-and-anvil forge from scroll or click/key strikes: each blow swings
+ * the hammer onto the anvil and splits the component into layout boxes, glyph paths, and paint steps.
  */
 export function StageController({ data }: { data: StageData }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -39,19 +52,32 @@ export function StageController({ data }: { data: StageData }) {
     const canvas = canvasRef.current;
     const stage = canvas?.closest<HTMLElement>("[data-stage]");
     const view = stage?.querySelector<HTMLElement>("[data-stage-view]");
-    const hero = stage?.querySelector<HTMLElement>("[data-hero]");
-    const headline = stage?.querySelector<HTMLElement>("[data-headline]");
-    const card = stage?.querySelector<HTMLElement>("[data-card]");
-    const steps = stage?.querySelector<HTMLElement>("[data-steps]");
-    const stepItems = [...(steps?.querySelectorAll<HTMLElement>("li") ?? [])];
+    const hammer = stage?.querySelector<SVGGElement>("[data-hammer]");
+    const anvil = stage?.querySelector<SVGGElement>("[data-anvil]");
+    const impactBurst = stage?.querySelector<SVGGElement>("[data-impact-burst]");
+    const anvilCard = stage?.querySelector<SVGGElement>("[data-anvil-card]");
+    const cardBoundsEl = stage?.querySelector<SVGGElement>("[data-card-bounds]");
+    const layoutLayer = stage?.querySelector<SVGGElement>("[data-layer='layout']");
+    const textLayer = stage?.querySelector<SVGGElement>("[data-layer='text']");
+    const paintLayer = stage?.querySelector<SVGGElement>("[data-layer='paint']");
+    const boxElements = [...(stage?.querySelectorAll<SVGGElement>("[data-box]") ?? [])];
+    const glyphElements = [...(stage?.querySelectorAll<SVGGElement>("[data-glyph-run]") ?? [])];
+    const paintPlanes = [...(stage?.querySelectorAll<SVGGElement>("[data-paint-plane]") ?? [])];
+    const copyBlocks = [...(stage?.querySelectorAll<HTMLElement>("[data-stage-copy]") ?? [])];
+    const stepButtons = [
+      ...(stage?.querySelectorAll<HTMLButtonElement>("[data-step-button]") ?? []),
+    ];
+    const strikeTriggers = [
+      ...(stage?.querySelectorAll<HTMLElement>("[data-strike-trigger]") ?? []),
+    ];
+    const strikeLabel = stage?.querySelector<HTMLElement>("[data-strike-label]");
 
-    if (!canvas || !stage || !view || !hero || !headline || !card || !steps) {
+    if (!canvas || !stage || !view) {
       return;
     }
 
     const reduceMotion = matchMedia("(prefers-reduced-motion: reduce)").matches;
     let scene: ParticleScene | undefined;
-    let sampleInk: ((heading: HTMLElement, origin: DOMRect) => Float32Array) | undefined;
     let disposed = false;
     let frame = 0;
     let target = 0;
@@ -59,22 +85,57 @@ export function StageController({ data }: { data: StageData }) {
     let last = performance.now();
     let activeStep = -1;
 
-    const measure = () => {
+    const getTravel = () => {
       const rect = stage.getBoundingClientRect();
       const pinnedTop = parseFloat(getComputedStyle(view).top) || 0;
       const travel = rect.height - view.offsetHeight;
 
+      return { rect, pinnedTop, travel };
+    };
+
+    const measure = () => {
+      const { rect, pinnedTop, travel } = getTravel();
+
       target = travel > 0 ? Math.min(Math.max((pinnedTop - rect.top) / travel, 0), 1) : 0;
+    };
+
+    const scrollToProgress = (nextProgress: number) => {
+      const { rect, pinnedTop, travel } = getTravel();
+
+      if (travel <= 0) {
+        return;
+      }
+      const stageTopInDoc = rect.top + window.scrollY - pinnedTop;
+      const destination = stageTopInDoc + nextProgress * travel;
+
+      window.scrollTo({
+        top: destination,
+        behavior: reduceMotion ? "auto" : "smooth",
+      });
+    };
+
+    const onStrike = () => {
+      const nextStop = STRIKE_STOPS.find((stop) => stop > target + 0.08);
+
+      if (nextStop !== undefined) {
+        scrollToProgress(nextStop);
+        return;
+      }
+
+      const outputsSection = document.getElementById("outputs");
+
+      if (outputsSection) {
+        outputsSection.scrollIntoView({ behavior: reduceMotion ? "auto" : "smooth" });
+      }
     };
 
     const stageLayout = (): StageLayout => {
       const origin = view.getBoundingClientRect();
-      const cardRect = card.getBoundingClientRect();
+      const cardRect = cardBoundsEl?.getBoundingClientRect() ?? origin;
 
       return {
         width: origin.width,
         height: origin.height,
-        ink: sampleInk?.(headline, origin) ?? new Float32Array(),
         card: {
           left: cardRect.left - origin.left,
           top: cardRect.top - origin.top,
@@ -85,38 +146,110 @@ export function StageController({ data }: { data: StageData }) {
     };
 
     const apply = (p: number) => {
-      const heroOut = ramp(p, STAGE.heroOut);
-      const step = STEP_STARTS.findLastIndex((start) => p >= start);
+      const step = Math.max(
+        0,
+        STEP_STARTS.findLastIndex((start) => p >= start),
+      );
+      const angle = reduceMotion ? (step === 0 ? -20 : -8) : hammerAngle(p);
+      const impulse = reduceMotion ? 0 : strikeImpulse(p);
+      const lSpread = reduceMotion ? (step === 1 ? 1 : 0) : layoutSpread(p);
+      const tSpread = reduceMotion ? (step === 2 ? 1 : 0) : textSpread(p);
+      const pSpread = reduceMotion ? (step === 3 ? 1 : 0) : paintSpread(p);
 
-      hero.style.opacity = String(1 - heroOut);
-      hero.style.transform = reduceMotion ? "" : `translateY(${-heroOut * 12}svh)`;
-      hero.style.visibility = heroOut >= 1 ? "hidden" : "";
-      hero.inert = heroOut > 0.5;
-      steps.style.opacity = String(ramp(p, STAGE.steps));
+      if (hammer) {
+        hammer.style.transform = `rotate(${-angle.toFixed(2)}deg)`;
+      }
+      if (anvil) {
+        anvil.style.transform = reduceMotion ? "" : `translateY(${(impulse * 12).toFixed(2)}px)`;
+      }
+      if (impactBurst) {
+        impactBurst.style.opacity = impulse.toFixed(3);
+        impactBurst.style.transform = `scale(${(0.72 + impulse * 0.62).toFixed(3)})`;
+      }
+
+      const intactOpacity = Math.max(
+        0,
+        1 - Math.max(lSpread * 0.92, tSpread * 0.95, pSpread * 0.96),
+      );
+
+      if (anvilCard) {
+        anvilCard.style.opacity = intactOpacity.toFixed(3);
+        anvilCard.style.transform = reduceMotion
+          ? ""
+          : `translateY(${(impulse * 9).toFixed(2)}px) scale(${(1 - 0.04 * (1 - intactOpacity)).toFixed(3)})`;
+      }
+
+      if (layoutLayer) {
+        layoutLayer.style.opacity = lSpread.toFixed(3);
+        layoutLayer.style.visibility = lSpread > 0.01 ? "visible" : "hidden";
+      }
+      for (const boxEl of boxElements) {
+        const dx = Number(boxEl.dataset.dx ?? 0);
+        const dy = Number(boxEl.dataset.dy ?? 0);
+        const rot = Number(boxEl.dataset.rot ?? 0);
+
+        boxEl.style.transform = reduceMotion
+          ? `translate(${(dx * 0.55).toFixed(1)}px, ${(dy * 0.55).toFixed(1)}px)`
+          : `translate(${(dx * lSpread).toFixed(1)}px, ${(dy * lSpread).toFixed(1)}px) rotate(${(rot * lSpread).toFixed(2)}deg)`;
+      }
+
+      if (textLayer) {
+        textLayer.style.opacity = tSpread.toFixed(3);
+        textLayer.style.visibility = tSpread > 0.01 ? "visible" : "hidden";
+      }
+      for (const glyphEl of glyphElements) {
+        const dx = Number(glyphEl.dataset.dx ?? 0);
+        const dy = Number(glyphEl.dataset.dy ?? 0);
+        const scale = Number(glyphEl.dataset.scale ?? 1);
+        const currentScale = 1 + (scale - 1) * tSpread;
+
+        glyphEl.style.transform = reduceMotion
+          ? `translate(${(dx * 0.6).toFixed(1)}px, ${(dy * 0.6).toFixed(1)}px)`
+          : `translate(${(dx * tSpread).toFixed(1)}px, ${(dy * tSpread).toFixed(1)}px) scale(${currentScale.toFixed(3)})`;
+      }
+
+      if (paintLayer) {
+        paintLayer.style.opacity = pSpread.toFixed(3);
+        paintLayer.style.visibility = pSpread > 0.01 ? "visible" : "hidden";
+      }
+      for (const planeEl of paintPlanes) {
+        const dx = Number(planeEl.dataset.dx ?? 0);
+        const dy = Number(planeEl.dataset.dy ?? 0);
+        const planeScale = 1 - 0.14 * pSpread;
+
+        planeEl.style.transform = reduceMotion
+          ? `translate(${(dx * 0.7).toFixed(1)}px, ${(dy * 0.7).toFixed(1)}px) scale(0.88)`
+          : `translate(${(dx * pSpread).toFixed(1)}px, ${(dy * pSpread).toFixed(1)}px) scale(${planeScale.toFixed(3)})`;
+      }
 
       if (scene) {
-        const handedOff = p >= STAGE.handoff;
+        const showParticles = lSpread > 0.02 || tSpread > 0.02 || pSpread > 0.02 || impulse > 0.02;
 
-        headline.style.opacity = handedOff ? "0" : "1";
-        card.style.opacity = String(ramp(p, STAGE.image));
-        canvas.style.visibility = handedOff && p < STAGE.image[1] ? "visible" : "hidden";
-        if (canvas.style.visibility === "visible") {
+        canvas.style.visibility = showParticles ? "visible" : "hidden";
+        if (showParticles) {
           scene.render(p);
         }
-      } else {
-        headline.style.opacity = String(1 - heroOut);
-        card.style.opacity = String(ramp(p, [0.2, 0.4]));
       }
 
       if (step !== activeStep) {
         activeStep = step;
-        stepItems.forEach((item, index) => {
+        copyBlocks.forEach((block, index) => {
+          const isCurrent = index === step;
+
+          block.style.opacity = isCurrent ? "1" : "0";
+          block.style.pointerEvents = isCurrent ? "auto" : "none";
+          block.inert = !isCurrent;
+        });
+        stepButtons.forEach((button, index) => {
           if (index === step) {
-            item.setAttribute("aria-current", "step");
+            button.setAttribute("aria-current", "step");
           } else {
-            item.removeAttribute("aria-current");
+            button.removeAttribute("aria-current");
           }
         });
+        if (strikeLabel) {
+          strikeLabel.textContent = STRIKE_LABELS[step] ?? STRIKE_LABELS[0];
+        }
       }
     };
 
@@ -127,7 +260,7 @@ export function StageController({ data }: { data: StageData }) {
 
       last = now;
       progress += (target - progress) * follow;
-      if (Math.abs(target - progress) < 0.0004) {
+      if (Math.abs(target - progress) < 0.0005) {
         progress = target;
       }
       apply(progress);
@@ -163,7 +296,7 @@ export function StageController({ data }: { data: StageData }) {
 
       const module = await import("./particle-scene");
       const created = await module.createParticleScene(canvas, data, {
-        columns: view.clientWidth >= WIDE_MIN ? 200 : 110,
+        columns: view.clientWidth >= WIDE_MIN ? 64 : 40,
         palette: readPalette(),
       });
 
@@ -172,13 +305,10 @@ export function StageController({ data }: { data: StageData }) {
         return;
       }
       scene = created;
-      sampleInk = module.sampleInk;
       scene.layout(stageLayout());
       apply(progress);
     };
 
-    // The page reads complete without the scene, so three.js waits for the reader to act or for
-    // a quiet moment well after load.
     const triggers = ["scroll", "pointerdown", "keydown", "touchstart"] as const;
     const onTrigger = () => void start();
     const startSoon = setTimeout(() => {
@@ -191,6 +321,21 @@ export function StageController({ data }: { data: StageData }) {
 
     for (const type of triggers) {
       addEventListener(type, onTrigger, { once: true, passive: true });
+    }
+
+    const onStepClick = (event: Event) => {
+      const button = event.currentTarget as HTMLButtonElement;
+      const index = Number(button.dataset.stepIndex ?? 0);
+      const stop = STRIKE_STOPS[index] ?? 0;
+
+      scrollToProgress(stop);
+    };
+
+    for (const trigger of strikeTriggers) {
+      trigger.addEventListener("click", onStrike);
+    }
+    for (const button of stepButtons) {
+      button.addEventListener("click", onStepClick);
     }
 
     const resizeObserver = new ResizeObserver(relayout);
@@ -214,6 +359,12 @@ export function StageController({ data }: { data: StageData }) {
       clearTimeout(startSoon);
       for (const type of triggers) {
         removeEventListener(type, onTrigger);
+      }
+      for (const trigger of strikeTriggers) {
+        trigger.removeEventListener("click", onStrike);
+      }
+      for (const button of stepButtons) {
+        button.removeEventListener("click", onStepClick);
       }
       cancelAnimationFrame(frame);
       removeEventListener("scroll", wake);
