@@ -13,3 +13,5 @@ pub(crate) mod image_decoder;
 mod image_resampler;
 #[cfg(feature = "svg-sizing")]
 pub(crate) mod svg_size;
+/// `@font-face` `unicode-range` coverage
+pub mod unicode_range;

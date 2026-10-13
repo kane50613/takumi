@@ -1,7 +1,6 @@
 use std::{
   borrow::Cow,
   cell::RefCell,
-  collections::HashMap,
   hash::{Hash, Hasher},
   mem::discriminant,
   ops::Range,
@@ -23,7 +22,7 @@ use crate::{
   geometry::Size,
   layout::inline::{InlineBrush, TextScale},
   layout_unit::LayoutUnit,
-  resources::font::{FontClasses, SubsetGroup},
+  resources::font::FontClasses,
   shadow::SizedShadow,
   style::{
     AppliedTextDecorations, Color, ComputedStyle, Display, FontFamily, FontFeature, FontSynthesis,
@@ -32,7 +31,7 @@ use crate::{
   },
 };
 
-/// A `font-family` stack with registered subset groups expanded.
+/// A `font-family` stack in the form parley queries.
 #[derive(Clone)]
 pub(crate) struct ExpandedFontFamily {
   tokens: Vec<ExpandedFamilyToken>,
@@ -148,25 +147,16 @@ impl ExpandedFontFamily {
     ParleyFontFamily::List(Cow::Owned(names))
   }
 
-  /// Expands `family` against registered subset `groups`.
-  pub(crate) fn expand(family: &FontFamily, groups: &HashMap<String, SubsetGroup>) -> Self {
-    let mut tokens = Vec::new();
-    for name in family.names() {
-      match name {
-        FontFamilyName::Named(name) => match groups.get(name.as_ref()) {
-          Some(subsets) => {
-            tokens.extend(
-              subsets
-                .iter()
-                .map(|(_, _, name)| ExpandedFamilyToken::Named(name.clone())),
-            );
-          }
-          None => tokens.push(ExpandedFamilyToken::Named(name.into_owned())),
-        },
-        FontFamilyName::Generic(generic) => tokens.push(ExpandedFamilyToken::Generic(generic)),
-      }
-    }
-    Self::new(tokens)
+  pub(crate) fn expand(family: &FontFamily) -> Self {
+    Self::new(
+      family
+        .names()
+        .map(|name| match name {
+          FontFamilyName::Named(name) => ExpandedFamilyToken::Named(name.into_owned()),
+          FontFamilyName::Generic(generic) => ExpandedFamilyToken::Generic(generic),
+        })
+        .collect(),
+    )
   }
 }
 
@@ -179,7 +169,7 @@ impl RenderContext {
     let mut expanded = self.font_families().0.borrow_mut();
     let expanded = expanded
       .entry(family.id())
-      .or_insert_with(|| Rc::new(ExpandedFontFamily::expand(family, &self.fonts().groups)));
+      .or_insert_with(|| Rc::new(ExpandedFontFamily::expand(family)));
 
     Rc::clone(expanded)
   }
@@ -656,13 +646,12 @@ impl<'s> SizedFontStyle<'s> {
 // not in this file; the one testable seam owned by this module is `ExpandedFontFamily::expand`.
 #[cfg(test)]
 mod tests {
-  use std::collections::{HashMap, HashSet};
+  use std::collections::HashSet;
 
   use parley::{FontFamilyName, GenericFamily};
 
   use super::{
-    ExpandedFamilyToken, ExpandedFontFamily, FontClasses, Presentation, SubsetGroup,
-    presentation_segments,
+    ExpandedFamilyToken, ExpandedFontFamily, FontClasses, Presentation, presentation_segments,
   };
   use crate::style::{FontFamily, FromCssStr};
 
@@ -696,9 +685,9 @@ mod tests {
   }
 
   #[test]
-  fn names_not_in_groups_pass_through_unchanged() {
+  fn names_pass_through_unchanged() {
     let family = FontFamily::from_css_str("Geist, serif").unwrap();
-    let expanded = ExpandedFontFamily::expand(&family, &HashMap::new());
+    let expanded = ExpandedFontFamily::expand(&family);
 
     assert_eq!(expanded.tokens.len(), 2);
     assert_eq!(
@@ -708,29 +697,9 @@ mod tests {
   }
 
   #[test]
-  fn logical_subset_group_expands_to_its_registered_subsets_in_rank_order() {
-    let family = FontFamily::from_css_str("Logical").unwrap();
-    let mut groups = HashMap::new();
-    groups.insert(
-      "Logical".to_string(),
-      SubsetGroup::from([
-        (1, 0, "Subset A".to_string()),
-        (0, 1, "Subset B".to_string()),
-      ]),
-    );
-
-    let expanded = ExpandedFontFamily::expand(&family, &groups);
-
-    assert_eq!(
-      names(&expanded),
-      vec!["Subset B".to_string(), "Subset A".to_string()]
-    );
-  }
-
-  #[test]
   fn generic_family_tokens_pass_through_expansion() {
     let family = FontFamily::from_css_str("monospace").unwrap();
-    let expanded = ExpandedFontFamily::expand(&family, &HashMap::new());
+    let expanded = ExpandedFontFamily::expand(&family);
 
     assert_eq!(expanded.tokens.len(), 1);
     assert!(matches!(
@@ -830,7 +799,7 @@ mod tests {
   #[test]
   fn emoji_presentation_puts_color_families_first() {
     let family = FontFamily::from_css_str("Text Font, Emoji Font").unwrap();
-    let expanded = ExpandedFontFamily::expand(&family, &HashMap::new());
+    let expanded = ExpandedFontFamily::expand(&family);
 
     assert_eq!(
       family_names(expanded.with_presentation(Presentation::Emoji, &classes())),
@@ -841,7 +810,7 @@ mod tests {
   #[test]
   fn text_presentation_puts_mono_families_first() {
     let family = FontFamily::from_css_str("Emoji Font, Text Font").unwrap();
-    let expanded = ExpandedFontFamily::expand(&family, &HashMap::new());
+    let expanded = ExpandedFontFamily::expand(&family);
 
     assert_eq!(
       family_names(expanded.with_presentation(Presentation::Text, &classes())),
@@ -852,7 +821,7 @@ mod tests {
   #[test]
   fn registered_class_families_slot_between_authored_classes() {
     let family = FontFamily::from_css_str("Text Font").unwrap();
-    let expanded = ExpandedFontFamily::expand(&family, &HashMap::new());
+    let expanded = ExpandedFontFamily::expand(&family);
 
     // No authored color font: the registered ones still outrank the mismatched
     // authored family, like Blink's fallback-priority font stage.
