@@ -251,6 +251,7 @@
         "react": "catalog:",
         "shiki": "^4.4.3",
         "takumi-js": "workspace:*",
+        "takumi-pdf": "workspace:*",
       },
       "devDependencies": {
         "@types/bun": "catalog:",

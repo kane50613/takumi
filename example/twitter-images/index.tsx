@@ -17,6 +17,10 @@ import * as HomeFilmstrip from "./components/home-filmstrip";
 import * as GoogleFontsShowcase from "./components/google-fonts-showcase";
 import * as DitherOg from "./components/dither-og";
 import * as BenchCard from "./components/bench-card";
+import * as UsecaseBlogCover from "./components/home-usecase-blog-cover";
+import * as UsecaseChatDigest from "./components/home-usecase-chat-digest";
+import * as UsecaseQuoteCard from "./components/home-usecase-quote-card";
+import * as UsecaseRepoBanner from "./components/home-usecase-repo-banner";
 
 const components = [
   TextFit,
@@ -32,6 +36,10 @@ const components = [
   GoogleFontsShowcase,
   DitherOg,
   BenchCard,
+  UsecaseBlogCover,
+  UsecaseChatDigest,
+  UsecaseQuoteCard,
+  UsecaseRepoBanner,
 ];
 
 type Component = (typeof components)[number];
@@ -82,16 +90,26 @@ async function render(
 async function renderSvgFile(module: Component) {
   const renderer = new Renderer();
   const { node, css } = await fromJsx(<module.default />);
+  const [fonts, images] = await Promise.all([loadFonts(module), loadImages(module)]);
   const svg = await renderer.renderSvg(node, {
     width: module.width,
     height: module.height,
     css: [...css, ...("css" in module ? module.css : [])],
+    images,
+    fonts: fonts.length > 0 ? fonts : undefined,
   });
 
   await writeFile(join("output", `${module.name}.svg`), svg);
 }
 
-for (const component of components) {
+// `bun index.tsx home-usecase` renders only components whose name starts with an argument.
+const prefixes = process.argv.slice(2).filter((arg) => !arg.startsWith("--"));
+const selected = components.filter(
+  (component) =>
+    prefixes.length === 0 || prefixes.some((prefix) => component.name.startsWith(prefix)),
+);
+
+for (const component of selected) {
   if ("timestamps" in component) {
     for (const [index, timeMs] of component.timestamps.entries()) {
       await render(component, 1, "webp", timeMs, index);
@@ -99,8 +117,18 @@ for (const component of components) {
     continue;
   }
 
-  await render(component);
-  await render(component, 2, "webp");
+  // A component lists its own `outputs` when the default PNG plus 2x WebP does not fit.
+  const outputs: ReadonlyArray<{ ratio: number; format: OutputFormat }> =
+    "outputs" in component
+      ? component.outputs
+      : [
+          { ratio: 1, format: "png" },
+          { ratio: 2, format: "webp" },
+        ];
+
+  for (const { ratio, format } of outputs) {
+    await render(component, ratio, format);
+  }
 
   if ("svg" in component) {
     await renderSvgFile(component);

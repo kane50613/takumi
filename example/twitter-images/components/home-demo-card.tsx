@@ -8,7 +8,6 @@ export const height = 630;
 // The docs homepage shows the SVG output beside the raster ones.
 export const svg = true;
 
-// Shown verbatim as the code sample on the docs homepage; keep it in sync.
 export default function DemoCard() {
   return (
     <div tw="flex h-full w-full flex-col justify-between bg-[#16130f] p-14 text-white">
@@ -24,7 +23,7 @@ export default function DemoCard() {
           color: "transparent",
         }}
       >
-        This card is the code beside it.
+        One component, every output.
       </h1>
       <div tw="flex items-center justify-between text-2xl text-[#a8a29a]">
         <span>Rendered without a browser</span>

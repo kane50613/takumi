@@ -7,7 +7,6 @@ export const height = 630;
 
 export const animation = { durationMs: 1000, fps: 30, quality: 80 };
 
-// The docs homepage shows these keyframes beside the output; keep them in sync.
 export const css = [
   `@keyframes morph {
     from { border-radius: 12%; transform: rotate(0deg) scale(1); }
@@ -35,7 +34,7 @@ export default function DemoCardMotion() {
           color: "transparent",
         }}
       >
-        This card is the code beside it.
+        One component, every output.
       </h1>
       <div tw="flex items-center justify-between text-2xl text-[#a8a29a]">
         <span>Rendered without a browser</span>
