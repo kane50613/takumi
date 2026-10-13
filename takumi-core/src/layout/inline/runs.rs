@@ -211,7 +211,7 @@ impl ShapedRun {
     cluster_ranges: Vec<Range<usize>>,
   ) -> Self {
     let run = glyph_run.run();
-    let metrics = run.metrics();
+    let metrics = run.font_metrics();
     let synthesis = run_synthesis(glyph_run);
     // The run's leaded box: the font height plus the line-height leading.
     let (above, below) =
@@ -551,7 +551,7 @@ impl<'c> BuiltInlineLayout<'c> {
             0.0
           };
         let width = glyph_run.advance() + stretch.advance - hanging.advance;
-        let metrics = glyph_run.run().metrics();
+        let metrics = glyph_run.run().font_metrics();
         // The font's text height, without the line-height leading, like the inline box fragment
         // `InlineBoxState::ComputeTextMetrics` sizes.
         let text = FontHeight::text(metrics.ascent, metrics.descent, setup.fit.text_scale(false));

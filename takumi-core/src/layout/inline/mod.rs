@@ -18,6 +18,7 @@ use crate::{
 use parley::{
   BreakReason, FontFeatures, GlyphRun, IndentOptions, InlineBox, InlineBoxKind, Line,
   PositionedInlineBox, PositionedLayoutItem, TextStyle, TreeBuilder,
+  VerticalAlign as ParleyVerticalAlign,
 };
 use std::{
   convert::Infallible,
@@ -944,6 +945,8 @@ pub(crate) fn process_inline_spans<'c>(
             kind: InlineBoxKind::InFlow,
             width: *width,
             height: 0.0,
+            baseline: None,
+            vertical_align: ParleyVerticalAlign::BASELINE,
           },
           decorations: decorations.clone(),
         });
@@ -1099,6 +1102,8 @@ fn inline_box_span<'c>(
     },
     width: paint_width,
     height: paint_height,
+    baseline: None,
+    vertical_align: ParleyVerticalAlign::BASELINE,
   };
   let baseline_offset = raw_baseline_offset.map(|baseline| baseline.clamp(0.0, inline_box.height));
 
@@ -1439,7 +1444,7 @@ pub(crate) fn glyph_run_rect(
   stretch: &SpacingStretch,
   baseline_shift: f32,
 ) -> (Point<f32>, Size<f32>) {
-  let metrics = glyph_run.run().metrics();
+  let metrics = glyph_run.run().font_metrics();
 
   (
     Point {
@@ -1824,6 +1829,7 @@ mod tests {
             40.0,
           )))),
       ),
+      Node::text("overflowing".to_string()),
     ])
     .with_style(
       Style::default()
@@ -1831,17 +1837,17 @@ mod tests {
         .with(StyleDeclaration::font_size(FontSize::Length(Length::Px(
           20.0,
         ))))
-        .with_white_space(WhiteSpace::pre()),
+        .with_white_space(WhiteSpace::pre_wrap()),
     );
     let render_node = RenderNode::from_node(&context, node);
     let font_style = SizedFontStyle::from_style(&render_node.context.style, &render_node.context);
     let built = create_inline_layout(InlineLayoutRequest {
       items: collect_inline_items(&render_node),
       available_space: Size {
-        width: AvailableSpace::Definite(1200.0),
+        width: AvailableSpace::Definite(60.0),
         height: AvailableSpace::Definite(630.0),
       },
-      max_width: 1200.0,
+      max_width: 60.0,
       max_height: None,
       style: &font_style,
       context: &render_node.context,
@@ -1862,11 +1868,12 @@ mod tests {
       .map(|run| (run.glyph_run.advance, run.glyph_run.hanging.advance))
       .collect();
 
-    // The 40px space run hangs entirely; earlier runs keep what layout kept.
-    let last = trailing.last().unwrap();
+    // The spaces end a soft-wrapped line, so they hang: the 40px space run entirely, the run
+    // before it only its own trailing space.
+    let space = trailing[1];
     assert!(
-      (last.1 - last.0).abs() < 0.01,
-      "last run is all whitespace: {trailing:?}"
+      (space.1 - space.0).abs() < 0.01,
+      "the space run hangs whole: {trailing:?}"
     );
     for (advance, ws) in &trailing {
       assert!(

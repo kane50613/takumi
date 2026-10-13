@@ -1,53 +1,53 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="300" height="160" viewBox="0 0 300 160">
   <rect x="0" y="0" width="300" height="160" fill="#fff"/>
-  <rect x="66" y="23" width="214" height="26" fill="#bfdbfe"/>
-  <rect x="93" y="55" width="187" height="26" fill="#bfdbfe"/>
+  <rect x="61" y="23" width="219" height="26" fill="#bfdbfe"/>
+  <rect x="88" y="55" width="192" height="26" fill="#bfdbfe"/>
   <rect x="186" y="87" width="94" height="26" fill="#bfdbfe"/>
-  <rect x="66.42" y="44" width="135.58" height="2" fill="#0f172a"/>
-  <rect x="208" y="44" width="72" height="2" fill="#0f172a"/>
+  <rect x="61.42" y="44" width="135.58" height="2" fill="#0f172a"/>
+  <rect x="203" y="44" width="77" height="2" fill="#0f172a"/>
   <g fill="#0f172a">
-    <use href="#g0" x="66.42" y="43"/>
-    <use href="#g1" x="82.28" y="43"/>
-    <use href="#g2" x="93.54" y="43"/>
-    <use href="#g3" x="100.32" y="43"/>
-    <use href="#g4" x="112.02" y="43"/>
-    <use href="#g5" x="127.42" y="43"/>
-    <use href="#g6" x="134.94" y="43"/>
-    <use href="#g7" x="146.36" y="43"/>
-    <use href="#g5" x="156.38" y="43"/>
-    <use href="#g0" x="169.22" y="43"/>
-    <use href="#g2" x="185.12" y="43"/>
-    <use href="#g7" x="191.9" y="43"/>
-    <use href="#g8" x="202.84" y="43"/>
-    <use href="#g7" x="219.74" y="43"/>
-    <use href="#g9" x="230.64" y="43"/>
-    <use href="#g2" x="241.36" y="43"/>
-    <use href="#g1" x="248.14" y="43"/>
-    <use href="#g4" x="259.4" y="43"/>
-    <use href="#g4" x="269.6" y="43"/>
+    <use href="#g0" x="61.42" y="43"/>
+    <use href="#g1" x="77.28" y="43"/>
+    <use href="#g2" x="88.54" y="43"/>
+    <use href="#g3" x="95.32" y="43"/>
+    <use href="#g4" x="107.02" y="43"/>
+    <use href="#g5" x="122.42" y="43"/>
+    <use href="#g6" x="129.94" y="43"/>
+    <use href="#g7" x="141.36" y="43"/>
+    <use href="#g5" x="151.38" y="43"/>
+    <use href="#g0" x="164.22" y="43"/>
+    <use href="#g2" x="180.12" y="43"/>
+    <use href="#g7" x="186.9" y="43"/>
+    <use href="#g8" x="197.84" y="43"/>
+    <use href="#g7" x="214.74" y="43"/>
+    <use href="#g9" x="225.64" y="43"/>
+    <use href="#g2" x="236.36" y="43"/>
+    <use href="#g1" x="243.14" y="43"/>
+    <use href="#g4" x="254.4" y="43"/>
+    <use href="#g4" x="264.6" y="43"/>
   </g>
-  <rect x="92.72" y="76" width="97.28" height="2" fill="#0f172a"/>
-  <rect x="202" y="76" width="78" height="2" fill="#0f172a"/>
+  <rect x="87.72" y="76" width="97.28" height="2" fill="#0f172a"/>
+  <rect x="197" y="76" width="83" height="2" fill="#0f172a"/>
   <g fill="#0f172a">
-    <use href="#g10" x="92.72" y="75"/>
-    <use href="#g11" x="97.9" y="75"/>
-    <use href="#g12" x="102.9" y="75"/>
-    <use href="#g13" x="114.28" y="75"/>
-    <use href="#g4" x="125.3" y="75"/>
-    <use href="#g11" x="140.7" y="75"/>
-    <use href="#g12" x="145.7" y="75"/>
-    <use href="#g7" x="162.32" y="75"/>
-    <use href="#g2" x="178.34" y="75"/>
-    <use href="#g11" x="185.32" y="75"/>
-    <use href="#g14" x="190" y="75"/>
-    <use href="#g6" x="201.58" y="75"/>
-    <use href="#g5" x="212.4" y="75"/>
-    <use href="#g5" x="225.24" y="75"/>
-    <use href="#g1" x="232.76" y="75"/>
-    <use href="#g10" x="249.22" y="75"/>
-    <use href="#g13" x="254.44" y="75"/>
-    <use href="#g15" x="265.06" y="75"/>
-    <use href="#g5" x="272.16" y="75"/>
+    <use href="#g10" x="87.72" y="75"/>
+    <use href="#g11" x="92.9" y="75"/>
+    <use href="#g12" x="97.9" y="75"/>
+    <use href="#g13" x="109.28" y="75"/>
+    <use href="#g4" x="120.3" y="75"/>
+    <use href="#g11" x="135.7" y="75"/>
+    <use href="#g12" x="140.7" y="75"/>
+    <use href="#g7" x="157.32" y="75"/>
+    <use href="#g2" x="173.34" y="75"/>
+    <use href="#g11" x="180.32" y="75"/>
+    <use href="#g14" x="185" y="75"/>
+    <use href="#g6" x="196.58" y="75"/>
+    <use href="#g5" x="207.4" y="75"/>
+    <use href="#g5" x="220.24" y="75"/>
+    <use href="#g1" x="227.76" y="75"/>
+    <use href="#g10" x="244.22" y="75"/>
+    <use href="#g13" x="249.44" y="75"/>
+    <use href="#g15" x="260.06" y="75"/>
+    <use href="#g5" x="267.16" y="75"/>
   </g>
   <rect x="192" y="108" width="35" height="2" fill="#0f172a"/>
   <rect x="239" y="108" width="17" height="2" fill="#0f172a"/>

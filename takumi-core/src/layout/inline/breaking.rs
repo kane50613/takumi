@@ -24,7 +24,7 @@ pub(super) fn distribute_trailing_whitespace(
   rtl_paragraph: bool,
 ) -> Vec<HangingWhitespace> {
   let mut shares = vec![HangingWhitespace::default(); items.len()];
-  let mut remaining = line.metrics().trailing_whitespace;
+  let mut remaining = line.metrics().hanging_advance;
   let count = items.len();
 
   // The line's logical end sits at its visual left in a right-to-left paragraph, where parley
@@ -126,7 +126,6 @@ impl LineWidths {
 pub(crate) fn has_custom_out_of_flow(layout: &InlineLayout) -> bool {
   layout
     .inline_boxes()
-    .iter()
     .any(|inline_box| inline_box.kind == InlineBoxKind::CustomOutOfFlow)
 }
 
@@ -206,7 +205,7 @@ impl LineBreaks<'_, '_> {
       text_wrap_mode,
       spans,
     } = self;
-    let inline_boxes = layout.inline_boxes().to_vec();
+    let inline_boxes: Vec<_> = layout.inline_boxes().cloned().collect();
     let mut float_layout = FloatLayoutState::new(widths, line_height_hint);
     let has_custom_out_of_flow = has_custom_out_of_flow(layout);
     let is_uniform = widths.breaking == widths.alignment && edges.is_empty();
@@ -247,12 +246,12 @@ impl LineBreaks<'_, '_> {
         break;
       }
       let height = match yield_data {
-        YieldData::LineBreak(data) => data.line_height,
+        YieldData::LineBreak(data) => data.metrics.line_height,
         YieldData::MaxHeightExceeded(data) => data.line_height,
         YieldData::InlineBoxBreak(data) => {
           breaker
             .state_mut()
-            .append_inline_box_to_line(data.advance, 0.0);
+            .append_inline_box_to_line(data.advance, 0.0, 0.0);
 
           let Some(inline_box) = inline_boxes.get(data.inline_box_index).cloned() else {
             continue;

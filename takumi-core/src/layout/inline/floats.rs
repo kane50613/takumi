@@ -152,6 +152,7 @@ impl FloatLayoutState {
       y: float_y,
       width: inline_box.width,
       height: inline_box.height,
+      baseline: inline_box.baseline,
       id: inline_box.id,
       kind: inline_box.kind,
     }

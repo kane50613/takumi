@@ -10,7 +10,9 @@ use std::{
 
 use parley::{
   FontFamily as ParleyFontFamily, FontFamilyName, FontFeatures, FontVariations, GenericFamily,
-  LineHeight, TextStyle, fontique::QueryFamily, style::FontStyle as ParleyFontStyle,
+  LineBreak as ParleyLineBreak, LineHeight, TextStyle, VerticalAlign as ParleyVerticalAlign,
+  WhiteSpaceCollapse as ParleyWhiteSpaceCollapse, fontique::QueryFamily,
+  style::FontStyle as ParleyFontStyle,
 };
 use rustc_hash::FxHashMap;
 use smallvec::SmallVec;
@@ -456,6 +458,10 @@ impl<'s> From<&'s SizedFontStyle<'s>> for TextStyle<'s, 's, InlineBrush> {
         vertical_align: style.parent.base_data.vertical_align,
       },
       text_wrap_mode: style.parent.resolved_text_wrap_mode().into_parley(),
+      line_break: ParleyLineBreak::default(),
+      // Inline layout collapses white space and aligns boxes itself, as Blink's inline items do.
+      white_space_collapse: ParleyWhiteSpaceCollapse::Preserve,
+      vertical_align: ParleyVerticalAlign::BASELINE,
       font_width: style.parent.inherited_data.font_stretch.into_parlance(),
 
       locale: style.parent.lang.map(Lang::into_parlance),

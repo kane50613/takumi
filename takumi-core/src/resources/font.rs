@@ -344,8 +344,7 @@ pub(crate) fn run_normalized_coords(run: &GlyphRun<'_, InlineBrush>) -> Vec<F2Do
     .run()
     .normalized_coords()
     .iter()
-    .copied()
-    .map(F2Dot14::from_bits)
+    .map(|coord| F2Dot14::from_bits(coord.to_bits()))
     .collect()
 }
 

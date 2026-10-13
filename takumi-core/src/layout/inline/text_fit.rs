@@ -40,7 +40,7 @@ pub(super) fn text_fit_applies(
 /// The fixed letter- and word-spacing `cluster` carries, which `text-fit` leaves unscaled as
 /// Blink's `PercentageSpacingDescription` drops it before measuring.
 pub(super) fn cluster_fixed_spacing(cluster: &Cluster<'_, InlineBrush>) -> f32 {
-  let brush = &cluster.first_style().brush;
+  let brush = &cluster.style().brush;
   let word = if cluster.is_space_or_nbsp() {
     brush.fixed_word_spacing
   } else {
@@ -186,7 +186,7 @@ pub(super) fn text_fit_line_advance(line: &Line<'_, InlineBrush>, rtl: bool) -> 
     .sum();
   let spacing = line_fixed_spacing(line, rtl);
   let static_advance = boxes + spacing;
-  let text_advance = (metrics.advance - metrics.trailing_whitespace - static_advance).max(0.0);
+  let text_advance = (metrics.advance - metrics.hanging_advance - static_advance).max(0.0);
 
   (text_advance, static_advance)
 }
@@ -377,7 +377,7 @@ impl FitLine {
     let offset = line_offset_for_text_align(align, rtl, space);
 
     if rtl {
-      offset - metrics.trailing_whitespace * scale
+      offset - metrics.hanging_advance * scale
     } else {
       self.indent + offset
     }
