@@ -134,7 +134,7 @@ describe("render", () => {
     const result = await renderer.render(
       container({
         children: [image({ src: { width: 8, height: 8, data } })],
-        style: { width: "100%", height: "100%", backgroundColor: "black" },
+        style: { display: "flex", width: "100%", height: "100%", backgroundColor: "black" },
       }),
       { width: 8, height: 8, format: "raw" },
     );
@@ -155,7 +155,7 @@ describe("render", () => {
     const result = await renderer.render(
       container({
         children: [image({ src: { width: 8, height: 8, data, premultiplied: true } })],
-        style: { width: "100%", height: "100%", backgroundColor: "black" },
+        style: { display: "flex", width: "100%", height: "100%", backgroundColor: "black" },
       }),
       { width: 8, height: 8, format: "raw" },
     );
