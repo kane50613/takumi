@@ -1,150 +1,153 @@
 core:changelogs:
-  - content: "---\npackages:\n  takumi-core:\n    type: patch\n  takumi:\n    type: patch\n  takumi-pdf:\n    type: patch\n---\n\n# Lay out paragraphs with inline elements faster\n\nA paragraph holding spans no longer lays its text out a second time to find its baseline. Large documents lay out about 8% faster.\n"
-    filename: baseline-from-fragment-items.md
+  - content: "---\npackages:\n  \"@takumi-rs/helpers\":\n    type: patch\n---\n\n# Skip emoji scanning for plain text\n\n`extractEmojis` segments text into graphemes only when it holds an `Extended_Pictographic` or `Regional_Indicator` codepoint or a keycap mark (U+20E3). A 48-card dashboard without emoji goes through it in 0.02 ms instead of 0.33 ms per render.\n"
+    filename: helpers-emoji-skip.md
     v: 0.0.0
-  - content: "---\npackages:\n  takumi-core:\n    type: patch\n  takumi:\n    type: patch\n  takumi-pdf:\n    type: patch\n---\n\n# Lay out inline spans faster\n\nAn inline span works out its strut from its line height alone, without building its whole text style. Large documents with many spans lay out about 5% faster.\n"
-    filename: strut-line-height.md
+  - content: "---\npackages:\n  \"@takumi-rs/helpers\":\n    type: patch\n---\n\n# Pick font subsets faster\n\n`subsetFonts`, which every render with `fonts` runs, finds the subsets the text needs by binary search instead of checking every character against every range. With Noto Sans JP, Noto Sans TC, and Inter from Google Fonts, it takes 0.3 ms per render instead of 3.6 ms.\n"
+    filename: helpers-subset-search.md
     v: 0.0.0
-  - content: "---\npackages:\n  takumi-core:\n    type: patch\n  takumi:\n    type: patch\n  takumi-pdf:\n    type: patch\n---\n\n# Lay out Latin text faster\n\nText below U+02C7, such as Latin, no longer scans the CJK tables to decide whether underlines skip its ink. Large documents lay out about 3% faster.\n"
-    filename: skip-ink-early-exit.md
+  - content: "---\npackages:\n  \"@takumi-rs/core\":\n    type: patch\n---\n\n# Read node trees off the main thread\n\n`render`, `renderSvg`, and `measure` pass a node tree to the native renderer as JSON when it holds only plain values. The renderer parses it on a worker thread, so a 48-card dashboard blocks the event loop for 0.1 ms instead of 0.7 ms and renders about 10% faster. Trees holding bytes or other values JSON cannot keep are read as before.\n"
+    filename: napi-json-nodes.md
     v: 0.0.0
-  - content: "---\npackages:\n  takumi-core:\n    type: patch\n  takumi:\n    type: patch\n  takumi-pdf:\n    type: patch\n---\n\n# Look up glyphs faster\n\nEach glyph's cache key now hashes 12 bytes instead of copying a 600-byte hasher. Large documents lay out about 2% faster.\n"
-    filename: glyph-key-digest.md
+  - content: "---\npackages:\n  takumi-core:\n    type: patch\n  takumi:\n    type: patch\n---\n\n# Keep no fragment items for hidden subtrees\n\nLaying out a `display: none` box no longer keeps fragment items for the boxes under it, which paint never reads. A hidden 48-card panel costs 0.3 ms instead of 2.1 ms per render.\n"
+    filename: hidden-fragments.md
     v: 0.0.0
-  - content: "---\npackages:\n  takumi-core:\n    type: patch\n  takumi:\n    type: patch\n  takumi-pdf:\n    type: patch\n---\n\n# Expand each font stack once per render\n\nA `font-family` stack is matched against registered font subsets once per render, not on every text style. Large documents lay out about 4% faster.\n"
-    filename: font-family-expansion-cache.md
+  - content: "---\npackages:\n  takumi-core:\n    type: patch\n  takumi:\n    type: patch\n---\n\n# Shape repeated text once per render\n\nText that several boxes repeat with the same style is shaped once per render again. A box that reused another's measurement used to drop the shared shape after drawing, so every later box shaped it anew.\n"
+    filename: shared-shape-owners.md
     v: 0.0.0
-  - content: "---\npackages:\n  takumi-core:\n    type: minor\n  takumi:\n    type: patch\n  takumi-pdf:\n    type: patch\n---\n\n# Read each glyph's ink box once\n\nA glyph's ink box is worked out when the glyph is resolved, not on every use. Large documents lay out about 7% faster.\n\n`ResolvedOutlineGlyph::Plain` and `ResolvedOutlineGlyph::Color` gain an `ink` field, which `outline_ink` computes from their paths.\n"
-    filename: glyph-ink-once.md
+  - content: "---\npackages:\n  takumi-html:\n    type: patch\n  takumi:\n    type: patch\n---\n\n# Parse repeated inline styles once\n\n`from_html` parses each distinct `style` attribute once per document and reuses it for every element that repeats it. A dashboard of 48 cards with shared styles builds in half the time.\n"
+    filename: html-style-reuse.md
     v: 0.0.0
-  - content: "---\npackages:\n  takumi-core:\n    type: minor\n  takumi-paint:\n    type: patch\n---\n\n# Write glyph outlines only when a run asks for them\n\n`paint()` no longer writes every run's outline up front. `run.outline()` builds it when called. A 2,000-section document paints 3 times faster in about a third of the memory.\n\nIn Rust, `TextRun::outline` is replaced by `PaintTree::run_outline(node, run)`.\n"
-    filename: paint-lazy-outlines.md
+  - content: "---\npackages:\n  takumi:\n    type: patch\n---\n\n# Scale images faster\n\nBilinear image scaling mixes eight pixels at a time in vector lanes, with the same pixels as before. Real templates render about 5% faster.\n"
+    filename: bilinear-runs.md
     v: 0.0.0
-  - content: "---\npackages:\n  takumi-paint:\n    type: patch\n---\n\n# Keep less memory for each painted tree\n\nA painted tree no longer keeps a second copy of itself in WebAssembly memory. Keeping several large trees at once takes about a third less memory.\n"
-    filename: paint-free-document.md
+  - content: "---\npackages:\n  takumi-core:\n    type: minor\n  takumi:\n    type: patch\n---\n\n# Composite pixels faster\n\nBlending, masking and PNG scanline work run in 16-bit vector lanes, with the same pixels as before. Real templates render about 3% faster.\n"
+    filename: vectorized-compositing.md
     v: 0.0.0
-  - content: "---\npackages:\n  takumi-core:\n    type: patch\n  takumi:\n    type: patch\n---\n\n# Lay out text faster\n\nThe glyph cache and per-render font metrics hash their keys with a faster hasher. Text-heavy layouts take about 6% less time.\n"
-    filename: fx-hash-caches.md
+  - content: "---\npackages:\n  takumi-core:\n    type: patch\n  takumi:\n    type: patch\n---\n\n# Read repeated style values once\n\nReading a node tree parses each distinct style value once per property and reuses it wherever the tree repeats it. A 48-card dashboard reads its styles in 0.16 ms instead of 0.26 ms.\n"
+    filename: style-value-reuse.md
     v: 0.0.0
-  - content: "---\npackages:\n  takumi-core:\n    type: patch\n  takumi:\n    type: patch\n---\n\n# Write SVG output faster\n\nSVG output and the paint tree's glyph outlines write numbers below 1,000 without float formatting, with the same bytes. A text-heavy SVG renders about twice as fast.\n"
-    filename: svg-number-format.md
+  - content: "---\npackages:\n  takumi-core:\n    type: minor\n  takumi:\n    type: patch\n---\n\n# Redraw rounded boxes faster\n\nA rounded background drawn at the same place and size as in an earlier render reuses its rasterized mask from the glyph cache. A mask may take at most `glyph_cache::max_entry_bytes`, a 32nd of the budget. `PathCommand::digest` hashes a path for such keys.\n"
+    filename: shape-mask-cache.md
+    v: 0.0.0
+  - content: "---\npackages:\n  takumi-core:\n    type: patch\n  takumi:\n    type: patch\n---\n\n# Rasterize inline SVG images once\n\nAn `<img>` whose `src` is SVG markup now goes through the render's image cache, as `data:` URIs already do. Repeated renders reuse its parsed tree and rasters instead of redrawing them. Real templates render about 3% faster.\n"
+    filename: inline-svg-cache.md
+    v: 0.0.0
+  - content: "---\npackages:\n  takumi-core:\n    type: patch\n  takumi:\n    type: patch\n---\n\n# Parse inline styles faster\n\nA CSS value that fails one way of parsing no longer builds an error message before trying the next. Building nodes from HTML with inline styles takes about 40% less time.\n"
+    filename: lazy-css-errors.md
+    v: 0.0.0
+  - content: "---\npackages:\n  takumi:\n    type: patch\n---\n\n# Encode lossless WebP faster\n\nLossless WebP encodes about 40% faster, for files about 11% larger. The pixels are the same.\n"
+    filename: webp-lossless-effort.md
+    v: 0.0.0
+  - content: "---\npackages:\n  takumi-core:\n    type: minor\n---\n\n# Divide by 255 in 16 bits\n\n`div_255` and `mul_div_255` replace `fast_div_255` and `fast_div_255_u32`. Both take bytes or byte products, so their arithmetic fits 16-bit vector lanes.\n"
+    filename: div-255-u16.md
     v: 0.0.0
 core:packages:
   - id: npm:takumi-workspace
     updated: false
   - id: npm:docs
     updated: false
-  - changelogIds:
-      - baseline-from-fragment-items.md
-      - strut-line-height.md
-      - skip-ink-early-exit.md
-      - glyph-key-digest.md
-      - font-family-expansion-cache.md
-      - glyph-ink-once.md
-    id: npm:takumi-pdf
+  - id: npm:takumi-js
     updated: true
   - changelogIds:
-      - paint-lazy-outlines.md
-      - paint-free-document.md
-    id: npm:takumi-paint
+      - helpers-emoji-skip.md
+      - helpers-subset-search.md
+    id: npm:@takumi-rs/helpers
     updated: true
   - id: npm:@takumi-rs/wasm
     updated: true
-  - id: npm:@takumi-rs/core
+  - id: npm:takumi-pdf
     updated: true
-  - id: npm:@takumi-rs/helpers
+  - id: npm:takumi-paint
     updated: true
-  - id: npm:takumi-js
+  - changelogIds:
+      - napi-json-nodes.md
+    id: npm:@takumi-rs/core
     updated: true
   - id: npm:@takumi-rs/image-response
     updated: true
-  - id: npm:example-generate-invoice
-    updated: false
-  - id: npm:ffmpeg-keyframe-animation
-    updated: false
-  - id: npm:example-twitter-images
-    updated: false
-  - id: npm:example-e-invoice
-    updated: false
   - id: npm:ffplay
     updated: false
-  - id: npm:pdf-bench
+  - id: npm:example-tanstack-start
     updated: false
   - id: npm:example-css-library-integration
     updated: false
+  - id: npm:example-twitter-images
+    updated: false
   - id: npm:example-cloudflare-workers
     updated: false
-  - id: npm:example-tanstack-start
+  - id: npm:example-e-invoice
+    updated: false
+  - id: npm:pdf-bench
+    updated: false
+  - id: npm:example-nextjs
+    updated: false
+  - id: npm:example-liquid-glass
+    updated: false
+  - id: npm:example-generate-invoice
+    updated: false
+  - id: npm:ffmpeg-keyframe-animation
     updated: false
   - id: npm:svelte
     updated: false
   - id: npm:example-satori-html
     updated: false
-  - id: npm:example-liquid-glass
-    updated: false
   - id: npm:waku-ssr
     updated: false
-  - id: npm:example-nextjs
-    updated: false
-  - changelogIds:
-      - baseline-from-fragment-items.md
-      - strut-line-height.md
-      - skip-ink-early-exit.md
-      - glyph-key-digest.md
-      - font-family-expansion-cache.md
-      - glyph-ink-once.md
-    id: cargo:takumi-pdf
+  - id: cargo:takumi-raster
     updated: true
   - id: cargo:takumi-svg
     updated: true
   - changelogIds:
-      - fx-hash-caches.md
-      - baseline-from-fragment-items.md
-      - strut-line-height.md
-      - skip-ink-early-exit.md
-      - glyph-key-digest.md
-      - font-family-expansion-cache.md
-      - svg-number-format.md
-      - glyph-ink-once.md
+      - hidden-fragments.md
+      - shared-shape-owners.md
+      - html-style-reuse.md
+      - bilinear-runs.md
+      - vectorized-compositing.md
+      - style-value-reuse.md
+      - shape-mask-cache.md
+      - inline-svg-cache.md
+      - lazy-css-errors.md
+      - webp-lossless-effort.md
     id: cargo:takumi
     updated: true
-  - id: cargo:takumi-raster
+  - changelogIds:
+      - html-style-reuse.md
+    id: cargo:takumi-html
     updated: true
   - changelogIds:
-      - fx-hash-caches.md
-      - baseline-from-fragment-items.md
-      - strut-line-height.md
-      - skip-ink-early-exit.md
-      - glyph-key-digest.md
-      - paint-lazy-outlines.md
-      - font-family-expansion-cache.md
-      - svg-number-format.md
-      - glyph-ink-once.md
+      - hidden-fragments.md
+      - shared-shape-owners.md
+      - vectorized-compositing.md
+      - style-value-reuse.md
+      - div-255-u16.md
+      - shape-mask-cache.md
+      - inline-svg-cache.md
+      - lazy-css-errors.md
     id: cargo:takumi-core
     updated: true
-  - id: cargo:takumi-html
+  - id: cargo:takumi-pdf
     updated: true
 npm:packages:
   - id: npm:takumi-workspace
   - id: npm:docs
+  - id: npm:takumi-js
+  - id: npm:@takumi-rs/helpers
+  - id: npm:@takumi-rs/wasm
   - id: npm:takumi-pdf
   - id: npm:takumi-paint
-  - id: npm:@takumi-rs/wasm
   - id: npm:@takumi-rs/core
-  - id: npm:@takumi-rs/helpers
-  - id: npm:takumi-js
   - id: npm:@takumi-rs/image-response
+  - id: npm:ffplay
+  - id: npm:example-tanstack-start
+  - id: npm:example-css-library-integration
+  - id: npm:example-twitter-images
+  - id: npm:example-cloudflare-workers
+  - id: npm:example-e-invoice
+  - id: npm:pdf-bench
+  - id: npm:example-nextjs
+  - id: npm:example-liquid-glass
   - id: npm:example-generate-invoice
   - id: npm:ffmpeg-keyframe-animation
-  - id: npm:example-twitter-images
-  - id: npm:example-e-invoice
-  - id: npm:ffplay
-  - id: npm:pdf-bench
-  - id: npm:example-css-library-integration
-  - id: npm:example-cloudflare-workers
-  - id: npm:example-tanstack-start
   - id: npm:svelte
   - id: npm:example-satori-html
-  - id: npm:example-liquid-glass
   - id: npm:waku-ssr
-  - id: npm:example-nextjs

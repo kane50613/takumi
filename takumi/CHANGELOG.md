@@ -1,3 +1,45 @@
+## takumi@2.15.2
+
+### Keep no fragment items for hidden subtrees
+
+Laying out a `display: none` box no longer keeps fragment items for the boxes under it, which paint never reads. A hidden 48-card panel costs 0.3 ms instead of 2.1 ms per render.
+
+### Shape repeated text once per render
+
+Text that several boxes repeat with the same style is shaped once per render again. A box that reused another's measurement used to drop the shared shape after drawing, so every later box shaped it anew.
+
+### Parse repeated inline styles once
+
+`from_html` parses each distinct `style` attribute once per document and reuses it for every element that repeats it. A dashboard of 48 cards with shared styles builds in half the time.
+
+### Scale images faster
+
+Bilinear image scaling mixes eight pixels at a time in vector lanes, with the same pixels as before. Real templates render about 5% faster.
+
+### Composite pixels faster
+
+Blending, masking and PNG scanline work run in 16-bit vector lanes, with the same pixels as before. Real templates render about 3% faster.
+
+### Read repeated style values once
+
+Reading a node tree parses each distinct style value once per property and reuses it wherever the tree repeats it. A 48-card dashboard reads its styles in 0.16 ms instead of 0.26 ms.
+
+### Redraw rounded boxes faster
+
+A rounded background drawn at the same place and size as in an earlier render reuses its rasterized mask from the glyph cache. A mask may take at most `glyph_cache::max_entry_bytes`, a 32nd of the budget. `PathCommand::digest` hashes a path for such keys.
+
+### Rasterize inline SVG images once
+
+An `<img>` whose `src` is SVG markup now goes through the render's image cache, as `data:` URIs already do. Repeated renders reuse its parsed tree and rasters instead of redrawing them. Real templates render about 3% faster.
+
+### Parse inline styles faster
+
+A CSS value that fails one way of parsing no longer builds an error message before trying the next. Building nodes from HTML with inline styles takes about 40% less time.
+
+### Encode lossless WebP faster
+
+Lossless WebP encodes about 40% faster, for files about 11% larger. The pixels are the same.
+
 ## takumi@2.15.1
 
 ### Lay out text faster
