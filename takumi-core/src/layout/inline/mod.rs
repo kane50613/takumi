@@ -246,7 +246,7 @@ impl BuiltInlineLayout<'_> {
           PositionedLayoutItem::InlineBox(inline_box) => inline_box,
         };
 
-        match self.box_kind(&inline_box) {
+        match inline_box.kind {
           InlineBoxKind::InFlow => preceded = true,
           InlineBoxKind::CustomOutOfFlow => {}
           InlineBoxKind::OutOfFlow => {
@@ -284,14 +284,6 @@ impl BuiltInlineLayout<'_> {
     }
 
     positions
-  }
-
-  /// How `inline_box` sits in its line, which parley's kind does not tell for an out-of-flow box.
-  fn box_kind(&self, inline_box: &PositionedInlineBox) -> InlineBoxKind {
-    match self.spans.get(inline_box.id as usize) {
-      Some(ProcessedInlineSpan::Box(item)) => item.render_node.inline_box_kind(),
-      _ => inline_box.kind,
-    }
   }
 
   /// How `text-fit` fits the line `index`.
@@ -1092,15 +1084,10 @@ fn inline_box_span<'c>(
   } else {
     content_size.height + margin.vertical() + padding.vertical() + border.vertical()
   };
-  // Parley breaks the line after every box it places itself, while Blink never breaks at an
-  // out-of-flow object, so the line breaker takes these back and appends them without one.
   let inline_box = InlineBox {
     index,
     id,
-    kind: match kind {
-      InlineBoxKind::OutOfFlow => InlineBoxKind::CustomOutOfFlow,
-      kind => kind,
-    },
+    kind,
     width: paint_width,
     height: paint_height,
     baseline: None,
@@ -1589,7 +1576,7 @@ impl BuiltInlineLayout<'_> {
             static_inline_prefix += spacing;
           }
           PositionedLayoutItem::InlineBox(inline_box) => {
-            let kind = self.box_kind(&inline_box);
+            let kind = inline_box.kind;
 
             if kind == InlineBoxKind::CustomOutOfFlow {
               continue;
