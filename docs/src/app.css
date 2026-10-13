@@ -1,6 +1,7 @@
 @import "tailwindcss";
 @import "fumadocs-ui/css/neutral.css";
 @import "fumadocs-ui/css/preset.css";
+@import "fumadocs-ui/css/generated/spacious.css";
 @import "fumapress/css/preset.css";
 @import "fumadocs-twoslash/twoslash.css";
 
@@ -41,24 +42,24 @@
     "Liberation Mono", Menlo, "Courier New", monospace;
 }
 
-.pdf-section {
+:root:has(.pdf-section) {
   --primary: #2563eb;
   --ring: rgba(37, 99, 235, 0.3);
   --color-fd-primary: var(--primary);
 }
 
-.dark .pdf-section {
+.dark:has(.pdf-section) {
   --primary: #60a5fa;
   --ring: rgba(96, 165, 250, 0.3);
 }
 
-.paint-section {
+:root:has(.paint-section) {
   --primary: #7c3aed;
   --ring: rgba(124, 58, 237, 0.3);
   --color-fd-primary: var(--primary);
 }
 
-.dark .paint-section {
+.dark:has(.paint-section) {
   --primary: #a78bfa;
   --ring: rgba(167, 139, 250, 0.3);
 }
