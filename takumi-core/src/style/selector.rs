@@ -653,9 +653,12 @@ enum AtRulePrelude {
   /// cascade at computed time, so `reference` and `inline` collapse into the
   /// emitted rule.
   Theme,
-  /// `@import "tailwindcss"`, which here only turns Preflight on: the built-in
-  /// scales already back every utility and `tw` is already the last layer.
-  TailwindImport,
+  /// A Tailwind entry point such as `@import "tailwindcss"`, which here only
+  /// decides Preflight: the built-in scales already back every utility and
+  /// `tw` is already the last layer.
+  TailwindImport {
+    preflight: bool,
+  },
   /// `@apply`, already expanded into the declarations its utilities stand for.
   Apply(Box<StyleDeclarationBlock>),
   /// An at-rule takumi does not implement, such as `@font-face`, dropped
@@ -952,11 +955,21 @@ impl NestingContext<'_> {
       AtRulePrelude::Theme => self.parse_theme_block(input),
       AtRulePrelude::Keyframes(_)
       | AtRulePrelude::Property(_)
-      | AtRulePrelude::TailwindImport
+      | AtRulePrelude::TailwindImport { .. }
       | AtRulePrelude::Apply(_) => {
         Err(input.new_custom_error(StyleSheetParseErrorKind::UnsupportedNestedAtRule))
       }
     }
+  }
+}
+
+/// Whether the Tailwind v4 entry point `target` brings Preflight, or `None` when `target` is not one.
+/// <https://tailwindcss.com/docs/preflight#disabling-preflight>
+fn tailwind_entry_preflight(target: &str) -> Option<bool> {
+  match target.strip_prefix("tailwindcss")? {
+    "" | "/index" | "/index.css" | "/preflight" | "/preflight.css" => Some(true),
+    "/theme" | "/theme.css" | "/utilities" | "/utilities.css" => Some(false),
+    _ => None,
   }
 }
 
@@ -994,11 +1007,14 @@ fn parse_at_rule_prelude<'i, 't>(
       token => return Err(location.new_unexpected_token_error(token.clone())),
     };
 
-    if &*target == "tailwindcss" && input.is_exhausted() {
-      return Ok(AtRulePrelude::TailwindImport);
-    }
+    let Some(preflight) = tailwind_entry_preflight(&target) else {
+      return Err(input.new_error(BasicParseErrorKind::AtRuleInvalid(name)));
+    };
 
-    return Err(input.new_error(BasicParseErrorKind::AtRuleInvalid(name)));
+    // Modifiers such as `layer(base)`, `source(none)` and `important` change nothing here.
+    while input.next().is_ok() {}
+
+    return Ok(AtRulePrelude::TailwindImport { preflight });
   }
 
   if name.eq_ignore_ascii_case("apply") {
@@ -1171,7 +1187,7 @@ impl<'i> AtRuleParser<'i> for RuleParser {
       AtRulePrelude::Keyframes(name) => self.context().parse_keyframes_block(name, input),
       AtRulePrelude::Theme => self.context().parse_theme_block(input),
       // `@import` and `@apply` end at their semicolon; a block after them is invalid.
-      AtRulePrelude::TailwindImport | AtRulePrelude::Apply(_) => {
+      AtRulePrelude::TailwindImport { .. } | AtRulePrelude::Apply(_) => {
         Err(input.new_custom_error(StyleSheetParseErrorKind::UnsupportedNestedAtRule))
       }
       AtRulePrelude::Media(media_query) => {
@@ -1212,13 +1228,13 @@ impl<'i> AtRuleParser<'i> for RuleParser {
         declared_layers: self.declared_layers(&layer_names),
         ..StyleSheetFragment::default()
       }),
-      AtRulePrelude::TailwindImport => {
+      AtRulePrelude::TailwindImport { preflight } => {
         if !self.top_level {
           return Err(());
         }
 
         Ok(StyleSheetFragment {
-          preflight: true,
+          preflight,
           ..StyleSheetFragment::default()
         })
       }
@@ -3036,9 +3052,38 @@ mod tests {
 
   #[test]
   fn test_tailwind_import_turns_preflight_on() {
-    let sheet = parse_stylesheet(r#"@import "tailwindcss"; .card { width: 100px; }"#);
-    assert!(preflight_rule_count(&sheet) > 0);
-    assert_eq!(sheet.rules.last().map(selector_text), Some(".card".into()));
+    let imports = [
+      r#"@import "tailwindcss";"#,
+      r#"@import "tailwindcss" source(none);"#,
+      r#"@import "tailwindcss" important;"#,
+      r#"@import "tailwindcss/index.css";"#,
+      r#"@import "tailwindcss/preflight.css" layer(base);"#,
+      r#"@import "tailwindcss/preflight";"#,
+    ];
+
+    for import in imports {
+      let sheet = parse_stylesheet(&format!("{import} .card {{ width: 100px; }}"));
+      assert!(preflight_rule_count(&sheet) > 0, "{import}");
+      assert_eq!(
+        sheet.rules.last().map(selector_text),
+        Some(".card".into()),
+        "{import}"
+      );
+    }
+  }
+
+  /// Tailwind's documented way to leave Preflight out imports only these two.
+  #[test]
+  fn test_theme_and_utilities_imports_leave_preflight_off() {
+    let sheet = parse_stylesheet(
+      r#"@layer theme, base, components, utilities;
+      @import "tailwindcss/theme.css" layer(theme);
+      @import "tailwindcss/utilities.css" layer(utilities);
+      .card { width: 100px; }"#,
+    );
+
+    assert_eq!(preflight_rule_count(&sheet), 0);
+    assert_eq!(sheet.rules.len(), 1);
   }
 
   /// `@import` is only valid at the top of a stylesheet; a nested one must
@@ -3061,7 +3106,11 @@ mod tests {
 
   #[test]
   fn test_other_imports_are_dropped() {
-    for import in [r#"@import "./app.css";"#, r#"@import "TAILWINDCSS";"#] {
+    for import in [
+      r#"@import "./app.css";"#,
+      r#"@import "TAILWINDCSS";"#,
+      r#"@import "tailwindcss/plugin";"#,
+    ] {
       let sheet = parse_stylesheet_loosy(&format!("{import} .card {{ width: 100px; }}"));
       assert_eq!(preflight_rule_count(&sheet), 0, "{import}");
       assert_eq!(sheet.rules.len(), 1, "{import}");

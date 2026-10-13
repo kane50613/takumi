@@ -177,6 +177,10 @@ The native parser applies no Tailwind Preflight by default, so elements keep the
 
 The same import line a Tailwind stylesheet starts with turns Preflight on. It drops the UA margins, list markers and heading font tweaks.
 
+Without Preflight, a border style utility draws on every side. `border-dashed` sets `border-style` on all four sides, and an unset border width is `medium`. So `border-l-2 border-dashed` draws a 2px left border and 3px borders on the other sides. Preflight's `border: 0 solid` reset removes them.
+
+Tailwind's other entry points work the same way. `tailwindcss/index.css` and `tailwindcss/preflight.css` turn Preflight on. `tailwindcss/theme.css` and `tailwindcss/utilities.css` leave it off, as in Tailwind's [setup without Preflight](https://tailwindcss.com/docs/preflight#disabling-preflight). Modifiers such as `layer(base)` and `source(none)` are ignored.
+
 ```tsx twoslash title="Enable Preflight"
 import { render } from "takumi-js";
 
@@ -207,7 +211,7 @@ A Tailwind source stylesheet drops into `css` unchanged. The engine reads these 
 | At-rule                 | Reads as                                                                                               | Rejected                |
 | ----------------------- | ------------------------------------------------------------------------------------------------------ | ----------------------- |
 | `@theme`                | its `:root` rule. Nested `@keyframes` register. Modifiers like `reference` and `inline` change nothing | `prefix()`              |
-| `@import "tailwindcss"` | [Preflight](#preflight), at the top level only                                                         | any other import target |
+| `@import "tailwindcss"` | [Preflight](#preflight) when the entry point brings it, at the top level only                          | any other import target |
 | `@apply`                | the utilities' declarations, expanded in place, `!` suffix included                                    | variants like `md:`     |
 
 ```css title="Define Tailwind utilities"
