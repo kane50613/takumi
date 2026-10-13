@@ -26,8 +26,8 @@ use crate::{
   resources::font::{FontClasses, SubsetGroup},
   shadow::SizedShadow,
   style::{
-    AppliedTextDecorations, Color, ComputedStyle, Display, FontFamily, FontSynthesis, Lang,
-    LineHeight as CssLineHeight, SizedTextDecorationThickness, SizingContext, VerticalAlign,
+    AppliedTextDecorations, Color, ComputedStyle, Display, FontFamily, FontFeature, FontSynthesis,
+    Lang, LineHeight as CssLineHeight, SizedTextDecorationThickness, SizingContext, VerticalAlign,
     WordBreak,
   },
 };
@@ -293,6 +293,13 @@ impl SizedFontStyle<'_> {
       .filter(|shadow| shadow.color.0[3] != 0)
   }
 
+  /// OpenType features to shape with, after `letter-spacing` has disabled ligatures.
+  fn font_features(&self) -> Cow<'_, [FontFeature]> {
+    self
+      .parent
+      .resolved_font_features(self.letter_spacing != 0.0)
+  }
+
   /// Hashes every input the `TextStyle` conversion below reads, so shaped text-only layouts can be
   /// cached by content.
   pub(crate) fn hash_shaping_inputs(&self, hasher: &mut impl Hasher) {
@@ -365,7 +372,7 @@ impl SizedFontStyle<'_> {
       variation.tag.hash(hasher);
       variation.value.to_bits().hash(hasher);
     }
-    for feature in parent.resolved_font_features().iter() {
+    for feature in self.font_features().iter() {
       feature.tag.hash(hasher);
       feature.value.hash(hasher);
     }
@@ -409,8 +416,7 @@ impl<'s> From<&'s SizedFontStyle<'s>> for TextStyle<'s, 's, InlineBrush> {
       )),
       font_features: FontFeatures::List(Cow::Owned(
         style
-          .parent
-          .resolved_font_features()
+          .font_features()
           .iter()
           .map(|feature| feature.into_parlance())
           .collect(),

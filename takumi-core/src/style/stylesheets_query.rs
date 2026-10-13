@@ -423,12 +423,12 @@ impl ComputedStyle {
   /// Resolved OpenType features: the `font-variant-*` expansions followed by explicit
   /// `font-feature-settings`, which win on tag conflicts. Borrows the settings when no
   /// `font-variant-*` is active, avoiding an allocation.
-  pub(crate) fn resolved_font_features(&self) -> Cow<'_, [FontFeature]> {
+  pub(crate) fn resolved_font_features(&self, letter_spacing: bool) -> Cow<'_, [FontFeature]> {
     let mut features = Vec::new();
     self
       .inherited_data
       .font_variant_ligatures
-      .append_features(&mut features);
+      .append_features(letter_spacing, &mut features);
     self
       .inherited_data
       .font_variant_numeric
