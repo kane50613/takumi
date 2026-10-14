@@ -105,15 +105,16 @@ export function Outputs() {
         </section>
       </Gallery>
 
-      <section
-        aria-label="Paint"
-        className={cn("mx-auto max-w-[64rem] space-y-6 pt-[8svh]", GUTTER)}
-      >
-        <PanelTitle
-          title="Paint"
-          line="The draw steps behind the card above, replayed in paint order."
+      <section aria-label="Paint" className={GUTTER}>
+        <PaintBench
+          scene={scene}
+          title={
+            <PanelTitle
+              title="Paint"
+              line="The draw steps behind the card above, replayed in paint order."
+            />
+          }
         />
-        <PaintBench scene={scene} />
       </section>
     </section>
   );
