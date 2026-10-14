@@ -2,6 +2,8 @@
 //! vector goldens. The HTML is the fixture source: add a file, run this test,
 //! eyeball the generated goldens. The same file opens in a browser for a
 //! reference render (it links `shared.css` for the font faces).
+//! `FIXTURE=text_sup,inline` renders only the fixtures whose names contain one
+//! of those comma-separated fragments.
 //!
 //! `oxfmt` formats the fixtures under `htmlWhitespaceSensitivity: strict`
 //! (see `.oxfmtrc.json`), so it never adds or removes whitespace between
@@ -12,7 +14,7 @@
 mod test_utils;
 
 use std::{
-  fs,
+  env, fs,
   path::{Path, PathBuf},
 };
 
@@ -25,17 +27,18 @@ use test_utils::{CONTEXT, TEST_IMAGES, write_goldens};
 #[test]
 fn html_fixtures() {
   let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures-html");
+  let only = env::var("FIXTURE").ok();
   let mut files: Vec<PathBuf> = fs::read_dir(&dir)
     .expect("tests/fixtures-html directory")
     .filter_map(|entry| {
       let path = entry.ok()?.path();
 
-      (path.extension()? == "html").then_some(path)
+      (path.extension()? == "html" && is_selected(&path, only.as_deref())).then_some(path)
     })
     .collect();
 
   files.sort();
-  assert!(!files.is_empty(), "no HTML fixtures found");
+  assert!(!files.is_empty(), "no HTML fixtures match {only:?}");
 
   let failures: Vec<String> = files
     .par_iter()
@@ -49,6 +52,18 @@ fn html_fixtures() {
     .collect();
 
   assert!(failures.is_empty(), "{failures:#?}");
+}
+
+/// Whether `only`, the `FIXTURE` fragments, picks the fixture at `path`.
+fn is_selected(path: &Path, only: Option<&str>) -> bool {
+  let name = path.file_stem().unwrap_or_default().to_string_lossy();
+
+  only.is_none_or(|only| {
+    only
+      .split(',')
+      .map(str::trim)
+      .any(|fragment| !fragment.is_empty() && name.contains(fragment))
+  })
 }
 
 fn render_fixture(path: &Path, name: &str) -> Result<(), String> {
