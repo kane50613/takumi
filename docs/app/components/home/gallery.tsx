@@ -14,6 +14,8 @@ import { GUTTER } from "./typography";
 
 /** Scroll held at each end before the first wipe starts and after the last one lands, in panels. */
 const HOLD = 0.35;
+/** Scroll length each panel takes. */
+const PANEL_SVH = 90;
 
 /** The enclosing panel's progress: 0 as it starts wiping in, 1 once settled, 2 once covered. */
 const PanelProgress = createContext<MotionValue<number> | null>(null);
@@ -34,7 +36,17 @@ export function Gallery({ children }: { children: ReactNode }) {
   }
 
   return (
-    <div ref={track} style={{ height: `${panels.length * 130}svh` }}>
+    <div ref={track} className="relative" style={{ height: `${panels.length * PANEL_SVH}svh` }}>
+      {panels.map((_, index) => (
+        <div
+          key={index}
+          aria-hidden
+          className="pointer-events-none absolute inset-x-0 h-px snap-start"
+          style={{
+            top: `calc(${(index + HOLD) / (panels.length - 1 + 2 * HOLD)} * (${panels.length * PANEL_SVH}svh - 100svh + 3.5rem))`,
+          }}
+        />
+      ))}
       <div className="sticky top-14 h-[calc(100svh-3.5rem)] overflow-hidden">
         {panels.map((panel, index) => (
           <GalleryPanel key={index} turns={turns} index={index} last={index === panels.length - 1}>

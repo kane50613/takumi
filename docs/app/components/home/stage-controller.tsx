@@ -122,7 +122,10 @@ export function StageController() {
     };
 
     let glide = 0;
-    const stopGlide = () => cancelAnimationFrame(glide);
+    const stopGlide = () => {
+      cancelAnimationFrame(glide);
+      document.documentElement.style.scrollSnapType = "";
+    };
 
     /** Scrolls to `top` slower than the browser's smooth scroll, so each strike plays out. */
     const glideTo = (top: number) => {
@@ -134,6 +137,9 @@ export function StageController() {
 
       const from = window.scrollY;
       const start = performance.now();
+
+      // Snap points would pull each frame's scroll toward them mid-glide.
+      document.documentElement.style.scrollSnapType = "none";
       const tick = (now: number) => {
         const t = Math.min(1, (now - start) / GLIDE_MS);
         const eased = t < 0.5 ? 4 * t ** 3 : 1 - (-2 * t + 2) ** 3 / 2;
@@ -141,6 +147,8 @@ export function StageController() {
         window.scrollTo(0, from + (top - from) * eased);
         if (t < 1) {
           glide = requestAnimationFrame(tick);
+        } else {
+          stopGlide();
         }
       };
 

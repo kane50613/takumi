@@ -5,6 +5,7 @@ import { Button } from "~/components/ui/button";
 import { cn } from "~/lib/utils";
 import { boxes, CARD, glyphRuns, scene } from "./card";
 import { StageController } from "./stage-controller";
+import { STRIKE_STOPS } from "./stage-timeline";
 import { BACKDROP_WORD, DISPLAY, GUTTER, LINK, PRIMARY_BUTTON } from "./typography";
 
 const STAGES = [
@@ -109,8 +110,17 @@ export function Stage() {
     <section
       data-stage
       aria-labelledby="home-title"
-      className="relative h-[420svh] select-none motion-reduce:h-[200svh]"
+      className="relative h-[300svh] select-none motion-reduce:h-[200svh]"
     >
+      {/* Soft snap points at each settled strike: `stop` of the pinned travel, 300svh less the view */}
+      {STRIKE_STOPS.map((stop) => (
+        <div
+          key={stop}
+          aria-hidden
+          className="pointer-events-none absolute inset-x-0 h-px snap-start motion-reduce:hidden"
+          style={{ top: `calc(${stop} * (200svh + 3.5rem))` }}
+        />
+      ))}
       <div
         data-stage-view
         className="sticky top-14 flex h-[calc(100svh-3.5rem)] w-full flex-col justify-between overflow-hidden"

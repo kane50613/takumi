@@ -37,7 +37,7 @@ export function PaintBench({ scene, title }: { scene: PaintScene; title: ReactNo
   const quad = current ? scene.nodes[current.node]?.quad : undefined;
 
   return (
-    <div ref={track} className={cn("relative", !reduceMotion && "h-[340svh]")}>
+    <div ref={track} className={cn("relative", !reduceMotion && "h-[220svh]")}>
       <div
         className={cn(
           !reduceMotion && "sticky top-14 flex h-[calc(100svh-3.5rem)] flex-col justify-center",

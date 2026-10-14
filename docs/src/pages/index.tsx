@@ -41,6 +41,10 @@ const HOME_THEME_CSS = `
   --color-fd-primary: var(--primary);
   font-family: var(--font-sans);
 }
+:root:has([data-stage]) {
+  scroll-snap-type: y proximity;
+  scroll-padding-top: 3.5rem;
+}
 :root:has([data-stage]) #nd-nav > nav {
   border-bottom-color: transparent;
 }
