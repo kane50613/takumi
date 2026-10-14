@@ -2,7 +2,8 @@ import { Link } from "waku";
 import { Button } from "~/components/ui/button";
 import { PROJECT_LINK_REL, showcaseProjects } from "~/data/showcase";
 import { cn } from "~/lib/utils";
-import { GUTTER, H2, LEAD, LINK, VALUE } from "./typography";
+import { Rise } from "./rise";
+import { GUTTER, H2, LINK, VALUE } from "./typography";
 
 const FEATURED_URLS = new Set([
   "https://dcard.tw",
@@ -13,55 +14,39 @@ const FEATURED_URLS = new Set([
 
 const featured = showcaseProjects.filter((project) => FEATURED_URLS.has(project.url));
 
-const OFFSETS = [
-  "lg:w-[30%] lg:mt-0",
-  "lg:w-[26%] lg:mt-14",
-  "lg:w-[26%] lg:mt-4",
-  "lg:w-[28%] lg:mt-20",
-] as const;
-
 export function Showcase() {
   return (
     <section
       aria-labelledby="showcase-title"
       className={cn("space-y-[6svh] pt-[4svh] pb-[10svh]", GUTTER)}
     >
-      <div className="max-w-[48rem] space-y-3">
-        <h2 id="showcase-title" className={H2}>
-          Forged in production.
-        </h2>
-        <p className={LEAD}>
-          Dcard, TanStack, Fumadocs, Luma, and Nuxt OG Image render in Node.js, Bun, WebAssembly,
-          and Rust.
-        </p>
-      </div>
+      <h2 id="showcase-title" className={H2}>
+        Forged in production.
+      </h2>
 
-      {/* Asymmetric staggered spread of production share images */}
-      <div className="flex flex-col gap-6 sm:flex-row sm:flex-wrap lg:flex-nowrap lg:items-start lg:justify-between">
+      <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
         {featured.map((project, index) => {
           const name = project.title ?? new URL(project.url).hostname;
 
           return (
-            <a
-              key={project.url}
-              href={project.url}
-              target="_blank"
-              rel={PROJECT_LINK_REL}
-              className={cn(
-                "group block w-full overflow-hidden rounded-2xl border border-foreground/15 shadow-lg transition-transform duration-200 ease-out hover:-translate-y-1 active:scale-[0.98] sm:w-[calc(50%-0.75rem)]",
-                OFFSETS[index],
-              )}
-            >
-              <img
-                src={project.image}
-                alt={`Production Open Graph image rendered by ${name}`}
-                width={project.width}
-                height={project.height}
-                loading="lazy"
-                decoding="async"
-                className="aspect-40/21 h-auto w-full object-cover"
-              />
-            </a>
+            <Rise key={project.url} lag={index * 56}>
+              <a
+                href={project.url}
+                target="_blank"
+                rel={PROJECT_LINK_REL}
+                className="group block overflow-hidden rounded-2xl border border-foreground/15 shadow-lg transition-transform duration-200 ease-out-strong hover:-translate-y-1 active:scale-[0.98]"
+              >
+                <img
+                  src={project.image}
+                  alt={`Production Open Graph image rendered by ${name}`}
+                  width={project.width}
+                  height={project.height}
+                  loading="lazy"
+                  decoding="async"
+                  className="aspect-40/21 h-auto w-full object-cover"
+                />
+              </a>
+            </Rise>
           );
         })}
       </div>
@@ -85,7 +70,7 @@ export function Showcase() {
           <Button
             asChild
             size="lg"
-            className="h-12 rounded-xl bg-primary px-7 text-base font-bold text-primary-foreground shadow-sm transition-transform duration-150 ease-out hover:bg-primary/90 active:scale-[0.97]"
+            className="h-12 rounded-xl bg-primary px-7 text-base font-bold text-primary-foreground shadow-sm transition-[transform,background-color] duration-150 ease-out-strong hover:bg-primary/90 active:scale-[0.97]"
           >
             <Link to="/playground">Try in playground</Link>
           </Button>

@@ -1,19 +1,17 @@
 import { cn } from "~/lib/utils";
-import { CARD, scene } from "./card";
-import { GUTTER, H2, LEAD, VALUE } from "./typography";
-import { PaintBench } from "./use-cases";
+import { scene } from "./card";
+import { Gallery } from "./gallery";
+import { PaintBench } from "./paint-bench";
+import { GUTTER, H2, H3, VALUE } from "./typography";
 
 const OUTPUT = "/images/twitter-images";
 const THUMBNAIL = "/images/home";
+const PANEL = "w-[min(84vw,58rem)] shrink-0 space-y-5";
 
-/** The five real outputs reassembled from the anvil strike, staggered across the page. */
+/** The outputs the anvil strike forges, slid past one by one, then its draw steps replayed. */
 export function Outputs() {
   return (
-    <section
-      id="outputs"
-      aria-labelledby="outputs-title"
-      className="relative overflow-x-clip pb-[8svh]"
-    >
+    <section id="outputs" aria-labelledby="outputs-title" className="relative pb-[8svh]">
       {/* Forge trajectory streams crossing the boundary from the anvil stage above */}
       <div aria-hidden className="pointer-events-none relative -mt-[4svh] h-[12svh] w-full">
         <svg
@@ -41,225 +39,138 @@ export function Outputs() {
         </svg>
       </div>
 
-      <div className={cn("max-w-[44rem] space-y-3", GUTTER)}>
-        <h2 id="outputs-title" className={H2}>
-          Five outputs from one strike.
-        </h2>
-        <p className={LEAD}>Open any rendered file or scrub the draw steps.</p>
-      </div>
+      <h2 id="outputs-title" className={cn(H2, GUTTER)}>
+        Five outputs from one strike.
+      </h2>
 
-      {/* Staggered full-bleed workbench: Images (left) + Animations (right, offset) */}
-      <div
-        className={cn(
-          "mt-[5svh] grid items-start gap-x-[4vw] gap-y-[7svh] lg:grid-cols-12",
-          GUTTER,
-        )}
-      >
-        {/* 1. Images */}
-        <div className="space-y-4 lg:col-span-7">
-          <div className="flex flex-wrap items-baseline justify-between gap-2">
-            <h3 className="font-sans text-[1.75rem] font-[780] tracking-tight">Images</h3>
-            <span className={VALUE}>PNG · WebP · JPEG</span>
-          </div>
-
-          <div className="relative pb-12 sm:pb-16">
-            <a
-              href={CARD.png}
-              target="_blank"
-              rel="noopener"
-              className="group block overflow-hidden rounded-2xl border border-foreground/15 shadow-xl transition-transform duration-200 ease-out hover:-translate-y-1 active:scale-[0.98]"
-            >
-              <img
-                src={CARD.image}
-                alt="Forged social card rendered by Takumi at 2400 by 1260 pixels"
-                width={CARD.width}
-                height={CARD.height}
-                loading="lazy"
-                decoding="async"
-                className="h-auto w-full"
-              />
-            </a>
-
-            <a
+      <Gallery>
+        <section aria-label="Images" className={PANEL}>
+          <PanelTitle title="Images" formats="PNG · WebP · JPEG" />
+          <div className="relative pb-12">
+            <OutputImage
               href={`${OUTPUT}/home-usecase-blog-cover.png`}
-              target="_blank"
-              rel="noopener"
-              className="group absolute -bottom-2 right-0 w-[56%] overflow-hidden rounded-xl border border-foreground/20 shadow-2xl transition-transform duration-200 ease-out hover:-translate-y-1 active:scale-[0.98] sm:w-[48%]"
-            >
-              <img
-                src={`${THUMBNAIL}/home-usecase-blog-cover.webp`}
-                alt="Blog cover with a lighthouse at night rendered as PNG"
-                width={1037}
-                height={544}
-                loading="lazy"
-                decoding="async"
-                className="h-auto w-full"
-              />
-            </a>
+              src={`${THUMBNAIL}/home-usecase-blog-cover.webp`}
+              alt="Blog cover with a lighthouse at night rendered as PNG"
+              width={1037}
+              height={544}
+              className="w-[82%]"
+            />
+            <OutputImage
+              href={`${OUTPUT}/home-usecase-quote-card.webp`}
+              src={`${THUMBNAIL}/home-usecase-quote-card.webp`}
+              alt="Square quote card rendered as WebP"
+              width={544}
+              height={544}
+              className="absolute -bottom-2 right-0 w-[34%] shadow-2xl"
+            />
           </div>
-        </div>
+        </section>
 
-        {/* 2. Animations */}
-        <div className="space-y-4 lg:col-span-5 lg:mt-[8svh]">
-          <div className="flex flex-wrap items-baseline justify-between gap-2">
-            <h3 className="font-sans text-[1.75rem] font-[780] tracking-tight">Animations</h3>
-            <span className={VALUE}>Animated WebP · APNG · GIF</span>
-          </div>
+        <section aria-label="Animations" className={PANEL}>
+          <PanelTitle title="Animations" formats="Animated WebP · APNG · GIF" />
+          <OutputImage
+            href={`${OUTPUT}/home-usecase-now-playing.webp`}
+            src={`${OUTPUT}/home-usecase-now-playing.webp`}
+            alt="Animated now-playing card with moving CSS keyframe equalizer bars"
+            width={960}
+            height={360}
+          />
+        </section>
 
-          <div className="space-y-5">
-            <a
-              href={`${OUTPUT}/home-usecase-now-playing.webp`}
-              target="_blank"
-              rel="noopener"
-              className="block overflow-hidden rounded-2xl border border-foreground/15 shadow-xl transition-transform duration-200 ease-out hover:-translate-y-1 active:scale-[0.98]"
-            >
-              <img
-                src={`${OUTPUT}/home-usecase-now-playing.webp`}
-                alt="Animated now-playing card with moving CSS keyframe equalizer bars"
-                width={960}
-                height={360}
-                loading="lazy"
-                decoding="async"
-                className="h-auto w-full"
-              />
-            </a>
+        <section aria-label="SVG" className={PANEL}>
+          <PanelTitle title="SVG" />
+          <OutputImage
+            href={`${OUTPUT}/home-usecase-repo-banner.svg`}
+            src={`${OUTPUT}/home-usecase-repo-banner.svg`}
+            alt="Repository banner rendered as scalable vector SVG"
+            width={1280}
+            height={440}
+          />
+        </section>
 
-            <a
-              href={CARD.motion}
-              target="_blank"
-              rel="noopener"
-              className="ml-auto block w-[88%] overflow-hidden rounded-xl border border-foreground/15 shadow-lg transition-transform duration-200 ease-out hover:-translate-y-1 active:scale-[0.98]"
-            >
-              <img
-                src={CARD.motion}
-                alt="Animated forge card rendered from CSS keyframes at 24 frames per second"
-                width={CARD.width}
-                height={CARD.height}
-                loading="lazy"
-                decoding="async"
-                className="h-auto w-full"
-              />
-            </a>
-          </div>
-        </div>
-
-        {/* 3. SVG (left-center) + 4. PDF (tall right spread) */}
-        <div className="space-y-4 lg:col-span-6 lg:-mt-[2svh]">
-          <div className="flex flex-wrap items-baseline justify-between gap-2">
-            <h3 className="font-sans text-[1.75rem] font-[780] tracking-tight">SVG</h3>
-            <span className={VALUE}>Vector paths</span>
-          </div>
-
-          <div className="space-y-5">
-            <a
-              href={`${OUTPUT}/home-usecase-repo-banner.svg`}
-              target="_blank"
-              rel="noopener"
-              className="block overflow-hidden rounded-2xl border border-foreground/15 shadow-xl transition-transform duration-200 ease-out hover:-translate-y-1 active:scale-[0.98]"
-            >
-              <img
-                src={`${OUTPUT}/home-usecase-repo-banner.svg`}
-                alt="Repository banner rendered as scalable vector SVG"
-                width={1280}
-                height={440}
-                loading="lazy"
-                decoding="async"
-                className="h-auto w-full"
-              />
-            </a>
-
-            <a
-              href={CARD.svg}
-              target="_blank"
-              rel="noopener"
-              className="block w-[84%] overflow-hidden rounded-xl border border-foreground/15 shadow-md transition-transform duration-200 ease-out hover:-translate-y-1 active:scale-[0.98]"
-            >
-              <img
-                src={CARD.svg}
-                alt="Forged homepage card rendered as vector SVG"
-                width={CARD.width}
-                height={CARD.height}
-                loading="lazy"
-                decoding="async"
-                className="h-auto w-full"
-              />
-            </a>
-          </div>
-        </div>
-
-        {/* 4. PDF */}
-        <div className="space-y-4 lg:col-span-6 lg:mt-[4svh]">
-          <div className="flex flex-wrap items-baseline justify-between gap-2">
-            <h3 className="font-sans text-[1.75rem] font-[780] tracking-tight">PDF</h3>
-            <span className={VALUE}>Paged · selectable text</span>
-          </div>
-
-          <div className="relative flex items-start gap-5">
-            <a
+        <section aria-label="PDF" className={PANEL}>
+          <PanelTitle title="PDF" />
+          <div className="flex items-start gap-5">
+            <OutputImage
               href={`${OUTPUT}/home-usecase-invoice.pdf`}
-              target="_blank"
-              rel="noopener"
-              className="block w-[46%] shrink-0 overflow-hidden rounded-xl border border-foreground/15 bg-white shadow-xl transition-transform duration-200 ease-out hover:-translate-y-1 active:scale-[0.98]"
-            >
-              <img
-                src={`${THUMBNAIL}/home-usecase-invoice.webp`}
-                alt="A4 invoice PDF for Hollow Oak Studio with selectable text"
-                width={385}
-                height={544}
-                loading="lazy"
-                decoding="async"
-                className="h-auto w-full"
-              />
-            </a>
-
+              src={`${THUMBNAIL}/home-usecase-invoice.webp`}
+              alt="A4 invoice PDF for Hollow Oak Studio with selectable text"
+              width={385}
+              height={544}
+              className="w-[40%] shrink-0 bg-white"
+            />
             <div className="flex flex-1 flex-col gap-5 pt-6">
-              <a
+              <OutputImage
                 href={`${OUTPUT}/home-usecase-ticket.pdf`}
-                target="_blank"
-                rel="noopener"
-                className="block overflow-hidden rounded-xl border border-foreground/15 shadow-xl transition-transform duration-200 ease-out hover:-translate-y-1 active:scale-[0.98]"
-              >
-                <img
-                  src={`${THUMBNAIL}/home-usecase-ticket.webp`}
-                  alt="HARBOR/26 Lisbon conference pass PDF with barcode stub"
-                  width={1322}
-                  height={544}
-                  loading="lazy"
-                  decoding="async"
-                  className="h-auto w-full"
-                />
-              </a>
-
-              <a
+                src={`${THUMBNAIL}/home-usecase-ticket.webp`}
+                alt="HARBOR/26 Lisbon conference pass PDF with barcode stub"
+                width={1322}
+                height={544}
+              />
+              <OutputImage
                 href={`${OUTPUT}/home-usecase-certificate.pdf`}
-                target="_blank"
-                rel="noopener"
-                className="block overflow-hidden rounded-xl border border-foreground/15 shadow-lg transition-transform duration-200 ease-out hover:-translate-y-1 active:scale-[0.98]"
-              >
-                <img
-                  src={`${THUMBNAIL}/home-usecase-certificate.webp`}
-                  alt="Course completion certificate PDF with seal"
-                  width={770}
-                  height={544}
-                  loading="lazy"
-                  decoding="async"
-                  className="h-auto w-full"
-                />
-              </a>
+                src={`${THUMBNAIL}/home-usecase-certificate.webp`}
+                alt="Course completion certificate PDF with seal"
+                width={770}
+                height={544}
+              />
             </div>
           </div>
-        </div>
+        </section>
+      </Gallery>
 
-        {/* 5. Paint Data Interactive Workbench */}
-        <div className="space-y-4 lg:col-span-8 lg:col-start-3 lg:mt-[2svh]">
-          <div className="flex flex-wrap items-baseline justify-between gap-2">
-            <h3 className="font-sans text-[1.75rem] font-[780] tracking-tight">Paint</h3>
-            <span className={VALUE}>Ordered draw steps for your own canvas</span>
-          </div>
-
-          <PaintBench scene={scene} />
-        </div>
-      </div>
+      <section aria-label="Paint" className={cn("mx-auto max-w-[64rem] space-y-5", GUTTER)}>
+        <h3 className={H3}>Paint</h3>
+        <PaintBench scene={scene} />
+      </section>
     </section>
+  );
+}
+
+function PanelTitle({ title, formats }: { title: string; formats?: string }) {
+  return (
+    <div className="flex flex-wrap items-baseline justify-between gap-2">
+      <h3 className={H3}>{title}</h3>
+      {formats && <span className={VALUE}>{formats}</span>}
+    </div>
+  );
+}
+
+/** A rendered file's preview that opens the file itself. */
+function OutputImage({
+  href,
+  src,
+  alt,
+  width,
+  height,
+  className,
+}: {
+  href: string;
+  src: string;
+  alt: string;
+  width: number;
+  height: number;
+  className?: string;
+}) {
+  return (
+    <a
+      href={href}
+      target="_blank"
+      rel="noopener"
+      className={cn(
+        "block overflow-hidden rounded-2xl border border-foreground/15 shadow-xl transition-transform duration-200 ease-out-strong hover:-translate-y-1 active:scale-[0.98]",
+        className,
+      )}
+    >
+      <img
+        src={src}
+        alt={alt}
+        width={width}
+        height={height}
+        loading="lazy"
+        decoding="async"
+        className="h-auto w-full"
+      />
+    </a>
   );
 }
