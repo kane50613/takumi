@@ -18,9 +18,9 @@ use taffy::{
   BoxSizing, Cache, CacheTree, ContainingBlockClaims, CoreStyle, DetailedGridInfo,
   DetailedLayoutInfo, Dimension, Display as TaffyDisplay, Layout, LayoutBlockContainer,
   LayoutContainingBlock, LayoutFlexboxContainer, LayoutGridContainer, LayoutInput, LayoutOutput,
-  LayoutPartialTree, LengthPercentageAuto, Line, MaybeResolve, NodeId as TaffyNodeId, OofCandidate,
-  OofPositioningArea, RequestedAxis, ResolveOrZero, RoundTree, RunMode, Size as TaffySize,
-  SizingMode, Style, TraversePartialTree, TraverseTree, compute_block_layout,
+  LayoutPartialTree, LengthPercentageAuto, Line, MaybeMath, MaybeResolve, NodeId as TaffyNodeId,
+  OofCandidate, OofPositioningArea, RequestedAxis, ResolveOrZero, RoundTree, RunMode,
+  Size as TaffySize, SizingMode, Style, TraversePartialTree, TraverseTree, compute_block_layout,
   compute_cached_layout, compute_flexbox_layout, compute_grid_layout, compute_hidden_layout,
   compute_leaf_layout, compute_oof_layout_for_area, compute_root_layout,
 };
@@ -1426,22 +1426,37 @@ impl<'r> LayoutTree<'r> {
               known_dimensions
             }
           };
-          // The size `compute_leaf_layout` gives the box before its content.
+          let calc = |value, basis| tree.resolve_calc_value(value, basis);
+          let padding = node_data
+            .style
+            .padding
+            .resolve_or_zero(inputs.parent_size.width, calc);
+          let border = node_data
+            .style
+            .border
+            .resolve_or_zero(inputs.parent_size.width, calc);
+          let insets = padding.sum_axes() + border.sum_axes();
+          // The border-box size `compute_leaf_layout` gives the box before its content.
           let fixed_size =
             stripped_known_dimensions(inputs.known_dimensions).or(match inputs.sizing_mode {
               SizingMode::InherentSize => node_data
                 .style
                 .size
-                .maybe_resolve(inputs.parent_size, |val, basis| {
-                  tree.resolve_calc_value(val, basis)
-                })
-                .maybe_apply_aspect_ratio(node_data.style.aspect_ratio),
+                .maybe_resolve(inputs.parent_size, calc)
+                .maybe_apply_aspect_ratio(node_data.style.aspect_ratio)
+                .maybe_add(if node_data.style.box_sizing == BoxSizing::ContentBox {
+                  insets
+                } else {
+                  TaffySize::ZERO
+                }),
               SizingMode::ContentSize => TaffySize::NONE,
             });
 
-          render_node
-            .context
-            .set_definite_height(fixed_size.height.is_some());
+          render_node.context.set_definite_height(
+            fixed_size
+              .height
+              .map(|height| (height - insets.height).max(0.0)),
+          );
 
           let mut output = compute_leaf_layout(
             inputs,
@@ -1506,23 +1521,11 @@ impl<'r> LayoutTree<'r> {
             );
 
           let border_box = || {
-            let calc = |value, basis| tree.resolve_calc_value(value, basis);
-
             ComputedLayout::new(
               Point::ZERO,
               Size::from_taffy(output.size),
-              Rect::from_taffy(
-                node_data
-                  .style
-                  .border
-                  .resolve_or_zero(inputs.parent_size.width, calc),
-              ),
-              Rect::from_taffy(
-                node_data
-                  .style
-                  .padding
-                  .resolve_or_zero(inputs.parent_size.width, calc),
-              ),
+              Rect::from_taffy(border),
+              Rect::from_taffy(padding),
             )
           };
 

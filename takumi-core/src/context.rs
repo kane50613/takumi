@@ -108,7 +108,7 @@ impl From<RenderContextInit> for RenderContext {
       text_decorations: AppliedTextDecorations::default(),
       collapsed_borders: init.collapsed_borders,
       text_measure_digest: OnceCell::new(),
-      definite_height: Cell::new(false),
+      definite_height: Cell::new(None),
       id: 0,
     }
   }
@@ -136,9 +136,9 @@ pub struct RenderContext {
   pub(crate) collapsed_borders: bool,
   /// Digest of the style inputs to text measurement, taken on first use.
   text_measure_digest: OnceCell<u64>,
-  /// Whether the box's last layout sized its height before its content, Blink's definite block
+  /// The content height the box's last layout fixed before its content, Blink's definite block
   /// size.
-  definite_height: Cell<bool>,
+  definite_height: Cell<Option<f32>>,
   /// Names the box it styles within the render; its clones style the same box.
   id: usize,
 }
@@ -249,7 +249,7 @@ impl RenderContext {
       text_decorations: parent.text_decorations.clone(),
       collapsed_borders: parent.collapsed_borders,
       text_measure_digest: OnceCell::new(),
-      definite_height: Cell::new(false),
+      definite_height: Cell::new(None),
     }
   }
 
@@ -275,17 +275,17 @@ impl RenderContext {
       style: Rc::new(style),
       collapsed_borders: false,
       text_measure_digest: OnceCell::new(),
-      definite_height: Cell::new(false),
+      definite_height: Cell::new(None),
     }
   }
 
-  /// Whether the box's last layout sized its height before its content.
-  pub(crate) fn has_definite_height(&self) -> bool {
+  /// The content height the box's last layout fixed before its content.
+  pub(crate) fn definite_height(&self) -> Option<f32> {
     self.definite_height.get()
   }
 
-  pub(crate) fn set_definite_height(&self, definite: bool) {
-    self.definite_height.set(definite);
+  pub(crate) fn set_definite_height(&self, height: Option<f32>) {
+    self.definite_height.set(height);
   }
 
   /// The style to change in place, copied first when another box shares it.

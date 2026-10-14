@@ -3,7 +3,7 @@
 use crate::{
   context::RenderContext,
   font_style::{BoxLineHeight, SizedFontStyle},
-  geometry::{AvailableSpace, ComputedLayout, Point, Rect, Size},
+  geometry::{ComputedLayout, Point, Rect, Size},
   layout::{border::BorderProperties, node::Node, tree::RenderNode},
   style::{
     Color, Direction, Display, Float, Length, Position, ResolvedVerticalAlign, Sides,
@@ -87,19 +87,12 @@ pub(crate) struct LineSpace {
 }
 
 impl LineSpace {
-  /// The space lines break at `max_width` in for the formatting context `context` styles, laid
-  /// out in `available_height`, which counts only when layout sized the box's height first.
-  pub(crate) fn of(
-    context: &RenderContext,
-    max_width: f32,
-    available_height: AvailableSpace,
-  ) -> Self {
+  /// The space lines break at `max_width` in for the formatting context `context` styles.
+  pub(crate) fn of(context: &RenderContext, max_width: f32) -> Self {
     Self {
       direction: context.style.inherited_data.direction,
       inline_size: max_width.is_finite().then_some(max_width),
-      block_size: available_height
-        .into_option()
-        .filter(|_| context.has_definite_height()),
+      block_size: context.definite_height(),
     }
   }
 

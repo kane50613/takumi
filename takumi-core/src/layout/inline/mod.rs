@@ -865,7 +865,7 @@ fn build_inline_layout_tree<'c>(
     shape_key,
     strut,
     font,
-    line_space: LineSpace::of(context, max_width, available_space.height),
+    line_space: LineSpace::of(context, max_width),
   }
 }
 
@@ -1991,6 +1991,58 @@ mod tests {
     assert!(
       (painted - unmoved - 10.0).abs() < 0.01,
       "the offset scaled: {painted} past {unmoved}"
+    );
+  }
+
+  #[test]
+  fn a_vertical_percentage_inset_resolves_against_the_content_height() {
+    let fonts = create_test_context();
+    let context = RenderContext::builder()
+      .fonts(fonts.snapshot_with_fallbacks(None))
+      .sizing(
+        SizingContext::builder()
+          .viewport(Viewport::new((1200, 630)))
+          .build(),
+      )
+      .build();
+    let node = Node::container([
+      Node::text("tall ".to_string()),
+      Node::container([Node::text("moved".to_string())]).with_style(
+        Style::default()
+          .with(StyleDeclaration::display(Display::Inline))
+          .with(StyleDeclaration::position(Position::Relative))
+          .with(StyleDeclaration::top(Length::Percentage(50.0))),
+      ),
+    ])
+    .with_style(Style::default().with(StyleDeclaration::display(Display::Block)));
+    let render_node = RenderNode::from_node(&context, node);
+
+    render_node.context.set_definite_height(Some(96.0));
+
+    let font_style = SizedFontStyle::from_style(&render_node.context.style, &render_node.context);
+    let built = create_inline_layout(InlineLayoutRequest::in_available_space(
+      collect_inline_items(&render_node),
+      Size {
+        width: AvailableSpace::Definite(600.0),
+        height: AvailableSpace::Definite(730.0),
+      },
+      Size {
+        width: Some(600.0),
+        height: Some(96.0),
+      },
+      &font_style,
+      &render_node.context,
+      InlineLayoutMode::Measure,
+    ));
+    let moved = built
+      .spans
+      .iter()
+      .position(|span| matches!(span, ProcessedInlineSpan::Text { text, .. } if text == "moved"))
+      .unwrap();
+
+    assert_eq!(
+      built.span_relative_offset(moved as u64),
+      Point { x: 0.0, y: 48.0 }
     );
   }
 
