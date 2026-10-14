@@ -1459,6 +1459,7 @@ define_style! {
       font_variant_caps: FontVariantCaps where inherit = true,
       font_variant_position: FontVariantPosition where inherit = true,
       font_kerning: FontKerning where inherit = true,
+      font_optical_sizing: FontOpticalSizing where inherit = true,
       font_synthesis_weight: FontSynthesic where inherit = true,
       font_synthesis_style: FontSynthesic where inherit = true,
       text_align: TextAlign where inherit = true,

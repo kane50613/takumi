@@ -26,8 +26,8 @@ use crate::{
   shadow::SizedShadow,
   style::{
     AppliedTextDecorations, Color, ComputedStyle, Display, FontFamily, FontFeature, FontSynthesis,
-    Lang, LineHeight as CssLineHeight, SizedTextDecorationThickness, SizingContext, VerticalAlign,
-    WordBreak,
+    FontVariation, Lang, LineHeight as CssLineHeight, ResolvedFontVariations,
+    SizedTextDecorationThickness, SizingContext, VerticalAlign, WordBreak,
   },
 };
 
@@ -252,6 +252,7 @@ pub struct SizedFontStyle<'s> {
   /// Computed style this is derived from.
   pub parent: &'s ComputedStyle,
   pub(crate) font_family: Rc<ExpandedFontFamily>,
+  pub(crate) font_variations: ResolvedFontVariations,
   pub(crate) line_height: parley::LineHeight,
   /// The line height kept on the brush, because parley's run metrics can carry a neighboring
   /// span's style at run boundaries.
@@ -358,7 +359,7 @@ impl SizedFontStyle<'_> {
       .percentage()
       .to_bits()
       .hash(hasher);
-    for variation in parent.inherited_data.font_variation_settings.iter() {
+    for variation in self.font_variations.iter() {
       variation.tag.hash(hasher);
       variation.value.to_bits().hash(hasher);
     }
@@ -397,11 +398,9 @@ impl<'s> From<&'s SizedFontStyle<'s>> for TextStyle<'s, 's, InlineBrush> {
       font_style: style.parent.inherited_data.font_style.into_parlance(),
       font_variations: FontVariations::List(Cow::Owned(
         style
-          .parent
-          .inherited_data
-          .font_variation_settings
+          .font_variations
           .iter()
-          .map(|variation| variation.into_parlance())
+          .map(FontVariation::into_parlance)
           .collect(),
       )),
       font_features: FontFeatures::List(Cow::Owned(
@@ -440,7 +439,7 @@ impl<'s> From<&'s SizedFontStyle<'s>> for TextStyle<'s, 's, InlineBrush> {
           weight: style.parent.inherited_data.font_synthesis_weight,
           style: style.parent.inherited_data.font_synthesis_style,
         },
-        font_variations: style.parent.inherited_data.font_variation_settings.clone(),
+        font_variations: style.font_variations.clone(),
         line_height: style.box_line_height,
         fixed_letter_spacing: if style.parent.inherited_data.letter_spacing.has_percentage() {
           0.0
@@ -612,6 +611,11 @@ impl<'s> SizedFontStyle<'s> {
       sizing: context.sizing.to_owned(),
       parent: style,
       font_family: context.expand_font_family(&style.inherited_data.font_family),
+      font_variations: ResolvedFontVariations::new(
+        style.inherited_data.font_variation_settings.clone(),
+        style.inherited_data.font_optical_sizing,
+        context.sizing.to_css(context.sizing.font_size),
+      ),
       line_height,
       box_line_height,
       stroke_width: style

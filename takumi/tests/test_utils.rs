@@ -77,6 +77,11 @@ const TEST_FONTS: &[(&str, &str, GenericFamily)] = &[
     "Manrope",
     GenericFamily::SANS_SERIF,
   ),
+  (
+    "assets/fonts/inter/inter-latin-opsz-wght-normal.woff2",
+    "Inter",
+    GenericFamily::SANS_SERIF,
+  ),
 ];
 
 const IMAGES: &[&str] = &[
