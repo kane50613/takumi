@@ -47,8 +47,25 @@ export function SearchDialog(props: SharedProps) {
   }
 
   return (
-    <Suspense fallback={null}>
+    <Suspense fallback={<LoadingDialog {...props} />}>
       <Results {...props} />
     </Suspense>
+  );
+}
+
+/** The search dialog's frame while its results chunk loads. */
+function LoadingDialog({ open, onOpenChange, dialogHandle }: SharedProps) {
+  return (
+    <Dialog.Root open={open} onOpenChange={onOpenChange} handle={dialogHandle}>
+      <Dialog.Portal>
+        <Dialog.Backdrop className="fixed inset-0 z-50 bg-fd-overlay backdrop-blur-xs" />
+        <Dialog.Popup
+          aria-busy
+          className="fixed top-4 left-1/2 z-50 w-[calc(100%-1rem)] max-w-screen-sm -translate-x-1/2 rounded-xl border bg-fd-popover p-4 text-fd-muted-foreground shadow-2xl md:top-[calc(50%-250px)]"
+        >
+          <Dialog.Title className="text-sm">Loading search…</Dialog.Title>
+        </Dialog.Popup>
+      </Dialog.Portal>
+    </Dialog.Root>
   );
 }
