@@ -239,8 +239,9 @@ fn test_deserialize_skips_null_declarations() -> Result<(), serde_json::Error> {
   Ok(())
 }
 
-fn feature_tags(features: &[FontFeature]) -> Vec<(String, u16)> {
-  features
+fn feature_tags(style: &ComputedStyle, letter_spacing: bool) -> Vec<(String, u16)> {
+  style
+    .resolved_font_features(letter_spacing, style.inherited_data.font_variant_caps)
     .iter()
     .map(|feature| {
       (
@@ -264,7 +265,7 @@ fn font_variant_longhands_expand_to_features() {
   );
 
   assert_eq!(
-    feature_tags(&style.resolved_font_features(false)),
+    feature_tags(&style, false),
     vec![
       ("tnum".into(), 1),
       ("ordn".into(), 1),
@@ -285,7 +286,7 @@ fn font_variant_ligatures_none_disables_defaults() {
   );
 
   assert_eq!(
-    feature_tags(&style.resolved_font_features(false)),
+    feature_tags(&style, false),
     vec![
       ("liga".into(), 0),
       ("clig".into(), 0),
@@ -307,7 +308,7 @@ fn letter_spacing_disables_ligatures_but_not_feature_settings() {
   );
 
   assert_eq!(
-    feature_tags(&style.resolved_font_features(true)),
+    feature_tags(&style, true),
     vec![
       ("liga".into(), 0),
       ("clig".into(), 0),
@@ -322,19 +323,13 @@ fn letter_spacing_disables_ligatures_but_not_feature_settings() {
 #[test]
 fn font_kerning_expands_to_kern_feature() {
   let auto = inherited_style_from_pairs([("font-kerning", "auto")], &ComputedStyle::default());
-  assert!(auto.resolved_font_features(false).is_empty());
+  assert!(feature_tags(&auto, false).is_empty());
 
   let normal = inherited_style_from_pairs([("font-kerning", "normal")], &ComputedStyle::default());
-  assert_eq!(
-    feature_tags(&normal.resolved_font_features(false)),
-    vec![("kern".into(), 1)],
-  );
+  assert_eq!(feature_tags(&normal, false), vec![("kern".into(), 1)],);
 
   let none = inherited_style_from_pairs([("font-kerning", "none")], &ComputedStyle::default());
-  assert_eq!(
-    feature_tags(&none.resolved_font_features(false)),
-    vec![("kern".into(), 0)],
-  );
+  assert_eq!(feature_tags(&none, false), vec![("kern".into(), 0)],);
 }
 
 #[test]
@@ -348,7 +343,7 @@ fn font_feature_settings_override_font_kerning() {
   );
 
   assert_eq!(
-    feature_tags(&style.resolved_font_features(false)),
+    feature_tags(&style, false),
     vec![("kern".into(), 0), ("kern".into(), 1)],
   );
 }
@@ -364,7 +359,7 @@ fn font_variant_shorthand_distributes_and_settings_win() {
     &ComputedStyle::default(),
   );
 
-  let tags = feature_tags(&style.resolved_font_features(false));
+  let tags = feature_tags(&style, false);
   assert_eq!(tags.first(), Some(&("liga".to_string(), 1)));
   assert!(tags.contains(&("smcp".to_string(), 1)));
   // both tnum entries present; the last (settings) wins under swash's last-tag semantics

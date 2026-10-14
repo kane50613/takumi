@@ -20,13 +20,13 @@ use xxhash_rust::xxh3::Xxh3;
 use crate::{
   context::RenderContext,
   geometry::Size,
-  layout::inline::{InlineBrush, TextScale},
+  layout::inline::{CapsRun, InlineBrush, SMALL_CAPS_FONT_SIZE_MULTIPLIER, TextScale},
   layout_unit::LayoutUnit,
   resources::font::FontClasses,
   shadow::SizedShadow,
   style::{
     AppliedTextDecorations, Color, ComputedStyle, Display, FontFamily, FontFeature, FontSynthesis,
-    FontVariation, Lang, LineHeight as CssLineHeight, ResolvedFontVariations,
+    FontVariantCaps, FontVariation, Lang, LineHeight as CssLineHeight, ResolvedFontVariations,
     SizedTextDecorationThickness, SizingContext, VerticalAlign, WordBreak,
   },
 };
@@ -253,6 +253,8 @@ pub struct SizedFontStyle<'s> {
   pub parent: &'s ComputedStyle,
   pub(crate) font_family: Rc<ExpandedFontFamily>,
   pub(crate) font_variations: ResolvedFontVariations,
+  /// The `font-variant-caps` feature to shape with, which a synthesized caps run swaps.
+  pub(crate) caps: FontVariantCaps,
   pub(crate) line_height: parley::LineHeight,
   /// The line height kept on the brush, because parley's run metrics can carry a neighboring
   /// span's style at run boundaries.
@@ -288,7 +290,22 @@ impl SizedFontStyle<'_> {
   fn font_features(&self) -> Cow<'_, [FontFeature]> {
     self
       .parent
-      .resolved_font_features(self.letter_spacing != 0.0)
+      .resolved_font_features(self.letter_spacing != 0.0, self.caps)
+  }
+
+  /// This style shaping one case run of `font-variant-caps` text, at Blink's synthetic small-caps
+  /// size when the run synthesizes them.
+  pub(crate) fn for_caps_run(mut self, run: CapsRun) -> Self {
+    self.caps = run.caps;
+    if run.synthetic {
+      let font_size = self.sizing.font_size;
+
+      if let LineHeight::FontSizeRelative(value) = self.line_height {
+        self.line_height = LineHeight::Absolute(value * font_size);
+      }
+      self.sizing.font_size = (font_size * SMALL_CAPS_FONT_SIZE_MULTIPLIER).round();
+    }
+    self
   }
 
   /// Hashes every input the `TextStyle` conversion below reads, so shaped text-only layouts can be
@@ -374,6 +391,7 @@ impl SizedFontStyle<'_> {
     (parent.misc_inherited_data.text_decoration_skip_ink as u8).hash(hasher);
     (parent.inherited_data.font_synthesis_weight as u8).hash(hasher);
     (parent.inherited_data.font_synthesis_style as u8).hash(hasher);
+    (parent.inherited_data.font_synthesis_small_caps as u8).hash(hasher);
     match &parent.base_data.vertical_align {
       VerticalAlign::Keyword(keyword) => {
         0_u8.hash(hasher);
@@ -438,6 +456,7 @@ impl<'s> From<&'s SizedFontStyle<'s>> for TextStyle<'s, 's, InlineBrush> {
         font_synthesis: FontSynthesis {
           weight: style.parent.inherited_data.font_synthesis_weight,
           style: style.parent.inherited_data.font_synthesis_style,
+          small_caps: style.parent.inherited_data.font_synthesis_small_caps,
         },
         font_variations: style.font_variations.clone(),
         line_height: style.box_line_height,
@@ -616,6 +635,7 @@ impl<'s> SizedFontStyle<'s> {
         style.inherited_data.font_optical_sizing,
         context.sizing.to_css(context.sizing.font_size),
       ),
+      caps: style.inherited_data.font_variant_caps,
       line_height,
       box_line_height,
       stroke_width: style

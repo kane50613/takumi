@@ -40,6 +40,7 @@ mod line_box;
 mod metrics;
 mod outline;
 mod runs;
+mod small_caps;
 mod text_fit;
 mod truncation;
 
@@ -48,6 +49,7 @@ pub(crate) use self::{
   fragment_items::{ContentBox, InkBox},
   items::InlineOutOfFlow,
   outline::{OutlineIsland, RightAngleContour},
+  small_caps::{CapsRun, SMALL_CAPS_FONT_SIZE_MULTIPLIER},
   text_fit::{LineFit, TextScale},
 };
 pub use self::{
@@ -70,6 +72,7 @@ use self::{
     resolve_inline_line_states, resolve_visual_inline_box,
   },
   runs::measured_run_text,
+  small_caps::CapsSupport,
   text_fit::{
     GlyphCursor, LineScaleState, SpacingStretch, text_fit_applies, text_fit_line_advance,
     text_fit_line_alignment_correction, text_fit_lines, text_fit_x_correction,
@@ -886,17 +889,21 @@ pub(crate) fn process_inline_spans<'c>(
           &mut previous_collapsible_space,
           &mut previous_was_line_break,
         );
-        let start = index_pos;
-        let end = start + collapsed.len();
-        index_pos = end;
+        let caps = CapsSupport::of(&span_style, context);
 
-        spans.push(ProcessedInlineSpan::Text {
-          byte_range: start..end,
-          text: collapsed.into_owned(),
-          style: Box::new(span_style),
-          link: link.clone(),
-          decorations: decorations.clone(),
-        });
+        for (text, style) in caps.styled_runs(collapsed, span_style) {
+          let start = index_pos;
+          let end = start + text.len();
+          index_pos = end;
+
+          spans.push(ProcessedInlineSpan::Text {
+            byte_range: start..end,
+            text,
+            style: Box::new(style),
+            link: link.clone(),
+            decorations: decorations.clone(),
+          });
+        }
       }
       InlineItem::RenderNode {
         render_node,
