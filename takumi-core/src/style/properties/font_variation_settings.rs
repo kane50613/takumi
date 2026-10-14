@@ -2,7 +2,10 @@ use std::{fmt, sync::Arc};
 
 use cssparser::Parser;
 
-use super::font_feature_settings::{Tag, parse_opentype_tag};
+use super::{
+  font_feature_settings::{Tag, parse_opentype_tag},
+  font_optical_sizing::FontOpticalSizing,
+};
 use crate::style::{FromCss, MakeComputed, ParseResult, ToCss};
 
 /// An OpenType font variation setting (tag + value) from CSS `font-variation-settings`.
@@ -56,6 +59,48 @@ impl<'i> FromCss<'i> for FontVariationSettings {
   }
 
   const VALID_TOKENS: &'static [&'static str] = &["normal", "<string>"];
+}
+
+const OPSZ: Tag = Tag::new(b"opsz");
+
+/// The axes text shapes at: `font-variation-settings`, then the `opsz` that
+/// `font-optical-sizing: auto` adds when the settings leave it unset, as Blink's
+/// `FontCustomPlatformData::GetFontPlatformData` does.
+/// <https://source.chromium.org/chromium/chromium/src/+/main:third_party/blink/renderer/platform/fonts/font_custom_platform_data.cc>
+#[derive(Clone, PartialEq, Debug, Default)]
+pub(crate) struct ResolvedFontVariations {
+  settings: FontVariationSettings,
+  optical_size: Option<f32>,
+}
+
+impl ResolvedFontVariations {
+  /// The variations `settings` and `optical_sizing` give text `font_size` CSS pixels tall.
+  pub(crate) fn new(
+    settings: FontVariationSettings,
+    optical_sizing: FontOpticalSizing,
+    font_size: f32,
+  ) -> Self {
+    let optical_size = (optical_sizing == FontOpticalSizing::Auto
+      && !settings.iter().any(|variation| variation.tag == OPSZ))
+    .then_some(font_size);
+
+    Self {
+      settings,
+      optical_size,
+    }
+  }
+
+  pub(crate) fn is_empty(&self) -> bool {
+    self.settings.is_empty() && self.optical_size.is_none()
+  }
+
+  pub(crate) fn iter(&self) -> impl Iterator<Item = FontVariation> + '_ {
+    self
+      .settings
+      .iter()
+      .copied()
+      .chain(self.optical_size.map(|size| FontVariation::new(OPSZ, size)))
+  }
 }
 
 impl ToCss for FontVariation {

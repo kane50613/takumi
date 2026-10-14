@@ -4956,6 +4956,38 @@ fn font_variation_settings() {
   );
 }
 
+/// `font-optical-sizing: auto` embeds the font at the `opsz` each size shaped at.
+#[test]
+fn font_optical_sizing() {
+  let mut fonts = Fonts::default();
+  let data = fs::read(
+    Path::new(env!("CARGO_MANIFEST_DIR"))
+      .join("../assets/fonts/inter/inter-latin-opsz-wght-normal.woff2"),
+  )
+  .expect("read inter");
+
+  fonts.register(FontResource::new(data)).expect("load inter");
+
+  let doc = r#"<main style="display:flex;flex-direction:column;font-family:Inter;color:#141414;">
+      <p style="font-size:14px;">Text size</p>
+      <p style="font-size:72px;">Display size</p>
+      <p style="font-size:72px;font-optical-sizing:none;">Text cut</p>
+    </main>"#;
+  let pdf = run_pdf_fixture_with("font-optical-sizing", &fonts, |fonts| {
+    PdfOptions::builder()
+      .node(from_html(doc, FromHtmlOptions::default()).expect("parse optical sizing doc"))
+      .page(PageOptions::A4)
+      .fonts(fonts)
+      .build()
+  });
+
+  assert_eq!(
+    embedded_subsets(&inflated_text(&pdf), "Inter"),
+    2,
+    "optical sizes not embedded once per instance"
+  );
+}
+
 #[test]
 fn cid_default_width_is_an_integer() {
   let mut fonts = Fonts::default();

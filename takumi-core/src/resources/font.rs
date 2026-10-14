@@ -364,8 +364,8 @@ impl<'a> RunFace<'a> {
 }
 
 /// User-space variation coordinates the run was shaped at, e.g. `[(*b"wght", 700.0)]`: the font's
-/// synthesis, then `font-variation-settings` on the axes the font has, a later value replacing an
-/// earlier one as skrifa resolves a location.
+/// synthesis, then the style's resolved variations on the axes the font has, a later value
+/// replacing an earlier one as skrifa resolves a location.
 pub(crate) fn run_variations(run: &GlyphRun<'_, InlineBrush>) -> Vec<([u8; 4], f32)> {
   let mut variations: Vec<([u8; 4], f32)> = run
     .run()
@@ -374,9 +374,10 @@ pub(crate) fn run_variations(run: &GlyphRun<'_, InlineBrush>) -> Vec<([u8; 4], f
     .iter()
     .map(|(tag, value)| (tag.to_be_bytes(), *value))
     .collect();
-  let settings = &run.style().brush.font_variations;
+  let style_variations = &run.style().brush.font_variations;
 
-  if settings.is_empty() {
+  // Empty coordinates mean the default instance, which the settings did not move.
+  if style_variations.is_empty() || run.run().normalized_coords().is_empty() {
     return variations;
   }
 
@@ -385,7 +386,7 @@ pub(crate) fn run_variations(run: &GlyphRun<'_, InlineBrush>) -> Vec<([u8; 4], f
     .map(|font_ref| font_ref.axes().iter().map(|axis| axis.tag()).collect())
     .unwrap_or_default();
 
-  for variation in settings.iter() {
+  for variation in style_variations.iter() {
     let tag = variation.tag.to_bytes();
 
     if !axes.contains(&Tag::new(&tag)) {

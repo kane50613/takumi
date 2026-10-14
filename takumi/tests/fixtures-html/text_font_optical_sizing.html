@@ -1,0 +1,37 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>text_font_optical_sizing</title>
+    <base href="../../../" />
+    <link rel="stylesheet" href="takumi/tests/shared.css" />
+    <style>
+      .root {
+        display: block;
+        padding: 12px 24px;
+        width: 100%;
+        height: 100%;
+        background: rgb(248, 250, 252);
+        font-family: "Inter";
+      }
+      p {
+        display: block;
+        margin: 0;
+        line-height: 1.25;
+      }
+    </style>
+  </head>
+  <body style="width: 900px; height: 520px">
+    <div class="root">
+      <p style="font-size: 12px">Hamburgefonstiv 12px auto</p>
+      <p style="font-size: 20px">Hamburgefonstiv 20px auto</p>
+      <p style="font-size: 32px">Hamburgefonstiv 32px auto</p>
+      <p style="font-size: 32px; font-optical-sizing: none">Hamburgefonstiv 32px none</p>
+      <p style="font-size: 72px">Hamburgefonstiv auto</p>
+      <p style="font-size: 72px; font-optical-sizing: none">Hamburgefonstiv none</p>
+      <p style="font-size: 72px; font-variation-settings: &quot;opsz&quot; 14">
+        Hamburgefonstiv opsz 14
+      </p>
+    </div>
+  </body>
+</html>

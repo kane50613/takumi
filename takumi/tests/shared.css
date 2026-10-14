@@ -39,6 +39,10 @@
   font-family: Manrope;
   src: url("../../assets/fonts/manrope/manrope-latin-wght-normal.woff2") format("woff2");
 }
+@font-face {
+  font-family: Inter;
+  src: url("../../assets/fonts/inter/inter-latin-opsz-wght-normal.woff2") format("woff2");
+}
 
 /* takumi defaults box-sizing to border-box; match it so browser comparisons
    of these fixtures are faithful. */
