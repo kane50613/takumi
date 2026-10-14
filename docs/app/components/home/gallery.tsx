@@ -5,11 +5,11 @@ import {
   type MotionValue,
   useMotionValue,
   useReducedMotion,
-  useScroll,
   useTransform,
 } from "motion/react";
 import { Children, createContext, type ReactNode, useContext, useRef } from "react";
 import { cn } from "~/lib/utils";
+import { useScrub } from "./scrub";
 import { GUTTER } from "./typography";
 
 /** Scroll held at each end before the first wipe starts and after the last one lands, in panels. */
@@ -24,7 +24,7 @@ const PanelProgress = createContext<MotionValue<number> | null>(null);
 export function Gallery({ title, children }: { title: ReactNode; children: ReactNode }) {
   const reduceMotion = useReducedMotion();
   const track = useRef<HTMLDivElement>(null);
-  const { scrollYProgress } = useScroll({ target: track, offset: ["start start", "end end"] });
+  const scrollYProgress = useScrub(track);
   const panels = Children.toArray(children);
   const turns = useTransform(
     scrollYProgress,

@@ -1,17 +1,12 @@
 "use client";
 
-import {
-  useMotionValueEvent,
-  useReducedMotion,
-  useScroll,
-  useTransform,
-  motion,
-} from "motion/react";
+import { useMotionValueEvent, useReducedMotion, useTransform, motion } from "motion/react";
 import { type ReactNode, useId, useMemo, useRef, useState } from "react";
 import { sceneSteps, SvgIds } from "~/components/mdx/paint/paint-svg";
 import { stepDetail } from "~/components/mdx/paint/parts";
 import type { PaintScene } from "~/components/mdx/paint/scene";
 import { cn } from "~/lib/utils";
+import { useScrub } from "./scrub";
 
 /** Draw-step replay of the real build-time `PaintScene` under `title`, advanced by scrolling past it. */
 export function PaintBench({ scene, title }: { scene: PaintScene; title: ReactNode }) {
@@ -22,7 +17,7 @@ export function PaintBench({ scene, title }: { scene: PaintScene; title: ReactNo
   const totalDraws = drawIndices.length;
   const reduceMotion = useReducedMotion();
   const track = useRef<HTMLDivElement>(null);
-  const { scrollYProgress } = useScroll({ target: track, offset: ["start start", "end end"] });
+  const scrollYProgress = useScrub(track);
   const transform = useTransform(scrollYProgress, (value) => `scaleX(${value})`);
   const [drawNumber, setDrawNumber] = useState(1);
   const ids = new SvgIds(useId());

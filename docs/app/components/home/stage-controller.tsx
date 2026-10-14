@@ -50,7 +50,7 @@ function isometricStack(spread: number, drift: number) {
   return { spread, matrix: `matrix(${[a, b, c, d].map((v) => v.toFixed(4)).join(",")},0,0)` };
 }
 
-const GLIDE_MS = 1400;
+const GLIDE_MS = 1200;
 /** Reader input that takes the scroll back from a glide. */
 const GLIDE_INTERRUPTS = ["wheel", "touchstart", "keydown"] as const;
 const STRIKE_LABELS = [
