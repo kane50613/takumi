@@ -70,29 +70,12 @@ export function StageController() {
   useEffect(() => {
     const stage = anchorRef.current?.closest<HTMLElement>("[data-stage]");
     const view = stage?.querySelector<HTMLElement>("[data-stage-view]");
-    const hammer = stage?.querySelector<SVGGElement>("[data-hammer]");
-    const anvil = stage?.querySelector<SVGGElement>("[data-anvil]");
-    const impactBurst = stage?.querySelector<SVGGElement>("[data-impact-burst]");
-    const anvilCard = stage?.querySelector<SVGGElement>("[data-anvil-card]");
-    const layoutLayer = stage?.querySelector<SVGGElement>("[data-layer='layout']");
-    const textLayer = stage?.querySelector<SVGGElement>("[data-layer='text']");
-    const paintLayer = stage?.querySelector<SVGGElement>("[data-layer='paint']");
-    const boxElements = [...(stage?.querySelectorAll<SVGGElement>("[data-box]") ?? [])];
-    const glyphElements = [...(stage?.querySelectorAll<SVGGElement>("[data-glyph-run]") ?? [])];
-    const paintPlanes = [...(stage?.querySelectorAll<SVGGElement>("[data-paint-plane]") ?? [])];
-    const copyBlocks = [...(stage?.querySelectorAll<HTMLElement>("[data-stage-copy]") ?? [])];
-    const words = [...(stage?.querySelectorAll<HTMLElement>("[data-stage-word]") ?? [])];
-    const backdrop = stage?.querySelector<HTMLElement>("[data-stage-backdrop]");
-    const captionLines = copyBlocks
-      .map((block) => [...block.querySelectorAll<HTMLElement>("[data-stage-line]")])
-      .filter((lines) => lines.length > 0);
     const stepButtons = [
       ...(stage?.querySelectorAll<HTMLButtonElement>("[data-step-button]") ?? []),
     ];
     const strikeTriggers = [
       ...(stage?.querySelectorAll<HTMLElement>("[data-strike-trigger]") ?? []),
     ];
-    const strikeLabel = stage?.querySelector<HTMLElement>("[data-strike-label]");
     const forge = stage?.querySelector<SVGSVGElement>("[data-forge]");
     const wide = matchMedia(`(min-width: ${WIDE_MIN}px)`);
 
@@ -105,7 +88,6 @@ export function StageController() {
     let target = 0;
     let progress = 0;
     let last = performance.now();
-    let activeStep = -1;
 
     const getTravel = () => {
       const rect = stage.getBoundingClientRect();
@@ -181,125 +163,8 @@ export function StageController() {
       }
     };
 
-    const apply = (p: number) => {
-      const step = Math.max(
-        0,
-        STEP_STARTS.findLastIndex((start) => p >= start),
-      );
-      const angle = reduceMotion ? (step === 0 ? -20 : -8) : hammerAngle(p);
-      const impulse = reduceMotion ? 0 : strikeImpulse(p);
-      const lSpread = reduceMotion ? (step === 1 ? 1 : 0) : layoutSpread(p);
-      const tSpread = reduceMotion ? (step === 2 ? 1 : 0) : textSpread(p);
-      const pSpread = reduceMotion ? (step === 3 ? 1 : 0) : paintSpread(p);
-
-      if (hammer) {
-        hammer.style.transform = `rotate(${-angle.toFixed(2)}deg)`;
-      }
-      if (anvil) {
-        anvil.style.transform = reduceMotion ? "" : `translateY(${(impulse * 12).toFixed(2)}px)`;
-      }
-      if (impactBurst) {
-        impactBurst.style.opacity = impulse.toFixed(3);
-        impactBurst.style.transform = `scale(${(0.72 + impulse * 0.62).toFixed(3)})`;
-      }
-
-      const intactOpacity = Math.max(0, 1 - Math.max(lSpread, tSpread, pSpread) / CARD_HANDOFF);
-
-      if (anvilCard) {
-        anvilCard.style.opacity = intactOpacity.toFixed(3);
-        anvilCard.style.transform = reduceMotion
-          ? ""
-          : `translateY(${(impulse * 9).toFixed(2)}px) scale(${(1 - 0.04 * (1 - intactOpacity)).toFixed(3)})`;
-      }
-
-      if (layoutLayer) {
-        layoutLayer.style.opacity = partsOpacity(lSpread);
-        layoutLayer.style.visibility = lSpread > 0.01 ? "visible" : "hidden";
-      }
-      const layoutDrift = reduceMotion ? 0 : -stepDrift(p, 1);
-
-      for (const boxEl of lSpread > 0.01 ? boxElements : []) {
-        const dx = Number(boxEl.dataset.dx ?? 0);
-        const dy = Number(boxEl.dataset.dy ?? 0) + layoutDrift * depthDistance(boxEl, 70);
-        const rot = Number(boxEl.dataset.rot ?? 0);
-
-        boxEl.style.transform = reduceMotion
-          ? `translate(${(dx * 0.55).toFixed(1)}px, ${(dy * 0.55).toFixed(1)}px)`
-          : `translate(${(dx * lSpread).toFixed(1)}px, ${(dy * lSpread).toFixed(1)}px) rotate(${(rot * lSpread).toFixed(2)}deg)`;
-      }
-
-      if (textLayer) {
-        textLayer.style.opacity = partsOpacity(tSpread);
-        textLayer.style.visibility = tSpread > 0.01 ? "visible" : "hidden";
-      }
-      const textDrift = reduceMotion ? 0 : -stepDrift(p, 2);
-
-      for (const glyphEl of tSpread > 0.01 ? glyphElements : []) {
-        const dx = Number(glyphEl.dataset.dx ?? 0);
-        const dy = Number(glyphEl.dataset.dy ?? 0) + textDrift * depthDistance(glyphEl, 70);
-        const scale = Number(glyphEl.dataset.scale ?? 1);
-        const currentScale = 1 + (scale - 1) * tSpread;
-
-        glyphEl.style.transform = reduceMotion
-          ? `translate(${(dx * 0.6).toFixed(1)}px, ${(dy * 0.6).toFixed(1)}px)`
-          : `translate(${(dx * tSpread).toFixed(1)}px, ${(dy * tSpread).toFixed(1)}px) scale(${currentScale.toFixed(3)})`;
-      }
-
-      if (paintLayer) {
-        paintLayer.style.opacity = pSpread > 0.01 ? "1" : "0";
-        paintLayer.style.visibility = pSpread > 0.01 ? "visible" : "hidden";
-      }
-      const paintDrift = reduceMotion ? 0 : -stepDrift(p, 3);
-      const stack = isometricStack(1 - (1 - pSpread) ** 3, paintDrift);
-
-      (pSpread > 0.01 ? paintPlanes : []).forEach((planeEl, index) => {
-        const rank = index - (paintPlanes.length - 1) / 2;
-        const lift = -rank * PLANE_GAP * stack.spread + paintDrift * index * 14;
-
-        planeEl.style.opacity = Math.min(
-          1,
-          Math.max(0, (pSpread - index * PLANE_STAGGER) / 0.2),
-        ).toFixed(3);
-        planeEl.style.transform = `translate(0px, ${lift.toFixed(1)}px) ${stack.matrix}`;
-      });
-
-      const word = words[step];
-      const captionDrift = reduceMotion ? 0 : stepDrift(p, step);
-
-      captionLines[step]?.forEach((line, index) => {
-        line.style.transform = `translateY(${(-captionDrift * (index + 1) * 10).toFixed(1)}px)`;
-      });
-
-      if (backdrop) {
-        backdrop.style.opacity = (1 - 0.6 * Math.max(lSpread, tSpread, pSpread)).toFixed(3);
-      }
-      if (word && !reduceMotion) {
-        const { stretch, weight } = wordAxes(p, step);
-
-        word.style.fontStretch = `${stretch.toFixed(1)}%`;
-        word.style.fontWeight = weight.toFixed(0);
-      }
-
-      if (step !== activeStep) {
-        activeStep = step;
-        copyBlocks.forEach((block) => {
-          const isCurrent = Number(block.dataset.stageCopy) === step;
-
-          block.toggleAttribute("data-current", isCurrent);
-          block.inert = !isCurrent;
-        });
-        stepButtons.forEach((button, index) => {
-          if (index === step) {
-            button.setAttribute("aria-current", "step");
-          } else {
-            button.removeAttribute("aria-current");
-          }
-        });
-        if (strikeLabel) {
-          strikeLabel.textContent = STRIKE_LABELS[step] ?? STRIKE_LABELS[0];
-        }
-      }
-    };
+    const scene = new ForgeScene(stage, stepButtons);
+    const apply = (p: number) => scene.render(forgeFrame(p, reduceMotion));
 
     const draw = (now: number) => {
       frame = 0;
@@ -376,4 +241,242 @@ export function StageController() {
   }, []);
 
   return <span ref={anchorRef} hidden />;
+}
+
+/** Everything the forge shows at one scroll progress, settled per strike under reduced motion. */
+type ForgeFrame = {
+  progress: number;
+  step: number;
+  reduceMotion: boolean;
+  angle: number;
+  impulse: number;
+  layout: number;
+  text: number;
+  paint: number;
+};
+
+function forgeFrame(progress: number, reduceMotion: boolean): ForgeFrame {
+  const step = Math.max(
+    0,
+    STEP_STARTS.findLastIndex((start) => progress >= start),
+  );
+
+  if (reduceMotion) {
+    return {
+      progress,
+      step,
+      reduceMotion,
+      angle: step === 0 ? -20 : -8,
+      impulse: 0,
+      layout: step === 1 ? 1 : 0,
+      text: step === 2 ? 1 : 0,
+      paint: step === 3 ? 1 : 0,
+    };
+  }
+
+  return {
+    progress,
+    step,
+    reduceMotion,
+    angle: hammerAngle(progress),
+    impulse: strikeImpulse(progress),
+    layout: layoutSpread(progress),
+    text: textSpread(progress),
+    paint: paintSpread(progress),
+  };
+}
+
+/** `-stepDrift` for the strike, or still under reduced motion. */
+function strikeDrift(frame: ForgeFrame, step: number) {
+  return frame.reduceMotion ? 0 : -stepDrift(frame.progress, step);
+}
+
+/** Shows or hides a layer of parts at `spread`, returning whether its parts need moving. */
+function showLayer(layer: SVGGElement | null | undefined, spread: number, opacity: string) {
+  if (layer) {
+    layer.style.opacity = opacity;
+    layer.style.visibility = spread > 0.01 ? "visible" : "hidden";
+  }
+
+  return spread > 0.01;
+}
+
+/** The forge's DOM, queried once, and how one frame of the timeline paints onto it. */
+class ForgeScene {
+  private readonly hammer;
+  private readonly anvil;
+  private readonly impactBurst;
+  private readonly anvilCard;
+  private readonly layoutLayer;
+  private readonly textLayer;
+  private readonly paintLayer;
+  private readonly boxes;
+  private readonly glyphs;
+  private readonly planes;
+  private readonly copyBlocks;
+  private readonly words;
+  private readonly backdropLayer;
+  private readonly captionLines;
+  private readonly strikeLabel;
+  private activeStep = -1;
+
+  constructor(
+    stage: HTMLElement,
+    private readonly stepButtons: HTMLButtonElement[],
+  ) {
+    this.hammer = stage.querySelector<SVGGElement>("[data-hammer]");
+    this.anvil = stage.querySelector<SVGGElement>("[data-anvil]");
+    this.impactBurst = stage.querySelector<SVGGElement>("[data-impact-burst]");
+    this.anvilCard = stage.querySelector<SVGGElement>("[data-anvil-card]");
+    this.layoutLayer = stage.querySelector<SVGGElement>("[data-layer='layout']");
+    this.textLayer = stage.querySelector<SVGGElement>("[data-layer='text']");
+    this.paintLayer = stage.querySelector<SVGGElement>("[data-layer='paint']");
+    this.boxes = [...stage.querySelectorAll<SVGGElement>("[data-box]")];
+    this.glyphs = [...stage.querySelectorAll<SVGGElement>("[data-glyph-run]")];
+    this.planes = [...stage.querySelectorAll<SVGGElement>("[data-paint-plane]")];
+    this.copyBlocks = [...stage.querySelectorAll<HTMLElement>("[data-stage-copy]")];
+    this.words = [...stage.querySelectorAll<HTMLElement>("[data-stage-word]")];
+    this.backdropLayer = stage.querySelector<HTMLElement>("[data-stage-backdrop]");
+    this.captionLines = this.copyBlocks
+      .map((block) => [...block.querySelectorAll<HTMLElement>("[data-stage-line]")])
+      .filter((lines) => lines.length > 0);
+    this.strikeLabel = stage.querySelector<HTMLElement>("[data-strike-label]");
+  }
+
+  render(frame: ForgeFrame) {
+    this.strike(frame);
+    this.layout(frame);
+    this.text(frame);
+    this.paint(frame);
+    this.backdrop(frame);
+    this.syncStep(frame.step);
+  }
+
+  /** The hammer, the anvil's jolt, the impact burst, and the intact card handing off to its parts. */
+  private strike({ angle, impulse, layout, text, paint, reduceMotion }: ForgeFrame) {
+    const intactOpacity = Math.max(0, 1 - Math.max(layout, text, paint) / CARD_HANDOFF);
+
+    if (this.hammer) {
+      this.hammer.style.transform = `rotate(${-angle.toFixed(2)}deg)`;
+    }
+    if (this.anvil) {
+      this.anvil.style.transform = reduceMotion ? "" : `translateY(${(impulse * 12).toFixed(2)}px)`;
+    }
+    if (this.impactBurst) {
+      this.impactBurst.style.opacity = impulse.toFixed(3);
+      this.impactBurst.style.transform = `scale(${(0.72 + impulse * 0.62).toFixed(3)})`;
+    }
+    if (this.anvilCard) {
+      this.anvilCard.style.opacity = intactOpacity.toFixed(3);
+      this.anvilCard.style.transform = reduceMotion
+        ? ""
+        : `translateY(${(impulse * 9).toFixed(2)}px) scale(${(1 - 0.04 * (1 - intactOpacity)).toFixed(3)})`;
+    }
+  }
+
+  private layout(frame: ForgeFrame) {
+    const spread = frame.layout;
+
+    if (!showLayer(this.layoutLayer, spread, partsOpacity(spread))) {
+      return;
+    }
+
+    const drift = strikeDrift(frame, 1);
+
+    for (const box of this.boxes) {
+      const dx = Number(box.dataset.dx ?? 0);
+      const dy = Number(box.dataset.dy ?? 0) + drift * depthDistance(box, 70);
+      const rot = Number(box.dataset.rot ?? 0);
+
+      box.style.transform = frame.reduceMotion
+        ? `translate(${(dx * 0.55).toFixed(1)}px, ${(dy * 0.55).toFixed(1)}px)`
+        : `translate(${(dx * spread).toFixed(1)}px, ${(dy * spread).toFixed(1)}px) rotate(${(rot * spread).toFixed(2)}deg)`;
+    }
+  }
+
+  private text(frame: ForgeFrame) {
+    const spread = frame.text;
+
+    if (!showLayer(this.textLayer, spread, partsOpacity(spread))) {
+      return;
+    }
+
+    const drift = strikeDrift(frame, 2);
+
+    for (const glyph of this.glyphs) {
+      const dx = Number(glyph.dataset.dx ?? 0);
+      const dy = Number(glyph.dataset.dy ?? 0) + drift * depthDistance(glyph, 70);
+      const scale = 1 + (Number(glyph.dataset.scale ?? 1) - 1) * spread;
+
+      glyph.style.transform = frame.reduceMotion
+        ? `translate(${(dx * 0.6).toFixed(1)}px, ${(dy * 0.6).toFixed(1)}px)`
+        : `translate(${(dx * spread).toFixed(1)}px, ${(dy * spread).toFixed(1)}px) scale(${scale.toFixed(3)})`;
+    }
+  }
+
+  private paint(frame: ForgeFrame) {
+    const spread = frame.paint;
+
+    if (!showLayer(this.paintLayer, spread, spread > 0.01 ? "1" : "0")) {
+      return;
+    }
+
+    const drift = strikeDrift(frame, 3);
+    const stack = isometricStack(1 - (1 - spread) ** 3, drift);
+
+    this.planes.forEach((plane, index) => {
+      const rank = index - (this.planes.length - 1) / 2;
+      const lift = -rank * PLANE_GAP * stack.spread + drift * index * 14;
+
+      plane.style.opacity = Math.min(
+        1,
+        Math.max(0, (spread - index * PLANE_STAGGER) / 0.2),
+      ).toFixed(3);
+      plane.style.transform = `translate(0px, ${lift.toFixed(1)}px) ${stack.matrix}`;
+    });
+  }
+
+  /** The caption's drifting lines, and the hollow word receding behind any spread of parts. */
+  private backdrop({ progress, step, reduceMotion, layout, text, paint }: ForgeFrame) {
+    const captionDrift = reduceMotion ? 0 : stepDrift(progress, step);
+    const word = this.words[step];
+
+    this.captionLines[step]?.forEach((line, index) => {
+      line.style.transform = `translateY(${(-captionDrift * (index + 1) * 10).toFixed(1)}px)`;
+    });
+    if (this.backdropLayer) {
+      this.backdropLayer.style.opacity = (1 - 0.6 * Math.max(layout, text, paint)).toFixed(3);
+    }
+    if (word && !reduceMotion) {
+      const { stretch, weight } = wordAxes(progress, step);
+
+      word.style.fontStretch = `${stretch.toFixed(1)}%`;
+      word.style.fontWeight = weight.toFixed(0);
+    }
+  }
+
+  /** Marks `step`'s caption, tab, and strike label current, once per change. */
+  private syncStep(step: number) {
+    if (step === this.activeStep) {
+      return;
+    }
+
+    this.activeStep = step;
+    for (const block of this.copyBlocks) {
+      const isCurrent = Number(block.dataset.stageCopy) === step;
+
+      block.toggleAttribute("data-current", isCurrent);
+      block.inert = !isCurrent;
+    }
+    this.stepButtons.forEach((button, index) => {
+      if (index === step) {
+        button.setAttribute("aria-current", "step");
+      } else {
+        button.removeAttribute("aria-current");
+      }
+    });
+    if (this.strikeLabel) {
+      this.strikeLabel.textContent = STRIKE_LABELS[step] ?? STRIKE_LABELS[0];
+    }
+  }
 }
