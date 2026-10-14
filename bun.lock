@@ -372,7 +372,7 @@
     },
     "takumi-pdf-js": {
       "name": "takumi-pdf",
-      "version": "0.17.2",
+      "version": "0.17.3",
       "dependencies": {
         "@takumi-rs/helpers": "workspace:*",
       },

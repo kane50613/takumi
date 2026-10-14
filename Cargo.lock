@@ -1937,7 +1937,7 @@ dependencies = [
 
 [[package]]
 name = "takumi-pdf"
-version = "0.17.2"
+version = "0.17.3"
 dependencies = [
  "base64",
  "bumpalo",

@@ -1,3 +1,13 @@
+## takumi-pdf@0.17.3
+
+### Copy text correctly from PDF in viewers that ignore `/ActualText`
+
+When several glyphs draw one cluster, such as `S` and an acute for `Ś`, or a Devanagari consonant and its matra, each glyph now maps to its own characters in the font's ToUnicode table. Before, each mapped to the whole cluster, so pdf.js (Firefox), pypdf, and pdfminer read `Świnoujście` as `ŚŚwinoujśŚcie`, `मोटा` as `मोमोटाटा`, and a plain `S` elsewhere in the document as `Ś`.
+
+### Keep words whole when a letter is drawn as a base and a mark
+
+PDF text extraction no longer splits a word after a letter the font draws as a base glyph and a combining mark, such as `Ś` from a font that has only `S` and U+0301. Before, `pdftotext` read `Świnoujście` as `Ś winoujś cie`.
+
 ## takumi-pdf@0.17.0
 
 ### Register font subsets with `unicodeRange`
