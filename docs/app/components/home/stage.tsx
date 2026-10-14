@@ -120,6 +120,7 @@ export function Stage() {
         {/* Hollow backdrop word for the current strike, rising out of its mask and widening with scroll */}
         <div
           aria-hidden
+          data-stage-backdrop
           className="pointer-events-none absolute inset-0 grid place-items-center overflow-hidden"
         >
           {STAGES.map((item, index) => (
@@ -270,8 +271,10 @@ export function Stage() {
                         rx={box.depth <= 2 ? 18 : 6}
                         fill="none"
                         stroke="currentColor"
-                        strokeOpacity={isAccent ? 0.75 : 0.3}
+                        strokeOpacity={isAccent ? 0.75 : 0.35}
                         strokeWidth={isAccent ? 3 : 2}
+                        strokeDasharray={isAccent ? "16 10" : "6 8"}
+                        strokeLinecap="round"
                       />
                       {showLabel && (
                         <g transform={`translate(${box.x + 18}, ${box.y + 38})`}>
@@ -313,8 +316,10 @@ export function Stage() {
                       rx="8"
                       fill="none"
                       stroke="currentColor"
-                      strokeOpacity="0.25"
+                      strokeOpacity="0.4"
                       strokeWidth="2"
+                      strokeDasharray="2 7"
+                      strokeLinecap="round"
                     />
                     <line
                       x1={run.x - 18}
@@ -368,6 +373,7 @@ export function Stage() {
                         stroke="currentColor"
                         strokeOpacity="0.4"
                         strokeWidth="2"
+                        strokeDasharray="16 10"
                       />
                       <g filter="url(#forge-mute)" opacity="0.85">
                         {plane.steps.map((step, sIdx) => {
