@@ -6,9 +6,10 @@ use crate::{
   layout_unit::LayoutUnit,
   resources::font::FontClasses,
   style::{
-    AppliedTextDecorations, BlockEllipsis, Color, Direction, FontFeature, FontSynthesis, Lang,
-    Length, ResolvedVerticalAlign, Tag, TextDecorationSkipInk, TextOverflow, TextWrapStyle,
-    VerticalAlign, VerticalAlignKeyword, WhiteSpaceCollapse, WordBreak,
+    AppliedTextDecorations, BlockEllipsis, Color, Direction, FontFeature, FontSynthesis,
+    FontVariationSettings, Lang, Length, ResolvedVerticalAlign, Tag, TextDecorationSkipInk,
+    TextOverflow, TextWrapStyle, VerticalAlign, VerticalAlignKeyword, WhiteSpaceCollapse,
+    WordBreak,
   },
   text_processing::{
     MaxHeight, RebreakOptions, apply_text_transform, apply_white_space_collapse,
@@ -531,6 +532,8 @@ pub struct InlineBrush {
   /// `-webkit-text-stroke` width in pixels.
   pub stroke_width: f32,
   pub(crate) font_synthesis: FontSynthesis,
+  /// The `font-variation-settings` the run shaped with.
+  pub(crate) font_variations: FontVariationSettings,
   pub(crate) line_height: BoxLineHeight,
   /// `letter-spacing` in pixels when it is fixed rather than a percentage, which `text-fit`
   /// leaves unscaled.
@@ -608,6 +611,7 @@ impl Default for InlineBrush {
       stroke_color: Color::black(),
       stroke_width: 0.0,
       font_synthesis: FontSynthesis::default(),
+      font_variations: FontVariationSettings::default(),
       line_height: BoxLineHeight::Normal,
       fixed_letter_spacing: 0.0,
       fixed_word_spacing: 0.0,

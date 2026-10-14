@@ -4933,6 +4933,29 @@ fn font_weights() {
   );
 }
 
+/// `font-variation-settings` instances the embedded font as it shaped the run.
+#[test]
+fn font_variation_settings() {
+  let doc = r#"<main style="display:flex;flex-direction:column;font-family:Archivo;font-size:32px;color:#141414;">
+      <p>Default instance</p>
+      <p style="font-variation-settings:'wght' 900;">Black through settings</p>
+      <p style="font-variation-settings:'wdth' 62;">Condensed through settings</p>
+    </main>"#;
+  let pdf = run_pdf_fixture_with("font-variation-settings", &latin_font(), |fonts| {
+    PdfOptions::builder()
+      .node(from_html(doc, FromHtmlOptions::default()).expect("parse variation doc"))
+      .page(PageOptions::A4)
+      .fonts(fonts)
+      .build()
+  });
+
+  assert_eq!(
+    embedded_subsets(&inflated_text(&pdf), "Archivo"),
+    3,
+    "variation settings not embedded once per instance"
+  );
+}
+
 #[test]
 fn cid_default_width_is_an_integer() {
   let mut fonts = Fonts::default();

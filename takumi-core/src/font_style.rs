@@ -440,6 +440,7 @@ impl<'s> From<&'s SizedFontStyle<'s>> for TextStyle<'s, 's, InlineBrush> {
           weight: style.parent.inherited_data.font_synthesis_weight,
           style: style.parent.inherited_data.font_synthesis_style,
         },
+        font_variations: style.parent.inherited_data.font_variation_settings.clone(),
         line_height: style.box_line_height,
         fixed_letter_spacing: if style.parent.inherited_data.letter_spacing.has_percentage() {
           0.0
