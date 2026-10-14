@@ -9,6 +9,8 @@
 
 use std::{borrow::Cow, ops::Range};
 
+use parley::LineHeight;
+
 use icu_properties::{
   CodePointMapData, CodePointSetData,
   props::{CanonicalCombiningClass, ChangesWhenUppercased},
@@ -22,7 +24,7 @@ use smallvec::{SmallVec, smallvec};
 use crate::{context::RenderContext, font_style::SizedFontStyle, style::FontVariantCaps};
 
 /// Blink's `kSmallCapsFontSizeMultiplier`.
-pub(crate) const SMALL_CAPS_FONT_SIZE_MULTIPLIER: f32 = 0.7;
+const SMALL_CAPS_FONT_SIZE_MULTIPLIER: f32 = 0.7;
 
 /// How the font serves the requested caps.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -68,11 +70,11 @@ impl CaseMap {
 
 /// How one case run shapes.
 #[derive(Clone, Copy, Debug, PartialEq)]
-pub(crate) struct CapsRun {
+struct CapsRun {
   /// The caps feature the run shapes with.
-  pub(crate) caps: FontVariantCaps,
+  caps: FontVariantCaps,
   /// Whether the run shapes at the synthetic small-caps size.
-  pub(crate) synthetic: bool,
+  synthetic: bool,
   case_map: CaseMap,
 }
 
@@ -169,6 +171,7 @@ impl CapsSupport {
     }
 
     case_runs(&text)
+      .into_iter()
       .enumerate()
       .map(|(index, (range, class))| {
         let run = self.run(class);
@@ -244,6 +247,25 @@ impl CapsSupport {
   }
 }
 
+impl SizedFontStyle<'_> {
+  /// This style shaping one case run of `font-variant-caps` text, at Blink's synthetic small-caps
+  /// size when the run synthesizes them.
+  fn for_caps_run(mut self, run: CapsRun) -> Self {
+    self.caps = run.caps;
+
+    if run.synthetic {
+      let font_size = self.sizing.font_size;
+
+      if let LineHeight::FontSizeRelative(value) = self.line_height {
+        self.line_height = LineHeight::Absolute(value * font_size);
+      }
+      self.sizing.font_size = (font_size * SMALL_CAPS_FONT_SIZE_MULTIPLIER).round();
+    }
+
+    self
+  }
+}
+
 /// The feature tags the font's GSUB lists.
 fn gsub_feature_tags(font: &FontRef) -> SmallVec<[Tag; 32]> {
   font
@@ -261,10 +283,10 @@ fn gsub_feature_tags(font: &FontRef) -> SmallVec<[Tag; 32]> {
 
 /// Splits `text` where its letters switch between needing uppercasing and not, as Blink's
 /// `SmallCapsIterator`. A combining mark stays with the letter before it.
-fn case_runs(text: &str) -> impl Iterator<Item = (Range<usize>, CaseClass)> + '_ {
+fn case_runs(text: &str) -> SmallVec<[(Range<usize>, CaseClass); 4]> {
   let combining_class = CodePointMapData::<CanonicalCombiningClass>::new();
   let changes_when_uppercased = CodePointSetData::new::<ChangesWhenUppercased>();
-  let mut starts: SmallVec<[(usize, CaseClass); 4]> = SmallVec::new();
+  let mut runs: SmallVec<[(Range<usize>, CaseClass); 4]> = SmallVec::new();
 
   for (index, ch) in text.char_indices() {
     if combining_class.get(ch) != CanonicalCombiningClass::NotReordered {
@@ -277,27 +299,21 @@ fn case_runs(text: &str) -> impl Iterator<Item = (Range<usize>, CaseClass)> + '_
       CaseClass::SameCase
     };
 
-    match starts.last() {
+    match runs.last_mut() {
       Some((_, last)) if *last == class => {}
-      Some(_) => starts.push((index, class)),
-      None => starts.push((0, class)),
+      Some((range, _)) => {
+        range.end = index;
+        runs.push((index..text.len(), class));
+      }
+      None => runs.push((0..text.len(), class)),
     }
   }
-  if starts.is_empty() {
-    starts.push((0, CaseClass::SameCase));
+
+  if runs.is_empty() {
+    runs.push((0..text.len(), CaseClass::SameCase));
   }
 
-  let ends: SmallVec<[usize; 4]> = starts
-    .iter()
-    .skip(1)
-    .map(|(start, _)| *start)
-    .chain([text.len()])
-    .collect();
-
-  starts
-    .into_iter()
-    .zip(ends)
-    .map(|((start, class), end)| (start..end, class))
+  runs
 }
 
 #[cfg(test)]
@@ -312,6 +328,7 @@ mod tests {
 
   fn runs(text: &str) -> Vec<(&str, CaseClass)> {
     case_runs(text)
+      .into_iter()
       .map(|(range, class)| (&text[range], class))
       .collect()
   }

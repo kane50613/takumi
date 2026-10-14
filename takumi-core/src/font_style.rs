@@ -20,7 +20,7 @@ use xxhash_rust::xxh3::Xxh3;
 use crate::{
   context::RenderContext,
   geometry::Size,
-  layout::inline::{CapsRun, InlineBrush, SMALL_CAPS_FONT_SIZE_MULTIPLIER, TextScale},
+  layout::inline::{InlineBrush, TextScale},
   layout_unit::LayoutUnit,
   resources::font::FontClasses,
   shadow::SizedShadow,
@@ -294,21 +294,6 @@ impl SizedFontStyle<'_> {
     self
       .parent
       .resolved_font_features(self.letter_spacing != 0.0, self.caps)
-  }
-
-  /// This style shaping one case run of `font-variant-caps` text, at Blink's synthetic small-caps
-  /// size when the run synthesizes them.
-  pub(crate) fn for_caps_run(mut self, run: CapsRun) -> Self {
-    self.caps = run.caps;
-    if run.synthetic {
-      let font_size = self.sizing.font_size;
-
-      if let LineHeight::FontSizeRelative(value) = self.line_height {
-        self.line_height = LineHeight::Absolute(value * font_size);
-      }
-      self.sizing.font_size = (font_size * SMALL_CAPS_FONT_SIZE_MULTIPLIER).round();
-    }
-    self
   }
 
   /// Hashes every input the `TextStyle` conversion below reads, so shaped text-only layouts can be

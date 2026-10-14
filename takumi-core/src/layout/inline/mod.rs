@@ -49,7 +49,6 @@ pub(crate) use self::{
   fragment_items::{ContentBox, InkBox},
   items::InlineOutOfFlow,
   outline::{OutlineIsland, RightAngleContour},
-  small_caps::{CapsRun, SMALL_CAPS_FONT_SIZE_MULTIPLIER},
   text_fit::{LineFit, TextScale},
 };
 pub use self::{
@@ -742,12 +741,14 @@ pub(super) fn push_presentation_text(
           .to_mut()
           .push(FontFeature::new(Tag::new(b"TKSB"), id as u16).into_parlance());
       }
+
       if let Some(parity) = style.case_run_parity {
         features
           .to_mut()
           .push(FontFeature::new(Tag::new(b"TKCR"), u16::from(parity)).into_parlance());
       }
     }
+
     text_style
   };
 
@@ -895,9 +896,9 @@ pub(crate) fn process_inline_spans<'c>(
           &mut previous_collapsible_space,
           &mut previous_was_line_break,
         );
-        let caps = CapsSupport::of(&span_style, context);
-
-        for (text, style) in caps.styled_runs(collapsed, span_style) {
+        for (text, style) in
+          CapsSupport::of(&span_style, context).styled_runs(collapsed, span_style)
+        {
           let start = index_pos;
           let end = start + text.len();
           index_pos = end;
