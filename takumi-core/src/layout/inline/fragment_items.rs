@@ -12,7 +12,7 @@ use super::{
   background::{FragmentBackground, InlineBackgroundFragment},
   decorations::DecorationPlacement,
   glyph_run_rect,
-  items::{DecorationLink, ProcessedInlineSpan},
+  items::ProcessedInlineSpan,
   metrics::VisualInlineBox,
   outline::InlineOutlineRect,
   runs::{
@@ -196,10 +196,17 @@ struct TextItem {
   hanging: HangingWhitespace,
   text_range: Range<usize>,
   glyphs: RunGlyphs,
+  placement: RunPlacement,
+}
+
+/// Where a run paints on its line, past where it was shaped.
+struct RunPlacement {
   line_scale: LineScaleState,
   static_inline_prefix: f32,
   baseline_shift: f32,
   decoration_placement: DecorationPlacement,
+  /// How far `position: relative` on its spans moves it.
+  relative_offset: Point<f32>,
 }
 
 /// The glyphs of every run of a [`FragmentItems`], in two encodings.
@@ -320,10 +327,11 @@ impl BuiltInlineLayout<'_> {
           stretch,
         } => {
           let baseline_shift = self.run_baseline_shift(line, &glyph_run);
+          let relative_offset = self.run_relative_offset(&glyph_run);
           let (origin, size) = glyph_run_rect(&glyph_run, hanging, &stretch, baseline_shift);
           let (origin, size) = setup.scale_rect(origin, size, static_inline_prefix, baseline_shift);
 
-          InkBox::include(&mut ink, origin, size);
+          InkBox::include(&mut ink, origin + relative_offset, size);
 
           // A run carrying only the direction mark paints nothing; a run the
           // mark's cluster merged into (emoji sequences) paints as the first
@@ -367,6 +375,7 @@ impl BuiltInlineLayout<'_> {
             setup,
             static_inline_prefix,
             baseline_shift,
+            relative_offset,
           );
           if !shaped.brush.decorations.is_empty() {
             let undecorated = ShapedRun {
@@ -389,7 +398,7 @@ impl BuiltInlineLayout<'_> {
                 Point {
                   x: area.left,
                   y: area.top,
-                },
+                } + relative_offset,
                 Size {
                   width: area.right - area.left,
                   height: area.bottom - area.top,
@@ -401,13 +410,23 @@ impl BuiltInlineLayout<'_> {
           items.push_run(
             context,
             shaped,
-            setup.run_scale(baseline_shift),
-            static_inline_prefix,
-            baseline_shift,
-            decoration_placement,
+            RunPlacement {
+              line_scale: setup.run_scale(baseline_shift),
+              static_inline_prefix,
+              baseline_shift,
+              decoration_placement,
+              relative_offset,
+            },
           );
         }
         PlacedItem::Box(inline_box) => {
+          let relative_offset = self.span_relative_offset(inline_box.id);
+          let inline_box = VisualInlineBox {
+            x: inline_box.x + relative_offset.x,
+            y: inline_box.y + relative_offset.y,
+            ..inline_box
+          };
+
           InkBox::include(
             &mut ink,
             Point::new(inline_box.x, inline_box.y),
@@ -465,7 +484,7 @@ impl BuiltInlineLayout<'_> {
 
 /// `ink` grown to take the ink of `run`'s glyphs on the line `setup` sets up: what the run's
 /// metrics box misses, such as synthetic-italic skew, faux-bold outset, negative bearings, and
-/// glyphs taller than the font's metrics.
+/// glyphs taller than the font's metrics, moved by `relative_offset`.
 fn include_glyph_ink(
   ink: &mut Option<InkBox>,
   run: &ShapedRun,
@@ -473,6 +492,7 @@ fn include_glyph_ink(
   setup: &LineSetup,
   static_inline_prefix: f32,
   baseline_shift: f32,
+  relative_offset: Point<f32>,
 ) {
   let Ok(font) = FontRef::from_index(run.font_data(), run.font_index) else {
     return;
@@ -501,7 +521,7 @@ fn include_glyph_ink(
       baseline_shift,
     );
 
-    InkBox::include(ink, origin, size);
+    InkBox::include(ink, origin + relative_offset, size);
   }
 }
 
@@ -620,15 +640,7 @@ impl FragmentItems {
     self.backgrounds.shrink_to_fit();
   }
 
-  fn push_run(
-    &mut self,
-    context: &RenderContext,
-    run: ShapedRun,
-    line_scale: LineScaleState,
-    static_inline_prefix: f32,
-    baseline_shift: f32,
-    decoration_placement: DecorationPlacement,
-  ) {
+  fn push_run(&mut self, context: &RenderContext, run: ShapedRun, placement: RunPlacement) {
     let (mut face, glyphs) = self.glyphs.push(run);
     let offset = take(&mut face.offset);
     let baseline = take(&mut face.baseline);
@@ -645,10 +657,7 @@ impl FragmentItems {
       hanging,
       text_range,
       glyphs,
-      line_scale,
-      static_inline_prefix,
-      baseline_shift,
-      decoration_placement,
+      placement,
     });
   }
 
@@ -733,11 +742,12 @@ impl FragmentItems {
       runs.push(PositionedInlineRun {
         glyph_run,
         resolved_glyphs,
-        line_scale: item.line_scale,
-        static_inline_prefix: item.static_inline_prefix,
-        baseline_shift: item.baseline_shift,
-        decoration_placement: item.decoration_placement.clone(),
+        line_scale: item.placement.line_scale,
+        static_inline_prefix: item.placement.static_inline_prefix,
+        baseline_shift: item.placement.baseline_shift,
+        decoration_placement: item.placement.decoration_placement.clone(),
         paint_offset,
+        relative_offset: item.placement.relative_offset,
         #[cfg(feature = "paint-tree")]
         index: runs.len(),
       });
@@ -768,13 +778,8 @@ impl FragmentItems {
 fn span_owners<'c>(spans: &[ProcessedInlineSpan<'c>]) -> HashMap<usize, &'c RenderNode> {
   spans
     .iter()
-    .filter_map(|span| match span {
-      ProcessedInlineSpan::Text { decorations, .. }
-      | ProcessedInlineSpan::Spacer { decorations, .. } => decorations.as_deref(),
-      ProcessedInlineSpan::Box(item) => item.decorations.as_deref(),
-      ProcessedInlineSpan::DirectionMark { .. } => None,
-    })
-    .flat_map(DecorationLink::ancestors)
+    .filter_map(ProcessedInlineSpan::chain)
+    .flat_map(|link| link.ancestors())
     .map(|link| (link.decoration.id, link.decoration.owner))
     .collect()
 }

@@ -65,6 +65,7 @@ pub use self::{
 };
 use self::{
   breaking::distribute_trailing_whitespace,
+  items::LineSpace,
   line_box::{BoxFont, BoxKey, FontHeight},
   metrics::{
     ResolvedInlineLineState, ResolvedLineMetrics, Strut, resolve_inline_line_metrics,
@@ -222,6 +223,8 @@ pub struct BuiltInlineLayout<'c> {
   pub(crate) strut: Option<Strut>,
   /// The root inline box's font, which its children align against.
   pub(crate) font: BoxFont,
+  /// The space its lines lay out in.
+  pub(crate) line_space: LineSpace,
 }
 
 impl BuiltInlineLayout<'_> {
@@ -416,6 +419,7 @@ impl BuiltInlineLayout<'_> {
           let baseline_shift = self.run_baseline_shift(line, &glyph_run);
           let (origin, size) = glyph_run_rect(&glyph_run, hanging, &stretch, baseline_shift);
           let (origin, size) = setup.scale_rect(origin, size, static_inline_prefix, baseline_shift);
+          let origin = origin + self.run_relative_offset(&glyph_run);
 
           let link = span_id.and_then(|span_id| match self.spans.get(span_id as usize) {
             Some(ProcessedInlineSpan::Text { link, .. }) => link.as_deref(),
@@ -439,9 +443,11 @@ impl BuiltInlineLayout<'_> {
           ) {
             return Ok(());
           }
+          let relative_offset = self.span_relative_offset(inline_box.id);
+
           inline_boxes.push(MeasuredInlineBox {
-            x: inline_box.x,
-            y: inline_box.y,
+            x: inline_box.x + relative_offset.x,
+            y: inline_box.y + relative_offset.y,
             width: inline_box.width,
             height: inline_box.height,
           });
@@ -836,6 +842,7 @@ fn first_text_span_id(spans: &[ProcessedInlineSpan<'_>]) -> Option<u64> {
 fn build_inline_layout_tree<'c>(
   items: &[InlineItem<'c>],
   available_space: Size<AvailableSpace>,
+  max_width: f32,
   style: &'c SizedFontStyle,
   context: &'c RenderContext,
   shape_cacheable: bool,
@@ -858,6 +865,7 @@ fn build_inline_layout_tree<'c>(
     shape_key,
     strut,
     font,
+    line_space: LineSpace::of(context, max_width),
   }
 }
 
@@ -1187,8 +1195,14 @@ pub fn create_inline_layout<'c>(request: InlineLayoutRequest<'c>) -> BuiltInline
     mode,
     shape_cacheable,
   } = request;
-  let mut built =
-    build_inline_layout_tree(&items, available_space, style, context, shape_cacheable);
+  let mut built = build_inline_layout_tree(
+    &items,
+    available_space,
+    max_width,
+    style,
+    context,
+    shape_cacheable,
+  );
   let fits_text = text_fit_applies(style, &items, max_width);
   // `text-fit` scales line heights only after breaking, so only a line count clamps fitted lines.
   let max_height = if fits_text {
@@ -1488,6 +1502,23 @@ impl<'c> BuiltInlineLayout<'c> {
     self.spans.get(span_id? as usize)?.text_chain()
   }
 
+  /// How far `position: relative` moves span `span_id`.
+  pub(crate) fn span_relative_offset(&self, span_id: u64) -> Point<f32> {
+    self
+      .spans
+      .get(span_id as usize)
+      .map_or(Point::ZERO, |span| span.relative_offset(self.line_space))
+  }
+
+  /// How far `position: relative` moves `glyph_run`.
+  pub(crate) fn run_relative_offset(&self, glyph_run: &GlyphRun<'_, InlineBrush>) -> Point<f32> {
+    glyph_run
+      .style()
+      .brush
+      .source_span_id
+      .map_or(Point::ZERO, |span_id| self.span_relative_offset(span_id))
+  }
+
   /// The baseline shift `glyph_run` paints at on `line`.
   pub(crate) fn run_baseline_shift(
     &self,
@@ -1629,8 +1660,8 @@ mod tests {
     scene::Scene,
     style::{
       Affine, AppliedTextDecoration, BorderStyle, Color, ColorInput, Display, FontSize, Length,
-      Sides, SizedTextDecorationThickness, SizingContext, SpacePair, Style, StyleDeclaration,
-      TextAlign, TextDecorationLines, TextDecorationStyle, TextFit, TextFitMode,
+      Position, Sides, SizedTextDecorationThickness, SizingContext, SpacePair, Style,
+      StyleDeclaration, TextAlign, TextDecorationLines, TextDecorationStyle, TextFit, TextFitMode,
       TextUnderlinePosition, WhiteSpace,
     },
     viewport::Viewport,
@@ -1885,6 +1916,132 @@ mod tests {
         "share capped by the run advance: {trailing:?}"
       );
     }
+  }
+
+  #[test]
+  fn text_fit_leaves_a_relative_offset_unscaled() {
+    let fonts = create_test_context();
+    let context = RenderContext::builder()
+      .fonts(fonts.snapshot_with_fallbacks(None))
+      .sizing(
+        SizingContext::builder()
+          .viewport(Viewport::new((1200, 630)))
+          .build(),
+      )
+      .build();
+    let node = Node::container([
+      Node::text("fit ".to_string()),
+      Node::container([Node::text("moved".to_string())]).with_style(
+        Style::default()
+          .with(StyleDeclaration::display(Display::Inline))
+          .with(StyleDeclaration::position(Position::Relative))
+          .with(StyleDeclaration::top(Length::Px(10.0))),
+      ),
+    ])
+    .with_style(
+      Style::default()
+        .with(StyleDeclaration::display(Display::Block))
+        .with(StyleDeclaration::font_size(FontSize::Length(Length::Px(
+          20.0,
+        ))))
+        .with(StyleDeclaration::text_fit(
+          TextFit::builder().mode(TextFitMode::Grow).build(),
+        )),
+    );
+    let render_node = RenderNode::from_node(&context, node);
+    let font_style = SizedFontStyle::from_style(&render_node.context.style, &render_node.context);
+    let built = create_inline_layout(InlineLayoutRequest {
+      items: collect_inline_items(&render_node),
+      available_space: Size {
+        width: AvailableSpace::Definite(600.0),
+        height: AvailableSpace::Definite(630.0),
+      },
+      max_width: 600.0,
+      max_height: None,
+      style: &font_style,
+      context: &render_node.context,
+      mode: InlineLayoutMode::Draw,
+      shape_cacheable: false,
+    });
+    let layout = ComputedLayout {
+      location: Point::ZERO,
+      size: Size::new(600.0, 630.0),
+      border: Rect::default(),
+      padding: Rect::default(),
+    };
+    let runs = built.resolve_runs(&render_node.context, layout).unwrap();
+    let moved = runs
+      .runs
+      .iter()
+      .find(|run| run.relative_offset.y != 0.0)
+      .unwrap();
+    let glyph = moved.glyph_run.glyphs[0];
+    let offset = moved.glyph_offset(layout);
+    let (_, painted) = moved
+      .transform(Affine::IDENTITY)
+      .transform_point(offset.x + glyph.x, offset.y + glyph.y);
+    let (_, unmoved) = moved
+      .line_scale
+      .transform(Affine::IDENTITY, moved.static_inline_prefix)
+      .transform_point(offset.x + glyph.x, offset.y + glyph.y - 10.0);
+
+    assert!(moved.line_scale.scale > 1.0, "the line does not grow");
+    assert!(
+      (painted - unmoved - 10.0).abs() < 0.01,
+      "the offset scaled: {painted} past {unmoved}"
+    );
+  }
+
+  #[test]
+  fn a_vertical_percentage_inset_resolves_against_the_content_height() {
+    let fonts = create_test_context();
+    let context = RenderContext::builder()
+      .fonts(fonts.snapshot_with_fallbacks(None))
+      .sizing(
+        SizingContext::builder()
+          .viewport(Viewport::new((1200, 630)))
+          .build(),
+      )
+      .build();
+    let node = Node::container([
+      Node::text("tall ".to_string()),
+      Node::container([Node::text("moved".to_string())]).with_style(
+        Style::default()
+          .with(StyleDeclaration::display(Display::Inline))
+          .with(StyleDeclaration::position(Position::Relative))
+          .with(StyleDeclaration::top(Length::Percentage(50.0))),
+      ),
+    ])
+    .with_style(Style::default().with(StyleDeclaration::display(Display::Block)));
+    let render_node = RenderNode::from_node(&context, node);
+
+    render_node.context.set_definite_height(Some(96.0));
+
+    let font_style = SizedFontStyle::from_style(&render_node.context.style, &render_node.context);
+    let built = create_inline_layout(InlineLayoutRequest::in_available_space(
+      collect_inline_items(&render_node),
+      Size {
+        width: AvailableSpace::Definite(600.0),
+        height: AvailableSpace::Definite(730.0),
+      },
+      Size {
+        width: Some(600.0),
+        height: Some(96.0),
+      },
+      &font_style,
+      &render_node.context,
+      InlineLayoutMode::Measure,
+    ));
+    let moved = built
+      .spans
+      .iter()
+      .position(|span| matches!(span, ProcessedInlineSpan::Text { text, .. } if text == "moved"))
+      .unwrap();
+
+    assert_eq!(
+      built.span_relative_offset(moved as u64),
+      Point { x: 0.0, y: 48.0 }
+    );
   }
 
   #[test]

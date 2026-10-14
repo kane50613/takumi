@@ -931,6 +931,7 @@ fn compute_node_paint_bounds(
         stretch,
       } => {
         let baseline_shift = built.run_baseline_shift(line, &glyph_run);
+        let relative_offset = built.run_relative_offset(&glyph_run);
         let (glyph_origin, glyph_size) =
           glyph_run_rect(&glyph_run, hanging, &stretch, baseline_shift);
         let (glyph_origin, glyph_size) = setup.scale_rect(
@@ -942,7 +943,7 @@ fn compute_node_paint_bounds(
 
         bounds = merge_bounds(
           bounds,
-          bounds_for_placed_rect(glyph_origin, glyph_size, inline_transform),
+          bounds_for_placed_rect(glyph_origin + relative_offset, glyph_size, inline_transform),
         );
 
         // Blink's `InkOverflow::ComputeAppliedDecorationOverflow`.
@@ -978,7 +979,7 @@ fn compute_node_paint_bounds(
                 Point {
                   x: area.left,
                   y: area.top,
-                },
+                } + relative_offset,
                 Size {
                   width: area.right - area.left,
                   height: area.bottom - area.top,
@@ -1029,7 +1030,7 @@ fn compute_node_paint_bounds(
 
           bounds = merge_bounds(
             bounds,
-            bounds_for_placed_rect(ink_origin, ink_size, inline_transform),
+            bounds_for_placed_rect(ink_origin + relative_offset, ink_size, inline_transform),
           );
         }
       }
@@ -1037,7 +1038,7 @@ fn compute_node_paint_bounds(
         bounds = merge_bounds(
           bounds,
           bounds_for_placed_rect(
-            Point::new(inline_box.x, inline_box.y),
+            Point::new(inline_box.x, inline_box.y) + built.span_relative_offset(inline_box.id),
             Size::new(inline_box.width, inline_box.height),
             inline_transform,
           ),
