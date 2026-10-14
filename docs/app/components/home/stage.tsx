@@ -51,8 +51,6 @@ type DrawStep = Extract<SceneStep, { type: "draw" }>;
 type PaintPlane = {
   label: string;
   steps: DrawStep[];
-  dx: number;
-  dy: number;
 };
 
 /** Groups the scene's real draw steps into 5 semantic layers so every plane shows a distinct stage. */
@@ -86,11 +84,11 @@ function buildPaintPlanes(): PaintPlane[] {
   }
 
   return [
-    { label: "01 · canvas & frame", steps: canvasAndFrame, dx: -175, dy: 144 },
-    { label: "02 · rust gradient", steps: rustStamp, dx: -70, dy: 92 },
-    { label: "03 · header & specs", steps: headerAndSpecs, dx: 35, dy: 40 },
-    { label: "04 · equalizer bars", steps: equalizerBars, dx: 140, dy: -12 },
-    { label: "05 · headline glyphs", steps: headlineGlyphs, dx: 245, dy: -64 },
+    { label: "01 · canvas & frame", steps: canvasAndFrame },
+    { label: "02 · rust gradient", steps: rustStamp },
+    { label: "03 · header & specs", steps: headerAndSpecs },
+    { label: "04 · equalizer bars", steps: equalizerBars },
+    { label: "05 · headline glyphs", steps: headlineGlyphs },
   ];
 }
 
@@ -356,9 +354,6 @@ export function Stage() {
                     <g
                       key={plane.label}
                       data-paint-plane
-                      data-dx={plane.dx}
-                      data-dy={plane.dy}
-                      data-depth={0.5 + 0.35 * planeIndex}
                       className="will-change-transform"
                       style={{ transformOrigin: "600px 315px" }}
                     >
@@ -373,7 +368,7 @@ export function Stage() {
                         strokeOpacity="0.4"
                         strokeWidth="2"
                       />
-                      <g filter="url(#forge-mute)" opacity="0.7">
+                      <g filter="url(#forge-mute)" opacity="0.85">
                         {plane.steps.map((step, sIdx) => {
                           const node = scene.nodes[step.node];
 

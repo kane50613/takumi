@@ -23,6 +23,23 @@ function depthDistance(element: HTMLElement | SVGElement, base: number) {
   return base * Number(element.dataset.depth ?? 1);
 }
 
+/** Card-space gap between stacked paint planes, and how flat the isometric view squashes them. */
+const PLANE_GAP = 105;
+const ISO_SQUASH = 0.55;
+
+/** The paint planes' view at `spread`, from flat to isometric, orbiting `10° × drift` off -45°. */
+function isometricStack(spread: number, drift: number) {
+  const angle = ((-45 + 10 * drift) * Math.PI) / 180;
+  const cos = Math.cos(angle);
+  const sin = Math.sin(angle);
+  const a = 1 + (cos - 1) * spread;
+  const b = ISO_SQUASH * sin * spread;
+  const c = -sin * spread;
+  const d = 1 + (ISO_SQUASH * cos - 1) * spread;
+
+  return { spread, matrix: `matrix(${[a, b, c, d].map((v) => v.toFixed(4)).join(",")},0,0)` };
+}
+
 const STRIKE_LABELS = [
   "Strike the anvil",
   "Strike again · Text",
@@ -139,10 +156,7 @@ export function StageController() {
         impactBurst.style.transform = `scale(${(0.72 + impulse * 0.62).toFixed(3)})`;
       }
 
-      const intactOpacity = Math.max(
-        0,
-        1 - Math.max(lSpread * 0.92, tSpread * 0.95, pSpread * 0.96),
-      );
+      const intactOpacity = Math.max(0, 1 - Math.max(lSpread, tSpread, pSpread));
 
       if (anvilCard) {
         anvilCard.style.opacity = intactOpacity.toFixed(3);
@@ -188,22 +202,23 @@ export function StageController() {
         paintLayer.style.opacity = pSpread.toFixed(3);
         paintLayer.style.visibility = pSpread > 0.01 ? "visible" : "hidden";
       }
-      const paintDrift = -stepDrift(p, 3);
+      const paintDrift = reduceMotion ? 0 : -stepDrift(p, 3);
+      const stack = isometricStack(pSpread, paintDrift);
 
-      for (const planeEl of paintPlanes) {
-        const dx = Number(planeEl.dataset.dx ?? 0);
-        const dy = Number(planeEl.dataset.dy ?? 0) + paintDrift * depthDistance(planeEl, 70);
-        const planeScale = 1 - 0.14 * pSpread;
+      paintPlanes.forEach((planeEl, index) => {
+        const rank = index - (paintPlanes.length - 1) / 2;
+        const lift = -rank * PLANE_GAP * stack.spread + paintDrift * index * 14;
 
-        planeEl.style.transform = reduceMotion
-          ? `translate(${(dx * 0.7).toFixed(1)}px, ${(dy * 0.7).toFixed(1)}px) scale(0.88)`
-          : `translate(${(dx * pSpread).toFixed(1)}px, ${(dy * pSpread).toFixed(1)}px) scale(${planeScale.toFixed(3)})`;
-      }
+        planeEl.style.transform = `translate(0px, ${lift.toFixed(1)}px) ${stack.matrix}`;
+      });
 
       if (!reduceMotion) {
+        const recede = 1 - 0.6 * Math.max(lSpread, tSpread, pSpread);
+
         words.forEach((word, index) => {
           const { stretch, weight } = wordAxes(p, index);
 
+          word.style.opacity = recede.toFixed(3);
           word.style.fontStretch = `${stretch.toFixed(1)}%`;
           word.style.fontWeight = weight.toFixed(0);
         });
