@@ -1821,7 +1821,7 @@ dependencies = [
 
 [[package]]
 name = "takumi"
-version = "2.16.0"
+version = "2.16.1"
 dependencies = [
  "criterion",
  "image",
@@ -1937,7 +1937,7 @@ dependencies = [
 
 [[package]]
 name = "takumi-pdf"
-version = "0.17.0"
+version = "0.17.1"
 dependencies = [
  "base64",
  "bumpalo",
@@ -2008,7 +2008,7 @@ dependencies = [
 
 [[package]]
 name = "takumi-svg"
-version = "0.3.26"
+version = "0.3.27"
 dependencies = [
  "quick-xml",
  "takumi-core",

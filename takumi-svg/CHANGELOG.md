@@ -1,3 +1,9 @@
+## takumi-svg@0.3.27
+
+### Stop clipping blurred shadows in SVG output
+
+Blurred `box-shadow` and `text-shadow` no longer end in a hard-edged square. Each blur filter now covers the image plus the `3σ` the blur reaches, as Chrome does.
+
 ## takumi-svg@0.3.23
 
 ### Share computed styles between boxes

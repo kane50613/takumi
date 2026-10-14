@@ -1,187 +1,89 @@
 core:changelogs:
-  - content: "---\npackages:\n  takumi-core:\n    type: minor\n  takumi:\n    type: minor\n  \"@takumi-rs/helpers\":\n    type: minor\n  \"@takumi-rs/core\":\n    type: minor\n  \"@takumi-rs/wasm\":\n    type: minor\n  takumi-paint:\n    type: minor\n  takumi-pdf:\n    type: minor\n---\n\n# Register font subsets with `unicodeRange`\n\nA font now takes `unicodeRange`, the codepoint ranges its `@font-face` declares. It serves only those codepoints, as in Chrome, so each subset of a family registers under the same `name`:\n\n```ts\nconst fonts = [\n  { name: \"Inter\", data: latin, unicodeRange: [[0x0000, 0x00ff]] },\n  { name: \"Inter\", data: cyrillic, unicodeRange: [[0x0400, 0x045f]] },\n];\n```\n\n`googleFonts` returns its subsets this way. `subsetOf` and `subsetRank` are deprecated: `subsetOf` now only sets the family name, and `subsetRank` does nothing. In Rust, use `FontResource::unicode_range`.\n"
-    filename: font-unicode-range.md
-    v: 0.0.0
-  - content: "---\npackages:\n  takumi-core:\n    type: patch\n  takumi:\n    type: patch\n  takumi-pdf:\n    type: patch\n---\n\n# Stop leaking a direction mark into PDF text\n\nParagraphs set their direction directly instead of starting with an invisible U+200E or U+200F mark, so text extracted from a PDF no longer contains it. A right-to-left paragraph that starts with an inline box before any text still gets the mark.\n"
-    filename: paragraph-direction.md
-    v: 0.0.0
-  - content: "---\npackages:\n  takumi-core:\n    type: minor\n  takumi:\n    type: minor\n  takumi-pdf:\n    type: minor\n---\n\n# Support `font-optical-sizing`\n\nVariable fonts with an `opsz` axis now set it to the font size, as Chrome does, so fonts like Inter draw their display cut at large sizes. `font-optical-sizing: none` or an `opsz` value in `font-variation-settings` turns this off.\n"
-    filename: font-optical-sizing.md
-    v: 0.0.0
-  - content: "---\npackages:\n  takumi-core:\n    type: patch\n  takumi-pdf:\n    type: patch\n---\n\n# Embed fonts at their `font-variation-settings` in PDF\n\nPDF output and the paint tree now instance a variable font at the axes `font-variation-settings` sets. Before, they used the default instance, so glyphs drew at the wrong weight or width while the layout used the right one.\n"
-    filename: pdf-font-variation-settings.md
-    v: 0.0.0
-  - content: "---\npackages:\n  takumi-raster:\n    type: patch\n---\n\n# Read layer alpha a pixel at a time\n\n`background-clip: text` and image masks for text read a layer's alpha channel a whole pixel at a time, which makes clipped text about 6% faster.\n"
-    filename: alpha-mask.md
-    v: 0.0.0
-  - content: "---\npackages:\n  takumi-raster:\n    type: patch\n---\n\n# Keep clip masks to the pixels they cover\n\nA clip such as `overflow: hidden` with rounded corners keeps a mask only over the pixels it covers instead of one the size of the whole image. Nested clips render about 13% faster with about 28% less peak memory, and images inside rounded clips render 5–7% faster.\n"
-    filename: placed-clip-masks.md
-    v: 0.0.0
-  - content: "---\npackages:\n  takumi-core:\n    type: patch\n  takumi:\n    type: patch\n---\n\n# Turn off contextual alternates under letter spacing\n\nNon-zero `letter-spacing` now also turns off contextual alternates (`calt`), as Chrome does. `font-variant-ligatures` can no longer turn ligatures back on while letters are spaced. `font-feature-settings` still overrides both.\n"
-    filename: letter-spacing-contextual.md
-    v: 0.0.0
-  - content: "---\npackages:\n  takumi-core:\n    type: patch\n  takumi:\n    type: patch\n---\n\n# Upgrade taffy to 0.15\n\nLayout runs on taffy 0.15, whose grid and flexbox passes are faster. The root box now sits at its own margins, as Chrome places it, instead of at the top left corner.\n"
-    filename: taffy-0-15.md
-    v: 0.0.0
-  - content: "---\npackages:\n  takumi-core:\n    type: patch\n  takumi:\n    type: patch\n---\n\n# Measure text ink once per text node\n\nA text node with its own `display`, such as `flex`, no longer shapes and breaks its text a second time to measure ink bounds while the scene is built. Dashboards with many styled text labels render about 30% faster.\n"
-    filename: text-ink-bounds.md
-    v: 0.0.0
-  - content: "---\npackages:\n  takumi-core:\n    type: patch\n  takumi:\n    type: patch\n---\n\n# Move inline elements by `position: relative`\n\nAn inline element with `position: relative` now moves by its `top`, `left`, `bottom` and `right`, along with its background, border, text decorations and inline-block children, as in Chrome. Tailwind's Preflight relies on this to raise `<sup>` and lower `<sub>`.\n"
-    filename: inline-position-relative.md
-    v: 0.0.0
-  - content: "---\npackages:\n  takumi-core:\n    type: patch\n  takumi:\n    type: patch\n---\n\n# Read Preflight from every Tailwind entry point\n\n`@import \"tailwindcss\"` now turns Preflight on when it carries modifiers such as `source(none)` or `important`. `@import \"tailwindcss/preflight.css\"` turns it on too, while `tailwindcss/theme.css` and `tailwindcss/utilities.css` leave it off, as in Tailwind's setup without Preflight.\n"
-    filename: tailwind-entry-preflight.md
-    v: 0.0.0
-  - content: "---\npackages:\n  takumi-core:\n    type: patch\n  takumi:\n    type: patch\n---\n\n# Keep images at their natural size in grids and between insets\n\nAn image or SVG in a grid cell no longer stretches to the cell under the default alignment, and an absolutely positioned one no longer stretches between its insets. Both keep their natural size, as Chrome draws them.\n"
-    filename: taffy-replaced.md
-    v: 0.0.0
-  - content: "---\npackages:\n  takumi-core:\n    type: patch\n  takumi:\n    type: patch\n---\n\n# Lay out text with parley 0.12\n\nText layout moves to parley 0.12. Letter spacing turns off ligatures as browsers do, and text beside floats, cloned box decorations, list markers, and `text-fit` lines sit closer to where Chrome puts them. A family's coverage subsets now load together, which lets later releases drop the per-subset family names.\n"
-    filename: parley-0-12.md
-    v: 0.0.0
-  - content: "---\npackages:\n  takumi-core:\n    type: patch\n  takumi:\n    type: patch\n---\n\n# Keep the line strut when no font family matches\n\nA line that holds only an image or another inline box keeps the default font's strut when its `font-family` matches no registered font, as Chrome does. Such lines used to come out a few pixels short.\n"
-    filename: primary-font-strut.md
-    v: 0.0.0
-  - content: "---\npackages:\n  takumi-core:\n    type: patch\n  takumi:\n    type: patch\n---\n\n# Keep the static position of absolute boxes whose containing block is further up\n\nAn absolutely positioned box without insets now starts where it would have sat in its parent's flow, padding included, even when its containing block is an ancestor further up. It used to start at that ancestor's content edge. Chrome places it the same way.\n"
-    filename: taffy-out-of-flow.md
-    v: 0.0.0
-  - content: "---\npackages:\n  takumi-core:\n    type: minor\n  takumi:\n    type: minor\n---\n\n# Synthesize small caps for fonts without them\n\n`font-variant-caps` now synthesizes small capitals when the font lacks the caps feature, as Chrome does. Lowercase letters render as capitals at 70% size, so `small-caps` works with fonts like Geist. `font-synthesis: none` or the new `font-synthesis-small-caps: none` turns this off.\n"
-    filename: synthetic-small-caps.md
-    v: 0.0.0
-  - content: "---\npackages:\n  takumi-core:\n    type: patch\n  takumi:\n    type: patch\n---\n\n# Check small-caps support in each run's own font and script\n\n`font-variant-caps` now checks the font that draws each run, and that font's caps features for the run's script, as Chrome does. A fallback font keeps the small capitals it ships, and a font that lists them only for some scripts synthesizes them for the rest.\n"
-    filename: small-caps-font-support.md
+  - content: "---\npackages:\n  takumi-svg:\n    type: patch\n---\n\n# Stop clipping blurred shadows in SVG output\n\nBlurred `box-shadow` and `text-shadow` no longer end in a hard-edged square. Each blur filter now covers the image plus the `3σ` the blur reaches, as Chrome does.\n"
+    filename: svg-blur-region.md
     v: 0.0.0
 core:packages:
   - id: npm:takumi-workspace
     updated: false
-  - id: npm:docs
-    updated: false
-  - changelogIds:
-      - font-unicode-range.md
-      - paragraph-direction.md
-      - font-optical-sizing.md
-      - pdf-font-variation-settings.md
-    id: npm:takumi-pdf
-    updated: true
-  - changelogIds:
-      - font-unicode-range.md
-    id: npm:@takumi-rs/wasm
-    updated: true
-  - changelogIds:
-      - font-unicode-range.md
-    id: npm:@takumi-rs/helpers
-    updated: true
-  - id: npm:takumi-js
-    updated: true
-  - changelogIds:
-      - font-unicode-range.md
-    id: npm:takumi-paint
+  - id: npm:@takumi-rs/wasm
     updated: true
   - id: npm:@takumi-rs/image-response
     updated: true
-  - changelogIds:
-      - font-unicode-range.md
-    id: npm:@takumi-rs/core
+  - id: npm:@takumi-rs/helpers
     updated: true
-  - id: npm:pdf-bench
+  - id: npm:takumi-paint
+    updated: true
+  - id: npm:docs
     updated: false
-  - id: npm:example-generate-invoice
-    updated: false
+  - id: npm:@takumi-rs/core
+    updated: true
+  - id: npm:takumi-pdf
+    updated: true
+  - id: npm:takumi-js
+    updated: true
   - id: npm:svelte
-    updated: false
-  - id: npm:example-nextjs
     updated: false
   - id: npm:example-tanstack-start
     updated: false
-  - id: npm:example-satori-html
-    updated: false
   - id: npm:waku-ssr
     updated: false
-  - id: npm:ffplay
+  - id: npm:pdf-bench
     updated: false
-  - id: npm:example-e-invoice
-    updated: false
-  - id: npm:example-twitter-images
-    updated: false
-  - id: npm:example-cloudflare-workers
-    updated: false
-  - id: npm:ffmpeg-keyframe-animation
-    updated: false
-  - id: npm:example-liquid-glass
+  - id: npm:example-nextjs
     updated: false
   - id: npm:example-css-library-integration
     updated: false
-  - changelogIds:
-      - alpha-mask.md
-      - placed-clip-masks.md
-    id: cargo:takumi-raster
+  - id: npm:example-satori-html
+    updated: false
+  - id: npm:example-e-invoice
+    updated: false
+  - id: npm:example-liquid-glass
+    updated: false
+  - id: npm:example-generate-invoice
+    updated: false
+  - id: npm:example-twitter-images
+    updated: false
+  - id: npm:ffplay
+    updated: false
+  - id: npm:ffmpeg-keyframe-animation
+    updated: false
+  - id: npm:example-cloudflare-workers
+    updated: false
+  - id: cargo:takumi
     updated: true
-  - changelogIds:
-      - font-unicode-range.md
-      - letter-spacing-contextual.md
-      - taffy-0-15.md
-      - text-ink-bounds.md
-      - inline-position-relative.md
-      - tailwind-entry-preflight.md
-      - taffy-replaced.md
-      - parley-0-12.md
-      - paragraph-direction.md
-      - primary-font-strut.md
-      - font-optical-sizing.md
-      - taffy-out-of-flow.md
-      - synthetic-small-caps.md
-      - pdf-font-variation-settings.md
-      - small-caps-font-support.md
-    id: cargo:takumi-core
-    updated: true
-  - changelogIds:
-      - font-unicode-range.md
-      - letter-spacing-contextual.md
-      - taffy-0-15.md
-      - text-ink-bounds.md
-      - inline-position-relative.md
-      - tailwind-entry-preflight.md
-      - taffy-replaced.md
-      - parley-0-12.md
-      - paragraph-direction.md
-      - primary-font-strut.md
-      - font-optical-sizing.md
-      - taffy-out-of-flow.md
-      - synthetic-small-caps.md
-      - small-caps-font-support.md
-    id: cargo:takumi
-    updated: true
-  - changelogIds:
-      - font-unicode-range.md
-      - paragraph-direction.md
-      - font-optical-sizing.md
-      - pdf-font-variation-settings.md
-    id: cargo:takumi-pdf
-    updated: true
+  - id: cargo:takumi-raster
+    updated: false
   - id: cargo:takumi-html
+    updated: false
+  - changelogIds:
+      - svg-blur-region.md
+    id: cargo:takumi-svg
     updated: true
-  - id: cargo:takumi-svg
+  - id: cargo:takumi-pdf
     updated: true
+  - id: cargo:takumi-core
+    updated: false
 npm:packages:
   - id: npm:takumi-workspace
-  - id: npm:docs
-  - id: npm:takumi-pdf
   - id: npm:@takumi-rs/wasm
-  - id: npm:@takumi-rs/helpers
-  - id: npm:takumi-js
-  - id: npm:takumi-paint
   - id: npm:@takumi-rs/image-response
+  - id: npm:@takumi-rs/helpers
+  - id: npm:takumi-paint
+  - id: npm:docs
   - id: npm:@takumi-rs/core
-  - id: npm:pdf-bench
-  - id: npm:example-generate-invoice
+  - id: npm:takumi-pdf
+  - id: npm:takumi-js
   - id: npm:svelte
-  - id: npm:example-nextjs
   - id: npm:example-tanstack-start
-  - id: npm:example-satori-html
   - id: npm:waku-ssr
-  - id: npm:ffplay
-  - id: npm:example-e-invoice
-  - id: npm:example-twitter-images
-  - id: npm:example-cloudflare-workers
-  - id: npm:ffmpeg-keyframe-animation
-  - id: npm:example-liquid-glass
+  - id: npm:pdf-bench
+  - id: npm:example-nextjs
   - id: npm:example-css-library-integration
+  - id: npm:example-satori-html
+  - id: npm:example-e-invoice
+  - id: npm:example-liquid-glass
+  - id: npm:example-generate-invoice
+  - id: npm:example-twitter-images
+  - id: npm:ffplay
+  - id: npm:ffmpeg-keyframe-animation
+  - id: npm:example-cloudflare-workers
