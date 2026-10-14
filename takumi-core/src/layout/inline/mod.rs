@@ -865,10 +865,7 @@ fn build_inline_layout_tree<'c>(
     shape_key,
     strut,
     font,
-    line_space: LineSpace::new(
-      context.style.inherited_data.direction,
-      max_width.is_finite().then_some(max_width),
-    ),
+    line_space: LineSpace::of(context, max_width, available_space.height),
   }
 }
 

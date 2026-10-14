@@ -3,11 +3,11 @@
 use crate::{
   context::RenderContext,
   font_style::{BoxLineHeight, SizedFontStyle},
-  geometry::{ComputedLayout, Point, Rect, Size},
+  geometry::{AvailableSpace, ComputedLayout, Point, Rect, Size},
   layout::{border::BorderProperties, node::Node, tree::RenderNode},
   style::{
     Color, Direction, Display, Float, Length, Position, ResolvedVerticalAlign, Sides,
-    SizingContext, SpacePair, WhiteSpaceCollapse,
+    Size as CssSize, SizingContext, SpacePair, WhiteSpaceCollapse,
   },
   text_processing::{COLLAPSIBLE_WHITESPACE, HORIZONTAL_WHITESPACE},
 };
@@ -82,21 +82,35 @@ pub(crate) struct LineSpace {
   direction: Direction,
   /// The lines' available width, `None` when indefinite.
   inline_size: Option<f32>,
+  /// The height they lay out in, `None` when it depends on them.
+  block_size: Option<f32>,
 }
 
 impl LineSpace {
-  pub(crate) fn new(direction: Direction, inline_size: Option<f32>) -> Self {
+  /// The space lines break at `max_width` in for the formatting context `context` styles, laid
+  /// out in `available_height`. Its height counts as definite only for a fixed `height`.
+  /// Approximate: Blink also takes a percentage `height` against a definite parent, and a height
+  /// a flex or grid container stretches, as definite.
+  pub(crate) fn of(
+    context: &RenderContext,
+    max_width: f32,
+    available_height: AvailableSpace,
+  ) -> Self {
+    let fixed_height = matches!(
+      context.style.box_data.height,
+      CssSize::Length(height) if height != Length::Auto && !height.has_percentage()
+    );
+
     Self {
-      direction,
-      inline_size,
+      direction: context.style.inherited_data.direction,
+      inline_size: max_width.is_finite().then_some(max_width),
+      block_size: available_height.into_option().filter(|_| fixed_height),
     }
   }
 
   /// Blink's `ComputeRelativeOffsetForInline`: how far `position: relative` moves the
   /// inline-level `node` on these lines, its start inset winning when both horizontal ones are
   /// set. A percentage inset against an indefinite size counts as `auto`.
-  /// Approximate: a vertical percentage inset always counts as `auto`, where Blink resolves it
-  /// against a definite containing block height.
   /// <https://source.chromium.org/chromium/chromium/src/+/main:third_party/blink/renderer/core/layout/relative_utils.cc>
   pub(crate) fn relative_offset(self, node: &RenderNode) -> Point<f32> {
     let style = &node.context.style;
@@ -120,8 +134,8 @@ impl LineSpace {
       (_, Some(right), _) => -right,
       (None, None, _) => 0.0,
     };
-    let y = inset(surround.top, None)
-      .or_else(|| inset(surround.bottom, None).map(|bottom| -bottom))
+    let y = inset(surround.top, self.block_size)
+      .or_else(|| inset(surround.bottom, self.block_size).map(|bottom| -bottom))
       .unwrap_or(0.0);
 
     Point { x, y }
