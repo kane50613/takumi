@@ -421,37 +421,6 @@ impl ComputedStyle {
     }
   }
 
-  /// Blink's `ComputeRelativeOffsetForInline`: how far `position: relative` moves an inline box
-  /// in a container of `direction`, whose start inset wins when both horizontal ones are set.
-  /// Approximate: a percentage inset counts as `auto`, where Blink resolves `left` and `right`
-  /// against the line's available width.
-  /// <https://source.chromium.org/chromium/chromium/src/+/main:third_party/blink/renderer/core/layout/relative_utils.cc>
-  pub(crate) fn inline_relative_offset(
-    &self,
-    sizing: &SizingContext,
-    direction: Direction,
-  ) -> Point<f32> {
-    if self.base_data.position != Position::Relative {
-      return Point::ZERO;
-    }
-
-    let inset = |length: Length| {
-      (length != Length::Auto && !length.has_percentage()).then(|| length.to_px(sizing, 0.0))
-    };
-    let surround = &self.surround_data;
-    let (left, right) = (inset(surround.left), inset(surround.right));
-    let x = match (left, right, direction) {
-      (Some(left), _, Direction::Ltr) | (Some(left), None, Direction::Rtl) => left,
-      (_, Some(right), _) => -right,
-      (None, None, _) => 0.0,
-    };
-    let y = inset(surround.top)
-      .or_else(|| inset(surround.bottom).map(|bottom| -bottom))
-      .unwrap_or(0.0);
-
-    Point { x, y }
-  }
-
   /// The face attributes a font query matches.
   pub(crate) fn font_attributes(&self) -> Attributes {
     Attributes {

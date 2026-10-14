@@ -10,7 +10,7 @@ use std::{collections::HashMap, rc::Rc};
 
 use super::{
   decoration_break::ClonedLines,
-  items::{DecorationLink, InlineDecoration},
+  items::{DecorationLink, InlineDecoration, LineSpace},
   line_box::{BoxKey, FontHeight, LineBoxOffsets},
   outline::InlineOutlineRect,
   text_fit::TextScale,
@@ -110,18 +110,24 @@ pub(super) struct DecorationAccumulator<'c> {
   /// Each span's position among `decorations`, by the span's id.
   ids: HashMap<usize, usize>,
   decorations: Vec<InlineDecoration<'c>>,
+  /// How far `position: relative` moves each span among `decorations`.
+  relative_offsets: Vec<Point<f32>>,
   fragments: HashMap<(usize, usize), FragmentBounds>,
   /// The edges `box-decoration-break: clone` spans repeat on each line.
   cloned: Option<ClonedLines>,
+  /// The space the lines lay out in.
+  line_space: LineSpace,
 }
 
 impl<'c> DecorationAccumulator<'c> {
-  pub(super) fn new(cloned: Option<ClonedLines>) -> Self {
+  pub(super) fn new(cloned: Option<ClonedLines>, line_space: LineSpace) -> Self {
     Self {
       ids: HashMap::new(),
       decorations: Vec::new(),
+      relative_offsets: Vec::new(),
       fragments: HashMap::new(),
       cloned,
+      line_space,
     }
   }
 
@@ -137,6 +143,9 @@ impl<'c> DecorationAccumulator<'c> {
 
     self.ids.insert(link.decoration.id, id);
     self.decorations.push(link.decoration.clone());
+    self
+      .relative_offsets
+      .push(link.relative_offset(self.line_space));
     id
   }
 
@@ -256,16 +265,16 @@ impl<'c> DecorationAccumulator<'c> {
           .or(runs)
           .unwrap_or((line.top, line.bottom));
         let (min_line, max_line) = line_range[id];
+        let relative_offset = self.relative_offsets[id];
 
         SpanFragment {
           id,
           line_index,
-          x: x0 + decoration.relative_offset.x,
-          y: top - decoration.padding.top - decoration.border.width.top
-            + decoration.relative_offset.y,
+          x: x0 + relative_offset.x,
+          y: top - decoration.padding.top - decoration.border.width.top + relative_offset.y,
           width: x1 - x0,
           height: bottom - top + decoration.padding.vertical() + decoration.border.width.vertical(),
-          baseline: line.baseline + decoration.relative_offset.y,
+          baseline: line.baseline + relative_offset.y,
           has_start: cloned.is_some() || line_index == min_line,
           has_end: cloned.is_some() || line_index == max_line,
         }

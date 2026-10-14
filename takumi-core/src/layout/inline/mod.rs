@@ -65,6 +65,7 @@ pub use self::{
 };
 use self::{
   breaking::distribute_trailing_whitespace,
+  items::LineSpace,
   line_box::{BoxFont, BoxKey, FontHeight},
   metrics::{
     ResolvedInlineLineState, ResolvedLineMetrics, Strut, resolve_inline_line_metrics,
@@ -222,6 +223,8 @@ pub struct BuiltInlineLayout<'c> {
   pub(crate) strut: Option<Strut>,
   /// The root inline box's font, which its children align against.
   pub(crate) font: BoxFont,
+  /// The space its lines lay out in.
+  pub(crate) line_space: LineSpace,
 }
 
 impl BuiltInlineLayout<'_> {
@@ -861,6 +864,10 @@ fn build_inline_layout_tree<'c>(
     shape_key,
     strut,
     font,
+    line_space: LineSpace::new(
+      context.style.inherited_data.direction,
+      available_space.width.into_option(),
+    ),
   }
 }
 
@@ -925,7 +932,6 @@ pub(crate) fn process_inline_spans<'c>(
           available_space,
           index_pos,
           spans.len() as u64,
-          context.style.inherited_data.direction,
         ));
         // A float or an out-of-flow box is opaque to white space collapsing, as Blink's
         // `InlineItemsBuilder::AppendOpaque` leaves the spaces around it adjacent.
@@ -1032,15 +1038,13 @@ fn direction_mark_span<'c>(
   })
 }
 
-/// Measures an inline-level node and sizes the box that stands in for it in a container of
-/// `container` direction.
+/// Measures an inline-level node and sizes the box that stands in for it.
 fn inline_box_span<'c>(
   render_node: &'c RenderNode,
   decorations: Option<Rc<DecorationLink<'c>>>,
   available_space: Size<AvailableSpace>,
   index: usize,
   id: u64,
-  container: Direction,
 ) -> ProcessedInlineSpan<'c> {
   let context = &render_node.context;
   let kind = render_node.inline_box_kind();
@@ -1106,7 +1110,6 @@ fn inline_box_span<'c>(
     vertical_align: ParleyVerticalAlign::BASELINE,
   };
   let baseline_offset = raw_baseline_offset.map(|baseline| baseline.clamp(0.0, inline_box.height));
-  let relative_offset = render_node.relative_offset_in(decorations.as_ref(), container);
 
   ProcessedInlineSpan::Box(InlineBoxItem {
     render_node,
@@ -1119,7 +1122,6 @@ fn inline_box_span<'c>(
     border,
     baseline_offset,
     vertical_align,
-    relative_offset,
   })
 }
 
@@ -1503,7 +1505,7 @@ impl<'c> BuiltInlineLayout<'c> {
     self
       .spans
       .get(span_id as usize)
-      .map_or(Point::ZERO, ProcessedInlineSpan::relative_offset)
+      .map_or(Point::ZERO, |span| span.relative_offset(self.line_space))
   }
 
   /// How far `position: relative` moves `glyph_run`.

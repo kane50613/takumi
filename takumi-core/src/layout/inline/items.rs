@@ -73,25 +73,62 @@ pub struct InlineBoxItem<'c> {
   pub(crate) border: Rect<f32>,
   pub(crate) baseline_offset: Option<f32>,
   pub(crate) vertical_align: ResolvedVerticalAlign,
-  /// How far `position: relative` on the box and the spans around it moves it.
-  pub(crate) relative_offset: Point<f32>,
+}
+
+/// The space lines lay out in, which `position: relative` insets resolve against, after Blink's
+/// `ConstraintSpace`.
+#[derive(Clone, Copy)]
+pub(crate) struct LineSpace {
+  direction: Direction,
+  /// The lines' available width, `None` when indefinite.
+  inline_size: Option<f32>,
+}
+
+impl LineSpace {
+  pub(crate) fn new(direction: Direction, inline_size: Option<f32>) -> Self {
+    Self {
+      direction,
+      inline_size,
+    }
+  }
+
+  /// Blink's `ComputeRelativeOffsetForInline`: how far `position: relative` moves the
+  /// inline-level `node` on these lines, its start inset winning when both horizontal ones are
+  /// set. A percentage inset against an indefinite size counts as `auto`.
+  /// Approximate: a vertical percentage inset always counts as `auto`, where Blink resolves it
+  /// against a definite containing block height.
+  /// <https://source.chromium.org/chromium/chromium/src/+/main:third_party/blink/renderer/core/layout/relative_utils.cc>
+  pub(crate) fn relative_offset(self, node: &RenderNode) -> Point<f32> {
+    let style = &node.context.style;
+
+    if style.base_data.position != Position::Relative {
+      return Point::ZERO;
+    }
+
+    let inset = |length: Length, basis: Option<f32>| match (length, basis) {
+      (Length::Auto, _) => None,
+      (length, None) if length.has_percentage() => None,
+      (length, basis) => Some(length.to_px(&node.context.sizing, basis.unwrap_or(0.0))),
+    };
+    let surround = &style.surround_data;
+    let (left, right) = (
+      inset(surround.left, self.inline_size),
+      inset(surround.right, self.inline_size),
+    );
+    let x = match (left, right, self.direction) {
+      (Some(left), _, Direction::Ltr) | (Some(left), None, Direction::Rtl) => left,
+      (_, Some(right), _) => -right,
+      (None, None, _) => 0.0,
+    };
+    let y = inset(surround.top, None)
+      .or_else(|| inset(surround.bottom, None).map(|bottom| -bottom))
+      .unwrap_or(0.0);
+
+    Point { x, y }
+  }
 }
 
 impl RenderNode {
-  /// How far `position: relative` moves this inline-level node inside `parent` in a container of
-  /// `container` direction, `parent`'s moves included.
-  pub(crate) fn relative_offset_in(
-    &self,
-    parent: Option<&Rc<DecorationLink<'_>>>,
-    container: Direction,
-  ) -> Point<f32> {
-    parent.map_or(Point::ZERO, |parent| parent.decoration.relative_offset)
-      + self
-        .context
-        .style
-        .inline_relative_offset(&self.context.sizing, container)
-  }
-
   /// Whether a float sits among the inline content this node lays out, found the way
   /// [`collect_inline_items`] walks it.
   pub(crate) fn has_inline_floats(&self) -> bool {
@@ -231,13 +268,15 @@ impl<'c> ProcessedInlineSpan<'c> {
     }
   }
 
-  /// How far `position: relative` moves it.
-  pub(crate) fn relative_offset(&self) -> Point<f32> {
+  /// How far `position: relative` on it and the spans around it moves it on lines of `space`.
+  pub(crate) fn relative_offset(&self, space: LineSpace) -> Point<f32> {
+    let spans = self
+      .chain()
+      .map_or(Point::ZERO, |link| link.relative_offset(space));
+
     match self {
-      Self::Box(item) => item.relative_offset,
-      _ => self
-        .chain()
-        .map_or(Point::ZERO, |link| link.decoration.relative_offset),
+      Self::Box(item) => spans + space.relative_offset(item.render_node),
+      _ => spans,
     }
   }
 }
@@ -273,9 +312,6 @@ pub(crate) struct InlineDecoration<'c> {
   pub(crate) direction: Direction,
   /// The span's sizing, which each fragment resolves its radii against.
   pub(crate) sizing: SizingContext,
-  /// How far `position: relative` moves the span's fragments and content, its ancestors' moves
-  /// included.
-  pub(crate) relative_offset: Point<f32>,
 }
 
 impl InlineDecoration<'_> {
@@ -312,6 +348,14 @@ impl<'c> DecorationLink<'c> {
   pub(crate) fn ancestors(&self) -> impl Iterator<Item = &DecorationLink<'c>> {
     successors(Some(self), |link| link.parent.as_deref())
   }
+
+  /// How far `position: relative` on this span and the spans around it moves its content on
+  /// lines of `space`.
+  pub(crate) fn relative_offset(&self, space: LineSpace) -> Point<f32> {
+    self.ancestors().fold(Point::ZERO, |offset, link| {
+      offset + space.relative_offset(link.decoration.owner)
+    })
+  }
 }
 
 /// A piece of inline content collected from the tree.
@@ -346,9 +390,7 @@ pub enum InlineItem<'c> {
 /// Flatten a render node subtree into its inline items.
 pub fn collect_inline_items<'n>(root: &'n RenderNode) -> Vec<InlineItem<'n>> {
   let mut items = Vec::new();
-  let container = root.context.style.inherited_data.direction;
-
-  collect_inline_items_impl(root, 0, container, None, None, &mut 0, &mut items);
+  collect_inline_items_impl(root, 0, None, None, &mut 0, &mut items);
   items
 }
 
@@ -375,7 +417,6 @@ fn trim_leading_whitespace(item: &mut InlineItem<'_>) {
 fn collect_inline_items_impl<'n>(
   node: &'n RenderNode,
   depth: usize,
-  container: Direction,
   link: Option<&Arc<str>>,
   decorations: Option<&Rc<DecorationLink<'n>>>,
   next_span: &mut usize,
@@ -394,15 +435,14 @@ fn collect_inline_items_impl<'n>(
     .and_then(Node::href)
     .map(Arc::<str>::from);
   let link = anchor.as_ref().or(link);
-  let own_decoration =
-    inline_span_decoration(node, depth, *next_span, decorations, container).map(|decoration| {
-      *next_span += 1;
+  let own_decoration = inline_span_decoration(node, depth, *next_span).map(|decoration| {
+    *next_span += 1;
 
-      Rc::new(DecorationLink {
-        decoration,
-        parent: decorations.cloned(),
-      })
-    });
+    Rc::new(DecorationLink {
+      decoration,
+      parent: decorations.cloned(),
+    })
+  });
   // The margins sit outside the span's own background, on its parent's.
   let outer_decorations = decorations;
   let decorations = own_decoration.as_ref().or(decorations);
@@ -460,15 +500,7 @@ fn collect_inline_items_impl<'n>(
 
   if let Some(children) = &node.children {
     for child in children {
-      collect_inline_items_impl(
-        child,
-        depth + 1,
-        container,
-        link,
-        decorations,
-        next_span,
-        items,
-      );
+      collect_inline_items_impl(child, depth + 1, link, decorations, next_span, items);
     }
   }
 
@@ -524,15 +556,12 @@ fn inline_span_spacing(node: &RenderNode, depth: usize) -> (Rect<f32>, Rect<f32>
   )
 }
 
-/// The inline box an inline span opens with `id` inside `parent` in a container of `container`
-/// direction, or `None` for a node that is not one.
-fn inline_span_decoration<'n>(
-  node: &'n RenderNode,
+/// The inline box an inline span opens with `id`, or `None` for a node that is not one.
+fn inline_span_decoration(
+  node: &RenderNode,
   depth: usize,
   id: usize,
-  parent: Option<&Rc<DecorationLink<'n>>>,
-  container: Direction,
-) -> Option<InlineDecoration<'n>> {
+) -> Option<InlineDecoration<'_>> {
   if !is_inline_span(node, depth) {
     return None;
   }
@@ -575,7 +604,6 @@ fn inline_span_decoration<'n>(
     opacity: style.svg_data.opacity.0,
     direction: style.inherited_data.direction,
     sizing: node.context.sizing.clone(),
-    relative_offset: node.relative_offset_in(parent, container),
   })
 }
 

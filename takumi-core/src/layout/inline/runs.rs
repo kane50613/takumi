@@ -503,7 +503,7 @@ impl<'c> BuiltInlineLayout<'c> {
 impl<'c> BuiltInlineLayout<'c> {
   /// An accumulator for the spans' line fragments, which knows the edges cloning spans repeat.
   pub(super) fn decoration_coverage(&self) -> DecorationAccumulator<'c> {
-    DecorationAccumulator::new(ClonedLines::of(&self.spans, &self.layout))
+    DecorationAccumulator::new(ClonedLines::of(&self.spans, &self.layout), self.line_space)
   }
 
   /// The padding box of each inline span that contains out-of-flow boxes, relative to `layout`'s
