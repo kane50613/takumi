@@ -3,20 +3,22 @@
 //! Blink's `OpenTypeCapsSupport` and `SmallCapsIterator` do.
 //! <https://source.chromium.org/chromium/chromium/src/+/main:third_party/blink/renderer/platform/fonts/opentype/open_type_caps_support.cc>
 //!
-//! Approximate: Blink checks every font that fallback picks, but takumi checks only the primary
-//! font. A feature counts when GSUB lists it under any script, where Blink reads only the run
-//! script's default language system. AAT `morx` caps go undetected.
+//! Each run of the text checks the font fallback picks for it, under its script's default
+//! language system, as Blink's `HarfBuzzShaper` does.
+//! Approximate: neutral characters take the script before them, or after them at the start,
+//! where Blink's `ScriptRunIterator` also pairs brackets; an Indic script never tries its newer
+//! OpenType tags; and AAT `morx` caps go undetected.
 
 use std::{borrow::Cow, ops::Range};
 
 use parley::LineHeight;
 
 use icu_properties::{
-  CodePointMapData, CodePointSetData,
-  props::{CanonicalCombiningClass, ChangesWhenUppercased},
+  CodePointMapData, CodePointSetData, PropertyNamesShort,
+  props::{CanonicalCombiningClass, ChangesWhenUppercased, Script},
 };
 use skrifa::{
-  FontRef,
+  FontRef, MetadataProvider,
   raw::{TableProvider, tables::layout::FeatureRecord, types::Tag},
 };
 use smallvec::{SmallVec, smallvec};
@@ -88,25 +90,88 @@ pub(super) struct CapsSupport {
 }
 
 impl CapsSupport {
-  /// The caps `style` asks for, as its primary font can render them.
-  pub(super) fn of(style: &SizedFontStyle, context: &RenderContext) -> Self {
+  /// Splits `text` into the runs it shapes as, each case-mapped and under its own copy of `style`:
+  /// first where the caps the font renders change, then where the case changes inside a run that
+  /// synthesizes them.
+  pub(super) fn styled_runs<'s>(
+    text: Cow<'_, str>,
+    style: SizedFontStyle<'s>,
+    context: &RenderContext,
+  ) -> SmallVec<[(String, SizedFontStyle<'s>); 1]> {
+    if style.parent.inherited_data.font_variant_caps == FontVariantCaps::Normal {
+      return smallvec![(text.into_owned(), style)];
+    }
+
+    let segments = Self::segments(&text, &style, context);
+
+    if let [(_, support)] = segments.as_slice()
+      && !support.splits_runs()
+    {
+      return smallvec![(
+        text.into_owned(),
+        style.for_caps_run(support.run(CaseClass::SameCase))
+      )];
+    }
+
+    let mut runs = SmallVec::new();
+
+    for (segment, support) in segments {
+      let case_runs = if support.splits_runs() {
+        case_runs(&text, segment)
+      } else {
+        smallvec![(segment, CaseClass::SameCase)]
+      };
+
+      for (range, class) in case_runs {
+        let run = support.run(class);
+        let mut run_style = style.clone().for_caps_run(run);
+
+        run_style.case_run_parity = Some(runs.len() % 2 == 1);
+        runs.push((run.case_map.apply(&text[range]).into_owned(), run_style));
+      }
+    }
+
+    runs
+  }
+
+  /// Splits `text` where the font fallback picks or the script changes the caps `style` gets.
+  fn segments(
+    text: &str,
+    style: &SizedFontStyle,
+    context: &RenderContext,
+  ) -> SmallVec<[(Range<usize>, Self); 2]> {
     let inherited = &style.parent.inherited_data;
     let requested = inherited.font_variant_caps;
     let synthesis_allowed = inherited.font_synthesis_small_caps.is_allowed();
+    let blobs = context.fallback_fonts(
+      style.font_family.query_families(),
+      style.parent.font_attributes(),
+    );
+    let fonts: SmallVec<[FontRef; 4]> = blobs
+      .iter()
+      .filter_map(|(blob, index)| FontRef::from_index(blob.data(), *index).ok())
+      .collect();
+    let font_caps: SmallVec<[FontCaps; 4]> = fonts.iter().map(FontCaps::of).collect();
+    let supports = FontRun::split(text, &fonts).into_iter().map(|run| {
+      let caps = font_caps.get(run.font);
 
-    if requested == FontVariantCaps::Normal {
-      return Self::new(requested, synthesis_allowed, |_| true);
+      (
+        run.range,
+        Self::new(requested, synthesis_allowed, |feature| {
+          caps.is_some_and(|caps| caps.supports(run.script, feature))
+        }),
+      )
+    });
+    let mut segments: SmallVec<[(Range<usize>, Self); 2]> = SmallVec::new();
+
+    for (range, support) in supports {
+      match segments.last_mut() {
+        Some((last, last_support)) if *last_support == support => last.end = range.end,
+        _ => segments.push((range, support)),
+      }
     }
 
-    let features = context
-      .with_primary_font(
-        style.font_family.query_families(),
-        style.parent.font_attributes(),
-        gsub_feature_tags,
-      )
-      .unwrap_or_default();
-
-    Self::new(requested, synthesis_allowed, |tag| features.contains(&tag))
+    segments
   }
 
   /// Blink's `DetermineFontSupport`.
@@ -155,32 +220,6 @@ impl CapsSupport {
       synthesis,
       synthesis_allowed,
     }
-  }
-
-  /// Splits `text` into the runs it shapes as, each case-mapped and under its own copy of `style`.
-  pub(super) fn styled_runs<'s>(
-    self,
-    text: Cow<'_, str>,
-    style: SizedFontStyle<'s>,
-  ) -> SmallVec<[(String, SizedFontStyle<'s>); 1]> {
-    if !self.splits_runs() {
-      return smallvec![(
-        text.into_owned(),
-        style.for_caps_run(self.run(CaseClass::SameCase))
-      )];
-    }
-
-    case_runs(&text)
-      .into_iter()
-      .enumerate()
-      .map(|(index, (range, class))| {
-        let run = self.run(class);
-        let mut run_style = style.clone().for_caps_run(run);
-
-        run_style.case_run_parity = Some(index % 2 == 1);
-        (run.case_map.apply(&text[range]).into_owned(), run_style)
-      })
-      .collect()
   }
 
   /// Blink's `NeedsRunCaseSplitting`: titling caps are never synthesized.
@@ -266,29 +305,152 @@ impl SizedFontStyle<'_> {
   }
 }
 
-/// The feature tags the font's GSUB lists.
-fn gsub_feature_tags(font: &FontRef) -> SmallVec<[Tag; 32]> {
-  font
-    .gsub()
-    .and_then(|gsub| gsub.feature_list())
-    .map(|list| {
-      list
-        .feature_records()
-        .iter()
-        .map(FeatureRecord::feature_tag)
-        .collect()
-    })
-    .unwrap_or_default()
+/// The features each script of a font's GSUB lists under its default language system.
+#[derive(Default)]
+struct FontCaps {
+  scripts: SmallVec<[(Tag, SmallVec<[Tag; 16]>); 4]>,
 }
 
-/// Splits `text` where its letters switch between needing uppercasing and not, as Blink's
+impl FontCaps {
+  fn of(font: &FontRef) -> Self {
+    let Ok(gsub) = font.gsub() else {
+      return Self::default();
+    };
+    let (Ok(script_list), Ok(feature_list)) = (gsub.script_list(), gsub.feature_list()) else {
+      return Self::default();
+    };
+    let features = feature_list.feature_records();
+    let scripts = script_list
+      .script_records()
+      .iter()
+      .map(|record| {
+        let tags = record
+          .script(script_list.offset_data())
+          .ok()
+          .and_then(|script| script.default_lang_sys()?.ok())
+          .map(|lang_sys| {
+            lang_sys
+              .feature_indices()
+              .iter()
+              .filter_map(|index| features.get(usize::from(index.get())))
+              .map(FeatureRecord::feature_tag)
+              .collect()
+          })
+          .unwrap_or_default();
+
+        (record.script_tag(), tags)
+      })
+      .collect();
+
+    Self { scripts }
+  }
+
+  /// Whether the font has `feature` for text in `script`, under the script HarfBuzz's
+  /// `hb_ot_layout_table_select_script` falls back to, `None` taking the default script.
+  fn supports(&self, script: Option<Tag>, feature: Tag) -> bool {
+    script
+      .into_iter()
+      .chain([Tag::new(b"DFLT"), Tag::new(b"dflt"), Tag::new(b"latn")])
+      .find_map(|tag| self.scripts.iter().find(|(script, _)| *script == tag))
+      .is_some_and(|(_, features)| features.contains(&feature))
+  }
+}
+
+/// A stretch of text one font draws in one script.
+struct FontRun {
+  range: Range<usize>,
+  /// Its font, among the fonts text falls back through.
+  font: usize,
+  /// Its OpenType script, `None` while only neutral characters fill it.
+  script: Option<Tag>,
+}
+
+impl FontRun {
+  /// Splits `text` where the font among `fonts` fallback picks or the OpenType script changes. A
+  /// combining mark stays with the character before it, and a neutral character takes the script
+  /// before it, or the one after it at the start.
+  fn split(text: &str, fonts: &[FontRef]) -> SmallVec<[Self; 2]> {
+    let combining_class = CodePointMapData::<CanonicalCombiningClass>::new();
+    let scripts = CodePointMapData::<Script>::new();
+    let charmaps: SmallVec<[_; 4]> = fonts.iter().map(MetadataProvider::charmap).collect();
+    let mut runs: SmallVec<[Self; 2]> = SmallVec::new();
+
+    for (index, ch) in text.char_indices() {
+      if combining_class.get(ch) != CanonicalCombiningClass::NotReordered {
+        continue;
+      }
+
+      let font = charmaps
+        .iter()
+        .position(|charmap| charmap.map(ch).is_some())
+        .unwrap_or(0);
+      let script = ot_script_tag(scripts.get(ch));
+
+      let Some(last) = runs.last_mut() else {
+        runs.push(Self {
+          range: 0..text.len(),
+          font,
+          script,
+        });
+        continue;
+      };
+
+      if last.font == font && (script.is_none() || last.script == script) {
+        continue;
+      }
+
+      if last.font == font && last.script.is_none() {
+        last.script = script;
+        continue;
+      }
+
+      last.range.end = index;
+      runs.push(Self {
+        range: index..text.len(),
+        font,
+        script,
+      });
+    }
+
+    runs
+  }
+}
+
+/// The OpenType script tag for `script`, `None` for a neutral one.
+fn ot_script_tag(script: Script) -> Option<Tag> {
+  if matches!(script, Script::Common | Script::Inherited | Script::Unknown) {
+    return None;
+  }
+
+  let code = PropertyNamesShort::<Script>::new().get(script)?;
+  let tag = match code {
+    "Hira" | "Kana" => *b"kana",
+    "Laoo" => *b"lao ",
+    "Nkoo" => *b"nko ",
+    "Vaii" => *b"vai ",
+    "Yiii" => *b"yi  ",
+    _ => {
+      let mut tag = [0; 4];
+
+      tag.copy_from_slice(code.as_bytes().get(..4)?);
+      tag.make_ascii_lowercase();
+      tag
+    }
+  };
+
+  Some(Tag::new(&tag))
+}
+
+/// Splits `span` of `text` where its letters switch between needing uppercasing and not, as Blink's
 /// `SmallCapsIterator`. A combining mark stays with the letter before it.
-fn case_runs(text: &str) -> SmallVec<[(Range<usize>, CaseClass); 4]> {
+fn case_runs(text: &str, span: Range<usize>) -> SmallVec<[(Range<usize>, CaseClass); 4]> {
   let combining_class = CodePointMapData::<CanonicalCombiningClass>::new();
   let changes_when_uppercased = CodePointSetData::new::<ChangesWhenUppercased>();
   let mut runs: SmallVec<[(Range<usize>, CaseClass); 4]> = SmallVec::new();
 
-  for (index, ch) in text.char_indices() {
+  for (index, ch) in text[span.clone()].char_indices() {
+    let index = span.start + index;
+
     if combining_class.get(ch) != CanonicalCombiningClass::NotReordered {
       continue;
     }
@@ -303,14 +465,14 @@ fn case_runs(text: &str) -> SmallVec<[(Range<usize>, CaseClass); 4]> {
       Some((_, last)) if *last == class => {}
       Some((range, _)) => {
         range.end = index;
-        runs.push((index..text.len(), class));
+        runs.push((index..span.end, class));
       }
-      None => runs.push((0..text.len(), class)),
+      None => runs.push((span.clone(), class)),
     }
   }
 
   if runs.is_empty() {
-    runs.push((0..text.len(), CaseClass::SameCase));
+    runs.push((span, CaseClass::SameCase));
   }
 
   runs
@@ -327,7 +489,7 @@ mod tests {
   }
 
   fn runs(text: &str) -> Vec<(&str, CaseClass)> {
-    case_runs(text)
+    case_runs(text, 0..text.len())
       .into_iter()
       .map(|(range, class)| (&text[range], class))
       .collect()

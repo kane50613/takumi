@@ -848,6 +848,22 @@ impl RenderContext {
     result
   }
 
+  /// The fonts `families`/`attributes` match, in the order text falls back through them.
+  pub(crate) fn fallback_fonts<'a>(
+    &self,
+    families: impl IntoIterator<Item = QueryFamily<'a>>,
+    attributes: Attributes,
+  ) -> Vec<(Blob<u8>, u32)> {
+    let mut fonts = Vec::new();
+
+    self.match_fonts(families, attributes, |font, _| {
+      fonts.push((font.blob.clone(), font.index));
+      QueryStatus::Continue
+    });
+
+    fonts
+  }
+
   /// Visits the fonts `families`/`attributes` match, in the order text falls back through them,
   /// with whether each one's `unicode-range` leaves out the space, until `visit` stops.
   fn match_fonts<'a>(
