@@ -61,7 +61,8 @@ fn is_selected(path: &Path, only: Option<&str>) -> bool {
   only.is_none_or(|only| {
     only
       .split(',')
-      .any(|fragment| name.contains(fragment.trim()))
+      .map(str::trim)
+      .any(|fragment| !fragment.is_empty() && name.contains(fragment))
   })
 }
 
