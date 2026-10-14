@@ -13,15 +13,14 @@ use crate::{
   layout::{
     decoration::OutlineGeometry,
     inline::{
-      InkBox, InlineContentKind, InlineLayoutMode, InlineLayoutRequest, PlacedItem,
-      ProcessedInlineSpan, ShapedRun, collect_inline_items, create_inline_layout, glyph_run_rect,
-      resolve_inline_max_height,
+      InkBox, InlineLayoutMode, InlineLayoutRequest, PlacedItem, ProcessedInlineSpan, ShapedRun,
+      collect_inline_items, create_inline_layout, glyph_run_rect, resolve_inline_max_height,
     },
-    node::Node,
     tree::{ContainingBlocks, LayoutResults, RenderNode},
   },
   paint_chunk::PaintChunk,
   paint_property::{ContainerContents, NodeProperties, PropertyState, PropertyTrees},
+  painter::OwnContent,
   resources::font::{RunFace, run_normalized_coords},
   shadow::SizedShadow,
   sort_key::sort_by_key,
@@ -1087,17 +1086,7 @@ fn compute_node_paint_bounds(
 }
 
 fn has_inline_paint_content(node: &RenderNode) -> bool {
-  node.should_create_inline_layout()
-    || node.anonymous_text_content.is_some()
-    || matches!(
-      node.node.as_ref().and_then(Node::inline_content),
-      Some(InlineContentKind::Text(_))
-    )
-    || node.children.as_ref().is_some_and(|children| {
-      children
-        .iter()
-        .any(|child| child.anonymous_text_content.is_some())
-    })
+  matches!(OwnContent::of(node), OwnContent::Inline(_))
 }
 
 /// [`SceneBounds::of_rect`] for a rect at `origin` in `transform`'s space.
