@@ -40,7 +40,6 @@
     "tailwind-merge": "^3.6.0",
     "tailwindcss": "^4.3.3",
     "takumi-js": "workspace:*",
-    "three": "^0.186.1",
     "twoslash": "^0.3.9",
     "waku": "1.0.0-rc.0",
     "zod": "^4.5.4"
@@ -55,7 +54,6 @@
     "@types/node": "catalog:",
     "@types/react": "^19.2.18",
     "@types/react-dom": "^19.2.7",
-    "@types/three": "^0.186.0",
     "csstype": "^3.2.3",
     "portless": "^0.15.6",
     "prettier": "^3.9.6",

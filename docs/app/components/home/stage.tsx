@@ -113,9 +113,7 @@ export function Stage() {
         data-stage-view
         className="sticky top-14 flex h-[calc(100svh-3.5rem)] w-full flex-col justify-between overflow-hidden"
       >
-        <StageController
-          data={{ image: CARD.image, width: CARD.width, height: CARD.height, boxes }}
-        />
+        <StageController />
 
         {/* Hollow backdrop word for the current strike, rising out of its mask and widening with scroll */}
         <div
@@ -171,7 +169,7 @@ export function Stage() {
             aria-label="Takumi's orange-red hammer suspended over an anvil where a component splits into layout boxes, glyph outlines, and paint layers."
             viewBox="200 -40 1440 940"
             preserveAspectRatio="xMidYMid meet"
-            className="size-full overflow-visible text-foreground"
+            className="size-full overflow-visible text-[var(--wire)]"
           >
             <defs>
               <linearGradient
@@ -217,7 +215,7 @@ export function Stage() {
             </g>
 
             {/* The Component on the Anvil (1200×630 scaled by 0.516 -> 619×325 at x=610..1229, y=323..648) */}
-            <g data-card-bounds transform="translate(610, 323) scale(0.516)">
+            <g transform="translate(610, 323) scale(0.516)">
               {/* 0. Intact component before the first strike */}
               <g
                 data-anvil-card
@@ -241,7 +239,7 @@ export function Stage() {
                   rx="16"
                   fill="none"
                   stroke="currentColor"
-                  strokeOpacity="0.5"
+                  strokeOpacity="0.4"
                   strokeWidth="2"
                   strokeDasharray="10 8"
                 />
@@ -269,7 +267,7 @@ export function Stage() {
                         rx={box.depth <= 2 ? 18 : 6}
                         fill="none"
                         stroke="currentColor"
-                        strokeOpacity={isAccent ? 0.9 : 0.45}
+                        strokeOpacity={isAccent ? 0.75 : 0.3}
                         strokeWidth={isAccent ? 3 : 2}
                       />
                       {showLabel && (
@@ -314,7 +312,7 @@ export function Stage() {
                       rx="8"
                       fill="none"
                       stroke="currentColor"
-                      strokeOpacity="0.35"
+                      strokeOpacity="0.25"
                       strokeWidth="2"
                     />
                     <line
@@ -329,9 +327,7 @@ export function Stage() {
                     <path
                       d={run.outline}
                       transform={`translate(${run.x}, ${run.y})`}
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="1.5"
+                      fill="currentColor"
                     />
                     <text
                       x={run.x}
@@ -371,7 +367,7 @@ export function Stage() {
                         rx="22"
                         fill="none"
                         stroke="currentColor"
-                        strokeOpacity="0.5"
+                        strokeOpacity="0.4"
                         strokeWidth="2"
                       />
                       <g filter="url(#forge-mute)" opacity="0.7">

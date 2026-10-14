@@ -6,15 +6,7 @@ import DemoCard, {
   width,
 } from "../../../../example/twitter-images/components/home-demo-card";
 
-export const CARD = {
-  width,
-  height,
-  image: "/images/twitter-images/home-demo-card@2x.webp",
-  png: "/images/twitter-images/home-demo-card.png",
-  svg: "/images/twitter-images/home-demo-card.svg",
-  motion: "/images/twitter-images/home-demo-card-motion.webp",
-  headline: "One component, every output.",
-};
+export const CARD = { width, height };
 
 const tree = await paint(<DemoCard />, { width, height });
 

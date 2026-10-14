@@ -33,6 +33,7 @@ const HOME_THEME_CSS = `
   --muted: #efe7dc;
   --muted-foreground: #5c5046;
   --anvil: #2a211b;
+  --wire: #1d4ed8;
   --border: rgba(24, 19, 15, 0.12);
   --ring: rgba(201, 45, 20, 0.35);
   --color-fd-background: var(--background);
@@ -51,6 +52,7 @@ const HOME_THEME_CSS = `
   --muted: #211a15;
   --muted-foreground: #b8aa9b;
   --anvil: #4a3d33;
+  --wire: #5b8def;
   --border: rgba(247, 240, 230, 0.12);
   --ring: rgba(255, 85, 43, 0.4);
   --color-fd-background: var(--background);
