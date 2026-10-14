@@ -2,11 +2,10 @@ import { cn } from "~/lib/utils";
 import { scene } from "./card";
 import { Gallery } from "./gallery";
 import { PaintBench } from "./paint-bench";
-import { GUTTER, H2, H3, VALUE } from "./typography";
+import { BODY, GUTTER, H2, H3, VALUE } from "./typography";
 
 const OUTPUT = "/images/twitter-images";
-const THUMBNAIL = "/images/home";
-const PANEL = "grid w-full max-w-[76rem] items-center gap-x-12 gap-y-6 lg:grid-cols-[15rem_1fr]";
+const PANEL = "grid w-full max-w-[76rem] items-center gap-x-12 gap-y-6 lg:grid-cols-[19rem_1fr]";
 
 /** The outputs the anvil strike forges, wiped in one by one, then its draw steps replayed. */
 export function Outputs() {
@@ -18,11 +17,15 @@ export function Outputs() {
 
       <Gallery>
         <section aria-label="Images" className={PANEL}>
-          <PanelTitle title="Images" formats="PNG · WebP · JPEG" />
+          <PanelTitle
+            title="Images"
+            line="Open Graph cards, blog covers, and quote cards at any size."
+            formats={["PNG", "WebP", "JPEG"]}
+          />
           <div className="relative pb-12">
             <OutputImage
               href={`${OUTPUT}/home-usecase-blog-cover.png`}
-              src={`${THUMBNAIL}/home-usecase-blog-cover.webp`}
+              src={`${OUTPUT}/home-usecase-blog-cover@2x.webp`}
               alt="Blog cover with a lighthouse at night rendered as PNG"
               width={1037}
               height={544}
@@ -30,7 +33,7 @@ export function Outputs() {
             />
             <OutputImage
               href={`${OUTPUT}/home-usecase-quote-card.webp`}
-              src={`${THUMBNAIL}/home-usecase-quote-card.webp`}
+              src={`${OUTPUT}/home-usecase-quote-card.svg`}
               alt="Square quote card rendered as WebP"
               width={544}
               height={544}
@@ -40,7 +43,11 @@ export function Outputs() {
         </section>
 
         <section aria-label="Animations" className={PANEL}>
-          <PanelTitle title="Animations" formats="Animated WebP · APNG · GIF" />
+          <PanelTitle
+            title="Animations"
+            line="CSS keyframes, played frame by frame into one file."
+            formats={["Animated WebP", "APNG", "GIF"]}
+          />
           <OutputImage
             href={`${OUTPUT}/home-usecase-now-playing.webp`}
             src={`${OUTPUT}/home-usecase-now-playing.webp`}
@@ -51,7 +58,10 @@ export function Outputs() {
         </section>
 
         <section aria-label="SVG" className={PANEL}>
-          <PanelTitle title="SVG" />
+          <PanelTitle
+            title="SVG"
+            line="Vector banners and README art that stay sharp at any scale."
+          />
           <OutputImage
             href={`${OUTPUT}/home-usecase-repo-banner.svg`}
             src={`${OUTPUT}/home-usecase-repo-banner.svg`}
@@ -62,11 +72,14 @@ export function Outputs() {
         </section>
 
         <section aria-label="PDF" className={PANEL}>
-          <PanelTitle title="PDF" />
+          <PanelTitle
+            title="PDF"
+            line="Invoices, tickets, and certificates as paged PDFs with selectable text."
+          />
           <div className="flex items-start gap-5">
             <OutputImage
               href={`${OUTPUT}/home-usecase-invoice.pdf`}
-              src={`${THUMBNAIL}/home-usecase-invoice.webp`}
+              src={`${OUTPUT}/home-usecase-invoice.svg`}
               alt="A4 invoice PDF for Hollow Oak Studio with selectable text"
               width={385}
               height={544}
@@ -75,14 +88,14 @@ export function Outputs() {
             <div className="flex flex-1 flex-col gap-5 pt-6">
               <OutputImage
                 href={`${OUTPUT}/home-usecase-ticket.pdf`}
-                src={`${THUMBNAIL}/home-usecase-ticket.webp`}
+                src={`${OUTPUT}/home-usecase-ticket.svg`}
                 alt="HARBOR/26 Lisbon conference pass PDF with barcode stub"
                 width={1322}
                 height={544}
               />
               <OutputImage
                 href={`${OUTPUT}/home-usecase-certificate.pdf`}
-                src={`${THUMBNAIL}/home-usecase-certificate.webp`}
+                src={`${OUTPUT}/home-usecase-certificate.svg`}
                 alt="Course completion certificate PDF with seal"
                 width={770}
                 height={544}
@@ -96,18 +109,38 @@ export function Outputs() {
         aria-label="Paint"
         className={cn("mx-auto max-w-[64rem] space-y-6 pt-[8svh]", GUTTER)}
       >
-        <h3 className={H3}>Paint</h3>
+        <PanelTitle
+          title="Paint"
+          line="The draw steps behind the card above, replayed in paint order."
+        />
         <PaintBench scene={scene} />
       </section>
     </section>
   );
 }
 
-function PanelTitle({ title, formats }: { title: string; formats?: string }) {
+function PanelTitle({
+  title,
+  line,
+  formats = [],
+}: {
+  title: string;
+  line: string;
+  formats?: string[];
+}) {
   return (
-    <div className="space-y-2">
+    <div className="space-y-3">
       <h3 className={H3}>{title}</h3>
-      {formats && <span className={VALUE}>{formats}</span>}
+      <p className={BODY}>{line}</p>
+      {formats.length > 0 && (
+        <ul className={cn(VALUE, "flex flex-wrap gap-x-4 gap-y-1")}>
+          {formats.map((format) => (
+            <li key={format} className="whitespace-nowrap">
+              {format}
+            </li>
+          ))}
+        </ul>
+      )}
     </div>
   );
 }
@@ -134,7 +167,7 @@ function OutputImage({
       target="_blank"
       rel="noopener"
       className={cn(
-        "block overflow-hidden rounded-lg border border-foreground/12 transition-[border-color,transform] duration-150 ease-out-strong hover:border-foreground/30 active:scale-[0.99]",
+        "block overflow-hidden rounded-lg border border-foreground/12 bg-background transition-[border-color,transform] duration-150 ease-out-strong hover:border-foreground/30 active:scale-[0.99]",
         className,
       )}
     >

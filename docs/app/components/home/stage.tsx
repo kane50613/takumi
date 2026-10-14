@@ -458,7 +458,7 @@ export function Stage() {
             GUTTER,
           )}
         >
-          <nav aria-label="Forge stages" className="flex flex-wrap items-center gap-2 sm:gap-3">
+          <nav aria-label="Forge stages" className="flex flex-wrap items-center gap-x-6 gap-y-2">
             {STAGES.map((item, index) => (
               <button
                 key={item.key}
@@ -466,9 +466,16 @@ export function Stage() {
                 data-step-button
                 data-step-index={index}
                 aria-current={index === 0 ? "step" : undefined}
-                className="raised raised-quiet cursor-pointer rounded-lg bg-background px-3.5 py-1.5 font-label text-base font-medium text-muted-foreground transition-[color,background-color,box-shadow,transform] duration-150 ease-out-strong [font-stretch:87.5%] hover:text-foreground active:scale-[0.97] aria-[current=step]:bg-muted aria-[current=step]:text-foreground sm:px-4 sm:py-2"
+                className="group relative cursor-pointer py-2 font-label text-base text-muted-foreground transition-colors duration-150 ease-out-strong [font-stretch:87.5%] hover:text-foreground aria-[current=step]:text-foreground"
               >
+                <span className="mr-2 tabular-nums opacity-50 transition-[color,opacity] duration-150 group-aria-[current=step]:text-primary group-aria-[current=step]:opacity-100">
+                  {String(index + 1).padStart(2, "0")}
+                </span>
                 {item.stepLabel}
+                <span
+                  aria-hidden
+                  className="absolute inset-x-0 bottom-0 h-0.5 origin-left scale-x-0 rounded-full bg-primary transition-transform duration-300 ease-out-strong group-aria-[current=step]:scale-x-100"
+                />
               </button>
             ))}
           </nav>

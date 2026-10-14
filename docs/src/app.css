@@ -152,42 +152,19 @@
   --ease-out-strong: cubic-bezier(0.23, 1, 0.32, 1);
 }
 
-/* A pressable button lit from above: a top highlight, a hairline edge, and a lip below that the
-   press sinks into. Set through --tw-shadow so focus rings still draw on top. */
+/* A pressable primary button lit from above: a top highlight, a darker edge, and a lip below that
+   the press sinks into. Set through --tw-shadow so focus rings still draw on top. */
 @utility raised {
   --tw-shadow:
-    0 0 0 1px var(--raised-ring), inset 0 1px 0 var(--raised-highlight),
-    inset 0 -2px 0 var(--raised-lip), 0 1px 2px var(--raised-drop);
+    0 0 0 1px color-mix(in oklab, var(--primary), black 25%), inset 0 1px 0 rgb(255 255 255 / 28%),
+    inset 0 -2px 0 rgb(0 0 0 / 22%), 0 1px 2px rgb(80 20 0 / 30%);
   box-shadow:
     var(--tw-inset-shadow, 0 0 #0000), var(--tw-inset-ring-shadow, 0 0 #0000),
     var(--tw-ring-offset-shadow, 0 0 #0000), var(--tw-ring-shadow, 0 0 #0000), var(--tw-shadow);
 
-  &:active,
-  &[aria-current="step"] {
-    --tw-shadow: 0 0 0 1px var(--raised-ring), inset 0 2px 3px var(--raised-press);
-  }
-}
-
-@utility raised-primary {
-  --raised-ring: color-mix(in oklab, var(--primary), black 25%);
-  --raised-highlight: rgb(255 255 255 / 28%);
-  --raised-lip: rgb(0 0 0 / 22%);
-  --raised-drop: rgb(80 20 0 / 30%);
-  --raised-press: rgb(0 0 0 / 35%);
-}
-
-@utility raised-quiet {
-  --raised-ring: var(--border);
-  --raised-highlight: rgb(255 255 255 / 90%);
-  --raised-lip: rgb(24 19 15 / 8%);
-  --raised-drop: rgb(24 19 15 / 8%);
-  --raised-press: rgb(24 19 15 / 14%);
-
-  @variant dark {
-    --raised-highlight: rgb(255 255 255 / 8%);
-    --raised-lip: rgb(0 0 0 / 35%);
-    --raised-drop: rgb(0 0 0 / 30%);
-    --raised-press: rgb(0 0 0 / 45%);
+  &:active {
+    --tw-shadow:
+      0 0 0 1px color-mix(in oklab, var(--primary), black 25%), inset 0 2px 3px rgb(0 0 0 / 35%);
   }
 }
 
