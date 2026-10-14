@@ -8,7 +8,9 @@ export const title = "Certificate of Completion, Lin Wei-Ting";
 export const width = 1123;
 export const height = 794;
 
-export const previewRatio = 1.5;
+export const outputs = [] as const;
+
+export const svg = true;
 
 export const googleFonts: GoogleFontFamily[] = [
   { name: "Cormorant Garamond", weight: [500, 600] },

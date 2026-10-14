@@ -8,7 +8,9 @@ export const title = "Harbor/26 conference pass";
 export const width = 816;
 export const height = 336;
 
-export const previewRatio = 2;
+export const outputs = [] as const;
+
+export const svg = true;
 
 export const googleFonts: GoogleFontFamily[] = [
   { name: "Big Shoulders Display", weight: 800 },

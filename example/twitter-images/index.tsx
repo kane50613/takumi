@@ -21,6 +21,9 @@ import * as UsecaseBlogCover from "./components/home-usecase-blog-cover";
 import * as UsecaseChatDigest from "./components/home-usecase-chat-digest";
 import * as UsecaseQuoteCard from "./components/home-usecase-quote-card";
 import * as UsecaseRepoBanner from "./components/home-usecase-repo-banner";
+import * as UsecaseTicket from "./components/home-usecase-ticket";
+import * as UsecaseInvoice from "./components/home-usecase-invoice";
+import * as UsecaseCertificate from "./components/home-usecase-certificate";
 
 const components = [
   TextFit,
@@ -40,6 +43,9 @@ const components = [
   UsecaseChatDigest,
   UsecaseQuoteCard,
   UsecaseRepoBanner,
+  UsecaseTicket,
+  UsecaseInvoice,
+  UsecaseCertificate,
 ];
 
 type Component = (typeof components)[number];

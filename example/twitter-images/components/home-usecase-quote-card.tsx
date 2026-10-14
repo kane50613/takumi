@@ -7,6 +7,8 @@ export const height = 1080;
 
 export const outputs = [{ ratio: 1, format: "webp" }] as const;
 
+export const svg = true;
+
 export const googleFonts: GoogleFontFamily[] = [
   { name: "Noto Serif TC", weight: [500, 900] },
   { name: "Noto Serif JP", weight: 500 },

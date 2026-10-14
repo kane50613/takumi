@@ -5,7 +5,10 @@ export const name = "home-usecase-blog-cover";
 export const width = 1200;
 export const height = 630;
 
-export const outputs = [{ ratio: 1, format: "png" }] as const;
+export const outputs = [
+  { ratio: 1, format: "png" },
+  { ratio: 2, format: "webp" },
+] as const;
 
 export const googleFonts: GoogleFontFamily[] = [
   { name: "Fraunces", weight: 600 },

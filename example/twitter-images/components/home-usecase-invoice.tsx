@@ -8,7 +8,9 @@ export const title = "Invoice HOS-2026-031";
 export const width = 794;
 export const height = 1123;
 
-export const previewRatio = 1.5;
+export const outputs = [] as const;
+
+export const svg = true;
 
 export const googleFonts: GoogleFontFamily[] = [
   { name: "Newsreader", weight: 500 },
