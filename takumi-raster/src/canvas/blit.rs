@@ -669,7 +669,7 @@ mod tests {
 
   use super::*;
   use crate::{
-    BorderProperties, Canvas, PaintSource, Result, pixmap_from_buffer,
+    BorderProperties, Canvas, PaintSource, PlacedMask, Result, pixmap_from_buffer,
     resources::image_buffer::ImageBuffer, style::ImageScalingAlgorithm,
   };
 
@@ -942,7 +942,7 @@ mod tests {
 
     let mut parent_mask = TinyMask::new(10, 10).unwrap();
     parent_mask.data_mut()[0..50].fill(255);
-    canvas.push_mask(parent_mask);
+    canvas.push_mask(PlacedMask::covering(canvas.viewport(), parent_mask));
 
     let image_data = [0u8, 255, 0, 255].repeat(16);
     let image_pixmap = PixmapRef::from_bytes(&image_data, 4, 4).unwrap();

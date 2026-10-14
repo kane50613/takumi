@@ -164,16 +164,48 @@ impl NodeMasks {
   }
 }
 
-/// The region `clip` keeps, as a viewport mask.
-pub(crate) fn clip_node_mask(clip: &ClipNode, viewport: CanvasViewport) -> Option<TinyMask> {
-  let (mask, placement) = render_mask(
-    &clip.shape.to_commands(),
-    Some(clip.transform),
-    Some(Fill::from(clip.shape.rule()).into()),
-    Some(viewport),
-  );
+/// A mask over part of the canvas: `mask`'s pixels from `origin`, in the coordinates of the
+/// viewport origin. Everything outside it is masked out.
+pub(crate) struct PlacedMask {
+  pub(crate) mask: TinyMask,
+  pub(crate) origin: Point<u32>,
+}
 
-  viewport_mask(viewport, mask.into(), placement)
+impl PlacedMask {
+  /// `mask` over the whole of `viewport`.
+  pub(crate) fn covering(viewport: CanvasViewport, mask: TinyMask) -> Self {
+    Self {
+      mask,
+      origin: viewport.origin,
+    }
+  }
+
+  /// The region `clip` keeps, over the pixels it covers alone, or `None` for an empty viewport.
+  pub(crate) fn of_clip(clip: &ClipNode, viewport: CanvasViewport) -> Option<Self> {
+    IntSize::from_wh(viewport.size.width, viewport.size.height)?;
+
+    let (mask, placement) = render_mask(
+      &clip.shape.to_commands(),
+      Some(clip.transform),
+      Some(Fill::from(clip.shape.rule()).into()),
+      Some(viewport),
+    );
+    // The mask is culled to the viewport, so its placement starts inside it.
+    let covered = IntSize::from_wh(placement.width, placement.height)
+      .and_then(|size| TinyMask::from_vec(mask, size));
+
+    Some(match covered {
+      Some(mask) => Self {
+        mask,
+        origin: Point {
+          x: placement.left as u32,
+          y: placement.top as u32,
+        },
+      },
+      // A clip that covers no pixel masks out everything.
+      None => Self::covering(viewport, TinyMask::new(1, 1)?),
+    })
+  }
 }
 
 /// The `clip-path` shape as a viewport mask over the box and its descendants.
