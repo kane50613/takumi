@@ -23,8 +23,18 @@ function depthDistance(element: HTMLElement | SVGElement, base: number) {
   return base * Number(element.dataset.depth ?? 1);
 }
 
+/** How much of a strike's spread the intact card takes to fade out, and its parts to fade in. */
+const CARD_HANDOFF = 0.2;
+const PARTS_HANDOFF = 0.35;
+
+function partsOpacity(spread: number) {
+  return Math.min(1, spread / PARTS_HANDOFF).toFixed(3);
+}
+
 /** Card-space gap between stacked paint planes, and how flat the isometric view squashes them. */
 const PLANE_GAP = 105;
+/** How much later in the spread each paint plane appears than the one below it. */
+const PLANE_STAGGER = 0.1;
 const ISO_SQUASH = 0.55;
 
 /** The paint planes' view at `spread`, from flat to isometric, orbiting `10° × drift` off -45°. */
@@ -157,7 +167,7 @@ export function StageController() {
         impactBurst.style.transform = `scale(${(0.72 + impulse * 0.62).toFixed(3)})`;
       }
 
-      const intactOpacity = Math.max(0, 1 - Math.max(lSpread, tSpread, pSpread));
+      const intactOpacity = Math.max(0, 1 - Math.max(lSpread, tSpread, pSpread) / CARD_HANDOFF);
 
       if (anvilCard) {
         anvilCard.style.opacity = intactOpacity.toFixed(3);
@@ -167,7 +177,7 @@ export function StageController() {
       }
 
       if (layoutLayer) {
-        layoutLayer.style.opacity = lSpread.toFixed(3);
+        layoutLayer.style.opacity = partsOpacity(lSpread);
         layoutLayer.style.visibility = lSpread > 0.01 ? "visible" : "hidden";
       }
       const layoutDrift = reduceMotion ? 0 : -stepDrift(p, 1);
@@ -183,7 +193,7 @@ export function StageController() {
       }
 
       if (textLayer) {
-        textLayer.style.opacity = tSpread.toFixed(3);
+        textLayer.style.opacity = partsOpacity(tSpread);
         textLayer.style.visibility = tSpread > 0.01 ? "visible" : "hidden";
       }
       const textDrift = reduceMotion ? 0 : -stepDrift(p, 2);
@@ -200,16 +210,20 @@ export function StageController() {
       }
 
       if (paintLayer) {
-        paintLayer.style.opacity = pSpread.toFixed(3);
+        paintLayer.style.opacity = pSpread > 0.01 ? "1" : "0";
         paintLayer.style.visibility = pSpread > 0.01 ? "visible" : "hidden";
       }
       const paintDrift = reduceMotion ? 0 : -stepDrift(p, 3);
-      const stack = isometricStack(pSpread, paintDrift);
+      const stack = isometricStack(1 - (1 - pSpread) ** 3, paintDrift);
 
       (pSpread > 0.01 ? paintPlanes : []).forEach((planeEl, index) => {
         const rank = index - (paintPlanes.length - 1) / 2;
         const lift = -rank * PLANE_GAP * stack.spread + paintDrift * index * 14;
 
+        planeEl.style.opacity = Math.min(
+          1,
+          Math.max(0, (pSpread - index * PLANE_STAGGER) / 0.2),
+        ).toFixed(3);
         planeEl.style.transform = `translate(0px, ${lift.toFixed(1)}px) ${stack.matrix}`;
       });
 
