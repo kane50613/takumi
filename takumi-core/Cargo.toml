@@ -106,7 +106,6 @@ optional = true
 
 [dependencies.icu_properties]
 workspace = true
-optional = true
 
 [dependencies.unicode-bidi]
 workspace = true
@@ -131,7 +130,6 @@ svg = [
   "dep:strict-num",
   "dep:tiny-skia-path",
   "dep:harfrust",
-  "dep:icu_properties",
   "dep:unicode-bidi",
 ]
 woff2 = ["dep:wuff", "wuff/brotli"]

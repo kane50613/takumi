@@ -40,6 +40,7 @@ mod line_box;
 mod metrics;
 mod outline;
 mod runs;
+mod small_caps;
 mod text_fit;
 mod truncation;
 
@@ -70,6 +71,7 @@ use self::{
     resolve_inline_line_states, resolve_visual_inline_box,
   },
   runs::measured_run_text,
+  small_caps::CapsSupport,
   text_fit::{
     GlyphCursor, LineScaleState, SpacingStretch, text_fit_applies, text_fit_line_advance,
     text_fit_line_alignment_correction, text_fit_lines, text_fit_x_correction,
@@ -719,7 +721,8 @@ pub(super) fn chromium_line_breaks(spans: &[ProcessedInlineSpan<'_>]) -> bool {
 }
 
 /// Pushes `text` under `style`, giving each variation-selector segment a presentation-reordered
-/// font stack. Text inside the span `shaping_box` shapes apart from text outside it.
+/// font stack. Text inside the span `shaping_box` shapes apart from text outside it, and each case
+/// run of split `font-variant-caps` text apart from its neighbours.
 pub(super) fn push_presentation_text(
   builder: &mut TreeBuilder<'_, InlineBrush>,
   style: &SizedFontStyle,
@@ -731,14 +734,21 @@ pub(super) fn push_presentation_text(
   let text_style = || {
     let mut text_style = text_style_with_span_id(style, span_id);
 
-    if let Some(id) = shaping_box
-      && let FontFeatures::List(features) = &mut text_style.font_features
-    {
-      // No font defines this feature; the distinct list only makes parley split its shaping run.
-      features
-        .to_mut()
-        .push(FontFeature::new(Tag::new(b"TKSB"), id as u16).into_parlance());
+    // No font defines these features; the distinct lists only make parley split its shaping runs.
+    if let FontFeatures::List(features) = &mut text_style.font_features {
+      if let Some(id) = shaping_box {
+        features
+          .to_mut()
+          .push(FontFeature::new(Tag::new(b"TKSB"), id as u16).into_parlance());
+      }
+
+      if let Some(parity) = style.case_run_parity {
+        features
+          .to_mut()
+          .push(FontFeature::new(Tag::new(b"TKCR"), u16::from(parity)).into_parlance());
+      }
     }
+
     text_style
   };
 
@@ -886,17 +896,21 @@ pub(crate) fn process_inline_spans<'c>(
           &mut previous_collapsible_space,
           &mut previous_was_line_break,
         );
-        let start = index_pos;
-        let end = start + collapsed.len();
-        index_pos = end;
+        for (text, style) in
+          CapsSupport::of(&span_style, context).styled_runs(collapsed, span_style)
+        {
+          let start = index_pos;
+          let end = start + text.len();
+          index_pos = end;
 
-        spans.push(ProcessedInlineSpan::Text {
-          byte_range: start..end,
-          text: collapsed.into_owned(),
-          style: Box::new(span_style),
-          link: link.clone(),
-          decorations: decorations.clone(),
-        });
+          spans.push(ProcessedInlineSpan::Text {
+            byte_range: start..end,
+            text,
+            style: Box::new(style),
+            link: link.clone(),
+            decorations: decorations.clone(),
+          });
+        }
       }
       InlineItem::RenderNode {
         render_node,

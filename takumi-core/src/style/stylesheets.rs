@@ -1462,6 +1462,7 @@ define_style! {
       font_optical_sizing: FontOpticalSizing where inherit = true,
       font_synthesis_weight: FontSynthesic where inherit = true,
       font_synthesis_style: FontSynthesic where inherit = true,
+      font_synthesis_small_caps: FontSynthesic where inherit = true,
       text_align: TextAlign where inherit = true,
       letter_spacing: Length where inherit = true,
       word_spacing: Length where inherit = true,
@@ -1800,9 +1801,10 @@ define_style! {
           .collect(),
       )));
     },
-    font_synthesis: FontSynthesis => [FontSynthesisWeight, FontSynthesisStyle] |value, target| {
+    font_synthesis: FontSynthesis => [FontSynthesisWeight, FontSynthesisStyle, FontSynthesisSmallCaps] |value, target| {
       target.push(StyleDeclaration::font_synthesis_weight(value.weight));
       target.push(StyleDeclaration::font_synthesis_style(value.style));
+      target.push(StyleDeclaration::font_synthesis_small_caps(value.small_caps));
     },
     font_variant: FontVariant => [FontVariantLigatures, FontVariantNumeric, FontVariantEastAsian, FontVariantCaps, FontVariantPosition] |value, target| {
       target.push(StyleDeclaration::font_variant_ligatures(value.ligatures));
