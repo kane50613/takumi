@@ -5,40 +5,37 @@ import { Button } from "~/components/ui/button";
 import { cn } from "~/lib/utils";
 import { boxes, CARD, glyphRuns, scene } from "./card";
 import { StageController } from "./stage-controller";
-import { DISPLAY, GUTTER, LEAD, LINK, PRIMARY_BUTTON, STEP_WORD } from "./typography";
+import { BACKDROP_WORD, DISPLAY, GUTTER, LINK, PRIMARY_BUTTON } from "./typography";
 
 const STAGES = [
   {
     key: "anvil",
     stepLabel: "Anvil",
-    title: ["Craft components", "into every", "output."],
+    word: "Craft",
+    title: "Craft components into every output.",
   },
   {
     key: "layout",
     stepLabel: "Layout",
-    title: ["Layout"],
-    line: "Flexbox and grid, measured.",
+    word: "Layout",
+    title: "Flexbox and grid, measured.",
   },
   {
     key: "text",
     stepLabel: "Text",
-    title: ["Text"],
-    line: "Every glyph, shaped.",
+    word: "Text",
+    title: "Every glyph, shaped.",
   },
   {
     key: "paint",
     stepLabel: "Paint",
-    title: ["Paint"],
-    line: "Every fill, drawn in order.",
+    word: "Paint",
+    title: "Every fill, drawn in order.",
   },
 ] as const;
 
-/** How far each headline line steps in from the one above, for the staggered poster cut. */
-const INDENTS = ["", "lg:pl-[7vw]", "lg:pl-[14vw]"];
-
 const EMBER = "#ff5d2e";
 const INK = "#181310";
-const PAPER = "#fff8f0";
 
 const ANVIL_PATH =
   "M 430 672 Q 535 652 608 652 L 1232 652 L 1278 670 L 1232 688 L 1110 696 C 1055 724 1055 768 1120 792 L 1220 806 L 1238 844 L 595 844 L 615 806 L 715 792 C 780 768 780 724 725 696 L 608 690 Q 520 686 430 672 Z";
@@ -120,67 +117,60 @@ export function Stage() {
           data={{ image: CARD.image, width: CARD.width, height: CARD.height, boxes }}
         />
 
-        {/* Poster copy behind the forge, one block per strike, each line rising out of a mask */}
-        <div className="grid lg:absolute lg:inset-0">
+        {/* Hollow backdrop word for the current strike, widening as it rises out of its mask */}
+        <div
+          aria-hidden
+          className="pointer-events-none absolute inset-0 grid place-items-center overflow-hidden"
+        >
+          {STAGES.map((item, index) => (
+            <div
+              key={item.key}
+              data-stage-copy={index}
+              data-current={index === 0 ? "" : undefined}
+              className="col-start-1 row-start-1 overflow-hidden"
+            >
+              <span
+                className={cn(
+                  BACKDROP_WORD,
+                  "home-rise block translate-y-[calc(100%+0.2em)] [font-stretch:70%] transition-[transform,font-stretch] duration-1000 ease-out-strong in-data-current:translate-y-0 in-data-current:[font-stretch:125%]",
+                )}
+              >
+                {item.word}
+              </span>
+            </div>
+          ))}
+        </div>
+
+        <div className={cn("relative z-10 grid pt-[3svh] lg:pt-[5svh]", GUTTER)}>
           {STAGES.map((item, index) => {
             const HeadingTag = index === 0 ? "h1" : "h2";
 
             return (
-              <div
+              <HeadingTag
                 key={item.key}
-                data-stage-copy
+                id={index === 0 ? "home-title" : undefined}
+                data-stage-copy={index}
                 data-current={index === 0 ? "" : undefined}
                 className={cn(
-                  "col-start-1 row-start-1 pt-[3svh]",
-                  index === 0 ? "lg:pt-[5svh]" : "lg:self-end lg:pb-[calc(5.5rem+2svh)]",
-                  GUTTER,
+                  DISPLAY,
+                  "home-enter col-start-1 row-start-1 max-w-[17ch] transition-[opacity,transform,filter] duration-500 ease-out-strong not-data-current:translate-y-3 not-data-current:opacity-0 not-data-current:blur-sm",
                 )}
               >
-                <HeadingTag
-                  id={index === 0 ? "home-title" : undefined}
-                  className={cn(DISPLAY, index > 0 && STEP_WORD)}
-                >
-                  {item.title.map((line, lineIndex) => (
-                    <span
-                      key={line}
-                      className={cn("block overflow-hidden pb-[0.08em]", INDENTS[lineIndex])}
-                    >
-                      <span
-                        className="home-rise block translate-y-[calc(100%+0.25em)] transition-transform duration-700 ease-out-strong in-data-current:translate-y-0"
-                        style={{
-                          transitionDelay: `${lineIndex * 90}ms`,
-                          animationDelay: `${lineIndex * 90}ms`,
-                        }}
-                      >
-                        {line}
-                      </span>
-                    </span>
-                  ))}
-                </HeadingTag>
-                {"line" in item && (
-                  <p
-                    className={cn(
-                      LEAD,
-                      "mt-2 opacity-0 transition-opacity duration-500 ease-out-strong in-data-current:opacity-100 in-data-current:delay-200",
-                    )}
-                  >
-                    {item.line}
-                  </p>
-                )}
-              </div>
+                {item.title}
+              </HeadingTag>
             );
           })}
         </div>
 
         {/* Full-bleed SVG Forge Canvas: Hammer, Anvil, Component, and Exploded Real Parts */}
-        <div className="home-enter pointer-events-none min-h-0 flex-1 [--enter-delay:120ms] max-lg:order-1 lg:absolute lg:inset-0 lg:bottom-20">
+        <div className="home-enter pointer-events-none relative min-h-0 flex-1 [--enter-delay:120ms] max-lg:order-1 lg:absolute lg:inset-0 lg:bottom-20">
           <svg
             data-forge
             role="img"
             aria-label="Takumi's orange-red hammer suspended over an anvil where a component splits into layout boxes, glyph outlines, and paint layers."
-            viewBox="0 -40 1440 940"
+            viewBox="200 -40 1440 940"
             preserveAspectRatio="xMidYMid meet"
-            className="size-full overflow-visible"
+            className="size-full overflow-visible text-foreground"
           >
             <defs>
               <linearGradient
@@ -205,8 +195,11 @@ export function Stage() {
                 <stop offset="0" stopColor="#ff3535" />
                 <stop offset="1" stopColor="#d71d36" />
               </linearGradient>
-              {/* The sticker edge the logo carries, lifted off light and dark pages alike */}
-              <filter id="forge-sticker" x="-10%" y="-10%" width="120%" height="130%">
+              <filter id="forge-mute">
+                <feColorMatrix type="saturate" values="0.12" />
+              </filter>
+              {/* A soft drop shadow lifting hammer and anvil off light and dark pages alike */}
+              <filter id="forge-shadow" x="-10%" y="-10%" width="120%" height="130%">
                 <feDropShadow
                   dx="0"
                   dy="8"
@@ -217,18 +210,9 @@ export function Stage() {
               </filter>
             </defs>
 
-            {/* Heavy Cast-Iron Anvil anchored at x=920, its sticker edge just under the card */}
-            <g data-anvil className="will-change-transform" filter="url(#forge-sticker)">
-              <g transform="translate(0, 8)">
-                <path
-                  d={ANVIL_PATH}
-                  fill="none"
-                  stroke={PAPER}
-                  strokeWidth="16"
-                  strokeLinejoin="round"
-                />
-                <path d={ANVIL_PATH} fill="#2a211b" />
-              </g>
+            {/* Heavy Cast-Iron Anvil anchored at x=920, face at y=652 */}
+            <g data-anvil className="will-change-transform" filter="url(#forge-shadow)">
+              <path d={ANVIL_PATH} className="fill-[var(--anvil)]" />
             </g>
 
             {/* The Component on the Anvil (1200×630 scaled by 0.516 -> 619×325 at x=610..1229, y=323..648) */}
@@ -254,10 +238,10 @@ export function Stage() {
                   width={CARD.width}
                   height={CARD.height}
                   rx="16"
-                  fill={INK}
-                  fillOpacity="0.28"
-                  stroke={EMBER}
-                  strokeWidth="2.5"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeOpacity="0.5"
+                  strokeWidth="2"
                   strokeDasharray="10 8"
                 />
                 {boxes.map((box) => {
@@ -282,15 +266,14 @@ export function Stage() {
                         width={box.width}
                         height={box.height}
                         rx={box.depth <= 2 ? 18 : 6}
-                        fill={INK}
-                        fillOpacity="0.82"
-                        stroke={EMBER}
-                        strokeWidth={isAccent ? 4 : 2}
+                        fill="none"
+                        stroke="currentColor"
+                        strokeOpacity={isAccent ? 0.9 : 0.45}
+                        strokeWidth={isAccent ? 3 : 2}
                       />
                       {showLabel && (
                         <g transform={`translate(${box.x + 18}, ${box.y + 38})`}>
-                          <rect x="-8" y="-28" width="310" height="38" rx="6" fill={EMBER} />
-                          <text fill="#ffffff" className="font-label text-[30px] font-bold">
+                          <text fill="currentColor" className="font-label text-[30px]">
                             {Math.round(box.x)},{Math.round(box.y)} · {Math.round(box.width)}×
                             {Math.round(box.height)}
                           </text>
@@ -325,10 +308,10 @@ export function Stage() {
                       width={run.width + 20}
                       height={run.ascent + run.descent + 16}
                       rx="8"
-                      fill={INK}
-                      fillOpacity="0.92"
-                      stroke={EMBER}
-                      strokeWidth={run.accent ? 3 : 2}
+                      fill="none"
+                      stroke="currentColor"
+                      strokeOpacity="0.35"
+                      strokeWidth="2"
                     />
                     <line
                       x1={run.x - 18}
@@ -342,13 +325,15 @@ export function Stage() {
                     <path
                       d={run.outline}
                       transform={`translate(${run.x}, ${run.y})`}
-                      fill={PAPER}
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="1.5"
                     />
                     <text
                       x={run.x}
                       y={run.y + run.descent + 34}
-                      fill={PAPER}
-                      className="font-label text-[31px] font-bold"
+                      fill="currentColor"
+                      className="font-label text-[31px]"
                     >
                       {run.fontSize}px · w {Math.round(run.width)}
                     </text>
@@ -380,30 +365,26 @@ export function Stage() {
                         width={CARD.width}
                         height={CARD.height}
                         rx="22"
-                        fill={INK}
-                        fillOpacity={planeIndex === 0 ? "0.94" : "0.24"}
-                        stroke={EMBER}
-                        strokeWidth="3.5"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeOpacity="0.5"
+                        strokeWidth="2"
                       />
-                      {plane.steps.map((step, sIdx) => {
-                        const node = scene.nodes[step.node];
+                      <g filter="url(#forge-mute)" opacity="0.7">
+                        {plane.steps.map((step, sIdx) => {
+                          const node = scene.nodes[step.node];
 
-                        return (
-                          <g key={sIdx} transform={node ? matrixCss(node.transform) : undefined}>
-                            {step.drawables.map((drawable, dIdx) => (
-                              <g key={dIdx}>{drawableElement(drawable, planeIds)}</g>
-                            ))}
-                          </g>
-                        );
-                      })}
+                          return (
+                            <g key={sIdx} transform={node ? matrixCss(node.transform) : undefined}>
+                              {step.drawables.map((drawable, dIdx) => (
+                                <g key={dIdx}>{drawableElement(drawable, planeIds)}</g>
+                              ))}
+                            </g>
+                          );
+                        })}
+                      </g>
                       <g transform="translate(20, -16)">
-                        <rect x="0" y="-36" width="380" height="46" rx="8" fill={EMBER} />
-                        <text
-                          x="16"
-                          y="-4"
-                          fill="#ffffff"
-                          className="font-label text-[30px] font-bold"
-                        >
+                        <text x="0" y="-4" fill="currentColor" className="font-label text-[30px]">
                           {plane.label}
                         </text>
                       </g>
@@ -454,7 +435,7 @@ export function Stage() {
             <g
               className="home-swing"
               style={{ transformOrigin: "1315px 165px" }}
-              filter="url(#forge-sticker)"
+              filter="url(#forge-shadow)"
             >
               <g
                 data-hammer
@@ -462,22 +443,6 @@ export function Stage() {
                 style={{ transformOrigin: "1315px 165px", transform: "rotate(11deg)" }}
               >
                 <g transform="translate(1315, 165) rotate(-47.9) scale(-3.3, 3.3) translate(-8, -110)">
-                  <path
-                    d={HAMMER_HANDLE_PATH}
-                    fill="none"
-                    stroke={PAPER}
-                    strokeWidth="6.5"
-                    strokeLinejoin="round"
-                    strokeLinecap="round"
-                  />
-                  <path
-                    d={HAMMER_HEAD_PATH}
-                    fill="none"
-                    stroke={PAPER}
-                    strokeWidth="6.5"
-                    strokeLinejoin="round"
-                    strokeLinecap="round"
-                  />
                   <path fill="url(#forge-hammer-handle)" d={HAMMER_HANDLE_PATH} />
                   <path fill="url(#forge-hammer-head)" d={HAMMER_HEAD_PATH} />
                 </g>
@@ -528,7 +493,7 @@ export function Stage() {
             <Link to="/docs" className={cn(LINK, "text-lg")}>
               Get started
             </Link>
-            <Link to="/playground" className={cn(LINK, "text-lg")}>
+            <Link to="/playground" className={cn(LINK, "text-lg max-sm:hidden")}>
               Playground
             </Link>
           </div>

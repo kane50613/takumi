@@ -23,6 +23,8 @@ import {
 import { layoutSpread, paintSpread, strikeImpulse, textSpread } from "./stage-timeline";
 
 const FOV = 32;
+/** The forge overlay's accent, repeated so the overlay never imports this Three.js module. */
+const EMBER = "#ff5d2e";
 
 export type StageData = {
   image: string;
@@ -215,8 +217,8 @@ export async function createParticleScene(
     tilt: { value: new Matrix3() },
     map: { value: map },
     lod: { value: Math.max(0, Math.log2(image.naturalWidth / columns)) },
-    emberWarm: { value: new Color("#ffa944") },
-    emberHot: { value: new Color("#ff3535") },
+    emberWarm: { value: new Color() },
+    emberHot: { value: new Color() },
   };
   const material = new ShaderMaterial({
     glslVersion: GLSL3,
@@ -266,9 +268,9 @@ export async function createParticleScene(
     uniforms.cardSize.value.set(card.width, card.height);
   };
 
-  const setPalette = (_palette: Palette) => {
-    uniforms.emberWarm.value.set("#ffa944");
-    uniforms.emberHot.value.set("#ff3535");
+  const setPalette = ({ foreground, background }: Palette) => {
+    uniforms.emberWarm.value.set(foreground).lerp(new Color(background), 0.35);
+    uniforms.emberHot.value.set(foreground).lerp(new Color(EMBER), 0.4);
   };
 
   setPalette(options.palette);
