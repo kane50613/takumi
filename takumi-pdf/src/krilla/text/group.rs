@@ -98,6 +98,7 @@ where
       g: &U,
       context_color: rgb::Color,
       previous_range: Option<Range<usize>>,
+      clustered: bool,
       forbid_invalid_codepoints: bool,
       mut font_container: RefMut<FontContainer>,
       text: &str,
@@ -112,7 +113,16 @@ where
         .unwrap();
 
       let range = g.text_range().clone();
-      let text = &text[range.clone()];
+      // A glyph sharing its cluster maps to its own `cmap` codepoint where it has one, as Skia's
+      // PDF backend does.
+      let character = clustered
+        .then(|| pdf_font.font().codepoint(g.glyph_id()))
+        .flatten();
+      let mut utf8 = [0; 4];
+      let text = match character {
+        Some(character) => &*character.encode_utf8(&mut utf8),
+        None => &text[range.clone()],
+      };
       let codepoints = pdf_font.get_codepoints(pdf_glyph);
       // Check if the glyph has already been assigned codepoints that don't match the
       // one we are seeing right now.
@@ -120,20 +130,15 @@ where
 
       // Only set the codepoint if there isn't a previous, different mapping.
       //
-      // If we could set it, we only want to insert a codepoint if we are not already
-      // building a spanned run (which is the case if the previous range is the same).
-      // If we are building a spanned run, it means that the glyphs are part of the same
-      // cluster, in which case only the first glyph should be assigned the codepoint,
-      // while all other glyphs in the same cluster should not be assigned anything.
-      // Otherwise, when copying text from the PDF, we will get the same codepoint multiple
-      // times in viewers that don't support `ActualText`.
-      //
-      // However, in case we are for example exporting to PDF/UA, every glyph is required
-      // to have a valid codepoint mapping. So in this case, we still add the codepoints
-      // to each glyph in the cluster, this will result in worse copy-pasting in viewers
-      // that don't support `ActualText`.
+      // A glyph with its own `cmap` codepoint always takes it, so a viewer that ignores
+      // `ActualText` reads each character of the cluster once: `S` and U+0301 for `Ś`.
+      // Any other glyph of a cluster would repeat the whole cluster's text, so only the
+      // first one takes it, unless the export (PDF/UA, for example) requires every glyph
+      // to map to Unicode, at the cost of that repetition.
       if !incompatible_codepoint
-        && (previous_range != Some(range.clone()) || forbid_invalid_codepoints)
+        && (previous_range != Some(range.clone())
+          || forbid_invalid_codepoints
+          || character.is_some())
         && codepoints != Some(text)
       {
         pdf_font.set_codepoints(pdf_glyph, text.to_string(), g.location());
@@ -145,14 +150,26 @@ where
     let mut use_span = None;
     let mut count = 1;
 
-    let mut iter = self.slice.iter();
+    // A cluster never straddles two fragments, so the slice holds every glyph it shares with.
+    let clustered = |index: usize| {
+      let range = self.slice[index].text_range();
+
+      index
+        .checked_sub(1)
+        .is_some_and(|previous| self.slice[previous].text_range() == range)
+        || self
+          .slice
+          .get(index + 1)
+          .is_some_and(|next| next.text_range() == range)
+    };
 
     // Get the range of the first glyph, as well as whether it's
     // incompatible.
     let (first_range, first_incompatible) = func(
-      iter.next()?,
+      self.slice.first()?,
       self.context_color,
       None,
+      clustered(0),
       self.forbid_invalid_codepoints,
       self.font_container.borrow_mut(),
       self.text,
@@ -160,11 +177,12 @@ where
 
     let mut prev_range = first_range.clone();
 
-    for next in iter {
+    for (index, next) in self.slice.iter().enumerate().skip(1) {
       let (next_range, next_incompatible) = func(
         next,
         self.context_color,
         Some(prev_range.clone()),
+        clustered(index),
         self.forbid_invalid_codepoints,
         self.font_container.borrow_mut(),
         self.text,

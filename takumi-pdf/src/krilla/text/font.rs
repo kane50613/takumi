@@ -67,6 +67,7 @@ impl Font {
       font_ref_yoke,
       font_info,
       advance_widths: AdvanceWidths::default(),
+      codepoints: OnceLock::new(),
     }))))
   }
 
@@ -146,6 +147,26 @@ impl Font {
 
   pub(crate) fn font_data(&self) -> Data {
     self.0.font_data.clone()
+  }
+
+  /// The lowest codepoint the font's `cmap` maps to `glyph_id`.
+  pub(crate) fn codepoint(&self, glyph_id: GlyphId) -> Option<char> {
+    let codepoints = self.0.codepoints.get_or_init(|| {
+      let mut codepoints = vec![u32::MAX; self.num_glyphs() as usize];
+
+      for (codepoint, glyph) in self.font_ref().charmap().mappings() {
+        if let Some(slot) = codepoints.get_mut(glyph.to_u32() as usize) {
+          *slot = (*slot).min(codepoint);
+        }
+      }
+
+      codepoints.into_boxed_slice()
+    });
+
+    codepoints
+      .get(glyph_id.to_u32() as usize)
+      .copied()
+      .and_then(char::from_u32)
   }
 
   pub(crate) fn advance_width(&self, glyph_id: GlyphId) -> Option<f32> {
@@ -242,6 +263,8 @@ struct Repr {
   /// Each glyph's advance once read: a variable font recomputes it from its variation store on
   /// every read, and a document reads the same few glyphs again and again.
   advance_widths: AdvanceWidths,
+  /// Each glyph's lowest `cmap` codepoint, by glyph id, with `u32::MAX` for an unmapped glyph.
+  codepoints: OnceLock<Box<[u32]>>,
 }
 
 /// Each glyph's advance once read, by glyph id: a variable font recomputes it from its variation

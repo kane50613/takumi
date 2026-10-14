@@ -5167,11 +5167,8 @@ fn a_ranged_subset_keeps_a_latin_run_whole() {
   assert_eq!(shows, 1, "the run was split across {shows} text objects");
 }
 
-/// A font without `Ś` shapes it as `S` and a positioned acute under one `/ActualText`. Poppler
-/// ends that span where its last glyph's advance does, so the acute's character spacing has to
-/// reach the end of the `S`, or `pdftotext` reads the gap after it as a space: `Ś winoujś cie`.
-#[test]
-fn a_cluster_closing_on_a_mark_spans_its_base() {
+/// Archivo without its precomposed accented letters, so `Ś` shapes as `S` and a positioned acute.
+fn combining_fonts() -> Fonts {
   let mut fonts = Fonts::default();
   let data = fs::read(
     Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fonts/archivo-combining.subset.ttf"),
@@ -5181,7 +5178,15 @@ fn a_cluster_closing_on_a_mark_spans_its_base() {
   fonts
     .register(FontResource::new(data))
     .expect("load combining font");
+  fonts
+}
 
+/// A font without `Ś` shapes it as `S` and a positioned acute under one `/ActualText`. Poppler
+/// ends that span where its last glyph's advance does, so the acute's character spacing has to
+/// reach the end of the `S`, or `pdftotext` reads the gap after it as a space: `Ś winoujś cie`.
+#[test]
+fn a_cluster_closing_on_a_mark_spans_its_base() {
+  let fonts = combining_fonts();
   let pdf = run_pdf_fixture_with("cluster-closing-on-a-mark", &fonts, |fonts| {
     PdfOptions::builder()
       .node(
@@ -5221,6 +5226,39 @@ fn a_cluster_closing_on_a_mark_spans_its_base() {
     assert!(
       span.trim_end().ends_with("0 Tc"),
       "character spacing outlives its span: {span}"
+    );
+  }
+}
+
+/// The glyphs of a cluster map to their own characters in ToUnicode, as Skia writes them. A
+/// viewer that ignores `/ActualText` then reads `S` and U+0301 rather than `Ś` twice, and the
+/// plain `S` of a later word still reads as `S`.
+#[test]
+fn a_clustered_glyph_maps_to_its_own_character() {
+  let fonts = combining_fonts();
+  let pdf = render(
+    PdfOptions::builder()
+      .node(
+        from_html("<p>Świnoujście Sopot</p>", FromHtmlOptions::default()).expect("parse the doc"),
+      )
+      .viewport(Viewport::new((240, 48)))
+      .fonts(&fonts)
+      .build(),
+  )
+  .expect("render the decomposed letters");
+  let haystack = inflated_text(&pdf);
+
+  // A ToUnicode entry reads `<glyph> <codepoint>`.
+  for (codepoint, mapped) in [
+    ("0053", true),
+    ("0301", true),
+    ("015A", false),
+    ("015B", false),
+  ] {
+    assert_eq!(
+      haystack.contains(&format!("> <{codepoint}>")),
+      mapped,
+      "a glyph maps to U+{codepoint}"
     );
   }
 }
