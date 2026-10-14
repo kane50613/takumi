@@ -15,11 +15,13 @@ export function Outputs() {
       aria-labelledby="outputs-title"
       className="relative pt-[12svh] pb-[16svh]"
     >
-      <h2 id="outputs-title" className={cn(H2, GUTTER)}>
-        One component, every format.
-      </h2>
-
-      <Gallery>
+      <Gallery
+        title={
+          <h2 id="outputs-title" className={H2}>
+            One component, every format.
+          </h2>
+        }
+      >
         <section aria-label="Images" className={PANEL}>
           <PanelTitle
             title="Images"

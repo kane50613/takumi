@@ -20,8 +20,8 @@ const PANEL_SVH = 90;
 /** The enclosing panel's progress: 0 as it starts wiping in, 1 once settled, 2 once covered. */
 const PanelProgress = createContext<MotionValue<number> | null>(null);
 
-/** Panels pinned under the header, each wiped up over the one before as the page scrolls. */
-export function Gallery({ children }: { children: ReactNode }) {
+/** Panels pinned under `title`, each wiped up over the one before as the page scrolls. */
+export function Gallery({ title, children }: { title: ReactNode; children: ReactNode }) {
   const reduceMotion = useReducedMotion();
   const track = useRef<HTMLDivElement>(null);
   const { scrollYProgress } = useScroll({ target: track, offset: ["start start", "end end"] });
@@ -32,7 +32,12 @@ export function Gallery({ children }: { children: ReactNode }) {
   );
 
   if (reduceMotion) {
-    return <div className={cn("flex flex-col gap-[10svh]", GUTTER)}>{panels}</div>;
+    return (
+      <div className={cn("flex flex-col gap-[10svh]", GUTTER)}>
+        {title}
+        {panels}
+      </div>
+    );
   }
 
   return (
@@ -47,12 +52,20 @@ export function Gallery({ children }: { children: ReactNode }) {
           }}
         />
       ))}
-      <div className="sticky top-14 h-[calc(100svh-3.5rem)] overflow-hidden">
-        {panels.map((panel, index) => (
-          <GalleryPanel key={index} turns={turns} index={index} last={index === panels.length - 1}>
-            {panel}
-          </GalleryPanel>
-        ))}
+      <div className="sticky top-14 flex h-[calc(100svh-3.5rem)] flex-col overflow-hidden">
+        <div className={cn("pt-[5svh]", GUTTER)}>{title}</div>
+        <div className="relative flex-1">
+          {panels.map((panel, index) => (
+            <GalleryPanel
+              key={index}
+              turns={turns}
+              index={index}
+              last={index === panels.length - 1}
+            >
+              {panel}
+            </GalleryPanel>
+          ))}
+        </div>
       </div>
     </div>
   );
