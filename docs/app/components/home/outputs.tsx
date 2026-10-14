@@ -1,6 +1,6 @@
 import { cn } from "~/lib/utils";
 import { scene } from "./card";
-import { Gallery } from "./gallery";
+import { Gallery, Parallax } from "./gallery";
 import { PaintBench } from "./paint-bench";
 import { BODY, GUTTER, H2, H3, VALUE } from "./typography";
 
@@ -23,22 +23,25 @@ export function Outputs() {
             formats={["PNG", "WebP", "JPEG"]}
           />
           <div className="relative pb-12">
-            <OutputImage
-              href={`${OUTPUT}/home-usecase-blog-cover.png`}
-              src={`${OUTPUT}/home-usecase-blog-cover@2x.webp`}
-              alt="Blog cover with a lighthouse at night rendered as PNG"
-              width={1037}
-              height={544}
-              className="w-[82%]"
-            />
-            <OutputImage
-              href={`${OUTPUT}/home-usecase-quote-card.webp`}
-              src={`${OUTPUT}/home-usecase-quote-card.svg`}
-              alt="Square quote card rendered as WebP"
-              width={544}
-              height={544}
-              className="absolute -bottom-2 right-0 w-[34%] ring-8 ring-background"
-            />
+            <Parallax depth={0.4} className="w-[82%]">
+              <OutputImage
+                href={`${OUTPUT}/home-usecase-blog-cover.png`}
+                src={`${OUTPUT}/home-usecase-blog-cover@2x.webp`}
+                alt="Blog cover with a lighthouse at night rendered as PNG"
+                width={1037}
+                height={544}
+              />
+            </Parallax>
+            <Parallax depth={1.4} className="absolute -bottom-2 right-0 w-[34%]">
+              <OutputImage
+                href={`${OUTPUT}/home-usecase-quote-card.webp`}
+                src={`${OUTPUT}/home-usecase-quote-card.svg`}
+                alt="Square quote card rendered as WebP"
+                width={544}
+                height={544}
+                className="ring-8 ring-background"
+              />
+            </Parallax>
           </div>
         </section>
 
@@ -77,29 +80,35 @@ export function Outputs() {
             line="Invoices, tickets, and certificates as paged PDFs with selectable text."
           />
           <div className="flex items-start gap-5">
-            <OutputImage
-              href={`${OUTPUT}/home-usecase-invoice.pdf`}
-              src={`${OUTPUT}/home-usecase-invoice.svg`}
-              alt="A4 invoice PDF for Hollow Oak Studio with selectable text"
-              width={385}
-              height={544}
-              className="w-[40%] shrink-0 bg-white"
-            />
+            <Parallax depth={0.3} className="w-[40%] shrink-0">
+              <OutputImage
+                href={`${OUTPUT}/home-usecase-invoice.pdf`}
+                src={`${OUTPUT}/home-usecase-invoice.svg`}
+                alt="A4 invoice PDF for Hollow Oak Studio with selectable text"
+                width={385}
+                height={544}
+                className="bg-white"
+              />
+            </Parallax>
             <div className="flex flex-1 flex-col gap-5 pt-6">
-              <OutputImage
-                href={`${OUTPUT}/home-usecase-ticket.pdf`}
-                src={`${OUTPUT}/home-usecase-ticket.svg`}
-                alt="HARBOR/26 Lisbon conference pass PDF with barcode stub"
-                width={1322}
-                height={544}
-              />
-              <OutputImage
-                href={`${OUTPUT}/home-usecase-certificate.pdf`}
-                src={`${OUTPUT}/home-usecase-certificate.svg`}
-                alt="Course completion certificate PDF with seal"
-                width={770}
-                height={544}
-              />
+              <Parallax depth={0.9}>
+                <OutputImage
+                  href={`${OUTPUT}/home-usecase-ticket.pdf`}
+                  src={`${OUTPUT}/home-usecase-ticket.svg`}
+                  alt="HARBOR/26 Lisbon conference pass PDF with barcode stub"
+                  width={1322}
+                  height={544}
+                />
+              </Parallax>
+              <Parallax depth={1.5}>
+                <OutputImage
+                  href={`${OUTPUT}/home-usecase-certificate.pdf`}
+                  src={`${OUTPUT}/home-usecase-certificate.svg`}
+                  alt="Course completion certificate PDF with seal"
+                  width={770}
+                  height={544}
+                />
+              </Parallax>
             </div>
           </div>
         </section>
