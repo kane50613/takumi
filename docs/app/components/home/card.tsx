@@ -1,10 +1,7 @@
 /** The homepage card, laid out once while the site builds; the forge stage and paint workbench read from it. */
 import { paint } from "takumi-paint";
 import { type PaintScene, paintScene } from "~/components/mdx/paint/scene";
-import DemoCard, {
-  height,
-  width,
-} from "../../../../example/twitter-images/components/home-demo-card";
+import DemoCard, { height, width } from "./demo-card";
 
 export const CARD = { width, height };
 

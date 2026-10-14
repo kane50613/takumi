@@ -1,12 +1,5 @@
-export const name = "home-demo-card";
-
-export const fonts = [];
-
 export const width = 1200;
 export const height = 630;
-
-// The docs homepage shows the SVG output beside the raster ones.
-export const svg = true;
 
 const RULER = [36, 20, 56, 28, 44, 22, 64, 32, 48, 24, 52, 30];
 

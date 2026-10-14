@@ -12,7 +12,6 @@ import * as PrismaOGImage from "./components/prisma-og-image";
 import * as XPostImage from "./components/x-post-image";
 import * as V1 from "./components/v1";
 import * as TextFit from "./components/text-fit";
-import * as HomeDemoCard from "./components/home-demo-card";
 import * as HomeFilmstrip from "./components/home-filmstrip";
 import * as GoogleFontsShowcase from "./components/google-fonts-showcase";
 import * as DitherOg from "./components/dither-og";
@@ -34,7 +33,6 @@ const components = [
   PrismaOGImage,
   PackageOgImage,
   GithubSocialPreview,
-  HomeDemoCard,
   HomeFilmstrip,
   GoogleFontsShowcase,
   DitherOg,
