@@ -722,7 +722,8 @@ pub(super) fn chromium_line_breaks(spans: &[ProcessedInlineSpan<'_>]) -> bool {
 }
 
 /// Pushes `text` under `style`, giving each variation-selector segment a presentation-reordered
-/// font stack. Text inside the span `shaping_box` shapes apart from text outside it.
+/// font stack. Text inside the span `shaping_box` shapes apart from text outside it, and each case
+/// run of split `font-variant-caps` text apart from its neighbours.
 pub(super) fn push_presentation_text(
   builder: &mut TreeBuilder<'_, InlineBrush>,
   style: &SizedFontStyle,
@@ -734,13 +735,18 @@ pub(super) fn push_presentation_text(
   let text_style = || {
     let mut text_style = text_style_with_span_id(style, span_id);
 
-    if let Some(id) = shaping_box
-      && let FontFeatures::List(features) = &mut text_style.font_features
-    {
-      // No font defines this feature; the distinct list only makes parley split its shaping run.
-      features
-        .to_mut()
-        .push(FontFeature::new(Tag::new(b"TKSB"), id as u16).into_parlance());
+    // No font defines these features; the distinct lists only make parley split its shaping runs.
+    if let FontFeatures::List(features) = &mut text_style.font_features {
+      if let Some(id) = shaping_box {
+        features
+          .to_mut()
+          .push(FontFeature::new(Tag::new(b"TKSB"), id as u16).into_parlance());
+      }
+      if let Some(parity) = style.case_run_parity {
+        features
+          .to_mut()
+          .push(FontFeature::new(Tag::new(b"TKCR"), u16::from(parity)).into_parlance());
+      }
     }
     text_style
   };

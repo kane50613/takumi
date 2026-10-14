@@ -255,6 +255,9 @@ pub struct SizedFontStyle<'s> {
   pub(crate) font_variations: ResolvedFontVariations,
   /// The `font-variant-caps` feature to shape with, which a synthesized caps run swaps.
   pub(crate) caps: FontVariantCaps,
+  /// Alternates between neighbouring case runs of split `font-variant-caps` text, so each shapes
+  /// apart as Blink shapes them.
+  pub(crate) case_run_parity: Option<bool>,
   pub(crate) line_height: parley::LineHeight,
   /// The line height kept on the brush, because parley's run metrics can carry a neighboring
   /// span's style at run boundaries.
@@ -312,6 +315,7 @@ impl SizedFontStyle<'_> {
   /// cached by content.
   pub(crate) fn hash_shaping_inputs(&self, hasher: &mut impl Hasher) {
     self.sizing.font_size.to_bits().hash(hasher);
+    self.case_run_parity.hash(hasher);
     self.letter_spacing.to_bits().hash(hasher);
     self.word_spacing.to_bits().hash(hasher);
     self
@@ -636,6 +640,7 @@ impl<'s> SizedFontStyle<'s> {
         context.sizing.to_css(context.sizing.font_size),
       ),
       caps: style.inherited_data.font_variant_caps,
+      case_run_parity: None,
       line_height,
       box_line_height,
       stroke_width: style

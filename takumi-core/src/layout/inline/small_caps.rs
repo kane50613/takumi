@@ -169,13 +169,13 @@ impl CapsSupport {
     }
 
     case_runs(&text)
-      .map(|(range, class)| {
+      .enumerate()
+      .map(|(index, (range, class))| {
         let run = self.run(class);
+        let mut run_style = style.clone().for_caps_run(run);
 
-        (
-          run.case_map.apply(&text[range]).into_owned(),
-          style.clone().for_caps_run(run),
-        )
+        run_style.case_run_parity = Some(index % 2 == 1);
+        (run.case_map.apply(&text[range]).into_owned(), run_style)
       })
       .collect()
   }
