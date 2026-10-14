@@ -7,8 +7,6 @@ export const BACKDROP_WORD =
 export const H2 =
   "font-display font-[840] [font-stretch:118%] text-[clamp(2rem,4vw,3.5rem)] leading-[0.98] tracking-[-0.02em] text-balance";
 export const H3 = "font-display text-[1.625rem] font-[780] [font-stretch:112%] tracking-tight";
-export const LEAD =
-  "font-sans text-[clamp(1.125rem,1.45vw,1.375rem)] leading-[1.45] text-foreground/80 text-pretty";
 export const BODY = "font-sans text-[1.125rem] leading-[1.5] text-muted-foreground text-pretty";
 export const VALUE =
   "font-sans text-base font-medium leading-snug text-muted-foreground tabular-nums";
