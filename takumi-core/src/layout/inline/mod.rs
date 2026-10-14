@@ -896,9 +896,7 @@ pub(crate) fn process_inline_spans<'c>(
           &mut previous_collapsible_space,
           &mut previous_was_line_break,
         );
-        for (text, style) in
-          CapsSupport::of(&span_style, context).styled_runs(collapsed, span_style)
-        {
+        for (text, style) in CapsSupport::styled_runs(collapsed, span_style, context) {
           let start = index_pos;
           let end = start + text.len();
           index_pos = end;

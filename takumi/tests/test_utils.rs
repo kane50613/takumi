@@ -82,6 +82,16 @@ const TEST_FONTS: &[(&str, &str, GenericFamily)] = &[
     "Inter",
     GenericFamily::SANS_SERIF,
   ),
+  (
+    "assets/fonts/eb-garamond/EBGaramondCaps.woff2",
+    "EB Garamond Caps",
+    GenericFamily::SERIF,
+  ),
+  (
+    "assets/fonts/eb-garamond/EBGaramondCapsLatn.woff2",
+    "EB Garamond Caps Latn",
+    GenericFamily::SERIF,
+  ),
 ];
 
 const IMAGES: &[&str] = &[
