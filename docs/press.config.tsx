@@ -10,7 +10,7 @@ import { generate as generateOgNode } from "fumadocs-ui/og/takumi";
 import * as Twoslash from "fumadocs-twoslash/ui";
 import { defineConfig } from "fumapress";
 import { fumadocsMdx } from "fumapress/adapters/mdx";
-import { createDocsLayoutPage } from "fumapress/layouts/docs";
+import { createSpaciousLayoutPage } from "fumapress/layouts/spacious";
 import { createRootLayout } from "fumapress/layouts/root";
 import { oramaSearchPlugin } from "fumapress/plugins/orama-search";
 import { linkValidationPlugin } from "fumapress/plugins/link-validation";
@@ -38,6 +38,7 @@ import sticker from "./public/sticker.svg?raw";
 import { baseOptions, SITE_NAME, SITE_URL } from "./app/layout-config";
 import { Accordion, Accordions } from "./app/components/accordion";
 import { Mermaid } from "./app/components/mdx/mermaid";
+import { SearchDialog } from "./app/components/search/dialog";
 import { LocalSpace, PaintPipeline, StepReplay, TextRuns } from "./app/components/mdx/paint";
 import { TypeTable } from "./app/components/type-table";
 import { Video } from "./app/components/video";
@@ -74,6 +75,7 @@ function tabIcon(icon: ReactNode, color: string) {
 const rootLayout = createRootLayout({
   providerProps: {
     theme: { hotKey: false },
+    search: { enabled: true, SearchDialog },
   },
 });
 
@@ -211,7 +213,7 @@ export default defineConfig({
         githubUrl: baseOptions.githubUrl,
       };
     },
-    page: createDocsLayoutPage({
+    page: createSpaciousLayoutPage({
       async render(page) {
         const source = await this.getLoader();
         let tree = source.getPageTree(this.lang);
@@ -224,33 +226,31 @@ export default defineConfig({
         const className = sectionClass(page.url);
 
         return {
+          pageProps: className ? { className } : undefined,
           layoutProps: {
             tree,
-            containerProps: className ? { className } : undefined,
-            sidebar: {
-              // Active tab resolves by findLast + prefix match, so the nested
-              // roots must come after the whole-docs tab.
-              tabs: [
-                {
-                  title: "Image",
-                  description: "OG images, animations & SVG",
-                  url: "/docs",
-                  icon: tabIcon(<ImageIcon size="100%" />, "#e11d48"),
-                },
-                {
-                  title: "PDF",
-                  description: "Paged documents with takumi-pdf",
-                  url: "/docs/pdf",
-                  icon: tabIcon(<FileText size="100%" />, PDF_ACCENT),
-                },
-                {
-                  title: "Paint",
-                  description: "Boxes, images, and text runs with takumi-paint",
-                  url: "/docs/paint",
-                  icon: tabIcon(<Brush size="100%" />, PAINT_ACCENT),
-                },
-              ],
-            },
+            // Active tab resolves by findLast + prefix match, so the nested
+            // roots must come after the whole-docs tab.
+            tabs: [
+              {
+                title: "Image",
+                description: "OG images, animations & SVG",
+                url: "/docs",
+                icon: tabIcon(<ImageIcon size="100%" />, "#e11d48"),
+              },
+              {
+                title: "PDF",
+                description: "Paged documents with takumi-pdf",
+                url: "/docs/pdf",
+                icon: tabIcon(<FileText size="100%" />, PDF_ACCENT),
+              },
+              {
+                title: "Paint",
+                description: "Boxes, images, and text runs with takumi-paint",
+                url: "/docs/paint",
+                icon: tabIcon(<Brush size="100%" />, PAINT_ACCENT),
+              },
+            ],
             links: [
               { icon: <Shovel />, text: "Try in Playground", url: "/playground" },
               { icon: <Sparkles />, text: "Showcase", url: "/showcase" },

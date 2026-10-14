@@ -1,6 +1,7 @@
 @import "tailwindcss";
 @import "fumadocs-ui/css/neutral.css";
 @import "fumadocs-ui/css/preset.css";
+@import "fumadocs-ui/css/generated/spacious.css";
 @import "fumapress/css/preset.css";
 @import "fumadocs-twoslash/twoslash.css";
 
@@ -41,24 +42,24 @@
     "Liberation Mono", Menlo, "Courier New", monospace;
 }
 
-.pdf-section {
+:root:has(.pdf-section) {
   --primary: #2563eb;
   --ring: rgba(37, 99, 235, 0.3);
   --color-fd-primary: var(--primary);
 }
 
-.dark .pdf-section {
+.dark:has(.pdf-section) {
   --primary: #60a5fa;
   --ring: rgba(96, 165, 250, 0.3);
 }
 
-.paint-section {
+:root:has(.paint-section) {
   --primary: #7c3aed;
   --ring: rgba(124, 58, 237, 0.3);
   --color-fd-primary: var(--primary);
 }
 
-.dark .paint-section {
+.dark:has(.paint-section) {
   --primary: #a78bfa;
   --ring: rgba(167, 139, 250, 0.3);
 }
@@ -146,18 +147,23 @@
 @theme inline {
   --default-font-family: "Noto Serif", serif;
   --font-mono: "Geist Mono", monospace;
-
-  --animate-reveal-up: reveal-up 0.8s cubic-bezier(0.16, 1, 0.3, 1) both;
+  --font-display: "Anybody", sans-serif;
+  --ease-out-strong: cubic-bezier(0.23, 1, 0.32, 1);
 }
 
-@keyframes reveal-up {
-  from {
-    opacity: 0;
-    transform: translateY(28px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
+/* A pressable primary button lit from above: a top highlight, a darker edge, and a lip below that
+   the press sinks into. Set through --tw-shadow so focus rings still draw on top. */
+@utility raised {
+  --tw-shadow:
+    0 0 0 1px color-mix(in oklab, var(--primary), black 25%), inset 0 1px 0 rgb(255 255 255 / 28%),
+    inset 0 -2px 0 rgb(0 0 0 / 22%), 0 1px 2px rgb(80 20 0 / 30%);
+  box-shadow:
+    var(--tw-inset-shadow, 0 0 #0000), var(--tw-inset-ring-shadow, 0 0 #0000),
+    var(--tw-ring-offset-shadow, 0 0 #0000), var(--tw-ring-shadow, 0 0 #0000), var(--tw-shadow);
+
+  &:active {
+    --tw-shadow:
+      0 0 0 1px color-mix(in oklab, var(--primary), black 25%), inset 0 2px 3px rgb(0 0 0 / 35%);
   }
 }
 
@@ -231,6 +237,62 @@
 
 @media (prefers-reduced-motion: reduce) {
   .paint-in {
+    animation: none;
+  }
+}
+
+/* ─── Home page entrance ─── */
+@keyframes home-enter {
+  from {
+    opacity: 0;
+    transform: translateY(28px);
+    filter: blur(8px);
+  }
+}
+
+@keyframes home-rise {
+  from {
+    transform: translateY(calc(100% + 0.25em));
+  }
+}
+
+@keyframes paint-reveal {
+  from {
+    opacity: 0;
+    transform: translateY(28px) scale(0.96);
+  }
+}
+
+.paint-reveal {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: paint-reveal 600ms var(--ease-out-strong) both;
+}
+
+@keyframes home-swing {
+  from {
+    opacity: 0;
+    transform: rotate(26deg);
+  }
+}
+
+.home-enter {
+  animation: home-enter 1100ms var(--ease-out-strong) var(--enter-delay, 0ms) both;
+}
+
+.home-rise {
+  animation: home-rise 1100ms var(--ease-out-strong) backwards;
+}
+
+.home-swing {
+  animation: home-swing 1400ms cubic-bezier(0.34, 1.36, 0.64, 1) 450ms both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .home-enter,
+  .home-rise,
+  .home-swing,
+  .paint-reveal {
     animation: none;
   }
 }
