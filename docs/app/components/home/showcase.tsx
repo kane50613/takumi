@@ -18,7 +18,7 @@ export function Showcase() {
   return (
     <section
       aria-labelledby="showcase-title"
-      className={cn("space-y-[6svh] pt-[4svh] pb-[10svh]", GUTTER)}
+      className={cn("space-y-[6svh] pt-[8svh] pb-[10svh]", GUTTER)}
     >
       <h2 id="showcase-title" className={H2}>
         In production.
@@ -51,7 +51,7 @@ export function Showcase() {
         })}
       </div>
 
-      <div className="flex flex-col items-start justify-between gap-8 pt-[4svh] lg:flex-row lg:items-end">
+      <div className="flex flex-col items-start justify-between gap-8 pt-[12svh] lg:flex-row lg:items-end">
         <img
           src="/sticker.svg"
           alt="Takumi"

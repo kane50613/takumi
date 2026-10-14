@@ -34,6 +34,10 @@ const STAGES = [
   },
 ] as const;
 
+/** Wireframe labels, haloed in the page color so they stay legible across crossing lines. */
+const LABEL =
+  "font-sans text-[30px] font-medium tabular-nums stroke-background stroke-[8px] [stroke-linejoin:round] [paint-order:stroke_fill]";
+
 const EMBER = "#ff5d2e";
 const INK = "#181310";
 
@@ -271,10 +275,7 @@ export function Stage() {
                       />
                       {showLabel && (
                         <g transform={`translate(${box.x + 18}, ${box.y + 38})`}>
-                          <text
-                            fill="currentColor"
-                            className="font-sans text-[30px] font-medium tabular-nums"
-                          >
+                          <text fill="currentColor" className={LABEL}>
                             {Math.round(box.x)},{Math.round(box.y)} · {Math.round(box.width)}×
                             {Math.round(box.height)}
                           </text>
@@ -333,7 +334,7 @@ export function Stage() {
                       x={run.x}
                       y={run.y + run.descent + 34}
                       fill="currentColor"
-                      className="font-sans text-[31px] font-medium tabular-nums"
+                      className={LABEL}
                     >
                       {run.fontSize}px · w {Math.round(run.width)}
                     </text>
@@ -382,12 +383,7 @@ export function Stage() {
                         })}
                       </g>
                       <g transform="translate(20, -16)">
-                        <text
-                          x="0"
-                          y="-4"
-                          fill="currentColor"
-                          className="font-sans text-[30px] font-medium tabular-nums"
-                        >
+                        <text x="0" y="-4" fill="currentColor" className={LABEL}>
                           {plane.label}
                         </text>
                       </g>

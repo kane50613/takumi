@@ -10,7 +10,11 @@ const PANEL = "grid w-full max-w-[76rem] items-center gap-x-12 gap-y-6 lg:grid-c
 /** The outputs the anvil strike forges, wiped in one by one, then its draw steps replayed. */
 export function Outputs() {
   return (
-    <section id="outputs" aria-labelledby="outputs-title" className="relative pt-[12svh] pb-[8svh]">
+    <section
+      id="outputs"
+      aria-labelledby="outputs-title"
+      className="relative pt-[12svh] pb-[16svh]"
+    >
       <h2 id="outputs-title" className={cn(H2, GUTTER)}>
         One component, every format.
       </h2>

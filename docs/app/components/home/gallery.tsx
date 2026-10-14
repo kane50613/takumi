@@ -60,14 +60,14 @@ function GalleryPanel({
 }) {
   const reveal = useTransform(turns, (turn) => (index === 0 ? 1 : clamp01(turn - index + 1)));
   const recede = useTransform(turns, (turn) => (last ? 0 : clamp01(turn - index)));
-  const clipPath = useTransform(reveal, (t) => `inset(${(1 - easeOut(t)) * 100}% 0 0 0)`);
+  const clipPath = useTransform(reveal, (t) => `inset(${(1 - smooth(t)) * 100}% 0 0 0)`);
   const transform = useTransform(
     [reveal, recede],
     ([t, r]: number[]) =>
-      `translateY(${(1 - easeOut(t ?? 1)) * 18}svh) scale(${1 - easeOut(r ?? 0) * 0.08})`,
+      `translateY(${(1 - smooth(t ?? 1)) * 8}svh) scale(${1 - smooth(r ?? 0) * 0.08})`,
   );
   const opacity = useTransform([reveal, recede], ([t, r]: number[]) =>
-    Math.min(easeOut(t ?? 1), 1 - easeOut(r ?? 0) * 0.65),
+    Math.min(clamp01((t ?? 1) * 2), 1 - smooth(r ?? 0) * 0.65),
   );
   const progress = useTransform(turns, (turn) => Math.min(Math.max(turn - index + 1, 0), 2));
 
@@ -111,6 +111,6 @@ function clamp01(value: number) {
   return Math.min(Math.max(value, 0), 1);
 }
 
-function easeOut(t: number) {
-  return 1 - (1 - t) ** 3;
+function smooth(t: number) {
+  return t * t * (3 - 2 * t);
 }
