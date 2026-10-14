@@ -1,6 +1,6 @@
 /** The homepage's text styles. Reading text stays at 18px or larger, and values at 16px. */
 export const DISPLAY =
-  "font-display font-[860] [font-stretch:112%] text-[clamp(1.875rem,3vw,3rem)] leading-[0.95] tracking-[-0.015em] text-balance";
+  "font-display font-[860] [font-stretch:112%] text-[clamp(1.875rem,3vw,3rem)] leading-[1.05] tracking-[-0.015em] text-balance";
 /** The strike's word set as a hollow outline behind the forge, as wide as the page allows. */
 export const BACKDROP_WORD =
   "font-display font-[900] [font-stretch:125%] text-[min(16vw,34svh)] leading-[1.15] tracking-[-0.03em] whitespace-nowrap text-transparent [-webkit-text-stroke:2px_color-mix(in_oklab,var(--foreground)_28%,transparent)]";

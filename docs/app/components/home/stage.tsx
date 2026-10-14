@@ -12,25 +12,25 @@ const STAGES = [
     key: "anvil",
     stepLabel: "Anvil",
     word: "Craft",
-    title: "Craft components into every output.",
+    title: ["Craft components", "into every output."],
   },
   {
     key: "layout",
     stepLabel: "Layout",
     word: "Layout",
-    title: "Flexbox and grid, measured.",
+    title: ["Flexbox and", "grid, measured."],
   },
   {
     key: "text",
     stepLabel: "Text",
     word: "Text",
-    title: "Every glyph, shaped.",
+    title: ["Every glyph,", "shaped."],
   },
   {
     key: "paint",
     stepLabel: "Paint",
     word: "Paint",
-    title: "Every fill, drawn in order.",
+    title: ["Every fill,", "drawn in order."],
   },
 ] as const;
 
@@ -153,12 +153,25 @@ export function Stage() {
                 id={index === 0 ? "home-title" : undefined}
                 data-stage-copy={index}
                 data-current={index === 0 ? "" : undefined}
-                className={cn(
-                  DISPLAY,
-                  "home-enter col-start-1 row-start-1 max-w-[17ch] transition-[opacity,transform,filter] duration-500 ease-out-strong not-data-current:translate-y-3 not-data-current:opacity-0 not-data-current:blur-sm",
-                )}
+                className={cn(DISPLAY, "col-start-1 row-start-1 max-w-[17ch]")}
               >
-                {item.title}
+                {item.title.map((line, lineIndex) => (
+                  <span
+                    key={line}
+                    data-stage-line={lineIndex}
+                    className="-mb-[0.12em] block overflow-hidden pb-[0.12em]"
+                  >
+                    <span
+                      className="home-rise block translate-y-[calc(100%+0.15em)] transition-transform duration-700 ease-out-strong in-data-current:translate-y-0"
+                      style={{
+                        transitionDelay: `${lineIndex * 80}ms`,
+                        animationDelay: `${lineIndex * 80}ms`,
+                      }}
+                    >
+                      {line}
+                    </span>
+                  </span>
+                ))}
               </HeadingTag>
             );
           })}

@@ -80,6 +80,9 @@ export function StageController() {
     const copyBlocks = [...(stage?.querySelectorAll<HTMLElement>("[data-stage-copy]") ?? [])];
     const words = [...(stage?.querySelectorAll<HTMLElement>("[data-stage-word]") ?? [])];
     const backdrop = stage?.querySelector<HTMLElement>("[data-stage-backdrop]");
+    const captionLines = copyBlocks
+      .map((block) => [...block.querySelectorAll<HTMLElement>("[data-stage-line]")])
+      .filter((lines) => lines.length > 0);
     const stepButtons = [
       ...(stage?.querySelectorAll<HTMLButtonElement>("[data-step-button]") ?? []),
     ];
@@ -228,6 +231,11 @@ export function StageController() {
       });
 
       const word = words[step];
+      const captionDrift = reduceMotion ? 0 : stepDrift(p, step);
+
+      captionLines[step]?.forEach((line, index) => {
+        line.style.transform = `translateY(${(-captionDrift * (index + 1) * 10).toFixed(1)}px)`;
+      });
 
       if (backdrop) {
         backdrop.style.opacity = (1 - 0.6 * Math.max(lSpread, tSpread, pSpread)).toFixed(3);
