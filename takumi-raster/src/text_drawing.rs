@@ -5,7 +5,7 @@ use xxhash_rust::xxh3::Xxh3;
 
 use crate::{
   Canvas, CanvasViewport, Command, Placement, Result, SamplingOptions, SizedFontStyle, Stroke,
-  checked_area, cull_bounds, pixmap_ref_from_buffer, render_mask,
+  alpha_mask, checked_area, cull_bounds, pixmap_ref_from_buffer, render_mask,
   resources::{
     glyph::{ResolvedBitmapGlyph, ResolvedColorLayer, ResolvedGlyph},
     glyph_cache::glyph_mask,
@@ -332,10 +332,7 @@ pub(crate) fn bitmap_coverage(
     None,
   );
 
-  Some((
-    pixmap.data().iter().skip(3).step_by(4).copied().collect(),
-    placement,
-  ))
+  Some((alpha_mask(pixmap.data()), placement))
 }
 
 #[cfg(test)]

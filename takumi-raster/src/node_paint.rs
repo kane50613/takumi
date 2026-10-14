@@ -30,8 +30,8 @@ use super::{
 };
 use crate::{
   BlurType, CanvasSubcanvas, Command, Error, MaskSamplingOptions, Placement, Result, Stroke, Style,
-  apply_blur_alpha_bytes, attenuate_alpha_by_mask, bitmap_coverage, checked_area, draw_glyph,
-  intersect_alpha_masks,
+  alpha_mask, apply_blur_alpha_bytes, attenuate_alpha_by_mask, bitmap_coverage, checked_area,
+  draw_glyph, intersect_alpha_masks,
   layout::node::ImageData,
   render_mask,
   style::{Affine, BlendMode},
@@ -356,11 +356,7 @@ impl<'c> CanvasDevice<'c> {
 
     let painted = self.canvas.take_subcanvas(subcanvas);
 
-    self.push_clip_coverage(
-      painted.data().iter().skip(3).step_by(4).copied().collect(),
-      placement,
-      false,
-    );
+    self.push_clip_coverage(alpha_mask(painted.data()), placement, false);
     content(self);
     self.clips.pop();
   }

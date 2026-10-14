@@ -488,6 +488,16 @@ fn transformed_mask_point(
   is_contained.then_some(original_point)
 }
 
+/// The alpha channel of RGBA `pixels`, as an 8-bit mask.
+pub(crate) fn alpha_mask(pixels: &[u8]) -> Vec<u8> {
+  pixels
+    .as_chunks::<4>()
+    .0
+    .iter()
+    .map(|pixel| pixel[3])
+    .collect()
+}
+
 /// `cull` bounds the rasterized area for masks the caller only ever reads
 /// through the canvas. Blink clips the same way in `ClipPathClipper::PaintClipPath`
 /// ("we clip by the cull rect here. Visually, this should be a NOP").
