@@ -69,6 +69,7 @@ export function StageController() {
     const paintPlanes = [...(stage?.querySelectorAll<SVGGElement>("[data-paint-plane]") ?? [])];
     const copyBlocks = [...(stage?.querySelectorAll<HTMLElement>("[data-stage-copy]") ?? [])];
     const words = [...(stage?.querySelectorAll<HTMLElement>("[data-stage-word]") ?? [])];
+    const backdrop = stage?.querySelector<HTMLElement>("[data-stage-backdrop]");
     const stepButtons = [
       ...(stage?.querySelectorAll<HTMLButtonElement>("[data-step-button]") ?? []),
     ];
@@ -169,9 +170,9 @@ export function StageController() {
         layoutLayer.style.opacity = lSpread.toFixed(3);
         layoutLayer.style.visibility = lSpread > 0.01 ? "visible" : "hidden";
       }
-      const layoutDrift = -stepDrift(p, 1);
+      const layoutDrift = reduceMotion ? 0 : -stepDrift(p, 1);
 
-      for (const boxEl of boxElements) {
+      for (const boxEl of lSpread > 0.01 ? boxElements : []) {
         const dx = Number(boxEl.dataset.dx ?? 0);
         const dy = Number(boxEl.dataset.dy ?? 0) + layoutDrift * depthDistance(boxEl, 70);
         const rot = Number(boxEl.dataset.rot ?? 0);
@@ -185,9 +186,9 @@ export function StageController() {
         textLayer.style.opacity = tSpread.toFixed(3);
         textLayer.style.visibility = tSpread > 0.01 ? "visible" : "hidden";
       }
-      const textDrift = -stepDrift(p, 2);
+      const textDrift = reduceMotion ? 0 : -stepDrift(p, 2);
 
-      for (const glyphEl of glyphElements) {
+      for (const glyphEl of tSpread > 0.01 ? glyphElements : []) {
         const dx = Number(glyphEl.dataset.dx ?? 0);
         const dy = Number(glyphEl.dataset.dy ?? 0) + textDrift * depthDistance(glyphEl, 70);
         const scale = Number(glyphEl.dataset.scale ?? 1);
@@ -205,23 +206,23 @@ export function StageController() {
       const paintDrift = reduceMotion ? 0 : -stepDrift(p, 3);
       const stack = isometricStack(pSpread, paintDrift);
 
-      paintPlanes.forEach((planeEl, index) => {
+      (pSpread > 0.01 ? paintPlanes : []).forEach((planeEl, index) => {
         const rank = index - (paintPlanes.length - 1) / 2;
         const lift = -rank * PLANE_GAP * stack.spread + paintDrift * index * 14;
 
         planeEl.style.transform = `translate(0px, ${lift.toFixed(1)}px) ${stack.matrix}`;
       });
 
-      if (!reduceMotion) {
-        const recede = 1 - 0.6 * Math.max(lSpread, tSpread, pSpread);
+      const word = words[step];
 
-        words.forEach((word, index) => {
-          const { stretch, weight } = wordAxes(p, index);
+      if (backdrop) {
+        backdrop.style.opacity = (1 - 0.6 * Math.max(lSpread, tSpread, pSpread)).toFixed(3);
+      }
+      if (word && !reduceMotion) {
+        const { stretch, weight } = wordAxes(p, step);
 
-          word.style.opacity = recede.toFixed(3);
-          word.style.fontStretch = `${stretch.toFixed(1)}%`;
-          word.style.fontWeight = weight.toFixed(0);
-        });
+        word.style.fontStretch = `${stretch.toFixed(1)}%`;
+        word.style.fontWeight = weight.toFixed(0);
       }
 
       if (step !== activeStep) {
