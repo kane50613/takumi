@@ -1,23 +1,5 @@
-/** Where each strike of the homepage forge sits along its scroll progress, from 0 to 1. */
-export const STAGE = {
-  heroOut: [0.06, 0.18],
-  steps: [0.14, 0.22],
-  handoff: 0.15,
-  flyStart: 0.18,
-  flySpread: 0.14,
-  flyDuration: 0.14,
-  layout: [0.19, 0.28],
-  tiltIn: [0.22, 0.34],
-  paint: [0.47, 0.56],
-  separate: [0.74, 0.84],
-  merge: [0.92, 0.99],
-  tiltOut: [0.9, 0.98],
-  fill: [0.88, 0.96],
-  image: [0.93, 0.99],
-} as const;
-
 /** The three hammer impact points along the 0..1 forge timeline. */
-export const IMPACTS = [0.21, 0.49, 0.77] as const;
+const IMPACTS = [0.21, 0.49, 0.77] as const;
 
 /** Settled scroll progress stops for [Anvil, Layout, Text, Paint]. */
 export const STRIKE_STOPS = [0, 0.38, 0.65, 0.93] as const;
@@ -26,7 +8,7 @@ export const STRIKE_STOPS = [0, 0.38, 0.65, 0.93] as const;
 export const STEP_STARTS = [0, 0.19, 0.47, 0.74] as const;
 
 /** 0 before `from`, 1 after `to`, eased in and out between. */
-export function ramp(progress: number, [from, to]: readonly [number, number]) {
+function ramp(progress: number, [from, to]: readonly [number, number]) {
   const t = Math.min(Math.max((progress - from) / (to - from), 0), 1);
 
   return t * t * (3 - 2 * t);
