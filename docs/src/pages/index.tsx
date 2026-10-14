@@ -24,13 +24,6 @@ const HOME_THEME_CSS = `
   font-stretch: 75% 100%;
   font-display: swap;
 }
-@font-face {
-  font-family: "Martian Mono";
-  src: url("/fonts/MartianMono.woff2") format("woff2");
-  font-weight: 100 800;
-  font-stretch: 75% 112.5%;
-  font-display: swap;
-}
 :root:has([data-stage]) {
   --font-sans: "Instrument Sans", system-ui, sans-serif;
   --background: #faf5ee;

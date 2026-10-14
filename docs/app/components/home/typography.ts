@@ -11,7 +11,7 @@ export const LEAD =
   "font-sans text-[clamp(1.125rem,1.45vw,1.375rem)] leading-[1.45] text-foreground/80 text-pretty";
 export const BODY = "font-sans text-[1.125rem] leading-[1.5] text-muted-foreground text-pretty";
 export const VALUE =
-  "font-label text-base [font-stretch:87.5%] leading-snug text-muted-foreground tabular-nums";
+  "font-sans text-base font-medium leading-snug text-muted-foreground tabular-nums";
 export const LINK =
   "font-sans font-semibold underline underline-offset-4 decoration-foreground/30 transition-[text-decoration-color] duration-150 ease-out-strong hover:decoration-foreground";
 export const PRIMARY_BUTTON =

@@ -59,7 +59,7 @@ export function PaintBench({ scene }: { scene: PaintScene }) {
           </svg>
         </div>
 
-        <div className="flex flex-wrap items-center justify-between gap-4 font-label text-base [font-stretch:87.5%]">
+        <div className="flex flex-wrap items-center justify-between gap-4 font-sans text-base tabular-nums">
           <div className="flex min-w-[16rem] flex-1 items-center gap-4">
             <span className="shrink-0 font-semibold text-primary tabular-nums">
               step {String(shown).padStart(2, "0")}/{String(totalDraws).padStart(2, "0")}

@@ -273,7 +273,10 @@ export function Stage() {
                       />
                       {showLabel && (
                         <g transform={`translate(${box.x + 18}, ${box.y + 38})`}>
-                          <text fill="currentColor" className="font-label text-[30px]">
+                          <text
+                            fill="currentColor"
+                            className="font-sans text-[30px] font-medium tabular-nums"
+                          >
                             {Math.round(box.x)},{Math.round(box.y)} · {Math.round(box.width)}×
                             {Math.round(box.height)}
                           </text>
@@ -333,7 +336,7 @@ export function Stage() {
                       x={run.x}
                       y={run.y + run.descent + 34}
                       fill="currentColor"
-                      className="font-label text-[31px]"
+                      className="font-sans text-[31px] font-medium tabular-nums"
                     >
                       {run.fontSize}px · w {Math.round(run.width)}
                     </text>
@@ -384,7 +387,12 @@ export function Stage() {
                         })}
                       </g>
                       <g transform="translate(20, -16)">
-                        <text x="0" y="-4" fill="currentColor" className="font-label text-[30px]">
+                        <text
+                          x="0"
+                          y="-4"
+                          fill="currentColor"
+                          className="font-sans text-[30px] font-medium tabular-nums"
+                        >
                           {plane.label}
                         </text>
                       </g>
@@ -466,7 +474,7 @@ export function Stage() {
                 data-step-button
                 data-step-index={index}
                 aria-current={index === 0 ? "step" : undefined}
-                className="group relative cursor-pointer py-2 font-label text-base text-muted-foreground transition-colors duration-150 ease-out-strong [font-stretch:87.5%] hover:text-foreground aria-[current=step]:text-foreground"
+                className="group relative cursor-pointer py-2 font-sans text-base font-medium text-muted-foreground transition-colors duration-150 ease-out-strong hover:text-foreground aria-[current=step]:text-foreground"
               >
                 <span className="mr-2 tabular-nums opacity-50 transition-[color,opacity] duration-150 group-aria-[current=step]:text-primary group-aria-[current=step]:opacity-100">
                   {String(index + 1).padStart(2, "0")}
