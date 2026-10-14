@@ -5167,6 +5167,64 @@ fn a_ranged_subset_keeps_a_latin_run_whole() {
   assert_eq!(shows, 1, "the run was split across {shows} text objects");
 }
 
+/// A font without `Ś` shapes it as `S` and a positioned acute under one `/ActualText`. Poppler
+/// ends that span where its last glyph's advance does, so the acute's character spacing has to
+/// reach the end of the `S`, or `pdftotext` reads the gap after it as a space: `Ś winoujś cie`.
+#[test]
+fn a_cluster_closing_on_a_mark_spans_its_base() {
+  let mut fonts = Fonts::default();
+  let data = fs::read(
+    Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fonts/archivo-combining.subset.ttf"),
+  )
+  .expect("read combining font");
+
+  fonts
+    .register(FontResource::new(data))
+    .expect("load combining font");
+
+  let pdf = run_pdf_fixture_with("cluster-closing-on-a-mark", &fonts, |fonts| {
+    PdfOptions::builder()
+      .node(
+        from_html(
+          r#"<p style="font-size:16px;">Świnoujście</p>"#,
+          FromHtmlOptions::default(),
+        )
+        .expect("parse the doc"),
+      )
+      .viewport(Viewport::new((240, 48)))
+      .fonts(fonts)
+      .build()
+  });
+  let content = content_lines(&pdf)
+    .map(|line| String::from_utf8_lossy(&line).into_owned())
+    .collect::<Vec<_>>()
+    .join("\n");
+  let spans = content
+    .split("/ActualText")
+    .skip(1)
+    .filter_map(|span| span.split("EMC").next())
+    .collect::<Vec<_>>();
+
+  assert_eq!(spans.len(), 2, "expected a span for each accented letter");
+
+  for span in spans {
+    let spacing = span
+      .split(" Tc")
+      .next()
+      .and_then(|before| before.rsplit(' ').next())
+      .and_then(|value| value.parse::<f32>().ok());
+
+    assert!(
+      spacing.is_some_and(|spacing| spacing > 0.0),
+      "the closing acute keeps its own advance: {span}"
+    );
+    assert!(
+      span.trim_end().ends_with("0 Tc"),
+      "character spacing outlives its span: {span}"
+    );
+  }
+}
+
 /// Encoded bitmaps reach the PDF as the bytes they came in as: a JPEG embeds
 /// as a `DCTDecode` stream rather than a re-encode of its pixels.
 #[test]
