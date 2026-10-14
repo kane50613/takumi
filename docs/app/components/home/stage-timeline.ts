@@ -96,7 +96,7 @@ export function wordAxes(progress: number, index: number) {
 
   return {
     stretch: Math.max(50, 55 + 85 * grown - 30 * strikeImpulse(progress)),
-    weight: 300 + 600 * grown,
+    weight: 500 + 400 * grown,
   };
 }
 

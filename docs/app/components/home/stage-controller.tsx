@@ -50,6 +50,9 @@ function isometricStack(spread: number, drift: number) {
   return { spread, matrix: `matrix(${[a, b, c, d].map((v) => v.toFixed(4)).join(",")},0,0)` };
 }
 
+const GLIDE_MS = 1400;
+/** Reader input that takes the scroll back from a glide. */
+const GLIDE_INTERRUPTS = ["wheel", "touchstart", "keydown"] as const;
 const STRIKE_LABELS = [
   "Strike the anvil",
   "Strike again · Text",
@@ -118,6 +121,32 @@ export function StageController() {
       target = travel > 0 ? Math.min(Math.max((pinnedTop - rect.top) / travel, 0), 1) : 0;
     };
 
+    let glide = 0;
+    const stopGlide = () => cancelAnimationFrame(glide);
+
+    /** Scrolls to `top` slower than the browser's smooth scroll, so each strike plays out. */
+    const glideTo = (top: number) => {
+      stopGlide();
+      if (reduceMotion) {
+        window.scrollTo(0, top);
+        return;
+      }
+
+      const from = window.scrollY;
+      const start = performance.now();
+      const tick = (now: number) => {
+        const t = Math.min(1, (now - start) / GLIDE_MS);
+        const eased = t < 0.5 ? 4 * t ** 3 : 1 - (-2 * t + 2) ** 3 / 2;
+
+        window.scrollTo(0, from + (top - from) * eased);
+        if (t < 1) {
+          glide = requestAnimationFrame(tick);
+        }
+      };
+
+      glide = requestAnimationFrame(tick);
+    };
+
     const scrollToProgress = (nextProgress: number) => {
       const { rect, pinnedTop, travel } = getTravel();
 
@@ -125,12 +154,8 @@ export function StageController() {
         return;
       }
       const stageTopInDoc = rect.top + window.scrollY - pinnedTop;
-      const destination = stageTopInDoc + nextProgress * travel;
 
-      window.scrollTo({
-        top: destination,
-        behavior: reduceMotion ? "auto" : "smooth",
-      });
+      glideTo(stageTopInDoc + nextProgress * travel);
     };
 
     const onStrike = () => {
@@ -144,7 +169,7 @@ export function StageController() {
       const outputsSection = document.getElementById("outputs");
 
       if (outputsSection) {
-        outputsSection.scrollIntoView({ behavior: reduceMotion ? "auto" : "smooth" });
+        glideTo(outputsSection.getBoundingClientRect().top + window.scrollY);
       }
     };
 
@@ -318,6 +343,9 @@ export function StageController() {
     progress = target;
     apply(progress);
     addEventListener("scroll", wake, { passive: true });
+    for (const type of GLIDE_INTERRUPTS) {
+      addEventListener(type, stopGlide, { passive: true });
+    }
     wide.addEventListener("change", frameForge);
     resizeObserver.observe(view);
 
@@ -330,6 +358,10 @@ export function StageController() {
       }
       cancelAnimationFrame(frame);
       removeEventListener("scroll", wake);
+      stopGlide();
+      for (const type of GLIDE_INTERRUPTS) {
+        removeEventListener(type, stopGlide);
+      }
       wide.removeEventListener("change", frameForge);
       resizeObserver.disconnect();
     };
