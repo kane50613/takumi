@@ -254,6 +254,7 @@ export function Stage() {
                       data-dx={box.dx}
                       data-dy={box.dy}
                       data-rot={box.rotate}
+                      data-depth={0.4 + 0.3 * box.depth}
                       className="will-change-transform"
                       style={{
                         transformOrigin: `${box.x + box.width / 2}px ${box.y + box.height / 2}px`,
@@ -299,6 +300,7 @@ export function Stage() {
                     data-dx={run.dx}
                     data-dy={run.dy}
                     data-scale={run.scale}
+                    data-depth={run.fontSize / 40}
                     className="will-change-transform"
                     style={{
                       transformOrigin: `${run.x + run.width / 2}px ${run.y - run.ascent / 2}px`,
@@ -356,6 +358,7 @@ export function Stage() {
                       data-paint-plane
                       data-dx={plane.dx}
                       data-dy={plane.dy}
+                      data-depth={0.5 + 0.35 * planeIndex}
                       className="will-change-transform"
                       style={{ transformOrigin: "600px 315px" }}
                     >

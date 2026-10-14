@@ -77,6 +77,14 @@ export function hammerAngle(progress: number): number {
   return -11.5 * ramp(progress, [0.77, 0.85]);
 }
 
+/** Where `progress` sits inside strike `step`, from -0.5 at its start to 0.5 at the next one. */
+export function stepDrift(progress: number, step: number) {
+  const from = STEP_STARTS[step] ?? 0;
+  const to = STEP_STARTS[step + 1] ?? 1;
+
+  return Math.min(Math.max((progress - from) / (to - from), 0), 1) - 0.5;
+}
+
 /**
  * Backdrop word `index`'s `font-stretch` (%) and `font-weight`: it widens and thickens across its
  * strike, starting partway for the opening word, and each blow squashes it back.

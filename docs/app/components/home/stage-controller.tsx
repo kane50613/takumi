@@ -6,6 +6,7 @@ import {
   layoutSpread,
   paintSpread,
   STEP_STARTS,
+  stepDrift,
   STRIKE_STOPS,
   strikeImpulse,
   textSpread,
@@ -17,6 +18,11 @@ const WIDE_MIN = 1024;
 /** The forge's full composition, and the crop around hammer, card, and anvil narrower pages show. */
 const FULL_VIEW_BOX = "200 -40 1440 940";
 const COMPACT_VIEW_BOX = "420 -40 1000 900";
+/** How far a forge part drifts over one strike: `base` units scaled by its `data-depth`. */
+function depthDistance(element: HTMLElement | SVGElement, base: number) {
+  return base * Number(element.dataset.depth ?? 1);
+}
+
 const STRIKE_LABELS = [
   "Strike the anvil",
   "Strike again · Text",
@@ -149,9 +155,11 @@ export function StageController() {
         layoutLayer.style.opacity = lSpread.toFixed(3);
         layoutLayer.style.visibility = lSpread > 0.01 ? "visible" : "hidden";
       }
+      const layoutDrift = -stepDrift(p, 1);
+
       for (const boxEl of boxElements) {
         const dx = Number(boxEl.dataset.dx ?? 0);
-        const dy = Number(boxEl.dataset.dy ?? 0);
+        const dy = Number(boxEl.dataset.dy ?? 0) + layoutDrift * depthDistance(boxEl, 70);
         const rot = Number(boxEl.dataset.rot ?? 0);
 
         boxEl.style.transform = reduceMotion
@@ -163,9 +171,11 @@ export function StageController() {
         textLayer.style.opacity = tSpread.toFixed(3);
         textLayer.style.visibility = tSpread > 0.01 ? "visible" : "hidden";
       }
+      const textDrift = -stepDrift(p, 2);
+
       for (const glyphEl of glyphElements) {
         const dx = Number(glyphEl.dataset.dx ?? 0);
-        const dy = Number(glyphEl.dataset.dy ?? 0);
+        const dy = Number(glyphEl.dataset.dy ?? 0) + textDrift * depthDistance(glyphEl, 70);
         const scale = Number(glyphEl.dataset.scale ?? 1);
         const currentScale = 1 + (scale - 1) * tSpread;
 
@@ -178,9 +188,11 @@ export function StageController() {
         paintLayer.style.opacity = pSpread.toFixed(3);
         paintLayer.style.visibility = pSpread > 0.01 ? "visible" : "hidden";
       }
+      const paintDrift = -stepDrift(p, 3);
+
       for (const planeEl of paintPlanes) {
         const dx = Number(planeEl.dataset.dx ?? 0);
-        const dy = Number(planeEl.dataset.dy ?? 0);
+        const dy = Number(planeEl.dataset.dy ?? 0) + paintDrift * depthDistance(planeEl, 70);
         const planeScale = 1 - 0.14 * pSpread;
 
         planeEl.style.transform = reduceMotion
