@@ -73,9 +73,25 @@ pub struct InlineBoxItem<'c> {
   pub(crate) border: Rect<f32>,
   pub(crate) baseline_offset: Option<f32>,
   pub(crate) vertical_align: ResolvedVerticalAlign,
+  /// How far `position: relative` on the box and the spans around it moves it.
+  pub(crate) relative_offset: Point<f32>,
 }
 
 impl RenderNode {
+  /// How far `position: relative` moves this inline-level node inside `parent` in a container of
+  /// `container` direction, `parent`'s moves included.
+  pub(crate) fn relative_offset_in(
+    &self,
+    parent: Option<&Rc<DecorationLink<'_>>>,
+    container: Direction,
+  ) -> Point<f32> {
+    parent.map_or(Point::ZERO, |parent| parent.decoration.relative_offset)
+      + self
+        .context
+        .style
+        .inline_relative_offset(&self.context.sizing, container)
+  }
+
   /// Whether a float sits among the inline content this node lays out, found the way
   /// [`collect_inline_items`] walks it.
   pub(crate) fn has_inline_floats(&self) -> bool {
@@ -205,6 +221,25 @@ impl<'c> ProcessedInlineSpan<'c> {
       _ => None,
     }
   }
+
+  /// The spans around this one, innermost first.
+  pub(crate) fn chain(&self) -> Option<&Rc<DecorationLink<'c>>> {
+    match self {
+      Self::Text { decorations, .. } | Self::Spacer { decorations, .. } => decorations.as_ref(),
+      Self::Box(item) => item.decorations.as_ref(),
+      Self::DirectionMark { .. } => None,
+    }
+  }
+
+  /// How far `position: relative` moves it.
+  pub(crate) fn relative_offset(&self) -> Point<f32> {
+    match self {
+      Self::Box(item) => item.relative_offset,
+      _ => self
+        .chain()
+        .map_or(Point::ZERO, |link| link.decoration.relative_offset),
+    }
+  }
 }
 
 /// The inline box a `display: inline` span opens: what its line fragments paint and how far it
@@ -238,6 +273,9 @@ pub(crate) struct InlineDecoration<'c> {
   pub(crate) direction: Direction,
   /// The span's sizing, which each fragment resolves its radii against.
   pub(crate) sizing: SizingContext,
+  /// How far `position: relative` moves the span's fragments and content, its ancestors' moves
+  /// included.
+  pub(crate) relative_offset: Point<f32>,
 }
 
 impl InlineDecoration<'_> {
@@ -308,7 +346,9 @@ pub enum InlineItem<'c> {
 /// Flatten a render node subtree into its inline items.
 pub fn collect_inline_items<'n>(root: &'n RenderNode) -> Vec<InlineItem<'n>> {
   let mut items = Vec::new();
-  collect_inline_items_impl(root, 0, None, None, &mut 0, &mut items);
+  let container = root.context.style.inherited_data.direction;
+
+  collect_inline_items_impl(root, 0, container, None, None, &mut 0, &mut items);
   items
 }
 
@@ -335,6 +375,7 @@ fn trim_leading_whitespace(item: &mut InlineItem<'_>) {
 fn collect_inline_items_impl<'n>(
   node: &'n RenderNode,
   depth: usize,
+  container: Direction,
   link: Option<&Arc<str>>,
   decorations: Option<&Rc<DecorationLink<'n>>>,
   next_span: &mut usize,
@@ -353,14 +394,15 @@ fn collect_inline_items_impl<'n>(
     .and_then(Node::href)
     .map(Arc::<str>::from);
   let link = anchor.as_ref().or(link);
-  let own_decoration = inline_span_decoration(node, depth, *next_span).map(|decoration| {
-    *next_span += 1;
+  let own_decoration =
+    inline_span_decoration(node, depth, *next_span, decorations, container).map(|decoration| {
+      *next_span += 1;
 
-    Rc::new(DecorationLink {
-      decoration,
-      parent: decorations.cloned(),
-    })
-  });
+      Rc::new(DecorationLink {
+        decoration,
+        parent: decorations.cloned(),
+      })
+    });
   // The margins sit outside the span's own background, on its parent's.
   let outer_decorations = decorations;
   let decorations = own_decoration.as_ref().or(decorations);
@@ -418,7 +460,15 @@ fn collect_inline_items_impl<'n>(
 
   if let Some(children) = &node.children {
     for child in children {
-      collect_inline_items_impl(child, depth + 1, link, decorations, next_span, items);
+      collect_inline_items_impl(
+        child,
+        depth + 1,
+        container,
+        link,
+        decorations,
+        next_span,
+        items,
+      );
     }
   }
 
@@ -474,12 +524,15 @@ fn inline_span_spacing(node: &RenderNode, depth: usize) -> (Rect<f32>, Rect<f32>
   )
 }
 
-/// The inline box an inline span opens with `id`, or `None` for a node that is not one.
-fn inline_span_decoration(
-  node: &RenderNode,
+/// The inline box an inline span opens with `id` inside `parent` in a container of `container`
+/// direction, or `None` for a node that is not one.
+fn inline_span_decoration<'n>(
+  node: &'n RenderNode,
   depth: usize,
   id: usize,
-) -> Option<InlineDecoration<'_>> {
+  parent: Option<&Rc<DecorationLink<'n>>>,
+  container: Direction,
+) -> Option<InlineDecoration<'n>> {
   if !is_inline_span(node, depth) {
     return None;
   }
@@ -522,6 +575,7 @@ fn inline_span_decoration(
     opacity: style.svg_data.opacity.0,
     direction: style.inherited_data.direction,
     sizing: node.context.sizing.clone(),
+    relative_offset: node.relative_offset_in(parent, container),
   })
 }
 

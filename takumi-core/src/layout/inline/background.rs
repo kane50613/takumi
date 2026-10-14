@@ -260,11 +260,12 @@ impl<'c> DecorationAccumulator<'c> {
         SpanFragment {
           id,
           line_index,
-          x: x0,
-          y: top - decoration.padding.top - decoration.border.width.top,
+          x: x0 + decoration.relative_offset.x,
+          y: top - decoration.padding.top - decoration.border.width.top
+            + decoration.relative_offset.y,
           width: x1 - x0,
           height: bottom - top + decoration.padding.vertical() + decoration.border.width.vertical(),
-          baseline: line.baseline,
+          baseline: line.baseline + decoration.relative_offset.y,
           has_start: cloned.is_some() || line_index == min_line,
           has_end: cloned.is_some() || line_index == max_line,
         }

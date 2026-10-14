@@ -352,6 +352,8 @@ pub struct PositionedInlineRun {
   pub(crate) decoration_placement: DecorationPlacement,
   /// Where the block's border box sits in the space paint snaps to pixels in.
   pub(crate) paint_offset: Point<f32>,
+  /// How far `position: relative` on its spans moves it.
+  pub(crate) relative_offset: Point<f32>,
   /// Where the run sits among its block's runs.
   #[cfg(feature = "paint-tree")]
   pub(crate) index: usize,
@@ -372,9 +374,9 @@ impl PositionedInlineRun {
       &self.decoration_placement,
       self.baseline_shift,
       DecorationSpace {
-        transform: base,
+        transform: base * Affine::translation(self.relative_offset.x, self.relative_offset.y),
         device,
-        paint_offset: self.paint_offset,
+        paint_offset: self.paint_offset + self.relative_offset,
       },
     )
   }
@@ -385,12 +387,13 @@ impl PositionedInlineRun {
     self.line_scale.transform(base, self.static_inline_prefix)
   }
 
-  /// Per-glyph inline-offset origin (border/padding box top-left + baseline shift).
+  /// Per-glyph inline-offset origin (border/padding box top-left + baseline shift + relative
+  /// offset).
   pub fn glyph_offset(&self, layout: ComputedLayout) -> Point<f32> {
     let offset = layout.content_box_offset();
     Point {
-      x: offset.x,
-      y: offset.y + self.baseline_shift,
+      x: offset.x + self.relative_offset.x,
+      y: offset.y + self.baseline_shift + self.relative_offset.y,
     }
   }
 

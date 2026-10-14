@@ -31,15 +31,29 @@
         line-height: 1.6;
         background: rgb(224, 231, 255);
       }
+      .preflight sup,
+      .preflight sub {
+        font-size: 75%;
+        line-height: 0;
+        position: relative;
+        vertical-align: baseline;
+      }
+      .preflight sup {
+        top: -0.5em;
+      }
+      .preflight sub {
+        bottom: -0.25em;
+      }
     </style>
   </head>
-  <body style="width: 720px; height: 340px">
+  <body style="width: 720px; height: 400px">
     <div class="root">
       <p>E = mc<sup>2</sup> and H<sub>2</sub>O</p>
       <p
         >Footnote<sup>12</sup> nested x<sup>a<sup>b</sup></sup></p
       >
       <p class="lined">Line height<sup>sup</sup> stays<sub>sub</sub></p>
+      <p class="preflight">Preflight x<sup>2</sup> and CO<sub>2</sub></p>
       <p style="font-size: 18px">Small text<sup>†</sup> with a mark</p>
     </div>
   </body>

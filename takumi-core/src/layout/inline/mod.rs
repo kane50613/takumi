@@ -416,6 +416,7 @@ impl BuiltInlineLayout<'_> {
           let baseline_shift = self.run_baseline_shift(line, &glyph_run);
           let (origin, size) = glyph_run_rect(&glyph_run, hanging, &stretch, baseline_shift);
           let (origin, size) = setup.scale_rect(origin, size, static_inline_prefix, baseline_shift);
+          let origin = origin + self.run_relative_offset(&glyph_run);
 
           let link = span_id.and_then(|span_id| match self.spans.get(span_id as usize) {
             Some(ProcessedInlineSpan::Text { link, .. }) => link.as_deref(),
@@ -439,9 +440,11 @@ impl BuiltInlineLayout<'_> {
           ) {
             return Ok(());
           }
+          let relative_offset = self.span_relative_offset(inline_box.id);
+
           inline_boxes.push(MeasuredInlineBox {
-            x: inline_box.x,
-            y: inline_box.y,
+            x: inline_box.x + relative_offset.x,
+            y: inline_box.y + relative_offset.y,
             width: inline_box.width,
             height: inline_box.height,
           });
@@ -922,6 +925,7 @@ pub(crate) fn process_inline_spans<'c>(
           available_space,
           index_pos,
           spans.len() as u64,
+          context.style.inherited_data.direction,
         ));
         // A float or an out-of-flow box is opaque to white space collapsing, as Blink's
         // `InlineItemsBuilder::AppendOpaque` leaves the spaces around it adjacent.
@@ -1028,13 +1032,15 @@ fn direction_mark_span<'c>(
   })
 }
 
-/// Measures an inline-level node and sizes the box that stands in for it.
+/// Measures an inline-level node and sizes the box that stands in for it in a container of
+/// `container` direction.
 fn inline_box_span<'c>(
   render_node: &'c RenderNode,
   decorations: Option<Rc<DecorationLink<'c>>>,
   available_space: Size<AvailableSpace>,
   index: usize,
   id: u64,
+  container: Direction,
 ) -> ProcessedInlineSpan<'c> {
   let context = &render_node.context;
   let kind = render_node.inline_box_kind();
@@ -1100,6 +1106,7 @@ fn inline_box_span<'c>(
     vertical_align: ParleyVerticalAlign::BASELINE,
   };
   let baseline_offset = raw_baseline_offset.map(|baseline| baseline.clamp(0.0, inline_box.height));
+  let relative_offset = render_node.relative_offset_in(decorations.as_ref(), container);
 
   ProcessedInlineSpan::Box(InlineBoxItem {
     render_node,
@@ -1112,6 +1119,7 @@ fn inline_box_span<'c>(
     border,
     baseline_offset,
     vertical_align,
+    relative_offset,
   })
 }
 
@@ -1488,6 +1496,23 @@ impl<'c> BuiltInlineLayout<'c> {
   /// The spans around the text span `span_id`, innermost first.
   pub(crate) fn span_chain(&self, span_id: Option<u64>) -> Option<&Rc<DecorationLink<'c>>> {
     self.spans.get(span_id? as usize)?.text_chain()
+  }
+
+  /// How far `position: relative` moves span `span_id`.
+  pub(crate) fn span_relative_offset(&self, span_id: u64) -> Point<f32> {
+    self
+      .spans
+      .get(span_id as usize)
+      .map_or(Point::ZERO, ProcessedInlineSpan::relative_offset)
+  }
+
+  /// How far `position: relative` moves `glyph_run`.
+  pub(crate) fn run_relative_offset(&self, glyph_run: &GlyphRun<'_, InlineBrush>) -> Point<f32> {
+    glyph_run
+      .style()
+      .brush
+      .source_span_id
+      .map_or(Point::ZERO, |span_id| self.span_relative_offset(span_id))
   }
 
   /// The baseline shift `glyph_run` paints at on `line`.
