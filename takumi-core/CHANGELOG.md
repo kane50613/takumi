@@ -1,3 +1,9 @@
+## takumi-core@0.29.1
+
+### Keep every line `line-clamp` allows
+
+`line-clamp` now limits text by line count alone, as Chrome does. A paragraph that fits its clamp exactly no longer loses its last line to rounding, such as two lines of 42px text at `line-height: 1.04`.
+
 ## takumi-core@0.29.0
 
 ### Register font subsets with `unicodeRange`
