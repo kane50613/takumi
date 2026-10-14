@@ -147,7 +147,48 @@
 @theme inline {
   --default-font-family: "Noto Serif", serif;
   --font-mono: "Geist Mono", monospace;
+  --font-display: "Anybody", sans-serif;
+  --font-label: "Martian Mono", monospace;
   --ease-out-strong: cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+/* A pressable button lit from above: a top highlight, a hairline edge, and a lip below that the
+   press sinks into. Set through --tw-shadow so focus rings still draw on top. */
+@utility raised {
+  --tw-shadow:
+    0 0 0 1px var(--raised-ring), inset 0 1px 0 var(--raised-highlight),
+    inset 0 -2px 0 var(--raised-lip), 0 1px 2px var(--raised-drop);
+  box-shadow:
+    var(--tw-inset-shadow, 0 0 #0000), var(--tw-inset-ring-shadow, 0 0 #0000),
+    var(--tw-ring-offset-shadow, 0 0 #0000), var(--tw-ring-shadow, 0 0 #0000), var(--tw-shadow);
+
+  &:active,
+  &[aria-current="step"] {
+    --tw-shadow: 0 0 0 1px var(--raised-ring), inset 0 2px 3px var(--raised-press);
+  }
+}
+
+@utility raised-primary {
+  --raised-ring: color-mix(in oklab, var(--primary), black 25%);
+  --raised-highlight: rgb(255 255 255 / 28%);
+  --raised-lip: rgb(0 0 0 / 22%);
+  --raised-drop: rgb(80 20 0 / 30%);
+  --raised-press: rgb(0 0 0 / 35%);
+}
+
+@utility raised-quiet {
+  --raised-ring: var(--border);
+  --raised-highlight: rgb(255 255 255 / 90%);
+  --raised-lip: rgb(24 19 15 / 8%);
+  --raised-drop: rgb(24 19 15 / 8%);
+  --raised-press: rgb(24 19 15 / 14%);
+
+  @variant dark {
+    --raised-highlight: rgb(255 255 255 / 8%);
+    --raised-lip: rgb(0 0 0 / 35%);
+    --raised-drop: rgb(0 0 0 / 30%);
+    --raised-press: rgb(0 0 0 / 45%);
+  }
 }
 
 /* ─── Playground boot ─── */
@@ -220,6 +261,48 @@
 
 @media (prefers-reduced-motion: reduce) {
   .paint-in {
+    animation: none;
+  }
+}
+
+/* ─── Home page entrance ─── */
+@keyframes home-enter {
+  from {
+    opacity: 0;
+    transform: translateY(28px);
+    filter: blur(8px);
+  }
+}
+
+@keyframes home-rise {
+  from {
+    transform: translateY(calc(100% + 0.25em));
+  }
+}
+
+@keyframes home-swing {
+  from {
+    opacity: 0;
+    transform: rotate(26deg);
+  }
+}
+
+.home-enter {
+  animation: home-enter 1100ms var(--ease-out-strong) var(--enter-delay, 0ms) both;
+}
+
+.home-rise {
+  animation: home-rise 1100ms var(--ease-out-strong) backwards;
+}
+
+.home-swing {
+  animation: home-swing 1400ms cubic-bezier(0.34, 1.36, 0.64, 1) 450ms both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .home-enter,
+  .home-rise,
+  .home-swing {
     animation: none;
   }
 }

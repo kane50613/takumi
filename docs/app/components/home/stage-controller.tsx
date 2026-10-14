@@ -16,8 +16,8 @@ const FOLLOW_MS = 105;
 const START_AFTER_MS = 3500;
 const WIDE_MIN = 1024;
 /** The forge's full composition, and the crop around hammer, card, and anvil narrower pages show. */
-const FULL_VIEW_BOX = "0 0 1440 900";
-const COMPACT_VIEW_BOX = "400 20 960 840";
+const FULL_VIEW_BOX = "0 -40 1440 940";
+const COMPACT_VIEW_BOX = "400 -40 960 900";
 const STRIKE_LABELS = [
   "Strike the anvil",
   "Strike again · Text",
@@ -241,8 +241,7 @@ export function StageController({ data }: { data: StageData }) {
         copyBlocks.forEach((block, index) => {
           const isCurrent = index === step;
 
-          block.style.opacity = isCurrent ? "1" : "0";
-          block.style.pointerEvents = isCurrent ? "auto" : "none";
+          block.toggleAttribute("data-current", isCurrent);
           block.inert = !isCurrent;
         });
         stepButtons.forEach((button, index) => {

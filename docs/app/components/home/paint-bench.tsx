@@ -37,9 +37,9 @@ export function PaintBench({ scene }: { scene: PaintScene }) {
   const quad = current ? scene.nodes[current.node]?.quad : undefined;
 
   return (
-    <div ref={track} className={cn("relative", !reduceMotion && "h-[220svh]")}>
+    <div ref={track} className={cn("relative", !reduceMotion && "h-[340svh]")}>
       <div className={cn("space-y-4", !reduceMotion && "sticky top-[calc(3.5rem+6svh)]")}>
-        <div className="overflow-hidden rounded-2xl border border-foreground/15 bg-[#181310] shadow-lg">
+        <div className="overflow-hidden rounded-lg border border-foreground/12 bg-[#181310]">
           <svg
             role="img"
             aria-label={`Forged component replayed through draw step ${shown} of ${totalDraws}`}
@@ -50,8 +50,8 @@ export function PaintBench({ scene }: { scene: PaintScene }) {
             {quad && shown < totalDraws && (
               <polygon
                 points={quad.map(({ x, y }) => `${x},${y}`).join(" ")}
-                fill="rgba(255, 169, 68, 0.14)"
-                stroke="#ffa944"
+                fill="rgba(255, 93, 46, 0.14)"
+                stroke="#ff5d2e"
                 strokeWidth="4"
                 strokeDasharray="10 8"
               />
@@ -59,7 +59,7 @@ export function PaintBench({ scene }: { scene: PaintScene }) {
           </svg>
         </div>
 
-        <div className="flex flex-wrap items-center justify-between gap-4 font-mono text-base">
+        <div className="flex flex-wrap items-center justify-between gap-4 font-label text-base [font-stretch:87.5%]">
           <div className="flex min-w-[16rem] flex-1 items-center gap-4">
             <span className="shrink-0 font-semibold text-primary tabular-nums">
               step {String(shown).padStart(2, "0")}/{String(totalDraws).padStart(2, "0")}

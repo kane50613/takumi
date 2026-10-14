@@ -11,20 +11,28 @@ const DESCRIPTION =
 
 const HOME_THEME_CSS = `
 @font-face {
-  font-family: "Geist";
-  src: url("/fonts/Geist.woff2") format("woff2");
+  font-family: "Anybody";
+  src: url("/fonts/Anybody.woff2") format("woff2");
   font-weight: 100 900;
-  font-style: normal;
+  font-stretch: 50% 150%;
   font-display: swap;
 }
 @font-face {
-  font-family: "Geist Mono";
-  src: url("/fonts/GeistMono.woff2") format("woff2");
-  font-weight: 100 900;
-  font-style: normal;
+  font-family: "Instrument Sans";
+  src: url("/fonts/InstrumentSans.woff2") format("woff2");
+  font-weight: 400 700;
+  font-stretch: 75% 100%;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Martian Mono";
+  src: url("/fonts/MartianMono.woff2") format("woff2");
+  font-weight: 100 800;
+  font-stretch: 75% 112.5%;
   font-display: swap;
 }
 :root:has([data-stage]) {
+  --font-sans: "Instrument Sans", system-ui, sans-serif;
   --background: #faf5ee;
   --foreground: #18130f;
   --primary: #c92d14;

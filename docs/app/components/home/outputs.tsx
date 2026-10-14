@@ -6,41 +6,14 @@ import { GUTTER, H2, H3, VALUE } from "./typography";
 
 const OUTPUT = "/images/twitter-images";
 const THUMBNAIL = "/images/home";
-const PANEL = "w-[min(84vw,58rem)] shrink-0 space-y-5";
+const PANEL = "grid w-full max-w-[76rem] items-center gap-x-12 gap-y-6 lg:grid-cols-[15rem_1fr]";
 
-/** The outputs the anvil strike forges, slid past one by one, then its draw steps replayed. */
+/** The outputs the anvil strike forges, wiped in one by one, then its draw steps replayed. */
 export function Outputs() {
   return (
-    <section id="outputs" aria-labelledby="outputs-title" className="relative pb-[8svh]">
-      {/* Forge trajectory streams crossing the boundary from the anvil stage above */}
-      <div aria-hidden className="pointer-events-none relative -mt-[4svh] h-[12svh] w-full">
-        <svg
-          viewBox="0 0 1440 220"
-          preserveAspectRatio="none"
-          className="size-full overflow-visible"
-        >
-          <defs>
-            <linearGradient id="forge-stream" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor="#ffa944" stopOpacity="0.85" />
-              <stop offset="60%" stopColor="#ff451a" stopOpacity="0.45" />
-              <stop offset="100%" stopColor="#ff451a" stopOpacity="0" />
-            </linearGradient>
-          </defs>
-          {[180, 480, 780, 1060, 1280].map((targetX, index) => (
-            <path
-              key={targetX}
-              d={`M 920 0 C 920 95, ${targetX} 95, ${targetX} 220`}
-              fill="none"
-              stroke="url(#forge-stream)"
-              strokeWidth={index === 2 ? "3.5" : "2"}
-              strokeDasharray="10 8"
-            />
-          ))}
-        </svg>
-      </div>
-
+    <section id="outputs" aria-labelledby="outputs-title" className="relative pt-[12svh] pb-[8svh]">
       <h2 id="outputs-title" className={cn(H2, GUTTER)}>
-        Five outputs from one strike.
+        One component, every format.
       </h2>
 
       <Gallery>
@@ -61,7 +34,7 @@ export function Outputs() {
               alt="Square quote card rendered as WebP"
               width={544}
               height={544}
-              className="absolute -bottom-2 right-0 w-[34%] shadow-2xl"
+              className="absolute -bottom-2 right-0 w-[34%] ring-8 ring-background"
             />
           </div>
         </section>
@@ -119,7 +92,10 @@ export function Outputs() {
         </section>
       </Gallery>
 
-      <section aria-label="Paint" className={cn("mx-auto max-w-[64rem] space-y-5", GUTTER)}>
+      <section
+        aria-label="Paint"
+        className={cn("mx-auto max-w-[64rem] space-y-6 pt-[8svh]", GUTTER)}
+      >
         <h3 className={H3}>Paint</h3>
         <PaintBench scene={scene} />
       </section>
@@ -129,7 +105,7 @@ export function Outputs() {
 
 function PanelTitle({ title, formats }: { title: string; formats?: string }) {
   return (
-    <div className="flex flex-wrap items-baseline justify-between gap-2">
+    <div className="space-y-2">
       <h3 className={H3}>{title}</h3>
       {formats && <span className={VALUE}>{formats}</span>}
     </div>
@@ -158,7 +134,7 @@ function OutputImage({
       target="_blank"
       rel="noopener"
       className={cn(
-        "block overflow-hidden rounded-2xl border border-foreground/15 shadow-xl transition-transform duration-200 ease-out-strong hover:-translate-y-1 active:scale-[0.98]",
+        "block overflow-hidden rounded-lg border border-foreground/12 transition-[border-color,transform] duration-150 ease-out-strong hover:border-foreground/30 active:scale-[0.99]",
         className,
       )}
     >
