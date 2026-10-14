@@ -15,6 +15,9 @@ import {
 const FOLLOW_MS = 105;
 const START_AFTER_MS = 3500;
 const WIDE_MIN = 1024;
+/** The forge's full composition, and the crop around hammer, card, and anvil narrower pages show. */
+const FULL_VIEW_BOX = "0 0 1440 900";
+const COMPACT_VIEW_BOX = "400 20 960 840";
 const STRIKE_LABELS = [
   "Strike the anvil",
   "Strike again · Text",
@@ -71,6 +74,8 @@ export function StageController({ data }: { data: StageData }) {
       ...(stage?.querySelectorAll<HTMLElement>("[data-strike-trigger]") ?? []),
     ];
     const strikeLabel = stage?.querySelector<HTMLElement>("[data-strike-label]");
+    const forge = stage?.querySelector<SVGSVGElement>("[data-forge]");
+    const wide = matchMedia(`(min-width: ${WIDE_MIN}px)`);
 
     if (!canvas || !stage || !view) {
       return;
@@ -344,10 +349,16 @@ export function StageController({ data }: { data: StageData }) {
       apply(progress);
     });
 
+    const frameForge = () => {
+      forge?.setAttribute("viewBox", wide.matches ? FULL_VIEW_BOX : COMPACT_VIEW_BOX);
+    };
+
+    frameForge();
     measure();
     progress = target;
     apply(progress);
     addEventListener("scroll", wake, { passive: true });
+    wide.addEventListener("change", frameForge);
     resizeObserver.observe(view);
     themeObserver.observe(document.documentElement, {
       attributes: true,
@@ -368,6 +379,7 @@ export function StageController({ data }: { data: StageData }) {
       }
       cancelAnimationFrame(frame);
       removeEventListener("scroll", wake);
+      wide.removeEventListener("change", frameForge);
       resizeObserver.disconnect();
       themeObserver.disconnect();
       scene?.dispose();

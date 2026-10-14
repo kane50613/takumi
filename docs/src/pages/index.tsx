@@ -38,6 +38,9 @@ const HOME_THEME_CSS = `
   --color-fd-primary: var(--primary);
   font-family: var(--font-sans);
 }
+:root:has([data-stage]) #nd-nav > nav {
+  border-bottom-color: transparent;
+}
 .dark:has([data-stage]) {
   --background: #14100d;
   --foreground: #f7f0e6;

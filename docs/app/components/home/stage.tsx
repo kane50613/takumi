@@ -12,27 +12,30 @@ const STAGES = [
     key: "anvil",
     stepLabel: "Anvil",
     title: "Craft components into every output.",
-    line: "Swing the hammer or scroll to forge JSX and CSS into images, motion, SVG, PDF, and draw data.",
+    line: "JSX and CSS in. Images, motion, SVG, and PDF out.",
   },
   {
     key: "layout",
     stepLabel: "Layout",
     title: "Layout",
-    line: "Strike one splits the component into measured flexbox and grid boxes.",
+    line: "Flexbox and grid, measured.",
   },
   {
     key: "text",
     stepLabel: "Text",
     title: "Text",
-    line: "Strike two shapes every glyph into vector outlines with exact baselines.",
+    line: "Every glyph, shaped.",
   },
   {
     key: "paint",
     stepLabel: "Paint",
     title: "Paint",
-    line: "Strike three orders every fill, gradient, and glyph run for any backend.",
+    line: "Every fill, drawn in order.",
   },
 ] as const;
+
+const ANVIL_PATH =
+  "M 430 672 Q 535 652 608 652 L 1232 652 L 1278 670 L 1232 688 L 1110 696 C 1055 724 1055 768 1120 792 L 1220 806 L 1238 844 L 595 844 L 615 806 L 715 792 C 780 768 780 724 725 696 L 608 690 Q 520 686 430 672 Z";
 
 const HAMMER_HANDLE_PATH =
   "M114.3 14.1c1.1.9 3.2 2.7 4.2 4.5s.9 3.5.8 4.8-.4 2.3-2 4.3c-1.7 2-4.7 5-12.8 13.7-8.1 8.8-21.4 23.4-35.3 38.4s-28.6 30.5-36.4 38.7-8.8 8.8-10 9.2-2.5.4-4.1 0-3.5-1.2-6.5-3.8-7.1-6.9-9.4-10S.1 108.8.1 107c0-1.7.4-3.4 5.3-8.6s14.3-13.9 30.5-28.9c16.1-14.9 39-36.1 51-47.2s13.2-12 14.7-12.7 3.2-1.1 4.8-.9 2.8 1 3.9 1.9a32 32 0 0 1 2.5 2.1l.4.5z";
@@ -112,13 +115,14 @@ export function Stage() {
         />
 
         {/* Full-bleed SVG Forge Canvas: Hammer, Anvil, Component, and Exploded Real Parts */}
-        <div className="pointer-events-none absolute inset-0 size-full max-lg:top-[22svh] max-lg:bottom-[7svh]">
+        <div className="pointer-events-none min-h-0 flex-1 max-lg:order-1 lg:absolute lg:inset-0 lg:bottom-20">
           <svg
+            data-forge
             role="img"
             aria-label="Takumi's orange-red hammer suspended over an anvil where a component splits into layout boxes, glyph outlines, and paint layers."
             viewBox="0 0 1440 900"
             preserveAspectRatio="xMidYMid meet"
-            className="size-full overflow-visible max-lg:scale-[1.08] max-lg:-translate-x-[13%]"
+            className="size-full overflow-visible"
           >
             <defs>
               <linearGradient
@@ -144,15 +148,24 @@ export function Stage() {
                 <stop offset="1" stopColor="#d71d36" />
               </linearGradient>
               <linearGradient id="forge-anvil-body" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor="#352b24" />
-                <stop offset="45%" stopColor="#231c17" />
-                <stop offset="100%" stopColor="#15110e" />
+                <stop offset="0%" stopColor="#3a2e26" />
+                <stop offset="100%" stopColor="#2a211b" />
               </linearGradient>
               <linearGradient id="forge-anvil-face" x1="0" y1="0" x2="1" y2="0">
                 <stop offset="0%" stopColor="#ff6a3d" />
                 <stop offset="50%" stopColor="#ffa944" />
                 <stop offset="100%" stopColor="#e5341f" />
               </linearGradient>
+              {/* The sticker edge the logo carries, lifted off light and dark pages alike */}
+              <filter id="forge-sticker" x="-10%" y="-10%" width="120%" height="130%">
+                <feDropShadow
+                  dx="0"
+                  dy="8"
+                  stdDeviation="10"
+                  floodColor="#18130f"
+                  floodOpacity="0.22"
+                />
+              </filter>
               <radialGradient id="forge-impact-glow" cx="50%" cy="50%" r="50%">
                 <stop offset="0%" stopColor="#ffa944" stopOpacity="0.92" />
                 <stop offset="45%" stopColor="#ff3535" stopOpacity="0.55" />
@@ -161,24 +174,16 @@ export function Stage() {
             </defs>
 
             {/* Heavy Cast-Iron Anvil anchored at x=920, face at y=652 */}
-            <g data-anvil className="will-change-transform">
+            <g data-anvil className="will-change-transform" filter="url(#forge-sticker)">
               <path
-                d="M 430 672 Q 535 652 608 652 L 1232 652 L 1278 670 L 1232 688 L 1110 696 C 1055 724 1055 768 1120 792 L 1220 806 L 1238 844 L 595 844 L 615 806 L 715 792 C 780 768 780 724 725 696 L 608 690 Q 520 686 430 672 Z"
-                fill="url(#forge-anvil-body)"
-                stroke="#4a3c32"
-                strokeWidth="2"
+                d={ANVIL_PATH}
+                fill="none"
+                stroke="#fff8f0"
+                strokeWidth="16"
+                strokeLinejoin="round"
               />
+              <path d={ANVIL_PATH} fill="url(#forge-anvil-body)" />
               <rect x="606" y="648" width="628" height="9" rx="3" fill="url(#forge-anvil-face)" />
-              <rect
-                x="760"
-                y="814"
-                width="320"
-                height="30"
-                rx="4"
-                fill="#120e0c"
-                stroke="#3d3129"
-                strokeWidth="1.5"
-              />
             </g>
 
             {/* The Component on the Anvil (1200×630 scaled by 0.516 -> 619×325 at x=610..1229, y=323..648) */}
@@ -409,7 +414,10 @@ export function Stage() {
               className="will-change-transform"
               style={{ transformOrigin: "1315px 165px", transform: "rotate(11deg)" }}
             >
-              <g transform="translate(1315, 165) rotate(-47.9) scale(-3.3, 3.3) translate(-8, -110)">
+              <g
+                transform="translate(1315, 165) rotate(-47.9) scale(-3.3, 3.3) translate(-8, -110)"
+                filter="url(#forge-sticker)"
+              >
                 <path
                   d={HAMMER_HANDLE_PATH}
                   fill="none"
@@ -464,7 +472,7 @@ export function Stage() {
               type="button"
               size="lg"
               data-strike-trigger
-              className="h-12 cursor-pointer gap-3 rounded-xl bg-primary px-6 text-base font-bold text-primary-foreground shadow-sm transition-transform duration-150 ease-out hover:bg-primary/90 active:scale-[0.97]"
+              className="h-12 cursor-pointer gap-3 rounded-xl bg-primary px-6 text-base font-bold text-primary-foreground shadow-sm transition-[transform,background-color] duration-150 ease-out-strong hover:bg-primary/90 active:scale-[0.97]"
             >
               <img
                 src="/logo.svg"
@@ -488,7 +496,7 @@ export function Stage() {
         {/* Bottom Stage Rail: Keyboard-accessible buttons for each strike */}
         <div
           className={cn(
-            "relative z-10 flex flex-wrap items-center justify-between gap-4 pb-[2.5svh]",
+            "relative z-10 flex flex-wrap items-center justify-between gap-4 pb-[2.5svh] max-lg:order-2",
             GUTTER,
           )}
         >
@@ -500,7 +508,7 @@ export function Stage() {
                 data-step-button
                 data-step-index={index}
                 aria-current={index === 0 ? "step" : undefined}
-                className="cursor-pointer rounded-lg border border-foreground/15 bg-background/90 px-3.5 py-1.5 font-mono text-base font-semibold text-muted-foreground transition-[color,border-color,background-color,transform] duration-150 ease-out hover:border-foreground/35 hover:text-foreground active:scale-[0.97] aria-[current=step]:border-primary aria-[current=step]:bg-primary/12 aria-[current=step]:text-foreground sm:px-4 sm:py-2"
+                className="cursor-pointer rounded-lg border border-foreground/15 bg-background/90 px-3.5 py-1.5 font-mono text-base font-semibold text-muted-foreground transition-[color,border-color,background-color,transform] duration-150 ease-out-strong hover:border-foreground/35 hover:text-foreground active:scale-[0.97] aria-[current=step]:border-primary aria-[current=step]:bg-primary/12 aria-[current=step]:text-foreground sm:px-4 sm:py-2"
               >
                 {item.stepLabel}
               </button>
