@@ -38,7 +38,7 @@
     </g>
     <rect x="86" y="142" width="555.552" height="6" fill="#e11d48"/>
   </g>
-  <filter id="bl0">
+  <filter id="bl0" filterUnits="userSpaceOnUse" x="-18" y="-18" width="1236" height="666">
     <feGaussianBlur stdDeviation="6"/>
   </filter>
   <g filter="url(#bl0)">

@@ -3,7 +3,7 @@
     <path d="M-1000000-1000000H1000000V1000000H-1000000ZM40 40h480v200h-480v-200Z" clip-rule="evenodd"/>
   </clipPath>
   <g clip-path="url(#cp0)">
-    <filter id="bl1">
+    <filter id="bl1" filterUnits="userSpaceOnUse" x="-24" y="-24" width="648" height="348">
       <feGaussianBlur stdDeviation="8"/>
     </filter>
     <g filter="url(#bl1)">

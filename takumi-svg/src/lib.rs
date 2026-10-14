@@ -168,6 +168,8 @@ pub(crate) struct SvgDocument {
   glyph_ids: HashMap<String, u32>,
   /// Each open transformed group's transform onto the root, innermost last.
   transforms: Vec<Affine>,
+  /// The root viewport in root user space.
+  viewport: Frame,
 }
 
 impl SvgDocument {
@@ -176,6 +178,7 @@ impl SvgDocument {
   pub(crate) fn new(width: f32, height: f32) -> io::Result<Self> {
     // Indent so the emitted SVG is one element per line and reviewable in a diff.
     let mut writer = Writer::new_with_indent(Vec::new(), b' ', 2);
+    let viewport = Frame::new(0.0, 0.0, width, height);
     let (width, height) = (num(width), num(height));
     let mut svg = BytesStart::new("svg");
     svg.push_attribute(("xmlns", "http://www.w3.org/2000/svg"));
@@ -189,6 +192,7 @@ impl SvgDocument {
       glyph_defs: Vec::new(),
       glyph_ids: HashMap::new(),
       transforms: Vec::new(),
+      viewport,
     })
   }
 
@@ -623,16 +627,46 @@ impl SvgDocument {
     Ok(reference)
   }
 
-  /// Defines a gaussian-blur filter (for text-shadow) and returns its `url(#id)`.
+  /// Defines a gaussian-blur filter for a shadow and returns its `url(#id)`.
   pub(crate) fn blur_filter(&mut self, std_deviation: f32) -> io::Result<String> {
     let (id, reference) = self.alloc_id("bl");
-    self.open("filter", &[("id", id.into())])?;
+    let mut attrs = vec![("id", id.into()), ("filterUnits", "userSpaceOnUse".into())];
+
+    attrs.extend(self.blur_region(std_deviation).attrs());
+    self.open("filter", &attrs)?;
     self.empty(
       "feGaussianBlur",
       &[("stdDeviation", num(std_deviation).into())],
     )?;
     self.close("filter")?;
     Ok(reference)
+  }
+
+  /// The viewport in the current user space, grown by the `ceil(3σ)` a blur reaches, as
+  /// Chromium bounds shadow blur in `ShadowData::RectOutsets`
+  /// (third_party/blink/renderer/core/style/shadow_data.cc).
+  fn blur_region(&self, std_deviation: f32) -> Frame {
+    let outset = (3.0 * std_deviation).ceil();
+    let Frame { x, y, w, h } = self.viewport;
+    // A singular transform draws nothing, so any region serves it.
+    let to_user = self.transform().invert().unwrap_or(Affine::IDENTITY);
+    let corners =
+      [(x, y), (x + w, y), (x, y + h), (x + w, y + h)].map(|(x, y)| to_user.transform_point(x, y));
+    let (mut left, mut top, mut right, mut bottom) = (f32::MAX, f32::MAX, f32::MIN, f32::MIN);
+
+    for (x, y) in corners {
+      left = left.min(x);
+      top = top.min(y);
+      right = right.max(x);
+      bottom = bottom.max(y);
+    }
+
+    Frame::new(
+      left - outset,
+      top - outset,
+      right - left + 2.0 * outset,
+      bottom - top + 2.0 * outset,
+    )
   }
 
   /// Defines a CSS `filter` list as SVG `<filter>` elements and returns their
@@ -1100,6 +1134,25 @@ mod tests {
       svg.contains(r#"<g transform="matrix(1 0 0 1 3 4)" opacity=".5" clip-path="url(#cp0)">"#)
     );
     assert!(svg.contains("</g>"));
+  }
+
+  #[test]
+  fn blur_region_covers_viewport_in_group_space() {
+    let mut doc = SvgDocument::new(100.0, 50.0).unwrap();
+    let token = doc
+      .begin_group(
+        Affine::scale(2.0, 2.0) * Affine::translation(10.0, 0.0),
+        1.0,
+        None,
+        None,
+      )
+      .unwrap();
+    doc.blur_filter(4.5).unwrap();
+    doc.end_group(token).unwrap();
+
+    assert!(doc.finish().unwrap().contains(
+      r#"<filter id="bl0" filterUnits="userSpaceOnUse" x="-24" y="-14" width="78" height="53">"#
+    ));
   }
 
   #[test]
