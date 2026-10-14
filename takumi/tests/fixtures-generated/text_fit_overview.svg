@@ -243,7 +243,7 @@
     <use href="#g0" x="909.11" y="167"/>
     <use href="#g2" x="917.49" y="167"/>
   </g>
-  <filter id="bl0">
+  <filter id="bl0" filterUnits="userSpaceOnUse" x="-9" y="-9" width="1218" height="758">
     <feGaussianBlur stdDeviation="3"/>
   </filter>
   <g filter="url(#bl0)">
@@ -251,7 +251,7 @@
     <rect x="926" y="222" width="21.776" height="4" fill="#45556e" fill-opacity=".706"/>
     <rect x="973.776" y="222" width="89.224" height="4" fill="#45556e" fill-opacity=".706"/>
   </g>
-  <filter id="bl1">
+  <filter id="bl1" filterUnits="userSpaceOnUse" x="-15" y="-15" width="1230" height="770">
     <feGaussianBlur stdDeviation="4.71"/>
   </filter>
   <g filter="url(#bl1)">
