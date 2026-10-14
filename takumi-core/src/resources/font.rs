@@ -18,7 +18,7 @@ use parley::{
   LayoutContext, TreeBuilder,
   fontique::{
     Attributes, Blob, Collection, CollectionOptions, FallbackKey, FontInfo, FontInfoOverride,
-    FontStyle, FontWeight, FontWidth, QueryFamily, QueryStatus, Script, ScriptExt,
+    FontStyle, FontWeight, FontWidth, QueryFamily, QueryFont, QueryStatus, Script, ScriptExt,
   },
 };
 use skrifa::{
@@ -830,32 +830,43 @@ impl RenderContext {
     attributes: Attributes,
     read: impl FnOnce(&FontRef) -> R,
   ) -> Option<R> {
+    let mut read = Some(read);
+    let mut result = None;
+
+    self.match_fonts(families, attributes, |font, space_outside_range| {
+      let Ok(font_ref) = FontRef::from_index(font.blob.data(), font.index) else {
+        return QueryStatus::Continue;
+      };
+      if space_outside_range {
+        return QueryStatus::Continue;
+      }
+
+      result = read.take().map(|read| read(&font_ref));
+      QueryStatus::Stop
+    });
+
+    result
+  }
+
+  /// Visits the fonts `families`/`attributes` match, in the order text falls back through them,
+  /// with whether each one's `unicode-range` leaves out the space, until `visit` stops.
+  fn match_fonts<'a>(
+    &self,
+    families: impl IntoIterator<Item = QueryFamily<'a>>,
+    attributes: Attributes,
+    mut visit: impl FnMut(&QueryFont, bool) -> QueryStatus,
+  ) {
     self.fonts().with_context(|fonts| {
       let space_outside_range = fonts.space_outside_range.clone();
       let mut query = fonts.inner.collection.query(&mut fonts.inner.source_cache);
-      let mut read = Some(read);
-      let mut result = None;
 
       query.set_families(families);
       // Past the listed families, Blink takes the default font; text without a listed family
       // shapes with the fallback bucket, which carries one family order for every script.
       query.set_fallbacks(FallbackKey::new(Script::from_bytes(*b"Latn"), None));
       query.set_attributes(attributes);
-
-      query.matches_with(|font| {
-        let Ok(font_ref) = FontRef::from_index(font.blob.data(), font.index) else {
-          return QueryStatus::Continue;
-        };
-        if space_outside_range.contains(&font.blob.id()) {
-          return QueryStatus::Continue;
-        }
-
-        result = read.take().map(|read| read(&font_ref));
-        QueryStatus::Stop
-      });
-
-      result
-    })
+      query.matches_with(|font| visit(font, space_outside_range.contains(&font.blob.id())));
+    });
   }
 
   /// Builds an inline layout whose paragraph takes `root_style` and its direction.
