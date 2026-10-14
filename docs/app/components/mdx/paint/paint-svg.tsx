@@ -5,7 +5,7 @@
 import type { CSSProperties, ReactNode } from "react";
 import type { CornerRadii, Gradient, Matrix, Paint, Rect, Shape, Stroke } from "takumi-paint";
 import { cssColor } from "~/playground/inspect-paint";
-import type { PaintScene, SceneDrawable } from "./scene";
+import type { PaintScene, SceneDrawable, SceneStep } from "./scene";
 
 /** Hands out ids for the gradients, filters, clips, and masks one SVG defines. */
 export class SvgIds {
@@ -338,8 +338,8 @@ export function sceneSteps(
   scene: PaintScene,
   count: number,
   ids: SvgIds,
-  /** Fades each drawn step in, the later ones this many milliseconds after the one before. */
-  stagger?: number,
+  /** Animates each drawn step in with `className`, the later ones `stagger` ms after the one before. */
+  enter?: { className: string; stagger: number },
 ): ReactNode {
   const root: Frame = { wrap: (children) => children, children: [] };
   const frames: Frame[] = [root];
@@ -355,15 +355,17 @@ export function sceneSteps(
     switch (step.type) {
       case "draw":
         top().children.push(
-          <g
-            key={index}
-            className={stagger === undefined ? undefined : "paint-in"}
-            style={stagger ? { animationDelay: `${index * stagger}ms` } : undefined}
-            transform={node && matrixCss(node.transform)}
-          >
-            {step.drawables.map((drawable, at) => (
-              <g key={at}>{drawableElement(drawable, ids)}</g>
-            ))}
+          <g key={index} transform={node && matrixCss(node.transform)}>
+            {enter ? (
+              <g
+                className={enter.className}
+                style={{ animationDelay: `${index * enter.stagger}ms` }}
+              >
+                {drawStep(step, ids)}
+              </g>
+            ) : (
+              drawStep(step, ids)
+            )}
           </g>,
         );
         break;
@@ -411,4 +413,8 @@ export function sceneSteps(
 /** A browser-loadable `href` for an image source; Takumi reads any source containing `<svg` as inline markup. */
 function imageHref(src: string) {
   return src.includes("<svg") ? `data:image/svg+xml;utf8,${encodeURIComponent(src)}` : src;
+}
+
+function drawStep(step: Extract<SceneStep, { type: "draw" }>, ids: SvgIds) {
+  return step.drawables.map((drawable, at) => <g key={at}>{drawableElement(drawable, ids)}</g>);
 }

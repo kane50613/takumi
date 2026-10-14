@@ -52,7 +52,7 @@ export function PaintBench({ scene, title }: { scene: PaintScene; title: ReactNo
               viewBox={`0 0 ${scene.width} ${scene.height}`}
               className="h-auto w-full"
             >
-              {sceneSteps(scene, sceneCount, ids)}
+              {sceneSteps(scene, sceneCount, ids, { className: "paint-reveal", stagger: 0 })}
               {quad && shown < totalDraws && (
                 <polygon
                   points={quad.map(({ x, y }) => `${x},${y}`).join(" ")}

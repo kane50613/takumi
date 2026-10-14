@@ -256,6 +256,19 @@
   }
 }
 
+@keyframes paint-reveal {
+  from {
+    opacity: 0;
+    transform: translateY(28px) scale(0.96);
+  }
+}
+
+.paint-reveal {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: paint-reveal 600ms var(--ease-out-strong) both;
+}
+
 @keyframes home-swing {
   from {
     opacity: 0;
@@ -278,7 +291,8 @@
 @media (prefers-reduced-motion: reduce) {
   .home-enter,
   .home-rise,
-  .home-swing {
+  .home-swing,
+  .paint-reveal {
     animation: none;
   }
 }
