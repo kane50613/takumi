@@ -842,6 +842,7 @@ fn first_text_span_id(spans: &[ProcessedInlineSpan<'_>]) -> Option<u64> {
 fn build_inline_layout_tree<'c>(
   items: &[InlineItem<'c>],
   available_space: Size<AvailableSpace>,
+  max_width: f32,
   style: &'c SizedFontStyle,
   context: &'c RenderContext,
   shape_cacheable: bool,
@@ -866,7 +867,7 @@ fn build_inline_layout_tree<'c>(
     font,
     line_space: LineSpace::new(
       context.style.inherited_data.direction,
-      available_space.width.into_option(),
+      max_width.is_finite().then_some(max_width),
     ),
   }
 }
@@ -1199,8 +1200,14 @@ pub fn create_inline_layout<'c>(request: InlineLayoutRequest<'c>) -> BuiltInline
     mode,
     shape_cacheable,
   } = request;
-  let mut built =
-    build_inline_layout_tree(&items, available_space, style, context, shape_cacheable);
+  let mut built = build_inline_layout_tree(
+    &items,
+    available_space,
+    max_width,
+    style,
+    context,
+    shape_cacheable,
+  );
   let fits_text = text_fit_applies(style, &items, max_width);
   // `text-fit` scales line heights only after breaking, so only a line count clamps fitted lines.
   let max_height = if fits_text {
