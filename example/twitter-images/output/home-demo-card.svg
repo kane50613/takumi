@@ -2,155 +2,84 @@
   <rect x="0" y="0" width="1200" height="630" fill="#181310"/>
   <path d="M60 40h784c11.05 0 20 8.95 20 20v510c0 11.05-8.95 20-20 20h-784c-11.05 0-20-8.95-20-20v-510c0-11.05 8.95-20 20-20Z" fill="#211a15"/>
   <path d="M60 40h784c11.05 0 20 8.95 20 20v510c0 11.05-8.95 20-20 20h-784c-11.05 0-20-8.95-20-20v-510c0-11.05 8.95-20 20-20Zm0 2h784c9.94 0 18 8.06 18 18v510c0 9.94-8.06 18-18 18h-784c-9.94 0-18-8.06-18-18v-510c0-9.94 8.06-18 18-18Z" fill="#332922" fill-rule="evenodd"/>
-  <clipPath id="cp0">
-    <path d="M94 86h20c4.42 0 8 3.58 8 8v20c0 4.42-3.58 8-8 8h-20c-4.42 0-8-3.58-8-8v-20c0-4.42 3.58-8 8-8Z"/>
-  </clipPath>
-  <g clip-path="url(#cp0)">
-    <linearGradient id="lg1" gradientUnits="userSpaceOnUse" x1="86" y1="86" x2="122" y2="122">
-      <stop offset="0" stop-color="#ffa944"/>
-      <stop offset=".016" stop-color="#ffa743"/>
-      <stop offset=".032" stop-color="#ffa542"/>
-      <stop offset=".048" stop-color="#ffa341"/>
-      <stop offset=".063" stop-color="#ffa240"/>
-      <stop offset=".079" stop-color="#ffa03f"/>
-      <stop offset=".095" stop-color="#ff9e3e"/>
-      <stop offset=".111" stop-color="#ff9c3c"/>
-      <stop offset=".127" stop-color="#ff9a3b"/>
-      <stop offset=".143" stop-color="#ff983a"/>
-      <stop offset=".159" stop-color="#ff9639"/>
-      <stop offset=".175" stop-color="#ff9438"/>
-      <stop offset=".19" stop-color="#ff9337"/>
-      <stop offset=".206" stop-color="#ff9136"/>
-      <stop offset=".222" stop-color="#ff8f35"/>
-      <stop offset=".238" stop-color="#ff8d34"/>
-      <stop offset=".254" stop-color="#ff8b33"/>
-      <stop offset=".27" stop-color="#ff8932"/>
-      <stop offset=".286" stop-color="#ff8731"/>
-      <stop offset=".302" stop-color="#ff852f"/>
-      <stop offset=".317" stop-color="#ff842e"/>
-      <stop offset=".333" stop-color="#ff822d"/>
-      <stop offset=".349" stop-color="#ff802c"/>
-      <stop offset=".365" stop-color="#ff7e2b"/>
-      <stop offset=".381" stop-color="#ff7c2a"/>
-      <stop offset=".397" stop-color="#ff7a29"/>
-      <stop offset=".413" stop-color="#ff7828"/>
-      <stop offset=".429" stop-color="#ff7627"/>
-      <stop offset=".444" stop-color="#ff7526"/>
-      <stop offset=".46" stop-color="#ff7325"/>
-      <stop offset=".476" stop-color="#ff7124"/>
-      <stop offset=".492" stop-color="#ff6f23"/>
-      <stop offset=".508" stop-color="#ff6d21"/>
-      <stop offset=".524" stop-color="#ff6b20"/>
-      <stop offset=".54" stop-color="#ff691f"/>
-      <stop offset=".556" stop-color="#ff671e"/>
-      <stop offset=".571" stop-color="#ff661d"/>
-      <stop offset=".587" stop-color="#ff641c"/>
-      <stop offset=".603" stop-color="#ff621b"/>
-      <stop offset=".619" stop-color="#ff601a"/>
-      <stop offset=".635" stop-color="#ff5e19"/>
-      <stop offset=".651" stop-color="#ff5c18"/>
-      <stop offset=".667" stop-color="#ff5a17"/>
-      <stop offset=".683" stop-color="#ff5816"/>
-      <stop offset=".698" stop-color="#ff5715"/>
-      <stop offset=".714" stop-color="#ff5513"/>
-      <stop offset=".73" stop-color="#ff5312"/>
-      <stop offset=".746" stop-color="#ff5111"/>
-      <stop offset=".762" stop-color="#ff4f10"/>
-      <stop offset=".778" stop-color="#ff4d0f"/>
-      <stop offset=".794" stop-color="#ff4b0e"/>
-      <stop offset=".81" stop-color="#ff490d"/>
-      <stop offset=".825" stop-color="#ff480c"/>
-      <stop offset=".841" stop-color="#ff460b"/>
-      <stop offset=".857" stop-color="#ff440a"/>
-      <stop offset=".873" stop-color="#ff4209"/>
-      <stop offset=".889" stop-color="#ff4008"/>
-      <stop offset=".905" stop-color="#ff3e06"/>
-      <stop offset=".921" stop-color="#ff3c05"/>
-      <stop offset=".937" stop-color="#ff3a04"/>
-      <stop offset=".952" stop-color="#ff3903"/>
-      <stop offset=".968" stop-color="#ff3702"/>
-      <stop offset=".984" stop-color="#ff3501"/>
-      <stop offset="1" stop-color="#f30"/>
-    </linearGradient>
-    <rect x="86" y="86" width="36" height="36" fill="url(#lg1)"/>
-  </g>
+  <image x="86" y="86" width="40" height="40" href="data:image/svg+xml;base64,PHN2ZyB0dz0iaC0xMCB3LTEwIiB2aWV3Qm94PSIwIDAgMTI4IDEyOCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48ZGVmcz48bGluZWFyR3JhZGllbnQgaWQ9ImhhbmRsZSIgZ3JhZGllbnRVbml0cz0idXNlclNwYWNlT25Vc2UiIHgxPSI1OS43IiB5MT0iOC42IiB4Mj0iNTkuNyIgeTI9IjEyOCI+PHN0b3Agb2Zmc2V0PSIwIiBzdG9wLWNvbG9yPSIjZmZhOTQ0Ij48L3N0b3A+PHN0b3Agb2Zmc2V0PSIxIiBzdG9wLWNvbG9yPSIjZmYzMzAwIj48L3N0b3A+PC9saW5lYXJHcmFkaWVudD48bGluZWFyR3JhZGllbnQgaWQ9ImhlYWQiIGdyYWRpZW50VW5pdHM9InVzZXJTcGFjZU9uVXNlIiB4MT0iOTAuNyIgeTE9IjAiIHgyPSI5MC43IiB5Mj0iNzMuNyI+PHN0b3Agb2Zmc2V0PSIwIiBzdG9wLWNvbG9yPSIjZmYzNTM1Ij48L3N0b3A+PHN0b3Agb2Zmc2V0PSIxIiBzdG9wLWNvbG9yPSIjZDcxZDM2Ij48L3N0b3A+PC9saW5lYXJHcmFkaWVudD48L2RlZnM+PHBhdGggZmlsbD0idXJsKCNoYW5kbGUpIiBkPSJNMTE0LjMgMTQuMWMxLjEuOSAzLjIgMi43IDQuMiA0LjVzLjkgMy41LjggNC44LS40IDIuMy0yIDQuM2MtMS43IDItNC43IDUtMTIuOCAxMy43LTguMSA4LjgtMjEuNCAyMy40LTM1LjMgMzguNHMtMjguNiAzMC41LTM2LjQgMzguNy04LjggOC44LTEwIDkuMi0yLjUuNC00LjEgMC0zLjUtMS4yLTYuNS0zLjgtNy4xLTYuOS05LjQtMTBTLjEgMTA4LjguMSAxMDdjMC0xLjcuNC0zLjQgNS4zLTguNnMxNC4zLTEzLjkgMzAuNS0yOC45YzE2LjEtMTQuOSAzOS0zNi4xIDUxLTQ3LjJzMTMuMi0xMiAxNC43LTEyLjcgMy4yLTEuMSA0LjgtLjkgMi44IDEgMy45IDEuOWEzMiAzMiAwIDAgMSAyLjUgMi4xbC40LjV6Ij48L3BhdGg+PHBhdGggZmlsbD0idXJsKCNoZWFkKSIgZD0iTTc5IC41QzY1LjMgMy4xIDQ2LjkgMjMuNCA1Ni44IDM2LjNjMy4zIDQuMyA1LjEgNi43IDkuMyA5LjcgMTAuMiA3LjMgMzkuMSAzMSA1My4xIDI2LjkgMTItMy41IDkuNC0xNi45IDUuNi0yNS44LTEuMy0zLTI1LjctNTIuOC00NS44LTQ2LjYiPjwvcGF0aD48L3N2Zz4=" preserveAspectRatio="none"/>
   <g fill="#f6efe6">
-    <use href="#g0" x="138" y="112"/>
-    <use href="#g1" x="147.89" y="112"/>
-    <use href="#g2" x="161.38" y="112"/>
-    <use href="#g3" x="175.82" y="112"/>
-    <use href="#g4" x="189.79" y="112"/>
-    <use href="#g5" x="210.65" y="112"/>
-    <use href="#g6" x="216.82" y="112"/>
-    <use href="#g2" x="221.88" y="112"/>
-    <use href="#g1" x="235.46" y="112"/>
-    <use href="#g7" x="249.14" y="112"/>
-    <use href="#g8" x="262.87" y="112"/>
-    <use href="#g6" x="276.79" y="112"/>
-    <use href="#g0" x="281.86" y="112"/>
-    <use href="#g9" x="291.65" y="112"/>
+    <use href="#g0" x="142" y="114"/>
+    <use href="#g1" x="151.89" y="114"/>
+    <use href="#g2" x="165.38" y="114"/>
+    <use href="#g3" x="179.82" y="114"/>
+    <use href="#g4" x="193.79" y="114"/>
+    <use href="#g5" x="214.65" y="114"/>
+    <use href="#g6" x="220.82" y="114"/>
+    <use href="#g2" x="225.88" y="114"/>
+    <use href="#g1" x="239.46" y="114"/>
+    <use href="#g7" x="253.14" y="114"/>
+    <use href="#g8" x="266.87" y="114"/>
+    <use href="#g6" x="280.79" y="114"/>
+    <use href="#g0" x="285.86" y="114"/>
+    <use href="#g9" x="295.65" y="114"/>
   </g>
   <g fill="#b5a695">
-    <use href="#g10" x="534.83" y="111"/>
-    <use href="#g11" x="547.73" y="111"/>
-    <use href="#g12" x="562.37" y="111"/>
-    <use href="#g13" x="581.61" y="111"/>
-    <use href="#g14" x="590.83" y="111"/>
-    <use href="#g15" x="609.71" y="111"/>
-    <use href="#g16" x="621.33" y="111"/>
-    <use href="#g10" x="633.55" y="111"/>
-    <use href="#g13" x="651.57" y="111"/>
-    <use href="#g17" x="660.79" y="111"/>
-    <use href="#g18" x="673.29" y="111"/>
-    <use href="#g12" x="686.63" y="111"/>
-    <use href="#g13" x="705.87" y="111"/>
-    <use href="#g10" x="715.09" y="111"/>
-    <use href="#g19" x="727.99" y="111"/>
-    <use href="#g20" x="742.43" y="111"/>
-    <use href="#g13" x="759.15" y="111"/>
-    <use href="#g10" x="768.37" y="111"/>
-    <use href="#g21" x="781.23" y="111"/>
-    <use href="#g22" x="792.67" y="111"/>
-    <use href="#g23" x="798.17" y="111"/>
-    <use href="#g24" x="809.45" y="111"/>
+    <use href="#g10" x="534.83" y="113"/>
+    <use href="#g11" x="547.73" y="113"/>
+    <use href="#g12" x="562.37" y="113"/>
+    <use href="#g13" x="581.61" y="113"/>
+    <use href="#g14" x="590.83" y="113"/>
+    <use href="#g15" x="609.71" y="113"/>
+    <use href="#g16" x="621.33" y="113"/>
+    <use href="#g10" x="633.55" y="113"/>
+    <use href="#g13" x="651.57" y="113"/>
+    <use href="#g17" x="660.79" y="113"/>
+    <use href="#g18" x="673.29" y="113"/>
+    <use href="#g12" x="686.63" y="113"/>
+    <use href="#g13" x="705.87" y="113"/>
+    <use href="#g10" x="715.09" y="113"/>
+    <use href="#g19" x="727.99" y="113"/>
+    <use href="#g20" x="742.43" y="113"/>
+    <use href="#g13" x="759.15" y="113"/>
+    <use href="#g10" x="768.37" y="113"/>
+    <use href="#g21" x="781.23" y="113"/>
+    <use href="#g22" x="792.67" y="113"/>
+    <use href="#g23" x="798.17" y="113"/>
+    <use href="#g24" x="809.45" y="113"/>
   </g>
-  <mask id="mk2" maskUnits="userSpaceOnUse" style="mask-type:alpha">
+  <mask id="mk0" maskUnits="userSpaceOnUse" style="mask-type:alpha">
     <g fill="#000">
-      <use href="#g25" x="86" y="307.56"/>
-      <use href="#g26" x="145.12" y="307.56"/>
-      <use href="#g27" x="190.13" y="307.56"/>
-      <use href="#g28" x="251.05" y="307.56"/>
-      <use href="#g29" x="295.9" y="307.56"/>
-      <use href="#g30" x="342.15" y="307.56"/>
-      <use href="#g31" x="409.62" y="307.56"/>
-      <use href="#g29" x="456.97" y="307.56"/>
-      <use href="#g26" x="503.22" y="307.56"/>
-      <use href="#g27" x="548.23" y="307.56"/>
-      <use href="#g26" x="593.47" y="307.56"/>
-      <use href="#g32" x="636.91" y="307.56"/>
-      <use href="#g33" x="673.26" y="307.56"/>
+      <use href="#g25" x="86" y="309.56"/>
+      <use href="#g26" x="145.12" y="309.56"/>
+      <use href="#g27" x="190.13" y="309.56"/>
+      <use href="#g28" x="251.05" y="309.56"/>
+      <use href="#g29" x="295.9" y="309.56"/>
+      <use href="#g30" x="342.15" y="309.56"/>
+      <use href="#g31" x="409.62" y="309.56"/>
+      <use href="#g29" x="456.97" y="309.56"/>
+      <use href="#g26" x="503.22" y="309.56"/>
+      <use href="#g27" x="548.23" y="309.56"/>
+      <use href="#g26" x="593.47" y="309.56"/>
+      <use href="#g32" x="636.91" y="309.56"/>
+      <use href="#g33" x="673.26" y="309.56"/>
     </g>
     <g fill="#000">
-      <use href="#g27" x="86" y="384"/>
-      <use href="#g34" x="129.6" y="384"/>
-      <use href="#g27" x="174.37" y="384"/>
-      <use href="#g35" x="219.61" y="384"/>
-      <use href="#g36" x="249.96" y="384"/>
-      <use href="#g29" x="309.55" y="384"/>
-      <use href="#g37" x="355.8" y="384"/>
-      <use href="#g32" x="400.26" y="384"/>
-      <use href="#g31" x="434.35" y="384"/>
-      <use href="#g37" x="481.69" y="384"/>
-      <use href="#g32" x="526.15" y="384"/>
-      <use href="#g38" x="562.5" y="384"/>
+      <use href="#g27" x="86" y="386"/>
+      <use href="#g34" x="129.6" y="386"/>
+      <use href="#g27" x="174.37" y="386"/>
+      <use href="#g35" x="219.61" y="386"/>
+      <use href="#g36" x="249.96" y="386"/>
+      <use href="#g29" x="309.55" y="386"/>
+      <use href="#g37" x="355.8" y="386"/>
+      <use href="#g32" x="400.26" y="386"/>
+      <use href="#g31" x="434.35" y="386"/>
+      <use href="#g37" x="481.69" y="386"/>
+      <use href="#g32" x="526.15" y="386"/>
+      <use href="#g38" x="562.5" y="386"/>
     </g>
   </mask>
-  <g mask="url(#mk2)">
-    <clipPath id="cp3">
-      <path d="M86 243h732v152h-732v-152Z"/>
+  <g mask="url(#mk0)">
+    <clipPath id="cp1">
+      <path d="M86 245h732v152h-732v-152Z"/>
     </clipPath>
-    <g clip-path="url(#cp3)">
-      <linearGradient id="lg4" gradientUnits="userSpaceOnUse" x1="98.614" y1="204.178" x2="805.386" y2="433.822">
+    <g clip-path="url(#cp1)">
+      <linearGradient id="lg2" gradientUnits="userSpaceOnUse" x1="98.614" y1="206.178" x2="805.386" y2="435.822">
         <stop offset="0" stop-color="#fff8f0"/>
         <stop offset=".016" stop-color="#fff8f0"/>
         <stop offset=".032" stop-color="#fff8f0"/>
@@ -216,37 +145,37 @@
         <stop offset=".984" stop-color="#ff4b1d"/>
         <stop offset="1" stop-color="#ff451a"/>
       </linearGradient>
-      <rect x="86" y="243" width="732" height="152" fill="url(#lg4)"/>
+      <rect x="86" y="245" width="732" height="152" fill="url(#lg2)"/>
     </g>
   </g>
   <g fill="#000" fill-opacity="0">
-    <use href="#g25" x="86" y="307.56"/>
-    <use href="#g26" x="145.12" y="307.56"/>
-    <use href="#g27" x="190.13" y="307.56"/>
-    <use href="#g28" x="251.05" y="307.56"/>
-    <use href="#g29" x="295.9" y="307.56"/>
-    <use href="#g30" x="342.15" y="307.56"/>
-    <use href="#g31" x="409.62" y="307.56"/>
-    <use href="#g29" x="456.97" y="307.56"/>
-    <use href="#g26" x="503.22" y="307.56"/>
-    <use href="#g27" x="548.23" y="307.56"/>
-    <use href="#g26" x="593.47" y="307.56"/>
-    <use href="#g32" x="636.91" y="307.56"/>
-    <use href="#g33" x="673.26" y="307.56"/>
+    <use href="#g25" x="86" y="309.56"/>
+    <use href="#g26" x="145.12" y="309.56"/>
+    <use href="#g27" x="190.13" y="309.56"/>
+    <use href="#g28" x="251.05" y="309.56"/>
+    <use href="#g29" x="295.9" y="309.56"/>
+    <use href="#g30" x="342.15" y="309.56"/>
+    <use href="#g31" x="409.62" y="309.56"/>
+    <use href="#g29" x="456.97" y="309.56"/>
+    <use href="#g26" x="503.22" y="309.56"/>
+    <use href="#g27" x="548.23" y="309.56"/>
+    <use href="#g26" x="593.47" y="309.56"/>
+    <use href="#g32" x="636.91" y="309.56"/>
+    <use href="#g33" x="673.26" y="309.56"/>
   </g>
   <g fill="#000" fill-opacity="0">
-    <use href="#g27" x="86" y="384"/>
-    <use href="#g34" x="129.6" y="384"/>
-    <use href="#g27" x="174.37" y="384"/>
-    <use href="#g35" x="219.61" y="384"/>
-    <use href="#g36" x="249.96" y="384"/>
-    <use href="#g29" x="309.55" y="384"/>
-    <use href="#g37" x="355.8" y="384"/>
-    <use href="#g32" x="400.26" y="384"/>
-    <use href="#g31" x="434.35" y="384"/>
-    <use href="#g37" x="481.69" y="384"/>
-    <use href="#g32" x="526.15" y="384"/>
-    <use href="#g38" x="562.5" y="384"/>
+    <use href="#g27" x="86" y="386"/>
+    <use href="#g34" x="129.6" y="386"/>
+    <use href="#g27" x="174.37" y="386"/>
+    <use href="#g35" x="219.61" y="386"/>
+    <use href="#g36" x="249.96" y="386"/>
+    <use href="#g29" x="309.55" y="386"/>
+    <use href="#g37" x="355.8" y="386"/>
+    <use href="#g32" x="400.26" y="386"/>
+    <use href="#g31" x="434.35" y="386"/>
+    <use href="#g37" x="481.69" y="386"/>
+    <use href="#g32" x="526.15" y="386"/>
+    <use href="#g38" x="562.5" y="386"/>
   </g>
   <g fill="#b5a695">
     <use href="#g39" x="86" y="537"/>
@@ -290,11 +219,11 @@
     <use href="#g62" x="791.13" y="537"/>
     <use href="#g59" x="804.13" y="537"/>
   </g>
-  <clipPath id="cp5">
+  <clipPath id="cp3">
     <path d="M908 40h232c11.05 0 20 8.95 20 20v510c0 11.05-8.95 20-20 20h-232c-11.05 0-20-8.95-20-20v-510c0-11.05 8.95-20 20-20Z"/>
   </clipPath>
-  <g clip-path="url(#cp5)">
-    <linearGradient id="lg6" gradientUnits="userSpaceOnUse" x1="946.14" y1="24.422" x2="1101.86" y2="605.579">
+  <g clip-path="url(#cp3)">
+    <linearGradient id="lg4" gradientUnits="userSpaceOnUse" x1="946.14" y1="24.422" x2="1101.86" y2="605.579">
       <stop offset="0" stop-color="#ff5d2e"/>
       <stop offset=".016" stop-color="#fe5c2e"/>
       <stop offset=".032" stop-color="#fd5b2d"/>
@@ -360,7 +289,7 @@
       <stop offset=".984" stop-color="#ba1a21"/>
       <stop offset="1" stop-color="#b81921"/>
     </linearGradient>
-    <rect x="888" y="40" width="272" height="550" fill="url(#lg6)"/>
+    <rect x="888" y="40" width="272" height="550" fill="url(#lg4)"/>
   </g>
   <g fill="#fff">
     <use href="#g63" x="924" y="107"/>
