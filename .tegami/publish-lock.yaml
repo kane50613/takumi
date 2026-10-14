@@ -1,153 +1,187 @@
 core:changelogs:
-  - content: "---\npackages:\n  \"@takumi-rs/helpers\":\n    type: patch\n---\n\n# Skip emoji scanning for plain text\n\n`extractEmojis` segments text into graphemes only when it holds an `Extended_Pictographic` or `Regional_Indicator` codepoint or a keycap mark (U+20E3). A 48-card dashboard without emoji goes through it in 0.02 ms instead of 0.33 ms per render.\n"
-    filename: helpers-emoji-skip.md
+  - content: "---\npackages:\n  takumi-core:\n    type: minor\n  takumi:\n    type: minor\n  \"@takumi-rs/helpers\":\n    type: minor\n  \"@takumi-rs/core\":\n    type: minor\n  \"@takumi-rs/wasm\":\n    type: minor\n  takumi-paint:\n    type: minor\n  takumi-pdf:\n    type: minor\n---\n\n# Register font subsets with `unicodeRange`\n\nA font now takes `unicodeRange`, the codepoint ranges its `@font-face` declares. It serves only those codepoints, as in Chrome, so each subset of a family registers under the same `name`:\n\n```ts\nconst fonts = [\n  { name: \"Inter\", data: latin, unicodeRange: [[0x0000, 0x00ff]] },\n  { name: \"Inter\", data: cyrillic, unicodeRange: [[0x0400, 0x045f]] },\n];\n```\n\n`googleFonts` returns its subsets this way. `subsetOf` and `subsetRank` are deprecated: `subsetOf` now only sets the family name, and `subsetRank` does nothing. In Rust, use `FontResource::unicode_range`.\n"
+    filename: font-unicode-range.md
     v: 0.0.0
-  - content: "---\npackages:\n  \"@takumi-rs/helpers\":\n    type: patch\n---\n\n# Pick font subsets faster\n\n`subsetFonts`, which every render with `fonts` runs, finds the subsets the text needs by binary search instead of checking every character against every range. With Noto Sans JP, Noto Sans TC, and Inter from Google Fonts, it takes 0.3 ms per render instead of 3.6 ms.\n"
-    filename: helpers-subset-search.md
+  - content: "---\npackages:\n  takumi-core:\n    type: patch\n  takumi:\n    type: patch\n  takumi-pdf:\n    type: patch\n---\n\n# Stop leaking a direction mark into PDF text\n\nParagraphs set their direction directly instead of starting with an invisible U+200E or U+200F mark, so text extracted from a PDF no longer contains it. A right-to-left paragraph that starts with an inline box before any text still gets the mark.\n"
+    filename: paragraph-direction.md
     v: 0.0.0
-  - content: "---\npackages:\n  \"@takumi-rs/core\":\n    type: patch\n---\n\n# Read node trees off the main thread\n\n`render`, `renderSvg`, and `measure` pass a node tree to the native renderer as JSON when it holds only plain values. The renderer parses it on a worker thread, so a 48-card dashboard blocks the event loop for 0.1 ms instead of 0.7 ms and renders about 10% faster. Trees holding bytes or other values JSON cannot keep are read as before.\n"
-    filename: napi-json-nodes.md
+  - content: "---\npackages:\n  takumi-core:\n    type: minor\n  takumi:\n    type: minor\n  takumi-pdf:\n    type: minor\n---\n\n# Support `font-optical-sizing`\n\nVariable fonts with an `opsz` axis now set it to the font size, as Chrome does, so fonts like Inter draw their display cut at large sizes. `font-optical-sizing: none` or an `opsz` value in `font-variation-settings` turns this off.\n"
+    filename: font-optical-sizing.md
     v: 0.0.0
-  - content: "---\npackages:\n  takumi-core:\n    type: patch\n  takumi:\n    type: patch\n---\n\n# Keep no fragment items for hidden subtrees\n\nLaying out a `display: none` box no longer keeps fragment items for the boxes under it, which paint never reads. A hidden 48-card panel costs 0.3 ms instead of 2.1 ms per render.\n"
-    filename: hidden-fragments.md
+  - content: "---\npackages:\n  takumi-core:\n    type: patch\n  takumi-pdf:\n    type: patch\n---\n\n# Embed fonts at their `font-variation-settings` in PDF\n\nPDF output and the paint tree now instance a variable font at the axes `font-variation-settings` sets. Before, they used the default instance, so glyphs drew at the wrong weight or width while the layout used the right one.\n"
+    filename: pdf-font-variation-settings.md
     v: 0.0.0
-  - content: "---\npackages:\n  takumi-core:\n    type: patch\n  takumi:\n    type: patch\n---\n\n# Shape repeated text once per render\n\nText that several boxes repeat with the same style is shaped once per render again. A box that reused another's measurement used to drop the shared shape after drawing, so every later box shaped it anew.\n"
-    filename: shared-shape-owners.md
+  - content: "---\npackages:\n  takumi-raster:\n    type: patch\n---\n\n# Read layer alpha a pixel at a time\n\n`background-clip: text` and image masks for text read a layer's alpha channel a whole pixel at a time, which makes clipped text about 6% faster.\n"
+    filename: alpha-mask.md
     v: 0.0.0
-  - content: "---\npackages:\n  takumi-html:\n    type: patch\n  takumi:\n    type: patch\n---\n\n# Parse repeated inline styles once\n\n`from_html` parses each distinct `style` attribute once per document and reuses it for every element that repeats it. A dashboard of 48 cards with shared styles builds in half the time.\n"
-    filename: html-style-reuse.md
+  - content: "---\npackages:\n  takumi-raster:\n    type: patch\n---\n\n# Keep clip masks to the pixels they cover\n\nA clip such as `overflow: hidden` with rounded corners keeps a mask only over the pixels it covers instead of one the size of the whole image. Nested clips render about 13% faster with about 28% less peak memory, and images inside rounded clips render 5–7% faster.\n"
+    filename: placed-clip-masks.md
     v: 0.0.0
-  - content: "---\npackages:\n  takumi:\n    type: patch\n---\n\n# Scale images faster\n\nBilinear image scaling mixes eight pixels at a time in vector lanes, with the same pixels as before. Real templates render about 5% faster.\n"
-    filename: bilinear-runs.md
+  - content: "---\npackages:\n  takumi-core:\n    type: patch\n  takumi:\n    type: patch\n---\n\n# Turn off contextual alternates under letter spacing\n\nNon-zero `letter-spacing` now also turns off contextual alternates (`calt`), as Chrome does. `font-variant-ligatures` can no longer turn ligatures back on while letters are spaced. `font-feature-settings` still overrides both.\n"
+    filename: letter-spacing-contextual.md
     v: 0.0.0
-  - content: "---\npackages:\n  takumi-core:\n    type: minor\n  takumi:\n    type: patch\n---\n\n# Composite pixels faster\n\nBlending, masking and PNG scanline work run in 16-bit vector lanes, with the same pixels as before. Real templates render about 3% faster.\n"
-    filename: vectorized-compositing.md
+  - content: "---\npackages:\n  takumi-core:\n    type: patch\n  takumi:\n    type: patch\n---\n\n# Upgrade taffy to 0.15\n\nLayout runs on taffy 0.15, whose grid and flexbox passes are faster. The root box now sits at its own margins, as Chrome places it, instead of at the top left corner.\n"
+    filename: taffy-0-15.md
     v: 0.0.0
-  - content: "---\npackages:\n  takumi-core:\n    type: patch\n  takumi:\n    type: patch\n---\n\n# Read repeated style values once\n\nReading a node tree parses each distinct style value once per property and reuses it wherever the tree repeats it. A 48-card dashboard reads its styles in 0.16 ms instead of 0.26 ms.\n"
-    filename: style-value-reuse.md
+  - content: "---\npackages:\n  takumi-core:\n    type: patch\n  takumi:\n    type: patch\n---\n\n# Measure text ink once per text node\n\nA text node with its own `display`, such as `flex`, no longer shapes and breaks its text a second time to measure ink bounds while the scene is built. Dashboards with many styled text labels render about 30% faster.\n"
+    filename: text-ink-bounds.md
     v: 0.0.0
-  - content: "---\npackages:\n  takumi-core:\n    type: minor\n  takumi:\n    type: patch\n---\n\n# Redraw rounded boxes faster\n\nA rounded background drawn at the same place and size as in an earlier render reuses its rasterized mask from the glyph cache. A mask may take at most `glyph_cache::max_entry_bytes`, a 32nd of the budget. `PathCommand::digest` hashes a path for such keys.\n"
-    filename: shape-mask-cache.md
+  - content: "---\npackages:\n  takumi-core:\n    type: patch\n  takumi:\n    type: patch\n---\n\n# Move inline elements by `position: relative`\n\nAn inline element with `position: relative` now moves by its `top`, `left`, `bottom` and `right`, along with its background, border, text decorations and inline-block children, as in Chrome. Tailwind's Preflight relies on this to raise `<sup>` and lower `<sub>`.\n"
+    filename: inline-position-relative.md
     v: 0.0.0
-  - content: "---\npackages:\n  takumi-core:\n    type: patch\n  takumi:\n    type: patch\n---\n\n# Rasterize inline SVG images once\n\nAn `<img>` whose `src` is SVG markup now goes through the render's image cache, as `data:` URIs already do. Repeated renders reuse its parsed tree and rasters instead of redrawing them. Real templates render about 3% faster.\n"
-    filename: inline-svg-cache.md
+  - content: "---\npackages:\n  takumi-core:\n    type: patch\n  takumi:\n    type: patch\n---\n\n# Read Preflight from every Tailwind entry point\n\n`@import \"tailwindcss\"` now turns Preflight on when it carries modifiers such as `source(none)` or `important`. `@import \"tailwindcss/preflight.css\"` turns it on too, while `tailwindcss/theme.css` and `tailwindcss/utilities.css` leave it off, as in Tailwind's setup without Preflight.\n"
+    filename: tailwind-entry-preflight.md
     v: 0.0.0
-  - content: "---\npackages:\n  takumi-core:\n    type: patch\n  takumi:\n    type: patch\n---\n\n# Parse inline styles faster\n\nA CSS value that fails one way of parsing no longer builds an error message before trying the next. Building nodes from HTML with inline styles takes about 40% less time.\n"
-    filename: lazy-css-errors.md
+  - content: "---\npackages:\n  takumi-core:\n    type: patch\n  takumi:\n    type: patch\n---\n\n# Keep images at their natural size in grids and between insets\n\nAn image or SVG in a grid cell no longer stretches to the cell under the default alignment, and an absolutely positioned one no longer stretches between its insets. Both keep their natural size, as Chrome draws them.\n"
+    filename: taffy-replaced.md
     v: 0.0.0
-  - content: "---\npackages:\n  takumi:\n    type: patch\n---\n\n# Encode lossless WebP faster\n\nLossless WebP encodes about 40% faster, for files about 11% larger. The pixels are the same.\n"
-    filename: webp-lossless-effort.md
+  - content: "---\npackages:\n  takumi-core:\n    type: patch\n  takumi:\n    type: patch\n---\n\n# Lay out text with parley 0.12\n\nText layout moves to parley 0.12. Letter spacing turns off ligatures as browsers do, and text beside floats, cloned box decorations, list markers, and `text-fit` lines sit closer to where Chrome puts them. A family's coverage subsets now load together, which lets later releases drop the per-subset family names.\n"
+    filename: parley-0-12.md
     v: 0.0.0
-  - content: "---\npackages:\n  takumi-core:\n    type: minor\n---\n\n# Divide by 255 in 16 bits\n\n`div_255` and `mul_div_255` replace `fast_div_255` and `fast_div_255_u32`. Both take bytes or byte products, so their arithmetic fits 16-bit vector lanes.\n"
-    filename: div-255-u16.md
+  - content: "---\npackages:\n  takumi-core:\n    type: patch\n  takumi:\n    type: patch\n---\n\n# Keep the line strut when no font family matches\n\nA line that holds only an image or another inline box keeps the default font's strut when its `font-family` matches no registered font, as Chrome does. Such lines used to come out a few pixels short.\n"
+    filename: primary-font-strut.md
+    v: 0.0.0
+  - content: "---\npackages:\n  takumi-core:\n    type: patch\n  takumi:\n    type: patch\n---\n\n# Keep the static position of absolute boxes whose containing block is further up\n\nAn absolutely positioned box without insets now starts where it would have sat in its parent's flow, padding included, even when its containing block is an ancestor further up. It used to start at that ancestor's content edge. Chrome places it the same way.\n"
+    filename: taffy-out-of-flow.md
+    v: 0.0.0
+  - content: "---\npackages:\n  takumi-core:\n    type: minor\n  takumi:\n    type: minor\n---\n\n# Synthesize small caps for fonts without them\n\n`font-variant-caps` now synthesizes small capitals when the font lacks the caps feature, as Chrome does. Lowercase letters render as capitals at 70% size, so `small-caps` works with fonts like Geist. `font-synthesis: none` or the new `font-synthesis-small-caps: none` turns this off.\n"
+    filename: synthetic-small-caps.md
+    v: 0.0.0
+  - content: "---\npackages:\n  takumi-core:\n    type: patch\n  takumi:\n    type: patch\n---\n\n# Check small-caps support in each run's own font and script\n\n`font-variant-caps` now checks the font that draws each run, and that font's caps features for the run's script, as Chrome does. A fallback font keeps the small capitals it ships, and a font that lists them only for some scripts synthesizes them for the rest.\n"
+    filename: small-caps-font-support.md
     v: 0.0.0
 core:packages:
   - id: npm:takumi-workspace
     updated: false
   - id: npm:docs
     updated: false
+  - changelogIds:
+      - font-unicode-range.md
+      - paragraph-direction.md
+      - font-optical-sizing.md
+      - pdf-font-variation-settings.md
+    id: npm:takumi-pdf
+    updated: true
+  - changelogIds:
+      - font-unicode-range.md
+    id: npm:@takumi-rs/wasm
+    updated: true
+  - changelogIds:
+      - font-unicode-range.md
+    id: npm:@takumi-rs/helpers
+    updated: true
   - id: npm:takumi-js
     updated: true
   - changelogIds:
-      - helpers-emoji-skip.md
-      - helpers-subset-search.md
-    id: npm:@takumi-rs/helpers
-    updated: true
-  - id: npm:@takumi-rs/wasm
-    updated: true
-  - id: npm:takumi-pdf
-    updated: true
-  - id: npm:takumi-paint
-    updated: true
-  - changelogIds:
-      - napi-json-nodes.md
-    id: npm:@takumi-rs/core
+      - font-unicode-range.md
+    id: npm:takumi-paint
     updated: true
   - id: npm:@takumi-rs/image-response
     updated: true
-  - id: npm:ffplay
-    updated: false
-  - id: npm:example-tanstack-start
-    updated: false
-  - id: npm:example-css-library-integration
-    updated: false
-  - id: npm:example-twitter-images
-    updated: false
-  - id: npm:example-cloudflare-workers
-    updated: false
-  - id: npm:example-e-invoice
-    updated: false
+  - changelogIds:
+      - font-unicode-range.md
+    id: npm:@takumi-rs/core
+    updated: true
   - id: npm:pdf-bench
-    updated: false
-  - id: npm:example-nextjs
-    updated: false
-  - id: npm:example-liquid-glass
     updated: false
   - id: npm:example-generate-invoice
     updated: false
-  - id: npm:ffmpeg-keyframe-animation
-    updated: false
   - id: npm:svelte
+    updated: false
+  - id: npm:example-nextjs
+    updated: false
+  - id: npm:example-tanstack-start
     updated: false
   - id: npm:example-satori-html
     updated: false
   - id: npm:waku-ssr
     updated: false
-  - id: cargo:takumi-raster
-    updated: true
-  - id: cargo:takumi-svg
+  - id: npm:ffplay
+    updated: false
+  - id: npm:example-e-invoice
+    updated: false
+  - id: npm:example-twitter-images
+    updated: false
+  - id: npm:example-cloudflare-workers
+    updated: false
+  - id: npm:ffmpeg-keyframe-animation
+    updated: false
+  - id: npm:example-liquid-glass
+    updated: false
+  - id: npm:example-css-library-integration
+    updated: false
+  - changelogIds:
+      - alpha-mask.md
+      - placed-clip-masks.md
+    id: cargo:takumi-raster
     updated: true
   - changelogIds:
-      - hidden-fragments.md
-      - shared-shape-owners.md
-      - html-style-reuse.md
-      - bilinear-runs.md
-      - vectorized-compositing.md
-      - style-value-reuse.md
-      - shape-mask-cache.md
-      - inline-svg-cache.md
-      - lazy-css-errors.md
-      - webp-lossless-effort.md
+      - font-unicode-range.md
+      - letter-spacing-contextual.md
+      - taffy-0-15.md
+      - text-ink-bounds.md
+      - inline-position-relative.md
+      - tailwind-entry-preflight.md
+      - taffy-replaced.md
+      - parley-0-12.md
+      - paragraph-direction.md
+      - primary-font-strut.md
+      - font-optical-sizing.md
+      - taffy-out-of-flow.md
+      - synthetic-small-caps.md
+      - pdf-font-variation-settings.md
+      - small-caps-font-support.md
+    id: cargo:takumi-core
+    updated: true
+  - changelogIds:
+      - font-unicode-range.md
+      - letter-spacing-contextual.md
+      - taffy-0-15.md
+      - text-ink-bounds.md
+      - inline-position-relative.md
+      - tailwind-entry-preflight.md
+      - taffy-replaced.md
+      - parley-0-12.md
+      - paragraph-direction.md
+      - primary-font-strut.md
+      - font-optical-sizing.md
+      - taffy-out-of-flow.md
+      - synthetic-small-caps.md
+      - small-caps-font-support.md
     id: cargo:takumi
     updated: true
   - changelogIds:
-      - html-style-reuse.md
-    id: cargo:takumi-html
+      - font-unicode-range.md
+      - paragraph-direction.md
+      - font-optical-sizing.md
+      - pdf-font-variation-settings.md
+    id: cargo:takumi-pdf
     updated: true
-  - changelogIds:
-      - hidden-fragments.md
-      - shared-shape-owners.md
-      - vectorized-compositing.md
-      - style-value-reuse.md
-      - div-255-u16.md
-      - shape-mask-cache.md
-      - inline-svg-cache.md
-      - lazy-css-errors.md
-    id: cargo:takumi-core
+  - id: cargo:takumi-html
     updated: true
-  - id: cargo:takumi-pdf
+  - id: cargo:takumi-svg
     updated: true
 npm:packages:
   - id: npm:takumi-workspace
   - id: npm:docs
-  - id: npm:takumi-js
-  - id: npm:@takumi-rs/helpers
-  - id: npm:@takumi-rs/wasm
   - id: npm:takumi-pdf
+  - id: npm:@takumi-rs/wasm
+  - id: npm:@takumi-rs/helpers
+  - id: npm:takumi-js
   - id: npm:takumi-paint
-  - id: npm:@takumi-rs/core
   - id: npm:@takumi-rs/image-response
-  - id: npm:ffplay
-  - id: npm:example-tanstack-start
-  - id: npm:example-css-library-integration
-  - id: npm:example-twitter-images
-  - id: npm:example-cloudflare-workers
-  - id: npm:example-e-invoice
+  - id: npm:@takumi-rs/core
   - id: npm:pdf-bench
-  - id: npm:example-nextjs
-  - id: npm:example-liquid-glass
   - id: npm:example-generate-invoice
-  - id: npm:ffmpeg-keyframe-animation
   - id: npm:svelte
+  - id: npm:example-nextjs
+  - id: npm:example-tanstack-start
   - id: npm:example-satori-html
   - id: npm:waku-ssr
+  - id: npm:ffplay
+  - id: npm:example-e-invoice
+  - id: npm:example-twitter-images
+  - id: npm:example-cloudflare-workers
+  - id: npm:ffmpeg-keyframe-animation
+  - id: npm:example-liquid-glass
+  - id: npm:example-css-library-integration

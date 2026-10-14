@@ -1,3 +1,70 @@
+## takumi@2.16.0
+
+### Register font subsets with `unicodeRange`
+
+A font now takes `unicodeRange`, the codepoint ranges its `@font-face` declares. It serves only those codepoints, as in Chrome, so each subset of a family registers under the same `name`:
+
+```ts
+const fonts = [
+  { name: "Inter", data: latin, unicodeRange: [[0x0000, 0x00ff]] },
+  { name: "Inter", data: cyrillic, unicodeRange: [[0x0400, 0x045f]] },
+];
+```
+
+`googleFonts` returns its subsets this way. `subsetOf` and `subsetRank` are deprecated: `subsetOf` now only sets the family name, and `subsetRank` does nothing. In Rust, use `FontResource::unicode_range`.
+
+### Turn off contextual alternates under letter spacing
+
+Non-zero `letter-spacing` now also turns off contextual alternates (`calt`), as Chrome does. `font-variant-ligatures` can no longer turn ligatures back on while letters are spaced. `font-feature-settings` still overrides both.
+
+### Upgrade taffy to 0.15
+
+Layout runs on taffy 0.15, whose grid and flexbox passes are faster. The root box now sits at its own margins, as Chrome places it, instead of at the top left corner.
+
+### Measure text ink once per text node
+
+A text node with its own `display`, such as `flex`, no longer shapes and breaks its text a second time to measure ink bounds while the scene is built. Dashboards with many styled text labels render about 30% faster.
+
+### Move inline elements by `position: relative`
+
+An inline element with `position: relative` now moves by its `top`, `left`, `bottom` and `right`, along with its background, border, text decorations and inline-block children, as in Chrome. Tailwind's Preflight relies on this to raise `<sup>` and lower `<sub>`.
+
+### Read Preflight from every Tailwind entry point
+
+`@import "tailwindcss"` now turns Preflight on when it carries modifiers such as `source(none)` or `important`. `@import "tailwindcss/preflight.css"` turns it on too, while `tailwindcss/theme.css` and `tailwindcss/utilities.css` leave it off, as in Tailwind's setup without Preflight.
+
+### Keep images at their natural size in grids and between insets
+
+An image or SVG in a grid cell no longer stretches to the cell under the default alignment, and an absolutely positioned one no longer stretches between its insets. Both keep their natural size, as Chrome draws them.
+
+### Lay out text with parley 0.12
+
+Text layout moves to parley 0.12. Letter spacing turns off ligatures as browsers do, and text beside floats, cloned box decorations, list markers, and `text-fit` lines sit closer to where Chrome puts them. A family's coverage subsets now load together, which lets later releases drop the per-subset family names.
+
+### Stop leaking a direction mark into PDF text
+
+Paragraphs set their direction directly instead of starting with an invisible U+200E or U+200F mark, so text extracted from a PDF no longer contains it. A right-to-left paragraph that starts with an inline box before any text still gets the mark.
+
+### Keep the line strut when no font family matches
+
+A line that holds only an image or another inline box keeps the default font's strut when its `font-family` matches no registered font, as Chrome does. Such lines used to come out a few pixels short.
+
+### Support `font-optical-sizing`
+
+Variable fonts with an `opsz` axis now set it to the font size, as Chrome does, so fonts like Inter draw their display cut at large sizes. `font-optical-sizing: none` or an `opsz` value in `font-variation-settings` turns this off.
+
+### Keep the static position of absolute boxes whose containing block is further up
+
+An absolutely positioned box without insets now starts where it would have sat in its parent's flow, padding included, even when its containing block is an ancestor further up. It used to start at that ancestor's content edge. Chrome places it the same way.
+
+### Synthesize small caps for fonts without them
+
+`font-variant-caps` now synthesizes small capitals when the font lacks the caps feature, as Chrome does. Lowercase letters render as capitals at 70% size, so `small-caps` works with fonts like Geist. `font-synthesis: none` or the new `font-synthesis-small-caps: none` turns this off.
+
+### Check small-caps support in each run's own font and script
+
+`font-variant-caps` now checks the font that draws each run, and that font's caps features for the run's script, as Chrome does. A fallback font keeps the small capitals it ships, and a font that lists them only for some scripts synthesizes them for the rest.
+
 ## takumi@2.15.2
 
 ### Keep no fragment items for hidden subtrees

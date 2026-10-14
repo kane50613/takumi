@@ -1,3 +1,13 @@
+## takumi-raster@0.5.5
+
+### Read layer alpha a pixel at a time
+
+`background-clip: text` and image masks for text read a layer's alpha channel a whole pixel at a time, which makes clipped text about 6% faster.
+
+### Keep clip masks to the pixels they cover
+
+A clip such as `overflow: hidden` with rounded corners keeps a mask only over the pixels it covers instead of one the size of the whole image. Nested clips render about 13% faster with about 28% less peak memory, and images inside rounded clips render 5–7% faster.
+
 ## takumi-raster@0.5.2
 
 ### Share computed styles between boxes
