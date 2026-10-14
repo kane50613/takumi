@@ -1004,6 +1004,7 @@ jobs:
           filters: |
             docs:
               - "docs/**"
+              - "example/twitter-images/components/home-demo-card.tsx"
               - "bun.lock"
 
   deploy-docs:
@@ -1066,7 +1067,10 @@ jobs:
           path: takumi-paint
 
       - name: Install dependencies
-        run: bun install --frozen-lockfile --filter ./docs
+        run: >
+          bun install --frozen-lockfile
+          --filter ./docs
+          --filter ./example/twitter-images
 
       # `vercel build` strips types without checking them, so the playground's
       # own use of the render options is only checked here.
