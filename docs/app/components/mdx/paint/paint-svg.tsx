@@ -291,7 +291,11 @@ export function drawableElement(drawable: SceneDrawable, ids: SvgIds): ReactNode
       return (
         <g clipPath={`url(#${id})`}>
           <clipPath id={id}>{shapeElement(drawable.clip)}</clipPath>
-          <image href={drawable.image.src} {...drawable.rect} preserveAspectRatio="none" />
+          <image
+            href={imageHref(drawable.image.src)}
+            {...drawable.rect}
+            preserveAspectRatio="none"
+          />
         </g>
       );
     }
@@ -402,4 +406,9 @@ export function sceneSteps(
   while (frames.length > 1) close();
 
   return root.children;
+}
+
+/** A browser-loadable `href` for an image source; Takumi reads any source containing `<svg` as inline markup. */
+function imageHref(src: string) {
+  return src.includes("<svg") ? `data:image/svg+xml;utf8,${encodeURIComponent(src)}` : src;
 }
