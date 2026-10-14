@@ -796,9 +796,44 @@ impl RenderContext {
     attributes: Attributes,
     font_size: f32,
   ) -> Option<PrimaryFontMetrics> {
+    self.with_primary_font(families, attributes, |font_ref| {
+      let metrics = font_ref.metrics(Size::new(font_size), LocationRef::default());
+
+      PrimaryFontMetrics {
+        ascent: metrics.ascent.round(),
+        descent: metrics.descent.abs().round(),
+        line_gap: metrics.leading.round(),
+        x_height: metrics.x_height,
+        exact: ExactFontMetrics {
+          ascent: metrics.ascent,
+          descent: metrics.descent.abs(),
+          line_gap: metrics.leading,
+        },
+        underline: metrics.underline.map(|underline| FontUnderline {
+          position: -underline.offset,
+          thickness: underline.thickness,
+        }),
+        em_descent: em_box_descent(
+          Some(font_ref),
+          font_size,
+          metrics.ascent,
+          metrics.descent.abs(),
+        ),
+      }
+    })
+  }
+
+  /// Reads the primary font [`Self::first_font_metrics`] measures.
+  pub(crate) fn with_primary_font<'a, R>(
+    &self,
+    families: impl IntoIterator<Item = QueryFamily<'a>>,
+    attributes: Attributes,
+    read: impl FnOnce(&FontRef) -> R,
+  ) -> Option<R> {
     self.fonts().with_context(|fonts| {
       let space_outside_range = fonts.space_outside_range.clone();
       let mut query = fonts.inner.collection.query(&mut fonts.inner.source_cache);
+      let mut read = Some(read);
       let mut result = None;
 
       query.set_families(families);
@@ -814,29 +849,8 @@ impl RenderContext {
         if space_outside_range.contains(&font.blob.id()) {
           return QueryStatus::Continue;
         }
-        let metrics = font_ref.metrics(Size::new(font_size), LocationRef::default());
 
-        result = Some(PrimaryFontMetrics {
-          ascent: metrics.ascent.round(),
-          descent: metrics.descent.abs().round(),
-          line_gap: metrics.leading.round(),
-          x_height: metrics.x_height,
-          exact: ExactFontMetrics {
-            ascent: metrics.ascent,
-            descent: metrics.descent.abs(),
-            line_gap: metrics.leading,
-          },
-          underline: metrics.underline.map(|underline| FontUnderline {
-            position: -underline.offset,
-            thickness: underline.thickness,
-          }),
-          em_descent: em_box_descent(
-            Some(&font_ref),
-            font_size,
-            metrics.ascent,
-            metrics.descent.abs(),
-          ),
-        });
+        result = read.take().map(|read| read(&font_ref));
         QueryStatus::Stop
       });
 

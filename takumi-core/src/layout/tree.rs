@@ -11,7 +11,7 @@ use std::{
   vec::IntoIter,
 };
 
-use parley::fontique::{Attributes, FontStyle as FontiqueStyle};
+use parley::fontique::FontStyle as FontiqueStyle;
 use smallvec::SmallVec;
 use taffy::{
   AvailableSpace as TaffyAvailableSpace, AxisStaticEdge, AxisStaticPosition, BlockContext,
@@ -2899,11 +2899,7 @@ impl RenderContext {
     style: &ComputedStyle,
     font_size: f32,
   ) -> Option<PrimaryFontMetrics> {
-    let attributes = Attributes {
-      width: style.inherited_data.font_stretch.into_parlance(),
-      style: style.inherited_data.font_style.into_parlance(),
-      weight: style.inherited_data.font_weight.into_parlance(),
-    };
+    let attributes = style.font_attributes();
     let font_family = self.expand_font_family(&style.inherited_data.font_family);
 
     let mut hasher = Xxh3::new();

@@ -1,5 +1,6 @@
 use std::{borrow::Cow, marker::PhantomData};
 
+use parley::fontique::Attributes;
 use taffy::{LengthPercentage, Line, Rect, Size};
 
 use super::ComputedStyle;
@@ -417,6 +418,15 @@ impl ComputedStyle {
       TextDecorationThickness::Length(thickness) => {
         SizedTextDecorationThickness::Value(thickness.to_px(sizing, sizing.font_size))
       }
+    }
+  }
+
+  /// The face attributes a font query matches.
+  pub(crate) fn font_attributes(&self) -> Attributes {
+    Attributes {
+      width: self.inherited_data.font_stretch.into_parlance(),
+      style: self.inherited_data.font_style.into_parlance(),
+      weight: self.inherited_data.font_weight.into_parlance(),
     }
   }
 
