@@ -1656,8 +1656,8 @@ mod tests {
     scene::Scene,
     style::{
       Affine, AppliedTextDecoration, BorderStyle, Color, ColorInput, Display, FontSize, Length,
-      Sides, SizedTextDecorationThickness, SizingContext, SpacePair, Style, StyleDeclaration,
-      TextAlign, TextDecorationLines, TextDecorationStyle, TextFit, TextFitMode,
+      Position, Sides, SizedTextDecorationThickness, SizingContext, SpacePair, Style,
+      StyleDeclaration, TextAlign, TextDecorationLines, TextDecorationStyle, TextFit, TextFitMode,
       TextUnderlinePosition, WhiteSpace,
     },
     viewport::Viewport,
@@ -1912,6 +1912,80 @@ mod tests {
         "share capped by the run advance: {trailing:?}"
       );
     }
+  }
+
+  #[test]
+  fn text_fit_leaves_a_relative_offset_unscaled() {
+    let fonts = create_test_context();
+    let context = RenderContext::builder()
+      .fonts(fonts.snapshot_with_fallbacks(None))
+      .sizing(
+        SizingContext::builder()
+          .viewport(Viewport::new((1200, 630)))
+          .build(),
+      )
+      .build();
+    let node = Node::container([
+      Node::text("fit ".to_string()),
+      Node::container([Node::text("moved".to_string())]).with_style(
+        Style::default()
+          .with(StyleDeclaration::display(Display::Inline))
+          .with(StyleDeclaration::position(Position::Relative))
+          .with(StyleDeclaration::top(Length::Px(10.0))),
+      ),
+    ])
+    .with_style(
+      Style::default()
+        .with(StyleDeclaration::display(Display::Block))
+        .with(StyleDeclaration::font_size(FontSize::Length(Length::Px(
+          20.0,
+        ))))
+        .with(StyleDeclaration::text_fit(
+          TextFit::builder().mode(TextFitMode::Grow).build(),
+        )),
+    );
+    let render_node = RenderNode::from_node(&context, node);
+    let font_style = SizedFontStyle::from_style(&render_node.context.style, &render_node.context);
+    let built = create_inline_layout(InlineLayoutRequest {
+      items: collect_inline_items(&render_node),
+      available_space: Size {
+        width: AvailableSpace::Definite(600.0),
+        height: AvailableSpace::Definite(630.0),
+      },
+      max_width: 600.0,
+      max_height: None,
+      style: &font_style,
+      context: &render_node.context,
+      mode: InlineLayoutMode::Draw,
+      shape_cacheable: false,
+    });
+    let layout = ComputedLayout {
+      location: Point::ZERO,
+      size: Size::new(600.0, 630.0),
+      border: Rect::default(),
+      padding: Rect::default(),
+    };
+    let runs = built.resolve_runs(&render_node.context, layout).unwrap();
+    let moved = runs
+      .runs
+      .iter()
+      .find(|run| run.relative_offset.y != 0.0)
+      .unwrap();
+    let glyph = moved.glyph_run.glyphs[0];
+    let offset = moved.glyph_offset(layout);
+    let (_, painted) = moved
+      .transform(Affine::IDENTITY)
+      .transform_point(offset.x + glyph.x, offset.y + glyph.y);
+    let (_, unmoved) = moved
+      .line_scale
+      .transform(Affine::IDENTITY, moved.static_inline_prefix)
+      .transform_point(offset.x + glyph.x, offset.y + glyph.y - 10.0);
+
+    assert!(moved.line_scale.scale > 1.0, "the line does not grow");
+    assert!(
+      (painted - unmoved - 10.0).abs() < 0.01,
+      "the offset scaled: {painted} past {unmoved}"
+    );
   }
 
   #[test]

@@ -382,9 +382,15 @@ impl PositionedInlineRun {
   }
 
   /// The run's affine transform composed onto `base` (the element transform for raster, identity
-  /// for vector emission).
+  /// for vector emission). `text-fit` scales the line about the run's unmoved place, so the
+  /// relative offset [`Self::glyph_offset`] carries moves it unscaled.
   pub fn transform(&self, base: Affine) -> Affine {
-    self.line_scale.transform(base, self.static_inline_prefix)
+    let Point { x, y } = self.relative_offset;
+
+    self
+      .line_scale
+      .transform(base * Affine::translation(x, y), self.static_inline_prefix)
+      * Affine::translation(-x, -y)
   }
 
   /// Per-glyph inline-offset origin (border/padding box top-left + baseline shift + relative
