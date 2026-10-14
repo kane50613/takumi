@@ -1945,6 +1945,7 @@ dependencies = [
  "flate2",
  "float-cmp",
  "gif",
+ "icu_normalizer",
  "image-webp",
  "imagesize",
  "indexmap",

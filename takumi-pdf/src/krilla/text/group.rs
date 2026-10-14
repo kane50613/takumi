@@ -2,10 +2,12 @@ use std::cell::{RefCell, RefMut};
 use std::ops::Range;
 use std::rc::Rc;
 
+use icu_normalizer::DecomposingNormalizerBorrowed;
+
 use crate::krilla::color::rgb;
 use crate::krilla::text::Glyph;
 use crate::krilla::text::type3::ColoredGlyph;
-use crate::krilla::text::{FontContainer, FontIdentifier};
+use crate::krilla::text::{Font, FontContainer, FontIdentifier};
 
 pub(crate) enum GlyphSpan<'a, T>
 where
@@ -61,6 +63,10 @@ where
   forbid_invalid_codepoints: bool,
   font_container: Rc<RefCell<FontContainer>>,
   text: &'a str,
+  /// The [`cluster_unicode`] of the whole run.
+  unicode: Vec<Option<String>>,
+  /// How many glyphs of the run earlier fragments took.
+  offset: usize,
 }
 
 impl<'a, T> GlyphSpanner<'a, T>
@@ -75,6 +81,8 @@ where
     context_color: rgb::Color,
     font_container: Rc<RefCell<FontContainer>>,
   ) -> Self {
+    let unicode = cluster_unicode(slice, text, &font_container.borrow().cid_font().font());
+
     Self {
       slice,
       context_color,
@@ -82,6 +90,8 @@ where
       forbid_invalid_codepoints,
       text,
       font_container,
+      unicode,
+      offset: 0,
     }
   }
 }
@@ -98,7 +108,7 @@ where
       g: &U,
       context_color: rgb::Color,
       previous_range: Option<Range<usize>>,
-      clustered: bool,
+      unicode: Option<&str>,
       forbid_invalid_codepoints: bool,
       mut font_container: RefMut<FontContainer>,
       text: &str,
@@ -113,16 +123,7 @@ where
         .unwrap();
 
       let range = g.text_range().clone();
-      // A glyph sharing its cluster maps to its own `cmap` codepoint where it has one, as Skia's
-      // PDF backend does.
-      let character = clustered
-        .then(|| pdf_font.font().codepoint(g.glyph_id()))
-        .flatten();
-      let mut utf8 = [0; 4];
-      let text = match character {
-        Some(character) => &*character.encode_utf8(&mut utf8),
-        None => &text[range.clone()],
-      };
+      let text = unicode.unwrap_or(&text[range.clone()]);
       let codepoints = pdf_font.get_codepoints(pdf_glyph);
       // Check if the glyph has already been assigned codepoints that don't match the
       // one we are seeing right now.
@@ -130,15 +131,13 @@ where
 
       // Only set the codepoint if there isn't a previous, different mapping.
       //
-      // A glyph with its own `cmap` codepoint always takes it, so a viewer that ignores
-      // `ActualText` reads each character of the cluster once: `S` and U+0301 for `Ś`.
-      // Any other glyph of a cluster would repeat the whole cluster's text, so only the
-      // first one takes it, unless the export (PDF/UA, for example) requires every glyph
-      // to map to Unicode, at the cost of that repetition.
+      // A glyph with its own share of the cluster's characters always takes it, so a viewer
+      // that ignores `ActualText` reads each of them once: `S` and U+0301 for `Ś`. Any other
+      // glyph of a cluster would repeat the whole cluster's text, so only the first one takes
+      // it, unless the export (PDF/UA, for example) requires every glyph to map to Unicode,
+      // at the cost of that repetition.
       if !incompatible_codepoint
-        && (previous_range != Some(range.clone())
-          || forbid_invalid_codepoints
-          || character.is_some())
+        && (previous_range != Some(range.clone()) || forbid_invalid_codepoints || unicode.is_some())
         && codepoints != Some(text)
       {
         pdf_font.set_codepoints(pdf_glyph, text.to_string(), g.location());
@@ -150,18 +149,7 @@ where
     let mut use_span = None;
     let mut count = 1;
 
-    // A cluster never straddles two fragments, so the slice holds every glyph it shares with.
-    let clustered = |index: usize| {
-      let range = self.slice[index].text_range();
-
-      index
-        .checked_sub(1)
-        .is_some_and(|previous| self.slice[previous].text_range() == range)
-        || self
-          .slice
-          .get(index + 1)
-          .is_some_and(|next| next.text_range() == range)
-    };
+    let unicode = &self.unicode[self.offset..];
 
     // Get the range of the first glyph, as well as whether it's
     // incompatible.
@@ -169,7 +157,7 @@ where
       self.slice.first()?,
       self.context_color,
       None,
-      clustered(0),
+      unicode[0].as_deref(),
       self.forbid_invalid_codepoints,
       self.font_container.borrow_mut(),
       self.text,
@@ -182,7 +170,7 @@ where
         next,
         self.context_color,
         Some(prev_range.clone()),
-        clustered(index),
+        unicode[index].as_deref(),
         self.forbid_invalid_codepoints,
         self.font_container.borrow_mut(),
         self.text,
@@ -263,6 +251,7 @@ where
 
     let (head, tail) = self.slice.split_at(count);
     self.slice = tail;
+    self.offset += count;
 
     let fragment = match use_span.unwrap_or(false) {
       true => GlyphSpan::Spanned(head, &self.text[first_range]),
@@ -271,6 +260,62 @@ where
 
     Some(fragment)
   }
+}
+
+/// What each glyph of a multi-glyph cluster maps to in ToUnicode, so a viewer that ignores
+/// `/ActualText` reads each of the cluster's characters once.
+///
+/// A glyph takes its own `cmap` codepoint, as Skia's PDF backend writes it. The glyphs without
+/// one split what those leave of the cluster's decomposed text evenly, in glyph order, which
+/// for a reordered cluster such as a Devanagari pre-base matra is visual rather than logical.
+/// `None` leaves a glyph to the cluster's whole text: one outside a cluster, or one the leftover
+/// characters run out before.
+fn cluster_unicode(glyphs: &[impl Glyph], text: &str, font: &Font) -> Vec<Option<String>> {
+  let nfd = DecomposingNormalizerBorrowed::new_nfd();
+  let mut unicode = vec![None; glyphs.len()];
+  let mut start = 0;
+
+  while let Some(first) = glyphs.get(start) {
+    let range = first.text_range();
+    let end = start
+      + glyphs[start..]
+        .iter()
+        .take_while(|glyph| glyph.text_range() == range)
+        .count();
+
+    if end - start > 1 {
+      let mut rest = nfd.normalize(&text[range]).chars().collect::<Vec<_>>();
+      let mut uncovered = Vec::new();
+
+      for (index, glyph) in (start..end).zip(&glyphs[start..end]) {
+        let Some(character) = font.codepoint(glyph.glyph_id()) else {
+          uncovered.push(index);
+          continue;
+        };
+
+        for decomposed in nfd.normalize(character.encode_utf8(&mut [0; 4])).chars() {
+          if let Some(at) = rest.iter().position(|&left| left == decomposed) {
+            rest.remove(at);
+          }
+        }
+
+        unicode[index] = Some(character.to_string());
+      }
+
+      for (share, &index) in uncovered.iter().enumerate() {
+        let from = share * rest.len() / uncovered.len();
+        let to = (share + 1) * rest.len() / uncovered.len();
+
+        if from < to {
+          unicode[index] = Some(rest[from..to].iter().collect());
+        }
+      }
+    }
+
+    start = end;
+  }
+
+  unicode
 }
 
 pub(crate) struct GlyphGroup<'a, T>

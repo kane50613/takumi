@@ -5263,6 +5263,43 @@ fn a_clustered_glyph_maps_to_its_own_character() {
   }
 }
 
+/// A glyph with no `cmap` codepoint of its own, such as Noto's pre-base matra in `ति`, maps to
+/// what the cluster's other glyphs leave of it: `ि`, not the whole `ति` again after `त`.
+#[test]
+fn a_glyph_without_a_codepoint_maps_to_the_rest_of_its_cluster() {
+  let mut fonts = Fonts::default();
+  let data = fs::read(
+    Path::new(env!("CARGO_MANIFEST_DIR"))
+      .join("../assets/fonts/noto-sans/noto-sans-devanagari-v30-devanagari-regular.woff2"),
+  )
+  .expect("read devanagari font");
+
+  fonts
+    .register(FontResource::new(data))
+    .expect("load devanagari font");
+
+  let pdf = render(
+    PdfOptions::builder()
+      .node(
+        from_html(r#"<p lang="hi">तिरछा</p>"#, FromHtmlOptions::default()).expect("parse the doc"),
+      )
+      .viewport(Viewport::new((240, 48)))
+      .fonts(&fonts)
+      .build(),
+  )
+  .expect("render the reordered cluster");
+  let haystack = inflated_text(&pdf);
+
+  assert!(
+    haystack.contains("> <093F>"),
+    "the matra maps to its own character"
+  );
+  assert!(
+    !haystack.contains("> <0924093F>"),
+    "the matra repeats its whole cluster"
+  );
+}
+
 /// Encoded bitmaps reach the PDF as the bytes they came in as: a JPEG embeds
 /// as a `DCTDecode` stream rather than a re-encode of its pixels.
 #[test]
