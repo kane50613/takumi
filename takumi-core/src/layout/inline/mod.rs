@@ -1334,7 +1334,7 @@ pub(crate) fn resolve_inline_max_height(
   font_style
     .parent
     .clamp_lines()
-    .map(|lines| MaxHeight::HeightAndLines(content_box_height, lines))
+    .map(MaxHeight::Lines)
     .or_else(|| {
       (font_style.parent.misc4_data.text_overflow == TextOverflow::Ellipsis)
         .then_some(MaxHeight::Absolute(content_box_height))
