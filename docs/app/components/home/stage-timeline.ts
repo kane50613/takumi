@@ -20,7 +20,7 @@ export const STAGE = {
 export const IMPACTS = [0.21, 0.49, 0.77] as const;
 
 /** Settled scroll progress stops for [Anvil, Layout, Text, Paint]. */
-export const STRIKE_STOPS = [0, 0.32, 0.6, 0.88] as const;
+export const STRIKE_STOPS = [0, 0.38, 0.65, 0.93] as const;
 
 /** The progress at which each phase becomes active. */
 export const STEP_STARTS = [0, 0.19, 0.47, 0.74] as const;
