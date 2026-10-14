@@ -113,6 +113,11 @@ version = "3"
 default-features = false
 features = ["napi4", "serde-json"]
 
+[workspace.dependencies.icu_normalizer]
+version = "2.3.0"
+default-features = false
+features = ["compiled_data"]
+
 [workspace.dependencies.icu_properties]
 version = "2.3.0"
 default-features = false

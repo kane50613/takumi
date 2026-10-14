@@ -46,6 +46,9 @@ optional = true
 workspace = true
 optional = true
 
+[dependencies.icu_normalizer]
+workspace = true
+
 [dependencies.image-webp]
 workspace = true
 optional = true
