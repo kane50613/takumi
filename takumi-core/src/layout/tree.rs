@@ -18,7 +18,7 @@ use taffy::{
   BoxSizing, Cache, CacheTree, ContainingBlockClaims, CoreStyle, DetailedGridInfo,
   DetailedLayoutInfo, Dimension, Display as TaffyDisplay, Layout, LayoutBlockContainer,
   LayoutContainingBlock, LayoutFlexboxContainer, LayoutGridContainer, LayoutInput, LayoutOutput,
-  LayoutPartialTree, LengthPercentageAuto, Line, NodeId as TaffyNodeId, OofCandidate,
+  LayoutPartialTree, LengthPercentageAuto, Line, MaybeResolve, NodeId as TaffyNodeId, OofCandidate,
   OofPositioningArea, RequestedAxis, ResolveOrZero, RoundTree, RunMode, Size as TaffySize,
   SizingMode, Style, TraversePartialTree, TraverseTree, compute_block_layout,
   compute_cached_layout, compute_flexbox_layout, compute_grid_layout, compute_hidden_layout,
@@ -1426,6 +1426,22 @@ impl<'r> LayoutTree<'r> {
               known_dimensions
             }
           };
+          // The size `compute_leaf_layout` gives the box before its content.
+          let fixed_size =
+            stripped_known_dimensions(inputs.known_dimensions).or(match inputs.sizing_mode {
+              SizingMode::InherentSize => node_data
+                .style
+                .size
+                .maybe_resolve(inputs.parent_size, |val, basis| {
+                  tree.resolve_calc_value(val, basis)
+                })
+                .maybe_apply_aspect_ratio(node_data.style.aspect_ratio),
+              SizingMode::ContentSize => TaffySize::NONE,
+            });
+
+          render_node
+            .context
+            .set_definite_height(fixed_size.height.is_some());
 
           let mut output = compute_leaf_layout(
             inputs,

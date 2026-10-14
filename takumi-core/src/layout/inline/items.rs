@@ -7,7 +7,7 @@ use crate::{
   layout::{border::BorderProperties, node::Node, tree::RenderNode},
   style::{
     Color, Direction, Display, Float, Length, Position, ResolvedVerticalAlign, Sides,
-    Size as CssSize, SizingContext, SpacePair, WhiteSpaceCollapse,
+    SizingContext, SpacePair, WhiteSpaceCollapse,
   },
   text_processing::{COLLAPSIBLE_WHITESPACE, HORIZONTAL_WHITESPACE},
 };
@@ -88,23 +88,18 @@ pub(crate) struct LineSpace {
 
 impl LineSpace {
   /// The space lines break at `max_width` in for the formatting context `context` styles, laid
-  /// out in `available_height`. Its height counts as definite only for a fixed `height`.
-  /// Approximate: Blink also takes a percentage `height` against a definite parent, and a height
-  /// a flex or grid container stretches, as definite.
+  /// out in `available_height`, which counts only when layout sized the box's height first.
   pub(crate) fn of(
     context: &RenderContext,
     max_width: f32,
     available_height: AvailableSpace,
   ) -> Self {
-    let fixed_height = matches!(
-      context.style.box_data.height,
-      CssSize::Length(height) if height != Length::Auto && !height.has_percentage()
-    );
-
     Self {
       direction: context.style.inherited_data.direction,
       inline_size: max_width.is_finite().then_some(max_width),
-      block_size: available_height.into_option().filter(|_| fixed_height),
+      block_size: available_height
+        .into_option()
+        .filter(|_| context.has_definite_height()),
     }
   }
 
