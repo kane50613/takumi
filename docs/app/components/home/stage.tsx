@@ -117,7 +117,7 @@ export function Stage() {
           data={{ image: CARD.image, width: CARD.width, height: CARD.height, boxes }}
         />
 
-        {/* Hollow backdrop word for the current strike, widening as it rises out of its mask */}
+        {/* Hollow backdrop word for the current strike, rising out of its mask and widening with scroll */}
         <div
           aria-hidden
           className="pointer-events-none absolute inset-0 grid place-items-center overflow-hidden"
@@ -130,9 +130,10 @@ export function Stage() {
               className="col-start-1 row-start-1 overflow-hidden"
             >
               <span
+                data-stage-word
                 className={cn(
                   BACKDROP_WORD,
-                  "home-rise block translate-y-[calc(100%+0.2em)] [font-stretch:70%] transition-[transform,font-stretch] duration-1000 ease-out-strong in-data-current:translate-y-0 in-data-current:[font-stretch:125%]",
+                  "home-rise block translate-y-[calc(100%+0.2em)] transition-transform duration-1000 ease-out-strong in-data-current:translate-y-0",
                 )}
               >
                 {item.word}

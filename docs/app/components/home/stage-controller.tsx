@@ -10,6 +10,7 @@ import {
   STRIKE_STOPS,
   strikeImpulse,
   textSpread,
+  wordAxes,
 } from "./stage-timeline";
 
 const FOLLOW_MS = 105;
@@ -67,6 +68,7 @@ export function StageController({ data }: { data: StageData }) {
     const glyphElements = [...(stage?.querySelectorAll<SVGGElement>("[data-glyph-run]") ?? [])];
     const paintPlanes = [...(stage?.querySelectorAll<SVGGElement>("[data-paint-plane]") ?? [])];
     const copyBlocks = [...(stage?.querySelectorAll<HTMLElement>("[data-stage-copy]") ?? [])];
+    const words = [...(stage?.querySelectorAll<HTMLElement>("[data-stage-word]") ?? [])];
     const stepButtons = [
       ...(stage?.querySelectorAll<HTMLButtonElement>("[data-step-button]") ?? []),
     ];
@@ -225,6 +227,15 @@ export function StageController({ data }: { data: StageData }) {
         planeEl.style.transform = reduceMotion
           ? `translate(${(dx * 0.7).toFixed(1)}px, ${(dy * 0.7).toFixed(1)}px) scale(0.88)`
           : `translate(${(dx * pSpread).toFixed(1)}px, ${(dy * pSpread).toFixed(1)}px) scale(${planeScale.toFixed(3)})`;
+      }
+
+      if (!reduceMotion) {
+        words.forEach((word, index) => {
+          const { stretch, weight } = wordAxes(p, index);
+
+          word.style.fontStretch = `${stretch.toFixed(1)}%`;
+          word.style.fontWeight = weight.toFixed(0);
+        });
       }
 
       if (scene) {

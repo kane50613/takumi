@@ -77,6 +77,21 @@ export function hammerAngle(progress: number): number {
   return -11.5 * ramp(progress, [0.77, 0.85]);
 }
 
+/**
+ * Backdrop word `index`'s `font-stretch` (%) and `font-weight`: it widens and thickens across its
+ * strike, starting partway for the opening word, and each blow squashes it back.
+ */
+export function wordAxes(progress: number, index: number) {
+  const from = index === 0 ? -0.35 : (STEP_STARTS[index] ?? 0);
+  const to = STEP_STARTS[index + 1] ?? 1;
+  const grown = ramp(progress, [from, to]);
+
+  return {
+    stretch: Math.max(50, 55 + 85 * grown - 30 * strikeImpulse(progress)),
+    weight: 300 + 600 * grown,
+  };
+}
+
 /** Sharp impulse (0..1) right as the hammer strikes the anvil at any of the three blows. */
 export function strikeImpulse(progress: number): number {
   let maxImpulse = 0;
