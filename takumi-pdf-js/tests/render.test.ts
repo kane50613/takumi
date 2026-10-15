@@ -50,6 +50,7 @@ test("defaults to paged A4 without options", async () => {
 
   expect(pdfHeader(pdf)).toBe("%PDF-");
   expect(pageCount(pdf)).toBe(1);
+  expect(await renderer.render(doc, { sections: [] })).toEqual(pdf);
 });
 
 test("sections paginate at their own width with real page boxes", async () => {

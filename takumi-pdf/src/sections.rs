@@ -6,10 +6,11 @@ use takumi_core::style::Color;
 
 use crate::{
   Band, PageOptions, PageRules, PdfError, PdfSection,
+  counters::{has_page_counters, has_target_counters},
   emitter::DocumentState,
   interactive::Interactive,
   krilla::{Document, destination::XyzDestination},
-  options::{PageRange, PageSelection},
+  options::{PageBand, PageRange, PageSelection},
   page::{PageBands, PagePlan},
   pagination::{MAX_PAGES, PageCounters},
   tree::TreeInputs,
@@ -29,27 +30,50 @@ impl SectionPlan {
     ranges: Option<&[PageRange]>,
     structural: bool,
   ) -> Result<Self, PdfError> {
+    if sources.len() >= MAX_PAGES {
+      return Err(PdfError::TooManyPages(sources.len()));
+    }
     let mut counts = vec![1; sources.len()];
     let mut targets = HashMap::new();
 
     for _ in 0..8 {
       let total = counts.iter().sum();
       let mut offset = 0;
+      let mut next_total = 0;
+      let mut dynamic = false;
       let mut sections = Vec::with_capacity(sources.len());
       let mut next_targets = HashMap::new();
-      let mut interactive = Interactive::default();
 
       for (index, source) in sources.iter().enumerate() {
-        let header = source.header.clone().and_then(Band::node);
-        let footer = source.footer.clone().and_then(Band::node);
+        // The first source owns the document's default bands.
+        let [header, footer] = [
+          source.header.as_ref().or(sources[0].header.as_ref()),
+          source.footer.as_ref().or(sources[0].footer.as_ref()),
+        ]
+        .map(|band| match band {
+          Some(Band::Node(node)) => Some(node.as_ref()),
+          _ => None,
+        });
+        let bands = PageBands {
+          header: rules.header_band(header),
+          footer: rules.footer_band(footer),
+          page_ranges: None,
+        };
+
+        dynamic |= [&source.node]
+          .into_iter()
+          .chain(
+            bands
+              .header
+              .iter()
+              .chain(&bands.footer)
+              .flat_map(PageBand::nodes),
+          )
+          .any(|node| has_page_counters(node) || has_target_counters(node));
         let mut plan = PagePlan::solve(
           inputs,
           source.page.unwrap_or(page),
-          PageBands {
-            header: rules.header_band(header.as_ref()),
-            footer: rules.footer_band(footer.as_ref()),
-            page_ranges: None,
-          },
+          bands,
           source.node.clone(),
           structural,
           PageCounters {
@@ -59,13 +83,16 @@ impl SectionPlan {
           },
         )?;
 
+        next_total += plan.paginated.starts.len();
+        if next_total >= MAX_PAGES {
+          return Err(PdfError::TooManyPages(next_total));
+        }
         plan.prefix = vec![index];
         for (id, anchor) in &plan.paginated.interactive.anchors {
           next_targets
             .entry(id.clone())
             .or_insert(offset + plan.paginated.page_index(anchor.top) + 1);
         }
-        interactive.append_section(&plan.paginated.interactive, index);
         offset += counts[index];
         sections.push(plan);
       }
@@ -73,16 +100,18 @@ impl SectionPlan {
         .iter()
         .map(|plan| plan.paginated.starts.len())
         .collect();
-      let next_total = next_counts.iter().sum();
 
-      if next_total >= MAX_PAGES {
-        return Err(PdfError::TooManyPages(next_total));
-      }
-      if next_counts == counts && next_targets == targets {
-        let selection = PageSelection::resolve(ranges, total)?;
+      if !dynamic || (next_counts == counts && next_targets == targets) {
+        let selection = PageSelection::resolve(ranges, next_total)?;
+        let mut interactive = Interactive::default();
+        let mut offset = 0;
 
-        for plan in &mut sections {
-          plan.selection = selection.section(plan.offset, plan.paginated.starts.len());
+        for (index, plan) in sections.iter_mut().enumerate() {
+          plan.offset = offset;
+          plan.total = next_total;
+          plan.selection = selection.section(offset, plan.paginated.starts.len());
+          interactive.append_section(&plan.paginated.interactive, index);
+          offset += plan.paginated.starts.len();
         }
         return Ok(Self {
           sections,

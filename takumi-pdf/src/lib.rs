@@ -186,19 +186,13 @@ pub fn render(mut options: PdfOptions<'_>) -> Result<Vec<u8>, PdfError> {
   let structural = options.tagged.names_structure_destinations();
   let rendered = match options.page {
     Some(page) if !options.sections.is_empty() => {
-      let mut sources = vec![PdfSection::builder().node(options.node).build()];
+      let mut first = PdfSection::builder().node(options.node).build();
+
+      first.header = options.header.take().map(Band::from);
+      first.footer = options.footer.take().map(Band::from);
+      let mut sources = vec![first];
 
       sources.append(&mut options.sections);
-      for source in &mut sources {
-        source.header = source
-          .header
-          .take()
-          .or_else(|| options.header.clone().map(Band::from));
-        source.footer = source
-          .footer
-          .take()
-          .or_else(|| options.footer.clone().map(Band::from));
-      }
       let plan = SectionPlan::solve(
         &inputs,
         &sources,
@@ -208,6 +202,7 @@ pub fn render(mut options: PdfOptions<'_>) -> Result<Vec<u8>, PdfError> {
         structural,
       )?;
 
+      drop(sources);
       plan.compose(&mut pdf, &inputs, &state, options.background_color)?;
       Rendered::Sections(Box::new(plan))
     }

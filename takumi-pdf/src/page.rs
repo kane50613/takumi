@@ -204,7 +204,7 @@ impl PagePlan {
     // stops moving, like the content counters in `Paginated::build`.
     let dynamic = header.as_ref().is_some_and(Repeatable::dynamic)
       || footer.as_ref().is_some_and(Repeatable::dynamic);
-    let source = dynamic.then(|| node.clone());
+    let source = (dynamic && counters.total.is_none()).then(|| node.clone());
     let mut paginated = Paginated::build(node, inputs, &frame, counters)?;
 
     if let Some(source) = source {

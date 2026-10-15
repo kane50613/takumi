@@ -648,6 +648,20 @@ fn mixed_sections_keep_global_ranges_and_destinations() {
     "both targets were dropped"
   );
   assert_eq!(inflated.matches("/Title(").count(), 2);
+  let mut kept = mixed_section_options(&fonts, true);
+  let mut numbered = mixed_section_options(&fonts, false);
+
+  kept.page_ranges = Some(vec![PageRange::single(2), PageRange::single(4)]);
+  numbered.page_ranges.clone_from(&kept.page_ranges);
+  let pdf = render_pinned(kept);
+
+  assert_eq!(page_count(&pdf), 2);
+  assert!(inflated_text(&pdf).contains("/Subtype/Link"));
+  assert_eq!(
+    pdf,
+    render_pinned(numbered),
+    "static and counter-driven plans must retain the same destination after earlier pages are removed"
+  );
   let mut empty = mixed_section_options(&fonts, true);
 
   empty.page_ranges = Some(vec![PageRange::single(9)]);
@@ -660,6 +674,73 @@ fn mixed_sections_keep_global_ranges_and_destinations() {
   viewport.page = None;
   viewport.viewport = Some(Viewport::new((400, 300)));
   assert!(matches!(render(viewport), Err(PdfError::SectionsNeedPages)));
+}
+
+#[test]
+fn mixed_sections_stop_at_the_document_page_limit() {
+  let fonts = latin_font();
+  let node = from_html(
+    "<div style=\"height:20000px;background:white;\"></div>",
+    FromHtmlOptions::default(),
+  )
+  .expect("parse tall content");
+  let page = PageOptions {
+    width: 100.0,
+    height: 2.0,
+    margin: PageMargins::uniform(0.0),
+  };
+  let options = PdfOptions::builder()
+    .fonts(&fonts)
+    .node(node.clone())
+    .page(page)
+    .sections(vec![
+      PdfSection::builder().node(node.clone()).build(),
+      PdfSection::builder()
+        .node(node)
+        .page(PageOptions { width: 0.0, ..page })
+        .build(),
+    ])
+    .build();
+
+  let error = render(options).expect_err("the page limit precedes the invalid third section");
+
+  assert!(matches!(error, PdfError::TooManyPages(20000)), "{error:?}");
+}
+
+#[test]
+fn mixed_sections_settle_when_total_digits_wrap_an_auto_band() {
+  let fonts = latin_font();
+  let parse = |html: &str| from_html(html, FromHtmlOptions::default()).expect("parse document");
+  let options = |counter: &str| {
+    PdfOptions::builder()
+      .fonts(&fonts)
+      .node(parse("<div style=\"height:300px;background:white;\"></div>"))
+      .page(PageOptions {
+        width: 200.0,
+        height: 200.0,
+        margin: PageMargins {
+          top: PageMargin::Px(0.0),
+          bottom: PageMargin::Auto,
+          left: PageMargin::Px(0.0),
+          right: PageMargin::Px(0.0),
+        },
+      })
+      .sections((0..8).map(|_| PdfSection::builder()
+        .node(parse("<div style=\"height:150px;background:white;\"></div>"))
+        .build()).collect())
+      .footer(parse(&format!(
+        "<div style=\"display:flex;flex-wrap:wrap;width:100px;font-size:14px;line-height:20px;\"><span style=\"width:92px;\">Total</span>{counter}</div>"
+      )))
+      .build()
+  };
+  let pdf = render_pinned(options("<span class=\"totalPages\"></span>"));
+  let expected = render_pinned(options("<span>19</span>"));
+
+  assert_eq!(page_count(&pdf), 19);
+  assert_eq!(
+    pdf, expected,
+    "a two-digit total must change the band height and page count"
+  );
 }
 
 /// `page_ranges` keeps pages 1 and 3 of a three-page report. The footer
