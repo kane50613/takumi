@@ -14,24 +14,32 @@ export CARGO_UNSTABLE_BUILD_STD_FEATURES=optimize_for_size
 export RUSTFLAGS='--remap-path-prefix=/home/runner=~ --remap-path-prefix=/Users/runner=~ --remap-path-prefix=/root=~ --remap-path-prefix=$HOME/.cargo/registry=~/.cargo/registry --remap-path-prefix=$HOME/.rustup=~/.rustup -Zunstable-options -Cpanic=immediate-abort -Ctarget-feature=+simd128'
 ```
 
-Before applying the build change, from the workspace root:
+Start from the candidate source checkout, at the workspace root. The commands below build both variants from identical Rust and JavaScript sources. For the baseline, they temporarily remove only the new wasm-opt inlining limit; for the candidate, they restore it. The manifest must match `HEAD` and contain the candidate flag. The saved manifest is restored even if a build fails.
 
 ```sh
 bun install --frozen-lockfile
 bun run --filter ./takumi-helpers build
-bun run --filter ./takumi-pdf-js build
-cp takumi-pdf-js/pkg/takumi_pdf_wasm_bg.wasm /tmp/pdf-baseline.wasm
-```
+(
+  set -eu
+  manifest=takumi-pdf-js/Cargo.toml
+  git diff --exit-code HEAD -- "$manifest"
+  grep -Fq -- '--inline-max-combined-binary-size=65536' "$manifest"
+  saved_manifest=$(mktemp)
+  cp "$manifest" "$saved_manifest"
+  trap 'cp "$saved_manifest" "$manifest"; rm -f "$saved_manifest"' EXIT
 
-Apply the candidate change, rebuild through the same release pipeline (including wasm-opt), and run:
+  sed '/--inline-max-combined-binary-size=65536/d' "$saved_manifest" > "$manifest"
+  bun run --filter ./takumi-pdf-js build
+  cp takumi-pdf-js/pkg/takumi_pdf_wasm_bg.wasm /tmp/pdf-baseline.wasm
 
-```sh
-bun run --filter ./takumi-pdf-js build
-cp takumi-pdf-js/pkg/takumi_pdf_wasm_bg.wasm /tmp/pdf-candidate.wasm
-node takumi-pdf-js/tests/bench/index.mjs \
-  /tmp/pdf-baseline.wasm /tmp/pdf-candidate.wasm > /tmp/pdf-bench.jsonl
-gzip -9 < /tmp/pdf-baseline.wasm | wc -c
-gzip -9 < /tmp/pdf-candidate.wasm | wc -c
+  cp "$saved_manifest" "$manifest"
+  bun run --filter ./takumi-pdf-js build
+  cp takumi-pdf-js/pkg/takumi_pdf_wasm_bg.wasm /tmp/pdf-candidate.wasm
+  node takumi-pdf-js/tests/bench/index.mjs \
+    /tmp/pdf-baseline.wasm /tmp/pdf-candidate.wasm > /tmp/pdf-bench.jsonl
+  gzip -9 < /tmp/pdf-baseline.wasm | wc -c
+  gzip -9 < /tmp/pdf-candidate.wasm | wc -c
+)
 ```
 
 Record `rustc --version`, `wasm-pack --version`, `wasm-opt --version`, `bun --version`, `node --version`, the source revision, and CPU model with the results. The script's gzip sizes use Node's zlib; the commands above separately measure the shipped binary with GNU gzip.
