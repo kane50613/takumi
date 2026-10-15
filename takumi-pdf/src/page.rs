@@ -8,7 +8,7 @@ use takumi_core::{
   viewport::{MediaTarget, Viewport},
 };
 
-use std::mem::take;
+use std::{collections::HashMap, mem::take};
 
 use crate::{
   bands::{RepeatBounds, Repeatable, RepeatablePage},
@@ -24,7 +24,7 @@ use crate::{
     surface::Surface,
   },
   options::{PT_PER_PX, PageBand, PageOptions, PageRange, PageSelection, PdfError},
-  pagination::{MAX_PAGES, PageSlice, Paginated},
+  pagination::{MAX_PAGES, PageCounters, PageSlice, Paginated},
   paint::paint_page_background,
   tree::TreeInputs,
   window::{ContentWindow, Window},
@@ -138,6 +138,9 @@ pub(crate) struct PagePlan {
   pub(crate) structural: bool,
   /// In draw order: the header band, the repeated boxes, the footer band.
   pub(crate) repeatables: Vec<Repeatable>,
+  pub(crate) offset: usize,
+  pub(crate) total: usize,
+  pub(crate) prefix: Vec<usize>,
 }
 
 impl PagePlan {
@@ -153,7 +156,7 @@ impl PagePlan {
     Some(xyz_destination(
       emitted,
       Point::from_xy(self.frame.margin.left * PT_PER_PX, y * PT_PER_PX),
-      path,
+      &[self.prefix.as_slice(), path].concat(),
       self.structural,
     ))
   }
@@ -166,6 +169,7 @@ impl PagePlan {
     bands: PageBands<'_>,
     node: Node,
     structural: bool,
+    counters: PageCounters<'_>,
   ) -> Result<Self, PdfError> {
     // Bands lay out at full page width and draw inside the margin areas,
     // like Chromium's print header and footer templates.
@@ -191,7 +195,7 @@ impl PagePlan {
         footer.map(Repeatable::height),
       )
     };
-    let (mut header, mut footer) = measure_bands(1)?;
+    let (mut header, mut footer) = measure_bands(counters.total.unwrap_or(1))?;
     let mut frame = resolve(header.as_ref(), footer.as_ref())?;
     // A band with a counter and the cut list depend on each other: an `auto`
     // margin takes the band's height, the band lays out with the real page
@@ -200,14 +204,15 @@ impl PagePlan {
     // stops moving, like the content counters in `Paginated::build`.
     let dynamic = header.as_ref().is_some_and(Repeatable::dynamic)
       || footer.as_ref().is_some_and(Repeatable::dynamic);
-    let source = dynamic.then(|| node.clone());
-    let mut paginated = Paginated::build(node, inputs, &frame)?;
+    let source = (dynamic && counters.total.is_none()).then(|| node.clone());
+    let mut paginated = Paginated::build(node, inputs, &frame, counters)?;
 
     if let Some(source) = source {
       const BAND_PASSES: usize = 3;
 
       for _ in 0..BAND_PASSES {
-        let (next_header, next_footer) = measure_bands(paginated.starts.len())?;
+        let (next_header, next_footer) =
+          measure_bands(counters.total.unwrap_or(paginated.starts.len()))?;
         let stable = next_header.as_ref().map(Repeatable::height)
           == header.as_ref().map(Repeatable::height)
           && next_footer.as_ref().map(Repeatable::height)
@@ -219,7 +224,7 @@ impl PagePlan {
           break;
         }
         frame = resolve(header.as_ref(), footer.as_ref())?;
-        paginated = Paginated::build(source.clone(), inputs, &frame)?;
+        paginated = Paginated::build(source.clone(), inputs, &frame, counters)?;
       }
     }
 
@@ -227,6 +232,7 @@ impl PagePlan {
       return Err(PdfError::TooManyPages(paginated.starts.len()));
     }
     let selection = PageSelection::resolve(bands.page_ranges, paginated.starts.len())?;
+    let total = counters.total.unwrap_or(paginated.starts.len());
     let repeatables = header
       .into_iter()
       .chain(take(&mut paginated.repeated))
@@ -239,6 +245,9 @@ impl PagePlan {
       selection,
       structural,
       repeatables,
+      offset: counters.offset,
+      total,
+      prefix: Vec::new(),
     })
   }
 
@@ -249,6 +258,7 @@ impl PagePlan {
     inputs: &TreeInputs<'_>,
     state: &DocumentState<'_>,
     background: Option<Color>,
+    destinations: Option<&HashMap<Box<str>, XyzDestination>>,
   ) -> Result<(), PdfError> {
     let text_boxes = TextBox::collect(&self.paginated.content);
     let inline = InlineCache::new(&text_boxes);
@@ -261,6 +271,7 @@ impl PagePlan {
       chunks: &chunks,
       state,
       background,
+      destinations,
     };
 
     for slice in self.paginated.pages() {
@@ -293,6 +304,7 @@ pub(crate) struct PageComposer<'c, 'g> {
   pub(crate) chunks: &'c SceneChunks<'c>,
   pub(crate) state: &'c DocumentState<'c>,
   pub(crate) background: Option<Color>,
+  pub(crate) destinations: Option<&'c HashMap<Box<str>, XyzDestination>>,
 }
 
 impl PageComposer<'_, '_> {
@@ -306,7 +318,7 @@ impl PageComposer<'_, '_> {
   ) -> Result<(), PdfError> {
     let frame = &self.plan.frame;
     let paginated = &self.plan.paginated;
-    let pages = paginated.starts.len();
+    let pages = self.plan.total;
     let resolved = repeatables
       .iter()
       .map(|repeatable| {
@@ -314,7 +326,7 @@ impl PageComposer<'_, '_> {
           self.inputs,
           &self.page_context,
           frame,
-          slice.index + 1,
+          self.plan.offset + slice.index + 1,
           pages,
         )
       })
@@ -333,7 +345,10 @@ impl PageComposer<'_, '_> {
     }
     surface.pop();
     surface.finish();
-    let anchor = |id: &str| self.plan.anchor_destination(id);
+    let anchor = |id: &str| match self.destinations {
+      Some(destinations) => destinations.get(id).cloned(),
+      None => self.plan.anchor_destination(id),
+    };
 
     add_link_annotations(
       &mut pdf_page,

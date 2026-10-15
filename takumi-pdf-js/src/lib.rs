@@ -148,7 +148,7 @@ impl PdfRenderer {
     options: Option<PdfRenderOptionsType>,
   ) -> Result<Vec<u8>, js_sys::Error> {
     let node: Node = from_value(node.into()).map_err(map_error)?;
-    let options: PdfRenderOptions = options
+    let mut options: PdfRenderOptions = options
       .map(|options| from_value(options.into()).map_err(map_error))
       .transpose()?
       .unwrap_or_default();
@@ -164,6 +164,7 @@ impl PdfRenderer {
       viewport,
       fonts: &state,
       node,
+      sections: options.take_sections()?,
       stylesheet: stylesheet(&self.resource_cache, options.css, Vec::new()).map_err(map_error)?,
       images,
       page,

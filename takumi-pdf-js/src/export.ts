@@ -14,6 +14,7 @@ import {
   counterCharacters,
   type PageOverride,
   type PageRules,
+  type PdfSection,
   PdfRenderer as PdfRendererInternal,
 } from "../pkg/takumi_pdf_wasm";
 
@@ -88,6 +89,16 @@ export type PageSizeName =
 /** A page size: a preset name or explicit {@link Dimensions}. */
 export type PageSize = PageSizeName | Dimensions;
 
+/** Additional content starting on a new page; omitted fields inherit document options. */
+export type SectionInput = {
+  node: NodeInput;
+  size?: PageSize;
+  landscape?: boolean;
+  margin?: PageMargin;
+  header?: BandInput;
+  footer?: BandInput;
+};
+
 /**
  * One side of a page margin: a length in CSS px, or `"auto"` to fit the band
  * that draws on that side. `"auto"` never goes below the 37.8 a page starts with, and the
@@ -139,6 +150,8 @@ type PagedOptions = {
   footer?: BandInput;
   /** What some pages draw differently from the rest. */
   pages?: PageRulesInput;
+  /** Additional sections with independent layout and document-wide page counters. */
+  sections?: SectionInput[];
   /**
    * The pages the output keeps, e.g. `[1, { from: 4, to: 8 }]`, like a print
    * dialog's page ranges. Layout and page counters still run over the whole
@@ -162,6 +175,7 @@ type ViewportOptions = {
   header?: never;
   footer?: never;
   pages?: never;
+  sections?: never;
   pageRanges?: never;
 };
 
@@ -441,6 +455,33 @@ async function resolveNode(input: NodeInput): Promise<{ node: Node; css: string[
   return fromJsx(input as ReactNode);
 }
 
+async function resolveSection(input: SectionInput) {
+  rejectNonObject(input, "section");
+  rejectUnknownKeys(
+    input,
+    ["node", "size", "landscape", "margin", "header", "footer"],
+    "section field",
+  );
+  const { node, header, footer, ...geometry } = input;
+  const [main, top, bottom] = await Promise.all([
+    resolveNode(node),
+    header == null || header === false ? undefined : resolveNode(header),
+    footer == null || footer === false ? undefined : resolveNode(footer),
+  ]);
+  const section: PdfSection = {
+    ...geometry,
+    node: main.node,
+    header: header === false ? false : top?.node,
+    footer: footer === false ? false : bottom?.node,
+  };
+
+  return {
+    section,
+    nodes: [main.node, ...[top?.node, bottom?.node].filter((band) => band !== undefined)],
+    css: [...main.css, ...(top?.css ?? []), ...(bottom?.css ?? [])],
+  };
+}
+
 /** A PDF renderer holding registered fonts. Reuse one instance across renders. */
 export class PdfRenderer {
   private inner = new PdfRendererInternal();
@@ -450,17 +491,33 @@ export class PdfRenderer {
 
   /** Renders a node tree, JSX, or an HTML string to PDF bytes. See {@link RenderOptions}. */
   async render(node: NodeInput, options: RenderOptions = {}): Promise<Uint8Array> {
-    const { fonts, images, header, footer, pages, css, stylesheets, fontFamilies, ...rest } =
-      options;
-    const [main, headerResult, footerResult, pagesResult] = await Promise.all([
+    const {
+      fonts,
+      images,
+      header,
+      footer,
+      pages,
+      sections,
+      css,
+      stylesheets,
+      fontFamilies,
+      ...rest
+    } = options;
+    const [main, headerResult, footerResult, pagesResult, sectionResults] = await Promise.all([
       resolveNode(node),
       header == null || header === false ? undefined : resolveNode(header),
       footer == null || footer === false ? undefined : resolveNode(footer),
       pages == null ? undefined : resolveRules(pages),
+      sections == null ? undefined : Promise.all(sections.map(resolveSection)),
     ]);
     const bands = [headerResult?.node, footerResult?.node, ...(pagesResult?.nodes ?? [])].filter(
       (band) => band !== undefined,
     );
+    const trees = [
+      main.node,
+      ...bands,
+      ...(sectionResults?.flatMap((result) => result.nodes) ?? []),
+    ];
     const resources = await this.fonts.resolveResources(
       fonts &&
         subsetFonts({
@@ -468,10 +525,9 @@ export class PdfRenderer {
           // Page counters and list markers render characters no node in the
           // tree carries, so the renderer says which ones.
           source: [
-            main.node,
-            ...bands,
+            ...trees,
             LIST_MARKER_CHARACTERS,
-            counterCharacters([main.node, ...bands].flatMap((tree) => classNames(tree))),
+            counterCharacters(trees.flatMap((tree) => classNames(tree))),
           ],
         }),
       images,
@@ -483,6 +539,7 @@ export class PdfRenderer {
       ...(headerResult?.css ?? []),
       ...(footerResult?.css ?? []),
       ...(pagesResult?.css ?? []),
+      ...(sectionResults?.flatMap((result) => result.css) ?? []),
     ];
 
     return this.inner.render(main.node, {
@@ -490,6 +547,7 @@ export class PdfRenderer {
       header: headerResult?.node,
       footer: footerResult?.node,
       pages: pagesResult?.pages,
+      sections: sectionResults?.map((result) => result.section),
       css: sheets.length > 0 ? sheets : undefined,
       images: resources.images,
       fontFamilies: resources.fontFamilies,
