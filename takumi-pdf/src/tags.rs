@@ -39,6 +39,7 @@ pub(crate) const ARTIFACT: ContentTag<'static> = ContentTag::Artifact(Artifact {
 #[derive(Default)]
 pub(crate) struct TagCollector {
   recorded: HashMap<Vec<usize>, Recorded>,
+  pub(crate) prefix: Vec<usize>,
 }
 
 /// What one source node recorded.
@@ -66,7 +67,10 @@ impl TagCollector {
   }
 
   fn at(&mut self, path: &[usize]) -> &mut Recorded {
-    self.recorded.entry(path.to_vec()).or_default()
+    self
+      .recorded
+      .entry([self.prefix.as_slice(), path].concat())
+      .or_default()
   }
 
   fn take(&mut self, path: &[usize]) -> Recorded {
@@ -75,9 +79,9 @@ impl TagCollector {
 
   /// Walks the source tree in logical order and builds the structure tree from
   /// the recorded identifiers.
-  pub(crate) fn build_tree(
+  pub(crate) fn build_tree<'r>(
     &mut self,
-    root: &RenderNode,
+    roots: impl IntoIterator<Item = (&'r RenderNode, Vec<usize>)>,
     lang: Option<&str>,
     targets: &HashSet<Vec<usize>>,
   ) -> TagTree {
@@ -90,15 +94,17 @@ impl TagCollector {
       targets,
     };
 
-    build_node(
-      root,
-      &mut Vec::new(),
-      &mut walk,
-      &mut top,
-      &mut pending,
-      Nesting::default(),
-    );
-    flush_paragraph(&mut pending, &mut top);
+    for (root, mut prefix) in roots {
+      build_node(
+        root,
+        &mut prefix,
+        &mut walk,
+        &mut top,
+        &mut pending,
+        Nesting::default(),
+      );
+      flush_paragraph(&mut pending, &mut top);
+    }
     for group in top {
       tree.push(group);
     }

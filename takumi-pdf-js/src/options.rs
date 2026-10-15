@@ -9,7 +9,8 @@ use takumi_core::{
   viewport::Viewport,
 };
 use takumi_pdf::{
-  Band, PageMargin, PageMargins, PageOptions, PageOverride, PageRange, PageRules, UncoveredText,
+  Band, PageMargin, PageMargins, PageOptions, PageOverride, PageRange, PageRules, PdfSection,
+  UncoveredText,
 };
 
 use crate::metadata::{AttachmentInput, MetadataInput, PdfaInput, TaggedInput};
@@ -187,6 +188,8 @@ pub(crate) struct PdfRenderOptions {
   landscape: Option<bool>,
   /// Page margin in CSS px: one number or per-side values.
   margin: Option<MarginInput>,
+  /// Additional sections, each starting on a new page.
+  pub(crate) sections: Option<Vec<SectionInput>>,
   /// Paper color as a CSS color, painted under everything on every page.
   pub(crate) background_color: Option<String>,
   /// Band repeated at the top of every page. Nodes classed `pageNumber` /
@@ -224,6 +227,43 @@ pub(crate) struct PdfRenderOptions {
   /// What a character no registered font covers turns into: `"error"`
   /// (default), `"placeholder"` or `"blank"`.
   pub(crate) uncovered_text: Option<UncoveredTextInput>,
+}
+
+/// A section with geometry inherited field-by-field from the document options.
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub(crate) struct SectionInput {
+  node: Node,
+  size: Option<SizeInput>,
+  landscape: Option<bool>,
+  margin: Option<MarginInput>,
+  header: Option<BandInput>,
+  footer: Option<BandInput>,
+}
+
+impl PdfRenderOptions {
+  pub(crate) fn take_sections(&mut self) -> Result<Vec<PdfSection>, js_sys::Error> {
+    self
+      .sections
+      .take()
+      .unwrap_or_default()
+      .into_iter()
+      .map(|section| {
+        let mut resolved = PdfSection::builder()
+          .node(section.node)
+          .page(resolve_page(
+            section.size.as_ref().or(self.size.as_ref()),
+            section.landscape.or(self.landscape).unwrap_or(false),
+            section.margin.as_ref().or(self.margin.as_ref()),
+          )?)
+          .build();
+
+        resolved.header = section.header.map(Band::from);
+        resolved.footer = section.footer.map(Band::from);
+        Ok(resolved)
+      })
+      .collect()
+  }
 }
 
 /// `uncoveredText` names accepted from JS.
@@ -329,11 +369,12 @@ pub(crate) fn resolve_geometry(
     || options.header.is_some()
     || options.footer.is_some()
     || options.pages.is_some()
+    || options.sections.is_some()
     || options.page_ranges.is_some();
 
   match options.viewport {
     Some(_) if paged_field_set => Err(js_sys::Error::new(
-      "viewport is mutually exclusive with the paged options (size, landscape, margin, header, footer, pages, pageRanges)",
+      "viewport is mutually exclusive with the paged options (size, landscape, margin, header, footer, pages, sections, pageRanges)",
     )),
     Some(input) => Ok((
       Some(Viewport::new((
