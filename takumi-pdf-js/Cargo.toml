@@ -36,6 +36,7 @@ wasm-opt = [
   '-Oz',
   '--converge',
   '--code-folding',
+  '--inline-max-combined-binary-size=65536',
   '--enable-bulk-memory',
   '--enable-simd',
   '--enable-nontrapping-float-to-int',
