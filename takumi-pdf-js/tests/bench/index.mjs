@@ -60,6 +60,7 @@ async function child(wasmPath, name, mode) {
     footer: { type: "text", text: "0 / 0", className: "pageNumber" },
   };
   let pdf;
+  let hash;
   const times = [];
   try {
     for (let run = mode === "warm" ? -warmups : 0; run < (mode === "warm" ? samples : 1); run++) {
@@ -67,12 +68,15 @@ async function child(wasmPath, name, mode) {
       pdf = await renderer.render(node, options);
       const elapsed = performance.now() - start;
       if (run >= 0) times.push(elapsed);
+      const currentHash = createHash("sha256").update(pdf).digest("hex");
+      if (hash !== undefined && currentHash !== hash)
+        throw new Error(`PDF bytes differ for ${name}/${mode}, render ${run}`);
+      hash = currentHash;
     }
   } finally {
     renderer.free();
   }
   if (!pdf) throw new Error("No PDF rendered");
-  const hash = createHash("sha256").update(pdf).digest("hex");
   process.on("exit", () => {
     process.stdout.write(
       `${JSON.stringify({
@@ -105,6 +109,7 @@ function compare(paths) {
     );
   }
   for (const name of cases) {
+    let hash;
     for (const mode of ["cold", "warm"]) {
       const results = new Map(paths.map((path) => [path, []]));
       for (let run = -warmups; run < samples; run++) {
@@ -117,11 +122,13 @@ function compare(paths) {
           );
           const wallMs = performance.now() - start;
           if (result.status !== 0) throw new Error(result.stderr || String(result.error));
-          if (run >= 0) results.get(path).push({ wallMs, ...JSON.parse(result.stdout) });
+          const output = JSON.parse(result.stdout);
+          if (hash !== undefined && output.sha256 !== hash)
+            throw new Error(`PDF bytes differ for ${name}/${mode}, process ${run}: ${path}`);
+          hash = output.sha256;
+          if (run >= 0) results.get(path).push({ wallMs, ...output });
         }
       }
-      const hashes = new Set([...results.values()].flat().map((result) => result.sha256));
-      if (hashes.size !== 1) throw new Error(`PDF bytes differ for ${name}/${mode}`);
       for (const [path, runs] of results) {
         console.log(
           JSON.stringify({
@@ -130,6 +137,9 @@ function compare(paths) {
             path,
             wallMs: statistics(runs.map((run) => run.wallMs)),
             renderMs: statistics(runs.flatMap((run) => run.renderMs)),
+            perProcessRenderMedianMs: statistics(
+              runs.map((run) => statistics(run.renderMs).median),
+            ),
             runs,
           }),
         );
