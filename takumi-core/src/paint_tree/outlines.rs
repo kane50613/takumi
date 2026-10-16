@@ -14,12 +14,25 @@ pub(super) struct OutlineGlyph {
   pub(super) offset: Point<f32>,
 }
 
-/// The glyphs of one run that its colour fills.
-pub(super) struct RunOutline(Box<[OutlineGlyph]>);
+/// Every glyph of one run, by its index in the run, with `None` where the run's colour does not fill it.
+pub(super) struct RunOutline(Box<[Option<OutlineGlyph>]>);
 
-impl FromIterator<OutlineGlyph> for RunOutline {
-  fn from_iter<I: IntoIterator<Item = OutlineGlyph>>(glyphs: I) -> Self {
+impl FromIterator<Option<OutlineGlyph>> for RunOutline {
+  fn from_iter<I: IntoIterator<Item = Option<OutlineGlyph>>>(glyphs: I) -> Self {
     Self(glyphs.into_iter().collect())
+  }
+}
+
+impl OutlineGlyph {
+  /// The glyph's outline as SVG path data, positioned from the run's baseline start.
+  fn path_data(&self) -> Option<String> {
+    match self.glyph.as_ref() {
+      ResolvedGlyph::Outline(outline) => Some(path_data(
+        outline.paths(),
+        Affine::translation(self.offset.x, self.offset.y),
+      )),
+      ResolvedGlyph::Bitmap(_) => None,
+    }
   }
 }
 
@@ -29,14 +42,14 @@ impl RunOutline {
     self
       .0
       .iter()
-      .filter_map(|OutlineGlyph { glyph, offset }| match glyph.as_ref() {
-        ResolvedGlyph::Outline(outline) => Some(path_data(
-          outline.paths(),
-          Affine::translation(offset.x, offset.y),
-        )),
-        ResolvedGlyph::Bitmap(_) => None,
-      })
+      .flatten()
+      .filter_map(OutlineGlyph::path_data)
       .collect()
+  }
+
+  /// The outline of glyph `glyph` as SVG path data, positioned from the run's baseline start.
+  fn glyph_path_data(&self, glyph: usize) -> Option<String> {
+    self.0.get(glyph)?.as_ref()?.path_data()
   }
 }
 
@@ -53,5 +66,10 @@ impl Outlines {
   /// The path data of run `run` of text node `node`.
   pub(super) fn path_data(&self, node: usize, run: usize) -> Option<String> {
     Some(self.0.get(&node)?.get(run)?.path_data())
+  }
+
+  /// The path data of glyph `glyph` of run `run` of text node `node`.
+  pub(super) fn glyph_path_data(&self, node: usize, run: usize, glyph: usize) -> Option<String> {
+    self.0.get(&node)?.get(run)?.glyph_path_data(glyph)
   }
 }

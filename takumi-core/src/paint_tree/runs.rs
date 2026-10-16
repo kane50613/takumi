@@ -59,11 +59,17 @@ impl PositionedInlineRun {
     &self,
     layout: ComputedLayout,
   ) -> impl Iterator<Item = PlacedGlyph<'_>> {
+    self.each_glyph(layout).flatten()
+  }
+
+  /// Every glyph of the run in the block at `layout`, in order, `None` for one that did not
+  /// resolve.
+  fn each_glyph(&self, layout: ComputedLayout) -> impl Iterator<Item = Option<PlacedGlyph<'_>>> {
     let run_transform = self.transform(Affine::IDENTITY);
     let glyph_offset = self.glyph_offset(layout);
     let shaped = &self.glyph_run;
 
-    shaped.glyphs.iter().filter_map(move |glyph| {
+    shaped.glyphs.iter().map(move |glyph| {
       let resolved = self.resolved_glyphs.get(&glyph.id)?;
       let paint = match resolved.as_ref() {
         ResolvedGlyph::Outline(outline) => {
@@ -94,16 +100,17 @@ impl PositionedInlineRun {
     })
   }
 
-  /// The glyphs the run's colour fills.
+  /// The glyphs the run's colour fills, one entry per glyph of the run.
   pub(super) fn outline(&self, layout: ComputedLayout) -> RunOutline {
     self
-      .placed_glyphs(layout)
-      .filter_map(|placed| match placed.paint {
-        GlyphPaint::Outline { .. } => Some(OutlineGlyph {
+      .each_glyph(layout)
+      .map(|placed| {
+        let placed = placed?;
+
+        matches!(placed.paint, GlyphPaint::Outline { .. }).then(|| OutlineGlyph {
           glyph: Arc::clone(placed.glyph),
           offset: placed.offset,
-        }),
-        _ => None,
+        })
       })
       .collect()
   }

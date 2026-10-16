@@ -55,6 +55,11 @@ export interface TextRun {
    * some emoji are left out.
    */
   outline(): string;
+  /**
+   * The outline of `glyphs[index]` as SVG path data, in the same space as {@link outline}.
+   * `undefined` for a glyph the run's color does not fill.
+   */
+  glyphOutline(index: number): string | undefined;
   /** Present when `text-fit` scales the line; maps the run's space before it is placed at `x`, `y`. */
   readonly transform?: Matrix;
 }
@@ -139,6 +144,7 @@ export interface PaintTree {
 interface PaintedFiles {
   fontData(index: number): Uint8Array | undefined;
   runOutline(node: number, run: number): string | undefined;
+  glyphOutline(node: number, run: number, glyph: number): string | undefined;
 }
 
 export class PaintTreeView implements PaintTree {
@@ -380,6 +386,7 @@ class TextView extends NodeView<RawNode<"text">> implements TextNode {
       ...fields,
       font: resolved,
       outline: () => this.listing.files.runOutline(this.raw.id, index) ?? "",
+      glyphOutline: (glyph) => this.listing.files.glyphOutline(this.raw.id, index, glyph),
     };
   }
 }

@@ -23,6 +23,16 @@ describe("Painter.paint", () => {
     expect(run?.glyphs.map((glyph) => glyph.cluster)).toEqual([0, 1, 2, 3, 4, 5, 6]);
   });
 
+  it("splits a run's outline into one outline per glyph", async () => {
+    const tree = await painter.paint(text("paint", { fontSize: 32 }), { width: 400, height: 100 });
+    const [run] = runs(tree);
+    const outlines = run?.glyphs.map((_, index) => run.glyphOutline(index)) ?? [];
+
+    expect(outlines).toHaveLength(5);
+    expect(outlines.join("")).toBe(run?.outline() ?? "");
+    expect(run?.glyphOutline(5)).toBeUndefined();
+  });
+
   it("resolves a box's decorations into drawables and its text into runs", async () => {
     const tree = await painter.paint(
       container({

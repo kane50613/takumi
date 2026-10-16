@@ -172,4 +172,10 @@ impl RenderedPaint {
   pub fn run_outline(&self, node: usize, run: usize) -> Option<String> {
     self.tree.run_outline(node, run)
   }
+
+  /// The SVG path data of glyph `glyph` of run `run` of text node `node`.
+  #[wasm_bindgen(js_name = glyphOutline)]
+  pub fn glyph_outline(&self, node: usize, run: usize, glyph: usize) -> Option<String> {
+    self.tree.glyph_outline(node, run, glyph)
+  }
 }

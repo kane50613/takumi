@@ -468,3 +468,34 @@ fn run_outline_writes_the_runs_glyphs() {
   );
   assert_eq!(tree.run_outline(node, usize::MAX), None);
 }
+
+#[test]
+fn glyph_outlines_make_up_the_run_outline() {
+  let tree = paint(card());
+  let (node, run, count) = tree
+    .document
+    .nodes
+    .iter()
+    .find_map(|node| match &node.kind {
+      NodeKind::Text { runs, .. } => runs
+        .iter()
+        .position(|run| run.text == "world")
+        .map(|run| (node.id, run, runs[run].glyphs.len())),
+      _ => None,
+    })
+    .expect("a run reading world");
+  let glyphs: Vec<_> = (0..count)
+    .map(|glyph| tree.glyph_outline(node, run, glyph))
+    .collect();
+
+  assert!(glyphs.iter().all(|outline| {
+    outline
+      .as_deref()
+      .is_some_and(|outline| outline.starts_with('M'))
+  }));
+  assert_eq!(
+    glyphs.into_iter().flatten().collect::<String>(),
+    tree.run_outline(node, run).expect("the run's outline")
+  );
+  assert_eq!(tree.glyph_outline(node, run, count), None);
+}

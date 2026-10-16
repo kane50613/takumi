@@ -78,6 +78,13 @@ impl PaintTree {
   pub fn run_outline(&self, node: usize, run: usize) -> Option<String> {
     self.outlines.path_data(node, run)
   }
+
+  /// The outline of glyph `glyph` of run `run` of text node `node`, as SVG path data from the
+  /// run's baseline start. `None` for a glyph the run's colour does not fill, such as a colour
+  /// font or bitmap glyph.
+  pub fn glyph_outline(&self, node: usize, run: usize, glyph: usize) -> Option<String> {
+    self.outlines.glyph_path_data(node, run, glyph)
+  }
 }
 
 /// Lays out `options.node` and records what painting it would draw.
