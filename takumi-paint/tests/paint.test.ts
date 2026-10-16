@@ -100,6 +100,18 @@ describe("Painter.paint", () => {
     expect(() => paintTreeFromJSON(JSON.parse(JSON.stringify(outside)))).toThrow(
       "does not follow it",
     );
+
+    const orphaned = {
+      ...json,
+      tree: {
+        ...json.tree,
+        nodes: json.tree.nodes.map((node) => (node.id === 0 ? { ...node, children: [] } : node)),
+      },
+    };
+
+    expect(() => paintTreeFromJSON(JSON.parse(JSON.stringify(orphaned)))).toThrow(
+      "not listed under a parent",
+    );
   });
 
   it("outlines each glyph of a run on its own", async () => {

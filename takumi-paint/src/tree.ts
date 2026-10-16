@@ -180,6 +180,9 @@ export function paintTreeFromJSON(json: SerializedPaintTree): PaintTree {
       claimed[child] = 1;
     }
   });
+  claimed.forEach((parents, index) => {
+    if (index > 0 && !parents) throw new Error(`Node ${index} is not listed under a parent`);
+  });
 
   return new PaintTreeView(json.tree, {
     fontData: () => undefined,
