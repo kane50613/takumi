@@ -71,7 +71,7 @@ Every node has these fields.
 | `font`                                    | The `Font` the run was shaped with              |
 | `fontSize`, `lineHeight`, `letterSpacing` | Used text metrics in device pixels              |
 | `glyphs`                                  | Glyph IDs and offsets from the baseline start   |
-| `outline()`                               | Glyph outlines as SVG path data                 |
+| `outlines()`                              | Each glyph's outline as SVG path data           |
 | `transform?`                              | The `text-fit` scale, applied before `x`, `y`   |
 
 `Font` records `family?`, `weight`, `style`, `stretch`, `variationSettings`, and `faceIndex`. `font.data()` returns the font file.
@@ -95,4 +95,4 @@ Every node has these fields.
 
 - `filter: url(#id)` arrives as `{ type: "unsupported", css }`.
 - `backdrop-filter` needs what is already drawn behind the node, which targets such as PPTX cannot read.
-- Bitmap glyphs, such as some emoji fonts, are left out of `run.outline()`.
+- Bitmap glyphs, such as some emoji fonts, have no outline: `run.outlines()` holds `null` for them.

@@ -50,16 +50,11 @@ export interface TextRun {
   /** Glyph ids in `font`, positioned from the baseline start. */
   readonly glyphs: readonly Glyph[];
   /**
-   * The outlines of the glyphs the run's color fills, as SVG path data positioned from the
-   * baseline start. Color font layers arrive as their own drawables, and bitmap glyphs such as
-   * some emoji are left out.
+   * Each glyph's outline as SVG path data from the baseline start, by its index in `glyphs`.
+   * `null` for a glyph the run's color does not fill: color font layers arrive as their own
+   * drawables, and bitmap glyphs such as some emoji are left out. `join("")` draws the whole run.
    */
-  outline(): string;
-  /**
-   * The outline of `glyphs[index]` as SVG path data, in the same space as {@link outline}.
-   * `undefined` for a glyph the run's color does not fill.
-   */
-  glyphOutline(index: number): string | undefined;
+  outlines(): readonly (string | null)[];
   /** Present when `text-fit` scales the line; maps the run's space before it is placed at `x`, `y`. */
   readonly transform?: Matrix;
 }
@@ -143,8 +138,7 @@ export interface PaintTree {
 /** What the wasm module keeps of a painted tree: its font files and run outlines. */
 interface PaintedFiles {
   fontData(index: number): Uint8Array | undefined;
-  runOutline(node: number, run: number): string | undefined;
-  glyphOutline(node: number, run: number, glyph: number): string | undefined;
+  runOutlines(node: number, run: number): readonly (string | null)[] | undefined;
 }
 
 export class PaintTreeView implements PaintTree {
@@ -385,8 +379,7 @@ class TextView extends NodeView<RawNode<"text">> implements TextNode {
     return {
       ...fields,
       font: resolved,
-      outline: () => this.listing.files.runOutline(this.raw.id, index) ?? "",
-      glyphOutline: (glyph) => this.listing.files.glyphOutline(this.raw.id, index, glyph),
+      outlines: () => this.listing.files.runOutlines(this.raw.id, index) ?? [],
     };
   }
 }

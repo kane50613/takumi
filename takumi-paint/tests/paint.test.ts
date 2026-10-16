@@ -23,14 +23,13 @@ describe("Painter.paint", () => {
     expect(run?.glyphs.map((glyph) => glyph.cluster)).toEqual([0, 1, 2, 3, 4, 5, 6]);
   });
 
-  it("splits a run's outline into one outline per glyph", async () => {
+  it("outlines each glyph of a run on its own", async () => {
     const tree = await painter.paint(text("paint", { fontSize: 32 }), { width: 400, height: 100 });
     const [run] = runs(tree);
-    const outlines = run?.glyphs.map((_, index) => run.glyphOutline(index)) ?? [];
+    const outlines = run?.outlines() ?? [];
 
     expect(outlines).toHaveLength(5);
-    expect(outlines.join("")).toBe(run?.outline() ?? "");
-    expect(run?.glyphOutline(5)).toBeUndefined();
+    expect(outlines.every((outline) => outline?.startsWith("M"))).toBe(true);
   });
 
   it("resolves a box's decorations into drawables and its text into runs", async () => {
@@ -64,7 +63,7 @@ describe("Painter.paint", () => {
     expect(run?.fontSize).toBe(32);
     expect(run?.font.family).toBe("Geist");
     expect(run?.font.data().byteLength).toBeGreaterThan(0);
-    expect(run?.outline()).toStartWith("M");
+    expect(run?.outlines().join("")).toStartWith("M");
 
     const glyphs = tree.steps
       .flatMap((step) => (step.type === "draw" ? step.drawables : []))

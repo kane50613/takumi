@@ -446,31 +446,7 @@ fn glyph_clusters_index_the_runs_text_in_utf16_units() {
 }
 
 #[test]
-fn run_outline_writes_the_runs_glyphs() {
-  let tree = paint(card());
-  let (node, run) = tree
-    .document
-    .nodes
-    .iter()
-    .find_map(|node| match &node.kind {
-      NodeKind::Text { runs, .. } => runs
-        .iter()
-        .position(|run| run.text == "world")
-        .map(|run| (node.id, run)),
-      _ => None,
-    })
-    .expect("a run reading world");
-
-  assert!(
-    tree
-      .run_outline(node, run)
-      .is_some_and(|outline| outline.starts_with('M'))
-  );
-  assert_eq!(tree.run_outline(node, usize::MAX), None);
-}
-
-#[test]
-fn glyph_outlines_make_up_the_run_outline() {
+fn run_outlines_write_each_glyph() {
   let tree = paint(card());
   let (node, run, count) = tree
     .document
@@ -484,18 +460,13 @@ fn glyph_outlines_make_up_the_run_outline() {
       _ => None,
     })
     .expect("a run reading world");
-  let glyphs: Vec<_> = (0..count)
-    .map(|glyph| tree.glyph_outline(node, run, glyph))
-    .collect();
+  let outlines = tree.run_outlines(node, run).expect("the run's outlines");
 
-  assert!(glyphs.iter().all(|outline| {
+  assert_eq!(outlines.len(), count);
+  assert!(outlines.iter().all(|outline| {
     outline
       .as_deref()
       .is_some_and(|outline| outline.starts_with('M'))
   }));
-  assert_eq!(
-    glyphs.into_iter().flatten().collect::<String>(),
-    tree.run_outline(node, run).expect("the run's outline")
-  );
-  assert_eq!(tree.glyph_outline(node, run, count), None);
+  assert_eq!(tree.run_outlines(node, usize::MAX), None);
 }

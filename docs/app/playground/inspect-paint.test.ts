@@ -81,8 +81,7 @@ function card(): PaintTree {
         lineHeight: 20,
         letterSpacing: 0,
         glyphs: [],
-        outline: () => "",
-        glyphOutline: () => undefined,
+        outlines: () => [],
       },
     ],
   };

@@ -167,15 +167,17 @@ impl RenderedPaint {
     self.tree.font_data(index).map(<[u8]>::to_vec)
   }
 
-  /// The SVG path data of run `run` of text node `node`.
-  #[wasm_bindgen(js_name = runOutline)]
-  pub fn run_outline(&self, node: usize, run: usize) -> Option<String> {
-    self.tree.run_outline(node, run)
-  }
-
-  /// The SVG path data of glyph `glyph` of run `run` of text node `node`.
-  #[wasm_bindgen(js_name = glyphOutline)]
-  pub fn glyph_outline(&self, node: usize, run: usize, glyph: usize) -> Option<String> {
-    self.tree.glyph_outline(node, run, glyph)
+  /// The SVG path data of each glyph of run `run` of text node `node`, `null` for a glyph the
+  /// run's color does not fill.
+  #[wasm_bindgen(js_name = runOutlines, unchecked_return_type = "(string | null)[] | undefined")]
+  pub fn run_outlines(&self, node: usize, run: usize) -> Option<Vec<JsValue>> {
+    Some(
+      self
+        .tree
+        .run_outlines(node, run)?
+        .into_iter()
+        .map(|outline| outline.map_or(JsValue::NULL, |outline| JsValue::from_str(&outline)))
+        .collect(),
+    )
   }
 }

@@ -37,19 +37,13 @@ impl OutlineGlyph {
 }
 
 impl RunOutline {
-  /// The outlines as SVG path data, positioned from the run's baseline start.
-  fn path_data(&self) -> String {
+  /// Each glyph's outline as SVG path data, positioned from the run's baseline start.
+  fn path_data(&self) -> Vec<Option<String>> {
     self
       .0
       .iter()
-      .flatten()
-      .filter_map(OutlineGlyph::path_data)
+      .map(|glyph| glyph.as_ref().and_then(OutlineGlyph::path_data))
       .collect()
-  }
-
-  /// The outline of glyph `glyph` as SVG path data, positioned from the run's baseline start.
-  fn glyph_path_data(&self, glyph: usize) -> Option<String> {
-    self.0.get(glyph)?.as_ref()?.path_data()
   }
 }
 
@@ -63,13 +57,8 @@ impl Outlines {
     self.0.insert(node, runs);
   }
 
-  /// The path data of run `run` of text node `node`.
-  pub(super) fn path_data(&self, node: usize, run: usize) -> Option<String> {
+  /// The path data of each glyph of run `run` of text node `node`.
+  pub(super) fn path_data(&self, node: usize, run: usize) -> Option<Vec<Option<String>>> {
     Some(self.0.get(&node)?.get(run)?.path_data())
-  }
-
-  /// The path data of glyph `glyph` of run `run` of text node `node`.
-  pub(super) fn glyph_path_data(&self, node: usize, run: usize, glyph: usize) -> Option<String> {
-    self.0.get(&node)?.get(run)?.glyph_path_data(glyph)
   }
 }

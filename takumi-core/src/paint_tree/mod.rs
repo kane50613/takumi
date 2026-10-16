@@ -72,18 +72,12 @@ impl PaintTree {
     self.fonts.get(index).map(Blob::as_ref)
   }
 
-  /// The outlines of the glyphs that run `run` of text node `node` fills with its colour, as SVG
-  /// path data from its baseline start. Colour font layers arrive as their own drawables, and
-  /// bitmap glyphs such as some emoji are left out.
-  pub fn run_outline(&self, node: usize, run: usize) -> Option<String> {
+  /// Each glyph's outline in run `run` of text node `node`, as SVG path data from the run's
+  /// baseline start, by its index in the run's glyphs. `None` for a glyph the run's colour does
+  /// not fill: colour font layers arrive as their own drawables, and bitmap glyphs such as some
+  /// emoji are left out.
+  pub fn run_outlines(&self, node: usize, run: usize) -> Option<Vec<Option<String>>> {
     self.outlines.path_data(node, run)
-  }
-
-  /// The outline of glyph `glyph` of run `run` of text node `node`, as SVG path data from the
-  /// run's baseline start. `None` for a glyph the run's colour does not fill, such as a colour
-  /// font or bitmap glyph.
-  pub fn glyph_outline(&self, node: usize, run: usize, glyph: usize) -> Option<String> {
-    self.outlines.glyph_path_data(node, run, glyph)
   }
 }
 
