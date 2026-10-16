@@ -30,6 +30,10 @@ describe("Painter.paint", () => {
 
     expect(outlines).toHaveLength(5);
     expect(outlines.every((outline) => outline?.startsWith("M"))).toBe(true);
+
+    const spaced = await painter.paint(text("a b", { fontSize: 32 }), { width: 400, height: 100 });
+
+    expect(runs(spaced)[0]?.outlines()[1]).toBe("");
   });
 
   it("resolves a box's decorations into drawables and its text into runs", async () => {

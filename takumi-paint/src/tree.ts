@@ -51,8 +51,9 @@ export interface TextRun {
   readonly glyphs: readonly Glyph[];
   /**
    * Each glyph's outline as SVG path data from the baseline start, by its index in `glyphs`.
-   * `null` for a glyph the run's color does not fill: color font layers arrive as their own
-   * drawables, and bitmap glyphs such as some emoji are left out. `join("")` draws the whole run.
+   * An empty string for a glyph with no contours, such as a space. `null` for a glyph the run's
+   * color does not fill: color font layers arrive as their own drawables, and bitmap glyphs such
+   * as some emoji are left out. `join("")` draws the whole run.
    */
   outlines(): readonly (string | null)[];
   /** Present when `text-fit` scales the line; maps the run's space before it is placed at `x`, `y`. */
