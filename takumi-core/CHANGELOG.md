@@ -1,3 +1,13 @@
+## takumi-core@0.30.0
+
+### Read a run's outlines one glyph at a time
+
+`TextRun.outline()` is now `outlines()`, which returns each glyph's outline as SVG path data in the order of `glyphs`, with `null` for a glyph the run's color does not fill. A renderer can draw, animate, or hit-test each letter on its own. Replace `run.outline()` with `run.outlines().join("")`. In Rust, `PaintTree::run_outline` is now `run_outlines`.
+
+### Map each glyph of a paint tree back to its text
+
+A `Glyph` now has `cluster`: where its cluster starts in the run's `text`, in UTF-16 code units. Glyphs of one cluster share it, so a renderer can split a run into words or animate it a letter at a time without guessing from glyph positions.
+
 ## takumi-core@0.29.1
 
 ### Keep every line `line-clamp` allows
