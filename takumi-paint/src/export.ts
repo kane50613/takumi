@@ -52,9 +52,11 @@ export type {
   PaintNode,
   PaintStep,
   PaintTree,
+  SerializedPaintTree,
   TextNode,
   TextRun,
 } from "./tree";
+export { paintTreeFromJSON } from "./tree";
 
 /** A document input: a takumi node tree, JSX, or an HTML string. */
 export type NodeInput = Node | ReactNode | ReactElementLike | string;

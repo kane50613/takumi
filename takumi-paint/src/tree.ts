@@ -134,6 +134,40 @@ export interface PaintTree {
   readonly nodes: readonly PaintNode[];
   /** The steps a renderer takes, in paint order. */
   readonly steps: readonly PaintStep[];
+  /**
+   * The tree as plain JSON, for `JSON.stringify` or a hand-off between processes; read it back
+   * with {@link paintTreeFromJSON}. Font files are left out.
+   */
+  toJSON(): SerializedPaintTree;
+}
+
+/** The version of {@link SerializedPaintTree} this package writes and reads. */
+const SERIALIZED_VERSION = 1;
+
+/** A paint tree as plain JSON, from {@link PaintTree.toJSON}. */
+export type SerializedPaintTree = {
+  readonly version: typeof SERIALIZED_VERSION;
+  /** The tree as the wasm module serializes it, nodes and runs named by index. */
+  readonly tree: RawPaintTree;
+  /**
+   * Each glyph's outline, by node, run, and glyph index: `null` for a node without runs, and for
+   * a glyph its run's color does not fill.
+   */
+  readonly outlines: readonly (readonly (readonly (string | null)[])[] | null)[];
+};
+
+/**
+ * Reads a tree written by {@link PaintTree.toJSON}, without the wasm module. Its fonts' `data()`
+ * is empty, since the JSON leaves font files out.
+ */
+export function paintTreeFromJSON(json: SerializedPaintTree): PaintTree {
+  if (json.version !== SERIALIZED_VERSION) {
+    throw new Error(`Unsupported paint tree version ${String(json.version)}`);
+  }
+  return new PaintTreeView(json.tree, {
+    fontData: () => undefined,
+    runOutlines: (node, run) => json.outlines[node]?.[run],
+  });
 }
 
 /** What the wasm module keeps of a painted tree: its font files and run outlines. */
@@ -149,12 +183,14 @@ export class PaintTreeView implements PaintTree {
   readonly root: BoxNode;
   readonly nodes: readonly PaintNode[];
   readonly #raw: RawPaintTree;
+  readonly #files: PaintedFiles;
   readonly #listing: Listing;
   #steps: readonly PaintStep[] | undefined;
 
   /** Wraps the serialized tree `raw`, reading font files and run outlines from `files`. */
   constructor(raw: RawPaintTree, files: PaintedFiles) {
     this.#raw = raw;
+    this.#files = files;
     this.width = raw.width;
     this.height = raw.height;
     this.fonts = raw.fonts.map((font, index) => ({
@@ -194,6 +230,18 @@ export class PaintTreeView implements PaintTree {
       return [{ type: step.type, node }];
     });
     return this.#steps;
+  }
+
+  toJSON(): SerializedPaintTree {
+    return {
+      version: SERIALIZED_VERSION,
+      tree: this.#raw,
+      outlines: this.#raw.nodes.map((node) =>
+        node.type === "text"
+          ? node.runs.map((_, index) => this.#files.runOutlines(node.id, index) ?? [])
+          : null,
+      ),
+    };
   }
 }
 

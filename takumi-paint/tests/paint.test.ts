@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import { container, image, text } from "@takumi-rs/helpers";
-import { type PaintTree, type TextRun, Painter } from "takumi-paint";
+import { type PaintTree, type TextRun, Painter, paintTreeFromJSON } from "takumi-paint";
 
 const painter = new Painter();
 
@@ -21,6 +21,42 @@ describe("Painter.paint", () => {
     const [run] = runs(tree);
 
     expect(run?.glyphs.map((glyph) => glyph.cluster)).toEqual([0, 1, 2, 3, 4, 5, 6]);
+  });
+
+  it("reads back a tree written to JSON", async () => {
+    const tree = await painter.paint(
+      container({
+        id: "card",
+        style: { display: "flex", width: 300, padding: 20 },
+        children: [
+          container({
+            id: "clipped",
+            style: { width: 100, height: 100, clipPath: "circle(40%)" },
+            children: [text("clipped")],
+          }),
+          text("Hello paint", { fontSize: 32 }),
+        ],
+      }),
+      { width: 400, height: 200 },
+    );
+    const read = paintTreeFromJSON(JSON.parse(JSON.stringify(tree)));
+    const run = runs(tree).find((each) => each.text === "Hello paint");
+    const readRun = runs(read).find((each) => each.text === "Hello paint");
+
+    expect(read.nodes.map((node) => node.element?.id)).toEqual(
+      tree.nodes.map((node) => node.element?.id),
+    );
+    expect(read.steps.map((step) => step.type)).toEqual(tree.steps.map((step) => step.type));
+    expect(
+      box(read, "clipped")?.type === "box" && box(read, "clipped")?.effects?.clip,
+    ).toMatchObject({ type: "path" });
+    expect(readRun?.glyphs).toEqual(run?.glyphs ?? []);
+    expect(readRun?.outlines().join("")).toStartWith("M");
+    expect(readRun?.outlines()).toEqual(run?.outlines() ?? []);
+    expect(readRun?.font.data().byteLength).toBe(0);
+    expect(() =>
+      paintTreeFromJSON(JSON.parse(JSON.stringify({ ...tree.toJSON(), version: 2 }))),
+    ).toThrow("version 2");
   });
 
   it("outlines each glyph of a run on its own", async () => {

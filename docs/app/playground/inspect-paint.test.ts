@@ -100,6 +100,9 @@ function card(): PaintTree {
       { type: "draw", node: root, drawables: root.drawables },
       { type: "draw", node: text, drawables: [{ type: "group", opacity: 1, drawables: [] }] },
     ],
+    toJSON: () => {
+      throw new Error("The inspector never serializes the tree");
+    },
   };
 }
 
