@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import { container, image, text } from "@takumi-rs/helpers";
-import { type PaintTree, type TextRun, Painter } from "takumi-paint";
+import { type PaintTree, type SerializedPaintTree, type TextRun, Painter } from "takumi-paint";
 
 const painter = new Painter();
 
@@ -21,6 +21,46 @@ describe("Painter.paint", () => {
     const [run] = runs(tree);
 
     expect(run?.glyphs.map((glyph) => glyph.cluster)).toEqual([0, 1, 2, 3, 4, 5, 6]);
+  });
+
+  it("writes every node, effect, and glyph outline to JSON", async () => {
+    const tree = await painter.paint(
+      container({
+        id: "card",
+        style: { display: "flex", width: 300, padding: 20 },
+        children: [
+          container({
+            id: "clipped",
+            style: { width: 100, height: 100, clipPath: "circle(40%)" },
+            children: [text("clipped")],
+          }),
+          text("Hello paint", { fontSize: 32 }),
+        ],
+      }),
+      { width: 400, height: 200 },
+    );
+    const json: SerializedPaintTree = JSON.parse(JSON.stringify(tree));
+    const clipped = json.tree.nodes.find((node) => node.element?.id === "clipped");
+    const node = json.tree.nodes.findIndex(
+      (each) => each.type === "text" && each.runs.some((run) => run.text === "Hello paint"),
+    );
+    const raw = json.tree.nodes[node];
+    const run =
+      raw?.type === "text" ? raw.runs.findIndex((each) => each.text === "Hello paint") : -1;
+
+    expect(json.version).toBe(1);
+    expect(json.tree.nodes).toHaveLength(tree.nodes.length);
+    expect(clipped?.type === "box" ? clipped.effects?.clip : undefined).toMatchObject({
+      type: "path",
+    });
+    expect(json.outlines.map((outlines) => outlines === null)).toEqual(
+      json.tree.nodes.map((each) => each.type !== "text"),
+    );
+    expect(json.outlines[node]?.[run]).toEqual(
+      runs(tree)
+        .find((each) => each.text === "Hello paint")
+        ?.outlines(),
+    );
   });
 
   it("outlines each glyph of a run on its own", async () => {
