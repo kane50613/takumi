@@ -135,8 +135,8 @@ export interface PaintTree {
   /** The steps a renderer takes, in paint order. */
   readonly steps: readonly PaintStep[];
   /**
-   * The tree as plain JSON, for `JSON.stringify` or a hand-off between processes; read it back
-   * with {@link paintTreeFromJSON}. Font files are left out.
+   * The tree as plain JSON, for `JSON.stringify` or a hand-off between processes. Font files are
+   * left out.
    */
   toJSON(): SerializedPaintTree;
 }
@@ -155,49 +155,6 @@ export type SerializedPaintTree = {
    */
   readonly outlines: readonly (readonly (readonly (string | null)[])[] | null)[];
 };
-
-/**
- * Reads a tree written by {@link PaintTree.toJSON}, without the wasm module. Its fonts' `data()`
- * is empty, since the JSON leaves font files out.
- */
-export function paintTreeFromJSON(json: SerializedPaintTree): PaintTree {
-  if (json.version !== SERIALIZED_VERSION) {
-    throw new Error(`Unsupported paint tree version ${String(json.version)}`);
-  }
-  if (
-    !Array.isArray(json.tree?.nodes) ||
-    !Array.isArray(json.tree.steps) ||
-    !Array.isArray(json.tree.fonts) ||
-    !Array.isArray(json.outlines) ||
-    !json.tree.nodes.every((node) => Array.isArray(node?.children))
-  ) {
-    throw new Error("The JSON is not a serialized paint tree");
-  }
-  // A painted tree is a tree listed in document order: every node but the root has one parent,
-  // listed before it. Holding crafted JSON to that keeps the walk in `inDocumentOrder` from
-  // looping on a cycle or revisiting a node shared by several parents exponentially often.
-  const { nodes } = json.tree;
-  const claimed = new Uint8Array(nodes.length);
-
-  nodes.forEach((node, index) => {
-    if (node.id !== index) throw new Error(`The tree lists node ${node.id} at ${index}`);
-    for (const child of node.children) {
-      if (!(child > index && child < nodes.length)) {
-        throw new Error(`Node ${index} lists a child that does not follow it`);
-      }
-      if (claimed[child]) throw new Error(`Node ${child} is listed under two parents`);
-      claimed[child] = 1;
-    }
-  });
-  claimed.forEach((parents, index) => {
-    if (index > 0 && !parents) throw new Error(`Node ${index} is not listed under a parent`);
-  });
-
-  return new PaintTreeView(json.tree, {
-    fontData: () => undefined,
-    runOutlines: (node, run) => json.outlines[node]?.[run],
-  });
-}
 
 /** What the wasm module keeps of a painted tree: its font files and run outlines. */
 interface PaintedFiles {

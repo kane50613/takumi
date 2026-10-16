@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import { container, image, text } from "@takumi-rs/helpers";
-import { type PaintTree, type TextRun, Painter, paintTreeFromJSON } from "takumi-paint";
+import { type PaintTree, type SerializedPaintTree, type TextRun, Painter } from "takumi-paint";
 
 const painter = new Painter();
 
@@ -23,7 +23,7 @@ describe("Painter.paint", () => {
     expect(run?.glyphs.map((glyph) => glyph.cluster)).toEqual([0, 1, 2, 3, 4, 5, 6]);
   });
 
-  it("reads back a tree written to JSON", async () => {
+  it("writes every node, effect, and glyph outline to JSON", async () => {
     const tree = await painter.paint(
       container({
         id: "card",
@@ -39,84 +39,27 @@ describe("Painter.paint", () => {
       }),
       { width: 400, height: 200 },
     );
-    const read = paintTreeFromJSON(JSON.parse(JSON.stringify(tree)));
-    const run = runs(tree).find((each) => each.text === "Hello paint");
-    const readRun = runs(read).find((each) => each.text === "Hello paint");
-
-    expect(read.nodes.map((node) => node.element?.id)).toEqual(
-      tree.nodes.map((node) => node.element?.id),
+    const json: SerializedPaintTree = JSON.parse(JSON.stringify(tree));
+    const clipped = json.tree.nodes.find((node) => node.element?.id === "clipped");
+    const node = json.tree.nodes.findIndex(
+      (each) => each.type === "text" && each.runs.some((run) => run.text === "Hello paint"),
     );
-    expect(read.steps.map((step) => step.type)).toEqual(tree.steps.map((step) => step.type));
-    expect(read.steps.map((step) => read.nodes.indexOf(step.node))).toEqual(
-      tree.steps.map((step) => tree.nodes.indexOf(step.node)),
+    const raw = json.tree.nodes[node];
+    const run =
+      raw?.type === "text" ? raw.runs.findIndex((each) => each.text === "Hello paint") : -1;
+
+    expect(json.version).toBe(1);
+    expect(json.tree.nodes).toHaveLength(tree.nodes.length);
+    expect(clipped?.type === "box" ? clipped.effects?.clip : undefined).toMatchObject({
+      type: "path",
+    });
+    expect(json.outlines.map((outlines) => outlines === null)).toEqual(
+      json.tree.nodes.map((each) => each.type !== "text"),
     );
-    expect(
-      box(read, "clipped")?.type === "box" && box(read, "clipped")?.effects?.clip,
-    ).toMatchObject({ type: "path" });
-    expect(readRun?.glyphs).toEqual(run?.glyphs ?? []);
-    expect(readRun?.outlines().join("")).toStartWith("M");
-    expect(readRun?.outlines()).toEqual(run?.outlines() ?? []);
-    expect(readRun?.font.data().byteLength).toBe(0);
-    expect(() =>
-      paintTreeFromJSON(JSON.parse(JSON.stringify({ ...tree.toJSON(), version: 2 }))),
-    ).toThrow("version 2");
-    expect(() => paintTreeFromJSON(JSON.parse('{"version":1,"tree":{}}'))).toThrow(
-      "not a serialized paint tree",
-    );
-
-    const json = tree.toJSON();
-    const cyclic = {
-      ...json,
-      tree: {
-        ...json.tree,
-        nodes: json.tree.nodes.map((node) =>
-          node.type === "box" && node.id === 1 ? { ...node, children: [0] } : node,
-        ),
-      },
-    };
-
-    expect(() => paintTreeFromJSON(JSON.parse(JSON.stringify(cyclic)))).toThrow(
-      "does not follow it",
-    );
-
-    const shared = {
-      ...json,
-      tree: {
-        ...json.tree,
-        nodes: json.tree.nodes.map((node) =>
-          node.id === 0 ? { ...node, children: [...node.children, ...node.children] } : node,
-        ),
-      },
-    };
-
-    expect(() => paintTreeFromJSON(JSON.parse(JSON.stringify(shared)))).toThrow(
-      "listed under two parents",
-    );
-
-    const outside = {
-      ...json,
-      tree: {
-        ...json.tree,
-        nodes: json.tree.nodes.map((node) =>
-          node.id === 0 ? { ...node, children: [json.tree.nodes.length] } : node,
-        ),
-      },
-    };
-
-    expect(() => paintTreeFromJSON(JSON.parse(JSON.stringify(outside)))).toThrow(
-      "does not follow it",
-    );
-
-    const orphaned = {
-      ...json,
-      tree: {
-        ...json.tree,
-        nodes: json.tree.nodes.map((node) => (node.id === 0 ? { ...node, children: [] } : node)),
-      },
-    };
-
-    expect(() => paintTreeFromJSON(JSON.parse(JSON.stringify(orphaned)))).toThrow(
-      "not listed under a parent",
+    expect(json.outlines[node]?.[run]).toEqual(
+      runs(tree)
+        .find((each) => each.text === "Hello paint")
+        ?.outlines(),
     );
   });
 
