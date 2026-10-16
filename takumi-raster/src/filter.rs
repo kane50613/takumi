@@ -14,7 +14,7 @@ use crate::{
   BlurType, BorderProperties, Canvas, Placement, RenderContext, Result, SizedShadow,
   apply_blur_alpha_bytes, apply_blur_rgba_bytes,
   canvas::demultiply_rgba_in_place,
-  checked_area, fast_div_255, intersect_alpha_masks, render_mask,
+  checked_area, div_255, intersect_alpha_masks, mul_div_255, render_mask,
   resources::image_buffer::premultiply_pixel,
   style::{Affine, Color, Filter, FilterCategory, SizingContext, TransferChannel, TransferTable},
 };
@@ -133,15 +133,14 @@ fn composite_pixel_under(dst: &mut [u8], under_rgb: [u8; 3], under_alpha: u8) {
     return;
   }
 
-  let uncovered = 255 - u32::from(dst[3]);
-  let under_alpha = u32::from(under_alpha);
+  let uncovered = 255 - dst[3];
 
   for (channel, color) in dst.iter_mut().zip(under_rgb) {
-    let under = u32::from(fast_div_255(u32::from(color) * under_alpha));
+    let under = mul_div_255(color, under_alpha);
 
-    *channel = channel.saturating_add(fast_div_255(under * uncovered));
+    *channel = channel.saturating_add(mul_div_255(under, uncovered));
   }
-  dst[3] = dst[3].saturating_add(fast_div_255(under_alpha * uncovered));
+  dst[3] = dst[3].saturating_add(mul_div_255(under_alpha, uncovered));
 }
 
 fn find_nonzero_bounds<T>(
@@ -277,11 +276,13 @@ fn composite_backdrop_with_mask(
     let src = &backdrop_row[px_idx..px_idx + 4];
     let dst = &mut canvas_row[px_idx..px_idx + 4];
     // The filtered backdrop composites over what it came from, masked by the element's shape.
-    let coverage = fast_div_255(src[3] as u32 * alpha as u32) as u32;
-    let inverse = 255 - coverage;
+    let inverse = u8::MAX - mul_div_255(src[3], alpha);
 
-    for (dst, src) in dst.iter_mut().zip(src) {
-      *dst = fast_div_255(*src as u32 * alpha as u32 + *dst as u32 * inverse);
+    for (dst, &src) in dst.iter_mut().zip(src) {
+      let sum = u32::from(src) * u32::from(alpha) + u32::from(*dst) * u32::from(inverse);
+
+      // The weights can sum past 255, but every sum from 255 * 255 up divides to 255.
+      *dst = div_255(sum.min(255 * 255) as u16);
     }
   }
 }
@@ -522,7 +523,7 @@ fn apply_drop_shadow_filter(pixmap: &mut PixmapMut<'_>, shadow: &SizedShadow) ->
     let dst_row = (y + padding) as usize * shadow_width as usize + padding as usize;
     for x in 0..source_bounds.width {
       let alpha = source_pixels[src_row + (source_bounds.left as u32 + x) as usize].alpha();
-      shadow_alpha[dst_row + x as usize] = fast_div_255(sa as u32 * alpha as u32);
+      shadow_alpha[dst_row + x as usize] = mul_div_255(sa, alpha);
     }
   }
 

@@ -19,7 +19,7 @@
     <path d="M-1000000-1000000H1000000V1000000H-1000000ZM850 205h140c22.09 0 40 17.91 40 40v140c0 22.09-17.91 40-40 40h-140c-22.09 0-40-17.91-40-40v-140c0-22.09 17.91-40 40-40Z" clip-rule="evenodd"/>
   </clipPath>
   <g clip-path="url(#cp2)">
-    <filter id="bl3">
+    <filter id="bl3" filterUnits="userSpaceOnUse" x="-36" y="-36" width="1272" height="702">
       <feGaussianBlur stdDeviation="12"/>
     </filter>
     <g filter="url(#bl3)">
@@ -31,7 +31,7 @@
     <path d="M850 205h140c22.09 0 40 17.91 40 40v140c0 22.09-17.91 40-40 40h-140c-22.09 0-40-17.91-40-40v-140c0-22.09 17.91-40 40-40Z"/>
   </clipPath>
   <g clip-path="url(#cp4)">
-    <filter id="bl5">
+    <filter id="bl5" filterUnits="userSpaceOnUse" x="-24" y="-24" width="1248" height="678">
       <feGaussianBlur stdDeviation="8"/>
     </filter>
     <g filter="url(#bl5)">

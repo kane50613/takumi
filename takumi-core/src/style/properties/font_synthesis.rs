@@ -11,6 +11,8 @@ pub struct FontSynthesis {
   pub weight: FontSynthesic,
   /// Controls synthetic italics/obliques when a matching style is unavailable.
   pub style: FontSynthesic,
+  /// Controls synthetic small capitals when the font lacks the caps feature.
+  pub small_caps: FontSynthesic,
 }
 
 impl MakeComputed for FontSynthesis {}
@@ -19,6 +21,7 @@ impl<'i> FromCss<'i> for FontSynthesis {
   fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
     let mut weight = FontSynthesic::None;
     let mut style = FontSynthesic::None;
+    let mut small_caps = FontSynthesic::None;
 
     while !input.is_exhausted() {
       let location = input.current_source_location();
@@ -28,6 +31,7 @@ impl<'i> FromCss<'i> for FontSynthesis {
         "none" => {
           weight = FontSynthesic::None;
           style = FontSynthesic::None;
+          small_caps = FontSynthesic::None;
         },
         "weight" => {
           weight = FontSynthesic::Auto;
@@ -35,14 +39,21 @@ impl<'i> FromCss<'i> for FontSynthesis {
         "style" => {
           style = FontSynthesic::Auto;
         },
+        "small-caps" => {
+          small_caps = FontSynthesic::Auto;
+        },
         _ => return Err(unexpected_token!(location, &Token::Ident(ident.to_owned()))),
       };
     }
 
-    Ok(Self { weight, style })
+    Ok(Self {
+      weight,
+      style,
+      small_caps,
+    })
   }
 
-  const VALID_TOKENS: &'static [&'static str] = &["none", "weight", "style"];
+  const VALID_TOKENS: &'static [&'static str] = &["none", "weight", "style", "small-caps"];
 }
 
 /// Control mode for synthetic.
@@ -82,6 +93,7 @@ mod tests {
         FontSynthesis {
           weight: FontSynthesic::None,
           style: FontSynthesic::None,
+          small_caps: FontSynthesic::None,
         },
       ),
       (
@@ -89,6 +101,7 @@ mod tests {
         FontSynthesis {
           weight: FontSynthesic::Auto,
           style: FontSynthesic::None,
+          small_caps: FontSynthesic::None,
         },
       ),
       (
@@ -96,6 +109,7 @@ mod tests {
         FontSynthesis {
           weight: FontSynthesic::None,
           style: FontSynthesic::Auto,
+          small_caps: FontSynthesic::None,
         },
       ),
       (
@@ -103,6 +117,15 @@ mod tests {
         FontSynthesis {
           weight: FontSynthesic::Auto,
           style: FontSynthesic::Auto,
+          small_caps: FontSynthesic::None,
+        },
+      ),
+      (
+        "small-caps weight",
+        FontSynthesis {
+          weight: FontSynthesic::Auto,
+          style: FontSynthesic::None,
+          small_caps: FontSynthesic::Auto,
         },
       ),
     ] {

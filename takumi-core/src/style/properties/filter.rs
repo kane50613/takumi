@@ -319,7 +319,7 @@ fn parse_filter_reference<'i>(url: &str, location: SourceLocation) -> ParseResul
   FilterReference::from_url(url)
     .map(|reference| Filter::Reference(Arc::new(reference)))
     .map_err(|error| CssParseError {
-      kind: ParseErrorKind::Custom(Cow::Owned(error.to_string())),
+      kind: ParseErrorKind::Custom(Cow::<str>::Owned(error.to_string()).into()),
       location,
     })
 }

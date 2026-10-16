@@ -1,3 +1,24 @@
+## @takumi-rs/core@2.16.0
+
+### Register font subsets with `unicodeRange`
+
+A font now takes `unicodeRange`, the codepoint ranges its `@font-face` declares. It serves only those codepoints, as in Chrome, so each subset of a family registers under the same `name`:
+
+```ts
+const fonts = [
+  { name: "Inter", data: latin, unicodeRange: [[0x0000, 0x00ff]] },
+  { name: "Inter", data: cyrillic, unicodeRange: [[0x0400, 0x045f]] },
+];
+```
+
+`googleFonts` returns its subsets this way. `subsetOf` and `subsetRank` are deprecated: `subsetOf` now only sets the family name, and `subsetRank` does nothing. In Rust, use `FontResource::unicode_range`.
+
+## @takumi-rs/core@2.15.2
+
+### Read node trees off the main thread
+
+`render`, `renderSvg`, and `measure` pass a node tree to the native renderer as JSON when it holds only plain values. The renderer parses it on a worker thread, so a 48-card dashboard blocks the event loop for 0.1 ms instead of 0.7 ms and renders about 10% faster. Trees holding bytes or other values JSON cannot keep are read as before.
+
 ## @takumi-rs/core@2.13.7
 
 ### Export the CssInput type from @takumi-rs/core

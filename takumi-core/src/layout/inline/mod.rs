@@ -7,8 +7,9 @@ use crate::{
   resources::{font::FontClasses, shape_cache},
   style::{
     AppliedTextDecorations, BlockEllipsis, Color, Direction, FontFeature, FontSynthesis, Lang,
-    Length, ResolvedVerticalAlign, Tag, TextDecorationSkipInk, TextOverflow, TextWrapStyle,
-    VerticalAlign, VerticalAlignKeyword, WhiteSpaceCollapse, WordBreak,
+    Length, ResolvedFontVariations, ResolvedVerticalAlign, Tag, TextDecorationSkipInk,
+    TextOverflow, TextWrapStyle, VerticalAlign, VerticalAlignKeyword, WhiteSpaceCollapse,
+    WordBreak,
   },
   text_processing::{
     MaxHeight, RebreakOptions, apply_text_transform, apply_white_space_collapse,
@@ -18,11 +19,11 @@ use crate::{
 use parley::{
   BreakReason, FontFeatures, GlyphRun, IndentOptions, InlineBox, InlineBoxKind, Line,
   PositionedInlineBox, PositionedLayoutItem, TextStyle, TreeBuilder,
+  VerticalAlign as ParleyVerticalAlign,
 };
 use std::{
   convert::Infallible,
   hash::{Hash, Hasher},
-  ptr,
   rc::Rc,
 };
 use xxhash_rust::xxh3::Xxh3;
@@ -39,6 +40,7 @@ mod line_box;
 mod metrics;
 mod outline;
 mod runs;
+mod small_caps;
 mod text_fit;
 mod truncation;
 
@@ -63,12 +65,14 @@ pub use self::{
 };
 use self::{
   breaking::distribute_trailing_whitespace,
+  items::LineSpace,
   line_box::{BoxFont, BoxKey, FontHeight},
   metrics::{
     ResolvedInlineLineState, ResolvedLineMetrics, Strut, resolve_inline_line_metrics,
     resolve_inline_line_states, resolve_visual_inline_box,
   },
   runs::measured_run_text,
+  small_caps::CapsSupport,
   text_fit::{
     GlyphCursor, LineScaleState, SpacingStretch, text_fit_applies, text_fit_line_advance,
     text_fit_line_alignment_correction, text_fit_lines, text_fit_x_correction,
@@ -154,7 +158,7 @@ impl<'c> InlineLayoutRequest<'c> {
 }
 
 /// Hashes everything shaping depends on: each span's processed text and
-/// style, plus the root style and language.
+/// style, plus the root style, its direction, and language.
 fn shape_fingerprint(
   spans: &[ProcessedInlineSpan<'_>],
   style: &SizedFontStyle<'_>,
@@ -163,6 +167,7 @@ fn shape_fingerprint(
   let mut hasher = Xxh3::new();
 
   style.hash_shaping_inputs(&mut hasher);
+  (style.parent.inherited_data.direction as u8).hash(&mut hasher);
   lang.hash(&mut hasher);
   for (span_id, span) in spans.iter().enumerate() {
     let (text, style, shaping) = match span {
@@ -218,6 +223,8 @@ pub struct BuiltInlineLayout<'c> {
   pub(crate) strut: Option<Strut>,
   /// The root inline box's font, which its children align against.
   pub(crate) font: BoxFont,
+  /// The space its lines lay out in.
+  pub(crate) line_space: LineSpace,
 }
 
 impl BuiltInlineLayout<'_> {
@@ -246,7 +253,7 @@ impl BuiltInlineLayout<'_> {
           PositionedLayoutItem::InlineBox(inline_box) => inline_box,
         };
 
-        match self.box_kind(&inline_box) {
+        match inline_box.kind {
           InlineBoxKind::InFlow => preceded = true,
           InlineBoxKind::CustomOutOfFlow => {}
           InlineBoxKind::OutOfFlow => {
@@ -284,14 +291,6 @@ impl BuiltInlineLayout<'_> {
     }
 
     positions
-  }
-
-  /// How `inline_box` sits in its line, which parley's kind does not tell for an out-of-flow box.
-  fn box_kind(&self, inline_box: &PositionedInlineBox) -> InlineBoxKind {
-    match self.spans.get(inline_box.id as usize) {
-      Some(ProcessedInlineSpan::Box(item)) => item.render_node.inline_box_kind(),
-      _ => inline_box.kind,
-    }
   }
 
   /// How `text-fit` fits the line `index`.
@@ -336,7 +335,8 @@ impl BuiltInlineLayout<'_> {
           return metrics.inline_min_coord + metrics.advance;
         }
 
-        let (text_advance, static_advance) = text_fit_line_advance(&line, self.layout.is_rtl());
+        let (text_advance, static_advance) =
+          text_fit_line_advance(&line, &self.text, self.layout.is_rtl());
         let scale = self.line_fit(index).scale;
 
         metrics.inline_min_coord + static_advance + text_advance * scale
@@ -419,6 +419,7 @@ impl BuiltInlineLayout<'_> {
           let baseline_shift = self.run_baseline_shift(line, &glyph_run);
           let (origin, size) = glyph_run_rect(&glyph_run, hanging, &stretch, baseline_shift);
           let (origin, size) = setup.scale_rect(origin, size, static_inline_prefix, baseline_shift);
+          let origin = origin + self.run_relative_offset(&glyph_run);
 
           let link = span_id.and_then(|span_id| match self.spans.get(span_id as usize) {
             Some(ProcessedInlineSpan::Text { link, .. }) => link.as_deref(),
@@ -442,9 +443,11 @@ impl BuiltInlineLayout<'_> {
           ) {
             return Ok(());
           }
+          let relative_offset = self.span_relative_offset(inline_box.id);
+
           inline_boxes.push(MeasuredInlineBox {
-            x: inline_box.x,
-            y: inline_box.y,
+            x: inline_box.x + relative_offset.x,
+            y: inline_box.y + relative_offset.y,
             width: inline_box.width,
             height: inline_box.height,
           });
@@ -537,6 +540,8 @@ pub struct InlineBrush {
   /// `-webkit-text-stroke` width in pixels.
   pub stroke_width: f32,
   pub(crate) font_synthesis: FontSynthesis,
+  /// The variations the run shaped with.
+  pub(crate) font_variations: ResolvedFontVariations,
   pub(crate) line_height: BoxLineHeight,
   /// `letter-spacing` in pixels when it is fixed rather than a percentage, which `text-fit`
   /// leaves unscaled.
@@ -614,6 +619,7 @@ impl Default for InlineBrush {
       stroke_color: Color::black(),
       stroke_width: 0.0,
       font_synthesis: FontSynthesis::default(),
+      font_variations: ResolvedFontVariations::default(),
       line_height: BoxLineHeight::Normal,
       fixed_letter_spacing: 0.0,
       fixed_word_spacing: 0.0,
@@ -663,31 +669,14 @@ impl LineIndent {
   fn apply(self, layout: &mut InlineLayout) {
     layout.set_text_indent(self.amount, self.options);
   }
+}
 
-  /// The indent of each line of `layout`, as parley's `resolve_indent` gives it while breaking.
-  pub(super) fn per_line(self, layout: &InlineLayout) -> impl Iterator<Item = f32> + '_ {
-    let mut previous = None;
-
-    layout.lines().map(move |line| {
-      let starts_scope = match previous {
-        None => true,
-        Some(reason) => self.options.each_line && reason == BreakReason::Explicit,
-      };
-
-      previous = Some(line.break_reason());
-
-      if starts_scope != self.options.hanging {
-        self.amount
-      } else {
-        0.0
-      }
-    })
-  }
-
-  /// The indent of the last line of `layout`.
-  pub(super) fn last_line(self, layout: &InlineLayout) -> f32 {
-    self.per_line(layout).last().unwrap_or(0.0)
-  }
+/// The indent parley gave the last line of `layout`.
+pub(super) fn last_line_indent(layout: &InlineLayout) -> f32 {
+  layout
+    .lines()
+    .last()
+    .map_or(0.0, |line| line.metrics().indent)
 }
 
 fn inline_line_height_hint(style: &SizedFontStyle) -> f32 {
@@ -738,7 +727,8 @@ pub(super) fn chromium_line_breaks(spans: &[ProcessedInlineSpan<'_>]) -> bool {
 }
 
 /// Pushes `text` under `style`, giving each variation-selector segment a presentation-reordered
-/// font stack. Text inside the span `shaping_box` shapes apart from text outside it.
+/// font stack. Text inside the span `shaping_box` shapes apart from text outside it, and each case
+/// run of split `font-variant-caps` text apart from its neighbours.
 pub(super) fn push_presentation_text(
   builder: &mut TreeBuilder<'_, InlineBrush>,
   style: &SizedFontStyle,
@@ -750,14 +740,21 @@ pub(super) fn push_presentation_text(
   let text_style = || {
     let mut text_style = text_style_with_span_id(style, span_id);
 
-    if let Some(id) = shaping_box
-      && let FontFeatures::List(features) = &mut text_style.font_features
-    {
-      // No font defines this feature; the distinct list only makes parley split its shaping run.
-      features
-        .to_mut()
-        .push(FontFeature::new(Tag::new(b"TKSB"), id as u16).into_parlance());
+    // No font defines these features; the distinct lists only make parley split its shaping runs.
+    if let FontFeatures::List(features) = &mut text_style.font_features {
+      if let Some(id) = shaping_box {
+        features
+          .to_mut()
+          .push(FontFeature::new(Tag::new(b"TKSB"), id as u16).into_parlance());
+      }
+
+      if let Some(parity) = style.case_run_parity {
+        features
+          .to_mut()
+          .push(FontFeature::new(Tag::new(b"TKCR"), u16::from(parity)).into_parlance());
+      }
     }
+
     text_style
   };
 
@@ -845,6 +842,7 @@ fn first_text_span_id(spans: &[ProcessedInlineSpan<'_>]) -> Option<u64> {
 fn build_inline_layout_tree<'c>(
   items: &[InlineItem<'c>],
   available_space: Size<AvailableSpace>,
+  max_width: f32,
   style: &'c SizedFontStyle,
   context: &'c RenderContext,
   shape_cacheable: bool,
@@ -867,6 +865,7 @@ fn build_inline_layout_tree<'c>(
     shape_key,
     strut,
     font,
+    line_space: LineSpace::of(context, max_width),
   }
 }
 
@@ -905,17 +904,19 @@ pub(crate) fn process_inline_spans<'c>(
           &mut previous_collapsible_space,
           &mut previous_was_line_break,
         );
-        let start = index_pos;
-        let end = start + collapsed.len();
-        index_pos = end;
+        for (text, style) in CapsSupport::styled_runs(collapsed, span_style, context) {
+          let start = index_pos;
+          let end = start + text.len();
+          index_pos = end;
 
-        spans.push(ProcessedInlineSpan::Text {
-          byte_range: start..end,
-          text: collapsed.into_owned(),
-          style: Box::new(span_style),
-          link: link.clone(),
-          decorations: decorations.clone(),
-        });
+          spans.push(ProcessedInlineSpan::Text {
+            byte_range: start..end,
+            text,
+            style: Box::new(style),
+            link: link.clone(),
+            decorations: decorations.clone(),
+          });
+        }
       }
       InlineItem::RenderNode {
         render_node,
@@ -945,6 +946,8 @@ pub(crate) fn process_inline_spans<'c>(
             kind: InlineBoxKind::InFlow,
             width: *width,
             height: 0.0,
+            baseline: None,
+            vertical_align: ParleyVerticalAlign::BASELINE,
           },
           decorations: decorations.clone(),
         });
@@ -992,25 +995,29 @@ fn trim_trailing_space(spans: &mut [ProcessedInlineSpan<'_>]) {
   }
 }
 
-/// The direction mark a paragraph leads with. Parley has no base-direction
-/// API and infers the paragraph level from the first strong character, so
-/// every block leads with its direction's mark; a text-less LTR paragraph
-/// already has that base level, and the mark's line metrics would inflate its
-/// line box.
+/// The direction mark a right-to-left paragraph leads with when an inline box comes before its
+/// first text. Parley gives such a box bidi level 0 whatever the base direction, where Blink
+/// resolves it as U+FFFC at the paragraph level; the mark gives the box a run to take its level
+/// from.
 fn direction_mark_span<'c>(
   items: &[InlineItem<'c>],
   context: &'c RenderContext,
 ) -> Option<ProcessedInlineSpan<'c>> {
-  let text_item_context = items.iter().find_map(|item| match item {
-    InlineItem::Text { context, .. } => Some(*context),
-    _ => None,
-  });
+  let first_text = items
+    .iter()
+    .position(|item| matches!(item, InlineItem::Text { .. }));
 
-  if items.is_empty()
-    || (text_item_context.is_none() && context.style.inherited_data.direction != Direction::Rtl)
+  if context.style.inherited_data.direction != Direction::Rtl
+    || items.is_empty()
+    || first_text == Some(0)
   {
     return None;
   }
+
+  let text_item_context = first_text.and_then(|index| match &items[index] {
+    InlineItem::Text { context, .. } => Some(*context),
+    _ => None,
+  });
 
   // The mark borrows the first text span's style so it resolves to the same
   // font and cannot skew the line's metrics, and it must not advance the
@@ -1089,17 +1096,14 @@ fn inline_box_span<'c>(
   } else {
     content_size.height + margin.vertical() + padding.vertical() + border.vertical()
   };
-  // Parley breaks the line after every box it places itself, while Blink never breaks at an
-  // out-of-flow object, so the line breaker takes these back and appends them without one.
   let inline_box = InlineBox {
     index,
     id,
-    kind: match kind {
-      InlineBoxKind::OutOfFlow => InlineBoxKind::CustomOutOfFlow,
-      kind => kind,
-    },
+    kind,
     width: paint_width,
     height: paint_height,
+    baseline: None,
+    vertical_align: ParleyVerticalAlign::BASELINE,
   };
   let baseline_offset = raw_baseline_offset.map(|baseline| baseline.clamp(0.0, inline_box.height));
 
@@ -1151,9 +1155,9 @@ fn shape_spans(
   let shape_locally = || {
     context.inline_cache().get_or_shape(
       cache_key.zip(expected_text.as_deref()),
-      ptr::from_ref(context).addr(),
+      context.id(),
       || {
-        context.tree_builder(style.into(), chromium_line_breaks(spans), |builder| {
+        context.tree_builder(style, chromium_line_breaks(spans), |builder| {
           push_spans_into_builder(builder, spans, &context.fonts().classes)
         })
       },
@@ -1209,8 +1213,14 @@ pub fn create_inline_layout<'c>(request: InlineLayoutRequest<'c>) -> BuiltInline
     mode,
     shape_cacheable,
   } = request;
-  let mut built =
-    build_inline_layout_tree(&items, available_space, style, context, shape_cacheable);
+  let mut built = build_inline_layout_tree(
+    &items,
+    available_space,
+    max_width,
+    style,
+    context,
+    shape_cacheable,
+  );
   let fits_text = text_fit_applies(style, &items, max_width);
   // `text-fit` scales line heights only after breaking, so only a line count clamps fitted lines.
   let max_height = if fits_text {
@@ -1271,16 +1281,16 @@ pub fn create_inline_layout<'c>(request: InlineLayoutRequest<'c>) -> BuiltInline
       // before InlineLayoutAlgorithm::CreateLine), so only a line still too
       // wide at its fitted scale is ellipsed, at that scale.
       let fits = if fits_text {
-        text_fit_lines(layout, max_width, style, None)
+        text_fit_lines(layout, text, max_width, style, None)
       } else {
         Vec::new()
       };
       let last_fit = fits.last().copied().unwrap_or(LineFit::NONE);
-      let indent = LineIndent::of(style, max_width).last_line(layout);
+      let indent = last_line_indent(layout);
       let is_overflowing = layout.lines().last().is_some_and(|last_line| {
         last_line.text_range().end < text.len()
           || ellipsis_on_overflow
-            && last_fit.content_end(&last_line, layout.is_rtl(), indent)
+            && last_fit.content_end(&last_line, text, layout.is_rtl(), indent)
               > max_width + LAYOUT_UNIT_EPSILON
       });
 
@@ -1318,7 +1328,13 @@ pub fn create_inline_layout<'c>(request: InlineLayoutRequest<'c>) -> BuiltInline
   }
 
   if fits_text {
-    built.line_fits = text_fit_lines(&built.layout, max_width, style, kept_fits.as_deref());
+    built.line_fits = text_fit_lines(
+      &built.layout,
+      &built.text,
+      max_width,
+      style,
+      kept_fits.as_deref(),
+    );
   }
 
   built.layout.align(
@@ -1336,7 +1352,7 @@ pub(crate) fn resolve_inline_max_height(
   font_style
     .parent
     .clamp_lines()
-    .map(|lines| MaxHeight::HeightAndLines(content_box_height, lines))
+    .map(MaxHeight::Lines)
     .or_else(|| {
       (font_style.parent.misc4_data.text_overflow == TextOverflow::Ellipsis)
         .then_some(MaxHeight::Absolute(content_box_height))
@@ -1458,7 +1474,7 @@ pub(crate) fn glyph_run_rect(
   stretch: &SpacingStretch,
   baseline_shift: f32,
 ) -> (Point<f32>, Size<f32>) {
-  let metrics = glyph_run.run().metrics();
+  let metrics = glyph_run.run().font_metrics();
 
   (
     Point {
@@ -1502,6 +1518,23 @@ impl<'c> BuiltInlineLayout<'c> {
   /// The spans around the text span `span_id`, innermost first.
   pub(crate) fn span_chain(&self, span_id: Option<u64>) -> Option<&Rc<DecorationLink<'c>>> {
     self.spans.get(span_id? as usize)?.text_chain()
+  }
+
+  /// How far `position: relative` moves span `span_id`.
+  pub(crate) fn span_relative_offset(&self, span_id: u64) -> Point<f32> {
+    self
+      .spans
+      .get(span_id as usize)
+      .map_or(Point::ZERO, |span| span.relative_offset(self.line_space))
+  }
+
+  /// How far `position: relative` moves `glyph_run`.
+  pub(crate) fn run_relative_offset(&self, glyph_run: &GlyphRun<'_, InlineBrush>) -> Point<f32> {
+    glyph_run
+      .style()
+      .brush
+      .source_span_id
+      .map_or(Point::ZERO, |span_id| self.span_relative_offset(span_id))
   }
 
   /// The baseline shift `glyph_run` paints at on `line`.
@@ -1569,7 +1602,13 @@ impl BuiltInlineLayout<'_> {
         state: line_states[index].clone(),
       };
       let items: Vec<_> = line.items().collect();
-      let hanging = distribute_trailing_whitespace(&items, &line, self.layout.is_rtl());
+      let hanging = distribute_trailing_whitespace(
+        &items,
+        &line,
+        &self.text,
+        self.layout.alignment(),
+        self.layout.is_rtl(),
+      );
       let mut static_inline_prefix = 0.0_f32;
       let mut cursor = GlyphCursor::default();
 
@@ -1590,7 +1629,7 @@ impl BuiltInlineLayout<'_> {
             static_inline_prefix += spacing;
           }
           PositionedLayoutItem::InlineBox(inline_box) => {
-            let kind = self.box_kind(&inline_box);
+            let kind = inline_box.kind;
 
             if kind == InlineBoxKind::CustomOutOfFlow {
               continue;
@@ -1626,8 +1665,8 @@ mod tests {
   use std::{fs::File, io::Read, path::Path, sync::Arc};
 
   use super::{
-    decorations::DecorationPlacement, outline::InlineOutline, runs::slice_text_at_char_boundaries,
-    *,
+    breaking::hanging_advance, decorations::DecorationPlacement, outline::InlineOutline,
+    runs::slice_text_at_char_boundaries, *,
   };
   use crate::{
     Fonts,
@@ -1639,9 +1678,9 @@ mod tests {
     scene::Scene,
     style::{
       Affine, AppliedTextDecoration, BorderStyle, Color, ColorInput, Display, FontSize, Length,
-      Sides, SizedTextDecorationThickness, SizingContext, SpacePair, Style, StyleDeclaration,
-      TextDecorationLines, TextDecorationStyle, TextFit, TextFitMode, TextUnderlinePosition,
-      WhiteSpace,
+      Position, Sides, SizedTextDecorationThickness, SizingContext, SpacePair, Style,
+      StyleDeclaration, TextAlign, TextDecorationLines, TextDecorationStyle, TextFit, TextFitMode,
+      TextUnderlinePosition, WhiteSpace,
     },
     viewport::Viewport,
   };
@@ -1843,6 +1882,7 @@ mod tests {
             40.0,
           )))),
       ),
+      Node::text("overflowing".to_string()),
     ])
     .with_style(
       Style::default()
@@ -1850,17 +1890,17 @@ mod tests {
         .with(StyleDeclaration::font_size(FontSize::Length(Length::Px(
           20.0,
         ))))
-        .with_white_space(WhiteSpace::pre()),
+        .with_white_space(WhiteSpace::pre_wrap()),
     );
     let render_node = RenderNode::from_node(&context, node);
     let font_style = SizedFontStyle::from_style(&render_node.context.style, &render_node.context);
     let built = create_inline_layout(InlineLayoutRequest {
       items: collect_inline_items(&render_node),
       available_space: Size {
-        width: AvailableSpace::Definite(1200.0),
+        width: AvailableSpace::Definite(60.0),
         height: AvailableSpace::Definite(630.0),
       },
-      max_width: 1200.0,
+      max_width: 60.0,
       max_height: None,
       style: &font_style,
       context: &render_node.context,
@@ -1881,11 +1921,12 @@ mod tests {
       .map(|run| (run.glyph_run.advance, run.glyph_run.hanging.advance))
       .collect();
 
-    // The 40px space run hangs entirely; earlier runs keep what layout kept.
-    let last = trailing.last().unwrap();
+    // The spaces end a soft-wrapped line, so they hang: the 40px space run entirely, the run
+    // before it only its own trailing space.
+    let space = trailing[1];
     assert!(
-      (last.1 - last.0).abs() < 0.01,
-      "last run is all whitespace: {trailing:?}"
+      (space.1 - space.0).abs() < 0.01,
+      "the space run hangs whole: {trailing:?}"
     );
     for (advance, ws) in &trailing {
       assert!(
@@ -1893,6 +1934,280 @@ mod tests {
         "share capped by the run advance: {trailing:?}"
       );
     }
+  }
+
+  #[test]
+  fn text_fit_leaves_a_relative_offset_unscaled() {
+    let fonts = create_test_context();
+    let context = RenderContext::builder()
+      .fonts(fonts.snapshot_with_fallbacks(None))
+      .sizing(
+        SizingContext::builder()
+          .viewport(Viewport::new((1200, 630)))
+          .build(),
+      )
+      .build();
+    let node = Node::container([
+      Node::text("fit ".to_string()),
+      Node::container([Node::text("moved".to_string())]).with_style(
+        Style::default()
+          .with(StyleDeclaration::display(Display::Inline))
+          .with(StyleDeclaration::position(Position::Relative))
+          .with(StyleDeclaration::top(Length::Px(10.0))),
+      ),
+    ])
+    .with_style(
+      Style::default()
+        .with(StyleDeclaration::display(Display::Block))
+        .with(StyleDeclaration::font_size(FontSize::Length(Length::Px(
+          20.0,
+        ))))
+        .with(StyleDeclaration::text_fit(
+          TextFit::builder().mode(TextFitMode::Grow).build(),
+        )),
+    );
+    let render_node = RenderNode::from_node(&context, node);
+    let font_style = SizedFontStyle::from_style(&render_node.context.style, &render_node.context);
+    let built = create_inline_layout(InlineLayoutRequest {
+      items: collect_inline_items(&render_node),
+      available_space: Size {
+        width: AvailableSpace::Definite(600.0),
+        height: AvailableSpace::Definite(630.0),
+      },
+      max_width: 600.0,
+      max_height: None,
+      style: &font_style,
+      context: &render_node.context,
+      mode: InlineLayoutMode::Draw,
+      shape_cacheable: false,
+    });
+    let layout = ComputedLayout {
+      location: Point::ZERO,
+      size: Size::new(600.0, 630.0),
+      border: Rect::default(),
+      padding: Rect::default(),
+    };
+    let runs = built.resolve_runs(&render_node.context, layout).unwrap();
+    let moved = runs
+      .runs
+      .iter()
+      .find(|run| run.relative_offset.y != 0.0)
+      .unwrap();
+    let glyph = moved.glyph_run.glyphs[0];
+    let offset = moved.glyph_offset(layout);
+    let (_, painted) = moved
+      .transform(Affine::IDENTITY)
+      .transform_point(offset.x + glyph.x, offset.y + glyph.y);
+    let (_, unmoved) = moved
+      .line_scale
+      .transform(Affine::IDENTITY, moved.static_inline_prefix)
+      .transform_point(offset.x + glyph.x, offset.y + glyph.y - 10.0);
+
+    assert!(moved.line_scale.scale > 1.0, "the line does not grow");
+    assert!(
+      (painted - unmoved - 10.0).abs() < 0.01,
+      "the offset scaled: {painted} past {unmoved}"
+    );
+  }
+
+  #[test]
+  fn a_vertical_percentage_inset_resolves_against_the_content_height() {
+    let fonts = create_test_context();
+    let context = RenderContext::builder()
+      .fonts(fonts.snapshot_with_fallbacks(None))
+      .sizing(
+        SizingContext::builder()
+          .viewport(Viewport::new((1200, 630)))
+          .build(),
+      )
+      .build();
+    let node = Node::container([
+      Node::text("tall ".to_string()),
+      Node::container([Node::text("moved".to_string())]).with_style(
+        Style::default()
+          .with(StyleDeclaration::display(Display::Inline))
+          .with(StyleDeclaration::position(Position::Relative))
+          .with(StyleDeclaration::top(Length::Percentage(50.0))),
+      ),
+    ])
+    .with_style(Style::default().with(StyleDeclaration::display(Display::Block)));
+    let render_node = RenderNode::from_node(&context, node);
+
+    render_node.context.set_definite_height(Some(96.0));
+
+    let font_style = SizedFontStyle::from_style(&render_node.context.style, &render_node.context);
+    let built = create_inline_layout(InlineLayoutRequest::in_available_space(
+      collect_inline_items(&render_node),
+      Size {
+        width: AvailableSpace::Definite(600.0),
+        height: AvailableSpace::Definite(730.0),
+      },
+      Size {
+        width: Some(600.0),
+        height: Some(96.0),
+      },
+      &font_style,
+      &render_node.context,
+      InlineLayoutMode::Measure,
+    ));
+    let moved = built
+      .spans
+      .iter()
+      .position(|span| matches!(span, ProcessedInlineSpan::Text { text, .. } if text == "moved"))
+      .unwrap();
+
+    assert_eq!(
+      built.span_relative_offset(moved as u64),
+      Point { x: 0.0, y: 48.0 }
+    );
+  }
+
+  #[test]
+  fn an_opposite_direction_run_hangs_its_line_end_spaces_under_every_alignment() {
+    const WIDTH: f32 = 160.0;
+
+    for (text_align, free_space_share) in [
+      (TextAlign::Start, 1.0),
+      (TextAlign::Center, 0.5),
+      (TextAlign::Left, 0.0),
+    ] {
+      let fonts = create_test_context();
+      let context = RenderContext::builder()
+        .fonts(fonts.snapshot_with_fallbacks(None))
+        .sizing(
+          SizingContext::builder()
+            .viewport(Viewport::new((1200, 630)))
+            .build(),
+        )
+        .build();
+      let node = Node::container([Node::text("words that wrap across lines".to_string())])
+        .with_style(
+          Style::default()
+            .with(StyleDeclaration::display(Display::Block))
+            .with(StyleDeclaration::direction(Direction::Rtl))
+            .with(StyleDeclaration::text_align(text_align))
+            .with(StyleDeclaration::font_size(FontSize::Length(Length::Px(
+              20.0,
+            )))),
+        );
+      let render_node = RenderNode::from_node(&context, node);
+      let font_style = SizedFontStyle::from_style(&render_node.context.style, &render_node.context);
+      let built = create_inline_layout(InlineLayoutRequest {
+        items: collect_inline_items(&render_node),
+        available_space: Size {
+          width: AvailableSpace::Definite(WIDTH),
+          height: AvailableSpace::Definite(630.0),
+        },
+        max_width: WIDTH,
+        max_height: None,
+        style: &font_style,
+        context: &render_node.context,
+        mode: InlineLayoutMode::Draw,
+        shape_cacheable: false,
+      });
+      let layout = ComputedLayout {
+        location: Point::ZERO,
+        size: Size::new(WIDTH, 630.0),
+        border: Rect::default(),
+        padding: Rect::default(),
+      };
+      let runs = built.resolve_runs(&render_node.context, layout).unwrap();
+      let first = &runs.runs[0].glyph_run;
+      let visible_left = (WIDTH - (first.advance - first.hanging.advance)) * free_space_share;
+
+      assert!(
+        first.hanging.advance > 0.0,
+        "{text_align:?}: no space hangs"
+      );
+      assert!(
+        (first.offset - visible_left).abs() < 0.01,
+        "{text_align:?}: text starts at {}, not {visible_left}",
+        first.offset
+      );
+    }
+  }
+
+  #[test]
+  fn text_fit_measures_an_opposite_direction_run_without_its_hanging_spaces() {
+    const WIDTH: f32 = 160.0;
+
+    let fonts = create_test_context();
+    let context = RenderContext::builder()
+      .fonts(fonts.snapshot_with_fallbacks(None))
+      .sizing(
+        SizingContext::builder()
+          .viewport(Viewport::new((1200, 630)))
+          .build(),
+      )
+      .build();
+    let node = Node::container([Node::text("words that wrap across lines".to_string())])
+      .with_style(
+        Style::default()
+          .with(StyleDeclaration::display(Display::Block))
+          .with(StyleDeclaration::direction(Direction::Rtl))
+          .with(StyleDeclaration::font_size(FontSize::Length(Length::Px(
+            20.0,
+          )))),
+      );
+    let render_node = RenderNode::from_node(&context, node);
+    let font_style = SizedFontStyle::from_style(&render_node.context.style, &render_node.context);
+    let built = create_inline_layout(InlineLayoutRequest {
+      items: collect_inline_items(&render_node),
+      available_space: Size {
+        width: AvailableSpace::Definite(WIDTH),
+        height: AvailableSpace::Definite(630.0),
+      },
+      max_width: WIDTH,
+      max_height: None,
+      style: &font_style,
+      context: &render_node.context,
+      mode: InlineLayoutMode::Draw,
+      shape_cacheable: false,
+    });
+    let line = built.layout.lines().next().unwrap();
+    let hanging = hanging_advance(&line, &built.text);
+    let (text_advance, static_advance) = text_fit_line_advance(&line, &built.text, true);
+
+    assert!(hanging > 0.0, "no space hangs");
+    assert!(
+      (text_advance + static_advance - (line.metrics().advance - hanging)).abs() < 0.01,
+      "text-fit measures {text_advance} + {static_advance} with the hanging {hanging}"
+    );
+  }
+
+  #[test]
+  fn a_newline_after_a_space_still_breaks_the_line() {
+    let fonts = create_test_context();
+    let context = RenderContext::builder()
+      .fonts(fonts.snapshot_with_fallbacks(None))
+      .sizing(
+        SizingContext::builder()
+          .viewport(Viewport::new((1200, 630)))
+          .build(),
+      )
+      .build();
+    let node = Node::container([Node::text("ab \ncd".to_string())]).with_style(
+      Style::default()
+        .with(StyleDeclaration::display(Display::Block))
+        .with_white_space(WhiteSpace::pre_wrap()),
+    );
+    let render_node = RenderNode::from_node(&context, node);
+    let font_style = SizedFontStyle::from_style(&render_node.context.style, &render_node.context);
+    let built = create_inline_layout(InlineLayoutRequest {
+      items: collect_inline_items(&render_node),
+      available_space: Size {
+        width: AvailableSpace::Definite(1200.0),
+        height: AvailableSpace::Definite(630.0),
+      },
+      max_width: 1200.0,
+      max_height: None,
+      style: &font_style,
+      context: &render_node.context,
+      mode: InlineLayoutMode::Draw,
+      shape_cacheable: false,
+    });
+
+    assert_eq!(built.layout.lines().count(), 2);
   }
 
   #[test]
@@ -1998,6 +2313,42 @@ mod tests {
 
     assert!(paragraphs.iter().all(RenderNode::has_fragment_items));
     assert_eq!(context.inline_cache().shape_count(), 0);
+  }
+
+  #[test]
+  fn a_hidden_box_keeps_no_fragment_items() {
+    let fonts = create_test_context();
+    let context = RenderContext::builder()
+      .fonts(fonts.snapshot_with_fallbacks(None))
+      .sizing(
+        SizingContext::builder()
+          .viewport(Viewport::new((200, None)))
+          .build(),
+      )
+      .build();
+    let paragraph = |text: &str, display: Display| {
+      Node::container([Node::text(text.to_string())])
+        .with_style(Style::default().with(StyleDeclaration::display(display)))
+    };
+    let root = RenderNode::from_node(
+      &context,
+      Node::container([
+        paragraph("Shown.", Display::Block),
+        Node::container([paragraph("Hidden.", Display::Block)])
+          .with_style(Style::default().with(StyleDeclaration::display(Display::None))),
+      ])
+      .with_style(Style::default().with(StyleDeclaration::display(Display::Block))),
+    );
+    let scene = Scene::lay_out(root, Viewport::new((200, None)), true).unwrap();
+    let [shown, hidden] = scene.root.children.as_deref().unwrap() else {
+      panic!("expected two children");
+    };
+
+    assert!(shown.has_fragment_items());
+    assert!(
+      !hidden.children.as_deref().unwrap()[0].has_fragment_items(),
+      "the hidden paragraph laid its text out"
+    );
   }
 
   #[test]
@@ -2227,13 +2578,13 @@ mod tests {
     assert!(
       segments
         .iter()
-        .any(|(span_id, _, color)| *span_id == Some(1) && *color == orange),
+        .any(|(span_id, _, color)| *span_id == Some(0) && *color == orange),
       "{segments:#?}"
     );
     assert!(
       segments
         .iter()
-        .any(|(span_id, _, color)| *span_id == Some(3) && *color == blue),
+        .any(|(span_id, _, color)| *span_id == Some(2) && *color == blue),
       "{segments:#?}"
     );
   }

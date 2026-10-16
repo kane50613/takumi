@@ -35,6 +35,22 @@
   font-family: "Poppins Bold";
   src: url("../../assets/fonts/poppins/poppins-v24-devanagari_latin-700.woff2") format("woff2");
 }
+@font-face {
+  font-family: Manrope;
+  src: url("../../assets/fonts/manrope/manrope-latin-wght-normal.woff2") format("woff2");
+}
+@font-face {
+  font-family: Inter;
+  src: url("../../assets/fonts/inter/inter-latin-opsz-wght-normal.woff2") format("woff2");
+}
+@font-face {
+  font-family: "EB Garamond Caps";
+  src: url("../../assets/fonts/eb-garamond/EBGaramondCaps.woff2") format("woff2");
+}
+@font-face {
+  font-family: "EB Garamond Caps Latn";
+  src: url("../../assets/fonts/eb-garamond/EBGaramondCapsLatn.woff2") format("woff2");
+}
 
 /* takumi defaults box-sizing to border-box; match it so browser comparisons
    of these fixtures are faithful. */

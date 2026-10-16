@@ -3,6 +3,7 @@
 use std::cell::RefCell;
 use std::collections::HashSet;
 use std::rc::Rc;
+use std::slice;
 use std::sync::Arc;
 
 use float_cmp::approx_eq;
@@ -774,11 +775,20 @@ impl ContentBuilder {
       self.content.begin_marked_content(Name(b"ReversedChars"));
     }
 
+    let closing = fragment.actual_text().and_then(|_| {
+      let font = font_container.borrow().cid_font().font();
+
+      closing_spacing(fragment.glyphs(), &font, *cur_x, font_size)
+    });
+
     // Segment into glyph runs that can be encoded in one go using a PDF
     // text showing operator (i.e. no y shift, same Type3 font, etc.)
-    let segmented = GlyphGrouper::new(font_container.clone(), context_color, fragment.glyphs());
+    let mut segmented =
+      GlyphGrouper::new(font_container.clone(), context_color, fragment.glyphs()).peekable();
 
-    for glyph_group in segmented {
+    while let Some(glyph_group) = segmented.next() {
+      let closing = closing.filter(|_| segmented.peek().is_none());
+
       self.fill_stroke_glyph_group(
         cur_x,
         cur_y,
@@ -789,6 +799,7 @@ impl ContentBuilder {
         context_color,
         text,
         font_size,
+        closing,
       )
     }
 
@@ -813,6 +824,7 @@ impl ContentBuilder {
     context_color: rgb::Color,
     text: &str,
     font_size: f32,
+    closing: Option<f32>,
   ) {
     let borrowed = font_container.borrow();
     let pdf_font = borrowed
@@ -833,17 +845,41 @@ impl ContentBuilder {
         .set_text_rendering_mode(TextRenderingMode::Stroke);
     }
 
-    self.encode_consecutive_glyph_run(
-      sc,
-      cur_x,
-      *cur_y - glyph_group.y_offset * font_size,
-      glyph_group.font_identifier,
-      pdf_font,
-      font_size,
-      context_color,
-      glyph_group.glyphs,
-      text,
-    );
+    let y = *cur_y - glyph_group.y_offset * font_size;
+    let (body, last) = match (closing, glyph_group.glyphs.split_last()) {
+      (Some(spacing), Some((last, body))) => (body, Some((last, spacing))),
+      _ => (glyph_group.glyphs, None),
+    };
+
+    if !body.is_empty() {
+      self.encode_consecutive_glyph_run(
+        sc,
+        cur_x,
+        y,
+        glyph_group.font_identifier.clone(),
+        pdf_font,
+        font_size,
+        context_color,
+        body,
+        text,
+      );
+    }
+
+    if let Some((last, spacing)) = last {
+      self.content.set_char_spacing(spacing);
+      self.encode_consecutive_glyph_run(
+        sc,
+        cur_x,
+        y,
+        glyph_group.font_identifier,
+        pdf_font,
+        font_size,
+        context_color,
+        slice::from_ref(last),
+        text,
+      );
+      self.content.set_char_spacing(0.0);
+    }
 
     *cur_y -= glyph_group.y_advance * font_size;
   }
@@ -1414,6 +1450,29 @@ fn as_rect(subpath: &[PathSegment]) -> Option<PathOp> {
     w: p1.x - p0.x,
     h: p2.y - p1.y,
   })
+}
+
+/// The character spacing that carries the last glyph's advance to the end of the furthest glyph.
+///
+/// Poppler ends an `/ActualText` span at its last glyph's advance, so a cluster closing on a
+/// positioned mark measures short and the gap after it reads as a word break:
+/// <https://gitlab.freedesktop.org/poppler/poppler/-/blob/master/poppler/TextOutputDev.cc>
+fn closing_spacing(glyphs: &[impl Glyph], font: &Font, x: f32, size: f32) -> Option<f32> {
+  let mut pen = x;
+  let mut furthest = f32::MIN;
+  let mut last = x;
+
+  for glyph in glyphs {
+    let advance = font.advance_width(glyph.glyph_id()).unwrap_or_default() / font.units_per_em();
+
+    last = pen + glyph.x_offset(size) + advance * size;
+    furthest = furthest.max(last);
+    pen += glyph.x_advance(size);
+  }
+
+  let spacing = furthest - last;
+
+  (spacing > 0.001).then_some(spacing)
 }
 
 // The font's bounding box at every glyph's origin: it can overestimate, but it covers every glyph

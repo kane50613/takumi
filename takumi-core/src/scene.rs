@@ -13,15 +13,14 @@ use crate::{
   layout::{
     decoration::OutlineGeometry,
     inline::{
-      InkBox, InlineContentKind, InlineLayoutMode, InlineLayoutRequest, PlacedItem,
-      ProcessedInlineSpan, ShapedRun, collect_inline_items, create_inline_layout, glyph_run_rect,
-      resolve_inline_max_height,
+      InkBox, InlineLayoutMode, InlineLayoutRequest, PlacedItem, ProcessedInlineSpan, ShapedRun,
+      collect_inline_items, create_inline_layout, glyph_run_rect, resolve_inline_max_height,
     },
-    node::Node,
     tree::{ContainingBlocks, LayoutResults, RenderNode},
   },
   paint_chunk::PaintChunk,
   paint_property::{ContainerContents, NodeProperties, PropertyState, PropertyTrees},
+  painter::OwnContent,
   resources::font::{RunFace, run_normalized_coords},
   shadow::SizedShadow,
   sort_key::sort_by_key,
@@ -932,6 +931,7 @@ fn compute_node_paint_bounds(
         stretch,
       } => {
         let baseline_shift = built.run_baseline_shift(line, &glyph_run);
+        let relative_offset = built.run_relative_offset(&glyph_run);
         let (glyph_origin, glyph_size) =
           glyph_run_rect(&glyph_run, hanging, &stretch, baseline_shift);
         let (glyph_origin, glyph_size) = setup.scale_rect(
@@ -943,7 +943,7 @@ fn compute_node_paint_bounds(
 
         bounds = merge_bounds(
           bounds,
-          bounds_for_placed_rect(glyph_origin, glyph_size, inline_transform),
+          bounds_for_placed_rect(glyph_origin + relative_offset, glyph_size, inline_transform),
         );
 
         // Blink's `InkOverflow::ComputeAppliedDecorationOverflow`.
@@ -979,7 +979,7 @@ fn compute_node_paint_bounds(
                 Point {
                   x: area.left,
                   y: area.top,
-                },
+                } + relative_offset,
                 Size {
                   width: area.right - area.left,
                   height: area.bottom - area.top,
@@ -1030,7 +1030,7 @@ fn compute_node_paint_bounds(
 
           bounds = merge_bounds(
             bounds,
-            bounds_for_placed_rect(ink_origin, ink_size, inline_transform),
+            bounds_for_placed_rect(ink_origin + relative_offset, ink_size, inline_transform),
           );
         }
       }
@@ -1038,7 +1038,7 @@ fn compute_node_paint_bounds(
         bounds = merge_bounds(
           bounds,
           bounds_for_placed_rect(
-            Point::new(inline_box.x, inline_box.y),
+            Point::new(inline_box.x, inline_box.y) + built.span_relative_offset(inline_box.id),
             Size::new(inline_box.width, inline_box.height),
             inline_transform,
           ),
@@ -1087,17 +1087,7 @@ fn compute_node_paint_bounds(
 }
 
 fn has_inline_paint_content(node: &RenderNode) -> bool {
-  node.should_create_inline_layout()
-    || node.anonymous_text_content.is_some()
-    || matches!(
-      node.node.as_ref().and_then(Node::inline_content),
-      Some(InlineContentKind::Text(_))
-    )
-    || node.children.as_ref().is_some_and(|children| {
-      children
-        .iter()
-        .any(|child| child.anonymous_text_content.is_some())
-    })
+  matches!(OwnContent::of(node), OwnContent::Inline(_))
 }
 
 /// [`SceneBounds::of_rect`] for a rect at `origin` in `transform`'s space.

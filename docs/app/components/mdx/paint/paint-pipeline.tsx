@@ -111,7 +111,7 @@ export function PaintPipelineView({ scene }: { scene: PaintScene }) {
           {stage === 1 && <Tree scene={scene} />}
           {stage === 2 && (
             <Canvas scene={scene} label="The card, drawn from the steps">
-              {sceneSteps(scene, scene.steps.length, ids, 140)}
+              {sceneSteps(scene, scene.steps.length, ids, { className: "paint-in", stagger: 140 })}
             </Canvas>
           )}
         </div>

@@ -66,6 +66,7 @@ pub mod prelude {
     resources::{
       font::{FontError, FontOverride, FontResource, FontSource, GenericFamily, RegisteredFamily},
       image::{ImageCacheMode, ImageSource},
+      unicode_range::{UnicodeRange, UnicodeRangeSet},
     },
     style::*,
     viewport::Viewport,

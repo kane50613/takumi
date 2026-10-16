@@ -9,6 +9,7 @@ use takumi_core::{
   resources::{
     font::{FontError, FontOverride, FontResource, RegisteredFamily},
     image::{ImageCacheMode, ImageError, ImageSource as DecodedImage, ResourceCache},
+    unicode_range::UnicodeRange,
   },
   style::{FontStyle as CssFontStyle, FromCssStr},
 };
@@ -23,10 +24,10 @@ pub struct FontOptions {
   weight: Option<f64>,
   /// The font style.
   style: Option<FontStyle>,
-  /// Logical family this font is a coverage subset of.
+  /// Inclusive codepoint ranges the font serves, as `@font-face` `unicode-range`.
+  unicode_range: Option<Vec<(u32, u32)>>,
+  /// Deprecated: the family to register under in place of `name`.
   subset_of: Option<String>,
-  /// Where this subset sits in its group's fallback order.
-  subset_rank: Option<u32>,
   /// CSS generic family keyword this font resolves for.
   generic: Option<String>,
 }
@@ -34,19 +35,25 @@ pub struct FontOptions {
 impl FontOptions {
   /// A font resource over `bytes` with these overrides applied.
   pub fn resource<'a>(&self, bytes: &'a [u8]) -> Result<FontResource<'a>, FontError> {
-    let resource = FontResource::new(bytes).override_info(FontOverride {
-      family_name: self.name.clone().map(Into::into),
-      weight: self.weight.map(|weight| weight as f32),
-      style: self.style.map(|style| style.0),
-      ..Default::default()
-    });
-
-    let resource = match &self.subset_of {
-      Some(logical) => resource
-        .subset_of(logical.clone())
-        .subset_rank(self.subset_rank.unwrap_or_default()),
-      None => resource,
-    };
+    let resource = FontResource::new(bytes)
+      .override_info(FontOverride {
+        family_name: self
+          .subset_of
+          .as_deref()
+          .or(self.name.as_deref())
+          .map(Into::into),
+        weight: self.weight.map(|weight| weight as f32),
+        style: self.style.map(|style| style.0),
+        ..Default::default()
+      })
+      .unicode_range(
+        self
+          .unicode_range
+          .iter()
+          .flatten()
+          .map(|&(from, to)| UnicodeRange::new(from, to))
+          .collect(),
+      );
 
     match &self.generic {
       Some(generic) => Ok(resource.generic_family(generic.parse()?)),

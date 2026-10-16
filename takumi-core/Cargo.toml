@@ -1,6 +1,6 @@
 [package]
 name = "takumi-core"
-version = "0.27.0"
+version = "0.30.0"
 edition = "2024"
 license = "MIT OR Apache-2.0"
 description = "Backend-agnostic layout, style, and resource core for takumi."
@@ -106,7 +106,6 @@ optional = true
 
 [dependencies.icu_properties]
 workspace = true
-optional = true
 
 [dependencies.unicode-bidi]
 workspace = true
@@ -131,7 +130,6 @@ svg = [
   "dep:strict-num",
   "dep:tiny-skia-path",
   "dep:harfrust",
-  "dep:icu_properties",
   "dep:unicode-bidi",
 ]
 woff2 = ["dep:wuff", "wuff/brotli"]

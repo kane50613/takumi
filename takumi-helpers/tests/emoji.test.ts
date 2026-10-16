@@ -25,6 +25,12 @@ describe("emoji", () => {
       expect(result).toEqual(node);
     });
 
+    it("should keep marks that only join or modify emoji as text", () => {
+      const node = text("#1 *2 \u200D\uFE0F\u{1F3FB} é");
+
+      expect(extractEmojis(node, "twemoji")).toEqual(node);
+    });
+
     it("should extract simple emoji", () => {
       const content = "Hello 😀";
       const node = text(content);

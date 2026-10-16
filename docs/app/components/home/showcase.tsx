@@ -1,61 +1,78 @@
 import { Link } from "waku";
+import { Button } from "~/components/ui/button";
 import { PROJECT_LINK_REL, showcaseProjects } from "~/data/showcase";
+import { cn } from "~/lib/utils";
+import { Reveal } from "./reveal";
+import { GUTTER, H2, LINK, PRIMARY_BUTTON } from "./typography";
 
-function User({ href, children }: { href: string; children: string }) {
-  return (
-    <a
-      href={href}
-      target="_blank"
-      rel="noopener noreferrer"
-      className="text-foreground underline underline-offset-4 decoration-border hover:decoration-primary"
-    >
-      {children}
-    </a>
-  );
-}
+const FEATURED_URLS = new Set([
+  "https://dcard.tw",
+  "https://tanstack.com",
+  "https://fumadocs.dev/",
+  "https://lu.ma",
+]);
+
+const featured = showcaseProjects.filter((project) => FEATURED_URLS.has(project.url));
 
 export function Showcase() {
   return (
-    <section className="px-6 py-24 max-sm:py-14">
-      <div className="max-w-275 mx-auto">
-        <h2 className="font-[540] text-[clamp(2.25rem,4vw,3.5rem)] leading-[1.06] tracking-tight mb-4">
-          In production.
-        </h2>
-        <p className="text-muted-foreground leading-relaxed max-w-150 mb-10">
-          <User href="https://dcard.tw">Dcard</User> share cards.{" "}
-          <User href="https://fumadocs.dev">Fumadocs</User> OG images. Built into{" "}
-          <User href="https://nuxtseo.com/docs/og-image/renderers/takumi">Nuxt OG Image</User>.
-        </p>
+    <section
+      aria-labelledby="showcase-title"
+      className={cn("space-y-[6svh] pt-[8svh] pb-[10svh]", GUTTER)}
+    >
+      <h2 id="showcase-title" className={H2}>
+        In production.
+      </h2>
 
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-          {showcaseProjects.slice(0, 8).map((project) => (
-            <a
-              key={project.url}
-              href={project.url}
-              target="_blank"
-              rel={PROJECT_LINK_REL}
-              className="border border-border hover:border-primary"
-            >
-              <img
-                src={project.image}
-                alt={`OG image from ${new URL(project.url).hostname}`}
-                width={project.width}
-                height={project.height}
-                loading="lazy"
-                className="w-full h-auto aspect-40/21 object-cover"
-              />
-            </a>
-          ))}
-        </div>
+      <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
+        {featured.map((project, index) => {
+          const name = project.title ?? new URL(project.url).hostname;
 
-        <p className="mt-8">
-          <Link
-            to="/showcase"
-            className="text-sm underline underline-offset-4 decoration-border hover:decoration-primary"
-          >
-            View all projects →
+          return (
+            <Reveal key={project.url} delay={index * 0.12}>
+              <a
+                href={project.url}
+                target="_blank"
+                rel={PROJECT_LINK_REL}
+                className="block overflow-hidden rounded-lg border border-foreground/12 transition-[border-color,transform] duration-150 ease-out-strong hover:border-foreground/30 active:scale-[0.99]"
+              >
+                <img
+                  src={project.image}
+                  alt={`Production Open Graph image rendered by ${name}`}
+                  width={project.width}
+                  height={project.height}
+                  loading="lazy"
+                  decoding="async"
+                  className="aspect-40/21 h-auto w-full object-cover"
+                />
+              </a>
+            </Reveal>
+          );
+        })}
+      </div>
+
+      <div className="flex flex-col items-start justify-between gap-8 pt-[12svh] lg:flex-row lg:items-end">
+        <img
+          src="/sticker.svg"
+          alt="Takumi"
+          width={530}
+          height={210}
+          loading="lazy"
+          decoding="async"
+          className="h-20 w-auto sm:h-24"
+        />
+
+        <div className="flex flex-wrap items-center gap-x-6 gap-y-4">
+          <Button asChild size="lg" className={PRIMARY_BUTTON}>
+            <Link to="/playground">Try in playground</Link>
+          </Button>
+          <Link to="/docs" className={cn(LINK, "text-lg")}>
+            Read documentation
           </Link>
-        </p>
+          <Link to="/showcase" className={cn(LINK, "text-lg")}>
+            View showcase
+          </Link>
+        </div>
       </div>
     </section>
   );

@@ -181,7 +181,7 @@
     <use href="#g16" x="462.67" y="229"/>
     <use href="#g17" x="479.74" y="229"/>
   </g>
-  <filter id="bl6">
+  <filter id="bl6" filterUnits="userSpaceOnUse" x="-3" y="-3" width="906" height="526">
     <feGaussianBlur stdDeviation="1"/>
   </filter>
   <g filter="url(#bl6)">

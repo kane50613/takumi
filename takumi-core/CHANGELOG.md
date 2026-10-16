@@ -1,3 +1,124 @@
+## takumi-core@0.30.0
+
+### Read a run's outlines one glyph at a time
+
+`TextRun.outline()` is now `outlines()`, which returns each glyph's outline as SVG path data in the order of `glyphs`, with `null` for a glyph the run's color does not fill. A renderer can draw, animate, or hit-test each letter on its own. Replace `run.outline()` with `run.outlines().join("")`. In Rust, `PaintTree::run_outline` is now `run_outlines`.
+
+### Map each glyph of a paint tree back to its text
+
+A `Glyph` now has `cluster`: where its cluster starts in the run's `text`, in UTF-16 code units. Glyphs of one cluster share it, so a renderer can split a run into words or animate it a letter at a time without guessing from glyph positions.
+
+## takumi-core@0.29.1
+
+### Keep every line `line-clamp` allows
+
+`line-clamp` now limits text by line count alone, as Chrome does. A paragraph that fits its clamp exactly no longer loses its last line to rounding, such as two lines of 42px text at `line-height: 1.04`.
+
+## takumi-core@0.29.0
+
+### Register font subsets with `unicodeRange`
+
+A font now takes `unicodeRange`, the codepoint ranges its `@font-face` declares. It serves only those codepoints, as in Chrome, so each subset of a family registers under the same `name`:
+
+```ts
+const fonts = [
+  { name: "Inter", data: latin, unicodeRange: [[0x0000, 0x00ff]] },
+  { name: "Inter", data: cyrillic, unicodeRange: [[0x0400, 0x045f]] },
+];
+```
+
+`googleFonts` returns its subsets this way. `subsetOf` and `subsetRank` are deprecated: `subsetOf` now only sets the family name, and `subsetRank` does nothing. In Rust, use `FontResource::unicode_range`.
+
+### Turn off contextual alternates under letter spacing
+
+Non-zero `letter-spacing` now also turns off contextual alternates (`calt`), as Chrome does. `font-variant-ligatures` can no longer turn ligatures back on while letters are spaced. `font-feature-settings` still overrides both.
+
+### Upgrade taffy to 0.15
+
+Layout runs on taffy 0.15, whose grid and flexbox passes are faster. The root box now sits at its own margins, as Chrome places it, instead of at the top left corner.
+
+### Measure text ink once per text node
+
+A text node with its own `display`, such as `flex`, no longer shapes and breaks its text a second time to measure ink bounds while the scene is built. Dashboards with many styled text labels render about 30% faster.
+
+### Move inline elements by `position: relative`
+
+An inline element with `position: relative` now moves by its `top`, `left`, `bottom` and `right`, along with its background, border, text decorations and inline-block children, as in Chrome. Tailwind's Preflight relies on this to raise `<sup>` and lower `<sub>`.
+
+### Read Preflight from every Tailwind entry point
+
+`@import "tailwindcss"` now turns Preflight on when it carries modifiers such as `source(none)` or `important`. `@import "tailwindcss/preflight.css"` turns it on too, while `tailwindcss/theme.css` and `tailwindcss/utilities.css` leave it off, as in Tailwind's setup without Preflight.
+
+### Keep images at their natural size in grids and between insets
+
+An image or SVG in a grid cell no longer stretches to the cell under the default alignment, and an absolutely positioned one no longer stretches between its insets. Both keep their natural size, as Chrome draws them.
+
+### Lay out text with parley 0.12
+
+Text layout moves to parley 0.12. Letter spacing turns off ligatures as browsers do, and text beside floats, cloned box decorations, list markers, and `text-fit` lines sit closer to where Chrome puts them. A family's coverage subsets now load together, which lets later releases drop the per-subset family names.
+
+### Stop leaking a direction mark into PDF text
+
+Paragraphs set their direction directly instead of starting with an invisible U+200E or U+200F mark, so text extracted from a PDF no longer contains it. A right-to-left paragraph that starts with an inline box before any text still gets the mark.
+
+### Keep the line strut when no font family matches
+
+A line that holds only an image or another inline box keeps the default font's strut when its `font-family` matches no registered font, as Chrome does. Such lines used to come out a few pixels short.
+
+### Support `font-optical-sizing`
+
+Variable fonts with an `opsz` axis now set it to the font size, as Chrome does, so fonts like Inter draw their display cut at large sizes. `font-optical-sizing: none` or an `opsz` value in `font-variation-settings` turns this off.
+
+### Keep the static position of absolute boxes whose containing block is further up
+
+An absolutely positioned box without insets now starts where it would have sat in its parent's flow, padding included, even when its containing block is an ancestor further up. It used to start at that ancestor's content edge. Chrome places it the same way.
+
+### Synthesize small caps for fonts without them
+
+`font-variant-caps` now synthesizes small capitals when the font lacks the caps feature, as Chrome does. Lowercase letters render as capitals at 70% size, so `small-caps` works with fonts like Geist. `font-synthesis: none` or the new `font-synthesis-small-caps: none` turns this off.
+
+### Embed fonts at their `font-variation-settings` in PDF
+
+PDF output and the paint tree now instance a variable font at the axes `font-variation-settings` sets. Before, they used the default instance, so glyphs drew at the wrong weight or width while the layout used the right one.
+
+### Check small-caps support in each run's own font and script
+
+`font-variant-caps` now checks the font that draws each run, and that font's caps features for the run's script, as Chrome does. A fallback font keeps the small capitals it ships, and a font that lists them only for some scripts synthesizes them for the rest.
+
+## takumi-core@0.28.0
+
+### Keep no fragment items for hidden subtrees
+
+Laying out a `display: none` box no longer keeps fragment items for the boxes under it, which paint never reads. A hidden 48-card panel costs 0.3 ms instead of 2.1 ms per render.
+
+### Shape repeated text once per render
+
+Text that several boxes repeat with the same style is shaped once per render again. A box that reused another's measurement used to drop the shared shape after drawing, so every later box shaped it anew.
+
+### Composite pixels faster
+
+Blending, masking and PNG scanline work run in 16-bit vector lanes, with the same pixels as before. Real templates render about 3% faster.
+
+### Read repeated style values once
+
+Reading a node tree parses each distinct style value once per property and reuses it wherever the tree repeats it. A 48-card dashboard reads its styles in 0.16 ms instead of 0.26 ms.
+
+### Divide by 255 in 16 bits
+
+`div_255` and `mul_div_255` replace `fast_div_255` and `fast_div_255_u32`. Both take bytes or byte products, so their arithmetic fits 16-bit vector lanes.
+
+### Redraw rounded boxes faster
+
+A rounded background drawn at the same place and size as in an earlier render reuses its rasterized mask from the glyph cache. A mask may take at most `glyph_cache::max_entry_bytes`, a 32nd of the budget. `PathCommand::digest` hashes a path for such keys.
+
+### Rasterize inline SVG images once
+
+An `<img>` whose `src` is SVG markup now goes through the render's image cache, as `data:` URIs already do. Repeated renders reuse its parsed tree and rasters instead of redrawing them. Real templates render about 3% faster.
+
+### Parse inline styles faster
+
+A CSS value that fails one way of parsing no longer builds an error message before trying the next. Building nodes from HTML with inline styles takes about 40% less time.
+
 ## takumi-core@0.27.0
 
 ### Lay out text faster

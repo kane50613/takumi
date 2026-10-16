@@ -1,0 +1,41 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>text_font_variant_caps_fonts</title>
+    <base href="../../../" />
+    <link rel="stylesheet" href="takumi/tests/shared.css" />
+    <style>
+      .root {
+        display: block;
+        padding: 12px 24px;
+        width: 100%;
+        height: 100%;
+        background: rgb(248, 250, 252);
+        font-family: "EB Garamond Caps";
+        font-size: 30px;
+        line-height: 1.4;
+      }
+      p {
+        display: block;
+        margin: 0;
+      }
+    </style>
+  </head>
+  <body style="width: 720px; height: 440px">
+    <div class="root">
+      <p style="font-variant-caps: small-caps">Hotel Unterkunft 2026</p>
+      <p style="font-variant-caps: all-small-caps">Hotel Unterkunft 2026</p>
+      <p style="font-variant-caps: petite-caps">Hotel Unterkunft 2026</p>
+      <p style="font-variant-caps: unicase">Hotel Unterkunft 2026</p>
+      <p style="font-variant-caps: titling-caps">Hotel Unterkunft 2026</p>
+      <p style="font-variant-caps: small-caps; font-family: Manrope, &quot;EB Garamond Caps&quot;"
+        >Hotel Квартира</p
+      >
+      <p style="font-variant-caps: small-caps; font-family: &quot;EB Garamond Caps Latn&quot;"
+        >Hotel Квартира</p
+      >
+      <p style="font-variant-caps: small-caps">Hotel Ωμέγα</p>
+    </div>
+  </body>
+</html>

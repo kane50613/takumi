@@ -2,6 +2,8 @@
 
 use std::ops::{Add, Sub};
 
+use xxhash_rust::xxh3::Xxh3;
+
 use crate::style::Affine;
 
 /// The smallest difference between two layout values a browser can tell apart:
@@ -409,6 +411,43 @@ pub enum PathCommand {
 }
 
 impl PathCommand {
+  /// A digest of `paths`, which the same commands always give.
+  pub fn digest(paths: &[Self]) -> u64 {
+    let mut h = Xxh3::new();
+    let point = |h: &mut Xxh3, p: &Point<f32>| {
+      h.update(&p.x.to_le_bytes());
+      h.update(&p.y.to_le_bytes());
+    };
+
+    for cmd in paths {
+      match cmd {
+        Self::MoveTo(p) => {
+          h.update(&[0u8]);
+          point(&mut h, p);
+        }
+        Self::LineTo(p) => {
+          h.update(&[1u8]);
+          point(&mut h, p);
+        }
+        Self::QuadTo(p1, p2) => {
+          h.update(&[2u8]);
+          point(&mut h, p1);
+          point(&mut h, p2);
+        }
+        Self::CubicTo(p1, p2, p3) => {
+          h.update(&[3u8]);
+          point(&mut h, p1);
+          point(&mut h, p2);
+          point(&mut h, p3);
+        }
+        Self::Close => {
+          h.update(&[4u8]);
+        }
+      }
+    }
+    h.digest()
+  }
+
   /// Maps every point the command carries through `f`.
   pub fn map_points(self, mut f: impl FnMut(Point<f32>) -> Point<f32>) -> Self {
     match self {

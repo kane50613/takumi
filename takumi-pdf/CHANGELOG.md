@@ -1,3 +1,40 @@
+## takumi-pdf@0.17.3
+
+### Copy text correctly from PDF in viewers that ignore `/ActualText`
+
+When several glyphs draw one cluster, such as `S` and an acute for `Ś`, or a Devanagari consonant and its matra, each glyph now maps to its own characters in the font's ToUnicode table. Before, each mapped to the whole cluster, so pdf.js (Firefox), pypdf, and pdfminer read `Świnoujście` as `ŚŚwinoujśŚcie`, `मोटा` as `मोमोटाटा`, and a plain `S` elsewhere in the document as `Ś`.
+
+### Keep words whole when a letter is drawn as a base and a mark
+
+PDF text extraction no longer splits a word after a letter the font draws as a base glyph and a combining mark, such as `Ś` from a font that has only `S` and U+0301. Before, `pdftotext` read `Świnoujście` as `Ś winoujś cie`.
+
+## takumi-pdf@0.17.0
+
+### Register font subsets with `unicodeRange`
+
+A font now takes `unicodeRange`, the codepoint ranges its `@font-face` declares. It serves only those codepoints, as in Chrome, so each subset of a family registers under the same `name`:
+
+```ts
+const fonts = [
+  { name: "Inter", data: latin, unicodeRange: [[0x0000, 0x00ff]] },
+  { name: "Inter", data: cyrillic, unicodeRange: [[0x0400, 0x045f]] },
+];
+```
+
+`googleFonts` returns its subsets this way. `subsetOf` and `subsetRank` are deprecated: `subsetOf` now only sets the family name, and `subsetRank` does nothing. In Rust, use `FontResource::unicode_range`.
+
+### Stop leaking a direction mark into PDF text
+
+Paragraphs set their direction directly instead of starting with an invisible U+200E or U+200F mark, so text extracted from a PDF no longer contains it. A right-to-left paragraph that starts with an inline box before any text still gets the mark.
+
+### Support `font-optical-sizing`
+
+Variable fonts with an `opsz` axis now set it to the font size, as Chrome does, so fonts like Inter draw their display cut at large sizes. `font-optical-sizing: none` or an `opsz` value in `font-variation-settings` turns this off.
+
+### Embed fonts at their `font-variation-settings` in PDF
+
+PDF output and the paint tree now instance a variable font at the axes `font-variation-settings` sets. Before, they used the default instance, so glyphs drew at the wrong weight or width while the layout used the right one.
+
 ## takumi-pdf@0.16.1
 
 ### Lay out paragraphs with inline elements faster

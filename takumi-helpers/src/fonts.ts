@@ -1,7 +1,9 @@
 import type { GoogleFontShapeFamilies, GoogleFontShapes } from "./google-fonts-catalog";
 import type { Node } from "./types";
-import { defaultMaxFetchBytes, fetchOk, type FetchOptions, readBodyLimited } from "./fetch";
+import type { FetchOptions } from "./fetch";
+import { fetchBytes } from "./fetch/bytes";
 import { FontStylesheetCache } from "./fonts/cache";
+import { unicodeRangeOf } from "./unicode-range";
 
 type FontStyle = "normal" | "italic";
 
@@ -150,18 +152,14 @@ type SubsetFace = {
 
 /** A loaded font subset, ready to hand to a renderer's `fonts`. */
 export type FontSubset = {
-  /** Unique internal family name (`"{family} {subset}"`); never written in CSS. */
+  /** The family authors reference in `font-family`, shared by every subset of it. */
   name: string;
-  /** Logical family authors reference in `font-family`; expands to every loaded subset. */
-  subsetOf: string;
-  /** Position in the group's fallback order, from the lowest codepoint the subset declares. */
-  subsetRank: number;
-  /** Stable dedup key (`"{name}:{weight}:{style}:{range}"`), independent of the rotating woff2 URL. */
+  /** Stable dedup key (`"{name} {subset}:{weight}:{style}:{range}"`), independent of the rotating woff2 URL. */
   key: string;
   weight?: number;
   style?: string;
-  /** Inclusive codepoint ranges this subset covers; empty covers everything. */
-  ranges: [number, number][];
+  /** Inclusive codepoint ranges from the face's `unicode-range`; empty covers everything. */
+  unicodeRange: [number, number][];
   /** CSS generic family the subset claims, from the family's `generic` option. */
   generic?: GenericFontFamily;
   /** Fetches the subset bytes. The renderer skips files it has already loaded. */
@@ -173,37 +171,19 @@ function toSubset(
   options: FetchOptions,
   generic?: GenericFontFamily,
 ): FontSubset {
-  const name = `${face.family} ${face.subset}`;
   const range = face.ranges.map(([lo, hi]) => `${lo}-${hi}`).join(",");
 
   return {
-    name,
-    subsetOf: face.family,
-    subsetRank: subsetRank(face.ranges),
+    name: face.family,
     // Stable coverage identity, not the woff2 URL Google may rotate, so the renderer dedups
     // across calls yet never merges two subsets that cover different ranges.
-    key: `${name}:${face.weight ?? ""}:${face.style ?? ""}:${range}:${generic ?? ""}`,
+    key: `${face.family} ${face.subset}:${face.weight ?? ""}:${face.style ?? ""}:${range}:${generic ?? ""}`,
     weight: face.weight,
     style: face.style,
-    ranges: face.ranges,
+    unicodeRange: face.ranges,
     generic,
-    data: () =>
-      fetchOk(face.url, options).then((r) =>
-        readBodyLimited(r, options.maxBytes ?? defaultMaxFetchBytes),
-      ),
+    data: () => fetchBytes(face.url, options),
   };
-}
-
-/**
- * Fallback order within a `subsetOf` group. Coverage alone cannot settle it: Google's Cyrillic
- * and Greek subsets also encode the ASCII space and several Latin capitals, so a shaper that
- * takes the first font whose `cmap` covers a cluster tears Latin words apart. Ranking by the
- * lowest codepoint a subset declares puts `latin` (U+0000) first, which is the order a browser
- * reaches through `unicode-range`. A subset declaring no range covers everything, so it goes
- * last and catches whatever the ranged ones miss.
- */
-function subsetRank(ranges: [number, number][]): number {
-  return ranges.length === 0 ? 0xffffffff : Math.min(...ranges.map(([lo]) => lo));
 }
 
 /** Parse `U+0460-052F, U+20B4, U+30??` into inclusive `[lo, hi]` codepoint ranges. */
@@ -346,33 +326,45 @@ export function collectCodepoints(source: CodepointSource): Set<number> {
   return codepoints;
 }
 
-function rangesCover(ranges: [number, number][], codepoints: Set<number>): boolean {
-  if (ranges.length === 0) {
-    return true;
-  }
+/** Whether any of the ascending `codepoints` falls in `ranges`; no ranges covers everything. */
+function rangesCover(ranges: [number, number][], codepoints: Uint32Array): boolean {
+  return (
+    ranges.length === 0 ||
+    ranges.some(([lo, hi]) => {
+      const first = codepoints[lowerBound(codepoints, lo)];
 
-  for (const cp of codepoints) {
-    for (const [lo, hi] of ranges) {
-      if (cp >= lo && cp <= hi) {
-        return true;
-      }
+      return first !== undefined && first <= hi;
+    })
+  );
+}
+
+/** The index of the first of the ascending `values` at or above `target`. */
+function lowerBound(values: Uint32Array, target: number): number {
+  let low = 0;
+  let high = values.length;
+
+  while (low < high) {
+    const middle = (low + high) >>> 1;
+
+    if ((values[middle] ?? target) < target) {
+      low = middle + 1;
+    } else {
+      high = middle;
     }
   }
 
-  return false;
+  return low;
 }
 
 /**
  * Keep the subsets `source` renders, dropping the rest. Range-less fallbacks (a full font or a
  * `text=` subset) always stay. Runs without network, so a renderer can apply it to the final
- * node tree. Works on any descriptor carrying `ranges`; entries without it are kept.
+ * node tree. Works on any descriptor carrying `unicodeRange`; entries without it are kept.
  */
 export function subsetFonts<T>({ fonts, source }: { fonts: T[]; source: CodepointSource }): T[] {
-  const codepoints = collectCodepoints(source);
+  const codepoints = Uint32Array.from(collectCodepoints(source)).sort();
 
-  return fonts.filter((font) =>
-    rangesCover((font as { ranges?: [number, number][] }).ranges ?? [], codepoints),
-  );
+  return fonts.filter((font) => rangesCover(unicodeRangeOf(font), codepoints));
 }
 
 /**
@@ -383,17 +375,14 @@ export function subsetFonts<T>({ fonts, source }: { fonts: T[]; source: Codepoin
 export function fontFromUrl(url: string, options: FetchOptions = {}) {
   return {
     key: url,
-    data: () =>
-      fetchOk(url, options).then((r) =>
-        readBodyLimited(r, options.maxBytes ?? defaultMaxFetchBytes),
-      ),
+    data: () => fetchBytes(url, options),
   };
 }
 
 /**
- * Load Google Font families in one css2 request, returning every coverage subset. Each keeps
- * its `unicode-range` and registers uniquely-named under its `subsetOf` family, which
- * `font-family: {family}` expands across, so a glyph routes to the subset that covers it.
+ * Load Google Font families in one css2 request, returning every coverage subset. Each registers
+ * under its family name with its `unicode-range`, so a codepoint routes to the subset that
+ * declares it, as in a browser.
  * Subsets download lazily. Hand the result to `render`, which registers only the subsets the
  * content uses; or trim them first with {@link subsetFonts}.
  *

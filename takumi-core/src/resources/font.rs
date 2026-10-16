@@ -2,7 +2,7 @@ use std::{
   borrow::Cow,
   cell::OnceCell,
   cell::RefCell,
-  collections::{BTreeSet, HashMap, HashSet, hash_map::Entry},
+  collections::{HashSet, hash_map::Entry},
   fmt::{self, Debug, Formatter},
   hash::{Hash, Hasher},
   iter::once,
@@ -15,11 +15,11 @@ use std::{
 };
 
 use parley::{
-  CHROMIUM_LINE_BREAK_OVERRIDE, GenericFamily as ParleyGenericFamily, GlyphRun, LayoutContext,
-  LineBreakContext, LineBreakOverrideFn, TextStyle, TreeBuilder,
+  BaseDirection, CHROMIUM_LINE_BREAK_OVERRIDE, GenericFamily as ParleyGenericFamily, GlyphRun,
+  LayoutContext, TreeBuilder,
   fontique::{
     Attributes, Blob, Collection, CollectionOptions, FallbackKey, FontInfo, FontInfoOverride,
-    FontStyle, FontWeight, FontWidth, QueryFamily, QueryStatus, Script, ScriptExt,
+    FontStyle, FontWeight, FontWidth, QueryFamily, QueryFont, QueryStatus, Script, ScriptExt,
   },
 };
 use skrifa::{
@@ -33,18 +33,22 @@ use skrifa::{
 use thiserror::Error;
 use xxhash_rust::xxh3::{Xxh3, xxh3_64};
 
+#[cfg(feature = "paint-tree")]
+use std::collections::HashMap;
+
 #[cfg(feature = "svg")]
 use crate::resvg::usvg::fontdb::Database;
 use crate::{
   context::RenderContext,
-  font_style::ExpandedFontFamily,
+  font_style::{ExpandedFontFamily, SizedFontStyle},
   layout::inline::{InlineBrush, InlineLayout},
   resources::{
     glyph::{BOLD_THRESHOLD, GlyphResolveContext, ResolvedGlyphs, synthesis_embolden_strength},
     glyph_cache::resolved_glyph,
+    unicode_range::UnicodeRangeSet,
   },
   sort_key::sort_by_key,
-  style::{FontFamily, FontStyle as CssFontStyle},
+  style::{Direction, FontFamily, FontStyle as CssFontStyle},
 };
 
 /// Errors that can occur during font loading and conversion.
@@ -179,10 +183,6 @@ fn font_style_css(style: FontStyle) -> String {
   }
 }
 
-/// The subset families under one logical family, ordered by the rank each declared, then by
-/// registration order and name.
-pub(crate) type SubsetGroup = BTreeSet<(u32, u32, String)>;
-
 /// Registered families partitioned by color-glyph support.
 pub(crate) struct FontClasses {
   pub(crate) color: HashSet<String>,
@@ -214,14 +214,9 @@ fn has_color_table(font: &FontRef) -> bool {
 #[derive(Clone)]
 pub struct Fonts {
   inner: parley::FontContext,
-  /// Maps a logical family name (the name authors write in `font-family`) to the
-  /// unique internal names of the subset families registered under it, keyed by
-  /// [`FontResource::subset_rank`] then registration order. Populated by [`FontResource::subset_of`];
-  /// consulted when a render expands a `font-family` into its per-coverage subset stack.
-  /// Tied ranks fall back to registration order, so callers whose selection depends on a
-  /// tie must register those subsets in a deterministic order. Shared (immutable after
-  /// registration) so a render can read it without borrowing the parley context.
-  groups: Arc<HashMap<String, SubsetGroup>>,
+  /// Blob ids of faces whose `unicode-range` leaves out U+0020, which Blink never picks as a
+  /// primary font.
+  space_outside_range: Arc<HashSet<u64>>,
   /// Every registered family name in registration order. The fallback bucket is built from
   /// this so its per-script priority is deterministic; `fontique`'s `family_names()` iterates
   /// a `HashMap` (hash order), which would otherwise make font selection vary per render.
@@ -253,7 +248,7 @@ impl Default for Fonts {
         }),
         source_cache: Default::default(),
       },
-      groups: Arc::new(HashMap::new()),
+      space_outside_range: Arc::new(HashSet::new()),
       order: Vec::new(),
       last_resort_order: Vec::new(),
       color_names: HashSet::new(),
@@ -266,12 +261,10 @@ impl Default for Fonts {
   }
 }
 
-/// A render-local font handle. `groups` sits outside the `RefCell` so a render can expand
-/// `font-family` without taking the parley-context borrow that building the tree holds.
+/// A render-local font handle.
 #[derive(Clone)]
 pub struct FontsSnapshot {
   context: Rc<RefCell<Fonts>>,
-  pub(crate) groups: Arc<HashMap<String, SubsetGroup>>,
   pub(crate) classes: Arc<FontClasses>,
   fallback_signature: u64,
 }
@@ -355,8 +348,7 @@ pub(crate) fn run_normalized_coords(run: &GlyphRun<'_, InlineBrush>) -> Vec<F2Do
     .run()
     .normalized_coords()
     .iter()
-    .copied()
-    .map(F2Dot14::from_bits)
+    .map(|coord| F2Dot14::from_bits(coord.to_bits()))
     .collect()
 }
 
@@ -382,15 +374,43 @@ impl<'a> RunFace<'a> {
   }
 }
 
-/// User-space variation coordinates the run was shaped at, e.g. `[(*b"wght", 700.0)]`.
+/// User-space variation coordinates the run was shaped at, e.g. `[(*b"wght", 700.0)]`: the font's
+/// synthesis, then the style's resolved variations on the axes the font has, a later value
+/// replacing an earlier one as skrifa resolves a location.
 pub(crate) fn run_variations(run: &GlyphRun<'_, InlineBrush>) -> Vec<([u8; 4], f32)> {
-  run
+  let mut variations: Vec<([u8; 4], f32)> = run
     .run()
     .synthesis()
     .variation_settings()
     .iter()
     .map(|(tag, value)| (tag.to_be_bytes(), *value))
-    .collect()
+    .collect();
+  let style_variations = &run.style().brush.font_variations;
+
+  // Empty coordinates mean the default instance, which the settings did not move.
+  if style_variations.is_empty() || run.run().normalized_coords().is_empty() {
+    return variations;
+  }
+
+  let font = run.run().font();
+  let axes: Vec<Tag> = FontRef::from_index(font.data.data(), font.index)
+    .map(|font_ref| font_ref.axes().iter().map(|axis| axis.tag()).collect())
+    .unwrap_or_default();
+
+  for variation in style_variations.iter() {
+    let tag = variation.tag.to_bytes();
+
+    if !axes.contains(&Tag::new(&tag)) {
+      continue;
+    }
+
+    match variations.iter_mut().find(|(existing, _)| *existing == tag) {
+      Some((_, existing)) => *existing = variation.value,
+      None => variations.push((tag, variation.value)),
+    }
+  }
+
+  variations
 }
 
 impl Fonts {
@@ -506,9 +526,7 @@ impl Fonts {
     let mut cloned = self.inner.clone();
 
     let mut family_ids: Vec<_> = if let Some(names) = fallbacks {
-      // A name may be a logical subset family; expand it to its registered subset names so
-      // the fallback bucket carries the whole stack, matching `font-family` expansion.
-      ExpandedFontFamily::expand(names, &self.groups)
+      ExpandedFontFamily::expand(names)
         .query_families()
         .filter_map(|family| match family {
           QueryFamily::Named(name) => cloned.collection.family_id(name),
@@ -552,7 +570,7 @@ impl Fonts {
     FontsSnapshot {
       context: Rc::new(RefCell::new(Self {
         inner: cloned,
-        groups: self.groups.clone(),
+        space_outside_range: self.space_outside_range.clone(),
         order: self.order.clone(),
         last_resort_order: self.last_resort_order.clone(),
         color_names: self.color_names.clone(),
@@ -562,7 +580,6 @@ impl Fonts {
         svg_db: self.svg_db.clone(),
         revision: self.revision,
       })),
-      groups: self.groups.clone(),
       classes: Arc::new(FontClasses {
         color: self.color_names.clone(),
         color_order,
@@ -638,12 +655,16 @@ impl Fonts {
       source,
       info_override,
       generic_family,
-      subset_of,
-      subset_rank,
+      unicode_range,
       last_resort,
     } = font;
 
-    let blob = source.into_blob()?;
+    let blob = unicode_range.restrict_blob(source.into_blob()?);
+
+    if !unicode_range.contains(u32::from(' ')) {
+      Arc::make_mut(&mut self.space_outside_range).insert(blob.id());
+    }
+
     let axes = info_override.as_ref().map(FontOverride::resolved_axes);
     let info_override = info_override
       .as_ref()
@@ -699,15 +720,6 @@ impl Fonts {
         for face in &faces {
           face_families.insert((blob.id(), face.index), name.clone());
         }
-      }
-
-      if let Some(logical) = &subset_of {
-        let group = Arc::make_mut(&mut self.groups)
-          .entry(logical.clone())
-          .or_default();
-        let sequence = group.len() as u32;
-
-        group.insert((subset_rank, sequence, name.clone()));
       }
 
       families.push(RegisteredFamily { name, faces });
@@ -792,7 +804,7 @@ impl PrimaryFontMetrics {
 
 impl RenderContext {
   /// The primary font's vertical metrics for `families`/`attributes` at `font_size`: the first
-  /// available font, skipping a coverage subset without the space glyph, as Blink's
+  /// available font, skipping a face whose `unicode-range` leaves out the space, as Blink's
   /// `FontFallbackList::DeterminePrimarySimpleFontData` skips such a segment.
   pub(crate) fn first_font_metrics<'a>(
     &self,
@@ -800,69 +812,116 @@ impl RenderContext {
     attributes: Attributes,
     font_size: f32,
   ) -> Option<PrimaryFontMetrics> {
-    let groups = self.fonts().groups.clone();
+    self.with_primary_font(families, attributes, |font_ref| {
+      let metrics = font_ref.metrics(Size::new(font_size), LocationRef::default());
 
-    self.fonts().with_context(|fonts| {
-      let subsets: HashSet<_> = groups
-        .values()
-        .flatten()
-        .filter_map(|(_, _, name)| fonts.inner.collection.family_id(name))
-        .collect();
-      let mut query = fonts.inner.collection.query(&mut fonts.inner.source_cache);
-      let mut result = None;
-
-      query.set_families(families);
-      query.set_attributes(attributes);
-
-      query.matches_with(|font| {
-        let Ok(font_ref) = FontRef::from_index(font.blob.data(), font.index) else {
-          return QueryStatus::Continue;
-        };
-        if subsets.contains(&font.family.0) && font_ref.charmap().map(' ').is_none() {
-          return QueryStatus::Continue;
-        }
-        let metrics = font_ref.metrics(Size::new(font_size), LocationRef::default());
-
-        result = Some(PrimaryFontMetrics {
-          ascent: metrics.ascent.round(),
-          descent: metrics.descent.abs().round(),
-          line_gap: metrics.leading.round(),
-          x_height: metrics.x_height,
-          exact: ExactFontMetrics {
-            ascent: metrics.ascent,
-            descent: metrics.descent.abs(),
-            line_gap: metrics.leading,
-          },
-          underline: metrics.underline.map(|underline| FontUnderline {
-            position: -underline.offset,
-            thickness: underline.thickness,
-          }),
-          em_descent: em_box_descent(
-            Some(&font_ref),
-            font_size,
-            metrics.ascent,
-            metrics.descent.abs(),
-          ),
-        });
-        QueryStatus::Stop
-      });
-
-      result
+      PrimaryFontMetrics {
+        ascent: metrics.ascent.round(),
+        descent: metrics.descent.abs().round(),
+        line_gap: metrics.leading.round(),
+        x_height: metrics.x_height,
+        exact: ExactFontMetrics {
+          ascent: metrics.ascent,
+          descent: metrics.descent.abs(),
+          line_gap: metrics.leading,
+        },
+        underline: metrics.underline.map(|underline| FontUnderline {
+          position: -underline.offset,
+          thickness: underline.thickness,
+        }),
+        em_descent: em_box_descent(
+          Some(font_ref),
+          font_size,
+          metrics.ascent,
+          metrics.descent.abs(),
+        ),
+      }
     })
   }
 
-  /// Builds an inline layout with the given root style.
+  /// Reads the primary font [`Self::first_font_metrics`] measures.
+  pub(crate) fn with_primary_font<'a, R>(
+    &self,
+    families: impl IntoIterator<Item = QueryFamily<'a>>,
+    attributes: Attributes,
+    read: impl FnOnce(&FontRef) -> R,
+  ) -> Option<R> {
+    let mut read = Some(read);
+    let mut result = None;
+
+    self.match_fonts(families, attributes, |font, space_outside_range| {
+      let Ok(font_ref) = FontRef::from_index(font.blob.data(), font.index) else {
+        return QueryStatus::Continue;
+      };
+      if space_outside_range {
+        return QueryStatus::Continue;
+      }
+
+      result = read.take().map(|read| read(&font_ref));
+      QueryStatus::Stop
+    });
+
+    result
+  }
+
+  /// The fonts `families`/`attributes` match, in the order text falls back through them.
+  pub(crate) fn fallback_fonts<'a>(
+    &self,
+    families: impl IntoIterator<Item = QueryFamily<'a>>,
+    attributes: Attributes,
+  ) -> Vec<(Blob<u8>, u32)> {
+    let mut fonts = Vec::new();
+
+    self.match_fonts(families, attributes, |font, _| {
+      fonts.push((font.blob.clone(), font.index));
+      QueryStatus::Continue
+    });
+
+    fonts
+  }
+
+  /// Visits the fonts `families`/`attributes` match, in the order text falls back through them,
+  /// with whether each one's `unicode-range` leaves out the space, until `visit` stops.
+  fn match_fonts<'a>(
+    &self,
+    families: impl IntoIterator<Item = QueryFamily<'a>>,
+    attributes: Attributes,
+    mut visit: impl FnMut(&QueryFont, bool) -> QueryStatus,
+  ) {
+    self.fonts().with_context(|fonts| {
+      let space_outside_range = fonts.space_outside_range.clone();
+      let mut query = fonts.inner.collection.query(&mut fonts.inner.source_cache);
+
+      query.set_families(families);
+      // Past the listed families, Blink takes the default font; text without a listed family
+      // shapes with the fallback bucket, which carries one family order for every script.
+      query.set_fallbacks(FallbackKey::new(Script::from_bytes(*b"Latn"), None));
+      query.set_attributes(attributes);
+      query.matches_with(|font| visit(font, space_outside_range.contains(&font.blob.id())));
+    });
+  }
+
+  /// Builds an inline layout whose paragraph takes `root_style` and its direction.
   pub(crate) fn tree_builder(
     &self,
-    root_style: TextStyle<'_, '_, InlineBrush>,
+    root_style: &SizedFontStyle,
     chromium_line_breaks: bool,
     func: impl FnOnce(&mut TreeBuilder<'_, InlineBrush>),
   ) -> (InlineLayout, String) {
+    let base_direction = match root_style.parent.inherited_data.direction {
+      Direction::Ltr => BaseDirection::Ltr,
+      Direction::Rtl => BaseDirection::Rtl,
+    };
+
     self.fonts().with_context(|fonts| {
       with_layout_context(|layout| {
-        let mut builder = layout.tree_builder(&mut fonts.inner, 1.0, true, &root_style);
+        // Line boxes resolve their vertical metrics in `LayoutUnit`s, as Blink's do; parley's
+        // pixel rounding would open gaps between lines that read as clearance.
+        let mut builder = layout.tree_builder(&mut fonts.inner, 1.0, false, &root_style.into());
+
+        builder.set_base_direction(base_direction);
         if chromium_line_breaks {
-          builder.set_line_break_override(Some(LINE_BREAK_OVERRIDE));
+          builder.set_line_break_override(Some(CHROMIUM_LINE_BREAK_OVERRIDE));
         }
         func(&mut builder);
         builder.build()
@@ -1108,10 +1167,7 @@ pub struct FontResource<'a> {
   source: FontSource<'a>,
   info_override: Option<FontOverride>,
   generic_family: Option<GenericFamily>,
-  /// Logical family this font is a coverage subset of (see [`FontResource::subset_of`]).
-  subset_of: Option<String>,
-  /// Where this subset sits in its group's fallback order (see [`FontResource::subset_rank`]).
-  subset_rank: u32,
+  unicode_range: UnicodeRangeSet,
   /// Sorts after every normal family in default fallback selection (see
   /// [`FontResource::last_resort`]).
   last_resort: bool,
@@ -1124,8 +1180,7 @@ impl<'a> FontResource<'a> {
       source: source.into(),
       info_override: None,
       generic_family: None,
-      subset_of: None,
-      subset_rank: 0,
+      unicode_range: UnicodeRangeSet::default(),
       last_resort: false,
     }
   }
@@ -1146,20 +1201,31 @@ impl<'a> FontResource<'a> {
     }
   }
 
-  /// Marks this font as a coverage subset of the logical family `logical`.
-  pub fn subset_of(self, logical: impl Into<String>) -> Self {
+  /// Limits the codepoints this font serves, as `@font-face` `unicode-range` does.
+  pub fn unicode_range(self, unicode_range: UnicodeRangeSet) -> Self {
     Self {
-      subset_of: Some(logical.into()),
+      unicode_range,
       ..self
     }
   }
 
-  /// Sets where this subset sits in its group's fallback order.
-  pub fn subset_rank(self, rank: u32) -> Self {
+  /// Registers the font under the family `logical`.
+  #[deprecated(note = "register every subset under its family name with `unicode_range` instead")]
+  pub fn subset_of(self, logical: impl Into<Arc<str>>) -> Self {
+    let mut info_override = self.info_override.unwrap_or_default();
+
+    info_override.family_name = Some(logical.into());
+
     Self {
-      subset_rank: rank,
+      info_override: Some(info_override),
       ..self
     }
+  }
+
+  /// Does nothing; `unicode_range` decides which subset serves a codepoint.
+  #[deprecated(note = "use `unicode_range` instead")]
+  pub fn subset_rank(self, _rank: u32) -> Self {
+    self
   }
 
   /// Sorts this font's families after every normal family in default fallback selection, so they
@@ -1178,35 +1244,13 @@ impl<'a> FontResource<'a> {
   }
 }
 
-/// Chromium's line breaks, leaving a mandatory break to parley, which in 0.11.1 lets the soft
-/// opportunity after a space hide a newline that follows it.
-// TODO: drop once a parley release carries linebender/parley#781.
-static LINE_BREAK_OVERRIDE: &LineBreakOverrideFn =
-  &(line_break_override as fn(LineBreakContext) -> Option<bool>);
-
-fn line_break_override(context: LineBreakContext) -> Option<bool> {
-  if is_mandatory_break(context.after) {
-    return None;
-  }
-
-  CHROMIUM_LINE_BREAK_OVERRIDE(context)
-}
-
-/// UAX #14's mandatory break classes: BK, CR, LF and NL.
-fn is_mandatory_break(character: char) -> bool {
-  matches!(
-    character,
-    '\n' | '\r' | '\u{0B}' | '\u{0C}' | '\u{85}' | '\u{2028}' | '\u{2029}'
-  )
-}
-
 #[cfg(test)]
 #[allow(clippy::panic, clippy::unwrap_used)]
 mod tests {
   use std::{fs::File, io::Read, path::Path};
 
   use super::*;
-  use crate::style::FromCssStr;
+  use crate::{resources::unicode_range::UnicodeRange, style::FromCssStr};
 
   fn read_font_asset(relative: &str) -> Vec<u8> {
     let path = Path::new(env!("CARGO_MANIFEST_DIR")).join(relative);
@@ -1398,76 +1442,29 @@ mod tests {
   }
 
   #[test]
-  fn subset_of_groups_multiple_families_under_logical_name() {
+  fn ranged_subsets_join_one_family() {
     let mut fonts = Fonts::default();
-    fonts
-      .register(
-        FontResource::new(geist_bytes())
-          .override_info(FontOverride {
-            family_name: Some("Subset A".into()),
-            ..Default::default()
-          })
-          .subset_of("Logical"),
-      )
-      .unwrap();
-    fonts
-      .register(
-        FontResource::new(geist_mono_bytes())
-          .override_info(FontOverride {
-            family_name: Some("Subset B".into()),
-            ..Default::default()
-          })
-          .subset_of("Logical"),
-      )
-      .unwrap();
 
-    let subsets = fonts.groups.get("Logical").expect("logical group present");
-    assert_eq!(
-      subsets,
-      &BTreeSet::from([
-        (0, 0, "Subset A".to_string()),
-        (0, 1, "Subset B".to_string())
-      ])
-    );
+    for (bytes, range) in [
+      (geist_bytes(), UnicodeRange::new(0x41, 0x5A)),
+      (geist_mono_bytes(), UnicodeRange::new(0x61, 0x7A)),
+    ] {
+      let families = fonts
+        .register(
+          FontResource::new(bytes)
+            .override_info(FontOverride {
+              family_name: Some("Logical".into()),
+              ..Default::default()
+            })
+            .unicode_range(UnicodeRangeSet::from_iter([range])),
+        )
+        .unwrap();
 
-    let snapshot =
-      fonts.snapshot_with_fallbacks(Some(&FontFamily::from_css_str("Logical").unwrap()));
-    assert_eq!(snapshot.groups.get("Logical"), Some(subsets));
-  }
+      assert_eq!(families[0].name, "Logical");
+    }
 
-  /// The rank a subset declares outranks its family name, so a group whose coverage order runs
-  /// against the alphabet still resolves shared codepoints to the intended subset.
-  #[test]
-  fn subset_rank_orders_the_group_ahead_of_the_family_name() {
-    let mut fonts = Fonts::default();
-    fonts
-      .register(
-        FontResource::new(geist_bytes())
-          .override_info(FontOverride {
-            family_name: Some("Subset A".into()),
-            ..Default::default()
-          })
-          .subset_of("Logical")
-          .subset_rank(1),
-      )
-      .unwrap();
-    fonts
-      .register(
-        FontResource::new(geist_mono_bytes())
-          .override_info(FontOverride {
-            family_name: Some("Subset B".into()),
-            ..Default::default()
-          })
-          .subset_of("Logical")
-          .subset_rank(0),
-      )
-      .unwrap();
-
-    let subsets = fonts.groups.get("Logical").expect("logical group present");
-    assert_eq!(
-      subsets.iter().map(|(_, _, name)| name).collect::<Vec<_>>(),
-      ["Subset B", "Subset A"]
-    );
+    assert_eq!(fonts.order, vec!["Logical".to_string()]);
+    assert_eq!(fonts.space_outside_range.len(), 2);
   }
 
   #[test]

@@ -103,9 +103,9 @@
     <use href="#g8" x="526.07" y="81"/>
     <use href="#g9" x="537.45" y="81"/>
   </g>
-  <rect x="8" y="245" width="241" height="49" fill="#ffedd5"/>
+  <rect x="14" y="245" width="235" height="49" fill="#ffedd5"/>
   <rect x="243" y="245" width="6" height="49" fill="#9333ea"/>
-  <rect x="8" y="245" width="3" height="49" fill="#ea580c"/>
+  <rect x="14" y="245" width="3" height="49" fill="#ea580c"/>
   <rect x="128" y="281" width="172" height="49" fill="#ffedd5"/>
   <rect x="294" y="281" width="6" height="49" fill="#9333ea"/>
   <rect x="128" y="281" width="3" height="49" fill="#ea580c"/>

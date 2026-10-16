@@ -72,6 +72,26 @@ const TEST_FONTS: &[(&str, &str, GenericFamily)] = &[
     "Poppins Bold",
     GenericFamily::SANS_SERIF,
   ),
+  (
+    "assets/fonts/manrope/manrope-latin-wght-normal.woff2",
+    "Manrope",
+    GenericFamily::SANS_SERIF,
+  ),
+  (
+    "assets/fonts/inter/inter-latin-opsz-wght-normal.woff2",
+    "Inter",
+    GenericFamily::SANS_SERIF,
+  ),
+  (
+    "assets/fonts/eb-garamond/EBGaramondCaps.woff2",
+    "EB Garamond Caps",
+    GenericFamily::SERIF,
+  ),
+  (
+    "assets/fonts/eb-garamond/EBGaramondCapsLatn.woff2",
+    "EB Garamond Caps Latn",
+    GenericFamily::SERIF,
+  ),
 ];
 
 const IMAGES: &[&str] = &[

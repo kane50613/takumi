@@ -75,7 +75,7 @@ export function StepReplayView({ scene }: { scene: PaintScene }) {
       <div className="grid md:grid-cols-[minmax(0,1fr)_16rem]">
         <Stage>
           <Canvas scene={scene} label="The example card, drawn up to the selected step">
-            {sceneSteps(scene, shown, ids, 0)}
+            {sceneSteps(scene, shown, ids, { className: "paint-in", stagger: 0 })}
             {quad && (
               <polygon
                 key={shown}

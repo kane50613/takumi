@@ -184,14 +184,14 @@ pub struct HangingWhitespace {
 }
 
 impl HangingWhitespace {
-  /// The whitespace of a run of `advance` that the line's end holds `share` of, in a paragraph
-  /// that is right-to-left when `rtl_paragraph`.
-  pub(super) fn of(share: f32, run_rtl: bool, rtl_paragraph: bool) -> Self {
+  /// The whitespace of a run that the line's end holds `share` of, in a paragraph that is
+  /// right-to-left when `rtl_paragraph`, on a line that took `fraction` of its free space.
+  pub(super) fn of(share: f32, run_rtl: bool, rtl_paragraph: bool, fraction: f32) -> Self {
     Self {
       advance: share,
       shift: match (rtl_paragraph, run_rtl) {
-        (true, false) => share,
-        (false, true) => -share,
+        (true, false) => share * fraction,
+        (false, true) => -share * (1.0 - fraction),
         _ => 0.0,
       },
       at_start: run_rtl,
@@ -211,7 +211,7 @@ impl ShapedRun {
     cluster_ranges: Vec<Range<usize>>,
   ) -> Self {
     let run = glyph_run.run();
-    let metrics = run.metrics();
+    let metrics = run.font_metrics();
     let synthesis = run_synthesis(glyph_run);
     // The run's leaded box: the font height plus the line-height leading.
     let (above, below) =
@@ -352,6 +352,8 @@ pub struct PositionedInlineRun {
   pub(crate) decoration_placement: DecorationPlacement,
   /// Where the block's border box sits in the space paint snaps to pixels in.
   pub(crate) paint_offset: Point<f32>,
+  /// How far `position: relative` on its spans moves it.
+  pub(crate) relative_offset: Point<f32>,
   /// Where the run sits among its block's runs.
   #[cfg(feature = "paint-tree")]
   pub(crate) index: usize,
@@ -372,25 +374,32 @@ impl PositionedInlineRun {
       &self.decoration_placement,
       self.baseline_shift,
       DecorationSpace {
-        transform: base,
+        transform: base * Affine::translation(self.relative_offset.x, self.relative_offset.y),
         device,
-        paint_offset: self.paint_offset,
+        paint_offset: self.paint_offset + self.relative_offset,
       },
     )
   }
 
   /// The run's affine transform composed onto `base` (the element transform for raster, identity
-  /// for vector emission).
+  /// for vector emission). `text-fit` scales the line about the run's unmoved place, so the
+  /// relative offset [`Self::glyph_offset`] carries moves it unscaled.
   pub fn transform(&self, base: Affine) -> Affine {
-    self.line_scale.transform(base, self.static_inline_prefix)
+    let Point { x, y } = self.relative_offset;
+
+    self
+      .line_scale
+      .transform(base * Affine::translation(x, y), self.static_inline_prefix)
+      * Affine::translation(-x, -y)
   }
 
-  /// Per-glyph inline-offset origin (border/padding box top-left + baseline shift).
+  /// Per-glyph inline-offset origin (border/padding box top-left + baseline shift + relative
+  /// offset).
   pub fn glyph_offset(&self, layout: ComputedLayout) -> Point<f32> {
     let offset = layout.content_box_offset();
     Point {
-      x: offset.x,
-      y: offset.y + self.baseline_shift,
+      x: offset.x + self.relative_offset.x,
+      y: offset.y + self.baseline_shift + self.relative_offset.y,
     }
   }
 
@@ -494,7 +503,7 @@ impl<'c> BuiltInlineLayout<'c> {
 impl<'c> BuiltInlineLayout<'c> {
   /// An accumulator for the spans' line fragments, which knows the edges cloning spans repeat.
   pub(super) fn decoration_coverage(&self) -> DecorationAccumulator<'c> {
-    DecorationAccumulator::new(ClonedLines::of(&self.spans, &self.layout))
+    DecorationAccumulator::new(ClonedLines::of(&self.spans, &self.layout), self.line_space)
   }
 
   /// The padding box of each inline span that contains out-of-flow boxes, relative to `layout`'s
@@ -551,7 +560,7 @@ impl<'c> BuiltInlineLayout<'c> {
             0.0
           };
         let width = glyph_run.advance() + stretch.advance - hanging.advance;
-        let metrics = glyph_run.run().metrics();
+        let metrics = glyph_run.run().font_metrics();
         // The font's text height, without the line-height leading, like the inline box fragment
         // `InlineBoxState::ComputeTextMetrics` sizes.
         let text = FontHeight::text(metrics.ascent, metrics.descent, setup.fit.text_scale(false));

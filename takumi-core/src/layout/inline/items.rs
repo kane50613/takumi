@@ -75,6 +75,61 @@ pub struct InlineBoxItem<'c> {
   pub(crate) vertical_align: ResolvedVerticalAlign,
 }
 
+/// The space lines lay out in, which `position: relative` insets resolve against, after Blink's
+/// `ConstraintSpace`.
+#[derive(Clone, Copy)]
+pub(crate) struct LineSpace {
+  direction: Direction,
+  /// The lines' available width, `None` when indefinite.
+  inline_size: Option<f32>,
+  /// The height they lay out in, `None` when it depends on them.
+  block_size: Option<f32>,
+}
+
+impl LineSpace {
+  /// The space lines break at `max_width` in for the formatting context `context` styles.
+  pub(crate) fn of(context: &RenderContext, max_width: f32) -> Self {
+    Self {
+      direction: context.style.inherited_data.direction,
+      inline_size: max_width.is_finite().then_some(max_width),
+      block_size: context.definite_height(),
+    }
+  }
+
+  /// Blink's `ComputeRelativeOffsetForInline`: how far `position: relative` moves the
+  /// inline-level `node` on these lines, its start inset winning when both horizontal ones are
+  /// set. A percentage inset against an indefinite size counts as `auto`.
+  /// <https://source.chromium.org/chromium/chromium/src/+/main:third_party/blink/renderer/core/layout/relative_utils.cc>
+  pub(crate) fn relative_offset(self, node: &RenderNode) -> Point<f32> {
+    let style = &node.context.style;
+
+    if style.base_data.position != Position::Relative {
+      return Point::ZERO;
+    }
+
+    let inset = |length: Length, basis: Option<f32>| match (length, basis) {
+      (Length::Auto, _) => None,
+      (length, None) if length.has_percentage() => None,
+      (length, basis) => Some(length.to_px(&node.context.sizing, basis.unwrap_or(0.0))),
+    };
+    let surround = &style.surround_data;
+    let (left, right) = (
+      inset(surround.left, self.inline_size),
+      inset(surround.right, self.inline_size),
+    );
+    let x = match (left, right, self.direction) {
+      (Some(left), _, Direction::Ltr) | (Some(left), None, Direction::Rtl) => left,
+      (_, Some(right), _) => -right,
+      (None, None, _) => 0.0,
+    };
+    let y = inset(surround.top, self.block_size)
+      .or_else(|| inset(surround.bottom, self.block_size).map(|bottom| -bottom))
+      .unwrap_or(0.0);
+
+    Point { x, y }
+  }
+}
+
 impl RenderNode {
   /// Whether a float sits among the inline content this node lays out, found the way
   /// [`collect_inline_items`] walks it.
@@ -205,6 +260,27 @@ impl<'c> ProcessedInlineSpan<'c> {
       _ => None,
     }
   }
+
+  /// The spans around this one, innermost first.
+  pub(crate) fn chain(&self) -> Option<&Rc<DecorationLink<'c>>> {
+    match self {
+      Self::Text { decorations, .. } | Self::Spacer { decorations, .. } => decorations.as_ref(),
+      Self::Box(item) => item.decorations.as_ref(),
+      Self::DirectionMark { .. } => None,
+    }
+  }
+
+  /// How far `position: relative` on it and the spans around it moves it on lines of `space`.
+  pub(crate) fn relative_offset(&self, space: LineSpace) -> Point<f32> {
+    let spans = self
+      .chain()
+      .map_or(Point::ZERO, |link| link.relative_offset(space));
+
+    match self {
+      Self::Box(item) => spans + space.relative_offset(item.render_node),
+      _ => spans,
+    }
+  }
 }
 
 /// The inline box a `display: inline` span opens: what its line fragments paint and how far it
@@ -273,6 +349,14 @@ impl<'c> DecorationLink<'c> {
   /// This span and the spans around it, innermost first.
   pub(crate) fn ancestors(&self) -> impl Iterator<Item = &DecorationLink<'c>> {
     successors(Some(self), |link| link.parent.as_deref())
+  }
+
+  /// How far `position: relative` on this span and the spans around it moves its content on
+  /// lines of `space`.
+  pub(crate) fn relative_offset(&self, space: LineSpace) -> Point<f32> {
+    self.ancestors().fold(Point::ZERO, |offset, link| {
+      offset + space.relative_offset(link.decoration.owner)
+    })
   }
 }
 

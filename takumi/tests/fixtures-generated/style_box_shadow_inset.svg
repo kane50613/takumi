@@ -5,7 +5,7 @@
     <path d="M16 0h88c8.84 0 16 7.16 16 16v48c0 8.84-7.16 16-16 16h-88c-8.84 0-16-7.16-16-16v-48c0-8.84 7.16-16 16-16Z"/>
   </clipPath>
   <g clip-path="url(#cp0)">
-    <filter id="bl1">
+    <filter id="bl1" filterUnits="userSpaceOnUse" x="-27" y="-27" width="1254" height="684">
       <feGaussianBlur stdDeviation="9"/>
     </filter>
     <g filter="url(#bl1)">

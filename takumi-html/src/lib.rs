@@ -15,6 +15,7 @@
 
 use std::{
   borrow::Cow,
+  cell::RefCell,
   collections::{BTreeMap, HashMap},
   str::FromStr,
   sync::LazyLock,
@@ -269,6 +270,7 @@ pub fn from_html(source: &str, options: FromHtmlOptions) -> Result<Node, HtmlErr
     presets: &options.presets,
     tw_property: options.tailwind_property.as_deref().unwrap_or("tw"),
     max_depth: options.max_depth,
+    styles: RefCell::default(),
   };
   let mut nodes = Vec::new();
 
@@ -378,6 +380,8 @@ struct NodeBuilder<'a> {
   presets: &'a StylePresets,
   tw_property: &'a str,
   max_depth: usize,
+  /// Parsed `style` attributes, by source text.
+  styles: RefCell<HashMap<Box<str>, Style>>,
 }
 
 impl NodeBuilder<'_> {
@@ -494,7 +498,7 @@ impl NodeBuilder<'_> {
             node = node.with_dir(dir);
           }
         }
-        "style" => node = node.with_style(Style::from(StyleDeclarationBlock::parse_loosy(value))),
+        "style" => node = node.with_style(self.style(value)),
         // Consumed into `ImageData`; re-emitted by serialization, so keep them out
         // of the passthrough attributes to avoid duplicating on round-trip.
         "src" if tag == "img" => {}
@@ -512,6 +516,18 @@ impl NodeBuilder<'_> {
     }
 
     node
+  }
+
+  /// The style a `style` attribute of `css` sets.
+  fn style(&self, css: &str) -> Style {
+    if let Some(style) = self.styles.borrow().get(css) {
+      return style.clone();
+    }
+
+    let style = Style::from(StyleDeclarationBlock::parse_loosy(css));
+
+    self.styles.borrow_mut().insert(css.into(), style.clone());
+    style
   }
 }
 
@@ -715,6 +731,25 @@ mod tests {
     };
     assert_eq!(children.len(), 2);
     assert!(node.to_html().contains("100%"));
+  }
+
+  #[test]
+  fn a_repeated_inline_style_parses_like_the_first() {
+    let node =
+      parse(r#"<p style="color:red">a</p><p style="color:red">b</p><p style="color:blue">c</p>"#);
+    let NodeKind::Container { children } = &node.kind else {
+      panic!("expected container");
+    };
+    let alone = |source: &str| format!("{:?}", parse(source));
+
+    assert_eq!(
+      format!("{:?}", children[1]),
+      alone(r#"<p style="color:red">b</p>"#)
+    );
+    assert_eq!(
+      format!("{:?}", children[2]),
+      alone(r#"<p style="color:blue">c</p>"#)
+    );
   }
 
   #[test]

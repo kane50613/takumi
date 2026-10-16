@@ -6,13 +6,15 @@ use takumi_core::{
   geometry::{ComputedLayout as Layout, Point, Size, transformed_rect_extents},
   paint_property::ClipNode,
   painter::{BoxPainter, FillShape},
+  resources::glyph_cache::{glyph_mask, max_entry_bytes},
   scene::SceneBounds,
 };
 use tiny_skia::{IntSize, Mask as TinyMask, Transform as TinyTransform};
+use xxhash_rust::xxh3::Xxh3;
 
 use crate::{
   BoxMask, Command, Fill, Placement, RenderContext, Result, Style, build_path, checked_area,
-  create_mask, fast_div_255, placement_overlap, style::Affine,
+  create_mask, mul_div_255, placement_overlap, style::Affine,
 };
 
 pub(crate) enum NodeMaskAction {
@@ -150,7 +152,7 @@ impl NodeMasks {
 
     for mask in masks {
       for (alpha, other) in combined.data_mut().iter_mut().zip(mask.data()) {
-        *alpha = fast_div_255(*alpha as u32 * *other as u32);
+        *alpha = mul_div_255(*alpha, *other);
       }
     }
     Some(combined)
@@ -162,16 +164,48 @@ impl NodeMasks {
   }
 }
 
-/// The region `clip` keeps, as a viewport mask.
-pub(crate) fn clip_node_mask(clip: &ClipNode, viewport: CanvasViewport) -> Option<TinyMask> {
-  let (mask, placement) = render_mask(
-    &clip.shape.to_commands(),
-    Some(clip.transform),
-    Some(Fill::from(clip.shape.rule()).into()),
-    Some(viewport),
-  );
+/// A mask over part of the canvas: `mask`'s pixels from `origin`, in the coordinates of the
+/// viewport origin. Everything outside it is masked out.
+pub(crate) struct PlacedMask {
+  pub(crate) mask: TinyMask,
+  pub(crate) origin: Point<u32>,
+}
 
-  viewport_mask(viewport, mask.into(), placement)
+impl PlacedMask {
+  /// `mask` over the whole of `viewport`.
+  pub(crate) fn covering(viewport: CanvasViewport, mask: TinyMask) -> Self {
+    Self {
+      mask,
+      origin: viewport.origin,
+    }
+  }
+
+  /// The region `clip` keeps, over the pixels it covers alone, or `None` for an empty viewport.
+  pub(crate) fn of_clip(clip: &ClipNode, viewport: CanvasViewport) -> Option<Self> {
+    IntSize::from_wh(viewport.size.width, viewport.size.height)?;
+
+    let (mask, placement) = render_mask(
+      &clip.shape.to_commands(),
+      Some(clip.transform),
+      Some(Fill::from(clip.shape.rule()).into()),
+      Some(viewport),
+    );
+    // The mask is culled to the viewport, so its placement starts inside it.
+    let covered = IntSize::from_wh(placement.width, placement.height)
+      .and_then(|size| TinyMask::from_vec(mask, size));
+
+    Some(match covered {
+      Some(mask) => Self {
+        mask,
+        origin: Point {
+          x: placement.left as u32,
+          y: placement.top as u32,
+        },
+      },
+      // A clip that covers no pixel masks out everything.
+      None => Self::covering(viewport, TinyMask::new(1, 1)?),
+    })
+  }
 }
 
 /// The `clip-path` shape as a viewport mask over the box and its descendants.
@@ -287,7 +321,7 @@ pub(crate) fn intersect_alpha_masks(
     }
 
     for index in 0..width {
-      mask_row[index] = fast_div_255(lhs_row[index] as u32 * rhs_row[index] as u32);
+      mask_row[index] = mul_div_255(lhs_row[index], rhs_row[index]);
     }
   }
 
@@ -316,7 +350,7 @@ pub(crate) fn attenuate_alpha_by_mask(
     }
 
     for (alpha, &mask_alpha) in dst_row.iter_mut().zip(mask_row) {
-      *alpha = fast_div_255(*alpha as u32 * (255 - mask_alpha as u32));
+      *alpha = mul_div_255(*alpha, 255 - mask_alpha);
     }
   }
 }
@@ -454,6 +488,16 @@ fn transformed_mask_point(
   is_contained.then_some(original_point)
 }
 
+/// The alpha channel of RGBA `pixels`, as an 8-bit mask.
+pub(crate) fn alpha_mask(pixels: &[u8]) -> Vec<u8> {
+  pixels
+    .as_chunks::<4>()
+    .0
+    .iter()
+    .map(|pixel| pixel[3])
+    .collect()
+}
+
 /// `cull` bounds the rasterized area for masks the caller only ever reads
 /// through the canvas. Blink clips the same way in `ClipPathClipper::PaintClipPath`
 /// ("we clip by the cull rect here. Visually, this should be a NOP").
@@ -464,6 +508,51 @@ pub(crate) fn render_mask(
   cull: Option<CanvasViewport>,
 ) -> (Vec<u8>, Placement) {
   rasterize_mask(paths, transform, style.unwrap_or_default(), cull).unwrap_or_default()
+}
+
+/// Whether a fill of `size` at `transform` fits the glyph cache: its rasterized bounds, a byte a
+/// pixel, within [`max_entry_bytes`].
+fn fits_glyph_cache(size: Size<f32>, transform: Affine) -> bool {
+  transformed_placement(Point::ZERO, size, transform).is_some_and(|placement| {
+    u64::from(placement.width) * u64::from(placement.height) <= max_entry_bytes()
+  })
+}
+
+/// [`render_mask`] of `paths`, filled at `transform` within `cull`, kept in the glyph cache when
+/// it [fits](fits_glyph_cache) for `size`, the local extent of `paths`: a box drawn the same way
+/// every frame of a live view rasterizes once.
+pub(crate) fn render_cached_mask(
+  paths: &[Command],
+  size: Size<f32>,
+  transform: Affine,
+  cull: CanvasViewport,
+) -> (Arc<Vec<u8>>, Placement) {
+  let render = || render_mask(paths, Some(transform), None, Some(cull));
+
+  if !fits_glyph_cache(size, transform) {
+    let (mask, placement) = render();
+
+    return (Arc::new(mask), placement);
+  }
+
+  let Affine { a, b, c, d, x, y } = transform;
+
+  let mut hasher = Xxh3::new();
+
+  hasher.update(b"filled-shape");
+  hasher.update(&Command::digest(paths).to_le_bytes());
+  for value in [a, b, c, d, x, y] {
+    hasher.update(&value.to_bits().to_le_bytes());
+  }
+  for value in [
+    cull.origin.x,
+    cull.origin.y,
+    cull.size.width,
+    cull.size.height,
+  ] {
+    hasher.update(&value.to_le_bytes());
+  }
+  glyph_mask(hasher.digest(), render)
 }
 
 /// `[left, top, right, bottom]` cut to `cull` once they cover too many pixels to rasterize whole,
@@ -707,7 +796,48 @@ impl<'a> MaskRow<'a> {
 
 #[cfg(test)]
 mod tests {
+  use takumi_core::{
+    layout::border::BorderProperties,
+    style::{Angle, Sides, SpacePair},
+  };
+
   use super::*;
+
+  #[test]
+  fn a_cached_mask_matches_a_fresh_one_and_is_reused() {
+    let mut paths = Vec::new();
+    let border = BorderProperties {
+      radius: Sides([SpacePair { x: 9.5, y: 9.5 }; 4]),
+      ..Default::default()
+    };
+    let size = Size::new(73.0, 41.0);
+
+    border.append_mask_commands(&mut paths, size, Point::ZERO);
+
+    let transform = Affine::translation(11.25, 7.75);
+    let cull = CanvasViewport {
+      origin: Point { x: 0, y: 0 },
+      size: Size::new(200, 100),
+    };
+    let fresh = render_mask(&paths, Some(transform), None, Some(cull));
+    let (first, placement) = render_cached_mask(&paths, size, transform, cull);
+    let (second, _) = render_cached_mask(&paths, size, transform, cull);
+
+    assert_eq!((first.as_slice(), placement), (fresh.0.as_slice(), fresh.1));
+    assert!(Arc::ptr_eq(&first, &second));
+  }
+
+  #[test]
+  fn the_cache_takes_a_fill_by_its_rasterized_bounds() {
+    let strip = Size::new(1_000.0, 1.0);
+    let widest = Size::new(max_entry_bytes() as f32, 1.0);
+
+    assert!(fits_glyph_cache(Size::new(270.0, 70.0), Affine::IDENTITY));
+    assert!(fits_glyph_cache(strip, Affine::IDENTITY));
+    assert!(!fits_glyph_cache(strip, Affine::rotation(Angle::new(45.0))));
+    assert!(fits_glyph_cache(widest, Affine::IDENTITY));
+    assert!(!fits_glyph_cache(widest, Affine::translation(0.5, 0.5)));
+  }
 
   #[test]
   fn a_row_covers_only_the_offsets_inside_the_mask() {
@@ -729,7 +859,7 @@ mod tests {
       return alpha;
     }
 
-    fast_div_255(alpha as u32 * (255 - mask_alpha as u32))
+    mul_div_255(alpha, 255 - mask_alpha)
   }
 
   #[test]
@@ -827,7 +957,7 @@ mod tests {
 
     assert_eq!(dst[0], 255);
     assert_eq!(dst[4], 255);
-    assert_eq!(dst[5], fast_div_255(255 * (255 - 128)));
+    assert_eq!(dst[5], mul_div_255(255, 255 - 128));
     assert_eq!(dst[7], 0);
   }
 

@@ -20,7 +20,6 @@ use skrifa::{
   },
   raw::types::BoundingBox,
 };
-use xxhash_rust::xxh3::Xxh3;
 
 #[cfg(feature = "png")]
 use crate::resources::image_decoder::decode_png;
@@ -305,42 +304,6 @@ pub(crate) fn synthesis_embolden_strength(font_size: f32) -> f32 {
   font_size * skia_fake_bold_factor(font_size)
 }
 
-fn hash_path_commands(paths: &[Command]) -> u64 {
-  let mut h = Xxh3::new();
-  let point = |h: &mut Xxh3, p: &Point<f32>| {
-    h.update(&p.x.to_le_bytes());
-    h.update(&p.y.to_le_bytes());
-  };
-
-  for cmd in paths {
-    match cmd {
-      Command::MoveTo(p) => {
-        h.update(&[0u8]);
-        point(&mut h, p);
-      }
-      Command::LineTo(p) => {
-        h.update(&[1u8]);
-        point(&mut h, p);
-      }
-      Command::QuadTo(p1, p2) => {
-        h.update(&[2u8]);
-        point(&mut h, p1);
-        point(&mut h, p2);
-      }
-      Command::CubicTo(p1, p2, p3) => {
-        h.update(&[3u8]);
-        point(&mut h, p1);
-        point(&mut h, p2);
-        point(&mut h, p3);
-      }
-      Command::Close => {
-        h.update(&[4u8]);
-      }
-    }
-  }
-  h.digest()
-}
-
 /// Draws `glyph` through one type-erased pen: skrifa monomorphizes its whole
 /// CFF/glyf evaluator per pen type, which costs ~100KB of wasm per concrete pen.
 pub fn draw_outline(
@@ -482,7 +445,7 @@ impl<'a> GlyphResolveContext<'a> {
     for layer in &color_layers {
       paths.extend(layer.paths.iter().copied());
     }
-    let cache_signature = hash_path_commands(&paths);
+    let cache_signature = Command::digest(&paths);
 
     Some(ResolvedOutlineGlyph::Color {
       ink: outline_ink(&paths, None),
@@ -498,7 +461,7 @@ impl<'a> GlyphResolveContext<'a> {
     if let Some(skew_degrees) = self.skew {
       transform_commands(&mut paths, skew_degrees);
     }
-    let cache_signature = hash_path_commands(&paths);
+    let cache_signature = Command::digest(&paths);
 
     Some(ResolvedOutlineGlyph::Plain {
       ink: outline_ink(&paths, self.embolden),

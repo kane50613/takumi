@@ -1,5 +1,3 @@
-use std::borrow::Cow;
-
 use cssparser::{BasicParseErrorKind, ParseError, ParseErrorKind};
 use selectors::parser::SelectorParseErrorKind;
 use thiserror::Error;
@@ -7,6 +5,7 @@ use thiserror::Error;
 use crate::{
   keyframes::KeyframePreludeParseError,
   resources::{font::FontError, image::ImageError},
+  style::ValueError,
 };
 
 /// Structured errors raised by the WebP encoding and container assembly paths.
@@ -294,9 +293,9 @@ impl<'i> From<SelectorParseErrorKind<'i>> for StyleSheetParseError {
   }
 }
 
-impl<'i> From<Cow<'i, str>> for StyleSheetParseError {
-  fn from(err: Cow<'i, str>) -> Self {
-    Self::invalid_reason(err.into_owned())
+impl<'i> From<ValueError<'i>> for StyleSheetParseError {
+  fn from(err: ValueError<'i>) -> Self {
+    Self::invalid_reason(err.to_string())
   }
 }
 

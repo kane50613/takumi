@@ -11,7 +11,7 @@ use super::{
   DrawTarget, MASK_RUN, MaskSamplingOptions, MaskView, OverlayOptions, PaintSource,
   SamplingOptions, composite,
   composite::PixelSampler,
-  mask::MaskRow,
+  mask::{MaskRow, render_cached_mask},
   paint_source::{RowSource, ScaledRows},
   skia::{
     FillColorOptions, ImagePathFillOptions, try_draw_image_with_tiny_skia,
@@ -21,7 +21,6 @@ use super::{
 use crate::{
   Placement,
   blend::*,
-  render_mask,
   resources::image_buffer::premultiply_pixel,
   style::{Affine, BlendMode, ImageScalingAlgorithm},
 };
@@ -223,9 +222,7 @@ pub(super) fn blit_rows(
     let dst = &mut pixels[dst_start..dst_start + row.len()];
 
     let Some(mask_row) = mask_row else {
-      for (dst, &src) in dst.iter_mut().zip(&row) {
-        blend_premultiplied_pixel(dst, src, mode);
-      }
+      blend_row(dst, &row, mode);
       continue;
     };
     let (first, alphas) = mask_row.covered(row.len());
@@ -238,11 +235,7 @@ pub(super) fn blit_rows(
     for ((dst, row), alphas) in dst_runs.iter_mut().zip(row_runs).zip(alpha_runs) {
       match u64::from_ne_bytes(*alphas) {
         0 => {}
-        u64::MAX => {
-          for (dst, &src) in dst.iter_mut().zip(row) {
-            blend_premultiplied_pixel(dst, src, mode);
-          }
-        }
+        u64::MAX => blend_row(dst, row, mode),
         _ => blend_masked(dst, row, alphas, mode),
       }
     }
@@ -251,10 +244,45 @@ pub(super) fn blit_rows(
 }
 
 fn blend_masked(dst: &mut [[u8; 4]], row: &[[u8; 4]], alphas: &[u8], mode: BlendMode) {
+  if mode == BlendMode::Normal {
+    composite_run_over(
+      dst,
+      row
+        .iter()
+        .zip(alphas)
+        .map(|(&src, &alpha)| scale_premultiplied_pixel(src, alpha)),
+    );
+    return;
+  }
+
   for ((dst, &src), &alpha) in dst.iter_mut().zip(row).zip(alphas) {
     if src[3] != 0 && alpha != 0 {
       blend_premultiplied_pixel(dst, scale_premultiplied_pixel(src, alpha), mode);
     }
+  }
+}
+
+/// `sources` over `dst`, at most a [`MASK_RUN`] long, gathered first so the compositing
+/// vectorizes.
+#[inline(always)]
+pub(super) fn composite_run_over(dst: &mut [[u8; 4]], sources: impl Iterator<Item = [u8; 4]>) {
+  let mut run = [[0; 4]; MASK_RUN];
+
+  for (slot, source) in run.iter_mut().zip(sources) {
+    *slot = source;
+  }
+  composite_premultiplied_over_row(dst, &run[..dst.len()]);
+}
+
+/// `row` over `dst` in `mode`, the row compositor's vectorized source-over in normal mode.
+fn blend_row(dst: &mut [[u8; 4]], row: &[[u8; 4]], mode: BlendMode) {
+  if mode == BlendMode::Normal {
+    composite_premultiplied_over_row(dst, row);
+    return;
+  }
+
+  for (dst, &src) in dst.iter_mut().zip(row) {
+    blend_premultiplied_pixel(dst, src, mode);
   }
 }
 
@@ -546,11 +574,11 @@ fn composite_bordered_source(
     .border
     .append_mask_commands(&mut paths, size.map(|v| v as f32), Point::ZERO);
 
-  let (mask, placement) = render_mask(
+  let (mask, placement) = render_cached_mask(
     &paths,
-    Some(options.transform),
-    None,
-    Some(target.viewport()),
+    size.map(|v| v as f32),
+    options.transform,
+    target.viewport(),
   );
   let canvas_to_source =
     if options.transform.is_identity() && placement.left >= 0 && placement.top >= 0 {
@@ -641,9 +669,83 @@ mod tests {
 
   use super::*;
   use crate::{
-    BorderProperties, Canvas, PaintSource, Result, pixmap_from_buffer,
+    BorderProperties, Canvas, PaintSource, PlacedMask, Result, pixmap_from_buffer,
     resources::image_buffer::ImageBuffer, style::ImageScalingAlgorithm,
   };
+
+  /// Bytes from a fixed hash of `index`, so every run sees the same noise.
+  fn noise(index: usize, salt: u32) -> u8 {
+    ((index as u32 ^ salt).wrapping_mul(2_654_435_761) >> 13) as u8
+  }
+
+  #[test]
+  fn normal_rows_match_the_pixel_path() {
+    let canvas = Size::new(29, 13);
+    let clip = TinyMask::from_vec(
+      (0..24 * 11)
+        .map(|index| match noise(index / 12, 1) % 3 {
+          0 => 0,
+          1 => u8::MAX,
+          _ => noise(index, 2),
+        })
+        .collect(),
+      tiny_skia::IntSize::from_wh(24, 11).unwrap(),
+    )
+    .unwrap();
+    let view = MaskView {
+      mask: &clip,
+      origin: Point { x: 1, y: 0 },
+      canvas_origin: Point { x: 0, y: 0 },
+    };
+    // Sources and destinations both include transparent pixels that keep colour.
+    let pixel = |index: usize, salt: u32| {
+      let [red, green, blue, alpha] = [0, 1, 2, 3].map(|lane| noise(index * 4 + lane, salt));
+
+      [
+        red,
+        green,
+        blue,
+        if index.is_multiple_of(6) { 0 } else { alpha },
+      ]
+    };
+    let bounds = OverlayBounds::new(canvas, Point { x: -2.0, y: 1.0 }, Size::new(27, 14)).unwrap();
+    let start: Vec<[u8; 4]> = (0..29 * 13).map(|index| pixel(index, 3)).collect();
+    let fill = |y: u32, row: &mut [[u8; 4]]| {
+      for (x, src) in row.iter_mut().enumerate() {
+        *src = pixel(y as usize * 31 + x, 4);
+      }
+    };
+
+    for clip in [None, Some(view)] {
+      let mut actual = start.clone();
+      let mut expected = start.clone();
+
+      blit_rows(
+        &mut actual,
+        canvas.width,
+        bounds,
+        BlendMode::Normal,
+        clip,
+        fill,
+      );
+      for dest_y in bounds.y_min..bounds.y_max {
+        let mut row = vec![[0; 4]; (bounds.x_max - bounds.x_min) as usize];
+
+        fill((dest_y - bounds.offset_y) as u32, &mut row);
+        for (offset, &src) in row.iter().enumerate() {
+          let dst = &mut expected[dest_y as usize * 29 + bounds.x_min as usize + offset];
+          let alpha = clip.map_or(u8::MAX, |view| {
+            view.row(dest_y, bounds.x_min).alpha_at_offset(offset)
+          });
+
+          if src[3] != 0 && alpha != 0 {
+            composite_premultiplied_over(dst, scale_premultiplied_pixel(src, alpha));
+          }
+        }
+      }
+      assert_eq!(actual, expected, "clipped: {}", clip.is_some());
+    }
+  }
 
   /// A pixmap of valid premultiplied pixels, varied by `seed`.
   fn noisy_pixmap(width: u32, height: u32, seed: u32) -> Pixmap {
@@ -840,7 +942,7 @@ mod tests {
 
     let mut parent_mask = TinyMask::new(10, 10).unwrap();
     parent_mask.data_mut()[0..50].fill(255);
-    canvas.push_mask(parent_mask);
+    canvas.push_mask(PlacedMask::covering(canvas.viewport(), parent_mask));
 
     let image_data = [0u8, 255, 0, 255].repeat(16);
     let image_pixmap = PixmapRef::from_bytes(&image_data, 4, 4).unwrap();

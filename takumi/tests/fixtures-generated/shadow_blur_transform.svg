@@ -5,7 +5,7 @@
       <path d="M-1000000-1000000H1000000V1000000H-1000000ZM0 0h60v40h-60v-40Z" clip-rule="evenodd"/>
     </clipPath>
     <g clip-path="url(#cp0)">
-      <filter id="bl1">
+      <filter id="bl1" filterUnits="userSpaceOnUse" x="-22" y="-22" width="264" height="154">
         <feGaussianBlur stdDeviation="4"/>
       </filter>
       <g filter="url(#bl1)">
@@ -24,7 +24,7 @@
       <path d="M0 0h60v40h-60v-40Z"/>
     </clipPath>
     <g clip-path="url(#cp2)">
-      <filter id="bl3">
+      <filter id="bl3" filterUnits="userSpaceOnUse" x="-102" y="-22" width="264" height="154">
         <feGaussianBlur stdDeviation="4"/>
       </filter>
       <g filter="url(#bl3)">
@@ -39,7 +39,7 @@
   <g transform="matrix(1.5 0 0 3 340 20)">
   </g>
   <g transform="matrix(1.5 0 0 3 340 20)">
-    <filter id="bl4">
+    <filter id="bl4" filterUnits="userSpaceOnUse" x="-231.667" y="-11.667" width="330" height="96.667">
       <feGaussianBlur stdDeviation="1.5"/>
     </filter>
     <g filter="url(#bl4)">
@@ -63,7 +63,7 @@
     <path d="M-1000000-1000000H1000000V1000000H-1000000ZM20 150h60v40h-60v-40Z" clip-rule="evenodd"/>
   </clipPath>
   <g clip-path="url(#cp5)">
-    <filter id="bl6">
+    <filter id="bl6" filterUnits="userSpaceOnUse" x="-24" y="-24" width="528" height="308">
       <feGaussianBlur stdDeviation="8"/>
     </filter>
     <g filter="url(#bl6)">
@@ -76,7 +76,7 @@
       <path d="M-1000000-1000000H1000000V1000000H-1000000ZM0 0h60v40h-60v-40Z" clip-rule="evenodd"/>
     </clipPath>
     <g clip-path="url(#cp7)">
-      <filter id="bl8">
+      <filter id="bl8" filterUnits="userSpaceOnUse" x="-162.923" y="-195.603" width="381.795" height="328.111">
         <feGaussianBlur stdDeviation="3"/>
       </filter>
       <g filter="url(#bl8)">

@@ -4,7 +4,7 @@
     <path d="M-1000000-1000000H1000000V1000000H-1000000ZM274 135h652c13.25 0 24 10.75 24 24v312c0 13.25-10.75 24-24 24h-652c-13.25 0-24-10.75-24-24v-312c0-13.25 10.75-24 24-24Z" clip-rule="evenodd"/>
   </clipPath>
   <g clip-path="url(#cp0)">
-    <filter id="bl1">
+    <filter id="bl1" filterUnits="userSpaceOnUse" x="-90" y="-90" width="1380" height="810">
       <feGaussianBlur stdDeviation="30"/>
     </filter>
     <g filter="url(#bl1)">

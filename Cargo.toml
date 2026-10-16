@@ -113,6 +113,11 @@ version = "3"
 default-features = false
 features = ["napi4", "serde-json"]
 
+[workspace.dependencies.icu_normalizer]
+version = "2.3.0"
+default-features = false
+features = ["compiled_data"]
+
 [workspace.dependencies.icu_properties]
 version = "2.3.0"
 default-features = false
@@ -124,7 +129,7 @@ default-features = false
 features = ["std"]
 
 [workspace.dependencies.parley]
-version = "0.11"
+version = "0.12"
 default-features = false
 features = ["std"]
 
@@ -146,7 +151,7 @@ version = "1.16"
 features = ["serde"]
 
 [workspace.dependencies.taffy]
-version = "0.14"
+version = "0.15"
 default-features = false
 features = [
   "flexbox",
@@ -184,6 +189,20 @@ priority = -1
 
 [profile.dev.package."*"]
 opt-level = 2
+
+# The crates that draw pixels, so tests that render hundreds of fixtures run in seconds.
+# takumi-core stays unoptimized: it changes most often, and optimizing it doubles a rebuild.
+[profile.dev.package.takumi]
+opt-level = 1
+
+[profile.dev.package.takumi-raster]
+opt-level = 1
+
+[profile.dev.package.takumi-pdf]
+opt-level = 1
+
+[profile.dev.package.takumi-svg]
+opt-level = 1
 
 [profile.release]
 strip = true
@@ -277,6 +296,10 @@ opt-level = "z"
 [profile.release.package.parley]
 opt-level = "z"
 [profile.release.package.fontique]
+opt-level = "z"
+[profile.release.package.parley_engine]
+opt-level = "z"
+[profile.release.package.parley_emoji]
 opt-level = "z"
 [profile.release.package.kurbo]
 opt-level = "z"

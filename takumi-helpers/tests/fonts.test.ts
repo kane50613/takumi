@@ -39,6 +39,9 @@ const cssFetch = (css: string) =>
 
 const mockInter = () => cssFetch(interCss);
 
+/** The `{family} {subset}` a subset's key starts with. */
+const subsetLabel = (font: { key: string }) => font.key.split(":")[0];
+
 /** The last css2 request a `cssFetch` mock received. */
 const cssRequest = (fetchMock: ReturnType<typeof cssFetch>) => {
   const [url = "", init] = fetchMock.mock.calls.findLast(([url]) => url.includes("/css2")) ?? [];
@@ -76,30 +79,17 @@ describe("googleFonts", () => {
     expect(plain.every((f) => f.generic === undefined)).toBe(true);
   });
 
-  test("gives each coverage subset a distinct name so glyphs can't collide", async () => {
+  test("registers every coverage subset under its family with its own range", async () => {
     const fonts = await googleFonts({ families: ["Inter"], fetch: mockInter() });
 
-    // Same family, three faces — distinct names, each carrying its own range.
-    expect(fonts.map((f) => f.name).sort()).toEqual([
-      "Inter cyrillic",
-      "Inter greek",
-      "Inter latin",
+    expect(fonts.every((f) => f.name === "Inter")).toBe(true);
+    expect(fonts.map(subsetLabel).sort()).toEqual(["Inter cyrillic", "Inter greek", "Inter latin"]);
+    expect(fonts.find((f) => subsetLabel(f) === "Inter latin")?.unicodeRange).toEqual([
+      [0x0, 0xff],
     ]);
-    expect(fonts.every((f) => f.subsetOf === "Inter")).toBe(true);
-    expect(fonts.find((f) => f.name === "Inter latin")!.ranges).toEqual([[0x0, 0xff]]);
   });
 
-  test("ranks each subset by the lowest codepoint it declares", async () => {
-    const fonts = await googleFonts({ families: ["Inter"], fetch: mockInter() });
-    const ranked = [...fonts].sort((a, b) => a.subsetRank - b.subsetRank).map((f) => f.name);
-
-    // Google's Cyrillic and Greek subsets also encode the ASCII space and the Latin
-    // capitals, so `latin` has to be reached first or those codepoints defect to them.
-    expect(ranked[0]).toBe("Inter latin");
-    expect(fonts.find((f) => f.name === "Inter latin")!.subsetRank).toBe(0);
-  });
-
-  test("resolves every weight to a keyed loader under one subsetOf", async () => {
+  test("resolves every weight to a keyed loader under one family", async () => {
     const fetchMock = cssFetch(twoWeightCss);
 
     const fonts = await googleFonts({
@@ -108,7 +98,7 @@ describe("googleFonts", () => {
     });
 
     expect(fonts.map((f) => f.weight).sort()).toEqual([400, 700]);
-    expect(fonts.every((f) => f.subsetOf === "Inter")).toBe(true);
+    expect(fonts.every((f) => f.name === "Inter")).toBe(true);
     // Keys are stable composites of identity, not the woff2 URL, and unique per face.
     expect(new Set(fonts.map((f) => f.key)).size).toBe(2);
     expect(fonts.every((f) => !f.key.includes("gstatic"))).toBe(true);
@@ -400,13 +390,13 @@ describe("subsetFonts", () => {
   test("keeps only the subsets the text renders", async () => {
     const fonts = await googleFonts({ families: ["Inter"], fetch: mockInter() });
 
-    expect(subsetFonts({ fonts, source: "Hi" }).map((f) => f.name)).toEqual(["Inter latin"]);
-    expect(subsetFonts({ fonts, source: "Привет" }).map((f) => f.name)).toEqual(["Inter cyrillic"]);
-    expect(
-      subsetFonts({ fonts, source: "Hi Привет Γειά" })
-        .map((f) => f.name)
-        .sort(),
-    ).toEqual(["Inter cyrillic", "Inter greek", "Inter latin"]);
+    expect(subsetFonts({ fonts, source: "Hi" }).map(subsetLabel)).toEqual(["Inter latin"]);
+    expect(subsetFonts({ fonts, source: "Привет" }).map(subsetLabel)).toEqual(["Inter cyrillic"]);
+    expect(subsetFonts({ fonts, source: "Hi Привет Γειά" }).map(subsetLabel).sort()).toEqual([
+      "Inter cyrillic",
+      "Inter greek",
+      "Inter latin",
+    ]);
   });
 
   test("scans a node tree for codepoints", async () => {
@@ -419,23 +409,59 @@ describe("subsetFonts", () => {
       ],
     };
 
-    expect(
-      subsetFonts({ fonts, source: node })
-        .map((f) => f.name)
-        .sort(),
-    ).toEqual(["Inter greek", "Inter latin"]);
+    expect(subsetFonts({ fonts, source: node }).map(subsetLabel).sort()).toEqual([
+      "Inter greek",
+      "Inter latin",
+    ]);
   });
 
   test("keeps range-less fallbacks (full fonts, text= subsets) regardless of content", () => {
     const fallback = { name: "Local", weight: 400, data: () => Promise.resolve(bytes("x")) };
     const greek = {
-      name: "Inter greek",
-      ranges: [[0x370, 0x3ff]] as [number, number][],
+      name: "Inter",
+      unicodeRange: [[0x370, 0x3ff]] as [number, number][],
       data: () => Promise.resolve(bytes("g")),
     };
 
     // "Hi" is Latin only: the ranged Greek subset drops, the range-less fallback stays.
     expect(subsetFonts({ fonts: [fallback, greek], source: "Hi" })).toEqual([fallback]);
+  });
+
+  test("still reads the deprecated ranges", () => {
+    const greek = { name: "Inter", ranges: [[0x370, 0x3ff]] as [number, number][] };
+
+    expect(subsetFonts({ fonts: [greek], source: "Hi" })).toEqual([]);
+    expect(subsetFonts({ fonts: [greek], source: "Γειά" })).toEqual([greek]);
+  });
+
+  test("keeps the subsets that checking every codepoint against every range keeps", () => {
+    let seed = 1;
+    const random = (limit: number) => {
+      seed = (seed * 1_103_515_245 + 12_345) % 2 ** 31;
+
+      return seed % limit;
+    };
+    const codepoint = () => (random(4) === 0 ? 0x1f000 + random(0x1000) : random(0x3000));
+    const fonts = Array.from({ length: 400 }, (_, index) => ({
+      name: `font ${index}`,
+      unicodeRange: Array.from({ length: random(4) }, (): [number, number] => {
+        const lo = codepoint();
+
+        return [lo, random(5) === 0 ? lo - 1 : lo + random(64)];
+      }),
+    }));
+
+    for (let round = 0; round < 50; round++) {
+      const source = String.fromCodePoint(...Array.from({ length: random(40) }, codepoint));
+      const codepoints = [...source].map((ch) => ch.codePointAt(0) ?? 0);
+      const covering = fonts.filter(
+        ({ unicodeRange }) =>
+          unicodeRange.length === 0 ||
+          codepoints.some((cp) => unicodeRange.some(([lo, hi]) => cp >= lo && cp <= hi)),
+      );
+
+      expect(subsetFonts({ fonts, source })).toEqual(covering);
+    }
   });
 
   test("keeps a bare URL string (no ranges) regardless of content", () => {
@@ -445,16 +471,15 @@ describe("subsetFonts", () => {
   });
 
   test("regression: a multi-subset family can't tofu — covering subset survives, sibling drops", async () => {
-    // The bug: same-named subsets collide so a glyph routes to a file lacking it.
-    // The fix: googleFonts names subsets distinctly + subsetFonts keeps the covering one by range.
+    // The bug: a glyph routes to a subset file lacking it.
+    // The fix: each subset carries its unicode-range + subsetFonts keeps the covering one.
     const fonts = subsetFonts({
       fonts: await googleFonts({ families: ["Inter"], fetch: mockInter() }),
       source: "Hello",
     });
 
-    expect(fonts).toHaveLength(1);
-    expect(fonts[0]!.name).toBe("Inter latin");
-    expect(fonts[0]!.subsetOf).toBe("Inter");
+    expect(fonts.map(subsetLabel)).toEqual(["Inter latin"]);
+    expect(fonts[0]?.unicodeRange).toEqual([[0x0, 0xff]]);
   });
 });
 

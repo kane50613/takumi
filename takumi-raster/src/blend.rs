@@ -1,13 +1,13 @@
+use std::array;
+
 use image::Rgba;
 use tiny_skia::PremultipliedColorU8;
 
-use crate::{
-  fast_div_255, fast_div_255_u32, resources::image_buffer::premultiply_pixel, style::BlendMode,
-};
+use crate::{div_255, mul_div_255, resources::image_buffer::premultiply_pixel, style::BlendMode};
 
 #[inline(always)]
-fn composited_alpha(bottom_alpha: u32, top_alpha: u32) -> u32 {
-  top_alpha + bottom_alpha - fast_div_255_u32(bottom_alpha * top_alpha)
+fn composited_alpha(bottom_alpha: u8, top_alpha: u8) -> u32 {
+  u32::from(top_alpha) + u32::from(bottom_alpha) - u32::from(mul_div_255(bottom_alpha, top_alpha))
 }
 
 #[inline(always)]
@@ -17,12 +17,9 @@ fn blend_plus_lighter(bottom: &mut Rgba<u8>, top: Rgba<u8>) {
     return;
   }
 
-  let top_alpha = top.0[3] as u32;
-  let bottom_alpha = bottom.0[3] as u32;
-
   for i in 0..3 {
-    let top_premul = fast_div_255(top.0[i] as u32 * top_alpha);
-    let bottom_premul = fast_div_255(bottom.0[i] as u32 * bottom_alpha);
+    let top_premul = mul_div_255(top.0[i], top.0[3]);
+    let bottom_premul = mul_div_255(bottom.0[i], bottom.0[3]);
     bottom.0[i] = top_premul.saturating_add(bottom_premul);
   }
 
@@ -50,11 +47,13 @@ pub(crate) fn blend_pixel(bottom: &mut Rgba<u8>, top: Rgba<u8>, mode: BlendMode)
       }
 
       if bottom_alpha == 255 {
-        let alpha = top_alpha as u32;
-        let inverse_alpha = 255 - alpha;
+        let inverse_alpha = 255 - top_alpha;
 
         for i in 0..3 {
-          bottom.0[i] = fast_div_255(top[i] as u32 * alpha + bottom[i] as u32 * inverse_alpha);
+          bottom.0[i] = div_255(
+            u16::from(top[i]) * u16::from(top_alpha)
+              + u16::from(bottom[i]) * u16::from(inverse_alpha),
+          );
         }
       } else {
         blend_normal_partial_transparency(bottom, top);
@@ -87,7 +86,7 @@ fn blend_normal_partial_transparency(bottom: &mut Rgba<u8>, top: Rgba<u8>) {
   let top_alpha = top.0[3] as u32;
   let bottom_alpha = bottom.0[3] as u32;
 
-  let result_alpha = composited_alpha(bottom_alpha, top_alpha);
+  let result_alpha = composited_alpha(bottom.0[3], top.0[3]);
 
   if result_alpha == 0 {
     return;
@@ -110,7 +109,7 @@ fn blend_normal_partial_transparency(bottom: &mut Rgba<u8>, top: Rgba<u8>) {
 fn blend_with_integer(bottom: &mut Rgba<u8>, top: Rgba<u8>, mode: BlendMode) {
   let bottom_alpha = bottom.0[3] as u32;
   let top_alpha = top.0[3] as u32;
-  let result_alpha = composited_alpha(bottom_alpha, top_alpha);
+  let result_alpha = composited_alpha(bottom.0[3], top.0[3]);
 
   if result_alpha == 0 {
     return;
@@ -137,16 +136,16 @@ fn blend_with_integer(bottom: &mut Rgba<u8>, top: Rgba<u8>, mode: BlendMode) {
 #[inline(always)]
 fn blend_channel_integer(mode: BlendMode, bottom: u8, top: u8) -> u8 {
   match mode {
-    BlendMode::Multiply => fast_div_255(top as u32 * bottom as u32),
-    BlendMode::Screen => 255 - fast_div_255((255 - top as u32) * (255 - bottom as u32)),
+    BlendMode::Multiply => mul_div_255(top, bottom),
+    BlendMode::Screen => 255 - mul_div_255(255 - top, 255 - bottom),
     BlendMode::Darken => top.min(bottom),
     BlendMode::Lighten => top.max(bottom),
     BlendMode::ColorDodge => color_dodge_integer(bottom, top),
     BlendMode::ColorBurn => color_burn_integer(bottom, top),
     BlendMode::Difference => top.abs_diff(bottom),
-    BlendMode::Exclusion => (bottom as u32 + top as u32
-      - (2 * fast_div_255_u32(bottom as u32 * top as u32)))
-    .min(255) as u8,
+    BlendMode::Exclusion => {
+      (u32::from(bottom) + u32::from(top) - 2 * u32::from(mul_div_255(bottom, top))).min(255) as u8
+    }
     _ => top,
   }
 }
@@ -435,18 +434,28 @@ pub(crate) fn premultiplied_from_pixel(pixel: PremultipliedColorU8) -> [u8; 4] {
   [pixel.red(), pixel.green(), pixel.blue(), pixel.alpha()]
 }
 
+/// `pixel` scaled by `alpha`, without a branch so a loop over pixels vectorizes.
 #[inline(always)]
 pub(crate) fn scale_premultiplied_pixel(pixel: [u8; 4], alpha: u8) -> [u8; 4] {
-  if alpha == u8::MAX {
-    return pixel;
-  }
+  pixel.map(|channel| mul_div_255(channel, alpha))
+}
 
-  [
-    fast_div_255(pixel[0] as u32 * alpha as u32),
-    fast_div_255(pixel[1] as u32 * alpha as u32),
-    fast_div_255(pixel[2] as u32 * alpha as u32),
-    fast_div_255(pixel[3] as u32 * alpha as u32),
-  ]
+/// [`composite_premultiplied_over`] for each pixel of `src` over `dst`, for every input, with
+/// selects instead of branches so it vectorizes.
+#[inline(always)]
+pub(crate) fn composite_premultiplied_over_row(dst: &mut [[u8; 4]], src: &[[u8; 4]]) {
+  for (dst, &src) in dst.iter_mut().zip(src) {
+    let inverse = u8::MAX - src[3];
+    let over = array::from_fn(|lane| src[lane].saturating_add(mul_div_255(dst[lane], inverse)));
+
+    *dst = if src[3] == 0 {
+      *dst
+    } else if dst[3] == 0 {
+      src
+    } else {
+      over
+    };
+  }
 }
 
 #[inline(always)]
@@ -463,10 +472,10 @@ pub(crate) fn composite_premultiplied_over(dst: &mut [u8; 4], src: [u8; 4]) {
   }
 
   let inverse_alpha = u8::MAX - src_alpha;
-  dst[0] = src[0].saturating_add(fast_div_255(dst[0] as u32 * inverse_alpha as u32));
-  dst[1] = src[1].saturating_add(fast_div_255(dst[1] as u32 * inverse_alpha as u32));
-  dst[2] = src[2].saturating_add(fast_div_255(dst[2] as u32 * inverse_alpha as u32));
-  dst[3] = src_alpha.saturating_add(fast_div_255(dst_alpha as u32 * inverse_alpha as u32));
+  dst[0] = src[0].saturating_add(mul_div_255(dst[0], inverse_alpha));
+  dst[1] = src[1].saturating_add(mul_div_255(dst[1], inverse_alpha));
+  dst[2] = src[2].saturating_add(mul_div_255(dst[2], inverse_alpha));
+  dst[3] = src_alpha.saturating_add(mul_div_255(dst_alpha, inverse_alpha));
 }
 
 #[inline(always)]
@@ -532,32 +541,26 @@ pub(crate) fn blend_premultiplied_pixel_normal(dst: &mut [u8], src: Premultiplie
   }
 
   let inv_src_a = u8::MAX - src_a;
-  dst[0] = src
-    .red()
-    .saturating_add(fast_div_255(dst[0] as u32 * inv_src_a as u32));
-  dst[1] = src
-    .green()
-    .saturating_add(fast_div_255(dst[1] as u32 * inv_src_a as u32));
-  dst[2] = src
-    .blue()
-    .saturating_add(fast_div_255(dst[2] as u32 * inv_src_a as u32));
-  dst[3] = src_a.saturating_add(fast_div_255(dst[3] as u32 * inv_src_a as u32));
+  dst[0] = src.red().saturating_add(mul_div_255(dst[0], inv_src_a));
+  dst[1] = src.green().saturating_add(mul_div_255(dst[1], inv_src_a));
+  dst[2] = src.blue().saturating_add(mul_div_255(dst[2], inv_src_a));
+  dst[3] = src_a.saturating_add(mul_div_255(dst[3], inv_src_a));
 }
 
 pub(crate) fn composite_premultiplied_over_span(dst: &mut [u8], pixels: &[PremultipliedColorU8]) {
   for (dst_pixel, src_pixel) in dst.as_chunks_mut::<4>().0.iter_mut().zip(pixels) {
     let src_a = src_pixel.alpha();
-    let inv_src_a = (u8::MAX - src_a) as u32;
+    let inv_src_a = u8::MAX - src_a;
     dst_pixel[0] = src_pixel
       .red()
-      .saturating_add(fast_div_255(dst_pixel[0] as u32 * inv_src_a));
+      .saturating_add(mul_div_255(dst_pixel[0], inv_src_a));
     dst_pixel[1] = src_pixel
       .green()
-      .saturating_add(fast_div_255(dst_pixel[1] as u32 * inv_src_a));
+      .saturating_add(mul_div_255(dst_pixel[1], inv_src_a));
     dst_pixel[2] = src_pixel
       .blue()
-      .saturating_add(fast_div_255(dst_pixel[2] as u32 * inv_src_a));
-    dst_pixel[3] = src_a.saturating_add(fast_div_255(dst_pixel[3] as u32 * inv_src_a));
+      .saturating_add(mul_div_255(dst_pixel[2], inv_src_a));
+    dst_pixel[3] = src_a.saturating_add(mul_div_255(dst_pixel[3], inv_src_a));
   }
 }
 
@@ -594,7 +597,36 @@ pub(crate) fn composite_repeated_premultiplied_pixel_normal(
 mod tests {
   use image::Rgba;
 
-  use crate::{blend::blend_pixel, style::BlendMode};
+  use crate::{
+    blend::{blend_pixel, composite_premultiplied_over, composite_premultiplied_over_row},
+    style::BlendMode,
+  };
+
+  #[test]
+  fn the_row_compositor_matches_the_pixel_one_for_every_input() {
+    let samples = [0, 1, 2, 77, 128, 200, 254, 255];
+
+    for src_alpha in 0..=u8::MAX {
+      for dst_alpha in 0..=u8::MAX {
+        for &src_red in &samples {
+          for &dst_red in &samples {
+            let src = [src_red, src_alpha / 2, 255, src_alpha];
+            let mut expected = [dst_red, dst_alpha / 3, 0, dst_alpha];
+            let mut actual = [expected];
+
+            composite_premultiplied_over(&mut expected, src);
+            composite_premultiplied_over_row(&mut actual, &[src]);
+            assert_eq!(
+              actual[0],
+              expected,
+              "{src:?} over {:?}",
+              [dst_red, dst_alpha]
+            );
+          }
+        }
+      }
+    }
+  }
 
   // https://github.com/kane50613/takumi/issues/447
   #[test]

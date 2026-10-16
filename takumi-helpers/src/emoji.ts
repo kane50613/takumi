@@ -11,6 +11,8 @@ const EMOJI_PRESENTATION_REGEX = /^\p{Emoji_Presentation}/u;
 const EMOJI_MODIFIER_SEQUENCE_REGEX = /^\p{Emoji_Modifier_Base}\p{Emoji_Modifier}/u;
 const REGIONAL_INDICATOR_REGEX = /^(?:\p{Regional_Indicator}){1,2}$/u;
 const KEYCAP_EMOJI_REGEX = /^[#*0-9]\uFE0F?\u20E3$/u;
+/** A codepoint every segment {@link isEmojiSegment} accepts holds. */
+const EMOJI_CODEPOINT_REGEX = /[\p{Extended_Pictographic}\p{Regional_Indicator}\u20E3]/u;
 
 function getIconCode(char: string) {
   const c = char.includes(ZERO_WIDTH_JOINER) ? char : char.replaceAll(EMOJI_VARIATION_SELECTOR, "");
@@ -98,7 +100,9 @@ function splitTextToNodes(node: TextNode, emojiType: EmojiType): Node[] {
 
 export function extractEmojis(node: Node, emojiType: EmojiType): Node {
   if (node.type === "text") {
-    const hasEmoji = getSegments(node.text).some(({ segment }) => isEmojiSegment(segment));
+    const hasEmoji =
+      EMOJI_CODEPOINT_REGEX.test(node.text) &&
+      getSegments(node.text).some(({ segment }) => isEmojiSegment(segment));
 
     if (hasEmoji) {
       const { type: _, ...metadata } = node;

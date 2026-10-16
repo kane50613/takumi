@@ -29,6 +29,7 @@ mod flex_grow;
 mod font_family;
 mod font_feature_settings;
 mod font_kerning;
+mod font_optical_sizing;
 mod font_size;
 mod font_stretch;
 mod font_style;
@@ -91,8 +92,8 @@ pub use contain::*;
 pub use content::*;
 pub use corner_shape::*;
 use cssparser::{
-  ParseError as CssParseError, ParseErrorKind, Parser, SourceLocation, ToCss as CssParserToCss,
-  Token, match_ignore_ascii_case,
+  ParseError as CssParseError, ParseErrorKind, Parser, SourceLocation, Token,
+  match_ignore_ascii_case,
 };
 pub use filter::{
   BlurType, Filter, FilterCategory, Filters, LUMA_WEIGHTS, SEPIA_WEIGHTS, TransferChannel,
@@ -106,13 +107,14 @@ pub use font_family::*;
 pub(crate) use font_feature_settings::FontFeatureSettings;
 pub use font_feature_settings::{FontFeature, Tag};
 pub use font_kerning::*;
+pub use font_optical_sizing::*;
 pub use font_size::*;
 pub use font_stretch::*;
 pub use font_style::*;
 pub use font_synthesis::*;
 pub use font_variant::*;
 pub use font_variation_settings::FontVariation;
-pub(crate) use font_variation_settings::FontVariationSettings;
+pub(crate) use font_variation_settings::{FontVariationSettings, ResolvedFontVariations};
 pub use font_weight::*;
 pub use gap::*;
 pub use grid::*;
@@ -208,16 +210,17 @@ pub(crate) use unexpected_token;
 #[inline(never)]
 pub(crate) fn build_unexpected_token<'i>(
   location: SourceLocation,
-  token: &Token<'_>,
+  token: &Token<'i>,
   expect: CssExpectedMessage,
   valid_tokens: &'static [&'static str],
-) -> CssParseError<'i, Cow<'i, str>> {
-  let token = CssParserToCss::to_css_string(token);
-  let message = expect.build_message(&token, merge_enum_values(valid_tokens));
-
+) -> CssParseError<'i, ValueError<'i>> {
   CssParseError {
     location,
-    kind: ParseErrorKind::Custom(Cow::Owned(message)),
+    kind: ParseErrorKind::Custom(ValueError::UnexpectedToken {
+      token: token.clone(),
+      expect,
+      valid_tokens,
+    }),
   }
 }
 
@@ -672,8 +675,10 @@ impl_css_enum!(
 impl Position {
   pub(crate) fn into_taffy(self) -> taffy::Position {
     match self {
-      Position::Relative | Position::Static => taffy::Position::Relative,
-      Position::Absolute | Position::Fixed => taffy::Position::Absolute,
+      Position::Static => taffy::Position::Static,
+      Position::Relative => taffy::Position::Relative,
+      Position::Absolute => taffy::Position::Absolute,
+      Position::Fixed => taffy::Position::Fixed,
     }
   }
 
@@ -924,23 +929,23 @@ impl TailwindPropertyParser for JustifyContent {
 }
 
 impl JustifyContent {
-  pub(crate) fn into_taffy(self) -> Option<taffy::JustifyContent> {
+  pub(crate) fn into_taffy(self) -> taffy::JustifyContent {
     match self {
-      JustifyContent::Normal => None,
-      JustifyContent::Start => Some(taffy::JustifyContent::START),
-      JustifyContent::End => Some(taffy::JustifyContent::END),
-      JustifyContent::FlexStart => Some(taffy::JustifyContent::FLEX_START),
-      JustifyContent::FlexEnd => Some(taffy::JustifyContent::FLEX_END),
-      JustifyContent::Center => Some(taffy::JustifyContent::CENTER),
-      JustifyContent::Stretch => Some(taffy::JustifyContent::STRETCH),
-      JustifyContent::SpaceBetween => Some(taffy::JustifyContent::SPACE_BETWEEN),
-      JustifyContent::SpaceAround => Some(taffy::JustifyContent::SPACE_AROUND),
-      JustifyContent::SpaceEvenly => Some(taffy::JustifyContent::SPACE_EVENLY),
-      JustifyContent::SafeStart => Some(taffy::JustifyContent::SAFE_START),
-      JustifyContent::SafeEnd => Some(taffy::JustifyContent::SAFE_END),
-      JustifyContent::SafeFlexStart => Some(taffy::JustifyContent::SAFE_FLEX_START),
-      JustifyContent::SafeFlexEnd => Some(taffy::JustifyContent::SAFE_FLEX_END),
-      JustifyContent::SafeCenter => Some(taffy::JustifyContent::SAFE_CENTER),
+      JustifyContent::Normal => taffy::JustifyContent::NORMAL,
+      JustifyContent::Start => taffy::JustifyContent::START,
+      JustifyContent::End => taffy::JustifyContent::END,
+      JustifyContent::FlexStart => taffy::JustifyContent::FLEX_START,
+      JustifyContent::FlexEnd => taffy::JustifyContent::FLEX_END,
+      JustifyContent::Center => taffy::JustifyContent::CENTER,
+      JustifyContent::Stretch => taffy::JustifyContent::STRETCH,
+      JustifyContent::SpaceBetween => taffy::JustifyContent::SPACE_BETWEEN,
+      JustifyContent::SpaceAround => taffy::JustifyContent::SPACE_AROUND,
+      JustifyContent::SpaceEvenly => taffy::JustifyContent::SPACE_EVENLY,
+      JustifyContent::SafeStart => taffy::JustifyContent::SAFE_START,
+      JustifyContent::SafeEnd => taffy::JustifyContent::SAFE_END,
+      JustifyContent::SafeFlexStart => taffy::JustifyContent::SAFE_FLEX_START,
+      JustifyContent::SafeFlexEnd => taffy::JustifyContent::SAFE_FLEX_END,
+      JustifyContent::SafeCenter => taffy::JustifyContent::SAFE_CENTER,
     }
   }
 }
@@ -1226,26 +1231,31 @@ declare_box_alignment_enum_impl!(
 );
 
 impl AlignItems {
-  pub(crate) fn into_taffy(self) -> Option<taffy::AlignItems> {
+  pub(crate) fn into_taffy(self) -> taffy::AlignItems {
     match self {
-      AlignItems::Normal => None,
-      AlignItems::Start => Some(taffy::AlignItems::START),
-      AlignItems::End => Some(taffy::AlignItems::END),
-      AlignItems::FlexStart => Some(taffy::AlignItems::FLEX_START),
-      AlignItems::FlexEnd => Some(taffy::AlignItems::FLEX_END),
-      AlignItems::Center => Some(taffy::AlignItems::CENTER),
-      AlignItems::Baseline => Some(taffy::AlignItems::BASELINE),
-      AlignItems::Stretch => Some(taffy::AlignItems::STRETCH),
-      AlignItems::SafeStart => Some(taffy::AlignItems::SAFE_START),
-      AlignItems::SafeEnd => Some(taffy::AlignItems::SAFE_END),
-      AlignItems::SafeFlexStart => Some(taffy::AlignItems::SAFE_FLEX_START),
-      AlignItems::SafeFlexEnd => Some(taffy::AlignItems::SAFE_FLEX_END),
-      AlignItems::SelfStart => Some(taffy::AlignItems::SELF_START),
-      AlignItems::SelfEnd => Some(taffy::AlignItems::SELF_END),
-      AlignItems::SafeSelfStart => Some(taffy::AlignItems::SAFE_SELF_START),
-      AlignItems::SafeSelfEnd => Some(taffy::AlignItems::SAFE_SELF_END),
-      AlignItems::SafeCenter => Some(taffy::AlignItems::SAFE_CENTER),
+      AlignItems::Normal => taffy::AlignItems::NORMAL,
+      AlignItems::Start => taffy::AlignItems::START,
+      AlignItems::End => taffy::AlignItems::END,
+      AlignItems::FlexStart => taffy::AlignItems::FLEX_START,
+      AlignItems::FlexEnd => taffy::AlignItems::FLEX_END,
+      AlignItems::Center => taffy::AlignItems::CENTER,
+      AlignItems::Baseline => taffy::AlignItems::BASELINE,
+      AlignItems::Stretch => taffy::AlignItems::STRETCH,
+      AlignItems::SafeStart => taffy::AlignItems::SAFE_START,
+      AlignItems::SafeEnd => taffy::AlignItems::SAFE_END,
+      AlignItems::SafeFlexStart => taffy::AlignItems::SAFE_FLEX_START,
+      AlignItems::SafeFlexEnd => taffy::AlignItems::SAFE_FLEX_END,
+      AlignItems::SelfStart => taffy::AlignItems::SELF_START,
+      AlignItems::SelfEnd => taffy::AlignItems::SELF_END,
+      AlignItems::SafeSelfStart => taffy::AlignItems::SAFE_SELF_START,
+      AlignItems::SafeSelfEnd => taffy::AlignItems::SAFE_SELF_END,
+      AlignItems::SafeCenter => taffy::AlignItems::SAFE_CENTER,
     }
+  }
+
+  /// As `align-self` or `justify-self`, where `Normal` stands for `auto`.
+  pub(crate) fn into_taffy_self(self) -> Option<taffy::AlignSelf> {
+    (self != Self::Normal).then(|| self.into_taffy())
   }
 }
 

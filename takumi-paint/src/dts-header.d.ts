@@ -11,15 +11,13 @@ export type FontDetails = {
   weight?: number;
   style?: "normal" | "italic" | "oblique" | `oblique ${number}deg` | (string & {});
   /**
-   * Logical family this font is a coverage subset of. Subsets sharing a
-   * `subsetOf` are kept as distinct families and `font-family: {subsetOf}`
-   * expands to all of them, so each script routes to the subset that covers it.
+   * Inclusive codepoint ranges the font serves, as `@font-face` `unicode-range`. Register each
+   * subset of a family under the same `name` with its own ranges.
    */
+  unicodeRange?: [number, number][];
+  /** @deprecated Register under `name` with `unicodeRange` instead. */
   subsetOf?: string;
-  /**
-   * Where this subset sits in its group's fallback order; lowest is tried first, and equal
-   * ranks order by family name.
-   */
+  /** @deprecated Ignored; `unicodeRange` decides which subset serves a codepoint. */
   subsetRank?: number;
   /** CSS generic family keyword this font resolves for. */
   generic?: string;
@@ -318,7 +316,16 @@ export type ElementInfo = {
   readonly path: readonly number[];
 };
 
-export type Glyph = { readonly id: number; readonly x: number; readonly y: number };
+export type Glyph = {
+  readonly id: number;
+  readonly x: number;
+  readonly y: number;
+  /**
+   * Where the glyph's cluster starts in the run's `text`, in UTF-16 code units. Glyphs of one
+   * cluster share it; absent when the shaper's clusters could not be matched to the glyphs.
+   */
+  readonly cluster?: number;
+};
 
 export type RawTextRun = {
   readonly text: string;

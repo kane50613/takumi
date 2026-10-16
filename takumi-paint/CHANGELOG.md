@@ -1,3 +1,32 @@
+## takumi-paint@0.3.0
+
+### Read a run's outlines one glyph at a time
+
+`TextRun.outline()` is now `outlines()`, which returns each glyph's outline as SVG path data in the order of `glyphs`, with `null` for a glyph the run's color does not fill. A renderer can draw, animate, or hit-test each letter on its own. Replace `run.outline()` with `run.outlines().join("")`. In Rust, `PaintTree::run_outline` is now `run_outlines`.
+
+### Map each glyph of a paint tree back to its text
+
+A `Glyph` now has `cluster`: where its cluster starts in the run's `text`, in UTF-16 code units. Glyphs of one cluster share it, so a renderer can split a run into words or animate it a letter at a time without guessing from glyph positions.
+
+### Write a paint tree to JSON
+
+`JSON.stringify(tree)` now writes a versioned `SerializedPaintTree`: the tree's nodes, steps, and effects by index, and every glyph's outline. A tree painted on a server can be handed to a browser or a worker as plain data. Font files are left out.
+
+## takumi-paint@0.2.0
+
+### Register font subsets with `unicodeRange`
+
+A font now takes `unicodeRange`, the codepoint ranges its `@font-face` declares. It serves only those codepoints, as in Chrome, so each subset of a family registers under the same `name`:
+
+```ts
+const fonts = [
+  { name: "Inter", data: latin, unicodeRange: [[0x0000, 0x00ff]] },
+  { name: "Inter", data: cyrillic, unicodeRange: [[0x0400, 0x045f]] },
+];
+```
+
+`googleFonts` returns its subsets this way. `subsetOf` and `subsetRank` are deprecated: `subsetOf` now only sets the family name, and `subsetRank` does nothing. In Rust, use `FontResource::unicode_range`.
+
 ## takumi-paint@0.1.1
 
 ### Write glyph outlines only when a run asks for them

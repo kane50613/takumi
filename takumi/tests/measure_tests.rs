@@ -1,7 +1,11 @@
 mod test_utils;
 
+use std::fs;
+
 use takumi::prelude::{Length::*, *};
-use test_utils::{CONTEXT, TEST_IMAGES, create_test_viewport, measure_with_css, run_texts};
+use test_utils::{
+  CONTEXT, TEST_IMAGES, create_test_viewport, measure_with_css, repo_base_path, run_texts,
+};
 
 fn create_measure_viewport_with_dpr(device_pixel_ratio: f32) -> Viewport {
   Viewport::new((
@@ -2662,4 +2666,106 @@ fn cell_runs(node: &MeasuredNode) -> Vec<&MeasuredTextRun> {
     .iter()
     .chain(node.children.iter().flat_map(cell_runs))
     .collect()
+}
+
+/// A line holding only an image keeps the strut of the default font when no `font-family`
+/// matches, as Blink's falls back to its default font. Chrome lays this line out 43px tall with
+/// Archivo: the 40px image plus Archivo's descent below the baseline.
+#[test]
+fn an_image_line_without_a_matching_family_keeps_the_default_font_strut() {
+  let mut fonts = Fonts::default();
+
+  fonts
+    .register(FontResource::new(
+      fs::read(repo_base_path(
+        "assets/fonts/archivo/Archivo-VariableFont_wdth,wght.ttf",
+      ))
+      .unwrap(),
+    ))
+    .unwrap();
+
+  let node = Node::container([Node::image("assets/images/yeecord.png").with_style(
+    Style::default()
+      .with(StyleDeclaration::width(Px(40.0)))
+      .with(StyleDeclaration::height(Px(40.0))),
+  )])
+  .with_style(
+    Style::default()
+      .with(StyleDeclaration::display(Display::Block))
+      .with(StyleDeclaration::font_size(FontSize::Length(Px(14.0)))),
+  );
+  let measured = takumi::measure(
+    RenderOptions::builder()
+      .viewport(create_test_viewport())
+      .node(node)
+      .fonts(&fonts)
+      .images(TEST_IMAGES.clone())
+      .build(),
+  )
+  .unwrap();
+
+  assert_close(measured.height, 43.0);
+}
+
+#[test]
+fn a_box_hoisted_past_its_parent_keeps_its_static_position() {
+  let node = Node::container([Node::container([
+    Node::container([]).with_tw("block h-[50px]".parse().unwrap()),
+    Node::container([]).with_tw("absolute w-[20px] h-[20px]".parse().unwrap()),
+  ])
+  .with_tw("block pl-[30px]".parse().unwrap())])
+  .with_tw(
+    "relative block w-[400px] h-[300px] p-[10px]"
+      .parse()
+      .unwrap(),
+  );
+  let result = measure(node, create_test_viewport());
+  let hoisted = &result.children[0].children[1];
+
+  assert_eq!((hoisted.transform[4], hoisted.transform[5]), (40.0, 60.0));
+}
+
+const SQUARE_SVG: &str = r##"<svg width="100" height="100" viewBox="0 0 40 40" xmlns="http://www.w3.org/2000/svg"><rect width="40" height="40" fill="red"/></svg>"##;
+
+#[test]
+fn a_replaced_grid_item_keeps_its_natural_size_under_normal_alignment() {
+  let node = Node::container([Node::image(SQUARE_SVG).with_tag_name("svg")]).with_tw(
+    "grid w-[400px] h-[300px] grid-cols-[200px_200px] grid-rows-[300px]"
+      .parse()
+      .unwrap(),
+  );
+  let result = measure(node, create_test_viewport());
+  let image = &result.children[0];
+
+  assert_eq!((image.width, image.height), (100.0, 100.0));
+}
+
+#[test]
+fn an_absolute_replaced_box_keeps_its_natural_size_between_insets() {
+  let node = Node::container([Node::image(SQUARE_SVG)
+    .with_tag_name("svg")
+    .with_tw("absolute inset-0".parse().unwrap())])
+  .with_tw("relative w-[400px] h-[300px]".parse().unwrap());
+  let result = measure(node, create_test_viewport());
+  let image = &result.children[0];
+
+  assert_eq!((image.width, image.height), (100.0, 100.0));
+}
+
+#[test]
+fn an_inline_flex_resolves_a_percentage_height_before_sizing_its_width() {
+  let node = Node::container([
+    Node::text("x"),
+    Node::container([Node::container([]).with_tw("block aspect-square".parse().unwrap())])
+      .with_tw("inline-flex h-[50%]".parse().unwrap()),
+  ])
+  .with_tw("block w-[400px] h-[200px] text-[20px]".parse().unwrap());
+  let result = measure(node, create_test_viewport());
+  let sizes: Vec<(f32, f32)> = result
+    .children
+    .iter()
+    .map(|child| (child.width, child.height))
+    .collect();
+
+  assert_eq!(sizes.last(), Some(&(100.0, 100.0)), "{sizes:?}");
 }

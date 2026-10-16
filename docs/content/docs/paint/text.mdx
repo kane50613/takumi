@@ -30,7 +30,7 @@ The text node comes before the inline boxes in its paragraph. Its runs can sit o
 
 ## Draw glyphs
 
-`run.outline()` returns the glyphs as SVG path data. The paths start at the baseline start. Drawing them needs no font engine.
+`run.outlines()` returns each glyph's outline as SVG path data, in the order of `run.glyphs`. The paths start at the baseline start, and `run.outlines().join("")` is the whole run. Drawing them needs no font engine.
 
 | Drawable                               | Draw                                              |
 | -------------------------------------- | ------------------------------------------------- |

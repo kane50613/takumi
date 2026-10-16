@@ -49,8 +49,8 @@ function postMessage(message: RenderMessageInput, transfer?: Transferable[]) {
   return self.postMessage(message, { transfer });
 }
 
-// Dogfood: load Google Font subsets by content. Each subset registers uniquely-named under
-// its `subsetOf` family, so `font-family` routes per script and any leftover falls back. The
+// Dogfood: load Google Font subsets by content. Each subset registers under its family with
+// its `unicode-range`, so `font-family` routes per script and any leftover falls back. The
 // variable weight axis lets any `font-weight` render with a real face instead of faux bold.
 const GOOGLE_FONTS = FONT_FAMILIES.map((name) => ({ name, weight: "100..900" as const }));
 

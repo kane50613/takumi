@@ -1,150 +1,100 @@
 core:changelogs:
-  - content: "---\npackages:\n  takumi-core:\n    type: patch\n  takumi:\n    type: patch\n  takumi-pdf:\n    type: patch\n---\n\n# Lay out paragraphs with inline elements faster\n\nA paragraph holding spans no longer lays its text out a second time to find its baseline. Large documents lay out about 8% faster.\n"
-    filename: baseline-from-fragment-items.md
+  - content: "---\npackages:\n  takumi-paint:\n    type: minor\n  takumi-core:\n    type: minor\n---\n\n# Read a run's outlines one glyph at a time\n\n`TextRun.outline()` is now `outlines()`, which returns each glyph's outline as SVG path data in the order of `glyphs`, with `null` for a glyph the run's color does not fill. A renderer can draw, animate, or hit-test each letter on its own. Replace `run.outline()` with `run.outlines().join(\"\")`. In Rust, `PaintTree::run_outline` is now `run_outlines`.\n"
+    filename: paint-glyph-outlines.md
     v: 0.0.0
-  - content: "---\npackages:\n  takumi-core:\n    type: patch\n  takumi:\n    type: patch\n  takumi-pdf:\n    type: patch\n---\n\n# Lay out inline spans faster\n\nAn inline span works out its strut from its line height alone, without building its whole text style. Large documents with many spans lay out about 5% faster.\n"
-    filename: strut-line-height.md
+  - content: "---\npackages:\n  takumi-paint:\n    type: minor\n  takumi-core:\n    type: minor\n---\n\n# Map each glyph of a paint tree back to its text\n\nA `Glyph` now has `cluster`: where its cluster starts in the run's `text`, in UTF-16 code units. Glyphs of one cluster share it, so a renderer can split a run into words or animate it a letter at a time without guessing from glyph positions.\n"
+    filename: paint-glyph-clusters.md
     v: 0.0.0
-  - content: "---\npackages:\n  takumi-core:\n    type: patch\n  takumi:\n    type: patch\n  takumi-pdf:\n    type: patch\n---\n\n# Lay out Latin text faster\n\nText below U+02C7, such as Latin, no longer scans the CJK tables to decide whether underlines skip its ink. Large documents lay out about 3% faster.\n"
-    filename: skip-ink-early-exit.md
-    v: 0.0.0
-  - content: "---\npackages:\n  takumi-core:\n    type: patch\n  takumi:\n    type: patch\n  takumi-pdf:\n    type: patch\n---\n\n# Look up glyphs faster\n\nEach glyph's cache key now hashes 12 bytes instead of copying a 600-byte hasher. Large documents lay out about 2% faster.\n"
-    filename: glyph-key-digest.md
-    v: 0.0.0
-  - content: "---\npackages:\n  takumi-core:\n    type: patch\n  takumi:\n    type: patch\n  takumi-pdf:\n    type: patch\n---\n\n# Expand each font stack once per render\n\nA `font-family` stack is matched against registered font subsets once per render, not on every text style. Large documents lay out about 4% faster.\n"
-    filename: font-family-expansion-cache.md
-    v: 0.0.0
-  - content: "---\npackages:\n  takumi-core:\n    type: minor\n  takumi:\n    type: patch\n  takumi-pdf:\n    type: patch\n---\n\n# Read each glyph's ink box once\n\nA glyph's ink box is worked out when the glyph is resolved, not on every use. Large documents lay out about 7% faster.\n\n`ResolvedOutlineGlyph::Plain` and `ResolvedOutlineGlyph::Color` gain an `ink` field, which `outline_ink` computes from their paths.\n"
-    filename: glyph-ink-once.md
-    v: 0.0.0
-  - content: "---\npackages:\n  takumi-core:\n    type: minor\n  takumi-paint:\n    type: patch\n---\n\n# Write glyph outlines only when a run asks for them\n\n`paint()` no longer writes every run's outline up front. `run.outline()` builds it when called. A 2,000-section document paints 3 times faster in about a third of the memory.\n\nIn Rust, `TextRun::outline` is replaced by `PaintTree::run_outline(node, run)`.\n"
-    filename: paint-lazy-outlines.md
-    v: 0.0.0
-  - content: "---\npackages:\n  takumi-paint:\n    type: patch\n---\n\n# Keep less memory for each painted tree\n\nA painted tree no longer keeps a second copy of itself in WebAssembly memory. Keeping several large trees at once takes about a third less memory.\n"
-    filename: paint-free-document.md
-    v: 0.0.0
-  - content: "---\npackages:\n  takumi-core:\n    type: patch\n  takumi:\n    type: patch\n---\n\n# Lay out text faster\n\nThe glyph cache and per-render font metrics hash their keys with a faster hasher. Text-heavy layouts take about 6% less time.\n"
-    filename: fx-hash-caches.md
-    v: 0.0.0
-  - content: "---\npackages:\n  takumi-core:\n    type: patch\n  takumi:\n    type: patch\n---\n\n# Write SVG output faster\n\nSVG output and the paint tree's glyph outlines write numbers below 1,000 without float formatting, with the same bytes. A text-heavy SVG renders about twice as fast.\n"
-    filename: svg-number-format.md
+  - content: "---\npackages:\n  takumi-paint:\n    type: minor\n---\n\n# Write a paint tree to JSON\n\n`JSON.stringify(tree)` now writes a versioned `SerializedPaintTree`: the tree's nodes, steps, and effects by index, and every glyph's outline. A tree painted on a server can be handed to a browser or a worker as plain data. Font files are left out.\n"
+    filename: paint-tree-json.md
     v: 0.0.0
 core:packages:
   - id: npm:takumi-workspace
     updated: false
+  - id: npm:@takumi-rs/image-response
+    updated: true
   - id: npm:docs
     updated: false
-  - changelogIds:
-      - baseline-from-fragment-items.md
-      - strut-line-height.md
-      - skip-ink-early-exit.md
-      - glyph-key-digest.md
-      - font-family-expansion-cache.md
-      - glyph-ink-once.md
-    id: npm:takumi-pdf
-    updated: true
-  - changelogIds:
-      - paint-lazy-outlines.md
-      - paint-free-document.md
-    id: npm:takumi-paint
-    updated: true
-  - id: npm:@takumi-rs/wasm
-    updated: true
   - id: npm:@takumi-rs/core
-    updated: true
-  - id: npm:@takumi-rs/helpers
     updated: true
   - id: npm:takumi-js
     updated: true
-  - id: npm:@takumi-rs/image-response
+  - id: npm:takumi-pdf
     updated: true
-  - id: npm:example-generate-invoice
+  - id: npm:@takumi-rs/wasm
+    updated: true
+  - changelogIds:
+      - paint-glyph-outlines.md
+      - paint-glyph-clusters.md
+      - paint-tree-json.md
+    id: npm:takumi-paint
+    updated: true
+  - id: npm:@takumi-rs/helpers
+    updated: true
+  - id: npm:example-cloudflare-workers
     updated: false
   - id: npm:ffmpeg-keyframe-animation
     updated: false
-  - id: npm:example-twitter-images
-    updated: false
-  - id: npm:example-e-invoice
-    updated: false
-  - id: npm:ffplay
-    updated: false
-  - id: npm:pdf-bench
-    updated: false
-  - id: npm:example-css-library-integration
-    updated: false
-  - id: npm:example-cloudflare-workers
-    updated: false
   - id: npm:example-tanstack-start
-    updated: false
-  - id: npm:svelte
-    updated: false
-  - id: npm:example-satori-html
-    updated: false
-  - id: npm:example-liquid-glass
     updated: false
   - id: npm:waku-ssr
     updated: false
+  - id: npm:svelte
+    updated: false
+  - id: npm:example-liquid-glass
+    updated: false
+  - id: npm:example-satori-html
+    updated: false
+  - id: npm:example-e-invoice
+    updated: false
   - id: npm:example-nextjs
     updated: false
-  - changelogIds:
-      - baseline-from-fragment-items.md
-      - strut-line-height.md
-      - skip-ink-early-exit.md
-      - glyph-key-digest.md
-      - font-family-expansion-cache.md
-      - glyph-ink-once.md
-    id: cargo:takumi-pdf
-    updated: true
-  - id: cargo:takumi-svg
-    updated: true
-  - changelogIds:
-      - fx-hash-caches.md
-      - baseline-from-fragment-items.md
-      - strut-line-height.md
-      - skip-ink-early-exit.md
-      - glyph-key-digest.md
-      - font-family-expansion-cache.md
-      - svg-number-format.md
-      - glyph-ink-once.md
-    id: cargo:takumi
-    updated: true
+  - id: npm:ffplay
+    updated: false
+  - id: npm:example-twitter-images
+    updated: false
+  - id: npm:example-generate-invoice
+    updated: false
+  - id: npm:example-css-library-integration
+    updated: false
+  - id: npm:pdf-bench
+    updated: false
   - id: cargo:takumi-raster
     updated: true
+  - id: cargo:takumi-pdf
+    updated: true
   - changelogIds:
-      - fx-hash-caches.md
-      - baseline-from-fragment-items.md
-      - strut-line-height.md
-      - skip-ink-early-exit.md
-      - glyph-key-digest.md
-      - paint-lazy-outlines.md
-      - font-family-expansion-cache.md
-      - svg-number-format.md
-      - glyph-ink-once.md
+      - paint-glyph-outlines.md
+      - paint-glyph-clusters.md
     id: cargo:takumi-core
     updated: true
   - id: cargo:takumi-html
     updated: true
+  - id: cargo:takumi-svg
+    updated: true
+  - id: cargo:takumi
+    updated: true
 npm:packages:
   - id: npm:takumi-workspace
-  - id: npm:docs
-  - id: npm:takumi-pdf
-  - id: npm:takumi-paint
-  - id: npm:@takumi-rs/wasm
-  - id: npm:@takumi-rs/core
-  - id: npm:@takumi-rs/helpers
-  - id: npm:takumi-js
   - id: npm:@takumi-rs/image-response
-  - id: npm:example-generate-invoice
-  - id: npm:ffmpeg-keyframe-animation
-  - id: npm:example-twitter-images
-  - id: npm:example-e-invoice
-  - id: npm:ffplay
-  - id: npm:pdf-bench
-  - id: npm:example-css-library-integration
+  - id: npm:docs
+  - id: npm:@takumi-rs/core
+  - id: npm:takumi-js
+  - id: npm:takumi-pdf
+  - id: npm:@takumi-rs/wasm
+  - id: npm:takumi-paint
+  - id: npm:@takumi-rs/helpers
   - id: npm:example-cloudflare-workers
+  - id: npm:ffmpeg-keyframe-animation
   - id: npm:example-tanstack-start
-  - id: npm:svelte
-  - id: npm:example-satori-html
-  - id: npm:example-liquid-glass
   - id: npm:waku-ssr
+  - id: npm:svelte
+  - id: npm:example-liquid-glass
+  - id: npm:example-satori-html
+  - id: npm:example-e-invoice
   - id: npm:example-nextjs
+  - id: npm:ffplay
+  - id: npm:example-twitter-images
+  - id: npm:example-generate-invoice
+  - id: npm:example-css-library-integration
+  - id: npm:pdf-bench

@@ -52,6 +52,7 @@ export type {
   PaintNode,
   PaintStep,
   PaintTree,
+  SerializedPaintTree,
   TextNode,
   TextRun,
 } from "./tree";

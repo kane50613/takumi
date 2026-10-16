@@ -10,7 +10,7 @@ use tiny_skia::PixmapMut;
 
 use crate::{
   BorderProperties, Canvas, CanvasSubcanvas, CanvasViewport, DeferredOutline, Error, NodeMasks,
-  Result, apply_backdrop_filter, apply_filters_to_pixmap, clip_node_mask, draw_box_shell,
+  PlacedMask, Result, apply_backdrop_filter, apply_filters_to_pixmap, draw_box_shell,
   draw_debug_border,
   inline_drawing::draw_own_content,
   layout::tree::{LayoutResults, RenderNode},
@@ -161,7 +161,7 @@ impl ScenePainter<'_, '_> {
     let count = masks.len();
 
     for mask in masks.shell {
-      canvas.push_mask(mask);
+      canvas.push_mask(PlacedMask::covering(canvas.viewport(), mask));
     }
 
     Ok(OpenEffect {
@@ -224,7 +224,7 @@ impl PropertySink for ScenePainter<'_, '_> {
   fn push_clip(&mut self, _id: ClipId, clip: &ClipNode) {
     let viewport = self.canvas.viewport();
 
-    match clip_node_mask(clip, viewport) {
+    match PlacedMask::of_clip(clip, viewport) {
       Some(mask) => self.canvas.push_mask(mask),
       None => self.record(Err(Error::InvalidViewport)),
     }

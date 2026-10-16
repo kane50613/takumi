@@ -1,7 +1,6 @@
 use std::{
   borrow::Cow,
   cell::RefCell,
-  collections::HashMap,
   hash::{Hash, Hasher},
   mem::discriminant,
   ops::Range,
@@ -10,7 +9,9 @@ use std::{
 
 use parley::{
   FontFamily as ParleyFontFamily, FontFamilyName, FontFeatures, FontVariations, GenericFamily,
-  LineHeight, TextStyle, fontique::QueryFamily, style::FontStyle as ParleyFontStyle,
+  LineBreak as ParleyLineBreak, LineHeight, TextStyle, VerticalAlign as ParleyVerticalAlign,
+  WhiteSpaceCollapse as ParleyWhiteSpaceCollapse, fontique::QueryFamily,
+  style::FontStyle as ParleyFontStyle,
 };
 use rustc_hash::FxHashMap;
 use smallvec::SmallVec;
@@ -21,16 +22,16 @@ use crate::{
   geometry::Size,
   layout::inline::{InlineBrush, TextScale},
   layout_unit::LayoutUnit,
-  resources::font::{FontClasses, SubsetGroup},
+  resources::font::FontClasses,
   shadow::SizedShadow,
   style::{
-    AppliedTextDecorations, Color, ComputedStyle, Display, FontFamily, FontSynthesis, Lang,
-    LineHeight as CssLineHeight, SizedTextDecorationThickness, SizingContext, VerticalAlign,
-    WordBreak,
+    AppliedTextDecorations, Color, ComputedStyle, Display, FontFamily, FontFeature, FontSynthesis,
+    FontVariantCaps, FontVariation, Lang, LineHeight as CssLineHeight, ResolvedFontVariations,
+    SizedTextDecorationThickness, SizingContext, VerticalAlign, WordBreak,
   },
 };
 
-/// A `font-family` stack with registered subset groups expanded.
+/// A `font-family` stack in the form parley queries.
 #[derive(Clone)]
 pub(crate) struct ExpandedFontFamily {
   tokens: Vec<ExpandedFamilyToken>,
@@ -146,25 +147,16 @@ impl ExpandedFontFamily {
     ParleyFontFamily::List(Cow::Owned(names))
   }
 
-  /// Expands `family` against registered subset `groups`.
-  pub(crate) fn expand(family: &FontFamily, groups: &HashMap<String, SubsetGroup>) -> Self {
-    let mut tokens = Vec::new();
-    for name in family.names() {
-      match name {
-        FontFamilyName::Named(name) => match groups.get(name.as_ref()) {
-          Some(subsets) => {
-            tokens.extend(
-              subsets
-                .iter()
-                .map(|(_, _, name)| ExpandedFamilyToken::Named(name.clone())),
-            );
-          }
-          None => tokens.push(ExpandedFamilyToken::Named(name.into_owned())),
-        },
-        FontFamilyName::Generic(generic) => tokens.push(ExpandedFamilyToken::Generic(generic)),
-      }
-    }
-    Self::new(tokens)
+  pub(crate) fn expand(family: &FontFamily) -> Self {
+    Self::new(
+      family
+        .names()
+        .map(|name| match name {
+          FontFamilyName::Named(name) => ExpandedFamilyToken::Named(name.into_owned()),
+          FontFamilyName::Generic(generic) => ExpandedFamilyToken::Generic(generic),
+        })
+        .collect(),
+    )
   }
 }
 
@@ -177,7 +169,7 @@ impl RenderContext {
     let mut expanded = self.font_families().0.borrow_mut();
     let expanded = expanded
       .entry(family.id())
-      .or_insert_with(|| Rc::new(ExpandedFontFamily::expand(family, &self.fonts().groups)));
+      .or_insert_with(|| Rc::new(ExpandedFontFamily::expand(family)));
 
     Rc::clone(expanded)
   }
@@ -260,6 +252,12 @@ pub struct SizedFontStyle<'s> {
   /// Computed style this is derived from.
   pub parent: &'s ComputedStyle,
   pub(crate) font_family: Rc<ExpandedFontFamily>,
+  pub(crate) font_variations: ResolvedFontVariations,
+  /// The `font-variant-caps` feature to shape with, which a synthesized caps run swaps.
+  pub(crate) caps: FontVariantCaps,
+  /// Alternates between neighbouring case runs of split `font-variant-caps` text, so each shapes
+  /// apart as Blink shapes them.
+  pub(crate) case_run_parity: Option<bool>,
   pub(crate) line_height: parley::LineHeight,
   /// The line height kept on the brush, because parley's run metrics can carry a neighboring
   /// span's style at run boundaries.
@@ -291,10 +289,18 @@ impl SizedFontStyle<'_> {
       .filter(|shadow| shadow.color.0[3] != 0)
   }
 
+  /// OpenType features to shape with, after `letter-spacing` has disabled ligatures.
+  fn font_features(&self) -> Cow<'_, [FontFeature]> {
+    self
+      .parent
+      .resolved_font_features(self.letter_spacing != 0.0, self.caps)
+  }
+
   /// Hashes every input the `TextStyle` conversion below reads, so shaped text-only layouts can be
   /// cached by content.
   pub(crate) fn hash_shaping_inputs(&self, hasher: &mut impl Hasher) {
     self.sizing.font_size.to_bits().hash(hasher);
+    self.case_run_parity.hash(hasher);
     self.letter_spacing.to_bits().hash(hasher);
     self.word_spacing.to_bits().hash(hasher);
     self
@@ -359,11 +365,11 @@ impl SizedFontStyle<'_> {
       .percentage()
       .to_bits()
       .hash(hasher);
-    for variation in parent.inherited_data.font_variation_settings.iter() {
+    for variation in self.font_variations.iter() {
       variation.tag.hash(hasher);
       variation.value.to_bits().hash(hasher);
     }
-    for feature in parent.resolved_font_features().iter() {
+    for feature in self.font_features().iter() {
       feature.tag.hash(hasher);
       feature.value.hash(hasher);
     }
@@ -374,6 +380,7 @@ impl SizedFontStyle<'_> {
     (parent.misc_inherited_data.text_decoration_skip_ink as u8).hash(hasher);
     (parent.inherited_data.font_synthesis_weight as u8).hash(hasher);
     (parent.inherited_data.font_synthesis_style as u8).hash(hasher);
+    (parent.inherited_data.font_synthesis_small_caps as u8).hash(hasher);
     match &parent.base_data.vertical_align {
       VerticalAlign::Keyword(keyword) => {
         0_u8.hash(hasher);
@@ -398,17 +405,14 @@ impl<'s> From<&'s SizedFontStyle<'s>> for TextStyle<'s, 's, InlineBrush> {
       font_style: style.parent.inherited_data.font_style.into_parlance(),
       font_variations: FontVariations::List(Cow::Owned(
         style
-          .parent
-          .inherited_data
-          .font_variation_settings
+          .font_variations
           .iter()
-          .map(|variation| variation.into_parlance())
+          .map(FontVariation::into_parlance)
           .collect(),
       )),
       font_features: FontFeatures::List(Cow::Owned(
         style
-          .parent
-          .resolved_font_features()
+          .font_features()
           .iter()
           .map(|feature| feature.into_parlance())
           .collect(),
@@ -441,7 +445,9 @@ impl<'s> From<&'s SizedFontStyle<'s>> for TextStyle<'s, 's, InlineBrush> {
         font_synthesis: FontSynthesis {
           weight: style.parent.inherited_data.font_synthesis_weight,
           style: style.parent.inherited_data.font_synthesis_style,
+          small_caps: style.parent.inherited_data.font_synthesis_small_caps,
         },
+        font_variations: style.font_variations.clone(),
         line_height: style.box_line_height,
         fixed_letter_spacing: if style.parent.inherited_data.letter_spacing.has_percentage() {
           0.0
@@ -456,6 +462,10 @@ impl<'s> From<&'s SizedFontStyle<'s>> for TextStyle<'s, 's, InlineBrush> {
         vertical_align: style.parent.base_data.vertical_align,
       },
       text_wrap_mode: style.parent.resolved_text_wrap_mode().into_parley(),
+      line_break: ParleyLineBreak::default(),
+      // Inline layout collapses white space and aligns boxes itself, as Blink's inline items do.
+      white_space_collapse: ParleyWhiteSpaceCollapse::Preserve,
+      vertical_align: ParleyVerticalAlign::BASELINE,
       font_width: style.parent.inherited_data.font_stretch.into_parlance(),
 
       locale: style.parent.lang.map(Lang::into_parlance),
@@ -609,6 +619,13 @@ impl<'s> SizedFontStyle<'s> {
       sizing: context.sizing.to_owned(),
       parent: style,
       font_family: context.expand_font_family(&style.inherited_data.font_family),
+      font_variations: ResolvedFontVariations::new(
+        style.inherited_data.font_variation_settings.clone(),
+        style.inherited_data.font_optical_sizing,
+        context.sizing.to_css(context.sizing.font_size),
+      ),
+      caps: style.inherited_data.font_variant_caps,
+      case_run_parity: None,
       line_height,
       box_line_height,
       stroke_width: style
@@ -644,13 +661,12 @@ impl<'s> SizedFontStyle<'s> {
 // not in this file; the one testable seam owned by this module is `ExpandedFontFamily::expand`.
 #[cfg(test)]
 mod tests {
-  use std::collections::{HashMap, HashSet};
+  use std::collections::HashSet;
 
   use parley::{FontFamilyName, GenericFamily};
 
   use super::{
-    ExpandedFamilyToken, ExpandedFontFamily, FontClasses, Presentation, SubsetGroup,
-    presentation_segments,
+    ExpandedFamilyToken, ExpandedFontFamily, FontClasses, Presentation, presentation_segments,
   };
   use crate::style::{FontFamily, FromCssStr};
 
@@ -684,9 +700,9 @@ mod tests {
   }
 
   #[test]
-  fn names_not_in_groups_pass_through_unchanged() {
+  fn names_pass_through_unchanged() {
     let family = FontFamily::from_css_str("Geist, serif").unwrap();
-    let expanded = ExpandedFontFamily::expand(&family, &HashMap::new());
+    let expanded = ExpandedFontFamily::expand(&family);
 
     assert_eq!(expanded.tokens.len(), 2);
     assert_eq!(
@@ -696,29 +712,9 @@ mod tests {
   }
 
   #[test]
-  fn logical_subset_group_expands_to_its_registered_subsets_in_rank_order() {
-    let family = FontFamily::from_css_str("Logical").unwrap();
-    let mut groups = HashMap::new();
-    groups.insert(
-      "Logical".to_string(),
-      SubsetGroup::from([
-        (1, 0, "Subset A".to_string()),
-        (0, 1, "Subset B".to_string()),
-      ]),
-    );
-
-    let expanded = ExpandedFontFamily::expand(&family, &groups);
-
-    assert_eq!(
-      names(&expanded),
-      vec!["Subset B".to_string(), "Subset A".to_string()]
-    );
-  }
-
-  #[test]
   fn generic_family_tokens_pass_through_expansion() {
     let family = FontFamily::from_css_str("monospace").unwrap();
-    let expanded = ExpandedFontFamily::expand(&family, &HashMap::new());
+    let expanded = ExpandedFontFamily::expand(&family);
 
     assert_eq!(expanded.tokens.len(), 1);
     assert!(matches!(
@@ -818,7 +814,7 @@ mod tests {
   #[test]
   fn emoji_presentation_puts_color_families_first() {
     let family = FontFamily::from_css_str("Text Font, Emoji Font").unwrap();
-    let expanded = ExpandedFontFamily::expand(&family, &HashMap::new());
+    let expanded = ExpandedFontFamily::expand(&family);
 
     assert_eq!(
       family_names(expanded.with_presentation(Presentation::Emoji, &classes())),
@@ -829,7 +825,7 @@ mod tests {
   #[test]
   fn text_presentation_puts_mono_families_first() {
     let family = FontFamily::from_css_str("Emoji Font, Text Font").unwrap();
-    let expanded = ExpandedFontFamily::expand(&family, &HashMap::new());
+    let expanded = ExpandedFontFamily::expand(&family);
 
     assert_eq!(
       family_names(expanded.with_presentation(Presentation::Text, &classes())),
@@ -840,7 +836,7 @@ mod tests {
   #[test]
   fn registered_class_families_slot_between_authored_classes() {
     let family = FontFamily::from_css_str("Text Font").unwrap();
-    let expanded = ExpandedFontFamily::expand(&family, &HashMap::new());
+    let expanded = ExpandedFontFamily::expand(&family);
 
     // No authored color font: the registered ones still outrank the mismatched
     // authored family, like Blink's fallback-priority font stage.

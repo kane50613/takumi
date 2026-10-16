@@ -1,3 +1,28 @@
+## @takumi-rs/helpers@2.16.0
+
+### Register font subsets with `unicodeRange`
+
+A font now takes `unicodeRange`, the codepoint ranges its `@font-face` declares. It serves only those codepoints, as in Chrome, so each subset of a family registers under the same `name`:
+
+```ts
+const fonts = [
+  { name: "Inter", data: latin, unicodeRange: [[0x0000, 0x00ff]] },
+  { name: "Inter", data: cyrillic, unicodeRange: [[0x0400, 0x045f]] },
+];
+```
+
+`googleFonts` returns its subsets this way. `subsetOf` and `subsetRank` are deprecated: `subsetOf` now only sets the family name, and `subsetRank` does nothing. In Rust, use `FontResource::unicode_range`.
+
+## @takumi-rs/helpers@2.15.2
+
+### Skip emoji scanning for plain text
+
+`extractEmojis` segments text into graphemes only when it holds an `Extended_Pictographic` or `Regional_Indicator` codepoint or a keycap mark (U+20E3). A 48-card dashboard without emoji goes through it in 0.02 ms instead of 0.33 ms per render.
+
+### Pick font subsets faster
+
+`subsetFonts`, which every render with `fonts` runs, finds the subsets the text needs by binary search instead of checking every character against every range. With Noto Sans JP, Noto Sans TC, and Inter from Google Fonts, it takes 0.3 ms per render instead of 3.6 ms.
+
 ## @takumi-rs/helpers@2.15.0
 
 ### Repeat table headers and footers on every page, as Chrome prints them

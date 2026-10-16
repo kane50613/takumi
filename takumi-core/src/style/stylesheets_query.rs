@@ -1,5 +1,6 @@
 use std::{borrow::Cow, marker::PhantomData};
 
+use parley::fontique::Attributes;
 use taffy::{LengthPercentage, Line, Rect, Size};
 
 use super::ComputedStyle;
@@ -420,15 +421,28 @@ impl ComputedStyle {
     }
   }
 
-  /// Resolved OpenType features: the `font-variant-*` expansions followed by explicit
-  /// `font-feature-settings`, which win on tag conflicts. Borrows the settings when no
-  /// `font-variant-*` is active, avoiding an allocation.
-  pub(crate) fn resolved_font_features(&self) -> Cow<'_, [FontFeature]> {
+  /// The face attributes a font query matches.
+  pub(crate) fn font_attributes(&self) -> Attributes {
+    Attributes {
+      width: self.inherited_data.font_stretch.into_parlance(),
+      style: self.inherited_data.font_style.into_parlance(),
+      weight: self.inherited_data.font_weight.into_parlance(),
+    }
+  }
+
+  /// Resolved OpenType features: the `font-variant-*` expansions, with `caps` standing in for
+  /// `font-variant-caps`, followed by explicit `font-feature-settings`, which win on tag
+  /// conflicts. Borrows the settings when no `font-variant-*` is active, avoiding an allocation.
+  pub(crate) fn resolved_font_features(
+    &self,
+    letter_spacing: bool,
+    caps: FontVariantCaps,
+  ) -> Cow<'_, [FontFeature]> {
     let mut features = Vec::new();
     self
       .inherited_data
       .font_variant_ligatures
-      .append_features(&mut features);
+      .append_features(letter_spacing, &mut features);
     self
       .inherited_data
       .font_variant_numeric
@@ -437,10 +451,7 @@ impl ComputedStyle {
       .inherited_data
       .font_variant_east_asian
       .append_features(&mut features);
-    self
-      .inherited_data
-      .font_variant_caps
-      .append_features(&mut features);
+    caps.append_features(&mut features);
     self
       .inherited_data
       .font_variant_position
@@ -492,17 +503,13 @@ impl ComputedStyle {
         left: self.box_data.padding_left,
       }
       .map(|padding| padding.resolve_to_length_percentage(sizing)),
-      inset: if self.base_data.position == Position::Static {
-        Rect::auto()
-      } else {
-        Rect {
-          top: self.surround_data.top,
-          right: self.surround_data.right,
-          bottom: self.surround_data.bottom,
-          left: self.surround_data.left,
-        }
-        .map(|inset| inset.resolve_to_length_percentage_auto(sizing))
-      },
+      inset: Rect {
+        top: self.surround_data.top,
+        right: self.surround_data.right,
+        bottom: self.surround_data.bottom,
+        left: self.surround_data.left,
+      }
+      .map(|inset| inset.resolve_to_length_percentage_auto(sizing)),
       margin: Rect {
         top: self.box_data.margin_top,
         right: self.box_data.margin_right,
@@ -586,8 +593,8 @@ impl ComputedStyle {
         .cloned()
         .and_then(GridTemplateAreas::into_taffy),
       aspect_ratio: self.surround_data.aspect_ratio.into(),
-      align_self: self.misc_data.align_self.into_taffy(),
-      justify_self: self.misc_data.justify_self.into_taffy(),
+      align_self: self.misc_data.align_self.into_taffy_self(),
+      justify_self: self.misc_data.justify_self.into_taffy_self(),
       overflow: self
         .resolve_overflows()
         .into_taffy()
@@ -595,6 +602,7 @@ impl ComputedStyle {
       dummy: PhantomData,
       item_is_table: false,
       item_is_replaced: false,
+      item_is_compressible_replaced: false,
       scrollbar_width: 0.0,
       text_align: taffy::TextAlign::Auto,
     }

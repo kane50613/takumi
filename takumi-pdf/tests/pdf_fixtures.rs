@@ -21,6 +21,7 @@ use takumi_core::{
     font::{FontOverride, FontResource},
     image::{ImageCacheMode, ImageSource, ResourceCache},
     image_buffer::ImageBuffer,
+    unicode_range::{UnicodeRange, UnicodeRangeSet},
   },
   style::{
     BreakBetween, Color, ColorInput, Display, FlexDirection, FontSize, Length::*, LineHeight,
@@ -4932,6 +4933,61 @@ fn font_weights() {
   );
 }
 
+/// `font-variation-settings` instances the embedded font as it shaped the run.
+#[test]
+fn font_variation_settings() {
+  let doc = r#"<main style="display:flex;flex-direction:column;font-family:Archivo;font-size:32px;color:#141414;">
+      <p>Default instance</p>
+      <p style="font-variation-settings:'wght' 900;">Black through settings</p>
+      <p style="font-variation-settings:'wdth' 62;">Condensed through settings</p>
+    </main>"#;
+  let pdf = run_pdf_fixture_with("font-variation-settings", &latin_font(), |fonts| {
+    PdfOptions::builder()
+      .node(from_html(doc, FromHtmlOptions::default()).expect("parse variation doc"))
+      .page(PageOptions::A4)
+      .fonts(fonts)
+      .build()
+  });
+
+  assert_eq!(
+    embedded_subsets(&inflated_text(&pdf), "Archivo"),
+    3,
+    "variation settings not embedded once per instance"
+  );
+}
+
+/// `font-optical-sizing: auto` embeds the font at the `opsz` each size shaped at.
+#[test]
+fn font_optical_sizing() {
+  let mut fonts = Fonts::default();
+  let data = fs::read(
+    Path::new(env!("CARGO_MANIFEST_DIR"))
+      .join("../assets/fonts/inter/inter-latin-opsz-wght-normal.woff2"),
+  )
+  .expect("read inter");
+
+  fonts.register(FontResource::new(data)).expect("load inter");
+
+  let doc = r#"<main style="display:flex;flex-direction:column;font-family:Inter;color:#141414;">
+      <p style="font-size:14px;">Text size</p>
+      <p style="font-size:72px;">Display size</p>
+      <p style="font-size:72px;font-optical-sizing:none;">Text cut</p>
+    </main>"#;
+  let pdf = run_pdf_fixture_with("font-optical-sizing", &fonts, |fonts| {
+    PdfOptions::builder()
+      .node(from_html(doc, FromHtmlOptions::default()).expect("parse optical sizing doc"))
+      .page(PageOptions::A4)
+      .fonts(fonts)
+      .build()
+  });
+
+  assert_eq!(
+    embedded_subsets(&inflated_text(&pdf), "Inter"),
+    2,
+    "optical sizes not embedded once per instance"
+  );
+}
+
 #[test]
 fn cid_default_width_is_an_integer() {
   let mut fonts = Fonts::default();
@@ -5052,21 +5108,19 @@ fn stroke_alphas(haystack: &str) -> Vec<f32> {
     .collect()
 }
 
-/// Registers both test fonts as coverage subsets of one logical family, ranked the way
-/// their declared `unicode-range` would rank them.
-fn ranked_subset_fonts() -> Fonts {
+/// Registers both test fonts under one family as two `@font-face` rules would: each at the
+/// default `font-weight: normal`, serving only its declared `unicode-range`.
+fn ranged_subset_fonts() -> Fonts {
   let mut fonts = Fonts::default();
 
-  for (path, name, rank) in [
+  for (path, range) in [
     (
       "tests/fonts/noto-sans-tc-caps.subset.ttf",
-      "Grouped cjk",
-      0x4e00,
+      UnicodeRange::new(0x4E00, 0x9FFF),
     ),
     (
       "../assets/fonts/archivo/Archivo-VariableFont_wdth,wght.ttf",
-      "Grouped latin",
-      0,
+      UnicodeRange::new(0x0000, 0x00FF),
     ),
   ] {
     let data = fs::read(Path::new(env!("CARGO_MANIFEST_DIR")).join(path)).expect("read test font");
@@ -5075,26 +5129,25 @@ fn ranked_subset_fonts() -> Fonts {
       .register(
         FontResource::new(data)
           .override_info(FontOverride {
-            family_name: Some(name.into()),
+            family_name: Some("Grouped".into()),
+            weight: Some(400.0),
             ..Default::default()
           })
-          .subset_of("Grouped")
-          .subset_rank(rank),
+          .unicode_range(UnicodeRangeSet::from_iter([range])),
       )
       .expect("load test font");
   }
   fonts
 }
 
-/// A subset whose `cmap` reaches past the range it was cut for must not steal codepoints
-/// from the subset that declares them. `Grouped cjk` also encodes the ASCII space and the
-/// capitals, and sorts first by name, so without the rank it takes those and leaves the
-/// lowercase to `Grouped latin` — one text object per fragment, each repositioned from
-/// scratch. Extractors rebuild words from glyph geometry, and that is the shape they read
-/// wrong.
+/// A subset whose `cmap` reaches past its `unicode-range` must not steal codepoints from the
+/// subset that declares them. The CJK subset also encodes the ASCII space and the capitals, and
+/// registers first, so without the range it takes those and leaves the lowercase to Archivo —
+/// one text object per fragment, each repositioned from scratch. Extractors rebuild words from
+/// glyph geometry, and that is the shape they read wrong.
 #[test]
-fn a_ranked_subset_group_keeps_a_latin_run_whole() {
-  let fonts = ranked_subset_fonts();
+fn a_ranged_subset_keeps_a_latin_run_whole() {
+  let fonts = ranged_subset_fonts();
   let doc = r#"<main style="font-family:Grouped;font-size:16px;">
     <p>Average App Rating</p>
   </main>"#;
@@ -5105,13 +5158,146 @@ fn a_ranked_subset_group_keeps_a_latin_run_whole() {
       .fonts(&fonts)
       .build(),
   )
-  .expect("render the ranked group");
+  .expect("render the ranged family");
 
   let shows = content_lines(&pdf)
     .filter(|line| line.ends_with(b"TJ") || line.ends_with(b"Tj"))
     .count();
 
   assert_eq!(shows, 1, "the run was split across {shows} text objects");
+}
+
+/// Archivo without its precomposed accented letters, so `Ś` shapes as `S` and a positioned acute.
+fn combining_fonts() -> Fonts {
+  let mut fonts = Fonts::default();
+  let data = fs::read(
+    Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fonts/archivo-combining.subset.ttf"),
+  )
+  .expect("read combining font");
+
+  fonts
+    .register(FontResource::new(data))
+    .expect("load combining font");
+  fonts
+}
+
+/// A font without `Ś` shapes it as `S` and a positioned acute under one `/ActualText`. Poppler
+/// ends that span where its last glyph's advance does, so the acute's character spacing has to
+/// reach the end of the `S`, or `pdftotext` reads the gap after it as a space: `Ś winoujś cie`.
+#[test]
+fn a_cluster_closing_on_a_mark_spans_its_base() {
+  let fonts = combining_fonts();
+  let pdf = run_pdf_fixture_with("cluster-closing-on-a-mark", &fonts, |fonts| {
+    PdfOptions::builder()
+      .node(
+        from_html(
+          r#"<p style="font-size:16px;">Świnoujście</p>"#,
+          FromHtmlOptions::default(),
+        )
+        .expect("parse the doc"),
+      )
+      .viewport(Viewport::new((240, 48)))
+      .fonts(fonts)
+      .build()
+  });
+  let content = content_lines(&pdf)
+    .map(|line| String::from_utf8_lossy(&line).into_owned())
+    .collect::<Vec<_>>()
+    .join("\n");
+  let spans = content
+    .split("/ActualText")
+    .skip(1)
+    .filter_map(|span| span.split("EMC").next())
+    .collect::<Vec<_>>();
+
+  assert_eq!(spans.len(), 2, "expected a span for each accented letter");
+
+  for span in spans {
+    let spacing = span
+      .split(" Tc")
+      .next()
+      .and_then(|before| before.rsplit(' ').next())
+      .and_then(|value| value.parse::<f32>().ok());
+
+    assert!(
+      spacing.is_some_and(|spacing| spacing > 0.0),
+      "the closing acute keeps its own advance: {span}"
+    );
+    assert!(
+      span.trim_end().ends_with("0 Tc"),
+      "character spacing outlives its span: {span}"
+    );
+  }
+}
+
+/// The glyphs of a cluster map to their own characters in ToUnicode, as Skia writes them. A
+/// viewer that ignores `/ActualText` then reads `S` and U+0301 rather than `Ś` twice, and the
+/// plain `S` of a later word still reads as `S`.
+#[test]
+fn a_clustered_glyph_maps_to_its_own_character() {
+  let fonts = combining_fonts();
+  let pdf = render(
+    PdfOptions::builder()
+      .node(
+        from_html("<p>Świnoujście Sopot</p>", FromHtmlOptions::default()).expect("parse the doc"),
+      )
+      .viewport(Viewport::new((240, 48)))
+      .fonts(&fonts)
+      .build(),
+  )
+  .expect("render the decomposed letters");
+  let haystack = inflated_text(&pdf);
+
+  // A ToUnicode entry reads `<glyph> <codepoint>`.
+  for (codepoint, mapped) in [
+    ("0053", true),
+    ("0301", true),
+    ("015A", false),
+    ("015B", false),
+  ] {
+    assert_eq!(
+      haystack.contains(&format!("> <{codepoint}>")),
+      mapped,
+      "a glyph maps to U+{codepoint}"
+    );
+  }
+}
+
+/// A glyph with no `cmap` codepoint of its own, such as Noto's pre-base matra in `ति`, maps to
+/// what the cluster's other glyphs leave of it: `ि`, not the whole `ति` again after `त`.
+#[test]
+fn a_glyph_without_a_codepoint_maps_to_the_rest_of_its_cluster() {
+  let mut fonts = Fonts::default();
+  let data = fs::read(
+    Path::new(env!("CARGO_MANIFEST_DIR"))
+      .join("../assets/fonts/noto-sans/noto-sans-devanagari-v30-devanagari-regular.woff2"),
+  )
+  .expect("read devanagari font");
+
+  fonts
+    .register(FontResource::new(data))
+    .expect("load devanagari font");
+
+  let pdf = render(
+    PdfOptions::builder()
+      .node(
+        from_html(r#"<p lang="hi">तिरछा</p>"#, FromHtmlOptions::default()).expect("parse the doc"),
+      )
+      .viewport(Viewport::new((240, 48)))
+      .fonts(&fonts)
+      .build(),
+  )
+  .expect("render the reordered cluster");
+  let haystack = inflated_text(&pdf);
+
+  assert!(
+    haystack.contains("> <093F>"),
+    "the matra maps to its own character"
+  );
+  assert!(
+    !haystack.contains("> <0924093F>"),
+    "the matra repeats its whole cluster"
+  );
 }
 
 /// Encoded bitmaps reach the PDF as the bytes they came in as: a JPEG embeds

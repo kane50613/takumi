@@ -6,9 +6,9 @@ import type { Node } from "../src/types";
 const bytes = () => new Uint8Array([1, 2, 3]);
 const textNode = (text: string): Node => ({ type: "text", text });
 
-const rangedFont = (name: string, ranges: [number, number][]): FontLoader => ({
+const rangedFont = (name: string, unicodeRange: [number, number][]): FontLoader => ({
   name,
-  ranges,
+  unicodeRange,
   data: () => bytes(),
 });
 
@@ -55,6 +55,16 @@ const stub = () => {
   };
 };
 
+describe("FontRegistry", () => {
+  test("registers a deprecated ranges loader with its unicodeRange", async () => {
+    const { registerInner, fonts } = registry();
+
+    await fonts.register({ name: "Fam", ranges: [[0x41, 0x5a]], data: () => bytes() });
+
+    expect(registerInner.mock.calls[0]?.[0]).toMatchObject({ unicodeRange: [[0x41, 0x5a]] });
+  });
+});
+
 describe("prepareRenderInput abort policy", () => {
   test("a pre-aborted signal rejects before resources resolve", async () => {
     const { fonts } = registry();
@@ -72,7 +82,7 @@ describe("prepareRenderInput abort policy", () => {
     const controller = new AbortController();
     const font: FontLoader = {
       name: "Fam",
-      ranges: [[0x41, 0x5a]],
+      unicodeRange: [[0x41, 0x5a]],
       data: () => {
         controller.abort();
         return bytes();
