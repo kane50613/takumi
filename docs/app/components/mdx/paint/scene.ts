@@ -92,7 +92,7 @@ function sceneRun(run: TextRun): SceneRun {
     family: run.font.family,
     weight: run.font.weight,
     transform: run.transform,
-    outline: run.outline(),
+    outline: run.outlines().join(""),
   };
 }
 

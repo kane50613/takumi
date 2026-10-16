@@ -446,9 +446,9 @@ fn glyph_clusters_index_the_runs_text_in_utf16_units() {
 }
 
 #[test]
-fn run_outline_writes_the_runs_glyphs() {
+fn run_outlines_write_each_glyph() {
   let tree = paint(card());
-  let (node, run) = tree
+  let (node, run, count) = tree
     .document
     .nodes
     .iter()
@@ -456,15 +456,17 @@ fn run_outline_writes_the_runs_glyphs() {
       NodeKind::Text { runs, .. } => runs
         .iter()
         .position(|run| run.text == "world")
-        .map(|run| (node.id, run)),
+        .map(|run| (node.id, run, runs[run].glyphs.len())),
       _ => None,
     })
     .expect("a run reading world");
+  let outlines = tree.run_outlines(node, run).expect("the run's outlines");
 
-  assert!(
-    tree
-      .run_outline(node, run)
+  assert_eq!(outlines.len(), count);
+  assert!(outlines.iter().all(|outline| {
+    outline
+      .as_deref()
       .is_some_and(|outline| outline.starts_with('M'))
-  );
-  assert_eq!(tree.run_outline(node, usize::MAX), None);
+  }));
+  assert_eq!(tree.run_outlines(node, usize::MAX), None);
 }
