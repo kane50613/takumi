@@ -47,6 +47,9 @@ describe("Painter.paint", () => {
       tree.nodes.map((node) => node.element?.id),
     );
     expect(read.steps.map((step) => step.type)).toEqual(tree.steps.map((step) => step.type));
+    expect(read.steps.map((step) => read.nodes.indexOf(step.node))).toEqual(
+      tree.steps.map((step) => tree.nodes.indexOf(step.node)),
+    );
     expect(
       box(read, "clipped")?.type === "box" && box(read, "clipped")?.effects?.clip,
     ).toMatchObject({ type: "path" });
@@ -57,6 +60,9 @@ describe("Painter.paint", () => {
     expect(() =>
       paintTreeFromJSON(JSON.parse(JSON.stringify({ ...tree.toJSON(), version: 2 }))),
     ).toThrow("version 2");
+    expect(() => paintTreeFromJSON(JSON.parse('{"version":1,"tree":{}}'))).toThrow(
+      "not a serialized paint tree",
+    );
 
     const json = tree.toJSON();
     const cyclic = {

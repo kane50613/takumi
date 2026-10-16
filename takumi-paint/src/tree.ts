@@ -164,6 +164,15 @@ export function paintTreeFromJSON(json: SerializedPaintTree): PaintTree {
   if (json.version !== SERIALIZED_VERSION) {
     throw new Error(`Unsupported paint tree version ${String(json.version)}`);
   }
+  if (
+    !Array.isArray(json.tree?.nodes) ||
+    !Array.isArray(json.tree.steps) ||
+    !Array.isArray(json.tree.fonts) ||
+    !Array.isArray(json.outlines) ||
+    !json.tree.nodes.every((node) => Array.isArray(node?.children))
+  ) {
+    throw new Error("The JSON is not a serialized paint tree");
+  }
   // A painted tree is a tree listed in document order: every node but the root has one parent,
   // listed before it. Holding crafted JSON to that keeps the walk in `inDocumentOrder` from
   // looping on a cycle or revisiting a node shared by several parents exponentially often.
