@@ -10,6 +10,11 @@ use crate::{
   style::{Affine, Color},
 };
 
+/// Whether `c` is a bidi mark layout inserts rather than text the document holds.
+fn is_bidi_mark(c: char) -> bool {
+  matches!(c, '\u{200E}' | '\u{200F}')
+}
+
 /// How one glyph of a run paints.
 pub(super) enum GlyphPaint<'g> {
   /// An outline filled with the run's colour, stroked by `embolden` for faux bold.
@@ -115,15 +120,54 @@ impl PositionedInlineRun {
 
   /// The run's text without the bidi marks layout inserts.
   pub(super) fn text(&self, text: &str, spans: &[ProcessedInlineSpan<'_>]) -> String {
+    let (_, slice) = self.text_slice(text, spans);
+
+    slice.chars().filter(|c| !is_bidi_mark(*c)).collect()
+  }
+
+  /// Where each glyph's cluster starts in [`Self::text`], in UTF-16 code units; every glyph is
+  /// `None` when the shaper's clusters could not be matched to the glyphs.
+  pub(super) fn glyph_clusters(
+    &self,
+    text: &str,
+    spans: &[ProcessedInlineSpan<'_>],
+  ) -> Vec<Option<u32>> {
+    let clusters = &self.glyph_run.cluster_ranges;
+
+    if clusters.len() != self.glyph_run.glyphs.len() {
+      return vec![None; self.glyph_run.glyphs.len()];
+    }
+
+    let (start, slice) = self.text_slice(text, spans);
+    let mut units = vec![0; slice.len() + 1];
+    let mut count = 0;
+
+    for (offset, c) in slice.char_indices() {
+      units[offset] = count;
+      if !is_bidi_mark(c) {
+        count += c.len_utf16() as u32;
+      }
+    }
+    units[slice.len()] = count;
+
+    clusters
+      .iter()
+      .map(|cluster| {
+        let offset = cluster.start.checked_sub(start)?;
+
+        slice.is_char_boundary(offset).then(|| units[offset])
+      })
+      .collect()
+  }
+
+  /// The run's slice of `text` and the byte offset it starts at.
+  fn text_slice<'t>(&self, text: &'t str, spans: &[ProcessedInlineSpan<'_>]) -> (usize, &'t str) {
     let Range { start, end } = self.text_range(spans);
     let end = end.min(text.len());
     let start = text.ceil_char_boundary(start.min(end));
     let end = text.floor_char_boundary(end);
 
-    text[start..end]
-      .chars()
-      .filter(|c| !matches!(c, '\u{200E}' | '\u{200F}'))
-      .collect()
+    (start, &text[start..end])
   }
 
   /// The run's byte range narrowed to the span it was shaped for, since several spans can share

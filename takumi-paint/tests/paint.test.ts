@@ -13,6 +13,16 @@ function runs(tree: PaintTree): TextRun[] {
 }
 
 describe("Painter.paint", () => {
+  it("points each glyph at where its cluster starts in the run's text", async () => {
+    const tree = await painter.paint(text("café ok", { fontSize: 32 }), {
+      width: 400,
+      height: 100,
+    });
+    const [run] = runs(tree);
+
+    expect(run?.glyphs.map((glyph) => glyph.cluster)).toEqual([0, 1, 2, 3, 4, 5, 6]);
+  });
+
   it("resolves a box's decorations into drawables and its text into runs", async () => {
     const tree = await painter.paint(
       container({

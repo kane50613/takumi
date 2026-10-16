@@ -432,6 +432,20 @@ fn a_hairline_repeating_gradient_keeps_one_period_repeating() {
 }
 
 #[test]
+fn glyph_clusters_index_the_runs_text_in_utf16_units() {
+  let document = build(Node::container([Node::text("café ok")]).with_id("cafe"));
+  let run = runs(&document, find(&document, "cafe"))[0];
+  let clusters: Vec<_> = run.glyphs.iter().map(|glyph| glyph.cluster).collect();
+
+  assert_eq!(run.text, "café ok");
+  assert_eq!(
+    clusters,
+    [0, 1, 2, 3, 4, 5, 6].map(Some),
+    "é is two bytes but one UTF-16 unit, so o and k start at 5 and 6"
+  );
+}
+
+#[test]
 fn run_outline_writes_the_runs_glyphs() {
   let tree = paint(card());
   let (node, run) = tree

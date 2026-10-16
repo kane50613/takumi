@@ -439,10 +439,12 @@ impl Walker {
           glyphs: shaped
             .glyphs
             .iter()
-            .map(|glyph| PaintGlyph {
+            .zip(run.glyph_clusters(text, spans))
+            .map(|(glyph, cluster)| PaintGlyph {
               id: glyph.id,
               x: glyph.x - shaped.offset,
               y: glyph.y - shaped.baseline,
+              cluster,
             })
             .collect(),
           transform: (!line_scale.is_identity()).then(|| {
