@@ -316,7 +316,16 @@ export type ElementInfo = {
   readonly path: readonly number[];
 };
 
-export type Glyph = { readonly id: number; readonly x: number; readonly y: number };
+export type Glyph = {
+  readonly id: number;
+  readonly x: number;
+  readonly y: number;
+  /**
+   * Where the glyph's cluster starts in the run's `text`, in UTF-16 code units. Glyphs of one
+   * cluster share it; absent when the shaper's clusters could not be matched to the glyphs.
+   */
+  readonly cluster?: number;
+};
 
 export type RawTextRun = {
   readonly text: string;
