@@ -72,6 +72,34 @@ describe("Painter.paint", () => {
     expect(() => paintTreeFromJSON(JSON.parse(JSON.stringify(cyclic)))).toThrow(
       "does not follow it",
     );
+
+    const shared = {
+      ...json,
+      tree: {
+        ...json.tree,
+        nodes: json.tree.nodes.map((node) =>
+          node.id === 0 ? { ...node, children: [...node.children, ...node.children] } : node,
+        ),
+      },
+    };
+
+    expect(() => paintTreeFromJSON(JSON.parse(JSON.stringify(shared)))).toThrow(
+      "listed under two parents",
+    );
+
+    const outside = {
+      ...json,
+      tree: {
+        ...json.tree,
+        nodes: json.tree.nodes.map((node) =>
+          node.id === 0 ? { ...node, children: [json.tree.nodes.length] } : node,
+        ),
+      },
+    };
+
+    expect(() => paintTreeFromJSON(JSON.parse(JSON.stringify(outside)))).toThrow(
+      "does not follow it",
+    );
   });
 
   it("outlines each glyph of a run on its own", async () => {
