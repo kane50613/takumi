@@ -136,6 +136,11 @@ name = "shape_cache"
 harness = false
 required-features = ["unstable"]
 
+[[bench]]
+name = "panel_dashboard"
+harness = false
+required-features = ["unstable"]
+
 
 [[bench]]
 name = "blur_large"

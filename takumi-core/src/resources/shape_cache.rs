@@ -26,9 +26,7 @@ static MAX_BYTES: AtomicUsize = AtomicUsize::new(DEFAULT_SHAPE_CACHE_MAX_BYTES);
 pub fn set_shape_cache_max_bytes(bytes: usize) {
   MAX_BYTES.store(bytes, Ordering::Relaxed);
 
-  if let Some(cache) = LazyLock::get(&SHARED) {
-    cache.set_capacity(bytes as u64);
-  }
+  SHARED.set_capacity(bytes as u64);
 }
 
 type Entry = Arc<(u64, InlineLayout, String)>;
@@ -116,7 +114,7 @@ thread_local! {
 /// The key this thread last inserted, if any.
 #[cfg(test)]
 pub(crate) fn take_last_inserted_key_for_test() -> Option<u64> {
-  LAST_INSERTED_KEY.with(|cell| cell.take())
+  LAST_INSERTED_KEY.with(Cell::take)
 }
 
 #[cfg(test)]
