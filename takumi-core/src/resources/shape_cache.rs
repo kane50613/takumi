@@ -26,7 +26,9 @@ static MAX_BYTES: AtomicUsize = AtomicUsize::new(DEFAULT_SHAPE_CACHE_MAX_BYTES);
 pub fn set_shape_cache_max_bytes(bytes: usize) {
   MAX_BYTES.store(bytes, Ordering::Relaxed);
 
-  SHARED.set_capacity(bytes as u64);
+  if bytes > 0 {
+    SHARED.set_capacity(bytes as u64);
+  }
 }
 
 type Entry = Arc<(u64, InlineLayout, String)>;
@@ -143,6 +145,7 @@ mod tests {
 
   #[test]
   fn a_text_mismatch_is_a_miss_even_on_a_fingerprint_collision() {
+    enable_for_test();
     get_or_shape(parts(2, 1, 1), "hello", || {
       (InlineLayout::new(), "hello".to_owned())
     });
@@ -155,6 +158,7 @@ mod tests {
 
   #[test]
   fn different_revisions_never_collide() {
+    enable_for_test();
     get_or_shape(parts(3, 1, 1), "hello", || {
       (InlineLayout::new(), "hello".to_owned())
     });
@@ -167,6 +171,7 @@ mod tests {
 
   #[test]
   fn different_fallback_signatures_never_collide() {
+    enable_for_test();
     get_or_shape(parts(4, 1, 1), "hello", || {
       (InlineLayout::new(), "hello".to_owned())
     });
@@ -179,6 +184,7 @@ mod tests {
 
   #[test]
   fn a_mismatched_stored_fingerprint_is_a_miss_even_with_matching_text() {
+    enable_for_test();
     let the_key = key(parts(5, 1, 1));
     SHARED.insert(
       the_key,
