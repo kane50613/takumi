@@ -57,6 +57,21 @@ describe("Painter.paint", () => {
     expect(() =>
       paintTreeFromJSON(JSON.parse(JSON.stringify({ ...tree.toJSON(), version: 2 }))),
     ).toThrow("version 2");
+
+    const json = tree.toJSON();
+    const cyclic = {
+      ...json,
+      tree: {
+        ...json.tree,
+        nodes: json.tree.nodes.map((node) =>
+          node.type === "box" && node.id === 1 ? { ...node, children: [0] } : node,
+        ),
+      },
+    };
+
+    expect(() => paintTreeFromJSON(JSON.parse(JSON.stringify(cyclic)))).toThrow(
+      "does not follow it",
+    );
   });
 
   it("outlines each glyph of a run on its own", async () => {

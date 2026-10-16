@@ -164,6 +164,15 @@ export function paintTreeFromJSON(json: SerializedPaintTree): PaintTree {
   if (json.version !== SERIALIZED_VERSION) {
     throw new Error(`Unsupported paint tree version ${String(json.version)}`);
   }
+  // Nodes are listed in document order, so a node's children always come after it. Holding the
+  // JSON to that keeps a crafted cycle from sending the walk in `inDocumentOrder` round forever.
+  json.tree.nodes.forEach((node, index) => {
+    if (node.id !== index) throw new Error(`The tree lists node ${node.id} at ${index}`);
+    if (node.children.some((child) => child <= index)) {
+      throw new Error(`Node ${index} lists a child that does not follow it`);
+    }
+  });
+
   return new PaintTreeView(json.tree, {
     fontData: () => undefined,
     runOutlines: (node, run) => json.outlines[node]?.[run],
