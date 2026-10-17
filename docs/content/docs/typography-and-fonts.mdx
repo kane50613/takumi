@@ -18,7 +18,7 @@ Pass the fonts a render needs through `fonts`. An entry takes one of three forms
 | Raw bytes  | A `Uint8Array`, `ArrayBuffer`, or `Buffer`, registered directly.                     |
 | Descriptor | `{ name, data, weight, style, generic }`. The fields override what the file reports. |
 
-A reused renderer decodes each file once and keeps it for later renders, even ones that do not list it, until you [release it](#releasing-fonts). `fonts` also takes a promise of the list, so async helpers like `googleFonts` pass straight through without `await`.
+A reused renderer decodes each file once and keeps it until you [release it](#releasing-fonts). `fonts` also takes a promise of the list, so async helpers like `googleFonts` pass straight through without `await`.
 
 ```tsx twoslash title="Load a font URL"
 import { ImageResponse } from "takumi-js/response";
@@ -194,18 +194,14 @@ export function GET() {
 
 ### Releasing fonts
 
-A long-running renderer keeps every family it has registered. When the families come from user content, release the ones you are done with. `unregisterFont({ name })` removes every face of that family, whichever call registered it, with all its `unicodeRange` subsets. `clearFonts` goes back to the bundled fallback font.
+A long-running renderer keeps every font it registers. Release the ones you are done with:
 
-```ts title="Release fonts on a long-running renderer"
-import { Renderer } from "@takumi-rs/core";
-
-const renderer = new Renderer();
-
-renderer.unregisterFont({ name: "Inter" }); // [!code highlight]
-renderer.clearFonts(); // [!code highlight]
+```ts
+renderer.unregisterFont({ name: "Inter" }); // every face and subset of Inter
+renderer.clearFonts(); // back to the bundled fallback font
 ```
 
-A later render that lists a released font in `fonts` loads and registers it again. A render already running keeps the fonts it started with, and a font still loading when you call `clearFonts` finishes registering afterwards.
+A later render that lists a released font registers it again.
 
 ## Choosing a font
 
