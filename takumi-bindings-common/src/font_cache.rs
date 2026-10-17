@@ -3,7 +3,12 @@
 
 use std::collections::HashMap;
 
-use takumi_core::{Fonts, resources::font::RegisteredFamily};
+use takumi_core::{
+  Fonts,
+  resources::font::{FontError, RegisteredFamily},
+};
+
+use crate::register_embedded;
 
 /// A family as fontique matches its name: each character lowercased on its own.
 fn fold(family: &str) -> String {
@@ -13,8 +18,7 @@ fn fold(family: &str) -> String {
 struct CachedFamily {
   /// Bytes of font data its registrations hold. A file holding several families counts in each.
   bytes: u64,
-  /// Added to by an explicit registration, or holding a last-resort face, so never released for
-  /// space.
+  /// Added to by an explicit registration, so never released for space.
   pinned: bool,
   last_used: u64,
   keys: Vec<String>,
@@ -64,19 +68,20 @@ impl FontCache {
     registered: &[RegisteredFamily],
     bytes: u64,
     pinned: bool,
-  ) {
-    self.record(fonts, key, registered, bytes, pinned);
+  ) -> Result<(), FontError> {
+    self.record(key, registered, bytes, pinned);
 
-    if !pinned {
-      let fresh: Vec<String> = registered.iter().map(|family| fold(&family.name)).collect();
-
-      self.evict(fonts, &fresh);
+    if pinned {
+      return Ok(());
     }
+
+    let fresh: Vec<String> = registered.iter().map(|family| fold(&family.name)).collect();
+
+    self.evict(fonts, &fresh)
   }
 
   fn record(
     &mut self,
-    fonts: &Fonts,
     key: Option<&str>,
     registered: &[RegisteredFamily],
     bytes: u64,
@@ -85,7 +90,6 @@ impl FontCache {
     let now = self.tick();
 
     for family in registered {
-      let pinned = pinned || fonts.is_last_resort(&family.name);
       let cached = self
         .families
         .entry(fold(&family.name))
@@ -119,9 +123,10 @@ impl FontCache {
   }
 
   /// Releases the least recently used unpinned families but `keep` from `fonts` until the rest fit
-  /// the budget, with every family the same registrations added. Renders in progress keep the
-  /// fonts they started with.
-  fn evict(&mut self, fonts: &mut Fonts, keep: &[String]) {
+  /// the budget, with every family the same registrations added. An embedded last-resort font
+  /// that goes with a family is registered again. Renders in progress keep the fonts they started
+  /// with.
+  fn evict(&mut self, fonts: &mut Fonts, keep: &[String]) -> Result<(), FontError> {
     while self.unpinned_bytes() > self.max_bytes {
       let Some(oldest) = self
         .families
@@ -130,7 +135,7 @@ impl FontCache {
         .min_by_key(|(_, family)| family.last_used)
         .map(|(folded, _)| folded.clone())
       else {
-        return;
+        return Ok(());
       };
 
       for family in self.registered_with(&oldest) {
@@ -144,9 +149,12 @@ impl FontCache {
         }
 
         fonts.unregister_family(&family);
+        register_embedded(fonts, |name| fold(name) == family)?;
         self.forget(&family);
       }
     }
+
+    Ok(())
   }
 
   /// `family` and every family a registration that added to it also added.
@@ -225,7 +233,9 @@ mod tests {
     });
     let (registered, size) = register_resource(fonts, resource).unwrap();
 
-    cache.admit(fonts, Some(family), &registered, size, pinned);
+    cache
+      .admit(fonts, Some(family), &registered, size, pinned)
+      .unwrap();
 
     size
   }
@@ -288,15 +298,18 @@ mod tests {
   }
 
   #[test]
-  fn keeps_a_family_holding_a_last_resort_face() {
+  fn registers_the_embedded_font_again_after_releasing_its_family() {
     let (_, mut cache) = fitting(1);
     let mut fonts = default_fonts().unwrap();
 
     register(&mut fonts, &mut cache, "Geist", false);
     register(&mut fonts, &mut cache, "A", false);
-    register(&mut fonts, &mut cache, "B", false);
 
-    assert!(fonts.is_last_resort("Geist"));
+    assert!(cache.lookup("Geist", false).is_none());
+    assert!(
+      fonts.unregister_family("Geist"),
+      "the embedded Geist is back"
+    );
   }
 
   #[test]

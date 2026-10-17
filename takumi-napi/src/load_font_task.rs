@@ -41,9 +41,9 @@ impl Task for LoadFontTask {
   /// between a render checking its fonts and starting.
   fn resolve(&mut self, _env: Env, (registered, bytes): Self::Output) -> Result<Self::JsValue> {
     self.state.update_fonts(|fonts, cache| {
-      cache.admit(fonts, self.key.as_deref(), &registered, bytes, self.pinned);
-
-      Ok(())
+      cache
+        .admit(fonts, self.key.as_deref(), &registered, bytes, self.pinned)
+        .map_err(map_error)
     })?;
 
     Ok(registered.into_iter().map(Into::into).collect())
