@@ -82,3 +82,36 @@ describe("FontRegistry font cache", () => {
     expect(registered.size).toBe(2);
   });
 });
+
+describe("FontRegistry font cache while fonts load", () => {
+  test("registers again a family evicted while the render's other fonts loaded", async () => {
+    const { registered, registerInner, unregister } = backend();
+    const registry = new FontRegistry(registerInner, { maxBytes: 150, unregister });
+    let finishLoading: (bytes: Uint8Array) => void = () => {};
+    const slow = {
+      name: "W",
+      data: () =>
+        new Promise<Uint8Array>((resolve) => {
+          finishLoading = resolve;
+        }),
+    };
+
+    await render(registry, font("X", 100));
+
+    const other = await registry.resolveResources([font("A", 100)], undefined, undefined);
+    const loading = registry.resolveResources([font("X", 100), slow], undefined, undefined);
+
+    await Promise.resolve();
+    other.release();
+    expect(registered.has("x")).toBe(false);
+
+    finishLoading(new Uint8Array(10));
+
+    const { fontFamilies, release } = await loading;
+
+    expect(fontFamilies).toEqual(["X", "W"]);
+    expect(registered.has("x")).toBe(true);
+
+    release();
+  });
+});

@@ -413,6 +413,11 @@ export class FontRegistry<TFamily extends RegisteredFamilyLike> {
     }
   }
 
+  /** Whether any of `families` is no longer registered here. */
+  private lost(families: string[] | undefined) {
+    return families?.some((family) => !this.uses.has(family.toLowerCase())) ?? false;
+  }
+
   private releasedSince(family: string, epoch: number) {
     return Math.max(this.released.get(family.toLowerCase()) ?? 0, this.releasedAll) > epoch;
   }
@@ -464,8 +469,18 @@ export class FontRegistry<TFamily extends RegisteredFamilyLike> {
     images: ImagesInput | undefined,
     fontFamilies: string[] | undefined,
   ): Promise<{ images?: ImageSource[]; fontFamilies?: string[]; release: () => void }> {
-    const registeredFamilies = await this.prepareFonts(fonts);
-    const release = this.use(registeredFamilies ?? []);
+    let registeredFamilies = await this.prepareFonts(fonts);
+    let release = this.use(registeredFamilies ?? []);
+
+    // A release elsewhere can evict a family before `use` protects it, so register those again,
+    // a bounded number of times so a budget smaller than one render's fonts cannot loop forever.
+    for (let attempt = 0; attempt < 3 && this.lost(registeredFamilies); attempt++) {
+      const previous = release;
+
+      registeredFamilies = await this.prepareFonts(fonts);
+      release = this.use(registeredFamilies ?? []);
+      previous();
+    }
 
     try {
       return {
