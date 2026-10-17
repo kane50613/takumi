@@ -50,4 +50,15 @@ describe("FontRegistry release", () => {
 
     expect(registerInner).toHaveBeenCalledTimes(1);
   });
+
+  test("matches family names as the backend folds them, a character at a time", async () => {
+    const registerInner = mock((_font: Font) => [{ name: "ΟΣ" }]);
+    const registry = new FontRegistry(registerInner);
+
+    await registry.register(font("ΟΣ"));
+    registry.forget("οσ");
+    await registry.register(font("ΟΣ"));
+
+    expect(registerInner).toHaveBeenCalledTimes(2);
+  });
 });

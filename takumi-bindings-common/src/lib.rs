@@ -73,10 +73,10 @@ impl FontStore {
     Ok(changed)
   }
 
-  /// Removes every face registered under `family`; see [`Fonts::unregister`].
-  pub fn unregister(&self, family: &str) -> bool {
+  /// Removes every face registered under `family`; see [`Fonts::unregister_family`].
+  pub fn unregister_family(&self, family: &str) -> bool {
     let mut fonts = Fonts::clone(&self.current());
-    let removed = fonts.unregister(family);
+    let removed = fonts.unregister_family(family);
 
     if removed {
       *self.0.borrow_mut() = Rc::new(fonts);

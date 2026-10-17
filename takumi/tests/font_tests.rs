@@ -291,9 +291,12 @@ fn unregister_removes_every_subset() {
 
   let registered = render_devanagari(&fonts, "Alpha");
 
-  assert!(fonts.unregister("alpha"), "family names match without case");
   assert!(
-    !fonts.unregister("Alpha"),
+    fonts.unregister_family("alpha"),
+    "family names match without case"
+  );
+  assert!(
+    !fonts.unregister_family("Alpha"),
     "a removed family has nothing left"
   );
 

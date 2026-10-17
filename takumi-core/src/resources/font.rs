@@ -714,7 +714,7 @@ impl Fonts {
 
   /// Removes every face registered under `family`, from each source and `unicode-range` subset
   /// alike, so it falls back as an unknown family; false when it has no faces.
-  pub fn unregister(&mut self, family: &str) -> bool {
+  pub fn unregister_family(&mut self, family: &str) -> bool {
     let Some(info) = self.inner.collection.family_by_name(family) else {
       return false;
     };

@@ -5,6 +5,7 @@ import type {
   FontCacheRendererOptions,
   FontLoader,
   ImagesInput,
+  RegisteredFamilyLike,
 } from "@takumi-rs/helpers/renderer";
 import { FontRegistry } from "@takumi-rs/helpers/renderer";
 import {
@@ -157,14 +158,14 @@ export class Painter {
   }
 
   /**
-   * Removes every face registered under `family`, each `unicodeRange` subset alike, so the
-   * renderer lets go of it; returns whether it had any. A later render that lists the font
-   * registers it again.
+   * Removes every face registered under the family `name`, from any `registerFont` call and each
+   * `unicodeRange` subset alike; returns whether it had any. Takes a family `registerFont` returned
+   * as well. A later render that lists one of its fonts registers it again.
    */
-  unregisterFont(family: string) {
-    this.#fonts.forget(family);
+  unregisterFont(family: RegisteredFamilyLike) {
+    this.#fonts.forget(family.name);
 
-    return this.#inner.unregisterFont(family);
+    return this.#inner.unregisterFont(family.name);
   }
 
   /** Removes every registered font, leaving the bundled fallback font. */

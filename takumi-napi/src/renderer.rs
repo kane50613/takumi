@@ -471,7 +471,7 @@ impl Renderer {
   pub fn unregister_font(&self, family: String) -> Result<bool> {
     self
       .state
-      .update_fonts(|fonts| Ok(fonts.unregister(&family)))
+      .update_fonts(|fonts| Ok(fonts.unregister_family(&family)))
   }
 
   /// Removes every registered font, leaving the bundled fallback font.

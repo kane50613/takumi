@@ -19,8 +19,8 @@ describe("unregisterFont", () => {
     await renderer.registerFont(monoData);
     const registered = await renderer.render(node("Geist Mono"), options);
 
-    expect(renderer.unregisterFont("geist mono")).toBe(true);
-    expect(renderer.unregisterFont("Geist Mono")).toBe(false);
+    expect(renderer.unregisterFont({ name: "geist mono" })).toBe(true);
+    expect(renderer.unregisterFont({ name: "Geist Mono" })).toBe(false);
 
     const removed = await renderer.render(node("Geist Mono"), options);
 
@@ -48,11 +48,22 @@ describe("unregisterFont", () => {
     await renderer.render(node("Geist Mono"), { ...options, fonts });
     expect(loads).toBe(1);
 
-    renderer.unregisterFont("Geist Mono");
+    renderer.unregisterFont({ name: "Geist Mono" });
 
     const again = await renderer.render(node("Geist Mono"), { ...options, fonts });
     expect(loads).toBe(2);
     expect(Buffer.compare(again, first)).toBe(0);
+  });
+
+  test("takes back the families registerFont returned", async () => {
+    const renderer = new Renderer();
+    const fallback = await renderer.render(node("Geist Mono"), options);
+
+    for (const family of await renderer.registerFont(monoData)) {
+      expect(renderer.unregisterFont(family)).toBe(true);
+    }
+
+    expect(Buffer.compare(await renderer.render(node("Geist Mono"), options), fallback)).toBe(0);
   });
 
   test("clearFonts leaves the bundled fallback font", async () => {
