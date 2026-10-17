@@ -209,7 +209,7 @@ To release them automatically, cap the decoded font bytes that renders' `fonts` 
 const renderer = new Renderer({ fontCacheMaxBytes: 64 * 1024 * 1024 });
 ```
 
-Past the cap, the least recently used families go first. Fonts from `registerFont` stay. Set the cap above what one render needs.
+Past the cap, the least recently used families go first. Fonts from `registerFont` stay, and so does the font loaded last, even past the cap alone. Set the cap above what one render needs.
 
 ## Choosing a font
 

@@ -436,7 +436,8 @@ pub struct RendererOptions {
   pub cache_max_bytes: Option<f64>,
   /// Bytes of decoded fonts that renders' `fonts` lists may keep registered. Past it, the least
   /// recently used families are released and load again when a render lists them. Fonts from
-  /// `registerFont` stay, and a running render keeps the fonts it started with.
+  /// `registerFont` stay, and so does the font loaded last, even past the budget alone. A running
+  /// render keeps the fonts it started with.
   /// @default unbounded
   pub font_cache_max_bytes: Option<f64>,
 }
