@@ -1,5 +1,10 @@
 import { describe, expect, mock, test } from "bun:test";
+import type { FontLoader } from "../src/renderer";
 import { fontBackend } from "./font-backend";
+
+/** The `fontFamilies` a render with `loaders` passes on. */
+const families = (fonts: ReturnType<typeof fontBackend>["fonts"], loaders: FontLoader[]) =>
+  fonts.resolveResources(loaders, undefined, undefined, (resources) => resources.fontFamilies);
 
 const font = (name: string) => ({ name, data: mock(() => new Uint8Array([1, 2, 3])) });
 
@@ -8,8 +13,8 @@ describe("FontRegistry", () => {
     const { backend, fonts } = fontBackend();
     const inter = font("Inter");
 
-    await fonts.prepareFonts([inter]);
-    await fonts.prepareFonts([inter]);
+    await families(fonts, [inter]);
+    await families(fonts, [inter]);
 
     expect(inter.data).toHaveBeenCalledTimes(1);
     expect(backend.cacheFont).toHaveBeenCalledTimes(1);
@@ -19,7 +24,7 @@ describe("FontRegistry", () => {
     const { backend, fonts } = fontBackend();
     const inter = font("Inter");
 
-    await Promise.all([fonts.prepareFonts([inter]), fonts.prepareFonts([inter])]);
+    await Promise.all([families(fonts, [inter]), families(fonts, [inter])]);
 
     expect(backend.cacheFont).toHaveBeenCalledTimes(1);
   });
@@ -28,9 +33,9 @@ describe("FontRegistry", () => {
     const { held, backend, fonts } = fontBackend();
     const inter = font("Inter");
 
-    await fonts.prepareFonts([inter]);
+    await families(fonts, [inter]);
     held.clear();
-    await fonts.prepareFonts([inter]);
+    await families(fonts, [inter]);
 
     expect(backend.cacheFont).toHaveBeenCalledTimes(2);
   });
@@ -38,7 +43,7 @@ describe("FontRegistry", () => {
   test("caches a render's fonts and pins those registerFont registers", async () => {
     const { backend, fonts } = fontBackend();
 
-    await fonts.prepareFonts([font("Inter")]);
+    await families(fonts, [font("Inter")]);
     await fonts.register(font("Geist"));
 
     expect(backend.cacheFont).toHaveBeenCalledTimes(1);
@@ -48,7 +53,7 @@ describe("FontRegistry", () => {
   test("pins a font registerFont asks for while a render loads it", async () => {
     const { backend, fonts } = fontBackend();
     const inter = font("Inter");
-    const render = fonts.prepareFonts([inter]);
+    const render = families(fonts, [inter]);
 
     await fonts.register(inter);
     await render;
@@ -58,6 +63,20 @@ describe("FontRegistry", () => {
       ["Inter::", true],
       ["Inter::", true],
     ]);
+  });
+
+  test("registers a font again when registerFont joins a load whose font was released", async () => {
+    const { backend, fonts } = fontBackend();
+    const inter = font("Inter");
+
+    backend.cacheFont.mockImplementation(() => [{ name: "Inter" }]);
+
+    const render = families(fonts, [inter]);
+
+    await fonts.register(inter);
+    await render;
+
+    expect(backend.registerFont).toHaveBeenCalledTimes(1);
   });
 
   test("loads a render's fonts again when another render pushed them out", async () => {
@@ -73,7 +92,7 @@ describe("FontRegistry", () => {
       },
     };
 
-    expect(await fonts.prepareFonts([inter, geist])).toEqual(["Inter", "Geist"]);
+    expect(await families(fonts, [inter, geist])).toEqual(["Inter", "Geist"]);
     expect(backend.cacheFont).toHaveBeenCalledTimes(3);
   });
 

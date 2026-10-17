@@ -467,7 +467,15 @@ export class PdfRenderer {
     const bands = [headerResult?.node, footerResult?.node, ...(pagesResult?.nodes ?? [])].filter(
       (band) => band !== undefined,
     );
-    const resources = await this.fonts.resolveResources(
+    const sheets = [
+      ...ownCss(css, stylesheets),
+      ...main.css,
+      ...(headerResult?.css ?? []),
+      ...(footerResult?.css ?? []),
+      ...(pagesResult?.css ?? []),
+    ];
+
+    return this.fonts.resolveResources(
       fonts &&
         subsetFonts({
           fonts,
@@ -482,24 +490,16 @@ export class PdfRenderer {
         }),
       images,
       fontFamilies,
+      (resources) =>
+        this.inner.render(main.node, {
+          ...rest,
+          header: headerResult?.node,
+          footer: footerResult?.node,
+          pages: pagesResult?.pages,
+          css: sheets.length > 0 ? sheets : undefined,
+          ...resources,
+        }),
     );
-    const sheets = [
-      ...ownCss(css, stylesheets),
-      ...main.css,
-      ...(headerResult?.css ?? []),
-      ...(footerResult?.css ?? []),
-      ...(pagesResult?.css ?? []),
-    ];
-
-    return this.inner.render(main.node, {
-      ...rest,
-      header: headerResult?.node,
-      footer: footerResult?.node,
-      pages: pagesResult?.pages,
-      css: sheets.length > 0 ? sheets : undefined,
-      images: resources.images,
-      fontFamilies: resources.fontFamilies,
-    });
   }
 
   /**
@@ -516,8 +516,10 @@ export class PdfRenderer {
   async measure(node: NodeInput, options: MeasureOptions = {}): Promise<MeasuredSize> {
     const { fonts, images, css, stylesheets, fontFamilies, ...rest } = options;
     const main = await resolveNode(node);
+    const sheets = [...ownCss(css, stylesheets), ...main.css];
+
     // The tree measured may itself be a band, so its counters are always in play.
-    const resources = await this.fonts.resolveResources(
+    return this.fonts.resolveResources(
       fonts &&
         subsetFonts({
           fonts,
@@ -525,15 +527,13 @@ export class PdfRenderer {
         }),
       images,
       fontFamilies,
+      (resources) =>
+        this.inner.measure(main.node, {
+          ...rest,
+          css: sheets.length > 0 ? sheets : undefined,
+          ...resources,
+        }),
     );
-    const sheets = [...ownCss(css, stylesheets), ...main.css];
-
-    return this.inner.measure(main.node, {
-      ...rest,
-      css: sheets.length > 0 ? sheets : undefined,
-      images: resources.images,
-      fontFamilies: resources.fontFamilies,
-    });
   }
 
   /** Registers a font ahead of time, deduped against earlier registrations. */

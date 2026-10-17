@@ -13,7 +13,8 @@ fn fold(family: &str) -> String {
 struct CachedFamily {
   /// Bytes of font data its registrations hold. A file holding several families counts in each.
   bytes: u64,
-  /// Added to by an explicit registration, so never released for space.
+  /// Added to by an explicit registration, or holding a last-resort face, so never released for
+  /// space.
   pinned: bool,
   last_used: u64,
   keys: Vec<String>,
@@ -64,7 +65,7 @@ impl FontCache {
     bytes: u64,
     pinned: bool,
   ) {
-    self.record(key, registered, bytes, pinned);
+    self.record(fonts, key, registered, bytes, pinned);
 
     if !pinned {
       let fresh: Vec<String> = registered.iter().map(|family| fold(&family.name)).collect();
@@ -75,6 +76,7 @@ impl FontCache {
 
   fn record(
     &mut self,
+    fonts: &Fonts,
     key: Option<&str>,
     registered: &[RegisteredFamily],
     bytes: u64,
@@ -83,6 +85,7 @@ impl FontCache {
     let now = self.tick();
 
     for family in registered {
+      let pinned = pinned || fonts.is_last_resort(&family.name);
       let cached = self
         .families
         .entry(fold(&family.name))
@@ -207,7 +210,7 @@ mod tests {
   use takumi_core::resources::font::{FontOverride, FontResource};
 
   use super::*;
-  use crate::input::register_resource;
+  use crate::{default_fonts, input::register_resource};
 
   /// Geist registered under `family`, as a render's `fonts` list or `registerFont` would.
   fn register(fonts: &mut Fonts, cache: &mut FontCache, family: &str, pinned: bool) -> u64 {
@@ -282,6 +285,18 @@ mod tests {
     register(&mut fonts, &mut cache, "A", false);
 
     assert!(cache.lookup("A", false).is_some());
+  }
+
+  #[test]
+  fn keeps_a_family_holding_a_last_resort_face() {
+    let (_, mut cache) = fitting(1);
+    let mut fonts = default_fonts().unwrap();
+
+    register(&mut fonts, &mut cache, "Geist", false);
+    register(&mut fonts, &mut cache, "A", false);
+    register(&mut fonts, &mut cache, "B", false);
+
+    assert!(fonts.is_last_resort("Geist"));
   }
 
   #[test]

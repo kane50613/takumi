@@ -1,5 +1,5 @@
 import { describe, expect, mock, spyOn, test } from "bun:test";
-import { prepareRenderInput } from "../src/renderer";
+import { withRenderInput } from "../src/renderer";
 import type { FontLoader } from "../src/renderer";
 import type { Node } from "../src/types";
 import { fontBackend } from "./font-backend";
@@ -13,6 +13,13 @@ const rangedFont = (name: string, unicodeRange: [number, number][]): FontLoader 
   data: () => bytes(),
 });
 
+/** Runs {@link withRenderInput} with a render that does nothing. */
+const prepare = (
+  fonts: ReturnType<typeof fontBackend>["fonts"],
+  options: Parameters<typeof withRenderInput>[1],
+  source: Node,
+) => withRenderInput(fonts, options, source, () => undefined);
+
 /** Mirrors the per-backend `Renderer` wiring so the shared body is exercised through all methods. */
 const stub = () => {
   const { fonts } = fontBackend();
@@ -24,26 +31,30 @@ const stub = () => {
   };
   return {
     inner,
-    async render(node: Node, options?: { signal?: AbortSignal; fonts?: FontLoader[] }) {
-      const { options: opts, signal } = await prepareRenderInput(fonts, options ?? {}, node);
-      return inner.render(node, opts, signal);
+    render(node: Node, options?: { signal?: AbortSignal; fonts?: FontLoader[] }) {
+      return withRenderInput(fonts, options ?? {}, node, (opts, signal) =>
+        inner.render(node, opts, signal),
+      );
     },
-    async renderSvg(node: Node, options?: { signal?: AbortSignal; fonts?: FontLoader[] }) {
-      const { options: opts, signal } = await prepareRenderInput(fonts, options ?? {}, node);
-      return inner.renderSvg(node, opts, signal);
+    renderSvg(node: Node, options?: { signal?: AbortSignal; fonts?: FontLoader[] }) {
+      return withRenderInput(fonts, options ?? {}, node, (opts, signal) =>
+        inner.renderSvg(node, opts, signal),
+      );
     },
-    async measure(node: Node, options?: { signal?: AbortSignal; fonts?: FontLoader[] }) {
-      const { options: opts, signal } = await prepareRenderInput(fonts, options ?? {}, node);
-      return inner.measure(node, opts, signal);
+    measure(node: Node, options?: { signal?: AbortSignal; fonts?: FontLoader[] }) {
+      return withRenderInput(fonts, options ?? {}, node, (opts, signal) =>
+        inner.measure(node, opts, signal),
+      );
     },
-    async renderAnimation(options: {
+    renderAnimation(options: {
       scenes: { node: Node }[];
       signal?: AbortSignal;
       fonts?: FontLoader[];
     }) {
       const nodes = options.scenes.map((scene) => scene.node);
-      const { options: opts, signal } = await prepareRenderInput(fonts, options, nodes);
-      return inner.renderAnimation(opts, signal);
+      return withRenderInput(fonts, options, nodes, (opts, signal) =>
+        inner.renderAnimation(opts, signal),
+      );
     },
   };
 };
@@ -58,14 +69,12 @@ describe("FontRegistry", () => {
   });
 });
 
-describe("prepareRenderInput abort policy", () => {
+describe("withRenderInput abort policy", () => {
   test("a pre-aborted signal rejects before resources resolve", async () => {
     const { fonts } = fontBackend();
     const resolve = spyOn(fonts, "resolveResources");
 
-    await expect(
-      prepareRenderInput(fonts, { signal: AbortSignal.abort() }, textNode("A")),
-    ).rejects.toThrow();
+    await expect(prepare(fonts, { signal: AbortSignal.abort() }, textNode("A"))).rejects.toThrow();
     expect(resolve).not.toHaveBeenCalled();
   });
 
@@ -83,26 +92,22 @@ describe("prepareRenderInput abort policy", () => {
     };
 
     await expect(
-      prepareRenderInput(fonts, { fonts: [font], signal: controller.signal }, textNode("A")),
+      prepare(fonts, { fonts: [font], signal: controller.signal }, textNode("A")),
     ).rejects.toThrow();
     expect(resolve).toHaveBeenCalled();
   });
 });
 
-describe("prepareRenderInput resource forwarding", () => {
+describe("withRenderInput resource forwarding", () => {
   test("fonts, images and fontFamilies reach resolveResources", async () => {
     const { fonts } = fontBackend();
     const resolve = spyOn(fonts, "resolveResources");
     const font = rangedFont("Fam", [[0x41, 0x5a]]);
     const images = [{ src: "a", data: bytes() }];
 
-    await prepareRenderInput(
-      fonts,
-      { fonts: [font], images, fontFamilies: ["Explicit"] },
-      textNode("A"),
-    );
+    await prepare(fonts, { fonts: [font], images, fontFamilies: ["Explicit"] }, textNode("A"));
 
-    expect(resolve).toHaveBeenCalledWith([font], images, ["Explicit"]);
+    expect(resolve).toHaveBeenCalledWith([font], images, ["Explicit"], expect.any(Function));
   });
 
   test("fonts accepts a promise of the list", async () => {
@@ -110,9 +115,9 @@ describe("prepareRenderInput resource forwarding", () => {
     const resolve = spyOn(fonts, "resolveResources");
     const font = rangedFont("Fam", [[0x41, 0x5a]]);
 
-    await prepareRenderInput(fonts, { fonts: Promise.resolve([font]) }, textNode("A"));
+    await prepare(fonts, { fonts: Promise.resolve([font]) }, textNode("A"));
 
-    expect(resolve).toHaveBeenCalledWith([font], undefined, undefined);
+    expect(resolve).toHaveBeenCalledWith([font], undefined, undefined, expect.any(Function));
   });
 
   test("source drives font subsetting", async () => {
@@ -120,9 +125,9 @@ describe("prepareRenderInput resource forwarding", () => {
     const resolve = spyOn(fonts, "resolveResources");
     const font = rangedFont("Fam", [[0x4e00, 0x4e00]]);
 
-    await prepareRenderInput(fonts, { fonts: [font] }, textNode("0"));
+    await prepare(fonts, { fonts: [font] }, textNode("0"));
 
-    expect(resolve).toHaveBeenCalledWith([], undefined, undefined);
+    expect(resolve).toHaveBeenCalledWith([], undefined, undefined, expect.any(Function));
   });
 
   test("a face covering list-marker characters stays without list content", async () => {
@@ -130,9 +135,9 @@ describe("prepareRenderInput resource forwarding", () => {
     const resolve = spyOn(fonts, "resolveResources");
     const font = rangedFont("Fam", [[0x2022, 0x2022]]);
 
-    await prepareRenderInput(fonts, { fonts: [font] }, textNode("一"));
+    await prepare(fonts, { fonts: [font] }, textNode("一"));
 
-    expect(resolve).toHaveBeenCalledWith([font], undefined, undefined);
+    expect(resolve).toHaveBeenCalledWith([font], undefined, undefined, expect.any(Function));
   });
 });
 

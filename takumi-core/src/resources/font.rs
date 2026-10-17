@@ -712,6 +712,11 @@ impl Fonts {
     Ok(families)
   }
 
+  /// Whether `family` holds a face registered with [`FontResource::last_resort`].
+  pub fn is_last_resort(&self, family: &str) -> bool {
+    self.last_resort_order.iter().any(|each| each == family)
+  }
+
   /// Removes every face registered under `family`, from each source and `unicode-range` subset
   /// alike, so it falls back as an unknown family; false when it has no faces.
   pub fn unregister_family(&mut self, family: &str) -> bool {

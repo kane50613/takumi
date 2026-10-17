@@ -125,20 +125,19 @@ export class Painter {
   async paint(node: NodeInput, options: PaintOptions = {}): Promise<PaintTree> {
     const { fonts, images, css, fontFamilies, ...rest } = options;
     const main = await resolveNode(node);
-    const resources = await this.#fonts.resolveResources(
+    const own = css === undefined ? [] : isCssList(css) ? [...css] : [css];
+    const sheets = [...own, ...main.css];
+    const painted = await this.#fonts.resolveResources(
       fonts && subsetFonts({ fonts, source: [main.node, LIST_MARKER_CHARACTERS] }),
       images,
       fontFamilies,
+      (resources) =>
+        this.#inner.paint(main.node, {
+          ...rest,
+          css: sheets.length > 0 ? sheets : undefined,
+          ...resources,
+        }),
     );
-    const own = css === undefined ? [] : isCssList(css) ? [...css] : [css];
-    const sheets = [...own, ...main.css];
-
-    const painted = this.#inner.paint(main.node, {
-      ...rest,
-      css: sheets.length > 0 ? sheets : undefined,
-      images: resources.images,
-      fontFamilies: resources.fontFamilies,
-    });
 
     return new PaintTreeView(painted.tree(), painted);
   }

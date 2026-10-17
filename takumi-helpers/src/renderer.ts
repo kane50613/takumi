@@ -237,7 +237,7 @@ export class FontRegistry<TFamily extends RegisteredFamilyLike> {
 
     if (pending) {
       return pinned
-        ? pending.then((families) => this.backend.cachedFonts(key, true) ?? families)
+        ? pending.then(() => this.backend.cachedFonts(key, true) ?? this.register(loader))
         : pending;
     }
 
@@ -277,44 +277,38 @@ export class FontRegistry<TFamily extends RegisteredFamilyLike> {
     return assigned;
   }
 
-  /** Registers every font and returns the distinct family names produced. */
-  async prepareFonts(fonts: FontLoader[] | undefined): Promise<string[] | undefined> {
-    if (!fonts) {
-      return;
-    }
-
-    const loaders = fonts.map(toLoader);
+  /**
+   * Registers `fonts` and resolves lazy `images`, then calls `use` with the `images` and
+   * `fontFamilies` the binding expects while the backend holds every font. Explicit `fontFamilies`
+   * wins over the registered set.
+   */
+  async resolveResources<T>(
+    fonts: FontLoader[] | undefined,
+    images: ImagesInput | undefined,
+    fontFamilies: string[] | undefined,
+    use: (resources: { images?: ImageSource[]; fontFamilies?: string[] }) => Awaitable<T>,
+  ): Promise<T> {
+    const resolvedImages = images ? await resolveImageLoaders(images) : undefined;
+    const loaders = fonts?.map(toLoader) ?? [];
 
     for (let attempt = 1; ; attempt++) {
       const families = await Promise.all(loaders.map((loader) => this.register(loader, false)));
 
-      // Fonts other renders load meanwhile can push out the ones this render loaded first.
+      // Nothing yields from this check into `use`, and backends only release fonts on this
+      // thread, so no other render can release these fonts before the render takes them.
       if (
         attempt === REGISTER_ATTEMPTS ||
         loaders.every((loader) => this.backend.cachedFonts(this.keyOf(loader), false))
       ) {
-        return [...new Set(families.flat().map((family) => family.name))];
+        const registered = fonts && [...new Set(families.flat().map((family) => family.name))];
+
+        return use({ images: resolvedImages, fontFamilies: fontFamilies ?? registered });
       }
     }
   }
-
-  /**
-   * Registers `fonts` and resolves lazy `images`, yielding the `images`/`fontFamilies` the binding
-   * expects. Explicit `fontFamilies` wins over the registered set.
-   */
-  async resolveResources(
-    fonts: FontLoader[] | undefined,
-    images: ImagesInput | undefined,
-    fontFamilies: string[] | undefined,
-  ): Promise<{ images?: ImageSource[]; fontFamilies?: string[] }> {
-    const resolvedImages = images ? await resolveImageLoaders(images) : undefined;
-    const registeredFamilies = await this.prepareFonts(fonts);
-
-    return { images: resolvedImages, fontFamilies: fontFamilies ?? registeredFamilies };
-  }
 }
 
-/** The binding options {@link prepareRenderInput} yields: extras stripped, resolved resources merged in. */
+/** The binding options {@link withRenderInput} passes on: extras stripped, resolved resources merged in. */
 export type ResolvedRenderOptions<TOptions> = Omit<
   TOptions,
   keyof RenderExtras | "fontFamilies"
@@ -326,22 +320,28 @@ export type ResolvedRenderOptions<TOptions> = Omit<
 /**
  * Shared body for every backend render entry point: subsets and registers `fonts` against `source`,
  * resolves `images`/`fontFamilies`, and enforces one abort policy: `signal` is checked before and
- * after the (network-bound) resource resolution. Returns the binding options plus the `signal` for
- * the backend to forward into a native call when it supports cancellation.
+ * after the (network-bound) resource resolution. Then calls `call` with the binding options and the
+ * `signal` for the backend to forward into a native call when it supports cancellation.
  */
-export async function prepareRenderInput<
+export async function withRenderInput<
   TOptions extends RenderExtras & { fontFamilies?: string[] },
   TFamily extends RegisteredFamilyLike,
+  TResult,
 >(
   registry: FontRegistry<TFamily>,
   options: TOptions,
   source: CodepointSource,
-): Promise<{ options: ResolvedRenderOptions<TOptions>; signal: AbortSignal | undefined }> {
+  call: (
+    options: ResolvedRenderOptions<TOptions>,
+    signal: AbortSignal | undefined,
+  ) => Awaitable<TResult>,
+): Promise<TResult> {
   const { fonts, fontFamilies, signal, images, ...rest } = options;
   signal?.throwIfAborted();
 
   const resolvedFonts = await fonts;
-  const resolved = await registry.resolveResources(
+
+  return registry.resolveResources(
     resolvedFonts &&
       subsetFonts({
         fonts: resolvedFonts,
@@ -349,8 +349,10 @@ export async function prepareRenderInput<
       }),
     images,
     fontFamilies,
-  );
-  signal?.throwIfAborted();
+    (resolved) => {
+      signal?.throwIfAborted();
 
-  return { options: { ...rest, ...resolved }, signal };
+      return call({ ...rest, ...resolved }, signal);
+    },
+  );
 }

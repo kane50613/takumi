@@ -11,7 +11,7 @@ import {
 export * from "../pkg/takumi_wasm";
 export { default } from "../pkg/takumi_wasm";
 
-import { FontRegistry, prepareRenderInput } from "@takumi-rs/helpers/renderer";
+import { FontRegistry, withRenderInput } from "@takumi-rs/helpers/renderer";
 import type {
   BackendAnimationOptions,
   BackendRenderOptions,
@@ -41,30 +41,34 @@ export class Renderer {
     this.fonts = new FontRegistry(this.inner);
   }
 
-  async render(node: Node, options?: RenderOptions) {
-    const { options: opts } = await prepareRenderInput(this.fonts, options ?? {}, node);
-    return this.inner.render(node, opts);
+  render(node: Node, options?: RenderOptions) {
+    return withRenderInput(this.fonts, options ?? {}, node, (opts) =>
+      this.inner.render(node, opts),
+    );
   }
 
-  async renderAsDataUrl(node: Node, options?: RenderOptions) {
-    const { options: opts } = await prepareRenderInput(this.fonts, options ?? {}, node);
-    return this.inner.renderAsDataUrl(node, opts);
+  renderAsDataUrl(node: Node, options?: RenderOptions) {
+    return withRenderInput(this.fonts, options ?? {}, node, (opts) =>
+      this.inner.renderAsDataUrl(node, opts),
+    );
   }
 
-  async renderSvg(node: Node, options?: SvgRenderOptions) {
-    const { options: opts } = await prepareRenderInput(this.fonts, options ?? {}, node);
-    return this.inner.renderSvg(node, opts);
+  renderSvg(node: Node, options?: SvgRenderOptions) {
+    return withRenderInput(this.fonts, options ?? {}, node, (opts) =>
+      this.inner.renderSvg(node, opts),
+    );
   }
 
-  async measure(node: Node, options?: RenderOptions) {
-    const { options: opts } = await prepareRenderInput(this.fonts, options ?? {}, node);
-    return this.inner.measure(node, opts);
+  measure(node: Node, options?: RenderOptions) {
+    return withRenderInput(this.fonts, options ?? {}, node, (opts) =>
+      this.inner.measure(node, opts),
+    );
   }
 
-  async renderAnimation(options: RenderAnimationOptions) {
+  renderAnimation(options: RenderAnimationOptions) {
     const nodes = options.scenes.map((scene) => scene.node);
-    const { options: opts } = await prepareRenderInput(this.fonts, options, nodes);
-    return this.inner.renderAnimation(opts);
+
+    return withRenderInput(this.fonts, options, nodes, (opts) => this.inner.renderAnimation(opts));
   }
 
   registerFont(font: FontLoader) {
