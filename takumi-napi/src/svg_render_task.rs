@@ -45,7 +45,7 @@ impl SvgRenderTask {
 
     Ok(SvgRenderTask {
       node: Some(node),
-      fonts: state.fonts.load_full(),
+      fonts: state.fonts_for_render(options.font_families.as_deref())?,
       state,
       viewport: Viewport::new((options.width, options.height)),
       time_ms: time_ms(options.time_ms),

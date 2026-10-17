@@ -1,12 +1,7 @@
 import type { CssInput } from "@takumi-rs/helpers";
 import { fromHtml } from "@takumi-rs/helpers/html";
 import { fromJsx } from "@takumi-rs/helpers/jsx";
-import type {
-  FontCacheRendererOptions,
-  FontLoader,
-  ImagesInput,
-  RegisteredFamilyLike,
-} from "@takumi-rs/helpers/renderer";
+import type { FontLoader, ImagesInput, RegisteredFamilyLike } from "@takumi-rs/helpers/renderer";
 import { FontRegistry } from "@takumi-rs/helpers/renderer";
 import {
   LIST_MARKER_CHARACTERS,
@@ -17,12 +12,15 @@ import {
 import type { ReactNode } from "react";
 import {
   counterCharacters,
+  type FontCacheOptions,
   type PageOverride,
   type PageRules,
   PdfRenderer as PdfRendererInternal,
+  type RegisteredFamily,
 } from "../pkg/takumi_pdf_wasm";
 
 export { default, initSync } from "../pkg/takumi_pdf_wasm";
+export type { FontCacheOptions } from "../pkg/takumi_pdf_wasm";
 export type { FontLoader, ImagesInput } from "@takumi-rs/helpers/renderer";
 export { PageNumber, TargetPageNumber, TotalPages } from "./primitives";
 export type { CounterProps, CounterStyle } from "./primitives";
@@ -448,17 +446,12 @@ async function resolveNode(input: NodeInput): Promise<{ node: Node; css: string[
 
 /** A PDF renderer holding registered fonts. Reuse one instance across renders. */
 export class PdfRenderer {
-  private inner = new PdfRendererInternal();
-  private fonts: FontRegistry<RegisteredFamilyLike>;
+  private inner: PdfRendererInternal;
+  private fonts: FontRegistry<RegisteredFamily>;
 
-  constructor(options: FontCacheRendererOptions = {}) {
-    this.fonts = new FontRegistry<RegisteredFamilyLike>(
-      (font) => this.inner.registerFont(font) as RegisteredFamilyLike[],
-      {
-        maxBytes: options.fontCacheMaxBytes,
-        unregister: (family) => this.inner.unregisterFont(family),
-      },
-    );
+  constructor(options?: FontCacheOptions) {
+    this.inner = new PdfRendererInternal(options);
+    this.fonts = new FontRegistry(this.inner);
   }
 
   /** Renders a node tree, JSX, or an HTML string to PDF bytes. See {@link RenderOptions}. */
@@ -474,7 +467,7 @@ export class PdfRenderer {
     const bands = [headerResult?.node, footerResult?.node, ...(pagesResult?.nodes ?? [])].filter(
       (band) => band !== undefined,
     );
-    const { release, ...resources } = await this.fonts.resolveResources(
+    const resources = await this.fonts.resolveResources(
       fonts &&
         subsetFonts({
           fonts,
@@ -498,19 +491,15 @@ export class PdfRenderer {
       ...(pagesResult?.css ?? []),
     ];
 
-    try {
-      return this.inner.render(main.node, {
-        ...rest,
-        header: headerResult?.node,
-        footer: footerResult?.node,
-        pages: pagesResult?.pages,
-        css: sheets.length > 0 ? sheets : undefined,
-        images: resources.images,
-        fontFamilies: resources.fontFamilies,
-      });
-    } finally {
-      release();
-    }
+    return this.inner.render(main.node, {
+      ...rest,
+      header: headerResult?.node,
+      footer: footerResult?.node,
+      pages: pagesResult?.pages,
+      css: sheets.length > 0 ? sheets : undefined,
+      images: resources.images,
+      fontFamilies: resources.fontFamilies,
+    });
   }
 
   /**
@@ -528,7 +517,7 @@ export class PdfRenderer {
     const { fonts, images, css, stylesheets, fontFamilies, ...rest } = options;
     const main = await resolveNode(node);
     // The tree measured may itself be a band, so its counters are always in play.
-    const { release, ...resources } = await this.fonts.resolveResources(
+    const resources = await this.fonts.resolveResources(
       fonts &&
         subsetFonts({
           fonts,
@@ -539,16 +528,12 @@ export class PdfRenderer {
     );
     const sheets = [...ownCss(css, stylesheets), ...main.css];
 
-    try {
-      return this.inner.measure(main.node, {
-        ...rest,
-        css: sheets.length > 0 ? sheets : undefined,
-        images: resources.images,
-        fontFamilies: resources.fontFamilies,
-      });
-    } finally {
-      release();
-    }
+    return this.inner.measure(main.node, {
+      ...rest,
+      css: sheets.length > 0 ? sheets : undefined,
+      images: resources.images,
+      fontFamilies: resources.fontFamilies,
+    });
   }
 
   /** Registers a font ahead of time, deduped against earlier registrations. */
@@ -562,14 +547,11 @@ export class PdfRenderer {
    * as well. A later render that lists one of its fonts registers it again.
    */
   unregisterFont(family: RegisteredFamilyLike) {
-    this.fonts.forget(family.name);
-
     return this.inner.unregisterFont(family.name);
   }
 
   /** Removes every registered font, leaving the bundled fallback font. */
   clearFonts() {
-    this.fonts.forgetAll();
     this.inner.clearFonts();
   }
 

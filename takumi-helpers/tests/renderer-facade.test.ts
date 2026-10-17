@@ -1,7 +1,8 @@
 import { describe, expect, mock, spyOn, test } from "bun:test";
-import { FontRegistry, prepareRenderInput } from "../src/renderer";
-import type { Font, FontLoader } from "../src/renderer";
+import { prepareRenderInput } from "../src/renderer";
+import type { FontLoader } from "../src/renderer";
 import type { Node } from "../src/types";
+import { fontBackend } from "./font-backend";
 
 const bytes = () => new Uint8Array([1, 2, 3]);
 const textNode = (text: string): Node => ({ type: "text", text });
@@ -12,16 +13,9 @@ const rangedFont = (name: string, unicodeRange: [number, number][]): FontLoader 
   data: () => bytes(),
 });
 
-const registry = () => {
-  const registerInner = mock((font: Font) => [
-    { name: "name" in font && font.name ? font.name : "Fam" },
-  ]);
-  return { registerInner, fonts: new FontRegistry(registerInner) };
-};
-
 /** Mirrors the per-backend `Renderer` wiring so the shared body is exercised through all methods. */
 const stub = () => {
-  const { registerInner, fonts } = registry();
+  const { fonts } = fontBackend();
   const inner = {
     render: mock((_node: Node, _options: unknown, _signal?: AbortSignal) => "png"),
     renderSvg: mock((_node: Node, _options: unknown, _signal?: AbortSignal) => "svg"),
@@ -30,7 +24,6 @@ const stub = () => {
   };
   return {
     inner,
-    registerInner,
     async render(node: Node, options?: { signal?: AbortSignal; fonts?: FontLoader[] }) {
       const { options: opts, signal } = await prepareRenderInput(fonts, options ?? {}, node);
       return inner.render(node, opts, signal);
@@ -57,17 +50,17 @@ const stub = () => {
 
 describe("FontRegistry", () => {
   test("registers a deprecated ranges loader with its unicodeRange", async () => {
-    const { registerInner, fonts } = registry();
+    const { backend, fonts } = fontBackend();
 
     await fonts.register({ name: "Fam", ranges: [[0x41, 0x5a]], data: () => bytes() });
 
-    expect(registerInner.mock.calls[0]?.[0]).toMatchObject({ unicodeRange: [[0x41, 0x5a]] });
+    expect(backend.registerFont.mock.calls[0]?.[0]).toMatchObject({ unicodeRange: [[0x41, 0x5a]] });
   });
 });
 
 describe("prepareRenderInput abort policy", () => {
   test("a pre-aborted signal rejects before resources resolve", async () => {
-    const { fonts } = registry();
+    const { fonts } = fontBackend();
     const resolve = spyOn(fonts, "resolveResources");
 
     await expect(
@@ -77,7 +70,7 @@ describe("prepareRenderInput abort policy", () => {
   });
 
   test("a signal aborted during resolution rejects after resources resolve", async () => {
-    const { fonts } = registry();
+    const { fonts } = fontBackend();
     const resolve = spyOn(fonts, "resolveResources");
     const controller = new AbortController();
     const font: FontLoader = {
@@ -98,7 +91,7 @@ describe("prepareRenderInput abort policy", () => {
 
 describe("prepareRenderInput resource forwarding", () => {
   test("fonts, images and fontFamilies reach resolveResources", async () => {
-    const { fonts } = registry();
+    const { fonts } = fontBackend();
     const resolve = spyOn(fonts, "resolveResources");
     const font = rangedFont("Fam", [[0x41, 0x5a]]);
     const images = [{ src: "a", data: bytes() }];
@@ -113,7 +106,7 @@ describe("prepareRenderInput resource forwarding", () => {
   });
 
   test("fonts accepts a promise of the list", async () => {
-    const { fonts } = registry();
+    const { fonts } = fontBackend();
     const resolve = spyOn(fonts, "resolveResources");
     const font = rangedFont("Fam", [[0x41, 0x5a]]);
 
@@ -123,7 +116,7 @@ describe("prepareRenderInput resource forwarding", () => {
   });
 
   test("source drives font subsetting", async () => {
-    const { fonts } = registry();
+    const { fonts } = fontBackend();
     const resolve = spyOn(fonts, "resolveResources");
     const font = rangedFont("Fam", [[0x4e00, 0x4e00]]);
 
@@ -133,7 +126,7 @@ describe("prepareRenderInput resource forwarding", () => {
   });
 
   test("a face covering list-marker characters stays without list content", async () => {
-    const { fonts } = registry();
+    const { fonts } = fontBackend();
     const resolve = spyOn(fonts, "resolveResources");
     const font = rangedFont("Fam", [[0x2022, 0x2022]]);
 

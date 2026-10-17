@@ -10,6 +10,8 @@ pub struct LoadFontTask {
   pub(crate) state: Arc<RendererState>,
   pub(crate) buffer: JsBytes,
   pub(crate) info: FontOptions,
+  pub(crate) key: Option<String>,
+  pub(crate) pinned: bool,
 }
 
 impl Task for LoadFontTask {
@@ -24,10 +26,15 @@ impl Task for LoadFontTask {
       .into_resolved()
       .map_err(map_error)?;
 
-    let registered = self.state.update_fonts(|fonts| {
-      fonts
+    let bytes = resource.byte_len() as u64;
+    let registered = self.state.update_fonts(|fonts, cache| {
+      let registered = fonts
         .register(resource)
-        .map_err(|e| Error::from_reason(format!("Failed to register font: {e}")))
+        .map_err(|e| Error::from_reason(format!("Failed to register font: {e}")))?;
+
+      cache.admit(fonts, self.key.as_deref(), &registered, bytes, self.pinned);
+
+      Ok(registered)
     })?;
 
     Ok(registered.into_iter().map(Into::into).collect())

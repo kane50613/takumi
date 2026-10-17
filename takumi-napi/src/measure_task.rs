@@ -46,7 +46,7 @@ impl MeasureTask {
 
     Ok(MeasureTask {
       node: Some(node),
-      fonts: state.fonts.load_full(),
+      fonts: state.fonts_for_render(options.font_families.as_deref())?,
       state,
       viewport: Viewport::new((options.width, options.height)).with_device_pixel_ratio(
         device_pixel_ratio(options.device_pixel_ratio.map(|ratio| ratio as f32)),

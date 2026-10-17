@@ -5,9 +5,8 @@ use std::{collections::HashMap, sync::Arc};
 use base64::{Engine, prelude::BASE64_STANDARD};
 use serde_wasm_bindgen::{from_value, to_value};
 use takumi_bindings_common::{
-  FontStore, css_or_stylesheets, device_pixel_ratio,
-  input::{decode_images, register_font},
-  parse_lang, stylesheet, time_ms,
+  FontStore, css_or_stylesheets, device_pixel_ratio, input::decode_images, parse_lang, stylesheet,
+  time_ms,
 };
 use takumi_core::{
   Fonts,
@@ -72,6 +71,18 @@ fn raster_options<'fonts>(
 
 #[wasm_bindgen]
 impl Renderer {
+  fn load_font(
+    &self,
+    font: FontType,
+    key: Option<&str>,
+    pinned: bool,
+  ) -> Result<RegisteredFamiliesType, js_sys::Error> {
+    let font: Font = from_value(font.into()).map_err(map_error)?;
+    let registered = self.fonts.register(font, key, pinned).map_err(map_error)?;
+
+    Ok(to_value(&registered).map_err(map_error)?.unchecked_into())
+  }
+
   fn images_map(
     &self,
     images: Option<&[ImageSource]>,
@@ -88,7 +99,7 @@ impl Renderer {
       .unwrap_or_default();
 
     Ok(Renderer {
-      fonts: FontStore::new().map_err(map_error)?,
+      fonts: FontStore::new(options.font_cache_max_bytes).map_err(map_error)?,
       resource_cache: match options.cache_max_bytes {
         Some(bytes) => ResourceCache::new(bytes),
         None => ResourceCache::default(),
@@ -98,15 +109,38 @@ impl Renderer {
 
   /// Registers fonts into the renderer, returning the families each font produced.
   #[wasm_bindgen(js_name = registerFont)]
-  pub fn register_font(&self, font: FontType) -> Result<RegisteredFamiliesType, js_sys::Error> {
-    let font: Font = from_value(font.into()).map_err(map_error)?;
+  pub fn register_font(
+    &self,
+    font: FontType,
+    key: Option<String>,
+  ) -> Result<RegisteredFamiliesType, js_sys::Error> {
+    self.load_font(font, key.as_deref(), true)
+  }
 
-    let registered = self
+  /// Registers a font a render's `fonts` list loaded under `key`, released for space once the
+  /// renderer's font cache is past its budget.
+  #[wasm_bindgen(js_name = cacheFont)]
+  pub fn cache_font(
+    &self,
+    font: FontType,
+    key: &str,
+  ) -> Result<RegisteredFamiliesType, js_sys::Error> {
+    self.load_font(font, Some(key), false)
+  }
+
+  /// The families a registration under `key` added, when the renderer still holds them; `pin`
+  /// keeps them from being released for space.
+  #[wasm_bindgen(js_name = cachedFonts)]
+  pub fn cached_fonts(
+    &self,
+    key: &str,
+    pin: bool,
+  ) -> Result<Option<RegisteredFamiliesType>, js_sys::Error> {
+    self
       .fonts
-      .update(|fonts| register_font(fonts, font))
-      .map_err(map_error)?;
-
-    Ok(to_value(&registered).map_err(map_error)?.unchecked_into())
+      .cached(key, pin)
+      .map(|registered| Ok(to_value(&registered).map_err(map_error)?.unchecked_into()))
+      .transpose()
   }
 
   /// Removes every face registered under `family`, each `unicodeRange` subset alike, returning
@@ -136,7 +170,7 @@ impl Renderer {
       .unwrap_or_default();
 
     let images = self.images_map(options.images.as_deref())?;
-    let fonts = self.fonts.current();
+    let fonts = self.fonts.for_render(options.font_families.as_deref());
     self.render_internal(&fonts, node, options, images)
   }
 
@@ -189,7 +223,7 @@ impl Renderer {
       options.keyframes.unwrap_or_default(),
     )
     .map_err(map_error)?;
-    let fonts = self.fonts.current();
+    let fonts = self.fonts.for_render(options.font_families.as_deref());
 
     let lang = parse_lang(options.lang.as_deref()).map_err(map_error)?;
 
@@ -225,7 +259,7 @@ impl Renderer {
 
     let images = self.images_map(options.images.as_deref())?;
 
-    let fonts = self.fonts.current();
+    let fonts = self.fonts.for_render(options.font_families.as_deref());
     let render_options = raster_options(&self.resource_cache, &fonts, node, options, images)?;
 
     let layout = measure(render_options).map_err(map_error)?;
@@ -254,7 +288,7 @@ impl Renderer {
     }
 
     let images = self.images_map(options.images.as_deref())?;
-    let fonts = self.fonts.current();
+    let fonts = self.fonts.for_render(options.font_families.as_deref());
     let buffer = self.render_internal(&fonts, node, options, images)?;
 
     let mut data_uri = String::new();
@@ -306,7 +340,7 @@ impl Renderer {
       keyframes.unwrap_or_default(),
     )
     .map_err(map_error)?;
-    let fonts = self.fonts.current();
+    let fonts = self.fonts.for_render(font_families.as_deref());
     let scene_options = scenes
       .into_iter()
       .map(|scene| {
