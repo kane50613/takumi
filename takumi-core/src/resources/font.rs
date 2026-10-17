@@ -1266,6 +1266,11 @@ impl<'a> FontResource<'a> {
     }
   }
 
+  /// Bytes of its font data, as decoded once [`Self::into_resolved`] has run.
+  pub fn byte_len(&self) -> usize {
+    self.source.as_ref().len()
+  }
+
   /// Convert to resolved font resource, decompressing woff2/woff into a raw buffer.
   pub fn into_resolved(self) -> Result<Self, FontError> {
     let source = self.source.into_decoded()?;

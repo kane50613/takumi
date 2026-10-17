@@ -2,7 +2,7 @@ import {
   Renderer as RendererInternal,
   type Node,
   type RegisteredFamily,
-  type RendererOptions as RendererOptionsInternal,
+  type RendererOptions,
   type RenderAnimationOptions as RenderAnimationOptionsInternal,
   type RenderOptions as RenderOptionsInternal,
   type SvgRenderOptions as SvgRenderOptionsInternal,
@@ -16,7 +16,6 @@ import type {
   BackendAnimationOptions,
   BackendRenderOptions,
   BackendSvgOptions,
-  FontCacheRendererOptions,
   FontLoader,
   RegisteredFamilyLike,
 } from "@takumi-rs/helpers/renderer";
@@ -32,20 +31,14 @@ export type {
 export type RenderOptions = BackendRenderOptions<RenderOptionsInternal>;
 export type RenderAnimationOptions = BackendAnimationOptions<RenderAnimationOptionsInternal>;
 export type SvgRenderOptions = BackendSvgOptions<SvgRenderOptionsInternal>;
-export type RendererOptions = RendererOptionsInternal & FontCacheRendererOptions;
 
 export class Renderer {
   private inner: RendererInternal;
   private fonts: FontRegistry<RegisteredFamily>;
 
   constructor(options?: RendererOptions) {
-    const { fontCacheMaxBytes, ...native } = options ?? {};
-
-    this.inner = new RendererInternal(native);
-    this.fonts = new FontRegistry<RegisteredFamily>((font) => this.inner.registerFont(font), {
-      maxBytes: fontCacheMaxBytes,
-      unregister: (family) => this.inner.unregisterFont(family),
-    });
+    this.inner = new RendererInternal(options);
+    this.fonts = new FontRegistry(this.inner);
   }
 
   render(node: Node, options?: RenderOptions) {
@@ -88,14 +81,11 @@ export class Renderer {
    * as well. A later render that lists one of its fonts registers it again.
    */
   unregisterFont(family: RegisteredFamilyLike) {
-    this.fonts.forget(family.name);
-
     return this.inner.unregisterFont(family.name);
   }
 
   /** Removes every registered font, leaving the bundled fallback font. */
   clearFonts() {
-    this.fonts.forgetAll();
     this.inner.clearFonts();
   }
 

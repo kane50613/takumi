@@ -1,12 +1,7 @@
 import type { CssInput } from "@takumi-rs/helpers";
 import { fromHtml } from "@takumi-rs/helpers/html";
 import { fromJsx } from "@takumi-rs/helpers/jsx";
-import type {
-  FontCacheRendererOptions,
-  FontLoader,
-  ImagesInput,
-  RegisteredFamilyLike,
-} from "@takumi-rs/helpers/renderer";
+import type { FontLoader, ImagesInput, RegisteredFamilyLike } from "@takumi-rs/helpers/renderer";
 import { FontRegistry } from "@takumi-rs/helpers/renderer";
 import {
   LIST_MARKER_CHARACTERS,
@@ -16,6 +11,7 @@ import {
 } from "@takumi-rs/helpers";
 import type { ReactNode } from "react";
 import initWasm, {
+  type FontCacheOptions,
   type InitInput,
   initSync as initWasmSync,
   Painter as PainterInternal,
@@ -31,6 +27,7 @@ export type {
   CornerRadii,
   ElementInfo,
   Filter,
+  FontCacheOptions,
   Glyph,
   Gradient,
   ImagePaint,
@@ -116,40 +113,33 @@ export function initSync(source: { module: SyncInitInput }): void {
 }
 
 export class Painter {
-  #inner = new PainterInternal();
+  #inner: PainterInternal;
   #fonts: FontRegistry<RegisteredFamily>;
 
-  constructor(options: FontCacheRendererOptions = {}) {
-    this.#fonts = new FontRegistry<RegisteredFamily>((font) => this.#inner.registerFont(font), {
-      maxBytes: options.fontCacheMaxBytes,
-      unregister: (family) => this.#inner.unregisterFont(family),
-    });
+  constructor(options?: FontCacheOptions) {
+    this.#inner = new PainterInternal(options);
+    this.#fonts = new FontRegistry(this.#inner);
   }
 
   /** Lays out a node tree, JSX, or an HTML string and returns what painting it would draw. */
   async paint(node: NodeInput, options: PaintOptions = {}): Promise<PaintTree> {
     const { fonts, images, css, fontFamilies, ...rest } = options;
     const main = await resolveNode(node);
-    const { release, ...resources } = await this.#fonts.resolveResources(
+    const own = css === undefined ? [] : isCssList(css) ? [...css] : [css];
+    const sheets = [...own, ...main.css];
+    const painted = await this.#fonts.resolveResources(
       fonts && subsetFonts({ fonts, source: [main.node, LIST_MARKER_CHARACTERS] }),
       images,
       fontFamilies,
+      (resources) =>
+        this.#inner.paint(main.node, {
+          ...rest,
+          css: sheets.length > 0 ? sheets : undefined,
+          ...resources,
+        }),
     );
-    const own = css === undefined ? [] : isCssList(css) ? [...css] : [css];
-    const sheets = [...own, ...main.css];
 
-    try {
-      const painted = this.#inner.paint(main.node, {
-        ...rest,
-        css: sheets.length > 0 ? sheets : undefined,
-        images: resources.images,
-        fontFamilies: resources.fontFamilies,
-      });
-
-      return new PaintTreeView(painted.tree(), painted);
-    } finally {
-      release();
-    }
+    return new PaintTreeView(painted.tree(), painted);
   }
 
   /** Registers a font ahead of time, deduped against earlier registrations. */
@@ -163,14 +153,11 @@ export class Painter {
    * as well. A later render that lists one of its fonts registers it again.
    */
   unregisterFont(family: RegisteredFamilyLike) {
-    this.#fonts.forget(family.name);
-
     return this.#inner.unregisterFont(family.name);
   }
 
   /** Removes every registered font, leaving the bundled fallback font. */
   clearFonts() {
-    this.#fonts.forgetAll();
     this.#inner.clearFonts();
   }
 

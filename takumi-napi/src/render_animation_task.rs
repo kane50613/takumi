@@ -83,7 +83,7 @@ impl RenderAnimationTask {
 
     Ok(Self {
       scenes: Some(scenes),
-      fonts: state.fonts.load_full(),
+      fonts: state.fonts_for_render(font_families.as_deref())?,
       state,
       viewport: Viewport::new((width, height))
         .with_device_pixel_ratio(device_pixel_ratio(dpr.map(|ratio| ratio as f32))),

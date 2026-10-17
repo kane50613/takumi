@@ -203,13 +203,13 @@ renderer.clearFonts(); // back to the bundled fallback font
 
 A later render that lists a released font registers it again.
 
-To release them automatically, cap the font file bytes that renders' `fonts` lists keep:
+To release them automatically, cap the decoded font bytes that renders' `fonts` lists keep:
 
 ```ts
 const renderer = new Renderer({ fontCacheMaxBytes: 64 * 1024 * 1024 });
 ```
 
-Past the cap, the least recently used families go first. Fonts from `registerFont` and fonts a running render lists stay.
+Past the cap, the least recently used families go first. Fonts from `registerFont` stay, and so does the font loaded last, even past the cap alone. Set the cap above what one render needs.
 
 ## Choosing a font
 

@@ -7,8 +7,8 @@ use std::mem::take;
 use serde::{Deserialize, Serialize};
 use serde_wasm_bindgen::{Serializer, from_value, to_value};
 use takumi_bindings_common::{
-  FontStore,
-  input::{Font, ImageSource, decode_images, register_font},
+  FontCacheOptions, FontStore,
+  input::{Font, ImageSource, decode_images},
   stylesheet,
 };
 use takumi_core::{
@@ -35,6 +35,9 @@ extern "C" {
   /// JavaScript type for font input (details object or raw buffer).
   #[wasm_bindgen(typescript_type = "FontInput")]
   pub type FontType;
+  /// JavaScript object holding the font cache budget.
+  #[wasm_bindgen(typescript_type = "FontCacheOptions")]
+  pub type FontCacheOptionsType;
   /// JavaScript type for the families produced by `registerFont`.
   #[wasm_bindgen(typescript_type = "RegisteredFamily[]")]
   pub type RegisteredFamiliesType;
@@ -70,13 +73,32 @@ pub struct Painter {
   resource_cache: ResourceCache,
 }
 
+impl Painter {
+  fn load_font(
+    &self,
+    font: FontType,
+    key: Option<&str>,
+    pinned: bool,
+  ) -> Result<RegisteredFamiliesType, js_sys::Error> {
+    let font: Font = from_value(font.into()).map_err(map_error)?;
+    let registered = self.fonts.register(font, key, pinned).map_err(map_error)?;
+
+    Ok(to_value(&registered).map_err(map_error)?.unchecked_into())
+  }
+}
+
 #[wasm_bindgen]
 impl Painter {
   /// Creates a renderer with the bundled last-resort fonts.
   #[wasm_bindgen(constructor)]
-  pub fn new() -> Result<Painter, js_sys::Error> {
+  pub fn new(options: Option<FontCacheOptionsType>) -> Result<Painter, js_sys::Error> {
+    let options: FontCacheOptions = options
+      .map(|options| from_value(options.into()).map_err(map_error))
+      .transpose()?
+      .unwrap_or_default();
+
     Ok(Painter {
-      fonts: FontStore::new().map_err(map_error)?,
+      fonts: FontStore::new(options.font_cache_max_bytes).map_err(map_error)?,
       resource_cache: ResourceCache::default(),
     })
   }
@@ -84,13 +106,38 @@ impl Painter {
   /// Registers a font (raw bytes or a details object), returning the families
   /// it produced.
   #[wasm_bindgen(js_name = registerFont)]
-  pub fn register_font(&self, font: FontType) -> Result<RegisteredFamiliesType, js_sys::Error> {
-    let font: Font = from_value(font.into()).map_err(map_error)?;
-    let registered = self
+  pub fn register_font(
+    &self,
+    font: FontType,
+    key: Option<String>,
+  ) -> Result<RegisteredFamiliesType, js_sys::Error> {
+    self.load_font(font, key.as_deref(), true)
+  }
+
+  /// Registers a font a render's `fonts` list loaded under `key`, released for space once the
+  /// renderer's font cache is past its budget.
+  #[wasm_bindgen(js_name = cacheFont)]
+  pub fn cache_font(
+    &self,
+    font: FontType,
+    key: &str,
+  ) -> Result<RegisteredFamiliesType, js_sys::Error> {
+    self.load_font(font, Some(key), false)
+  }
+
+  /// The families a registration under `key` added, when the renderer still holds them; `pin`
+  /// keeps them from being released for space.
+  #[wasm_bindgen(js_name = cachedFonts)]
+  pub fn cached_fonts(
+    &self,
+    key: &str,
+    pin: bool,
+  ) -> Result<Option<RegisteredFamiliesType>, js_sys::Error> {
+    self
       .fonts
-      .update(|fonts| register_font(fonts, font))
-      .map_err(map_error)?;
-    Ok(to_value(&registered).map_err(map_error)?.unchecked_into())
+      .cached(key, pin)
+      .map(|registered| Ok(to_value(&registered).map_err(map_error)?.unchecked_into()))
+      .transpose()
   }
 
   /// Removes every face registered under `family`, each `unicodeRange` subset alike, returning
@@ -128,7 +175,7 @@ impl Painter {
       .map(Lang::parse)
       .transpose()
       .map_err(map_error)?;
-    let fonts = self.fonts.current();
+    let fonts = self.fonts.for_render(options.font_families.as_deref());
     let mut tree = paint_tree(
       PaintTreeOptions::builder()
         .viewport(
