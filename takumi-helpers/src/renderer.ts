@@ -243,6 +243,13 @@ export class FontRegistry<TFamily extends RegisteredFamilyLike> {
   /** Each family, lowercased, to its bytes and use. A font in more than one family counts in each. */
   private readonly uses = new Map<string, FamilyUse>();
   private clock = 0;
+  /** Counts releases, so a registration can tell whether one ran while it was pending. */
+  private epoch = 0;
+  /** Each family released while a registration was pending, to the epoch of its release. */
+  private readonly released = new Map<string, number>();
+  /** The epoch of the last release of every family. */
+  private releasedAll = 0;
+  private pending = 0;
 
   constructor(
     private readonly registerInner: (font: Font) => Awaitable<TFamily[]>,
@@ -282,20 +289,37 @@ export class FontRegistry<TFamily extends RegisteredFamilyLike> {
       return pinned ? cached.then((families) => this.pin(families)) : cached;
     }
 
-    const promise = Promise.resolve(extractFontBuffer(loader))
+    const started = this.epoch;
+
+    this.pending++;
+
+    const promise: Promise<TFamily[]> = Promise.resolve(extractFontBuffer(loader))
       .then(async (data) => {
         const view = asView(data);
         const families = await this.registerInner(
           isBuffer(loader) ? view : { ...loader, unicodeRange: unicodeRangeOf(loader), data: view },
         );
 
-        this.remember(key, families, view.byteLength, pinned);
+        // A family released while this was pending may be gone from the backend, so the next
+        // registration of the font has to reach it again.
+        if (families.some(({ name }) => this.releasedSince(name, started))) {
+          if (this.getFont(key) === promise) {
+            this.deleteFont(key);
+          }
+        } else {
+          this.remember(key, families, view.byteLength, pinned);
+        }
 
         return families;
       })
       .catch((error) => {
         this.deleteFont(key);
         throw error;
+      })
+      .finally(() => {
+        if (--this.pending === 0) {
+          this.released.clear();
+        }
       });
 
     this.setFont(key, promise);
@@ -309,6 +333,12 @@ export class FontRegistry<TFamily extends RegisteredFamilyLike> {
    */
   forget(family: string) {
     const folded = family.toLowerCase();
+
+    this.epoch++;
+
+    if (this.pending > 0) {
+      this.released.set(folded, this.epoch);
+    }
 
     for (const entry of this.byFamily.get(folded) ?? []) {
       const key = typeof entry === "string" ? entry : entry.deref();
@@ -324,6 +354,7 @@ export class FontRegistry<TFamily extends RegisteredFamilyLike> {
 
   /** Forgets every registration. Call it when the backend clears its fonts. */
   forgetAll() {
+    this.releasedAll = ++this.epoch;
     this.byKey.clear();
     this.byData = new WeakMap();
     this.byFamily.clear();
@@ -380,6 +411,10 @@ export class FontRegistry<TFamily extends RegisteredFamilyLike> {
       this.forget(family);
       total -= use.bytes;
     }
+  }
+
+  private releasedSince(family: string, epoch: number) {
+    return Math.max(this.released.get(family.toLowerCase()) ?? 0, this.releasedAll) > epoch;
   }
 
   private remember(key: string | ByteBuf, families: TFamily[], bytes: number, pinned: boolean) {
