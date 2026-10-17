@@ -24,20 +24,11 @@ impl Task for LoadFontTask {
       .into_resolved()
       .map_err(map_error)?;
 
-    // Serialize registrations; readers stay wait-free on the old snapshot meanwhile.
-    let _write = self
-      .state
-      .font_write
-      .lock()
-      .map_err(|e| Error::from_reason(format!("Renderer lock poisoned: {e}")))?;
-
-    let mut fonts = self.state.fonts.load_full().as_ref().clone();
-
-    let registered = fonts
-      .register(resource)
-      .map_err(|e| Error::from_reason(format!("Failed to register font: {e}")))?;
-
-    self.state.fonts.store(Arc::new(fonts));
+    let registered = self.state.update_fonts(|fonts| {
+      fonts
+        .register(resource)
+        .map_err(|e| Error::from_reason(format!("Failed to register font: {e}")))
+    })?;
 
     Ok(registered.into_iter().map(Into::into).collect())
   }

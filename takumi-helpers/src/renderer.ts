@@ -191,6 +191,10 @@ export async function resolveImageLoaders(images: ImagesInput): Promise<ImageSou
   );
 }
 
+/** A family name as the backend matches it: each character lowercased on its own, as fontique does. */
+const foldFamily = (family: string) =>
+  Array.from(family, (character) => character.toLowerCase()).join("");
+
 /**
  * Font-registration state machine shared by both backends: dedupes registrations by a stable key
  * (or by buffer identity), resolves lazy `data()` loaders once, and turns a set of {@link FontLoader}s
@@ -201,7 +205,16 @@ export async function resolveImageLoaders(images: ImagesInput): Promise<ImageSou
  */
 export class FontRegistry<TFamily extends RegisteredFamilyLike> {
   private readonly byKey = new Map<string, Promise<TFamily[]>>();
-  private readonly byData = new WeakMap<ByteBuf, Promise<TFamily[]>>();
+  private byData = new WeakMap<ByteBuf, Promise<TFamily[]>>();
+  /** Each family, folded as the backend matches names, to the registrations that produced it. */
+  private readonly byFamily = new Map<string, Set<string | WeakRef<ByteBuf>>>();
+  /** Counts releases, so a registration can tell whether one ran while it was pending. */
+  private epoch = 0;
+  /** Each family released while a registration was pending, to the epoch of its release. */
+  private readonly released = new Map<string, number>();
+  /** The epoch of the last release of every family. */
+  private releasedAll = 0;
+  private pending = 0;
 
   constructor(private readonly registerInner: (font: Font) => Awaitable<TFamily[]>) {}
 
@@ -235,7 +248,11 @@ export class FontRegistry<TFamily extends RegisteredFamilyLike> {
       return cached;
     }
 
-    const promise = Promise.resolve(extractFontBuffer(loader))
+    const started = this.epoch;
+
+    this.pending++;
+
+    const promise: Promise<TFamily[]> = Promise.resolve(extractFontBuffer(loader))
       .then((data) => {
         const view = asView(data);
 
@@ -243,14 +260,81 @@ export class FontRegistry<TFamily extends RegisteredFamilyLike> {
           isBuffer(loader) ? view : { ...loader, unicodeRange: unicodeRangeOf(loader), data: view },
         );
       })
+      .then((families) => {
+        // A family released while this was pending may be gone from the backend, so the next
+        // registration of the font has to reach it again.
+        if (families.some(({ name }) => this.releasedSince(name, started))) {
+          if (this.getFont(key) === promise) {
+            this.deleteFont(key);
+          }
+        } else {
+          this.remember(key, families);
+        }
+
+        return families;
+      })
       .catch((error) => {
         this.deleteFont(key);
         throw error;
+      })
+      .finally(() => {
+        if (--this.pending === 0) {
+          this.released.clear();
+        }
       });
 
     this.setFont(key, promise);
 
     return promise;
+  }
+
+  /**
+   * Forgets every registration that produced `family`, so registering one of them again reaches
+   * the backend. Call it when the backend unregisters the family.
+   */
+  forget(family: string) {
+    const folded = foldFamily(family);
+
+    this.epoch++;
+
+    if (this.pending > 0) {
+      this.released.set(folded, this.epoch);
+    }
+
+    for (const entry of this.byFamily.get(folded) ?? []) {
+      const key = typeof entry === "string" ? entry : entry.deref();
+
+      if (key !== undefined) {
+        this.deleteFont(key);
+      }
+    }
+
+    this.byFamily.delete(folded);
+  }
+
+  /**
+   * Forgets every registration. Call it when the backend clears its fonts. A registration still
+   * loading finishes afterwards, but is not cached, so a later render registers it again.
+   */
+  forgetAll() {
+    this.releasedAll = ++this.epoch;
+    this.byKey.clear();
+    this.byData = new WeakMap();
+    this.byFamily.clear();
+  }
+
+  private releasedSince(family: string, epoch: number) {
+    return Math.max(this.released.get(foldFamily(family)) ?? 0, this.releasedAll) > epoch;
+  }
+
+  private remember(key: string | ByteBuf, families: TFamily[]) {
+    const entry = typeof key === "string" ? key : new WeakRef(key);
+
+    for (const { name } of families) {
+      const folded = foldFamily(name);
+
+      this.byFamily.set(folded, (this.byFamily.get(folded) ?? new Set()).add(entry));
+    }
   }
 
   /** Registers every font and returns the distinct family names produced. */

@@ -206,8 +206,8 @@ fn has_color_table(font: &FontRef) -> bool {
 
 /// The registry of fonts available to a renderer.
 ///
-/// Registration is the only mutation; afterwards the assembled parley context is immutable
-/// and shared as `&self` across concurrent renders. Each render takes a cheap working clone
+/// Registering and unregistering are the only mutations; between them the assembled parley
+/// context is immutable and shared as `&self` across concurrent renders. Each render takes a cheap working clone
 /// (see [`RenderContext`]) for parley's `&mut` query API, so no per-thread or global state
 /// is needed.
 #[derive(Clone)]
@@ -231,7 +231,7 @@ pub struct Fonts {
   /// Lazily built face store for SVG `<text>`; cleared on registration.
   #[cfg(feature = "svg")]
   svg_db: Option<Arc<Database>>,
-  /// Stamped from a process-wide counter on every registration, so
+  /// Stamped from a process-wide counter on every registration or removal, so
   /// font-dependent caches (SVG `<text>` trees, their rasterizations) can
   /// tell any two registry states apart, including across `Fonts` instances.
   revision: u64,
@@ -626,14 +626,7 @@ impl Fonts {
   /// Registers a font, decoding it and skipping fonts already registered in this context (deduped
   /// by content + family name).
   pub fn register(&mut self, font: FontResource) -> Result<Vec<RegisteredFamily>, FontError> {
-    #[cfg(feature = "svg")]
-    {
-      self.svg_db = None;
-    }
-
-    static REVISION: AtomicU64 = AtomicU64::new(1);
-
-    self.revision = REVISION.fetch_add(1, Ordering::Relaxed);
+    self.revise();
 
     let FontResource {
       source,
@@ -717,6 +710,58 @@ impl Fonts {
     }
 
     Ok(families)
+  }
+
+  /// Removes every face registered under `family`, from each source and `unicode-range` subset
+  /// alike, so it falls back as an unknown family; false when it has no faces.
+  pub fn unregister_family(&mut self, family: &str) -> bool {
+    let Some(info) = self.inner.collection.family_by_name(family) else {
+      return false;
+    };
+    let id = info.id();
+    let name = info.name().to_string();
+    let faces = info.fonts().to_vec();
+
+    if faces.is_empty() {
+      return false;
+    }
+
+    self.revise();
+
+    let collection = &mut self.inner.collection;
+
+    for face in faces {
+      collection.unregister_font(id, face.width(), face.style(), face.weight());
+    }
+
+    for &generic in ParleyGenericFamily::all() {
+      let kept: Vec<_> = collection
+        .generic_families(generic)
+        .filter(|each| *each != id)
+        .collect();
+
+      collection.set_generic_families(generic, kept.into_iter());
+    }
+
+    self.order.retain(|each| *each != name);
+    self.last_resort_order.retain(|each| *each != name);
+    self.color_names.remove(&name);
+    #[cfg(feature = "paint-tree")]
+    Arc::make_mut(&mut self.face_families).retain(|_, each| *each != name);
+
+    true
+  }
+
+  /// Marks the registry changed, so font-dependent caches can tell its states apart.
+  fn revise(&mut self) {
+    static REVISION: AtomicU64 = AtomicU64::new(1);
+
+    #[cfg(feature = "svg")]
+    {
+      self.svg_db = None;
+    }
+
+    self.revision = REVISION.fetch_add(1, Ordering::Relaxed);
   }
 }
 

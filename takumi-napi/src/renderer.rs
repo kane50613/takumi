@@ -7,7 +7,7 @@ use arc_swap::ArcSwap;
 use napi::bindgen_prelude::*;
 use napi_derive::napi;
 use serde::Deserialize;
-use takumi_bindings_common::css_or_stylesheets;
+use takumi_bindings_common::{css_or_stylesheets, default_fonts};
 use takumi_core::{
   Fonts,
   resources::image::{
@@ -92,6 +92,22 @@ pub(crate) struct RendererState {
   pub(crate) fonts: ArcSwap<Fonts>,
   pub(crate) font_write: Mutex<()>,
   pub(crate) resource_cache: ResourceCache,
+}
+
+impl RendererState {
+  /// Applies `change` to a copy of the fonts and publishes it, one change at a time.
+  pub(crate) fn update_fonts<T>(&self, change: impl FnOnce(&mut Fonts) -> Result<T>) -> Result<T> {
+    let _write = self
+      .font_write
+      .lock()
+      .map_err(|e| Error::from_reason(format!("Renderer lock poisoned: {e}")))?;
+    let mut fonts = self.fonts.load_full().as_ref().clone();
+    let changed = change(&mut fonts)?;
+
+    self.fonts.store(Arc::new(fonts));
+
+    Ok(changed)
+  }
 }
 
 /// Decodes the per-call image buffers into a `src`-keyed map. The resource cache is
@@ -415,7 +431,7 @@ impl Renderer {
 
     Ok(Self {
       state: Arc::new(RendererState {
-        fonts: ArcSwap::from_pointee(takumi_bindings_common::default_fonts().map_err(map_error)?),
+        fonts: ArcSwap::from_pointee(default_fonts().map_err(map_error)?),
         font_write: Mutex::new(()),
         resource_cache: match options.and_then(|options| options.cache_max_bytes) {
           Some(bytes) => ResourceCache::new(bytes.max(0.0) as u64),
@@ -447,6 +463,25 @@ impl Renderer {
       },
       signal,
     ))
+  }
+
+  /// Removes every face registered under `family`, each `unicodeRange` subset alike, returning
+  /// whether it had any.
+  #[napi(js_name = "unregisterFont")]
+  pub fn unregister_font(&self, family: String) -> Result<bool> {
+    self
+      .state
+      .update_fonts(|fonts| Ok(fonts.unregister_family(&family)))
+  }
+
+  /// Removes every registered font, leaving the bundled fallback font.
+  #[napi(js_name = "clearFonts")]
+  pub fn clear_fonts(&self) -> Result<()> {
+    self.state.update_fonts(|fonts| {
+      *fonts = default_fonts().map_err(map_error)?;
+
+      Ok(())
+    })
   }
 
   /// Renders a node tree into an image buffer asynchronously.

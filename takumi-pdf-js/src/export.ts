@@ -535,6 +535,23 @@ export class PdfRenderer {
     return this.fonts.register(font);
   }
 
+  /**
+   * Removes every face registered under the family `name`, from any `registerFont` call and each
+   * `unicodeRange` subset alike; returns whether it had any. Takes a family `registerFont` returned
+   * as well. A later render that lists one of its fonts registers it again.
+   */
+  unregisterFont(family: RegisteredFamilyLike) {
+    this.fonts.forget(family.name);
+
+    return this.inner.unregisterFont(family.name);
+  }
+
+  /** Removes every registered font, leaving the bundled fallback font. */
+  clearFonts() {
+    this.fonts.forgetAll();
+    this.inner.clearFonts();
+  }
+
   /** Releases the underlying wasm renderer's memory. */
   free() {
     this.inner.free();

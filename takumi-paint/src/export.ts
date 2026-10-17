@@ -1,7 +1,7 @@
 import type { CssInput } from "@takumi-rs/helpers";
 import { fromHtml } from "@takumi-rs/helpers/html";
 import { fromJsx } from "@takumi-rs/helpers/jsx";
-import type { FontLoader, ImagesInput } from "@takumi-rs/helpers/renderer";
+import type { FontLoader, ImagesInput, RegisteredFamilyLike } from "@takumi-rs/helpers/renderer";
 import { FontRegistry } from "@takumi-rs/helpers/renderer";
 import {
   LIST_MARKER_CHARACTERS,
@@ -139,6 +139,23 @@ export class Painter {
   /** Registers a font ahead of time, deduped against earlier registrations. */
   registerFont(font: FontLoader) {
     return this.#fonts.register(font);
+  }
+
+  /**
+   * Removes every face registered under the family `name`, from any `registerFont` call and each
+   * `unicodeRange` subset alike; returns whether it had any. Takes a family `registerFont` returned
+   * as well. A later render that lists one of its fonts registers it again.
+   */
+  unregisterFont(family: RegisteredFamilyLike) {
+    this.#fonts.forget(family.name);
+
+    return this.#inner.unregisterFont(family.name);
+  }
+
+  /** Removes every registered font, leaving the bundled fallback font. */
+  clearFonts() {
+    this.#fonts.forgetAll();
+    this.#inner.clearFonts();
   }
 
   /** Releases the underlying wasm memory. */

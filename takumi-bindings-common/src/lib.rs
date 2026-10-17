@@ -72,6 +72,25 @@ impl FontStore {
 
     Ok(changed)
   }
+
+  /// Removes every face registered under `family`; see [`Fonts::unregister_family`].
+  pub fn unregister_family(&self, family: &str) -> bool {
+    let mut fonts = Fonts::clone(&self.current());
+    let removed = fonts.unregister_family(family);
+
+    if removed {
+      *self.0.borrow_mut() = Rc::new(fonts);
+    }
+
+    removed
+  }
+
+  /// Goes back to the embedded last-resort fonts alone.
+  pub fn reset(&self) -> Result<(), FontError> {
+    *self.0.borrow_mut() = Rc::new(default_fonts()?);
+
+    Ok(())
+  }
 }
 
 /// A render's default language, parsed from its BCP-47 tag.
