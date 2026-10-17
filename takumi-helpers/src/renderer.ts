@@ -473,9 +473,22 @@ export class FontRegistry<TFamily extends RegisteredFamilyLike> {
       return;
     }
 
-    const families = await Promise.all(fonts.map((font) => this.register(font, false)));
+    const results = await Promise.allSettled(fonts.map((font) => this.register(font, false)));
+    const failure = results.find(
+      (result): result is PromiseRejectedResult => result.status === "rejected",
+    );
 
-    return [...new Set(families.flat().map((family) => family.name))];
+    // The fonts that did register still count against the budget.
+    if (failure) {
+      this.evict();
+      throw failure.reason;
+    }
+
+    const families = results.flatMap((result) =>
+      result.status === "fulfilled" ? result.value : [],
+    );
+
+    return [...new Set(families.map((family) => family.name))];
   }
 
   /**
@@ -488,9 +501,19 @@ export class FontRegistry<TFamily extends RegisteredFamilyLike> {
     images: ImagesInput | undefined,
     fontFamilies: string[] | undefined,
   ): Promise<{ images?: ImageSource[]; fontFamilies?: string[]; release: () => void }> {
-    let registeredFamilies = await this.prepareFonts(fonts);
-    const listed = () => [...(registeredFamilies ?? []), ...(fontFamilies ?? [])];
-    let release = this.use(listed());
+    // A family named only in `fontFamilies` has no loader to register it again, so it is held
+    // before anything awaits.
+    const releaseNamed = this.use(fontFamilies ?? []);
+    let registeredFamilies: string[] | undefined;
+
+    try {
+      registeredFamilies = await this.prepareFonts(fonts);
+    } catch (error) {
+      releaseNamed();
+      throw error;
+    }
+
+    let release = this.use(registeredFamilies ?? []);
 
     try {
       // A release elsewhere can evict a family before `use` protects it, so register those again,
@@ -499,17 +522,23 @@ export class FontRegistry<TFamily extends RegisteredFamilyLike> {
         const previous = release;
 
         registeredFamilies = await this.prepareFonts(fonts);
-        release = this.use(listed());
+        release = this.use(registeredFamilies ?? []);
         previous();
       }
+
+      const releaseLoaded = release;
 
       return {
         images: images ? await resolveImageLoaders(images) : undefined,
         fontFamilies: fontFamilies ?? registeredFamilies,
-        release,
+        release: () => {
+          releaseLoaded();
+          releaseNamed();
+        },
       };
     } catch (error) {
       release();
+      releaseNamed();
       throw error;
     }
   }

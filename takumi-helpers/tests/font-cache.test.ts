@@ -192,3 +192,48 @@ describe("FontRegistry font cache when a reload fails", () => {
     expect(registered.has("w")).toBe(false);
   });
 });
+
+describe("FontRegistry font cache edges", () => {
+  test("holds a family named only in fontFamilies while the render's fonts load", async () => {
+    const { registered, registerInner, unregister } = backend();
+    const registry = new FontRegistry(registerInner, { maxBytes: 150, unregister });
+    let finishLoading: (bytes: Uint8Array) => void = () => {};
+    const slow = {
+      name: "W",
+      data: () =>
+        new Promise<Uint8Array>((resolve) => {
+          finishLoading = resolve;
+        }),
+    };
+
+    await render(registry, font("X", 100));
+
+    const other = await registry.resolveResources([font("A", 100)], undefined, undefined);
+    const loading = registry.resolveResources([slow], undefined, ["X"]);
+
+    await Promise.resolve();
+    other.release();
+    expect(registered.has("x")).toBe(true);
+
+    finishLoading(new Uint8Array(10));
+    (await loading).release();
+  });
+
+  test("keeps to the budget when one of a render's fonts fails to load", async () => {
+    const { registered, registerInner, unregister } = backend();
+    const registry = new FontRegistry(registerInner, { maxBytes: 150, unregister });
+    const broken = {
+      name: "Broken",
+      data: () => {
+        throw new Error("offline");
+      },
+    };
+
+    await render(registry, font("A", 100));
+    await expect(
+      registry.resolveResources([font("B", 100), broken], undefined, undefined),
+    ).rejects.toThrow("offline");
+
+    expect(registered.size).toBe(1);
+  });
+});
