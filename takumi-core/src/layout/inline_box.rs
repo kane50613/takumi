@@ -56,7 +56,9 @@ pub fn resolve_inline_box<'n>(
 }
 
 impl<'n> InlineBoxPaint<'n> {
-  /// What `positioned` holds, and its origin relative to the container's border-box origin.
+  /// What `positioned` holds, and where it paints from relative to the container's border-box
+  /// origin: a replaced box's border box, or a container's margin box, which
+  /// [`InlineSubtree::border_box_origin`] moves to its border box.
   pub fn of(
     positioned: &VisualInlineBox,
     item: &InlineBoxItem<'n>,
@@ -68,14 +70,22 @@ impl<'n> InlineBoxPaint<'n> {
       x: content.x + positioned.x,
       y: content.y + positioned.y,
     };
+    let margin_offset = Point {
+      x: item.margin.left,
+      y: item.margin.top,
+    };
 
+    // The line advances by the margin box, but the box itself is its border box inside it, as
+    // Blink's `LogicalLineBuilder::PlaceAtomicInline` places the fragment past its start margin.
     if !node.participates_as_inline_box() {
+      let border_box = origin + margin_offset;
+
       return (
-        origin,
+        border_box,
         Self::Replaced {
           node,
           layout: ComputedLayout {
-            location: origin,
+            location: border_box,
             ..ComputedLayout::from(item)
           },
         },
@@ -95,16 +105,8 @@ impl<'n> InlineBoxPaint<'n> {
         root,
         results,
         size,
-        margin_offset: Point {
-          x: item.margin.left,
-          y: item.margin.top,
-        },
-        paint_offset: node.context.paint_offset
-          + origin
-          + Point {
-            x: item.margin.left,
-            y: item.margin.top,
-          },
+        margin_offset,
+        paint_offset: node.context.paint_offset + origin + margin_offset,
       })),
     )
   }

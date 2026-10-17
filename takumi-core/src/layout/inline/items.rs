@@ -614,11 +614,15 @@ pub(crate) enum InlineContentKind<'c> {
   Box,
 }
 
+/// The box's border box: its line footprint less its margins.
 impl From<&InlineBoxItem<'_>> for ComputedLayout {
   fn from(value: &InlineBoxItem<'_>) -> Self {
     ComputedLayout::new(
       Point::ZERO,
-      Size::new(value.paint_width, value.paint_height),
+      Size::new(
+        (value.paint_width - value.margin.horizontal()).max(0.0),
+        (value.paint_height - value.margin.vertical()).max(0.0),
+      ),
       value.border,
       value.padding,
     )
