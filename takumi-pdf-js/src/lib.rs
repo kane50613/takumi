@@ -89,9 +89,9 @@ struct Layout {
 
 /// A PDF renderer holding registered fonts and a decoded-resource cache.
 ///
-/// State lives behind a lock and every method takes `&self`, mirroring the
+/// Every method takes `&self` and the fonts are copy-on-write, mirroring the
 /// other wasm bindings: a panic mid-call can't leave the wasm-bindgen borrow
-/// flag permanently set.
+/// flag or the font store held.
 #[wasm_bindgen]
 pub struct PdfRenderer {
   fonts: FontStore,
@@ -133,9 +133,10 @@ impl PdfRenderer {
   #[wasm_bindgen(js_name = registerFont)]
   pub fn register_font(&self, font: FontType) -> Result<RegisteredFamiliesType, js_sys::Error> {
     let font: Font = from_value(font.into()).map_err(map_error)?;
-    let mut state = self.fonts.write().map_err(map_error)?;
-
-    let registered = register_font(&mut state, font).map_err(map_error)?;
+    let registered = self
+      .fonts
+      .update(|fonts| register_font(fonts, font))
+      .map_err(map_error)?;
     Ok(to_value(&registered).map_err(map_error)?.unchecked_into())
   }
 
@@ -158,11 +159,11 @@ impl PdfRenderer {
       images,
       lang,
     } = self.layout(&options)?;
-    let state = self.fonts.read().map_err(map_error)?;
+    let fonts = self.fonts.current();
 
     takumi_pdf::render(PdfOptions {
       viewport,
-      fonts: &state,
+      fonts: &fonts,
       node,
       stylesheet: stylesheet(&self.resource_cache, options.css, Vec::new()).map_err(map_error)?,
       images,
@@ -215,10 +216,10 @@ impl PdfRenderer {
       images,
       lang,
     } = self.layout(&options)?;
-    let state = self.fonts.read().map_err(map_error)?;
+    let fonts = self.fonts.current();
     let measured = takumi_pdf::measure(MeasureOptions {
       viewport,
-      fonts: &state,
+      fonts: &fonts,
       node,
       stylesheet: stylesheet(&self.resource_cache, options.css, Vec::new()).map_err(map_error)?,
       images,

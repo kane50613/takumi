@@ -26,9 +26,9 @@ use crate::{helper::map_error, model::*};
 
 /// The main renderer for Takumi image rendering engine.
 ///
-/// State lives behind a lock and every method takes `&self`, mirroring the
-/// napi bindings: a panic mid-call can't leave the wasm-bindgen borrow flag
-/// permanently set, which would otherwise fail all subsequent calls.
+/// Every method takes `&self` and the fonts are copy-on-write, mirroring the
+/// napi bindings: a panic mid-call can't leave the wasm-bindgen borrow flag or
+/// the font store held, which would otherwise fail all subsequent calls.
 #[wasm_bindgen]
 pub struct Renderer {
   fonts: FontStore,
@@ -101,8 +101,10 @@ impl Renderer {
   pub fn register_font(&self, font: FontType) -> Result<RegisteredFamiliesType, js_sys::Error> {
     let font: Font = from_value(font.into()).map_err(map_error)?;
 
-    let mut state = self.fonts.write().map_err(map_error)?;
-    let registered = register_font(&mut state, font).map_err(map_error)?;
+    let registered = self
+      .fonts
+      .update(|fonts| register_font(fonts, font))
+      .map_err(map_error)?;
 
     Ok(to_value(&registered).map_err(map_error)?.unchecked_into())
   }
@@ -121,8 +123,8 @@ impl Renderer {
       .unwrap_or_default();
 
     let images = self.images_map(options.images.as_deref())?;
-    let state = self.fonts.read().map_err(map_error)?;
-    self.render_internal(&state, node, options, images)
+    let fonts = self.fonts.current();
+    self.render_internal(&fonts, node, options, images)
   }
 
   fn render_internal(
@@ -174,7 +176,7 @@ impl Renderer {
       options.keyframes.unwrap_or_default(),
     )
     .map_err(map_error)?;
-    let state = self.fonts.read().map_err(map_error)?;
+    let fonts = self.fonts.current();
 
     let lang = parse_lang(options.lang.as_deref()).map_err(map_error)?;
 
@@ -185,7 +187,7 @@ impl Renderer {
         .stylesheet(stylesheet)
         .time_ms(time_ms(options.time_ms))
         .node(node)
-        .fonts(&state)
+        .fonts(&fonts)
         .font_families(options.font_families.map(FontFamily::from_names))
         .lang(lang)
         .build(),
@@ -210,8 +212,8 @@ impl Renderer {
 
     let images = self.images_map(options.images.as_deref())?;
 
-    let state = self.fonts.read().map_err(map_error)?;
-    let render_options = raster_options(&self.resource_cache, &state, node, options, images)?;
+    let fonts = self.fonts.current();
+    let render_options = raster_options(&self.resource_cache, &fonts, node, options, images)?;
 
     let layout = measure(render_options).map_err(map_error)?;
 
@@ -239,8 +241,8 @@ impl Renderer {
     }
 
     let images = self.images_map(options.images.as_deref())?;
-    let state = self.fonts.read().map_err(map_error)?;
-    let buffer = self.render_internal(&state, node, options, images)?;
+    let fonts = self.fonts.current();
+    let buffer = self.render_internal(&fonts, node, options, images)?;
 
     let mut data_uri = String::new();
 
@@ -291,7 +293,7 @@ impl Renderer {
       keyframes.unwrap_or_default(),
     )
     .map_err(map_error)?;
-    let state = self.fonts.read().map_err(map_error)?;
+    let fonts = self.fonts.current();
     let scene_options = scenes
       .into_iter()
       .map(|scene| {
@@ -304,7 +306,7 @@ impl Renderer {
               .resource_cache(self.resource_cache.clone())
               .stylesheet(stylesheet.clone())
               .node(scene.node)
-              .fonts(&state)
+              .fonts(&fonts)
               .font_families(font_families.clone().map(FontFamily::from_names))
               .lang(lang)
               .draw_debug_border(draw_debug_border)
