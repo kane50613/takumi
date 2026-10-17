@@ -59,8 +59,8 @@ impl FontCache {
     Some(registered)
   }
 
-  /// Records what registering a font under `key` added to `fonts`, `bytes` of font data, then for a
-  /// font that is not pinned releases what the budget no longer fits, other than that font.
+  /// Records a registration, then for a font that is not pinned releases what the budget no
+  /// longer fits, other than that font.
   pub fn admit(
     &mut self,
     fonts: &mut Fonts,
@@ -75,12 +75,11 @@ impl FontCache {
       return Ok(());
     }
 
-    let fresh: Vec<String> = registered.iter().map(|family| fold(&family.name)).collect();
-
-    self.evict(fonts, &fresh)
+    self.release_past_budget(fonts, registered)
   }
 
-  fn record(
+  /// Records what registering a font under `key` added to the registry, `bytes` of font data.
+  pub fn record(
     &mut self,
     key: Option<&str>,
     registered: &[RegisteredFamily],
@@ -88,6 +87,14 @@ impl FontCache {
     pinned: bool,
   ) {
     let now = self.tick();
+
+    if let Some(key) = key {
+      for previous in self.by_key.remove(key).into_iter().flatten() {
+        if let Some(cached) = self.families.get_mut(&fold(&previous.name)) {
+          cached.keys.retain(|each| each != key);
+        }
+      }
+    }
 
     for family in registered {
       let cached = self
@@ -120,6 +127,17 @@ impl FontCache {
         cached.last_used = now;
       }
     }
+  }
+
+  /// Releases from `fonts` what the budget no longer fits, other than the families `kept`.
+  pub fn release_past_budget(
+    &mut self,
+    fonts: &mut Fonts,
+    kept: &[RegisteredFamily],
+  ) -> Result<(), FontError> {
+    let keep: Vec<String> = kept.iter().map(|family| fold(&family.name)).collect();
+
+    self.evict(fonts, &keep)
   }
 
   /// Releases the least recently used unpinned families but `keep` from `fonts` until the rest fit
@@ -222,6 +240,17 @@ mod tests {
 
   /// Geist registered under `family`, as a render's `fonts` list or `registerFont` would.
   fn register(fonts: &mut Fonts, cache: &mut FontCache, family: &str, pinned: bool) -> u64 {
+    register_under(fonts, cache, family, family, pinned)
+  }
+
+  /// Geist registered as `family` under `key`.
+  fn register_under(
+    fonts: &mut Fonts,
+    cache: &mut FontCache,
+    key: &str,
+    family: &str,
+    pinned: bool,
+  ) -> u64 {
     let bytes = fs::read(concat!(
       env!("CARGO_MANIFEST_DIR"),
       "/../assets/fonts/geist/Geist[wght].woff2"
@@ -234,7 +263,7 @@ mod tests {
     let (registered, size) = register_resource(fonts, resource).unwrap();
 
     cache
-      .admit(fonts, Some(family), &registered, size, pinned)
+      .admit(fonts, Some(key), &registered, size, pinned)
       .unwrap();
 
     size
@@ -310,6 +339,17 @@ mod tests {
       fonts.unregister_family("Geist"),
       "the embedded Geist is back"
     );
+  }
+
+  #[test]
+  fn a_key_registered_again_leaves_its_old_family() {
+    let (mut fonts, mut cache) = fitting(2);
+
+    register_under(&mut fonts, &mut cache, "K", "A", false);
+    register_under(&mut fonts, &mut cache, "K", "B", false);
+    register(&mut fonts, &mut cache, "C", false);
+
+    assert!(cache.lookup("K", false).is_some());
   }
 
   #[test]

@@ -16,7 +16,7 @@ pub struct LoadFontTask {
 }
 
 impl Task for LoadFontTask {
-  type Output = (Vec<font::RegisteredFamily>, u64);
+  type Output = Vec<font::RegisteredFamily>;
   type JsValue = Vec<RegisteredFamily>;
 
   fn compute(&mut self) -> Result<Self::Output> {
@@ -28,23 +28,29 @@ impl Task for LoadFontTask {
       .map_err(map_error)?;
 
     let bytes = resource.byte_len() as u64;
-    let registered = self.state.update_fonts(|fonts, _| {
-      fonts
+    let registered = self.state.update_fonts(|fonts, cache| {
+      let registered = fonts
         .register(resource)
-        .map_err(|e| Error::from_reason(format!("Failed to register font: {e}")))
+        .map_err(|e| Error::from_reason(format!("Failed to register font: {e}")))?;
+
+      cache.record(self.key.as_deref(), &registered, bytes, self.pinned);
+
+      Ok(registered)
     })?;
 
-    Ok((registered, bytes))
+    Ok(registered)
   }
 
-  /// Admits the font on the JS thread, where renders take their fonts, so nothing is released
-  /// between a render checking its fonts and starting.
-  fn resolve(&mut self, _env: Env, (registered, bytes): Self::Output) -> Result<Self::JsValue> {
-    self.state.update_fonts(|fonts, cache| {
-      cache
-        .admit(fonts, self.key.as_deref(), &registered, bytes, self.pinned)
-        .map_err(map_error)
-    })?;
+  /// Releases fonts past the budget on the JS thread, where renders take their fonts, so nothing
+  /// is released between a render checking its fonts and starting.
+  fn resolve(&mut self, _env: Env, registered: Self::Output) -> Result<Self::JsValue> {
+    if !self.pinned {
+      self.state.update_fonts(|fonts, cache| {
+        cache
+          .release_past_budget(fonts, &registered)
+          .map_err(map_error)
+      })?;
+    }
 
     Ok(registered.into_iter().map(Into::into).collect())
   }
