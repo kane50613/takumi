@@ -2,6 +2,7 @@ import {
   Renderer as RendererInternal,
   type Node,
   type RegisteredFamily,
+  type RendererOptions as RendererOptionsInternal,
   type RenderAnimationOptions as RenderAnimationOptionsInternal,
   type RenderOptions as RenderOptionsInternal,
   type SvgRenderOptions as SvgRenderOptionsInternal,
@@ -10,11 +11,12 @@ import {
 export * from "../pkg/takumi_wasm";
 export { default } from "../pkg/takumi_wasm";
 
-import { FontRegistry, prepareRenderInput } from "@takumi-rs/helpers/renderer";
+import { FontRegistry, withRenderInput } from "@takumi-rs/helpers/renderer";
 import type {
   BackendAnimationOptions,
   BackendRenderOptions,
   BackendSvgOptions,
+  FontCacheRendererOptions,
   FontLoader,
   RegisteredFamilyLike,
 } from "@takumi-rs/helpers/renderer";
@@ -30,35 +32,50 @@ export type {
 export type RenderOptions = BackendRenderOptions<RenderOptionsInternal>;
 export type RenderAnimationOptions = BackendAnimationOptions<RenderAnimationOptionsInternal>;
 export type SvgRenderOptions = BackendSvgOptions<SvgRenderOptionsInternal>;
+export type RendererOptions = RendererOptionsInternal & FontCacheRendererOptions;
 
 export class Renderer {
-  private inner = new RendererInternal();
-  private fonts = new FontRegistry<RegisteredFamily>((font) => this.inner.registerFont(font));
+  private inner: RendererInternal;
+  private fonts: FontRegistry<RegisteredFamily>;
 
-  async render(node: Node, options?: RenderOptions) {
-    const { options: opts } = await prepareRenderInput(this.fonts, options ?? {}, node);
-    return this.inner.render(node, opts);
+  constructor(options?: RendererOptions) {
+    const { fontCacheMaxBytes, ...native } = options ?? {};
+
+    this.inner = new RendererInternal(native);
+    this.fonts = new FontRegistry<RegisteredFamily>((font) => this.inner.registerFont(font), {
+      maxBytes: fontCacheMaxBytes,
+      unregister: (family) => this.inner.unregisterFont(family),
+    });
   }
 
-  async renderAsDataUrl(node: Node, options?: RenderOptions) {
-    const { options: opts } = await prepareRenderInput(this.fonts, options ?? {}, node);
-    return this.inner.renderAsDataUrl(node, opts);
+  render(node: Node, options?: RenderOptions) {
+    return withRenderInput(this.fonts, options ?? {}, node, (opts) =>
+      this.inner.render(node, opts),
+    );
   }
 
-  async renderSvg(node: Node, options?: SvgRenderOptions) {
-    const { options: opts } = await prepareRenderInput(this.fonts, options ?? {}, node);
-    return this.inner.renderSvg(node, opts);
+  renderAsDataUrl(node: Node, options?: RenderOptions) {
+    return withRenderInput(this.fonts, options ?? {}, node, (opts) =>
+      this.inner.renderAsDataUrl(node, opts),
+    );
   }
 
-  async measure(node: Node, options?: RenderOptions) {
-    const { options: opts } = await prepareRenderInput(this.fonts, options ?? {}, node);
-    return this.inner.measure(node, opts);
+  renderSvg(node: Node, options?: SvgRenderOptions) {
+    return withRenderInput(this.fonts, options ?? {}, node, (opts) =>
+      this.inner.renderSvg(node, opts),
+    );
   }
 
-  async renderAnimation(options: RenderAnimationOptions) {
+  measure(node: Node, options?: RenderOptions) {
+    return withRenderInput(this.fonts, options ?? {}, node, (opts) =>
+      this.inner.measure(node, opts),
+    );
+  }
+
+  renderAnimation(options: RenderAnimationOptions) {
     const nodes = options.scenes.map((scene) => scene.node);
-    const { options: opts } = await prepareRenderInput(this.fonts, options, nodes);
-    return this.inner.renderAnimation(opts);
+
+    return withRenderInput(this.fonts, options, nodes, (opts) => this.inner.renderAnimation(opts));
   }
 
   registerFont(font: FontLoader) {

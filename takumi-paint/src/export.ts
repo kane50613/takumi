@@ -1,7 +1,12 @@
 import type { CssInput } from "@takumi-rs/helpers";
 import { fromHtml } from "@takumi-rs/helpers/html";
 import { fromJsx } from "@takumi-rs/helpers/jsx";
-import type { FontLoader, ImagesInput, RegisteredFamilyLike } from "@takumi-rs/helpers/renderer";
+import type {
+  FontCacheRendererOptions,
+  FontLoader,
+  ImagesInput,
+  RegisteredFamilyLike,
+} from "@takumi-rs/helpers/renderer";
 import { FontRegistry } from "@takumi-rs/helpers/renderer";
 import {
   LIST_MARKER_CHARACTERS,
@@ -112,13 +117,20 @@ export function initSync(source: { module: SyncInitInput }): void {
 
 export class Painter {
   #inner = new PainterInternal();
-  #fonts = new FontRegistry<RegisteredFamily>((font) => this.#inner.registerFont(font));
+  #fonts: FontRegistry<RegisteredFamily>;
+
+  constructor(options: FontCacheRendererOptions = {}) {
+    this.#fonts = new FontRegistry<RegisteredFamily>((font) => this.#inner.registerFont(font), {
+      maxBytes: options.fontCacheMaxBytes,
+      unregister: (family) => this.#inner.unregisterFont(family),
+    });
+  }
 
   /** Lays out a node tree, JSX, or an HTML string and returns what painting it would draw. */
   async paint(node: NodeInput, options: PaintOptions = {}): Promise<PaintTree> {
     const { fonts, images, css, fontFamilies, ...rest } = options;
     const main = await resolveNode(node);
-    const resources = await this.#fonts.resolveResources(
+    const { release, ...resources } = await this.#fonts.resolveResources(
       fonts && subsetFonts({ fonts, source: [main.node, LIST_MARKER_CHARACTERS] }),
       images,
       fontFamilies,
@@ -126,14 +138,18 @@ export class Painter {
     const own = css === undefined ? [] : isCssList(css) ? [...css] : [css];
     const sheets = [...own, ...main.css];
 
-    const painted = this.#inner.paint(main.node, {
-      ...rest,
-      css: sheets.length > 0 ? sheets : undefined,
-      images: resources.images,
-      fontFamilies: resources.fontFamilies,
-    });
+    try {
+      const painted = this.#inner.paint(main.node, {
+        ...rest,
+        css: sheets.length > 0 ? sheets : undefined,
+        images: resources.images,
+        fontFamilies: resources.fontFamilies,
+      });
 
-    return new PaintTreeView(painted.tree(), painted);
+      return new PaintTreeView(painted.tree(), painted);
+    } finally {
+      release();
+    }
   }
 
   /** Registers a font ahead of time, deduped against earlier registrations. */
