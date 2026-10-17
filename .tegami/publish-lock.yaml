@@ -1,12 +1,12 @@
 core:changelogs:
-  - content: "---\npackages:\n  takumi-paint:\n    type: minor\n  takumi-core:\n    type: minor\n---\n\n# Read a run's outlines one glyph at a time\n\n`TextRun.outline()` is now `outlines()`, which returns each glyph's outline as SVG path data in the order of `glyphs`, with `null` for a glyph the run's color does not fill. A renderer can draw, animate, or hit-test each letter on its own. Replace `run.outline()` with `run.outlines().join(\"\")`. In Rust, `PaintTree::run_outline` is now `run_outlines`.\n"
-    filename: paint-glyph-outlines.md
+  - content: "---\npackages:\n  takumi-core:\n    type: minor\n  takumi:\n    type: minor\n  \"@takumi-rs/helpers\":\n    type: minor\n  \"@takumi-rs/core\":\n    type: minor\n  \"@takumi-rs/wasm\":\n    type: minor\n  takumi-paint:\n    type: minor\n  takumi-pdf:\n    type: minor\n---\n\n# Release fonts a renderer no longer needs\n\n`unregisterFont({ name })` removes a family with all its `unicodeRange` subsets, and `clearFonts()` goes back to the bundled fallback font. A later render that lists a released font registers it again. In Rust, use `Fonts::unregister_family`.\n"
+    filename: unregister-fonts.md
     v: 0.0.0
-  - content: "---\npackages:\n  takumi-paint:\n    type: minor\n  takumi-core:\n    type: minor\n---\n\n# Map each glyph of a paint tree back to its text\n\nA `Glyph` now has `cluster`: where its cluster starts in the run's `text`, in UTF-16 code units. Glyphs of one cluster share it, so a renderer can split a run into words or animate it a letter at a time without guessing from glyph positions.\n"
-    filename: paint-glyph-clusters.md
+  - content: "---\npackages:\n  \"@takumi-rs/helpers\":\n    type: minor\n  \"@takumi-rs/core\":\n    type: minor\n  \"@takumi-rs/wasm\":\n    type: minor\n  takumi-paint:\n    type: minor\n  takumi-pdf:\n    type: minor\n---\n\n# Bound render fonts with `fontCacheMaxBytes`\n\nPast this cap in decoded font bytes, a renderer releases the least recently used fonts that renders' `fonts` lists loaded, and a later render loads them again. Fonts from `registerFont` stay, and a running render keeps the fonts it started with. The wasm `Renderer` now passes its options, such as `cacheMaxBytes`, to the native renderer.\n"
+    filename: font-cache-max-bytes.md
     v: 0.0.0
-  - content: "---\npackages:\n  takumi-paint:\n    type: minor\n---\n\n# Write a paint tree to JSON\n\n`JSON.stringify(tree)` now writes a versioned `SerializedPaintTree`: the tree's nodes, steps, and effects by index, and every glyph's outline. A tree painted on a server can be handed to a browser or a worker as plain data. Font files are left out.\n"
-    filename: paint-tree-json.md
+  - content: "---\npackages:\n  takumi-core:\n    type: patch\n---\n\n# Draw an inline image inside its margins\n\nAn `<img>` or other replaced element in a line of text was drawn across its margins, stretched and with its border and background reaching into them. It now draws in its border box, and its margins stay empty space on the line.\n"
+    filename: inline-image-margins.md
     v: 0.0.0
 core:packages:
   - id: npm:takumi-workspace
@@ -15,86 +15,102 @@ core:packages:
     updated: true
   - id: npm:docs
     updated: false
-  - id: npm:@takumi-rs/core
+  - changelogIds:
+      - unregister-fonts.md
+      - font-cache-max-bytes.md
+    id: npm:@takumi-rs/core
+    updated: true
+  - changelogIds:
+      - unregister-fonts.md
+      - font-cache-max-bytes.md
+    id: npm:takumi-paint
+    updated: true
+  - changelogIds:
+      - unregister-fonts.md
+      - font-cache-max-bytes.md
+    id: npm:@takumi-rs/wasm
+    updated: true
+  - changelogIds:
+      - unregister-fonts.md
+      - font-cache-max-bytes.md
+    id: npm:takumi-pdf
+    updated: true
+  - changelogIds:
+      - unregister-fonts.md
+      - font-cache-max-bytes.md
+    id: npm:@takumi-rs/helpers
     updated: true
   - id: npm:takumi-js
     updated: true
-  - id: npm:takumi-pdf
-    updated: true
-  - id: npm:@takumi-rs/wasm
-    updated: true
-  - changelogIds:
-      - paint-glyph-outlines.md
-      - paint-glyph-clusters.md
-      - paint-tree-json.md
-    id: npm:takumi-paint
-    updated: true
-  - id: npm:@takumi-rs/helpers
-    updated: true
-  - id: npm:example-cloudflare-workers
-    updated: false
-  - id: npm:ffmpeg-keyframe-animation
-    updated: false
-  - id: npm:example-tanstack-start
-    updated: false
-  - id: npm:waku-ssr
-    updated: false
-  - id: npm:svelte
-    updated: false
-  - id: npm:example-liquid-glass
-    updated: false
-  - id: npm:example-satori-html
+  - id: npm:example-twitter-images
     updated: false
   - id: npm:example-e-invoice
     updated: false
   - id: npm:example-nextjs
     updated: false
+  - id: npm:svelte
+    updated: false
+  - id: npm:waku-ssr
+    updated: false
   - id: npm:ffplay
     updated: false
-  - id: npm:example-twitter-images
+  - id: npm:example-satori-html
     updated: false
-  - id: npm:example-generate-invoice
+  - id: npm:example-tanstack-start
+    updated: false
+  - id: npm:ffmpeg-keyframe-animation
+    updated: false
+  - id: npm:example-liquid-glass
     updated: false
   - id: npm:example-css-library-integration
     updated: false
+  - id: npm:example-generate-invoice
+    updated: false
   - id: npm:pdf-bench
     updated: false
-  - id: cargo:takumi-raster
-    updated: true
-  - id: cargo:takumi-pdf
+  - id: npm:example-cloudflare-workers
+    updated: false
+  - changelogIds:
+      - unregister-fonts.md
+      - font-cache-max-bytes.md
+    id: cargo:takumi-pdf
     updated: true
   - changelogIds:
-      - paint-glyph-outlines.md
-      - paint-glyph-clusters.md
-    id: cargo:takumi-core
+      - unregister-fonts.md
+    id: cargo:takumi
     updated: true
   - id: cargo:takumi-html
     updated: true
   - id: cargo:takumi-svg
     updated: true
-  - id: cargo:takumi
+  - id: cargo:takumi-raster
+    updated: true
+  - changelogIds:
+      - unregister-fonts.md
+      - inline-image-margins.md
+    id: cargo:takumi-core
     updated: true
 npm:packages:
   - id: npm:takumi-workspace
   - id: npm:@takumi-rs/image-response
   - id: npm:docs
   - id: npm:@takumi-rs/core
-  - id: npm:takumi-js
-  - id: npm:takumi-pdf
-  - id: npm:@takumi-rs/wasm
   - id: npm:takumi-paint
+  - id: npm:@takumi-rs/wasm
+  - id: npm:takumi-pdf
   - id: npm:@takumi-rs/helpers
-  - id: npm:example-cloudflare-workers
-  - id: npm:ffmpeg-keyframe-animation
-  - id: npm:example-tanstack-start
-  - id: npm:waku-ssr
-  - id: npm:svelte
-  - id: npm:example-liquid-glass
-  - id: npm:example-satori-html
+  - id: npm:takumi-js
+  - id: npm:example-twitter-images
   - id: npm:example-e-invoice
   - id: npm:example-nextjs
+  - id: npm:svelte
+  - id: npm:waku-ssr
   - id: npm:ffplay
-  - id: npm:example-twitter-images
-  - id: npm:example-generate-invoice
+  - id: npm:example-satori-html
+  - id: npm:example-tanstack-start
+  - id: npm:ffmpeg-keyframe-animation
+  - id: npm:example-liquid-glass
   - id: npm:example-css-library-integration
+  - id: npm:example-generate-invoice
   - id: npm:pdf-bench
+  - id: npm:example-cloudflare-workers

@@ -1,3 +1,9 @@
+## takumi@2.17.0
+
+### Release fonts a renderer no longer needs
+
+`unregisterFont({ name })` removes a family with all its `unicodeRange` subsets, and `clearFonts()` goes back to the bundled fallback font. A later render that lists a released font registers it again. In Rust, use `Fonts::unregister_family`.
+
 ## takumi@2.16.0
 
 ### Register font subsets with `unicodeRange`

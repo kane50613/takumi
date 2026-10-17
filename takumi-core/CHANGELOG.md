@@ -1,3 +1,13 @@
+## takumi-core@0.31.0
+
+### Release fonts a renderer no longer needs
+
+`unregisterFont({ name })` removes a family with all its `unicodeRange` subsets, and `clearFonts()` goes back to the bundled fallback font. A later render that lists a released font registers it again. In Rust, use `Fonts::unregister_family`.
+
+### Draw an inline image inside its margins
+
+An `<img>` or other replaced element in a line of text was drawn across its margins, stretched and with its border and background reaching into them. It now draws in its border box, and its margins stay empty space on the line.
+
 ## takumi-core@0.30.0
 
 ### Read a run's outlines one glyph at a time
