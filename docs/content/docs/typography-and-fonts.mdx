@@ -207,9 +207,9 @@ renderer.clearFonts(); // [!code highlight]
 
 A later render that lists a released font in `fonts` loads and registers it again. A render already running keeps the fonts it started with, and a font still loading when you call `clearFonts` finishes registering afterwards.
 
-To bound the fonts without tracking them yourself, give the renderer `fontCacheMaxBytes`. Past it, the renderer releases the families renders used least recently, never one a render in progress uses. Fonts from `registerFont` are always kept.
+To bound the fonts without tracking them yourself, give the renderer `fontCacheMaxBytes`. It counts the font files renders' `fonts` lists loaded, as loaded, so a WOFF2 counts compressed. Past it, the renderer releases the families renders used least recently, skipping any a render in progress lists in `fonts` or `fontFamilies`. A family that any `registerFont` call added to is never released this way.
 
-```ts title="Keep at most 64 MiB of render fonts"
+```ts title="Keep 64 MiB of font files from renders"
 import { Renderer } from "@takumi-rs/core";
 
 const renderer = new Renderer({ fontCacheMaxBytes: 64 * 1024 * 1024 }); // [!code highlight]

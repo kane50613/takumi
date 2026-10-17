@@ -9,4 +9,4 @@ packages:
 
 # Bound the fonts a renderer keeps with `fontCacheMaxBytes`
 
-Renderers take `fontCacheMaxBytes`. Past it, a renderer releases the font families that renders' `fonts` lists registered and used least recently, never one a render in progress uses, and registers them again when a later render lists them. Fonts from `registerFont` are always kept. The wasm `Renderer` now also passes its other options, such as `cacheMaxBytes`, to the native renderer.
+Renderers take `fontCacheMaxBytes`, a budget in font file bytes for the fonts that renders' `fonts` lists registered. Past it, a renderer releases the families used least recently, skipping any a render in progress lists in `fonts` or `fontFamilies`, and registers them again when a later render lists them. A family that any `registerFont` call added to is never released this way. The wasm `Renderer` now also passes its other options, such as `cacheMaxBytes`, to the native renderer.

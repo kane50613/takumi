@@ -40,7 +40,7 @@ describe("FontRegistry font cache", () => {
     await render(registry, font("C", 100));
 
     expect([...registered].sort()).toEqual(["a", "c"]);
-    expect(unregister).toHaveBeenCalledWith("b");
+    expect(unregister).toHaveBeenCalledWith("B");
 
     await render(registry, font("B", 100));
 
@@ -113,5 +113,38 @@ describe("FontRegistry font cache while fonts load", () => {
     expect(registered.has("x")).toBe(true);
 
     release();
+  });
+});
+
+describe("FontRegistry font cache contract", () => {
+  test("releases a family under the name the backend gave it", async () => {
+    const { registerInner, unregister } = backend();
+    const registry = new FontRegistry(registerInner, { maxBytes: 100, unregister });
+
+    await render(registry, font("Alpha", 100));
+    await render(registry, font("Beta", 100));
+
+    expect(unregister).toHaveBeenCalledWith("Alpha");
+  });
+
+  test("keeps a family a render in progress names in fontFamilies", async () => {
+    const { registered, registerInner, unregister } = backend();
+    const registry = new FontRegistry(registerInner, { maxBytes: 100, unregister });
+
+    await render(registry, font("A", 100));
+
+    const naming = await registry.resolveResources(undefined, undefined, ["A"]);
+
+    await render(registry, font("B", 100));
+    expect(registered.has("a")).toBe(true);
+
+    naming.release();
+  });
+
+  test("rejects a negative or NaN budget", () => {
+    const { registerInner } = backend();
+
+    expect(() => new FontRegistry(registerInner, { maxBytes: -1 })).toThrow(RangeError);
+    expect(() => new FontRegistry(registerInner, { maxBytes: Number.NaN })).toThrow(RangeError);
   });
 });

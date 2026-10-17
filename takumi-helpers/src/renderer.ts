@@ -194,9 +194,10 @@ export async function resolveImageLoaders(images: ImagesInput): Promise<ImageSou
 /** The renderer option that bounds the fonts renders' `fonts` lists keep registered. */
 export type FontCacheRendererOptions = {
   /**
-   * Bytes of fonts from renders' `fonts` lists to keep registered. Past it, the families least
-   * recently used are released, and a later render that lists them registers them again. Fonts
-   * from `registerFont` are always kept.
+   * Bytes of font files, as loaded (a WOFF2 counts compressed), that renders' `fonts` lists may
+   * keep registered. Past it, the families least recently used are released after a render
+   * finishes; a later render that lists them registers them again. A family any `registerFont`
+   * call added to is never released for space.
    * @default Infinity
    */
   fontCacheMaxBytes?: number;
@@ -205,9 +206,9 @@ export type FontCacheRendererOptions = {
 /** How a {@link FontRegistry} releases fonts that renders' `fonts` lists registered. */
 export type FontCacheOptions = {
   /**
-   * Bytes of fonts from renders' `fonts` lists to keep. Past it, the families least recently
-   * used by a render are released, never one a render in progress uses, and a later render that
-   * lists them registers them again. Fonts from `registerFont` are always kept.
+   * Bytes of font files from renders' `fonts` lists to keep; see
+   * {@link FontCacheRendererOptions.fontCacheMaxBytes}. A family a render in progress lists in
+   * `fonts` or `fontFamilies` is not released.
    * @default Infinity
    */
   maxBytes?: number;
@@ -215,8 +216,9 @@ export type FontCacheOptions = {
   unregister?: (family: string) => unknown;
 };
 
-/** What a registry knows of a family: its registrations' bytes, and who uses it. */
+/** What a registry knows of a family: its name as the backend gave it, its bytes, and who uses it. */
 type FamilyUse = {
+  name: string;
   bytes: number;
   /** Registered through `registerFont`, so never released for space. */
   pinned: boolean;
@@ -258,7 +260,13 @@ export class FontRegistry<TFamily extends RegisteredFamilyLike> {
   constructor(
     private readonly registerInner: (font: Font) => Awaitable<TFamily[]>,
     private readonly cache: FontCacheOptions = {},
-  ) {}
+  ) {
+    if (cache.maxBytes !== undefined && !(cache.maxBytes >= 0)) {
+      throw new RangeError(
+        `fontCacheMaxBytes must be a non-negative number, got ${cache.maxBytes}`,
+      );
+    }
+  }
 
   private getFont(key: string | ByteBuf) {
     return typeof key === "string" ? this.byKey.get(key) : this.byData.get(key);
@@ -373,7 +381,7 @@ export class FontRegistry<TFamily extends RegisteredFamilyLike> {
    * the least recently used fonts past the budget.
    */
   use(families: readonly string[]): () => void {
-    const used = families.map((family) => this.uses.get(family.toLowerCase()));
+    const used = families.map((family) => this.uses.get(foldFamily(family)));
     const now = ++this.clock;
 
     for (const use of used) {
@@ -405,7 +413,7 @@ export class FontRegistry<TFamily extends RegisteredFamilyLike> {
     const evictable = [...this.uses].filter(([, use]) => !use.pinned);
     let total = evictable.reduce((sum, [, use]) => sum + use.bytes, 0);
 
-    for (const [family, use] of evictable.sort(([, a], [, b]) => a.lastUsed - b.lastUsed)) {
+    for (const [, use] of evictable.sort(([, a], [, b]) => a.lastUsed - b.lastUsed)) {
       if (total <= maxBytes) {
         return;
       }
@@ -414,15 +422,15 @@ export class FontRegistry<TFamily extends RegisteredFamilyLike> {
         continue;
       }
 
-      unregister(family);
-      this.forget(family);
+      unregister(use.name);
+      this.forget(use.name);
       total -= use.bytes;
     }
   }
 
   /** Whether any of `families` is no longer registered here. */
   private lost(families: string[] | undefined) {
-    return families?.some((family) => !this.uses.has(family.toLowerCase())) ?? false;
+    return families?.some((family) => !this.uses.has(foldFamily(family))) ?? false;
   }
 
   private releasedSince(family: string, epoch: number) {
@@ -434,7 +442,13 @@ export class FontRegistry<TFamily extends RegisteredFamilyLike> {
 
     for (const { name } of families) {
       const folded = foldFamily(name);
-      const use = this.uses.get(folded) ?? { bytes: 0, pinned, lastUsed: ++this.clock, users: 0 };
+      const use = this.uses.get(folded) ?? {
+        name,
+        bytes: 0,
+        pinned,
+        lastUsed: ++this.clock,
+        users: 0,
+      };
 
       use.bytes += bytes;
       use.pinned ||= pinned;
@@ -445,7 +459,7 @@ export class FontRegistry<TFamily extends RegisteredFamilyLike> {
 
   private pin(families: TFamily[]) {
     for (const { name } of families) {
-      const use = this.uses.get(name.toLowerCase());
+      const use = this.uses.get(foldFamily(name));
 
       if (use) {
         use.pinned = true;
@@ -477,7 +491,8 @@ export class FontRegistry<TFamily extends RegisteredFamilyLike> {
     fontFamilies: string[] | undefined,
   ): Promise<{ images?: ImageSource[]; fontFamilies?: string[]; release: () => void }> {
     let registeredFamilies = await this.prepareFonts(fonts);
-    let release = this.use(registeredFamilies ?? []);
+    const listed = () => [...(registeredFamilies ?? []), ...(fontFamilies ?? [])];
+    let release = this.use(listed());
 
     // A release elsewhere can evict a family before `use` protects it, so register those again,
     // a bounded number of times so a budget smaller than one render's fonts cannot loop forever.
@@ -485,7 +500,7 @@ export class FontRegistry<TFamily extends RegisteredFamilyLike> {
       const previous = release;
 
       registeredFamilies = await this.prepareFonts(fonts);
-      release = this.use(registeredFamilies ?? []);
+      release = this.use(listed());
       previous();
     }
 
