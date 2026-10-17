@@ -201,7 +201,9 @@ export async function resolveImageLoaders(images: ImagesInput): Promise<ImageSou
  */
 export class FontRegistry<TFamily extends RegisteredFamilyLike> {
   private readonly byKey = new Map<string, Promise<TFamily[]>>();
-  private readonly byData = new WeakMap<ByteBuf, Promise<TFamily[]>>();
+  private byData = new WeakMap<ByteBuf, Promise<TFamily[]>>();
+  /** Each family, lowercased as the backend matches names, to the registrations that produced it. */
+  private readonly byFamily = new Map<string, Set<string | WeakRef<ByteBuf>>>();
 
   constructor(private readonly registerInner: (font: Font) => Awaitable<TFamily[]>) {}
 
@@ -243,6 +245,11 @@ export class FontRegistry<TFamily extends RegisteredFamilyLike> {
           isBuffer(loader) ? view : { ...loader, unicodeRange: unicodeRangeOf(loader), data: view },
         );
       })
+      .then((families) => {
+        this.remember(key, families);
+
+        return families;
+      })
       .catch((error) => {
         this.deleteFont(key);
         throw error;
@@ -251,6 +258,41 @@ export class FontRegistry<TFamily extends RegisteredFamilyLike> {
     this.setFont(key, promise);
 
     return promise;
+  }
+
+  /**
+   * Forgets every registration that produced `family`, so registering one of them again reaches
+   * the backend. Call it when the backend unregisters the family.
+   */
+  forget(family: string) {
+    const folded = family.toLowerCase();
+
+    for (const entry of this.byFamily.get(folded) ?? []) {
+      const key = typeof entry === "string" ? entry : entry.deref();
+
+      if (key !== undefined) {
+        this.deleteFont(key);
+      }
+    }
+
+    this.byFamily.delete(folded);
+  }
+
+  /** Forgets every registration. Call it when the backend clears its fonts. */
+  forgetAll() {
+    this.byKey.clear();
+    this.byData = new WeakMap();
+    this.byFamily.clear();
+  }
+
+  private remember(key: string | ByteBuf, families: TFamily[]) {
+    const entry = typeof key === "string" ? key : new WeakRef(key);
+
+    for (const { name } of families) {
+      const folded = name.toLowerCase();
+
+      this.byFamily.set(folded, (this.byFamily.get(folded) ?? new Set()).add(entry));
+    }
   }
 
   /** Registers every font and returns the distinct family names produced. */

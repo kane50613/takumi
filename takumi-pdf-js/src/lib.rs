@@ -140,6 +140,19 @@ impl PdfRenderer {
     Ok(to_value(&registered).map_err(map_error)?.unchecked_into())
   }
 
+  /// Removes every face registered under `family`, each `unicodeRange` subset alike, returning
+  /// whether it had any.
+  #[wasm_bindgen(js_name = unregisterFont)]
+  pub fn unregister_font(&self, family: &str) -> bool {
+    self.fonts.unregister(family)
+  }
+
+  /// Removes every registered font, leaving the bundled fallback font.
+  #[wasm_bindgen(js_name = clearFonts)]
+  pub fn clear_fonts(&self) -> Result<(), js_sys::Error> {
+    self.fonts.reset().map_err(map_error)
+  }
+
   /// Renders a node tree to PDF bytes. Without options the output is paged A4;
   /// `viewport` renders a single fixed page instead.
   #[wasm_bindgen(unchecked_return_type = "Uint8Array<ArrayBuffer>")]

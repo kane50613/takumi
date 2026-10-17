@@ -65,4 +65,21 @@ export class Renderer {
   registerFont(font: FontLoader) {
     return this.fonts.register(font);
   }
+
+  /**
+   * Removes every face registered under `family`, each `unicodeRange` subset alike, so the
+   * renderer lets go of it; returns whether it had any. A later render that lists the font
+   * registers it again.
+   */
+  unregisterFont(family: string) {
+    this.fonts.forget(family);
+
+    return this.inner.unregisterFont(family);
+  }
+
+  /** Removes every registered font, leaving the bundled fallback font. */
+  clearFonts() {
+    this.fonts.forgetAll();
+    this.inner.clearFonts();
+  }
 }
