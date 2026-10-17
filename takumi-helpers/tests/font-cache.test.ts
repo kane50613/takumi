@@ -148,3 +148,47 @@ describe("FontRegistry font cache contract", () => {
     expect(() => new FontRegistry(registerInner, { maxBytes: Number.NaN })).toThrow(RangeError);
   });
 });
+
+describe("FontRegistry font cache when a reload fails", () => {
+  test("lets go of a render's fonts when registering an evicted one again fails", async () => {
+    const { registered, registerInner, unregister } = backend();
+    const registry = new FontRegistry(registerInner, { maxBytes: 150, unregister });
+    let loads = 0;
+    let finishLoading: (bytes: Uint8Array) => void = () => {};
+    const flaky = {
+      name: "X",
+      data: () => {
+        loads++;
+
+        if (loads > 1) {
+          throw new Error("offline");
+        }
+
+        return new Uint8Array(100);
+      },
+    };
+    const slow = {
+      name: "W",
+      data: () =>
+        new Promise<Uint8Array>((resolve) => {
+          finishLoading = resolve;
+        }),
+    };
+
+    await registry.resolveResources([flaky], undefined, undefined).then(({ release }) => release());
+
+    const other = await registry.resolveResources([font("A", 100)], undefined, undefined);
+    const loading = registry.resolveResources([flaky, slow], undefined, undefined);
+
+    await Promise.resolve();
+    other.release();
+    finishLoading(new Uint8Array(10));
+
+    await expect(loading).rejects.toThrow("offline");
+
+    await render(registry, font("B", 100));
+    await render(registry, font("C", 100));
+
+    expect(registered.has("w")).toBe(false);
+  });
+});

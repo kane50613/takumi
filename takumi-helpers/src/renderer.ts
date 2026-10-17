@@ -492,17 +492,17 @@ export class FontRegistry<TFamily extends RegisteredFamilyLike> {
     const listed = () => [...(registeredFamilies ?? []), ...(fontFamilies ?? [])];
     let release = this.use(listed());
 
-    // A release elsewhere can evict a family before `use` protects it, so register those again,
-    // a bounded number of times so a budget smaller than one render's fonts cannot loop forever.
-    for (let attempt = 0; attempt < 3 && this.lost(registeredFamilies); attempt++) {
-      const previous = release;
-
-      registeredFamilies = await this.prepareFonts(fonts);
-      release = this.use(listed());
-      previous();
-    }
-
     try {
+      // A release elsewhere can evict a family before `use` protects it, so register those again,
+      // a bounded number of times so a budget smaller than one render's fonts cannot loop forever.
+      for (let attempt = 0; attempt < 3 && this.lost(registeredFamilies); attempt++) {
+        const previous = release;
+
+        registeredFamilies = await this.prepareFonts(fonts);
+        release = this.use(listed());
+        previous();
+      }
+
       return {
         images: images ? await resolveImageLoaders(images) : undefined,
         fontFamilies: fontFamilies ?? registeredFamilies,
