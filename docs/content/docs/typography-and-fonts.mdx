@@ -194,18 +194,18 @@ export function GET() {
 
 ### Releasing fonts
 
-A long-running renderer keeps every family it has registered. When the families come from user content, release the ones you are done with. `unregisterFont` removes a family with all its `unicodeRange` subsets, and `clearFonts` goes back to the bundled fallback font.
+A long-running renderer keeps every family it has registered. When the families come from user content, release the ones you are done with. `unregisterFont({ name })` removes every face of that family, whichever call registered it, with all its `unicodeRange` subsets. `clearFonts` goes back to the bundled fallback font.
 
 ```ts title="Release fonts on a long-running renderer"
 import { Renderer } from "@takumi-rs/core";
 
 const renderer = new Renderer();
 
-renderer.unregisterFont("Inter"); // [!code highlight]
+renderer.unregisterFont({ name: "Inter" }); // [!code highlight]
 renderer.clearFonts(); // [!code highlight]
 ```
 
-A render that lists a released font in `fonts` registers it again, so releasing never breaks a later render.
+A later render that lists a released font in `fonts` loads and registers it again. A render already running keeps the fonts it started with, and a font still loading when you call `clearFonts` finishes registering afterwards.
 
 ## Choosing a font
 

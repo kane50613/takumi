@@ -191,6 +191,10 @@ export async function resolveImageLoaders(images: ImagesInput): Promise<ImageSou
   );
 }
 
+/** A family name as the backend matches it: each character lowercased on its own, as fontique does. */
+const foldFamily = (family: string) =>
+  Array.from(family, (character) => character.toLowerCase()).join("");
+
 /**
  * Font-registration state machine shared by both backends: dedupes registrations by a stable key
  * (or by buffer identity), resolves lazy `data()` loaders once, and turns a set of {@link FontLoader}s
@@ -202,7 +206,7 @@ export async function resolveImageLoaders(images: ImagesInput): Promise<ImageSou
 export class FontRegistry<TFamily extends RegisteredFamilyLike> {
   private readonly byKey = new Map<string, Promise<TFamily[]>>();
   private byData = new WeakMap<ByteBuf, Promise<TFamily[]>>();
-  /** Each family, lowercased as the backend matches names, to the registrations that produced it. */
+  /** Each family, folded as the backend matches names, to the registrations that produced it. */
   private readonly byFamily = new Map<string, Set<string | WeakRef<ByteBuf>>>();
   /** Counts releases, so a registration can tell whether one ran while it was pending. */
   private epoch = 0;
@@ -289,7 +293,7 @@ export class FontRegistry<TFamily extends RegisteredFamilyLike> {
    * the backend. Call it when the backend unregisters the family.
    */
   forget(family: string) {
-    const folded = family.toLowerCase();
+    const folded = foldFamily(family);
 
     this.epoch++;
 
@@ -308,7 +312,10 @@ export class FontRegistry<TFamily extends RegisteredFamilyLike> {
     this.byFamily.delete(folded);
   }
 
-  /** Forgets every registration. Call it when the backend clears its fonts. */
+  /**
+   * Forgets every registration. Call it when the backend clears its fonts. A registration still
+   * loading finishes afterwards, but is not cached, so a later render registers it again.
+   */
   forgetAll() {
     this.releasedAll = ++this.epoch;
     this.byKey.clear();
@@ -317,14 +324,14 @@ export class FontRegistry<TFamily extends RegisteredFamilyLike> {
   }
 
   private releasedSince(family: string, epoch: number) {
-    return Math.max(this.released.get(family.toLowerCase()) ?? 0, this.releasedAll) > epoch;
+    return Math.max(this.released.get(foldFamily(family)) ?? 0, this.releasedAll) > epoch;
   }
 
   private remember(key: string | ByteBuf, families: TFamily[]) {
     const entry = typeof key === "string" ? key : new WeakRef(key);
 
     for (const { name } of families) {
-      const folded = name.toLowerCase();
+      const folded = foldFamily(name);
 
       this.byFamily.set(folded, (this.byFamily.get(folded) ?? new Set()).add(entry));
     }

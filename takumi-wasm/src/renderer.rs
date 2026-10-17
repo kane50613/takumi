@@ -113,7 +113,7 @@ impl Renderer {
   /// whether it had any.
   #[wasm_bindgen(js_name = unregisterFont)]
   pub fn unregister_font(&self, family: &str) -> bool {
-    self.fonts.unregister(family)
+    self.fonts.unregister_family(family)
   }
 
   /// Removes every registered font, leaving the bundled fallback font.
