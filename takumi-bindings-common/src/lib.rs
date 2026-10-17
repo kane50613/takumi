@@ -8,10 +8,7 @@
 
 pub mod input;
 
-use std::{
-  fmt,
-  sync::{Arc, RwLock, RwLockReadGuard, RwLockWriteGuard, TryLockError},
-};
+use std::{cell::RefCell, rc::Rc, sync::Arc};
 
 use takumi_core::{
   Error as CoreError, Fonts,
@@ -49,38 +46,31 @@ pub fn default_fonts() -> Result<Fonts, FontError> {
   Ok(fonts)
 }
 
-/// Registered fonts behind a lock that fails instead of blocking, for the
-/// single-threaded wasm bindings.
-pub struct FontStore(RwLock<Fonts>);
+/// Registered fonts for the single-threaded wasm bindings, copy-on-write like the napi
+/// bindings' `ArcSwap`: a call takes the current registry and lets go of the store at once, and
+/// a change publishes a new registry. Nothing is held across a call, so one that traps (release
+/// builds abort on panic) leaves the store usable.
+pub struct FontStore(RefCell<Rc<Fonts>>);
 
 impl FontStore {
   /// A store holding the embedded last-resort fonts.
   pub fn new() -> Result<Self, FontError> {
-    default_fonts().map(|fonts| Self(RwLock::new(fonts)))
+    default_fonts().map(|fonts| Self(RefCell::new(Rc::new(fonts))))
   }
 
-  pub fn read(&self) -> Result<RwLockReadGuard<'_, Fonts>, FontStoreLocked> {
-    self.0.try_read().map_err(FontStoreLocked::from)
+  /// The registry as it is now.
+  pub fn current(&self) -> Rc<Fonts> {
+    self.0.borrow().clone()
   }
 
-  pub fn write(&self) -> Result<RwLockWriteGuard<'_, Fonts>, FontStoreLocked> {
-    self.0.try_write().map_err(FontStoreLocked::from)
-  }
-}
+  /// Applies `change` to a copy of the registry, publishing the copy only when it succeeds.
+  pub fn update<T, E>(&self, change: impl FnOnce(&mut Fonts) -> Result<T, E>) -> Result<T, E> {
+    let mut fonts = Fonts::clone(&self.current());
+    let changed = change(&mut fonts)?;
 
-/// A [`FontStore`] lock already held by another call.
-#[derive(Debug)]
-pub struct FontStoreLocked(String);
+    *self.0.borrow_mut() = Rc::new(fonts);
 
-impl<T> From<TryLockError<T>> for FontStoreLocked {
-  fn from(error: TryLockError<T>) -> Self {
-    Self(error.to_string())
-  }
-}
-
-impl fmt::Display for FontStoreLocked {
-  fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-    write!(f, "Renderer state is locked: {}", self.0)
+    Ok(changed)
   }
 }
 
