@@ -3,6 +3,7 @@ use std::{collections::HashMap, mem::take, sync::Arc};
 use napi::bindgen_prelude::*;
 use takumi_bindings_common::{device_pixel_ratio, parse_lang, stylesheet, time_ms};
 use takumi_core::{
+  Fonts,
   style::{FontFamily, Lang, StyleSheet},
   viewport::Viewport,
 };
@@ -20,6 +21,8 @@ pub struct RenderTask {
   pub(crate) draw_debug_border: bool,
   pub(crate) node: Option<NodeSource>,
   pub(crate) state: Arc<RendererState>,
+  /// The fonts as they were when the call was made, so a later change leaves this one alone.
+  pub(crate) fonts: Arc<Fonts>,
   pub(crate) viewport: Viewport,
   pub(crate) format: OutputFormat,
   pub(crate) quality: Option<u8>,
@@ -48,6 +51,7 @@ impl RenderTask {
 
     Ok(RenderTask {
       node: Some(node),
+      fonts: state.fonts.load_full(),
       state,
       viewport: Viewport::new((options.width, options.height)).with_device_pixel_ratio(
         device_pixel_ratio(options.device_pixel_ratio.map(|ratio| ratio as f32)),
@@ -76,8 +80,6 @@ impl Task for RenderTask {
     };
     let node = node.into_node()?;
 
-    let fonts = self.state.fonts.load();
-
     let initialized_images = decode_images(&self.state.resource_cache, take(&mut self.images))?;
 
     let image = render(
@@ -89,7 +91,7 @@ impl Task for RenderTask {
         .time_ms(self.time_ms)
         .dithering(self.dithering)
         .node(node)
-        .fonts(&fonts)
+        .fonts(&self.fonts)
         .font_families(take(&mut self.font_families))
         .lang(take(&mut self.lang))
         .draw_debug_border(self.draw_debug_border)
