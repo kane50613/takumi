@@ -2,17 +2,16 @@
 #![deny(missing_docs)]
 #![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
-use std::{mem::take, sync::RwLock};
+use std::mem::take;
 
 use serde::{Deserialize, Serialize};
 use serde_wasm_bindgen::{Serializer, from_value, to_value};
 use takumi_bindings_common::{
-  default_fonts,
+  FontStore,
   input::{Font, ImageSource, decode_images, register_font},
   stylesheet,
 };
 use takumi_core::{
-  Fonts,
   layout::node::Node,
   paint_tree::{PaintTree, PaintTreeOptions, paint_tree},
   resources::image::ResourceCache,
@@ -62,12 +61,12 @@ struct RenderOptions {
 
 /// A renderer holding registered fonts and a decoded-resource cache.
 ///
-/// State lives behind a lock and every method takes `&self`, mirroring the
+/// Every method takes `&self` and the fonts are copy-on-write, mirroring the
 /// other wasm bindings: a panic mid-call can't leave the wasm-bindgen borrow
-/// flag permanently set.
+/// flag or the font store held.
 #[wasm_bindgen]
 pub struct Painter {
-  state: RwLock<Fonts>,
+  fonts: FontStore,
   resource_cache: ResourceCache,
 }
 
@@ -77,7 +76,7 @@ impl Painter {
   #[wasm_bindgen(constructor)]
   pub fn new() -> Result<Painter, js_sys::Error> {
     Ok(Painter {
-      state: RwLock::new(default_fonts().map_err(map_error)?),
+      fonts: FontStore::new().map_err(map_error)?,
       resource_cache: ResourceCache::default(),
     })
   }
@@ -87,11 +86,10 @@ impl Painter {
   #[wasm_bindgen(js_name = registerFont)]
   pub fn register_font(&self, font: FontType) -> Result<RegisteredFamiliesType, js_sys::Error> {
     let font: Font = from_value(font.into()).map_err(map_error)?;
-    let mut state = self
-      .state
-      .try_write()
-      .map_err(|error| js_sys::Error::new(&format!("Renderer state is locked: {error}")))?;
-    let registered = register_font(&mut state, font).map_err(map_error)?;
+    let registered = self
+      .fonts
+      .update(|fonts| register_font(fonts, font))
+      .map_err(map_error)?;
     Ok(to_value(&registered).map_err(map_error)?.unchecked_into())
   }
 
@@ -117,10 +115,7 @@ impl Painter {
       .map(Lang::parse)
       .transpose()
       .map_err(map_error)?;
-    let state = self
-      .state
-      .try_read()
-      .map_err(|error| js_sys::Error::new(&format!("Renderer state is locked: {error}")))?;
+    let fonts = self.fonts.current();
     let mut tree = paint_tree(
       PaintTreeOptions::builder()
         .viewport(
@@ -130,7 +125,7 @@ impl Painter {
               .unwrap_or(DEFAULT_DEVICE_PIXEL_RATIO),
           ),
         )
-        .fonts(&state)
+        .fonts(&fonts)
         .node(node)
         .images(images)
         .stylesheet(stylesheet(&self.resource_cache, options.css, Vec::new()).map_err(map_error)?)
