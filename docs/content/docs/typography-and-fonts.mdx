@@ -207,6 +207,14 @@ renderer.clearFonts(); // [!code highlight]
 
 A render that lists a released font in `fonts` registers it again, so releasing never breaks a later render.
 
+To bound the fonts without tracking them yourself, give the renderer `fontCacheMaxBytes`. Past it, the renderer releases the families renders used least recently, never one a render in progress uses. Fonts from `registerFont` are always kept.
+
+```ts title="Keep at most 64 MiB of render fonts"
+import { Renderer } from "@takumi-rs/core";
+
+const renderer = new Renderer({ fontCacheMaxBytes: 64 * 1024 * 1024 }); // [!code highlight]
+```
+
 ## Choosing a font
 
 ### Fallback chain

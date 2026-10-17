@@ -191,10 +191,46 @@ export async function resolveImageLoaders(images: ImagesInput): Promise<ImageSou
   );
 }
 
+/** The renderer option that bounds the fonts renders' `fonts` lists keep registered. */
+export type FontCacheRendererOptions = {
+  /**
+   * Bytes of fonts from renders' `fonts` lists to keep registered. Past it, the families least
+   * recently used are released, and a later render that lists them registers them again. Fonts
+   * from `registerFont` are always kept.
+   * @default Infinity
+   */
+  fontCacheMaxBytes?: number;
+};
+
+/** How a {@link FontRegistry} releases fonts that renders' `fonts` lists registered. */
+export type FontCacheOptions = {
+  /**
+   * Bytes of fonts from renders' `fonts` lists to keep. Past it, the families least recently
+   * used by a render are released, never one a render in progress uses, and a later render that
+   * lists them registers them again. Fonts from `registerFont` are always kept.
+   * @default Infinity
+   */
+  maxBytes?: number;
+  /** The backend's `unregisterFont`, which releasing a family calls. */
+  unregister?: (family: string) => unknown;
+};
+
+/** What a registry knows of a family: its registrations' bytes, and who uses it. */
+type FamilyUse = {
+  bytes: number;
+  /** Registered through `registerFont`, so never released for space. */
+  pinned: boolean;
+  /** The registry's clock when a render last used it. */
+  lastUsed: number;
+  /** Renders in progress that use it. */
+  users: number;
+};
+
 /**
  * Font-registration state machine shared by both backends: dedupes registrations by a stable key
  * (or by buffer identity), resolves lazy `data()` loaders once, and turns a set of {@link FontLoader}s
- * plus an {@link ImagesInput} into the `fontFamilies`/`images` the binding expects.
+ * plus an {@link ImagesInput} into the `fontFamilies`/`images` the binding expects. With a
+ * {@link FontCacheOptions.maxBytes} budget it also releases the fonts renders used least recently.
  *
  * `registerInner` is the backend's raw `registerFont`; its precise `RegisteredFamily` type flows
  * back out through {@link TFamily}.
@@ -204,8 +240,14 @@ export class FontRegistry<TFamily extends RegisteredFamilyLike> {
   private byData = new WeakMap<ByteBuf, Promise<TFamily[]>>();
   /** Each family, lowercased as the backend matches names, to the registrations that produced it. */
   private readonly byFamily = new Map<string, Set<string | WeakRef<ByteBuf>>>();
+  /** Each family, lowercased, to its bytes and use. A font in more than one family counts in each. */
+  private readonly uses = new Map<string, FamilyUse>();
+  private clock = 0;
 
-  constructor(private readonly registerInner: (font: Font) => Awaitable<TFamily[]>) {}
+  constructor(
+    private readonly registerInner: (font: Font) => Awaitable<TFamily[]>,
+    private readonly cache: FontCacheOptions = {},
+  ) {}
 
   private getFont(key: string | ByteBuf) {
     return typeof key === "string" ? this.byKey.get(key) : this.byData.get(key);
@@ -227,26 +269,27 @@ export class FontRegistry<TFamily extends RegisteredFamilyLike> {
     }
   }
 
-  /** Registers one font, deduped against earlier registrations. */
-  async register(font: FontLoader): Promise<TFamily[]> {
+  /**
+   * Registers one font, deduped against earlier registrations. A `pinned` font, as `registerFont`
+   * registers, is never released for space.
+   */
+  async register(font: FontLoader, pinned = true): Promise<TFamily[]> {
     const loader = typeof font === "string" ? fontFromUrl(font) : font;
     const key = createFontKey(loader);
 
     const cached = this.getFont(key);
     if (cached) {
-      return cached;
+      return pinned ? cached.then((families) => this.pin(families)) : cached;
     }
 
     const promise = Promise.resolve(extractFontBuffer(loader))
-      .then((data) => {
+      .then(async (data) => {
         const view = asView(data);
-
-        return this.registerInner(
+        const families = await this.registerInner(
           isBuffer(loader) ? view : { ...loader, unicodeRange: unicodeRangeOf(loader), data: view },
         );
-      })
-      .then((families) => {
-        this.remember(key, families);
+
+        this.remember(key, families, view.byteLength, pinned);
 
         return families;
       })
@@ -276,6 +319,7 @@ export class FontRegistry<TFamily extends RegisteredFamilyLike> {
     }
 
     this.byFamily.delete(folded);
+    this.uses.delete(folded);
   }
 
   /** Forgets every registration. Call it when the backend clears its fonts. */
@@ -283,16 +327,85 @@ export class FontRegistry<TFamily extends RegisteredFamilyLike> {
     this.byKey.clear();
     this.byData = new WeakMap();
     this.byFamily.clear();
+    this.uses.clear();
   }
 
-  private remember(key: string | ByteBuf, families: TFamily[]) {
+  /**
+   * Marks `families` used by a render until the returned function is called, which then releases
+   * the least recently used fonts past the budget.
+   */
+  use(families: readonly string[]): () => void {
+    const used = families.map((family) => this.uses.get(family.toLowerCase()));
+    const now = ++this.clock;
+
+    for (const use of used) {
+      if (use) {
+        use.users++;
+        use.lastUsed = now;
+      }
+    }
+
+    return () => {
+      for (const use of used) {
+        if (use) {
+          use.users--;
+        }
+      }
+
+      this.evict();
+    };
+  }
+
+  /** Releases the least recently used unpinned families until the rest fit the budget. */
+  private evict() {
+    const { maxBytes = Infinity, unregister } = this.cache;
+
+    if (!unregister || maxBytes === Infinity) {
+      return;
+    }
+
+    const evictable = [...this.uses].filter(([, use]) => !use.pinned);
+    let total = evictable.reduce((sum, [, use]) => sum + use.bytes, 0);
+
+    for (const [family, use] of evictable.sort(([, a], [, b]) => a.lastUsed - b.lastUsed)) {
+      if (total <= maxBytes) {
+        return;
+      }
+
+      if (use.users > 0) {
+        continue;
+      }
+
+      unregister(family);
+      this.forget(family);
+      total -= use.bytes;
+    }
+  }
+
+  private remember(key: string | ByteBuf, families: TFamily[], bytes: number, pinned: boolean) {
     const entry = typeof key === "string" ? key : new WeakRef(key);
 
     for (const { name } of families) {
       const folded = name.toLowerCase();
+      const use = this.uses.get(folded) ?? { bytes: 0, pinned, lastUsed: ++this.clock, users: 0 };
 
+      use.bytes += bytes;
+      use.pinned ||= pinned;
+      this.uses.set(folded, use);
       this.byFamily.set(folded, (this.byFamily.get(folded) ?? new Set()).add(entry));
     }
+  }
+
+  private pin(families: TFamily[]) {
+    for (const { name } of families) {
+      const use = this.uses.get(name.toLowerCase());
+
+      if (use) {
+        use.pinned = true;
+      }
+    }
+
+    return families;
   }
 
   /** Registers every font and returns the distinct family names produced. */
@@ -301,26 +414,34 @@ export class FontRegistry<TFamily extends RegisteredFamilyLike> {
       return;
     }
 
-    const families = await Promise.all(fonts.map((font) => this.register(font)));
+    const families = await Promise.all(fonts.map((font) => this.register(font, false)));
 
     return [...new Set(families.flat().map((family) => family.name))];
   }
 
   /**
    * Registers `fonts` and resolves lazy `images`, yielding the `images`/`fontFamilies` the binding
-   * expects. Explicit `fontFamilies` wins over the registered set.
+   * expects. Explicit `fontFamilies` wins over the registered set. Call `release` once the render
+   * is done, so its fonts can be released for space again.
    */
   async resolveResources(
     fonts: FontLoader[] | undefined,
     images: ImagesInput | undefined,
     fontFamilies: string[] | undefined,
-  ): Promise<{ images?: ImageSource[]; fontFamilies?: string[] }> {
+  ): Promise<{ images?: ImageSource[]; fontFamilies?: string[]; release: () => void }> {
     const registeredFamilies = await this.prepareFonts(fonts);
+    const release = this.use(registeredFamilies ?? []);
 
-    return {
-      images: images ? await resolveImageLoaders(images) : undefined,
-      fontFamilies: fontFamilies ?? registeredFamilies,
-    };
+    try {
+      return {
+        images: images ? await resolveImageLoaders(images) : undefined,
+        fontFamilies: fontFamilies ?? registeredFamilies,
+        release,
+      };
+    } catch (error) {
+      release();
+      throw error;
+    }
   }
 }
 
@@ -337,7 +458,8 @@ export type ResolvedRenderOptions<TOptions> = Omit<
  * Shared body for every backend render entry point: subsets and registers `fonts` against `source`,
  * resolves `images`/`fontFamilies`, and enforces one abort policy: `signal` is checked before and
  * after the (network-bound) resource resolution. Returns the binding options plus the `signal` for
- * the backend to forward into a native call when it supports cancellation.
+ * the backend to forward into a native call when it supports cancellation, and `release` to call
+ * once that call is done.
  */
 export async function prepareRenderInput<
   TOptions extends RenderExtras & { fontFamilies?: string[] },
@@ -346,12 +468,16 @@ export async function prepareRenderInput<
   registry: FontRegistry<TFamily>,
   options: TOptions,
   source: CodepointSource,
-): Promise<{ options: ResolvedRenderOptions<TOptions>; signal: AbortSignal | undefined }> {
+): Promise<{
+  options: ResolvedRenderOptions<TOptions>;
+  signal: AbortSignal | undefined;
+  release: () => void;
+}> {
   const { fonts, fontFamilies, signal, images, ...rest } = options;
   signal?.throwIfAborted();
 
   const resolvedFonts = await fonts;
-  const resolved = await registry.resolveResources(
+  const { release, ...resolved } = await registry.resolveResources(
     resolvedFonts &&
       subsetFonts({
         fonts: resolvedFonts,
@@ -360,7 +486,38 @@ export async function prepareRenderInput<
     images,
     fontFamilies,
   );
-  signal?.throwIfAborted();
 
-  return { options: { ...rest, ...resolved }, signal };
+  if (signal?.aborted) {
+    release();
+    signal.throwIfAborted();
+  }
+
+  return { options: { ...rest, ...resolved }, signal, release };
+}
+
+/** Runs `call` with the binding options {@link prepareRenderInput} yields, then releases the render's fonts. */
+export async function withRenderInput<
+  TOptions extends RenderExtras & { fontFamilies?: string[] },
+  TFamily extends RegisteredFamilyLike,
+  TResult,
+>(
+  registry: FontRegistry<TFamily>,
+  options: TOptions,
+  source: CodepointSource,
+  call: (
+    options: ResolvedRenderOptions<TOptions>,
+    signal: AbortSignal | undefined,
+  ) => Awaitable<TResult>,
+): Promise<TResult> {
+  const {
+    options: resolved,
+    signal,
+    release,
+  } = await prepareRenderInput(registry, options, source);
+
+  try {
+    return await call(resolved, signal);
+  } finally {
+    release();
+  }
 }
