@@ -194,10 +194,8 @@ export async function resolveImageLoaders(images: ImagesInput): Promise<ImageSou
 /** The renderer option that bounds the fonts renders' `fonts` lists keep registered. */
 export type FontCacheRendererOptions = {
   /**
-   * Bytes of font files, as loaded (a WOFF2 counts compressed), that renders' `fonts` lists may
-   * keep registered. Past it, the families least recently used are released after a render
-   * finishes; a later render that lists them registers them again. A family any `registerFont`
-   * call added to is never released for space.
+   * Font file bytes that renders' `fonts` lists may keep registered; past it, the least recently
+   * used families are released. Fonts from `registerFont` and fonts a running render lists stay.
    * @default Infinity
    */
   fontCacheMaxBytes?: number;

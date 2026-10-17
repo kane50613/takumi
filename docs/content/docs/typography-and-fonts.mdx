@@ -203,13 +203,13 @@ renderer.clearFonts(); // back to the bundled fallback font
 
 A later render that lists a released font registers it again.
 
-To bound the fonts without tracking them yourself, give the renderer `fontCacheMaxBytes`. It counts the font files renders' `fonts` lists loaded, as loaded, so a WOFF2 counts compressed. Past it, the renderer releases the families renders used least recently, skipping any a render in progress lists in `fonts` or `fontFamilies`. A family that any `registerFont` call added to is never released this way.
+To release them automatically, cap the font file bytes that renders' `fonts` lists keep:
 
-```ts title="Keep 64 MiB of font files from renders"
-import { Renderer } from "@takumi-rs/core";
-
-const renderer = new Renderer({ fontCacheMaxBytes: 64 * 1024 * 1024 }); // [!code highlight]
+```ts
+const renderer = new Renderer({ fontCacheMaxBytes: 64 * 1024 * 1024 });
 ```
+
+Past the cap, the least recently used families go first. Fonts from `registerFont` and fonts a running render lists stay.
 
 ## Choosing a font
 
