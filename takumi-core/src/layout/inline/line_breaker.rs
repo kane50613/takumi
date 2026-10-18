@@ -3382,7 +3382,10 @@ mod tests {
         node,
         &data,
         LineBreakerMode::Content,
-        ConstraintSpace::new(Some(available_width)),
+        ConstraintSpace::new(
+          Some(available_width),
+          block.context.style.inherited_data.direction,
+        ),
         LineLayoutOpportunity::new(available_width),
         break_token,
         &mut atomic_inline,

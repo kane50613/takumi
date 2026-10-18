@@ -18,11 +18,13 @@ pub(crate) struct ConstraintSpace {
 }
 
 impl ConstraintSpace {
-  pub(crate) fn new(available_inline_size: Option<LayoutUnit>) -> Self {
+  /// A space for a container of `direction`, its percentages against an indefinite block size
+  /// until the caller knows one.
+  pub(crate) fn new(available_inline_size: Option<LayoutUnit>, direction: Direction) -> Self {
     Self {
       available_inline_size,
       bfc_offset: BfcOffset::default(),
-      direction: Direction::Ltr,
+      direction,
       percentage_resolution_inline_size: available_inline_size,
       percentage_resolution_block_size: None,
     }
