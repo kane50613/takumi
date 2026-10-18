@@ -158,6 +158,15 @@ mod line_box;
   not(test),
   expect(
     dead_code,
+    reason = "TODO: the inline layout algorithm port balances lines"
+  )
+)]
+#[cfg_attr(test, allow(dead_code))]
+pub(crate) mod line_break_candidate;
+#[cfg_attr(
+  not(test),
+  expect(
+    dead_code,
     reason = "TODO: the line breaker port reads the collected items"
   )
 )]
@@ -194,6 +203,15 @@ pub(crate) mod line_truncator;
   not(test),
   expect(
     dead_code,
+    reason = "TODO: the inline layout algorithm port balances lines"
+  )
+)]
+#[cfg_attr(test, allow(dead_code))]
+pub(crate) mod line_widths;
+#[cfg_attr(
+  not(test),
+  expect(
+    dead_code,
     reason = "TODO: the inline layout algorithm port builds logical lines"
   )
 )]
@@ -219,7 +237,25 @@ mod metrics;
 #[cfg_attr(test, allow(dead_code))]
 pub(crate) mod min_max_sizes;
 mod outline;
+#[cfg_attr(
+  not(test),
+  expect(
+    dead_code,
+    reason = "TODO: the inline layout algorithm port balances lines"
+  )
+)]
+#[cfg_attr(test, allow(dead_code))]
+pub(crate) mod paragraph_line_breaker;
 mod runs;
+#[cfg_attr(
+  not(test),
+  expect(
+    dead_code,
+    reason = "TODO: the inline layout algorithm port balances lines"
+  )
+)]
+#[cfg_attr(test, allow(dead_code))]
+pub(crate) mod score_line_breaker;
 mod small_caps;
 #[cfg(test)]
 pub(crate) mod testing;

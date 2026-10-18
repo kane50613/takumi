@@ -147,7 +147,12 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
    src/layout/inline/leading_floats.rs, `InlineChildLayoutContext` in
    src/layout/inline/inline_child_layout_context.rs, `LineTruncator` in
    src/layout/inline/line_truncator.rs, `MinMaxSizes` and
-   `InlineNode::compute_min_max_sizes` in src/layout/inline/min_max_sizes.rs, and the
+   `InlineNode::compute_min_max_sizes` in src/layout/inline/min_max_sizes.rs,
+   `ScoreLineBreaker` and `ScoreLineBreakContext` in
+   src/layout/inline/score_line_breaker.rs, the bisection in
+   src/layout/inline/paragraph_line_breaker.rs, `LineBreakCandidate` in
+   src/layout/inline/line_break_candidate.rs, `LineWidths` in
+   src/layout/inline/line_widths.rs, and the
    `white-space` predicates in
    src/style/properties/mod.rs and src/style/properties/text_wrap.rs, from
    third_party/blink/renderer/core/layout/inline/inline_item.cc,
@@ -185,7 +190,12 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
    third_party/blink/renderer/core/layout/inline/inline_child_layout_context.cc,
    third_party/blink/renderer/core/layout/length_utils.cc,
    third_party/blink/renderer/core/layout/inline/line_truncator.cc,
-   third_party/blink/renderer/core/layout/min_max_sizes.h, and
+   third_party/blink/renderer/core/layout/min_max_sizes.h,
+   third_party/blink/renderer/core/layout/inline/score_line_breaker.cc,
+   third_party/blink/renderer/core/layout/inline/score_line_break_context.h,
+   third_party/blink/renderer/core/layout/inline/paragraph_line_breaker.cc,
+   third_party/blink/renderer/core/layout/inline/line_break_candidate.cc,
+   third_party/blink/renderer/core/layout/inline/line_widths.cc, and
    third_party/blink/renderer/core/css/white_space.h.
 
 Copyright 2014, 2015, 2016, 2017, 2018, 2019, 2020, 2023, 2024, 2025 The Chromium Authors

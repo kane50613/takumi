@@ -15,21 +15,26 @@ use super::{
   line_breaker::{AtomicInlineLayout, LineBreaker, LineBreakerMode},
   line_info::LineInfo,
   line_truncator::LineTruncator,
+  line_widths::LineWidths,
   logical_line_builder::LogicalLineBuilder,
   logical_line_item::{LineFragment, LogicalLineItems},
+  score_line_breaker::{ScoreLineBreakContext, ScoreLineBreaker},
 };
 use crate::{
   fonts::font_height::FontHeight,
   layout::{
     bfc_rect::BfcOffset,
     constraint_space::ConstraintSpace,
-    exclusions::{exclusion_space::ExclusionSpace, layout_opportunity::LineLayoutOpportunity},
+    exclusions::{
+      exclusion_space::ExclusionSpace,
+      layout_opportunity::{LayoutOpportunity, LineLayoutOpportunity},
+    },
     floats_utils::{PositionedFloat, UnpositionedFloat, adjust_to_clearance, position_float},
     logical_rect::LogicalOffset,
     tree::RenderNode,
   },
   layout_unit::LayoutUnit,
-  style::{Direction as TextDirection, TextAlign, TextOverflow},
+  style::{Direction as TextDirection, TextAlign, TextOverflow, TextWrapStyle},
 };
 
 /// Blink's `LineBoxFragmentBuilder` and the line's `LogicalLineContainer`: a line box, as
@@ -113,6 +118,45 @@ impl TextAlign {
   }
 }
 
+/// Blink's `LineBreakStrategy`: the greedy line breaker, `text-wrap: balance`, or `pretty`.
+#[derive(Debug, Clone, Copy, Default)]
+struct LineBreakStrategy {
+  /// `balance` starts on the paragraph's first line.
+  initiate_balancing: bool,
+  use_score_line_break: bool,
+}
+
+impl LineBreakStrategy {
+  fn new(
+    context: &InlineChildLayoutContext<'_, '_>,
+    text_wrap: TextWrapStyle,
+    break_token: Option<InlineBreakToken<'_>>,
+  ) -> Self {
+    let score_context = context.score_line_break_context.as_ref();
+
+    match text_wrap {
+      TextWrapStyle::Balance => {
+        let initiate_balancing = break_token.is_none();
+
+        Self {
+          initiate_balancing,
+          use_score_line_break: initiate_balancing && score_context.is_some(),
+        }
+      }
+      TextWrapStyle::Pretty => Self {
+        initiate_balancing: false,
+        use_score_line_break: score_context.is_some_and(ScoreLineBreakContext::is_active),
+      },
+      TextWrapStyle::Auto => Self::default(),
+    }
+  }
+
+  /// Blink's `NeedsToPrepare`.
+  fn needs_to_prepare(self) -> bool {
+    self.initiate_balancing || self.use_score_line_break
+  }
+}
+
 /// Blink's `LineClampState`: how a line shows.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum LineClampState {
@@ -170,6 +214,11 @@ impl<'s, 'a, 'c> InlineLayoutAlgorithm<'s, 'a, 'c> {
       space.inline_size(),
       space.direction,
     );
+    let line_break_strategy = LineBreakStrategy::new(
+      self.context,
+      self.node.block.context.style.inherited_data.text_wrap_style,
+      self.break_token,
+    );
     let mut line_box = LogicalLineItems::default();
     let mut line_block_size = LayoutUnit::ZERO;
     let mut block_delta = LayoutUnit::ZERO;
@@ -187,9 +236,17 @@ impl<'s, 'a, 'c> InlineLayoutAlgorithm<'s, 'a, 'c> {
         line_block_size,
         block_delta,
       );
-      let mut line_info = LineInfo::new(self.items_data, &self.node.block.context);
+      if line_break_strategy.needs_to_prepare() {
+        self.prepare_line_break_strategy(
+          line_break_strategy,
+          &opportunities[opportunities_index..],
+          &line_opportunity,
+          &leading_floats,
+        );
+      }
 
-      LineBreaker::new(
+      let mut line_info = LineInfo::new(self.items_data, &self.node.block.context);
+      let mut line_breaker = LineBreaker::new(
         self.node,
         self.items_data,
         LineBreakerMode::Content,
@@ -199,8 +256,22 @@ impl<'s, 'a, 'c> InlineLayoutAlgorithm<'s, 'a, 'c> {
         self.break_token,
         &mut *self.atomic_inline,
         &mut self.container_builder.exclusion_space,
-      )
-      .next_line(&mut line_info);
+      );
+
+      // Blink's `LineBreakStrategy::SetupLineBreaker`.
+      if let Some(balanced_available_width) = self.context.balanced_available_width {
+        line_breaker.override_available_width(balanced_available_width);
+      } else if let Some(break_point) = self
+        .context
+        .score_line_break_context
+        .as_ref()
+        .and_then(ScoreLineBreakContext::current_line_break_point)
+      {
+        line_breaker.set_break_at(*break_point);
+      }
+
+      line_breaker.next_line(&mut line_info);
+      drop(line_breaker);
 
       // An empty line has no block offset yet.
       if !line_info.is_empty_line {
@@ -252,11 +323,88 @@ impl<'s, 'a, 'c> InlineLayoutAlgorithm<'s, 'a, 'c> {
         self.container_builder.block_size = self.container_builder.line_height();
       }
 
+      // Blink's `LineBreakStrategy::DidCreateLine`.
+      if let Some(context) = &mut self.context.score_line_break_context {
+        context.did_create_line(line_info.is_end_paragraph());
+      }
+
       break;
     }
 
     self.container_builder.items = line_box;
     self.container_builder
+  }
+
+  /// Blink's `LineBreakStrategy::Prepare`: the break points or width that balance or optimize the
+  /// paragraph's lines.
+  fn prepare_line_break_strategy(
+    &mut self,
+    strategy: LineBreakStrategy,
+    opportunities: &[LayoutOpportunity],
+    line_opportunity: &LineLayoutOpportunity,
+    leading_floats: &LeadingFloats,
+  ) {
+    let break_token = if strategy.initiate_balancing {
+      None
+    } else {
+      self.break_token
+    };
+    let Some(score_context) = self.context.score_line_break_context.as_mut() else {
+      if strategy.initiate_balancing {
+        self.balance_by_bisection(opportunities, line_opportunity);
+      }
+
+      return;
+    };
+
+    if strategy.use_score_line_break
+      && score_context.is_active()
+      && let Some(line_widths) =
+        LineWidths::new(self.node, self.items_data, opportunities, break_token)
+    {
+      let mut score_line_breaker = ScoreLineBreaker::new(
+        self.node,
+        self.items_data,
+        self.constraint_space,
+        line_widths,
+        break_token,
+        &mut self.container_builder.exclusion_space,
+        &mut *self.atomic_inline,
+      );
+
+      if strategy.initiate_balancing {
+        score_line_breaker.balance_break_points(leading_floats, score_context);
+      } else {
+        score_line_breaker.optimal_break_points(leading_floats, score_context);
+      }
+
+      if !score_context.line_break_points.is_empty() {
+        return;
+      }
+    }
+
+    // The bisection when the scores do not apply.
+    if strategy.initiate_balancing {
+      self.balance_by_bisection(opportunities, line_opportunity);
+    }
+  }
+
+  /// Blink's bisection in `LineBreakStrategy::Balance`, for one opportunity of positive width.
+  fn balance_by_bisection(
+    &mut self,
+    opportunities: &[LayoutOpportunity],
+    line_opportunity: &LineLayoutOpportunity,
+  ) {
+    if opportunities.len() != 1 || line_opportunity.available_inline_size() <= LayoutUnit::ZERO {
+      return;
+    }
+
+    self.context.balanced_available_width = self.node.attempt_paragraph_balancing(
+      self.items_data,
+      self.constraint_space,
+      line_opportunity,
+      &mut *self.atomic_inline,
+    );
   }
 
   /// Blink's `PrepareBoxStates`: the boxes open at the line's start, kept from the last line when
@@ -684,6 +832,13 @@ impl<'c> InlineNode<'c> {
     let mut break_token = None;
     let mut lines = Vec::new();
 
+    // Blink's `LayoutWithOptimalInlineChildLayoutContext`.
+    if self.block.context.style.inherited_data.text_wrap_style != TextWrapStyle::Auto
+      && !items_data.is_score_line_break_disabled
+    {
+      context.score_line_break_context = Some(ScoreLineBreakContext::default());
+    }
+
     loop {
       let line = InlineLayoutAlgorithm::new(
         self,
@@ -836,6 +991,53 @@ mod tests {
     assert_eq!(
       layout_lines(&block, 48.0),
       ["\"\" 18@-1+0", "\"abcdefg\" 0@15+42"]
+    );
+  }
+
+  /// `pretty` moves a word down so the last line is not one short word.
+  #[test]
+  fn pretty_avoids_a_short_last_word() {
+    let greedy = render_tree([Node::text("aaa bbb ccc d")], "");
+    let pretty = render_tree(
+      [Node::text("aaa bbb ccc d")],
+      ".container { text-wrap: pretty }",
+    );
+
+    assert_eq!(
+      layout_lines(&greedy, 66.0),
+      ["\"aaa bbb ccc\" 0@0+66", "\"d\" 0@10+6"]
+    );
+    assert_eq!(
+      layout_lines(&pretty, 66.0),
+      ["\"aaa bbb\" 0@0+42", "\"ccc d\" 0@10+30"]
+    );
+  }
+
+  /// `balance` evens the lines by their scores.
+  #[test]
+  fn balance_evens_the_lines() {
+    let block = render_tree(
+      [Node::text("aaa bbb ccc d")],
+      ".container { text-wrap: balance }",
+    );
+
+    assert_eq!(
+      layout_lines(&block, 66.0),
+      ["\"aaa bbb\" 0@0+42", "\"ccc d\" 0@10+30"]
+    );
+  }
+
+  /// Cloned box decorations take scoring away, so `balance` bisects the width instead.
+  #[test]
+  fn balance_bisects_without_scores() {
+    let block = render_tree(
+      [span("aaa bbb ccc d").with_class_name("span cloned")],
+      ".container { text-wrap: balance } .cloned { box-decoration-break: clone }",
+    );
+
+    assert_eq!(
+      layout_lines(&block, 66.0),
+      ["\"aaa bbb\" 0@0+42", "\"ccc d\" 0@10+30"]
     );
   }
 }
