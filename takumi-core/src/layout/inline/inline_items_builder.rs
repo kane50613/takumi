@@ -3,8 +3,10 @@
 use super::inline_item::{
   CollapseType, InlineItem, InlineItemType, InlineItems, LayoutObject, TextItemType,
 };
+use super::outline::InlineOutline;
 use crate::{
-  layout::tree::RenderNode,
+  geometry::{Rect, Size},
+  layout::{border::BorderProperties, tree::RenderNode},
   style::{ComputedStyle, Direction as TextDirection, VerticalAlign},
   text::character::maybe_bidi_rtl,
 };
@@ -65,7 +67,7 @@ impl<'c> BoxInfo<'c> {
     Self {
       style,
       item_index,
-      should_create_box_fragment: false,
+      should_create_box_fragment: node.needs_own_box_fragment(),
       text_metrics,
     }
   }
@@ -98,6 +100,51 @@ pub(crate) struct CollectedInlines {
   pub(crate) is_block_level: bool,
   pub(crate) is_bisect_line_break_disabled: bool,
   pub(crate) is_score_line_break_disabled: bool,
+}
+
+impl RenderNode {
+  /// Whether this inline box paints, offsets, or contains something of its own, so it needs a
+  /// fragment whatever it holds, as Blink's `LayoutInline::ComputeInitialShouldCreateBoxFragment`
+  /// decides for the properties takumi has.
+  fn needs_own_box_fragment(&self) -> bool {
+    let style = &self.context.style;
+    let has_side = |sides: Rect<f32>| {
+      sides.top != 0.0 || sides.right != 0.0 || sides.bottom != 0.0 || sides.left != 0.0
+    };
+
+    self.has_box_decoration_background()
+      || has_side(self.padding_px())
+      || has_side(self.margin_px())
+      || InlineOutline::of(&self.context).is_some()
+      || style.base_data.position.is_positioned()
+      || style.creates_stacking_context(false)
+      || style.contains_fixed_descendants()
+  }
+
+  /// Blink's `HasBoxDecorationBackground`: a background, a border, or a shadow.
+  pub(crate) fn has_box_decoration_background(&self) -> bool {
+    let style = &self.context.style;
+    let has_background_image = style
+      .background_data
+      .background_image
+      .as_deref()
+      .is_some_and(|images| !images.is_empty());
+
+    style
+      .background_data
+      .background_color
+      .resolve(self.context.current_color)
+      .0[3]
+      != 0
+      || has_background_image
+      || BorderProperties::from_context(&self.context, Size::ZERO, self.border_px())
+        .has_visible_sides()
+      || style
+        .misc1_data
+        .box_shadow
+        .as_deref()
+        .is_some_and(|shadows| !shadows.is_empty())
+  }
 }
 
 /// Blink's `InlineItemsBuilder`, without reusing earlier items, offset mapping, SVG text chunks,
@@ -700,6 +747,9 @@ impl<'c, 'i> InlineItemsBuilder<'c, 'i> {
     self.append_opaque(InlineItemType::OpenTag, LayoutObject::Inline(node));
 
     let current_box = BoxInfo::new(self.items.len() - 1, node);
+
+    self.items[current_box.item_index].should_create_box_fragment =
+      current_box.should_create_box_fragment;
 
     // The parent needs a fragment when this box changes its size or position.
     if let Some(parent_box) = self.boxes.last_mut()

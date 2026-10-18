@@ -362,6 +362,31 @@ mod tests {
     assert!(!items[3].should_create_box_fragment);
   }
 
+  #[test]
+  fn a_decorated_inline_box_creates_a_box_fragment() {
+    let mut items = InlineItems::new();
+    let tree = render_tree(
+      block([
+        span("a").with_class_name("span padded"),
+        span("b").with_class_name("span positioned"),
+        span("c").with_class_name("span painted"),
+        span("d"),
+      ]),
+      ".padded { padding-left: 1px } .positioned { position: relative } \
+        .painted { background-color: red }",
+    );
+
+    collect_inlines(&tree, &mut items);
+
+    let open_tags: Vec<_> = items
+      .iter()
+      .filter(|item| item.item_type == InlineItemType::OpenTag)
+      .map(|item| item.should_create_box_fragment)
+      .collect();
+
+    assert_eq!(open_tags, [true, true, true, false]);
+  }
+
   /// Blink's `LayoutOutsideListMarker` is an opaque `kListMarker` item ahead of the content.
   #[test]
   fn an_outside_marker_is_a_list_marker_item() {
