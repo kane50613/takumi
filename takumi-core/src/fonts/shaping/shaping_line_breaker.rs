@@ -304,10 +304,16 @@ impl<'a, S: FnMut(usize, usize) -> Rc<ShapeResult>> ShapingLineBreaker<'a, S> {
           return None;
         }
 
-        break_opportunity = self.next_break_opportunity(candidate_break.max(start + 1), range_end);
+        break_opportunity = self.next_break_opportunity(
+          candidate_break.max(next_character_offset(self.text(), start)),
+          range_end,
+        );
       }
     } else {
-      break_opportunity = self.next_break_opportunity(candidate_break.max(start + 1), range_end);
+      break_opportunity = self.next_break_opportunity(
+        candidate_break.max(next_character_offset(self.text(), start)),
+        range_end,
+      );
 
       debug_assert!(break_opportunity.offset > start);
 
@@ -392,7 +398,7 @@ impl<'a, S: FnMut(usize, usize) -> Rc<ShapeResult>> ShapingLineBreaker<'a, S> {
     }
 
     if !is_break_after_any_space && let Some(end) = break_opportunity.non_hangable_run_end {
-      break_opportunity.offset = (start + 1).max(end);
+      break_opportunity.offset = next_character_offset(text, start).max(end);
     }
 
     check_break_offset(break_opportunity.offset, start, range_end);
@@ -415,7 +421,7 @@ impl<'a, S: FnMut(usize, usize) -> Rc<ShapeResult>> ShapingLineBreaker<'a, S> {
       // the break before.
       loop {
         if !is_break_after_any_space && let Some(end) = break_opportunity.non_hangable_run_end {
-          break_opportunity.offset = (start + 1).max(end);
+          break_opportunity.offset = next_character_offset(text, start).max(end);
         }
 
         last_safe =
@@ -448,7 +454,10 @@ impl<'a, S: FnMut(usize, usize) -> Rc<ShapeResult>> ShapingLineBreaker<'a, S> {
           break;
         }
 
-        break_opportunity = self.previous_break_opportunity(break_opportunity.offset - 1, start);
+        break_opportunity = self.previous_break_opportunity(
+          break_opportunity.offset - char_before(self.text(), break_opportunity.offset).len_utf8(),
+          start,
+        );
 
         if break_opportunity.offset > start {
           continue;
@@ -460,8 +469,10 @@ impl<'a, S: FnMut(usize, usize) -> Rc<ShapeResult>> ShapingLineBreaker<'a, S> {
         break_opportunity = self.previous_break_opportunity(candidate_break, start);
 
         if break_opportunity.offset <= start {
-          break_opportunity =
-            self.next_break_opportunity(candidate_break.max(start + 1), range_end);
+          break_opportunity = self.next_break_opportunity(
+            candidate_break.max(next_character_offset(self.text(), start)),
+            range_end,
+          );
 
           if break_opportunity.offset >= range_end {
             self.set_break_offset(range_end, result_out);
@@ -636,6 +647,11 @@ impl<'a, S: FnMut(usize, usize) -> Rc<ShapeResult>> ShapingLineBreaker<'a, S> {
   }
 }
 
+/// The offset past the character at `offset`: Blink's `offset + 1` for a UTF-16 code unit.
+fn next_character_offset(text: &str, offset: usize) -> usize {
+  offset + char_at(text, offset).len_utf8().max(1)
+}
+
 #[cfg(test)]
 mod tests {
   use parley::WordBreak;
@@ -747,6 +763,21 @@ mod tests {
       let (offset, line) = shape_line(&mut breaker, 0, available_space);
 
       assert_eq!((offset, line.snapped_width()), (break_offset, width));
+    }
+  }
+
+  /// A line too narrow for its first character breaks after it, a whole multi-byte character.
+  #[test]
+  fn shape_line_breaks_after_a_whole_character() {
+    let text = "\u{3000}\u{3000}a b";
+    let (_fonts, fixture) = Fixture::new(text);
+    let break_iterator = iterator(text, WordBreak::Normal);
+    let mut breaker = fixture.breaker(&fixture.result, &break_iterator);
+
+    for available in [0, 1, 4] {
+      let (offset, _) = shape_line(&mut breaker, 0, LayoutUnit::from_int(available));
+
+      assert!(text.is_char_boundary(offset), "{available}: {offset}");
     }
   }
 
