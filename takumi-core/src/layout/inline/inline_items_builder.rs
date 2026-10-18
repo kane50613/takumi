@@ -1,12 +1,12 @@
 //! Blink's [`InlineItemsBuilder`](https://source.chromium.org/chromium/chromium/src/+/main:third_party/blink/renderer/core/layout/inline/inline_items_builder.cc).
 
+use super::outline::InlineOutline;
 use super::{
   inline_item::{
     CollapseType, InlineItem, InlineItemType, InlineItems, LayoutObject, TextItemType,
   },
   inline_node_data::InlineNodeData,
 };
-use super::outline::InlineOutline;
 use crate::{
   geometry::{Rect, Size},
   layout::{border::BorderProperties, tree::RenderNode},

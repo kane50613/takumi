@@ -526,7 +526,6 @@ mod tests {
 
   #[test]
   fn a_decorated_inline_box_creates_a_box_fragment() {
-    let mut items = InlineItems::new();
     let tree = render_tree(
       block([
         span("a").with_class_name("span padded"),
@@ -539,8 +538,7 @@ mod tests {
         .painted { background-color: red } .unpainted { background-image: none }",
     );
 
-    collect_inlines(&tree, &mut items);
-
+    let items = InlineNode::new(&tree).collect_inlines().items;
     let open_tags: Vec<_> = items
       .iter()
       .filter(|item| item.item_type == InlineItemType::OpenTag)
