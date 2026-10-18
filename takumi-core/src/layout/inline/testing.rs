@@ -47,10 +47,11 @@ impl<'c> AtomicInlineLayout<'c> for TestAtomicInline {
   }
 }
 
-pub(crate) fn render_tree(children: impl Into<Vec<Node>>, css: &str) -> RenderNode {
+/// `root` laid out with `css`, its only font the family `family` at `path`.
+pub(crate) fn render_root(path: &str, family: &str, root: Node, css: &str) -> RenderNode {
   let mut fonts = Fonts::default();
 
-  register(&mut fonts, GEIST_MONO, "Geist Mono");
+  register(&mut fonts, path, family);
 
   let context = RenderContext::builder()
     .fonts(fonts.snapshot())
@@ -59,14 +60,19 @@ pub(crate) fn render_tree(children: impl Into<Vec<Node>>, css: &str) -> RenderNo
         .viewport(Viewport::default())
         .build(),
     )
-    .stylesheet(Arc::new(
-      StyleSheet::parse(&format!("{CSS} {css}")).expect("stylesheet parses"),
-    ))
+    .stylesheet(Arc::new(StyleSheet::parse(css).expect("stylesheet parses")))
     .build();
 
-  RenderNode::from_node(
-    &context,
+  RenderNode::from_node(&context, root)
+}
+
+/// `children` in a block of Geist Mono.
+pub(crate) fn render_tree(children: impl Into<Vec<Node>>, css: &str) -> RenderNode {
+  render_root(
+    GEIST_MONO,
+    "Geist Mono",
     Node::container(children).with_class_name("container"),
+    &format!("{CSS} {css}"),
   )
 }
 
