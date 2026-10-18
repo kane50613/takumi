@@ -39,6 +39,15 @@ mod fragment_items;
   not(test),
   expect(
     dead_code,
+    reason = "TODO: the inline layout algorithm port builds logical lines"
+  )
+)]
+#[cfg_attr(test, allow(dead_code))]
+pub(crate) mod inline_box_state;
+#[cfg_attr(
+  not(test),
+  expect(
+    dead_code,
     reason = "TODO: the line breaker port reads the collected items"
   )
 )]
@@ -136,10 +145,30 @@ pub(crate) mod line_breaker;
 )]
 #[cfg_attr(test, allow(dead_code))]
 pub(crate) mod line_info;
+#[cfg_attr(
+  not(test),
+  expect(
+    dead_code,
+    reason = "TODO: the inline layout algorithm port builds logical lines"
+  )
+)]
+#[cfg_attr(test, allow(dead_code))]
+pub(crate) mod logical_line_builder;
+#[cfg_attr(
+  not(test),
+  expect(
+    dead_code,
+    reason = "TODO: the inline layout algorithm port builds logical lines"
+  )
+)]
+#[cfg_attr(test, allow(dead_code))]
+pub(crate) mod logical_line_item;
 mod metrics;
 mod outline;
 mod runs;
 mod small_caps;
+#[cfg(test)]
+pub(crate) mod testing;
 mod text_fit;
 mod truncation;
 

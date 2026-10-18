@@ -51,9 +51,19 @@ pub mod inline_box;
 pub mod intercept;
 /// Generated marker boxes for `display: list-item`.
 mod list_marker;
+#[cfg_attr(
+  not(test),
+  expect(
+    dead_code,
+    reason = "TODO: the inline layout algorithm port builds logical lines"
+  )
+)]
+#[cfg_attr(test, allow(dead_code))]
+pub(crate) mod logical_rect;
 pub mod measure;
 /// Node Tree
 pub mod node;
+pub(crate) mod relative_utils;
 /// Where replaced content sits inside its content box.
 pub mod replaced;
 /// Lowering `display: table` onto the grid layout algorithm.

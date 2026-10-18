@@ -5,12 +5,13 @@ use std::{
   cell::RefCell,
   collections::HashMap,
   fmt::{self, Debug, Formatter},
+  ops::Range,
   ptr,
   rc::Rc,
 };
 
 use super::{
-  inline_item::{InlineItemType, InlineItems, LayoutObject},
+  inline_item::{InlineItem, InlineItemType, InlineItems, LayoutObject},
   inline_item_segment::InlineItemSegments,
 };
 use crate::{
@@ -65,6 +66,23 @@ impl<'c> InlineNodeData<'c> {
     }
 
     block
+  }
+
+  /// Blink's `GetOpenTagItems`: the tags `items[range]` leaves open.
+  pub(crate) fn open_tag_items(&self, range: Range<usize>) -> Vec<&InlineItem<'c>> {
+    let mut open_items = Vec::new();
+
+    for item in &self.items[range] {
+      match item.item_type {
+        InlineItemType::OpenTag => open_items.push(item),
+        InlineItemType::CloseTag => {
+          open_items.pop();
+        }
+        _ => {}
+      }
+    }
+
+    open_items
   }
 
   /// Blink's `DisableBidi`.

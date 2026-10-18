@@ -8,7 +8,7 @@ use std::{
 use harfrust::{FontRef, ShaperData, ShaperInstance, Tag, Variation};
 use skrifa::{GlyphId, MetadataProvider, instance::Size, raw::TableProvider};
 
-use crate::resources::font::MatchedFace;
+use crate::resources::font::{MatchedFace, PrimaryFontMetrics};
 
 /// Blink's `SimpleFontData`.
 pub(crate) struct SimpleFontData {
@@ -21,6 +21,7 @@ pub(crate) struct SimpleFontData {
   units_per_em: u16,
   space_glyph: u16,
   shaper_data: OnceCell<ShaperData>,
+  font_metrics: OnceCell<Option<PrimaryFontMetrics>>,
   shaper_instance: OnceCell<Option<ShaperInstance>>,
 }
 
@@ -57,6 +58,7 @@ impl SimpleFontData {
       units_per_em,
       space_glyph,
       shaper_data: OnceCell::new(),
+      font_metrics: OnceCell::new(),
       shaper_instance: OnceCell::new(),
     })
   }
@@ -99,6 +101,21 @@ impl SimpleFontData {
       .advance_width(GlyphId::new(u32::from(self.space_glyph)))
       .unwrap_or(0.0)
       .max(0.0)
+  }
+
+  /// Blink's `GetFontMetrics`, at the face's variation coordinates.
+  pub(crate) fn font_metrics(&self) -> Option<PrimaryFontMetrics> {
+    *self.font_metrics.get_or_init(|| {
+      let font = self.font_ref()?;
+      let location = font.axes().location(
+        self
+          .variations
+          .iter()
+          .map(|variation| (variation.tag, variation.value)),
+      );
+
+      Some(PrimaryFontMetrics::of(&font, self.size, (&location).into()))
+    })
   }
 
   /// The font the face reads from.
