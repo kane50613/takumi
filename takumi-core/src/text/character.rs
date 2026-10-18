@@ -1,9 +1,4 @@
-//! Blink's `unicode::` predicates, after
-//! [`character.cc`](https://source.chromium.org/chromium/chromium/src/+/main:third_party/blink/renderer/platform/text/character.cc)
-//! and
-//! [`character_emoji.cc`](https://source.chromium.org/chromium/chromium/src/+/main:third_party/blink/renderer/platform/text/character_emoji.cc).
-//! Follows Blink under the notice in LICENSE-CHROMIUM, reading Unicode properties from ICU4X where
-//! Blink reads ICU.
+//! Blink's `unicode::` predicates from [`character.cc`](https://source.chromium.org/chromium/chromium/src/+/main:third_party/blink/renderer/platform/text/character.cc), reading ICU4X.
 
 use icu_properties::{
   CodePointMapData, CodePointSetData,
@@ -19,17 +14,17 @@ pub(crate) const VARIATION_SELECTOR_16: char = '\u{FE0F}';
 pub(crate) const WAVING_BLACK_FLAG: char = '\u{1F3F4}';
 pub(crate) const CANCEL_TAG: char = '\u{E007F}';
 
-/// Blink's `IsEmoji`: the `Emoji` property.
+/// Blink's `IsEmoji`.
 pub(crate) fn is_emoji(c: char) -> bool {
   CodePointSetData::new::<Emoji>().contains(c)
 }
 
-/// Blink's `IsEmojiTextDefault`: emoji shown as text unless asked otherwise.
+/// Blink's `IsEmojiTextDefault`.
 pub(crate) fn is_emoji_text_default(c: char) -> bool {
   is_emoji(c) && !is_emoji_emoji_default(c)
 }
 
-/// Blink's `IsEmojiEmojiDefault`: the `Emoji_Presentation` property.
+/// Blink's `IsEmojiEmojiDefault`.
 pub(crate) fn is_emoji_emoji_default(c: char) -> bool {
   CodePointSetData::new::<EmojiPresentation>().contains(c)
 }
@@ -49,7 +44,7 @@ pub(crate) fn is_regional_indicator(c: char) -> bool {
   ('\u{1F1E6}'..='\u{1F1FF}').contains(&c)
 }
 
-/// Blink's `IsModifier`: the skin tone modifiers.
+/// Blink's `IsModifier`.
 pub(crate) fn is_modifier(c: char) -> bool {
   ('\u{1F3FB}'..='\u{1F3FF}').contains(&c)
 }
@@ -60,7 +55,7 @@ pub(crate) fn is_emoji_tag_sequence(c: char) -> bool {
   ('\u{E0030}'..='\u{E0039}').contains(&c) || ('\u{E0061}'..='\u{E007A}').contains(&c)
 }
 
-/// Blink's `IsEmojiReserved`: unassigned code points in blocks kept for pictographs.
+/// Blink's `IsEmojiReserved`.
 pub(crate) fn is_emoji_reserved(c: char) -> bool {
   CodePointMapData::<GeneralCategory>::new().get(c) == GeneralCategory::Unassigned
     && CodePointSetData::new::<ExtendedPictographic>().contains(c)
@@ -71,8 +66,7 @@ pub(crate) fn is_emoji_including_reserved(c: char) -> bool {
   is_emoji(c) || is_emoji_reserved(c)
 }
 
-/// Blink's `MaybeEmojiPresentation`: whether `c` may start or join an emoji, a fast check before
-/// the full grammar.
+/// Blink's `MaybeEmojiPresentation`.
 pub(crate) fn maybe_emoji_presentation(c: char) -> bool {
   if c.is_ascii() {
     return is_emoji_keycap_base(c);

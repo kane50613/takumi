@@ -1,15 +1,8 @@
-//! The emoji presentation grammar of
-//! [emoji-segmenter](https://github.com/google/emoji-segmenter/blob/955936be8b391e00835257059607d7c5b72ce744/emoji_presentation_scanner.rl),
-//! at the revision Chromium pins. Follows it under the Apache License 2.0 in
-//! LICENSE-EMOJI-SEGMENTER.
-//!
-//! Blink compiles the grammar with Ragel. This matches each token rule by hand and takes the
-//! longest match, the earlier rule on a tie, as a Ragel scanner does.
+//! The emoji presentation grammar of [emoji-segmenter](https://github.com/google/emoji-segmenter/blob/955936be8b391e00835257059607d7c5b72ce744/emoji_presentation_scanner.rl), matched by hand; see LICENSE-EMOJI-SEGMENTER.
 
 use crate::text::emoji_segmentation_category::EmojiSegmentationCategory as Category;
 
-/// A token of the grammar: its length in characters, whether it shows as emoji, and whether a
-/// variation selector chose that.
+/// A token of the grammar: its length in characters, whether it shows as emoji, and whether a variation selector chose that.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct EmojiToken {
   pub(crate) length: usize,
@@ -20,7 +13,6 @@ pub(crate) struct EmojiToken {
 /// `scan_emoji_presentation`: the token at the start of `categories`, or an empty one at the end.
 pub(crate) fn scan_emoji_presentation(categories: &[Category]) -> EmojiToken {
   let grammar = Grammar(categories);
-  // `text_and_emoji_run`, its rules in priority order.
   let rules = [
     (grammar.text_emoji_run_with_vs(), false, true),
     (grammar.emoji_run_with_vs(), true, true),
@@ -75,8 +67,7 @@ impl Grammar<'_> {
     )
   }
 
-  /// `emoji_combining_enclosing_circle_backslash_sequence = any_emoji
-  /// COMBINING_ENCLOSING_CIRCLE_BACKSLASH`.
+  /// `emoji_combining_enclosing_circle_backslash_sequence = any_emoji COMBINING_ENCLOSING_CIRCLE_BACKSLASH`.
   fn emoji_combining_enclosing_circle_backslash_sequence(&self, index: usize) -> Option<usize> {
     (self.any_emoji(index) && self.is(index + 1, Category::CombiningEnclosingCircleBackslash))
       .then_some(2)
@@ -131,8 +122,7 @@ impl Grammar<'_> {
     .then_some(3)
   }
 
-  /// The ends of `emoji_zwj_element = emoji_presentation_sequence | emoji_modifier_sequence |
-  /// any_emoji` at `index`.
+  /// The ends of `emoji_zwj_element = emoji_presentation_sequence | emoji_modifier_sequence | any_emoji` at `index`.
   fn emoji_zwj_element_ends(&self, index: usize) -> impl Iterator<Item = usize> {
     [
       self.emoji_presentation_sequence(index),

@@ -1,9 +1,4 @@
-//! Blink's `ScriptRunIterator`, which splits text into runs of one script, after
-//! [`script_run_iterator.cc`](https://source.chromium.org/chromium/chromium/src/+/main:third_party/blink/renderer/platform/fonts/script_run_iterator.cc).
-//! Follows Blink under the notice in LICENSE-CHROMIUM.
-//!
-//! Offsets count UTF-8 bytes where Blink's count UTF-16 code units. Not ported: the fast path that
-//! skips characters a run of one script can keep, which finds the same runs.
+//! Blink's [`ScriptRunIterator`](https://source.chromium.org/chromium/chromium/src/+/main:third_party/blink/renderer/platform/fonts/script_run_iterator.cc).
 
 use std::{collections::VecDeque, mem::swap};
 
@@ -19,10 +14,10 @@ use crate::text::character::LEFT_CORNER_BRACKET;
 pub(crate) const MAX_UNICODE_SCRIPT_EXTENSIONS: usize = 23;
 /// Blink's `kMaxScriptCount`.
 pub(crate) const MAX_SCRIPT_COUNT: usize = MAX_UNICODE_SCRIPT_EXTENSIONS + 1;
-/// Blink's `kMaxBrackets`: how many open brackets a run remembers.
+/// Blink's `kMaxBrackets`.
 const MAX_BRACKETS: usize = 32;
 
-/// Blink's `UScriptCodeList`: the scripts a character may take, the preferred one first.
+/// Blink's `UScriptCodeList`.
 pub(crate) type ScriptCodeList = Vec<Script>;
 
 /// Blink's `ScriptData::PairedBracketType`.
@@ -33,9 +28,9 @@ pub(crate) enum PairedBracketType {
   Close,
 }
 
-/// Blink's `ScriptData`: the scripts and paired brackets of characters.
+/// Blink's `ScriptData`.
 pub(crate) trait ScriptData {
-  /// Blink's `GetScripts`: the scripts of `ch`, in the priority order `merge_sets` relies on.
+  /// Blink's `GetScripts`.
   fn get_scripts(&self, ch: char, dst: &mut ScriptCodeList);
 
   /// Blink's `GetPairedBracket`.
@@ -45,13 +40,12 @@ pub(crate) trait ScriptData {
   fn get_paired_bracket_type(&self, ch: char) -> PairedBracketType;
 }
 
-/// Blink's `ICUScriptData`, reading ICU4X.
+/// Blink's `ICUScriptData`.
 #[derive(Debug, Clone, Copy, Default)]
 pub(crate) struct IcuScriptData;
 
 impl IcuScriptData {
-  /// Blink's `GetScriptForOpenType`: OpenType tags Hiragana and Katakana alike, so Katakana takes
-  /// Hiragana to split fewer runs.
+  /// Blink's `GetScriptForOpenType`.
   fn get_script_for_open_type(ch: char) -> Script {
     match CodePointMapData::<Script>::new().get(ch) {
       Script::Katakana | Script::KatakanaOrHiragana => Script::Hiragana,
@@ -75,7 +69,6 @@ impl ScriptData for IcuScriptData {
   fn get_scripts(&self, ch: char, dst: &mut ScriptCodeList) {
     let primary_script = Self::get_script_for_open_type(ch);
 
-    // Every kana has itself as its only extension, so a singleton comes sooner.
     if primary_script == Script::Hiragana {
       dst.clear();
       dst.push(primary_script);
@@ -85,14 +78,11 @@ impl ScriptData for IcuScriptData {
 
     Self::script_extensions(ch, dst);
 
-    // Only one script, common or inherited never among the extensions, or extensions already in
-    // priority order.
     if primary_script == dst[0] {
       return;
     }
 
     if primary_script != Script::Inherited && primary_script != Script::Common {
-      // The extensions are out of order: put the primary script first.
       match dst[1..].iter().position(|&script| script == primary_script) {
         Some(index) => dst.swap(0, index + 1),
         None => {
@@ -108,14 +98,12 @@ impl ScriptData for IcuScriptData {
     }
 
     if primary_script == Script::Common {
-      // Common with a preferred script keeps common first.
       if dst.len() == 1 {
         dst.insert(0, primary_script);
 
         return;
       }
 
-      // Common with several scripts puts the preferred one first.
       for i in 1..dst.len() {
         if dst[0] == Script::Latin || dst[i] < dst[0] {
           dst.swap(0, i);
@@ -125,7 +113,6 @@ impl ScriptData for IcuScriptData {
       return;
     }
 
-    // Inherited with other scripts: inherited first, the preferred script next.
     dst.push(dst[0]);
     dst[0] = primary_script;
 
@@ -167,8 +154,7 @@ fn first_han_script(list: &[Script]) -> Option<Script> {
   list.iter().copied().find(|&script| is_han_script(script))
 }
 
-/// Blink's `FixScriptsByEastAsianWidth`: a common East Asian character takes the Han scripts, so
-/// fullwidth and halfwidth punctuation does not split a run of CJK punctuation.
+/// Blink's `FixScriptsByEastAsianWidth`.
 fn fix_scripts_by_east_asian_width(ch: char, set: &mut ScriptCodeList) {
   debug_assert!(!set.is_empty());
 
@@ -182,12 +168,11 @@ fn fix_scripts_by_east_asian_width(ch: char, set: &mut ScriptCodeList) {
     east_asian_width,
     EastAsianWidth::Wide | EastAsianWidth::Fullwidth | EastAsianWidth::Halfwidth
   ) {
-    // The scripts of U+300C, as in ScriptExtensions.txt.
     IcuScriptData::script_extensions(LEFT_CORNER_BRACKET, set);
   }
 }
 
-/// Blink's `BracketRec`: an open bracket and the script it resolved to.
+/// Blink's `BracketRec`.
 #[derive(Debug, Clone, Copy)]
 struct BracketRec {
   ch: char,
@@ -230,7 +215,6 @@ impl<'a, D: ScriptData> ScriptRunIterator<'a, D> {
     };
 
     if let Some(ch) = text.chars().next() {
-      // Common first, so the first merge takes the script of the first character.
       iterator.current_set.push(Script::Common);
       iterator.ahead_character = ch;
       iterator.ahead_pos = ch.len_utf8();
@@ -242,7 +226,7 @@ impl<'a, D: ScriptData> ScriptRunIterator<'a, D> {
     iterator
   }
 
-  /// Blink's `Consume`: the end of the next run and its script.
+  /// Blink's `Consume`.
   pub(crate) fn consume(&mut self) -> Option<(usize, Script)> {
     if self.current_set.is_empty() {
       return None;
@@ -260,7 +244,6 @@ impl<'a, D: ScriptData> ScriptRunIterator<'a, D> {
       if !self.merge_sets() {
         let script = self.resolve_current_script();
 
-        // An open bracket belongs to the next run, which resolves its script.
         self.fixup_stack(script, paired_type == PairedBracketType::Open);
         self.current_set.clone_from(&self.next_set);
 
@@ -293,8 +276,7 @@ impl<'a, D: ScriptData> ScriptRunIterator<'a, D> {
     self.brackets_fixup_depth += 1;
   }
 
-  /// Blink's `CloseBracket`: a close bracket takes the script of its open bracket and pops the
-  /// brackets opened after it; one without a match leaves the stack.
+  /// Blink's `CloseBracket`.
   fn close_bracket(&mut self, ch: char) {
     let target = self.script_data.get_paired_bracket(ch);
     let Some(index) = self
@@ -306,8 +288,6 @@ impl<'a, D: ScriptData> ScriptRunIterator<'a, D> {
     };
     let mut script = self.brackets[index].script;
 
-    // Han languages take several scripts, with font features for runs of punctuation, so a close
-    // bracket keeps any Han script the run allows.
     if is_han_script(script)
       && let Some(current_han_script) = first_han_script(&self.current_set)
     {
@@ -325,11 +305,7 @@ impl<'a, D: ScriptData> ScriptRunIterator<'a, D> {
     self.brackets_fixup_depth = self.brackets_fixup_depth.saturating_sub(num_popped);
   }
 
-  /// Blink's `MergeSets`: keeps the scripts of the current set that are in the next set, the
-  /// current priority script first when it remains, else the next one's. Returns false, leaving
-  /// the current set, when the sets are disjoint.
-  ///
-  /// A common next set leaves the current set, and may give common a preferred script.
+  /// Blink's `MergeSets`.
   fn merge_sets(&mut self) -> bool {
     if self.next_set.is_empty() || self.current_set.is_empty() {
       return false;
@@ -337,7 +313,6 @@ impl<'a, D: ScriptData> ScriptRunIterator<'a, D> {
 
     let mut priority_script = self.current_set[0];
 
-    // A common or inherited next set changes at most the preferred script of common.
     if self.next_set[0] <= Script::Inherited {
       if self.next_set.len() == 2
         && priority_script <= Script::Inherited
@@ -349,22 +324,18 @@ impl<'a, D: ScriptData> ScriptRunIterator<'a, D> {
       return true;
     }
 
-    // A common or inherited current set takes the next one.
     if priority_script <= Script::Inherited {
       self.current_set.clone_from(&self.next_set);
 
       return true;
     }
 
-    // Neither is common or inherited. A single current script only needs to be in the next set,
-    // the usual case.
     let mut have_priority = self.next_set.contains(&priority_script);
 
     if self.current_set.len() == 1 {
       return have_priority;
     }
 
-    // Take the current priority script, else the next one.
     let mut next_start = 0;
 
     if !have_priority {
@@ -392,7 +363,6 @@ impl<'a, D: ScriptData> ScriptRunIterator<'a, D> {
       }
     }
 
-    // The current set changes only when the run continues.
     if written > 0 {
       self.current_set.truncate(written);
 
@@ -402,8 +372,7 @@ impl<'a, D: ScriptData> ScriptRunIterator<'a, D> {
     false
   }
 
-  /// Blink's `FixupStack`: the open brackets of the run that just ended take its script, all but
-  /// the last when `exclude_last`.
+  /// Blink's `FixupStack`.
   fn fixup_stack(&mut self, resolved_script: Script, exclude_last: bool) {
     let mut count = self.brackets_fixup_depth;
 
@@ -424,7 +393,7 @@ impl<'a, D: ScriptData> ScriptRunIterator<'a, D> {
     }
   }
 
-  /// Blink's `Fetch`: the next character and its offset, with its scripts moved to the next set.
+  /// Blink's `Fetch`.
   fn fetch(&mut self) -> Option<(usize, char)> {
     if self.ahead_pos > self.text.len() {
       return None;
@@ -435,7 +404,6 @@ impl<'a, D: ScriptData> ScriptRunIterator<'a, D> {
 
     swap(&mut self.next_set, &mut self.ahead_set);
 
-    // The last character still needs processing; step past the end to mark it done.
     if self.ahead_pos == self.text.len() {
       self.ahead_pos += 1;
 
@@ -460,7 +428,6 @@ impl<'a, D: ScriptData> ScriptRunIterator<'a, D> {
     }
 
     if self.ahead_set[0] == Script::Inherited && self.ahead_set.len() > 1 {
-      // An inherited character with extensions narrows a common one before it to them.
       if self.next_set[0] == Script::Common {
         self.next_set.clear();
         self.next_set.extend_from_slice(&self.ahead_set[1..]);
@@ -485,11 +452,7 @@ impl<'a, D: ScriptData> ScriptRunIterator<'a, D> {
 mod tests {
   use super::*;
 
-  /// Blink's `MockScriptData`: characters from U+E000 whose offset encodes their scripts and
-  /// brackets.
-  ///
-  /// Bits 0-3 index `TABLE`, bits 4-5 mark common or inherited, bit 6 a close bracket, bit 7 a
-  /// bracket, and bit 8 a square one. A bracket's pair is 64 code points away.
+  /// Blink's `MockScriptData`.
   struct MockScriptData;
 
   impl MockScriptData {
@@ -546,8 +509,7 @@ mod tests {
       char::from_u32(Self::CHAR_MIN + code).unwrap()
     }
 
-    /// Blink's `ToTestString`: `l`, `h`, `g` for Latin, Han, Greek, `c` common, `i` inherited,
-    /// `?` unknown, brackets as themselves, and `<...>` one character of several of them.
+    /// Blink's `ToTestString`.
     fn to_test_string(input: &str) -> String {
       let mut result = String::new();
       let mut in_set = false;
@@ -749,22 +711,16 @@ mod tests {
   fn japanese_mixed_script() {
     let cases = [
       ("あ", Script::Hiragana),
-      // Katakana takes Hiragana.
       ("ア", Script::Hiragana),
-      // Script_Extensions=Hira Kana
       ("\u{30FC}", Script::Hiragana),
-      // Script_Extensions=Hani Hira Kana
       ("\u{303C}", Script::Han),
-      // Script_Extensions=Bopo Hang Hani Hira Kana
       ("\u{3003}", Script::Bopomofo),
-      // Script_Extensions=Bopo Hang Hani Hira Kana Yiii
       ("\u{3001}", Script::Bopomofo),
     ];
 
     for (string, script) in cases {
       check_runs(&[(string, script)]);
 
-      // Next to Hiragana or Katakana, it takes Hiragana.
       for text in [
         format!("か{string}"),
         format!("{string}か"),
@@ -778,7 +734,6 @@ mod tests {
     }
   }
 
-  // A close bracket without an open one is ignored.
   #[test]
   fn unbalanced_parens_1() {
     check_runs(&[
@@ -788,7 +743,6 @@ mod tests {
     ]);
   }
 
-  // An open bracket without a close one pops at an outer close, so a later close skips it.
   #[test]
   fn unbalanced_parens_2() {
     check_runs(&[
@@ -798,7 +752,6 @@ mod tests {
     ]);
   }
 
-  // A space goes with the script before it.
   #[test]
   fn latin_han() {
     check_runs(&[("Unicode ", Script::Latin), ("萬國碼", Script::Han)]);
@@ -824,7 +777,6 @@ mod tests {
     check_runs(&[("(Unicode)", Script::Latin)]);
   }
 
-  // An open bracket takes the script before it.
   #[test]
   fn latin_paren_chinese_paren() {
     check_runs(&[
@@ -834,13 +786,11 @@ mod tests {
     ]);
   }
 
-  // An open bracket with no script before it takes the one after it.
   #[test]
   fn paren_chinese_paren_latin() {
     check_runs(&[("(萬國碼) ", Script::Han), ("Unicode", Script::Latin)]);
   }
 
-  // Leading common characters and an open bracket take the first script after them.
   #[test]
   fn quote_paren_chinese_paren_latin_quote() {
     check_runs(&[("\"(萬國碼) ", Script::Han), ("Unicode\"", Script::Latin)]);
@@ -866,7 +816,6 @@ mod tests {
     ]);
   }
 
-  // CJK punctuation after other scripts takes Bopomofo, its first script extension.
   #[test]
   fn cjk_consecutive_parens_4() {
     check_runs(&[
@@ -971,13 +920,11 @@ mod tests {
     ]);
   }
 
-  // Emoji take the script before them.
   #[test]
   fn emoji_common() {
     check_runs(&[("百家姓🌱🌲🌳🌴", Script::Han)]);
   }
 
-  // An unmatched close bracket takes the script before it.
   #[test]
   fn unmatched_close() {
     check_runs(&[
@@ -999,7 +946,6 @@ mod tests {
     ]);
   }
 
-  // Only the 32 most recent bracket pairs match; older ones take the surrounding script.
   #[test]
   fn match_32_most_recent_brackets() {
     check_runs(&[
@@ -1012,25 +958,21 @@ mod tests {
     ]);
   }
 
-  // A character whose scripts match both sides takes the side before it.
   #[test]
   fn extensions_prefer_leading_context() {
     check_mock_runs(&[("h<lh>", Script::Han), ("l", Script::Latin)]);
   }
 
-  // A character whose scripts match only the side after it takes that side.
   #[test]
   fn extensions_match_trailing_context() {
     check_mock_runs(&[("h", Script::Han), ("<gl>l", Script::Latin)]);
   }
 
-  // The first established priority script stays.
   #[test]
   fn extensions_retain_first_priority_script() {
     check_mock_runs(&[("<lhg><gh><hgl>", Script::Greek)]);
   }
 
-  // Brackets can have scripts that end runs.
   #[test]
   fn extensions_parens() {
     check_mock_runs(&[
@@ -1042,13 +984,11 @@ mod tests {
     ]);
   }
 
-  // A close bracket before its open bracket's script is known leaves the run.
   #[test]
   fn extensions_parens_2() {
     check_mock_runs(&[("<(lhg><gh><)lhg>", Script::Greek)]);
   }
 
-  // Common with one extension stays common, with that extension as its default.
   #[test]
   fn common_with_priority() {
     check_mock_runs(&[("<ch>", Script::Han)]);
@@ -1064,15 +1004,11 @@ mod tests {
     check_mock_runs(&[("<ch><cl><cg>", Script::Han)]);
   }
 
-  // Udatta U+0951 is inherited with Latin among its extensions, so it joins the Latin dotted
-  // circle U+25CC.
   #[test]
   fn latin_dotted_circle_udatta() {
     check_runs(&[("Latin \u{25CC}\u{951}", Script::Latin)]);
   }
 
-  // Udatta U+0951 shares no script with the Han dotted circle, so it takes the circle into a run
-  // of its lowest script code, Bengali.
   #[test]
   fn han_dotted_circle_udatta() {
     check_runs(&[
@@ -1081,8 +1017,6 @@ mod tests {
     ]);
   }
 
-  // Fathatan U+064B, inherited with Arabic and Syriac, takes the common tatweel U+0640 into a run
-  // of Arabic, the lower script code.
   #[test]
   fn latin_tatweel_fathatan() {
     check_runs(&[
@@ -1091,19 +1025,16 @@ mod tests {
     ]);
   }
 
-  // A mark that accepts the script a common character took continues it.
   #[test]
   fn syriac_tatweel_fathatan() {
     check_runs(&[("\u{722}\u{640}\u{64B}", Script::Syriac)]);
   }
 
-  // Inherited Udatta shares a run with any script but common.
   #[test]
   fn han_udatta() {
     check_runs(&[("萬國碼\u{951}", Script::Han)]);
   }
 
-  // Udatta takes the space before it into Bengali, the lowest of its scripts.
   #[test]
   fn han_space_udatta() {
     check_runs(&[("萬國碼", Script::Han), (" \u{951}", Script::Bengali)]);
@@ -1129,7 +1060,6 @@ mod tests {
     check_mock_runs(&[("h", Script::Han), ("c<igl>", Script::Greek)]);
   }
 
-  // A leading inherited character acts as common, without a preferred script.
   #[test]
   fn mock_leading_inherited() {
     check_mock_runs(&[("<igl>", Script::Common)]);

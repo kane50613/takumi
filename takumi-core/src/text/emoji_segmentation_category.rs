@@ -1,6 +1,4 @@
-//! Blink's `EmojiSegmentationCategory`, the classes of the emoji presentation grammar, after
-//! [`emoji_segmentation_category_inline_header.h`](https://source.chromium.org/chromium/chromium/src/+/main:third_party/blink/renderer/platform/text/emoji_segmentation_category_inline_header.h).
-//! Follows Blink under the notice in LICENSE-CHROMIUM.
+//! Blink's [`EmojiSegmentationCategory`](https://source.chromium.org/chromium/chromium/src/+/main:third_party/blink/renderer/platform/text/emoji_segmentation_category_inline_header.h).
 
 use super::character::{
   CANCEL_TAG, COMBINING_ENCLOSING_CIRCLE_BACKSLASH, COMBINING_ENCLOSING_KEYCAP,
@@ -33,7 +31,7 @@ pub(crate) enum EmojiSegmentationCategory {
 }
 
 impl EmojiSegmentationCategory {
-  /// Blink's `GetEmojiSegmentationCategory`: the narrowest class first, as the grammar needs.
+  /// Blink's `GetEmojiSegmentationCategory`.
   pub(crate) fn of(codepoint: char) -> Self {
     if codepoint.is_ascii() {
       if is_emoji_keycap_base(codepoint) {

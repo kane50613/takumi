@@ -1,9 +1,4 @@
-//! Blink's `RunSegmenter`, which splits text into the runs shaping takes one at a time, after
-//! [`run_segmenter.cc`](https://source.chromium.org/chromium/chromium/src/+/main:third_party/blink/renderer/platform/fonts/shaping/run_segmenter.cc).
-//! Follows Blink under the notice in LICENSE-CHROMIUM.
-//!
-//! Offsets count UTF-8 bytes where Blink's count UTF-16 code units. Not ported: the orientation
-//! split of vertical text, as takumi lays out horizontal text only.
+//! Blink's [`RunSegmenter`](https://source.chromium.org/chromium/chromium/src/+/main:third_party/blink/renderer/platform/fonts/shaping/run_segmenter.cc).
 
 use icu_properties::props::Script;
 
@@ -12,7 +7,7 @@ use crate::fonts::{
   symbols_iterator::SymbolsIterator,
 };
 
-/// Blink's `RunSegmenterRange`: a run of one script and one fallback priority.
+/// Blink's `RunSegmenterRange`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct RunSegmenterRange {
   pub(crate) start: usize,
@@ -53,7 +48,7 @@ impl<'a> RunSegmenter<'a> {
     }
   }
 
-  /// Blink's `Consume`: the next range, ending where the first of the iterators splits.
+  /// Blink's `Consume`.
   pub(crate) fn consume(&mut self) -> Option<RunSegmenterRange> {
     if self.at_end {
       return None;
@@ -84,8 +79,7 @@ impl<'a> RunSegmenter<'a> {
     Some(self.candidate_range)
   }
 
-  /// Blink's `ConsumeIteratorPastLastSplit`: consumes an iterator that has not passed the last
-  /// split until it does.
+  /// Blink's `ConsumeIteratorPastLastSplit`.
   fn consume_iterator_past_last_split<T>(
     mut consume: impl FnMut() -> Option<(usize, T)>,
     iterator_position: &mut usize,
@@ -208,7 +202,6 @@ mod tests {
 
   #[test]
   fn hangul_space() {
-    // Blink's vertical runs, joined where only their orientation differs.
     check_runs(&[(
       "\u{D0A4}\u{C2A4}\u{C758} \u{ACE0}\u{C720}\u{C870}\u{AC74}\u{C740}",
       Script::Hangul,
@@ -236,7 +229,6 @@ mod tests {
 
   #[test]
   fn japanese_punctuation_mixed_inside() {
-    // Blink's vertical runs, joined where only their orientation differs.
     check_runs(&[(
       "\u{3044}\u{308D}\u{306F}\u{306B}.\u{2026}\u{A1}\u{307B}\u{3078}\u{3068}",
       Script::Hiragana,
@@ -295,7 +287,6 @@ mod tests {
 
   #[test]
   fn japanese_letterlike_end() {
-    // Blink's vertical runs, joined where only their orientation differs.
     check_runs(&[(
       "\u{3044}\u{308D}\u{306F}\u{2110}\u{2112}\u{2110}\u{2112}\u{2110}\u{2112}\u{2110}\u{2112}\u{2110}\u{2112}\u{2110}\u{2112}\u{2110}\u{2112}",
       Script::Hiragana,

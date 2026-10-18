@@ -1,8 +1,4 @@
-//! Blink's `SymbolsIterator`, which splits text into runs of emoji and text presentation, after
-//! [`symbols_iterator.cc`](https://source.chromium.org/chromium/chromium/src/+/main:third_party/blink/renderer/platform/fonts/symbols_iterator.cc).
-//! Follows Blink under the notice in LICENSE-CHROMIUM.
-//!
-//! Offsets count UTF-8 bytes where Blink's count UTF-16 code units.
+//! Blink's [`SymbolsIterator`](https://source.chromium.org/chromium/chromium/src/+/main:third_party/blink/renderer/platform/fonts/symbols_iterator.cc).
 
 use super::{
   emoji_presentation_scanner::{EmojiToken, scan_emoji_presentation},
@@ -12,13 +8,13 @@ use crate::text::{
   character::maybe_emoji_presentation, emoji_segmentation_category::EmojiSegmentationCategory,
 };
 
-/// Blink's `SymbolsIterator`. Positions count characters until they leave as byte offsets.
+/// Blink's `SymbolsIterator`.
 pub(crate) struct SymbolsIterator {
   /// The byte offset of each character, then of the end.
   offsets: Vec<usize>,
   characters: Vec<char>,
   categories: Vec<EmojiSegmentationCategory>,
-  /// Blink's `buffer_iterator_`, which may trail `cursor`.
+  /// Blink's `buffer_iterator_`.
   buffer_iterator: usize,
   cursor: usize,
   next_token_end: usize,
@@ -54,7 +50,7 @@ impl SymbolsIterator {
     iterator
   }
 
-  /// Blink's `Consume`: the end of the next run and the fonts it falls back through.
+  /// Blink's `Consume`.
   pub(crate) fn consume(&mut self) -> Option<(usize, FontFallbackPriority)> {
     let end = self.characters.len();
 
