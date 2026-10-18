@@ -4,7 +4,7 @@ use crate::{
   geometry::Point,
   layout::{constraint_space::ConstraintSpace, logical_rect::LogicalOffset, tree::RenderNode},
   layout_unit::LayoutUnit,
-  style::{Direction, Length, Position},
+  style::{Direction, Length},
 };
 
 impl ConstraintSpace {
@@ -39,7 +39,7 @@ pub(crate) fn compute_relative_offset_for_inline(
 ) -> Point<f32> {
   let style = &node.context.style;
 
-  if style.base_data.position != Position::Relative {
+  if !style.base_data.position.is_relative() {
     return Point::ZERO;
   }
 

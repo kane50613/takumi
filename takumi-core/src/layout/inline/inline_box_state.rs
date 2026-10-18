@@ -21,7 +21,6 @@ use crate::{
   },
   layout::{
     constraint_space::ConstraintSpace,
-    inline::text_fit::TextScale,
     logical_rect::{LogicalOffset, LogicalRect, LogicalSize},
     tree::RenderNode,
   },
@@ -30,20 +29,9 @@ use crate::{
   style::{BoxDecorationBreak, Direction as TextDirection, VerticalAlign, VerticalAlignKeyword},
 };
 
-/// Blink's `ComputedLineHeightAsFixed` against `font`, as takumi's `BoxLineHeight` resolves it.
+/// Blink's `ComputedLineHeightAsFixed` of `context` against `font`.
 fn computed_line_height_as_fixed(context: &RenderContext, font: &Font) -> LayoutUnit {
-  let (ascent, descent, line_gap) = font
-    .primary_font_metrics()
-    .map_or((0.0, 0.0, 0.0), |metrics| {
-      (metrics.ascent, metrics.descent, metrics.line_gap)
-    });
-
-  BoxLineHeight::of(&context.style, context).resolve(
-    ascent,
-    descent,
-    line_gap,
-    TextScale::Paint(1.0),
-  )
+  BoxLineHeight::of(&context.style, context).computed_as_fixed(font.primary_font_metrics())
 }
 
 /// Blink's `PendingPositions`: fragments whose position waits for an ancestor's size.

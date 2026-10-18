@@ -682,6 +682,11 @@ impl Position {
     }
   }
 
+  /// `position: relative`, which moves a box from where it lays out.
+  pub(crate) const fn is_relative(self) -> bool {
+    matches!(self, Self::Relative)
+  }
+
   /// A positioned element (anything but `static`): establishes a containing
   /// block for absolutely-positioned descendants and honors `z-index`.
   pub(crate) const fn is_positioned(self) -> bool {

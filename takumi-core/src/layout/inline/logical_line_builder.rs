@@ -17,7 +17,7 @@ use crate::{
   fonts::shaping::shape_result_view::ShapeResultView,
   layout::{constraint_space::ConstraintSpace, logical_rect::LogicalOffset},
   layout_unit::LayoutUnit,
-  style::{Direction as TextDirection, Position},
+  style::Direction as TextDirection,
   text::bidi_paragraph::BidiParagraph,
 };
 
@@ -335,7 +335,7 @@ fn place_layout_result<'a, 'c>(
 fn is_relative_positioned(item: &InlineItem<'_>) -> bool {
   item
     .style()
-    .is_some_and(|style| style.base_data.position == Position::Relative)
+    .is_some_and(|style| style.base_data.position.is_relative())
 }
 
 impl LogicalLineItems<'_, '_> {
@@ -347,7 +347,7 @@ impl LogicalLineItems<'_, '_> {
     }
 
     // Trailing items and items of only trailing spaces take the paragraph's level.
-    let base_direction_level = u8::from(base_direction == TextDirection::Rtl);
+    let base_direction_level = base_direction.bidi_level();
     let mut levels: Vec<u8> = self
       .children
       .iter()
@@ -410,7 +410,10 @@ mod tests {
     let node = InlineNode::new(block);
     let data = node.prepare_layout();
     let available_width = LayoutUnit::from_float(available_width);
-    let space = ConstraintSpace::new(Some(available_width));
+    let space = ConstraintSpace::new(
+      Some(available_width),
+      block.context.style.inherited_data.direction,
+    );
     let mut atomic_inline = TestAtomicInline;
     let mut exclusion_space = ExclusionSpace::default();
     let mut line_info = LineInfo::new(&data, &block.context);
