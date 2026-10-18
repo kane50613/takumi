@@ -145,7 +145,8 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
    src/layout/inline/inline_layout_algorithm.rs, the justification in
    src/layout/inline/justification_utils.rs, `LeadingFloats` in
    src/layout/inline/leading_floats.rs, `InlineChildLayoutContext` in
-   src/layout/inline/inline_child_layout_context.rs, and the `white-space` predicates in
+   src/layout/inline/inline_child_layout_context.rs, `LineTruncator` in
+   src/layout/inline/line_truncator.rs, and the `white-space` predicates in
    src/style/properties/mod.rs and src/style/properties/text_wrap.rs, from
    third_party/blink/renderer/core/layout/inline/inline_item.cc,
    third_party/blink/renderer/core/layout/inline/inline_items_builder.cc,
@@ -180,7 +181,8 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
    third_party/blink/renderer/core/layout/inline/justification_utils.cc,
    third_party/blink/renderer/core/layout/inline/leading_floats.h,
    third_party/blink/renderer/core/layout/inline/inline_child_layout_context.cc,
-   third_party/blink/renderer/core/layout/length_utils.cc, and
+   third_party/blink/renderer/core/layout/length_utils.cc,
+   third_party/blink/renderer/core/layout/inline/line_truncator.cc, and
    third_party/blink/renderer/core/css/white_space.h.
 
 Copyright 2014, 2015, 2016, 2017, 2018, 2019, 2020, 2023, 2024, 2025 The Chromium Authors
