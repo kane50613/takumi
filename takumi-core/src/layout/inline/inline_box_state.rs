@@ -116,6 +116,13 @@ impl<'a, 'c> InlineBoxState<'a, 'c> {
     );
   }
 
+  /// Blink's `EnsureTextMetrics`.
+  pub(crate) fn ensure_text_metrics(&mut self) {
+    if self.text_metrics.is_empty() {
+      self.compute_text_metrics();
+    }
+  }
+
   /// Blink's `ResetTextMetrics`.
   pub(crate) fn reset_text_metrics(&mut self) {
     self.metrics = FontHeight::empty();

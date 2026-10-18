@@ -57,6 +57,15 @@ pub(crate) mod inline_break_token;
   not(test),
   expect(
     dead_code,
+    reason = "TODO: the inline layout algorithm port lays out lines"
+  )
+)]
+#[cfg_attr(test, allow(dead_code))]
+pub(crate) mod inline_child_layout_context;
+#[cfg_attr(
+  not(test),
+  expect(
+    dead_code,
     reason = "TODO: the line breaker port reads the collected items"
   )
 )]
@@ -102,6 +111,15 @@ pub(crate) mod inline_items_builder;
   not(test),
   expect(
     dead_code,
+    reason = "TODO: the inline layout algorithm port lays out lines"
+  )
+)]
+#[cfg_attr(test, allow(dead_code))]
+pub(crate) mod inline_layout_algorithm;
+#[cfg_attr(
+  not(test),
+  expect(
+    dead_code,
     reason = "TODO: the line breaker port reads the collected items"
   )
 )]
@@ -117,6 +135,24 @@ pub(crate) mod inline_node;
 #[cfg_attr(test, allow(dead_code))]
 pub(crate) mod inline_node_data;
 mod items;
+#[cfg_attr(
+  not(test),
+  expect(
+    dead_code,
+    reason = "TODO: the inline layout algorithm port justifies lines"
+  )
+)]
+#[cfg_attr(test, allow(dead_code))]
+pub(crate) mod justification_utils;
+#[cfg_attr(
+  not(test),
+  expect(
+    dead_code,
+    reason = "TODO: the inline layout algorithm port places leading floats"
+  )
+)]
+#[cfg_attr(test, allow(dead_code))]
+pub(crate) mod leading_floats;
 mod line_box;
 #[cfg_attr(
   not(test),

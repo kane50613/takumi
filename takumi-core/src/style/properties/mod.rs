@@ -469,7 +469,6 @@ impl_from_taffy_enum!(
 
 impl TextAlign {
   /// The physical side `start` and `end` name under `direction`.
-  #[cfg(feature = "paint-tree")]
   pub(crate) fn resolve(self, direction: Direction) -> Self {
     match (self, direction) {
       (Self::Start, Direction::Ltr) | (Self::End, Direction::Rtl) => Self::Left,
