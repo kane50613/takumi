@@ -26,6 +26,7 @@ pub(crate) mod filter;
 pub(crate) mod filter_reference;
 mod flex;
 mod flex_grow;
+mod font;
 mod font_family;
 mod font_feature_settings;
 mod font_kerning;
@@ -103,6 +104,7 @@ pub use filter::{
 pub use filter_reference::FilterReference;
 pub use flex::*;
 pub use flex_grow::*;
+pub use font::*;
 pub use font_family::*;
 pub(crate) use font_feature_settings::FontFeatureSettings;
 pub use font_feature_settings::{FontFeature, Tag};
