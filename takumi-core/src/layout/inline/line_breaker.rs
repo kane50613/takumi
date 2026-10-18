@@ -27,8 +27,7 @@ use crate::{
     shape_result_view::{Segment, SegmentSource, ShapeResultView},
     shaping_line_breaker::{ShapingLineBreaker, ShapingLineBreakerResult},
   },
-  geometry::{Rect, Size},
-  layout::border::BorderProperties,
+  geometry::Rect,
   layout::tree::RenderNode,
   layout_unit::LayoutUnit,
   style::{BoxDecorationBreak, ComputedStyle, Direction as TextDirection, WordBreak},
@@ -258,33 +257,8 @@ fn item_needs_accurate_end_position(item: &InlineItem<'_>) -> bool {
   item.layout_object.is_some_and(|object| {
     let node = object.node();
 
-    !node.context.text_decorations.as_slice().is_empty() || has_box_decoration_background(node)
+    !node.context.text_decorations.as_slice().is_empty() || node.has_box_decoration_background()
   })
-}
-
-/// Blink's `HasBoxDecorationBackground`: a background, a border, or a shadow.
-fn has_box_decoration_background(node: &RenderNode) -> bool {
-  let style = &node.context.style;
-  let has_background_image = style
-    .background_data
-    .background_image
-    .as_deref()
-    .is_some_and(|images| !images.is_empty());
-
-  style
-    .background_data
-    .background_color
-    .resolve(node.context.current_color)
-    .0[3]
-    != 0
-    || has_background_image
-    || BorderProperties::from_context(&node.context, Size::ZERO, node.border_px())
-      .has_visible_sides()
-    || style
-      .misc1_data
-      .box_shadow
-      .as_deref()
-      .is_some_and(|shadows| !shadows.is_empty())
 }
 
 /// Blink's `ComputedStyle::ShouldBreakOnlyAfterWhiteSpace`, with `line-break` always `auto`.
