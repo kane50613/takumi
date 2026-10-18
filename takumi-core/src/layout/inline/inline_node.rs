@@ -516,6 +516,16 @@ impl RenderNode {
     self.node.as_ref().is_some_and(|node| {
       let metadata = &node.metadata;
 
+      // A `<br>` is Blink's `LayoutBR`, a text, whatever styles it.
+      if matches!(node.kind, NodeKind::Text(_))
+        && metadata
+          .tag_name
+          .as_deref()
+          .is_some_and(|tag| tag.eq_ignore_ascii_case("br"))
+      {
+        return true;
+      }
+
       matches!(node.kind, NodeKind::Text(_))
         && metadata.tag_name.is_none()
         && metadata.class_name.is_none()
@@ -652,6 +662,22 @@ mod tests {
 
     assert_eq!(text, "a\nb");
     assert!(items.contains(&(Control, "\n".to_owned())));
+  }
+
+  /// A `<br>` opens no inline box, so its own font does not grow the line.
+  #[test]
+  fn a_br_opens_no_inline_box() {
+    let tree = render_tree(
+      block([
+        Node::text("a"),
+        Node::text("\n").with_tag_name("br").with_class_name("big"),
+        Node::text("b"),
+      ]),
+      ".big { font-size: 40px }",
+    );
+    let (_, items) = collect(&tree);
+
+    assert!(!items.iter().any(|(item_type, _)| *item_type == OpenTag));
   }
 
   #[test]
