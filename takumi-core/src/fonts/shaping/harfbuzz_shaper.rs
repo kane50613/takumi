@@ -393,8 +393,9 @@ impl HarfBuzzShaper {
 
         current_font_data_for_range_set = fallback_iterator.next(&fallback_chars_hint);
 
+        // Blink's last resort font always exists; takumi may have no font that parses at all.
         if current_font_data_for_range_set.font_data().is_none() {
-          debug_assert!(range_data.reshape_queue.is_empty());
+          range_data.reshape_queue.clear();
 
           break;
         }
@@ -786,6 +787,16 @@ mod tests {
     let total_width = first.width() + second.width() + third.width();
 
     assert!((combined.width() - total_width).abs() <= 1.0);
+  }
+
+  /// With no font, the text shapes to no runs.
+  #[test]
+  fn no_font() {
+    let mut fonts = Fonts::default();
+    let font = font(&mut fonts, "Geist");
+    let result = HarfBuzzShaper::new("a".into()).shape_all(&font, TextDirection::Ltr);
+
+    assert!(result.runs.is_empty());
   }
 
   #[test]
