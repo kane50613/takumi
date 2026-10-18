@@ -2660,6 +2660,27 @@ impl RenderNode {
     }
   }
 
+  /// Blink's `LayoutAtomicInline` sizing: an auto width shrinks to fit, and any other resolves
+  /// against the containing block, which `available_space` stands in for.
+  pub(crate) fn layout_atomic_inline(
+    &self,
+    available_space: Size<AvailableSpace>,
+  ) -> AtomicInlineMetrics {
+    if !self.participates_as_inline_box()
+      || self.layout_style(&self.context.sizing).size.width.is_auto()
+    {
+      return self.measure_inline_box(available_space);
+    }
+
+    let results = LayoutResults::compute(self, available_space);
+    let size = results.root_size();
+
+    AtomicInlineMetrics {
+      size,
+      baseline_offset: self.resolve_inline_baseline_offset(available_space, size, &results),
+    }
+  }
+
   /// An atomic inline box's shrink-to-fit size and baseline.
   fn measure_atomic_subtree(&self, available_space: Size<AvailableSpace>) -> AtomicInlineMetrics {
     let at_width = |width| Size {
