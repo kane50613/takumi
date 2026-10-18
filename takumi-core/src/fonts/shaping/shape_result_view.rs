@@ -87,7 +87,7 @@ impl RunInfoPart {
     (0..self.num_glyphs).map(move |i| offsets.get(i).copied().unwrap_or_default())
   }
 
-  /// Blink's `CharacterIndexOfEndGlyph`: the end character index, ignoring the view's offsets.
+  /// Blink's `CharacterIndexOfEndGlyph`.
   pub(crate) fn character_index_of_end_glyph(&self) -> u32 {
     self.num_characters + self.offset
   }
@@ -126,7 +126,6 @@ impl RunInfoPart {
       glyphs.iter().find(is_safe)
     };
 
-    // Previous safe break is at the start of the run.
     found.map_or(0, |glyph| u32::from(glyph.character_index) - self.offset)
   }
 
@@ -149,7 +148,7 @@ impl RunInfoPart {
     part
   }
 
-  /// Blink's `ComputeStart`, with `offset_for_run` the source's `StartIndexOffsetForRun`.
+  /// Blink's `ComputeStart`.
   fn compute_start(&self, offset_for_run: u32, is_ltr: bool) -> u32 {
     let part_start = self.start_index + offset_for_run;
 
@@ -157,7 +156,6 @@ impl RunInfoPart {
       return part_start;
     }
 
-    // In RTL with several parts, a part's offset may pass its start index.
     part_start.max(self.offset)
   }
 
@@ -269,7 +267,6 @@ impl ShapeResultView {
       char_index_offset,
     };
 
-    // Segments are logical, parts visual: RTL takes the segments back to front.
     if view.is_ltr() {
       for (segment, source) in segments.iter().zip(&sources) {
         view.populate_run_info_parts(source, segment);
@@ -344,7 +341,6 @@ impl ShapeResultView {
 
       let part_characters = range_end - range_start;
 
-      // A run the segment covers whole needs no search.
       let mut part = if part_start >= segment.start_index && part_end <= segment.end_index {
         run.clone()
       } else {
@@ -362,7 +358,6 @@ impl ShapeResultView {
       };
 
       self.width += part.width;
-      // Start indices continue from the parts before.
       part.start_index = (i64::from(run_start + range_start) + index_diff) as u32;
       part.offset = range_start;
       part.num_characters = part_characters;
@@ -451,7 +446,7 @@ impl ShapeResultView {
     self.parts.iter().map(RunInfoPart::num_glyphs).sum()
   }
 
-  /// Blink's `UsedFonts`: each font once.
+  /// Blink's `UsedFonts`.
   pub(crate) fn used_fonts(&self) -> Vec<Rc<SimpleFontData>> {
     let mut used_fonts: Vec<Rc<SimpleFontData>> = Vec::new();
 
@@ -566,7 +561,6 @@ impl ShapeResultView {
         let character_index =
           u32::from(glyph_data.character_index).wrapping_add(character_index_offset);
 
-        // LTR glyphs ascend in character index, RTL ones descend.
         if run.is_ltr() {
           if character_index >= to {
             break;
@@ -594,7 +588,7 @@ impl ShapeResultView {
     total_advance
   }
 
-  /// Blink's `ForEachGraphemeClusters`, counting graphemes with ICU4X.
+  /// Blink's `ForEachGraphemeClusters`.
   pub(crate) fn for_each_grapheme_clusters(
     &self,
     text: &str,
@@ -727,7 +721,7 @@ mod tests {
     resources::font::Fonts,
   };
 
-  /// Blink's `ShapeResultTestGlyphInfo`: a glyph's character index, id, and position.
+  /// Blink's `ShapeResultTestGlyphInfo`.
   type GlyphInfo = (u32, u16, f32);
 
   fn shape(font: &Font, text: &str) -> Rc<ShapeResult> {
@@ -745,8 +739,7 @@ mod tests {
     glyphs
   }
 
-  /// Blink's `CompareResultGlyphs`: `test` against `reference` from `reference_start`, positions
-  /// relative to it.
+  /// Blink's `CompareResultGlyphs`.
   fn assert_glyphs_match(test: &[GlyphInfo], reference: &[GlyphInfo], reference_start: usize) {
     let advance_offset = reference[reference_start].2;
     let expected = &reference[reference_start..reference_start + test.len()];
@@ -755,7 +748,6 @@ mod tests {
       test.iter().zip(expected)
     {
       assert_eq!((index, glyph), (expected_index, expected_glyph));
-      // Positions differ in the last bits once the reference's start is taken off.
       assert!((advance - (expected_advance - advance_offset)).abs() < 1e-3);
     }
   }
@@ -777,7 +769,6 @@ mod tests {
     );
     let all = glyphs(&ShapeResultView::create_from_result(&result));
 
-    // "Test run with multiple", "multiple words and breaking", "breaking opportunities."
     for (start, end) in [(0, 22), (14, 41), (33, 56)] {
       let view = ShapeResultView::create(&[segment(&result, start, end)]);
       let view_glyphs = glyphs(&view);
@@ -794,13 +785,11 @@ mod tests {
     let (_fonts, font) = geist();
     let mut result = ShapeResult::new(0, 0, TextDirection::Ltr);
 
-    // "hello world!" in four runs.
     for text in ["hello", " w", "orld", "!"] {
       shape(&font, text).copy_range(0, text.len() as u32, &mut result);
     }
 
     let result = Rc::new(result);
-    // "hello wood wold!"
     let ranges = [(0, 8), (7, 8), (10, 11), (5, 8), (9, 12)];
     let composite_view =
       ShapeResultView::create(&ranges.map(|(start, end)| segment(&result, start, end)));
@@ -831,7 +820,6 @@ mod tests {
       "Test run with multiple words and breaking opportunities.",
     );
     let reference_result = shape(&font, "multiple breaking opportunities Test");
-    // "multiple ", "breaking opportunities", " ", "Test"
     let ranges = [(14, 23), (33, 55), (4, 5), (0, 4)];
     let mut composite_copy = ShapeResult::new(0, 0, TextDirection::Ltr);
 
@@ -933,12 +921,10 @@ mod tests {
     let (_fonts, font) = geist();
     let result = shape(&font, "Blah bla test something. ");
 
-    // Once 14 - 9 = 5, before the start of the view.
     let view1 = ShapeResultView::create_from_result_range(&result, 9, 14);
 
     assert_eq!(view1.previous_safe_to_break_offset(14), 14);
 
-    // Once 25 - 9 = 16, inside the view but not its last safe offset.
     let view2 = ShapeResultView::create_from_result_range(&result, 9, 25);
 
     assert_eq!(view2.previous_safe_to_break_offset(24), 24);
