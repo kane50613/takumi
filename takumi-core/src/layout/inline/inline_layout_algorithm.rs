@@ -36,8 +36,8 @@ use crate::{
   },
   layout_unit::LayoutUnit,
   style::{
-    BlockEllipsis, Continue, Direction as TextDirection, TextAlign, TextFitMode, TextFitTarget,
-    TextOverflow, TextWrapStyle,
+    BlockEllipsis, Direction as TextDirection, TextAlign, TextFitMode, TextFitTarget, TextOverflow,
+    TextWrapStyle,
   },
 };
 
@@ -918,14 +918,7 @@ impl<'c> InlineNode<'c> {
       .definite_height()
       .map(LayoutUnit::from_float);
 
-    // `line-clamp`, which collapses the lines past its count.
-    if style.misc_data.r#continue == Continue::Collapse {
-      space.lines_until_clamp = style
-        .misc3_data
-        .max_lines
-        .filter(|&lines| lines >= 1)
-        .map(|lines| lines as i32);
-    }
+    space.lines_until_clamp = style.line_clamp().map(|lines| lines as i32);
 
     let paragraph_scale = self.measure_paragraph_scale(items_data, space, atomic_inline);
     let lines = self.layout_lines_in(items_data, space, Some(paragraph_scale), atomic_inline);

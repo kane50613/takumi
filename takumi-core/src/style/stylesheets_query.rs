@@ -103,6 +103,20 @@ impl ComputedStyle {
       self.misc4_data_mut().text_overflow = TextOverflow::Clip;
     }
 
+    // Approximate: `-webkit-legacy` collapses the lines of a `display: -webkit-box` with
+    // `-webkit-box-orient: vertical`, which takumi lowers to a flex column, so a flex column
+    // clamps where Chrome would not. It does nothing anywhere else.
+    if self.misc_data.r#continue == Continue::WebkitLegacy {
+      let collapses = matches!(self.base_data.display, Display::Flex | Display::InlineFlex)
+        && self.misc_data.flex_direction == FlexDirection::Column;
+
+      self.misc_data_mut().r#continue = if collapses {
+        Continue::Collapse
+      } else {
+        Continue::Normal
+      };
+    }
+
     self.original_display = self.base_data.display;
 
     // https://www.w3.org/TR/css-display-3/#transformations
@@ -409,6 +423,14 @@ impl ComputedStyle {
         SizedTextDecorationThickness::Value(thickness.to_px(sizing, sizing.font_size))
       }
     }
+  }
+
+  /// The lines `line-clamp` keeps, which collapse the lines past them.
+  pub(crate) fn line_clamp(&self) -> Option<u32> {
+    self
+      .misc3_data
+      .max_lines
+      .filter(|&lines| self.misc_data.r#continue == Continue::Collapse && lines >= 1)
   }
 
   /// What font matching reads of this style at `sizing`'s font size, apart from the families.

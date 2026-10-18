@@ -1897,6 +1897,11 @@ define_style! {
       target.push(StyleDeclaration::block_ellipsis(value.block_ellipsis));
       target.push(StyleDeclaration::r#continue(value.line_continue));
     },
+    webkit_line_clamp: WebkitLineClamp => [MaxLines, BlockEllipsis, Continue] |value, target| {
+      target.push(StyleDeclaration::max_lines(value.0.max_lines));
+      target.push(StyleDeclaration::block_ellipsis(value.0.block_ellipsis));
+      target.push(StyleDeclaration::r#continue(value.0.line_continue));
+    },
   }
 }
 
