@@ -21,7 +21,7 @@ use crate::{
   layout::logical_rect::LogicalRect,
   layout_unit::LayoutUnit,
   resources::font::PrimaryFontMetrics,
-  style::{Direction as TextDirection, TextOverflow},
+  style::{BlockEllipsis, Direction as TextDirection, TextOverflow},
   text::{
     bidi_paragraph::{BidiParagraph, direction_from_level},
     character::{FORM_FEED, LINE_FEED, maybe_bidi_rtl},
@@ -102,11 +102,22 @@ impl<'a, 'c> LineTruncator<'a, 'c> {
   /// Blink's `ComputeEllipsisText`: `text-overflow`'s string, or an ellipsis character, or three
   /// periods when the font has no ellipsis. The ellipsis takes the line's style.
   /// <https://drafts.csswg.org/css-ui/#ellipsing-details>
+  /// A `line-clamp` takes its `block-ellipsis` string, as css-overflow-4 says and Blink's
+  /// `-webkit-line-clamp` does not. <https://drafts.csswg.org/css-overflow-4/#block-ellipsis>
   fn compute_ellipsis_text(&self) -> String {
-    if let TextOverflow::Custom(text) = &self.line_style.style.misc4_data.text_overflow
-      && !self.is_ellipsis_caused_by_line_clamp
-    {
-      return suppress_line_breaks(text);
+    let style = &self.line_style.style;
+
+    match (
+      &style.misc4_data.text_overflow,
+      &style.misc_inherited1_data.block_ellipsis,
+    ) {
+      (TextOverflow::Custom(text), _) if !self.is_ellipsis_caused_by_line_clamp => {
+        return suppress_line_breaks(text);
+      }
+      (_, BlockEllipsis::String(text)) if self.is_ellipsis_caused_by_line_clamp => {
+        return suppress_line_breaks(text);
+      }
+      _ => {}
     }
 
     let has_ellipsis = self
@@ -430,8 +441,9 @@ mod tests {
   const ELLIPSIS: &str =
     ".container { overflow: hidden; text-overflow: ellipsis; white-space: nowrap }";
 
-  /// The first line's visible items: each text, or ellipsis, with its inline offset and size.
-  fn visible_items(block: &RenderNode, available_width: f32) -> Vec<String> {
+  /// The visible items of the line at `line_index`: each text, or ellipsis, with its inline
+  /// offset and size.
+  fn line_items(block: &RenderNode, available_width: f32, line_index: usize) -> Vec<String> {
     let node = InlineNode::new(block);
     let data = node.prepare_layout();
     let mut atomic_inline = TestAtomicInline;
@@ -441,7 +453,7 @@ mod tests {
       &mut atomic_inline,
     );
 
-    lines[0]
+    lines[line_index]
       .items
       .children
       .iter()
@@ -459,6 +471,53 @@ mod tests {
         )
       })
       .collect()
+  }
+
+  fn visible_items(block: &RenderNode, available_width: f32) -> Vec<String> {
+    line_items(block, available_width, 0)
+  }
+
+  /// `line-clamp` ellipsizes its last line whether it overflows or not, and leaves the lines
+  /// before it.
+  #[test]
+  fn line_clamp_ellipsizes_its_last_line() {
+    let block = render_tree(
+      [Node::text("aaa bbb ccc ddd eee")],
+      ".container { line-clamp: 2 }",
+    );
+
+    assert_eq!(line_items(&block, 42.0, 0), ["aaa bbb@0+42"]);
+    assert_eq!(
+      line_items(&block, 42.0, 1),
+      ["ccc dd@0+36", "\u{2026}@36+6"]
+    );
+  }
+
+  /// A balanced paragraph still ellipsizes its clamp line; these two lines score a tie, which keeps
+  /// the greedy breaks.
+  #[test]
+  fn a_balanced_clamp_line_ends_in_an_ellipsis() {
+    let block = render_tree(
+      [Node::text("aaa bbb ccc ddd eee")],
+      ".container { line-clamp: 2; text-wrap: balance }",
+    );
+
+    assert_eq!(line_items(&block, 66.0, 0), ["aaa bbb ccc@0+66"]);
+    assert_eq!(
+      line_items(&block, 66.0, 1),
+      ["ddd eee@0+42", "\u{2026}@42+6"]
+    );
+  }
+
+  /// css-overflow-4's `block-ellipsis` string replaces the ellipsis.
+  #[test]
+  fn line_clamp_takes_its_block_ellipsis_string() {
+    let block = render_tree(
+      [Node::text("aaa bbb ccc ddd eee")],
+      ".container { line-clamp: 2 \" >\" }",
+    );
+
+    assert_eq!(line_items(&block, 42.0, 1), ["ccc d@0+30", " >@30+12"]);
   }
 
   #[test]

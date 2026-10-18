@@ -15,6 +15,8 @@ pub(crate) struct ConstraintSpace {
   /// Blink's `PercentageResolutionSize`, none where indefinite.
   pub(crate) percentage_resolution_inline_size: Option<LayoutUnit>,
   pub(crate) percentage_resolution_block_size: Option<LayoutUnit>,
+  /// Blink's `GetLineClampData().LinesUntilClamp()`, for a box clamped by lines.
+  pub(crate) lines_until_clamp: Option<i32>,
 }
 
 impl ConstraintSpace {
@@ -27,7 +29,13 @@ impl ConstraintSpace {
       direction,
       percentage_resolution_inline_size: available_inline_size,
       percentage_resolution_block_size: None,
+      lines_until_clamp: None,
     }
+  }
+
+  /// Blink's `LineClampData::IsAtClampPoint`: the line the clamp ellipsizes.
+  pub(crate) fn is_at_clamp_point(&self) -> bool {
+    self.lines_until_clamp == Some(1)
   }
 
   /// The available inline size, zero while computing intrinsic sizes.

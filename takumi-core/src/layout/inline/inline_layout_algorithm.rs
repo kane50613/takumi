@@ -34,7 +34,9 @@ use crate::{
     tree::RenderNode,
   },
   layout_unit::LayoutUnit,
-  style::{Direction as TextDirection, TextAlign, TextOverflow, TextWrapStyle},
+  style::{
+    BlockEllipsis, Continue, Direction as TextDirection, TextAlign, TextOverflow, TextWrapStyle,
+  },
 };
 
 /// Blink's `LineBoxFragmentBuilder` and the line's `LogicalLineContainer`: a line box, as
@@ -61,6 +63,8 @@ pub(crate) struct LineBoxFragment<'a, 'c> {
   pub(crate) clearance_after_line: LayoutUnit,
   /// The floats after the line.
   pub(crate) exclusion_space: ExclusionSpace,
+  /// Blink's `LinesUntilClamp`, after this line.
+  pub(crate) lines_until_clamp: Option<i32>,
 }
 
 impl LineBoxFragment<'_, '_> {
@@ -79,6 +83,7 @@ impl LineBoxFragment<'_, '_> {
       is_empty_line_box: false,
       clearance_after_line: LayoutUnit::ZERO,
       exclusion_space,
+      lines_until_clamp: None,
     }
   }
 
@@ -161,6 +166,7 @@ impl LineBreakStrategy {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum LineClampState {
   Show,
+  LineClampEllipsis,
   TextOverflowEllipsis,
 }
 
@@ -214,6 +220,7 @@ impl<'s, 'a, 'c> InlineLayoutAlgorithm<'s, 'a, 'c> {
       space.inline_size(),
       space.direction,
     );
+    let mut lines_until_clamp = space.lines_until_clamp;
     let line_break_strategy = LineBreakStrategy::new(
       self.context,
       self.node.block.context.style.inherited_data.text_wrap_style,
@@ -321,6 +328,7 @@ impl<'s, 'a, 'c> InlineLayoutAlgorithm<'s, 'a, 'c> {
       } else {
         self.add_any_clearance_after_line(&line_info);
         self.container_builder.block_size = self.container_builder.line_height();
+        lines_until_clamp = lines_until_clamp.map(|lines| lines - 1);
       }
 
       // Blink's `LineBreakStrategy::DidCreateLine`.
@@ -332,6 +340,7 @@ impl<'s, 'a, 'c> InlineLayoutAlgorithm<'s, 'a, 'c> {
     }
 
     self.container_builder.items = line_box;
+    self.container_builder.lines_until_clamp = lines_until_clamp;
     self.container_builder
   }
 
@@ -469,9 +478,12 @@ impl<'s, 'a, 'c> InlineLayoutAlgorithm<'s, 'a, 'c> {
 
     let line_box_metrics = box_states.line_box_state().metrics;
 
-    // TODO: `line-clamp` ellipsizes its last line too.
-    if self.line_clamp_state(line_info) == LineClampState::TextOverflowEllipsis {
-      inline_size = LineTruncator::new(line_info, false).truncate_line(
+    let line_clamp_state = self.line_clamp_state(line_info);
+
+    if line_clamp_state != LineClampState::Show {
+      let is_ellipsis_caused_by_line_clamp = line_clamp_state == LineClampState::LineClampEllipsis;
+
+      inline_size = LineTruncator::new(line_info, is_ellipsis_caused_by_line_clamp).truncate_line(
         inline_size,
         line_box,
         self.context.box_states(),
@@ -524,12 +536,19 @@ impl<'s, 'a, 'c> InlineLayoutAlgorithm<'s, 'a, 'c> {
     self.container_builder.inline_size = inline_size;
   }
 
-  /// Blink's `GetLineClampState`, for `text-overflow` alone.
+  /// Blink's `GetLineClampState`, without the hidden lines of the experimental `line-clamp`.
   fn line_clamp_state(&self, line_info: &LineInfo<'a, 'c>) -> LineClampState {
+    let style = &self.node.block.context.style;
+
+    if self.constraint_space.is_at_clamp_point()
+      && style.misc_inherited1_data.block_ellipsis != BlockEllipsis::None
+    {
+      return LineClampState::LineClampEllipsis;
+    }
+
     // Blink's `ShouldTruncateOverflowingText`; takumi's computed `text-overflow` is `clip` in a
     // box that does not clip its overflow.
-    let should_truncate_overflowing_text =
-      self.node.block.context.style.misc4_data.text_overflow != TextOverflow::Clip;
+    let should_truncate_overflowing_text = style.misc4_data.text_overflow != TextOverflow::Clip;
 
     if line_info.has_overflow && should_truncate_overflowing_text {
       return LineClampState::TextOverflowEllipsis;
@@ -823,10 +842,19 @@ impl<'c> InlineNode<'c> {
     available_inline_size: LayoutUnit,
     atomic_inline: &mut dyn AtomicInlineLayout<'c>,
   ) -> Vec<LineBoxFragment<'a, 'c>> {
-    let mut space = ConstraintSpace::new(
-      Some(available_inline_size),
-      self.block.context.style.inherited_data.direction,
-    );
+    let style = &self.block.context.style;
+    let mut space =
+      ConstraintSpace::new(Some(available_inline_size), style.inherited_data.direction);
+
+    // `line-clamp`, which collapses the lines past its count.
+    if style.misc_data.r#continue == Continue::Collapse {
+      space.lines_until_clamp = style
+        .misc3_data
+        .max_lines
+        .filter(|&lines| lines >= 1)
+        .map(|lines| lines as i32);
+    }
+
     let mut exclusion_space = ExclusionSpace::default();
     let mut context = InlineChildLayoutContext::default();
     let mut break_token = None;
@@ -853,6 +881,7 @@ impl<'c> InlineNode<'c> {
 
       exclusion_space = line.exclusion_space.clone();
       break_token = line.break_token;
+      space.lines_until_clamp = line.lines_until_clamp;
 
       // An empty line takes no space.
       if let Some(line_box_bfc_block_offset) = line.line_box_bfc_block_offset {

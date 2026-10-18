@@ -189,24 +189,35 @@ impl<'c> InlineNode<'c> {
 
     let available_width = line_opportunity.available_inline_size();
     let block_context = &self.block.context;
-
-    // An estimate, so it may be twice the most lines.
-    let space_width = items_data
-      .fonts
-      .get(block_context)
-      .primary_font()
-      .map_or(0.0, |font_data| font_data.space_width());
-
-    if estimate_num_lines(&items_data.text_content, space_width, available_width)
-      > MAX_LINES_FOR_BALANCE * 2
-    {
-      return None;
-    }
-
     let mut normal_lines = LineBreakResults::new(self, items_data, space, &mut *atomic_inline);
+    let lines_until_clamp = space
+      .lines_until_clamp
+      .and_then(|lines| usize::try_from(lines).ok())
+      .filter(|&lines| lines > 0 && lines <= MAX_LINES_FOR_BALANCE);
 
-    if normal_lines.break_lines(available_width, MAX_LINES_FOR_BALANCE, None) != Status::Finished {
-      return None;
+    if let Some(lines_until_clamp) = lines_until_clamp {
+      // A clamp of one line leaves nothing to balance; the lines past the clamp do not count.
+      if lines_until_clamp == 1
+        || normal_lines.break_lines(available_width, lines_until_clamp, None)
+          == Status::NotApplicable
+      {
+        return None;
+      }
+    } else {
+      // An estimate, so it may be twice the most lines.
+      let space_width = items_data
+        .fonts
+        .get(block_context)
+        .primary_font()
+        .map_or(0.0, |font_data| font_data.space_width());
+
+      if estimate_num_lines(&items_data.text_content, space_width, available_width)
+        > MAX_LINES_FOR_BALANCE * 2
+        || normal_lines.break_lines(available_width, MAX_LINES_FOR_BALANCE, None)
+          != Status::Finished
+      {
+        return None;
+      }
     }
 
     let num_lines = normal_lines.line_widths.len();
