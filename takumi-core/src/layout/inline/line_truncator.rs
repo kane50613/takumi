@@ -493,19 +493,27 @@ mod tests {
     );
   }
 
+  /// A clamp line with no line after it keeps its text.
+  #[test]
+  fn line_clamp_leaves_a_last_line_whole() {
+    let block = render_tree([Node::text("aaa bbb ccc")], ".container { line-clamp: 2 }");
+
+    assert_eq!(line_items(&block, 42.0, 1), ["ccc@0+18"]);
+  }
+
   /// A balanced paragraph still ellipsizes its clamp line; these two lines score a tie, which keeps
   /// the greedy breaks.
   #[test]
   fn a_balanced_clamp_line_ends_in_an_ellipsis() {
     let block = render_tree(
-      [Node::text("aaa bbb ccc ddd eee")],
+      [Node::text("aaa bbb ccc ddd eee fff ggg")],
       ".container { line-clamp: 2; text-wrap: balance }",
     );
 
     assert_eq!(line_items(&block, 66.0, 0), ["aaa bbb ccc@0+66"]);
     assert_eq!(
       line_items(&block, 66.0, 1),
-      ["ddd eee@0+42", "\u{2026}@42+6"]
+      ["ddd eee ff@0+60", "\u{2026}@60+6"]
     );
   }
 

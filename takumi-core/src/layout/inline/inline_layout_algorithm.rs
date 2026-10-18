@@ -855,6 +855,28 @@ impl<'c> InlineNode<'c> {
         .map(|lines| lines as i32);
     }
 
+    let lines = self.layout_lines_in(items_data, space, atomic_inline);
+
+    // Blink's `ShouldRelayoutWithNoForcedTruncate`: no line follows the clamp line, so it relays
+    // out ignoring the clamp.
+    if lines
+      .last()
+      .is_some_and(|line| line.lines_until_clamp == Some(0))
+    {
+      space.lines_until_clamp = None;
+
+      return self.layout_lines_in(items_data, space, atomic_inline);
+    }
+
+    lines
+  }
+
+  fn layout_lines_in<'a>(
+    self,
+    items_data: &'a InlineNodeData<'c>,
+    mut space: ConstraintSpace,
+    atomic_inline: &mut dyn AtomicInlineLayout<'c>,
+  ) -> Vec<LineBoxFragment<'a, 'c>> {
     let mut exclusion_space = ExclusionSpace::default();
     let mut context = InlineChildLayoutContext::default();
     let mut break_token = None;
