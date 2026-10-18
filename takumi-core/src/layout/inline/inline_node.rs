@@ -88,7 +88,7 @@ impl<'c> Frame<'c> {
 /// Blink's `InlineNode`: the inline formatting context `block` establishes.
 #[derive(Clone, Copy)]
 pub(crate) struct InlineNode<'c> {
-  block: &'c RenderNode,
+  pub(crate) block: &'c RenderNode,
 }
 
 impl<'c> InlineNode<'c> {
@@ -143,7 +143,7 @@ impl<'c> InlineNode<'c> {
             } else {
               builder.append_atomic_inline(LayoutObject::Box(node));
             }
-          } else if node.context.style.base_data.display == Display::Inline {
+          } else if node.context.style.base_data.display == Display::Inline && !node.is_dom_text() {
             builder.enter_inline(node);
             stack.push(Frame::new(node, Some(parent), true));
           } else {
@@ -509,6 +509,24 @@ impl RenderNode {
       NodeKind::Text(text) => Some(&text.text),
       _ => None,
     }
+  }
+
+  /// Whether this is a DOM text node, without a box of its own: Blink's `LayoutText` alone.
+  fn is_dom_text(&self) -> bool {
+    self.node.as_ref().is_some_and(|node| {
+      let metadata = &node.metadata;
+
+      matches!(node.kind, NodeKind::Text(_))
+        && metadata.tag_name.is_none()
+        && metadata.class_name.is_none()
+        && metadata.id.is_none()
+        && metadata.attributes.is_none()
+        && metadata.preset.is_none()
+        && metadata.style.is_none()
+        && metadata.tw.is_none()
+        && metadata.dir.is_none()
+        && metadata.lang.is_none()
+    })
   }
 
   /// Blink's `IsAtomicInline`.

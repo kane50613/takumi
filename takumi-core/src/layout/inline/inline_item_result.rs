@@ -1,0 +1,172 @@
+//! Blink's [`InlineItemResult`](https://source.chromium.org/chromium/chromium/src/+/main:third_party/blink/renderer/core/layout/inline/inline_item_result.cc)
+//! and [`HyphenResult`](https://source.chromium.org/chromium/chromium/src/+/main:third_party/blink/renderer/core/layout/inline/hyphen_result.cc),
+//! without ruby or `text-fit`.
+
+use std::{ops::Range, rc::Rc};
+
+use super::{
+  inline_item::{InlineItem, InlineItemType},
+  inline_item_text_index::InlineItemTextIndex,
+  inline_node_data::StyleFonts,
+};
+use crate::{
+  context::RenderContext,
+  fonts::shaping::{
+    harfbuzz_shaper::HarfBuzzShaper, shape_result::ShapeResult, shape_result_view::ShapeResultView,
+  },
+  layout_unit::LayoutUnit,
+  text::character::{HYPHEN, HYPHEN_MINUS},
+};
+
+/// Blink's `LineBoxStrut`: lengths on each side of a box, in line-relative directions.
+#[derive(Debug, Clone, Copy, Default, PartialEq)]
+pub(crate) struct LineBoxStrut {
+  pub(crate) inline_start: LayoutUnit,
+  pub(crate) inline_end: LayoutUnit,
+  pub(crate) line_over: LayoutUnit,
+  pub(crate) line_under: LayoutUnit,
+}
+
+impl LineBoxStrut {
+  /// Blink's `InlineSum`.
+  pub(crate) fn inline_sum(&self) -> LayoutUnit {
+    self.inline_start + self.inline_end
+  }
+}
+
+/// What laying out an atomic inline gives its line: Blink's `LayoutResult` for one, in
+/// line-relative directions.
+#[derive(Debug, Clone, Copy, Default, PartialEq)]
+pub(crate) struct LayoutResult {
+  /// The border box's inline size.
+  pub(crate) inline_size: LayoutUnit,
+  /// The border box's block size.
+  pub(crate) block_size: LayoutUnit,
+  /// The baseline below the border box's block start, if it has one.
+  pub(crate) baseline: Option<LayoutUnit>,
+}
+
+/// Blink's `HyphenResult`: the shaped hyphen a hyphenated line ends with.
+#[derive(Debug, Clone)]
+pub(crate) struct HyphenResult {
+  pub(crate) text: String,
+  pub(crate) shape_result: Rc<ShapeResult>,
+}
+
+impl HyphenResult {
+  /// Blink's `Shape`: `ComputedStyle::HyphenString`, U+2010 HYPHEN when the primary font has it,
+  /// else U+002D HYPHEN-MINUS.
+  pub(crate) fn new(context: &RenderContext, fonts: &StyleFonts) -> Self {
+    let font = fonts.get(context);
+    let has_hyphen = font
+      .primary_font()
+      .is_some_and(|font_data| font_data.has_glyph(HYPHEN));
+    let text = String::from(if has_hyphen { HYPHEN } else { HYPHEN_MINUS });
+    let shape_result =
+      HarfBuzzShaper::new(text.clone()).shape_all(&font, context.style.inherited_data.direction);
+
+    Self {
+      text,
+      shape_result: Rc::new(shape_result),
+    }
+  }
+
+  /// Blink's `InlineSize`.
+  pub(crate) fn inline_size(&self) -> LayoutUnit {
+    self.shape_result.snapped_width().clamp_negative_to_zero()
+  }
+}
+
+/// Blink's `InlineItemResult`: the part of an item a line holds, and how it measures there.
+#[derive(Debug, Clone)]
+pub(crate) struct InlineItemResult<'a, 'c> {
+  pub(crate) item: &'a InlineItem<'c>,
+  pub(crate) item_index: usize,
+  pub(crate) text_offset: Range<usize>,
+  pub(crate) inline_size: LayoutUnit,
+  pub(crate) spacing_before: LayoutUnit,
+  pub(crate) shape_result: Option<Rc<ShapeResultView>>,
+  pub(crate) hyphen: Option<HyphenResult>,
+  pub(crate) layout_result: Option<LayoutResult>,
+  pub(crate) margins: LineBoxStrut,
+  pub(crate) borders: LineBoxStrut,
+  pub(crate) padding: LineBoxStrut,
+  pub(crate) may_break_inside: bool,
+  pub(crate) can_break_after: bool,
+  pub(crate) has_only_pre_wrap_trailing_spaces: bool,
+  pub(crate) has_only_bidi_trailing_spaces: bool,
+  pub(crate) break_anywhere_if_overflow: bool,
+  pub(crate) should_create_line_box: bool,
+  pub(crate) has_unpositioned_floats: bool,
+  pub(crate) is_hyphenated: bool,
+}
+
+impl<'a, 'c> InlineItemResult<'a, 'c> {
+  pub(crate) fn new(
+    item: &'a InlineItem<'c>,
+    item_index: usize,
+    text_offset: Range<usize>,
+    break_anywhere_if_overflow: bool,
+    should_create_line_box: bool,
+    has_unpositioned_floats: bool,
+  ) -> Self {
+    Self {
+      item,
+      item_index,
+      text_offset,
+      inline_size: LayoutUnit::ZERO,
+      spacing_before: LayoutUnit::ZERO,
+      shape_result: None,
+      hyphen: None,
+      layout_result: None,
+      margins: LineBoxStrut::default(),
+      borders: LineBoxStrut::default(),
+      padding: LineBoxStrut::default(),
+      may_break_inside: false,
+      can_break_after: false,
+      has_only_pre_wrap_trailing_spaces: false,
+      has_only_bidi_trailing_spaces: false,
+      break_anywhere_if_overflow,
+      should_create_line_box,
+      has_unpositioned_floats,
+      is_hyphenated: false,
+    }
+  }
+
+  pub(crate) fn start_offset(&self) -> usize {
+    self.text_offset.start
+  }
+
+  pub(crate) fn end_offset(&self) -> usize {
+    self.text_offset.end
+  }
+
+  pub(crate) fn length(&self) -> usize {
+    self.text_offset.len()
+  }
+
+  pub(crate) fn start(&self) -> InlineItemTextIndex {
+    InlineItemTextIndex::new(self.item_index, self.start_offset())
+  }
+
+  pub(crate) fn end(&self) -> InlineItemTextIndex {
+    InlineItemTextIndex::new(self.item_index, self.end_offset())
+  }
+
+  /// Blink's `IsEmptyText`.
+  pub(crate) fn is_empty_text(&self) -> bool {
+    self.length() == 0 && self.item.item_type == InlineItemType::Text
+  }
+
+  /// Blink's `ShapeHyphen`.
+  pub(crate) fn shape_hyphen(&mut self, fonts: &StyleFonts) {
+    debug_assert!(self.hyphen.is_none());
+
+    if let Some(object) = self.item.layout_object {
+      self.hyphen = Some(HyphenResult::new(&object.node().context, fonts));
+    }
+  }
+}
+
+/// Blink's `InlineItemResults`.
+pub(crate) type InlineItemResults<'a, 'c> = Vec<InlineItemResult<'a, 'c>>;

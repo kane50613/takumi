@@ -654,8 +654,6 @@ fn next_character_offset(text: &str, offset: usize) -> usize {
 
 #[cfg(test)]
 mod tests {
-  use parley::WordBreak;
-
   use super::*;
   use crate::{
     fonts::{
@@ -667,6 +665,7 @@ mod tests {
     },
     resources::font::Fonts,
     style::Direction as TextDirection,
+    text::line_break_iterator::LineBreakType,
   };
 
   struct Fixture {
@@ -711,8 +710,8 @@ mod tests {
     }
   }
 
-  fn iterator(text: &str, word_break: WordBreak) -> LineBreakIterator<'_> {
-    LineBreakIterator::new(text, word_break, BreakSpaceType::AfterSpaceRun)
+  fn iterator(text: &str, break_type: LineBreakType) -> LineBreakIterator<'_> {
+    LineBreakIterator::new(text, break_type, BreakSpaceType::AfterSpaceRun)
   }
 
   /// The break offset and the line, from `start` in `available_space`.
@@ -733,7 +732,7 @@ mod tests {
   fn shape_line_latin() {
     let text = "Test run with multiple words and breaking opportunities.";
     let (_fonts, fixture) = Fixture::new(text);
-    let break_iterator = iterator(text, WordBreak::Normal);
+    let break_iterator = iterator(text, LineBreakType::Normal);
     // "Test run with multiple", "Test run with", "Test run", "Test"
     let first4 = fixture.shape(0, 22).snapped_width();
     let first3 = fixture.shape(0, 13).snapped_width();
@@ -785,7 +784,7 @@ mod tests {
   fn shape_line_latin_multi_line() {
     let text = "Line breaking test case.";
     let (_fonts, fixture) = Fixture::new(text);
-    let break_iterator = iterator(text, WordBreak::Normal);
+    let break_iterator = iterator(text, LineBreakType::Normal);
     let first = fixture.shape(0, 4).snapped_width();
     let mid_third = fixture.shape(0, 16).snapped_width();
     let full = fixture.result.snapped_width();
@@ -805,7 +804,7 @@ mod tests {
     let text = "Testing break type-break all.";
     // Geist kerns "y" before "p", which Blink's test font does not.
     let (_fonts, fixture) = Fixture::with_font(text, geist_mono());
-    let break_iterator = iterator(text, WordBreak::BreakAll);
+    let break_iterator = iterator(text, LineBreakType::BreakAll);
     let midpoint = fixture.shape(0, 16).snapped_width();
     let full = fixture.result.snapped_width();
     let mut breaker = fixture.breaker(&fixture.result, &break_iterator);
@@ -823,7 +822,7 @@ mod tests {
   fn shape_line_zero_available_width() {
     let text = "Testing overflow line break.";
     let (_fonts, fixture) = Fixture::new(text);
-    let break_iterator = iterator(text, WordBreak::Normal);
+    let break_iterator = iterator(text, LineBreakType::Normal);
     let mut breaker = fixture.breaker(&fixture.result, &break_iterator);
 
     for (start, break_offset) in [(0, 7), (8, 16), (17, 21), (22, 28)] {
@@ -838,7 +837,7 @@ mod tests {
   fn shape_line_range_end_mid_word() {
     let text = "Mid word";
     let (_fonts, fixture) = Fixture::new(text);
-    let break_iterator = iterator(text, WordBreak::Normal);
+    let break_iterator = iterator(text, LineBreakType::Normal);
     let result = Rc::new(fixture.shape(0, 2));
     let mut breaker = fixture.breaker(&result, &break_iterator);
     let (offset, line) = shape_line(&mut breaker, 0, LayoutUnit::MAX);
@@ -859,7 +858,7 @@ mod tests {
 
     for (text, expected) in cases {
       let (_fonts, fixture) = Fixture::new(text);
-      let break_iterator = iterator(text, WordBreak::Normal);
+      let break_iterator = iterator(text, LineBreakType::Normal);
       let breaker = fixture.breaker(&fixture.result, &break_iterator);
       let mut next = Vec::new();
 

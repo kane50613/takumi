@@ -95,6 +95,76 @@ impl ShapeResult {
     }
   }
 
+  /// Blink's `CreateForTabulationCharacters`: space glyphs to each tab stop, the first reaching
+  /// the stop after `position`.
+  pub(crate) fn create_for_tabulation_characters(
+    font: &Font,
+    direction: TextDirection,
+    tab_size: f32,
+    position: f32,
+    start_index: u32,
+    length: u32,
+  ) -> Self {
+    debug_assert!(length > 0);
+
+    let font_data = font.primary_font_for_tab_size();
+    let space_glyph = font_data
+      .as_ref()
+      .map_or(0, |font_data| font_data.space_glyph());
+    let hb_direction = match direction {
+      TextDirection::Ltr => HbDirection::LeftToRight,
+      TextDirection::Rtl => HbDirection::RightToLeft,
+    };
+    let mut result = Self::new(start_index, length, direction);
+    let mut advance = TextRunLayoutUnit::from_float_round(font.tab_width(
+      font_data.as_deref(),
+      tab_size,
+      Some(position),
+    ));
+    let mut remaining = length;
+    let mut run_start = start_index;
+
+    while remaining > 0 {
+      let run_length = remaining.min(HarfBuzzRunGlyphData::MAX_GLYPHS);
+      let mut run = ShapeResultRun::new(
+        font_data.clone(),
+        hb_direction,
+        script::COMMON,
+        run_start,
+        run_length,
+        run_length,
+      );
+      let mut run_width = InlineLayoutUnit::ZERO;
+
+      for (i, glyph) in run.glyph_data.glyphs_mut().iter_mut().enumerate() {
+        // Tabs after the first take the whole tab width.
+        if i == 1 {
+          advance = TextRunLayoutUnit::from_float_round(font.tab_width(
+            font_data.as_deref(),
+            tab_size,
+            None,
+          ));
+        }
+
+        let index = match direction {
+          TextDirection::Ltr => i as u32,
+          TextDirection::Rtl => remaining - 1 - i as u32,
+        };
+
+        *glyph = HarfBuzzRunGlyphData::new(space_glyph, index, SafeToBreak::Safe, advance);
+        run_width += advance.into();
+      }
+
+      run.width = run_width.to_float();
+      result.width.set(result.width.get() + run.width);
+      result.runs.push(run);
+      remaining -= run_length;
+      run_start += run_length;
+    }
+
+    result
+  }
+
   /// Blink's `CreateForSpaces`: space glyphs `width` wide in all, one per character of `text`
   /// where Blink has one per UTF-16 code unit.
   pub(crate) fn create_for_spaces(
