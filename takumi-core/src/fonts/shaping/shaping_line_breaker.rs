@@ -9,7 +9,7 @@ use super::{
 use crate::{
   layout_unit::LayoutUnit,
   text::{
-    character::SOFT_HYPHEN,
+    character::{SOFT_HYPHEN, char_at, char_before, is_other_space_separator},
     line_break_iterator::{BreakSpaceType, LineBreakIterator},
   },
 };
@@ -45,22 +45,7 @@ impl BreakOpportunity {
 
 /// Blink's `IsBreakableSpace`, with ideographic space.
 fn is_breakable_space(ch: char) -> bool {
-  LineBreakIterator::is_breakable_space(ch) || ch == '\u{3000}'
-}
-
-/// The character starting at `offset`; a byte inside a character stands in for the trailing
-/// surrogate Blink would read there, which is no space.
-fn char_at(text: &str, offset: usize) -> char {
-  if !text.is_char_boundary(offset) {
-    return char::REPLACEMENT_CHARACTER;
-  }
-
-  text[offset..].chars().next().unwrap_or('\0')
-}
-
-/// The character ending at `offset`.
-fn char_before(text: &str, offset: usize) -> char {
-  text[..offset].chars().next_back().unwrap_or('\0')
+  LineBreakIterator::is_breakable_space(ch) || is_other_space_separator(ch)
 }
 
 /// Blink's `FindNonHangableEnd`: the start of the run of spaces ending with the one at
