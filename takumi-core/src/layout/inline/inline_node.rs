@@ -393,9 +393,10 @@ mod tests {
         span("b").with_class_name("span positioned"),
         span("c").with_class_name("span painted"),
         span("d"),
+        span("e").with_class_name("span unpainted"),
       ]),
       ".padded { padding-left: 1px } .positioned { position: relative } \
-        .painted { background-color: red }",
+        .painted { background-color: red } .unpainted { background-image: none }",
     );
 
     collect_inlines(&tree, &mut items);
@@ -406,7 +407,7 @@ mod tests {
       .map(|item| item.should_create_box_fragment)
       .collect();
 
-    assert_eq!(open_tags, [true, true, true, false]);
+    assert_eq!(open_tags, [true, true, true, false, false]);
   }
 
   /// Blink's `LayoutOutsideListMarker` is an opaque `kListMarker` item ahead of the content.

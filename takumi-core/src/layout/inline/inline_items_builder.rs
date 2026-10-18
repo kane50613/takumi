@@ -7,7 +7,7 @@ use super::outline::InlineOutline;
 use crate::{
   geometry::{Rect, Size},
   layout::{border::BorderProperties, tree::RenderNode},
-  style::{ComputedStyle, Direction as TextDirection, VerticalAlign},
+  style::{BackgroundImage, ComputedStyle, Direction as TextDirection, VerticalAlign},
   text::character::{
     CARRIAGE_RETURN, FORM_FEED, LINE_FEED, OBJECT_REPLACEMENT_CHARACTER, TAB,
     ZERO_WIDTH_NON_JOINER, ZERO_WIDTH_SPACE, maybe_bidi_rtl,
@@ -129,7 +129,7 @@ impl RenderNode {
       .background_data
       .background_image
       .as_deref()
-      .is_some_and(|images| !images.is_empty());
+      .is_some_and(|images| images.iter().any(BackgroundImage::paints));
 
     style
       .background_data
