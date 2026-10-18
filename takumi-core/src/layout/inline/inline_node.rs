@@ -380,7 +380,8 @@ mod tests {
     collect_inlines(&tree, &mut items);
 
     assert!(items[0].should_create_box_fragment);
-    assert!(!items[3].should_create_box_fragment);
+    assert_eq!(items[2].item_type, InlineItemType::OpenTag);
+    assert!(!items[2].should_create_box_fragment);
   }
 
   #[test]
