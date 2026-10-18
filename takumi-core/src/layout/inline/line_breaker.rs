@@ -2208,13 +2208,13 @@ impl<'a, 'b, 'c> LineBreaker<'a, 'b, 'c> {
         }
 
         let font = self.items_data.fonts.get(self.block_context());
-
         let tab_size = object.style().misc_inherited1_data.tab_size.spaces() as f32;
+        // Tab stops count from the container's edge, not from the floats beside the line.
         let shape_result = Rc::new(ShapeResult::create_for_tabulation_characters(
           &font,
           item.direction(),
           tab_size,
-          self.position.to_float(),
+          (self.position + self.compute_float_offset()).to_float(),
           item.start_offset() as u32,
           item.length() as u32,
         ));
@@ -2494,6 +2494,25 @@ impl<'a, 'b, 'c> LineBreaker<'a, 'b, 'c> {
   /// The containing block's direction, which the constraint space carries in Blink.
   fn container_direction(&self) -> TextDirection {
     self.block_context().style.inherited_data.direction
+  }
+
+  /// Blink's `ComputeFloatOffset`: how far the floats on the line's start side move it from the
+  /// container's edge.
+  fn compute_float_offset(&self) -> LayoutUnit {
+    let Some(available_inline_size) = self.constraint_space.available_inline_size else {
+      return LayoutUnit::ZERO;
+    };
+    let bfc_left = self.constraint_space.bfc_offset.line_offset;
+    let bfc_right = bfc_left + available_inline_size;
+
+    match self.base_direction {
+      TextDirection::Ltr => {
+        (self.line_opportunity.line_left_offset - bfc_left).clamp_negative_to_zero()
+      }
+      TextDirection::Rtl => {
+        (bfc_right - self.line_opportunity.line_right_offset).clamp_negative_to_zero()
+      }
+    }
   }
 
   /// Blink's `UpdateLineOpportunity`: the line's extent beside the floats placed so far.
@@ -3402,6 +3421,7 @@ mod tests {
     lines: Vec<(String, usize)>,
     trailing_whitespaces: Vec<WhitespaceState>,
     first_hang_width: LayoutUnit,
+    widths: Vec<LayoutUnit>,
   }
 
   /// Blink's `BreakLines`.
@@ -3416,6 +3436,7 @@ mod tests {
       lines: Vec::new(),
       trailing_whitespaces: Vec::new(),
       first_hang_width: LayoutUnit::ZERO,
+      widths: Vec::new(),
     };
 
     loop {
@@ -3445,6 +3466,7 @@ mod tests {
       }
 
       break_token = line_info.break_token;
+      broken.widths.push(line_info.width());
       broken.lines.push((
         line_info
           .results
@@ -3760,5 +3782,23 @@ mod tests {
     );
 
     assert_eq!(texts(break_lines(&tree, 60.0)), ["123", "456 789"]);
+  }
+
+  /// A tab beside a float reaches the container's next tab stop, 48px from its edge, not the
+  /// line's.
+  #[test]
+  fn tab_stops_count_from_the_container_edge() {
+    let tree = render_tree(
+      [
+        Node::container([]).with_class_name("float"),
+        span("\tX").with_class_name("span pre"),
+      ],
+      ".float { float: left; width: 18px; height: 10px } .pre { white-space: pre }",
+    );
+
+    assert_eq!(
+      break_lines_with_state(&tree, 120.0).widths,
+      [LayoutUnit::from_int(30 + 6)]
+    );
   }
 }
