@@ -6,13 +6,16 @@
 //! so a generic family lists registered families, in registration order, looked up among the
 //! registered faces. System font fallback becomes [`CssFontSelector::fallback_families`]: every
 //! registered family in registration order, last-resort families last, for every script.
+//! [`FontBudget`] bounds the faces a long-running renderer keeps; a clone is a render's snapshot,
+//! keeping every face it holds, and the bytes behind it, alive after the registry lets go.
 
-use std::{collections::HashMap, sync::Arc};
+use std::{collections::HashMap, mem::take, sync::Arc};
 
 use skrifa::raw::FileRef;
 
 use super::{
   css_segmented_font_face::FontPlatformDataForRangeSet,
+  font_budget::FontBudget,
   font_custom_platform_data::FontCustomPlatformData,
   font_description::FontSelectionDescription,
   font_face::{FontFace, FontFaceDescriptors},
@@ -21,17 +24,25 @@ use super::{
 use crate::resources::font::SharedBytes;
 
 /// Blink's `CSSFontSelector`.
-#[derive(Debug, Default)]
+#[derive(Clone, Debug, Default)]
 pub(crate) struct CssFontSelector {
   font_face_cache: FontFaceCache,
   /// Every registered face, in registration order.
-  font_faces: Vec<Arc<FontFace>>,
+  font_faces: Vec<RegisteredFontFace>,
   /// The families each generic keyword lists, by folded keyword.
   generic_font_family_settings: HashMap<String, Vec<Arc<str>>>,
   /// Registered families in registration order, which system fallback walks.
   fallback_families: Vec<Arc<str>>,
   /// Families registered as a last resort, which fallback walks after every other.
   last_resort_families: Vec<Arc<str>>,
+  font_budget: FontBudget,
+}
+
+/// A registered face, and whether it registered as a last resort.
+#[derive(Clone, Debug)]
+struct RegisteredFontFace {
+  font_face: Arc<FontFace>,
+  last_resort: bool,
 }
 
 /// Adds `family` to `families` unless it is there under any case.
@@ -86,7 +97,10 @@ impl CssFontSelector {
       ));
 
       self.font_face_cache.add_font_face(Arc::clone(&font_face));
-      self.font_faces.push(Arc::clone(&font_face));
+      self.font_faces.push(RegisteredFontFace {
+        font_face: Arc::clone(&font_face),
+        last_resort,
+      });
 
       let order = if last_resort {
         &mut self.last_resort_families
@@ -112,13 +126,73 @@ impl CssFontSelector {
     added
   }
 
+  /// A registry keeping at most `max_bytes` of the faces [`Self::admit`] records unpinned.
+  pub(crate) fn with_font_cache_max_bytes(max_bytes: Option<u64>) -> Self {
+    Self {
+      font_budget: FontBudget::new(max_bytes),
+      ..Self::default()
+    }
+  }
+
+  /// Records the faces a [`Self::register`] under `key` added, then for faces not `pinned`
+  /// releases the least recently used families past the budget, other than theirs.
+  pub(crate) fn admit(&mut self, key: Option<&str>, font_faces: &[Arc<FontFace>], pinned: bool) {
+    self.font_budget.record(key, font_faces, pinned);
+
+    if pinned {
+      return;
+    }
+
+    let released = self.font_budget.release_past_budget(font_faces);
+
+    self.remove_font_faces(|font_face| {
+      released
+        .iter()
+        .any(|released| Arc::ptr_eq(released, font_face))
+    });
+  }
+
+  /// The families a registration under `key` added, marked used; see [`FontBudget::lookup`].
+  pub(crate) fn lookup(&mut self, key: &str, pin: bool) -> Option<Vec<Arc<str>>> {
+    self.font_budget.lookup(key, pin)
+  }
+
+  /// Marks `families` used now, as a render that names them starts.
+  pub(crate) fn touch(&mut self, families: &[impl AsRef<str>]) {
+    self.font_budget.touch(families);
+  }
+
+  /// Bytes the faces [`Self::admit`] recorded hold.
+  pub(crate) fn recorded_bytes(&self) -> u64 {
+    self.font_budget.recorded_bytes()
+  }
+
   /// Removes every face of `family`, so it falls back as an unknown family; false when it has none.
   pub(crate) fn unregister_family(&mut self, family: &str) -> bool {
     let key = fold_family_name(family);
+
+    self.font_budget.forget(family);
+    self.remove_font_faces(|font_face| fold_family_name(&font_face.family) == key)
+  }
+
+  /// Removes every face and forgets every registration, keeping the budget.
+  pub(crate) fn clear(&mut self) {
+    let mut font_budget = take(&mut self.font_budget);
+
+    font_budget.clear();
+    *self = Self {
+      font_budget,
+      ..Self::default()
+    };
+  }
+
+  /// Removes the faces `is_removed` picks, and from each family list the families left without a
+  /// face it lists them for; false when it picks none.
+  fn remove_font_faces(&mut self, is_removed: impl Fn(&Arc<FontFace>) -> bool) -> bool {
     let (removed, kept): (Vec<_>, Vec<_>) = self
       .font_faces
       .drain(..)
-      .partition(|font_face| fold_family_name(&font_face.family) == key);
+      .partition(|registered| is_removed(&registered.font_face));
 
     self.font_faces = kept;
 
@@ -126,25 +200,40 @@ impl CssFontSelector {
       return false;
     }
 
-    for font_face in &removed {
-      self.font_face_cache.remove_font_face(font_face);
+    for registered in &removed {
+      self.font_face_cache.remove_font_face(&registered.font_face);
     }
 
-    let is_other = |each: &Arc<str>| fold_family_name(each) != key;
+    let font_faces = &self.font_faces;
+    let has_faces = |family: &Arc<str>, last_resort: Option<bool>| {
+      let key = fold_family_name(family);
 
-    self.fallback_families.retain(is_other);
-    self.last_resort_families.retain(is_other);
+      font_faces.iter().any(|registered| {
+        last_resort.is_none_or(|last_resort| registered.last_resort == last_resort)
+          && fold_family_name(&registered.font_face.family) == key
+      })
+    };
 
-    for families in self.generic_font_family_settings.values_mut() {
-      families.retain(is_other);
-    }
+    self
+      .fallback_families
+      .retain(|family| has_faces(family, Some(false)));
+    self
+      .last_resort_families
+      .retain(|family| has_faces(family, Some(true)));
+    self.generic_font_family_settings.retain(|_, families| {
+      families.retain(|family| has_faces(family, None));
+      !families.is_empty()
+    });
 
     true
   }
 
   /// Every registered face, in registration order.
-  pub(crate) fn font_faces(&self) -> &[Arc<FontFace>] {
-    &self.font_faces
+  pub(crate) fn font_faces(&self) -> impl Iterator<Item = &Arc<FontFace>> + '_ {
+    self
+      .font_faces
+      .iter()
+      .map(|registered| &registered.font_face)
   }
 
   /// Blink's `FamilyNameFromSettings`: the families the generic keyword `generic_family` lists.
@@ -468,7 +557,7 @@ mod tests {
         .get_font_data(&request(400.0, NORMAL_SLOPE_VALUE), "Gone", false)
         .is_none()
     );
-    assert_eq!(selector.font_faces().len(), 1);
+    assert_eq!(selector.font_faces().count(), 1);
     assert_eq!(selector.fallback_families().count(), 1);
   }
 
@@ -492,5 +581,193 @@ mod tests {
     let face = face(&selector, &request(700.0, NORMAL_SLOPE_VALUE), "Light");
 
     assert_eq!(face.font_platform_data.variation(b"wght"), Some(300.0));
+  }
+
+  /// `path` registered under `key` as `family` and recorded, its decoded bytes.
+  fn admit(
+    selector: &mut CssFontSelector,
+    key: &str,
+    path: &str,
+    family: &str,
+    pinned: bool,
+  ) -> SharedBytes {
+    let (data, id) = FontCustomPlatformData::read_asset(path);
+    let faces = selector.register(Arc::clone(&data), id, &named(family), None, false);
+
+    selector.admit(Some(key), &faces, pinned);
+    data
+  }
+
+  /// A registry whose budget fits `families` registrations of Geist.
+  fn fitting(families: u64) -> CssFontSelector {
+    let (data, _) = FontCustomPlatformData::read_asset(GEIST);
+    let size = (*data).as_ref().len() as u64;
+
+    CssFontSelector::with_font_cache_max_bytes(Some(size * families + size / 2))
+  }
+
+  fn matches(selector: &CssFontSelector, family: &str) -> bool {
+    selector
+      .get_font_data(&request(400.0, NORMAL_SLOPE_VALUE), family, false)
+      .is_some()
+  }
+
+  #[test]
+  fn register_and_unregister_cycles_release_every_byte() {
+    let mut selector = CssFontSelector::default();
+
+    for _ in 0..3 {
+      let data = admit(&mut selector, "cycle", GEIST, "Cycle", false);
+
+      assert_eq!(selector.recorded_bytes(), (*data).as_ref().len() as u64);
+      assert!(Arc::strong_count(&data) > 1);
+      assert!(selector.unregister_family("cycle"));
+      assert_eq!(selector.recorded_bytes(), 0);
+      assert_eq!(
+        Arc::strong_count(&data),
+        1,
+        "the registry let go of the bytes"
+      );
+      assert_eq!(selector.font_faces().count(), 0);
+      assert_eq!(selector.fallback_families().count(), 0);
+      assert!(selector.lookup("cycle", false).is_none());
+    }
+  }
+
+  #[test]
+  fn releases_the_least_recently_used_family_past_the_budget() {
+    let mut selector = fitting(1);
+    let a = admit(&mut selector, "A", GEIST, "A", false);
+
+    admit(&mut selector, "B", GEIST, "B", false);
+
+    assert!(!matches(&selector, "A"));
+    assert!(selector.lookup("A", false).is_none());
+    assert_eq!(Arc::strong_count(&a), 1);
+    assert!(matches(&selector, "B"));
+    assert_eq!(
+      selector
+        .fallback_families()
+        .map(|family| &**family)
+        .collect::<Vec<_>>(),
+      ["B"]
+    );
+  }
+
+  #[test]
+  fn a_render_naming_a_family_counts_as_use() {
+    let mut selector = fitting(2);
+
+    admit(&mut selector, "A", GEIST, "A", false);
+    admit(&mut selector, "B", GEIST, "B", false);
+    selector.touch(&["a"]);
+    admit(&mut selector, "C", GEIST, "C", false);
+
+    assert!(matches(&selector, "A"));
+    assert!(!matches(&selector, "B"));
+  }
+
+  #[test]
+  fn a_live_render_keeps_the_faces_it_holds() {
+    let mut selector = fitting(1);
+    let a = admit(&mut selector, "A", GEIST, "A", false);
+    let render = selector.clone();
+
+    admit(&mut selector, "B", GEIST, "B", false);
+
+    assert!(!matches(&selector, "A"));
+    assert!(matches(&render, "A"), "the render matches as it started");
+    assert!(Arc::strong_count(&a) > 1);
+
+    drop(render);
+
+    assert_eq!(Arc::strong_count(&a), 1);
+  }
+
+  #[test]
+  fn keeps_pinned_families_and_the_font_it_just_loaded() {
+    let mut selector = fitting(1);
+
+    admit(&mut selector, "Pinned", GEIST, "Pinned", true);
+    admit(&mut selector, "A", GEIST, "A", false);
+    selector.lookup("A", true);
+    admit(&mut selector, "B", GEIST, "B", false);
+
+    assert!(matches(&selector, "Pinned"));
+    assert!(matches(&selector, "A"));
+    assert!(
+      matches(&selector, "B"),
+      "the font loaded last stays past the budget"
+    );
+
+    let mut empty = fitting(0);
+
+    admit(&mut empty, "A", GEIST, "A", false);
+
+    assert!(matches(&empty, "A"));
+  }
+
+  #[test]
+  fn a_released_family_registers_again() {
+    let mut selector = fitting(1);
+
+    admit(&mut selector, "A", GEIST, "A", false);
+    admit(&mut selector, "B", GEIST, "B", false);
+    assert!(selector.lookup("A", false).is_none());
+    admit(&mut selector, "A", GEIST, "A", false);
+
+    assert!(matches(&selector, "A"));
+    assert!(!matches(&selector, "B"));
+
+    selector.unregister_family("A");
+    admit(&mut selector, "A", GEIST, "A", false);
+
+    assert!(matches(&selector, "A"));
+  }
+
+  #[test]
+  fn a_released_family_falls_back_to_its_last_resort_faces() {
+    let mut selector = fitting(1);
+    let (embedded, id) = FontCustomPlatformData::read_asset(GEIST);
+
+    selector.register(embedded, id, &named("Geist"), None, true);
+    admit(&mut selector, "Geist", GEIST_MONO, "Geist", false);
+    admit(&mut selector, "A", GEIST, "A", false);
+
+    let face = face(&selector, &request(400.0, NORMAL_SLOPE_VALUE), "Geist");
+
+    assert_eq!(
+      face
+        .font_platform_data
+        .typeface
+        .family_name_for_inspector()
+        .as_deref(),
+      Some("Geist"),
+      "the embedded Geist, not the released Geist Mono"
+    );
+    assert_eq!(
+      selector
+        .fallback_families()
+        .map(|family| &**family)
+        .collect::<Vec<_>>(),
+      ["A", "Geist"]
+    );
+  }
+
+  #[test]
+  fn clearing_keeps_the_budget() {
+    let mut selector = fitting(1);
+
+    admit(&mut selector, "A", GEIST, "A", false);
+    selector.clear();
+
+    assert_eq!(selector.font_faces().count(), 0);
+    assert_eq!(selector.recorded_bytes(), 0);
+
+    admit(&mut selector, "B", GEIST, "B", false);
+    admit(&mut selector, "C", GEIST, "C", false);
+
+    assert!(!matches(&selector, "B"));
+    assert!(matches(&selector, "C"));
   }
 }

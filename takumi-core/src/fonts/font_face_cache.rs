@@ -22,19 +22,19 @@ pub(crate) fn fold_family_name(family: &str) -> String {
 }
 
 /// Blink's `FontFaceCache`.
-#[derive(Debug, Default)]
+#[derive(Clone, Debug, Default)]
 pub(crate) struct FontFaceCache {
   segmented_faces: SegmentedFacesByFamily,
 }
 
 /// Blink's `FontFaceCache::SegmentedFacesByFamily`.
-#[derive(Debug, Default)]
+#[derive(Clone, Debug, Default)]
 struct SegmentedFacesByFamily {
   map: HashMap<String, CapabilitiesSet>,
 }
 
 /// Blink's `FontFaceCache::CapabilitiesSet`.
-#[derive(Debug, Default)]
+#[derive(Clone, Debug, Default)]
 struct CapabilitiesSet {
   map: Vec<CssSegmentedFontFace>,
 }

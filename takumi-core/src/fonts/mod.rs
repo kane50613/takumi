@@ -20,6 +20,15 @@ pub(crate) mod css_font_selector;
 pub(crate) mod css_segmented_font_face;
 pub(crate) mod emoji_presentation_scanner;
 pub(crate) mod font;
+#[cfg_attr(
+  not(test),
+  expect(
+    dead_code,
+    reason = "TODO: font matching moves off fontique once the registry is rewired"
+  )
+)]
+#[cfg_attr(test, allow(dead_code))]
+pub(crate) mod font_budget;
 pub(crate) mod font_cache;
 #[cfg_attr(
   not(test),

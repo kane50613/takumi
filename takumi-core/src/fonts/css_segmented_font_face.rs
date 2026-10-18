@@ -23,7 +23,7 @@ pub(crate) struct FontPlatformDataForRangeSet {
 }
 
 /// Blink's `CSSSegmentedFontFace`.
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub(crate) struct CssSegmentedFontFace {
   font_selection_capabilities: FontSelectionCapabilities,
   /// Blink's `FontFaceList`, in insertion order.
