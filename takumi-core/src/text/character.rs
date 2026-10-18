@@ -5,11 +5,15 @@ use std::ops::RangeInclusive;
 use icu_properties::{
   CodePointMapData, CodePointSetData,
   props::{
-    Emoji, EmojiModifierBase, EmojiPresentation, ExtendedPictographic, GeneralCategory, Script,
+    DefaultIgnorableCodePoint, Emoji, EmojiModifierBase, EmojiPresentation, ExtendedPictographic,
+    GeneralCategory, Script,
   },
 };
 
+pub(crate) const NO_BREAK_SPACE: char = '\u{A0}';
+pub(crate) const ZERO_WIDTH_NON_JOINER: char = '\u{200C}';
 pub(crate) const ZERO_WIDTH_JOINER: char = '\u{200D}';
+pub(crate) const OBJECT_REPLACEMENT_CHARACTER: char = '\u{FFFC}';
 pub(crate) const COMBINING_ENCLOSING_CIRCLE_BACKSLASH: char = '\u{20E0}';
 pub(crate) const COMBINING_ENCLOSING_KEYCAP: char = '\u{20E3}';
 pub(crate) const IDEOGRAPHIC_SPACE: char = '\u{3000}';
@@ -121,6 +125,46 @@ pub(crate) fn is_common_or_inherited_script(c: char) -> bool {
   matches!(
     CodePointMapData::<Script>::new().get(c),
     Script::Common | Script::Inherited
+  )
+}
+
+/// Blink's `IsDefaultIgnorable`.
+pub(crate) fn is_default_ignorable(c: char) -> bool {
+  if u32::from(c) < 0x100 {
+    return c == '\u{AD}';
+  }
+
+  CodePointSetData::new::<DefaultIgnorableCodePoint>().contains(c)
+}
+
+/// Blink's `TreatAsZeroWidthSpaceInComplexScript`.
+pub(crate) fn treat_as_zero_width_space_in_complex_script(c: char) -> bool {
+  matches!(c, '\u{C}' | '\r' | OBJECT_REPLACEMENT_CHARACTER) || is_default_ignorable(c)
+}
+
+/// Blink's `TreatAsSpace`.
+pub(crate) fn treat_as_space(c: char) -> bool {
+  matches!(c, ' ' | '\t' | '\n' | NO_BREAK_SPACE)
+}
+
+/// Blink's `TreatAsZeroWidthSpace`.
+pub(crate) fn treat_as_zero_width_space(c: char) -> bool {
+  treat_as_zero_width_space_in_complex_script(c)
+    || c == ZERO_WIDTH_NON_JOINER
+    || c == ZERO_WIDTH_JOINER
+}
+
+/// Blink's `IsCursiveScript`.
+pub(crate) fn is_cursive_script(c: char) -> bool {
+  matches!(
+    CodePointMapData::<Script>::new().get(c),
+    Script::Arabic
+      | Script::HanifiRohingya
+      | Script::Mandaic
+      | Script::Mongolian
+      | Script::Nko
+      | Script::PhagsPa
+      | Script::Syriac
   )
 }
 

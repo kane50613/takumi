@@ -14,11 +14,13 @@ use super::{
   glyph_data::{GlyphOffset, HarfBuzzRunGlyphData, SafeToBreak},
   harfbuzz_shaper::HarfBuzzBuffer,
   shape_result_run::{AdjustMidCluster, BreakGlyphsOption, GlyphIndexResult, ShapeResultRun},
+  shape_result_spacing::ShapeResultSpacing,
 };
 use crate::{
   fonts::simple_font_data::SimpleFontData,
   layout_unit::{FixedPoint, InlineLayoutUnit, LayoutUnit, TextRunLayoutUnit},
   style::Direction as TextDirection,
+  text::text_justify::TextJustify,
 };
 
 /// Blink's `ShapeResultCharacterData`.
@@ -441,6 +443,139 @@ impl ShapeResult {
 
       run.glyph_data.set_graphemes(graphemes);
     }
+  }
+
+  /// Blink's `ApplySpacing`.
+  pub(crate) fn apply_spacing(
+    &mut self,
+    spacing: &mut ShapeResultSpacing<'_>,
+    text_start_offset: i32,
+  ) {
+    debug_assert!(!self.is_applied_spacing);
+
+    self.is_applied_spacing = true;
+    self.apply_spacing_or_expansion(spacing, None, text_start_offset);
+  }
+
+  /// Blink's `ApplyExpansion`, returning the expansion after the last glyph.
+  pub(crate) fn apply_expansion(
+    &mut self,
+    method: TextJustify,
+    spacing: &mut ShapeResultSpacing<'_>,
+    text_start_offset: i32,
+  ) -> TextRunLayoutUnit {
+    debug_assert!(!self.is_applied_spacing);
+
+    self.is_applied_spacing = true;
+    self.apply_spacing_or_expansion(spacing, Some(method), text_start_offset)
+  }
+
+  /// Blink's `ApplySpacingOrExpansion`.
+  fn apply_spacing_or_expansion(
+    &mut self,
+    spacing: &mut ShapeResultSpacing<'_>,
+    method: Option<TextJustify>,
+    text_start_offset: i32,
+  ) -> TextRunLayoutUnit {
+    let mut total_advance = 0.0;
+    let mut spacing_after = TextRunLayoutUnit::ZERO;
+
+    for run in &mut self.runs {
+      let run_start_index = (i64::from(run.start_index) + i64::from(text_start_offset)) as usize;
+      let is_cursive_script = is_cursive_script(run.script);
+      let num_glyphs = run.glyph_data.size();
+      let mut total_advance_for_run = InlineLayoutUnit::ZERO;
+
+      for i in 0..num_glyphs {
+        let glyphs = run.glyph_data.glyphs_mut();
+
+        // Only at a grapheme cluster boundary.
+        if i + 1 < num_glyphs && glyphs[i].character_index == glyphs[i + 1].character_index {
+          total_advance_for_run += glyphs[i].advance.into();
+
+          continue;
+        }
+
+        let index = run_start_index + usize::from(glyphs[i].character_index);
+        let mut spacing_before = TextRunLayoutUnit::ZERO;
+
+        if let Some(method) = method {
+          (spacing_before, spacing_after) = spacing.compute_expansion(method, index);
+        } else {
+          spacing_after = spacing.compute_spacing(index, is_cursive_script);
+        }
+
+        glyphs[i].advance += spacing_before + spacing_after;
+        total_advance_for_run += glyphs[i].advance.into();
+
+        if spacing_before != TextRunLayoutUnit::ZERO {
+          run
+            .glyph_data
+            .add_offset_width_at(i, spacing_before.to_float());
+        }
+      }
+
+      run.width = total_advance_for_run.to_float();
+      total_advance += run.width;
+    }
+
+    self.width.set(total_advance);
+
+    spacing_after
+  }
+
+  /// Blink's `ApplyLeadingExpansion`.
+  pub(crate) fn apply_leading_expansion(&mut self, expansion: LayoutUnit) {
+    if expansion <= LayoutUnit::ZERO {
+      return;
+    }
+
+    for run in &mut self.runs {
+      let num_glyphs = run.glyph_data.size();
+
+      for i in 0..num_glyphs {
+        let glyphs = run.glyph_data.glyphs_mut();
+
+        if i + 1 < num_glyphs && glyphs[i].character_index == glyphs[i + 1].character_index {
+          continue;
+        }
+
+        let advance = expansion.to::<TextRunLayoutUnit>();
+        let expansion_as_float = advance.to_float();
+
+        glyphs[i].advance += advance;
+        run.width += expansion_as_float;
+        self.width.set(self.width.get() + expansion_as_float);
+        run.glyph_data.add_offset_width_at(i, expansion_as_float);
+
+        return;
+      }
+    }
+
+    debug_assert!(false, "ApplyLeadingExpansion needs a glyph");
+  }
+
+  /// Blink's `ApplyTrailingExpansion`.
+  pub(crate) fn apply_trailing_expansion(&mut self, expansion: LayoutUnit) {
+    if expansion <= LayoutUnit::ZERO {
+      return;
+    }
+
+    for run in self.runs.iter_mut().rev() {
+      let Some(glyph) = run.glyph_data.glyphs_mut().last_mut() else {
+        continue;
+      };
+      let advance = expansion.to::<TextRunLayoutUnit>();
+      let expansion_as_float = advance.to_float();
+
+      glyph.advance += advance;
+      run.width += expansion_as_float;
+      self.width.set(self.width.get() + expansion_as_float);
+
+      return;
+    }
+
+    debug_assert!(false, "ApplyTrailingExpansion needs a glyph");
   }
 
   /// Blink's `EnsurePositionData`.
@@ -942,6 +1077,22 @@ impl ShapeResult {
 
     &mut self.runs[position.unwrap_or_default()]
   }
+}
+
+/// Blink's `IsCursiveScript` for a run's script: scripts without gaps between letters.
+fn is_cursive_script(script: harfrust::Script) -> bool {
+  use harfrust::script::{ARABIC, HANIFI_ROHINGYA, MANDAIC, MONGOLIAN, NKO, PHAGS_PA, SYRIAC};
+
+  [
+    ARABIC,
+    HANIFI_ROHINGYA,
+    MANDAIC,
+    MONGOLIAN,
+    NKO,
+    PHAGS_PA,
+    SYRIAC,
+  ]
+  .contains(&script)
 }
 
 /// Blink's `HarfBuzzPositionToFloat`.
