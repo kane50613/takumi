@@ -34,7 +34,7 @@ use crate::{
 
 /// Blink's `ComputedLineHeightAsFixed` of `context` against `font`.
 fn computed_line_height_as_fixed(context: &RenderContext, font: &Font) -> LayoutUnit {
-  BoxLineHeight::of(&context.style, context).computed_as_fixed(font.primary_font_metrics())
+  BoxLineHeight::of(&context.style, context).computed_as_fixed(font)
 }
 
 /// Blink's `PendingPositions`: fragments whose position waits for an ancestor's size.
@@ -124,7 +124,7 @@ impl<'a, 'c> InlineBoxState<'a, 'c> {
     self.text_height = self.text_metrics.line_height();
 
     let box_line_height = BoxLineHeight::of(&self.style.style, self.style);
-    let mut line_height = box_line_height.computed_as_fixed(font_metrics);
+    let mut line_height = box_line_height.computed_as_fixed(base_font);
 
     // A `line-height` length, percentages included, does not scale.
     if !matches!(box_line_height, BoxLineHeight::Length(_)) && paint_scale != 1.0 {

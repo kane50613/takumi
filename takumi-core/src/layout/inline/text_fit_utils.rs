@@ -564,7 +564,7 @@ mod tests {
     layout::{
       inline::{
         inline_node::InlineNode,
-        testing::{TestAtomicInline, render_tree},
+        testing::{TestAtomicInline, render_tree, span},
       },
       node::Node,
     },
@@ -633,6 +633,24 @@ mod tests {
     let lines = node.layout_lines(&data, LayoutUnit::from_float(36.0), &mut TestAtomicInline);
 
     assert_eq!(lines[0].block_size.to_float(), 20.0);
+  }
+
+  /// A reshaped text's unitless `line-height` multiplies its scaled font size.
+  #[test]
+  fn a_reshaped_line_height_takes_the_scaled_font_size() {
+    let block = render_tree(
+      [span("aaa")],
+      ".container { text-fit: grow per-line-all; letter-spacing: 1px } .span { line-height: 3 }",
+    );
+    let node = InlineNode::new(&block);
+    let data = node.prepare_layout();
+    let lines = node.layout_lines(&data, LayoutUnit::from_float(42.0), &mut TestAtomicInline);
+
+    assert!(
+      (lines[0].block_size.to_float() - 3.0 * 10.0 * 39.0 / 18.0).abs() < 0.1,
+      "{:?}",
+      lines[0].block_size
+    );
   }
 
   /// An overflowing line shrinks.
