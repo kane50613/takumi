@@ -551,9 +551,9 @@ impl<'c, 'i> InlineItemsBuilder<'c, 'i> {
         continue;
       }
 
-      let end = string[start + 1..]
+      let end = string[start..]
         .find('\n')
-        .map_or(string.len(), |offset| start + 1 + offset);
+        .map_or(string.len(), |offset| start + offset);
 
       self.append_collapse_whitespace(&string[start..end], layout_object);
       start = end;

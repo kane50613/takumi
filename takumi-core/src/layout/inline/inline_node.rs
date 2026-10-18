@@ -332,6 +332,17 @@ mod tests {
     assert_eq!(collect(&tree).0, "a\nb");
   }
 
+  /// Text after a preserved newline may start with a multi-byte character.
+  #[test]
+  fn preserved_breaks_before_non_ascii_text() {
+    let tree = render_tree(
+      block([span("\u{E9}\na\n\u{4E2D}")]),
+      ".span { white-space: pre-line }",
+    );
+
+    assert_eq!(collect(&tree).0, "\u{E9}\na\n\u{4E2D}");
+  }
+
   /// css-text-3 §4.1.3: a segment break next to a zero width space goes.
   #[test]
   fn a_newline_next_to_a_zero_width_space_goes() {
