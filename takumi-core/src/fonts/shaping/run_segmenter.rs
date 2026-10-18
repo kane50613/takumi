@@ -361,21 +361,49 @@ mod tests {
 
   #[test]
   fn cjk_brackets_after_latin_letter() {
-    check_runs(&[("A", Script::Latin, FontFallbackPriority::Text)]);
+    check_runs(&[
+      ("A", Script::Latin, FontFallbackPriority::Text),
+      (
+        "\u{300C}\u{56FD}\u{300D}",
+        Script::Han,
+        FontFallbackPriority::Text,
+      ),
+    ]);
   }
 
   #[test]
   fn cjk_brackets_after_latin_parenthesis() {
-    check_runs(&[("A()", Script::Latin, FontFallbackPriority::Text)]);
+    check_runs(&[
+      ("A(", Script::Latin, FontFallbackPriority::Text),
+      (
+        "\u{300C}\u{56FD}\u{300D}",
+        Script::Han,
+        FontFallbackPriority::Text,
+      ),
+      (")", Script::Latin, FontFallbackPriority::Text),
+    ]);
   }
 
   #[test]
   fn cjk_brackets_with_latin_parenthesis_inside() {
-    check_runs(&[("AA", Script::Latin, FontFallbackPriority::Text)]);
+    check_runs(&[
+      ("A", Script::Latin, FontFallbackPriority::Text),
+      ("\u{300C}\u{56FD}(", Script::Han, FontFallbackPriority::Text),
+      ("A", Script::Latin, FontFallbackPriority::Text),
+      (")\u{300D}", Script::Han, FontFallbackPriority::Text),
+    ]);
   }
 
   #[test]
   fn cjk_brackets_after_unmatching_latin_parenthesis() {
-    check_runs(&[("A(()", Script::Latin, FontFallbackPriority::Text)]);
+    check_runs(&[
+      ("A((", Script::Latin, FontFallbackPriority::Text),
+      (
+        "\u{300C}\u{56FD}\u{300D}",
+        Script::Han,
+        FontFallbackPriority::Text,
+      ),
+      (")", Script::Latin, FontFallbackPriority::Text),
+    ]);
   }
 }
