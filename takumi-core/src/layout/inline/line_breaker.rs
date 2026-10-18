@@ -2239,13 +2239,21 @@ impl<'a, 'b, 'c> LineBreaker<'a, 'b, 'c> {
 
           return;
         };
-        let font = self.items_data.fonts.get(self.block_context());
-
-        if font.primary_font().is_none() {
+        // The item's font must have a primary font; tab stops come from the block's, as Blink's
+        // `InlineNode::FontForTab`.
+        if self
+          .items_data
+          .fonts
+          .get(object.context())
+          .primary_font()
+          .is_none()
+        {
           self.handle_empty_text(item_index, line_info);
 
           return;
         }
+
+        let font = self.items_data.fonts.get(self.block_context());
 
         let tab_size = object.style().misc_inherited1_data.tab_size.spaces() as f32;
         let shape_result = Rc::new(ShapeResult::create_for_tabulation_characters(
