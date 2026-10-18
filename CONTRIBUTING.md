@@ -267,6 +267,14 @@ Fixtures that animate or assert on pixels or measured layout stay as Rust tests 
 
 CI fails when test execution changes a generated file that is not included in the pull request.
 
+### Chromium geometry
+
+The `chromium_geometry` test compares where takumi draws each character of the HTML fixtures with where Chromium draws it. Chromium's positions live in `takumi/tests/fixtures-chromium`. `takumi/tests/chromium-geometry.json` counts the characters each fixture places differently, and the test fails when a count grows.
+
+- After adding or changing an HTML fixture, run `bunx playwright-core install chromium` once, then `bun chromium-geometry <fixture>`.
+- To list the characters that differ, run `CHROMIUM_GEOMETRY_VERBOSE=1 FIXTURE=<fixture> cargo test -p takumi --test chromium_geometry -- --nocapture`.
+- When a change places more characters where Chromium does, run the test with `CHROMIUM_GEOMETRY_UPDATE=1` and commit the lower counts.
+
 ### Platform-specific goldens
 
 - WebP goldens are canonical on Linux.
