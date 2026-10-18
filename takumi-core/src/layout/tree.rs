@@ -11,7 +11,6 @@ use std::{
   vec::IntoIter,
 };
 
-use parley::fontique::FontStyle as FontiqueStyle;
 use smallvec::SmallVec;
 use taffy::{
   AvailableSpace as TaffyAvailableSpace, AxisStaticEdge, AxisStaticPosition, BlockContext,
@@ -2843,25 +2842,22 @@ impl RenderContext {
     style: &ComputedStyle,
     font_size: f32,
   ) -> Option<PrimaryFontMetrics> {
-    let attributes = style.font_attributes();
+    let description = style.font_selection_description(&self.sizing);
+    let request = description.font_selection_request;
     let font_family = self.expand_font_family(&style.inherited_data.font_family);
-
     let mut hasher = Xxh3::new();
+
     font_family.hash_tokens(&mut hasher);
-    hasher.write_u32(attributes.weight.value().to_bits());
-    hasher.write_u32(attributes.width.ratio().to_bits());
-    match attributes.style {
-      FontiqueStyle::Normal => hasher.write_u8(0),
-      FontiqueStyle::Italic => hasher.write_u8(1),
-      FontiqueStyle::Oblique(angle) => {
-        hasher.write_u8(2);
-        hasher.write_u32(angle.unwrap_or(f32::NAN).to_bits());
-      }
+
+    for value in [request.weight, request.width, request.slope] {
+      hasher.write_u32(value.to_f32().to_bits());
     }
+
+    hasher.write_u8(u8::from(description.is_italic_keyword));
     hasher.write_u32(font_size.to_bits());
 
     self.cached_primary_font_metrics(hasher.finish(), || {
-      self.first_font_metrics(font_family.query_families(), attributes, font_size)
+      self.first_font_metrics(font_family.tokens(), &description, font_size)
     })
   }
 

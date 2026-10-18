@@ -25,16 +25,6 @@ impl_css_enum!(
   "break-word" => WordBreak::BreakWord,
 );
 
-impl WordBreak {
-  pub(crate) fn into_parley(self) -> parley::WordBreak {
-    match self {
-      WordBreak::Normal | WordBreak::BreakWord => parley::WordBreak::Normal,
-      WordBreak::BreakAll => parley::WordBreak::BreakAll,
-      WordBreak::KeepAll => parley::WordBreak::KeepAll,
-    }
-  }
-}
-
 #[cfg(test)]
 mod tests {
   use super::*;

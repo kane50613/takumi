@@ -1,8 +1,9 @@
 use std::sync::Arc;
 
-use parley::fontique::Blob;
 use skrifa::{FontRef, MetadataProvider, raw::types::Tag};
 use xxhash_rust::xxh3::xxh3_64;
+
+use crate::resources::font::SharedBytes;
 
 /// An inclusive codepoint range from an `@font-face` `unicode-range`, as Blink's `UnicodeRange`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
@@ -71,15 +72,16 @@ impl UnicodeRangeSet {
     self.0.is_empty() || (self.0.len() == 1 && self.0[0].from == 0 && self.0[0].to >= 0x10FFFF)
   }
 
-  /// `blob` with its `cmap` restricted to the set; see [`Self::restrict_charmap`].
-  pub(crate) fn restrict_blob(&self, blob: Blob<u8>) -> Blob<u8> {
-    match self.restrict_charmap(blob.data()) {
+  /// The sfnt `data`, which `id` names, with its `cmap` restricted to the set, and the id of the
+  /// bytes it returns; see [`Self::restrict_charmap`].
+  pub(crate) fn restrict_sfnt(&self, data: SharedBytes, id: u64) -> (SharedBytes, u64) {
+    match self.restrict_charmap(AsRef::<[u8]>::as_ref(&*data)) {
       Some(restricted) => {
         let id = xxh3_64(&restricted);
 
-        Blob::from_raw_parts(Arc::new(restricted), id)
+        (Arc::new(restricted), id)
       }
-      None => blob,
+      None => (data, id),
     }
   }
 

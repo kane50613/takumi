@@ -9,14 +9,6 @@
 )]
 #[cfg_attr(test, allow(dead_code))]
 pub(crate) mod css_font_selector;
-#[cfg_attr(
-  not(test),
-  expect(
-    dead_code,
-    reason = "TODO: font matching moves off fontique once the registry is rewired"
-  )
-)]
-#[cfg_attr(test, allow(dead_code))]
 pub(crate) mod css_segmented_font_face;
 pub(crate) mod emoji_presentation_scanner;
 pub(crate) mod font;
@@ -41,14 +33,6 @@ pub(crate) mod font_cache;
 pub(crate) mod font_custom_platform_data;
 pub(crate) mod font_data_for_range_set;
 pub(crate) mod font_description;
-#[cfg_attr(
-  not(test),
-  expect(
-    dead_code,
-    reason = "TODO: font matching moves off fontique once the registry is rewired"
-  )
-)]
-#[cfg_attr(test, allow(dead_code))]
 pub(crate) mod font_face;
 #[cfg_attr(
   not(test),

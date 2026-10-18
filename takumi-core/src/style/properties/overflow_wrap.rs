@@ -45,10 +45,6 @@ impl ToCss for OverflowWrap {
 }
 
 impl OverflowWrap {
-  pub(crate) fn into_parley(self) -> parley::OverflowWrap {
-    self.0
-  }
-
   /// Whether this is `anywhere`.
   pub(crate) fn is_anywhere(self) -> bool {
     self.0 == parley::OverflowWrap::Anywhere

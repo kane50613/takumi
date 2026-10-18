@@ -207,7 +207,7 @@ impl DatabaseExt for Database {
   }
 
   fn has_opsz_axis(&self, id: ID) -> bool {
-    // Diverges from upstream: fontique already knows this at registration
+    // Diverges from upstream: the registry already knows this at registration
     // time, so no need to re-parse the face with skrifa.
     self.face(id).is_some_and(|face| face.has_opsz)
   }

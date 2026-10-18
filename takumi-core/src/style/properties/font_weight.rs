@@ -1,7 +1,6 @@
 use std::fmt;
 
 use cssparser::{Parser, Token, match_ignore_ascii_case};
-use parley::style::FontWeight as ParleyFontWeight;
 
 use crate::style::{
   Animatable, Color, FromCss, MakeComputed, ParseResult, SizingContext, ToCss, lerp, tw::Namespace,
@@ -128,10 +127,6 @@ impl FontWeight {
       Self::Lighter => FontWeight::from(lighter(parent)),
       absolute => absolute,
     }
-  }
-
-  pub(crate) fn into_parlance(self) -> ParleyFontWeight {
-    ParleyFontWeight::new(self.value())
   }
 }
 

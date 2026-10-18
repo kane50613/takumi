@@ -75,15 +75,6 @@ impl<'i> FromCss<'i> for LineHeight {
 }
 
 impl LineHeight {
-  /// Converts to parley's line-height representation.
-  pub(crate) fn into_parley(self, sizing: &SizingContext) -> parley::LineHeight {
-    match self {
-      Self::Normal => parley::LineHeight::MetricsRelative(1.0),
-      Self::Length(length) => parley::LineHeight::Absolute(length.to_px(sizing, sizing.font_size)),
-      Self::Unitless(value) => parley::LineHeight::FontSizeRelative(value),
-    }
-  }
-
   /// Resolves to pixels, using `normal_basis` for `normal`.
   pub fn to_px(self, sizing: &SizingContext, normal_basis: f32) -> f32 {
     match self {

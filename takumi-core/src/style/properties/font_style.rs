@@ -1,13 +1,24 @@
 use std::fmt;
 
 use cssparser::{Parser, Token, match_ignore_ascii_case};
-use parley::style::FontStyle as ParleyFontStyle;
 
 use crate::style::{Angle, FromCss, MakeComputed, ParseResult, ToCss, unexpected_token};
 
 /// Controls the slant (italic/oblique) of text rendering.
 #[derive(Default, Debug, Clone, Copy, PartialEq)]
-pub struct FontStyle(ParleyFontStyle);
+pub struct FontStyle(Slant);
+
+#[derive(Default, Debug, Clone, Copy, PartialEq)]
+enum Slant {
+  #[default]
+  Normal,
+  Italic,
+  /// An angle in degrees, `None` for the keyword alone.
+  Oblique(Option<f32>),
+}
+
+/// The angle `oblique` and `italic` request, as CSS Fonts 4 defines it.
+const DEFAULT_OBLIQUE_ANGLE: f32 = 14.0;
 
 impl MakeComputed for FontStyle {}
 
@@ -17,11 +28,11 @@ impl<'i> FromCss<'i> for FontStyle {
     let ident = input.expect_ident()?;
 
     match_ignore_ascii_case! { ident,
-      "normal" => Ok(Self(ParleyFontStyle::Normal)),
-      "italic" => Ok(Self(ParleyFontStyle::Italic)),
+      "normal" => Ok(Self(Slant::Normal)),
+      "italic" => Ok(Self(Slant::Italic)),
       "oblique" => {
         let angle = input.try_parse(Angle::from_css).ok().map(|angle| *angle);
-        Ok(Self(ParleyFontStyle::Oblique(angle)))
+        Ok(Self(Slant::Oblique(angle)))
       },
       _ => Err(unexpected_token!(location, &Token::Ident(ident.to_owned()))),
     }
@@ -33,30 +44,40 @@ impl<'i> FromCss<'i> for FontStyle {
 impl FontStyle {
   /// The normal font style.
   pub const fn normal() -> Self {
-    Self(ParleyFontStyle::Normal)
+    Self(Slant::Normal)
   }
 
   /// The italic font style.
   pub const fn italic() -> Self {
-    Self(ParleyFontStyle::Italic)
+    Self(Slant::Italic)
   }
 
   /// The oblique font style with a given angle.
   pub const fn oblique(angle: f32) -> Self {
-    Self(ParleyFontStyle::Oblique(Some(angle)))
+    Self(Slant::Oblique(Some(angle)))
   }
 
-  pub(crate) fn into_parlance(self) -> ParleyFontStyle {
-    self.0
+  /// Whether this is the `italic` keyword, Blink's `StyleSyntax::kItalicKeyword`.
+  pub(crate) fn is_italic(self) -> bool {
+    self.0 == Slant::Italic
+  }
+
+  /// The slope font matching requests, in degrees clockwise.
+  pub(crate) fn slope(self) -> f32 {
+    match self.0 {
+      Slant::Normal => 0.0,
+      Slant::Italic | Slant::Oblique(None) => DEFAULT_OBLIQUE_ANGLE,
+      Slant::Oblique(Some(angle)) => angle,
+    }
   }
 }
 
 impl ToCss for FontStyle {
   fn to_css<W: fmt::Write>(&self, dest: &mut W) -> fmt::Result {
     match &self.0 {
-      ParleyFontStyle::Normal => dest.write_str("normal"),
-      ParleyFontStyle::Italic => dest.write_str("italic"),
-      ParleyFontStyle::Oblique(angle) => match angle {
+      Slant::Normal => dest.write_str("normal"),
+      Slant::Italic => dest.write_str("italic"),
+      Slant::Oblique(angle) => match angle {
         Some(a) => write!(dest, "oblique {a}deg"),
         None => dest.write_str("oblique"),
       },
@@ -74,7 +95,7 @@ mod tests {
     for (css, expected) in [
       ("normal", FontStyle::normal()),
       ("italic", FontStyle::italic()),
-      ("oblique", FontStyle(ParleyFontStyle::Oblique(None))),
+      ("oblique", FontStyle(Slant::Oblique(None))),
       ("oblique 10deg", FontStyle::oblique(10.0)),
     ] {
       assert_eq!(

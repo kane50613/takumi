@@ -3,10 +3,7 @@
 use crate::{
   font_style::BoxLineHeight,
   geometry::{Point, Size},
-  style::{
-    AppliedTextDecorations, Color, FontSynthesis, ResolvedFontVariations, TextDecorationSkipInk,
-    VerticalAlign,
-  },
+  style::{AppliedTextDecorations, Color, FontSynthesis, TextDecorationSkipInk, VerticalAlign},
 };
 
 pub(crate) mod atomic_inline;
@@ -112,8 +109,6 @@ pub struct InlineBrush {
   /// `-webkit-text-stroke` width in pixels.
   pub stroke_width: f32,
   pub(crate) font_synthesis: FontSynthesis,
-  /// The variations the run shaped with.
-  pub(crate) font_variations: ResolvedFontVariations,
   pub(crate) line_height: BoxLineHeight,
   /// `letter-spacing` in pixels when it is fixed rather than a percentage, which `text-fit`
   /// leaves unscaled.
@@ -135,7 +130,6 @@ impl Default for InlineBrush {
       stroke_color: Color::black(),
       stroke_width: 0.0,
       font_synthesis: FontSynthesis::default(),
-      font_variations: ResolvedFontVariations::default(),
       line_height: BoxLineHeight::Normal,
       fixed_letter_spacing: 0.0,
       fixed_word_spacing: 0.0,

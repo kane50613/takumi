@@ -86,7 +86,7 @@ impl CssFontSelector {
         continue;
       };
 
-      if family.is_empty() {
+      if family.is_empty() || self.has_font_face(&family, id, platform_data.index) {
         continue;
       }
 
@@ -244,6 +244,24 @@ impl CssFontSelector {
       .map_or(&[], Vec::as_slice)
   }
 
+  /// Whether `family` already lists the face at `index` of the data `id` names.
+  fn has_font_face(&self, family: &str, id: u64, index: u32) -> bool {
+    let family = fold_family_name(family);
+
+    self.font_faces.iter().any(|registered| {
+      let custom_platform_data = &registered.font_face.custom_platform_data;
+
+      custom_platform_data.id == id
+        && custom_platform_data.index == index
+        && fold_family_name(&registered.font_face.family) == family
+    })
+  }
+
+  /// The families registered as a last resort, which fallback walks after every other.
+  pub(crate) fn last_resort_families(&self) -> impl Iterator<Item = &Arc<str>> + '_ {
+    self.last_resort_families.iter()
+  }
+
   /// The families system fallback walks, in order.
   pub(crate) fn fallback_families(&self) -> impl Iterator<Item = &Arc<str>> + '_ {
     self
@@ -272,15 +290,31 @@ impl CssFontSelector {
       })
   }
 
+  /// Approximate: Blink takes the faces of the best bucket alone. takumi gives an `auto`
+  /// descriptor the face's own capabilities, which splits the `unicode-range` subsets of one
+  /// family into buckets, so a best bucket whose faces leave out codepoints is followed by the
+  /// faces of the others, the better matches first.
   fn font_data_for_family(
     &self,
     font_description: &FontSelectionDescription,
     family: &str,
   ) -> Option<Vec<FontPlatformDataForRangeSet>> {
-    self
+    let ranked = self
       .font_face_cache
-      .get(font_description.font_selection_request, family)?
-      .get_font_data(font_description)
+      .get_ranked(font_description.font_selection_request, family);
+    let (best, others) = ranked.split_first()?;
+    let mut faces = best.get_font_data(font_description)?;
+
+    if faces.iter().any(|face| !face.range_set.is_entire_range()) {
+      faces.extend(
+        others
+          .iter()
+          .filter_map(|segmented| segmented.get_font_data(font_description))
+          .flatten(),
+      );
+    }
+
+    Some(faces)
   }
 }
 

@@ -6,7 +6,7 @@ use std::{
   rc::Rc,
 };
 
-use harfrust::{FontRef, ShaperData, ShaperInstance, Tag, Variation};
+use harfrust::{FontRef, ShaperData, ShaperInstance, Variation};
 use skrifa::{
   GlyphId, MetadataProvider,
   instance::Size,
@@ -38,13 +38,8 @@ pub(crate) struct SimpleFontData {
 }
 
 impl SimpleFontData {
-  /// `face` at `size`, with the variation `settings` after the ones its synthesis asks for; none for a face that does not parse.
-  pub(crate) fn new(
-    face: MatchedFace,
-    size: f32,
-    specified_size: f32,
-    settings: &[Variation],
-  ) -> Option<Self> {
+  /// `face` at `size`; none for a face that does not parse.
+  pub(crate) fn new(face: MatchedFace, size: f32, specified_size: f32) -> Option<Self> {
     let font = FontRef::from_index(face.blob.data(), face.index).ok()?;
     let units_per_em = font.head().ok()?.units_per_em();
     let space_glyph = font
@@ -56,15 +51,9 @@ impl SimpleFontData {
 
     // A setting on an axis the face lacks does nothing, and a later one on an axis replaces an
     // earlier one, as skrifa resolves a location.
-    for variation in face
-      .synthesis
-      .variation_settings()
+    for &variation in face
+      .variations
       .iter()
-      .map(|&(tag, value)| Variation {
-        tag: Tag::new(&tag.to_be_bytes()),
-        value,
-      })
-      .chain(settings.iter().copied())
       .filter(|variation| axes.iter().any(|axis| axis.tag() == variation.tag))
     {
       match variations

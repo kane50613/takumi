@@ -69,6 +69,19 @@ impl FontFaceCache {
       .font_selection_query_result(request)
   }
 
+  /// The buckets of `family`, the one [`Self::get`] picks first, then the rest from the better
+  /// match for `request` to the worse.
+  pub(crate) fn get_ranked(
+    &self,
+    request: FontSelectionRequest,
+    family: &str,
+  ) -> Vec<&CssSegmentedFontFace> {
+    self
+      .segmented_faces
+      .find(family)
+      .map_or_else(Vec::new, |faces| faces.ranked(request))
+  }
+
   /// Blink's `GetNumSegmentedFacesForTesting`.
   pub(crate) fn get_num_segmented_faces_for_testing(&self) -> usize {
     self
@@ -156,34 +169,53 @@ impl CapabilitiesSet {
   }
 
   /// Blink's `FontSelectionQueryResult::GetOrCreate`, without its cache.
-  fn font_selection_query_result(
-    &self,
-    request: FontSelectionRequest,
-  ) -> Option<&CssSegmentedFontFace> {
-    // The algorithm measures distances against the bounds of every face of the family.
+  /// The buckets, each a better match for `request` than the ones after it.
+  fn ranked(&self, request: FontSelectionRequest) -> Vec<&CssSegmentedFontFace> {
+    let mut remaining: Vec<&CssSegmentedFontFace> = self.map.iter().collect();
+    let mut ranked = Vec::with_capacity(remaining.len());
+
+    while let Some(best) = Self::best_of(&remaining, request) {
+      ranked.push(remaining.remove(best));
+    }
+
+    ranked
+  }
+
+  /// The position in `candidates` of the best match for `request`, measured against the bounds
+  /// of every face of the family.
+  fn best_of(candidates: &[&CssSegmentedFontFace], request: FontSelectionRequest) -> Option<usize> {
     let mut all_faces_boundaries = FontSelectionCapabilities::default();
 
-    for segmented in &self.map {
+    for segmented in candidates {
       all_faces_boundaries.expand(&segmented.get_font_selection_capabilities());
     }
 
     let font_selection_algorithm = FontSelectionAlgorithm::new(request, all_faces_boundaries);
-    let mut best: Option<&CssSegmentedFontFace> = None;
+    let mut best: Option<usize> = None;
 
-    for candidate in &self.map {
+    for (index, candidate) in candidates.iter().enumerate() {
       let is_better = best.is_none_or(|best| {
         font_selection_algorithm.is_better_match_for_request(
           &candidate.get_font_selection_capabilities(),
-          &best.get_font_selection_capabilities(),
+          &candidates[best].get_font_selection_capabilities(),
         )
       });
 
       if is_better {
-        best = Some(candidate);
+        best = Some(index);
       }
     }
 
     best
+  }
+
+  fn font_selection_query_result(
+    &self,
+    request: FontSelectionRequest,
+  ) -> Option<&CssSegmentedFontFace> {
+    let candidates: Vec<&CssSegmentedFontFace> = self.map.iter().collect();
+
+    Self::best_of(&candidates, request).map(|best| candidates[best])
   }
 }
 

@@ -5,7 +5,6 @@ use std::rc::Rc;
 use std::str::FromStr;
 
 use harfrust::{Feature, Language, Variation};
-use parley::fontique::Attributes;
 
 use super::font_selection_types::FontSelectionRequest;
 use crate::{
@@ -19,16 +18,14 @@ use crate::{
 pub(crate) struct FontDescription {
   /// The `font-family` list.
   pub(crate) family: Rc<ExpandedFontFamily>,
-  /// `font-weight`, `font-style`, and `font-stretch` as font matching takes them.
-  pub(crate) attributes: Attributes,
+  /// What font matching reads of the style, apart from the families.
+  pub(crate) selection: FontSelectionDescription,
   /// Blink's `ComputedSize`.
   pub(crate) computed_size: f32,
   /// Blink's `SpecifiedSize`.
   pub(crate) specified_size: f32,
   /// Blink's `FontFeatures`.
   pub(crate) features: Vec<Feature>,
-  /// `font-variation-settings`.
-  pub(crate) variation_settings: Vec<Variation>,
   /// Blink's `LocaleOrDefault` as a HarfBuzz language.
   pub(crate) locale: Option<Language>,
   /// Blink's `VariantCaps`, whose features the shaper adds.
@@ -52,21 +49,13 @@ impl FontDescription {
 
     Self {
       family: Rc::clone(&style.font_family),
-      attributes: computed.font_attributes(),
+      selection: computed.font_selection_description(&style.sizing),
       computed_size: style.sizing.font_size,
       specified_size: style.sizing.font_size,
       features: computed
         .resolved_font_features(style.letter_spacing != 0.0, FontVariantCaps::Normal)
         .iter()
         .map(|feature| feature.into_harfrust())
-        .collect(),
-      variation_settings: style
-        .font_variations
-        .iter()
-        .map(|variation| Variation {
-          tag: variation.tag.into_harfrust(),
-          value: variation.value,
-        })
         .collect(),
       locale: computed
         .lang
@@ -82,15 +71,7 @@ impl FontDescription {
   }
 }
 
-/// What font matching reads of Blink's `FontDescription`, apart from the families; joins
-/// [`FontDescription`] in place of its fontique `attributes` once matching drops fontique.
-#[cfg_attr(
-  not(test),
-  expect(
-    dead_code,
-    reason = "TODO: font matching moves off fontique once the registry is rewired"
-  )
-)]
+/// What font matching reads of Blink's `FontDescription`, apart from the families.
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) struct FontSelectionDescription {
   /// Blink's `GetFontSelectionRequest`.
@@ -115,13 +96,6 @@ pub(crate) struct FontSelectionDescription {
   pub(crate) variation_settings: Vec<Variation>,
 }
 
-#[cfg_attr(
-  not(test),
-  expect(
-    dead_code,
-    reason = "TODO: font matching moves off fontique once the registry is rewired"
-  )
-)]
 impl FontSelectionDescription {
   /// Blink's `MergeFontVariationSettingsWithDescriptor`: the descriptor's axes the description
   /// leaves unset join its own, ordered by tag.
@@ -163,13 +137,6 @@ impl FontSelectionDescription {
 }
 
 /// Orders variation settings by tag, as Blink's `FontVariationAxis` compares.
-#[cfg_attr(
-  not(test),
-  expect(
-    dead_code,
-    reason = "TODO: font matching moves off fontique once the registry is rewired"
-  )
-)]
 pub(crate) fn sort_by_tag(settings: &mut [Variation]) {
   sort_by_key(settings, |axis| u32::from_be_bytes(axis.tag.to_be_bytes()));
 }
