@@ -60,6 +60,7 @@ png.workspace = true
 parley.workspace = true
 rayon.workspace = true
 resvg.workspace = true
+serde.workspace = true
 serde_json.workspace = true
 
 [dev-dependencies.image]

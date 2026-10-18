@@ -396,6 +396,85 @@ impl IntoAnimationFixtureFrames for Vec<Node> {
   }
 }
 
+/// The HTML fixtures under `tests/fixtures-html/` whose names contain one of `only`'s
+/// comma-separated fragments, or every one without `only`.
+pub fn html_fixture_paths(only: Option<&str>) -> Vec<PathBuf> {
+  let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures-html");
+  let mut files: Vec<PathBuf> = fs::read_dir(&dir)
+    .expect("tests/fixtures-html directory")
+    .filter_map(|entry| {
+      let path = entry.ok()?.path();
+      let name = path.file_stem()?.to_string_lossy().into_owned();
+      let selected = only.is_none_or(|only| {
+        only
+          .split(',')
+          .map(str::trim)
+          .any(|fragment| !fragment.is_empty() && name.contains(fragment))
+      });
+
+      (path.extension()? == "html" && selected).then_some(path)
+    })
+    .collect();
+
+  files.sort();
+  assert!(!files.is_empty(), "no HTML fixtures match {only:?}");
+
+  files
+}
+
+/// An HTML fixture's `<body>` as a node tree, with the viewport its `style` sets and its `<style>`.
+pub struct HtmlFixture {
+  pub node: Node,
+  pub viewport: Viewport,
+  pub stylesheet: StyleSheet,
+}
+
+impl HtmlFixture {
+  pub fn read(path: &Path) -> Result<Self, String> {
+    let html = fs::read_to_string(path).map_err(|error| error.to_string())?;
+    let body = section(&html, "<body", "</body>")
+      .and_then(|tag_onward| tag_onward.split_once('>'))
+      .map(|(_, inner)| inner.trim())
+      .ok_or("no <body> element")?;
+    let css = section(&html, "<style>", "</style>").unwrap_or("").trim();
+    let options = FromHtmlOptions::builder()
+      .presets(StylePresets::empty())
+      .build();
+
+    Ok(Self {
+      node: Node::from_html(body, options).map_err(|error| format!("parse: {error:?}"))?,
+      viewport: body_viewport(&html)?,
+      stylesheet: StyleSheet::parse(css).map_err(|error| format!("stylesheet: {error:?}"))?,
+    })
+  }
+}
+
+fn body_viewport(html: &str) -> Result<Viewport, String> {
+  let style = section(html, "<body style=\"", "\"").ok_or("no styled <body>")?;
+  let pixels = |property: &str| {
+    style
+      .split(';')
+      .filter_map(|declaration| declaration.split_once(':'))
+      .find(|(name, _)| name.trim() == property)
+      .ok_or(format!("no body {property}"))
+      .and_then(|(_, value)| {
+        value
+          .trim()
+          .trim_end_matches("px")
+          .parse::<u32>()
+          .map_err(|error| error.to_string())
+      })
+  };
+
+  Ok(Viewport::new((pixels("width")?, pixels("height")?)))
+}
+
+fn section<'h>(html: &'h str, start: &str, end: &str) -> Option<&'h str> {
+  let after = &html[html.find(start)? + start.len()..];
+
+  Some(&after[..after.find(end)?])
+}
+
 fn create_test_context() -> Fonts {
   let mut context = Fonts::default();
 

@@ -17,6 +17,7 @@
     "build": "bun --filter '*' run build",
     "lint": "oxlint --format=github && oxfmt --check",
     "lint:fix": "oxlint --fix && oxfmt --write",
+    "chromium-geometry": "bun scripts/chromium-geometry.mts",
     "tegami": "bun scripts/tegami.mts",
     "knip": "knip-bun --no-config-hints",
     "postinstall": "lefthook install",
@@ -29,6 +30,7 @@
     "lefthook": "^2.1.12",
     "oxfmt": "^0.66.0",
     "oxlint": "^1.81.0",
+    "playwright-core": "1.64.0",
     "publint": "^0.3.24",
     "tegami": "^1.5.0",
     "typescript": "catalog:"

@@ -1830,6 +1830,7 @@ dependencies = [
  "png",
  "rayon",
  "resvg",
+ "serde",
  "serde_json",
  "takumi",
  "takumi-core",

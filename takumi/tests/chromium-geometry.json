@@ -1,0 +1,390 @@
+{
+  "background_clip_text_reach": {
+    "takumi": 0,
+    "chromium": 44
+  },
+  "br_line_break": {
+    "takumi": 0,
+    "chromium": 1
+  },
+  "direction_flex_row": {
+    "takumi": 36,
+    "chromium": 36
+  },
+  "direction_grid": {
+    "takumi": 36,
+    "chromium": 36
+  },
+  "display_flow_root": {
+    "takumi": 0,
+    "chromium": 1
+  },
+  "display_legacy_webkit": {
+    "takumi": 6,
+    "chromium": 12
+  },
+  "flex_wrap_balance": {
+    "takumi": 0,
+    "chromium": 4
+  },
+  "float_paint_phase": {
+    "takumi": 0,
+    "chromium": 1
+  },
+  "inline_absolute_static_position": {
+    "takumi": 0,
+    "chromium": 1
+  },
+  "inline_atomic_containers": {
+    "takumi": 0,
+    "chromium": 1
+  },
+  "inline_box_decoration_break_clone": {
+    "takumi": 2,
+    "chromium": 2
+  },
+  "inline_box_in_rotated_container": {
+    "takumi": 14,
+    "chromium": 14
+  },
+  "inline_complex_nested_fixture": {
+    "takumi": 0,
+    "chromium": 2
+  },
+  "inline_float_leading_space": {
+    "takumi": 0,
+    "chromium": 2
+  },
+  "inline_float_wrap": {
+    "takumi": 0,
+    "chromium": 7
+  },
+  "inline_nested_flex_block": {
+    "takumi": 0,
+    "chromium": 2
+  },
+  "inline_outline_element_box": {
+    "takumi": 27,
+    "chromium": 27
+  },
+  "inline_outline_styles": {
+    "takumi": 0,
+    "chromium": 8
+  },
+  "inline_position_relative": {
+    "takumi": 0,
+    "chromium": 2
+  },
+  "inline_social_post_regression": {
+    "takumi": 34,
+    "chromium": 37
+  },
+  "inline_span_margins": {
+    "takumi": 0,
+    "chromium": 1
+  },
+  "inline_span_rtl_padding": {
+    "takumi": 1,
+    "chromium": 1
+  },
+  "inline_span_text_stroke_off": {
+    "takumi": 0,
+    "chromium": 1
+  },
+  "inline_text_decorations": {
+    "takumi": 0,
+    "chromium": 1
+  },
+  "inline_vertical_align": {
+    "takumi": 0,
+    "chromium": 2
+  },
+  "inline_vertical_align_types": {
+    "takumi": 0,
+    "chromium": 2
+  },
+  "lang_han_unification": {
+    "takumi": 23,
+    "chromium": 23
+  },
+  "legacy_box_alignment": {
+    "takumi": 13,
+    "chromium": 42
+  },
+  "list_marker_fractional_offset": {
+    "takumi": 25,
+    "chromium": 19
+  },
+  "list_markers": {
+    "takumi": 83,
+    "chromium": 32
+  },
+  "offset_path_circular_text": {
+    "takumi": 25,
+    "chromium": 25
+  },
+  "offset_path_wave_text": {
+    "takumi": 10,
+    "chromium": 10
+  },
+  "paint_order_content_phase": {
+    "takumi": 0,
+    "chromium": 1
+  },
+  "preflight_replaced_elements": {
+    "takumi": 11,
+    "chromium": 11
+  },
+  "pseudo_display_image": {
+    "takumi": 17,
+    "chromium": 0
+  },
+  "pseudo_text_attr": {
+    "takumi": 24,
+    "chromium": 2
+  },
+  "sizing_keywords": {
+    "takumi": 0,
+    "chromium": 2
+  },
+  "style_backdrop_filter_frosted_glass": {
+    "takumi": 0,
+    "chromium": 1
+  },
+  "style_border_non_uniform_patterns": {
+    "takumi": 0,
+    "chromium": 1
+  },
+  "style_border_styles": {
+    "takumi": 0,
+    "chromium": 1
+  },
+  "style_filter_reference_duotone": {
+    "takumi": 0,
+    "chromium": 1
+  },
+  "style_outline_styles": {
+    "takumi": 0,
+    "chromium": 1
+  },
+  "style_overflow_clip_text": {
+    "takumi": 0,
+    "chromium": 2
+  },
+  "style_overflow_clip_visible_identity_transform": {
+    "takumi": 0,
+    "chromium": 1
+  },
+  "style_overflow_hidden_text": {
+    "takumi": 0,
+    "chromium": 2
+  },
+  "style_overflow_hidden_visible_text": {
+    "takumi": 0,
+    "chromium": 2
+  },
+  "style_overflow_issue_630_grid": {
+    "takumi": 0,
+    "chromium": 1
+  },
+  "style_overflow_visible_text": {
+    "takumi": 0,
+    "chromium": 2
+  },
+  "style_text_underline_offset": {
+    "takumi": 0,
+    "chromium": 5
+  },
+  "style_transform_translate_and_scale": {
+    "takumi": 25,
+    "chromium": 25
+  },
+  "stylesheets": {
+    "takumi": 43,
+    "chromium": 43
+  },
+  "table_auto_columns": {
+    "takumi": 3,
+    "chromium": 4
+  },
+  "table_baseline": {
+    "takumi": 0,
+    "chromium": 1
+  },
+  "table_border_collapse": {
+    "takumi": 52,
+    "chromium": 53
+  },
+  "table_layout": {
+    "takumi": 0,
+    "chromium": 3
+  },
+  "table_width": {
+    "takumi": 0,
+    "chromium": 1
+  },
+  "table_width_keywords": {
+    "takumi": 0,
+    "chromium": 2
+  },
+  "tables": {
+    "takumi": 11,
+    "chromium": 14
+  },
+  "text_align_center_chinese_in_block_container": {
+    "takumi": 26,
+    "chromium": 26
+  },
+  "text_chinese_ellipsis": {
+    "takumi": 0,
+    "chromium": 127
+  },
+  "text_decoration_ink_overflow": {
+    "takumi": 0,
+    "chromium": 1
+  },
+  "text_decoration_propagation": {
+    "takumi": 4,
+    "chromium": 3
+  },
+  "text_decoration_shadow_clip": {
+    "takumi": 0,
+    "chromium": 1
+  },
+  "text_decoration_styles": {
+    "takumi": 0,
+    "chromium": 3
+  },
+  "text_devanagari_noto_sans": {
+    "takumi": 0,
+    "chromium": 64
+  },
+  "text_ellipsis_line_clamp_2": {
+    "takumi": 0,
+    "chromium": 109
+  },
+  "text_ellipsis_text_indent": {
+    "takumi": 26,
+    "chromium": 127
+  },
+  "text_ellipsis_text_nowrap": {
+    "takumi": 1,
+    "chromium": 92
+  },
+  "text_emoji_variation_selector": {
+    "takumi": 3,
+    "chromium": 9
+  },
+  "text_fit_center_aligned_per_line_all": {
+    "takumi": 29,
+    "chromium": 29
+  },
+  "text_fit_float_ellipsis": {
+    "takumi": 0,
+    "chromium": 55
+  },
+  "text_fit_grow_bg_clip_transparent_stroke": {
+    "takumi": 10,
+    "chromium": 10
+  },
+  "text_fit_indent_and_float": {
+    "takumi": 80,
+    "chromium": 80
+  },
+  "text_fit_limit_and_epsilon": {
+    "takumi": 11,
+    "chromium": 11
+  },
+  "text_fit_line_height_behavior": {
+    "takumi": 80,
+    "chromium": 80
+  },
+  "text_fit_overview": {
+    "takumi": 254,
+    "chromium": 255
+  },
+  "text_fit_shrink_ellipsis": {
+    "takumi": 92,
+    "chromium": 149
+  },
+  "text_fit_shrink_letter_spacing": {
+    "takumi": 57,
+    "chromium": 58
+  },
+  "text_fit_vertical_align_spans": {
+    "takumi": 72,
+    "chromium": 72
+  },
+  "text_font_synthesis_style_auto_none": {
+    "takumi": 4,
+    "chromium": 6
+  },
+  "text_font_synthesis_weight_auto_none": {
+    "takumi": 4,
+    "chromium": 6
+  },
+  "text_font_synthesis_weight_emoji": {
+    "takumi": 6,
+    "chromium": 6
+  },
+  "text_font_variant_caps_fonts": {
+    "takumi": 13,
+    "chromium": 13
+  },
+  "text_font_variant_caps_synthesis": {
+    "takumi": 61,
+    "chromium": 58
+  },
+  "text_indent_variants": {
+    "takumi": 0,
+    "chromium": 1
+  },
+  "text_inline": {
+    "takumi": 0,
+    "chromium": 19
+  },
+  "text_line_clamp_block_ellipsis": {
+    "takumi": 0,
+    "chromium": 139
+  },
+  "text_mask_image_gradient_emoji": {
+    "takumi": 3,
+    "chromium": 3
+  },
+  "text_overflow_requires_clipping": {
+    "takumi": 0,
+    "chromium": 51
+  },
+  "text_sup_sub": {
+    "takumi": 0,
+    "chromium": 1
+  },
+  "text_typography_variable_width": {
+    "takumi": 8,
+    "chromium": 8
+  },
+  "text_whitespace_collapse": {
+    "takumi": 47,
+    "chromium": 47
+  },
+  "text_wrap_balance_alignment": {
+    "takumi": 20,
+    "chromium": 24
+  },
+  "text_wrap_balance_float": {
+    "takumi": 82,
+    "chromium": 84
+  },
+  "text_wrap_style_all": {
+    "takumi": 16,
+    "chromium": 17
+  },
+  "transform_identity_stacking_context": {
+    "takumi": 0,
+    "chromium": 1
+  },
+  "zero_size_box_text": {
+    "takumi": 0,
+    "chromium": 1
+  }
+}

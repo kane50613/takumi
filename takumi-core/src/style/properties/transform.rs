@@ -159,6 +159,11 @@ impl Affine {
     [self.a, self.b, self.c, self.d, self.x, self.y]
   }
 
+  /// The transform a column-major array from [`Self::to_cols_array`] holds.
+  pub const fn from_cols_array([a, b, c, d, x, y]: [f32; 6]) -> Self {
+    Self { a, b, c, d, x, y }
+  }
+
   /// Returns the identity transform
   pub const IDENTITY: Self = Self {
     a: 1.0,

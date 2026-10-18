@@ -3,7 +3,10 @@
   "overrides": [
     {
       "files": ["takumi/tests/fixtures-html/**"],
-      "options": { "htmlWhitespaceSensitivity": "strict" }
+      "options": {
+        "htmlWhitespaceSensitivity": "strict"
+      }
     }
-  ]
+  ],
+  "ignorePatterns": ["takumi/tests/fixtures-chromium/**", "takumi/tests/chromium-geometry.json"]
 }
