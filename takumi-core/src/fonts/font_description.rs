@@ -7,7 +7,10 @@ use std::str::FromStr;
 use harfrust::{Feature, Language, Variation};
 use parley::fontique::Attributes;
 
-use crate::font_style::{ExpandedFontFamily, SizedFontStyle};
+use crate::{
+  font_style::{ExpandedFontFamily, SizedFontStyle},
+  style::{FontSynthesic, FontVariantCaps},
+};
 
 /// The style a font is matched and shaped with.
 #[derive(Clone, PartialEq)]
@@ -26,6 +29,10 @@ pub(crate) struct FontDescription {
   pub(crate) variation_settings: Vec<Variation>,
   /// Blink's `LocaleOrDefault` as a HarfBuzz language.
   pub(crate) locale: Option<Language>,
+  /// Blink's `VariantCaps`, whose features the shaper adds.
+  pub(crate) variant_caps: FontVariantCaps,
+  /// Blink's `GetFontSynthesisSmallCaps`.
+  pub(crate) font_synthesis_small_caps: FontSynthesic,
   /// Blink's `LetterSpacing`, in pixels.
   pub(crate) letter_spacing: f32,
   /// Blink's `WordSpacing`, in pixels.
@@ -43,9 +50,9 @@ impl FontDescription {
       computed_size: style.sizing.font_size,
       specified_size: style.sizing.font_size,
       features: computed
-        .resolved_font_features(style.letter_spacing != 0.0, style.caps)
+        .resolved_font_features(style.letter_spacing != 0.0, FontVariantCaps::Normal)
         .iter()
-        .map(|feature| Feature::new(feature.tag.into_harfrust(), u32::from(feature.value), ..))
+        .map(|feature| feature.into_harfrust())
         .collect(),
       variation_settings: style
         .font_variations
@@ -59,6 +66,8 @@ impl FontDescription {
         .lang
         .as_ref()
         .and_then(|lang| Language::from_str(lang.as_str()).ok()),
+      variant_caps: style.caps,
+      font_synthesis_small_caps: computed.inherited_data.font_synthesis_small_caps,
       letter_spacing: style.letter_spacing,
       word_spacing: style.word_spacing,
     }

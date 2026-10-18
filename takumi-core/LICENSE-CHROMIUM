@@ -44,7 +44,9 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
    `FontDataForRangeSet` in src/fonts/font_data_for_range_set.rs, from
    third_party/blink/renderer/platform/fonts/font_data_for_range_set.h, and
    `FontData::font_data_for_character` in src/fonts/font_fallback_list.rs, from
-   third_party/blink/renderer/platform/fonts/segmented_font_data.cc.
+   third_party/blink/renderer/platform/fonts/segmented_font_data.cc, and
+   `SimpleFontData::small_caps_font_data` in src/fonts/simple_font_data.rs, from
+   third_party/blink/renderer/platform/fonts/simple_font_data.cc.
 
 Copyright (C) 2003, 2004, 2005, 2006, 2008, 2009 Apple Inc. All rights reserved.
 
@@ -154,7 +156,10 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
    src/layout/inline/line_break_candidate.rs, `LineWidths` in
    src/layout/inline/line_widths.rs, the line clamp in
    src/layout/constraint_space.rs, `capitalize` in src/text/capitalize.rs,
-   `CaseMap` in src/text/case_map.rs, and the `white-space` predicates in
+   `CaseMap` in src/text/case_map.rs, `SmallCapsIterator` in
+   src/fonts/small_caps_iterator.rs, `OpenTypeCapsSupport` in
+   src/fonts/open_type_caps_support.rs, `CaseMapIntend::fill_buffer` in
+   src/fonts/shaping/case_mapping_harfbuzz_buffer_filler.rs, and the `white-space` predicates in
    src/style/properties/mod.rs and src/style/properties/text_wrap.rs, from
    third_party/blink/renderer/core/layout/inline/inline_item.cc,
    third_party/blink/renderer/core/layout/inline/inline_items_builder.cc,
@@ -199,7 +204,10 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
    third_party/blink/renderer/core/layout/inline/line_widths.cc,
    third_party/blink/renderer/core/layout/line_clamp_data.h,
    third_party/blink/renderer/platform/text/capitalize.cc,
-   third_party/blink/renderer/platform/wtf/text/case_map.cc, and
+   third_party/blink/renderer/platform/wtf/text/case_map.cc,
+   third_party/blink/renderer/platform/fonts/small_caps_iterator.cc,
+   third_party/blink/renderer/platform/fonts/opentype/open_type_caps_support.cc,
+   third_party/blink/renderer/platform/fonts/shaping/case_mapping_harfbuzz_buffer_filler.cc, and
    third_party/blink/renderer/core/css/white_space.h.
 
 Copyright 2014, 2015, 2016, 2017, 2018, 2019, 2020, 2023, 2024, 2025 The Chromium Authors

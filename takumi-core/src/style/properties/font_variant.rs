@@ -358,9 +358,7 @@ impl ToCss for FontVariantEastAsian {
   }
 }
 
-/// `font-variant-caps`. Each value maps to OpenType caps features; unlike browsers, missing
-/// features are not synthesized (e.g. small-caps from scaled capitals), so the result depends
-/// on the font shipping `smcp`/`c2sc`/`pcap`/`c2pc`/`unic`/`titl`.
+/// `font-variant-caps`. Each value maps to OpenType caps features.
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
 pub enum FontVariantCaps {
   /// No caps feature.
