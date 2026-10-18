@@ -6,7 +6,7 @@ set -eu
 revision=eed8aea45725da5b002ee8778400d14148d0ebfe
 dir="$(cd "$(dirname "$0")/.." && pwd)/target/wpt"
 
-if [ "$(git -C "$dir" rev-parse HEAD 2>/dev/null)" = "$revision" ]; then
+if [ "$(git -C "$dir" rev-parse HEAD 2>/dev/null)" = "$revision" ] && [ -d "$dir/css/css-inline" ]; then
   exit 0
 fi
 
@@ -21,3 +21,4 @@ git -C "$dir" sparse-checkout set \
   common fonts images
 git -C "$dir" fetch -q --depth 1 --filter=blob:none origin "$revision"
 git -C "$dir" checkout -q --force FETCH_HEAD
+test -d "$dir/css/css-inline" || { echo "wpt-checkout: $dir/css is missing after checkout" >&2; exit 1; }

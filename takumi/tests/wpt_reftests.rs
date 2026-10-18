@@ -69,6 +69,11 @@ fn wpt_reftests() {
     .into_iter()
     .filter(|path| matches_fragments(only.as_deref(), &path.to_string_lossy()))
     .collect();
+
+  assert!(
+    only.is_none() || !tests.is_empty(),
+    "WPT={only:?} selects no reftests"
+  );
   let outcomes: BTreeMap<String, Outcome> = tests
     .par_iter()
     .map(|path| (runner.relative(path), runner.run(path)))
@@ -87,7 +92,8 @@ fn wpt_reftests() {
     .unwrap_or_default();
 
   if env::var_os("WPT_UPDATE").is_some() {
-    expected.retain(|name| !outcomes.contains_key(name));
+    // A full run also drops the tests discovery no longer finds.
+    expected.retain(|name| only.is_some() && !outcomes.contains_key(name));
     expected.extend(
       outcomes
         .iter()
@@ -103,12 +109,14 @@ fn wpt_reftests() {
     return;
   }
 
+  // An expected test that discovery no longer finds regressed too, unless `WPT` left it out.
   let regressed: Vec<String> = expected
     .iter()
-    .filter_map(|name| {
-      let outcome = outcomes.get(name)?;
-
-      (*outcome != Outcome::Pass).then(|| format!("{name}: {outcome:?}"))
+    .filter(|name| matches_fragments(only.as_deref(), name))
+    .filter_map(|name| match outcomes.get(name) {
+      Some(Outcome::Pass) => None,
+      Some(outcome) => Some(format!("{name}: {outcome:?}")),
+      None => Some(format!("{name}: not found")),
     })
     .collect();
 
@@ -149,7 +157,8 @@ fn reftests(dir: &Path) -> Vec<PathBuf> {
 
       if is_document
         && !is_reference
-        && fs::read_to_string(&path).is_ok_and(|source| !references(&source).is_empty())
+        && fs::read_to_string(&path)
+          .is_ok_and(|source| !references(&source).is_empty() && !changes_itself(&source))
       {
         found.push(path);
       }
@@ -159,6 +168,35 @@ fn reftests(dir: &Path) -> Vec<PathBuf> {
   found.sort();
 
   found
+}
+
+/// Whether an inline script in `source` changes the document after it loads. takumi runs no
+/// scripts, so such a test cannot show what it tests. Approximate: it looks for the DOM and style
+/// APIs these tests use, not for every way a script can change a document.
+fn changes_itself(source: &str) -> bool {
+  const MUTATIONS: [&str; 12] = [
+    ".style",
+    "classList",
+    "className",
+    "setAttribute",
+    "removeAttribute",
+    "textContent",
+    "innerHTML",
+    "appendChild",
+    "removeChild",
+    "insertBefore",
+    ".remove(",
+    ".value",
+  ];
+
+  source.match_indices("<script").any(|(start, _)| {
+    let Some((tag, rest)) = source[start..].split_once('>') else {
+      return false;
+    };
+    let body = rest.split_once("</script>").map_or(rest, |(body, _)| body);
+
+    !tag.contains("src=") && MUTATIONS.iter().any(|mutation| body.contains(mutation))
+  })
 }
 
 /// The references `source` links, each with whether the test must match it.
@@ -179,6 +217,14 @@ fn references(source: &str) -> Vec<(String, bool)> {
 
 /// The attributes of each `<name ...>` tag in `source`, by lowercase name.
 fn tags(source: &str, name: &str) -> Vec<HashMap<String, String>> {
+  positioned_tags(source, name)
+    .into_iter()
+    .map(|(_, attributes)| attributes)
+    .collect()
+}
+
+/// [`tags`], each with where it starts in `source`.
+fn positioned_tags(source: &str, name: &str) -> Vec<(usize, HashMap<String, String>)> {
   let lower = source.to_ascii_lowercase();
   let opening = format!("<{name}");
   let mut found = Vec::new();
@@ -200,7 +246,7 @@ fn tags(source: &str, name: &str) -> Vec<HashMap<String, String>> {
       continue;
     }
 
-    found.push(attributes(&source[after..end]));
+    found.push((start, attributes(&source[after..end])));
   }
 
   found
@@ -267,43 +313,54 @@ impl Fuzzy {
     total_pixels: (0, 0),
   };
 
-  /// The allowance `source`'s `<meta name=fuzzy>` gives the reference at `reference`.
+  /// The allowance `source`'s `<meta name=fuzzy>` gives the reference at `reference`: one naming
+  /// that reference wins over one naming none.
   fn of(source: &str, reference: &str) -> Self {
-    tags(source, "meta")
+    let allowances: Vec<(Option<String>, String)> = tags(source, "meta")
       .into_iter()
       .filter(|attributes| attributes.get("name").is_some_and(|name| name == "fuzzy"))
       .filter_map(|attributes| attributes.get("content").cloned())
-      .find_map(|content| {
-        let (target, ranges) = match content.split_once(':') {
-          Some((target, ranges)) if !target.contains('=') => (Some(target.trim()), ranges),
-          _ => (None, content.as_str()),
-        };
-
-        if target.is_some_and(|target| !reference.ends_with(target)) {
-          return None;
+      .map(|content| match content.split_once(':') {
+        Some((target, ranges)) if !target.contains('=') => {
+          (Some(target.trim().to_owned()), ranges.to_owned())
         }
-
-        let mut parts = ranges.split(';').map(|part| {
-          part
-            .split_once('=')
-            .map_or(part, |(_, range)| range)
-            .trim()
-            .to_owned()
-        });
-        let range = |text: Option<String>| -> Option<(u32, u32)> {
-          let text = text?;
-          let (low, high) = text.split_once('-').unwrap_or((&text, &text));
-
-          Some((low.trim().parse().ok()?, high.trim().parse().ok()?))
-        };
-        let (low, high) = range(parts.next())?;
-
-        Some(Self {
-          max_difference: (low.min(255) as u8, high.min(255) as u8),
-          total_pixels: range(parts.next())?,
-        })
+        _ => (None, content),
       })
+      .collect();
+    let for_reference = allowances.iter().find(|(target, _)| {
+      target
+        .as_deref()
+        .is_some_and(|target| reference.ends_with(target))
+    });
+    let generic = allowances.iter().find(|(target, _)| target.is_none());
+
+    for_reference
+      .or(generic)
+      .and_then(|(_, ranges)| Self::parse(ranges))
       .unwrap_or(Self::EXACT)
+  }
+
+  /// The allowance in a `<meta name=fuzzy>` content's ranges, `maxDifference=1;totalPixels=0-2`.
+  fn parse(ranges: &str) -> Option<Self> {
+    let mut parts = ranges.split(';').map(|part| {
+      part
+        .split_once('=')
+        .map_or(part, |(_, range)| range)
+        .trim()
+        .to_owned()
+    });
+    let range = |text: Option<String>| -> Option<(u32, u32)> {
+      let text = text?;
+      let (low, high) = text.split_once('-').unwrap_or((&text, &text));
+
+      Some((low.trim().parse().ok()?, high.trim().parse().ok()?))
+    };
+    let (low, high) = range(parts.next())?;
+
+    Some(Self {
+      max_difference: (low.min(255) as u8, high.min(255) as u8),
+      total_pixels: range(parts.next())?,
+    })
   }
 
   /// Whether `test` and `reference`, both opaque RGBA, are within this allowance of each other.
@@ -407,10 +464,13 @@ impl Runner {
     outcome
   }
 
-  /// Whether the test at `path` renders as its references say it should.
+  /// Whether the test at `path` renders as its references say it should: like at least one
+  /// `match` reference, and unlike every `mismatch` one.
   fn compare(&self, path: &Path) -> Result<bool, String> {
     let source = fs::read_to_string(path).map_err(|error| error.to_string())?;
     let test = self.render(path, &source)?;
+    let mut has_match_reference = false;
+    let mut matched = false;
 
     for (href, matches) in references(&source) {
       let reference_path = self.resolve(path, &href);
@@ -422,7 +482,12 @@ impl Runner {
           .and_then(|reference| self.render(&reference_path, &reference))?
       };
 
-      if Fuzzy::of(&source, &href).allows(&test, &reference) != matches {
+      let is_alike = Fuzzy::of(&source, &href).allows(&test, &reference);
+
+      has_match_reference |= matches;
+      matched |= matches && is_alike;
+
+      if is_alike != matches {
         if let Some(dump) = &self.dump {
           let name = self.relative(path).replace('/', "__");
           let (width, height) = VIEWPORT;
@@ -435,29 +500,40 @@ impl Runner {
           }
         }
 
-        return Ok(false);
+        if !matches {
+          return Ok(false);
+        }
       }
     }
 
-    Ok(true)
+    Ok(!has_match_reference || matched)
   }
 
   /// The document at `path` rendered onto white, as RGBA.
   fn render(&self, path: &Path, source: &str) -> Result<Vec<u8>, String> {
-    let linked = tags(source, "link").into_iter().filter_map(|attributes| {
-      attributes
-        .get("rel")
-        .is_some_and(|rel| rel.eq_ignore_ascii_case("stylesheet"))
-        .then(|| fs::read_to_string(self.resolve(path, attributes.get("href")?)).ok())?
-    });
+    let linked = positioned_tags(source, "link")
+      .into_iter()
+      .filter_map(|(start, attributes)| {
+        let is_stylesheet = attributes
+          .get("rel")
+          .is_some_and(|rel| rel.eq_ignore_ascii_case("stylesheet"));
+        let sheet = fs::read_to_string(self.resolve(path, attributes.get("href")?)).ok()?;
+
+        is_stylesheet.then_some((start, sheet))
+      });
     // An XHTML document's parser takes a `<style>` block's CDATA section apart before CSS sees it.
-    let inline = source.split("<style").skip(1).filter_map(|block| {
-      let (_, inner) = block.split_once('>')?;
+    let inline = source.match_indices("<style").filter_map(|(start, _)| {
+      let (_, inner) = source[start..].split_once('>')?;
       let (sheet, _) = inner.split_once("</style>")?;
 
-      Some(sheet.replace("<![CDATA[", "").replace("]]>", ""))
+      Some((start, sheet.replace("<![CDATA[", "").replace("]]>", "")))
     });
-    let stylesheet = StyleSheet::parse_list_loosy(linked.chain(inline));
+    // Later sheets win ties, so they keep document order.
+    let mut sheets: Vec<(usize, String)> = linked.chain(inline).collect();
+
+    sheets.sort_by_key(|(start, _)| *start);
+
+    let stylesheet = StyleSheet::parse_list_loosy(sheets.into_iter().map(|(_, sheet)| sheet));
 
     let images: HashMap<Arc<str>, ImageSource> = tags(source, "img")
       .into_iter()
