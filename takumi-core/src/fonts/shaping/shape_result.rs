@@ -17,7 +17,7 @@ use crate::{
   fonts::{font::Font, simple_font_data::SimpleFontData},
   layout_unit::{FixedPoint, InlineLayoutUnit, LayoutUnit, TextRunLayoutUnit},
   style::Direction as TextDirection,
-  text::text_justify::TextJustify,
+  style::TextJustify,
 };
 #[cfg(test)]
 use icu_segmenter::GraphemeClusterSegmenter;

@@ -2,11 +2,10 @@
 
 use crate::{
   layout_unit::{FixedPoint, InlineLayoutUnit, TextRunLayoutUnit},
-  style::Direction as TextDirection,
+  style::{Direction as TextDirection, TextJustify},
   text::{
     character::{NO_BREAK_SPACE, char_at, treat_as_space, treat_as_zero_width_space},
     justification_opportunity::JustificationContext,
-    text_justify::TextJustify,
   },
 };
 
