@@ -8,27 +8,26 @@ use crate::{
   geometry::{Rect, Size},
   layout::{border::BorderProperties, tree::RenderNode},
   style::{ComputedStyle, Direction as TextDirection, VerticalAlign},
-  text::character::maybe_bidi_rtl,
+  text::character::{
+    CARRIAGE_RETURN, FORM_FEED, LINE_FEED, OBJECT_REPLACEMENT_CHARACTER, TAB,
+    ZERO_WIDTH_NON_JOINER, ZERO_WIDTH_SPACE, maybe_bidi_rtl,
+  },
 };
-
-const ZERO_WIDTH_SPACE: char = '\u{200B}';
-const ZERO_WIDTH_NON_JOINER: char = '\u{200C}';
-const OBJECT_REPLACEMENT_CHARACTER: char = '\u{FFFC}';
 
 /// Blink's `IsCollapsibleSpace`.
 fn is_collapsible_space(c: char) -> bool {
-  matches!(c, ' ' | '\n' | '\t' | '\r')
+  matches!(c, ' ' | LINE_FEED | TAB | CARRIAGE_RETURN)
 }
 
 /// Blink's `ShouldIgnore`: carriage return and form feed.
 /// <https://drafts.csswg.org/css-text-3/#white-space-processing>
 fn should_ignore(c: char) -> bool {
-  matches!(c, '\r' | '\u{C}')
+  matches!(c, CARRIAGE_RETURN | FORM_FEED)
 }
 
 /// Blink's `IsControlItemCharacter`: characters taking a control item of their own.
 fn is_control_item_character(c: char) -> bool {
-  matches!(c, '\n' | '\t' | ZERO_WIDTH_NON_JOINER) || should_ignore(c)
+  matches!(c, LINE_FEED | TAB | ZERO_WIDTH_NON_JOINER) || should_ignore(c)
 }
 
 /// Blink's `MoveToEndOfCollapsibleSpaces`: the end of the space run at `offset`, and whether it
@@ -38,7 +37,7 @@ fn move_to_end_of_collapsible_spaces(string: &str, offset: usize) -> (usize, boo
     .find(|c| !is_collapsible_space(c))
     .map_or(string.len(), |run| offset + run);
 
-  (end, string[offset..end].contains('\n'))
+  (end, string[offset..end].contains(LINE_FEED))
 }
 
 /// Blink's `ShouldRemoveNewline`, per the segment break transformation rules: a newline next to a
@@ -79,12 +78,7 @@ impl<'c> BoxInfo<'c> {
     child: &BoxInfo<'_>,
     child_node: &RenderNode,
   ) -> bool {
-    let margin = child_node.margin_px();
-
-    margin.left != 0.0
-      || margin.right != 0.0
-      || margin.top != 0.0
-      || margin.bottom != 0.0
+    child_node.may_have_margin()
       || child.style.base_data.vertical_align != VerticalAlign::default()
       || self.text_metrics != child.text_metrics
   }
@@ -108,17 +102,24 @@ impl RenderNode {
   /// decides for the properties takumi has.
   fn needs_own_box_fragment(&self) -> bool {
     let style = &self.context.style;
-    let has_side = |sides: Rect<f32>| {
-      sides.top != 0.0 || sides.right != 0.0 || sides.bottom != 0.0 || sides.left != 0.0
-    };
 
     self.has_box_decoration_background()
-      || has_side(self.padding_px())
-      || has_side(self.margin_px())
+      || self.may_have_padding()
+      || self.may_have_margin()
       || InlineOutline::of(&self.context).is_some()
       || style.base_data.position.is_positioned()
       || style.creates_stacking_context(false)
       || style.contains_fixed_descendants()
+  }
+
+  /// Blink's `MayHaveMargin`.
+  fn may_have_margin(&self) -> bool {
+    self.margin_px() != Rect::ZERO
+  }
+
+  /// Blink's `MayHavePadding`.
+  fn may_have_padding(&self) -> bool {
+    self.padding_px() != Rect::ZERO
   }
 
   /// Blink's `HasBoxDecorationBackground`: a background, a border, or a shadow.
@@ -433,7 +434,7 @@ impl<'c, 'i> InlineItemsBuilder<'c, 'i> {
       return string.as_bytes()[index - 1] == b'\n';
     }
 
-    self.text.is_empty() || self.text.ends_with('\n')
+    self.text.is_empty() || self.text.ends_with(LINE_FEED)
   }
 
   /// Blink's `InsertBreakOpportunityAfterLeadingPreservedSpaces`.
@@ -491,7 +492,7 @@ impl<'c, 'i> InlineItemsBuilder<'c, 'i> {
       };
 
       match c {
-        '\n' => {
+        LINE_FEED => {
           self.append_forced_break(layout_object);
           start += 1;
           // Spaces after a forced break lead a line.
@@ -501,9 +502,9 @@ impl<'c, 'i> InlineItemsBuilder<'c, 'i> {
             &mut start,
           );
         }
-        '\t' => {
+        TAB => {
           let tab_end = string[start + 1..]
-            .find(|c| c != '\t')
+            .find(|c| c != TAB)
             .map_or(length, |offset| start + 1 + offset);
           let index = self.append_text_item(
             InlineItemType::Control,
@@ -552,7 +553,7 @@ impl<'c, 'i> InlineItemsBuilder<'c, 'i> {
       }
 
       let end = string[start..]
-        .find('\n')
+        .find(LINE_FEED)
         .map_or(string.len(), |offset| start + offset);
 
       self.append_collapse_whitespace(&string[start..end], layout_object);
@@ -562,7 +563,7 @@ impl<'c, 'i> InlineItemsBuilder<'c, 'i> {
 
   /// Blink's `AppendForcedBreak`.
   fn append_forced_break(&mut self, layout_object: LayoutObject<'c>) {
-    let index = self.append(InlineItemType::Control, '\n', layout_object);
+    let index = self.append(InlineItemType::Control, LINE_FEED, layout_object);
     let item = &mut self.items[index];
 
     item.text_type = TextItemType::ForcedLineBreak;

@@ -10,8 +10,13 @@ use icu_properties::{
   },
 };
 
+pub(crate) const TAB: char = '\t';
+pub(crate) const LINE_FEED: char = '\n';
+pub(crate) const FORM_FEED: char = '\u{C}';
+pub(crate) const CARRIAGE_RETURN: char = '\r';
 pub(crate) const NO_BREAK_SPACE: char = '\u{A0}';
 pub(crate) const SOFT_HYPHEN: char = '\u{AD}';
+pub(crate) const ZERO_WIDTH_SPACE: char = '\u{200B}';
 pub(crate) const ZERO_WIDTH_NON_JOINER: char = '\u{200C}';
 pub(crate) const ZERO_WIDTH_JOINER: char = '\u{200D}';
 pub(crate) const OBJECT_REPLACEMENT_CHARACTER: char = '\u{FFFC}';
