@@ -35,6 +35,33 @@ mod decoration_break;
 mod decorations;
 mod floats;
 mod fragment_items;
+#[cfg_attr(
+  not(test),
+  expect(
+    dead_code,
+    reason = "TODO: the line breaker port reads the collected items"
+  )
+)]
+#[cfg_attr(test, allow(dead_code))]
+pub(crate) mod inline_item;
+#[cfg_attr(
+  not(test),
+  expect(
+    dead_code,
+    reason = "TODO: the line breaker port reads the collected items"
+  )
+)]
+#[cfg_attr(test, allow(dead_code))]
+pub(crate) mod inline_items_builder;
+#[cfg_attr(
+  not(test),
+  expect(
+    dead_code,
+    reason = "TODO: the line breaker port reads the collected items"
+  )
+)]
+#[cfg_attr(test, allow(dead_code))]
+pub(crate) mod inline_node;
 mod items;
 mod line_box;
 mod metrics;

@@ -117,9 +117,17 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
    third_party/blink/renderer/platform/fonts/shaping/shape_result_spacing.cc and
    third_party/blink/renderer/platform/text/justification_opportunity.cc;
    and `ShapingLineBreaker` in src/fonts/shaping/shaping_line_breaker.rs, from
-   third_party/blink/renderer/platform/fonts/shaping/shaping_line_breaker.cc.
+   third_party/blink/renderer/platform/fonts/shaping/shaping_line_breaker.cc;
+   and `InlineItem` in src/layout/inline/inline_item.rs, `InlineItemsBuilder`
+   in src/layout/inline/inline_items_builder.rs, `collect_inlines` in
+   src/layout/inline/inline_node.rs, and the `white-space` predicates in
+   src/style/properties/mod.rs and src/style/properties/text_wrap.rs, from
+   third_party/blink/renderer/core/layout/inline/inline_item.cc,
+   third_party/blink/renderer/core/layout/inline/inline_items_builder.cc,
+   third_party/blink/renderer/core/layout/inline/inline_node.cc, and
+   third_party/blink/renderer/core/css/white_space.h.
 
-Copyright 2014, 2015, 2016, 2017, 2018, 2019, 2020, 2024, 2025 The Chromium Authors
+Copyright 2014, 2015, 2016, 2017, 2018, 2019, 2020, 2023, 2024, 2025 The Chromium Authors
 
 Redistribution and use in source and binary forms, with or without
 modification, are permitted provided that the following conditions are
@@ -150,6 +158,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 4. `skips_ink` and its character tables in src/layout/intercept.rs, and the
    predicates in src/text/character.rs, from
+   third_party/blink/renderer/platform/text/character.h,
    third_party/blink/renderer/platform/text/character.cc,
    third_party/blink/renderer/platform/text/character_emoji.cc, and
    third_party/blink/renderer/platform/text/character_property_data.h.

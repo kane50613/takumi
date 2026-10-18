@@ -169,6 +169,23 @@ pub(crate) fn is_cursive_script(c: char) -> bool {
   )
 }
 
+/// Blink's `MaybeBidiRtlUtf16`: whether a UTF-16 code unit may be right-to-left.
+fn maybe_bidi_rtl_utf16(unit: u32) -> bool {
+  unit >= 0x0590
+    && unit != 0x200B
+    && !(0x2010..=0x2029).contains(&unit)
+    && !(0x206A..=0xD7FF).contains(&unit)
+    && !(0xFF00..=0xFFFF).contains(&unit)
+}
+
+/// Blink's `MaybeBidiRtl` for a string, which checks UTF-16 code units: a surrogate of a
+/// character past the BMP counts, as there.
+pub(crate) fn maybe_bidi_rtl(text: &str) -> bool {
+  text
+    .chars()
+    .any(|c| u32::from(c) >= 0x10000 || maybe_bidi_rtl_utf16(u32::from(c)))
+}
+
 /// Blink's `Character::IsCjkIdeographOrSymbol`.
 pub(crate) fn is_cjk_ideograph_or_symbol(character: char) -> bool {
   let code = u32::from(character);

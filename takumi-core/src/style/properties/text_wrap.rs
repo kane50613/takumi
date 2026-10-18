@@ -83,6 +83,13 @@ pub enum TextWrapMode {
   NoWrap,
 }
 
+impl TextWrapMode {
+  /// Blink's `ShouldWrapLine`.
+  pub(crate) fn should_wrap_line(self) -> bool {
+    self != Self::NoWrap
+  }
+}
+
 impl_css_enum!(
   TextWrapMode,
   "wrap" => TextWrapMode::Wrap,
