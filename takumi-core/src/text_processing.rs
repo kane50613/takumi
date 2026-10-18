@@ -1,4 +1,4 @@
-//! Backend-agnostic text processing: whitespace collapsing, text-transform, and
+//! Backend-agnostic text processing: whitespace collapsing and
 //! line balancing/rebreaking used by inline layout.
 
 use std::{borrow::Cow, iter::repeat_n};
@@ -9,7 +9,7 @@ use crate::{
   layout::inline::{
     InlineLayout, LineWidths, ProcessedInlineSpan, break_lines, has_custom_out_of_flow,
   },
-  style::{TextTransform, TextWrapMode, WhiteSpaceCollapse},
+  style::{TextWrapMode, WhiteSpaceCollapse},
 };
 
 /// Constraint capping a text block's height.
@@ -29,33 +29,6 @@ impl MaxHeight {
     match self {
       Self::Absolute(_) => None,
       Self::Lines(lines) | Self::HeightAndLines(_, lines) => Some(Self::Lines(lines)),
-    }
-  }
-}
-
-/// Applies text transform to the input text.
-pub(crate) fn apply_text_transform<'a>(input: &'a str, transform: TextTransform) -> Cow<'a, str> {
-  match transform {
-    TextTransform::None => Cow::Borrowed(input),
-    TextTransform::Uppercase => Cow::Owned(input.to_uppercase()),
-    TextTransform::Lowercase => Cow::Owned(input.to_lowercase()),
-    TextTransform::Capitalize => {
-      let mut result = String::with_capacity(input.len());
-      let mut start_of_word = true;
-      for ch in input.chars() {
-        if ch.is_alphabetic() {
-          if start_of_word {
-            result.extend(ch.to_uppercase());
-            start_of_word = false;
-          } else {
-            result.extend(ch.to_lowercase());
-          }
-        } else {
-          start_of_word = !ch.is_numeric();
-          result.push(ch);
-        }
-      }
-      Cow::Owned(result)
     }
   }
 }

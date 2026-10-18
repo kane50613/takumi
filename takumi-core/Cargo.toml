@@ -103,6 +103,12 @@ optional = true
 [dependencies.harfrust]
 workspace = true
 
+[dependencies.icu_casemap]
+workspace = true
+
+[dependencies.icu_locale_core]
+workspace = true
+
 [dependencies.icu_segmenter]
 workspace = true
 

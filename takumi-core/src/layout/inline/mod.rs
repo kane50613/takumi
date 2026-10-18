@@ -12,8 +12,7 @@ use crate::{
     WordBreak,
   },
   text_processing::{
-    MaxHeight, RebreakOptions, apply_text_transform, apply_white_space_collapse,
-    make_balanced_text, make_pretty_text,
+    MaxHeight, RebreakOptions, apply_white_space_collapse, make_balanced_text, make_pretty_text,
   },
 };
 use parley::{
@@ -246,6 +245,7 @@ mod outline;
 )]
 #[cfg_attr(test, allow(dead_code))]
 pub(crate) mod paragraph_line_breaker;
+pub(crate) mod previous_character;
 mod runs;
 #[cfg_attr(
   not(test),
@@ -289,6 +289,7 @@ use self::{
     ResolvedInlineLineState, ResolvedLineMetrics, Strut, resolve_inline_line_metrics,
     resolve_inline_line_states, resolve_visual_inline_box,
   },
+  previous_character::PreviousCharacter,
   runs::measured_run_text,
   small_caps::CapsSupport,
   text_fit::{
@@ -1099,6 +1100,7 @@ pub(crate) fn process_inline_spans<'c>(
   // A paragraph opens as a line does, so its leading collapsible spaces go.
   let mut previous_collapsible_space = true;
   let mut previous_was_line_break = false;
+  let mut previous_character = PreviousCharacter::new();
 
   if let Some(mark) = direction_mark_span(items, context) {
     index_pos = context.style.inherited_data.direction.bidi_mark().len();
@@ -1114,7 +1116,7 @@ pub(crate) fn process_inline_spans<'c>(
         decorations,
       } => {
         let span_style = SizedFontStyle::from_style(&context.style, context);
-        let transformed = apply_text_transform(text, context.style.inherited_data.text_transform);
+        let transformed = previous_character.transform_text(&context.style, text);
         let collapsed = apply_white_space_collapse(
           &transformed,
           context.style.inherited_data.white_space_collapse,
@@ -1140,6 +1142,7 @@ pub(crate) fn process_inline_spans<'c>(
         render_node,
         decorations,
       } => {
+        previous_character.pass_box(render_node);
         spans.push(inline_box_span(
           render_node,
           decorations.clone(),

@@ -25,6 +25,7 @@ use crate::{
       inline_item_segment::InlineItemSegments,
       inline_items_builder::InlineItemsBuilder,
       inline_node_data::{InlineNodeData, StyleFonts},
+      previous_character::PreviousCharacter,
     },
     list_marker::width_of_symbol,
     node::{Node, NodeKind},
@@ -35,7 +36,6 @@ use crate::{
     bidi_paragraph::BidiParagraph,
     character::{OBJECT_REPLACEMENT_CHARACTER, ZERO_WIDTH_NON_JOINER, is_8bit},
   },
-  text_processing::apply_text_transform,
 };
 
 /// A box's content in Blink's child order: the marker, the box's own text, then its children.
@@ -100,6 +100,7 @@ impl<'c> InlineNode<'c> {
   pub(crate) fn collect_inlines(self) -> InlineNodeData<'c> {
     let mut builder = InlineItemsBuilder::new();
     let mut stack = vec![Frame::new(self.block, None, false)];
+    let mut previous_character = PreviousCharacter::new();
 
     builder.enter_block(&self.block.context.style);
 
@@ -116,8 +117,7 @@ impl<'c> InlineNode<'c> {
       match child {
         Child::OwnText => {
           if let Some(text) = frame.node.own_text() {
-            let text =
-              apply_text_transform(text, frame.node.context.style.inherited_data.text_transform);
+            let text = previous_character.transform_text(&frame.node.context.style, text);
 
             builder.append_text(&text, LayoutObject::Text(frame.node));
 
@@ -135,18 +135,23 @@ impl<'c> InlineNode<'c> {
           // takumi's computed style leaves as specified.
           if node.is_out_of_flow() {
             builder.append_out_of_flow_positioned(LayoutObject::Box(node));
+            previous_character.pass_box(node);
           } else if node.context.style.base_data.float != Float::None {
             builder.append_floating(LayoutObject::Box(node));
+            previous_character.pass_box(node);
           } else if node.is_atomic_inline() {
             if node.is_outside_list_marker() {
               builder.append_opaque(InlineItemType::ListMarker, LayoutObject::Box(node));
             } else {
               builder.append_atomic_inline(LayoutObject::Box(node));
             }
+
+            previous_character.pass_box(node);
           } else if node.context.style.base_data.display == Display::Inline && !node.is_dom_text() {
             builder.enter_inline(node);
             stack.push(Frame::new(node, Some(parent), true));
           } else {
+            previous_character.enter_box(node);
             stack.push(Frame::new(node, Some(parent), false));
           }
         }
@@ -500,7 +505,7 @@ fn should_break_shaping_after_box(item: &InlineItem<'_>) -> bool {
 
 impl RenderNode {
   /// The text of this box's own `LayoutText`, if it has one.
-  fn own_text(&self) -> Option<&str> {
+  pub(crate) fn own_text(&self) -> Option<&str> {
     if let Some(text) = self.anonymous_text_content.as_deref() {
       return Some(text);
     }
@@ -540,7 +545,7 @@ impl RenderNode {
   }
 
   /// Blink's `IsAtomicInline`.
-  fn is_atomic_inline(&self) -> bool {
+  pub(crate) fn is_atomic_inline(&self) -> bool {
     self.is_inline_atomic_container()
       || matches!(
         self.node.as_ref().and_then(Node::inline_content),
@@ -569,7 +574,7 @@ mod tests {
       node::Node,
       tree::RenderNode,
     },
-    style::Direction as TextDirection,
+    style::{Direction as TextDirection, Lang},
   };
 
   use InlineItemType::*;
@@ -630,6 +635,75 @@ mod tests {
         ]
       )
     );
+  }
+
+  /// `capitalize` starts a word only after a word break, which the text before an inline box
+  /// decides, and leaves the rest of the word's case.
+  #[test]
+  fn capitalize_continues_a_word_across_inline_boxes() {
+    let tree = render_tree(
+      block([span("hel"), span("lo wORLD")]),
+      ".block { text-transform: capitalize }",
+    );
+
+    assert_eq!(collect(&tree).0, "Hello WORLD");
+  }
+
+  /// A text after an atomic inline continues the last text in it.
+  #[test]
+  fn capitalize_continues_the_text_of_an_atomic_inline() {
+    let tree = render_tree(
+      block([
+        span("a "),
+        Node::container([Node::text("b")]).with_class_name("atomic"),
+        span("c d"),
+      ]),
+      ".block { text-transform: capitalize }",
+    );
+
+    assert_eq!(collect(&tree).0, "A \u{FFFC}c D");
+  }
+
+  /// An atomic inline that ends in a box ends a word.
+  #[test]
+  fn capitalize_starts_a_word_after_an_atomic_inline_ending_in_a_box() {
+    let tree = render_tree(
+      block([
+        span("a"),
+        Node::container([
+          Node::text("b"),
+          Node::container([]).with_class_name("atomic"),
+        ])
+        .with_class_name("atomic"),
+        span("c"),
+      ]),
+      ".block { text-transform: capitalize }",
+    );
+
+    assert_eq!(collect(&tree).0, "A\u{FFFC}C");
+  }
+
+  /// Case conversion follows the language's rules.
+  #[test]
+  fn uppercase_follows_the_language() {
+    let turkish = Lang::parse("tr").expect("a language tag");
+    let tree = render_tree(
+      block([span("istanbul")]).with_lang(turkish),
+      ".block { text-transform: uppercase }",
+    );
+
+    assert_eq!(collect(&tree).0, "\u{130}STANBUL");
+  }
+
+  /// Georgian keeps its Mkhedruli letters, which fonts have, when uppercased.
+  #[test]
+  fn uppercase_keeps_georgian_letters() {
+    let tree = render_tree(
+      block([span("\u{10E5}\u{10D0}a")]),
+      ".block { text-transform: uppercase }",
+    );
+
+    assert_eq!(collect(&tree).0, "\u{10E5}\u{10D0}A");
   }
 
   #[test]

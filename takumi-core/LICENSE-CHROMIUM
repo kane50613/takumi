@@ -153,8 +153,8 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
    src/layout/inline/paragraph_line_breaker.rs, `LineBreakCandidate` in
    src/layout/inline/line_break_candidate.rs, `LineWidths` in
    src/layout/inline/line_widths.rs, the line clamp in
-   src/layout/constraint_space.rs, and the
-   `white-space` predicates in
+   src/layout/constraint_space.rs, `capitalize` in src/text/capitalize.rs,
+   `CaseMap` in src/text/case_map.rs, and the `white-space` predicates in
    src/style/properties/mod.rs and src/style/properties/text_wrap.rs, from
    third_party/blink/renderer/core/layout/inline/inline_item.cc,
    third_party/blink/renderer/core/layout/inline/inline_items_builder.cc,
@@ -197,7 +197,9 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
    third_party/blink/renderer/core/layout/inline/paragraph_line_breaker.cc,
    third_party/blink/renderer/core/layout/inline/line_break_candidate.cc,
    third_party/blink/renderer/core/layout/inline/line_widths.cc,
-   third_party/blink/renderer/core/layout/line_clamp_data.h, and
+   third_party/blink/renderer/core/layout/line_clamp_data.h,
+   third_party/blink/renderer/platform/text/capitalize.cc,
+   third_party/blink/renderer/platform/wtf/text/case_map.cc, and
    third_party/blink/renderer/core/css/white_space.h.
 
 Copyright 2014, 2015, 2016, 2017, 2018, 2019, 2020, 2023, 2024, 2025 The Chromium Authors
