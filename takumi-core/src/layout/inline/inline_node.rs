@@ -100,10 +100,12 @@ pub(crate) fn collect_inlines<'c>(
       Child::Box(node) => {
         stack.push(frame);
 
-        if node.context.style.base_data.float != Float::None {
-          builder.append_floating(LayoutObject::Box(node));
-        } else if node.is_out_of_flow() {
+        // An out-of-flow box does not float: CSS 2.1 §9.7 computes its `float` to `none`, which
+        // takumi's computed style leaves as specified.
+        if node.is_out_of_flow() {
           builder.append_out_of_flow_positioned(LayoutObject::Box(node));
+        } else if node.context.style.base_data.float != Float::None {
+          builder.append_floating(LayoutObject::Box(node));
         } else if node.is_atomic_inline() {
           if node.is_outside_list_marker() {
             builder.append_opaque(InlineItemType::ListMarker, LayoutObject::Box(node));
@@ -268,6 +270,14 @@ mod tests {
   }
 
   /// Floats and out-of-flow boxes are opaque, so the spaces around them collapse together.
+  #[test]
+  fn an_absolute_float_is_out_of_flow() {
+    let tree = render_tree(block([block([]).with_class_name("abs float")]), "");
+    let (_, items) = collect(&tree);
+
+    assert_eq!(items, [(OutOfFlowPositioned, String::new())]);
+  }
+
   #[test]
   fn floats_and_out_of_flow_boxes_are_opaque_to_collapsing() {
     let tree = render_tree(
