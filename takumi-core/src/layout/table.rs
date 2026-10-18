@@ -141,6 +141,13 @@ impl TableSlots {
         continue;
       }
 
+      // A hidden child generates no box, so it leaves the run of cells whole.
+      if display == Display::None {
+        strays.push(child);
+
+        continue;
+      }
+
       if !cells.is_empty() {
         let row = RenderNode::anonymous_box(&table.context, Display::TableRow, take(&mut cells));
 
@@ -1852,6 +1859,29 @@ mod tests {
     );
 
     assert_eq!(ids(&tree), ["a"]);
+  }
+
+  #[test]
+  fn a_hidden_child_leaves_loose_cells_in_one_row() {
+    let tree = lower(
+      Node::container([
+        cell("a"),
+        Node::container([Node::text("hidden")]).with_class_name("hidden"),
+        cell("b"),
+      ])
+      .with_class_name("table"),
+    );
+    let rows: Vec<_> = tree
+      .children
+      .as_deref()
+      .unwrap_or_default()
+      .iter()
+      .filter(|child| child.context.style.base_data.display != Display::None)
+      .map(|child| child.context.style.misc2_data.grid_row_start.clone())
+      .collect();
+
+    assert_eq!(ids(&tree)[..2], ["a", "b"]);
+    assert_eq!(rows, [GridPlacement::Line(1), GridPlacement::Line(1)]);
   }
 
   #[test]
