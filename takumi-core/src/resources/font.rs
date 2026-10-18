@@ -2,7 +2,7 @@ use std::{
   borrow::Cow,
   cell::OnceCell,
   cell::RefCell,
-  collections::{HashSet, hash_map::Entry},
+  collections::{HashMap, HashSet, hash_map::Entry},
   fmt::{self, Debug, Formatter},
   iter::once,
   rc::Rc,
@@ -31,9 +31,6 @@ use skrifa::{
 };
 use thiserror::Error;
 use xxhash_rust::xxh3::{Xxh3, xxh3_64};
-
-#[cfg(feature = "paint-tree")]
-use std::collections::HashMap;
 
 #[cfg(feature = "svg")]
 use crate::resvg::usvg::fontdb::Database;
@@ -213,9 +210,8 @@ fn has_color_table(font: &FontRef) -> bool {
 #[derive(Clone)]
 pub struct Fonts {
   inner: parley::FontContext,
-  /// Blob ids of faces whose `unicode-range` leaves out U+0020, which Blink never picks as a
-  /// primary font.
-  space_outside_range: Arc<HashSet<u64>>,
+  /// The `unicode-range` of every face registered with one, by font blob id.
+  unicode_ranges: Arc<HashMap<u64, UnicodeRangeSet>>,
   /// Every registered family name in registration order. The fallback bucket is built from
   /// this so its per-script priority is deterministic; `fontique`'s `family_names()` iterates
   /// a `HashMap` (hash order), which would otherwise make font selection vary per render.
@@ -247,7 +243,7 @@ impl Default for Fonts {
         }),
         source_cache: Default::default(),
       },
-      space_outside_range: Arc::new(HashSet::new()),
+      unicode_ranges: Arc::new(HashMap::new()),
       order: Vec::new(),
       last_resort_order: Vec::new(),
       color_names: HashSet::new(),
@@ -555,7 +551,7 @@ impl Fonts {
     FontsSnapshot {
       context: Rc::new(RefCell::new(Self {
         inner: cloned,
-        space_outside_range: self.space_outside_range.clone(),
+        unicode_ranges: self.unicode_ranges.clone(),
         order: self.order.clone(),
         last_resort_order: self.last_resort_order.clone(),
         color_names: self.color_names.clone(),
@@ -638,8 +634,8 @@ impl Fonts {
 
     let blob = unicode_range.restrict_blob(source.into_blob()?);
 
-    if !unicode_range.contains(u32::from(' ')) {
-      Arc::make_mut(&mut self.space_outside_range).insert(blob.id());
+    if !unicode_range.is_entire_range() {
+      Arc::make_mut(&mut self.unicode_ranges).insert(blob.id(), unicode_range);
     }
 
     let axes = info_override.as_ref().map(FontOverride::resolved_axes);
@@ -918,7 +914,7 @@ impl RenderContext {
     mut visit: impl FnMut(&QueryFont, bool) -> QueryStatus,
   ) {
     self.fonts().with_context(|fonts| {
-      let space_outside_range = fonts.space_outside_range.clone();
+      let unicode_ranges = fonts.unicode_ranges.clone();
       let mut query = fonts.inner.collection.query(&mut fonts.inner.source_cache);
 
       query.set_families(families);
@@ -926,7 +922,13 @@ impl RenderContext {
       // shapes with the fallback bucket, which carries one family order for every script.
       query.set_fallbacks(FallbackKey::new(Script::from_bytes(*b"Latn"), None));
       query.set_attributes(attributes);
-      query.matches_with(|font| visit(font, space_outside_range.contains(&font.blob.id())));
+      query.matches_with(|font| {
+        let space_outside_range = unicode_ranges
+          .get(&font.blob.id())
+          .is_some_and(|range| !range.contains(u32::from(' ')));
+
+        visit(font, space_outside_range)
+      });
     });
   }
 
@@ -1498,7 +1500,7 @@ mod tests {
     }
 
     assert_eq!(fonts.order, vec!["Logical".to_string()]);
-    assert_eq!(fonts.space_outside_range.len(), 2);
+    assert_eq!(fonts.unicode_ranges.len(), 2);
   }
 
   #[test]
