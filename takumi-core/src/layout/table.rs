@@ -119,7 +119,7 @@ impl TableSlots {
     }
   }
 
-  /// Extracts rows without CSS anonymous table-box fixup.
+  /// Extracts the table's rows, giving its loose cells anonymous rows.
   fn collect(table: &mut RenderNode) -> Self {
     let mut captions = Vec::new();
     let mut groups: Vec<(u8, usize, Vec<RenderNode>)> = Vec::new();
@@ -129,8 +129,25 @@ impl TableSlots {
 
     let children = table.children.take().map_or_else(Vec::new, Vec::from);
 
+    let mut cells = Vec::new();
+
     for (index, mut child) in children.into_iter().enumerate() {
-      match child.context.style.base_data.display {
+      let display = child.context.style.base_data.display;
+
+      // Cells straight inside the table share an anonymous row, as CSS 2.2 §17.2.1 rule 3 has it.
+      if display == Display::TableCell {
+        cells.push(child);
+
+        continue;
+      }
+
+      if !cells.is_empty() {
+        let row = RenderNode::anonymous_box(&table.context, Display::TableRow, take(&mut cells));
+
+        groups.push((1, index, vec![row]));
+      }
+
+      match display {
         Display::TableCaption => captions.push(child),
         Display::TableRow => groups.push((1, index, vec![child])),
         Display::TableHeaderGroup | Display::TableRowGroup | Display::TableFooterGroup => {
@@ -159,6 +176,12 @@ impl TableSlots {
         }
         _ => strays.push(child),
       }
+    }
+
+    if !cells.is_empty() {
+      let row = RenderNode::anonymous_box(&table.context, Display::TableRow, cells);
+
+      groups.push((1, usize::MAX, vec![row]));
     }
 
     sort_by_key(&mut groups, |(order, index, _)| (*order, *index));
@@ -362,8 +385,9 @@ impl RenderNode {
       .filter(|cell| cell.is_cell())
   }
 
-  /// Wraps each run of this row's children that are not table cells in an anonymous cell, as
-  /// CSS 2.2 §17.2.1 fixes a table up.
+  /// Wraps each run of this row's children that are not table cells, text included, in an
+  /// anonymous cell, dropping the collapsible white space between cells, as CSS 2.2 §17.2.1 fixes a
+  /// table up.
   fn wrap_anonymous_cells(&mut self) {
     let Some(children) = self.children.take() else {
       return;
@@ -372,36 +396,93 @@ impl RenderNode {
     let mut run = Vec::new();
 
     for child in children {
-      if child.context.style.base_data.display != Display::TableCell && child.is_cell() {
-        run.push(child);
+      if child.context.style.base_data.display != Display::TableCell {
+        if !run.is_empty() || !child.is_collapsible_whitespace_only_text_node() {
+          run.push(child);
+        }
+
         continue;
       }
+
       if !run.is_empty() {
-        wrapped.push(self.anonymous_box(Display::TableCell, take(&mut run)));
+        wrapped.push(Self::anonymous_box(
+          &self.context,
+          Display::TableCell,
+          take(&mut run),
+        ));
       }
+
       wrapped.push(child);
     }
-    if !run.is_empty() {
-      wrapped.push(self.anonymous_box(Display::TableCell, run));
+
+    if run
+      .iter()
+      .any(|child| !child.is_collapsible_whitespace_only_text_node())
+    {
+      wrapped.push(Self::anonymous_box(&self.context, Display::TableCell, run));
     }
 
     self.children = Some(wrapped.into_boxed_slice());
   }
 
-  /// A `display` box this one generates around `children`, styled only by what it inherits.
-  fn anonymous_box(&self, display: Display, children: Vec<RenderNode>) -> RenderNode {
-    let mut style = ComputedStyle::from_parent(&self.context.style);
+  /// Wraps each run of `children` that are parts of a table, under a `parent` that is not one, in
+  /// an anonymous table, as CSS 2.2 §17.2.1 rule 3 fixes a tree up. Approximate: an inline parent
+  /// gets a block-level table, where the spec generates an inline one.
+  pub(super) fn wrap_orphan_table_parts(
+    parent: &RenderContext,
+    children: Box<[RenderNode]>,
+  ) -> Box<[RenderNode]> {
+    let parent_display = parent.style.base_data.display;
+    let is_part = |child: &RenderNode| child.context.style.base_data.display.is_table_part();
+
+    if parent_display.holds_table_parts() || !children.iter().any(is_part) {
+      return children;
+    }
+
+    let mut wrapped = Vec::with_capacity(children.len());
+    let mut run = Vec::new();
+    // Collapsible white space between two parts belongs to neither, and goes.
+    let mut gap = Vec::new();
+
+    for child in children {
+      if is_part(&child) {
+        gap.clear();
+        run.push(child);
+      } else if !run.is_empty() && child.is_collapsible_whitespace_only_text_node() {
+        gap.push(child);
+      } else {
+        if !run.is_empty() {
+          wrapped.push(Self::anonymous_box(parent, Display::Table, take(&mut run)));
+        }
+
+        wrapped.append(&mut gap);
+        wrapped.push(child);
+      }
+    }
+
+    if !run.is_empty() {
+      wrapped.push(Self::anonymous_box(parent, Display::Table, run));
+    }
+
+    wrapped.append(&mut gap);
+
+    wrapped.into_boxed_slice()
+  }
+
+  /// A `display` box generated inside `parent` around `children`, styled only by what it
+  /// inherits.
+  fn anonymous_box(
+    parent: &RenderContext,
+    display: Display,
+    children: Vec<RenderNode>,
+  ) -> RenderNode {
+    let mut style = ComputedStyle::from_parent(&parent.style);
 
     style.base_data_mut().display = display;
-    style.make_computed(&self.context.sizing);
+    style.make_computed(&parent.sizing);
 
     RenderNode::new(
-      RenderContext::from_parent(
-        &self.context,
-        style,
-        self.context.sizing.clone(),
-        self.context.current_color,
-      ),
+      RenderContext::from_parent(parent, style, parent.sizing.clone(), parent.current_color),
       NodeOrigin::Anonymous,
       None,
       Some(children.into_boxed_slice()),
@@ -628,7 +709,7 @@ impl RenderNode {
     tracks: u16,
     gaps: SpacePair<Length>,
   ) -> RenderNode {
-    let mut rows = self.anonymous_box(Display::Grid, cells);
+    let mut rows = Self::anonymous_box(&self.context, Display::Grid, cells);
 
     rows.context.style_mut().set_table_grid(tracks, gaps);
     rows.lower_full_width(line, tracks);
@@ -1073,6 +1154,7 @@ mod tests {
         .heavy-under { display: table-cell; border: 1px solid rgb(0, 0, 0); border-bottom-width: 4px }
         .short { display: table-cell; height: 10px; padding: 2px }
         .tall { display: table-cell; height: 23px }
+        .bordered-box { border: 1px solid rgb(0, 0, 0) }
       ",
     )
     .expect("stylesheet parses");
@@ -1367,24 +1449,22 @@ mod tests {
   }
 
   #[test]
-  fn a_rows_generated_box_takes_no_track() {
+  fn a_rows_generated_box_takes_the_first_track_in_an_anonymous_cell() {
     let tree = lower(
       Node::container([named_row("row", [cell("a"), cell("b")]).with_class_name("tr pseudo-row")])
         .with_class_name("table"),
     );
 
-    assert_eq!(ids(&tree), ["a", "b"]);
+    assert_eq!(ids(&tree), ["", "a", "b"]);
 
     let cells = tree.children.as_deref().expect("children");
 
-    assert_eq!(
-      cells[0].context.style.misc2_data.grid_column_start,
-      GridPlacement::Line(1)
-    );
-    assert_eq!(
-      cells[1].context.style.misc2_data.grid_column_start,
-      GridPlacement::Line(2)
-    );
+    for (track, cell) in cells.iter().enumerate() {
+      assert_eq!(
+        cell.context.style.misc2_data.grid_column_start,
+        GridPlacement::Line(track as i16 + 1)
+      );
+    }
   }
 
   fn with_span(node: Node, name: &str, value: &str) -> Node {
@@ -1696,7 +1776,7 @@ mod tests {
       Node::container([named_row(
         "only",
         [Node::container([Node::container([Node::text("x")])
-          .with_class_name("bordered")
+          .with_class_name("bordered-box")
           .with_id("inner")])
         .with_class_name("bordered")
         .with_id("cell")],
@@ -1734,6 +1814,37 @@ mod tests {
         .context
         .collapsed_borders
     );
+  }
+
+  #[test]
+  fn a_cell_inside_a_cell_collapses_in_an_anonymous_table() {
+    let table = lower(
+      Node::container([named_row(
+        "only",
+        [Node::container([Node::container([Node::text("x")])
+          .with_class_name("bordered")
+          .with_id("inner")])
+        .with_class_name("bordered")],
+      )])
+      .with_class_name("collapse"),
+    );
+    let mut pending = vec![&table];
+    let mut inner = None;
+
+    while let Some(node) = pending.pop() {
+      if node
+        .node
+        .as_ref()
+        .and_then(|node| node.metadata.id.as_deref())
+        == Some("inner")
+      {
+        inner = Some(node);
+      }
+
+      pending.extend(node.children.as_deref().unwrap_or_default());
+    }
+
+    assert!(inner.expect("inner cell").context.collapsed_borders);
   }
 
   #[test]
