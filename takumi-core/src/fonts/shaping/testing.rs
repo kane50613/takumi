@@ -1,0 +1,57 @@
+//! Fonts for shaping tests.
+
+use std::{fs::read, path::Path, rc::Rc};
+
+use parley::fontique::Attributes;
+
+use crate::{
+  font_style::ExpandedFontFamily,
+  fonts::{font::Font, font_description::FontDescription},
+  resources::font::{FontOverride, FontResource, Fonts},
+  style::{FontFamily, FromCssStr},
+};
+
+pub(crate) const GEIST: &str = "../assets/fonts/geist/Geist[wght].woff2";
+pub(crate) const NOTO_SANS_TC: &str =
+  "../assets/fonts/noto-sans/NotoSansTC-VariableFont_wght.woff2";
+
+/// Registers the font at `path`, from the crate root, as `family_name`.
+pub(crate) fn register(fonts: &mut Fonts, path: &str, family_name: &str) {
+  let bytes = read(Path::new(env!("CARGO_MANIFEST_DIR")).join(path)).unwrap();
+
+  fonts
+    .register(FontResource::new(bytes).override_info(FontOverride {
+      family_name: Some(family_name.into()),
+      ..Default::default()
+    }))
+    .unwrap();
+}
+
+/// A 16px font for the `font-family` list `family`.
+pub(crate) fn font(fonts: &mut Fonts, family: &str) -> Font {
+  let family = FontFamily::from_css_str(family).unwrap();
+
+  Font::new(
+    fonts,
+    FontDescription {
+      family: Rc::new(ExpandedFontFamily::expand(&family)),
+      attributes: Attributes::default(),
+      computed_size: 16.0,
+      specified_size: 16.0,
+      features: Vec::new(),
+      variation_settings: Vec::new(),
+      locale: None,
+    },
+  )
+}
+
+/// Geist, alone.
+pub(crate) fn geist() -> (Fonts, Font) {
+  let mut fonts = Fonts::default();
+
+  register(&mut fonts, GEIST, "Geist");
+
+  let font = font(&mut fonts, "Geist");
+
+  (fonts, font)
+}
