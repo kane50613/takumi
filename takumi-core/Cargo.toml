@@ -106,6 +106,9 @@ workspace = true
 [dependencies.icu_segmenter]
 workspace = true
 
+[dependencies.parley_engine]
+workspace = true
+
 [dependencies.icu_properties]
 workspace = true
 

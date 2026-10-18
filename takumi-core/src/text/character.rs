@@ -11,6 +11,7 @@ use icu_properties::{
 };
 
 pub(crate) const NO_BREAK_SPACE: char = '\u{A0}';
+pub(crate) const SOFT_HYPHEN: char = '\u{AD}';
 pub(crate) const ZERO_WIDTH_NON_JOINER: char = '\u{200C}';
 pub(crate) const ZERO_WIDTH_JOINER: char = '\u{200D}';
 pub(crate) const OBJECT_REPLACEMENT_CHARACTER: char = '\u{FFFC}';
@@ -131,7 +132,7 @@ pub(crate) fn is_common_or_inherited_script(c: char) -> bool {
 /// Blink's `IsDefaultIgnorable`.
 pub(crate) fn is_default_ignorable(c: char) -> bool {
   if u32::from(c) < 0x100 {
-    return c == '\u{AD}';
+    return c == SOFT_HYPHEN;
   }
 
   CodePointSetData::new::<DefaultIgnorableCodePoint>().contains(c)

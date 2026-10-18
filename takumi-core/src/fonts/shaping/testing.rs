@@ -12,6 +12,7 @@ use crate::{
 };
 
 pub(crate) const GEIST: &str = "../assets/fonts/geist/Geist[wght].woff2";
+pub(crate) const GEIST_MONO: &str = "../assets/fonts/geist/GeistMono[wght].woff2";
 pub(crate) const NOTO_SANS_TC: &str =
   "../assets/fonts/noto-sans/NotoSansTC-VariableFont_wght.woff2";
 
@@ -52,6 +53,17 @@ pub(crate) fn geist() -> (Fonts, Font) {
   register(&mut fonts, GEIST, "Geist");
 
   let font = font(&mut fonts, "Geist");
+
+  (fonts, font)
+}
+
+/// Geist Mono, alone: no kerning.
+pub(crate) fn geist_mono() -> (Fonts, Font) {
+  let mut fonts = Fonts::default();
+
+  register(&mut fonts, GEIST_MONO, "Geist Mono");
+
+  let font = font(&mut fonts, "'Geist Mono'");
 
   (fonts, font)
 }
