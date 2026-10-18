@@ -551,11 +551,15 @@ impl ShapeResultRun {
         assert!(limit > left);
         assert!(limit < right);
 
+        // The run keeps its end. Blink subtracts the first dropped cluster from the last kept one,
+        // which is one cluster short when the two differ in width, as UTF-8 clusters often do.
+        let run_end = self.start_index + self.num_characters;
+
         right = limit;
         start_cluster = glyph_infos[right].cluster;
         num_glyphs = right - left + 1;
         self.start_index = start_cluster;
-        self.num_characters = last_cluster - glyph_infos[right + 1].cluster;
+        self.num_characters = run_end - start_cluster;
       }
     }
 
@@ -791,6 +795,35 @@ mod tests {
     let run = create_test_shape_result_run(2, 131_072);
 
     assert_eq!(run.num_characters, 131_072);
+  }
+
+  /// An RTL run past the character index limit drops its logical start, and keeps its end: here
+  /// the last character takes two bytes, and the dropped one takes one.
+  #[test]
+  fn limit_num_glyphs_keeps_the_rtl_run_end() {
+    let last_cluster = HarfBuzzRunGlyphData::MAX_CHARACTERS;
+    let glyph_infos: Vec<GlyphInfo> = (0..=last_cluster)
+      .rev()
+      .map(|cluster| {
+        let mut info = GlyphInfo::default();
+
+        info.cluster = cluster;
+        info
+      })
+      .collect();
+    let mut run = ShapeResultRun::new(
+      None,
+      Direction::RightToLeft,
+      script::LATIN,
+      0,
+      last_cluster + 1,
+      last_cluster + 2,
+    );
+    let (num_glyphs, _) = run.limit_num_glyphs(0, glyph_infos.len(), false, &glyph_infos);
+
+    assert_eq!(num_glyphs, last_cluster as usize);
+    assert_eq!(run.start_index, 1);
+    assert_eq!(run.start_index + run.num_characters, last_cluster + 2);
   }
 
   #[test]
