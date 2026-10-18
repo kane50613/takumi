@@ -2334,6 +2334,11 @@ impl RenderNode {
 
   /// Padding in pixels, with a percentage resolving to zero.
   pub(super) fn padding_px(&self) -> Rect<f32> {
+    self.padding_px_against(0.0)
+  }
+
+  /// The padding, its percentages of `containing_block_width`.
+  pub(super) fn padding_px_against(&self, containing_block_width: f32) -> Rect<f32> {
     let style = &self.context.style;
 
     Rect {
@@ -2342,7 +2347,7 @@ impl RenderNode {
       bottom: style.box_data.padding_bottom,
       left: style.box_data.padding_left,
     }
-    .map(|length| length.to_px(&self.context.sizing, 0.0))
+    .map(|length| length.to_px(&self.context.sizing, containing_block_width))
   }
 
   /// The child-index path to the first node in preorder, `self` included, that `matches` accepts.

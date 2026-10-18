@@ -26,7 +26,12 @@ impl BoxAtomicInline {
       return (metrics.size, metrics.baseline_offset);
     }
 
-    let padding = node.padding_px();
+    // Percentages resolve against the containing block's width, zero when it is indefinite.
+    let containing_block_width = match available_space.width {
+      AvailableSpace::Definite(width) => width,
+      _ => 0.0,
+    };
+    let padding = node.padding_px_against(containing_block_width);
     let border = node.border_px();
 
     (
@@ -116,6 +121,22 @@ mod tests {
     assert_eq!(
       atomic_inline(80.0).layout(child).inline_size,
       LayoutUnit::from_int(40)
+    );
+  }
+
+  /// A replaced box's percentage padding takes the containing block's width.
+  #[test]
+  fn a_replaced_box_resolves_percentage_padding() {
+    let block = render_tree(
+      [Node::image("data:image/png;base64,iVBOR").with_class_name("image")],
+      ".image { width: 20px; height: 10px; box-sizing: content-box; padding-left: 10% }",
+    );
+    let child = &block.children.as_deref().expect("children")[0];
+
+    assert_eq!(
+      atomic_inline(200.0).layout(child).inline_size
+        - atomic_inline(100.0).layout(child).inline_size,
+      LayoutUnit::from_int(10)
     );
   }
 
