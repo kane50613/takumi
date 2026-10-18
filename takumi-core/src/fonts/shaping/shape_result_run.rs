@@ -16,6 +16,7 @@ pub(crate) enum AdjustMidCluster {
   /// The logical end boundary.
   ToEnd,
   /// The logical start boundary.
+  #[cfg(test)]
   ToStart,
 }
 
@@ -72,6 +73,7 @@ impl GlyphDataCollection {
     self.offsets.is_some()
   }
 
+  #[cfg(test)]
   pub(crate) fn has_graphemes(&self) -> bool {
     self.graphemes.is_some()
   }
@@ -80,6 +82,7 @@ impl GlyphDataCollection {
     self.graphemes.as_deref()
   }
 
+  #[cfg(test)]
   pub(crate) fn set_graphemes(&mut self, graphemes: Vec<u32>) {
     self.graphemes = Some(graphemes);
   }
@@ -132,6 +135,7 @@ impl GlyphDataCollection {
     }
   }
 
+  #[cfg(test)]
   /// Blink's `AddOffsetHeightAt`.
   pub(crate) fn add_offset_height_at(&mut self, index: usize, delta: f32) {
     debug_assert!(delta != 0.0);
@@ -155,6 +159,7 @@ impl GlyphDataCollection {
     self.allocate_offsets_if_needed()[index] = offset;
   }
 
+  #[cfg(test)]
   /// Blink's `Reverse`.
   pub(crate) fn reverse(&mut self) {
     self.data.reverse();
@@ -243,13 +248,6 @@ impl ShapeResultRun {
     matches!(
       self.direction,
       Direction::RightToLeft | Direction::BottomToTop
-    )
-  }
-
-  pub(crate) fn is_horizontal(&self) -> bool {
-    matches!(
-      self.direction,
-      Direction::LeftToRight | Direction::RightToLeft
     )
   }
 
@@ -700,51 +698,6 @@ impl ShapeResultRun {
       && self.script == other.script
       && self.glyph_data.size() + other.glyph_data.size()
         <= HarfBuzzRunGlyphData::MAX_CHARACTER_INDEX as usize
-  }
-
-  /// Blink's `ExpandRangeToIncludePartialGlyphs`.
-  pub(crate) fn expand_range_to_include_partial_glyphs(
-    &self,
-    offset: i32,
-    from: &mut i32,
-    to: &mut i32,
-  ) {
-    let num_characters = self.num_characters as i32;
-    let mut include = |start: i32, end: i32| {
-      if end > *from && start < *to {
-        *from = (*from).min(start);
-        *to = (*to).max(end);
-      }
-    };
-    let mut end = offset + num_characters;
-    let mut start = offset + num_characters;
-
-    if self.is_ltr() {
-      for glyph in self.glyph_data.glyphs() {
-        let index = offset + i32::from(glyph.character_index);
-
-        if start == index {
-          continue;
-        }
-
-        include(start, index);
-        start = index;
-      }
-    } else {
-      for glyph in self.glyph_data.glyphs() {
-        let index = offset + i32::from(glyph.character_index);
-
-        if start == index {
-          continue;
-        }
-
-        include(start, end);
-        end = start;
-        start = index;
-      }
-    }
-
-    include(start, end);
   }
 }
 

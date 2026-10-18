@@ -3,7 +3,6 @@ use std::{
   cell::RefCell,
   hash::{Hash, Hasher},
   mem::discriminant,
-  ops::Range,
   rc::Rc,
 };
 
@@ -11,7 +10,6 @@ use parley::{
   FontFamily as ParleyFontFamily, FontFamilyName, FontFeatures, FontVariations, GenericFamily,
   LineBreak as ParleyLineBreak, LineHeight, TextStyle, VerticalAlign as ParleyVerticalAlign,
   WhiteSpaceCollapse as ParleyWhiteSpaceCollapse, fontique::QueryFamily,
-  style::FontStyle as ParleyFontStyle,
 };
 use rustc_hash::FxHashMap;
 use smallvec::SmallVec;
@@ -21,14 +19,14 @@ use crate::{
   context::RenderContext,
   fonts::font::Font,
   geometry::Size,
-  layout::inline::{InlineBrush, TextScale},
+  layout::inline::InlineBrush,
   layout_unit::LayoutUnit,
-  resources::font::{FontClasses, PrimaryFontMetrics},
+  resources::font::PrimaryFontMetrics,
   shadow::SizedShadow,
   style::{
     AppliedTextDecorations, Color, ComputedStyle, Display, FontFamily, FontFeature, FontSynthesis,
     FontVariantCaps, FontVariation, Lang, LineHeight as CssLineHeight, ResolvedFontVariations,
-    SizedTextDecorationThickness, SizingContext, VerticalAlign, WordBreak,
+    SizingContext, WordBreak,
   },
 };
 
@@ -103,57 +101,6 @@ impl ExpandedFontFamily {
     ParleyFontFamily::List(self.iter().collect())
   }
 
-  /// Reorders the stack for a variation-selector segment: families whose glyphs match the
-  /// requested presentation come first (authored order preserved), then every registered
-  /// family of the matching class, then the rest of the authored stack as the base-glyph
-  /// fallback. Blink reaches the same order by rejecting presentation-mismatched fonts
-  /// during the first fallback pass and rerunning it without the selector.
-  pub(crate) fn with_presentation<'a>(
-    &self,
-    presentation: Presentation,
-    classes: &FontClasses,
-  ) -> ParleyFontFamily<'a> {
-    let matches = |token: &ExpandedFamilyToken| {
-      let is_color = match token {
-        ExpandedFamilyToken::Named(name) => classes.color.contains(name),
-        ExpandedFamilyToken::Generic(generic) => *generic == GenericFamily::Emoji,
-      };
-
-      is_color == (presentation == Presentation::Emoji)
-    };
-    let owned = |token: &ExpandedFamilyToken| match token {
-      ExpandedFamilyToken::Named(name) => FontFamilyName::Named(Cow::Owned(name.clone())),
-      ExpandedFamilyToken::Generic(generic) => FontFamilyName::Generic(*generic),
-    };
-    let registered = match presentation {
-      Presentation::Emoji => &classes.color_order,
-      Presentation::Text => &classes.mono_order,
-    };
-
-    let mut names: Vec<FontFamilyName<'a>> = Vec::with_capacity(self.tokens.len());
-    names.extend(self.tokens.iter().filter(|token| matches(token)).map(owned));
-    names.extend(
-      registered
-        .iter()
-        .filter(|name| {
-          !self
-            .tokens
-            .iter()
-            .any(|token| matches!(token, ExpandedFamilyToken::Named(authored) if authored == *name))
-        })
-        .map(|name| FontFamilyName::Named(Cow::Owned(name.clone()))),
-    );
-    names.extend(
-      self
-        .tokens
-        .iter()
-        .filter(|token| !matches(token))
-        .map(owned),
-    );
-
-    ParleyFontFamily::List(Cow::Owned(names))
-  }
-
   pub(crate) fn expand(family: &FontFamily) -> Self {
     Self::new(
       family
@@ -182,76 +129,6 @@ impl RenderContext {
   }
 }
 
-/// The glyph presentation a variation selector requests.
-/// <https://unicode.org/reports/tr51/#Presentation_Style>
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub(crate) enum Presentation {
-  /// `U+FE0F`: color emoji glyph.
-  Emoji,
-  /// `U+FE0E`: monochrome text glyph.
-  Text,
-}
-
-const VS15: char = '\u{FE0E}';
-const VS16: char = '\u{FE0F}';
-const ZWJ: char = '\u{200D}';
-const KEYCAP: char = '\u{20E3}';
-
-pub(crate) fn contains_variation_selector(text: &str) -> bool {
-  text.contains([VS15, VS16])
-}
-
-fn continues_emoji_sequence(ch: char) -> bool {
-  matches!(ch, VS15 | VS16 | KEYCAP | '\u{1F3FB}'..='\u{1F3FF}')
-}
-
-/// Splits `text` into maximal segments of one requested presentation, `None` where no variation
-/// selector expresses one.
-pub(crate) fn presentation_segments(text: &str) -> Vec<(Range<usize>, Option<Presentation>)> {
-  let chars: Vec<(usize, char)> = text.char_indices().collect();
-  let mut segments: Vec<(Range<usize>, Option<Presentation>)> = Vec::new();
-  let mut push = |range: Range<usize>, presentation| {
-    match segments.last_mut() {
-      Some((last, existing)) if *existing == presentation => last.end = range.end,
-      _ => segments.push((range, presentation)),
-    };
-  };
-
-  let mut index = 0;
-  while index < chars.len() {
-    let start = chars[index].0;
-    let mut presentation = None;
-    let mut end = index + 1;
-
-    loop {
-      while let Some(&(_, ch)) = chars
-        .get(end)
-        .filter(|(_, ch)| continues_emoji_sequence(*ch))
-      {
-        match ch {
-          VS16 => presentation = presentation.or(Some(Presentation::Emoji)),
-          VS15 => presentation = presentation.or(Some(Presentation::Text)),
-          _ => {}
-        }
-        end += 1;
-      }
-
-      if chars.get(end).is_some_and(|(_, ch)| *ch == ZWJ) && end + 1 < chars.len() {
-        end += 2;
-      } else {
-        break;
-      }
-    }
-
-    let end_byte = chars.get(end).map_or(text.len(), |(byte, _)| *byte);
-
-    push(start..end_byte, presentation);
-    index = end;
-  }
-
-  segments
-}
-
 /// Sized font style with computed font size and line height.
 #[derive(Clone)]
 #[non_exhaustive]
@@ -262,9 +139,6 @@ pub struct SizedFontStyle<'s> {
   pub(crate) font_variations: ResolvedFontVariations,
   /// The `font-variant-caps` feature to shape with, which a synthesized caps run swaps.
   pub(crate) caps: FontVariantCaps,
-  /// Alternates between neighbouring case runs of split `font-variant-caps` text, so each shapes
-  /// apart as Blink shapes them.
-  pub(crate) case_run_parity: Option<bool>,
   pub(crate) line_height: parley::LineHeight,
   /// The line height kept on the brush, because parley's run metrics can carry a neighboring
   /// span's style at run boundaries.
@@ -284,6 +158,43 @@ pub struct SizedFontStyle<'s> {
 }
 
 impl SizedFontStyle<'_> {
+  /// The paint attributes a run in this style carries.
+  pub(crate) fn brush(&self) -> InlineBrush {
+    InlineBrush {
+      source_span_id: None,
+      is_direction_mark: false,
+      // Inline elements don't establish a stacking context, so we handle opacity here.
+      opacity: if self.parent.base_data.display == Display::Inline {
+        self.parent.svg_data.opacity.0
+      } else {
+        1.0
+      },
+      color: self.color,
+      decorations: self.text_decorations.clone(),
+      decoration_skip_ink: self.parent.misc_inherited_data.text_decoration_skip_ink,
+      stroke_color: self.text_stroke_color,
+      stroke_width: self.stroke_width,
+      font_synthesis: FontSynthesis {
+        weight: self.parent.inherited_data.font_synthesis_weight,
+        style: self.parent.inherited_data.font_synthesis_style,
+        small_caps: self.parent.inherited_data.font_synthesis_small_caps,
+      },
+      font_variations: self.font_variations.clone(),
+      line_height: self.box_line_height,
+      fixed_letter_spacing: if self.parent.inherited_data.letter_spacing.has_percentage() {
+        0.0
+      } else {
+        self.letter_spacing
+      },
+      fixed_word_spacing: if self.parent.inherited_data.word_spacing.has_percentage() {
+        0.0
+      } else {
+        self.word_spacing
+      },
+      vertical_align: self.parent.base_data.vertical_align,
+    }
+  }
+
   /// The `text-shadow` layers in painting order: back to front, so the first
   /// one authored ends up on top, and without the ones nobody would see.
   ///
@@ -301,105 +212,6 @@ impl SizedFontStyle<'_> {
     self
       .parent
       .resolved_font_features(self.letter_spacing != 0.0, self.caps)
-  }
-
-  /// Hashes every input the `TextStyle` conversion below reads, so shaped text-only layouts can be
-  /// cached by content.
-  pub(crate) fn hash_shaping_inputs(&self, hasher: &mut impl Hasher) {
-    self.sizing.font_size.to_bits().hash(hasher);
-    self.case_run_parity.hash(hasher);
-    self.letter_spacing.to_bits().hash(hasher);
-    self.word_spacing.to_bits().hash(hasher);
-    self
-      .parent
-      .inherited_data
-      .letter_spacing
-      .has_percentage()
-      .hash(hasher);
-    self
-      .parent
-      .inherited_data
-      .word_spacing
-      .has_percentage()
-      .hash(hasher);
-    self.box_line_height.hash(hasher);
-    discriminant(&self.line_height).hash(hasher);
-    match self.line_height {
-      LineHeight::Absolute(value)
-      | LineHeight::FontSizeRelative(value)
-      | LineHeight::MetricsRelative(value) => value.to_bits().hash(hasher),
-    }
-    self.color.0.hash(hasher);
-    self.text_stroke_color.0.hash(hasher);
-    self.stroke_width.to_bits().hash(hasher);
-    self.font_family.hash_tokens(hasher);
-    for decoration in self.text_decorations.as_slice() {
-      decoration.line.bits().hash(hasher);
-      discriminant(&decoration.style).hash(hasher);
-      decoration.color.0.hash(hasher);
-      match decoration.thickness {
-        SizedTextDecorationThickness::Auto => 2_u8.hash(hasher),
-        SizedTextDecorationThickness::FromFont => 0_u8.hash(hasher),
-        SizedTextDecorationThickness::Value(value) => {
-          1_u8.hash(hasher);
-          value.to_bits().hash(hasher);
-        }
-      }
-      decoration.underline_offset.map(f32::to_bits).hash(hasher);
-      (decoration.underline_position as u8).hash(hasher);
-    }
-
-    let parent = self.parent;
-
-    discriminant(&parent.inherited_data.font_weight).hash(hasher);
-    parent
-      .inherited_data
-      .font_weight
-      .value()
-      .to_bits()
-      .hash(hasher);
-    match parent.inherited_data.font_style.into_parlance() {
-      ParleyFontStyle::Normal => 0_u8.hash(hasher),
-      ParleyFontStyle::Italic => 1_u8.hash(hasher),
-      ParleyFontStyle::Oblique(angle) => {
-        2_u8.hash(hasher);
-        angle.map(f32::to_bits).hash(hasher);
-      }
-    }
-    parent
-      .inherited_data
-      .font_stretch
-      .percentage()
-      .to_bits()
-      .hash(hasher);
-    for variation in self.font_variations.iter() {
-      variation.tag.hash(hasher);
-      variation.value.to_bits().hash(hasher);
-    }
-    for feature in self.font_features().iter() {
-      feature.tag.hash(hasher);
-      feature.value.hash(hasher);
-    }
-    (parent.misc_inherited_data.word_break as u8).hash(hasher);
-    discriminant(&parent.misc_inherited_data.overflow_wrap.into_parley()).hash(hasher);
-    discriminant(&parent.base_data.display).hash(hasher);
-    parent.svg_data.opacity.0.to_bits().hash(hasher);
-    (parent.misc_inherited_data.text_decoration_skip_ink as u8).hash(hasher);
-    (parent.inherited_data.font_synthesis_weight as u8).hash(hasher);
-    (parent.inherited_data.font_synthesis_style as u8).hash(hasher);
-    (parent.inherited_data.font_synthesis_small_caps as u8).hash(hasher);
-    match &parent.base_data.vertical_align {
-      VerticalAlign::Keyword(keyword) => {
-        0_u8.hash(hasher);
-        (*keyword as u8).hash(hasher);
-      }
-      VerticalAlign::Length(length) => {
-        1_u8.hash(hasher);
-        length.hash_bits(hasher);
-      }
-    }
-    (parent.resolved_text_wrap_mode() as u8).hash(hasher);
-    parent.lang.as_ref().map(Lang::as_str).hash(hasher);
   }
 }
 
@@ -435,39 +247,7 @@ impl<'s> From<&'s SizedFontStyle<'s>> for TextStyle<'s, 's, InlineBrush> {
       } else {
         style.parent.misc_inherited_data.overflow_wrap.into_parley()
       },
-      brush: InlineBrush {
-        source_span_id: None,
-        is_direction_mark: false,
-        // Inline elements don't establish a stacking context, so we handle opacity here.
-        opacity: if style.parent.base_data.display == Display::Inline {
-          style.parent.svg_data.opacity.0
-        } else {
-          1.0
-        },
-        color: style.color,
-        decorations: style.text_decorations.clone(),
-        decoration_skip_ink: style.parent.misc_inherited_data.text_decoration_skip_ink,
-        stroke_color: style.text_stroke_color,
-        stroke_width: style.stroke_width,
-        font_synthesis: FontSynthesis {
-          weight: style.parent.inherited_data.font_synthesis_weight,
-          style: style.parent.inherited_data.font_synthesis_style,
-          small_caps: style.parent.inherited_data.font_synthesis_small_caps,
-        },
-        font_variations: style.font_variations.clone(),
-        line_height: style.box_line_height,
-        fixed_letter_spacing: if style.parent.inherited_data.letter_spacing.has_percentage() {
-          0.0
-        } else {
-          style.letter_spacing
-        },
-        fixed_word_spacing: if style.parent.inherited_data.word_spacing.has_percentage() {
-          0.0
-        } else {
-          style.word_spacing
-        },
-        vertical_align: style.parent.base_data.vertical_align,
-      },
+      brush: style.brush(),
       text_wrap_mode: style.parent.resolved_text_wrap_mode().into_parley(),
       line_break: ParleyLineBreak::default(),
       // Inline layout collapses white space and aligns boxes itself, as Blink's inline items do.
@@ -553,36 +333,6 @@ impl BoxLineHeight {
       Self::Number { value, .. } => number_line_height(value, font.description.computed_size),
     }
   }
-
-  /// The line height against a font of `ascent`, `descent` and `line_gap` px, sized by `scale`.
-  /// A line height that is not a length scales with text that scales as it paints, as Blink's
-  /// `InlineBoxState::ComputeTextMetrics` scales it.
-  pub(crate) fn resolve(
-    self,
-    ascent: f32,
-    descent: f32,
-    line_gap: f32,
-    scale: TextScale,
-  ) -> LayoutUnit {
-    let font_scale = scale.font();
-    let line_height = match self {
-      Self::Length(line_height) => return line_height,
-      // Blink's `FontMetrics::FixedLineSpacing`.
-      Self::Normal => LayoutUnit::from_float_round(
-        (ascent * font_scale).round()
-          + (descent * font_scale).round()
-          + (line_gap * font_scale).round(),
-      ),
-      Self::Number { value, font_size } => number_line_height(value, font_size * font_scale),
-    };
-
-    match scale {
-      TextScale::Paint(scale) if scale != 1.0 => {
-        LayoutUnit::from_float(line_height.to_float() * scale)
-      }
-      _ => line_height,
-    }
-  }
 }
 
 impl Hash for BoxLineHeight {
@@ -649,7 +399,6 @@ impl<'s> SizedFontStyle<'s> {
         context.sizing.to_css(context.sizing.font_size),
       ),
       caps: style.inherited_data.font_variant_caps,
-      case_run_parity: None,
       line_height,
       box_line_height,
       stroke_width: style
@@ -685,13 +434,9 @@ impl<'s> SizedFontStyle<'s> {
 // not in this file; the one testable seam owned by this module is `ExpandedFontFamily::expand`.
 #[cfg(test)]
 mod tests {
-  use std::collections::HashSet;
-
   use parley::{FontFamilyName, GenericFamily};
 
-  use super::{
-    ExpandedFamilyToken, ExpandedFontFamily, FontClasses, Presentation, presentation_segments,
-  };
+  use super::{ExpandedFamilyToken, ExpandedFontFamily};
   use crate::style::{FontFamily, FromCssStr};
 
   #[test]
@@ -745,128 +490,5 @@ mod tests {
       expanded.iter().next(),
       Some(FontFamilyName::Generic(GenericFamily::Monospace))
     ));
-  }
-
-  fn segments(text: &str) -> Vec<(&str, Option<Presentation>)> {
-    presentation_segments(text)
-      .into_iter()
-      .map(|(range, presentation)| (&text[range], presentation))
-      .collect()
-  }
-
-  #[test]
-  fn text_without_selectors_is_one_neutral_segment() {
-    assert_eq!(segments("hello 👍"), vec![("hello 👍", None)]);
-  }
-
-  #[test]
-  fn a_selector_claims_its_base_and_leaves_the_rest() {
-    assert_eq!(
-      segments("‼ ‼\u{FE0F}!"),
-      vec![
-        ("‼ ", None),
-        ("‼\u{FE0F}", Some(Presentation::Emoji)),
-        ("!", None),
-      ]
-    );
-  }
-
-  #[test]
-  fn vs15_requests_text_presentation() {
-    assert_eq!(
-      segments("a‼\u{FE0E}b"),
-      vec![
-        ("a", None),
-        ("‼\u{FE0E}", Some(Presentation::Text)),
-        ("b", None),
-      ]
-    );
-  }
-
-  #[test]
-  fn keycap_and_zwj_sequences_stay_whole() {
-    assert_eq!(
-      segments("1\u{FE0F}\u{20E3}"),
-      vec![("1\u{FE0F}\u{20E3}", Some(Presentation::Emoji))]
-    );
-    assert_eq!(
-      segments("❤\u{FE0F}\u{200D}🔥!"),
-      vec![
-        ("❤\u{FE0F}\u{200D}🔥", Some(Presentation::Emoji)),
-        ("!", None),
-      ]
-    );
-  }
-
-  #[test]
-  fn a_selector_later_in_a_zwj_chain_claims_the_whole_chain() {
-    assert_eq!(
-      segments("👁\u{200D}🗨\u{FE0F}"),
-      vec![("👁\u{200D}🗨\u{FE0F}", Some(Presentation::Emoji))]
-    );
-  }
-
-  #[test]
-  fn adjacent_segments_with_the_same_presentation_merge() {
-    assert_eq!(
-      segments("‼\u{FE0F}ℹ\u{FE0F}"),
-      vec![("‼\u{FE0F}ℹ\u{FE0F}", Some(Presentation::Emoji))]
-    );
-  }
-
-  fn classes() -> FontClasses {
-    FontClasses {
-      color: HashSet::from(["Emoji Font".to_string(), "Other Emoji".to_string()]),
-      color_order: vec!["Emoji Font".to_string(), "Other Emoji".to_string()],
-      mono_order: vec!["Text Font".to_string(), "Other Text".to_string()],
-    }
-  }
-
-  fn family_names(family: parley::FontFamily<'_>) -> Vec<String> {
-    let parley::FontFamily::List(names) = family else {
-      panic!("expected a list");
-    };
-    names
-      .iter()
-      .map(|name| match name {
-        FontFamilyName::Named(name) => name.to_string(),
-        FontFamilyName::Generic(generic) => format!("{generic:?}"),
-      })
-      .collect()
-  }
-
-  #[test]
-  fn emoji_presentation_puts_color_families_first() {
-    let family = FontFamily::from_css_str("Text Font, Emoji Font").unwrap();
-    let expanded = ExpandedFontFamily::expand(&family);
-
-    assert_eq!(
-      family_names(expanded.with_presentation(Presentation::Emoji, &classes())),
-      vec!["Emoji Font", "Other Emoji", "Text Font"]
-    );
-  }
-
-  #[test]
-  fn text_presentation_puts_mono_families_first() {
-    let family = FontFamily::from_css_str("Emoji Font, Text Font").unwrap();
-    let expanded = ExpandedFontFamily::expand(&family);
-
-    assert_eq!(
-      family_names(expanded.with_presentation(Presentation::Text, &classes())),
-      vec!["Text Font", "Other Text", "Emoji Font"]
-    );
-  }
-
-  #[test]
-  fn registered_class_families_slot_between_authored_classes() {
-    let family = FontFamily::from_css_str("Text Font").unwrap();
-    let expanded = ExpandedFontFamily::expand(&family);
-
-    // No authored color font: the registered ones still outrank the mismatched
-    // authored family, like Blink's fallback-priority font stage.
-    assert_eq!(
-      family_names(expanded.with_presentation(Presentation::Emoji, &classes())),
-      vec!["Emoji Font", "Other Emoji", "Text Font"]
-    );
   }
 }

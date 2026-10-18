@@ -1,7 +1,6 @@
 mod container;
 mod image;
 mod input;
-mod text;
 
 use std::{
   collections::BTreeMap,
@@ -22,7 +21,6 @@ use crate::{
     image_buffer::ImageBuffer,
   },
   style::{Direction, Lang, Style, StyleDeclaration, TailwindValues, ToCss},
-  text_processing::COLLAPSIBLE_WHITESPACE,
   viewport::Viewport,
 };
 
@@ -350,13 +348,6 @@ impl Node {
     Some(text)
   }
 
-  pub(crate) fn text_data(&self) -> Option<&TextData> {
-    match &self.kind {
-      NodeKind::Text(text) => Some(text),
-      _ => None,
-    }
-  }
-
   pub(crate) fn is_whitespace_only_text(&self) -> bool {
     let NodeKind::Text(data) = &self.kind else {
       return false;
@@ -364,7 +355,7 @@ impl Node {
     data
       .text
       .chars()
-      .all(|ch| COLLAPSIBLE_WHITESPACE.contains(&ch))
+      .all(|ch| matches!(ch, ' ' | '\t' | '\n' | '\r' | '\u{c}'))
   }
 
   /// Sets the tag name and returns the updated node.
@@ -564,9 +555,8 @@ impl Node {
     style: &taffy::Style,
   ) -> Size<f32> {
     match &self.kind {
-      NodeKind::Container { .. } => Size::ZERO,
       NodeKind::Image(image) => image.measure(context, available_space, known_dimensions, style),
-      NodeKind::Text(text) => text.measure(context, available_space, known_dimensions),
+      NodeKind::Container { .. } | NodeKind::Text(_) => Size::ZERO,
     }
   }
 

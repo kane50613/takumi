@@ -1,47 +1,15 @@
 /// Tile geometry of background and mask layers.
 pub mod background_image_geometry;
-#[cfg_attr(
-  not(test),
-  expect(
-    dead_code,
-    reason = "TODO: the inline layout algorithm port places floats"
-  )
-)]
-#[cfg_attr(test, allow(dead_code))]
 pub(crate) mod bfc_rect;
 /// Backend-agnostic border geometry shared across rasterization backends.
 pub mod border;
 pub mod clip;
-#[cfg_attr(
-  not(test),
-  expect(
-    dead_code,
-    reason = "TODO: the inline layout algorithm port places floats"
-  )
-)]
-#[cfg_attr(test, allow(dead_code))]
 pub(crate) mod constraint_space;
 pub(crate) mod contoured_rect;
 pub(crate) mod corner_shape;
 /// Backend-agnostic box-decoration clip geometry.
 pub mod decoration;
-#[cfg_attr(
-  not(test),
-  expect(
-    dead_code,
-    reason = "TODO: the inline layout algorithm port places floats"
-  )
-)]
-#[cfg_attr(test, allow(dead_code))]
 pub(crate) mod exclusions;
-#[cfg_attr(
-  not(test),
-  expect(
-    dead_code,
-    reason = "TODO: the inline layout algorithm port places floats"
-  )
-)]
-#[cfg_attr(test, allow(dead_code))]
 pub(crate) mod floats_utils;
 /// Inline-level layout: text shaping, line breaking, and text fitting.
 pub mod inline;
@@ -51,14 +19,6 @@ pub mod inline_box;
 pub mod intercept;
 /// Generated marker boxes for `display: list-item`.
 mod list_marker;
-#[cfg_attr(
-  not(test),
-  expect(
-    dead_code,
-    reason = "TODO: the inline layout algorithm port builds logical lines"
-  )
-)]
-#[cfg_attr(test, allow(dead_code))]
 pub(crate) mod logical_rect;
 pub mod measure;
 /// Node Tree

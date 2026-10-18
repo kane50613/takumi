@@ -5,9 +5,9 @@ use std::rc::Rc;
 
 use super::{
   inline_box_state::InlineLayoutStateStack,
-  inline_item::StyleVariant,
   line_info::LineInfo,
   logical_line_item::{LogicalLineItem, LogicalLineItems},
+  text_fit_scale::TextFitScale,
 };
 use crate::{
   context::RenderContext,
@@ -79,6 +79,8 @@ pub(crate) struct LineTruncator<'a, 'c> {
   available_width: LayoutUnit,
   line_direction: TextDirection,
   is_ellipsis_caused_by_line_clamp: bool,
+  /// How `text-fit` scales the line's text, which the ellipsis scales with.
+  text_fit_scale: f32,
   ellipsis_shape_results: Vec<EllipsisShapeResult>,
   ellipsis_width: LayoutUnit,
 }
@@ -94,6 +96,7 @@ impl<'a, 'c> LineTruncator<'a, 'c> {
       available_width: line_info.available_width() - line_info.text_indent,
       line_direction: line_info.base_direction,
       is_ellipsis_caused_by_line_clamp,
+      text_fit_scale: line_info.text_fit_scale,
       ellipsis_shape_results: Vec::new(),
       ellipsis_width: LayoutUnit::ZERO,
     }
@@ -142,7 +145,7 @@ impl<'a, 'c> LineTruncator<'a, 'c> {
     let Some(bidi) = bidi else {
       let shape_result = self.shape(ellipsis_text.clone(), self.line_direction);
 
-      self.ellipsis_width = shape_result.snapped_width();
+      self.ellipsis_width = self.scaled(shape_result.snapped_width());
       self.ellipsis_shape_results.push(EllipsisShapeResult {
         shape_result,
         text: ellipsis_text,
@@ -156,13 +159,22 @@ impl<'a, 'c> LineTruncator<'a, 'c> {
       let run_text = ellipsis_text[run.start..run.end].to_owned();
       let shape_result = self.shape(run_text.clone(), direction_from_level(run.level));
 
-      self.ellipsis_width += shape_result.snapped_width();
+      self.ellipsis_width += self.scaled(shape_result.snapped_width());
       self.ellipsis_shape_results.push(EllipsisShapeResult {
         shape_result,
         text: run_text,
         bidi_level: run.level,
       });
     }
+  }
+
+  /// `width` scaled as `text-fit` scales the line's text.
+  fn scaled(&self, width: LayoutUnit) -> LayoutUnit {
+    if self.text_fit_scale == 1.0 {
+      return width;
+    }
+
+    LayoutUnit::from_float(width.to_float() * self.text_fit_scale)
   }
 
   fn shape(&self, text: String, direction: TextDirection) -> Rc<ShapeResultView> {
@@ -199,21 +211,30 @@ impl<'a, 'c> LineTruncator<'a, 'c> {
     let mut current_offset = ellipsis_inline_offset;
 
     for ellipsis in &self.ellipsis_shape_results {
-      let inline_size = ellipsis.shape_result.snapped_width();
+      let inline_size = self.scaled(ellipsis.shape_result.snapped_width());
 
-      line_box.add_child(LogicalLineItem::ellipsis(
+      let mut ellipsis_item = LogicalLineItem::ellipsis(
         layout_object,
-        StyleVariant::StandardEllipsis,
         Rc::clone(&ellipsis.shape_result),
         ellipsis.text.clone(),
         LogicalRect::new(
           current_offset,
-          -ellipsis_metrics.ascent,
+          -self.scaled(ellipsis_metrics.ascent),
           inline_size,
-          ellipsis_metrics.line_height(),
+          self.scaled(ellipsis_metrics.line_height()),
         ),
         ellipsis.bidi_level,
-      ));
+      );
+
+      // Approximate: Blink leaves the ellipsis of a fitted line unscaled.
+      if self.text_fit_scale != 1.0 {
+        ellipsis_item.text_fit_scale = Some(TextFitScale {
+          scale: self.text_fit_scale,
+          font: None,
+        });
+      }
+
+      line_box.add_child(ellipsis_item);
       current_offset += inline_size;
     }
 
@@ -356,9 +377,14 @@ impl<'a, 'c> LineTruncator<'a, 'c> {
     };
     let shape_result = shape_result.create_shape_result();
     let text_length = child.text_offset.len();
+    // `text-fit` scales the child past its shape.
+    let scale = child
+      .text_fit_scale
+      .as_ref()
+      .map_or(1.0, |text_fit_scale| text_fit_scale.scale);
     let position = match self.line_direction {
-      TextDirection::Ltr => space_for_child.to_float(),
-      TextDirection::Rtl => shape_result.width() - space_for_child.to_float(),
+      TextDirection::Ltr => space_for_child.to_float() / scale,
+      TextDirection::Rtl => shape_result.width() - space_for_child.to_float() / scale,
     };
     let mut offset_to_fit = shape_result.offset_to_fit(position, self.line_direction) as usize;
 

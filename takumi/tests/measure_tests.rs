@@ -141,7 +141,7 @@ fn test_measure_text_node() {
           text: "Hello World".to_string(),
           x: 0.0,
           y: -0.10000038,
-          width: 105.46001,
+          width: 105.45999,
           height: 26.0,
         }],
       }],
@@ -269,7 +269,7 @@ fn test_measure_inline_layout() {
   assert_within(first.height, 26.0, 0.1);
 
   let second = &result.runs[1];
-  assert_eq!(second.text, "This is Takumi ");
+  assert_eq!(second.text, "This is Takumi");
   assert_within(second.x, 233.47, 0.1);
   assert_within(second.y, 108.0, 1.5);
   assert_within(second.height, 26.0, 0.1);
@@ -1123,7 +1123,7 @@ fn test_measure_clear_left_moves_following_float_below_previous_left_float() {
 }
 
 #[test]
-fn test_measure_line_box_reflows_below_float_that_intersects_tall_line() {
+fn test_measure_float_too_wide_for_the_line_goes_below_it() {
   let node = Node::container([
     Node::container([])
       .with_style(
@@ -1173,12 +1173,11 @@ fn test_measure_line_box_reflows_below_float_that_intersects_tall_line() {
     .first()
     .expect("expected text after the floats to be measured");
 
+  // Blink's `ShouldPushFloatAfterLine` places a float too wide for the rest of the line below it.
   assert_close(second_float.transform[4], 0.0);
-  assert_close(second_float.transform[5], 40.0);
-  assert!(
-    first_run.y >= 80.0,
-    "expected text to reflow below the intersecting float instead of overlapping it"
-  );
+  assert_close(second_float.transform[5], 60.0);
+  assert_close(first_run.x, 120.0);
+  assert!(first_run.y >= 60.0, "text after the float starts beside it");
 }
 
 #[test]

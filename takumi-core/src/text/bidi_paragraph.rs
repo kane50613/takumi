@@ -4,10 +4,7 @@
 use icu_properties::{CodePointMapData, props::BidiClass};
 use parley_engine::{Analysis, AnalysisOptions, Analyzer, BaseDirection};
 
-use crate::{
-  style::Direction as TextDirection,
-  text::character::{LEFT_TO_RIGHT_OVERRIDE, POP_DIRECTIONAL_FORMATTING, RIGHT_TO_LEFT_OVERRIDE},
-};
+use crate::style::Direction as TextDirection;
 
 /// Blink's `DirectionFromLevel`.
 pub(crate) fn direction_from_level(level: u8) -> TextDirection {
@@ -26,15 +23,7 @@ pub(crate) struct Run {
   pub(crate) level: u8,
 }
 
-impl Run {
-  pub(crate) fn length(&self) -> usize {
-    self.end - self.start
-  }
-
-  pub(crate) fn direction(&self) -> TextDirection {
-    direction_from_level(self.level)
-  }
-}
+impl Run {}
 
 /// Blink's `BidiParagraph`.
 #[derive(Debug, Default)]
@@ -122,6 +111,7 @@ impl BidiParagraph {
     (run.end, run.level)
   }
 
+  #[cfg(test)]
   /// Blink's `GetLogicalRuns`.
   pub(crate) fn get_logical_runs(&self) -> &[Run] {
     &self.runs
@@ -170,6 +160,7 @@ impl BidiParagraph {
     indices
   }
 
+  #[cfg(test)]
   /// Blink's `BaseDirectionForString`: the direction of the first strong character before one
   /// `stop_at` accepts.
   pub(crate) fn base_direction_for_string(
@@ -191,24 +182,6 @@ impl BidiParagraph {
     }
 
     None
-  }
-
-  /// Blink's `BaseDirectionForStringOrLtr`.
-  pub(crate) fn base_direction_for_string_or_ltr(
-    text: &str,
-    stop_at: Option<fn(char) -> bool>,
-  ) -> TextDirection {
-    Self::base_direction_for_string(text, stop_at).unwrap_or(TextDirection::Ltr)
-  }
-
-  /// Blink's `StringWithDirectionalOverride`.
-  pub(crate) fn string_with_directional_override(text: &str, direction: TextDirection) -> String {
-    let override_character = match direction {
-      TextDirection::Ltr => LEFT_TO_RIGHT_OVERRIDE,
-      TextDirection::Rtl => RIGHT_TO_LEFT_OVERRIDE,
-    };
-
-    format!("{override_character}{text}{POP_DIRECTIONAL_FORMATTING}")
   }
 }
 

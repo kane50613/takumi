@@ -103,9 +103,7 @@ impl LineWidths {
             return None;
           }
         }
-        InlineItemType::AtomicInline
-        | InlineItemType::BlockInInline
-        | InlineItemType::ListMarker => {
+        InlineItemType::AtomicInline | InlineItemType::ListMarker => {
           return None;
         }
       }

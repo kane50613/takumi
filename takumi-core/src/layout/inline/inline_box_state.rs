@@ -344,7 +344,6 @@ impl<'a, 'c> BoxData<'a, 'c> {
 
     LineFragment::InlineBox(InlineBoxFragment {
       node: self.node,
-      style_variant: self.item.style_variant,
       size: LogicalSize::new(
         self.rect.size.inline_size.clamp_negative_to_zero(),
         self.rect.size.block_size,

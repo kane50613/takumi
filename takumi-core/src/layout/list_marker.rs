@@ -41,13 +41,14 @@ pub(super) fn list_marker(item_context: &RenderContext, ordinal: i32) -> Option<
   let (mut style, sizing, current_color) =
     item_context.resolve_pseudo_style(&MatchedDeclarationsView::default());
 
-  let inherited = style.inherited_data_mut();
-
-  inherited.white_space_collapse = WhiteSpaceCollapse::Preserve;
-  inherited.text_wrap_mode = TextWrapMode::NoWrap;
-
   match position {
     ListStylePosition::Outside => {
+      // Blink's `AdjustStyleForMarker`: an outside marker does not break and keeps its trailing
+      // spaces.
+      let inherited = style.inherited_data_mut();
+
+      inherited.white_space_collapse = WhiteSpaceCollapse::Preserve;
+      inherited.text_wrap_mode = TextWrapMode::NoWrap;
       style.base_data_mut().display = Display::InlineFlex;
 
       let box_data = style.box_data_mut();

@@ -34,7 +34,6 @@ pub(crate) struct InlineNodeData<'c> {
   pub(crate) base_direction: TextDirection,
   pub(crate) has_floats: bool,
   pub(crate) has_out_of_flow_positioned: bool,
-  pub(crate) is_block_level: bool,
   pub(crate) is_bisect_line_break_disabled: bool,
   pub(crate) is_score_line_break_disabled: bool,
   pub(crate) fonts: StyleFonts,
@@ -83,12 +82,6 @@ impl<'c> InlineNodeData<'c> {
     }
 
     open_items
-  }
-
-  /// Blink's `DisableBidi`.
-  pub(crate) fn disable_bidi(&mut self) {
-    self.is_bidi_enabled = false;
-    self.base_direction = TextDirection::Ltr;
   }
 }
 

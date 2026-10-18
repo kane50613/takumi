@@ -13,17 +13,17 @@
       <use href="#g1" x="66.33" y="36"/>
     </g>
     <g fill="#000">
-      <use href="#g5" x="232.04" y="36"/>
+      <use href="#g5" x="232.05" y="36"/>
       <use href="#g2" x="247.08" y="36"/>
       <use href="#g6" x="257.02" y="36"/>
-      <use href="#g1" x="267.54" y="36"/>
-      <use href="#g4" x="282.97" y="36"/>
+      <use href="#g1" x="267.55" y="36"/>
+      <use href="#g4" x="282.98" y="36"/>
     </g>
     <rect x="97" y="8" width="120" height="48" fill="#dc2626"/>
     <g fill="#fff">
-      <use href="#g0" x="97.04" y="36"/>
-      <use href="#g3" x="113.42" y="36"/>
-      <use href="#g7" x="128.06" y="36"/>
+      <use href="#g0" x="97.05" y="36"/>
+      <use href="#g3" x="113.43" y="36"/>
+      <use href="#g7" x="128.07" y="36"/>
     </g>
   </g>
   <g transform="matrix(.866 .5 -.5 .866 390.833 157.287)">

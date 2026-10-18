@@ -134,7 +134,6 @@ pub use offset_path::*;
 pub use order::*;
 pub use overflow::*;
 pub use overflow_wrap::*;
-use parley::Alignment;
 pub use percentage_number::*;
 pub use radial_gradient::{RadialGradient, RadialShape, RadialSize};
 use serde::Deserialize;
@@ -480,10 +479,6 @@ impl_css_enum!(
   "end" => TextAlign::End
 );
 
-impl_from_taffy_enum!(
-  TextAlign, into_parley -> Alignment, Left, Right, Center, Justify, Start, End
-);
-
 impl TextAlign {
   /// The physical side `start` and `end` name under `direction`.
   pub(crate) fn resolve(self, direction: Direction) -> Self {
@@ -740,15 +735,6 @@ impl Direction {
     match self {
       Self::Ltr => 0,
       Self::Rtl => 1,
-    }
-  }
-
-  /// The bidi control character forcing this base direction: U+200E LEFT-TO-RIGHT
-  /// MARK or U+200F RIGHT-TO-LEFT MARK.
-  pub(crate) const fn bidi_mark(self) -> &'static str {
-    match self {
-      Self::Ltr => "\u{200E}",
-      Self::Rtl => "\u{200F}",
     }
   }
 }

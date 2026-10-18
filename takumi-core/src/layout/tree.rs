@@ -19,10 +19,10 @@ use taffy::{
   DetailedLayoutInfo, Dimension, Display as TaffyDisplay, Layout, LayoutBlockContainer,
   LayoutContainingBlock, LayoutFlexboxContainer, LayoutGridContainer, LayoutInput, LayoutOutput,
   LayoutPartialTree, LengthPercentageAuto, Line, MaybeMath, MaybeResolve, NodeId as TaffyNodeId,
-  OofCandidate, OofPositioningArea, RequestedAxis, ResolveOrZero, RoundTree, RunMode,
-  Size as TaffySize, SizingMode, Style, TraversePartialTree, TraverseTree, compute_block_layout,
-  compute_cached_layout, compute_flexbox_layout, compute_grid_layout, compute_hidden_layout,
-  compute_leaf_layout, compute_oof_layout_for_area, compute_root_layout,
+  OofCandidate, OofPositioningArea, Position as TaffyPosition, RequestedAxis, ResolveOrZero,
+  RoundTree, RunMode, Size as TaffySize, SizingMode, Style, TraversePartialTree, TraverseTree,
+  compute_block_layout, compute_cached_layout, compute_flexbox_layout, compute_grid_layout,
+  compute_hidden_layout, compute_leaf_layout, compute_oof_layout_for_area, compute_root_layout,
 };
 use xxhash_rust::xxh3::Xxh3;
 
@@ -33,12 +33,11 @@ use crate::{
   geometry::{AvailableSpace, ComputedLayout, NodeId, Point, Rect, Size},
   layout::{
     inline::{
-      ContentBox, FragmentItems, InlineContentKind, InlineItem, InlineLayoutMode,
-      InlineLayoutRequest, InlineMeasureOptions, InlineOutOfFlow, PaddingBox, ProcessedInlineSpan,
-      StaticPosition, collect_inline_items, create_inline_constraint, create_inline_layout,
+      ContentBox, FragmentItems, InlineContentKind, InlineOutOfFlow, PaddingBox, StaticPosition,
+      inline_node::InlineNode,
     },
     list_marker::{ListCounter, is_list_element, list_marker, owns_list_counter},
-    node::{Node, NodeStyleLayers, TextData},
+    node::{Node, NodeKind, NodeStyleLayers},
     table::MAX_GRID_ROWS,
     table_columns::TableColumns,
   },
@@ -49,8 +48,8 @@ use crate::{
   style::{
     Affine, BackgroundImage, BackgroundImages, Color, ComputedStyle, ContentItem, ContentValue,
     Display, Float, GridPlacement, Length, LineHeight, ListStylePosition, Position, SizingContext,
-    Style as NodeStyle, StyleDeclaration, StyleDeclarationBlock, StyleSheet, TextWrapMode,
-    TwBlocks, WhiteSpaceCollapse, apply_stylesheet_animations,
+    Style as NodeStyle, StyleDeclaration, StyleDeclarationBlock, StyleSheet, TwBlocks,
+    WhiteSpaceCollapse, apply_stylesheet_animations,
   },
   viewport::Viewport,
 };
@@ -448,7 +447,6 @@ pub(crate) struct AtomicInlineMetrics {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum InlineBaselineSource {
   InlineContentLastLine,
-  InlineContentFirstLine,
   LayoutFirstBaseline,
 }
 
@@ -809,7 +807,7 @@ impl<'r> LayoutTree<'r> {
   fn lay_out_inline_out_of_flow(
     &mut self,
     node: TaffyNodeId,
-    available_space: Size<AvailableSpace>,
+    _available_space: Size<AvailableSpace>,
     layout: ComputedLayout,
     output: &mut LayoutOutput,
   ) {
@@ -826,7 +824,7 @@ impl<'r> LayoutTree<'r> {
       .map(|&proxy| self.render_nodes[usize::from(proxy)])
       .collect();
     let (positions, containing_blocks) =
-      render_node.inline_out_of_flow_geometry(available_space, layout, &containers);
+      render_node.inline_out_of_flow_geometry(layout, &containers);
     // Static positions arrive in the content box; candidates sit in the border box.
     let content = Point {
       x: layout.border.left + layout.padding.left,
@@ -1297,7 +1295,9 @@ impl<'r> LayoutTree<'r> {
       .collect();
 
     if cells.is_empty() {
-      return compute_grid_layout(self, node, inputs);
+      let output = compute_grid_layout(self, node, inputs);
+
+      return self.with_first_row_baseline(node, inputs, output);
     }
 
     for &(cell, content, _) in &cells {
@@ -1331,7 +1331,49 @@ impl<'r> LayoutTree<'r> {
       }
     }
 
-    compute_grid_layout(self, node, inputs)
+    let output = compute_grid_layout(self, node, inputs);
+
+    self.with_first_row_baseline(node, inputs, output)
+  }
+
+  /// `output` with the grid's first baseline its first row's first item's, which taffy takes from
+  /// the item's bottom edge unless the item aligns to the baseline.
+  /// <https://drafts.csswg.org/css-grid-2/#grid-baselines>
+  fn with_first_row_baseline(
+    &self,
+    node: TaffyNodeId,
+    inputs: LayoutInput,
+    mut output: LayoutOutput,
+  ) -> LayoutOutput {
+    if inputs.run_mode != RunMode::PerformLayout || output.baselines.first.is_none() {
+      return output;
+    }
+
+    let Some(state) = self.get_layout_node_ref(node) else {
+      return output;
+    };
+    let first_item = state
+      .children
+      .iter()
+      .filter_map(|&child| self.get_layout_node_ref(child))
+      .filter(|child| {
+        child.style.position != TaffyPosition::Absolute && child.style.display != TaffyDisplay::None
+      })
+      .min_by(|left, right| {
+        left
+          .unrounded_layout
+          .location
+          .y
+          .total_cmp(&right.unrounded_layout.location.y)
+      });
+
+    if let Some(item) = first_item
+      && let Some(baseline) = item.first_baseline_y
+    {
+      output.baselines.first = Some(item.unrounded_layout.location.y + baseline);
+    }
+
+    output
   }
 
   /// Moves `cell`'s `content` down by `shift`, dropping what the cell laid out before.
@@ -1817,12 +1859,6 @@ impl RenderNode {
       .map(Rc::clone)
   }
 
-  /// Whether it keeps fragment items from a layout.
-  #[cfg(test)]
-  pub(crate) fn has_fragment_items(&self) -> bool {
-    self.fragment_items.0.borrow().is_some()
-  }
-
   /// Forgets the fragment items it and the boxes under it laid out to, which no longer hold once
   /// the tree may have changed since.
   pub(crate) fn clear_fragment_items(&self) {
@@ -2138,7 +2174,7 @@ impl RenderNode {
       || self.anonymous_text_content.is_some()
   }
 
-  fn participates_in_inline_formatting_context(&self) -> bool {
+  pub(crate) fn participates_in_inline_formatting_context(&self) -> bool {
     self.participates_in_inflow_inline_formatting_context()
       || self.is_out_of_flow()
       || self.context.style.base_data.float != Float::None
@@ -2421,58 +2457,6 @@ impl RenderNode {
     Some(self.margin_px().top + baseline)
   }
 
-  /// Where each out-of-flow box inside this node's inline content sits, relative to its content
-  /// box, and the padding box each of `containers` bounds the boxes it contains with, relative to
-  /// `layout`'s border box: an inline span's from its fragments, this node's its own.
-  fn inline_out_of_flow_geometry(
-    &self,
-    available_space: Size<AvailableSpace>,
-    layout: ComputedLayout,
-    containers: &[&RenderNode],
-  ) -> (Vec<StaticPosition>, Vec<PaddingBox>) {
-    let known_dimensions = Size {
-      width: Some(layout.size.width.max(0.0)),
-      height: None,
-    };
-    let font_style = SizedFontStyle::from_style(&self.context.style, &self.context);
-    let (max_width, _) = create_inline_constraint(&self.context, available_space, known_dimensions);
-
-    let built = create_inline_layout(InlineLayoutRequest {
-      items: collect_inline_items(self),
-      available_space: Size {
-        width: AvailableSpace::Definite(max_width),
-        height: available_space.height,
-      },
-      max_width,
-      max_height: None,
-      style: &font_style,
-      context: &self.context,
-      mode: InlineLayoutMode::Measure,
-      shape_cacheable: true,
-    });
-
-    let spans = if containers.iter().all(|container| ptr::eq(*container, self)) {
-      Vec::new()
-    } else {
-      built.inline_containing_blocks(layout)
-    };
-    let own_padding_box = PaddingBox::of(layout);
-    let containing_blocks = containers
-      .iter()
-      .map(|container| {
-        spans
-          .iter()
-          .find(|span| ptr::eq(span.owner, *container))
-          .map_or(own_padding_box, |span| span.padding_box)
-      })
-      .collect();
-
-    (
-      built.out_of_flow_static_positions(max_width),
-      containing_blocks,
-    )
-  }
-
   /// Baseline of the first or last line box, measured from the border box top.
   /// Reads the baseline from the fragment items it kept for `kept`, when it kept them, instead of
   /// laying its content out again.
@@ -2497,58 +2481,8 @@ impl RenderNode {
       return Some(self.content_top() + baseline);
     }
 
-    // An atomic box with no in-flow inline content has no line boxes, so it has
-    // no content baseline; the caller must fall back to the bottom margin edge.
-    // https://www.w3.org/TR/CSS22/visudet.html#leading
-    let items = collect_inline_items(self);
-    if items.is_empty() {
-      return None;
-    }
+    let baseline = self.inline_content_baseline(available_space, size.width, use_last_line)?;
 
-    // `size` is the border box, but the content wrapped against the content box.
-    let known_dimensions = Size {
-      width: Some(size.width.max(0.0)),
-      height: None,
-    };
-    // A clamped measurement dropped lines this pass keeps, so it lays out again.
-    let measured = self
-      .plain_text(&items)
-      .map(|text| text.measurement(&self.context, available_space, known_dimensions))
-      .filter(|measured| !measured.clamped);
-    let baseline = match measured {
-      Some(measured) => {
-        if use_last_line {
-          measured.last_baseline?
-        } else {
-          measured.first_baseline?
-        }
-      }
-      None => {
-        let font_style = SizedFontStyle::from_style(&self.context.style, &self.context);
-        let (max_width, _) =
-          create_inline_constraint(&self.context, available_space, known_dimensions);
-        let built = create_inline_layout(InlineLayoutRequest {
-          items,
-          available_space: Size {
-            width: AvailableSpace::Definite(max_width),
-            height: available_space.height,
-          },
-          max_width,
-          max_height: None,
-          style: &font_style,
-          context: &self.context,
-          mode: InlineLayoutMode::Measure,
-          shape_cacheable: true,
-        });
-        let resolved = built.line_metrics();
-        let line = if use_last_line {
-          resolved.last()?
-        } else {
-          resolved.first()?
-        };
-        line.resolved_baseline
-      }
-    };
     Some(self.content_top() + baseline)
   }
 
@@ -2559,25 +2493,6 @@ impl RenderNode {
     let padding_top = self.context.style.box_data.padding_top.to_px(sizing, 0.0);
 
     border_top + padding_top
-  }
-
-  /// This node's text when it lays out exactly as [`TextData::measurement`] does.
-  ///
-  /// A text node's own text is always among its items, so a lone text item is that text.
-  fn plain_text(&self, items: &[InlineItem<'_>]) -> Option<&TextData> {
-    let text = self.node.as_ref()?.text_data()?;
-    let [
-      InlineItem::Text {
-        link: None,
-        decorations: None,
-        ..
-      },
-    ] = items
-    else {
-      return None;
-    };
-
-    Some(text)
   }
 
   fn layout_first_baseline_offset(&self, results: &LayoutResults) -> Option<f32> {
@@ -2600,11 +2515,7 @@ impl RenderNode {
         InlineBaselineSource::InlineContentLastLine,
         InlineBaselineSource::LayoutFirstBaseline,
       ],
-      Display::InlineFlex | Display::InlineGrid => &[
-        InlineBaselineSource::InlineContentLastLine,
-        InlineBaselineSource::InlineContentFirstLine,
-        InlineBaselineSource::LayoutFirstBaseline,
-      ],
+      Display::InlineFlex | Display::InlineGrid => &[InlineBaselineSource::LayoutFirstBaseline],
       _ => &[],
     }
   }
@@ -2619,9 +2530,6 @@ impl RenderNode {
     match source {
       InlineBaselineSource::InlineContentLastLine => {
         self.inline_content_baseline_offset(available_space, size, true)
-      }
-      InlineBaselineSource::InlineContentFirstLine => {
-        self.inline_content_baseline_offset(available_space, size, false)
       }
       InlineBaselineSource::LayoutFirstBaseline => self.layout_first_baseline_offset(results),
     }
@@ -2718,28 +2626,12 @@ impl RenderNode {
     available_space: Size<AvailableSpace>,
     known_dimensions: Size<Option<f32>>,
   ) -> (Size<f32>, bool) {
-    let font_style = SizedFontStyle::from_style(&self.context.style, &self.context);
-    let request = InlineLayoutRequest::in_available_space(
-      collect_inline_items(self),
-      available_space,
-      known_dimensions,
-      &font_style,
-      &self.context,
-      InlineLayoutMode::Measure,
-    );
-    let options = InlineMeasureOptions::new(
-      request.max_width,
-      font_style.parent.resolved_text_wrap_mode() == TextWrapMode::Wrap,
-      available_space,
-      known_dimensions,
-    );
-    let built = create_inline_layout(request);
-    let sizes_boxes = built
-      .spans
-      .iter()
-      .any(|span| matches!(span, ProcessedInlineSpan::Box(_)));
-
-    (built.measure(options).size, sizes_boxes)
+    (
+      InlineNode::new(self)
+        .measure(available_space, known_dimensions)
+        .size,
+      true,
+    )
   }
 
   pub(crate) fn measure(
@@ -2757,6 +2649,12 @@ impl RenderNode {
     let Some(node) = &self.node else {
       return Size::ZERO;
     };
+
+    if matches!(node.kind, NodeKind::Text(_)) {
+      return InlineNode::new(self)
+        .measure(available_space, known_dimensions)
+        .size;
+    }
 
     node.measure(&self.context, available_space, known_dimensions, style)
   }

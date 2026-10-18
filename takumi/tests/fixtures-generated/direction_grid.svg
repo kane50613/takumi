@@ -34,35 +34,35 @@
   </g>
   <path d="M904 323h280v65h-280v-65Zm1 1h278v63h-278v-63Z" fill="#000" fill-rule="evenodd"/>
   <g fill="#000">
-    <use href="#g0" x="1080.6" y="364"/>
-    <use href="#g1" x="1095" y="364"/>
-    <use href="#g2" x="1109.4" y="364"/>
-    <use href="#g3" x="1123.8" y="364"/>
-    <use href="#g4" x="1152.6" y="364"/>
+    <use href="#g0" x="1080.59" y="364"/>
+    <use href="#g1" x="1094.99" y="364"/>
+    <use href="#g2" x="1109.39" y="364"/>
+    <use href="#g3" x="1123.79" y="364"/>
+    <use href="#g4" x="1152.59" y="364"/>
   </g>
   <path d="M608 323h280v65h-280v-65Zm1 1h278v63h-278v-63Z" fill="#000" fill-rule="evenodd"/>
   <g fill="#000">
-    <use href="#g0" x="784.6" y="364"/>
-    <use href="#g1" x="799" y="364"/>
-    <use href="#g2" x="813.4" y="364"/>
-    <use href="#g3" x="827.8" y="364"/>
-    <use href="#g5" x="856.6" y="364"/>
+    <use href="#g0" x="784.59" y="364"/>
+    <use href="#g1" x="798.99" y="364"/>
+    <use href="#g2" x="813.39" y="364"/>
+    <use href="#g3" x="827.79" y="364"/>
+    <use href="#g5" x="856.59" y="364"/>
   </g>
   <path d="M312 323h280v65h-280v-65Zm1 1h278v63h-278v-63Z" fill="#000" fill-rule="evenodd"/>
   <g fill="#000">
-    <use href="#g0" x="488.6" y="364"/>
-    <use href="#g1" x="503" y="364"/>
-    <use href="#g2" x="517.4" y="364"/>
-    <use href="#g3" x="531.8" y="364"/>
-    <use href="#g6" x="560.6" y="364"/>
+    <use href="#g0" x="488.59" y="364"/>
+    <use href="#g1" x="502.99" y="364"/>
+    <use href="#g2" x="517.39" y="364"/>
+    <use href="#g3" x="531.79" y="364"/>
+    <use href="#g6" x="560.59" y="364"/>
   </g>
   <path d="M16 323h280v65h-280v-65Zm1 1h278v63h-278v-63Z" fill="#000" fill-rule="evenodd"/>
   <g fill="#000">
-    <use href="#g0" x="192.6" y="364"/>
-    <use href="#g1" x="207" y="364"/>
-    <use href="#g2" x="221.4" y="364"/>
-    <use href="#g3" x="235.8" y="364"/>
-    <use href="#g7" x="264.6" y="364"/>
+    <use href="#g0" x="192.59" y="364"/>
+    <use href="#g1" x="206.99" y="364"/>
+    <use href="#g2" x="221.39" y="364"/>
+    <use href="#g3" x="235.79" y="364"/>
+    <use href="#g7" x="264.59" y="364"/>
   </g>
   <defs>
     <path id="g0" d="M1.69 0v-17.05h2.92l6.41 15.58-.36.08v-15.66h2.06v17.05h-2.92l-6.41-15.58.36-.09v15.67Z"/>

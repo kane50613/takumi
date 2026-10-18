@@ -196,8 +196,6 @@ impl<'s, 'a, 'c> LogicalLineBuilder<'s, 'a, 'c> {
           self.place_atomic_inline(item, item_result, line_box, fonts);
           self.has_relative_positioned_items |= is_relative_positioned(item);
         }
-        // TODO: the inline layout algorithm port places block-in-inline.
-        InlineItemType::BlockInInline => {}
         // A list marker's metrics count only in quirks mode.
         InlineItemType::ListMarker => {}
         InlineItemType::OutOfFlowPositioned => {
@@ -220,7 +218,7 @@ impl<'s, 'a, 'c> LogicalLineBuilder<'s, 'a, 'c> {
         InlineItemType::Floating => {
           line_box.add_child(match item_result.positioned_float {
             Some(positioned_float) => LogicalLineItem::positioned_float(item, positioned_float),
-            None => LogicalLineItem::unpositioned_float(item, item_result.start()),
+            None => LogicalLineItem::unpositioned_float(item),
           });
           self.has_floating_items = true;
           self.has_relative_positioned_items |= is_relative_positioned(item);

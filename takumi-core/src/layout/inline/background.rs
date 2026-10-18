@@ -3,23 +3,18 @@
 use crate::{
   geometry::{ComputedLayout, PathCommand, Point, Rect, Size},
   layout::{border::BorderProperties, corner_shape::KAPPA, tree::RenderNode},
-  sort_key::sort_by_key,
   style::{BackgroundClip, BoxDecorationBreak, Color, Direction, Sides, SpacePair},
 };
-use std::{collections::HashMap, rc::Rc};
+
+use std::rc::Rc;
 
 use super::{
-  decoration_break::ClonedLines,
-  items::{DecorationLink, InlineDecoration, LineSpace},
-  line_box::{BoxKey, FontHeight, LineBoxOffsets},
+  items::{DecorationLink, InlineDecoration},
   outline::InlineOutlineRect,
-  text_fit::TextScale,
 };
 
 /// A resolved inline background fragment: one rounded rect a decorated span
 /// fills on one line, in border-box space, in paint order (outer spans first).
-/// The naive drifts from Blink are listed on `DecorationAccumulator`'s doc in
-/// this module's source.
 #[derive(Clone, Copy)]
 #[non_exhaustive]
 pub struct InlineBackgroundFragment<'c> {
@@ -63,466 +58,187 @@ pub struct FragmentBackground<'c> {
   pub fragment: ComputedLayout,
 }
 
-/// Where a line sits, in border-box space.
-#[derive(Clone, Copy)]
-pub(super) struct LinePosition {
-  pub(super) top: f32,
-  pub(super) bottom: f32,
-  pub(super) baseline: f32,
-  /// How the line sizes a span's text.
-  pub(super) text_scale: TextScale,
-}
+/// The background and outline fragments of each span's line fragments, which come grouped by span
+/// in line order.
+pub(super) fn resolve_span_fragments<'c>(
+  fragments: &[(Rc<DecorationLink<'c>>, SpanFragment)],
+) -> (Vec<InlineBackgroundFragment<'c>>, Vec<InlineOutlineRect>) {
+  let mut backgrounds = Vec::new();
+  let mut outlines = Vec::new();
 
-/// The line a covering item sits on.
-pub(super) struct CoverLine<'a> {
-  pub(super) index: usize,
-  pub(super) position: LinePosition,
-  /// Where each box on the line sits below its baseline.
-  pub(super) offsets: &'a LineBoxOffsets,
-}
+  for span in fragments.chunk_by(|(_, a), (_, b)| a.id == b.id) {
+    let strip_width: f32 = span.iter().map(|(_, fragment)| fragment.width).sum();
+    let mut before = 0.0;
 
-/// What covers a span on a line.
-#[derive(Clone, Copy)]
-pub(super) enum Covering {
-  /// A glyph run, with its font's content area.
-  Run { top: f32, bottom: f32 },
-  /// An atomic box or an out-of-flow placeholder.
-  Box,
-  /// A span's padding.
-  Padding,
-}
+    for (link, fragment) in span {
+      let strip_offset = before;
 
-/// Per-line bounds of one decorated span, unioned over the items it covers.
-struct FragmentBounds {
-  x0: f32,
-  x1: f32,
-  line: LinePosition,
-  /// The content area of the runs on the line.
-  runs: Option<(f32, f32)>,
-  /// Whether anything but the span's padding sits on the line.
-  has_content: bool,
-}
-
-/// Accumulates decorated-span coverage per line and resolves it into
-/// [`InlineBackgroundFragment`]s, mirroring Blink's per-line inline box
-/// fragments (`InlineBoxFragmentPainterBase::PaintBackgroundBorderShadow`).
-pub(super) struct DecorationAccumulator<'c> {
-  /// Each span's position among `decorations`, by the span's id.
-  ids: HashMap<usize, usize>,
-  decorations: Vec<InlineDecoration<'c>>,
-  /// How far `position: relative` moves each span among `decorations`.
-  relative_offsets: Vec<Point<f32>>,
-  fragments: HashMap<(usize, usize), FragmentBounds>,
-  /// The edges `box-decoration-break: clone` spans repeat on each line.
-  cloned: Option<ClonedLines>,
-  /// The space the lines lay out in.
-  line_space: LineSpace,
-}
-
-impl<'c> DecorationAccumulator<'c> {
-  pub(super) fn new(cloned: Option<ClonedLines>, line_space: LineSpace) -> Self {
-    Self {
-      ids: HashMap::new(),
-      decorations: Vec::new(),
-      relative_offsets: Vec::new(),
-      fragments: HashMap::new(),
-      cloned,
-      line_space,
+      before += fragment.width;
+      resolve_fragment(
+        &link.decoration,
+        *fragment,
+        strip_offset,
+        strip_width,
+        &mut backgrounds,
+        &mut outlines,
+      );
     }
   }
 
-  /// The id for `link`, assigning parents first so outer spans paint first.
-  fn ensure(&mut self, link: &Rc<DecorationLink<'c>>) -> usize {
-    if let Some(id) = self.ids.get(&link.decoration.id) {
-      return *id;
-    }
-    if let Some(parent) = &link.parent {
-      self.ensure(parent);
-    }
-    let id = self.decorations.len();
+  (backgrounds, outlines)
+}
 
-    self.ids.insert(link.decoration.id, id);
-    self.decorations.push(link.decoration.clone());
-    self
-      .relative_offsets
-      .push(link.relative_offset(self.line_space));
-    id
+/// Resolves `fragment`, `strip_offset` along its span's strip of `strip_width`, into its
+/// background and outline fragments.
+fn resolve_fragment<'c>(
+  decoration: &InlineDecoration<'c>,
+  fragment: SpanFragment,
+  strip_offset: f32,
+  strip_width: f32,
+  backgrounds: &mut Vec<InlineBackgroundFragment<'c>>,
+  outlines: &mut Vec<InlineOutlineRect>,
+) {
+  let SpanFragment {
+    id,
+    line_index,
+    x,
+    y,
+    width,
+    height,
+    baseline,
+    has_start,
+    has_end,
+  } = fragment;
+
+  if !decoration.paints {
+    return;
   }
 
-  pub(super) fn cover(
-    &mut self,
-    chain: Option<&Rc<DecorationLink<'c>>>,
-    line: &CoverLine<'_>,
-    x0: f32,
-    x1: f32,
-    covering: Covering,
-  ) {
-    let mut next = chain;
+  let mut border = decoration.border;
+  // The start edge sits on the first line, the end edge on the last;
+  // wrap-edge corners stay square, like `box-decoration-break: slice`.
+  let (has_left, has_right) = decoration.direction.inline_sides(has_start, has_end);
+  let radii = decoration.radius.0.map(|radius| {
+    let radius = radius.to_px(&decoration.sizing, width, height);
 
-    while let Some(link) = next {
-      next = link.parent.as_ref();
+    (radius.x, radius.y)
+  });
+  let [top_left, top_right, bottom_right, bottom_left] = radii;
+  let sliced = [
+    if has_left { top_left } else { (0.0, 0.0) },
+    if has_right { top_right } else { (0.0, 0.0) },
+    if has_right { bottom_right } else { (0.0, 0.0) },
+    if has_left { bottom_left } else { (0.0, 0.0) },
+  ];
 
-      if !link.decoration.has_fragments {
-        continue;
-      }
+  border.radius = fitted_radii(sliced, width, height);
 
-      let id = self.ensure(link);
-      let position = line.position;
-      let baseline = position.baseline + line.offsets.of(BoxKey::Span(link.decoration.id));
-      let bounds = self
-        .fragments
-        .entry((id, line.index))
-        .or_insert(FragmentBounds {
-          x0,
-          x1,
-          line: LinePosition {
-            baseline,
-            ..position
-          },
-          runs: None,
-          has_content: false,
-        });
-
-      bounds.x0 = bounds.x0.min(x0);
-      bounds.x1 = bounds.x1.max(x1);
-      bounds.has_content |= !matches!(covering, Covering::Padding);
-      if let Covering::Run { top, bottom } = covering {
-        bounds.runs = Some(
-          bounds
-            .runs
-            .map_or((top, bottom), |(a, b)| (a.min(top), b.max(bottom))),
-        );
-      }
-    }
+  if !has_left {
+    border.width.left = 0.0;
   }
 
-  /// Each span's border box on each line it covers, sorted by span then line.
-  fn span_fragments(&self) -> Vec<SpanFragment> {
-    let mut has_content = vec![false; self.decorations.len()];
-
-    for ((id, _), bounds) in &self.fragments {
-      has_content[*id] |= bounds.has_content;
-    }
-    // Parley can leave a span's start padding at the end of a line when the text after it wraps,
-    // where Blink's line breaker carries the open tag along with the text. A span with content
-    // elsewhere drops such a padding-only fragment.
-    let kept = |(id, line_index): &(usize, usize)| {
-      !has_content[*id] || self.fragments[&(*id, *line_index)].has_content
-    };
-    let mut keys: Vec<(usize, usize)> = self.fragments.keys().copied().filter(kept).collect();
-    let mut line_range = vec![(usize::MAX, 0); self.decorations.len()];
-
-    for (id, line_index) in &keys {
-      let range = &mut line_range[*id];
-
-      range.0 = range.0.min(*line_index);
-      range.1 = range.1.max(*line_index);
-    }
-
-    sort_by_key(&mut keys, |&key| key);
-
-    keys
-      .into_iter()
-      .map(|(id, line_index)| {
-        let FragmentBounds {
-          mut x0,
-          mut x1,
-          line,
-          runs,
-          ..
-        } = self.fragments[&(id, line_index)];
-        let decoration = &self.decorations[id];
-        let cloned = self
-          .cloned
-          .as_ref()
-          .filter(|cloned| cloned.clones(decoration.id));
-
-        if let Some(cloned) = cloned {
-          let (start, end) = cloned.reach(decoration.id, line_index);
-          let (left, right) = match decoration.direction {
-            Direction::Rtl => (end, start),
-            _ => (start, end),
-          };
-
-          x0 -= left.unwrap_or(0.0);
-          x1 += right.unwrap_or(0.0);
-        }
-        // The content area of Blink's `InlineBoxState::ComputeTextMetrics`: the span's own
-        // primary font around the baseline, whatever its content. Without a primary font, the
-        // fonts its runs fell back to stand in, then the line.
-        let (top, bottom) = decoration
-          .font
-          .metrics
-          .map(|metrics| {
-            let text =
-              FontHeight::text(metrics.exact.ascent, metrics.exact.descent, line.text_scale);
-
-            (
-              line.baseline - text.ascent.to_float(),
-              line.baseline + text.descent.to_float(),
-            )
-          })
-          .or(runs)
-          .unwrap_or((line.top, line.bottom));
-        let (min_line, max_line) = line_range[id];
-        let relative_offset = self.relative_offsets[id];
-
-        SpanFragment {
-          id,
-          line_index,
-          x: x0 + relative_offset.x,
-          y: top - decoration.padding.top - decoration.border.width.top + relative_offset.y,
-          width: x1 - x0,
-          height: bottom - top + decoration.padding.vertical() + decoration.border.width.vertical(),
-          baseline: line.baseline + relative_offset.y,
-          has_start: cloned.is_some() || line_index == min_line,
-          has_end: cloned.is_some() || line_index == max_line,
-        }
-      })
-      .collect()
+  if !has_right {
+    border.width.right = 0.0;
   }
 
-  /// The spans' background fragments and their outlines' line fragments, both sorted by span
-  /// then line.
-  pub(super) fn into_fragments(
-    self,
-  ) -> (Vec<InlineBackgroundFragment<'c>>, Vec<InlineOutlineRect>) {
-    let mut backgrounds = Vec::new();
-    let mut outlines = Vec::new();
-    let fragments = self.span_fragments();
-
-    for span in fragments.chunk_by(|a, b| a.id == b.id) {
-      let strip_width: f32 = span.iter().map(|fragment| fragment.width).sum();
-      let mut before = 0.0;
-
-      for &fragment in span {
-        let strip_offset = before;
-
-        before += fragment.width;
-        self.resolve_fragment(
-          fragment,
-          strip_offset,
-          strip_width,
-          &mut backgrounds,
-          &mut outlines,
-        );
-      }
-    }
-
-    (backgrounds, outlines)
+  if width <= 0.0 || height <= 0.0 {
+    return;
   }
 
-  /// Resolves `fragment`, `strip_offset` along its span's strip of `strip_width`, into its
-  /// background and outline fragments.
-  fn resolve_fragment(
-    &self,
-    fragment: SpanFragment,
-    strip_offset: f32,
-    strip_width: f32,
-    backgrounds: &mut Vec<InlineBackgroundFragment<'c>>,
-    outlines: &mut Vec<InlineOutlineRect>,
-  ) {
-    let SpanFragment {
-      id,
+  if let Some(outline) = decoration.outline {
+    outlines.push(InlineOutlineRect {
+      owner: id,
       line_index,
       x,
       y,
       width,
       height,
-      baseline,
-      has_start,
-      has_end,
-    } = fragment;
-    let decoration = &self.decorations[id];
-
-    if !decoration.paints {
-      return;
-    }
-
-    let mut border = decoration.border;
-    // The start edge sits on the first line, the end edge on the last;
-    // wrap-edge corners stay square, like `box-decoration-break: slice`.
-    let (has_left, has_right) = decoration.direction.inline_sides(has_start, has_end);
-    let radii = decoration.radius.0.map(|radius| {
-      let radius = radius.to_px(&decoration.sizing, width, height);
-
-      (radius.x, radius.y)
+      radius: fitted_radii(radii, width, height),
+      outline,
+      opacity: decoration.opacity,
     });
-    let [top_left, top_right, bottom_right, bottom_left] = radii;
-    let sliced = [
-      if has_left { top_left } else { (0.0, 0.0) },
-      if has_right { top_right } else { (0.0, 0.0) },
-      if has_right { bottom_right } else { (0.0, 0.0) },
-      if has_left { bottom_left } else { (0.0, 0.0) },
-    ];
-
-    border.radius = fitted_radii(sliced, width, height);
-
-    if !has_left {
-      border.width.left = 0.0;
-    }
-    if !has_right {
-      border.width.right = 0.0;
-    }
-
-    if width <= 0.0 || height <= 0.0 {
-      return;
-    }
-    if let Some(outline) = decoration.outline {
-      outlines.push(InlineOutlineRect {
-        owner: id,
-        line_index,
-        x,
-        y,
-        width,
-        height,
-        radius: fitted_radii(radii, width, height),
-        outline,
-        opacity: decoration.opacity,
-      });
-    }
-
-    let style = &decoration.owner.context.style;
-    let has_images = style
-      .background_data
-      .background_image
-      .as_deref()
-      .is_some_and(|images| !images.is_empty());
-    let background = (decoration.color.0[3] != 0
-      || has_images
-      || style.background_data.background_clip == BackgroundClip::Text)
-      .then(|| {
-        let side = |has: bool, width: f32| if has { width } else { 0.0 };
-        let padding = Rect {
-          left: side(has_left, decoration.padding.left),
-          right: side(has_right, decoration.padding.right),
-          ..decoration.padding
-        };
-        let fragment = ComputedLayout::new(
-          Point { x, y },
-          Size { width, height },
-          border.width,
-          padding,
-        );
-        let (strip_x, strip) = match style.box_data.box_decoration_break {
-          BoxDecorationBreak::Clone => (x, fragment),
-          BoxDecorationBreak::Slice => (
-            match decoration.direction {
-              Direction::Rtl => x + width + strip_offset - strip_width,
-              _ => x - strip_offset,
-            },
-            ComputedLayout::new(
-              Point::ZERO,
-              Size {
-                width: strip_width,
-                height,
-              },
-              decoration.border.width,
-              decoration.padding,
-            ),
-          ),
-        };
-
-        FragmentBackground {
-          node: decoration.owner,
-          strip_origin: Point { x: strip_x, y },
-          strip,
-          fragment,
-        }
-      });
-
-    if border.has_visible_sides() || background.is_some() {
-      backgrounds.push(InlineBackgroundFragment {
-        x,
-        y,
-        width,
-        height,
-        border,
-        color: decoration.color,
-        opacity: decoration.opacity,
-        baseline,
-        background,
-        owner: decoration.owner,
-        span: decoration.id,
-      });
-    }
   }
 
-  /// The padding box each span bounds its out-of-flow boxes with, after Blink's
-  /// `OutOfFlowLayoutPart::AddInlineContainingBlockInfo`, in a `direction` formatting context.
-  pub(super) fn containing_blocks(&self, direction: Direction) -> Vec<InlineContainingBlock<'c>> {
-    let fragments = self.span_fragments();
-    let rtl = direction == Direction::Rtl;
-    // The inline offset of a rect's logical start, measured against the formatting context's
-    // direction from an origin that cancels out when converting back.
-    let inline_start = |x: f32, width: f32| if rtl { -(x + width) } else { x };
-
-    fragments
-      .chunk_by(|a, b| a.id == b.id)
-      .filter_map(|span| {
-        let (first, last) = (span.first()?, span.last()?);
-        let decoration = &self.decorations[first.id];
-        let widths = decoration.border.width;
-        let same_direction = decoration.direction == direction;
-        let (border_start, border_end) = if rtl {
-          (widths.right, widths.left)
-        } else {
-          (widths.left, widths.right)
-        };
-        let mut start = Point {
-          x: inline_start(first.x, first.width),
-          y: first.y + widths.top,
-        };
-        let mut end = Point {
-          x: inline_start(last.x, last.width) + last.width,
-          y: last.y + last.height - widths.bottom,
-        };
-
-        if same_direction {
-          start.x += border_start;
-          end.x -= border_end;
-        }
-        end.x = end.x.max(start.x);
-        end.y = end.y.max(start.y);
-
-        let size = Size {
-          width: end.x - start.x,
-          height: end.y - start.y,
-        };
-
-        Some(InlineContainingBlock {
-          owner: decoration.owner,
-          padding_box: PaddingBox {
-            origin: Point {
-              x: if rtl {
-                -(start.x + size.width)
-              } else {
-                start.x
-              },
-              y: start.y,
-            },
-            size,
+  let style = &decoration.owner.context.style;
+  let has_images = style
+    .background_data
+    .background_image
+    .as_deref()
+    .is_some_and(|images| !images.is_empty());
+  let background = (decoration.color.0[3] != 0
+    || has_images
+    || style.background_data.background_clip == BackgroundClip::Text)
+    .then(|| {
+      let side = |has: bool, width: f32| if has { width } else { 0.0 };
+      let padding = Rect {
+        left: side(has_left, decoration.padding.left),
+        right: side(has_right, decoration.padding.right),
+        ..decoration.padding
+      };
+      let fragment = ComputedLayout::new(
+        Point { x, y },
+        Size { width, height },
+        border.width,
+        padding,
+      );
+      let (strip_x, strip) = match style.box_data.box_decoration_break {
+        BoxDecorationBreak::Clone => (x, fragment),
+        BoxDecorationBreak::Slice => (
+          match decoration.direction {
+            Direction::Rtl => x + width + strip_offset - strip_width,
+            _ => x - strip_offset,
           },
-        })
-      })
-      .collect()
+          ComputedLayout::new(
+            Point::ZERO,
+            Size {
+              width: strip_width,
+              height,
+            },
+            decoration.border.width,
+            decoration.padding,
+          ),
+        ),
+      };
+
+      FragmentBackground {
+        node: decoration.owner,
+        strip_origin: Point { x: strip_x, y },
+        strip,
+        fragment,
+      }
+    });
+
+  if border.has_visible_sides() || background.is_some() {
+    backgrounds.push(InlineBackgroundFragment {
+      x,
+      y,
+      width,
+      height,
+      border,
+      color: decoration.color,
+      opacity: decoration.opacity,
+      baseline,
+      background,
+      owner: decoration.owner,
+      span: decoration.id,
+    });
   }
 }
 
 /// One span's border box on one line.
 #[derive(Clone, Copy)]
-struct SpanFragment {
-  id: usize,
-  line_index: usize,
-  x: f32,
-  y: f32,
-  width: f32,
-  height: f32,
-  baseline: f32,
+pub(super) struct SpanFragment {
+  pub(super) id: usize,
+  pub(super) line_index: usize,
+  pub(super) x: f32,
+  pub(super) y: f32,
+  pub(super) width: f32,
+  pub(super) height: f32,
+  pub(super) baseline: f32,
   /// Whether the span's start edge sits on this line, its first.
-  has_start: bool,
+  pub(super) has_start: bool,
   /// Whether the span's end edge sits on this line, its last.
-  has_end: bool,
+  pub(super) has_end: bool,
 }
 
 /// An inline span that contains out-of-flow boxes.
@@ -641,4 +357,67 @@ impl InlineBackgroundFragment<'_> {
     path.push(PathCommand::Close);
     path
   }
+}
+
+/// The padding box each span bounds its out-of-flow boxes with, from its line fragments grouped
+/// by span in line order, after Blink's `OutOfFlowLayoutPart::AddInlineContainingBlockInfo`, in a
+/// `direction` formatting context.
+pub(super) fn containing_blocks<'c>(
+  fragments: &[(Rc<DecorationLink<'c>>, SpanFragment)],
+  direction: Direction,
+) -> Vec<InlineContainingBlock<'c>> {
+  let rtl = direction == Direction::Rtl;
+  // The inline offset of a rect's logical start, measured against the formatting context's
+  // direction from an origin that cancels out when converting back.
+  let inline_start = |x: f32, width: f32| if rtl { -(x + width) } else { x };
+
+  fragments
+    .chunk_by(|(_, a), (_, b)| a.id == b.id)
+    .filter_map(|span| {
+      let ((link, first), (_, last)) = (span.first()?, span.last()?);
+      let decoration = &link.decoration;
+      let widths = decoration.border.width;
+      let same_direction = decoration.direction == direction;
+      let (border_start, border_end) = if rtl {
+        (widths.right, widths.left)
+      } else {
+        (widths.left, widths.right)
+      };
+      let mut start = Point {
+        x: inline_start(first.x, first.width),
+        y: first.y + widths.top,
+      };
+      let mut end = Point {
+        x: inline_start(last.x, last.width) + last.width,
+        y: last.y + last.height - widths.bottom,
+      };
+
+      if same_direction {
+        start.x += border_start;
+        end.x -= border_end;
+      }
+      end.x = end.x.max(start.x);
+      end.y = end.y.max(start.y);
+
+      let size = Size {
+        width: end.x - start.x,
+        height: end.y - start.y,
+      };
+
+      Some(InlineContainingBlock {
+        owner: decoration.owner,
+        padding_box: PaddingBox {
+          origin: Point {
+            x: if rtl {
+              -(start.x + size.width)
+            } else {
+              start.x
+            },
+            y: start.y,
+          },
+          size,
+        },
+      })
+    })
+    .collect()
 }

@@ -355,7 +355,7 @@ Takumi supports `balance` and `pretty` wrapping, adapted from [satori](https://g
 
 `line-clamp` (or `-webkit-line-clamp`) cuts text after its line count and ends the last line with an ellipsis, as Chrome does. `line-clamp: 3 none` cuts without one.
 
-`text-overflow: ellipsis` applies only to a box that clips its overflow, as in Chrome, so set `overflow: hidden` with it. In that box, Takumi also ellipses text its max height cuts and a line too wide to break. Multiline ellipsis works; no `white-space: nowrap` needed.
+`text-overflow: ellipsis` applies only to a box that clips its overflow, as in Chrome, so set `overflow: hidden` with it. It ends a line that overflows the box's width, such as `white-space: nowrap` text or a word too long to break. Text cut off by the box's height is clipped without an ellipsis; use `line-clamp` to end the text after a number of lines.
 
 ```tsx title="Truncation"
 <div
@@ -386,7 +386,7 @@ The optional target controls which lines share a scale:
 
 The percentage caps how far the scale can move.
 
-With `text-overflow: ellipsis`, Takumi fits the text first. Only a line that still overflows at its fitted size gets an ellipsis, such as a line the percentage cap holds back. The `line-clamp` count still applies, but the box height does not cut lines.
+With `text-overflow: ellipsis`, Takumi fits the text first. Only a line that still overflows at its fitted size gets an ellipsis, such as a line the percentage cap holds back. The `line-clamp` count still applies.
 
 ### RTL & bidirectional text
 

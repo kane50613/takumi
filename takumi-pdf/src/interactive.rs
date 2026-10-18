@@ -10,12 +10,8 @@ use std::{
 use takumi_core::{
   font_style::SizedFontStyle,
   geometry::{ComputedLayout as Layout, Point as CorePoint, Size, transformed_rect_extents},
-  layout::{
-    inline::{
-      InlineItem, InlineLayoutMode, InlineLayoutRequest, collect_inline_items, create_inline_layout,
-    },
-    tree::RenderNode,
-  },
+  layout::tree::RenderNode,
+  painter::OwnContent,
   scene::NodePaint,
   style::{Affine, Position},
 };
@@ -363,25 +359,11 @@ fn collect_inline_links(
   path: &[usize],
   links: &mut Vec<LinkTarget>,
 ) {
-  let context = &node.context;
-  let font_style = SizedFontStyle::from_style(&context.style, context);
-  let content = layout.content_box_size();
-  let items = collect_inline_items(node);
-
-  if !items
-    .iter()
-    .any(|item| matches!(item, InlineItem::Text { link: Some(_), .. }))
-  {
+  let font_style = SizedFontStyle::from_style(&node.context.style, &node.context);
+  let Some(items) = OwnContent::of(node).fragment_items(&font_style, layout) else {
     return;
-  }
-  let built = create_inline_layout(InlineLayoutRequest::in_content_box(
-    items,
-    content,
-    &font_style,
-    context,
-    InlineLayoutMode::Measure,
-  ));
-  let (runs, _) = built.measure_runs(layout);
+  };
+  let (runs, _) = items.measure_runs(node);
 
   for run in runs {
     let Some(uri) = run.link.filter(|uri| allowed_link_uri(uri)) else {

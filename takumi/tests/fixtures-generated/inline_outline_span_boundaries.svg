@@ -117,11 +117,11 @@
     <use href="#g28" x="625.54" y="427"/>
   </g>
   <clipPath id="cp0">
-    <path d="M561 192h132v42h-68v26h108v42h-49v34h-7v26h34v42h-248v-178h98Z"/>
+    <path d="M561 192h132v42h-67v26h107v42h-49v34h-7v26h34v42h-248v-178h98Z"/>
   </clipPath>
   <g clip-path="url(#cp0)">
     <clipPath id="cp1">
-      <path d="M564 195h126v36h-68v32h108v36h-49v34h-7v32h34v36h-242v-172h98Zm-101-3v212h270v-212Z"/>
+      <path d="M564 195h126v36h-67v32h107v36h-49v34h-7v32h34v36h-242v-172h98Zm-101-3v212h270v-212Z"/>
     </clipPath>
     <g clip-path="url(#cp1)">
       <rect x="463" y="192" width="270" height="212" fill="#f00"/>

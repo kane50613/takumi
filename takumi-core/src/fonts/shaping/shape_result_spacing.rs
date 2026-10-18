@@ -44,42 +44,16 @@ impl<'a> ShapeResultSpacing<'a> {
     }
   }
 
-  pub(crate) fn text(&self) -> &'a str {
-    self.text
-  }
-
-  pub(crate) fn letter_spacing(&self) -> TextRunLayoutUnit {
-    if self.has_spacing {
-      self.letter_spacing
-    } else {
-      TextRunLayoutUnit::ZERO
-    }
-  }
-
-  pub(crate) fn word_spacing(&self) -> TextRunLayoutUnit {
-    if self.has_spacing {
-      self.word_spacing
-    } else {
-      TextRunLayoutUnit::ZERO
-    }
-  }
-
-  pub(crate) fn has_spacing(&self) -> bool {
-    self.has_spacing
-  }
-
+  #[cfg(test)]
   pub(crate) fn is_letter_spacing_applied(&self) -> bool {
     self.is_letter_spacing_applied
-  }
-
-  pub(crate) fn is_word_spacing_applied(&self) -> bool {
-    self.is_word_spacing_applied
   }
 
   pub(crate) fn has_expansion(&self) -> bool {
     self.expansion_opportunity_count != 0
   }
 
+  #[cfg(test)]
   /// Blink's `ExpansionOppotunityCount`.
   pub(crate) fn expansion_opportunity_count(&self) -> usize {
     self.expansion_opportunity_count

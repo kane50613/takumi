@@ -85,14 +85,4 @@ impl LogicalRect {
       size: LogicalSize::new(inline_size, block_size),
     }
   }
-
-  /// Blink's `BlockEndOffset`.
-  pub(crate) fn block_end_offset(&self) -> LayoutUnit {
-    self.offset.block_offset + self.size.block_size
-  }
-
-  /// Blink's `InlineEndOffset`.
-  pub(crate) fn inline_end_offset(&self) -> LayoutUnit {
-    self.offset.inline_offset + self.size.inline_size
-  }
 }

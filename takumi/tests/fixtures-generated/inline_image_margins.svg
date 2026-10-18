@@ -32,20 +32,20 @@
     <use href="#g6" x="144.84" y="321"/>
   </g>
   <g fill="#000">
-    <use href="#g15" x="322.79" y="321"/>
-    <use href="#g13" x="355.55" y="321"/>
+    <use href="#g15" x="322.8" y="321"/>
+    <use href="#g13" x="355.56" y="321"/>
     <use href="#g6" x="385.29" y="321"/>
     <use href="#g4" x="406.68" y="321"/>
     <use href="#g13" x="451.09" y="321"/>
-    <use href="#g13" x="481.94" y="321"/>
+    <use href="#g13" x="481.95" y="321"/>
     <use href="#g3" x="512.8" y="321"/>
     <use href="#g11" x="559.34" y="321"/>
     <use href="#g8" x="607.89" y="321"/>
     <use href="#g9" x="638.52" y="321"/>
-    <use href="#g10" x="657.5" y="321"/>
+    <use href="#g10" x="657.51" y="321"/>
     <use href="#g5" x="689.93" y="321"/>
     <use href="#g3" x="703.93" y="321"/>
-    <use href="#g16" x="735.79" y="321"/>
+    <use href="#g16" x="735.8" y="321"/>
   </g>
   <rect x="187" y="213" width="96" height="96" fill="#fee2e2"/>
   <path d="M187 213h96v96h-96v-96Zm6 6h84v84h-84v-84Z" fill="#2563eb" fill-rule="evenodd"/>
