@@ -87,8 +87,7 @@ pub(crate) fn maybe_emoji_presentation(c: char) -> bool {
     || u32::from(c) >= 0x10000
 }
 
-/// Blink's `HasLikelyScript`: whether `c` has a script, or a common or inherited one its block
-/// suggests.
+/// Blink's `HasLikelyScript`.
 pub(crate) fn has_likely_script(c: char) -> bool {
   let mut script = CodePointMapData::<Script>::new().get(c);
 
@@ -99,15 +98,12 @@ pub(crate) fn has_likely_script(c: char) -> bool {
   !matches!(script, Script::Common | Script::Inherited)
 }
 
-/// Blink's `GetScriptBasedOnUnicodeBlock`, with Blink's `NastaliqScript` feature off.
+/// Blink's `GetScriptBasedOnUnicodeBlock`.
 fn get_script_based_on_unicode_block(c: char) -> Script {
   match u32::from(c) {
-    // CJK Symbols and Punctuation.
     0x3000..=0x303F => Script::Han,
-    // Hiragana and Katakana.
     0x3040..=0x30FF => Script::KatakanaOrHiragana,
     0x0E00..=0x0E7F => Script::Thai,
-    // Greek and Coptic.
     0x0370..=0x03FF => Script::Greek,
     0x0900..=0x097F => Script::Devanagari,
     0x0530..=0x058F => Script::Armenian,

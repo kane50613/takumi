@@ -1,13 +1,11 @@
-//! Blink's `FontDataForRangeSet`: a face with the `unicode-range` it serves, after
-//! [`font_data_for_range_set.h`](https://source.chromium.org/chromium/chromium/src/+/main:third_party/blink/renderer/platform/fonts/font_data_for_range_set.h).
-//! Follows Blink under the notice in LICENSE-CHROMIUM.
+//! Blink's [`FontDataForRangeSet`](https://source.chromium.org/chromium/chromium/src/+/main:third_party/blink/renderer/platform/fonts/font_data_for_range_set.h).
 
 use std::rc::Rc;
 
 use super::simple_font_data::SimpleFontData;
 use crate::resources::unicode_range::UnicodeRangeSet;
 
-/// Blink's `FontDataForRangeSet`. No font data marks the iterator out of fonts.
+/// Blink's `FontDataForRangeSet`.
 #[derive(Debug, Clone, Default)]
 pub(crate) struct FontDataForRangeSet {
   font_data: Option<Rc<SimpleFontData>>,

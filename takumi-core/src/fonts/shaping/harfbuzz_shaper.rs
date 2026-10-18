@@ -1,15 +1,4 @@
-//! Blink's `HarfBuzzShaper`, which shapes text with a font and its fallbacks, after
-//! [`harfbuzz_shaper.cc`](https://source.chromium.org/chromium/chromium/src/+/main:third_party/blink/renderer/platform/fonts/shaping/harfbuzz_shaper.cc).
-//! Follows Blink under the notice in LICENSE-CHROMIUM.
-//!
-//! Offsets count UTF-8 bytes where Blink's count UTF-16 code units. harfrust stands in for
-//! HarfBuzz and returns font units, which this scales to HarfBuzz's 16.16 pixels; Blink's HarfBuzz
-//! reads glyph advances from Skia instead, so positions are approximate to 1/65536 px.
-//!
-//! Not ported: vertical text, the `font-variant-caps` overlay, `HanKerning` for
-//! `text-spacing-trim`, incremental font transfer, and `font-variant-emoji`. harfrust has no hook
-//! for variation sequences a font lacks, so the stages that reshape without the variation selector
-//! never start.
+//! Blink's [`HarfBuzzShaper`](https://source.chromium.org/chromium/chromium/src/+/main:third_party/blink/renderer/platform/fonts/shaping/harfbuzz_shaper.cc).
 
 use std::{collections::VecDeque, rc::Rc};
 
@@ -36,8 +25,7 @@ use crate::{
   text::character::{IDEOGRAPHIC_SPACE, is_common_or_inherited_script},
 };
 
-/// Blink's `ShouldSubpixelPosition`. takumi positions glyphs at fractions of a pixel, as Chromium
-/// does on macOS and at high device scale factors.
+/// Blink's `ShouldSubpixelPosition`.
 const SHOULD_SUBPIXEL_POSITION: bool = true;
 
 /// A shaped `hb_buffer_t`: its glyphs, and their positions in 16.16 pixels.
@@ -88,7 +76,7 @@ impl ReshapeQueueItem {
   }
 }
 
-/// Blink's `RangeContext`: what shaping one range carries along.
+/// Blink's `RangeContext`.
 struct RangeContext<'a> {
   font: &'a Font,
   text_direction: TextDirection,
@@ -121,7 +109,7 @@ impl<'a> RangeContext<'a> {
   }
 }
 
-/// Blink's `BufferSlice`: glyphs of a buffer and the characters they are for.
+/// Blink's `BufferSlice`.
 #[derive(Debug, Clone, Copy)]
 struct BufferSlice {
   start_character_index: usize,
@@ -130,7 +118,7 @@ struct BufferSlice {
   num_glyphs: usize,
 }
 
-/// Blink's `FallbackFontStage`, without the variation selector stages.
+/// Blink's `FallbackFontStage`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum FallbackFontStage {
   Intermediate,
@@ -161,15 +149,14 @@ fn icu_script_to_hb_script(script: Script) -> harfrust::Script {
     .unwrap_or(harfrust::script::UNKNOWN)
 }
 
-/// Blink's `RoundHarfBuzzPosition`: a 16.16 value with a fraction, rounded to whole pixels.
+/// Blink's `RoundHarfBuzzPosition`.
 fn round_harfbuzz_position(value: &mut i32) {
   if *value & 0xFFFF != 0 {
     *value = ((*value as f32 / 65536.0).round() as i32) << 16;
   }
 }
 
-/// Blink's `ShapeRange`: `text` from `start` to `end` shaped with `current_font`, the rest of
-/// `text` as context, or none for a font that does not parse.
+/// Blink's `ShapeRange`.
 #[allow(clippy::too_many_arguments)]
 fn shape_range(
   text: &str,
@@ -189,7 +176,6 @@ fn shape_range(
     .build();
   let mut buffer = UnicodeBuffer::new();
 
-  // Blink's `CaseMappingHarfBuzzBufferFiller` keeping the case: clusters index the whole text.
   for (offset, ch) in text[start..end].char_indices() {
     buffer.add(ch, (start + offset) as u32);
   }
@@ -210,7 +196,7 @@ fn shape_range(
       .features(font_features)
       .point_size(Some(current_font.specified_size())),
   );
-  // HarfBuzz scales font units to the 16.16 pixels its scale asks for.
+  // Approximate: Blink's HarfBuzz scales Skia's advances; see #2001.
   let scale = f64::from(current_font.size()) * 65536.0 / f64::from(current_font.units_per_em());
   let to_harfbuzz_position = |units: i32| (f64::from(units) * scale).round() as i32;
   let positions = glyphs
@@ -242,8 +228,7 @@ fn shape_range(
   })
 }
 
-/// Blink's `ComputeSlice`: the characters of glyphs `old_glyph_index..new_glyph_index`, clusters
-/// counting down in RTL.
+/// Blink's `ComputeSlice`.
 fn compute_slice(
   range_data: &RangeContext<'_>,
   current_queue_item: &ReshapeQueueItem,
@@ -253,7 +238,6 @@ fn compute_slice(
 ) -> BufferSlice {
   let glyph_info = &buffer.infos;
   let num_glyphs = glyph_info.len();
-  // The end of the queue item, within the shaping window.
   let shape_end = range_data
     .end
     .min(current_queue_item.start_index + current_queue_item.num_characters);
@@ -285,7 +269,7 @@ fn compute_slice(
   }
 }
 
-/// Blink's `QueueCharacters`: queues `slice` for the next font, after the font switch once.
+/// Blink's `QueueCharacters`.
 fn queue_characters(
   range_data: &mut RangeContext<'_>,
   font_cycle_queued: &mut bool,
@@ -324,8 +308,7 @@ impl HarfBuzzShaper {
     Self { text }
   }
 
-  /// Blink's `Shape`: `text` from `start` to `end` with `font` in `direction`. `start` and `end`
-  /// should be where a line may break.
+  /// Blink's `Shape`.
   pub(crate) fn shape(
     &self,
     font: &Font,
@@ -350,11 +333,9 @@ impl HarfBuzzShaper {
 
       self.shape_segment(&mut range_data, &segment_range, &mut result);
     } else {
-      // Segmentation covers the whole text, whatever the shaping window.
       let mut run_segmenter = RunSegmenter::new(&self.text);
 
       while let Some(segment_range) = run_segmenter.consume() {
-        // Every segment overlapping the window, not only those inside it.
         if start < segment_range.end && end > segment_range.start {
           self.shape_segment(&mut range_data, &segment_range, &mut result);
         }
@@ -373,8 +354,7 @@ impl HarfBuzzShaper {
     self.shape(font, direction, 0, self.text.len())
   }
 
-  /// Blink's `ShapeSegment`: shapes `segment` font by font, queuing the characters a font lacks
-  /// for the next one.
+  /// Blink's `ShapeSegment`.
   fn shape_segment(
     &self,
     range_data: &mut RangeContext<'_>,
@@ -401,7 +381,6 @@ impl HarfBuzzShaper {
 
     while let Some(current_queue_item) = range_data.reshape_queue.pop_front() {
       if current_queue_item.action != ReshapeQueueItemAction::Range {
-        // Without hint characters there is no font to fall back to.
         if !self.collect_fallback_hint_chars(
           &range_data.reshape_queue,
           fallback_iterator.needs_hint_list(),
@@ -435,7 +414,6 @@ impl HarfBuzzShaper {
 
       debug_assert!(current_queue_item.num_characters > 0);
 
-      // The queue item within the shaping window.
       let shape_start = range_data.start.max(current_queue_item.start_index);
       let shape_end = range_data
         .end
@@ -469,8 +447,7 @@ impl HarfBuzzShaper {
     }
   }
 
-  /// Blink's `ExtractShapeResults`: commits the clusters `current_font` shaped, and queues the
-  /// ones it could not for the next font, unless it is the last.
+  /// Blink's `ExtractShapeResults`.
   #[allow(clippy::too_many_arguments)]
   fn extract_shape_results(
     &self,
@@ -507,7 +484,6 @@ impl HarfBuzzShaper {
       );
     };
 
-    // Each cluster is shaped or not as a whole.
     for (glyph_index, glyph) in glyph_info.iter().enumerate() {
       let previous_cluster = current_cluster;
 
@@ -531,7 +507,6 @@ impl HarfBuzzShaper {
       };
 
       if current_cluster != previous_cluster {
-        // The cluster just passed is complete: a change from the one before it ends a slice.
         if previous_cluster_result != current_cluster_result
           && previous_cluster_result != ClusterResult::Unknown
         {
@@ -543,8 +518,6 @@ impl HarfBuzzShaper {
             previous_cluster_start_glyph_index,
           );
 
-          // A shaped cluster after the change means the ones before it were not, so they queue,
-          // unless this is the last font; else the ones before it were shaped and commit.
           if current_cluster_result == ClusterResult::Shaped
             && !fallback_stage.is_last_font_to_shape()
           {
@@ -572,7 +545,6 @@ impl HarfBuzzShaper {
       }
     }
 
-    // The last cluster differs from the ones before it: one shaped and one unshaped slice.
     if current_cluster_result != previous_cluster_result
       && previous_cluster_result != ClusterResult::Unknown
       && !fallback_stage.is_last_font_to_shape()
@@ -603,7 +575,6 @@ impl HarfBuzzShaper {
       return;
     }
 
-    // No change at the last cluster: everything since the last change commits or queues.
     let slice = compute_slice(
       range_data,
       current_queue_item,
@@ -619,7 +590,7 @@ impl HarfBuzzShaper {
     }
   }
 
-  /// Blink's `CommitGlyphs`: inserts runs for `slice`, several when it is longer than a run holds.
+  /// Blink's `CommitGlyphs`.
   fn commit_glyphs(
     &self,
     range_data: &RangeContext<'_>,
@@ -659,7 +630,6 @@ impl HarfBuzzShaper {
         break;
       }
 
-      // The rest of a slice longer than a run holds goes into another run.
       let run_num_characters = run_num_characters as usize;
 
       debug_assert!(current_slice.num_characters > run_num_characters);
@@ -671,15 +641,13 @@ impl HarfBuzzShaper {
         num_glyphs: next_num_glyphs,
       };
 
-      // The run lost its right end: the end characters in LTR, the start ones in RTL.
       if buffer.is_forward() {
         run_start_index = current_slice.start_character_index;
       }
     }
   }
 
-  /// Blink's `CollectFallbackHintChars`: the characters queued for the next font, or only the
-  /// first with a script when `needs_hint_list` is false. False when none are queued.
+  /// Blink's `CollectFallbackHintChars`.
   fn collect_fallback_hint_chars(
     &self,
     reshape_queue: &VecDeque<ReshapeQueueItem>,
@@ -702,7 +670,6 @@ impl HarfBuzzShaper {
       for hint_char in range.chars() {
         hint.push(hint_char);
 
-        // Fallback needs one character with a script to find a font.
         if !needs_hint_list && !is_common_or_inherited_script(hint_char) {
           return true;
         }
@@ -768,7 +735,7 @@ mod tests {
     (fonts, font)
   }
 
-  /// Blink's `ShapeResultRunData`: each run's start, characters, glyphs, and script.
+  /// Blink's `ShapeResultRunData`.
   fn runs(result: &ShapeResult) -> Vec<(u32, u32, u32, harfrust::Script)> {
     result
       .runs
@@ -812,7 +779,6 @@ mod tests {
     let second_reference = HarfBuzzShaper::new(string[6..11].into()).shape_all(&font, direction);
     let third_reference = HarfBuzzShaper::new(string[11..12].into()).shape_all(&font, direction);
 
-    // A pixel of tolerance for kerning across the cuts.
     assert!((first_reference.width() - first.width()).abs() <= 1.0);
     assert!((second_reference.width() - second.width()).abs() <= 1.0);
     assert!((third_reference.width() - third.width()).abs() <= 1.0);
@@ -826,7 +792,6 @@ mod tests {
   fn missing_glyph() {
     let (_fonts, font) = geist();
 
-    // U+FFF0 is unassigned, and U+00AD SOFT HYPHEN often has no glyph.
     for string in ["\u{FFF0}", "\u{FFF0}Hello", "\u{AD}"] {
       let result = HarfBuzzShaper::new(string.into()).shape_all(&font, TextDirection::Ltr);
 
@@ -835,7 +800,6 @@ mod tests {
     }
   }
 
-  // Code point, glyph, and cluster are all 1:1, so runs split at `MAX_CHARACTER_INDEX`.
   #[test]
   fn max_glyphs_simple() {
     let (_fonts, font) = geist();
@@ -884,7 +848,6 @@ mod tests {
     register(&mut fonts, NOTO_SANS_TC, "Noto Sans TC");
 
     let font = font(&mut fonts, "Noto Sans TC");
-    // IDEOGRAPHIC COMMA, IDEOGRAPHIC SPACE.
     let result =
       HarfBuzzShaper::new("\u{3001}\u{3000}".into()).shape_all(&font, TextDirection::Ltr);
     let mut fonts = run_fonts(&result);
@@ -894,7 +857,6 @@ mod tests {
     assert_eq!(fonts.len(), 1);
   }
 
-  // A character the first font lacks falls back to the next family, in a run of its own.
   #[test]
   fn falls_back_to_the_next_family() {
     let mut fonts = Fonts::default();

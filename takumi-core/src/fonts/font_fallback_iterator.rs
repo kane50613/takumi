@@ -1,8 +1,4 @@
-//! Blink's `FontFallbackIterator`, which hands shaping the next font to try, after
-//! [`font_fallback_iterator.cc`](https://source.chromium.org/chromium/chromium/src/+/main:third_party/blink/renderer/platform/fonts/font_fallback_iterator.cc).
-//! Follows Blink under the notice in LICENSE-CHROMIUM.
-//!
-//! Not ported: waiting for web fonts still loading, as takumi registers fonts before it renders.
+//! Blink's [`FontFallbackIterator`](https://source.chromium.org/chromium/chromium/src/+/main:third_party/blink/renderer/platform/fonts/font_fallback_iterator.cc).
 
 use std::{collections::HashSet, rc::Rc};
 
@@ -14,7 +10,7 @@ use super::{
 };
 use crate::text::character::has_likely_script;
 
-/// Blink's `HintCharList`: characters left unshaped, which the next font should have.
+/// Blink's `HintCharList`.
 pub(crate) type HintCharList = Vec<char>;
 
 /// Blink's `FallbackStage`.
@@ -63,8 +59,7 @@ impl<'a> FontFallbackIterator<'a> {
     self.fallback_stage != FallbackStage::OutOfLuck
   }
 
-  /// Blink's `NeedsHintList`: whether `next` needs every unshaped character, or one with a script
-  /// is enough.
+  /// Blink's `NeedsHintList`.
   pub(crate) fn needs_hint_list(&self) -> bool {
     match self.fallback_stage {
       FallbackStage::SegmentedFace => true,
@@ -84,7 +79,7 @@ impl<'a> FontFallbackIterator<'a> {
     hint_list.iter().any(|&hint| segmented_face.contains(hint))
   }
 
-  /// Blink's `UniqueOrNext`: `candidate`, unless a face it covers whole was returned already.
+  /// Blink's `UniqueOrNext`.
   fn unique_or_next(
     &mut self,
     candidate: FontDataForRangeSet,
@@ -102,14 +97,12 @@ impl<'a> FontFallbackIterator<'a> {
       return self.next(hint_list);
     }
 
-    // Subsets stay, as shaping depends on them.
     if candidate.is_entire_range() {
       self
         .unique_font_data_for_range_sets_returned
         .insert(candidate_id);
     }
 
-    // The first candidate renders `.notdef` when every other font fails.
     if self.first_candidate.is_none() {
       self.first_candidate = Some(candidate.clone());
     }
@@ -117,13 +110,11 @@ impl<'a> FontFallbackIterator<'a> {
     candidate
   }
 
-  /// Blink's `Next`: the next font to try for `hint_list`, or one without font data when none is
-  /// left.
+  /// Blink's `Next`.
   pub(crate) fn next(&mut self, hint_list: &[char]) -> FontDataForRangeSet {
     match self.fallback_stage {
       FallbackStage::OutOfLuck => return FontDataForRangeSet::default(),
       FallbackStage::FallbackPriorityFonts => {
-        // Only one fallback priority font, then system fallback.
         self.fallback_stage = FallbackStage::SystemFonts;
 
         return match hint_list
@@ -139,7 +130,6 @@ impl<'a> FontFallbackIterator<'a> {
           return self.unique_or_next(FontDataForRangeSet::new(system_font), hint_list);
         }
 
-        // Out of system fonts, only the last resort font is left.
         self.fallback_stage = FallbackStage::FirstCandidateForNotdefGlyph;
 
         let last_resort = self
@@ -163,7 +153,6 @@ impl<'a> FontFallbackIterator<'a> {
       .font_fallback_list
       .font_data_at(self.current_font_data_index)
     else {
-      // Past the font-family list, prioritized emoji fonts, then system fonts.
       self.fallback_stage = if self.font_fallback_priority.is_non_text() {
         FallbackStage::FallbackPriorityFonts
       } else {
@@ -175,7 +164,6 @@ impl<'a> FontFallbackIterator<'a> {
 
     let faces = match font_data {
       FontData::Simple(font_data) => {
-        // The next call moves on to the next family.
         self.current_font_data_index += 1;
 
         return self.unique_or_next(FontDataForRangeSet::new(font_data.clone()), hint_list);
@@ -193,7 +181,6 @@ impl<'a> FontFallbackIterator<'a> {
     self.segmented_face_index += 1;
 
     if self.segmented_face_index == faces.len() {
-      // The segmented face is done; the next call moves on to the next family.
       self.fallback_stage = FallbackStage::FontGroupFonts;
       self.current_font_data_index += 1;
     }
@@ -213,8 +200,7 @@ impl<'a> FontFallbackIterator<'a> {
       .fallback_font_for_character(hint, self.font_fallback_priority)
   }
 
-  /// Blink's `ChooseHintIndex`: past the first character, the first with a script, as fallback
-  /// finds little for common characters.
+  /// Blink's `ChooseHintIndex`.
   fn choose_hint_index(hint_list: &[char]) -> usize {
     debug_assert!(!hint_list.is_empty());
 
@@ -227,8 +213,7 @@ impl<'a> FontFallbackIterator<'a> {
       .unwrap_or(0)
   }
 
-  /// Blink's `UniqueSystemFontForHintList`: a system font for a hint not asked for before, as the
-  /// shaper already tried the font a repeated hint got.
+  /// Blink's `UniqueSystemFontForHintList`.
   fn unique_system_font_for_hint_list(&mut self, hint_list: &[char]) -> Option<Rc<SimpleFontData>> {
     if hint_list.is_empty() {
       return None;

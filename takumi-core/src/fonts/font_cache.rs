@@ -1,8 +1,4 @@
-//! takumi's stand-in for the fallback half of Blink's `FontCache`, which asks the system for a font
-//! with a character. takumi has no system fonts, so it searches the registered ones.
-//!
-//! Approximate: fontconfig ranks system fonts by their own rules, where this takes the registered
-//! fallback order, color families first for emoji presentation and last for text presentation.
+//! Approximate stand-in for the fallback half of Blink's `FontCache`, searching registered fonts; see #2001.
 
 use std::rc::Rc;
 
@@ -19,7 +15,7 @@ impl FontCache {
     Self { fallback_fonts }
   }
 
-  /// Blink's `FallbackFontForCharacter`: a face with a glyph for `hint`.
+  /// Blink's `FallbackFontForCharacter`.
   pub(crate) fn fallback_font_for_character(
     &self,
     hint: char,
@@ -39,7 +35,7 @@ impl FontCache {
     with_glyph(preferred).or_else(|| with_glyph(other)).cloned()
   }
 
-  /// Blink's `GetLastResortFallbackFont`: the first registered face.
+  /// Blink's `GetLastResortFallbackFont`.
   pub(crate) fn last_resort_fallback_font(&self) -> Option<Rc<SimpleFontData>> {
     self.fallback_fonts.first().cloned()
   }

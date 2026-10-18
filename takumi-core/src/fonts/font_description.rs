@@ -18,8 +18,7 @@ pub(crate) struct FontDescription {
   pub(crate) computed_size: f32,
   /// Blink's `SpecifiedSize`.
   pub(crate) specified_size: f32,
-  /// Blink's `FontFeatures`, resolved from `font-feature-settings`, `font-variant-*`, and
-  /// `letter-spacing`.
+  /// Blink's `FontFeatures`.
   pub(crate) features: Vec<Feature>,
   /// `font-variation-settings`.
   pub(crate) variation_settings: Vec<Variation>,

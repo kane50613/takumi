@@ -1,9 +1,4 @@
-//! Blink's `FontFallbackList`, the fonts the `font-family` list resolves to, after
-//! [`font_fallback_list.cc`](https://source.chromium.org/chromium/chromium/src/+/main:third_party/blink/renderer/platform/fonts/font_fallback_list.cc).
-//!
-//! Blink resolves each family as fallback reaches it; this resolves them all at once, with the same
-//! fonts in the same order. Blink's standard font is the generic `serif` family here. Follows Blink
-//! under the notice in LICENSE-CHROMIUM.
+//! Blink's [`FontFallbackList`](https://source.chromium.org/chromium/chromium/src/+/main:third_party/blink/renderer/platform/fonts/font_fallback_list.cc), resolving every family up front; approximate, see #2001.
 
 use std::rc::Rc;
 
@@ -15,7 +10,7 @@ use super::{
 };
 use crate::resources::font::{Fonts, MatchedFace};
 
-/// Blink's `FontData`: one face, or the faces a `unicode-range` splits a family into.
+/// Blink's `FontData`.
 #[derive(Debug)]
 pub(crate) enum FontData {
   Simple(Rc<SimpleFontData>),
@@ -29,7 +24,7 @@ impl FontData {
   }
 }
 
-/// Blink's `FontFallbackList`, with the `FontCache` it falls back to past it.
+/// Blink's `FontFallbackList`.
 #[derive(Debug)]
 pub(crate) struct FontFallbackList {
   font_list: Vec<FontData>,
@@ -48,7 +43,6 @@ impl FontFallbackList {
       .map(Rc::new)
     };
     let resolve = |faces: Vec<MatchedFace>| {
-      // A family split by `unicode-range` stays segmented even with one face.
       if let [face] = faces.as_slice()
         && face.unicode_range.is_none()
       {
@@ -75,7 +69,6 @@ impl FontFallbackList {
         .filter_map(font_data)
         .collect(),
     );
-    // Past the families, Blink takes the standard font, else the last resort font.
     let standard = fonts
       .font_group(
         [QueryFamily::Generic(GenericFamily::Serif)],
