@@ -91,6 +91,10 @@ jobs:
             | jq -r '.packages[] | select(.publish != []) | select(any(.targets[]; .kind | index("lib"))) | .manifest_path | rtrimstr("/Cargo.toml")')
           exit $fail
 
+      # The WPT reftests compare against the revision the script pins, and skip without a checkout.
+      - name: Check out the web-platform-tests
+        run: sh scripts/wpt-checkout.sh
+
       - name: Run tests
         run: cargo test --locked
 

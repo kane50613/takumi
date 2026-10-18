@@ -22,7 +22,7 @@ use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use takumi::prelude::{
   FromHtml, FromHtmlOptions, Node, RenderOptions, StylePresets, StyleSheet, Viewport,
 };
-use test_utils::{CONTEXT, TEST_IMAGES, write_goldens};
+use test_utils::{CONTEXT, TEST_IMAGES, matches_fragments, write_goldens};
 
 #[test]
 fn html_fixtures() {
@@ -56,14 +56,10 @@ fn html_fixtures() {
 
 /// Whether `only`, the `FIXTURE` fragments, picks the fixture at `path`.
 fn is_selected(path: &Path, only: Option<&str>) -> bool {
-  let name = path.file_stem().unwrap_or_default().to_string_lossy();
-
-  only.is_none_or(|only| {
-    only
-      .split(',')
-      .map(str::trim)
-      .any(|fragment| !fragment.is_empty() && name.contains(fragment))
-  })
+  matches_fragments(
+    only,
+    &path.file_stem().unwrap_or_default().to_string_lossy(),
+  )
 }
 
 fn render_fixture(path: &Path, name: &str) -> Result<(), String> {
