@@ -27,14 +27,14 @@ use crate::{
     shape_result_view::{Segment, SegmentSource, ShapeResultView},
     shaping_line_breaker::{ShapingLineBreaker, ShapingLineBreakerResult},
   },
-  geometry::Rect,
   layout::tree::RenderNode,
   layout_unit::LayoutUnit,
   style::{BoxDecorationBreak, ComputedStyle, Direction as TextDirection, WordBreak},
   text::{
     character::{
-      CARRIAGE_RETURN, FORM_FEED, IDEOGRAPHIC_SPACE, LINE_FEED, OBJECT_REPLACEMENT_CHARACTER,
+      CARRIAGE_RETURN, FORM_FEED, LINE_FEED, OBJECT_REPLACEMENT_CHARACTER,
       POP_DIRECTIONAL_FORMATTING, POP_DIRECTIONAL_ISOLATE, SOFT_HYPHEN, TAB, ZERO_WIDTH_SPACE,
+      char_at, char_before, is_other_space_separator,
     },
     line_break_iterator::{BreakSpaceType, LineBreakIterator, LineBreakType},
   },
@@ -155,11 +155,6 @@ fn is_breakable_space(c: char) -> bool {
   c == ' ' || c == TAB
 }
 
-/// Blink's `IsOtherSpaceSeparator`.
-fn is_other_space_separator(c: char) -> bool {
-  c == IDEOGRAPHIC_SPACE
-}
-
 /// Blink's `IsBreakableSpaceOrOtherSeparator`.
 fn is_breakable_space_or_other_separator(c: char) -> bool {
   is_breakable_space(c) || is_other_space_separator(c)
@@ -201,45 +196,28 @@ fn has_unpositioned_floats(item_results: &InlineItemResults<'_, '_>) -> bool {
     .is_some_and(|result| result.has_unpositioned_floats)
 }
 
-/// The character starting at `offset`, or NUL past the end, as Blink's `String::operator[]`.
-fn char_at(text: &str, offset: usize) -> char {
-  text
-    .get(offset..)
-    .and_then(|rest| rest.chars().next())
-    .unwrap_or('\0')
-}
-
-/// The character ending at `offset`.
-fn char_before(text: &str, offset: usize) -> char {
-  text[..offset].chars().next_back().unwrap_or('\0')
-}
-
-/// The physical `edges` of `node` in its line-relative directions.
-fn line_strut(node: &RenderNode, edges: Rect<f32>) -> LineBoxStrut {
-  let direction = node.context.style.inherited_data.direction;
-  let (inline_start, inline_end) = direction.inline_sides(edges.left, edges.right);
-
-  LineBoxStrut {
-    inline_start: LayoutUnit::from_float(inline_start),
-    inline_end: LayoutUnit::from_float(inline_end),
-    line_over: LayoutUnit::from_float(edges.top),
-    line_under: LayoutUnit::from_float(edges.bottom),
-  }
-}
-
 /// Blink's `ComputeLineMarginsForSelf`.
 fn line_margins(node: &RenderNode) -> LineBoxStrut {
-  line_strut(node, node.margin_px())
+  LineBoxStrut::from_physical(
+    node.margin_px(),
+    node.context.style.inherited_data.direction,
+  )
 }
 
 /// Blink's `ComputeLineBorders`.
 fn line_borders(node: &RenderNode) -> LineBoxStrut {
-  line_strut(node, node.border_px())
+  LineBoxStrut::from_physical(
+    node.border_px(),
+    node.context.style.inherited_data.direction,
+  )
 }
 
 /// Blink's `ComputeLinePadding`.
 fn line_padding(node: &RenderNode) -> LineBoxStrut {
-  line_strut(node, node.padding_px())
+  LineBoxStrut::from_physical(
+    node.padding_px(),
+    node.context.style.inherited_data.direction,
+  )
 }
 
 /// Blink's `ComputeInlineEndSize`.
@@ -2073,10 +2051,7 @@ impl<'a, 'b, 'c> LineBreaker<'a, 'b, 'c> {
     }
 
     let text = self.text();
-    let base_level = match self.base_direction {
-      TextDirection::Ltr => 0,
-      TextDirection::Rtl => 1,
-    };
+    let base_level = self.base_direction.bidi_level();
 
     for result_index in (0..line_info.results.len()).rev() {
       let item_result = &mut line_info.results[result_index];

@@ -714,6 +714,14 @@ impl Direction {
     }
   }
 
+  /// The paragraph embedding level of this base direction, as UAX #9 numbers it.
+  pub(crate) fn bidi_level(self) -> u8 {
+    match self {
+      Self::Ltr => 0,
+      Self::Rtl => 1,
+    }
+  }
+
   /// The bidi control character forcing this base direction: U+200E LEFT-TO-RIGHT
   /// MARK or U+200F RIGHT-TO-LEFT MARK.
   pub(crate) const fn bidi_mark(self) -> &'static str {

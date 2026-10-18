@@ -14,7 +14,9 @@ use crate::{
   fonts::shaping::{
     harfbuzz_shaper::HarfBuzzShaper, shape_result::ShapeResult, shape_result_view::ShapeResultView,
   },
+  geometry::Rect,
   layout_unit::LayoutUnit,
+  style::Direction as TextDirection,
   text::character::{HYPHEN, HYPHEN_MINUS},
 };
 
@@ -28,6 +30,27 @@ pub(crate) struct LineBoxStrut {
 }
 
 impl LineBoxStrut {
+  /// The physical `edges` of a box in a container of `direction`, truncated to layout units as
+  /// Blink's `LineBoxStrut(BoxStrut)` takes them.
+  pub(crate) fn from_physical(edges: Rect<f32>, direction: TextDirection) -> Self {
+    let (inline_start, inline_end) = direction.inline_sides(edges.left, edges.right);
+
+    Self {
+      inline_start: LayoutUnit::from_float(inline_start),
+      inline_end: LayoutUnit::from_float(inline_end),
+      line_over: LayoutUnit::from_float(edges.top),
+      line_under: LayoutUnit::from_float(edges.bottom),
+    }
+  }
+
+  /// Blink's `LineLeft`.
+  pub(crate) fn line_left(&self, direction: TextDirection) -> LayoutUnit {
+    match direction {
+      TextDirection::Ltr => self.inline_start,
+      TextDirection::Rtl => self.inline_end,
+    }
+  }
+
   /// Blink's `InlineSum`.
   pub(crate) fn inline_sum(&self) -> LayoutUnit {
     self.inline_start + self.inline_end

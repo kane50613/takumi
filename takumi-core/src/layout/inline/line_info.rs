@@ -13,12 +13,12 @@ use crate::{
   fonts::shaping::shape_result_run::AdjustMidCluster,
   layout_unit::LayoutUnit,
   style::{ComputedStyle, Direction as TextDirection, TextAlign, WhiteSpaceCollapse},
-  text::character::{IDEOGRAPHIC_SPACE, LINE_FEED},
+  text::character::{LINE_FEED, is_other_space_separator},
 };
 
 /// Blink's `IsHangingSpace`.
 fn is_hanging_space(c: char) -> bool {
-  c == ' ' || c == IDEOGRAPHIC_SPACE
+  c == ' ' || is_other_space_separator(c)
 }
 
 /// `text-align` on the last line, or the one before a forced break, per css-text-3 §6.3: `text-align-last`
