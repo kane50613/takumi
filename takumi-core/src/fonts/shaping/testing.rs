@@ -46,6 +46,8 @@ pub(crate) fn font(fonts: &mut Fonts, family: &str) -> Font {
       font_synthesis_small_caps: FontSynthesic::Auto,
       letter_spacing: 0.0,
       word_spacing: 0.0,
+      is_letter_spacing_fixed: true,
+      is_word_spacing_fixed: true,
     },
   )
 }

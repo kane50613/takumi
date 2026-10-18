@@ -260,6 +260,8 @@ mod small_caps;
 #[cfg(test)]
 pub(crate) mod testing;
 mod text_fit;
+pub(crate) mod text_fit_scale;
+pub(crate) mod text_fit_utils;
 mod truncation;
 
 pub(crate) use self::{

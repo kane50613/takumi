@@ -50,7 +50,7 @@ impl LineWidths {
     let fonts = &items_data.fonts;
     let mut line_box = InlineBoxState::new(0, block_context, fonts);
 
-    line_box.compute_text_metrics();
+    line_box.compute_text_metrics(None);
 
     let primary_font = line_box.font.primary_font()?;
     let mut items = &items_data.items[..];
@@ -73,10 +73,11 @@ impl LineWidths {
             let object = item.layout_object?;
             let mut text_box = InlineBoxState::new(0, object.context(), fonts);
 
-            text_box.compute_text_metrics();
+            text_box.compute_text_metrics(None);
 
             if text_box.include_used_fonts {
-              text_box.accumulate_used_fonts(&ShapeResultView::create_from_result(shape_result));
+              text_box
+                .accumulate_used_fonts(&ShapeResultView::create_from_result(shape_result), 1.0);
             }
 
             if !line_box.metrics.contains(&text_box.metrics) {

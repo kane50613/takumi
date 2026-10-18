@@ -1,6 +1,6 @@
 //! Blink's [`InlineLayoutAlgorithm`](https://source.chromium.org/chromium/chromium/src/+/main:third_party/blink/renderer/core/layout/inline/inline_layout_algorithm.cc)
 //! and the line boxes it builds, without ruby, initial letters, SVG text, `text-combine-upright`,
-//! `text-box-trim`, `text-fit`, block fragmentation, shapes, or margin collapsing.
+//! `text-box-trim`, block fragmentation, shapes, or margin collapsing.
 
 use taffy::Clear;
 
@@ -19,6 +19,7 @@ use super::{
   logical_line_builder::LogicalLineBuilder,
   logical_line_item::{LineFragment, LogicalLineItems},
   score_line_breaker::{ScoreLineBreakContext, ScoreLineBreaker},
+  text_fit_utils::{LineFitter, ParagraphScale},
 };
 use crate::{
   fonts::font_height::FontHeight,
@@ -35,7 +36,8 @@ use crate::{
   },
   layout_unit::LayoutUnit,
   style::{
-    BlockEllipsis, Continue, Direction as TextDirection, TextAlign, TextOverflow, TextWrapStyle,
+    BlockEllipsis, Continue, Direction as TextDirection, TextAlign, TextFitMode, TextFitTarget,
+    TextOverflow, TextWrapStyle,
   },
 };
 
@@ -65,6 +67,8 @@ pub(crate) struct LineBoxFragment<'a, 'c> {
   pub(crate) exclusion_space: ExclusionSpace,
   /// Blink's `LinesUntilClamp`, after this line.
   pub(crate) lines_until_clamp: Option<i32>,
+  /// Blink's `TextFitScale` of the line container.
+  pub(crate) text_fit_scale: f32,
 }
 
 impl LineBoxFragment<'_, '_> {
@@ -84,6 +88,7 @@ impl LineBoxFragment<'_, '_> {
       clearance_after_line: LayoutUnit::ZERO,
       exclusion_space,
       lines_until_clamp: None,
+      text_fit_scale: 1.0,
     }
   }
 
@@ -181,6 +186,7 @@ pub(crate) struct InlineLayoutAlgorithm<'s, 'a, 'c> {
   context: &'s mut InlineChildLayoutContext<'a, 'c>,
   atomic_inline: &'s mut dyn AtomicInlineLayout<'c>,
   container_builder: LineBoxFragment<'a, 'c>,
+  apply_text_fit: bool,
 }
 
 impl<'s, 'a, 'c> InlineLayoutAlgorithm<'s, 'a, 'c> {
@@ -202,6 +208,7 @@ impl<'s, 'a, 'c> InlineLayoutAlgorithm<'s, 'a, 'c> {
       context,
       atomic_inline,
       container_builder: LineBoxFragment::new(exclusion_space.clone()),
+      apply_text_fit: node.should_apply_text_fit(items_data),
     }
   }
 
@@ -306,8 +313,30 @@ impl<'s, 'a, 'c> InlineLayoutAlgorithm<'s, 'a, 'c> {
         continue;
       }
 
-      self.prepare_box_states(&line_info);
-      self.create_line(&line_opportunity, &mut line_info, &mut line_box);
+      let mut should_scale_line_height = false;
+
+      // The measuring layout of a consistent `text-fit` fits nothing; `measure_per_block_scale`
+      // reads its lines.
+      if self.apply_text_fit && !self.context.is_measuring_scale {
+        let scale = self.context.measured_scale;
+
+        if scale.scale == 1.0 {
+          should_scale_line_height =
+            LineFitter::new(self.node, &mut line_info).measure_and_fit_line();
+        } else {
+          LineFitter::new(self.node, &mut line_info)
+            .fit_line(scale.scale, Some(scale.additional_paint_time_scale));
+          should_scale_line_height = true;
+        }
+      }
+
+      self.prepare_box_states(&line_info, should_scale_line_height);
+      self.create_line(
+        &line_opportunity,
+        &mut line_info,
+        should_scale_line_height,
+        &mut line_box,
+      );
 
       // A line taller than the opportunity tries the next one.
       let total_block_size = self.container_builder.line_height();
@@ -418,7 +447,7 @@ impl<'s, 'a, 'c> InlineLayoutAlgorithm<'s, 'a, 'c> {
 
   /// Blink's `PrepareBoxStates`: the boxes open at the line's start, kept from the last line when
   /// it ended there.
-  fn prepare_box_states(&mut self, line_info: &LineInfo<'a, 'c>) {
+  fn prepare_box_states(&mut self, line_info: &LineInfo<'a, 'c>, should_scale_line_height: bool) {
     let Some(break_token) = self.break_token else {
       self.context.reset_box_states();
 
@@ -426,14 +455,20 @@ impl<'s, 'a, 'c> InlineLayoutAlgorithm<'s, 'a, 'c> {
     };
     let start_item_index = break_token.start.item_index;
 
+    // A fitted line's scale changes the boxes' metrics.
     if !break_token.is_line_clamp_displaced_line
+      && !self.apply_text_fit
       && self.context.has_box_states_for_item_index(start_item_index)
     {
       return;
     }
 
-    LogicalLineBuilder::new(self.constraint_space, self.context.reset_box_states())
-      .rebuild_box_states(line_info, 0, start_item_index);
+    LogicalLineBuilder::new(
+      self.constraint_space,
+      self.context.reset_box_states(),
+      should_scale_line_height,
+    )
+    .rebuild_box_states(line_info, 0, start_item_index);
   }
 
   /// Blink's `CreateLine`.
@@ -441,6 +476,7 @@ impl<'s, 'a, 'c> InlineLayoutAlgorithm<'s, 'a, 'c> {
     &mut self,
     opportunity: &LineLayoutOpportunity,
     line_info: &mut LineInfo<'a, 'c>,
+    should_scale_line_height: bool,
     line_box: &mut LogicalLineItems<'a, 'c>,
   ) {
     let space = self.constraint_space;
@@ -450,7 +486,8 @@ impl<'s, 'a, 'c> InlineLayoutAlgorithm<'s, 'a, 'c> {
 
     line_box.children.clear();
 
-    let mut line_builder = LogicalLineBuilder::new(space, self.context.box_states());
+    let mut line_builder =
+      LogicalLineBuilder::new(space, self.context.box_states(), should_scale_line_height);
 
     line_builder.create_line(line_info, line_box);
 
@@ -473,7 +510,7 @@ impl<'s, 'a, 'c> InlineLayoutAlgorithm<'s, 'a, 'c> {
 
     // An empty line that still shows takes the strut's height.
     if line_info.has_line_even_if_empty {
-      box_states.line_box_state().ensure_text_metrics();
+      box_states.line_box_state().ensure_text_metrics(None);
     }
 
     let line_box_metrics = box_states.line_box_state().metrics;
@@ -533,6 +570,7 @@ impl<'s, 'a, 'c> InlineLayoutAlgorithm<'s, 'a, 'c> {
 
     // The items sat on a baseline at zero; the line box's top is zero from here.
     line_box.move_in_block_direction(line_box_metrics.ascent);
+    self.container_builder.text_fit_scale = line_info.text_fit_scale;
     self.container_builder.inline_size = inline_size;
   }
 
@@ -855,7 +893,8 @@ impl<'c> InlineNode<'c> {
         .map(|lines| lines as i32);
     }
 
-    let lines = self.layout_lines_in(items_data, space, atomic_inline);
+    let paragraph_scale = self.measure_paragraph_scale(items_data, space, atomic_inline);
+    let lines = self.layout_lines_in(items_data, space, Some(paragraph_scale), atomic_inline);
 
     // Blink's `ShouldRelayoutWithNoForcedTruncate`: no line follows the clamp line, so it relays
     // out ignoring the clamp.
@@ -865,20 +904,53 @@ impl<'c> InlineNode<'c> {
     {
       space.lines_until_clamp = None;
 
-      return self.layout_lines_in(items_data, space, atomic_inline);
+      return self.layout_lines_in(items_data, space, Some(paragraph_scale), atomic_inline);
     }
 
     lines
+  }
+
+  /// Blink's `LayoutInlineChild`, measuring the scale of a consistent `text-fit` with a layout of
+  /// its own.
+  fn measure_paragraph_scale(
+    self,
+    items_data: &InlineNodeData<'c>,
+    space: ConstraintSpace,
+    atomic_inline: &mut dyn AtomicInlineLayout<'c>,
+  ) -> ParagraphScale {
+    let text_fit = self.block.context.style.misc_inherited1_data.text_fit;
+    let grow_consistent =
+      text_fit.mode == TextFitMode::Grow && text_fit.target == TextFitTarget::Consistent;
+    let shrink_consistent =
+      text_fit.mode == TextFitMode::Shrink && text_fit.target == TextFitTarget::Consistent;
+
+    if !grow_consistent && !shrink_consistent {
+      return ParagraphScale::default();
+    }
+
+    let lines = self.layout_lines_in(items_data, space, None, atomic_inline);
+    let paragraph_scale = self.measure_per_block_scale(items_data, &lines, space.inline_size());
+
+    if (paragraph_scale.scale < 1.0 && !shrink_consistent)
+      || (paragraph_scale.scale > 1.0 && !grow_consistent)
+    {
+      return ParagraphScale::default();
+    }
+
+    paragraph_scale
   }
 
   fn layout_lines_in<'a>(
     self,
     items_data: &'a InlineNodeData<'c>,
     mut space: ConstraintSpace,
+    paragraph_scale: Option<ParagraphScale>,
     atomic_inline: &mut dyn AtomicInlineLayout<'c>,
   ) -> Vec<LineBoxFragment<'a, 'c>> {
     let mut exclusion_space = ExclusionSpace::default();
     let mut context = InlineChildLayoutContext::default();
+
+    context.enable_measuring_mode_if_necessary(paragraph_scale);
     let mut break_token = None;
     let mut lines = Vec::new();
 

@@ -10,6 +10,7 @@ use super::{
   inline_item::{InlineItem, InlineItemType, LayoutObject, StyleVariant},
   inline_item_result::{InlineItemResult, LayoutResult, LineBoxStrut},
   inline_item_text_index::InlineItemTextIndex,
+  text_fit_scale::TextFitScale,
 };
 use crate::{
   fonts::shaping::shape_result_view::ShapeResultView,
@@ -74,6 +75,7 @@ pub(crate) struct LogicalLineItem<'a, 'c> {
   /// The item for a text fragment; none for an ellipsis.
   pub(crate) inline_item: Option<&'a InlineItem<'c>>,
   pub(crate) shape_result: Option<Rc<ShapeResultView>>,
+  pub(crate) text_fit_scale: Option<TextFitScale>,
   pub(crate) text_offset: Range<usize>,
   /// The text of generated text, such as a hyphen or an ellipsis.
   pub(crate) text_content: Option<String>,
@@ -113,6 +115,7 @@ impl Default for LogicalLineItem<'_, '_> {
     Self {
       inline_item: None,
       shape_result: None,
+      text_fit_scale: None,
       text_offset: 0..0,
       text_content: None,
       layout_result: None,
@@ -186,6 +189,7 @@ impl<'a, 'c> LogicalLineItem<'a, 'c> {
     Self {
       inline_item: Some(inline_item),
       shape_result: item_result.shape_result.clone(),
+      text_fit_scale: item_result.text_fit_scale.clone(),
       text_offset: item_result.text_offset.clone(),
       rect: LogicalRect::new(
         LayoutUnit::ZERO,
@@ -205,6 +209,7 @@ impl<'a, 'c> LogicalLineItem<'a, 'c> {
     inline_item: &'a InlineItem<'c>,
     shape_result: Rc<ShapeResultView>,
     text_content: String,
+    text_fit_scale: Option<TextFitScale>,
     block_offset: LayoutUnit,
     inline_size: LayoutUnit,
     text_height: LayoutUnit,
@@ -213,6 +218,7 @@ impl<'a, 'c> LogicalLineItem<'a, 'c> {
       inline_item: Some(inline_item),
       text_offset: shape_result.start_index() as usize..shape_result.end_index() as usize,
       shape_result: Some(shape_result),
+      text_fit_scale,
       text_content: Some(text_content),
       rect: LogicalRect::new(
         LayoutUnit::ZERO,

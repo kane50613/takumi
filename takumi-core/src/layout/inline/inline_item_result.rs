@@ -8,6 +8,7 @@ use super::{
   inline_item::{InlineItem, InlineItemType},
   inline_item_text_index::InlineItemTextIndex,
   inline_node_data::StyleFonts,
+  text_fit_scale::{TextFitBlockScale, TextFitScale},
 };
 use crate::{
   context::RenderContext,
@@ -132,6 +133,7 @@ pub(crate) struct InlineItemResult<'a, 'c> {
   pub(crate) spacing_before: LayoutUnit,
   pub(crate) shape_result: Option<Rc<ShapeResultView>>,
   pub(crate) hyphen: Option<HyphenResult>,
+  pub(crate) text_fit_scale: Option<TextFitScale>,
   pub(crate) layout_result: Option<LayoutResult>,
   pub(crate) positioned_float: Option<PositionedFloat>,
   /// The exclusion space before the float was placed, which a rewind restores.
@@ -166,6 +168,7 @@ impl<'a, 'c> InlineItemResult<'a, 'c> {
       spacing_before: LayoutUnit::ZERO,
       shape_result: None,
       hyphen: None,
+      text_fit_scale: None,
       layout_result: None,
       positioned_float: None,
       exclusion_space_before_position_float: None,
@@ -220,3 +223,43 @@ impl<'a, 'c> InlineItemResult<'a, 'c> {
 
 /// Blink's `InlineItemResults`.
 pub(crate) type InlineItemResults<'a, 'c> = Vec<InlineItemResult<'a, 'c>>;
+
+/// Blink's `FindTextScale`: the scale of the first text from `start_index` at the nesting level
+/// `initial_nesting_level` starts it at, or none unless `should_scale`.
+pub(crate) fn find_text_scale(
+  should_scale: bool,
+  line_items: &[InlineItemResult<'_, '_>],
+  start_index: usize,
+  initial_nesting_level: usize,
+) -> TextFitBlockScale {
+  if !should_scale {
+    return TextFitBlockScale::default();
+  }
+
+  let mut level = initial_nesting_level;
+
+  for item_result in line_items.iter().skip(start_index) {
+    match item_result.item.item_type {
+      InlineItemType::OpenTag => level += 1,
+      InlineItemType::CloseTag => {
+        if level == 0 {
+          break;
+        }
+
+        level -= 1;
+      }
+      InlineItemType::Text if level == 0 => {
+        return item_result.text_fit_scale.as_ref().map_or_else(
+          TextFitBlockScale::default,
+          |text_fit_scale| TextFitBlockScale {
+            paint_scale: text_fit_scale.scale,
+            scaled_font: text_fit_scale.font.clone(),
+          },
+        );
+      }
+      _ => {}
+    }
+  }
+
+  TextFitBlockScale::default()
+}

@@ -4,7 +4,7 @@
 //! text, and `InlineLayoutUnit` 1/65536px in an `i64` for a whole line. Each saturates at the ends
 //! of its range. Follows Blink under the notice in LICENSE-CHROMIUM.
 
-use std::ops::{Add, AddAssign, Div, Mul, Neg, Rem, Sub, SubAssign};
+use std::ops::{Add, AddAssign, Div, Mul, MulAssign, Neg, Rem, Sub, SubAssign};
 
 use crate::geometry::{Point, Rect, Size};
 
@@ -462,6 +462,13 @@ impl From<LayoutUnit> for InlineLayoutUnit {
 impl From<TextRunLayoutUnit> for InlineLayoutUnit {
   fn from(source: TextRunLayoutUnit) -> Self {
     Self(i64::from(source.0))
+  }
+}
+
+/// Blink's `operator*=(LayoutUnit&, float)`, truncating the product.
+impl MulAssign<f32> for LayoutUnit {
+  fn mul_assign(&mut self, other: f32) {
+    *self = Self::from_float(self.to_float() * other);
   }
 }
 

@@ -46,6 +46,8 @@ pub(crate) struct LineInfo<'a, 'c> {
   width: LayoutUnit,
   hang_width: LayoutUnit,
   pub(crate) text_indent: LayoutUnit,
+  /// Blink's `TextFitScale`: the scale `text-fit` gives the line.
+  pub(crate) text_fit_scale: f32,
   pub(crate) start: InlineItemTextIndex,
   pub(crate) end_item_index: usize,
   end_offset_for_justify: usize,
@@ -75,6 +77,7 @@ impl<'a, 'c> LineInfo<'a, 'c> {
       width: LayoutUnit::ZERO,
       hang_width: LayoutUnit::ZERO,
       text_indent: LayoutUnit::ZERO,
+      text_fit_scale: 1.0,
       start: InlineItemTextIndex::default(),
       end_item_index: 0,
       end_offset_for_justify: 0,

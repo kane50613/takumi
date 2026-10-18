@@ -1,6 +1,5 @@
 //! Blink's [`InlineBoxState`](https://source.chromium.org/chromium/chromium/src/+/main:third_party/blink/renderer/core/layout/inline/inline_box_state.cc),
-//! without ruby, SVG text, block-in-inline, `text-box-trim`, `text-emphasis`, `text-fit`, or
-//! quirks mode.
+//! without ruby, SVG text, block-in-inline, `text-box-trim`, `text-emphasis`, or quirks mode.
 
 use std::{mem, ptr, rc::Rc};
 
@@ -10,6 +9,7 @@ use super::{
   inline_node_data::StyleFonts,
   line_info::LineInfo,
   logical_line_item::{InlineBoxFragment, LineFragment, LogicalLineItem, LogicalLineItems},
+  text_fit_scale::TextFitBlockScale,
 };
 use crate::{
   context::RenderContext,
@@ -26,7 +26,10 @@ use crate::{
   },
   layout_unit::LayoutUnit,
   resources::font::PrimaryFontMetrics,
-  style::{BoxDecorationBreak, Direction as TextDirection, VerticalAlign, VerticalAlignKeyword},
+  style::{
+    BoxDecorationBreak, Direction as TextDirection, TextFitMode, TextFitTarget, VerticalAlign,
+    VerticalAlignKeyword,
+  },
 };
 
 /// Blink's `ComputedLineHeightAsFixed` of `context` against `font`.
@@ -65,6 +68,8 @@ pub(crate) struct InlineBoxState<'a, 'c> {
   pending_descendants: Vec<PendingPositions>,
   pub(crate) include_used_fonts: bool,
   pub(crate) needs_box_fragment: bool,
+  /// The scale `text-fit` gives the box's text.
+  pub(crate) text_fit_scale: f32,
 }
 
 impl<'a, 'c> InlineBoxState<'a, 'c> {
@@ -86,6 +91,7 @@ impl<'a, 'c> InlineBoxState<'a, 'c> {
       pending_descendants: Vec::new(),
       include_used_fonts: false,
       needs_box_fragment: false,
+      text_fit_scale: 1.0,
     }
   }
 
@@ -96,16 +102,34 @@ impl<'a, 'c> InlineBoxState<'a, 'c> {
   }
 
   /// Blink's `ComputeTextMetrics`: the box's font with its leading, which every text in the box
-  /// shares and the line height includes.
-  pub(crate) fn compute_text_metrics(&mut self) {
-    self.text_metrics = self
-      .font
-      .primary_font_metrics()
-      .map_or_else(FontHeight::default, PrimaryFontMetrics::font_height);
+  /// shares and the line height includes; `text-fit` scales both.
+  pub(crate) fn compute_text_metrics(&mut self, scale: Option<&TextFitBlockScale>) {
+    let base_font = scale
+      .and_then(|scale| scale.scaled_font.as_deref())
+      .unwrap_or(&self.font);
+    let paint_scale = scale.map_or(1.0, |scale| scale.paint_scale);
+    let font_metrics = base_font.primary_font_metrics();
+
+    self.text_metrics = if paint_scale == 1.0 {
+      font_metrics.map_or_else(FontHeight::default, PrimaryFontMetrics::font_height)
+    } else {
+      let mut text_metrics =
+        font_metrics.map_or_else(FontHeight::default, PrimaryFontMetrics::float_font_height);
+
+      text_metrics.ascent *= paint_scale;
+      text_metrics.descent *= paint_scale;
+      text_metrics
+    };
     self.text_top = -self.text_metrics.ascent;
     self.text_height = self.text_metrics.line_height();
 
-    let line_height = computed_line_height_as_fixed(self.style, &self.font);
+    let box_line_height = BoxLineHeight::of(&self.style.style, self.style);
+    let mut line_height = box_line_height.computed_as_fixed(font_metrics);
+
+    // A `line-height` length, percentages included, does not scale.
+    if !matches!(box_line_height, BoxLineHeight::Length(_)) && paint_scale != 1.0 {
+      line_height *= paint_scale;
+    }
     let leading_space = calculate_leading_space(line_height, &self.text_metrics);
 
     self.text_metrics.add_leading(leading_space);
@@ -117,9 +141,9 @@ impl<'a, 'c> InlineBoxState<'a, 'c> {
   }
 
   /// Blink's `EnsureTextMetrics`.
-  pub(crate) fn ensure_text_metrics(&mut self) {
+  pub(crate) fn ensure_text_metrics(&mut self, scale: Option<&TextFitBlockScale>) {
     if self.text_metrics.is_empty() {
-      self.compute_text_metrics();
+      self.compute_text_metrics(scale);
     }
   }
 
@@ -133,7 +157,7 @@ impl<'a, 'c> InlineBoxState<'a, 'c> {
 
   /// Blink's `AccumulateUsedFonts`: under `line-height: normal`, each font the text used grows the
   /// box to its own leaded height.
-  pub(crate) fn accumulate_used_fonts(&mut self, shape_result: &ShapeResultView) {
+  pub(crate) fn accumulate_used_fonts(&mut self, shape_result: &ShapeResultView, scale: f32) {
     for used_font in shape_result.used_fonts() {
       let Some(font_metrics) = used_font.font_metrics() else {
         continue;
@@ -142,8 +166,21 @@ impl<'a, 'c> InlineBoxState<'a, 'c> {
       let leading_space = calculate_leading_space(font_metrics.fixed_line_spacing(), &used_metrics);
 
       used_metrics.add_leading(leading_space);
+      used_metrics.ascent *= scale;
+      used_metrics.descent *= scale;
       self.metrics.unite(&used_metrics);
     }
+  }
+
+  /// Blink's `ComputedFontSizeAsFixed`, times the box's `text-fit` scale.
+  fn scaled_font_size_as_fixed(&self) -> LayoutUnit {
+    let font_size = LayoutUnit::from_float_round(self.style.sizing.font_size);
+
+    if self.text_fit_scale == 1.0 {
+      return font_size;
+    }
+
+    LayoutUnit::from_float(font_size.to_float() * self.text_fit_scale)
   }
 
   /// Blink's `TextTop`: the text top's offset from the baseline, for `vertical-align: text-top`.
@@ -374,7 +411,12 @@ impl<'a, 'c> InlineLayoutStateStack<'a, 'c> {
         if self.stack[index].needs_box_fragment {
           debug_assert_ne!(index, 0);
 
-          self.add_box_fragment_placeholder(index, line_box, false);
+          let text_block_scale = TextFitBlockScale {
+            paint_scale: line_info.text_fit_scale,
+            scaled_font: None,
+          };
+
+          self.add_box_fragment_placeholder(index, &text_block_scale, line_box, false);
         }
 
         let box_state = &mut self.stack[index];
@@ -400,13 +442,22 @@ impl<'a, 'c> InlineLayoutStateStack<'a, 'c> {
     // The line box's own state starts with a strut, a zero-width inline box with the block's font
     // and line height. <https://drafts.csswg.org/css2/visudet.html#strut>
     let line_box_state = &mut self.stack[0];
+    let text_fit = line_style.style.misc_inherited1_data.text_fit;
 
     if is_first_line
       || !ptr::eq(line_box_state.style, line_style)
       || line_height_mode == LineHeightMode::LineClampDisplacedEllipsis
+      || (text_fit.mode != TextFitMode::None && text_fit.target != TextFitTarget::Consistent)
     {
       line_box_state.reset_style(line_style, fonts);
-      line_box_state.compute_text_metrics();
+
+      let text_scale = TextFitBlockScale {
+        paint_scale: line_info.text_fit_scale,
+        scaled_font: None,
+      };
+
+      line_box_state.text_fit_scale = text_scale.total_scale(&line_box_state.font);
+      line_box_state.compute_text_metrics(Some(&text_scale));
     }
   }
 
@@ -419,12 +470,18 @@ impl<'a, 'c> InlineLayoutStateStack<'a, 'c> {
     line_box: &LogicalLineItems<'a, 'c>,
     fonts: &StyleFonts,
   ) -> &mut InlineBoxState<'a, 'c> {
+    let text_fit_scale = self
+      .stack
+      .last()
+      .map_or(1.0, |parent| parent.text_fit_scale);
+
     self.stack.push(InlineBoxState {
       item: Some(item),
       has_start_edge: true,
       margins: item_result.margins,
       borders: item_result.borders,
       padding: item_result.padding,
+      text_fit_scale,
       ..InlineBoxState::new(line_box.len(), style, fonts)
     });
     self.current()
@@ -436,17 +493,20 @@ impl<'a, 'c> InlineLayoutStateStack<'a, 'c> {
     item: &'a InlineItem<'c>,
     style: &'c RenderContext,
     item_result: &InlineItemResult<'a, 'c>,
+    text_scale: &TextFitBlockScale,
     line_box: &mut LogicalLineItems<'a, 'c>,
     fonts: &StyleFonts,
   ) -> &mut InlineBoxState<'a, 'c> {
     self.on_open_tag(item, style, item_result, line_box, fonts);
 
     let index = self.stack.len() - 1;
+    let box_state = &mut self.stack[index];
 
-    self.stack[index].needs_box_fragment = item.should_create_box_fragment;
+    box_state.text_fit_scale = text_scale.total_scale(&box_state.font);
+    box_state.needs_box_fragment = item.should_create_box_fragment;
 
-    if self.stack[index].needs_box_fragment {
-      self.add_box_fragment_placeholder(index, line_box, !item.is_empty_item);
+    if box_state.needs_box_fragment {
+      self.add_box_fragment_placeholder(index, text_scale, line_box, !item.is_empty_item);
     }
 
     &mut self.stack[index]
@@ -523,6 +583,7 @@ impl<'a, 'c> InlineLayoutStateStack<'a, 'c> {
   fn add_box_fragment_placeholder(
     &mut self,
     index: usize,
+    text_scale: &TextFitBlockScale,
     line_box: &mut LogicalLineItems<'a, 'c>,
     has_non_empty_inline_box_start: bool,
   ) {
@@ -539,10 +600,19 @@ impl<'a, 'c> InlineLayoutStateStack<'a, 'c> {
 
     if !self.is_empty_line {
       // The font's height, without `line-height`.
-      let metrics = box_state
-        .font
-        .primary_font_metrics()
-        .map_or_else(FontHeight::default, PrimaryFontMetrics::font_height);
+      let font = text_scale.scaled_font.as_deref().unwrap_or(&box_state.font);
+      let font_metrics = font.primary_font_metrics();
+      let scale = text_scale.paint_scale;
+      let mut metrics = if scale == 1.0 {
+        font_metrics.map_or_else(FontHeight::default, PrimaryFontMetrics::font_height)
+      } else {
+        font_metrics.map_or_else(FontHeight::default, PrimaryFontMetrics::float_font_height)
+      };
+
+      if scale != 1.0 {
+        metrics.ascent *= scale;
+        metrics.descent *= scale;
+      }
 
       // Borders and padding grow the box in the block direction; the line breaker counted their
       // inline sides.
@@ -1105,15 +1175,14 @@ impl<'a, 'c> InlineLayoutStateStack<'a, 'c> {
     }
 
     let parent_box = &self.stack[index - 1];
-    let parent_context = parent_box.style;
     let baseline_shift = match vertical_align {
       VerticalAlign::Keyword(VerticalAlignKeyword::Sub) => {
-        let font_size = LayoutUnit::from_float_round(parent_context.sizing.font_size);
+        let font_size = parent_box.scaled_font_size_as_fixed();
 
         font_size / 5 + LayoutUnit::from_int(1)
       }
       VerticalAlign::Keyword(VerticalAlignKeyword::Super) => {
-        let font_size = LayoutUnit::from_float_round(parent_context.sizing.font_size);
+        let font_size = parent_box.scaled_font_size_as_fixed();
 
         -(font_size / 3 + LayoutUnit::from_int(1))
       }
