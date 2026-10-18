@@ -770,7 +770,7 @@ mod tests {
   fn shape_line_breaks_after_a_whole_character() {
     let text = "\u{3000}\u{3000}a b";
     let (_fonts, fixture) = Fixture::new(text);
-    let break_iterator = iterator(text, WordBreak::Normal);
+    let break_iterator = iterator(text, LineBreakType::Normal);
     let mut breaker = fixture.breaker(&fixture.result, &break_iterator);
 
     for available in [0, 1, 4] {
