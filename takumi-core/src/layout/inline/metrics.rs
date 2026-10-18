@@ -202,7 +202,7 @@ pub(super) fn resolve_inline_line_metrics(
 
     let (height, offsets) = tree.resolve();
     let (resolved_above, resolved_below) = if has_contribution {
-      (height.ascent.to_f32().max(0.0), height.descent.to_f32())
+      (height.ascent.to_float().max(0.0), height.descent.to_float())
     } else {
       text_line_box_contribution(
         line_metrics.line_height,

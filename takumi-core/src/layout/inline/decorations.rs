@@ -120,9 +120,9 @@ impl DecorationFont {
         ((self.metrics.ascent + underline.position) * self.scale + style_offset).round()
       }),
       TextUnderlinePosition::Under => {
-        let offset =
-          LayoutUnit::from_f32_round((self.metrics.ascent + self.metrics.em_descent) * self.scale)
-            + LayoutUnit::from_f32_round(style_offset);
+        let offset = LayoutUnit::from_float_round(
+          (self.metrics.ascent + self.metrics.em_descent) * self.scale,
+        ) + LayoutUnit::from_float_round(style_offset);
 
         (offset.floor() + 1) as f32
       }

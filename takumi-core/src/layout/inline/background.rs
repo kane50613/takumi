@@ -258,8 +258,8 @@ impl<'c> DecorationAccumulator<'c> {
               FontHeight::text(metrics.exact.ascent, metrics.exact.descent, line.text_scale);
 
             (
-              line.baseline - text.ascent.to_f32(),
-              line.baseline + text.descent.to_f32(),
+              line.baseline - text.ascent.to_float(),
+              line.baseline + text.descent.to_float(),
             )
           })
           .or(runs)

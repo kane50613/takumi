@@ -525,7 +525,7 @@ impl BoxLineHeight {
       return Self::Normal;
     }
     match layout_unit_line_height(css.into_parley(&context.sizing), context.sizing.font_size) {
-      LineHeight::Absolute(value) => Self::Length(LayoutUnit::from_f32(value)),
+      LineHeight::Absolute(value) => Self::Length(LayoutUnit::from_float(value)),
       LineHeight::FontSizeRelative(_) | LineHeight::MetricsRelative(_) => match css {
         CssLineHeight::Unitless(value) => Self::Number {
           value,
@@ -550,7 +550,7 @@ impl BoxLineHeight {
     let line_height = match self {
       Self::Length(line_height) => return line_height,
       // Blink's `FontMetrics::FixedLineSpacing`.
-      Self::Normal => LayoutUnit::from_f32_round(
+      Self::Normal => LayoutUnit::from_float_round(
         (ascent * font_scale).round()
           + (descent * font_scale).round()
           + (line_gap * font_scale).round(),
@@ -559,7 +559,9 @@ impl BoxLineHeight {
     };
 
     match scale {
-      TextScale::Paint(scale) if scale != 1.0 => LayoutUnit::from_f32(line_height.to_f32() * scale),
+      TextScale::Paint(scale) if scale != 1.0 => {
+        LayoutUnit::from_float(line_height.to_float() * scale)
+      }
       _ => line_height,
     }
   }
@@ -582,16 +584,20 @@ impl Hash for BoxLineHeight {
 /// A number line height, which Blink keeps as a percentage, truncated against the font size
 /// rounded to a layout unit.
 fn number_line_height(value: f32, font_size: f32) -> LayoutUnit {
-  LayoutUnit::from_f32(LayoutUnit::from_f32_round(font_size).to_f32() * (value * 100.0) / 100.0)
+  LayoutUnit::from_float(
+    LayoutUnit::from_float_round(font_size).to_float() * (value * 100.0) / 100.0,
+  )
 }
 
 /// `line_height` in layout units, as Blink's `ComputedLineHeightAsFixed` resolves it: a length
 /// rounded to the nearest unit, and a number as `number_line_height`.
 fn layout_unit_line_height(line_height: LineHeight, font_size: f32) -> LineHeight {
   match line_height {
-    LineHeight::Absolute(value) => LineHeight::Absolute(LayoutUnit::from_f32_round(value).to_f32()),
+    LineHeight::Absolute(value) => {
+      LineHeight::Absolute(LayoutUnit::from_float_round(value).to_float())
+    }
     LineHeight::FontSizeRelative(value) if font_size > 0.0 => {
-      LineHeight::FontSizeRelative(number_line_height(value, font_size).to_f32() / font_size)
+      LineHeight::FontSizeRelative(number_line_height(value, font_size).to_float() / font_size)
     }
     line_height => line_height,
   }

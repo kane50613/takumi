@@ -559,7 +559,7 @@ impl InlineBrush {
   fn line_box_contribution(&self, ascent: f32, descent: f32, line_gap: f32) -> (f32, f32) {
     let height = self.line_box_height(ascent, descent, line_gap, TextScale::Paint(1.0));
 
-    (height.ascent.to_f32(), height.descent.to_f32())
+    (height.ascent.to_float(), height.descent.to_float())
   }
 
   /// The run's line-box contribution with its text sized by `scale`, as Blink's
@@ -600,8 +600,8 @@ impl InlineBrush {
       height
     } else {
       FontHeight {
-        ascent: LayoutUnit::from_f32(height.ascent.to_f32() * paint),
-        descent: LayoutUnit::from_f32(height.descent.to_f32() * paint),
+        ascent: LayoutUnit::from_float(height.ascent.to_float() * paint),
+        descent: LayoutUnit::from_float(height.descent.to_float() * paint),
       }
     })
   }

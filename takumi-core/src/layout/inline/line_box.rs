@@ -45,8 +45,8 @@ impl FontHeight {
   /// `ascent` and `descent` px in the nearest layout units.
   pub(super) fn nearest(ascent: f32, descent: f32) -> Self {
     Self {
-      ascent: LayoutUnit::from_f32_round(ascent),
-      descent: LayoutUnit::from_f32_round(descent),
+      ascent: LayoutUnit::from_float_round(ascent),
+      descent: LayoutUnit::from_float_round(descent),
     }
   }
 
@@ -56,12 +56,12 @@ impl FontHeight {
   pub(crate) fn text(ascent: f32, descent: f32, scale: TextScale) -> Self {
     match scale {
       TextScale::Paint(scale) if scale != 1.0 => Self {
-        ascent: LayoutUnit::from_f32(LayoutUnit::from_f32_round(ascent).to_f32() * scale),
-        descent: LayoutUnit::from_f32(LayoutUnit::from_f32_round(descent).to_f32() * scale),
+        ascent: LayoutUnit::from_float(LayoutUnit::from_float_round(ascent).to_float() * scale),
+        descent: LayoutUnit::from_float(LayoutUnit::from_float_round(descent).to_float() * scale),
       },
       scale => Self {
-        ascent: LayoutUnit::from_f32((ascent * scale.font()).round()),
-        descent: LayoutUnit::from_f32((descent * scale.font()).round()),
+        ascent: LayoutUnit::from_float((ascent * scale.font()).round()),
+        descent: LayoutUnit::from_float((descent * scale.font()).round()),
       },
     }
   }
@@ -133,13 +133,13 @@ impl BoxFont {
 
     let exact = metrics.exact;
     let painted = if fit.reshaped {
-      LayoutUnit::from_f32((exact.ascent * fit.scale).round())
+      LayoutUnit::from_float((exact.ascent * fit.scale).round())
     } else {
-      LayoutUnit::from_f32(metrics.ascent * fit.scale)
+      LayoutUnit::from_float(metrics.ascent * fit.scale)
     };
     let text = FontHeight::text(exact.ascent, exact.descent, fit.text_scale(root));
 
-    (painted - text.ascent).to_f32()
+    (painted - text.ascent).to_float()
   }
 }
 
@@ -280,8 +280,8 @@ impl LineBoxTree {
       // is the font's text height with the borders, grown by the leading its line height leaves.
       let text = FontHeight::text(text.exact.ascent, text.exact.descent, scale);
       let content = FontHeight {
-        ascent: text.ascent + LayoutUnit::from_f32(border.top),
-        descent: text.descent + LayoutUnit::from_f32(border.bottom),
+        ascent: text.ascent + LayoutUnit::from_float(border.top),
+        descent: text.descent + LayoutUnit::from_float(border.bottom),
       };
 
       self.boxes[index].box_metrics = content.with_leading(strut.ascent + strut.descent);
@@ -331,7 +331,7 @@ impl LineBoxTree {
           .boxes
           .iter()
           .zip(offsets)
-          .filter_map(|(open, offset)| open.key.map(|key| (key, offset.to_f32())))
+          .filter_map(|(open, offset)| open.key.map(|key| (key, offset.to_float())))
           .collect(),
       },
     )
@@ -366,7 +366,7 @@ impl LineBoxTree {
         // Blink's `FixedDescent`.
         ResolvedVerticalAlign::Keyword(VerticalAlignKeyword::TextBottom) => {
           text.map_or(LayoutUnit::ZERO, |text| {
-            LayoutUnit::from_f32_round(text.exact.descent)
+            LayoutUnit::from_float_round(text.exact.descent)
           }) - metrics.descent
         }
         _ => {
@@ -450,16 +450,16 @@ impl LineBoxTree {
     let one = LayoutUnit::from_int(1);
     // Blink's `ComputedFontSizeAsFixed`, scaled with the line's text.
     let font_size = parent_font.map(|font| {
-      let size = LayoutUnit::from_f32_round(font.size);
+      let size = LayoutUnit::from_float_round(font.size);
 
       if self.fit.scale == 1.0 {
         size
       } else {
-        LayoutUnit::from_f32(size.to_f32() * self.fit.scale)
+        LayoutUnit::from_float(size.to_float() * self.fit.scale)
       }
     });
     let shift = match self.boxes[index].align {
-      ResolvedVerticalAlign::Shift(px) => -LayoutUnit::from_f32(px),
+      ResolvedVerticalAlign::Shift(px) => -LayoutUnit::from_float(px),
       ResolvedVerticalAlign::Keyword(keyword) => match keyword {
         VerticalAlignKeyword::Baseline => LayoutUnit::ZERO,
         VerticalAlignKeyword::Sub => font_size.map_or(LayoutUnit::ZERO, |size| size / 5 + one),
@@ -469,7 +469,7 @@ impl LineBoxTree {
             .and_then(|font| font.metrics)
             .and_then(|metrics| metrics.x_height)
             .map_or(LayoutUnit::ZERO, |x_height| {
-              LayoutUnit::from_f32_round(x_height / 2.0)
+              LayoutUnit::from_float_round(x_height / 2.0)
             });
 
           (metrics.ascent - metrics.descent) / 2 - x_height
