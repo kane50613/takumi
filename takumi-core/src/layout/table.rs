@@ -653,6 +653,12 @@ impl RenderNode {
     }
 
     for mut stray in strays {
+      // A hidden child generates no box, so it takes no line of the grid.
+      if stray.context.style.base_data.display == Display::None {
+        items.push(stray);
+        continue;
+      }
+
       stray.lower_full_width(line, tracks);
       items.push(stray);
       line = line.saturating_add(1);
@@ -1846,6 +1852,40 @@ mod tests {
     );
 
     assert_eq!(ids(&tree), ["a"]);
+  }
+
+  #[test]
+  fn a_hidden_child_of_a_table_stays_hidden() {
+    fn hidden_display(tree: &RenderNode) -> Option<Display> {
+      let mut pending = vec![tree];
+
+      while let Some(node) = pending.pop() {
+        if node
+          .node
+          .as_ref()
+          .and_then(|node| node.metadata.id.as_deref())
+          == Some("hidden")
+        {
+          return Some(node.context.style.base_data.display);
+        }
+
+        pending.extend(node.children.as_deref().unwrap_or_default());
+      }
+
+      None
+    }
+
+    let hidden = || {
+      Node::container([Node::text("x")])
+        .with_class_name("hidden")
+        .with_id("hidden")
+    };
+    let in_table =
+      lower(Node::container([named_row("row", [cell("a")]), hidden()]).with_class_name("table"));
+    let after_loose_row = lower(Node::container([named_row("row", [cell("a")]), hidden()]));
+
+    assert_eq!(hidden_display(&in_table), Some(Display::None));
+    assert_eq!(hidden_display(&after_loose_row), Some(Display::None));
   }
 
   #[test]
