@@ -265,3 +265,13 @@ pub(crate) const CJK_IDEOGRAPH_OR_SYMBOL_RANGES: &[RangeInclusive<u32>] = &[
   0x1F900..=0x1F90B,
   0x1FAC9..=0x1FACC,
 ];
+
+/// The character starting at byte `offset` of `text`. A byte inside a character stands in for the
+/// trailing surrogate Blink would read there, which no predicate takes for a space.
+pub(crate) fn char_at(text: &str, offset: usize) -> char {
+  if !text.is_char_boundary(offset) {
+    return char::REPLACEMENT_CHARACTER;
+  }
+
+  text[offset..].chars().next().unwrap_or('\0')
+}

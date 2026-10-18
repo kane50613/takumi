@@ -4,7 +4,7 @@ use crate::{
   layout_unit::{FixedPoint, InlineLayoutUnit, TextRunLayoutUnit},
   style::Direction as TextDirection,
   text::{
-    character::{NO_BREAK_SPACE, treat_as_space, treat_as_zero_width_space},
+    character::{NO_BREAK_SPACE, char_at, treat_as_space, treat_as_zero_width_space},
     justification_opportunity::JustificationContext,
     text_justify::TextJustify,
   },
@@ -164,7 +164,7 @@ impl<'a> ShapeResultSpacing<'a> {
   ) -> TextRunLayoutUnit {
     debug_assert!(self.has_spacing);
 
-    let mut character = self.text[index..].chars().next().unwrap_or('\0');
+    let mut character = char_at(self.text, index);
     let treat_as_space = treat_as_space(character) && (character != '\t' || !self.allow_tabs);
 
     if treat_as_space && character != NO_BREAK_SPACE {
@@ -207,7 +207,7 @@ impl<'a> ShapeResultSpacing<'a> {
 
     debug_assert!(!self.allow_tabs);
 
-    let ch = self.text[index..].chars().next().unwrap_or('\0');
+    let ch = char_at(self.text, index);
 
     self.compute_expansion_for(method, ch)
   }
