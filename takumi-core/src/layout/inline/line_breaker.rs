@@ -27,7 +27,15 @@ use crate::{
     shape_result_view::{Segment, SegmentSource, ShapeResultView},
     shaping_line_breaker::{ShapingLineBreaker, ShapingLineBreakerResult},
   },
-  layout::tree::RenderNode,
+  layout::{
+    bfc_rect::BfcOffset,
+    constraint_space::ConstraintSpace,
+    exclusions::{exclusion_space::ExclusionSpace, layout_opportunity::LineLayoutOpportunity},
+    floats_utils::{
+      UnpositionedFloat, compute_margin_box_inline_size_for_unpositioned_float, position_float,
+    },
+    tree::RenderNode,
+  },
   layout_unit::LayoutUnit,
   style::{BoxDecorationBreak, ComputedStyle, Direction as TextDirection, WordBreak},
   text::{
@@ -46,38 +54,6 @@ pub(crate) enum LineBreakerMode {
   Content,
   MinContent,
   MaxContent,
-}
-
-/// Blink's `LineLayoutOpportunity`: the inline extent a line may take, beside the floats.
-#[derive(Debug, Clone, Copy, Default, PartialEq)]
-pub(crate) struct LineLayoutOpportunity {
-  pub(crate) line_left_offset: LayoutUnit,
-  pub(crate) line_right_offset: LayoutUnit,
-  pub(crate) float_line_left_offset: LayoutUnit,
-  pub(crate) float_line_right_offset: LayoutUnit,
-  pub(crate) bfc_block_offset: LayoutUnit,
-  pub(crate) line_block_size: LayoutUnit,
-}
-
-impl LineLayoutOpportunity {
-  /// An opportunity spanning `inline_size`, as Blink's constructor from one size makes.
-  pub(crate) fn new(inline_size: LayoutUnit) -> Self {
-    Self {
-      line_right_offset: inline_size,
-      float_line_right_offset: inline_size,
-      ..Self::default()
-    }
-  }
-
-  /// Blink's `AvailableInlineSize`.
-  pub(crate) fn available_inline_size(&self) -> LayoutUnit {
-    (self.line_right_offset - self.line_left_offset).clamp_negative_to_zero()
-  }
-
-  /// Blink's `AvailableFloatInlineSize`.
-  pub(crate) fn available_float_inline_size(&self) -> LayoutUnit {
-    (self.float_line_right_offset - self.float_line_left_offset).clamp_negative_to_zero()
-  }
 }
 
 /// Lays out an atomic inline for a line: Blink's `LayoutAtomicInline` and
@@ -298,9 +274,9 @@ pub(crate) struct LineBreaker<'a, 'b, 'c> {
   node: InlineNode<'c>,
   items_data: &'a InlineNodeData<'c>,
   mode: LineBreakerMode,
-  /// The constraint space's available inline size, none when computing intrinsic sizes.
-  available_inline_size: Option<LayoutUnit>,
+  constraint_space: ConstraintSpace,
   atomic_inline: &'b mut dyn AtomicInlineLayout<'c>,
+  exclusion_space: &'b mut ExclusionSpace,
   state: LineBreakState,
   current: InlineItemTextIndex,
   break_at: LineBreakPoint,
@@ -342,14 +318,16 @@ pub(crate) struct LineBreaker<'a, 'b, 'c> {
 }
 
 impl<'a, 'b, 'c> LineBreaker<'a, 'b, 'c> {
+  #[expect(clippy::too_many_arguments, reason = "Blink's constructor takes these")]
   pub(crate) fn new(
     node: InlineNode<'c>,
     items_data: &'a InlineNodeData<'c>,
     mode: LineBreakerMode,
-    available_inline_size: Option<LayoutUnit>,
+    constraint_space: ConstraintSpace,
     line_opportunity: LineLayoutOpportunity,
     break_token: Option<InlineBreakToken<'c>>,
     atomic_inline: &'b mut dyn AtomicInlineLayout<'c>,
+    exclusion_space: &'b mut ExclusionSpace,
   ) -> Self {
     let text = items_data.text_content.as_str();
     let break_iterator = Rc::new(LineBreakIterator::new(
@@ -361,8 +339,9 @@ impl<'a, 'b, 'c> LineBreaker<'a, 'b, 'c> {
       node,
       items_data,
       mode,
-      available_inline_size,
+      constraint_space,
       atomic_inline,
+      exclusion_space,
       state: LineBreakState::Continue,
       current: InlineItemTextIndex::default(),
       break_at: LineBreakPoint::default(),
@@ -439,7 +418,7 @@ impl<'a, 'b, 'c> LineBreaker<'a, 'b, 'c> {
 
   /// Blink's `IsComputingContentSize`.
   fn is_computing_content_size(&self) -> bool {
-    self.available_inline_size.is_none()
+    self.constraint_space.available_inline_size.is_none()
   }
 
   /// Blink's `ShouldAutoWrap`.
@@ -726,7 +705,7 @@ impl<'a, 'b, 'c> LineBreaker<'a, 'b, 'c> {
     ) {
       let length = line_style.style.misc_inherited1_data.text_indent.amount;
       // Percentages resolve against nothing while computing intrinsic sizes.
-      let maximum_value = match (self.mode, self.available_inline_size) {
+      let maximum_value = match (self.mode, self.constraint_space.available_inline_size) {
         (LineBreakerMode::Content, Some(available_inline_size)) if length.has_percentage() => {
           available_inline_size
         }
@@ -2399,9 +2378,66 @@ impl<'a, 'b, 'c> LineBreaker<'a, 'b, 'c> {
     self.move_to_next_of_item(item_index);
   }
 
-  /// Blink's `HandleFloat`, adding the float to the line. TODO(#2001): position floats through
-  /// Blink's `ExclusionSpace`.
+  /// Blink's `ShouldPushFloatAfterLine`: whether the float goes below this line.
+  fn should_push_float_after_line(
+    &mut self,
+    unpositioned_float: &mut UnpositionedFloat<'c>,
+    line_info: &mut LineInfo<'a, 'c>,
+  ) -> bool {
+    let inline_margin_size = compute_margin_box_inline_size_for_unpositioned_float(
+      unpositioned_float,
+      &mut *self.atomic_inline,
+    );
+    let used_size = self.position
+      + inline_margin_size
+      + self.compute_float_ancestor_inline_end_size(self.current.item_index);
+    let available_float_inline_size = self
+      .line_opportunity
+      .available_float_inline_size()
+      .add_epsilon();
+    // Trailing spaces collapse across floats when the line breaks here.
+    let can_fit_float = used_size <= available_float_inline_size
+      || used_size - self.trailing_collapsible_space_width(line_info)
+        <= available_float_inline_size;
+    let bfc_block_offset = unpositioned_float.origin_bfc_offset.block_offset;
+
+    // Below the line when it does not fit, or the top edge alignment rule or clearance moves it
+    // down.
+    !can_fit_float
+      || self.exclusion_space.last_float_block_start() > bfc_block_offset
+      || self
+        .exclusion_space
+        .clearance_offset(unpositioned_float.clear_type())
+        > bfc_block_offset
+  }
+
+  /// Blink's `ComputeFloatAncestorInlineEndSize`: the inline end edges of the boxes a float closes
+  /// before anything else, which count against its line.
+  fn compute_float_ancestor_inline_end_size(&self, item_index: usize) -> LayoutUnit {
+    let mut inline_end_size = LayoutUnit::ZERO;
+
+    for item in &self.items()[item_index..] {
+      if item.item_type == InlineItemType::CloseTag {
+        if let Some(object) = item.layout_object {
+          inline_end_size += compute_inline_end_size(object.node());
+        }
+
+        continue;
+      }
+
+      // An open tag, even an empty one, or any content, lets the float join the line.
+      if item.item_type == InlineItemType::OpenTag || !item.is_empty_item {
+        break;
+      }
+    }
+
+    inline_end_size
+  }
+
+  /// Blink's `HandleFloat`: places the float on this line when it fits, and narrows the line by
+  /// it; otherwise it goes below the line.
   fn handle_float(&mut self, item_index: usize, line_info: &mut LineInfo<'a, 'c>) {
+    let item = &self.items()[item_index];
     let result_index = self.add_item(item_index, line_info);
     let item_result = &mut line_info.results[result_index];
 
@@ -2415,6 +2451,88 @@ impl<'a, 'b, 'c> LineBreaker<'a, 'b, 'c> {
     }
 
     self.move_to_next_of_item(item_index);
+
+    // Intrinsic sizes only collect the floats.
+    if self.is_computing_content_size() || self.mode != LineBreakerMode::Content {
+      return;
+    }
+
+    let Some(object) = item.layout_object else {
+      return;
+    };
+    let mut unpositioned_float = UnpositionedFloat::new(
+      object.node(),
+      self.constraint_space.inline_size(),
+      BfcOffset::new(
+        self.constraint_space.bfc_offset.line_offset,
+        self.line_opportunity.bfc_block_offset,
+      ),
+      self.container_direction(),
+    );
+    let float_after_line = self.should_push_float_after_line(&mut unpositioned_float, line_info);
+
+    // A float sits no higher than one before it.
+    if line_info.results[result_index].has_unpositioned_floats || float_after_line {
+      line_info.results[result_index].has_unpositioned_floats = true;
+
+      return;
+    }
+
+    let exclusion_space_before = self.exclusion_space.clone();
+    let positioned_float = position_float(
+      &mut unpositioned_float,
+      self.exclusion_space,
+      &mut *self.atomic_inline,
+    );
+    let item_result = &mut line_info.results[result_index];
+
+    item_result.exclusion_space_before_position_float = Some(exclusion_space_before);
+    item_result.positioned_float = Some(positioned_float);
+    self.update_line_opportunity();
+  }
+
+  /// The containing block's direction, which the constraint space carries in Blink.
+  fn container_direction(&self) -> TextDirection {
+    self.block_context().style.inherited_data.direction
+  }
+
+  /// Blink's `UpdateLineOpportunity`: the line's extent beside the floats placed so far.
+  fn update_line_opportunity(&mut self) {
+    let bfc_line_offset = self.constraint_space.bfc_offset.line_offset;
+    let available_inline_size = self.constraint_space.inline_size();
+    let direction = self.container_direction();
+    let opportunity = self.exclusion_space.find_layout_opportunity(
+      BfcOffset::new(bfc_line_offset, self.line_opportunity.bfc_block_offset),
+      available_inline_size,
+      direction,
+      LayoutUnit::ZERO,
+    );
+
+    debug_assert_eq!(
+      self.line_opportunity.bfc_block_offset,
+      opportunity.rect.block_start_offset()
+    );
+
+    self.line_opportunity = opportunity.compute_line_layout_opportunity(
+      bfc_line_offset,
+      available_inline_size,
+      direction,
+      self.line_opportunity.line_block_size,
+      LayoutUnit::ZERO,
+    );
+    self.update_available_width();
+  }
+
+  /// Blink's `RewindFloats`: the exclusion space before the first float in the rewound results.
+  fn rewind_floats(&mut self, new_end: usize, line_info: &LineInfo<'a, 'c>) {
+    let restored = line_info.results[new_end..]
+      .iter()
+      .find_map(|result| result.exclusion_space_before_position_float.clone());
+
+    if let Some(exclusion_space) = restored {
+      *self.exclusion_space = exclusion_space;
+      self.update_line_opportunity();
+    }
   }
 
   /// Blink's `HandleOutOfFlowPositioned`.
@@ -2967,6 +3085,9 @@ impl<'a, 'b, 'c> LineBreaker<'a, 'b, 'c> {
       self.last_rewind = Some((self.current.item_index, new_end));
     }
 
+    // Floats placed in the rewound results come out of the exclusion space.
+    self.rewind_floats(new_end, line_info);
+
     if new_end != 0 {
       // The previous result's end, which truncation may have moved before the next one's start.
       self.move_to_next_of_result(new_end - 1, line_info);
@@ -3197,14 +3318,14 @@ impl<'a, 'b, 'c> LineBreaker<'a, 'b, 'c> {
 mod tests {
   use std::sync::Arc;
 
-  use super::{
-    AtomicInlineLayout, LineBreaker, LineBreakerMode, LineLayoutOpportunity, WhitespaceState,
-  };
+  use super::{AtomicInlineLayout, LineBreaker, LineBreakerMode, WhitespaceState};
   use crate::{
     context::RenderContext,
     fonts::shaping::testing::{GEIST_MONO, register},
     geometry::{AvailableSpace, Size},
     layout::{
+      constraint_space::ConstraintSpace,
+      exclusions::{exclusion_space::ExclusionSpace, layout_opportunity::LineLayoutOpportunity},
       inline::{
         inline_item::InlineItemType, inline_item_result::LayoutResult, inline_node::InlineNode,
         line_info::LineInfo,
@@ -3289,6 +3410,7 @@ mod tests {
     let data = node.prepare_layout();
     let available_width = LayoutUnit::from_float(available_width);
     let mut atomic_inline = TestAtomicInline;
+    let mut exclusion_space = ExclusionSpace::default();
     let mut break_token = None;
     let mut broken = BrokenLines {
       lines: Vec::new(),
@@ -3302,10 +3424,11 @@ mod tests {
         node,
         &data,
         LineBreakerMode::Content,
-        Some(available_width),
+        ConstraintSpace::new(Some(available_width)),
         LineLayoutOpportunity::new(available_width),
         break_token,
         &mut atomic_inline,
+        &mut exclusion_space,
       );
 
       line_breaker.next_line(&mut line_info);
@@ -3623,5 +3746,19 @@ mod tests {
 
     assert_eq!(texts(lines.clone()), ["12", "34"]);
     assert_eq!(data.items[lines[0].1].item_type, InlineItemType::CloseTag);
+  }
+
+  /// A float placed on a line narrows it.
+  #[test]
+  fn float_narrows_its_line() {
+    let tree = render_tree(
+      [
+        Node::container([]).with_class_name("float"),
+        Node::text("123 456 789"),
+      ],
+      ".float { float: left; width: 24px; height: 10px }",
+    );
+
+    assert_eq!(texts(break_lines(&tree, 60.0)), ["123", "456 789"]);
   }
 }
