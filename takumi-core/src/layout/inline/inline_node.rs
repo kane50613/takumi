@@ -420,4 +420,20 @@ mod tests {
     assert_eq!(text, "a");
     assert_eq!(items[0], (ListMarker, String::new()));
   }
+
+  /// Blink's `LayoutInsideListMarker` is an inline box, and a symbol's text paints as a shape.
+  #[test]
+  fn an_inside_marker_is_an_inline_box() {
+    let list = Node::container([Node::text("a").with_class_name("item")]).with_class_name("list");
+    let tree = render_tree(list, ".list { list-style-position: inside }");
+    let item = &tree.children.as_deref().expect("children")[0];
+    let mut items = InlineItems::new();
+    let text = collect_inlines(item, &mut items).text_content;
+    let types: Vec<_> = items.iter().map(|item| item.item_type).collect();
+
+    assert_eq!(text, "\u{2022}a");
+    assert_eq!(types, [OpenTag, Text, CloseTag, Text]);
+    assert!(items[1].is_symbol_marker());
+    assert!(!items[3].is_symbol_marker());
+  }
 }
