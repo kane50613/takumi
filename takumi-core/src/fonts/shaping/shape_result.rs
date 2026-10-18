@@ -1,10 +1,4 @@
-//! Blink's `ShapeResult`: a run of text shaped into runs of glyphs, after
-//! [`shape_result.cc`](https://source.chromium.org/chromium/chromium/src/+/main:third_party/blink/renderer/platform/fonts/shaping/shape_result.cc).
-//! Follows Blink under the notice in LICENSE-CHROMIUM.
-//!
-//! Offsets count UTF-8 bytes where Blink's count UTF-16 code units. Not ported: the single shared
-//! advance Blink keeps in place of the position table for monospace text, which saves memory and
-//! gives the same positions.
+//! Blink's [`ShapeResult`](https://source.chromium.org/chromium/chromium/src/+/main:third_party/blink/renderer/platform/fonts/shaping/shape_result.cc).
 
 use std::{
   cell::{Cell, RefCell},
@@ -29,7 +23,7 @@ use crate::{
   style::Direction as TextDirection,
 };
 
-/// Blink's `ShapeResultCharacterData`: what a character's position cache holds.
+/// Blink's `ShapeResultCharacterData`.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub(crate) struct ShapeResultCharacterData {
   pub(crate) x_position: LayoutUnit,
@@ -51,7 +45,7 @@ impl ShapeResultCharacterData {
   }
 }
 
-/// Blink's `ShapeResult::ShapeRange`: a range of offsets copied into `target`.
+/// Blink's `ShapeResult::ShapeRange`.
 pub(crate) struct ShapeRange<'a> {
   pub(crate) start: u32,
   pub(crate) end: u32,
@@ -114,7 +108,7 @@ impl ShapeResult {
     self.runs.iter().map(ShapeResultRun::num_glyphs).sum()
   }
 
-  /// Blink's `HasFallbackFonts`: whether a run took a font other than `primary_font`.
+  /// Blink's `HasFallbackFonts`.
   pub(crate) fn has_fallback_fonts(&self, primary_font: &Rc<SimpleFontData>) -> bool {
     self.runs.iter().any(|run| {
       run
@@ -166,7 +160,6 @@ impl ShapeResult {
 
   /// Blink's `IsStartSafeToBreak`.
   pub(crate) fn is_start_safe_to_break(&self) -> bool {
-    // Empty is likely a `SubRange` in a cluster or a ligature.
     let run = if self.is_ltr() {
       self.runs.first()
     } else {
@@ -183,7 +176,6 @@ impl ShapeResult {
 
     glyph.is_some_and(|glyph| {
       glyph.is_safe_to_break_before()
-        // The glyph for the first character missing is not safe either.
         && self.start_index() == run.start_index + u32::from(glyph.character_index)
     })
   }
@@ -244,8 +236,7 @@ impl ShapeResult {
     self.start_index()
   }
 
-  /// Blink's `AddUnsafeToBreak`: marks the characters at `offsets`, sorted ascending, as unsafe
-  /// to break before.
+  /// Blink's `AddUnsafeToBreak`.
   pub(crate) fn add_unsafe_to_break(&mut self, offsets: &[u32]) {
     if self.is_ltr() {
       self.add_unsafe_to_break_in_order(offsets.iter().copied());
@@ -290,8 +281,7 @@ impl ShapeResult {
     }
   }
 
-  /// Blink's `OffsetForPosition` with a `GlyphIndexResult`: the characters at `target_x`, or the
-  /// start or end offset for a position outside the result.
+  /// Blink's `OffsetForPosition` with a `GlyphIndexResult`.
   pub(crate) fn offset_for_position_result(
     &self,
     target_x: f32,
@@ -323,7 +313,6 @@ impl ShapeResult {
       let offset_for_run = target_x - current_x;
 
       if offset_for_run >= 0.0 && offset_for_run < run.width {
-        // The position is within this run.
         result = run.character_index_for_x_position(offset_for_run, break_glyphs);
         result.left_character_index += characters_so_far;
         result.right_character_index += characters_so_far;
@@ -354,13 +343,10 @@ impl ShapeResult {
   pub(crate) fn offset_for_position(&self, x: f32) -> u32 {
     let result = self.offset_for_position_result(x, true);
 
-    // LTR takes the left offset.
     if self.is_ltr() {
       return result.left_character_index;
     }
 
-    // RTL takes the right one, but the interval opens on the other side, so exactly at the
-    // boundary the left one.
     if x == result.origin_x {
       return result.left_character_index;
     }
@@ -368,8 +354,7 @@ impl ShapeResult {
     result.right_character_index
   }
 
-  /// Blink's `OffsetToFit`: the offset where text that fits `x` ends, on a line of
-  /// `line_direction`.
+  /// Blink's `OffsetToFit`.
   pub(crate) fn offset_to_fit(&self, x: f32, line_direction: TextDirection) -> u32 {
     let result = self.offset_for_position_result(x, false);
 
@@ -384,8 +369,7 @@ impl ShapeResult {
     result.right_character_index
   }
 
-  /// Blink's `PositionForOffset`: the position of `absolute_offset`, which counts from the
-  /// result's start.
+  /// Blink's `PositionForOffset`.
   pub(crate) fn position_for_offset(
     &self,
     absolute_offset: u32,
@@ -394,7 +378,6 @@ impl ShapeResult {
     let mut x = 0.0;
     let mut offset = absolute_offset;
 
-    // Offsets are logical and runs are visual.
     if self.is_rtl() && offset < self.num_characters() {
       offset = self.num_characters() - offset - 1;
     }
@@ -410,7 +393,6 @@ impl ShapeResult {
       x += run.width;
     }
 
-    // The position may be just after the text.
     if absolute_offset == self.num_characters() {
       return if self.is_rtl() { 0.0 } else { self.width() };
     }
@@ -418,11 +400,7 @@ impl ShapeResult {
     0.0
   }
 
-  /// Blink's `EnsureGraphemes`: the grapheme counts every run's hit testing splits glyphs by.
-  ///
-  /// Blink counts graphemes with `GraphemesClusterList` from `character_break_iterator.cc`, which
-  /// is LGPL, so this does not follow its source: it gives each byte of a run the number of
-  /// grapheme cluster boundaries, by UAX #29 as ICU4X finds them, before it.
+  /// Blink's `EnsureGraphemes`, counting graphemes with ICU4X instead of Blink's LGPL code.
   pub(crate) fn ensure_graphemes(&mut self, text: &str) {
     assert_eq!(self.num_characters() as usize, text.len());
 
@@ -461,8 +439,7 @@ impl ShapeResult {
     self.compute_position_data();
   }
 
-  /// Blink's `ComputePositionData`: the position, cluster base, and safe break of every character,
-  /// walking the glyphs from the left edge in either direction so positions ascend.
+  /// Blink's `ComputePositionData`.
   fn compute_position_data(&self) {
     let is_rtl = self.is_rtl();
     let mut character_position = self.character_position.borrow_mut();
@@ -472,7 +449,6 @@ impl ShapeResult {
     let mut last_x_position = LayoutUnit::ZERO;
 
     for run in &self.runs {
-      // Every run takes the result's direction, so positions ascend.
       debug_assert_eq!(self.is_rtl(), run.is_rtl());
 
       for glyph_data in run.glyph_data.glyphs() {
@@ -491,11 +467,8 @@ impl ShapeResult {
 
         assert!(character_index < num_characters);
 
-        // The first glyph of a cluster sets the data; later ones leave it.
         if next_character_index <= character_index {
           if next_character_index < character_index {
-            // A character with no glyph of its own takes the position of the nearest one before it
-            // in logical order: the last position in LTR, this one in RTL.
             let x_position = if is_rtl {
               total_advance.to_ceil::<LayoutUnit>()
             } else {
@@ -522,7 +495,6 @@ impl ShapeResult {
       }
     }
 
-    // Characters left without glyphs.
     if next_character_index < num_characters {
       let x_position = if is_rtl {
         total_advance.to_ceil::<LayoutUnit>()
@@ -538,15 +510,12 @@ impl ShapeResult {
     self.width.set(total_advance.to_float());
   }
 
-  /// Blink's `CachedOffsetForPosition`: the offset of the last character starting at or before
-  /// `x`.
+  /// Blink's `CachedOffsetForPosition`.
   pub(crate) fn cached_offset_for_position(&self, x: LayoutUnit) -> u32 {
     let character_position = self.character_position.borrow();
 
     debug_assert!(!character_position.is_empty());
 
-    // At or before the start, the offset of the first character; at or past the end, the offset
-    // after the last.
     let rtl = self.is_rtl();
     let length = self.num_characters();
 
@@ -558,7 +527,6 @@ impl ShapeResult {
       return if rtl { 0 } else { length };
     }
 
-    // Binary search for the largest position at or before `x`.
     let mut low: i64 = 0;
     let mut high: i64 = i64::from(length) - 1;
 
@@ -574,7 +542,6 @@ impl ShapeResult {
           return midpoint as u32;
         }
 
-        // The border belongs to the logical next character.
         return if x_position == x {
           length - midpoint as u32
         } else {
@@ -610,7 +577,6 @@ impl ShapeResult {
         return LayoutUnit::ZERO;
       }
 
-      // RTL takes the left edge of the next character, as the position is the right edge.
       for visual_offset in (length - offset - 1)..length {
         if character_position[visual_offset as usize].is_cluster_base {
           return if visual_offset + 1 < length {
@@ -655,7 +621,6 @@ impl ShapeResult {
 
     (adjusted_offset..length)
       .find(|&i| character_position[i as usize].safe_to_break_before)
-      // Next safe break is at the end of the run.
       .map_or(self.start_index + length, |i| self.start_index + i)
   }
 
@@ -675,7 +640,6 @@ impl ShapeResult {
 
     debug_assert!(adjusted_offset <= length);
 
-    // It is always safe to break at the end of the run.
     if adjusted_offset >= length {
       return self.start_index + length;
     }
@@ -683,12 +647,10 @@ impl ShapeResult {
     (0..=adjusted_offset)
       .rev()
       .find(|&i| character_position[i as usize].safe_to_break_before)
-      // Previous safe break is at the start of the run.
       .map_or(self.start_index, |i| self.start_index + i)
   }
 
-  /// Blink's `ReorderRtlRuns`: moves the runs from `run_size_before` on to the front, as an RTL
-  /// result prepends new runs in visual order.
+  /// Blink's `ReorderRtlRuns`.
   fn reorder_rtl_runs(&mut self, run_size_before: usize) {
     debug_assert!(self.is_rtl());
     debug_assert!(self.runs.len() > run_size_before);
@@ -701,13 +663,12 @@ impl ShapeResult {
     self.copy_range_internal(0, start_offset, end_offset, target);
   }
 
-  /// Blink's `CopyRanges`: copies each of `ranges`, in logical order, into its target.
+  /// Blink's `CopyRanges`.
   pub(crate) fn copy_ranges(&self, ranges: &mut [ShapeRange<'_>]) {
     debug_assert!(!ranges.is_empty());
 
     let mut run_index = 0;
 
-    // RTL takes the ranges back to front, so they follow the runs in visual order.
     if self.is_rtl() {
       for range in ranges.iter_mut().rev() {
         debug_assert!(range.end >= range.start);
@@ -725,8 +686,7 @@ impl ShapeResult {
     }
   }
 
-  /// Blink's `CopyRangeInternal`: appends the characters from `start_offset` to `end_offset` to
-  /// `target`, searching the runs from `run_index`, and returns the run index to search on from.
+  /// Blink's `CopyRangeInternal`.
   fn copy_range_internal(
     &self,
     mut run_index: usize,
@@ -736,8 +696,6 @@ impl ShapeResult {
   ) -> usize {
     target.is_applied_spacing |= self.is_applied_spacing;
 
-    // An empty `target` takes this range's character indices; otherwise they continue its own.
-    // The source's offsets give the difference, as runs missing all their characters would not.
     let index_diff: i64 = if target.num_characters == 0 {
       target.start_index = start_offset;
       0
@@ -778,7 +736,6 @@ impl ShapeResult {
 
         should_merge = false;
 
-        // No run past the end of the range matters.
         if (self.is_ltr() && end_offset <= run_end) || (self.is_rtl() && start_offset >= run_start)
         {
           break;
@@ -792,7 +749,6 @@ impl ShapeResult {
       return run_index;
     }
 
-    // An RTL result prepends new runs in visual order.
     debug_assert_eq!(self.is_rtl(), target.is_rtl());
 
     if self.is_rtl() && target.runs.len() != target_run_size_before {
@@ -813,7 +769,7 @@ impl ShapeResult {
     sub_range
   }
 
-  /// Blink's `CopyAdjustedOffset`: the result with its offsets moved to start at `start_index`.
+  /// Blink's `CopyAdjustedOffset`.
   pub(crate) fn copy_adjusted_offset(&self, start_index: u32) -> Self {
     let mut result = self.clone();
 
@@ -840,8 +796,7 @@ impl ShapeResult {
     result
   }
 
-  /// Blink's `InsertRun` for a run already filled: in visual order, so before the next run with a
-  /// greater start index in LTR, or a lesser one in RTL.
+  /// Blink's `InsertRun` for a run already filled.
   pub(crate) fn insert_run(&mut self, run: ShapeResultRun) {
     let position = if run.is_ltr() {
       self
@@ -856,8 +811,7 @@ impl ShapeResult {
     self.runs.insert(position, run);
   }
 
-  /// Blink's `InsertRunForTesting`: a run without a font whose glyphs are its characters, each
-  /// safe to break before only at `safe_break_offsets`.
+  /// Blink's `InsertRunForTesting`.
   #[cfg(test)]
   pub(crate) fn insert_run_for_testing(
     &mut self,
@@ -888,7 +842,6 @@ impl ShapeResult {
       run.glyph_data.glyphs_mut()[usize::from(offset)].set_safe_to_break_before(SafeToBreak::Safe);
     }
 
-    // RTL runs have glyphs in the descending order of character index.
     if self.is_rtl() {
       run.glyph_data.reverse();
     }
@@ -908,7 +861,7 @@ impl ShapeResult {
 mod tests {
   use super::*;
 
-  /// Blink's `InsertConstantAdvanceRun`, without compaction.
+  /// Blink's `InsertConstantAdvanceRun`.
   fn insert_constant_advance_run(
     result: &mut ShapeResult,
     start_index: u32,

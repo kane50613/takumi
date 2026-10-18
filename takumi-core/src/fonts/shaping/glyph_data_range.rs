@@ -1,6 +1,4 @@
-//! Blink's `GlyphDataRange`, a run's glyphs in one range of glyph indices, after
-//! [`glyph_data_range.cc`](https://source.chromium.org/chromium/chromium/src/+/main:third_party/blink/renderer/platform/fonts/shaping/glyph_data_range.cc).
-//! Follows Blink under the notice in LICENSE-CHROMIUM.
+//! Blink's [`GlyphDataRange`](https://source.chromium.org/chromium/chromium/src/+/main:third_party/blink/renderer/platform/fonts/shaping/glyph_data_range.cc).
 
 use super::{
   glyph_data::{GlyphOffset, HarfBuzzRunGlyphData},
@@ -51,8 +49,7 @@ impl<'a> GlyphDataRange<'a> {
     }
   }
 
-  /// Blink's `FindGlyphDataRange`: the glyphs for the characters from `start_character_index` to
-  /// `end_character_index`, in the order the run stores them.
+  /// Blink's `FindGlyphDataRange`.
   pub(crate) fn find_glyph_data_range(
     self,
     is_rtl: bool,
@@ -76,7 +73,6 @@ impl<'a> GlyphDataRange<'a> {
       let start_glyph = lower_bound(glyphs, start_character_index);
 
       if start_glyph == glyphs.len() {
-        // No glyph matches; an empty range that still keeps the run.
         return Self {
           run: Some(run),
           index: self.index + self.size,
@@ -93,8 +89,6 @@ impl<'a> GlyphDataRange<'a> {
       };
     }
 
-    // RTL searches from the end, as there may be several glyphs for a character and the first in
-    // logical order is wanted.
     let reverse_lower_bound = |end: usize, index: u32| {
       end
         - glyphs[..end]
@@ -106,7 +100,6 @@ impl<'a> GlyphDataRange<'a> {
     let start_glyph_end = reverse_lower_bound(glyphs.len(), start_character_index);
 
     if start_glyph_end == 0 {
-      // No glyph matches; an empty range that still keeps the run.
       return Self {
         run: Some(run),
         index: self.index,

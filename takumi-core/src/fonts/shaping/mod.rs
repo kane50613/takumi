@@ -1,4 +1,4 @@
-//! Blink's `platform/fonts/shaping`: text shaped into runs of glyphs.
+//! Blink's `platform/fonts/shaping`.
 
 pub(crate) mod glyph_data;
 pub(crate) mod glyph_data_range;

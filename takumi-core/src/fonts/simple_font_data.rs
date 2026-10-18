@@ -1,8 +1,8 @@
-//! Blink's `SimpleFontData`: one face at one size, as shaping takes it.
+//! Blink's `SimpleFontData`, with `FontPlatformData` and `HarfBuzzFace` folded in.
 
 use parley::fontique::Blob;
 
-/// Blink's `SimpleFontData`. Runs compare it by identity, as Blink compares the pointer.
+/// Blink's `SimpleFontData`.
 #[derive(Debug)]
 pub(crate) struct SimpleFontData {
   blob: Blob<u8>,

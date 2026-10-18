@@ -1,11 +1,4 @@
-//! Blink's `ShapeResultRun`, the glyphs one font shaped for a range of characters, after
-//! [`shape_result_run.h`](https://source.chromium.org/chromium/chromium/src/+/main:third_party/blink/renderer/platform/fonts/shaping/shape_result_run.h)
-//! and the run methods in
-//! [`shape_result.cc`](https://source.chromium.org/chromium/chromium/src/+/main:third_party/blink/renderer/platform/fonts/shaping/shape_result.cc).
-//! Follows Blink under the notice in LICENSE-CHROMIUM.
-//!
-//! Not ported: the compact storage Blink keeps for fixed-pitch runs, which saves memory and lays
-//! out the same, and the canvas rotation of vertical text.
+//! Blink's [`ShapeResultRun`](https://source.chromium.org/chromium/chromium/src/+/main:third_party/blink/renderer/platform/fonts/shaping/shape_result_run.h).
 
 use std::rc::Rc;
 
@@ -17,7 +10,7 @@ use super::{
 };
 use crate::{fonts::simple_font_data::SimpleFontData, layout_unit::InlineLayoutUnit};
 
-/// Blink's `AdjustMidCluster`: which boundary of a grapheme cluster an offset inside it means.
+/// Blink's `AdjustMidCluster`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum AdjustMidCluster {
   /// The logical end boundary.
@@ -26,10 +19,10 @@ pub(crate) enum AdjustMidCluster {
   ToStart,
 }
 
-/// Blink's `BreakGlyphsOption`: whether hit testing splits a glyph into its graphemes.
+/// Blink's `BreakGlyphsOption`.
 pub(crate) type BreakGlyphsOption = bool;
 
-/// Blink's `GlyphIndexResult`: the glyphs `CharacterIndexForXPosition` selects.
+/// Blink's `GlyphIndexResult`.
 #[derive(Debug, Clone, Copy, Default, PartialEq)]
 pub(crate) struct GlyphIndexResult {
   pub(crate) left_character_index: u32,
@@ -38,8 +31,7 @@ pub(crate) struct GlyphIndexResult {
   pub(crate) advance: f32,
 }
 
-/// Blink's `ShapeResultRun::GlyphDataCollection`: glyphs, with offsets and grapheme counts kept
-/// only when a run has them.
+/// Blink's `ShapeResultRun::GlyphDataCollection`.
 #[derive(Debug, Clone, Default, PartialEq)]
 pub(crate) struct GlyphDataCollection {
   data: Vec<HarfBuzzRunGlyphData>,
@@ -97,7 +89,7 @@ impl GlyphDataCollection {
     self.offsets.as_deref().unwrap_or_default()
   }
 
-  /// Blink's `CopyFrom`: `first`'s glyphs then `second`'s. The caller adjusts `character_index`.
+  /// Blink's `CopyFrom`.
   pub(crate) fn copy_from(&mut self, first: &Self, second: &Self) {
     let first_size = first.size();
     let second_size = second.size();
@@ -125,8 +117,7 @@ impl GlyphDataCollection {
     }
   }
 
-  /// Blink's `CopyFromRange`: the glyphs of `range`, their character indices made relative to
-  /// `character_index_offset`.
+  /// Blink's `CopyFromRange`.
   pub(crate) fn copy_from_range(&mut self, range: GlyphDataRange<'_>, character_index_offset: u32) {
     self.data = range.glyphs().to_vec();
     self.offsets = None;
@@ -262,8 +253,7 @@ impl ShapeResultRun {
     )
   }
 
-  /// Blink's `NextSafeToBreakOffset`: the first offset at or after `offset` the run may break
-  /// before without shaping again, or its end.
+  /// Blink's `NextSafeToBreakOffset`.
   pub(crate) fn next_safe_to_break_offset(&self, offset: u32) -> u32 {
     debug_assert!(offset <= self.num_characters);
 
@@ -277,14 +267,12 @@ impl ShapeResultRun {
       glyphs.iter().rev().find(is_safe)
     };
 
-    // Next safe break is at the end of the run.
     found.map_or(self.num_characters, |glyph| {
       u32::from(glyph.character_index)
     })
   }
 
-  /// Blink's `PreviousSafeToBreakOffset`: the last offset at or before `offset` the run may break
-  /// before without shaping again, or its start.
+  /// Blink's `PreviousSafeToBreakOffset`.
   pub(crate) fn previous_safe_to_break_offset(&self, offset: u32) -> u32 {
     if offset >= self.num_characters {
       return self.num_characters;
@@ -300,7 +288,6 @@ impl ShapeResultRun {
       glyphs.iter().find(is_safe)
     };
 
-    // Previous safe break is at the start of the run.
     found.map_or(0, |glyph| u32::from(glyph.character_index))
   }
 
@@ -321,8 +308,7 @@ impl ShapeResultRun {
     self.x_position_for_offset(offset, adjust_mid_cluster)
   }
 
-  /// Blink's `NumGraphemes`: the graphemes from character `start` to `end`, once the graphemes
-  /// are computed.
+  /// Blink's `NumGraphemes`.
   pub(crate) fn num_graphemes(&self, start: u32, end: u32) -> u32 {
     let Some(graphemes) = self.glyph_data.graphemes() else {
       return 0;
@@ -339,9 +325,7 @@ impl ShapeResultRun {
     graphemes[end as usize - 1] - graphemes[start as usize] + 1
   }
 
-  /// Blink's `XPositionForOffset`: the position from the run's start to the start of the cluster
-  /// of glyphs for character `offset`, its right side in RTL. A cluster several graphemes make
-  /// shares its advance among them.
+  /// Blink's `XPositionForOffset`.
   pub(crate) fn x_position_for_offset(
     &self,
     offset: u32,
@@ -351,8 +335,6 @@ impl ShapeResultRun {
 
     let glyphs = self.glyph_data.glyphs();
 
-    // A glyph sequence shares one character index, and so one interval of source characters:
-    // [glyph_sequence_start, glyph_sequence_end).
     let mut glyph_sequence_start = 0;
     let mut glyph_sequence_end = self.num_characters;
     let mut glyph_sequence_advance = InlineLayoutUnit::ZERO;
@@ -367,7 +349,6 @@ impl ShapeResultRun {
           continue;
         }
 
-        // About to leave a glyph sequence that holds `offset`: it is the one sought.
         if glyph_sequence_start <= offset && offset < current_glyph_char_index {
           glyph_sequence_end = current_glyph_char_index;
           break;
@@ -400,8 +381,6 @@ impl ShapeResultRun {
         glyph_sequence_advance = glyph.advance.into();
       }
 
-      // Leading characters with no glyph of their own, as where a run starts inside a cluster,
-      // join the logically first glyph sequence.
       if glyph_sequence_start > offset {
         glyph_sequence_start = 0;
       }
@@ -416,7 +395,6 @@ impl ShapeResultRun {
       let next_offset = offset + u32::from(offset != self.num_characters);
       let num_graphemes_to_offset = self.num_graphemes(glyph_sequence_start, next_offset) - 1;
 
-      // A glyph broken into several graphemes starts one at each of them.
       if offset > 0 {
         is_offset_at_glyph_sequence_start = self.num_graphemes(offset - 1, next_offset) != 1;
       }
@@ -432,7 +410,6 @@ impl ShapeResultRun {
       accumulated_position += glyph_sequence_advance * num_graphemes_from_left as i32;
     }
 
-    // In the middle of a grapheme, `ToEnd` takes its right side in LTR and its left side in RTL.
     if adjust_mid_cluster == AdjustMidCluster::ToEnd && !is_offset_at_glyph_sequence_start {
       if self.is_ltr() {
         accumulated_position += glyph_sequence_advance;
@@ -442,15 +419,13 @@ impl ShapeResultRun {
     }
 
     if self.is_rtl() {
-      // RTL returns the right side.
       accumulated_position += glyph_sequence_advance;
     }
 
     accumulated_position.to_float()
   }
 
-  /// Blink's `CharacterIndexForXPosition`: the characters of the glyphs at `target_x`, split into
-  /// graphemes when `break_glyphs` asks for it.
+  /// Blink's `CharacterIndexForXPosition`.
   pub(crate) fn character_index_for_x_position(
     &self,
     target_x: f32,
@@ -462,7 +437,6 @@ impl ShapeResultRun {
     let mut glyph_sequence_start = 0;
     let mut glyph_sequence_end = self.num_characters;
 
-    // RTL starts at the last index.
     if self.is_rtl() {
       glyph_sequence_start = self.num_characters;
       glyph_sequence_end = self.num_characters;
@@ -476,7 +450,6 @@ impl ShapeResultRun {
         continue;
       }
 
-      // Moving to the next sequence: if the target falls in the current one, it is found.
       if result.origin_x + result.advance > target_x {
         if self.is_ltr() {
           glyph_sequence_end = current_glyph_char_index;
@@ -486,7 +459,6 @@ impl ShapeResultRun {
       }
 
       if self.is_rtl() {
-        // RTL already knows both bounds, but moves on to take every glyph of the sequence.
         glyph_sequence_end = glyph_sequence_start;
       }
 
@@ -495,8 +467,6 @@ impl ShapeResultRun {
       result.advance = glyph.advance.to_float();
     }
 
-    // [glyph_sequence_start, glyph_sequence_end) is a sequence of glyphs `result.advance` wide;
-    // split it evenly among its graphemes.
     if break_glyphs && glyph_sequence_end > glyph_sequence_start {
       let graphemes = self.num_graphemes(glyph_sequence_start, glyph_sequence_end);
 
@@ -531,8 +501,7 @@ impl ShapeResultRun {
     result
   }
 
-  /// Blink's `LimitNumGlyphs`: shrinks the run to the glyphs and characters it can hold, and
-  /// returns how many of `num_glyphs` remain and how many the run drops.
+  /// Blink's `LimitNumGlyphs`, returning the glyphs kept and the glyphs dropped.
   pub(crate) fn limit_num_glyphs(
     &mut self,
     start_glyph: usize,
@@ -548,7 +517,6 @@ impl ShapeResultRun {
     let mut right = start_glyph + num_glyphs - 1;
     let mut start_cluster;
 
-    // Code points and glyphs are not 1:1, so check the first and the last cluster.
     if is_ltr {
       start_cluster = glyph_infos[left].cluster;
 
@@ -556,7 +524,6 @@ impl ShapeResultRun {
       let max_cluster = start_cluster + max_character_index;
 
       if last_cluster > max_cluster {
-        // Limit at the last glyph whose cluster is at most `max_cluster`.
         let limit =
           left + glyph_infos[left..=right].partition_point(|info| info.cluster <= max_cluster) - 1;
 
@@ -574,8 +541,6 @@ impl ShapeResultRun {
       let max_cluster = start_cluster + max_character_index;
 
       if last_cluster > max_cluster {
-        // Limit the right edge, which comes last in RTL, at the last glyph whose cluster is at
-        // least `min_cluster`.
         let min_cluster = last_cluster - max_character_index;
 
         debug_assert!(start_cluster < min_cluster);
@@ -594,8 +559,6 @@ impl ShapeResultRun {
       }
     }
 
-    // `num_glyphs` may still exceed the limit once the characters fit; cut it at the last cluster
-    // boundary within it.
     let mut num_glyphs_removed = 0;
     let max_glyphs = HarfBuzzRunGlyphData::MAX_GLYPHS as usize;
 
@@ -611,7 +574,6 @@ impl ShapeResultRun {
       }
 
       if num_glyphs == 0 {
-        // One grapheme cluster of `max_glyphs` glyphs: cut there regardless.
         num_glyphs = max_glyphs;
         num_glyphs_removed = old_num_glyphs - num_glyphs;
       } else if is_ltr {
@@ -619,7 +581,6 @@ impl ShapeResultRun {
         debug_assert!(self.num_characters > 0);
       } else {
         self.num_characters = glyph_infos[start_glyph].cluster - end_cluster;
-        // Cutting the right end glyphs cuts the start characters.
         self.start_index = glyph_infos[start_glyph + num_glyphs - 1].cluster;
         debug_assert!(self.num_characters > 0);
       }
@@ -647,8 +608,7 @@ impl ShapeResultRun {
     )
   }
 
-  /// Blink's `CreateSubRun`: the part of the run from character `start` to `end`, or `None`
-  /// when no glyph is in it.
+  /// Blink's `CreateSubRun`.
   pub(crate) fn create_sub_run(&self, start: u32, end: u32) -> Option<Self> {
     debug_assert!(end > start);
 
@@ -681,7 +641,7 @@ impl ShapeResultRun {
     Some(run)
   }
 
-  /// Blink's `MergeIfPossible`: this run with `other` appended, when they can merge.
+  /// Blink's `MergeIfPossible`.
   pub(crate) fn merge_if_possible(&self, other: &Self) -> Option<Self> {
     if !self.can_merge(other) {
       return None;
@@ -722,7 +682,7 @@ impl ShapeResultRun {
     Some(run)
   }
 
-  /// Blink's `CanMerge`: whether `other` continues this run in one font, direction, and script.
+  /// Blink's `CanMerge`.
   pub(crate) fn can_merge(&self, other: &Self) -> bool {
     let same_font = match (&self.font_data, &other.font_data) {
       (Some(a), Some(b)) => Rc::ptr_eq(a, b),
@@ -738,8 +698,7 @@ impl ShapeResultRun {
         <= HarfBuzzRunGlyphData::MAX_CHARACTER_INDEX as usize
   }
 
-  /// Blink's `ExpandRangeToIncludePartialGlyphs`: widens `[from, to)` to every whole cluster it
-  /// touches, with `offset` the run's start.
+  /// Blink's `ExpandRangeToIncludePartialGlyphs`.
   pub(crate) fn expand_range_to_include_partial_glyphs(
     &self,
     offset: i32,
@@ -829,7 +788,6 @@ mod tests {
 
   #[test]
   fn large_num_characters() {
-    // Requires more than 17 bits; only two glyphs are allocated.
     let run = create_test_shape_result_run(2, 131_072);
 
     assert_eq!(run.num_characters, 131_072);
@@ -910,7 +868,6 @@ mod tests {
   fn glyph_data_set_at() {
     let mut run = create_test_shape_result_run(2, 2);
 
-    // A zero offset allocates no storage.
     run.glyph_data.set_offset_at(0, GlyphOffset::default());
 
     assert!(!run.glyph_data.has_non_zero_offsets());

@@ -1,6 +1,4 @@
-//! Blink's `HarfBuzzRunGlyphData` and `GlyphOffset`, after
-//! [`glyph_data.h`](https://source.chromium.org/chromium/chromium/src/+/main:third_party/blink/renderer/platform/fonts/shaping/glyph_data.h).
-//! Follows Blink under the notice in LICENSE-CHROMIUM.
+//! Blink's [`HarfBuzzRunGlyphData`](https://source.chromium.org/chromium/chromium/src/+/main:third_party/blink/renderer/platform/fonts/shaping/glyph_data.h).
 
 use crate::{geometry::Point, layout_unit::TextRunLayoutUnit};
 
@@ -12,27 +10,25 @@ pub(crate) enum SafeToBreak {
   Unsafe,
 }
 
-/// A glyph of a [`ShapeResultRun`](super::shape_result_run::ShapeResultRun), with the character
-/// it is for. Offsets of glyphs, often all zero, live apart in the run.
+/// A glyph of a [`ShapeResultRun`](super::shape_result_run::ShapeResultRun), with the character it is for.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub(crate) struct HarfBuzzRunGlyphData {
   /// The glyph id.
   pub(crate) glyph: u16,
-  /// The offset from the run's start of the character this glyph is for, always at a cluster
-  /// boundary, in UTF-8 bytes where Blink counts UTF-16 code units.
+  /// The offset from the run's start of the character this glyph is for, always at a cluster boundary, in UTF-8 bytes where Blink counts UTF-16 code units.
   pub(crate) character_index: u16,
   unsafe_to_break_before: bool,
   pub(crate) advance: TextRunLayoutUnit,
 }
 
 impl HarfBuzzRunGlyphData {
-  /// Blink's `kCharacterIndexBits`: the bits `character_index` packs into.
+  /// Blink's `kCharacterIndexBits`.
   pub(crate) const CHARACTER_INDEX_BITS: u32 = 15;
-  /// Blink's `kMaxCharacters`: the most characters a run holds, limited by `character_index`.
+  /// Blink's `kMaxCharacters`.
   pub(crate) const MAX_CHARACTERS: u32 = 1 << Self::CHARACTER_INDEX_BITS;
   /// Blink's `kMaxCharacterIndex`.
   pub(crate) const MAX_CHARACTER_INDEX: u32 = Self::MAX_CHARACTERS - 1;
-  /// Blink's `kMaxGlyphs`: the most glyphs a run holds, which keeps its buffer predictable.
+  /// Blink's `kMaxGlyphs`.
   pub(crate) const MAX_GLYPHS: u32 = Self::MAX_CHARACTERS;
 
   pub(crate) fn new(
@@ -71,5 +67,5 @@ impl HarfBuzzRunGlyphData {
   }
 }
 
-/// Blink's `GlyphOffset`, a `gfx::Vector2dF`.
+/// Blink's `GlyphOffset`.
 pub(crate) type GlyphOffset = Point<f32>;
