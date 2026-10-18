@@ -5,21 +5,19 @@ use std::{
   rc::Rc,
 };
 
+use harfrust::GlyphInfo;
 #[cfg(test)]
 use harfrust::{Direction as HbDirection, script};
 use icu_segmenter::GraphemeClusterSegmenter;
 
-#[cfg(test)]
-use super::glyph_data::HarfBuzzRunGlyphData;
 use super::{
-  glyph_data::SafeToBreak,
+  glyph_data::{GlyphOffset, HarfBuzzRunGlyphData, SafeToBreak},
+  harfbuzz_shaper::HarfBuzzBuffer,
   shape_result_run::{AdjustMidCluster, BreakGlyphsOption, GlyphIndexResult, ShapeResultRun},
 };
-#[cfg(test)]
-use crate::layout_unit::TextRunLayoutUnit;
 use crate::{
   fonts::simple_font_data::SimpleFontData,
-  layout_unit::{FixedPoint, InlineLayoutUnit, LayoutUnit},
+  layout_unit::{FixedPoint, InlineLayoutUnit, LayoutUnit, TextRunLayoutUnit},
   style::Direction as TextDirection,
 };
 
@@ -796,6 +794,78 @@ impl ShapeResult {
     result
   }
 
+  /// Blink's `InsertRun` for glyphs `start_glyph.
+  pub(crate) fn insert_run_from_buffer(
+    &mut self,
+    mut run: ShapeResultRun,
+    start_glyph: usize,
+    num_glyphs: usize,
+    buffer: &HarfBuzzBuffer,
+  ) -> (usize, u32) {
+    debug_assert!(num_glyphs > 0);
+
+    let (num_glyphs, num_glyphs_removed) =
+      run.limit_num_glyphs(start_glyph, num_glyphs, buffer.is_forward(), &buffer.infos);
+    let next_start_glyph = start_glyph + run.num_glyphs() as usize + num_glyphs_removed;
+
+    self.compute_glyph_positions(&mut run, start_glyph, num_glyphs, buffer);
+    self.width.set(self.width() + run.width);
+
+    let num_characters = run.num_characters;
+
+    self.insert_run(run);
+
+    (next_start_glyph, num_characters)
+  }
+
+  /// Blink's `ComputeGlyphPositions` for a horizontal run.
+  fn compute_glyph_positions(
+    &mut self,
+    run: &mut ShapeResultRun,
+    start_glyph: usize,
+    num_glyphs: usize,
+    buffer: &HarfBuzzBuffer,
+  ) {
+    let start_cluster = run.start_index;
+    let glyph_infos = &buffer.infos[start_glyph..start_glyph + num_glyphs];
+    let glyph_positions = &buffer.positions[start_glyph..start_glyph + num_glyphs];
+    let mut total_advance = InlineLayoutUnit::ZERO;
+    let mut has_vertical_offsets = false;
+
+    for (i, (glyph, position)) in glyph_infos.iter().zip(glyph_positions).enumerate() {
+      let advance = harfbuzz_position_to_text_layout_unit(position.x_advance);
+
+      debug_assert!(glyph.cluster >= start_cluster);
+
+      let character_index = glyph.cluster - start_cluster;
+
+      debug_assert!(character_index < run.num_characters);
+
+      run.glyph_data.glyphs_mut()[i] = HarfBuzzRunGlyphData::new(
+        glyph.glyph_id as u16,
+        character_index,
+        safe_to_break_before(glyph_infos, i, self.direction),
+        advance,
+      );
+
+      if position.x_offset != 0 || position.y_offset != 0 {
+        has_vertical_offsets |= position.y_offset != 0;
+        run.glyph_data.set_offset_at(
+          i,
+          GlyphOffset::new(
+            harfbuzz_position_to_float(position.x_offset),
+            -harfbuzz_position_to_float(position.y_offset),
+          ),
+        );
+      }
+
+      total_advance += advance.into();
+    }
+
+    run.width = total_advance.clamp_negative_to_zero().to_float();
+    self.has_vertical_offsets |= has_vertical_offsets;
+  }
+
   /// Blink's `InsertRun` for a run already filled.
   pub(crate) fn insert_run(&mut self, run: ShapeResultRun) {
     let position = if run.is_ltr() {
@@ -854,6 +924,51 @@ impl ShapeResult {
       .position(|run| run.start_index == start_index);
 
     &mut self.runs[position.unwrap_or_default()]
+  }
+}
+
+/// Blink's `HarfBuzzPositionToFloat`.
+fn harfbuzz_position_to_float(value: i32) -> f32 {
+  value as f32 / 65536.0
+}
+
+/// Blink's `HarfBuzzPositionToTextLayoutUnit`.
+fn harfbuzz_position_to_text_layout_unit(value: i32) -> TextRunLayoutUnit {
+  TextRunLayoutUnit::from_fixed(16, i128::from(value))
+}
+
+/// Blink's `SafeToBreakBefore`.
+fn safe_to_break_before(
+  glyph_infos: &[GlyphInfo],
+  i: usize,
+  direction: TextDirection,
+) -> SafeToBreak {
+  let pair_start = if direction == TextDirection::Ltr {
+    i.wrapping_sub(1)
+  } else {
+    i
+  };
+
+  if pair_start >= glyph_infos.len() - 1 {
+    return SafeToBreak::Safe;
+  }
+
+  let pair = &glyph_infos[pair_start..pair_start + 2];
+
+  if pair[0].cluster == pair[1].cluster {
+    return SafeToBreak::Unsafe;
+  }
+
+  let glyph = if direction == TextDirection::Ltr {
+    pair[1]
+  } else {
+    pair[0]
+  };
+
+  if glyph.unsafe_to_break() {
+    SafeToBreak::Unsafe
+  } else {
+    SafeToBreak::Safe
   }
 }
 
