@@ -89,29 +89,11 @@ impl<'c> UnpositionedFloat<'c> {
     }
 
     let layout_result = layout.layout(self.node);
-    let margins = self.node.margin_px();
-    let (inline_start, inline_end) = match self.direction {
-      TextDirection::Ltr => (margins.left, margins.right),
-      TextDirection::Rtl => (margins.right, margins.left),
-    };
 
     self.layout_result = Some(layout_result);
-    self.margins = LineBoxStrut {
-      inline_start: LayoutUnit::from_float(inline_start),
-      inline_end: LayoutUnit::from_float(inline_end),
-      line_over: LayoutUnit::from_float(margins.top),
-      line_under: LayoutUnit::from_float(margins.bottom),
-    };
+    self.margins = LineBoxStrut::from_physical(self.node.margin_px(), self.direction);
 
     layout_result
-  }
-
-  /// The margins on the line-left side.
-  fn margin_line_left(&self) -> LayoutUnit {
-    match self.direction {
-      TextDirection::Ltr => self.margins.inline_start,
-      TextDirection::Rtl => self.margins.inline_end,
-    }
   }
 }
 
@@ -218,7 +200,10 @@ pub(crate) fn position_float<'c>(
   PositionedFloat {
     layout_result,
     bfc_offset: BfcOffset::new(
-      float_margin_bfc_offset.line_offset + unpositioned_float.margin_line_left(),
+      float_margin_bfc_offset.line_offset
+        + unpositioned_float
+          .margins
+          .line_left(unpositioned_float.direction),
       float_margin_bfc_offset.block_offset + margins.line_over,
     ),
   }

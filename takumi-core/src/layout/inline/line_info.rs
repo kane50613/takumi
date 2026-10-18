@@ -11,6 +11,7 @@ use super::{
 use crate::{
   context::RenderContext,
   fonts::shaping::shape_result_run::AdjustMidCluster,
+  layout::bfc_rect::BfcOffset,
   layout_unit::LayoutUnit,
   style::{ComputedStyle, Direction as TextDirection, TextAlign, WhiteSpaceCollapse},
   text::character::{LINE_FEED, is_other_space_separator},
@@ -39,7 +40,7 @@ pub(crate) struct LineInfo<'a, 'c> {
   pub(crate) line_style: &'c RenderContext,
   pub(crate) results: InlineItemResults<'a, 'c>,
   /// Blink's `BfcOffset`: the line-left and block offsets of the line opportunity.
-  pub(crate) bfc_offset: (LayoutUnit, LayoutUnit),
+  pub(crate) bfc_offset: BfcOffset,
   pub(crate) break_token: Option<InlineBreakToken<'c>>,
   available_width: LayoutUnit,
   width: LayoutUnit,
@@ -68,7 +69,7 @@ impl<'a, 'c> LineInfo<'a, 'c> {
       items_data,
       line_style,
       results: InlineItemResults::new(),
-      bfc_offset: (LayoutUnit::ZERO, LayoutUnit::ZERO),
+      bfc_offset: BfcOffset::default(),
       break_token: None,
       available_width: LayoutUnit::ZERO,
       width: LayoutUnit::ZERO,

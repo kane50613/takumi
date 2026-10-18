@@ -923,7 +923,7 @@ impl<'a, 'b, 'c> LineBreaker<'a, 'b, 'c> {
       self.base_available_width + self.line_clamp_ellipsis_width,
       self.position + self.cloned_box_decorations_end_size + self.line_clamp_ellipsis_width,
     );
-    line_info.bfc_offset = (
+    line_info.bfc_offset = BfcOffset::new(
       self.line_opportunity.line_left_offset,
       self.line_opportunity.bfc_block_offset,
     );
