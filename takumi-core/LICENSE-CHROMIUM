@@ -5,7 +5,8 @@ notice that source carries.
 1. The dash and dot spacing in src/layout/border.rs (`BorderStyle::dash_pattern`,
    `square_dash`, and `select_best_dash_gap`), from
    third_party/blink/renderer/platform/graphics/styled_stroke_data.cc, and
-   `LayoutUnit` in src/layout_unit.rs, from
+   `FixedPoint`, `LayoutUnit`, `TextRunLayoutUnit`, and `InlineLayoutUnit` in
+   src/layout_unit.rs, from
    third_party/blink/renderer/platform/geometry/layout_unit.h.
 
 Copyright (c) 2012, Google Inc. All rights reserved.
