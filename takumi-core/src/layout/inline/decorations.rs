@@ -208,12 +208,9 @@ impl DecorationPlacement {
     });
     let text = DecorationFont::of(text_font, scale, run);
     let baseline = content.y + run.baseline;
-    let left = content.x + run.offset + run.decorated_offset();
+    let left = content.x + run.offset;
     let (left, _) = glyphs.transform_point(left, 0.0);
-    let (right, _) = glyphs.transform_point(
-      content.x + run.offset + run.decorated_offset() + run.decorated_advance(),
-      0.0,
-    );
+    let (right, _) = glyphs.transform_point(content.x + run.offset + run.advance, 0.0);
 
     Self {
       glyphs,
@@ -234,7 +231,6 @@ impl ShapedRun {
     &self,
     resolved_glyphs: &'g ResolvedGlyphs,
     origin: Point<f32>,
-    baseline_shift: f32,
   ) -> Vec<(Point<f32>, &'g ResolvedOutlineGlyph)> {
     self
       .glyphs
@@ -248,7 +244,7 @@ impl ShapedRun {
         Some((
           Point {
             x: origin.x + glyph.x,
-            y: origin.y + glyph.y + baseline_shift,
+            y: origin.y + glyph.y,
           },
           outline,
         ))
@@ -263,7 +259,6 @@ impl ShapedRun {
     resolved_glyphs: &ResolvedGlyphs,
     layout: ComputedLayout,
     placement: &DecorationPlacement,
-    baseline_shift: f32,
     space: DecorationSpace,
   ) -> Vec<DecorationLine> {
     let DecorationSpace {
@@ -278,13 +273,12 @@ impl ShapedRun {
       return lines;
     }
 
-    let glyph_baseline = content.y + self.baseline + baseline_shift;
+    let glyph_baseline = content.y + self.baseline;
     let mut outlines = None;
 
     for decoration in lines.iter_mut().filter(|decoration| !decoration.over) {
       let band = decoration.bounds();
-      let outlines =
-        outlines.get_or_insert_with(|| self.ink_outlines(resolved_glyphs, content, baseline_shift));
+      let outlines = outlines.get_or_insert_with(|| self.ink_outlines(resolved_glyphs, content));
 
       decoration.skips = skip_ink_ranges(
         outlines.iter().copied(),
@@ -312,7 +306,7 @@ impl ShapedRun {
     output: Affine,
     paint_offset: Point<f32>,
   ) -> Vec<DecorationLine> {
-    if self.decorated_advance() <= 0.0 {
+    if self.advance <= 0.0 {
       return Vec::new();
     }
 

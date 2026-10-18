@@ -282,8 +282,8 @@ impl FontsSnapshot {
       .map(str::to_owned)
   }
 
-  /// Mutable access to the render-local parley context. Callers must not re-enter while the
-  /// borrow is held (layout measures inline boxes before building the parley tree).
+  /// Mutable access to the render-local registry. Callers must not re-enter while the borrow is
+  /// held.
   pub(crate) fn with_context<R>(&self, f: impl FnOnce(&mut Fonts) -> R) -> R {
     f(&mut self.context.borrow_mut())
   }

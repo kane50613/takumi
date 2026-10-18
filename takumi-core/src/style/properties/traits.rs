@@ -658,7 +658,7 @@ impl ToCss for Arc<str> {
   }
 }
 
-/// Macro to implement a `pub(crate)` conversion method into a foreign (taffy/parley) enum.
+/// Macro to implement a `pub(crate)` conversion method into a foreign (taffy) enum.
 macro_rules! impl_from_taffy_enum {
   ($from_ty:ty, $method:ident -> $to_ty:ty, $($variant:ident),*) => {
     impl $from_ty {

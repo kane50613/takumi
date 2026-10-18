@@ -322,7 +322,7 @@ fn test_measure_text_fit_per_line_grow_scales_run_geometry() {
 }
 
 /// taffy subtracts the content-box inset without a floor, so the available
-/// width reaching the text can be negative. parley asserts on that.
+/// width reaching the text can be negative.
 #[test]
 fn test_measure_padding_wider_than_the_box_does_not_panic() {
   let node = Node::from_html(

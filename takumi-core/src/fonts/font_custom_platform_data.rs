@@ -105,7 +105,6 @@ pub(crate) struct FontCustomPlatformData {
 #[derive(Clone, Debug)]
 pub(crate) struct FontPlatformData {
   pub(crate) typeface: Arc<FontCustomPlatformData>,
-  pub(crate) text_size: f32,
   pub(crate) synthetic_bold: bool,
   pub(crate) synthetic_italic: bool,
   /// The design coordinates the face is instanced at; a later tag wins, as in Skia.
@@ -145,8 +144,8 @@ impl FontCustomPlatformData {
     FontRef::from_index((*self.data).as_ref(), self.index).ok()
   }
 
-  /// Blink's `FamilyNameForInspector`, as fontique names families: the typographic family name,
-  /// else the family name, each in English when the face has it.
+  /// Blink's `FamilyNameForInspector`: the typographic family name, else the family name, each in
+  /// English when the face has it.
   pub(crate) fn family_name_for_inspector(&self) -> Option<String> {
     let font = self.font_ref()?;
 
@@ -358,7 +357,6 @@ impl FontCustomPlatformData {
 
     FontPlatformData {
       typeface: Arc::clone(self),
-      text_size: font_description.effective_font_size,
       synthetic_bold: synthetic_bold && !self.is_bold(),
       synthetic_italic: synthetic_italic && !self.is_italic(),
       variations: variation,

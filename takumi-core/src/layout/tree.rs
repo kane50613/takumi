@@ -2639,17 +2639,15 @@ impl RenderNode {
     known_dimensions: Size<Option<f32>>,
     style: &Style,
   ) -> Size<f32> {
-    assert_ne!(
-      self.context.style.base_data.display,
-      Display::Inline,
-      "Inline nodes should be wrapped in anonymous block boxes"
-    );
-
     let Some(node) = &self.node else {
       return Size::ZERO;
     };
 
-    if matches!(node.kind, NodeKind::Text(_)) {
+    // An inline box that tree building left among block-level siblings, such as in a table row
+    // no table wraps, lays out as the anonymous block CSS 2.2 §9.2.1.1 would wrap it in.
+    if matches!(node.kind, NodeKind::Text(_))
+      || self.context.style.base_data.display == Display::Inline
+    {
       return InlineNode::new(self)
         .measure(available_space, known_dimensions)
         .size;

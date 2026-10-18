@@ -1,19 +1,76 @@
-//! Soft wrap opportunities from parley's UAX #14 analysis with Chromium's overrides, in place of
+//! Soft wrap opportunities from ICU4X's UAX #14 segmenter with Chromium's overrides, in place of
 //! Blink's LGPL `LazyLineBreakIterator`.
 
-use std::slice::from_ref;
+use std::ops::RangeInclusive;
 
-use icu_segmenter::GraphemeClusterSegmenter;
-use parley::WordBreak;
-use parley_engine::{
-  Analysis, AnalysisOptions, Analyzer, LineBreakConfig,
-  break_overrides::{CHROMIUM_LINE_BREAK_OVERRIDE, LineBreakContext},
+use icu_properties::{CodePointMapData, props::LineBreak};
+use icu_segmenter::{
+  GraphemeClusterSegmenter, LineSegmenter,
+  options::{LineBreakOptions, LineBreakStrictness, LineBreakWordOption},
+};
+use parley_engine::break_overrides::{AsciiLineBreakTable, AsciiLineBreakTableBuilder};
+
+/// Chromium's breaks between printable ASCII characters, as parley_engine's
+/// `CHROMIUM_LINE_BREAK_OVERRIDE` builds them from Chromium's `kLineBreakTable`.
+static CHROMIUM_LINE_BREAK_TABLE: AsciiLineBreakTable<5> = {
+  const ALL: RangeInclusive<char> = '!'..='\u{7f}';
+
+  AsciiLineBreakTableBuilder::new()
+    .with_pairs(ALL, ALL, false)
+    .with_pairs(ALL, '('..='(', true)
+    .with_pairs(ALL, '<'..='<', true)
+    .with_pairs(ALL, '['..='[', true)
+    .with_pairs(ALL, '{'..='{', true)
+    .with_pairs('-'..='-', ALL, true)
+    .with_pairs('?'..='?', ALL, true)
+    .with_pairs('-'..='-', '$'..='$', false)
+    .with_pairs(ALL, '!'..='!', false)
+    .with_pairs('?'..='?', '"'..='"', false)
+    .with_pairs('?'..='?', '\''..='\'', false)
+    .with_pairs(ALL, ')'..=')', false)
+    .with_pairs(ALL, ','..=',', false)
+    .with_pairs(ALL, '.'..='.', false)
+    .with_pairs(ALL, '/'..='/', false)
+    .with_pairs('-'..='-', '0'..='9', false)
+    .with_pairs(ALL, ':'..=':', false)
+    .with_pairs(ALL, ';'..=';', false)
+    .with_pairs(ALL, '?'..='?', false)
+    .with_pairs(ALL, ']'..=']', false)
+    .with_pairs(ALL, '}'..='}', false)
+    .with_pairs('$'..='$', ALL, false)
+    .with_pairs('\''..='\'', ALL, false)
+    .with_pairs('('..='(', ALL, false)
+    .with_pairs('/'..='/', ALL, false)
+    .with_pairs('0'..='9', ALL, false)
+    .with_pairs('<'..='<', ALL, false)
+    .with_pairs('@'..='@', ALL, false)
+    .with_pairs('A'..='Z', ALL, false)
+    .with_pairs('['..='[', ALL, false)
+    .with_pairs('^'..='`', ALL, false)
+    .with_pairs('a'..='z', ALL, false)
+    .with_pairs('{'..='{', ALL, false)
+    .with_pairs('\u{7f}'..='\u{7f}', ALL, false)
+    .build::<5>()
 };
 
-/// Chromium's overrides under `word-break: break-all`, where its table of ASCII pairs allows breaks
-/// but no longer prevents them.
-fn chromium_break_all_override(context: LineBreakContext) -> Option<bool> {
-  CHROMIUM_LINE_BREAK_OVERRIDE(context).filter(|&opportunity| opportunity)
+/// Whether Chromium breaks between `before` and `after`, `before_before` preceding them, where it
+/// overrides UAX #14: after a space run, around a minus sign, and between the ASCII pairs of its
+/// table.
+fn chromium_line_break_override(
+  before_before: Option<char>,
+  before: char,
+  after: char,
+) -> Option<bool> {
+  if before == ' ' && after != ' ' {
+    return Some(true);
+  }
+
+  // A minus sign before a digit reads as a negative number unless it follows a word.
+  if before == '-' && after.is_ascii_digit() {
+    return Some(before_before.is_some_and(|character| character.is_ascii_alphanumeric()));
+  }
+
+  CHROMIUM_LINE_BREAK_TABLE.lookup(before, after)
 }
 
 /// Blink's `LineBreakType`, without `kPhrase`.
@@ -55,36 +112,49 @@ impl<'a> LineBreakIterator<'a> {
         breakable[position] = true;
       }
     } else {
-      let word_break = match break_type {
-        LineBreakType::BreakAll => WordBreak::BreakAll,
-        LineBreakType::KeepAll => WordBreak::KeepAll,
-        LineBreakType::Normal | LineBreakType::BreakCharacter => WordBreak::Normal,
-      };
-      let config = LineBreakConfig {
-        word_break,
-        ..LineBreakConfig::default()
-      };
-      let line_break = [(0..text.len(), config)];
-      let whole_text = 0..text.len();
-      let options = AnalysisOptions {
-        line_break: &line_break,
-        break_spaces: match break_space {
-          BreakSpaceType::AfterSpaceRun => &[],
-          BreakSpaceType::AfterEverySpace => from_ref(&whole_text),
-        },
-        line_break_override: Some(if word_break == WordBreak::BreakAll {
-          &chromium_break_all_override
-        } else {
-          CHROMIUM_LINE_BREAK_OVERRIDE
-        }),
-        ..AnalysisOptions::default()
-      };
-      let mut analysis = Analysis::new();
+      let mut options = LineBreakOptions::default();
 
-      Analyzer::new().analyze(text, &options, &mut analysis);
+      options.strictness = Some(LineBreakStrictness::Strict);
+      options.word_option = Some(match break_type {
+        LineBreakType::BreakAll => LineBreakWordOption::BreakAll,
+        LineBreakType::KeepAll => LineBreakWordOption::KeepAll,
+        LineBreakType::Normal | LineBreakType::BreakCharacter => LineBreakWordOption::Normal,
+      });
 
-      for ((position, _), info) in text.char_indices().zip(analysis.char_info()) {
-        breakable[position] = info.is_soft_wrap_opportunity();
+      for position in LineSegmenter::new_for_non_complex_scripts(options).segment_str(text) {
+        breakable[position] = true;
+      }
+
+      // Under `word-break: break-all`, Chromium's table allows breaks but no longer prevents them.
+      let line_break_override = |before_before, before, after| {
+        chromium_line_break_override(before_before, before, after)
+          .filter(|&opportunity| opportunity || break_type != LineBreakType::BreakAll)
+      };
+      let line_break = CodePointMapData::<LineBreak>::new();
+      let is_mandatory_break = |character: char| {
+        matches!(
+          line_break.get(character),
+          LineBreak::MandatoryBreak
+            | LineBreak::CarriageReturn
+            | LineBreak::LineFeed
+            | LineBreak::NextLine
+        )
+      };
+      let mut previous: Option<(char, Option<char>)> = None;
+
+      for (position, character) in text.char_indices() {
+        let after_break_space = break_space == BreakSpaceType::AfterEverySpace
+          && previous.is_some_and(|(previous, _)| matches!(previous, ' ' | '\t' | '\u{3000}'));
+
+        // UAX #14 LB4-LB6: no soft wrap opportunity next to a mandatory break, which breaks on its
+        // own.
+        breakable[position] = match previous {
+          Some((before, _)) if is_mandatory_break(before) || is_mandatory_break(character) => false,
+          Some((before, before_before)) => line_break_override(before_before, before, character)
+            .unwrap_or(breakable[position] || after_break_space),
+          None => false,
+        };
+        previous = Some((character, previous.map(|(before, _)| before)));
       }
     }
 

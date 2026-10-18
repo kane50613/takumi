@@ -7,7 +7,6 @@ use std::{
 };
 
 use cssparser::{Parser, ParserInput, RuleBodyParser, Token, match_ignore_ascii_case};
-use parley::Language;
 use pastey::paste;
 use serde::{
   Deserialize,
@@ -151,7 +150,11 @@ impl TwVarRef {
 /// prefix), inherited from the `lang` attribute. Drives locale-aware shaping
 /// (Han unification, line-breaking).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct Lang(parley::Language);
+pub struct Lang {
+  /// The canonical form, ASCII.
+  bytes: [u8; Lang::MAX_LEN],
+  len: u8,
+}
 
 impl<'de> Deserialize<'de> for Lang {
   fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
@@ -169,16 +172,55 @@ impl<'de> Deserialize<'de> for Lang {
 }
 
 impl Lang {
-  /// Parses a BCP-47 tag string, canonicalizing language/script/region casing.
+  /// The longest canonical form: an eight-letter language, a script, and a region.
+  const MAX_LEN: usize = 17;
+
+  /// Parses a BCP-47 tag string, canonicalizing language/script/region casing and dropping the
+  /// subtags after them.
   pub fn parse(tag: &str) -> crate::Result<Self> {
-    Language::parse(tag)
-      .map(Self)
-      .map_err(|_| Error::InvalidLanguageTag(tag.to_string()))
+    let invalid = || Error::InvalidLanguageTag(tag.to_string());
+    let mut subtags = tag.split(['-', '_']).peekable();
+    let language = subtags
+      .next()
+      .filter(|language| {
+        matches!(language.len(), 2..=3 | 5..=8)
+          && language.bytes().all(|byte| byte.is_ascii_alphabetic())
+      })
+      .ok_or_else(invalid)?;
+    let mut canonical = language.to_ascii_lowercase();
+
+    if let Some(script) = subtags
+      .next_if(|script| script.len() == 4 && script.bytes().all(|byte| byte.is_ascii_alphabetic()))
+    {
+      canonical.push('-');
+      canonical.push_str(&script[..1].to_ascii_uppercase());
+      canonical.push_str(&script[1..].to_ascii_lowercase());
+    }
+
+    if let Some(region) = subtags.next_if(|region| {
+      (region.len() == 2 && region.bytes().all(|byte| byte.is_ascii_alphabetic()))
+        || (region.len() == 3 && region.bytes().all(|byte| byte.is_ascii_digit()))
+    }) {
+      canonical.push('-');
+      canonical.push_str(&region.to_ascii_uppercase());
+    }
+
+    let mut bytes = [0; Self::MAX_LEN];
+
+    bytes
+      .get_mut(..canonical.len())
+      .ok_or_else(invalid)?
+      .copy_from_slice(canonical.as_bytes());
+
+    Ok(Self {
+      bytes,
+      len: canonical.len() as u8,
+    })
   }
 
   /// The canonical string form (`language[-Script][-REGION]`).
   pub fn as_str(&self) -> &str {
-    self.0.as_str()
+    str::from_utf8(&self.bytes[..usize::from(self.len)]).unwrap_or_default()
   }
 }
 

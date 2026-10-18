@@ -527,7 +527,6 @@ impl_passthrough_animatable!(
   TextStroke,
   TextDecoration,
   TextDecorationLines,
-  OverflowWrap,
   BasicShape,
   OffsetPath,
   OffsetAnchor,

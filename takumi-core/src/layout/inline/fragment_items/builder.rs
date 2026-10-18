@@ -26,7 +26,7 @@ use crate::{
     line_breaker::AtomicInlineLayout,
     logical_line_item::{LineFragment, LogicalLineItem},
     metrics::VisualInlineBox,
-    runs::{HangingWhitespace, PositionedGlyph, RunMetrics, ShapedRun, glyph_skips_ink},
+    runs::{PositionedGlyph, RunMetrics, ShapedRun, glyph_skips_ink},
     text_fit::LineScaleState,
   },
   layout_unit::LayoutUnit,
@@ -465,7 +465,6 @@ impl FragmentItems {
         offset: origin.x + start_x,
         baseline,
         advance: end_x - start_x,
-        hanging: HangingWhitespace::default(),
         metrics: RunMetrics {
           ascent: metrics.map_or(0.0, |metrics| metrics.exact.ascent),
           descent: metrics.map_or(0.0, |metrics| metrics.exact.descent),
@@ -491,7 +490,6 @@ impl FragmentItems {
       };
       let line_scale = LineScaleState {
         scale,
-        alignment_correction: 0.0,
         layout_origin: Point {
           x: line.content.x + origin.x,
           y: line.content.y + baseline,
@@ -499,7 +497,7 @@ impl FragmentItems {
       };
       let decoration_placement = DecorationPlacement::for_run(
         &run,
-        line_scale.transform(Affine::IDENTITY, 0.0),
+        line_scale.transform(Affine::IDENTITY),
         line.content,
         (text_font, scale),
         (line.root_font, line.baseline),
@@ -548,8 +546,6 @@ impl FragmentItems {
         run,
         RunPlacement {
           line_scale,
-          static_inline_prefix: 0.0,
-          baseline_shift: 0.0,
           decoration_placement,
           relative_offset: Point::ZERO,
         },
