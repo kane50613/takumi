@@ -7,9 +7,11 @@ use std::str::FromStr;
 use harfrust::{Feature, Language, Variation};
 use parley::fontique::Attributes;
 
+use super::font_selection_types::FontSelectionRequest;
 use crate::{
   font_style::{ExpandedFontFamily, SizedFontStyle},
-  style::{FontSynthesic, FontVariantCaps},
+  sort_key::sort_by_key,
+  style::{FontOpticalSizing, FontSynthesic, FontVariantCaps},
 };
 
 /// The style a font is matched and shaped with.
@@ -78,4 +80,96 @@ impl FontDescription {
       is_word_spacing_fixed: !computed.inherited_data.word_spacing.has_percentage(),
     }
   }
+}
+
+/// What font matching reads of Blink's `FontDescription`, apart from the families; joins
+/// [`FontDescription`] in place of its fontique `attributes` once matching drops fontique.
+#[cfg_attr(
+  not(test),
+  expect(
+    dead_code,
+    reason = "TODO: font matching moves off fontique once the registry is rewired"
+  )
+)]
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) struct FontSelectionDescription {
+  /// Blink's `GetFontSelectionRequest`.
+  pub(crate) font_selection_request: FontSelectionRequest,
+  /// Whether `font-style` is the `italic` keyword, Blink's `StyleSyntax::kItalicKeyword`.
+  pub(crate) is_italic_keyword: bool,
+  /// Blink's `SyntheticBoldAllowed`.
+  pub(crate) synthetic_bold_allowed: bool,
+  /// Blink's `SyntheticItalicAllowed`.
+  pub(crate) synthetic_italic_allowed: bool,
+  /// Blink's `IsSyntheticBold`.
+  pub(crate) is_synthetic_bold: bool,
+  /// Blink's `IsSyntheticItalic`.
+  pub(crate) is_synthetic_italic: bool,
+  /// Blink's `EffectiveFontSize`.
+  pub(crate) effective_font_size: f32,
+  /// Blink's `AdjustedSpecifiedSize`, which an automatic `opsz` takes.
+  pub(crate) adjusted_specified_size: f32,
+  /// Blink's `FontOpticalSizing`.
+  pub(crate) font_optical_sizing: FontOpticalSizing,
+  /// Blink's `VariationSettings`.
+  pub(crate) variation_settings: Vec<Variation>,
+}
+
+#[cfg_attr(
+  not(test),
+  expect(
+    dead_code,
+    reason = "TODO: font matching moves off fontique once the registry is rewired"
+  )
+)]
+impl FontSelectionDescription {
+  /// Blink's `MergeFontVariationSettingsWithDescriptor`: the descriptor's axes the description
+  /// leaves unset join its own, ordered by tag.
+  pub(crate) fn merge_font_variation_settings_with_descriptor(&mut self, descriptor: &[Variation]) {
+    let mut merged = self.variation_settings.clone();
+
+    for axis in descriptor {
+      if !self
+        .variation_settings
+        .iter()
+        .any(|existing| existing.tag == axis.tag)
+      {
+        merged.push(*axis);
+      }
+    }
+
+    sort_by_key(&mut merged, |axis| {
+      u32::from_be_bytes(axis.tag.to_be_bytes())
+    });
+    self.variation_settings = merged;
+  }
+
+  /// A 16px description of `request` that allows synthesis and leaves `opsz` alone.
+  #[cfg(test)]
+  pub(crate) fn for_request(font_selection_request: FontSelectionRequest) -> Self {
+    Self {
+      font_selection_request,
+      is_italic_keyword: false,
+      synthetic_bold_allowed: true,
+      synthetic_italic_allowed: true,
+      is_synthetic_bold: false,
+      is_synthetic_italic: false,
+      effective_font_size: 16.0,
+      adjusted_specified_size: 16.0,
+      font_optical_sizing: FontOpticalSizing::None,
+      variation_settings: Vec::new(),
+    }
+  }
+}
+
+/// Orders variation settings by tag, as Blink's `FontVariationAxis` compares.
+#[cfg_attr(
+  not(test),
+  expect(
+    dead_code,
+    reason = "TODO: font matching moves off fontique once the registry is rewired"
+  )
+)]
+pub(crate) fn sort_by_tag(settings: &mut [Variation]) {
+  sort_by_key(settings, |axis| u32::from_be_bytes(axis.tag.to_be_bytes()));
 }

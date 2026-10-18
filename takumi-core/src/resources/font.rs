@@ -176,7 +176,7 @@ const CBDT: Tag = Tag::new(b"CBDT");
 const CBLC: Tag = Tag::new(b"CBLC");
 
 /// Color tables in the pairs Blink's `ColorTableLookup` accepts.
-fn has_color_table(font: &FontRef) -> bool {
+pub(crate) fn has_color_table(font: &FontRef) -> bool {
   font.table_data(SBIX).is_some()
     || (font.table_data(COLR).is_some() && font.table_data(CPAL).is_some())
     || (font.table_data(CBDT).is_some() && font.table_data(CBLC).is_some())
@@ -938,7 +938,7 @@ impl RenderContext {
 }
 
 /// Bytes the caller already holds behind an `Arc`, taken as they are.
-type SharedBytes = Arc<dyn AsRef<[u8]> + Send + Sync>;
+pub(crate) type SharedBytes = Arc<dyn AsRef<[u8]> + Send + Sync>;
 
 enum FontBytes<'a> {
   Inline(Cow<'a, [u8]>),
@@ -1057,6 +1057,13 @@ impl<'a> FontSource<'a> {
   }
 
   fn into_blob(self) -> Result<Blob<u8>, FontError> {
+    let (decoded, id) = self.into_sfnt_with_id()?;
+
+    Ok(Blob::from_raw_parts(decoded, id))
+  }
+
+  /// The decoded sfnt bytes and the id the glyph caches key them by.
+  pub(crate) fn into_sfnt_with_id(self) -> Result<(SharedBytes, u64), FontError> {
     let passthrough = self.is_decoded || self.is_sfnt();
     let cache_id = self.cache_id;
     let decoded: SharedBytes = match self.bytes {
@@ -1069,7 +1076,7 @@ impl<'a> FontSource<'a> {
     // then miss every glyph it had already resolved, so the id comes from the content.
     let id = cache_id.unwrap_or_else(|| xxh3_64((*decoded).as_ref()));
 
-    Ok(Blob::from_raw_parts(decoded, id))
+    Ok((decoded, id))
   }
 }
 

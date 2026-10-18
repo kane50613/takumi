@@ -7,10 +7,19 @@ notice that source carries.
    third_party/blink/renderer/platform/graphics/styled_stroke_data.cc, and
    `FixedPoint`, `LayoutUnit`, `TextRunLayoutUnit`, and `InlineLayoutUnit` in
    src/layout_unit.rs, from
-   third_party/blink/renderer/platform/geometry/layout_unit.h.
+   third_party/blink/renderer/platform/geometry/layout_unit.h, and
+   `FontFace::get_font_selection_capabilities` in src/fonts/font_face.rs, from
+   third_party/blink/renderer/core/css/font_face.cc, and
+   `FontCustomPlatformData` and `FontPlatformData` in
+   src/fonts/font_custom_platform_data.rs, from
+   third_party/blink/renderer/platform/fonts/font_custom_platform_data.cc and
+   third_party/blink/renderer/platform/fonts/font_platform_data.h.
 
 Copyright (c) 2012, Google Inc. All rights reserved.
 Copyright (C) 2013 Google Inc. All rights reserved.
+Copyright (C) 2007 Apple Computer, Inc.
+Copyright (c) 2006, 2007, 2008, 2009, Google Inc. All rights reserved.
+Copyright (C) 2010 Company 100, Inc.
 
 Redistribution and use in source and binary forms, with or without
 modification, are permitted provided that the following conditions are
@@ -46,9 +55,20 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
    `FontData::font_data_for_character` in src/fonts/font_fallback_list.rs, from
    third_party/blink/renderer/platform/fonts/segmented_font_data.cc, and
    `SimpleFontData::small_caps_font_data` in src/fonts/simple_font_data.rs, from
-   third_party/blink/renderer/platform/fonts/simple_font_data.cc.
+   third_party/blink/renderer/platform/fonts/simple_font_data.cc, and
+   `FontFaceCache` in src/fonts/font_face_cache.rs, `CssSegmentedFontFace` in
+   src/fonts/css_segmented_font_face.rs, `FontFace::get_font_data` in
+   src/fonts/font_face.rs, and `CssFontSelector::get_font_data` in
+   src/fonts/css_font_selector.rs, from
+   third_party/blink/renderer/core/css/font_face_cache.cc,
+   third_party/blink/renderer/core/css/css_segmented_font_face.cc,
+   third_party/blink/renderer/core/css/css_font_face.cc, and
+   third_party/blink/renderer/core/css/css_font_selector.cc.
 
 Copyright (C) 2003, 2004, 2005, 2006, 2008, 2009 Apple Inc. All rights reserved.
+Copyright (C) 2007, 2008, 2011 Apple Inc. All rights reserved.
+          (C) 2007, 2008 Nikolas Zimmermann <zimmermann@kde.org>
+Copyright (C) 2013 Google Inc. All rights reserved.
 
 Redistribution and use in source and binary forms, with or without
 modification, are permitted provided that the following conditions
@@ -212,7 +232,13 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
    third_party/blink/renderer/platform/fonts/shaping/case_mapping_harfbuzz_buffer_filler.cc,
    third_party/blink/renderer/core/layout/inline/text_fit_utils.cc,
    third_party/blink/renderer/core/layout/inline/text_fit_scale.h, and
-   third_party/blink/renderer/core/css/white_space.h.
+   third_party/blink/renderer/core/css/white_space.h;
+   and `VariableFontSubType::probe_variable_font` in
+   src/fonts/font_custom_platform_data.rs and the tests in
+   src/fonts/font_selection_types.rs and src/fonts/font_face_cache.rs, from
+   third_party/blink/renderer/platform/fonts/opentype/font_format_check.cc,
+   third_party/blink/renderer/platform/fonts/font_selection_types_test.cc, and
+   third_party/blink/renderer/core/css/font_face_cache_test.cc.
 
 Copyright 2014, 2015, 2016, 2017, 2018, 2019, 2020, 2023, 2024, 2025 The Chromium Authors
 
@@ -351,9 +377,14 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 
 7. `FontFallbackList` in src/fonts/font_fallback_list.rs, from
-   third_party/blink/renderer/platform/fonts/font_fallback_list.cc.
+   third_party/blink/renderer/platform/fonts/font_fallback_list.cc, and
+   `FontSelectionDescription::merge_font_variation_settings_with_descriptor` in
+   src/fonts/font_description.rs, from
+   third_party/blink/renderer/platform/fonts/font_description.cc.
 
 Copyright (C) 2006 Apple Computer, Inc.  All rights reserved.
+Copyright (C) 2007 Nicholas Shanks <contact@nickshanks.com>
+Copyright (C) 2008 Apple Inc. All rights reserved.
 
 Redistribution and use in source and binary forms, with or without
 modification, are permitted provided that the following conditions
@@ -378,3 +409,34 @@ LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND
 ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
 THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+
+8. `FontSelectionValue`, `FontSelectionRange`, `FontSelectionRequest`, and
+   `FontSelectionCapabilities` in src/fonts/font_selection_types.rs, and
+   `FontSelectionAlgorithm` in src/fonts/font_selection_algorithm.rs, from
+   third_party/blink/renderer/platform/fonts/font_selection_types.h,
+   third_party/blink/renderer/platform/fonts/font_selection_types.cc, and
+   third_party/blink/renderer/platform/fonts/font_selection_algorithm.cc.
+
+Copyright (C) 2017 Apple Inc. All rights reserved.
+
+Redistribution and use in source and binary forms, with or without
+modification, are permitted provided that the following conditions
+are met:
+1. Redistributions of source code must retain the above copyright
+   notice, this list of conditions and the following disclaimer.
+2. Redistributions in binary form must reproduce the above copyright
+   notice, this list of conditions and the following disclaimer in the
+   documentation and/or other materials provided with the distribution.
+
+THIS SOFTWARE IS PROVIDED BY APPLE INC. AND ITS CONTRIBUTORS ``AS IS''
+AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO,
+THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
+PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL APPLE INC. OR ITS CONTRIBUTORS
+BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF
+THE POSSIBILITY OF SUCH DAMAGE.
