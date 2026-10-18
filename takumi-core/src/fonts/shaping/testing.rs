@@ -42,6 +42,8 @@ pub(crate) fn font(fonts: &mut Fonts, family: &str) -> Font {
       features: Vec::new(),
       variation_settings: Vec::new(),
       locale: None,
+      letter_spacing: 0.0,
+      word_spacing: 0.0,
     },
   )
 }

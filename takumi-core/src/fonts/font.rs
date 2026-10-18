@@ -1,6 +1,11 @@
 //! A font description with the fonts it falls back through, named for Blink's `Font`.
 
-use super::{font_description::FontDescription, font_fallback_list::FontFallbackList};
+use std::rc::Rc;
+
+use super::{
+  font_description::FontDescription, font_fallback_list::FontFallbackList,
+  simple_font_data::SimpleFontData,
+};
 use crate::resources::font::Fonts;
 
 /// A font as shaping takes it.
@@ -17,5 +22,10 @@ impl Font {
       description,
       fallback_list,
     }
+  }
+
+  /// Blink's `PrimaryFont`.
+  pub(crate) fn primary_font(&self) -> Option<Rc<SimpleFontData>> {
+    self.fallback_list.primary_simple_font_data()
   }
 }

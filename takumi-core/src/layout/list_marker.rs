@@ -8,6 +8,7 @@ use crate::{
     node::{Node, resolve_image},
     tree::{NodeOrigin, RenderNode},
   },
+  layout_unit::LayoutUnit,
   matching::MatchedDeclarationsView,
   style::{
     BackgroundImage, Direction, Display, JustifyContent, Length, ListStylePosition, ListStyleType,
@@ -25,6 +26,9 @@ const INSIDE_SYMBOL_GAP_EM: f32 = 1.0;
 
 /// Blink's `kClosureMarkerMarginEm`: the gap an inside disclosure triangle keeps.
 const INSIDE_DISCLOSURE_GAP_EM: f32 = 0.4;
+
+/// Blink's `DisclosureSymbolSize`, in ems.
+const DISCLOSURE_SYMBOL_SIZE_EM: f32 = 0.66;
 
 /// The marker box of a `display: list-item` box, per css-lists-3 §3: Blink's
 /// `LayoutOutsideListMarker`, an atomic inline, or `LayoutInsideListMarker`, an inline box.
@@ -119,6 +123,21 @@ fn inline_margins_for_inside(has_image: bool, style_type: &ListStyleType) -> (Le
     }
     _ if style_type.is_symbolic() => (Length::Px(-1.0), Length::Em(INSIDE_SYMBOL_GAP_EM)),
     _ => (Length::zero(), Length::zero()),
+  }
+}
+
+/// Blink's `ListMarker::WidthOfSymbol`: the width a symbol marker, painted as a shape, takes.
+pub(crate) fn width_of_symbol(context: &RenderContext) -> LayoutUnit {
+  let style = &context.style;
+  let Some(metrics) = context.primary_font_metrics(style, context.sizing.font_size) else {
+    return LayoutUnit::ZERO;
+  };
+
+  match style.misc_inherited1_data.list_style_type {
+    ListStyleType::DisclosureOpen | ListStyleType::DisclosureClosed => {
+      LayoutUnit::from_float(context.sizing.font_size * DISCLOSURE_SYMBOL_SIZE_EM)
+    }
+    _ => LayoutUnit::from_int((metrics.ascent as i32 * 2 / 3 + 1) / 2 + 2),
   }
 }
 

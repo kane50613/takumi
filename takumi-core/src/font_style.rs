@@ -39,13 +39,19 @@ pub(crate) struct ExpandedFontFamily {
   digest: u64,
 }
 
+impl PartialEq for ExpandedFontFamily {
+  fn eq(&self, other: &Self) -> bool {
+    self.digest == other.digest && self.tokens == other.tokens
+  }
+}
+
 impl Default for ExpandedFontFamily {
   fn default() -> Self {
     Self::new(Vec::new())
   }
 }
 
-#[derive(Clone)]
+#[derive(Clone, PartialEq)]
 enum ExpandedFamilyToken {
   Named(String),
   Generic(GenericFamily),

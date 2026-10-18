@@ -1,27 +1,39 @@
 //! Blink's [`InlineNode`](https://source.chromium.org/chromium/chromium/src/+/main:third_party/blink/renderer/core/layout/inline/inline_node.cc).
 
+use std::{ptr, rc::Rc};
+
 use icu_properties::props::Script;
 
 use crate::{
   fonts::{
+    font::Font,
     font_fallback_priority::FontFallbackPriority,
-    shaping::run_segmenter::{RunSegmenter, RunSegmenterRange},
+    shaping::{
+      harfbuzz_shaper::HarfBuzzShaper,
+      run_segmenter::{RunSegmenter, RunSegmenterRange},
+      shape_result::{ShapeRange, ShapeResult},
+      shape_result_spacing::ShapeResultSpacing,
+    },
   },
   layout::{
     inline::{
       InlineContentKind,
-      inline_item::{InlineItemType, LayoutObject, set_bidi_level, set_segment_data},
+      inline_item::{
+        InlineItem, InlineItemType, LayoutObject, inline_box_edges_empty, set_bidi_level,
+        set_segment_data, update_index,
+      },
       inline_item_segment::InlineItemSegments,
       inline_items_builder::InlineItemsBuilder,
-      inline_node_data::InlineNodeData,
+      inline_node_data::{InlineNodeData, StyleFonts},
     },
+    list_marker::width_of_symbol,
     node::{Node, NodeKind},
     tree::{NodeOrigin, RenderNode},
   },
-  style::{Direction as TextDirection, Display, Float, ListStylePosition},
+  style::{Direction as TextDirection, Display, Float, ListStylePosition, VerticalAlign},
   text::{
     bidi_paragraph::BidiParagraph,
-    character::{OBJECT_REPLACEMENT_CHARACTER, is_8bit},
+    character::{OBJECT_REPLACEMENT_CHARACTER, ZERO_WIDTH_NON_JOINER, is_8bit},
   },
   text_processing::apply_text_transform,
 };
@@ -145,6 +157,16 @@ impl<'c> InlineNode<'c> {
     builder.finish()
   }
 
+  /// Blink's `PrepareLayout`: the items of the context, segmented and shaped.
+  pub(crate) fn prepare_layout(self) -> InlineNodeData<'c> {
+    let mut data = self.collect_inlines();
+
+    self.segment_text(&mut data);
+    update_index(&mut data.items);
+    self.shape_text(&mut data);
+    data
+  }
+
   /// Blink's `SegmentText`, without font orientation.
   pub(crate) fn segment_text(self, data: &mut InlineNodeData<'c>) {
     self.segment_bidi_runs(data);
@@ -265,6 +287,215 @@ impl<'c> InlineNode<'c> {
 
     data.segments = Some(InlineItemSegments::compute_segments(&mut segmenter, range));
   }
+
+  /// Blink's `ShapeText`: shapes adjacent text items together, then splits the result among them.
+  /// Without reusing earlier results, the shape cache, `text-autospace`, or `HanKerning`.
+  fn shape_text(self, data: &mut InlineNodeData<'c>) {
+    let text = &data.text_content;
+    let items = &mut data.items;
+    let shaper = HarfBuzzShaper::new(text.clone());
+    let mut spacing = ShapeResultSpacing::new(
+      text,
+      self
+        .block
+        .context
+        .style
+        .inherited_data
+        .white_space_collapse
+        .should_preserve_white_spaces(),
+    );
+    let mut index = 0;
+
+    debug_assert!(
+      data
+        .segments
+        .as_ref()
+        .is_none_or(|segments| segments.end_offset() == text.len())
+    );
+
+    while index < items.len() {
+      let start_item = &items[index];
+      let Some(layout_object) = start_item
+        .layout_object
+        .filter(|_| start_item.item_type == InlineItemType::Text && start_item.length() > 0)
+      else {
+        index += 1;
+
+        continue;
+      };
+      let start_context = &layout_object.node().context;
+      let font = data.fonts.get(start_context);
+      let direction = start_item.direction();
+      let start_offset = start_item.start_offset();
+      let mut end_index = index + 1;
+      let mut end_offset = start_item.end_offset();
+
+      // A symbol marker paints as a shape, so spaces of its width stand in for its glyphs.
+      if start_item.is_symbol_marker() {
+        let symbol_width = width_of_symbol(start_context).to_float();
+
+        items[index].shape_result = Some(Rc::new(ShapeResult::create_for_spaces(
+          &font,
+          direction,
+          start_offset as u32,
+          &text[start_offset..end_offset],
+          symbol_width,
+        )));
+        index += 1;
+
+        continue;
+      }
+
+      while end_index < items.len() {
+        let item = &items[end_index];
+
+        match item.item_type {
+          InlineItemType::Text => {
+            if item.length() == 0 {
+              end_index += 1;
+
+              continue;
+            }
+
+            // A zero width non-joiner starts its own item, so breaking there prevents kerning.
+            if item.is_symbol_marker()
+              || should_break_shaping_before_text(item, start_item, &font, &data.fonts)
+              || text[item.start_offset()..].starts_with(ZERO_WIDTH_NON_JOINER)
+            {
+              break;
+            }
+
+            end_offset = item.end_offset();
+          }
+          InlineItemType::OpenTag if !should_break_shaping_before_box(item) => {}
+          InlineItemType::CloseTag if !should_break_shaping_after_box(item) => {}
+          _ => break,
+        }
+
+        end_index += 1;
+      }
+
+      let mut shape_result = match &data.segments {
+        Some(segments) => segments.shape_text(
+          &shaper,
+          &font,
+          direction,
+          start_offset,
+          end_offset,
+          start_item.index,
+        ),
+        None => {
+          let mut range = start_item.create_run_segmenter_range();
+
+          range.end = end_offset;
+          shaper.shape_pre_segmented(&font, direction, start_offset, end_offset, &range)
+        }
+      };
+
+      if spacing.set_spacing_from(
+        font.description.letter_spacing,
+        font.description.word_spacing,
+      ) {
+        shape_result.apply_spacing(&mut spacing, 0);
+      }
+
+      if end_offset == start_item.end_offset() {
+        items[index].shape_result = Some(Rc::new(shape_result));
+        index += 1;
+
+        continue;
+      }
+
+      // Not a line break, so not split where safe to break: the parts must look unbroken. A
+      // ligature's glyph stays with the item holding its first character.
+      let text_items: Vec<usize> = (index..end_index)
+        .filter(|&i| items[i].item_type == InlineItemType::Text && items[i].length() > 0)
+        .collect();
+      let mut item_results: Vec<ShapeResult> = text_items
+        .iter()
+        .map(|_| ShapeResult::create_empty(&shape_result))
+        .collect();
+      let has_ligatures = shape_result.has_ligatures();
+
+      if has_ligatures {
+        shape_result.ensure_position_data();
+      }
+
+      for &i in &text_items {
+        let item_end = items[i].end_offset() as u32;
+
+        // A result ending in a ligature cannot be reused. <http://crbug.com/1409702>
+        if has_ligatures
+          && item_end < shape_result.end_index()
+          && shape_result.cached_next_safe_to_break_offset(item_end) != item_end
+        {
+          items[i].is_unsafe_to_reuse_shape_result = true;
+        }
+      }
+
+      let mut ranges: Vec<ShapeRange<'_>> = text_items
+        .iter()
+        .zip(&mut item_results)
+        .map(|(&i, target)| ShapeRange {
+          start: items[i].start_offset() as u32,
+          end: items[i].end_offset() as u32,
+          target,
+        })
+        .collect();
+
+      shape_result.copy_ranges(&mut ranges);
+      drop(ranges);
+
+      for (i, item_result) in text_items.into_iter().zip(item_results) {
+        items[i].shape_result = Some(Rc::new(item_result));
+      }
+
+      index = end_index;
+    }
+  }
+}
+
+/// Blink's `ShouldBreakShapingBeforeText`: shaping runs on across items of one font, direction,
+/// and run segment.
+fn should_break_shaping_before_text(
+  item: &InlineItem<'_>,
+  start_item: &InlineItem<'_>,
+  start_font: &Rc<Font>,
+  fonts: &StyleFonts,
+) -> bool {
+  let context = item.layout_object.map(|object| &object.node().context);
+  let start_context = start_item
+    .layout_object
+    .map(|object| &object.node().context);
+
+  if let Some(context) = context
+    && !start_context.is_some_and(|start_context| ptr::eq(context, start_context))
+  {
+    let font = fonts.get(context);
+
+    if !Rc::ptr_eq(&font, start_font) && font.description != start_font.description {
+      return true;
+    }
+  }
+
+  item.direction() != start_item.direction() || !item.equals_run_segment(start_item)
+}
+
+/// Blink's `ShouldBreakShapingBeforeBox`: padding, a margin, a border, or a vertical alignment at
+/// the box's start breaks shaping. <https://drafts.csswg.org/css-text-3/#boundary-shaping>
+fn should_break_shaping_before_box(item: &InlineItem<'_>) -> bool {
+  item.layout_object.is_some_and(|object| {
+    !inline_box_edges_empty(object.node()).0
+      || object.style().base_data.vertical_align != VerticalAlign::default()
+  })
+}
+
+/// Blink's `ShouldBreakShapingAfterBox`.
+fn should_break_shaping_after_box(item: &InlineItem<'_>) -> bool {
+  item.layout_object.is_some_and(|object| {
+    !inline_box_edges_empty(object.node()).1
+      || object.style().base_data.vertical_align != VerticalAlign::default()
+  })
 }
 
 impl RenderNode {
@@ -302,6 +533,7 @@ mod tests {
 
   use crate::{
     context::RenderContext,
+    fonts::shaping::testing::{GEIST, register},
     layout::{
       inline::{
         inline_item::{InlineItem, InlineItemType, LayoutObject},
@@ -319,13 +551,17 @@ mod tests {
   use InlineItemType::*;
   use TextDirection::{Ltr, Rtl};
 
-  const CSS: &str = ".block { display: block } .span { display: inline } \
+  const CSS: &str = ".block { display: block; font: 16px Geist } .span { display: inline } \
     .atomic { display: inline-block } .float { float: left } .abs { position: absolute } \
     .list { list-style-type: disc } .item { display: list-item }";
 
   fn render_tree(root: Node, css: &str) -> RenderNode {
+    let mut fonts = Fonts::default();
+
+    register(&mut fonts, GEIST, "Geist");
+
     let context = RenderContext::builder()
-      .fonts(Fonts::default().snapshot())
+      .fonts(fonts.snapshot())
       .sizing(
         SizingContext::builder()
           .viewport(Viewport::default())
@@ -776,5 +1012,95 @@ mod tests {
     assert_eq!(ends(12, 13, second), [13]);
     assert_eq!(ends(12, 14, second), [14]);
     assert_eq!(ends(13, 16, second), [16]);
+  }
+
+  /// Each text item's shaped width.
+  fn shaped_widths(block: &RenderNode) -> Vec<f32> {
+    let data = InlineNode::new(block).prepare_layout();
+
+    data
+      .items
+      .iter()
+      .filter(|item| item.item_type == Text && item.length() > 0)
+      .map(|item| {
+        let shape_result = item.shape_result.as_ref().expect("a shaped text item");
+
+        assert_eq!(shape_result.start_index() as usize, item.start_offset());
+        assert_eq!(shape_result.end_index() as usize, item.end_offset());
+
+        shape_result.width()
+      })
+      .collect()
+  }
+
+  /// Adjacent items shape as one text, so kerning across them survives the split.
+  #[test]
+  fn adjacent_items_shape_together() {
+    let whole = shaped_widths(&render_tree(block([span("AVAV")]), ""));
+    let split = shaped_widths(&render_tree(block([span("AV"), span("AV")]), ""));
+
+    assert_eq!(whole.len(), 1);
+    assert_eq!(split.len(), 2);
+    assert!((split.iter().sum::<f32>() - whole[0]).abs() < 1e-3);
+  }
+
+  /// css-text-3 §7.3: padding at a box's edge breaks shaping there.
+  #[test]
+  fn padding_breaks_shaping() {
+    let together = shaped_widths(&render_tree(block([span("AV"), span("AV")]), ""));
+    let apart = shaped_widths(&render_tree(
+      block([span("AV"), span("AV").with_class_name("padded")]),
+      ".padded { padding-left: 1px }",
+    ));
+
+    // The kerning between "V" and "A" widens or narrows the first item.
+    assert!((together[0] - apart[0]).abs() > 1e-3);
+  }
+
+  #[test]
+  fn letter_spacing_widens_every_character() {
+    let plain = shaped_widths(&render_tree(block([span("abc")]), ""));
+    let spaced = shaped_widths(&render_tree(
+      block([span("abc")]),
+      ".span { letter-spacing: 2px }",
+    ));
+
+    assert!((spaced[0] - plain[0] - 6.0).abs() < 1e-3);
+  }
+
+  /// Blink paints a symbol marker as a shape, so its text shapes as spaces of the symbol's width.
+  #[test]
+  fn a_symbol_marker_shapes_to_its_symbol_width() {
+    let list = Node::container([Node::text("a").with_class_name("item")]).with_class_name("list");
+    let tree = render_tree(
+      list,
+      ".list { list-style-position: inside; font: 16px Geist }",
+    );
+    let item = &tree.children.as_deref().expect("children")[0];
+    let data = InlineNode::new(item).prepare_layout();
+    let marker = data
+      .items
+      .iter()
+      .find(|item| item.is_symbol_marker())
+      .expect("a symbol marker");
+    let width = marker.shape_result.as_ref().expect("shaped").width();
+
+    // Blink's `(ascent * 2 / 3 + 1) / 2 + 2`, with Geist's 16px ascent rounding to 15.
+    assert_eq!(width, 7.0);
+  }
+
+  /// Items of one bidi level shape in that direction.
+  #[test]
+  fn right_to_left_items_shape_right_to_left() {
+    let tree = render_tree(block([span(&format!("abc {HEBREW}"))]), "");
+    let data = InlineNode::new(&tree).prepare_layout();
+    let directions: Vec<_> = data
+      .items
+      .iter()
+      .filter_map(|item| item.shape_result.as_ref())
+      .map(|shape_result| shape_result.is_rtl())
+      .collect();
+
+    assert_eq!(directions, [false, true]);
   }
 }

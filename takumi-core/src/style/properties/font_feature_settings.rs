@@ -32,6 +32,10 @@ impl Tag {
   pub(crate) fn into_parlance(self) -> parley::setting::Tag {
     parley::setting::Tag::from_bytes(self.0)
   }
+
+  pub(crate) fn into_harfrust(self) -> harfrust::Tag {
+    harfrust::Tag::new(&self.0)
+  }
 }
 
 impl fmt::Display for Tag {

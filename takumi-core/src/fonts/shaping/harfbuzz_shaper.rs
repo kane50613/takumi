@@ -349,6 +349,53 @@ impl HarfBuzzShaper {
     result
   }
 
+  /// Blink's `Shape` of `start..end` in the runs `ranges`, which cover it in order.
+  pub(crate) fn shape_segmented(
+    &self,
+    font: &Font,
+    direction: TextDirection,
+    start: usize,
+    end: usize,
+    ranges: &[RunSegmenterRange],
+  ) -> ShapeResult {
+    assert!(end >= start);
+    assert!(end <= self.text.len());
+    debug_assert_eq!(ranges.first().map(|range| range.start), Some(start));
+    debug_assert_eq!(ranges.last().map(|range| range.end), Some(end));
+
+    let mut result = ShapeResult::new(start as u32, (end - start) as u32, direction);
+    let mut range_data = RangeContext::new(font, direction, start, end);
+
+    for segmented_range in ranges {
+      debug_assert!(segmented_range.start >= start && segmented_range.end <= end);
+
+      self.shape_segment(&mut range_data, segmented_range, &mut result);
+    }
+
+    result
+  }
+
+  /// Blink's `Shape` of `start..end` within one run, `pre_segmented`.
+  pub(crate) fn shape_pre_segmented(
+    &self,
+    font: &Font,
+    direction: TextDirection,
+    start: usize,
+    end: usize,
+    pre_segmented: &RunSegmenterRange,
+  ) -> ShapeResult {
+    assert!(end >= start);
+    assert!(end <= self.text.len());
+    debug_assert!(start >= pre_segmented.start && end <= pre_segmented.end);
+
+    let mut result = ShapeResult::new(start as u32, (end - start) as u32, direction);
+    let mut range_data = RangeContext::new(font, direction, start, end);
+
+    self.shape_segment(&mut range_data, pre_segmented, &mut result);
+
+    result
+  }
+
   /// Blink's `Shape` of the whole text.
   pub(crate) fn shape_all(&self, font: &Font, direction: TextDirection) -> ShapeResult {
     self.shape(font, direction, 0, self.text.len())
