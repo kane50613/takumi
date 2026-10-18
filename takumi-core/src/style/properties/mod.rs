@@ -1060,10 +1060,18 @@ impl Display {
   }
 
   /// Cast the display to block level.
+  /// Blink's `EquivalentBlockDisplay`, which turns the parts of a table into blocks as well.
+  /// <https://drafts.csswg.org/css-display/#blockify>
   pub(crate) fn as_blockified(self) -> Self {
     match self {
-      Display::Inline => Display::Block,
-      Display::InlineBlock => Display::Block,
+      Display::Inline
+      | Display::InlineBlock
+      | Display::TableRowGroup
+      | Display::TableHeaderGroup
+      | Display::TableFooterGroup
+      | Display::TableRow
+      | Display::TableCell
+      | Display::TableCaption => Display::Block,
       Display::InlineFlex => Display::Flex,
       Display::InlineGrid => Display::Grid,
       _ => self,

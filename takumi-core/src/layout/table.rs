@@ -396,7 +396,20 @@ impl RenderNode {
     let mut run = Vec::new();
 
     for child in children {
-      if child.context.style.base_data.display != Display::TableCell {
+      let display = child.context.style.base_data.display;
+
+      // A box `display: none` hides generates nothing, so it neither starts a cell nor splits one.
+      if display == Display::None {
+        if run.is_empty() {
+          wrapped.push(child);
+        } else {
+          run.push(child);
+        }
+
+        continue;
+      }
+
+      if display != Display::TableCell {
         if !run.is_empty() || !child.is_collapsible_whitespace_only_text_node() {
           run.push(child);
         }
@@ -447,6 +460,8 @@ impl RenderNode {
     for child in children {
       if is_part(&child) {
         gap.clear();
+        run.push(child);
+      } else if !run.is_empty() && child.context.style.base_data.display == Display::None {
         run.push(child);
       } else if !run.is_empty() && child.is_collapsible_whitespace_only_text_node() {
         gap.push(child);
@@ -1155,6 +1170,7 @@ mod tests {
         .short { display: table-cell; height: 10px; padding: 2px }
         .tall { display: table-cell; height: 23px }
         .bordered-box { border: 1px solid rgb(0, 0, 0) }
+        .hidden { display: none }
       ",
     )
     .expect("stylesheet parses");
@@ -1814,6 +1830,22 @@ mod tests {
         .context
         .collapsed_borders
     );
+  }
+
+  #[test]
+  fn a_hidden_child_of_a_row_takes_no_track() {
+    let tree = lower(
+      Node::container([named_row(
+        "row",
+        [
+          Node::container([Node::text("hidden")]).with_class_name("hidden"),
+          cell("a"),
+        ],
+      )])
+      .with_class_name("table"),
+    );
+
+    assert_eq!(ids(&tree), ["a"]);
   }
 
   #[test]
