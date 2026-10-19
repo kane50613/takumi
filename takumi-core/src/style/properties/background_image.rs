@@ -151,6 +151,26 @@ mod tests {
   }
 
   #[test]
+  fn a_list_may_start_with_none() {
+    for css in [
+      "background-image: none, none",
+      "mask-image: none, url(a.png)",
+    ] {
+      assert_eq!(
+        StyleDeclarationBlock::parse_loosy(css).len(),
+        1,
+        "{css} parsed as invalid"
+      );
+    }
+
+    assert_eq!(
+      Option::<BackgroundImages>::from_css_str("none, none"),
+      Ok(Some([BackgroundImage::None, BackgroundImage::None].into()))
+    );
+    assert_eq!(Option::<BackgroundImages>::from_css_str("none"), Ok(None));
+  }
+
+  #[test]
   fn test_parse_tailwind_none() {
     assert_eq!(
       BackgroundImage::parse_tw("none"),

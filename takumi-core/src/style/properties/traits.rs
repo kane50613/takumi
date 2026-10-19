@@ -240,7 +240,24 @@ impl<'i, T: FromCss<'i>> FromCss<'i> for Option<T> {
   const EXPECT_MESSAGE: CssExpectedMessage = CssExpectedMessage::ValueOrNone;
 
   fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
+    let start = input.state();
+
     if input.try_parse(|i| i.expect_ident_matching("none")).is_ok() {
+      let after_none = input.state();
+
+      if input.try_parse(Parser::expect_comma).is_err() {
+        return Ok(None);
+      }
+
+      // `none, ...` starts a list whose first item is `none`, as `background-image: none, none`.
+      input.reset(&start);
+
+      if let Ok(value) = input.try_parse(T::from_css) {
+        return Ok(Some(value));
+      }
+
+      input.reset(&after_none);
+
       return Ok(None);
     }
 
