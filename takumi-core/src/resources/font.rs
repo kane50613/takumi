@@ -449,16 +449,19 @@ impl Fonts {
       .map(|face| &*face.family)
   }
 
-  /// Render-local snapshot whose fallback walks the named families of `fallbacks`, then the
-  /// last-resort ones.
+  /// Render-local snapshot whose fallback walks the families of `fallbacks`, a generic one as the
+  /// families registered for it, then the last-resort ones.
   pub fn snapshot_with_fallbacks(&self, fallbacks: Option<&FontFamily>) -> FontsSnapshot {
     let fallback_families = fallbacks.map(|fallbacks| {
       fallbacks
         .tokens()
         .iter()
-        .filter_map(|token| match token {
-          FontFamilyToken::Owned(name) => Some(Arc::from(name.as_str())),
-          FontFamilyToken::Generic(_) => None,
+        .flat_map(|token| match token {
+          FontFamilyToken::Owned(name) => vec![Arc::from(name.as_str())],
+          FontFamilyToken::Generic(generic) => self
+            .selector
+            .family_names_from_settings(generic.keyword())
+            .to_vec(),
         })
         .collect()
     });
