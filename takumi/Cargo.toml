@@ -84,14 +84,18 @@ workspace = true
 [package.metadata.docs.rs]
 all-features = true
 
-# The suites share one binary, so they link takumi once. The allocator count and the WPT run, which
-# exits the process on a hung test, keep their own.
+# The suites share one binary, so they link takumi once. The allocator count, the SVG parity check
+# that reads the goldens the suites write, and the WPT run, which exits the process on a hung test,
+# keep their own.
 [[test]]
 name = "integration"
 path = "tests/integration.rs"
 
 [[test]]
 name = "memory_retention"
+
+[[test]]
+name = "svg_parity"
 
 [[test]]
 name = "wpt_reftests"

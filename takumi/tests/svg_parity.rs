@@ -10,6 +10,8 @@
 //! meant to shrink. A fixture that climbs back above the floor must leave the list
 //! (the test fails if a listed fixture now passes), so the debt can't go stale.
 
+mod test_utils;
+
 use std::{collections::HashMap, convert::identity, fs, path::Path};
 
 use image::ImageReader;
@@ -18,8 +20,7 @@ use resvg::{
   tiny_skia::Pixmap,
   usvg::{Options, Transform, Tree},
 };
-
-use crate::test_utils::GENERATED_DIR;
+use test_utils::GENERATED_DIR;
 
 /// Per-channel tolerance counted as "matching".
 const TOL: i32 = 16;
