@@ -7,6 +7,7 @@ use harfrust::{
   ShaperFont, shape,
 };
 use icu_properties::{PropertyNamesShort, props::Script};
+use skrifa::MetadataProvider;
 
 use super::{
   case_mapping_harfbuzz_buffer_filler::CaseMapIntend,
@@ -25,7 +26,13 @@ use crate::{
     small_caps_iterator::{SmallCapsBehavior, SmallCapsIterator},
   },
   style::{Direction as TextDirection, FontFeature, FontVariantCaps},
-  text::character::{IDEOGRAPHIC_SPACE, is_8bit, is_common_or_inherited_script},
+  text::{
+    character::{
+      IDEOGRAPHIC_SPACE, VARIATION_SELECTOR_15, VARIATION_SELECTOR_16, is_8bit,
+      is_common_or_inherited_script,
+    },
+    variation_sequence::{is_unicode_variation_selector, is_variation_sequence},
+  },
 };
 
 /// Blink's `ShouldSubpixelPosition`.
@@ -53,6 +60,8 @@ impl HarfBuzzBuffer {
 enum ReshapeQueueItemAction {
   NextFont,
   Range,
+  /// Restart the font fallback, ignoring variation selectors.
+  Reset,
 }
 
 /// Blink's `ReshapeQueueItem`.
@@ -66,6 +75,11 @@ struct ReshapeQueueItem {
 impl ReshapeQueueItem {
   const NEXT_FONT: Self = Self {
     action: ReshapeQueueItemAction::NextFont,
+    start_index: 0,
+    num_characters: 0,
+  };
+  const RESET: Self = Self {
+    action: ReshapeQueueItemAction::Reset,
     start_index: 0,
     num_characters: 0,
   };
@@ -103,6 +117,11 @@ impl<'a> RangeContext<'a> {
     }
   }
 
+  /// End of the part of `item` this range shapes.
+  fn shape_end(&self, item: &ReshapeQueueItem) -> usize {
+    self.end.min(item.start_index + item.num_characters)
+  }
+
   /// Blink's `HarfBuzzDirection` for horizontal text.
   fn harfbuzz_direction(&self) -> HbDirection {
     match self.text_direction {
@@ -126,17 +145,42 @@ struct BufferSlice {
 enum FallbackFontStage {
   Intermediate,
   Last,
+  /// A variation sequence some font lacked waits for a later font that has it.
+  IntermediateWithVS,
+  LastWithVS,
+  /// The second pass, through every font again, ignoring variation selectors.
+  IntermediateIgnoreVS,
+  LastIgnoreVS,
 }
 
 impl FallbackFontStage {
   /// Blink's `IsLastFontToShape`.
   fn is_last_font_to_shape(self) -> bool {
-    self == Self::Last
+    matches!(self, Self::Last | Self::LastIgnoreVS)
+  }
+
+  /// Blink's `StageNeedsQueueReset`.
+  fn needs_queue_reset(self) -> bool {
+    self == Self::LastWithVS
   }
 
   /// Blink's `ChangeStageToLast`.
   fn change_stage_to_last(self) -> Self {
-    Self::Last
+    match self {
+      Self::Intermediate => Self::Last,
+      Self::IntermediateWithVS => Self::LastWithVS,
+      Self::IntermediateIgnoreVS => Self::LastIgnoreVS,
+      stage => stage,
+    }
+  }
+
+  /// Blink's `ChangeStageToVS`.
+  fn change_stage_to_vs(self) -> Self {
+    match self {
+      Self::Intermediate => Self::IntermediateWithVS,
+      Self::Last => Self::LastWithVS,
+      stage => stage,
+    }
   }
 }
 
@@ -226,9 +270,7 @@ fn compute_slice(
 ) -> BufferSlice {
   let glyph_info = &buffer.infos;
   let num_glyphs = glyph_info.len();
-  let shape_end = range_data
-    .end
-    .min(current_queue_item.start_index + current_queue_item.num_characters);
+  let shape_end = range_data.shape_end(current_queue_item);
   let (start_character_index, num_characters) = if buffer.is_forward() {
     let start_character_index = glyph_info[old_glyph_index].cluster as usize;
     let num_characters = if new_glyph_index == num_glyphs {
@@ -262,11 +304,16 @@ fn queue_characters(
   range_data: &mut RangeContext<'_>,
   font_cycle_queued: &mut bool,
   slice: &BufferSlice,
+  font_stage: FallbackFontStage,
 ) {
   if !*font_cycle_queued {
     range_data
       .reshape_queue
-      .push_back(ReshapeQueueItem::NEXT_FONT);
+      .push_back(if font_stage.needs_queue_reset() {
+        ReshapeQueueItem::RESET
+      } else {
+        ReshapeQueueItem::NEXT_FONT
+      });
     *font_cycle_queued = true;
   }
 
@@ -276,6 +323,40 @@ fn queue_characters(
     slice.start_character_index,
     slice.num_characters,
   ));
+}
+
+/// Whether `font` draws the variation sequence `text` starts with in a way the sequence does not
+/// ask for, Blink's `HarfBuzzGetGlyph` answering `kUnmatchedVSGlyphId`. Approximate: Blink marks
+/// the glyph in a HarfBuzz callback, which harfrust lacks, so the cluster is checked after shaping
+/// with the same rules.
+fn is_unmatched_variation_sequence(font: &SimpleFontData, text: &str) -> bool {
+  let mut characters = text.chars();
+  let (Some(character), Some(selector)) = (characters.next(), characters.next()) else {
+    return false;
+  };
+
+  if !is_unicode_variation_selector(selector) || !is_variation_sequence(character, selector) {
+    return false;
+  }
+
+  let Some(font_ref) = font.font_ref() else {
+    return false;
+  };
+  let charmap = font_ref.charmap();
+
+  if charmap.map_variant(character, selector).is_some() || charmap.map(character).is_none() {
+    return false;
+  }
+
+  // Only the base character's glyph: it is unmatched unless its color fits the presentation
+  // asked for, as Blink judges by `TypefaceHasAnySupportedColorTable`.
+  let is_color = font.face().typeface.is_color;
+
+  match selector {
+    VARIATION_SELECTOR_15 => is_color,
+    VARIATION_SELECTOR_16 => !is_color,
+    _ => true,
+  }
 }
 
 /// Blink's `ClusterResult`.
@@ -415,9 +496,19 @@ impl HarfBuzzShaper {
     let mut fallback_chars_hint = HintCharList::new();
     let mut current_font_data_for_range_set = FontDataForRangeSet::default();
     let mut fallback_stage = FallbackFontStage::Intermediate;
+    let mut ignore_variation_selectors = false;
 
     while let Some(mut current_queue_item) = range_data.reshape_queue.pop_front() {
       if current_queue_item.action != ReshapeQueueItemAction::Range {
+        if current_queue_item.action == ReshapeQueueItemAction::Reset {
+          // The last font left variation sequences no font had; fonts that have their base
+          // characters shape them on a second pass that ignores the selectors.
+          debug_assert_eq!(fallback_stage, FallbackFontStage::LastWithVS);
+          fallback_iterator.reset();
+          fallback_stage = FallbackFontStage::IntermediateIgnoreVS;
+          ignore_variation_selectors = true;
+        }
+
         if !self.collect_fallback_hint_chars(
           &range_data.reshape_queue,
           fallback_iterator.needs_hint_list(),
@@ -477,9 +568,7 @@ impl HarfBuzzShaper {
       debug_assert!(current_queue_item.num_characters > 0);
 
       let shape_start = range_data.start.max(current_queue_item.start_index);
-      let shape_end = range_data
-        .end
-        .min(current_queue_item.start_index + current_queue_item.num_characters);
+      let shape_end = range_data.shape_end(&current_queue_item);
 
       debug_assert!(shape_end > shape_start);
 
@@ -539,6 +628,7 @@ impl HarfBuzzShaper {
         &adjusted_font,
         segment.script,
         &mut fallback_stage,
+        ignore_variation_selectors,
         result,
         &buffer,
       );
@@ -583,6 +673,7 @@ impl HarfBuzzShaper {
     current_font: &Rc<SimpleFontData>,
     current_run_script: Script,
     fallback_stage: &mut FallbackFontStage,
+    ignore_variation_selectors: bool,
     shape_result: &mut ShapeResult,
     buffer: &HarfBuzzBuffer,
   ) {
@@ -599,6 +690,7 @@ impl HarfBuzzShaper {
     }
 
     let space_glyph = u32::from(current_font.space_glyph());
+    let shape_end = range_data.shape_end(current_queue_item);
     let commit = |range_data: &RangeContext<'_>, shape_result: &mut ShapeResult, slice| {
       self.commit_glyphs(
         range_data,
@@ -628,6 +720,13 @@ impl HarfBuzzShaper {
         // `line-height` should not take: crbug.com/1193282 and
         // https://github.com/harfbuzz/harfbuzz/issues/2889.
         ClusterResult::NotDef
+      } else if !ignore_variation_selectors
+        && is_unmatched_variation_sequence(current_font, &self.text[current_cluster..shape_end])
+      {
+        // Blink's `kUnmatchedVSGlyphId`: a later font may have the sequence.
+        *fallback_stage = fallback_stage.change_stage_to_vs();
+
+        ClusterResult::NotDef
       } else {
         ClusterResult::Shaped
       };
@@ -647,7 +746,7 @@ impl HarfBuzzShaper {
           if current_cluster_result == ClusterResult::Shaped
             && !fallback_stage.is_last_font_to_shape()
           {
-            queue_characters(range_data, font_cycle_queued, &slice);
+            queue_characters(range_data, font_cycle_queued, &slice, *fallback_stage);
           } else {
             commit(range_data, shape_result, slice);
           }
@@ -691,11 +790,11 @@ impl HarfBuzzShaper {
       );
 
       if current_cluster_result == ClusterResult::Shaped {
-        queue_characters(range_data, font_cycle_queued, &before);
+        queue_characters(range_data, font_cycle_queued, &before, *fallback_stage);
         commit(range_data, shape_result, last);
       } else {
         commit(range_data, shape_result, before);
-        queue_characters(range_data, font_cycle_queued, &last);
+        queue_characters(range_data, font_cycle_queued, &last, *fallback_stage);
       }
 
       return;
@@ -710,7 +809,7 @@ impl HarfBuzzShaper {
     );
 
     if current_cluster_result == ClusterResult::NotDef && !fallback_stage.is_last_font_to_shape() {
-      queue_characters(range_data, font_cycle_queued, &slice);
+      queue_characters(range_data, font_cycle_queued, &slice, *fallback_stage);
     } else {
       commit(range_data, shape_result, slice);
     }
@@ -811,7 +910,7 @@ mod tests {
   use super::*;
   use crate::fonts::shaping::{
     glyph_data::HarfBuzzRunGlyphData,
-    testing::{GEIST, NOTO_SANS_TC, font, geist, register},
+    testing::{GEIST, NOTO_SANS_TC, TWEMOJI, font, geist, register},
   };
   use crate::{
     resources::font::Fonts,
@@ -863,6 +962,66 @@ mod tests {
 
   /// A font without `smcp` draws lowercase letters as uppercase ones at 70% of the size, and
   /// leaves uppercase ones.
+  /// Whether each run of `text` draws from a color font, with no `.notdef` glyph.
+  fn run_colors(font: &Font, text: &str) -> Vec<bool> {
+    prefix_run_colors(font, text, text.len())
+  }
+
+  /// Whether each run shaping `text[..end]` takes a color font.
+  fn prefix_run_colors(font: &Font, text: &str, end: usize) -> Vec<bool> {
+    HarfBuzzShaper::new(text.into())
+      .shape(font, TextDirection::Ltr, 0, end)
+      .runs
+      .iter()
+      .map(|run| {
+        assert!(run.glyph_data.glyphs().iter().all(|glyph| glyph.glyph != 0));
+
+        run
+          .font_data
+          .as_ref()
+          .is_some_and(|font_data| font_data.face().typeface.is_color)
+      })
+      .collect()
+  }
+
+  #[test]
+  fn emoji_presentation_takes_the_color_font_after_a_text_font() {
+    let mut fonts = Fonts::default();
+
+    register(&mut fonts, NOTO_SANS_TC, "Noto Sans TC");
+    register(&mut fonts, TWEMOJI, "Twemoji Mozilla");
+
+    let text_first = font(&fonts, "Noto Sans TC, Twemoji Mozilla");
+    let emoji_first = font(&fonts, "Twemoji Mozilla, Noto Sans TC");
+
+    assert_eq!(run_colors(&text_first, "\u{203C}"), [false]);
+    assert_eq!(run_colors(&text_first, "\u{203C}\u{FE0F}"), [true]);
+    assert_eq!(run_colors(&emoji_first, "\u{203C}"), [true]);
+    assert_eq!(run_colors(&emoji_first, "\u{203C}\u{FE0E}"), [false]);
+  }
+
+  #[test]
+  fn a_selector_outside_the_shaped_range_keeps_the_first_font() {
+    let mut fonts = Fonts::default();
+
+    register(&mut fonts, NOTO_SANS_TC, "Noto Sans TC");
+    register(&mut fonts, TWEMOJI, "Twemoji Mozilla");
+
+    let text_first = font(&fonts, "Noto Sans TC, Twemoji Mozilla");
+
+    assert_eq!(
+      prefix_run_colors(&text_first, "\u{203C}\u{FE0F}", '\u{203C}'.len_utf8()),
+      [false]
+    );
+  }
+
+  #[test]
+  fn a_sequence_no_font_has_shapes_its_base_character() {
+    let (_fonts, geist) = geist();
+
+    assert_eq!(run_colors(&geist, "0\u{FE00}"), [false]);
+  }
+
   #[test]
   fn synthesizes_small_caps() {
     let mut fonts = Fonts::default();
