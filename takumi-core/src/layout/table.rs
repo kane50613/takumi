@@ -170,6 +170,8 @@ impl TableSlots {
             }
             _ => {}
           }
+          child.wrap_anonymous(Display::TableRow);
+
           let rows = child.children.take().map_or_else(Vec::new, Vec::from);
 
           groups.push((
@@ -392,10 +394,10 @@ impl RenderNode {
       .filter(|cell| cell.is_cell())
   }
 
-  /// Wraps each run of this row's children that are not table cells, text included, in an
-  /// anonymous cell, dropping the collapsible white space between cells, as CSS 2.2 §17.2.1 fixes a
-  /// table up.
-  fn wrap_anonymous_cells(&mut self) {
+  /// Wraps each run of this box's children that are not `part` boxes, text included, in an
+  /// anonymous `part` box, dropping the collapsible white space between parts, as CSS 2.2 §17.2.1
+  /// rule 2 fixes a table up.
+  fn wrap_anonymous(&mut self, part: Display) {
     let Some(children) = self.children.take() else {
       return;
     };
@@ -405,7 +407,7 @@ impl RenderNode {
     for child in children {
       let display = child.context.style.base_data.display;
 
-      // A box `display: none` hides generates nothing, so it neither starts a cell nor splits one.
+      // A box `display: none` hides generates nothing, so it neither starts a part nor splits one.
       if display == Display::None {
         if run.is_empty() {
           wrapped.push(child);
@@ -416,7 +418,7 @@ impl RenderNode {
         continue;
       }
 
-      if display != Display::TableCell {
+      if display != part {
         if !run.is_empty() || !child.is_collapsible_whitespace_only_text_node() {
           run.push(child);
         }
@@ -425,11 +427,7 @@ impl RenderNode {
       }
 
       if !run.is_empty() {
-        wrapped.push(Self::anonymous_box(
-          &self.context,
-          Display::TableCell,
-          take(&mut run),
-        ));
+        wrapped.push(Self::anonymous_box(&self.context, part, take(&mut run)));
       }
 
       wrapped.push(child);
@@ -439,7 +437,7 @@ impl RenderNode {
       .iter()
       .any(|child| !child.is_collapsible_whitespace_only_text_node())
     {
-      wrapped.push(Self::anonymous_box(&self.context, Display::TableCell, run));
+      wrapped.push(Self::anonymous_box(&self.context, part, run));
     }
 
     self.children = Some(wrapped.into_boxed_slice());
@@ -539,7 +537,7 @@ impl RenderNode {
     } = TableSlots::collect(self);
 
     for row in &mut rows {
-      row.wrap_anonymous_cells();
+      row.wrap_anonymous(Display::TableCell);
     }
 
     let grid = TableGrid::resolve(&rows);
@@ -1494,6 +1492,16 @@ mod tests {
         GridPlacement::Line(track as i16 + 1)
       );
     }
+  }
+
+  #[test]
+  fn a_row_groups_text_takes_an_anonymous_row_and_cell() {
+    let tree = lower(
+      Node::container([Node::container([Node::text("x")]).with_class_name("tbody")])
+        .with_class_name("table"),
+    );
+
+    assert_eq!(ids(&tree), [""]);
   }
 
   fn with_span(node: Node, name: &str, value: &str) -> Node {
