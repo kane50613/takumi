@@ -8,5 +8,6 @@ pub(crate) mod shape_result;
 pub(crate) mod shape_result_run;
 pub(crate) mod shape_result_spacing;
 pub(crate) mod shape_result_view;
+pub(crate) mod shaping_line_breaker;
 #[cfg(test)]
 pub(crate) mod testing;

@@ -11,6 +11,7 @@ use icu_properties::{
 };
 
 pub(crate) const NO_BREAK_SPACE: char = '\u{A0}';
+pub(crate) const SOFT_HYPHEN: char = '\u{AD}';
 pub(crate) const ZERO_WIDTH_NON_JOINER: char = '\u{200C}';
 pub(crate) const ZERO_WIDTH_JOINER: char = '\u{200D}';
 pub(crate) const OBJECT_REPLACEMENT_CHARACTER: char = '\u{FFFC}';
@@ -131,7 +132,7 @@ pub(crate) fn is_common_or_inherited_script(c: char) -> bool {
 /// Blink's `IsDefaultIgnorable`.
 pub(crate) fn is_default_ignorable(c: char) -> bool {
   if u32::from(c) < 0x100 {
-    return c == '\u{AD}';
+    return c == SOFT_HYPHEN;
   }
 
   CodePointSetData::new::<DefaultIgnorableCodePoint>().contains(c)
@@ -266,6 +267,11 @@ pub(crate) const CJK_IDEOGRAPH_OR_SYMBOL_RANGES: &[RangeInclusive<u32>] = &[
   0x1FAC9..=0x1FACC,
 ];
 
+/// Blink's `IsOtherSpaceSeparator`: the ideographic space.
+pub(crate) fn is_other_space_separator(c: char) -> bool {
+  c == IDEOGRAPHIC_SPACE
+}
+
 /// The character starting at byte `offset` of `text`. A byte inside a character stands in for the
 /// trailing surrogate Blink would read there, which no predicate takes for a space.
 pub(crate) fn char_at(text: &str, offset: usize) -> char {
@@ -274,4 +280,9 @@ pub(crate) fn char_at(text: &str, offset: usize) -> char {
   }
 
   text[offset..].chars().next().unwrap_or('\0')
+}
+
+/// The character ending at byte `offset` of `text`.
+pub(crate) fn char_before(text: &str, offset: usize) -> char {
+  text[..offset].chars().next_back().unwrap_or('\0')
 }

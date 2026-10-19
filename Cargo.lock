@@ -1867,6 +1867,7 @@ dependencies = [
  "libwebp-sys",
  "log",
  "parley",
+ "parley_engine",
  "pastey",
  "phf",
  "png",
