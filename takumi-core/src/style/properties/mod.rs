@@ -1355,6 +1355,23 @@ impl_css_enum!(
   "preserve-breaks" => WhiteSpaceCollapse::PreserveBreaks,
 );
 
+impl WhiteSpaceCollapse {
+  /// Blink's `ShouldPreserveWhiteSpaces`.
+  pub(crate) fn should_preserve_white_spaces(self) -> bool {
+    matches!(self, Self::Preserve | Self::PreserveSpaces)
+  }
+
+  /// Blink's `ShouldCollapseWhiteSpaces`.
+  pub(crate) fn should_collapse_white_spaces(self) -> bool {
+    !self.should_preserve_white_spaces()
+  }
+
+  /// Blink's `ShouldPreserveBreaks`.
+  pub(crate) fn should_preserve_breaks(self) -> bool {
+    matches!(self, Self::Preserve | Self::PreserveBreaks)
+  }
+}
+
 /// Defines how images should be scaled when rendered.
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
 #[non_exhaustive]
