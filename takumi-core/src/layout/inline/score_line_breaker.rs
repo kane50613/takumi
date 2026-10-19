@@ -203,7 +203,13 @@ impl<'s, 'a, 'c> ScoreLineBreaker<'s, 'a, 'c> {
 
       line_info_list.push(line_info);
 
-      if is_end_paragraph {
+      // The clamp ends the paragraph too.
+      if is_end_paragraph
+        || self
+          .space
+          .lines_until_clamp
+          .is_some_and(|lines| lines > 0 && line_info_list.len() == lines as usize)
+      {
         context.suspend_until_end_paragraph();
 
         break;
