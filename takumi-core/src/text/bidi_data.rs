@@ -1,5 +1,5 @@
-//! `unicode-bidi` data source backed by the icu_properties tables parley
-//! already links, replacing the crate's `hardcoded-data` feature.
+//! `unicode-bidi` data source backed by the icu_properties tables takumi already links, in place
+//! of the crate's `hardcoded-data` feature.
 
 use icu_properties::CodePointMapData;
 use icu_properties::props::{BidiMirroringGlyph, BidiPairedBracketType};

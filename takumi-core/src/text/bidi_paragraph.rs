@@ -1,10 +1,10 @@
 //! Blink's [`BidiParagraph`](https://source.chromium.org/chromium/chromium/src/+/main:third_party/blink/renderer/platform/text/bidi_paragraph.cc),
-//! with parley_engine's bidi algorithm in place of ICU's `ubidi`.
+//! with `unicode-bidi`'s algorithm in place of ICU's `ubidi`.
 
 use icu_properties::{CodePointMapData, props::BidiClass};
-use parley_engine::{Analysis, AnalysisOptions, Analyzer, BaseDirection};
+use unicode_bidi::{BidiInfo, Level};
 
-use crate::style::Direction as TextDirection;
+use crate::{style::Direction as TextDirection, text::bidi_data::IcuBidiData};
 
 /// Blink's `DirectionFromLevel`.
 pub(crate) fn direction_from_level(level: u8) -> TextDirection {
@@ -22,8 +22,6 @@ pub(crate) struct Run {
   pub(crate) end: usize,
   pub(crate) level: u8,
 }
-
-impl Run {}
 
 /// Blink's `BidiParagraph`.
 #[derive(Debug, Default)]
@@ -49,25 +47,25 @@ impl BidiParagraph {
     text: &str,
     base_direction: Option<TextDirection>,
   ) -> bool {
-    let mut analysis = Analysis::new();
-    let options = AnalysisOptions {
-      base_direction: match base_direction {
-        None => BaseDirection::Auto,
-        Some(TextDirection::Ltr) => BaseDirection::Ltr,
-        Some(TextDirection::Rtl) => BaseDirection::Rtl,
-      },
-      ..AnalysisOptions::default()
-    };
-
-    Analyzer::new().analyze(text, &options, &mut analysis);
-
-    let paragraph_level = analysis.paragraph_level().to_u8();
+    let info = BidiInfo::new_with_data_source(
+      &IcuBidiData,
+      text,
+      base_direction.map(|direction| match direction {
+        TextDirection::Ltr => Level::ltr(),
+        TextDirection::Rtl => Level::rtl(),
+      }),
+    );
+    // ICU's `ubidi_getParaLevel` is the first paragraph's level.
+    let paragraph_level = info
+      .paragraphs
+      .first()
+      .map_or(0, |paragraph| paragraph.level.number());
     let bidi_class = CodePointMapData::<BidiClass>::new();
     let classes: Vec<BidiClass> = text.chars().map(|c| bidi_class.get(c)).collect();
-    let mut levels: Vec<u8> = match analysis.bidi_levels() {
-      [] => vec![paragraph_level; classes.len()],
-      levels => levels.iter().map(|level| level.to_u8()).collect(),
-    };
+    let mut levels: Vec<u8> = text
+      .char_indices()
+      .map(|(offset, _)| info.levels[offset].number())
+      .collect();
 
     adjust_ws_levels(&classes, &mut levels, paragraph_level);
     self.paragraph_level = paragraph_level;

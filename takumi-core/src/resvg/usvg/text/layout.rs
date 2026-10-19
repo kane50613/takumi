@@ -24,6 +24,7 @@ use crate::resvg::usvg::{
   FontResolver, GlyphId, LengthAdjust, PaintOrder, Path, ShapeRendering, Stroke, Text, TextAnchor,
   TextChunk, TextDecorationStyle, TextFlow, TextPath, TextSpan, WritingMode,
 };
+use crate::text::bidi_data::IcuBidiData;
 
 /// A glyph that has already been positioned correctly.
 ///
@@ -1447,7 +1448,7 @@ fn shape_text_with_font(
     }
 
     let bidi_info = unicode_bidi::BidiInfo::new_with_data_source(
-      &super::bidi::IcuBidiData,
+      &IcuBidiData,
       text,
       Some(unicode_bidi::Level::ltr()),
     );

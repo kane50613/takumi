@@ -111,15 +111,11 @@ workspace = true
 [dependencies.icu_segmenter]
 workspace = true
 
-[dependencies.parley_engine]
-workspace = true
-
 [dependencies.icu_properties]
 workspace = true
 
 [dependencies.unicode-bidi]
 workspace = true
-optional = true
 
 [dependencies.wuff]
 workspace = true
@@ -133,14 +129,7 @@ jpeg = ["image/jpeg"]
 webp = ["dep:image-webp", "dep:libwebp-sys", "image/webp"]
 gif = ["dep:gif", "image/gif"]
 svg-sizing = ["dep:roxmltree", "dep:svgtypes"]
-svg = [
-  "svg-sizing",
-  "dep:simplecss",
-  "dep:siphasher",
-  "dep:strict-num",
-  "dep:tiny-skia-path",
-  "dep:unicode-bidi",
-]
+svg = ["svg-sizing", "dep:simplecss", "dep:siphasher", "dep:strict-num", "dep:tiny-skia-path"]
 woff2 = ["dep:wuff", "wuff/brotli"]
 woff = ["dep:wuff", "wuff/z"]
 rayon = ["dep:rayon"]
