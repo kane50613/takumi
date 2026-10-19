@@ -389,6 +389,8 @@ pub struct RenderNode {
   pub(crate) table_columns: Option<Box<TableColumns>>,
   /// The fragment items its inline content last laid out to.
   pub(crate) fragment_items: FragmentItemsCache,
+  /// The layouts it took as an atomic inline, by available space.
+  atomic_inline_layouts: AtomicInlineCache,
 }
 
 /// Drops the render tree iteratively; recursive drop glue overflows the stack
@@ -424,6 +426,42 @@ impl FragmentItemsCache {
 }
 
 impl Clone for FragmentItemsCache {
+  fn clone(&self) -> Self {
+    Self::default()
+  }
+}
+
+/// Blink's layout result cache for an atomic inline box: a line breaker and each ancestor's
+/// intrinsic sizing ask for the same few available spaces, and every miss lays the whole subtree
+/// out again, so nested inline blocks would cost exponential time.
+#[derive(Default)]
+struct AtomicInlineCache(RefCell<Vec<(Size<AvailableSpace>, AtomicInlineMetrics)>>);
+
+impl AtomicInlineCache {
+  fn get_or_insert_with(
+    &self,
+    available_space: Size<AvailableSpace>,
+    lay_out: impl FnOnce() -> AtomicInlineMetrics,
+  ) -> AtomicInlineMetrics {
+    let cached = self
+      .0
+      .borrow()
+      .iter()
+      .find(|(space, _)| *space == available_space)
+      .map(|&(_, metrics)| metrics);
+
+    if let Some(metrics) = cached {
+      return metrics;
+    }
+
+    let metrics = lay_out();
+
+    self.0.borrow_mut().push((available_space, metrics));
+    metrics
+  }
+}
+
+impl Clone for AtomicInlineCache {
   fn clone(&self) -> Self {
     Self::default()
   }
@@ -1875,6 +1913,7 @@ impl RenderNode {
       table_part: None,
       table_columns: None,
       fragment_items: FragmentItemsCache::default(),
+      atomic_inline_layouts: AtomicInlineCache::default(),
     }
   }
 
@@ -2640,6 +2679,14 @@ impl RenderNode {
     &self,
     available_space: Size<AvailableSpace>,
   ) -> AtomicInlineMetrics {
+    self
+      .atomic_inline_layouts
+      .get_or_insert_with(available_space, || {
+        self.lay_out_atomic_inline(available_space)
+      })
+  }
+
+  fn lay_out_atomic_inline(&self, available_space: Size<AvailableSpace>) -> AtomicInlineMetrics {
     if !self.participates_as_inline_box()
       || self.layout_style(&self.context.sizing).size.width.is_auto()
     {
