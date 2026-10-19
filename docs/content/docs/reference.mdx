@@ -162,40 +162,42 @@ Applying it broadly makes a render slower, not faster.
 
 ### Sizing
 
-| Property                | Values                                                                                |
-| :---------------------- | :------------------------------------------------------------------------------------ |
-| `width`, `height`       | `<length-percentage>`, `auto`, `min-content`, `max-content`, `fit-content`, `stretch` |
-| `minWidth`, `minHeight` | `<length-percentage>`, `auto`                                                         |
-| `maxWidth`, `maxHeight` | `<length-percentage>`, `none`, `auto` <sup>1</sup>                                    |
-| `aspectRatio`           | Supported                                                                             |
+| Property                                                  | Values                                                                                |
+| :-------------------------------------------------------- | :------------------------------------------------------------------------------------ |
+| `width`, `height` (`inlineSize`, `blockSize`)             | `<length-percentage>`, `auto`, `min-content`, `max-content`, `fit-content`, `stretch` |
+| `minWidth`, `minHeight` (`minInlineSize`, `minBlockSize`) | `<length-percentage>`, `auto`                                                         |
+| `maxWidth`, `maxHeight` (`maxInlineSize`, `maxBlockSize`) | `<length-percentage>`, `none`, `auto` <sup>1</sup>                                    |
+| `aspectRatio`                                             | Supported                                                                             |
 
 <sup>1</sup> `maxWidth` and `maxHeight` accept `auto` as an alias for `none` for compatibility. The
 min/max properties reject intrinsic sizing keywords and `stretch`.
 
 ### Spacing
 
-| Property                                                                                                                                            | Values    |
-| :-------------------------------------------------------------------------------------------------------------------------------------------------- | :-------- |
-| `padding` (`paddingTop`, `paddingRight`, `paddingBottom`, `paddingLeft`, `paddingInline`, `paddingInlineStart`, `paddingInlineEnd`, `paddingBlock`) | Supported |
-| `margin` (`marginTop`, `marginRight`, `marginBottom`, `marginLeft`, `marginInline`, `marginInlineStart`, `marginInlineEnd`, `marginBlock`)          | Supported |
-| `inset` (`top`, `right`, `bottom`, `left`, `insetInline`, `insetBlock`)                                                                             | Supported |
-| `gap` (`columnGap`, `rowGap`)                                                                                                                       | Supported |
+Logical properties map as in `writing-mode: horizontal-tb`, the only writing mode Takumi lays out. Inline start and end follow `direction`.
+
+| Property                                                                                                                                                                                    | Values    |
+| :------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | :-------- |
+| `padding` (`paddingTop`, `paddingRight`, `paddingBottom`, `paddingLeft`, `paddingInline`, `paddingInlineStart`, `paddingInlineEnd`, `paddingBlock`, `paddingBlockStart`, `paddingBlockEnd`) | Supported |
+| `margin` (`marginTop`, `marginRight`, `marginBottom`, `marginLeft`, `marginInline`, `marginInlineStart`, `marginInlineEnd`, `marginBlock`, `marginBlockStart`, `marginBlockEnd`)            | Supported |
+| `inset` (`top`, `right`, `bottom`, `left`, `insetInline`, `insetInlineStart`, `insetInlineEnd`, `insetBlock`, `insetBlockStart`, `insetBlockEnd`)                                           | Supported |
+| `gap` (`columnGap`, `rowGap`)                                                                                                                                                               | Supported |
 
 ### Border & outline
 
-| Property                                                                                                                              | Values                                                                                        |
-| :------------------------------------------------------------------------------------------------------------------------------------ | :-------------------------------------------------------------------------------------------- |
-| `border` (`borderTop`, `borderRight`, `borderBottom`, `borderLeft`)                                                                   | Supported                                                                                     |
-| `borderWidth` (`borderTopWidth`, `borderRightWidth`, `borderBottomWidth`, `borderLeftWidth`, `borderInlineWidth`, `borderBlockWidth`) | `thin`, `medium`, `thick`, `<length>` <sup>1</sup>                                            |
-| `borderStyle` (`borderTopStyle`, `borderRightStyle`, `borderBottomStyle`, `borderLeftStyle`)                                          | `none`, `hidden`, `solid`, `dashed`, `dotted`, `double`, `groove`, `ridge`, `inset`, `outset` |
-| `borderColor` (`borderTopColor`, `borderRightColor`, `borderBottomColor`, `borderLeftColor`)                                          | Supported                                                                                     |
-| `borderRadius` (`borderTopLeftRadius`, `borderTopRightRadius`, `borderBottomRightRadius`, `borderBottomLeftRadius`)                   | Supported                                                                                     |
-| `cornerShape` (`cornerTopLeftShape`, `cornerTopRightShape`, `cornerBottomRightShape`, `cornerBottomLeftShape`)                        | `round`, `squircle`, `bevel`, `scoop`, `notch`, `square`, `superellipse(<number>)`            |
-| `outline` (`outlineWidth`, `outlineStyle`, `outlineColor`)                                                                            | Supported                                                                                     |
-| `outlineWidth`                                                                                                                        | `thin`, `medium`, `thick`, `<length>` <sup>1</sup>                                            |
-| `outlineStyle`                                                                                                                        | `none`, `hidden`, `solid`, `dashed`, `dotted`, `double`, `groove`, `ridge`, `inset`, `outset` |
-| `outlineColor`                                                                                                                        | Supported                                                                                     |
-| `outlineOffset`                                                                                                                       | Supported <sup>1</sup>                                                                        |
+| Property                                                                                                                                                                                                                                | Values                                                                                        |
+| :-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | :-------------------------------------------------------------------------------------------- |
+| `border` (`borderTop`, `borderRight`, `borderBottom`, `borderLeft`, `borderInline`, `borderInlineStart`, `borderInlineEnd`, `borderBlock`, `borderBlockStart`, `borderBlockEnd`)                                                        | Supported                                                                                     |
+| `borderWidth` (`borderTopWidth`, `borderRightWidth`, `borderBottomWidth`, `borderLeftWidth`, `borderInlineWidth`, `borderInlineStartWidth`, `borderInlineEndWidth`, `borderBlockWidth`, `borderBlockStartWidth`, `borderBlockEndWidth`) | `thin`, `medium`, `thick`, `<length>` <sup>1</sup>                                            |
+| `borderStyle` (`borderTopStyle`, `borderRightStyle`, `borderBottomStyle`, `borderLeftStyle`, `borderInlineStyle`, `borderInlineStartStyle`, `borderInlineEndStyle`, `borderBlockStyle`, `borderBlockStartStyle`, `borderBlockEndStyle`) | `none`, `hidden`, `solid`, `dashed`, `dotted`, `double`, `groove`, `ridge`, `inset`, `outset` |
+| `borderColor` (`borderTopColor`, `borderRightColor`, `borderBottomColor`, `borderLeftColor`, `borderInlineColor`, `borderInlineStartColor`, `borderInlineEndColor`, `borderBlockColor`, `borderBlockStartColor`, `borderBlockEndColor`) | Supported                                                                                     |
+| `borderRadius` (`borderTopLeftRadius`, `borderTopRightRadius`, `borderBottomRightRadius`, `borderBottomLeftRadius`, `borderStartStartRadius`, `borderStartEndRadius`, `borderEndStartRadius`, `borderEndEndRadius`)                     | Supported                                                                                     |
+| `cornerShape` (`cornerTopLeftShape`, `cornerTopRightShape`, `cornerBottomRightShape`, `cornerBottomLeftShape`)                                                                                                                          | `round`, `squircle`, `bevel`, `scoop`, `notch`, `square`, `superellipse(<number>)`            |
+| `outline` (`outlineWidth`, `outlineStyle`, `outlineColor`)                                                                                                                                                                              | Supported                                                                                     |
+| `outlineWidth`                                                                                                                                                                                                                          | `thin`, `medium`, `thick`, `<length>` <sup>1</sup>                                            |
+| `outlineStyle`                                                                                                                                                                                                                          | `none`, `hidden`, `solid`, `dashed`, `dotted`, `double`, `groove`, `ridge`, `inset`, `outset` |
+| `outlineColor`                                                                                                                                                                                                                          | Supported                                                                                     |
+| `outlineOffset`                                                                                                                                                                                                                         | Supported <sup>1</sup>                                                                        |
 
 <sup>1</sup> These snap to whole device pixels, like browsers do. Anything thinner than one device
 pixel draws as one. The rest rounds toward zero, so `1.5px` draws as `1px`.
