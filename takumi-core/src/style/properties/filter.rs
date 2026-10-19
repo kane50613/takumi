@@ -1,20 +1,17 @@
 use std::fmt;
 
-use cssparser::{Parser, Token, match_ignore_ascii_case};
+use cssparser::{ParseError as CssParseError, Parser, Token, match_ignore_ascii_case};
 
 #[cfg(feature = "svg")]
 use std::{borrow::Cow, sync::Arc};
 
-#[cfg(feature = "svg")]
-use cssparser::ParseError as CssParseError;
-
-#[cfg(feature = "svg")]
-use crate::style::properties::filter_reference::FilterReference;
 use crate::style::{
   Angle, Animatable, Color, CssExpectedMessage, FromCss, Length, ListInterpolationStrategy,
-  MakeComputed, ParseResult, PercentageNumber, SizingContext, TextShadow, ToCss, ValueError,
-  discrete, tw::TailwindPropertyParser, unexpected_token,
+  MakeComputed, ParseResult, PercentageNumber, SizingContext, TextShadow, ToCss, discrete,
+  tw::TailwindPropertyParser, unexpected_token,
 };
+#[cfg(feature = "svg")]
+use crate::style::{ValueError, properties::filter_reference::FilterReference};
 
 /// Lookup table for a single 8-bit channel transition.
 pub type TransferTable = [u8; 256];
