@@ -31,6 +31,16 @@ impl ComputedStyle {
     style
   }
 
+  /// Blink's `ResolvedIsColumnFlexDirection`, as a direction: a `-webkit-box` takes its axis from
+  /// `-webkit-box-orient`.
+  pub(crate) fn resolved_flex_direction(&self) -> FlexDirection {
+    if self.base_data.display.is_deprecated_webkit_box() {
+      self.misc_data.box_orient.into()
+    } else {
+      self.misc_data.flex_direction
+    }
+  }
+
   /// Normalize inheritable text-related values to computed values for this node.
   pub(crate) fn make_computed(&mut self, sizing: &SizingContext) {
     #[cfg(debug_assertions)]
@@ -101,6 +111,19 @@ impl ComputedStyle {
     // (LayoutBlockFlow::ShouldTruncateOverflowingText).
     if !self.clips_overflow() && self.misc4_data.text_overflow != TextOverflow::Clip {
       self.misc4_data_mut().text_overflow = TextOverflow::Clip;
+    }
+
+    // `-webkit-legacy` collapses only in a vertical `-webkit-box`, Blink's
+    // `IsDeprecatedWebkitBoxWithVerticalLineClamp`.
+    if self.misc_data.r#continue == Continue::WebkitLegacy {
+      let collapses = self.base_data.display.is_deprecated_webkit_box()
+        && self.misc_data.box_orient == BoxOrient::Vertical;
+
+      self.misc_data_mut().r#continue = if collapses {
+        Continue::Collapse
+      } else {
+        Continue::Normal
+      };
     }
 
     self.original_display = self.base_data.display;
@@ -411,6 +434,14 @@ impl ComputedStyle {
     }
   }
 
+  /// The lines `line-clamp` keeps, which collapse the lines past them.
+  pub(crate) fn line_clamp(&self) -> Option<u32> {
+    self
+      .misc3_data
+      .max_lines
+      .filter(|&lines| self.misc_data.r#continue == Continue::Collapse && lines >= 1)
+  }
+
   /// What font matching reads of this style at `sizing`'s font size, apart from the families.
   pub(crate) fn font_selection_description(
     &self,
@@ -531,7 +562,7 @@ impl ComputedStyle {
       }
       .map(|margin| margin.resolve_to_length_percentage_auto(sizing)),
       display: self.base_data.display.into_taffy(),
-      flex_direction: self.misc_data.flex_direction.into_taffy(),
+      flex_direction: self.resolved_flex_direction().into_taffy(),
       position: self.base_data.position.into_taffy(),
       justify_content: self.box_data.justify_content.into_taffy(),
       align_content: self.misc_data.align_content.into_taffy(),

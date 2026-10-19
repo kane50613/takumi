@@ -407,9 +407,12 @@ fn property_id_accepts_webkit_aliases() {
   assert_eq!(PropertyId::from_camel_case("lineClamp"), line_clamp);
   assert_eq!(
     PropertyId::from_kebab_case("-webkit-line-clamp"),
-    line_clamp
+    PropertyId::Shorthand(ShorthandId::WebkitLineClamp)
   );
-  assert_eq!(PropertyId::from_camel_case("WebkitLineClamp"), line_clamp);
+  assert_eq!(
+    PropertyId::from_camel_case("WebkitLineClamp"),
+    PropertyId::Shorthand(ShorthandId::WebkitLineClamp)
+  );
   assert_eq!(
     PropertyId::from_kebab_case("-webkit-text-fill-color"),
     PropertyId::Longhand(LonghandId::WebkitTextFillColor)
@@ -426,6 +429,52 @@ fn property_id_accepts_webkit_aliases() {
     PropertyId::from_kebab_case("-webkit-mask-image"),
     PropertyId::Longhand(LonghandId::MaskImage)
   );
+}
+
+/// `-webkit-line-clamp` collapses lines only in a vertical legacy box.
+#[test]
+fn webkit_line_clamp_needs_a_vertical_webkit_box() {
+  let style = |declarations: &[(&str, &str)]| {
+    let mut style = Style::default();
+
+    for (name, value) in declarations {
+      style.append_block(parse_declarations(name, value));
+    }
+
+    let mut computed = style.inherit(&ComputedStyle::default());
+
+    computed.make_computed(&SizingContext {
+      viewport: Viewport::new((1200, 630)),
+      container_size: Size::NONE,
+      container_read: Default::default(),
+      font_size: 16.0,
+      root_font_size: None,
+      line_height: 0.0,
+      root_line_height: None,
+      calc_arena: Rc::new(CalcArena::default()),
+    });
+    computed
+  };
+
+  let legacy = style(&[
+    ("display", "-webkit-box"),
+    ("-webkit-box-orient", "vertical"),
+    ("-webkit-line-clamp", "2"),
+  ]);
+  let bare = style(&[("-webkit-line-clamp", "2")]);
+  let flex_column = style(&[
+    ("display", "flex"),
+    ("flex-direction", "column"),
+    ("-webkit-line-clamp", "2"),
+  ]);
+  let horizontal = style(&[("display", "-webkit-box"), ("-webkit-line-clamp", "2")]);
+  let overridden = style(&[("line-clamp", "4"), ("-webkit-line-clamp", "4")]);
+
+  assert_eq!(legacy.line_clamp(), Some(2));
+  assert_eq!(bare.line_clamp(), None);
+  assert_eq!(flex_column.line_clamp(), None);
+  assert_eq!(horizontal.line_clamp(), None);
+  assert_eq!(overridden.line_clamp(), None);
 }
 
 #[test]
@@ -794,13 +843,13 @@ fn parse_legacy_box_properties_lower_to_flex() {
   let orient = parse_declarations("-webkit-box-orient", "vertical");
   assert_eq!(
     orient.iter().collect::<Vec<_>>(),
-    vec![&StyleDeclaration::flex_direction(FlexDirection::Column)]
+    vec![&StyleDeclaration::box_orient(BoxOrient::Vertical)]
   );
 
   let inline_axis = parse_declarations("-webkit-box-orient", "inline-axis");
   assert_eq!(
     inline_axis.iter().collect::<Vec<_>>(),
-    vec![&StyleDeclaration::flex_direction(FlexDirection::Row)]
+    vec![&StyleDeclaration::box_orient(BoxOrient::Horizontal)]
   );
 
   let pack = parse_declarations("-webkit-box-pack", "justify");

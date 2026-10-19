@@ -353,7 +353,7 @@ Takumi supports `balance` and `pretty` wrapping, adapted from [satori](https://g
 
 ### Truncation
 
-`line-clamp` (or `-webkit-line-clamp`) cuts text after its line count and ends the last line with an ellipsis, as Chrome does. `line-clamp: 3 none` cuts without one.
+`line-clamp` cuts text after its line count and ends the last line with an ellipsis, as Chrome does. `line-clamp: 3 none` cuts without one. The legacy `-webkit-line-clamp` cuts only together with `display: -webkit-box` and `-webkit-box-orient: vertical`, as in browsers.
 
 `text-overflow: ellipsis` applies only to a box that clips its overflow, as in Chrome, so set `overflow: hidden` with it. It ends a line that overflows the box's width, such as `white-space: nowrap` text or a word too long to break. Text cut off by the box's height is clipped without an ellipsis; use `line-clamp` to end the text after a number of lines.
 

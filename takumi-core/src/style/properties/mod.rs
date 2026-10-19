@@ -1004,13 +1004,19 @@ pub enum Display {
   TableCell,
   /// The element generates a table caption
   TableCaption,
+  /// The legacy `-webkit-box`: a flex container whose axis `-webkit-box-orient` sets
+  WebkitBox,
+  /// The legacy `-webkit-inline-box`: an inline-level `-webkit-box`
+  WebkitInlineBox,
 }
 
 impl_css_enum!(
   Display,
   "none" => Display::None,
-  "flex" | "-webkit-box" | "-webkit-flex" => Display::Flex,
-  "inline-flex" | "-webkit-inline-box" | "-webkit-inline-flex" => Display::InlineFlex,
+  "flex" | "-webkit-flex" => Display::Flex,
+  "inline-flex" | "-webkit-inline-flex" => Display::InlineFlex,
+  "-webkit-box" => Display::WebkitBox,
+  "-webkit-inline-box" => Display::WebkitInlineBox,
   "grid" => Display::Grid,
   "inline-grid" => Display::InlineGrid,
   "inline" => Display::Inline,
@@ -1037,8 +1043,25 @@ impl Display {
   pub(crate) fn is_inline_level(&self) -> bool {
     matches!(
       self,
-      Display::Inline | Display::InlineBlock | Display::InlineFlex | Display::InlineGrid
+      Display::Inline
+        | Display::InlineBlock
+        | Display::InlineFlex
+        | Display::InlineGrid
+        | Display::WebkitInlineBox
     )
+  }
+
+  /// Whether the box is a flex container, the legacy `-webkit-box` included.
+  pub(crate) fn is_flex(self) -> bool {
+    matches!(
+      self,
+      Display::Flex | Display::InlineFlex | Display::WebkitBox | Display::WebkitInlineBox
+    )
+  }
+
+  /// Blink's `IsDeprecatedWebkitBox`.
+  pub(crate) fn is_deprecated_webkit_box(self) -> bool {
+    matches!(self, Display::WebkitBox | Display::WebkitInlineBox)
   }
 
   /// Returns true if the display makes the children blockified (e.g., flex or grid).
@@ -1068,10 +1091,7 @@ impl Display {
   }
 
   pub(crate) fn should_blockify_children(&self) -> bool {
-    matches!(
-      self,
-      Display::Flex | Display::InlineFlex | Display::Grid | Display::InlineGrid
-    )
+    self.is_flex() || matches!(self, Display::Grid | Display::InlineGrid)
   }
 
   /// Cast the display to block level.
@@ -1088,6 +1108,7 @@ impl Display {
       | Display::TableCell
       | Display::TableCaption => Display::Block,
       Display::InlineFlex => Display::Flex,
+      Display::WebkitInlineBox => Display::WebkitBox,
       Display::InlineGrid => Display::Grid,
       _ => self,
     }
@@ -1100,7 +1121,9 @@ impl Display {
 
   pub(crate) fn into_taffy(self) -> taffy::Display {
     match self {
-      Display::Flex | Display::InlineFlex => taffy::Display::Flex,
+      Display::Flex | Display::InlineFlex | Display::WebkitBox | Display::WebkitInlineBox => {
+        taffy::Display::Flex
+      }
       Display::Grid | Display::InlineGrid => taffy::Display::Grid,
       Display::Block | Display::InlineBlock | Display::Inline | Display::ListItem => {
         taffy::Display::Block
@@ -1121,11 +1144,12 @@ impl Display {
   }
 }
 
-/// Legacy `-webkit-box-orient` axis, lowered to `flex-direction`.
-#[derive(Debug, Clone, Copy, PartialEq)]
+/// Legacy `-webkit-box-orient`: the axis of a `display: -webkit-box`, which ignores `flex-direction`.
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
 #[non_exhaustive]
 pub enum BoxOrient {
   /// `horizontal` or `inline-axis`: children flow as a row.
+  #[default]
   Horizontal,
   /// `vertical` or `block-axis`: children flow as a column.
   Vertical,
@@ -1463,12 +1487,14 @@ mod display_tests {
 
   #[test]
   fn legacy_webkit_values_map_to_flex_layout() {
-    assert_eq!(Display::from_css_str("-webkit-box"), Ok(Display::Flex));
+    let webkit_box = Display::from_css_str("-webkit-box").unwrap();
+    let webkit_inline_box = Display::from_css_str("-webkit-inline-box").unwrap();
+
+    assert_eq!(webkit_box, Display::WebkitBox);
+    assert_eq!(webkit_inline_box.as_blockified(), Display::WebkitBox);
+    assert_eq!(webkit_box.into_taffy(), taffy::Display::Flex);
+    assert!(webkit_inline_box.is_inline_level() && webkit_inline_box.is_flex());
     assert_eq!(Display::from_css_str("-webkit-flex"), Ok(Display::Flex));
-    assert_eq!(
-      Display::from_css_str("-webkit-inline-box"),
-      Ok(Display::InlineFlex)
-    );
     assert_eq!(
       Display::from_css_str("-webkit-inline-flex"),
       Ok(Display::InlineFlex)
