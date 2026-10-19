@@ -105,7 +105,7 @@ impl HyphenResult {
   pub(crate) fn new(context: &RenderContext, fonts: &StyleFonts) -> Self {
     let font = fonts.get(context);
     let text = match &context.style.misc_inherited1_data.hyphenate_character {
-      HyphenateCharacter::String(text) => text.clone(),
+      HyphenateCharacter::String(text) => text.to_string(),
       HyphenateCharacter::Auto => {
         let has_hyphen = font
           .primary_font()
