@@ -6,36 +6,52 @@
     <base href="../../../" />
     <link rel="stylesheet" href="takumi/tests/shared.css" />
     <style>
-      p {
-        display: block;
-        margin: 0;
+      .row {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+      }
+      .sample {
         font-family: "CJK Locl Test";
         font-size: 40px;
       }
-      span {
+      .note {
         font-family: Geist;
-        font-size: 24px;
+        font-size: 16px;
+        color: rgb(100, 100, 100);
       }
     </style>
   </head>
-  <body style="width: 640px; height: 330px">
+  <body style="width: 560px; height: 420px">
     <div
       style="
         display: flex;
         flex-direction: column;
-        gap: 16px;
+        gap: 18px;
         padding: 16px;
         background-color: rgb(255, 255, 255);
       "
     >
-      <p lang="ja"><span>ja </span>直 骨 今 海 真 令 説 器</p>
-      <p style="font-language-override: &quot;JAN&quot;"
-        ><span>JAN </span>直 骨 今 海 真 令 説 器</p
-      >
-      <p lang="ko"><span>ko </span>直 骨 今 海 真 令 説 器</p>
-      <p lang="ja" style="font-language-override: &quot;KOR&quot;">
-        <span>ja KOR </span>直 骨 今 海 真 令 説 器
-      </p>
+      <div class="row">
+        <div class="sample" lang="zh-Hant">直 骨 今 海 真 令 説 器</div>
+        <div class="note">lang="zh-Hant": Traditional Chinese, the ZHT system</div>
+      </div>
+      <div class="row">
+        <div class="sample" lang="ja" style="font-language-override: &quot;ZHT&quot;">
+          直 骨 今 海 真 令 説 器
+        </div>
+        <div class="note">lang="ja" with font-language-override: "ZHT": Traditional Chinese</div>
+      </div>
+      <div class="row">
+        <div class="sample" lang="zh-Hant" style="font-language-override: &quot;JAN&quot;">
+          直 骨 今 海 真 令 説 器
+        </div>
+        <div class="note">lang="zh-Hant" with font-language-override: "JAN": Japanese</div>
+      </div>
+      <div class="row">
+        <div class="sample" lang="ja">直 骨 今 海 真 令 説 器</div>
+        <div class="note">lang="ja": Japanese, the JAN system</div>
+      </div>
     </div>
   </body>
 </html>
