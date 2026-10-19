@@ -161,6 +161,21 @@ pub use z_index::*;
 
 use crate::style::{SizingContext, tw::TailwindPropertyParser};
 
+/// Whether `ident` is a CSS-wide keyword or `default`, which a `<custom-ident>` excludes.
+/// <https://drafts.csswg.org/css-values-4/#custom-idents>
+pub(crate) fn is_reserved_custom_ident(ident: &str) -> bool {
+  [
+    "initial",
+    "inherit",
+    "unset",
+    "revert",
+    "revert-layer",
+    "default",
+  ]
+  .iter()
+  .any(|keyword| ident.eq_ignore_ascii_case(keyword))
+}
+
 pub(crate) fn next_is_comma<'i>(input: &mut Parser<'i, '_>) -> bool {
   let state = input.state();
   let is_comma = input.expect_comma().is_ok();

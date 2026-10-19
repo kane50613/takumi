@@ -171,4 +171,24 @@ mod tests {
     assert!(FontShorthand::from_css_str("bold serif").is_err());
     assert!(FontShorthand::from_css_str("12px").is_err());
   }
+
+  #[test]
+  fn a_unitless_zero_is_the_font_size() {
+    let font = FontShorthand::from_css_str("0 serif").expect("parses");
+
+    assert_eq!(font.size, FontSize::from_css_str("0").expect("size"));
+    assert_eq!(font.weight, FontWeight::default());
+  }
+
+  #[test]
+  fn an_unquoted_css_wide_keyword_is_no_family() {
+    assert!(FontShorthand::from_css_str("16px inherit").is_err());
+    assert!(FontShorthand::from_css_str("16px Foo default").is_err());
+    assert_eq!(
+      FontShorthand::from_css_str("16px \"inherit\"")
+        .expect("parses")
+        .family,
+      FontFamily::from_css_str("\"inherit\"").expect("family")
+    );
+  }
 }

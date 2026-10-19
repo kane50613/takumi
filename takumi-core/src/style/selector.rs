@@ -20,7 +20,8 @@ use crate::{
   matching::RuleIndex,
   style::{
     BreakpointOverrides, FromCssStr, KeyframeRule, KeyframesRule, Length, StyleDeclaration,
-    StyleDeclarationBlock, expand_apply, supports::parse_supports_condition,
+    StyleDeclarationBlock, expand_apply, is_reserved_custom_ident,
+    supports::parse_supports_condition,
   },
 };
 
@@ -1075,7 +1076,7 @@ pub(crate) fn parse_layer_name<'i, 't>(
   loop {
     let location = input.current_source_location();
     let segment = match input.next()? {
-      Token::Ident(value) if !is_reserved_layer_name(value) => value.to_string(),
+      Token::Ident(value) if !is_reserved_custom_ident(value) => value.to_string(),
       token => return Err(location.new_unexpected_token_error(token.clone())),
     };
     segments.push(LayerName::Named(segment));
@@ -1086,21 +1087,6 @@ pub(crate) fn parse_layer_name<'i, 't>(
   }
 
   Ok(segments)
-}
-
-/// CSS-wide keywords and `default` are reserved, per
-/// <https://drafts.csswg.org/css-cascade-5/#layer-names>.
-fn is_reserved_layer_name(ident: &str) -> bool {
-  [
-    "initial",
-    "inherit",
-    "unset",
-    "revert",
-    "revert-layer",
-    "default",
-  ]
-  .iter()
-  .any(|keyword| ident.eq_ignore_ascii_case(keyword))
 }
 
 /// Reads a block whose rules do not apply to its end, which the parser needs
