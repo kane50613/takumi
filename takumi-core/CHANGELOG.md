@@ -1,3 +1,93 @@
+## takumi-core@0.31.0
+
+### Wrap loose table parts in anonymous tables
+
+A `display: table-row` or `table-cell` outside a table, with text or inline elements in it, made rendering panic. Loose table parts now sit in an anonymous table, cells outside a row and a row group's other children in an anonymous row, and anything else in a row in an anonymous cell, as Chrome builds them. A table part inside a flex or grid container lays out as a block.
+
+### Support `line-break`
+
+`lineBreak` sets how strictly lines break around CJK punctuation and small kana: `strict` keeps a small kana with the character before it, while `normal` and `loose` break before it. `anywhere` breaks between any two characters, mid-word included.
+
+### Support the remaining logical properties
+
+The block-axis longhands (`margin-block-start`, `inset-block-end`, …), the logical sizes (`inline-size`, `max-block-size`, …), and the logical borders and corner radii (`border-inline-start`, `border-block-color`, `border-start-end-radius`, …) now parse. Inline start and end follow `direction`, and `inset-inline` and `border-inline-width` now do too.
+
+### Support `text-justify`
+
+`textJustify` takes `auto`, `none`, `inter-word`, and `inter-character`. With `text-align: justify`, `inter-word` widens only the spaces, `inter-character` spaces out the letters too, and `none` leaves the line unjustified.
+
+### Support `hyphens` and `hyphenate-character`
+
+`hyphens: none` stops lines from breaking at soft hyphens (U+00AD). `hyphenateCharacter` sets the string a line ends with where it breaks at one. `hyphens: auto` breaks only at soft hyphens, as `manual` does, because takumi has no hyphenation dictionaries.
+
+### Match fonts as Chrome does
+
+Within a family, a renderer now picks the face closest to `font-weight`, `font-stretch`, and `font-style` with the CSS font matching algorithm, as Chrome does. A variable face takes its `wght`, `wdth`, and `slnt` from the style, and a family split by `unicodeRange` keeps every subset for fallback.
+
+### Draw an inline image inside its margins
+
+An `<img>` or other replaced element in a line of text was drawn across its margins, stretched and with its border and background reaching into them. It now draws in its border box, and its margins stay empty space on the line.
+
+### Transform text case as browsers do
+
+`text-transform: capitalize` no longer lowercases the rest of each word, and a word split across inline elements is capitalized once. `uppercase` and `lowercase` follow the `lang` of Turkish, Azerbaijani, Greek, Lithuanian, and Dutch text, and uppercased Georgian keeps its usual letters.
+
+### Drop line and column from CSS value errors
+
+`cssparser` 0.38 no longer tracks where a parse error happened, so an invalid style value reports the token it stopped at but no longer its line and column.
+
+### Shape with HarfBuzz 14.5.1
+
+Shaping moves to harfrust 0.14, which matches HarfBuzz 14.5.1: Bengali ra-phala such as গ্র joins again, marks attach correctly after a ligated multiple substitution, and Hangul runs apply `calt` to the characters around them. A PDF now draws a glyph from a font's SVG table only when that glyph has SVG data.
+
+### Support `unicode-bidi`
+
+`unicodeBidi` with `direction` sets how a box's text joins the bidi algorithm: `embed` and `isolate` give an inline box its own direction, `bidi-override` and `isolate-override` lay its characters out in that direction whatever they are, and `plaintext` lets each paragraph's first strong character pick its direction.
+
+### Space inside list markers as Chromium does
+
+A `list-style-position: inside` marker now lays out as an inline box, as Chromium's does. A `disc`, `circle`, or `square` marker starts 1px earlier. A `disclosure-open` or `disclosure-closed` marker keeps a 0.4em gap from the text instead of 1em.
+
+### Parse an image list that starts with `none`
+
+`background-image: none, url(a.png)` and `mask-image: none, none` were dropped as invalid. A list may now start with `none`.
+
+### Support `full-width` and `full-size-kana` in `text-transform`
+
+`textTransform` takes `full-width`, which puts characters in their full-width forms, and `full-size-kana`, which puts small kana in their full-size forms, alone or with a case: `uppercase full-width`. A space becomes U+3000 only where white space is preserved, as in Chrome.
+
+In Rust, `TextTransform` is now a struct of a `TextTransformCase` and the two flags; `TextTransformCase` converts into it.
+
+### Support `font-language-override`
+
+`fontLanguageOverride` takes an OpenType language system tag, such as `"TRK"`, which picks glyphs and localized forms in place of the system the content language maps to: `lang="ja"` with `font-language-override: "KOR"` draws Korean forms.
+
+### Lay out inline text as Chrome does
+
+Text and inline boxes now lay out with a port of Chromium's inline layout. `text-overflow: ellipsis` and `line-clamp` cut at a character instead of a whole word, a tab advances to the next tab stop, a float that no longer fits beside a line moves below it, and `text-wrap: balance` leaves a paragraph with floats unbalanced, as Chrome does.
+
+### Support `text-align-last`
+
+`textAlignLast` aligns the last line of a block, and a line before a forced break, apart from the others. `text-align: justify; text-align-last: justify` justifies every line, and `auto` keeps aligning a justified block's last line to the start.
+
+### Support the `font` shorthand
+
+`font: italic bold 16px/1.5 Geist, sans-serif` sets the style, weight, size, line height, and family in one declaration, and resets the other font properties it covers. System font keywords such as `caption` are not supported.
+
+`font-weight` now rejects numbers outside 1 to 1000, and `font-family` rejects unquoted CSS-wide keywords and `default`, as browsers do.
+
+### Release fonts a renderer no longer needs
+
+`unregisterFont({ name })` removes a family with all its `unicodeRange` subsets, and `clearFonts()` goes back to the bundled fallback font. A later render that lists a released font registers it again. In Rust, use `Fonts::unregister_family`.
+
+### Keep a keyframe when one of its declarations is invalid
+
+`StyleSheet::parse_loosy` dropped a whole keyframe when one declaration in it failed to parse. Now it drops only that declaration, as it already did in style rules.
+
+### Clamp with `-webkit-line-clamp` only in a vertical `-webkit-box`
+
+As in browsers, `-webkit-line-clamp` now cuts lines only together with `display: -webkit-box` and `-webkit-box-orient: vertical`. Use `line-clamp` to cut lines on any block. `-webkit-box-orient` now sets the axis of a `-webkit-box` only, which ignores `flex-direction`, as in browsers.
+
 ## takumi-core@0.30.0
 
 ### Read a run's outlines one glyph at a time

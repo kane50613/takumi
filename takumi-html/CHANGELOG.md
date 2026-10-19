@@ -1,3 +1,13 @@
+## takumi-html@0.5.0
+
+### Render an `<img>` without a source
+
+An `<img>` with no `src`, or an empty one, used to fail the whole document. It now renders as an empty inline box its `width` and `height` size, as in Chrome, and `HtmlError::MissingImageSrc` is gone.
+
+### Build the parsed HTML into an arena
+
+`takumi-html` builds the DOM it parses into one `Vec` instead of `markup5ever_rcdom`'s reference-counted nodes, so it no longer depends on `markup5ever_rcdom` or `xml5ever`.
+
 ## takumi-html@0.4.2
 
 ### Parse repeated inline styles once
