@@ -56,19 +56,19 @@ impl CanvasViewport {
 
   pub(crate) fn intersects(self, bounds: SceneBounds) -> bool {
     !bounds.is_empty()
-      && bounds.right as i32 > self.origin.x
-      && bounds.bottom as i32 > self.origin.y
-      && (bounds.left as i32) < self.right()
-      && (bounds.top as i32) < self.bottom()
+      && bounds.right > self.origin.x
+      && bounds.bottom > self.origin.y
+      && bounds.left < self.right()
+      && bounds.top < self.bottom()
   }
 
   /// The part of `bounds`, grown by `padding` on every side, inside the viewport.
   pub(crate) fn clamp_bounds(self, bounds: SceneBounds, padding: i32) -> Option<Placement> {
     Placement::from_bounds(
-      (bounds.left as i32 - padding).max(self.origin.x),
-      (bounds.top as i32 - padding).max(self.origin.y),
-      (bounds.right as i32 + padding).min(self.right()),
-      (bounds.bottom as i32 + padding).min(self.bottom()),
+      (bounds.left - padding).max(self.origin.x),
+      (bounds.top - padding).max(self.origin.y),
+      (bounds.right + padding).min(self.right()),
+      (bounds.bottom + padding).min(self.bottom()),
     )
   }
 
