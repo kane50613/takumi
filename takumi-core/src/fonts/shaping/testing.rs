@@ -12,7 +12,7 @@ use crate::{
     },
   },
   resources::font::{FontOverride, FontResource, Fonts},
-  style::{FontFamily, FontSynthesic, FontVariantCaps, FromCssStr},
+  style::{FontFamily, FontLanguageOverride, FontSynthesic, FontVariantCaps, FromCssStr},
 };
 
 pub(crate) const GEIST: &str = "../assets/fonts/geist/Geist[wght].woff2";
@@ -49,6 +49,7 @@ pub(crate) fn font(fonts: &mut Fonts, family: &str) -> Font {
       specified_size: 16.0,
       features: Vec::new(),
       locale: None,
+      language_override: FontLanguageOverride::Normal,
       variant_caps: FontVariantCaps::Normal,
       font_synthesis_small_caps: FontSynthesic::Auto,
       letter_spacing: 0.0,

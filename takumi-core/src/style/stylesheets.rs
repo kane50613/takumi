@@ -1500,6 +1500,7 @@ define_style! {
       font_variant_position: FontVariantPosition where inherit = true,
       font_kerning: FontKerning where inherit = true,
       font_optical_sizing: FontOpticalSizing where inherit = true,
+      font_language_override: FontLanguageOverride where inherit = true,
       font_synthesis_weight: FontSynthesic where inherit = true,
       font_synthesis_style: FontSynthesic where inherit = true,
       font_synthesis_small_caps: FontSynthesic where inherit = true,
@@ -1846,7 +1847,7 @@ define_style! {
       target.push(StyleDeclaration::font_synthesis_style(value.style));
       target.push(StyleDeclaration::font_synthesis_small_caps(value.small_caps));
     },
-    font: FontShorthand => [FontStyle, FontVariantLigatures, FontVariantCaps, FontVariantNumeric, FontVariantEastAsian, FontVariantPosition, FontWeight, FontStretch, FontSize, LineHeight, FontFamily, FontOpticalSizing, FontKerning, FontFeatureSettings, FontVariationSettings] |value, target| {
+    font: FontShorthand => [FontStyle, FontVariantLigatures, FontVariantCaps, FontVariantNumeric, FontVariantEastAsian, FontVariantPosition, FontWeight, FontStretch, FontSize, LineHeight, FontFamily, FontOpticalSizing, FontKerning, FontFeatureSettings, FontVariationSettings, FontLanguageOverride] |value, target| {
       target.push(StyleDeclaration::font_style(value.style));
       target.push(StyleDeclaration::font_variant_ligatures(FontVariantLigatures::default()));
       target.push(StyleDeclaration::font_variant_caps(value.caps));
@@ -1862,6 +1863,7 @@ define_style! {
       target.push(StyleDeclaration::font_kerning(FontKerning::default()));
       target.push(StyleDeclaration::font_feature_settings(FontFeatureSettings::default()));
       target.push(StyleDeclaration::font_variation_settings(FontVariationSettings::default()));
+      target.push(StyleDeclaration::font_language_override(FontLanguageOverride::default()));
     },
     font_variant: FontVariant => [FontVariantLigatures, FontVariantNumeric, FontVariantEastAsian, FontVariantCaps, FontVariantPosition] |value, target| {
       target.push(StyleDeclaration::font_variant_ligatures(value.ligatures));
