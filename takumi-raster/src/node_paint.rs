@@ -8,7 +8,7 @@ use std::collections::HashMap;
 
 use skrifa::{FontRef, MetadataProvider};
 use takumi_core::{
-  geometry::{ComputedLayout as Layout, Point, Size},
+  geometry::{ComputedLayout as Layout, Point, Rect, Size},
   layout::{
     decoration::ClipBox,
     inline::{PositionedGlyph, PositionedInlineRun},
@@ -22,6 +22,7 @@ use takumi_core::{
   shadow::SizedShadow,
   style::{Color, ImageScalingAlgorithm},
 };
+use tiny_skia::{IntRect, Pixmap};
 
 use super::{
   BackgroundTile, BorderProperties, Canvas, CanvasViewport, ColorTile, Fill, PaintSource,
@@ -750,34 +751,9 @@ pub(crate) fn draw_background(
       let layers = background_image_layers(&background, context)?;
 
       if border_radius.is_zero() && layers.iter().all(TileLayer::blits) {
-        for tile in layers {
-          for y in &tile.ys {
-            for x in &tile.xs {
-              let transform = tile.tile_transform(context.transform, *x, *y);
-              if transform.only_translation()
-                && canvas.overlay_background_tile_direct(
-                  &tile.tile,
-                  Point {
-                    x: transform.x,
-                    y: transform.y,
-                  },
-                  tile.blend_mode,
-                )
-              {
-                continue;
-              }
-
-              canvas.overlay_image(
-                &tile.tile,
-                border_radius,
-                transform,
-                context.style.misc_inherited_data.image_rendering,
-                tile.blend_mode,
-              );
-            }
-          }
-        }
-      } else if let Some(layer) = single_solid_color_layer(&layers, canvas) {
+        blit_background_tiles(&layers, background.border_box(), context, canvas);
+      } else if let Some(layer) = single_solid_color_layer(&layers, background.border_box(), canvas)
+      {
         let transform = context.transform * Affine::translation(layer.x, layer.y);
         canvas.overlay_image(
           layer.tile,
@@ -856,6 +832,74 @@ pub(crate) fn draw_background(
 /// Rasterizes the background layers into `clip`'s rounded region, relative to the snapped border
 /// box `offset` from the border box, and composites it. Shared by the padding-box and
 /// content-box `background-clip` modes.
+/// Blits each tile of `layers`, cutting the ones that cross the edge of `border_box` to it.
+fn blit_background_tiles(
+  layers: &[TileLayer],
+  border_box: Rect<f32>,
+  context: &RenderContext,
+  canvas: &mut Canvas,
+) {
+  let algorithm = context.style.misc_inherited_data.image_rendering;
+
+  for layer in layers {
+    let (width, height) = layer.tile.dimensions();
+    let mut cuts: Vec<(IntRect, Pixmap)> = Vec::new();
+
+    for y in &layer.ys {
+      for x in &layer.xs {
+        let Some(part) = layer.visible_part(*x, *y, border_box) else {
+          continue;
+        };
+        let transform = layer.tile_transform(context.transform, *x, *y);
+
+        if part.width() != width || part.height() != height {
+          let cut = match cuts.iter().position(|(cut, _)| *cut == part) {
+            Some(index) => &cuts[index].1,
+            None => {
+              let Some(pixmap) = layer.tile.cut(part) else {
+                continue;
+              };
+
+              cuts.push((part, pixmap));
+              &cuts[cuts.len() - 1].1
+            }
+          };
+
+          canvas.overlay_image(
+            cut,
+            BorderProperties::default(),
+            transform * Affine::translation(part.x() as f32, part.y() as f32),
+            algorithm,
+            layer.blend_mode,
+          );
+          continue;
+        }
+
+        if transform.only_translation()
+          && canvas.overlay_background_tile_direct(
+            &layer.tile,
+            Point {
+              x: transform.x,
+              y: transform.y,
+            },
+            layer.blend_mode,
+          )
+        {
+          continue;
+        }
+
+        canvas.overlay_image(
+          &layer.tile,
+          BorderProperties::default(),
+          transform,
+          algorithm,
+          layer.blend_mode,
+        );
+      }
+    }
+  }
+}
+
 fn draw_clipped_background(
   clip: ClipBox,
   offset: Point<f32>,
@@ -928,6 +972,7 @@ struct SolidColorLayer<'a> {
 
 fn single_solid_color_layer<'a>(
   layers: &'a [TileLayer],
+  area: Rect<f32>,
   canvas: &Canvas,
 ) -> Option<SolidColorLayer<'a>> {
   if !canvas.has_no_constraint_mask() {
@@ -939,7 +984,7 @@ fn single_solid_color_layer<'a>(
   if !matches!(layer.tile, BackgroundTile::Color(_)) {
     return None;
   }
-  if layer.xs.len() != 1 || layer.ys.len() != 1 || !layer.blits() {
+  if layer.xs.len() != 1 || layer.ys.len() != 1 || !layer.blits() || !layer.fits(area) {
     return None;
   }
   Some(SolidColorLayer {
