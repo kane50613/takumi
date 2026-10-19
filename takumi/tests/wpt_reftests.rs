@@ -4,10 +4,10 @@
 //!
 //! The tests come from the WPT checkout `scripts/wpt-checkout.sh` makes in `target/wpt`, or the one
 //! `WPT_ROOT` points at; without either the test does nothing.
-//! `tests/wpt-reftests.txt` lists the tests that pass, one pattern a line, where `*` matches within
-//! a path segment and `**` across segments; the test fails when one of them stops passing.
-//! `WPT_UPDATE=1` rewrites it with the tests that pass now, a directory whose tests all pass as
-//! one `dir/**` pattern, `WPT_WRITE=path` writes that list to `path` and still checks for
+//! `tests/wpt-reftests.txt` lists the tests expected to pass as rules, where `dir/` covers every
+//! test under it, a leading `!` expects failures, and the most specific rule decides; the test fails
+//! when an expected pass stops passing. `WPT_UPDATE=1` rewrites it with the fewest rules for the
+//! tests that pass now, `WPT_WRITE=path` writes those rules to `path` and still checks for
 //! regressions, `WPT_VERBOSE=1` prints each
 //! test that does not pass, `WPT_DUMP=dir` writes each failing test's rendering and its
 //! reference's there, `WPT_REPORT=path` writes each test's outcome, time, and error as
@@ -17,7 +17,7 @@
 mod test_utils;
 
 use std::{
-  collections::{BTreeMap, BTreeSet, HashMap},
+  collections::{BTreeMap, BTreeSet, HashMap, HashSet},
   env, fs,
   panic::{self, AssertUnwindSafe},
   path::{Path, PathBuf},
@@ -202,108 +202,162 @@ fn wpt_reftests() {
   assert!(regressed.is_empty(), "{regressed:#?}");
 }
 
-/// The patterns `tests/wpt-reftests.txt` lists, each a test path or a glob of them.
+/// The rules `tests/wpt-reftests.txt` lists: `path` expects one test to pass and `dir/` every test
+/// under it, and a leading `!` expects them to fail instead. The most specific rule for a test
+/// decides, so a directory that mostly passes is one rule and its few failures.
 struct Expectations {
-  patterns: Vec<String>,
+  /// Whether each rule expects a pass, by the path or `dir/` it covers.
+  rules: BTreeMap<String, bool>,
 }
 
 impl Expectations {
-  const HEADER: &str = "# The WPT reftests that pass: one pattern a line, where `*` matches within a path\n# segment and `**` across segments. `WPT_UPDATE=1 cargo test --test wpt_reftests` rewrites it.\n";
+  const HEADER: &str = "# The WPT reftests expected to pass: `path` is one test and `dir/` every test under it, and\n# a leading `!` expects a failure. The most specific rule decides. `WPT_UPDATE=1 cargo test --test\n# wpt_reftests` rewrites it.\n";
 
   fn read(path: &Path) -> Self {
-    let patterns = fs::read_to_string(path)
+    let rules = fs::read_to_string(path)
       .unwrap_or_default()
       .lines()
       .map(str::trim)
       .filter(|line| !line.is_empty() && !line.starts_with('#'))
-      .map(str::to_owned)
+      .map(|line| match line.strip_prefix('!') {
+        Some(rule) => (rule.to_owned(), false),
+        None => (line.to_owned(), true),
+      })
       .collect();
 
-    Self { patterns }
+    Self { rules }
   }
 
   fn write(&self, path: &Path) {
     let mut text = Self::HEADER.to_owned();
 
-    for pattern in &self.patterns {
-      text.push_str(pattern);
+    for (rule, passes) in &self.rules {
+      if !passes {
+        text.push('!');
+      }
+
+      text.push_str(rule);
       text.push('\n');
     }
 
     fs::write(path, text).unwrap();
   }
 
-  /// The fewest patterns that match exactly `passing` among `all`: a directory whose tests all
-  /// pass becomes `dir/**`, and every other passing test stays by name.
-  fn compress(passing: &BTreeSet<&String>, all: &[String]) -> Self {
-    let mut directories: BTreeMap<&str, bool> = BTreeMap::new();
-
-    for name in all {
-      for (index, _) in name.match_indices('/') {
-        *directories.entry(&name[..=index]).or_insert(true) &= passing.contains(name);
-      }
+  /// Whether the most specific rule for `name` expects it to pass; no rule expects a failure.
+  fn passes(&self, name: &str) -> bool {
+    if let Some(&passes) = self.rules.get(name) {
+      return passes;
     }
 
-    let patterns: BTreeSet<String> = passing
+    name
+      .rmatch_indices('/')
+      .find_map(|(index, _)| self.rules.get(&name[..=index]).copied())
+      .unwrap_or(false)
+  }
+
+  /// The fewest rules that expect exactly `passing` among `all` to pass: each directory states
+  /// whichever of pass and fail most of what it holds does, below the state of its parent.
+  fn compress(passing: &BTreeSet<&String>, all: &[String]) -> Self {
+    let mut tree = Directory::default();
+
+    for name in all {
+      tree.insert(name, passing.contains(name));
+    }
+
+    let mut rules = BTreeMap::new();
+
+    tree.encode("", false, &mut rules);
+
+    Self { rules }
+  }
+
+  /// The tests among `all` the rules expect to pass.
+  fn names<'a>(&self, all: &'a [String]) -> BTreeSet<&'a String> {
+    all.iter().filter(|name| self.passes(name)).collect()
+  }
+
+  /// The rules that cover none of `all`.
+  fn unmatched<'s>(&'s self, all: &'s [String]) -> impl Iterator<Item = &'s String> + 's {
+    let covered: HashSet<&str> = all
       .iter()
-      .map(|name| {
+      .flat_map(|name| {
         name
           .match_indices('/')
           .map(|(index, _)| &name[..=index])
-          // `css/` stays a prefix of every pattern.
-          .skip(1)
-          .find(|directory| directories.get(directory) == Some(&true))
-          .map_or_else(|| (*name).clone(), |directory| format!("{directory}**"))
+          .chain([name.as_str()])
       })
       .collect();
 
-    Self {
-      patterns: patterns.into_iter().collect(),
-    }
-  }
-
-  /// The tests among `all` some pattern matches.
-  fn names<'a>(&self, all: &'a [String]) -> BTreeSet<&'a String> {
-    all
-      .iter()
-      .filter(|name| {
-        self
-          .patterns
-          .iter()
-          .any(|pattern| glob_matches(pattern, name))
-      })
-      .collect()
-  }
-
-  /// The patterns that match none of `all`.
-  fn unmatched<'s>(&'s self, all: &'s [String]) -> impl Iterator<Item = &'s String> + 's {
     self
-      .patterns
-      .iter()
-      .filter(|pattern| !all.iter().any(|name| glob_matches(pattern, name)))
+      .rules
+      .keys()
+      .filter(move |rule| !covered.contains(rule.as_str()))
   }
 }
 
-/// Whether `pattern` matches the test path `name`: `*` matches within one path segment and `**`
-/// across segments.
-fn glob_matches(pattern: &str, name: &str) -> bool {
-  let Some((prefix, rest)) = pattern.split_once('*') else {
-    return pattern == name;
-  };
-  let Some(name) = name.strip_prefix(prefix) else {
-    return false;
-  };
-  let (rest, crosses_segments) = match rest.strip_prefix('*') {
-    Some(rest) => (rest, true),
-    None => (rest, false),
-  };
+/// The tests under one directory, by whether each passes, for [`Expectations::compress`].
+#[derive(Default)]
+struct Directory {
+  tests: BTreeMap<String, bool>,
+  directories: BTreeMap<String, Directory>,
+}
 
-  name
-    .char_indices()
-    .map(|(index, _)| index)
-    .chain([name.len()])
-    .take_while(|&index| crosses_segments || !name[..index].contains('/'))
-    .any(|index| glob_matches(rest, &name[index..]))
+impl Directory {
+  fn insert(&mut self, path: &str, passes: bool) {
+    match path.split_once('/') {
+      Some((directory, rest)) => self
+        .directories
+        .entry(format!("{directory}/"))
+        .or_default()
+        .insert(rest, passes),
+      None => {
+        self.tests.insert(path.to_owned(), passes);
+      }
+    }
+  }
+
+  /// The fewest rules for this directory under a parent that states `inherited`, and the state
+  /// it states itself.
+  fn cost(&self, inherited: bool) -> (usize, bool) {
+    [inherited, !inherited]
+      .into_iter()
+      .map(|state| {
+        let own = usize::from(state != inherited);
+        let tests = self
+          .tests
+          .values()
+          .filter(|&&passes| passes != state)
+          .count();
+        let directories: usize = self
+          .directories
+          .values()
+          .map(|directory| directory.cost(state).0)
+          .sum();
+
+        (own + tests + directories, state)
+      })
+      .min_by_key(|&(cost, _)| cost)
+      .unwrap_or((0, inherited))
+  }
+
+  /// Writes the rules [`Self::cost`] counts for this directory at `path`, under `inherited`.
+  fn encode(&self, path: &str, inherited: bool, rules: &mut BTreeMap<String, bool>) {
+    let (_, state) = self.cost(inherited);
+
+    if state != inherited {
+      rules.insert(path.to_owned(), state);
+    }
+
+    for (name, &passes) in &self.tests {
+      if passes != state {
+        rules.insert(format!("{path}{name}"), passes);
+      }
+    }
+
+    for (name, directory) in &self.directories {
+      directory.encode(&format!("{path}{name}"), state, rules);
+    }
+  }
 }
 
 /// Every reftest under `dir`: an HTML or XHTML file that links a reference, and is not one.
@@ -829,13 +883,23 @@ impl Runner {
 }
 
 #[test]
-fn glob_matches_within_and_across_segments() {
-  assert!(glob_matches("css/a/b.html", "css/a/b.html"));
-  assert!(glob_matches("css/a/*.html", "css/a/b.html"));
-  assert!(!glob_matches("css/a/*.html", "css/a/c/b.html"));
-  assert!(glob_matches("css/a/**", "css/a/c/b.html"));
-  assert!(glob_matches("css/**/b-*.xht", "css/a/c/b-001.xht"));
-  assert!(!glob_matches("css/a/**", "css/ab/c.html"));
+fn the_most_specific_rule_decides() {
+  let expectations = Expectations {
+    rules: [
+      ("css/a/", true),
+      ("css/a/b/", false),
+      ("css/a/b/c.html", true),
+      ("css/a/d.html", false),
+    ]
+    .map(|(rule, passes)| (rule.to_owned(), passes))
+    .into(),
+  };
+
+  assert!(expectations.passes("css/a/x.html"));
+  assert!(!expectations.passes("css/a/d.html"));
+  assert!(!expectations.passes("css/a/b/x.html"));
+  assert!(expectations.passes("css/a/b/c.html"));
+  assert!(!expectations.passes("css/z.html"));
 }
 
 #[test]
@@ -851,6 +915,33 @@ fn compress_folds_a_fully_passing_directory() {
   let passing: BTreeSet<&String> = [&all[0], &all[1], &all[2]].into_iter().collect();
   let expectations = Expectations::compress(&passing, &all);
 
-  assert_eq!(expectations.patterns, ["css/a/**", "css/b/x.html"]);
+  assert_eq!(
+    expectations.rules,
+    [
+      ("css/a/".to_owned(), true),
+      ("css/b/x.html".to_owned(), true)
+    ]
+    .into()
+  );
+  assert_eq!(expectations.names(&all), passing);
+}
+
+/// A directory that mostly passes is one rule and its failures.
+#[test]
+fn compress_lists_the_failures_of_a_mostly_passing_directory() {
+  let all: Vec<String> = ["w", "x", "y", "z"]
+    .map(|name| format!("css/a/{name}.html"))
+    .to_vec();
+  let passing: BTreeSet<&String> = all[..3].iter().collect();
+  let expectations = Expectations::compress(&passing, &all);
+
+  assert_eq!(
+    expectations.rules,
+    [
+      ("css/a/".to_owned(), true),
+      ("css/a/z.html".to_owned(), false)
+    ]
+    .into()
+  );
   assert_eq!(expectations.names(&all), passing);
 }

@@ -399,9 +399,9 @@ jobs:
           set -eu
           current="$RUNNER_TEMP/wpt-reftests.txt"
           [ -f "$current" ] || exit 0
-          patterns() { grep -v '^#' "$1" | sort; }
-          added=$(comm -13 <(patterns takumi/tests/wpt-reftests.txt) <(patterns "$current"))
-          removed=$(comm -23 <(patterns takumi/tests/wpt-reftests.txt) <(patterns "$current"))
+          rules() { grep -v '^#' "$1" | sort; }
+          added=$(comm -13 <(rules takumi/tests/wpt-reftests.txt) <(rules "$current"))
+          removed=$(comm -23 <(rules takumi/tests/wpt-reftests.txt) <(rules "$current"))
           {
             echo "### WPT reftests"
             echo
