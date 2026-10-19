@@ -70,6 +70,7 @@ mod text_stroke;
 mod text_wrap;
 mod traits;
 mod transform;
+mod unicode_bidi;
 mod vertical_align;
 mod white_space;
 mod word_break;
@@ -159,6 +160,7 @@ pub(crate) use traits::{
   declare_box_alignment_enum_impl, impl_comma_list_from_css, impl_css_enum, impl_from_taffy_enum,
 };
 pub use transform::*;
+pub use unicode_bidi::*;
 pub use vertical_align::*;
 pub use white_space::*;
 pub use word_break::*;

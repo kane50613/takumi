@@ -1,0 +1,34 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>unicode_bidi</title>
+    <base href="../../../" />
+    <link rel="stylesheet" href="takumi/tests/shared.css" />
+    <style>
+      p {
+        display: block;
+        margin: 0;
+        padding: 8px;
+        font-family: Geist;
+        font-size: 28px;
+        background-color: rgb(240, 240, 240);
+      }
+      .rtl {
+        direction: rtl;
+      }
+    </style>
+  </head>
+  <body style="width: 520px; height: 430px">
+    <div style="display: flex; flex-direction: column; gap: 12px; padding: 12px">
+      <p>plain: hello world</p>
+      <p>override: <span class="rtl" style="unicode-bidi: bidi-override">hello world</span></p>
+      <p class="rtl" style="unicode-bidi: bidi-override">block override</p>
+      <p>embed: <span class="rtl" style="unicode-bidi: embed">1 2 3</span> end</p>
+      <p>isolate: <span class="rtl" style="unicode-bidi: isolate">1 2 3</span> end</p>
+      <p style="unicode-bidi: plaintext; font-family: Geist, &quot;Scheherazade New Test&quot;"
+        >plaintext paragraph<br />مرحبا بالعالم</p
+      >
+    </div>
+  </body>
+</html>

@@ -1410,6 +1410,7 @@ define_style! {
       outline_style: BorderStyle,
       object_fit: ObjectFit where anonymous = true,
       r#continue: Continue where anonymous = true,
+      unicode_bidi: UnicodeBidi,
       text_decoration_style: TextDecorationStyle,
       break_before: BreakBetween,
       break_after: BreakBetween,

@@ -31,7 +31,9 @@ use crate::{
     node::{Node, NodeKind},
     tree::{NodeOrigin, RenderNode},
   },
-  style::{Direction as TextDirection, Display, Float, ListStylePosition, VerticalAlign},
+  style::{
+    Direction as TextDirection, Display, Float, ListStylePosition, UnicodeBidi, VerticalAlign,
+  },
   text::{
     bidi_paragraph::BidiParagraph,
     character::{OBJECT_REPLACEMENT_CHARACTER, ZERO_WIDTH_NON_JOINER, is_8bit},
@@ -127,7 +129,7 @@ impl<'c> InlineNode<'c> {
     let mut stack = vec![Frame::root(self.block)];
     let mut previous_character = PreviousCharacter::new();
 
-    builder.enter_block(&self.block.context.style);
+    builder.enter_block(self.block);
 
     while let Some(mut frame) = stack.pop() {
       let Some(child) = frame.children.pop() else {
@@ -216,8 +218,12 @@ impl<'c> InlineNode<'c> {
       return;
     }
 
-    let base_direction = self.block.context.style.inherited_data.direction;
-    let mut bidi = BidiParagraph::new(&data.text_content, Some(base_direction));
+    let style = &self.block.context.style;
+    // Blink's `SetParagraph` leaves a `plaintext` paragraph's direction to its first strong
+    // character.
+    let base_direction = (style.misc_data.unicode_bidi != UnicodeBidi::Plaintext)
+      .then_some(style.inherited_data.direction);
+    let mut bidi = BidiParagraph::new(&data.text_content, base_direction);
 
     data.base_direction = bidi.base_direction();
 
@@ -249,7 +255,7 @@ impl<'c> InlineNode<'c> {
 
       if !out_of_flow_offsets.is_empty() {
         text.push_str(&data.text_content[last_offset..]);
-        bidi.set_paragraph(&text, Some(base_direction));
+        bidi.set_paragraph(&text, base_direction);
         text_length = text.len();
         out_of_flow_offsets.push(usize::MAX);
       }

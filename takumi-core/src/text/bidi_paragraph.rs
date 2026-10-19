@@ -158,7 +158,6 @@ impl BidiParagraph {
     indices
   }
 
-  #[cfg(test)]
   /// Blink's `BaseDirectionForString`: the direction of the first strong character before one
   /// `stop_at` accepts.
   pub(crate) fn base_direction_for_string(
