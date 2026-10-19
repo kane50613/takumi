@@ -54,7 +54,9 @@ for (const node of tree.nodes) {
 | `text`  | One paragraph, as shaped runs in visual order            |
 | `image` | A replaced image, such as `<img>` or an SVG              |
 
-Lengths are in device pixels. `devicePixelRatio` scales CSS lengths during layout.
+<Callout type="info">
+  Lengths are in device pixels. `devicePixelRatio` scales CSS lengths during layout.
+</Callout>
 
 `tree.toJSON()` returns the tree as plain JSON, without font files, so you can hand it to another process.
 

@@ -16,7 +16,10 @@ The plugin is part of Fumapress's `recommended` preset, which is on by default. 
 <meta property="twitter:card" content="summary_large_image" />
 ```
 
-Set `site.baseUrl` so `og:image` is an absolute URL. Without it, the tag holds a relative path, which most crawlers cannot follow.
+<Callout type="warn">
+  Set `site.baseUrl` so `og:image` is an absolute URL. Without it, the tag holds a relative path,
+  which most crawlers cannot follow.
+</Callout>
 
 ```tsx title="press.config.tsx"
 import { defineConfig } from "fumapress";

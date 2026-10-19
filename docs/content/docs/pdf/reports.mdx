@@ -30,7 +30,11 @@ const pdf = await render(
 );
 ```
 
-`widows` and `orphans` keep a paragraph from splitting into single lines, but they do not keep a heading with the text under it. To do that, wrap the heading and its first paragraph in a `break-inside: avoid` box.
+<Callout type="info">
+  `widows` and `orphans` keep a paragraph from splitting into single lines, but they do not keep a
+  heading with the text under it. To do that, wrap the heading and its first paragraph in a
+  `break-inside: avoid` box.
+</Callout>
 
 See [Pagination](/docs/pdf/pagination) for every break property.
 

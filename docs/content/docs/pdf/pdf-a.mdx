@@ -71,7 +71,10 @@ A missing input fails the render. A few more rules:
 
 ## Tagged output
 
-`tagged` defaults to `true`, which writes a structure tree from the document's HTML semantics. It does not validate against PDF/UA on its own.
+<Callout type="info">
+  `tagged` defaults to `true`, which writes a structure tree from the document's HTML semantics. It
+  does not validate against PDF/UA on its own.
+</Callout>
 
 Set `tagged: "ua1"` to validate against PDF/UA-1:
 
@@ -122,7 +125,9 @@ Heading levels are normalized in the structure tree. A document that starts with
 - `rowspan` and `colspan` become `RowSpan` and `ColSpan` attributes.
 - A table that spans pages stays one `Table` element, and the repeated header is marked as an artifact.
 
-Table elements follow the rendered layout. A `<table>` whose `display` is overridden gets no table tags, and neither does a table built from flex rows. Screen readers cannot navigate those by row or column. The file still passes PDF/UA, because the validator only checks the tags that are present.
+<Callout type="warn">
+  Table elements follow the rendered layout. A `<table>` whose `display` is overridden gets no table tags, and neither does a table built from flex rows. Screen readers cannot navigate those by row or column. The file still passes PDF/UA, because the validator only checks the tags that are present.
+</Callout>
 
 Set `tagged: false` only when you do not need a structure tree and the selected level allows it.
 

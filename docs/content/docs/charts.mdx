@@ -68,7 +68,12 @@ For PDF output, see [Charts in PDF](/docs/pdf/charts).
 
 Register fonts that cover every label, tick, and legend entry. Set the chart's font family to the same name.
 
-The `fonts` render option keeps only the subsets that the document's text uses. Text inside an SVG image does not count, so chart labels can lose their font. Fonts registered with `registerFont`, as above, stay on the renderer for every render.
+<Callout type="warn">
+  The `fonts` render option keeps only the subsets that the document's text uses. Text inside an SVG
+  image does not count, so chart labels can lose their font.
+</Callout>
+
+Fonts registered with `registerFont`, as above, stay on the renderer for every render.
 
 For a large family, keep only the subsets the chart text needs. Include generated numeric ticks and punctuation as well as your data labels:
 

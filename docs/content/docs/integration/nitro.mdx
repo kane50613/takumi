@@ -77,4 +77,7 @@ export default defineConfig({
 });
 ```
 
-`wasm: false` also selects the native binding, but it removes unwasm from the build. Other `.wasm` imports in your app then stop resolving. Negating the condition keeps the plugin.
+<Callout type="warn">
+  `wasm: false` also selects the native binding, but it removes unwasm from the build. Other `.wasm`
+  imports in your app then stop resolving. Negating the condition keeps the plugin.
+</Callout>

@@ -70,7 +70,9 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 }
 ```
 
-A relative image URL needs `metadataBase` in the root layout's metadata, or `next build` fails:
+<Callout type="warn">
+  A relative image URL needs `metadataBase` in the root layout's metadata, or `next build` fails.
+</Callout>
 
 ```tsx title="app/layout.tsx"
 export const metadata = { metadataBase: new URL("https://example.com") };

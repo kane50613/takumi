@@ -87,7 +87,9 @@ export function GET() {
 }
 ```
 
-`next/og` makes every element a flex container. In Takumi, a `<div>` is `display: block`, as in a browser. Add `display: flex` (or `tw="flex"`) to each container that needs Flexbox. Compare the output before you deploy.
+<Callout type="warn">
+  `next/og` makes every element a flex container. In Takumi, a `<div>` is `display: block`, as in a browser. Add `display: flex` (or `tw="flex"`) to each container that needs Flexbox. Compare the output before you deploy.
+</Callout>
 
 The [Next.js guide](/docs/integration/nextjs) covers the route handler setup.
 

@@ -74,7 +74,10 @@ The stylesheet supports:
 
 `width`, `height`, `aspect-ratio`, and `resolution` take `min-` and `max-` prefixes and the range syntax. Both `(min-width: 768px)` and `(400px < width <= 700px)` work. Combine queries with `and`, `or`, `not`, and parentheses.
 
-Any other feature, `prefers-color-scheme` included, matches nothing. The rest of the stylesheet still applies.
+<Callout type="warn">
+  Any other feature, `prefers-color-scheme` included, matches nothing. The rest of the stylesheet
+  still applies.
+</Callout>
 
 ### Rule objects
 
@@ -169,7 +172,12 @@ const isError = true;
 
 The built-in parser applies no Tailwind Preflight by default. Elements keep their default margins: an `<h1>` gets a `0.67em` top margin until you add `mt-0`. `box-sizing` still defaults to `border-box`.
 
-Without Preflight, a border style utility draws on every side. `border-dashed` sets `border-style` on all four sides, and an unset border width is `medium`. So `border-l-2 border-dashed` draws a 2px left border and 3px borders on the other sides. Preflight's `border: 0 solid` reset removes them.
+<Callout type="warn">
+  Without Preflight, a border style utility draws on every side. `border-dashed` sets `border-style`
+  on all four sides, and an unset border width is `medium`. So `border-l-2 border-dashed` draws a
+  2px left border and 3px borders on the other sides. Preflight's `border: 0 solid` reset removes
+  them.
+</Callout>
 
 Add the import line a Tailwind stylesheet starts with to turn Preflight on. It removes default margins, list markers, and heading font sizes and weights.
 

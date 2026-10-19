@@ -6,7 +6,10 @@ icon: Scissors
 
 Content lays out at the width inside the margins, then flows across pages. Use CSS break properties to start chapters, keep related content together, and control how paragraphs split.
 
-The content has no fixed height, so percentage heights do not resolve. Viewport units do. `vh` is the height of the page area inside the margins, as in print.
+<Callout type="warn">
+  The content has no fixed height, so percentage heights do not resolve. Viewport units do. `vh` is
+  the height of the page area inside the margins, as in print.
+</Callout>
 
 ## Break properties
 
@@ -174,6 +177,9 @@ const pdf = await render(
 );
 ```
 
-Keep the fixed box outside transformed or filtered ancestors. Such an ancestor contains the box, so the box paginates with it instead of repeating on every page.
+<Callout type="warn">
+  Keep the fixed box outside transformed or filtered ancestors. Such an ancestor contains the box,
+  so the box paginates with it instead of repeating on every page.
+</Callout>
 
 To put the watermark behind content, give it a negative `z-index`. If the root background then covers it, set the page color with the `backgroundColor` option instead.

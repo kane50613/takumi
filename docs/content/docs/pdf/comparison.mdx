@@ -4,7 +4,11 @@ description: Compare takumi-pdf, react-pdf, and Puppeteer using recorded invoice
 icon: Scale
 ---
 
-This page records one benchmark, an 80-line invoice rendered by three PDF renderers. The numbers hold for the package versions and machine listed here, not for current releases.
+This page records one benchmark, an 80-line invoice rendered by three PDF renderers.
+
+<Callout type="info">
+  The numbers hold for the package versions and machine listed here, not for current releases.
+</Callout>
 
 - Each harness uses its renderer's own template language.
 - Geometry, columns, and the embedded font (Inter 400/700) match across harnesses. react-pdf's pt values mirror the other renderers' px values.

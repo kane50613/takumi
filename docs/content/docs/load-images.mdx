@@ -11,7 +11,9 @@ icon: Image
 - an `<img>` `src`
 - `background-image`, `mask-image`, and `list-style-image` in a node's `style` or `tw`
 
-Takumi does not fetch URLs inside `css` or a `<style>` tag. Pass those images as [pre-fetched images](#pre-fetched-images).
+<Callout type="warn">
+  Takumi does not fetch URLs inside `css` or a `<style>` tag. Pass those images as [pre-fetched images](#pre-fetched-images).
+</Callout>
 
 Share a `fetchCache` across renders to reuse downloaded bytes and pending requests:
 
@@ -31,7 +33,10 @@ const image = await render(element, {
 
 `fetchCache` takes a `Map<string, Promise<ArrayBuffer>>` or any object with the same `get`, `set`, and `delete` methods. Values are promises, not raw buffers.
 
-A plain `Map` never evicts entries. If each render uses a different URL, pass a bounded cache such as an LRU, or leave `fetchCache` out.
+<Callout type="warn">
+  A plain `Map` never evicts entries. If each render uses a different URL, pass a bounded cache such
+  as an LRU, or leave `fetchCache` out.
+</Callout>
 
 ## Fetch limits
 
@@ -75,7 +80,10 @@ A custom `fetch` must honor the abort signal it receives.
 
 ### URLs from user input
 
-Takumi fetches these URLs from your server. Set `allowUrl` whenever user input can reach the markup.
+<Callout type="warn">
+  Takumi fetches these URLs from your server. Set `allowUrl` whenever user input can reach the
+  markup.
+</Callout>
 
 - `allowUrl` checks each redirect destination, up to five hops. Each hop shares the same deadline and gets its own attempts.
 - A `fetchCache` hit checks only the requested URL, because cached bytes keep no redirect history. Do not share one `fetchCache` across different URL policies.

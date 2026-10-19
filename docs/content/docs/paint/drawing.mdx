@@ -83,7 +83,9 @@ function replay(ctx: CanvasRenderingContext2D, tree: PaintTree) {
 }
 ```
 
-A group needs its own layer. Setting `globalAlpha` per draw darkens the spots where draws overlap.
+<Callout type="warn">
+  A group needs its own layer. Setting `globalAlpha` per draw darkens the spots where draws overlap.
+</Callout>
 
 ## Draw a drawable
 
