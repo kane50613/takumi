@@ -269,11 +269,11 @@ CI fails when test execution changes a generated file that is not included in th
 
 ### Web platform tests
 
-The `wpt_reftests` test runs the CSS reftests from the [web-platform-tests](https://web-platform-tests.org/writing-tests/reftests.html) that `scripts/wpt-checkout.sh` checks out into `target/wpt`. `takumi/tests/wpt-reftests.json` lists the tests that pass, and the test fails when one of them stops passing.
+The `wpt_reftests` test runs the CSS reftests from the [web-platform-tests](https://web-platform-tests.org/writing-tests/reftests.html) that `scripts/wpt-checkout.sh` checks out into `target/wpt`. `takumi/tests/wpt-reftests.txt` lists the tests that pass, one pattern a line: `*` matches within a path segment, `**` across segments, and `css/css-text/white-space/**` stands for every test in that directory. The test fails when one of them stops passing.
 
 - Run `sh scripts/wpt-checkout.sh` once. Without a checkout, the test does nothing.
 - To see why tests fail, run `WPT=<path fragment> WPT_VERBOSE=1 WPT_DUMP=/tmp/wpt cargo test -p takumi --test wpt_reftests -- --nocapture`. `WPT_DUMP` writes each failing test's rendering and its reference's as PNG.
-- When a change makes more tests pass, run the test with `WPT_UPDATE=1` and commit the longer list.
+- When a change makes more tests pass, CI lists them in the Rust Test job's summary and uploads the new list as the `wpt-reftests` artifact. Commit it with `gh run download <run> -n wpt-reftests -D takumi/tests`, or run the test with `WPT_UPDATE=1`.
 
 ### Platform-specific goldens
 
