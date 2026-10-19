@@ -9,6 +9,7 @@ use skrifa::FontRef;
 use super::{BackgroundItem, ContentBox, FragmentItems, GlyphStore, Ink, InkBox, RunPlacement};
 use crate::{
   context::RenderContext,
+  font_style::SizedFontStyle,
   fonts::{
     font::Font,
     shaping::{harfbuzz_shaper::HarfBuzzShaper, shape_result_view::ShapeResultView},
@@ -124,7 +125,9 @@ impl FragmentItems {
       last_baseline = Some(baseline);
 
       for child in &line.items.children {
-        if child.is_hidden_due_to_layout {
+        // Blink's `PhysicalFragment::IsHiddenDueToLayout` also reads the `IsTruncated` that
+        // `LineTruncator::HideChild` sets on an atomic inline's layout object.
+        if child.is_hidden_due_to_layout || child.is_truncated {
           continue;
         }
 
@@ -311,13 +314,20 @@ impl FragmentItems {
     else {
       return;
     };
-    let Some(ProcessedInlineSpan::Text {
-      style, decorations, ..
-    }) = spans.spans.get(span)
-    else {
-      return;
+    let box_style;
+    let (style, chain) = match spans.spans.get(span) {
+      Some(ProcessedInlineSpan::Text {
+        style, decorations, ..
+      }) => (&**style, decorations.as_deref()),
+      // Blink's `PlaceEllipsisNextTo` hangs the ellipsis after an atomic inline on that inline's
+      // layout object, whose style paints it.
+      Some(ProcessedInlineSpan::Box(item)) if child.text_content.is_some() => {
+        box_style = SizedFontStyle::from_style(&object.context().style, object.context());
+
+        (&box_style, item.decorations.as_deref())
+      }
+      _ => return,
     };
-    let chain = decorations.as_deref();
     let mut decorating: Vec<(BoxFont, f32)> = chain
       .into_iter()
       .flat_map(DecorationLink::ancestors)
