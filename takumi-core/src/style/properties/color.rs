@@ -70,13 +70,12 @@ impl ColorInterpolationMethod {
 }
 
 impl<'i> FromCss<'i> for ColorInterpolationMethod {
-  fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
+  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
     input.expect_ident_matching("in")?;
 
-    let location = input.current_source_location();
     let token = input.next()?;
     let Token::Ident(color_space_ident) = token else {
-      return Err(unexpected_token!(location, token));
+      return Err(unexpected_token!(token));
     };
 
     let color_space = match_ignore_ascii_case! { &color_space_ident,
@@ -94,15 +93,14 @@ impl<'i> FromCss<'i> for ColorInterpolationMethod {
       "rec2020" => ColorSpaceTag::Rec2020,
       "xyz" | "xyz-d65" => ColorSpaceTag::XyzD65,
       "xyz-d50" => ColorSpaceTag::XyzD50,
-      _ => return Err(unexpected_token!(location, token)),
+      _ => return Err(unexpected_token!(token)),
     };
 
     let hue_direction = input
       .try_parse(|input| -> ParseResult<'i, HueDirection> {
-        let location = input.current_source_location();
         let token = input.next()?;
         let Token::Ident(ident) = token else {
-          return Err(unexpected_token!(location, token));
+          return Err(unexpected_token!(token));
         };
 
         let direction = match_ignore_ascii_case! { &ident,
@@ -110,7 +108,7 @@ impl<'i> FromCss<'i> for ColorInterpolationMethod {
           "longer" => HueDirection::Longer,
           "increasing" => HueDirection::Increasing,
           "decreasing" => HueDirection::Decreasing,
-          _ => return Err(unexpected_token!(location, token)),
+          _ => return Err(unexpected_token!(token)),
         };
 
         input.expect_ident_matching("hue")?;
@@ -690,7 +688,7 @@ struct ColorMixItem {
 }
 
 impl<'i> FromCss<'i> for ColorMixItem {
-  fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
+  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
     if let Ok(item) = input.try_parse(|input| -> ParseResult<'i, Self> {
       let color = Color::from_css(input)?;
       let percentage = input.try_parse(PercentageNumber::from_css).ok();
@@ -755,7 +753,7 @@ impl ColorMix {
 }
 
 impl<'i> FromCss<'i> for ColorMix {
-  fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
+  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
     let interpolation = ColorInterpolationMethod::from_css(input)?;
 
     input.expect_comma()?;
@@ -778,7 +776,7 @@ impl<'i> FromCss<'i> for ColorMix {
 }
 
 impl<'i> FromCss<'i> for ColorInput {
-  fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
+  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
     if input
       .try_parse(|input| input.expect_ident_matching("currentcolor"))
       .is_ok()
@@ -848,12 +846,11 @@ fn is_hue_slot(cs: ColorSpaceTag, index: usize) -> bool {
 }
 
 fn parse_relative_slot<'i>(
-  input: &mut Parser<'i, '_>,
+  input: &mut Parser<'i>,
   target_cs: ColorSpaceTag,
   index: usize,
   keyword_values: [f32; 4],
 ) -> ParseResult<'i, f32> {
-  let location = input.current_source_location();
   let token = input.next()?.clone();
   let is_hue = is_hue_slot(target_cs, index);
   match &token {
@@ -869,7 +866,7 @@ fn parse_relative_slot<'i>(
           return Ok(keyword_values[i]);
         }
       }
-      Err(unexpected_token!(Color, location, &token))
+      Err(unexpected_token!(Color, &token))
     }
     Token::Number { value, .. } => Ok(*value),
     Token::Percentage { unit_value, .. } if !is_hue => {
@@ -880,19 +877,18 @@ fn parse_relative_slot<'i>(
       "grad" => *value / 400.0 * 360.0,
       "turn" => *value * 360.0,
       "rad" => value.to_degrees(),
-      _ => return Err(unexpected_token!(Color, location, &token)),
+      _ => return Err(unexpected_token!(Color, &token)),
     }),
-    _ => Err(unexpected_token!(Color, location, &token)),
+    _ => Err(unexpected_token!(Color, &token)),
   }
 }
 
 /// `calc()` expressions in component slots are not yet supported.
 fn parse_relative_color<'i>(
-  input: &mut Parser<'i, '_>,
+  input: &mut Parser<'i>,
   target_cs: ColorSpaceTag,
 ) -> ParseResult<'i, Color> {
   let origin_start = input.position();
-  let origin_location = input.current_source_location();
   let origin_token = input.next()?.clone();
   match &origin_token {
     Token::Hash(_) | Token::IDHash(_) | Token::Ident(_) => {}
@@ -902,12 +898,12 @@ fn parse_relative_color<'i>(
         Ok(())
       })?;
     }
-    _ => return Err(unexpected_token!(Color, origin_location, &origin_token)),
+    _ => return Err(unexpected_token!(Color, &origin_token)),
   }
 
   let scale = channel_keyword_scale(target_cs);
   let origin_color = Color::from_css_str(input.slice_from(origin_start).trim())
-    .map_err(|_| unexpected_token!(Color, origin_location, &origin_token))?;
+    .map_err(|_| unexpected_token!(Color, &origin_token))?;
   let converted = origin_color.to_dynamic().convert(target_cs);
   let [k0, k1, k2, k_alpha] = converted.components;
   let keyword_values = [k0 * scale, k1 * scale, k2 * scale, k_alpha];
@@ -928,15 +924,14 @@ fn parse_relative_color<'i>(
 }
 
 impl<'i> FromCss<'i> for Color {
-  fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
-    let location = input.current_source_location();
+  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
     let position = input.position();
     let token = input.next()?;
 
     match *token {
       Token::Hash(ref value) | Token::IDHash(ref value) => parse_hash_color(value.as_bytes())
         .map(|(r, g, b, a)| Color([r, g, b, (a * 255.0) as u8]))
-        .map_err(|_| unexpected_token!(location, token)),
+        .map_err(|_| unexpected_token!(token)),
       Token::Ident(ref ident) => {
         if ident.eq_ignore_ascii_case("transparent") {
           return Ok(Color::transparent());
@@ -944,7 +939,7 @@ impl<'i> FromCss<'i> for Color {
 
         parse_named_color(ident)
           .map(|(r, g, b)| Color([r, g, b, 255]))
-          .map_err(|_| unexpected_token!(location, token))
+          .map_err(|_| unexpected_token!(token))
       }
       Token::Function(ref name) => {
         let token = Token::Function(name.clone());
@@ -975,10 +970,10 @@ impl<'i> FromCss<'i> for Color {
 
           parse_color(&function)
             .map(Color::from_dynamic)
-            .map_err(|_| unexpected_token!(location, &token))
+            .map_err(|_| unexpected_token!(&token))
         })
       }
-      _ => Err(unexpected_token!(location, token)),
+      _ => Err(unexpected_token!(token)),
     }
   }
   const VALID_TOKENS: &'static [&'static str] = &["<color>"];

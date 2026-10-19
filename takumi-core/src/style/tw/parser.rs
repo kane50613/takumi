@@ -1,6 +1,6 @@
 use std::{ops::Neg, sync::Arc};
 
-use cssparser::{Parser, match_ignore_ascii_case};
+use cssparser::{ParseError as CssParseError, Parser, match_ignore_ascii_case};
 
 use crate::style::{
   Length::{self, *},
@@ -18,7 +18,7 @@ pub(crate) struct TwFontSize {
 }
 
 impl<'i> FromCss<'i> for TwFontSize {
-  fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
+  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
     Ok(Self::new(FontSize::from_css(input)?, None))
   }
 
@@ -100,7 +100,7 @@ pub(crate) struct TwGridTemplate(
 );
 
 impl<'i> FromCss<'i> for TwGridTemplate {
-  fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
+  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
     Ok(Self(GridTemplateComponents::from_css(input)?))
   }
 
@@ -144,7 +144,7 @@ pub(crate) struct TwLetterSpacing(
 );
 
 impl<'i> FromCss<'i> for TwLetterSpacing {
-  fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
+  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
     Ok(Self(Length::from_css(input)?))
   }
 
@@ -183,7 +183,7 @@ pub(crate) struct TwRounded(
 );
 
 impl<'i> FromCss<'i> for TwRounded {
-  fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
+  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
     Ok(TwRounded(Length::from_css(input)?))
   }
 
@@ -218,15 +218,10 @@ pub(crate) struct TwGradientPosition(
 );
 
 impl<'i> FromCss<'i> for TwGradientPosition {
-  fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
-    let location = input.current_source_location();
+  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
     let length = Length::from_css(input)?;
     if matches!(length, Length::Auto) {
-      return Err(
-        location
-          .new_basic_unexpected_token_error(cssparser::Token::Ident("auto".into()))
-          .into(),
-      );
+      return Err(CssParseError::unexpected_token());
     }
     Ok(TwGradientPosition(length))
   }
@@ -261,7 +256,7 @@ impl TwBlur {
 }
 
 impl<'i> FromCss<'i> for TwBlur {
-  fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
+  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
     Ok(TwBlur {
       radius: Length::from_css(input)?,
       token: None,
@@ -298,7 +293,7 @@ pub(crate) struct TwDropShadow {
 }
 
 impl<'i> FromCss<'i> for TwDropShadow {
-  fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
+  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
     Ok(TwDropShadow {
       shadow: TextShadow::from_css(input)?,
       token: None,
@@ -325,7 +320,7 @@ pub(crate) struct TwAnimation {
 }
 
 impl<'i> FromCss<'i> for TwAnimation {
-  fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
+  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
     Ok(TwAnimation {
       animations: Animations::from_css(input)?,
       token: None,
@@ -362,7 +357,7 @@ impl TailwindPropertyParser for TwAnimation {
 pub(crate) struct TwVarColor(pub Arc<str>);
 
 impl<'i> FromCss<'i> for TwVarColor {
-  fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
+  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
     Ok(Self(ColorInput::from_css(input)?.to_css_string().into()))
   }
 

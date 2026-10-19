@@ -148,7 +148,6 @@ impl ToCss for PseudoClass {
 }
 
 impl NonTSPseudoClass for PseudoClass {
-  type Impl = SelectorImpl;
   fn is_active_or_hover(&self) -> bool {
     false
   }
@@ -198,9 +197,7 @@ impl ToCss for PseudoElement {
   }
 }
 
-impl PseudoElementTrait for PseudoElement {
-  type Impl = SelectorImpl;
-}
+impl PseudoElementTrait for PseudoElement {}
 
 impl SelectorImplTrait for SelectorImpl {
   type ExtraMatchingData<'a> = ();
@@ -235,25 +232,24 @@ impl<'i> selectors::Parser<'i> for TakumiSelectorParser {
 
   fn parse_non_ts_pseudo_class(
     &self,
-    _location: SourceLocation,
     name: CowRcStr<'i>,
-  ) -> Result<<Self::Impl as SelectorImplTrait>::NonTSPseudoClass, ParseError<'i, Self::Error>> {
+  ) -> Result<<Self::Impl as SelectorImplTrait>::NonTSPseudoClass, ParseError<Self::Error>> {
     Ok(PseudoClass::Other(Ident::from(&*name)))
   }
 
-  fn parse_non_ts_functional_pseudo_class<'t>(
+  fn parse_non_ts_functional_pseudo_class(
     &self,
     name: CowRcStr<'i>,
-    parser: &mut Parser<'i, 't>,
+    parser: &mut Parser<'i>,
     _after_part: bool,
-  ) -> Result<<Self::Impl as SelectorImplTrait>::NonTSPseudoClass, ParseError<'i, Self::Error>> {
+  ) -> Result<<Self::Impl as SelectorImplTrait>::NonTSPseudoClass, ParseError<Self::Error>> {
     if name.eq_ignore_ascii_case("lang") {
       let ranges = parser.parse_comma_separated(|input| {
         let token = input.next()?.clone();
         match &token {
           Token::Ident(ident) => Ok(ident.as_ref().into()),
           Token::QuotedString(s) => Ok(s.as_ref().into()),
-          _ => Err(input.new_unexpected_token_error(token)),
+          _ => Err(ParseError::unexpected_token()),
         }
       })?;
       return Ok(PseudoClass::Lang(ranges));
@@ -265,17 +261,16 @@ impl<'i> selectors::Parser<'i> for TakumiSelectorParser {
 
   fn parse_pseudo_element(
     &self,
-    _location: SourceLocation,
     name: CowRcStr<'i>,
-  ) -> Result<<Self::Impl as SelectorImplTrait>::PseudoElement, ParseError<'i, Self::Error>> {
+  ) -> Result<<Self::Impl as SelectorImplTrait>::PseudoElement, ParseError<Self::Error>> {
     Ok(PseudoElement::from_name(&name))
   }
 
-  fn parse_functional_pseudo_element<'t>(
+  fn parse_functional_pseudo_element(
     &self,
     name: CowRcStr<'i>,
-    arguments: &mut Parser<'i, 't>,
-  ) -> Result<<Self::Impl as SelectorImplTrait>::PseudoElement, ParseError<'i, Self::Error>> {
+    arguments: &mut Parser<'i>,
+  ) -> Result<<Self::Impl as SelectorImplTrait>::PseudoElement, ParseError<Self::Error>> {
     while arguments.next_including_whitespace_and_comments().is_ok() {}
     Ok(PseudoElement::Other(Ident::from(&*name)))
   }
@@ -340,13 +335,13 @@ struct NestingContext<'a> {
 /// The items a rule or declaration list yields, with the invalid ones dropped
 /// when `lossy` and their errors kept otherwise.
 fn recover<'i, T>(
-  items: impl Iterator<Item = Result<T, (ParseError<'i, StyleSheetParseError>, &'i str)>>,
+  items: impl Iterator<Item = Result<T, (ParseError<StyleSheetParseError>, &'i str, SourceLocation)>>,
   lossy: bool,
-) -> impl Iterator<Item = Result<T, ParseError<'i, StyleSheetParseError>>> {
+) -> impl Iterator<Item = Result<T, ParseError<StyleSheetParseError>>> {
   items.filter_map(move |item| match item {
     Ok(item) => Some(Ok(item)),
     Err(_) if lossy => None,
-    Err((error, _)) => Some(Err(error)),
+    Err((error, ..)) => Some(Err(error)),
   })
 }
 
@@ -381,12 +376,12 @@ impl<'i> DeclarationParser<'i> for StyleDeclarationParser {
   type Declaration = StyleDeclarationBlock;
   type Error = StyleSheetParseError;
 
-  fn parse_value<'t>(
+  fn parse_value(
     &mut self,
     name: CowRcStr<'i>,
-    input: &mut Parser<'i, 't>,
+    input: &mut Parser<'i>,
     _state: &ParserState,
-  ) -> Result<Self::Declaration, ParseError<'i, Self::Error>> {
+  ) -> Result<Self::Declaration, ParseError<Self::Error>> {
     let mut declarations = StyleDeclarationBlock::parse(&name, input).map_err(ParseError::into)?;
     if input.try_parse(parse_important).is_ok() {
       declarations.mark_important();
@@ -403,12 +398,12 @@ impl<'i> DeclarationParser<'i> for PropertyRuleDeclarationParser {
   type Declaration = (String, String);
   type Error = StyleSheetParseError;
 
-  fn parse_value<'t>(
+  fn parse_value(
     &mut self,
     name: CowRcStr<'i>,
-    input: &mut Parser<'i, 't>,
+    input: &mut Parser<'i>,
     _state: &ParserState,
-  ) -> Result<Self::Declaration, ParseError<'i, Self::Error>> {
+  ) -> Result<Self::Declaration, ParseError<Self::Error>> {
     let start = input.position();
     while input.next_including_whitespace_and_comments().is_ok() {}
     Ok((name.to_string(), input.slice_from(start).trim().to_owned()))
@@ -426,12 +421,12 @@ impl<'i> DeclarationParser<'i> for NestedStyleRuleParser<'_> {
   type Declaration = StyleRuleBodyItem;
   type Error = StyleSheetParseError;
 
-  fn parse_value<'t>(
+  fn parse_value(
     &mut self,
     name: CowRcStr<'i>,
-    input: &mut Parser<'i, 't>,
+    input: &mut Parser<'i>,
     state: &ParserState,
-  ) -> Result<Self::Declaration, ParseError<'i, Self::Error>> {
+  ) -> Result<Self::Declaration, ParseError<Self::Error>> {
     let mut parser = StyleDeclarationParser;
     parser
       .parse_value(name, input, state)
@@ -445,19 +440,19 @@ impl<'i> QualifiedRuleParser<'i> for NestedStyleRuleParser<'_> {
   type QualifiedRule = StyleRuleBodyItem;
   type Error = StyleSheetParseError;
 
-  fn parse_prelude<'t>(
+  fn parse_prelude(
     &mut self,
-    input: &mut Parser<'i, 't>,
-  ) -> Result<Self::Prelude, ParseError<'i, Self::Error>> {
+    input: &mut Parser<'i>,
+  ) -> Result<Self::Prelude, ParseError<Self::Error>> {
     SelectorList::parse(&TakumiSelectorParser, input, ParseRelative::ForNesting)
   }
 
-  fn parse_block<'t>(
+  fn parse_block(
     &mut self,
     nested_selectors: Self::Prelude,
     _location: &ParserState,
-    input: &mut Parser<'i, 't>,
-  ) -> Result<Self::QualifiedRule, ParseError<'i, Self::Error>> {
+    input: &mut Parser<'i>,
+  ) -> Result<Self::QualifiedRule, ParseError<Self::Error>> {
     let selectors = nested_selectors.replace_parent_selector(&self.parent_selectors);
 
     self
@@ -472,20 +467,20 @@ impl<'i> AtRuleParser<'i> for NestedStyleRuleParser<'_> {
   type AtRule = StyleRuleBodyItem;
   type Error = StyleSheetParseError;
 
-  fn parse_prelude<'t>(
+  fn parse_prelude(
     &mut self,
     name: CowRcStr<'i>,
-    input: &mut Parser<'i, 't>,
-  ) -> Result<Self::Prelude, ParseError<'i, Self::Error>> {
+    input: &mut Parser<'i>,
+  ) -> Result<Self::Prelude, ParseError<Self::Error>> {
     parse_at_rule_prelude(name, input)
   }
 
-  fn parse_block<'t>(
+  fn parse_block(
     &mut self,
     prelude: Self::Prelude,
     _location: &ParserState,
-    input: &mut Parser<'i, 't>,
-  ) -> Result<Self::AtRule, ParseError<'i, Self::Error>> {
+    input: &mut Parser<'i>,
+  ) -> Result<Self::AtRule, ParseError<Self::Error>> {
     self
       .context
       .parse_nested_at_rule_block(&self.parent_selectors, prelude, input)
@@ -536,12 +531,12 @@ impl<'i> DeclarationParser<'i> for KeyframeDeclarationParser {
   type Declaration = StyleDeclarationBlock;
   type Error = StyleSheetParseError;
 
-  fn parse_value<'t>(
+  fn parse_value(
     &mut self,
     name: CowRcStr<'i>,
-    input: &mut Parser<'i, 't>,
+    input: &mut Parser<'i>,
     _state: &ParserState,
-  ) -> Result<Self::Declaration, ParseError<'i, Self::Error>> {
+  ) -> Result<Self::Declaration, ParseError<Self::Error>> {
     let declarations = StyleDeclarationBlock::parse(&name, input).map_err(ParseError::into)?;
     // !important flag is ignored in keyframe declartion.
     // Ref: https://developer.mozilla.org/en-US/docs/Web/CSS/Reference/At-rules/@keyframes#!important_in_a_keyframe
@@ -561,19 +556,19 @@ impl<'i> QualifiedRuleParser<'i> for KeyframeRuleParser {
   type QualifiedRule = KeyframeRule;
   type Error = StyleSheetParseError;
 
-  fn parse_prelude<'t>(
+  fn parse_prelude(
     &mut self,
-    input: &mut Parser<'i, 't>,
-  ) -> Result<Self::Prelude, ParseError<'i, Self::Error>> {
+    input: &mut Parser<'i>,
+  ) -> Result<Self::Prelude, ParseError<Self::Error>> {
     parse_keyframe_prelude(input)
   }
 
-  fn parse_block<'t>(
+  fn parse_block(
     &mut self,
     offsets: Self::Prelude,
     _location: &ParserState,
-    input: &mut Parser<'i, 't>,
-  ) -> Result<Self::QualifiedRule, ParseError<'i, Self::Error>> {
+    input: &mut Parser<'i>,
+  ) -> Result<Self::QualifiedRule, ParseError<Self::Error>> {
     let mut declaration_parser = KeyframeDeclarationParser;
     let mut declarations = StyleDeclarationBlock::default();
 
@@ -634,8 +629,8 @@ impl RuleParser {
 
   fn parse_fragment<'i>(
     &mut self,
-    input: &mut Parser<'i, '_>,
-  ) -> Result<StyleSheetFragment, ParseError<'i, StyleSheetParseError>> {
+    input: &mut Parser<'i>,
+  ) -> Result<StyleSheetFragment, ParseError<StyleSheetParseError>> {
     let lossy = self.lossy;
     let mut fragment = StyleSheetFragment::default();
 
@@ -690,10 +685,10 @@ pub(crate) struct CssRule {
   pub(crate) layer_order: Option<usize>,
 }
 
-fn parse_property_rule<'i, 't>(
+fn parse_property_rule<'i>(
   property_name: String,
-  input: &mut Parser<'i, 't>,
-) -> Result<PropertyRule, ParseError<'i, StyleSheetParseError>> {
+  input: &mut Parser<'i>,
+) -> Result<PropertyRule, ParseError<StyleSheetParseError>> {
   let mut parser = PropertyRuleDeclarationParser;
   let mut syntax = None;
   let mut inherits = None;
@@ -701,7 +696,7 @@ fn parse_property_rule<'i, 't>(
   let mut invalid_inherits = false;
 
   for descriptor in RuleBodyParser::new(input, &mut parser) {
-    let (name, value) = descriptor.map_err(|(error, _)| error)?;
+    let (name, value) = descriptor.map_err(|(error, ..)| error)?;
 
     match_ignore_ascii_case! { &name,
       "syntax" => syntax = Some(value),
@@ -716,14 +711,20 @@ fn parse_property_rule<'i, 't>(
   }
 
   if invalid_inherits {
-    return Err(input.new_custom_error(StyleSheetParseErrorKind::PropertyInheritsMustBeBoolean));
+    return Err(ParseError::custom(
+      StyleSheetParseErrorKind::PropertyInheritsMustBeBoolean,
+    ));
   }
 
   let Some(syntax) = syntax else {
-    return Err(input.new_custom_error(StyleSheetParseErrorKind::MissingPropertySyntax));
+    return Err(ParseError::custom(
+      StyleSheetParseErrorKind::MissingPropertySyntax,
+    ));
   };
   let Some(inherits) = inherits else {
-    return Err(input.new_custom_error(StyleSheetParseErrorKind::MissingPropertyInherits));
+    return Err(ParseError::custom(
+      StyleSheetParseErrorKind::MissingPropertyInherits,
+    ));
   };
 
   // The descriptor is a string, and nothing downstream wants the quotes.
@@ -732,7 +733,9 @@ fn parse_property_rule<'i, 't>(
   // css-properties-values-api-1 2.1: only the universal syntax may leave the
   // initial value out, because every other one needs a value to fall back to.
   if syntax != "*" && initial_value.is_none() {
-    return Err(input.new_custom_error(StyleSheetParseErrorKind::MissingPropertyInitialValue));
+    return Err(ParseError::custom(
+      StyleSheetParseErrorKind::MissingPropertyInitialValue,
+    ));
   }
 
   Ok(PropertyRule {
@@ -760,12 +763,12 @@ impl<'i> DeclarationParser<'i> for ThemeBlockParser<'_> {
   type Declaration = ThemeBodyItem;
   type Error = StyleSheetParseError;
 
-  fn parse_value<'t>(
+  fn parse_value(
     &mut self,
     name: CowRcStr<'i>,
-    input: &mut Parser<'i, 't>,
+    input: &mut Parser<'i>,
     state: &ParserState,
-  ) -> Result<Self::Declaration, ParseError<'i, Self::Error>> {
+  ) -> Result<Self::Declaration, ParseError<Self::Error>> {
     let mut parser = StyleDeclarationParser;
     parser
       .parse_value(name, input, state)
@@ -779,26 +782,28 @@ impl<'i> AtRuleParser<'i> for ThemeBlockParser<'_> {
   type AtRule = ThemeBodyItem;
   type Error = StyleSheetParseError;
 
-  fn parse_prelude<'t>(
+  fn parse_prelude(
     &mut self,
     name: CowRcStr<'i>,
-    input: &mut Parser<'i, 't>,
-  ) -> Result<Self::Prelude, ParseError<'i, Self::Error>> {
+    input: &mut Parser<'i>,
+  ) -> Result<Self::Prelude, ParseError<Self::Error>> {
     parse_at_rule_prelude(name, input)
   }
 
-  fn parse_block<'t>(
+  fn parse_block(
     &mut self,
     prelude: Self::Prelude,
     _location: &ParserState,
-    input: &mut Parser<'i, 't>,
-  ) -> Result<Self::AtRule, ParseError<'i, Self::Error>> {
+    input: &mut Parser<'i>,
+  ) -> Result<Self::AtRule, ParseError<Self::Error>> {
     match prelude {
       AtRulePrelude::Keyframes(name) => self
         .context
         .parse_keyframes_block(name, input)
         .map(ThemeBodyItem::Keyframes),
-      _ => Err(input.new_custom_error(StyleSheetParseErrorKind::UnsupportedNestedAtRule)),
+      _ => Err(ParseError::custom(
+        StyleSheetParseErrorKind::UnsupportedNestedAtRule,
+      )),
     }
   }
 }
@@ -808,11 +813,13 @@ impl<'i> QualifiedRuleParser<'i> for ThemeBlockParser<'_> {
   type QualifiedRule = ThemeBodyItem;
   type Error = StyleSheetParseError;
 
-  fn parse_prelude<'t>(
+  fn parse_prelude(
     &mut self,
-    input: &mut Parser<'i, 't>,
-  ) -> Result<Self::Prelude, ParseError<'i, Self::Error>> {
-    Err(input.new_custom_error(StyleSheetParseErrorKind::UnsupportedNestedAtRule))
+    _input: &mut Parser<'i>,
+  ) -> Result<Self::Prelude, ParseError<Self::Error>> {
+    Err(ParseError::custom(
+      StyleSheetParseErrorKind::UnsupportedNestedAtRule,
+    ))
   }
 }
 
@@ -841,15 +848,14 @@ impl NestingContext<'_> {
 
   fn parse_theme_block<'i>(
     self,
-    input: &mut Parser<'i, '_>,
-  ) -> Result<StyleSheetFragment, ParseError<'i, StyleSheetParseError>> {
-    let mut root_input = ParserInput::new(":root");
+    input: &mut Parser<'i>,
+  ) -> Result<StyleSheetFragment, ParseError<StyleSheetParseError>> {
     let selectors = SelectorList::parse(
       &TakumiSelectorParser,
-      &mut Parser::new(&mut root_input),
+      &mut Parser::new(":root"),
       ParseRelative::No,
     )
-    .map_err(|_| input.new_custom_error(StyleSheetParseErrorKind::UnsupportedNestedAtRule))?;
+    .map_err(|_| ParseError::custom(StyleSheetParseErrorKind::UnsupportedNestedAtRule))?;
 
     let mut declarations = RuleDeclarations::default();
     let mut fragment = StyleSheetFragment::default();
@@ -872,8 +878,8 @@ impl NestingContext<'_> {
   fn parse_keyframes_block<'i>(
     self,
     name: String,
-    input: &mut Parser<'i, '_>,
-  ) -> Result<StyleSheetFragment, ParseError<'i, StyleSheetParseError>> {
+    input: &mut Parser<'i>,
+  ) -> Result<StyleSheetFragment, ParseError<StyleSheetParseError>> {
     let mut parser = KeyframeRuleParser { lossy: self.lossy };
     let mut keyframes = Vec::new();
 
@@ -896,8 +902,8 @@ impl NestingContext<'_> {
   fn parse_style_rule_block<'i>(
     self,
     selectors: SelectorList<SelectorImpl>,
-    input: &mut Parser<'i, '_>,
-  ) -> Result<StyleSheetFragment, ParseError<'i, StyleSheetParseError>> {
+    input: &mut Parser<'i>,
+  ) -> Result<StyleSheetFragment, ParseError<StyleSheetParseError>> {
     let mut declarations = RuleDeclarations::default();
     let mut fragment = StyleSheetFragment::default();
     let mut parser = NestedStyleRuleParser {
@@ -930,11 +936,11 @@ impl NestingContext<'_> {
     self,
     parent_selectors: &SelectorList<SelectorImpl>,
     prelude: AtRulePrelude,
-    input: &mut Parser<'i, '_>,
-  ) -> Result<StyleSheetFragment, ParseError<'i, StyleSheetParseError>> {
+    input: &mut Parser<'i>,
+  ) -> Result<StyleSheetFragment, ParseError<StyleSheetParseError>> {
     match prelude {
       AtRulePrelude::Layer(layer_names) => {
-        ensure_single_layer_name(&layer_names, input)?;
+        ensure_single_layer_name(&layer_names)?;
         let Some(layer_name) = layer_names.first() else {
           return Ok(StyleSheetFragment::default());
         };
@@ -962,9 +968,9 @@ impl NestingContext<'_> {
       AtRulePrelude::Keyframes(_)
       | AtRulePrelude::Property(_)
       | AtRulePrelude::TailwindImport { .. }
-      | AtRulePrelude::Apply(_) => {
-        Err(input.new_custom_error(StyleSheetParseErrorKind::UnsupportedNestedAtRule))
-      }
+      | AtRulePrelude::Apply(_) => Err(ParseError::custom(
+        StyleSheetParseErrorKind::UnsupportedNestedAtRule,
+      )),
     }
   }
 }
@@ -979,10 +985,10 @@ fn tailwind_entry_preflight(target: &str) -> Option<bool> {
   }
 }
 
-fn parse_at_rule_prelude<'i, 't>(
+fn parse_at_rule_prelude<'i>(
   name: CowRcStr<'i>,
-  input: &mut Parser<'i, 't>,
-) -> Result<AtRulePrelude, ParseError<'i, StyleSheetParseError>> {
+  input: &mut Parser<'i>,
+) -> Result<AtRulePrelude, ParseError<StyleSheetParseError>> {
   if name.eq_ignore_ascii_case("layer") {
     if input.is_exhausted() {
       return Ok(AtRulePrelude::Layer(vec![vec![LayerName::Anonymous]]));
@@ -1007,14 +1013,15 @@ fn parse_at_rule_prelude<'i, 't>(
   }
 
   if name.eq_ignore_ascii_case("import") {
-    let location = input.current_source_location();
     let target = match input.next()? {
       Token::QuotedString(value) => value.clone(),
-      token => return Err(location.new_unexpected_token_error(token.clone())),
+      _ => return Err(ParseError::unexpected_token()),
     };
 
     let Some(preflight) = tailwind_entry_preflight(&target) else {
-      return Err(input.new_error(BasicParseErrorKind::AtRuleInvalid(name)));
+      return Err(ParseError::from_basic_kind(
+        BasicParseErrorKind::AtRuleInvalid,
+      ));
     };
 
     // Modifiers such as `layer(base)`, `source(none)` and `important` change nothing here.
@@ -1041,18 +1048,17 @@ fn parse_at_rule_prelude<'i, 't>(
     source.push_str(input.slice_from(start));
 
     let block = expand_apply(&source)
-      .ok_or_else(|| input.new_custom_error(StyleSheetParseErrorKind::InvalidApplyUtility))?;
+      .ok_or_else(|| ParseError::custom(StyleSheetParseErrorKind::InvalidApplyUtility))?;
 
     return Ok(AtRulePrelude::Apply(Box::new(block)));
   }
 
   if name.eq_ignore_ascii_case("theme") {
     while !input.is_exhausted() {
-      let location = input.current_source_location();
       let modifier = input.expect_ident()?.clone();
       match_ignore_ascii_case! {&modifier,
         "reference" | "default" | "static" | "inline" => {},
-        _ => return Err(location.new_unexpected_token_error(Token::Ident(modifier))),
+        _ => return Err(ParseError::unexpected_token()),
       }
     }
     return Ok(AtRulePrelude::Theme);
@@ -1061,9 +1067,9 @@ fn parse_at_rule_prelude<'i, 't>(
   if name.eq_ignore_ascii_case("property") {
     let property_name = input.expect_ident_or_string()?.to_string();
     if !property_name.starts_with("--") {
-      return Err(
-        input.new_custom_error(StyleSheetParseErrorKind::PropertyNameMustBeCustomProperty),
-      );
+      return Err(ParseError::custom(
+        StyleSheetParseErrorKind::PropertyNameMustBeCustomProperty,
+      ));
     }
     return Ok(AtRulePrelude::Property(property_name));
   }
@@ -1073,16 +1079,15 @@ fn parse_at_rule_prelude<'i, 't>(
   Ok(AtRulePrelude::Unknown)
 }
 
-pub(crate) fn parse_layer_name<'i, 't>(
-  input: &mut Parser<'i, 't>,
-) -> Result<LayerPath, ParseError<'i, StyleSheetParseError>> {
+pub(crate) fn parse_layer_name<'i>(
+  input: &mut Parser<'i>,
+) -> Result<LayerPath, ParseError<StyleSheetParseError>> {
   let mut segments = Vec::new();
 
   loop {
-    let location = input.current_source_location();
     let segment = match input.next()? {
       Token::Ident(value) if !is_reserved_custom_ident(value) => value.to_string(),
-      token => return Err(location.new_unexpected_token_error(token.clone())),
+      _ => return Err(ParseError::unexpected_token()),
     };
     segments.push(LayerName::Named(segment));
 
@@ -1096,7 +1101,7 @@ pub(crate) fn parse_layer_name<'i, 't>(
 
 /// Reads a block whose rules do not apply to its end, which the parser needs
 /// before it accepts the block.
-fn skip_block(input: &mut Parser<'_, '_>) -> StyleSheetFragment {
+fn skip_block(input: &mut Parser<'_>) -> StyleSheetFragment {
   while input.next_including_whitespace_and_comments().is_ok() {}
 
   StyleSheetFragment::default()
@@ -1109,15 +1114,16 @@ fn extend_layer_name(current_layer: Option<&LayerPath>, layer_name: &[LayerName]
   combined
 }
 
-fn ensure_single_layer_name<'i>(
+fn ensure_single_layer_name(
   layer_names: &[LayerPath],
-  input: &Parser<'i, '_>,
-) -> Result<(), ParseError<'i, StyleSheetParseError>> {
+) -> Result<(), ParseError<StyleSheetParseError>> {
   if layer_names.len() <= 1 {
     return Ok(());
   }
 
-  Err(input.new_custom_error(StyleSheetParseErrorKind::LayerBlockMultipleNames))
+  Err(ParseError::custom(
+    StyleSheetParseErrorKind::LayerBlockMultipleNames,
+  ))
 }
 
 impl<'i> QualifiedRuleParser<'i> for RuleParser {
@@ -1125,19 +1131,19 @@ impl<'i> QualifiedRuleParser<'i> for RuleParser {
   type QualifiedRule = StyleSheetFragment;
   type Error = StyleSheetParseError;
 
-  fn parse_prelude<'t>(
+  fn parse_prelude(
     &mut self,
-    input: &mut Parser<'i, 't>,
-  ) -> Result<Self::Prelude, ParseError<'i, Self::Error>> {
+    input: &mut Parser<'i>,
+  ) -> Result<Self::Prelude, ParseError<Self::Error>> {
     SelectorList::parse(&TakumiSelectorParser, input, ParseRelative::No)
   }
 
-  fn parse_block<'t>(
+  fn parse_block(
     &mut self,
     selectors: Self::Prelude,
     _location: &ParserState,
-    input: &mut Parser<'i, 't>,
-  ) -> Result<Self::QualifiedRule, ParseError<'i, Self::Error>> {
+    input: &mut Parser<'i>,
+  ) -> Result<Self::QualifiedRule, ParseError<Self::Error>> {
     self.context().parse_style_rule_block(selectors, input)
   }
 }
@@ -1147,23 +1153,23 @@ impl<'i> AtRuleParser<'i> for RuleParser {
   type AtRule = StyleSheetFragment;
   type Error = StyleSheetParseError;
 
-  fn parse_prelude<'t>(
+  fn parse_prelude(
     &mut self,
     name: CowRcStr<'i>,
-    input: &mut Parser<'i, 't>,
-  ) -> Result<Self::Prelude, ParseError<'i, Self::Error>> {
+    input: &mut Parser<'i>,
+  ) -> Result<Self::Prelude, ParseError<Self::Error>> {
     parse_at_rule_prelude(name, input)
   }
 
-  fn parse_block<'t>(
+  fn parse_block(
     &mut self,
     prelude: Self::Prelude,
     _location: &ParserState,
-    input: &mut Parser<'i, 't>,
-  ) -> Result<Self::AtRule, ParseError<'i, Self::Error>> {
+    input: &mut Parser<'i>,
+  ) -> Result<Self::AtRule, ParseError<Self::Error>> {
     match prelude {
       AtRulePrelude::Layer(layer_names) => {
-        ensure_single_layer_name(&layer_names, input)?;
+        ensure_single_layer_name(&layer_names)?;
         let declared_layers = self.declared_layers(&layer_names);
         let Some(nested_layer) = declared_layers.first().cloned() else {
           return Ok(StyleSheetFragment {
@@ -1178,9 +1184,9 @@ impl<'i> AtRuleParser<'i> for RuleParser {
       AtRulePrelude::Keyframes(name) => self.context().parse_keyframes_block(name, input),
       AtRulePrelude::Theme => self.context().parse_theme_block(input),
       // `@import` and `@apply` end at their semicolon; a block after them is invalid.
-      AtRulePrelude::TailwindImport { .. } | AtRulePrelude::Apply(_) => {
-        Err(input.new_custom_error(StyleSheetParseErrorKind::UnsupportedNestedAtRule))
-      }
+      AtRulePrelude::TailwindImport { .. } | AtRulePrelude::Apply(_) => Err(ParseError::custom(
+        StyleSheetParseErrorKind::UnsupportedNestedAtRule,
+      )),
       AtRulePrelude::Media(media_query) => {
         let mut fragment = self
           .nested(self.current_layer.clone())
@@ -1431,8 +1437,7 @@ impl StyleSheet {
   }
 
   fn parse_with_mode(css: &str, lossy: bool) -> Result<Self, StyleSheetParseError> {
-    let mut input = ParserInput::new(css);
-    let mut parser = Parser::new(&mut input);
+    let mut parser = Parser::new(css);
     let mut rule_parser = RuleParser {
       current_layer: None,
       lossy,
@@ -1445,7 +1450,7 @@ impl StyleSheet {
       match parsed {
         Ok(parsed) => fragment.extend(parsed),
         Err(_) if lossy => {}
-        Err((error, context)) => {
+        Err((error, context, _)) => {
           return Err(StyleSheetParseError::from_parse_error(context, error));
         }
       }

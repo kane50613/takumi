@@ -66,7 +66,7 @@ impl TailwindPropertyParser for ContentValue {
 }
 
 impl<'i> FromCss<'i> for ContentValue {
-  fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
+  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
     if input
       .try_parse(|input| input.expect_ident_matching("none"))
       .is_ok()
@@ -87,8 +87,7 @@ impl<'i> FromCss<'i> for ContentValue {
     }
 
     if items.is_empty() {
-      let location = input.current_source_location();
-      return Err(unexpected_token!(Self, location, &Token::WhiteSpace("")));
+      return Err(unexpected_token!(Self, &Token::WhiteSpace("")));
     }
 
     Ok(ContentValue::Items(items.into_boxed_slice()))
@@ -98,7 +97,7 @@ impl<'i> FromCss<'i> for ContentValue {
 }
 
 impl<'i> FromCss<'i> for ContentItem {
-  fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
+  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
     let start = input.state();
     if let Ok(image) = input.try_parse(BackgroundImage::from_css) {
       if !matches!(image, BackgroundImage::None) {
@@ -109,14 +108,13 @@ impl<'i> FromCss<'i> for ContentItem {
       input.reset(&start);
     }
 
-    let location = input.current_source_location();
     let token = input.next()?.clone();
     match token {
       Token::QuotedString(value) => Ok(ContentItem::Text(value.as_ref().into())),
       Token::Function(ref name) if name.eq_ignore_ascii_case("attr") => input
         .parse_nested_block(AttrRef::from_css)
         .map(ContentItem::Attr),
-      other => Err(unexpected_token!(Self, location, &other)),
+      other => Err(unexpected_token!(Self, &other)),
     }
   }
 
@@ -124,7 +122,7 @@ impl<'i> FromCss<'i> for ContentItem {
 }
 
 impl<'i> FromCss<'i> for AttrRef {
-  fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
+  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
     let name: Arc<str> = input.expect_ident()?.as_ref().into();
     let fallback: Arc<str> = if input.try_parse(Parser::expect_comma).is_ok() {
       input.expect_string()?.as_ref().into()

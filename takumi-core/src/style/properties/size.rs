@@ -113,7 +113,7 @@ impl<'i> FromCss<'i> for Size {
     "stretch",
   ];
 
-  fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
+  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
     if let Ok(keyword) = input.try_parse(parse_sizing_keyword) {
       return Ok(keyword);
     }
@@ -122,8 +122,7 @@ impl<'i> FromCss<'i> for Size {
   }
 }
 
-fn parse_sizing_keyword<'i>(input: &mut Parser<'i, '_>) -> ParseResult<'i, Size> {
-  let location = input.current_source_location();
+fn parse_sizing_keyword<'i>(input: &mut Parser<'i>) -> ParseResult<'i, Size> {
   let token = input.next()?.clone();
 
   match &token {
@@ -132,9 +131,9 @@ fn parse_sizing_keyword<'i>(input: &mut Parser<'i, '_>) -> ParseResult<'i, Size>
       "max-content" => Ok(Size::MaxContent),
       "fit-content" => Ok(Size::FitContent),
       "stretch" => Ok(Size::Stretch),
-      _ => Err(unexpected_token!(Size, location, &token)),
+      _ => Err(unexpected_token!(Size, &token)),
     },
-    _ => Err(unexpected_token!(Size, location, &token)),
+    _ => Err(unexpected_token!(Size, &token)),
   }
 }
 

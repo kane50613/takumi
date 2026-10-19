@@ -68,14 +68,13 @@ impl TailwindPropertyParser for PercentageNumber {
 }
 
 impl<'i> FromCss<'i> for PercentageNumber {
-  fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
-    let location = input.current_source_location();
+  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
     let token = input.next()?;
 
     match token {
       Token::Number { value, .. } => Ok(PercentageNumber(*value)),
       Token::Percentage { unit_value, .. } => Ok(PercentageNumber(*unit_value)),
-      _ => Err(unexpected_token!(location, token)),
+      _ => Err(unexpected_token!(token)),
     }
   }
 

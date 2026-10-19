@@ -28,7 +28,7 @@ pub struct FontShorthand {
 }
 
 impl<'i> FromCss<'i> for FontShorthand {
-  fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
+  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
     let mut style = None;
     let mut caps = None;
     let mut weight = None;
@@ -73,11 +73,10 @@ impl<'i> FromCss<'i> for FontShorthand {
       if stretch.is_none()
         && let Ok(value) = input.try_parse(|input| -> ParseResult<'i, FontStretch> {
           let start = input.state();
-          let location = input.current_source_location();
           let token = input.next()?.clone();
 
           if !matches!(token, Token::Ident(_)) {
-            return Err(unexpected_token!(location, &token));
+            return Err(unexpected_token!(&token));
           }
 
           input.reset(&start);

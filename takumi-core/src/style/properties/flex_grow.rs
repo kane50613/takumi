@@ -27,7 +27,7 @@ impl Animatable for FlexGrow {
 }
 
 impl<'i> FromCss<'i> for FlexGrow {
-  fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
+  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
     Ok(FlexGrow(input.expect_number()?))
   }
 

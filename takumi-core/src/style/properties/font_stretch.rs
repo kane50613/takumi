@@ -33,9 +33,7 @@ impl Animatable for FontStretch {
 }
 
 impl<'i> FromCss<'i> for FontStretch {
-  fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
-    let location = input.current_source_location();
-
+  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
     if let Ok(value) = input.try_parse(Parser::expect_percentage) {
       return Ok(Self::from_percentage(value));
     }
@@ -51,7 +49,7 @@ impl<'i> FromCss<'i> for FontStretch {
       "expanded" => Ok(Self::EXPANDED),
       "extra-expanded" => Ok(Self::EXTRA_EXPANDED),
       "ultra-expanded" => Ok(Self::ULTRA_EXPANDED),
-      _ => Err(unexpected_token!(location, &Token::Ident(ident.to_owned()))),
+      _ => Err(unexpected_token!(&Token::Ident(ident.to_owned()))),
     }
   }
 

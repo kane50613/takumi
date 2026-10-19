@@ -6,7 +6,7 @@ use std::{
   sync::{Arc, OnceLock},
 };
 
-use cssparser::{Parser, ParserInput, RuleBodyParser, Token, match_ignore_ascii_case};
+use cssparser::{Parser, RuleBodyParser, Token, match_ignore_ascii_case};
 use pastey::paste;
 use serde::{
   Deserialize,
@@ -394,7 +394,7 @@ macro_rules! define_style {
       impl LonghandId {
         fn parse_declarations<'i>(
           self,
-          input: &mut cssparser::Parser<'i, '_>,
+          input: &mut cssparser::Parser<'i>,
         ) -> ParseResult<'i, ParsedDeclarations> {
           let state = input.state();
           let keyword = input.try_parse(CssWideKeyword::from_css).ok();
@@ -433,7 +433,7 @@ macro_rules! define_style {
       impl ShorthandId {
         fn parse_declarations<'i>(
           self,
-          input: &mut cssparser::Parser<'i, '_>,
+          input: &mut cssparser::Parser<'i>,
         ) -> ParseResult<'i, ParsedDeclarations> {
           match self {
             $(
@@ -502,7 +502,7 @@ macro_rules! define_style {
         fn parse_declarations<'i>(
           self,
           name: &str,
-          input: &mut cssparser::Parser<'i, '_>,
+          input: &mut cssparser::Parser<'i>,
         ) -> ParseResult<'i, ParsedDeclarations> {
           match self {
             Self::Ignored => {
@@ -596,8 +596,7 @@ macro_rules! define_style {
           };
 
           let result = {
-            let mut parser_input = ParserInput::new(&source);
-            let mut parser = Parser::new(&mut parser_input);
+            let mut parser = Parser::new(&source);
 
             // `parse_entirely`, because a declaration list drops a value with
             // anything left over and a lone value has no `;` to stop at.
@@ -610,7 +609,7 @@ macro_rules! define_style {
           .map_err(|error| {
             (
               self.expected_message(&source),
-              CssInputParseFailure::new(&source, error.location),
+              CssInputParseFailure::new(&error),
             )
           });
 
@@ -2073,15 +2072,14 @@ pub(crate) enum CssWideKeyword {
 }
 
 impl<'i> FromCss<'i> for CssWideKeyword {
-  fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
-    let location = input.current_source_location();
+  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
     let ident = input.expect_ident_cloned()?;
 
     match_ignore_ascii_case! { ident.as_ref(),
       "initial" => Ok(Self::Initial),
       "inherit" => Ok(Self::Inherit),
       "unset" => Ok(Self::Unset),
-      _ => Err(unexpected_token!(location, &Token::Ident(ident))),
+      _ => Err(unexpected_token!(&Token::Ident(ident))),
     }
   }
 
@@ -2346,7 +2344,7 @@ impl StyleDeclarationBlock {
   }
 
   /// Parses one declaration block for the given property name.
-  pub(crate) fn parse<'i>(name: &str, input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
+  pub(crate) fn parse<'i>(name: &str, input: &mut Parser<'i>) -> ParseResult<'i, Self> {
     let property = PropertyId::from_kebab_case(name);
     let start = input.position();
 
@@ -2379,8 +2377,7 @@ impl StyleDeclarationBlock {
   /// its own declaration and nothing else. [`FromStr`] stays strict for callers that want to
   /// know the input was not fully understood.
   pub fn parse_loosy(input: &str) -> Self {
-    let mut parser_input = ParserInput::new(input);
-    let mut parser = Parser::new(&mut parser_input);
+    let mut parser = Parser::new(input);
     let mut declaration_parser = StyleDeclarationParser;
     let mut block = Self::default();
 
@@ -2395,15 +2392,14 @@ impl FromStr for StyleDeclarationBlock {
   type Err = StyleDeclarationBlockParseError;
 
   fn from_str(input: &str) -> Result<Self, Self::Err> {
-    let mut parser_input = ParserInput::new(input);
-    let mut parser = Parser::new(&mut parser_input);
+    let mut parser = Parser::new(input);
     let mut declaration_parser = StyleDeclarationParser;
     let mut block = Self::default();
 
     for result in RuleBodyParser::new(&mut parser, &mut declaration_parser) {
       match result {
         Ok(declarations) => block.append(declarations),
-        Err((error, context)) => {
+        Err((error, context, _)) => {
           return Err(StyleDeclarationBlockParseError::InvalidDeclarationBlock {
             input: input.to_owned(),
             context: context.to_owned(),

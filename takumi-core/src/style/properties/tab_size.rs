@@ -1,6 +1,6 @@
 use std::fmt;
 
-use cssparser::{BasicParseErrorKind, Parser};
+use cssparser::{BasicParseErrorKind, ParseError as CssParseError, Parser};
 
 use crate::style::{
   Animatable, Color, FromCss, MakeComputed, ParseResult, SizingContext, ToCss, lerp,
@@ -51,11 +51,13 @@ impl Animatable for TabSize {
 }
 
 impl<'i> FromCss<'i> for TabSize {
-  fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
+  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
     let value = input.expect_number()?;
 
     if value < 0.0 {
-      return Err(input.new_error(BasicParseErrorKind::QualifiedRuleInvalid));
+      return Err(CssParseError::from_basic_kind(
+        BasicParseErrorKind::QualifiedRuleInvalid,
+      ));
     }
 
     Ok(Self(value))

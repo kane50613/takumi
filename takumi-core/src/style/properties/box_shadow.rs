@@ -1,6 +1,6 @@
 use std::fmt;
 
-use cssparser::{BasicParseErrorKind, Parser};
+use cssparser::{BasicParseErrorKind, ParseError as CssParseError, Parser};
 use typed_builder::TypedBuilder;
 
 use crate::style::{
@@ -53,16 +53,18 @@ pub type BoxShadows = Box<[BoxShadow]>;
 impl_comma_list_from_css!(BoxShadows, BoxShadow);
 
 /// Parses a `<length>` rejecting percentages, which are invalid for shadow blur/spread radii.
-fn parse_non_percentage_length<'i>(input: &mut Parser<'i, '_>) -> ParseResult<'i, Length> {
+fn parse_non_percentage_length<'i>(input: &mut Parser<'i>) -> ParseResult<'i, Length> {
   let length = Length::from_css(input)?;
   if matches!(length, Length::Percentage(_)) {
-    return Err(input.new_error(BasicParseErrorKind::QualifiedRuleInvalid));
+    return Err(CssParseError::from_basic_kind(
+      BasicParseErrorKind::QualifiedRuleInvalid,
+    ));
   }
   Ok(length)
 }
 
 pub(super) fn parse_offsets_blur<'i>(
-  input: &mut Parser<'i, '_>,
+  input: &mut Parser<'i>,
 ) -> ParseResult<'i, (Length, Length, Length)> {
   let horizontal = Length::from_css(input)?;
   let vertical = Length::from_css(input)?;
@@ -73,7 +75,7 @@ pub(super) fn parse_offsets_blur<'i>(
 }
 
 impl<'i> FromCss<'i> for BoxShadow {
-  fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, BoxShadow> {
+  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, BoxShadow> {
     let mut color = None;
     let mut lengths = None;
     let mut inset = false;
@@ -112,7 +114,9 @@ impl<'i> FromCss<'i> for BoxShadow {
       break;
     }
 
-    let lengths = lengths.ok_or(input.new_error(BasicParseErrorKind::QualifiedRuleInvalid))?;
+    let lengths = lengths.ok_or(CssParseError::from_basic_kind(
+      BasicParseErrorKind::QualifiedRuleInvalid,
+    ))?;
 
     Ok(BoxShadow {
       color: color.unwrap_or(ColorInput::Value(Color::transparent())),

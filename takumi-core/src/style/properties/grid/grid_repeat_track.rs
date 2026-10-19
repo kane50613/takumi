@@ -25,7 +25,7 @@ impl MakeComputed for GridRepeatTrack {
 }
 
 impl<'i> FromCss<'i> for GridRepeatTrack {
-  fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
+  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
     let mut names: Vec<String> = Vec::new();
 
     while input.try_parse(Parser::expect_square_bracket_block).is_ok() {
@@ -69,15 +69,14 @@ impl ToCss for GridRepeatTrack {
 
 #[cfg(test)]
 mod tests {
-  use cssparser::{Parser, ParserInput};
+  use cssparser::Parser;
 
   use super::*;
   use crate::style::GridLength;
 
   #[test]
   fn test_parse_repeat_track_with_names() {
-    let mut parser_input = ParserInput::new("[a b] 1fr [c]");
-    let mut parser = Parser::new(&mut parser_input);
+    let mut parser = Parser::new("[a b] 1fr [c]");
     let track = GridRepeatTrack::from_css(&mut parser);
 
     assert_eq!(

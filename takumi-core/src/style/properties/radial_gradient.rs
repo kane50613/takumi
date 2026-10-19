@@ -98,15 +98,14 @@ pub enum RadialSize {
   },
 }
 impl<'i> FromCss<'i> for RadialSize {
-  fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
-    let location = input.current_source_location();
+  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
     let ident = input.expect_ident()?;
     match_ignore_ascii_case! { &ident,
       "closest-side" => Ok(RadialSize::ClosestSide),
       "farthest-side" => Ok(RadialSize::FarthestSide),
       "closest-corner" => Ok(RadialSize::ClosestCorner),
       "farthest-corner" => Ok(RadialSize::FarthestCorner),
-      _ => Err(unexpected_token!(location, &Token::Ident(ident.clone()))),
+      _ => Err(unexpected_token!(&Token::Ident(ident.clone()))),
     }
   }
 
@@ -459,7 +458,7 @@ impl RadialGradient {
 }
 
 impl<'i> FromCss<'i> for RadialGradient {
-  fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, RadialGradient> {
+  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, RadialGradient> {
     let repeating = parse_gradient_function::<Self>(input, Self::FUNCTION_NAMES)?;
 
     input.parse_nested_block(|input| {

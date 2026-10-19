@@ -24,7 +24,7 @@ impl<T: Copy + Default> Default for SpacePair<T> {
 }
 
 impl<'i, T: Copy + FromCss<'i>> FromCss<'i> for SpacePair<T> {
-  fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
+  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
     let first = T::from_css(input)?;
     if let Ok(second) = T::from_css(input) {
       Ok(Self::from_pair(first, second))

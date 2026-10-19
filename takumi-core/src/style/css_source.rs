@@ -3,7 +3,7 @@
 
 use std::fmt::Write;
 
-use cssparser::{ParseError, Parser, ParserInput, Token};
+use cssparser::{ParseError, Parser};
 use selectors::parser::{ParseRelative, SelectorList};
 use serde::{
   Deserialize,
@@ -248,9 +248,7 @@ fn write_group(
   at_rule: &'static str,
   prelude: &str,
   rules: Option<&[CssSource]>,
-  parse: impl for<'i, 't> FnOnce(
-    &mut Parser<'i, 't>,
-  ) -> Result<(), ParseError<'i, StyleSheetParseError>>,
+  parse: impl for<'i> FnOnce(&mut Parser<'i>) -> Result<(), ParseError<StyleSheetParseError>>,
 ) -> Result<(), CssSourceError> {
   validate_prelude(at_rule, prelude, parse)?;
 
@@ -274,12 +272,9 @@ fn write_group(
 fn validate_prelude(
   rule: &'static str,
   prelude: &str,
-  parse: impl for<'i, 't> FnOnce(
-    &mut Parser<'i, 't>,
-  ) -> Result<(), ParseError<'i, StyleSheetParseError>>,
+  parse: impl for<'i> FnOnce(&mut Parser<'i>) -> Result<(), ParseError<StyleSheetParseError>>,
 ) -> Result<(), CssSourceError> {
-  let mut parser_input = ParserInput::new(prelude);
-  let mut parser = Parser::new(&mut parser_input);
+  let mut parser = Parser::new(prelude);
 
   parser
     .parse_entirely(parse)
@@ -316,13 +311,12 @@ impl AnimationStep {
             return Ok(());
           }
 
-          let location = parser.current_source_location();
           let ident = parser.expect_ident()?;
 
           if ident.eq_ignore_ascii_case("from") || ident.eq_ignore_ascii_case("to") {
             Ok(())
           } else {
-            Err(location.new_unexpected_token_error(Token::Ident(ident.clone())))
+            Err(ParseError::unexpected_token())
           }
         })
         .map(|_| ())

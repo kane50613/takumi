@@ -4,7 +4,7 @@
 
 use std::fmt;
 
-use cssparser::{BasicParseErrorKind, Parser};
+use cssparser::{BasicParseErrorKind, ParseError as CssParseError, Parser};
 
 use crate::style::{
   Animatable, Color, FromCss, MakeComputed, ParseResult, SizingContext, ToCss, impl_css_enum, lerp,
@@ -86,11 +86,13 @@ impl Animatable for MinLines {
 }
 
 impl<'i> FromCss<'i> for MinLines {
-  fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
+  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
     let value = input.expect_integer()?;
 
     if value < 1 {
-      return Err(input.new_error(BasicParseErrorKind::QualifiedRuleInvalid));
+      return Err(CssParseError::from_basic_kind(
+        BasicParseErrorKind::QualifiedRuleInvalid,
+      ));
     }
 
     Ok(Self(value as u32))

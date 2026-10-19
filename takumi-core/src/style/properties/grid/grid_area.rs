@@ -18,7 +18,7 @@ pub struct GridArea {
 impl<'i> FromCss<'i> for GridArea {
   const VALID_TOKENS: &'static [&'static str] = &["auto", "span", "<ident>", "<number>"];
 
-  fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
+  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
     let mut values = vec![GridPlacement::from_css(input)?];
 
     while values.len() < 4 && input.try_parse(|parser| parser.expect_delim('/')).is_ok() {
@@ -26,10 +26,7 @@ impl<'i> FromCss<'i> for GridArea {
     }
 
     if !input.is_exhausted() {
-      return Err(unexpected_token!(
-        input.current_source_location(),
-        input.next()?,
-      ));
+      return Err(unexpected_token!(input.next()?,));
     }
 
     let row_start = values[0].clone();

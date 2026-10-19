@@ -1,20 +1,17 @@
 use std::fmt;
 
-use cssparser::{Parser, Token, match_ignore_ascii_case};
+use cssparser::{ParseError as CssParseError, Parser, Token, match_ignore_ascii_case};
 
 #[cfg(feature = "svg")]
 use std::{borrow::Cow, sync::Arc};
 
-#[cfg(feature = "svg")]
-use cssparser::{ParseError as CssParseError, ParseErrorKind, SourceLocation};
-
-#[cfg(feature = "svg")]
-use crate::style::properties::filter_reference::FilterReference;
 use crate::style::{
   Angle, Animatable, Color, CssExpectedMessage, FromCss, Length, ListInterpolationStrategy,
   MakeComputed, ParseResult, PercentageNumber, SizingContext, TextShadow, ToCss, discrete,
   tw::TailwindPropertyParser, unexpected_token,
 };
+#[cfg(feature = "svg")]
+use crate::style::{ValueError, properties::filter_reference::FilterReference};
 
 /// Lookup table for a single 8-bit channel transition.
 pub type TransferTable = [u8; 256];
@@ -297,7 +294,7 @@ pub enum FilterCategory<'f> {
 }
 
 impl<'i> FromCss<'i> for Filters {
-  fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
+  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
     if input.try_parse(|i| i.expect_ident_matching("none")).is_ok() {
       return Ok(Filters::default());
     }
@@ -315,38 +312,30 @@ impl<'i> FromCss<'i> for Filters {
 }
 
 #[cfg(feature = "svg")]
-fn parse_filter_reference<'i>(url: &str, location: SourceLocation) -> ParseResult<'i, Filter> {
+fn parse_filter_reference<'i>(url: &str) -> ParseResult<'i, Filter> {
   FilterReference::from_url(url)
     .map(|reference| Filter::Reference(Arc::new(reference)))
-    .map_err(|error| CssParseError {
-      kind: ParseErrorKind::Custom(Cow::<str>::Owned(error.to_string()).into()),
-      location,
-    })
+    .map_err(|error| CssParseError::custom(ValueError::from(Cow::<str>::Owned(error.to_string()))))
 }
 
 impl<'i> FromCss<'i> for Filter {
-  fn from_css(parser: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
-    let location = parser.current_source_location();
+  fn from_css(parser: &mut Parser<'i>) -> ParseResult<'i, Self> {
     let token = parser.next()?;
 
     #[cfg(feature = "svg")]
     if let Token::UnquotedUrl(url) = token {
-      return parse_filter_reference(url, location);
+      return parse_filter_reference(url);
     }
 
     let Token::Function(function) = token else {
-      return Err(
-        location
-          .new_basic_unexpected_token_error(token.clone())
-          .into(),
-      );
+      return Err(CssParseError::unexpected_token());
     };
 
     #[cfg(feature = "svg")]
     if function.eq_ignore_ascii_case("url") {
       return parser.parse_nested_block(|input| {
         let url = input.expect_string()?.clone();
-        parse_filter_reference(&url, location)
+        parse_filter_reference(&url)
       });
     }
 
@@ -369,7 +358,7 @@ impl<'i> FromCss<'i> for Filter {
         Ok(Filter::Blur(radius))
       }),
       "drop-shadow" => parser.parse_nested_block(|input| TextShadow::from_css(input).map(Filter::DropShadow)),
-      _ => Err(unexpected_token!(location, token)),
+      _ => Err(unexpected_token!(token)),
     }
   }
 

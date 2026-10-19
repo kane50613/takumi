@@ -40,8 +40,7 @@ impl TextDecorationLines {
 }
 
 impl<'i> FromCss<'i> for TextDecorationLines {
-  fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
-    let first_location = input.current_source_location();
+  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
     let first_ident = input.expect_ident()?;
 
     if first_ident.eq_ignore_ascii_case("none") {
@@ -49,18 +48,13 @@ impl<'i> FromCss<'i> for TextDecorationLines {
     }
 
     let Some(mut lines) = Self::from_keyword(first_ident) else {
-      return Err(unexpected_token!(
-        first_location,
-        &Token::Ident(first_ident.clone())
-      ));
+      return Err(unexpected_token!(&Token::Ident(first_ident.clone())));
     };
 
     while let Ok(line) = input.try_parse(|input| {
-      let location = input.current_source_location();
       let ident = input.expect_ident()?;
 
-      Self::from_keyword(ident)
-        .ok_or_else(|| unexpected_token!(location, &Token::Ident(ident.clone())))
+      Self::from_keyword(ident).ok_or_else(|| unexpected_token!(&Token::Ident(ident.clone())))
     }) {
       lines |= line;
     }
@@ -220,7 +214,7 @@ impl FromIterator<AppliedTextDecoration> for AppliedTextDecorations {
 }
 
 impl<'i> FromCss<'i> for TextDecorationThickness {
-  fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
+  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
     if input
       .try_parse(|input| input.expect_ident_matching("from-font"))
       .is_ok()
@@ -321,7 +315,7 @@ impl Animatable for TextUnderlineOffset {
 }
 
 impl<'i> FromCss<'i> for TextUnderlineOffset {
-  fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
+  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
     if input
       .try_parse(|input| input.expect_ident_matching("auto"))
       .is_ok()
@@ -415,7 +409,7 @@ impl MakeComputed for TextDecoration {
 }
 
 impl<'i> FromCss<'i> for TextDecoration {
-  fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
+  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
     let mut line = TextDecorationLines::empty();
     let mut style = None;
     let mut color = None;
@@ -446,10 +440,7 @@ impl<'i> FromCss<'i> for TextDecoration {
         break;
       }
 
-      return Err(unexpected_token!(
-        input.current_source_location(),
-        input.next()?,
-      ));
+      return Err(unexpected_token!(input.next()?,));
     }
 
     Ok(TextDecoration {

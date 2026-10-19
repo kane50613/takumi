@@ -23,7 +23,7 @@ impl MakeComputed for BlockEllipsis {}
 impl Animatable for BlockEllipsis {}
 
 impl<'i> FromCss<'i> for BlockEllipsis {
-  fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
+  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
     if input.try_parse(|i| i.expect_ident_matching("none")).is_ok() {
       return Ok(Self::None);
     }
@@ -108,7 +108,7 @@ impl From<u32> for LineClamp {
 impl MakeComputed for LineClamp {}
 
 impl<'i> FromCss<'i> for LineClamp {
-  fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
+  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
     if input.try_parse(|i| i.expect_ident_matching("none")).is_ok() {
       return Ok(Self::default());
     }
@@ -139,7 +139,7 @@ pub struct WebkitLineClamp(pub LineClamp);
 impl MakeComputed for WebkitLineClamp {}
 
 impl<'i> FromCss<'i> for WebkitLineClamp {
-  fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
+  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
     if input.try_parse(|i| i.expect_ident_matching("none")).is_ok() {
       return Ok(Self::default());
     }

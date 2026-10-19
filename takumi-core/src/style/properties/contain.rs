@@ -56,21 +56,20 @@ impl Animatable for Contain {}
 impl<'i> FromCss<'i> for Contain {
   const VALID_TOKENS: &'static [&'static str] = &["none", "content", "layout", "style", "paint"];
 
-  fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
+  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
     let mut flags = Self::NONE;
 
     loop {
-      let location = input.current_source_location();
       let token = input.next()?.clone();
       let Token::Ident(ident) = &token else {
-        return Err(unexpected_token!(location, &token));
+        return Err(unexpected_token!(&token));
       };
 
       let added = match_ignore_ascii_case! {ident,
         // The single-keyword values stand alone.
         "none" | "content" => {
           if flags != Self::NONE || !input.is_exhausted() {
-            return Err(unexpected_token!(location, &token));
+            return Err(unexpected_token!(&token));
           }
 
           return Ok(match_ignore_ascii_case! {ident,
@@ -81,11 +80,11 @@ impl<'i> FromCss<'i> for Contain {
         "layout" => Self::LAYOUT,
         "style" => Self::STYLE,
         "paint" => Self::PAINT,
-        _ => return Err(unexpected_token!(location, &token)),
+        _ => return Err(unexpected_token!(&token)),
       };
 
       if flags.contains(added) {
-        return Err(unexpected_token!(location, &token));
+        return Err(unexpected_token!(&token));
       }
 
       flags = Self(flags.0 | added.0);

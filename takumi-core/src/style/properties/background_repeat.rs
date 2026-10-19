@@ -67,7 +67,7 @@ impl BackgroundRepeat {
 }
 
 impl<'i> FromCss<'i> for BackgroundRepeat {
-  fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
+  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
     let state = input.state();
     let ident = input.expect_ident()?;
 
@@ -100,7 +100,7 @@ impl<'i> FromCss<'i> for BackgroundRepeat {
 pub type BackgroundRepeats = Box<[BackgroundRepeat]>;
 
 impl<'i> FromCss<'i> for BackgroundRepeats {
-  fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
+  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
     parse_comma_list(input, BackgroundRepeat::from_css)
   }
 

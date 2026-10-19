@@ -1,15 +1,14 @@
 use std::{borrow::Cow, fmt::Write};
 
 use cssparser::{
-  Delimiter, ParseError, Parser, ParserInput, SourceLocation, Token, parse_important,
+  Delimiter, ParseError, ParseErrorKind, Parser, ToCss as CssParserToCss, Token, parse_important,
 };
 
 use super::{LonghandId, ParsedDeclarations, PropertyId, ShorthandId};
-use crate::style::{CssInput, CssNumber, CssUnexpected, CssWideKeyword, FromCss};
+use crate::style::{CssInput, CssNumber, CssUnexpected, CssWideKeyword, FromCss, ValueError};
 
 #[derive(Debug, Clone)]
 pub(crate) struct CssInputParseFailure {
-  location: SourceLocation,
   detail: Option<String>,
 }
 
@@ -69,16 +68,9 @@ impl<'de> CssInputParseError<'de> {
 
     if let Self::Value { failure, .. } = self
       && let Some(failure) = failure
+      && let Some(detail) = &failure.detail
     {
-      let _ = write!(
-        message,
-        ", line {}, column {}",
-        failure.location.line + 1,
-        failure.location.column
-      );
-      if let Some(detail) = &failure.detail {
-        let _ = write!(message, " near \"{}\"", detail);
-      }
+      let _ = write!(message, " near \"{}\"", detail);
     }
 
     let input_description = match self {
@@ -121,34 +113,32 @@ impl CssWideKeyword {
     let CssInput::Str(value) = css_input else {
       return None;
     };
-    let mut parser_input = ParserInput::new(value.as_ref());
-    let mut parser = Parser::new(&mut parser_input);
+    let mut parser = Parser::new(value.as_ref());
 
     Self::from_css(&mut parser).ok()
   }
 }
 
 impl CssInputParseFailure {
-  /// Where a parse stopped reading `source` at `location`, with the word it stopped at.
-  pub(crate) fn new(source: &str, location: SourceLocation) -> Self {
-    let detail = source
-      .char_indices()
-      .nth(location.column.saturating_sub(1) as usize)
-      .map(|(start, _)| {
-        source[start..]
-          .trim_start()
-          .split([' ', '\t', '\n', '\r', ',', ')', '('])
-          .next()
-          .unwrap_or_default()
-          .trim_matches('"')
-          .trim_matches('\'')
-          .chars()
-          .take(24)
-          .collect::<String>()
-      })
-      .filter(|snippet| !snippet.is_empty());
+  /// The token a parse stopped at, when its error names one.
+  pub(crate) fn new(error: &ParseError<ValueError<'_>>) -> Self {
+    let detail = match &error.kind {
+      ParseErrorKind::Custom(ValueError::UnexpectedToken { token, .. }) => {
+        Some(token.to_css_string())
+      }
+      _ => None,
+    }
+    .map(|token| {
+      token
+        .trim_matches('"')
+        .trim_matches('\'')
+        .chars()
+        .take(24)
+        .collect::<String>()
+    })
+    .filter(|snippet| !snippet.is_empty());
 
-    Self { location, detail }
+    Self { detail }
   }
 }
 
@@ -253,7 +243,7 @@ fn without_leading_underscores(mut normalized: String) -> Cow<'static, str> {
 }
 
 pub(crate) fn contains_var_function(specified_value: &str) -> bool {
-  fn contains_in_parser(input: &mut Parser<'_, '_>) -> bool {
+  fn contains_in_parser(input: &mut Parser<'_>) -> bool {
     loop {
       let should_check_nested_block = match input.next_including_whitespace_and_comments() {
         Ok(Token::Function(name)) if name.eq_ignore_ascii_case("var") => return true,
@@ -269,9 +259,7 @@ pub(crate) fn contains_var_function(specified_value: &str) -> bool {
 
       if should_check_nested_block
         && input
-          .parse_nested_block(|input| {
-            Ok::<_, ParseError<'_, Cow<'_, str>>>(contains_in_parser(input))
-          })
+          .parse_nested_block(|input| Ok::<_, ParseError<Cow<'_, str>>>(contains_in_parser(input)))
           .unwrap_or(true)
       {
         return true;
@@ -281,19 +269,18 @@ pub(crate) fn contains_var_function(specified_value: &str) -> bool {
     false
   }
 
-  let mut parser_input = ParserInput::new(specified_value);
-  let mut parser = Parser::new(&mut parser_input);
+  let mut parser = Parser::new(specified_value);
   contains_in_parser(&mut parser)
 }
 
 /// Advances to the first `!` at the top level, leaving it unread. A value can
 /// carry one for its own sake, so the caller decides whether what follows is an
 /// importance marker.
-pub(crate) fn skip_to_bang(parser: &mut Parser<'_, '_>) {
+pub(crate) fn skip_to_bang(parser: &mut Parser<'_>) {
   let _ = parser.parse_until_before(Delimiter::Bang, |parser| {
     while parser.next_including_whitespace_and_comments().is_ok() {}
 
-    Ok::<_, ParseError<'_, ()>>(())
+    Ok::<_, ParseError<()>>(())
   });
 }
 
@@ -303,8 +290,7 @@ pub(crate) fn important_start(value: &str) -> Option<usize> {
     return None;
   }
 
-  let mut parser_input = ParserInput::new(value);
-  let mut parser = Parser::new(&mut parser_input);
+  let mut parser = Parser::new(value);
 
   skip_to_bang(&mut parser);
   let end = parser.position().byte_index();

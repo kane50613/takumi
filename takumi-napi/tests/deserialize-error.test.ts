@@ -31,11 +31,10 @@ function expectInvalidValue(
   input: string,
   near: string,
   expected: string,
-  column = 1,
 ) {
   expect(action).toThrowError(
     new RegExp(
-      `^InvalidArg, invalid value for ${escapeRegex(property)}, line 1, column ${column} near "${escapeRegex(near)}": string ${escapeRegex(JSON.stringify(input))}; (?:Unexpected token: .+?, expected )?${escapeRegex(expected)}$`,
+      `^InvalidArg, invalid value for ${escapeRegex(property)} near "${escapeRegex(near)}": string ${escapeRegex(JSON.stringify(input))}; (?:Unexpected token: .+?, expected )?${escapeRegex(expected)}$`,
     ),
   );
 }
@@ -169,7 +168,6 @@ test("report deserialize error for borderRadius property with invalid slash synt
     "10px / invalid",
     "invalid",
     "1 to 4 length values for width, optionally followed by '/' and 1 to 4 length values for height; also accepts 'initial', 'unset' or 'inherit'.",
-    7,
   );
 });
 

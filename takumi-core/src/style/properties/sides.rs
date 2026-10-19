@@ -37,7 +37,7 @@ impl<T: Copy> Sides<T> {
 }
 
 impl<'i, T: Copy + for<'j> FromCss<'j>> FromCss<'i> for Sides<T> {
-  fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
+  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
     let mut values = [T::from_css(input)?; 4];
     let mut count = 1;
 

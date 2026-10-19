@@ -42,7 +42,7 @@ impl TailwindPropertyParser for TextWrap {
 }
 
 impl<'i> FromCss<'i> for TextWrap {
-  fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
+  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
     let mut mode = None;
     let mut style = TextWrapStyle::default();
 

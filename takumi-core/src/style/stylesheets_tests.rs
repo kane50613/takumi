@@ -1,6 +1,6 @@
 use std::{rc::Rc, str::FromStr};
 
-use cssparser::{Parser, ParserInput};
+use cssparser::Parser;
 use serde_json::{from_value, json};
 
 use super::{
@@ -48,16 +48,14 @@ fn style_with(declarations: impl IntoIterator<Item = StyleDeclaration>) -> Style
 }
 
 fn parse_declarations(name: &str, css: &str) -> StyleDeclarationBlock {
-  let mut input = ParserInput::new(css);
-  let mut parser = Parser::new(&mut input);
+  let mut parser = Parser::new(css);
   let declarations_result = StyleDeclarationBlock::parse(name, &mut parser);
   assert!(declarations_result.is_ok());
   declarations_result.unwrap_or_default()
 }
 
 fn parse_declarations_is_err(name: &str, css: &str) -> bool {
-  let mut input = ParserInput::new(css);
-  let mut parser = Parser::new(&mut input);
+  let mut parser = Parser::new(css);
   StyleDeclarationBlock::parse(name, &mut parser).is_err()
 }
 

@@ -1,6 +1,6 @@
 use std::cell::RefCell;
 
-use cssparser::{Parser, Token, match_ignore_ascii_case};
+use cssparser::{ParseError as CssParseError, Parser, Token, match_ignore_ascii_case};
 
 use crate::style::{
   Length, ONE_CM_IN_PX, ONE_IN_PX, ONE_MM_IN_PX, ONE_PC_IN_PX, ONE_PT_IN_PX, ONE_Q_IN_PX,
@@ -383,19 +383,18 @@ impl CalcValue {
 // Matches Blink's `kMaxExpressionDepth` (css_math_expression_node.h).
 const MAX_CALC_DEPTH: u32 = 100;
 
-pub(crate) fn parse_calc_sum<'i>(input: &mut Parser<'i, '_>) -> ParseResult<'i, CalcValue> {
+pub(crate) fn parse_calc_sum<'i>(input: &mut Parser<'i>) -> ParseResult<'i, CalcValue> {
   parse_calc_sum_at(input, 0)
 }
 
-fn parse_calc_sum_at<'i>(input: &mut Parser<'i, '_>, depth: u32) -> ParseResult<'i, CalcValue> {
+fn parse_calc_sum_at<'i>(input: &mut Parser<'i>, depth: u32) -> ParseResult<'i, CalcValue> {
   parse_calc_chain(input, ['+', '-'], |input| {
     parse_calc_product_at(input, depth)
   })
 }
 
 /// Parses a `calc(...)` that must reduce to a unitless number.
-pub(crate) fn parse_calc_number_expression<'i>(input: &mut Parser<'i, '_>) -> ParseResult<'i, f32> {
-  let location = input.current_source_location();
+pub(crate) fn parse_calc_number_expression<'i>(input: &mut Parser<'i>) -> ParseResult<'i, f32> {
   let token = input.next()?.clone();
 
   if let Token::Function(function) = &token
@@ -405,40 +404,36 @@ pub(crate) fn parse_calc_number_expression<'i>(input: &mut Parser<'i, '_>) -> Pa
     return Ok(value);
   }
 
-  Err(location.new_unexpected_token_error(token))
+  Err(CssParseError::unexpected_token())
 }
 
-fn parse_calc_product_at<'i>(input: &mut Parser<'i, '_>, depth: u32) -> ParseResult<'i, CalcValue> {
+fn parse_calc_product_at<'i>(input: &mut Parser<'i>, depth: u32) -> ParseResult<'i, CalcValue> {
   parse_calc_chain(input, ['*', '/'], |input| {
     parse_calc_factor_at(input, depth)
   })
 }
 
 /// An operand followed by any number of `operators` and further operands, folded left.
-fn parse_calc_chain<'i, 't>(
-  input: &mut Parser<'i, 't>,
+fn parse_calc_chain<'i>(
+  input: &mut Parser<'i>,
   operators: [char; 2],
-  mut parse_operand: impl FnMut(&mut Parser<'i, 't>) -> ParseResult<'i, CalcValue>,
+  mut parse_operand: impl FnMut(&mut Parser<'i>) -> ParseResult<'i, CalcValue>,
 ) -> ParseResult<'i, CalcValue> {
   let mut value = parse_operand(input)?;
 
   while let Some(operator) = parse_calc_operator(input, operators) {
     let rhs = parse_operand(input)?;
 
-    value = value.combine(operator, rhs).ok_or_else(|| {
-      unexpected_token!(
-        Length,
-        input.current_source_location(),
-        &Token::Delim(operator),
-      )
-    })?;
+    value = value
+      .combine(operator, rhs)
+      .ok_or_else(|| unexpected_token!(Length, &Token::Delim(operator),))?;
   }
 
   Ok(value)
 }
 
 /// Consumes the next token when it is a delimiter among `operators`.
-fn parse_calc_operator(input: &mut Parser<'_, '_>, operators: [char; 2]) -> Option<char> {
+fn parse_calc_operator(input: &mut Parser<'_>, operators: [char; 2]) -> Option<char> {
   input
     .try_parse(|input| match input.next() {
       Ok(&Token::Delim(operator)) if operators.contains(&operator) => Ok(operator),
@@ -447,10 +442,9 @@ fn parse_calc_operator(input: &mut Parser<'_, '_>, operators: [char; 2]) -> Opti
     .ok()
 }
 
-fn parse_calc_factor_at<'i>(input: &mut Parser<'i, '_>, depth: u32) -> ParseResult<'i, CalcValue> {
-  let location = input.current_source_location();
+fn parse_calc_factor_at<'i>(input: &mut Parser<'i>, depth: u32) -> ParseResult<'i, CalcValue> {
   if depth >= MAX_CALC_DEPTH {
-    return Err(location.new_unexpected_token_error(Token::ParenthesisBlock));
+    return Err(CssParseError::unexpected_token());
   }
 
   match parse_calc_operator(input, ['+', '-']) {
@@ -474,7 +468,7 @@ fn parse_calc_factor_at<'i>(input: &mut Parser<'i, '_>, depth: u32) -> ParseResu
     Token::Dimension { value, unit, .. } => {
       match length_from_dimension_unit(unit.as_ref(), *value) {
         Some(length) => Ok(CalcValue::Formula(CalcFormula::from_length(length))),
-        None => Err(unexpected_token!(Length, location, token)),
+        None => Err(unexpected_token!(Length, token)),
       }
     }
     Token::Function(name) if name.eq_ignore_ascii_case("calc") => {
@@ -486,8 +480,8 @@ fn parse_calc_factor_at<'i>(input: &mut Parser<'i, '_>, depth: u32) -> ParseResu
       "infinity" => Ok(CalcValue::Number(f32::INFINITY)),
       "-infinity" => Ok(CalcValue::Number(f32::NEG_INFINITY)),
       "nan" => Ok(CalcValue::Number(f32::NAN)),
-      _ => Err(unexpected_token!(Length, location, token)),
+      _ => Err(unexpected_token!(Length, token)),
     },
-    _ => Err(unexpected_token!(Length, location, token)),
+    _ => Err(unexpected_token!(Length, token)),
   }
 }

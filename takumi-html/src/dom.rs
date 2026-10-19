@@ -184,7 +184,7 @@ impl<'a> NodeRef<'a> {
 
     attrs
       .iter()
-      .find(|attr| attr.name.local.as_ref() == name)
+      .find(|attr| &*attr.name.local == name)
       .map(|attr| &*attr.value)
   }
 }

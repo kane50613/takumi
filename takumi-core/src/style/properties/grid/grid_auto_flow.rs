@@ -63,7 +63,7 @@ impl GridAutoFlow {
 }
 
 impl<'i> FromCss<'i> for GridAutoFlow {
-  fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
+  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
     let mut direction = GridDirection::default();
     let mut dense = false;
 
