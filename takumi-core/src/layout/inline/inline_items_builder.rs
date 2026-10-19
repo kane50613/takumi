@@ -1,5 +1,7 @@
 //! Blink's [`InlineItemsBuilder`](https://source.chromium.org/chromium/chromium/src/+/main:third_party/blink/renderer/core/layout/inline/inline_items_builder.cc).
 
+use std::ptr;
+
 use super::outline::InlineOutline;
 use super::{
   inline_item::{
@@ -11,11 +13,15 @@ use crate::{
   geometry::{Rect, Size},
   layout::{border::BorderProperties, tree::RenderNode},
   style::{
-    BackgroundImage, ComputedStyle, Direction as TextDirection, VerticalAlign, WhiteSpaceCollapse,
+    BackgroundImage, ComputedStyle, Direction as TextDirection, UnicodeBidi, VerticalAlign,
+    WhiteSpaceCollapse,
   },
   text::character::{
-    CARRIAGE_RETURN, FORM_FEED, LINE_FEED, OBJECT_REPLACEMENT_CHARACTER, TAB,
-    ZERO_WIDTH_NON_JOINER, ZERO_WIDTH_SPACE, maybe_bidi_rtl,
+    CARRIAGE_RETURN, FIRST_STRONG_ISOLATE, FORM_FEED, LEFT_TO_RIGHT_EMBEDDING,
+    LEFT_TO_RIGHT_ISOLATE, LEFT_TO_RIGHT_OVERRIDE, LINE_FEED, OBJECT_REPLACEMENT_CHARACTER,
+    POP_DIRECTIONAL_FORMATTING, POP_DIRECTIONAL_ISOLATE, RIGHT_TO_LEFT_EMBEDDING,
+    RIGHT_TO_LEFT_ISOLATE, RIGHT_TO_LEFT_OVERRIDE, TAB, ZERO_WIDTH_NON_JOINER, ZERO_WIDTH_SPACE,
+    maybe_bidi_rtl,
   },
 };
 
@@ -141,12 +147,41 @@ impl RenderNode {
   }
 }
 
+/// The left-to-right opening, right-to-left opening, and closing controls of an embedding.
+const EMBED: [char; 3] = [
+  LEFT_TO_RIGHT_EMBEDDING,
+  RIGHT_TO_LEFT_EMBEDDING,
+  POP_DIRECTIONAL_FORMATTING,
+];
+/// The left-to-right opening, right-to-left opening, and closing controls of an override.
+const OVERRIDE: [char; 3] = [
+  LEFT_TO_RIGHT_OVERRIDE,
+  RIGHT_TO_LEFT_OVERRIDE,
+  POP_DIRECTIONAL_FORMATTING,
+];
+/// The left-to-right opening, right-to-left opening, and closing controls of an isolate.
+const ISOLATE: [char; 3] = [
+  LEFT_TO_RIGHT_ISOLATE,
+  RIGHT_TO_LEFT_ISOLATE,
+  POP_DIRECTIONAL_ISOLATE,
+];
+
+/// Blink's `BidiContext`: an embedding, override, or isolate open while items are collected, and
+/// the character that closes it.
+struct BidiContext<'c> {
+  /// The inline box it closes with, or none for the block's own.
+  node: Option<&'c RenderNode>,
+  layout_object: LayoutObject<'c>,
+  exit: char,
+}
+
 /// Blink's `InlineItemsBuilder`, without reusing earlier items, offset mapping, SVG text chunks,
-/// `text-combine-upright`, ruby, initial letters, or `unicode-bidi`.
+/// `text-combine-upright`, ruby, or initial letters.
 pub(crate) struct InlineItemsBuilder<'c> {
   items: InlineItems<'c>,
   text: String,
   boxes: Vec<BoxInfo<'c>>,
+  bidi_context: Vec<BidiContext<'c>>,
   has_bidi_controls: bool,
   has_floats: bool,
   has_out_of_flow_positioned: bool,
@@ -160,6 +195,7 @@ impl<'c> InlineItemsBuilder<'c> {
       items: InlineItems::new(),
       text: String::new(),
       boxes: Vec::new(),
+      bidi_context: Vec::new(),
       has_bidi_controls: false,
       has_floats: false,
       has_out_of_flow_positioned: false,
@@ -724,16 +760,104 @@ impl<'c> InlineItemsBuilder<'c> {
     }
   }
 
-  /// Blink's `EnterBlock`: an RTL block needs bidi.
-  pub(crate) fn enter_block(&mut self, style: &ComputedStyle) {
-    if style.inherited_data.direction == TextDirection::Rtl {
-      self.has_bidi_controls = true;
+  /// Blink's `EnterBidiContext`: opens `enter`, which `exit` closes when `node` does.
+  fn enter_bidi_context(
+    &mut self,
+    node: Option<&'c RenderNode>,
+    layout_object: LayoutObject<'c>,
+    enter: char,
+    exit: char,
+  ) {
+    self.append_opaque_char(InlineItemType::BidiControl, enter, layout_object);
+    self.bidi_context.push(BidiContext {
+      node,
+      layout_object,
+      exit,
+    });
+    self.has_bidi_controls = true;
+  }
+
+  /// [`Self::enter_bidi_context`] with `ltr` or `rtl` as `style`'s `direction` picks.
+  fn enter_directional_context(
+    &mut self,
+    node: Option<&'c RenderNode>,
+    layout_object: LayoutObject<'c>,
+    style: &ComputedStyle,
+    [ltr, rtl, exit]: [char; 3],
+  ) {
+    let enter = match style.inherited_data.direction {
+      TextDirection::Ltr => ltr,
+      TextDirection::Rtl => rtl,
+    };
+
+    self.enter_bidi_context(node, layout_object, enter, exit);
+  }
+
+  /// Blink's `Exit`: closes the contexts `node` opened.
+  fn exit(&mut self, node: Option<&'c RenderNode>) {
+    while let Some(context) = self.bidi_context.last()
+      && context.node.map(ptr::from_ref) == node.map(ptr::from_ref)
+    {
+      let (layout_object, exit) = (context.layout_object, context.exit);
+
+      self.append_opaque_char(InlineItemType::BidiControl, exit, layout_object);
+      self.bidi_context.pop();
     }
   }
 
-  /// Blink's `EnterInline`.
+  /// Blink's `EnterBlock`: an RTL or `plaintext` block needs bidi, and an override opens on the
+  /// block itself.
+  pub(crate) fn enter_block(&mut self, block: &'c RenderNode) {
+    let style = &block.context.style;
+
+    match style.misc_data.unicode_bidi {
+      UnicodeBidi::Normal | UnicodeBidi::Embed | UnicodeBidi::Isolate => {
+        if style.inherited_data.direction == TextDirection::Rtl {
+          self.has_bidi_controls = true;
+        }
+      }
+      UnicodeBidi::BidiOverride | UnicodeBidi::IsolateOverride => {
+        self.enter_directional_context(None, LayoutObject::Box(block), style, OVERRIDE)
+      }
+      UnicodeBidi::Plaintext => self.has_bidi_controls = true,
+    }
+  }
+
+  /// Blink's `EnterInline`, its controls from the bidi control codes injection table.
+  /// <https://drafts.csswg.org/css-writing-modes-3/#bidi-control-codes-injection-table>
   pub(crate) fn enter_inline(&mut self, node: &'c RenderNode) {
-    self.append_opaque(InlineItemType::OpenTag, LayoutObject::Inline(node));
+    let style = &node.context.style;
+    let layout_object = LayoutObject::Inline(node);
+
+    match style.misc_data.unicode_bidi {
+      UnicodeBidi::Normal => {}
+      UnicodeBidi::Embed => {
+        self.enter_directional_context(Some(node), layout_object, style, EMBED);
+      }
+      UnicodeBidi::BidiOverride => {
+        self.enter_directional_context(Some(node), layout_object, style, OVERRIDE);
+      }
+      UnicodeBidi::Isolate => {
+        self.enter_directional_context(Some(node), layout_object, style, ISOLATE);
+      }
+      UnicodeBidi::Plaintext => self.enter_bidi_context(
+        Some(node),
+        layout_object,
+        FIRST_STRONG_ISOLATE,
+        POP_DIRECTIONAL_ISOLATE,
+      ),
+      UnicodeBidi::IsolateOverride => {
+        self.enter_bidi_context(
+          Some(node),
+          layout_object,
+          FIRST_STRONG_ISOLATE,
+          POP_DIRECTIONAL_ISOLATE,
+        );
+        self.enter_directional_context(Some(node), layout_object, style, OVERRIDE);
+      }
+    }
+
+    self.append_opaque(InlineItemType::OpenTag, layout_object);
 
     let current_box = BoxInfo::new(self.items.len() - 1, node);
 
@@ -754,6 +878,7 @@ impl<'c> InlineItemsBuilder<'c> {
 
   /// Blink's `ExitBlock`: trailing newlines and collapsible spaces go.
   pub(crate) fn exit_block(&mut self) {
+    self.exit(None);
     self.remove_trailing_collapsible_space_if_exists();
   }
 
@@ -793,6 +918,8 @@ impl<'c> InlineItemsBuilder<'c> {
 
       self.items[last].should_create_box_fragment = should_create_box_fragment;
     }
+
+    self.exit(Some(node));
   }
 
   /// Blink's `SetIsSymbolMarker`.
