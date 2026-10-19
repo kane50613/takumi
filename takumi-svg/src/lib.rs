@@ -3,11 +3,12 @@
 #![cfg_attr(test, allow(clippy::unwrap_used, clippy::expect_used, clippy::panic))]
 //! Vector SVG output for takumi.
 //!
-//! [`render`] turns a node tree into real SVG (`<rect>`, `<path>`,
-//! `<linearGradient>`/`<radialGradient>`, `<filter>`, `<clipPath>`, glyph-outline
-//! `<path>`s, embedded `<image>`) instead of wrapping a rasterized bitmap in a
-//! `data:` URL. [`quick_xml`] builds the document, so every attribute and value
-//! is escaped.
+//! [`render`] turns a node tree into SVG elements: `<rect>`, `<path>`, `<linearGradient>`,
+//! `<radialGradient>`, `<filter>`, `<clipPath>`, `<mask>`, glyph outline `<path>`s, and
+//! embedded `<image>`s. It does not wrap a rasterized bitmap in a `data:` URL. [`quick_xml`]
+//! builds the document, so every attribute and value is escaped.
+//!
+//! In the `takumi` crate, enable the `svg-backend` feature and call `takumi::render_svg`.
 //!
 //! Coverage:
 //!
@@ -16,7 +17,7 @@
 //! - Box-shadow.
 //! - Text: glyph outlines, decorations, text-shadow, `-webkit-text-stroke`.
 //! - Bitmap and emoji glyphs, images.
-//! - Clip-path, overflow, opacity.
+//! - Clip-path, `mask-image`, overflow, opacity, and blend modes.
 //! - Filter and backdrop-filter (`<filter>` chains; the backdrop is the scene
 //!   replayed up to the element).
 //! - Affine transforms.

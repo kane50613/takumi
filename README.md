@@ -3,10 +3,11 @@
     <img src="./example/twitter-images/output/readme-banner.webp" alt="Takumi — images and PDFs from JSX and CSS, no browser. Rendered by Takumi from the JSX shown in the banner." />
   </a>
 
-**Generate OG images and PDF documents from JSX, HTML, and CSS. No headless browser required.**
+**One layout engine for JSX, HTML, and CSS. Render images, SVG, PDFs, or a paint tree. No headless browser.**
 
 [![npm version](https://img.shields.io/npm/v/takumi-js?label=takumi-js)](https://www.npmjs.com/package/takumi-js)
 [![npm version](https://img.shields.io/npm/v/takumi-pdf?label=takumi-pdf)](https://www.npmjs.com/package/takumi-pdf)
+[![npm version](https://img.shields.io/npm/v/takumi-paint?label=takumi-paint)](https://www.npmjs.com/package/takumi-paint)
 [![crates.io](https://img.shields.io/crates/v/takumi?label=takumi)](https://crates.io/crates/takumi)
 [![npm downloads](https://img.shields.io/npm/dm/%40takumi-rs%2Fcore?label=downloads)](https://www.npmjs.com/package/@takumi-rs/core)
 [![license](https://img.shields.io/badge/license-MIT%20%2F%20Apache--2.0-blue)](#license)
@@ -15,13 +16,26 @@
 
 </div>
 
+Takumi is a layout engine written in Rust, with text and inline layout ported from Chromium. It lays out JSX, HTML, and CSS without launching a browser. One layout feeds several outputs, so the same component can become an Open Graph image, an animated GIF, an invoice PDF, or the paint tree behind editable slides.
+
+## Choose a Package
+
+| Use                                  | Package                                                | Output                                                                        |
+| :----------------------------------- | :----------------------------------------------------- | :---------------------------------------------------------------------------- |
+| Images and animations                | [`takumi-js`](https://takumi.kane.tw/docs/)            | PNG, JPEG, WebP, ICO, raw RGBA, SVG. Animated WebP, APNG, and GIF.            |
+| PDF documents                        | [`takumi-pdf`](https://takumi.kane.tw/docs/pdf)        | Paged or single-page PDF with selectable text.                                |
+| Drawing on Canvas, slides, or native | [`takumi-paint`](https://takumi.kane.tw/docs/paint)    | A paint tree: shapes, paints, text runs, and images with CSS values resolved. |
+| Measuring text and layout            | [`measure()`](https://takumi.kane.tw/docs/measure-api) | Box sizes and text runs, from `takumi-js`. No image is drawn.                 |
+| Embedding in Rust                    | [`takumi`](https://docs.rs/takumi)                     | Images and SVG from a node tree or HTML.                                      |
+
 ## Quick Start
 
-Use `takumi-js` for images and animations, or `takumi-pdf` for PDF documents. The examples below use Bun to run JSX directly.
+Install the package for your output. The examples below use Bun to run JSX directly.
 
 ```bash
-bun i takumi-js    # PNG, JPEG, WebP, SVG, animations
-bun i takumi-pdf   # paged PDF
+bun i takumi-js      # PNG, JPEG, WebP, SVG, animations
+bun i takumi-pdf     # paged PDF
+bun i takumi-paint   # paint tree
 ```
 
 ### Image
@@ -69,9 +83,34 @@ const pdf = await render(
 await writeFile("invoice.pdf", pdf);
 ```
 
-## Features
+### Paint Tree
 
-Takumi is a Rust rendering engine for markup and CSS. It handles layout, text shaping, compositing, and encoding without launching a browser. One component tree renders as an image, an animation, or a paged PDF.
+Save this as `paint.tsx` and run `bun paint.tsx` to print each text run with its font.
+
+```tsx
+import { paint } from "takumi-paint";
+
+const tree = await paint(
+  <div style={{ width: 240, padding: 16, background: "#F7F3EC" }}>
+    Hello <b>world</b>
+  </div>,
+  { width: 320 },
+);
+
+for (const node of tree.nodes) {
+  if (node.type !== "text") {
+    continue;
+  }
+
+  for (const run of node.runs) {
+    console.log(run.text, run.font.family, run.fontSize);
+  }
+}
+```
+
+`tree.steps` lists the draws in paint order. See [Drawing](https://takumi.kane.tw/docs/paint/drawing) to replay them on a canvas.
+
+## Features
 
 ### Images
 
@@ -79,7 +118,7 @@ Takumi is a Rust rendering engine for markup and CSS. It handles layout, text sh
 - **`text-wrap: balance`** balances lines in a headline. `pretty` reduces short last lines.
 - **Animations** sample the tree across time. `@keyframes` and `animate-spin` become WebP, APNG, GIF, or video frames.
 - **Stylesheets** support complex selectors, `var()`, `calc()`, and media queries.
-- **Flexbox, CSS Grid, block, inline, and float** provide layout options.
+- **Flexbox, CSS Grid, block, inline, table, and float** layout are supported.
 - **`lang`** picks each language's own Han glyphs for the same code points.
 - **Text on a path** follows `offset-path`. `background-clip: text` and conic gradients paint it.
 - **Masks, clipping, filters, and blend modes** control how image layers combine.
@@ -92,7 +131,7 @@ Takumi is a Rust rendering engine for markup and CSS. It handles layout, text sh
 - **Page breaks** honor `break-before: page`, `break-after: page`, and `break-inside: avoid`.
 - **Widows and orphans** default to 2, keeping lone lines away from page breaks.
 - **Headers and footers** repeat on every page. `<PageNumber />` and `<TotalPages />` count in CSS counter styles, `trad-chinese-informal` included.
-- **Tables** share column widths across pages and repeat their `<thead>` on every page.
+- **Tables** share column widths across pages and repeat their `<thead>` and `<tfoot>` on every page.
 - **Text** stays selectable and searchable. Fonts embed as subsets.
 - **Links** and metadata carry into the output. `outline: true` builds bookmarks from headings.
 - **Attachments** embed files, including Factur-X e-invoice XML.
@@ -102,7 +141,7 @@ Takumi is a Rust rendering engine for markup and CSS. It handles layout, text sh
 ### Runtimes
 
 - **Node.js and Bun** load a native binding, prebuilt for macOS, Linux (glibc and musl), and Windows on x64 and ARM64.
-- **Cloudflare Workers** and browsers load the WebAssembly build.
+- **Cloudflare Workers** and browsers load the WebAssembly build. `takumi-pdf` and `takumi-paint` run on WebAssembly everywhere.
 - **Rust** applications embed the `takumi` crate.
 
 ## Coming From Something Else
@@ -142,7 +181,7 @@ const image = await render(
 );
 ```
 
-Rendering many images? Register the fonts once on a `Renderer` and reuse it. See [Typography & Fonts](https://takumi.kane.tw/docs/typography-and-fonts).
+`render()` registers only the font subsets the content uses. To preload fonts outside the request path, register them on a `Renderer` and pass it as `renderer`. See [Typography & Fonts](https://takumi.kane.tw/docs/typography-and-fonts#preloading-with-registerfont).
 
 ### API route (`next/og`-compatible)
 
@@ -201,19 +240,31 @@ const svg = await renderSvg(
 await writeFile("./output.svg", svg);
 ```
 
+### Measure Layout
+
+`measure()` takes the same input and options as `render()`. It returns the laid-out size and text runs without drawing.
+
+```tsx
+import { measure } from "takumi-js";
+
+const { width, height } = await measure(<span tw="text-xl">Hello from Takumi</span>);
+```
+
+See the [measure API](https://takumi.kane.tw/docs/measure-api) for the returned fields.
+
 ### Rust
 
 ```bash
 cargo add takumi
 ```
 
-Start from the [Rust example](./example/rust).
+Start from the [Rust example](./example/rust) or the [crate docs](https://docs.rs/takumi).
 
 ## Comparison
 
 Compare [Takumi and Satori](https://takumi.kane.tw/docs/comparison-to-satori) for image formats, CSS support, runtime requirements, and migration examples. For PDFs, the [renderer comparison](https://takumi.kane.tw/docs/pdf/comparison) records invoice benchmarks against `@react-pdf/renderer` and Puppeteer, with package versions and hardware.
 
-Takumi supports a subset of browser CSS. PDF output rejects `filter: blur()`, `drop-shadow()`, and `backdrop-filter`. Keep Puppeteer when your output depends on page scripts or browser layout. Test your templates before switching renderers.
+Takumi supports a subset of browser CSS. PDF output keeps only color `filter` functions: it rejects `blur()` and `drop-shadow()`, and it does not draw `backdrop-filter`. Keep Puppeteer when your output depends on page scripts or browser layout. Test your templates before switching renderers.
 
 ## Who's Using Takumi
 
@@ -228,19 +279,21 @@ More projects in the [showcase](https://takumi.kane.tw/showcase). Takumi is part
 
 ## Core Architecture
 
-Takumi converts templates to a node tree, computes layout with Taffy, shapes text with Parley and Skrifa, and sends the layout to a raster, SVG, or PDF backend. See the [node reference](https://takumi.kane.tw/docs/reference#node-types) for the input format.
+Takumi converts JSX or HTML to a node tree and lays it out in `takumi-core`. Text and inline layout port Chromium's Blink. [Taffy](https://github.com/DioxusLabs/taffy) runs flexbox, grid, and block layout, and tables lay out on its grid algorithm. HarfRust shapes text, and Skrifa reads fonts.
+
+The laid-out tree goes to one of four backends: raster (`takumi-raster`), SVG (`takumi-svg`), PDF (`takumi-pdf`), or the paint tree (`takumi-paint`). See the [node reference](https://takumi.kane.tw/docs/reference#node-types) for the input format.
 
 ## Packages
 
-| Package                                  | Use                                                       |
-| ---------------------------------------- | --------------------------------------------------------- |
-| [`takumi-js`](./takumi-js)               | JSX, HTML, and node trees to images, SVG, and animations. |
-| [`takumi-pdf`](./takumi-pdf-js)          | JSX, HTML, and node trees to PDF documents.               |
-| [`takumi-paint`](./takumi-paint)         | JSX, HTML, and node trees to a paint tree of used values. |
-| [`@takumi-rs/core`](./takumi-napi)       | Native Node.js bindings for direct node-tree rendering.   |
-| [`@takumi-rs/wasm`](./takumi-wasm)       | WebAssembly bindings for edge runtimes and browsers.      |
-| [`@takumi-rs/helpers`](./takumi-helpers) | Template conversion, fonts, images, and emoji.            |
-| [`takumi`](./takumi)                     | Rust crate for image rendering.                           |
+| Package                                  | Use                                                             |
+| ---------------------------------------- | --------------------------------------------------------------- |
+| [`takumi-js`](./takumi-js)               | JSX, HTML, and node trees to images, SVG, and animations.       |
+| [`takumi-pdf`](./takumi-pdf-js)          | JSX, HTML, and node trees to PDF documents.                     |
+| [`takumi-paint`](./takumi-paint)         | JSX, HTML, and node trees to a paint tree of used values.       |
+| [`@takumi-rs/core`](./takumi-napi)       | Native Node.js bindings for direct node-tree rendering.         |
+| [`@takumi-rs/wasm`](./takumi-wasm)       | WebAssembly bindings for edge runtimes and browsers.            |
+| [`@takumi-rs/helpers`](./takumi-helpers) | Template conversion, fonts, images, and emoji.                  |
+| [`takumi`](./takumi)                     | Rust crate: node trees and HTML to images, animations, and SVG. |
 
 ## Showcase
 

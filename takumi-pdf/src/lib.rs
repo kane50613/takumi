@@ -1,28 +1,36 @@
 #![deny(missing_docs)]
 #![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 #![cfg_attr(test, allow(clippy::unwrap_used, clippy::expect_used, clippy::panic))]
-//! Vector PDF output for takumi.
+//! Vector PDF output for takumi. The `takumi-pdf` npm package wraps this crate, which is not
+//! published to crates.io.
 //!
-//! [`render`] runs takumi-core layout and walks the same backend-agnostic
-//! stacking-context scene as `takumi-svg`. A vendored krilla fork writes the
-//! PDF. Backgrounds become filled paths. Text becomes real glyph runs with
-//! embedded subset fonts: selectable, searchable, copyable.
+//! [`render`] lays out the tree with `takumi-core` and walks the same stacking-context scene as
+//! `takumi-svg`. A vendored krilla fork writes the PDF. Backgrounds become filled paths. Text
+//! becomes glyph runs in embedded subset fonts, so it stays selectable and searchable.
+//! [`measure`] lays out a tree without writing a PDF, such as to size a header band.
 //!
 //! # Pagination
 //!
-//! With [`PdfOptions::page`] set, content lays out at the page's content
-//! width with unbounded height, then slices into pages. Unsplittable atoms
-//! (text lines, images, transformed subtrees) push cut points up, so none of
-//! them is cut in half unless it is taller than a page, which then runs on
-//! over the pages after it. Each page re-walks the scene through a vertical
-//! window (clip + translate). Every text line lands on exactly one page, save
-//! a line taller than a page.
+//! With [`PdfOptions::page`] set, content lays out at the page's content width with unbounded
+//! height, then slices into pages. Text lines, images, and transformed subtrees move the cut
+//! point up so no page cuts them in half. One taller than a page runs on over the next pages.
+//! Each page walks the scene again through a vertical window (clip and translate).
 //!
-//! Pagination honors `break-before: page`, `break-after: page`,
-//! `break-inside: avoid`, and the `widows` / `orphans` minimums (default 2,
-//! like Chromium). Header and footer bands repeat in the page margin
-//! areas, like Chromium's print templates. Nodes classed `pageNumber` /
-//! `totalPages` receive the page counters.
+//! Pagination honors `break-before: page`, `break-after: page`, `break-inside: avoid`, and the
+//! `widows` and `orphans` minimums, which default to 2 as in Chromium. A table header or footer
+//! group with `break-inside: avoid`, the default for `<thead>` and `<tfoot>`, repeats on each
+//! page the table crosses. The header and footer bands repeat in the page margins, like
+//! Chromium's print templates. Nodes classed `pageNumber` or `totalPages` receive the page
+//! counters.
+//!
+//! # Document features
+//!
+//! - Link annotations, and an outline built from `h1`–`h6` with [`PdfOptions::outline`].
+//! - Document metadata through [`PdfOptions::metadata`].
+//! - A structure tree, on by default, set by [`PdfOptions::tagged`].
+//! - PDF/A conformance through [`PdfOptions::standard`]. A validation failure fails the render.
+//! - File attachments through [`PdfOptions::attachments`].
+//! - A subset of pages through [`PdfOptions::page_ranges`].
 //!
 //! # CSS coverage
 //!
@@ -31,15 +39,15 @@
 //!   per-layer blend modes; an inline span fills `background-color` per line
 //!   fragment, `box-decoration-break: slice` style (the drifts are listed on
 //!   [`takumi_core::layout::inline::InlineBackgroundFragment`])
-//! - borders, border-radius, `outline`, and `box-shadow` (blur approximated
-//!   by bands)
+//! - borders, border-radius, `outline`, and `box-shadow`
 //! - text with decorations, `text-shadow`, and `-webkit-text-stroke`
+//! - shadow blur, approximated by bands
 //! - images, with `object-fit` and `object-position`
-//! - `clip-path`, `mask-image`, and the color `filter` primitives
+//! - `clip-path`, `mask-image`, and the color `filter` functions
 //! - opacity, blend modes, overflow clipping, and affine transforms
 //!
-//! `filter: blur()` and `drop-shadow()` have no PDF equivalent. [`render`]
-//! stops and names the function.
+//! A PDF has no operator for `filter: blur()` or `drop-shadow()`. [`render`] fails with
+//! [`PdfError::UnsupportedFilter`], naming the function. `backdrop-filter` is not drawn.
 
 use std::{mem::take, rc::Rc};
 
