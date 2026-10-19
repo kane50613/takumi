@@ -91,48 +91,9 @@ jobs:
             | jq -r '.packages[] | select(.publish != []) | select(any(.targets[]; .kind | index("lib"))) | .manifest_path | rtrimstr("/Cargo.toml")')
           exit $fail
 
-      # The WPT reftests compare against the revision the script pins, and skip without a checkout.
-      - name: Check out the web-platform-tests
-        run: sh scripts/wpt-checkout.sh
-
+      # The WPT reftests skip without a checkout; the WPT job runs them.
       - name: Run tests
-        env:
-          WPT_WRITE: ${{ runner.temp }}/wpt-reftests.txt
         run: cargo test --locked
-
-      # The tests that pass now, for a PR to adopt without running the suite locally:
-      # `gh run download <run> -n wpt-reftests -D takumi/tests`.
-      - name: Report WPT passes
-        if: ${{ !cancelled() }}
-        run: |
-          set -eu
-          current="$RUNNER_TEMP/wpt-reftests.txt"
-          [ -f "$current" ] || exit 0
-          patterns() { grep -v '^#' "$1" | sort; }
-          added=$(comm -13 <(patterns takumi/tests/wpt-reftests.txt) <(patterns "$current"))
-          removed=$(comm -23 <(patterns takumi/tests/wpt-reftests.txt) <(patterns "$current"))
-          {
-            echo "### WPT reftests"
-            echo
-            if [ -z "$added$removed" ]; then
-              echo "\`takumi/tests/wpt-reftests.txt\` matches the tests that pass."
-            else
-              echo "\`takumi/tests/wpt-reftests.txt\` differs from the tests that pass; download the \`wpt-reftests\` artifact to update it."
-              echo
-              echo '```diff'
-              printf '%s\n' "$added" | sed '/^$/d; s/^/+ /'
-              printf '%s\n' "$removed" | sed '/^$/d; s/^/- /'
-              echo '```'
-            fi
-          } >> "$GITHUB_STEP_SUMMARY"
-
-      - name: Upload WPT passes
-        if: ${{ !cancelled() }}
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: wpt-reftests
-          path: ${{ runner.temp }}/wpt-reftests.txt
-          if-no-files-found: ignore
 
       # The fixtures claim PDF/A and PDF/UA conformance in their metadata. Only
       # the reference validator can tell whether the claim holds.
@@ -396,6 +357,68 @@ jobs:
           name: js-dist
           path: takumi-js/dist
           if-no-files-found: error
+
+  test-wpt:
+    name: WPT reftests
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Setup Rust
+        uses: ./.github/actions/setup-rust
+        with:
+          stage: wpt
+
+      # The checkout is pinned to one revision and directory list, both in the script.
+      - name: Cache the web-platform-tests
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: target/wpt
+          key: wpt-${{ hashFiles('scripts/wpt-checkout.sh') }}
+
+      - name: Check out the web-platform-tests
+        run: sh scripts/wpt-checkout.sh
+
+      - name: Run the reftests
+        env:
+          WPT_WRITE: ${{ runner.temp }}/wpt-reftests.txt
+        run: cargo test --locked --release -p takumi --test wpt_reftests
+
+      # The tests that pass now, for a PR to adopt without running the suite locally:
+      # `gh run download <run> -n wpt-reftests -D takumi/tests`.
+      - name: Report WPT passes
+        if: ${{ !cancelled() }}
+        run: |
+          set -eu
+          current="$RUNNER_TEMP/wpt-reftests.txt"
+          [ -f "$current" ] || exit 0
+          patterns() { grep -v '^#' "$1" | sort; }
+          added=$(comm -13 <(patterns takumi/tests/wpt-reftests.txt) <(patterns "$current"))
+          removed=$(comm -23 <(patterns takumi/tests/wpt-reftests.txt) <(patterns "$current"))
+          {
+            echo "### WPT reftests"
+            echo
+            if [ -z "$added$removed" ]; then
+              echo "\`takumi/tests/wpt-reftests.txt\` matches the tests that pass."
+            else
+              echo "\`takumi/tests/wpt-reftests.txt\` differs from the tests that pass; download the \`wpt-reftests\` artifact to update it."
+              echo
+              echo '```diff'
+              printf '%s\n' "$added" | sed '/^$/d; s/^/+ /'
+              printf '%s\n' "$removed" | sed '/^$/d; s/^/- /'
+              echo '```'
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload WPT passes
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: wpt-reftests
+          path: ${{ runner.temp }}/wpt-reftests.txt
+          if-no-files-found: ignore
 
   test-js:
     name: Test takumi-js, templates & examples
@@ -932,6 +955,7 @@ jobs:
       [
         lint-and-format,
         test-rust,
+        test-wpt,
         test-js,
         build-image-response,
         check-packaging,
