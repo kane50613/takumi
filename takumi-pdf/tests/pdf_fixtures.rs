@@ -6020,3 +6020,46 @@ fn a_table_taller_than_one_grid_keeps_every_row() {
 
   assert_eq!(inflated_text(&pdf).matches("/S/TR").count(), ROWS + 1);
 }
+
+/// A zero-width non-joiner keeps a glyph of its own that maps back to U+200C alone, so a reader
+/// that follows `ToUnicode`, as Poppler does, extracts each one between the letters it sits between
+/// in the source, in right-to-left Persian too. A mapping that joined it to a letter read it on the
+/// letter's other side.
+#[test]
+fn persian_zero_width_non_joiners_keep_their_own_glyph() {
+  let mut fonts = Fonts::default();
+  let data = fs::read(
+    Path::new(env!("CARGO_MANIFEST_DIR"))
+      .join("../assets/fonts/sil/scheherazade-new-v17-arabic-regular.woff2"),
+  )
+  .expect("read arabic font");
+  let family = fonts
+    .register(FontResource::new(data))
+    .expect("load arabic font")
+    .first()
+    .expect("registered family")
+    .name
+    .clone();
+  let doc = format!(
+    r#"<p dir="rtl" lang="fa" style="font-family:{family};font-size:24px">سه‌ماهه می‌دهد لپ‌تاپ‌ها</p>"#
+  );
+  let pdf = render_pinned(
+    PdfOptions::builder()
+      .node(from_html(&doc, FromHtmlOptions::default()).expect("parse persian doc"))
+      .page(PageOptions::A4)
+      .fonts(&fonts)
+      .build(),
+  );
+  let mappings: Vec<String> = inflated_text(&pdf)
+    .lines()
+    .filter(|line| line.contains("200C"))
+    .filter_map(|line| line.rsplit('<').next())
+    .map(|destination| destination.trim_end_matches('>').to_owned())
+    .collect();
+
+  assert!(!mappings.is_empty(), "no ToUnicode entry for U+200C");
+  assert!(
+    mappings.iter().all(|destination| destination == "200C"),
+    "U+200C joined to another character: {mappings:?}"
+  );
+}
