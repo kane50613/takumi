@@ -111,7 +111,7 @@ impl Database {
     let existing = self
       .faces
       .iter()
-      .position(|face| Arc::ptr_eq(&face.typeface, &typeface));
+      .position(|face| face.typeface.id == typeface.id && face.typeface.index == typeface.index);
 
     let position = existing.unwrap_or_else(|| {
       let id = ID(self.faces.len() as u32);
