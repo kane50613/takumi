@@ -1,6 +1,6 @@
 //! Blink's [`HarfBuzzShaper`](https://source.chromium.org/chromium/chromium/src/+/main:third_party/blink/renderer/platform/fonts/shaping/harfbuzz_shaper.cc).
 
-use std::{collections::VecDeque, rc::Rc};
+use std::{borrow::Cow, collections::VecDeque, rc::Rc};
 
 use harfrust::{
   Direction as HbDirection, Feature, GlyphInfo, GlyphPosition, Language, ShapeOptions,
@@ -9,6 +9,7 @@ use harfrust::{
 use icu_properties::{PropertyNamesShort, props::Script};
 
 use super::{
+  case_mapping_harfbuzz_buffer_filler::CaseMapIntend,
   run_segmenter::{RunSegmenter, RunSegmenterRange},
   shape_result::ShapeResult,
   shape_result_run::ShapeResultRun,
@@ -19,9 +20,11 @@ use crate::{
     font_data_for_range_set::FontDataForRangeSet,
     font_fallback_iterator::{FontFallbackIterator, HintCharList},
     font_fallback_priority::FontFallbackPriority,
+    open_type_caps_support::OpenTypeCapsSupport,
     simple_font_data::SimpleFontData,
+    small_caps_iterator::{SmallCapsBehavior, SmallCapsIterator},
   },
-  style::Direction as TextDirection,
+  style::{Direction as TextDirection, FontFeature, FontVariantCaps},
   text::character::{IDEOGRAPHIC_SPACE, is_8bit, is_common_or_inherited_script},
 };
 
@@ -159,9 +162,7 @@ fn round_harfbuzz_position(value: &mut i32) {
 /// Blink's `ShapeRange`.
 #[allow(clippy::too_many_arguments)]
 fn shape_range(
-  text: &str,
-  start: usize,
-  end: usize,
+  mut buffer: UnicodeBuffer,
   font_features: &[Feature],
   current_font: &SimpleFontData,
   current_run_script: Script,
@@ -174,14 +175,6 @@ fn shape_range(
     .shaper(&font)
     .instance(current_font.shaper_instance(&font))
     .build();
-  let mut buffer = UnicodeBuffer::new();
-
-  for (offset, ch) in text[start..end].char_indices() {
-    buffer.add(ch, (start + offset) as u32);
-  }
-
-  buffer.set_pre_context(&text[..start]);
-  buffer.set_post_context(&text[end..]);
 
   if let Some(language) = language {
     buffer.set_language(language.clone());
@@ -410,6 +403,7 @@ impl HarfBuzzShaper {
   ) {
     let font = range_data.font;
     let language = font.description.locale.as_ref();
+    let needs_caps_handling = font.description.variant_caps != FontVariantCaps::Normal;
     let mut fallback_iterator =
       FontFallbackIterator::new(&font.fallback_list, segment.font_fallback_priority);
 
@@ -426,7 +420,7 @@ impl HarfBuzzShaper {
     let mut current_font_data_for_range_set = FontDataForRangeSet::default();
     let mut fallback_stage = FallbackFontStage::Intermediate;
 
-    while let Some(current_queue_item) = range_data.reshape_queue.pop_front() {
+    while let Some(mut current_queue_item) = range_data.reshape_queue.pop_front() {
       if current_queue_item.action != ReshapeQueueItemAction::Range {
         if !self.collect_fallback_hint_chars(
           &range_data.reshape_queue,
@@ -459,6 +453,30 @@ impl HarfBuzzShaper {
       let Some(font_data) = current_font_data_for_range_set.font_data().cloned() else {
         continue;
       };
+      let font_ref = font_data.font_ref();
+      let mut caps_support = OpenTypeCapsSupport::default();
+      let mut small_caps_behavior = SmallCapsBehavior::SameCase;
+
+      if needs_caps_handling && let Some(font_ref) = font_ref {
+        caps_support = OpenTypeCapsSupport::new(
+          font_ref,
+          font.description.variant_caps,
+          font.description.font_synthesis_small_caps,
+          icu_script_to_hb_script(segment.script),
+        );
+
+        if caps_support.needs_run_case_splitting() {
+          small_caps_behavior = self
+            .split_until_next_case_change(&mut range_data.reshape_queue, &mut current_queue_item);
+
+          // The rest of a split may fall outside the range being shaped.
+          if range_data.start >= current_queue_item.start_index + current_queue_item.num_characters
+            || range_data.end <= current_queue_item.start_index
+          {
+            continue;
+          }
+        }
+      }
 
       debug_assert!(current_queue_item.num_characters > 0);
 
@@ -469,12 +487,48 @@ impl HarfBuzzShaper {
 
       debug_assert!(shape_end > shape_start);
 
-      let Some(buffer) = shape_range(
+      let mut adjusted_font = Rc::clone(&font_data);
+      let mut case_map_intend = CaseMapIntend::KeepSameCase;
+
+      if needs_caps_handling {
+        case_map_intend = caps_support.needs_case_change(small_caps_behavior);
+
+        if caps_support.needs_synthetic_font(small_caps_behavior) {
+          adjusted_font = font_data.small_caps_font_data(&font.description);
+        }
+      }
+
+      let mut buffer = UnicodeBuffer::new();
+
+      case_map_intend.fill_buffer(
+        &mut buffer,
+        language.map(Language::as_str),
         &self.text,
         shape_start,
         shape_end,
-        &range_data.font_features,
-        &font_data,
+      );
+
+      // Blink's `CapsFeatureSettingsScopedOverlay`: the caps features go before the others.
+      let mut caps_features = Vec::new();
+
+      caps_support
+        .font_feature_to_use(small_caps_behavior)
+        .append_features(&mut caps_features);
+
+      let font_features: Cow<'_, [Feature]> = if caps_features.is_empty() {
+        Cow::Borrowed(&range_data.font_features)
+      } else {
+        caps_features
+          .into_iter()
+          .map(FontFeature::into_harfrust)
+          .chain(range_data.font_features.iter().copied())
+          .collect()
+      };
+
+      let Some(buffer) = shape_range(
+        buffer,
+        &font_features,
+        &adjusted_font,
         segment.script,
         range_data.harfbuzz_direction(),
         language,
@@ -486,13 +540,41 @@ impl HarfBuzzShaper {
         range_data,
         &mut font_cycle_queued,
         &current_queue_item,
-        &font_data,
+        &adjusted_font,
         segment.script,
         &mut fallback_stage,
         result,
         &buffer,
       );
     }
+  }
+
+  /// Blink's `SplitUntilNextCaseChange`: shortens `current_queue_item` to its first run of one
+  /// case, queueing the rest, and returns that run's case.
+  fn split_until_next_case_change(
+    &self,
+    queue: &mut VecDeque<ReshapeQueueItem>,
+    current_queue_item: &mut ReshapeQueueItem,
+  ) -> SmallCapsBehavior {
+    let start = current_queue_item.start_index;
+    let text = &self.text[start..start + current_queue_item.num_characters];
+    let Some((num_characters_until_case_change, small_caps_behavior)) =
+      SmallCapsIterator::new(text).consume()
+    else {
+      return SmallCapsBehavior::SameCase;
+    };
+
+    if num_characters_until_case_change > 0
+      && num_characters_until_case_change < current_queue_item.num_characters
+    {
+      queue.push_front(ReshapeQueueItem::range(
+        start + num_characters_until_case_change,
+        current_queue_item.num_characters - num_characters_until_case_change,
+      ));
+      current_queue_item.num_characters = num_characters_until_case_change;
+    }
+
+    small_caps_behavior
   }
 
   /// Blink's `ExtractShapeResults`.
@@ -735,7 +817,134 @@ mod tests {
     glyph_data::HarfBuzzRunGlyphData,
     testing::{GEIST, NOTO_SANS_TC, font, geist, register},
   };
-  use crate::resources::font::Fonts;
+  use crate::{
+    resources::font::Fonts,
+    style::{FontSynthesic, FontVariantCaps},
+  };
+
+  const EB_GARAMOND_CAPS: &str = "../assets/fonts/eb-garamond/EBGaramondCaps.woff2";
+
+  /// A 16px `family` font with `font-variant-caps: caps` and `font-synthesis-small-caps:
+  /// synthesis`.
+  fn caps_font(
+    fonts: &mut Fonts,
+    family: &str,
+    caps: FontVariantCaps,
+    synthesis: FontSynthesic,
+  ) -> Font {
+    let mut description = font(fonts, family).description;
+
+    description.variant_caps = caps;
+    description.font_synthesis_small_caps = synthesis;
+
+    Font::new(fonts, description)
+  }
+
+  /// Each run's characters, font size, and glyphs.
+  fn caps_runs(font: &Font, text: &str) -> Vec<(u32, u32, f32, Vec<u16>)> {
+    HarfBuzzShaper::new(text.into())
+      .shape_all(font, TextDirection::Ltr)
+      .runs
+      .iter()
+      .map(|run| {
+        (
+          run.start_index,
+          run.num_characters,
+          run
+            .font_data
+            .as_ref()
+            .map_or(0.0, |font_data| font_data.size()),
+          run
+            .glyph_data
+            .glyphs()
+            .iter()
+            .map(|glyph| glyph.glyph)
+            .collect(),
+        )
+      })
+      .collect()
+  }
+
+  /// A font without `smcp` draws lowercase letters as uppercase ones at 70% of the size, and
+  /// leaves uppercase ones.
+  #[test]
+  fn synthesizes_small_caps() {
+    let mut fonts = Fonts::default();
+
+    register(&mut fonts, GEIST, "Geist");
+
+    let plain = caps_runs(&font(&mut fonts, "Geist"), "AB");
+    let small_caps = caps_font(
+      &mut fonts,
+      "Geist",
+      FontVariantCaps::SmallCaps,
+      FontSynthesic::Auto,
+    );
+
+    assert_eq!(
+      caps_runs(&small_caps, "aB"),
+      [
+        (0, 1, 11.0, vec![plain[0].3[0]]),
+        (1, 1, 16.0, vec![plain[0].3[1]])
+      ]
+    );
+  }
+
+  /// A letter whose uppercase is longer keeps all of it at its one character.
+  #[test]
+  fn synthesized_small_caps_keep_a_longer_uppercase() {
+    let mut fonts = Fonts::default();
+
+    register(&mut fonts, GEIST, "Geist");
+
+    let small_caps = caps_font(
+      &mut fonts,
+      "Geist",
+      FontVariantCaps::SmallCaps,
+      FontSynthesic::Auto,
+    );
+    let runs = caps_runs(&small_caps, "\u{DF}");
+
+    assert_eq!((runs[0].0, runs[0].1, runs[0].3.len()), (0, 2, 2));
+  }
+
+  /// `font-synthesis-small-caps: none` leaves the text as it is.
+  #[test]
+  fn small_caps_without_synthesis() {
+    let mut fonts = Fonts::default();
+
+    register(&mut fonts, GEIST, "Geist");
+
+    let plain = caps_runs(&font(&mut fonts, "Geist"), "aB");
+    let small_caps = caps_font(
+      &mut fonts,
+      "Geist",
+      FontVariantCaps::SmallCaps,
+      FontSynthesic::None,
+    );
+
+    assert_eq!(caps_runs(&small_caps, "aB"), plain);
+  }
+
+  /// A font with `smcp` draws small capitals with it, at its size.
+  #[test]
+  fn small_caps_from_the_font() {
+    let mut fonts = Fonts::default();
+
+    register(&mut fonts, EB_GARAMOND_CAPS, "EB Garamond Caps");
+
+    let plain = caps_runs(&font(&mut fonts, "EB Garamond Caps"), "a");
+    let small_caps = caps_font(
+      &mut fonts,
+      "EB Garamond Caps",
+      FontVariantCaps::SmallCaps,
+      FontSynthesic::Auto,
+    );
+    let runs = caps_runs(&small_caps, "a");
+
+    assert_eq!((runs.len(), runs[0].2), (1, 16.0));
+    assert_ne!(runs[0].3, plain[0].3);
+  }
 
   /// Blink's `ShapeResultRunData`.
   fn runs(result: &ShapeResult) -> Vec<(u32, u32, u32, harfrust::Script)> {

@@ -1,5 +1,6 @@
 //! Blink's `platform/fonts/shaping`.
 
+pub(crate) mod case_mapping_harfbuzz_buffer_filler;
 pub(crate) mod glyph_data;
 pub(crate) mod glyph_data_range;
 pub(crate) mod harfbuzz_shaper;

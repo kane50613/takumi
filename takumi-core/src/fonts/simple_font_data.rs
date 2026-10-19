@@ -3,12 +3,19 @@
 use std::{
   cell::OnceCell,
   fmt::{self, Debug, Formatter},
+  rc::Rc,
 };
 
 use harfrust::{FontRef, ShaperData, ShaperInstance, Tag, Variation};
 use skrifa::{GlyphId, MetadataProvider, instance::Size, raw::TableProvider};
 
-use crate::resources::font::{MatchedFace, PrimaryFontMetrics};
+use crate::{
+  fonts::font_description::FontDescription,
+  resources::font::{MatchedFace, PrimaryFontMetrics},
+};
+
+/// Blink's `kSmallCapsFontSizeMultiplier`.
+const SMALL_CAPS_FONT_SIZE_MULTIPLIER: f32 = 0.7;
 
 /// Blink's `SimpleFontData`.
 pub(crate) struct SimpleFontData {
@@ -23,6 +30,7 @@ pub(crate) struct SimpleFontData {
   shaper_data: OnceCell<ShaperData>,
   font_metrics: OnceCell<Option<PrimaryFontMetrics>>,
   shaper_instance: OnceCell<Option<ShaperInstance>>,
+  small_caps: OnceCell<Rc<SimpleFontData>>,
 }
 
 impl SimpleFontData {
@@ -60,7 +68,31 @@ impl SimpleFontData {
       shaper_data: OnceCell::new(),
       font_metrics: OnceCell::new(),
       shaper_instance: OnceCell::new(),
+      small_caps: OnceCell::new(),
     })
+  }
+
+  /// Blink's `SmallCapsFontData`: this font at the size synthesized small capitals take.
+  pub(crate) fn small_caps_font_data(&self, font_description: &FontDescription) -> Rc<Self> {
+    Rc::clone(self.small_caps.get_or_init(|| {
+      Rc::new(self.create_scaled_font_data(font_description, SMALL_CAPS_FONT_SIZE_MULTIPLIER))
+    }))
+  }
+
+  /// Blink's `CreateScaledFontData`.
+  fn create_scaled_font_data(&self, font_description: &FontDescription, scale_factor: f32) -> Self {
+    Self {
+      face: self.face.clone(),
+      size: (font_description.computed_size * scale_factor).round(),
+      specified_size: self.specified_size,
+      variations: self.variations.clone(),
+      units_per_em: self.units_per_em,
+      space_glyph: self.space_glyph,
+      shaper_data: OnceCell::new(),
+      font_metrics: OnceCell::new(),
+      shaper_instance: OnceCell::new(),
+      small_caps: OnceCell::new(),
+    }
   }
 
   pub(crate) fn face(&self) -> &MatchedFace {

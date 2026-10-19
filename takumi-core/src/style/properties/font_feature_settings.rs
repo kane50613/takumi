@@ -65,6 +65,11 @@ pub struct FontFeature {
 }
 
 impl FontFeature {
+  /// The feature as harfrust shapes with it, over the whole text.
+  pub(crate) fn into_harfrust(self) -> harfrust::Feature {
+    harfrust::Feature::new(self.tag.into_harfrust(), u32::from(self.value), ..)
+  }
+
   /// Creates a new feature setting.
   pub const fn new(tag: Tag, value: u16) -> Self {
     Self { tag, value }
