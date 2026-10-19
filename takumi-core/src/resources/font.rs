@@ -1145,6 +1145,23 @@ mod tests {
     assert!(!families[0].faces.is_empty());
   }
 
+  /// The same bytes under another family share one decoded face, so one set of shaping tables.
+  #[test]
+  fn a_font_registered_under_two_families_shares_its_face() {
+    let mut fonts = Fonts::default();
+
+    register_named(&mut fonts, geist_bytes(), "Geist A");
+    register_named(&mut fonts, geist_bytes(), "Geist B");
+
+    let faces: Vec<_> = fonts.registry.selector.font_faces().collect();
+
+    assert_eq!(faces.len(), 2);
+    assert!(Arc::ptr_eq(
+      &faces[0].custom_platform_data,
+      &faces[1].custom_platform_data
+    ));
+  }
+
   #[test]
   fn shared_sfnt_bytes_reach_the_font_system_uncopied() {
     let sfnt = FontBytes::Inline(Cow::Owned(geist_bytes()))

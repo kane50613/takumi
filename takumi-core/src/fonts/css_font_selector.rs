@@ -71,9 +71,12 @@ impl CssFontSelector {
     let mut faces = Vec::new();
 
     for index in 0..count {
-      let Some(platform_data) = u32::try_from(index)
-        .ok()
-        .and_then(|index| FontCustomPlatformData::create(Arc::clone(&data), id, index))
+      let Ok(index) = u32::try_from(index) else {
+        continue;
+      };
+      let Some(platform_data) = self
+        .typeface(id, index)
+        .or_else(|| FontCustomPlatformData::create(Arc::clone(&data), id, index).map(Arc::new))
       else {
         continue;
       };
@@ -98,7 +101,7 @@ impl CssFontSelector {
       let font_face = Arc::new(FontFace::new(
         Arc::clone(&family),
         descriptors.clone(),
-        Arc::new(platform_data),
+        platform_data,
       ));
 
       self.font_face_cache.add_font_face(Arc::clone(&font_face));
@@ -194,6 +197,17 @@ impl CssFontSelector {
       .generic_font_family_settings
       .get(&fold_family_name(generic_family))
       .map_or(&[], Vec::as_slice)
+  }
+
+  /// The decoded face at `index` of the data `id` names, under any family, so registering the same
+  /// bytes again shares one face and its shaping tables.
+  fn typeface(&self, id: u64, index: u32) -> Option<Arc<FontCustomPlatformData>> {
+    self
+      .font_faces
+      .iter()
+      .map(|registered| &registered.font_face.custom_platform_data)
+      .find(|typeface| typeface.id == id && typeface.index == index)
+      .map(Arc::clone)
   }
 
   /// The face `family` already lists at `index` of the data `id` names.
