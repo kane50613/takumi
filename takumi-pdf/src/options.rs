@@ -651,8 +651,9 @@ pub struct PdfMetadata {
   pub keywords: Vec<String>,
   /// The tool that created the source document.
   pub creator: Option<String>,
-  /// The document creation date, interpreted as UTC. Every PDF/A level
-  /// requires one; supplying it keeps output deterministic.
+  /// The document creation date, interpreted as UTC. PDF/A output requires
+  /// one when metadata is set, or a language on tagged output. Supplying it keeps
+  /// output deterministic.
   pub creation_date: Option<PdfDate>,
   /// Custom XMP schemas written into the packet, for metadata the renderer
   /// knows nothing about, e.g. the `fx:` properties a Factur-X invoice needs.
