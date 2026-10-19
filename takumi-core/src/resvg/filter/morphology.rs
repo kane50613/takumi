@@ -14,60 +14,144 @@ use crate::resvg::usvg::filter::MorphologyOperator;
 /// This method will allocate a copy of the `src` image as a back buffer.
 pub fn apply(operator: MorphologyOperator, rx: f32, ry: f32, src: ImageRefMut) {
   // No point in making matrix larger than image.
-  let columns = std::cmp::min((rx.ceil() as u32).saturating_mul(2), src.width);
-  let rows = std::cmp::min((ry.ceil() as u32).saturating_mul(2), src.height);
-  let target_x = (columns as f32 / 2.0).floor() as u32;
-  let target_y = (rows as f32 / 2.0).floor() as u32;
-
-  let width_max = src.width as i32 - 1;
-  let height_max = src.height as i32 - 1;
-
+  let columns = std::cmp::min((rx.ceil() as u32).saturating_mul(2), src.width) as usize;
+  let rows = std::cmp::min((ry.ceil() as u32).saturating_mul(2), src.height) as usize;
+  let width = src.width as usize;
+  let height = src.height as usize;
   let mut buf = vec![RGBA8::default(); src.data.len()];
-  let mut buf = ImageRefMut::new(src.width, src.height, &mut buf);
-  let mut x = 0;
-  let mut y = 0;
-  for _ in src.data.iter() {
-    let mut new_p = RGBA8::default();
-    if operator == MorphologyOperator::Erode {
-      new_p.r = 255;
-      new_p.g = 255;
-      new_p.b = 255;
-      new_p.a = 255;
+
+  // The extremum over a rectangle is the extremum over its rows' extrema, so the window sweeps
+  // each row, then each column.
+  sweep(
+    operator,
+    src.data,
+    &mut buf,
+    columns,
+    height,
+    width,
+    |row, x| row * width + x,
+  );
+  sweep(
+    operator,
+    &buf,
+    src.data,
+    rows,
+    width,
+    height,
+    |column, y| y * width + column,
+  );
+}
+
+/// Writes to `dst` the extremum of `src` along each of `lines` lines of `length` pixels, over a
+/// window of `size` pixels that starts `size / 2` before each pixel and is clipped to the line.
+fn sweep(
+  operator: MorphologyOperator,
+  src: &[RGBA8],
+  dst: &mut [RGBA8],
+  size: usize,
+  lines: usize,
+  length: usize,
+  index: impl Fn(usize, usize) -> usize,
+) {
+  let before = size / 2;
+
+  for line in 0..lines {
+    for position in 0..length {
+      let start = position.saturating_sub(before);
+      let end = std::cmp::min((position + size).saturating_sub(before), length);
+
+      dst[index(line, position)] = (start..end)
+        .map(|offset| src[index(line, offset)])
+        .reduce(|extremum, pixel| combine(operator, extremum, pixel))
+        .unwrap_or_default();
     }
+  }
+}
 
-    for oy in 0..rows {
-      for ox in 0..columns {
-        let tx = x as i32 - target_x as i32 + ox as i32;
-        let ty = y as i32 - target_y as i32 + oy as i32;
+fn combine(operator: MorphologyOperator, a: RGBA8, b: RGBA8) -> RGBA8 {
+  let pick = match operator {
+    MorphologyOperator::Erode => std::cmp::min::<u8>,
+    MorphologyOperator::Dilate => std::cmp::max::<u8>,
+  };
 
-        if tx < 0 || tx > width_max || ty < 0 || ty > height_max {
-          continue;
-        }
+  RGBA8 {
+    r: pick(a.r, b.r),
+    g: pick(a.g, b.g),
+    b: pick(a.b, b.b),
+    a: pick(a.a, b.a),
+  }
+}
 
-        let p = src.pixel_at(tx as u32, ty as u32);
-        if operator == MorphologyOperator::Erode {
-          new_p.r = std::cmp::min(p.r, new_p.r);
-          new_p.g = std::cmp::min(p.g, new_p.g);
-          new_p.b = std::cmp::min(p.b, new_p.b);
-          new_p.a = std::cmp::min(p.a, new_p.a);
-        } else {
-          new_p.r = std::cmp::max(p.r, new_p.r);
-          new_p.g = std::cmp::max(p.g, new_p.g);
-          new_p.b = std::cmp::max(p.b, new_p.b);
-          new_p.a = std::cmp::max(p.a, new_p.a);
-        }
+#[cfg(test)]
+mod tests {
+  use super::*;
+
+  /// The extremum over the whole clipped rectangle around each pixel, pixel by pixel.
+  fn naive(
+    operator: MorphologyOperator,
+    columns: usize,
+    rows: usize,
+    src: &ImageRefMut,
+  ) -> Vec<RGBA8> {
+    let (width, height) = (src.width as usize, src.height as usize);
+    let mut out = Vec::new();
+
+    for y in 0..height {
+      for x in 0..width {
+        let xs = x.saturating_sub(columns / 2)..(x + columns - columns / 2).min(width);
+        let ys = y.saturating_sub(rows / 2)..(y + rows - rows / 2).min(height);
+        let pixels = ys.flat_map(|ty| xs.clone().map(move |tx| ty * width + tx));
+
+        out.push(
+          pixels
+            .map(|index| src.data[index])
+            .reduce(|a, b| combine(operator, a, b))
+            .unwrap_or_default(),
+        );
       }
     }
 
-    *buf.pixel_at_mut(x, y) = new_p;
-
-    x += 1;
-    if x == src.width {
-      x = 0;
-      y += 1;
-    }
+    out
   }
 
-  // Do not use `mem::swap` because `data` referenced via FFI.
-  src.data.copy_from_slice(buf.data);
+  #[test]
+  fn sweeps_match_the_whole_rectangle() {
+    let (width, height) = (9, 7);
+    let mut seed = 0x2545_f491_u32;
+    let pixels: Vec<RGBA8> = (0..width * height)
+      .map(|_| {
+        seed ^= seed << 13;
+        seed ^= seed >> 17;
+        seed ^= seed << 5;
+
+        let [r, g, b, a] = seed.to_le_bytes();
+
+        RGBA8 { r, g, b, a }
+      })
+      .collect();
+
+    for operator in [MorphologyOperator::Erode, MorphologyOperator::Dilate] {
+      for (rx, ry) in [
+        (0.5_f32, 0.5_f32),
+        (1.0, 2.0),
+        (2.5, 1.0),
+        (3.0, 3.0),
+        (20.0, 20.0),
+      ] {
+        let mut data = pixels.clone();
+        let columns = ((rx.ceil() as usize) * 2).min(width as usize);
+        let rows = ((ry.ceil() as usize) * 2).min(height as usize);
+        let expected = naive(
+          operator,
+          columns,
+          rows,
+          &ImageRefMut::new(width, height, &mut data.clone()),
+        );
+
+        apply(operator, rx, ry, ImageRefMut::new(width, height, &mut data));
+
+        assert_eq!(data, expected, "{operator:?} {rx} {ry}");
+      }
+    }
+  }
 }
