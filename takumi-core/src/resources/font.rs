@@ -11,7 +11,7 @@ use std::{
   },
 };
 
-use harfrust::font::{Blob, Font as ShapingFont, Variation};
+use harfrust::font::Variation;
 use skrifa::{
   FontRef, MetadataProvider,
   attribute::Style,
@@ -26,6 +26,9 @@ use xxhash_rust::xxh3::{Xxh3, xxh3_64};
 
 #[cfg(feature = "svg")]
 use std::sync::OnceLock;
+
+#[cfg(feature = "svg")]
+use harfrust::font::{Blob, Font as ShapingFont};
 
 #[cfg(feature = "svg")]
 use crate::resvg::usvg::fontdb::Database;
@@ -192,6 +195,7 @@ impl FontBlob {
   }
 
   /// The face at `index` of the bytes, as harfrust shapes with it; none when it does not parse.
+  #[cfg(feature = "svg")]
   pub(crate) fn shaping_font(&self, index: u32) -> Option<ShapingFont> {
     ShapingFont::new(Blob::from(Arc::clone(&self.data)), index)
   }
