@@ -4,12 +4,15 @@ description: Render CSS keyframe animations as GIF, animated WebP, APNG, or raw 
 icon: Play
 ---
 
-Takumi animates scenes two ways:
+Takumi samples CSS animations at a point in time. Pick the call by the output you need:
 
-- `renderAnimation()` produces an animated `webp`, `apng`, or `gif` directly.
-- `render()` with `timeMs` renders one frame at a time, for an animation written as an object or for external encoders like ffmpeg.
+| Output                      | Call                                         |
+| :-------------------------- | :------------------------------------------- |
+| Animated WebP, APNG, or GIF | `renderAnimation()`                          |
+| One frame at a given time   | `render()` with `timeMs`                     |
+| Video through ffmpeg        | `render()` with `timeMs` and `format: "raw"` |
 
-Below is a keyframe animation rendered with ffmpeg + shiki for syntax highlighting:
+This video was rendered frame by frame and encoded with ffmpeg. Its code is highlighted with shiki.
 
 <Video
   src="https://raw.githubusercontent.com/kane50613/takumi/master/example/ffmpeg-keyframe-animation/output/animation.mp4"
@@ -17,140 +20,17 @@ Below is a keyframe animation rendered with ffmpeg + shiki for syntax highlighti
   height={630}
 />
 
-## How to define animations
+## Define an animation
 
-### An animation written as an object
+### With a stylesheet
 
-Write the animation as a `css` entry when the values come from application data.
-Takumi checks every value before the entry reaches the parser, so nothing has to
-be concatenated into a string.
-
-Each step takes an `offset`. Accepted offsets:
-
-| Offset   | Position                          |
-| -------- | --------------------------------- |
-| `from`   | start of the animation            |
-| `to`     | end of the animation              |
-| `"<n>%"` | a percentage offset, e.g. `"50%"` |
-
-```tsx twoslash title="render.tsx"
-// @noErrors
-import { render } from "takumi-js";
-
-const output = await render(<div tw="animate-[move_1s_ease-in-out_infinite_alternate]" />, {
-  width: 100,
-  height: 100,
-  format: "png",
-  timeMs: 500,
-  css: {
-    keyframes: "move",
-    steps: [
-      { offset: "from", style: { transform: "translateX(0)" } },
-      { offset: "50%", style: { transform: "translateX(60px)" } },
-      { offset: "to", style: { transform: "translateX(120px)" } },
-    ],
-  },
-});
-```
-
-The `keyframes` render option takes the same animation as a nested record. It is
-deprecated and goes away in v3.
-
-### CSS Stylesheets
-
-Use stylesheet `@keyframes` when you want the animation to travel with the JSX tree and then render it with either `renderAnimation()` or `render()` + `css`.
-
-`renderAnimation()` takes the scenes directly and handles the rest:
-
-- Transforms each scene's JSX (or HTML string, or node tree)
-- Extracts its `<style>` automatically
-- Fetches images once across every scene
-
-```tsx twoslash title="render.tsx"
-// @noErrors
-import { renderAnimation } from "takumi-js";
-
-const output = await renderAnimation({
-  width: 100,
-  height: 100,
-  fps: 30,
-  format: "webp",
-  scenes: [
-    {
-      durationMs: 1000,
-      node: (
-        <div tw="w-full h-full items-center justify-center">
-          <style>{`
-            @keyframes move {
-              from {
-                transform: translateX(0);
-              }
-
-              to {
-                transform: translateX(60px);
-              }
-            }
-          `}</style>
-          <div tw="w-10 h-10 bg-red-500 animate-[move_1s_ease-in-out_infinite_alternate]" />
-        </div>
-      ),
-    },
-  ],
-});
-```
-
-### Tailwind animation utilities
-
-Takumi supports these Tailwind animation forms:
-
-- Presets: see the table below.
-- Arbitrary shorthand values: `animate-[move_1s_ease-in-out_infinite_alternate]`
-
-| Preset           | Effect                                |
-| ---------------- | ------------------------------------- |
-| `animate-none`   | no animation                          |
-| `animate-spin`   | continuous rotation                   |
-| `animate-ping`   | scale and fade out, like a radar ping |
-| `animate-pulse`  | fade opacity in and out               |
-| `animate-bounce` | bounce up and down                    |
-
-For arbitrary values, `_` is converted to a space, so:
-
-```txt title="Tailwind animation utilities"
-animate-[move_1s_ease-in-out_infinite_alternate]
-```
-
-becomes:
-
-```css title="Tailwind animation utilities"
-animation: move 1s ease-in-out infinite alternate;
-```
-
-<Callout type="warning">
-  Takumi does not currently support Tailwind's `animate-(--custom-property)` form because CSS custom
-  property resolution for `animation` is not implemented.
-</Callout>
-
-## Ways to render
-
-The next two examples share this file.
+Write `@keyframes` in a `<style>` tag inside the tree. `render()` and `renderAnimation()` both pick it up, so the animation travels with the component.
 
 ```tsx twoslash title="scene.tsx"
 // @noErrors
-import type { AnimationRule } from "takumi-js";
-
-export const move: AnimationRule = {
-  keyframes: "move",
-  steps: [
-    { offset: "from", style: { transform: "translateX(0)" } },
-    { offset: "to", style: { transform: "translateX(60px)" } },
-  ],
-};
-
-// `move` feeds render(); the inline <style> travels with the tree for renderAnimation().
 export function Scene() {
   return (
-    <div tw="w-full h-full items-center justify-center">
+    <div tw="flex w-full h-full items-center justify-center">
       <style>{`
         @keyframes move {
           from {
@@ -168,34 +48,94 @@ export function Scene() {
 }
 ```
 
-### `render()`
+The next examples render this `Scene`.
 
-Use `render()` when you want a single frame at a specific animation time.
+### As an object
+
+When the values come from application data, pass the animation as a `css` entry. Takumi checks every value before parsing, so nothing is concatenated into a CSS string.
 
 ```tsx twoslash title="render.tsx"
 // @noErrors
 import { render } from "takumi-js";
-import { Scene, move } from "./scene";
 
-const output = await render(<Scene />, {
+const frame = await render(<div tw="animate-[move_1s_ease-in-out_infinite_alternate]" />, {
   width: 100,
   height: 100,
-  format: "png",
-  css: move,
+  timeMs: 500,
+  css: {
+    keyframes: "move",
+    steps: [
+      { offset: "from", style: { transform: "translateX(0)" } },
+      { offset: "50%", style: { transform: "translateX(60px)" } },
+      { offset: "to", style: { transform: "translateX(120px)" } },
+    ],
+  },
+});
+```
+
+Each step takes an `offset`:
+
+| Offset   | Position                          |
+| -------- | --------------------------------- |
+| `from`   | Start of the animation            |
+| `to`     | End of the animation              |
+| `"<n>%"` | A percentage offset, e.g. `"50%"` |
+
+The `keyframes` render option takes the same animation as a nested record. It is deprecated and will be removed in v3.
+
+### With Tailwind utilities
+
+Takumi supports these Tailwind presets:
+
+| Preset           | Effect                                |
+| ---------------- | ------------------------------------- |
+| `animate-none`   | No animation                          |
+| `animate-spin`   | Continuous rotation                   |
+| `animate-ping`   | Scale and fade out, like a radar ping |
+| `animate-pulse`  | Fade opacity in and out               |
+| `animate-bounce` | Bounce up and down                    |
+
+An arbitrary value turns each `_` into a space. `animate-[move_1s_ease-in-out_infinite_alternate]` becomes:
+
+```css title="Generated declaration"
+animation: move 1s ease-in-out infinite alternate;
+```
+
+A named utility reads its theme variable, as in Tailwind. `animate-wiggle` reads `var(--animate-wiggle)`, so declare that variable and its `@keyframes`. See [Design tokens](/docs/styling#design-tokens).
+
+<Callout type="warning">
+  Takumi does not parse the `animate-(--my-animation)` form. Use a named utility with its
+  `--animate-*` variable instead.
+</Callout>
+
+## Render the animation
+
+### One frame with `render()`
+
+Pass `timeMs` to render the frame at that point of the timeline.
+
+```tsx twoslash title="render.tsx"
+// @noErrors
+import { render } from "takumi-js";
+import { Scene } from "./scene";
+
+const frame = await render(<Scene />, {
+  width: 100,
+  height: 100,
   timeMs: 500,
 });
 ```
 
-### `renderAnimation()`
+### An animated image with `renderAnimation()`
 
-`renderAnimation()` samples the animations defined in each scene. Define motion with stylesheet keyframes (an inline `<style>`, as in `Scene` above) or Tailwind's animation presets. `scenes` is an array so you can stitch several into one animation, but Takumi does not tween between them.
+`renderAnimation()` samples each scene at `fps` and encodes the frames. It converts each scene's JSX, HTML string, or node tree, extracts its `<style>` tags, and fetches images once across every scene.
 
 ```tsx twoslash title="render.tsx"
 // @noErrors
 import { renderAnimation } from "takumi-js";
 import { Scene } from "./scene";
 
-const output = await renderAnimation({
+const webp = await renderAnimation({
   width: 100,
   height: 100,
   fps: 30,
@@ -204,17 +144,17 @@ const output = await renderAnimation({
 });
 ```
 
-### `render()` + ffmpeg
+`scenes` plays several scenes in a row. Each scene starts its own timeline at 0, and Takumi does not tween between scenes.
 
-The [`ffmpeg-keyframe-animation` example](https://github.com/kane50613/takumi/blob/master/example/ffmpeg-keyframe-animation/) renders raw frames with `render()` and streams them into ffmpeg. Use it for video output.
+### Video with ffmpeg
 
-Build the scene once, render each frame at a specific `timeMs`, and pipe the raw RGBA frames into ffmpeg.
+Render each frame with `format: "raw"` and pipe the RGBA bytes into ffmpeg. The [`ffmpeg-keyframe-animation` example](https://github.com/kane50613/takumi/blob/master/example/ffmpeg-keyframe-animation/) is a complete version.
 
 ```tsx twoslash title="render.tsx"
 // @noErrors
 import { render } from "takumi-js";
 import { spawn } from "bun";
-import { Scene, move } from "./scene";
+import { Scene } from "./scene";
 
 const fps = 30;
 const durationSeconds = 4;
@@ -244,13 +184,11 @@ const ffmpeg = spawn(
 const scene = <Scene />;
 
 for (let frameIndex = 0; frameIndex < totalFrames; frameIndex++) {
-  const timeMs = (frameIndex / fps) * 1000;
   const frame = await render(scene, {
     width,
     height,
     format: "raw",
-    css: move,
-    timeMs,
+    timeMs: (frameIndex / fps) * 1000,
   });
 
   ffmpeg.stdin.write(frame);

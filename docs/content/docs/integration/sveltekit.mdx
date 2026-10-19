@@ -3,7 +3,7 @@ title: SvelteKit
 description: Render Svelte components and their CSS as Open Graph images in SvelteKit server routes.
 ---
 
-Render a Svelte component to HTML on the server, then pass that HTML and its CSS to `ImageResponse`.
+Render a Svelte component to HTML on the server. Then pass that HTML and its CSS to `ImageResponse`.
 
 <Steps>
   <Step>
@@ -17,7 +17,7 @@ Render a Svelte component to HTML on the server, then pass that HTML and its CSS
   <Step>
     ### Make a Svelte component
 
-    Set `css="injected"` so the `<style>` block is inlined into the SSR HTML.
+    Set `css="injected"` so the component's `<style>` block lands in the server-rendered HTML.
 
     ```svelte title="src/lib/components/OgImage.svelte"
     <script lang="ts">
@@ -48,10 +48,9 @@ Render a Svelte component to HTML on the server, then pass that HTML and its CSS
   <Step>
     ### Render the component on a server route
 
-    - Import the component, and `app.css` if you use Tailwind.
-    - Map `#lib/*` to `./src/lib/*` in the `imports` field of `package.json`.
-    - Render to HTML with `render` from `svelte/server`.
-    - Return an `ImageResponse`.
+    Render the component with `render` from `svelte/server`, then return an `ImageResponse`. If you use Tailwind, import `app.css` with `?inline` and pass it as `css`.
+
+    The example imports through `#lib/*`. Map it to `./src/lib/*` in the `imports` field of `package.json`.
 
     ```ts title="src/routes/+server.ts"
     import { render } from "svelte/server";
@@ -76,6 +75,8 @@ Render a Svelte component to HTML on the server, then pass that HTML and its CSS
       });
     }
     ```
+
+    `head` carries the injected `<style>`, and `body` carries the markup. `fonts` takes a font URL, which Takumi fetches on demand.
 
   </Step>
 </Steps>
