@@ -23,6 +23,6 @@ Each engine prints one JSON line:
 | `warmMedianMs` | The median time of 20 renders after the first.          |
 | `bytes`        | The size of the PDF.                                    |
 
-Each engine also writes its PDF: `out-takumi.pdf`, `out-reactpdf.pdf`, and `out-puppeteer.pdf`.
+Each engine also writes its PDF to `out-takumi.pdf`, `out-reactpdf.pdf`, and `out-puppeteer.pdf`.
 
 The [comparison page](https://takumi.kane.tw/docs/pdf/comparison) records results for specific package versions and hardware. Run this benchmark with your own templates to measure your workload.

@@ -9,7 +9,7 @@
 
 </div>
 
-`takumi-js` is Takumi's package for images: PNG, JPEG, WebP, SVG, and animated WebP, APNG, or GIF. Use it for social cards, banners, charts, and other generated graphics.
+`takumi-js` is Takumi's package for images. It renders PNG, JPEG, WebP, SVG, and animated WebP, APNG, or GIF. Use it for social cards, banners, charts, and other generated graphics.
 
 Takumi's packages share one layout engine, with text and inline layout ported from Chromium. For PDF documents, use [`takumi-pdf`](https://www.npmjs.com/package/takumi-pdf). To draw the laid-out boxes and text with your own renderer, use [`takumi-paint`](https://www.npmjs.com/package/takumi-paint).
 

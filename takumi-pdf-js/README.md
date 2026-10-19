@@ -71,11 +71,11 @@ await writeFile("invoice.pdf", pdf);
 
 ## Before using an existing template
 
-- **Fonts:** Takumi does not read system fonts. Register fonts that cover your text.
-- **Images:** Fetch remote document images yourself and pass their bytes through `images`.
-- **Page geometry:** Use `size`, `landscape`, and `margin`. CSS `@page` rules are not supported.
-- **Effects:** PDF output rejects CSS `filter: blur()` and `drop-shadow()`, and it does not draw `backdrop-filter`. Prepare those effects as images before rendering.
-- **Validation:** Tagged PDF is enabled by default. Choose the conformance options your document needs and validate the result.
+- **Fonts.** Takumi does not read system fonts. Register fonts that cover your text.
+- **Images.** Fetch remote document images yourself and pass their bytes through `images`.
+- **Page geometry.** Use `size`, `landscape`, and `margin`. CSS `@page` rules are not supported.
+- **Effects.** PDF output rejects CSS `filter: blur()` and `drop-shadow()`, and it does not draw `backdrop-filter`. Prepare those effects as images before rendering.
+- **Validation.** Tagged PDF is enabled by default. Choose the conformance options your document needs and validate the result.
 
 See the [PDF renderer comparison](https://takumi.kane.tw/docs/pdf/comparison) for recorded benchmarks and rendering differences. Runnable examples cover [invoices and receipts](https://github.com/kane50613/takumi/tree/master/example/generate-invoice) and [Factur-X invoices](https://github.com/kane50613/takumi/tree/master/example/e-invoice).
 

@@ -19,7 +19,7 @@ Open `output/invoice.pdf`. The viewer's attachment panel lists `factur-x.xml`. T
 
 ## What the example uses
 
-- **`pdfa: "3b"`** writes the archival container: an sRGB output intent, XMP metadata, and embedded subset fonts. A document that cannot conform fails the render instead of writing a broken file.
+- **`pdfa: "3b"`** writes the archival container. It has an sRGB output intent, XMP metadata, and embedded subset fonts. A document that cannot conform fails the render instead of writing a broken file.
 - **`attachments`** embeds the XML with the file name `factur-x.xml`, a media type, and the `data` relationship. Factur-X fixes all three. `metadata.creationDate` also sets the attachment's modification date, so that date stays the same between runs.
 - **`measure`** lays out the footer and returns its height. The bottom margin is that height plus a 32px gap, which keeps body content clear of the footer.
 - **`tagged: "ua1"`** adds PDF/UA-1. Headings, paragraphs, table rows, and the logo's alt text go into the structure tree. The footer, backgrounds, and borders are artifacts, so screen readers skip them.
