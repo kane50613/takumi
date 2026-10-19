@@ -131,7 +131,9 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
    `HyphenResult` in src/layout/inline/inline_item_result.rs, `InlineBreakToken`
    in src/layout/inline/inline_break_token.rs, `LineBreakPoint` in
    src/layout/inline/line_break_point.rs, `InlineItemTextIndex` in
-   src/layout/inline/inline_item_text_index.rs, and the `white-space` predicates in
+   src/layout/inline/inline_item_text_index.rs, the exclusions in
+   src/layout/exclusions/, `BfcOffset` and `BfcRect` in src/layout/bfc_rect.rs,
+   the float placement in src/layout/floats_utils.rs, and the `white-space` predicates in
    src/style/properties/mod.rs and src/style/properties/text_wrap.rs, from
    third_party/blink/renderer/core/layout/inline/inline_item.cc,
    third_party/blink/renderer/core/layout/inline/inline_items_builder.cc,
@@ -146,7 +148,15 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
    third_party/blink/renderer/core/layout/inline/hyphen_result.cc,
    third_party/blink/renderer/core/layout/inline/inline_break_token.h,
    third_party/blink/renderer/core/layout/inline/line_break_point.h,
-   third_party/blink/renderer/core/layout/inline/inline_item_text_index.h, and
+   third_party/blink/renderer/core/layout/inline/inline_item_text_index.h,
+   third_party/blink/renderer/core/layout/exclusions/exclusion_space.cc,
+   third_party/blink/renderer/core/layout/exclusions/exclusion_area.h,
+   third_party/blink/renderer/core/layout/exclusions/layout_opportunity.cc,
+   third_party/blink/renderer/core/layout/exclusions/line_layout_opportunity.h,
+   third_party/blink/renderer/core/layout/geometry/bfc_rect.h,
+   third_party/blink/renderer/core/layout/floats_utils.cc,
+   third_party/blink/renderer/core/layout/unpositioned_float.h,
+   third_party/blink/renderer/core/layout/positioned_float.h, and
    third_party/blink/renderer/core/css/white_space.h.
 
 Copyright 2014, 2015, 2016, 2017, 2018, 2019, 2020, 2023, 2024, 2025 The Chromium Authors
