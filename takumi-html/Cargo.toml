@@ -10,7 +10,6 @@ rust-version = "1.91"
 
 [dependencies]
 html5ever.workspace = true
-markup5ever_rcdom.workspace = true
 thiserror.workspace = true
 typed-builder.workspace = true
 

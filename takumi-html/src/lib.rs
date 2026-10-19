@@ -13,6 +13,8 @@
 //! # }
 //! ```
 
+mod dom;
+
 use std::{
   borrow::Cow,
   cell::RefCell,
@@ -26,7 +28,6 @@ use html5ever::{
   serialize::{SerializeOpts, TraversalScope, serialize},
   tendril::TendrilSink,
 };
-use markup5ever_rcdom::{Handle, NodeData, RcDom, SerializableHandle};
 use takumi_core::{
   layout::node::{ImageData, ImageSourceInput, MAXIMUM_DOM_TREE_DEPTH, Node, NodeKind},
   style::{
@@ -35,6 +36,8 @@ use takumi_core::{
   },
 };
 use typed_builder::TypedBuilder;
+
+use crate::dom::{DomSink, NodeData, NodeRef};
 
 /// Tags whose entire subtree is dropped, matching the JS markup walker.
 /// Deliberately distinct from the `display:none` presets (`title`,
@@ -275,13 +278,13 @@ pub fn from_html(source: &str, options: FromHtmlOptions) -> Result<Node, HtmlErr
   let mut nodes = Vec::new();
 
   if starts_with_html_element(source) {
-    let dom = parse_document(RcDom::default(), ParseOpts::default()).one(source);
+    let dom = parse_document(DomSink::default(), ParseOpts::default()).one(source);
 
-    builder.build_nodes(&dom.document, 0, &mut nodes)?;
+    builder.build_nodes(dom.document(), 0, &mut nodes)?;
   } else {
     let context = QualName::new(None, ns!(html), local_name!("body"));
     let dom = parse_fragment(
-      RcDom::default(),
+      DomSink::default(),
       ParseOpts::default(),
       context,
       vec![],
@@ -291,8 +294,8 @@ pub fn from_html(source: &str, options: FromHtmlOptions) -> Result<Node, HtmlErr
 
     // `parse_fragment` wraps the roots in a synthetic context element, the
     // document's only child.
-    if let Some(context) = dom.document.children.borrow().first() {
-      for child in context.children.borrow().iter() {
+    if let Some(context) = dom.document().children().next() {
+      for child in context.children() {
         builder.build_nodes(child, 0, &mut nodes)?;
       }
     }
@@ -387,23 +390,20 @@ struct NodeBuilder<'a> {
 impl NodeBuilder<'_> {
   fn build_nodes(
     &self,
-    handle: &Handle,
+    handle: NodeRef<'_>,
     depth: usize,
     out: &mut Vec<Node>,
   ) -> Result<(), HtmlError> {
-    match &handle.data {
-      NodeData::Comment { .. }
-      | NodeData::Doctype { .. }
-      | NodeData::ProcessingInstruction { .. } => {}
+    match handle.data() {
+      NodeData::Comment(_) | NodeData::Doctype { .. } | NodeData::ProcessingInstruction { .. } => {}
       NodeData::Document => {
-        for child in handle.children.borrow().iter() {
+        for child in handle.children() {
           self.build_nodes(child, depth, out)?;
         }
       }
-      NodeData::Text { contents } => {
-        let value = contents.borrow();
-        if !value.is_empty() {
-          out.push(Node::text(value.to_string()));
+      NodeData::Text(contents) => {
+        if !contents.is_empty() {
+          out.push(Node::text(contents.to_string()));
         }
       }
       NodeData::Element { name, .. } => {
@@ -418,7 +418,7 @@ impl NodeBuilder<'_> {
 
   fn build_element(
     &self,
-    handle: &Handle,
+    handle: NodeRef<'_>,
     tag: &str,
     depth: usize,
   ) -> Result<Option<Node>, HtmlError> {
@@ -428,7 +428,7 @@ impl NodeBuilder<'_> {
 
     let node = match tag {
       "br" => Node::text("\n"),
-      "img" => match attribute(handle, "src").filter(|src| !src.trim().is_empty()) {
+      "img" => match handle.attribute("src").filter(|src| !src.trim().is_empty()) {
         Some(src) => Node::image(ImageData {
           src: ImageSourceInput::Url(src.into()),
           width: dimension(handle, "width"),
@@ -448,7 +448,7 @@ impl NodeBuilder<'_> {
         Some(text) => Node::text(text),
         None => {
           let mut children = Vec::new();
-          for child in handle.children.borrow().iter() {
+          for child in handle.children() {
             self.build_nodes(child, depth + 1, &mut children)?;
           }
 
@@ -460,19 +460,19 @@ impl NodeBuilder<'_> {
     Ok(Some(self.apply_metadata(node, handle, tag)))
   }
 
-  fn apply_metadata(&self, mut node: Node, handle: &Handle, tag: &str) -> Node {
+  fn apply_metadata(&self, mut node: Node, handle: NodeRef<'_>, tag: &str) -> Node {
     node = node.with_tag_name(tag);
 
     if let Some(preset) = self.presets.get(tag) {
       node = node.with_preset(preset.clone());
     }
 
-    let NodeData::Element { attrs, .. } = &handle.data else {
+    let NodeData::Element { attrs, .. } = handle.data() else {
       return node;
     };
 
     let mut attributes = BTreeMap::new();
-    for attr in attrs.borrow().iter() {
+    for attr in attrs {
       let name = attr.name.local.as_ref();
       let value = attr.value.as_ref();
 
@@ -532,13 +532,13 @@ impl NodeBuilder<'_> {
 
 /// Concatenated text if every child is a text node, else `None`. Comments are
 /// ignored, mirroring the JS markup walker.
-fn text_only_contents(handle: &Handle) -> Option<String> {
+fn text_only_contents(handle: NodeRef<'_>) -> Option<String> {
   let mut text = String::new();
 
-  for child in handle.children.borrow().iter() {
-    match &child.data {
-      NodeData::Comment { .. } => continue,
-      NodeData::Text { contents } => text.push_str(&contents.borrow()),
+  for child in handle.children() {
+    match child.data() {
+      NodeData::Comment(_) => continue,
+      NodeData::Text(contents) => text.push_str(contents),
       _ => return None,
     }
   }
@@ -546,24 +546,12 @@ fn text_only_contents(handle: &Handle) -> Option<String> {
   (!text.is_empty()).then_some(text)
 }
 
-fn attribute(handle: &Handle, name: &str) -> Option<String> {
-  let NodeData::Element { attrs, .. } = &handle.data else {
-    return None;
-  };
-
-  attrs
-    .borrow()
-    .iter()
-    .find(|attr| attr.name.local.as_ref() == name)
-    .map(|attr| attr.value.to_string())
-}
-
-fn dimension(handle: &Handle, name: &str) -> Option<f32> {
-  attribute(handle, name).and_then(|value| value.parse().ok())
+fn dimension(handle: NodeRef<'_>, name: &str) -> Option<f32> {
+  handle.attribute(name).and_then(|value| value.parse().ok())
 }
 
 /// The style of an `<img>` without a source: an inline-block, sized by its `width` and `height`.
-fn empty_image_style(handle: &Handle) -> Style {
+fn empty_image_style(handle: NodeRef<'_>) -> Style {
   let mut style = Style::default().with(StyleDeclaration::display(Display::InlineBlock));
 
   if let Some(width) = dimension(handle, "width") {
@@ -579,15 +567,14 @@ fn empty_image_style(handle: &Handle) -> Style {
 
 /// Serialize an element including its own tag (outer HTML), used to round-trip
 /// `<svg>` subtrees into an image source.
-fn serialize_outer_html(handle: &Handle) -> Vec<u8> {
+fn serialize_outer_html(handle: NodeRef<'_>) -> Vec<u8> {
   let mut buffer = Vec::new();
-  let serializable: SerializableHandle = handle.clone().into();
   let opts = SerializeOpts {
     traversal_scope: TraversalScope::IncludeNode,
     ..SerializeOpts::default()
   };
 
-  if serialize(&mut buffer, &serializable, opts).is_err() {
+  if serialize(&mut buffer, &handle, opts).is_err() {
     return Vec::new();
   }
 
