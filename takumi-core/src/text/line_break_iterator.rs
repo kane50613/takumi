@@ -1,7 +1,7 @@
 //! Soft wrap opportunities from ICU4X's UAX #14 segmenter with Chromium's overrides, in place of
 //! Blink's LGPL `LazyLineBreakIterator`.
 
-use std::ops::RangeInclusive;
+use std::{ops::RangeInclusive, rc::Rc};
 
 use icu_properties::{CodePointMapData, props::LineBreak};
 use icu_segmenter::{
@@ -98,13 +98,43 @@ pub(crate) enum BreakSpaceType {
 pub(crate) struct LineBreakIterator<'a> {
   text: &'a str,
   /// Whether a line may break before each byte, and at the end.
-  breakable: Vec<bool>,
+  breakable: Rc<[bool]>,
   break_type: LineBreakType,
   break_space: BreakSpaceType,
 }
 
 impl<'a> LineBreakIterator<'a> {
+  #[cfg(test)]
   pub(crate) fn new(text: &'a str, break_type: LineBreakType, break_space: BreakSpaceType) -> Self {
+    Self::with_opportunities(
+      text,
+      Self::opportunities(text, break_type, break_space),
+      break_type,
+      break_space,
+    )
+  }
+
+  /// An iterator over `breakable`, the [`Self::opportunities`] of `text` it was computed for.
+  pub(crate) fn with_opportunities(
+    text: &'a str,
+    breakable: Rc<[bool]>,
+    break_type: LineBreakType,
+    break_space: BreakSpaceType,
+  ) -> Self {
+    Self {
+      text,
+      breakable,
+      break_type,
+      break_space,
+    }
+  }
+
+  /// Whether a line may break before each byte of `text`, and at its end.
+  pub(crate) fn opportunities(
+    text: &str,
+    break_type: LineBreakType,
+    break_space: BreakSpaceType,
+  ) -> Rc<[bool]> {
     let mut breakable = vec![false; text.len() + 1];
 
     if break_type == LineBreakType::BreakCharacter {
@@ -160,13 +190,7 @@ impl<'a> LineBreakIterator<'a> {
 
     breakable[0] = false;
     breakable[text.len()] = true;
-
-    Self {
-      text,
-      breakable,
-      break_type,
-      break_space,
-    }
+    breakable.into()
   }
 
   /// Blink's `BreakType`.

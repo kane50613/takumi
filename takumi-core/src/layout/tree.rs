@@ -11,6 +11,7 @@ use std::{
   vec::IntoIter,
 };
 
+use rustc_hash::FxHashMap;
 use smallvec::SmallVec;
 use taffy::{
   AvailableSpace as TaffyAvailableSpace, AxisStaticEdge, AxisStaticPosition, BlockContext,
@@ -33,7 +34,7 @@ use crate::{
   layout::{
     inline::{
       ContentBox, FragmentItems, InlineContentKind, InlineOutOfFlow, PaddingBox, StaticPosition,
-      inline_node::InlineNode,
+      inline_node::InlineNode, inline_node_data::InlineNodeData,
     },
     list_marker::{ListCounter, is_list_element, list_marker, owns_list_counter},
     node::{Node, NodeKind, NodeStyleLayers},
@@ -258,6 +259,9 @@ pub struct LayoutTree<'r> {
   /// both axes, while only inline boxes see the available height, so a context without them is
   /// keyed on its width constraint alone.
   inline_measures: RefCell<HashMap<InlineMeasureKey, Size<f32>>>,
+  /// Each inline formatting context's prepared items, which every pass of one layout shares, as
+  /// Blink keeps them until `NeedsCollectInlines`.
+  inline_node_data: RefCell<FxHashMap<usize, Rc<InlineNodeData<'r>>>>,
   /// Whether each inline formatting context keeps the fragment items it lays out to, as a layout
   /// that paint reads does.
   keeps_fragment_items: bool,
@@ -505,6 +509,7 @@ impl<'r> LayoutTree<'r> {
       render_nodes: Vec::with_capacity(1),
       inline_containing_blocks: Vec::new(),
       inline_measures: RefCell::default(),
+      inline_node_data: RefCell::default(),
       keeps_fragment_items: false,
     };
     let root_id = tree.push_subtree(render_root);
@@ -512,6 +517,17 @@ impl<'r> LayoutTree<'r> {
     debug_assert_eq!(root_id, TaffyNodeId::from(0usize));
 
     tree
+  }
+
+  /// The prepared items of the inline formatting context the node at `index` establishes.
+  fn inline_node_data(&self, index: usize) -> Rc<InlineNodeData<'r>> {
+    Rc::clone(
+      self
+        .inline_node_data
+        .borrow_mut()
+        .entry(index)
+        .or_insert_with(|| Rc::new(InlineNode::new(self.render_nodes[index]).prepare_layout())),
+    )
   }
 
   /// Appends the layout nodes of the subtree under `render_root`, returning its root id.
@@ -1230,10 +1246,17 @@ impl LayoutPartialTree for LayoutTree<'_> {
     };
 
     node.unrounded_layout = *layout;
+
+    let index = usize::from(node_id);
+
     if self.keeps_fragment_items
-      && let Some(render_node) = self.render_nodes.get(usize::from(node_id))
+      && let Some(render_node) = self.render_nodes.get(index)
+      && render_node.has_own_inline_content()
     {
-      render_node.keep_fragment_items(ComputedLayout::from_taffy(layout));
+      render_node.keep_fragment_items(
+        &self.inline_node_data(index),
+        ComputedLayout::from_taffy(layout),
+      );
     }
   }
 
@@ -1544,8 +1567,11 @@ impl<'r> LayoutTree<'r> {
                 return size.into_taffy();
               }
 
-              let (size, sizes_boxes) =
-                render_node.measure_inline_content(available_space, known_dimensions);
+              let (size, sizes_boxes) = render_node.measure_inline_content(
+                &tree.inline_node_data(idx),
+                available_space,
+                known_dimensions,
+              );
 
               tree
                 .inline_measures
@@ -1575,10 +1601,13 @@ impl<'r> LayoutTree<'r> {
           if lays_out_text && inputs.run_mode == RunMode::PerformLayout {
             let kept = tree.keeps_fragment_items.then(border_box);
 
+            let items_data = tree.inline_node_data(idx);
+
             if let Some(layout) = kept {
-              render_node.keep_fragment_items(layout);
+              render_node.keep_fragment_items(&items_data, layout);
             }
             output.baselines.first = render_node.inline_content_border_box_baseline(
+              &items_data,
               Size::from_taffy(inputs.available_space).map(AvailableSpace::from_taffy),
               Size::from_taffy(output.size),
               false,
@@ -1599,7 +1628,7 @@ impl<'r> LayoutTree<'r> {
               TaffyAvailableSpace::Definite(_)
             )
           {
-            render_node.keep_fragment_items(border_box());
+            render_node.keep_fragment_items(&tree.inline_node_data(idx), border_box());
           }
 
           if node_data.is_inline_children
@@ -1840,10 +1869,25 @@ impl RenderNode {
 
   /// Lays its inline content out to the fragment items it keeps, in the content box of `layout`,
   /// unless it keeps ones for that content box already.
-  pub(crate) fn keep_fragment_items(&self, layout: ComputedLayout) {
+  pub(crate) fn keep_fragment_items<'c>(
+    &'c self,
+    items_data: &InlineNodeData<'c>,
+    layout: ComputedLayout,
+  ) {
+    if self.fragment_items_in(layout).is_some() || !self.has_own_inline_content() {
+      return;
+    }
+
+    self.fragment_items.keep(Rc::new(
+      self.lay_out_fragment_items_from(items_data, layout),
+    ));
+  }
+
+  /// Whether it has inline content of its own to lay out.
+  pub(crate) fn has_own_inline_content(&self) -> bool {
     let font_style = SizedFontStyle::from_style(&self.context.style, &self.context);
 
-    OwnContent::of(self).fragment_items(&font_style, layout);
+    OwnContent::of(self).has_inline_content(&font_style)
   }
 
   /// The fragment items its inline content laid out to in the content box of `layout`, if it
@@ -2447,8 +2491,14 @@ impl RenderNode {
     size: Size<f32>,
     use_last_line: bool,
   ) -> Option<f32> {
-    let baseline =
-      self.inline_content_border_box_baseline(available_space, size, use_last_line, None)?;
+    let items_data = InlineNode::new(self).prepare_layout();
+    let baseline = self.inline_content_border_box_baseline(
+      &items_data,
+      available_space,
+      size,
+      use_last_line,
+      None,
+    )?;
 
     Some(self.margin_px().top + baseline)
   }
@@ -2456,8 +2506,9 @@ impl RenderNode {
   /// Baseline of the first or last line box, measured from the border box top.
   /// Reads the baseline from the fragment items it kept for `kept`, when it kept them, instead of
   /// laying its content out again.
-  fn inline_content_border_box_baseline(
-    &self,
+  fn inline_content_border_box_baseline<'c>(
+    &'c self,
+    items_data: &InlineNodeData<'c>,
     available_space: Size<AvailableSpace>,
     size: Size<f32>,
     use_last_line: bool,
@@ -2477,7 +2528,8 @@ impl RenderNode {
       return Some(self.content_top() + baseline);
     }
 
-    let baseline = self.inline_content_baseline(available_space, size.width, use_last_line)?;
+    let baseline =
+      self.inline_content_baseline(items_data, available_space, size.width, use_last_line)?;
 
     Some(self.content_top() + baseline)
   }
@@ -2619,14 +2671,15 @@ impl RenderNode {
 
   /// The size of this inline formatting context, and whether it sized inline boxes, the only
   /// part of it the available height reaches.
-  pub(crate) fn measure_inline_content(
-    &self,
+  pub(crate) fn measure_inline_content<'c>(
+    &'c self,
+    items_data: &InlineNodeData<'c>,
     available_space: Size<AvailableSpace>,
     known_dimensions: Size<Option<f32>>,
   ) -> (Size<f32>, bool) {
     (
       InlineNode::new(self)
-        .measure(available_space, known_dimensions)
+        .measure(items_data, available_space, known_dimensions)
         .size,
       true,
     )
@@ -2647,8 +2700,10 @@ impl RenderNode {
     if matches!(node.kind, NodeKind::Text(_))
       || self.context.style.base_data.display == Display::Inline
     {
-      return InlineNode::new(self)
-        .measure(available_space, known_dimensions)
+      let node = InlineNode::new(self);
+
+      return node
+        .measure(&node.prepare_layout(), available_space, known_dimensions)
         .size;
     }
 

@@ -10,6 +10,8 @@ use std::{
   rc::Rc,
 };
 
+use rustc_hash::FxHashMap;
+
 use super::{
   inline_item::{InlineItem, InlineItemType, InlineItems, LayoutObject},
   inline_item_segment::InlineItemSegments,
@@ -19,6 +21,7 @@ use crate::{
   font_style::SizedFontStyle,
   fonts::{font::Font, font_description::FontDescription},
   style::Direction as TextDirection,
+  text::line_break_iterator::{BreakSpaceType, LineBreakIterator, LineBreakType},
 };
 
 /// Blink's `InlineNodeData`, without first-line items, SVG text, ruby, initial letters, or text
@@ -37,9 +40,35 @@ pub(crate) struct InlineNodeData<'c> {
   pub(crate) is_bisect_line_break_disabled: bool,
   pub(crate) is_score_line_break_disabled: bool,
   pub(crate) fonts: StyleFonts,
+  /// The soft wrap opportunities of `text_content` per break type, which every line breaking pass
+  /// shares.
+  pub(crate) break_opportunities: RefCell<FxHashMap<BreakKind, Rc<[bool]>>>,
 }
 
+/// The break type and break space a line breaker asks for opportunities under.
+type BreakKind = (LineBreakType, BreakSpaceType);
+
 impl<'c> InlineNodeData<'c> {
+  /// An iterator over the soft wrap opportunities of `text_content` under `break_type` and
+  /// `break_space`, computed once.
+  pub(crate) fn break_iterator(
+    &self,
+    break_type: LineBreakType,
+    break_space: BreakSpaceType,
+  ) -> LineBreakIterator<'_> {
+    let breakable = Rc::clone(
+      self
+        .break_opportunities
+        .borrow_mut()
+        .entry((break_type, break_space))
+        .or_insert_with(|| {
+          LineBreakIterator::opportunities(&self.text_content, break_type, break_space)
+        }),
+    );
+
+    LineBreakIterator::with_opportunities(&self.text_content, breakable, break_type, break_space)
+  }
+
   /// Blink's `HasFloatingOrOutOfFlowPositioned`.
   pub(crate) fn has_floating_or_out_of_flow_positioned(&self) -> bool {
     self.has_floats || self.has_out_of_flow_positioned
