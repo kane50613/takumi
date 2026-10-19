@@ -1743,3 +1743,39 @@ fn logical_properties_map_to_physical_sides() {
     LineWidth::Length(Length::Px(2.0))
   );
 }
+
+/// Padding and sizes reject a negative value, which leaves the earlier declaration in place, while
+/// margins and offsets still take one.
+#[test]
+fn negative_padding_and_sizes_are_invalid() {
+  for css in [
+    "padding-top: -1px",
+    "padding: 8px -8px",
+    "padding-inline-start: -1px",
+    "padding-block: -1px",
+    "width: -10px",
+    "height: -1%",
+    "min-width: -1px",
+    "max-height: -1em",
+    "inline-size: -1px",
+  ] {
+    assert!(
+      StyleDeclarationBlock::parse_loosy(css).is_empty(),
+      "{css} parsed as valid"
+    );
+  }
+
+  for css in ["margin-top: -1px", "top: -1px", "width: 0", "padding: 0"] {
+    assert!(
+      !StyleDeclarationBlock::parse_loosy(css).is_empty(),
+      "{css} parsed as invalid"
+    );
+  }
+
+  let style = style_with(
+    StyleDeclarationBlock::parse_loosy("padding-top: 8px; padding-top: -8px").declarations,
+  )
+  .inherit(&ComputedStyle::default());
+
+  assert_eq!(style.box_data.padding_top, Length::Px(8.0));
+}

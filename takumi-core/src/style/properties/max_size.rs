@@ -18,6 +18,11 @@ pub enum MaxSize {
 }
 
 impl MaxSize {
+  /// Whether it is a negative length, which a sizing property rejects.
+  pub(crate) fn is_negative(self) -> bool {
+    matches!(self, Self::Length(length) if length.is_negative())
+  }
+
   /// The maximum as a [`Length`], or `None` for `none`.
   pub(crate) fn as_length(self) -> Option<Length> {
     match self {
