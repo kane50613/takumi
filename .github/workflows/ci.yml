@@ -202,6 +202,8 @@ jobs:
       - name: Check for git changes and prepare artifact
         id: check_changes
         run: |
+          # A new fixture's goldens are untracked, which `git diff` skips without this.
+          git add --all --intent-to-add
           if git diff --quiet HEAD; then
             echo "changed=false" >> $GITHUB_OUTPUT
           else
