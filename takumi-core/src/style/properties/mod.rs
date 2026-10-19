@@ -1476,6 +1476,8 @@ pub enum WhiteSpaceCollapse {
   PreserveSpaces,
   /// Preserve breaks and collapse spaces.
   PreserveBreaks,
+  /// Preserve whitespace, with a soft wrap opportunity after every preserved space.
+  BreakSpaces,
 }
 
 impl_css_enum!(
@@ -1484,12 +1486,16 @@ impl_css_enum!(
   "collapse" => WhiteSpaceCollapse::Collapse,
   "preserve-spaces" => WhiteSpaceCollapse::PreserveSpaces,
   "preserve-breaks" => WhiteSpaceCollapse::PreserveBreaks,
+  "break-spaces" => WhiteSpaceCollapse::BreakSpaces,
 );
 
 impl WhiteSpaceCollapse {
   /// Blink's `ShouldPreserveWhiteSpaces`.
   pub(crate) fn should_preserve_white_spaces(self) -> bool {
-    matches!(self, Self::Preserve | Self::PreserveSpaces)
+    matches!(
+      self,
+      Self::Preserve | Self::PreserveSpaces | Self::BreakSpaces
+    )
   }
 
   /// Blink's `ShouldCollapseWhiteSpaces`.
@@ -1499,7 +1505,15 @@ impl WhiteSpaceCollapse {
 
   /// Blink's `ShouldPreserveBreaks`.
   pub(crate) fn should_preserve_breaks(self) -> bool {
-    matches!(self, Self::Preserve | Self::PreserveBreaks)
+    matches!(
+      self,
+      Self::Preserve | Self::PreserveBreaks | Self::BreakSpaces
+    )
+  }
+
+  /// Blink's `ShouldBreakSpaces`.
+  pub(crate) fn should_break_spaces(self) -> bool {
+    self == Self::BreakSpaces
   }
 }
 

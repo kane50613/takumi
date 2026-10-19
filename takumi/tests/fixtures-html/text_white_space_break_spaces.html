@@ -1,0 +1,35 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>text_white_space_break_spaces</title>
+    <base href="../../../" />
+    <link rel="stylesheet" href="takumi/tests/shared.css" />
+  </head>
+  <body style="width: 1200px; height: 630px">
+    <div
+      style="
+        display: flex;
+        align-items: flex-start;
+        gap: 40px;
+        width: 100%;
+        height: 100%;
+        padding: 40px;
+        background-color: rgb(255, 255, 255);
+        font-family: Geist;
+        font-size: 40px;
+      "
+    >
+      <div style="width: 300px; white-space: pre-wrap; border: 2px solid rgb(0, 0, 0)"
+        ><span style="background-color: rgb(254, 202, 202)"
+          >Lorem&#32;ipsum&#32;&#32;&#32;&#32;&#32;&#32;&#32;&#32;&#32;&#32;&#32;&#32;dolor&#32;sit&#32;amet</span
+        ></div
+      >
+      <div style="width: 300px; white-space: break-spaces; border: 2px solid rgb(0, 0, 0)"
+        ><span style="background-color: rgb(191, 219, 254)"
+          >Lorem&#32;ipsum&#32;&#32;&#32;&#32;&#32;&#32;&#32;&#32;&#32;&#32;&#32;&#32;dolor&#32;sit&#32;amet</span
+        ></div
+      >
+    </div>
+  </body>
+</html>
