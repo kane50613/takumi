@@ -20,7 +20,29 @@ enum Slant {
 /// The angle `oblique` and `italic` request, as CSS Fonts 4 defines it.
 const DEFAULT_OBLIQUE_ANGLE: f32 = 14.0;
 
+/// The steepest angle `oblique` takes. <https://drafts.csswg.org/css-fonts-4/#valdef-font-style-oblique-angle--90deg-90deg>
+const MAX_OBLIQUE_ANGLE: f32 = 90.0;
+
 impl MakeComputed for FontStyle {}
+
+/// An `oblique` angle in degrees, signed where `Angle` keeps a turn in [0, 360), and within
+/// ±90deg.
+fn oblique_angle<'i>(input: &mut Parser<'i, '_>) -> ParseResult<'i, f32> {
+  let start = input.state();
+  let angle = *Angle::from_css(input)?;
+  let angle = if angle > 180.0 { angle - 360.0 } else { angle };
+
+  if (-MAX_OBLIQUE_ANGLE..=MAX_OBLIQUE_ANGLE).contains(&angle) {
+    return Ok(angle);
+  }
+
+  input.reset(&start);
+
+  let location = input.current_source_location();
+  let token = input.next()?.clone();
+
+  Err(location.new_unexpected_token_error(token))
+}
 
 impl<'i> FromCss<'i> for FontStyle {
   fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
@@ -30,10 +52,7 @@ impl<'i> FromCss<'i> for FontStyle {
     match_ignore_ascii_case! { ident,
       "normal" => Ok(Self(Slant::Normal)),
       "italic" => Ok(Self(Slant::Italic)),
-      "oblique" => {
-        let angle = input.try_parse(Angle::from_css).ok().map(|angle| *angle);
-        Ok(Self(Slant::Oblique(angle)))
-      },
+      "oblique" => Ok(Self(Slant::Oblique(input.try_parse(oblique_angle).ok()))),
       _ => Err(unexpected_token!(location, &Token::Ident(ident.to_owned()))),
     }
   }
@@ -97,6 +116,7 @@ mod tests {
       ("italic", FontStyle::italic()),
       ("oblique", FontStyle(Slant::Oblique(None))),
       ("oblique 10deg", FontStyle::oblique(10.0)),
+      ("oblique -14deg", FontStyle::oblique(-14.0)),
     ] {
       assert_eq!(
         FontStyle::from_css_str(css),
@@ -108,7 +128,13 @@ mod tests {
 
   #[test]
   fn test_font_style_round_trip() {
-    for css in ["normal", "italic", "oblique", "oblique 10deg"] {
+    for css in [
+      "normal",
+      "italic",
+      "oblique",
+      "oblique 10deg",
+      "oblique -14deg",
+    ] {
       let parsed = FontStyle::from_css_str(css).unwrap();
       let reparsed = FontStyle::from_css_str(&parsed.to_css_string()).unwrap();
       assert_eq!(parsed, reparsed, "failed for {css}");
@@ -118,6 +144,10 @@ mod tests {
   #[test]
   fn test_parse_font_style_invalid() {
     assert!(FontStyle::from_css_str("bogus").is_err());
+    assert_ne!(
+      FontStyle::from_css_str("oblique 100deg"),
+      Ok(FontStyle::oblique(100.0))
+    );
     assert!(FontStyle::from_css_str("123").is_err());
   }
 }
