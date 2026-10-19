@@ -1,12 +1,12 @@
-import type { editor } from "monaco-editor/esm/vs/editor/editor.api.js";
+import type { editor } from "monaco-editor/editor/editor.api.js";
 import {
   JsxEmit,
   ModuleKind,
   ModuleResolutionKind,
   ScriptTarget,
   typescriptDefaults,
-} from "monaco-editor/esm/vs/language/typescript/monaco.contribution.js";
-import { setupTypeScript } from "monaco-editor/esm/vs/language/typescript/tsMode.js";
+} from "monaco-editor/languages/features/typescript/register.js";
+import { setupTypeScript } from "monaco-editor/languages/features/typescript/tsMode.js";
 
 type ExtraLib = { content: string; filePath: string };
 
