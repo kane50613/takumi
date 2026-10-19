@@ -3,134 +3,82 @@
 
 # takumi-js
 
-**Generate Open Graph images from JSX, HTML, and CSS without a headless browser.**
-
-Create social cards, banners, PNG, JPEG, WebP, SVG, and animations. The package provides an `ImageResponse` API compatible with `next/og`.
+**Render JSX, HTML, and CSS to images and animations. No headless browser.**
 
 [Documentation](https://takumi.kane.tw/docs/) · [Playground](https://takumi.kane.tw/playground)
 
 </div>
 
+`takumi-js` is Takumi's package for images. It renders PNG, JPEG, WebP, SVG, and animated WebP, APNG, or GIF. Use it for social cards, banners, charts, and other generated graphics.
+
+Takumi's packages share one layout engine, with text and inline layout ported from Chromium. For PDF documents, use [`takumi-pdf`](https://www.npmjs.com/package/takumi-pdf). To draw the laid-out boxes and text with your own renderer, use [`takumi-paint`](https://www.npmjs.com/package/takumi-paint).
+
 ## Install
 
 ```bash
-bun add takumi-js
-# or
 npm install takumi-js
 ```
 
-## Quick start
+## Render an image
 
-Save this example as `image.tsx` and run it with `bun image.tsx`. In Node.js, compile JSX before running it.
+Save this as `image.tsx` and run `bun image.tsx`. In Node.js, compile the JSX first.
 
 ```tsx
 import { render } from "takumi-js";
 import { writeFile } from "node:fs/promises";
 
-const image = await render(
+const png = await render(
   <div tw="w-full h-full flex items-center justify-center bg-linear-to-b from-blue-100 to-red-50">
     <h1 tw="text-6xl font-bold">Hello from Takumi</h1>
   </div>,
   { width: 1200, height: 630 },
 );
 
-await writeFile("./output.png", image);
+await writeFile("output.png", png);
 ```
 
-## Migrate from another renderer
+`render()` also accepts an HTML string or a Takumi node tree. It returns PNG bytes unless you set `format`.
 
-| You are using             | What changes                                                                                                                                                                                     |
-| :------------------------ | :----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `satori`                  | Replace `satori()` with `renderSvg()`, or call `render()` for encoded image bytes. [Compare the renderers](https://takumi.kane.tw/docs/comparison-to-satori).                                    |
-| `next/og`                 | Swap the `ImageResponse` import. Keep explicit Flexbox styles and compare the rendered output. [Read the migration guide](https://takumi.kane.tw/docs/comparison-to-satori#migrate-from-nextog). |
-| Puppeteer for screenshots | Pass a JSX or HTML tree to `render()`. Scripts do not run, and Takumi supports less CSS than Chrome.                                                                                             |
+Takumi never reads system fonts. A built-in Geist font covers Latin text. Load fonts for other scripts through the `fonts` option.
 
-## Runtime detection
+## Serve an image
 
-`takumi-js` selects the backend for the runtime:
-
-- **Node.js / Bun** → native `@takumi-rs/core` (napi-rs)
-- **Next.js Edge / Cloudflare Workers / browsers** → `@takumi-rs/wasm`
-
-Override it with a `module` option on `render()`, or import `takumi-js/wasm` directly.
-
-## Examples
-
-### `next/og`-compatible API route
+`ImageResponse` extends the web `Response`, so any runtime with `Request` and `Response` can return it. Its API matches `next/og`.
 
 ```tsx
 import { ImageResponse } from "takumi-js/response";
 
 export function GET() {
-  return new ImageResponse(
-    <div tw="w-full h-full flex items-center justify-center bg-linear-to-b from-blue-100 to-red-50">
-      <h1 tw="text-6xl font-bold">Hello from Takumi</h1>
-    </div>,
-    { width: 1200, height: 630 },
-  );
+  return new ImageResponse(<div tw="w-full h-full flex items-center justify-center">Hello</div>, {
+    width: 1200,
+    height: 630,
+  });
 }
 ```
 
-### Render SVG
+## Other outputs
 
-```tsx
-import { renderSvg } from "takumi-js";
-import { writeFile } from "node:fs/promises";
+| Function                                                              | Returns                                    |
+| :-------------------------------------------------------------------- | :----------------------------------------- |
+| [`render()`](https://takumi.kane.tw/docs/output-formats)              | PNG, JPEG, WebP, ICO, or raw RGBA bytes    |
+| [`renderSvg()`](https://takumi.kane.tw/docs/output-formats)           | An SVG document string                     |
+| [`renderAnimation()`](https://takumi.kane.tw/docs/keyframe-animation) | Animated WebP, APNG, or GIF bytes          |
+| [`measure()`](https://takumi.kane.tw/docs/measure-api)                | The laid-out node tree, without drawing it |
 
-const svg = await renderSvg(
-  <div tw="w-full h-full flex items-center justify-center bg-linear-to-b from-blue-100 to-red-50">
-    <h1 tw="text-6xl font-bold">Hello from Takumi</h1>
-  </div>,
-  { width: 1200, height: 630 },
-);
+## Runtimes
 
-await writeFile("./output.svg", svg);
-```
+`takumi-js` picks a binding from your runtime's import conditions:
 
-### Animated WebP
+- **Node.js and Bun:** the native [`@takumi-rs/core`](https://www.npmjs.com/package/@takumi-rs/core) binding.
+- **Cloudflare Workers, Vercel Edge, Deno, and browsers:** the WebAssembly [`@takumi-rs/wasm`](https://www.npmjs.com/package/@takumi-rs/wasm) binding.
 
-```tsx
-import { renderAnimation } from "takumi-js";
-import { writeFile } from "node:fs/promises";
+To use WebAssembly on Node.js, pass the binary as the `module` option. See [Troubleshooting](https://takumi.kane.tw/docs/troubleshooting) when a bundler picks the wrong entry.
 
-const animation = await renderAnimation({
-  width: 400,
-  height: 400,
-  fps: 30,
-  format: "webp",
-  scenes: [
-    {
-      durationMs: 1000,
-      node: (
-        <div tw="w-full h-full flex items-center justify-center">
-          <div tw="w-32 h-32 bg-blue-500 animate-spin rounded-lg" />
-        </div>
-      ),
-    },
-  ],
-});
+## Migrate from another renderer
 
-await writeFile("./output.webp", animation);
-```
-
-### Bun server
-
-```tsx
-import { ImageResponse } from "takumi-js/response";
-import { serve } from "bun";
-
-serve({
-  fetch() {
-    return new ImageResponse(
-      <div tw="w-full h-full flex items-center justify-center bg-[linear-gradient(to_bottom,#dbf4ff,#fff1f1)]">
-        <h1 tw="text-6xl font-bold">Hello from Takumi 👋</h1>
-      </div>,
-      { width: 1200, height: 630 },
-    );
-  },
-  port: 3000,
-});
-```
+- **`satori`:** replace `satori()` with `renderSvg()`, or call `render()` for image bytes. See the [Satori comparison](https://takumi.kane.tw/docs/comparison-to-satori).
+- **`next/og`:** change the `ImageResponse` import. Keep explicit Flexbox styles, because a bare `<div>` defaults to block layout. See the [`next/og` migration guide](https://takumi.kane.tw/docs/comparison-to-satori#migrate-from-nextog).
+- **Puppeteer screenshots:** pass JSX or HTML to `render()`. Scripts do not run, and Takumi supports less CSS than Chrome.
 
 ## License
 

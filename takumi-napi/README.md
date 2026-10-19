@@ -3,13 +3,15 @@
 
 # @takumi-rs/core
 
-**Native Node.js bindings for [Takumi](https://github.com/kane50613/takumi), a Rust image rendering engine.**
-
-Render node trees as Open Graph images, banners, and animations in Node.js or Bun. For JSX, HTML, and automatic resource loading, use [`takumi-js`](https://www.npmjs.com/package/takumi-js).
+**Native Node.js bindings for Takumi's image renderer.**
 
 [Documentation](https://takumi.kane.tw/docs/) · [Playground](https://takumi.kane.tw/playground)
 
 </div>
+
+`@takumi-rs/core` renders Takumi node trees to images in Node.js and Bun. Most apps should install [`takumi-js`](https://www.npmjs.com/package/takumi-js) instead. It uses this package on Node.js and Bun, and it also accepts JSX and HTML and fetches remote images. Use `@takumi-rs/core` directly when you build node trees yourself.
+
+For Cloudflare Workers and browsers, use [`@takumi-rs/wasm`](https://www.npmjs.com/package/@takumi-rs/wasm). For PDF documents, use [`takumi-pdf`](https://www.npmjs.com/package/takumi-pdf).
 
 ## Install
 
@@ -17,9 +19,12 @@ Render node trees as Open Graph images, banners, and animations in Node.js or Bu
 npm install @takumi-rs/core
 ```
 
-## Quick start
+Prebuilt binaries cover macOS, Linux (glibc and musl), and Windows, on x64 and arm64.
+
+## Render a node tree
 
 ```ts
+import { writeFile } from "node:fs/promises";
 import { Renderer } from "@takumi-rs/core";
 
 const renderer = new Renderer();
@@ -31,13 +36,15 @@ const png = await renderer.render(
   },
   { width: 1200, height: 630 },
 );
+
+await writeFile("output.png", png);
 ```
 
-`render` takes a node tree and returns a PNG `Buffer`. Build the tree by hand, or generate it from JSX and HTML with [`@takumi-rs/helpers`](https://npmjs.com/package/@takumi-rs/helpers).
+`render()` returns a PNG `Buffer` unless you set `format`. To build the tree from JSX or HTML, use [`@takumi-rs/helpers`](https://www.npmjs.com/package/@takumi-rs/helpers).
 
 ## Fonts
 
-Pass fonts through the render options. A separate registration step is optional:
+A built-in Geist font covers Latin text. Pass other fonts with each render:
 
 ```ts
 import { readFile } from "node:fs/promises";
@@ -49,22 +56,18 @@ const png = await renderer.render(node, {
 });
 ```
 
-## Renderer
+To render many images with the same fonts, register them once with `renderer.registerFont()`.
 
-| Method                   | Returns           | Description                       |
-| :----------------------- | :---------------- | :-------------------------------- |
-| `render(node, opts?)`    | `Promise<Buffer>` | Raster image (PNG, JPEG, WebP, …) |
-| `renderSvg(node, opts?)` | `Promise<string>` | Vector SVG document               |
-| `renderAnimation(opts)`  | `Promise<Buffer>` | Animated WebP, APNG, or GIF       |
-| `measure(node, opts?)`   | `Promise<...>`    | Layout without rasterizing        |
+## Renderer methods
 
-## Documentation
+| Method                   | Returns                 | Output                                   |
+| :----------------------- | :---------------------- | :--------------------------------------- |
+| `render(node, opts?)`    | `Promise<Buffer>`       | PNG, JPEG, WebP, ICO, or raw RGBA pixels |
+| `renderSvg(node, opts?)` | `Promise<string>`       | An SVG document                          |
+| `renderAnimation(opts)`  | `Promise<Buffer>`       | Animated WebP, APNG, or GIF              |
+| `measure(node, opts?)`   | `Promise<MeasuredNode>` | The layout, without drawing              |
 
-- Integration guide: <https://takumi.kane.tw/docs/integration>
-- API reference: <https://takumi.kane.tw/docs/reference>
-- Repository: <https://github.com/kane50613/takumi>
-
-For WebAssembly runtimes (Cloudflare Workers, browsers, edge), use [@takumi-rs/wasm](https://npmjs.com/package/@takumi-rs/wasm).
+See the [node and style reference](https://takumi.kane.tw/docs/reference) and the [integration guides](https://takumi.kane.tw/docs/integration).
 
 ## License
 

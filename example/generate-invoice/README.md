@@ -1,21 +1,19 @@
 # Generate PDF invoices and receipts
 
-Generate a paginated A4 invoice and a single-page receipt from the same sample data with [takumi-pdf](../../takumi-pdf-js).
+Render a paged A4 invoice and a single-page receipt from the same sample data with [`takumi-pdf`](../../takumi-pdf-js).
 
-Build the wasm package first (needs [Rust](https://www.rust-lang.org/tools/install) and [wasm-pack](https://rustwasm.github.io/wasm-pack/installer/)):
+## Run
 
-```bash
-cd takumi-pdf-js
-bun run build
-```
-
-Then run the example:
+Build the [PDF example packages](../README.md#pdf-examples) first. Then render both documents:
 
 ```bash
-cd ../example/generate-invoice
+cd example/generate-invoice
 bun index.tsx
 ```
 
-Open `output/invoice.pdf` and `output/receipt.pdf` to see the results.
+The script writes `output/invoice.pdf` and `output/receipt.pdf`. It loads Inter and Space Mono from Google Fonts, so it needs network access.
 
-The invoice uses the paged mode: content flows across A4 pages, and the footer repeats with `pageNumber` / `totalPages` counters. The receipt uses `viewport` for a fixed 80mm-style single page.
+## How the two documents differ
+
+- **Invoice:** `size: "a4"` flows content across A4 pages. The footer repeats on every page, and its `pageNumber` and `totalPages` spans receive the page counters.
+- **Receipt:** `viewport: { width: 302 }` renders one page 80 mm wide at 96 dpi. Without a `height`, the page grows to fit the content.
