@@ -16,14 +16,8 @@ use crate::{
 /// The style a font is matched and shaped with.
 #[derive(Clone, PartialEq)]
 pub(crate) struct FontDescription {
-  /// The `font-family` list.
-  pub(crate) family: Rc<ExpandedFontFamily>,
-  /// What font matching reads of the style, apart from the families.
-  pub(crate) selection: FontSelectionDescription,
-  /// Blink's `ComputedSize`.
-  pub(crate) computed_size: f32,
-  /// Blink's `SpecifiedSize`.
-  pub(crate) specified_size: f32,
+  /// The families, matching, and sizes its fallback list reads.
+  pub(crate) fallback: FontFallbackKey,
   /// Blink's `FontFeatures`.
   pub(crate) features: Vec<Feature>,
   /// Blink's `LocaleOrDefault` as a HarfBuzz language.
@@ -65,10 +59,12 @@ impl FontDescription {
     let computed = style.parent;
 
     Self {
-      family: Rc::clone(&style.font_family),
-      selection: computed.font_selection_description(&style.sizing),
-      computed_size: style.sizing.font_size,
-      specified_size: style.sizing.font_size,
+      fallback: FontFallbackKey {
+        family: Rc::clone(&style.font_family),
+        selection: computed.font_selection_description(&style.sizing),
+        computed_size: style.sizing.font_size,
+        specified_size: style.sizing.font_size,
+      },
       features: computed
         .resolved_font_features(style.letter_spacing != 0.0, FontVariantCaps::Normal)
         .iter()
@@ -87,6 +83,20 @@ impl FontDescription {
       is_word_spacing_fixed: !computed.inherited_data.word_spacing.has_percentage(),
     }
   }
+}
+
+/// What a [`FontFallbackList`](super::font_fallback_list::FontFallbackList) reads of Blink's
+/// `FontDescription`, so styles that differ only in shaping share one list.
+#[derive(Clone, PartialEq)]
+pub(crate) struct FontFallbackKey {
+  /// The `font-family` list.
+  pub(crate) family: Rc<ExpandedFontFamily>,
+  /// What font matching reads of the style, apart from the families.
+  pub(crate) selection: FontSelectionDescription,
+  /// Blink's `ComputedSize`.
+  pub(crate) computed_size: f32,
+  /// Blink's `SpecifiedSize`.
+  pub(crate) specified_size: f32,
 }
 
 /// What font matching reads of Blink's `FontDescription`, apart from the families.

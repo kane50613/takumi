@@ -30,7 +30,6 @@ use std::sync::OnceLock;
 #[cfg(feature = "svg")]
 use crate::resvg::usvg::fontdb::Database;
 use crate::{
-  context::RenderContext,
   fonts::{
     css_font_selector::CssFontSelector, css_segmented_font_face::FontPlatformDataForRangeSet,
     font_custom_platform_data::FontCustomPlatformData, font_description::FontSelectionDescription,
@@ -738,58 +737,6 @@ impl PrimaryFontMetrics {
   /// The `line-height: normal` these metrics give, as Blink's `FontMetrics::SetLineSpacing`.
   pub(crate) fn line_spacing(self) -> f32 {
     self.ascent + self.descent + self.line_gap
-  }
-}
-
-impl RenderContext {
-  /// The primary font's vertical metrics for `families` and `description` at `font_size`: the
-  /// first available face, skipping one whose `unicode-range` leaves out the space, as Blink's
-  /// `FontFallbackList::DeterminePrimarySimpleFontData` skips such a segment, else the first
-  /// fallback face.
-  pub(crate) fn first_font_metrics(
-    &self,
-    families: &[FontFamilyToken],
-    description: &FontSelectionDescription,
-    font_size: f32,
-  ) -> Option<PrimaryFontMetrics> {
-    let fonts = self.fonts();
-    let faces: Vec<MatchedFace> = fonts
-      .font_group(families, description)
-      .into_iter()
-      .flatten()
-      .collect();
-    let face_for = |character: char| {
-      faces
-        .iter()
-        .find(|face| {
-          face
-            .unicode_range
-            .as_ref()
-            .is_none_or(|range| range.contains(u32::from(character)))
-        })
-        .cloned()
-        .or_else(|| fonts.fallback_bucket(description).into_iter().next())
-    };
-    let face = face_for(' ')?;
-    let font_ref = face.typeface.font_ref()?;
-    let mut metrics = PrimaryFontMetrics::of(&font_ref, font_size, LocationRef::default());
-
-    // Blink's `PrimaryFontWithDigitZero`: `ch` reads the first font that covers a `0`, at the
-    // instance it draws with.
-    metrics.zero_width = face_for('0').map_or(0.0, |face| {
-      face.typeface.font_ref().map_or(0.0, |font| {
-        let location = font.axes().location(
-          face
-            .variations
-            .iter()
-            .map(|variation| (variation.tag, variation.value)),
-        );
-
-        zero_inline_size(&font, font_size, (&location).into())
-      })
-    });
-
-    Some(metrics)
   }
 }
 

@@ -1,10 +1,10 @@
 //! Blink's [`FontFallbackList`](https://source.chromium.org/chromium/chromium/src/+/main:third_party/blink/renderer/platform/fonts/font_fallback_list.cc), resolving every family up front; approximate, see #2001.
 
-use std::rc::Rc;
+use std::{cell::OnceCell, rc::Rc};
 
 use super::{
   font_cache::FontCache, font_data_for_range_set::FontDataForRangeSet,
-  font_description::FontDescription, simple_font_data::SimpleFontData,
+  font_description::FontFallbackKey, simple_font_data::SimpleFontData,
 };
 use crate::{
   resources::font::{Fonts, MatchedFace},
@@ -51,12 +51,16 @@ impl FontData {
 pub(crate) struct FontFallbackList {
   font_list: Vec<FontData>,
   font_cache: FontCache,
+  /// Blink's `cached_primary_simple_font_data_with_space_`.
+  primary_with_space: OnceCell<Option<Rc<SimpleFontData>>>,
+  /// Blink's `cached_primary_simple_font_data_with_digit_zero_`.
+  primary_with_digit_zero: OnceCell<Option<Rc<SimpleFontData>>>,
 }
 
 impl FontFallbackList {
-  pub(crate) fn new(fonts: &Fonts, description: &FontDescription) -> Self {
+  pub(crate) fn new(fonts: &Fonts, key: &FontFallbackKey) -> Self {
     let font_data = |face: MatchedFace| {
-      SimpleFontData::new(face, description.computed_size, description.specified_size).map(Rc::new)
+      SimpleFontData::new(face, key.computed_size, key.specified_size).map(Rc::new)
     };
     let resolve = |faces: Vec<MatchedFace>| {
       if let [face] = faces.as_slice()
@@ -74,13 +78,13 @@ impl FontFallbackList {
       (!faces.is_empty()).then_some(FontData::Segmented(faces))
     };
     let mut font_list: Vec<FontData> = fonts
-      .font_group(description.family.tokens(), &description.selection)
+      .font_group(key.family.tokens(), &key.selection)
       .into_iter()
       .filter_map(resolve)
       .collect();
     let font_cache = FontCache::new(
       fonts
-        .fallback_bucket(&description.selection)
+        .fallback_bucket(&key.selection)
         .into_iter()
         .filter_map(font_data)
         .collect(),
@@ -88,7 +92,7 @@ impl FontFallbackList {
     let standard = fonts
       .font_group(
         &[FontFamilyToken::Generic(GenericFamilyType::Serif)],
-        &description.selection,
+        &key.selection,
       )
       .into_iter()
       .find_map(resolve)
@@ -99,6 +103,8 @@ impl FontFallbackList {
     Self {
       font_list,
       font_cache,
+      primary_with_space: OnceCell::new(),
+      primary_with_digit_zero: OnceCell::new(),
     }
   }
 
@@ -111,14 +117,32 @@ impl FontFallbackList {
     &self.font_cache
   }
 
-  /// Blink's `PrimarySimpleFontData`: the first font that covers a space.
+  /// Blink's `PrimarySimpleFontDataWithSpace`: the font metrics come from.
   pub(crate) fn primary_simple_font_data(&self) -> Option<Rc<SimpleFontData>> {
+    self
+      .primary_with_space
+      .get_or_init(|| self.determine_primary_simple_font_data(' '))
+      .clone()
+  }
+
+  /// Blink's `PrimarySimpleFontDataWithDigitZero`: the font `ch` measures.
+  pub(crate) fn primary_simple_font_data_with_digit_zero(&self) -> Option<Rc<SimpleFontData>> {
+    self
+      .primary_with_digit_zero
+      .get_or_init(|| self.determine_primary_simple_font_data('0'))
+      .clone()
+  }
+
+  /// Blink's `DeterminePrimarySimpleFontDataCore`: the first font a segmented font's
+  /// `unicode-range` does not rule out for `character`, else the first font, else the last
+  /// resort.
+  fn determine_primary_simple_font_data(&self, character: char) -> Option<Rc<SimpleFontData>> {
     self
       .font_list
       .iter()
-      .find(|font_data| font_data.contains_character(' '))
+      .find(|font_data| font_data.contains_character(character))
       .or(self.font_list.first())
-      .and_then(|font_data| font_data.font_data_for_character(' '))
+      .and_then(|font_data| font_data.font_data_for_character(character))
       .or_else(|| self.font_cache.last_resort_fallback_font())
   }
 }

@@ -19,7 +19,7 @@ pub(crate) struct Font {
 impl Font {
   #[cfg(test)]
   pub(crate) fn new(fonts: &Fonts, description: FontDescription) -> Self {
-    let fallback_list = Rc::new(FontFallbackList::new(fonts, &description));
+    let fallback_list = Rc::new(FontFallbackList::new(fonts, &description.fallback));
 
     Self {
       description,
