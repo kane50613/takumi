@@ -6,9 +6,9 @@ use std::{
   rc::Rc,
 };
 
-use harfrust::{FontRef, ShaperData, ShaperInstance, Variation};
+use harfrust::font::{Font as ShapingFont, Variation};
 use skrifa::{
-  GlyphId, MetadataProvider,
+  FontRef, GlyphId, MetadataProvider,
   instance::Size,
   raw::{TableProvider, types::F2Dot14},
 };
@@ -31,9 +31,8 @@ pub(crate) struct SimpleFontData {
   variations: Vec<Variation>,
   units_per_em: u16,
   space_glyph: u16,
-  shaper_data: OnceCell<ShaperData>,
   font_metrics: OnceCell<Option<PrimaryFontMetrics>>,
-  shaper_instance: OnceCell<Option<ShaperInstance>>,
+  shaping_font: OnceCell<Option<ShapingFont>>,
   small_caps: OnceCell<Rc<SimpleFontData>>,
 }
 
@@ -80,9 +79,8 @@ impl SimpleFontData {
       variations,
       units_per_em,
       space_glyph,
-      shaper_data: OnceCell::new(),
       font_metrics: OnceCell::new(),
-      shaper_instance: OnceCell::new(),
+      shaping_font: OnceCell::new(),
       small_caps: OnceCell::new(),
     })
   }
@@ -103,9 +101,8 @@ impl SimpleFontData {
       variations: self.variations.clone(),
       units_per_em: self.units_per_em,
       space_glyph: self.space_glyph,
-      shaper_data: OnceCell::new(),
       font_metrics: OnceCell::new(),
-      shaper_instance: OnceCell::new(),
+      shaping_font: OnceCell::new(),
       small_caps: OnceCell::new(),
     }
   }
@@ -204,18 +201,21 @@ impl SimpleFontData {
       .is_some_and(|font| font.charmap().map(ch).is_some())
   }
 
-  /// The tables harfrust shapes with, read once.
-  pub(crate) fn shaper_data(&self, font: &FontRef<'_>) -> &ShaperData {
-    self.shaper_data.get_or_init(|| ShaperData::new(font))
-  }
-
-  /// The face at its variation coordinates, or none for a face without variations.
-  pub(crate) fn shaper_instance(&self, font: &FontRef<'_>) -> Option<&ShaperInstance> {
+  /// The face at its variation coordinates, as harfrust shapes with it, read once.
+  pub(crate) fn shaping_font(&self) -> Option<&ShapingFont> {
     self
-      .shaper_instance
+      .shaping_font
       .get_or_init(|| {
-        (!self.variations.is_empty())
-          .then(|| ShaperInstance::from_variations(font, self.variations.iter().copied()))
+        let font = self.face.blob.shaping_font(self.face.index)?;
+
+        Some(if self.variations.is_empty() {
+          font
+        } else {
+          font
+            .instance_builder()
+            .variations(self.variations.iter().copied())
+            .build()
+        })
       })
       .as_ref()
   }

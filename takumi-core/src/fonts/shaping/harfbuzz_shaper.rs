@@ -3,8 +3,8 @@
 use std::{borrow::Cow, collections::VecDeque, rc::Rc};
 
 use harfrust::{
-  Direction as HbDirection, Feature, GlyphInfo, GlyphPosition, Language, ShapeOptions,
-  UnicodeBuffer,
+  Buffer, Direction as HbDirection, Feature, GlyphInfo, GlyphPosition, Language, ShapeOptions,
+  ShaperFont, shape,
 };
 use icu_properties::{PropertyNamesShort, props::Script};
 
@@ -149,7 +149,7 @@ fn icu_script_to_hb_script(script: Script) -> harfrust::Script {
 
       harfrust::Script::from_iso15924_tag(harfrust::Tag::new(&tag))
     })
-    .unwrap_or(harfrust::script::UNKNOWN)
+    .unwrap_or(harfrust::Script::UNKNOWN)
 }
 
 /// Blink's `RoundHarfBuzzPosition`.
@@ -162,33 +162,28 @@ fn round_harfbuzz_position(value: &mut i32) {
 /// Blink's `ShapeRange`.
 #[allow(clippy::too_many_arguments)]
 fn shape_range(
-  mut buffer: UnicodeBuffer,
+  mut buffer: Buffer,
   font_features: &[Feature],
   current_font: &SimpleFontData,
   current_run_script: Script,
   direction: HbDirection,
   language: Option<&Language>,
 ) -> Option<HarfBuzzBuffer> {
-  let font = current_font.font_ref()?;
-  let shaper = current_font
-    .shaper_data(&font)
-    .shaper(&font)
-    .instance(current_font.shaper_instance(&font))
-    .build();
+  let shaper_font = ShaperFont::new(current_font.shaping_font()?);
 
-  if let Some(language) = language {
-    buffer.set_language(language.clone());
-  }
-
-  buffer.set_script(icu_script_to_hb_script(current_run_script));
+  buffer.set_language(language.cloned());
+  buffer.set_script(Some(icu_script_to_hb_script(current_run_script)));
   buffer.set_direction(direction);
-
-  let glyphs = shaper.shape(
-    buffer,
+  shape(
+    &shaper_font,
+    &mut buffer,
     ShapeOptions::new()
       .features(font_features)
       .point_size(Some(current_font.specified_size())),
-  );
+  )
+  .ok()?;
+
+  let glyphs = buffer;
   // Approximate: Blink's HarfBuzz scales Skia's advances; see #2001.
   let scale = f64::from(current_font.size()) * 65536.0 / f64::from(current_font.units_per_em());
   let to_harfbuzz_position = |units: i32| (f64::from(units) * scale).round() as i32;
@@ -498,7 +493,7 @@ impl HarfBuzzShaper {
         }
       }
 
-      let mut buffer = UnicodeBuffer::new();
+      let mut buffer = Buffer::new();
 
       case_map_intend.fill_buffer(
         &mut buffer,

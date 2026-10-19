@@ -5,6 +5,8 @@
 use std::collections::HashMap;
 use std::fmt;
 
+use harfrust::font::Font as ShapingFont;
+
 use crate::resources::font::FontBlob;
 
 /// Identifier of a face inside a [`Database`].
@@ -180,6 +182,13 @@ impl Database {
     let face = self.face(id)?;
 
     Some(f(face.data.data(), face.index))
+  }
+
+  /// The face `id` names, as harfrust shapes with it.
+  pub(crate) fn shaping_font(&self, id: ID) -> Option<ShapingFont> {
+    let face = self.face(id)?;
+
+    face.data.shaping_font(face.index)
   }
 
   pub fn face(&self, id: ID) -> Option<&FaceInfo> {

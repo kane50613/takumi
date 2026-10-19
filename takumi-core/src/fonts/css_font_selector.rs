@@ -276,7 +276,7 @@ impl CssFontSelector {
 
 #[cfg(test)]
 mod tests {
-  use harfrust::{Tag, Variation};
+  use harfrust::{Tag, font::Variation};
 
   use super::*;
   use crate::{

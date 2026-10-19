@@ -11,7 +11,7 @@ use std::{
   },
 };
 
-use harfrust::Variation;
+use harfrust::font::{Blob, Font as ShapingFont, Variation};
 use skrifa::{
   FontRef, MetadataProvider,
   attribute::Style,
@@ -186,6 +186,11 @@ pub struct FontBlob {
 impl FontBlob {
   pub(crate) fn new(data: SharedBytes, id: u64) -> Self {
     Self { data, id }
+  }
+
+  /// The face at `index` of the bytes, as harfrust shapes with it; none when it does not parse.
+  pub(crate) fn shaping_font(&self, index: u32) -> Option<ShapingFont> {
+    ShapingFont::new(Blob::from(Arc::clone(&self.data)), index)
   }
 
   /// The sfnt bytes.
