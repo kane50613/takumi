@@ -1,23 +1,41 @@
-# Generate Takumi social images
+# Generate Takumi's social images
 
-This workspace renders the social cards and animation frames used in the README and documentation website. Templates live in `components/`. The render list, output formats, and filenames are defined in [`index.tsx`](./index.tsx).
+Render the social cards, animations, and sample PDFs used in the Takumi README and documentation site. The templates live in [`components/`](./components).
 
 ## Run
 
-Install dependencies and build workspace packages from the repository root:
-
-```bash
-bun install
-bun --filter '*' run build
-```
-
-Render the images:
+Build both the [image example packages](../README.md#image-examples) and the [PDF example packages](../README.md#pdf-examples) first. Run each script from this directory:
 
 ```bash
 cd example/twitter-images
+```
+
+Some templates load fonts from Google Fonts, so rendering needs network access. Every script writes to `output/`. Review generated files before committing them.
+
+### Cards
+
+```bash
 bun index.tsx
 ```
 
-The script writes to `output/`. It generates PNG and WebP variants for static templates and WebP frames for templates with timestamps. Pass `--debug` to draw node outlines.
+The script renders each template in [`index.tsx`](./index.tsx) as a PNG and a 2× WebP, unless the template lists its own outputs. A template with timestamps renders one WebP per frame instead. Some templates also write an SVG.
 
-Review generated images before committing them. Some templates load remote assets, so rendering may need network access.
+- Pass name prefixes to render only matching templates, such as `bun index.tsx home-usecase`.
+- Pass `--debug` to draw layout borders.
+
+### Animations and videos
+
+```bash
+bun animation.tsx readme-banner
+bun video.tsx dither-og
+```
+
+`animation.tsx` writes an animated WebP for a template that exports an `animation` config. `video.tsx` writes an MP4 for a template that exports a `video` config. It pipes frames to [FFmpeg](https://ffmpeg.org), which must be installed.
+
+### PDFs
+
+```bash
+bun usecases-pdf.tsx
+```
+
+The script renders the ticket, invoice, and certificate templates as single-page PDFs with `takumi-pdf`.

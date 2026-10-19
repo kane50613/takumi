@@ -1,23 +1,18 @@
-# FFplay Example
+# Play live Takumi frames with ffplay
 
-Render a moving clock as raw RGBA frames with Takumi and play them with `ffplay`.
+Render a bouncing clock as raw RGBA frames and play them in real time with `ffplay`.
 
-## Prerequisites
+## Run
 
-- [Bun](https://bun.sh)
-- [FFmpeg](https://ffmpeg.org) (specifically `ffplay`)
-
-## Usage
+Install [FFmpeg](https://ffmpeg.org), which includes `ffplay`. Build the [image example packages](../README.md#image-examples). Then start the clock:
 
 ```bash
-bun install
-bun src/index.ts
+cd example/ffplay
+bun start
 ```
 
-Press `Ctrl+C` to exit.
+Press `Ctrl+C` to stop.
 
-## How It Works
+## How it works
 
-1. Renders a clock with a target frame rate of 60 fps
-2. Outputs raw RGBA frames
-3. Pipes frames to `ffplay` for real-time playback
+The script keeps one `Renderer` from `takumi-js/node` and renders each 960 × 540 frame with `format: "raw"`. It pipes the pixels to `ffplay` at a target of 60 fps. The next frame renders while the current one is written. The clock position comes from wall-clock time, so a late frame does not change its path.

@@ -1,38 +1,30 @@
-# CSS keyframe animation with ffmpeg
+# Encode a CSS keyframe animation with ffmpeg
 
-[![Animation Preview](output/thumbnail.webp)](output/animation.mp4)
+Render a CSS keyframe animation frame by frame with `takumi-js`, then encode the frames as an H.265 MP4 with ffmpeg.
 
-Render CSS **keyframe animations** with Takumi and encode them into an **H.265 (HEVC) MP4** file using ffmpeg.
+[![Animation preview](output/thumbnail.webp)](output/animation.mp4)
 
-## How It Works
+## Run
 
-1. A scene is built once and exports structured `keyframes` objects alongside the JSX.
-2. For each frame `i` the renderer is called with:
-
-   ```ts
-   timeMs = (i / fps) * 1000;
-   ```
-
-   This advances the animation clock by exactly one frame period, so `animation-duration`, `animation-delay`, `animation-iteration-count`, etc. all work as expected.
-
-3. `render()` is called with `format: "raw"` which returns raw RGBA pixels.
-4. Each frame buffer is written directly to ffmpeg's stdin.
-5. ffmpeg encodes the stream to H.265 (`libx265`) and writes the output MP4.
-
-## Prerequisites
-
-- [Bun](https://bun.sh)
-- [FFmpeg](https://ffmpeg.org) with `libx265` support
-
-## Usage
+Install [FFmpeg](https://ffmpeg.org) with `libx265` support. Build the [image example packages](../README.md#image-examples). Then render the video:
 
 ```bash
-bun install
-bun src/index.tsx
+cd example/ffmpeg-keyframe-animation
+bun start
 ```
 
-The example writes `output/animation.mp4`.
+The script writes `output/thumbnail.webp`, a still at 2.5 seconds, and `output/animation.mp4`, a 4-second clip at 30 fps.
+
+## How it works
+
+Each frame is one `render()` call with `format: "raw"`, which returns RGBA pixels. Frame `i` sets the animation clock to:
+
+```ts
+const timeMs = (i / fps) * 1000;
+```
+
+Animation properties such as `animation-duration` and `animation-delay` resolve against that time. The script writes each frame to ffmpeg's stdin, and ffmpeg encodes the stream with `libx265`.
 
 ## Credits
 
-Photo by Martin Martz on Unsplash
+Background photo by Martin Martz on Unsplash.
