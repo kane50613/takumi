@@ -30,6 +30,11 @@
       ],
       "enabled": false,
       "description": "The layout, shaping and font stack moves by hand: taffy is pinned by decision, and harfrust and the fontations family resolve to takumi's forks through [patch.crates-io]."
+    },
+    {
+      "matchPackageNames": ["rolldown-plugin-dts"],
+      "allowedVersions": "<0.28.0",
+      "description": "0.28 needs rolldown 1.2, which tsdown does not use yet. Under an older rolldown its CommonJS declarations lose `export =`, and attw rejects @takumi-rs/image-response."
     }
   ]
 }
