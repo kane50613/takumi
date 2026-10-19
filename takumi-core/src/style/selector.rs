@@ -552,7 +552,9 @@ impl<'i> DeclarationParser<'i> for KeyframeDeclarationParser {
 
 impl_parser_traits!(KeyframeDeclarationParser, StyleDeclarationBlock);
 
-struct KeyframeRuleParser;
+struct KeyframeRuleParser {
+  lossy: bool,
+}
 
 impl<'i> QualifiedRuleParser<'i> for KeyframeRuleParser {
   type Prelude = Vec<f32>;
@@ -575,8 +577,11 @@ impl<'i> QualifiedRuleParser<'i> for KeyframeRuleParser {
     let mut declaration_parser = KeyframeDeclarationParser;
     let mut declarations = StyleDeclarationBlock::default();
 
-    for block in RuleBodyParser::new(input, &mut declaration_parser) {
-      declarations.append(block.map_err(|(error, _)| error)?);
+    for block in recover(
+      RuleBodyParser::new(input, &mut declaration_parser),
+      self.lossy,
+    ) {
+      declarations.append(block?);
     }
 
     Ok(KeyframeRule {
@@ -869,7 +874,7 @@ impl NestingContext<'_> {
     name: String,
     input: &mut Parser<'i, '_>,
   ) -> Result<StyleSheetFragment, ParseError<'i, StyleSheetParseError>> {
-    let mut parser = KeyframeRuleParser;
+    let mut parser = KeyframeRuleParser { lossy: self.lossy };
     let mut keyframes = Vec::new();
 
     for keyframe in recover(StyleSheetParser::new(input, &mut parser), self.lossy) {
@@ -1854,6 +1859,15 @@ mod tests {
     assert_eq!(sheet.keyframes[0].keyframes[0].offsets, vec![0.0]);
     assert_eq!(sheet.keyframes[0].keyframes[1].offsets, vec![0.5]);
     assert_eq!(sheet.keyframes[0].keyframes[2].offsets, vec![1.0]);
+  }
+
+  #[test]
+  fn lossy_parse_drops_only_the_invalid_keyframe_declaration() {
+    let sheet = parse_stylesheet_loosy("@keyframes fade { to { opacity: 1; width: bogus; } }");
+
+    assert_eq!(sheet.keyframes.len(), 1);
+    assert_eq!(sheet.keyframes[0].keyframes.len(), 1);
+    assert_eq!(sheet.keyframes[0].keyframes[0].declarations.len(), 1);
   }
 
   #[test]
