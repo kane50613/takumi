@@ -963,7 +963,7 @@ mod tests {
     result
       .runs
       .iter()
-      .map(|run| run.font_data.as_ref().unwrap().face().blob.id())
+      .map(|run| run.font_data.as_ref().unwrap().face().typeface.id)
       .collect()
   }
 

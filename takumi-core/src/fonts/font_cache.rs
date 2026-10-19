@@ -25,7 +25,7 @@ impl FontCache {
       self
         .fallback_fonts
         .iter()
-        .find(|font| font.face().is_color == is_color && font.has_glyph(hint))
+        .find(|font| font.face().typeface.is_color == is_color && font.has_glyph(hint))
     };
     let (preferred, other) = match font_fallback_priority {
       FontFallbackPriority::Emoji | FontFallbackPriority::EmojiBySelector => (true, false),

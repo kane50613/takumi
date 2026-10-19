@@ -434,7 +434,7 @@ impl FragmentItems {
         continue;
       };
       let face = font_data.face();
-      let is_color = face.is_color;
+      let is_color = face.typeface.is_color;
       let cluster_ranges: Vec<Range<usize>> = group
         .iter()
         .map(|glyph| cluster_of(glyph.character_index))
@@ -477,7 +477,7 @@ impl FragmentItems {
             .map_or(0.0, |underline| underline.thickness),
         },
         font_size: font_data.size(),
-        font_index: face.index,
+        font_index: face.typeface.index,
         text_range,
         cluster_ranges,
         variations: font_data.variation_settings(),
@@ -485,7 +485,7 @@ impl FragmentItems {
           .then(|| synthesis_embolden_strength(font_data.size())),
         synthetic_skew: (!is_color && face.synthetic_italic).then_some(-SYNTHETIC_ITALIC_SKEW),
         normalized_coords: font_data.normalized_coords(),
-        font_data: face.blob.clone(),
+        font_data: face.typeface.blob(),
         brush: brush.clone(),
       };
       let line_scale = LineScaleState {

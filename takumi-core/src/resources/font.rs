@@ -11,7 +11,7 @@ use std::{
   },
 };
 
-use harfrust::font::{Blob, Font as ShapingFont, Variation};
+use harfrust::font::Variation;
 use skrifa::{
   FontRef, MetadataProvider,
   attribute::Style,
@@ -28,13 +28,16 @@ use xxhash_rust::xxh3::{Xxh3, xxh3_64};
 use std::sync::OnceLock;
 
 #[cfg(feature = "svg")]
+use harfrust::font::{Blob, Font as ShapingFont};
+
+#[cfg(feature = "svg")]
 use crate::resvg::usvg::fontdb::Database;
 use crate::{
   context::RenderContext,
   fonts::{
     css_font_selector::CssFontSelector, css_segmented_font_face::FontPlatformDataForRangeSet,
-    font_description::FontSelectionDescription, font_face::FontFaceDescriptors,
-    font_height::FontHeight,
+    font_custom_platform_data::FontCustomPlatformData, font_description::FontSelectionDescription,
+    font_face::FontFaceDescriptors, font_height::FontHeight,
   },
   layout_unit::LayoutUnit,
   resources::{
@@ -192,6 +195,7 @@ impl FontBlob {
   }
 
   /// The face at `index` of the bytes, as harfrust shapes with it; none when it does not parse.
+  #[cfg(feature = "svg")]
   pub(crate) fn shaping_font(&self, index: u32) -> Option<ShapingFont> {
     ShapingFont::new(Blob::from(Arc::clone(&self.data)), index)
   }
@@ -222,8 +226,8 @@ impl Debug for FontBlob {
 /// A face font matching picked, before it takes a size: what Blink makes `SimpleFontData` from.
 #[derive(Clone, Debug)]
 pub(crate) struct MatchedFace {
-  pub(crate) blob: FontBlob,
-  pub(crate) index: u32,
+  /// The registered face, shared with the registry.
+  pub(crate) typeface: Arc<FontCustomPlatformData>,
   /// Blink's `FontPlatformData::SyntheticBold`.
   pub(crate) synthetic_bold: bool,
   /// Blink's `FontPlatformData::SyntheticItalic`.
@@ -232,23 +236,18 @@ pub(crate) struct MatchedFace {
   pub(crate) variations: Vec<Variation>,
   /// The face's `unicode-range`, or `None` for every codepoint.
   pub(crate) unicode_range: Option<UnicodeRangeSet>,
-  /// Whether the face has a color glyph table.
-  pub(crate) is_color: bool,
 }
 
 impl MatchedFace {
   fn of(face: FontPlatformDataForRangeSet) -> Self {
     let platform = face.font_platform_data;
-    let typeface = &platform.typeface;
 
     Self {
-      blob: FontBlob::new(Arc::clone(&typeface.data), typeface.id),
-      index: typeface.index,
+      typeface: platform.typeface,
       synthetic_bold: platform.synthetic_bold,
       synthetic_italic: platform.synthetic_italic,
       variations: platform.variations,
       unicode_range: (!face.range_set.is_entire_range()).then_some(face.range_set),
-      is_color: typeface.is_color,
     }
   }
 }
@@ -757,7 +756,7 @@ impl RenderContext {
           .is_none_or(|range| range.contains(u32::from(' ')))
       })
       .or_else(|| fonts.fallback_bucket(description).into_iter().next())?;
-    let font_ref = FontRef::from_index(face.blob.data(), face.index).ok()?;
+    let font_ref = face.typeface.font_ref()?;
 
     Some(PrimaryFontMetrics::of(
       &font_ref,
@@ -1144,6 +1143,23 @@ mod tests {
     assert_eq!(families.len(), 1);
     assert_eq!(families[0].name, "Geist Test");
     assert!(!families[0].faces.is_empty());
+  }
+
+  /// The same bytes under another family share one decoded face, so one set of shaping tables.
+  #[test]
+  fn a_font_registered_under_two_families_shares_its_face() {
+    let mut fonts = Fonts::default();
+
+    register_named(&mut fonts, geist_bytes(), "Geist A");
+    register_named(&mut fonts, geist_bytes(), "Geist B");
+
+    let faces: Vec<_> = fonts.registry.selector.font_faces().collect();
+
+    assert_eq!(faces.len(), 2);
+    assert!(Arc::ptr_eq(
+      &faces[0].custom_platform_data,
+      &faces[1].custom_platform_data
+    ));
   }
 
   #[test]
