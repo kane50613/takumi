@@ -570,11 +570,6 @@ impl ExclusionSpace {
     self.last_float_block_start.unwrap_or(LayoutUnit::MIN)
   }
 
-  /// Blink's `IsEmpty`.
-  pub(crate) fn is_empty(&self) -> bool {
-    self.exclusions.is_empty()
-  }
-
   /// Blink's `GetDerivedGeometry`: the geometry valid from `block_offset_limit`, rebuilt from the
   /// highest exclusion past the others above it.
   fn with_derived_geometry<R>(

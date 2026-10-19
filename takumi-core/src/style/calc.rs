@@ -1,7 +1,4 @@
-use std::{
-  cell::RefCell,
-  hash::{Hash, Hasher},
-};
+use std::cell::RefCell;
 
 use cssparser::{Parser, Token, match_ignore_ascii_case};
 
@@ -220,14 +217,6 @@ impl CalcTerms {
     CalcLinear {
       px: sizing.to_device(absolute_css) + px,
       percent,
-    }
-  }
-
-  /// Hashes each term's unit and value by bit pattern.
-  pub(crate) fn hash_bits(&self, hasher: &mut impl Hasher) {
-    for (unit, value) in self.units.into_iter().zip(self.values) {
-      (unit as u8).hash(hasher);
-      value.to_bits().hash(hasher);
     }
   }
 }

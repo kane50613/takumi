@@ -13,7 +13,7 @@ use crate::{
     font_fallback_priority::FontFallbackPriority,
     shaping::{run_segmenter::RunSegmenterRange, shape_result::ShapeResult},
   },
-  layout::{node::NodeKind, tree::RenderNode},
+  layout::tree::RenderNode,
   style::{ComputedStyle, Direction as TextDirection},
   text::bidi_paragraph::direction_from_level,
 };
@@ -45,11 +45,6 @@ impl<'c> LayoutObject<'c> {
     &self.node().context.style
   }
 
-  /// Blink's `IsLayoutImage`.
-  pub(crate) fn is_image(self) -> bool {
-    matches!(self, Self::Box(node) if node.node.as_ref().is_some_and(|node| matches!(node.kind, NodeKind::Image(_))))
-  }
-
   /// Blink's `IsBR`.
   pub(crate) fn is_br(self) -> bool {
     matches!(self, Self::Text(node) if node.node.as_ref().and_then(|node| node.tag_name()).is_some_and(|tag| tag.eq_ignore_ascii_case("br")))
@@ -75,7 +70,6 @@ pub(crate) enum InlineItemType {
   Text,
   Control,
   AtomicInline,
-  BlockInInline,
   OpenTag,
   CloseTag,
   Floating,
@@ -102,15 +96,6 @@ pub(crate) enum TextItemType {
   ForcedLineBreak,
   FlowControl,
   SymbolMarker,
-  LayoutGenerated,
-}
-
-/// Blink's `StyleVariant`, without `::first-line`.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-pub(crate) enum StyleVariant {
-  #[default]
-  Standard,
-  StandardEllipsis,
 }
 
 /// Blink's `InlineItem`.
@@ -123,13 +108,11 @@ pub(crate) struct InlineItem<'c> {
   pub(crate) index: usize,
   pub(crate) item_type: InlineItemType,
   pub(crate) text_type: TextItemType,
-  pub(crate) style_variant: StyleVariant,
   pub(crate) end_collapse_type: CollapseType,
   bidi_level: u8,
   /// The script and fallback priority `RunSegmenter` found, for text items.
   pub(crate) segment_data: Option<(Script, FontFallbackPriority)>,
   pub(crate) is_empty_item: bool,
-  pub(crate) is_block_level: bool,
   pub(crate) is_end_collapsible_newline: bool,
   pub(crate) is_generated_for_line_break: bool,
   pub(crate) is_unsafe_to_reuse_shape_result: bool,
@@ -154,12 +137,10 @@ impl<'c> InlineItem<'c> {
       index: 0,
       item_type,
       text_type: TextItemType::Normal,
-      style_variant: StyleVariant::Standard,
       end_collapse_type: CollapseType::NotCollapsible,
       bidi_level: 0,
       segment_data: None,
       is_empty_item: false,
-      is_block_level: false,
       is_end_collapsible_newline: false,
       is_generated_for_line_break: false,
       is_unsafe_to_reuse_shape_result: false,
@@ -168,23 +149,6 @@ impl<'c> InlineItem<'c> {
 
     item.compute_box_properties();
     item
-  }
-
-  /// Blink's copy constructor with new offsets and shape result.
-  pub(crate) fn with_offsets(
-    &self,
-    start: usize,
-    end: usize,
-    shape_result: Option<Rc<ShapeResult>>,
-  ) -> Self {
-    debug_assert!(end >= start);
-
-    Self {
-      start_offset: start,
-      end_offset: end,
-      shape_result,
-      ..self.clone()
-    }
   }
 
   /// Blink's `ComputeBoxProperties`.
@@ -203,16 +167,7 @@ impl<'c> InlineItem<'c> {
           .layout_object
           .is_some_and(|object| inline_box_edges_empty(object.node()).1);
       }
-      // Unknown until laid out; not empty is the safer guess.
-      InlineItemType::BlockInInline => {}
       _ => {
-        if matches!(
-          self.item_type,
-          InlineItemType::OutOfFlowPositioned | InlineItemType::Floating
-        ) {
-          self.is_block_level = true;
-        }
-
         self.is_empty_item = true;
       }
     }
@@ -244,11 +199,6 @@ impl<'c> InlineItem<'c> {
     self.text_type = TextItemType::SymbolMarker;
   }
 
-  /// Blink's `IsOpaqueForTextProcessing`.
-  pub(crate) fn is_opaque_for_text_processing(&self) -> bool {
-    self.length() == 0 || self.is_floating_or_out_of_flow_positioned()
-  }
-
   pub(crate) fn start_offset(&self) -> usize {
     self.start_offset
   }
@@ -261,12 +211,6 @@ impl<'c> InlineItem<'c> {
     self.end_offset - self.start_offset
   }
 
-  /// Blink's `IsValidOffset`.
-  pub(crate) fn is_valid_offset(&self, offset: usize) -> bool {
-    (offset >= self.start_offset && offset < self.end_offset)
-      || (self.start_offset == self.end_offset && offset == self.start_offset)
-  }
-
   /// Blink's `Direction`.
   pub(crate) fn direction(&self) -> TextDirection {
     direction_from_level(self.bidi_level)
@@ -274,20 +218,6 @@ impl<'c> InlineItem<'c> {
 
   pub(crate) fn bidi_level(&self) -> u8 {
     self.bidi_level
-  }
-
-  /// Blink's `BidiLevelForReorder`: list markers stay out of reordering.
-  pub(crate) fn bidi_level_for_reorder(&self) -> u8 {
-    if self.item_type == InlineItemType::ListMarker {
-      0
-    } else {
-      self.bidi_level
-    }
-  }
-
-  /// Blink's `IsImage`.
-  pub(crate) fn is_image(&self) -> bool {
-    self.layout_object.is_some_and(LayoutObject::is_image)
   }
 
   /// Blink's `SetOffset`, dropping the shape result.

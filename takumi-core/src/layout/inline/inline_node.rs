@@ -55,10 +55,35 @@ struct Frame<'c> {
 
 impl<'c> Frame<'c> {
   fn new(node: &'c RenderNode, parent: Option<&'c RenderNode>, is_inline: bool) -> Self {
+    Self::with_children(node, parent, is_inline, true)
+  }
+
+  /// The frame of the context's block, whose children taffy lays out when one is block-level.
+  fn root(block: &'c RenderNode) -> Self {
+    let has_inline_children = block.force_inline_layout
+      || block
+        .children
+        .iter()
+        .flatten()
+        .all(RenderNode::participates_in_inline_formatting_context);
+
+    Self::with_children(block, None, false, has_inline_children)
+  }
+
+  fn with_children(
+    node: &'c RenderNode,
+    parent: Option<&'c RenderNode>,
+    is_inline: bool,
+    has_inline_children: bool,
+  ) -> Self {
     let mut children: Vec<Child<'c>> = node.marker.as_deref().map(Child::Box).into_iter().collect();
 
     children.push(Child::OwnText);
-    children.extend(node.children.iter().flatten().map(Child::Box));
+
+    if has_inline_children {
+      children.extend(node.children.iter().flatten().map(Child::Box));
+    }
+
     children.reverse();
 
     Self {
@@ -99,7 +124,7 @@ impl<'c> InlineNode<'c> {
   /// Blink's `CollectInlinesInternal`: the items and text content of the context.
   pub(crate) fn collect_inlines(self) -> InlineNodeData<'c> {
     let mut builder = InlineItemsBuilder::new();
-    let mut stack = vec![Frame::new(self.block, None, false)];
+    let mut stack = vec![Frame::root(self.block)];
     let mut previous_character = PreviousCharacter::new();
 
     builder.enter_block(&self.block.context.style);
@@ -610,6 +635,11 @@ mod tests {
     Node::text(text).with_class_name("span")
   }
 
+  /// The anonymous block wrapping `block`'s children beside a block-level float.
+  fn anonymous_block(block: &RenderNode) -> &RenderNode {
+    &block.children.as_deref().expect("children")[0]
+  }
+
   fn block(children: impl Into<Vec<Node>>) -> Node {
     Node::container(children).with_class_name("block")
   }
@@ -767,7 +797,7 @@ mod tests {
       ]),
       "",
     );
-    let (text, items) = collect(&tree);
+    let (text, items) = collect(anonymous_block(&tree));
 
     assert_eq!(text, "a b c");
     assert!(items.contains(&(Floating, String::new())));
@@ -1062,7 +1092,7 @@ mod tests {
       block([span(HEBREW), block([]).with_class_name("abs"), span(HEBREW)]),
       ".block { direction: rtl }",
     );
-    let node = InlineNode::new(&tree);
+    let node = InlineNode::new(anonymous_block(&tree));
     let mut data = node.collect_inlines();
 
     node.segment_text(&mut data);

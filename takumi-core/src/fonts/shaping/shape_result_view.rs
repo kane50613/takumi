@@ -2,8 +2,6 @@
 
 use std::rc::Rc;
 
-use icu_segmenter::GraphemeClusterSegmenter;
-
 use super::{
   glyph_data::{GlyphOffset, HarfBuzzRunGlyphData},
   glyph_data_range::GlyphDataRange,
@@ -14,7 +12,6 @@ use crate::{
   fonts::simple_font_data::SimpleFontData,
   layout_unit::{InlineLayoutUnit, LayoutUnit},
   style::Direction as TextDirection,
-  text::character::is_8bit,
 };
 
 /// Blink's `Segment`.
@@ -76,11 +73,6 @@ impl RunInfoPart {
     GlyphDataRange::with_range(self.run_info(), self.glyph_index, self.num_glyphs)
   }
 
-  /// Blink's `HasGlyphOffsets`.
-  pub(crate) fn has_glyph_offsets(&self) -> bool {
-    self.glyph_data_range().has_offsets()
-  }
-
   /// The offset of each glyph, zero for a part without offsets.
   fn glyph_offsets(&self) -> impl Iterator<Item = GlyphOffset> + '_ {
     let offsets = self.glyph_data_range().offsets();
@@ -88,21 +80,8 @@ impl RunInfoPart {
     (0..self.num_glyphs).map(move |i| offsets.get(i).copied().unwrap_or_default())
   }
 
-  /// Blink's `CharacterIndexOfEndGlyph`.
-  pub(crate) fn character_index_of_end_glyph(&self) -> u32 {
-    self.num_characters + self.offset
-  }
-
-  pub(crate) fn num_characters(&self) -> u32 {
-    self.num_characters
-  }
-
   pub(crate) fn num_glyphs(&self) -> usize {
     self.num_glyphs
-  }
-
-  pub(crate) fn width(&self) -> f32 {
-    self.width
   }
 
   /// Blink's `OffsetToRunStartIndex`.
@@ -434,14 +413,6 @@ impl ShapeResultView {
     self.direction == TextDirection::Rtl
   }
 
-  pub(crate) fn has_vertical_offsets(&self) -> bool {
-    self.has_vertical_offsets
-  }
-
-  pub(crate) fn parts(&self) -> &[RunInfoPart] {
-    &self.parts
-  }
-
   /// Blink's `NumGlyphs`.
   pub(crate) fn num_glyphs(&self) -> usize {
     self.parts.iter().map(RunInfoPart::num_glyphs).sum()
@@ -534,177 +505,6 @@ impl ShapeResultView {
     }
 
     total_advance
-  }
-
-  /// Blink's `ForEachGlyph` over the characters from `from` to `to`.
-  pub(crate) fn for_each_glyph_in_range(
-    &self,
-    initial_advance: f32,
-    from: u32,
-    to: u32,
-    mut glyph_callback: impl FnMut(u32, u16, GlyphOffset, f32, Option<&Rc<SimpleFontData>>),
-  ) -> f32 {
-    let mut total_advance = initial_advance;
-
-    for part in &self.parts {
-      let Some(run) = part.run_info() else {
-        continue;
-      };
-      let mut advance = InlineLayoutUnit::from_float_round(total_advance);
-      let character_index_offset = self.character_index_offset_for_glyph_data(part);
-
-      for (glyph_data, offset) in part
-        .glyph_data_range()
-        .glyphs()
-        .iter()
-        .zip(part.glyph_offsets())
-      {
-        let character_index =
-          u32::from(glyph_data.character_index).wrapping_add(character_index_offset);
-
-        if run.is_ltr() {
-          if character_index >= to {
-            break;
-          }
-        } else if character_index < from {
-          break;
-        }
-
-        if character_index >= from && character_index < to {
-          glyph_callback(
-            character_index,
-            glyph_data.glyph,
-            offset,
-            advance.to_float(),
-            run.font_data.as_ref(),
-          );
-        }
-
-        advance += glyph_data.advance.into();
-      }
-
-      total_advance = advance.to_float();
-    }
-
-    total_advance
-  }
-
-  /// Blink's `ForEachGraphemeClusters`.
-  pub(crate) fn for_each_grapheme_clusters(
-    &self,
-    text: &str,
-    initial_advance: f32,
-    from: u32,
-    to: u32,
-    index_offset: u32,
-    mut callback: impl FnMut(u32, f32, u32, f32),
-  ) -> f32 {
-    let segmenter = GraphemeClusterSegmenter::new();
-    let num_grapheme_clusters =
-      |text: &str| segmenter.segment_str(text).count().saturating_sub(1) as u32;
-    // Blink keeps text that fits Latin-1 in 8 bits, where every character is a grapheme.
-    let is_8bit = is_8bit(text);
-    let rtl = self.is_rtl();
-    let mut advance_so_far = initial_advance;
-
-    for part in &self.parts {
-      if part.num_glyphs == 0 {
-        continue;
-      }
-
-      let glyphs = part.glyph_data_range().glyphs();
-      let mut cluster_advance = 0.0;
-      let character_index_offset = self
-        .character_index_offset_for_glyph_data(part)
-        .wrapping_add(index_offset);
-      let mut cluster_start = if rtl {
-        part
-          .character_index_of_end_glyph()
-          .wrapping_add(character_index_offset)
-      } else {
-        u32::from(glyphs[0].character_index).wrapping_add(character_index_offset)
-      };
-
-      for (i, glyph_data) in glyphs.iter().enumerate() {
-        let current_character_index =
-          u32::from(glyph_data.character_index).wrapping_add(character_index_offset);
-
-        assert!((current_character_index as usize) < text.len());
-
-        if current_character_index < from || current_character_index >= to {
-          advance_so_far += glyph_data.advance.to_float();
-
-          cluster_start = if rtl {
-            cluster_start.wrapping_sub(1)
-          } else {
-            cluster_start.wrapping_add(1)
-          };
-
-          continue;
-        }
-
-        let is_run_end = i + 1 == glyphs.len();
-        let is_cluster_end = is_run_end
-          || u32::from(glyphs[i + 1].character_index).wrapping_add(character_index_offset)
-            != current_character_index;
-
-        cluster_advance += glyph_data.advance.to_float();
-
-        if is_8bit {
-          callback(
-            current_character_index,
-            advance_so_far,
-            1,
-            glyph_data.advance.to_float(),
-          );
-          advance_so_far += glyph_data.advance.to_float();
-        } else if is_cluster_end {
-          let cluster_end = if rtl {
-            current_character_index
-          } else if is_run_end {
-            part
-              .character_index_of_end_glyph()
-              .wrapping_add(character_index_offset)
-          } else {
-            u32::from(glyphs[i + 1].character_index).wrapping_add(character_index_offset)
-          };
-          let (start, end) = if cluster_end >= cluster_start {
-            (cluster_start, cluster_end)
-          } else {
-            (cluster_end, cluster_start)
-          };
-          let graphemes_in_cluster = num_grapheme_clusters(&text[start as usize..end as usize]);
-
-          if graphemes_in_cluster == 0 || cluster_advance == 0.0 {
-            continue;
-          }
-
-          callback(
-            current_character_index,
-            advance_so_far,
-            graphemes_in_cluster,
-            cluster_advance,
-          );
-          advance_so_far += cluster_advance;
-          cluster_start = cluster_end;
-          cluster_advance = 0.0;
-        }
-      }
-    }
-
-    advance_so_far
-  }
-
-  /// Blink's `ExpandRangeToIncludePartialGlyphs`.
-  pub(crate) fn expand_range_to_include_partial_glyphs(&self, from: &mut i32, to: &mut i32) {
-    for part in &self.parts {
-      let Some(run) = part.run_info() else {
-        continue;
-      };
-      let part_offset = (self.char_index_offset + part.start_index) as i32 - part.offset as i32;
-
-      run.expand_range_to_include_partial_glyphs(part_offset, from, to);
-    }
   }
 }
 

@@ -1,13 +1,13 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630">
   <rect x="0" y="0" width="1200" height="630" fill="#fff"/>
-  <path d="M427 274h346v82h-346v-82Zm2 2h342v78h-342v-78Z" fill="#000" fill-rule="evenodd"/>
+  <path d="M427 274h347v82h-347v-82Zm2 2h343v78h-343v-78Z" fill="#000" fill-rule="evenodd"/>
   <g fill="#000">
     <use href="#g0" x="428.51" y="340"/>
-    <use href="#g1" x="461.06" y="340"/>
+    <use href="#g1" x="461.05" y="340"/>
     <use href="#g2" x="486.54" y="340"/>
     <use href="#g3" x="503.39" y="340"/>
-    <use href="#g4" x="530.42" y="340"/>
-    <use href="#g1" x="546.69" y="340"/>
+    <use href="#g4" x="530.41" y="340"/>
+    <use href="#g1" x="546.68" y="340"/>
   </g>
   <g fill="#000">
     <use href="#g5" x="661.62" y="340"/>

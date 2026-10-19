@@ -16,13 +16,4 @@ pub(crate) struct InlineBreakToken<'c> {
   pub(crate) is_line_clamp_displaced_line: bool,
 }
 
-impl InlineBreakToken<'_> {
-  /// Blink's `IsStartEqual`.
-  pub(crate) fn is_start_equal(lhs: Option<&Self>, rhs: Option<&Self>) -> bool {
-    match (lhs, rhs) {
-      (None, rhs) => rhs.is_none(),
-      (Some(lhs), Some(rhs)) => lhs.start == rhs.start,
-      (Some(_), None) => false,
-    }
-  }
-}
+impl InlineBreakToken<'_> {}

@@ -1,17 +1,17 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630">
   <rect x="0" y="0" width="1200" height="31" fill="#f0f0f0"/>
   <g fill="#000">
-    <use href="#g0" x="1055.74" y="24"/>
+    <use href="#g0" x="1055.73" y="24"/>
     <use href="#g1" x="1071.86" y="24"/>
     <use href="#g2" x="1077.48" y="24"/>
-    <use href="#g3" x="1091.38" y="24"/>
+    <use href="#g3" x="1091.37" y="24"/>
     <use href="#g4" x="1104.36" y="24"/>
     <use href="#g5" x="1119.77" y="24"/>
     <use href="#g6" x="1132.75" y="24"/>
     <use href="#g1" x="1138.97" y="24"/>
     <use href="#g2" x="1144.58" y="24"/>
     <use href="#g7" x="1158.84" y="24"/>
-    <use href="#g8" x="1172.5" y="24"/>
+    <use href="#g8" x="1172.49" y="24"/>
     <use href="#g9" x="1185.72" y="24"/>
   </g>
   <defs>

@@ -382,23 +382,6 @@ impl ComputedStyle {
     }
   }
 
-  /// The string used to mark truncated text.
-  pub(crate) fn ellipsis_char(&self) -> &str {
-    const ELLIPSIS_CHAR: &str = "…";
-
-    match &self.misc4_data.text_overflow {
-      TextOverflow::Ellipsis => return ELLIPSIS_CHAR,
-      TextOverflow::Custom(custom) => return custom.as_str(),
-      _ => {}
-    }
-
-    match &self.misc_inherited1_data.block_ellipsis {
-      BlockEllipsis::String(custom) => custom.as_str(),
-      BlockEllipsis::None => "",
-      BlockEllipsis::Auto => ELLIPSIS_CHAR,
-    }
-  }
-
   /// `nowrap` + `ellipsis`: parley lays out all the text even when it overflows,
   /// so this case is rendered by switching to wrapping with a one-line clamp.
   fn forces_single_line_ellipsis(&self) -> bool {
@@ -413,23 +396,6 @@ impl ComputedStyle {
     } else {
       self.inherited_data.text_wrap_mode
     }
-  }
-
-  /// The number of lines to clamp to for layout, or `None` when not clamped.
-  ///
-  /// `nowrap` + `ellipsis` clamps to a single line; otherwise `max-lines` applies
-  /// only inside a fragmentation context (`continue: collapse`), per CSS Overflow 4.
-  /// The ellipsis itself comes from [`Self::ellipsis_char`].
-  pub(crate) fn clamp_lines(&self) -> Option<u32> {
-    if self.forces_single_line_ellipsis() {
-      return Some(1);
-    }
-
-    if self.misc_data.r#continue != Continue::Collapse {
-      return None;
-    }
-
-    self.misc3_data.max_lines.filter(|&count| count >= 1)
   }
 
   #[inline]

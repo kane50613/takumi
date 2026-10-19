@@ -38,6 +38,11 @@ impl ConstraintSpace {
     self.lines_until_clamp == Some(1)
   }
 
+  /// Blink's `IsPastClampPoint`.
+  pub(crate) fn is_past_clamp_point(&self) -> bool {
+    self.lines_until_clamp.is_some_and(|lines| lines <= 0)
+  }
+
   /// The available inline size, zero while computing intrinsic sizes.
   pub(crate) fn inline_size(&self) -> LayoutUnit {
     self.available_inline_size.unwrap_or(LayoutUnit::ZERO)

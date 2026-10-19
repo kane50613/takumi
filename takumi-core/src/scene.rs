@@ -2,26 +2,20 @@
 //! bounds. Raster and SVG backends consume this instead of each walking the node tree
 //! independently.
 
-use std::{collections::HashMap, convert::Infallible};
-
-use skrifa::FontRef;
+use std::{collections::HashMap, rc::Rc};
 
 use crate::{
   error::{Error, Result},
   font_style::SizedFontStyle,
-  geometry::{AvailableSpace, ComputedLayout, NodeId, Point, Size, transformed_rect_extents},
+  geometry::{ComputedLayout, NodeId, Point, Size, transformed_rect_extents},
   layout::{
     decoration::OutlineGeometry,
-    inline::{
-      InkBox, InlineLayoutMode, InlineLayoutRequest, PlacedItem, ProcessedInlineSpan, ShapedRun,
-      collect_inline_items, create_inline_layout, glyph_run_rect, resolve_inline_max_height,
-    },
+    inline::InkBox,
     tree::{ContainingBlocks, LayoutResults, RenderNode},
   },
   paint_chunk::PaintChunk,
   paint_property::{ContainerContents, NodeProperties, PropertyState, PropertyTrees},
   painter::OwnContent,
-  resources::font::{RunFace, run_normalized_coords},
   shadow::SizedShadow,
   sort_key::sort_by_key,
   style::{Affine, BlurType, ComputedStyle, Display, Float},
@@ -887,203 +881,23 @@ fn compute_node_paint_bounds(
   let content_offset = layout.content_box_offset();
   let inline_transform = Affine::translation(content_offset.x, content_offset.y) * transform;
 
-  if let Some(items) = node.fragment_items_in(layout) {
-    let placed = |ink: Option<InkBox>, transform| {
-      let (origin, size) = ink?.rect();
+  let items = node
+    .fragment_items_in(layout)
+    .unwrap_or_else(|| Rc::new(node.lay_out_fragment_items(layout)));
+  let placed = |ink: Option<InkBox>, transform| {
+    let (origin, size) = ink?.rect();
 
-      bounds_for_placed_rect(origin, size, transform)
-    };
-
-    bounds = merge_bounds(bounds, placed(items.ink.content, inline_transform));
-    bounds = merge_bounds(bounds, placed(items.ink.decorations, transform));
-    return outset_bounds(
-      bounds,
-      items.span_ink_reach.max(text_ink_reach(&font_style)),
-      inline_transform,
-    );
-  }
-
-  let content = layout.content_box_size();
-  let available_space = Size {
-    width: AvailableSpace::Definite(content.width),
-    height: AvailableSpace::Definite(content.height),
+    bounds_for_placed_rect(origin, size, transform)
   };
-  let max_height = resolve_inline_max_height(&font_style, content.height);
 
-  let built = create_inline_layout(InlineLayoutRequest {
-    items: collect_inline_items(node),
-    available_space,
-    max_width: content.width,
-    max_height,
-    style: &font_style,
-    context: &node.context,
-    mode: InlineLayoutMode::Measure,
-    shape_cacheable: true,
-  });
-  let Ok(()) = built.walk_items::<Infallible>(layout, |line, item| {
-    let setup = &line.setup;
+  bounds = merge_bounds(bounds, placed(items.ink.content, inline_transform));
+  bounds = merge_bounds(bounds, placed(items.ink.decorations, transform));
 
-    match item {
-      PlacedItem::Run {
-        glyph_run,
-        static_inline_prefix,
-        hanging,
-        stretch,
-      } => {
-        let baseline_shift = built.run_baseline_shift(line, &glyph_run);
-        let relative_offset = built.run_relative_offset(&glyph_run);
-        let (glyph_origin, glyph_size) =
-          glyph_run_rect(&glyph_run, hanging, &stretch, baseline_shift);
-        let (glyph_origin, glyph_size) = setup.scale_rect(
-          glyph_origin,
-          glyph_size,
-          static_inline_prefix,
-          baseline_shift,
-        );
-
-        bounds = merge_bounds(
-          bounds,
-          bounds_for_placed_rect(glyph_origin + relative_offset, glyph_size, inline_transform),
-        );
-
-        // Blink's `InkOverflow::ComputeAppliedDecorationOverflow`.
-        let brush = &glyph_run.style().brush;
-        if !brush.decorations.is_empty() {
-          let run = ShapedRun::of(
-            &glyph_run,
-            Vec::new(),
-            hanging,
-            &stretch,
-            brush.clone(),
-            Vec::new(),
-          );
-          let placement = built.decoration_placement(
-            line,
-            &run,
-            brush.source_span_id,
-            static_inline_prefix,
-            layout,
-          );
-
-          for line in run.decoration_lines(
-            &placement,
-            Affine::IDENTITY,
-            transform,
-            node.context.box_paint_offset(layout),
-          ) {
-            let area = line.bounds();
-
-            bounds = merge_bounds(
-              bounds,
-              bounds_for_placed_rect(
-                Point {
-                  x: area.left,
-                  y: area.top,
-                } + relative_offset,
-                Size {
-                  width: area.right - area.left,
-                  height: area.bottom - area.top,
-                },
-                transform,
-              ),
-            );
-          }
-        }
-
-        // The metrics box above misses ink outside advance × (ascent+descent):
-        // synthetic-italic skew, faux-bold outset, negative bearings, and
-        // glyphs taller than the font's metrics. Merge per-glyph ink extents
-        // so isolation surfaces sized from these bounds never clip text.
-        let Ok(font) = FontRef::from_index(
-          glyph_run.run().font().data.as_ref(),
-          glyph_run.run().font().index,
-        ) else {
-          return Ok(());
-        };
-        let glyph_ids = glyph_run.positioned_glyphs().map(|glyph| glyph.id);
-        let normalized_coords = run_normalized_coords(&glyph_run);
-        let face = RunFace::of(&glyph_run, &normalized_coords);
-        let resolved_glyphs = node
-          .context
-          .fonts()
-          .with_context(|fonts| fonts.resolve_glyphs(face, font, glyph_ids));
-
-        for (index, glyph) in glyph_run.positioned_glyphs().enumerate() {
-          let Some((min_x, min_y, max_x, max_y)) = resolved_glyphs
-            .get(&glyph.id)
-            .and_then(|glyph| glyph.ink_extents())
-          else {
-            continue;
-          };
-          let (ink_origin, ink_size) = setup.scale_rect(
-            Point {
-              x: glyph.x + hanging.shift + stretch.shift(index) + min_x,
-              y: glyph.y + baseline_shift + min_y,
-            },
-            Size {
-              width: max_x - min_x,
-              height: max_y - min_y,
-            },
-            static_inline_prefix,
-            baseline_shift,
-          );
-
-          bounds = merge_bounds(
-            bounds,
-            bounds_for_placed_rect(ink_origin + relative_offset, ink_size, inline_transform),
-          );
-        }
-      }
-      PlacedItem::Box(inline_box) => {
-        bounds = merge_bounds(
-          bounds,
-          bounds_for_placed_rect(
-            Point::new(inline_box.x, inline_box.y) + built.span_relative_offset(inline_box.id),
-            Size::new(inline_box.width, inline_box.height),
-            inline_transform,
-          ),
-        );
-      }
-      PlacedItem::Placeholder(_) => {}
-    }
-    Ok(())
-  });
-
-  for inline_box in built.positioned_floats {
-    bounds = merge_bounds(
-      bounds,
-      bounds_for_placed_rect(
-        Point::new(inline_box.x, inline_box.y),
-        Size::new(inline_box.width, inline_box.height),
-        inline_transform,
-      ),
-    );
-  }
-
-  let decoration_reach = built
-    .spans
-    .iter()
-    .filter_map(ProcessedInlineSpan::text_chain)
-    .fold(0.0_f32, |mut max, chain| {
-      let mut next = Some(chain);
-
-      while let Some(link) = next {
-        max = max.max(link.decoration.reach());
-        next = link.parent.as_ref();
-      }
-      max
-    });
-
-  let text_reach = built
-    .spans
-    .iter()
-    .filter_map(|span| match span {
-      ProcessedInlineSpan::Text { style, .. } => Some(text_ink_reach(style)),
-      _ => None,
-    })
-    .fold(text_ink_reach(&font_style), f32::max);
-
-  outset_bounds(bounds, decoration_reach.max(text_reach), inline_transform)
+  outset_bounds(
+    bounds,
+    items.span_ink_reach.max(text_ink_reach(&font_style)),
+    inline_transform,
+  )
 }
 
 fn has_inline_paint_content(node: &RenderNode) -> bool {

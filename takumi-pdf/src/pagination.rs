@@ -457,9 +457,6 @@ impl Paginated {
     let starts = atoms.page_starts(&sections, content.scene.size.height, frame.window_height);
     let interactive = Interactive::collect(&content);
 
-    // Collecting the atoms left every text box holding the fragment items pages paint from.
-    content.scene.root.context.release_shaped_text();
-
     Ok(Self {
       content,
       repeated,

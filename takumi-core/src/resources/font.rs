@@ -14,8 +14,7 @@ use std::{
 };
 
 use parley::{
-  BaseDirection, CHROMIUM_LINE_BREAK_OVERRIDE, GenericFamily as ParleyGenericFamily, GlyphRun,
-  LayoutContext, TreeBuilder,
+  GenericFamily as ParleyGenericFamily,
   fontique::{
     Attributes, Blob, Collection, CollectionOptions, FallbackKey, FamilyId, FontInfo,
     FontInfoOverride, FontStyle, FontWeight, FontWidth, QueryFamily, QueryFont, QueryStatus,
@@ -37,17 +36,16 @@ use xxhash_rust::xxh3::{Xxh3, xxh3_64};
 use crate::resvg::usvg::fontdb::Database;
 use crate::{
   context::RenderContext,
-  font_style::{ExpandedFontFamily, SizedFontStyle},
+  font_style::ExpandedFontFamily,
   fonts::font_height::FontHeight,
-  layout::inline::{InlineBrush, InlineLayout},
   layout_unit::LayoutUnit,
   resources::{
-    glyph::{BOLD_THRESHOLD, GlyphResolveContext, ResolvedGlyphs, synthesis_embolden_strength},
+    glyph::{GlyphResolveContext, ResolvedGlyphs},
     glyph_cache::resolved_glyph,
     unicode_range::UnicodeRangeSet,
   },
   sort_key::sort_by_key,
-  style::{Direction, FontFamily, FontStyle as CssFontStyle},
+  style::{FontFamily, FontStyle as CssFontStyle},
 };
 
 /// Errors that can occur during font loading and conversion.
@@ -104,10 +102,6 @@ fn guess_font_format(source: &[u8]) -> Result<FontFormat, FontError> {
   }
 }
 
-thread_local! {
-  static LAYOUT_CONTEXT: RefCell<LayoutContext<InlineBrush>> = RefCell::new(LayoutContext::new());
-}
-
 /// Digest of everything but the glyph id of a run's cache key.
 fn glyph_cache_key_prefix(
   font_id: u64,
@@ -144,13 +138,6 @@ fn resolved_glyph_cache_key(prefix: u64, glyph_id: u32) -> u64 {
   xxh3_64(&key)
 }
 
-fn with_layout_context<R>(f: impl FnOnce(&mut LayoutContext<InlineBrush>) -> R) -> R {
-  LAYOUT_CONTEXT.with(|cell| match cell.try_borrow_mut() {
-    Ok(mut ctx) => f(&mut ctx),
-    Err(_) => f(&mut LayoutContext::new()),
-  })
-}
-
 /// A font family produced by [`Fonts::register`], with the faces it contains.
 #[derive(Clone, Debug, serde::Serialize)]
 pub struct RegisteredFamily {
@@ -180,15 +167,6 @@ fn font_style_css(style: FontStyle) -> String {
     FontStyle::Oblique(None) => "oblique".to_string(),
     FontStyle::Oblique(Some(angle)) => format!("oblique {angle}deg"),
   }
-}
-
-/// Registered families partitioned by color-glyph support.
-pub(crate) struct FontClasses {
-  pub(crate) color: HashSet<String>,
-  /// Color families in registration order.
-  pub(crate) color_order: Vec<String>,
-  /// Monochrome families in registration order.
-  pub(crate) mono_order: Vec<String>,
 }
 
 const SBIX: Tag = Tag::new(b"sbix");
@@ -278,7 +256,6 @@ impl Default for Fonts {
 #[derive(Clone)]
 pub struct FontsSnapshot {
   context: Rc<RefCell<Fonts>>,
-  pub(crate) classes: Arc<FontClasses>,
 }
 
 impl FontsSnapshot {
@@ -320,41 +297,6 @@ pub(crate) struct RunSynthesis {
   pub skew: Option<f32>,
 }
 
-/// Shared by the raster glyph cache and the PDF emitter so both fake the same faces.
-pub(crate) fn run_synthesis(run: &GlyphRun<'_, InlineBrush>) -> RunSynthesis {
-  let has_emoji_cluster = run
-    .run()
-    .visual_clusters()
-    .any(|cluster| cluster.is_emoji());
-
-  RunSynthesis {
-    // Only synthesize bold at the CSS bold threshold (>= 600), matching browsers; a lighter
-    // requested weight keeps the regular face rather than faux-bolding it.
-    embolden: (!has_emoji_cluster
-      && run.run().synthesis().embolden()
-      && run.run().font_attrs().weight.value() >= BOLD_THRESHOLD
-      && run.style().brush.font_synthesis.weight.is_allowed())
-    .then_some(synthesis_embolden_strength(run.run().font_size())),
-    skew: run
-      .run()
-      .synthesis()
-      .skew()
-      .filter(|_| !has_emoji_cluster)
-      .filter(|_| run.style().brush.font_synthesis.style.is_allowed())
-      .map(|degrees| -degrees),
-  }
-}
-
-/// The normalized variation coordinates the run was shaped at.
-pub(crate) fn run_normalized_coords(run: &GlyphRun<'_, InlineBrush>) -> Vec<F2Dot14> {
-  run
-    .run()
-    .normalized_coords()
-    .iter()
-    .map(|coord| F2Dot14::from_bits(coord.to_bits()))
-    .collect()
-}
-
 /// What resolving a run's glyphs reads from it: its face, size, instance, and synthesis.
 pub(crate) struct RunFace<'a> {
   pub(crate) font_id: u64,
@@ -362,58 +304,6 @@ pub(crate) struct RunFace<'a> {
   pub(crate) font_size: f32,
   pub(crate) normalized_coords: &'a [F2Dot14],
   pub(crate) synthesis: RunSynthesis,
-}
-
-impl<'a> RunFace<'a> {
-  /// The face `run` was shaped with, at `normalized_coords`, its [`run_normalized_coords`].
-  pub(crate) fn of(run: &GlyphRun<'_, InlineBrush>, normalized_coords: &'a [F2Dot14]) -> Self {
-    Self {
-      font_id: run.run().font().data.id(),
-      font_index: run.run().font().index,
-      font_size: run.run().font_size(),
-      normalized_coords,
-      synthesis: run_synthesis(run),
-    }
-  }
-}
-
-/// User-space variation coordinates the run was shaped at, e.g. `[(*b"wght", 700.0)]`: the font's
-/// synthesis, then the style's resolved variations on the axes the font has, a later value
-/// replacing an earlier one as skrifa resolves a location.
-pub(crate) fn run_variations(run: &GlyphRun<'_, InlineBrush>) -> Vec<([u8; 4], f32)> {
-  let mut variations: Vec<([u8; 4], f32)> = run
-    .run()
-    .synthesis()
-    .variation_settings()
-    .iter()
-    .map(|(tag, value)| (tag.to_be_bytes(), *value))
-    .collect();
-  let style_variations = &run.style().brush.font_variations;
-
-  // Empty coordinates mean the default instance, which the settings did not move.
-  if style_variations.is_empty() || run.run().normalized_coords().is_empty() {
-    return variations;
-  }
-
-  let font = run.run().font();
-  let axes: Vec<Tag> = FontRef::from_index(font.data.data(), font.index)
-    .map(|font_ref| font_ref.axes().iter().map(|axis| axis.tag()).collect())
-    .unwrap_or_default();
-
-  for variation in style_variations.iter() {
-    let tag = variation.tag.to_bytes();
-
-    if !axes.contains(&Tag::new(&tag)) {
-      continue;
-    }
-
-    match variations.iter_mut().find(|(existing, _)| *existing == tag) {
-      Some((_, existing)) => *existing = variation.value,
-      None => variations.push((tag, variation.value)),
-    }
-  }
-
-  variations
 }
 
 impl Fonts {
@@ -657,12 +547,6 @@ impl Fonts {
       );
     }
 
-    let (color_order, mono_order) = self
-      .order
-      .iter()
-      .cloned()
-      .partition(|name| self.color_names.contains(name));
-
     FontsSnapshot {
       context: Rc::new(RefCell::new(Self {
         inner: cloned,
@@ -676,11 +560,6 @@ impl Fonts {
         svg_db: self.svg_db.clone(),
         revision: self.revision,
       })),
-      classes: Arc::new(FontClasses {
-        color: self.color_names.clone(),
-        color_order,
-        mono_order,
-      }),
     }
   }
 
@@ -932,7 +811,6 @@ pub(crate) fn em_box_descent(
 pub(crate) struct ExactFontMetrics {
   pub(crate) ascent: f32,
   pub(crate) descent: f32,
-  pub(crate) line_gap: f32,
 }
 
 impl PrimaryFontMetrics {
@@ -949,7 +827,6 @@ impl PrimaryFontMetrics {
       exact: ExactFontMetrics {
         ascent: metrics.ascent,
         descent: metrics.descent.abs(),
-        line_gap: metrics.leading,
       },
       underline: metrics.underline.map(|underline| FontUnderline {
         position: -underline.offset,
@@ -1032,22 +909,6 @@ impl RenderContext {
     result
   }
 
-  /// The fonts `families`/`attributes` match, in the order text falls back through them.
-  pub(crate) fn fallback_fonts<'a>(
-    &self,
-    families: impl IntoIterator<Item = QueryFamily<'a>>,
-    attributes: Attributes,
-  ) -> Vec<(Blob<u8>, u32)> {
-    let mut fonts = Vec::new();
-
-    self.match_fonts(families, attributes, |font, _| {
-      fonts.push((font.blob.clone(), font.index));
-      QueryStatus::Continue
-    });
-
-    fonts
-  }
-
   /// Visits the fonts `families`/`attributes` match, in the order text falls back through them,
   /// with whether each one's `unicode-range` leaves out the space, until `visit` stops.
   fn match_fonts<'a>(
@@ -1073,34 +934,6 @@ impl RenderContext {
         visit(font, space_outside_range)
       });
     });
-  }
-
-  /// Builds an inline layout whose paragraph takes `root_style` and its direction.
-  pub(crate) fn tree_builder(
-    &self,
-    root_style: &SizedFontStyle,
-    chromium_line_breaks: bool,
-    func: impl FnOnce(&mut TreeBuilder<'_, InlineBrush>),
-  ) -> (InlineLayout, String) {
-    let base_direction = match root_style.parent.inherited_data.direction {
-      Direction::Ltr => BaseDirection::Ltr,
-      Direction::Rtl => BaseDirection::Rtl,
-    };
-
-    self.fonts().with_context(|fonts| {
-      with_layout_context(|layout| {
-        // Line boxes resolve their vertical metrics in `LayoutUnit`s, as Blink's do; parley's
-        // pixel rounding would open gaps between lines that read as clearance.
-        let mut builder = layout.tree_builder(&mut fonts.inner, 1.0, false, &root_style.into());
-
-        builder.set_base_direction(base_direction);
-        if chromium_line_breaks {
-          builder.set_line_break_override(Some(CHROMIUM_LINE_BREAK_OVERRIDE));
-        }
-        func(&mut builder);
-        builder.build()
-      })
-    })
   }
 }
 

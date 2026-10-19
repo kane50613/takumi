@@ -1,16 +1,12 @@
 //! What a node paints inside its box, besides its children.
 
-use std::{borrow::Cow, rc::Rc};
+use std::rc::Rc;
 
 use crate::{
   font_style::SizedFontStyle,
-  geometry::{AvailableSpace, ComputedLayout, Size},
+  geometry::ComputedLayout,
   layout::{
-    inline::{
-      BuiltInlineLayout, FragmentItems, InlineItem, InlineLayoutMode, InlineLayoutRequest,
-      InlineRunLayout, ProcessedInlineSpan, collect_inline_items, create_inline_layout,
-      process_inline_spans,
-    },
+    inline::{FragmentItems, InlineRunLayout, ProcessedInlineSpan},
     node::{ImageData, NodeKind},
     tree::RenderNode,
   },
@@ -60,27 +56,19 @@ impl<'n> OwnContent<'n> {
     }
   }
 
-  /// The items the inline content lays out in the node's own `font_style`, or `None` when it
-  /// has none. A text node at `font-size: 0` shows nothing, but an inline formatting context
-  /// still lays out the children that set their own size.
-  pub fn inline_items(&self, font_style: &SizedFontStyle) -> Option<Vec<InlineItem<'n>>> {
+  /// Whether the inline content lays anything out in the node's own `font_style`. A text node at
+  /// `font-size: 0` shows nothing, but an inline formatting context still lays out the children
+  /// that set their own size.
+  fn has_inline_content(&self, font_style: &SizedFontStyle) -> bool {
     let Self::Inline(node) = *self else {
-      return None;
+      return false;
     };
 
-    if node.should_create_inline_layout() {
-      return Some(collect_inline_items(node));
-    }
-
-    match &node.node.as_ref()?.kind {
-      NodeKind::Text(text) if font_style.sizing.font_size != 0.0 => Some(vec![InlineItem::Text {
-        text: Cow::Borrowed(text.text.as_str()),
-        context: &node.context,
-        link: None,
-        decorations: None,
-      }]),
-      _ => None,
-    }
+    node.should_create_inline_layout()
+      || matches!(
+        node.node.as_ref().map(|input| &input.kind),
+        Some(NodeKind::Text(_)) if font_style.sizing.font_size != 0.0
+      )
   }
 
   /// The fragment items the inline content lays out to in the content box of `layout`, styled
@@ -94,16 +82,21 @@ impl<'n> OwnContent<'n> {
       return None;
     };
 
-    node.fragment_items_in(layout).or_else(|| {
-      let items = self.inline_items(font_style)?;
+    if !self.has_inline_content(font_style) {
+      return None;
+    }
 
-      Some(lay_out(node, items, font_style, layout).1)
-    })
+    Some(node.fragment_items_in(layout).unwrap_or_else(|| {
+      let items = Rc::new(node.lay_out_fragment_items(layout));
+
+      node.fragment_items.keep(Rc::clone(&items));
+      items
+    }))
   }
 
   /// The inline content laid out in the content box of `layout`, styled by `font_style`, its
   /// node's own; `None` when it has none. A node keeps the fragment items it laid out to, so
-  /// painting it again at the same layout only processes its spans.
+  /// painting it again at the same layout only collects its spans.
   pub fn lay_out_inline<'c>(
     &self,
     font_style: &'c SizedFontStyle<'c>,
@@ -115,66 +108,13 @@ impl<'n> OwnContent<'n> {
     let Self::Inline(node) = *self else {
       return None;
     };
-    let items = self.inline_items(font_style)?;
-    let context = &node.context;
+    let items = self.fragment_items(font_style, layout)?;
+    let spans = node.inline_spans(&items);
 
-    if let Some(fragment) = node.fragment_items_in(layout) {
-      let content = layout.content_box_size();
-      let spans = process_inline_spans(
-        &items,
-        Size {
-          width: AvailableSpace::Definite(content.width),
-          height: AvailableSpace::Definite(content.height),
-        },
-        context,
-      );
-
-      return Some(
-        fragment
-          .resolve_runs(&spans, context, layout)
-          .map(|runs| PaintedInline {
-            spans,
-            runs,
-            items: fragment,
-          }),
-      );
-    }
-
-    let (built, fragment) = lay_out(node, items, font_style, layout);
-    let runs = fragment.resolve_runs(&built.spans, context, layout);
-    let BuiltInlineLayout { spans, .. } = built;
-
-    Some(runs.map(|runs| PaintedInline {
-      spans,
-      runs,
-      items: fragment,
-    }))
+    Some(
+      items
+        .resolve_runs(&spans, &node.context, layout)
+        .map(|runs| PaintedInline { spans, runs, items }),
+    )
   }
-}
-
-/// Lays `items`, `node`'s inline content, out in the content box of `layout`. Unless
-/// `text-overflow: ellipsis` cut its spans short, the node keeps the fragment items and lets go
-/// of the shaped text no other box shares.
-fn lay_out<'c>(
-  node: &'c RenderNode,
-  items: Vec<InlineItem<'c>>,
-  font_style: &'c SizedFontStyle<'c>,
-  layout: ComputedLayout,
-) -> (BuiltInlineLayout<'c>, Rc<FragmentItems>) {
-  let built = create_inline_layout(InlineLayoutRequest::in_content_box(
-    items,
-    layout.content_box_size(),
-    font_style,
-    &node.context,
-    InlineLayoutMode::Draw,
-  ));
-  let fragment = Rc::new(built.fragment_items(layout, &node.context));
-
-  if !fragment.ellipsized {
-    node.fragment_items.keep(Rc::clone(&fragment));
-    if let Some(key) = built.shape_key {
-      node.context.inline_cache().release_unshared(key);
-    }
-  }
-  (built, fragment)
 }

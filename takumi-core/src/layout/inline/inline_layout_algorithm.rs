@@ -61,6 +61,8 @@ pub(crate) struct LineBoxFragment<'a, 'c> {
   pub(crate) base_direction: TextDirection,
   pub(crate) break_token: Option<InlineBreakToken<'c>>,
   pub(crate) is_empty_line_box: bool,
+  /// Blink's `IsHiddenDueToLayout`: the line is past the `line-clamp` point.
+  pub(crate) is_hidden_due_to_layout: bool,
   /// The space a `<br clear>` adds after the line.
   pub(crate) clearance_after_line: LayoutUnit,
   /// The floats after the line.
@@ -85,6 +87,7 @@ impl LineBoxFragment<'_, '_> {
       base_direction: TextDirection::Ltr,
       break_token: None,
       is_empty_line_box: false,
+      is_hidden_due_to_layout: false,
       clearance_after_line: LayoutUnit::ZERO,
       exclusion_space,
       lines_until_clamp: None,
@@ -171,6 +174,7 @@ impl LineBreakStrategy {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum LineClampState {
   Show,
+  Hide,
   LineClampEllipsis,
   TextOverflowEllipsis,
 }
@@ -517,7 +521,14 @@ impl<'s, 'a, 'c> InlineLayoutAlgorithm<'s, 'a, 'c> {
 
     let line_clamp_state = self.line_clamp_state(line_info);
 
-    if line_clamp_state != LineClampState::Show {
+    // Approximate: Blink also truncates the layout that measures a consistent `text-fit`, so the
+    // ellipsized text it then measures fits no line. takumi fits the text first, and only a line
+    // that still overflows at its fitted size takes an ellipsis.
+    if matches!(
+      line_clamp_state,
+      LineClampState::LineClampEllipsis | LineClampState::TextOverflowEllipsis
+    ) && !self.context.is_measuring_scale
+    {
       let is_ellipsis_caused_by_line_clamp = line_clamp_state == LineClampState::LineClampEllipsis;
 
       inline_size = LineTruncator::new(line_info, is_ellipsis_caused_by_line_clamp).truncate_line(
@@ -525,6 +536,14 @@ impl<'s, 'a, 'c> InlineLayoutAlgorithm<'s, 'a, 'c> {
         line_box,
         self.context.box_states(),
       );
+    }
+
+    if line_clamp_state == LineClampState::Hide {
+      self.container_builder.is_hidden_due_to_layout = true;
+
+      for child in &mut line_box.children {
+        child.is_hidden_due_to_layout = true;
+      }
     }
 
     // Negative margins can move the position before zero, but not shrink the size below it.
@@ -556,7 +575,7 @@ impl<'s, 'a, 'c> InlineLayoutAlgorithm<'s, 'a, 'c> {
     let box_states = self.context.box_states();
 
     box_states.apply_relative_positioning(space, line_box);
-    box_states.create_box_fragments(line_box, line_box_metrics.line_height());
+    box_states.create_box_fragments(line_box);
     self.context.set_item_index(line_info.end_item_index);
 
     // Empty items may still leave no line.
@@ -574,9 +593,14 @@ impl<'s, 'a, 'c> InlineLayoutAlgorithm<'s, 'a, 'c> {
     self.container_builder.inline_size = inline_size;
   }
 
-  /// Blink's `GetLineClampState`, without the hidden lines of the experimental `line-clamp`.
+  /// Blink's `GetLineClampState`.
   fn line_clamp_state(&self, line_info: &LineInfo<'a, 'c>) -> LineClampState {
     let style = &self.node.block.context.style;
+
+    // Blink's `IsHidden`, which the standard `line-clamp` takumi parses turns on.
+    if self.constraint_space.is_past_clamp_point() {
+      return LineClampState::Hide;
+    }
 
     if self.constraint_space.is_at_clamp_point()
       && style.misc_inherited1_data.block_ellipsis != BlockEllipsis::None
@@ -588,7 +612,11 @@ impl<'s, 'a, 'c> InlineLayoutAlgorithm<'s, 'a, 'c> {
     // box that does not clip its overflow.
     let should_truncate_overflowing_text = style.misc4_data.text_overflow != TextOverflow::Clip;
 
-    if line_info.has_overflow && should_truncate_overflowing_text {
+    // Approximate: Blink truncates a line that overflowed before `text-fit` fitted it.
+    let has_overflow = line_info.has_overflow
+      && (line_info.text_fit_scale == 1.0 || line_info.width() > line_info.available_width());
+
+    if has_overflow && should_truncate_overflowing_text {
       return LineClampState::TextOverflowEllipsis;
     }
 
@@ -883,6 +911,12 @@ impl<'c> InlineNode<'c> {
     let style = &self.block.context.style;
     let mut space =
       ConstraintSpace::new(Some(available_inline_size), style.inherited_data.direction);
+
+    space.percentage_resolution_block_size = self
+      .block
+      .context
+      .definite_height()
+      .map(LayoutUnit::from_float);
 
     // `line-clamp`, which collapses the lines past its count.
     if style.misc_data.r#continue == Continue::Collapse {

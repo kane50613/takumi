@@ -1,7 +1,7 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630">
   <rect x="0" y="0" width="1200" height="630" fill="#fff"/>
   <path d="M400 215h400v200h-400v-200Zm4 4h392v192h-392v-192Z" fill="#000" fill-rule="evenodd"/>
-  <path d="M404 219h392v585h-392v-585Zm2 2h388v581h-388v-581Z" fill="#f00" fill-rule="evenodd"/>
+  <path d="M404 219h392v1000h-392v-1000Zm2 2h388v996h-388v-996Z" fill="#f00" fill-rule="evenodd"/>
   <g fill="#000">
     <use href="#g0" x="406" y="285"/>
     <use href="#g1" x="439.41" y="285"/>

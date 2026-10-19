@@ -90,10 +90,6 @@ impl ResolvedFontVariations {
     }
   }
 
-  pub(crate) fn is_empty(&self) -> bool {
-    self.settings.is_empty() && self.optical_size.is_none()
-  }
-
   pub(crate) fn iter(&self) -> impl Iterator<Item = FontVariation> + '_ {
     self
       .settings

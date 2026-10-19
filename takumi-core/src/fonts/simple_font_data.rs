@@ -7,7 +7,11 @@ use std::{
 };
 
 use harfrust::{FontRef, ShaperData, ShaperInstance, Tag, Variation};
-use skrifa::{GlyphId, MetadataProvider, instance::Size, raw::TableProvider};
+use skrifa::{
+  GlyphId, MetadataProvider,
+  instance::Size,
+  raw::{TableProvider, types::F2Dot14},
+};
 
 use crate::{
   fonts::font_description::FontDescription,
@@ -47,7 +51,12 @@ impl SimpleFontData {
       .charmap()
       .map(' ')
       .map_or(0, |glyph| glyph.to_u32() as u16);
-    let variations = face
+    let axes = font.axes();
+    let mut variations: Vec<Variation> = Vec::new();
+
+    // A setting on an axis the face lacks does nothing, and a later one on an axis replaces an
+    // earlier one, as skrifa resolves a location.
+    for variation in face
       .synthesis
       .variation_settings()
       .iter()
@@ -56,7 +65,24 @@ impl SimpleFontData {
         value,
       })
       .chain(settings.iter().copied())
-      .collect();
+      .filter(|variation| axes.iter().any(|axis| axis.tag() == variation.tag))
+    {
+      match variations
+        .iter_mut()
+        .find(|existing| existing.tag == variation.tag)
+      {
+        Some(existing) => *existing = variation,
+        None => variations.push(variation),
+      }
+    }
+
+    // A setting at its axis's default leaves the default instance, which the face draws without.
+    variations.retain(|variation| {
+      axes
+        .iter()
+        .find(|axis| axis.tag() == variation.tag)
+        .is_some_and(|axis| axis.default_value() != variation.value)
+    });
 
     Some(Self {
       face,
@@ -109,6 +135,33 @@ impl SimpleFontData {
 
   pub(crate) fn units_per_em(&self) -> u16 {
     self.units_per_em
+  }
+
+  /// The variation coordinates the face is instanced at, as user-space `(tag, value)` pairs.
+  pub(crate) fn variation_settings(&self) -> Vec<([u8; 4], f32)> {
+    self
+      .variations
+      .iter()
+      .map(|variation| (variation.tag.to_be_bytes(), variation.value))
+      .collect()
+  }
+
+  /// The face's variation coordinates, normalized.
+  pub(crate) fn normalized_coords(&self) -> Vec<F2Dot14> {
+    let Some(font) = self.font_ref() else {
+      return Vec::new();
+    };
+
+    font
+      .axes()
+      .location(
+        self
+          .variations
+          .iter()
+          .map(|variation| (variation.tag, variation.value)),
+      )
+      .coords()
+      .to_vec()
   }
 
   /// Blink's `SpaceGlyph`.

@@ -47,20 +47,12 @@ impl HarfBuzzRunGlyphData {
     }
   }
 
-  /// Blink's `SafeToBreakBefore`.
-  pub(crate) fn safe_to_break_before(self) -> SafeToBreak {
-    if self.unsafe_to_break_before {
-      SafeToBreak::Unsafe
-    } else {
-      SafeToBreak::Safe
-    }
-  }
-
   /// Blink's `IsSafeToBreakBefore`.
   pub(crate) fn is_safe_to_break_before(self) -> bool {
     !self.unsafe_to_break_before
   }
 
+  #[cfg(test)]
   /// Blink's `SetSafeToBreakBefore`.
   pub(crate) fn set_safe_to_break_before(&mut self, value: SafeToBreak) {
     self.unsafe_to_break_before = value == SafeToBreak::Unsafe;

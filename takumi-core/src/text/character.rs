@@ -23,8 +23,6 @@ pub(crate) const ZERO_WIDTH_NON_JOINER: char = '\u{200C}';
 pub(crate) const ZERO_WIDTH_JOINER: char = '\u{200D}';
 pub(crate) const POP_DIRECTIONAL_FORMATTING: char = '\u{202C}';
 pub(crate) const POP_DIRECTIONAL_ISOLATE: char = '\u{2069}';
-pub(crate) const LEFT_TO_RIGHT_OVERRIDE: char = '\u{202D}';
-pub(crate) const RIGHT_TO_LEFT_OVERRIDE: char = '\u{202E}';
 pub(crate) const OBJECT_REPLACEMENT_CHARACTER: char = '\u{FFFC}';
 pub(crate) const COMBINING_ENCLOSING_CIRCLE_BACKSLASH: char = '\u{20E0}';
 pub(crate) const COMBINING_ENCLOSING_KEYCAP: char = '\u{20E3}';
@@ -328,5 +326,20 @@ pub(crate) fn char_at(text: &str, offset: usize) -> char {
 
 /// The character ending at byte `offset` of `text`.
 pub(crate) fn char_before(text: &str, offset: usize) -> char {
-  text[..offset].chars().next_back().unwrap_or('\0')
+  text
+    .get(..offset)
+    .and_then(|before| before.chars().next_back())
+    .unwrap_or('\0')
+}
+
+#[cfg(test)]
+mod tests {
+  use super::char_before;
+
+  #[test]
+  fn char_before_a_mid_character_offset_is_none() {
+    assert_eq!(char_before("aé", 3), 'é');
+    assert_eq!(char_before("aé", 2), '\0');
+    assert_eq!(char_before("aé", 0), '\0');
+  }
 }

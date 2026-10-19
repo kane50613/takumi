@@ -10,13 +10,6 @@ use crate::geometry::{Point, Rect, Size};
 
 /// What every unit `FixedPoint` makes shares, so one converts to another as Blink's `To<>()`,
 /// `FromFixed<>()`, and `ToCeil<>()` do.
-#[cfg_attr(
-  not(test),
-  expect(
-    dead_code,
-    reason = "TODO: the shaping and line breaking ports convert between units"
-  )
-)]
 pub(crate) trait FixedPoint: Copy {
   /// Blink's `kFractionalBits`.
   const FRACTIONAL_BITS: u32;

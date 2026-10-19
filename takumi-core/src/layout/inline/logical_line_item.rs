@@ -7,9 +7,8 @@ use std::{
 };
 
 use super::{
-  inline_item::{InlineItem, InlineItemType, LayoutObject, StyleVariant},
+  inline_item::{InlineItem, LayoutObject},
   inline_item_result::{InlineItemResult, LayoutResult, LineBoxStrut},
-  inline_item_text_index::InlineItemTextIndex,
   text_fit_scale::TextFitScale,
 };
 use crate::{
@@ -22,7 +21,6 @@ use crate::{
   },
   layout_unit::LayoutUnit,
   style::Direction as TextDirection,
-  text::bidi_paragraph::direction_from_level,
 };
 
 /// A line item without a bidi level: Blink's `0xff`.
@@ -33,15 +31,25 @@ pub(crate) const NO_BIDI_LEVEL: u8 = 0xff;
 #[derive(Clone)]
 pub(crate) struct InlineBoxFragment<'c> {
   pub(crate) node: &'c RenderNode,
-  pub(crate) style_variant: StyleVariant,
   /// The border box's size.
   pub(crate) size: LogicalSize,
   pub(crate) borders: LineBoxStrut,
   pub(crate) padding: LineBoxStrut,
   pub(crate) has_line_left_edge: bool,
   pub(crate) has_line_right_edge: bool,
-  /// The out-of-flow boxes inside, and their static offsets from the fragment.
-  pub(crate) out_of_flow_children: Vec<(&'c RenderNode, LogicalOffset, LayoutUnit)>,
+  /// The out-of-flow boxes inside.
+  pub(crate) out_of_flow_children: Vec<OutOfFlowInlineChild<'c>>,
+}
+
+/// Blink's `AddOutOfFlowInlineChildCandidate` arguments: an out-of-flow box an inline box's
+/// fragment takes.
+#[derive(Clone)]
+pub(crate) struct OutOfFlowInlineChild<'c> {
+  pub(crate) node: &'c RenderNode,
+  /// The static offset from the fragment.
+  pub(crate) offset: LogicalOffset,
+  /// The direction its static position resolves in.
+  pub(crate) container_direction: TextDirection,
 }
 
 /// What a line item's fragment is: Blink's `LayoutResult` of one.
@@ -82,10 +90,8 @@ pub(crate) struct LogicalLineItem<'a, 'c> {
   pub(crate) layout_result: Option<LineFragment<'c>>,
   /// The box an ellipsis belongs to, which has no item.
   pub(crate) layout_object: Option<LayoutObject<'c>>,
-  pub(crate) style_variant: StyleVariant,
   pub(crate) out_of_flow_positioned_box: Option<&'c RenderNode>,
   pub(crate) unpositioned_float: Option<&'c RenderNode>,
-  pub(crate) item_index: InlineItemTextIndex,
   /// The border box, at first in this child's own coordinates; `ComputeInlinePositions` makes it
   /// the line box's.
   pub(crate) rect: LogicalRect,
@@ -120,10 +126,8 @@ impl Default for LogicalLineItem<'_, '_> {
       text_content: None,
       layout_result: None,
       layout_object: None,
-      style_variant: StyleVariant::Standard,
       out_of_flow_positioned_box: None,
       unpositioned_float: None,
-      item_index: InlineItemTextIndex::default(),
       rect: LogicalRect::default(),
       bfc_offset: BfcOffset::default(),
       inline_size: LayoutUnit::ZERO,
@@ -235,7 +239,6 @@ impl<'a, 'c> LogicalLineItem<'a, 'c> {
   /// An ellipsis, generated text of `layout_object` without an item.
   pub(crate) fn ellipsis(
     layout_object: LayoutObject<'c>,
-    style_variant: StyleVariant,
     shape_result: Rc<ShapeResultView>,
     text_content: String,
     rect: LogicalRect,
@@ -246,7 +249,6 @@ impl<'a, 'c> LogicalLineItem<'a, 'c> {
       shape_result: Some(shape_result),
       text_content: Some(text_content),
       layout_object: Some(layout_object),
-      style_variant,
       rect,
       inline_size: rect.size.inline_size,
       bidi_level,
@@ -260,14 +262,21 @@ impl<'a, 'c> LogicalLineItem<'a, 'c> {
     shape_result: Rc<ShapeResultView>,
     text_offset: Range<usize>,
   ) -> Self {
+    let scale = source_item
+      .text_fit_scale
+      .as_ref()
+      .map_or(1.0, |text_fit_scale| text_fit_scale.scale);
+
     Self {
       inline_item: source_item.inline_item,
-      inline_size: shape_result.snapped_width(),
+      inline_size: LayoutUnit::from_float(shape_result.snapped_width().to_float() * scale),
       shape_result: Some(shape_result),
       text_offset,
       text_content: source_item.text_content.clone(),
       rect: source_item.rect,
       bidi_level: source_item.bidi_level,
+      // Blink drops the scale, which leaves a truncated fitted text unscaled.
+      text_fit_scale: source_item.text_fit_scale.clone(),
       ..Self::default()
     }
   }
@@ -302,33 +311,17 @@ impl<'a, 'c> LogicalLineItem<'a, 'c> {
   }
 
   /// Blink's `UnpositionedFloat`.
-  pub(crate) fn unpositioned_float(
-    inline_item: &InlineItem<'c>,
-    item_index: InlineItemTextIndex,
-  ) -> Self {
+  pub(crate) fn unpositioned_float(inline_item: &InlineItem<'c>) -> Self {
     Self {
       unpositioned_float: inline_item.layout_object.map(LayoutObject::node),
       bidi_level: inline_item.bidi_level(),
-      item_index,
       ..Self::default()
     }
-  }
-
-  /// Blink's `IsItemType`.
-  pub(crate) fn is_item_type(&self, item_type: InlineItemType) -> bool {
-    self
-      .inline_item
-      .is_some_and(|item| item.item_type == item_type)
   }
 
   /// Blink's `IsFloating`.
   pub(crate) fn is_floating(&self) -> bool {
     matches!(self.layout_result, Some(LineFragment::Float { .. }))
-  }
-
-  /// Blink's `IsAtomicInline`.
-  pub(crate) fn is_atomic_inline(&self) -> bool {
-    matches!(self.layout_result, Some(LineFragment::AtomicInline { .. }))
   }
 
   /// Blink's `IsInlineBox`.
@@ -360,11 +353,6 @@ impl<'a, 'c> LogicalLineItem<'a, 'c> {
     self.has_in_flow_or_floating_fragment() || self.has_out_of_flow_fragment()
   }
 
-  /// Blink's `IsControl`.
-  pub(crate) fn is_control(&self) -> bool {
-    self.is_item_type(InlineItemType::Control)
-  }
-
   /// Blink's `HasBidiLevel`.
   pub(crate) fn has_bidi_level(&self) -> bool {
     self.bidi_level != NO_BIDI_LEVEL
@@ -380,16 +368,6 @@ impl<'a, 'c> LogicalLineItem<'a, 'c> {
     self.is_placeholder() || self.is_inline_box()
   }
 
-  /// Blink's `GetLayoutObject`'s node.
-  pub(crate) fn node(&self) -> Option<&'c RenderNode> {
-    self
-      .inline_item
-      .and_then(|item| item.layout_object)
-      .map(LayoutObject::node)
-      .or_else(|| self.layout_result.as_ref().map(LineFragment::node))
-      .or_else(|| self.layout_object.map(LayoutObject::node))
-  }
-
   /// Blink's `GetMutableLayoutObject`.
   pub(crate) fn layout_object(&self) -> Option<LayoutObject<'c>> {
     if let Some(object) = self.inline_item.and_then(|item| item.layout_object) {
@@ -400,17 +378,6 @@ impl<'a, 'c> LogicalLineItem<'a, 'c> {
       Some(LineFragment::InlineBox(fragment)) => Some(LayoutObject::Inline(fragment.node)),
       Some(fragment) => Some(LayoutObject::Box(fragment.node())),
       None => self.layout_object,
-    }
-  }
-
-  /// Blink's `ResolvedDirection`.
-  pub(crate) fn resolved_direction(&self) -> TextDirection {
-    debug_assert!(self.has_bidi_level() || self.is_inline_box());
-
-    if self.has_bidi_level() {
-      direction_from_level(self.bidi_level)
-    } else {
-      TextDirection::Ltr
     }
   }
 }
@@ -451,28 +418,6 @@ impl<'a, 'c> LogicalLineItems<'a, 'c> {
         child.children_count += 1;
       }
     }
-  }
-
-  /// Blink's `FirstInFlowChild`.
-  pub(crate) fn first_in_flow_child(&self) -> Option<&LogicalLineItem<'a, 'c>> {
-    self
-      .children
-      .iter()
-      .find(|child| child.has_in_flow_fragment())
-  }
-
-  /// Blink's `LastInFlowChild`.
-  pub(crate) fn last_in_flow_child(&self) -> Option<&LogicalLineItem<'a, 'c>> {
-    self
-      .children
-      .iter()
-      .rev()
-      .find(|child| child.has_in_flow_fragment())
-  }
-
-  /// Blink's `MoveInInlineDirection` of every child.
-  pub(crate) fn move_in_inline_direction(&mut self, delta: LayoutUnit) {
-    self.move_in_inline_direction_range(delta, 0, self.children.len());
   }
 
   /// Blink's `MoveInInlineDirection` of `start..end`.

@@ -187,15 +187,27 @@ fn scaled_font(font: &Font, scale_factor: f32, context: &RenderContext) -> Rc<Fo
   )
 }
 
-/// The text fragments of a line box, forced breaks among them, as Blink's inline leaves.
+/// The text fragments of a line box, forced breaks and hidden ones among them, as Blink's cursor
+/// visits the inline leaves of its fragment items, each with the item holding its text.
 fn line_texts<'l, 'a, 'c>(
   line: &'l LineBoxFragment<'a, 'c>,
-) -> impl Iterator<Item = (&'l InlineItem<'c>, &'l LogicalLineItem<'a, 'c>)> {
-  line.items.children.iter().filter_map(|child| {
-    let item = child.inline_item?;
+  items: &'a [InlineItem<'c>],
+) -> impl Iterator<Item = (&'a InlineItem<'c>, &'l LogicalLineItem<'a, 'c>)> {
+  line
+    .items
+    .children
+    .iter()
+    .filter(|child| child.shape_result.is_some())
+    .filter_map(|child| {
+      let item = child.inline_item.or_else(|| {
+        items.iter().find(|item| {
+          item.start_offset() <= child.text_offset.start
+            && child.text_offset.end <= item.end_offset()
+        })
+      })?;
 
-    (child.shape_result.is_some() && !child.is_hidden_due_to_layout).then_some((item, child))
-  })
+      Some((item, child))
+    })
 }
 
 /// Blink's `ComputeAdditionalPaintTimeScale`: the paint-time scale that fills the line after its
@@ -210,7 +222,7 @@ fn compute_additional_paint_time_scale(
 ) -> f32 {
   let mut flexible_total_size = LayoutUnit::ZERO;
 
-  for (item, child) in line_texts(line) {
+  for (item, child) in line_texts(line, &fit_shaper.items_data.items) {
     if item.is_forced_line_break() {
       continue;
     }
@@ -280,7 +292,7 @@ impl<'c> InlineNode<'c> {
       let mut flexible_total_size_including_letter_spacing = LayoutUnit::ZERO;
       let mut did_reshape = false;
 
-      for (item, child) in line_texts(line) {
+      for (item, child) in line_texts(line, &fit_shaper.items_data.items) {
         if item.is_forced_line_break() {
           continue;
         }

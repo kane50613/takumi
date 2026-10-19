@@ -19,11 +19,6 @@ impl InlineItemTextIndex {
     self.text_offset == 0 && self.item_index == 0
   }
 
-  /// Blink's `operator>`, true when either part is greater.
-  pub(crate) fn is_greater_than(self, other: Self) -> bool {
-    self.text_offset > other.text_offset || self.item_index > other.item_index
-  }
-
   /// Blink's `operator<`, true when either part is less.
   pub(crate) fn is_less_than(self, other: Self) -> bool {
     self.text_offset < other.text_offset || self.item_index < other.item_index

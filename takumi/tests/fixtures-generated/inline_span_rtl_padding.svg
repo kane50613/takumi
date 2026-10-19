@@ -4,24 +4,24 @@
   <rect x="272" y="15" width="8" height="58" fill="#9333ea"/>
   <rect x="144" y="15" width="2" height="58" fill="#ea580c"/>
   <g fill="#0f172a">
-    <use href="#g0" x="90.66" y="53"/>
-    <use href="#g1" x="101.63" y="53"/>
-    <use href="#g2" x="108.76" y="53"/>
-    <use href="#g3" x="115.94" y="53"/>
-    <use href="#g4" x="129.69" y="53"/>
+    <use href="#g0" x="90.64" y="53"/>
+    <use href="#g1" x="101.61" y="53"/>
+    <use href="#g2" x="108.74" y="53"/>
+    <use href="#g3" x="115.92" y="53"/>
+    <use href="#g4" x="129.67" y="53"/>
   </g>
   <g fill="#0f172a">
-    <use href="#g5" x="150.35" y="53"/>
-    <use href="#g6" x="169.78" y="53"/>
+    <use href="#g5" x="150.34" y="53"/>
+    <use href="#g6" x="169.77" y="53"/>
     <use href="#g7" x="176.91" y="53"/>
-    <use href="#g8" x="186.57" y="53"/>
-    <use href="#g9" x="208.66" y="53"/>
-    <use href="#g4" x="241.01" y="53"/>
+    <use href="#g8" x="186.56" y="53"/>
+    <use href="#g9" x="208.65" y="53"/>
+    <use href="#g4" x="241" y="53"/>
   </g>
   <g fill="#0f172a">
     <use href="#g2" x="287.66" y="53"/>
     <use href="#g10" x="294.84" y="53"/>
-    <use href="#g11" x="302.12" y="53"/>
+    <use href="#g11" x="302.11" y="53"/>
     <use href="#g7" x="318.89" y="53"/>
     <use href="#g12" x="328.54" y="53"/>
   </g>

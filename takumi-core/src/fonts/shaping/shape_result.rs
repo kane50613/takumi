@@ -6,7 +6,6 @@ use std::{
 };
 
 use harfrust::{Direction as HbDirection, GlyphInfo, script};
-use icu_segmenter::GraphemeClusterSegmenter;
 
 use super::{
   glyph_data::{GlyphOffset, HarfBuzzRunGlyphData, SafeToBreak},
@@ -20,6 +19,8 @@ use crate::{
   style::Direction as TextDirection,
   text::text_justify::TextJustify,
 };
+#[cfg(test)]
+use icu_segmenter::GraphemeClusterSegmenter;
 
 /// Blink's `ShapeResultCharacterData`.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
@@ -238,6 +239,7 @@ impl ShapeResult {
     self.runs.iter().any(ShapeResultRun::has_ligatures)
   }
 
+  #[cfg(test)]
   /// Blink's `NumGlyphs`.
   pub(crate) fn num_glyphs(&self) -> u32 {
     self.runs.iter().map(ShapeResultRun::num_glyphs).sum()
@@ -277,10 +279,7 @@ impl ShapeResult {
     self.has_vertical_offsets
   }
 
-  pub(crate) fn is_applied_spacing(&self) -> bool {
-    self.is_applied_spacing
-  }
-
+  #[cfg(test)]
   /// Blink's `CharacterData`.
   pub(crate) fn character_data(&self, offset: u32) -> ShapeResultCharacterData {
     debug_assert!(offset >= self.start_index());
@@ -371,6 +370,7 @@ impl ShapeResult {
     self.start_index()
   }
 
+  #[cfg(test)]
   /// Blink's `AddUnsafeToBreak`.
   pub(crate) fn add_unsafe_to_break(&mut self, offsets: &[u32]) {
     if self.is_ltr() {
@@ -380,6 +380,7 @@ impl ShapeResult {
     }
   }
 
+  #[cfg(test)]
   fn add_unsafe_to_break_in_order(&mut self, mut offsets: impl Iterator<Item = u32>) {
     let Some(mut offset) = offsets.next() else {
       debug_assert!(false, "AddUnsafeToBreak needs an offset");
@@ -474,6 +475,7 @@ impl ShapeResult {
     result
   }
 
+  #[cfg(test)]
   /// Blink's `OffsetForPosition`.
   pub(crate) fn offset_for_position(&self, x: f32) -> u32 {
     let result = self.offset_for_position_result(x, true);
@@ -535,6 +537,7 @@ impl ShapeResult {
     0.0
   }
 
+  #[cfg(test)]
   /// Blink's `EnsureGraphemes`, counting graphemes with ICU4X instead of Blink's LGPL code.
   pub(crate) fn ensure_graphemes(&mut self, text: &str) {
     assert_eq!(self.num_characters() as usize, text.len());
@@ -640,60 +643,6 @@ impl ShapeResult {
     self.width.set(total_advance);
 
     spacing_after
-  }
-
-  /// Blink's `ApplyLeadingExpansion`.
-  pub(crate) fn apply_leading_expansion(&mut self, expansion: LayoutUnit) {
-    if expansion <= LayoutUnit::ZERO {
-      return;
-    }
-
-    for run in &mut self.runs {
-      let num_glyphs = run.glyph_data.size();
-
-      for i in 0..num_glyphs {
-        let glyphs = run.glyph_data.glyphs_mut();
-
-        if i + 1 < num_glyphs && glyphs[i].character_index == glyphs[i + 1].character_index {
-          continue;
-        }
-
-        let advance = expansion.to::<TextRunLayoutUnit>();
-        let expansion_as_float = advance.to_float();
-
-        glyphs[i].advance += advance;
-        run.width += expansion_as_float;
-        self.width.set(self.width.get() + expansion_as_float);
-        run.glyph_data.add_offset_width_at(i, expansion_as_float);
-
-        return;
-      }
-    }
-
-    debug_assert!(false, "ApplyLeadingExpansion needs a glyph");
-  }
-
-  /// Blink's `ApplyTrailingExpansion`.
-  pub(crate) fn apply_trailing_expansion(&mut self, expansion: LayoutUnit) {
-    if expansion <= LayoutUnit::ZERO {
-      return;
-    }
-
-    for run in self.runs.iter_mut().rev() {
-      let Some(glyph) = run.glyph_data.glyphs_mut().last_mut() else {
-        continue;
-      };
-      let advance = expansion.to::<TextRunLayoutUnit>();
-      let expansion_as_float = advance.to_float();
-
-      glyph.advance += advance;
-      run.width += expansion_as_float;
-      self.width.set(self.width.get() + expansion_as_float);
-
-      return;
-    }
-
-    debug_assert!(false, "ApplyTrailingExpansion needs a glyph");
   }
 
   /// Blink's `EnsurePositionData`.
@@ -926,6 +875,7 @@ impl ShapeResult {
     self.runs.rotate_left(run_size_before);
   }
 
+  #[cfg(test)]
   /// Blink's `CopyRange`.
   pub(crate) fn copy_range(&self, start_offset: u32, end_offset: u32, target: &mut Self) {
     self.copy_range_internal(0, start_offset, end_offset, target);
@@ -1028,6 +978,7 @@ impl ShapeResult {
     run_index
   }
 
+  #[cfg(test)]
   /// Blink's `SubRange`.
   pub(crate) fn sub_range(&self, start_offset: u32, end_offset: u32) -> Self {
     let mut sub_range = Self::new(0, 0, self.direction());
@@ -1035,33 +986,6 @@ impl ShapeResult {
     self.copy_range(start_offset, end_offset, &mut sub_range);
 
     sub_range
-  }
-
-  /// Blink's `CopyAdjustedOffset`.
-  pub(crate) fn copy_adjusted_offset(&self, start_index: u32) -> Self {
-    let mut result = self.clone();
-
-    *result.character_position.get_mut() = Vec::new();
-
-    if start_index > result.start_index() {
-      let delta = start_index - result.start_index();
-
-      for run in &mut result.runs {
-        run.start_index += delta;
-      }
-    } else {
-      let delta = result.start_index() - start_index;
-
-      for run in &mut result.runs {
-        debug_assert!(run.start_index >= delta);
-
-        run.start_index -= delta;
-      }
-    }
-
-    result.start_index = start_index;
-
-    result
   }
 
   /// Blink's `InsertRun` for glyphs `start_glyph.

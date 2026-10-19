@@ -1,6 +1,7 @@
 //! Text decoration lines and where skip-ink cuts them.
 
 use crate::{
+  context::RenderContext,
   geometry::{ComputedLayout, Point},
   layout::intercept::{Spans, skip_ink_ranges},
   layout_unit::LayoutUnit,
@@ -15,11 +16,26 @@ use crate::{
 };
 use std::iter::repeat_n;
 
-use super::{
-  BuiltInlineLayout, WalkedLine,
-  line_box::{BoxFont, BoxKey},
-  runs::ShapedRun,
-};
+use super::runs::ShapedRun;
+
+/// The font a box aligns its children against.
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct BoxFont {
+  /// The computed `font-size`.
+  pub(crate) size: f32,
+  /// The primary font's metrics.
+  pub(crate) metrics: Option<PrimaryFontMetrics>,
+}
+
+impl BoxFont {
+  /// The font of the box `context` styles.
+  pub(crate) fn of(context: &RenderContext) -> Self {
+    Self {
+      size: context.sizing.font_size,
+      metrics: context.primary_font_metrics(&context.style, context.sizing.font_size),
+    }
+  }
+}
 
 /// A text decoration line as Blink's `DecorationGeometry` holds it, unsnapped.
 pub struct DecorationLine {
@@ -163,57 +179,35 @@ pub(crate) struct DecorationPlacement {
   boxes: Vec<DecoratingBox>,
 }
 
-impl BuiltInlineLayout<'_> {
-  /// Where `run`, shaped from `glyph_run`'s spans and placed after `static_inline_prefix` of
-  /// static advance on `line`, paints its decorations in `layout`.
-  pub(crate) fn decoration_placement(
-    &self,
-    line: &WalkedLine,
+impl DecorationPlacement {
+  /// Blink's `TextDecorationInfo` for `run`, whose glyphs `glyphs` maps into the content box at
+  /// `content`, its text in `text_font` scaled by `scale`: each of its decorations against the
+  /// root box, or the spans of `spans`, outermost first, that decorate it. Each box comes with
+  /// its baseline.
+  pub(super) fn for_run(
     run: &ShapedRun,
-    source_span_id: Option<u64>,
-    static_inline_prefix: f32,
-    layout: ComputedLayout,
-  ) -> DecorationPlacement {
+    glyphs: Affine,
+    content: Point<f32>,
+    (text_font, scale): (BoxFont, f32),
+    (root_font, line_baseline): (BoxFont, f32),
+    spans: &[(BoxFont, f32)],
+  ) -> Self {
     let decorations = run.brush.decorations.as_slice();
 
     if decorations.is_empty() {
-      return DecorationPlacement::default();
+      return Self::default();
     }
 
-    let chain = self.span_chain(source_span_id);
-    let baseline_shift = self.text_baseline_shift(line, chain);
-    let state = line.setup.run_scale(baseline_shift);
-    let glyphs = state.transform(Affine::IDENTITY, static_inline_prefix);
-    let content = layout.content_box_offset();
-    let line_baseline = content.y + line.setup.resolved_metrics.resolved_baseline;
     let root = DecoratingBox {
-      font: DecorationFont::of(self.font, state.scale, run),
-      baseline: line_baseline,
+      font: DecorationFont::of(root_font, scale, run),
+      baseline: content.y + line_baseline,
     };
-    let mut spans: Vec<DecoratingBox> = chain
-      .into_iter()
-      .flat_map(|link| link.ancestors())
-      .filter(|link| {
-        link
-          .decoration
-          .owner
-          .context
-          .style
-          .visual_data
-          .text_decoration_line
-          .is_some_and(|line| !line.is_empty())
-      })
-      .map(|link| DecoratingBox {
-        font: DecorationFont::of(link.decoration.font, 1.0, run),
-        baseline: line_baseline + line.state.offsets.of(BoxKey::Span(link.decoration.id)),
-      })
-      .collect();
-
-    spans.reverse();
-
-    let text_font = chain.map_or(self.font, |link| link.decoration.font);
-    let text = DecorationFont::of(text_font, state.scale, run);
-    let baseline = content.y + run.baseline + baseline_shift;
+    let spans = spans.iter().map(|&(font, baseline)| DecoratingBox {
+      font: DecorationFont::of(font, 1.0, run),
+      baseline: content.y + baseline,
+    });
+    let text = DecorationFont::of(text_font, scale, run);
+    let baseline = content.y + run.baseline;
     let left = content.x + run.offset + run.decorated_offset();
     let (left, _) = glyphs.transform_point(left, 0.0);
     let (right, _) = glyphs.transform_point(
@@ -221,7 +215,7 @@ impl BuiltInlineLayout<'_> {
       0.0,
     );
 
-    DecorationPlacement {
+    Self {
       glyphs,
       baseline,
       text_top: baseline - text.ascent(),
@@ -389,7 +383,6 @@ mod tests {
         exact: ExactFontMetrics {
           ascent: 40.0,
           descent: 10.0,
-          line_gap: 0.0,
         },
         underline: Some(FontUnderline {
           position: 5.0,

@@ -531,12 +531,6 @@ impl<'a, 'b, 'c> LineBreaker<'a, 'b, 'c> {
     self.override_available_width(LayoutUnit::NEARLY_MAX);
   }
 
-  /// Blink's `SetLineClampEllipsisWidth`.
-  pub(crate) fn set_line_clamp_ellipsis_width(&mut self, width: LayoutUnit) {
-    self.line_clamp_ellipsis_width = width;
-    self.update_available_width();
-  }
-
   fn available_width_to_fit(&self) -> LayoutUnit {
     self.available_width.add_epsilon()
   }

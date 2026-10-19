@@ -8,13 +8,13 @@
     <use href="#g1" x="38.56" y="46"/>
   </g>
   <g fill="#000">
-    <use href="#g2" x="54.94" y="92"/>
-    <use href="#g3" x="62.46" y="92"/>
-    <use href="#g4" x="73.72" y="92"/>
+    <use href="#g2" x="54.95" y="92"/>
+    <use href="#g3" x="62.47" y="92"/>
+    <use href="#g4" x="73.73" y="92"/>
   </g>
   <g fill="#000">
-    <use href="#g0" x="105.62" y="46"/>
-    <use href="#g1" x="124.19" y="46"/>
+    <use href="#g0" x="105.64" y="46"/>
+    <use href="#g1" x="124.2" y="46"/>
   </g>
   <rect x="86" y="20" width="20" height="90" fill="#fdba74"/>
   <defs>

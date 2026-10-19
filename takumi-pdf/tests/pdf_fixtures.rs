@@ -3382,12 +3382,13 @@ fn uncovered_character_renders_under_an_uncovered_text_policy() {
   let placeholder = render_with(UncoveredText::Placeholder).expect("render with the placeholder");
   let blank = render_with(UncoveredText::Blank).expect("render without the glyph");
 
+  // The primary font shapes the uncovered character in the run of the text before it.
   assert!(
-    inflated_text(&placeholder).contains("(\\000\\000)"),
+    inflated_text(&placeholder).contains("\\000\\000"),
     "the placeholder policy did not draw glyph 0"
   );
   assert!(
-    !inflated_text(&blank).contains("(\\000\\000)"),
+    !inflated_text(&blank).contains("\\000\\000"),
     "the blank policy drew glyph 0"
   );
 }

@@ -2,6 +2,7 @@
 
 /// Blink's `TextJustify`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[expect(dead_code, reason = "TODO: parse text-justify")]
 pub(crate) enum TextJustify {
   #[default]
   Auto,

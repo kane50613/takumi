@@ -10,7 +10,9 @@ use super::{
 use crate::{
   geometry::{Rect, Size},
   layout::{border::BorderProperties, tree::RenderNode},
-  style::{BackgroundImage, ComputedStyle, Direction as TextDirection, VerticalAlign},
+  style::{
+    BackgroundImage, ComputedStyle, Direction as TextDirection, VerticalAlign, WhiteSpaceCollapse,
+  },
   text::character::{
     CARRIAGE_RETURN, FORM_FEED, LINE_FEED, OBJECT_REPLACEMENT_CHARACTER, TAB,
     ZERO_WIDTH_NON_JOINER, ZERO_WIDTH_SPACE, maybe_bidi_rtl,
@@ -146,7 +148,6 @@ pub(crate) struct InlineItemsBuilder<'c> {
   text: String,
   boxes: Vec<BoxInfo<'c>>,
   has_bidi_controls: bool,
-  is_block_level: bool,
   has_floats: bool,
   has_out_of_flow_positioned: bool,
   is_bisect_line_break_disabled: bool,
@@ -160,7 +161,6 @@ impl<'c> InlineItemsBuilder<'c> {
       text: String::new(),
       boxes: Vec::new(),
       has_bidi_controls: false,
-      is_block_level: true,
       has_floats: false,
       has_out_of_flow_positioned: false,
       is_bisect_line_break_disabled: false,
@@ -207,7 +207,6 @@ impl<'c> InlineItemsBuilder<'c> {
     let end = self.text.len();
 
     self.append_item(item_type, start_offset, end, layout_object);
-    self.is_block_level = false;
 
     self.items.len() - 1
   }
@@ -219,7 +218,6 @@ impl<'c> InlineItemsBuilder<'c> {
 
     item.end_collapse_type = CollapseType::OpaqueToCollapsing;
     item.is_empty_item = true;
-    item.is_block_level = true;
   }
 
   /// Blink's `AppendGeneratedBreakOpportunity`.
@@ -249,7 +247,13 @@ impl<'c> InlineItemsBuilder<'c> {
 
     self.restore_trailing_collapsible_space_if_removed();
 
-    if collapse.should_preserve_white_spaces() {
+    if collapse == WhiteSpaceCollapse::PreserveSpaces {
+      // css-text-4 `preserve-spaces`, which Blink lacks, turns tabs and segment breaks into
+      // spaces it keeps. <https://drafts.csswg.org/css-text-4/#valdef-white-space-collapse-preserve-spaces>
+      let spaced = string.replace([LINE_FEED, TAB], " ");
+
+      self.append_preserve_whitespace(&spaced, layout_object);
+    } else if collapse.should_preserve_white_spaces() {
       self.append_preserve_whitespace(string, layout_object);
     } else if collapse.should_preserve_breaks() {
       self.append_preserve_newline(string, layout_object);
@@ -399,7 +403,6 @@ impl<'c> InlineItemsBuilder<'c> {
 
     item.end_collapse_type = end_collapse;
     item.is_end_collapsible_newline = space_run_has_newline;
-    self.is_block_level = false;
   }
 
   /// Blink's `ShouldInsertBreakOpportunityAfterLeadingPreservedSpaces`: preserved spaces leading
@@ -593,9 +596,7 @@ impl<'c> InlineItemsBuilder<'c> {
 
     let end_offset = self.text.len();
     let start = end_offset - character.len_utf8();
-    let item = self.append_item(item_type, start, end_offset, layout_object);
-
-    self.is_block_level &= item.is_block_level;
+    self.append_item(item_type, start, end_offset, layout_object);
 
     self.items.len() - 1
   }
@@ -656,7 +657,6 @@ impl<'c> InlineItemsBuilder<'c> {
     let item = self.append_item(item_type, end_offset, end_offset, layout_object);
 
     item.end_collapse_type = CollapseType::OpaqueToCollapsing;
-    self.is_block_level &= item.is_block_level;
   }
 
   /// Blink's `RemoveTrailingCollapsibleSpaceIfExists`.
@@ -678,10 +678,7 @@ impl<'c> InlineItemsBuilder<'c> {
 
     // A forced break poses as a collapsible space, and stays.
     if item.item_type != InlineItemType::Text {
-      debug_assert!(matches!(
-        item.item_type,
-        InlineItemType::Control | InlineItemType::BlockInInline
-      ));
+      debug_assert_eq!(item.item_type, InlineItemType::Control);
 
       return;
     }
@@ -822,7 +819,6 @@ impl<'c> InlineItemsBuilder<'c> {
       is_bidi_enabled,
       has_floats: self.has_floats,
       has_out_of_flow_positioned: self.has_out_of_flow_positioned,
-      is_block_level: self.is_block_level,
       is_bisect_line_break_disabled: self.is_bisect_line_break_disabled,
       is_score_line_break_disabled: self.is_score_line_break_disabled,
       ..InlineNodeData::default()

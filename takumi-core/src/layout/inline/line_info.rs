@@ -4,7 +4,7 @@
 use super::{
   inline_break_token::InlineBreakToken,
   inline_item::{CollapseType, InlineItemType},
-  inline_item_result::{InlineItemResult, InlineItemResults},
+  inline_item_result::InlineItemResults,
   inline_item_text_index::InlineItemTextIndex,
   inline_node_data::InlineNodeData,
 };
@@ -198,20 +198,6 @@ impl<'a, 'c> LineInfo<'a, 'c> {
     self.end_offset_for_justify
   }
 
-  /// Blink's `InflowStartOffset`: where the first item that takes space starts.
-  pub(crate) fn inflow_start_offset(&self) -> usize {
-    self
-      .results
-      .iter()
-      .find(|result| {
-        matches!(
-          result.item.item_type,
-          InlineItemType::Text | InlineItemType::Control | InlineItemType::AtomicInline
-        ) && result.item.length() > 0
-      })
-      .map_or_else(|| self.end_text_offset(), InlineItemResult::start_offset)
-  }
-
   /// Blink's `End`.
   pub(crate) fn end(&self) -> InlineItemTextIndex {
     if let Some(break_token) = &self.break_token {
@@ -240,11 +226,6 @@ impl<'a, 'c> LineInfo<'a, 'c> {
     self.inflow_end_offset_internal(false)
   }
 
-  /// Blink's `InflowEndOffsetWithoutForcedBreak`.
-  pub(crate) fn inflow_end_offset_without_forced_break(&self) -> usize {
-    self.inflow_end_offset_internal(true)
-  }
-
   /// Blink's `InflowEndOffsetInternal`: where the last item that takes space ends.
   fn inflow_end_offset_internal(&self, skip_forced_break: bool) -> usize {
     let text = &self.items_data.text_content;
@@ -269,25 +250,6 @@ impl<'a, 'c> LineInfo<'a, 'c> {
     }
 
     self.start_offset()
-  }
-
-  /// Blink's `GlyphCountIsGreaterThan`.
-  pub(crate) fn glyph_count_is_greater_than(&self, limit: usize) -> bool {
-    let mut count = 0;
-
-    for result in &self.results {
-      count += match (&result.shape_result, &result.layout_result) {
-        (Some(shape_result), _) => shape_result.num_glyphs(),
-        (None, Some(_)) => 1,
-        (None, None) => 0,
-      };
-
-      if count > limit {
-        return true;
-      }
-    }
-
-    false
   }
 
   /// Blink's `IsHyphenated`.

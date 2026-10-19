@@ -99,22 +99,6 @@ impl InlineItemSegments {
     }
   }
 
-  /// Blink's `ToRanges`.
-  pub(crate) fn to_ranges(&self) -> Vec<RunSegmenterRange> {
-    let mut start_offset = 0;
-
-    self
-      .segments
-      .iter()
-      .map(|segment| {
-        let range = segment.to_run_segmenter_range(start_offset, segment.end_offset);
-
-        start_offset = segment.end_offset;
-        range
-      })
-      .collect()
-  }
-
   /// Blink's `Ranges`: the runs from `start_offset` to `end_offset` of item `item_index`.
   pub(crate) fn ranges(
     &self,

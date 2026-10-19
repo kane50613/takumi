@@ -7,15 +7,9 @@ use serde::Serialize;
 use crate::{
   Error, Result,
   font_style::SizedFontStyle,
-  geometry::{AvailableSpace, ComputedLayout as Layout, NodeId, Size},
-  layout::{
-    inline::{
-      InlineItem, InlineLayoutMode, InlineLayoutRequest, MeasuredInlineBox, collect_inline_items,
-      create_inline_layout,
-    },
-    node::NodeKind,
-    tree::{ContainingBlocks, LayoutResults, RenderNode},
-  },
+  geometry::{ComputedLayout as Layout, NodeId, Size},
+  layout::tree::{ContainingBlocks, LayoutResults, RenderNode},
+  painter::OwnContent,
   style::{Affine, Display},
 };
 
@@ -94,48 +88,47 @@ impl MeasuredNode {
           );
           containing_blocks.record_placement(node_id, local_transform);
 
-          let (runs, leading) = if current.should_create_inline_layout() {
-            let (runs, inline_boxes) =
-              measure_inline(current, collect_inline_items(current), layout);
-            // Inline layout places boxes against the content box, while every measured node's
-            // transform is absolute.
-            let content_offset = layout.content_box_offset();
-            let children = inline_boxes
-              .into_iter()
-              .map(|inline_box| MeasuredNode {
-                width: inline_box.width,
-                height: inline_box.height,
-                transform: (local_transform
-                  * Affine::translation(
-                    inline_box.x + content_offset.x,
-                    inline_box.y + content_offset.y,
-                  ))
-                .to_cols_array(),
-                children: Vec::new(),
-                runs: Vec::new(),
-              })
-              .collect();
+          let own_content = OwnContent::of(current);
+          let font_style = SizedFontStyle::from_style(&current.context.style, &current.context);
+          let items = own_content.fragment_items(&font_style, layout).filter(|_| {
+            current.should_create_inline_layout()
+              || current.context.style.base_data.display != Display::None
+          });
+          let (runs, leading) = match items {
+            Some(items) => {
+              let (runs, inline_boxes) = items.measure_runs(current);
+              let runs = runs
+                .into_iter()
+                .map(|run| MeasuredTextRun {
+                  text: run.text.to_string(),
+                  x: run.x,
+                  y: run.y,
+                  width: run.width,
+                  height: run.height,
+                })
+                .collect();
+              // Inline layout places boxes against the content box, while every measured node's
+              // transform is absolute.
+              let content_offset = layout.content_box_offset();
+              let children = inline_boxes
+                .into_iter()
+                .map(|inline_box| MeasuredNode {
+                  width: inline_box.width,
+                  height: inline_box.height,
+                  transform: (local_transform
+                    * Affine::translation(
+                      inline_box.x + content_offset.x,
+                      inline_box.y + content_offset.y,
+                    ))
+                  .to_cols_array(),
+                  children: Vec::new(),
+                  runs: Vec::new(),
+                })
+                .collect();
 
-            (runs, children)
-          } else if current.context.style.base_data.display != Display::None
-            // Paint always draws a text node's own text, even when generated
-            // content gave it box children; its runs sit beside those children.
-            && !current.has_anonymous_text_item_child()
-            && let Some(text) = current.node.as_ref().and_then(|node| match &node.kind {
-              NodeKind::Text(data) => Some(data.text.as_str()),
-              _ => None,
-            })
-          {
-            let item = InlineItem::Text {
-              text: text.into(),
-              context: &current.context,
-              link: None,
-              decorations: None,
-            };
-
-            (measure_inline(current, vec![item], layout).0, Vec::new())
-          } else {
-            (Vec::new(), Vec::new())
+              (runs, children)
+            }
+            None => (Vec::new(), Vec::new()),
           };
 
           let layout_children = if current.children.is_some() {
@@ -247,38 +240,4 @@ struct MeasureExit {
   /// The inline boxes an inline formatting context measured, ahead of its layout children.
   leading: Vec<MeasuredNode>,
   child_ids: Vec<NodeId>,
-}
-
-/// Lays `items` out in `node`'s content box and reads back the text runs and
-/// inline boxes it produced.
-fn measure_inline(
-  node: &RenderNode,
-  items: Vec<InlineItem<'_>>,
-  layout: Layout,
-) -> (Vec<MeasuredTextRun>, Vec<MeasuredInlineBox>) {
-  let font_style = SizedFontStyle::from_style(&node.context.style, &node.context);
-  let built = create_inline_layout(InlineLayoutRequest::in_available_space(
-    items,
-    Size {
-      width: AvailableSpace::Definite(layout.content_box_width()),
-      height: AvailableSpace::Definite(layout.content_box_height()),
-    },
-    Size::NONE,
-    &font_style,
-    &node.context,
-    InlineLayoutMode::Measure,
-  ));
-  let (runs, inline_boxes) = built.measure_runs(layout);
-  let runs = runs
-    .into_iter()
-    .map(|run| MeasuredTextRun {
-      text: run.text.to_string(),
-      x: run.x,
-      y: run.y,
-      width: run.width,
-      height: run.height,
-    })
-    .collect();
-
-  (runs, inline_boxes)
 }

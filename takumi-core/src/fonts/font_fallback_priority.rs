@@ -6,8 +6,6 @@ pub(crate) enum FontFallbackPriority {
   /// Text that is not a symbol.
   #[default]
   Text,
-  /// Emoji in text presentation.
-  EmojiText,
   /// Emoji in text presentation by variation selector 15.
   EmojiTextWithVs,
   /// Emoji in emoji presentation.
