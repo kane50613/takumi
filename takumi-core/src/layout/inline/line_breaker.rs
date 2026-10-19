@@ -1561,7 +1561,12 @@ impl<'a, 'b, 'c> LineBreaker<'a, 'b, 'c> {
 
     let mut context = FastMinTextContext::default();
     let item_style = item.style();
-    let should_break_spaces = false;
+    let should_break_spaces = item_style.is_some_and(|style| {
+      style
+        .inherited_data
+        .white_space_collapse
+        .should_break_spaces()
+    });
     let mut next_break = 0;
     let mut non_hangable_run_end = 0;
     let mut can_break_after = false;
@@ -1803,7 +1808,7 @@ impl<'a, 'b, 'c> LineBreaker<'a, 'b, 'c> {
       if let Some(last) = line_info.results.last_mut() {
         last.can_break_after = true;
       }
-    } else {
+    } else if !style.should_break_spaces() {
       // The run of spaces in this item, without other white space such as tabs.
       let mut end = self.current.text_offset;
 
@@ -3056,6 +3061,16 @@ impl<'a, 'b, 'c> LineBreaker<'a, 'b, 'c> {
     let text = self.text();
     let mut open_tag_count = 0_usize;
     let mut index = new_end;
+    // Blink's `ShouldWrapLine() && !ShouldBreakSpaces()`: white space that trails a line.
+    let trails = |item: &InlineItem<'_>| {
+      item.style().is_some_and(|style| {
+        style.inherited_data.text_wrap_mode.should_wrap_line()
+          && !style
+            .inherited_data
+            .white_space_collapse
+            .should_break_spaces()
+      })
+    };
 
     while index < line_info.results.len() {
       let item_result = &line_info.results[index];
@@ -3073,11 +3088,7 @@ impl<'a, 'b, 'c> LineBreaker<'a, 'b, 'c> {
           if item_result.shape_result.is_some()
             || (self.break_anywhere_if_overflow && !self.override_break_anywhere)
           {
-            let wraps = item
-              .style()
-              .is_some_and(|style| style.inherited_data.text_wrap_mode.should_wrap_line());
-
-            if wraps && is_breakable_space(char_at(text, item_result.start_offset())) {
+            if trails(item) && is_breakable_space(char_at(text, item_result.start_offset())) {
               // All trailable spaces: check the next item.
               if item_result.shape_result.is_some()
                 && is_all_breakable_spaces(
@@ -3104,10 +3115,7 @@ impl<'a, 'b, 'c> LineBreaker<'a, 'b, 'c> {
           // Every control but a newline trails a wrapping line.
           debug_assert_ne!(char_at(text, item_result.start_offset()), LINE_FEED);
 
-          if item
-            .style()
-            .is_some_and(|style| style.inherited_data.text_wrap_mode.should_wrap_line())
-          {
+          if trails(item) {
             index += 1;
 
             continue;
@@ -3302,11 +3310,23 @@ impl<'a, 'b, 'c> LineBreaker<'a, 'b, 'c> {
 
     let line_break = style.misc_inherited_data.line_break;
     let disable_soft_hyphen = style.misc_inherited_data.hyphens == Hyphens::None;
+    let break_space = if style
+      .inherited_data
+      .white_space_collapse
+      .should_break_spaces()
+    {
+      self.disable_score_line_break = true;
+
+      BreakSpaceType::AfterEverySpace
+    } else {
+      BreakSpaceType::AfterSpaceRun
+    };
 
     if line_break == LineBreak::Anywhere {
       self.break_anywhere_if_overflow = false;
       self.set_break_iterator(BreakOptions {
         break_type: LineBreakType::BreakCharacter,
+        break_space,
         disable_soft_hyphen,
         ..BreakOptions::default()
       });
@@ -3357,7 +3377,7 @@ impl<'a, 'b, 'c> LineBreaker<'a, 'b, 'c> {
 
     self.set_break_iterator(BreakOptions {
       break_type: line_break_type,
-      break_space: BreakSpaceType::AfterSpaceRun,
+      break_space,
       strictness: match line_break {
         LineBreak::Auto | LineBreak::Anywhere => LineBreakStrictness::Default,
         LineBreak::Loose => LineBreakStrictness::Loose,
