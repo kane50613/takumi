@@ -137,6 +137,7 @@ jobs:
       # Pinned to one release, so a new veraPDF changes what CI validates only
       # when someone bumps it. The checksum guards the file behind the URL.
       - name: Install veraPDF
+        working-directory: ${{ runner.temp }}
         env:
           VERAPDF_VERSION: 1.30.3
           VERAPDF_SHA256: b512bf24945503a33fc10738ecffc1f2dccaaf8593a448e94ee9ac86a9559a59
@@ -180,7 +181,7 @@ jobs:
               fi
             done
             if [ ${#files[@]} -gt 0 ]; then
-              ./verapdf/verapdf --flavour "$flavour" --format text "${files[@]}" || fail=1
+              "$RUNNER_TEMP/verapdf/verapdf" --flavour "$flavour" --format text "${files[@]}" || fail=1
               checked=$((checked + ${#files[@]}))
             fi
           done
@@ -202,10 +203,12 @@ jobs:
       - name: Check for git changes and prepare artifact
         id: check_changes
         run: |
+          # A new fixture's goldens are untracked, which `git diff` skips without this.
+          git add --all --intent-to-add
           if git diff --quiet HEAD; then
             echo "changed=false" >> $GITHUB_OUTPUT
           else
-            git diff --name-only HEAD > changed_files.txt
+            git diff --name-only HEAD | tee changed_files.txt
             tar czf changed_files.tar.gz $(cat changed_files.txt)
             echo "changed=true" >> $GITHUB_OUTPUT
           fi
