@@ -3085,30 +3085,30 @@ impl<'a, 'b, 'c> LineBreaker<'a, 'b, 'c> {
             continue;
           }
 
-          if item_result.shape_result.is_some()
-            || (self.break_anywhere_if_overflow && !self.override_break_anywhere)
+          if (item_result.shape_result.is_some()
+            || (self.break_anywhere_if_overflow && !self.override_break_anywhere))
+            && trails(item)
+            && is_breakable_space(char_at(text, item_result.start_offset()))
           {
-            if trails(item) && is_breakable_space(char_at(text, item_result.start_offset())) {
-              // All trailable spaces: check the next item.
-              if item_result.shape_result.is_some()
-                && is_all_breakable_spaces(
-                  text,
-                  item_result.start_offset() + 1,
-                  item_result.end_offset(),
-                )
-              {
-                index += 1;
+            // All trailable spaces: check the next item.
+            if item_result.shape_result.is_some()
+              && is_all_breakable_spaces(
+                text,
+                item_result.start_offset() + 1,
+                item_result.end_offset(),
+              )
+            {
+              index += 1;
 
-                continue;
-              }
-
-              // Spaces then other characters: break after the spaces, which the next
-              // `handle_text` handles.
-              self.state = LineBreakState::Trailing;
-              self.rewind(index, line_info);
-
-              return;
+              continue;
             }
+
+            // Spaces then other characters: break after the spaces, which the next `handle_text`
+            // handles.
+            self.state = LineBreakState::Trailing;
+            self.rewind(index, line_info);
+
+            return;
           }
         }
         InlineItemType::Control => {
