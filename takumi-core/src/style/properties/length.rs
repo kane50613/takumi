@@ -29,6 +29,7 @@ pub(crate) fn length_from_dimension_unit(unit: &str, value: f32) -> Option<Lengt
     "rem" => Length::Rem(value),
     "lh" => Length::Lh(value),
     "rlh" => Length::Rlh(value),
+    "ch" => Length::Ch(value),
     "vw" => Length::Vw(value),
     "dvw" => Length::Vw(value),
     "svw" => Length::Vw(value),
@@ -109,6 +110,8 @@ pub enum Length {
   Lh(f32),
   /// Rlh value relative to the root element's computed line-height
   Rlh(f32),
+  /// Ch value relative to the advance of the element's `0` glyph
+  Ch(f32),
   /// Vh value relative to the viewport height (0-100)
   Vh(f32),
   /// Vw value relative to the viewport width (0-100)
@@ -212,6 +215,7 @@ impl ToCss for Length {
       Self::Em(v) => write!(dest, "{v}em"),
       Self::Lh(v) => write!(dest, "{v}lh"),
       Self::Rlh(v) => write!(dest, "{v}rlh"),
+      Self::Ch(v) => write!(dest, "{v}ch"),
       Self::Vh(v) => write!(dest, "{v}vh"),
       Self::Vw(v) => write!(dest, "{v}vw"),
       Self::CqH(v) => write!(dest, "{v}cqh"),
@@ -288,6 +292,7 @@ impl Length {
       | Self::Em(value)
       | Self::Lh(value)
       | Self::Rlh(value)
+      | Self::Ch(value)
       | Self::Vh(value)
       | Self::Vw(value)
       | Self::CqH(value)
@@ -324,6 +329,7 @@ impl Length {
       Length::Em(v) => Length::Em(-v),
       Length::Lh(v) => Length::Lh(-v),
       Length::Rlh(v) => Length::Rlh(-v),
+      Length::Ch(v) => Length::Ch(-v),
       Length::Vh(v) => Length::Vh(-v),
       Length::Vw(v) => Length::Vw(-v),
       Length::CqH(v) => Length::CqH(-v),
@@ -392,6 +398,7 @@ impl Length {
       Length::Em(value) => value * sizing.font_size,
       Length::Lh(value) => value * sizing.line_height,
       Length::Rlh(value) => value * sizing.root_line_height_basis(),
+      Length::Ch(value) => value * sizing.ch,
       Length::Vh(value) => value * sizing.viewport.unit_height() / 100.0,
       Length::Vw(value) => value * sizing.viewport.unit_width() / 100.0,
       Length::CqH(value) => value * sizing.query_container_height() / 100.0,
@@ -446,6 +453,7 @@ impl Length {
       | Length::Em(_)
       | Length::Lh(_)
       | Length::Rlh(_)
+      | Length::Ch(_)
       | Length::Vh(_)
       | Length::Vw(_)
       | Length::CqH(_)
@@ -565,6 +573,11 @@ impl MakeComputed for Length {
       return;
     }
 
+    if let Self::Ch(ch) = *self {
+      *self = Self::Px(ch * sizing.to_css(sizing.ch));
+      return;
+    }
+
     if let Self::Calc(formula) = *self {
       let linear = formula.resolve(sizing);
 
@@ -606,6 +619,7 @@ mod tests {
       root_font_size: None,
       line_height: 30.0,
       root_line_height: Some(40.0),
+      ch: 7.0,
       calc_arena: Rc::new(CalcArena::default()),
     }
   }
@@ -907,6 +921,20 @@ mod tests {
   fn parse_supports_lh_and_rlh_units() {
     assert_eq!(Length::from_css_str("1.5lh"), Ok(Length::Lh(1.5)));
     assert_eq!(Length::from_css_str("2rlh"), Ok(Length::Rlh(2.0)));
+    assert_eq!(Length::from_css_str("4ch"), Ok(Length::Ch(4.0)));
+  }
+
+  #[test]
+  fn ch_resolves_to_the_zero_advance() {
+    let sizing = sizing();
+
+    assert_near(Length::Ch(2.0).to_px(&sizing, 0.0), 14.0);
+    assert_near(
+      Length::from_css_str("calc(2ch + 1px)")
+        .unwrap()
+        .to_px(&sizing, 0.0),
+      16.0,
+    );
   }
 
   #[test]
