@@ -4,9 +4,17 @@
 use icu_properties::props::Script;
 
 use super::inline_item::{InlineItem, InlineItems};
-use crate::fonts::{
-  font_fallback_priority::FontFallbackPriority,
-  shaping::run_segmenter::{RunSegmenter, RunSegmenterRange},
+use crate::{
+  fonts::{
+    font::Font,
+    font_fallback_priority::FontFallbackPriority,
+    shaping::{
+      harfbuzz_shaper::HarfBuzzShaper,
+      run_segmenter::{RunSegmenter, RunSegmenterRange},
+      shape_result::ShapeResult,
+    },
+  },
+  style::Direction as TextDirection,
 };
 
 /// Blink's `InlineItemSegment`: where a run of one script and fallback priority ends.
@@ -137,5 +145,21 @@ impl InlineItemSegments {
           range
         })
       })
+  }
+
+  /// Blink's `ShapeText`: shapes `start_offset..end_offset` of item `item_index` run by run.
+  pub(crate) fn shape_text(
+    &self,
+    shaper: &HarfBuzzShaper,
+    font: &Font,
+    direction: TextDirection,
+    start_offset: usize,
+    end_offset: usize,
+    item_index: usize,
+  ) -> ShapeResult {
+    let ranges: Vec<RunSegmenterRange> =
+      self.ranges(start_offset, end_offset, item_index).collect();
+
+    shaper.shape_segmented(font, direction, start_offset, end_offset, &ranges)
   }
 }

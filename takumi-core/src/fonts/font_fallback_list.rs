@@ -22,6 +22,27 @@ impl FontData {
   pub(crate) fn is_segmented(&self) -> bool {
     matches!(self, Self::Segmented(_))
   }
+
+  /// Blink's `FontDataForCharacter`: a segmented font's face for `character`, else its first.
+  pub(crate) fn font_data_for_character(&self, character: char) -> Option<Rc<SimpleFontData>> {
+    match self {
+      Self::Simple(font_data) => Some(Rc::clone(font_data)),
+      Self::Segmented(faces) => faces
+        .iter()
+        .find(|face| face.contains(character))
+        .or(faces.first())
+        .and_then(FontDataForRangeSet::font_data)
+        .cloned(),
+    }
+  }
+
+  /// Blink's `SegmentedFontData::ContainsCharacter`.
+  fn contains_character(&self, character: char) -> bool {
+    match self {
+      Self::Simple(_) => true,
+      Self::Segmented(faces) => faces.iter().any(|face| face.contains(character)),
+    }
+  }
 }
 
 /// Blink's `FontFallbackList`.
@@ -93,5 +114,16 @@ impl FontFallbackList {
 
   pub(crate) fn font_cache(&self) -> &FontCache {
     &self.font_cache
+  }
+
+  /// Blink's `PrimarySimpleFontData`: the first font that covers a space.
+  pub(crate) fn primary_simple_font_data(&self) -> Option<Rc<SimpleFontData>> {
+    self
+      .font_list
+      .iter()
+      .find(|font_data| font_data.contains_character(' '))
+      .or(self.font_list.first())
+      .and_then(|font_data| font_data.font_data_for_character(' '))
+      .or_else(|| self.font_cache.last_resort_fallback_font())
   }
 }

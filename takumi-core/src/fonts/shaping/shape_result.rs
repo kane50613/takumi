@@ -5,9 +5,7 @@ use std::{
   rc::Rc,
 };
 
-use harfrust::GlyphInfo;
-#[cfg(test)]
-use harfrust::{Direction as HbDirection, script};
+use harfrust::{Direction as HbDirection, GlyphInfo, script};
 use icu_segmenter::GraphemeClusterSegmenter;
 
 use super::{
@@ -17,7 +15,7 @@ use super::{
   shape_result_spacing::ShapeResultSpacing,
 };
 use crate::{
-  fonts::simple_font_data::SimpleFontData,
+  fonts::{font::Font, simple_font_data::SimpleFontData},
   layout_unit::{FixedPoint, InlineLayoutUnit, LayoutUnit, TextRunLayoutUnit},
   style::Direction as TextDirection,
   text::text_justify::TextJustify,
@@ -95,6 +93,56 @@ impl ShapeResult {
       has_vertical_offsets,
       ..Self::new(start_index, num_characters, direction)
     }
+  }
+
+  /// Blink's `CreateForSpaces`: space glyphs `width` wide in all, one per character of `text`
+  /// where Blink has one per UTF-16 code unit.
+  pub(crate) fn create_for_spaces(
+    font: &Font,
+    direction: TextDirection,
+    start_index: u32,
+    text: &str,
+    width: f32,
+  ) -> Self {
+    debug_assert!(!text.is_empty());
+
+    let font_data = font.primary_font();
+    let space_glyph = font_data
+      .as_ref()
+      .map_or(0, |font_data| font_data.space_glyph());
+    let offsets: Vec<u32> = text
+      .char_indices()
+      .map(|(offset, _)| offset as u32)
+      .collect();
+    let hb_direction = match direction {
+      TextDirection::Ltr => HbDirection::LeftToRight,
+      TextDirection::Rtl => HbDirection::RightToLeft,
+    };
+    let mut result = Self::new(start_index, text.len() as u32, direction);
+    let mut run = ShapeResultRun::new(
+      font_data,
+      hb_direction,
+      script::COMMON,
+      start_index,
+      offsets.len() as u32,
+      text.len() as u32,
+    );
+    let mut glyph_width = TextRunLayoutUnit::from_float_round(width);
+
+    for (i, glyph) in run.glyph_data.glyphs_mut().iter_mut().enumerate() {
+      let index = match direction {
+        TextDirection::Ltr => offsets[i],
+        TextDirection::Rtl => offsets[offsets.len() - 1 - i],
+      };
+
+      *glyph = HarfBuzzRunGlyphData::new(space_glyph, index, SafeToBreak::Safe, glyph_width);
+      glyph_width = TextRunLayoutUnit::ZERO;
+    }
+
+    run.width = width;
+    result.width.set(width);
+    result.runs.push(run);
+    result
   }
 
   /// Blink's `CreateEmpty`.

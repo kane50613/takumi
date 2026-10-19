@@ -42,7 +42,9 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 2. `Color::dark` and `Color::light` in src/style/properties/color.rs, from
    third_party/blink/renderer/platform/graphics/color.cc, and
    `FontDataForRangeSet` in src/fonts/font_data_for_range_set.rs, from
-   third_party/blink/renderer/platform/fonts/font_data_for_range_set.h.
+   third_party/blink/renderer/platform/fonts/font_data_for_range_set.h, and
+   `FontData::font_data_for_character` in src/fonts/font_fallback_list.rs, from
+   third_party/blink/renderer/platform/fonts/segmented_font_data.cc.
 
 Copyright (C) 2003, 2004, 2005, 2006, 2008, 2009 Apple Inc. All rights reserved.
 
@@ -123,14 +125,16 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
    src/layout/inline/inline_node.rs, `InlineItemSegments` in
    src/layout/inline/inline_item_segment.rs, `InlineNodeData` in
    src/layout/inline/inline_node_data.rs, `BidiParagraph` in
-   src/text/bidi_paragraph.rs, and the `white-space` predicates in
+   src/text/bidi_paragraph.rs, the marker margins and `width_of_symbol` in
+   src/layout/list_marker.rs, and the `white-space` predicates in
    src/style/properties/mod.rs and src/style/properties/text_wrap.rs, from
    third_party/blink/renderer/core/layout/inline/inline_item.cc,
    third_party/blink/renderer/core/layout/inline/inline_items_builder.cc,
    third_party/blink/renderer/core/layout/inline/inline_node.cc,
    third_party/blink/renderer/core/layout/inline/inline_item_segment.cc,
    third_party/blink/renderer/core/layout/inline/inline_node_data.h,
-   third_party/blink/renderer/platform/text/bidi_paragraph.cc, and
+   third_party/blink/renderer/platform/text/bidi_paragraph.cc,
+   third_party/blink/renderer/core/layout/list/list_marker.cc, and
    third_party/blink/renderer/core/css/white_space.h.
 
 Copyright 2014, 2015, 2016, 2017, 2018, 2019, 2020, 2023, 2024, 2025 The Chromium Authors

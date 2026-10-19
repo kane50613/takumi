@@ -441,7 +441,7 @@ pub(crate) fn update_index(items: &mut InlineItems<'_>) {
 
 /// Blink's `IsInlineBoxStartEmpty` and `IsInlineBoxEndEmpty`: whether each inline edge of `node`
 /// has no border, padding, or margin.
-fn inline_box_edges_empty(node: &RenderNode) -> (bool, bool) {
+pub(crate) fn inline_box_edges_empty(node: &RenderNode) -> (bool, bool) {
   let direction = node.context.style.inherited_data.direction;
   let sides = [node.border_px(), node.padding_px(), node.margin_px()]
     .map(|edges| direction.inline_sides(edges.left, edges.right));
