@@ -8,6 +8,7 @@ use std::{
 use icu_properties::props::Script;
 
 use crate::{
+  context::RenderContext,
   fonts::{
     font_fallback_priority::FontFallbackPriority,
     shaping::{run_segmenter::RunSegmenterRange, shape_result::ShapeResult},
@@ -33,6 +34,10 @@ impl<'c> LayoutObject<'c> {
     match self {
       Self::Text(node) | Self::Inline(node) | Self::Box(node) => node,
     }
+  }
+
+  pub(crate) fn context(self) -> &'c RenderContext {
+    &self.node().context
   }
 
   /// Blink's `Style`.

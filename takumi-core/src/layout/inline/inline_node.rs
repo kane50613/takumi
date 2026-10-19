@@ -88,7 +88,7 @@ impl<'c> Frame<'c> {
 /// Blink's `InlineNode`: the inline formatting context `block` establishes.
 #[derive(Clone, Copy)]
 pub(crate) struct InlineNode<'c> {
-  block: &'c RenderNode,
+  pub(crate) block: &'c RenderNode,
 }
 
 impl<'c> InlineNode<'c> {
@@ -143,7 +143,7 @@ impl<'c> InlineNode<'c> {
             } else {
               builder.append_atomic_inline(LayoutObject::Box(node));
             }
-          } else if node.context.style.base_data.display == Display::Inline {
+          } else if node.context.style.base_data.display == Display::Inline && !node.is_dom_text() {
             builder.enter_inline(node);
             stack.push(Frame::new(node, Some(parent), true));
           } else {
@@ -511,6 +511,34 @@ impl RenderNode {
     }
   }
 
+  /// Whether this is a DOM text node, without a box of its own: Blink's `LayoutText` alone.
+  fn is_dom_text(&self) -> bool {
+    self.node.as_ref().is_some_and(|node| {
+      let metadata = &node.metadata;
+
+      // A `<br>` is Blink's `LayoutBR`, a text, whatever styles it.
+      if matches!(node.kind, NodeKind::Text(_))
+        && metadata
+          .tag_name
+          .as_deref()
+          .is_some_and(|tag| tag.eq_ignore_ascii_case("br"))
+      {
+        return true;
+      }
+
+      matches!(node.kind, NodeKind::Text(_))
+        && metadata.tag_name.is_none()
+        && metadata.class_name.is_none()
+        && metadata.id.is_none()
+        && metadata.attributes.is_none()
+        && metadata.preset.is_none()
+        && metadata.style.is_none()
+        && metadata.tw.is_none()
+        && metadata.dir.is_none()
+        && metadata.lang.is_none()
+    })
+  }
+
   /// Blink's `IsAtomicInline`.
   fn is_atomic_inline(&self) -> bool {
     self.is_inline_atomic_container()
@@ -634,6 +662,22 @@ mod tests {
 
     assert_eq!(text, "a\nb");
     assert!(items.contains(&(Control, "\n".to_owned())));
+  }
+
+  /// A `<br>` opens no inline box, so its own font does not grow the line.
+  #[test]
+  fn a_br_opens_no_inline_box() {
+    let tree = render_tree(
+      block([
+        Node::text("a"),
+        Node::text("\n").with_tag_name("br").with_class_name("big"),
+        Node::text("b"),
+      ]),
+      ".big { font-size: 40px }",
+    );
+    let (_, items) = collect(&tree);
+
+    assert!(!items.iter().any(|(item_type, _)| *item_type == OpenTag));
   }
 
   #[test]

@@ -9,7 +9,10 @@ use std::{
   rc::Rc,
 };
 
-use super::{inline_item::InlineItems, inline_item_segment::InlineItemSegments};
+use super::{
+  inline_item::{InlineItemType, InlineItems, LayoutObject},
+  inline_item_segment::InlineItemSegments,
+};
 use crate::{
   context::RenderContext,
   font_style::SizedFontStyle,
@@ -36,10 +39,32 @@ pub(crate) struct InlineNodeData<'c> {
   pub(crate) fonts: StyleFonts,
 }
 
-impl InlineNodeData<'_> {
+impl<'c> InlineNodeData<'c> {
   /// Blink's `HasFloatingOrOutOfFlowPositioned`.
   pub(crate) fn has_floating_or_out_of_flow_positioned(&self) -> bool {
     self.has_floats || self.has_out_of_flow_positioned
+  }
+
+  /// The style an item after the close tag at `index` takes: the box enclosing that tag's box,
+  /// else `block`, as Blink reads `LayoutObject::Parent`.
+  pub(crate) fn parent_context(&self, index: usize, block: &'c RenderContext) -> &'c RenderContext {
+    let mut depth = 0_isize;
+
+    for item in self.items[..=index].iter().rev() {
+      match item.item_type {
+        InlineItemType::CloseTag => depth += 1,
+        InlineItemType::OpenTag => {
+          depth -= 1;
+
+          if depth < 0 {
+            return item.layout_object.map_or(block, LayoutObject::context);
+          }
+        }
+        _ => {}
+      }
+    }
+
+    block
   }
 
   /// Blink's `DisableBidi`.

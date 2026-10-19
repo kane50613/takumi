@@ -6,7 +6,7 @@ use std::{
 };
 
 use harfrust::{FontRef, ShaperData, ShaperInstance, Tag, Variation};
-use skrifa::{MetadataProvider, raw::TableProvider};
+use skrifa::{GlyphId, MetadataProvider, instance::Size, raw::TableProvider};
 
 use crate::resources::font::MatchedFace;
 
@@ -80,6 +80,25 @@ impl SimpleFontData {
   /// Blink's `SpaceGlyph`.
   pub(crate) fn space_glyph(&self) -> u16 {
     self.space_glyph
+  }
+
+  /// Blink's `SpaceWidth`: the space glyph's advance.
+  pub(crate) fn space_width(&self) -> f32 {
+    let Some(font) = self.font_ref() else {
+      return 0.0;
+    };
+    let location = font.axes().location(
+      self
+        .variations
+        .iter()
+        .map(|variation| (variation.tag, variation.value)),
+    );
+
+    font
+      .glyph_metrics(Size::new(self.size), &location)
+      .advance_width(GlyphId::new(u32::from(self.space_glyph)))
+      .unwrap_or(0.0)
+      .max(0.0)
   }
 
   /// The font the face reads from.

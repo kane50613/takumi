@@ -43,6 +43,15 @@ mod fragment_items;
   )
 )]
 #[cfg_attr(test, allow(dead_code))]
+pub(crate) mod inline_break_token;
+#[cfg_attr(
+  not(test),
+  expect(
+    dead_code,
+    reason = "TODO: the line breaker port reads the collected items"
+  )
+)]
+#[cfg_attr(test, allow(dead_code))]
 pub(crate) mod inline_item;
 #[cfg_attr(
   not(test),
@@ -52,7 +61,25 @@ pub(crate) mod inline_item;
   )
 )]
 #[cfg_attr(test, allow(dead_code))]
+pub(crate) mod inline_item_result;
+#[cfg_attr(
+  not(test),
+  expect(
+    dead_code,
+    reason = "TODO: the line breaker port reads the collected items"
+  )
+)]
+#[cfg_attr(test, allow(dead_code))]
 pub(crate) mod inline_item_segment;
+#[cfg_attr(
+  not(test),
+  expect(
+    dead_code,
+    reason = "TODO: the line breaker port reads the collected items"
+  )
+)]
+#[cfg_attr(test, allow(dead_code))]
+pub(crate) mod inline_item_text_index;
 #[cfg_attr(
   not(test),
   expect(
@@ -82,6 +109,33 @@ pub(crate) mod inline_node;
 pub(crate) mod inline_node_data;
 mod items;
 mod line_box;
+#[cfg_attr(
+  not(test),
+  expect(
+    dead_code,
+    reason = "TODO: the line breaker port reads the collected items"
+  )
+)]
+#[cfg_attr(test, allow(dead_code))]
+pub(crate) mod line_break_point;
+#[cfg_attr(
+  not(test),
+  expect(
+    dead_code,
+    reason = "TODO: the line breaker port reads the collected items"
+  )
+)]
+#[cfg_attr(test, allow(dead_code))]
+pub(crate) mod line_breaker;
+#[cfg_attr(
+  not(test),
+  expect(
+    dead_code,
+    reason = "TODO: the line breaker port reads the collected items"
+  )
+)]
+#[cfg_attr(test, allow(dead_code))]
+pub(crate) mod line_info;
 mod metrics;
 mod outline;
 mod runs;

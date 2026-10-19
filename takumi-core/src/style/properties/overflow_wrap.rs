@@ -48,6 +48,16 @@ impl OverflowWrap {
   pub(crate) fn into_parley(self) -> parley::OverflowWrap {
     self.0
   }
+
+  /// Whether this is `anywhere`.
+  pub(crate) fn is_anywhere(self) -> bool {
+    self.0 == parley::OverflowWrap::Anywhere
+  }
+
+  /// Whether this is `break-word`.
+  pub(crate) fn is_break_word(self) -> bool {
+    self.0 == parley::OverflowWrap::BreakWord
+  }
 }
 
 #[cfg(test)]
