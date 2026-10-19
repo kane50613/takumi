@@ -2070,7 +2070,7 @@ impl RenderNode {
   // Only fully-collapsible whitespace may be dropped. preserve / preserve-spaces
   // keep their spaces, and preserve-breaks may hold a forced break, so a
   // whitespace-only node in any of those still renders.
-  fn is_collapsible_whitespace_only_text_node(&self) -> bool {
+  pub(super) fn is_collapsible_whitespace_only_text_node(&self) -> bool {
     self.context.style.inherited_data.white_space_collapse == WhiteSpaceCollapse::Collapse
       && self.is_whitespace_only_text_node()
   }
@@ -2276,6 +2276,7 @@ impl RenderNode {
       return children.into_boxed_slice();
     }
 
+    let children = RenderNode::wrap_orphan_table_parts(context, children);
     // Blink's Text::TextLayoutObjectIsNeeded: collapsible
     // whitespace-only text renders only after an in-flow inline-level
     // sibling, and leading whitespace only inside an inline parent

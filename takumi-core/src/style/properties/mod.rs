@@ -1027,6 +1027,31 @@ impl Display {
   }
 
   /// Returns true if the display makes the children blockified (e.g., flex or grid).
+  /// Whether a box with this display belongs inside a table: a row, row group, cell, or caption.
+  pub(crate) fn is_table_part(self) -> bool {
+    matches!(
+      self,
+      Display::TableRow
+        | Display::TableRowGroup
+        | Display::TableHeaderGroup
+        | Display::TableFooterGroup
+        | Display::TableCell
+        | Display::TableCaption
+    )
+  }
+
+  /// Whether a box with this display lays its table parts out itself: a table, row group, or row.
+  pub(crate) fn holds_table_parts(self) -> bool {
+    matches!(
+      self,
+      Display::Table
+        | Display::TableRowGroup
+        | Display::TableHeaderGroup
+        | Display::TableFooterGroup
+        | Display::TableRow
+    )
+  }
+
   pub(crate) fn should_blockify_children(&self) -> bool {
     matches!(
       self,
@@ -1035,10 +1060,18 @@ impl Display {
   }
 
   /// Cast the display to block level.
+  /// Blink's `EquivalentBlockDisplay`, which turns the parts of a table into blocks as well.
+  /// <https://drafts.csswg.org/css-display/#blockify>
   pub(crate) fn as_blockified(self) -> Self {
     match self {
-      Display::Inline => Display::Block,
-      Display::InlineBlock => Display::Block,
+      Display::Inline
+      | Display::InlineBlock
+      | Display::TableRowGroup
+      | Display::TableHeaderGroup
+      | Display::TableFooterGroup
+      | Display::TableRow
+      | Display::TableCell
+      | Display::TableCaption => Display::Block,
       Display::InlineFlex => Display::Flex,
       Display::InlineGrid => Display::Grid,
       _ => self,

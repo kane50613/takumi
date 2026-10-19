@@ -1,0 +1,43 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>table_orphan_parts</title>
+    <base href="../../../" />
+    <link rel="stylesheet" href="takumi/tests/shared.css" />
+    <style>
+      .box {
+        font-family: Geist;
+        font-size: 24px;
+        background-color: rgb(226, 232, 240);
+        margin-bottom: 8px;
+      }
+      .row {
+        display: table-row;
+      }
+      .cell {
+        display: table-cell;
+        padding: 4px 12px;
+        border: 2px solid rgb(37, 99, 235);
+      }
+      b {
+        color: rgb(220, 38, 38);
+      }
+    </style>
+  </head>
+  <body style="width: 480px; height: 280px">
+    <div style="padding: 12px; background-color: white">
+      <div class="box"
+        ><div class="row">Text <b>and spans</b> in a row</div></div
+      >
+      <div class="box"><span class="cell">One</span> <span class="cell">Two</span></div>
+      <div class="box"
+        ><div class="row"><span class="cell">Cell</span></div
+        >After the row</div
+      >
+    </div>
+    <div class="box" style="display: flex"
+      ><div class="row">Flex <b>row</b></div></div
+    >
+  </body>
+</html>
