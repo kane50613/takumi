@@ -826,7 +826,12 @@ mod tests {
 
   /// A 16px `family` font with `font-variant-caps: caps` and `font-synthesis-small-caps:
   /// synthesis`.
-  fn caps_font(fonts: &mut Fonts, family: &str, caps: FontVariantCaps, synthesis: FontSynthesic) -> Font {
+  fn caps_font(
+    fonts: &mut Fonts,
+    family: &str,
+    caps: FontVariantCaps,
+    synthesis: FontSynthesic,
+  ) -> Font {
     let mut description = font(fonts, family).description;
 
     description.variant_caps = caps;
@@ -845,8 +850,16 @@ mod tests {
         (
           run.start_index,
           run.num_characters,
-          run.font_data.as_ref().map_or(0.0, |font_data| font_data.size()),
-          run.glyph_data.glyphs().iter().map(|glyph| glyph.glyph).collect(),
+          run
+            .font_data
+            .as_ref()
+            .map_or(0.0, |font_data| font_data.size()),
+          run
+            .glyph_data
+            .glyphs()
+            .iter()
+            .map(|glyph| glyph.glyph)
+            .collect(),
         )
       })
       .collect()
@@ -861,7 +874,12 @@ mod tests {
     register(&mut fonts, GEIST, "Geist");
 
     let plain = caps_runs(&font(&mut fonts, "Geist"), "AB");
-    let small_caps = caps_font(&mut fonts, "Geist", FontVariantCaps::SmallCaps, FontSynthesic::Auto);
+    let small_caps = caps_font(
+      &mut fonts,
+      "Geist",
+      FontVariantCaps::SmallCaps,
+      FontSynthesic::Auto,
+    );
 
     assert_eq!(
       caps_runs(&small_caps, "aB"),
@@ -879,7 +897,12 @@ mod tests {
 
     register(&mut fonts, GEIST, "Geist");
 
-    let small_caps = caps_font(&mut fonts, "Geist", FontVariantCaps::SmallCaps, FontSynthesic::Auto);
+    let small_caps = caps_font(
+      &mut fonts,
+      "Geist",
+      FontVariantCaps::SmallCaps,
+      FontSynthesic::Auto,
+    );
     let runs = caps_runs(&small_caps, "\u{DF}");
 
     assert_eq!((runs[0].0, runs[0].1, runs[0].3.len()), (0, 2, 2));
@@ -893,7 +916,12 @@ mod tests {
     register(&mut fonts, GEIST, "Geist");
 
     let plain = caps_runs(&font(&mut fonts, "Geist"), "aB");
-    let small_caps = caps_font(&mut fonts, "Geist", FontVariantCaps::SmallCaps, FontSynthesic::None);
+    let small_caps = caps_font(
+      &mut fonts,
+      "Geist",
+      FontVariantCaps::SmallCaps,
+      FontSynthesic::None,
+    );
 
     assert_eq!(caps_runs(&small_caps, "aB"), plain);
   }
