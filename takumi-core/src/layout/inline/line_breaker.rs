@@ -15,6 +15,7 @@ use super::{
   inline_item_text_index::InlineItemTextIndex,
   inline_node::InlineNode,
   inline_node_data::InlineNodeData,
+  leading_floats::LeadingFloats,
   line_break_point::LineBreakPoint,
   line_info::LineInfo,
 };
@@ -277,6 +278,8 @@ pub(crate) struct LineBreaker<'a, 'b, 'c> {
   constraint_space: ConstraintSpace,
   atomic_inline: &'b mut dyn AtomicInlineLayout<'c>,
   exclusion_space: &'b mut ExclusionSpace,
+  leading_floats: &'b LeadingFloats,
+  leading_floats_index: usize,
   state: LineBreakState,
   current: InlineItemTextIndex,
   break_at: LineBreakPoint,
@@ -325,6 +328,7 @@ impl<'a, 'b, 'c> LineBreaker<'a, 'b, 'c> {
     mode: LineBreakerMode,
     constraint_space: ConstraintSpace,
     line_opportunity: LineLayoutOpportunity,
+    leading_floats: &'b LeadingFloats,
     break_token: Option<InlineBreakToken<'c>>,
     atomic_inline: &'b mut dyn AtomicInlineLayout<'c>,
     exclusion_space: &'b mut ExclusionSpace,
@@ -342,6 +346,8 @@ impl<'a, 'b, 'c> LineBreaker<'a, 'b, 'c> {
       constraint_space,
       atomic_inline,
       exclusion_space,
+      leading_floats,
+      leading_floats_index: 0,
       state: LineBreakState::Continue,
       current: InlineItemTextIndex::default(),
       break_at: LineBreakPoint::default(),
@@ -2457,6 +2463,21 @@ impl<'a, 'b, 'c> LineBreaker<'a, 'b, 'c> {
       return;
     }
 
+    // A leading float was placed before the line broke.
+    if self.current.item_index <= self.leading_floats.handled_index
+      && !self.leading_floats.floats.is_empty()
+    {
+      let positioned_float = self.leading_floats.floats[self.leading_floats_index];
+      let item_result = &mut line_info.results[result_index];
+
+      self.leading_floats_index += 1;
+      item_result.positioned_float = Some(positioned_float);
+      // Kept even though a leading float leaves the space as it is; see `rewind_floats`.
+      item_result.exclusion_space_before_position_float = Some(self.exclusion_space.clone());
+
+      return;
+    }
+
     let Some(object) = item.layout_object else {
       return;
     };
@@ -2467,7 +2488,7 @@ impl<'a, 'b, 'c> LineBreaker<'a, 'b, 'c> {
         self.constraint_space.bfc_offset.line_offset,
         self.line_opportunity.bfc_block_offset,
       ),
-      self.container_direction(),
+      self.constraint_space.direction,
     );
     let float_after_line = self.should_push_float_after_line(&mut unpositioned_float, line_info);
 
@@ -2489,11 +2510,6 @@ impl<'a, 'b, 'c> LineBreaker<'a, 'b, 'c> {
     item_result.exclusion_space_before_position_float = Some(exclusion_space_before);
     item_result.positioned_float = Some(positioned_float);
     self.update_line_opportunity();
-  }
-
-  /// The containing block's direction, which the constraint space carries in Blink.
-  fn container_direction(&self) -> TextDirection {
-    self.block_context().style.inherited_data.direction
   }
 
   /// Blink's `ComputeFloatOffset`: how far the floats on the line's start side move it from the
@@ -2519,7 +2535,7 @@ impl<'a, 'b, 'c> LineBreaker<'a, 'b, 'c> {
   fn update_line_opportunity(&mut self) {
     let bfc_line_offset = self.constraint_space.bfc_offset.line_offset;
     let available_inline_size = self.constraint_space.inline_size();
-    let direction = self.container_direction();
+    let direction = self.constraint_space.direction;
     let opportunity = self.exclusion_space.find_layout_opportunity(
       BfcOffset::new(bfc_line_offset, self.line_opportunity.bfc_block_offset),
       available_inline_size,
@@ -2544,12 +2560,26 @@ impl<'a, 'b, 'c> LineBreaker<'a, 'b, 'c> {
 
   /// Blink's `RewindFloats`: the exclusion space before the first float in the rewound results.
   fn rewind_floats(&mut self, new_end: usize, line_info: &LineInfo<'a, 'c>) {
-    let restored = line_info.results[new_end..]
+    let Some(item_result) = line_info.results[new_end..]
       .iter()
-      .find_map(|result| result.exclusion_space_before_position_float.clone());
+      .find(|result| result.positioned_float.is_some())
+    else {
+      return;
+    };
 
-    if let Some(exclusion_space) = restored {
-      *self.exclusion_space = exclusion_space;
+    // A leading float is handed out again.
+    if item_result.item_index < self.leading_floats.handled_index
+      && let Some(index) = self
+        .leading_floats
+        .floats
+        .iter()
+        .position(|leading_float| Some(*leading_float) == item_result.positioned_float)
+    {
+      self.leading_floats_index = index;
+    }
+
+    if let Some(exclusion_space) = &item_result.exclusion_space_before_position_float {
+      *self.exclusion_space = exclusion_space.clone();
       self.update_line_opportunity();
     }
   }
@@ -2882,11 +2912,7 @@ impl<'a, 'b, 'c> LineBreaker<'a, 'b, 'c> {
     if self.applied_text_indent != LayoutUnit::ZERO
       && width_to_rewind > LayoutUnit::ZERO
       && self.is_first_formatted_line
-      && line_info
-        .results
-        .iter()
-        .all(|result| result.item.item_type == InlineItemType::Floating)
-      && !line_info.results.is_empty()
+      && !self.leading_floats.floats.is_empty()
     {
       self.position -= self.applied_text_indent;
       width_to_rewind -= self.applied_text_indent;
@@ -3343,6 +3369,7 @@ mod tests {
       inline::{
         inline_item::InlineItemType,
         inline_node::InlineNode,
+        leading_floats::LeadingFloats,
         line_info::LineInfo,
         testing::{TestAtomicInline, render_tree, span},
       },
@@ -3368,6 +3395,7 @@ mod tests {
     let available_width = LayoutUnit::from_float(available_width);
     let mut atomic_inline = TestAtomicInline;
     let mut exclusion_space = ExclusionSpace::default();
+    let leading_floats = LeadingFloats::default();
     let mut break_token = None;
     let mut broken = BrokenLines {
       lines: Vec::new(),
@@ -3387,6 +3415,7 @@ mod tests {
           block.context.style.inherited_data.direction,
         ),
         LineLayoutOpportunity::new(available_width),
+        &leading_floats,
         break_token,
         &mut atomic_inline,
         &mut exclusion_space,

@@ -392,6 +392,7 @@ mod tests {
       inline::{
         inline_box_state::InlineLayoutStateStack,
         inline_node::InlineNode,
+        leading_floats::LeadingFloats,
         line_breaker::{LineBreaker, LineBreakerMode},
         line_info::LineInfo,
         logical_line_item::{LineFragment, LogicalLineItems},
@@ -424,6 +425,7 @@ mod tests {
       LineBreakerMode::Content,
       space,
       LineLayoutOpportunity::new(available_width),
+      &LeadingFloats::default(),
       None,
       &mut atomic_inline,
       &mut exclusion_space,
