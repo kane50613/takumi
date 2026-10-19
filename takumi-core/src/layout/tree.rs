@@ -2103,10 +2103,6 @@ impl RenderNode {
       .filter_map(|item| Self::pseudo_content_child(originating_node, &pseudo_context, item))
       .collect();
 
-    if children.is_empty() {
-      return None;
-    }
-
     Some(Self::new(
       pseudo_context,
       NodeOrigin::Pseudo,

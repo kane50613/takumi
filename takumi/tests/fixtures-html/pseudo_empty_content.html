@@ -1,0 +1,53 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>pseudo_empty_content</title>
+    <base href="../../../" />
+    <link rel="stylesheet" href="takumi/tests/shared.css" />
+    <style>
+      .bar::before {
+        content: "";
+        display: block;
+        width: 160px;
+        height: 16px;
+        margin-bottom: 16px;
+        background-color: rgb(34, 197, 94);
+      }
+
+      .overlay {
+        position: relative;
+      }
+
+      .overlay::after {
+        content: "";
+        position: absolute;
+        inset: 0;
+        background-image: linear-gradient(to bottom, rgba(0, 0, 0, 0), rgba(59, 130, 246, 0.8));
+      }
+    </style>
+  </head>
+  <body style="width: 600px; height: 300px">
+    <div
+      style="
+        display: flex;
+        align-items: flex-start;
+        gap: 40px;
+        width: 100%;
+        height: 100%;
+        padding: 40px;
+        background-color: rgb(255, 255, 255);
+        font-family: Geist;
+        font-size: 32px;
+      "
+    >
+      <div class="bar" style="display: block">Title</div>
+      <div
+        class="overlay"
+        style="width: 200px; height: 160px; background-color: rgb(254, 202, 202)"
+      >
+        Card
+      </div>
+    </div>
+  </body>
+</html>
