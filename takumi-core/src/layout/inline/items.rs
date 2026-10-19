@@ -450,10 +450,7 @@ fn collect_inline_items_impl<'n>(
   let decorations = own_decoration.as_ref().or(decorations);
 
   if let Some(marker) = node.marker.as_deref() {
-    items.push(InlineItem::RenderNode {
-      render_node: marker,
-      decorations: None,
-    });
+    collect_inline_items_impl(marker, depth + 1, link, decorations, next_span, items);
   }
 
   let content_start = items.len();
