@@ -542,7 +542,7 @@ impl Fonts {
         .map(FontOverride::descriptors)
         .unwrap_or_default()
     };
-    let added = self.selector.register(
+    let faces = self.selector.register(
       data,
       id,
       &descriptors,
@@ -551,7 +551,7 @@ impl Fonts {
     );
     let mut families: Vec<RegisteredFamily> = Vec::new();
 
-    for font_face in added {
+    for font_face in faces {
       let typeface = &font_face.custom_platform_data;
 
       let face = RegisteredFace {
@@ -1248,8 +1248,10 @@ mod tests {
   #[test]
   fn registering_same_bytes_twice_is_idempotent_in_order() {
     let mut fonts = Fonts::default();
-    register_named(&mut fonts, geist_bytes(), "Geist Test");
-    register_named(&mut fonts, geist_bytes(), "Geist Test");
+    let first = register_named(&mut fonts, geist_bytes(), "Geist Test");
+    let second = register_named(&mut fonts, geist_bytes(), "Geist Test");
+
+    assert_eq!(format!("{second:?}"), format!("{first:?}"));
 
     // Registration order dedups by name: registering the same family name twice does not
     // list it twice, so default fallback selection stays stable.

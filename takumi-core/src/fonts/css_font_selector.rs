@@ -59,7 +59,8 @@ fn insert_family(families: &mut Vec<Arc<str>>, family: &Arc<str>) {
 
 impl CssFontSelector {
   /// Registers every face of the sfnt or collection `data` under `descriptors`, its own family
-  /// name when they give none; the faces it added, skipping any without a family name.
+  /// name when they give none; its faces, the ones registered before included, skipping any
+  /// without a family name.
   pub(crate) fn register(
     &mut self,
     data: SharedBytes,
@@ -69,7 +70,7 @@ impl CssFontSelector {
     last_resort: bool,
   ) -> Vec<Arc<FontFace>> {
     let count = FileRef::new((*data).as_ref()).map_or(0, |file| file.fonts().count());
-    let mut added = Vec::new();
+    let mut faces = Vec::new();
 
     for index in 0..count {
       let Some(platform_data) = u32::try_from(index)
@@ -86,7 +87,13 @@ impl CssFontSelector {
         continue;
       };
 
-      if family.is_empty() || self.has_font_face(&family, id, platform_data.index) {
+      if family.is_empty() {
+        continue;
+      }
+
+      if let Some(font_face) = self.font_face(&family, id, platform_data.index) {
+        faces.push(Arc::clone(font_face));
+
         continue;
       }
 
@@ -120,10 +127,10 @@ impl CssFontSelector {
         );
       }
 
-      added.push(font_face);
+      faces.push(font_face);
     }
 
-    added
+    faces
   }
 
   /// A registry keeping at most `max_bytes` of the faces [`Self::admit`] records unpinned.
@@ -244,17 +251,21 @@ impl CssFontSelector {
       .map_or(&[], Vec::as_slice)
   }
 
-  /// Whether `family` already lists the face at `index` of the data `id` names.
-  fn has_font_face(&self, family: &str, id: u64, index: u32) -> bool {
+  /// The face `family` already lists at `index` of the data `id` names.
+  fn font_face(&self, family: &str, id: u64, index: u32) -> Option<&Arc<FontFace>> {
     let family = fold_family_name(family);
 
-    self.font_faces.iter().any(|registered| {
-      let custom_platform_data = &registered.font_face.custom_platform_data;
+    self
+      .font_faces
+      .iter()
+      .map(|registered| &registered.font_face)
+      .find(|font_face| {
+        let custom_platform_data = &font_face.custom_platform_data;
 
-      custom_platform_data.id == id
-        && custom_platform_data.index == index
-        && fold_family_name(&registered.font_face.family) == family
-    })
+        custom_platform_data.id == id
+          && custom_platform_data.index == index
+          && fold_family_name(&font_face.family) == family
+      })
   }
 
   /// The families registered as a last resort, which fallback walks after every other.
