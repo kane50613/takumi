@@ -2,7 +2,7 @@
 //! with `InlineItemsData` folded in.
 
 use std::{
-  cell::RefCell,
+  cell::{OnceCell, RefCell},
   collections::HashMap,
   fmt::{self, Debug, Formatter},
   ops::Range,
@@ -21,7 +21,11 @@ use crate::{
   font_style::SizedFontStyle,
   fonts::{font::Font, font_description::FontDescription},
   style::Direction as TextDirection,
-  text::line_break_iterator::{BreakOptions, LineBreakIterator},
+  text::{
+    bidi_paragraph::BidiParagraph,
+    character::{LINE_FEED, is_8bit},
+    line_break_iterator::{BreakOptions, LineBreakIterator},
+  },
 };
 
 /// Blink's `InlineNodeData`, without first-line items, SVG text, ruby, initial letters, or text
@@ -43,9 +47,42 @@ pub(crate) struct InlineNodeData<'c> {
   /// The soft wrap opportunities of `text_content` per break type, which every line breaking pass
   /// shares.
   pub(crate) break_opportunities: RefCell<FxHashMap<BreakOptions, Rc<[bool]>>>,
+  /// Where each paragraph after a line feed starts, and the direction its first strong character
+  /// gives it, for `unicode-bidi: plaintext`.
+  pub(crate) plaintext_paragraphs: OnceCell<Vec<(usize, TextDirection)>>,
 }
 
 impl<'c> InlineNodeData<'c> {
+  /// The base direction `unicode-bidi: plaintext` gives the paragraph `offset` is in, or none in
+  /// the first paragraph, whose direction the block's bidi paragraph resolved. Computed once, as
+  /// each line's line breaker asks again.
+  pub(crate) fn plaintext_paragraph_direction(&self, offset: usize) -> Option<TextDirection> {
+    let paragraphs = self.plaintext_paragraphs.get_or_init(|| {
+      // Latin-1 text has no right-to-left character.
+      if is_8bit(&self.text_content) {
+        return Vec::new();
+      }
+
+      self
+        .text_content
+        .match_indices(LINE_FEED)
+        .map(|(line_feed, _)| {
+          let start = line_feed + LINE_FEED.len_utf8();
+          let direction = BidiParagraph::base_direction_for_string(
+            &self.text_content[start..],
+            Some(|c| c == LINE_FEED),
+          );
+
+          // UAX #9 rules P2 and P3 make a paragraph without a strong character left-to-right.
+          (start, direction.unwrap_or(TextDirection::Ltr))
+        })
+        .collect()
+    });
+    let index = paragraphs.partition_point(|&(start, _)| start <= offset);
+
+    index.checked_sub(1).map(|index| paragraphs[index].1)
+  }
+
   /// An iterator over the soft wrap opportunities of `text_content` under `options`, computed
   /// once.
   pub(crate) fn break_iterator(&self, options: BreakOptions) -> LineBreakIterator<'_> {

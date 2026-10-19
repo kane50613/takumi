@@ -39,7 +39,10 @@ use crate::{
     tree::RenderNode,
   },
   layout_unit::LayoutUnit,
-  style::{BoxDecorationBreak, ComputedStyle, Direction as TextDirection, LineBreak, WordBreak},
+  style::{
+    BoxDecorationBreak, ComputedStyle, Direction as TextDirection, LineBreak, UnicodeBidi,
+    WordBreak,
+  },
   text::{
     character::{
       CARRIAGE_RETURN, FORM_FEED, LINE_FEED, OBJECT_REPLACEMENT_CHARACTER,
@@ -715,6 +718,22 @@ impl<'a, 'b, 'c> LineBreaker<'a, 'b, 'c> {
   }
 
   /// Blink's `PrepareNextLine`.
+  /// Blink's `ComputeBaseDirection`: a `unicode-bidi: plaintext` block takes each paragraph's
+  /// direction from its first strong character. A forced break ends a paragraph with a line feed,
+  /// so the paragraph a line is in is the one after the last line feed before it.
+  fn compute_base_direction(&mut self) {
+    if self.node.block.context.style.misc_data.unicode_bidi != UnicodeBidi::Plaintext {
+      return;
+    }
+
+    if let Some(direction) = self
+      .items_data
+      .plaintext_paragraph_direction(self.current.text_offset)
+    {
+      self.base_direction = direction;
+    }
+  }
+
   fn prepare_next_line(&mut self, line_info: &mut LineInfo<'a, 'c>) {
     line_info.reset();
 
@@ -734,6 +753,7 @@ impl<'a, 'b, 'c> LineBreaker<'a, 'b, 'c> {
     line_info.start = self.current;
     line_info.is_first_formatted_line = self.is_first_formatted_line;
     line_info.is_start_of_paragraph = self.current.is_zero() || self.previous_line_had_forced_break;
+    self.compute_base_direction();
     line_info.base_direction = self.base_direction;
     line_info.set_line_style(self.block_context());
 
