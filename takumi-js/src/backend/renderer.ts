@@ -23,7 +23,7 @@ export class RendererProvider {
   }
 }
 
-export const defaultRenderer = new RendererProvider(async (module) => {
+export const defaultRenderer: RendererProvider = new RendererProvider(async (module) => {
   const backend = await (module === undefined
     ? loadBackend()
     : import("./wasm-init").then(({ initWasm }) => initWasm(module)));

@@ -1,9 +1,9 @@
 import { readFileSync, writeFileSync } from "node:fs";
-import { defineConfig } from "tsdown";
+import { defineConfig, type UserConfig } from "tsdown";
 
 const exportOutputs = ["export.mjs", "export.cjs"];
 
-export default defineConfig({
+const config: UserConfig = defineConfig({
   entry: {
     export: "src/export.ts",
     primitives: "src/primitives.ts",
@@ -35,6 +35,8 @@ export default defineConfig({
     },
   },
 });
+
+export default config;
 
 function patchGeneratedExportScript(content: string) {
   return content

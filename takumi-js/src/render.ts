@@ -256,7 +256,10 @@ async function prepareScene<T extends PipelineOptions>(element: RenderInput, opt
  * @param options - Configuration for rendering, including dimensions, format, fonts, and more.
  * @returns A promise that resolves to the rendered image data (Buffer/Uint8Array).
  */
-export async function render(element: RenderInput, options?: RenderOptions) {
+export async function render(
+  element: RenderInput,
+  options?: RenderOptions,
+): Promise<Buffer<ArrayBuffer> | Uint8Array<ArrayBuffer>> {
   const scene = await prepareScene(element, options);
 
   return scene.renderer.render(scene.node, scene.options);
@@ -277,7 +280,10 @@ export async function render(element: RenderInput, options?: RenderOptions) {
  *
  * @returns A promise that resolves to the measured node tree.
  */
-export async function measure(element: RenderInput, options?: RenderOptions) {
+export async function measure(
+  element: RenderInput,
+  options?: RenderOptions,
+): Promise<napi.MeasuredNode> {
   const scene = await prepareScene(element, options);
 
   return scene.renderer.measure(scene.node, scene.options);
@@ -333,7 +339,9 @@ export async function renderSvg(element: RenderInput, options?: RenderSvgOptions
  *
  * @returns A promise that resolves to the encoded animation (Buffer/Uint8Array).
  */
-export async function renderAnimation(options: RenderAnimationOptions) {
+export async function renderAnimation(
+  options: RenderAnimationOptions,
+): Promise<Buffer<ArrayBuffer> | Uint8Array<ArrayBuffer>> {
   options.signal?.throwIfAborted();
 
   const { css: _, stylesheets: _alias, ...forward } = options;

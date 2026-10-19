@@ -538,7 +538,7 @@ export class PdfRenderer {
   }
 
   /** Registers a font ahead of time, deduped against earlier registrations. */
-  registerFont(font: FontLoader) {
+  registerFont(font: FontLoader): Promise<RegisteredFamily[]> {
     return this.fonts.register(font);
   }
 
@@ -547,17 +547,17 @@ export class PdfRenderer {
    * `unicodeRange` subset alike; returns whether it had any. Takes a family `registerFont` returned
    * as well. A later render that lists one of its fonts registers it again.
    */
-  unregisterFont(family: RegisteredFamilyLike) {
+  unregisterFont(family: RegisteredFamilyLike): boolean {
     return this.inner.unregisterFont(family.name);
   }
 
   /** Removes every registered font, leaving the bundled fallback font. */
-  clearFonts() {
+  clearFonts(): void {
     this.inner.clearFonts();
   }
 
   /** Releases the underlying wasm renderer's memory. */
-  free() {
+  free(): void {
     this.inner.free();
   }
 }

@@ -1,10 +1,10 @@
 import { readFileSync, writeFileSync } from "node:fs";
-import { defineConfig } from "tsdown";
+import { defineConfig, type UserConfig } from "tsdown";
 
 const loaderOutputs = ["export.mjs", "export.cjs"];
 const patchedOutputs = new Set<string>();
 
-export default defineConfig({
+const config: UserConfig = defineConfig({
   entry: {
     export: "src/export.ts",
   },
@@ -35,6 +35,8 @@ export default defineConfig({
     },
   },
 });
+
+export default config;
 
 function patchGeneratedLoader(content: string) {
   return content

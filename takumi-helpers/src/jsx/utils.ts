@@ -4,7 +4,7 @@ import type { ReactElementLike } from "../types";
 
 const unrenderedElements = new Set(["head", "meta", "link", "style", "script"]);
 
-export function isUnrenderedElement(type: string) {
+export function isUnrenderedElement(type: string): boolean {
   return unrenderedElements.has(type);
 }
 
