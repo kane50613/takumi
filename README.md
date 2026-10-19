@@ -25,7 +25,7 @@ Takumi is a layout engine written in Rust, with text and inline layout ported fr
 | Images and animations            | [`takumi-js`](https://takumi.kane.tw/docs/)         | PNG, JPEG, WebP, ICO, raw RGBA, SVG. Animated WebP, APNG, and GIF.                   |
 | PDF documents                    | [`takumi-pdf`](https://takumi.kane.tw/docs/pdf)     | Paged or single-page PDF with selectable text.                                       |
 | Your own renderer or layout data | [`takumi-paint`](https://takumi.kane.tw/docs/paint) | A paint tree of every box, text run, and image, positioned with CSS values resolved. |
-| Embedding in Rust                | [`takumi`](https://docs.rs/takumi)                  | Images and SVG from a node tree or HTML.                                             |
+| Embedding in Rust                | [`takumi`](https://docs.rs/takumi)                  | Images, animations, and SVG from a node tree or HTML.                                |
 
 ## Quick Start
 
