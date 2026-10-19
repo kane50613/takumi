@@ -4,7 +4,7 @@ description: Embed files in PDF documents and configure PDF/A-3 attachments for 
 icon: Paperclip
 ---
 
-Pass files through `attachments` to include source data, supporting documents, or invoice XML. Readers can access them in PDF viewers that expose an attachment panel:
+Pass files through `attachments` to embed source data, supporting documents, or invoice XML. Viewers with an attachment panel list them there:
 
 ```tsx twoslash title="Attachments"
 import type { ReactNode } from "react";
@@ -27,9 +27,16 @@ const pdf = await render(invoice, {
 });
 ```
 
-`data` takes raw bytes as a `Uint8Array`, or a string encoded as UTF-8.
+| Field              | Value                                                                             |
+| ------------------ | --------------------------------------------------------------------------------- |
+| `name`             | File name in the PDF. Two attachments cannot share a name.                        |
+| `data`             | A `Uint8Array`, or a string written as UTF-8                                      |
+| `mimeType`         | IANA media type, such as `"application/xml"`                                      |
+| `description`      | Human-readable description                                                        |
+| `relationship`     | The file's role, written as `AFRelationship`. See the next table.                 |
+| `modificationDate` | UTC `YYYY-MM-DD` or `YYYY-MM-DDTHH:MM:SS`. Falls back to `metadata.creationDate`. |
 
-`relationship` describes the attachment's role and is written as `AFRelationship`:
+`relationship` takes one of these values:
 
 | Value           | Meaning                                          |
 | --------------- | ------------------------------------------------ |
@@ -41,7 +48,7 @@ const pdf = await render(invoice, {
 
 ## Electronic invoices
 
-For a Factur-X or ZUGFeRD document, use PDF/A-3 and attach the invoice XML. This example shows the attachment configuration:
+For a Factur-X or ZUGFeRD document, use PDF/A-3 and attach the invoice XML:
 
 ```tsx twoslash title="Electronic invoices"
 import type { ReactNode } from "react";
@@ -70,10 +77,17 @@ The PDF/A-3 levels require three fields on each attachment:
 
 - `mimeType`
 - `description`
-- a modification date: `modificationDate`, or the `metadata.creationDate` fallback
+- a modification date from `modificationDate`, or the `metadata.creationDate` fallback
 
-The render fails if required attachment metadata is missing.
+TypeScript enforces `mimeType` and `description` under these levels. A missing date fails the render.
 
-Invalid combinations are **TypeScript type errors**. The PDF/A-2 levels and `"4"` forbid attachments. Use `"4f"` to attach files to a PDF 2.0 archival document. The PDF/A-3 levels require `mimeType` and `description` on each one.
+## Levels that allow attachments
 
-This configuration alone does not validate the invoice XML or its profile. Add the profile's XMP metadata and validate the result as described in [Invoices](/docs/pdf/invoices).
+| `pdfa`                        | Attachments                                                     |
+| ----------------------------- | --------------------------------------------------------------- |
+| unset                         | Allowed                                                         |
+| `"3b"`, `"3u"`, `"3a"`        | Allowed, with the three fields above                            |
+| `"4f"`                        | Allowed, with `mimeType` and `description`. The PDF 2.0 option. |
+| `"2b"`, `"2u"`, `"2a"`, `"4"` | Not allowed: a TypeScript type error                            |
+
+Attaching the XML does not validate it or its profile. Add the profile's XMP metadata and validate the result as described in [Invoices](/docs/pdf/invoices#electronic-invoices).

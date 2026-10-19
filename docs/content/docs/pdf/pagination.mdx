@@ -4,7 +4,9 @@ description: Control PDF page breaks, keep related content together, and set par
 icon: Scissors
 ---
 
-Content flows across pages at the width available inside the margins. Use CSS break properties to start chapters, keep related content together, and control how paragraphs split. Percentage heights do not resolve in this mode because the content has no fixed height. Viewport units do: `vh` is the page area height, as in print media.
+Content lays out at the width inside the margins, then flows across pages. Use CSS break properties to start chapters, keep related content together, and control how paragraphs split.
+
+The content has no fixed height, so percentage heights do not resolve. Viewport units do. `vh` is the height of the page area inside the margins, as in print.
 
 ## Break properties
 
@@ -27,11 +29,13 @@ const pdf = await render(
 | `break-inside: avoid`         | Keeps the element on one page when it fits.             |
 | `box-decoration-break: clone` | Repeats borders and backgrounds on every page fragment. |
 
-`break-inside: avoid` applies only when the box fits on a page. An oversized box can still split. Text lines, images, and transformed subtrees are kept together where possible.
+`break-inside: avoid` applies only when the box fits on a page. A taller box still splits.
+
+A text line, an image, or a transformed subtree never splits unless it is taller than a page.
 
 ## Full-page boxes
 
-A `100vh` box fills one page inside the margins, and the next box starts on the following page. Use it for a cover or any page laid out by hand:
+A `100vh` box fills the page area, so the next box starts on the following page. Use it for a cover or any page laid out by hand:
 
 ```tsx twoslash title="Full-page cover"
 import { render } from "takumi-pdf";
@@ -48,11 +52,11 @@ const pdf = await render(
 );
 ```
 
-`vw`, `vmin`, and `vmax` resolve against the same page area. In the `header` and `footer` bands they resolve against the full page.
+`vw`, `vmin`, and `vmax` resolve against the same page area. In the `header` and `footer` bands, viewport units resolve against the full page.
 
 ## Widows and orphans
 
-A cut through a paragraph keeps at least `orphans` lines at the bottom of the page and `widows` lines at the top of the next. Both default to 2, like Chromium. Set them to 1 to allow lone lines:
+When a page break cuts a paragraph, at least `orphans` lines stay at the bottom of the page and at least `widows` lines move to the top of the next. Both default to 2, like Chromium. Set them to 1 to allow single lines:
 
 ```tsx twoslash title="Widows and orphans"
 import { render } from "takumi-pdf";
@@ -65,7 +69,10 @@ const pdf = await render(
 );
 ```
 
-Both properties inherit. If a paragraph is too short to satisfy both values, `orphans` takes priority. A paragraph moves to the next page when the current page cannot hold the required lines. A requirement larger than a full page is relaxed.
+- Both properties inherit.
+- If a paragraph is too short to satisfy both, `orphans` wins.
+- A paragraph moves to the next page when the current page cannot hold the required lines.
+- A requirement taller than a full page is relaxed.
 
 ## Split decorations
 
@@ -90,7 +97,7 @@ const pdf = await render(
 
 ## Repeated table headers and footers
 
-Use `<thead>` for column headings that repeat at the top of continuation pages, and `<tfoot>` for rows that repeat below the last row of every page the table breaks across. Each stays together, including its spacing next to the body.
+A `<thead>` repeats at the top of each continuation page. A `<tfoot>` repeats below the last row on every page the table breaks across. Each section stays in one piece, with its spacing next to the body.
 
 ```tsx twoslash title="Repeated table headers and footers"
 declare const rows: import("react").ReactNode;
@@ -117,7 +124,11 @@ const pdf = await render(
 );
 ```
 
-A section repeats only with `break-inside: avoid`, which `<thead>` and `<tfoot>` set by default, as in Chrome. A header or footer taller than a quarter of the page does not repeat, matching Chromium. A header or footer cell whose `rowspan` reaches into the body suppresses repetition for that table.
+A section repeats only when all of these hold:
+
+- It has `break-inside: avoid`. `<thead>` and `<tfoot>` set it by default, as in Chromium.
+- It is no taller than a quarter of the page area, matching Chromium.
+- None of its cells has a `rowspan` that reaches into the body.
 
 ## Page ranges
 
@@ -134,15 +145,13 @@ const pdf = await render(<main>{rows}</main>, {
 });
 ```
 
-An unset `from` starts at the first page. An unset `to` runs to the last. Ranges that keep no page reject the render.
+An unset `from` starts at the first page. An unset `to` runs to the last. The render fails if a range names page 0, runs backwards, or keeps no page.
 
-Layout and page counters still run over the whole document. A kept page shows the numbers it would in full output, so page 4 of 12 still reads "Page 4 of 12". Links and outline entries pointing at a dropped page are dropped with it.
+Layout and page counters still run over the whole document. A kept page shows the numbers it has in full output, so page 4 of 12 still reads "Page 4 of 12". Links and outline entries that point at a dropped page are dropped with it.
 
 ## Watermarks
 
-`position: fixed` paints a box on every page.
-The box lays out against the page area.
-It stays outside the content column.
+A `position: fixed` box paints on every page. It lays out against the page area, outside the content flow.
 
 ```tsx twoslash title="Watermarks"
 import { render } from "takumi-pdf";
@@ -165,6 +174,6 @@ const pdf = await render(
 );
 ```
 
-Place the fixed box outside transformed or filtered ancestors. Those ancestors contain the box, so it paginates with them instead of repeating independently.
+Keep the fixed box outside transformed or filtered ancestors. Such an ancestor contains the box, so the box paginates with it instead of repeating on every page.
 
-Use a negative `z-index` to place the watermark behind content. Set the page color through `backgroundColor` if the root background would otherwise cover the watermark.
+To put the watermark behind content, give it a negative `z-index`. If the root background then covers it, set the page color with the `backgroundColor` option instead.

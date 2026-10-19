@@ -4,9 +4,9 @@ description: Migrate Puppeteer PDF templates to takumi-pdf, including page setup
 icon: Globe
 ---
 
-Start with the HTML you pass to `page.setContent()`. Pass that string to `render()` and translate the page options using the table below. Headers and footers use the same `pageNumber` and `totalPages` class hooks.
+Start with the HTML you pass to `page.setContent()`. Pass the same string to `render()`, and translate the `page.pdf()` options with the [option map](#option-map). Headers and footers use the same `pageNumber` and `totalPages` class hooks.
 
-Takumi does not navigate a page or execute its scripts. Generate dynamic content and fetch document images before rendering. Check your template against the supported CSS features.
+Takumi does not load a page or run its scripts. Generate dynamic content and fetch document images before you render.
 
 ## Before and after
 
@@ -49,7 +49,7 @@ const pdf = await render(html, {
 });
 ```
 
-`render()` parses HTML strings, including embedded `<style>` tags. It also accepts JSX and node trees. Headers and footers accept the same inputs.
+`render()` parses HTML strings, including `<style>` tags. It also takes JSX and node trees, and so do `header` and `footer`.
 
 ## Option map
 
@@ -73,11 +73,11 @@ const pdf = await render(html, {
 | `preferCSSPageSize`, `@page`             | not supported: set `size` and `margin` |
 | `omitBackground`                         | not supported                          |
 
-Margins take numbers in CSS px. Chromium's `"0.5in"` strings have no equivalent; `48` is that half inch.
+Margins take numbers in CSS px, not length strings. For Chromium's `"0.5in"`, pass `48`.
 
 ## Fetching moves to your code
 
-Use `prepareImages()` to fetch document images before rendering. Parse the HTML first so the helper can inspect its image references:
+Use `prepareImages()` to fetch document images before rendering. Parse the HTML first, so the helper can find its image references:
 
 ```tsx twoslash title="Pass fetched image bytes"
 declare const html: string;
@@ -93,18 +93,19 @@ const images = await prepareImages({ node });
 const pdf = await render(node, { images, css }); // [!code highlight]
 ```
 
-`prepareImages` walks the tree, fetches every remote `<img>`, `background-image`, and `mask-image` URL, and returns the `images` entries. It takes a `fetchCache` to reuse bytes, an `allowUrl` predicate, and a `timeout`.
+`prepareImages()` walks the tree and fetches every remote `http` or `https` URL in `<img src>`, `background-image`, `mask-image`, and `list-style-image`. It returns the entries for `images`.
 
-Fonts come from the `fonts` option rather than a CSS `@font-face` rule. See [Fonts & images](/docs/pdf/fonts-and-images).
+- It reads inline styles and `tw` classes. URLs inside `<style>` rules are not collected, so pass those images through `images` yourself.
+- It takes `timeout`, `maxBytes`, an `allowUrl` predicate, and a `fetchCache` that reuses bytes across renders.
 
-Apply timeouts and URL policies to image fetching. Font URL loaders and `googleFonts()` also perform requests, so configure their fetch policies separately.
+Fonts come from the `fonts` option, not from CSS `@font-face` rules. See [Fonts & images](/docs/pdf/fonts-and-images). Font URL loaders and `googleFonts()` make their own requests, so give them their own fetch limits.
 
 ## Check browser-dependent features
 
-Takumi supports a subset of browser CSS. Check these differences before replacing Puppeteer:
+Takumi supports a subset of browser CSS. Check these differences before you replace Puppeteer:
 
-- **No scripts.** Charts and diagrams have to arrive as markup, SVG, or images. A client-side chart library will not run.
-- **Narrower CSS.** No `filter: blur()`, `drop-shadow()`, or `backdrop-filter` in PDF output. A blurred `box-shadow` approximates with bands. Grid and flex, transforms, gradients, masks, and clip paths all work.
-- **No `@page`.** Page geometry lives in the options.
+- **No scripts.** Charts and diagrams have to arrive as markup, SVG, or images. A client-side chart library does not run.
+- **Narrower CSS.** PDF output rejects `filter: blur()` and `drop-shadow()`, and does not draw `backdrop-filter`. Blurred `box-shadow` and `text-shadow` are approximated with bands. Grid, flexbox, transforms, gradients, masks, and clip paths all work.
+- **No `@page`.** Page geometry comes from the options.
 
-Keep Puppeteer to reproduce a live web page as it appears in a browser. Move to `takumi-pdf` for documents written for print, and see [Comparison](/docs/pdf/comparison) for the measured numbers.
+Keep Puppeteer to reproduce a live web page as a browser shows it. Use `takumi-pdf` for documents written for print. See [Comparison](/docs/pdf/comparison) for measured numbers.

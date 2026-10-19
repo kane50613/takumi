@@ -4,7 +4,7 @@ description: Place nodes with their transform, then replay the steps.
 icon: PenTool
 ---
 
-A renderer reads two things from the tree: where each node sits, and the draw order.
+A renderer reads where each node sits and the order to draw it in.
 
 ## Place a node
 
@@ -14,7 +14,7 @@ Pick a rotation below. The drawables stay the same. Only the transform changes.
 
 <LocalSpace />
 
-`node.bounds` is the node's rectangle on the canvas. It grows when the node rotates.
+`node.bounds` is the node's bounding rectangle on the canvas, so it grows when the node rotates.
 
 Canvas takes the matrix in the same order: `ctx.setTransform(...node.transform)`.
 
@@ -30,7 +30,7 @@ Canvas takes the matrix in the same order: `ctx.setTransform(...node.transform)`
 
 <StepReplay />
 
-The order already handles `z-index` and negative stacking. Outlines that paint after later siblings are in place too.
+The order already accounts for `z-index`, including negative values. An outline that paints after later siblings has its own `draw` step in the right place.
 
 | Step                        | Do                                                   |
 | --------------------------- | ---------------------------------------------------- |
@@ -89,25 +89,25 @@ A group needs its own layer. Setting `globalAlpha` per draw darkens the spots wh
 
 | Type     | Draw                                                                                                                     |
 | -------- | ------------------------------------------------------------------------------------------------------------------------ |
-| `fill`   | Fill `shape` with `paint`, clipped to every shape in `clips`                                                             |
-| `stroke` | Stroke `shape` with `stroke` and `paint`                                                                                 |
+| `fill`   | Fill `shape` with `paint`, clipped to every shape in `clips`. Blend with `blendMode` when set.                           |
+| `stroke` | Stroke `shape` with `stroke` and `paint`, clipped to every shape in `clips`                                              |
 | `shadow` | Blur a copy of `shape`, filled or stroked with `stroke`, moved by `offset`, visible only `outside` or `inside` its `box` |
-| `glyphs` | Fill the run's outline with `paint`, blurred by `blur`, or stroke it when `stroke` is set                                |
-| `image`  | Draw `image` into `rect`, clipped to `clip`                                                                              |
+| `glyphs` | Fill the run's outlines with `paint`, moved by `offset` and blurred by `blur`. Stroke them instead when `stroke` is set. |
+| `image`  | Draw `image` into `rect`, clipped to `clip`, sampled per `sampling`                                                      |
 | `masked` | Draw `content` into a layer, keep it only where `mask` covers, then composite it                                         |
 | `group`  | Draw `drawables` into a layer, then composite it at `opacity`                                                            |
 
-A `shadow` or `glyphs` blur is a Gaussian standard deviation. It is half the CSS blur radius.
+A `shadow` or `glyphs` blur is a Gaussian standard deviation, half the CSS blur radius. A `glyphs` drawable with a blur is a text shadow.
 
-Every drawable has a `role`, such as `background`, `border`, or `text`. Exporters use it to rebuild editable objects. For example, a slide writer can merge a box's background, border, and shadow into one shape.
+Every drawable except `group` has a `role`, such as `background`, `border`, or `text`. Exporters use it to rebuild editable objects. For example, a slide writer can merge a box's background, border, and shadow into one shape.
 
 ## Read paints
 
-Gradient stops interpolate in sRGB. Takumi adds stops where the CSS color space would differ. Oklab is the CSS default.
+Interpolate gradient stops linearly in sRGB. Takumi adds stops wherever the CSS interpolation color space, Oklab by default, would differ.
 
-A repeating gradient has `spread: "repeat"`. Its stops cover one period, like SVG's `spreadMethod`. Canvas gradients only pad, so repeat the stops yourself.
+A repeating gradient has `spread: "repeat"`. Its stops cover one period, as with SVG's `spreadMethod`. Canvas gradients only pad, so repeat the stops across the area yourself.
 
-Background and mask layers arrive as `pattern` paints. A pattern draws one tile at every `x` and `y`, clipped to `area`.
+Background and mask layers arrive as `pattern` paints. A pattern draws one tile at every `x` and `y` pair, clipped to `area`.
 
 ## Apply effects
 
@@ -118,4 +118,4 @@ A box with `effects` composites as a group. Apply them in this order:
 3. Clip it to `clip`, and multiply it by the alpha of `mask`.
 4. Blend it with `opacity` and `blendMode`.
 
-`backdropFilters` apply to what is already drawn behind the node. They run inside `backdropClip`, before the node draws.
+`backdropFilters` apply to what is already drawn behind the node. They run inside `backdropClip`, the node's border box, before the node draws.

@@ -4,7 +4,7 @@ description: Generate PDF tickets, shipping labels, and receipts with fixed dime
 icon: Ticket
 ---
 
-Use `viewport` for a ticket, shipping label, certificate, or receipt. Set both dimensions for fixed paper, or omit the height for a receipt that grows with its content.
+Use `viewport` for a ticket, shipping label, certificate, or receipt. Set both dimensions for a fixed paper size, or omit `height` for a receipt that grows with its content.
 
 ## Labels and tickets
 
@@ -27,7 +27,7 @@ const pdf = await render(
 );
 ```
 
-Generate the QR code or barcode as SVG and pass its bytes through `images`. Vector paths scale with the page. Check that the printed code has enough physical size and clear space for scanning.
+Generate the QR code or barcode as SVG and pass its bytes through `images`. It stays vector at any print size. Check that the printed code is large enough, with enough clear space around it, to scan.
 
 Common sizes in CSS px:
 
@@ -41,7 +41,7 @@ Common sizes in CSS px:
 
 ## Receipts
 
-Omit `height` and the page grows to fit the content. A till receipt is one continuous strip, however many lines it has:
+Omit `height` and the page grows to fit the content, so a till receipt is one continuous strip however many lines it has:
 
 ```tsx twoslash title="Receipts"
 import type { ReactNode } from "react";
@@ -53,11 +53,11 @@ import { render } from "takumi-pdf";
 const pdf = await render(receipt, { viewport: { width: 302 } }); // 80mm at 96 dpi
 ```
 
-Percentage heights do not resolve in this mode. Nothing knows the final height until the layout finishes.
+Percentage heights do not resolve in this mode, because the page height is known only after layout.
 
 ## Certificates
 
-A certificate is a fixed page with artwork behind the text. Gradients, borders, radii, and transforms all draw as vectors:
+A certificate is a fixed page with artwork behind the text. Gradients, borders, border radii, and transforms all draw as vectors:
 
 ```tsx twoslash title="Certificates"
 declare const recipient: string;
@@ -77,10 +77,10 @@ const pdf = await render(
 );
 ```
 
-Overflowing content is clipped, exactly like an image render. Size the text to the box, or measure it first.
+Content that overflows the page is clipped, as in an image render. Size the text to fit, or check it first with `measure()`.
 
-## Options and overflow
+## Options
 
-`viewport` rejects the paged options as type errors. Everything else carries over, including `pdfa` and `attachments`. See [Single-page viewport](/docs/pdf/single-page).
+`viewport` rules out the paged options, and TypeScript reports them as type errors. Every other option still works, including `pdfa` and `attachments`. See [Single-page viewport](/docs/pdf/single-page).
 
-The same component can also render as a PNG with `takumi-js`. Pass image dimensions to the image renderer instead of PDF page options.
+The same component also renders as a PNG with [`takumi-js`](/docs). Pass `width` and `height` to the image renderer instead of `viewport`.

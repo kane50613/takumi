@@ -6,27 +6,31 @@ icon: BookMarked
 
 ## Entry points
 
-| API                             | Result                                        |
-| ------------------------------- | --------------------------------------------- |
-| `paint(node, options?)`         | A `Promise<PaintTree>` using a shared painter |
-| `new Painter()`                 | A painter with its own registered fonts       |
-| `painter.paint(node, options?)` | A `Promise<PaintTree>` using that painter     |
-| `painter.registerFont(font)`    | Registers a font before painting              |
-| `painter.free()`                | Releases the painter's WebAssembly memory     |
+| API                              | Result                                                    |
+| -------------------------------- | --------------------------------------------------------- |
+| `paint(node, options?)`          | A `Promise<PaintTree>` from a shared painter              |
+| `new Painter(options?)`          | A painter with its own registered fonts                   |
+| `painter.paint(node, options?)`  | A `Promise<PaintTree>` from that painter                  |
+| `painter.registerFont(font)`     | Registers a font that stays until you remove it           |
+| `painter.unregisterFont(family)` | Removes every face of a family                            |
+| `painter.clearFonts()`           | Removes every registered font except the bundled fallback |
+| `painter.free()`                 | Releases the painter's WebAssembly memory                 |
 
 `node` accepts JSX, an HTML string, or a takumi node tree.
 
+`new Painter({ fontCacheMaxBytes })` caps the decoded fonts that `fonts` lists keep. Past the cap, the least recently used families are released and load again when a call lists them. Fonts from `registerFont()` are never released.
+
 ## Paint options
 
-| Option             | Type                              | Effect                                                          |
-| ------------------ | --------------------------------- | --------------------------------------------------------------- |
-| `width`, `height`  | `number`                          | Canvas size in device pixels; omitted dimensions follow content |
-| `devicePixelRatio` | `number`                          | Device pixels per CSS pixel; default `1`                        |
-| `fonts`            | `FontLoader[]`                    | Fonts registered before layout                                  |
-| `images`           | `ImagesInput`                     | Images keyed by the referenced `src`                            |
-| `css`              | `CssInput \| readonly CssInput[]` | Stylesheets applied before layout                               |
-| `fontFamilies`     | `string[]`                        | Fallback family chain for this call                             |
-| `lang`             | `string`                          | Default BCP-47 language tag on the root                         |
+| Option             | Type                              | Effect                                                                  |
+| ------------------ | --------------------------------- | ----------------------------------------------------------------------- |
+| `width`, `height`  | `number`                          | Canvas size in device pixels. An omitted dimension follows the content. |
+| `devicePixelRatio` | `number`                          | Device pixels per CSS pixel. Default `1`.                               |
+| `fonts`            | `FontLoader[]`                    | Fonts registered before layout                                          |
+| `images`           | `ImagesInput`                     | Image bytes, keyed by the `src` that references them                    |
+| `css`              | `CssInput \| readonly CssInput[]` | Stylesheets applied before layout                                       |
+| `fontFamilies`     | `string[]`                        | Fallback family chain for this call                                     |
+| `lang`             | `string`                          | Default BCP 47 language tag on the root                                 |
 
 ## PaintTree
 
@@ -37,6 +41,7 @@ icon: BookMarked
 | `root`            | The root `BoxNode`                                  |
 | `nodes`           | Every node in document order, as an array           |
 | `steps`           | Steps a renderer takes, in paint order, as an array |
+| `toJSON()`        | The tree as plain JSON, without font files          |
 
 ## Nodes
 
@@ -52,47 +57,48 @@ Every node has these fields.
 | `parent`          | The enclosing `BoxNode`                                          |
 | `drawables`       | What the node draws, in local space                              |
 
-| Node        | Extra fields                                                             |
-| ----------- | ------------------------------------------------------------------------ |
-| `BoxNode`   | `contentBox`, `outline`, `effects`, `overflowClip`, `children`; iterable |
-| `TextNode`  | `textAlign` with `start` and `end` resolved, `runs` in visual order      |
-| `ImageNode` | `image`: the decoded `src`, `width`, and `height`                        |
+| Node        | Extra fields                                                        |
+| ----------- | ------------------------------------------------------------------- |
+| `BoxNode`   | `contentBox`, `outline`, `effects`, `overflowClip`, `children`      |
+| `TextNode`  | `textAlign` with `start` and `end` resolved, `runs` in visual order |
+| `ImageNode` | `image`: the decoded image's `src`, `width`, and `height`           |
 
 ## TextRun
 
-| Field                                     | Value                                           |
-| ----------------------------------------- | ----------------------------------------------- |
-| `text`                                    | Final text, after `text-transform` and ellipsis |
-| `element?`                                | The inline element the run came from            |
-| `x`, `y`                                  | Baseline start in the text node's local space   |
-| `width`                                   | Advance                                         |
-| `line`                                    | Index of the line, from `0`                     |
-| `ascent`, `descent`                       | Typographic distances from the baseline         |
-| `font`                                    | The `Font` the run was shaped with              |
-| `fontSize`, `lineHeight`, `letterSpacing` | Used text metrics in device pixels              |
-| `glyphs`                                  | Glyph IDs and offsets from the baseline start   |
-| `outlines()`                              | Each glyph's outline as SVG path data           |
-| `transform?`                              | The `text-fit` scale, applied before `x`, `y`   |
+| Field                                     | Value                                                        |
+| ----------------------------------------- | ------------------------------------------------------------ |
+| `text`                                    | Final text, after `text-transform` and ellipsis              |
+| `element?`                                | The inline element the run came from                         |
+| `x`, `y`                                  | Baseline start in the text node's local space                |
+| `width`                                   | Advance                                                      |
+| `line`                                    | Index of the line, from `0`                                  |
+| `ascent`, `descent`                       | Typographic distances from the baseline                      |
+| `font`                                    | The `Font` the run was shaped with                           |
+| `fontSize`, `lineHeight`, `letterSpacing` | Used text metrics in device pixels                           |
+| `glyphs`                                  | Glyph `id`, `x`, `y` from the baseline start, and `cluster?` |
+| `outlines()`                              | Each glyph's outline as SVG path data                        |
+| `transform?`                              | The `text-fit` scale, applied before `x`, `y`                |
 
 `Font` records `family?`, `weight`, `style`, `stretch`, `variationSettings`, and `faceIndex`. `font.data()` returns the font file.
 
 ## Value formats
 
-| Type          | Format                                                                              |
-| ------------- | ----------------------------------------------------------------------------------- |
-| `Rgba`        | `[r, g, b, a]`, each byte from `0` to `255`, in sRGB                                |
-| `Matrix`      | `[a, b, c, d, e, f]`, as `setTransform` takes it                                    |
-| `Rect`        | `{ x, y, width, height }`                                                           |
-| `CornerRadii` | `topLeft`, `topRight`, `bottomRight`, `bottomLeft`, each an `{ x, y }` radius       |
-| `Shape`       | `rect`, `rounded-rect`, or `path` (SVG path data, as `new Path2D()` takes it)       |
-| `Paint`       | `color`, `linear-gradient`, `radial-gradient`, `conic-gradient`, `image`, `pattern` |
-| `Stroke`      | `width`, `dash?`, `cap`, `join`                                                     |
-| `Drawable`    | `fill`, `stroke`, `shadow`, `glyphs`, `image`, `masked`, `group`                    |
-| `Filter`      | `blur`, `color-matrix`, `drop-shadow`, `unsupported`                                |
-| `Effects`     | `opacity`, `blendMode`, `isolation`, `filters`, `backdropFilters`, `clip`, `mask`   |
+| Type          | Format                                                                                                                                 |
+| ------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
+| `Rgba`        | `[r, g, b, a]`, each byte from `0` to `255`, in sRGB                                                                                   |
+| `Matrix`      | `[a, b, c, d, e, f]`, as `setTransform` takes it                                                                                       |
+| `Rect`        | `{ x, y, width, height }`                                                                                                              |
+| `CornerRadii` | `topLeft`, `topRight`, `bottomRight`, `bottomLeft`, each an `{ x, y }` radius                                                          |
+| `Shape`       | `rect`, `rounded-rect`, or `path` (SVG path data, as `new Path2D()` takes it)                                                          |
+| `Paint`       | `color`, `linear-gradient`, `radial-gradient`, `conic-gradient`, `image`, `pattern`                                                    |
+| `Stroke`      | `width`, `dash?`, `cap`, `join`                                                                                                        |
+| `Drawable`    | `fill`, `stroke`, `shadow`, `glyphs`, `image`, `masked`, `group`                                                                       |
+| `Filter`      | `blur`, `color-matrix`, `drop-shadow`, `unsupported`                                                                                   |
+| `Effects`     | `opacity`, `blendMode`, `isolation`, `filters`, `backdropFilters`, `backdropClip?`, `clip?`, `mask?`                                   |
+| `Role`        | `background`, `border`, `box-shadow`, `outline`, `image`, `text`, `text-shadow`, `text-stroke`, `text-decoration`, `inline-background` |
 
 ## What stays unresolved
 
 - `filter: url(#id)` arrives as `{ type: "unsupported", css }`.
-- `backdrop-filter` needs what is already drawn behind the node, which targets such as PPTX cannot read.
-- Bitmap glyphs, such as some emoji fonts, have no outline: `run.outlines()` holds `null` for them.
+- `backdrop-filter` needs what is already drawn behind the node. Targets such as PPTX cannot read that.
+- `run.outlines()` holds `null` for glyphs the run's color does not fill. These are color font layers, which arrive as their own drawables, and bitmap glyphs such as some emoji.

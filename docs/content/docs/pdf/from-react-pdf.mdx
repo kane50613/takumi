@@ -4,7 +4,7 @@ description: Migrate @react-pdf/renderer templates to takumi-pdf using HTML elem
 icon: Atom
 ---
 
-Replace react-pdf document primitives with HTML elements, move page settings into `render()` options, and convert lengths from points to CSS pixels. Takumi uses the same JSX and styles for image and PDF output.
+To migrate, replace react-pdf's primitives with HTML elements, move page settings into `render()` options, and convert lengths from pt to CSS px. The resulting JSX also renders as an image with [`takumi-js`](/docs).
 
 ## Before and after
 
@@ -74,15 +74,21 @@ const pdf = await render(
 
 ## Preserve the layout
 
-**Units are CSS px.** react-pdf measures lengths in pt. Takumi measures them in CSS px at 96 dpi. Multiply every length by `96 / 72`, or about `1.333`. A4 is `595 × 842` pt and `794 × 1123` px. Unitless values carry over as they are: `flexGrow`, `opacity`, `fontWeight`.
+### Units are CSS px
 
-**Flex direction defaults to row.** react-pdf defaults every container to `column`, unlike the web. CSS defaults to `row`. A stacked layout needs `flex-direction: column` written out.
+react-pdf measures lengths in pt. Takumi measures them in CSS px at 96 dpi, so multiply every length by `96 / 72`, about `1.333`. A4 is `595 × 842` pt, or `794 × 1123` px. Unitless values such as `flexGrow`, `opacity`, and `fontWeight` carry over unchanged.
 
-**Layout is not implicit.** react-pdf's `<View>` is always a flex container. Plain HTML elements are not, so a `<div>` meant to lay out children needs `display: flex` or `display: grid`. The `tw` shorthand covers this: `tw="flex flex-col"`.
+### Flex direction defaults to row
+
+react-pdf defaults every container to `column`. CSS defaults to `row`, so a stacked layout needs `flex-direction: column` written out.
+
+### Flex layout is opt-in
+
+react-pdf's `<View>` is always a flex container. A plain HTML element is not, so a `<div>` that lays out children needs `display: flex` or `display: grid`. In Tailwind, write `tw="flex flex-col"`.
 
 ## Page bands
 
-react-pdf repeats a band by marking a `<View>` as `fixed` inside the page. Takumi takes the band as a separate option, and it draws in the margin:
+react-pdf repeats a band by marking a `<View>` inside the page as `fixed`. Takumi takes the band as a separate option and draws it in the margin:
 
 ```tsx twoslash title="Repeat page headers"
 import type { ReactNode } from "react";
@@ -106,8 +112,10 @@ The counter is a class on an element, not a `render` callback. See [Headers & fo
 
 ## Features to adapt
 
-Takumi has no equivalents for `minPresenceAhead`, custom hyphenation callbacks, or react-pdf's preview and download components. Render a `Uint8Array` and handle its delivery in your application. Browser bundles can use the [manual initialization entry](/docs/pdf#in-the-browser).
+Takumi has no equivalent for `minPresenceAhead`, hyphenation callbacks, or react-pdf's preview and download components. Render a `Uint8Array` and deliver it from your application. In a browser bundle, use the [manual initialization entry](/docs/pdf#in-the-browser).
 
-`widows` and `orphans` are supported CSS properties. See [Pagination](/docs/pdf/pagination#widows-and-orphans). Fonts are embedded, so register the fonts your template uses instead of relying on the standard PDF fonts.
+`widows` and `orphans` work as CSS properties. See [Pagination](/docs/pdf/pagination#widows-and-orphans).
+
+Takumi does not use the 14 standard PDF fonts. Register every font your template uses.
 
 For archival output and accessibility validation, see [PDF/A and PDF/UA](/docs/pdf/pdf-a).
