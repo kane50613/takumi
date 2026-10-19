@@ -199,6 +199,10 @@ redundant_closure_for_method_calls = "deny"
 level = "deny"
 priority = -1
 
+# Full debug info is nine tenths of a test binary. Line tables still give backtraces a file and line.
+[profile.dev]
+debug = "line-tables-only"
+
 [profile.dev.package."*"]
 opt-level = 2
 
