@@ -1,6 +1,6 @@
 use std::fmt;
 
-use cssparser::{Parser, Token, match_ignore_ascii_case};
+use cssparser::{ParseError as CssParseError, Parser, Token, match_ignore_ascii_case};
 
 use crate::style::{Angle, FromCss, MakeComputed, ParseResult, ToCss, unexpected_token};
 
@@ -27,7 +27,7 @@ impl MakeComputed for FontStyle {}
 
 /// An `oblique` angle in degrees, signed where `Angle` keeps a turn in [0, 360), and within
 /// ±90deg.
-fn oblique_angle<'i>(input: &mut Parser<'i, '_>) -> ParseResult<'i, f32> {
+fn oblique_angle<'i>(input: &mut Parser<'i>) -> ParseResult<'i, f32> {
   let start = input.state();
   let angle = *Angle::from_css(input)?;
   let angle = if angle > 180.0 { angle - 360.0 } else { angle };
@@ -38,22 +38,20 @@ fn oblique_angle<'i>(input: &mut Parser<'i, '_>) -> ParseResult<'i, f32> {
 
   input.reset(&start);
 
-  let location = input.current_source_location();
-  let token = input.next()?.clone();
+  input.next()?;
 
-  Err(location.new_unexpected_token_error(token))
+  Err(CssParseError::unexpected_token())
 }
 
 impl<'i> FromCss<'i> for FontStyle {
-  fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
-    let location = input.current_source_location();
+  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
     let ident = input.expect_ident()?;
 
     match_ignore_ascii_case! { ident,
       "normal" => Ok(Self(Slant::Normal)),
       "italic" => Ok(Self(Slant::Italic)),
       "oblique" => Ok(Self(Slant::Oblique(input.try_parse(oblique_angle).ok()))),
-      _ => Err(unexpected_token!(location, &Token::Ident(ident.to_owned()))),
+      _ => Err(unexpected_token!(&Token::Ident(ident.to_owned()))),
     }
   }
 

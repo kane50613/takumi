@@ -73,7 +73,7 @@ pub enum GridPlacementSpan {
 }
 
 impl<'i> FromCss<'i> for GridPlacementSpan {
-  fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
+  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
     Ok(GridPlacementSpan::Span(
       input.expect_integer()?.max(1) as u16
     ))
@@ -89,7 +89,7 @@ impl TailwindPropertyParser for GridPlacementSpan {
 }
 
 impl<'i> FromCss<'i> for GridPlacement {
-  fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
+  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
     if let Ok(ident) = input.try_parse(Parser::expect_ident_cloned) {
       if ident.eq_ignore_ascii_case("auto") {
         return Ok(GridPlacement::auto());
@@ -105,16 +105,12 @@ impl<'i> FromCss<'i> for GridPlacement {
           return Ok(GridPlacement::span(1));
         }
 
-        return Err(unexpected_token!(
-          input.current_source_location(),
-          input.next()?,
-        ));
+        return Err(unexpected_token!(input.next()?,));
       }
 
       return Ok(GridPlacement::Named(ident.to_string()));
     }
 
-    let location = input.current_source_location();
     let token = input.next()?;
     match *token {
       Token::Number {
@@ -123,7 +119,7 @@ impl<'i> FromCss<'i> for GridPlacement {
         let v: i32 = int_value.unwrap_or(value as i32);
         Ok(GridPlacement::Line(v as i16))
       }
-      _ => Err(unexpected_token!(location, token)),
+      _ => Err(unexpected_token!(token)),
     }
   }
 

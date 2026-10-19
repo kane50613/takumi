@@ -307,8 +307,7 @@ impl GradientOverlayTile for ConicGradientTile {
 
 impl ConicGradient {
   /// Parses a conic gradient stop position: a percentage/number (fraction of a turn) or an angle.
-  fn parse_stop_position<'i>(input: &mut Parser<'i, '_>) -> ParseResult<'i, StopPosition> {
-    let location = input.current_source_location();
+  fn parse_stop_position<'i>(input: &mut Parser<'i>) -> ParseResult<'i, StopPosition> {
     let token = input.next()?;
 
     match token {
@@ -324,12 +323,12 @@ impl ConicGradient {
           "grad" => *value * 0.9,
           "rad" => value.to_degrees(),
           "turn" => *value * 360.0,
-          _ => return Err(unexpected_token!(StopPosition, location, token)),
+          _ => return Err(unexpected_token!(StopPosition, token)),
         };
 
         Ok(StopPosition(Length::Percentage(degrees / 360.0 * 100.0)))
       }
-      _ => Err(unexpected_token!(StopPosition, location, token)),
+      _ => Err(unexpected_token!(StopPosition, token)),
     }
   }
 }
@@ -356,7 +355,7 @@ impl ConicGradient {
 }
 
 impl<'i> FromCss<'i> for ConicGradient {
-  fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, ConicGradient> {
+  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, ConicGradient> {
     let repeating = parse_gradient_function::<Self>(input, Self::FUNCTION_NAMES)?;
 
     input.parse_nested_block(|input| {

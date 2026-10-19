@@ -1,6 +1,6 @@
 use std::{fmt, str};
 
-use cssparser::{Parser, Token, serialize_string};
+use cssparser::{ParseError as CssParseError, Parser, Token, serialize_string};
 
 use crate::style::{Animatable, FromCss, MakeComputed, ParseResult, ToCss};
 
@@ -22,8 +22,7 @@ impl MakeComputed for FontLanguageOverride {}
 impl Animatable for FontLanguageOverride {}
 
 impl<'i> FromCss<'i> for FontLanguageOverride {
-  fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
-    let location = input.current_source_location();
+  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
     let token = input.next()?.clone();
 
     match &token {
@@ -43,7 +42,7 @@ impl<'i> FromCss<'i> for FontLanguageOverride {
 
         Ok(Self::Tag(padded))
       }
-      _ => Err(location.new_unexpected_token_error(token)),
+      _ => Err(CssParseError::unexpected_token()),
     }
   }
 

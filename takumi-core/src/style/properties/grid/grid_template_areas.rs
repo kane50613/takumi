@@ -57,13 +57,12 @@ impl GridTemplateAreas {
 }
 
 impl<'i> FromCss<'i> for GridTemplateAreas {
-  fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
-    let location = input.current_source_location();
+  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
     if let Ok(ident) = input.try_parse(Parser::expect_ident_cloned) {
       if ident.as_ref() == "none" {
         return Ok(GridTemplateAreas(Vec::new()));
       }
-      return Err(unexpected_token!(location, &Token::Ident(ident)));
+      return Err(unexpected_token!(&Token::Ident(ident)));
     }
 
     let mut rows: Vec<Vec<String>> = Vec::new();
@@ -72,7 +71,7 @@ impl<'i> FromCss<'i> for GridTemplateAreas {
       let row = input.expect_ident_or_string()?;
       let cols: Vec<String> = row.split_whitespace().map(ToString::to_string).collect();
       if cols.is_empty() {
-        return Err(unexpected_token!(location, &Token::Ident("".into()),));
+        return Err(unexpected_token!(&Token::Ident("".into()),));
       }
       rows.push(cols);
     }
@@ -80,10 +79,7 @@ impl<'i> FromCss<'i> for GridTemplateAreas {
     if let Some(width) = rows.first().map(Vec::len)
       && rows.iter().any(|r| r.len() != width)
     {
-      return Err(unexpected_token!(
-        input.current_source_location(),
-        &Token::Ident("inconsistent-rows".into()),
-      ));
+      return Err(unexpected_token!(&Token::Ident("inconsistent-rows".into()),));
     }
 
     Ok(GridTemplateAreas(rows))

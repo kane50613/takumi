@@ -14,7 +14,7 @@ pub struct PlaceItems {
 impl<'i> FromCss<'i> for PlaceItems {
   const VALID_TOKENS: &'static [&'static str] = AlignItems::VALID_TOKENS;
 
-  fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
+  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
     parse_pair(input).map(|(align, justify)| Self { align, justify })
   }
 }
@@ -31,7 +31,7 @@ pub struct PlaceContent {
 impl<'i> FromCss<'i> for PlaceContent {
   const VALID_TOKENS: &'static [&'static str] = JustifyContent::VALID_TOKENS;
 
-  fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
+  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
     parse_pair(input).map(|(align, justify)| Self { align, justify })
   }
 }
@@ -48,12 +48,12 @@ pub struct PlaceSelf {
 impl<'i> FromCss<'i> for PlaceSelf {
   const VALID_TOKENS: &'static [&'static str] = AlignItems::VALID_TOKENS;
 
-  fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
+  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
     parse_pair(input).map(|(align, justify)| Self { align, justify })
   }
 }
 
-fn parse_pair<'i, T>(input: &mut Parser<'i, '_>) -> ParseResult<'i, (T, T)>
+fn parse_pair<'i, T>(input: &mut Parser<'i>) -> ParseResult<'i, (T, T)>
 where
   T: FromCss<'i> + Copy,
 {
@@ -65,11 +65,7 @@ where
   };
 
   if !input.is_exhausted() {
-    return Err(unexpected_token!(
-      T,
-      input.current_source_location(),
-      input.next()?,
-    ));
+    return Err(unexpected_token!(T, input.next()?,));
   }
 
   Ok((first, second))

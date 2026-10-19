@@ -30,7 +30,7 @@ pub(crate) type FontVariationSettings = Arc<[FontVariation]>;
 impl MakeComputed for FontVariationSettings {}
 
 impl<'i> FromCss<'i> for FontVariationSettings {
-  fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
+  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
     if input
       .try_parse(|input| input.expect_ident_matching("normal"))
       .is_ok()

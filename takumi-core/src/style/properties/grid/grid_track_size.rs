@@ -12,7 +12,7 @@ use crate::style::{
 pub(crate) type GridTrackSizes = Vec<GridTrackSize>;
 
 impl<'i> FromCss<'i> for GridTrackSizes {
-  fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
+  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
     let mut components: Vec<GridTrackSize> = Vec::new();
     while let Ok(size) = GridTrackSize::from_css(input) {
       components.push(size);
@@ -65,7 +65,7 @@ impl TailwindPropertyParser for GridTrackSize {
 }
 
 impl<'i> FromCss<'i> for GridTrackSize {
-  fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
+  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
     if input
       .try_parse(|input| input.expect_function_matching("minmax"))
       .is_ok()

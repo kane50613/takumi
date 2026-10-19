@@ -1,6 +1,8 @@
 use std::{fmt, mem};
 
-use cssparser::{BasicParseErrorKind, Parser, Token, match_ignore_ascii_case};
+use cssparser::{
+  BasicParseErrorKind, ParseError as CssParseError, Parser, Token, match_ignore_ascii_case,
+};
 
 use crate::style::{
   Animatable, AspectRatio, Color, FlexDirection, FromCss, FromCssStr, Length, MakeComputed,
@@ -95,7 +97,7 @@ const FLEX_BASIS_TOKENS: [&str; merged_token_len(FLEX_BASIS_TOKEN_LISTS)] =
 impl<'i> FromCss<'i> for FlexBasis {
   const VALID_TOKENS: &'static [&'static str] = &FLEX_BASIS_TOKENS;
 
-  fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
+  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
     if input
       .try_parse(|input| input.expect_ident_matching("content"))
       .is_ok()
@@ -164,13 +166,12 @@ impl<'i> FromCss<'i> for FlexWrap {
 
   // `[ nowrap | wrap | wrap-reverse ] || balance`, per CSS Flexbox Level 2.
   // <https://drafts.csswg.org/css-flexbox-2/#balance-values>
-  fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
+  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
     let mut wrap = None;
     let mut balance = false;
 
     loop {
       let state = input.state();
-      let location = input.current_source_location();
       let Ok(token) = input.next().cloned() else {
         break;
       };
@@ -198,7 +199,7 @@ impl<'i> FromCss<'i> for FlexWrap {
       };
 
       if !accepted {
-        return Err(unexpected_token!(location, &token));
+        return Err(unexpected_token!(&token));
       }
     }
 
@@ -206,7 +207,9 @@ impl<'i> FromCss<'i> for FlexWrap {
       (Some(Self::WrapReverse), true) => Ok(Self::BalanceReverse),
       (_, true) => Ok(Self::Balance),
       (Some(wrap), false) => Ok(wrap),
-      (None, false) => Err(input.new_error(BasicParseErrorKind::QualifiedRuleInvalid)),
+      (None, false) => Err(CssParseError::from_basic_kind(
+        BasicParseErrorKind::QualifiedRuleInvalid,
+      )),
     }
   }
 }
@@ -246,11 +249,13 @@ impl Animatable for FlexLineCount {}
 impl<'i> FromCss<'i> for FlexLineCount {
   const VALID_TOKENS: &'static [&'static str] = &["<number>"];
 
-  fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
+  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
     let count = input.expect_integer()?;
 
     if count < 1 {
-      return Err(input.new_error(BasicParseErrorKind::QualifiedRuleInvalid));
+      return Err(CssParseError::from_basic_kind(
+        BasicParseErrorKind::QualifiedRuleInvalid,
+      ));
     }
 
     Ok(Self(count.min(u16::MAX as i32) as u16))
@@ -349,7 +354,7 @@ impl<'i> FromCss<'i> for FlexFlow {
     "wrap-reverse",
   ];
 
-  fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
+  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
     let mut direction = None;
     let mut wrap = None;
 
@@ -368,10 +373,7 @@ impl<'i> FromCss<'i> for FlexFlow {
         continue;
       }
 
-      return Err(unexpected_token!(
-        input.current_source_location(),
-        input.next()?,
-      ));
+      return Err(unexpected_token!(input.next()?,));
     }
 
     Ok(Self {
@@ -382,7 +384,7 @@ impl<'i> FromCss<'i> for FlexFlow {
 }
 
 impl<'i> FromCss<'i> for Flex {
-  fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
+  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
     // https://developer.mozilla.org/en-US/docs/Web/CSS/flex#values
     if input
       .try_parse(|input| input.expect_ident_matching("none"))

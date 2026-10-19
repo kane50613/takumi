@@ -48,21 +48,20 @@ impl Default for BackgroundSize {
 }
 
 impl<'i> FromCss<'i> for BackgroundSize {
-  fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
+  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
     if let Ok(width) = input.try_parse(Length::from_css) {
       let height = input.try_parse(Length::from_css).unwrap_or(Length::Auto);
 
       return Ok(BackgroundSize::Explicit { width, height });
     }
 
-    let location = input.current_source_location();
     let ident = input.expect_ident()?;
 
     match_ignore_ascii_case! {
       &ident,
       "cover" => Ok(BackgroundSize::Cover),
       "contain" => Ok(BackgroundSize::Contain),
-      _ => Err(unexpected_token!(location, &Token::Ident(ident.clone()))),
+      _ => Err(unexpected_token!(&Token::Ident(ident.clone()))),
     }
   }
 
@@ -114,7 +113,7 @@ impl Animatable for BackgroundSize {
 pub type BackgroundSizes = Box<[BackgroundSize]>;
 
 impl<'i> FromCss<'i> for BackgroundSizes {
-  fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
+  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
     parse_comma_list(input, BackgroundSize::from_css)
   }
 

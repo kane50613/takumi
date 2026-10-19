@@ -9,7 +9,7 @@ use crate::style::{
 pub(crate) type BlendModes = Box<[BlendMode]>;
 
 impl<'i> FromCss<'i> for BlendModes {
-  fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
+  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
     parse_comma_list(input, BlendMode::from_css)
   }
 

@@ -407,7 +407,7 @@ impl NodeBuilder<'_> {
         }
       }
       NodeData::Element { name, .. } => {
-        if let Some(node) = self.build_element(handle, name.local.as_ref(), depth)? {
+        if let Some(node) = self.build_element(handle, &name.local, depth)? {
           out.push(node);
         }
       }
@@ -473,7 +473,7 @@ impl NodeBuilder<'_> {
 
     let mut attributes = BTreeMap::new();
     for attr in attrs {
-      let name = attr.name.local.as_ref();
+      let name = &*attr.name.local;
       let value = attr.value.as_ref();
 
       // Read Tailwind independently of reserved names so it can alias `class`

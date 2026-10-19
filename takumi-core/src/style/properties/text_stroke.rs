@@ -15,7 +15,7 @@ pub struct TextStroke {
 }
 
 impl<'i> FromCss<'i> for TextStroke {
-  fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
+  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
     let width = Length::from_css(input)?;
     let color = input.try_parse(ColorInput::from_css).ok();
 

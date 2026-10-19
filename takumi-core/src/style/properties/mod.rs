@@ -98,10 +98,7 @@ pub use conic_gradient::ConicGradient;
 pub use contain::*;
 pub use content::*;
 pub use corner_shape::*;
-use cssparser::{
-  ParseError as CssParseError, ParseErrorKind, Parser, SourceLocation, Token,
-  match_ignore_ascii_case,
-};
+use cssparser::{ParseError as CssParseError, Parser, Token, match_ignore_ascii_case};
 pub use filter::{
   BlurType, Filter, FilterCategory, Filters, LUMA_WEIGHTS, SEPIA_WEIGHTS, TransferChannel,
   TransferTable,
@@ -187,7 +184,7 @@ pub(crate) fn is_reserved_custom_ident(ident: &str) -> bool {
   .any(|keyword| ident.eq_ignore_ascii_case(keyword))
 }
 
-pub(crate) fn next_is_comma<'i>(input: &mut Parser<'i, '_>) -> bool {
+pub(crate) fn next_is_comma<'i>(input: &mut Parser<'i>) -> bool {
   let state = input.state();
   let is_comma = input.expect_comma().is_ok();
   input.reset(&state);
@@ -196,8 +193,8 @@ pub(crate) fn next_is_comma<'i>(input: &mut Parser<'i, '_>) -> bool {
 
 /// Parses a comma-separated list of `parse_item`, requiring at least one.
 pub(crate) fn parse_comma_list<'i, T>(
-  input: &mut Parser<'i, '_>,
-  mut parse_item: impl FnMut(&mut Parser<'i, '_>) -> ParseResult<'i, T>,
+  input: &mut Parser<'i>,
+  mut parse_item: impl FnMut(&mut Parser<'i>) -> ParseResult<'i, T>,
 ) -> ParseResult<'i, Box<[T]>> {
   let mut items = Vec::new();
   items.push(parse_item(input)?);
@@ -218,16 +215,15 @@ impl TailwindPropertyParser for AlignItems {}
 impl TailwindPropertyParser for BorderStyle {}
 
 macro_rules! unexpected_token {
-  ($type:ty, $location:expr, $token:expr $(,)?) => {
+  ($token:expr $(,)?) => {
+    $crate::style::unexpected_token!(Self, $token)
+  };
+  ($type:ty, $token:expr $(,)?) => {
     $crate::style::build_unexpected_token(
-      $location,
       $token,
       <$type as $crate::style::FromCss>::EXPECT_MESSAGE,
       <$type as $crate::style::FromCss>::VALID_TOKENS,
     )
-  };
-  ($location:expr, $token:expr $(,)?) => {
-    $crate::style::unexpected_token!(Self, $location, $token)
   };
 }
 
@@ -237,19 +233,15 @@ pub(crate) use unexpected_token;
 #[cold]
 #[inline(never)]
 pub(crate) fn build_unexpected_token<'i>(
-  location: SourceLocation,
   token: &Token<'i>,
   expect: CssExpectedMessage,
   valid_tokens: &'static [&'static str],
-) -> CssParseError<'i, ValueError<'i>> {
-  CssParseError {
-    location,
-    kind: ParseErrorKind::Custom(ValueError::UnexpectedToken {
-      token: token.clone(),
-      expect,
-      valid_tokens,
-    }),
-  }
+) -> CssParseError<ValueError<'i>> {
+  CssParseError::custom(ValueError::UnexpectedToken {
+    token: token.clone(),
+    expect,
+    valid_tokens,
+  })
 }
 
 /// `tokens` as an error message lists them: keywords quoted, `<syntax>` as is, the last joined
@@ -417,7 +409,7 @@ impl Animatable for BorderRadius {
 }
 
 impl<'i> FromCss<'i> for BorderRadius {
-  fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
+  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
     let widths: Sides<Length> = Sides::from_css(input)?;
 
     let heights = if input.try_parse(|input| input.expect_delim('/')).is_ok() {
@@ -627,15 +619,14 @@ impl<'i> FromCss<'i> for BorderSpacing {
   const VALID_TOKENS: &'static [&'static str] = SpacePair::<Length>::VALID_TOKENS;
   const EXPECT_MESSAGE: CssExpectedMessage = CssExpectedMessage::OneOrTwoValues;
 
-  fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
-    let location = input.current_source_location();
+  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
     let pair = SpacePair::<Length>::from_css(input)?;
 
     if [pair.x, pair.y]
       .into_iter()
       .any(|length| matches!(length, Length::Auto | Length::Percentage(_)) || length.is_negative())
     {
-      return Err(location.new_unexpected_token_error(Token::Delim('%')));
+      return Err(CssParseError::unexpected_token());
     }
 
     Ok(Self(pair))
@@ -1385,7 +1376,7 @@ impl MakeComputed for TextTransform {}
 impl Animatable for TextTransform {}
 
 impl<'i> FromCss<'i> for TextTransform {
-  fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
+  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
     if input
       .try_parse(|input| input.expect_ident_matching("none"))
       .is_ok()
@@ -1399,8 +1390,6 @@ impl<'i> FromCss<'i> for TextTransform {
 
     // Each of the three may come once, in any order.
     while let Ok(ident) = input.try_parse(Parser::expect_ident_cloned) {
-      let location = input.current_source_location();
-
       match_ignore_ascii_case! { &ident,
         "uppercase" | "lowercase" | "capitalize" if !has_case => {
           has_case = true;
@@ -1412,7 +1401,7 @@ impl<'i> FromCss<'i> for TextTransform {
         },
         "full-width" if !transform.full_width => transform.full_width = true,
         "full-size-kana" if !transform.full_size_kana => transform.full_size_kana = true,
-        _ => return Err(location.new_unexpected_token_error(Token::Ident(ident))),
+        _ => return Err(CssParseError::unexpected_token()),
       }
 
       parsed_any = true;

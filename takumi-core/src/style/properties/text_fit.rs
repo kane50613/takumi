@@ -26,17 +26,16 @@ impl Animatable for TextFit {}
 impl<'i> FromCss<'i> for TextFit {
   // Syntax: [ none | grow | shrink ] [ consistent | per-line | per-line-all ]? <percentage>?
   // The type keyword is mandatory and must appear first, matching the spec and Chromium.
-  fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
+  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
     let mode = TextFitMode::from_css(input)?;
 
     let target = input.try_parse(TextFitTarget::from_css).unwrap_or_default();
 
     let limit: Option<f32> = input
       .try_parse(|input| -> ParseResult<'i, f32> {
-        let location = input.current_source_location();
         match input.next()? {
           Token::Percentage { unit_value, .. } => Ok(unit_value.max(0.0)),
-          token => Err(unexpected_token!(location, token)),
+          token => Err(unexpected_token!(token)),
         }
       })
       .ok();

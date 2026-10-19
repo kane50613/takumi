@@ -1,3 +1,4 @@
+use cssparser::ParseError as CssParseError;
 use cssparser::*;
 
 use crate::{
@@ -5,19 +6,18 @@ use crate::{
   style::StyleDeclarationBlock,
 };
 
-fn parse_supports_declaration<'i, 't>(
-  input: &mut Parser<'i, 't>,
-) -> Result<bool, ParseError<'i, StyleSheetParseError>> {
+fn parse_supports_declaration<'i>(
+  input: &mut Parser<'i>,
+) -> Result<bool, ParseError<StyleSheetParseError>> {
   let name = input.expect_ident_cloned()?;
   input.expect_colon()?;
   let declaration = StyleDeclarationBlock::parse(&name, input).map_err(ParseError::into)?;
   Ok(!declaration.declarations.is_empty() && input.is_exhausted())
 }
 
-fn parse_supports_in_parens<'i, 't>(
-  input: &mut Parser<'i, 't>,
-) -> Result<bool, ParseError<'i, StyleSheetParseError>> {
-  let location = input.current_source_location();
+fn parse_supports_in_parens<'i>(
+  input: &mut Parser<'i>,
+) -> Result<bool, ParseError<StyleSheetParseError>> {
   match input.next()? {
     Token::ParenthesisBlock => input.parse_nested_block(|input| {
       let state = input.state();
@@ -30,13 +30,13 @@ fn parse_supports_in_parens<'i, 't>(
       input.reset(&state);
       parse_supports_declaration(input)
     }),
-    token => Err(location.new_unexpected_token_error(token.clone())),
+    _ => Err(CssParseError::unexpected_token()),
   }
 }
 
-fn parse_supports_not<'i, 't>(
-  input: &mut Parser<'i, 't>,
-) -> Result<bool, ParseError<'i, StyleSheetParseError>> {
+fn parse_supports_not<'i>(
+  input: &mut Parser<'i>,
+) -> Result<bool, ParseError<StyleSheetParseError>> {
   if input
     .try_parse(|input| input.expect_ident_matching("not"))
     .is_ok()
@@ -47,17 +47,17 @@ fn parse_supports_not<'i, 't>(
   parse_supports_in_parens(input)
 }
 
-pub(crate) fn parse_supports_condition<'i, 't>(
-  input: &mut Parser<'i, 't>,
-) -> Result<bool, ParseError<'i, StyleSheetParseError>> {
+pub(crate) fn parse_supports_condition<'i>(
+  input: &mut Parser<'i>,
+) -> Result<bool, ParseError<StyleSheetParseError>> {
   let mut result = parse_supports_not(input)?;
   let mut operator = None;
 
   while let Ok(is_and) = input.try_parse(parse_supports_operator) {
     if operator.is_some_and(|operator| operator != is_and) {
-      return Err(
-        input.new_custom_error(StyleSheetParseErrorKind::SupportsMixedAndOrWithoutParentheses),
-      );
+      return Err(CssParseError::custom(
+        StyleSheetParseErrorKind::SupportsMixedAndOrWithoutParentheses,
+      ));
     }
 
     operator = Some(is_and);
@@ -80,14 +80,13 @@ pub(crate) fn parse_supports_condition<'i, 't>(
 
 /// Reads `and` as `true` and `or` as `false`.
 fn parse_supports_operator<'i>(
-  input: &mut Parser<'i, '_>,
-) -> Result<bool, ParseError<'i, StyleSheetParseError>> {
-  let location = input.current_source_location();
+  input: &mut Parser<'i>,
+) -> Result<bool, ParseError<StyleSheetParseError>> {
   let ident = input.expect_ident()?;
 
   match_ignore_ascii_case! { ident.as_ref(),
     "and" => Ok(true),
     "or" => Ok(false),
-    _ => Err(location.new_unexpected_token_error(Token::Ident(ident.clone()))),
+    _ => Err(CssParseError::unexpected_token()),
   }
 }

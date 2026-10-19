@@ -61,7 +61,7 @@ impl MakeComputed for ListStyleImage {}
 impl Animatable for ListStyleImage {}
 
 impl<'i> FromCss<'i> for ListStyleImage {
-  fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
+  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
     let image = BackgroundImage::from_css(input)?;
 
     Ok(Self(image.paints().then(|| Arc::new(image))))
@@ -253,16 +253,15 @@ const LIST_STYLE_TYPE_TOKENS: &[&str] = &[
 ];
 
 impl<'i> FromCss<'i> for ListStyleType {
-  fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
-    let location = input.current_source_location();
+  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
     let token = input.next()?.clone();
 
     match token {
       Token::QuotedString(ref value) => Ok(ListStyleType::String(value.as_ref().into())),
       Token::Ident(ref ident) => {
-        Self::from_ident(ident).ok_or_else(|| unexpected_token!(Self, location, &token))
+        Self::from_ident(ident).ok_or_else(|| unexpected_token!(Self, &token))
       }
-      other => Err(unexpected_token!(Self, location, &other)),
+      other => Err(unexpected_token!(Self, &other)),
     }
   }
 
@@ -299,14 +298,12 @@ const LIST_STYLE_TOKENS: [&str; merged_token_len(LIST_STYLE_TOKEN_LISTS)] =
   merge_token_lists(LIST_STYLE_TOKEN_LISTS);
 
 impl<'i> FromCss<'i> for ListStyleShorthand {
-  fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
+  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
     let mut style_type = None;
     let mut position = None;
     let mut image = None;
 
     while !input.is_exhausted() {
-      let location = input.current_source_location();
-
       if position.is_none()
         && let Ok(parsed) = input.try_parse(ListStylePosition::from_css)
       {
@@ -329,7 +326,7 @@ impl<'i> FromCss<'i> for ListStyleShorthand {
       }
 
       let token = input.next()?.clone();
-      return Err(unexpected_token!(Self, location, &token));
+      return Err(unexpected_token!(Self, &token));
     }
 
     Ok(Self {

@@ -99,7 +99,7 @@ pub(crate) use gradient_tile_accessors;
 /// Oklab; every other stop syntax is a legacy sRGB form.
 const MODERN_COLOR_FUNCTIONS: [&str; 6] = ["lab", "lch", "oklab", "oklch", "color", "color-mix"];
 
-fn peeks_modern_color_function(input: &mut Parser<'_, '_>) -> bool {
+fn peeks_modern_color_function(input: &mut Parser<'_>) -> bool {
   let state = input.state();
   let modern = match input.next() {
     Ok(Token::Function(name)) => {
@@ -125,10 +125,9 @@ fn peeks_modern_color_function(input: &mut Parser<'_, '_>) -> bool {
 
 /// Parses the `names[0](` or `names[1](` (repeating) function token, returning whether it repeats.
 pub(crate) fn parse_gradient_function<'i, T: FromCss<'i>>(
-  input: &mut Parser<'i, '_>,
+  input: &mut Parser<'i>,
   [name, repeating_name]: [&str; 2],
 ) -> ParseResult<'i, bool> {
-  let location = input.current_source_location();
   let function = input.expect_function()?;
 
   if function.eq_ignore_ascii_case(name) {
@@ -139,11 +138,7 @@ pub(crate) fn parse_gradient_function<'i, T: FromCss<'i>>(
     return Ok(true);
   }
 
-  Err(unexpected_token!(
-    T,
-    location,
-    &Token::Function(function.clone())
-  ))
+  Err(unexpected_token!(T, &Token::Function(function.clone())))
 }
 
 /// Appends `at <center>` to a gradient prelude unless the center is the default.
@@ -167,8 +162,8 @@ pub(crate) fn push_center_clause(params: &mut String, center: &PositionValue) ->
 
 /// Parses a comma-separated gradient stop list; `color a b` expands to two stops.
 pub(crate) fn parse_gradient_stops<'i>(
-  input: &mut Parser<'i, '_>,
-  parse_position: fn(&mut Parser<'i, '_>) -> ParseResult<'i, StopPosition>,
+  input: &mut Parser<'i>,
+  parse_position: fn(&mut Parser<'i>) -> ParseResult<'i, StopPosition>,
 ) -> ParseResult<'i, (Vec<GradientStop>, bool)> {
   let mut stops = Vec::new();
   let mut modern = false;

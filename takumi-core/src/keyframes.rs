@@ -1,6 +1,6 @@
 //! Shared keyframe input parsing used by external bindings.
 
-use cssparser::{ParseError, ParseErrorKind, Parser, ParserInput, Token};
+use cssparser::{ParseError, ParseErrorKind, Parser, Token};
 use serde::{
   Deserialize, Deserializer,
   de::{self, MapAccess, SeqAccess, Visitor},
@@ -140,8 +140,7 @@ fn parse_keyframe_offsets(selector: &str) -> Result<Vec<f32>, String> {
     );
   }
 
-  let mut input = ParserInput::new(selector);
-  let mut parser = Parser::new(&mut input);
+  let mut parser = Parser::new(selector);
   parse_keyframe_prelude::<KeyframePreludeParseError<'_>>(&mut parser).map_err(|error| match error
     .kind
   {
@@ -156,8 +155,8 @@ fn parse_keyframe_offsets(selector: &str) -> Result<Vec<f32>, String> {
 }
 
 pub(crate) fn parse_keyframe_prelude<'i, E>(
-  input: &mut Parser<'i, '_>,
-) -> Result<Vec<f32>, ParseError<'i, E>>
+  input: &mut Parser<'i>,
+) -> Result<Vec<f32>, ParseError<E>>
 where
   KeyframePreludeParseError<'i>: Into<E>,
 {
@@ -170,7 +169,7 @@ pub(crate) enum KeyframePreludeParseError<'i> {
   InvalidPercentage(&'i str),
 }
 
-fn parse_keyframe_offset<'i, E>(input: &mut Parser<'i, '_>) -> Result<f32, ParseError<'i, E>>
+fn parse_keyframe_offset<'i, E>(input: &mut Parser<'i>) -> Result<f32, ParseError<E>>
 where
   KeyframePreludeParseError<'i>: Into<E>,
 {
@@ -193,13 +192,17 @@ where
     Ok(Token::Percentage { unit_value, .. }) => *unit_value,
     Ok(_) | Err(_) => {
       let part = input.slice_from(start_position).trim();
-      return Err(input.new_custom_error(KeyframePreludeParseError::InvalidSelector(part)));
+      return Err(ParseError::custom(
+        KeyframePreludeParseError::InvalidSelector(part),
+      ));
     }
   };
 
   if !(0.0..=1.0).contains(&offset) {
     let part = input.slice_from(start_position).trim();
-    return Err(input.new_custom_error(KeyframePreludeParseError::InvalidPercentage(part)));
+    return Err(ParseError::custom(
+      KeyframePreludeParseError::InvalidPercentage(part),
+    ));
   }
 
   Ok(offset)

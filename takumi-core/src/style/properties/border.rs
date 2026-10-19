@@ -70,7 +70,7 @@ impl From<LineWidth> for Length {
 }
 
 impl<'i> FromCss<'i> for LineWidth {
-  fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
+  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
     if let Ok(keyword) = input.try_parse(LineWidthKeyword::from_css) {
       return Ok(Self::Keyword(keyword));
     }
@@ -146,7 +146,7 @@ pub struct Border {
 }
 
 impl<'i> FromCss<'i> for Border {
-  fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
+  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
     let mut width = None;
     let mut style = None;
     let mut color = None;
@@ -167,10 +167,7 @@ impl<'i> FromCss<'i> for Border {
         continue;
       }
 
-      return Err(unexpected_token!(
-        input.current_source_location(),
-        input.next()?,
-      ));
+      return Err(unexpected_token!(input.next()?,));
     }
 
     Ok(Border {

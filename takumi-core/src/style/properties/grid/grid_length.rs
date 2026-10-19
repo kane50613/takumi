@@ -27,20 +27,19 @@ impl GridLength {
 }
 
 impl<'i> FromCss<'i> for GridLength {
-  fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
+  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
     if let Ok(unit) = input.try_parse(Length::from_css) {
       return Ok(GridLength::Unit(unit));
     }
 
-    let location = input.current_source_location();
     let token = input.next()?;
 
     let Token::Dimension { value, unit, .. } = &token else {
-      return Err(unexpected_token!(location, token));
+      return Err(unexpected_token!(token));
     };
 
     if !unit.eq_ignore_ascii_case("fr") {
-      return Err(unexpected_token!(location, token));
+      return Err(unexpected_token!(token));
     }
 
     Ok(GridLength::Fr(*value))

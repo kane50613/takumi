@@ -6,7 +6,9 @@ use std::{
   },
 };
 
-use cssparser::{CowRcStr, Parser, Token, match_ignore_ascii_case, serialize_string};
+use cssparser::{
+  CowRcStr, ParseError as CssParseError, Parser, match_ignore_ascii_case, serialize_string,
+};
 
 use crate::style::{
   FromCss, MakeComputed, ParseResult, ToCss, is_reserved_custom_ident, tw::Namespace,
@@ -137,7 +139,7 @@ impl FontFamily {
 }
 
 impl<'i> FromCss<'i> for FontFamilyToken {
-  fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
+  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
     if let Ok(name) = input.try_parse(|input| input.expect_string().map(ToString::to_string)) {
       return Ok(Self::Owned(name));
     }
@@ -160,19 +162,18 @@ impl<'i> FromCss<'i> for FontFamilyToken {
 }
 
 /// One `<custom-ident>` of an unquoted family name.
-fn custom_ident<'i>(input: &mut Parser<'i, '_>) -> ParseResult<'i, CowRcStr<'i>> {
-  let location = input.current_source_location();
+fn custom_ident<'i>(input: &mut Parser<'i>) -> ParseResult<'i, CowRcStr<'i>> {
   let ident = input.expect_ident_cloned()?;
 
   if is_reserved_custom_ident(&ident) {
-    return Err(location.new_unexpected_token_error(Token::Ident(ident)));
+    return Err(CssParseError::unexpected_token());
   }
 
   Ok(ident)
 }
 
 impl<'i> FromCss<'i> for FontFamily {
-  fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
+  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
     let list = input.parse_comma_separated(FontFamilyToken::from_css)?;
 
     Ok(Self::new(list))

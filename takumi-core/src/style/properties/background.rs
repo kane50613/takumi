@@ -30,7 +30,7 @@ impl MakeComputed for Background {
 }
 
 impl<'i> FromCss<'i> for Background {
-  fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
+  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
     let mut color = None;
     let mut image = None;
     let mut position = None;
@@ -90,10 +90,7 @@ impl<'i> FromCss<'i> for Background {
         continue;
       }
 
-      return Err(unexpected_token!(
-        input.current_source_location(),
-        input.next()?,
-      ));
+      return Err(unexpected_token!(input.next()?,));
     }
 
     Ok(Background {

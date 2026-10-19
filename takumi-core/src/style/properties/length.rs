@@ -351,14 +351,13 @@ impl From<f32> for Length {
 }
 
 impl<'i> FromCss<'i> for Length {
-  fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
-    let location = input.current_source_location();
+  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
     let token = input.next()?;
 
     match token {
       Token::Ident(unit) => match_ignore_ascii_case! {unit.as_ref(),
         "auto" => Ok(Self::Auto),
-        _ => Err(unexpected_token!(location, token)),
+        _ => Err(unexpected_token!(token)),
       },
       Token::Function(function) if function.eq_ignore_ascii_case("calc") => {
         let token = token.clone();
@@ -368,14 +367,15 @@ impl<'i> FromCss<'i> for Length {
           CalcValue::Formula(formula) => formula
             .compress()
             .map(Self::Calc)
-            .ok_or_else(|| unexpected_token!(location, &token)),
+            .ok_or_else(|| unexpected_token!(&token)),
         }
       }
-      Token::Dimension { value, unit, .. } => length_from_dimension_unit(unit.as_ref(), *value)
-        .ok_or_else(|| unexpected_token!(location, token)),
+      Token::Dimension { value, unit, .. } => {
+        length_from_dimension_unit(unit.as_ref(), *value).ok_or_else(|| unexpected_token!(token))
+      }
       Token::Percentage { unit_value, .. } => Ok(Self::Percentage(*unit_value * 100.0)),
       Token::Number { value, .. } => Ok(Self::Px(*value)),
-      _ => Err(unexpected_token!(location, token)),
+      _ => Err(unexpected_token!(token)),
     }
   }
 

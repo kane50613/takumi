@@ -1,3 +1,4 @@
+use cssparser::ParseError as CssParseError;
 use std::rc::Rc;
 
 use cssparser::*;
@@ -98,10 +99,7 @@ pub struct MediaQueryList {
 }
 
 impl MediaFeatureComparison {
-  fn parse<'i, 't>(
-    input: &mut Parser<'i, 't>,
-  ) -> Result<Self, ParseError<'i, StyleSheetParseError>> {
-    let location = input.current_source_location();
+  fn parse<'i>(input: &mut Parser<'i>) -> Result<Self, ParseError<StyleSheetParseError>> {
     let token = input.next()?.clone();
 
     match token {
@@ -116,7 +114,7 @@ impl MediaFeatureComparison {
           (_, false) => Self::GreaterThan,
         })
       }
-      _ => Err(location.new_unexpected_token_error(token)),
+      _ => Err(CssParseError::unexpected_token()),
     }
   }
 
@@ -156,12 +154,9 @@ impl MediaFeatureValue {
   /// decimals, as Blink does; Blink rounds the device pixel ratio the same way
   /// before comparing, which this does not, so the two disagree when that ratio
   /// carries more than two decimals.
-  fn parse_resolution<'i>(
-    input: &mut Parser<'i, '_>,
-  ) -> Result<f32, ParseError<'i, StyleSheetParseError>> {
+  fn parse_resolution<'i>(input: &mut Parser<'i>) -> Result<f32, ParseError<StyleSheetParseError>> {
     const DPCM_PER_DPPX: f32 = 96.0 / 2.54;
 
-    let location = input.current_source_location();
     let token = input.next()?.clone();
 
     if let Token::Dimension {
@@ -180,25 +175,20 @@ impl MediaFeatureValue {
       }
     }
 
-    Err(location.new_unexpected_token_error(token))
+    Err(CssParseError::unexpected_token())
   }
 
-  fn parse<'i>(input: &mut Parser<'i, '_>) -> Result<Self, ParseError<'i, StyleSheetParseError>> {
+  fn parse<'i>(input: &mut Parser<'i>) -> Result<Self, ParseError<StyleSheetParseError>> {
     if let Ok(resolution) = input.try_parse(Self::parse_resolution) {
       return Ok(Self::Resolution(resolution));
     }
 
     if let Ok(number) = input.try_parse(Parser::expect_number) {
       if input.try_parse(|input| input.expect_delim('/')).is_ok() {
-        let location = input.current_source_location();
         let divisor = input.expect_number()?;
 
         if divisor <= 0.0 {
-          return Err(location.new_unexpected_token_error(Token::Number {
-            has_sign: divisor < 0.0,
-            value: divisor,
-            int_value: None,
-          }));
+          return Err(CssParseError::unexpected_token());
         }
 
         return Ok(Self::Ratio(MediaRatio {
@@ -265,26 +255,23 @@ impl MediaFeature {
   }
 
   /// The feature `name` names, or the unsupported-feature error when `value` does not fit it.
-  fn from_value<'i>(
-    input: &Parser<'i, '_>,
+  fn from_value(
     name: &str,
     comparison: MediaFeatureComparison,
     value: MediaFeatureValue,
-  ) -> Result<Self, ParseError<'i, StyleSheetParseError>> {
+  ) -> Result<Self, ParseError<StyleSheetParseError>> {
     Self::new(name, comparison, value)
-      .ok_or_else(|| input.new_custom_error(StyleSheetParseErrorKind::UnsupportedMediaFeature))
+      .ok_or_else(|| CssParseError::custom(StyleSheetParseErrorKind::UnsupportedMediaFeature))
   }
 
-  fn parse<'i, 't>(
-    input: &mut Parser<'i, 't>,
-  ) -> Result<MediaFeature, ParseError<'i, StyleSheetParseError>> {
+  fn parse<'i>(input: &mut Parser<'i>) -> Result<MediaFeature, ParseError<StyleSheetParseError>> {
     let feature_name = input.expect_ident_cloned()?;
 
     // Boolean context: the feature name alone matches when its value is non-zero.
     // <https://drafts.csswg.org/mediaqueries-4/#mq-boolean-context>
     if input.try_parse(Parser::expect_colon).is_err() {
       return MediaFeature::boolean(&feature_name)
-        .ok_or_else(|| input.new_custom_error(StyleSheetParseErrorKind::UnsupportedMediaFeature));
+        .ok_or_else(|| CssParseError::custom(StyleSheetParseErrorKind::UnsupportedMediaFeature));
     }
 
     if feature_name.eq_ignore_ascii_case("orientation") {
@@ -293,9 +280,7 @@ impl MediaFeature {
         "portrait" => Ok(Self::Orientation(MediaOrientation::Portrait)),
         "landscape" => Ok(Self::Orientation(MediaOrientation::Landscape)),
         _ => Err(
-          input.new_error(BasicParseErrorKind::UnexpectedToken(Token::Ident(
-            orientation.clone(),
-          ))),
+          CssParseError::from_basic_kind(BasicParseErrorKind::UnexpectedToken),
         ),
       };
     }
@@ -312,26 +297,26 @@ impl MediaFeature {
 
     let value = MediaFeatureValue::parse(input)?;
 
-    Self::from_value(input, name, comparison, value)
+    Self::from_value(name, comparison, value)
   }
 
   /// The range context of Media Queries Level 4, such as `(width >= 40em)` and
   /// `(400px < height <= 700px)`.
   /// <https://drafts.csswg.org/mediaqueries-4/#mq-range-context>
-  fn parse_range<'i, 't>(
-    input: &mut Parser<'i, 't>,
-  ) -> Result<(MediaFeature, Option<MediaFeature>), ParseError<'i, StyleSheetParseError>> {
+  fn parse_range<'i>(
+    input: &mut Parser<'i>,
+  ) -> Result<(MediaFeature, Option<MediaFeature>), ParseError<StyleSheetParseError>> {
     if let Ok(name) = input.try_parse(Parser::expect_ident_cloned) {
       let comparison = MediaFeatureComparison::parse(input)?;
       let value = MediaFeatureValue::parse(input)?;
 
-      return Ok((Self::from_value(input, &name, comparison, value)?, None));
+      return Ok((Self::from_value(&name, comparison, value)?, None));
     }
 
     let lower_value = MediaFeatureValue::parse(input)?;
     let lower = MediaFeatureComparison::parse(input)?.flipped();
     let name = input.expect_ident_cloned()?;
-    let lower_feature = Self::from_value(input, &name, lower, lower_value)?;
+    let lower_feature = Self::from_value(&name, lower, lower_value)?;
 
     if input.is_exhausted() {
       return Ok((lower_feature, None));
@@ -340,7 +325,7 @@ impl MediaFeature {
     let upper = MediaFeatureComparison::parse(input)?;
 
     if lower.is_upper_bound() == upper.is_upper_bound() {
-      return Err(input.new_custom_error(StyleSheetParseError::invalid_reason(
+      return Err(CssParseError::custom(StyleSheetParseError::invalid_reason(
         "media range comparisons must point the same way",
       )));
     }
@@ -349,7 +334,7 @@ impl MediaFeature {
 
     Ok((
       lower_feature,
-      Some(Self::from_value(input, &name, upper, upper_value)?),
+      Some(Self::from_value(&name, upper, upper_value)?),
     ))
   }
 
@@ -398,23 +383,21 @@ impl MediaFeature {
 }
 
 impl MediaCondition {
-  fn parse<'i, 't>(
-    input: &mut Parser<'i, 't>,
-  ) -> Result<Self, ParseError<'i, StyleSheetParseError>> {
+  fn parse<'i>(input: &mut Parser<'i>) -> Result<Self, ParseError<StyleSheetParseError>> {
     Self::parse_with_or(input, true)
   }
 
   /// The `and`-only form a media type takes, which cannot carry a bare `or`.
-  fn parse_without_or<'i, 't>(
-    input: &mut Parser<'i, 't>,
-  ) -> Result<Self, ParseError<'i, StyleSheetParseError>> {
+  fn parse_without_or<'i>(
+    input: &mut Parser<'i>,
+  ) -> Result<Self, ParseError<StyleSheetParseError>> {
     Self::parse_with_or(input, false)
   }
 
-  fn parse_with_or<'i, 't>(
-    input: &mut Parser<'i, 't>,
+  fn parse_with_or<'i>(
+    input: &mut Parser<'i>,
     allow_or: bool,
-  ) -> Result<Self, ParseError<'i, StyleSheetParseError>> {
+  ) -> Result<Self, ParseError<StyleSheetParseError>> {
     if input
       .try_parse(|input| input.expect_ident_matching("not"))
       .is_ok()
@@ -443,11 +426,11 @@ impl MediaCondition {
   }
 
   /// The operands of a chain whose first keyword the caller has consumed.
-  fn parse_operands<'i, 't>(
-    input: &mut Parser<'i, 't>,
+  fn parse_operands<'i>(
+    input: &mut Parser<'i>,
     first: Self,
     keyword: &str,
-  ) -> Result<Vec<Self>, ParseError<'i, StyleSheetParseError>> {
+  ) -> Result<Vec<Self>, ParseError<StyleSheetParseError>> {
     let mut operands = vec![first, Self::parse_in_parens(input)?];
 
     while input
@@ -461,14 +444,11 @@ impl MediaCondition {
   }
 
   /// `( <media-condition> ) | ( <media-feature> )`
-  fn parse_in_parens<'i, 't>(
-    input: &mut Parser<'i, 't>,
-  ) -> Result<Self, ParseError<'i, StyleSheetParseError>> {
-    let location = input.current_source_location();
+  fn parse_in_parens<'i>(input: &mut Parser<'i>) -> Result<Self, ParseError<StyleSheetParseError>> {
     let token = input.next()?.clone();
 
     if token != Token::ParenthesisBlock {
-      return Err(location.new_unexpected_token_error(token));
+      return Err(CssParseError::unexpected_token());
     }
 
     input.parse_nested_block(|input| {
@@ -504,9 +484,7 @@ impl MediaCondition {
 }
 
 impl MediaQuery {
-  fn parse<'i, 't>(
-    input: &mut Parser<'i, 't>,
-  ) -> Result<MediaQuery, ParseError<'i, StyleSheetParseError>> {
+  fn parse<'i>(input: &mut Parser<'i>) -> Result<MediaQuery, ParseError<StyleSheetParseError>> {
     if let Ok(query) = input.try_parse(Self::parse_with_media_type) {
       return Ok(query);
     }
@@ -519,9 +497,9 @@ impl MediaQuery {
   }
 
   /// `[not | only]? <media-type> [and <media-condition-without-or>]?`
-  fn parse_with_media_type<'i, 't>(
-    input: &mut Parser<'i, 't>,
-  ) -> Result<MediaQuery, ParseError<'i, StyleSheetParseError>> {
+  fn parse_with_media_type<'i>(
+    input: &mut Parser<'i>,
+  ) -> Result<MediaQuery, ParseError<StyleSheetParseError>> {
     let keyword = input.expect_ident_cloned()?;
     let mut negated = false;
     let name = if keyword.eq_ignore_ascii_case("not") {
@@ -574,9 +552,9 @@ impl MediaQuery {
 }
 
 impl MediaQueryList {
-  pub(crate) fn parse<'i, 't>(
-    input: &mut Parser<'i, 't>,
-  ) -> Result<Self, ParseError<'i, StyleSheetParseError>> {
+  pub(crate) fn parse<'i>(
+    input: &mut Parser<'i>,
+  ) -> Result<Self, ParseError<StyleSheetParseError>> {
     Ok(Self {
       queries: input.parse_comma_separated(|input| {
         let query = input
@@ -596,10 +574,9 @@ impl MediaQueryList {
   /// stray closing delimiter means the text was never a prelude, which is how a
   /// caller assembling CSS from strings catches a rule smuggled into one.
   fn skip_malformed_query<'i>(
-    input: &mut Parser<'i, '_>,
-  ) -> Result<(), ParseError<'i, StyleSheetParseError>> {
+    input: &mut Parser<'i>,
+  ) -> Result<(), ParseError<StyleSheetParseError>> {
     loop {
-      let location = input.current_source_location();
       let Ok(token) = input.next() else {
         return Ok(());
       };
@@ -611,9 +588,7 @@ impl MediaQueryList {
           | Token::CloseParenthesis
           | Token::CloseSquareBracket
       ) {
-        let token = token.clone();
-
-        return Err(location.new_unexpected_token_error(token));
+        return Err(CssParseError::unexpected_token());
       }
     }
   }

@@ -68,7 +68,7 @@ impl Animatable for TextIndent {
 }
 
 impl<'i> FromCss<'i> for TextIndent {
-  fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
+  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
     let mut amount = None;
     let mut each_line = false;
     let mut hanging = false;
@@ -81,14 +81,13 @@ impl<'i> FromCss<'i> for TextIndent {
         continue;
       }
 
-      let location = input.current_source_location();
       match input.next()? {
         Token::Ident(keyword) => match_ignore_ascii_case! {keyword.as_ref(),
           "each-line" if !each_line => each_line = true,
           "hanging" if !hanging => hanging = true,
-          _ => return Err(unexpected_token!(location, &Token::Ident(keyword.clone()))),
+          _ => return Err(unexpected_token!(&Token::Ident(keyword.clone()))),
         },
-        token => return Err(unexpected_token!(location, token)),
+        token => return Err(unexpected_token!(token)),
       }
     }
 

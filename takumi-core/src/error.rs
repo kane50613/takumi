@@ -287,8 +287,8 @@ impl From<StyleSheetParseErrorKind> for StyleSheetParseError {
   }
 }
 
-impl<'i> From<SelectorParseErrorKind<'i>> for StyleSheetParseError {
-  fn from(err: SelectorParseErrorKind<'i>) -> Self {
+impl From<SelectorParseErrorKind> for StyleSheetParseError {
+  fn from(err: SelectorParseErrorKind) -> Self {
     Self::invalid_reason(format!("{err:?}"))
   }
 }
@@ -319,10 +319,7 @@ impl StyleSheetParseError {
   }
 
   /// Converts a `cssparser` parse error into a stylesheet error with context.
-  pub(crate) fn from_parse_error(
-    context: &str,
-    error: ParseError<'_, StyleSheetParseError>,
-  ) -> Self {
+  pub(crate) fn from_parse_error(context: &str, error: ParseError<StyleSheetParseError>) -> Self {
     match error.kind {
       ParseErrorKind::Basic(error) => Self::invalid_reason(format!("{error:?}")),
       ParseErrorKind::Custom(error) => error,

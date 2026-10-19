@@ -22,7 +22,7 @@ pub enum TextOverflow {
 impl MakeComputed for TextOverflow {}
 
 impl<'i> FromCss<'i> for TextOverflow {
-  fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
+  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
     let string = input.expect_ident_or_string()?;
 
     match_ignore_ascii_case! {string,

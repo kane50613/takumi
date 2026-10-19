@@ -48,7 +48,7 @@ impl TailwindPropertyParser for LineHeight {
 }
 
 impl<'i> FromCss<'i> for LineHeight {
-  fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
+  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
     if input
       .try_parse(|input| input.expect_ident_matching("normal"))
       .is_ok()

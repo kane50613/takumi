@@ -12,7 +12,7 @@ impl MakeComputed for Order {}
 impl Animatable for Order {}
 
 impl<'i> FromCss<'i> for Order {
-  fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
+  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
     Ok(Self(input.expect_integer()?))
   }
 

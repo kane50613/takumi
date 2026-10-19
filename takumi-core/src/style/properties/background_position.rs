@@ -207,7 +207,7 @@ impl Default for PositionValue {
 }
 
 impl<'i> FromCss<'i> for PositionValue {
-  fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
+  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
     let first = PositionComponent::from_css(input)?;
     let second = input.try_parse(PositionComponent::from_css).ok();
 
@@ -227,15 +227,14 @@ impl<'i> FromCss<'i> for PositionValue {
 }
 
 impl<'i> FromCss<'i> for PositionComponent {
-  fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
+  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
     if let Ok(v) = input.try_parse(Length::from_css) {
       return Ok(v.into());
     }
 
-    let location = input.current_source_location();
     let token = input.next()?;
     let Token::Ident(ident) = token else {
-      return Err(unexpected_token!(location, token));
+      return Err(unexpected_token!(token));
     };
 
     match_ignore_ascii_case! {
@@ -245,7 +244,7 @@ impl<'i> FromCss<'i> for PositionComponent {
       "right" => Ok(PositionComponent::KeywordX(PositionKeywordX::Right)),
       "top" => Ok(PositionComponent::KeywordY(PositionKeywordY::Top)),
       "bottom" => Ok(PositionComponent::KeywordY(PositionKeywordY::Bottom)),
-      _ => Err(unexpected_token!(location, token)),
+      _ => Err(unexpected_token!(token)),
     }
   }
 
@@ -257,7 +256,7 @@ impl<'i> FromCss<'i> for PositionComponent {
 pub type PositionValues = Box<[PositionValue]>;
 
 impl<'i> FromCss<'i> for PositionValues {
-  fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
+  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
     parse_comma_list(input, PositionValue::from_css)
   }
 

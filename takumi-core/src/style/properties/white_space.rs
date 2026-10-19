@@ -1,4 +1,4 @@
-use cssparser::{Parser, Token, match_ignore_ascii_case};
+use cssparser::{ParseError as CssParseError, Parser, match_ignore_ascii_case};
 
 use crate::style::{
   FromCss, MakeComputed, ParseResult, TextWrapMode, WhiteSpaceCollapse, tw::TailwindPropertyParser,
@@ -70,8 +70,7 @@ impl WhiteSpace {
     }
   }
 
-  fn parse_keyword<'i>(input: &mut Parser<'i, '_>) -> ParseResult<'i, WhiteSpace> {
-    let location = input.current_source_location();
+  fn parse_keyword<'i>(input: &mut Parser<'i>) -> ParseResult<'i, WhiteSpace> {
     let ident = input.expect_ident()?;
 
     match_ignore_ascii_case! {&ident,
@@ -79,13 +78,13 @@ impl WhiteSpace {
       "pre" => Ok(WhiteSpace::pre()),
       "pre-wrap" => Ok(WhiteSpace::pre_wrap()),
       "pre-line" => Ok(WhiteSpace::pre_line()),
-      _ => Err(location.new_basic_unexpected_token_error(Token::Ident(ident.clone())).into())
+      _ => Err(CssParseError::unexpected_token())
     }
   }
 }
 
 impl<'i> FromCss<'i> for WhiteSpace {
-  fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
+  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
     if let Ok(ident) = input.try_parse(WhiteSpace::parse_keyword) {
       return Ok(ident);
     }

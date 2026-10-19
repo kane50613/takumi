@@ -65,8 +65,7 @@ impl Animatable for FontWeight {
 }
 
 impl<'i> FromCss<'i> for FontWeight {
-  fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
-    let location = input.current_source_location();
+  fn from_css(input: &mut Parser<'i>) -> ParseResult<'i, Self> {
     let token = input.next()?;
 
     match token {
@@ -76,9 +75,9 @@ impl<'i> FromCss<'i> for FontWeight {
         "bold" => Ok(700.0.into()),
         "bolder" => Ok(FontWeight::Bolder),
         "lighter" => Ok(FontWeight::Lighter),
-        _ => Err(unexpected_token!(location, token)),
+        _ => Err(unexpected_token!(token)),
       },
-      _ => Err(unexpected_token!(location, token)),
+      _ => Err(unexpected_token!(token)),
     }
   }
 
