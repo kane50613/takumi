@@ -1358,7 +1358,7 @@ impl TailwindProperty {
       }
       TailwindProperty::FlexWrap(flex_wrap) => push_decl!(builder, important, flex_wrap(flex_wrap)),
       TailwindProperty::Flex(flex) => {
-        builder.push_all(StyleDeclaration::expand_flex(Some(flex)), important);
+        builder.push_all(StyleDeclaration::expand_flex(flex), important);
       }
       TailwindProperty::FlexBasis(flex_basis) => {
         push_decl!(builder, important, flex_basis(Some(flex_basis)))

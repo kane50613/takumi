@@ -1755,14 +1755,10 @@ define_style! {
     box_align: BoxAlign => [AlignItems] |value, target| {
       target.push(StyleDeclaration::align_items(value.into()));
     },
-    flex: Option<Flex> => [FlexGrow, FlexShrink, FlexBasis] |value, target| {
-      target.push(StyleDeclaration::flex_grow(
-        value.map(|value| FlexGrow(value.grow)),
-      ));
-      target.push(StyleDeclaration::flex_shrink(
-        value.map(|value| FlexGrow(value.shrink)),
-      ));
-      target.push(StyleDeclaration::flex_basis(value.map(|value| value.basis)));
+    flex: Flex => [FlexGrow, FlexShrink, FlexBasis] |value, target| {
+      target.push(StyleDeclaration::flex_grow(Some(FlexGrow(value.grow))));
+      target.push(StyleDeclaration::flex_shrink(Some(FlexGrow(value.shrink))));
+      target.push(StyleDeclaration::flex_basis(Some(value.basis)));
     },
     place_items: PlaceItems => [AlignItems, JustifyItems] |value, target| {
       target.push(StyleDeclaration::align_items(value.align));
