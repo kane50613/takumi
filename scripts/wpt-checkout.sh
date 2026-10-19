@@ -29,6 +29,10 @@ mkdir -p "$dir"
 git -C "$dir" init -q
 git -C "$dir" remote remove origin 2>/dev/null || true
 git -C "$dir" remote add origin https://github.com/web-platform-tests/wpt.git
+# Re-adding the remote drops the partial clone settings, without which Git cannot fetch the blobs
+# a wider path list needs.
+git -C "$dir" config remote.origin.promisor true
+git -C "$dir" config remote.origin.partialclonefilter blob:none
 # shellcheck disable=SC2086 # The paths split on purpose.
 git -C "$dir" sparse-checkout set $paths
 git -C "$dir" fetch -q --depth 1 --filter=blob:none origin "$revision"
