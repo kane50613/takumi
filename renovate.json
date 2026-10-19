@@ -35,6 +35,11 @@
       "matchPackageNames": ["rolldown-plugin-dts"],
       "allowedVersions": "<0.28.0",
       "description": "0.28 needs rolldown 1.2, which tsdown does not use yet. Under an older rolldown its CommonJS declarations lose `export =`, and attw rejects @takumi-rs/image-response."
+    },
+    {
+      "matchPackageNames": ["monaco-editor"],
+      "allowedVersions": "<0.56.0",
+      "description": "0.57 maps every subpath to esm/vs through package exports, so the playground's monaco-editor/esm/vs imports stop resolving and type-checking."
     }
   ]
 }
