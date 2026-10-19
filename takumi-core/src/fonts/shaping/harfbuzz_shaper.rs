@@ -117,6 +117,11 @@ impl<'a> RangeContext<'a> {
     }
   }
 
+  /// End of the part of `item` this range shapes.
+  fn shape_end(&self, item: &ReshapeQueueItem) -> usize {
+    self.end.min(item.start_index + item.num_characters)
+  }
+
   /// Blink's `HarfBuzzDirection` for horizontal text.
   fn harfbuzz_direction(&self) -> HbDirection {
     match self.text_direction {
@@ -265,9 +270,7 @@ fn compute_slice(
 ) -> BufferSlice {
   let glyph_info = &buffer.infos;
   let num_glyphs = glyph_info.len();
-  let shape_end = range_data
-    .end
-    .min(current_queue_item.start_index + current_queue_item.num_characters);
+  let shape_end = range_data.shape_end(current_queue_item);
   let (start_character_index, num_characters) = if buffer.is_forward() {
     let start_character_index = glyph_info[old_glyph_index].cluster as usize;
     let num_characters = if new_glyph_index == num_glyphs {
@@ -565,9 +568,7 @@ impl HarfBuzzShaper {
       debug_assert!(current_queue_item.num_characters > 0);
 
       let shape_start = range_data.start.max(current_queue_item.start_index);
-      let shape_end = range_data
-        .end
-        .min(current_queue_item.start_index + current_queue_item.num_characters);
+      let shape_end = range_data.shape_end(&current_queue_item);
 
       debug_assert!(shape_end > shape_start);
 
@@ -689,6 +690,7 @@ impl HarfBuzzShaper {
     }
 
     let space_glyph = u32::from(current_font.space_glyph());
+    let shape_end = range_data.shape_end(current_queue_item);
     let commit = |range_data: &RangeContext<'_>, shape_result: &mut ShapeResult, slice| {
       self.commit_glyphs(
         range_data,
@@ -719,7 +721,7 @@ impl HarfBuzzShaper {
         // https://github.com/harfbuzz/harfbuzz/issues/2889.
         ClusterResult::NotDef
       } else if !ignore_variation_selectors
-        && is_unmatched_variation_sequence(current_font, &self.text[current_cluster..])
+        && is_unmatched_variation_sequence(current_font, &self.text[current_cluster..shape_end])
       {
         // Blink's `kUnmatchedVSGlyphId`: a later font may have the sequence.
         *fallback_stage = fallback_stage.change_stage_to_vs();
@@ -962,8 +964,13 @@ mod tests {
   /// leaves uppercase ones.
   /// Whether each run of `text` draws from a color font, with no `.notdef` glyph.
   fn run_colors(font: &Font, text: &str) -> Vec<bool> {
+    prefix_run_colors(font, text, text.len())
+  }
+
+  /// Whether each run shaping `text[..end]` takes a color font.
+  fn prefix_run_colors(font: &Font, text: &str, end: usize) -> Vec<bool> {
     HarfBuzzShaper::new(text.into())
-      .shape_all(font, TextDirection::Ltr)
+      .shape(font, TextDirection::Ltr, 0, end)
       .runs
       .iter()
       .map(|run| {
@@ -991,6 +998,21 @@ mod tests {
     assert_eq!(run_colors(&text_first, "\u{203C}\u{FE0F}"), [true]);
     assert_eq!(run_colors(&emoji_first, "\u{203C}"), [true]);
     assert_eq!(run_colors(&emoji_first, "\u{203C}\u{FE0E}"), [false]);
+  }
+
+  #[test]
+  fn a_selector_outside_the_shaped_range_keeps_the_first_font() {
+    let mut fonts = Fonts::default();
+
+    register(&mut fonts, NOTO_SANS_TC, "Noto Sans TC");
+    register(&mut fonts, TWEMOJI, "Twemoji Mozilla");
+
+    let text_first = font(&fonts, "Noto Sans TC, Twemoji Mozilla");
+
+    assert_eq!(
+      prefix_run_colors(&text_first, "\u{203C}\u{FE0F}", '\u{203C}'.len_utf8()),
+      [false]
+    );
   }
 
   #[test]
