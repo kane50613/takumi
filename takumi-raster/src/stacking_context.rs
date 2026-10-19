@@ -293,7 +293,7 @@ fn apply_filters(
   let filter_region = bounds.and_then(|bounds| {
     viewport
       .clamp_bounds(bounds, filter_padding)
-      .map(|region| region.translate(-(viewport.origin.x as i32), -(viewport.origin.y as i32)))
+      .map(|region| region.translate(-(viewport.origin.x), -(viewport.origin.y)))
   });
 
   if let Some(region) = filter_region
