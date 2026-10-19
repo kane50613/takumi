@@ -43,7 +43,6 @@ css/CSS2/
 !css/CSS2/backgrounds/background-190.xht
 !css/CSS2/backgrounds/background-194.xht
 !css/CSS2/backgrounds/background-196.xht
-!css/CSS2/backgrounds/background-327.xht
 !css/CSS2/backgrounds/background-applies-to-001.xht
 !css/CSS2/backgrounds/background-applies-to-002.xht
 !css/CSS2/backgrounds/background-applies-to-003.xht
@@ -71,15 +70,8 @@ css/CSS2/
 !css/CSS2/backgrounds/background-image-applies-to-001.xht
 !css/CSS2/backgrounds/background-image-applies-to-002.xht
 !css/CSS2/backgrounds/background-image-applies-to-003.xht
-!css/CSS2/backgrounds/background-image-applies-to-004.xht
 !css/CSS2/backgrounds/background-image-applies-to-005.xht
 !css/CSS2/backgrounds/background-image-applies-to-006.xht
-!css/CSS2/backgrounds/background-image-applies-to-007.xht
-!css/CSS2/backgrounds/background-image-applies-to-009.xht
-!css/CSS2/backgrounds/background-image-applies-to-012.xht
-!css/CSS2/backgrounds/background-image-applies-to-013.xht
-!css/CSS2/backgrounds/background-image-applies-to-014.xht
-!css/CSS2/backgrounds/background-image-applies-to-015.xht
 !css/CSS2/backgrounds/background-image-cover-002.xht
 !css/CSS2/backgrounds/background-image-cover-004.xht
 !css/CSS2/backgrounds/background-image-cover-attachment-001.xht
@@ -109,15 +101,8 @@ css/CSS2/
 !css/CSS2/backgrounds/background-repeat-applies-to-001.xht
 !css/CSS2/backgrounds/background-repeat-applies-to-002.xht
 !css/CSS2/backgrounds/background-repeat-applies-to-003.xht
-!css/CSS2/backgrounds/background-repeat-applies-to-004.xht
 !css/CSS2/backgrounds/background-repeat-applies-to-005.xht
 !css/CSS2/backgrounds/background-repeat-applies-to-006.xht
-!css/CSS2/backgrounds/background-repeat-applies-to-007.xht
-!css/CSS2/backgrounds/background-repeat-applies-to-009.xht
-!css/CSS2/backgrounds/background-repeat-applies-to-012.xht
-!css/CSS2/backgrounds/background-repeat-applies-to-013.xht
-!css/CSS2/backgrounds/background-repeat-applies-to-014.xht
-!css/CSS2/backgrounds/background-repeat-applies-to-015.xht
 !css/CSS2/backgrounds/background-root-001.xht
 !css/CSS2/backgrounds/background-root-002.xht
 !css/CSS2/backgrounds/background-root-005.xht
@@ -143,7 +128,6 @@ css/CSS2/
 !css/CSS2/borders/border-bottom-applies-to-001.xht
 !css/CSS2/borders/border-bottom-applies-to-002.xht
 !css/CSS2/borders/border-bottom-applies-to-003.xht
-!css/CSS2/borders/border-bottom-color-129.xht
 !css/CSS2/borders/border-bottom-color-applies-to-001.xht
 !css/CSS2/borders/border-bottom-color-applies-to-002.xht
 !css/CSS2/borders/border-bottom-color-applies-to-003.xht
@@ -185,7 +169,6 @@ css/CSS2/
 !css/CSS2/borders/border-left-applies-to-003.xht
 !css/CSS2/borders/border-left-applies-to-005.xht
 !css/CSS2/borders/border-left-applies-to-006.xht
-!css/CSS2/borders/border-left-color-129.xht
 !css/CSS2/borders/border-left-color-applies-to-001.xht
 !css/CSS2/borders/border-left-color-applies-to-002.xht
 !css/CSS2/borders/border-left-color-applies-to-003.xht
@@ -215,7 +198,6 @@ css/CSS2/
 !css/CSS2/borders/border-right-applies-to-005.xht
 !css/CSS2/borders/border-right-applies-to-006.xht
 !css/CSS2/borders/border-right-applies-to-014.xht
-!css/CSS2/borders/border-right-color-129.xht
 !css/CSS2/borders/border-right-color-applies-to-001.xht
 !css/CSS2/borders/border-right-color-applies-to-002.xht
 !css/CSS2/borders/border-right-color-applies-to-003.xht
@@ -244,7 +226,6 @@ css/CSS2/
 !css/CSS2/borders/border-top-applies-to-001.xht
 !css/CSS2/borders/border-top-applies-to-002.xht
 !css/CSS2/borders/border-top-applies-to-003.xht
-!css/CSS2/borders/border-top-color-129.xht
 !css/CSS2/borders/border-top-color-applies-to-001.xht
 !css/CSS2/borders/border-top-color-applies-to-002.xht
 !css/CSS2/borders/border-top-color-applies-to-003.xht
@@ -1015,8 +996,6 @@ css/css-backgrounds/animations/invalidation/background-color-animation-with-zero
 !css/css-backgrounds/background-clip-content-box-with-border-radius-003.html
 !css/css-backgrounds/background-clip-padding-box-with-border-radius-003.html
 !css/css-backgrounds/background-clip-text-and-blend-mode.html
-!css/css-backgrounds/background-clip/clip-border-area-background-geometry.html
-!css/css-backgrounds/background-clip/clip-border-area-border-image.html
 !css/css-backgrounds/background-clip/clip-border-area-border-on-top.html
 !css/css-backgrounds/background-clip/clip-border-area-border-shape-background-position.html
 !css/css-backgrounds/background-clip/clip-border-area-box-decoration-break.html
@@ -1064,7 +1043,6 @@ css/css-backgrounds/animations/invalidation/background-color-animation-with-zero
 !css/css-backgrounds/background-rounded-image-clip-002.html
 !css/css-backgrounds/background-size-043.html
 !css/css-backgrounds/background-size-044.html
-!css/css-backgrounds/background-size-cover-003.html
 !css/css-backgrounds/background-size-with-negative-value.html
 !css/css-backgrounds/background-size/background-size-contain-svg-view.html
 !css/css-backgrounds/background-size/background-size-contain.xht
@@ -2129,6 +2107,7 @@ css/css-images/normalization-radial-2.html
 css/css-images/normalization-radial-4.html
 css/css-images/normalization-radial-degenerate.html
 css/css-images/normalization-radial.html
+css/css-images/object-fit-containsize-png-001i.tentative.html
 css/css-images/object-fit-fill-png-001i.html
 css/css-images/object-fit-fill-png-002i.html
 css/css-images/object-fit-fill-svg-001i.html
