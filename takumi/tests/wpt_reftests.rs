@@ -5,7 +5,8 @@
 //! The tests come from the WPT checkout `scripts/wpt-checkout.sh` makes in `target/wpt`, or the one
 //! `WPT_ROOT` points at; without either the test does nothing.
 //! `tests/wpt-reftests.json` lists the tests that pass, and the test fails when one of them stops
-//! passing. `WPT_UPDATE=1` rewrites it with the tests that pass now, `WPT_VERBOSE=1` prints each
+//! passing. `WPT_UPDATE=1` rewrites it with the tests that pass now, `WPT_WRITE=path` writes that
+//! list to `path` and still checks for regressions, `WPT_VERBOSE=1` prints each
 //! test that does not pass, `WPT_DUMP=dir` writes each failing test's rendering and its
 //! reference's there, and `WPT=fragment,...` runs only the tests whose paths contain one of the
 //! fragments.
@@ -85,6 +86,20 @@ fn wpt_reftests() {
   }
 
   eprintln!("WPT reftests: {counts:?}");
+
+  if let Some(path) = env::var_os("WPT_WRITE") {
+    let passing: BTreeSet<&String> = outcomes
+      .iter()
+      .filter(|(_, outcome)| **outcome == Outcome::Pass)
+      .map(|(name, _)| name)
+      .collect();
+
+    fs::write(
+      path,
+      format!("{}\n", serde_json::to_string_pretty(&passing).unwrap()),
+    )
+    .unwrap();
+  }
 
   let mut expected: BTreeSet<String> = fs::read_to_string(EXPECTATIONS)
     .ok()
