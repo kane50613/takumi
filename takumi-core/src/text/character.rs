@@ -331,3 +331,15 @@ pub(crate) fn char_before(text: &str, offset: usize) -> char {
     .and_then(|before| before.chars().next_back())
     .unwrap_or('\0')
 }
+
+#[cfg(test)]
+mod tests {
+  use super::char_before;
+
+  #[test]
+  fn char_before_a_mid_character_offset_is_none() {
+    assert_eq!(char_before("aé", 3), 'é');
+    assert_eq!(char_before("aé", 2), '\0');
+    assert_eq!(char_before("aé", 0), '\0');
+  }
+}
