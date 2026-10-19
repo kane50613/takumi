@@ -1,9 +1,12 @@
 //! Blink's [`InlineItemsBuilder`](https://source.chromium.org/chromium/chromium/src/+/main:third_party/blink/renderer/core/layout/inline/inline_items_builder.cc).
 
-use super::inline_item::{
-  CollapseType, InlineItem, InlineItemType, InlineItems, LayoutObject, TextItemType,
-};
 use super::outline::InlineOutline;
+use super::{
+  inline_item::{
+    CollapseType, InlineItem, InlineItemType, InlineItems, LayoutObject, TextItemType,
+  },
+  inline_node_data::InlineNodeData,
+};
 use crate::{
   geometry::{Rect, Size},
   layout::{border::BorderProperties, tree::RenderNode},
@@ -84,18 +87,6 @@ impl<'c> BoxInfo<'c> {
   }
 }
 
-/// What collecting found about the content: Blink's `InlineNodeData` flags.
-#[derive(Debug, Default)]
-pub(crate) struct CollectedInlines {
-  pub(crate) text_content: String,
-  pub(crate) is_bidi_enabled: bool,
-  pub(crate) has_floats: bool,
-  pub(crate) has_out_of_flow_positioned: bool,
-  pub(crate) is_block_level: bool,
-  pub(crate) is_bisect_line_break_disabled: bool,
-  pub(crate) is_score_line_break_disabled: bool,
-}
-
 impl RenderNode {
   /// Whether this inline box paints, offsets, or contains something of its own, so it needs a
   /// fragment whatever it holds, as Blink's `LayoutInline::ComputeInitialShouldCreateBoxFragment`
@@ -150,8 +141,8 @@ impl RenderNode {
 
 /// Blink's `InlineItemsBuilder`, without reusing earlier items, offset mapping, SVG text chunks,
 /// `text-combine-upright`, ruby, initial letters, or `unicode-bidi`.
-pub(crate) struct InlineItemsBuilder<'c, 'i> {
-  items: &'i mut InlineItems<'c>,
+pub(crate) struct InlineItemsBuilder<'c> {
+  items: InlineItems<'c>,
   text: String,
   boxes: Vec<BoxInfo<'c>>,
   has_bidi_controls: bool,
@@ -162,10 +153,10 @@ pub(crate) struct InlineItemsBuilder<'c, 'i> {
   is_score_line_break_disabled: bool,
 }
 
-impl<'c, 'i> InlineItemsBuilder<'c, 'i> {
-  pub(crate) fn new(items: &'i mut InlineItems<'c>) -> Self {
+impl<'c> InlineItemsBuilder<'c> {
+  pub(crate) fn new() -> Self {
     Self {
-      items,
+      items: InlineItems::new(),
       text: String::new(),
       boxes: Vec::new(),
       has_bidi_controls: false,
@@ -814,8 +805,9 @@ impl<'c, 'i> InlineItemsBuilder<'c, 'i> {
     }
   }
 
-  /// Blink's `DidFinishCollectInlines`.
-  pub(crate) fn finish(self) -> CollectedInlines {
+  /// Blink's `DidFinishCollectInlines`. Bidi is on for any text that may hold right-to-left
+  /// characters; `SegmentText` turns it off when none resolve so.
+  pub(crate) fn finish(self) -> InlineNodeData<'c> {
     let text_content = self.text;
     let has_non_orc_16bit = text_content
       .chars()
@@ -823,14 +815,17 @@ impl<'c, 'i> InlineItemsBuilder<'c, 'i> {
     let is_bidi_enabled =
       self.has_bidi_controls || (has_non_orc_16bit && maybe_bidi_rtl(&text_content));
 
-    CollectedInlines {
+    InlineNodeData {
       text_content,
+      items: self.items,
+      has_non_orc_16bit,
       is_bidi_enabled,
       has_floats: self.has_floats,
       has_out_of_flow_positioned: self.has_out_of_flow_positioned,
       is_block_level: self.is_block_level,
       is_bisect_line_break_disabled: self.is_bisect_line_break_disabled,
       is_score_line_break_disabled: self.is_score_line_break_disabled,
+      ..InlineNodeData::default()
     }
   }
 }

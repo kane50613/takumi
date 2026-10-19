@@ -22,7 +22,7 @@ use crate::{
     simple_font_data::SimpleFontData,
   },
   style::Direction as TextDirection,
-  text::character::{IDEOGRAPHIC_SPACE, is_common_or_inherited_script},
+  text::character::{IDEOGRAPHIC_SPACE, is_8bit, is_common_or_inherited_script},
 };
 
 /// Blink's `ShouldSubpixelPosition`.
@@ -323,7 +323,7 @@ impl HarfBuzzShaper {
     let mut range_data = RangeContext::new(font, direction, start, end);
 
     // Blink keeps text that fits Latin-1 in 8 bits, and shapes it as one Latin segment.
-    if self.text.chars().all(|ch| u32::from(ch) <= 0xFF) {
+    if is_8bit(&self.text) {
       let segment_range = RunSegmenterRange {
         start,
         end,

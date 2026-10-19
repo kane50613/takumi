@@ -19,6 +19,9 @@ pub(crate) const SOFT_HYPHEN: char = '\u{AD}';
 pub(crate) const ZERO_WIDTH_SPACE: char = '\u{200B}';
 pub(crate) const ZERO_WIDTH_NON_JOINER: char = '\u{200C}';
 pub(crate) const ZERO_WIDTH_JOINER: char = '\u{200D}';
+pub(crate) const POP_DIRECTIONAL_FORMATTING: char = '\u{202C}';
+pub(crate) const LEFT_TO_RIGHT_OVERRIDE: char = '\u{202D}';
+pub(crate) const RIGHT_TO_LEFT_OVERRIDE: char = '\u{202E}';
 pub(crate) const OBJECT_REPLACEMENT_CHARACTER: char = '\u{FFFC}';
 pub(crate) const COMBINING_ENCLOSING_CIRCLE_BACKSLASH: char = '\u{20E0}';
 pub(crate) const COMBINING_ENCLOSING_KEYCAP: char = '\u{20E3}';
@@ -172,6 +175,11 @@ pub(crate) fn is_cursive_script(c: char) -> bool {
       | Script::PhagsPa
       | Script::Syriac
   )
+}
+
+/// Blink's `String::Is8Bit`, approximated as every character fitting Latin-1.
+pub(crate) fn is_8bit(text: &str) -> bool {
+  text.chars().all(|c| u32::from(c) <= 0xFF)
 }
 
 /// Blink's `MaybeBidiRtlUtf16`: whether a UTF-16 code unit may be right-to-left.

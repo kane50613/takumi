@@ -14,6 +14,7 @@ use crate::{
   },
   layout::{node::NodeKind, tree::RenderNode},
   style::{ComputedStyle, Direction as TextDirection},
+  text::bidi_paragraph::direction_from_level,
 };
 
 /// The box an inline item comes from: Blink's `LayoutObject`.
@@ -263,11 +264,7 @@ impl<'c> InlineItem<'c> {
 
   /// Blink's `Direction`.
   pub(crate) fn direction(&self) -> TextDirection {
-    if self.bidi_level & 1 == 0 {
-      TextDirection::Ltr
-    } else {
-      TextDirection::Rtl
-    }
+    direction_from_level(self.bidi_level)
   }
 
   pub(crate) fn bidi_level(&self) -> u8 {

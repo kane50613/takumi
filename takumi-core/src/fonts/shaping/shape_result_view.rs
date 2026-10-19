@@ -14,6 +14,7 @@ use crate::{
   fonts::simple_font_data::SimpleFontData,
   layout_unit::{InlineLayoutUnit, LayoutUnit},
   style::Direction as TextDirection,
+  text::character::is_8bit,
 };
 
 /// Blink's `Segment`.
@@ -602,7 +603,7 @@ impl ShapeResultView {
     let num_grapheme_clusters =
       |text: &str| segmenter.segment_str(text).count().saturating_sub(1) as u32;
     // Blink keeps text that fits Latin-1 in 8 bits, where every character is a grapheme.
-    let is_8bit = text.chars().all(|ch| u32::from(ch) <= 0xFF);
+    let is_8bit = is_8bit(text);
     let rtl = self.is_rtl();
     let mut advance_so_far = initial_advance;
 
