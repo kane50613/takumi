@@ -217,11 +217,11 @@ impl RenderNode {
 
         // An inline box's fragment took the out-of-flow boxes inside it.
         if let Some(LineFragment::InlineBox(fragment)) = &child.layout_result {
-          for &(node, offset, _) in &fragment.out_of_flow_children {
+          for out_of_flow in &fragment.out_of_flow_children {
             place(
-              node,
-              child.rect.offset + offset,
-              fragment.node.context.style.inherited_data.direction,
+              out_of_flow.node,
+              child.rect.offset + out_of_flow.offset,
+              out_of_flow.container_direction,
             );
           }
         }

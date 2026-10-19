@@ -8,7 +8,9 @@ use super::{
   inline_item_result::{InlineItemResult, LineBoxStrut},
   inline_node_data::StyleFonts,
   line_info::LineInfo,
-  logical_line_item::{InlineBoxFragment, LineFragment, LogicalLineItem, LogicalLineItems},
+  logical_line_item::{
+    InlineBoxFragment, LineFragment, LogicalLineItem, LogicalLineItems, OutOfFlowInlineChild,
+  },
   text_fit_scale::TextFitBlockScale,
 };
 use crate::{
@@ -316,11 +318,7 @@ impl<'a, 'c> BoxData<'a, 'c> {
 
   /// Blink's `CreateBoxFragment`: the box's fragment, its children staying in the line's flat
   /// list but for the out-of-flow boxes it takes.
-  fn create_box_fragment(
-    &self,
-    line_box: &mut LogicalLineItems<'a, 'c>,
-    line_box_line_height: LayoutUnit,
-  ) -> LineFragment<'c> {
+  fn create_box_fragment(&self, line_box: &mut LogicalLineItems<'a, 'c>) -> LineFragment<'c> {
     let mut out_of_flow_children = Vec::new();
     let mut i = self.fragment_start;
 
@@ -332,11 +330,11 @@ impl<'a, 'c> BoxData<'a, 'c> {
 
       if let Some(node) = child.out_of_flow_positioned_box.take() {
         // The static position, from this fragment.
-        out_of_flow_children.push((
+        out_of_flow_children.push(OutOfFlowInlineChild {
           node,
-          child.rect.offset - self.rect.offset,
-          line_box_line_height,
-        ));
+          offset: child.rect.offset - self.rect.offset,
+          container_direction: child.container_direction,
+        });
       }
 
       i += skip + 1;
@@ -721,8 +719,7 @@ impl<'a, 'c> InlineLayoutStateStack<'a, 'c> {
     box_data.rect.size.inline_size =
       advance - box_data.margin_line_left - box_data.margin_line_right;
 
-    // A placeholder's line box line height, for the static position, is zero.
-    let fragment = box_data.create_box_fragment(line_box, LayoutUnit::ZERO);
+    let fragment = box_data.create_box_fragment(line_box);
     let placeholder = &mut line_box[fragment_start];
 
     placeholder.layout_result = Some(fragment);
@@ -1036,11 +1033,7 @@ impl<'a, 'c> InlineLayoutStateStack<'a, 'c> {
   }
 
   /// Blink's `CreateBoxFragments`: the boxes' fragments, in place of their placeholders.
-  pub(crate) fn create_box_fragments(
-    &mut self,
-    line_box: &mut LogicalLineItems<'a, 'c>,
-    line_box_line_height: LayoutUnit,
-  ) {
+  pub(crate) fn create_box_fragments(&mut self, line_box: &mut LogicalLineItems<'a, 'c>) {
     if !self.has_box_fragments() {
       return;
     }
@@ -1055,7 +1048,7 @@ impl<'a, 'c> InlineLayoutStateStack<'a, 'c> {
       debug_assert!(end > start);
       debug_assert!(box_data.item.should_create_box_fragment);
 
-      let fragment = box_data.create_box_fragment(line_box, line_box_line_height);
+      let fragment = box_data.create_box_fragment(line_box);
 
       if line_box[start].is_placeholder() {
         let child = &mut line_box[start];

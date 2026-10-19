@@ -575,7 +575,7 @@ impl<'s, 'a, 'c> InlineLayoutAlgorithm<'s, 'a, 'c> {
     let box_states = self.context.box_states();
 
     box_states.apply_relative_positioning(space, line_box);
-    box_states.create_box_fragments(line_box, line_box_metrics.line_height());
+    box_states.create_box_fragments(line_box);
     self.context.set_item_index(line_info.end_item_index);
 
     // Empty items may still leave no line.

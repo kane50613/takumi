@@ -37,8 +37,19 @@ pub(crate) struct InlineBoxFragment<'c> {
   pub(crate) padding: LineBoxStrut,
   pub(crate) has_line_left_edge: bool,
   pub(crate) has_line_right_edge: bool,
-  /// The out-of-flow boxes inside, and their static offsets from the fragment.
-  pub(crate) out_of_flow_children: Vec<(&'c RenderNode, LogicalOffset, LayoutUnit)>,
+  /// The out-of-flow boxes inside.
+  pub(crate) out_of_flow_children: Vec<OutOfFlowInlineChild<'c>>,
+}
+
+/// Blink's `AddOutOfFlowInlineChildCandidate` arguments: an out-of-flow box an inline box's
+/// fragment takes.
+#[derive(Clone)]
+pub(crate) struct OutOfFlowInlineChild<'c> {
+  pub(crate) node: &'c RenderNode,
+  /// The static offset from the fragment.
+  pub(crate) offset: LogicalOffset,
+  /// The direction its static position resolves in.
+  pub(crate) container_direction: TextDirection,
 }
 
 /// What a line item's fragment is: Blink's `LayoutResult` of one.

@@ -326,5 +326,8 @@ pub(crate) fn char_at(text: &str, offset: usize) -> char {
 
 /// The character ending at byte `offset` of `text`.
 pub(crate) fn char_before(text: &str, offset: usize) -> char {
-  text[..offset].chars().next_back().unwrap_or('\0')
+  text
+    .get(..offset)
+    .and_then(|before| before.chars().next_back())
+    .unwrap_or('\0')
 }

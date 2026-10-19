@@ -488,7 +488,7 @@ mod tests {
     let metrics = box_states.line_box_state().metrics;
 
     box_states.apply_relative_positioning(&space, &mut line_box);
-    box_states.create_box_fragments(&mut line_box, metrics.line_height());
+    box_states.create_box_fragments(&mut line_box);
 
     let items = line_box
       .children

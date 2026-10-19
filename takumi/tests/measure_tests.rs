@@ -2807,3 +2807,29 @@ fn an_ellipsis_measures_as_its_own_text() {
 
   assert_eq!(texts.last(), Some(&"\u{2026}"), "{texts:?}");
 }
+
+/// A block-level absolute box in an inline box of the other direction takes its static position
+/// in its container's direction, as Blink's `AddOutOfFlowInlineChildCandidate` passes it.
+#[test]
+fn an_absolute_block_in_a_reversed_inline_box_keeps_its_containers_direction() {
+  let root = Node::container([
+    Node::text("aa "),
+    Node::container([
+      Node::text("bb"),
+      Node::container([]).with_class_name("absolute"),
+    ])
+    .with_class_name("span"),
+  ])
+  .with_class_name("root");
+  let result = measure_with_css(
+    root,
+    r#"
+      .root { display: block; position: relative; width: 400px; font-size: 20px; }
+      .span { display: inline; direction: rtl; padding: 0 4px; }
+      .absolute { display: block; position: absolute; width: 10px; height: 10px; }
+    "#,
+  );
+  let absolute = &result.children[0].children[0];
+
+  assert_eq!(absolute.transform[4], 0.0, "{result:?}");
+}
