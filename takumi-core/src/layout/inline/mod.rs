@@ -209,6 +209,15 @@ pub(crate) mod logical_line_builder;
 #[cfg_attr(test, allow(dead_code))]
 pub(crate) mod logical_line_item;
 mod metrics;
+#[cfg_attr(
+  not(test),
+  expect(
+    dead_code,
+    reason = "TODO: the inline layout algorithm port sizes inline content"
+  )
+)]
+#[cfg_attr(test, allow(dead_code))]
+pub(crate) mod min_max_sizes;
 mod outline;
 mod runs;
 mod small_caps;
