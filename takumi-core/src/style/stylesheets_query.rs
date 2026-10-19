@@ -7,6 +7,11 @@ use super::ComputedStyle;
 use crate::{
   geometry::{Point, Size as CoreSize},
   style::{Lang, SizingContext, properties::*},
+  text::{
+    capitalize::capitalize,
+    case_map::CaseMap,
+    character::{is_modern_georgian_uppercase, lowercase_modern_georgian_uppercase},
+  },
 };
 
 impl ComputedStyle {
@@ -343,6 +348,38 @@ impl ComputedStyle {
   /// Whether overflowing content is clipped.
   pub fn clips_overflow(&self) -> bool {
     self.resolve_overflows().should_clip_content()
+  }
+
+  /// Blink's `ApplyTextTransform`, for the case transforms takumi parses. `previous_character`
+  /// ends the text before, which decides whether `capitalize` starts a word.
+  pub(crate) fn apply_text_transform<'t>(
+    &self,
+    text: &'t str,
+    previous_character: char,
+  ) -> Cow<'t, str> {
+    let case_map = || CaseMap::new(self.lang.as_ref().map(Lang::as_str));
+
+    match self.inherited_data.text_transform {
+      TextTransform::None => Cow::Borrowed(text),
+      TextTransform::Capitalize => Cow::Owned(capitalize(text, previous_character)),
+      // Fonts lack the Mtavruli letters, so Georgian stays in Mkhedruli. <https://crbug.com/865427>
+      TextTransform::Uppercase => match case_map().to_upper(text) {
+        Cow::Owned(upper) if upper.contains(is_modern_georgian_uppercase) => Cow::Owned(
+          upper
+            .chars()
+            .map(|c| {
+              if is_modern_georgian_uppercase(c) {
+                lowercase_modern_georgian_uppercase(c)
+              } else {
+                c
+              }
+            })
+            .collect(),
+        ),
+        upper => upper,
+      },
+      TextTransform::Lowercase => case_map().to_lower(text),
+    }
   }
 
   /// The string used to mark truncated text.

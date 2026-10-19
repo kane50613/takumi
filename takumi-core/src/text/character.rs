@@ -305,6 +305,17 @@ pub(crate) fn is_other_space_separator(c: char) -> bool {
   c == IDEOGRAPHIC_SPACE
 }
 
+/// Blink's `IsModernGeorgianUppercase`: the Mtavruli letters of Unicode 11.
+pub(crate) fn is_modern_georgian_uppercase(c: char) -> bool {
+  ('\u{1C90}'..='\u{1CBF}').contains(&c)
+}
+
+/// Blink's `LowercaseModernGeorgianUppercase`: the Mkhedruli letter of a Mtavruli one.
+/// <https://www.unicode.org/charts/PDF/U1C90.pdf>
+pub(crate) fn lowercase_modern_georgian_uppercase(c: char) -> char {
+  char::from_u32(u32::from(c) - (0x1C90 - 0x10D0)).unwrap_or(c)
+}
+
 /// The character starting at byte `offset` of `text`. A byte inside a character stands in for the
 /// trailing surrogate Blink would read there, which no predicate takes for a space.
 pub(crate) fn char_at(text: &str, offset: usize) -> char {
