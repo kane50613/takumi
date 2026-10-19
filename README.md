@@ -20,13 +20,12 @@ Takumi is a layout engine written in Rust, with text and inline layout ported fr
 
 ## Choose a Package
 
-| Use                                  | Package                                                | Output                                                                        |
-| :----------------------------------- | :----------------------------------------------------- | :---------------------------------------------------------------------------- |
-| Images and animations                | [`takumi-js`](https://takumi.kane.tw/docs/)            | PNG, JPEG, WebP, ICO, raw RGBA, SVG. Animated WebP, APNG, and GIF.            |
-| PDF documents                        | [`takumi-pdf`](https://takumi.kane.tw/docs/pdf)        | Paged or single-page PDF with selectable text.                                |
-| Drawing on Canvas, slides, or native | [`takumi-paint`](https://takumi.kane.tw/docs/paint)    | A paint tree: shapes, paints, text runs, and images with CSS values resolved. |
-| Measuring text and layout            | [`measure()`](https://takumi.kane.tw/docs/measure-api) | Box sizes and text runs, from `takumi-js`. No image is drawn.                 |
-| Embedding in Rust                    | [`takumi`](https://docs.rs/takumi)                     | Images and SVG from a node tree or HTML.                                      |
+| Use                              | Package                                             | Output                                                                             |
+| :------------------------------- | :-------------------------------------------------- | :--------------------------------------------------------------------------------- |
+| Images and animations            | [`takumi-js`](https://takumi.kane.tw/docs/)         | PNG, JPEG, WebP, ICO, raw RGBA, SVG. Animated WebP, APNG, and GIF.                 |
+| PDF documents                    | [`takumi-pdf`](https://takumi.kane.tw/docs/pdf)     | Paged or single-page PDF with selectable text.                                     |
+| Your own renderer or layout data | [`takumi-paint`](https://takumi.kane.tw/docs/paint) | A paint tree: every box, text run, and image, positioned with CSS values resolved. |
+| Embedding in Rust                | [`takumi`](https://docs.rs/takumi)                  | Images and SVG from a node tree or HTML.                                           |
 
 ## Quick Start
 
@@ -239,18 +238,6 @@ const svg = await renderSvg(
 
 await writeFile("./output.svg", svg);
 ```
-
-### Measure Layout
-
-`measure()` takes the same input and options as `render()`. It returns the laid-out size and text runs without drawing.
-
-```tsx
-import { measure } from "takumi-js";
-
-const { width, height } = await measure(<span tw="text-xl">Hello from Takumi</span>);
-```
-
-See the [measure API](https://takumi.kane.tw/docs/measure-api) for the returned fields.
 
 ### Rust
 
