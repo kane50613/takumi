@@ -212,7 +212,8 @@ pixel draws as one. The rest rounds toward zero, so `1.5px` draws as `1px`.
 | `justifyContent`, `alignContent`                         | `normal`, `stretch`, `space-between`, `space-around`, `space-evenly`; `start`, `end`, `flex-start`, `flex-end`, `center` optionally prefixed with `safe` or `unsafe` <sup>1</sup> |
 | `justifyItems`, `justifySelf`, `alignItems`, `alignSelf` | `normal`, `baseline`, `stretch`; `start`, `end`, `flex-start`, `flex-end`, `self-start`, `self-end`, `center` optionally prefixed with `safe` or `unsafe` <sup>1</sup>            |
 | `placeContent`, `placeItems`, `placeSelf`                | Supported                                                                                                                                                                         |
-| `WebkitBoxOrient`, `WebkitBoxPack`, `WebkitBoxAlign`     | Legacy aliases for `flexDirection`, `justifyContent`, `alignItems`                                                                                                                |
+| `WebkitBoxOrient`                                        | The axis of a `display: -webkit-box`, which ignores `flexDirection`                                                                                                               |
+| `WebkitBoxPack`, `WebkitBoxAlign`                        | Legacy aliases for `justifyContent`, `alignItems`                                                                                                                                 |
 
 <sup>1</sup> `unsafe` also parses before the other listed alignment values, such as `normal`. `safe`
 only works with the positional values listed after the semicolon. `alignSelf` and `justifySelf`
