@@ -623,6 +623,8 @@ pub(crate) struct PrimaryFontMetrics {
   pub(crate) underline: Option<FontUnderline>,
   /// How far the em box reaches below the baseline.
   pub(crate) em_descent: f32,
+  /// Blink's `FontMetrics::ZeroWidth`: the advance of the `0` glyph, the `ch` unit's basis.
+  pub(crate) zero_width: f32,
 }
 
 /// A font's own underline.
@@ -631,6 +633,21 @@ pub(crate) struct FontUnderline {
   /// How far below the baseline its top sits.
   pub(crate) position: f32,
   pub(crate) thickness: f32,
+}
+
+/// Blink's `SimpleFontData::ZeroInlineSize` for horizontal text: the advance of the `0` glyph,
+/// or half the font size when the font has none.
+/// <https://drafts.csswg.org/css-values-4/#ch>
+pub(crate) fn zero_inline_size(font: &FontRef, font_size: f32, location: LocationRef<'_>) -> f32 {
+  font
+    .charmap()
+    .map('0')
+    .and_then(|glyph| {
+      font
+        .glyph_metrics(Size::new(font_size), location)
+        .advance_width(glyph)
+    })
+    .unwrap_or(font_size / 2.0)
 }
 
 /// How far the em box of `font` at `font_size` reaches below the baseline: its typographic
@@ -692,6 +709,7 @@ impl PrimaryFontMetrics {
         metrics.ascent,
         metrics.descent.abs(),
       ),
+      zero_width: zero_inline_size(font_ref, font_size, location),
     }
   }
 
@@ -735,24 +753,43 @@ impl RenderContext {
     font_size: f32,
   ) -> Option<PrimaryFontMetrics> {
     let fonts = self.fonts();
-    let face = fonts
+    let faces: Vec<MatchedFace> = fonts
       .font_group(families, description)
       .into_iter()
       .flatten()
-      .find(|face| {
-        face
-          .unicode_range
-          .as_ref()
-          .is_none_or(|range| range.contains(u32::from(' ')))
-      })
-      .or_else(|| fonts.fallback_bucket(description).into_iter().next())?;
+      .collect();
+    let face_for = |character: char| {
+      faces
+        .iter()
+        .find(|face| {
+          face
+            .unicode_range
+            .as_ref()
+            .is_none_or(|range| range.contains(u32::from(character)))
+        })
+        .cloned()
+        .or_else(|| fonts.fallback_bucket(description).into_iter().next())
+    };
+    let face = face_for(' ')?;
     let font_ref = face.typeface.font_ref()?;
+    let mut metrics = PrimaryFontMetrics::of(&font_ref, font_size, LocationRef::default());
 
-    Some(PrimaryFontMetrics::of(
-      &font_ref,
-      font_size,
-      LocationRef::default(),
-    ))
+    // Blink's `PrimaryFontWithDigitZero`: `ch` reads the first font that covers a `0`, at the
+    // instance it draws with.
+    metrics.zero_width = face_for('0').map_or(0.0, |face| {
+      face.typeface.font_ref().map_or(0.0, |font| {
+        let location = font.axes().location(
+          face
+            .variations
+            .iter()
+            .map(|variation| (variation.tag, variation.value)),
+        );
+
+        zero_inline_size(&font, font_size, (&location).into())
+      })
+    });
+
+    Some(metrics)
   }
 }
 

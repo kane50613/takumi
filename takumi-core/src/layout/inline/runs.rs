@@ -6,13 +6,13 @@ use crate::{
   resources::{
     font::{
       ExactFontMetrics, FontBlob, FontUnderline, PrimaryFontMetrics, RunFace, RunSynthesis,
-      em_box_descent,
+      em_box_descent, zero_inline_size,
     },
     glyph::{ResolvedColorLayer, ResolvedGlyphs, ResolvedOutlineGlyph},
   },
   style::{Affine, Color},
 };
-use skrifa::{FontRef, MetadataProvider, raw::types::F2Dot14};
+use skrifa::{FontRef, MetadataProvider, instance::LocationRef, raw::types::F2Dot14};
 use std::{ops::Range, sync::Arc};
 
 use super::{
@@ -159,6 +159,9 @@ impl ShapedRun {
     } = self.metrics;
     let font = FontRef::from_index(self.font_data(), self.font_index).ok();
     let em_descent = em_box_descent(font.as_ref(), self.font_size, ascent, descent);
+    let zero_width = font.as_ref().map_or(self.font_size / 2.0, |font| {
+      zero_inline_size(font, self.font_size, LocationRef::default())
+    });
 
     PrimaryFontMetrics {
       ascent: ascent.round(),
@@ -171,6 +174,7 @@ impl ShapedRun {
         thickness: underline_size,
       }),
       em_descent,
+      zero_width,
     }
   }
 }

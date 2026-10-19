@@ -211,6 +211,7 @@ mod tests {
       root_font_size: None,
       line_height: 0.0,
       root_line_height: None,
+      ch: 20.0 / 2.0,
       calc_arena: Rc::new(CalcArena::default()),
     };
 
@@ -238,6 +239,7 @@ mod tests {
       root_font_size: None,
       line_height: 0.0,
       root_line_height: None,
+      ch: 16.0 / 2.0,
       calc_arena: Rc::new(CalcArena::default()),
     };
 
@@ -258,6 +260,7 @@ mod tests {
       root_font_size: Some(root_font_size_device_px),
       line_height: 0.0,
       root_line_height: None,
+      ch: root_font_size_device_px / 2.0,
       calc_arena: Rc::new(CalcArena::default()),
     };
 

@@ -2941,18 +2941,6 @@ impl PendingRenderNode {
 }
 
 impl RenderContext {
-  /// The used `line-height: normal` for `style` at `font_size`, or zero for any other
-  /// `line-height`.
-  pub(crate) fn resolve_normal_line_height(&self, style: &ComputedStyle, font_size: f32) -> f32 {
-    if !matches!(style.inherited_data.line_height, LineHeight::Normal) {
-      return 0.0;
-    }
-
-    self
-      .primary_font_metrics(style, font_size)
-      .map_or(font_size, PrimaryFontMetrics::line_spacing)
-  }
-
   /// The metrics of `style`'s primary font at `font_size`.
   pub(crate) fn primary_font_metrics(
     &self,
@@ -3181,7 +3169,11 @@ impl RenderContext {
       .inherited_data
       .font_size
       .to_px(font_size_basis, font_size_basis.font_size);
-    let normal_basis = self.resolve_normal_line_height(style, font_size);
+    let metrics = self.primary_font_metrics(style, font_size);
+    let normal_basis = match style.inherited_data.line_height {
+      LineHeight::Normal => metrics.map_or(font_size, PrimaryFontMetrics::line_spacing),
+      _ => 0.0,
+    };
     let line_height = style
       .inherited_data
       .line_height
@@ -3198,6 +3190,7 @@ impl RenderContext {
         .sizing
         .root_line_height
         .or_else(|| is_document_root.then_some(line_height)),
+      metrics.map_or(0.0, |metrics| metrics.zero_width),
     )
   }
 

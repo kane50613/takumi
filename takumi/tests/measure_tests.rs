@@ -2877,3 +2877,25 @@ fn an_img_without_a_source_takes_its_attribute_size() {
   );
   assert_eq!(run_texts(&result), ["after"]);
 }
+
+/// `ch` is the advance of the font's `0` glyph, so ten of them fill a `10ch` box once kerning and
+/// contextual alternates, which `ch` never sees, stay off.
+#[test]
+fn ch_matches_the_advance_of_zero() {
+  let root = Node::container([
+    Node::container([]).with_class_name("box"),
+    Node::text("0000000000"),
+  ])
+  .with_class_name("root");
+  let result = measure_with_css(
+    root,
+    ".root { display: block; font: 20px Geist; font-feature-settings: \"calt\" 0, \"kern\" 0; } .box { display: block; width: 10ch; height: 1px; }",
+  );
+  let box_width = result.children[0].width;
+  let zeros_width = result.children[1].runs[0].width;
+
+  assert!(
+    (box_width - zeros_width).abs() < 0.5,
+    "10ch is {box_width}px, ten zeros {zeros_width}px"
+  );
+}

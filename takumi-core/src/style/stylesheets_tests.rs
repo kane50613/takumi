@@ -449,6 +449,7 @@ fn webkit_line_clamp_needs_a_vertical_webkit_box() {
       root_font_size: None,
       line_height: 0.0,
       root_line_height: None,
+      ch: 16.0 / 2.0,
       calc_arena: Rc::new(CalcArena::default()),
     });
     computed
@@ -1165,6 +1166,7 @@ fn test_offset_path_moves_element_onto_path_and_creates_stacking_context() {
     root_font_size: None,
     line_height: 0.0,
     root_line_height: None,
+    ch: 16.0 / 2.0,
     calc_arena: Rc::new(CalcArena::default()),
   };
   let border_box = Size {
@@ -1241,6 +1243,7 @@ fn test_position_absolute_blockifies_inline_display() {
     root_font_size: None,
     line_height: 0.0,
     root_line_height: None,
+    ch: 16.0 / 2.0,
     calc_arena: Rc::new(CalcArena::default()),
   };
 
@@ -1265,6 +1268,7 @@ fn test_inherited_em_text_lengths_are_computed_once() {
     root_font_size: None,
     line_height: 0.0,
     root_line_height: None,
+    ch: 32.0 / 2.0,
     calc_arena: Rc::new(CalcArena::default()),
   });
 
@@ -1277,6 +1281,7 @@ fn test_inherited_em_text_lengths_are_computed_once() {
     root_font_size: None,
     line_height: 0.0,
     root_line_height: None,
+    ch: 32.0 / 2.0,
     calc_arena: Rc::new(CalcArena::default()),
   };
   let inherited_font_size = inherited_child
@@ -1295,6 +1300,7 @@ fn test_inherited_em_text_lengths_are_computed_once() {
     root_font_size: None,
     line_height: 0.0,
     root_line_height: None,
+    ch: 10.0 / 2.0,
     calc_arena: Rc::new(CalcArena::default()),
   };
 
@@ -1580,6 +1586,7 @@ fn test_border_radius_calc_infinity_parses_from_stylesheet_declaration() {
     root_font_size: None,
     line_height: 0.0,
     root_line_height: None,
+    ch: 16.0 / 2.0,
     calc_arena: Rc::new(CalcArena::default()),
   };
   let radius = style.surround_data.border_top_left_radius.x.to_px(

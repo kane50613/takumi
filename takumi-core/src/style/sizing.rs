@@ -32,6 +32,10 @@ pub struct SizingContext {
   /// Pixel basis for the `rlh` unit, set alongside [`Self::root_font_size`].
   #[builder(default)]
   pub root_line_height: Option<f32>,
+  /// Pixel basis for the `ch` unit: the advance of the `0` glyph, as Blink's
+  /// `FontSizes::Ch` reads it from `PrimaryFontWithDigitZero`.
+  #[builder(default = viewport.to_device(viewport.font_size) / 2.0)]
+  pub(crate) ch: f32,
   /// The calc arena shared by the current layout tree.
   #[builder(default, setter(skip))]
   pub(crate) calc_arena: Rc<CalcArena>,
@@ -59,12 +63,14 @@ impl SizingContext {
     root_font_size: Option<f32>,
     line_height: f32,
     root_line_height: Option<f32>,
+    ch: f32,
   ) -> Self {
     Self {
       font_size,
       root_font_size,
       line_height,
       root_line_height,
+      ch,
       ..self.clone()
     }
   }

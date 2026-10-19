@@ -383,6 +383,7 @@ mod tests {
           thickness: 2.0,
         }),
         em_descent: 20.0,
+        zero_width: 25.0,
       },
       size: 100.0,
       scale,
