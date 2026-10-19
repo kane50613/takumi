@@ -148,7 +148,14 @@ impl ScenePainter<'_, '_> {
       )?;
     }
 
-    let viewport = canvas.viewport();
+    // Blink's `CullRectUpdater` paints a pixel-moving filter's content without the cull rect, as
+    // what lies past the canvas within the filter's reach still lands inside it.
+    let reach = filter_padding(
+      &style.misc1_data.filter,
+      &node.context.sizing,
+      paint.transform,
+    ) as f32;
+    let viewport = canvas.viewport().inflate(reach, reach);
     let placement = effect
       .bounds
       .and_then(|bounds| viewport.clamp_bounds(bounds, 2))

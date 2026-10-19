@@ -82,8 +82,8 @@ impl CanvasViewport {
 
     Self {
       origin: Point {
-        x: (self.origin.x - margin_x as i32).max(0),
-        y: (self.origin.y - margin_y as i32).max(0),
+        x: self.origin.x - margin_x as i32,
+        y: self.origin.y - margin_y as i32,
       },
       size: Size {
         width: self.size.width.saturating_add(margin_x * 2),
