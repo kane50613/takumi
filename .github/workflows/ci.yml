@@ -371,18 +371,22 @@ jobs:
         with:
           stage: wpt
 
-      # The checkout is pinned to one revision and directory list, both in the script.
+      # The checkout is pinned to one revision and directory list, both in the script. It stays
+      # out of target/, which the Rust cache saves too.
       - name: Cache the web-platform-tests
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
-          path: target/wpt
+          path: ${{ runner.temp }}/wpt
           key: wpt-${{ hashFiles('scripts/wpt-checkout.sh') }}
 
       - name: Check out the web-platform-tests
+        env:
+          WPT_ROOT: ${{ runner.temp }}/wpt
         run: sh scripts/wpt-checkout.sh
 
       - name: Run the reftests
         env:
+          WPT_ROOT: ${{ runner.temp }}/wpt
           WPT_WRITE: ${{ runner.temp }}/wpt-reftests.txt
         run: cargo test --locked --release -p takumi --test wpt_reftests
 

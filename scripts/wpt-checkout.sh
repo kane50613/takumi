@@ -1,10 +1,10 @@
 #!/bin/sh
-# Checks out the web-platform-tests that takumi/tests/wpt_reftests.rs runs into target/wpt, at the
-# revision Chromium last imported, so local runs and CI test against the same files.
+# Checks out the web-platform-tests that takumi/tests/wpt_reftests.rs runs into $WPT_ROOT, or
+# target/wpt, at the revision Chromium last imported, so local runs and CI test against the same files.
 set -eu
 
 revision=eed8aea45725da5b002ee8778400d14148d0ebfe
-dir="$(cd "$(dirname "$0")/.." && pwd)/target/wpt"
+dir="${WPT_ROOT:-$(cd "$(dirname "$0")/.." && pwd)/target/wpt}"
 # The CSS modules takumi renders, then what their tests share.
 paths="
   css/css-text css/css-text-decor css/css-inline css/css-overflow
