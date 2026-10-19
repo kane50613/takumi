@@ -33,7 +33,13 @@ Replace `svg` with your generated chart. `breakInside: "avoid"` keeps the chart 
 
 ## Fonts for chart labels
 
-`render()` loads only the font subsets that cover text in the document tree. It does not read text inside an SVG image. If chart labels use characters the surrounding text does not, register their fonts ahead of time. Fonts from `registerFont()` stay loaded for every render:
+<Callout type="warn">
+  `render()` loads only the font subsets that cover text in the document tree. It does not read text
+  inside an SVG image. If chart labels use characters the surrounding text does not, register their
+  fonts ahead of time.
+</Callout>
+
+Fonts from `registerFont()` stay loaded for every render:
 
 ```tsx twoslash title="Register chart label fonts"
 declare const svg: string;

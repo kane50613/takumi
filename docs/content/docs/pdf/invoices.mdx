@@ -105,7 +105,10 @@ const pdf = await render(invoice, {
 });
 ```
 
-The renderer checks PDF conformance while writing. It does not check the invoice XML, tax rules, or whether a receiving system accepts the file.
+<Callout type="warn">
+  The renderer checks PDF conformance while writing. It does not check the invoice XML, tax rules,
+  or whether a receiving system accepts the file.
+</Callout>
 
 Takumi does not build the invoice XML. Use a library for your profile, or write the elements the profile lists. The [e-invoice example](https://github.com/kane50613/takumi/tree/master/example/e-invoice) writes a MINIMUM profile by hand, along with the `facturXmp` schema used above.
 

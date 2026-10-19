@@ -238,7 +238,11 @@ const filterUrl = (markup: string) => `url("data:image/svg+xml,${encodeURICompon
 <div style={{ filter: `contrast(1.4) ${filterUrl(markup)}` }} />;
 ```
 
-Threshold effects need `color-interpolation-filters="sRGB"` on the `<filter>`, because the spec default is `linearRGB`. Posterize snaps each channel to fixed levels:
+<Callout type="warn">
+  Threshold effects need `color-interpolation-filters="sRGB"` on the `<filter>`, because the spec default is `linearRGB`.
+</Callout>
+
+Posterize snaps each channel to fixed levels:
 
 ```xml title="Dithering and duotone"
 <filter color-interpolation-filters="sRGB" x="0" y="0" width="100%" height="100%">

@@ -157,7 +157,10 @@ Animations with high frame rates could stall or play incorrectly. In v2, `render
 
 ### Property defaults
 
-These properties changed their default or behavior to match the CSS specification. Check affected pages visually.
+<Callout type="warn">
+  These properties changed their default or behavior to match the CSS specification. Check affected
+  pages visually.
+</Callout>
 
 | Property                               | v1              | v2               | Action                                                                                |
 | -------------------------------------- | --------------- | ---------------- | ------------------------------------------------------------------------------------- |
@@ -173,7 +176,11 @@ The sections below cover the subtler cases.
 
 In v2.0 through v2.5, SVG image content uses its own `color` instead of inheriting the host element's color.
 
-Since v2.6, the host color is the fallback again. `currentColor` resolves to an explicit `color` inside the SVG first, then the host color, then black. If you upgrade straight to v2.6 or later, keep icons that use `currentColor` as they are.
+Since v2.6, the host color is the fallback again. `currentColor` resolves to an explicit `color` inside the SVG first, then the host color, then black.
+
+<Callout type="info">
+  If you upgrade straight to v2.6 or later, keep icons that use `currentColor` as they are.
+</Callout>
 
 This change does not affect Takumi's own text, borders, shadows, or decorations.
 
@@ -301,7 +308,10 @@ let measured = measure_layout(options)?; // [!code --]
 let measured = measure(options)?; // [!code ++]
 ```
 
-`render_for_layout` removed its `current_color` argument in v2.0 and restored it in v2.6. Keep the v1 call shape when upgrading to v2.6 or later.
+<Callout type="info">
+  `render_for_layout` removed its `current_color` argument in v2.0 and restored it in v2.6. Keep the
+  v1 call shape when upgrading to v2.6 or later.
+</Callout>
 
 ### `Length` and `ColorInput` drop their default-flavor type parameter
 

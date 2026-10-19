@@ -52,7 +52,12 @@ const image = await render(<div tw="w-full h-full text-6xl">Hello Takumi</div>, 
 });
 ```
 
-The result is a 2400 × 1260 image. Every CSS length draws twice as large, so the layout matches a 1200 × 630 render at ratio `1`. With `width: 1200` and `height: 630` at ratio `2`, the image stays 1200 × 630 and the layout gets only 600 × 315 CSS pixels.
+The result is a 2400 × 1260 image. Every CSS length draws twice as large, so the layout matches a 1200 × 630 render at ratio `1`.
+
+<Callout type="warn">
+  With `width: 1200` and `height: 630` at ratio `2`, the image stays 1200 × 630 and the layout gets
+  only 600 × 315 CSS pixels.
+</Callout>
 
 ## Dithering
 

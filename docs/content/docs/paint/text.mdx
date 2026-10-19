@@ -88,4 +88,9 @@ console.log(paragraphs);
 | Letter spacing | `run.letterSpacing`      |
 | Baseline       | `run.x`, `run.y`         |
 
-`run.letterSpacing` is already applied to the glyph positions, so do not add it again when you place glyphs. Under `line-height: normal`, a fallback face can make `run.lineHeight` taller.
+<Callout type="warn">
+  `run.letterSpacing` is already applied to the glyph positions, so do not add it again when you
+  place glyphs.
+</Callout>
+
+Under `line-height: normal`, a fallback face can make `run.lineHeight` taller.

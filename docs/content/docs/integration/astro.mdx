@@ -50,7 +50,9 @@ description: Generate Open Graph images for static Astro pages at build time wit
   <Step>
     ### Reference the image from your layout
 
-    `getImagePath` returns the URL of the current page's image. The build fails if `og:title`, `og:type`, or `og:image` is missing, or if `og:image` does not match that URL.
+    `getImagePath` returns the URL of the current page's image.
+
+    <Callout type="warn">The build fails if `og:title`, `og:type`, or `og:image` is missing, or if `og:image` does not match that URL.</Callout>
 
     ```astro title="src/layouts/Layout.astro"
     ---

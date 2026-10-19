@@ -6,7 +6,10 @@ icon: Globe
 
 Start with the HTML you pass to `page.setContent()`. Pass the same string to `render()`, and translate the `page.pdf()` options with the [option map](#option-map). Headers and footers use the same `pageNumber` and `totalPages` class hooks.
 
-Takumi does not load a page or run its scripts. Generate dynamic content and fetch document images before you render.
+<Callout type="warn">
+  Takumi does not load a page or run its scripts. Generate dynamic content and fetch document images
+  before you render.
+</Callout>
 
 ## Before and after
 

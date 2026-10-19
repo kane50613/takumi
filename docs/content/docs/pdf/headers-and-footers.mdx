@@ -70,7 +70,9 @@ A numeric margin overrides that side. Sides left out of the object stay automati
 const margin = { top: 96 };
 ```
 
-A numeric margin that is too small lets the band overlap the body. To compute one, call `measure()` with the same page size and fonts as the render. It lays the band out at full page width with three-digit page counters. Add the 20px inset to the returned height.
+<Callout type="warn">A numeric margin that is too small lets the band overlap the body.</Callout>
+
+To compute one, call `measure()` with the same page size and fonts as the render. It lays the band out at full page width with three-digit page counters. Add the 20px inset to the returned height.
 
 ```tsx twoslash title="Measure a footer margin"
 declare const report: import("react").ReactNode;
@@ -119,7 +121,10 @@ Counters also work in document content. A `position: fixed` box repeats on every
 </div>
 ```
 
-A fixed box draws over the content, not in the margin, so leave room for it. Automatic margins fit only the header and footer.
+<Callout type="warn">
+  A fixed box draws over the content, not in the margin, so leave room for it. Automatic margins fit
+  only the header and footer.
+</Callout>
 
 In ordinary flow, `<PageNumber />` shows the page the counter lands on. Its value depends on pagination, so the document lays out again after the numbers are filled in.
 

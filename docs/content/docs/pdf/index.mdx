@@ -86,7 +86,9 @@ const pdf = await render(report, {
 | `margin`          | `number`, `"auto"`, or `{ top?, right?, bottom?, left? }` | `"auto"` | Margin in CSS px. A side left out of the object is `"auto"`.                           |
 | `backgroundColor` | CSS color                                                 | unset    | Fills the whole page, margins included, under everything. Viewers show unset as white. |
 
-Set page geometry with these options. CSS `@page` rules are not parsed.
+Set page geometry with these options.
+
+<Callout type="warn">CSS `@page` rules are not parsed.</Callout>
 
 Each keyword is a portrait paper size:
 
@@ -162,7 +164,10 @@ await init({ module_or_path: wasmUrl });
 
 `takumi-pdf/wasm-url` resolves the binary with `new URL(specifier, import.meta.url)`. Vite, webpack, and Turbopack rewrite that call to the asset they emit. The module has no top-level `await`, so it also works in a worker bundled as an IIFE.
 
-Keep the default entry in server code. A Vite SSR build leaves the URL pointing at the server chunk, where the asset is not emitted.
+<Callout type="warn">
+  Keep the default entry in server code. A Vite SSR build leaves the URL pointing at the server
+  chunk, where the asset is not emitted.
+</Callout>
 
 On Turbopack, remove any `turbopack.rules` entry that maps `*.wasm` to `type: "wasm"`. That rule makes Turbopack instantiate the binary and look for wasm-bindgen glue the package does not ship.
 

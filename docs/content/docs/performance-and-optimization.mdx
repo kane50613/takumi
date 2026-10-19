@@ -54,7 +54,11 @@ import { setGlyphCacheMaxBytes } from "takumi-js";
 setGlyphCacheMaxBytes(64 * 1024 * 1024); // [!code highlight]
 ```
 
-Call it before the first render. A later call does not resize a cache already in use. Every renderer in the same backend module shares this budget. Large glyph sets, such as CJK text, can need more space. Benchmark your content first.
+<Callout type="warn">
+  Call it before the first render. A later call does not resize a cache already in use.
+</Callout>
+
+Every renderer in the same backend module shares this budget. Large glyph sets, such as CJK text, can need more space. Benchmark your content first.
 
 ## Keep memory flat on Linux servers
 

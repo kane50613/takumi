@@ -17,7 +17,7 @@ Render a Svelte component to HTML on the server. Then pass that HTML and its CSS
   <Step>
     ### Make a Svelte component
 
-    Set `css="injected"` so the component's `<style>` block lands in the server-rendered HTML.
+    <Callout type="warn">Set `css="injected"` so the component's `<style>` block lands in the server-rendered HTML.</Callout>
 
     ```svelte title="src/lib/components/OgImage.svelte"
     <script lang="ts">

@@ -113,7 +113,12 @@ Match `max-age` to how often the content changes.
 
 ## Error handling
 
-The response streams its body while the render runs, so the status is already set when a render fails. To send a fallback instead, await `ready`. It resolves when the render succeeds and rejects when it fails.
+<Callout type="warn">
+  The response streams its body while the render runs, so the status is already set when a render
+  fails.
+</Callout>
+
+To send a fallback instead, await `ready`. It resolves when the render succeeds and rejects when it fails.
 
 ```tsx twoslash title="Return a fallback response"
 import { ImageResponse } from "takumi-js/response";
