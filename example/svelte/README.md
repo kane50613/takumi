@@ -8,7 +8,7 @@ Build the [image example packages](../README.md#image-examples) first. Then star
 
 ```bash
 cd example/svelte
-portless run --name takumi-svelte vite dev
+bunx portless run --name takumi-svelte bunx vite dev
 ```
 
 Open `https://takumi-svelte.localhost/?name=Kane` to see the image.

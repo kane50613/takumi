@@ -4,7 +4,7 @@ Render a bouncing clock as raw RGBA frames and play them in real time with `ffpl
 
 ## Run
 
-Install [FFmpeg](https://ffmpeg.org), which includes `ffplay`. Build the [image example packages](../README.md#image-examples). Then start the clock:
+Install an [FFmpeg](https://ffmpeg.org) build that includes `ffplay`. Some builds leave it out. Build the [image example packages](../README.md#image-examples). Then start the clock:
 
 ```bash
 cd example/ffplay

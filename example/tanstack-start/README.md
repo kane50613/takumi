@@ -8,7 +8,7 @@ Build the [image example packages](../README.md#image-examples) first. Then star
 
 ```bash
 cd example/tanstack-start
-portless run --name takumi-tanstack vite dev
+bunx portless run --name takumi-tanstack bunx vite dev
 ```
 
 Open `https://takumi-tanstack.localhost/` to see the card. Its title shows the request's host.

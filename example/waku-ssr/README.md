@@ -8,7 +8,7 @@ Build the [image example packages](../README.md#image-examples) first. Then star
 
 ```bash
 cd example/waku-ssr
-portless run --name takumi-waku waku dev
+bunx portless run --name takumi-waku bunx waku dev
 ```
 
 Open `https://takumi-waku.localhost/api/image.png` to see the image.
