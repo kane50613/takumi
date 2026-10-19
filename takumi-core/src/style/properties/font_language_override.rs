@@ -28,8 +28,14 @@ impl<'i> FromCss<'i> for FontLanguageOverride {
 
     match &token {
       Token::Ident(ident) if ident.eq_ignore_ascii_case("normal") => Ok(Self::Normal),
+      // An OpenType tag is printable ASCII, spaces only at its end.
       Token::QuotedString(tag)
-        if (1..=4).contains(&tag.len()) && tag.bytes().all(|byte| byte.is_ascii_graphic()) =>
+        if (1..=4).contains(&tag.len())
+          && tag
+            .trim_end_matches(' ')
+            .bytes()
+            .all(|byte| byte.is_ascii_graphic())
+          && !tag.starts_with(' ') =>
       {
         let mut padded = [b' '; 4];
 
@@ -63,6 +69,10 @@ mod tests {
     let parsed = FontLanguageOverride::from_css_str("\"TRK\"").unwrap();
 
     assert_eq!(parsed, FontLanguageOverride::Tag(*b"TRK "));
+    assert_eq!(
+      FontLanguageOverride::from_css_str("\"TRK \""),
+      Ok(FontLanguageOverride::Tag(*b"TRK "))
+    );
     assert_eq!(parsed.to_css_string(), "\"TRK\"");
     assert_eq!(
       FontLanguageOverride::from_css_str("normal"),
@@ -72,7 +82,7 @@ mod tests {
 
   #[test]
   fn rejects_an_empty_or_long_tag() {
-    for value in ["\"\"", "\"ABCDE\"", "TRK"] {
+    for value in ["\"\"", "\"ABCDE\"", "TRK", "\" TRK\"", "\"T RK\""] {
       assert!(
         FontLanguageOverride::from_css_str(value).is_err(),
         "{value}"
