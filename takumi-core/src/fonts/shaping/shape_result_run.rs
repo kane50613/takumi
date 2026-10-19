@@ -703,8 +703,6 @@ impl ShapeResultRun {
 
 #[cfg(test)]
 mod tests {
-  use harfrust::script;
-
   use super::*;
 
   /// Blink's `CreateTestShapeResultRun`.
@@ -712,7 +710,7 @@ mod tests {
     ShapeResultRun::new(
       None,
       Direction::LeftToRight,
-      script::LATIN,
+      Script::LATIN,
       0,
       num_glyphs,
       num_characters,
@@ -767,7 +765,7 @@ mod tests {
     let mut run = ShapeResultRun::new(
       None,
       Direction::RightToLeft,
-      script::LATIN,
+      Script::LATIN,
       0,
       last_cluster + 1,
       last_cluster + 2,

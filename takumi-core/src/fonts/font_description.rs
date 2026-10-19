@@ -4,7 +4,7 @@ use std::rc::Rc;
 
 use std::str::FromStr;
 
-use harfrust::{Feature, Language, Variation};
+use harfrust::{Feature, Language, font::Variation};
 
 use super::font_selection_types::FontSelectionRequest;
 use crate::{

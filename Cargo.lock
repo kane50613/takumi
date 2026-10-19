@@ -461,8 +461,8 @@ dependencies = [
 
 [[package]]
 name = "font-types"
-version = "0.12.1"
-source = "git+https://github.com/kane50613/fontations?rev=caf93ec16d8e0f268da88dbdedd2fb21d7191170#caf93ec16d8e0f268da88dbdedd2fb21d7191170"
+version = "0.12.6"
+source = "git+https://github.com/kane50613/fontations?rev=4f695945ca06b2b8e85863165813458eeb8b7b31#4f695945ca06b2b8e85863165813458eeb8b7b31"
 dependencies = [
  "bytemuck",
 ]
@@ -623,7 +623,19 @@ checksum = "c03d949a14aa089bbb282f7dd76a498a7f684428e4257202efc119ec010376f9"
 dependencies = [
  "bitflags",
  "bytemuck",
- "read-fonts",
+ "read-fonts 0.41.0",
+ "smallvec",
+]
+
+[[package]]
+name = "harfrust"
+version = "0.14.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "86aa776d6d32b072119e1f1650f4db843ff4382a4aaa6a2c9c4e35703cd377cb"
+dependencies = [
+ "bitflags",
+ "bytemuck",
+ "read-fonts 0.45.0",
  "smallvec",
 ]
 
@@ -1377,11 +1389,23 @@ dependencies = [
 [[package]]
 name = "read-fonts"
 version = "0.41.0"
-source = "git+https://github.com/kane50613/fontations?rev=caf93ec16d8e0f268da88dbdedd2fb21d7191170#caf93ec16d8e0f268da88dbdedd2fb21d7191170"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "046a7d674daf459825b32f5062056d6882db0d2f5a479fbd76ccfc870ac18709"
 dependencies = [
  "bytemuck",
  "font-types",
  "once_cell",
+]
+
+[[package]]
+name = "read-fonts"
+version = "0.45.0"
+source = "git+https://github.com/kane50613/fontations?rev=4f695945ca06b2b8e85863165813458eeb8b7b31#4f695945ca06b2b8e85863165813458eeb8b7b31"
+dependencies = [
+ "bytemuck",
+ "font-types",
+ "once_cell",
+ "yoke",
 ]
 
 [[package]]
@@ -1634,10 +1658,20 @@ checksum = "8ee5873ec9cce0195efcb7a4e9507a04cd49aec9c83d0389df45b1ef7ba2e649"
 [[package]]
 name = "skrifa"
 version = "0.44.0"
-source = "git+https://github.com/kane50613/fontations?rev=caf93ec16d8e0f268da88dbdedd2fb21d7191170#caf93ec16d8e0f268da88dbdedd2fb21d7191170"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "819ab7d62b1d3e72d9d9dea5650bac30424f9111364bb94928dbf5ecad1baa68"
 dependencies = [
  "bytemuck",
- "read-fonts",
+ "read-fonts 0.41.0",
+]
+
+[[package]]
+name = "skrifa"
+version = "0.48.0"
+source = "git+https://github.com/kane50613/fontations?rev=4f695945ca06b2b8e85863165813458eeb8b7b31#4f695945ca06b2b8e85863165813458eeb8b7b31"
+dependencies = [
+ "bytemuck",
+ "read-fonts 0.45.0",
 ]
 
 [[package]]
@@ -1794,7 +1828,7 @@ dependencies = [
  "cssparser",
  "data-url",
  "gif",
- "harfrust",
+ "harfrust 0.14.0",
  "icu_casemap",
  "icu_locale_core",
  "icu_properties",
@@ -1819,7 +1853,7 @@ dependencies = [
  "serde_json",
  "simplecss",
  "siphasher",
- "skrifa",
+ "skrifa 0.48.0",
  "smallvec",
  "strict-num",
  "svgtypes",
@@ -1894,7 +1928,7 @@ dependencies = [
  "pretty_assertions",
  "rustc-hash",
  "siphasher",
- "skrifa",
+ "skrifa 0.48.0",
  "smallvec",
  "takumi-core",
  "takumi-html",
@@ -1937,7 +1971,7 @@ dependencies = [
  "rayon",
  "serde",
  "serde_json",
- "skrifa",
+ "skrifa 0.48.0",
  "smallvec",
  "takumi-core",
  "tiny-skia",
@@ -2128,7 +2162,7 @@ dependencies = [
  "data-url",
  "flate2",
  "fontdb",
- "harfrust",
+ "harfrust 0.12.0",
  "imagesize",
  "kurbo",
  "log",
@@ -2136,7 +2170,7 @@ dependencies = [
  "roxmltree 0.21.1",
  "simplecss",
  "siphasher",
- "skrifa",
+ "skrifa 0.44.0",
  "strict-num",
  "svgtypes",
  "tiny-skia-path",
@@ -2289,15 +2323,14 @@ dependencies = [
 
 [[package]]
 name = "write-fonts"
-version = "0.50.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cae90d1d9f6d1d36ef116b0b1e651a6d7c12ba925439d4d06ff9adc94662a3d8"
+version = "0.54.0"
+source = "git+https://github.com/kane50613/fontations?rev=4f695945ca06b2b8e85863165813458eeb8b7b31#4f695945ca06b2b8e85863165813458eeb8b7b31"
 dependencies = [
  "font-types",
  "indexmap",
  "kurbo",
  "log",
- "read-fonts",
+ "read-fonts 0.45.0",
 ]
 
 [[package]]

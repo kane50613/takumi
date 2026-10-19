@@ -2,7 +2,8 @@
 
 use std::cell::Cell;
 
-use harfrust::{FontRef, Script, Tag, script};
+use harfrust::{Script, Tag};
+use skrifa::FontRef;
 use skrifa::raw::{FontRead, TableProvider, tables::gsub::Gsub};
 use smallvec::SmallVec;
 
@@ -327,16 +328,16 @@ impl<'a> OpenTypeCapsSupport<'a> {
 /// the newest Indic or Myanmar tags first, and the old tag otherwise.
 fn script_tags(script: Script) -> SmallVec<[Tag; 2]> {
   let new_tag = match script {
-    script::BENGALI => Some(*b"bng2"),
-    script::DEVANAGARI => Some(*b"dev2"),
-    script::GUJARATI => Some(*b"gjr2"),
-    script::GURMUKHI => Some(*b"gur2"),
-    script::KANNADA => Some(*b"knd2"),
-    script::MALAYALAM => Some(*b"mlm2"),
-    script::ORIYA => Some(*b"ory2"),
-    script::TAMIL => Some(*b"tml2"),
-    script::TELUGU => Some(*b"tel2"),
-    script::MYANMAR => Some(*b"mym2"),
+    Script::BENGALI => Some(*b"bng2"),
+    Script::DEVANAGARI => Some(*b"dev2"),
+    Script::GUJARATI => Some(*b"gjr2"),
+    Script::GURMUKHI => Some(*b"gur2"),
+    Script::KANNADA => Some(*b"knd2"),
+    Script::MALAYALAM => Some(*b"mlm2"),
+    Script::ORIYA => Some(*b"ory2"),
+    Script::TAMIL => Some(*b"tml2"),
+    Script::TELUGU => Some(*b"tel2"),
+    Script::MYANMAR => Some(*b"mym2"),
     _ => None,
   };
 
@@ -359,12 +360,12 @@ fn script_tags(script: Script) -> SmallVec<[Tag; 2]> {
 /// HarfBuzz's `hb_ot_old_tag_from_script`.
 fn old_script_tag(script: Script) -> Tag {
   match script {
-    script::MATH => Tag::new(b"math"),
-    script::HIRAGANA => Tag::new(b"kana"),
-    script::LAO => Tag::new(b"lao "),
-    script::YI => Tag::new(b"yi  "),
-    script::NKO => Tag::new(b"nko "),
-    script::VAI => Tag::new(b"vai "),
+    Script::MATH => Tag::new(b"math"),
+    Script::HIRAGANA => Tag::new(b"kana"),
+    Script::LAO => Tag::new(b"lao "),
+    Script::YI => Tag::new(b"yi  "),
+    Script::NKO => Tag::new(b"nko "),
+    Script::VAI => Tag::new(b"vai "),
     _ => Tag::from_u32(u32::from_be_bytes(script.tag().to_be_bytes()) | 0x2000_0000),
   }
 }

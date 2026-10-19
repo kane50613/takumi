@@ -1419,11 +1419,11 @@ fn shape_text_with_font(
   fontdb: &Database,
 ) -> Option<Vec<Glyph>> {
   fontdb.with_face_data(font.id, |font_data, face_index| -> Option<Vec<Glyph>> {
-    use harfrust::{Feature, ShaperData, ShaperInstance, Tag, UnicodeBuffer, Variation};
+    use harfrust::{Buffer, Feature, ShaperFont, Tag, font::Variation, shape};
 
     use crate::resvg::usvg::text::OPSZ;
 
-    let hr_font = harfrust::FontRef::from_index(font_data, face_index).ok()?;
+    let hr_font = skrifa::FontRef::from_index(font_data, face_index).ok()?;
 
     // Build the list of variations to apply
     let mut variations: Vec<Variation> = variations
@@ -1457,14 +1457,16 @@ fn shape_text_with_font(
 
     let mut glyphs = Vec::new();
 
-    // A shaper instance is only needed to apply variations.
-    let instance_data =
-      (!variations.is_empty()).then(|| ShaperInstance::from_variations(&hr_font, &variations));
-    let shaper_data = ShaperData::new(&hr_font);
-    let shaper = shaper_data
-      .shaper(&hr_font)
-      .instance(instance_data.as_ref())
-      .build();
+    let shaping_font = fontdb.shaping_font(font.id)?;
+    let shaping_font = if variations.is_empty() {
+      shaping_font
+    } else {
+      shaping_font
+        .instance_builder()
+        .variations(variations.iter().copied())
+        .build()
+    };
+    let shaper_font = ShaperFont::new(&shaping_font);
 
     let mut features = Vec::new();
     if small_caps {
@@ -1488,14 +1490,20 @@ fn shape_text_with_font(
         harfrust::Direction::RightToLeft
       };
 
-      let mut buffer = UnicodeBuffer::new();
+      let mut buffer = Buffer::new();
       buffer.push_str(sub_text);
       buffer.set_direction(direction);
 
       // TODO: explicitly set language?
       buffer.guess_segment_properties();
+      shape(
+        &shaper_font,
+        &mut buffer,
+        ShapeOptions::new().features(&features),
+      )
+      .ok()?;
 
-      let output = shaper.shape(buffer, ShapeOptions::new().features(&features));
+      let output = &buffer;
 
       let positions = output.glyph_positions();
       let infos = output.glyph_infos();

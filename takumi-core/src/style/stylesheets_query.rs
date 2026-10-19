@@ -493,7 +493,7 @@ impl ComputedStyle {
       variation_settings: inherited
         .font_variation_settings
         .iter()
-        .map(|variation| harfrust::Variation {
+        .map(|variation| harfrust::font::Variation {
           tag: variation.tag.into_harfrust(),
           value: variation.value,
         })

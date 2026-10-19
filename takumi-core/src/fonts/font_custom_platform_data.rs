@@ -10,7 +10,7 @@ use std::{
   sync::Arc,
 };
 
-use harfrust::{Tag, Variation};
+use harfrust::{Tag, font::Variation};
 use skrifa::{
   FontRef, MetadataProvider,
   attribute::{Attributes, Style},

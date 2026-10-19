@@ -7,7 +7,7 @@
 
 use std::sync::Arc;
 
-use harfrust::Variation;
+use harfrust::font::Variation;
 
 use super::{
   font_custom_platform_data::{FontCustomPlatformData, FontPlatformData},

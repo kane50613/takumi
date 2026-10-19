@@ -5,7 +5,7 @@ use std::{
   rc::Rc,
 };
 
-use harfrust::{Direction as HbDirection, GlyphInfo, script};
+use harfrust::{Direction as HbDirection, GlyphInfo, Script as HbScript};
 
 use super::{
   glyph_data::{GlyphOffset, HarfBuzzRunGlyphData, SafeToBreak},
@@ -130,7 +130,7 @@ impl ShapeResult {
       let mut run = ShapeResultRun::new(
         font_data.clone(),
         hb_direction,
-        script::COMMON,
+        HbScript::COMMON,
         run_start,
         run_length,
         run_length,
@@ -193,7 +193,7 @@ impl ShapeResult {
     let mut run = ShapeResultRun::new(
       font_data,
       hb_direction,
-      script::COMMON,
+      HbScript::COMMON,
       start_index,
       offsets.len() as u32,
       text.len() as u32,
@@ -1092,7 +1092,7 @@ impl ShapeResult {
     let mut run = ShapeResultRun::new(
       None,
       hb_direction,
-      script::COMMON,
+      HbScript::COMMON,
       start_index,
       num_characters,
       num_characters,
@@ -1122,17 +1122,15 @@ impl ShapeResult {
 }
 
 /// Blink's `IsCursiveScript` for a run's script: scripts without gaps between letters.
-fn is_cursive_script(script: harfrust::Script) -> bool {
-  use harfrust::script::{ARABIC, HANIFI_ROHINGYA, MANDAIC, MONGOLIAN, NKO, PHAGS_PA, SYRIAC};
-
+fn is_cursive_script(script: HbScript) -> bool {
   [
-    ARABIC,
-    HANIFI_ROHINGYA,
-    MANDAIC,
-    MONGOLIAN,
-    NKO,
-    PHAGS_PA,
-    SYRIAC,
+    HbScript::ARABIC,
+    HbScript::HANIFI_ROHINGYA,
+    HbScript::MANDAIC,
+    HbScript::MONGOLIAN,
+    HbScript::NKO,
+    HbScript::PHAGS_PA,
+    HbScript::SYRIAC,
   ]
   .contains(&script)
 }

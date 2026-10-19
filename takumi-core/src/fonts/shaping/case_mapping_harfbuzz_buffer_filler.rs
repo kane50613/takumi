@@ -1,6 +1,6 @@
 //! Blink's [`CaseMappingHarfBuzzBufferFiller`](https://source.chromium.org/chromium/chromium/src/+/main:third_party/blink/renderer/platform/fonts/shaping/case_mapping_harfbuzz_buffer_filler.cc).
 
-use harfrust::UnicodeBuffer;
+use harfrust::Buffer;
 
 use crate::text::case_map::CaseMap;
 
@@ -19,7 +19,7 @@ impl CaseMapIntend {
   /// `text` as context.
   pub(crate) fn fill_buffer(
     self,
-    buffer: &mut UnicodeBuffer,
+    buffer: &mut Buffer,
     locale: Option<&str>,
     text: &str,
     start: usize,
@@ -29,7 +29,7 @@ impl CaseMapIntend {
     let case_mapped_text = match self {
       Self::KeepSameCase => {
         for (offset, character) in text[start..end].char_indices() {
-          buffer.add(character, (start + offset) as u32);
+          buffer.push(u32::from(character), (start + offset) as u32);
         }
 
         buffer.set_pre_context(&text[..start]);
@@ -84,7 +84,7 @@ impl CaseMapIntend {
 
       if source_byte >= start {
         pre_context_end.get_or_insert(byte);
-        buffer.add(character, source_byte as u32);
+        buffer.push(u32::from(character), source_byte as u32);
       }
 
       utf16_offset += character.len_utf16();
@@ -99,7 +99,7 @@ impl CaseMapIntend {
   /// Blink's `FillSlowCase`: each character's mapping at its cluster.
   fn fill_slow_case(
     self,
-    buffer: &mut UnicodeBuffer,
+    buffer: &mut Buffer,
     case_map: &CaseMap,
     text: &str,
     start: usize,
@@ -116,7 +116,7 @@ impl CaseMapIntend {
       };
 
       for case_mapped in case_mapped_character.chars() {
-        buffer.add(case_mapped, (start + offset) as u32);
+        buffer.push(u32::from(case_mapped), (start + offset) as u32);
       }
     }
 

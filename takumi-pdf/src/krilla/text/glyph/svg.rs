@@ -9,8 +9,7 @@ pub(crate) fn has_svg_data(font: &Font, glyph: GlyphId) -> bool {
   font
     .font_ref()
     .svg()
-    .map(|svg_table| svg_table.glyph_data(glyph.to_skrifa()).is_ok())
-    .is_ok()
+    .is_ok_and(|svg_table| svg_table.glyph_data(glyph.to_skrifa()).is_some())
 }
 
 /// Draw an SVG-based glyph on a surface.
@@ -20,11 +19,7 @@ pub(crate) fn draw_glyph(
   glyph: GlyphId,
   surface: &mut Surface,
 ) -> Option<()> {
-  let svg_data = font
-    .font_ref()
-    .svg()
-    .and_then(|svg_table| svg_table.glyph_data(glyph.to_skrifa()))
-    .ok()??;
+  let svg_data = font.font_ref().svg().ok()?.glyph_data(glyph.to_skrifa())?;
 
   let upem = font.units_per_em();
 

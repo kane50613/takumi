@@ -32,7 +32,7 @@ data-url = "0.3"
 flate2 = "1.1"
 float-cmp = "0.9"
 gif = "0.14"
-harfrust = "0.12"
+harfrust = "0.14"
 html5ever = "0.39"
 image-webp = "0.2"
 indexmap = "2.14"
@@ -68,7 +68,7 @@ tracing = "0.1"
 tracing-subscriber = "0.3"
 typed-builder = "0.23"
 wasm-bindgen = "0.2"
-write-fonts = "0.50"
+write-fonts = "0.54"
 xmp-writer = "0.3"
 yoke = "0.8"
 zune-jpeg = "0.5"
@@ -151,7 +151,7 @@ version = "1"
 features = ["derive"]
 
 [workspace.dependencies.skrifa]
-version = "0.44"
+version = "0.48"
 default-features = false
 features = ["std"]
 
@@ -315,6 +315,7 @@ opt-level = "z"
 # `OutlineGlyph::draw` so every pen type shares one instantiation of the
 # scalers.
 [patch.crates-io]
-skrifa = { git = "https://github.com/kane50613/fontations", rev = "caf93ec16d8e0f268da88dbdedd2fb21d7191170" }
-read-fonts = { git = "https://github.com/kane50613/fontations", rev = "caf93ec16d8e0f268da88dbdedd2fb21d7191170" }
-font-types = { git = "https://github.com/kane50613/fontations", rev = "caf93ec16d8e0f268da88dbdedd2fb21d7191170" }
+skrifa = { git = "https://github.com/kane50613/fontations", rev = "4f695945ca06b2b8e85863165813458eeb8b7b31" }
+read-fonts = { git = "https://github.com/kane50613/fontations", rev = "4f695945ca06b2b8e85863165813458eeb8b7b31" }
+font-types = { git = "https://github.com/kane50613/fontations", rev = "4f695945ca06b2b8e85863165813458eeb8b7b31" }
+write-fonts = { git = "https://github.com/kane50613/fontations", rev = "4f695945ca06b2b8e85863165813458eeb8b7b31" }
