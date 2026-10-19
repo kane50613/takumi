@@ -167,7 +167,7 @@ impl<'a> NodeRef<'a> {
     &self.dom.nodes[self.id].data
   }
 
-  pub(crate) fn children(self) -> impl Iterator<Item = NodeRef<'a>> {
+  pub(crate) fn children(self) -> impl DoubleEndedIterator<Item = NodeRef<'a>> {
     let dom = self.dom;
 
     dom.nodes[self.id]
@@ -185,7 +185,7 @@ impl<'a> NodeRef<'a> {
     attrs
       .iter()
       .find(|attr| attr.name.local.as_ref() == name)
-      .map(|attr| attr.value.as_ref())
+      .map(|attr| &*attr.value)
   }
 }
 
@@ -211,7 +211,7 @@ impl Serialize for NodeRef<'_> {
           NodeData::Element { name, attrs, .. } => {
             serializer.start_elem(
               name.clone(),
-              attrs.iter().map(|attr| (&attr.name, attr.value.as_ref())),
+              attrs.iter().map(|attr| (&attr.name, &*attr.value)),
             )?;
             steps.push(Step::Close(name));
             steps.extend(node.children().rev().map(Step::Open));
