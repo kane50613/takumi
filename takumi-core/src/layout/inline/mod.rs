@@ -185,6 +185,15 @@ pub(crate) mod line_info;
   not(test),
   expect(
     dead_code,
+    reason = "TODO: the inline layout algorithm port truncates lines"
+  )
+)]
+#[cfg_attr(test, allow(dead_code))]
+pub(crate) mod line_truncator;
+#[cfg_attr(
+  not(test),
+  expect(
+    dead_code,
     reason = "TODO: the inline layout algorithm port builds logical lines"
   )
 )]

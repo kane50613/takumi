@@ -14,6 +14,7 @@ use super::{
   leading_floats::LeadingFloats,
   line_breaker::{AtomicInlineLayout, LineBreaker, LineBreakerMode},
   line_info::LineInfo,
+  line_truncator::LineTruncator,
   logical_line_builder::LogicalLineBuilder,
   logical_line_item::{LineFragment, LogicalLineItems},
 };
@@ -28,7 +29,7 @@ use crate::{
     tree::RenderNode,
   },
   layout_unit::LayoutUnit,
-  style::{Direction as TextDirection, TextAlign},
+  style::{Direction as TextDirection, TextAlign, TextOverflow},
 };
 
 /// Blink's `LineBoxFragmentBuilder` and the line's `LogicalLineContainer`: a line box, as
@@ -110,6 +111,13 @@ impl TextAlign {
       _ => space_left,
     }
   }
+}
+
+/// Blink's `LineClampState`: how a line shows.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum LineClampState {
+  Show,
+  TextOverflowEllipsis,
 }
 
 /// Blink's `InlineLayoutAlgorithm`: lays out one line of an inline formatting context.
@@ -313,7 +321,14 @@ impl<'s, 'a, 'c> InlineLayoutAlgorithm<'s, 'a, 'c> {
 
     let line_box_metrics = box_states.line_box_state().metrics;
 
-    // TODO: `LineTruncator` truncates lines for `text-overflow: ellipsis` and `line-clamp`.
+    // TODO: `line-clamp` ellipsizes its last line too.
+    if self.line_clamp_state(line_info) == LineClampState::TextOverflowEllipsis {
+      inline_size = LineTruncator::new(line_info, false).truncate_line(
+        inline_size,
+        line_box,
+        self.context.box_states(),
+      );
+    }
 
     // Negative margins can move the position before zero, but not shrink the size below it.
     inline_size = inline_size.clamp_negative_to_zero();
@@ -359,6 +374,20 @@ impl<'s, 'a, 'c> InlineLayoutAlgorithm<'s, 'a, 'c> {
     // The items sat on a baseline at zero; the line box's top is zero from here.
     line_box.move_in_block_direction(line_box_metrics.ascent);
     self.container_builder.inline_size = inline_size;
+  }
+
+  /// Blink's `GetLineClampState`, for `text-overflow` alone.
+  fn line_clamp_state(&self, line_info: &LineInfo<'a, 'c>) -> LineClampState {
+    // Blink's `ShouldTruncateOverflowingText`; takumi's computed `text-overflow` is `clip` in a
+    // box that does not clip its overflow.
+    let should_truncate_overflowing_text =
+      self.node.block.context.style.misc4_data.text_overflow != TextOverflow::Clip;
+
+    if line_info.has_overflow && should_truncate_overflowing_text {
+      return LineClampState::TextOverflowEllipsis;
+    }
+
+    LineClampState::Show
   }
 
   /// Blink's `PlaceOutOfFlowObjects`: the static positions of the out-of-flow boxes on the line.

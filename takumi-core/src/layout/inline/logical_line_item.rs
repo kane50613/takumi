@@ -102,6 +102,10 @@ pub(crate) struct LogicalLineItem<'a, 'c> {
   /// Only trailing spaces, which take the paragraph's level (UAX #9 rule L1).
   pub(crate) has_only_bidi_trailing_spaces: bool,
   pub(crate) has_non_empty_inline_box_start: bool,
+  /// Text an ellipsis replaced, which paints nothing.
+  pub(crate) is_hidden_due_to_layout: bool,
+  /// An atomic inline an ellipsis replaced: Blink's `LayoutObject::IsTruncated`.
+  pub(crate) is_truncated: bool,
 }
 
 impl Default for LogicalLineItem<'_, '_> {
@@ -127,6 +131,8 @@ impl Default for LogicalLineItem<'_, '_> {
       container_direction: TextDirection::Ltr,
       has_only_bidi_trailing_spaces: false,
       has_non_empty_inline_box_start: false,
+      is_hidden_due_to_layout: false,
+      is_truncated: false,
     }
   }
 }
@@ -376,6 +382,19 @@ impl<'a, 'c> LogicalLineItem<'a, 'c> {
       .map(LayoutObject::node)
       .or_else(|| self.layout_result.as_ref().map(LineFragment::node))
       .or_else(|| self.layout_object.map(LayoutObject::node))
+  }
+
+  /// Blink's `GetMutableLayoutObject`.
+  pub(crate) fn layout_object(&self) -> Option<LayoutObject<'c>> {
+    if let Some(object) = self.inline_item.and_then(|item| item.layout_object) {
+      return Some(object);
+    }
+
+    match &self.layout_result {
+      Some(LineFragment::InlineBox(fragment)) => Some(LayoutObject::Inline(fragment.node)),
+      Some(fragment) => Some(LayoutObject::Box(fragment.node())),
+      None => self.layout_object,
+    }
   }
 
   /// Blink's `ResolvedDirection`.
