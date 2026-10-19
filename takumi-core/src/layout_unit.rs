@@ -1,195 +1,467 @@
-//! Blink's `LayoutUnit`: a layout length in 1/64px fixed point that saturates at the ends of its
-//! `i32` range, after
-//! [`layout_unit.h`](https://source.chromium.org/chromium/chromium/src/+/main:third_party/blink/renderer/platform/geometry/layout_unit.h).
-//! Follows Blink under the notice in LICENSE-CHROMIUM.
+//! Blink's `FixedPoint` and the three units it makes, after
+//! [`layout_unit.h`](https://source.chromium.org/chromium/chromium/src/+/main:third_party/blink/renderer/platform/geometry/layout_unit.h):
+//! `LayoutUnit` holds 1/64px in an `i32`, `TextRunLayoutUnit` 1/65536px in an `i32` for a run of
+//! text, and `InlineLayoutUnit` 1/65536px in an `i64` for a whole line. Each saturates at the ends
+//! of its range. Follows Blink under the notice in LICENSE-CHROMIUM.
 
-use std::ops::{Add, AddAssign, Div, Mul, Neg, Sub, SubAssign};
+use std::ops::{Add, AddAssign, Div, Mul, Neg, Rem, Sub, SubAssign};
 
 use crate::geometry::{Point, Rect, Size};
 
-const FRACTIONAL_BITS: u32 = 6;
-const DENOMINATOR: i32 = 1 << FRACTIONAL_BITS;
-const INT_MAX: i32 = i32::MAX / DENOMINATOR;
-const INT_MIN: i32 = i32::MIN / DENOMINATOR;
+/// What every unit `FixedPoint` makes shares, so one converts to another as Blink's `To<>()`,
+/// `FromFixed<>()`, and `ToCeil<>()` do.
+#[cfg_attr(
+  not(test),
+  expect(
+    dead_code,
+    reason = "TODO: the shaping and line breaking ports convert between units"
+  )
+)]
+pub(crate) trait FixedPoint: Copy {
+  /// Blink's `kFractionalBits`.
+  const FRACTIONAL_BITS: u32;
 
-/// A length in 1/64px.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
-pub(crate) struct LayoutUnit(i32);
+  /// The raw value, widened so every unit's fits.
+  fn raw_value_wide(self) -> i128;
 
-impl LayoutUnit {
-  /// Zero.
-  pub const ZERO: Self = Self(0);
+  /// Blink's `FromRawValueWithClamp`, from any unit's raw value.
+  fn from_raw_value_with_clamp_wide(raw_value: i128) -> Self;
 
-  /// The least length, Blink's `LayoutUnit::Min()`.
-  pub const MIN: Self = Self(i32::MIN);
+  /// The largest value, Blink's `Max()`.
+  fn max_value() -> Self;
 
-  /// The unit whose raw fixed-point value is `raw`.
-  pub const fn from_raw(raw: i32) -> Self {
-    Self(raw)
-  }
+  /// The least value, Blink's `Min()`.
+  fn min_value() -> Self;
 
-  /// `raw`, saturated to the `i32` range, where NaN gives zero, as `base::saturated_cast` does.
-  fn saturated(raw: f64) -> Self {
-    if raw.is_nan() {
-      return Self::ZERO;
+  /// Blink's `FromFixed<source_fractional_bits>`: a raw value with `source_fractional_bits`
+  /// fractional bits, truncated or saturated to this unit.
+  fn from_fixed(source_fractional_bits: u32, value: i128) -> Self {
+    if source_fractional_bits >= Self::FRACTIONAL_BITS {
+      return Self::from_raw_value_with_clamp_wide(
+        value >> (source_fractional_bits - Self::FRACTIONAL_BITS),
+      );
     }
 
-    Self(raw.clamp(f64::from(i32::MIN), f64::from(i32::MAX)) as i32)
-  }
+    let bits_diff = Self::FRACTIONAL_BITS - source_fractional_bits;
 
-  /// The raw fixed-point value.
-  #[cfg(test)]
-  pub(crate) const fn raw(self) -> i32 {
-    self.0
-  }
-
-  /// `value` px, saturated to the whole pixels the unit can hold.
-  pub(crate) const fn from_int(value: i32) -> Self {
-    if value > INT_MAX {
-      Self(i32::MAX)
-    } else if value < INT_MIN {
-      Self(i32::MIN)
-    } else {
-      Self(value << FRACTIONAL_BITS)
-    }
-  }
-
-  /// `value` px truncated toward zero to a 1/64 step, as `LayoutUnit(float)` constructs it.
-  pub fn from_f32(value: f32) -> Self {
-    Self::saturated(f64::from(value * DENOMINATOR as f32).trunc())
-  }
-
-  /// `value` px rounded down to a 1/64 step.
-  pub(crate) fn from_f32_floor(value: f32) -> Self {
-    Self::saturated(f64::from((value * DENOMINATOR as f32).floor()))
-  }
-
-  /// `value` px rounded up to a 1/64 step.
-  #[cfg(test)]
-  pub(crate) fn from_f32_ceil(value: f32) -> Self {
-    Self::saturated(f64::from((value * DENOMINATOR as f32).ceil()))
-  }
-
-  /// `value` px rounded to the nearest 1/64 step, halves away from zero.
-  pub(crate) fn from_f32_round(value: f32) -> Self {
-    Self::saturated(f64::from((value * DENOMINATOR as f32).round()))
-  }
-
-  /// The length in px.
-  pub(crate) fn to_f32(self) -> f32 {
-    self.0 as f32 / DENOMINATOR as f32
-  }
-
-  /// The whole px, truncated toward zero.
-  pub(crate) const fn to_int(self) -> i32 {
-    self.0 / DENOMINATOR
-  }
-
-  /// The whole px nearest, as Blink's `Round()` computes it from the truncated part and the
-  /// fraction.
-  pub const fn round(self) -> i32 {
-    self.to_int() + ((self.fraction().0 + DENOMINATOR / 2) >> FRACTIONAL_BITS)
-  }
-
-  /// The whole px at or below.
-  pub const fn floor(self) -> i32 {
-    if self.0 < i32::MIN + DENOMINATOR {
-      return INT_MIN;
+    if value >= Self::max_value().raw_value_wide() >> bits_diff {
+      return Self::max_value();
     }
 
-    self.0 >> FRACTIONAL_BITS
-  }
-
-  /// The whole px at or above.
-  #[cfg(test)]
-  pub(crate) const fn ceil(self) -> i32 {
-    if self.0 > i32::MAX - DENOMINATOR {
-      return INT_MAX;
-    }
-    if self.0 >= 0 {
-      return (self.0 + DENOMINATOR - 1) / DENOMINATOR;
+    if value <= Self::min_value().raw_value_wide() >> bits_diff {
+      return Self::min_value();
     }
 
-    self.to_int()
+    Self::from_raw_value_with_clamp_wide(value << bits_diff)
   }
 
-  /// The part below a whole px, keeping the sign.
-  pub const fn fraction(self) -> Self {
-    Self(self.0 % DENOMINATOR)
+  /// Blink's `To<Target>()`: this value in another unit.
+  fn to<Target: FixedPoint>(self) -> Target {
+    Target::from_fixed(Self::FRACTIONAL_BITS, self.raw_value_wide())
   }
 
-  /// The length without its sign.
-  pub const fn abs(self) -> Self {
-    Self(self.0.saturating_abs())
-  }
+  /// Blink's `ToCeil<Target>()`: this value in a unit with fewer fractional bits, rounding the lost
+  /// precision up.
+  fn to_ceil<Target: FixedPoint>(self) -> Target {
+    debug_assert!(Target::FRACTIONAL_BITS < Self::FRACTIONAL_BITS);
 
-  /// Zero in place of a negative length.
-  pub(crate) const fn clamp_negative_to_zero(self) -> Self {
-    if self.0 < 0 { Self::ZERO } else { self }
-  }
+    let bits_diff = Self::FRACTIONAL_BITS - Target::FRACTIONAL_BITS;
+    let raw_value = self.raw_value_wide();
+    let mut ceiled = raw_value >> bits_diff;
 
-  /// Blink's `IntMod`: the remainder after a division with a whole result, so that
-  /// `a = (a / b).to_int() * b + a.int_mod(b)`.
-  pub(crate) const fn int_mod(self, divisor: Self) -> Self {
-    Self(self.0 % divisor.0)
-  }
+    if raw_value & ((1 << bits_diff) - 1) != 0 {
+      ceiled += 1;
+    }
 
-  /// Blink's `MulDiv`: `self * multiplier / divisor` without rounding in between.
-  pub(crate) fn mul_div(self, multiplier: Self, divisor: Self) -> Self {
-    Self::saturated((i64::from(self.0) * i64::from(multiplier.0) / i64::from(divisor.0)) as f64)
+    Target::from_raw_value_with_clamp_wide(ceiled)
   }
 }
 
-impl Add for LayoutUnit {
-  type Output = Self;
+/// Blink's `FixedPoint<fractional_bits, Storage>` template, instantiated as `$name`.
+macro_rules! fixed_point {
+  ($(#[$doc:meta])* $name:ident, $fractional_bits:expr, $storage:ty, $unsigned_storage:ty, $wide:ty) => {
+    $(#[$doc])*
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
+    pub(crate) struct $name($storage);
 
-  fn add(self, other: Self) -> Self {
-    Self(self.0.saturating_add(other.0))
+    // The template's whole API, which each unit uses only part of.
+    #[allow(dead_code)]
+    impl $name {
+      pub(crate) const FRACTIONAL_BITS: u32 = $fractional_bits;
+      pub(crate) const INTEGRAL_BITS: u32 = <$storage>::BITS - Self::FRACTIONAL_BITS;
+      pub(crate) const FIXED_POINT_DENOMINATOR: $storage = 1 << Self::FRACTIONAL_BITS;
+      pub(crate) const RAW_VALUE_MAX: $storage = <$storage>::MAX;
+      pub(crate) const RAW_VALUE_MIN: $storage = <$storage>::MIN;
+      pub(crate) const INT_MAX: $storage = Self::RAW_VALUE_MAX / Self::FIXED_POINT_DENOMINATOR;
+      pub(crate) const INT_MIN: $storage = Self::RAW_VALUE_MIN / Self::FIXED_POINT_DENOMINATOR;
+
+      /// Zero, Blink's `FixedPoint()`.
+      pub(crate) const ZERO: Self = Self(0);
+      /// Blink's `Max()`.
+      pub(crate) const MAX: Self = Self(Self::RAW_VALUE_MAX);
+      /// Blink's `Min()`.
+      pub(crate) const MIN: Self = Self(Self::RAW_VALUE_MIN);
+      /// Blink's `NearlyMax()`, a little below `MAX` so it rounds without overflowing.
+      pub(crate) const NEARLY_MAX: Self = Self(Self::RAW_VALUE_MAX - Self::FIXED_POINT_DENOMINATOR / 2);
+      /// Blink's `NearlyMin()`, a little above `MIN` so it rounds without overflowing.
+      pub(crate) const NEARLY_MIN: Self = Self(Self::RAW_VALUE_MIN + Self::FIXED_POINT_DENOMINATOR / 2);
+
+      /// Blink's `ClampRawValue` from a float: truncated toward zero and saturated, where NaN gives
+      /// zero, as `base::saturated_cast` and Rust's `as` both convert.
+      fn clamp_raw_value_float(raw_value: f64) -> $storage {
+        raw_value as $storage
+      }
+
+      /// Blink's `ClampRawValue` from a wider integer.
+      fn clamp_raw_value(raw_value: $wide) -> $storage {
+        raw_value.clamp(<$wide>::from(Self::RAW_VALUE_MIN), <$wide>::from(Self::RAW_VALUE_MAX))
+          as $storage
+      }
+
+      /// `value` whole px, Blink's `FixedPoint(int)`, saturated by `SaturatedSet`.
+      pub(crate) const fn from_int(value: i32) -> Self {
+        if value as $wide > Self::INT_MAX as $wide {
+          Self(Self::RAW_VALUE_MAX)
+        } else if (value as $wide) < Self::INT_MIN as $wide {
+          Self(Self::RAW_VALUE_MIN)
+        } else {
+          Self(((value as $storage as $unsigned_storage) << Self::FRACTIONAL_BITS) as $storage)
+        }
+      }
+
+      /// `value` whole px, Blink's `FixedPoint(unsigned)`.
+      pub(crate) const fn from_unsigned(value: u32) -> Self {
+        if value as $wide >= Self::INT_MAX as $wide {
+          Self(Self::RAW_VALUE_MAX)
+        } else {
+          Self(((value as $unsigned_storage) << Self::FRACTIONAL_BITS) as $storage)
+        }
+      }
+
+      /// `value` whole px, Blink's `FixedPoint(int64_t)`, saturated by `ClampRawValue`.
+      pub(crate) fn from_int64(value: i64) -> Self {
+        Self(Self::clamp_raw_value(
+          <$wide>::from(value).saturating_mul(<$wide>::from(Self::FIXED_POINT_DENOMINATOR)),
+        ))
+      }
+
+      /// `value` px truncated toward zero to a step, Blink's `FixedPoint(float)`.
+      pub(crate) fn from_float(value: f32) -> Self {
+        Self(Self::clamp_raw_value_float(f64::from(value * Self::FIXED_POINT_DENOMINATOR as f32)))
+      }
+
+      /// `value` px truncated toward zero to a step, Blink's `FixedPoint(double)`.
+      pub(crate) fn from_double(value: f64) -> Self {
+        Self(Self::clamp_raw_value_float(value * Self::FIXED_POINT_DENOMINATOR as f64))
+      }
+
+      /// Blink's `FromFloatCeil`.
+      pub(crate) fn from_float_ceil(value: f32) -> Self {
+        Self(Self::clamp_raw_value_float(f64::from(
+          (value * Self::FIXED_POINT_DENOMINATOR as f32).ceil(),
+        )))
+      }
+
+      /// Blink's `FromFloatFloor`.
+      pub(crate) fn from_float_floor(value: f32) -> Self {
+        Self(Self::clamp_raw_value_float(f64::from(
+          (value * Self::FIXED_POINT_DENOMINATOR as f32).floor(),
+        )))
+      }
+
+      /// Blink's `FromFloatRound`: halves away from zero, as `roundf`.
+      pub(crate) fn from_float_round(value: f32) -> Self {
+        Self(Self::clamp_raw_value_float(f64::from(
+          (value * Self::FIXED_POINT_DENOMINATOR as f32).round(),
+        )))
+      }
+
+      /// Blink's `FromDoubleRound`.
+      pub(crate) fn from_double_round(value: f64) -> Self {
+        Self(Self::clamp_raw_value_float(
+          (value * Self::FIXED_POINT_DENOMINATOR as f64).round(),
+        ))
+      }
+
+      /// Blink's `FromRawValue`.
+      pub(crate) const fn from_raw_value(raw_value: $storage) -> Self {
+        Self(raw_value)
+      }
+
+      /// Blink's `FromRawValueWithClamp`.
+      pub(crate) fn from_raw_value_with_clamp(raw_value: $wide) -> Self {
+        Self(Self::clamp_raw_value(raw_value))
+      }
+
+      /// Blink's `FromFloatEncompassRound`: steps around `start_value` and `end_value` that
+      /// encompass them, both floored when they are equal.
+      pub(crate) fn from_float_encompass_round(start_value: f32, end_value: f32) -> (Self, Self) {
+        if start_value < end_value {
+          (Self::from_float_floor(start_value), Self::from_float_ceil(end_value))
+        } else if start_value > end_value {
+          (Self::from_float_ceil(start_value), Self::from_float_floor(end_value))
+        } else {
+          let floored = Self::from_float_floor(start_value);
+
+          (floored, floored)
+        }
+      }
+
+      /// Blink's `ToInt`: the whole px, truncated toward zero.
+      pub(crate) const fn to_int(self) -> $storage {
+        self.0 / Self::FIXED_POINT_DENOMINATOR
+      }
+
+      /// Blink's `ToFloat`.
+      pub(crate) fn to_float(self) -> f32 {
+        self.0 as f32 / Self::FIXED_POINT_DENOMINATOR as f32
+      }
+
+      /// Blink's `ToDouble`.
+      pub(crate) fn to_double(self) -> f64 {
+        self.0 as f64 / Self::FIXED_POINT_DENOMINATOR as f64
+      }
+
+      /// Blink's `RawValue`.
+      pub(crate) const fn raw_value(self) -> $storage {
+        self.0
+      }
+
+      /// Blink's `SetRawValue`.
+      pub(crate) fn set_raw_value(&mut self, raw_value: $storage) {
+        self.0 = raw_value;
+      }
+
+      /// Blink's `Abs`.
+      pub(crate) const fn abs(self) -> Self {
+        Self(self.0.saturating_abs())
+      }
+
+      /// Blink's `Ceil`: the whole px at or above.
+      pub(crate) const fn ceil(self) -> $storage {
+        if self.0 > Self::RAW_VALUE_MAX - Self::FIXED_POINT_DENOMINATOR {
+          return Self::INT_MAX;
+        }
+
+        if self.0 >= 0 {
+          return (self.0 + Self::FIXED_POINT_DENOMINATOR - 1) / Self::FIXED_POINT_DENOMINATOR;
+        }
+
+        self.to_int()
+      }
+
+      /// Blink's `Round`: the whole px nearest, from the truncated part and the fraction.
+      pub(crate) const fn round(self) -> $storage {
+        self.to_int()
+          + ((self.fraction().0 + Self::FIXED_POINT_DENOMINATOR / 2) >> Self::FRACTIONAL_BITS)
+      }
+
+      /// Blink's `Floor`: the whole px at or below.
+      pub(crate) const fn floor(self) -> $storage {
+        if self.0 < Self::RAW_VALUE_MIN + Self::FIXED_POINT_DENOMINATOR {
+          return Self::INT_MIN;
+        }
+
+        self.0 >> Self::FRACTIONAL_BITS
+      }
+
+      /// Blink's `ClampNegativeToZero`.
+      pub(crate) const fn clamp_negative_to_zero(self) -> Self {
+        if self.0 < 0 { Self::ZERO } else { self }
+      }
+
+      /// Blink's `ClampPositiveToZero`.
+      pub(crate) const fn clamp_positive_to_zero(self) -> Self {
+        if self.0 > 0 { Self::ZERO } else { self }
+      }
+
+      /// Blink's `HasFraction`.
+      pub(crate) const fn has_fraction(self) -> bool {
+        self.0 % Self::FIXED_POINT_DENOMINATOR != 0
+      }
+
+      /// Blink's `IsInteger`.
+      pub(crate) const fn is_integer(self) -> bool {
+        !self.has_fraction()
+      }
+
+      /// Blink's `Fraction`: the part below a whole px, keeping the sign.
+      pub(crate) const fn fraction(self) -> Self {
+        Self(self.0 % Self::FIXED_POINT_DENOMINATOR)
+      }
+
+      /// Blink's `MightBeSaturated`.
+      pub(crate) const fn might_be_saturated(self) -> bool {
+        self.0 == Self::RAW_VALUE_MAX || self.0 == Self::RAW_VALUE_MIN
+      }
+
+      /// Blink's `Epsilon`: the length of one step.
+      pub(crate) fn epsilon() -> f32 {
+        1.0 / Self::FIXED_POINT_DENOMINATOR as f32
+      }
+
+      /// Blink's `AddEpsilon`.
+      pub(crate) const fn add_epsilon(self) -> Self {
+        Self(if self.0 < Self::RAW_VALUE_MAX { self.0 + 1 } else { self.0 })
+      }
+
+      /// Blink's `MulDiv`: `self * m / d` as one operation, truncated toward zero.
+      pub(crate) fn mul_div(self, m: Self, d: Self) -> Self {
+        let n = <$wide>::from(self.0) * <$wide>::from(m.0);
+
+        Self::from_raw_value_with_clamp(n / <$wide>::from(d.0))
+      }
+
+      /// Blink's `NullOptIf`.
+      pub(crate) fn null_opt_if(self, null_value: Self) -> Option<Self> {
+        (self != null_value).then_some(self)
+      }
+    }
+
+    impl FixedPoint for $name {
+      const FRACTIONAL_BITS: u32 = $fractional_bits;
+
+      fn raw_value_wide(self) -> i128 {
+        i128::from(self.0)
+      }
+
+      fn from_raw_value_with_clamp_wide(raw_value: i128) -> Self {
+        Self(raw_value.clamp(i128::from(Self::RAW_VALUE_MIN), i128::from(Self::RAW_VALUE_MAX))
+          as $storage)
+      }
+
+      fn max_value() -> Self {
+        Self::MAX
+      }
+
+      fn min_value() -> Self {
+        Self::MIN
+      }
+    }
+
+    impl Add for $name {
+      type Output = Self;
+
+      fn add(self, other: Self) -> Self {
+        Self(self.0.saturating_add(other.0))
+      }
+    }
+
+    impl AddAssign for $name {
+      fn add_assign(&mut self, other: Self) {
+        *self = *self + other;
+      }
+    }
+
+    impl Sub for $name {
+      type Output = Self;
+
+      fn sub(self, other: Self) -> Self {
+        Self(self.0.saturating_sub(other.0))
+      }
+    }
+
+    impl SubAssign for $name {
+      fn sub_assign(&mut self, other: Self) {
+        *self = *self - other;
+      }
+    }
+
+    impl Neg for $name {
+      type Output = Self;
+
+      fn neg(self) -> Self {
+        Self(self.0.saturating_neg())
+      }
+    }
+
+    impl Mul<i32> for $name {
+      type Output = Self;
+
+      fn mul(self, other: i32) -> Self {
+        Self(self.0.saturating_mul(other.into()))
+      }
+    }
+
+    impl Div<i32> for $name {
+      type Output = Self;
+
+      fn div(self, other: i32) -> Self {
+        Self(self.0 / <$storage>::from(other))
+      }
+    }
+  };
+}
+
+/// The operators Blink defines only for an `int32_t` storage.
+macro_rules! fixed_point_int32_operators {
+  ($name:ident) => {
+    /// Blink's `BoundedMultiply`.
+    impl Mul for $name {
+      type Output = Self;
+
+      fn mul(self, other: Self) -> Self {
+        let result =
+          i64::from(self.0) * i64::from(other.0) / i64::from(Self::FIXED_POINT_DENOMINATOR);
+        let high = (result >> 32) as i32;
+        let low = result as i32;
+        let saturated = ((self.0 ^ other.0) as u32 >> 31).wrapping_add(Self::RAW_VALUE_MAX as u32);
+
+        if high != low >> 31 {
+          return Self(saturated as i32);
+        }
+
+        Self(result as i32)
+      }
+    }
+
+    /// Division rounds toward zero, as Blink's does.
+    impl Div for $name {
+      type Output = Self;
+
+      fn div(self, other: Self) -> Self {
+        Self::from_raw_value_with_clamp(
+          i64::from(Self::FIXED_POINT_DENOMINATOR) * i64::from(self.0) / i64::from(other.0),
+        )
+      }
+    }
+
+    impl Rem for $name {
+      type Output = Self;
+
+      fn rem(self, other: Self) -> Self {
+        Self::from_raw_value_with_clamp(i64::from(self.0 % other.0))
+      }
+    }
+  };
+}
+
+fixed_point!(
+  /// A layout length in 1/64px.
+  LayoutUnit, 6, i32, u32, i64
+);
+fixed_point!(
+  /// A length within a run of text in 1/65536px, with 16 bits of whole px.
+  TextRunLayoutUnit, 16, i32, u32, i64
+);
+fixed_point!(
+  /// A length on a line in 1/65536px, with 48 bits of whole px.
+  InlineLayoutUnit, 16, i64, u64, i128
+);
+fixed_point_int32_operators!(LayoutUnit);
+fixed_point_int32_operators!(TextRunLayoutUnit);
+
+/// Blink's lossless `FixedPoint(FixedPoint<source>)` constructor.
+impl From<LayoutUnit> for InlineLayoutUnit {
+  fn from(source: LayoutUnit) -> Self {
+    Self(i64::from(source.0) << (Self::FRACTIONAL_BITS - LayoutUnit::FRACTIONAL_BITS))
   }
 }
 
-impl AddAssign for LayoutUnit {
-  fn add_assign(&mut self, other: Self) {
-    *self = *self + other;
-  }
-}
-
-impl Sub for LayoutUnit {
-  type Output = Self;
-
-  fn sub(self, other: Self) -> Self {
-    Self(self.0.saturating_sub(other.0))
-  }
-}
-
-impl SubAssign for LayoutUnit {
-  fn sub_assign(&mut self, other: Self) {
-    *self = *self - other;
-  }
-}
-
-impl Neg for LayoutUnit {
-  type Output = Self;
-
-  fn neg(self) -> Self {
-    Self(self.0.saturating_neg())
-  }
-}
-
-/// Blink's `BoundedMultiply`.
-impl Mul for LayoutUnit {
-  type Output = Self;
-
-  fn mul(self, other: Self) -> Self {
-    Self::saturated((i64::from(self.0) * i64::from(other.0) / i64::from(DENOMINATOR)) as f64)
-  }
-}
-
-impl Mul<i32> for LayoutUnit {
-  type Output = Self;
-
-  fn mul(self, other: i32) -> Self {
-    Self(self.0.saturating_mul(other))
+/// Blink's lossless `FixedPoint(FixedPoint<source>)` constructor.
+impl From<TextRunLayoutUnit> for InlineLayoutUnit {
+  fn from(source: TextRunLayoutUnit) -> Self {
+    Self(i64::from(source.0))
   }
 }
 
@@ -201,20 +473,11 @@ impl Mul<LayoutUnit> for i32 {
   }
 }
 
-/// Division rounds toward zero, as Blink's does.
-impl Div for LayoutUnit {
-  type Output = Self;
-
-  fn div(self, other: Self) -> Self {
-    Self::saturated((i64::from(DENOMINATOR) * i64::from(self.0) / i64::from(other.0)) as f64)
-  }
-}
-
-impl Div<i32> for LayoutUnit {
-  type Output = Self;
-
-  fn div(self, other: i32) -> Self {
-    Self(self.0 / other)
+impl LayoutUnit {
+  /// Blink's `IntMod`: the remainder after a division with a whole result, so that
+  /// `a = (a / b).to_int() * b + a.int_mod(b)`.
+  pub(crate) const fn int_mod(self, divisor: Self) -> Self {
+    Self(self.0 % divisor.0)
   }
 }
 
@@ -304,8 +567,8 @@ impl UnitOffset {
   /// The offset in px.
   pub(crate) fn to_point(self) -> Point<f32> {
     Point {
-      x: self.left.to_f32(),
-      y: self.top.to_f32(),
+      x: self.left.to_float(),
+      y: self.top.to_float(),
     }
   }
 }
@@ -345,8 +608,8 @@ impl UnitSize {
   /// Blink's `FromSizeFFloor`.
   pub(crate) fn from_size_floor(size: Size<f32>) -> Self {
     Self {
-      width: LayoutUnit::from_f32_floor(size.width),
-      height: LayoutUnit::from_f32_floor(size.height),
+      width: LayoutUnit::from_float_floor(size.width),
+      height: LayoutUnit::from_float_floor(size.height),
     }
   }
 
@@ -384,8 +647,8 @@ impl UnitSize {
   /// The size in px.
   pub(crate) fn to_size(self) -> Size<f32> {
     Size {
-      width: self.width.to_f32(),
-      height: self.height.to_f32(),
+      width: self.width.to_float(),
+      height: self.height.to_float(),
     }
   }
 }
@@ -426,12 +689,12 @@ impl UnitRect {
   pub fn nearest(offset: Point<f32>, size: Size<f32>) -> Self {
     Self {
       offset: UnitOffset {
-        left: LayoutUnit::from_f32_round(offset.x),
-        top: LayoutUnit::from_f32_round(offset.y),
+        left: LayoutUnit::from_float_round(offset.x),
+        top: LayoutUnit::from_float_round(offset.y),
       },
       size: UnitSize {
-        width: LayoutUnit::from_f32_round(size.width),
-        height: LayoutUnit::from_f32_round(size.height),
+        width: LayoutUnit::from_float_round(size.width),
+        height: LayoutUnit::from_float_round(size.height),
       },
     }
   }
@@ -544,32 +807,34 @@ impl UnitRect {
   /// The rectangle in px.
   pub(crate) fn to_rect(self) -> Rect<f32> {
     Rect {
-      left: self.x().to_f32(),
-      top: self.y().to_f32(),
-      right: self.right().to_f32(),
-      bottom: self.bottom().to_f32(),
+      left: self.x().to_float(),
+      top: self.y().to_float(),
+      right: self.right().to_float(),
+      bottom: self.bottom().to_float(),
     }
   }
 }
 
 #[cfg(test)]
 mod tests {
-  use super::{LayoutUnit, UnitOffset, UnitRect, UnitSize};
+  use super::{
+    FixedPoint, InlineLayoutUnit, LayoutUnit, TextRunLayoutUnit, UnitOffset, UnitRect, UnitSize,
+  };
 
   #[test]
   fn floats_convert_as_blink_rounds_them() {
-    assert_eq!(LayoutUnit::from_f32(1.999).raw(), 127);
-    assert_eq!(LayoutUnit::from_f32(-1.999).raw(), -127);
-    assert_eq!(LayoutUnit::from_f32_floor(-1.999).raw(), -128);
-    assert_eq!(LayoutUnit::from_f32_ceil(1.001).raw(), 65);
-    assert_eq!(LayoutUnit::from_f32_round(0.5 / 64.0).raw(), 1);
-    assert_eq!(LayoutUnit::from_f32(f32::NAN), LayoutUnit::ZERO);
-    assert_eq!(LayoutUnit::from_f32(1e12).raw(), i32::MAX);
+    assert_eq!(LayoutUnit::from_float(1.999).raw_value(), 127);
+    assert_eq!(LayoutUnit::from_float(-1.999).raw_value(), -127);
+    assert_eq!(LayoutUnit::from_float_floor(-1.999).raw_value(), -128);
+    assert_eq!(LayoutUnit::from_float_ceil(1.001).raw_value(), 65);
+    assert_eq!(LayoutUnit::from_float_round(0.5 / 64.0).raw_value(), 1);
+    assert_eq!(LayoutUnit::from_float(f32::NAN), LayoutUnit::ZERO);
+    assert_eq!(LayoutUnit::from_float(1e12).raw_value(), i32::MAX);
   }
 
   #[test]
   fn whole_pixels_round_as_blink_rounds_them() {
-    let px = |raw| LayoutUnit::from_raw(raw);
+    let px = |raw| LayoutUnit::from_raw_value(raw);
 
     assert_eq!(px(96).round(), 2);
     assert_eq!(px(95).round(), 1);
@@ -585,26 +850,32 @@ mod tests {
   fn arithmetic_saturates_and_truncates() {
     let px = LayoutUnit::from_int;
 
-    assert_eq!((px(7) / px(2)).raw(), 224);
-    assert_eq!((px(-7) / px(2)).raw(), -224);
+    assert_eq!((px(7) / px(2)).raw_value(), 224);
+    assert_eq!((px(-7) / px(2)).raw_value(), -224);
     assert_eq!((px(3) * px(2)), px(6));
     assert_eq!(px(7).int_mod(px(2)), px(1));
     assert_eq!(px(-7).int_mod(px(2)), px(-1));
-    assert_eq!(LayoutUnit::from_int(i32::MAX).raw(), i32::MAX);
-    assert_eq!((LayoutUnit::from_raw(i32::MAX) + px(1)).raw(), i32::MAX);
-    assert_eq!((-LayoutUnit::from_raw(i32::MIN)).raw(), i32::MAX);
+    assert_eq!(LayoutUnit::from_int(i32::MAX).raw_value(), i32::MAX);
+    assert_eq!(
+      (LayoutUnit::from_raw_value(i32::MAX) + px(1)).raw_value(),
+      i32::MAX
+    );
+    assert_eq!(
+      (-LayoutUnit::from_raw_value(i32::MIN)).raw_value(),
+      i32::MAX
+    );
   }
 
   #[test]
   fn pixel_snapping_follows_the_location_fraction() {
     let rect = UnitRect {
       offset: UnitOffset {
-        left: LayoutUnit::from_f32(10.5),
-        top: LayoutUnit::from_f32(0.25),
+        left: LayoutUnit::from_float(10.5),
+        top: LayoutUnit::from_float(0.25),
       },
       size: UnitSize {
-        width: LayoutUnit::from_f32(20.25),
-        height: LayoutUnit::from_f32(0.1),
+        width: LayoutUnit::from_float(20.25),
+        height: LayoutUnit::from_float(0.1),
       },
     }
     .pixel_snapped();
@@ -612,5 +883,175 @@ mod tests {
     assert_eq!(rect.x(), LayoutUnit::from_int(11));
     assert_eq!(rect.width(), LayoutUnit::from_int(20));
     assert_eq!(rect.height(), LayoutUnit::from_int(1));
+  }
+
+  // The tests below follow `LayoutUnitTest` in Blink's `layout_unit_test.cc`.
+
+  #[test]
+  fn fixed_consts() {
+    assert_eq!(LayoutUnit::FRACTIONAL_BITS, 6);
+    assert_eq!(LayoutUnit::INTEGRAL_BITS, 26);
+    assert_eq!(TextRunLayoutUnit::FRACTIONAL_BITS, 16);
+    assert_eq!(TextRunLayoutUnit::INTEGRAL_BITS, 16);
+    assert_eq!(InlineLayoutUnit::FRACTIONAL_BITS, 16);
+    assert_eq!(InlineLayoutUnit::INTEGRAL_BITS, 48);
+  }
+
+  #[test]
+  fn fixed() {
+    let raw_value16 = 0x1234_5678;
+    let raw_value6 = raw_value16 >> 10;
+    let value16 = TextRunLayoutUnit::from_raw_value(raw_value16);
+    let value6 = LayoutUnit::from_raw_value(raw_value6);
+
+    assert_eq!(value16.to::<LayoutUnit>(), value6);
+  }
+
+  #[test]
+  fn raw64_from_int32() {
+    let int32_max_plus = LayoutUnit::INT_MAX + 10;
+
+    assert_ne!(
+      LayoutUnit::from_int(int32_max_plus).to_int(),
+      int32_max_plus
+    );
+    assert_eq!(
+      InlineLayoutUnit::from_int(int32_max_plus).to_int(),
+      i64::from(int32_max_plus)
+    );
+
+    let int32_min_minus = LayoutUnit::INT_MIN - 10;
+
+    assert_ne!(
+      LayoutUnit::from_int(int32_min_minus).to_int(),
+      int32_min_minus
+    );
+    assert_eq!(
+      InlineLayoutUnit::from_int(int32_min_minus).to_int(),
+      i64::from(int32_min_minus)
+    );
+
+    let raw32_max_plus = i64::from(LayoutUnit::RAW_VALUE_MAX) + 10;
+
+    assert_ne!(
+      i64::from(LayoutUnit::from_int64(raw32_max_plus).to_int()),
+      raw32_max_plus
+    );
+    assert_eq!(
+      InlineLayoutUnit::from_int64(raw32_max_plus).to_int(),
+      raw32_max_plus
+    );
+
+    let raw32_min_minus = i64::from(LayoutUnit::RAW_VALUE_MIN) - 10;
+
+    assert_ne!(
+      i64::from(LayoutUnit::from_int64(raw32_min_minus).to_int()),
+      raw32_min_minus
+    );
+    assert_eq!(
+      InlineLayoutUnit::from_int64(raw32_min_minus).to_int(),
+      raw32_min_minus
+    );
+  }
+
+  #[test]
+  fn raw64_from_raw32() {
+    let value = 1.0 + LayoutUnit::epsilon() * 234.0;
+
+    assert_eq!(
+      InlineLayoutUnit::from(LayoutUnit::from_float(value)),
+      InlineLayoutUnit::from_float(value)
+    );
+    assert_eq!(
+      InlineLayoutUnit::from(TextRunLayoutUnit::from_float(value)),
+      InlineLayoutUnit::from_float(value)
+    );
+  }
+
+  #[test]
+  fn to() {
+    for value in [1.0, 1.5, -1.0] {
+      assert_eq!(
+        LayoutUnit::from_float(value),
+        TextRunLayoutUnit::from_float(value).to::<LayoutUnit>()
+      );
+      assert_eq!(
+        TextRunLayoutUnit::from_float(value),
+        LayoutUnit::from_float(value).to::<TextRunLayoutUnit>()
+      );
+      assert_eq!(
+        LayoutUnit::from_float(value),
+        InlineLayoutUnit::from_float(value).to::<LayoutUnit>()
+      );
+      assert_eq!(
+        InlineLayoutUnit::from_float(value),
+        LayoutUnit::from_float(value).to::<InlineLayoutUnit>()
+      );
+      assert_eq!(
+        TextRunLayoutUnit::from_float(value),
+        InlineLayoutUnit::from_float(value).to::<TextRunLayoutUnit>()
+      );
+      assert_eq!(
+        InlineLayoutUnit::from_float(value),
+        TextRunLayoutUnit::from_float(value).to::<InlineLayoutUnit>()
+      );
+    }
+  }
+
+  #[test]
+  fn to_clamp_same_fractional64_to32() {
+    assert_eq!(
+      TextRunLayoutUnit::MAX,
+      InlineLayoutUnit::from_int(TextRunLayoutUnit::INT_MAX + 1).to::<TextRunLayoutUnit>()
+    );
+    assert_eq!(
+      TextRunLayoutUnit::MIN,
+      InlineLayoutUnit::from_int(TextRunLayoutUnit::INT_MIN - 1).to::<TextRunLayoutUnit>()
+    );
+  }
+
+  #[test]
+  fn to_clamp_less_fractional64_to32() {
+    assert_eq!(
+      LayoutUnit::MAX,
+      InlineLayoutUnit::from_int(LayoutUnit::INT_MAX + 1).to::<LayoutUnit>()
+    );
+    assert_eq!(
+      LayoutUnit::MIN,
+      InlineLayoutUnit::from_int(LayoutUnit::INT_MIN - 1).to::<LayoutUnit>()
+    );
+  }
+
+  #[test]
+  fn to_clamp_more_fractional() {
+    assert_eq!(
+      TextRunLayoutUnit::MAX,
+      LayoutUnit::from_int(TextRunLayoutUnit::INT_MAX + 1).to::<TextRunLayoutUnit>()
+    );
+    assert_eq!(
+      TextRunLayoutUnit::MIN,
+      LayoutUnit::from_int(TextRunLayoutUnit::INT_MIN - 1).to::<TextRunLayoutUnit>()
+    );
+  }
+
+  #[test]
+  fn raw64_ceil() {
+    let layout = LayoutUnit::from_double(1.234);
+    let inline_value = InlineLayoutUnit::from(layout);
+
+    assert_eq!(layout, inline_value.to_ceil::<LayoutUnit>());
+
+    let inline_value = inline_value.add_epsilon();
+
+    assert_ne!(layout, inline_value.to_ceil::<LayoutUnit>());
+    assert_eq!(layout.add_epsilon(), inline_value.to_ceil::<LayoutUnit>());
+  }
+
+  #[test]
+  fn multiplication_saturates_by_sign() {
+    let max = LayoutUnit::from_int(LayoutUnit::INT_MAX);
+
+    assert_eq!(max * LayoutUnit::from_int(2), LayoutUnit::MAX);
+    assert_eq!(max * LayoutUnit::from_int(-2), LayoutUnit::MIN);
   }
 }

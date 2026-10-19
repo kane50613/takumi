@@ -571,8 +571,8 @@ impl<'c> BuiltInlineLayout<'c> {
           content.x + setup.scale_x(x, *static_inline_prefix),
           content.x + setup.scale_x(x + width, *static_inline_prefix),
           Covering::Run {
-            top: baseline - text.ascent.to_f32(),
-            bottom: baseline + text.descent.to_f32(),
+            top: baseline - text.ascent.to_float(),
+            bottom: baseline + text.descent.to_float(),
           },
         )
       }

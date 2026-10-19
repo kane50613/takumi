@@ -550,8 +550,8 @@ impl Length {
   pub(crate) fn minimum_value_for(self, sizing: &SizingContext, maximum: LayoutUnit) -> LayoutUnit {
     match self {
       Length::Auto => LayoutUnit::ZERO,
-      Length::Percentage(percent) => LayoutUnit::from_f32(maximum.to_f32() * percent / 100.0),
-      length => LayoutUnit::from_f32(length.to_px(sizing, maximum.to_f32())),
+      Length::Percentage(percent) => LayoutUnit::from_float(maximum.to_float() * percent / 100.0),
+      length => LayoutUnit::from_float(length.to_px(sizing, maximum.to_float())),
     }
   }
 
