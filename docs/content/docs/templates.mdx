@@ -70,6 +70,12 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 }
 ```
 
+A relative image URL needs `metadataBase` in the root layout's metadata, or `next build` fails:
+
+```tsx title="app/layout.tsx"
+export const metadata = { metadataBase: new URL("https://example.com") };
+```
+
 The CLI rewrites the `@/` import to the alias in your `components.json`. A project on `~/` gets `~/components/takumi/image/blog-post`.
 
 The CLI writes the route only in a project it recognizes as Next.js. Elsewhere it installs the card alone.
