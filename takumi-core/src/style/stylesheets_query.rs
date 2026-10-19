@@ -13,7 +13,10 @@ use crate::{
   text::{
     capitalize::capitalize,
     case_map::CaseMap,
-    character::{is_modern_georgian_uppercase, lowercase_modern_georgian_uppercase},
+    character::{
+      IDEOGRAPHIC_SPACE, is_modern_georgian_uppercase, lowercase_modern_georgian_uppercase,
+    },
+    character_variants::{full_size_kana_variant, full_width_variant},
   },
 };
 
@@ -376,20 +379,20 @@ impl ComputedStyle {
     self.resolve_overflows().should_clip_content()
   }
 
-  /// Blink's `ApplyTextTransform`, for the case transforms takumi parses. `previous_character`
-  /// ends the text before, which decides whether `capitalize` starts a word.
+  /// Blink's `ApplyTextTransform`: the case, then full-width forms, then full-size kana.
+  /// `previous_character` ends the text before, which decides whether `capitalize` starts a word.
   pub(crate) fn apply_text_transform<'t>(
     &self,
     text: &'t str,
     previous_character: char,
   ) -> Cow<'t, str> {
+    let transform = self.inherited_data.text_transform;
     let case_map = || CaseMap::new(self.lang.as_ref().map(Lang::as_str));
-
-    match self.inherited_data.text_transform {
-      TextTransform::None => Cow::Borrowed(text),
-      TextTransform::Capitalize => Cow::Owned(capitalize(text, previous_character)),
+    let mut text = match transform.case {
+      TextTransformCase::None => Cow::Borrowed(text),
+      TextTransformCase::Capitalize => Cow::Owned(capitalize(text, previous_character)),
       // Fonts lack the Mtavruli letters, so Georgian stays in Mkhedruli. <https://crbug.com/865427>
-      TextTransform::Uppercase => match case_map().to_upper(text) {
+      TextTransformCase::Uppercase => match case_map().to_upper(text) {
         Cow::Owned(upper) if upper.contains(is_modern_georgian_uppercase) => Cow::Owned(
           upper
             .chars()
@@ -404,8 +407,32 @@ impl ComputedStyle {
         ),
         upper => upper,
       },
-      TextTransform::Lowercase => case_map().to_lower(text),
+      TextTransformCase::Lowercase => case_map().to_lower(text),
+    };
+
+    if transform.full_width {
+      // A space white space processing may collapse stays one, as in Blink.
+      let preserves_spaces = self
+        .inherited_data
+        .white_space_collapse
+        .should_preserve_white_spaces();
+
+      text = Cow::Owned(
+        text
+          .chars()
+          .map(|c| match c {
+            ' ' if preserves_spaces => IDEOGRAPHIC_SPACE,
+            c => full_width_variant(c),
+          })
+          .collect(),
+      );
     }
+
+    if transform.full_size_kana {
+      text = Cow::Owned(text.chars().map(full_size_kana_variant).collect());
+    }
+
+    text
   }
 
   #[inline]

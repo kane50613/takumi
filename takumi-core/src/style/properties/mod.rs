@@ -1339,11 +1339,11 @@ impl AlignItems {
   }
 }
 
-/// Controls text case transformation when rendering.
+/// The case `text-transform` maps text to.
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
 #[non_exhaustive]
-pub enum TextTransform {
-  /// Do not transform text
+pub enum TextTransformCase {
+  /// Leave the case.
   #[default]
   None,
   /// Transform all characters to uppercase
@@ -1354,13 +1354,104 @@ pub enum TextTransform {
   Capitalize,
 }
 
-impl_css_enum!(
-  TextTransform,
-  "none" => TextTransform::None,
-  "uppercase" => TextTransform::Uppercase,
-  "lowercase" => TextTransform::Lowercase,
-  "capitalize" => TextTransform::Capitalize
-);
+/// `text-transform`: `none | [capitalize | uppercase | lowercase] || full-width || full-size-kana`.
+/// <https://drafts.csswg.org/css-text-3/#text-transform-property>
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
+#[non_exhaustive]
+pub struct TextTransform {
+  /// The case it maps text to.
+  pub case: TextTransformCase,
+  /// Whether it puts characters in their full-width forms.
+  pub full_width: bool,
+  /// Whether it puts small kana in their full-size forms.
+  pub full_size_kana: bool,
+}
+
+impl From<TextTransformCase> for TextTransform {
+  fn from(case: TextTransformCase) -> Self {
+    Self {
+      case,
+      ..Self::default()
+    }
+  }
+}
+
+impl MakeComputed for TextTransform {}
+
+impl Animatable for TextTransform {}
+
+impl<'i> FromCss<'i> for TextTransform {
+  fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
+    if input
+      .try_parse(|input| input.expect_ident_matching("none"))
+      .is_ok()
+    {
+      return Ok(Self::default());
+    }
+
+    let mut transform = Self::default();
+    let mut has_case = false;
+    let mut parsed_any = false;
+
+    // Each of the three may come once, in any order.
+    while let Ok(ident) = input.try_parse(Parser::expect_ident_cloned) {
+      let location = input.current_source_location();
+
+      match_ignore_ascii_case! { &ident,
+        "uppercase" | "lowercase" | "capitalize" if !has_case => {
+          has_case = true;
+          transform.case = match_ignore_ascii_case! { &ident,
+            "uppercase" => TextTransformCase::Uppercase,
+            "lowercase" => TextTransformCase::Lowercase,
+            _ => TextTransformCase::Capitalize,
+          };
+        },
+        "full-width" if !transform.full_width => transform.full_width = true,
+        "full-size-kana" if !transform.full_size_kana => transform.full_size_kana = true,
+        _ => return Err(location.new_unexpected_token_error(Token::Ident(ident))),
+      }
+
+      parsed_any = true;
+    }
+
+    if !parsed_any {
+      return Err(input.new_error_for_next_token());
+    }
+
+    Ok(transform)
+  }
+
+  const VALID_TOKENS: &'static [&'static str] = &[
+    "none",
+    "uppercase",
+    "lowercase",
+    "capitalize",
+    "full-width",
+    "full-size-kana",
+  ];
+}
+
+impl ToCss for TextTransform {
+  fn to_css<W: fmt::Write>(&self, dest: &mut W) -> fmt::Result {
+    let case = match self.case {
+      TextTransformCase::None => None,
+      TextTransformCase::Uppercase => Some("uppercase"),
+      TextTransformCase::Lowercase => Some("lowercase"),
+      TextTransformCase::Capitalize => Some("capitalize"),
+    };
+    let parts: Vec<&str> = case
+      .into_iter()
+      .chain(self.full_width.then_some("full-width"))
+      .chain(self.full_size_kana.then_some("full-size-kana"))
+      .collect();
+
+    if parts.is_empty() {
+      dest.write_str("none")
+    } else {
+      dest.write_str(&parts.join(" "))
+    }
+  }
+}
 
 /// Controls whether text decoration should skip descenders.
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
@@ -1554,5 +1645,44 @@ mod border_spacing_tests {
       BorderSpacing::default(),
       BorderSpacing(SpacePair::from_single(Length::Px(0.0)))
     );
+  }
+}
+
+#[cfg(test)]
+mod text_transform_tests {
+  use crate::style::{FromCssStr, TextTransform, TextTransformCase, ToCss};
+
+  #[test]
+  fn parses_a_case_full_width_and_full_size_kana_in_any_order() {
+    let transform = TextTransform::from_css_str("full-size-kana uppercase full-width").unwrap();
+
+    assert_eq!(
+      transform,
+      TextTransform {
+        case: TextTransformCase::Uppercase,
+        full_width: true,
+        full_size_kana: true,
+      }
+    );
+    assert_eq!(
+      transform.to_css_string(),
+      "uppercase full-width full-size-kana"
+    );
+    assert_eq!(
+      TextTransform::from_css_str("none").unwrap().to_css_string(),
+      "none"
+    );
+  }
+
+  #[test]
+  fn rejects_a_repeated_part() {
+    for value in [
+      "uppercase lowercase",
+      "full-width full-width",
+      "full-size-kana capitalize full-size-kana",
+      "",
+    ] {
+      assert!(TextTransform::from_css_str(value).is_err(), "{value:?}");
+    }
   }
 }
