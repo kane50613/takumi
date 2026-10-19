@@ -4,22 +4,23 @@ description: Render ECharts and other SVG charts as PNG images or PDF documents 
 icon: ChartColumn
 ---
 
-Generate a chart as an SVG string, then pass it to an `<img>` in your document. Takumi renders the SVG without running the chart library in a browser. The library must support generating SVG in your runtime.
+Generate the chart as an SVG string, then pass it to an `<img>`. Takumi draws the SVG, so the chart library never runs in a browser. The library must be able to output SVG in your runtime.
 
 ## Render an ECharts chart
 
 Install ECharts alongside `takumi-js`:
 
 ```npm
-npm i echarts takumi-js @takumi-rs/helpers react
+npm i echarts takumi-js react
 ```
 
-This example generates a bar chart and saves it as a PNG. ECharts uses its SVG server renderer, so it needs no DOM or canvas.
+This example draws a bar chart and saves it as a PNG. ECharts uses its SVG server renderer, so it needs no DOM or canvas.
 
 ```tsx twoslash title="Render a chart to PNG"
 import * as echarts from "echarts";
 import { render } from "takumi-js";
-import { googleFonts } from "@takumi-rs/helpers";
+import { googleFonts } from "takumi-js/helpers";
+import { Renderer } from "takumi-js/node";
 import { writeFile } from "node:fs/promises";
 
 const chart = echarts.init(null, null, {
@@ -40,22 +41,26 @@ chart.setOption({
 const svg = chart.renderToSVGString();
 chart.dispose();
 
-const fonts = (await googleFonts(["Inter"])).map((font) => ({ ...font, ranges: [] }));
+const renderer = new Renderer();
+const fonts = await googleFonts(["Inter"]);
+
+await Promise.all(fonts.map((font) => renderer.registerFont(font)));
+
 const png = await render(
   <img
     src={svg}
     alt="Quarterly revenue: 320, 730, 550, and 910"
     style={{ width: 560, height: 360 }}
   />,
-  { width: 560, height: 360, fonts },
+  { width: 560, height: 360, renderer },
 );
 
 await writeFile("revenue.png", png);
 ```
 
-Keep `animation: false` for static output. Animated SVG can capture an empty or partially drawn chart. Dispose of the ECharts instance after extracting the SVG.
+Keep `animation: false` for static output. With animation on, the SVG can capture an empty or half-drawn chart. Dispose of the ECharts instance once you have the SVG.
 
-The SVG string goes directly in `src`. It does not need an `images` entry. To include it in an HTML string, insert the SVG markup inside the document.
+The SVG string goes straight into `src`, so it needs no `images` entry. In an HTML string, put the SVG markup inside the document.
 
 For PDF output, see [Charts in PDF](/docs/pdf/charts).
 
@@ -63,31 +68,35 @@ For PDF output, see [Charts in PDF](/docs/pdf/charts).
 
 Register fonts that cover every label, tick, and legend entry. Set the chart's font family to the same name.
 
-`googleFonts()` returns font subsets with Unicode ranges. Takumi filters those subsets against text in the document tree, which excludes text inside an SVG image. Clearing `ranges`, as above, keeps every returned subset.
+The `fonts` render option keeps only the subsets that the document's text uses. Text inside an SVG image does not count, so chart labels can lose their font. Fonts registered with `registerFont`, as above, stay on the renderer for every render.
 
-For a large font family, select the subsets against the chart text first. Include generated numeric ticks and punctuation as well as your data labels:
+For a large family, keep only the subsets the chart text needs. Include generated numeric ticks and punctuation as well as your data labels:
 
 ```tsx twoslash title="Load chart label fonts"
-import { googleFonts, subsetFonts } from "@takumi-rs/helpers";
+import { googleFonts, subsetFonts } from "takumi-js/helpers";
+import { Renderer } from "takumi-js/node";
 
+const renderer = new Renderer();
 const chartText = "一月二月三月四月營收0123456789.,−-%";
 const fonts = subsetFonts({
   fonts: await googleFonts(["Noto Sans TC"]),
   source: chartText,
-}).map((font) => ({ ...font, ranges: [] }));
+});
+
+await Promise.all(fonts.map((font) => renderer.registerFont(font)));
 ```
 
-Pass `fonts` to `render()` and set ECharts `textStyle.fontFamily` to `"Noto Sans TC"`. For offline output, load bundled font bytes instead. See [Fonts in CI and offline renders](/docs/typography-and-fonts#fonts-in-ci-and-offline-renders).
+Set ECharts `textStyle.fontFamily` to `"Noto Sans TC"` and pass `renderer` to `render()`. For offline output, load bundled font bytes instead. See [Fonts in CI and offline renders](/docs/typography-and-fonts#fonts-in-ci-and-offline-renders).
 
 ## Use another chart library
 
-Takumi accepts the SVG output, not the library's interactive component. Generate the final chart before calling `render()`.
+Takumi takes the SVG output, not the library's interactive component. Generate the final chart before you call `render()`.
 
-| Approach              | SVG generation                                            |
+| Library               | SVG generation                                            |
 | --------------------- | --------------------------------------------------------- |
 | ECharts               | `ssr: true`, then `renderToSVGString()`                   |
 | Vega or Vega-Lite     | Create a Vega view and call `toSVG()`                     |
 | d3-shape and d3-scale | Build SVG elements from computed paths and coordinates    |
 | React SVG components  | Render supported components with `renderToStaticMarkup()` |
 
-A library that requires a DOM or canvas needs its own server rendering setup. If it produces a PNG, pass that image to Takumi instead. A raster chart remains raster in PDF.
+A library that needs a DOM or canvas needs its own server rendering setup. If it outputs a PNG, pass that image to Takumi instead. A raster chart stays raster in a PDF.

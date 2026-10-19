@@ -3,7 +3,7 @@ title: Next.js
 description: Generate Open Graph images from React components in Next.js App Router route handlers.
 ---
 
-Return an Open Graph image from a Next.js App Router route handler. Use `takumi-js/response` to render a React component with `ImageResponse`.
+Return an Open Graph image from a Next.js App Router route. `ImageResponse` from `takumi-js/response` renders a React component and answers with the image.
 
 <Steps>
   <Step>
@@ -15,9 +15,9 @@ Return an Open Graph image from a Next.js App Router route handler. Use `takumi-
 
   </Step>
   <Step>
-    ### Mark Takumi core as a server external package
+    ### Keep the native binding out of the bundle
 
-    Add `@takumi-rs/core` to `serverExternalPackages` in your Next.js config.
+    Add `@takumi-rs/core` to `serverExternalPackages`. It holds a native `.node` addon, which Next.js cannot bundle.
 
     ```ts title="next.config.ts"
     import type { NextConfig } from "next";
@@ -31,7 +31,7 @@ Return an Open Graph image from a Next.js App Router route handler. Use `takumi-
 
   </Step>
   <Step>
-    ### Create an OG image component
+    ### Create an image component
 
     ```tsx title="app/og/OgImage.tsx"
     type OgImageProps = {
@@ -61,9 +61,7 @@ Return an Open Graph image from a Next.js App Router route handler. Use `takumi-
 
   </Step>
   <Step>
-    ### Return an image in an App Router route handler
-
-    Create a route handler, render the component, and return an `ImageResponse`.
+    ### Return the image from a route handler
 
     ```tsx title="app/og/route.tsx"
     import { ImageResponse } from "takumi-js/response";
@@ -81,5 +79,28 @@ Return an Open Graph image from a Next.js App Router route handler. Use `takumi-
     }
     ```
 
+    Visit `/og?title=Hello` to see the image.
+
   </Step>
 </Steps>
+
+## Use the `opengraph-image` file convention
+
+Next.js also reads an `opengraph-image.tsx` file next to a page and adds the meta tags for you. Return an `ImageResponse` from its default export:
+
+```tsx title="app/opengraph-image.tsx"
+import { ImageResponse } from "takumi-js/response";
+import OgImage from "./og/OgImage";
+
+export const size = { width: 1200, height: 630 };
+export const contentType = "image/png";
+
+export default function Image() {
+  return new ImageResponse(
+    <OgImage title="Takumi + Next.js" description="Render OG images with React." />,
+    size,
+  );
+}
+```
+
+If the build fails, see [Troubleshooting](/docs/troubleshooting#bundler-errors).

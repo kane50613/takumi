@@ -15,7 +15,7 @@ const image = await render(<div tw="p-8 text-4xl">Hello Takumi</div>, {
 });
 ```
 
-`render` and `ImageResponse` reuse a managed renderer. No cache setup is needed. When using `Renderer` directly, create it outside the request handler so registered fonts and decoded resources survive between renders.
+`render` and `ImageResponse` reuse one managed renderer, so they need no cache setup. If you create a `Renderer` yourself, create it outside the request handler. Its registered fonts and decoded resources then survive between renders.
 
 ## Know what is cached
 
@@ -28,13 +28,13 @@ const image = await render(<div tw="p-8 text-4xl">Hello Takumi</div>, {
 | Google Fonts CSS                                | Fetch implementation  | Automatic, bounded internally                                      |
 | Downloaded image bytes                          | Caller-provided cache | Optional `images.fetchCache`                                       |
 
-Cache budgets account for retained entries, not total process memory. Fonts, active renders, output buffers, and allocator overhead use memory too. See [image caching](/docs/load-images#decode-caching) and [Google Fonts](/docs/typography-and-fonts#from-google-fonts) for resource-specific behavior.
+Cache budgets count retained entries, not total process memory. Fonts, active renders, output buffers, and allocator overhead use memory too. See [image caching](/docs/load-images#decode-caching) and [Google Fonts](/docs/typography-and-fonts#from-google-fonts) for resource-specific behavior.
 
 ## Measure cold and repeated renders
 
-Measure the first render separately from repeated renders. Font downloads and decoding affect startup; layout, painting, and encoding still happen on a warm renderer.
+Measure the first render separately from repeated renders. Font downloads and decoding slow the first one. Layout, painting, and encoding still run on a warm renderer.
 
-Use representative text, images, output formats, and concurrent requests. Compare latency and memory before changing a budget. Increasing a cache helps only when it keeps work that later renders reuse.
+Use representative text, images, output formats, and concurrent requests. Compare latency and memory before you change a budget. A larger cache helps only when later renders reuse what it keeps.
 
 ### Resource cache
 
@@ -44,7 +44,7 @@ import { Renderer } from "takumi-js/node";
 const renderer = new Renderer({ cacheMaxBytes: 64 * 1024 * 1024 }); // [!code highlight]
 ```
 
-Raise the budget when frequently reused images or stylesheets are being evicted. For images used only once, [`cache: "none"`](/docs/load-images#decode-caching) avoids displacing reusable entries. An unbounded `images.fetchCache` is separate from this budget.
+Raise the budget when reused images or stylesheets get evicted. For an image used once, [`cache: "none"`](/docs/load-images#decode-caching) keeps it from pushing out reusable entries. This budget does not cover `images.fetchCache`, so bound that cache yourself.
 
 ### Glyph cache
 
@@ -54,17 +54,17 @@ import { setGlyphCacheMaxBytes } from "takumi-js";
 setGlyphCacheMaxBytes(64 * 1024 * 1024); // [!code highlight]
 ```
 
-Call this before the first render. Outlines and masks share the budget across renderers in the same backend module. Large glyph sets or text sizes can benefit from more space, but benchmark your content first.
+Call it before the first render. A later call does not resize a cache already in use. Every renderer in the same backend module shares this budget. Large glyph sets, such as CJK text, can need more space. Benchmark your content first.
 
 ## Keep memory flat on Linux servers
 
-Each render allocates a few megabytes for its canvas and encoder buffers. On Linux, glibc keeps freed memory in its arenas, so a long-running process holds more than the renderer retains.
+Each render allocates a few megabytes for its canvas and encoder buffers. On Linux, glibc keeps freed memory in its arenas, so a long-running process holds more memory than the renderer retains.
 
 ```bash title="Fixed mmap threshold"
 GLIBC_TUNABLES=glibc.malloc.mmap_threshold=262144 node server.js
 ```
 
-glibc raises its mmap threshold after a large block is freed, which moves later canvases into the arenas. A fixed threshold keeps buffers over 256 KiB in their own mappings, and glibc unmaps each one when it is freed.
+glibc raises its mmap threshold after a large block is freed, so later canvases land in the arenas. A fixed threshold keeps buffers over 256 KiB in their own mappings, and glibc unmaps each one when it is freed.
 
 | Setting                                             | RSS over 1,275 renders | Render time                      |
 | :-------------------------------------------------- | :--------------------- | :------------------------------- |
@@ -72,11 +72,11 @@ glibc raises its mmap threshold after a large block is freed, which moves later 
 | `GLIBC_TUNABLES=glibc.malloc.mmap_threshold=262144` | 114–130 MB             | 5–7% slower                      |
 | `MALLOC_ARENA_MAX=2`                                | 165–211 MB             | 7% slower with 4 renders at once |
 
-Both settings apply to the whole process, so measure your own server first. The figures come from the `node:24-bookworm-slim` image on Linux arm64, rendering 65 real OG templates four at a time. Alpine and other musl images use a different allocator.
+These figures come from one test setup, described in [PR #1862](https://github.com/kane50613/takumi/pull/1862): the `node:24-bookworm-slim` image on Linux arm64, rendering 65 OG templates four at a time. Both settings apply to the whole process, so measure your own server first. Alpine and other musl images use a different allocator.
 
 ## Keep network requests out of repeated work
 
-Bundle fonts for predictable startup without a font service. WOFF2 saves transfer and storage space but needs decompression; TTF avoids that step. A reused renderer decodes a registered file once. See [local fonts and CI](/docs/typography-and-fonts#fonts-in-ci-and-offline-renders).
+Bundle fonts for a predictable startup without a font service. WOFF2 files are smaller but need decompression. TTF files skip that step. A reused renderer decodes a registered file once. See [Fonts in CI and offline renders](/docs/typography-and-fonts#fonts-in-ci-and-offline-renders).
 
 For repeated remote images, use a bounded [fetch cache](/docs/load-images#external-images). The renderer's decode cache does not replace a download cache.
 
@@ -86,7 +86,7 @@ Each filtered node needs an offscreen layer. Put filters on one node when they s
 
 ## Render large canvases
 
-A canvas holds at most 64 megapixels. That is 8192 × 8192, or 4096 × 16384.
+A canvas holds at most 64 megapixels: 8192 × 8192, or 4096 × 16384.
 
 ```tsx twoslash title="A 4K render"
 import { render } from "takumi-js";
@@ -97,6 +97,6 @@ const image = await render(<div tw="p-8 text-4xl">Hello Takumi</div>, {
 });
 ```
 
-A larger viewport fails with `Invalid viewport dimensions: a canvas holds 1 to 64 megapixels`. Each pixel costs 4 bytes, so a full 64 megapixel render holds 256 MiB before encoding.
+A larger viewport fails with `Invalid viewport dimensions: a canvas holds 1 to 64 megapixels`. Each pixel takes 4 bytes, so a full 64-megapixel render holds 256 MiB before encoding.
 
-Painting cost follows the area a node covers, not the canvas. A `backdrop-filter` blurs only the pixels under its node. A clip mask costs only the clipped box.
+Painting cost follows the area a node covers, not the canvas size. A `backdrop-filter` blurs only the pixels under its node. A clip mask costs only the clipped box.

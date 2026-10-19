@@ -4,13 +4,12 @@ description: Create CSS image effects with Takumi, including gradient text, mask
 icon: Wand
 ---
 
-Use CSS gradients, shadows, masks, and SVG filters to build these effects. The previews are Takumi test output. The showcase scenes are defined in
-[`visual_showcase.rs`](https://github.com/kane50613/takumi/blob/master/takumi/tests/fixtures/visual_showcase.rs).
+Build these effects with CSS gradients, shadows, masks, and SVG filters. Each preview is Takumi test output. The full markup of every scene is in
+[`takumi/tests/fixtures-html`](https://github.com/kane50613/takumi/tree/master/takumi/tests/fixtures-html).
 
 ## Aurora and film grain
 
-Stack soft radial ellipses that all fade out around 68% for the mesh, and blur a conic layer over
-it for extra color drift:
+Stack soft radial ellipses that fade out at 68% for the mesh. A blurred conic layer on top adds color drift.
 
 ```css title="Aurora and film grain"
 background-color: #05010f;
@@ -20,9 +19,7 @@ background-image:
   radial-gradient(ellipse 60% 50% at 60% 65%, rgba(45, 212, 191, 0.4), transparent 68%);
 ```
 
-The grain is a `feTurbulence` filter graph on an empty overlay, blended with `overlay`; it also
-dithers away gradient banding. The title crosses the whole hue wheel with two stops through
-`in oklch longer hue`:
+The grain is a `feTurbulence` filter graph on an empty layer, blended with `overlay`. The title crosses the whole hue wheel with two stops, through `in oklch longer hue`:
 
 ```css title="Aurora and film grain"
 .grain {
@@ -40,9 +37,7 @@ dithers away gradient banding. The title crosses the whole hue wheel with two st
 
 ## Neon CRT
 
-Three layered effects:
-
-- **Neon**: stacked `text-shadow`s widening in the brand color
+- **Neon**: stacked `text-shadow`s that widen in the brand color
 - **Chromatic aberration**: two hard shadows in opposite directions
 - **Scanlines and vignette**: gradient overlays
 
@@ -78,8 +73,7 @@ Three layered effects:
 
 ## Chrome type
 
-Clip a gradient with hard color stops to the glyphs for a metallic finish. `feSpecularLighting` adds the bevel rim.
-The starburst behind is one `repeating-conic-gradient`:
+Clip a gradient with hard color stops to the glyphs for a metallic finish. `feSpecularLighting` adds the bevel rim. The starburst behind is one `repeating-conic-gradient`:
 
 ```css title="Chrome type"
 .chrome {
@@ -127,11 +121,11 @@ The starburst behind is one `repeating-conic-gradient`:
 
 ## Halftone
 
-A dot screen in three declarations:
+Build a dot screen in three steps:
 
-- Multiply a tiled radial gradient with a tone ramp
-- Crush it with `contrast()`
-- Re-ink the black dots with a `lighten` overlay (set `isolation: isolate` on the parent)
+- Multiply a tiled radial gradient with a tone ramp.
+- Crush it with `contrast()`.
+- Re-ink the black dots with a `lighten` layer. Set `isolation: isolate` on the parent.
 
 ```css title="Halftone"
 .dots {
@@ -154,8 +148,7 @@ A dot screen in three declarations:
 
 ## Grid hero
 
-The landing-page look: a hairline grid faded by `mask-image`, corner glows, and a neo-brutalist
-card with a hard offset shadow:
+A hairline grid faded by `mask-image`, corner glows, and a card with a hard offset shadow:
 
 ```css title="Grid hero"
 .grid {
@@ -176,7 +169,7 @@ card with a hard offset shadow:
 
 ## Gradient text
 
-`backgroundClip: "text"` fills glyphs with the background; make the text color transparent:
+`backgroundClip: "text"` fills the glyphs with the background. Make the text color transparent:
 
 ```tsx title="Gradient text"
 <h1
@@ -197,7 +190,9 @@ card with a hard offset shadow:
 `maskImage` fades content through a gradient's alpha channel:
 
 ```tsx title="Masks"
-<img src={photo} style={{ maskImage: "linear-gradient(to right, black, transparent)" }} />
+<div style={{ maskImage: "radial-gradient(circle, black 60%, transparent 100%)" }}>
+  <img src={photo} style={{ width: "100%", height: "100%" }} />
+</div>
 ```
 
 ![Masked image](/images/effects/style_mask_image_on_image.webp)
@@ -214,8 +209,7 @@ card with a hard offset shadow:
 
 ## Text on a path
 
-`offsetPath` places an element along a shape, and `offsetDistance` picks the spot. Wrap each glyph
-and spread the distances to set text on a circle:
+`offsetPath` places an element along a shape, and `offsetDistance` picks the spot. To set text on a circle, wrap each glyph and spread the distances:
 
 ```tsx title="Text on a path"
 const glyphs = [...ring].map((char, i) => (
@@ -223,7 +217,7 @@ const glyphs = [...ring].map((char, i) => (
     key={i}
     style={{
       position: "absolute",
-      offsetPath: "ellipse(240px 240px at 600px 315px)",
+      offsetPath: "circle(240px at 600px 315px)",
       offsetDistance: `${(i / ring.length) * 100}%`,
     }}
   >
@@ -236,9 +230,7 @@ const glyphs = [...ring].map((char, i) => (
 
 ## Dithering and duotone
 
-`filter` accepts inline SVG filter graphs as `data:` URIs next to filter functions, with the full
-primitive set (`feComponentTransfer`, `feColorMatrix`, `feImage`, `feTile`, `feTurbulence`, ...).
-Browsers parse the same markup, so prototype the effect on an HTML page and paste it in:
+`filter` takes inline SVG filter graphs as `data:` URLs, next to filter functions. Every SVG 1.1 filter primitive works, from `feColorMatrix` and `feComponentTransfer` to `feImage`, `feTile`, and `feTurbulence`. Browsers parse the same markup, so prototype the effect on an HTML page and paste it in:
 
 ```tsx title="Dithering and duotone"
 const filterUrl = (markup: string) => `url("data:image/svg+xml,${encodeURIComponent(markup)}")`;
@@ -246,8 +238,7 @@ const filterUrl = (markup: string) => `url("data:image/svg+xml,${encodeURICompon
 <div style={{ filter: `contrast(1.4) ${filterUrl(markup)}` }} />;
 ```
 
-Threshold effects need `color-interpolation-filters="sRGB"` on the `<filter>`; the spec default is
-`linearRGB`. Posterize snaps each channel to fixed levels:
+Threshold effects need `color-interpolation-filters="sRGB"` on the `<filter>`, because the spec default is `linearRGB`. Posterize snaps each channel to fixed levels:
 
 ```xml title="Dithering and duotone"
 <filter color-interpolation-filters="sRGB" x="0" y="0" width="100%" height="100%">
@@ -259,14 +250,12 @@ Threshold effects need `color-interpolation-filters="sRGB"` on the `<filter>`; t
 </filter>
 ```
 
-Tiling a Bayer matrix with `feImage` + `feTile` and adding it as noise before the quantize turns
-the same graph into ordered dithering. A two-color table over a 1-bit luma threshold gives duotone.
-The full graphs live in
-[`style_filter_reference.rs`](https://github.com/kane50613/takumi/blob/master/takumi/tests/fixtures/style_filter_reference.rs).
+For ordered dithering, tile a Bayer matrix with `feImage` and `feTile`, and add it as noise before the quantize step. For duotone, map a 1-bit luma threshold to a two-color table. The full graphs are in
+[`style_filter_reference_dither.html`](https://github.com/kane50613/takumi/blob/master/takumi/tests/fixtures-html/style_filter_reference_dither.html) and
+[`style_filter_reference_duotone.html`](https://github.com/kane50613/takumi/blob/master/takumi/tests/fixtures-html/style_filter_reference_duotone.html).
 
 ![Ordered dithering](/images/effects/style_filter_reference_dither.webp)
 
 ![Duotone](/images/effects/style_filter_reference_duotone.webp)
 
-For smooth gradients without banding, the render-level `dithering` option dithers gradient fills
-at the source; see [Output formats](/docs/output-formats).
+To remove banding from smooth gradients, set the `dithering` render option. It dithers gradient fills as they paint. See [Dithering](/docs/output-formats#dithering).
