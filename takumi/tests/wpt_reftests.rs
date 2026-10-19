@@ -20,10 +20,12 @@ use std::{
   env, fs,
   panic::{self, AssertUnwindSafe},
   path::{Path, PathBuf},
+  process,
   sync::{
-    Arc,
-    atomic::{AtomicUsize, Ordering},
+    Arc, Mutex, MutexGuard,
+    atomic::{AtomicBool, AtomicUsize, Ordering},
   },
+  thread,
   time::{Duration, Instant},
 };
 
@@ -45,8 +47,13 @@ const VIEWPORT: (u32, u32) = (800, 600);
 /// The run reports progress every this many finished tests.
 const PROGRESS_EVERY: usize = 500;
 
-/// How long one test may take before the run names it.
-const SLOW: Duration = Duration::from_secs(5);
+/// How long one test may run before the run names it. Most take milliseconds, so a test past this
+/// is caught in a layout bug.
+const SLOW: Duration = Duration::from_secs(15);
+
+/// How long one test may run before the run gives up on it and fails, as a stuck thread cannot be
+/// stopped.
+const HUNG: Duration = Duration::from_secs(120);
 
 const EXPECTATIONS: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/wpt-reftests.txt");
 
@@ -94,23 +101,38 @@ fn wpt_reftests() {
   );
   let started = Instant::now();
   let finished = AtomicUsize::new(0);
-  let outcomes: BTreeMap<String, Outcome> = tests
-    .par_iter()
-    .map(|path| {
-      let outcome = runner.run(path);
-      let finished = finished.fetch_add(1, Ordering::Relaxed) + 1;
+  let watchdog = Watchdog::default();
+  let outcomes: BTreeMap<String, Outcome> = thread::scope(|scope| {
+    scope.spawn(|| watchdog.watch());
 
-      if finished.is_multiple_of(PROGRESS_EVERY) {
-        eprintln!(
-          "WPT reftests: {finished}/{} after {:.0?}",
-          tests.len(),
-          started.elapsed()
-        );
-      }
+    let outcomes = tests
+      .par_iter()
+      .map(|path| {
+        let name = runner.relative(path);
 
-      (runner.relative(path), outcome)
-    })
-    .collect();
+        watchdog.start(&name);
+
+        let outcome = runner.run(path);
+
+        watchdog.finish(&name);
+
+        let finished = finished.fetch_add(1, Ordering::Relaxed) + 1;
+
+        if finished.is_multiple_of(PROGRESS_EVERY) {
+          eprintln!(
+            "WPT reftests: {finished}/{} after {:.0?}",
+            tests.len(),
+            started.elapsed()
+          );
+        }
+
+        (name, outcome)
+      })
+      .collect();
+
+    watchdog.stop();
+    outcomes
+  });
   let mut counts = BTreeMap::new();
 
   for outcome in outcomes.values() {
@@ -533,6 +555,55 @@ impl Fuzzy {
 }
 
 /// What every test renders with: the test fonts plus WPT's Ahem, and the images the suites use.
+/// Names the tests that run past [`SLOW`] while they still run, and fails the run once one passes
+/// [`HUNG`].
+#[derive(Default)]
+struct Watchdog {
+  running: Mutex<HashMap<String, (Instant, bool)>>,
+  stopped: AtomicBool,
+}
+
+impl Watchdog {
+  fn start(&self, name: &str) {
+    self.lock().insert(name.to_owned(), (Instant::now(), false));
+  }
+
+  fn finish(&self, name: &str) {
+    self.lock().remove(name);
+  }
+
+  fn stop(&self) {
+    self.stopped.store(true, Ordering::Relaxed);
+  }
+
+  fn lock(&self) -> MutexGuard<'_, HashMap<String, (Instant, bool)>> {
+    self
+      .running
+      .lock()
+      .unwrap_or_else(|poisoned| poisoned.into_inner())
+  }
+
+  fn watch(&self) {
+    while !self.stopped.load(Ordering::Relaxed) {
+      thread::sleep(Duration::from_secs(1));
+
+      for (name, (started, reported)) in self.lock().iter_mut() {
+        let elapsed = started.elapsed();
+
+        if elapsed > HUNG {
+          eprintln!("{name}: still running after {elapsed:.0?}, giving up");
+          process::exit(1);
+        }
+
+        if elapsed > SLOW && !*reported {
+          eprintln!("{name}: still running after {elapsed:.0?}");
+          *reported = true;
+        }
+      }
+    }
+  }
+}
+
 struct Runner {
   root: PathBuf,
   verbose: bool,
