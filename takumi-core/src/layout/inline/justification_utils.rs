@@ -15,16 +15,18 @@ use crate::{
   },
   layout_unit::{FixedPoint, InlineLayoutUnit, LayoutUnit, TextRunLayoutUnit},
   style::Direction as TextDirection,
-  text::{character::OBJECT_REPLACEMENT_CHARACTER, text_justify::TextJustify},
+  style::TextJustify,
+  text::character::OBJECT_REPLACEMENT_CHARACTER,
 };
 
 /// Blink's `GetTextJustify`: items without a box, such as controls, take no expansion.
 fn text_justify(item_result: &InlineItemResult<'_, '_>) -> TextJustify {
-  if item_result.item.layout_object.is_none() {
-    return TextJustify::None;
-  }
-
-  TextJustify::Auto
+  item_result
+    .item
+    .layout_object
+    .map_or(TextJustify::None, |object| {
+      object.style().misc_inherited_data.text_justify
+    })
 }
 
 /// Blink's `SetupItemJustificationOpportunity`.

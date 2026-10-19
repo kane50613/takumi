@@ -2,14 +2,11 @@
 
 use icu_segmenter::GraphemeClusterSegmenter;
 
-use super::{
-  character::{
-    OBJECT_REPLACEMENT_CHARACTER, is_cjk_ideograph_or_symbol, is_cursive_script,
-    is_default_ignorable, treat_as_space,
-  },
-  text_justify::TextJustify,
+use super::character::{
+  OBJECT_REPLACEMENT_CHARACTER, is_cjk_ideograph_or_symbol, is_cursive_script,
+  is_default_ignorable, treat_as_space,
 };
-use crate::style::Direction as TextDirection;
+use crate::style::{Direction as TextDirection, TextJustify};
 
 /// Blink's `JustificationContext::Type`: the kind of the character before.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]

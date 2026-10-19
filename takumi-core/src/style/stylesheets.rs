@@ -1523,6 +1523,7 @@ define_style! {
       image_rendering: ImageScalingAlgorithm where inherit = true,
       overflow_wrap: OverflowWrap where inherit = true,
       word_break: WordBreak where inherit = true,
+      text_justify: TextJustify where inherit = true,
       clip_rule: FillRule where inherit = true,
     }
     /// Blink's `misc-inherited->misc-inherited1` field group, which Blink nests in `misc-inherited`.
