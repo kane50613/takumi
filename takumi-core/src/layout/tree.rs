@@ -1541,6 +1541,17 @@ impl<'r> LayoutTree<'r> {
                 Size::from_taffy(available_space).map(AvailableSpace::from_taffy);
               let known_dimensions = Size::from_taffy(known_dimensions);
               if !node_data.is_inline_children {
+                if render_node.measures_as_inline_content() {
+                  return InlineNode::new(render_node)
+                    .measure(
+                      &tree.inline_node_data(idx),
+                      available_space,
+                      known_dimensions,
+                    )
+                    .size
+                    .into_taffy();
+                }
+
                 return render_node
                   .measure(available_space, known_dimensions, &node_data.style)
                   .into_taffy();
@@ -2685,6 +2696,16 @@ impl RenderNode {
     )
   }
 
+  /// Whether it measures as the inline content it holds: a text node, or an inline box that tree
+  /// building left among block-level siblings, such as in a table row no table wraps, which lays
+  /// out as the anonymous block CSS 2.2 §9.2.1.1 would wrap it in.
+  pub(crate) fn measures_as_inline_content(&self) -> bool {
+    self.node.as_ref().is_some_and(|node| {
+      matches!(node.kind, NodeKind::Text(_))
+        || self.context.style.base_data.display == Display::Inline
+    })
+  }
+
   pub(crate) fn measure(
     &self,
     available_space: Size<AvailableSpace>,
@@ -2695,11 +2716,7 @@ impl RenderNode {
       return Size::ZERO;
     };
 
-    // An inline box that tree building left among block-level siblings, such as in a table row
-    // no table wraps, lays out as the anonymous block CSS 2.2 §9.2.1.1 would wrap it in.
-    if matches!(node.kind, NodeKind::Text(_))
-      || self.context.style.base_data.display == Display::Inline
-    {
+    if self.measures_as_inline_content() {
       let node = InlineNode::new(self);
 
       return node
