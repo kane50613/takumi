@@ -111,9 +111,13 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
    and `FontFallbackIterator` in src/fonts/font_fallback_iterator.rs and
    `ShapeResultView` in src/fonts/shaping/shape_result_view.rs, from
    third_party/blink/renderer/platform/fonts/font_fallback_iterator.cc and
-   third_party/blink/renderer/platform/fonts/shaping/shape_result_view.cc.
+   third_party/blink/renderer/platform/fonts/shaping/shape_result_view.cc;
+   and `ShapeResultSpacing` in src/fonts/shaping/shape_result_spacing.rs and
+   `JustificationContext` in src/text/justification_opportunity.rs, from
+   third_party/blink/renderer/platform/fonts/shaping/shape_result_spacing.cc and
+   third_party/blink/renderer/platform/text/justification_opportunity.cc.
 
-Copyright 2014, 2015, 2017, 2018, 2019, 2020, 2024 The Chromium Authors
+Copyright 2014, 2015, 2016, 2017, 2018, 2019, 2020, 2024, 2025 The Chromium Authors
 
 Redistribution and use in source and binary forms, with or without
 modification, are permitted provided that the following conditions are
