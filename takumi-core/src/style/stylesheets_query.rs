@@ -31,6 +31,16 @@ impl ComputedStyle {
     style
   }
 
+  /// Blink's `ResolvedIsColumnFlexDirection`, as a direction: a `-webkit-box` takes its axis from
+  /// `-webkit-box-orient`.
+  pub(crate) fn resolved_flex_direction(&self) -> FlexDirection {
+    if self.base_data.display.is_deprecated_webkit_box() {
+      self.misc_data.box_orient.into()
+    } else {
+      self.misc_data.flex_direction
+    }
+  }
+
   /// Normalize inheritable text-related values to computed values for this node.
   pub(crate) fn make_computed(&mut self, sizing: &SizingContext) {
     #[cfg(debug_assertions)]
@@ -103,12 +113,11 @@ impl ComputedStyle {
       self.misc4_data_mut().text_overflow = TextOverflow::Clip;
     }
 
-    // Approximate: `-webkit-legacy` collapses the lines of a `display: -webkit-box` with
-    // `-webkit-box-orient: vertical`, which takumi lowers to a flex column, so a flex column
-    // clamps where Chrome would not. It does nothing anywhere else.
+    // `-webkit-legacy` collapses only in a vertical `-webkit-box`, Blink's
+    // `IsDeprecatedWebkitBoxWithVerticalLineClamp`.
     if self.misc_data.r#continue == Continue::WebkitLegacy {
-      let collapses = matches!(self.base_data.display, Display::Flex | Display::InlineFlex)
-        && self.misc_data.flex_direction == FlexDirection::Column;
+      let collapses = self.base_data.display.is_deprecated_webkit_box()
+        && self.misc_data.box_orient == BoxOrient::Vertical;
 
       self.misc_data_mut().r#continue = if collapses {
         Continue::Collapse
@@ -553,7 +562,7 @@ impl ComputedStyle {
       }
       .map(|margin| margin.resolve_to_length_percentage_auto(sizing)),
       display: self.base_data.display.into_taffy(),
-      flex_direction: self.misc_data.flex_direction.into_taffy(),
+      flex_direction: self.resolved_flex_direction().into_taffy(),
       position: self.base_data.position.into_taffy(),
       justify_content: self.box_data.justify_content.into_taffy(),
       align_content: self.misc_data.align_content.into_taffy(),

@@ -772,7 +772,7 @@ impl<'r> LayoutTree<'r> {
     let stretches = self.render_nodes.first().is_some_and(|root| {
       matches!(
         root.context.style.base_data.display,
-        Display::Flex | Display::Grid | Display::FlowRoot
+        Display::Flex | Display::WebkitBox | Display::Grid | Display::FlowRoot
       )
     });
     let style = &self.nodes[0].style;
@@ -1992,10 +1992,7 @@ impl RenderNode {
     }
 
     // flex/grid add no semantics over a flat content list; downgrade per spec §8.
-    if matches!(
-      style.base_data.display,
-      Display::Flex | Display::InlineFlex | Display::Grid | Display::InlineGrid
-    ) {
+    if style.base_data.display.should_blockify_children() {
       style.base_data_mut().display = Display::Block;
     }
 
@@ -2158,7 +2155,7 @@ impl RenderNode {
   pub(crate) fn is_inline_atomic_container(&self) -> bool {
     matches!(
       self.context.style.base_data.display,
-      Display::InlineBlock | Display::InlineFlex | Display::InlineGrid
+      Display::InlineBlock | Display::InlineFlex | Display::InlineGrid | Display::WebkitInlineBox
     )
   }
 
@@ -2514,7 +2511,9 @@ impl RenderNode {
         InlineBaselineSource::InlineContentLastLine,
         InlineBaselineSource::LayoutFirstBaseline,
       ],
-      Display::InlineFlex | Display::InlineGrid => &[InlineBaselineSource::LayoutFirstBaseline],
+      Display::InlineFlex | Display::InlineGrid | Display::WebkitInlineBox => {
+        &[InlineBaselineSource::LayoutFirstBaseline]
+      }
       _ => &[],
     }
   }

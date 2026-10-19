@@ -428,12 +428,9 @@ impl SceneRequest<'_> {
       let inline_floats = (current.should_create_inline_layout() && current.has_inline_floats())
         .then(|| node_paint.clone());
 
-      let is_flex_or_grid_item = visit.parent_display.is_some_and(|display| {
-        matches!(
-          display,
-          Display::Flex | Display::InlineFlex | Display::Grid | Display::InlineGrid
-        )
-      });
+      let is_flex_or_grid_item = visit
+        .parent_display
+        .is_some_and(|display| display.should_blockify_children());
 
       let creates_stacking_context = visit.is_root
         || current

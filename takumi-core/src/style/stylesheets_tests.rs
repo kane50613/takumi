@@ -462,10 +462,18 @@ fn webkit_line_clamp_needs_a_vertical_webkit_box() {
     ("-webkit-line-clamp", "2"),
   ]);
   let bare = style(&[("-webkit-line-clamp", "2")]);
+  let flex_column = style(&[
+    ("display", "flex"),
+    ("flex-direction", "column"),
+    ("-webkit-line-clamp", "2"),
+  ]);
+  let horizontal = style(&[("display", "-webkit-box"), ("-webkit-line-clamp", "2")]);
   let overridden = style(&[("line-clamp", "4"), ("-webkit-line-clamp", "4")]);
 
   assert_eq!(legacy.line_clamp(), Some(2));
   assert_eq!(bare.line_clamp(), None);
+  assert_eq!(flex_column.line_clamp(), None);
+  assert_eq!(horizontal.line_clamp(), None);
   assert_eq!(overridden.line_clamp(), None);
 }
 
@@ -835,13 +843,13 @@ fn parse_legacy_box_properties_lower_to_flex() {
   let orient = parse_declarations("-webkit-box-orient", "vertical");
   assert_eq!(
     orient.iter().collect::<Vec<_>>(),
-    vec![&StyleDeclaration::flex_direction(FlexDirection::Column)]
+    vec![&StyleDeclaration::box_orient(BoxOrient::Vertical)]
   );
 
   let inline_axis = parse_declarations("-webkit-box-orient", "inline-axis");
   assert_eq!(
     inline_axis.iter().collect::<Vec<_>>(),
-    vec![&StyleDeclaration::flex_direction(FlexDirection::Row)]
+    vec![&StyleDeclaration::box_orient(BoxOrient::Horizontal)]
   );
 
   let pack = parse_declarations("-webkit-box-pack", "justify");

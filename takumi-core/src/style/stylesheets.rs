@@ -1401,6 +1401,7 @@ define_style! {
     /// Blink's `misc` field group: its rarely set non-inherited fields under eight bits.
     misc_data: StyleMiscData {
       flex_direction: FlexDirection,
+      box_orient: BoxOrient,
       justify_self: AlignItems,
       align_content: JustifyContent,
       justify_items: AlignItems,
@@ -1650,9 +1651,6 @@ define_style! {
     flex_flow: FlexFlow => [FlexDirection, FlexWrap] |value, target| {
       target.push(StyleDeclaration::flex_direction(value.direction));
       target.push(StyleDeclaration::flex_wrap(value.wrap));
-    },
-    box_orient: BoxOrient => [FlexDirection] |value, target| {
-      target.push(StyleDeclaration::flex_direction(value.into()));
     },
     box_pack: BoxPack => [JustifyContent] |value, target| {
       target.push(StyleDeclaration::justify_content(value.into()));
