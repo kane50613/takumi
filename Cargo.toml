@@ -32,7 +32,6 @@ data-url = "0.3"
 flate2 = "1.1"
 float-cmp = "0.9"
 gif = "0.14"
-harfrust = "0.14"
 html5ever = "0.39"
 image-webp = "0.2"
 indexmap = "2.14"
@@ -149,6 +148,11 @@ features = ["macros"]
 [workspace.dependencies.serde]
 version = "1"
 features = ["derive"]
+
+[workspace.dependencies.harfrust]
+version = "0.14"
+default-features = false
+features = ["std"]
 
 [workspace.dependencies.skrifa]
 version = "0.48"
@@ -319,3 +323,6 @@ skrifa = { git = "https://github.com/kane50613/fontations", rev = "4f695945ca06b
 read-fonts = { git = "https://github.com/kane50613/fontations", rev = "4f695945ca06b2b8e85863165813458eeb8b7b31" }
 font-types = { git = "https://github.com/kane50613/fontations", rev = "4f695945ca06b2b8e85863165813458eeb8b7b31" }
 write-fonts = { git = "https://github.com/kane50613/fontations", rev = "4f695945ca06b2b8e85863165813458eeb8b7b31" }
+# The fork gates the AAT tables (`morx`, `mort`, `kerx`, `ankr`, `trak`) behind an `aat` feature,
+# which takumi leaves off: web fonts shape by their OpenType tables.
+harfrust = { git = "https://github.com/kane50613/harfrust", rev = "de393280a638ef3de24fad5eae26bb9454b44681" }

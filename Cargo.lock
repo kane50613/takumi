@@ -630,8 +630,7 @@ dependencies = [
 [[package]]
 name = "harfrust"
 version = "0.14.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "86aa776d6d32b072119e1f1650f4db843ff4382a4aaa6a2c9c4e35703cd377cb"
+source = "git+https://github.com/kane50613/harfrust?rev=de393280a638ef3de24fad5eae26bb9454b44681#de393280a638ef3de24fad5eae26bb9454b44681"
 dependencies = [
  "bitflags",
  "bytemuck",
