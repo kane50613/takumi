@@ -1538,9 +1538,7 @@ css/css-flexbox/
 !css/css-flexbox/flexbox-align-self-horiz-002.xhtml
 !css/css-flexbox/flexbox-align-self-horiz-003.xhtml
 !css/css-flexbox/flexbox-align-self-horiz-004.xhtml
-!css/css-flexbox/flexbox-align-self-vert-001.xhtml
 !css/css-flexbox/flexbox-align-self-vert-002.xhtml
-!css/css-flexbox/flexbox-align-self-vert-003.xhtml
 !css/css-flexbox/flexbox-align-self-vert-004.xhtml
 !css/css-flexbox/flexbox-align-self-vert-rtl-001.xhtml
 !css/css-flexbox/flexbox-align-self-vert-rtl-002.xhtml

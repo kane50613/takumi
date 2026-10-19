@@ -32,6 +32,7 @@ use std::{
 
 use image::RgbaImage;
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
+use roxmltree::{Document, Node as XmlNode};
 use takumi::{
   prelude::{
     FontOverride, FontResource, Fonts, FromHtml, FromHtmlOptions, ImageCacheMode, ImageSource,
@@ -206,64 +207,37 @@ fn wpt_reftests() {
 /// which takumi changes to `border-box`, apart from tables.
 const UA_SHEET: &str = "* { box-sizing: content-box } ::before, ::after { box-sizing: content-box } table { box-sizing: border-box }";
 
-/// `text` with its XML character references decoded: the predefined entities and numeric ones.
-fn decode_xml_references(text: &str) -> String {
-  let mut decoded = String::with_capacity(text.len());
-  let mut rest = text;
+/// The `<style>` blocks of a document with their offsets. HTML reads a block as raw text; XHTML
+/// reads it as XML, which unwraps CDATA sections and decodes character references, so each block
+/// goes through an XML parser alone, apart from the entities of the document's DTD.
+fn style_blocks(source: &str, is_xhtml: bool) -> Vec<(usize, String)> {
+  source
+    .match_indices("<style")
+    .filter_map(|(start, _)| {
+      let (_, inner) = source[start..].split_once('>')?;
+      let (sheet, _) = inner.split_once("</style>")?;
+      let sheet = is_xhtml
+        .then(|| xml_text(&format!("<style>{sheet}</style>")))
+        .flatten()
+        .unwrap_or_else(|| sheet.to_owned());
 
-  while let Some(start) = rest.find('&') {
-    decoded.push_str(&rest[..start]);
-    rest = &rest[start..];
-
-    let reference = rest[1..].split_once(';').and_then(|(name, _)| {
-      let character = match name {
-        "lt" => '<',
-        "gt" => '>',
-        "amp" => '&',
-        "quot" => '"',
-        "apos" => '\'',
-        _ => {
-          let code = match name.strip_prefix("#x").or_else(|| name.strip_prefix("#X")) {
-            Some(hex) => u32::from_str_radix(hex, 16).ok()?,
-            None => name.strip_prefix('#')?.parse().ok()?,
-          };
-
-          char::from_u32(code)?
-        }
-      };
-
-      Some((character, name.len() + 2))
-    });
-
-    match reference {
-      Some((character, length)) => {
-        decoded.push(character);
-        rest = &rest[length..];
-      }
-      None => {
-        decoded.push('&');
-        rest = &rest[1..];
-      }
-    }
-  }
-
-  decoded.push_str(rest);
-  decoded
+      Some((start, sheet))
+    })
+    .collect()
 }
 
-/// The file `url()`s in CSS text, unquoted as CSS reads them, leaving out `data:` URLs and
-/// fragment references such as `url(#clip)`.
-fn css_urls(text: &str) -> impl Iterator<Item = &str> {
-  text.match_indices("url(").filter_map(|(start, _)| {
-    let rest = text[start + "url(".len()..].trim_start();
-    let (url, _) = match rest.chars().next()? {
-      quote @ ('"' | '\'') => rest[1..].split_once(quote)?,
-      _ => rest.split_once(')')?,
-    };
-    let url = url.trim();
+/// The text an XML parser reads in `element`; none when it is not well-formed.
+fn xml_text(element: &str) -> Option<String> {
+  let document = Document::parse(element).ok()?;
 
-    (!url.is_empty() && !url.starts_with('#') && !url.starts_with("data:")).then_some(url)
-  })
+  Some(
+    document
+      .root_element()
+      .descendants()
+      .filter(XmlNode::is_text)
+      .filter_map(|node| node.text())
+      .collect(),
+  )
 }
 
 /// The rules `tests/wpt-reftests.txt` lists: `path` expects one test to pass and `dir/` every test
@@ -884,67 +858,72 @@ impl Runner {
         let is_stylesheet = attributes
           .get("rel")
           .is_some_and(|rel| rel.eq_ignore_ascii_case("stylesheet"));
+
+        if !is_stylesheet {
+          return None;
+        }
+
         let sheet_path = self.resolve(path, attributes.get("href")?);
         let sheet = fs::read_to_string(&sheet_path).ok()?;
 
-        is_stylesheet.then_some((start, sheet_path, sheet))
+        Some((start, sheet_path, sheet))
       })
       .collect();
     let is_xhtml = path
       .extension()
       .is_some_and(|extension| extension == "xht" || extension == "xhtml");
-    // An XHTML document's parser takes a `<style>` block's CDATA section apart, or decodes the
-    // character references outside one, before CSS sees it.
-    let inline = source.match_indices("<style").filter_map(|(start, _)| {
-      let (_, inner) = source[start..].split_once('>')?;
-      let (sheet, _) = inner.split_once("</style>")?;
-      let sheet = if sheet.contains("<![CDATA[") {
-        sheet.replace("<![CDATA[", "").replace("]]>", "")
-      } else if is_xhtml {
-        decode_xml_references(sheet)
-      } else {
-        sheet.to_owned()
-      };
-
-      Some((start, sheet))
-    });
-    // Later sheets win ties, so they keep document order.
-    let mut sheets: Vec<(usize, String)> = linked
-      .iter()
-      .map(|(start, _, sheet)| (*start, sheet.clone()))
-      .chain(inline)
+    let inline = style_blocks(source, is_xhtml);
+    let node = Node::from_html(source, FromHtmlOptions::default())
+      .map_err(|error| format!("parse: {error}"))?;
+    // Each sheet with the file its `url()`s resolve against, in document order, as later sheets
+    // win ties.
+    let mut sheets: Vec<(usize, PathBuf, String)> = linked
+      .into_iter()
+      .chain(
+        inline
+          .into_iter()
+          .map(|(start, sheet)| (start, path.to_path_buf(), sheet)),
+      )
       .collect();
 
-    sheets.sort_by_key(|(start, _)| *start);
+    sheets.sort_by_key(|(start, ..)| *start);
 
-    let stylesheet = StyleSheet::parse_list_loosy(
-      [UA_SHEET.to_owned()]
-        .into_iter()
-        .chain(sheets.into_iter().map(|(_, sheet)| sheet)),
-    );
-    // Image sources as the document writes them, with the file each resolves against: `<img>`
-    // sources and `url()`s in the document, then `url()`s in each linked sheet.
-    let sources = tags(source, "img")
+    let parsed: Vec<(PathBuf, StyleSheet)> = sheets
+      .iter()
+      .map(|(_, base, sheet)| (base.clone(), StyleSheet::parse_loosy(sheet)))
+      .collect();
+    // Image URLs as takumi looks them up, with the file each resolves against: `<img>` sources as
+    // written, since `Node::image_urls` keeps only remote ones, then style attributes and sheets.
+    let img_sources: Vec<String> = tags(source, "img")
       .into_iter()
-      .filter_map(|attributes| attributes.get("src").cloned())
-      .chain(css_urls(source).map(str::to_owned))
-      .map(|src| (src, path.to_path_buf()))
-      .chain(linked.iter().flat_map(|(_, sheet_path, sheet)| {
-        css_urls(sheet).map(|url| (url.to_owned(), sheet_path.clone()))
-      }));
+      .filter_map(|mut attributes| attributes.remove("src"))
+      .collect();
+    let sources = img_sources
+      .iter()
+      .map(String::as_str)
+      .chain(node.image_urls())
+      .map(|url| (url, path))
+      .chain(
+        parsed
+          .iter()
+          .flat_map(|(base, sheet)| sheet.image_urls().map(move |url| (url, base.as_path()))),
+      );
     let images: HashMap<Arc<str>, ImageSource> = sources
-      .filter_map(|(src, base)| {
-        let data = fs::read(self.resolve(&base, &src)).ok()?;
+      .filter_map(|(url, base)| {
+        let data = fs::read(self.resolve(base, url)).ok()?;
         let image = self
           .images
           .get_or_decode(&data, ImageCacheMode::Auto)
           .ok()?;
 
-        Some((Arc::from(src.as_str()), image))
+        Some((Arc::from(url), image))
       })
       .collect();
-    let node = Node::from_html(source, FromHtmlOptions::default())
-      .map_err(|error| format!("parse: {error}"))?;
+    let stylesheet = StyleSheet::parse_list_loosy(
+      [UA_SHEET.to_owned()]
+        .into_iter()
+        .chain(sheets.into_iter().map(|(.., sheet)| sheet)),
+    );
     let bitmap = render(
       RenderOptions::builder()
         .viewport(Viewport::new(VIEWPORT))
@@ -1039,20 +1018,16 @@ fn compress_lists_the_failures_of_a_mostly_passing_directory() {
 }
 
 #[test]
-fn css_urls_reads_file_references() {
-  let css = r#"a { background: url(a.png) } b { background-image: url( "b c.svg" ), url('d.gif') }
-    c { clip-path: url(#clip); background: url(data:image/png;base64,AA==) }"#;
+fn xhtml_style_blocks_read_as_xml() {
+  let source = "<style><![CDATA[a > b {}]]></style><p>&nbsp;</p><style>c &gt; d {}</style>";
+  let sheets: Vec<String> = style_blocks(source, true)
+    .into_iter()
+    .map(|(_, sheet)| sheet)
+    .collect();
 
+  assert_eq!(sheets, ["a > b {}", "c > d {}"]);
   assert_eq!(
-    css_urls(css).collect::<Vec<_>>(),
-    ["a.png", "b c.svg", "d.gif"]
-  );
-}
-
-#[test]
-fn decode_xml_references_reads_entities() {
-  assert_eq!(
-    decode_xml_references("div#a &gt; span::after { content: '&#x41;&#66;&amp;' } &bogus; &"),
-    "div#a > span::after { content: 'AB&' } &bogus; &"
+    style_blocks("<style>e &gt; f {}</style>", false)[0].1,
+    "e &gt; f {}"
   );
 }

@@ -1786,6 +1786,7 @@ dependencies = [
  "png",
  "rayon",
  "resvg",
+ "roxmltree 0.21.1",
  "serde_json",
  "takumi",
  "takumi-core",
