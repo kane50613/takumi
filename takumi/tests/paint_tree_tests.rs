@@ -1,5 +1,3 @@
-mod test_utils;
-
 use std::fs::{create_dir_all, write};
 
 use takumi::prelude::*;
@@ -7,7 +5,8 @@ use takumi_core::paint_tree::{
   Drawable, NodeKind, Paint, PaintDocument, PaintFilter, PaintNode, PaintStep, PaintTree,
   PaintTreeOptions, Role, Shape, Spread, TextRun, paint_tree,
 };
-use test_utils::{CONTEXT, TEST_IMAGES, format_generated};
+
+use crate::test_utils::{CONTEXT, TEST_IMAGES, format_generated};
 
 const CSS: &str = r#"
   .card {

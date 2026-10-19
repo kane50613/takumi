@@ -1,9 +1,8 @@
-mod test_utils;
-
 use std::collections::BTreeMap;
 
 use takumi::prelude::{Length::*, *};
-use test_utils::{block, measure_with_css, run_texts};
+
+use crate::test_utils::{block, measure_with_css, run_texts};
 
 #[test]
 fn before_string_content_inserts_text_at_start() {

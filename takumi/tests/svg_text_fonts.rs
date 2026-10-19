@@ -1,13 +1,12 @@
 //! A text SVG shared through the resource cache re-resolves fonts per
 //! snapshot instead of keeping the first snapshot's glyphs.
 
-mod test_utils;
-
 use std::fs;
 
 use takumi::prelude::*;
 use takumi_core::resources::image::{RenderedImage, ResourceCache};
-use test_utils::repo_base_path;
+
+use crate::test_utils::repo_base_path;
 
 const GEIST: &str = "assets/fonts/geist/Geist[wght].woff2";
 
