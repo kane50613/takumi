@@ -43,7 +43,7 @@ const renderer = new Renderer();
 
 `takumi-js/wasm/no-init` exports `init` by name, not as the default export. Its `Renderer` takes a node tree. Build one with [`fromJsx`](/docs/helpers#parsing-templates).
 
-The cause: your browser bundle resolved the entry made for Vite. That entry imports the binary with a `?url` suffix, which only Vite understands.
+The cause is that your browser bundle resolved the entry made for Vite. That entry imports the binary with a `?url` suffix, which only Vite understands.
 
 ### non-ecmascript placeable asset
 
