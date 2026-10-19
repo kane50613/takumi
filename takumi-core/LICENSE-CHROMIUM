@@ -159,7 +159,9 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
    `CaseMap` in src/text/case_map.rs, `SmallCapsIterator` in
    src/fonts/small_caps_iterator.rs, `OpenTypeCapsSupport` in
    src/fonts/open_type_caps_support.rs, `CaseMapIntend::fill_buffer` in
-   src/fonts/shaping/case_mapping_harfbuzz_buffer_filler.rs, and the `white-space` predicates in
+   src/fonts/shaping/case_mapping_harfbuzz_buffer_filler.rs, `LineFitter` and the
+   `text-fit` scales in src/layout/inline/text_fit_utils.rs and
+   src/layout/inline/text_fit_scale.rs, and the `white-space` predicates in
    src/style/properties/mod.rs and src/style/properties/text_wrap.rs, from
    third_party/blink/renderer/core/layout/inline/inline_item.cc,
    third_party/blink/renderer/core/layout/inline/inline_items_builder.cc,
@@ -207,7 +209,9 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
    third_party/blink/renderer/platform/wtf/text/case_map.cc,
    third_party/blink/renderer/platform/fonts/small_caps_iterator.cc,
    third_party/blink/renderer/platform/fonts/opentype/open_type_caps_support.cc,
-   third_party/blink/renderer/platform/fonts/shaping/case_mapping_harfbuzz_buffer_filler.cc, and
+   third_party/blink/renderer/platform/fonts/shaping/case_mapping_harfbuzz_buffer_filler.cc,
+   third_party/blink/renderer/core/layout/inline/text_fit_utils.cc,
+   third_party/blink/renderer/core/layout/inline/text_fit_scale.h, and
    third_party/blink/renderer/core/css/white_space.h.
 
 Copyright 2014, 2015, 2016, 2017, 2018, 2019, 2020, 2023, 2024, 2025 The Chromium Authors

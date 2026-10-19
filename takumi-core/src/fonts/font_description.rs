@@ -37,6 +37,10 @@ pub(crate) struct FontDescription {
   pub(crate) letter_spacing: f32,
   /// Blink's `WordSpacing`, in pixels.
   pub(crate) word_spacing: f32,
+  /// Whether `letter-spacing` is a length, which Blink's `ComputedLetterSpacing` keeps fixed.
+  pub(crate) is_letter_spacing_fixed: bool,
+  /// Whether `word-spacing` is a length, which Blink's `ComputedWordSpacing` keeps fixed.
+  pub(crate) is_word_spacing_fixed: bool,
 }
 
 impl FontDescription {
@@ -70,6 +74,8 @@ impl FontDescription {
       font_synthesis_small_caps: computed.inherited_data.font_synthesis_small_caps,
       letter_spacing: style.letter_spacing,
       word_spacing: style.word_spacing,
+      is_letter_spacing_fixed: !computed.inherited_data.letter_spacing.has_percentage(),
+      is_word_spacing_fixed: !computed.inherited_data.word_spacing.has_percentage(),
     }
   }
 }

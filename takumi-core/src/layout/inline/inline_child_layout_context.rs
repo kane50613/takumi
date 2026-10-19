@@ -1,7 +1,10 @@
 //! Blink's [`InlineChildLayoutContext`](https://source.chromium.org/chromium/chromium/src/+/main:third_party/blink/renderer/core/layout/inline/inline_child_layout_context.cc),
-//! without fragment items, parallel flows, or `text-fit`.
+//! without fragment items or parallel flows.
 
-use super::{inline_box_state::InlineLayoutStateStack, score_line_breaker::ScoreLineBreakContext};
+use super::{
+  inline_box_state::InlineLayoutStateStack, score_line_breaker::ScoreLineBreakContext,
+  text_fit_utils::ParagraphScale,
+};
 use crate::layout_unit::LayoutUnit;
 
 /// Blink's `InlineChildLayoutContext`: what one line's layout leaves for the next.
@@ -14,9 +17,30 @@ pub(crate) struct InlineChildLayoutContext<'a, 'c> {
   pub(crate) balanced_available_width: Option<LayoutUnit>,
   /// For `text-wrap: pretty` and `balance`, unless the content disables scoring.
   pub(crate) score_line_break_context: Option<ScoreLineBreakContext>,
+  /// Blink's `IsMeasuringScale`: whether the lines lay out to measure a `text-fit` scale.
+  pub(crate) is_measuring_scale: bool,
+  /// Blink's `MeasuredScale`: the scale every line of a consistent `text-fit` takes.
+  pub(crate) measured_scale: ParagraphScale,
 }
 
 impl<'a, 'c> InlineChildLayoutContext<'a, 'c> {
+  /// Blink's `EnableMeasuringModeIfNecessary`: measures without a paragraph scale, and applies
+  /// one when given.
+  pub(crate) fn enable_measuring_mode_if_necessary(
+    &mut self,
+    paragraph_scale: Option<ParagraphScale>,
+  ) {
+    match paragraph_scale {
+      Some(paragraph_scale) => {
+        debug_assert!(!self.is_measuring_scale);
+        debug_assert!(paragraph_scale.scale > 0.0);
+
+        self.measured_scale = paragraph_scale;
+      }
+      None => self.is_measuring_scale = true,
+    }
+  }
+
   /// Blink's `ResetBoxStates`.
   pub(crate) fn reset_box_states(&mut self) -> &mut InlineLayoutStateStack<'a, 'c> {
     self.box_states.insert(InlineLayoutStateStack::default())

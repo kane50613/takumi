@@ -19,6 +19,7 @@ use xxhash_rust::xxh3::Xxh3;
 
 use crate::{
   context::RenderContext,
+  fonts::font::Font,
   geometry::Size,
   layout::inline::{InlineBrush, TextScale},
   layout_unit::LayoutUnit,
@@ -542,12 +543,14 @@ impl BoxLineHeight {
     }
   }
 
-  /// Blink's `ComputedLineHeightAsFixed` against a primary font of `metrics`.
-  pub(crate) fn computed_as_fixed(self, metrics: Option<PrimaryFontMetrics>) -> LayoutUnit {
+  /// Blink's `ComputedLineHeightAsFixed` against `font`, whose size a number multiplies.
+  pub(crate) fn computed_as_fixed(self, font: &Font) -> LayoutUnit {
     match self {
       Self::Length(line_height) => line_height,
-      Self::Normal => metrics.map_or(LayoutUnit::ZERO, PrimaryFontMetrics::fixed_line_spacing),
-      Self::Number { value, font_size } => number_line_height(value, font_size),
+      Self::Normal => font
+        .primary_font_metrics()
+        .map_or(LayoutUnit::ZERO, PrimaryFontMetrics::fixed_line_spacing),
+      Self::Number { value, .. } => number_line_height(value, font.description.computed_size),
     }
   }
 

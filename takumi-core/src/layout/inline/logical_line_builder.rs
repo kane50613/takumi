@@ -1,5 +1,5 @@
 //! Blink's [`LogicalLineBuilder`](https://source.chromium.org/chromium/chromium/src/+/main:third_party/blink/renderer/core/layout/inline/logical_line_builder.cc),
-//! without ruby, initial letters, `text-combine-upright`, `text-fit`, line-clamp ellipses, or
+//! without ruby, initial letters, `text-combine-upright`, line-clamp ellipses, or
 //! quirks mode.
 
 use std::{mem, rc::Rc};
@@ -7,11 +7,12 @@ use std::{mem, rc::Rc};
 use super::{
   inline_box_state::{InlineBoxState, InlineLayoutStateStack, LineHeightMode},
   inline_item::{InlineItem, InlineItemType, LayoutObject},
-  inline_item_result::{HyphenResult, InlineItemResult},
+  inline_item_result::{HyphenResult, InlineItemResult, find_text_scale},
   inline_node_data::StyleFonts,
   line_breaker::LineBreaker,
   line_info::LineInfo,
   logical_line_item::{LineFragment, LogicalLineItem, LogicalLineItems},
+  text_fit_scale::TextFitBlockScale,
 };
 use crate::{
   fonts::shaping::shape_result_view::ShapeResultView,
@@ -29,6 +30,7 @@ const OPAQUE_BIDI_LEVEL: u8 = 0xff;
 pub(crate) struct LogicalLineBuilder<'s, 'a, 'c> {
   constraint_space: &'s ConstraintSpace,
   box_states: &'s mut InlineLayoutStateStack<'a, 'c>,
+  should_scale_line_height: bool,
   pub(crate) has_out_of_flow_positioned_items: bool,
   pub(crate) has_floating_items: bool,
   pub(crate) has_relative_positioned_items: bool,
@@ -38,10 +40,12 @@ impl<'s, 'a, 'c> LogicalLineBuilder<'s, 'a, 'c> {
   pub(crate) fn new(
     constraint_space: &'s ConstraintSpace,
     box_states: &'s mut InlineLayoutStateStack<'a, 'c>,
+    should_scale_line_height: bool,
   ) -> Self {
     Self {
       constraint_space,
       box_states,
+      should_scale_line_height,
       has_out_of_flow_positioned_items: false,
       has_floating_items: false,
       has_relative_positioned_items: false,
@@ -63,7 +67,10 @@ impl<'s, 'a, 'c> LogicalLineBuilder<'s, 'a, 'c> {
       .box_states
       .on_begin_place_items(line_info, LineHeightMode::Normal, &mut line_box);
 
-    for item in items_data.open_tag_items(start_item_index..end_item_index) {
+    let open_items = items_data.open_tag_items(start_item_index..end_item_index);
+    let num_open_items = open_items.len();
+
+    for (index, item) in open_items.into_iter().enumerate() {
       let mut item_result = InlineItemResult::new(
         item,
         item.index,
@@ -74,7 +81,21 @@ impl<'s, 'a, 'c> LogicalLineBuilder<'s, 'a, 'c> {
       );
 
       LineBreaker::compute_open_tag_result(item, &mut item_result);
-      self.handle_open_tag(item, &item_result, &mut line_box, &items_data.fonts);
+
+      let text_scale = find_text_scale(
+        self.should_scale_line_height,
+        &line_info.results,
+        0,
+        num_open_items - index - 1,
+      );
+
+      self.handle_open_tag(
+        item,
+        &item_result,
+        &text_scale,
+        &mut line_box,
+        &items_data.fonts,
+      );
     }
   }
 
@@ -111,7 +132,7 @@ impl<'s, 'a, 'c> LogicalLineBuilder<'s, 'a, 'c> {
   ) {
     let fonts = &line_info.items_data.fonts;
 
-    for item_result in &line_info.results {
+    for (index, item_result) in line_info.results.iter().enumerate() {
       let item = item_result.item;
 
       match item.item_type {
@@ -125,10 +146,14 @@ impl<'s, 'a, 'c> LogicalLineBuilder<'s, 'a, 'c> {
             continue;
           };
           let box_state = self.box_states.current();
+          let scale = item_result
+            .text_fit_scale
+            .as_ref()
+            .map_or(1.0, |text_fit_scale| text_fit_scale.scale);
 
           // Under `line-height: normal`, every font the text used counts.
           if box_state.include_used_fonts {
-            box_state.accumulate_used_fonts(shape_result);
+            box_state.accumulate_used_fonts(shape_result, scale);
           }
 
           match &item_result.hyphen {
@@ -139,22 +164,33 @@ impl<'s, 'a, 'c> LogicalLineBuilder<'s, 'a, 'c> {
                 item,
                 item_result,
                 box_state.text_top,
-                item_result.inline_size - hyphen_inline_size,
+                LayoutUnit::from_float(
+                  (item_result.inline_size - hyphen_inline_size).to_float() * scale,
+                ),
                 box_state.text_height,
               ));
-              place_hyphen(item, hyphen, hyphen_inline_size, line_box, box_state);
+              place_hyphen(item_result, hyphen, hyphen_inline_size, line_box, box_state);
             }
             _ => line_box.add_child(LogicalLineItem::text(
               item,
               item_result,
               box_state.text_top,
-              item_result.inline_size,
+              LayoutUnit::from_float(item_result.inline_size.to_float() * scale),
               box_state.text_height,
             )),
           }
         }
         InlineItemType::Control => self.place_control_item(item, item_result, line_box),
-        InlineItemType::OpenTag => self.handle_open_tag(item, item_result, line_box, fonts),
+        InlineItemType::OpenTag => {
+          let text_scale = find_text_scale(
+            self.should_scale_line_height,
+            &line_info.results,
+            index + 1,
+            0,
+          );
+
+          self.handle_open_tag(item, item_result, &text_scale, line_box, fonts);
+        }
         InlineItemType::CloseTag => self.handle_close_tag(item, line_box),
         InlineItemType::AtomicInline => {
           self.place_atomic_inline(item, item_result, line_box, fonts);
@@ -201,6 +237,7 @@ impl<'s, 'a, 'c> LogicalLineBuilder<'s, 'a, 'c> {
     &mut self,
     item: &'a InlineItem<'c>,
     item_result: &InlineItemResult<'a, 'c>,
+    text_scale: &TextFitBlockScale,
     line_box: &mut LogicalLineItems<'a, 'c>,
     fonts: &StyleFonts,
   ) {
@@ -212,8 +249,15 @@ impl<'s, 'a, 'c> LogicalLineBuilder<'s, 'a, 'c> {
     // <https://drafts.csswg.org/css2/visudet.html#line-height>
     self
       .box_states
-      .on_open_tag_with_placeholder(item, object.context(), item_result, line_box, fonts)
-      .compute_text_metrics();
+      .on_open_tag_with_placeholder(
+        item,
+        object.context(),
+        item_result,
+        text_scale,
+        line_box,
+        fonts,
+      )
+      .compute_text_metrics(Some(text_scale));
   }
 
   /// Blink's `HandleCloseTag`.
@@ -285,16 +329,21 @@ impl<'s, 'a, 'c> LogicalLineBuilder<'s, 'a, 'c> {
 
 /// Blink's `PlaceHyphen`.
 fn place_hyphen<'a, 'c>(
-  item: &'a InlineItem<'c>,
+  item_result: &InlineItemResult<'a, 'c>,
   hyphen: &HyphenResult,
-  hyphen_inline_size: LayoutUnit,
+  mut hyphen_inline_size: LayoutUnit,
   line_box: &mut LogicalLineItems<'a, 'c>,
   box_state: &InlineBoxState<'a, 'c>,
 ) {
+  if let Some(text_fit_scale) = &item_result.text_fit_scale {
+    hyphen_inline_size *= text_fit_scale.scale;
+  }
+
   line_box.add_child(LogicalLineItem::generated_text(
-    item,
+    item_result.item,
     Rc::new(ShapeResultView::create_from_result(&hyphen.shape_result)),
     hyphen.text.clone(),
+    item_result.text_fit_scale.clone(),
     box_state.text_top,
     hyphen_inline_size,
     box_state.text_height,
@@ -435,7 +484,7 @@ mod tests {
     let mut box_states = InlineLayoutStateStack::default();
     let mut line_box = LogicalLineItems::default();
 
-    LogicalLineBuilder::new(&space, &mut box_states).create_line(&line_info, &mut line_box);
+    LogicalLineBuilder::new(&space, &mut box_states, false).create_line(&line_info, &mut line_box);
     box_states.compute_inline_positions(&mut line_box, LayoutUnit::ZERO, false);
 
     let metrics = box_states.line_box_state().metrics;
