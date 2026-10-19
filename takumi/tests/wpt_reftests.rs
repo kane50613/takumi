@@ -20,7 +20,11 @@ use std::{
   env, fs,
   panic::{self, AssertUnwindSafe},
   path::{Path, PathBuf},
-  sync::Arc,
+  sync::{
+    Arc,
+    atomic::{AtomicUsize, Ordering},
+  },
+  time::{Duration, Instant},
 };
 
 use image::RgbaImage;
@@ -37,6 +41,12 @@ use test_utils::{CONTEXT, matches_fragments};
 
 /// The WPT harness's viewport.
 const VIEWPORT: (u32, u32) = (800, 600);
+
+/// The run reports progress every this many finished tests.
+const PROGRESS_EVERY: usize = 500;
+
+/// How long one test may take before the run names it.
+const SLOW: Duration = Duration::from_secs(5);
 
 const EXPECTATIONS: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/wpt-reftests.txt");
 
@@ -82,9 +92,24 @@ fn wpt_reftests() {
     only.is_none() || !tests.is_empty(),
     "WPT={only:?} selects no reftests"
   );
+  let started = Instant::now();
+  let finished = AtomicUsize::new(0);
   let outcomes: BTreeMap<String, Outcome> = tests
     .par_iter()
-    .map(|path| (runner.relative(path), runner.run(path)))
+    .map(|path| {
+      let outcome = runner.run(path);
+      let finished = finished.fetch_add(1, Ordering::Relaxed) + 1;
+
+      if finished.is_multiple_of(PROGRESS_EVERY) {
+        eprintln!(
+          "WPT reftests: {finished}/{} after {:.0?}",
+          tests.len(),
+          started.elapsed()
+        );
+      }
+
+      (runner.relative(path), outcome)
+    })
     .collect();
   let mut counts = BTreeMap::new();
 
@@ -558,12 +583,19 @@ impl Runner {
   }
 
   fn run(&self, path: &Path) -> Outcome {
+    let started = Instant::now();
     let (outcome, reason) = match panic::catch_unwind(AssertUnwindSafe(|| self.compare(path))) {
       Ok(Ok(true)) => (Outcome::Pass, None),
       Ok(Ok(false)) => (Outcome::Fail, None),
       Ok(Err(reason)) => (Outcome::Error, Some(reason)),
       Err(_) => (Outcome::Crash, None),
     };
+
+    let elapsed = started.elapsed();
+
+    if elapsed > SLOW {
+      eprintln!("{}: slow, took {elapsed:.1?}", self.relative(path));
+    }
 
     if self.verbose && outcome != Outcome::Pass {
       eprintln!(

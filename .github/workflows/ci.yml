@@ -389,7 +389,7 @@ jobs:
         env:
           WPT_ROOT: ${{ runner.temp }}/wpt
           WPT_WRITE: ${{ runner.temp }}/wpt-reftests.txt
-        run: cargo test --locked --release -p takumi --test wpt_reftests
+        run: cargo test --locked --release -p takumi --test wpt_reftests -- --nocapture
 
       # The tests that pass now, for a PR to adopt without running the suite locally:
       # `gh run download <run> -n wpt-reftests -D takumi/tests`.
