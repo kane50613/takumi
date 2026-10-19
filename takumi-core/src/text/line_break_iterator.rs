@@ -9,6 +9,8 @@ use icu_segmenter::{
   options::{LineBreakOptions, LineBreakStrictness as IcuStrictness, LineBreakWordOption},
 };
 
+use crate::text::character::SOFT_HYPHEN;
+
 /// Whether a line breaks between two ASCII characters where a table overrides UAX #14.
 struct AsciiLineBreakTable {
   /// For each `before` character, a bit for each `after` character the table overrides.
@@ -160,13 +162,15 @@ pub(crate) enum LineBreakStrictness {
   Loose,
 }
 
-/// How a [`LineBreakIterator`] finds its opportunities: Blink's break type, break space, and
-/// strictness.
+/// How a [`LineBreakIterator`] finds its opportunities: Blink's break type, break space,
+/// strictness, and soft hyphen switch.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 pub(crate) struct BreakOptions {
   pub(crate) break_type: LineBreakType,
   pub(crate) break_space: BreakSpaceType,
   pub(crate) strictness: LineBreakStrictness,
+  /// Blink's `EnableSoftHyphen(false)`, from `hyphens: none`: U+00AD neither breaks nor hyphenates.
+  pub(crate) disable_soft_hyphen: bool,
 }
 
 /// The soft wrap opportunities of a text, as Blink's `LazyLineBreakIterator` finds them.
@@ -208,6 +212,7 @@ impl<'a> LineBreakIterator<'a> {
       break_type,
       break_space,
       strictness,
+      disable_soft_hyphen,
     } = options;
     let mut breakable = vec![false; text.len() + 1];
 
@@ -258,6 +263,7 @@ impl<'a> LineBreakIterator<'a> {
         // own.
         breakable[position] = match previous {
           Some((before, _)) if is_mandatory_break(before) || is_mandatory_break(character) => false,
+          Some((SOFT_HYPHEN, _)) if disable_soft_hyphen => false,
           Some((before, before_before)) => line_break_override(before_before, before, character)
             .unwrap_or(breakable[position] || after_break_space),
           None => false,
@@ -319,14 +325,8 @@ impl<'a> LineBreakIterator<'a> {
 mod tests {
   use super::{BreakOptions, LineBreakIterator, LineBreakStrictness};
 
-  fn breaks(text: &str, strictness: LineBreakStrictness) -> Vec<usize> {
-    let opportunities = LineBreakIterator::opportunities(
-      text,
-      BreakOptions {
-        strictness,
-        ..BreakOptions::default()
-      },
-    );
+  fn breaks(text: &str, options: BreakOptions) -> Vec<usize> {
+    let opportunities = LineBreakIterator::opportunities(text, options);
 
     (1..text.len())
       .filter(|&offset| opportunities[offset])
@@ -337,11 +337,37 @@ mod tests {
   /// `CJ`; `normal` and `loose` break before it.
   #[test]
   fn strictness_decides_a_break_before_small_kana() {
-    let text = "あぁい";
+    let breaks_with = |strictness| {
+      breaks(
+        "あぁい",
+        BreakOptions {
+          strictness,
+          ..BreakOptions::default()
+        },
+      )
+    };
 
-    assert_eq!(breaks(text, LineBreakStrictness::Default), [6]);
-    assert_eq!(breaks(text, LineBreakStrictness::Strict), [6]);
-    assert_eq!(breaks(text, LineBreakStrictness::Normal), [3, 6]);
-    assert_eq!(breaks(text, LineBreakStrictness::Loose), [3, 6]);
+    assert_eq!(breaks_with(LineBreakStrictness::Default), [6]);
+    assert_eq!(breaks_with(LineBreakStrictness::Strict), [6]);
+    assert_eq!(breaks_with(LineBreakStrictness::Normal), [3, 6]);
+    assert_eq!(breaks_with(LineBreakStrictness::Loose), [3, 6]);
+  }
+
+  /// `hyphens: none` takes away the break after a soft hyphen.
+  #[test]
+  fn a_disabled_soft_hyphen_does_not_break() {
+    let text = "ab\u{AD}cd ef";
+
+    assert_eq!(breaks(text, BreakOptions::default()), [4, 7]);
+    assert_eq!(
+      breaks(
+        text,
+        BreakOptions {
+          disable_soft_hyphen: true,
+          ..BreakOptions::default()
+        }
+      ),
+      [7]
+    );
   }
 }

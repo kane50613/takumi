@@ -40,7 +40,7 @@ use crate::{
   },
   layout_unit::LayoutUnit,
   style::{
-    BoxDecorationBreak, ComputedStyle, Direction as TextDirection, LineBreak, UnicodeBidi,
+    BoxDecorationBreak, ComputedStyle, Direction as TextDirection, Hyphens, LineBreak, UnicodeBidi,
     WordBreak,
   },
   text::{
@@ -3301,11 +3301,13 @@ impl<'a, 'b, 'c> LineBreaker<'a, 'b, 'c> {
     }
 
     let line_break = style.misc_inherited_data.line_break;
+    let disable_soft_hyphen = style.misc_inherited_data.hyphens == Hyphens::None;
 
     if line_break == LineBreak::Anywhere {
       self.break_anywhere_if_overflow = false;
       self.set_break_iterator(BreakOptions {
         break_type: LineBreakType::BreakCharacter,
+        disable_soft_hyphen,
         ..BreakOptions::default()
       });
 
@@ -3362,6 +3364,7 @@ impl<'a, 'b, 'c> LineBreaker<'a, 'b, 'c> {
         LineBreak::Normal => LineBreakStrictness::Normal,
         LineBreak::Strict => LineBreakStrictness::Strict,
       },
+      disable_soft_hyphen,
     });
   }
 

@@ -1527,12 +1527,14 @@ define_style! {
       overflow_wrap: OverflowWrap where inherit = true,
       word_break: WordBreak where inherit = true,
       line_break: LineBreak where inherit = true,
+      hyphens: Hyphens where inherit = true,
       text_justify: TextJustify where inherit = true,
       clip_rule: FillRule where inherit = true,
     }
     /// Blink's `misc-inherited->misc-inherited1` field group, which Blink nests in `misc-inherited`.
     misc_inherited1_data: StyleMiscInherited1Data {
       block_ellipsis: BlockEllipsis where inherit = true,
+      hyphenate_character: HyphenateCharacter where inherit = true,
       list_style_image: ListStyleImage where inherit = true,
       list_style_type: ListStyleType where inherit = true,
       orphans: MinLines where inherit = true,
