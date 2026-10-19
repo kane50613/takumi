@@ -6,11 +6,12 @@ use std::{
   },
 };
 
-use cssparser::{Parser, match_ignore_ascii_case, serialize_string};
+use cssparser::{CowRcStr, Parser, Token, match_ignore_ascii_case, serialize_string};
 use parley::{FontFamilyName, GenericFamily};
 
 use crate::style::{
-  FromCss, MakeComputed, ParseResult, ToCss, tw::Namespace, tw::TailwindPropertyParser,
+  FromCss, MakeComputed, ParseResult, ToCss, is_reserved_custom_ident, tw::Namespace,
+  tw::TailwindPropertyParser,
 };
 
 /// Represents a font family for text rendering.
@@ -92,9 +93,9 @@ impl<'i> FromCss<'i> for FontFamilyToken {
       return Ok(Self::Owned(name));
     }
 
-    let mut family_name = input.expect_ident()?.to_string();
+    let mut family_name = custom_ident(input)?.to_string();
 
-    while let Ok(ident) = input.try_parse(Parser::expect_ident_cloned) {
+    while let Ok(ident) = input.try_parse(custom_ident) {
       family_name.push(' ');
       family_name.push_str(&ident);
     }
@@ -107,6 +108,18 @@ impl<'i> FromCss<'i> for FontFamilyToken {
   }
 
   const VALID_TOKENS: &'static [&'static str] = &["<family-name>", "<generic-name>"];
+}
+
+/// One `<custom-ident>` of an unquoted family name.
+fn custom_ident<'i>(input: &mut Parser<'i, '_>) -> ParseResult<'i, CowRcStr<'i>> {
+  let location = input.current_source_location();
+  let ident = input.expect_ident_cloned()?;
+
+  if is_reserved_custom_ident(&ident) {
+    return Err(location.new_unexpected_token_error(Token::Ident(ident)));
+  }
+
+  Ok(ident)
 }
 
 impl<'i> FromCss<'i> for FontFamily {

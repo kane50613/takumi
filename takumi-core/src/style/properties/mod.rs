@@ -26,6 +26,7 @@ pub(crate) mod filter;
 pub(crate) mod filter_reference;
 mod flex;
 mod flex_grow;
+mod font;
 mod font_family;
 mod font_feature_settings;
 mod font_kerning;
@@ -103,6 +104,7 @@ pub use filter::{
 pub use filter_reference::FilterReference;
 pub use flex::*;
 pub use flex_grow::*;
+pub use font::*;
 pub use font_family::*;
 pub(crate) use font_feature_settings::FontFeatureSettings;
 pub use font_feature_settings::{FontFeature, Tag};
@@ -158,6 +160,21 @@ pub use word_break::*;
 pub use z_index::*;
 
 use crate::style::{SizingContext, tw::TailwindPropertyParser};
+
+/// Whether `ident` is a CSS-wide keyword or `default`, which a `<custom-ident>` excludes.
+/// <https://drafts.csswg.org/css-values-4/#custom-idents>
+pub(crate) fn is_reserved_custom_ident(ident: &str) -> bool {
+  [
+    "initial",
+    "inherit",
+    "unset",
+    "revert",
+    "revert-layer",
+    "default",
+  ]
+  .iter()
+  .any(|keyword| ident.eq_ignore_ascii_case(keyword))
+}
 
 pub(crate) fn next_is_comma<'i>(input: &mut Parser<'i, '_>) -> bool {
   let state = input.state();
