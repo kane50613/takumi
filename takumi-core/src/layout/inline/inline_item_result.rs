@@ -22,7 +22,7 @@ use crate::{
   geometry::Rect,
   layout::{exclusions::exclusion_space::ExclusionSpace, floats_utils::PositionedFloat},
   layout_unit::LayoutUnit,
-  style::Direction as TextDirection,
+  style::{Direction as TextDirection, HyphenateCharacter},
   text::character::{HYPHEN, HYPHEN_MINUS},
 };
 
@@ -100,14 +100,20 @@ pub(crate) struct HyphenResult {
 }
 
 impl HyphenResult {
-  /// Blink's `Shape`: `ComputedStyle::HyphenString`, U+2010 HYPHEN when the primary font has it,
-  /// else U+002D HYPHEN-MINUS.
+  /// Blink's `Shape`: `ComputedStyle::HyphenString`, the `hyphenate-character` string, or U+2010
+  /// HYPHEN when the primary font has it, else U+002D HYPHEN-MINUS.
   pub(crate) fn new(context: &RenderContext, fonts: &StyleFonts) -> Self {
     let font = fonts.get(context);
-    let has_hyphen = font
-      .primary_font()
-      .is_some_and(|font_data| font_data.has_glyph(HYPHEN));
-    let text = String::from(if has_hyphen { HYPHEN } else { HYPHEN_MINUS });
+    let text = match &context.style.misc_inherited1_data.hyphenate_character {
+      HyphenateCharacter::String(text) => text.clone(),
+      HyphenateCharacter::Auto => {
+        let has_hyphen = font
+          .primary_font()
+          .is_some_and(|font_data| font_data.has_glyph(HYPHEN));
+
+        String::from(if has_hyphen { HYPHEN } else { HYPHEN_MINUS })
+      }
+    };
     let shape_result =
       HarfBuzzShaper::new(text.clone()).shape_all(&font, context.style.inherited_data.direction);
 
