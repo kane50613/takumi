@@ -96,7 +96,41 @@ jobs:
         run: sh scripts/wpt-checkout.sh
 
       - name: Run tests
+        env:
+          WPT_WRITE: ${{ runner.temp }}/wpt-reftests.json
         run: cargo test --locked
+
+      # The tests that pass now, for a PR to adopt without running the suite locally:
+      # `gh run download <run> -n wpt-reftests -D takumi/tests`.
+      - name: Report WPT passes
+        if: ${{ !cancelled() }}
+        run: |
+          set -eu
+          current="$RUNNER_TEMP/wpt-reftests.json"
+          [ -f "$current" ] || exit 0
+          added=$(jq -r --slurpfile expected takumi/tests/wpt-reftests.json '. - $expected[0] | .[]' "$current")
+          count=$(printf '%s' "$added" | grep -c . || true)
+          {
+            echo "### WPT reftests"
+            echo
+            echo "$(jq length "$current") pass, $count of them not in \`takumi/tests/wpt-reftests.json\` yet."
+            if [ "$count" -gt 0 ]; then
+              echo
+              echo "<details><summary>Newly passing</summary>"
+              echo
+              printf '%s\n' "$added" | sed 's/^/- /'
+              echo
+              echo "</details>"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload WPT passes
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: wpt-reftests
+          path: ${{ runner.temp }}/wpt-reftests.json
+          if-no-files-found: ignore
 
       # The fixtures claim PDF/A and PDF/UA conformance in their metadata. Only
       # the reference validator can tell whether the claim holds.
@@ -544,6 +578,10 @@ jobs:
   build-wasm:
     name: Build @takumi-rs/wasm
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      # To read the base branch's wasm artifact.
+      actions: read
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
@@ -574,6 +612,39 @@ jobs:
           # +simd128 must be repeated here or the published wasm loses SIMD
           RUSTFLAGS: ${{ env.RUSTFLAGS }} -Zunstable-options -Cpanic=immediate-abort -Ctarget-feature=+simd128
         run: bun run build
+
+      # A PR compares against the wasm its base branch's latest successful run built.
+      - name: Report wasm size
+        working-directory: takumi-wasm
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          set -eu
+          wasm=pkg/takumi_wasm_bg.wasm
+          raw=$(wc -c < "$wasm")
+          gz=$(gzip -9 -c "$wasm" | wc -c)
+          base_raw=""
+          base_gz=""
+          if [ -n "$BASE_REF" ]; then
+            run=$(gh run list -R "$GITHUB_REPOSITORY" --workflow ci.yml --branch "$BASE_REF" --status success -L 1 --json databaseId -q '.[0].databaseId' || true)
+            if [ -n "$run" ] && gh run download "$run" -R "$GITHUB_REPOSITORY" -n wasm-package -D "$RUNNER_TEMP/base" > /dev/null 2>&1; then
+              base_raw=$(wc -c < "$RUNNER_TEMP/base/pkg/takumi_wasm_bg.wasm")
+              base_gz=$(gzip -9 -c "$RUNNER_TEMP/base/pkg/takumi_wasm_bg.wasm" | wc -c)
+            fi
+          fi
+          {
+            echo "| takumi wasm | bytes | MiB | change from \`${BASE_REF:-base}\` |"
+            echo "| --- | ---: | ---: | ---: |"
+            awk -v raw="$raw" -v gz="$gz" -v base_raw="$base_raw" -v base_gz="$base_gz" 'BEGIN {
+              printf "| raw | %d | %.2f | %s |\n", raw, raw / 1048576, delta(raw, base_raw)
+              printf "| gzip | %d | %.2f | %s |\n", gz, gz / 1048576, delta(gz, base_gz)
+            }
+            function delta(now, before) {
+              if (before == "") return "n/a"
+              return sprintf("%+d (%+.2f%%)", now - before, 100 * (now - before) / before)
+            }'
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload artifact
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
