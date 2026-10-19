@@ -285,12 +285,33 @@ macro_rules! push_four_side_declarations {
   }};
 }
 
+/// `declarations`, or the error Blink's `kNonNegative` raises when one of them is negative on a
+/// property that must not be.
+fn reject_negative<'i>(declarations: ParsedDeclarations) -> ParseResult<'i, ParsedDeclarations> {
+  if declarations
+    .iter()
+    .any(StyleDeclaration::is_negative_where_non_negative)
+  {
+    return Err(cssparser::ParseError::custom(ValueError::from(
+      Cow::Borrowed("a negative value is invalid here"),
+    )));
+  }
+
+  Ok(declarations)
+}
+
 macro_rules! define_style {
   // Field default for `ComputedStyle`: explicit `= expr` when given, else the type's `Default`.
   (@default $default:expr) => { $default };
   (@default) => { ::core::default::Default::default() };
   // `where builder = manual` keeps the generated constructor out of the way of a
   // hand-written one.
+  // `where non_negative = true` makes a negative value invalid, as Blink's `kNonNegative`.
+  (@non_negative $value:ident, true) => { $value.is_negative() };
+  (@non_negative $value:ident) => {{
+    let _ = $value;
+    false
+  }};
   (@builder $name:ident, $ty:ty, manual) => {};
   (@builder $name:ident, $ty:ty) => {
     paste! {
@@ -310,6 +331,7 @@ macro_rules! define_style {
               $(where inherit = $longhand_inherit:literal)?
               $(where anonymous = $longhand_anonymous:literal)?
               $(where builder = $longhand_builder:ident)?
+              $(where non_negative = $longhand_non_negative:literal)?
               $(= $longhand_default:expr)?,
           )*
         }
@@ -319,6 +341,7 @@ macro_rules! define_style {
     transient_longhands {
       $(
         $transient:ident: $transient_ty:ty
+          $(where non_negative = $transient_non_negative:literal)?
           $(= $transient_default:expr)?
           => ($ltr_group:ident . $transient_ltr:ident, $rtl_group:ident . $transient_rtl:ident),
       )*
@@ -417,7 +440,7 @@ macro_rules! define_style {
             )*
           };
 
-          Ok(smallvec![declaration])
+          reject_negative(smallvec![declaration])
         }
 
         const EXPECT_INFO: [(CssExpectedMessage, &'static [&'static str]); Self::COUNT] = [
@@ -437,7 +460,7 @@ macro_rules! define_style {
         ) -> ParseResult<'i, ParsedDeclarations> {
           match self {
             $(
-              Self::[<$shorthand:camel>] => Ok(StyleDeclaration::[<expand_ $shorthand>](
+              Self::[<$shorthand:camel>] => reject_negative(StyleDeclaration::[<expand_ $shorthand>](
                 <$shorthand_ty as FromCss>::from_css(input)?,
               )),
             )*
@@ -1130,6 +1153,24 @@ macro_rules! define_style {
       }
 
       impl StyleDeclaration {
+        /// Whether it sets a property CSS keeps non-negative to a negative value, which makes the
+        /// declaration invalid.
+        pub(crate) fn is_negative_where_non_negative(&self) -> bool {
+          match self {
+            $($(
+              Self::[<$longhand:camel>](value) => {
+                define_style!(@non_negative value $(, $longhand_non_negative)?)
+              }
+            )*)*
+            $(
+              Self::[<$transient:camel>](value) => {
+                define_style!(@non_negative value $(, $transient_non_negative)?)
+              }
+            )*
+            _ => false,
+          }
+        }
+
         $($(
           define_style!(@builder $longhand, $longhand_ty $(, $longhand_builder)?);
         )*)*
@@ -1329,16 +1370,16 @@ define_style! {
     /// Blink's `box` field group: sizes, margins, padding, and border widths and styles.
     box_data: StyleBoxData {
       box_sizing: BoxSizing,
-      width: Size where builder = manual,
-      height: Size where builder = manual,
-      max_width: MaxSize,
-      max_height: MaxSize,
-      min_width: Length,
-      min_height: Length,
-      padding_top: Length = Length::zero(),
-      padding_right: Length = Length::zero(),
-      padding_bottom: Length = Length::zero(),
-      padding_left: Length = Length::zero(),
+      width: Size where builder = manual where non_negative = true,
+      height: Size where builder = manual where non_negative = true,
+      max_width: MaxSize where non_negative = true,
+      max_height: MaxSize where non_negative = true,
+      min_width: Length where non_negative = true,
+      min_height: Length where non_negative = true,
+      padding_top: Length where non_negative = true = Length::zero(),
+      padding_right: Length where non_negative = true = Length::zero(),
+      padding_bottom: Length where non_negative = true = Length::zero(),
+      padding_left: Length where non_negative = true = Length::zero(),
       margin_top: Length = Length::zero(),
       margin_right: Length = Length::zero(),
       margin_bottom: Length = Length::zero(),
@@ -1551,8 +1592,8 @@ define_style! {
   transient_longhands {
     margin_inline_start: Length = Length::zero() => (box_data.margin_left, box_data.margin_right),
     margin_inline_end: Length = Length::zero() => (box_data.margin_right, box_data.margin_left),
-    padding_inline_start: Length = Length::zero() => (box_data.padding_left, box_data.padding_right),
-    padding_inline_end: Length = Length::zero() => (box_data.padding_right, box_data.padding_left),
+    padding_inline_start: Length where non_negative = true = Length::zero() => (box_data.padding_left, box_data.padding_right),
+    padding_inline_end: Length where non_negative = true = Length::zero() => (box_data.padding_right, box_data.padding_left),
     inset_inline_start: Length => (surround_data.left, surround_data.right),
     inset_inline_end: Length => (surround_data.right, surround_data.left),
     border_inline_start_width: LineWidth => (box_data.border_left_width, box_data.border_right_width),

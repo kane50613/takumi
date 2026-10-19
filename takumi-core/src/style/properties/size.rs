@@ -33,6 +33,11 @@ impl Default for Size {
 }
 
 impl Size {
+  /// Whether it is a negative length, which a sizing property rejects.
+  pub(crate) fn is_negative(self) -> bool {
+    matches!(self, Self::Length(length) if length.is_negative())
+  }
+
   /// An automatic size.
   pub const fn auto() -> Self {
     Self::Length(Length::Auto)
