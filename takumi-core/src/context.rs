@@ -1,20 +1,19 @@
-use std::{
-  cell::{Cell, RefCell},
-  collections::HashMap,
-  rc::Rc,
-  sync::Arc,
-};
+use std::{cell::Cell, collections::HashMap, rc::Rc, sync::Arc};
 
-use rustc_hash::FxHashMap;
 use typed_builder::TypedBuilder;
 
 use crate::{
   font_style::ExpandedFamilies,
-  fonts::{font::Font, font_description::FontDescription, font_fallback_map::FontFallbackMap},
+  fonts::{
+    font::Font,
+    font_description::{FontDescription, FontFallbackKey},
+    font_fallback_list::FontFallbackList,
+    font_fallback_map::FontFallbackMap,
+  },
   geometry::{ComputedLayout, Point},
   layout::inline::InlineLayoutCache,
   resources::{
-    font::{FontsSnapshot, PrimaryFontMetrics},
+    font::FontsSnapshot,
     image::{ImageSource, ResourceCache},
   },
   style::{
@@ -32,7 +31,6 @@ struct RenderShared {
   font_fallback_map: FontFallbackMap,
   inline_cache: InlineLayoutCache,
   tw_cache: TwCache,
-  primary_font_metrics: RefCell<FxHashMap<u64, Option<PrimaryFontMetrics>>>,
   time_ms: u64,
   draw_debug_border: bool,
   dither_gradients: bool,
@@ -82,7 +80,6 @@ impl From<RenderContextInit> for RenderContext {
         font_fallback_map: FontFallbackMap::default(),
         inline_cache: InlineLayoutCache::default(),
         tw_cache: TwCache::default(),
-        primary_font_metrics: RefCell::default(),
         time_ms: init.time_ms,
         draw_debug_border: init.draw_debug_border,
         dither_gradients: init.dither_gradients,
@@ -190,30 +187,14 @@ impl RenderContext {
   /// The font `description` names, its fallback list shared across the render.
   pub(crate) fn font(&self, description: FontDescription) -> Font {
     Font {
-      fallback_list: self
-        .shared
-        .font_fallback_map
-        .get(&self.shared.fonts, &description),
+      fallback_list: self.font_fallback_list(&description.fallback),
       description,
     }
   }
 
-  /// The primary font metrics for `key`, resolved once per render.
-  pub(crate) fn cached_primary_font_metrics(
-    &self,
-    key: u64,
-    resolve: impl FnOnce() -> Option<PrimaryFontMetrics>,
-  ) -> Option<PrimaryFontMetrics> {
-    if let Some(metrics) = self.shared.primary_font_metrics.borrow().get(&key) {
-      return *metrics;
-    }
-    let metrics = resolve();
-    self
-      .shared
-      .primary_font_metrics
-      .borrow_mut()
-      .insert(key, metrics);
-    metrics
+  /// Blink's `FontFallbackMap::Get`: the fallback list `key` names, shared across the render.
+  pub(crate) fn font_fallback_list(&self, key: &FontFallbackKey) -> Rc<FontFallbackList> {
+    self.shared.font_fallback_map.get(&self.shared.fonts, key)
   }
 
   /// Blink's `CreateAnonymousStyleWithDisplay`, keeping the parent's applied text decorations.

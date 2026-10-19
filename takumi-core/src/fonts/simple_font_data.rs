@@ -96,7 +96,7 @@ impl SimpleFontData {
   fn create_scaled_font_data(&self, font_description: &FontDescription, scale_factor: f32) -> Self {
     Self {
       face: self.face.clone(),
-      size: (font_description.computed_size * scale_factor).round(),
+      size: (font_description.fallback.computed_size * scale_factor).round(),
       specified_size: self.specified_size,
       variations: self.variations.clone(),
       units_per_em: self.units_per_em,

@@ -25,7 +25,7 @@ impl Debug for TextFitScale {
         &self
           .font
           .as_ref()
-          .map(|font| font.description.computed_size),
+          .map(|font| font.description.fallback.computed_size),
       )
       .finish()
   }
@@ -62,10 +62,11 @@ impl TextFitBlockScale {
     let Some(scaled_font) = &self.scaled_font else {
       return self.paint_scale;
     };
-    let original_font_size = original_font.description.computed_size;
+    let original_font_size = original_font.description.fallback.computed_size;
 
     if original_font_size > 0.0 {
-      return scaled_font.description.computed_size / original_font_size * self.paint_scale;
+      return scaled_font.description.fallback.computed_size / original_font_size
+        * self.paint_scale;
     }
 
     self.paint_scale

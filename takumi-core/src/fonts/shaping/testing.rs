@@ -6,7 +6,7 @@ use crate::{
   font_style::ExpandedFontFamily,
   fonts::{
     font::Font,
-    font_description::{FontDescription, FontSelectionDescription},
+    font_description::{FontDescription, FontFallbackKey, FontSelectionDescription},
     font_selection_types::{
       FontSelectionRequest, NORMAL_SLOPE_VALUE, NORMAL_WEIGHT_VALUE, NORMAL_WIDTH_VALUE,
     },
@@ -39,14 +39,16 @@ pub(crate) fn font(fonts: &Fonts, family: &str) -> Font {
   Font::new(
     fonts,
     FontDescription {
-      family: Rc::new(ExpandedFontFamily::expand(&family)),
-      selection: FontSelectionDescription::for_request(FontSelectionRequest::new(
-        NORMAL_WEIGHT_VALUE,
-        NORMAL_WIDTH_VALUE,
-        NORMAL_SLOPE_VALUE,
-      )),
-      computed_size: 16.0,
-      specified_size: 16.0,
+      fallback: FontFallbackKey {
+        family: Rc::new(ExpandedFontFamily::expand(&family)),
+        selection: FontSelectionDescription::for_request(FontSelectionRequest::new(
+          NORMAL_WEIGHT_VALUE,
+          NORMAL_WIDTH_VALUE,
+          NORMAL_SLOPE_VALUE,
+        )),
+        computed_size: 16.0,
+        specified_size: 16.0,
+      },
       features: Vec::new(),
       locale: None,
       language_override: FontLanguageOverride::Normal,

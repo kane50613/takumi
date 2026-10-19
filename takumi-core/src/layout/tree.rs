@@ -2,7 +2,6 @@ use std::{
   borrow::Cow,
   cell::RefCell,
   collections::{HashMap, HashSet},
-  hash::Hasher,
   iter::Copied,
   mem::{replace, take},
   ptr,
@@ -24,12 +23,12 @@ use taffy::{
   compute_block_layout, compute_cached_layout, compute_flexbox_layout, compute_grid_layout,
   compute_hidden_layout, compute_leaf_layout, compute_oof_layout_for_area, compute_root_layout,
 };
-use xxhash_rust::xxh3::Xxh3;
 
 use crate::{
   Error,
   context::RenderContext,
   font_style::SizedFontStyle,
+  fonts::{font_description::FontFallbackKey, font_fallback_list::FontFallbackList},
   geometry::{AvailableSpace, ComputedLayout, NodeId, Point, Rect, Size},
   layout::{
     inline::{
@@ -2941,29 +2940,36 @@ impl PendingRenderNode {
 }
 
 impl RenderContext {
-  /// The metrics of `style`'s primary font at `font_size`.
+  /// The fallback list of `style`'s font at `font_size`, shared across the render.
+  pub(crate) fn fallback_list(
+    &self,
+    style: &ComputedStyle,
+    font_size: f32,
+  ) -> Rc<FontFallbackList> {
+    let sizing = SizingContext {
+      font_size,
+      ..self.sizing.clone()
+    };
+
+    self.font_fallback_list(&FontFallbackKey {
+      family: self.expand_font_family(&style.inherited_data.font_family),
+      selection: style.font_selection_description(&sizing),
+      computed_size: font_size,
+      specified_size: font_size,
+    })
+  }
+
+  /// Blink's `ComputedStyle::GetFontHeight` source: the metrics of `style`'s primary font at
+  /// `font_size`.
   pub(crate) fn primary_font_metrics(
     &self,
     style: &ComputedStyle,
     font_size: f32,
   ) -> Option<PrimaryFontMetrics> {
-    let description = style.font_selection_description(&self.sizing);
-    let request = description.font_selection_request;
-    let font_family = self.expand_font_family(&style.inherited_data.font_family);
-    let mut hasher = Xxh3::new();
-
-    font_family.hash_tokens(&mut hasher);
-
-    for value in [request.weight, request.width, request.slope] {
-      hasher.write_u32(value.to_f32().to_bits());
-    }
-
-    hasher.write_u8(u8::from(description.is_italic_keyword));
-    hasher.write_u32(font_size.to_bits());
-
-    self.cached_primary_font_metrics(hasher.finish(), || {
-      self.first_font_metrics(font_family.tokens(), &description, font_size)
-    })
+    self
+      .fallback_list(style, font_size)
+      .primary_simple_font_data()?
+      .font_metrics()
   }
 
   /// A child's cascaded style and its element-owned important declarations.
@@ -3169,7 +3175,15 @@ impl RenderContext {
       .inherited_data
       .font_size
       .to_px(font_size_basis, font_size_basis.font_size);
-    let metrics = self.primary_font_metrics(style, font_size);
+    let fallback_list = self.fallback_list(style, font_size);
+    let metrics = fallback_list
+      .primary_simple_font_data()
+      .and_then(|font| font.font_metrics());
+    // Blink's `ComputedStyleUtils::ZeroInlineSize`: `ch` reads `PrimaryFontWithDigitZero`.
+    let ch = fallback_list
+      .primary_simple_font_data_with_digit_zero()
+      .and_then(|font| font.font_metrics())
+      .map_or(0.0, |metrics| metrics.zero_width);
     let normal_basis = match style.inherited_data.line_height {
       LineHeight::Normal => metrics.map_or(font_size, PrimaryFontMetrics::line_spacing),
       _ => 0.0,
@@ -3190,7 +3204,7 @@ impl RenderContext {
         .sizing
         .root_line_height
         .or_else(|| is_document_root.then_some(line_height)),
-      metrics.map_or(0.0, |metrics| metrics.zero_width),
+      ch,
     )
   }
 

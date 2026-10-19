@@ -178,7 +178,7 @@ fn restrict_scale(scale: f32, is_grow: bool, limit: Option<f32>) -> f32 {
 fn scaled_font(font: &Font, scale_factor: f32, context: &RenderContext) -> Rc<Font> {
   let mut scaled_description = font.description.clone();
 
-  scaled_description.computed_size *= scale_factor;
+  scaled_description.fallback.computed_size *= scale_factor;
 
   Rc::new(context.font(scaled_description))
 }
@@ -609,7 +609,7 @@ mod tests {
               scale.map_or(1.0, |scale| scale.scale),
               scale
                 .and_then(|scale| scale.font.as_ref())
-                .map_or(10.0, |font| font.description.computed_size),
+                .map_or(10.0, |font| font.description.fallback.computed_size),
               item.inline_size.to_float(),
             )
           })

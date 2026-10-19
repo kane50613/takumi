@@ -210,7 +210,9 @@ impl BoxLineHeight {
       Self::Normal => font
         .primary_font_metrics()
         .map_or(LayoutUnit::ZERO, PrimaryFontMetrics::fixed_line_spacing),
-      Self::Number { value, .. } => number_line_height(value, font.description.computed_size),
+      Self::Number { value, .. } => {
+        number_line_height(value, font.description.fallback.computed_size)
+      }
     }
   }
 }
