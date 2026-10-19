@@ -1,3 +1,45 @@
+## takumi-core@0.32.0
+
+### Lay out nested inline blocks in linear time
+
+Each level of nested `inline-block` boxes laid out the level below it several times over, so a few levels deep took minutes. An inline block now keeps the layout it took in each available space.
+
+### Support the `ch` unit
+
+`ch` lengths, alone or in `calc()`, resolve to the advance of the `0` glyph in the first font that covers it, or half the font size when that font has no `0`.
+
+### Speed up `feMorphology`
+
+`feMorphology` read every pixel of its radius rectangle for each output pixel. It now sweeps rows, then columns, with the same result. A large radius runs several times faster.
+
+### Reject negative padding and sizes
+
+A negative `padding`, `width`, `height`, `min-*`, or `max-*`, including their logical forms, is now invalid, as in browsers: a stylesheet drops it and keeps the earlier declaration, and a style object reports it as an invalid value instead of using it.
+
+### Shape SVG text with the registry's faces
+
+SVG `<text>` shapes with the faces the font registry holds, sharing their shaping tables instead of building new ones for each text chunk.
+
+### Shape every size of a face with one font
+
+A face builds its shaping tables once while it stays registered, instead of once for each size, variation, and render that uses it.
+
+### List the images a stylesheet references
+
+`StyleSheet::image_urls` lists the `url()`s its rules and keyframes reference, as `Node::image_urls` does for a node tree, so a caller can load them before rendering.
+
+### Keep a background whose shorthand names an attachment
+
+`background: red url(a.png) no-repeat fixed` used to drop the whole declaration over `fixed`. The shorthand now accepts `scroll`, `fixed`, and `local`; a still image paints them alike.
+
+### Share the font registry between renders
+
+A render's font snapshot shares the registry instead of copying it, and SVG `<text>` builds its face store once per set of registered fonts instead of once per render.
+
+### Match fonts once per style in a render
+
+Each run of inline text matched its fonts and fallback faces again, even when an earlier run had the same font style. Runs with the same font style now share one fallback list for the whole render.
+
 ## takumi-core@0.31.0
 
 ### Wrap loose table parts in anonymous tables

@@ -1,203 +1,130 @@
 core:changelogs:
-  - content: "---\npackages:\n  \"@takumi-rs/helpers\":\n    type: minor\n  \"@takumi-rs/core\":\n    type: minor\n  \"@takumi-rs/wasm\":\n    type: minor\n  takumi-paint:\n    type: minor\n  takumi-pdf:\n    type: minor\n---\n\n# Bound render fonts with `fontCacheMaxBytes`\n\nPast this cap in decoded font bytes, a renderer releases the least recently used fonts that renders' `fonts` lists loaded, and a later render loads them again. Fonts from `registerFont` stay, and a running render keeps the fonts it started with. The wasm `Renderer` now passes its options, such as `cacheMaxBytes`, to the native renderer.\n"
-    filename: font-cache-max-bytes.md
+  - content: "---\npackages:\n  takumi-core:\n    type: patch\n---\n\n# Lay out nested inline blocks in linear time\n\nEach level of nested `inline-block` boxes laid out the level below it several times over, so a few levels deep took minutes. An inline block now keeps the layout it took in each available space.\n"
+    filename: atomic-inline-cache.md
     v: 0.0.0
-  - content: "---\npackages:\n  takumi-core:\n    type: minor\n  takumi:\n    type: minor\n  \"@takumi-rs/helpers\":\n    type: minor\n  \"@takumi-rs/core\":\n    type: minor\n  \"@takumi-rs/wasm\":\n    type: minor\n  takumi-paint:\n    type: minor\n  takumi-pdf:\n    type: minor\n---\n\n# Release fonts a renderer no longer needs\n\n`unregisterFont({ name })` removes a family with all its `unicodeRange` subsets, and `clearFonts()` goes back to the bundled fallback font. A later render that lists a released font registers it again. In Rust, use `Fonts::unregister_family`.\n"
-    filename: unregister-fonts.md
+  - content: "---\npackages:\n  takumi-core:\n    type: minor\n---\n\n# Support the `ch` unit\n\n`ch` lengths, alone or in `calc()`, resolve to the advance of the `0` glyph in the first font that covers it, or half the font size when that font has no `0`.\n"
+    filename: ch-unit.md
     v: 0.0.0
-  - content: "---\npackages:\n  takumi-core:\n    type: patch\n  takumi-pdf:\n    type: patch\n---\n\n# Shape with HarfBuzz 14.5.1\n\nShaping moves to harfrust 0.14, which matches HarfBuzz 14.5.1: Bengali ra-phala such as গ্র joins again, marks attach correctly after a ligated multiple substitution, and Hangul runs apply `calt` to the characters around them. A PDF now draws a glyph from a font's SVG table only when that glyph has SVG data.\n"
-    filename: harfrust-0-14.md
+  - content: "---\npackages:\n  takumi-core:\n    type: patch\n---\n\n# Speed up `feMorphology`\n\n`feMorphology` read every pixel of its radius rectangle for each output pixel. It now sweeps rows, then columns, with the same result. A large radius runs several times faster.\n"
+    filename: separable-morphology.md
     v: 0.0.0
-  - content: "---\npackages:\n  takumi-core:\n    type: patch\n---\n\n# Wrap loose table parts in anonymous tables\n\nA `display: table-row` or `table-cell` outside a table, with text or inline elements in it, made rendering panic. Loose table parts now sit in an anonymous table, cells outside a row and a row group's other children in an anonymous row, and anything else in a row in an anonymous cell, as Chrome builds them. A table part inside a flex or grid container lays out as a block.\n"
-    filename: orphan-table-parts.md
+  - content: "---\npackages:\n  takumi-core:\n    type: minor\n---\n\n# Reject negative padding and sizes\n\nA negative `padding`, `width`, `height`, `min-*`, or `max-*`, including their logical forms, is now invalid, as in browsers: a stylesheet drops it and keeps the earlier declaration, and a style object reports it as an invalid value instead of using it.\n"
+    filename: non-negative-sizes.md
     v: 0.0.0
-  - content: "---\npackages:\n  takumi-core:\n    type: minor\n---\n\n# Support `line-break`\n\n`lineBreak` sets how strictly lines break around CJK punctuation and small kana: `strict` keeps a small kana with the character before it, while `normal` and `loose` break before it. `anywhere` breaks between any two characters, mid-word included.\n"
-    filename: line-break.md
+  - content: "---\npackages:\n  takumi-core:\n    type: patch\n---\n\n# Shape SVG text with the registry's faces\n\nSVG `<text>` shapes with the faces the font registry holds, sharing their shaping tables instead of building new ones for each text chunk.\n"
+    filename: svg-shared-faces.md
     v: 0.0.0
-  - content: "---\npackages:\n  takumi-core:\n    type: minor\n---\n\n# Support the remaining logical properties\n\nThe block-axis longhands (`margin-block-start`, `inset-block-end`, …), the logical sizes (`inline-size`, `max-block-size`, …), and the logical borders and corner radii (`border-inline-start`, `border-block-color`, `border-start-end-radius`, …) now parse. Inline start and end follow `direction`, and `inset-inline` and `border-inline-width` now do too.\n"
-    filename: logical-properties.md
+  - content: "---\npackages:\n  takumi-core:\n    type: patch\n---\n\n# Shape every size of a face with one font\n\nA face builds its shaping tables once while it stays registered, instead of once for each size, variation, and render that uses it.\n"
+    filename: shared-shaping-font.md
     v: 0.0.0
-  - content: "---\npackages:\n  takumi-core:\n    type: minor\n---\n\n# Support `text-justify`\n\n`textJustify` takes `auto`, `none`, `inter-word`, and `inter-character`. With `text-align: justify`, `inter-word` widens only the spaces, `inter-character` spaces out the letters too, and `none` leaves the line unjustified.\n"
-    filename: text-justify.md
+  - content: "---\npackages:\n  takumi-core:\n    type: minor\n---\n\n# List the images a stylesheet references\n\n`StyleSheet::image_urls` lists the `url()`s its rules and keyframes reference, as `Node::image_urls` does for a node tree, so a caller can load them before rendering.\n"
+    filename: stylesheet-image-urls.md
     v: 0.0.0
-  - content: "---\npackages:\n  takumi-core:\n    type: minor\n---\n\n# Support `hyphens` and `hyphenate-character`\n\n`hyphens: none` stops lines from breaking at soft hyphens (U+00AD). `hyphenateCharacter` sets the string a line ends with where it breaks at one. `hyphens: auto` breaks only at soft hyphens, as `manual` does, because takumi has no hyphenation dictionaries.\n"
-    filename: hyphens.md
+  - content: "---\npackages:\n  takumi-core:\n    type: patch\n---\n\n# Keep a background whose shorthand names an attachment\n\n`background: red url(a.png) no-repeat fixed` used to drop the whole declaration over `fixed`. The shorthand now accepts `scroll`, `fixed`, and `local`; a still image paints them alike.\n"
+    filename: background-attachment.md
     v: 0.0.0
-  - content: "---\npackages:\n  takumi-core:\n    type: patch\n---\n\n# Match fonts as Chrome does\n\nWithin a family, a renderer now picks the face closest to `font-weight`, `font-stretch`, and `font-style` with the CSS font matching algorithm, as Chrome does. A variable face takes its `wght`, `wdth`, and `slnt` from the style, and a family split by `unicodeRange` keeps every subset for fallback.\n"
-    filename: font-matching.md
+  - content: "---\npackages:\n  takumi-core:\n    type: patch\n---\n\n# Share the font registry between renders\n\nA render's font snapshot shares the registry instead of copying it, and SVG `<text>` builds its face store once per set of registered fonts instead of once per render.\n"
+    filename: shared-font-registry.md
     v: 0.0.0
-  - content: "---\npackages:\n  takumi-core:\n    type: patch\n---\n\n# Draw an inline image inside its margins\n\nAn `<img>` or other replaced element in a line of text was drawn across its margins, stretched and with its border and background reaching into them. It now draws in its border box, and its margins stay empty space on the line.\n"
-    filename: inline-image-margins.md
+  - content: "---\npackages:\n  takumi-core:\n    type: patch\n---\n\n# Match fonts once per style in a render\n\nEach run of inline text matched its fonts and fallback faces again, even when an earlier run had the same font style. Runs with the same font style now share one fallback list for the whole render.\n"
+    filename: shared-fallback-lists.md
     v: 0.0.0
-  - content: "---\npackages:\n  takumi-core:\n    type: patch\n---\n\n# Transform text case as browsers do\n\n`text-transform: capitalize` no longer lowercases the rest of each word, and a word split across inline elements is capitalized once. `uppercase` and `lowercase` follow the `lang` of Turkish, Azerbaijani, Greek, Lithuanian, and Dutch text, and uppercased Georgian keeps its usual letters.\n"
-    filename: text-transform-case.md
-    v: 0.0.0
-  - content: "---\npackages:\n  takumi-core:\n    type: patch\n---\n\n# Drop line and column from CSS value errors\n\n`cssparser` 0.38 no longer tracks where a parse error happened, so an invalid style value reports the token it stopped at but no longer its line and column.\n"
-    filename: servo-parsers.md
-    v: 0.0.0
-  - content: "---\npackages:\n  takumi-core:\n    type: minor\n---\n\n# Support `unicode-bidi`\n\n`unicodeBidi` with `direction` sets how a box's text joins the bidi algorithm: `embed` and `isolate` give an inline box its own direction, `bidi-override` and `isolate-override` lay its characters out in that direction whatever they are, and `plaintext` lets each paragraph's first strong character pick its direction.\n"
-    filename: unicode-bidi.md
-    v: 0.0.0
-  - content: "---\npackages:\n  takumi-core:\n    type: patch\n---\n\n# Space inside list markers as Chromium does\n\nA `list-style-position: inside` marker now lays out as an inline box, as Chromium's does. A `disc`, `circle`, or `square` marker starts 1px earlier. A `disclosure-open` or `disclosure-closed` marker keeps a 0.4em gap from the text instead of 1em.\n"
-    filename: inside-list-marker.md
-    v: 0.0.0
-  - content: "---\npackages:\n  takumi-core:\n    type: patch\n---\n\n# Parse an image list that starts with `none`\n\n`background-image: none, url(a.png)` and `mask-image: none, none` were dropped as invalid. A list may now start with `none`.\n"
-    filename: background-image-none-list.md
-    v: 0.0.0
-  - content: "---\npackages:\n  takumi-core:\n    type: minor\n---\n\n# Support `full-width` and `full-size-kana` in `text-transform`\n\n`textTransform` takes `full-width`, which puts characters in their full-width forms, and `full-size-kana`, which puts small kana in their full-size forms, alone or with a case: `uppercase full-width`. A space becomes U+3000 only where white space is preserved, as in Chrome.\n\nIn Rust, `TextTransform` is now a struct of a `TextTransformCase` and the two flags; `TextTransformCase` converts into it.\n"
-    filename: text-transform-width.md
-    v: 0.0.0
-  - content: "---\npackages:\n  takumi-core:\n    type: minor\n---\n\n# Support `font-language-override`\n\n`fontLanguageOverride` takes an OpenType language system tag, such as `\"TRK\"`, which picks glyphs and localized forms in place of the system the content language maps to: `lang=\"ja\"` with `font-language-override: \"KOR\"` draws Korean forms.\n"
-    filename: font-language-override.md
-    v: 0.0.0
-  - content: "---\npackages:\n  takumi-core:\n    type: patch\n---\n\n# Lay out inline text as Chrome does\n\nText and inline boxes now lay out with a port of Chromium's inline layout. `text-overflow: ellipsis` and `line-clamp` cut at a character instead of a whole word, a tab advances to the next tab stop, a float that no longer fits beside a line moves below it, and `text-wrap: balance` leaves a paragraph with floats unbalanced, as Chrome does.\n"
-    filename: inline-layout.md
-    v: 0.0.0
-  - content: "---\npackages:\n  takumi-core:\n    type: minor\n---\n\n# Support `text-align-last`\n\n`textAlignLast` aligns the last line of a block, and a line before a forced break, apart from the others. `text-align: justify; text-align-last: justify` justifies every line, and `auto` keeps aligning a justified block's last line to the start.\n"
-    filename: text-align-last.md
-    v: 0.0.0
-  - content: "---\npackages:\n  takumi-core:\n    type: minor\n---\n\n# Support the `font` shorthand\n\n`font: italic bold 16px/1.5 Geist, sans-serif` sets the style, weight, size, line height, and family in one declaration, and resets the other font properties it covers. System font keywords such as `caption` are not supported.\n\n`font-weight` now rejects numbers outside 1 to 1000, and `font-family` rejects unquoted CSS-wide keywords and `default`, as browsers do.\n"
-    filename: font-shorthand.md
-    v: 0.0.0
-  - content: "---\npackages:\n  takumi-core:\n    type: patch\n---\n\n# Keep a keyframe when one of its declarations is invalid\n\n`StyleSheet::parse_loosy` dropped a whole keyframe when one declaration in it failed to parse. Now it drops only that declaration, as it already did in style rules.\n"
-    filename: keyframe-invalid-declaration.md
-    v: 0.0.0
-  - content: "---\npackages:\n  takumi-core:\n    type: patch\n---\n\n# Clamp with `-webkit-line-clamp` only in a vertical `-webkit-box`\n\nAs in browsers, `-webkit-line-clamp` now cuts lines only together with `display: -webkit-box` and `-webkit-box-orient: vertical`. Use `line-clamp` to cut lines on any block. `-webkit-box-orient` now sets the axis of a `-webkit-box` only, which ignores `flex-direction`, as in browsers.\n"
-    filename: webkit-line-clamp.md
-    v: 0.0.0
-  - content: "---\npackages:\n  takumi-html:\n    type: minor\n---\n\n# Render an `<img>` without a source\n\nAn `<img>` with no `src`, or an empty one, used to fail the whole document. It now renders as an empty inline box its `width` and `height` size, as in Chrome, and `HtmlError::MissingImageSrc` is gone.\n"
-    filename: img-without-src.md
-    v: 0.0.0
-  - content: "---\npackages:\n  takumi-html:\n    type: patch\n---\n\n# Build the parsed HTML into an arena\n\n`takumi-html` builds the DOM it parses into one `Vec` instead of `markup5ever_rcdom`'s reference-counted nodes, so it no longer depends on `markup5ever_rcdom` or `xml5ever`.\n"
-    filename: html-arena-dom.md
+  - content: "---\npackages:\n  takumi-html:\n    type: minor\n---\n\n# Parse a source with a doctype as a document\n\n`from_html` parses a source that opens with a doctype as a document even without an `<html>` tag, so it gains the `<html>`, `<head>`, and `<body>` a browser builds, along with the body's default margin.\n"
+    filename: doctype-document.md
     v: 0.0.0
 core:packages:
   - id: npm:takumi-workspace
     updated: false
-  - changelogIds:
-      - font-cache-max-bytes.md
-      - unregister-fonts.md
-    id: npm:@takumi-rs/helpers
+  - id: npm:@takumi-rs/helpers
     updated: true
-  - changelogIds:
-      - font-cache-max-bytes.md
-      - unregister-fonts.md
-    id: npm:@takumi-rs/wasm
+  - id: npm:takumi-js
     updated: true
   - id: npm:docs
     updated: false
-  - id: npm:takumi-js
+  - id: npm:takumi-paint
+    updated: true
+  - id: npm:@takumi-rs/core
+    updated: true
+  - id: npm:@takumi-rs/wasm
+    updated: true
+  - id: npm:takumi-pdf
     updated: true
   - id: npm:@takumi-rs/image-response
     updated: true
-  - changelogIds:
-      - harfrust-0-14.md
-      - font-cache-max-bytes.md
-      - unregister-fonts.md
-    id: npm:takumi-pdf
-    updated: true
-  - changelogIds:
-      - font-cache-max-bytes.md
-      - unregister-fonts.md
-    id: npm:@takumi-rs/core
-    updated: true
-  - changelogIds:
-      - font-cache-max-bytes.md
-      - unregister-fonts.md
-    id: npm:takumi-paint
-    updated: true
-  - id: npm:pdf-bench
-    updated: false
-  - id: npm:example-tanstack-start
-    updated: false
-  - id: npm:example-liquid-glass
-    updated: false
   - id: npm:example-nextjs
-    updated: false
-  - id: npm:example-css-library-integration
-    updated: false
-  - id: npm:example-generate-invoice
-    updated: false
-  - id: npm:example-cloudflare-workers
-    updated: false
-  - id: npm:svelte
     updated: false
   - id: npm:example-twitter-images
     updated: false
   - id: npm:ffmpeg-keyframe-animation
     updated: false
+  - id: npm:example-generate-invoice
+    updated: false
+  - id: npm:pdf-bench
+    updated: false
   - id: npm:ffplay
+    updated: false
+  - id: npm:svelte
+    updated: false
+  - id: npm:example-css-library-integration
+    updated: false
+  - id: npm:example-cloudflare-workers
     updated: false
   - id: npm:waku-ssr
     updated: false
-  - id: npm:example-e-invoice
-    updated: false
   - id: npm:example-satori-html
     updated: false
-  - changelogIds:
-      - orphan-table-parts.md
-      - line-break.md
-      - logical-properties.md
-      - text-justify.md
-      - hyphens.md
-      - font-matching.md
-      - inline-image-margins.md
-      - text-transform-case.md
-      - servo-parsers.md
-      - harfrust-0-14.md
-      - unicode-bidi.md
-      - inside-list-marker.md
-      - background-image-none-list.md
-      - text-transform-width.md
-      - font-language-override.md
-      - inline-layout.md
-      - text-align-last.md
-      - font-shorthand.md
-      - unregister-fonts.md
-      - keyframe-invalid-declaration.md
-      - webkit-line-clamp.md
-    id: cargo:takumi-core
-    updated: true
+  - id: npm:example-tanstack-start
+    updated: false
+  - id: npm:example-e-invoice
+    updated: false
+  - id: npm:example-liquid-glass
+    updated: false
   - id: cargo:takumi-svg
     updated: true
   - id: cargo:takumi-raster
     updated: true
   - changelogIds:
-      - img-without-src.md
-      - html-arena-dom.md
+      - atomic-inline-cache.md
+      - ch-unit.md
+      - separable-morphology.md
+      - non-negative-sizes.md
+      - svg-shared-faces.md
+      - shared-shaping-font.md
+      - stylesheet-image-urls.md
+      - background-attachment.md
+      - shared-font-registry.md
+      - shared-fallback-lists.md
+    id: cargo:takumi-core
+    updated: true
+  - changelogIds:
+      - doctype-document.md
     id: cargo:takumi-html
     updated: true
-  - changelogIds:
-      - unregister-fonts.md
-    id: cargo:takumi
+  - id: cargo:takumi-pdf
     updated: true
-  - changelogIds:
-      - harfrust-0-14.md
-      - font-cache-max-bytes.md
-      - unregister-fonts.md
-    id: cargo:takumi-pdf
+  - id: cargo:takumi
     updated: true
 npm:packages:
   - id: npm:takumi-workspace
   - id: npm:@takumi-rs/helpers
-  - id: npm:@takumi-rs/wasm
-  - id: npm:docs
   - id: npm:takumi-js
-  - id: npm:@takumi-rs/image-response
-  - id: npm:takumi-pdf
-  - id: npm:@takumi-rs/core
+  - id: npm:docs
   - id: npm:takumi-paint
-  - id: npm:pdf-bench
-  - id: npm:example-tanstack-start
-  - id: npm:example-liquid-glass
+  - id: npm:@takumi-rs/core
+  - id: npm:@takumi-rs/wasm
+  - id: npm:takumi-pdf
+  - id: npm:@takumi-rs/image-response
   - id: npm:example-nextjs
-  - id: npm:example-css-library-integration
-  - id: npm:example-generate-invoice
-  - id: npm:example-cloudflare-workers
-  - id: npm:svelte
   - id: npm:example-twitter-images
   - id: npm:ffmpeg-keyframe-animation
+  - id: npm:example-generate-invoice
+  - id: npm:pdf-bench
   - id: npm:ffplay
+  - id: npm:svelte
+  - id: npm:example-css-library-integration
+  - id: npm:example-cloudflare-workers
   - id: npm:waku-ssr
-  - id: npm:example-e-invoice
   - id: npm:example-satori-html
+  - id: npm:example-tanstack-start
+  - id: npm:example-e-invoice
+  - id: npm:example-liquid-glass
