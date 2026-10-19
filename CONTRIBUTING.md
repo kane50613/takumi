@@ -269,7 +269,7 @@ CI fails when test execution changes a generated file that is not included in th
 
 ### Web platform tests
 
-The `wpt_reftests` test runs the CSS reftests from the [web-platform-tests](https://web-platform-tests.org/writing-tests/reftests.html) that `scripts/wpt-checkout.sh` checks out into `target/wpt`. `takumi/tests/wpt-reftests.txt` lists the tests that pass, one pattern a line: `*` matches within a path segment, `**` across segments, and `css/css-text/white-space/**` stands for every test in that directory. The test fails when one of them stops passing.
+The `wpt_reftests` test runs the CSS reftests from the [web-platform-tests](https://web-platform-tests.org/writing-tests/reftests.html) that `scripts/wpt-checkout.sh` checks out into `target/wpt`. `takumi/tests/wpt-reftests.txt` lists the tests expected to pass as rules, one a line: `css/css-text/white-space/` covers every test in that directory, a leading `!` expects failures instead, and the most specific rule for a test decides. The test fails when an expected pass stops passing.
 
 - Run `sh scripts/wpt-checkout.sh` once. Without a checkout, the test does nothing. CI runs the suite in its own `WPT reftests` job, in release mode.
 - To see why tests fail, run `WPT=<path fragment> WPT_VERBOSE=1 WPT_DUMP=/tmp/wpt cargo test -p takumi --test wpt_reftests -- --nocapture`. `WPT_DUMP` writes each failing test's rendering and its reference's as PNG.
