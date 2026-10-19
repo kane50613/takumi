@@ -67,10 +67,10 @@ impl<'c> InlineNode<'c> {
   /// height down to a `line-clamp`.
   pub(crate) fn measure(
     self,
+    items_data: &InlineNodeData<'c>,
     available_space: Size<AvailableSpace>,
     known_dimensions: Size<Option<f32>>,
   ) -> InlineMeasurement {
-    let items_data = self.prepare_layout();
     // taffy knows a border-box width whatever `box-sizing` says, and offers a content-box one.
     let padding = self.block.padding_px();
     let border = self.block.border_px();
@@ -79,7 +79,7 @@ impl<'c> InlineNode<'c> {
       .map(|width| (width - padding.left - padding.right - border.left - border.right).max(0.0));
     let width = known_width.unwrap_or_else(|| {
       let mut atomic_inline = BoxAtomicInline { available_space };
-      let sizes = self.compute_min_max_sizes(&items_data, &mut atomic_inline);
+      let sizes = self.compute_min_max_sizes(items_data, &mut atomic_inline);
       let (min_size, max_size) = (sizes.min_size.to_float(), sizes.max_size.to_float());
 
       match available_space.width {
@@ -93,7 +93,7 @@ impl<'c> InlineNode<'c> {
       AvailableSpace::Definite(available) => available.max(width),
       _ => width,
     });
-    let lines = self.layout_lines_at(&items_data, line_width, available_space.height);
+    let lines = self.layout_lines_at(items_data, line_width, available_space.height);
     let (height, clamped) = content_block_size(&lines);
     let baseline = |line: &LineBoxFragment<'_, '_>| {
       line
@@ -157,12 +157,19 @@ fn content_block_size(lines: &[LineBoxFragment<'_, '_>]) -> (f32, bool) {
 impl RenderNode {
   /// The fragment items of this node's inline content laid out in the content box of `layout`.
   pub(crate) fn lay_out_fragment_items(&self, layout: ComputedLayout) -> FragmentItems {
-    let node = InlineNode::new(self);
-    let items_data = node.prepare_layout();
-    let lines = node.layout_lines_in_content_box(&items_data, layout);
-    let mut spans = InlineSpans::of(self, &items_data);
+    self.lay_out_fragment_items_from(&InlineNode::new(self).prepare_layout(), layout)
+  }
 
-    FragmentItems::from_lines(&items_data, &lines, &mut spans, layout, &self.context)
+  /// [`Self::lay_out_fragment_items`] from its prepared `items_data`.
+  pub(crate) fn lay_out_fragment_items_from<'c>(
+    &'c self,
+    items_data: &InlineNodeData<'c>,
+    layout: ComputedLayout,
+  ) -> FragmentItems {
+    let lines = InlineNode::new(self).layout_lines_in_content_box(items_data, layout);
+    let mut spans = InlineSpans::of(self, items_data);
+
+    FragmentItems::from_lines(items_data, &lines, &mut spans, layout, &self.context)
   }
 
   /// The spans `items`, this node's fragment items, paint with.
@@ -266,13 +273,15 @@ impl RenderNode {
 
   /// The first or last line's baseline below the content box's top, laid out at the border box
   /// width `width` in `available_space`.
-  pub(crate) fn inline_content_baseline(
-    &self,
+  pub(crate) fn inline_content_baseline<'c>(
+    &'c self,
+    items_data: &InlineNodeData<'c>,
     available_space: Size<AvailableSpace>,
     width: f32,
     use_last_line: bool,
   ) -> Option<f32> {
     let measurement = InlineNode::new(self).measure(
+      items_data,
       available_space,
       Size {
         width: Some(width),

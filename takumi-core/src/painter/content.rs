@@ -59,7 +59,7 @@ impl<'n> OwnContent<'n> {
   /// Whether the inline content lays anything out in the node's own `font_style`. A text node at
   /// `font-size: 0` shows nothing, but an inline formatting context still lays out the children
   /// that set their own size.
-  fn has_inline_content(&self, font_style: &SizedFontStyle) -> bool {
+  pub(crate) fn has_inline_content(&self, font_style: &SizedFontStyle) -> bool {
     let Self::Inline(node) = *self else {
       return false;
     };

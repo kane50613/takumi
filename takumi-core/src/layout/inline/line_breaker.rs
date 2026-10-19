@@ -2,7 +2,7 @@
 //! without ruby, SVG text, block-in-inline, initial letters, `text-combine-upright`, hyphenation
 //! dictionaries, `word-break: auto-phrase`, block fragmentation, or `::first-line`.
 
-use std::{cell::RefCell, collections::HashMap, rc::Rc};
+use std::rc::Rc;
 
 use icu_properties::{CodePointMapData, props::BidiClass};
 
@@ -354,7 +354,6 @@ pub(crate) struct LineBreaker<'a, 'b, 'c> {
   break_token: Option<InlineBreakToken<'c>>,
   current_style: Option<&'c RenderContext>,
   break_iterator: Rc<LineBreakIterator<'a>>,
-  break_iterators: RefCell<HashMap<(LineBreakType, BreakSpaceType), Rc<LineBreakIterator<'a>>>>,
   shaper: Rc<HarfBuzzShaper>,
   hyphen_index: Option<usize>,
   has_any_hyphens: bool,
@@ -382,12 +381,8 @@ impl<'a, 'b, 'c> LineBreaker<'a, 'b, 'c> {
     atomic_inline: &'b mut dyn AtomicInlineLayout<'c>,
     exclusion_space: &'b mut ExclusionSpace,
   ) -> Self {
-    let text = items_data.text_content.as_str();
-    let break_iterator = Rc::new(LineBreakIterator::new(
-      text,
-      LineBreakType::Normal,
-      BreakSpaceType::AfterSpaceRun,
-    ));
+    let break_iterator =
+      Rc::new(items_data.break_iterator(LineBreakType::Normal, BreakSpaceType::AfterSpaceRun));
     let mut line_breaker = Self {
       node,
       items_data,
@@ -422,10 +417,6 @@ impl<'a, 'b, 'c> LineBreaker<'a, 'b, 'c> {
       end_item_index: items_data.items.len(),
       break_token,
       current_style: None,
-      break_iterators: RefCell::new(HashMap::from([(
-        (LineBreakType::Normal, BreakSpaceType::AfterSpaceRun),
-        Rc::clone(&break_iterator),
-      )])),
       break_iterator,
       shaper: Rc::new(HarfBuzzShaper::new(items_data.text_content.clone())),
       hyphen_index: None,
@@ -3341,16 +3332,7 @@ impl<'a, 'b, 'c> LineBreaker<'a, 'b, 'c> {
       return;
     }
 
-    let text = self.text();
-    let iterator = Rc::clone(
-      self
-        .break_iterators
-        .borrow_mut()
-        .entry((break_type, break_space))
-        .or_insert_with(|| Rc::new(LineBreakIterator::new(text, break_type, break_space))),
-    );
-
-    self.break_iterator = iterator;
+    self.break_iterator = Rc::new(self.items_data.break_iterator(break_type, break_space));
   }
 
   /// Blink's `IsPreviousItemOfType`.
