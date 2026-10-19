@@ -154,7 +154,7 @@ impl StyleFonts {
     let font = fonts.entry(ptr::from_ref(context)).or_insert_with(|| {
       let description = FontDescription::new(&SizedFontStyle::from_style(&context.style, context));
 
-      Rc::new(Font::new(context.fonts(), description))
+      Rc::new(context.font(description))
     });
 
     Rc::clone(font)

@@ -10,6 +10,7 @@ use typed_builder::TypedBuilder;
 
 use crate::{
   font_style::ExpandedFamilies,
+  fonts::{font::Font, font_description::FontDescription, font_fallback_map::FontFallbackMap},
   geometry::{ComputedLayout, Point},
   layout::inline::InlineLayoutCache,
   resources::{
@@ -28,6 +29,7 @@ struct RenderShared {
   resource_cache: Option<ResourceCache>,
   stylesheet: Arc<StyleSheet>,
   font_families: ExpandedFamilies,
+  font_fallback_map: FontFallbackMap,
   inline_cache: InlineLayoutCache,
   tw_cache: TwCache,
   primary_font_metrics: RefCell<FxHashMap<u64, Option<PrimaryFontMetrics>>>,
@@ -77,6 +79,7 @@ impl From<RenderContextInit> for RenderContext {
         resource_cache: init.resource_cache,
         stylesheet: init.stylesheet,
         font_families: ExpandedFamilies::default(),
+        font_fallback_map: FontFallbackMap::default(),
         inline_cache: InlineLayoutCache::default(),
         tw_cache: TwCache::default(),
         primary_font_metrics: RefCell::default(),
@@ -182,6 +185,17 @@ impl RenderContext {
   /// Per-render cache of expanded Tailwind class lists.
   pub(crate) fn tw_cache(&self) -> &TwCache {
     &self.shared.tw_cache
+  }
+
+  /// The font `description` names, its fallback list shared across the render.
+  pub(crate) fn font(&self, description: FontDescription) -> Font {
+    Font {
+      fallback_list: self
+        .shared
+        .font_fallback_map
+        .get(&self.shared.fonts, &description),
+      description,
+    }
   }
 
   /// The primary font metrics for `key`, resolved once per render.

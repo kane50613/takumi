@@ -6,17 +6,20 @@ use super::{
   font_description::FontDescription, font_fallback_list::FontFallbackList,
   simple_font_data::SimpleFontData,
 };
-use crate::resources::font::{Fonts, PrimaryFontMetrics};
+#[cfg(test)]
+use crate::resources::font::Fonts;
+use crate::resources::font::PrimaryFontMetrics;
 
 /// A font as shaping takes it.
 pub(crate) struct Font {
   pub(crate) description: FontDescription,
-  pub(crate) fallback_list: FontFallbackList,
+  pub(crate) fallback_list: Rc<FontFallbackList>,
 }
 
 impl Font {
+  #[cfg(test)]
   pub(crate) fn new(fonts: &Fonts, description: FontDescription) -> Self {
-    let fallback_list = FontFallbackList::new(fonts, &description);
+    let fallback_list = Rc::new(FontFallbackList::new(fonts, &description));
 
     Self {
       description,
