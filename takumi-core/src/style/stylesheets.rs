@@ -180,10 +180,6 @@ impl Lang {
   pub fn as_str(&self) -> &str {
     self.0.as_str()
   }
-
-  pub(crate) fn into_parlance(self) -> Language {
-    self.0
-  }
 }
 
 #[derive(Clone, Copy)]

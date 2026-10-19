@@ -2,13 +2,14 @@
 
 use std::rc::Rc;
 
-use parley::{GenericFamily, fontique::QueryFamily};
-
 use super::{
   font_cache::FontCache, font_data_for_range_set::FontDataForRangeSet,
   font_description::FontDescription, simple_font_data::SimpleFontData,
 };
-use crate::resources::font::{Fonts, MatchedFace};
+use crate::{
+  resources::font::{Fonts, MatchedFace},
+  style::{FontFamilyToken, GenericFamilyType},
+};
 
 /// Blink's `FontData`.
 #[derive(Debug)]
@@ -55,13 +56,7 @@ pub(crate) struct FontFallbackList {
 impl FontFallbackList {
   pub(crate) fn new(fonts: &mut Fonts, description: &FontDescription) -> Self {
     let font_data = |face: MatchedFace| {
-      SimpleFontData::new(
-        face,
-        description.computed_size,
-        description.specified_size,
-        &description.variation_settings,
-      )
-      .map(Rc::new)
+      SimpleFontData::new(face, description.computed_size, description.specified_size).map(Rc::new)
     };
     let resolve = |faces: Vec<MatchedFace>| {
       if let [face] = faces.as_slice()
@@ -79,21 +74,21 @@ impl FontFallbackList {
       (!faces.is_empty()).then_some(FontData::Segmented(faces))
     };
     let mut font_list: Vec<FontData> = fonts
-      .font_group(description.family.query_families(), description.attributes)
+      .font_group(description.family.tokens(), &description.selection)
       .into_iter()
       .filter_map(resolve)
       .collect();
     let font_cache = FontCache::new(
       fonts
-        .fallback_bucket(description.attributes)
+        .fallback_bucket(&description.selection)
         .into_iter()
         .filter_map(font_data)
         .collect(),
     );
     let standard = fonts
       .font_group(
-        [QueryFamily::Generic(GenericFamily::Serif)],
-        description.attributes,
+        &[FontFamilyToken::Generic(GenericFamilyType::Serif)],
+        &description.selection,
       )
       .into_iter()
       .find_map(resolve)

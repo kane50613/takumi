@@ -1,10 +1,7 @@
 use cssparser::{Parser, match_ignore_ascii_case};
 use typed_builder::TypedBuilder;
 
-use crate::style::{
-  FromCss, MakeComputed, ParseResult, impl_css_enum, impl_from_taffy_enum,
-  tw::TailwindPropertyParser,
-};
+use crate::style::{FromCss, MakeComputed, ParseResult, impl_css_enum, tw::TailwindPropertyParser};
 
 /// Controls how text should be wrapped.
 /// Construct with [`TextWrap::builder`].
@@ -95,8 +92,6 @@ impl_css_enum!(
   "wrap" => TextWrapMode::Wrap,
   "nowrap" => TextWrapMode::NoWrap,
 );
-
-impl_from_taffy_enum!(TextWrapMode, into_parley -> parley::TextWrapMode, Wrap, NoWrap);
 
 /// Controls the style of text wrapping.
 #[derive(Debug, Clone, Copy, PartialEq, Default)]

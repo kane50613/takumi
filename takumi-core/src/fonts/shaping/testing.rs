@@ -2,11 +2,15 @@
 
 use std::{fs::read, path::Path, rc::Rc};
 
-use parley::fontique::Attributes;
-
 use crate::{
   font_style::ExpandedFontFamily,
-  fonts::{font::Font, font_description::FontDescription},
+  fonts::{
+    font::Font,
+    font_description::{FontDescription, FontSelectionDescription},
+    font_selection_types::{
+      FontSelectionRequest, NORMAL_SLOPE_VALUE, NORMAL_WEIGHT_VALUE, NORMAL_WIDTH_VALUE,
+    },
+  },
   resources::font::{FontOverride, FontResource, Fonts},
   style::{FontFamily, FontSynthesic, FontVariantCaps, FromCssStr},
 };
@@ -36,11 +40,14 @@ pub(crate) fn font(fonts: &mut Fonts, family: &str) -> Font {
     fonts,
     FontDescription {
       family: Rc::new(ExpandedFontFamily::expand(&family)),
-      attributes: Attributes::default(),
+      selection: FontSelectionDescription::for_request(FontSelectionRequest::new(
+        NORMAL_WEIGHT_VALUE,
+        NORMAL_WIDTH_VALUE,
+        NORMAL_SLOPE_VALUE,
+      )),
       computed_size: 16.0,
       specified_size: 16.0,
       features: Vec::new(),
-      variation_settings: Vec::new(),
       locale: None,
       variant_caps: FontVariantCaps::Normal,
       font_synthesis_small_caps: FontSynthesic::Auto,

@@ -5,13 +5,13 @@ use crate::{
   layout::intercept::skips_ink,
   resources::{
     font::{
-      ExactFontMetrics, FontUnderline, PrimaryFontMetrics, RunFace, RunSynthesis, em_box_descent,
+      ExactFontMetrics, FontBlob, FontUnderline, PrimaryFontMetrics, RunFace, RunSynthesis,
+      em_box_descent,
     },
     glyph::{ResolvedColorLayer, ResolvedGlyphs, ResolvedOutlineGlyph},
   },
   style::{Affine, Color},
 };
-use parley::fontique::Blob;
 use skrifa::{FontRef, MetadataProvider, raw::types::F2Dot14};
 use std::{ops::Range, sync::Arc};
 
@@ -62,9 +62,8 @@ pub(super) fn glyph_skips_ink(text: &str, cluster: Range<usize>) -> bool {
     .is_none_or(skips_ink)
 }
 
-/// A shaped, positioned glyph run — the core-owned replacement for
-/// `parley::GlyphRun`. Owns everything both backends need to paint a run; carries
-/// no borrow into the parley layout.
+/// A shaped, positioned glyph run, which Blink's `TextFragmentPainter` paints. Owns everything
+/// both backends need to paint a run.
 #[derive(Clone)]
 pub struct ShapedRun {
   /// The run's glyphs, positioned from the line origin.
@@ -105,7 +104,7 @@ pub struct ShapedRun {
   /// Normalized variation coordinates the run was shaped at.
   pub(crate) normalized_coords: Vec<F2Dot14>,
   // Accessor, not a `pub` field: the backing `parley` blob must not leak into the public API.
-  pub(super) font_data: Blob<u8>,
+  pub(super) font_data: FontBlob,
 }
 
 /// The line-end whitespace a run carries, placed where rule L1 of UAX #9 puts it: at the
@@ -170,7 +169,7 @@ impl ShapedRun {
 
   /// The font file the run was shaped with.
   #[cfg(feature = "paint-tree")]
-  pub(crate) fn font_blob(&self) -> Blob<u8> {
+  pub(crate) fn font_blob(&self) -> FontBlob {
     self.font_data.clone()
   }
 

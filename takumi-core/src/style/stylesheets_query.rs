@@ -1,10 +1,13 @@
 use std::{borrow::Cow, marker::PhantomData};
 
-use parley::fontique::Attributes;
 use taffy::{LengthPercentage, Line, Rect, Size};
 
 use super::ComputedStyle;
 use crate::{
+  fonts::{
+    font_description::FontSelectionDescription,
+    font_selection_types::{FontSelectionRequest, FontSelectionValue},
+  },
   geometry::{Point, Size as CoreSize},
   style::{Lang, SizingContext, properties::*},
   text::{
@@ -382,22 +385,6 @@ impl ComputedStyle {
     }
   }
 
-  /// `nowrap` + `ellipsis`: parley lays out all the text even when it overflows,
-  /// so this case is rendered by switching to wrapping with a one-line clamp.
-  fn forces_single_line_ellipsis(&self) -> bool {
-    self.inherited_data.text_wrap_mode == TextWrapMode::NoWrap
-      && self.misc4_data.text_overflow == TextOverflow::Ellipsis
-  }
-
-  /// The wrap mode used for layout, forcing wrap for single-line ellipsis.
-  pub(crate) fn resolved_text_wrap_mode(&self) -> TextWrapMode {
-    if self.forces_single_line_ellipsis() {
-      TextWrapMode::Wrap
-    } else {
-      self.inherited_data.text_wrap_mode
-    }
-  }
-
   #[inline]
   fn grid_template(
     components: &Option<GridTemplateComponents>,
@@ -424,12 +411,35 @@ impl ComputedStyle {
     }
   }
 
-  /// The face attributes a font query matches.
-  pub(crate) fn font_attributes(&self) -> Attributes {
-    Attributes {
-      width: self.inherited_data.font_stretch.into_parlance(),
-      style: self.inherited_data.font_style.into_parlance(),
-      weight: self.inherited_data.font_weight.into_parlance(),
+  /// What font matching reads of this style at `sizing`'s font size, apart from the families.
+  pub(crate) fn font_selection_description(
+    &self,
+    sizing: &SizingContext,
+  ) -> FontSelectionDescription {
+    let inherited = &self.inherited_data;
+
+    FontSelectionDescription {
+      font_selection_request: FontSelectionRequest::new(
+        FontSelectionValue::new(inherited.font_weight.value()),
+        FontSelectionValue::new(inherited.font_stretch.percentage() * 100.0),
+        FontSelectionValue::new(inherited.font_style.slope()),
+      ),
+      is_italic_keyword: inherited.font_style.is_italic(),
+      synthetic_bold_allowed: inherited.font_synthesis_weight.is_allowed(),
+      synthetic_italic_allowed: inherited.font_synthesis_style.is_allowed(),
+      is_synthetic_bold: false,
+      is_synthetic_italic: false,
+      effective_font_size: sizing.font_size,
+      adjusted_specified_size: sizing.to_css(sizing.font_size),
+      font_optical_sizing: inherited.font_optical_sizing,
+      variation_settings: inherited
+        .font_variation_settings
+        .iter()
+        .map(|variation| harfrust::Variation {
+          tag: variation.tag.into_harfrust(),
+          value: variation.value,
+        })
+        .collect(),
     }
   }
 

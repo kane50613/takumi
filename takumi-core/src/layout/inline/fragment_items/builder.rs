@@ -30,10 +30,14 @@ use crate::{
     text_fit::LineScaleState,
   },
   layout_unit::LayoutUnit,
-  resources::glyph::{BOLD_THRESHOLD, synthesis_embolden_strength},
+  resources::glyph::synthesis_embolden_strength,
   scene::text_ink_reach,
   style::{Affine, Direction},
 };
+
+/// The angle in degrees of the `-1/4` horizontal skew Skia gives a synthetic italic, which
+/// Blink's `FontPlatformData::SetupSkFont` asks for.
+const SYNTHETIC_ITALIC_SKEW: f32 = 14.036_243;
 
 /// What a line gives the texts on it: where its content box sits, its baseline, its root box's
 /// font, and the baselines of the spans on it.
@@ -456,7 +460,6 @@ impl FragmentItems {
         })
         .collect();
       let metrics = font_data.font_metrics();
-      let weight = font.description.attributes.weight.value();
       let run = ShapedRun {
         glyphs: positioned,
         offset: origin.x + start_x,
@@ -479,16 +482,9 @@ impl FragmentItems {
         text_range,
         cluster_ranges,
         variations: font_data.variation_settings(),
-        synthetic_bold: (!is_color
-          && face.synthesis.embolden()
-          && weight >= BOLD_THRESHOLD
-          && brush.font_synthesis.weight.is_allowed())
-        .then(|| synthesis_embolden_strength(font_data.size())),
-        synthetic_skew: face
-          .synthesis
-          .skew()
-          .filter(|_| !is_color && brush.font_synthesis.style.is_allowed())
-          .map(|degrees| -degrees),
+        synthetic_bold: (!is_color && face.synthetic_bold)
+          .then(|| synthesis_embolden_strength(font_data.size())),
+        synthetic_skew: (!is_color && face.synthetic_italic).then_some(-SYNTHETIC_ITALIC_SKEW),
         normalized_coords: font_data.normalized_coords(),
         font_data: face.blob.clone(),
         brush: brush.clone(),

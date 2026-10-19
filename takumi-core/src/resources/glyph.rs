@@ -281,10 +281,6 @@ pub fn outline_ink(paths: &[Command], embolden: Option<f32>) -> InkExtents {
   ))
 }
 
-/// CSS `kBoldThreshold` — weights at or above this synthesize bold when no bolder face
-/// exists; lighter weights do not. https://drafts.csswg.org/css-fonts-4/#font-weight-prop
-pub(crate) const BOLD_THRESHOLD: f32 = 600.0;
-
 /// Skia's fake-bold stroke width as a fraction of text size: `1/24` at 9px and below,
 /// easing to `1/32` at 36px and above, linearly interpolated in between. A constant factor
 /// over-emboldens large text. See Skia's `SkTextFormatParams.h`.

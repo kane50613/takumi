@@ -116,7 +116,7 @@ pub use font_style::*;
 pub use font_synthesis::*;
 pub use font_variant::*;
 pub use font_variation_settings::FontVariation;
-pub(crate) use font_variation_settings::{FontVariationSettings, ResolvedFontVariations};
+pub(crate) use font_variation_settings::FontVariationSettings;
 pub use font_weight::*;
 pub use gap::*;
 pub use grid::*;

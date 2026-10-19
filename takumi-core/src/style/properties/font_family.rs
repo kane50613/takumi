@@ -7,12 +7,64 @@ use std::{
 };
 
 use cssparser::{CowRcStr, Parser, Token, match_ignore_ascii_case, serialize_string};
-use parley::{FontFamilyName, GenericFamily};
 
 use crate::style::{
   FromCss, MakeComputed, ParseResult, ToCss, is_reserved_custom_ident, tw::Namespace,
   tw::TailwindPropertyParser,
 };
+
+/// Blink's `FontDescription::GenericFamilyType`: a CSS generic font family.
+/// <https://drafts.csswg.org/css-fonts/#generic-font-families>
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub(crate) enum GenericFamilyType {
+  Serif,
+  SansSerif,
+  Monospace,
+  Cursive,
+  Fantasy,
+  SystemUi,
+  UiSerif,
+  UiSansSerif,
+  UiMonospace,
+  UiRounded,
+  Emoji,
+  Math,
+  FangSong,
+}
+
+impl GenericFamilyType {
+  const ALL: [(Self, &'static str); 13] = [
+    (Self::Serif, "serif"),
+    (Self::SansSerif, "sans-serif"),
+    (Self::Monospace, "monospace"),
+    (Self::Cursive, "cursive"),
+    (Self::Fantasy, "fantasy"),
+    (Self::SystemUi, "system-ui"),
+    (Self::UiSerif, "ui-serif"),
+    (Self::UiSansSerif, "ui-sans-serif"),
+    (Self::UiMonospace, "ui-monospace"),
+    (Self::UiRounded, "ui-rounded"),
+    (Self::Emoji, "emoji"),
+    (Self::Math, "math"),
+    (Self::FangSong, "fangsong"),
+  ];
+
+  /// The generic family `keyword` names, in any case.
+  pub(crate) fn parse(keyword: &str) -> Option<Self> {
+    Self::ALL
+      .iter()
+      .find(|(_, name)| name.eq_ignore_ascii_case(keyword))
+      .map(|&(generic, _)| generic)
+  }
+
+  /// The CSS keyword.
+  pub(crate) fn keyword(self) -> &'static str {
+    Self::ALL
+      .iter()
+      .find(|&&(generic, _)| generic == self)
+      .map_or("sans-serif", |&(_, name)| name)
+  }
+}
 
 /// Represents a font family for text rendering.
 /// Multi value fallback is supported.
@@ -31,7 +83,7 @@ impl PartialEq for FontFamily {
 
 impl Default for FontFamily {
   fn default() -> Self {
-    Self::from_parlance_generic(GenericFamily::SansSerif)
+    Self::from_generic(GenericFamilyType::SansSerif)
   }
 }
 
@@ -41,7 +93,7 @@ pub(crate) enum FontFamilyToken {
   /// A named family.
   Owned(String),
   /// A generic family such as `serif`.
-  Generic(GenericFamily),
+  Generic(GenericFamilyType),
 }
 
 impl MakeComputed for FontFamily {}
@@ -55,7 +107,7 @@ impl FontFamily {
       .into_iter()
       .map(FontFamilyToken::Owned)
       .collect::<Vec<_>>();
-    tokens.push(FontFamilyToken::Generic(GenericFamily::SansSerif));
+    tokens.push(FontFamilyToken::Generic(GenericFamilyType::SansSerif));
 
     Self::new(tokens)
   }
@@ -74,15 +126,12 @@ impl FontFamily {
     self.id
   }
 
-  /// The families as parley `FontFamilyName`s, in declaration order.
-  pub(crate) fn names(&self) -> impl Iterator<Item = FontFamilyName<'_>> + Clone {
-    self.tokens.iter().map(|token| match token {
-      FontFamilyToken::Owned(name) => FontFamilyName::Named(name.as_str().into()),
-      FontFamilyToken::Generic(generic) => FontFamilyName::Generic(*generic),
-    })
+  /// The families, in declaration order.
+  pub(crate) fn tokens(&self) -> &[FontFamilyToken] {
+    &self.tokens
   }
 
-  pub(crate) fn from_parlance_generic(generic: GenericFamily) -> Self {
+  pub(crate) fn from_generic(generic: GenericFamilyType) -> Self {
     Self::new([FontFamilyToken::Generic(generic)])
   }
 }
@@ -100,7 +149,7 @@ impl<'i> FromCss<'i> for FontFamilyToken {
       family_name.push_str(&ident);
     }
 
-    if let Some(generic) = GenericFamily::parse(&family_name) {
+    if let Some(generic) = GenericFamilyType::parse(&family_name) {
       return Ok(Self::Generic(generic));
     }
 
@@ -137,9 +186,9 @@ impl TailwindPropertyParser for FontFamily {
 
   fn parse_tw(token: &str) -> Option<Self> {
     match_ignore_ascii_case! {token,
-      "sans" => Some(FontFamily::from_parlance_generic(GenericFamily::SansSerif)),
-      "serif" => Some(FontFamily::from_parlance_generic(GenericFamily::Serif)),
-      "mono" => Some(FontFamily::from_parlance_generic(GenericFamily::Monospace)),
+      "sans" => Some(FontFamily::from_generic(GenericFamilyType::SansSerif)),
+      "serif" => Some(FontFamily::from_generic(GenericFamilyType::Serif)),
+      "mono" => Some(FontFamily::from_generic(GenericFamilyType::Monospace)),
       _ => None,
     }
   }
@@ -159,16 +208,7 @@ impl ToCss for FontFamilyToken {
           dest.write_str(name)
         }
       }
-      Self::Generic(generic) => dest.write_str(match generic {
-        GenericFamily::Serif => "serif",
-        GenericFamily::SansSerif => "sans-serif",
-        GenericFamily::Monospace => "monospace",
-        GenericFamily::Cursive => "cursive",
-        GenericFamily::Fantasy => "fantasy",
-        GenericFamily::SystemUi => "system-ui",
-        GenericFamily::Emoji => "emoji",
-        _ => "sans-serif",
-      }),
+      Self::Generic(generic) => dest.write_str(generic.keyword()),
     }
   }
 }
@@ -181,9 +221,7 @@ impl ToCss for FontFamily {
 
 #[cfg(test)]
 mod tests {
-  use parley::GenericFamily;
-
-  use super::{FontFamily, FontFamilyToken};
+  use super::{FontFamily, FontFamilyToken, GenericFamilyType as GenericFamily};
   use crate::style::{FromCssStr, tw::TailwindPropertyParser};
 
   #[test]

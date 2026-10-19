@@ -1,10 +1,8 @@
 use std::{
   borrow::Cow,
-  cell::OnceCell,
-  cell::RefCell,
-  collections::{HashMap, HashSet, hash_map::Entry},
+  cell::{OnceCell, RefCell},
+  collections::hash_map::Entry,
   fmt::{self, Debug, Formatter},
-  iter::once,
   rc::Rc,
   str::FromStr,
   sync::{
@@ -13,16 +11,10 @@ use std::{
   },
 };
 
-use parley::{
-  GenericFamily as ParleyGenericFamily,
-  fontique::{
-    Attributes, Blob, Collection, CollectionOptions, FallbackKey, FamilyId, FontInfo,
-    FontInfoOverride, FontStyle, FontWeight, FontWidth, QueryFamily, QueryFont, QueryStatus,
-    Script, ScriptExt, Synthesis,
-  },
-};
+use harfrust::Variation;
 use skrifa::{
   FontRef, MetadataProvider,
+  attribute::Style,
   instance::{LocationRef, Size},
   raw::{
     TableProvider,
@@ -36,16 +28,18 @@ use xxhash_rust::xxh3::{Xxh3, xxh3_64};
 use crate::resvg::usvg::fontdb::Database;
 use crate::{
   context::RenderContext,
-  font_style::ExpandedFontFamily,
-  fonts::font_height::FontHeight,
+  fonts::{
+    css_font_selector::CssFontSelector, css_segmented_font_face::FontPlatformDataForRangeSet,
+    font_description::FontSelectionDescription, font_face::FontFaceDescriptors,
+    font_height::FontHeight,
+  },
   layout_unit::LayoutUnit,
   resources::{
     glyph::{GlyphResolveContext, ResolvedGlyphs},
     glyph_cache::resolved_glyph,
     unicode_range::UnicodeRangeSet,
   },
-  sort_key::sort_by_key,
-  style::{FontFamily, FontStyle as CssFontStyle},
+  style::{FontFamily, FontFamilyToken, FontStyle as CssFontStyle, GenericFamilyType},
 };
 
 /// Errors that can occur during font loading and conversion.
@@ -160,12 +154,12 @@ pub struct RegisteredFace {
   pub index: u32,
 }
 
-fn font_style_css(style: FontStyle) -> String {
+fn font_style_css(style: Style) -> String {
   match style {
-    FontStyle::Normal => "normal".to_string(),
-    FontStyle::Italic => "italic".to_string(),
-    FontStyle::Oblique(None) => "oblique".to_string(),
-    FontStyle::Oblique(Some(angle)) => format!("oblique {angle}deg"),
+    Style::Normal => "normal".to_string(),
+    Style::Italic => "italic".to_string(),
+    Style::Oblique(None) => "oblique".to_string(),
+    Style::Oblique(Some(angle)) => format!("oblique {angle}deg"),
   }
 }
 
@@ -176,50 +170,92 @@ const CBDT: Tag = Tag::new(b"CBDT");
 const CBLC: Tag = Tag::new(b"CBLC");
 
 /// Color tables in the pairs Blink's `ColorTableLookup` accepts.
-fn has_color_table(font: &FontRef) -> bool {
+pub(crate) fn has_color_table(font: &FontRef) -> bool {
   font.table_data(SBIX).is_some()
     || (font.table_data(COLR).is_some() && font.table_data(CPAL).is_some())
     || (font.table_data(CBDT).is_some() && font.table_data(CBLC).is_some())
 }
 
-/// A face's width, style, and weight, which font matching ranks.
-type FaceAttributes = (FontWidth, FontStyle, FontWeight);
+/// A font file's sfnt bytes, shared, with the id glyph caches key them by.
+#[derive(Clone)]
+pub struct FontBlob {
+  data: SharedBytes,
+  id: u64,
+}
 
-/// A face font matching picked, before it takes a size: what Blink makes `FontPlatformData` from.
+impl FontBlob {
+  pub(crate) fn new(data: SharedBytes, id: u64) -> Self {
+    Self { data, id }
+  }
+
+  /// The sfnt bytes.
+  pub fn data(&self) -> &[u8] {
+    (*self.data).as_ref()
+  }
+
+  /// The id glyph caches key the bytes by.
+  pub fn id(&self) -> u64 {
+    self.id
+  }
+}
+
+impl AsRef<[u8]> for FontBlob {
+  fn as_ref(&self) -> &[u8] {
+    self.data()
+  }
+}
+
+impl Debug for FontBlob {
+  fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+    f.debug_struct("FontBlob").field("id", &self.id).finish()
+  }
+}
+
+/// A face font matching picked, before it takes a size: what Blink makes `SimpleFontData` from.
 #[derive(Clone, Debug)]
 pub(crate) struct MatchedFace {
-  pub(crate) blob: Blob<u8>,
+  pub(crate) blob: FontBlob,
   pub(crate) index: u32,
-  pub(crate) synthesis: Synthesis,
+  /// Blink's `FontPlatformData::SyntheticBold`.
+  pub(crate) synthetic_bold: bool,
+  /// Blink's `FontPlatformData::SyntheticItalic`.
+  pub(crate) synthetic_italic: bool,
+  /// The design coordinates the face draws at, a later tag winning.
+  pub(crate) variations: Vec<Variation>,
   /// The face's `unicode-range`, or `None` for every codepoint.
   pub(crate) unicode_range: Option<UnicodeRangeSet>,
-  /// Whether the face's family has a color glyph table.
+  /// Whether the face has a color glyph table.
   pub(crate) is_color: bool,
 }
 
-/// The registry of fonts available to a renderer.
+impl MatchedFace {
+  fn of(face: FontPlatformDataForRangeSet) -> Self {
+    let platform = face.font_platform_data;
+    let typeface = &platform.typeface;
+
+    Self {
+      blob: FontBlob::new(Arc::clone(&typeface.data), typeface.id),
+      index: typeface.index,
+      synthetic_bold: platform.synthetic_bold,
+      synthetic_italic: platform.synthetic_italic,
+      variations: platform.variations,
+      unicode_range: (!face.range_set.is_entire_range()).then_some(face.range_set),
+      is_color: typeface.is_color,
+    }
+  }
+}
+
+/// The registry of fonts available to a renderer: Blink's `CSSFontSelector` over the faces
+/// registered.
 ///
-/// Registering and unregistering are the only mutations; between them the assembled parley
-/// context is immutable and shared as `&self` across concurrent renders. Each render takes a cheap working clone
-/// (see [`RenderContext`]) for parley's `&mut` query API, so no per-thread or global state
-/// is needed.
-#[derive(Clone)]
+/// Registering and unregistering are the only mutations; each render takes a clone as its
+/// snapshot (see [`RenderContext`]).
+#[derive(Clone, Default)]
 pub struct Fonts {
-  inner: parley::FontContext,
-  /// The `unicode-range` of every face registered with one, by font blob id.
-  unicode_ranges: Arc<HashMap<u64, UnicodeRangeSet>>,
-  /// Every registered family name in registration order. The fallback bucket is built from
-  /// this so its per-script priority is deterministic; `fontique`'s `family_names()` iterates
-  /// a `HashMap` (hash order), which would otherwise make font selection vary per render.
-  order: Vec<String>,
-  /// Families registered via [`FontResource::last_resort`], appended after `order` in the
-  /// fallback bucket regardless of registration arrival.
-  last_resort_order: Vec<String>,
-  /// Families with at least one face carrying a color glyph table.
-  color_names: HashSet<String>,
-  /// Registered family name of every face, keyed by font blob id and collection index.
-  #[cfg(feature = "paint-tree")]
-  face_families: Arc<HashMap<(u64, u32), String>>,
+  selector: CssFontSelector,
+  /// The families a snapshot's fallback walks before the last-resort ones, in place of every
+  /// registered family.
+  fallback_families: Option<Vec<Arc<str>>>,
   /// Lazily built face store for SVG `<text>`; cleared on registration.
   #[cfg(feature = "svg")]
   svg_db: Option<Arc<Database>>,
@@ -227,29 +263,6 @@ pub struct Fonts {
   /// font-dependent caches (SVG `<text>` trees, their rasterizations) can
   /// tell any two registry states apart, including across `Fonts` instances.
   revision: u64,
-}
-
-impl Default for Fonts {
-  fn default() -> Self {
-    Self {
-      inner: parley::FontContext {
-        collection: Collection::new(CollectionOptions {
-          system_fonts: false,
-          shared: false,
-        }),
-        source_cache: Default::default(),
-      },
-      unicode_ranges: Arc::new(HashMap::new()),
-      order: Vec::new(),
-      last_resort_order: Vec::new(),
-      color_names: HashSet::new(),
-      #[cfg(feature = "paint-tree")]
-      face_families: Arc::new(HashMap::new()),
-      #[cfg(feature = "svg")]
-      svg_db: None,
-      revision: 0,
-    }
-  }
 }
 
 /// A render-local font handle.
@@ -308,103 +321,46 @@ pub(crate) struct RunFace<'a> {
 
 impl Fonts {
   /// The faces each of `families` resolves to, as Blink's `FontFallbackList` takes them: every
-  /// face of the family matching `attributes` best, several when `unicode-range` splits it.
-  /// fontique then offers the family's default face for coverage, which Blink does not, so it is
-  /// left out.
-  pub(crate) fn font_group<'a>(
-    &mut self,
-    families: impl IntoIterator<Item = QueryFamily<'a>>,
-    attributes: Attributes,
+  /// face of the family matching `description` best, several when `unicode-range` splits it.
+  pub(crate) fn font_group(
+    &self,
+    families: &[FontFamilyToken],
+    description: &FontSelectionDescription,
   ) -> Vec<Vec<MatchedFace>> {
-    let fonts = self.query_fonts(families, None, attributes);
-    let mut group: Vec<Vec<MatchedFace>> = Vec::new();
-    let mut current: Option<(FamilyId, Option<FaceAttributes>)> = None;
-
-    for font in fonts {
-      let attributes = self.font_attributes(font.family);
-
-      match &current {
-        Some((family, best)) if *family == font.family.0 => {
-          if attributes != *best {
-            continue;
-          }
+    families
+      .iter()
+      .filter_map(|family| match family {
+        FontFamilyToken::Owned(name) => self.selector.get_font_data(description, name, false),
+        FontFamilyToken::Generic(generic) => {
+          self
+            .selector
+            .get_font_data(description, generic.keyword(), true)
         }
-        _ => {
-          current = Some((font.family.0, attributes));
-          group.push(Vec::new());
-        }
-      }
-
-      let face = self.matched_face(&font);
-
-      if let Some(faces) = group.last_mut() {
-        faces.push(face);
-      }
-    }
-
-    group
+      })
+      .map(|faces| faces.into_iter().map(MatchedFace::of).collect())
+      .collect()
   }
 
-  /// The faces system font fallback picks from: every registered family in fallback order, the
-  /// last-resort families last, each by its best match for `attributes`.
-  pub(crate) fn fallback_bucket(&mut self, attributes: Attributes) -> Vec<MatchedFace> {
-    let fonts = self.query_fonts(
-      [],
-      Some(FallbackKey::new(Script::from_bytes(*b"Latn"), None)),
-      attributes,
-    );
+  /// The faces system font fallback picks from: the fallback families, the last-resort families
+  /// last, each by its best match for `description`.
+  pub(crate) fn fallback_bucket(&self, description: &FontSelectionDescription) -> Vec<MatchedFace> {
+    let families: Vec<&Arc<str>> = match &self.fallback_families {
+      Some(families) => families
+        .iter()
+        .chain(self.selector.last_resort_families())
+        .collect(),
+      None => self.selector.fallback_families().collect(),
+    };
 
-    fonts.iter().map(|font| self.matched_face(font)).collect()
+    families
+      .into_iter()
+      .filter_map(|family| self.selector.get_font_data(description, family, false))
+      .flatten()
+      .map(MatchedFace::of)
+      .collect()
   }
 
-  fn query_fonts<'a>(
-    &mut self,
-    families: impl IntoIterator<Item = QueryFamily<'a>>,
-    fallbacks: Option<FallbackKey>,
-    attributes: Attributes,
-  ) -> Vec<QueryFont> {
-    let mut fonts = Vec::new();
-    let mut query = self.inner.collection.query(&mut self.inner.source_cache);
-
-    query.set_families(families);
-
-    if let Some(fallbacks) = fallbacks {
-      query.set_fallbacks(fallbacks);
-    }
-
-    query.set_attributes(attributes);
-    query.matches_with(|font| {
-      fonts.push(font.clone());
-      QueryStatus::Continue
-    });
-
-    fonts
-  }
-
-  fn font_attributes(&mut self, (family, index): (FamilyId, usize)) -> Option<FaceAttributes> {
-    let family = self.inner.collection.family(family)?;
-    let font = family.fonts().get(index)?;
-
-    Some((font.width(), font.style(), font.weight()))
-  }
-
-  fn matched_face(&mut self, font: &QueryFont) -> MatchedFace {
-    let is_color = self
-      .inner
-      .collection
-      .family_name(font.family.0)
-      .is_some_and(|name| self.color_names.contains(name));
-
-    MatchedFace {
-      blob: font.blob.clone(),
-      index: font.index,
-      synthesis: font.synthesis,
-      unicode_range: self.unicode_ranges.get(&font.blob.id()).cloned(),
-      is_color,
-    }
-  }
-
-  /// Face store for SVG `<text>` conversion, sharing this collection's font bytes.
+  /// Face store for SVG `<text>` conversion, sharing this registry's font bytes.
   #[cfg(feature = "svg")]
   pub(crate) fn svg_fontdb(&mut self) -> Arc<Database> {
     if let Some(database) = &self.svg_db {
@@ -418,11 +374,11 @@ impl Fonts {
   }
 
   #[cfg(feature = "svg")]
-  fn build_svg_fontdb(&mut self) -> Database {
-    use crate::resvg::usvg::fontdb::{Family, Stretch, Style, Weight};
+  fn build_svg_fontdb(&self) -> Database {
+    use crate::resvg::usvg::fontdb::{Family, Stretch, Style as SvgStyle, Weight};
 
-    fn stretch_bucket(width: FontWidth) -> Stretch {
-      match width.ratio() {
+    fn stretch_bucket(width: f32) -> Stretch {
+      match width {
         r if r <= 0.5625 => Stretch::UltraCondensed,
         r if r <= 0.6875 => Stretch::ExtraCondensed,
         r if r <= 0.8125 => Stretch::Condensed,
@@ -436,60 +392,39 @@ impl Fonts {
     }
 
     let mut database = Database::default();
-    let names: Vec<String> = self
-      .order
-      .iter()
-      .chain(self.last_resort_order.iter())
-      .cloned()
-      .collect();
 
-    for name in names {
-      let Some(family) = self.inner.collection.family_by_name(&name) else {
-        continue;
+    for font_face in self.selector.font_faces() {
+      let typeface = &font_face.custom_platform_data;
+      let attributes = typeface.attributes;
+      let style = match attributes.style {
+        Style::Normal => SvgStyle::Normal,
+        Style::Italic => SvgStyle::Italic,
+        Style::Oblique(_) => SvgStyle::Oblique,
       };
 
-      for font in family.fonts().to_vec() {
-        let Some(data) = font.load(Some(&mut self.inner.source_cache)) else {
-          continue;
-        };
-        let style = match font.style() {
-          FontStyle::Normal => Style::Normal,
-          FontStyle::Italic => Style::Italic,
-          FontStyle::Oblique(_) => Style::Oblique,
-        };
-
-        database.push_face(
-          name.clone(),
-          style,
-          Weight(font.weight().value() as u16),
-          stretch_bucket(font.width()),
-          font.has_optical_size_axis(),
-          data,
-          font.index(),
-        );
-      }
+      database.push_face(
+        font_face.family.to_string(),
+        style,
+        Weight(attributes.weight.value() as u16),
+        stretch_bucket(attributes.stretch.ratio()),
+        typeface
+          .axes
+          .iter()
+          .any(|axis| axis.tag == harfrust::Tag::new(b"opsz")),
+        FontBlob::new(Arc::clone(&typeface.data), typeface.id),
+        typeface.index,
+      );
     }
 
-    for (generic, parley_generic) in [
-      (Family::Serif, ParleyGenericFamily::Serif),
-      (Family::SansSerif, ParleyGenericFamily::SansSerif),
-      (Family::Cursive, ParleyGenericFamily::Cursive),
-      (Family::Fantasy, ParleyGenericFamily::Fantasy),
-      (Family::Monospace, ParleyGenericFamily::Monospace),
+    for (generic, keyword) in [
+      (Family::Serif, GenericFamilyType::Serif),
+      (Family::SansSerif, GenericFamilyType::SansSerif),
+      (Family::Cursive, GenericFamilyType::Cursive),
+      (Family::Fantasy, GenericFamilyType::Fantasy),
+      (Family::Monospace, GenericFamilyType::Monospace),
     ] {
-      let ids: Vec<_> = self
-        .inner
-        .collection
-        .generic_families(parley_generic)
-        .collect();
-
-      for id in ids {
-        let Some(family) = self.inner.collection.family(id) else {
-          continue;
-        };
-        let name = family.name().to_string();
-
-        database.register_generic(generic, &name);
+      for family in self.selector.family_names_from_settings(keyword.keyword()) {
+        database.register_generic(generic, family);
       }
     }
 
@@ -506,59 +441,32 @@ impl Fonts {
   #[cfg(feature = "paint-tree")]
   pub(crate) fn face_family(&self, font_id: u64, index: u32) -> Option<&str> {
     self
-      .face_families
-      .get(&(font_id, index))
-      .map(String::as_str)
+      .selector
+      .font_faces()
+      .find(|face| {
+        face.custom_platform_data.id == font_id && face.custom_platform_data.index == index
+      })
+      .map(|face| &*face.family)
   }
 
-  /// Render-local snapshot whose fallback bucket carries the given families.
+  /// Render-local snapshot whose fallback walks the named families of `fallbacks`, then the
+  /// last-resort ones.
   pub fn snapshot_with_fallbacks(&self, fallbacks: Option<&FontFamily>) -> FontsSnapshot {
-    let mut cloned = self.inner.clone();
-
-    let mut family_ids: Vec<_> = if let Some(names) = fallbacks {
-      ExpandedFontFamily::expand(names)
-        .query_families()
-        .filter_map(|family| match family {
-          QueryFamily::Named(name) => cloned.collection.family_id(name),
-          _ => None,
+    let fallback_families = fallbacks.map(|fallbacks| {
+      fallbacks
+        .tokens()
+        .iter()
+        .filter_map(|token| match token {
+          FontFamilyToken::Owned(name) => Some(Arc::from(name.as_str())),
+          FontFamilyToken::Generic(_) => None,
         })
         .collect()
-    } else {
-      // Registration order, not `family_names()` (hash order), so font selection is stable.
-      self
-        .order
-        .iter()
-        .filter_map(|name| cloned.collection.family_id(name))
-        .collect()
-    };
-
-    // Last-resort families close the bucket so they only serve uncovered text.
-    family_ids.extend(
-      self
-        .last_resort_order
-        .iter()
-        .filter_map(|name| cloned.collection.family_id(name)),
-    );
-
-    for (script, _) in Script::all_samples() {
-      cloned.collection.set_fallbacks(
-        FallbackKey::new(*script, None),
-        family_ids.clone().into_iter(),
-      );
-    }
+    });
 
     FontsSnapshot {
       context: Rc::new(RefCell::new(Self {
-        inner: cloned,
-        unicode_ranges: self.unicode_ranges.clone(),
-        order: self.order.clone(),
-        last_resort_order: self.last_resort_order.clone(),
-        color_names: self.color_names.clone(),
-        #[cfg(feature = "paint-tree")]
-        face_families: self.face_families.clone(),
-        #[cfg(feature = "svg")]
-        svg_db: self.svg_db.clone(),
-        revision: self.revision,
+        fallback_families,
+        ..self.clone()
       })),
     }
   }
@@ -613,8 +521,8 @@ impl Fonts {
     result
   }
 
-  /// Registers a font, decoding it and skipping fonts already registered in this context (deduped
-  /// by content + family name).
+  /// Registers a font, decoding it and skipping faces already registered under the same family
+  /// in this context.
   pub fn register(&mut self, font: FontResource) -> Result<Vec<RegisteredFamily>, FontError> {
     self.revise();
 
@@ -625,77 +533,43 @@ impl Fonts {
       unicode_range,
       last_resort,
     } = font;
-
-    let blob = unicode_range.restrict_blob(source.into_blob()?);
-
-    if !unicode_range.is_entire_range() {
-      Arc::make_mut(&mut self.unicode_ranges).insert(blob.id(), unicode_range);
-    }
-
-    let axes = info_override.as_ref().map(FontOverride::resolved_axes);
-    let info_override = info_override
-      .as_ref()
-      .zip(axes.as_deref())
-      .map(|(info, axes)| info.to_parley(axes));
-    let mut registered_fonts = self
-      .inner
-      .collection
-      .register_fonts(blob.clone(), info_override);
-
-    // fontique returns families in hash order; keep a multi-family file in face order.
-    sort_by_key(&mut registered_fonts, |(_, faces)| {
-      faces.iter().map(FontInfo::index).min().unwrap_or(u32::MAX)
-    });
-
-    let mut families = Vec::with_capacity(registered_fonts.len());
-    for (family, faces) in registered_fonts {
-      let is_color = faces.iter().any(|face| {
-        FontRef::from_index(blob.data(), face.index()).is_ok_and(|font| has_color_table(&font))
-      });
-      let faces: Vec<RegisteredFace> = faces
-        .iter()
-        .map(|face| RegisteredFace {
-          weight: face.weight().value(),
-          style: font_style_css(face.style()),
-          width: face.width().percentage(),
-          index: face.index(),
-        })
-        .collect();
-      let name = self
-        .inner
-        .collection
-        .family_name(family)
+    let (data, id) = source.into_sfnt_with_id()?;
+    let (data, id) = unicode_range.restrict_sfnt(data, id);
+    let descriptors = FontFaceDescriptors {
+      unicode_range,
+      ..info_override
+        .as_ref()
+        .map(FontOverride::descriptors)
         .unwrap_or_default()
-        .to_string();
+    };
+    let faces = self.selector.register(
+      data,
+      id,
+      &descriptors,
+      generic_family.map(|generic| generic.0.keyword()),
+      last_resort,
+    );
+    let mut families: Vec<RegisteredFamily> = Vec::new();
 
-      let order = if last_resort {
-        &mut self.last_resort_order
-      } else {
-        &mut self.order
+    for font_face in faces {
+      let typeface = &font_face.custom_platform_data;
+
+      let face = RegisteredFace {
+        weight: typeface.attributes.weight.value(),
+        style: font_style_css(typeface.attributes.style),
+        width: typeface.attributes.stretch.ratio() * 100.0,
+        index: typeface.index,
       };
 
-      if !order.contains(&name) {
-        order.push(name.clone());
-      }
-
-      if is_color {
-        self.color_names.insert(name.clone());
-      }
-      #[cfg(feature = "paint-tree")]
+      match families
+        .iter_mut()
+        .find(|family| *family.name == *font_face.family)
       {
-        let face_families = Arc::make_mut(&mut self.face_families);
-        for face in &faces {
-          face_families.insert((blob.id(), face.index), name.clone());
-        }
-      }
-
-      families.push(RegisteredFamily { name, faces });
-
-      if let Some(generic_family) = generic_family {
-        self
-          .inner
-          .collection
-          .append_generic_families(generic_family.into_parlance(), once(family));
+        Some(family) => family.faces.push(face),
+        None => families.push(RegisteredFamily {
+          name: font_face.family.to_string(),
+          faces: vec![face],
+        }),
       }
     }
 
@@ -705,39 +579,11 @@ impl Fonts {
   /// Removes every face registered under `family`, from each source and `unicode-range` subset
   /// alike, so it falls back as an unknown family; false when it has no faces.
   pub fn unregister_family(&mut self, family: &str) -> bool {
-    let Some(info) = self.inner.collection.family_by_name(family) else {
-      return false;
-    };
-    let id = info.id();
-    let name = info.name().to_string();
-    let faces = info.fonts().to_vec();
-
-    if faces.is_empty() {
+    if !self.selector.unregister_family(family) {
       return false;
     }
 
     self.revise();
-
-    let collection = &mut self.inner.collection;
-
-    for face in faces {
-      collection.unregister_font(id, face.width(), face.style(), face.weight());
-    }
-
-    for &generic in ParleyGenericFamily::all() {
-      let kept: Vec<_> = collection
-        .generic_families(generic)
-        .filter(|each| *each != id)
-        .collect();
-
-      collection.set_generic_families(generic, kept.into_iter());
-    }
-
-    self.order.retain(|each| *each != name);
-    self.last_resort_order.retain(|each| *each != name);
-    self.color_names.remove(&name);
-    #[cfg(feature = "paint-tree")]
-    Arc::make_mut(&mut self.face_families).retain(|_, each| *each != name);
 
     true
   }
@@ -870,75 +716,41 @@ impl PrimaryFontMetrics {
 }
 
 impl RenderContext {
-  /// The primary font's vertical metrics for `families`/`attributes` at `font_size`: the first
-  /// available font, skipping a face whose `unicode-range` leaves out the space, as Blink's
-  /// `FontFallbackList::DeterminePrimarySimpleFontData` skips such a segment.
-  pub(crate) fn first_font_metrics<'a>(
+  /// The primary font's vertical metrics for `families` and `description` at `font_size`: the
+  /// first available face, skipping one whose `unicode-range` leaves out the space, as Blink's
+  /// `FontFallbackList::DeterminePrimarySimpleFontData` skips such a segment, else the first
+  /// fallback face.
+  pub(crate) fn first_font_metrics(
     &self,
-    families: impl IntoIterator<Item = QueryFamily<'a>>,
-    attributes: Attributes,
+    families: &[FontFamilyToken],
+    description: &FontSelectionDescription,
     font_size: f32,
   ) -> Option<PrimaryFontMetrics> {
-    self.with_primary_font(families, attributes, |font_ref| {
-      PrimaryFontMetrics::of(font_ref, font_size, LocationRef::default())
-    })
-  }
-
-  /// Reads the primary font [`Self::first_font_metrics`] measures.
-  pub(crate) fn with_primary_font<'a, R>(
-    &self,
-    families: impl IntoIterator<Item = QueryFamily<'a>>,
-    attributes: Attributes,
-    read: impl FnOnce(&FontRef) -> R,
-  ) -> Option<R> {
-    let mut read = Some(read);
-    let mut result = None;
-
-    self.match_fonts(families, attributes, |font, space_outside_range| {
-      let Ok(font_ref) = FontRef::from_index(font.blob.data(), font.index) else {
-        return QueryStatus::Continue;
-      };
-      if space_outside_range {
-        return QueryStatus::Continue;
-      }
-
-      result = read.take().map(|read| read(&font_ref));
-      QueryStatus::Stop
-    });
-
-    result
-  }
-
-  /// Visits the fonts `families`/`attributes` match, in the order text falls back through them,
-  /// with whether each one's `unicode-range` leaves out the space, until `visit` stops.
-  fn match_fonts<'a>(
-    &self,
-    families: impl IntoIterator<Item = QueryFamily<'a>>,
-    attributes: Attributes,
-    mut visit: impl FnMut(&QueryFont, bool) -> QueryStatus,
-  ) {
     self.fonts().with_context(|fonts| {
-      let unicode_ranges = fonts.unicode_ranges.clone();
-      let mut query = fonts.inner.collection.query(&mut fonts.inner.source_cache);
+      let face = fonts
+        .font_group(families, description)
+        .into_iter()
+        .flatten()
+        .find(|face| {
+          face
+            .unicode_range
+            .as_ref()
+            .is_none_or(|range| range.contains(u32::from(' ')))
+        })
+        .or_else(|| fonts.fallback_bucket(description).into_iter().next())?;
+      let font_ref = FontRef::from_index(face.blob.data(), face.index).ok()?;
 
-      query.set_families(families);
-      // Past the listed families, Blink takes the default font; text without a listed family
-      // shapes with the fallback bucket, which carries one family order for every script.
-      query.set_fallbacks(FallbackKey::new(Script::from_bytes(*b"Latn"), None));
-      query.set_attributes(attributes);
-      query.matches_with(|font| {
-        let space_outside_range = unicode_ranges
-          .get(&font.blob.id())
-          .is_some_and(|range| !range.contains(u32::from(' ')));
-
-        visit(font, space_outside_range)
-      });
-    });
+      Some(PrimaryFontMetrics::of(
+        &font_ref,
+        font_size,
+        LocationRef::default(),
+      ))
+    })
   }
 }
 
 /// Bytes the caller already holds behind an `Arc`, taken as they are.
-type SharedBytes = Arc<dyn AsRef<[u8]> + Send + Sync>;
+pub(crate) type SharedBytes = Arc<dyn AsRef<[u8]> + Send + Sync>;
 
 enum FontBytes<'a> {
   Inline(Cow<'a, [u8]>),
@@ -1056,7 +868,8 @@ impl<'a> FontSource<'a> {
     })
   }
 
-  fn into_blob(self) -> Result<Blob<u8>, FontError> {
+  /// The decoded sfnt bytes and the id the glyph caches key them by.
+  pub(crate) fn into_sfnt_with_id(self) -> Result<(SharedBytes, u64), FontError> {
     let passthrough = self.is_decoded || self.is_sfnt();
     let cache_id = self.cache_id;
     let decoded: SharedBytes = match self.bytes {
@@ -1064,12 +877,11 @@ impl<'a> FontSource<'a> {
       bytes => Arc::new(bytes.into_sfnt()?),
     };
 
-    // `Blob::new` draws its id from a global counter, and that id keys the shared glyph
-    // caches. Registering the same face again — a second renderer, a rebuilt one — would
-    // then miss every glyph it had already resolved, so the id comes from the content.
+    // The id keys the shared glyph caches, so registering the same face again — a second
+    // renderer, a rebuilt one — keeps every glyph it had already resolved.
     let id = cache_id.unwrap_or_else(|| xxh3_64((*decoded).as_ref()));
 
-    Ok(Blob::from_raw_parts(decoded, id))
+    Ok((decoded, id))
   }
 }
 
@@ -1079,43 +891,38 @@ impl<'a> AsRef<[u8]> for FontSource<'a> {
   }
 }
 
-/// A CSS generic font family a registered font fulfills, exposed as named
-/// constants so callers need not depend on `parley`.
+/// A CSS generic font family a registered font fulfills.
 /// <https://drafts.csswg.org/css-fonts/#generic-font-families>
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct GenericFamily(ParleyGenericFamily);
+pub struct GenericFamily(GenericFamilyType);
 
 impl GenericFamily {
   /// `serif`
-  pub const SERIF: Self = Self(ParleyGenericFamily::Serif);
+  pub const SERIF: Self = Self(GenericFamilyType::Serif);
   /// `sans-serif`
-  pub const SANS_SERIF: Self = Self(ParleyGenericFamily::SansSerif);
+  pub const SANS_SERIF: Self = Self(GenericFamilyType::SansSerif);
   /// `monospace`
-  pub const MONOSPACE: Self = Self(ParleyGenericFamily::Monospace);
+  pub const MONOSPACE: Self = Self(GenericFamilyType::Monospace);
   /// `cursive`
-  pub const CURSIVE: Self = Self(ParleyGenericFamily::Cursive);
+  pub const CURSIVE: Self = Self(GenericFamilyType::Cursive);
   /// `fantasy`
-  pub const FANTASY: Self = Self(ParleyGenericFamily::Fantasy);
+  pub const FANTASY: Self = Self(GenericFamilyType::Fantasy);
   /// `system-ui`
-  pub const SYSTEM_UI: Self = Self(ParleyGenericFamily::SystemUi);
+  pub const SYSTEM_UI: Self = Self(GenericFamilyType::SystemUi);
   /// `ui-serif`
-  pub const UI_SERIF: Self = Self(ParleyGenericFamily::UiSerif);
+  pub const UI_SERIF: Self = Self(GenericFamilyType::UiSerif);
   /// `ui-sans-serif`
-  pub const UI_SANS_SERIF: Self = Self(ParleyGenericFamily::UiSansSerif);
+  pub const UI_SANS_SERIF: Self = Self(GenericFamilyType::UiSansSerif);
   /// `ui-monospace`
-  pub const UI_MONOSPACE: Self = Self(ParleyGenericFamily::UiMonospace);
+  pub const UI_MONOSPACE: Self = Self(GenericFamilyType::UiMonospace);
   /// `ui-rounded`
-  pub const UI_ROUNDED: Self = Self(ParleyGenericFamily::UiRounded);
+  pub const UI_ROUNDED: Self = Self(GenericFamilyType::UiRounded);
   /// `emoji`
-  pub const EMOJI: Self = Self(ParleyGenericFamily::Emoji);
+  pub const EMOJI: Self = Self(GenericFamilyType::Emoji);
   /// `math`
-  pub const MATH: Self = Self(ParleyGenericFamily::Math);
+  pub const MATH: Self = Self(GenericFamilyType::Math);
   /// `fangsong`
-  pub const FANG_SONG: Self = Self(ParleyGenericFamily::FangSong);
-
-  pub(crate) fn into_parlance(self) -> ParleyGenericFamily {
-    self.0
-  }
+  pub const FANG_SONG: Self = Self(GenericFamilyType::FangSong);
 }
 
 impl FromStr for GenericFamily {
@@ -1123,7 +930,7 @@ impl FromStr for GenericFamily {
 
   /// Parses a CSS generic family keyword (e.g. `monospace`, `sans-serif`).
   fn from_str(keyword: &str) -> Result<Self, Self::Err> {
-    ParleyGenericFamily::parse(keyword)
+    GenericFamilyType::parse(keyword)
       .map(Self)
       .ok_or(FontError::UnknownGenericFamily)
   }
@@ -1145,25 +952,24 @@ pub struct FontOverride {
 }
 
 impl FontOverride {
-  fn resolved_axes(&self) -> Vec<(Tag, f32)> {
-    self
-      .axes
-      .iter()
-      .filter_map(|(tag, value)| {
-        Tag::new_checked(tag.as_bytes())
-          .ok()
-          .map(|tag| (tag, *value))
-      })
-      .collect()
-  }
-
-  fn to_parley<'a>(&'a self, axes: &'a [(Tag, f32)]) -> FontInfoOverride<'a> {
-    FontInfoOverride {
-      family_name: self.family_name.as_deref(),
-      width: self.width.map(FontWidth::from_percentage),
-      style: self.style.map(CssFontStyle::into_parlance),
-      weight: self.weight.map(FontWeight::new),
-      axes: (!axes.is_empty()).then_some(axes),
+  /// The `@font-face` descriptors these overrides stand for.
+  fn descriptors(&self) -> FontFaceDescriptors {
+    FontFaceDescriptors {
+      family: self.family_name.clone(),
+      weight: self.weight.map(|weight| (weight, weight)),
+      width: self.width.map(|width| (width, width)),
+      slope: self.style.map(|style| (style.slope(), style.slope())),
+      variation_settings: self
+        .axes
+        .iter()
+        .filter_map(|(tag, value)| {
+          Tag::new_checked(tag.as_bytes()).ok().map(|tag| Variation {
+            tag: harfrust::Tag::new(&tag.to_be_bytes()),
+            value: *value,
+          })
+        })
+        .collect(),
+      ..FontFaceDescriptors::default()
     }
   }
 }
@@ -1275,6 +1081,25 @@ mod tests {
     bytes
   }
 
+  /// The bytes `source` registers, and their id.
+  fn blob(source: FontSource<'_>) -> FontBlob {
+    let (data, id) = source.into_sfnt_with_id().unwrap();
+
+    FontBlob::new(data, id)
+  }
+
+  /// The families fallback walks before the last-resort ones.
+  fn order(fonts: &Fonts) -> Vec<String> {
+    let last_resort: Vec<&Arc<str>> = fonts.selector.last_resort_families().collect();
+
+    fonts
+      .selector
+      .fallback_families()
+      .filter(|family| !last_resort.contains(family))
+      .map(ToString::to_string)
+      .collect()
+  }
+
   fn geist_bytes() -> Vec<u8> {
     read_font_asset("../assets/fonts/geist/Geist[wght].woff2")
   }
@@ -1309,9 +1134,7 @@ mod tests {
       .unwrap();
     let bytes: Arc<dyn AsRef<[u8]> + Send + Sync> = Arc::new(sfnt);
     let address = (*bytes).as_ref().as_ptr();
-    let blob = FontSource::from_shared(Arc::clone(&bytes))
-      .into_blob()
-      .unwrap();
+    let blob = blob(FontSource::from_shared(Arc::clone(&bytes)));
 
     assert_eq!(blob.data().as_ptr(), address);
   }
@@ -1321,7 +1144,7 @@ mod tests {
     static TTF: &[u8] = &[0x00, 0x01, 0x00, 0x00];
     static OTF: &[u8] = b"OTTO";
 
-    let id = |bytes| FontSource::from_static(bytes).into_blob().unwrap().id();
+    let id = |bytes| blob(FontSource::from_static(bytes)).id();
 
     // Same slice, same id, so a re-registered face keeps the glyphs it resolved.
     assert_eq!(id(TTF), id(TTF));
@@ -1334,7 +1157,7 @@ mod tests {
       .into_sfnt()
       .unwrap()
       .leak();
-    let blob = FontSource::from_static(sfnt).into_blob().unwrap();
+    let blob = blob(FontSource::from_static(sfnt));
 
     assert_eq!(blob.data().as_ptr(), sfnt.as_ptr());
   }
@@ -1342,12 +1165,8 @@ mod tests {
   #[test]
   fn a_static_woff2_face_keeps_its_id_through_decompression() {
     let woff2: &'static [u8] = geist_bytes().leak();
-    let registered = FontSource::from_static(woff2).into_blob().unwrap();
-    let resolved_first = FontSource::from_static(woff2)
-      .into_decoded()
-      .unwrap()
-      .into_blob()
-      .unwrap();
+    let registered = blob(FontSource::from_static(woff2));
+    let resolved_first = blob(FontSource::from_static(woff2).into_decoded().unwrap());
 
     // The bytes the font system holds are the decompressed sfnt either way, so only
     // the id carried past decompression keeps the two from being separate faces.
@@ -1422,21 +1241,22 @@ mod tests {
         .collect();
 
       assert_eq!(names, ["Geist", "Geist Mono"]);
-      assert_eq!(fonts.order, names);
+      assert_eq!(order(&fonts), names);
     }
   }
 
   #[test]
   fn registering_same_bytes_twice_is_idempotent_in_order() {
     let mut fonts = Fonts::default();
-    register_named(&mut fonts, geist_bytes(), "Geist Test");
-    register_named(&mut fonts, geist_bytes(), "Geist Test");
+    let first = register_named(&mut fonts, geist_bytes(), "Geist Test");
+    let second = register_named(&mut fonts, geist_bytes(), "Geist Test");
+
+    assert_eq!(format!("{second:?}"), format!("{first:?}"));
 
     // Registration order dedups by name: registering the same family name twice does not
-    // produce a second entry in `order`, so default fallback selection stays stable.
+    // list it twice, so default fallback selection stays stable.
     assert_eq!(
-      fonts
-        .order
+      order(&fonts)
         .iter()
         .filter(|name| *name == "Geist Test")
         .count(),
@@ -1450,7 +1270,7 @@ mod tests {
     let families = register_named(&mut fonts, geist_bytes(), "Renamed Family");
 
     assert_eq!(families[0].name, "Renamed Family");
-    assert!(fonts.order.contains(&"Renamed Family".to_string()));
+    assert!(order(&fonts).contains(&"Renamed Family".to_string()));
   }
 
   #[test]
@@ -1475,8 +1295,15 @@ mod tests {
       assert_eq!(families[0].name, "Logical");
     }
 
-    assert_eq!(fonts.order, vec!["Logical".to_string()]);
-    assert_eq!(fonts.unicode_ranges.len(), 2);
+    assert_eq!(order(&fonts), vec!["Logical".to_string()]);
+    assert_eq!(
+      fonts
+        .selector
+        .font_faces()
+        .filter(|face| !face.ranges().is_entire_range())
+        .count(),
+      2
+    );
   }
 
   #[test]
@@ -1486,7 +1313,7 @@ mod tests {
     register_named(&mut fonts, geist_mono_bytes(), "A Family");
 
     assert_eq!(
-      fonts.order,
+      order(&fonts),
       vec!["B Family".to_string(), "A Family".to_string()]
     );
   }
@@ -1507,21 +1334,24 @@ mod tests {
     register_named(&mut fonts, geist_mono_bytes(), "User Font");
 
     // Registered first, but selected last: a last-resort family never shadows caller fonts.
-    assert_eq!(fonts.order, vec!["User Font".to_string()]);
-    assert_eq!(fonts.last_resort_order, vec!["Embedded".to_string()]);
+    assert_eq!(order(&fonts), vec!["User Font".to_string()]);
+    assert_eq!(
+      fonts
+        .selector
+        .last_resort_families()
+        .map(ToString::to_string)
+        .collect::<Vec<_>>(),
+      vec!["Embedded".to_string()]
+    );
   }
 
   #[test]
   fn same_bytes_produce_the_same_blob_id() {
-    let first = FontSource::from(geist_bytes()).into_blob().unwrap();
-    // Decoded up front rather than during `into_blob`, so the id has to come from the
+    let first = blob(FontSource::from(geist_bytes()));
+    // Decoded up front rather than on registration, so the id has to come from the
     // decoded sfnt and not from whatever the caller happened to hand over.
-    let second = FontSource::from(geist_bytes())
-      .into_decoded()
-      .unwrap()
-      .into_blob()
-      .unwrap();
-    let other = FontSource::from(geist_mono_bytes()).into_blob().unwrap();
+    let second = blob(FontSource::from(geist_bytes()).into_decoded().unwrap());
+    let other = blob(FontSource::from(geist_mono_bytes()));
 
     // The glyph caches key on this id, so a re-registered face has to keep the entries
     // it already resolved.

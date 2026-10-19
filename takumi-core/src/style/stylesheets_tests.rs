@@ -11,8 +11,7 @@ use crate::{
   geometry::Size,
   style::{
     CalcArena, ComputedStyle, CustomProperties, DeferredDeclaration, SizingContext, Style,
-    StyleBaseData, StyleBoxData, StyleDeclaration, StyleInheritedData, StyleMisc4Data,
-    StyleSvgData, properties::*,
+    StyleBaseData, StyleBoxData, StyleDeclaration, StyleSvgData, properties::*,
   },
   viewport::Viewport,
 };
@@ -1177,23 +1176,6 @@ fn test_transform_creates_stacking_context_without_offscreen_compositing() {
 
   assert!(style.creates_stacking_context(false));
   assert!(!style.needs_offscreen_compositing());
-}
-
-#[test]
-fn test_text_overflow_ellipsis_forces_single_line_clamp_on_nowrap() {
-  let style = ComputedStyle {
-    inherited_data: Rc::new(StyleInheritedData {
-      text_wrap_mode: TextWrapMode::NoWrap,
-      ..Default::default()
-    }),
-    misc4_data: Rc::new(StyleMisc4Data {
-      text_overflow: TextOverflow::Ellipsis,
-      ..Default::default()
-    }),
-    ..Default::default()
-  };
-
-  assert_eq!(style.resolved_text_wrap_mode(), TextWrapMode::Wrap);
 }
 
 #[test]

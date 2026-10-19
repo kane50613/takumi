@@ -1,11 +1,11 @@
 //! Stand-in for the `fontdb` crate, backed by the faces already registered in
-//! the renderer's fontique collection. Font bytes are shared `Blob`s, so the
-//! tree stays `Send + Sync` and no second font store is built.
+//! the renderer's font registry. Font bytes are shared, so the tree stays
+//! `Send + Sync` and no second font store is built.
 
 use std::collections::HashMap;
 use std::fmt;
 
-use parley::fontique::Blob;
+use crate::resources::font::FontBlob;
 
 /// Identifier of a face inside a [`Database`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
@@ -59,7 +59,7 @@ pub struct Query<'a> {
   pub style: Style,
 }
 
-/// A single face extracted from the fontique collection.
+/// A single face of the font registry.
 pub struct FaceInfo {
   pub id: ID,
   /// Primary family name the face was registered under.
@@ -68,7 +68,7 @@ pub struct FaceInfo {
   pub weight: Weight,
   pub stretch: Stretch,
   pub(crate) has_opsz: bool,
-  data: Blob<u8>,
+  data: FontBlob,
   index: u32,
 }
 
@@ -104,7 +104,7 @@ impl Database {
     weight: Weight,
     stretch: Stretch,
     has_opsz: bool,
-    data: Blob<u8>,
+    data: FontBlob,
     index: u32,
   ) -> ID {
     let key = family.to_ascii_lowercase();

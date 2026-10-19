@@ -29,10 +29,6 @@ impl Tag {
     Some(Self([bytes[0], bytes[1], bytes[2], bytes[3]]))
   }
 
-  pub(crate) fn into_parlance(self) -> parley::setting::Tag {
-    parley::setting::Tag::from_bytes(self.0)
-  }
-
   pub(crate) fn into_harfrust(self) -> harfrust::Tag {
     harfrust::Tag::new(&self.0)
   }
@@ -73,13 +69,6 @@ impl FontFeature {
   /// Creates a new feature setting.
   pub const fn new(tag: Tag, value: u16) -> Self {
     Self { tag, value }
-  }
-
-  pub(crate) fn into_parlance(self) -> parley::FontFeature {
-    parley::FontFeature {
-      tag: self.tag.into_parlance(),
-      value: self.value,
-    }
   }
 }
 
