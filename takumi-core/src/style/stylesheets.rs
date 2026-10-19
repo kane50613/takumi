@@ -1524,6 +1524,7 @@ define_style! {
       image_rendering: ImageScalingAlgorithm where inherit = true,
       overflow_wrap: OverflowWrap where inherit = true,
       word_break: WordBreak where inherit = true,
+      line_break: LineBreak where inherit = true,
       text_justify: TextJustify where inherit = true,
       clip_rule: FillRule where inherit = true,
     }

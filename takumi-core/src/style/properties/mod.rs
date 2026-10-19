@@ -43,6 +43,7 @@ pub(crate) mod gradient_utils;
 mod grid;
 mod intrinsic_sizing;
 mod length;
+mod line_break;
 mod line_clamp;
 mod line_height;
 pub(crate) mod linear_gradient;
@@ -124,6 +125,7 @@ pub use gap::*;
 pub use grid::*;
 pub use intrinsic_sizing::*;
 pub use length::*;
+pub use line_break::*;
 pub use line_clamp::*;
 pub use line_height::*;
 pub use linear_gradient::{

@@ -6,7 +6,7 @@ use std::{ops::RangeInclusive, rc::Rc};
 use icu_properties::{CodePointMapData, props::LineBreak};
 use icu_segmenter::{
   GraphemeClusterSegmenter, LineSegmenter,
-  options::{LineBreakOptions, LineBreakStrictness, LineBreakWordOption},
+  options::{LineBreakOptions, LineBreakStrictness as IcuStrictness, LineBreakWordOption},
 };
 
 /// Whether a line breaks between two ASCII characters where a table overrides UAX #14.
@@ -149,47 +149,66 @@ pub(crate) enum BreakSpaceType {
   AfterEverySpace,
 }
 
+/// Blink's `LineBreakStrictness`, from `line-break`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+pub(crate) enum LineBreakStrictness {
+  /// ICU's default rules, which are UAX #14's strict ones.
+  #[default]
+  Default,
+  Normal,
+  Strict,
+  Loose,
+}
+
+/// How a [`LineBreakIterator`] finds its opportunities: Blink's break type, break space, and
+/// strictness.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+pub(crate) struct BreakOptions {
+  pub(crate) break_type: LineBreakType,
+  pub(crate) break_space: BreakSpaceType,
+  pub(crate) strictness: LineBreakStrictness,
+}
+
 /// The soft wrap opportunities of a text, as Blink's `LazyLineBreakIterator` finds them.
 pub(crate) struct LineBreakIterator<'a> {
   text: &'a str,
   /// Whether a line may break before each byte, and at the end.
   breakable: Rc<[bool]>,
-  break_type: LineBreakType,
-  break_space: BreakSpaceType,
+  pub(crate) options: BreakOptions,
 }
 
 impl<'a> LineBreakIterator<'a> {
   #[cfg(test)]
   pub(crate) fn new(text: &'a str, break_type: LineBreakType, break_space: BreakSpaceType) -> Self {
-    Self::with_opportunities(
-      text,
-      Self::opportunities(text, break_type, break_space),
+    let options = BreakOptions {
       break_type,
       break_space,
-    )
+      ..BreakOptions::default()
+    };
+
+    Self::with_opportunities(text, Self::opportunities(text, options), options)
   }
 
-  /// An iterator over `breakable`, the [`Self::opportunities`] of `text` it was computed for.
+  /// An iterator over `breakable`, the [`Self::opportunities`] of `text` under `options`.
   pub(crate) fn with_opportunities(
     text: &'a str,
     breakable: Rc<[bool]>,
-    break_type: LineBreakType,
-    break_space: BreakSpaceType,
+    options: BreakOptions,
   ) -> Self {
     Self {
       text,
       breakable,
-      break_type,
-      break_space,
+      options,
     }
   }
 
   /// Whether a line may break before each byte of `text`, and at its end.
-  pub(crate) fn opportunities(
-    text: &str,
-    break_type: LineBreakType,
-    break_space: BreakSpaceType,
-  ) -> Rc<[bool]> {
+  pub(crate) fn opportunities(text: &str, options: BreakOptions) -> Rc<[bool]> {
+    let BreakOptions {
+      break_type,
+      break_space,
+      strictness,
+    } = options;
     let mut breakable = vec![false; text.len() + 1];
 
     if break_type == LineBreakType::BreakCharacter {
@@ -199,7 +218,11 @@ impl<'a> LineBreakIterator<'a> {
     } else {
       let mut options = LineBreakOptions::default();
 
-      options.strictness = Some(LineBreakStrictness::Strict);
+      options.strictness = Some(match strictness {
+        LineBreakStrictness::Default | LineBreakStrictness::Strict => IcuStrictness::Strict,
+        LineBreakStrictness::Normal => IcuStrictness::Normal,
+        LineBreakStrictness::Loose => IcuStrictness::Loose,
+      });
       options.word_option = Some(match break_type {
         LineBreakType::BreakAll => LineBreakWordOption::BreakAll,
         LineBreakType::KeepAll => LineBreakWordOption::KeepAll,
@@ -250,7 +273,7 @@ impl<'a> LineBreakIterator<'a> {
 
   /// Blink's `BreakType`.
   pub(crate) fn break_type(&self) -> LineBreakType {
-    self.break_type
+    self.options.break_type
   }
 
   /// Blink's `GetString`.
@@ -260,7 +283,7 @@ impl<'a> LineBreakIterator<'a> {
 
   /// Blink's `BreakSpace`.
   pub(crate) fn break_space(&self) -> BreakSpaceType {
-    self.break_space
+    self.options.break_space
   }
 
   /// Blink's `IsBreakableSpace`.
@@ -289,5 +312,36 @@ impl<'a> LineBreakIterator<'a> {
       .rev()
       .find(|&position| self.is_breakable(position))
       .unwrap_or(min)
+  }
+}
+
+#[cfg(test)]
+mod tests {
+  use super::{BreakOptions, LineBreakIterator, LineBreakStrictness};
+
+  fn breaks(text: &str, strictness: LineBreakStrictness) -> Vec<usize> {
+    let opportunities = LineBreakIterator::opportunities(
+      text,
+      BreakOptions {
+        strictness,
+        ..BreakOptions::default()
+      },
+    );
+
+    (1..text.len())
+      .filter(|&offset| opportunities[offset])
+      .collect()
+  }
+
+  /// `line-break: strict` keeps a small kana with the character before it, as UAX #14 classes it
+  /// `CJ`; `normal` and `loose` break before it.
+  #[test]
+  fn strictness_decides_a_break_before_small_kana() {
+    let text = "あぁい";
+
+    assert_eq!(breaks(text, LineBreakStrictness::Default), [6]);
+    assert_eq!(breaks(text, LineBreakStrictness::Strict), [6]);
+    assert_eq!(breaks(text, LineBreakStrictness::Normal), [3, 6]);
+    assert_eq!(breaks(text, LineBreakStrictness::Loose), [3, 6]);
   }
 }

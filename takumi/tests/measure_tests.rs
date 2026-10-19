@@ -2833,3 +2833,29 @@ fn an_absolute_block_in_a_reversed_inline_box_keeps_its_containers_direction() {
 
   assert_eq!(absolute.transform[4], 0.0, "{result:?}");
 }
+
+/// `line-break: anywhere` breaks between any two characters, so a line fills up mid-word.
+#[test]
+fn line_break_anywhere_fills_a_line_mid_word() {
+  let measure_lines = |line_break: &str| {
+    let root = Node::container([Node::text("aaaa bbbbbbbbbbbb")]).with_class_name("root");
+    let result = measure_with_css(
+      root,
+      &format!(
+        ".root {{ display: block; width: 120px; font-size: 20px; line-break: {line_break}; }}"
+      ),
+    );
+
+    run_texts(&result)
+      .into_iter()
+      .map(str::to_owned)
+      .collect::<Vec<_>>()
+  };
+
+  assert_eq!(measure_lines("auto"), ["aaaa", "bbbbbbbbbbbb"]);
+
+  let anywhere = measure_lines("anywhere");
+
+  assert!(anywhere[0].starts_with("aaaa b"), "{anywhere:?}");
+  assert_eq!(anywhere.concat().replace(' ', ""), "aaaabbbbbbbbbbbb");
+}
