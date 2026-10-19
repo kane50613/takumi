@@ -18,8 +18,9 @@ use tiny_skia::{
 use crate::pixmap_from_buffer;
 use crate::resources::image::RenderedImage;
 use crate::{
-  BilinearAxis, BorderProperties, BoxAxis, DrawTarget, MaskView, OverlayOptions, PaintSource,
-  RenderContext, Result, RowSource, SamplingFootprint, checked_area, interpolate_with_footprint,
+  BilinearAxis, BilinearColumns, BorderProperties, BoxAxis, DrawTarget, MaskView, OverlayOptions,
+  PaintSource, RenderContext, Result, RowSource, SamplingFootprint, checked_area,
+  interpolate_with_footprint,
   layout::node::resolve_image,
   overlay_image, pixmap_ref_from_buffer,
   resources::{image::ImageSource, image_buffer::ImageBuffer},
@@ -337,7 +338,7 @@ impl<'a> SampledBitmapView<'a> {
     Some(BilinearRows {
       source: self.source,
       logical_height: self.logical_size.height,
-      columns,
+      columns: BilinearColumns::new(columns),
     })
   }
 
@@ -395,19 +396,21 @@ impl BoxRows<'_> {
 pub(crate) struct BilinearRows<'a> {
   source: PixmapRef<'a>,
   logical_height: u32,
-  columns: Vec<BilinearAxis>,
+  columns: BilinearColumns,
 }
 
 impl BilinearRows<'_> {
   pub(crate) fn fill(&self, y: u32, dst: &mut [[u8; 4]]) {
     let source_height = self.source.height();
 
-    BilinearAxis::new(
-      (y as f32 + 0.5) * source_height as f32 / self.logical_height.max(1) as f32,
-      source_height,
-    )
-    .rows(self.source)
-    .fill(&self.columns, dst);
+    self.columns.fill(
+      self.source,
+      BilinearAxis::new(
+        (y as f32 + 0.5) * source_height as f32 / self.logical_height.max(1) as f32,
+        source_height,
+      ),
+      dst,
+    );
   }
 }
 
