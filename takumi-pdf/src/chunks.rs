@@ -86,12 +86,18 @@ impl<'s> SceneChunks<'s> {
   }
 }
 
+/// The bucket row of device-space `y`; the rows start at the canvas top, which also holds what
+/// lies above it, as [`HeightIndex::candidates`] clamps its queries there.
+fn row(y: i32) -> usize {
+  y.max(0) as usize
+}
+
 impl HeightIndex {
   fn new(bounds: &[Option<SceneBounds>]) -> Self {
     let bottom = bounds
       .iter()
       .flatten()
-      .map(|bounds| bounds.bottom)
+      .map(|bounds| row(bounds.bottom))
       .max()
       .unwrap_or_default();
     // A sparse scene widens its buckets so their count stays within its chunk count.
@@ -101,7 +107,7 @@ impl HeightIndex {
 
     for (index, bounds) in bounds.iter().enumerate() {
       let span = bounds
-        .map(|bounds| bounds.top / bucket_height..=bounds.bottom / bucket_height)
+        .map(|bounds| row(bounds.top) / bucket_height..=row(bounds.bottom) / bucket_height)
         .filter(|span| {
           span
             .end()
@@ -149,7 +155,7 @@ impl HeightIndex {
 mod tests {
   use super::*;
 
-  fn bounds(top: usize, bottom: usize) -> Option<SceneBounds> {
+  fn bounds(top: i32, bottom: i32) -> Option<SceneBounds> {
     Some(SceneBounds {
       left: 0,
       top,

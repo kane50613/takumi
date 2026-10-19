@@ -3741,12 +3741,14 @@ css/filter-effects/filtered-block-is-container.html
 css/filter-effects/filtered-html-is-not-container.html
 css/filter-effects/filters-drop-shadow-001.html
 css/filter-effects/filters-drop-shadow-002.html
+css/filter-effects/filters-drop-shadow-003.html
 css/filter-effects/filters-grayscale-001-test.html
 css/filter-effects/filters-opacity-001-test.html
 css/filter-effects/filters-opacity-002-test.html
 css/filter-effects/filters-sepia-001-test.html
 css/filter-effects/filters-test-brightness-001.html
 css/filter-effects/filters-test-brightness-002.html
+css/filter-effects/fixed-pos-filter-clip-001.html
 css/filter-effects/kernel-unit-length-001.html
 css/filter-effects/kernel-unit-length-002.html
 css/filter-effects/lighting-region.html

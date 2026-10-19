@@ -63,7 +63,7 @@ pub(crate) fn checked_area(width: u32, height: u32, bytes_per_pixel: u32) -> Opt
 /// or 256 MiB at 4 bytes per pixel.
 const MAX_PIXMAP_PIXELS: u64 = 64 << 20;
 
-fn within_pixmap_pixel_budget(size: Size<u32>) -> bool {
+pub(crate) fn within_pixmap_pixel_budget(size: Size<u32>) -> bool {
   u64::from(size.width) * u64::from(size.height) <= MAX_PIXMAP_PIXELS
 }
 
@@ -140,13 +140,13 @@ impl<'a> DrawTarget<'a, '_> {
 /// A canvas that can be used to draw images onto.
 pub(crate) struct Canvas {
   image: Pixmap,
-  origin: Point<u32>,
+  origin: Point<i32>,
   constraint_mask_stack: Vec<MaskStackEntry>,
 }
 
 pub(crate) struct CanvasSubcanvas {
   image: Pixmap,
-  origin: Option<Point<u32>>,
+  origin: Option<Point<i32>>,
   constraint_mask_stack: Option<Vec<MaskStackEntry>>,
   offset: Point<i32>,
 }
@@ -205,12 +205,12 @@ impl Canvas {
     }
 
     let offset = Point {
-      x: bounds.left - self.origin.x as i32,
-      y: bounds.top - self.origin.y as i32,
+      x: bounds.left - self.origin.x,
+      y: bounds.top - self.origin.y,
     };
     let origin = Point {
-      x: bounds.left as u32,
-      y: bounds.top as u32,
+      x: bounds.left,
+      y: bounds.top,
     };
     let constraint_mask_stack = self.constraint_mask_stack.clone();
 
@@ -574,8 +574,8 @@ impl Canvas {
       canvas_origin: self.origin,
     };
     let mask_width = placed.mask.width() as usize;
-    let left = placed.origin.x as i32 - self.origin.x as i32;
-    let top = placed.origin.y as i32 - self.origin.y as i32;
+    let left = placed.origin.x - self.origin.x;
+    let top = placed.origin.y - self.origin.y;
 
     for (y, row) in placed
       .mask
@@ -617,15 +617,15 @@ impl Canvas {
 
   fn localize_placement(&self, placement: Placement) -> Placement {
     Placement {
-      left: placement.left - self.origin.x as i32,
-      top: placement.top - self.origin.y as i32,
+      left: placement.left - self.origin.x,
+      top: placement.top - self.origin.y,
       ..placement
     }
   }
 
   fn restore_subcanvas_state(
     &mut self,
-    origin: Option<Point<u32>>,
+    origin: Option<Point<i32>>,
     constraint_mask_stack: Option<Vec<MaskStackEntry>>,
   ) {
     if let Some(origin) = origin {

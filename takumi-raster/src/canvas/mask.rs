@@ -24,7 +24,7 @@ pub(crate) enum NodeMaskAction {
 
 #[derive(Clone, Copy)]
 pub(crate) struct CanvasViewport {
-  pub(crate) origin: Point<u32>,
+  pub(crate) origin: Point<i32>,
   pub(crate) size: Size<u32>,
 }
 
@@ -38,37 +38,61 @@ impl CanvasViewport {
   }
 
   pub(crate) fn right(self) -> i32 {
-    self.origin.x as i32 + self.size.width as i32
+    self.origin.x + self.size.width as i32
   }
 
   pub(crate) fn bottom(self) -> i32 {
-    self.origin.y as i32 + self.size.height as i32
+    self.origin.y + self.size.height as i32
   }
 
   pub(crate) fn placement(self) -> Placement {
     Placement {
-      left: self.origin.x as i32,
-      top: self.origin.y as i32,
+      left: self.origin.x,
+      top: self.origin.y,
       width: self.size.width,
       height: self.size.height,
     }
   }
 
+  /// The pixels the viewport covers.
+  pub(crate) fn bounds(self) -> SceneBounds {
+    SceneBounds {
+      left: self.origin.x,
+      top: self.origin.y,
+      right: self.right(),
+      bottom: self.bottom(),
+    }
+  }
+
+  /// A viewport over the pixels `bounds` covers, or `None` when they cover none.
+  pub(crate) fn covering(bounds: SceneBounds) -> Option<Self> {
+    (!bounds.is_empty()).then(|| Self {
+      origin: Point {
+        x: bounds.left,
+        y: bounds.top,
+      },
+      size: Size {
+        width: bounds.right.abs_diff(bounds.left),
+        height: bounds.bottom.abs_diff(bounds.top),
+      },
+    })
+  }
+
   pub(crate) fn intersects(self, bounds: SceneBounds) -> bool {
     !bounds.is_empty()
-      && bounds.right as i32 > self.origin.x as i32
-      && bounds.bottom as i32 > self.origin.y as i32
-      && (bounds.left as i32) < self.right()
-      && (bounds.top as i32) < self.bottom()
+      && bounds.right > self.origin.x
+      && bounds.bottom > self.origin.y
+      && bounds.left < self.right()
+      && bounds.top < self.bottom()
   }
 
   /// The part of `bounds`, grown by `padding` on every side, inside the viewport.
   pub(crate) fn clamp_bounds(self, bounds: SceneBounds, padding: i32) -> Option<Placement> {
     Placement::from_bounds(
-      (bounds.left as i32 - padding).max(self.origin.x as i32),
-      (bounds.top as i32 - padding).max(self.origin.y as i32),
-      (bounds.right as i32 + padding).min(self.right()),
-      (bounds.bottom as i32 + padding).min(self.bottom()),
+      (bounds.left - padding).max(self.origin.x),
+      (bounds.top - padding).max(self.origin.y),
+      (bounds.right + padding).min(self.right()),
+      (bounds.bottom + padding).min(self.bottom()),
     )
   }
 
@@ -82,8 +106,8 @@ impl CanvasViewport {
 
     Self {
       origin: Point {
-        x: self.origin.x.saturating_sub(margin_x),
-        y: self.origin.y.saturating_sub(margin_y),
+        x: (self.origin.x - margin_x as i32).max(0),
+        y: (self.origin.y - margin_y as i32).max(0),
       },
       size: Size {
         width: self.size.width.saturating_add(margin_x * 2),
@@ -168,7 +192,7 @@ impl NodeMasks {
 /// viewport origin. Everything outside it is masked out.
 pub(crate) struct PlacedMask {
   pub(crate) mask: TinyMask,
-  pub(crate) origin: Point<u32>,
+  pub(crate) origin: Point<i32>,
 }
 
 impl PlacedMask {
@@ -198,8 +222,8 @@ impl PlacedMask {
       Some(mask) => Self {
         mask,
         origin: Point {
-          x: placement.left as u32,
-          y: placement.top as u32,
+          x: placement.left,
+          y: placement.top,
         },
       },
       // A clip that covers no pixel masks out everything.
@@ -357,12 +381,12 @@ pub(crate) fn attenuate_alpha_by_mask(
 
 fn copy_mask_into_canvas(
   canvas_mask: &mut TinyMask,
-  canvas_origin: Point<u32>,
+  canvas_origin: Point<i32>,
   mask: &[u8],
   placement: Placement,
 ) {
-  let canvas_left = canvas_origin.x as i32;
-  let canvas_top = canvas_origin.y as i32;
+  let canvas_left = canvas_origin.x;
+  let canvas_top = canvas_origin.y;
   let canvas_right = canvas_left + canvas_mask.width() as i32;
   let canvas_bottom = canvas_top + canvas_mask.height() as i32;
   let start_x = placement.left.max(canvas_left);
@@ -410,8 +434,8 @@ fn rasterize_constraint_mask(
 ) -> Option<TinyMask> {
   let mut mask = TinyMask::new(viewport.size.width, viewport.size.height)?;
 
-  let start_x = placement.left.max(viewport.origin.x as i32);
-  let start_y = placement.top.max(viewport.origin.y as i32);
+  let start_x = placement.left.max(viewport.origin.x);
+  let start_y = placement.top.max(viewport.origin.y);
   let end_x = (placement.left + placement.width as i32).min(viewport.right());
   let end_y = (placement.top + placement.height as i32).min(viewport.bottom());
   if start_x >= end_x || start_y >= end_y {
@@ -421,9 +445,9 @@ fn rasterize_constraint_mask(
   let data = mask.data_mut();
   let stride = viewport.size.width as usize;
   for global_y in start_y..end_y {
-    let row = (global_y - viewport.origin.y as i32) as usize * stride;
+    let row = (global_y - viewport.origin.y) as usize * stride;
     for global_x in start_x..end_x {
-      data[row + (global_x - viewport.origin.x as i32) as usize] =
+      data[row + (global_x - viewport.origin.x) as usize] =
         alpha_at(global_x as u32, global_y as u32);
     }
   }
@@ -544,12 +568,10 @@ pub(crate) fn render_cached_mask(
   for value in [a, b, c, d, x, y] {
     hasher.update(&value.to_bits().to_le_bytes());
   }
-  for value in [
-    cull.origin.x,
-    cull.origin.y,
-    cull.size.width,
-    cull.size.height,
-  ] {
+  for value in [cull.origin.x, cull.origin.y] {
+    hasher.update(&value.to_le_bytes());
+  }
+  for value in [cull.size.width, cull.size.height] {
     hasher.update(&value.to_le_bytes());
   }
   glyph_mask(hasher.digest(), render)
@@ -575,8 +597,8 @@ pub(crate) fn cull_bounds(
     .saturating_mul(bottom.saturating_sub(top).max(0) as u64);
 
   if let Some(cull) = cull {
-    if right <= cull.origin.x as i32
-      || bottom <= cull.origin.y as i32
+    if right <= cull.origin.x
+      || bottom <= cull.origin.y
       || left >= cull.right()
       || top >= cull.bottom()
     {
@@ -584,8 +606,8 @@ pub(crate) fn cull_bounds(
     }
 
     if full_pixels > CULL_THRESHOLD_PIXELS {
-      left = left.max((cull.origin.x as i32).saturating_sub(CULL_HALO));
-      top = top.max((cull.origin.y as i32).saturating_sub(CULL_HALO));
+      left = left.max((cull.origin.x).saturating_sub(CULL_HALO));
+      top = top.max((cull.origin.y).saturating_sub(CULL_HALO));
       right = right.min(cull.right().saturating_add(CULL_HALO));
       bottom = bottom.min(cull.bottom().saturating_add(CULL_HALO));
     }
@@ -656,26 +678,26 @@ fn rasterize_mask(
 #[derive(Clone)]
 pub(crate) struct MaskStackEntry {
   pub(crate) mask: Arc<TinyMask>,
-  pub(crate) origin: Point<u32>,
+  pub(crate) origin: Point<i32>,
 }
 
 #[derive(Clone, Copy)]
 pub(crate) struct MaskView<'a> {
   pub(crate) mask: &'a TinyMask,
-  pub(crate) origin: Point<u32>,
-  pub(crate) canvas_origin: Point<u32>,
+  pub(crate) origin: Point<i32>,
+  pub(crate) canvas_origin: Point<i32>,
 }
 
 impl<'a> MaskView<'a> {
   #[inline]
   pub(crate) fn row(&self, canvas_y: i32, canvas_x_start: i32) -> MaskRow<'a> {
-    let local_y = canvas_y + self.canvas_origin.y as i32 - self.origin.y as i32;
+    let local_y = canvas_y + self.canvas_origin.y - self.origin.y;
     let mask_width = self.mask.width() as i32;
     let mask_height = self.mask.height() as i32;
     if local_y < 0 || local_y >= mask_height {
       return MaskRow::EMPTY;
     }
-    let local_x_start = canvas_x_start + self.canvas_origin.x as i32 - self.origin.x as i32;
+    let local_x_start = canvas_x_start + self.canvas_origin.x - self.origin.x;
     let row_offset = local_y as usize * self.mask.width() as usize;
     MaskRow {
       data: self.mask.data(),
@@ -706,8 +728,8 @@ impl<'a> MaskView<'a> {
     )?;
 
     let offset = Point {
-      x: self.canvas_origin.x as i32 - self.origin.x as i32,
-      y: self.canvas_origin.y as i32 - self.origin.y as i32,
+      x: self.canvas_origin.x - self.origin.x,
+      y: self.canvas_origin.y - self.origin.y,
     };
     let src_width = self.mask.width() as i32;
     let src_height = self.mask.height() as i32;
@@ -842,7 +864,7 @@ mod tests {
   #[test]
   fn a_row_covers_only_the_offsets_inside_the_mask() {
     let mask = TinyMask::from_vec((0..12).collect(), IntSize::from_wh(4, 3).unwrap()).unwrap();
-    let view = |x: u32| MaskView {
+    let view = |x: i32| MaskView {
       mask: &mask,
       origin: Point { x, y: 0 },
       canvas_origin: Point { x: 0, y: 0 },
