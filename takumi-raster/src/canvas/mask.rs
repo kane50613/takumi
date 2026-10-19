@@ -54,6 +54,30 @@ impl CanvasViewport {
     }
   }
 
+  /// The pixels the viewport covers.
+  pub(crate) fn bounds(self) -> SceneBounds {
+    SceneBounds {
+      left: self.origin.x,
+      top: self.origin.y,
+      right: self.right(),
+      bottom: self.bottom(),
+    }
+  }
+
+  /// A viewport over the pixels `bounds` covers, or `None` when they cover none.
+  pub(crate) fn covering(bounds: SceneBounds) -> Option<Self> {
+    (!bounds.is_empty()).then(|| Self {
+      origin: Point {
+        x: bounds.left,
+        y: bounds.top,
+      },
+      size: Size {
+        width: bounds.right.abs_diff(bounds.left),
+        height: bounds.bottom.abs_diff(bounds.top),
+      },
+    })
+  }
+
   pub(crate) fn intersects(self, bounds: SceneBounds) -> bool {
     !bounds.is_empty()
       && bounds.right > self.origin.x
@@ -82,8 +106,8 @@ impl CanvasViewport {
 
     Self {
       origin: Point {
-        x: self.origin.x - margin_x as i32,
-        y: self.origin.y - margin_y as i32,
+        x: (self.origin.x - margin_x as i32).max(0),
+        y: (self.origin.y - margin_y as i32).max(0),
       },
       size: Size {
         width: self.size.width.saturating_add(margin_x * 2),

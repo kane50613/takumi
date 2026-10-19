@@ -58,23 +58,34 @@ impl SceneBounds {
   /// The pixels a rectangle of `size` at the origin covers under `transform`.
   pub fn of_rect(size: Size<f32>, transform: Affine) -> Option<Self> {
     let (min_x, min_y, max_x, max_y) = transformed_rect_extents(Point::ZERO, size, transform)?;
-    let left = min_x.floor() as i32;
-    let top = min_y.floor() as i32;
-    let right = max_x.ceil() as i32;
-    let bottom = max_y.ceil() as i32;
-
     // Empty bounds mean "paints nothing"; None means "unknown" and forces full-viewport isolation.
-    Some(Self {
-      left,
-      top,
-      right,
-      bottom,
-    })
+    Some(Self::enclosing(min_x, min_y, max_x, max_y))
   }
 
   /// Whether the bounds enclose zero area.
   pub fn is_empty(self) -> bool {
     self.left >= self.right || self.top >= self.bottom
+  }
+
+  /// The pixels a rectangle from `(left, top)` to `(right, bottom)` touches, as
+  /// `gfx::ToEnclosingRect` rounds it.
+  pub fn enclosing(left: f32, top: f32, right: f32, bottom: f32) -> Self {
+    Self {
+      left: left.floor() as i32,
+      top: top.floor() as i32,
+      right: right.ceil() as i32,
+      bottom: bottom.ceil() as i32,
+    }
+  }
+
+  /// The smallest bounds holding both, as `gfx::Rect::Union` builds them.
+  pub fn union(self, other: Self) -> Self {
+    Self {
+      left: self.left.min(other.left),
+      top: self.top.min(other.top),
+      right: self.right.max(other.right),
+      bottom: self.bottom.max(other.bottom),
+    }
   }
 }
 
@@ -915,12 +926,7 @@ fn merge_bounds(left: Option<SceneBounds>, right: Option<SceneBounds>) -> Option
     // Empty bounds paint nothing, so they never expand the union.
     (Some(left), Some(right)) if left.is_empty() => Some(right),
     (Some(left), Some(right)) if right.is_empty() => Some(left),
-    (Some(left), Some(right)) => Some(SceneBounds {
-      left: left.left.min(right.left),
-      top: left.top.min(right.top),
-      right: left.right.max(right.right),
-      bottom: left.bottom.max(right.bottom),
-    }),
+    (Some(left), Some(right)) => Some(left.union(right)),
     (Some(bounds), None) | (None, Some(bounds)) => Some(bounds),
     (None, None) => None,
   }

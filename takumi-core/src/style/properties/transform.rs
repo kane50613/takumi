@@ -270,6 +270,17 @@ impl Affine {
     )
   }
 
+  /// Skia's `SkMatrix::mapVector`: `(x, y)` under the linear part alone, translation left out.
+  pub fn transform_vector(self, x: f32, y: f32) -> (f32, f32) {
+    (self.a * x + self.c * y, self.b * x + self.d * y)
+  }
+
+  /// cc's `MathUtil::ComputeTransform2dScaleComponents`: how far the transform stretches its x
+  /// and y axes.
+  pub fn scale_components(self) -> (f32, f32) {
+    (self.a.hypot(self.b), self.c.hypot(self.d))
+  }
+
   /// Creates a new skew transform
   pub(crate) fn skew(x: Angle, y: Angle) -> Self {
     let tanx = x.to_radians().tan();

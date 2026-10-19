@@ -63,7 +63,7 @@ pub(crate) fn checked_area(width: u32, height: u32, bytes_per_pixel: u32) -> Opt
 /// or 256 MiB at 4 bytes per pixel.
 const MAX_PIXMAP_PIXELS: u64 = 64 << 20;
 
-fn within_pixmap_pixel_budget(size: Size<u32>) -> bool {
+pub(crate) fn within_pixmap_pixel_budget(size: Size<u32>) -> bool {
   u64::from(size.width) * u64::from(size.height) <= MAX_PIXMAP_PIXELS
 }
 

@@ -5,13 +5,16 @@ use cssparser::{ParseError as CssParseError, Parser, Token, match_ignore_ascii_c
 #[cfg(feature = "svg")]
 use std::{borrow::Cow, sync::Arc};
 
-use crate::style::{
-  Angle, Animatable, Color, CssExpectedMessage, FromCss, Length, ListInterpolationStrategy,
-  MakeComputed, ParseResult, PercentageNumber, SizingContext, TextShadow, ToCss, discrete,
-  tw::TailwindPropertyParser, unexpected_token,
-};
 #[cfg(feature = "svg")]
 use crate::style::{ValueError, properties::filter_reference::FilterReference};
+use crate::{
+  scene::SceneBounds,
+  style::{
+    Affine, Angle, Animatable, Color, CssExpectedMessage, FromCss, Length,
+    ListInterpolationStrategy, MakeComputed, ParseResult, PercentageNumber, SizingContext,
+    TextShadow, ToCss, discrete, tw::TailwindPropertyParser, unexpected_token,
+  },
+};
 
 /// Lookup table for a single 8-bit channel transition.
 pub type TransferTable = [u8; 256];
@@ -123,6 +126,82 @@ impl Filter {
       _ => 0.0,
     }
   }
+}
+
+/// Which way [`Filter::map_bounds`] maps, Skia's `SkImageFilter::MapDirection`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MapDirection {
+  /// From the pixels a filter reads to the ones it writes.
+  Forward,
+  /// From the pixels a filter writes to the ones it reads.
+  Reverse,
+}
+
+impl Filter {
+  /// cc's `FilterOperation::MapRect` and `MapRectReverse`: the device pixels this filter writes
+  /// from `bounds`, or reads to fill them, under `transform` from local to device px.
+  /// Approximate: cc maps in the surface's scaled space and draws that into device space, where
+  /// takumi maps in device space, so a deviation takes the transform's scale components and a
+  /// shadow offset its whole linear part; a reference filter stays unmapped, where cc asks its
+  /// image filter.
+  /// <https://source.chromium.org/chromium/chromium/src/+/main:cc/paint/filter_operation.cc>
+  pub fn map_bounds(
+    &self,
+    bounds: SceneBounds,
+    sizing: &SizingContext,
+    transform: Affine,
+    direction: MapDirection,
+  ) -> SceneBounds {
+    let (scale_x, scale_y) = transform.scale_components();
+    // cc's `MapStdDeviation`: three scaled standard deviations.
+    let spread = |sigma: f32| ((sigma * scale_x * 3.0).abs(), (sigma * scale_y * 3.0).abs());
+    let outset = |(x, y): (f32, f32), (dx, dy): (f32, f32)| {
+      SceneBounds::enclosing(
+        bounds.left as f32 - x + dx,
+        bounds.top as f32 - y + dy,
+        bounds.right as f32 + x + dx,
+        bounds.bottom as f32 + y + dy,
+      )
+    };
+
+    match self {
+      Filter::Blur(radius) => outset(spread(radius.to_px(sizing, 1.0)), (0.0, 0.0)),
+      Filter::DropShadow(shadow) => {
+        let (dx, dy) = transform.transform_vector(
+          shadow.offset_x.to_px(sizing, 1.0),
+          shadow.offset_y.to_px(sizing, 1.0),
+        );
+        let offset = match direction {
+          MapDirection::Forward => (dx, dy),
+          MapDirection::Reverse => (-dx, -dy),
+        };
+
+        outset(spread(shadow.blur_radius.to_px(sizing, 1.0)), offset).union(bounds)
+      }
+      _ => bounds,
+    }
+  }
+}
+
+/// cc's `FilterOperations::ExpandRect`: the pixels `filters` write from `bounds` and those they
+/// read to fill them, each list mapped in order forward and in reverse order back.
+/// <https://source.chromium.org/chromium/chromium/src/+/main:cc/paint/filter_operations.cc>
+pub fn expand_filter_bounds(
+  filters: &[Filter],
+  bounds: SceneBounds,
+  sizing: &SizingContext,
+  transform: Affine,
+) -> SceneBounds {
+  let map =
+    |bounds, filter: &Filter, direction| filter.map_bounds(bounds, sizing, transform, direction);
+  let forward = filters.iter().fold(bounds, |bounds, filter| {
+    map(bounds, filter, MapDirection::Forward)
+  });
+  let reverse = filters.iter().rev().fold(bounds, |bounds, filter| {
+    map(bounds, filter, MapDirection::Reverse)
+  });
+
+  forward.union(reverse)
 }
 
 /// An ordered list of [`Filter`] values.
@@ -425,8 +504,109 @@ impl ToCss for Filter {
 
 #[cfg(test)]
 mod tests {
+  use std::rc::Rc;
+
   use super::*;
-  use crate::style::{Color, ColorInput, FromCssStr, Length::Px};
+  use crate::{
+    geometry::Size,
+    style::{CalcArena, Color, ColorInput, FromCssStr, Length::Px},
+    viewport::Viewport,
+  };
+
+  fn sizing() -> SizingContext {
+    SizingContext {
+      viewport: Viewport::new((200, 100)),
+      container_size: Size::NONE,
+      container_read: Default::default(),
+      font_size: 16.0,
+      root_font_size: None,
+      line_height: 0.0,
+      root_line_height: None,
+      ch: 16.0 / 2.0,
+      calc_arena: Rc::new(CalcArena::default()),
+    }
+  }
+
+  fn rect(left: i32, top: i32, right: i32, bottom: i32) -> SceneBounds {
+    SceneBounds {
+      left,
+      top,
+      right,
+      bottom,
+    }
+  }
+
+  fn map(css: &str, transform: Affine, direction: MapDirection) -> SceneBounds {
+    Filter::from_css_str(css).unwrap().map_bounds(
+      rect(0, 0, 100, 50),
+      &sizing(),
+      transform,
+      direction,
+    )
+  }
+
+  #[test]
+  fn a_blur_reaches_three_scaled_deviations_both_ways() {
+    for direction in [MapDirection::Forward, MapDirection::Reverse] {
+      assert_eq!(
+        map("blur(10px)", Affine::IDENTITY, direction),
+        rect(-30, -30, 130, 80)
+      );
+      assert_eq!(
+        map("blur(10px)", Affine::scale(2.0, 2.0), direction),
+        rect(-60, -60, 160, 110)
+      );
+    }
+  }
+
+  #[test]
+  fn a_rotated_blur_keeps_its_deviation_on_both_axes() {
+    let quarter_turn = Affine {
+      a: 0.0,
+      b: 1.0,
+      c: -1.0,
+      d: 0.0,
+      x: 0.0,
+      y: 0.0,
+    };
+
+    assert_eq!(
+      map("blur(10px)", quarter_turn, MapDirection::Forward),
+      rect(-30, -30, 130, 80)
+    );
+  }
+
+  #[test]
+  fn a_drop_shadow_moves_its_blur_along_the_offset_and_keeps_the_source() {
+    let shadow = "drop-shadow(10px 5px 2px red)";
+
+    assert_eq!(
+      map(shadow, Affine::IDENTITY, MapDirection::Forward),
+      rect(0, -1, 116, 61)
+    );
+    assert_eq!(
+      map(shadow, Affine::IDENTITY, MapDirection::Reverse),
+      rect(-16, -11, 100, 51)
+    );
+  }
+
+  #[test]
+  fn expanding_unites_what_filters_write_and_read() {
+    let filters = Filters::from_css_str("drop-shadow(10px 5px 2px red) grayscale(1)").unwrap();
+
+    assert_eq!(
+      expand_filter_bounds(&filters, rect(0, 0, 100, 50), &sizing(), Affine::IDENTITY),
+      rect(-16, -11, 116, 61)
+    );
+  }
+
+  #[test]
+  fn a_filter_that_moves_no_pixels_keeps_the_bounds() {
+    assert_eq!(
+      map("grayscale(1)", Affine::IDENTITY, MapDirection::Reverse),
+      rect(0, 0, 100, 50)
+    );
+  }
 
   #[test]
   fn test_parse_blur_filter() {

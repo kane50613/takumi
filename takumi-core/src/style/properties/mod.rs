@@ -100,8 +100,8 @@ pub use content::*;
 pub use corner_shape::*;
 use cssparser::{ParseError as CssParseError, Parser, Token, match_ignore_ascii_case};
 pub use filter::{
-  BlurType, Filter, FilterCategory, Filters, LUMA_WEIGHTS, SEPIA_WEIGHTS, TransferChannel,
-  TransferTable,
+  BlurType, Filter, FilterCategory, Filters, LUMA_WEIGHTS, MapDirection, SEPIA_WEIGHTS,
+  TransferChannel, TransferTable, expand_filter_bounds,
 };
 #[cfg(feature = "svg")]
 pub use filter_reference::FilterReference;
