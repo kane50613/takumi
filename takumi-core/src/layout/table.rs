@@ -1125,7 +1125,7 @@ mod tests {
     context::RenderContext,
     geometry::{AvailableSpace, NodeId, Point, Size},
     layout::{
-      node::Node,
+      node::{Node, NodeKind},
       tree::{LayoutResults, NodeOrigin, RenderNode, TablePart},
     },
     resources::font::Fonts,
@@ -1504,6 +1504,23 @@ mod tests {
     );
 
     assert_eq!(ids(&tree), [""]);
+
+    fn texts(node: &RenderNode) -> Vec<String> {
+      let own = node.node.as_ref().and_then(|node| match &node.kind {
+        NodeKind::Text(data) => Some(data.text.to_string()),
+        _ => None,
+      });
+
+      own
+        .into_iter()
+        .chain(node.children.iter().flatten().flat_map(texts))
+        .collect()
+    }
+
+    assert_eq!(
+      texts(&tree.children.as_deref().expect("children")[0]),
+      ["x"]
+    );
   }
 
   fn with_span(node: Node, name: &str, value: &str) -> Node {
