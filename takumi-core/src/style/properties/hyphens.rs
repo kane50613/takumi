@@ -1,4 +1,4 @@
-use std::fmt;
+use std::{fmt, sync::Arc};
 
 use cssparser::{Parser, Token, serialize_string};
 
@@ -35,7 +35,7 @@ pub enum HyphenateCharacter {
   #[default]
   Auto,
   /// This string.
-  String(String),
+  String(Arc<str>),
 }
 
 impl MakeComputed for HyphenateCharacter {}
@@ -49,7 +49,7 @@ impl<'i> FromCss<'i> for HyphenateCharacter {
 
     match &token {
       Token::Ident(ident) if ident.eq_ignore_ascii_case("auto") => Ok(Self::Auto),
-      Token::QuotedString(string) => Ok(Self::String(string.to_string())),
+      Token::QuotedString(string) => Ok(Self::String(string.as_ref().into())),
       _ => Err(location.new_unexpected_token_error(token)),
     }
   }
