@@ -1,0 +1,36 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>text_align_last</title>
+    <base href="../../../" />
+    <link rel="stylesheet" href="takumi/tests/shared.css" />
+    <style>
+      p {
+        display: block;
+        width: 520px;
+        margin: 0;
+        padding: 8px;
+        font-family: Geist;
+        font-size: 24px;
+        background-color: rgb(240, 240, 240);
+      }
+    </style>
+  </head>
+  <body style="width: 600px; height: 380px">
+    <div style="display: flex; flex-direction: column; gap: 12px; padding: 12px">
+      <p style="text-align: justify">
+        Justified lines spread to both edges, while the last line stays at the start.
+      </p>
+      <p style="text-align: justify; text-align-last: justify">
+        Justified lines spread to both edges, and so does the last line here.
+      </p>
+      <p style="text-align: left; text-align-last: right">
+        The lines start at the left, and the last line moves to the right.
+      </p>
+      <p style="text-align: center; text-align-last: start">
+        Centered lines, except the last one, which sits at the start.
+      </p>
+    </div>
+  </body>
+</html>
