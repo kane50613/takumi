@@ -26,7 +26,7 @@ Install these prerequisites:
 
 - Rust 1.91 or newer
 - Bun 1.4
-- The `wasm32-unknown-unknown` target, for the WebAssembly binding: `rustup target add wasm32-unknown-unknown`
+- The `wasm32-unknown-unknown` target, for the WebAssembly binding. Install it with `rustup target add wasm32-unknown-unknown`
 - [`wasm-pack`](https://rustwasm.github.io/wasm-pack/installer/), for building the WebAssembly packages. CI pins version 0.15.0.
 
 Install the workspace dependencies:

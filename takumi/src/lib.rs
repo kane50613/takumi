@@ -55,17 +55,17 @@
 //!
 //! # Feature flags
 //!
-//! - `raster-backend` (default): raster rendering backend.
-//! - `svg-source` (default): SVG image sources in the core and raster backend.
-//! - `svg-backend`: vector SVG output backend (`render_svg`).
-//! - `from-html`: HTML parsing (`from_html`).
-//! - `woff2` (default): WOFF2 font support.
-//! - `woff` (default): WOFF font support.
-//! - `image-decoding` (default): `png`, `jpeg`, `webp` and `gif` together.
-//! - `png`, `jpeg`, `webp`, `gif`: one image source format each. A source whose
+//! - `raster-backend` (default) enables the raster rendering backend.
+//! - `svg-source` (default) enables SVG image sources in the core and raster backend.
+//! - `svg-backend` enables the vector SVG output backend (`render_svg`).
+//! - `from-html` enables HTML parsing (`from_html`).
+//! - `woff2` (default) enables WOFF2 font support.
+//! - `woff` (default) enables WOFF font support.
+//! - `image-decoding` (default) enables `png`, `jpeg`, `webp` and `gif` together.
+//! - `png`, `jpeg`, `webp`, and `gif` each enable one image source format. A source whose
 //!   decoder is off still lays out from its header size.
-//! - `rayon` (default): parallelism in the raster backend; needs `raster-backend`.
-//! - `unstable`: re-export the backend crates with no semver guarantee.
+//! - `rayon` (default) adds parallelism in the raster backend. It needs `raster-backend`.
+//! - `unstable` re-exports the backend crates with no semver guarantee.
 
 /// The curated, stable data structures for building a node tree and configuring a
 /// render.
