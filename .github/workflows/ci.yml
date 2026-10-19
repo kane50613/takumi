@@ -542,7 +542,7 @@ jobs:
           if-no-files-found: error
 
   check-packaging:
-    name: Check packaging (attw + publint)
+    name: Check packaging (attw + publint + types)
     runs-on: ubuntu-slim
     needs:
       [
@@ -607,6 +607,10 @@ jobs:
 
       - name: Check exports with attw and publint
         run: bun publish-lint
+
+      # Bun runs TypeScript without checking it, and declaration builds fall back to `any`.
+      - name: Type-check the packages
+        run: bun run typecheck
 
   build-wasm:
     name: Build @takumi-rs/wasm

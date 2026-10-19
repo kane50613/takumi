@@ -1,11 +1,17 @@
 import { describe, expect, it } from "bun:test";
 import { container, image, text } from "@takumi-rs/helpers";
-import { type PaintTree, type SerializedPaintTree, type TextRun, Painter } from "takumi-paint";
+import {
+  type BoxNode,
+  type PaintTree,
+  type SerializedPaintTree,
+  type TextRun,
+  Painter,
+} from "takumi-paint";
 
 const painter = new Painter();
 
-function box(tree: PaintTree, id: string) {
-  return tree.nodes.find((node) => node.type === "box" && node.element?.id === id);
+function box(tree: PaintTree, id: string): BoxNode | undefined {
+  return tree.nodes.find((node): node is BoxNode => node.type === "box" && node.element?.id === id);
 }
 
 function runs(tree: PaintTree): TextRun[] {
@@ -95,7 +101,9 @@ describe("Painter.paint", () => {
 
     expect([tree.width, tree.height]).toEqual([600, 300]);
     const card = box(tree, "card");
-    expect(card?.drawables.map((drawable) => drawable.role)).toEqual(["background", "border"]);
+    expect(
+      card?.drawables.flatMap((drawable) => (drawable.type === "group" ? [] : [drawable.role])),
+    ).toEqual(["background", "border"]);
     expect(card?.drawables[0]).toMatchObject({
       type: "fill",
       paint: { type: "color", color: [247, 243, 236, 255] },
@@ -180,7 +188,7 @@ describe("Painter.paint", () => {
       "box:behind",
       "text:behind",
     ]);
-    expect(tree.root).toBe(tree.nodes[0]);
+    expect(tree.nodes[0]).toBe(tree.root);
   });
 
   it("keeps a translucent span's opacity on its group, not its colors", async () => {
