@@ -2,7 +2,7 @@ use std::{
   borrow::Cow,
   cell::OnceCell,
   cell::RefCell,
-  collections::{HashSet, hash_map::Entry},
+  collections::{HashMap, HashSet, hash_map::Entry},
   fmt::{self, Debug, Formatter},
   iter::once,
   rc::Rc,
@@ -17,8 +17,9 @@ use parley::{
   BaseDirection, CHROMIUM_LINE_BREAK_OVERRIDE, GenericFamily as ParleyGenericFamily, GlyphRun,
   LayoutContext, TreeBuilder,
   fontique::{
-    Attributes, Blob, Collection, CollectionOptions, FallbackKey, FontInfo, FontInfoOverride,
-    FontStyle, FontWeight, FontWidth, QueryFamily, QueryFont, QueryStatus, Script, ScriptExt,
+    Attributes, Blob, Collection, CollectionOptions, FallbackKey, FamilyId, FontInfo,
+    FontInfoOverride, FontStyle, FontWeight, FontWidth, QueryFamily, QueryFont, QueryStatus,
+    Script, ScriptExt, Synthesis,
   },
 };
 use skrifa::{
@@ -31,9 +32,6 @@ use skrifa::{
 };
 use thiserror::Error;
 use xxhash_rust::xxh3::{Xxh3, xxh3_64};
-
-#[cfg(feature = "paint-tree")]
-use std::collections::HashMap;
 
 #[cfg(feature = "svg")]
 use crate::resvg::usvg::fontdb::Database;
@@ -204,6 +202,21 @@ fn has_color_table(font: &FontRef) -> bool {
     || (font.table_data(CBDT).is_some() && font.table_data(CBLC).is_some())
 }
 
+/// A face's width, style, and weight, which font matching ranks.
+type FaceAttributes = (FontWidth, FontStyle, FontWeight);
+
+/// A face font matching picked, before it takes a size: what Blink makes `FontPlatformData` from.
+#[derive(Clone, Debug)]
+pub(crate) struct MatchedFace {
+  pub(crate) blob: Blob<u8>,
+  pub(crate) index: u32,
+  pub(crate) synthesis: Synthesis,
+  /// The face's `unicode-range`, or `None` for every codepoint.
+  pub(crate) unicode_range: Option<UnicodeRangeSet>,
+  /// Whether the face's family has a color glyph table.
+  pub(crate) is_color: bool,
+}
+
 /// The registry of fonts available to a renderer.
 ///
 /// Registering and unregistering are the only mutations; between them the assembled parley
@@ -213,9 +226,8 @@ fn has_color_table(font: &FontRef) -> bool {
 #[derive(Clone)]
 pub struct Fonts {
   inner: parley::FontContext,
-  /// Blob ids of faces whose `unicode-range` leaves out U+0020, which Blink never picks as a
-  /// primary font.
-  space_outside_range: Arc<HashSet<u64>>,
+  /// The `unicode-range` of every face registered with one, by font blob id.
+  unicode_ranges: Arc<HashMap<u64, UnicodeRangeSet>>,
   /// Every registered family name in registration order. The fallback bucket is built from
   /// this so its per-script priority is deterministic; `fontique`'s `family_names()` iterates
   /// a `HashMap` (hash order), which would otherwise make font selection vary per render.
@@ -247,7 +259,7 @@ impl Default for Fonts {
         }),
         source_cache: Default::default(),
       },
-      space_outside_range: Arc::new(HashSet::new()),
+      unicode_ranges: Arc::new(HashMap::new()),
       order: Vec::new(),
       last_resort_order: Vec::new(),
       color_names: HashSet::new(),
@@ -403,6 +415,103 @@ pub(crate) fn run_variations(run: &GlyphRun<'_, InlineBrush>) -> Vec<([u8; 4], f
 }
 
 impl Fonts {
+  /// The faces each of `families` resolves to, as Blink's `FontFallbackList` takes them: every
+  /// face of the family matching `attributes` best, several when `unicode-range` splits it.
+  /// fontique then offers the family's default face for coverage, which Blink does not, so it is
+  /// left out.
+  pub(crate) fn font_group<'a>(
+    &mut self,
+    families: impl IntoIterator<Item = QueryFamily<'a>>,
+    attributes: Attributes,
+  ) -> Vec<Vec<MatchedFace>> {
+    let fonts = self.query_fonts(families, None, attributes);
+    let mut group: Vec<Vec<MatchedFace>> = Vec::new();
+    let mut current: Option<(FamilyId, Option<FaceAttributes>)> = None;
+
+    for font in fonts {
+      let attributes = self.font_attributes(font.family);
+
+      match &current {
+        Some((family, best)) if *family == font.family.0 => {
+          if attributes != *best {
+            continue;
+          }
+        }
+        _ => {
+          current = Some((font.family.0, attributes));
+          group.push(Vec::new());
+        }
+      }
+
+      let face = self.matched_face(&font);
+
+      if let Some(faces) = group.last_mut() {
+        faces.push(face);
+      }
+    }
+
+    group
+  }
+
+  /// The faces system font fallback picks from: every registered family in fallback order, the
+  /// last-resort families last, each by its best match for `attributes`.
+  pub(crate) fn fallback_bucket(&mut self, attributes: Attributes) -> Vec<MatchedFace> {
+    let fonts = self.query_fonts(
+      [],
+      Some(FallbackKey::new(Script::from_bytes(*b"Latn"), None)),
+      attributes,
+    );
+
+    fonts.iter().map(|font| self.matched_face(font)).collect()
+  }
+
+  fn query_fonts<'a>(
+    &mut self,
+    families: impl IntoIterator<Item = QueryFamily<'a>>,
+    fallbacks: Option<FallbackKey>,
+    attributes: Attributes,
+  ) -> Vec<QueryFont> {
+    let mut fonts = Vec::new();
+    let mut query = self.inner.collection.query(&mut self.inner.source_cache);
+
+    query.set_families(families);
+
+    if let Some(fallbacks) = fallbacks {
+      query.set_fallbacks(fallbacks);
+    }
+
+    query.set_attributes(attributes);
+    query.matches_with(|font| {
+      fonts.push(font.clone());
+      QueryStatus::Continue
+    });
+
+    fonts
+  }
+
+  fn font_attributes(&mut self, (family, index): (FamilyId, usize)) -> Option<FaceAttributes> {
+    let family = self.inner.collection.family(family)?;
+    let font = family.fonts().get(index)?;
+
+    Some((font.width(), font.style(), font.weight()))
+  }
+
+  fn matched_face(&mut self, font: &QueryFont) -> MatchedFace {
+    let is_color = self
+      .inner
+      .collection
+      .family_name(font.family.0)
+      .is_some_and(|name| self.color_names.contains(name));
+
+    MatchedFace {
+      blob: font.blob.clone(),
+      index: font.index,
+      synthesis: font.synthesis,
+      unicode_range: self.unicode_ranges.get(&font.blob.id()).cloned(),
+      is_color,
+    }
+  }
+
   /// Face store for SVG `<text>` conversion, sharing this collection's font bytes.
   #[cfg(feature = "svg")]
   pub(crate) fn svg_fontdb(&mut self) -> Arc<Database> {
@@ -555,7 +664,7 @@ impl Fonts {
     FontsSnapshot {
       context: Rc::new(RefCell::new(Self {
         inner: cloned,
-        space_outside_range: self.space_outside_range.clone(),
+        unicode_ranges: self.unicode_ranges.clone(),
         order: self.order.clone(),
         last_resort_order: self.last_resort_order.clone(),
         color_names: self.color_names.clone(),
@@ -638,8 +747,8 @@ impl Fonts {
 
     let blob = unicode_range.restrict_blob(source.into_blob()?);
 
-    if !unicode_range.contains(u32::from(' ')) {
-      Arc::make_mut(&mut self.space_outside_range).insert(blob.id());
+    if !unicode_range.is_entire_range() {
+      Arc::make_mut(&mut self.unicode_ranges).insert(blob.id(), unicode_range);
     }
 
     let axes = info_override.as_ref().map(FontOverride::resolved_axes);
@@ -918,7 +1027,7 @@ impl RenderContext {
     mut visit: impl FnMut(&QueryFont, bool) -> QueryStatus,
   ) {
     self.fonts().with_context(|fonts| {
-      let space_outside_range = fonts.space_outside_range.clone();
+      let unicode_ranges = fonts.unicode_ranges.clone();
       let mut query = fonts.inner.collection.query(&mut fonts.inner.source_cache);
 
       query.set_families(families);
@@ -926,7 +1035,13 @@ impl RenderContext {
       // shapes with the fallback bucket, which carries one family order for every script.
       query.set_fallbacks(FallbackKey::new(Script::from_bytes(*b"Latn"), None));
       query.set_attributes(attributes);
-      query.matches_with(|font| visit(font, space_outside_range.contains(&font.blob.id())));
+      query.matches_with(|font| {
+        let space_outside_range = unicode_ranges
+          .get(&font.blob.id())
+          .is_some_and(|range| !range.contains(u32::from(' ')));
+
+        visit(font, space_outside_range)
+      });
     });
   }
 
@@ -1498,7 +1613,7 @@ mod tests {
     }
 
     assert_eq!(fonts.order, vec!["Logical".to_string()]);
-    assert_eq!(fonts.space_outside_range.len(), 2);
+    assert_eq!(fonts.unicode_ranges.len(), 2);
   }
 
   #[test]

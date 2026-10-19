@@ -15,3 +15,10 @@ pub(crate) enum FontFallbackPriority {
   /// Emoji in emoji presentation by variation selector 16.
   EmojiEmojiWithVs,
 }
+
+impl FontFallbackPriority {
+  /// Blink's `IsNonTextFallbackPriority`.
+  pub(crate) fn is_non_text(self) -> bool {
+    self != Self::Text
+  }
+}

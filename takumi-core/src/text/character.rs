@@ -2,12 +2,15 @@
 
 use icu_properties::{
   CodePointMapData, CodePointSetData,
-  props::{Emoji, EmojiModifierBase, EmojiPresentation, ExtendedPictographic, GeneralCategory},
+  props::{
+    Emoji, EmojiModifierBase, EmojiPresentation, ExtendedPictographic, GeneralCategory, Script,
+  },
 };
 
 pub(crate) const ZERO_WIDTH_JOINER: char = '\u{200D}';
 pub(crate) const COMBINING_ENCLOSING_CIRCLE_BACKSLASH: char = '\u{20E0}';
 pub(crate) const COMBINING_ENCLOSING_KEYCAP: char = '\u{20E3}';
+pub(crate) const IDEOGRAPHIC_SPACE: char = '\u{3000}';
 pub(crate) const LEFT_CORNER_BRACKET: char = '\u{300C}';
 pub(crate) const VARIATION_SELECTOR_15: char = '\u{FE0E}';
 pub(crate) const VARIATION_SELECTOR_16: char = '\u{FE0F}';
@@ -82,4 +85,39 @@ pub(crate) fn maybe_emoji_presentation(c: char) -> bool {
     || c == '\u{3299}'
     || c == VARIATION_SELECTOR_16
     || u32::from(c) >= 0x10000
+}
+
+/// Blink's `HasLikelyScript`.
+pub(crate) fn has_likely_script(c: char) -> bool {
+  let mut script = CodePointMapData::<Script>::new().get(c);
+
+  if matches!(script, Script::Inherited | Script::Common) {
+    script = get_script_based_on_unicode_block(c);
+  }
+
+  !matches!(script, Script::Common | Script::Inherited)
+}
+
+/// Blink's `GetScriptBasedOnUnicodeBlock`.
+fn get_script_based_on_unicode_block(c: char) -> Script {
+  match u32::from(c) {
+    0x3000..=0x303F => Script::Han,
+    0x3040..=0x30FF => Script::KatakanaOrHiragana,
+    0x0E00..=0x0E7F => Script::Thai,
+    0x0370..=0x03FF => Script::Greek,
+    0x0900..=0x097F => Script::Devanagari,
+    0x0530..=0x058F => Script::Armenian,
+    0x10A0..=0x10FF => Script::Georgian,
+    0x0C80..=0x0CFF => Script::Kannada,
+    0x10330..=0x1034F => Script::Gothic,
+    _ => Script::Common,
+  }
+}
+
+/// Blink's `IsCommonOrInheritedScript`.
+pub(crate) fn is_common_or_inherited_script(c: char) -> bool {
+  matches!(
+    CodePointMapData::<Script>::new().get(c),
+    Script::Common | Script::Inherited
+  )
 }
