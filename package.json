@@ -20,7 +20,8 @@
     "tegami": "bun scripts/tegami.mts",
     "knip": "knip-bun --no-config-hints",
     "postinstall": "lefthook install",
-    "publish-lint": "bun --filter '*' publish-lint"
+    "publish-lint": "bun --filter '*' publish-lint",
+    "typecheck": "bun --filter '@takumi-rs/*' --filter 'takumi-*' typecheck"
   },
   "devDependencies": {
     "@arethetypeswrong/cli": "0.18.5",

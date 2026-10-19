@@ -32,7 +32,8 @@
   },
   "scripts": {
     "build": "tsdown",
-    "publish-lint": "attw --pack . && publint --strict ."
+    "publish-lint": "attw --pack . && publint --strict .",
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "takumi-js": "workspace:*"
