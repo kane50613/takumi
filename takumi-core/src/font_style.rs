@@ -22,7 +22,7 @@ use crate::{
   geometry::Size,
   layout::inline::{InlineBrush, TextScale},
   layout_unit::LayoutUnit,
-  resources::font::FontClasses,
+  resources::font::{FontClasses, PrimaryFontMetrics},
   shadow::SizedShadow,
   style::{
     AppliedTextDecorations, Color, ComputedStyle, Display, FontFamily, FontFeature, FontSynthesis,
@@ -539,6 +539,15 @@ impl BoxLineHeight {
         },
         _ => Self::Normal,
       },
+    }
+  }
+
+  /// Blink's `ComputedLineHeightAsFixed` against a primary font of `metrics`.
+  pub(crate) fn computed_as_fixed(self, metrics: Option<PrimaryFontMetrics>) -> LayoutUnit {
+    match self {
+      Self::Length(line_height) => line_height,
+      Self::Normal => metrics.map_or(LayoutUnit::ZERO, PrimaryFontMetrics::fixed_line_spacing),
+      Self::Number { value, font_size } => number_line_height(value, font_size),
     }
   }
 

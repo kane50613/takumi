@@ -6,7 +6,7 @@ use super::{
   font_description::FontDescription, font_fallback_list::FontFallbackList,
   simple_font_data::SimpleFontData,
 };
-use crate::resources::font::Fonts;
+use crate::resources::font::{Fonts, PrimaryFontMetrics};
 
 /// A font as shaping takes it.
 pub(crate) struct Font {
@@ -27,6 +27,13 @@ impl Font {
   /// Blink's `PrimaryFont`.
   pub(crate) fn primary_font(&self) -> Option<Rc<SimpleFontData>> {
     self.fallback_list.primary_simple_font_data()
+  }
+
+  /// Blink's `PrimaryFont()->GetFontMetrics()`.
+  pub(crate) fn primary_font_metrics(&self) -> Option<PrimaryFontMetrics> {
+    self
+      .primary_font()
+      .and_then(|font_data| font_data.font_metrics())
   }
 
   /// Blink's `PrimaryFontForTabSize`.

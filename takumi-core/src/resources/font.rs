@@ -38,7 +38,9 @@ use crate::resvg::usvg::fontdb::Database;
 use crate::{
   context::RenderContext,
   font_style::{ExpandedFontFamily, SizedFontStyle},
+  fonts::font_height::FontHeight,
   layout::inline::{InlineBrush, InlineLayout},
+  layout_unit::LayoutUnit,
   resources::{
     glyph::{BOLD_THRESHOLD, GlyphResolveContext, ResolvedGlyphs, synthesis_embolden_strength},
     glyph_cache::resolved_glyph,
@@ -934,6 +936,56 @@ pub(crate) struct ExactFontMetrics {
 }
 
 impl PrimaryFontMetrics {
+  /// The metrics of `font_ref` at `font_size` and `location`, rounded as Blink's
+  /// `SimpleFontData::PlatformInit` rounds Skia's.
+  pub(crate) fn of(font_ref: &FontRef, font_size: f32, location: LocationRef<'_>) -> Self {
+    let metrics = font_ref.metrics(Size::new(font_size), location);
+
+    Self {
+      ascent: metrics.ascent.round(),
+      descent: metrics.descent.abs().round(),
+      line_gap: metrics.leading.round(),
+      x_height: metrics.x_height,
+      exact: ExactFontMetrics {
+        ascent: metrics.ascent,
+        descent: metrics.descent.abs(),
+        line_gap: metrics.leading,
+      },
+      underline: metrics.underline.map(|underline| FontUnderline {
+        position: -underline.offset,
+        thickness: underline.thickness,
+      }),
+      em_descent: em_box_descent(
+        Some(font_ref),
+        font_size,
+        metrics.ascent,
+        metrics.descent.abs(),
+      ),
+    }
+  }
+
+  /// Blink's `FontMetrics::GetFontHeight` at the alphabetic baseline: the whole-pixel ascent and
+  /// descent.
+  pub(crate) fn font_height(self) -> FontHeight {
+    FontHeight::new(
+      LayoutUnit::from_float(self.ascent),
+      LayoutUnit::from_float(self.descent),
+    )
+  }
+
+  /// Blink's `FontMetrics::GetFloatFontHeight`: the ascent and descent in the nearest layout units.
+  pub(crate) fn float_font_height(self) -> FontHeight {
+    FontHeight::new(
+      LayoutUnit::from_float_round(self.exact.ascent),
+      LayoutUnit::from_float_round(self.exact.descent),
+    )
+  }
+
+  /// Blink's `FontMetrics::FixedLineSpacing`.
+  pub(crate) fn fixed_line_spacing(self) -> LayoutUnit {
+    LayoutUnit::from_float_round(self.line_spacing())
+  }
+
   /// The `line-height: normal` these metrics give, as Blink's `FontMetrics::SetLineSpacing`.
   pub(crate) fn line_spacing(self) -> f32 {
     self.ascent + self.descent + self.line_gap
@@ -951,29 +1003,7 @@ impl RenderContext {
     font_size: f32,
   ) -> Option<PrimaryFontMetrics> {
     self.with_primary_font(families, attributes, |font_ref| {
-      let metrics = font_ref.metrics(Size::new(font_size), LocationRef::default());
-
-      PrimaryFontMetrics {
-        ascent: metrics.ascent.round(),
-        descent: metrics.descent.abs().round(),
-        line_gap: metrics.leading.round(),
-        x_height: metrics.x_height,
-        exact: ExactFontMetrics {
-          ascent: metrics.ascent,
-          descent: metrics.descent.abs(),
-          line_gap: metrics.leading,
-        },
-        underline: metrics.underline.map(|underline| FontUnderline {
-          position: -underline.offset,
-          thickness: underline.thickness,
-        }),
-        em_descent: em_box_descent(
-          Some(font_ref),
-          font_size,
-          metrics.ascent,
-          metrics.descent.abs(),
-        ),
-      }
+      PrimaryFontMetrics::of(font_ref, font_size, LocationRef::default())
     })
   }
 

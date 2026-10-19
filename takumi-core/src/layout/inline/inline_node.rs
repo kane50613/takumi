@@ -557,23 +557,19 @@ impl RenderNode {
 
 #[cfg(test)]
 mod tests {
-  use std::sync::Arc;
-
   use crate::{
-    context::RenderContext,
-    fonts::shaping::testing::{GEIST, register},
+    fonts::shaping::testing::GEIST,
     layout::{
       inline::{
         inline_item::{InlineItem, InlineItemType, LayoutObject},
         inline_node::InlineNode,
         inline_node_data::InlineNodeData,
+        testing::render_root,
       },
       node::Node,
       tree::RenderNode,
     },
-    resources::font::Fonts,
-    style::{Direction as TextDirection, SizingContext, StyleSheet},
-    viewport::Viewport,
+    style::Direction as TextDirection,
   };
 
   use InlineItemType::*;
@@ -584,23 +580,7 @@ mod tests {
     .list { list-style-type: disc } .item { display: list-item }";
 
   fn render_tree(root: Node, css: &str) -> RenderNode {
-    let mut fonts = Fonts::default();
-
-    register(&mut fonts, GEIST, "Geist");
-
-    let context = RenderContext::builder()
-      .fonts(fonts.snapshot())
-      .sizing(
-        SizingContext::builder()
-          .viewport(Viewport::default())
-          .build(),
-      )
-      .stylesheet(Arc::new(
-        StyleSheet::parse(&format!("{CSS} {css}")).expect("stylesheet parses"),
-      ))
-      .build();
-
-    RenderNode::from_node(&context, root)
+    render_root(GEIST, "Geist", root, &format!("{CSS} {css}"))
   }
 
   /// The text content and each item's type and text.

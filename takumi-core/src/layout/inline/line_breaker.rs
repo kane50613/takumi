@@ -3335,85 +3335,22 @@ impl<'a, 'b, 'c> LineBreaker<'a, 'b, 'c> {
 
 #[cfg(test)]
 mod tests {
-  use std::sync::Arc;
-
-  use super::{AtomicInlineLayout, LineBreaker, LineBreakerMode, WhitespaceState};
+  use super::{LineBreaker, LineBreakerMode, WhitespaceState};
   use crate::{
-    context::RenderContext,
-    fonts::shaping::testing::{GEIST_MONO, register},
-    geometry::{AvailableSpace, Size},
     layout::{
       constraint_space::ConstraintSpace,
       exclusions::{exclusion_space::ExclusionSpace, layout_opportunity::LineLayoutOpportunity},
       inline::{
-        inline_item::InlineItemType, inline_item_result::LayoutResult, inline_node::InlineNode,
+        inline_item::InlineItemType,
+        inline_node::InlineNode,
         line_info::LineInfo,
+        testing::{TestAtomicInline, render_tree, span},
       },
       node::Node,
       tree::RenderNode,
     },
     layout_unit::LayoutUnit,
-    resources::font::Fonts,
-    style::{SizingContext, StyleSheet},
-    viewport::Viewport,
   };
-
-  /// Blink's tests lay out with Ahem, whose glyphs are 1em wide; Geist Mono's are 0.6em, so their
-  /// widths here are Blink's times 0.6.
-  const CSS: &str = ".container { display: block; font-size: 10px; font-family: 'Geist Mono'; line-height: 1 } \
-    .span { display: inline } .atomic { display: inline-block; width: 18px; height: 10px }";
-
-  struct TestAtomicInline;
-
-  impl<'c> AtomicInlineLayout<'c> for TestAtomicInline {
-    fn layout(&mut self, node: &'c RenderNode) -> LayoutResult {
-      let size = node
-        .measure_inline_box(Size {
-          width: AvailableSpace::MaxContent,
-          height: AvailableSpace::MaxContent,
-        })
-        .size;
-
-      LayoutResult {
-        inline_size: LayoutUnit::from_float(size.width),
-        block_size: LayoutUnit::from_float(size.height),
-        baseline: None,
-      }
-    }
-
-    fn min_max_sizes(&mut self, node: &'c RenderNode) -> (LayoutUnit, LayoutUnit) {
-      let width = self.layout(node).inline_size;
-
-      (width, width)
-    }
-  }
-
-  fn render_tree(children: impl Into<Vec<Node>>, css: &str) -> RenderNode {
-    let mut fonts = Fonts::default();
-
-    register(&mut fonts, GEIST_MONO, "Geist Mono");
-
-    let context = RenderContext::builder()
-      .fonts(fonts.snapshot())
-      .sizing(
-        SizingContext::builder()
-          .viewport(Viewport::default())
-          .build(),
-      )
-      .stylesheet(Arc::new(
-        StyleSheet::parse(&format!("{CSS} {css}")).expect("stylesheet parses"),
-      ))
-      .build();
-
-    RenderNode::from_node(
-      &context,
-      Node::container(children).with_class_name("container"),
-    )
-  }
-
-  fn span(text: &str) -> Node {
-    Node::text(text).with_class_name("span")
-  }
 
   /// What Blink's `BreakLines` records.
   struct BrokenLines {
@@ -3445,7 +3382,10 @@ mod tests {
         node,
         &data,
         LineBreakerMode::Content,
-        ConstraintSpace::new(Some(available_width)),
+        ConstraintSpace::new(
+          Some(available_width),
+          block.context.style.inherited_data.direction,
+        ),
         LineLayoutOpportunity::new(available_width),
         break_token,
         &mut atomic_inline,

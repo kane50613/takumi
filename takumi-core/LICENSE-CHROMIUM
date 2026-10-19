@@ -133,7 +133,14 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
    src/layout/inline/line_break_point.rs, `InlineItemTextIndex` in
    src/layout/inline/inline_item_text_index.rs, the exclusions in
    src/layout/exclusions/, `BfcOffset` and `BfcRect` in src/layout/bfc_rect.rs,
-   the float placement in src/layout/floats_utils.rs, and the `white-space` predicates in
+   the float placement in src/layout/floats_utils.rs, `InlineBoxState` and
+   `InlineLayoutStateStack` in src/layout/inline/inline_box_state.rs,
+   `LogicalLineBuilder` in src/layout/inline/logical_line_builder.rs,
+   `LogicalLineItem` in src/layout/inline/logical_line_item.rs, `FontHeight` in
+   src/fonts/font_height.rs, `compute_relative_offset_for_inline` in
+   src/layout/relative_utils.rs, the logical geometry in
+   src/layout/logical_rect.rs, `LayoutResult::baseline_metrics` in
+   src/layout/inline/inline_item_result.rs, and the `white-space` predicates in
    src/style/properties/mod.rs and src/style/properties/text_wrap.rs, from
    third_party/blink/renderer/core/layout/inline/inline_item.cc,
    third_party/blink/renderer/core/layout/inline/inline_items_builder.cc,
@@ -156,7 +163,14 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
    third_party/blink/renderer/core/layout/geometry/bfc_rect.h,
    third_party/blink/renderer/core/layout/floats_utils.cc,
    third_party/blink/renderer/core/layout/unpositioned_float.h,
-   third_party/blink/renderer/core/layout/positioned_float.h, and
+   third_party/blink/renderer/core/layout/positioned_float.h,
+   third_party/blink/renderer/core/layout/inline/logical_line_builder.cc,
+   third_party/blink/renderer/core/layout/inline/logical_line_item.cc,
+   third_party/blink/renderer/core/layout/inline/inline_items_data.cc,
+   third_party/blink/renderer/platform/fonts/font_height.h,
+   third_party/blink/renderer/core/layout/relative_utils.cc,
+   third_party/blink/renderer/core/layout/geometry/logical_rect.h,
+   third_party/blink/renderer/core/layout/logical_box_fragment.cc, and
    third_party/blink/renderer/core/css/white_space.h.
 
 Copyright 2014, 2015, 2016, 2017, 2018, 2019, 2020, 2023, 2024, 2025 The Chromium Authors

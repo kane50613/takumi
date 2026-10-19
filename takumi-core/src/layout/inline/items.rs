@@ -4,7 +4,10 @@ use crate::{
   context::RenderContext,
   font_style::{BoxLineHeight, SizedFontStyle},
   geometry::{ComputedLayout, Point, Rect, Size},
-  layout::{border::BorderProperties, node::Node, tree::RenderNode},
+  layout::{
+    border::BorderProperties, node::Node, relative_utils::compute_relative_offset_for_inline,
+    tree::RenderNode,
+  },
   style::{
     Color, Direction, Display, Float, Length, Position, ResolvedVerticalAlign, Sides,
     SizingContext, SpacePair, WhiteSpaceCollapse,
@@ -96,37 +99,9 @@ impl LineSpace {
     }
   }
 
-  /// Blink's `ComputeRelativeOffsetForInline`: how far `position: relative` moves the
-  /// inline-level `node` on these lines, its start inset winning when both horizontal ones are
-  /// set. A percentage inset against an indefinite size counts as `auto`.
-  /// <https://source.chromium.org/chromium/chromium/src/+/main:third_party/blink/renderer/core/layout/relative_utils.cc>
+  /// Blink's `ComputeRelativeOffsetForInline` for `node` on these lines.
   pub(crate) fn relative_offset(self, node: &RenderNode) -> Point<f32> {
-    let style = &node.context.style;
-
-    if style.base_data.position != Position::Relative {
-      return Point::ZERO;
-    }
-
-    let inset = |length: Length, basis: Option<f32>| match (length, basis) {
-      (Length::Auto, _) => None,
-      (length, None) if length.has_percentage() => None,
-      (length, basis) => Some(length.to_px(&node.context.sizing, basis.unwrap_or(0.0))),
-    };
-    let surround = &style.surround_data;
-    let (left, right) = (
-      inset(surround.left, self.inline_size),
-      inset(surround.right, self.inline_size),
-    );
-    let x = match (left, right, self.direction) {
-      (Some(left), _, Direction::Ltr) | (Some(left), None, Direction::Rtl) => left,
-      (_, Some(right), _) => -right,
-      (None, None, _) => 0.0,
-    };
-    let y = inset(surround.top, self.block_size)
-      .or_else(|| inset(surround.bottom, self.block_size).map(|bottom| -bottom))
-      .unwrap_or(0.0);
-
-    Point { x, y }
+    compute_relative_offset_for_inline(node, self.direction, self.inline_size, self.block_size)
   }
 }
 

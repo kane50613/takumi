@@ -11,8 +11,12 @@ use super::{
 };
 use crate::{
   context::RenderContext,
-  fonts::shaping::{
-    harfbuzz_shaper::HarfBuzzShaper, shape_result::ShapeResult, shape_result_view::ShapeResultView,
+  fonts::{
+    font_height::FontHeight,
+    shaping::{
+      harfbuzz_shaper::HarfBuzzShaper, shape_result::ShapeResult,
+      shape_result_view::ShapeResultView,
+    },
   },
   geometry::Rect,
   layout::{exclusions::exclusion_space::ExclusionSpace, floats_utils::PositionedFloat},
@@ -68,6 +72,23 @@ pub(crate) struct LayoutResult {
   pub(crate) block_size: LayoutUnit,
   /// The baseline below the border box's block start, if it has one.
   pub(crate) baseline: Option<LayoutUnit>,
+}
+
+impl LayoutResult {
+  /// Blink's `LogicalBoxFragment::BaselineMetrics` for the alphabetic baseline: the margin box
+  /// around the baseline, synthesized at the margin box's bottom without one.
+  pub(crate) fn baseline_metrics(&self, margins: &LineBoxStrut) -> FontHeight {
+    match self.baseline {
+      Some(baseline) => FontHeight::new(
+        baseline + margins.line_over,
+        self.block_size - baseline + margins.line_under,
+      ),
+      None => FontHeight::new(
+        self.block_size + margins.line_over + margins.line_under,
+        LayoutUnit::ZERO,
+      ),
+    }
+  }
 }
 
 /// Blink's `HyphenResult`: the shaped hyphen a hyphenated line ends with.
