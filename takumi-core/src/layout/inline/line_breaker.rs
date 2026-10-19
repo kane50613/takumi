@@ -778,7 +778,14 @@ impl<'a, 'b, 'c> LineBreaker<'a, 'b, 'c> {
 
     // The line starts in the style the last one ended with, or the block's.
     self.override_break_anywhere = false;
-    self.disable_score_line_break = false;
+    self.disable_score_line_break = self.auto_wrap
+      && self.current_style.is_some_and(|context| {
+        context
+          .style
+          .inherited_data
+          .white_space_collapse
+          .should_break_spaces()
+      });
     self.disable_bisect_line_break = false;
 
     if self.current_style.is_none() {
