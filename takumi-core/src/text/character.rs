@@ -39,12 +39,12 @@ pub(crate) fn is_emoji(c: char) -> bool {
 }
 
 /// Blink's `IsEmojiTextDefault`.
-pub(crate) fn is_emoji_text_default(c: char) -> bool {
-  is_emoji(c) && !is_emoji_emoji_default(c)
+pub(crate) fn defaults_to_text_presentation(c: char) -> bool {
+  is_emoji(c) && !defaults_to_emoji_presentation(c)
 }
 
 /// Blink's `IsEmojiEmojiDefault`.
-pub(crate) fn is_emoji_emoji_default(c: char) -> bool {
+pub(crate) fn defaults_to_emoji_presentation(c: char) -> bool {
   CodePointSetData::new::<EmojiPresentation>().contains(c)
 }
 

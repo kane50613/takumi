@@ -176,7 +176,7 @@ mod tests {
       (
         "\u{1F331}\u{1F332}\u{1F333}\u{1F334}",
         Script::Devanagari,
-        FontFallbackPriority::EmojiEmoji,
+        FontFallbackPriority::Emoji,
       ),
       (
         "\u{767E}\u{5BB6}\u{59D3}",
@@ -186,7 +186,7 @@ mod tests {
       (
         "\u{1F331}\u{1F332}",
         Script::Han,
-        FontFallbackPriority::EmojiEmoji,
+        FontFallbackPriority::Emoji,
       ),
     ]);
   }
@@ -260,13 +260,13 @@ mod tests {
       (
         "\u{1F469}\u{200D}\u{1F469}\u{200D}\u{1F467}\u{200D}\u{1F466}\u{1F469}\u{200D}\u{2764}\u{FE0F}\u{200D}\u{1F48B}\u{200D}\u{1F468}",
         Script::Latin,
-        FontFallbackPriority::EmojiEmoji,
+        FontFallbackPriority::Emoji,
       ),
       ("abcd", Script::Latin, FontFallbackPriority::Text),
       (
         "\u{1F469}\u{200D}\u{1F469}",
         Script::Latin,
-        FontFallbackPriority::EmojiEmoji,
+        FontFallbackPriority::Emoji,
       ),
       (
         "\u{200D}\u{200D}efg",
@@ -281,7 +281,7 @@ mod tests {
     check_runs(&[(
       "\u{1F469}\u{200D}\u{1F469}\u{200D}\u{1F467}\u{200D}\u{1F466}\u{1F469}\u{200D}\u{2764}\u{FE0F}\u{200D}\u{1F48B}\u{200D}\u{1F468}",
       Script::Common,
-      FontFallbackPriority::EmojiEmoji,
+      FontFallbackPriority::Emoji,
     )]);
   }
 
@@ -316,7 +316,7 @@ mod tests {
     check_runs(&[(
       "\u{26F9}\u{1F3FB}\u{270D}\u{1F3FB}\u{270A}\u{1F3FC}",
       Script::Common,
-      FontFallbackPriority::EmojiEmoji,
+      FontFallbackPriority::Emoji,
     )]);
   }
 
@@ -346,7 +346,7 @@ mod tests {
     check_runs(&[(
       "\u{1F3F4}\u{E0067}\u{E0062}\u{E0077}\u{E006C}\u{E0073}\u{E007F}\u{1F3F4}\u{E0067}\u{E0062}\u{E0073}\u{E0063}\u{E0074}\u{E007F}\u{1F3F4}\u{E0067}\u{E0062}\u{E0065}\u{E006E}\u{E0067}\u{E007F}",
       Script::Common,
-      FontFallbackPriority::EmojiEmoji,
+      FontFallbackPriority::Emoji,
     )]);
   }
 

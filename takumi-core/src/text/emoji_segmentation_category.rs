@@ -3,8 +3,8 @@
 use super::character::{
   CANCEL_TAG, COMBINING_ENCLOSING_CIRCLE_BACKSLASH, COMBINING_ENCLOSING_KEYCAP,
   VARIATION_SELECTOR_15, VARIATION_SELECTOR_16, WAVING_BLACK_FLAG, ZERO_WIDTH_JOINER,
-  is_emoji_emoji_default, is_emoji_including_reserved, is_emoji_keycap_base,
-  is_emoji_modifier_base, is_emoji_tag_sequence, is_emoji_text_default, is_modifier,
+  defaults_to_emoji_presentation, defaults_to_text_presentation, is_emoji_including_reserved,
+  is_emoji_keycap_base, is_emoji_modifier_base, is_emoji_tag_sequence, is_modifier,
   is_regional_indicator,
 };
 
@@ -12,8 +12,8 @@ use super::character::{
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum EmojiSegmentationCategory {
   Emoji,
-  EmojiTextPresentation,
-  EmojiEmojiPresentation,
+  TextPresentation,
+  EmojiPresentation,
   EmojiModifierBase,
   EmojiModifier,
   RegionalIndicator,
@@ -27,7 +27,7 @@ pub(crate) enum EmojiSegmentationCategory {
   TagSequence,
   TagTerm,
   /// Any other character.
-  MaxCategory,
+  Other,
 }
 
 impl EmojiSegmentationCategory {
@@ -38,7 +38,7 @@ impl EmojiSegmentationCategory {
         return Self::KeycapBase;
       }
 
-      return Self::MaxCategory;
+      return Self::Other;
     }
 
     match codepoint {
@@ -53,10 +53,10 @@ impl EmojiSegmentationCategory {
       _ if is_emoji_modifier_base(codepoint) => Self::EmojiModifierBase,
       _ if is_modifier(codepoint) => Self::EmojiModifier,
       _ if is_regional_indicator(codepoint) => Self::RegionalIndicator,
-      _ if is_emoji_emoji_default(codepoint) => Self::EmojiEmojiPresentation,
-      _ if is_emoji_text_default(codepoint) => Self::EmojiTextPresentation,
+      _ if defaults_to_emoji_presentation(codepoint) => Self::EmojiPresentation,
+      _ if defaults_to_text_presentation(codepoint) => Self::TextPresentation,
       _ if is_emoji_including_reserved(codepoint) => Self::Emoji,
-      _ => Self::MaxCategory,
+      _ => Self::Other,
     }
   }
 }
