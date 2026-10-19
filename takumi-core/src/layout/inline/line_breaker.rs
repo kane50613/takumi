@@ -39,14 +39,16 @@ use crate::{
     tree::RenderNode,
   },
   layout_unit::LayoutUnit,
-  style::{BoxDecorationBreak, ComputedStyle, Direction as TextDirection, WordBreak},
+  style::{BoxDecorationBreak, ComputedStyle, Direction as TextDirection, LineBreak, WordBreak},
   text::{
     character::{
       CARRIAGE_RETURN, FORM_FEED, LINE_FEED, OBJECT_REPLACEMENT_CHARACTER,
       POP_DIRECTIONAL_FORMATTING, POP_DIRECTIONAL_ISOLATE, SOFT_HYPHEN, TAB, ZERO_WIDTH_SPACE,
       char_at, char_before, is_other_space_separator,
     },
-    line_break_iterator::{BreakSpaceType, LineBreakIterator, LineBreakType},
+    line_break_iterator::{
+      BreakOptions, BreakSpaceType, LineBreakIterator, LineBreakStrictness, LineBreakType,
+    },
   },
 };
 
@@ -381,8 +383,7 @@ impl<'a, 'b, 'c> LineBreaker<'a, 'b, 'c> {
     atomic_inline: &'b mut dyn AtomicInlineLayout<'c>,
     exclusion_space: &'b mut ExclusionSpace,
   ) -> Self {
-    let break_iterator =
-      Rc::new(items_data.break_iterator(LineBreakType::Normal, BreakSpaceType::AfterSpaceRun));
+    let break_iterator = Rc::new(items_data.break_iterator(BreakOptions::default()));
     let mut line_breaker = Self {
       node,
       items_data,
@@ -3279,6 +3280,18 @@ impl<'a, 'b, 'c> LineBreaker<'a, 'b, 'c> {
       return;
     }
 
+    let line_break = style.misc_inherited_data.line_break;
+
+    if line_break == LineBreak::Anywhere {
+      self.break_anywhere_if_overflow = false;
+      self.set_break_iterator(BreakOptions {
+        break_type: LineBreakType::BreakCharacter,
+        ..BreakOptions::default()
+      });
+
+      return;
+    }
+
     let mut line_break_type = match style.misc_inherited_data.word_break {
       WordBreak::Normal => {
         self.break_anywhere_if_overflow = false;
@@ -3320,19 +3333,24 @@ impl<'a, 'b, 'c> LineBreaker<'a, 'b, 'c> {
       }
     }
 
-    self.set_break_iterator(line_break_type, BreakSpaceType::AfterSpaceRun);
+    self.set_break_iterator(BreakOptions {
+      break_type: line_break_type,
+      break_space: BreakSpaceType::AfterSpaceRun,
+      strictness: match line_break {
+        LineBreak::Auto | LineBreak::Anywhere => LineBreakStrictness::Default,
+        LineBreak::Loose => LineBreakStrictness::Loose,
+        LineBreak::Normal => LineBreakStrictness::Normal,
+        LineBreak::Strict => LineBreakStrictness::Strict,
+      },
+    });
   }
 
-  /// The break iterator of `break_type` and `break_space`, as Blink's `SetBreakType` and
-  /// `SetBreakSpace` switch one lazily.
-  fn set_break_iterator(&mut self, break_type: LineBreakType, break_space: BreakSpaceType) {
-    if self.break_iterator.break_type() == break_type
-      && self.break_iterator.break_space() == break_space
-    {
-      return;
+  /// The break iterator of `options`, as Blink's `SetBreakType`, `SetBreakSpace`, and
+  /// `SetStrictness` switch one lazily.
+  fn set_break_iterator(&mut self, options: BreakOptions) {
+    if self.break_iterator.options != options {
+      self.break_iterator = Rc::new(self.items_data.break_iterator(options));
     }
-
-    self.break_iterator = Rc::new(self.items_data.break_iterator(break_type, break_space));
   }
 
   /// Blink's `IsPreviousItemOfType`.
