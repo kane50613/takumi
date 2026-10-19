@@ -396,6 +396,16 @@ impl IntoAnimationFixtureFrames for Vec<Node> {
   }
 }
 
+/// Whether `name` contains one of `only`'s comma-separated fragments, or whether there is no `only`.
+pub fn matches_fragments(only: Option<&str>, name: &str) -> bool {
+  only.is_none_or(|only| {
+    only
+      .split(',')
+      .map(str::trim)
+      .any(|fragment| !fragment.is_empty() && name.contains(fragment))
+  })
+}
+
 fn create_test_context() -> Fonts {
   let mut context = Fonts::default();
 
