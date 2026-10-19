@@ -5,7 +5,7 @@ use std::borrow::Cow;
 
 use crate::{
   layout::tree::RenderNode,
-  style::{ComputedStyle, Display, Float, TextTransform},
+  style::{ComputedStyle, Display, Float, TextTransformCase},
 };
 
 /// The character before the next text of an inline formatting context's walk.
@@ -31,7 +31,9 @@ impl<'c> PreviousCharacter<'c> {
     style: &ComputedStyle,
     text: &'t str,
   ) -> Cow<'t, str> {
-    if style.inherited_data.text_transform == TextTransform::Capitalize && !self.boxes.is_empty() {
+    if style.inherited_data.text_transform.case == TextTransformCase::Capitalize
+      && !self.boxes.is_empty()
+    {
       self.character = character_after(&self.boxes, self.character);
       self.boxes.clear();
     }

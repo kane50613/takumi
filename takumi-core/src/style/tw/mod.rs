@@ -552,7 +552,7 @@ pub(crate) enum TailwindProperty {
   /// `text-decoration-thickness` property.
   TextDecorationThickness(TextDecorationThickness),
   /// `text-transform` property.
-  TextTransform(TextTransform),
+  TextTransform(TextTransformCase),
   /// `width` and `height` property.
   Size(Size),
   /// `width` property.
@@ -1405,7 +1405,7 @@ impl TailwindProperty {
         push_decl!(builder, important, text_decoration_thickness(thickness))
       }
       TailwindProperty::TextTransform(text_transform) => {
-        push_decl!(builder, important, text_transform(text_transform))
+        push_decl!(builder, important, text_transform(text_transform.into()))
       }
       TailwindProperty::Size(size) => {
         push_decl!(builder, important, width(size), height(size));
