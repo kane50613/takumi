@@ -4,14 +4,14 @@ description: Compare takumi-pdf, react-pdf, and Puppeteer using recorded invoice
 icon: Scale
 ---
 
-This page records one benchmark: an 80-line invoice rendered by three PDF renderers. The numbers hold for the package versions and machine listed here, not for current releases.
+This page records one benchmark, an 80-line invoice rendered by three PDF renderers. The numbers hold for the package versions and machine listed here, not for current releases.
 
 - Each harness uses its renderer's own template language.
 - Geometry, columns, and the embedded font (Inter 400/700) match across harnesses. react-pdf's pt values mirror the other renderers' px values.
 - takumi and Chrome produce the same two-page layout.
 - Warm figures are the median of 20 renders.
 
-Environment: Apple M1 Pro, macOS 15.7.4, Bun 1.3.14, Chrome 151.
+The environment is Apple M1 Pro, macOS 15.7.4, Bun 1.3.14, and Chrome 151.
 
 The [bench source](https://github.com/kane50613/takumi/tree/master/example/pdf-bench) now depends on newer package versions. Run `bun bench` there to measure them on your machine.
 
@@ -39,7 +39,7 @@ These figures come from npm-registry packages bundled with esbuild (`--bundle --
 | jspdf 4.2.1               | 248 KB               | —                        | 59 MB                           |
 | Puppeteer + Chrome        | —                    | —                        | Chrome install (hundreds of MB) |
 
-pdf-lib, pdfkit, and jspdf are drawing libraries: you position each text line yourself. They are not in the benchmark above.
+pdf-lib, pdfkit, and jspdf are drawing libraries, so you position each text line yourself. They are not in the benchmark above.
 
 These figures exclude application code. Measure the complete bundle for your own deployment target.
 

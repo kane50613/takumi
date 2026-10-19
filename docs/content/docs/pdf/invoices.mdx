@@ -126,7 +126,7 @@ verapdf --flavour ua1 --format text invoice.pdf
 java -jar Mustang-CLI.jar --action validate --source invoice.pdf
 ```
 
-Mustang finds the profile through the `fx:` XMP block. Takumi writes each value together with the schema description PDF/A requires, so the two cannot disagree. It does not check the values: a wrong profile name shows up in Mustang, not at render time.
+Mustang finds the profile through the `fx:` XMP block. Takumi writes each value together with the schema description PDF/A requires, so the two cannot disagree. It does not check the values, so a wrong profile name shows up in Mustang, not at render time.
 
 ## Accessible invoices
 

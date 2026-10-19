@@ -77,7 +77,7 @@ The PDF/A-3 levels require three fields on each attachment:
 
 - `mimeType`
 - `description`
-- a modification date: `modificationDate`, or the `metadata.creationDate` fallback
+- a modification date from `modificationDate`, or the `metadata.creationDate` fallback
 
 TypeScript enforces `mimeType` and `description` under these levels. A missing date fails the render.
 

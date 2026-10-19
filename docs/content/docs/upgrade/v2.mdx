@@ -57,7 +57,7 @@ await renderer.registerFont(geist); // [!code ++]
 
 ### Pick the fallback chain with `fontFamilies`
 
-Each render takes an ordered `fontFamilies` list: the family names tried in turn when a glyph is missing. It defaults to every registered family, in registration order.
+Each render takes an ordered `fontFamilies` list of the family names tried in turn when a glyph is missing. It defaults to every registered family, in registration order.
 
 ```tsx title="Pick the fallback chain with fontFamilies"
 const image = await renderer.render(node, {

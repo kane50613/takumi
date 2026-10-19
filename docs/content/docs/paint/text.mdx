@@ -32,7 +32,7 @@ In `tree.nodes`, the text node comes before the inline boxes in its paragraph. I
 
 `run.outlines()` returns each glyph's outline as SVG path data, in the order of `run.glyphs`. The paths are relative to the baseline start, and `run.outlines().join("")` draws the whole run. Drawing them needs no font engine.
 
-An outline is an empty string for a glyph with no contours, such as a space. It is `null` for a glyph the run's color does not fill: color font layers arrive as their own drawables, and bitmap glyphs, such as some emoji, are left out.
+An outline is an empty string for a glyph with no contours, such as a space. It is `null` for a glyph the run's color does not fill. Color font layers arrive as their own drawables, and bitmap glyphs, such as some emoji, are left out.
 
 | Drawable                               | Draw                                              |
 | -------------------------------------- | ------------------------------------------------- |
@@ -40,7 +40,7 @@ An outline is an empty string for a glyph with no contours, such as a space. It 
 | `glyphs` with `stroke`                 | Stroke the outline, as `-webkit-text-stroke` does |
 | `masked` under `background-clip: text` | Draw the background layers, masked by the glyphs  |
 
-A native text API reads `run.glyphs` instead. Each glyph has an `id` in `run.font`, its `x` and `y` offset from the baseline start, and usually a `cluster`: where its cluster starts in `run.text`, in UTF-16 code units. `run.font.data()` returns the font file. Runs in the same face share one `Font` object.
+A native text API reads `run.glyphs` instead. Each glyph has an `id` in `run.font`, its `x` and `y` offset from the baseline start, and usually a `cluster`, which is where its cluster starts in `run.text`, in UTF-16 code units. `run.font.data()` returns the font file. Runs in the same face share one `Font` object.
 
 ## Lay text out again
 

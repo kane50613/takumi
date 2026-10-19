@@ -118,7 +118,7 @@ Heading levels are normalized in the structure tree. A document that starts with
 
 ### Tables
 
-- Header cells carry a `Scope`: `Column` inside `thead`, `Row` elsewhere. A `scope` attribute on the cell overrides it.
+- Header cells carry a `Scope`. It is `Column` inside `thead` and `Row` elsewhere. A `scope` attribute on the cell overrides it.
 - `rowspan` and `colspan` become `RowSpan` and `ColSpan` attributes.
 - A table that spans pages stays one `Table` element, and the repeated header is marked as an artifact.
 
