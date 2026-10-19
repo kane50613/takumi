@@ -20,7 +20,7 @@ Pass the fonts a render needs through `fonts`. Each entry takes one of three for
 
 `render`, `renderSvg`, `renderAnimation`, `measure`, and `ImageResponse` all take `fonts`. It also takes a promise of the list, so pass `googleFonts(...)` without `await`.
 
-The renderer decodes each file once and keeps it until you [release it](#releasing-fonts).
+The renderer decodes each file once and keeps it until you [release it](#releasing-fonts), or until `fontCacheMaxBytes` evicts it.
 
 ```tsx twoslash title="Load a font URL"
 import { ImageResponse } from "takumi-js/response";

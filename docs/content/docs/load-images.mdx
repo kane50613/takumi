@@ -258,7 +258,7 @@ const image = await renderer.render(node, {
 });
 ```
 
-`prepareImages` returns entries for the remote URLs missing from `sources`. It takes the same [fetch cache](#external-images) and [limits](#fetch-limits).
+`prepareImages` fetches the remote URLs missing from `sources`. It returns the supplied `sources` and the fetched entries together. It takes the same [fetch cache](#external-images) and [limits](#fetch-limits).
 
 ### COLR / bitmap fonts
 
