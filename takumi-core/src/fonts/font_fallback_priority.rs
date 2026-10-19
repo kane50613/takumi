@@ -7,11 +7,11 @@ pub(crate) enum FontFallbackPriority {
   #[default]
   Text,
   /// Emoji in text presentation by variation selector 15.
-  EmojiTextWithVs,
+  TextBySelector,
   /// Emoji in emoji presentation.
-  EmojiEmoji,
+  Emoji,
   /// Emoji in emoji presentation by variation selector 16.
-  EmojiEmojiWithVs,
+  EmojiBySelector,
 }
 
 impl FontFallbackPriority {

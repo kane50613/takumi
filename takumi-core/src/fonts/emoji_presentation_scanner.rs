@@ -57,8 +57,8 @@ impl Grammar<'_> {
     matches!(
       self.at(index),
       Some(
-        Category::EmojiTextPresentation
-          | Category::EmojiEmojiPresentation
+        Category::TextPresentation
+          | Category::EmojiPresentation
           | Category::KeycapBase
           | Category::EmojiModifierBase
           | Category::TagBase
@@ -159,7 +159,7 @@ impl Grammar<'_> {
   fn emoji_run(&self) -> Option<usize> {
     let single = matches!(
       self.at(0),
-      Some(Category::EmojiEmojiPresentation | Category::TagBase | Category::EmojiModifierBase)
+      Some(Category::EmojiPresentation | Category::TagBase | Category::EmojiModifierBase)
     );
 
     [
