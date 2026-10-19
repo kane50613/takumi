@@ -88,7 +88,10 @@ impl<'a> FontFallbackIterator<'a> {
     let Some(font_data) = candidate.font_data() else {
       return self.next(hint_list);
     };
-    let candidate_id = (font_data.face().blob.id(), font_data.face().index);
+    let candidate_id = (
+      font_data.face().typeface.id,
+      font_data.face().typeface.index,
+    );
 
     if self
       .unique_font_data_for_range_sets_returned

@@ -7,10 +7,13 @@
 
 use std::{
   fmt::{self, Debug, Formatter},
-  sync::Arc,
+  sync::{Arc, OnceLock},
 };
 
-use harfrust::{Tag, font::Variation};
+use harfrust::{
+  Tag,
+  font::{Blob, Font as ShapingFont, Variation},
+};
 use skrifa::{
   FontRef, MetadataProvider,
   attribute::{Attributes, Style},
@@ -26,7 +29,7 @@ use super::{
   },
 };
 use crate::{
-  resources::font::{SharedBytes, has_color_table},
+  resources::font::{FontBlob, SharedBytes, has_color_table},
   style::FontOpticalSizing,
 };
 
@@ -99,6 +102,9 @@ pub(crate) struct FontCustomPlatformData {
   pub(crate) attributes: Attributes,
   /// Whether the face has a color glyph table Blink's `ColorTableLookup` accepts.
   pub(crate) is_color: bool,
+  /// The default instance harfrust shapes with, built once, so every size, variation, and render
+  /// of the face shares its layout tables.
+  shaping_font: OnceLock<Option<ShapingFont>>,
 }
 
 /// Blink's `FontPlatformData`, as far as a registered face's instance goes.
@@ -137,7 +143,21 @@ impl FontCustomPlatformData {
       axes,
       attributes,
       is_color,
+      shaping_font: OnceLock::new(),
     })
+  }
+
+  /// The face's default instance as harfrust shapes with it; none when it does not parse.
+  pub(crate) fn shaping_font(&self) -> Option<&ShapingFont> {
+    self
+      .shaping_font
+      .get_or_init(|| ShapingFont::new(Blob::from(Arc::clone(&self.data)), self.index))
+      .as_ref()
+  }
+
+  /// The sfnt bytes and the id glyph caches key them by.
+  pub(crate) fn blob(&self) -> FontBlob {
+    FontBlob::new(Arc::clone(&self.data), self.id)
   }
 
   pub(crate) fn font_ref(&self) -> Option<FontRef<'_>> {

@@ -39,7 +39,7 @@ pub(crate) struct SimpleFontData {
 impl SimpleFontData {
   /// `face` at `size`; none for a face that does not parse.
   pub(crate) fn new(face: MatchedFace, size: f32, specified_size: f32) -> Option<Self> {
-    let font = FontRef::from_index(face.blob.data(), face.index).ok()?;
+    let font = face.typeface.font_ref()?;
     let units_per_em = font.head().ok()?.units_per_em();
     let space_glyph = font
       .charmap()
@@ -191,7 +191,7 @@ impl SimpleFontData {
 
   /// The font the face reads from.
   pub(crate) fn font_ref(&self) -> Option<FontRef<'_>> {
-    FontRef::from_index(self.face.blob.data(), self.face.index).ok()
+    self.face.typeface.font_ref()
   }
 
   /// Whether the face maps `ch` to a glyph, within its `unicode-range`.
@@ -206,10 +206,10 @@ impl SimpleFontData {
     self
       .shaping_font
       .get_or_init(|| {
-        let font = self.face.blob.shaping_font(self.face.index)?;
+        let font = self.face.typeface.shaping_font()?;
 
         Some(if self.variations.is_empty() {
-          font
+          font.clone()
         } else {
           font
             .instance_builder()
