@@ -1552,6 +1552,18 @@ define_style! {
     margin_inline_end: Length = Length::zero() => (box_data.margin_right, box_data.margin_left),
     padding_inline_start: Length = Length::zero() => (box_data.padding_left, box_data.padding_right),
     padding_inline_end: Length = Length::zero() => (box_data.padding_right, box_data.padding_left),
+    inset_inline_start: Length => (surround_data.left, surround_data.right),
+    inset_inline_end: Length => (surround_data.right, surround_data.left),
+    border_inline_start_width: LineWidth => (box_data.border_left_width, box_data.border_right_width),
+    border_inline_end_width: LineWidth => (box_data.border_right_width, box_data.border_left_width),
+    border_inline_start_style: BorderStyle => (box_data.border_left_style, box_data.border_right_style),
+    border_inline_end_style: BorderStyle => (box_data.border_right_style, box_data.border_left_style),
+    border_inline_start_color: ColorInput => (surround_data.border_left_color, surround_data.border_right_color),
+    border_inline_end_color: ColorInput => (surround_data.border_right_color, surround_data.border_left_color),
+    border_start_start_radius: SpacePair<Length> = SpacePair::from_single(Length::zero()) => (surround_data.border_top_left_radius, surround_data.border_top_right_radius),
+    border_start_end_radius: SpacePair<Length> = SpacePair::from_single(Length::zero()) => (surround_data.border_top_right_radius, surround_data.border_top_left_radius),
+    border_end_start_radius: SpacePair<Length> = SpacePair::from_single(Length::zero()) => (surround_data.border_bottom_left_radius, surround_data.border_bottom_right_radius),
+    border_end_end_radius: SpacePair<Length> = SpacePair::from_single(Length::zero()) => (surround_data.border_bottom_right_radius, surround_data.border_bottom_left_radius),
   }
   shorthands {
     list_style: ListStyleShorthand => [ListStyleType, ListStylePosition, ListStyleImage] |value, target| {
@@ -1608,6 +1620,14 @@ define_style! {
     padding_block: SpacePair<Length> => [PaddingTop, PaddingBottom] |value, target| {
       push_axis_declarations!(target, value, padding_top, padding_bottom);
     },
+    // The block-axis and size logical properties map as in `writing-mode: horizontal-tb`, the
+    // only writing mode takumi lays out.
+    padding_block_start: Length => [PaddingTop] |value, target| {
+      target.push(StyleDeclaration::padding_top(value));
+    },
+    padding_block_end: Length => [PaddingBottom] |value, target| {
+      target.push(StyleDeclaration::padding_bottom(value));
+    },
     margin: Sides<Length> => [MarginTop, MarginRight, MarginBottom, MarginLeft] |value, target| {
       push_four_side_declarations!(
         target,
@@ -1624,14 +1644,44 @@ define_style! {
     margin_block: SpacePair<Length> => [MarginTop, MarginBottom] |value, target| {
       push_axis_declarations!(target, value, margin_top, margin_bottom);
     },
+    margin_block_start: Length => [MarginTop] |value, target| {
+      target.push(StyleDeclaration::margin_top(value));
+    },
+    margin_block_end: Length => [MarginBottom] |value, target| {
+      target.push(StyleDeclaration::margin_bottom(value));
+    },
     inset: Sides<Length> => [Top, Right, Bottom, Left] |value, target| {
       push_four_side_declarations!(target, value.0, top, right, bottom, left);
     },
-    inset_inline: SpacePair<Length> => [Left, Right] |value, target| {
-      push_axis_declarations!(target, value, left, right);
+    inset_inline: SpacePair<Length> => [InsetInlineStart, InsetInlineEnd] |value, target| {
+      push_axis_declarations!(target, value, inset_inline_start, inset_inline_end);
     },
     inset_block: SpacePair<Length> => [Top, Bottom] |value, target| {
       push_axis_declarations!(target, value, top, bottom);
+    },
+    inset_block_start: Length => [Top] |value, target| {
+      target.push(StyleDeclaration::top(value));
+    },
+    inset_block_end: Length => [Bottom] |value, target| {
+      target.push(StyleDeclaration::bottom(value));
+    },
+    inline_size: Size => [Width] |value, target| {
+      target.push(StyleDeclaration::width(value));
+    },
+    block_size: Size => [Height] |value, target| {
+      target.push(StyleDeclaration::height(value));
+    },
+    min_inline_size: Length => [MinWidth] |value, target| {
+      target.push(StyleDeclaration::min_width(value));
+    },
+    min_block_size: Length => [MinHeight] |value, target| {
+      target.push(StyleDeclaration::min_height(value));
+    },
+    max_inline_size: MaxSize => [MaxWidth] |value, target| {
+      target.push(StyleDeclaration::max_width(value));
+    },
+    max_block_size: MaxSize => [MaxHeight] |value, target| {
+      target.push(StyleDeclaration::max_height(value));
     },
     mask: Backgrounds => [MaskImage, MaskPosition, MaskSize, MaskRepeat] |value, target| {
       target.push(StyleDeclaration::mask_position(
@@ -1728,13 +1778,53 @@ define_style! {
         border_left_width
       );
     },
-    border_inline_width: SpacePair<LineWidth> => [BorderLeftWidth, BorderRightWidth] |value, target| {
+    border_inline_width: SpacePair<LineWidth> => [BorderInlineStartWidth, BorderInlineEndWidth] |value, target| {
       push_axis_declarations!(
         target,
         value,
-        border_left_width,
-        border_right_width
+        border_inline_start_width,
+        border_inline_end_width
       );
+    },
+    border_inline_style: SpacePair<BorderStyle> => [BorderInlineStartStyle, BorderInlineEndStyle] |value, target| {
+      push_axis_declarations!(
+        target,
+        value,
+        border_inline_start_style,
+        border_inline_end_style
+      );
+    },
+    border_inline_color: SpacePair<ColorInput> => [BorderInlineStartColor, BorderInlineEndColor] |value, target| {
+      push_axis_declarations!(
+        target,
+        value,
+        border_inline_start_color,
+        border_inline_end_color
+      );
+    },
+    border_block_style: SpacePair<BorderStyle> => [BorderTopStyle, BorderBottomStyle] |value, target| {
+      push_axis_declarations!(target, value, border_top_style, border_bottom_style);
+    },
+    border_block_color: SpacePair<ColorInput> => [BorderTopColor, BorderBottomColor] |value, target| {
+      push_axis_declarations!(target, value, border_top_color, border_bottom_color);
+    },
+    border_block_start_width: LineWidth => [BorderTopWidth] |value, target| {
+      target.push(StyleDeclaration::border_top_width(value));
+    },
+    border_block_end_width: LineWidth => [BorderBottomWidth] |value, target| {
+      target.push(StyleDeclaration::border_bottom_width(value));
+    },
+    border_block_start_style: BorderStyle => [BorderTopStyle] |value, target| {
+      target.push(StyleDeclaration::border_top_style(value));
+    },
+    border_block_end_style: BorderStyle => [BorderBottomStyle] |value, target| {
+      target.push(StyleDeclaration::border_bottom_style(value));
+    },
+    border_block_start_color: ColorInput => [BorderTopColor] |value, target| {
+      target.push(StyleDeclaration::border_top_color(value));
+    },
+    border_block_end_color: ColorInput => [BorderBottomColor] |value, target| {
+      target.push(StyleDeclaration::border_bottom_color(value));
     },
     border_block_width: SpacePair<LineWidth> => [BorderTopWidth, BorderBottomWidth] |value, target| {
       push_axis_declarations!(
@@ -1777,6 +1867,42 @@ define_style! {
       target.push(StyleDeclaration::border_left_width(value.width));
       target.push(StyleDeclaration::border_left_style(value.style));
       target.push(StyleDeclaration::border_left_color(value.color));
+    },
+    border_inline: Border => [BorderInlineStartWidth, BorderInlineEndWidth, BorderInlineStartStyle, BorderInlineEndStyle, BorderInlineStartColor, BorderInlineEndColor] |value, target| {
+      target.push(StyleDeclaration::border_inline_start_width(value.width));
+      target.push(StyleDeclaration::border_inline_end_width(value.width));
+      target.push(StyleDeclaration::border_inline_start_style(value.style));
+      target.push(StyleDeclaration::border_inline_end_style(value.style));
+      target.push(StyleDeclaration::border_inline_start_color(value.color));
+      target.push(StyleDeclaration::border_inline_end_color(value.color));
+    },
+    border_inline_start: Border => [BorderInlineStartWidth, BorderInlineStartStyle, BorderInlineStartColor] |value, target| {
+      target.push(StyleDeclaration::border_inline_start_width(value.width));
+      target.push(StyleDeclaration::border_inline_start_style(value.style));
+      target.push(StyleDeclaration::border_inline_start_color(value.color));
+    },
+    border_inline_end: Border => [BorderInlineEndWidth, BorderInlineEndStyle, BorderInlineEndColor] |value, target| {
+      target.push(StyleDeclaration::border_inline_end_width(value.width));
+      target.push(StyleDeclaration::border_inline_end_style(value.style));
+      target.push(StyleDeclaration::border_inline_end_color(value.color));
+    },
+    border_block: Border => [BorderTopWidth, BorderBottomWidth, BorderTopStyle, BorderBottomStyle, BorderTopColor, BorderBottomColor] |value, target| {
+      target.push(StyleDeclaration::border_top_width(value.width));
+      target.push(StyleDeclaration::border_bottom_width(value.width));
+      target.push(StyleDeclaration::border_top_style(value.style));
+      target.push(StyleDeclaration::border_bottom_style(value.style));
+      target.push(StyleDeclaration::border_top_color(value.color));
+      target.push(StyleDeclaration::border_bottom_color(value.color));
+    },
+    border_block_start: Border => [BorderTopWidth, BorderTopStyle, BorderTopColor] |value, target| {
+      target.push(StyleDeclaration::border_top_width(value.width));
+      target.push(StyleDeclaration::border_top_style(value.style));
+      target.push(StyleDeclaration::border_top_color(value.color));
+    },
+    border_block_end: Border => [BorderBottomWidth, BorderBottomStyle, BorderBottomColor] |value, target| {
+      target.push(StyleDeclaration::border_bottom_width(value.width));
+      target.push(StyleDeclaration::border_bottom_style(value.style));
+      target.push(StyleDeclaration::border_bottom_color(value.color));
     },
     border_style: Sides<BorderStyle> => [BorderTopStyle, BorderRightStyle, BorderBottomStyle, BorderLeftStyle] |value, target| {
       push_four_side_declarations!(

@@ -1707,3 +1707,34 @@ fn shorthands_take_css_wide_keywords() {
     ]
   );
 }
+
+/// Inline-axis logical properties follow `direction`; block-axis and size ones map as in
+/// `horizontal-tb`.
+#[test]
+fn logical_properties_map_to_physical_sides() {
+  let style = style_with(
+    StyleDeclarationBlock::parse_loosy(
+      "direction: rtl; inset-inline-start: 10px; border-inline-end-width: 3px; \
+       border-start-start-radius: 4px; margin-block-start: 5px; inline-size: 20px; \
+       border-block-end: 2px solid red",
+    )
+    .declarations,
+  )
+  .inherit(&ComputedStyle::default());
+
+  assert_eq!(style.surround_data.right, Length::Px(10.0));
+  assert_eq!(
+    style.box_data.border_left_width,
+    LineWidth::Length(Length::Px(3.0))
+  );
+  assert_eq!(
+    style.surround_data.border_top_right_radius,
+    SpacePair::from_single(Length::Px(4.0))
+  );
+  assert_eq!(style.box_data.margin_top, Length::Px(5.0));
+  assert_eq!(style.box_data.width, Length::Px(20.0).into());
+  assert_eq!(
+    style.box_data.border_bottom_width,
+    LineWidth::Length(Length::Px(2.0))
+  );
+}
