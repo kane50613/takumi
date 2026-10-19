@@ -54,6 +54,16 @@ impl<'a> FontFallbackIterator<'a> {
     }
   }
 
+  /// Blink's `Reset`: back to the first font, for the pass that ignores variation selectors.
+  pub(crate) fn reset(&mut self) {
+    self.current_font_data_index = 0;
+    self.segmented_face_index = 0;
+    self.fallback_stage = FallbackStage::FontGroupFonts;
+    self.previously_asked_for_hint.clear();
+    self.unique_font_data_for_range_sets_returned.clear();
+    self.first_candidate = None;
+  }
+
   /// Blink's `HasNext`.
   pub(crate) fn has_next(&self) -> bool {
     self.fallback_stage != FallbackStage::OutOfLuck

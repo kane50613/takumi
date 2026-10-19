@@ -19,6 +19,7 @@ pub(crate) const GEIST: &str = "../assets/fonts/geist/Geist[wght].woff2";
 pub(crate) const GEIST_MONO: &str = "../assets/fonts/geist/GeistMono[wght].woff2";
 pub(crate) const NOTO_SANS_TC: &str =
   "../assets/fonts/noto-sans/NotoSansTC-VariableFont_wght.woff2";
+pub(crate) const TWEMOJI: &str = "../assets/fonts/twemoji/TwemojiMozilla-colr.woff2";
 
 /// Registers the font at `path`, from the crate root, as `family_name`.
 pub(crate) fn register(fonts: &mut Fonts, path: &str, family_name: &str) {
