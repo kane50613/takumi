@@ -4,9 +4,11 @@
 //!
 //! The tests come from the WPT checkout `scripts/wpt-checkout.sh` makes in `target/wpt`, or the one
 //! `WPT_ROOT` points at; without either the test does nothing.
-//! `tests/wpt-reftests.json` lists the tests that pass, and the test fails when one of them stops
-//! passing. `WPT_UPDATE=1` rewrites it with the tests that pass now, `WPT_WRITE=path` writes that
-//! list to `path` and still checks for regressions, `WPT_VERBOSE=1` prints each
+//! `tests/wpt-reftests.txt` lists the tests that pass, one pattern a line, where `*` matches within
+//! a path segment and `**` across segments; the test fails when one of them stops passing.
+//! `WPT_UPDATE=1` rewrites it with the tests that pass now, a directory whose tests all pass as
+//! one `dir/**` pattern, `WPT_WRITE=path` writes that list to `path` and still checks for
+//! regressions, `WPT_VERBOSE=1` prints each
 //! test that does not pass, `WPT_DUMP=dir` writes each failing test's rendering and its
 //! reference's there, and `WPT=fragment,...` runs only the tests whose paths contain one of the
 //! fragments.
@@ -36,7 +38,7 @@ use test_utils::{CONTEXT, matches_fragments};
 /// The WPT harness's viewport.
 const VIEWPORT: (u32, u32) = (800, 600);
 
-const EXPECTATIONS: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/wpt-reftests.json");
+const EXPECTATIONS: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/wpt-reftests.txt");
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 enum Outcome {
@@ -66,8 +68,13 @@ fn wpt_reftests() {
 
   let only = env::var("WPT").ok();
   let runner = Runner::new(&root);
-  let tests: Vec<PathBuf> = reftests(&root.join("css"))
-    .into_iter()
+  let discovered = reftests(&root.join("css"));
+  let all: Vec<String> = discovered
+    .iter()
+    .map(|path| runner.relative(path))
+    .collect();
+  let tests: Vec<&PathBuf> = discovered
+    .iter()
     .filter(|path| matches_fragments(only.as_deref(), &path.to_string_lossy()))
     .collect();
 
@@ -87,55 +94,147 @@ fn wpt_reftests() {
 
   eprintln!("WPT reftests: {counts:?}");
 
-  if let Some(path) = env::var_os("WPT_WRITE") {
-    let passing: BTreeSet<&String> = outcomes
-      .iter()
-      .filter(|(_, outcome)| **outcome == Outcome::Pass)
-      .map(|(name, _)| name)
-      .collect();
+  let passing = |name: &String| outcomes.get(name) == Some(&Outcome::Pass);
 
-    fs::write(
-      path,
-      format!("{}\n", serde_json::to_string_pretty(&passing).unwrap()),
-    )
-    .unwrap();
+  if let Some(path) = env::var_os("WPT_WRITE") {
+    let passed: BTreeSet<&String> = outcomes.keys().filter(|name| passing(name)).collect();
+
+    Expectations::compress(&passed, &all).write(Path::new(&path));
   }
 
-  let mut expected: BTreeSet<String> = fs::read_to_string(EXPECTATIONS)
-    .ok()
-    .map(|text| serde_json::from_str(&text).unwrap())
-    .unwrap_or_default();
+  let expectations = Expectations::read(Path::new(EXPECTATIONS));
+  let mut expected = expectations.names(&all);
 
   if env::var_os("WPT_UPDATE").is_some() {
-    // A full run also drops the tests discovery no longer finds.
-    expected.retain(|name| only.is_some() && !outcomes.contains_key(name));
-    expected.extend(
-      outcomes
-        .iter()
-        .filter(|(_, outcome)| **outcome == Outcome::Pass)
-        .map(|(name, _)| name.clone()),
-    );
-    fs::write(
-      EXPECTATIONS,
-      format!("{}\n", serde_json::to_string_pretty(&expected).unwrap()),
-    )
-    .unwrap();
+    // A run keeps what it did not run, and the tests it ran that pass.
+    expected.retain(|name| !outcomes.contains_key(*name));
+    expected.extend(outcomes.keys().filter(|name| passing(name)));
+    Expectations::compress(&expected, &all).write(Path::new(EXPECTATIONS));
 
     return;
   }
 
-  // An expected test that discovery no longer finds regressed too, unless `WPT` left it out.
-  let regressed: Vec<String> = expected
-    .iter()
-    .filter(|name| matches_fragments(only.as_deref(), name))
-    .filter_map(|name| match outcomes.get(name) {
-      Some(Outcome::Pass) => None,
-      Some(outcome) => Some(format!("{name}: {outcome:?}")),
-      None => Some(format!("{name}: not found")),
-    })
+  // A pattern that matches no test regressed too, unless `WPT` left its tests out.
+  let mut regressed: Vec<String> = expectations
+    .unmatched(&all)
+    .filter(|pattern| matches_fragments(only.as_deref(), pattern))
+    .map(|pattern| format!("{pattern}: not found"))
     .collect();
 
+  regressed.extend(
+    expected
+      .iter()
+      .filter_map(|name| match outcomes.get(*name) {
+        Some(Outcome::Pass) | None => None,
+        Some(outcome) => Some(format!("{name}: {outcome:?}")),
+      }),
+  );
+
   assert!(regressed.is_empty(), "{regressed:#?}");
+}
+
+/// The patterns `tests/wpt-reftests.txt` lists, each a test path or a glob of them.
+struct Expectations {
+  patterns: Vec<String>,
+}
+
+impl Expectations {
+  const HEADER: &str = "# The WPT reftests that pass: one pattern a line, where `*` matches within a path\n# segment and `**` across segments. `WPT_UPDATE=1 cargo test --test wpt_reftests` rewrites it.\n";
+
+  fn read(path: &Path) -> Self {
+    let patterns = fs::read_to_string(path)
+      .unwrap_or_default()
+      .lines()
+      .map(str::trim)
+      .filter(|line| !line.is_empty() && !line.starts_with('#'))
+      .map(str::to_owned)
+      .collect();
+
+    Self { patterns }
+  }
+
+  fn write(&self, path: &Path) {
+    let mut text = Self::HEADER.to_owned();
+
+    for pattern in &self.patterns {
+      text.push_str(pattern);
+      text.push('\n');
+    }
+
+    fs::write(path, text).unwrap();
+  }
+
+  /// The fewest patterns that match exactly `passing` among `all`: a directory whose tests all
+  /// pass becomes `dir/**`, and every other passing test stays by name.
+  fn compress(passing: &BTreeSet<&String>, all: &[String]) -> Self {
+    let mut directories: BTreeMap<&str, bool> = BTreeMap::new();
+
+    for name in all {
+      for (index, _) in name.match_indices('/') {
+        *directories.entry(&name[..=index]).or_insert(true) &= passing.contains(name);
+      }
+    }
+
+    let patterns: BTreeSet<String> = passing
+      .iter()
+      .map(|name| {
+        name
+          .match_indices('/')
+          .map(|(index, _)| &name[..=index])
+          // `css/` stays a prefix of every pattern.
+          .skip(1)
+          .find(|directory| directories.get(directory) == Some(&true))
+          .map_or_else(|| (*name).clone(), |directory| format!("{directory}**"))
+      })
+      .collect();
+
+    Self {
+      patterns: patterns.into_iter().collect(),
+    }
+  }
+
+  /// The tests among `all` some pattern matches.
+  fn names<'a>(&self, all: &'a [String]) -> BTreeSet<&'a String> {
+    all
+      .iter()
+      .filter(|name| {
+        self
+          .patterns
+          .iter()
+          .any(|pattern| glob_matches(pattern, name))
+      })
+      .collect()
+  }
+
+  /// The patterns that match none of `all`.
+  fn unmatched<'s>(&'s self, all: &'s [String]) -> impl Iterator<Item = &'s String> + 's {
+    self
+      .patterns
+      .iter()
+      .filter(|pattern| !all.iter().any(|name| glob_matches(pattern, name)))
+  }
+}
+
+/// Whether `pattern` matches the test path `name`: `*` matches within one path segment and `**`
+/// across segments.
+fn glob_matches(pattern: &str, name: &str) -> bool {
+  let Some((prefix, rest)) = pattern.split_once('*') else {
+    return pattern == name;
+  };
+  let Some(name) = name.strip_prefix(prefix) else {
+    return false;
+  };
+  let (rest, crosses_segments) = match rest.strip_prefix('*') {
+    Some(rest) => (rest, true),
+    None => (rest, false),
+  };
+
+  name
+    .char_indices()
+    .map(|(index, _)| index)
+    .chain([name.len()])
+    .take_while(|&index| crosses_segments || !name[..index].contains('/'))
+    .any(|index| glob_matches(rest, &name[index..]))
 }
 
 /// Every reftest under `dir`: an HTML or XHTML file that links a reference, and is not one.
@@ -592,4 +691,31 @@ impl Runner {
         .collect(),
     )
   }
+}
+
+#[test]
+fn glob_matches_within_and_across_segments() {
+  assert!(glob_matches("css/a/b.html", "css/a/b.html"));
+  assert!(glob_matches("css/a/*.html", "css/a/b.html"));
+  assert!(!glob_matches("css/a/*.html", "css/a/c/b.html"));
+  assert!(glob_matches("css/a/**", "css/a/c/b.html"));
+  assert!(glob_matches("css/**/b-*.xht", "css/a/c/b-001.xht"));
+  assert!(!glob_matches("css/a/**", "css/ab/c.html"));
+}
+
+#[test]
+fn compress_folds_a_fully_passing_directory() {
+  let all: Vec<String> = [
+    "css/a/x.html",
+    "css/a/y.html",
+    "css/b/x.html",
+    "css/b/y.html",
+  ]
+  .map(String::from)
+  .to_vec();
+  let passing: BTreeSet<&String> = [&all[0], &all[1], &all[2]].into_iter().collect();
+  let expectations = Expectations::compress(&passing, &all);
+
+  assert_eq!(expectations.patterns, ["css/a/**", "css/b/x.html"]);
+  assert_eq!(expectations.names(&all), passing);
 }

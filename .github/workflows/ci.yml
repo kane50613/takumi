@@ -97,7 +97,7 @@ jobs:
 
       - name: Run tests
         env:
-          WPT_WRITE: ${{ runner.temp }}/wpt-reftests.json
+          WPT_WRITE: ${{ runner.temp }}/wpt-reftests.txt
         run: cargo test --locked
 
       # The tests that pass now, for a PR to adopt without running the suite locally:
@@ -106,21 +106,23 @@ jobs:
         if: ${{ !cancelled() }}
         run: |
           set -eu
-          current="$RUNNER_TEMP/wpt-reftests.json"
+          current="$RUNNER_TEMP/wpt-reftests.txt"
           [ -f "$current" ] || exit 0
-          added=$(jq -r --slurpfile expected takumi/tests/wpt-reftests.json '. - $expected[0] | .[]' "$current")
-          count=$(printf '%s' "$added" | grep -c . || true)
+          patterns() { grep -v '^#' "$1" | sort; }
+          added=$(comm -13 <(patterns takumi/tests/wpt-reftests.txt) <(patterns "$current"))
+          removed=$(comm -23 <(patterns takumi/tests/wpt-reftests.txt) <(patterns "$current"))
           {
             echo "### WPT reftests"
             echo
-            echo "$(jq length "$current") pass, $count of them not in \`takumi/tests/wpt-reftests.json\` yet."
-            if [ "$count" -gt 0 ]; then
+            if [ -z "$added$removed" ]; then
+              echo "\`takumi/tests/wpt-reftests.txt\` matches the tests that pass."
+            else
+              echo "\`takumi/tests/wpt-reftests.txt\` differs from the tests that pass; download the \`wpt-reftests\` artifact to update it."
               echo
-              echo "<details><summary>Newly passing</summary>"
-              echo
-              printf '%s\n' "$added" | sed 's/^/- /'
-              echo
-              echo "</details>"
+              echo '```diff'
+              printf '%s\n' "$added" | sed '/^$/d; s/^/+ /'
+              printf '%s\n' "$removed" | sed '/^$/d; s/^/- /'
+              echo '```'
             fi
           } >> "$GITHUB_STEP_SUMMARY"
 
@@ -129,7 +131,7 @@ jobs:
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: wpt-reftests
-          path: ${{ runner.temp }}/wpt-reftests.json
+          path: ${{ runner.temp }}/wpt-reftests.txt
           if-no-files-found: ignore
 
       # The fixtures claim PDF/A and PDF/UA conformance in their metadata. Only
