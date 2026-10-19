@@ -1,0 +1,9 @@
+{
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    // Declarations come from each export's own annotations, not from inference that a missing
+    // workspace build turns into `any`.
+    "declaration": true,
+    "isolatedDeclarations": true
+  }
+}
