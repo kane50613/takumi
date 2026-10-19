@@ -2769,3 +2769,27 @@ fn an_inline_flex_resolves_a_percentage_height_before_sizing_its_width() {
 
   assert_eq!(sizes.last(), Some(&(100.0, 100.0)), "{sizes:?}");
 }
+
+/// A table in a block in a table cell sizes the cell by its max-content width, so its text stays on
+/// one line.
+#[test]
+fn a_table_nested_in_a_cell_keeps_its_max_content_width() {
+  let root = Node::container([Node::container([Node::container([Node::container([
+    Node::text("XXXXX XXXXXX"),
+  ])
+  .with_class_name("cell")])
+  .with_class_name("block")])
+  .with_class_name("row")])
+  .with_class_name("root");
+  let result = measure_with_css(
+    root,
+    r#"
+      .root { display: block; width: 800px; }
+      .row { display: table-row; font-size: 16px; }
+      .block { display: block; }
+      .cell { display: table-cell; }
+    "#,
+  );
+
+  assert_eq!(run_texts(&result), ["XXXXX XXXXXX"]);
+}
