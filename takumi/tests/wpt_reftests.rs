@@ -22,7 +22,7 @@ use std::{
   path::{Path, PathBuf},
   process,
   sync::{
-    Arc, Mutex, MutexGuard,
+    Arc, Mutex, MutexGuard, PoisonError,
     atomic::{AtomicBool, AtomicUsize, Ordering},
   },
   thread,
@@ -577,10 +577,7 @@ impl Watchdog {
   }
 
   fn lock(&self) -> MutexGuard<'_, HashMap<String, (Instant, bool)>> {
-    self
-      .running
-      .lock()
-      .unwrap_or_else(|poisoned| poisoned.into_inner())
+    self.running.lock().unwrap_or_else(PoisonError::into_inner)
   }
 
   fn watch(&self) {
