@@ -8,6 +8,7 @@ import { callWithDispatcher, getProperty, readContext, type RenderEnv } from "./
 import type { defaultStylePresets } from "./style-presets";
 import { serializeSvg } from "./svg";
 import {
+  isAsciiWhitespace,
   isFunctionComponent,
   isHtmlElement,
   isUnrenderedElement,
@@ -174,7 +175,7 @@ class NodeBuilder implements RenderEnv {
     }
 
     const textChildren = collectText(element);
-    if (textChildren !== undefined) {
+    if (textChildren !== undefined && !isAsciiWhitespace(textChildren)) {
       return nodeResult(text({ text: textChildren, ...metadata }));
     }
 

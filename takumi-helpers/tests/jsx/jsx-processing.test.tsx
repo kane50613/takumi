@@ -85,6 +85,12 @@ describe("fromJsx", () => {
     } satisfies TextNode);
   });
 
+  test("keeps an element holding only white space a container", async () => {
+    const { node } = await fromJsx(<div> </div>);
+
+    expect(node.type).toBe("container");
+  });
+
   test("passes tagName, id, className to text nodes", async () => {
     const { node } = await fromJsx(
       <p id="headline" className="text-xl">

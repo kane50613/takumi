@@ -531,8 +531,8 @@ impl NodeBuilder<'_> {
   }
 }
 
-/// Concatenated text if every child is a text node, else `None`. Comments are
-/// ignored, mirroring the JS markup walker.
+/// Concatenated text if every child is a text node and not all of it is white space, else `None`.
+/// Comments are ignored, mirroring the JS markup walker.
 fn text_only_contents(handle: NodeRef<'_>) -> Option<String> {
   let mut text = String::new();
 
@@ -544,7 +544,10 @@ fn text_only_contents(handle: NodeRef<'_>) -> Option<String> {
     }
   }
 
-  (!text.is_empty()).then_some(text)
+  text
+    .chars()
+    .any(|ch| !ch.is_ascii_whitespace())
+    .then_some(text)
 }
 
 fn dimension(handle: NodeRef<'_>, name: &str) -> Option<f32> {

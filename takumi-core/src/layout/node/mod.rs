@@ -51,20 +51,6 @@ pub(crate) struct NodeMetadata {
   pub lang: Option<Lang>,
 }
 
-impl NodeMetadata {
-  /// Whether an element made the node, as a bare string carries at most its preset.
-  fn is_element(&self) -> bool {
-    self.tag_name.is_some()
-      || self.class_name.is_some()
-      || self.id.is_some()
-      || self.attributes.is_some()
-      || self.style.is_some()
-      || self.tw.is_some()
-      || self.dir.is_some()
-      || self.lang.is_some()
-  }
-}
-
 #[derive(Debug, Default, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
 /// Variant-specific text node data.
@@ -362,17 +348,14 @@ impl Node {
     Some(text)
   }
 
-  /// Whether the node is a bare string of white space, never the text of an element.
   pub(crate) fn is_whitespace_only_text(&self) -> bool {
     let NodeKind::Text(data) = &self.kind else {
       return false;
     };
-
-    !self.metadata.is_element()
-      && data
-        .text
-        .chars()
-        .all(|ch| matches!(ch, ' ' | '\t' | '\n' | '\r' | '\u{c}'))
+    data
+      .text
+      .chars()
+      .all(|ch| matches!(ch, ' ' | '\t' | '\n' | '\r' | '\u{c}'))
   }
 
   /// Sets the tag name and returns the updated node.

@@ -50,6 +50,12 @@ describe("fromHtml", () => {
     expect((node as TextNode).text).toBe('a\u00a0b ° ° "q"');
   });
 
+  test("keeps an element holding only white space a container", () => {
+    for (const html of ["<div> </div>", "<div>&#32;\n</div>"]) {
+      expect(fromHtml(html).node.type).toBe("container");
+    }
+  });
+
   test("decodes character references in nested text nodes", () => {
     const { node } = fromHtml("<div><span>1&lt;2</span><div>&euro;5</div></div>");
 
