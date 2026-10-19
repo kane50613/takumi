@@ -10,7 +10,7 @@ use takumi_core::{
 
 use crate::register_embedded;
 
-/// A family as fontique matches its name: each character lowercased on its own.
+/// A family as the registry matches its name: each character lowercased on its own.
 fn fold(family: &str) -> String {
   family.chars().flat_map(char::to_lowercase).collect()
 }

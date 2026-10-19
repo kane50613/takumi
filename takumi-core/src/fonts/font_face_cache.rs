@@ -52,11 +52,7 @@ impl FontFaceCache {
     self.segmented_faces.remove_font_face(font_face)
   }
 
-  /// Blink's `ClearAll`.
-  pub(crate) fn clear_all(&mut self) {
-    self.segmented_faces.map.clear();
-  }
-
+  #[cfg(test)]
   /// Blink's `Get`: the bucket of `family` that best matches `request`.
   pub(crate) fn get(
     &self,
@@ -82,6 +78,7 @@ impl FontFaceCache {
       .map_or_else(Vec::new, |faces| faces.ranked(request))
   }
 
+  #[cfg(test)]
   /// Blink's `GetNumSegmentedFacesForTesting`.
   pub(crate) fn get_num_segmented_faces_for_testing(&self) -> usize {
     self
@@ -209,6 +206,7 @@ impl CapabilitiesSet {
     best
   }
 
+  #[cfg(test)]
   fn font_selection_query_result(
     &self,
     request: FontSelectionRequest,

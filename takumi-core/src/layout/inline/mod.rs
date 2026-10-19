@@ -1,9 +1,8 @@
 //! Inline layout, ported from Blink's `core/layout/inline`.
 
 use crate::{
-  font_style::BoxLineHeight,
   geometry::{Point, Size},
-  style::{AppliedTextDecorations, Color, FontSynthesis, TextDecorationSkipInk, VerticalAlign},
+  style::{AppliedTextDecorations, Color, TextDecorationSkipInk},
 };
 
 pub(crate) mod atomic_inline;
@@ -62,8 +61,8 @@ pub use self::{
   metrics::{InlineBoxKind, InlinePass, VisualInlineBox},
   outline::InlineOutlineRect,
   runs::{
-    HangingWhitespace, InlineRunLayout, MeasuredInlineBox, MeasuredInlineRun, PositionedGlyph,
-    PositionedInlineRun, RunMetrics, ShapedRun,
+    InlineRunLayout, MeasuredInlineBox, MeasuredInlineRun, PositionedGlyph, PositionedInlineRun,
+    RunMetrics, ShapedRun,
   },
 };
 pub(crate) use cache::InlineLayoutCache;
@@ -94,8 +93,6 @@ pub struct InlineMeasurement {
 pub struct InlineBrush {
   /// Span this run originated from, if any.
   pub source_span_id: Option<u64>,
-  /// Whether this run is the synthetic direction mark, which never paints.
-  pub(crate) is_direction_mark: bool,
   /// Run opacity.
   pub opacity: f32,
   /// Text fill color.
@@ -108,32 +105,18 @@ pub struct InlineBrush {
   pub stroke_color: Color,
   /// `-webkit-text-stroke` width in pixels.
   pub stroke_width: f32,
-  pub(crate) font_synthesis: FontSynthesis,
-  pub(crate) line_height: BoxLineHeight,
-  /// `letter-spacing` in pixels when it is fixed rather than a percentage, which `text-fit`
-  /// leaves unscaled.
-  pub(crate) fixed_letter_spacing: f32,
-  /// `word-spacing` in pixels when it is fixed rather than a percentage.
-  pub(crate) fixed_word_spacing: f32,
-  pub(crate) vertical_align: VerticalAlign,
 }
 
 impl Default for InlineBrush {
   fn default() -> Self {
     Self {
       source_span_id: None,
-      is_direction_mark: false,
       opacity: 1.0,
       color: Color::black(),
       decorations: AppliedTextDecorations::default(),
       decoration_skip_ink: TextDecorationSkipInk::default(),
       stroke_color: Color::black(),
       stroke_width: 0.0,
-      font_synthesis: FontSynthesis::default(),
-      line_height: BoxLineHeight::Normal,
-      fixed_letter_spacing: 0.0,
-      fixed_word_spacing: 0.0,
-      vertical_align: VerticalAlign::default(),
     }
   }
 }

@@ -19,7 +19,7 @@ use crate::{
   shadow::SizedShadow,
   style::{
     AppliedTextDecorations, Color, ComputedStyle, Display, FontFamily, FontFamilyToken,
-    FontSynthesis, FontVariantCaps, LineHeight as CssLineHeight, SizingContext,
+    FontVariantCaps, LineHeight as CssLineHeight, SizingContext,
   },
 };
 
@@ -105,8 +105,6 @@ pub struct SizedFontStyle<'s> {
   pub(crate) font_family: Rc<ExpandedFontFamily>,
   /// The `font-variant-caps` feature to shape with, which a synthesized caps run swaps.
   pub(crate) caps: FontVariantCaps,
-  /// The line height runs in this style take.
-  pub(crate) box_line_height: BoxLineHeight,
   /// Text stroke width in pixels.
   pub stroke_width: f32,
   pub(crate) letter_spacing: f32,
@@ -126,7 +124,6 @@ impl SizedFontStyle<'_> {
   pub(crate) fn brush(&self) -> InlineBrush {
     InlineBrush {
       source_span_id: None,
-      is_direction_mark: false,
       // Inline elements don't establish a stacking context, so we handle opacity here.
       opacity: if self.parent.base_data.display == Display::Inline {
         self.parent.svg_data.opacity.0
@@ -138,23 +135,6 @@ impl SizedFontStyle<'_> {
       decoration_skip_ink: self.parent.misc_inherited_data.text_decoration_skip_ink,
       stroke_color: self.text_stroke_color,
       stroke_width: self.stroke_width,
-      font_synthesis: FontSynthesis {
-        weight: self.parent.inherited_data.font_synthesis_weight,
-        style: self.parent.inherited_data.font_synthesis_style,
-        small_caps: self.parent.inherited_data.font_synthesis_small_caps,
-      },
-      line_height: self.box_line_height,
-      fixed_letter_spacing: if self.parent.inherited_data.letter_spacing.has_percentage() {
-        0.0
-      } else {
-        self.letter_spacing
-      },
-      fixed_word_spacing: if self.parent.inherited_data.word_spacing.has_percentage() {
-        0.0
-      } else {
-        self.word_spacing
-      },
-      vertical_align: self.parent.base_data.vertical_align,
     }
   }
 
@@ -260,14 +240,11 @@ fn number_line_height(value: f32, font_size: f32) -> LayoutUnit {
 impl<'s> SizedFontStyle<'s> {
   /// Resolves a sized font style from a computed style and render context.
   pub fn from_style(style: &'s ComputedStyle, context: &RenderContext) -> Self {
-    let box_line_height = BoxLineHeight::of(style, context);
-
     Self {
       sizing: context.sizing.to_owned(),
       parent: style,
       font_family: context.expand_font_family(&style.inherited_data.font_family),
       caps: style.inherited_data.font_variant_caps,
-      box_line_height,
       stroke_width: style
         .misc_inherited1_data
         .webkit_text_stroke_width

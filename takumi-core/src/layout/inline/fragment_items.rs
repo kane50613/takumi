@@ -18,8 +18,8 @@ use super::{
   metrics::VisualInlineBox,
   outline::InlineOutlineRect,
   runs::{
-    HangingWhitespace, InlineRunLayout, MeasuredInlineBox, MeasuredInlineRun, PositionedGlyph,
-    PositionedInlineRun, ShapedRun, slice_text_at_char_boundaries,
+    InlineRunLayout, MeasuredInlineBox, MeasuredInlineRun, PositionedGlyph, PositionedInlineRun,
+    ShapedRun, slice_text_at_char_boundaries,
   },
   text_fit::LineScaleState,
 };
@@ -195,7 +195,6 @@ struct TextItem {
   offset: f32,
   baseline: f32,
   advance: f32,
-  hanging: HangingWhitespace,
   text_range: Range<usize>,
   glyphs: RunGlyphs,
   placement: RunPlacement,
@@ -204,8 +203,6 @@ struct TextItem {
 /// Where a run paints on its line, past where it was shaped.
 struct RunPlacement {
   line_scale: LineScaleState,
-  static_inline_prefix: f32,
-  baseline_shift: f32,
   decoration_placement: DecorationPlacement,
   /// How far `position: relative` on its spans moves it.
   relative_offset: Point<f32>,
@@ -400,7 +397,6 @@ impl FragmentItems {
     let offset = take(&mut face.offset);
     let baseline = take(&mut face.baseline);
     let advance = take(&mut face.advance);
-    let hanging = take(&mut face.hanging);
     let text_range = take(&mut face.text_range);
     let face = self.face_index(face, context);
 
@@ -409,7 +405,6 @@ impl FragmentItems {
       offset,
       baseline,
       advance,
-      hanging,
       text_range,
       glyphs,
       placement,
@@ -480,14 +475,14 @@ impl FragmentItems {
       };
       let text = slice_text_at_char_boundaries(&self.text, text_range);
 
-      if text.is_empty() || (face.brush.is_direction_mark && item.advance == 0.0) {
+      if text.is_empty() {
         continue;
       }
 
       let line_scale = item.placement.line_scale;
       let scale = line_scale.scale;
       let origin = line_scale.layout_origin - self.content_box.offset;
-      let top = item.baseline + item.placement.baseline_shift - face.metrics.ascent;
+      let top = item.baseline - face.metrics.ascent;
       let link = match span {
         Some(ProcessedInlineSpan::Text { link, .. }) => link.clone(),
         _ => None,
@@ -495,9 +490,7 @@ impl FragmentItems {
 
       runs.push(MeasuredInlineRun {
         text,
-        x: origin.x
-          + (item.offset + item.hanging.shift - origin.x) * scale
-          + item.placement.relative_offset.x,
+        x: origin.x + (item.offset - origin.x) * scale + item.placement.relative_offset.x,
         y: origin.y + (top - origin.y) * scale + item.placement.relative_offset.y,
         width: item.advance * scale,
         height: (face.metrics.ascent + face.metrics.descent) * scale,
@@ -538,7 +531,6 @@ impl FragmentItems {
         offset: item.offset,
         baseline: item.baseline,
         advance: item.advance,
-        hanging: item.hanging,
         text_range: item.text_range.clone(),
         ..ShapedRun::clone(&self.faces[item.face as usize])
       };
@@ -556,8 +548,6 @@ impl FragmentItems {
         glyph_run,
         resolved_glyphs,
         line_scale: item.placement.line_scale,
-        static_inline_prefix: item.placement.static_inline_prefix,
-        baseline_shift: item.placement.baseline_shift,
         decoration_placement: item.placement.decoration_placement.clone(),
         paint_offset,
         relative_offset: item.placement.relative_offset,

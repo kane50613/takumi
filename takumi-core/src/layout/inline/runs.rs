@@ -76,9 +76,6 @@ pub struct ShapedRun {
   pub baseline: f32,
   /// Total horizontal advance of the run.
   pub advance: f32,
-  /// Line-end whitespace inside [`Self::advance`], which decorations, inline backgrounds and
-  /// outlines do not span, as Blink skips hanging whitespace.
-  pub hanging: HangingWhitespace,
   /// Paint attributes carried by the run.
   pub brush: InlineBrush,
   /// Vertical font metrics for the run.
@@ -103,21 +100,8 @@ pub struct ShapedRun {
   pub synthetic_skew: Option<f32>,
   /// Normalized variation coordinates the run was shaped at.
   pub(crate) normalized_coords: Vec<F2Dot14>,
-  // Accessor, not a `pub` field: the backing `parley` blob must not leak into the public API.
+  // Accessor, not a `pub` field: the backing font bytes stay out of the public API.
   pub(super) font_data: FontBlob,
-}
-
-/// The line-end whitespace a run carries, placed where rule L1 of UAX #9 puts it: at the
-/// paragraph's level, past the line's end.
-#[derive(Debug, Clone, Copy, Default, PartialEq)]
-pub struct HangingWhitespace {
-  /// Its advance.
-  pub advance: f32,
-  /// How far the run moves so the whitespace hangs past the line's end, when the run's direction
-  /// differs from the paragraph's and parley left the whitespace inside it.
-  pub shift: f32,
-  /// Whether the whitespace sits at the run's visual start rather than its end.
-  pub at_start: bool,
 }
 
 impl ShapedRun {
@@ -146,20 +130,6 @@ impl ShapedRun {
       && self.synthetic_bold == other.synthetic_bold
       && self.synthetic_skew == other.synthetic_skew
       && self.normalized_coords == other.normalized_coords
-  }
-
-  /// Advance that decorations span: the run without its line-end whitespace.
-  pub fn decorated_advance(&self) -> f32 {
-    self.advance - self.hanging.advance
-  }
-
-  /// Where the decorated span starts past [`Self::offset`].
-  pub(crate) fn decorated_offset(&self) -> f32 {
-    if self.hanging.at_start {
-      self.hanging.advance
-    } else {
-      0.0
-    }
   }
 
   /// Font bytes for `skrifa::FontRef::from_index`, paired with [`Self::font_index`].
@@ -214,10 +184,6 @@ pub struct PositionedInlineRun {
   pub resolved_glyphs: ResolvedGlyphs,
   /// Text-fit scale state for the line.
   pub(crate) line_scale: LineScaleState,
-  /// Cumulative in-flow inline-box width before this run on the line.
-  pub(crate) static_inline_prefix: f32,
-  /// Baseline shift applied to glyphs on the line.
-  pub baseline_shift: f32,
   /// Where the run's decorations go.
   pub(crate) decoration_placement: DecorationPlacement,
   /// Where the block's border box sits in the space paint snaps to pixels in.
@@ -242,7 +208,6 @@ impl PositionedInlineRun {
       &self.resolved_glyphs,
       layout,
       &self.decoration_placement,
-      self.baseline_shift,
       DecorationSpace {
         transform: base * Affine::translation(self.relative_offset.x, self.relative_offset.y),
         device,
@@ -257,19 +222,15 @@ impl PositionedInlineRun {
   pub fn transform(&self, base: Affine) -> Affine {
     let Point { x, y } = self.relative_offset;
 
-    self
-      .line_scale
-      .transform(base * Affine::translation(x, y), self.static_inline_prefix)
-      * Affine::translation(-x, -y)
+    self.line_scale.transform(base * Affine::translation(x, y)) * Affine::translation(-x, -y)
   }
 
-  /// Per-glyph inline-offset origin (border/padding box top-left + baseline shift + relative
-  /// offset).
+  /// Per-glyph inline-offset origin: the content box's top-left, moved by the relative offset.
   pub fn glyph_offset(&self, layout: ComputedLayout) -> Point<f32> {
     let offset = layout.content_box_offset();
     Point {
       x: offset.x + self.relative_offset.x,
-      y: offset.y + self.baseline_shift + self.relative_offset.y,
+      y: offset.y + self.relative_offset.y,
     }
   }
 

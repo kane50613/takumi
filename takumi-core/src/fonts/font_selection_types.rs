@@ -37,19 +37,16 @@ impl FontSelectionValue {
     self.backing
   }
 
+  #[cfg(test)]
   /// Blink's `MaximumValue`.
   pub(crate) const fn maximum_value() -> Self {
     Self::from_raw(i16::MAX)
   }
 
+  #[cfg(test)]
   /// Blink's `MinimumValue`.
   pub(crate) const fn minimum_value() -> Self {
     Self::from_raw(i16::MIN)
-  }
-
-  /// Blink's `ClampToObliqueRange`.
-  pub(crate) fn clamp_to_oblique_range(self) -> Self {
-    FontSelectionRange::new(MIN_OBLIQUE_VALUE, MAX_OBLIQUE_VALUE).clamp_to_range(self)
   }
 }
 
@@ -88,73 +85,47 @@ impl Display for FontSelectionValue {
 /// Blink's `kItalicThreshold`.
 pub(crate) const ITALIC_THRESHOLD: FontSelectionValue = FontSelectionValue::new(14.0);
 
-/// Blink's `IsItalic`.
-pub(crate) fn is_italic(font_style: FontSelectionValue) -> bool {
-  font_style >= ITALIC_THRESHOLD
-}
-
 /// Blink's `kFontSelectionZeroValue`.
 pub(crate) const FONT_SELECTION_ZERO_VALUE: FontSelectionValue = FontSelectionValue::new(0.0);
 /// Blink's `kNormalSlopeValue`.
 pub(crate) const NORMAL_SLOPE_VALUE: FontSelectionValue = FontSelectionValue::new(0.0);
 /// Blink's `kItalicSlopeValue`.
 pub(crate) const ITALIC_SLOPE_VALUE: FontSelectionValue = FontSelectionValue::new(14.0);
-/// Blink's `kMaxObliqueValue`.
-pub(crate) const MAX_OBLIQUE_VALUE: FontSelectionValue = FontSelectionValue::new(90.0);
-/// Blink's `kMinObliqueValue`.
-pub(crate) const MIN_OBLIQUE_VALUE: FontSelectionValue = FontSelectionValue::new(-90.0);
 
 /// Blink's `kBoldThreshold`.
 pub(crate) const BOLD_THRESHOLD: FontSelectionValue = FontSelectionValue::new(600.0);
-/// Blink's `kMinWeightValue`.
-pub(crate) const MIN_WEIGHT_VALUE: FontSelectionValue = FontSelectionValue::new(1.0);
-/// Blink's `kMaxWeightValue`.
-pub(crate) const MAX_WEIGHT_VALUE: FontSelectionValue = FontSelectionValue::new(1000.0);
+#[cfg(test)]
 /// Blink's `kBlackWeightValue`.
 pub(crate) const BLACK_WEIGHT_VALUE: FontSelectionValue = FontSelectionValue::new(900.0);
-/// Blink's `kExtraBoldWeightValue`.
-pub(crate) const EXTRA_BOLD_WEIGHT_VALUE: FontSelectionValue = FontSelectionValue::new(800.0);
+#[cfg(test)]
 /// Blink's `kBoldWeightValue`.
 pub(crate) const BOLD_WEIGHT_VALUE: FontSelectionValue = FontSelectionValue::new(700.0);
-/// Blink's `kSemiBoldWeightValue`.
-pub(crate) const SEMI_BOLD_WEIGHT_VALUE: FontSelectionValue = FontSelectionValue::new(600.0);
+#[cfg(test)]
 /// Blink's `kMediumWeightValue`.
 pub(crate) const MEDIUM_WEIGHT_VALUE: FontSelectionValue = FontSelectionValue::new(500.0);
 /// Blink's `kNormalWeightValue`.
 pub(crate) const NORMAL_WEIGHT_VALUE: FontSelectionValue = FontSelectionValue::new(400.0);
+#[cfg(test)]
 /// Blink's `kLightWeightValue`.
 pub(crate) const LIGHT_WEIGHT_VALUE: FontSelectionValue = FontSelectionValue::new(300.0);
-/// Blink's `kExtraLightWeightValue`.
-pub(crate) const EXTRA_LIGHT_WEIGHT_VALUE: FontSelectionValue = FontSelectionValue::new(200.0);
+#[cfg(test)]
 /// Blink's `kThinWeightValue`.
 pub(crate) const THIN_WEIGHT_VALUE: FontSelectionValue = FontSelectionValue::new(100.0);
-
-/// Blink's `IsFontWeightBold`.
-pub(crate) fn is_font_weight_bold(font_weight: FontSelectionValue) -> bool {
-  font_weight >= BOLD_THRESHOLD
-}
 
 /// Blink's `kUpperWeightSearchThreshold`.
 pub(crate) const UPPER_WEIGHT_SEARCH_THRESHOLD: FontSelectionValue = FontSelectionValue::new(500.0);
 /// Blink's `kLowerWeightSearchThreshold`.
 pub(crate) const LOWER_WEIGHT_SEARCH_THRESHOLD: FontSelectionValue = FontSelectionValue::new(400.0);
 
-/// Blink's `kUltraCondensedWidthValue`.
-pub(crate) const ULTRA_CONDENSED_WIDTH_VALUE: FontSelectionValue = FontSelectionValue::new(50.0);
-/// Blink's `kExtraCondensedWidthValue`.
-pub(crate) const EXTRA_CONDENSED_WIDTH_VALUE: FontSelectionValue = FontSelectionValue::new(62.5);
+#[cfg(test)]
 /// Blink's `kCondensedWidthValue`.
 pub(crate) const CONDENSED_WIDTH_VALUE: FontSelectionValue = FontSelectionValue::new(75.0);
-/// Blink's `kSemiCondensedWidthValue`.
-pub(crate) const SEMI_CONDENSED_WIDTH_VALUE: FontSelectionValue = FontSelectionValue::new(87.5);
 /// Blink's `kNormalWidthValue`.
 pub(crate) const NORMAL_WIDTH_VALUE: FontSelectionValue = FontSelectionValue::new(100.0);
-/// Blink's `kSemiExpandedWidthValue`.
-pub(crate) const SEMI_EXPANDED_WIDTH_VALUE: FontSelectionValue = FontSelectionValue::new(112.5);
+#[cfg(test)]
 /// Blink's `kExpandedWidthValue`.
 pub(crate) const EXPANDED_WIDTH_VALUE: FontSelectionValue = FontSelectionValue::new(125.0);
-/// Blink's `kExtraExpandedWidthValue`.
-pub(crate) const EXTRA_EXPANDED_WIDTH_VALUE: FontSelectionValue = FontSelectionValue::new(150.0);
+#[cfg(test)]
 /// Blink's `kUltraExpandedWidthValue`.
 pub(crate) const ULTRA_EXPANDED_WIDTH_VALUE: FontSelectionValue = FontSelectionValue::new(200.0);
 
@@ -221,6 +192,7 @@ impl FontSelectionRange {
     self.minimum <= self.maximum
   }
 
+  #[cfg(test)]
   /// Blink's `IsRange`.
   pub(crate) fn is_range(&self) -> bool {
     self.maximum > self.minimum
@@ -339,11 +311,6 @@ impl FontSelectionCapabilities {
   /// Blink's `IsValid`.
   pub(crate) fn is_valid(&self) -> bool {
     self.width.is_valid() && self.slope.is_valid() && self.weight.is_valid()
-  }
-
-  /// Blink's `HasRange`.
-  pub(crate) fn has_range(&self) -> bool {
-    self.width.is_range() || self.slope.is_range() || self.weight.is_range()
   }
 }
 
