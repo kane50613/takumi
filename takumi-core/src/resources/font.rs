@@ -28,9 +28,6 @@ use xxhash_rust::xxh3::{Xxh3, xxh3_64};
 use std::sync::OnceLock;
 
 #[cfg(feature = "svg")]
-use harfrust::font::{Blob, Font as ShapingFont};
-
-#[cfg(feature = "svg")]
 use crate::resvg::usvg::fontdb::Database;
 use crate::{
   context::RenderContext,
@@ -192,12 +189,6 @@ pub struct FontBlob {
 impl FontBlob {
   pub(crate) fn new(data: SharedBytes, id: u64) -> Self {
     Self { data, id }
-  }
-
-  /// The face at `index` of the bytes, as harfrust shapes with it; none when it does not parse.
-  #[cfg(feature = "svg")]
-  pub(crate) fn shaping_font(&self, index: u32) -> Option<ShapingFont> {
-    ShapingFont::new(Blob::from(Arc::clone(&self.data)), index)
   }
 
   /// The sfnt bytes.
@@ -422,7 +413,7 @@ impl Fonts {
       };
 
       database.push_face(
-        font_face.family.to_string(),
+        Arc::clone(&font_face.family),
         style,
         Weight(attributes.weight.value() as u16),
         stretch_bucket(attributes.stretch.ratio()),
@@ -430,8 +421,7 @@ impl Fonts {
           .axes
           .iter()
           .any(|axis| axis.tag == harfrust::Tag::new(b"opsz")),
-        FontBlob::new(Arc::clone(&typeface.data), typeface.id),
-        typeface.index,
+        Arc::clone(typeface),
       );
     }
 

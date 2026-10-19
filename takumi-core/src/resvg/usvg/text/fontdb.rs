@@ -2,12 +2,11 @@
 //! the renderer's font registry. Font bytes are shared, so the tree stays
 //! `Send + Sync` and no second font store is built.
 
-use std::collections::HashMap;
-use std::fmt;
+use std::{collections::HashMap, fmt, sync::Arc};
 
 use harfrust::font::Font as ShapingFont;
 
-use crate::resources::font::FontBlob;
+use crate::fonts::font_custom_platform_data::FontCustomPlatformData;
 
 /// Identifier of a face inside a [`Database`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
@@ -65,13 +64,13 @@ pub struct Query<'a> {
 pub struct FaceInfo {
   pub id: ID,
   /// Primary family name the face was registered under.
-  pub family: String,
+  pub family: Arc<str>,
   pub style: Style,
   pub weight: Weight,
   pub stretch: Stretch,
   pub(crate) has_opsz: bool,
-  data: FontBlob,
-  index: u32,
+  /// The registered face, shared with the font registry and its shaping tables.
+  typeface: Arc<FontCustomPlatformData>,
 }
 
 impl fmt::Debug for FaceInfo {
@@ -101,19 +100,18 @@ pub struct Database {
 impl Database {
   pub(crate) fn push_face(
     &mut self,
-    family: String,
+    family: Arc<str>,
     style: Style,
     weight: Weight,
     stretch: Stretch,
     has_opsz: bool,
-    data: FontBlob,
-    index: u32,
+    typeface: Arc<FontCustomPlatformData>,
   ) -> ID {
     let key = family.to_ascii_lowercase();
     let existing = self
       .faces
       .iter()
-      .position(|face| face.data.data().as_ptr() == data.data().as_ptr() && face.index == index);
+      .position(|face| face.typeface.id == typeface.id && face.typeface.index == typeface.index);
 
     let position = existing.unwrap_or_else(|| {
       let id = ID(self.faces.len() as u32);
@@ -125,8 +123,7 @@ impl Database {
         weight,
         stretch,
         has_opsz,
-        data,
-        index,
+        typeface,
       });
       self.faces.len() - 1
     });
@@ -181,14 +178,12 @@ impl Database {
   {
     let face = self.face(id)?;
 
-    Some(f(face.data.data(), face.index))
+    Some(f((*face.typeface.data).as_ref(), face.typeface.index))
   }
 
-  /// The face `id` names, as harfrust shapes with it.
+  /// The face `id` names, as harfrust shapes with it, sharing the registry's shaping tables.
   pub(crate) fn shaping_font(&self, id: ID) -> Option<ShapingFont> {
-    let face = self.face(id)?;
-
-    face.data.shaping_font(face.index)
+    self.face(id)?.typeface.shaping_font().cloned()
   }
 
   pub fn face(&self, id: ID) -> Option<&FaceInfo> {
