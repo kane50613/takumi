@@ -19,9 +19,9 @@
 //! Pagination honors `break-before: page`, `break-after: page`, `break-inside: avoid`, and the
 //! `widows` and `orphans` minimums, which default to 2 as in Chromium. A table header or footer
 //! group with `break-inside: avoid`, the default for `<thead>` and `<tfoot>`, repeats on each
-//! page the table crosses. The header and footer bands repeat in the page margins, like
-//! Chromium's print templates. Nodes classed `pageNumber` or `totalPages` receive the page
-//! counters.
+//! page the table crosses if it is at most a quarter of the page tall. The header and footer
+//! bands repeat in the page margins, like Chromium's print templates. Nodes classed `pageNumber`
+//! or `totalPages` receive the page counters.
 //!
 //! # Document features
 //!
