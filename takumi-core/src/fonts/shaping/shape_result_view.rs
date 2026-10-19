@@ -664,7 +664,7 @@ mod tests {
     register(&mut fonts, GEIST, "Geist");
     register(&mut fonts, NOTO_SANS_TC, "Noto Sans TC");
 
-    let font = font(&mut fonts, "Geist, 'Noto Sans TC'");
+    let font = font(&fonts, "Geist, 'Noto Sans TC'");
     let string_a = "Test with multiple 字体 ";
     let string_b = "and 本書.";
     let result_a = shape(&font, string_a);

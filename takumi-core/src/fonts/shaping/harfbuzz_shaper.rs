@@ -823,7 +823,7 @@ mod tests {
   /// A 16px `family` font with `font-variant-caps: caps` and `font-synthesis-small-caps:
   /// synthesis`.
   fn caps_font(
-    fonts: &mut Fonts,
+    fonts: &Fonts,
     family: &str,
     caps: FontVariantCaps,
     synthesis: FontSynthesic,
@@ -869,9 +869,9 @@ mod tests {
 
     register(&mut fonts, GEIST, "Geist");
 
-    let plain = caps_runs(&font(&mut fonts, "Geist"), "AB");
+    let plain = caps_runs(&font(&fonts, "Geist"), "AB");
     let small_caps = caps_font(
-      &mut fonts,
+      &fonts,
       "Geist",
       FontVariantCaps::SmallCaps,
       FontSynthesic::Auto,
@@ -894,7 +894,7 @@ mod tests {
     register(&mut fonts, GEIST, "Geist");
 
     let small_caps = caps_font(
-      &mut fonts,
+      &fonts,
       "Geist",
       FontVariantCaps::SmallCaps,
       FontSynthesic::Auto,
@@ -911,9 +911,9 @@ mod tests {
 
     register(&mut fonts, GEIST, "Geist");
 
-    let plain = caps_runs(&font(&mut fonts, "Geist"), "aB");
+    let plain = caps_runs(&font(&fonts, "Geist"), "aB");
     let small_caps = caps_font(
-      &mut fonts,
+      &fonts,
       "Geist",
       FontVariantCaps::SmallCaps,
       FontSynthesic::None,
@@ -929,9 +929,9 @@ mod tests {
 
     register(&mut fonts, EB_GARAMOND_CAPS, "EB Garamond Caps");
 
-    let plain = caps_runs(&font(&mut fonts, "EB Garamond Caps"), "a");
+    let plain = caps_runs(&font(&fonts, "EB Garamond Caps"), "a");
     let small_caps = caps_font(
-      &mut fonts,
+      &fonts,
       "EB Garamond Caps",
       FontVariantCaps::SmallCaps,
       FontSynthesic::Auto,
@@ -998,8 +998,8 @@ mod tests {
   /// With no font, the text shapes to no runs.
   #[test]
   fn no_font() {
-    let mut fonts = Fonts::default();
-    let font = font(&mut fonts, "Geist");
+    let fonts = Fonts::default();
+    let font = font(&fonts, "Geist");
     let result = HarfBuzzShaper::new("a".into()).shape_all(&font, TextDirection::Ltr);
 
     assert!(result.runs.is_empty());
@@ -1064,7 +1064,7 @@ mod tests {
 
     register(&mut fonts, NOTO_SANS_TC, "Noto Sans TC");
 
-    let font = font(&mut fonts, "Noto Sans TC");
+    let font = font(&fonts, "Noto Sans TC");
     let result =
       HarfBuzzShaper::new("\u{3001}\u{3000}".into()).shape_all(&font, TextDirection::Ltr);
     let mut fonts = run_fonts(&result);
@@ -1081,7 +1081,7 @@ mod tests {
     register(&mut fonts, GEIST, "Geist");
     register(&mut fonts, NOTO_SANS_TC, "Noto Sans TC");
 
-    let font = font(&mut fonts, "Geist, 'Noto Sans TC'");
+    let font = font(&fonts, "Geist, 'Noto Sans TC'");
     let geist = run_fonts(&HarfBuzzShaper::new("a".into()).shape_all(&font, TextDirection::Ltr))[0];
     let result = HarfBuzzShaper::new("ab\u{203B}cd".into()).shape_all(&font, TextDirection::Ltr);
     let ranges: Vec<(u32, u32)> = runs(&result)

@@ -33,7 +33,7 @@ pub(crate) fn register(fonts: &mut Fonts, path: &str, family_name: &str) {
 }
 
 /// A 16px font for the `font-family` list `family`.
-pub(crate) fn font(fonts: &mut Fonts, family: &str) -> Font {
+pub(crate) fn font(fonts: &Fonts, family: &str) -> Font {
   let family = FontFamily::from_css_str(family).unwrap();
 
   Font::new(
@@ -66,7 +66,7 @@ pub(crate) fn geist() -> (Fonts, Font) {
 
   register(&mut fonts, GEIST, "Geist");
 
-  let font = font(&mut fonts, "Geist");
+  let font = font(&fonts, "Geist");
 
   (fonts, font)
 }
@@ -77,7 +77,7 @@ pub(crate) fn geist_mono() -> (Fonts, Font) {
 
   register(&mut fonts, GEIST_MONO, "Geist Mono");
 
-  let font = font(&mut fonts, "'Geist Mono'");
+  let font = font(&fonts, "'Geist Mono'");
 
   (fonts, font)
 }

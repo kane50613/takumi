@@ -86,7 +86,9 @@ fn describe(fonts: &FontsSnapshot, run: &ShapedRun) -> PaintFont {
     .unwrap_or(100.0);
 
   PaintFont {
-    family: fonts.face_family(run.font_id(), run.font_index),
+    family: fonts
+      .face_family(run.font_id(), run.font_index)
+      .map(str::to_owned),
     face_index: run.font_index,
     weight,
     style,

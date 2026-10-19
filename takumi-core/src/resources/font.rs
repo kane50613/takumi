@@ -1,9 +1,9 @@
 use std::{
   borrow::Cow,
-  cell::{OnceCell, RefCell},
+  cell::OnceCell,
   collections::hash_map::Entry,
   fmt::{self, Debug, Formatter},
-  rc::Rc,
+  ops::Deref,
   str::FromStr,
   sync::{
     Arc,
@@ -23,6 +23,9 @@ use skrifa::{
 };
 use thiserror::Error;
 use xxhash_rust::xxh3::{Xxh3, xxh3_64};
+
+#[cfg(feature = "svg")]
+use std::sync::OnceLock;
 
 #[cfg(feature = "svg")]
 use crate::resvg::usvg::fontdb::Database;
@@ -253,56 +256,52 @@ impl MatchedFace {
 /// The registry of fonts available to a renderer: Blink's `CSSFontSelector` over the faces
 /// registered.
 ///
-/// Registering and unregistering are the only mutations; each render takes a clone as its
-/// snapshot (see [`RenderContext`]).
+/// Registering and unregistering are the only mutations. They copy the registry only while a
+/// snapshot still shares it, so a snapshot costs a reference count (see [`RenderContext`]).
 #[derive(Clone, Default)]
 pub struct Fonts {
-  selector: CssFontSelector,
+  registry: Arc<FontRegistry>,
   /// The families a snapshot's fallback walks before the last-resort ones, in place of every
   /// registered family.
   fallback_families: Option<Vec<Arc<str>>>,
-  /// Lazily built face store for SVG `<text>`; cleared on registration.
+}
+
+/// What registration builds, shared by a [`Fonts`] and every snapshot taken from it since.
+#[derive(Clone, Default)]
+struct FontRegistry {
+  selector: CssFontSelector,
+  /// Face store for SVG `<text>`, built on first use.
   #[cfg(feature = "svg")]
-  svg_db: Option<Arc<Database>>,
+  svg_db: OnceLock<Arc<Database>>,
   /// Stamped from a process-wide counter on every registration or removal, so
   /// font-dependent caches (SVG `<text>` trees, their rasterizations) can
   /// tell any two registry states apart, including across `Fonts` instances.
   revision: u64,
 }
 
-/// A render-local font handle.
-#[derive(Clone)]
-pub struct FontsSnapshot {
-  context: Rc<RefCell<Fonts>>,
+impl FontRegistry {
+  /// Marks the registry changed, so font-dependent caches can tell its states apart.
+  fn revise(&mut self) {
+    static REVISION: AtomicU64 = AtomicU64::new(1);
+
+    #[cfg(feature = "svg")]
+    {
+      self.svg_db = OnceLock::new();
+    }
+
+    self.revision = REVISION.fetch_add(1, Ordering::Relaxed);
+  }
 }
 
-impl FontsSnapshot {
-  /// The registered family name of a face; see [`Fonts::face_family`].
-  #[cfg(feature = "paint-tree")]
-  pub(crate) fn face_family(&self, font_id: u64, index: u32) -> Option<String> {
-    self
-      .context
-      .borrow()
-      .face_family(font_id, index)
-      .map(str::to_owned)
-  }
+/// A render-local font handle: the registry as it stood, and the render's fallback families.
+#[derive(Clone)]
+pub struct FontsSnapshot(Fonts);
 
-  /// Mutable access to the render-local registry. Callers must not re-enter while the borrow is
-  /// held.
-  pub(crate) fn with_context<R>(&self, f: impl FnOnce(&mut Fonts) -> R) -> R {
-    f(&mut self.context.borrow_mut())
-  }
+impl Deref for FontsSnapshot {
+  type Target = Fonts;
 
-  /// Face store for SVG `<text>` conversion, built once per snapshot.
-  #[cfg(feature = "svg")]
-  pub(crate) fn svg_fontdb(&self) -> Arc<Database> {
-    self.with_context(Fonts::svg_fontdb)
-  }
-
-  /// Registration revision of the underlying font registry.
-  #[cfg(feature = "svg")]
-  pub(crate) fn revision(&self) -> u64 {
-    self.with_context(|fonts| fonts.revision)
+  fn deref(&self) -> &Fonts {
+    &self.0
   }
 }
 
@@ -335,9 +334,15 @@ impl Fonts {
     families
       .iter()
       .filter_map(|family| match family {
-        FontFamilyToken::Owned(name) => self.selector.get_font_data(description, name, false),
+        FontFamilyToken::Owned(name) => {
+          self
+            .registry
+            .selector
+            .get_font_data(description, name, false)
+        }
         FontFamilyToken::Generic(generic) => {
           self
+            .registry
             .selector
             .get_font_data(description, generic.keyword(), true)
         }
@@ -352,30 +357,40 @@ impl Fonts {
     let families: Vec<&Arc<str>> = match &self.fallback_families {
       Some(families) => families
         .iter()
-        .chain(self.selector.last_resort_families())
+        .chain(self.registry.selector.last_resort_families())
         .collect(),
-      None => self.selector.fallback_families().collect(),
+      None => self.registry.selector.fallback_families().collect(),
     };
 
     families
       .into_iter()
-      .filter_map(|family| self.selector.get_font_data(description, family, false))
+      .filter_map(|family| {
+        self
+          .registry
+          .selector
+          .get_font_data(description, family, false)
+      })
       .flatten()
       .map(MatchedFace::of)
       .collect()
   }
 
-  /// Face store for SVG `<text>` conversion, sharing this registry's font bytes.
+  /// Face store for SVG `<text>` conversion, sharing this registry's font bytes, built once per
+  /// registry state.
   #[cfg(feature = "svg")]
-  pub(crate) fn svg_fontdb(&mut self) -> Arc<Database> {
-    if let Some(database) = &self.svg_db {
-      return database.clone();
-    }
+  pub(crate) fn svg_fontdb(&self) -> Arc<Database> {
+    Arc::clone(
+      self
+        .registry
+        .svg_db
+        .get_or_init(|| Arc::new(self.build_svg_fontdb())),
+    )
+  }
 
-    let database = Arc::new(self.build_svg_fontdb());
-
-    self.svg_db = Some(database.clone());
-    database
+  /// Registration revision of the font registry.
+  #[cfg(feature = "svg")]
+  pub(crate) fn revision(&self) -> u64 {
+    self.registry.revision
   }
 
   #[cfg(feature = "svg")]
@@ -398,7 +413,7 @@ impl Fonts {
 
     let mut database = Database::default();
 
-    for font_face in self.selector.font_faces() {
+    for font_face in self.registry.selector.font_faces() {
       let typeface = &font_face.custom_platform_data;
       let attributes = typeface.attributes;
       let style = match attributes.style {
@@ -428,7 +443,11 @@ impl Fonts {
       (Family::Fantasy, GenericFamilyType::Fantasy),
       (Family::Monospace, GenericFamilyType::Monospace),
     ] {
-      for family in self.selector.family_names_from_settings(keyword.keyword()) {
+      for family in self
+        .registry
+        .selector
+        .family_names_from_settings(keyword.keyword())
+      {
         database.register_generic(generic, family);
       }
     }
@@ -446,6 +465,7 @@ impl Fonts {
   #[cfg(feature = "paint-tree")]
   pub(crate) fn face_family(&self, font_id: u64, index: u32) -> Option<&str> {
     self
+      .registry
       .selector
       .font_faces()
       .find(|face| {
@@ -464,6 +484,7 @@ impl Fonts {
         .flat_map(|token| match token {
           FontFamilyToken::Owned(name) => vec![Arc::from(name.as_str())],
           FontFamilyToken::Generic(generic) => self
+            .registry
             .selector
             .family_names_from_settings(generic.keyword())
             .to_vec(),
@@ -471,12 +492,10 @@ impl Fonts {
         .collect()
     });
 
-    FontsSnapshot {
-      context: Rc::new(RefCell::new(Self {
-        fallback_families,
-        ..self.clone()
-      })),
-    }
+    FontsSnapshot(Self {
+      registry: Arc::clone(&self.registry),
+      fallback_families,
+    })
   }
 
   pub(crate) fn resolve_glyphs(
@@ -532,7 +551,9 @@ impl Fonts {
   /// Registers a font, decoding it and skipping faces already registered under the same family
   /// in this context.
   pub fn register(&mut self, font: FontResource) -> Result<Vec<RegisteredFamily>, FontError> {
-    self.revise();
+    let registry = Arc::make_mut(&mut self.registry);
+
+    registry.revise();
 
     let FontResource {
       source,
@@ -550,7 +571,7 @@ impl Fonts {
         .map(FontOverride::descriptors)
         .unwrap_or_default()
     };
-    let faces = self.selector.register(
+    let faces = registry.selector.register(
       data,
       id,
       &descriptors,
@@ -587,25 +608,15 @@ impl Fonts {
   /// Removes every face registered under `family`, from each source and `unicode-range` subset
   /// alike, so it falls back as an unknown family; false when it has no faces.
   pub fn unregister_family(&mut self, family: &str) -> bool {
-    if !self.selector.unregister_family(family) {
+    let registry = Arc::make_mut(&mut self.registry);
+
+    if !registry.selector.unregister_family(family) {
       return false;
     }
 
-    self.revise();
+    registry.revise();
 
     true
-  }
-
-  /// Marks the registry changed, so font-dependent caches can tell its states apart.
-  fn revise(&mut self) {
-    static REVISION: AtomicU64 = AtomicU64::new(1);
-
-    #[cfg(feature = "svg")]
-    {
-      self.svg_db = None;
-    }
-
-    self.revision = REVISION.fetch_add(1, Ordering::Relaxed);
   }
 }
 
@@ -734,26 +745,25 @@ impl RenderContext {
     description: &FontSelectionDescription,
     font_size: f32,
   ) -> Option<PrimaryFontMetrics> {
-    self.fonts().with_context(|fonts| {
-      let face = fonts
-        .font_group(families, description)
-        .into_iter()
-        .flatten()
-        .find(|face| {
-          face
-            .unicode_range
-            .as_ref()
-            .is_none_or(|range| range.contains(u32::from(' ')))
-        })
-        .or_else(|| fonts.fallback_bucket(description).into_iter().next())?;
-      let font_ref = FontRef::from_index(face.blob.data(), face.index).ok()?;
+    let fonts = self.fonts();
+    let face = fonts
+      .font_group(families, description)
+      .into_iter()
+      .flatten()
+      .find(|face| {
+        face
+          .unicode_range
+          .as_ref()
+          .is_none_or(|range| range.contains(u32::from(' ')))
+      })
+      .or_else(|| fonts.fallback_bucket(description).into_iter().next())?;
+    let font_ref = FontRef::from_index(face.blob.data(), face.index).ok()?;
 
-      Some(PrimaryFontMetrics::of(
-        &font_ref,
-        font_size,
-        LocationRef::default(),
-      ))
-    })
+    Some(PrimaryFontMetrics::of(
+      &font_ref,
+      font_size,
+      LocationRef::default(),
+    ))
   }
 }
 
@@ -1098,9 +1108,10 @@ mod tests {
 
   /// The families fallback walks before the last-resort ones.
   fn order(fonts: &Fonts) -> Vec<String> {
-    let last_resort: Vec<&Arc<str>> = fonts.selector.last_resort_families().collect();
+    let last_resort: Vec<&Arc<str>> = fonts.registry.selector.last_resort_families().collect();
 
     fonts
+      .registry
       .selector
       .fallback_families()
       .filter(|family| !last_resort.contains(family))
@@ -1306,6 +1317,7 @@ mod tests {
     assert_eq!(order(&fonts), vec!["Logical".to_string()]);
     assert_eq!(
       fonts
+        .registry
         .selector
         .font_faces()
         .filter(|face| !face.ranges().is_entire_range())
@@ -1345,6 +1357,7 @@ mod tests {
     assert_eq!(order(&fonts), vec!["User Font".to_string()]);
     assert_eq!(
       fonts
+        .registry
         .selector
         .last_resort_families()
         .map(ToString::to_string)

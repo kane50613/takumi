@@ -54,7 +54,7 @@ pub(crate) struct FontFallbackList {
 }
 
 impl FontFallbackList {
-  pub(crate) fn new(fonts: &mut Fonts, description: &FontDescription) -> Self {
+  pub(crate) fn new(fonts: &Fonts, description: &FontDescription) -> Self {
     let font_data = |face: MatchedFace| {
       SimpleFontData::new(face, description.computed_size, description.specified_size).map(Rc::new)
     };

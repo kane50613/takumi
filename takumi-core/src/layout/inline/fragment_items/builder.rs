@@ -567,9 +567,10 @@ fn include_glyph_ink(
   let Ok(font) = FontRef::from_index(run.font_data(), run.font_index) else {
     return;
   };
-  let resolved_glyphs = context.fonts().with_context(|fonts| {
-    fonts.resolve_glyphs(run.face(), font, run.glyphs.iter().map(|glyph| glyph.id))
-  });
+  let resolved_glyphs =
+    context
+      .fonts()
+      .resolve_glyphs(run.face(), font, run.glyphs.iter().map(|glyph| glyph.id));
 
   for glyph in &run.glyphs {
     let Some((min_x, min_y, max_x, max_y)) = resolved_glyphs
