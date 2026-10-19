@@ -1042,8 +1042,10 @@ impl RenderNode {
       }
     };
 
-    // A block-level table shrinks to fit rather than stretching.
-    if sized_by_grid && !item {
+    // A block-level table shrinks to fit rather than stretching. Under a content-sized width its
+    // tracks size it instead: taffy's block layout reads a child's definite width without asking it
+    // again, so a width written for one pass would leak into the next.
+    if sized_by_grid && !item && matches!(available, AvailableSpace::Definite(_)) {
       style.size.width = length(styled(width));
     }
     style.min_size.width = length(styled(min_width));
