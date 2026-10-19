@@ -536,13 +536,11 @@ impl FragmentItems {
       };
       let font = FontRef::from_index(glyph_run.font_data(), glyph_run.font_index)
         .map_err(|_| FontError::InvalidFontIndex)?;
-      let resolved_glyphs = context.fonts().with_context(|fonts| {
-        fonts.resolve_glyphs(
-          glyph_run.face(),
-          font,
-          glyph_run.glyphs.iter().map(|glyph| glyph.id),
-        )
-      });
+      let resolved_glyphs = context.fonts().resolve_glyphs(
+        glyph_run.face(),
+        font,
+        glyph_run.glyphs.iter().map(|glyph| glyph.id),
+      );
 
       runs.push(PositionedInlineRun {
         glyph_run,
