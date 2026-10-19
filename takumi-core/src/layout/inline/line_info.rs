@@ -22,13 +22,16 @@ fn is_hanging_space(c: char) -> bool {
   c == ' ' || is_other_space_separator(c)
 }
 
-/// `text-align` on the last line, or the one before a forced break, per css-text-3 §6.3: `text-align-last`
-/// is always `auto`, so `justify` aligns it to the start. Written from the spec, as Blink's
-/// `ComputedStyle::GetTextAlign` is LGPL. <https://drafts.csswg.org/css-text-3/#text-align-last-property>
+/// `text-align`, or on the last line and the one before a forced break `text-align-last`, per
+/// css-text-3 §6.3. Written from the spec, as Blink's `ComputedStyle::GetTextAlign` is LGPL.
+/// <https://drafts.csswg.org/css-text-3/#text-align-last-property>
 pub(crate) fn text_align(style: &ComputedStyle, is_last_line: bool) -> TextAlign {
-  match style.inherited_data.text_align {
-    TextAlign::Justify if is_last_line => TextAlign::Start,
-    text_align => text_align,
+  let text_align = style.inherited_data.text_align;
+
+  if is_last_line {
+    style.inherited_data.text_align_last.resolve(text_align)
+  } else {
+    text_align
   }
 }
 

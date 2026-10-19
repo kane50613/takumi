@@ -1503,6 +1503,7 @@ define_style! {
       font_synthesis_style: FontSynthesic where inherit = true,
       font_synthesis_small_caps: FontSynthesic where inherit = true,
       text_align: TextAlign where inherit = true,
+      text_align_last: TextAlignLast where inherit = true,
       letter_spacing: Length where inherit = true,
       word_spacing: Length where inherit = true,
       white_space_collapse: WhiteSpaceCollapse where inherit = true,
