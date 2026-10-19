@@ -31,6 +31,16 @@ pub mod font_style;
 pub(crate) mod fonts;
 /// Box, text, and inset shadow resolution.
 pub mod shadow;
+/// Unicode facts about characters, after Blink.
+#[cfg_attr(
+  not(test),
+  expect(
+    dead_code,
+    reason = "TODO: the shaping port reads these through RunSegmenter"
+  )
+)]
+#[cfg_attr(test, allow(dead_code))]
+pub(crate) mod text;
 pub mod text_processing;
 
 /// Error types.

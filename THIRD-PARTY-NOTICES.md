@@ -12,6 +12,10 @@ This software is based in part on the work of the Independent JPEG Group.
 
 `@takumi-rs/core`, `@takumi-rs/wasm`, `takumi-pdf`, and `takumi-paint` contain parts of `takumi-core` that follow algorithms from Chromium's Blink renderer and from Skia. [`takumi-core/LICENSE-CHROMIUM`](takumi-core/LICENSE-CHROMIUM) names each part and the notice its source carries.
 
+## emoji-segmenter
+
+`@takumi-rs/core`, `@takumi-rs/wasm`, `takumi-pdf`, and `takumi-paint` split text into emoji and text runs with a rewrite of the grammar from [emoji-segmenter](https://github.com/google/emoji-segmenter), under the Apache License 2.0. [`takumi-core/LICENSE-EMOJI-SEGMENTER`](takumi-core/LICENSE-EMOJI-SEGMENTER) names the rewritten file and carries the license.
+
 ## libwebp
 
 `@takumi-rs/core` encodes WebP with libwebp.

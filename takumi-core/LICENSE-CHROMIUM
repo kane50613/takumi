@@ -95,9 +95,19 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
    and `HarfBuzzRunGlyphData` in src/fonts/shaping/glyph_data.rs and
    `GlyphDataRange` in src/fonts/shaping/glyph_data_range.rs, from
    third_party/blink/renderer/platform/fonts/shaping/glyph_data.h and
-   third_party/blink/renderer/platform/fonts/shaping/glyph_data_range.cc.
+   third_party/blink/renderer/platform/fonts/shaping/glyph_data_range.cc;
+   and `ScriptRunIterator` in src/fonts/script_run_iterator.rs,
+   `SymbolsIterator` in src/fonts/symbols_iterator.rs, `FontFallbackPriority`
+   in src/fonts/font_fallback_priority.rs, `RunSegmenter` in
+   src/fonts/shaping/run_segmenter.rs, and `EmojiSegmentationCategory` in
+   src/text/emoji_segmentation_category.rs, from
+   third_party/blink/renderer/platform/fonts/script_run_iterator.cc,
+   third_party/blink/renderer/platform/fonts/symbols_iterator.cc,
+   third_party/blink/renderer/platform/fonts/font_fallback_priority.h,
+   third_party/blink/renderer/platform/fonts/shaping/run_segmenter.cc, and
+   third_party/blink/renderer/platform/text/emoji_segmentation_category_inline_header.h.
 
-Copyright 2014, 2015, 2017, 2020, 2024 The Chromium Authors
+Copyright 2014, 2015, 2017, 2019, 2020, 2024 The Chromium Authors
 
 Redistribution and use in source and binary forms, with or without
 modification, are permitted provided that the following conditions are
@@ -126,12 +136,14 @@ THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 
-4. `skips_ink` and its character tables in src/layout/intercept.rs, from
-   third_party/blink/renderer/platform/text/character.cc and
+4. `skips_ink` and its character tables in src/layout/intercept.rs, and the
+   predicates in src/text/character.rs, from
+   third_party/blink/renderer/platform/text/character.cc,
+   third_party/blink/renderer/platform/text/character_emoji.cc, and
    third_party/blink/renderer/platform/text/character_property_data.h.
 
 Copyright (C) 2014 Google Inc. All rights reserved.
-Copyright 2016 The Chromium Authors
+Copyright 2015, 2016 The Chromium Authors
 
 Redistribution and use in source and binary forms, with or without
 modification, are permitted provided that the following conditions are
