@@ -3,7 +3,7 @@ title: Upgrade to v1
 description: Upgrade Takumi from v0 to v1 and update imports, image formats, layout defaults, and font handling.
 ---
 
-v1 is the first stable release. The public API is locked: v1.x releases stay backward compatible under semver.
+v1 is the first stable release. Releases within v1.x stay backward compatible under semver. To move on from v1, see [Upgrade to v2](/docs/upgrade/v2).
 
 ## Install
 
@@ -29,9 +29,9 @@ npm i takumi-js@1
 
 ### `display` defaults to `inline`
 
-Early Takumi defaulted `display` to `flex`. v1 defaults to `inline` to match the CSS specification and keep LLM-generated components correct.
+Early Takumi defaulted `display` to `flex`. v1 defaults to `inline`, as the CSS specification does, so components written for the web, including LLM-generated ones, lay out as expected.
 
-Add `display: flex` (or the `flex` Tailwind class) to every container that needs flexbox.
+Add `display: flex`, or the `flex` Tailwind class, to every container that needs flexbox.
 
 ```tsx title="display defaults to inline"
 <div
@@ -50,7 +50,7 @@ Add `display: flex` (or the `flex` Tailwind class) to every container that needs
 
 ### Unified runtime detection and fallback
 
-`takumi-js` now detects the right bindings for your environment (Node.js, Workers, and others). You no longer import NAPI (native Node addon) or WASM (WebAssembly) bindings directly.
+`takumi-js` now picks the right bindings for your environment, such as Node.js or Workers. You no longer import the NAPI (native Node addon) or WASM (WebAssembly) bindings directly.
 
 ```ts title="Unified runtime detection and fallback"
 import { ImageResponse } from "@takumi-rs/image-response"; // [!code --]
@@ -59,9 +59,7 @@ import { ImageResponse } from "takumi-js/response"; // [!code ++]
 
 ### `emoji` option for dynamic emoji loading
 
-To match Next.js's `ImageResponse` API, `takumi-js` adds an `emoji` option for a custom emoji provider.
-
-It defaults to `twemoji`. To source emoji glyphs from a font, set it to `from-font` and include an emoji font in `fonts`.
+`takumi-js` adds an `emoji` option that selects the emoji provider, matching Next.js's `ImageResponse` API. It defaults to `twemoji`. To draw emoji from a font instead, set it to `from-font` and include an emoji font in `fonts`.
 
 See [Images & emoji](/docs/load-images).
 
@@ -105,7 +103,7 @@ await renderer.putPersistentImage({ src: "foo.png", data }); // [!code ++]
 ```
 
 <Callout type="warn">
-  In 2.x this method is gone. Supply images through the `images` render option instead.
+  v2 removes this method. Pass images through the `images` render option instead.
 </Callout>
 
 ### Deprecated exports removed
@@ -116,7 +114,7 @@ v1 removes all previously deprecated exports from `@takumi-rs/core`.
 
 ### `RenderOptions::builder()` replaces `RenderOptionsBuilder`
 
-The standalone `RenderOptionsBuilder` struct is gone. Call `builder()` on `RenderOptions`. It uses [typed-builder](https://docs.rs/typed-builder) for compile-time validation without `.unwrap()`.
+The standalone `RenderOptionsBuilder` struct is removed. Call `RenderOptions::builder()` instead. It uses [typed-builder](https://docs.rs/typed-builder), which checks required fields at compile time, so `build()` needs no `.unwrap()`.
 
 ```rust title="RenderOptions::builder() replaces RenderOptionsBuilder"
 let options = RenderOptionsBuilder::default().build().unwrap(); // [!code --]

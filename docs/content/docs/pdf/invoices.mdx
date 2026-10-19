@@ -4,13 +4,11 @@ description: Generate paginated PDF invoices with line items, totals, page numbe
 icon: Receipt
 ---
 
-Render line items and totals as a paged document. If your invoice format requires embedded XML, add it as an attachment with the required PDF/A and XMP settings.
+Render line items and totals as a paged document. If your invoice format needs embedded XML, attach it and set the PDF/A and XMP options the format requires.
 
 ## A plain invoice
 
-In this example, `invoice` is your invoice data and `InvoiceDocument` is your JSX template. For a complete implementation, see the [invoice example](https://github.com/kane50613/takumi/tree/master/example/generate-invoice).
-
-Line items flow across pages. A footer carries the page counter. `measure` returns the footer's height so you can reserve enough bottom margin:
+Here, `invoice` is your invoice data and `InvoiceDocument` is your JSX template. Line items flow across pages, and the footer carries the page counter. `measure()` returns the footer's height, so you can reserve enough bottom margin:
 
 ```tsx twoslash title="Reserve space for an invoice footer"
 import type { ReactNode } from "react";
@@ -43,7 +41,9 @@ const pdf = await render(<InvoiceDocument data={invoice} />, {
 });
 ```
 
-Use `break-inside: avoid` to keep a line item together when it fits on a page. In Tailwind, use `break-inside-avoid`:
+For complete templates, see the [invoice and receipt example](https://github.com/kane50613/takumi/tree/master/example/generate-invoice).
+
+Use `break-inside: avoid`, or `break-inside-avoid` in Tailwind, to keep a line item on one page:
 
 ```tsx twoslash title="Keep a line item together"
 declare const item: { description: string; amount: string };
@@ -61,9 +61,9 @@ Apply the same style to the totals block.
 
 ## Electronic invoices
 
-Factur-X and ZUGFeRD combine a readable PDF invoice with structured XML. Configure the container for the profile you are implementing:
+Factur-X and ZUGFeRD combine a readable PDF invoice with structured XML. Map what your profile requires to these options:
 
-| The standard requires        | The option         |
+| The profile requires         | The option         |
 | ---------------------------- | ------------------ |
 | A PDF/A-3 container          | `pdfa: "3b"`       |
 | The XML attached by name     | `attachments`      |
@@ -71,7 +71,7 @@ Factur-X and ZUGFeRD combine a readable PDF invoice with structured XML. Configu
 | A modification date per file | `modificationDate` |
 | Embedded subset fonts        | always on          |
 
-Each attachment's `modificationDate` falls back to `metadata.creationDate`. Setting the document date once covers both.
+Each attachment's `modificationDate` falls back to `metadata.creationDate`, so one document date covers both. This example also validates against PDF/UA-1:
 
 ```tsx twoslash title="Attach invoice XML"
 import type { ReactNode } from "react";
@@ -105,9 +105,9 @@ const pdf = await render(invoice, {
 });
 ```
 
-The renderer checks PDF conformance while writing. It does not validate invoice XML, tax rules, or acceptance by a receiving system.
+The renderer checks PDF conformance while writing. It does not check the invoice XML, tax rules, or whether a receiving system accepts the file.
 
-Takumi does not build the invoice XML. Use a library for the profile, or emit the elements the profile lists. The [e-invoice example](https://github.com/kane50613/takumi/tree/master/example/e-invoice) writes a MINIMUM profile by hand.
+Takumi does not build the invoice XML. Use a library for your profile, or write the elements the profile lists. The [e-invoice example](https://github.com/kane50613/takumi/tree/master/example/e-invoice) writes a MINIMUM profile by hand, along with the `facturXmp` schema used above.
 
 ### Validating the result
 
@@ -126,12 +126,12 @@ verapdf --flavour ua1 --format text invoice.pdf
 java -jar Mustang-CLI.jar --action validate --source invoice.pdf
 ```
 
-Mustang finds the profile through the `fx:` XMP block. Takumi writes the values and the schema description PDF/A demands, so the two cannot drift. It does not check the values: a wrong profile name surfaces in Mustang, not at render time.
+Mustang finds the profile through the `fx:` XMP block. Takumi writes each value together with the schema description PDF/A requires, so the two cannot disagree. It does not check the values: a wrong profile name shows up in Mustang, not at render time.
 
 ## Accessible invoices
 
-For PDF/UA-1 output, set `tagged: "ua1"` and supply the required metadata. Review the reading order and table semantics as well. See [PDF/A and PDF/UA](/docs/pdf/pdf-a).
+For PDF/UA-1 output, set `tagged: "ua1"`, `lang`, and `metadata.title`. Then review the reading order and table structure yourself. See [PDF/A and PDF/UA](/docs/pdf/pdf-a#required-inputs).
 
 ## Reproducible bytes
 
-Use a fixed `metadata.creationDate` with the same content, resources, and renderer version when you need reproducible bytes. A new date changes the file even if the invoice looks the same.
+Same content, resources, renderer version, and `metadata.creationDate` produce the same bytes. A new date changes the file even when the invoice looks the same.

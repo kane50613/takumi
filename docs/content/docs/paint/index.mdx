@@ -5,9 +5,9 @@ index: true
 icon: BookOpen
 ---
 
-`takumi-paint` lays out JSX, HTML, or a takumi node tree like takumi does. It returns the **paint tree** instead of pixels. The tree says what to draw, where, and in which order. Every CSS value is already resolved.
+`takumi-paint` is takumi's paint tree output, for drawing a layout with your own API. It shares one layout engine, a port of Chromium's layout, with [image output](/docs) and [PDF output](/docs/pdf). Where those produce pixels or pages, it returns the **paint tree**: what to draw, where, and in which order, with every CSS value resolved.
 
-Draw the tree with Canvas, write it into slides, or pass it to a native drawing API.
+Draw the tree on Canvas, write it into editable slides such as PPTX, or pass it to a native drawing API.
 
 <PaintPipeline />
 
@@ -19,7 +19,7 @@ npm i takumi-paint
 
 ## Paint JSX
 
-`paint()` lays out a node and returns a `PaintTree`. The demos on these pages paint this card when the site builds.
+`paint()` takes JSX, an HTML string, or a node tree, and returns a `PaintTree`. The demos on these pages paint this card when the site builds.
 
 <include cwd meta='twoslash title="card.tsx" {3,31}'>
   app/components/mdx/paint/examples/card.tsx
@@ -54,7 +54,9 @@ for (const node of tree.nodes) {
 | `text`  | One paragraph, as shaped runs in visual order            |
 | `image` | A replaced image, such as `<img>` or an SVG              |
 
-Lengths are device pixels. `devicePixelRatio` scales CSS lengths during layout.
+Lengths are in device pixels. `devicePixelRatio` scales CSS lengths during layout.
+
+`tree.toJSON()` returns the tree as plain JSON, without font files, so you can hand it to another process.
 
 ## Choose a guide
 
@@ -66,7 +68,7 @@ Lengths are device pixels. `devicePixelRatio` scales CSS lengths during layout.
 
 ## Reuse a painter
 
-`paint()` shares one `Painter`. Create your own `Painter` to keep its fonts separate. Call `free()` to release its WebAssembly memory.
+`paint()` uses one shared `Painter`. Create your own `Painter` to keep a separate font registry, and call `free()` to release its WebAssembly memory.
 
 ```tsx twoslash title="painter.tsx"
 import { Painter } from "takumi-paint";
@@ -79,3 +81,9 @@ try {
   painter.free();
 }
 ```
+
+`Painter` also has `registerFont()`, `unregisterFont()`, and `clearFonts()`, and takes the same `fontCacheMaxBytes` option as [`PdfRenderer`](/docs/pdf#reuse-a-renderer).
+
+## Runtimes
+
+The package entries match `takumi-pdf`: the default import, `takumi-paint/next`, and `takumi-paint/no-init` with `takumi-paint/wasm-url`. See [Runtimes](/docs/pdf#runtimes).

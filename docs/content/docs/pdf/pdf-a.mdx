@@ -1,12 +1,12 @@
 ---
 title: PDF/A and PDF/UA
-description: Configure PDF/A archival output, tagged PDF structure, and PDF/UA-1 validation with takumi-pdf.
+description: Configure PDF/A archival output, tagged PDF structure, and PDF/UA-1 or PDF/UA-2 validation with takumi-pdf.
 icon: Archive
 ---
 
-Use `pdfa` for archival output and `tagged` for document structure and PDF/UA validation. The selected standard determines which metadata and attachments are allowed.
+`pdfa` selects a PDF/A archival level. `tagged` controls the structure tree and PDF/UA accessibility validation. The level you pick decides which other options are allowed.
 
-```tsx twoslash title="PDF/A and PDF/UA"
+```tsx twoslash title="PDF/A-3b"
 import type { ReactNode } from "react";
 declare const invoice: ReactNode;
 // ---cut---
@@ -15,10 +15,11 @@ import { render } from "takumi-pdf";
 const pdf = await render(invoice, {
   // [!code highlight]
   pdfa: "3b",
+  metadata: { title: "Invoice 1042", creationDate: "2026-08-06" },
 });
 ```
 
-Conforming output includes an sRGB output intent and XMP metadata. Fonts are always embedded and subset, with or without PDF/A.
+Conforming output carries an sRGB output intent and XMP metadata. Fonts are embedded and subset with or without `pdfa`.
 
 ## Levels
 
@@ -33,23 +34,48 @@ Conforming output includes an sRGB output intent and XMP metadata. Fonts are alw
 | `"4"`  | PDF 2.0     | The PDF 2.0 revision of the standard. |
 | `"4f"` | PDF 2.0     | `4` plus arbitrary file attachments.  |
 
-The `u` levels add no output cost. Takumi always writes ToUnicode maps.
+- The `u` levels cost nothing extra. Takumi always writes Unicode mappings for text.
+- PDF/A-3 and PDF/A-4f allow file attachments. ZUGFeRD and Factur-X electronic invoices expect `"3b"`. See [Attachments](/docs/pdf/attachments).
+- PDF/A-1 is not offered, because it prohibits transparency.
 
-PDF/A-3 and PDF/A-4f allow arbitrary file attachments. ZUGFeRD and Factur-X electronic invoices expect `"3b"`. See [Attachments](/docs/pdf/attachments).
+## Validation
 
-PDF/A-1 is not offered. It prohibits transparency.
+The renderer validates the file while writing it. If the document cannot conform, the render fails and names the violated rule.
 
-Validation runs during rendering. When a document cannot conform, the render fails with the violated rule instead of writing a broken file.
+CI renders test documents at every `pdfa` level and both PDF/UA levels, then checks each one with [veraPDF](https://verapdf.org). Run veraPDF on your own documents as well:
 
-Validate your generated document with [veraPDF](https://verapdf.org). Internal checks do not replace reviewing reading order, alternative text, or the meaning of your content.
+```bash title="Validate with veraPDF"
+verapdf --flavour 3b --format text invoice.pdf
+verapdf --flavour ua1 --format text invoice.pdf
+```
+
+Neither check reviews reading order, alternative text quality, or the meaning of your content.
+
+## Required inputs
+
+Validators require some inputs the renderer cannot infer:
+
+| Input                   | Required by                                                                   |
+| ----------------------- | ----------------------------------------------------------------------------- |
+| `lang`                  | `"2a"`, `"3a"`, and `tagged: "ua2"`. PDF/UA-1 only recommends it.             |
+| `metadata.title`        | `tagged: "ua1"` and `tagged: "ua2"`                                           |
+| `metadata.creationDate` | Every `pdfa` level, when `metadata` is set, or `lang` is set on tagged output |
+| `alt` on every `<img>`  | `"2a"`, `"3a"`, and both PDF/UA levels                                        |
+
+A missing input fails the render. A few more rules:
+
+- Write `creationDate` as UTC `"YYYY-MM-DD"` or `"YYYY-MM-DDTHH:MM:SS"`. A fixed date keeps the output byte-identical across runs.
+- Mark a decorative image with `alt=""`.
+- Give a passage in another language its own `lang` attribute.
+- PDF/UA requires a document outline. `tagged: "ua1"` and `"ua2"` build it from headings, even without `outline: true`.
 
 ## Tagged output
 
-`tagged` defaults to `true`, which writes a structure tree from the document's HTML semantics. This alone does not request PDF/UA validation.
+`tagged` defaults to `true`, which writes a structure tree from the document's HTML semantics. It does not validate against PDF/UA on its own.
 
-Set `tagged: "ua1"` to also validate against PDF/UA-1:
+Set `tagged: "ua1"` to validate against PDF/UA-1:
 
-```tsx twoslash title="Tagged output"
+```tsx twoslash title="PDF/A-2a with PDF/UA-1"
 import type { ReactNode } from "react";
 declare const report: ReactNode;
 // ---cut---
@@ -67,36 +93,44 @@ const pdf = await render(report, {
 });
 ```
 
-The structure tree comes from the HTML semantics:
+The structure tree maps HTML elements like this:
 
-| HTML                      | PDF                                 |
-| ------------------------- | ----------------------------------- |
-| `h1`–`h6`                 | `Hn` with the heading text as title |
-| `p`, bare text            | `P`                                 |
-| `img`                     | `Figure` with the `alt` text        |
-| `img` with `alt=""`       | artifact (decorative, no element)   |
-| `figure`, `figcaption`    | one `Figure` holding a `Caption`    |
-| `a`                       | `Link`, holding the link annotation |
-| `ul`, `ol`, `li`          | `L`, `LI`, `LBody`                  |
-| `strong`, `em`, `code`    | `Strong`, `Em`, `Code`              |
-| `table`, `caption`        | `Table` holding a `Caption`         |
-| `thead`, `tbody`, `tfoot` | `THead`, `TBody`, `TFoot`           |
-| `tr`, `th`, `td`          | `TR`, `TH` with `Scope`, `TD`       |
-| page headers and footers  | artifacts                           |
+| HTML                                 | PDF                                  |
+| ------------------------------------ | ------------------------------------ |
+| `h1`–`h6`                            | `Hn`, with the heading text as title |
+| `p`, bare text                       | `P`                                  |
+| `img`                                | `Figure`, with the `alt` text        |
+| `img` with `alt=""`                  | artifact (decorative, no element)    |
+| `figure`, `figcaption`               | one `Figure` holding a `Caption`     |
+| `a` with `href`                      | `Link`, holding the link annotation  |
+| `ul`, `ol`, `li`                     | `L`, `LI`, `LBody`                   |
+| `strong` or `b`, `em` or `i`, `code` | `Strong`, `Em`, `Code`               |
+| `table`, `caption`                   | `Table` holding a `Caption`          |
+| `thead`, `tbody`, `tfoot`            | `THead`, `TBody`, `TFoot`            |
+| `tr`, `th`, `td`                     | `TR`, `TH` with `Scope`, `TD`        |
+| page headers and footers             | artifacts                            |
 
-Heading levels are normalized in the structure tree. A document starting with `h2` gets `H1`, and a jump from `h1` to `h4` becomes `H1` followed by `H2`. Use meaningful heading levels in your source even when their visual sizes differ.
+A `figure` takes its description from the first `img` inside it with non-empty `alt`. Without one, it gets no `Figure` element.
 
-Header cells carry a `Scope` attribute: `Column` inside `thead`, `Row` elsewhere. A `scope` attribute on the cell overrides it. `rowspan` and `colspan` become `RowSpan` and `ColSpan` attributes. A table that spans pages stays one `Table` element. The repeated header band is marked as an artifact.
+### Headings
 
-Table elements follow the rendered layout, like the rest of the tree. A `<table>` whose `display` is overridden gets none, and neither does a table built from flex rows. Screen readers cannot navigate those by row or column, and the file still passes PDF/UA, because the validator only checks the tags that are there.
+Heading levels are normalized in the structure tree. A document that starts with `h2` gets `H1`, and a jump from `h1` to `h4` becomes `H1` followed by `H2`. Use meaningful heading levels in your source, even when their visual sizes differ.
 
-Set `tagged: false` only when you do not need a structure tree and the selected standard permits it.
+### Tables
+
+- Header cells carry a `Scope`: `Column` inside `thead`, `Row` elsewhere. A `scope` attribute on the cell overrides it.
+- `rowspan` and `colspan` become `RowSpan` and `ColSpan` attributes.
+- A table that spans pages stays one `Table` element, and the repeated header is marked as an artifact.
+
+Table elements follow the rendered layout. A `<table>` whose `display` is overridden gets no table tags, and neither does a table built from flex rows. Screen readers cannot navigate those by row or column. The file still passes PDF/UA, because the validator only checks the tags that are present.
+
+Set `tagged: false` only when you do not need a structure tree and the selected level allows it.
 
 ### PDF/UA-2
 
-`tagged: "ua2"` validates against PDF/UA-2 instead. The standard is PDF 2.0 only, so it pairs with `pdfa: "4"`, `pdfa: "4f"`, or plain PDF.
+`tagged: "ua2"` validates against PDF/UA-2 instead. PDF/UA-2 is PDF 2.0 only, so it pairs with `pdfa: "4"`, `pdfa: "4f"`, or no `pdfa`.
 
-```tsx twoslash title="PDF/UA-2"
+```tsx twoslash title="PDF/A-4 with PDF/UA-2"
 import type { ReactNode } from "react";
 declare const report: ReactNode;
 // ---cut---
@@ -114,11 +148,11 @@ const pdf = await render(report, {
 });
 ```
 
-Links and outline entries target structure elements, not page positions. Reading order survives when a viewer follows one.
+Under PDF/UA-2, links and outline entries target structure elements, not page positions. A viewer that follows one keeps the reading order.
 
-### Compatible options
+## Compatible options
 
-Invalid combinations are TypeScript type errors. PDF/UA-1 uses PDF 1.7. PDF/A-4 and PDF/UA-2 use PDF 2.0. The two generations never mix.
+Invalid combinations are TypeScript type errors. PDF/UA-1 uses PDF 1.7, and PDF/A-4 and PDF/UA-2 use PDF 2.0, so the two never mix.
 
 | `pdfa`     | `tagged`                          | `attachments` |
 | ---------- | --------------------------------- | ------------- |
@@ -130,12 +164,4 @@ Invalid combinations are TypeScript type errors. PDF/UA-1 uses PDF 1.7. PDF/A-4 
 | `4`        | `false`, `true`, `"ua2"`          | no            |
 | `4f`       | `false`, `true`, `"ua2"`          | yes           |
 
-See [Attachments](/docs/pdf/attachments).
-
-Validators require inputs the renderer cannot supply:
-
-- `lang` is the document language. A-levels and PDF/UA require it. PDF/UA-2 fails the render without it. A passage in another language needs its own `lang` attribute.
-- `metadata.title` is required by PDF/UA.
-- `metadata.creationDate` is required by the `a` levels. Use UTC `"YYYY-MM-DD"` or `"YYYY-MM-DDTHH:MM:SS"`. A fixed date keeps output byte-identical across runs.
-
-PDF/UA also requires a document outline. Takumi generates it from headings.
+`uncoveredText: "placeholder"` fails with any `pdfa` level and both PDF/UA levels. See [Uncovered text](/docs/pdf/fonts-and-images#uncovered-text).

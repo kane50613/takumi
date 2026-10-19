@@ -209,8 +209,8 @@ export type PdfMetadata = {
   /** The tool that created the source document. */
   creator?: string;
   /**
-   * UTC creation date, `YYYY-MM-DD` or `YYYY-MM-DDTHH:MM:SS`. Tagged archival
-   * standards require one; supplying it keeps output deterministic.
+   * UTC creation date, `YYYY-MM-DD` or `YYYY-MM-DDTHH:MM:SS`. Every PDF/A
+   * level requires one; supplying it keeps output deterministic.
    */
   creationDate?: string;
   /**
