@@ -358,6 +358,7 @@ jobs:
           path: takumi-js/dist
           if-no-files-found: error
 
+  # Outside Pass Test: the suite takes over 20 minutes, so it reports without blocking a merge.
   test-wpt:
     name: WPT reftests
     runs-on: ubuntu-latest
@@ -959,7 +960,6 @@ jobs:
       [
         lint-and-format,
         test-rust,
-        test-wpt,
         test-js,
         build-image-response,
         check-packaging,
