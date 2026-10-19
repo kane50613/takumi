@@ -108,14 +108,32 @@ export interface ImageNode extends NodeBase {
 
 /** One step of painting the tree, bottom to top. */
 export type PaintStep =
-  /** Draw these in order, under `node.transform`. */
-  | { readonly type: "draw"; readonly node: PaintNode; readonly drawables: readonly Drawable[] }
-  /** Start a layer for `node`; composite it per `effects` at the matching `end-group`. */
-  | { readonly type: "begin-group"; readonly node: BoxNode; readonly effects: Effects }
+  | DrawStep
+  | BeginGroupStep
   | { readonly type: "end-group"; readonly node: BoxNode }
-  /** Clip the enclosed steps to `clip`, in `node`'s local space. */
-  | { readonly type: "begin-clip"; readonly node: BoxNode; readonly clip: Shape }
+  | BeginClipStep
   | { readonly type: "end-clip"; readonly node: BoxNode };
+
+/** Draw these in order, under `node.transform`. */
+interface DrawStep {
+  readonly type: "draw";
+  readonly node: PaintNode;
+  readonly drawables: readonly Drawable[];
+}
+
+/** Start a layer for `node`; composite it per `effects` at the matching `end-group`. */
+interface BeginGroupStep {
+  readonly type: "begin-group";
+  readonly node: BoxNode;
+  readonly effects: Effects;
+}
+
+/** Clip the enclosed steps to `clip`, in `node`'s local space. */
+interface BeginClipStep {
+  readonly type: "begin-clip";
+  readonly node: BoxNode;
+  readonly clip: Shape;
+}
 
 type RawNode<Type extends RawPaintNode["type"]> = Extract<RawPaintNode, { type: Type }>;
 

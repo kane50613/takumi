@@ -1,5 +1,5 @@
 import { writeFile } from "node:fs/promises";
-import { defineConfig } from "tsdown";
+import { defineConfig, type UserConfig } from "tsdown";
 import { fetchOk } from "./src/fetch";
 
 const CATALOG_SOURCE = "https://fonts.google.com/metadata/fonts";
@@ -98,7 +98,7 @@ ${shapeFamilyLines.join("\n")}
 // Regenerate before every build so the published types track the latest families.
 await generateCatalog();
 
-export default defineConfig({
+const config: UserConfig = defineConfig({
   entry: {
     index: "src/index.ts",
     emoji: "src/emoji.ts",
@@ -119,3 +119,5 @@ export default defineConfig({
   clean: true,
   outDir: "dist",
 });
+
+export default config;

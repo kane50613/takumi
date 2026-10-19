@@ -1,3 +1,4 @@
+import type { CSSProperties } from "react";
 import type { ContainerNode, Declarations, ImageNode, Node, NodeMetadata, TextNode } from "./types";
 
 function applyMetadata(node: Node, props: Partial<NodeMetadata>, style = props.style) {
@@ -81,34 +82,39 @@ export function image(props: Omit<ImageNode, "type">): ImageNode {
   return node;
 }
 
-export function style(style: Declarations) {
+export function style(style: Declarations): CSSProperties {
   return style;
 }
 
-export function percentage(percentage: number) {
+export function percentage(percentage: number): `${number}%` {
   return `${percentage}%` as const;
 }
 
-export function vw(vw: number) {
+export function vw(vw: number): `${number}vw` {
   return `${vw}vw` as const;
 }
 
-export function vh(vh: number) {
+export function vh(vh: number): `${number}vh` {
   return `${vh}vh` as const;
 }
 
-export function em(em: number) {
+export function em(em: number): `${number}em` {
   return `${em}em` as const;
 }
 
-export function rem(rem: number) {
+export function rem(rem: number): `${number}rem` {
   return `${rem}rem` as const;
 }
 
-export function fr(fr: number) {
+export function fr(fr: number): `${number}fr` {
   return `${fr}fr` as const;
 }
 
-export function rgba(r: number, g: number, b: number, a = 1) {
+export function rgba(
+  r: number,
+  g: number,
+  b: number,
+  a = 1,
+): `rgb(${number} ${number} ${number} / ${number})` {
   return `rgb(${r} ${g} ${b} / ${a})` as const;
 }

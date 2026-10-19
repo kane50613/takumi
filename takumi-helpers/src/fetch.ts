@@ -5,7 +5,7 @@ const redirectStatuses = new Set([301, 302, 303, 307, 308]);
 const maxFetchAttempts = 3;
 const maxRetryDelay = 1000;
 const retryableStatuses = new Set([408, 429, 500, 502, 503, 504]);
-export const defaultMaxFetchBytes = 32 * 1024 * 1024;
+export const defaultMaxFetchBytes: number = 32 * 1024 * 1024;
 
 export type FetchLike = (input: string, init?: RequestInit) => Promise<Response>;
 
@@ -23,7 +23,10 @@ export type FetchOptions = {
 };
 
 /** Fetches a URL, applying a timeout signal and throwing on a non-OK status. */
-export async function fetchOk(url: string, options: FetchOptions & { init?: RequestInit } = {}) {
+export async function fetchOk(
+  url: string,
+  options: FetchOptions & { init?: RequestInit } = {},
+): Promise<Response> {
   return new FetchRequest(url, options).send();
 }
 

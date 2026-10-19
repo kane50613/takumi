@@ -372,7 +372,10 @@ export function subsetFonts<T>({ fonts, source }: { fonts: T[]; source: Codepoin
  * dedupe. Family name, weight, and style come from the font file. Lets `fonts` take a bare URL
  * string, e.g. `fonts: ["https://example.com/Inter.woff2"]`.
  */
-export function fontFromUrl(url: string, options: FetchOptions = {}) {
+export function fontFromUrl(
+  url: string,
+  options: FetchOptions = {},
+): { key: string; data: () => Promise<ArrayBuffer> } {
   return {
     key: url,
     data: () => fetchBytes(url, options),

@@ -4,7 +4,7 @@ import { defaultMaxFetchBytes, fetchOk, type FetchOptions, readBodyLimited } fro
 export function fetchBytes(
   url: string,
   options: FetchOptions & { init?: RequestInit },
-  fallbackMaxBytes = defaultMaxFetchBytes,
+  fallbackMaxBytes: number = defaultMaxFetchBytes,
 ): Promise<ArrayBuffer> {
   return fetchOk(url, options).then((response) =>
     readBodyLimited(response, options.maxBytes ?? fallbackMaxBytes),
