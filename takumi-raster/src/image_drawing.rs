@@ -26,7 +26,7 @@ fn process_image_for_object_fit(
   placement: ReplacedPlacement,
   crop_origin: Point<f32>,
   crop: Size<f32>,
-) -> Result<PreparedImage> {
+) -> Result<Option<PreparedImage>> {
   let (image_width, image_height) = image.size(&context.sizing);
   let (source_width, source_height) = match image {
     ImageSource::Bitmap(bitmap) => (bitmap.width() as f32, bitmap.height() as f32),
@@ -48,9 +48,15 @@ fn process_image_for_object_fit(
     size: placement.size,
   }
   .clipped(crop);
+  let (width, height) = (clipped.size.width as u32, clipped.size.height as u32);
+
+  if !image.is_drawable_at(width, height) {
+    return Ok(None);
+  }
+
   let rendered = image.render_for_layout(
-    clipped.size.width as u32,
-    clipped.size.height as u32,
+    width,
+    height,
     context.style.misc_inherited_data.image_rendering,
     context.time_ms(),
     context.current_color,
@@ -65,11 +71,11 @@ fn process_image_for_object_fit(
     ) * Affine::translation(clipped.crop.x, clipped.crop.y)
   };
 
-  Ok(PreparedImage {
+  Ok(Some(PreparedImage {
     image: rendered,
     logical_to_source,
     offset: crop_origin + clipped.origin,
-  })
+  }))
 }
 
 /// Draws an image into its box's content box, clipped to the content box's curve when the box
@@ -87,8 +93,11 @@ pub(crate) fn draw_image(
     Some(clip) => (clip.offset - content_offset, clip.size),
     None => (replaced.placement.offset, replaced.placement.size),
   };
-  let prepared =
-    process_image_for_object_fit(image, context, replaced.placement, crop_origin, crop)?;
+  let Some(prepared) =
+    process_image_for_object_fit(image, context, replaced.placement, crop_origin, crop)?
+  else {
+    return Ok(());
+  };
   let offset = content_offset + prepared.offset;
   let image_to_box = Affine::translation(offset.x, offset.y);
   let rounded_clip = replaced.clip.filter(|clip| !clip.border.is_zero());
