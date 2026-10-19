@@ -1,5 +1,6 @@
 //! Blink's `platform/text`.
 
+pub(crate) mod bidi_data;
 pub(crate) mod bidi_paragraph;
 pub(crate) mod capitalize;
 pub(crate) mod case_map;

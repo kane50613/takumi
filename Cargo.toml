@@ -142,11 +142,6 @@ version = "0.3"
 default-features = false
 features = ["std"]
 
-[workspace.dependencies.parley_engine]
-version = "0.12"
-default-features = false
-features = ["std"]
-
 [workspace.dependencies.phf]
 version = "0.13"
 features = ["macros"]
@@ -307,12 +302,6 @@ opt-level = "s"
 opt-level = "z"
 [profile.release.package.taffy]
 opt-level = "z"
-[profile.release.package.fontique]
-opt-level = "z"
-[profile.release.package.parley_engine]
-opt-level = "z"
-[profile.release.package.parley_emoji]
-opt-level = "z"
 [profile.release.package.kurbo]
 opt-level = "z"
 [profile.release.package.tiny-skia-path]
@@ -324,7 +313,7 @@ opt-level = "z"
 # dead-code elimination through runtime branches. The fork gates them behind
 # the `hinting` and `harfbuzz_path_style` cargo features, and erases the pen in
 # `OutlineGlyph::draw` so every pen type shares one instantiation of the
-# scalers. parley_engine pins skrifa 0.44, so the fork stays on that line until it moves.
+# scalers.
 [patch.crates-io]
 skrifa = { git = "https://github.com/kane50613/fontations", rev = "caf93ec16d8e0f268da88dbdedd2fb21d7191170" }
 read-fonts = { git = "https://github.com/kane50613/fontations", rev = "caf93ec16d8e0f268da88dbdedd2fb21d7191170" }

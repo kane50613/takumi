@@ -8,14 +8,70 @@ use icu_segmenter::{
   GraphemeClusterSegmenter, LineSegmenter,
   options::{LineBreakOptions, LineBreakStrictness, LineBreakWordOption},
 };
-use parley_engine::break_overrides::{AsciiLineBreakTable, AsciiLineBreakTableBuilder};
+
+/// Whether a line breaks between two ASCII characters where a table overrides UAX #14.
+struct AsciiLineBreakTable {
+  /// For each `before` character, a bit for each `after` character the table overrides.
+  overridden: [u128; 128],
+  /// For each `before` character, a bit for each `after` character it breaks before.
+  allow: [u128; 128],
+}
+
+impl AsciiLineBreakTable {
+  const fn new() -> Self {
+    Self {
+      overridden: [0; 128],
+      allow: [0; 128],
+    }
+  }
+
+  /// Overrides every pair of a character in `before` and one in `after`, a later call winning.
+  const fn with_pairs(
+    mut self,
+    before: RangeInclusive<char>,
+    after: RangeInclusive<char>,
+    allow: bool,
+  ) -> Self {
+    let mut mask = 0_u128;
+    let mut after_char = *after.start() as u32;
+
+    while after_char <= *after.end() as u32 {
+      mask |= 1 << after_char;
+      after_char += 1;
+    }
+
+    let mut before_char = *before.start() as usize;
+
+    while before_char <= *before.end() as usize {
+      self.overridden[before_char] |= mask;
+      self.allow[before_char] = if allow {
+        self.allow[before_char] | mask
+      } else {
+        self.allow[before_char] & !mask
+      };
+      before_char += 1;
+    }
+
+    self
+  }
+
+  const fn lookup(&self, before: char, after: char) -> Option<bool> {
+    let (before, after) = (before as u32, after as u32);
+
+    if before >= 128 || after >= 128 || self.overridden[before as usize] & (1 << after) == 0 {
+      return None;
+    }
+
+    Some(self.allow[before as usize] & (1 << after) != 0)
+  }
+}
 
 /// Chromium's breaks between printable ASCII characters, as parley_engine's
 /// `CHROMIUM_LINE_BREAK_OVERRIDE` builds them from Chromium's `kLineBreakTable`.
-static CHROMIUM_LINE_BREAK_TABLE: AsciiLineBreakTable<5> = {
+static CHROMIUM_LINE_BREAK_TABLE: AsciiLineBreakTable = {
   const ALL: RangeInclusive<char> = '!'..='\u{7f}';
 
-  AsciiLineBreakTableBuilder::new()
+  AsciiLineBreakTable::new()
     .with_pairs(ALL, ALL, false)
     .with_pairs(ALL, '('..='(', true)
     .with_pairs(ALL, '<'..='<', true)
@@ -50,7 +106,6 @@ static CHROMIUM_LINE_BREAK_TABLE: AsciiLineBreakTable<5> = {
     .with_pairs('a'..='z', ALL, false)
     .with_pairs('{'..='{', ALL, false)
     .with_pairs('\u{7f}'..='\u{7f}', ALL, false)
-    .build::<5>()
 };
 
 /// Whether Chromium breaks between `before` and `after`, `before_before` preceding them, where it

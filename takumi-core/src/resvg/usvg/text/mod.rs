@@ -9,7 +9,6 @@ use self::fontdb::{Database, ID};
 use self::layout::DatabaseExt;
 use crate::resvg::usvg::{Cache, Font, FontStretch, FontStyle, Text};
 
-mod bidi;
 pub(crate) mod flatten;
 /// Font face store backed by the renderer's font registry.
 pub mod fontdb;
