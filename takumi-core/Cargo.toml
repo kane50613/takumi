@@ -102,7 +102,9 @@ optional = true
 
 [dependencies.harfrust]
 workspace = true
-optional = true
+
+[dependencies.icu_segmenter]
+workspace = true
 
 [dependencies.icu_properties]
 workspace = true
@@ -129,7 +131,6 @@ svg = [
   "dep:siphasher",
   "dep:strict-num",
   "dep:tiny-skia-path",
-  "dep:harfrust",
   "dep:unicode-bidi",
 ]
 woff2 = ["dep:wuff", "wuff/brotli"]

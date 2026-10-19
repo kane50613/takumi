@@ -123,6 +123,11 @@ version = "2.3.0"
 default-features = false
 features = ["compiled_data"]
 
+[workspace.dependencies.icu_segmenter]
+version = "2.3.0"
+default-features = false
+features = ["compiled_data"]
+
 [workspace.dependencies.unicode-bidi]
 version = "0.3"
 default-features = false
