@@ -2334,6 +2334,11 @@ impl RenderNode {
 
   /// Padding in pixels, with a percentage resolving to zero.
   pub(super) fn padding_px(&self) -> Rect<f32> {
+    self.padding_px_against(0.0)
+  }
+
+  /// The padding, its percentages of `containing_block_width`.
+  pub(super) fn padding_px_against(&self, containing_block_width: f32) -> Rect<f32> {
     let style = &self.context.style;
 
     Rect {
@@ -2342,7 +2347,7 @@ impl RenderNode {
       bottom: style.box_data.padding_bottom,
       left: style.box_data.padding_left,
     }
-    .map(|length| length.to_px(&self.context.sizing, 0.0))
+    .map(|length| length.to_px(&self.context.sizing, containing_block_width))
   }
 
   /// The child-index path to the first node in preorder, `self` included, that `matches` accepts.
@@ -2657,6 +2662,27 @@ impl RenderNode {
         )
       }),
       baseline_offset: None,
+    }
+  }
+
+  /// Blink's `LayoutAtomicInline` sizing: an auto width shrinks to fit, and any other resolves
+  /// against the containing block, which `available_space` stands in for.
+  pub(crate) fn layout_atomic_inline(
+    &self,
+    available_space: Size<AvailableSpace>,
+  ) -> AtomicInlineMetrics {
+    if !self.participates_as_inline_box()
+      || self.layout_style(&self.context.sizing).size.width.is_auto()
+    {
+      return self.measure_inline_box(available_space);
+    }
+
+    let results = LayoutResults::compute(self, available_space);
+    let size = results.root_size();
+
+    AtomicInlineMetrics {
+      size,
+      baseline_offset: self.resolve_inline_baseline_offset(available_space, size, &results),
     }
   }
 

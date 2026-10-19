@@ -27,6 +27,14 @@ use std::{
 };
 use xxhash_rust::xxh3::Xxh3;
 
+#[cfg_attr(
+  not(test),
+  expect(
+    dead_code,
+    reason = "TODO: the inline layout algorithm port lays out atomic inlines"
+  )
+)]
+pub(crate) mod atomic_inline;
 mod background;
 mod breaking;
 mod cache;
