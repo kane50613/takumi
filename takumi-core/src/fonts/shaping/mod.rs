@@ -6,3 +6,6 @@ pub(crate) mod harfbuzz_shaper;
 pub(crate) mod run_segmenter;
 pub(crate) mod shape_result;
 pub(crate) mod shape_result_run;
+pub(crate) mod shape_result_view;
+#[cfg(test)]
+pub(crate) mod testing;

@@ -23,6 +23,23 @@ impl<'a> GlyphDataRange<'a> {
     }
   }
 
+  /// `size` glyphs of `run` from glyph `index` on.
+  pub(crate) fn with_range(run: Option<&'a ShapeResultRun>, index: usize, size: usize) -> Self {
+    Self { run, index, size }
+  }
+
+  pub(crate) fn run(self) -> Option<&'a ShapeResultRun> {
+    self.run
+  }
+
+  pub(crate) fn index(self) -> usize {
+    self.index
+  }
+
+  pub(crate) fn size(self) -> usize {
+    self.size
+  }
+
   pub(crate) fn is_empty(self) -> bool {
     self.size == 0
   }

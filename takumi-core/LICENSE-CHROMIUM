@@ -108,10 +108,12 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
    third_party/blink/renderer/platform/fonts/font_fallback_priority.h,
    third_party/blink/renderer/platform/fonts/shaping/run_segmenter.cc, and
    third_party/blink/renderer/platform/text/emoji_segmentation_category_inline_header.h;
-   and `FontFallbackIterator` in src/fonts/font_fallback_iterator.rs, from
-   third_party/blink/renderer/platform/fonts/font_fallback_iterator.cc.
+   and `FontFallbackIterator` in src/fonts/font_fallback_iterator.rs and
+   `ShapeResultView` in src/fonts/shaping/shape_result_view.rs, from
+   third_party/blink/renderer/platform/fonts/font_fallback_iterator.cc and
+   third_party/blink/renderer/platform/fonts/shaping/shape_result_view.cc.
 
-Copyright 2014, 2015, 2017, 2019, 2020, 2024 The Chromium Authors
+Copyright 2014, 2015, 2017, 2018, 2019, 2020, 2024 The Chromium Authors
 
 Redistribution and use in source and binary forms, with or without
 modification, are permitted provided that the following conditions are

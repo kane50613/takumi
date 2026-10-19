@@ -78,6 +78,23 @@ impl ShapeResult {
     }
   }
 
+  /// A result made of `runs`, for `ShapeResultView::create_shape_result`.
+  pub(super) fn from_runs(
+    start_index: u32,
+    num_characters: u32,
+    direction: TextDirection,
+    runs: Vec<ShapeResultRun>,
+    width: f32,
+    has_vertical_offsets: bool,
+  ) -> Self {
+    Self {
+      runs,
+      width: Cell::new(width),
+      has_vertical_offsets,
+      ..Self::new(start_index, num_characters, direction)
+    }
+  }
+
   /// Blink's `CreateEmpty`.
   pub(crate) fn create_empty(other: &Self) -> Self {
     Self::new(0, 0, other.direction())

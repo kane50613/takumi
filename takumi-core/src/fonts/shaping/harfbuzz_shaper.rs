@@ -683,58 +683,12 @@ impl HarfBuzzShaper {
 
 #[cfg(test)]
 mod tests {
-  use std::{fs::read, path::Path, rc::Rc};
-
-  use parley::fontique::Attributes;
-
   use super::*;
-  use crate::{
-    font_style::ExpandedFontFamily,
-    fonts::{font_description::FontDescription, shaping::glyph_data::HarfBuzzRunGlyphData},
-    resources::font::{FontOverride, FontResource, Fonts},
-    style::{FontFamily, FromCssStr},
+  use crate::fonts::shaping::{
+    glyph_data::HarfBuzzRunGlyphData,
+    testing::{GEIST, NOTO_SANS_TC, font, geist, register},
   };
-
-  const GEIST: &str = "../assets/fonts/geist/Geist[wght].woff2";
-  const NOTO_SANS_TC: &str = "../assets/fonts/noto-sans/NotoSansTC-VariableFont_wght.woff2";
-
-  fn register(fonts: &mut Fonts, path: &str, family_name: &str) {
-    let bytes = read(Path::new(env!("CARGO_MANIFEST_DIR")).join(path)).unwrap();
-
-    fonts
-      .register(FontResource::new(bytes).override_info(FontOverride {
-        family_name: Some(family_name.into()),
-        ..Default::default()
-      }))
-      .unwrap();
-  }
-
-  fn font(fonts: &mut Fonts, family: &str) -> Font {
-    let family = FontFamily::from_css_str(family).unwrap();
-
-    Font::new(
-      fonts,
-      FontDescription {
-        family: Rc::new(ExpandedFontFamily::expand(&family)),
-        attributes: Attributes::default(),
-        computed_size: 16.0,
-        specified_size: 16.0,
-        features: Vec::new(),
-        variation_settings: Vec::new(),
-        locale: None,
-      },
-    )
-  }
-
-  fn geist() -> (Fonts, Font) {
-    let mut fonts = Fonts::default();
-
-    register(&mut fonts, GEIST, "Geist");
-
-    let font = font(&mut fonts, "Geist");
-
-    (fonts, font)
-  }
+  use crate::resources::font::Fonts;
 
   /// Blink's `ShapeResultRunData`.
   fn runs(result: &ShapeResult) -> Vec<(u32, u32, u32, harfrust::Script)> {
