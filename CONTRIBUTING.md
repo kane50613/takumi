@@ -26,8 +26,8 @@ Install these prerequisites:
 
 - Rust 1.91 or newer
 - Bun 1.4
-- The `wasm32-unknown-unknown` target, for the WebAssembly binding: `rustup target add wasm32-unknown-unknown`
-- [`wasm-pack`](https://rustwasm.github.io/wasm-pack/installer/), for building that binding. CI installs the latest release, so no version is pinned.
+- The `wasm32-unknown-unknown` target, for the WebAssembly binding. Install it with `rustup target add wasm32-unknown-unknown`
+- [`wasm-pack`](https://rustwasm.github.io/wasm-pack/installer/), for building the WebAssembly packages. CI pins version 0.15.0.
 
 Install the workspace dependencies:
 
@@ -100,7 +100,7 @@ Follow the pattern in `takumi-wasm`:
 - Declare extern types with `#[wasm_bindgen(typescript_type = "...")]`.
 - Add `unchecked_return_type` to bindings that return bytes.
 
-Keep the `RwLock` used with `&self` in `takumi-wasm` and `takumi-pdf-wasm`. Keep the `Mutex` in `takumi-napi`. A shared-memory build would make `&mut self` unsound.
+The WebAssembly bindings keep registered fonts in `FontStore` from `takumi-bindings-common`. Its methods take `&self`, and no borrow outlives a call, so a call that traps leaves the store usable. Keep binding methods on `&self`. `takumi-napi` keeps fonts in an `ArcSwap` and the font cache in a `Mutex`.
 
 ### TypeScript type safety
 
@@ -161,7 +161,12 @@ Run commands for the affected crate or package. A whole-workspace build is slow 
 | Native binding package                | `(cd takumi-napi && bun test --silent)`               |
 | WebAssembly binding package           | `(cd takumi-wasm && bun test --silent)`               |
 | JavaScript package                    | `(cd takumi-js && bun test --silent)`                 |
+| PDF Rust crate                        | `cargo test -p takumi-pdf`                            |
+| PDF package                           | `(cd takumi-pdf-js && bun test --silent)`             |
+| Paint package                         | `(cd takumi-paint && bun test --silent)`              |
 | Docs                                  | `(cd docs && bun test app/playground tests --silent)` |
+
+The PDF and paint package tests load the built WebAssembly module and the built helpers. Build both first, as shown in [Focused build commands](#focused-build-commands).
 
 Run all package tests only when a change crosses package boundaries:
 
@@ -182,11 +187,16 @@ Do not accept a loose output pattern as proof that a test failed. The pattern `f
 CI runs these Rust gates:
 
 ```bash
+cargo fmt --all -- --check
+cargo machete
+cargo deny --locked check bans sources
 cargo clippy --locked --all-targets --all-features -- -D warnings
 cargo clippy --locked --target wasm32-unknown-unknown -p takumi-wasm -p takumi-pdf-wasm -p takumi-paint-wasm -- -D warnings
-cargo test --locked
-cargo machete
+cargo clippy --locked --target wasm32-unknown-unknown -p takumi-paint-wasm -- -D warnings
+cargo test --locked -- --skip wpt_reftests
 ```
+
+The second wasm Clippy pass checks `takumi-paint-wasm` alone, so features that other wasm crates enable cannot hide its errors. The WPT reftests run in their own job. CI also checks the published crate READMEs, as described in [Rust crate READMEs](#rust-crate-readmes).
 
 A fresh cache can make Clippy skip an unchanged crate. Touch that crate's existing `src/lib.rs` before the Clippy command. The full flags cover feature-gated code and every target.
 
@@ -208,8 +218,10 @@ Build only the packages affected by the change:
 | Helpers             | `bun run --filter ./takumi-helpers build`        |
 | WebAssembly binding | `bun run --filter ./takumi-wasm build:debug`     |
 | Image response      | `bun run --filter ./takumi-image-response build` |
+| PDF package         | `bun run --filter ./takumi-pdf-js build`         |
+| Paint package       | `bun run --filter ./takumi-paint build`          |
 
-The WebAssembly binding build requires `wasm-pack`.
+The WebAssembly builds require `wasm-pack`. The PDF and paint packages have only a release build.
 
 ### Docs playground builds
 
@@ -335,7 +347,7 @@ bun run tegami
 
 Select the affected packages and the `patch`, `minor`, or `major` release type.
 
-Write the changelog entry as one imperative sentence. Do not add a second sentence or a rationale. Put reasoning in the commit body or pull request.
+Write the heading as one imperative sentence that names the user-visible change. Under it, describe the new behavior in a short paragraph when the heading alone does not explain it. Put the reasoning for the change in the commit body or pull request.
 
 The frontmatter lists the affected packages under `packages`. A bare `takumi` names the `takumi` crate, which bumps the whole release group:
 
@@ -346,22 +358,24 @@ packages:
 ---
 
 # Clip overflow at the padding box
+
+`overflow: hidden` clips children at the padding box instead of the border box.
 ```
 
 See the [changelog format docs](https://tegami.fuma-nama.dev/changelog) for the frontmatter and headings.
 
 ### Rust crate READMEs
 
-CI checks published Rust crate READMEs with `cargo rdme --check`.
+Each published crate's `README.md` is generated from the `//!` doc comment at the top of its `src/lib.rs`. Edit the doc comment, not the README. CI checks every published crate with `cargo rdme --check`.
 
-Regenerate a changed crate README from that crate's directory. For the umbrella crate:
+The `lefthook` pre-commit hook regenerates these READMEs. To regenerate one by hand, run `cargo rdme` from the crate's directory:
 
 ```bash
 cd takumi
 cargo rdme
 ```
 
-Include the regenerated `takumi/README.md` when Rust doc comments or crate-facing examples change.
+Include the regenerated README in the same pull request. Crates with `publish = false`, such as `takumi-pdf`, keep a hand-written README.
 
 ## Pull requests
 
