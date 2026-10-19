@@ -91,9 +91,9 @@ jobs:
             | jq -r '.packages[] | select(.publish != []) | select(any(.targets[]; .kind | index("lib"))) | .manifest_path | rtrimstr("/Cargo.toml")')
           exit $fail
 
-      # The WPT reftests skip without a checkout; the WPT job runs them.
+      # The WPT job runs the reftests. The cached target directory may still hold an old checkout.
       - name: Run tests
-        run: cargo test --locked
+        run: cargo test --locked -- --skip wpt_reftests
 
       # The fixtures claim PDF/A and PDF/UA conformance in their metadata. Only
       # the reference validator can tell whether the claim holds.
